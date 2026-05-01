@@ -5,6 +5,7 @@ import {
   formatPageNumber,
   pageTextPath,
   sourcePdfPath,
+  sourceTextPath,
 } from '../../services/storage';
 
 // pdfjs-dist v4 ships a CJS legacy build that works in Node without DOM shims.
@@ -61,6 +62,24 @@ export async function extractText(
   pageCount: number,
   onPage?: (pageNumber: number) => void,
 ): Promise<ExtractTextResult> {
+  const sourceTxt = sourceTextPath(pdfId);
+  if (fs.existsSync(sourceTxt)) {
+    const pages: ExtractTextResult['pages'] = [];
+    for (let pageNumber = 1; pageNumber <= pageCount; pageNumber++) {
+      const textPath = pageTextPath(pdfId, pageNumber, pageCount);
+      let text = '';
+      try {
+        text = await fs.promises.readFile(textPath, 'utf8');
+      } catch {
+        text = '';
+        await fs.promises.writeFile(textPath, '', 'utf8');
+      }
+      pages.push({ pageNumber, empty: text.trim().length === 0, textPath });
+      onPage?.(pageNumber);
+    }
+    return { pages };
+  }
+
   const source = sourcePdfPath(pdfId);
   const data = await fs.promises.readFile(source);
 

@@ -9,6 +9,7 @@ import {
   pageTextPath,
   pdfDir,
   readMetadata,
+  sourceTextPath,
   writeMetadata,
 } from '../services/storage';
 import type {
@@ -23,6 +24,8 @@ import type {
   ProgressStep,
 } from '../types';
 import { renderPages } from './steps/renderPages';
+import { renderTextPagesWithLlm } from './steps/renderTextPagesWithLlm';
+import { splitTextWithLlm } from './steps/splitTextWithLlm';
 import { extractText } from './steps/extractText';
 import { generateScript } from './steps/generateScript';
 import { generateTitle } from './steps/generateTitle';
@@ -286,10 +289,24 @@ async function runPipeline(pdfId: string): Promise<void> {
       row.progress_step === 'script_ready';
     if (!alreadyRendered || !pageCount) {
       // pdftoppm renders every page in a single spawn so we can only surface
-      // 0/? → pageCount/pageCount. Once we know pageCount we mark it done.
+      // 0/? → pageCount/pageCount. For TXT+LLM image generation we can expose
+      // per-page progress because we know the split result up-front.
       setProgress(pdfId, 'rendering', 0, 0);
       await persistMetadata(pdfId);
-      const r = await renderPages(pdfId);
+      const isTextImport = fs.existsSync(sourceTextPath(pdfId));
+      const r = isTextImport
+        ? await (async () => {
+            const raw = await fs.promises.readFile(sourceTextPath(pdfId), 'utf8');
+            const split = await splitTextWithLlm(raw);
+            setProgress(pdfId, 'rendering', 0, split.pages.length);
+            await persistMetadata(pdfId);
+            return await renderTextPagesWithLlm({
+              pdfId,
+              pages: split.pages,
+              onPage: (n) => bumpProgress(pdfId, n),
+            });
+          })()
+        : await renderPages(pdfId);
       pageCount = r.pageCount;
       updatePdf(pdfId, { page_count: pageCount });
       setProgress(pdfId, 'rendering', 0, pageCount);
@@ -301,7 +318,7 @@ async function runPipeline(pdfId: string): Promise<void> {
           image_path: toRelative(pdfId, abs),
           status: 'rendered',
         });
-        bumpProgress(pdfId, pageNumber);
+        if (!isTextImport) bumpProgress(pdfId, pageNumber);
       }
       await persistMetadata(pdfId);
     } else {
@@ -390,8 +407,11 @@ async function runPipeline(pdfId: string): Promise<void> {
     }
 
     // -------- Step 3 (M3): generate per-page script --------
-    // Cost guardrail.
-    if (pageCount > config.openaiMaxPages) {
+    // Cost guardrail: keep the legacy page cap for PDF inputs. TXT imports
+    // can legitimately produce many short pages and should not be blocked by
+    // the PDF-centric hard limit.
+    const isTextImport = fs.existsSync(sourceTextPath(pdfId));
+    if (!isTextImport && pageCount > config.openaiMaxPages) {
       throw new Error(
         `PDF 頁數超過 LLM 處理上限 (${config.openaiMaxPages})，請聯絡管理員或分批上傳`,
       );

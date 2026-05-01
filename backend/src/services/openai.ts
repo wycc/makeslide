@@ -63,6 +63,22 @@ async function appendLlmRequestLog(entry: unknown): Promise<void> {
   }
 }
 
+async function appendLlmResponseLog(entry: unknown): Promise<void> {
+  try {
+    await fs.promises.mkdir(path.dirname(LLM_REQUEST_LOG_FILE), { recursive: true });
+    await fs.promises.appendFile(
+      LLM_REQUEST_LOG_FILE,
+      `${JSON.stringify({ kind: 'response', ...((entry as object) ?? {}) })}\n`,
+      'utf8',
+    );
+  } catch (err) {
+    logger.warn(
+      { error: err instanceof Error ? err.message : String(err) },
+      'Failed to write llm response log file',
+    );
+  }
+}
+
 /**
  * Lazily instantiated OpenAI client. Throws a clear error if the API key is
  * missing so the server can still start (and serve M2 endpoints) when the
@@ -207,6 +223,18 @@ export async function callChatJSON<T>(
       completion_tokens: completion.usage?.completion_tokens ?? 0,
       total_tokens: completion.usage?.total_tokens ?? 0,
     };
+    await appendLlmResponseLog({
+      ts: new Date().toISOString(),
+      label: params.label ?? null,
+      model,
+      attempt,
+      latencyMs,
+      usage,
+      finish_reason: completion.choices[0]?.finish_reason ?? null,
+      refusal: (completion.choices[0]?.message as { refusal?: unknown } | undefined)?.refusal ?? null,
+      raw_content: rawContent,
+      raw_content_length: rawContent.length,
+    });
 
     try {
       const parsed = JSON.parse(rawContent) as unknown;

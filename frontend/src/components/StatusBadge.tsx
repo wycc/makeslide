@@ -35,7 +35,7 @@ const STATUS_STYLES: Record<PdfStatus, { label: string; className: string }> = {
 };
 
 const PROGRESS_LABELS: Record<Exclude<ProgressStep, null>, string> = {
-  rendering: '產生頁面圖',
+  rendering: '產生投影片圖片',
   extracting_text: '抽取文字',
   text_extracted: '文字已抽取',
   scripting: '產生逐字稿',
@@ -49,7 +49,8 @@ function formatProgress(
 ): string {
   if (total == null || total <= 0) return '';
   const cur = Math.max(0, Math.min(current ?? 0, total));
-  return ` ${cur}/${total}`;
+  const pct = Math.round((cur / total) * 100);
+  return ` ${cur}/${total} (${pct}%)`;
 }
 
 export default function StatusBadge({

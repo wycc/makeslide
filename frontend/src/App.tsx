@@ -1,11 +1,13 @@
 import { Route, Routes } from 'react-router-dom';
 import HomePage from './pages/HomePage';
+import ImportTextPage from './pages/ImportTextPage';
 import PlayPage from './pages/PlayPage';
 
 export default function App() {
   return (
     <Routes>
       <Route path="/" element={<HomePage />} />
+      <Route path="/import-text" element={<ImportTextPage />} />
       <Route path="/play/:id" element={<PlayPage />} />
       <Route
         path="*"

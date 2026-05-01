@@ -15,6 +15,7 @@ import {
   videoPath,
   writeMetadata,
   writeSourcePdf,
+  writeSourceText,
 } from '../services/storage';
 import { getOpenAIClient } from '../services/openai';
 import { enqueuePdfProcessing } from '../worker/pipeline';
@@ -202,10 +203,14 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
     const mimetype = file.mimetype ?? '';
     const hasPdfExt = filename.toLowerCase().endsWith('.pdf');
     const hasPdfMime = mimetype === 'application/pdf';
-    if (!hasPdfExt && !hasPdfMime) {
+    const hasTxtExt = filename.toLowerCase().endsWith('.txt');
+    const hasTxtMime = mimetype === 'text/plain';
+    const isPdf = hasPdfExt || hasPdfMime;
+    const isTxt = hasTxtExt || hasTxtMime;
+    if (!isPdf && !isTxt) {
       return reply
         .code(400)
-        .send(errorResponse('INVALID_MIME', 'File must be a PDF (application/pdf)'));
+        .send(errorResponse('INVALID_MIME', 'File must be a PDF 或 TXT（application/pdf, text/plain）'));
     }
 
     let buffer: Buffer;
@@ -249,7 +254,11 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
 
     try {
       createPdfDir(pdfId);
-      await writeSourcePdf(pdfId, buffer);
+      if (isPdf) {
+        await writeSourcePdf(pdfId, buffer);
+      } else {
+        await writeSourceText(pdfId, buffer.toString('utf8'));
+      }
       const metadata: PdfMetadata = {
         id: pdfId,
         title,
@@ -287,7 +296,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
       }
       return reply
         .code(500)
-        .send(errorResponse('INTERNAL_ERROR', 'Failed to save PDF'));
+        .send(errorResponse('INTERNAL_ERROR', 'Failed to save upload file'));
     }
 
     // Pipeline will be kicked off by POST /api/pdfs/:id/start once the

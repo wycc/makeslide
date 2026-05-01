@@ -27,6 +27,14 @@ function formatDate(iso: string): string {
 export default function PdfCard({ pdf, onDelete, onClick }: PdfCardProps) {
   const [isDeleting, setIsDeleting] = useState(false);
 
+  const livePagePreviewUrl =
+    pdf.status === 'processing' &&
+    pdf.progress_step === 'rendering' &&
+    (pdf.progress_current ?? 0) > 0
+      ? `/api/pdfs/${encodeURIComponent(pdf.id)}/pages/${encodeURIComponent(String(pdf.progress_current))}/image?t=${encodeURIComponent(String(pdf.progress_current))}`
+      : null;
+  const coverSrc = livePagePreviewUrl ?? pdf.cover_url;
+
   const handleDelete = async (ev: React.MouseEvent) => {
     ev.stopPropagation();
     if (isDeleting) return;
@@ -51,9 +59,9 @@ export default function PdfCard({ pdf, onDelete, onClick }: PdfCardProps) {
     >
       {/* Cover */}
       <div className="relative aspect-[4/3] w-full bg-slate-800">
-        {pdf.cover_url ? (
+        {coverSrc ? (
           <img
-            src={pdf.cover_url}
+            src={coverSrc}
             alt={pdf.title ?? pdf.id}
             loading="lazy"
             className="h-full w-full object-cover"

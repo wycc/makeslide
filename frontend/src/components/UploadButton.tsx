@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ApiError, uploadPdf } from '../lib/api';
 import type { UploadResponse } from '../types';
 
@@ -11,15 +12,21 @@ interface UploadButtonProps {
 }
 
 export default function UploadButton({ onUploaded }: UploadButtonProps) {
+  const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0); // 0..100
   const [error, setError] = useState<string | null>(null);
 
-  const handlePick = () => {
+  const handlePickPdf = () => {
     if (isUploading) return;
     setError(null);
     fileInputRef.current?.click();
+  };
+
+  const handlePickText = () => {
+    if (isUploading) return;
+    navigate('/import-text');
   };
 
   const handleChange = async (ev: React.ChangeEvent<HTMLInputElement>) => {
@@ -28,7 +35,9 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
     ev.target.value = '';
     if (!file) return;
 
-    if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
+    const lower = file.name.toLowerCase();
+    const isPdf = lower.endsWith('.pdf') || file.type === 'application/pdf';
+    if (!isPdf) {
       setError('請選擇 PDF 檔案');
       return;
     }
@@ -59,12 +68,13 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
     }
   };
 
+
   return (
     <div className="flex flex-col items-start gap-2">
       <div className="flex items-center gap-3">
         <button
           type="button"
-          onClick={handlePick}
+          onClick={handlePickPdf}
           disabled={isUploading}
           className="inline-flex items-center gap-2 rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white shadow transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
         >
@@ -82,6 +92,15 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
             />
           </svg>
           {isUploading ? `上傳中 ${progress}%` : '上傳 PDF'}
+        </button>
+
+        <button
+          type="button"
+          onClick={handlePickText}
+          disabled={isUploading}
+          className="inline-flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-100 shadow transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          貼上 TXT
         </button>
 
         <input

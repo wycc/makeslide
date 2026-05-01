@@ -19,6 +19,10 @@ export function sourcePdfPath(pdfId: string): string {
   return path.join(pdfDir(pdfId), 'source.pdf');
 }
 
+export function sourceTextPath(pdfId: string): string {
+  return path.join(pdfDir(pdfId), 'source.txt');
+}
+
 export function metadataPath(pdfId: string): string {
   return path.join(pdfDir(pdfId), 'metadata.json');
 }
@@ -96,6 +100,10 @@ export function createPdfDir(pdfId: string): string {
 
 export async function writeSourcePdf(pdfId: string, buffer: Buffer): Promise<void> {
   await fs.promises.writeFile(sourcePdfPath(pdfId), buffer);
+}
+
+export async function writeSourceText(pdfId: string, text: string): Promise<void> {
+  await fs.promises.writeFile(sourceTextPath(pdfId), text, 'utf8');
 }
 
 export async function writeMetadata(pdfId: string, metadata: PdfMetadata): Promise<void> {
