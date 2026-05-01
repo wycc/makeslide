@@ -83,6 +83,10 @@ export function pageAudioPath(
   );
 }
 
+export function videoPath(pdfId: string): string {
+  return path.join(pdfDir(pdfId), 'video.mp4');
+}
+
 export function createPdfDir(pdfId: string): string {
   const dir = pdfDir(pdfId);
   fs.mkdirSync(dir, { recursive: true });

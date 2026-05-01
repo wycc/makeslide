@@ -32,7 +32,8 @@ export type ProgressStep =
   | 'text_extracted'
   | 'scripting'
   | 'script_ready'
-  | 'synthesizing';
+  | 'synthesizing'
+  | 'rendering_video';
 
 export type PageStatus =
   | 'pending'
@@ -119,6 +120,7 @@ export interface PdfDetail {
   script_max_chars_per_page?: number | null;
   created_at: string;
   updated_at: string;
+  video_url?: string | null;
   pages: PdfDetailPage[];
 }
 
@@ -169,6 +171,7 @@ export interface PdfMetadata {
   script_max_chars_per_page?: number | null;
   created_at: string;
   updated_at: string;
+  video?: string | null;
   pages: PdfMetadataPage[];
   notes?: string;
   models?: PdfMetadataModels;

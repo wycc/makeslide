@@ -72,6 +72,7 @@ export interface PdfDetail {
   script_max_chars_per_page?: number | null;
   created_at: string;
   updated_at: string;
+  video_url?: string | null;
   pages: PdfDetailPage[];
 }
 

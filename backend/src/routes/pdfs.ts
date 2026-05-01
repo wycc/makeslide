@@ -8,14 +8,17 @@ import { config } from '../config';
 import {
   coverImagePath,
   createPdfDir,
+  pageAudioPath,
   readMetadata,
   removePdfDir,
   safeJoinPdfPath,
+  videoPath,
   writeMetadata,
   writeSourcePdf,
 } from '../services/storage';
 import { getOpenAIClient } from '../services/openai';
 import { enqueuePdfProcessing } from '../worker/pipeline';
+import { generateVideo } from '../worker/steps/generateVideo';
 import type {
   ApiError,
   PageRow,
@@ -65,6 +68,21 @@ const PageParamSchema = z.object({
 
 const RegenerateAudioBodySchema = z.object({
   script: z.string().min(1, 'script 不可為空').max(4096, 'script 不可超過 4096 字'),
+});
+
+const RewriteScriptBodySchema = z.object({
+  prompt: z.string().min(1, 'prompt 不可為空').max(2000, 'prompt 不可超過 2000 字'),
+  script: z.string().min(1, 'script 不可為空').max(4096, 'script 不可超過 4096 字'),
+  history: z
+    .array(
+      z.object({
+        role: z.enum(['user', 'assistant']),
+        content: z.string().min(1).max(4000),
+      }),
+    )
+    .max(20)
+    .optional()
+    .default([]),
 });
 
 const ChatMessageSchema = z.object({
@@ -146,6 +164,7 @@ function rowToDetail(row: PdfRow, pages: PageRow[]): PdfDetail {
     script_max_chars_per_page: row.script_max_chars_per_page,
     created_at: row.created_at,
     updated_at: row.updated_at,
+    video_url: fs.existsSync(videoPath(row.id)) ? `/api/pdfs/${row.id}/video` : null,
     pages: detailPages,
   };
 }
@@ -594,6 +613,190 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
+  // POST /api/pdfs/:id/pages/:n/rewrite-script
+  // Rewrite current page script based on user prompt. Returns rewritten script only.
+  app.post('/api/pdfs/:id/pages/:n/rewrite-script', async (request, reply) => {
+    const parsedParams = PageParamSchema.safeParse(request.params);
+    if (!parsedParams.success) {
+      return reply
+        .code(400)
+        .send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const parsedBody = RewriteScriptBodySchema.safeParse(request.body ?? {});
+    if (!parsedBody.success) {
+      return reply
+        .code(400)
+        .send(errorResponse('INVALID_REQUEST', parsedBody.error.issues[0]?.message ?? 'Invalid body'));
+    }
+
+    const { id, n } = parsedParams.data;
+    const prompt = parsedBody.data.prompt.trim();
+    const script = parsedBody.data.script.trim();
+    const history = parsedBody.data.history;
+
+    const row = db
+      .prepare(`SELECT id FROM pdfs WHERE id = ?`)
+      .get(id) as { id: string } | undefined;
+    if (!row) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+
+    const pageRow = db
+      .prepare(
+        `SELECT pdf_id, page_number, image_path, text_path, script_path,
+                audio_path, audio_duration_seconds, status, error_message,
+                created_at, updated_at
+         FROM pages WHERE pdf_id = ? AND page_number = ?`,
+      )
+      .get(id, n) as PageRow | undefined;
+    if (!pageRow) {
+      return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+    }
+
+    let pageText = '';
+    if (pageRow.text_path) {
+      try {
+        const absText = safeJoinPdfPath(id, pageRow.text_path);
+        pageText = await fs.promises.readFile(absText, 'utf8');
+      } catch {
+        pageText = '';
+      }
+    }
+
+    const RewriteSchema = z.object({
+      script: z.string().min(1).max(4096),
+    });
+
+    try {
+      const result = await getOpenAIClient().chat.completions.create({
+        model: config.openaiLlmModel,
+        messages: [
+          {
+            role: 'system',
+            content:
+              '你是逐字稿編修助理。請根據使用者提示改寫逐字稿，語言使用繁體中文。需忠於投影片內容，不可杜撰。僅輸出 JSON 物件，格式為 {"script":"..."}。',
+          },
+          {
+            role: 'user',
+            content:
+              `使用者修改需求：\n${prompt}\n\n` +
+              `頁面抽取文字（參考）：\n${pageText || '(無)'}\n\n` +
+              `目前逐字稿：\n${script}`,
+          },
+        ],
+        response_format: { type: 'json_object' },
+        ...(config.openaiLlmModel.toLowerCase().startsWith('gpt-5.5')
+          ? { max_completion_tokens: 1200 }
+          : { max_tokens: 1200 }),
+      });
+
+      const raw = result.choices[0]?.message?.content ?? '';
+      const parsed = RewriteSchema.safeParse(JSON.parse(raw));
+      if (!parsed.success) {
+        request.log.warn({ pdfId: id, pageNumber: n, raw }, 'rewrite-script invalid JSON shape');
+        return reply
+          .code(502)
+          .send(errorResponse('MODEL_OUTPUT_INVALID', '模型輸出格式錯誤，請重試'));
+      }
+
+      const rewrittenScript = parsed.data.script.trim();
+      const persistedHistory = [
+        ...history,
+        { role: 'user' as const, content: prompt },
+        { role: 'assistant' as const, content: rewrittenScript },
+      ];
+      db.prepare(
+        `UPDATE pages
+         SET chat_history_json = ?, updated_at = ?
+         WHERE pdf_id = ? AND page_number = ?`,
+      ).run(JSON.stringify(persistedHistory), nowIso(), id, n);
+
+      return reply.code(200).send({
+        id,
+        page_number: n,
+        script: rewrittenScript,
+      });
+    } catch (err) {
+      request.log.error({ err, pdfId: id, pageNumber: n }, 'rewrite-script failed');
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to rewrite script'));
+    }
+  });
+
+  // POST /api/pdfs/:id/generate-video
+  // Manual-only video generation from existing page images + audios.
+  app.post('/api/pdfs/:id/generate-video', async (request, reply) => {
+    const parsedParams = IdParamSchema.safeParse(request.params);
+    if (!parsedParams.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const { id } = parsedParams.data;
+    const pdfRow = db
+      .prepare(
+        `SELECT id, title, original_filename, status, page_count, progress_step,
+                progress_current, progress_total,
+                error_message, user_prompt, require_script_confirmation,
+                tts_voice, tts_speed, script_max_chars_per_page,
+                created_at, updated_at
+           FROM pdfs WHERE id = ?`,
+      )
+      .get(id) as PdfRow | undefined;
+    if (!pdfRow) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    if (!pdfRow.page_count || pdfRow.page_count <= 0) {
+      return reply.code(400).send(errorResponse('INVALID_STATE', 'PDF page_count is not ready'));
+    }
+
+    const pageRows = db
+      .prepare(
+        `SELECT pdf_id, page_number, image_path, text_path, script_path,
+                audio_path, audio_duration_seconds, status, error_message,
+                created_at, updated_at
+           FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
+      )
+      .all(id) as PageRow[];
+
+    const pageNumbers = pageRows
+      .filter((p) => !!p.image_path && !!p.audio_path)
+      .map((p) => p.page_number);
+    if (pageNumbers.length === 0) {
+      return reply
+        .code(400)
+        .send(errorResponse('NO_AUDIO_PAGES', 'No pages with both image and audio available'));
+    }
+
+    try {
+      const result = await generateVideo({
+        pdfId: id,
+        pageCount: pdfRow.page_count,
+        pageNumbers,
+      });
+      const relVideo = path.relative(path.join(config.storageRoot, id), result.outputPath);
+      const updatedAt = nowIso();
+      db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(updatedAt, id);
+
+      try {
+        const meta = await readMetadata(id);
+        if (meta) {
+          meta.video = relVideo;
+          meta.updated_at = updatedAt;
+          await writeMetadata(id, meta);
+        }
+      } catch (err) {
+        request.log.warn({ err, pdfId: id }, 'Failed to sync metadata after generate-video');
+      }
+
+      return reply.code(200).send({
+        id,
+        video_url: `/api/pdfs/${id}/video`,
+        updated_at: updatedAt,
+      });
+    } catch (err) {
+      request.log.error({ err, pdfId: id }, 'Failed to generate video');
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to generate video'));
+    }
+  });
+
   // POST /api/pdfs/:id/pages/:n/chat
   // Multi-turn chat grounded by current page text + image URL.
   app.post('/api/pdfs/:id/pages/:n/chat', async (request, reply) => {
@@ -893,6 +1096,26 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
         .send(errorResponse('COVER_NOT_READY', 'Cover image not generated yet'));
     }
     return streamFile(reply, cover, 'image/png', 'public, max-age=300');
+  });
+
+  // GET /api/pdfs/:id/video
+  app.get('/api/pdfs/:id/video', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const { id } = parsed.data;
+    const row = db.prepare(`SELECT id FROM pdfs WHERE id = ?`).get(id) as { id: string } | undefined;
+    if (!row) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    const abs = videoPath(id);
+    try {
+      await fs.promises.access(abs, fs.constants.R_OK);
+    } catch {
+      return reply.code(404).send(errorResponse('VIDEO_NOT_FOUND', 'Video not found'));
+    }
+    return streamFile(reply, abs, 'video/mp4', 'public, max-age=3600');
   });
 
   // GET /api/pdfs/:id/pages/:n/image

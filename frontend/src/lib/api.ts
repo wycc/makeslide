@@ -110,6 +110,28 @@ export interface RegenerateAudioResponse {
   updated_at: string;
 }
 
+export interface RewriteScriptResponse {
+  id: string;
+  page_number: number;
+  script: string;
+}
+
+export interface GenerateVideoResponse {
+  id: string;
+  video_url: string;
+  updated_at: string;
+}
+
+export async function generatePdfVideo(id: string): Promise<GenerateVideoResponse> {
+  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/generate-video`, {
+    method: 'POST',
+  });
+  if (!resp.ok) {
+    throw await parseErrorBody(resp);
+  }
+  return (await resp.json()) as GenerateVideoResponse;
+}
+
 export async function regeneratePageAudio(
   id: string,
   pageNumber: number,
@@ -127,6 +149,27 @@ export async function regeneratePageAudio(
     throw await parseErrorBody(resp);
   }
   return (await resp.json()) as RegenerateAudioResponse;
+}
+
+export async function rewritePageScript(
+  id: string,
+  pageNumber: number,
+  prompt: string,
+  script: string,
+  history: ChatMessage[] = [],
+): Promise<RewriteScriptResponse> {
+  const resp = await fetch(
+    `/api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/rewrite-script`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ prompt, script, history }),
+    },
+  );
+  if (!resp.ok) {
+    throw await parseErrorBody(resp);
+  }
+  return (await resp.json()) as RewriteScriptResponse;
 }
 
 export interface UploadOptions {

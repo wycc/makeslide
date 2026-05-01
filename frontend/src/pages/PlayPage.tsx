@@ -12,7 +12,9 @@ import {
   clearPageChatHistory,
   fetchPdfDetail,
   fetchPageChatHistory,
+  generatePdfVideo,
   regeneratePageAudio,
+  rewritePageScript,
 } from '../lib/api';
 import type { ChatMessage, PdfDetail, PdfDetailPage } from '../types';
 
@@ -40,12 +42,17 @@ export default function PlayPage() {
   const [audioError, setAudioError] = useState<string | null>(null);
   const [editorError, setEditorError] = useState<string | null>(null);
   const [editorBusy, setEditorBusy] = useState(false);
+  const [rewriteBusy, setRewriteBusy] = useState(false);
+  const [rewriteError, setRewriteError] = useState<string | null>(null);
   const [finished, setFinished] = useState(false);
   const [editingScript, setEditingScript] = useState('');
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatBusy, setChatBusy] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
+  const [videoBusy, setVideoBusy] = useState(false);
+  const [videoError, setVideoError] = useState<string | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   // prefetch refs so GC doesn't drop them mid-load
@@ -63,6 +70,7 @@ export default function PlayPage() {
         const d = await fetchPdfDetail(pdfId);
         if (cancelled) return;
         setDetail(d);
+        setVideoUrl(d.video_url ?? null);
         setLoadError(null);
         if (d.status !== 'ready') {
           timer = window.setTimeout(load, POLL_INTERVAL_MS);
@@ -314,6 +322,41 @@ export default function PlayPage() {
     }
   }, [pdfId, currentPage, editingScript]);
 
+  const handleRewriteScript = useCallback(async () => {
+    if (!pdfId || !currentPage) return;
+    const prompt = chatInput.trim();
+    const sourceScript = editingScript.trim();
+    if (!prompt) {
+      setRewriteError('請先輸入修改提示');
+      return;
+    }
+    if (!sourceScript) {
+      setRewriteError('目前逐字稿不可為空');
+      return;
+    }
+    setRewriteBusy(true);
+    setRewriteError(null);
+    const nextHistory = [...chatHistory, { role: 'user' as const, content: prompt }];
+    setChatHistory(nextHistory);
+    setChatInput('');
+    try {
+      const res = await rewritePageScript(
+        pdfId,
+        currentPage.page_number,
+        prompt,
+        sourceScript,
+        chatHistory,
+      );
+      setEditingScript(res.script);
+      setChatHistory((prev) => [...prev, { role: 'assistant', content: res.script }]);
+    } catch (err) {
+      setChatHistory(chatHistory);
+      setRewriteError(err instanceof ApiError ? err.message : '逐字稿改寫失敗');
+    } finally {
+      setRewriteBusy(false);
+    }
+  }, [pdfId, currentPage, chatInput, editingScript]);
+
   const handleClearChat = useCallback(async () => {
     if (!pdfId || !currentPage) return;
     setChatBusy(true);
@@ -328,6 +371,21 @@ export default function PlayPage() {
       setChatBusy(false);
     }
   }, [pdfId, currentPage]);
+
+  const handleGenerateVideo = useCallback(async () => {
+    if (!pdfId) return;
+    setVideoBusy(true);
+    setVideoError(null);
+    try {
+      const res = await generatePdfVideo(pdfId);
+      setVideoUrl(res.video_url);
+      setDetail((prev) => (prev ? { ...prev, video_url: res.video_url, updated_at: res.updated_at } : prev));
+    } catch (err) {
+      setVideoError(err instanceof ApiError ? err.message : '產生影片失敗');
+    } finally {
+      setVideoBusy(false);
+    }
+  }, [pdfId]);
 
   // ---- Render loading / error states ----
   if (!pdfId) {
@@ -411,6 +469,31 @@ export default function PlayPage() {
           </h1>
           <div className="w-20 text-right text-sm text-slate-400">
             頁 {currentIdx + 1}/{totalPages}
+          </div>
+        </div>
+        <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 px-4 pb-3">
+          <div className="text-xs text-slate-400">
+            {videoError ? <span className="text-rose-300">{videoError}</span> : '影片需手動產生'}
+          </div>
+          <div className="flex items-center gap-2">
+            {videoUrl ? (
+              <a
+                href={videoUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-200 hover:bg-cyan-500/25"
+              >
+                開啟影片
+              </a>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => void handleGenerateVideo()}
+              disabled={videoBusy}
+              className="rounded-md border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-sm text-amber-200 hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {videoBusy ? '產生影片中…' : videoUrl ? '重新產生影片' : '產生影片'}
+            </button>
           </div>
         </div>
       </header>
@@ -562,30 +645,41 @@ export default function PlayPage() {
             )}
           </div>
           <div className="border-t border-slate-800 p-3">
-            <div className="flex items-center gap-2">
-            <input
-              type="text"
+            <div className="flex flex-col gap-2">
+            <textarea
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault();
                   void handleSendChat();
                 }
               }}
-              placeholder="問這一頁的重點、名詞、推論…"
+              rows={3}
+              placeholder="可輸入問題，或輸入逐字稿修改指示（Shift+Enter 換行）"
               className="flex-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-emerald-500/40 placeholder:text-slate-500 focus:ring"
             />
-            <button
-              type="button"
-              onClick={() => void handleSendChat()}
-              disabled={chatBusy || !chatInput.trim()}
-              className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {chatBusy ? '送出中…' : '送出'}
-            </button>
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleRewriteScript()}
+                  disabled={rewriteBusy || !chatInput.trim() || !editingScript.trim()}
+                  className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-3 py-2 text-sm text-fuchsia-200 hover:bg-fuchsia-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {rewriteBusy ? '修改中…' : '修改逐字稿'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleSendChat()}
+                  disabled={chatBusy || !chatInput.trim()}
+                  className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {chatBusy ? '送出中…' : '送出'}
+                </button>
+              </div>
             </div>
             {chatError ? <p className="mt-1 text-xs text-rose-300">{chatError}</p> : null}
+            {rewriteError ? <p className="mt-1 text-xs text-rose-300">{rewriteError}</p> : null}
           </div>
         </aside>
       </main>
