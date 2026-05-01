@@ -44,7 +44,7 @@ makeslide/
    nvm install 20 && nvm use 20
    ```
 
-2. 複製環境變數並填入 `OPENAI_API_KEY`（M3/M4 才會用到，M1/M2 可先留空）：
+2. 複製環境變數並填入 `OPENAI_API_KEY`
 
    ```bash
    cp .env.example .env
@@ -137,10 +137,3 @@ npm run dev:frontend
 | `PROCESS_CONCURRENCY` | `2` | M2：同時處理中的 PDF 數 |
 | `RENDER_DPI` | `150` | M2：pdftoppm 解析度 |
 | `POPPLER_BIN_PATH` | `` | M2：poppler 二進位目錄（留空走 `PATH`） |
-
-OpenAI 相關變數於 M3 階段才會啟用。
-
-## 尚未實作（後續里程碑）
-
-- **M3**：LLM 逐字稿生成（GPT）+ TTS 語音合成；標題自動化
-- **M4**：播放頁（圖像 + 音訊同步、自動下一頁）
