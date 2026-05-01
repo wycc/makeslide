@@ -2,11 +2,12 @@ import fs from 'node:fs';
 import { coverImagePath, pageImagePath, pageTextPath, pagesDir } from '../../services/storage';
 import { getOpenAIClient } from '../../services/openai';
 import { logger } from '../../logger';
+import { config } from '../../config';
 
 export interface RenderTextPagesWithLlmOptions {
   pdfId: string;
   pages: Array<{ pageNumber: number; content: string; slideLabel?: string }>;
-  onPage?: (pageNumber: number) => void;
+  onPage?: (pageNumber: number, imagePath: string) => void;
 }
 
 export interface RenderTextPagesWithLlmResult {
@@ -36,10 +37,13 @@ export async function renderTextPagesWithLlm(
     );
 
     const prompt = [
-      '請產生一張 16:9 的簡報頁圖片，風格專業、清楚、可閱讀。',
-      '請依照下列內容設計版面，必須包含重點標題與條列重點。',
-      p.slideLabel ? `這是 ${p.slideLabel}。請以該頁內容為主。` : '請以這一頁內容為主。',
-      '語言：繁體中文。',
+      '請產生一張 16:9 的現代知識型簡報頁，視覺風格接近 NotebookLM（資訊圖卡、清楚層級、留白充足）。',
+      '目標是「視覺化摘要」而不是全文轉貼。請把重點轉成圖像與結構，不要做文字牆。',
+      '版型要求：1 個主標題 + 3~5 個關鍵短句（每句 ≤ 14 字）+ 1 個大型視覺主體（流程圖/關係圖/圖示群/概念圖）。',
+      '文字規範：繁體中文、精簡短句、可讀性高；避免長段落、密集條列、過小字。',
+      '視覺規範：扁平化圖示、卡片分區、柔和對比、資訊圖表感；可用抽象圖形輔助理解。',
+      '禁止項目：整頁密集文字、逐字抄錄、黑底白字純文本頁、學術論文式排版。',
+      p.slideLabel ? `頁面標記：${p.slideLabel}。請依該頁主題做視覺化總結。` : '請依本頁內容做視覺化總結。',
       '',
       p.content,
     ].join('\n');
@@ -47,7 +51,7 @@ export async function renderTextPagesWithLlm(
     let image;
     try {
       image = await client.images.generate({
-        model: 'gpt-image-1',
+        model: config.openaiImageModel,
         prompt,
         size: '1536x1024',
       });
@@ -75,15 +79,16 @@ export async function renderTextPagesWithLlm(
     await fs.promises.writeFile(textPath, p.content, 'utf8');
     pagePaths.push(imagePath);
     logger.info(
-      {
-        pdfId: opts.pdfId,
-        pageNumber: p.pageNumber,
-        pageCount,
-        latencyMs: Date.now() - startedAt,
-      },
-      'Text image generation: page done',
-    );
-    opts.onPage?.(p.pageNumber);
+        {
+          pdfId: opts.pdfId,
+          pageNumber: p.pageNumber,
+          pageCount,
+          latencyMs: Date.now() - startedAt,
+          model: config.openaiImageModel,
+        },
+        'Text image generation: page done',
+      );
+    opts.onPage?.(p.pageNumber, imagePath);
   }
 
   if (pagePaths[0]) {

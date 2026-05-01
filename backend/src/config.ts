@@ -89,6 +89,7 @@ const EnvSchema = z.object({
     .optional()
     .transform((v) => (v ? Number(v) : 50))
     .pipe(z.number().int().positive()),
+  OPENAI_IMAGE_MODEL: z.string().optional().default('gpt-image-2'),
   // M4: OpenAI TTS settings
   OPENAI_TTS_MODEL: z
     .enum(['gpt-4o-mini-tts', 'tts-1', 'tts-1-hd'])
@@ -157,6 +158,7 @@ export const config = {
   openaiRequestTimeoutMs: env.OPENAI_REQUEST_TIMEOUT_MS,
   openaiMaxRetries: env.OPENAI_MAX_RETRIES,
   openaiMaxPages: env.OPENAI_MAX_PAGES,
+  openaiImageModel: env.OPENAI_IMAGE_MODEL,
   // M4
   openaiTtsModel: env.OPENAI_TTS_MODEL,
   openaiTtsVoice: env.OPENAI_TTS_VOICE,

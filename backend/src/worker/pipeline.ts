@@ -303,7 +303,13 @@ async function runPipeline(pdfId: string): Promise<void> {
             return await renderTextPagesWithLlm({
               pdfId,
               pages: split.pages,
-              onPage: (n) => bumpProgress(pdfId, n),
+              onPage: (n, imagePath) => {
+                upsertPage(pdfId, n, {
+                  image_path: toRelative(pdfId, imagePath),
+                  status: 'rendered',
+                });
+                bumpProgress(pdfId, n);
+              },
             });
           })()
         : await renderPages(pdfId);
@@ -314,11 +320,13 @@ async function runPipeline(pdfId: string): Promise<void> {
         const abs = r.pagePaths[i];
         if (!abs) continue;
         const pageNumber = i + 1;
-        upsertPage(pdfId, pageNumber, {
-          image_path: toRelative(pdfId, abs),
-          status: 'rendered',
-        });
-        if (!isTextImport) bumpProgress(pdfId, pageNumber);
+        if (!isTextImport) {
+          upsertPage(pdfId, pageNumber, {
+            image_path: toRelative(pdfId, abs),
+            status: 'rendered',
+          });
+          bumpProgress(pdfId, pageNumber);
+        }
       }
       await persistMetadata(pdfId);
     } else {
