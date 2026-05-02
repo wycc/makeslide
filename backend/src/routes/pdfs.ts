@@ -111,6 +111,11 @@ const AddPageBodySchema = z.object({
   after_page_number: z.number().int().min(0).optional().default(0),
 });
 
+const UpdateTtsSettingsBodySchema = z.object({
+  tts_voice: z.string().min(1, 'tts_voice 不可為空').max(32, 'tts_voice 過長'),
+  tts_speed: z.number().min(0.25, 'tts_speed 過小').max(4, 'tts_speed 過大'),
+});
+
 function errorResponse(code: string, message: string): ApiError {
   return { error: { code, message } };
 }
@@ -801,6 +806,47 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
       request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to regenerate image by prompt');
       return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to regenerate image'));
     }
+  });
+
+  app.patch('/api/pdfs/:id/tts-settings', async (request, reply) => {
+    const parsedParams = IdParamSchema.safeParse(request.params);
+    if (!parsedParams.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const parsedBody = UpdateTtsSettingsBodySchema.safeParse(request.body ?? {});
+    if (!parsedBody.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', parsedBody.error.issues[0]?.message ?? 'Invalid body'));
+    }
+
+    const { id } = parsedParams.data;
+    const row = db.prepare(`SELECT id FROM pdfs WHERE id = ?`).get(id) as { id: string } | undefined;
+    if (!row) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+
+    const ttsVoice = parsedBody.data.tts_voice.trim();
+    const ttsSpeed = parsedBody.data.tts_speed;
+    const updatedAt = nowIso();
+
+    db.prepare(
+      `UPDATE pdfs
+          SET tts_voice = ?,
+              tts_speed = ?,
+              updated_at = ?
+        WHERE id = ?`,
+    ).run(ttsVoice, ttsSpeed, updatedAt, id);
+
+    try {
+      const meta = await readMetadata(id);
+      if (meta) {
+        meta.tts_voice = ttsVoice;
+        meta.tts_speed = ttsSpeed;
+        meta.updated_at = updatedAt;
+        await writeMetadata(id, meta);
+      }
+    } catch {
+      // non-fatal
+    }
+
+    return reply.code(200).send({ id, tts_voice: ttsVoice, tts_speed: ttsSpeed, updated_at: updatedAt });
   });
 
   app.delete('/api/pdfs/:id/pages/:n', async (request, reply) => {

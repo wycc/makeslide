@@ -18,6 +18,7 @@ import {
   regenerateSlideImage,
   replaceSlideImage,
   regeneratePageAudio,
+  updatePdfTtsSettings,
   rewritePageScript,
 } from '../lib/api';
 import type { ChatMessage, PdfDetail, PdfDetailPage } from '../types';
@@ -59,6 +60,11 @@ export default function PlayPage() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [slideBusy, setSlideBusy] = useState(false);
   const [slideError, setSlideError] = useState<string | null>(null);
+  const [ttsVoice, setTtsVoice] = useState('alloy');
+  const [ttsSpeed, setTtsSpeed] = useState(1);
+  const [ttsBusy, setTtsBusy] = useState(false);
+  const [ttsMsg, setTtsMsg] = useState<string | null>(null);
+  const [ttsDialogOpen, setTtsDialogOpen] = useState(false);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
   const IMAGE_MSG_PREFIX = '[image] ';
@@ -81,6 +87,8 @@ export default function PlayPage() {
         if (cancelled) return;
         setDetail(d);
         setVideoUrl(d.video_url ?? null);
+        setTtsVoice(d.tts_voice?.trim() || 'alloy');
+        setTtsSpeed(d.tts_speed ?? 1);
         setLoadError(null);
         if (d.status !== 'ready') {
           timer = window.setTimeout(load, POLL_INTERVAL_MS);
@@ -405,6 +413,30 @@ export default function PlayPage() {
     }
   }, [pdfId]);
 
+  const handleSaveTtsSettings = useCallback(async () => {
+    if (!pdfId) return;
+    setTtsBusy(true);
+    setTtsMsg(null);
+    try {
+      const res = await updatePdfTtsSettings(pdfId, ttsVoice, ttsSpeed);
+      setDetail((prev) =>
+        prev
+          ? {
+              ...prev,
+              tts_voice: res.tts_voice,
+              tts_speed: res.tts_speed,
+              updated_at: res.updated_at,
+            }
+          : prev,
+      );
+      setTtsMsg('語音設定已儲存');
+    } catch (err) {
+      setTtsMsg(err instanceof ApiError ? err.message : '儲存語音設定失敗');
+    } finally {
+      setTtsBusy(false);
+    }
+  }, [pdfId, ttsVoice, ttsSpeed]);
+
   const reloadDetail = useCallback(async () => {
     if (!pdfId) return;
     const d = await fetchPdfDetail(pdfId);
@@ -611,6 +643,15 @@ export default function PlayPage() {
             {videoError ? <span className="text-rose-300">{videoError}</span> : '影片需手動產生'}
           </div>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setTtsDialogOpen(true)}
+              className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
+              title="語音設定"
+              aria-label="語音設定"
+            >
+              ⚙️ 設定
+            </button>
             {videoUrl ? (
               <a
                 href={videoUrl}
@@ -951,6 +992,68 @@ export default function PlayPage() {
           </section>
         </aside>
       </main>
+
+      {ttsDialogOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
+          <div className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl">
+            <h3 className="mb-3 text-sm font-semibold text-slate-200">語音設定</h3>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-slate-300">聲音</span>
+                <select
+                  value={ttsVoice}
+                  onChange={(e) => setTtsVoice(e.target.value)}
+                  disabled={ttsBusy}
+                  className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs"
+                >
+                  <option value="alloy">alloy</option>
+                  <option value="ash">ash</option>
+                  <option value="ballad">ballad</option>
+                  <option value="coral">coral</option>
+                  <option value="echo">echo</option>
+                  <option value="fable">fable</option>
+                  <option value="nova">nova</option>
+                  <option value="onyx">onyx</option>
+                  <option value="sage">sage</option>
+                  <option value="shimmer">shimmer</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-300">速度</span>
+                <input
+                  type="range"
+                  min={0.5}
+                  max={2}
+                  step={0.05}
+                  value={ttsSpeed}
+                  onChange={(e) => setTtsSpeed(Number(e.target.value))}
+                  disabled={ttsBusy}
+                  className="flex-1 accent-cyan-500"
+                />
+                <span className="w-10 text-right text-xs tabular-nums text-slate-300">{ttsSpeed.toFixed(2)}</span>
+              </div>
+              {ttsMsg ? <p className="text-xs text-slate-400">{ttsMsg}</p> : null}
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setTtsDialogOpen(false)}
+                className="rounded border border-slate-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
+              >
+                關閉
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSaveTtsSettings()}
+                disabled={ttsBusy}
+                className="rounded border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-200 disabled:opacity-40"
+              >
+                {ttsBusy ? '儲存中…' : '儲存設定'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

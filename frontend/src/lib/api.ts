@@ -159,6 +159,13 @@ export interface RegenerateSlideImageResponse {
   updated_at: string;
 }
 
+export interface UpdateTtsSettingsResponse {
+  id: string;
+  tts_voice: string;
+  tts_speed: number;
+  updated_at: string;
+}
+
 export async function addSlide(id: string, afterPageNumber: number): Promise<AddSlideResponse> {
   const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/pages`, {
     method: 'POST',
@@ -208,6 +215,20 @@ export async function regenerateSlideImage(
   );
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as RegenerateSlideImageResponse;
+}
+
+export async function updatePdfTtsSettings(
+  id: string,
+  ttsVoice: string,
+  ttsSpeed: number,
+): Promise<UpdateTtsSettingsResponse> {
+  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/tts-settings`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ tts_voice: ttsVoice, tts_speed: ttsSpeed }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as UpdateTtsSettingsResponse;
 }
 
 export async function generatePdfVideo(id: string): Promise<GenerateVideoResponse> {
