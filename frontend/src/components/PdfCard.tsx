@@ -2,6 +2,15 @@ import { useState } from 'react';
 import type { PdfListItem } from '../types';
 import StatusBadge from './StatusBadge';
 
+const PROGRESS_LABELS: Record<string, string> = {
+  rendering: '產生投影片圖片',
+  extracting_text: '抽取文字',
+  text_extracted: '文字已抽取',
+  scripting: '產生逐字稿',
+  script_ready: '逐字稿完成',
+  synthesizing: '合成語音',
+};
+
 interface PdfCardProps {
   pdf: PdfListItem;
   onDelete: (id: string) => Promise<void> | void;
@@ -26,6 +35,16 @@ function formatDate(iso: string): string {
 
 export default function PdfCard({ pdf, onDelete, onClick }: PdfCardProps) {
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const progressTotal = pdf.progress_total ?? 0;
+  const progressCurrentRaw = pdf.progress_current ?? 0;
+  const progressCurrent = Math.max(0, Math.min(progressCurrentRaw, progressTotal || progressCurrentRaw));
+  const progressPct = progressTotal > 0 ? Math.round((progressCurrent / progressTotal) * 100) : 0;
+  const progressStepLabel =
+    pdf.progress_step != null
+      ? (PROGRESS_LABELS[pdf.progress_step] ?? '處理中')
+      : '處理中';
+  const showProcessingOverlay = pdf.status === 'processing';
 
   const livePagePreviewUrl =
     pdf.status === 'processing' &&
@@ -86,7 +105,7 @@ export default function PdfCard({ pdf, onDelete, onClick }: PdfCardProps) {
             <span className="text-xs tracking-wide uppercase">PDF</span>
           </div>
         )}
-        <div className="absolute right-2 top-2">
+        <div className="absolute right-2 top-2 rounded-full bg-slate-900/60 p-0.5 backdrop-blur-sm">
           <StatusBadge
             status={pdf.status}
             progressStep={pdf.progress_step}
@@ -94,6 +113,26 @@ export default function PdfCard({ pdf, onDelete, onClick }: PdfCardProps) {
             progressTotal={pdf.progress_total}
           />
         </div>
+        {showProcessingOverlay && (
+          <div className="absolute inset-x-0 bottom-0 bg-slate-900/75 px-2 py-2 backdrop-blur-sm">
+            <div className="mb-1 flex items-center justify-between gap-2 text-[11px] text-slate-100">
+              <span className="truncate">{progressStepLabel}</span>
+              {progressTotal > 0 && (
+                <span className="shrink-0 text-slate-200">
+                  {progressCurrent}/{progressTotal} ({progressPct}%)
+                </span>
+              )}
+            </div>
+            {progressTotal > 0 && (
+              <div className="h-1.5 w-full rounded-full bg-slate-700/90">
+                <div
+                  className="h-full rounded-full bg-amber-300 transition-all"
+                  style={{ width: `${progressPct}%` }}
+                />
+              </div>
+            )}
+          </div>
+        )}
       </div>
       {/* Body */}
       <div className="flex flex-1 flex-col gap-2 p-3">

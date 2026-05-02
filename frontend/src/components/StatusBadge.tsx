@@ -10,27 +10,33 @@ interface StatusBadgeProps {
 const STATUS_STYLES: Record<PdfStatus, { label: string; className: string }> = {
   awaiting_prompt: {
     label: '待輸入提示詞',
-    className: 'bg-sky-500/20 text-sky-200 border border-sky-400/60',
+    className:
+      'bg-slate-900/90 text-sky-200 border border-sky-400/70 backdrop-blur-sm shadow-sm',
   },
   uploaded: {
     label: '排隊中',
-    className: 'bg-slate-700 text-slate-100 border border-slate-500',
+    className:
+      'bg-slate-900/90 text-slate-100 border border-slate-500/90 backdrop-blur-sm shadow-sm',
   },
   processing: {
     label: '處理中',
-    className: 'bg-amber-500/20 text-amber-200 border border-amber-400/60',
+    className:
+      'bg-slate-900/90 text-amber-200 border border-amber-400/70 backdrop-blur-sm shadow-sm',
   },
   awaiting_script_confirmation: {
     label: '待確認逐字稿',
-    className: 'bg-orange-500/20 text-orange-200 border border-orange-400/60',
+    className:
+      'bg-slate-900/90 text-orange-200 border border-orange-400/70 backdrop-blur-sm shadow-sm',
   },
   ready: {
     label: '已完成',
-    className: 'bg-emerald-500/20 text-emerald-200 border border-emerald-400/60',
+    className:
+      'bg-slate-900/90 text-emerald-200 border border-emerald-400/70 backdrop-blur-sm shadow-sm',
   },
   failed: {
     label: '失敗',
-    className: 'bg-rose-500/20 text-rose-200 border border-rose-400/60',
+    className:
+      'bg-slate-900/90 text-rose-200 border border-rose-400/70 backdrop-blur-sm shadow-sm',
   },
 };
 
@@ -43,16 +49,6 @@ const PROGRESS_LABELS: Record<Exclude<ProgressStep, null>, string> = {
   synthesizing: '合成語音',
 };
 
-function formatProgress(
-  current: number | null | undefined,
-  total: number | null | undefined,
-): string {
-  if (total == null || total <= 0) return '';
-  const cur = Math.max(0, Math.min(current ?? 0, total));
-  const pct = Math.round((cur / total) * 100);
-  return ` ${cur}/${total} (${pct}%)`;
-}
-
 export default function StatusBadge({
   status,
   progressStep,
@@ -64,7 +60,7 @@ export default function StatusBadge({
   let label = style.label;
   if (status === 'processing' && progressStep) {
     const stepLabel = PROGRESS_LABELS[progressStep] ?? style.label;
-    label = `${stepLabel}${formatProgress(progressCurrent, progressTotal)}`;
+    label = stepLabel;
   }
   const titleExtra =
     progressTotal && progressTotal > 0
