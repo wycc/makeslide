@@ -132,6 +132,60 @@ export interface GenerateVideoResponse {
   updated_at: string;
 }
 
+export interface AddSlideResponse {
+  id: string;
+  page_number: number;
+  page_count: number;
+  updated_at: string;
+}
+
+export interface DeleteSlideResponse {
+  id: string;
+  page_count: number;
+  updated_at: string;
+}
+
+export interface ReplaceSlideImageResponse {
+  id: string;
+  page_number: number;
+  image_url: string;
+  updated_at: string;
+}
+
+export async function addSlide(id: string, afterPageNumber: number): Promise<AddSlideResponse> {
+  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/pages`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ after_page_number: afterPageNumber }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as AddSlideResponse;
+}
+
+export async function deleteSlide(id: string, pageNumber: number): Promise<DeleteSlideResponse> {
+  const resp = await fetch(
+    `/api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}`,
+    { method: 'DELETE' },
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as DeleteSlideResponse;
+}
+
+export async function replaceSlideImage(
+  id: string,
+  pageNumber: number,
+  file: File,
+): Promise<ReplaceSlideImageResponse> {
+  const form = new FormData();
+  form.append('file', file);
+  const resp = await fetch(
+    `/api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/replace-image`,
+    { method: 'POST', body: form },
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as ReplaceSlideImageResponse;
+}
+
 export async function generatePdfVideo(id: string): Promise<GenerateVideoResponse> {
   const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/generate-video`, {
     method: 'POST',

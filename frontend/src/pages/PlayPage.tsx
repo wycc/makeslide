@@ -9,10 +9,13 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ApiError,
   chatWithPageContext,
+  addSlide,
   clearPageChatHistory,
+  deleteSlide,
   fetchPdfDetail,
   fetchPageChatHistory,
   generatePdfVideo,
+  replaceSlideImage,
   regeneratePageAudio,
   rewritePageScript,
 } from '../lib/api';
@@ -53,6 +56,9 @@ export default function PlayPage() {
   const [videoBusy, setVideoBusy] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [slideBusy, setSlideBusy] = useState(false);
+  const [slideError, setSlideError] = useState<string | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   // prefetch refs so GC doesn't drop them mid-load
@@ -89,23 +95,22 @@ export default function PlayPage() {
   }, [pdfId]);
 
   const pages = detail?.pages ?? [];
-  const readyPages: PdfDetailPage[] = useMemo(
-    () => pages.filter((p) => !!p.audio_url && !!p.image_url),
-    [pages],
-  );
-  const currentPage: PdfDetailPage | null = readyPages[currentIdx] ?? null;
-  const totalPages = readyPages.length;
+  const deckPages: PdfDetailPage[] = useMemo(() => pages, [pages]);
+  const currentPage: PdfDetailPage | null = deckPages[currentIdx] ?? null;
+  const totalPages = deckPages.length;
 
   // ---- Fetch all scripts once pages are ready ----
   useEffect(() => {
-    if (readyPages.length === 0) return;
+    if (deckPages.length === 0) return;
     let cancelled = false;
     (async () => {
       const entries = await Promise.all(
-        readyPages.map(async (p) => {
+        deckPages.map(async (p) => {
           if (!p.script_url) return [p.page_number, ''] as const;
           try {
-            const resp = await fetch(p.script_url);
+            const bust = `t=${Date.now()}`;
+            const url = p.script_url.includes('?') ? `${p.script_url}&${bust}` : `${p.script_url}?${bust}`;
+            const resp = await fetch(url, { cache: 'no-store' });
             if (!resp.ok) return [p.page_number, ''] as const;
             const t = await resp.text();
             return [p.page_number, t] as const;
@@ -122,7 +127,7 @@ export default function PlayPage() {
     return () => {
       cancelled = true;
     };
-  }, [readyPages]);
+  }, [deckPages]);
 
   // ---- Swap audio src when current page changes ----
   useEffect(() => {
@@ -142,7 +147,7 @@ export default function PlayPage() {
 
   // ---- Prefetch next page assets ----
   useEffect(() => {
-    const next = readyPages[currentIdx + 1];
+    const next = deckPages[currentIdx + 1];
     if (!next) return;
     if (next.image_url) {
       const img = new Image();
@@ -155,7 +160,7 @@ export default function PlayPage() {
       a.src = next.audio_url;
       prefetchedAudioRef.current = a;
     }
-  }, [currentIdx, readyPages]);
+  }, [currentIdx, deckPages]);
 
   // ---- Controls ----
   const playPause = useCallback(() => {
@@ -387,6 +392,61 @@ export default function PlayPage() {
     }
   }, [pdfId]);
 
+  const reloadDetail = useCallback(async () => {
+    if (!pdfId) return;
+    const d = await fetchPdfDetail(pdfId);
+    setDetail(d);
+    setVideoUrl(d.video_url ?? null);
+  }, [pdfId]);
+
+  const handleAddSlideAfterCurrent = useCallback(async () => {
+    if (!pdfId || !currentPage) return;
+    setSlideBusy(true);
+    setSlideError(null);
+    try {
+      await addSlide(pdfId, currentPage.page_number);
+      // 等後端新增完成後再整頁重載，避免讀到中間狀態。
+      window.location.reload();
+    } catch (err) {
+      setSlideError(err instanceof ApiError ? err.message : '新增投影片失敗');
+    } finally {
+      setSlideBusy(false);
+    }
+  }, [pdfId, currentPage]);
+
+  const handleDeleteCurrentSlide = useCallback(async () => {
+    if (!pdfId || !currentPage) return;
+    if (!window.confirm(`確定刪除第 ${currentPage.page_number} 頁？`)) return;
+    setSlideBusy(true);
+    setSlideError(null);
+    try {
+      await deleteSlide(pdfId, currentPage.page_number);
+      // 等後端刪除完成後再整頁重載，避免讀到中間狀態。
+      window.location.reload();
+    } catch (err) {
+      setSlideError(err instanceof ApiError ? err.message : '刪除投影片失敗');
+    } finally {
+      setSlideBusy(false);
+    }
+  }, [pdfId, currentPage]);
+
+  const handleReplaceImageFile = useCallback(
+    async (file: File) => {
+      if (!pdfId || !currentPage) return;
+      setSlideBusy(true);
+      setSlideError(null);
+      try {
+        await replaceSlideImage(pdfId, currentPage.page_number, file);
+        await reloadDetail();
+      } catch (err) {
+        setSlideError(err instanceof ApiError ? err.message : '替換圖片失敗');
+      } finally {
+        setSlideBusy(false);
+      }
+    },
+    [pdfId, currentPage, reloadDetail],
+  );
+
   // ---- Render loading / error states ----
   if (!pdfId) {
     return (
@@ -615,8 +675,91 @@ export default function PlayPage() {
           </section>
         </div>
 
-        {/* Right: LLM chat panel */}
-        <aside className="flex max-h-[calc(100vh-7rem)] w-[360px] shrink-0 flex-col overflow-y-auto rounded-lg border border-slate-800 bg-slate-900/40">
+        {/* Right: thumbnails + LLM chat panel */}
+        <aside className="flex max-h-[calc(100vh-7rem)] w-[360px] shrink-0 flex-col gap-3 overflow-y-auto">
+          <section className="rounded-lg border border-slate-800 bg-slate-900/40">
+            <div className="border-b border-slate-800 px-4 py-3">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold text-slate-300">🧩 投影片管理</h2>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleAddSlideAfterCurrent()}
+                    disabled={slideBusy || !currentPage}
+                    className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-2 py-1 text-xs text-emerald-200 disabled:opacity-40"
+                  >
+                    新增
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleDeleteCurrentSlide()}
+                    disabled={slideBusy || !currentPage || totalPages <= 1}
+                    className="rounded-md border border-rose-500/50 bg-rose-500/15 px-2 py-1 text-xs text-rose-200 disabled:opacity-40"
+                  >
+                    刪除
+                  </button>
+                </div>
+              </div>
+              {slideError ? <p className="mt-2 text-xs text-rose-300">{slideError}</p> : null}
+            </div>
+            <div
+              className="grid max-h-48 grid-cols-4 gap-2 overflow-y-auto p-3"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                const f = e.dataTransfer.files?.[0];
+                if (f) void handleReplaceImageFile(f);
+              }}
+              onPaste={(e) => {
+                const file = Array.from(e.clipboardData.items)
+                  .map((it) => (it.kind === 'file' ? it.getAsFile() : null))
+                  .find((f): f is File => !!f);
+                if (file) void handleReplaceImageFile(file);
+              }}
+              tabIndex={0}
+            >
+              {deckPages.map((p, idx) => (
+                <button
+                  key={p.page_number}
+                  type="button"
+                  onClick={() => setCurrentIdx(idx)}
+                  className={`overflow-hidden rounded border ${idx === currentIdx ? 'border-cyan-400' : 'border-slate-700'}`}
+                  title={`第 ${p.page_number} 頁`}
+                >
+                  {p.image_url ? (
+                    <img src={p.image_url} alt={`第 ${p.page_number} 頁縮圖`} className="h-14 w-full object-cover" />
+                  ) : (
+                    <div className="flex h-14 w-full items-center justify-center bg-slate-800 text-[10px] text-slate-400">
+                      無圖片
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+            <div className="border-t border-slate-800 px-3 py-2">
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void handleReplaceImageFile(f);
+                  e.currentTarget.value = '';
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click()}
+                disabled={slideBusy || !currentPage}
+                className="w-full rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-xs text-cyan-200 disabled:opacity-40"
+              >
+                取代目前頁圖片（可拖放/貼上）
+              </button>
+            </div>
+          </section>
+
+          <section className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-lg border border-slate-800 bg-slate-900/40">
           <div className="border-b border-slate-800 px-4 py-3">
           <h2 className="mb-2 text-sm font-semibold text-slate-300">
             💬 本頁問答（含本頁圖片與文字上下文）
@@ -681,6 +824,7 @@ export default function PlayPage() {
             {chatError ? <p className="mt-1 text-xs text-rose-300">{chatError}</p> : null}
             {rewriteError ? <p className="mt-1 text-xs text-rose-300">{rewriteError}</p> : null}
           </div>
+          </section>
         </aside>
       </main>
     </div>

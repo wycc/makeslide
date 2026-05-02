@@ -129,6 +129,39 @@ export async function removePdfDir(pdfId: string): Promise<void> {
   await fs.promises.rm(dir, { recursive: true, force: true });
 }
 
+export async function renumberPageArtifacts(
+  pdfId: string,
+  oldPageCount: number,
+  updates: Array<{ from: number; to: number }>,
+): Promise<void> {
+  if (updates.length === 0) return;
+  const dir = pagesDir(pdfId);
+  await fs.promises.mkdir(dir, { recursive: true });
+
+  const suffixes = ['.png', '.text.txt', '.script.txt', '.mp3'] as const;
+  const tempMoves: Array<{ from: string; to: string }> = [];
+
+  for (const item of updates) {
+    const fromPad = formatPageNumber(item.from, oldPageCount);
+    const toPad = formatPageNumber(item.to, oldPageCount);
+    for (const suffix of suffixes) {
+      const from = path.join(dir, `${fromPad}${suffix}`);
+      const tmp = path.join(dir, `.__renaming__.${toPad}${suffix}`);
+      try {
+        await fs.promises.access(from, fs.constants.F_OK);
+      } catch {
+        continue;
+      }
+      await fs.promises.rename(from, tmp);
+      tempMoves.push({ from: tmp, to: path.join(dir, `${toPad}${suffix}`) });
+    }
+  }
+
+  for (const mv of tempMoves) {
+    await fs.promises.rename(mv.from, mv.to);
+  }
+}
+
 /**
  * Resolve a file path inside a pdf's storage dir and ensure it cannot escape
  * that directory (defence against path traversal). Returns the absolute path,

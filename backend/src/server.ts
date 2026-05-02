@@ -10,7 +10,7 @@ import { rescanPendingOnStartup } from './worker/pipeline';
 import { getProcessingQueue } from './worker/queue';
 import './db'; // Initialize DB and run migrations
 
-async function buildApp() {
+export async function buildApp() {
   const app = Fastify({
     logger,
     bodyLimit: config.maxUploadBytes + 1024 * 1024, // small slack for headers
@@ -127,4 +127,6 @@ async function main(): Promise<void> {
   }
 }
 
-main();
+if (process.env.NODE_ENV !== 'test') {
+  main();
+}
