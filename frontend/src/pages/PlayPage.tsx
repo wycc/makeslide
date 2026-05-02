@@ -98,6 +98,15 @@ export default function PlayPage() {
   const deckPages: PdfDetailPage[] = useMemo(() => pages, [pages]);
   const currentPage: PdfDetailPage | null = deckPages[currentIdx] ?? null;
   const totalPages = deckPages.length;
+  const imageBustKey = detail?.updated_at ?? '';
+  const withImageBust = useCallback(
+    (url: string | null | undefined) => {
+      if (!url) return null;
+      const q = `t=${encodeURIComponent(imageBustKey)}`;
+      return url.includes('?') ? `${url}&${q}` : `${url}?${q}`;
+    },
+    [imageBustKey],
+  );
 
   // ---- Fetch all scripts once pages are ready ----
   useEffect(() => {
@@ -431,12 +440,13 @@ export default function PlayPage() {
   }, [pdfId, currentPage]);
 
   const handleReplaceImageFile = useCallback(
-    async (file: File) => {
+    async (file: File, targetPageNumber?: number) => {
       if (!pdfId || !currentPage) return;
+      const pageNumber = targetPageNumber ?? currentPage.page_number;
       setSlideBusy(true);
       setSlideError(null);
       try {
-        await replaceSlideImage(pdfId, currentPage.page_number, file);
+        await replaceSlideImage(pdfId, pageNumber, file);
         await reloadDetail();
       } catch (err) {
         setSlideError(err instanceof ApiError ? err.message : '替換圖片失敗');
@@ -562,12 +572,20 @@ export default function PlayPage() {
         {/* Left: player + script */}
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950/70">
           {/* Slide image */}
-          <section className="flex flex-1 items-center justify-center px-4 py-6">
+          <section
+            className="flex flex-1 items-center justify-center px-4 py-6"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              const f = e.dataTransfer.files?.[0];
+              if (f && currentPage) void handleReplaceImageFile(f, currentPage.page_number);
+            }}
+          >
             <div className="flex h-full w-full max-w-4xl items-center justify-center">
               {currentPage?.image_url ? (
                 <img
                   key={currentPage.page_number}
-                  src={currentPage.image_url}
+                  src={withImageBust(currentPage.image_url) ?? currentPage.image_url}
                   alt={`第 ${currentPage.page_number} 頁`}
                   className="max-h-[52vh] w-auto rounded-lg border border-slate-800 shadow-xl"
                 />
@@ -704,12 +722,6 @@ export default function PlayPage() {
             </div>
             <div
               className="grid max-h-48 grid-cols-4 gap-2 overflow-y-auto p-3"
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                const f = e.dataTransfer.files?.[0];
-                if (f) void handleReplaceImageFile(f);
-              }}
               onPaste={(e) => {
                 const file = Array.from(e.clipboardData.items)
                   .map((it) => (it.kind === 'file' ? it.getAsFile() : null))
@@ -723,11 +735,21 @@ export default function PlayPage() {
                   key={p.page_number}
                   type="button"
                   onClick={() => setCurrentIdx(idx)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const f = e.dataTransfer.files?.[0];
+                    if (f) void handleReplaceImageFile(f, p.page_number);
+                  }}
                   className={`overflow-hidden rounded border ${idx === currentIdx ? 'border-cyan-400' : 'border-slate-700'}`}
                   title={`第 ${p.page_number} 頁`}
                 >
                   {p.image_url ? (
-                    <img src={p.image_url} alt={`第 ${p.page_number} 頁縮圖`} className="h-14 w-full object-cover" />
+                    <img
+                      src={withImageBust(p.image_url) ?? p.image_url}
+                      alt={`第 ${p.page_number} 頁縮圖`}
+                      className="h-14 w-full object-cover"
+                    />
                   ) : (
                     <div className="flex h-14 w-full items-center justify-center bg-slate-800 text-[10px] text-slate-400">
                       無圖片
