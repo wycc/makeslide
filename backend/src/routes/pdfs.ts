@@ -116,6 +116,10 @@ const UpdateTtsSettingsBodySchema = z.object({
   tts_speed: z.number().min(0.25, 'tts_speed 過小').max(4, 'tts_speed 過大'),
 });
 
+const RegenerateAllImagesBodySchema = z.object({
+  prompt: z.string().min(1, 'prompt 不可為空').max(4000, 'prompt 不可超過 4000 字'),
+});
+
 function errorResponse(code: string, message: string): ApiError {
   return { error: { code, message } };
 }
@@ -847,6 +851,93 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
     }
 
     return reply.code(200).send({ id, tts_voice: ttsVoice, tts_speed: ttsSpeed, updated_at: updatedAt });
+  });
+
+  app.post('/api/pdfs/:id/regenerate-images', async (request, reply) => {
+    const parsedParams = IdParamSchema.safeParse(request.params);
+    if (!parsedParams.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const parsedBody = RegenerateAllImagesBodySchema.safeParse(request.body ?? {});
+    if (!parsedBody.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', parsedBody.error.issues[0]?.message ?? 'Invalid body'));
+    }
+    const { id } = parsedParams.data;
+    const prompt = parsedBody.data.prompt.trim();
+
+    const pdfRow = db
+      .prepare(`SELECT page_count FROM pdfs WHERE id = ?`)
+      .get(id) as { page_count: number | null } | undefined;
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!pdfRow.page_count || pdfRow.page_count <= 0) {
+      return reply.code(409).send(errorResponse('INVALID_STATE', 'PDF page_count not ready'));
+    }
+
+    const pageRows = db
+      .prepare(`SELECT page_number, text_path, script_path FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`)
+      .all(id) as Array<{ page_number: number; text_path: string | null; script_path: string | null }>;
+
+    try {
+      const client = getOpenAIClient();
+      for (const p of pageRows) {
+        let pageText = '';
+        let pageScript = '';
+        if (p.text_path) {
+          try {
+            pageText = await fs.promises.readFile(safeJoinPdfPath(id, p.text_path), 'utf8');
+          } catch {
+            pageText = '';
+          }
+        }
+        if (p.script_path) {
+          try {
+            pageScript = await fs.promises.readFile(safeJoinPdfPath(id, p.script_path), 'utf8');
+          } catch {
+            pageScript = '';
+          }
+        }
+
+        const mergedPrompt = [
+          '請產生一張 16:9 的現代知識型簡報頁，視覺風格接近 NotebookLM（資訊圖卡、清楚層級、留白充足）。',
+          '請保持全份簡報視覺風格一致。',
+          `整份調整需求：\n${prompt}`,
+          `本頁文字內容（參考）：\n${pageText || '(無)'}`,
+          `本頁逐字稿（參考）：\n${pageScript || '(無)'}`,
+        ].join('\n\n');
+
+        const generated = await client.images.generate({
+          model: config.openaiImageModel,
+          prompt: mergedPrompt,
+          size: '1536x1024',
+        });
+        const b64 = generated.data?.[0]?.b64_json;
+        if (!b64) throw new Error(`OpenAI generate returned empty result at page ${p.page_number}`);
+        const newBuf = Buffer.from(b64, 'base64');
+        const outPath = pageImagePath(id, p.page_number, pdfRow.page_count);
+        await sharp(newBuf)
+          .resize(1920, 1080, { fit: 'contain', background: { r: 255, g: 255, b: 255 } })
+          .png()
+          .toFile(outPath);
+      }
+
+      const updatedAt = nowIso();
+      db.prepare(`UPDATE pages SET updated_at = ? WHERE pdf_id = ?`).run(updatedAt, id);
+      db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(updatedAt, id);
+      try {
+        const meta = await readMetadata(id);
+        if (meta) {
+          meta.updated_at = updatedAt;
+          await writeMetadata(id, meta);
+        }
+      } catch {
+        // non-fatal
+      }
+
+      return reply.code(200).send({ id, page_count: pdfRow.page_count, updated_at: updatedAt });
+    } catch (err) {
+      request.log.error({ err, pdfId: id }, 'Failed to regenerate all images');
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to regenerate all images'));
+    }
   });
 
   app.delete('/api/pdfs/:id/pages/:n', async (request, reply) => {

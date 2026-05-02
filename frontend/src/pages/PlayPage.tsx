@@ -16,6 +16,7 @@ import {
   fetchPageChatHistory,
   generatePdfVideo,
   regenerateSlideImage,
+  regenerateAllImages,
   replaceSlideImage,
   regeneratePageAudio,
   updatePdfTtsSettings,
@@ -65,6 +66,10 @@ export default function PlayPage() {
   const [ttsBusy, setTtsBusy] = useState(false);
   const [ttsMsg, setTtsMsg] = useState<string | null>(null);
   const [ttsDialogOpen, setTtsDialogOpen] = useState(false);
+  const [regenAllDialogOpen, setRegenAllDialogOpen] = useState(false);
+  const [regenAllPrompt, setRegenAllPrompt] = useState('請讓整份簡報的圖像風格一致，色調、字體與版面語言維持統一。');
+  const [regenAllBusy, setRegenAllBusy] = useState(false);
+  const [regenAllMsg, setRegenAllMsg] = useState<string | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
   const IMAGE_MSG_PREFIX = '[image] ';
@@ -444,6 +449,27 @@ export default function PlayPage() {
     setVideoUrl(d.video_url ?? null);
   }, [pdfId]);
 
+  const handleRegenerateAllImages = useCallback(async () => {
+    if (!pdfId) return;
+    const p = regenAllPrompt.trim();
+    if (!p) {
+      setRegenAllMsg('提示詞不可為空');
+      return;
+    }
+    setRegenAllBusy(true);
+    setRegenAllMsg(null);
+    try {
+      await regenerateAllImages(pdfId, p);
+      setRegenAllMsg('已完成全部圖片重生');
+      setRegenAllDialogOpen(false);
+      await reloadDetail();
+    } catch (err) {
+      setRegenAllMsg(err instanceof ApiError ? err.message : '重生全部圖片失敗');
+    } finally {
+      setRegenAllBusy(false);
+    }
+  }, [pdfId, regenAllPrompt, reloadDetail]);
+
   const handleAddSlideAfterCurrent = useCallback(async () => {
     if (!pdfId || !currentPage) return;
     setSlideBusy(true);
@@ -669,6 +695,17 @@ export default function PlayPage() {
               className="rounded-md border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-sm text-amber-200 hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {videoBusy ? '產生影片中…' : videoUrl ? '重新產生影片' : '產生影片'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setRegenAllMsg(null);
+                setRegenAllDialogOpen(true);
+              }}
+              disabled={regenAllBusy}
+              className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-3 py-1.5 text-sm text-fuchsia-200 hover:bg-fuchsia-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {regenAllBusy ? '重生中…' : '重生全部圖片'}
             </button>
           </div>
         </div>
@@ -1049,6 +1086,40 @@ export default function PlayPage() {
                 className="rounded border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-200 disabled:opacity-40"
               >
                 {ttsBusy ? '儲存中…' : '儲存設定'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {regenAllDialogOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
+          <div className="w-full max-w-xl rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl">
+            <h3 className="mb-3 text-sm font-semibold text-slate-200">重生全部圖片</h3>
+            <p className="mb-2 text-xs text-slate-400">用同一段提示詞逐頁重生圖片，常用於統一整份風格。</p>
+            <textarea
+              value={regenAllPrompt}
+              onChange={(e) => setRegenAllPrompt(e.target.value)}
+              rows={5}
+              className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-fuchsia-500/40 placeholder:text-slate-500 focus:ring"
+              placeholder="輸入整份風格調整提示詞..."
+            />
+            {regenAllMsg ? <p className="mt-2 text-xs text-rose-300">{regenAllMsg}</p> : null}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setRegenAllDialogOpen(false)}
+                className="rounded border border-slate-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleRegenerateAllImages()}
+                disabled={regenAllBusy}
+                className="rounded border border-fuchsia-500/50 bg-fuchsia-500/15 px-3 py-1.5 text-sm text-fuchsia-200 disabled:opacity-40"
+              >
+                {regenAllBusy ? '重生中…' : '開始重生'}
               </button>
             </div>
           </div>
