@@ -25,6 +25,33 @@ export async function renderTextPagesWithLlm(
 
   for (const p of opts.pages) {
     const startedAt = Date.now();
+    const imagePath = pageImagePath(opts.pdfId, p.pageNumber, pageCount);
+    const textPath = pageTextPath(opts.pdfId, p.pageNumber, pageCount);
+
+    // Idempotency: if image already exists and non-empty, keep it and skip
+    // re-generation. Still sync text file so downstream steps read latest text.
+    try {
+      const st = await fs.promises.stat(imagePath);
+      if (st.isFile() && st.size > 0) {
+        await fs.promises.writeFile(textPath, p.content, 'utf8');
+        pagePaths.push(imagePath);
+        logger.info(
+          {
+            pdfId: opts.pdfId,
+            pageNumber: p.pageNumber,
+            pageCount,
+            bytes: st.size,
+          },
+          'Text image generation: reuse existing image (idempotent skip)',
+        );
+        opts.onPage?.(p.pageNumber, imagePath);
+        continue;
+      }
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+      // proceed to generate
+    }
+
     logger.info(
       {
         pdfId: opts.pdfId,
@@ -73,8 +100,6 @@ export async function renderTextPagesWithLlm(
     const b64 = first?.b64_json;
     if (!b64) throw new Error(`LLM image generation failed at page ${p.pageNumber}`);
 
-    const imagePath = pageImagePath(opts.pdfId, p.pageNumber, pageCount);
-    const textPath = pageTextPath(opts.pdfId, p.pageNumber, pageCount);
     await fs.promises.writeFile(imagePath, Buffer.from(b64, 'base64'));
     await fs.promises.writeFile(textPath, p.content, 'utf8');
     pagePaths.push(imagePath);

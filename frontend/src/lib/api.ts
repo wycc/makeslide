@@ -71,6 +71,16 @@ export async function deletePdf(id: string): Promise<void> {
   }
 }
 
+export async function retryFailedPdf(id: string): Promise<{ id: string; status: string; updated_at: string }> {
+  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/retry`, {
+    method: 'POST',
+  });
+  if (!resp.ok) {
+    throw await parseErrorBody(resp);
+  }
+  return (await resp.json()) as { id: string; status: string; updated_at: string };
+}
+
 /**
  * Submit the user's style / tone prompt and ask the backend to start the
  * full pipeline. `prompt` may be an empty string (user skipped customising).

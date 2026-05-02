@@ -487,6 +487,72 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
     });
   });
 
+  // POST /api/pdfs/:id/retry
+  // Retry a failed pipeline job without forcing user to resubmit prompt.
+  app.post('/api/pdfs/:id/retry', async (request, reply) => {
+    const parsedParams = IdParamSchema.safeParse(request.params);
+    if (!parsedParams.success) {
+      return reply
+        .code(400)
+        .send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const { id } = parsedParams.data;
+    const row = db
+      .prepare(
+        `SELECT id, title, original_filename, status, page_count, progress_step,
+                progress_current, progress_total,
+                error_message, user_prompt, require_script_confirmation,
+                tts_voice, tts_speed, script_max_chars_per_page,
+                created_at, updated_at
+           FROM pdfs WHERE id = ?`,
+      )
+      .get(id) as PdfRow | undefined;
+    if (!row) {
+      return reply
+        .code(404)
+        .send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    if (row.status !== 'failed') {
+      return reply
+        .code(409)
+        .send(errorResponse('INVALID_STATE', `PDF ${id} is not failed`));
+    }
+
+    const updatedAt = nowIso();
+    db.prepare(
+      `UPDATE pdfs
+          SET status = 'uploaded',
+              error_message = NULL,
+              progress_step = NULL,
+              progress_current = NULL,
+              progress_total = NULL,
+              updated_at = ?
+        WHERE id = ?`,
+    ).run(updatedAt, id);
+
+    try {
+      const meta = await readMetadata(id);
+      if (meta) {
+        meta.status = 'uploaded';
+        meta.error_message = null;
+        meta.progress_step = null;
+        meta.progress_current = null;
+        meta.progress_total = null;
+        meta.updated_at = updatedAt;
+        await writeMetadata(id, meta);
+      }
+    } catch {
+      // non-fatal
+    }
+
+    enqueuePdfProcessing(id);
+    return reply.code(202).send({
+      id,
+      status: 'uploaded' as PdfStatus,
+      updated_at: updatedAt,
+    });
+  });
+
   // POST /api/pdfs/:id/pages/:n/regenerate-audio
   // User edits per-page script and asks backend to regenerate this page audio only.
   app.post('/api/pdfs/:id/pages/:n/regenerate-audio', async (request, reply) => {

@@ -4,6 +4,7 @@ import {
   ApiError,
   deletePdf,
   fetchPdfs,
+  retryFailedPdf,
   startProcessing,
 } from '../lib/api';
 import type { PdfListItem, UploadResponse } from '../types';
@@ -153,6 +154,19 @@ export default function HomePage() {
         return;
       }
       if (pdf.status !== 'ready') {
+        if (pdf.status === 'failed') {
+          void (async () => {
+            try {
+              await retryFailedPdf(pdf.id);
+              showToast('已重新排入處理佇列');
+              await load({ silent: true });
+            } catch (err) {
+              const msg = err instanceof ApiError ? err.message : '重試失敗';
+              showToast(`重試失敗：${msg}`);
+            }
+          })();
+          return;
+        }
         showToast('尚未處理完成');
         return;
       }
