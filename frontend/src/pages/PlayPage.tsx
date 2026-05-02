@@ -580,6 +580,13 @@ export default function PlayPage() {
               const f = e.dataTransfer.files?.[0];
               if (f && currentPage) void handleReplaceImageFile(f, currentPage.page_number);
             }}
+            onPaste={(e) => {
+              const file = Array.from(e.clipboardData.items)
+                .map((it) => (it.kind === 'file' ? it.getAsFile() : null))
+                .find((f): f is File => !!f);
+              if (file && currentPage) void handleReplaceImageFile(file, currentPage.page_number);
+            }}
+            tabIndex={0}
           >
             <div className="flex h-full w-full max-w-4xl items-center justify-center">
               {currentPage?.image_url ? (
@@ -740,6 +747,12 @@ export default function PlayPage() {
                     e.preventDefault();
                     const f = e.dataTransfer.files?.[0];
                     if (f) void handleReplaceImageFile(f, p.page_number);
+                  }}
+                  onPaste={(e) => {
+                    const file = Array.from(e.clipboardData.items)
+                      .map((it) => (it.kind === 'file' ? it.getAsFile() : null))
+                      .find((f): f is File => !!f);
+                    if (file) void handleReplaceImageFile(file, p.page_number);
                   }}
                   className={`overflow-hidden rounded border ${idx === currentIdx ? 'border-cyan-400' : 'border-slate-700'}`}
                   title={`第 ${p.page_number} 頁`}
