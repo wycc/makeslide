@@ -91,6 +91,10 @@ const RewriteScriptBodySchema = z.object({
     .default([]),
 });
 
+const RegenerateImageBodySchema = z.object({
+  prompt: z.string().min(1, 'prompt 不可為空').max(2000, 'prompt 不可超過 2000 字'),
+});
+
 const ChatMessageSchema = z.object({
   role: z.enum(['user', 'assistant']),
   content: z.string().min(1).max(4000),
@@ -717,6 +721,86 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
     }
 
     return reply.code(200).send({ id, page_number: n, image_url: `/api/pdfs/${id}/pages/${n}/image`, updated_at: now });
+  });
+
+  app.post('/api/pdfs/:id/pages/:n/regenerate-image', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const parsedBody = RegenerateImageBodySchema.safeParse(request.body ?? {});
+    if (!parsedBody.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', parsedBody.error.issues[0]?.message ?? 'Invalid body'));
+    }
+    const { id, n } = parsed.data;
+    const prompt = parsedBody.data.prompt.trim();
+
+    const pdfRow = db.prepare(`SELECT page_count FROM pdfs WHERE id = ?`).get(id) as { page_count: number | null } | undefined;
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!pdfRow.page_count || n > pdfRow.page_count) {
+      return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+    }
+    const pageRow = db
+      .prepare(`SELECT image_path, text_path, script_path FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .get(id, n) as { image_path: string | null; text_path: string | null; script_path: string | null } | undefined;
+    if (!pageRow) {
+      return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+    }
+
+    try {
+      const client = getOpenAIClient();
+      let pageText = '';
+      let pageScript = '';
+      if (pageRow.text_path) {
+        try {
+          pageText = await fs.promises.readFile(safeJoinPdfPath(id, pageRow.text_path), 'utf8');
+        } catch {
+          pageText = '';
+        }
+      }
+      if (pageRow.script_path) {
+        try {
+          pageScript = await fs.promises.readFile(safeJoinPdfPath(id, pageRow.script_path), 'utf8');
+        } catch {
+          pageScript = '';
+        }
+      }
+
+      const mergedPrompt = [
+        '請產生一張 16:9 的現代知識型簡報頁，視覺風格接近 NotebookLM（資訊圖卡、清楚層級、留白充足）。',
+        `頁面文字內容（參考）：\n${pageText || '(無)'}`,
+        `目前逐字稿（參考）：\n${pageScript || '(無)'}`,
+        `使用者修改需求：\n${prompt}`,
+      ].join('\n\n');
+
+      const edited = await client.images.generate({
+        model: config.openaiImageModel,
+        prompt: mergedPrompt,
+        size: '1536x1024',
+      });
+      const b64 = edited.data?.[0]?.b64_json;
+      if (!b64) throw new Error('OpenAI image edit returned empty result');
+      const newBuf = Buffer.from(b64, 'base64');
+      const outPath = pageImagePath(id, n, pdfRow.page_count);
+      await sharp(newBuf).resize(1920, 1080, { fit: 'contain', background: { r: 255, g: 255, b: 255 } }).png().toFile(outPath);
+
+      const now = nowIso();
+      db.prepare(`UPDATE pages SET updated_at = ? WHERE pdf_id = ? AND page_number = ?`).run(now, id, n);
+      db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(now, id);
+      try {
+        const meta = await readMetadata(id);
+        if (meta) {
+          meta.updated_at = now;
+          await writeMetadata(id, meta);
+        }
+      } catch {
+        // non-fatal
+      }
+      return reply.code(200).send({ id, page_number: n, image_url: `/api/pdfs/${id}/pages/${n}/image`, updated_at: now });
+    } catch (err) {
+      request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to regenerate image by prompt');
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to regenerate image'));
+    }
   });
 
   app.delete('/api/pdfs/:id/pages/:n', async (request, reply) => {

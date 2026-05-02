@@ -152,6 +152,13 @@ export interface ReplaceSlideImageResponse {
   updated_at: string;
 }
 
+export interface RegenerateSlideImageResponse {
+  id: string;
+  page_number: number;
+  image_url: string;
+  updated_at: string;
+}
+
 export async function addSlide(id: string, afterPageNumber: number): Promise<AddSlideResponse> {
   const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/pages`, {
     method: 'POST',
@@ -184,6 +191,23 @@ export async function replaceSlideImage(
   );
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as ReplaceSlideImageResponse;
+}
+
+export async function regenerateSlideImage(
+  id: string,
+  pageNumber: number,
+  prompt: string,
+): Promise<RegenerateSlideImageResponse> {
+  const resp = await fetch(
+    `/api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/regenerate-image`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ prompt }),
+    },
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as RegenerateSlideImageResponse;
 }
 
 export async function generatePdfVideo(id: string): Promise<GenerateVideoResponse> {

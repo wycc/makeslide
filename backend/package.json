@@ -19,7 +19,7 @@
     "fastify": "^4.28.1",
     "music-metadata": "^11.12.3",
     "nanoid": "^5.0.7",
-    "openai": "^4.104.0",
+    "openai": "^6.35.0",
     "p-queue": "^9.2.0",
     "pdfjs-dist": "^4.10.38",
     "pino": "^9.4.0",

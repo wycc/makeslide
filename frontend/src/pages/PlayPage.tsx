@@ -15,6 +15,7 @@ import {
   fetchPdfDetail,
   fetchPageChatHistory,
   generatePdfVideo,
+  regenerateSlideImage,
   replaceSlideImage,
   regeneratePageAudio,
   rewritePageScript,
@@ -58,6 +59,9 @@ export default function PlayPage() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [slideBusy, setSlideBusy] = useState(false);
   const [slideError, setSlideError] = useState<string | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
+  const IMAGE_MSG_PREFIX = '[image] ';
   const imageInputRef = useRef<HTMLInputElement | null>(null);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -457,6 +461,31 @@ export default function PlayPage() {
     [pdfId, currentPage, reloadDetail],
   );
 
+  const handleRegenerateImageWithPrompt = useCallback(async () => {
+    if (!pdfId || !currentPage) return;
+    const trimmed = chatInput.trim() || '保留版型，讓文字更清晰、重點更聚焦';
+    setSlideBusy(true);
+    setSlideError(null);
+    try {
+      const res = await regenerateSlideImage(pdfId, currentPage.page_number, trimmed);
+      const preview = `${res.image_url}${res.image_url.includes('?') ? '&' : '?'}t=${encodeURIComponent(res.updated_at)}`;
+      setChatHistory((prev) => [
+        ...prev,
+        { role: 'user', content: `【修改圖片】${trimmed}` },
+        { role: 'assistant', content: `${IMAGE_MSG_PREFIX}${preview}` },
+      ]);
+    } catch (err) {
+      setSlideError(err instanceof ApiError ? err.message : '修改圖片失敗');
+    } finally {
+      setSlideBusy(false);
+    }
+  }, [pdfId, currentPage, chatInput, reloadDetail]);
+
+  const handleApplyPreviewImage = useCallback(async () => {
+    setImagePreviewOpen(false);
+    await reloadDetail();
+  }, [reloadDetail]);
+
   // ---- Render loading / error states ----
   if (!pdfId) {
     return (
@@ -513,6 +542,42 @@ export default function PlayPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
+      {slideBusy ? (
+        <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-slate-950/60">
+          <div className="rounded-lg border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-200 shadow-xl">
+            <span className="mr-2 inline-block h-3 w-3 animate-pulse rounded-full bg-cyan-400" />
+            圖片產生中…
+          </div>
+        </div>
+      ) : null}
+
+      {imagePreviewOpen && imagePreviewUrl ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
+          <div className="w-full max-w-4xl rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl">
+            <h3 className="mb-3 text-sm font-semibold text-slate-200">圖片產生結果預覽</h3>
+            <div className="mb-4 flex max-h-[70vh] items-center justify-center overflow-auto rounded-lg border border-slate-800 bg-slate-950 p-2">
+              <img src={imagePreviewUrl} alt="生成結果預覽" className="max-h-[64vh] w-auto rounded" />
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setImagePreviewOpen(false)}
+                className="rounded-md border border-slate-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
+              >
+                關閉預覽
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleApplyPreviewImage()}
+                className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-3 py-1.5 text-sm text-emerald-200 hover:bg-emerald-500/25"
+              >
+                套用取代原圖
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {/* Hidden (but functional) audio element */}
       <audio
         ref={audioRef}
@@ -817,7 +882,23 @@ export default function PlayPage() {
               chatHistory.map((m, idx) => (
                 <div key={idx} className={m.role === 'user' ? 'text-slate-100' : 'text-emerald-200'}>
                   <span className="mr-2 text-xs uppercase opacity-70">{m.role === 'user' ? '你' : '助教'}</span>
-                  <span className="whitespace-pre-wrap">{m.content}</span>
+                  {m.role === 'assistant' && m.content.startsWith(IMAGE_MSG_PREFIX) ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const url = m.content.slice(IMAGE_MSG_PREFIX.length).trim();
+                        if (!url) return;
+                        setImagePreviewUrl(url);
+                        setImagePreviewOpen(true);
+                      }}
+                      className="inline-block overflow-hidden rounded-md border border-cyan-500/40 hover:border-cyan-300"
+                      title="點擊放大預覽"
+                    >
+                      <img src={m.content.slice(IMAGE_MSG_PREFIX.length).trim()} alt="生成圖片結果" className="max-h-36 w-auto" />
+                    </button>
+                  ) : (
+                    <span className="whitespace-pre-wrap">{m.content}</span>
+                  )}
                 </div>
               ))
             )}
@@ -838,6 +919,14 @@ export default function PlayPage() {
               className="flex-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-emerald-500/40 placeholder:text-slate-500 focus:ring"
             />
               <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleRegenerateImageWithPrompt()}
+                  disabled={slideBusy || !currentPage}
+                  className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  修改圖片
+                </button>
                 <button
                   type="button"
                   onClick={() => void handleRewriteScript()}
