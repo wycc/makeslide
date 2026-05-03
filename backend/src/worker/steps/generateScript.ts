@@ -78,6 +78,10 @@ const ScriptDeckRewriteSchema = z.object({
  * output char count is plenty of context for the *current* page.
  */
 const MAX_TEXT_CHARS_PER_PAGE = 4000;
+const SCRIPT_MAX_ATTEMPTS = 10;
+const SCRIPT_RETRY_INITIAL_DELAY_MS = 1000;
+const SCRIPT_RETRY_MAX_DELAY_MS = 15000;
+const SCRIPT_RETRY_FACTOR = 2;
 
 function clipText(text: string, max: number = MAX_TEXT_CHARS_PER_PAGE): string {
   const t = text.trim();
@@ -119,6 +123,27 @@ function buildNextContext(nextText: string, nextEmpty: boolean): string {
   const cap = config.openaiScriptNextContextChars;
   if (cap <= 0) return '';
   return clipText(nextText, cap);
+}
+
+function isRetryableScriptError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as { name?: string; message?: string; type?: string; status?: number };
+  const name = (e.name ?? '').toLowerCase();
+  const type = (e.type ?? '').toLowerCase();
+  const message = (e.message ?? '').toLowerCase();
+  const status = e.status;
+
+  if (status === 408 || status === 429) return true;
+  if (typeof status === 'number' && status >= 500) return true;
+  if (name.includes('timeout') || type.includes('timeout') || message.includes('timed out')) {
+    return true;
+  }
+  if (name.includes('connection') || type.includes('connection')) return true;
+  return false;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -431,8 +456,8 @@ export async function generateScript(
       latencyMs: number;
     } | null = null;
 
-    const MAX_ATTEMPTS = 2; // outer page-level retry
-    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    let delayMs = SCRIPT_RETRY_INITIAL_DELAY_MS;
+    for (let attempt = 1; attempt <= SCRIPT_MAX_ATTEMPTS; attempt++) {
       try {
         const { data, usage, latencyMs } = await callChatJSON({
           messages: [
@@ -452,25 +477,46 @@ export async function generateScript(
         break;
       } catch (err) {
         lastErr = err;
+        const retryable = isRetryableScriptError(err);
+        const hasMore = attempt < SCRIPT_MAX_ATTEMPTS;
         logger.warn(
           {
             pdfId,
             pageNumber: pageInfo.pageNumber,
             attempt,
+            retryable,
             hasImage: !!imageDataUrl,
             error: err instanceof Error ? err.message : String(err),
           },
           'generateScript: page attempt failed',
         );
+
+        if (!retryable || !hasMore) {
+          break;
+        }
+
+        await sleep(delayMs);
+        delayMs = Math.min(
+          Math.floor(delayMs * SCRIPT_RETRY_FACTOR),
+          SCRIPT_RETRY_MAX_DELAY_MS,
+        );
       }
     }
 
     if (!success) {
-      throw new Error(
-        `Page ${pageInfo.pageNumber} script generation failed: ${
-          lastErr instanceof Error ? lastErr.message : String(lastErr)
-        }`,
+      logger.error(
+        {
+          pdfId,
+          pageNumber: pageInfo.pageNumber,
+          attempts: SCRIPT_MAX_ATTEMPTS,
+          error: lastErr instanceof Error ? lastErr.message : String(lastErr),
+        },
+        'generateScript: page failed after max retries, skipping page',
       );
+      previousScript = '';
+      done += 1;
+      onPage?.(pageInfo.pageNumber, done);
+      continue;
     }
 
     const { script, usage, latencyMs } = success;

@@ -12,6 +12,10 @@ import { pageAudioPath, pageScriptPath } from '../../services/storage';
  * We clip conservatively below this to leave room for multibyte escaping.
  */
 const TTS_INPUT_MAX_CHARS = 4096;
+const TTS_MAX_ATTEMPTS = 10;
+const TTS_RETRY_INITIAL_DELAY_MS = 1000;
+const TTS_RETRY_MAX_DELAY_MS = 15000;
+const TTS_RETRY_FACTOR = 2;
 
 export interface SynthesizeAudioPageResult {
   pageNumber: number;
@@ -66,6 +70,27 @@ async function readAudioDuration(filePath: string): Promise<number | null> {
     );
     return null;
   }
+}
+
+function isRetryableTtsError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as { name?: string; message?: string; type?: string; status?: number };
+  const name = (e.name ?? '').toLowerCase();
+  const type = (e.type ?? '').toLowerCase();
+  const message = (e.message ?? '').toLowerCase();
+  const status = e.status;
+
+  if (status === 408 || status === 429) return true;
+  if (typeof status === 'number' && status >= 500) return true;
+  if (name.includes('timeout') || type.includes('timeout') || message.includes('timed out')) {
+    return true;
+  }
+  if (name.includes('connection') || type.includes('connection')) return true;
+  return false;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function synthesizeOnePage(params: {
@@ -133,10 +158,10 @@ async function synthesizeOnePage(params: {
   }
 
   const client = getOpenAIClient();
-  const MAX_ATTEMPTS = 2;
   let lastErr: unknown;
+  let delayMs = TTS_RETRY_INITIAL_DELAY_MS;
 
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+  for (let attempt = 1; attempt <= TTS_MAX_ATTEMPTS; attempt++) {
     const startedAt = Date.now();
     try {
       const response = await client.audio.speech.create({
@@ -184,11 +209,14 @@ async function synthesizeOnePage(params: {
       lastErr = err;
       const latencyMs = Date.now() - startedAt;
       const apiErr = err instanceof APIError ? err : null;
+      const retryable = isRetryableTtsError(err);
+      const hasMore = attempt < TTS_MAX_ATTEMPTS;
       logger.warn(
         {
           pdfId,
           pageNumber,
           attempt,
+          retryable,
           latencyMs,
           status: apiErr?.status,
           code: apiErr?.code,
@@ -196,14 +224,36 @@ async function synthesizeOnePage(params: {
         },
         'synthesizeAudio: attempt failed',
       );
+
+      if (!retryable || !hasMore) {
+        break;
+      }
+
+      await sleep(delayMs);
+      delayMs = Math.min(Math.floor(delayMs * TTS_RETRY_FACTOR), TTS_RETRY_MAX_DELAY_MS);
     }
   }
 
-  throw new Error(
-    `Page ${pageNumber} TTS synthesis failed after ${MAX_ATTEMPTS} attempts: ${
-      lastErr instanceof Error ? lastErr.message : String(lastErr)
-    }`,
+  logger.error(
+    {
+      pdfId,
+      pageNumber,
+      attempts: TTS_MAX_ATTEMPTS,
+      error: lastErr instanceof Error ? lastErr.message : String(lastErr),
+    },
+    'synthesizeAudio: page failed after max retries, skipping page',
   );
+
+  return {
+    pageNumber,
+    audioPath: absPath,
+    chars: input.length,
+    bytes: 0,
+    durationSeconds: null,
+    generatedAt: new Date().toISOString(),
+    latencyMs: 0,
+    skipped: true,
+  };
 }
 
 /**
@@ -224,7 +274,6 @@ export async function synthesizeAudio(
 
   const queue = new PQueue({ concurrency: config.ttsConcurrency });
   const results: SynthesizeAudioPageResult[] = new Array(sorted.length);
-  const errors: Array<{ pageNumber: number; error: unknown }> = [];
   let done = 0;
   let cancelled = false;
 
@@ -248,8 +297,6 @@ export async function synthesizeAudio(
           const code = (err as Error & { code?: string }).code;
           if (code === 'CANCELLED') {
             cancelled = true;
-          } else {
-            errors.push({ pageNumber: page.pageNumber, error: err });
           }
         }
       }),
@@ -260,15 +307,6 @@ export async function synthesizeAudio(
     const err = new Error('CANCELLED');
     (err as Error & { code?: string }).code = 'CANCELLED';
     throw err;
-  }
-
-  if (errors.length > 0) {
-    const first = errors[0]!;
-    throw new Error(
-      `synthesizeAudio: ${errors.length} page(s) failed (first: p${first.pageNumber}: ${
-        first.error instanceof Error ? first.error.message : String(first.error)
-      })`,
-    );
   }
 
   const totalChars = results.reduce((acc, r) => acc + (r.skipped ? 0 : r.chars), 0);

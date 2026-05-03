@@ -648,6 +648,72 @@ function markPageProgress(
   state.updated_at = nowIso();
 }
 
+function isRetryableOpenAIError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as { name?: string; message?: string; type?: string; status?: number };
+  const name = (e.name ?? '').toLowerCase();
+  const type = (e.type ?? '').toLowerCase();
+  const message = (e.message ?? '').toLowerCase();
+  const status = e.status;
+
+  if (status === 408 || status === 429) return true;
+  if (typeof status === 'number' && status >= 500) return true;
+  if (name.includes('timeout') || type.includes('timeout') || message.includes('timed out')) {
+    return true;
+  }
+  if (name.includes('connection') || type.includes('connection')) return true;
+  return false;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withExponentialBackoffRetry<T>(
+  fn: () => Promise<T>,
+  options: {
+    maxAttempts: number;
+    initialDelayMs: number;
+    maxDelayMs: number;
+    factor: number;
+    shouldAbort?: () => boolean;
+    context?: Record<string, unknown>;
+  },
+): Promise<T> {
+  let attempt = 0;
+  let delayMs = options.initialDelayMs;
+
+  while (true) {
+    if (options.shouldAbort?.()) {
+      throw makeCancelledError();
+    }
+
+    attempt += 1;
+    try {
+      return await fn();
+    } catch (err) {
+      const retryable = isRetryableOpenAIError(err);
+      const hasMore = attempt < options.maxAttempts;
+      if (!retryable || !hasMore) {
+        throw err;
+      }
+
+      logger.warn(
+        {
+          err,
+          attempt,
+          nextDelayMs: delayMs,
+          ...options.context,
+        },
+        'openai request failed, retry with exponential backoff',
+      );
+
+      await sleep(delayMs);
+      delayMs = Math.min(Math.floor(delayMs * options.factor), options.maxDelayMs);
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Step implementations
 // ---------------------------------------------------------------------------
@@ -905,11 +971,27 @@ async function runRegenerateImages(
       `本頁逐字稿（參考）：\n${pageScript || '(無)'}`,
     ].join('\n\n');
 
-    const generated = await client.images.generate({
-      model: config.openaiImageModel,
-      prompt: mergedPrompt,
-      size: '1536x1024',
-    });
+    const generated = await withExponentialBackoffRetry(
+      () =>
+        client.images.generate({
+          model: config.openaiImageModel,
+          prompt: mergedPrompt,
+          size: '1536x1024',
+          quality: 'low',
+        }),
+      {
+        maxAttempts: 5,
+        initialDelayMs: 1000,
+        maxDelayMs: 15000,
+        factor: 2,
+        shouldAbort,
+        context: {
+          pdfId,
+          pageNumber: p.page_number,
+          jobId: state.job_id,
+        },
+      },
+    );
     const b64 = generated.data?.[0]?.b64_json;
     if (!b64) {
       throw new Error(
