@@ -428,15 +428,13 @@ export async function generateScript(
       nextContext,
     });
 
-    // Optionally attach the current page's rendered PNG as a vision input.
+    // Always attach the current page image as a vision input when available.
     let imageDataUrl: string | null = null;
-    if (config.openaiScriptUseImages) {
-      imageDataUrl = await loadPageImageDataUrl(
-        pdfId,
-        pageInfo.pageNumber,
-        pageInfo.imagePath,
-      );
-    }
+    imageDataUrl = await loadPageImageDataUrl(
+      pdfId,
+      pageInfo.pageNumber,
+      pageInfo.imagePath,
+    );
 
     const userContent: ChatCompletionContentPart[] = [
       { type: 'text', text: userText },

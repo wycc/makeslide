@@ -42,6 +42,7 @@ import type {
   PdfRow,
   PdfStatus,
 } from '../types';
+import type { ChatCompletionContentPart } from 'openai/resources/chat/completions';
 
 const PDF_ID_SIZE = 10;
 
@@ -83,8 +84,8 @@ const RegenerateAudioBodySchema = z.object({
 });
 
 const RewriteScriptBodySchema = z.object({
-  prompt: z.string().min(1, 'prompt 不可為空').max(2000, 'prompt 不可超過 2000 字'),
-  script: z.string().min(1, 'script 不可為空').max(4096, 'script 不可超過 4096 字'),
+  prompt: z.string().max(2000, 'prompt 不可超過 2000 字'),
+  script: z.string().max(4096, 'script 不可超過 4096 字'),
   history: z
     .array(
       z.object({
@@ -747,10 +748,18 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
 
     const file = await request.file();
     if (!file) return reply.code(400).send(errorResponse('NO_FILE', 'No file field found'));
-    const okMime = /^image\/(png|jpeg|jpg|webp)$/i.test(file.mimetype ?? '');
-    if (!okMime) return reply.code(400).send(errorResponse('INVALID_MIME', 'Image must be png/jpeg/webp'));
-
     const imageBuffer = await file.toBuffer();
+    // Clipboard paste from some browsers may send empty/odd mimetype
+    // (e.g. application/octet-stream). Validate by actual decodability.
+    try {
+      const meta = await sharp(imageBuffer).metadata();
+      if (!meta.format) {
+        return reply.code(400).send(errorResponse('INVALID_MIME', 'Image must be decodable')); 
+      }
+    } catch {
+      return reply.code(400).send(errorResponse('INVALID_MIME', 'Image must be decodable'));
+    }
+
     const outPath = pageImagePath(id, n, row.page_count);
     await sharp(imageBuffer).resize(1920, 1080, { fit: 'contain', background: { r: 255, g: 255, b: 255 } }).jpeg({ quality: 82, mozjpeg: true }).toFile(outPath);
 
@@ -1449,25 +1458,53 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
+    let imageDataUrl = '';
+    if (pageRow.image_path) {
+      try {
+        const absImage = safeJoinPdfPath(id, pageRow.image_path);
+        const imgBuf = await sharp(absImage)
+          .resize({ width: config.openaiScriptImageMaxWidth, withoutEnlargement: true })
+          .jpeg({ quality: 80, mozjpeg: true })
+          .toBuffer();
+        imageDataUrl = `data:image/jpeg;base64,${imgBuf.toString('base64')}`;
+      } catch {
+        imageDataUrl = '';
+      }
+    }
+
     const RewriteSchema = z.object({
       script: z.string().min(1).max(4096),
     });
 
     try {
+      const userContent: ChatCompletionContentPart[] = [
+        {
+          type: 'text',
+          text:
+            `使用者修改需求：\n${prompt}\n\n` +
+            `頁面抽取文字（參考）：\n${pageText || '(無)'}\n\n` +
+            `目前逐字稿：\n${script || '(無)'}\n\n` +
+            '若上述參考為空，請直接依使用者需求產出一版可朗讀逐字稿草稿。',
+        },
+      ];
+      if (imageDataUrl) {
+        userContent.push({
+          type: 'image_url',
+          image_url: { url: imageDataUrl, detail: 'auto' },
+        });
+      }
+
       const result = await getOpenAIClient().chat.completions.create({
         model: config.openaiLlmModel,
         messages: [
           {
             role: 'system',
             content:
-              '你是逐字稿編修助理。請根據使用者提示改寫逐字稿，語言使用繁體中文。需忠於投影片內容，不可杜撰。僅輸出 JSON 物件，格式為 {"script":"..."}。',
+              '你是逐字稿編修助理。請根據使用者提示改寫逐字稿，語言使用繁體中文。若參考素材不足，也必須先產出可朗讀草稿，不可回覆無法說明或拒答。僅輸出 JSON 物件，格式為 {"script":"..."}。',
           },
           {
             role: 'user',
-            content:
-              `使用者修改需求：\n${prompt}\n\n` +
-              `頁面抽取文字（參考）：\n${pageText || '(無)'}\n\n` +
-              `目前逐字稿：\n${script}`,
+            content: userContent,
           },
         ],
         response_format: { type: 'json_object' },

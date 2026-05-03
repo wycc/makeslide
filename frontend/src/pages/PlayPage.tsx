@@ -109,6 +109,7 @@ export default function PlayPage() {
   const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
   // 手機模式下的 tab 切換（桌面模式忽略此 state，永遠並排顯示）
   const [activeTab, setActiveTab] = useState<'play' | 'qa'>('play');
+  const [imageOnlyFullscreen, setImageOnlyFullscreen] = useState(false);
   const IMAGE_MSG_PREFIX = '[image] ';
   const imageInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -449,14 +450,6 @@ export default function PlayPage() {
     if (!pdfId || !currentPage) return;
     const prompt = chatInput.trim();
     const sourceScript = editingScript.trim();
-    if (!prompt) {
-      setRewriteError('請先輸入修改提示');
-      return;
-    }
-    if (!sourceScript) {
-      setRewriteError('目前逐字稿不可為空');
-      return;
-    }
     setRewriteBusy(true);
     setRewriteError(null);
     const nextHistory = [...chatHistory, { role: 'user' as const, content: prompt }];
@@ -807,6 +800,94 @@ export default function PlayPage() {
 
   const hasChatInput = chatInput.trim().length > 0;
 
+  useEffect(() => {
+    const itemAsString = (item: DataTransferItem): Promise<string> =>
+      new Promise((resolve) => item.getAsString((s) => resolve(s || '')));
+
+    const extractImageFileFromClipboard = async (
+      e: ClipboardEvent,
+    ): Promise<File | null> => {
+      const items = Array.from(e.clipboardData?.items ?? []);
+      const directFile = items
+        .map((it) => (it.kind === 'file' ? it.getAsFile() : null))
+        .find((f): f is File => !!f && /^image\//i.test(f.type || ''));
+      if (directFile) return directFile;
+
+      const htmlItem = items.find((it) => it.kind === 'string' && /html/i.test(it.type));
+      if (!htmlItem) return null;
+      const html = await itemAsString(htmlItem);
+      if (!html) return null;
+
+      const m = html.match(/<img[^>]+src=["']([^"']+)["']/i);
+      const src = m?.[1];
+      if (!src) return null;
+
+      try {
+        if (src.startsWith('data:image/')) {
+          const [meta, b64] = src.split(',', 2);
+          if (!meta || !b64) return null;
+          const mime = /data:([^;]+)/i.exec(meta)?.[1] || 'image/png';
+          const binary = atob(b64);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          return new File([bytes], 'clipboard-image', { type: mime });
+        }
+
+        const resp = await fetch(src, { credentials: 'include' });
+        if (!resp.ok) return null;
+        const blob = await resp.blob();
+        if (!/^image\//i.test(blob.type || '')) return null;
+        return new File([blob], 'clipboard-image', { type: blob.type || 'image/png' });
+      } catch {
+        return null;
+      }
+    };
+
+    const onPasteGlobal = (e: ClipboardEvent) => {
+      // debug: verify global paste event reachability
+      // eslint-disable-next-line no-console
+      console.info('[paste][global] event fired', {
+        hasClipboard: !!e.clipboardData,
+        itemCount: e.clipboardData?.items?.length ?? 0,
+      });
+      if (!currentPage) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      const items = Array.from(e.clipboardData?.items ?? []);
+      // eslint-disable-next-line no-console
+      console.info('[paste][global] items', items.map((it) => ({ kind: it.kind, type: it.type })));
+      void (async () => {
+        const fileFromItems = await extractImageFileFromClipboard(e);
+        if (!fileFromItems) {
+          // eslint-disable-next-line no-console
+          console.warn('[paste][global] no image file found in clipboard items');
+          return;
+        }
+
+        e.preventDefault();
+        // eslint-disable-next-line no-console
+        console.info('[paste][global] image accepted', {
+          name: fileFromItems.name,
+          type: fileFromItems.type,
+          size: fileFromItems.size,
+          page: currentPage.page_number,
+        });
+        await handleReplaceImageFile(fileFromItems, currentPage.page_number);
+      })();
+    };
+
+    window.addEventListener('paste', onPasteGlobal);
+    return () => window.removeEventListener('paste', onPasteGlobal);
+  }, [currentPage, handleReplaceImageFile]);
+
   // ---- Render loading / error states ----
   if (!pdfId) {
     return (
@@ -863,6 +944,27 @@ export default function PlayPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
+      {imageOnlyFullscreen ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black">
+          {currentPage?.image_url ? (
+            <img
+              src={withImageBust(currentPage.image_url) ?? currentPage.image_url}
+              alt={`第 ${currentPage.page_number} 頁`}
+              className="max-h-screen max-w-screen object-contain"
+            />
+          ) : (
+            <div className="text-slate-300">無法顯示投影片</div>
+          )}
+          <button
+            type="button"
+            onClick={() => setImageOnlyFullscreen(false)}
+            className="absolute right-4 top-4 rounded-md border border-slate-500 bg-slate-900/70 px-3 py-1.5 text-sm text-slate-100"
+          >
+            離開全螢幕
+          </button>
+        </div>
+      ) : null}
+
       {slideBusy ? (
         <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-slate-950/60">
           <div className="rounded-lg border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-200 shadow-xl">
@@ -948,6 +1050,14 @@ export default function PlayPage() {
           {/* 手機：一排 3 欄（設定 / 產生影片 / 開啟影片）；桌面：維持原本 flex 排列。
               註：「重生」按鍵已搬到右側問答區（aside）。 */}
           <div className="grid grid-cols-3 gap-2 md:flex md:items-center md:gap-2">
+            <button
+              type="button"
+              onClick={() => setImageOnlyFullscreen(true)}
+              className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
+              title="全螢幕圖片模式"
+            >
+              全螢幕
+            </button>
             <button
               type="button"
               onClick={() => setTtsDialogOpen(true)}
@@ -1089,9 +1199,18 @@ export default function PlayPage() {
               if (f && currentPage) void handleReplaceImageFile(f, currentPage.page_number);
             }}
             onPaste={(e) => {
+              // eslint-disable-next-line no-console
+              console.info('[paste][slide-panel] event fired', {
+                itemCount: e.clipboardData.items.length,
+                items: Array.from(e.clipboardData.items).map((it) => ({ kind: it.kind, type: it.type })),
+              });
               const file = Array.from(e.clipboardData.items)
                 .map((it) => (it.kind === 'file' ? it.getAsFile() : null))
                 .find((f): f is File => !!f);
+              if (!file) {
+                // eslint-disable-next-line no-console
+                console.warn('[paste][slide-panel] no file found');
+              }
               if (file && currentPage) void handleReplaceImageFile(file, currentPage.page_number);
             }}
             tabIndex={0}
@@ -1305,9 +1424,18 @@ export default function PlayPage() {
             <div
               className="grid max-h-48 grid-cols-4 gap-2 overflow-y-auto p-3"
               onPaste={(e) => {
+                // eslint-disable-next-line no-console
+                console.info('[paste][thumb-grid] event fired', {
+                  itemCount: e.clipboardData.items.length,
+                  items: Array.from(e.clipboardData.items).map((it) => ({ kind: it.kind, type: it.type })),
+                });
                 const file = Array.from(e.clipboardData.items)
                   .map((it) => (it.kind === 'file' ? it.getAsFile() : null))
                   .find((f): f is File => !!f);
+                if (!file) {
+                  // eslint-disable-next-line no-console
+                  console.warn('[paste][thumb-grid] no file found');
+                }
                 if (file) void handleReplaceImageFile(file);
               }}
               tabIndex={0}
@@ -1440,7 +1568,7 @@ export default function PlayPage() {
                 <button
                   type="button"
                   onClick={() => void handleRewriteScript()}
-                  disabled={rewriteBusy || !hasChatInput}
+                  disabled={rewriteBusy}
                   className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-3 py-2 text-sm text-fuchsia-200 hover:bg-fuchsia-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {rewriteBusy ? '修改中…' : '修改逐字稿'}
