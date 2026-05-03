@@ -14,6 +14,7 @@ import {
   clearPageChatHistory,
   deleteSlide,
   fetchPdfDetail,
+  fetchPagePrompt,
   fetchPageChatHistory,
   fetchRegenerateStatus,
   generatePdfVideo,
@@ -23,6 +24,7 @@ import {
   rollbackRegenerate,
   startRegenerateJob,
   updatePdfTtsSettings,
+  updatePdfPrompt,
   updatePdfTitle,
   rewritePageScript,
 } from '../lib/api';
@@ -72,6 +74,11 @@ export default function PlayPage() {
   const [titleInput, setTitleInput] = useState('');
   const [titleBusy, setTitleBusy] = useState(false);
   const [titleMsg, setTitleMsg] = useState<string | null>(null);
+  const [editTab, setEditTab] = useState<'script' | 'prompt'>('script');
+  const [promptInput, setPromptInput] = useState('');
+  const [promptBusy, setPromptBusy] = useState(false);
+  const [promptMsg, setPromptMsg] = useState<string | null>(null);
+  const [pagePrompts, setPagePrompts] = useState<Record<number, string>>({});
   const [slideBusy, setSlideBusy] = useState(false);
   const [slideError, setSlideError] = useState<string | null>(null);
   const [ttsVoice, setTtsVoice] = useState('alloy');
@@ -123,6 +130,7 @@ export default function PlayPage() {
         setDetail(d);
         setVideoUrl(d.video_url ?? null);
         setTitleInput(d.title ?? d.original_filename);
+        // page prompts are managed per page in local state
         setTtsVoice(d.tts_voice?.trim() || 'alloy');
         setTtsSpeed(d.tts_speed ?? 1);
         setLoadError(null);
@@ -335,6 +343,32 @@ export default function PlayPage() {
     setEditorError(null);
   }, [currentPage?.page_number, currentScript]);
 
+  useEffect(() => {
+    const n = currentPage?.page_number;
+    if (!n) {
+      setPromptInput('');
+      return;
+    }
+    setPromptInput(pagePrompts[n] ?? '');
+  }, [currentPage?.page_number, pagePrompts]);
+
+  useEffect(() => {
+    if (!pdfId || !currentPage) return;
+    const n = currentPage.page_number;
+    let cancelled = false;
+    fetchPagePrompt(pdfId, n)
+      .then((res) => {
+        if (cancelled) return;
+        setPagePrompts((prev) => ({ ...prev, [n]: res.page_prompt ?? '' }));
+      })
+      .catch(() => {
+        // keep local fallback
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pdfId, currentPage?.page_number]);
+
   const hasScriptChanges = editingScript !== currentScript;
 
   useEffect(() => {
@@ -527,6 +561,22 @@ export default function PlayPage() {
       setTitleBusy(false);
     }
   }, [pdfId, titleInput]);
+
+  const handleSavePrompt = useCallback(async () => {
+    if (!pdfId || !currentPage) return;
+    setPromptBusy(true);
+    setPromptMsg(null);
+    try {
+      const res = await updatePdfPrompt(pdfId, currentPage.page_number, promptInput);
+      setPagePrompts((prev) => ({ ...prev, [res.page_number]: res.page_prompt ?? '' }));
+      setDetail((prev) => (prev ? { ...prev, updated_at: res.updated_at } : prev));
+      setPromptMsg('提示詞已更新');
+    } catch (err) {
+      setPromptMsg(err instanceof ApiError ? err.message : '更新提示詞失敗');
+    } finally {
+      setPromptBusy(false);
+    }
+  }, [pdfId, currentPage, promptInput]);
 
   const reloadDetail = useCallback(async () => {
     if (!pdfId) return;
@@ -1131,29 +1181,74 @@ export default function PlayPage() {
           {/* Script panel */}
           <section className="border-t border-slate-800 bg-slate-950">
             <div className="px-4 py-4">
-              <h2 className="mb-2 text-sm font-semibold text-slate-300">
-                📝 逐字稿（第 {currentPage?.page_number ?? '-'} 頁）
-              </h2>
-              <textarea
-                value={editingScript}
-                onChange={(e) => setEditingScript(e.target.value)}
-                rows={6}
-                className="w-full rounded-md border border-slate-700 bg-slate-900/70 p-3 text-sm leading-relaxed text-slate-100 outline-none ring-emerald-500/40 placeholder:text-slate-500 focus:ring"
-                placeholder="請輸入本頁逐字稿..."
-              />
-              <div className="mt-2 flex items-center justify-between gap-3">
-                <div className="text-xs text-slate-400">
-                  {editorError ? <span className="text-rose-300">{editorError}</span> : '儲存後會僅重生此頁語音'}
-                </div>
+              <div className="mb-3 flex overflow-hidden rounded-md border border-slate-700 bg-slate-900/60">
                 <button
                   type="button"
-                  onClick={() => void handleRegenerateAudio()}
-                  disabled={editorBusy || !hasScriptChanges}
-                  className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-3 py-1.5 text-sm text-emerald-200 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                  onClick={() => setEditTab('script')}
+                  className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'script' ? 'bg-slate-800 text-emerald-200' : 'text-slate-400'}`}
                 >
-                  {editorBusy ? '重生中…' : '儲存並重生語音'}
+                  📝 逐字稿
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditTab('prompt')}
+                  className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'prompt' ? 'bg-slate-800 text-cyan-200' : 'text-slate-400'}`}
+                >
+                  🪄 提示詞
                 </button>
               </div>
+
+              {editTab === 'script' ? (
+                <>
+                  <h2 className="mb-2 text-sm font-semibold text-slate-300">
+                    📝 逐字稿（第 {currentPage?.page_number ?? '-'} 頁）
+                  </h2>
+                  <textarea
+                    value={editingScript}
+                    onChange={(e) => setEditingScript(e.target.value)}
+                    rows={6}
+                    className="w-full rounded-md border border-slate-700 bg-slate-900/70 p-3 text-sm leading-relaxed text-slate-100 outline-none ring-emerald-500/40 placeholder:text-slate-500 focus:ring"
+                    placeholder="請輸入本頁逐字稿..."
+                  />
+                  <div className="mt-2 flex items-center justify-between gap-3">
+                    <div className="text-xs text-slate-400">
+                      {editorError ? <span className="text-rose-300">{editorError}</span> : '儲存後會僅重生此頁語音'}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void handleRegenerateAudio()}
+                      disabled={editorBusy || !hasScriptChanges}
+                      className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-3 py-1.5 text-sm text-emerald-200 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {editorBusy ? '重生中…' : '儲存並重生語音'}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h2 className="mb-2 text-sm font-semibold text-slate-300">🪄 提示詞（第 {currentPage?.page_number ?? '-'} 頁）</h2>
+                  <textarea
+                    value={promptInput}
+                    onChange={(e) => setPromptInput(e.target.value)}
+                    rows={6}
+                    className="w-full rounded-md border border-slate-700 bg-slate-900/70 p-3 text-sm leading-relaxed text-slate-100 outline-none ring-cyan-500/40 placeholder:text-slate-500 focus:ring"
+                    placeholder="請輸入這份簡報的風格提示詞..."
+                  />
+                  <div className="mt-2 flex items-center justify-between gap-3">
+                    <div className="text-xs text-slate-400">
+                      {promptMsg ? <span className="text-slate-300">{promptMsg}</span> : '更新後將影響後續以提示詞為基礎的生成'}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void handleSavePrompt()}
+                      disabled={promptBusy}
+                      className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {promptBusy ? '儲存中…' : '儲存提示詞'}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </section>
         </div>

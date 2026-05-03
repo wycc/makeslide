@@ -129,6 +129,10 @@ function migrate(): void {
     db.exec(`ALTER TABLE pages ADD COLUMN chat_history_json TEXT`);
     logger.info('Added column pages.chat_history_json');
   }
+  if (!columnExists('pages', 'page_prompt')) {
+    db.exec(`ALTER TABLE pages ADD COLUMN page_prompt TEXT`);
+    logger.info('Added column pages.page_prompt');
+  }
 
   logger.info({ dbPath: config.dbPath }, 'Database migrations applied');
 }

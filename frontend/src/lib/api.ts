@@ -184,6 +184,29 @@ export interface UpdatePdfTitleResponse {
   updated_at: string;
 }
 
+export interface UpdatePdfPromptResponse {
+  id: string;
+  page_number: number;
+  page_prompt: string | null;
+  updated_at: string;
+}
+
+export interface PagePromptResponse {
+  id: string;
+  page_number: number;
+  page_prompt: string | null;
+  updated_at: string;
+}
+
+export async function fetchPagePrompt(
+  id: string,
+  pageNumber: number,
+): Promise<PagePromptResponse> {
+  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/prompt`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as PagePromptResponse;
+}
+
 export async function updatePdfTitle(
   id: string,
   title: string,
@@ -195,6 +218,20 @@ export async function updatePdfTitle(
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as UpdatePdfTitleResponse;
+}
+
+export async function updatePdfPrompt(
+  id: string,
+  pageNumber: number,
+  prompt: string,
+): Promise<UpdatePdfPromptResponse> {
+  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/prompt`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ prompt }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as UpdatePdfPromptResponse;
 }
 
 export interface RegenerateAllImagesResponse {

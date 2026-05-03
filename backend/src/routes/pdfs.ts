@@ -126,6 +126,10 @@ const UpdateTitleBodySchema = z.object({
   title: z.string().min(1, 'title 不可為空').max(200, 'title 過長'),
 });
 
+const UpdatePromptBodySchema = z.object({
+  prompt: z.string().max(MAX_USER_PROMPT_CHARS, `提示詞不可超過 ${MAX_USER_PROMPT_CHARS} 字`),
+});
+
 const RegenerateAllImagesBodySchema = z.object({
   prompt: z.string().min(1, 'prompt 不可為空').max(4000, 'prompt 不可超過 4000 字'),
 });
@@ -1890,6 +1894,60 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
     }
 
     return reply.send({ id, title, updated_at: now });
+  });
+
+  // GET /api/pdfs/:id/pages/:n/prompt
+  app.get('/api/pdfs/:id/pages/:n/prompt', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const { id, n } = parsed.data;
+    const row = db
+      .prepare(`SELECT text_path, updated_at FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .get(id, n) as { text_path: string | null; updated_at: string } | undefined;
+    if (!row) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+    let prompt: string | null = null;
+    if (row.text_path) {
+      try {
+        prompt = await fs.promises.readFile(safeJoinPdfPath(id, row.text_path), 'utf8');
+      } catch {
+        prompt = null;
+      }
+    }
+    return reply.send({ id, page_number: n, page_prompt: prompt, updated_at: row.updated_at });
+  });
+
+  // PATCH /api/pdfs/:id/pages/:n/prompt
+  app.patch('/api/pdfs/:id/pages/:n/prompt', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const body = UpdatePromptBodySchema.safeParse(request.body ?? {});
+    if (!body.success) {
+      return reply
+        .code(400)
+        .send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
+    }
+    const { id, n } = parsed.data;
+    const row = db
+      .prepare(`SELECT text_path FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .get(id, n) as { text_path: string | null } | undefined;
+    if (!row) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+    if (!row.text_path) {
+      return reply.code(409).send(errorResponse('INVALID_STATE', 'Page text_path not ready'));
+    }
+    const now = nowIso();
+    const prompt = body.data.prompt.trim();
+    try {
+      await fs.promises.writeFile(safeJoinPdfPath(id, row.text_path), prompt, 'utf8');
+    } catch {
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to write text prompt'));
+    }
+    db.prepare(`UPDATE pages SET updated_at = ? WHERE pdf_id = ? AND page_number = ?`).run(now, id, n);
+    db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(now, id);
+    return reply.send({ id, page_number: n, page_prompt: prompt || null, updated_at: now });
   });
 
   // GET /api/pdfs/:id/cover
