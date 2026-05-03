@@ -666,7 +666,7 @@ export default function PlayPage() {
         </div>
         <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 px-4 pb-3">
           <div className="text-xs text-slate-400">
-            {videoError ? <span className="text-rose-300">{videoError}</span> : '影片需手動產生'}
+            {videoError ? <span className="text-rose-300">{videoError}</span> : null}
           </div>
           <div className="flex items-center gap-2">
             <button
