@@ -21,8 +21,8 @@ export interface RenderResult {
 }
 
 /**
- * Render every page of a PDF to `storage/<pdfId>/pages/NNN.png` using
- * `pdftoppm`, then produce a cover thumbnail `cover.png` from page 1.
+ * Render every page of a PDF to `storage/<pdfId>/pages/NNN.jpg` using
+ * `pdftoppm`, then produce a cover thumbnail `cover.jpg` from page 1.
  *
  * pdftoppm pads numeric suffixes to the width of the largest page number, so
  * we rename each output file to the fixed width our API / storage layout
@@ -42,7 +42,7 @@ export async function renderPages(pdfId: string): Promise<RenderResult> {
 
   // Clean any pre-existing rendered PNGs (but keep *.text.txt etc).
   for (const entry of fs.readdirSync(outDir)) {
-    if (/\.png$/i.test(entry)) {
+    if (/\.(png|jpg|jpeg)$/i.test(entry)) {
       fs.unlinkSync(path.join(outDir, entry));
     }
   }
@@ -77,18 +77,19 @@ export async function renderPages(pdfId: string): Promise<RenderResult> {
   const pagePaths: string[] = [];
   for (const { file, num } of produced) {
     const from = path.join(outDir, file);
-    const to = path.join(outDir, `${formatPageNumber(num, pageCount)}.png`);
-    if (from !== to) {
-      fs.renameSync(from, to);
-    }
-    pagePaths.push(to);
+    const jpgOut = path.join(outDir, `${formatPageNumber(num, pageCount)}.jpg`);
+    await sharp(from)
+      .jpeg({ quality: 82, mozjpeg: true })
+      .toFile(jpgOut);
+    fs.unlinkSync(from);
+    pagePaths.push(jpgOut);
   }
 
   // Build cover from page 1
   const coverPath = coverImagePath(pdfId);
   await sharp(pagePaths[0])
     .resize({ width: COVER_WIDTH_PX, withoutEnlargement: true })
-    .png()
+    .jpeg({ quality: 80, mozjpeg: true })
     .toFile(coverPath);
 
   logger.info({ pdfId, pageCount, coverPath }, 'Rendered pages and cover');

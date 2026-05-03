@@ -14,6 +14,7 @@ const PROGRESS_LABELS: Record<string, string> = {
 interface PdfCardProps {
   pdf: PdfListItem;
   onDelete: (id: string) => Promise<void> | void;
+  onDuplicate: (id: string) => Promise<void> | void;
   onClick?: (pdf: PdfListItem) => void;
 }
 
@@ -33,8 +34,9 @@ function formatDate(iso: string): string {
   }
 }
 
-export default function PdfCard({ pdf, onDelete, onClick }: PdfCardProps) {
+export default function PdfCard({ pdf, onDelete, onDuplicate, onClick }: PdfCardProps) {
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isDuplicating, setIsDuplicating] = useState(false);
 
   const progressTotal = pdf.progress_total ?? 0;
   const progressCurrentRaw = pdf.progress_current ?? 0;
@@ -69,6 +71,17 @@ export default function PdfCard({ pdf, onDelete, onClick }: PdfCardProps) {
 
   const handleCardClick = () => {
     onClick?.(pdf);
+  };
+
+  const handleDuplicate = async (ev: React.MouseEvent) => {
+    ev.stopPropagation();
+    if (isDuplicating) return;
+    setIsDuplicating(true);
+    try {
+      await onDuplicate(pdf.id);
+    } finally {
+      setIsDuplicating(false);
+    }
   };
 
   return (
@@ -173,14 +186,24 @@ export default function PdfCard({ pdf, onDelete, onClick }: PdfCardProps) {
           ) : (
             <span />
           )}
-          <button
-            type="button"
-            onClick={handleDelete}
-            disabled={isDeleting}
-            className="rounded-md border border-rose-500/40 px-2 py-1 text-xs text-rose-300 transition hover:bg-rose-500/10 disabled:opacity-50"
-          >
-            {isDeleting ? '刪除中…' : '刪除'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleDuplicate}
+              disabled={isDuplicating}
+              className="rounded-md border border-cyan-500/40 px-2 py-1 text-xs text-cyan-300 transition hover:bg-cyan-500/10 disabled:opacity-50"
+            >
+              {isDuplicating ? '複製中…' : '複製'}
+            </button>
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="rounded-md border border-rose-500/40 px-2 py-1 text-xs text-rose-300 transition hover:bg-rose-500/10 disabled:opacity-50"
+            >
+              {isDeleting ? '刪除中…' : '刪除'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

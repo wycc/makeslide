@@ -164,7 +164,7 @@ function rewritePagePathsToMatchNumber(pdfId: string, pageCount: number): void {
   const pad = pageCount > 999 ? 4 : 3;
   db.prepare(
     `UPDATE pages
-        SET image_path = 'pages/' || printf('%0${pad}d', page_number) || '.png',
+        SET image_path = 'pages/' || printf('%0${pad}d', page_number) || '.jpg',
             text_path = 'pages/' || printf('%0${pad}d', page_number) || '.text.txt',
             script_path = 'pages/' || printf('%0${pad}d', page_number) || '.script.txt',
             audio_path = CASE
@@ -176,7 +176,7 @@ function rewritePagePathsToMatchNumber(pdfId: string, pageCount: number): void {
 }
 
 function coverUrl(row: PdfRow): string | null {
-  // Cover exists iff cover.png is on disk. For efficiency, probe once here
+  // Cover exists iff cover.jpg is on disk. For efficiency, probe once here
   // instead of stat-ing for every list row; M2 ensures cover is written as
   // soon as page 1 is rendered.
   try {
@@ -663,7 +663,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
       ).run(
         id,
         inserted,
-        `pages/${String(inserted).padStart(oldCount > 999 ? 4 : 3, '0')}.png`,
+        `pages/${String(inserted).padStart(oldCount > 999 ? 4 : 3, '0')}.jpg`,
         `pages/${String(inserted).padStart(oldCount > 999 ? 4 : 3, '0')}.text.txt`,
         `pages/${String(inserted).padStart(oldCount > 999 ? 4 : 3, '0')}.script.txt`,
         `pages/${String(inserted).padStart(oldCount > 999 ? 4 : 3, '0')}.mp3`,
@@ -690,7 +690,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
           background: { r: 255, g: 255, b: 255 },
         },
       })
-        .png()
+        .jpeg({ quality: 82, mozjpeg: true })
         .toFile(pageImagePath(id, inserted, oldCount + 1));
       await fs.promises.writeFile(pageTextPath(id, inserted, oldCount + 1), '', 'utf8');
       await fs.promises.writeFile(pageScriptPath(id, inserted, oldCount + 1), '', 'utf8');
@@ -742,9 +742,9 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
 
     const imageBuffer = await file.toBuffer();
     const outPath = pageImagePath(id, n, row.page_count);
-    await sharp(imageBuffer).resize(1920, 1080, { fit: 'contain', background: { r: 255, g: 255, b: 255 } }).png().toFile(outPath);
+    await sharp(imageBuffer).resize(1920, 1080, { fit: 'contain', background: { r: 255, g: 255, b: 255 } }).jpeg({ quality: 82, mozjpeg: true }).toFile(outPath);
 
-    const relImagePath = path.posix.join('pages', `${String(n).padStart(row.page_count > 999 ? 4 : 3, '0')}.png`);
+    const relImagePath = path.posix.join('pages', `${String(n).padStart(row.page_count > 999 ? 4 : 3, '0')}.jpg`);
     const now = nowIso();
     db.prepare(`UPDATE pages SET image_path = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`).run(relImagePath, now, id, n);
     db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(now, id);
@@ -823,7 +823,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
       if (!b64) throw new Error('OpenAI image edit returned empty result');
       const newBuf = Buffer.from(b64, 'base64');
       const outPath = pageImagePath(id, n, pdfRow.page_count);
-      await sharp(newBuf).resize(1920, 1080, { fit: 'contain', background: { r: 255, g: 255, b: 255 } }).png().toFile(outPath);
+      await sharp(newBuf).resize(1920, 1080, { fit: 'contain', background: { r: 255, g: 255, b: 255 } }).jpeg({ quality: 82, mozjpeg: true }).toFile(outPath);
 
       const now = nowIso();
       db.prepare(`UPDATE pages SET updated_at = ? WHERE pdf_id = ? AND page_number = ?`).run(now, id, n);
@@ -948,7 +948,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
         const outPath = pageImagePath(id, p.page_number, pdfRow.page_count);
         await sharp(newBuf)
           .resize(1920, 1080, { fit: 'contain', background: { r: 255, g: 255, b: 255 } })
-          .png()
+          .jpeg({ quality: 82, mozjpeg: true })
           .toFile(outPath);
       }
 
@@ -1631,7 +1631,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
       try {
         const absImage = safeJoinPdfPath(id, pageRow.image_path);
         const imageBuffer = await fs.promises.readFile(absImage);
-        imageDataUrl = `data:image/png;base64,${imageBuffer.toString('base64')}`;
+        imageDataUrl = `data:image/jpeg;base64,${imageBuffer.toString('base64')}`;
       } catch {
         imageDataUrl = null;
       }
@@ -1871,7 +1871,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
         .code(404)
         .send(errorResponse('COVER_NOT_READY', 'Cover image not generated yet'));
     }
-    return streamFile(reply, cover, 'image/png', 'public, max-age=300');
+    return streamFile(reply, cover, 'image/jpeg', 'public, max-age=300');
   });
 
   // GET /api/pdfs/:id/video
@@ -1931,7 +1931,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
         .code(404)
         .send(errorResponse('PAGE_IMAGE_NOT_FOUND', 'Page image file missing'));
     }
-    return streamFile(reply, abs, 'image/png', 'public, max-age=300');
+    return streamFile(reply, abs, 'image/jpeg', 'public, max-age=300');
   });
 
   // GET /api/pdfs/:id/pages/:n/text
@@ -2134,5 +2134,142 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
       request.log.warn({ err, pdfId: id }, 'Failed to remove storage dir (DB row already deleted)');
     }
     return reply.code(204).send();
+  });
+
+  // POST /api/pdfs/:id/duplicate
+  app.post('/api/pdfs/:id/duplicate', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+
+    const { id } = parsed.data;
+    const source = db
+      .prepare(
+        `SELECT id, title, original_filename, status, page_count, progress_step,
+                progress_current, progress_total,
+                error_message, user_prompt, require_script_confirmation,
+                tts_voice, tts_speed, script_max_chars_per_page,
+                created_at, updated_at
+           FROM pdfs WHERE id = ?`,
+      )
+      .get(id) as PdfRow | undefined;
+    if (!source) {
+      return reply
+        .code(404)
+        .send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+
+    const newId = nanoid(PDF_ID_SIZE);
+    const now = nowIso();
+    const newTitle = `副本-${source.title ?? source.original_filename ?? source.id}`;
+
+    try {
+      const srcDir = path.join(config.storageRoot, id);
+      const dstDir = path.join(config.storageRoot, newId);
+      await fs.promises.cp(srcDir, dstDir, { recursive: true });
+
+      const metadata = await readMetadata(id);
+      if (!metadata) {
+        throw new Error('metadata not found');
+      }
+      await writeMetadata(newId, {
+        ...metadata,
+        id: newId,
+        title: newTitle,
+        original_filename: metadata.original_filename,
+        status: metadata.status,
+        progress_step: metadata.progress_step,
+        progress_current: metadata.progress_current,
+        progress_total: metadata.progress_total,
+        page_count: metadata.page_count,
+        error_message: metadata.error_message,
+        pages: metadata.pages,
+        created_at: now,
+        updated_at: now,
+      });
+
+      db.prepare(
+        `INSERT INTO pdfs (id, title, original_filename, status, page_count,
+                           progress_step, progress_current, progress_total,
+                           error_message, user_prompt, require_script_confirmation,
+                           tts_voice, tts_speed, script_max_chars_per_page,
+                           created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        newId,
+        newTitle,
+        source.original_filename,
+        source.status,
+        source.page_count,
+        source.progress_step,
+        source.progress_current,
+        source.progress_total,
+        source.error_message,
+        source.user_prompt,
+        source.require_script_confirmation,
+        source.tts_voice,
+        source.tts_speed,
+        source.script_max_chars_per_page,
+        now,
+        now,
+      );
+
+      const pages = db
+        .prepare(
+          `SELECT pdf_id, page_number, image_path, text_path, script_path,
+                  audio_path, audio_duration_seconds, status, error_message,
+                  created_at, updated_at
+             FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
+        )
+        .all(id) as PageRow[];
+      const insertPage = db.prepare(
+        `INSERT INTO pages (pdf_id, page_number, image_path, text_path, script_path,
+                            audio_path, audio_duration_seconds, status, error_message,
+                            created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      );
+      for (const p of pages) {
+        insertPage.run(
+          newId,
+          p.page_number,
+          p.image_path,
+          p.text_path,
+          p.script_path,
+          p.audio_path,
+          p.audio_duration_seconds,
+          p.status,
+          p.error_message,
+          now,
+          now,
+        );
+      }
+    } catch (err) {
+      request.log.error({ err, from: id, to: newId }, 'Failed to duplicate pdf');
+      try {
+        await removePdfDir(newId);
+      } catch {
+        // ignore
+      }
+      db.prepare(`DELETE FROM pages WHERE pdf_id = ?`).run(newId);
+      db.prepare(`DELETE FROM pdfs WHERE id = ?`).run(newId);
+      return reply
+        .code(500)
+        .send(errorResponse('INTERNAL_ERROR', 'Failed to duplicate pdf'));
+    }
+
+    const row = db
+      .prepare(
+        `SELECT id, title, original_filename, status, page_count, progress_step,
+                progress_current, progress_total,
+                error_message, user_prompt, require_script_confirmation,
+                tts_voice, tts_speed, script_max_chars_per_page,
+                created_at, updated_at
+           FROM pdfs WHERE id = ?`,
+      )
+      .get(newId) as PdfRow;
+    return reply.code(201).send(rowToListItem(row));
   });
 }

@@ -28,11 +28,11 @@ export function metadataPath(pdfId: string): string {
 }
 
 export function coverImagePath(pdfId: string): string {
-  return path.join(pdfDir(pdfId), 'cover.png');
+  return path.join(pdfDir(pdfId), 'cover.jpg');
 }
 
 /**
- * Width of the zero-padding used in page filenames (e.g. 001.png). 3 digits by
+ * Width of the zero-padding used in page filenames (e.g. 001.jpg). 3 digits by
  * default, auto-expands to 4 for PDFs with > 999 pages.
  */
 export function pagePad(pageCount: number): number {
@@ -50,7 +50,7 @@ export function pageImagePath(
 ): string {
   return path.join(
     pagesDir(pdfId),
-    `${formatPageNumber(pageNumber, pageCount)}.png`,
+    `${formatPageNumber(pageNumber, pageCount)}.jpg`,
   );
 }
 
@@ -138,7 +138,7 @@ export async function renumberPageArtifacts(
   const dir = pagesDir(pdfId);
   await fs.promises.mkdir(dir, { recursive: true });
 
-  const suffixes = ['.png', '.text.txt', '.script.txt', '.mp3'] as const;
+  const suffixes = ['.jpg', '.png', '.text.txt', '.script.txt', '.mp3'] as const;
   const tempMoves: Array<{ from: string; to: string }> = [];
 
   for (const item of updates) {

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   ApiError,
   deletePdf,
+  duplicatePdf,
   fetchPdfs,
   retryFailedPdf,
   startProcessing,
@@ -95,6 +96,20 @@ export default function HomePage() {
       } catch (err) {
         const msg = err instanceof ApiError ? err.message : '刪除失敗';
         showToast(`刪除失敗：${msg}`);
+      }
+    },
+    [showToast],
+  );
+
+  const handleDuplicate = useCallback(
+    async (id: string) => {
+      try {
+        const copied = await duplicatePdf(id);
+        setItems((prev) => [copied, ...prev]);
+        showToast('已複製');
+      } catch (err) {
+        const msg = err instanceof ApiError ? err.message : '複製失敗';
+        showToast(`複製失敗：${msg}`);
       }
     },
     [showToast],
@@ -212,6 +227,7 @@ export default function HomePage() {
                 key={pdf.id}
                 pdf={pdf}
                 onDelete={handleDelete}
+                onDuplicate={handleDuplicate}
                 onClick={handleCardClick}
               />
             ))}

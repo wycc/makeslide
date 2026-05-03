@@ -722,6 +722,8 @@ export default function PlayPage() {
     await reloadDetail();
   }, [reloadDetail]);
 
+  const hasChatInput = chatInput.trim().length > 0;
+
   // ---- Render loading / error states ----
   if (!pdfId) {
     return (
@@ -1288,7 +1290,7 @@ export default function PlayPage() {
                 <button
                   type="button"
                   onClick={() => void handleRegenerateImageWithPrompt()}
-                  disabled={slideBusy || !currentPage}
+                  disabled={slideBusy || !currentPage || !hasChatInput}
                   className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   修改圖片
@@ -1296,7 +1298,7 @@ export default function PlayPage() {
                 <button
                   type="button"
                   onClick={() => void handleRewriteScript()}
-                  disabled={rewriteBusy || !chatInput.trim() || !editingScript.trim()}
+                  disabled={rewriteBusy || !hasChatInput}
                   className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-3 py-2 text-sm text-fuchsia-200 hover:bg-fuchsia-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {rewriteBusy ? '修改中…' : '修改逐字稿'}
@@ -1304,10 +1306,10 @@ export default function PlayPage() {
                 <button
                   type="button"
                   onClick={() => void handleSendChat()}
-                  disabled={chatBusy || !chatInput.trim()}
+                  disabled={chatBusy || !hasChatInput}
                   className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  {chatBusy ? '送出中…' : '送出'}
+                  {chatBusy ? '詢問中…' : '詢問'}
                 </button>
               </div>
             </div>

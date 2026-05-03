@@ -73,6 +73,16 @@ export async function deletePdf(id: string): Promise<void> {
   }
 }
 
+export async function duplicatePdf(id: string): Promise<PdfListItem> {
+  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/duplicate`, {
+    method: 'POST',
+  });
+  if (!resp.ok) {
+    throw await parseErrorBody(resp);
+  }
+  return (await resp.json()) as PdfListItem;
+}
+
 export async function retryFailedPdf(id: string): Promise<{ id: string; status: string; updated_at: string }> {
   const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/retry`, {
     method: 'POST',
