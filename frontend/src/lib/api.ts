@@ -157,6 +157,12 @@ export interface DeleteSlideResponse {
   updated_at: string;
 }
 
+export interface MoveSlideResponse {
+  id: string;
+  page_count: number;
+  updated_at: string;
+}
+
 export interface ReplaceSlideImageResponse {
   id: string;
   page_number: number;
@@ -257,6 +263,23 @@ export async function deleteSlide(id: string, pageNumber: number): Promise<Delet
   );
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as DeleteSlideResponse;
+}
+
+export async function moveSlide(
+  id: string,
+  fromPageNumber: number,
+  toPageNumber: number,
+): Promise<MoveSlideResponse> {
+  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/pages/move`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      from_page_number: fromPageNumber,
+      to_page_number: toPageNumber,
+    }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as MoveSlideResponse;
 }
 
 export async function replaceSlideImage(

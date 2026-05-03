@@ -118,6 +118,11 @@ const AddPageBodySchema = z.object({
   after_page_number: z.number().int().min(0).optional().default(0),
 });
 
+const MovePageBodySchema = z.object({
+  from_page_number: z.number().int().positive(),
+  to_page_number: z.number().int().positive(),
+});
+
 const UpdateTtsSettingsBodySchema = z.object({
   tts_voice: z.string().min(1, 'tts_voice 不可為空').max(32, 'tts_voice 過長'),
   tts_speed: z.number().min(0.25, 'tts_speed 過小').max(4, 'tts_speed 過大'),
@@ -727,6 +732,96 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
       request.log.error({ err, pdfId: id }, 'Failed to add page');
       return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to add page'));
     }
+  });
+
+  // POST /api/pdfs/:id/pages/move
+  app.post('/api/pdfs/:id/pages/move', async (request, reply) => {
+    const parsedParams = IdParamSchema.safeParse(request.params);
+    if (!parsedParams.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const parsedBody = MovePageBodySchema.safeParse(request.body ?? {});
+    if (!parsedBody.success) {
+      return reply
+        .code(400)
+        .send(errorResponse('INVALID_REQUEST', parsedBody.error.issues[0]?.message ?? 'Invalid body'));
+    }
+
+    const { id } = parsedParams.data;
+    const { from_page_number: from, to_page_number: to } = parsedBody.data;
+    const pdfRow = db.prepare(`SELECT page_count FROM pdfs WHERE id = ?`).get(id) as { page_count: number | null } | undefined;
+    if (!pdfRow?.page_count) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    const pageCount = pdfRow.page_count;
+    if (from < 1 || from > pageCount || to < 1 || to > pageCount) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid from_page_number or to_page_number'));
+    }
+    if (from === to) {
+      return reply.code(200).send({ id, page_count: pageCount, updated_at: nowIso() });
+    }
+
+    const rows = db
+      .prepare(`SELECT page_number FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`)
+      .all(id) as Array<{ page_number: number }>;
+    const order = rows.map((r) => r.page_number);
+    if (order.length !== pageCount) {
+      return reply.code(409).send(errorResponse('INVALID_STATE', 'Page list incomplete'));
+    }
+
+    const fromIdx = from - 1;
+    const toIdx = to - 1;
+    const [moved] = order.splice(fromIdx, 1);
+    if (moved == null) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid from_page_number'));
+    }
+    order.splice(toIdx, 0, moved);
+
+    const now = nowIso();
+    const updates: Array<{ from: number; to: number }> = [];
+    const tx = db.transaction(() => {
+      db.prepare(`UPDATE pages SET page_number = page_number + 100000 WHERE pdf_id = ?`).run(id);
+      for (let i = 0; i < order.length; i++) {
+        const src = order[i];
+        if (src == null) continue;
+        const dst = i + 1;
+        updates.push({ from: src, to: dst });
+        db.prepare(`UPDATE pages SET page_number = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`).run(
+          dst,
+          now,
+          id,
+          src + 100000,
+        );
+      }
+      db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(now, id);
+      rewritePagePathsToMatchNumber(id, pageCount);
+    });
+
+    try {
+      tx();
+      await renumberPageArtifacts(id, pageCount, updates);
+      const meta = await readMetadata(id);
+      if (meta) {
+        const metaRows = db
+          .prepare(`SELECT page_number, image_path, text_path, script_path, audio_path, status FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`)
+          .all(id) as Array<{ page_number: number; image_path: string | null; text_path: string | null; script_path: string | null; audio_path: string | null; status: string }>;
+        meta.pages = metaRows.map((p) => ({
+          page_number: p.page_number,
+          image: p.image_path,
+          text: p.text_path,
+          script: p.script_path,
+          audio: p.audio_path,
+          status: p.status as PageRow['status'],
+        }));
+        meta.updated_at = now;
+        await writeMetadata(id, meta);
+      }
+    } catch (err) {
+      request.log.error({ err, pdfId: id, from, to }, 'Failed to move page');
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to move page'));
+    }
+
+    return reply.code(200).send({ id, page_count: pageCount, updated_at: now });
   });
 
   app.post('/api/pdfs/:id/pages/:n/replace-image', async (request, reply) => {

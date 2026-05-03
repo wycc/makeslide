@@ -18,6 +18,7 @@ import {
   fetchPageChatHistory,
   fetchRegenerateStatus,
   generatePdfVideo,
+  moveSlide,
   regenerateSlideImage,
   replaceSlideImage,
   regeneratePageAudio,
@@ -107,6 +108,7 @@ export default function PlayPage() {
   const autoJumpedJobIdRef = useRef<string | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
+  const [draggingPage, setDraggingPage] = useState<number | null>(null);
   // 手機模式下的 tab 切換（桌面模式忽略此 state，永遠並排顯示）
   const [activeTab, setActiveTab] = useState<'play' | 'qa'>('play');
   const [imageOnlyFullscreen, setImageOnlyFullscreen] = useState(false);
@@ -754,6 +756,24 @@ export default function PlayPage() {
       setSlideBusy(false);
     }
   }, [pdfId, currentPage]);
+
+  const handleMoveSlide = useCallback(
+    async (fromPageNumber: number, toPageNumber: number) => {
+      if (!pdfId || fromPageNumber === toPageNumber) return;
+      setSlideBusy(true);
+      setSlideError(null);
+      try {
+        await moveSlide(pdfId, fromPageNumber, toPageNumber);
+        await reloadDetail();
+        setCurrentIdx(Math.max(0, toPageNumber - 1));
+      } catch (err) {
+        setSlideError(err instanceof ApiError ? err.message : '調整頁面順序失敗');
+      } finally {
+        setSlideBusy(false);
+      }
+    },
+    [pdfId, reloadDetail],
+  );
 
   const handleReplaceImageFile = useCallback(
     async (file: File, targetPageNumber?: number) => {
@@ -1423,6 +1443,25 @@ export default function PlayPage() {
             </div>
             <div
               className="grid max-h-48 grid-cols-4 gap-2 overflow-y-auto p-3"
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+              }}
+              onDropCapture={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const fromText =
+                  e.dataTransfer.getData('application/x-page-number') ||
+                  e.dataTransfer.getData('text/plain');
+                const fromPage = Number(fromText);
+                const targetEl = (e.target as HTMLElement | null)?.closest('[data-page-number]') as HTMLElement | null;
+                const toPage = Number(targetEl?.dataset.pageNumber || '');
+                // eslint-disable-next-line no-console
+                console.info('[reorder][drop-capture]', { fromText, fromPage, toPage, hasTarget: !!targetEl });
+                if (Number.isFinite(fromPage) && fromPage > 0 && Number.isFinite(toPage) && toPage > 0 && fromPage !== toPage) {
+                  void handleMoveSlide(fromPage, toPage);
+                }
+              }}
               onPaste={(e) => {
                 // eslint-disable-next-line no-console
                 console.info('[paste][thumb-grid] event fired', {
@@ -1441,13 +1480,14 @@ export default function PlayPage() {
               tabIndex={0}
             >
               {deckPages.map((p, idx) => (
-                <button
+                <div
                   key={p.page_number}
-                  type="button"
+                  data-page-number={p.page_number}
                   onClick={() => setCurrentIdx(idx)}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => {
                     e.preventDefault();
+                    // Reorder is handled by parent onDropCapture to avoid double requests.
                     const f = e.dataTransfer.files?.[0];
                     if (f) void handleReplaceImageFile(f, p.page_number);
                   }}
@@ -1457,9 +1497,31 @@ export default function PlayPage() {
                       .find((f): f is File => !!f);
                     if (file) void handleReplaceImageFile(file, p.page_number);
                   }}
-                  className={`overflow-hidden rounded border ${idx === currentIdx ? 'border-cyan-400' : 'border-slate-700'}`}
+                  className={`relative overflow-hidden rounded border ${idx === currentIdx ? 'border-cyan-400' : 'border-slate-700'} ${draggingPage === p.page_number ? 'opacity-50' : ''}`}
                   title={`第 ${p.page_number} 頁`}
                 >
+                  <button
+                    type="button"
+                    draggable={!slideBusy}
+                    onDragStart={(e) => {
+                      setDraggingPage(p.page_number);
+                      e.dataTransfer.setData('application/x-page-number', String(p.page_number));
+                      e.dataTransfer.setData('text/plain', String(p.page_number));
+                      e.dataTransfer.effectAllowed = 'move';
+                      // eslint-disable-next-line no-console
+                      console.info('[reorder][dragstart]', { page: p.page_number });
+                    }}
+                    onDragEnd={() => {
+                      setDraggingPage(null);
+                      // eslint-disable-next-line no-console
+                      console.info('[reorder][dragend]', { page: p.page_number });
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute right-0 top-0 z-10 rounded-bl bg-slate-900/80 px-1.5 py-0.5 text-[10px] text-slate-200 cursor-grab active:cursor-grabbing"
+                    title="拖曳此把手可重排"
+                  >
+                    ↕
+                  </button>
                   {p.image_url ? (
                     <img
                       src={withImageBust(p.image_url) ?? p.image_url}
@@ -1471,7 +1533,7 @@ export default function PlayPage() {
                       無圖片
                     </div>
                   )}
-                </button>
+                </div>
               ))}
             </div>
             <div className="border-t border-slate-800 px-3 py-2">
