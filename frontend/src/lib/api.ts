@@ -5,6 +5,7 @@ import type {
   PageChatResponse,
   PdfDetail,
   PdfListItem,
+  RegenJobState,
   StartProcessingResponse,
   UploadResponse,
 } from '../types';
@@ -248,6 +249,52 @@ export async function regenerateAllImages(
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as RegenerateAllImagesResponse;
+}
+
+export interface StartRegenerateOptions {
+  scripts?: { prompt?: string } | null;
+  audio?: { voice?: string; speed?: number } | null;
+  images?: { prompt: string } | null;
+}
+
+/**
+ * 啟動批次「重生」任務（逐字稿 / 語音 / 圖檔，至少選一）。
+ * 後端以 image → script → audio 順序執行，進度以 {@link fetchRegenerateStatus}
+ * 輪詢。回傳值是任務建立當下的初始狀態（202 Accepted）。
+ */
+export async function startRegenerateJob(
+  id: string,
+  options: StartRegenerateOptions,
+): Promise<RegenJobState> {
+  const body: Record<string, unknown> = {};
+  if (options.scripts) {
+    body.scripts = { prompt: options.scripts.prompt ?? '' };
+  }
+  if (options.audio) {
+    const audioBody: Record<string, unknown> = {};
+    if (options.audio.voice !== undefined) audioBody.voice = options.audio.voice;
+    if (options.audio.speed !== undefined) audioBody.speed = options.audio.speed;
+    body.audio = audioBody;
+  }
+  if (options.images) {
+    body.images = { prompt: options.images.prompt };
+  }
+  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/regenerate`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as RegenJobState;
+}
+
+/** 查詢批次重生任務的最新進度。未建立過任務時會回傳 404 ApiError。 */
+export async function fetchRegenerateStatus(id: string): Promise<RegenJobState> {
+  const resp = await fetch(
+    `/api/pdfs/${encodeURIComponent(id)}/regenerate/status`,
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as RegenJobState;
 }
 
 export async function generatePdfVideo(id: string): Promise<GenerateVideoResponse> {

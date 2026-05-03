@@ -14,15 +14,22 @@ import {
   deleteSlide,
   fetchPdfDetail,
   fetchPageChatHistory,
+  fetchRegenerateStatus,
   generatePdfVideo,
   regenerateSlideImage,
-  regenerateAllImages,
   replaceSlideImage,
   regeneratePageAudio,
+  startRegenerateJob,
   updatePdfTtsSettings,
   rewritePageScript,
 } from '../lib/api';
-import type { ChatMessage, PdfDetail, PdfDetailPage } from '../types';
+import type {
+  ChatMessage,
+  PdfDetail,
+  PdfDetailPage,
+  RegenJobState,
+  RegenStepName,
+} from '../types';
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -70,6 +77,14 @@ export default function PlayPage() {
   const [regenAllPrompt, setRegenAllPrompt] = useState('請讓整份簡報的圖像風格一致，色調、字體與版面語言維持統一。');
   const [regenAllBusy, setRegenAllBusy] = useState(false);
   const [regenAllMsg, setRegenAllMsg] = useState<string | null>(null);
+  // 「重生」多選項目：圖檔 / 逐字稿 / 語音。後端 `/api/pdfs/:id/regenerate` 會依
+  // image → script → audio 的順序執行，並將進度保存在記憶體供前端輪詢。
+  const [regenOptions, setRegenOptions] = useState<{ image: boolean; script: boolean; audio: boolean }>({
+    image: true,
+    script: false,
+    audio: false,
+  });
+  const [regenJob, setRegenJob] = useState<RegenJobState | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
   // 手機模式下的 tab 切換（桌面模式忽略此 state，永遠並排顯示）
@@ -110,6 +125,26 @@ export default function PlayPage() {
     return () => {
       cancelled = true;
       if (timer != null) window.clearTimeout(timer);
+    };
+  }, [pdfId]);
+
+  // 掛載時檢查是否有正在進行中的批次重生任務；若有則接上並繼續顯示進度。
+  useEffect(() => {
+    if (!pdfId) return;
+    let cancelled = false;
+    fetchRegenerateStatus(pdfId)
+      .then((state) => {
+        if (cancelled) return;
+        if (state.status === 'running' || state.status === 'pending') {
+          setRegenJob(state);
+          setRegenAllBusy(true);
+        }
+      })
+      .catch(() => {
+        // 404 = 沒有任何任務紀錄，忽略即可。
+      });
+    return () => {
+      cancelled = true;
     };
   }, [pdfId]);
 
@@ -451,26 +486,78 @@ export default function PlayPage() {
     setVideoUrl(d.video_url ?? null);
   }, [pdfId]);
 
-  const handleRegenerateAllImages = useCallback(async () => {
+  const regenAnySelected = regenOptions.image || regenOptions.script || regenOptions.audio;
+  const regenJobRunning = regenJob?.status === 'running' || regenJob?.status === 'pending';
+
+  const handleConfirmRegenerate = useCallback(async () => {
     if (!pdfId) return;
-    const p = regenAllPrompt.trim();
-    if (!p) {
-      setRegenAllMsg('提示詞不可為空');
+    if (!regenAnySelected) {
+      setRegenAllMsg('請至少選擇一個重生項目');
       return;
+    }
+    if (regenOptions.image) {
+      const p = regenAllPrompt.trim();
+      if (!p) {
+        setRegenAllMsg('圖檔提示詞不可為空');
+        return;
+      }
     }
     setRegenAllBusy(true);
     setRegenAllMsg(null);
     try {
-      await regenerateAllImages(pdfId, p);
-      setRegenAllMsg('已完成全部圖片重生');
-      setRegenAllDialogOpen(false);
-      await reloadDetail();
+      const started = await startRegenerateJob(pdfId, {
+        scripts: regenOptions.script ? { prompt: '' } : null,
+        audio: regenOptions.audio ? {} : null,
+        images: regenOptions.image
+          ? { prompt: regenAllPrompt.trim() }
+          : null,
+      });
+      setRegenJob(started);
+      setRegenAllMsg('重生任務已啟動，進度如下');
     } catch (err) {
-      setRegenAllMsg(err instanceof ApiError ? err.message : '重生全部圖片失敗');
-    } finally {
+      setRegenAllMsg(err instanceof ApiError ? err.message : '重生失敗');
       setRegenAllBusy(false);
     }
-  }, [pdfId, regenAllPrompt, reloadDetail]);
+  }, [pdfId, regenAllPrompt, regenAnySelected, regenOptions]);
+
+  // 輪詢批次重生任務進度。任務進入 completed/failed 後停止輪詢。
+  useEffect(() => {
+    if (!pdfId || !regenJob || !regenJobRunning) return;
+    let cancelled = false;
+    let timer: number | null = null;
+    const tick = async () => {
+      try {
+        const next = await fetchRegenerateStatus(pdfId);
+        if (cancelled) return;
+        setRegenJob(next);
+        if (next.status === 'running' || next.status === 'pending') {
+          timer = window.setTimeout(tick, 1500);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setRegenAllMsg(err instanceof ApiError ? err.message : '取得進度失敗');
+      }
+    };
+    timer = window.setTimeout(tick, 1500);
+    return () => {
+      cancelled = true;
+      if (timer != null) window.clearTimeout(timer);
+    };
+  }, [pdfId, regenJob?.job_id, regenJobRunning]);
+
+  // 任務結束後：關閉 busy、顯示結果訊息，並重新載入詳情。
+  useEffect(() => {
+    if (!regenJob) return;
+    if (regenJob.status === 'completed') {
+      setRegenAllBusy(false);
+      setRegenAllMsg('重生完成');
+      void reloadDetail();
+    } else if (regenJob.status === 'failed') {
+      setRegenAllBusy(false);
+      setRegenAllMsg(regenJob.error ?? '重生失敗');
+      void reloadDetail();
+    }
+  }, [regenJob?.status, regenJob?.error, reloadDetail]);
 
   const handleAddSlideAfterCurrent = useCallback(async () => {
     if (!pdfId || !currentPage) return;
@@ -666,11 +753,13 @@ export default function PlayPage() {
             頁 {currentIdx + 1}/{totalPages}
           </div>
         </div>
-        <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 px-4 pb-3">
+        <div className="mx-auto flex w-full max-w-5xl flex-col gap-2 px-4 pb-3 md:flex-row md:items-center md:justify-between md:gap-3">
           <div className="text-xs text-slate-400">
             {videoError ? <span className="text-rose-300">{videoError}</span> : null}
           </div>
-          <div className="flex items-center gap-2">
+          {/* 手機：一排 3 欄（設定 / 產生影片 / 開啟影片）；桌面：維持原本 flex 排列。
+              註：「重生」按鍵已搬到右側問答區（aside）。 */}
+          <div className="grid grid-cols-3 gap-2 md:flex md:items-center md:gap-2">
             <button
               type="button"
               onClick={() => setTtsDialogOpen(true)}
@@ -680,16 +769,6 @@ export default function PlayPage() {
             >
               ⚙️ 設定
             </button>
-            {videoUrl ? (
-              <a
-                href={videoUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-200 hover:bg-cyan-500/25"
-              >
-                開啟影片
-              </a>
-            ) : null}
             <button
               type="button"
               onClick={() => void handleGenerateVideo()}
@@ -698,17 +777,25 @@ export default function PlayPage() {
             >
               {videoBusy ? '產生影片中…' : videoUrl ? '重新產生影片' : '產生影片'}
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setRegenAllMsg(null);
-                setRegenAllDialogOpen(true);
-              }}
-              disabled={regenAllBusy}
-              className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-3 py-1.5 text-sm text-fuchsia-200 hover:bg-fuchsia-500/25 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {regenAllBusy ? '重生中…' : '重生全部圖片'}
-            </button>
+            {videoUrl ? (
+              <a
+                href={videoUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-center text-sm text-cyan-200 hover:bg-cyan-500/25"
+              >
+                開啟影片
+              </a>
+            ) : (
+              <button
+                type="button"
+                disabled
+                className="cursor-not-allowed rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-500 opacity-60"
+                title="尚未產生影片"
+              >
+                開啟影片
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -888,6 +975,24 @@ export default function PlayPage() {
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-sm font-semibold text-slate-300">🧩 投影片管理</h2>
                 <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // 若非執行中才清掉舊訊息；執行中時保留以便顯示進度。
+                      if (!regenJobRunning) {
+                        setRegenAllMsg(null);
+                      }
+                      setRegenAllDialogOpen(true);
+                    }}
+                    className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-2 py-1 text-xs text-fuchsia-200 hover:bg-fuchsia-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                    title="重生（可選逐字稿/語音/圖檔）"
+                  >
+                    {regenJobRunning
+                      ? '重生中…'
+                      : regenAllBusy
+                        ? '啟動中…'
+                        : '重生'}
+                  </button>
                   <button
                     type="button"
                     onClick={() => void handleAddSlideAfterCurrent()}
@@ -1133,36 +1238,173 @@ export default function PlayPage() {
       {regenAllDialogOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
           <div className="w-full max-w-xl rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl">
-            <h3 className="mb-3 text-sm font-semibold text-slate-200">重生全部圖片</h3>
-            <p className="mb-2 text-xs text-slate-400">用同一段提示詞逐頁重生圖片，常用於統一整份風格。</p>
-            <textarea
-              value={regenAllPrompt}
-              onChange={(e) => setRegenAllPrompt(e.target.value)}
-              rows={5}
-              className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-fuchsia-500/40 placeholder:text-slate-500 focus:ring"
-              placeholder="輸入整份風格調整提示詞..."
-            />
-            {regenAllMsg ? <p className="mt-2 text-xs text-rose-300">{regenAllMsg}</p> : null}
+            <h3 className="mb-3 text-sm font-semibold text-slate-200">選擇重生項目</h3>
+            <p className="mb-3 text-xs text-slate-400">
+              可多選；執行順序固定為 <span className="font-semibold text-slate-200">圖檔 → 逐字稿 → 語音</span>。
+            </p>
+            <div className="mb-3 space-y-2">
+              <label className="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-200">
+                <input
+                  type="checkbox"
+                  className="accent-fuchsia-500"
+                  checked={regenOptions.image}
+                  onChange={(e) => setRegenOptions((prev) => ({ ...prev, image: e.target.checked }))}
+                  disabled={regenAllBusy}
+                />
+                <span>圖檔</span>
+              </label>
+              <label className="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-200">
+                <input
+                  type="checkbox"
+                  className="accent-fuchsia-500"
+                  checked={regenOptions.script}
+                  onChange={(e) => setRegenOptions((prev) => ({ ...prev, script: e.target.checked }))}
+                  disabled={regenAllBusy}
+                />
+                <span>逐字稿</span>
+              </label>
+              <label className="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-200">
+                <input
+                  type="checkbox"
+                  className="accent-fuchsia-500"
+                  checked={regenOptions.audio}
+                  onChange={(e) => setRegenOptions((prev) => ({ ...prev, audio: e.target.checked }))}
+                  disabled={regenAllBusy}
+                />
+                <span>語音</span>
+              </label>
+            </div>
+            {regenOptions.image ? (
+              <div className="mb-2">
+                <label className="mb-1 block text-xs text-slate-400">圖檔重生提示詞</label>
+                <textarea
+                  value={regenAllPrompt}
+                  onChange={(e) => setRegenAllPrompt(e.target.value)}
+                  rows={4}
+                  className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-fuchsia-500/40 placeholder:text-slate-500 focus:ring"
+                  placeholder="輸入整份風格調整提示詞..."
+                  disabled={regenAllBusy}
+                />
+              </div>
+            ) : null}
+            {regenOptions.script && regenOptions.audio ? null : regenOptions.script ? (
+              <p className="mb-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                提醒：若僅重生逐字稿，原有語音可能與新的逐字稿不相符，建議同時勾選「語音」。
+              </p>
+            ) : null}
+            <RegenerateProgress job={regenJob} />
+            {regenAllMsg ? (
+              <p
+                className={`mt-2 text-xs ${
+                  regenJob?.status === 'completed'
+                    ? 'text-emerald-300'
+                    : regenJob?.status === 'failed'
+                      ? 'text-rose-300'
+                      : 'text-slate-300'
+                }`}
+              >
+                {regenAllMsg}
+              </p>
+            ) : null}
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setRegenAllDialogOpen(false)}
-                className="rounded border border-slate-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
+                onClick={() => {
+                  setRegenAllDialogOpen(false);
+                  if (!regenJobRunning) {
+                    setRegenJob(null);
+                    setRegenAllMsg(null);
+                  }
+                }}
+                disabled={regenAllBusy}
+                className="rounded border border-slate-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-40"
               >
-                取消
+                {regenJobRunning ? '關閉（背景繼續）' : regenJob ? '關閉' : '取消'}
               </button>
               <button
                 type="button"
-                onClick={() => void handleRegenerateAllImages()}
-                disabled={regenAllBusy}
-                className="rounded border border-fuchsia-500/50 bg-fuchsia-500/15 px-3 py-1.5 text-sm text-fuchsia-200 disabled:opacity-40"
+                onClick={() => void handleConfirmRegenerate()}
+                disabled={regenAllBusy || !regenAnySelected}
+                className="rounded border border-fuchsia-500/50 bg-fuchsia-500/15 px-3 py-1.5 text-sm text-fuchsia-200 disabled:cursor-not-allowed disabled:opacity-40"
+                title={!regenAnySelected ? '請至少選擇一個項目' : ''}
               >
-                {regenAllBusy ? '重生中…' : '開始重生'}
+                {regenAllBusy ? '重生中…' : regenJob?.status === 'completed' ? '再次重生' : '確認'}
               </button>
             </div>
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+const STEP_LABELS: Record<RegenStepName, string> = {
+  script: '逐字稿',
+  audio: '語音',
+  image: '圖檔',
+};
+
+function RegenerateProgress({ job }: { job: RegenJobState | null }) {
+  if (!job) return null;
+  const currentStepIndex = Math.max(0, job.step_index);
+  return (
+    <div className="mb-2 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs text-slate-200">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="font-semibold text-slate-200">
+          重生進度
+          {job.status === 'running' || job.status === 'pending' ? (
+            <span className="ml-2 inline-block h-2 w-2 animate-pulse rounded-full bg-cyan-400 align-middle" />
+          ) : null}
+        </span>
+        <span className="text-[11px] text-slate-400">
+          步驟 {Math.min(currentStepIndex + 1, job.steps.length)}/{job.steps.length}
+          {` · `}
+          {job.status === 'running'
+            ? '執行中'
+            : job.status === 'completed'
+              ? '已完成'
+              : job.status === 'failed'
+                ? '失敗'
+                : '等待中'}
+        </span>
+      </div>
+      <ul className="space-y-1.5">
+        {job.steps.map((s) => {
+          const ratio = s.total > 0 ? Math.min(100, Math.round((s.completed / s.total) * 100)) : 0;
+          const isCurrent = job.current_step === s.name;
+          const color =
+            s.status === 'failed'
+              ? 'bg-rose-500'
+              : s.status === 'completed'
+                ? 'bg-emerald-500'
+                : isCurrent
+                  ? 'bg-cyan-500'
+                  : 'bg-slate-600';
+          return (
+            <li key={s.name}>
+              <div className="flex items-center justify-between">
+                <span>
+                  {STEP_LABELS[s.name]}
+                  {isCurrent && s.status === 'running' ? '（進行中）' : ''}
+                </span>
+                <span className="tabular-nums text-slate-400">
+                  {s.status === 'pending'
+                    ? '等待中'
+                    : s.status === 'failed'
+                      ? `失敗：${s.error ?? '未知錯誤'}`
+                      : `${s.completed}/${s.total} (${ratio}%)`}
+                </span>
+              </div>
+              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-800">
+                <div
+                  className={`h-full ${color} transition-all`}
+                  style={{ width: `${s.status === 'completed' ? 100 : ratio}%` }}
+                />
+              </div>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

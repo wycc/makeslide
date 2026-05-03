@@ -116,3 +116,38 @@ export interface ChatHistoryResponse {
 export interface PageChatResponse {
   answer: string;
 }
+
+export type RegenStepName = 'script' | 'audio' | 'image';
+
+export type RegenStepStatus =
+  | 'pending'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'skipped';
+
+export type RegenJobStatus = 'pending' | 'running' | 'completed' | 'failed';
+
+export interface RegenStepProgress {
+  name: RegenStepName;
+  status: RegenStepStatus;
+  total: number;
+  completed: number;
+  error: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface RegenJobState {
+  job_id: string;
+  pdf_id: string;
+  steps: RegenStepProgress[];
+  current_step: RegenStepName | null;
+  step_index: number;
+  status: RegenJobStatus;
+  started_at: string;
+  updated_at: string;
+  finished_at: string | null;
+  error: string | null;
+  message: string | null;
+}

@@ -25,6 +25,10 @@ import {
 import { getOpenAIClient } from '../services/openai';
 import { enqueuePdfProcessing } from '../worker/pipeline';
 import { generateVideo } from '../worker/steps/generateVideo';
+import {
+  getRegenerateJob,
+  startRegenerateJob,
+} from '../worker/regenerate';
 import type {
   ApiError,
   PageRow,
@@ -118,6 +122,32 @@ const UpdateTtsSettingsBodySchema = z.object({
 
 const RegenerateAllImagesBodySchema = z.object({
   prompt: z.string().min(1, 'prompt 不可為空').max(4000, 'prompt 不可超過 4000 字'),
+});
+
+const RegenerateBatchBodySchema = z.object({
+  scripts: z
+    .object({
+      prompt: z
+        .string()
+        .max(2000, 'prompt 不可超過 2000 字')
+        .optional()
+        .default(''),
+    })
+    .optional(),
+  audio: z
+    .object({
+      voice: z.string().min(1).max(32).optional(),
+      speed: z.number().min(0.25).max(4).optional(),
+    })
+    .optional(),
+  images: z
+    .object({
+      prompt: z
+        .string()
+        .min(1, 'images.prompt 不可為空')
+        .max(4000, 'images.prompt 不可超過 4000 字'),
+    })
+    .optional(),
 });
 
 function errorResponse(code: string, message: string): ApiError {
@@ -938,6 +968,111 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
       request.log.error({ err, pdfId: id }, 'Failed to regenerate all images');
       return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to regenerate all images'));
     }
+  });
+
+  // POST /api/pdfs/:id/regenerate
+  // 啟動一個批次重生任務，可同時包含「逐字稿 / 語音 / 圖檔」三種項目。
+  // 後端以固定順序 image → script → audio 依序執行，並在記憶體中保存進度，
+  // 前端可透過 GET /api/pdfs/:id/regenerate/status 輪詢。
+  app.post('/api/pdfs/:id/regenerate', async (request, reply) => {
+    const parsedParams = IdParamSchema.safeParse(request.params);
+    if (!parsedParams.success) {
+      return reply
+        .code(400)
+        .send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const parsedBody = RegenerateBatchBodySchema.safeParse(request.body ?? {});
+    if (!parsedBody.success) {
+      return reply
+        .code(400)
+        .send(
+          errorResponse(
+            'INVALID_REQUEST',
+            parsedBody.error.issues[0]?.message ?? 'Invalid body',
+          ),
+        );
+    }
+    const { id } = parsedParams.data;
+    const body = parsedBody.data;
+
+    const row = db
+      .prepare(`SELECT id, page_count FROM pdfs WHERE id = ?`)
+      .get(id) as { id: string; page_count: number | null } | undefined;
+    if (!row) {
+      return reply
+        .code(404)
+        .send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    if (!row.page_count || row.page_count <= 0) {
+      return reply
+        .code(409)
+        .send(errorResponse('INVALID_STATE', 'PDF page_count 尚未就緒'));
+    }
+
+    if (!body.scripts && !body.audio && !body.images) {
+      return reply
+        .code(400)
+        .send(errorResponse('INVALID_REQUEST', '請至少選擇一個重生項目'));
+    }
+
+    try {
+      const state = startRegenerateJob(id, {
+        scripts: body.scripts ? { prompt: body.scripts.prompt || null } : null,
+        audio: body.audio
+          ? {
+              voice: body.audio.voice ?? null,
+              speed: body.audio.speed ?? null,
+            }
+          : null,
+        images: body.images ? { prompt: body.images.prompt } : null,
+      });
+      return reply.code(202).send(state);
+    } catch (err) {
+      const code = (err as Error & { code?: string }).code;
+      if (code === 'JOB_ALREADY_RUNNING') {
+        return reply
+          .code(409)
+          .send(errorResponse('JOB_ALREADY_RUNNING', '已有重生任務正在執行'));
+      }
+      if (code === 'NO_STEPS_SELECTED') {
+        return reply
+          .code(400)
+          .send(errorResponse('INVALID_REQUEST', '請至少選擇一個重生項目'));
+      }
+      if (code === 'INVALID_STATE') {
+        return reply
+          .code(409)
+          .send(errorResponse('INVALID_STATE', 'PDF 狀態不允許重生'));
+      }
+      if (code === 'PDF_NOT_FOUND') {
+        return reply
+          .code(404)
+          .send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+      }
+      request.log.error({ err, pdfId: id }, 'Failed to start regenerate job');
+      return reply
+        .code(500)
+        .send(errorResponse('INTERNAL_ERROR', 'Failed to start regenerate job'));
+    }
+  });
+
+  // GET /api/pdfs/:id/regenerate/status
+  // 查詢最近一次（或目前正在進行中）的批次重生任務狀態。
+  app.get('/api/pdfs/:id/regenerate/status', async (request, reply) => {
+    const parsedParams = IdParamSchema.safeParse(request.params);
+    if (!parsedParams.success) {
+      return reply
+        .code(400)
+        .send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const { id } = parsedParams.data;
+    const state = getRegenerateJob(id);
+    if (!state) {
+      return reply
+        .code(404)
+        .send(errorResponse('JOB_NOT_FOUND', '沒有任何重生任務紀錄'));
+    }
+    return reply.send(state);
   });
 
   app.delete('/api/pdfs/:id/pages/:n', async (request, reply) => {
