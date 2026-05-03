@@ -5,6 +5,7 @@ import { config } from './config';
 import { logger } from './logger';
 import { pdfRoutes } from './routes/pdfs';
 import { ensureStorageRoot } from './services/storage';
+import { migrateLegacyPngToJpgOnStartup } from './services/imageMigration';
 import { checkPoppler } from './worker/poppler';
 import { rescanPendingOnStartup } from './worker/pipeline';
 import { getProcessingQueue } from './worker/queue';
@@ -66,6 +67,7 @@ export async function buildApp() {
 
 async function main(): Promise<void> {
   ensureStorageRoot();
+  await migrateLegacyPngToJpgOnStartup();
 
   // M3 cost-control observability: surface model + page cap on every boot.
   logger.info(

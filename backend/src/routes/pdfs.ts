@@ -176,11 +176,13 @@ function rewritePagePathsToMatchNumber(pdfId: string, pageCount: number): void {
 }
 
 function coverUrl(row: PdfRow): string | null {
-  // Cover exists iff cover.jpg is on disk. For efficiency, probe once here
+  // Cover exists iff cover.jpg/cover.png is on disk. For efficiency, probe once here
   // instead of stat-ing for every list row; M2 ensures cover is written as
   // soon as page 1 is rendered.
   try {
-    return fs.existsSync(coverImagePath(row.id))
+    const coverJpg = coverImagePath(row.id);
+    const coverPng = path.join(config.storageRoot, row.id, 'cover.png');
+    return (fs.existsSync(coverJpg) || fs.existsSync(coverPng))
       ? `/api/pdfs/${row.id}/cover`
       : null;
   } catch {
@@ -1866,12 +1868,28 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
         .send(errorResponse('PDF_NOT_FOUND', 'PDF not found'));
     }
     const cover = coverImagePath(parsed.data.id);
-    if (!fs.existsSync(cover)) {
+    const legacyCoverPng = path.join(config.storageRoot, parsed.data.id, 'cover.png');
+
+    if (!fs.existsSync(cover) && fs.existsSync(legacyCoverPng)) {
+      try {
+        await sharp(legacyCoverPng)
+          .jpeg({ quality: 80, mozjpeg: true })
+          .toFile(cover);
+      } catch (err) {
+        request.log.warn({ err, id: parsed.data.id }, 'Failed to convert legacy cover.png to cover.jpg');
+      }
+    }
+
+    const coverPath = fs.existsSync(cover)
+      ? cover
+      : (fs.existsSync(legacyCoverPng) ? legacyCoverPng : null);
+    if (!coverPath) {
       return reply
         .code(404)
         .send(errorResponse('COVER_NOT_READY', 'Cover image not generated yet'));
     }
-    return streamFile(reply, cover, 'image/jpeg', 'public, max-age=300');
+    const mime = coverPath.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+    return streamFile(reply, coverPath, mime, 'public, max-age=300');
   });
 
   // GET /api/pdfs/:id/video
@@ -1926,12 +1944,27 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
         .code(400)
         .send(errorResponse('INVALID_PATH', 'Invalid stored path'));
     }
-    if (!fs.existsSync(abs)) {
+    const legacyPng = abs.replace(/\.jpg$/i, '.png');
+    let imagePath = abs;
+    if (!fs.existsSync(imagePath) && fs.existsSync(legacyPng)) {
+      try {
+        await sharp(legacyPng)
+          .jpeg({ quality: 82, mozjpeg: true })
+          .toFile(imagePath);
+      } catch (err) {
+        request.log.warn({ err, id, n }, 'Failed to convert legacy page png to jpg');
+      }
+    }
+    if (!fs.existsSync(imagePath) && fs.existsSync(legacyPng)) {
+      imagePath = legacyPng;
+    }
+    if (!fs.existsSync(imagePath)) {
       return reply
         .code(404)
         .send(errorResponse('PAGE_IMAGE_NOT_FOUND', 'Page image file missing'));
     }
-    return streamFile(reply, abs, 'image/jpeg', 'public, max-age=300');
+    const mime = imagePath.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+    return streamFile(reply, imagePath, mime, 'public, max-age=300');
   });
 
   // GET /api/pdfs/:id/pages/:n/text
