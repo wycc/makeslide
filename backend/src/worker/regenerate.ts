@@ -735,6 +735,11 @@ async function runRegenerateScripts(
     )
     .all(pdfId) as Array<{ page_number: number; text_path: string | null }>;
   step.total = pageRows.length;
+  const imageQuality = config.openaiImageQuality;
+  const imageTimeoutMs =
+    imageQuality === 'high' || imageQuality === 'medium'
+      ? config.openaiImageTimeoutMsHighQuality
+      : config.openaiImageTimeoutMs;
 
   // 刪除既有腳本檔，避免 generateScript 的 idempotent skip 拿到舊內容。
   for (const p of pageRows) {
@@ -934,6 +939,11 @@ async function runRegenerateImages(
     script_path: string | null;
   }>;
   step.total = pageRows.length;
+  const imageQuality = config.openaiImageQuality;
+  const imageTimeoutMs =
+    imageQuality === 'high' || imageQuality === 'medium'
+      ? config.openaiImageTimeoutMsHighQuality
+      : config.openaiImageTimeoutMs;
 
   const client = getOpenAIClient();
   for (const p of pageRows) {
@@ -977,7 +987,9 @@ async function runRegenerateImages(
           model: config.openaiImageModel,
           prompt: mergedPrompt,
           size: '1536x1024',
-          quality: 'low',
+          quality: imageQuality,
+        }, {
+          timeout: imageTimeoutMs,
         }),
       {
         maxAttempts: 5,

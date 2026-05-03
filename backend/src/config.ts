@@ -90,6 +90,20 @@ const EnvSchema = z.object({
     .transform((v) => (v ? Number(v) : 50))
     .pipe(z.number().int().positive()),
   OPENAI_IMAGE_MODEL: z.string().optional().default('gpt-image-2'),
+  OPENAI_IMAGE_QUALITY: z
+    .enum(['low', 'medium', 'high', 'auto'])
+    .optional()
+    .default('low'),
+  OPENAI_IMAGE_TIMEOUT_MS: z
+    .string()
+    .optional()
+    .transform((v) => (v ? Number(v) : 60000))
+    .pipe(z.number().int().positive()),
+  OPENAI_IMAGE_TIMEOUT_MS_HIGH_QUALITY: z
+    .string()
+    .optional()
+    .transform((v) => (v ? Number(v) : 120000))
+    .pipe(z.number().int().positive()),
   // M4: OpenAI TTS settings
   OPENAI_TTS_MODEL: z
     .enum(['gpt-4o-mini-tts', 'tts-1', 'tts-1-hd'])
@@ -159,6 +173,9 @@ export const config = {
   openaiMaxRetries: env.OPENAI_MAX_RETRIES,
   openaiMaxPages: env.OPENAI_MAX_PAGES,
   openaiImageModel: env.OPENAI_IMAGE_MODEL,
+  openaiImageQuality: env.OPENAI_IMAGE_QUALITY,
+  openaiImageTimeoutMs: env.OPENAI_IMAGE_TIMEOUT_MS,
+  openaiImageTimeoutMsHighQuality: env.OPENAI_IMAGE_TIMEOUT_MS_HIGH_QUALITY,
   // M4
   openaiTtsModel: env.OPENAI_TTS_MODEL,
   openaiTtsVoice: env.OPENAI_TTS_VOICE,
