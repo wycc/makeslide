@@ -72,6 +72,8 @@ export default function PlayPage() {
   const [regenAllMsg, setRegenAllMsg] = useState<string | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
+  // 手機模式下的 tab 切換（桌面模式忽略此 state，永遠並排顯示）
+  const [activeTab, setActiveTab] = useState<'play' | 'qa'>('play');
   const IMAGE_MSG_PREFIX = '[image] ';
   const imageInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -711,9 +713,41 @@ export default function PlayPage() {
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-[1400px] flex-1 gap-4 px-4 py-4">
-        {/* Left: player + script */}
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950/70">
+      <main className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col gap-4 px-4 py-4 md:flex-row">
+        {/* Mobile-only tab 切換列 */}
+        <div className="flex shrink-0 overflow-hidden rounded-lg border border-slate-800 bg-slate-900/40 md:hidden">
+          <button
+            type="button"
+            onClick={() => setActiveTab('play')}
+            className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
+              activeTab === 'play'
+                ? 'border-b-2 border-cyan-400 bg-slate-800/60 text-cyan-200'
+                : 'border-b-2 border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+            aria-pressed={activeTab === 'play'}
+          >
+            播放
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('qa')}
+            className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
+              activeTab === 'qa'
+                ? 'border-b-2 border-cyan-400 bg-slate-800/60 text-cyan-200'
+                : 'border-b-2 border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+            aria-pressed={activeTab === 'qa'}
+          >
+            問答
+          </button>
+        </div>
+
+        {/* Left: player + script（手機：僅於 play tab 顯示；桌面：永遠顯示） */}
+        <div
+          className={`min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950/70 md:flex ${
+            activeTab === 'play' ? 'flex' : 'hidden'
+          }`}
+        >
           {/* Slide image */}
           <section
             className="flex flex-1 items-center justify-center px-4 py-6"
@@ -843,8 +877,12 @@ export default function PlayPage() {
           </section>
         </div>
 
-        {/* Right: thumbnails + LLM chat panel */}
-        <aside className="flex max-h-[calc(100vh-7rem)] w-[360px] shrink-0 flex-col gap-3 overflow-y-auto">
+        {/* Right: thumbnails + LLM chat panel（手機：僅於 qa tab 顯示；桌面：永遠顯示） */}
+        <aside
+          className={`max-h-[calc(100vh-7rem)] w-full shrink-0 flex-col gap-3 overflow-y-auto md:flex md:w-[360px] ${
+            activeTab === 'qa' ? 'flex' : 'hidden'
+          }`}
+        >
           <section className="rounded-lg border border-slate-800 bg-slate-900/40">
             <div className="border-b border-slate-800 px-4 py-3">
               <div className="flex items-center justify-between gap-2">
