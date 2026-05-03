@@ -124,9 +124,16 @@ export type RegenStepStatus =
   | 'running'
   | 'completed'
   | 'failed'
-  | 'skipped';
+  | 'skipped'
+  | 'cancelled';
 
-export type RegenJobStatus = 'pending' | 'running' | 'completed' | 'failed';
+export type RegenJobStatus =
+  | 'pending'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelling'
+  | 'cancelled';
 
 export interface RegenStepProgress {
   name: RegenStepName;
@@ -150,4 +157,16 @@ export interface RegenJobState {
   finished_at: string | null;
   error: string | null;
   message: string | null;
+  cancel_requested: boolean;
+  last_processed_page: number | null;
+  last_generated_page: number | null;
+  snapshot_id: string | null;
+  rollback_available: boolean;
+}
+
+export interface RollbackRegenerateResponse {
+  id: string;
+  rolled_back_pages: number;
+  asset_types: RegenStepName[];
+  snapshot_id: string;
 }

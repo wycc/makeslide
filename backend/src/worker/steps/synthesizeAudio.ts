@@ -42,6 +42,13 @@ export interface SynthesizeAudioOptions {
   onPage?: (pageNumber: number, done: number) => void;
   voice?: string | null;
   speed?: number | null;
+  /**
+   * Optional cancellation probe. Invoked before each page's TTS request.
+   * If it returns true, that page throws `CANCELLED` immediately. Tasks
+   * already in flight still complete; pending ones will see the abort
+   * flag and cascade-throw quickly.
+   */
+  shouldAbort?: () => boolean;
 }
 
 async function readAudioDuration(filePath: string): Promise<number | null> {
@@ -68,8 +75,14 @@ async function synthesizeOnePage(params: {
   script: string;
   voice: string;
   speed: number;
+  shouldAbort?: () => boolean;
 }): Promise<SynthesizeAudioPageResult> {
-  const { pdfId, pageNumber, pageCount, script, voice, speed } = params;
+  const { pdfId, pageNumber, pageCount, script, voice, speed, shouldAbort } = params;
+  if (shouldAbort?.()) {
+    const err = new Error('CANCELLED');
+    (err as Error & { code?: string }).code = 'CANCELLED';
+    throw err;
+  }
   const absPath = pageAudioPath(pdfId, pageNumber, pageCount);
 
   // Idempotency: if file already present and non-empty, reuse it.
@@ -204,7 +217,7 @@ async function synthesizeOnePage(params: {
 export async function synthesizeAudio(
   opts: SynthesizeAudioOptions,
 ): Promise<SynthesizeAudioResult> {
-  const { pdfId, pageCount, pages, onPage } = opts;
+  const { pdfId, pageCount, pages, onPage, shouldAbort } = opts;
   const voice = opts.voice?.trim() || config.openaiTtsVoice;
   const speed = opts.speed ?? config.openaiTtsSpeed;
   const sorted = [...pages].sort((a, b) => a.pageNumber - b.pageNumber);
@@ -213,6 +226,7 @@ export async function synthesizeAudio(
   const results: SynthesizeAudioPageResult[] = new Array(sorted.length);
   const errors: Array<{ pageNumber: number; error: unknown }> = [];
   let done = 0;
+  let cancelled = false;
 
   await Promise.all(
     sorted.map((page, idx) =>
@@ -225,16 +239,28 @@ export async function synthesizeAudio(
             script: page.script,
             voice,
             speed,
+            shouldAbort,
           });
           results[idx] = res;
           done += 1;
           onPage?.(page.pageNumber, done);
         } catch (err) {
-          errors.push({ pageNumber: page.pageNumber, error: err });
+          const code = (err as Error & { code?: string }).code;
+          if (code === 'CANCELLED') {
+            cancelled = true;
+          } else {
+            errors.push({ pageNumber: page.pageNumber, error: err });
+          }
         }
       }),
     ),
   );
+
+  if (cancelled) {
+    const err = new Error('CANCELLED');
+    (err as Error & { code?: string }).code = 'CANCELLED';
+    throw err;
+  }
 
   if (errors.length > 0) {
     const first = errors[0]!;

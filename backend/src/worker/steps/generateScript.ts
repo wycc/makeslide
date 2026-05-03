@@ -48,6 +48,13 @@ export interface GenerateScriptOptions {
    * idempotent skips). `done` is 1-based count of pages finished so far.
    */
   onPage?: (pageNumber: number, done: number) => void;
+  /**
+   * Optional cancellation probe. Invoked before each page; if it returns
+   * true, script generation throws `CANCELLED` immediately without
+   * processing further pages. Only checked between pages; any already
+   * in-flight OpenAI call will run to completion.
+   */
+  shouldAbort?: () => boolean;
 }
 
 const ScriptResponseSchema = z.object({
@@ -330,7 +337,7 @@ async function readExistingScript(
 export async function generateScript(
   opts: GenerateScriptOptions,
 ): Promise<GenerateScriptResult> {
-  const { pdfId, pageCount, pages, onPage, userPrompt } = opts;
+  const { pdfId, pageCount, pages, onPage, userPrompt, shouldAbort } = opts;
   const targetChars = opts.maxCharsPerPage ?? config.openaiScriptTargetChars;
   const system = buildSystemPrompt(userPrompt, targetChars);
   if (userPrompt && userPrompt.trim()) {
@@ -352,6 +359,11 @@ export async function generateScript(
   let done = 0;
 
   for (let i = 0; i < pages.length; i++) {
+    if (shouldAbort?.()) {
+      const err = new Error('CANCELLED');
+      (err as Error & { code?: string }).code = 'CANCELLED';
+      throw err;
+    }
     const pageInfo = pages[i]!;
     const nextInfo = pages[i + 1];
 

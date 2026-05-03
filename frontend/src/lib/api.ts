@@ -6,6 +6,7 @@ import type {
   PdfDetail,
   PdfListItem,
   RegenJobState,
+  RollbackRegenerateResponse,
   StartProcessingResponse,
   UploadResponse,
 } from '../types';
@@ -295,6 +296,34 @@ export async function fetchRegenerateStatus(id: string): Promise<RegenJobState> 
   );
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as RegenJobState;
+}
+
+/**
+ * 向後端送出「停止正在執行中的重生任務」請求；實際會在下一個頁面安全檢查點
+ * 停止，並讓 status 進入 `cancelling` → `cancelled`。
+ */
+export async function cancelRegenerateJob(id: string): Promise<RegenJobState> {
+  const resp = await fetch(
+    `/api/pdfs/${encodeURIComponent(id)}/regenerate/cancel`,
+    { method: 'POST' },
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as RegenJobState;
+}
+
+/**
+ * 還原最近一次重生任務啟動前的快照；包含圖片 / 逐字稿 / 語音，「原本不存在」
+ * 的檔案也會被還原為不存在。
+ */
+export async function rollbackRegenerate(
+  id: string,
+): Promise<RollbackRegenerateResponse> {
+  const resp = await fetch(
+    `/api/pdfs/${encodeURIComponent(id)}/regenerate/rollback`,
+    { method: 'POST' },
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as RollbackRegenerateResponse;
 }
 
 export async function generatePdfVideo(id: string): Promise<GenerateVideoResponse> {

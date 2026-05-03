@@ -27,6 +27,8 @@ import { enqueuePdfProcessing } from '../worker/pipeline';
 import { generateVideo } from '../worker/steps/generateVideo';
 import {
   getRegenerateJob,
+  requestCancelRegenerateJob,
+  rollbackRegenerate,
   startRegenerateJob,
 } from '../worker/regenerate';
 import type {
@@ -1073,6 +1075,89 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
         .send(errorResponse('JOB_NOT_FOUND', '沒有任何重生任務紀錄'));
     }
     return reply.send(state);
+  });
+
+  // POST /api/pdfs/:id/regenerate/cancel
+  // 請求停止目前正在執行中的批次重生任務。實際停止時機為下一個安全檢查點
+  // （每頁 / 步驟切換之間），已在飛行中的請求會讓它完成再停。
+  app.post('/api/pdfs/:id/regenerate/cancel', async (request, reply) => {
+    const parsedParams = IdParamSchema.safeParse(request.params);
+    if (!parsedParams.success) {
+      return reply
+        .code(400)
+        .send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const { id } = parsedParams.data;
+    try {
+      const state = requestCancelRegenerateJob(id);
+      return reply.code(202).send(state);
+    } catch (err) {
+      const code = (err as Error & { code?: string }).code;
+      if (code === 'JOB_NOT_FOUND') {
+        return reply
+          .code(404)
+          .send(errorResponse('JOB_NOT_FOUND', '沒有找到可取消的重生任務'));
+      }
+      if (code === 'JOB_NOT_ACTIVE') {
+        return reply
+          .code(409)
+          .send(errorResponse('JOB_NOT_ACTIVE', '目前任務已結束，無法取消'));
+      }
+      request.log.error({ err, pdfId: id }, 'Failed to cancel regenerate job');
+      return reply
+        .code(500)
+        .send(errorResponse('INTERNAL_ERROR', 'Failed to cancel regenerate job'));
+    }
+  });
+
+  // POST /api/pdfs/:id/regenerate/rollback
+  // 還原最近一次啟動重生前的快照：針對每頁的圖片 / 逐字稿 / 語音三種資產，
+  // 若快照中「原本有檔案」就覆蓋回去，若「原本不存在」則刪除目前的檔案；
+  // 同時還原 pages 表對應的欄位（status / *_path / audio_duration_seconds）。
+  app.post('/api/pdfs/:id/regenerate/rollback', async (request, reply) => {
+    const parsedParams = IdParamSchema.safeParse(request.params);
+    if (!parsedParams.success) {
+      return reply
+        .code(400)
+        .send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const { id } = parsedParams.data;
+    const row = db.prepare(`SELECT id FROM pdfs WHERE id = ?`).get(id) as
+      | { id: string }
+      | undefined;
+    if (!row) {
+      return reply
+        .code(404)
+        .send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    try {
+      const result = await rollbackRegenerate(id);
+      return reply.code(200).send({
+        id,
+        ...result,
+      });
+    } catch (err) {
+      const code = (err as Error & { code?: string }).code;
+      if (code === 'SNAPSHOT_NOT_FOUND') {
+        return reply
+          .code(404)
+          .send(errorResponse('SNAPSHOT_NOT_FOUND', '找不到可還原的快照'));
+      }
+      if (code === 'JOB_STILL_RUNNING') {
+        return reply
+          .code(409)
+          .send(
+            errorResponse(
+              'JOB_STILL_RUNNING',
+              '仍有重生任務在執行中，請先停止再還原',
+            ),
+          );
+      }
+      request.log.error({ err, pdfId: id }, 'Failed to rollback regenerate');
+      return reply
+        .code(500)
+        .send(errorResponse('INTERNAL_ERROR', 'Failed to rollback regenerate'));
+    }
   });
 
   app.delete('/api/pdfs/:id/pages/:n', async (request, reply) => {

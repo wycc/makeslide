@@ -10,11 +10,12 @@ import {
   pageAudioPath,
   pageImagePath,
   pageScriptPath,
+  pdfDir,
   readMetadata,
   safeJoinPdfPath,
   writeMetadata,
 } from '../services/storage';
-import type { PdfRow } from '../types';
+import type { PageStatus, PdfRow } from '../types';
 import { generateScript } from './steps/generateScript';
 import { readScriptsForTts, synthesizeAudio } from './steps/synthesizeAudio';
 
@@ -28,6 +29,12 @@ import { readScriptsForTts, synthesizeAudio } from './steps/synthesizeAudio';
  *
  * 狀態只存在記憶體中；若伺服器重啟，前端會收到 404 並把 UI 視為「已結束」。
  * 這對本專案的情境（單機、手動觸發）已經足夠。
+ *
+ * Snapshot / rollback：
+ *   啟動任務前，對每個頁面的三種資產（image/script/audio）做一份磁碟快照並
+ *   記錄每個檔案「原本是否存在」；rollback 時覆蓋或刪除以回到啟動前的狀態。
+ *   對應的 pages 表欄位（status / image_path / script_path / audio_path /
+ *   audio_duration_seconds）也會一併快照，rollback 時寫回。
  */
 
 export type RegenStepName = 'script' | 'audio' | 'image';
@@ -37,9 +44,16 @@ export type RegenStepStatus =
   | 'running'
   | 'completed'
   | 'failed'
-  | 'skipped';
+  | 'skipped'
+  | 'cancelled';
 
-export type RegenJobStatus = 'pending' | 'running' | 'completed' | 'failed';
+export type RegenJobStatus =
+  | 'pending'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelling'
+  | 'cancelled';
 
 export interface RegenStepProgress {
   name: RegenStepName;
@@ -63,6 +77,13 @@ export interface RegenJobState {
   finished_at: string | null;
   error: string | null;
   message: string | null;
+  // NEW: 取消請求與進度指標
+  cancel_requested: boolean;
+  last_processed_page: number | null;
+  last_generated_page: number | null;
+  // NEW: 快照與還原
+  snapshot_id: string | null;
+  rollback_available: boolean;
 }
 
 export interface RegenerateOptions {
@@ -77,7 +98,7 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-function pagePad(pageCount: number): number {
+function pagePadFor(pageCount: number): number {
   return pageCount > 999 ? 4 : 3;
 }
 
@@ -102,6 +123,329 @@ export function getRegenerateJob(pdfId: string): RegenJobState | null {
   return jobs.get(pdfId) ?? null;
 }
 
+// ---------------------------------------------------------------------------
+// Snapshot / rollback
+// ---------------------------------------------------------------------------
+
+const SNAPSHOT_DIR_NAME = '.regenerate-snapshot';
+
+interface SnapshotAssetEntry {
+  existed: boolean;
+}
+
+interface SnapshotPageEntry {
+  page_number: number;
+  db_status: PageStatus;
+  db_image_path: string | null;
+  db_script_path: string | null;
+  db_audio_path: string | null;
+  db_audio_duration_seconds: number | null;
+  image?: SnapshotAssetEntry;
+  script?: SnapshotAssetEntry;
+  audio?: SnapshotAssetEntry;
+}
+
+interface SnapshotManifest {
+  snapshot_id: string;
+  created_at: string;
+  pdf_id: string;
+  page_count: number;
+  asset_types: RegenStepName[];
+  pages: SnapshotPageEntry[];
+}
+
+function snapshotDirOf(pdfId: string): string {
+  return path.join(pdfDir(pdfId), SNAPSHOT_DIR_NAME);
+}
+
+function snapshotPagesDirOf(pdfId: string): string {
+  return path.join(snapshotDirOf(pdfId), 'pages');
+}
+
+function snapshotManifestPathOf(pdfId: string): string {
+  return path.join(snapshotDirOf(pdfId), 'manifest.json');
+}
+
+function snapshotBackupFilePath(
+  pdfId: string,
+  pageNumber: number,
+  pageCount: number,
+  assetType: RegenStepName,
+): string {
+  const padded = String(pageNumber).padStart(pagePadFor(pageCount), '0');
+  const ext =
+    assetType === 'image' ? '.png' : assetType === 'script' ? '.script.txt' : '.mp3';
+  return path.join(snapshotPagesDirOf(pdfId), `${padded}${ext}`);
+}
+
+function targetFilePath(
+  pdfId: string,
+  pageNumber: number,
+  pageCount: number,
+  assetType: RegenStepName,
+): string {
+  if (assetType === 'image') return pageImagePath(pdfId, pageNumber, pageCount);
+  if (assetType === 'script') return pageScriptPath(pdfId, pageNumber, pageCount);
+  return pageAudioPath(pdfId, pageNumber, pageCount);
+}
+
+/**
+ * 依照欲重生的資產類型為每一頁建立磁碟快照並記錄 pages 表當下的欄位值，
+ * 以供 rollback 時復原（包含「原本不存在」的檔案也會被還原為不存在）。
+ */
+async function createSnapshot(
+  pdfId: string,
+  pageCount: number,
+  assetTypes: RegenStepName[],
+): Promise<SnapshotManifest> {
+  const snapshotId = nanoid(10);
+  const snapDir = snapshotDirOf(pdfId);
+  const snapPagesDir = snapshotPagesDirOf(pdfId);
+  await fs.promises.rm(snapDir, { recursive: true, force: true });
+  await fs.promises.mkdir(snapPagesDir, { recursive: true });
+
+  const pageRows = db
+    .prepare(
+      `SELECT page_number, status, image_path, script_path, audio_path, audio_duration_seconds
+         FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
+    )
+    .all(pdfId) as Array<{
+    page_number: number;
+    status: PageStatus;
+    image_path: string | null;
+    script_path: string | null;
+    audio_path: string | null;
+    audio_duration_seconds: number | null;
+  }>;
+
+  const entries: SnapshotPageEntry[] = [];
+  for (const row of pageRows) {
+    const entry: SnapshotPageEntry = {
+      page_number: row.page_number,
+      db_status: row.status,
+      db_image_path: row.image_path,
+      db_script_path: row.script_path,
+      db_audio_path: row.audio_path,
+      db_audio_duration_seconds: row.audio_duration_seconds,
+    };
+    for (const assetType of assetTypes) {
+      const src = targetFilePath(pdfId, row.page_number, pageCount, assetType);
+      let existed = false;
+      try {
+        await fs.promises.access(src, fs.constants.F_OK);
+        existed = true;
+      } catch {
+        existed = false;
+      }
+      if (existed) {
+        const dest = snapshotBackupFilePath(pdfId, row.page_number, pageCount, assetType);
+        await fs.promises.copyFile(src, dest);
+      }
+      entry[assetType] = { existed };
+    }
+    entries.push(entry);
+  }
+
+  const manifest: SnapshotManifest = {
+    snapshot_id: snapshotId,
+    created_at: nowIso(),
+    pdf_id: pdfId,
+    page_count: pageCount,
+    asset_types: assetTypes,
+    pages: entries,
+  };
+  await fs.promises.writeFile(
+    snapshotManifestPathOf(pdfId),
+    JSON.stringify(manifest, null, 2),
+    'utf8',
+  );
+  logger.info(
+    {
+      pdfId,
+      snapshotId,
+      pageCount,
+      assetTypes,
+      pages: entries.length,
+    },
+    'regenerate snapshot: created',
+  );
+  return manifest;
+}
+
+async function readSnapshotManifest(pdfId: string): Promise<SnapshotManifest | null> {
+  try {
+    const raw = await fs.promises.readFile(snapshotManifestPathOf(pdfId), 'utf8');
+    return JSON.parse(raw) as SnapshotManifest;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw err;
+  }
+}
+
+async function deleteSnapshot(pdfId: string): Promise<void> {
+  const snapDir = snapshotDirOf(pdfId);
+  await fs.promises.rm(snapDir, { recursive: true, force: true });
+}
+
+export async function rollbackRegenerate(pdfId: string): Promise<{
+  rolled_back_pages: number;
+  asset_types: RegenStepName[];
+  snapshot_id: string;
+}> {
+  const manifest = await readSnapshotManifest(pdfId);
+  if (!manifest) {
+    const err = new Error('SNAPSHOT_NOT_FOUND');
+    (err as Error & { code?: string }).code = 'SNAPSHOT_NOT_FOUND';
+    throw err;
+  }
+
+  // 若任務仍在執行中（含 cancelling），不允許 rollback 以免與背景寫入衝突。
+  const existing = jobs.get(pdfId);
+  if (
+    existing &&
+    (existing.status === 'running' ||
+      existing.status === 'pending' ||
+      existing.status === 'cancelling')
+  ) {
+    const err = new Error('JOB_STILL_RUNNING');
+    (err as Error & { code?: string }).code = 'JOB_STILL_RUNNING';
+    throw err;
+  }
+
+  const updatedAt = nowIso();
+  const pageCount = manifest.page_count;
+
+  // 先還原所有磁碟檔案；任一步驟失敗就拋錯（保留 snapshot 以便重試）。
+  for (const entry of manifest.pages) {
+    for (const assetType of manifest.asset_types) {
+      const target = targetFilePath(pdfId, entry.page_number, pageCount, assetType);
+      const snap = snapshotBackupFilePath(pdfId, entry.page_number, pageCount, assetType);
+      const assetEntry = entry[assetType];
+      if (!assetEntry) continue;
+      if (assetEntry.existed) {
+        await fs.promises.mkdir(path.dirname(target), { recursive: true });
+        await fs.promises.copyFile(snap, target);
+      } else {
+        // 原本不存在 → 若目前有檔案就刪掉。
+        await fs.promises.rm(target, { force: true });
+      }
+    }
+  }
+
+  // 再還原 DB 欄位。
+  const updateStmt = db.prepare(
+    `UPDATE pages
+        SET status = ?,
+            image_path = ?,
+            script_path = ?,
+            audio_path = ?,
+            audio_duration_seconds = ?,
+            error_message = NULL,
+            updated_at = ?
+      WHERE pdf_id = ? AND page_number = ?`,
+  );
+  const tx = db.transaction(() => {
+    for (const entry of manifest.pages) {
+      updateStmt.run(
+        entry.db_status,
+        entry.db_image_path,
+        entry.db_script_path,
+        entry.db_audio_path,
+        entry.db_audio_duration_seconds,
+        updatedAt,
+        pdfId,
+        entry.page_number,
+      );
+    }
+    db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(updatedAt, pdfId);
+  });
+  tx();
+
+  // metadata.json 盡力同步，失敗只記 log。
+  try {
+    const meta = await readMetadata(pdfId);
+    if (meta) {
+      for (const entry of manifest.pages) {
+        const mp = meta.pages.find((x) => x.page_number === entry.page_number);
+        if (mp) {
+          mp.status = entry.db_status;
+          mp.image = entry.db_image_path;
+          mp.script = entry.db_script_path ?? null;
+          mp.audio = entry.db_audio_path ?? null;
+          mp.audio_duration_seconds = entry.db_audio_duration_seconds ?? null;
+        }
+      }
+      meta.updated_at = updatedAt;
+      await writeMetadata(pdfId, meta);
+    }
+  } catch (err) {
+    logger.warn({ err, pdfId }, 'rollbackRegenerate: failed to sync metadata.json');
+  }
+
+  await deleteSnapshot(pdfId);
+
+  // 若記憶體中仍有 job 紀錄，將 rollback 狀態關閉。
+  const job = jobs.get(pdfId);
+  if (job) {
+    job.rollback_available = false;
+    job.snapshot_id = null;
+    job.updated_at = updatedAt;
+    job.message = '已還原至重生前狀態';
+  }
+
+  logger.info(
+    {
+      pdfId,
+      snapshotId: manifest.snapshot_id,
+      pages: manifest.pages.length,
+      assetTypes: manifest.asset_types,
+    },
+    'regenerate rollback: done',
+  );
+
+  return {
+    rolled_back_pages: manifest.pages.length,
+    asset_types: manifest.asset_types,
+    snapshot_id: manifest.snapshot_id,
+  };
+}
+
+/**
+ * 送出取消請求（不會同步終止任務，會在下一個安全檢查點返回）。
+ */
+export function requestCancelRegenerateJob(pdfId: string): RegenJobState {
+  const state = jobs.get(pdfId);
+  if (!state) {
+    const err = new Error('JOB_NOT_FOUND');
+    (err as Error & { code?: string }).code = 'JOB_NOT_FOUND';
+    throw err;
+  }
+  if (
+    state.status !== 'running' &&
+    state.status !== 'pending' &&
+    state.status !== 'cancelling'
+  ) {
+    const err = new Error('JOB_NOT_ACTIVE');
+    (err as Error & { code?: string }).code = 'JOB_NOT_ACTIVE';
+    throw err;
+  }
+  state.cancel_requested = true;
+  if (state.status === 'pending' || state.status === 'running') {
+    state.status = 'cancelling';
+  }
+  state.updated_at = nowIso();
+  state.message = '已送出停止請求，等待目前處理中的頁面完成';
+  logger.info(
+    { pdfId, jobId: state.job_id, currentStep: state.current_step },
+    'regenerate job: cancel requested',
+  );
+  return state;
+}
+
+// ---------------------------------------------------------------------------
+// Job orchestration
+// ---------------------------------------------------------------------------
+
 /**
  * 建立並啟動一個重生任務。已經在跑的任務會以 `JOB_ALREADY_RUNNING` 拋錯；
  * 已完成/失敗的舊任務會被新的任務覆蓋。
@@ -111,7 +455,12 @@ export function startRegenerateJob(
   options: RegenerateOptions,
 ): RegenJobState {
   const existing = jobs.get(pdfId);
-  if (existing && existing.status === 'running') {
+  if (
+    existing &&
+    (existing.status === 'running' ||
+      existing.status === 'pending' ||
+      existing.status === 'cancelling')
+  ) {
     const err = new Error('JOB_ALREADY_RUNNING');
     (err as Error & { code?: string }).code = 'JOB_ALREADY_RUNNING';
     throw err;
@@ -156,9 +505,14 @@ export function startRegenerateJob(
     finished_at: null,
     error: null,
     message: null,
+    cancel_requested: false,
+    last_processed_page: null,
+    last_generated_page: null,
+    snapshot_id: null,
+    rollback_available: false,
   };
   jobs.set(pdfId, state);
-  void runJob(state, options).catch((err) => {
+  void runJob(state, options, stepNames, pageCount).catch((err) => {
     logger.error({ err, pdfId }, 'regenerate job runner rejected');
   });
   return state;
@@ -167,7 +521,34 @@ export function startRegenerateJob(
 async function runJob(
   state: RegenJobState,
   options: RegenerateOptions,
+  stepNames: RegenStepName[],
+  pageCount: number,
 ): Promise<void> {
+  // 先建立快照（在任何寫入前），確保可回復到啟動前狀態。
+  try {
+    const manifest = await createSnapshot(state.pdf_id, pageCount, stepNames);
+    state.snapshot_id = manifest.snapshot_id;
+    state.rollback_available = true;
+    state.updated_at = nowIso();
+  } catch (err) {
+    state.status = 'failed';
+    state.error = `snapshot failed: ${
+      err instanceof Error ? err.message : String(err)
+    }`;
+    state.finished_at = nowIso();
+    state.updated_at = nowIso();
+    logger.error({ err, pdfId: state.pdf_id }, 'regenerate job: snapshot failed');
+    return;
+  }
+
+  if (state.cancel_requested) {
+    state.status = 'cancelled';
+    state.finished_at = nowIso();
+    state.updated_at = nowIso();
+    state.message = '已取消（尚未開始執行）';
+    return;
+  }
+
   state.status = 'running';
   state.updated_at = nowIso();
   logger.info(
@@ -179,8 +560,13 @@ async function runJob(
     'regenerate job: start',
   );
 
+  const shouldAbort = (): boolean => state.cancel_requested;
+
   try {
     for (let i = 0; i < state.steps.length; i++) {
+      if (state.cancel_requested) {
+        throw makeCancelledError();
+      }
       const step = state.steps[i]!;
       state.current_step = step.name;
       state.step_index = i;
@@ -191,15 +577,22 @@ async function runJob(
 
       try {
         if (step.name === 'script') {
-          await runRegenerateScripts(state, step, options.scripts ?? {});
+          await runRegenerateScripts(state, step, options.scripts ?? {}, shouldAbort);
         } else if (step.name === 'audio') {
-          await runRegenerateAudio(state, step, options.audio ?? {});
+          await runRegenerateAudio(state, step, options.audio ?? {}, shouldAbort);
         } else if (step.name === 'image') {
-          await runRegenerateImages(state, step, options.images!);
+          await runRegenerateImages(state, step, options.images!, shouldAbort);
         }
         step.status = 'completed';
         step.finished_at = nowIso();
       } catch (err) {
+        const code = (err as Error & { code?: string }).code;
+        if (code === 'CANCELLED' || state.cancel_requested) {
+          step.status = 'cancelled';
+          step.error = null;
+          step.finished_at = nowIso();
+          throw makeCancelledError();
+        }
         step.status = 'failed';
         step.error = err instanceof Error ? err.message : String(err);
         step.finished_at = nowIso();
@@ -219,15 +612,40 @@ async function runJob(
       'regenerate job: completed',
     );
   } catch (err) {
-    state.status = 'failed';
-    state.error = err instanceof Error ? err.message : String(err);
+    const code = (err as Error & { code?: string }).code;
+    if (code === 'CANCELLED' || state.cancel_requested) {
+      state.status = 'cancelled';
+      state.error = null;
+      state.message = '已停止，可按「還原」回復到重生前狀態';
+    } else {
+      state.status = 'failed';
+      state.error = err instanceof Error ? err.message : String(err);
+      logger.error(
+        { err, pdfId: state.pdf_id, jobId: state.job_id },
+        'regenerate job: failed',
+      );
+    }
     state.finished_at = nowIso();
     state.updated_at = nowIso();
-    logger.error(
-      { err, pdfId: state.pdf_id, jobId: state.job_id },
-      'regenerate job: failed',
-    );
   }
+}
+
+function makeCancelledError(): Error {
+  const err = new Error('CANCELLED');
+  (err as Error & { code?: string }).code = 'CANCELLED';
+  return err;
+}
+
+function markPageProgress(
+  state: RegenJobState,
+  pageNumber: number,
+  done: number,
+  step: RegenStepProgress,
+): void {
+  step.completed = done;
+  state.last_processed_page = pageNumber;
+  state.last_generated_page = pageNumber;
+  state.updated_at = nowIso();
 }
 
 // ---------------------------------------------------------------------------
@@ -238,6 +656,7 @@ async function runRegenerateScripts(
   state: RegenJobState,
   step: RegenStepProgress,
   opts: { prompt?: string | null },
+  shouldAbort: () => boolean,
 ): Promise<void> {
   const pdfId = state.pdf_id;
   const pdfRow = getPdfRowStrict(pdfId);
@@ -297,15 +716,15 @@ async function runRegenerateScripts(
     pages,
     userPrompt,
     maxCharsPerPage: scriptMaxCharsPerPage,
-    onPage: (_pn, done) => {
-      step.completed = done;
-      state.updated_at = nowIso();
+    onPage: (pn, done) => {
+      markPageProgress(state, pn, done, step);
     },
+    shouldAbort,
   });
 
   // DB + metadata 同步
   const updatedAt = nowIso();
-  const pad = pagePad(pageCount);
+  const pad = pagePadFor(pageCount);
   for (const p of pageRows) {
     const padded = String(p.page_number).padStart(pad, '0');
     const relPath = path.posix.join('pages', `${padded}.script.txt`);
@@ -347,6 +766,7 @@ async function runRegenerateAudio(
   state: RegenJobState,
   step: RegenStepProgress,
   opts: { voice?: string | null; speed?: number | null },
+  shouldAbort: () => boolean,
 ): Promise<void> {
   const pdfId = state.pdf_id;
   const pdfRow = getPdfRowStrict(pdfId);
@@ -378,14 +798,14 @@ async function runRegenerateAudio(
     pages: nonEmpty,
     voice,
     speed,
-    onPage: (_pn, done) => {
-      step.completed = done;
-      state.updated_at = nowIso();
+    onPage: (pn, done) => {
+      markPageProgress(state, pn, done, step);
     },
+    shouldAbort,
   });
 
   const updatedAt = nowIso();
-  const pad = pagePad(pageCount);
+  const pad = pagePadFor(pageCount);
   for (const a of res.pages) {
     const padded = String(a.pageNumber).padStart(pad, '0');
     const relPath = path.posix.join('pages', `${padded}.mp3`);
@@ -428,6 +848,7 @@ async function runRegenerateImages(
   state: RegenJobState,
   step: RegenStepProgress,
   opts: { prompt: string },
+  shouldAbort: () => boolean,
 ): Promise<void> {
   const pdfId = state.pdf_id;
   const pdfRow = getPdfRowStrict(pdfId);
@@ -450,6 +871,9 @@ async function runRegenerateImages(
 
   const client = getOpenAIClient();
   for (const p of pageRows) {
+    if (shouldAbort()) {
+      throw makeCancelledError();
+    }
     let pageText = '';
     let pageScript = '';
     if (p.text_path) {
@@ -501,8 +925,7 @@ async function runRegenerateImages(
       .png()
       .toFile(pageImagePath(pdfId, p.page_number, pageCount));
 
-    step.completed += 1;
-    state.updated_at = nowIso();
+    markPageProgress(state, p.page_number, step.completed + 1, step);
   }
 
   const updatedAt = nowIso();

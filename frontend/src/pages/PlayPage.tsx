@@ -10,6 +10,7 @@ import {
   ApiError,
   chatWithPageContext,
   addSlide,
+  cancelRegenerateJob,
   clearPageChatHistory,
   deleteSlide,
   fetchPdfDetail,
@@ -19,6 +20,7 @@ import {
   regenerateSlideImage,
   replaceSlideImage,
   regeneratePageAudio,
+  rollbackRegenerate,
   startRegenerateJob,
   updatePdfTtsSettings,
   rewritePageScript,
@@ -85,6 +87,13 @@ export default function PlayPage() {
     audio: false,
   });
   const [regenJob, setRegenJob] = useState<RegenJobState | null>(null);
+  const [regenStopBusy, setRegenStopBusy] = useState(false);
+  const [regenRollbackBusy, setRegenRollbackBusy] = useState(false);
+  const [regenBannerDismissed, setRegenBannerDismissed] = useState(false);
+  // 在按下「確認」啟動重生前記住目前頁碼，供 rollback 後跳回。
+  const preRegenPageIdxRef = useRef<number | null>(null);
+  // 避免 completion 的自動跳頁多次觸發；每一個 job_id 只跳一次。
+  const autoJumpedJobIdRef = useRef<string | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
   // 手機模式下的 tab 切換（桌面模式忽略此 state，永遠並排顯示）
@@ -135,9 +144,16 @@ export default function PlayPage() {
     fetchRegenerateStatus(pdfId)
       .then((state) => {
         if (cancelled) return;
-        if (state.status === 'running' || state.status === 'pending') {
+        if (
+          state.status === 'running' ||
+          state.status === 'pending' ||
+          state.status === 'cancelling'
+        ) {
           setRegenJob(state);
           setRegenAllBusy(true);
+        } else if (state.rollback_available) {
+          // 終止的任務若仍可還原，也顯示 banner 讓使用者決定
+          setRegenJob(state);
         }
       })
       .catch(() => {
@@ -487,10 +503,19 @@ export default function PlayPage() {
   }, [pdfId]);
 
   const regenAnySelected = regenOptions.image || regenOptions.script || regenOptions.audio;
-  const regenJobRunning = regenJob?.status === 'running' || regenJob?.status === 'pending';
+  const regenJobRunning =
+    regenJob?.status === 'running' ||
+    regenJob?.status === 'pending' ||
+    regenJob?.status === 'cancelling';
+  const regenJobTerminal =
+    regenJob?.status === 'completed' ||
+    regenJob?.status === 'failed' ||
+    regenJob?.status === 'cancelled';
+  const showRegenBanner = regenJob != null && !regenBannerDismissed;
 
   const handleConfirmRegenerate = useCallback(async () => {
     if (!pdfId) return;
+    if (regenJobRunning) return; // 防重複提交
     if (!regenAnySelected) {
       setRegenAllMsg('請至少選擇一個重生項目');
       return;
@@ -504,6 +529,9 @@ export default function PlayPage() {
     }
     setRegenAllBusy(true);
     setRegenAllMsg(null);
+    setRegenBannerDismissed(false);
+    // 記住啟動前的頁碼，之後 rollback 可以跳回
+    preRegenPageIdxRef.current = currentIdx;
     try {
       const started = await startRegenerateJob(pdfId, {
         scripts: regenOptions.script ? { prompt: '' } : null,
@@ -512,13 +540,54 @@ export default function PlayPage() {
           ? { prompt: regenAllPrompt.trim() }
           : null,
       });
+      autoJumpedJobIdRef.current = null;
       setRegenJob(started);
-      setRegenAllMsg('重生任務已啟動，進度如下');
+      setRegenAllDialogOpen(false); // 關閉對話框，讓進度顯示在主畫面
+      setRegenAllMsg('重生任務已啟動，進度顯示在畫面上方');
     } catch (err) {
       setRegenAllMsg(err instanceof ApiError ? err.message : '重生失敗');
       setRegenAllBusy(false);
     }
-  }, [pdfId, regenAllPrompt, regenAnySelected, regenOptions]);
+  }, [pdfId, regenAllPrompt, regenAnySelected, regenOptions, regenJobRunning, currentIdx]);
+
+  const handleStopRegenerate = useCallback(async () => {
+    if (!pdfId || !regenJob) return;
+    setRegenStopBusy(true);
+    try {
+      const next = await cancelRegenerateJob(pdfId);
+      setRegenJob(next);
+      setRegenAllMsg('已送出停止請求，等待目前頁面處理完成…');
+    } catch (err) {
+      setRegenAllMsg(err instanceof ApiError ? err.message : '停止失敗');
+    } finally {
+      setRegenStopBusy(false);
+    }
+  }, [pdfId, regenJob]);
+
+  const handleRollbackRegenerate = useCallback(async () => {
+    if (!pdfId) return;
+    if (!window.confirm('確定要還原到重生前的狀態？此操作無法復原。')) return;
+    setRegenRollbackBusy(true);
+    try {
+      await rollbackRegenerate(pdfId);
+      // 還原後重新載入詳情
+      await reloadDetail();
+      // 回到啟動前的頁碼（若能取得）
+      const targetIdx = preRegenPageIdxRef.current;
+      if (targetIdx != null) {
+        setCurrentIdx(targetIdx);
+      }
+      // 清除記憶體中的 job，隱藏 banner
+      setRegenJob(null);
+      setRegenBannerDismissed(false);
+      setRegenAllMsg('已還原至重生前狀態');
+      autoJumpedJobIdRef.current = null;
+    } catch (err) {
+      setRegenAllMsg(err instanceof ApiError ? err.message : '還原失敗');
+    } finally {
+      setRegenRollbackBusy(false);
+    }
+  }, [pdfId, reloadDetail]);
 
   // 輪詢批次重生任務進度。任務進入 completed/failed 後停止輪詢。
   useEffect(() => {
@@ -530,7 +599,11 @@ export default function PlayPage() {
         const next = await fetchRegenerateStatus(pdfId);
         if (cancelled) return;
         setRegenJob(next);
-        if (next.status === 'running' || next.status === 'pending') {
+        if (
+          next.status === 'running' ||
+          next.status === 'pending' ||
+          next.status === 'cancelling'
+        ) {
           timer = window.setTimeout(tick, 1500);
         }
       } catch (err) {
@@ -545,19 +618,35 @@ export default function PlayPage() {
     };
   }, [pdfId, regenJob?.job_id, regenJobRunning]);
 
-  // 任務結束後：關閉 busy、顯示結果訊息，並重新載入詳情。
+  // 任務結束後：關閉 busy、顯示結果訊息，並重新載入詳情；若有成功完成的頁碼資訊
+  // 則自動切到該頁供使用者檢視。每個 job 只自動跳頁一次。
   useEffect(() => {
     if (!regenJob) return;
+    const terminal =
+      regenJob.status === 'completed' ||
+      regenJob.status === 'failed' ||
+      regenJob.status === 'cancelled';
+    if (!terminal) return;
+    setRegenAllBusy(false);
     if (regenJob.status === 'completed') {
-      setRegenAllBusy(false);
       setRegenAllMsg('重生完成');
-      void reloadDetail();
     } else if (regenJob.status === 'failed') {
-      setRegenAllBusy(false);
       setRegenAllMsg(regenJob.error ?? '重生失敗');
-      void reloadDetail();
+    } else {
+      setRegenAllMsg('已停止生成');
     }
-  }, [regenJob?.status, regenJob?.error, reloadDetail]);
+    void reloadDetail();
+    // 自動跳頁：優先跳到 last_processed_page（使用者可看到剛生成的頁）。
+    if (autoJumpedJobIdRef.current !== regenJob.job_id) {
+      const lastPage =
+        regenJob.last_processed_page ?? regenJob.last_generated_page ?? null;
+      if (lastPage != null) {
+        // page_number 是 1-based，currentIdx 是 0-based
+        setCurrentIdx(Math.max(0, lastPage - 1));
+      }
+      autoJumpedJobIdRef.current = regenJob.job_id;
+    }
+  }, [regenJob, reloadDetail]);
 
   const handleAddSlideAfterCurrent = useCallback(async () => {
     if (!pdfId || !currentPage) return;
@@ -798,6 +887,62 @@ export default function PlayPage() {
             )}
           </div>
         </div>
+        {showRegenBanner ? (
+          <div className="mx-auto w-full max-w-5xl px-4 pb-3">
+            <div className="rounded-md border border-fuchsia-500/40 bg-fuchsia-500/10 px-3 py-2 text-xs text-slate-200">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <span>
+                  重生任務：
+                  {regenJob?.status === 'running'
+                    ? '執行中'
+                    : regenJob?.status === 'pending'
+                      ? '等待中'
+                      : regenJob?.status === 'cancelling'
+                        ? '停止中'
+                        : regenJob?.status === 'cancelled'
+                          ? '已停止'
+                          : regenJob?.status === 'completed'
+                            ? '已完成'
+                            : '失敗'}
+                  {regenJob?.last_processed_page != null
+                    ? ` · 目前頁 ${regenJob.last_processed_page}`
+                    : ''}
+                </span>
+                <div className="flex items-center gap-2">
+                  {regenJobRunning ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleStopRegenerate()}
+                      disabled={regenStopBusy}
+                      className="rounded border border-rose-500/50 bg-rose-500/15 px-2 py-1 text-[11px] text-rose-200 disabled:opacity-40"
+                    >
+                      {regenStopBusy ? '停止中…' : '停止生成'}
+                    </button>
+                  ) : null}
+                  {regenJobTerminal && regenJob?.rollback_available ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleRollbackRegenerate()}
+                      disabled={regenRollbackBusy}
+                      className="rounded border border-amber-500/50 bg-amber-500/15 px-2 py-1 text-[11px] text-amber-200 disabled:opacity-40"
+                    >
+                      {regenRollbackBusy ? '還原中…' : '還原'}
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => setRegenBannerDismissed(true)}
+                    className="rounded border border-slate-600 px-2 py-1 text-[11px] text-slate-300"
+                  >
+                    關閉
+                  </button>
+                </div>
+              </div>
+              <RegenerateProgress job={regenJob} />
+              {regenAllMsg ? <p className="mt-1 text-[11px] text-slate-300">{regenAllMsg}</p> : null}
+            </div>
+          </div>
+        ) : null}
       </header>
 
       <main className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col gap-4 px-4 py-4 md:flex-row">
