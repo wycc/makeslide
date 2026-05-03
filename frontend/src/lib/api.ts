@@ -178,6 +178,25 @@ export interface UpdateTtsSettingsResponse {
   updated_at: string;
 }
 
+export interface UpdatePdfTitleResponse {
+  id: string;
+  title: string;
+  updated_at: string;
+}
+
+export async function updatePdfTitle(
+  id: string,
+  title: string,
+): Promise<UpdatePdfTitleResponse> {
+  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/title`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ title }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as UpdatePdfTitleResponse;
+}
+
 export interface RegenerateAllImagesResponse {
   id: string;
   page_count: number;

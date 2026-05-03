@@ -122,6 +122,10 @@ const UpdateTtsSettingsBodySchema = z.object({
   tts_speed: z.number().min(0.25, 'tts_speed 過小').max(4, 'tts_speed 過大'),
 });
 
+const UpdateTitleBodySchema = z.object({
+  title: z.string().min(1, 'title 不可為空').max(200, 'title 過長'),
+});
+
 const RegenerateAllImagesBodySchema = z.object({
   prompt: z.string().min(1, 'prompt 不可為空').max(4000, 'prompt 不可超過 4000 字'),
 });
@@ -1849,6 +1853,43 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
       )
       .all(parsed.data.id) as PageRow[];
     return reply.send(rowToDetail(row, pages));
+  });
+
+  // PATCH /api/pdfs/:id/title
+  app.patch('/api/pdfs/:id/title', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const body = UpdateTitleBodySchema.safeParse(request.body ?? {});
+    if (!body.success) {
+      return reply
+        .code(400)
+        .send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
+    }
+    const { id } = parsed.data;
+    const row = db.prepare(`SELECT id FROM pdfs WHERE id = ?`).get(id) as { id: string } | undefined;
+    if (!row) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    const now = nowIso();
+    const title = body.data.title.trim();
+    db.prepare(`UPDATE pdfs SET title = ?, updated_at = ? WHERE id = ?`).run(title, now, id);
+
+    try {
+      const metadata = await readMetadata(id);
+      if (metadata) {
+        metadata.title = title;
+        metadata.updated_at = now;
+        await writeMetadata(id, metadata);
+      }
+    } catch (err) {
+      request.log.warn({ err, id }, 'Failed to update metadata title');
+    }
+
+    return reply.send({ id, title, updated_at: now });
   });
 
   // GET /api/pdfs/:id/cover

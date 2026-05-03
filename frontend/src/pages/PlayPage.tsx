@@ -23,6 +23,7 @@ import {
   rollbackRegenerate,
   startRegenerateJob,
   updatePdfTtsSettings,
+  updatePdfTitle,
   rewritePageScript,
 } from '../lib/api';
 import type {
@@ -68,6 +69,9 @@ export default function PlayPage() {
   const [videoBusy, setVideoBusy] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [titleInput, setTitleInput] = useState('');
+  const [titleBusy, setTitleBusy] = useState(false);
+  const [titleMsg, setTitleMsg] = useState<string | null>(null);
   const [slideBusy, setSlideBusy] = useState(false);
   const [slideError, setSlideError] = useState<string | null>(null);
   const [ttsVoice, setTtsVoice] = useState('alloy');
@@ -118,6 +122,7 @@ export default function PlayPage() {
         if (cancelled) return;
         setDetail(d);
         setVideoUrl(d.video_url ?? null);
+        setTitleInput(d.title ?? d.original_filename);
         setTtsVoice(d.tts_voice?.trim() || 'alloy');
         setTtsSpeed(d.tts_speed ?? 1);
         setLoadError(null);
@@ -495,6 +500,34 @@ export default function PlayPage() {
     }
   }, [pdfId, ttsVoice, ttsSpeed]);
 
+  const handleSaveTitle = useCallback(async () => {
+    if (!pdfId) return;
+    const nextTitle = titleInput.trim();
+    if (!nextTitle) {
+      setTitleMsg('標題不可為空');
+      return;
+    }
+    setTitleBusy(true);
+    setTitleMsg(null);
+    try {
+      const res = await updatePdfTitle(pdfId, nextTitle);
+      setDetail((prev) =>
+        prev
+          ? {
+              ...prev,
+              title: res.title,
+              updated_at: res.updated_at,
+            }
+          : prev,
+      );
+      setTitleMsg('標題已更新');
+    } catch (err) {
+      setTitleMsg(err instanceof ApiError ? err.message : '更新標題失敗');
+    } finally {
+      setTitleBusy(false);
+    }
+  }, [pdfId, titleInput]);
+
   const reloadDetail = useCallback(async () => {
     if (!pdfId) return;
     const d = await fetchPdfDetail(pdfId);
@@ -837,9 +870,22 @@ export default function PlayPage() {
           >
             ← 返回
           </Link>
-          <h1 className="flex-1 truncate text-center text-base font-semibold">
-            {detail.title ?? detail.original_filename}
-          </h1>
+          <div className="flex flex-1 items-center justify-center gap-2">
+            <input
+              value={titleInput}
+              onChange={(e) => setTitleInput(e.target.value)}
+              className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-center text-sm text-slate-100"
+              maxLength={200}
+            />
+            <button
+              type="button"
+              onClick={() => void handleSaveTitle()}
+              disabled={titleBusy || !titleInput.trim()}
+              className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-2 py-1 text-xs text-cyan-200 disabled:opacity-40"
+            >
+              {titleBusy ? '儲存中…' : '更新標題'}
+            </button>
+          </div>
           <div className="w-20 text-right text-sm text-slate-400">
             頁 {currentIdx + 1}/{totalPages}
           </div>
@@ -847,6 +893,7 @@ export default function PlayPage() {
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-2 px-4 pb-3 md:flex-row md:items-center md:justify-between md:gap-3">
           <div className="text-xs text-slate-400">
             {videoError ? <span className="text-rose-300">{videoError}</span> : null}
+            {!videoError && titleMsg ? <span className="text-slate-300">{titleMsg}</span> : null}
           </div>
           {/* 手機：一排 3 欄（設定 / 產生影片 / 開啟影片）；桌面：維持原本 flex 排列。
               註：「重生」按鍵已搬到右側問答區（aside）。 */}
