@@ -1451,6 +1451,17 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
         throw new Error('OpenAI returned empty audio buffer');
       }
       await fs.promises.writeFile(absAudioPath, audioBuffer);
+      request.log.info(
+        {
+          pdfId: id,
+          pageNumber: n,
+          voice,
+          speed,
+          audioBytes: audioBuffer.byteLength,
+          audioPath: relAudioPath,
+        },
+        'Regenerate-audio completed',
+      );
 
       const updatedAt = nowIso();
       db.prepare(
@@ -1493,13 +1504,33 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
         page_number: n,
         script_url: `/api/pdfs/${id}/pages/${n}/script`,
         audio_url: `/api/pdfs/${id}/pages/${n}/audio`,
+        audio_bytes: audioBuffer.byteLength,
+        audio_mime: 'audio/mpeg',
         updated_at: updatedAt,
       });
     } catch (err) {
       request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to regenerate audio from edited script');
+      const msg =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'string'
+            ? err
+            : 'Failed to regenerate audio';
+      const safeMsg = msg.slice(0, 300);
+      try {
+        db.prepare(
+          `UPDATE pages
+              SET status = 'failed',
+                  error_message = ?,
+                  updated_at = ?
+            WHERE pdf_id = ? AND page_number = ?`,
+        ).run(safeMsg, nowIso(), id, n);
+      } catch {
+        // ignore secondary DB error
+      }
       return reply
         .code(500)
-        .send(errorResponse('INTERNAL_ERROR', 'Failed to regenerate audio'));
+        .send(errorResponse('INTERNAL_ERROR', `Failed to regenerate audio: ${safeMsg}`));
     }
   });
 

@@ -204,7 +204,7 @@ function buildSystemPrompt(
 ): string {
   const base = [
     '你是一位專業的中文簡報講師與旁白配音員。',
-    `你的任務：根據單一簡報頁的**文字 + 投影片圖像**，生成一段適合直接朗讀的**繁體中文逐字稿**（約 ${targetChars} 字，允許在 120–180 字之間）。`,
+    `你的任務：根據單一簡報頁的**文字 + 投影片圖像**，生成一段適合直接朗讀的**繁體中文逐字稿**（建議約 ${targetChars} 字）。`,
     '嚴格規則：',
     '1. 只輸出純粹口語化的連貫段落，不要 Markdown、不要項目符號、不要標題、不要表情符號、不要英文括號註解。',
     '2. 語氣自然、像真人對觀眾講解，避免贅詞與口頭禪。',
@@ -212,15 +212,17 @@ function buildSystemPrompt(
     '4. 每段以句號、問號或驚嘆號作為結尾。',
     '5. 要充分利用投影片圖像：讀懂其中的**標題、條列、流程圖、示意圖、圖表與程式碼**，並轉成口語敘述；若圖像呈現的資訊比文字更豐富，以圖像為準。',
     '6. 必須與**上一頁結尾**銜接、並為**下一頁**做自然鋪陳，整份簡報聽起來是一個連貫的故事；但不要重複上一頁已講過的內容，也不要提前劇透下一頁的細節。',
-    '7. 回傳 JSON，格式固定為 {"script": "..."}，不要夾帶其他欄位或說明。',
-    '8. 請儘量使用比喻、故事、類比等方式來講解，讓內容生動有趣，避免乾巴巴地照抄文字內容。',
+    '7. 字數目標只是建議，不是硬性限制：內容較多時可自然加長，內容較少時可自然縮短；不要為了湊字數而重複、灌水或加入無關內容。',
+    '8. 避免使用「這一頁／本頁／此頁／本張」等單頁指稱，改以連續敘事方式銜接，讓整段旁白更流暢。',
+    '9. 回傳 JSON，格式固定為 {"script": "..."}，不要夾帶其他欄位或說明。',
+    '10. 請儘量使用比喻、故事、類比等方式來講解，讓內容生動有趣，避免乾巴巴地照抄文字內容。',
   ];
 
   const sanitized = sanitiseUserPrompt(userPrompt);
   if (sanitized) {
     base.push('');
     base.push(
-      '【使用者指定的風格 / 語氣 / 聽眾要求】（優先遵守；若與上述規則衝突時，仍須維持逐字稿結構與字數，但語氣、人稱、情緒強度可依照此要求調整。請勿把這段內容直接複製到輸出裡。）',
+      '【使用者指定的風格 / 語氣 / 聽眾要求】（優先遵守；若與上述規則衝突時，仍須維持逐字稿結構，但語氣、人稱、情緒強度可依照此要求調整。請勿把這段內容直接複製到輸出裡。）',
     );
     base.push(sanitized);
   }
@@ -241,7 +243,8 @@ interface PromptContext {
 function buildUserText(ctx: PromptContext): string {
   const lines: string[] = [];
   lines.push(`目前頁碼：第 ${ctx.pageNumber} 頁 / 共 ${ctx.pageCount} 頁。`);
-  lines.push(`目標字數：約 ${ctx.targetChars} 字（120–180）。`);
+  lines.push(`建議字數：約 ${ctx.targetChars} 字（可依素材多寡彈性調整）。`);
+  lines.push('字數以資訊完整與講解流暢為優先：內容多可較長，內容少可較短，避免為湊字數而灌水。');
   lines.push(`輸出語言：${config.openaiScriptLanguage}（繁體中文）。`);
 
   if (ctx.previousContext) {
@@ -265,16 +268,17 @@ function buildUserText(ctx: PromptContext): string {
   lines.push('');
   if (ctx.pageEmpty || ctx.pageText.trim().length === 0) {
     lines.push(
-      '【本頁文字】（本頁抽不到文字，可能是封面、分隔頁或純圖像。請**根據附上的投影片圖像**與前後頁脈絡，給出合理的講解。）',
+      '【頁面文字】（此處可能抽不到文字，例如封面、分隔頁或純圖像。請**根據附上的投影片圖像**與前後頁脈絡，給出合理的講解。）',
     );
   } else {
-    lines.push('【本頁原始文字（pdf 抽取，可能有排版殘留）】');
+    lines.push('【頁面原始文字（pdf 抽取，可能有排版殘留）】');
     lines.push(clipText(ctx.pageText));
   }
   lines.push('');
-  lines.push('【本頁投影片圖像】請觀察附上的圖片，結合圖表、示意圖、條列與排版來講解。');
+  lines.push('【投影片圖像】請觀察附上的圖片，結合圖表、示意圖、條列與排版來講解。');
   lines.push('');
-  lines.push('請以 JSON 格式回覆：{"script": "本頁逐字稿內容..."}');
+  lines.push('避免使用「這一頁／本頁／此頁／本張」等單頁指稱，改用連續敘事語氣。');
+  lines.push('請以 JSON 格式回覆：{"script": "逐字稿內容..."}');
   return lines.join('\n');
 }
 
@@ -285,9 +289,10 @@ function buildDeckRewriteSystemPrompt(userPrompt: string | null | undefined): st
     '規則：',
     '1. 必須輸出 JSON：{"pages":[{"page_number":1,"script":"..."}, ...]}，不要其他欄位。',
     '2. pages 的數量與 page_number 必須和輸入完全一致，不可增刪頁。',
-    '3. 每頁保持約 120–180 字，繁體中文、口語自然。',
+    '3. 每頁字數以「資訊完整與流暢」為優先：建議維持目標字數附近，但可依內容多寡彈性增減；不要為達字數而灌水。',
     '4. 可以調整句子銜接與語氣，但不要憑空捏造與投影片無關的新事實。',
     '5. 每頁腳本仍要可獨立朗讀，並在頁與頁之間有連續性。',
+    '6. 避免使用「這一頁／本頁／此頁／本張」等單頁指稱，讓整份旁白聽感更連續。',
   ];
   const sanitized = sanitiseUserPrompt(userPrompt);
   if (sanitized) {

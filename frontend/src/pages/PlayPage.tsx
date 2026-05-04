@@ -428,11 +428,56 @@ export default function PlayPage() {
     setEditorError(null);
     setAudioError(null);
     try {
-      await regeneratePageAudio(pdfId, currentPage.page_number, nextScript);
+      const res = await regeneratePageAudio(pdfId, currentPage.page_number, nextScript);
+      // eslint-disable-next-line no-console
+      console.info('[tts][regenerate-audio] api success', {
+        pdfId,
+        pageNumber: currentPage.page_number,
+        audioUrl: res.audio_url,
+        audioBytes: res.audio_bytes,
+        audioMime: res.audio_mime,
+        updatedAt: res.updated_at,
+      });
+
+      try {
+        const verifyResp = await fetch(`${res.audio_url}?v=${encodeURIComponent(res.updated_at)}`, {
+          method: 'GET',
+          cache: 'no-store',
+        });
+        const contentType = verifyResp.headers.get('content-type');
+        const contentLengthHeader = verifyResp.headers.get('content-length');
+        const contentLength = contentLengthHeader ? Number(contentLengthHeader) : NaN;
+        const verifyBlob = verifyResp.ok ? await verifyResp.blob() : null;
+        const blobSize = verifyBlob?.size ?? 0;
+        // eslint-disable-next-line no-console
+        console.info('[tts][regenerate-audio] verify audio response', {
+          status: verifyResp.status,
+          ok: verifyResp.ok,
+          contentType,
+          contentLength,
+          blobSize,
+        });
+
+        if (!verifyResp.ok) {
+          throw new Error(`Audio URL not reachable (HTTP ${verifyResp.status})`);
+        }
+        if ((Number.isFinite(contentLength) && contentLength <= 0) || blobSize <= 0) {
+          throw new Error('Audio file is empty (0 bytes)');
+        }
+      } catch (verifyErr) {
+        // eslint-disable-next-line no-console
+        console.error('[tts][regenerate-audio] verification failed', {
+          pdfId,
+          pageNumber: currentPage.page_number,
+          error: verifyErr,
+        });
+        throw verifyErr;
+      }
+
       setScripts((prev) => ({ ...prev, [currentPage.page_number]: nextScript }));
       const audio = audioRef.current;
       if (audio && currentPage.audio_url) {
-        const nextUrl = `${currentPage.audio_url}?t=${Date.now()}`;
+        const nextUrl = `${currentPage.audio_url}?t=${Date.now()}&u=${encodeURIComponent(res.updated_at)}`;
         audio.pause();
         audio.src = nextUrl;
         audio.load();
@@ -442,6 +487,12 @@ export default function PlayPage() {
         void audio.play().catch(() => setIsPlaying(false));
       }
     } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[tts][regenerate-audio] failed', {
+        pdfId,
+        pageNumber: currentPage?.page_number,
+        error: err,
+      });
       setEditorError(err instanceof ApiError ? err.message : '重生語音失敗');
     } finally {
       setEditorBusy(false);
@@ -1030,7 +1081,14 @@ export default function PlayPage() {
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
         onEnded={handleEnded}
-        onError={() => setAudioError('語音載入失敗')}
+        onError={() => {
+          // eslint-disable-next-line no-console
+          console.error('[tts][audio-element] load failed', {
+            pageNumber: currentPage?.page_number,
+            src: audioRef.current?.src,
+          });
+          setAudioError('語音載入失敗');
+        }}
       />
 
       {/* Header */}
@@ -1675,6 +1733,8 @@ export default function PlayPage() {
                   <option value="onyx">onyx</option>
                   <option value="sage">sage</option>
                   <option value="shimmer">shimmer</option>
+                  <option value="marin">marin</option>
+                  <option value="cedar">cedar</option>
                 </select>
               </div>
               <div className="flex items-center gap-2">

@@ -130,6 +130,8 @@ export interface RegenerateAudioResponse {
   script_url: string;
   audio_url: string;
   updated_at: string;
+  audio_bytes?: number;
+  audio_mime?: string;
 }
 
 export interface RewriteScriptResponse {
