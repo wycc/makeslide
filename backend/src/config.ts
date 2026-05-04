@@ -3,6 +3,20 @@ import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
 import { z } from 'zod';
 
+export const OPENAI_TTS_VOICES = [
+  'alloy',
+  'ash',
+  'ballad',
+  'coral',
+  'echo',
+  'fable',
+  'onyx',
+  'nova',
+  'sage',
+  'shimmer',
+  'verse',
+] as const;
+
 // Load .env from repo root (one level above backend/)
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..', '..');
@@ -110,19 +124,7 @@ const EnvSchema = z.object({
     .optional()
     .default('gpt-4o-mini-tts'),
   OPENAI_TTS_VOICE: z
-    .enum([
-      'alloy',
-      'ash',
-      'ballad',
-      'coral',
-      'echo',
-      'fable',
-      'onyx',
-      'nova',
-      'sage',
-      'shimmer',
-      'verse',
-    ])
+    .enum(OPENAI_TTS_VOICES)
     .optional()
     .default('alloy'),
   OPENAI_TTS_FORMAT: z.enum(['mp3']).optional().default('mp3'),
