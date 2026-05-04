@@ -2,8 +2,6 @@
 
 PDF 語音簡報生成與播放系統。詳細設計請見 [`docs/design.md`](docs/design.md)。
 
-目前實作進度：**M2 階段** — 背景處理管線：PDF → 每頁 PNG + 封面 + 逐頁文字。
-
 ## 目錄結構
 
 ```
@@ -107,7 +105,7 @@ npm run dev:frontend
 | GET | `/api/pdfs/:id/pages/:n/text` | 取得第 `n` 頁抽取文字（`text/plain; charset=utf-8`） |
 | DELETE | `/api/pdfs/:id` | 刪除 PDF（同步清除 `pages` 與 `storage/<pdf_id>/`） |
 
-## 處理管線（M2）
+## 處理管線
 
 ```
 上傳 → uploaded
