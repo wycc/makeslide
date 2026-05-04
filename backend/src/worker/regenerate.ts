@@ -976,6 +976,7 @@ async function runRegenerateImages(
     const mergedPrompt = [
       '請產生一張 16:9 的現代知識型簡報頁，視覺風格接近 NotebookLM（資訊圖卡、清楚層級、留白充足）。',
       '請保持全份簡報視覺風格一致。',
+      '不要在圖片中加入任何 Slide 編號（例如 Slide 1、第 1 頁、Page 1）。',
       `整份調整需求：\n${prompt}`,
       `本頁文字內容（參考）：\n${pageText || '(無)'}`,
       `本頁逐字稿（參考）：\n${pageScript || '(無)'}`,
