@@ -95,7 +95,9 @@ function getPdfRow(pdfId: string): PdfRow | undefined {
     .prepare(
       `SELECT id, title, original_filename, status, page_count, progress_step,
               progress_current, progress_total,
-              error_message, user_prompt, created_at, updated_at
+              error_message, user_prompt, require_script_confirmation,
+              tts_voice, tts_speed, script_max_chars_per_page,
+              created_at, updated_at
          FROM pdfs WHERE id = ?`,
     )
     .get(pdfId) as PdfRow | undefined;
@@ -596,12 +598,27 @@ async function runPipeline(pdfId: string): Promise<void> {
     updatePdf(pdfId, { error_message: null });
     await persistMetadata(pdfId);
 
+    const ttsVoiceForRun = latestAfterScript?.tts_voice ?? rowWithPrompt?.tts_voice ?? null;
+    const ttsSpeedForRun = latestAfterScript?.tts_speed ?? rowWithPrompt?.tts_speed ?? null;
+    logger.info(
+      {
+        pdfId,
+        ttsVoiceForRun,
+        ttsSpeedForRun,
+        latestTtsVoice: latestAfterScript?.tts_voice ?? null,
+        latestTtsSpeed: latestAfterScript?.tts_speed ?? null,
+        initialTtsVoice: rowWithPrompt?.tts_voice ?? null,
+        initialTtsSpeed: rowWithPrompt?.tts_speed ?? null,
+      },
+      'Pipeline: TTS settings selected for this run',
+    );
+
     const ttsResult = await synthesizeAudio({
       pdfId,
       pageCount,
       pages: nonEmptyScripts,
-      voice: rowWithPrompt?.tts_voice ?? null,
-      speed: rowWithPrompt?.tts_speed ?? null,
+      voice: ttsVoiceForRun,
+      speed: ttsSpeedForRun,
       onPage: (_pageNumber, done) => {
         bumpProgress(pdfId, done);
       },

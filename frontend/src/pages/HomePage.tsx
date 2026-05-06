@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ApiError,
   deletePdf,
@@ -24,6 +24,7 @@ interface PromptTarget {
 
 export default function HomePage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [items, setItems] = useState<PdfListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -127,6 +128,17 @@ export default function HomePage() {
       initialValue: initial,
     });
   }, []);
+
+  useEffect(() => {
+    const openPromptId = searchParams.get('openPrompt')?.trim();
+    if (!openPromptId) return;
+    const target = items.find((p) => p.id === openPromptId);
+    if (!target) return;
+    openPromptFor(target);
+    const next = new URLSearchParams(searchParams);
+    next.delete('openPrompt');
+    setSearchParams(next, { replace: true });
+  }, [items, openPromptFor, searchParams, setSearchParams]);
 
   const handleUploaded = useCallback(
     (resp: UploadResponse) => {

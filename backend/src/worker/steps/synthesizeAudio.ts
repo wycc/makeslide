@@ -110,35 +110,7 @@ async function synthesizeOnePage(params: {
   }
   const absPath = pageAudioPath(pdfId, pageNumber, pageCount);
 
-  // Idempotency: if file already present and non-empty, reuse it.
-  try {
-    const st = await fs.promises.stat(absPath);
-    if (st.isFile() && st.size > 0) {
-      const duration = await readAudioDuration(absPath);
-      logger.info(
-        {
-          pdfId,
-          pageNumber,
-          bytes: st.size,
-          durationSeconds: duration,
-        },
-        'synthesizeAudio: reuse existing mp3 (idempotent skip)',
-      );
-      return {
-        pageNumber,
-        audioPath: absPath,
-        chars: script.length,
-        bytes: st.size,
-        durationSeconds: duration,
-        generatedAt: new Date().toISOString(),
-        latencyMs: 0,
-        skipped: true,
-      };
-    }
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
-    // proceed to synthesize
-  }
+  // Always regenerate audio so updated voice/speed settings reliably apply.
 
   let input = script.trim();
   if (!input) {
@@ -190,6 +162,7 @@ async function synthesizeOnePage(params: {
           latencyMs,
           attempt,
           voice,
+          speed,
           model: config.openaiTtsModel,
         },
         'synthesizeAudio: page done',
@@ -258,8 +231,10 @@ async function synthesizeOnePage(params: {
 
 /**
  * Per-page OpenAI TTS synthesis driven by a small in-process p-queue so we
- * run multiple pages concurrently (bounded by `TTS_CONCURRENCY`). Idempotent:
- * any existing non-empty mp3 on disk is reused without calling the API.
+ * run multiple pages concurrently (bounded by `TTS_CONCURRENCY`).
+ *
+ * Existing mp3 files are overwritten to ensure latest TTS settings (voice /
+ * speed) always take effect.
  *
  * Throws on the first unrecoverable per-page error (after one retry). Callers
  * should mark the PDF as `failed` in that case.

@@ -118,10 +118,13 @@ export default function PromptModal({
     }
     setSubmitting(true);
     setError(null);
+    const normalizedTtsSpeed = Number.isFinite(ttsSpeed)
+      ? Math.min(4, Math.max(0.25, ttsSpeed))
+      : 1;
     try {
       await onSubmit(prompt, requireScriptConfirmation, {
         ttsVoice,
-        ttsSpeed,
+        ttsSpeed: normalizedTtsSpeed,
         scriptMaxCharsPerPage,
         imageStylePrompt: imageStylePrompt.trim() || undefined,
       });
