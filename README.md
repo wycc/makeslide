@@ -1,8 +1,12 @@
 # makeslide
 
-PDF 語音簡報生成與播放系統。詳細設計請見 [`docs/design.md`](docs/design.md)。
+語音簡報生成與播放系統。詳細設計請見 [`docs/design.md`](docs/design.md)。
 
-目前實作進度：**M2 階段** — 背景處理管線：PDF → 每頁 PNG + 封面 + 逐頁文字。
+這個計畫提供了一個和 NotebookLM 中產生影片類似的功能。它目前可以接受 PDF 檔，從其中抽出簡報所需的圖片。也可以接受一個簡報大綱，
+一般使用 chatGPT 產生的簡報大綱都可以使用。只要頁和頁間使用 ## Slide XX 區隔即可。它會使用簡報大綱的內容產生圖片，接下來再使用
+圖片產生逐字檔，不論圖片是由 PDF 或是由簡報大綱產生都可以。最後再從逐字稿配上語音。
+
+目前只支援繁體中文，稍後會把其它語言加上去。
 
 ## 目錄結構
 
@@ -107,7 +111,7 @@ npm run dev:frontend
 | GET | `/api/pdfs/:id/pages/:n/text` | 取得第 `n` 頁抽取文字（`text/plain; charset=utf-8`） |
 | DELETE | `/api/pdfs/:id` | 刪除 PDF（同步清除 `pages` 與 `storage/<pdf_id>/`） |
 
-## 處理管線（M2）
+## 處理管線
 
 ```
 上傳 → uploaded
