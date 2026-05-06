@@ -88,6 +88,9 @@ const RegenerateAudioBodySchema = z.object({
 const RewriteScriptBodySchema = z.object({
   prompt: z.string().max(2000, 'prompt 不可超過 2000 字'),
   script: z.string().max(4096, 'script 不可超過 4096 字'),
+  previous_script: z.string().max(4096, 'previous_script 不可超過 4096 字').optional().default(''),
+  current_script: z.string().max(4096, 'current_script 不可超過 4096 字').optional().default(''),
+  next_script: z.string().max(4096, 'next_script 不可超過 4096 字').optional().default(''),
   history: z
     .array(
       z.object({
@@ -1612,6 +1615,9 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
     const { id, n } = parsedParams.data;
     const prompt = parsedBody.data.prompt.trim();
     const script = parsedBody.data.script.trim();
+    const previousScript = parsedBody.data.previous_script.trim();
+    const currentScript = parsedBody.data.current_script.trim();
+    const nextScript = parsedBody.data.next_script.trim();
     const history = parsedBody.data.history;
 
     const row = db
@@ -1667,9 +1673,12 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
           type: 'text',
           text:
             `使用者修改需求：\n${prompt}\n\n` +
+            `前一頁逐字稿（銜接參考）：\n${previousScript || '(無)'}\n\n` +
+            `本頁原逐字稿（優先保留核心意思）：\n${currentScript || script || '(無)'}\n\n` +
+            `下一頁逐字稿（銜接參考）：\n${nextScript || '(無)'}\n\n` +
             `頁面抽取文字（參考）：\n${pageText || '(無)'}\n\n` +
             `目前逐字稿：\n${script || '(無)'}\n\n` +
-            '若上述參考為空，請直接依使用者需求產出一版可朗讀逐字稿草稿。',
+            '請改寫本頁逐字稿，並確保與前後頁的語意與語氣銜接順暢；若上下文不足，仍需先產出可朗讀草稿。',
         },
       ];
       if (imageDataUrl) {
@@ -1685,7 +1694,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
           {
             role: 'system',
             content:
-              '你是逐字稿編修助理。請根據使用者提示改寫逐字稿，語言使用繁體中文。若參考素材不足，也必須先產出可朗讀草稿，不可回覆無法說明或拒答。僅輸出 JSON 物件，格式為 {"script":"..."}。',
+              '你是逐字稿編修助理。請根據使用者提示改寫逐字稿，語言使用繁體中文。必須優先做到：本頁內容與前後頁之間銜接自然、過場順暢、語氣一致。若參考素材不足，也必須先產出可朗讀草稿，不可回覆無法說明或拒答。僅輸出 JSON 物件，格式為 {"script":"..."}。',
           },
           {
             role: 'user',

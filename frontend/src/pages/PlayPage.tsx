@@ -624,6 +624,17 @@ export default function PlayPage() {
         currentPage.page_number,
         prompt,
         sourceScript,
+        {
+          previousScript:
+            currentIdx > 0
+              ? (scripts[deckPages[currentIdx - 1]?.page_number ?? -1] ?? '').trim()
+              : '',
+          currentScript: sourceScript,
+          nextScript:
+            currentIdx < deckPages.length - 1
+              ? (scripts[deckPages[currentIdx + 1]?.page_number ?? -1] ?? '').trim()
+              : '',
+        },
         chatHistory,
       );
       setEditingScript(res.script);
@@ -634,7 +645,7 @@ export default function PlayPage() {
     } finally {
       setRewriteBusy(false);
     }
-  }, [pdfId, currentPage, chatInput, editingScript]);
+  }, [pdfId, currentPage, chatInput, editingScript, chatHistory, currentIdx, deckPages, scripts]);
 
   const handleClearChat = useCallback(async () => {
     if (!pdfId || !currentPage) return;

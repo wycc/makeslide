@@ -489,6 +489,11 @@ export async function rewritePageScript(
   pageNumber: number,
   prompt: string,
   script: string,
+  context: {
+    previousScript?: string;
+    currentScript?: string;
+    nextScript?: string;
+  } = {},
   history: ChatMessage[] = [],
 ): Promise<RewriteScriptResponse> {
   const resp = await fetch(
@@ -496,7 +501,14 @@ export async function rewritePageScript(
     {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ prompt, script, history }),
+      body: JSON.stringify({
+        prompt,
+        script,
+        previous_script: context.previousScript,
+        current_script: context.currentScript,
+        next_script: context.nextScript,
+        history,
+      }),
     },
   );
   if (!resp.ok) {
