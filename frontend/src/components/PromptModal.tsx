@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { TTS_VOICES } from '../lib/ttsVoices';
+import { getImagePromptTemplates, type ImagePromptTemplate } from '../lib/api';
 
 export interface PromptPreset {
   label: string;
@@ -47,6 +49,7 @@ interface PromptModalProps {
       ttsVoice: string;
       ttsSpeed: number;
       scriptMaxCharsPerPage: number;
+      imageStylePrompt?: string;
     },
   ) => Promise<void>;
   /** Called when the user cancels / dismisses the modal. */
@@ -62,15 +65,38 @@ export default function PromptModal({
   const [value, setValue] = useState<string>(initialValue);
   const [submitting, setSubmitting] = useState(false);
   const [requireScriptConfirmation, setRequireScriptConfirmation] = useState(false);
-  const [ttsVoice, setTtsVoice] = useState('alloy');
+  const [ttsVoice, setTtsVoice] = useState<string>(TTS_VOICES[0]);
   const [ttsSpeed, setTtsSpeed] = useState(1);
   const [scriptMaxCharsPerPage, setScriptMaxCharsPerPage] = useState(150);
+  const [imageTemplates, setImageTemplates] = useState<ImagePromptTemplate[]>([]);
+  const [selectedImageTemplateKey, setSelectedImageTemplateKey] = useState<string>('');
+  const [imageStylePrompt, setImageStylePrompt] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Autofocus the textarea on open.
   useEffect(() => {
     textareaRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const resp = await getImagePromptTemplates();
+        if (!active) return;
+        setImageTemplates(resp.templates);
+        const key = resp.default_template_key ?? resp.templates[0]?.key ?? '';
+        setSelectedImageTemplateKey(key);
+        const hit = resp.templates.find((t) => t.key === key) ?? resp.templates[0];
+        setImageStylePrompt(hit?.prompt_en ?? '');
+      } catch {
+        // non-fatal: keep modal usable even if template endpoint fails
+      }
+    })();
+    return () => {
+      active = false;
+    };
   }, []);
 
   // Esc closes (only when not submitting).
@@ -97,6 +123,7 @@ export default function PromptModal({
         ttsVoice,
         ttsSpeed,
         scriptMaxCharsPerPage,
+        imageStylePrompt: imageStylePrompt.trim() || undefined,
       });
       // Parent is responsible for closing the modal on success.
     } catch (err) {
@@ -119,6 +146,12 @@ export default function PromptModal({
   const applyPreset = (p: PromptPreset) => {
     setValue(p.prompt);
     textareaRef.current?.focus();
+  };
+
+  const onSelectImageTemplate = (key: string) => {
+    setSelectedImageTemplateKey(key);
+    const hit = imageTemplates.find((t) => t.key === key);
+    if (hit) setImageStylePrompt(hit.prompt_en);
   };
 
   return (
@@ -186,7 +219,7 @@ export default function PromptModal({
                 onChange={(ev) => setTtsVoice(ev.target.value)}
                 disabled={submitting}
               >
-                {['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'onyx', 'nova', 'sage', 'shimmer', 'verse'].map((v) => (
+                {TTS_VOICES.map((v) => (
                   <option key={v} value={v}>{v}</option>
                 ))}
               </select>
@@ -216,6 +249,33 @@ export default function PromptModal({
                 className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100"
                 value={scriptMaxCharsPerPage}
                 onChange={(ev) => setScriptMaxCharsPerPage(Number(ev.target.value) || 150)}
+                disabled={submitting}
+              />
+            </label>
+          </div>
+
+          <div className="mt-4 rounded-lg border border-slate-700 bg-slate-950 px-3 py-3">
+            <p className="mb-2 text-xs font-medium text-slate-300">圖片風格模板（生圖專用）</p>
+            <label className="text-xs text-slate-300">
+              模板
+              <select
+                className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100"
+                value={selectedImageTemplateKey}
+                onChange={(ev) => onSelectImageTemplate(ev.target.value)}
+                disabled={submitting || imageTemplates.length === 0}
+              >
+                {imageTemplates.map((t) => (
+                  <option key={t.key} value={t.key}>{t.label}</option>
+                ))}
+              </select>
+            </label>
+            <label className="mt-2 block text-xs text-slate-300">
+              模板內容（可自行修改）
+              <textarea
+                rows={3}
+                className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100"
+                value={imageStylePrompt}
+                onChange={(ev) => setImageStylePrompt(ev.target.value)}
                 disabled={submitting}
               />
             </label>

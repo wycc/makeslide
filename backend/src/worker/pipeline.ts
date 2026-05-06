@@ -414,7 +414,55 @@ async function runPipeline(pdfId: string): Promise<void> {
       logger.info({ pdfId, pageCount }, 'Pipeline: reuse extracted text (resume)');
     }
 
-    // -------- Step 3 (M3): generate per-page script --------
+    // Fetch the latest row to pick up user prompt / TTS settings submitted via
+    // POST /api/pdfs/:id/start (may be null / empty if user skipped).
+    const rowWithPrompt = getPdfRow(pdfId);
+    const userPrompt = rowWithPrompt?.user_prompt ?? null;
+
+    // -------- Step 3 (M3): generate deck title first (non-fatal) --------
+    // For TXT or PDF, generate title from available extracted page text before
+    // script/audio stages so UI can show a better title as early as possible.
+    try {
+      const titleResult = await generateTitle(pdfId, pageCount, { userPrompt });
+      updatePdf(pdfId, { title: titleResult.title });
+      await persistMetadata(pdfId, {
+        models: {
+          ...((await readMetadata(pdfId))?.models ?? {}),
+          llm: config.openaiLlmModel,
+        },
+        usage: {
+          ...((await readMetadata(pdfId))?.usage ?? {}),
+          llm_prompt_tokens_total:
+            (((await readMetadata(pdfId))?.usage?.llm_prompt_tokens_total ?? 0) +
+              titleResult.usage.prompt_tokens),
+          llm_completion_tokens_total:
+            (((await readMetadata(pdfId))?.usage?.llm_completion_tokens_total ?? 0) +
+              titleResult.usage.completion_tokens),
+          llm_tokens_total:
+            (((await readMetadata(pdfId))?.usage?.llm_tokens_total ?? 0) +
+              titleResult.usage.total_tokens),
+        },
+      });
+      logger.info(
+        {
+          pdfId,
+          title: titleResult.title,
+          source: titleResult.source,
+          usage: titleResult.usage,
+        },
+        'Pipeline: early title generated',
+      );
+    } catch (err) {
+      logger.warn(
+        {
+          pdfId,
+          error: err instanceof Error ? err.message : String(err),
+        },
+        'Pipeline: early title generation failed (non-fatal, keeping original title)',
+      );
+    }
+
+    // -------- Step 4 (M3): generate per-page script --------
     // Cost guardrail: keep the legacy page cap for PDF inputs. TXT imports
     // can legitimately produce many short pages and should not be blocked by
     // the PDF-centric hard limit.
@@ -452,11 +500,7 @@ async function runPipeline(pdfId: string): Promise<void> {
       });
     }
 
-    // Fetch the latest row to pick up the user prompt submitted via
-    // POST /api/pdfs/:id/start (may be null / empty if the user skipped).
-  const rowWithPrompt = getPdfRow(pdfId);
-  const userPrompt = rowWithPrompt?.user_prompt ?? null;
-  const scriptMaxCharsPerPage = rowWithPrompt?.script_max_chars_per_page ?? null;
+    const scriptMaxCharsPerPage = rowWithPrompt?.script_max_chars_per_page ?? null;
 
     const scriptResult = await generateScript({
       pdfId,
@@ -522,44 +566,6 @@ async function runPipeline(pdfId: string): Promise<void> {
       },
       'Pipeline: M3 script stage complete',
     );
-
-    // -------- Step 4 (M3): generate deck title (non-fatal) --------
-    try {
-      const titleResult = await generateTitle(pdfId, pageCount, { userPrompt });
-      updatePdf(pdfId, { title: titleResult.title });
-
-      const afterUsage: PdfMetadataUsage = {
-        llm_prompt_tokens_total:
-          (mergedUsage.llm_prompt_tokens_total ?? 0) +
-          titleResult.usage.prompt_tokens,
-        llm_completion_tokens_total:
-          (mergedUsage.llm_completion_tokens_total ?? 0) +
-          titleResult.usage.completion_tokens,
-        llm_tokens_total:
-          (mergedUsage.llm_tokens_total ?? 0) + titleResult.usage.total_tokens,
-      };
-      await persistMetadata(pdfId, {
-        models: mergedModels,
-        usage: afterUsage,
-      });
-      logger.info(
-        {
-          pdfId,
-          title: titleResult.title,
-          source: titleResult.source,
-          usage: titleResult.usage,
-        },
-        'Pipeline: title generated',
-      );
-    } catch (err) {
-      logger.warn(
-        {
-          pdfId,
-          error: err instanceof Error ? err.message : String(err),
-        },
-        'Pipeline: title generation failed (non-fatal, keeping original title)',
-      );
-    }
 
     // -------- Step 5 (M4): per-page TTS synthesis --------
     const latestAfterScript = getPdfRow(pdfId);

@@ -16,6 +16,7 @@ import {
   fetchPdfDetail,
   fetchPagePrompt,
   fetchPageChatHistory,
+  getImagePromptTemplates,
   fetchRegenerateStatus,
   generatePdfVideo,
   moveSlide,
@@ -24,11 +25,14 @@ import {
   regeneratePageAudio,
   rollbackRegenerate,
   startRegenerateJob,
+  updatePdfImageStyleSettings,
   updatePdfTtsSettings,
   updatePdfPrompt,
   updatePdfTitle,
   rewritePageScript,
+  type ImagePromptTemplate,
 } from '../lib/api';
+import { TTS_VOICES } from '../lib/ttsVoices';
 import type {
   ChatMessage,
   PdfDetail,
@@ -38,6 +42,7 @@ import type {
 } from '../types';
 
 const POLL_INTERVAL_MS = 3000;
+const AUDIO_RETRY_DELAY_MS = 800;
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return '00:00';
@@ -88,6 +93,12 @@ export default function PlayPage() {
   const [ttsMsg, setTtsMsg] = useState<string | null>(null);
   const [ttsDialogOpen, setTtsDialogOpen] = useState(false);
   const [regenAllDialogOpen, setRegenAllDialogOpen] = useState(false);
+  const [imageStyleDialogOpen, setImageStyleDialogOpen] = useState(false);
+  const [deckImageStylePrompt, setDeckImageStylePrompt] = useState(
+    'academic minimalist style, clean layout, professional presentation design, soft blue background, clear visual hierarchy, vector illustration, no clutter, high readability',
+  );
+  const [imageStyleTemplates, setImageStyleTemplates] = useState<ImagePromptTemplate[]>([]);
+  const [selectedImageStyleTemplateKey, setSelectedImageStyleTemplateKey] = useState('');
   const [regenAllPrompt, setRegenAllPrompt] = useState('請讓整份簡報的圖像風格一致，色調、字體與版面語言維持統一。');
   const [regenAllBusy, setRegenAllBusy] = useState(false);
   const [regenAllMsg, setRegenAllMsg] = useState<string | null>(null);
@@ -116,9 +127,41 @@ export default function PlayPage() {
   const imageInputRef = useRef<HTMLInputElement | null>(null);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const currentAudioTokenRef = useRef(0);
+  const audioRetryTimerRef = useRef<number | null>(null);
   // prefetch refs so GC doesn't drop them mid-load
   const prefetchedAudioRef = useRef<HTMLAudioElement | null>(null);
   const prefetchedImageRef = useRef<HTMLImageElement | null>(null);
+
+  const clearAudioRetryTimer = useCallback(() => {
+    if (audioRetryTimerRef.current != null) {
+      window.clearTimeout(audioRetryTimerRef.current);
+      audioRetryTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleAudioReload = useCallback(
+    (token: number, audioUrl: string, pageNumber?: number) => {
+      const audio = audioRef.current;
+      if (!audio || !audioUrl) return;
+      if (token !== currentAudioTokenRef.current) return;
+
+      clearAudioRetryTimer();
+      audioRetryTimerRef.current = window.setTimeout(() => {
+        if (token !== currentAudioTokenRef.current) return;
+        const retryUrl = `${audioUrl}${audioUrl.includes('?') ? '&' : '?'}retry=${Date.now()}`;
+        // eslint-disable-next-line no-console
+        console.warn('[tts][audio-element] auto retry load', {
+          pageNumber,
+          retryUrl,
+        });
+        audio.src = retryUrl;
+        audio.load();
+        setAudioError('語音載入失敗，正在自動重試…');
+      }, AUDIO_RETRY_DELAY_MS);
+    },
+    [clearAudioRetryTimer],
+  );
 
   // ---- Load detail (+ poll until ready) ----
   useEffect(() => {
@@ -137,6 +180,9 @@ export default function PlayPage() {
         setTtsVoice(d.tts_voice?.trim() || 'alloy');
         setTtsSpeed(d.tts_speed ?? 1);
         setLoadError(null);
+        if (d.image_style_prompt && d.image_style_prompt.trim()) {
+          setDeckImageStylePrompt(d.image_style_prompt);
+        }
         if (d.status !== 'ready') {
           timer = window.setTimeout(load, POLL_INTERVAL_MS);
         }
@@ -151,6 +197,51 @@ export default function PlayPage() {
       cancelled = true;
       if (timer != null) window.clearTimeout(timer);
     };
+  }, [pdfId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await getImagePromptTemplates();
+        if (cancelled) return;
+        setImageStyleTemplates(res.templates);
+        const key = res.default_template_key ?? res.templates[0]?.key ?? '';
+        setSelectedImageStyleTemplateKey(key);
+      } catch {
+        // non-fatal
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const applyImageStyleTemplate = useCallback(
+    (key: string) => {
+      setSelectedImageStyleTemplateKey(key);
+      const hit = imageStyleTemplates.find((t) => t.key === key);
+      if (hit) setDeckImageStylePrompt(hit.prompt_en);
+    },
+    [imageStyleTemplates],
+  );
+
+  const openImageStyleDialog = useCallback(async () => {
+    if (!pdfId) {
+      setImageStyleDialogOpen(true);
+      return;
+    }
+    try {
+      const d = await fetchPdfDetail(pdfId);
+      setDetail(d);
+      if (d.image_style_prompt && d.image_style_prompt.trim()) {
+        setDeckImageStylePrompt(d.image_style_prompt);
+      }
+    } catch {
+      // non-fatal: still allow opening dialog with current local value
+    } finally {
+      setImageStyleDialogOpen(true);
+    }
   }, [pdfId]);
 
   // 掛載時檢查是否有正在進行中的批次重生任務；若有則接上並繼續顯示進度。
@@ -228,17 +319,29 @@ export default function PlayPage() {
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !currentPage || !currentPage.audio_url) return;
-    audio.src = currentPage.audio_url;
+    const audioUrl = currentPage.audio_url;
+    const pageNumber = currentPage.page_number;
+    const token = currentAudioTokenRef.current + 1;
+    currentAudioTokenRef.current = token;
+    clearAudioRetryTimer();
+    const nextUrl = `${audioUrl}${audioUrl.includes('?') ? '&' : '?'}t=${Date.now()}`;
+    audio.src = nextUrl;
     audio.load();
     setCurrentTime(0);
+    setDuration(0);
     setAudioError(null);
     if (isPlaying) {
-      void audio.play().catch(() => {
-        setIsPlaying(false);
-      });
+      void audio.play().catch(() => scheduleAudioReload(token, audioUrl, pageNumber));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage?.page_number]);
+  }, [currentPage?.page_number, clearAudioRetryTimer, scheduleAudioReload]);
+
+  useEffect(
+    () => () => {
+      clearAudioRetryTimer();
+    },
+    [clearAudioRetryTimer],
+  );
 
   // ---- Prefetch next page assets ----
   useEffect(() => {
@@ -301,11 +404,17 @@ export default function PlayPage() {
   const handleRetry = useCallback(() => {
     const audio = audioRef.current;
     if (!audio || !currentPage?.audio_url) return;
+    const audioUrl = currentPage.audio_url;
+    const pageNumber = currentPage.page_number;
+    const token = currentAudioTokenRef.current + 1;
+    currentAudioTokenRef.current = token;
+    clearAudioRetryTimer();
     setAudioError(null);
-    audio.src = currentPage.audio_url;
+    const retryUrl = `${audioUrl}${audioUrl.includes('?') ? '&' : '?'}manual_retry=${Date.now()}`;
+    audio.src = retryUrl;
     audio.load();
-    void audio.play().catch(() => setIsPlaying(false));
-  }, [currentPage]);
+    void audio.play().catch(() => scheduleAudioReload(token, audioUrl, pageNumber));
+  }, [currentPage, clearAudioRetryTimer, scheduleAudioReload]);
 
   // ---- Keyboard shortcuts ----
   useEffect(() => {
@@ -666,7 +775,12 @@ export default function PlayPage() {
         scripts: regenOptions.script ? { prompt: '' } : null,
         audio: regenOptions.audio ? {} : null,
         images: regenOptions.image
-          ? { prompt: regenAllPrompt.trim() }
+          ? {
+              prompt: [
+                `整份圖片風格（固定套用）：\n${deckImageStylePrompt.trim() || '(無)'}`,
+                `本次圖片重生需求：\n${regenAllPrompt.trim()}`,
+              ].join('\n\n'),
+            }
           : null,
       });
       autoJumpedJobIdRef.current = null;
@@ -677,7 +791,7 @@ export default function PlayPage() {
       setRegenAllMsg(err instanceof ApiError ? err.message : '重生失敗');
       setRegenAllBusy(false);
     }
-  }, [pdfId, regenAllPrompt, regenAnySelected, regenOptions, regenJobRunning, currentIdx]);
+  }, [pdfId, regenAllPrompt, regenAnySelected, regenOptions, regenJobRunning, currentIdx, deckImageStylePrompt]);
 
   const handleStopRegenerate = useCallback(async () => {
     if (!pdfId || !regenJob) return;
@@ -847,10 +961,14 @@ export default function PlayPage() {
   const handleRegenerateImageWithPrompt = useCallback(async () => {
     if (!pdfId || !currentPage) return;
     const trimmed = chatInput.trim() || '保留版型，讓文字更清晰、重點更聚焦';
+    const merged = [
+      `整份圖片風格（固定套用）：\n${deckImageStylePrompt.trim() || '(無)'}`,
+      `單張調整需求：\n${trimmed}`,
+    ].join('\n\n');
     setSlideBusy(true);
     setSlideError(null);
     try {
-      const res = await regenerateSlideImage(pdfId, currentPage.page_number, trimmed);
+      const res = await regenerateSlideImage(pdfId, currentPage.page_number, merged);
       const preview = `${res.image_url}${res.image_url.includes('?') ? '&' : '?'}t=${encodeURIComponent(res.updated_at)}`;
       setChatHistory((prev) => [
         ...prev,
@@ -862,7 +980,7 @@ export default function PlayPage() {
     } finally {
       setSlideBusy(false);
     }
-  }, [pdfId, currentPage, chatInput, reloadDetail]);
+  }, [pdfId, currentPage, chatInput, reloadDetail, deckImageStylePrompt]);
 
   const handleApplyPreviewImage = useCallback(async () => {
     setImagePreviewOpen(false);
@@ -1077,6 +1195,21 @@ export default function PlayPage() {
         ref={audioRef}
         preload="auto"
         onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
+        onCanPlay={() => {
+          clearAudioRetryTimer();
+          setAudioError(null);
+          if (isPlaying) {
+            void audioRef.current?.play().catch(() => {
+              if (currentPage?.audio_url) {
+                scheduleAudioReload(
+                  currentAudioTokenRef.current,
+                  currentPage.audio_url,
+                  currentPage.page_number,
+                );
+              }
+            });
+          }
+        }}
         onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime || 0)}
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
@@ -1087,7 +1220,13 @@ export default function PlayPage() {
             pageNumber: currentPage?.page_number,
             src: audioRef.current?.src,
           });
-          setAudioError('語音載入失敗');
+          if (currentPage?.audio_url) {
+            scheduleAudioReload(
+              currentAudioTokenRef.current,
+              currentPage.audio_url,
+              currentPage.page_number,
+            );
+          }
         }}
       />
 
@@ -1144,6 +1283,15 @@ export default function PlayPage() {
               aria-label="語音設定"
             >
               ⚙️ 設定
+            </button>
+            <button
+              type="button"
+              onClick={() => void openImageStyleDialog()}
+              className="rounded-md border border-cyan-500/40 bg-cyan-500/10 px-3 py-1.5 text-sm text-cyan-200 hover:bg-cyan-500/20"
+              title="圖片風格設定"
+              aria-label="圖片風格設定"
+            >
+              🖼️ 風格
             </button>
             <button
               type="button"
@@ -1680,7 +1828,7 @@ export default function PlayPage() {
                 <button
                   type="button"
                   onClick={() => void handleRegenerateImageWithPrompt()}
-                  disabled={slideBusy || !currentPage || !hasChatInput}
+                  disabled={slideBusy || !currentPage}
                   className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   修改圖片
@@ -1723,18 +1871,9 @@ export default function PlayPage() {
                   disabled={ttsBusy}
                   className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs"
                 >
-                  <option value="alloy">alloy</option>
-                  <option value="ash">ash</option>
-                  <option value="ballad">ballad</option>
-                  <option value="coral">coral</option>
-                  <option value="echo">echo</option>
-                  <option value="fable">fable</option>
-                  <option value="nova">nova</option>
-                  <option value="onyx">onyx</option>
-                  <option value="sage">sage</option>
-                  <option value="shimmer">shimmer</option>
-                  <option value="marin">marin</option>
-                  <option value="cedar">cedar</option>
+                  {TTS_VOICES.map((v) => (
+                    <option key={v} value={v}>{v}</option>
+                  ))}
                 </select>
               </div>
               <div className="flex items-center gap-2">
@@ -1774,6 +1913,74 @@ export default function PlayPage() {
         </div>
       ) : null}
 
+      {imageStyleDialogOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
+          <div className="w-full max-w-2xl rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl">
+            <h3 className="mb-2 text-sm font-semibold text-slate-200">整份簡報圖片風格設定</h3>
+            <p className="mb-3 text-xs text-slate-400">
+              這個風格會套用在後續的單張與多張圖片重生。可填入你偏好的風格模板並自行調整。
+            </p>
+            <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+              <select
+                value={selectedImageStyleTemplateKey}
+                onChange={(e) => setSelectedImageStyleTemplateKey(e.target.value)}
+                className="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
+              >
+                {imageStyleTemplates.map((t) => (
+                  <option key={t.key} value={t.key}>{t.label}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => applyImageStyleTemplate(selectedImageStyleTemplateKey)}
+                className="rounded border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25"
+              >
+                套用模板
+              </button>
+            </div>
+            <textarea
+              value={deckImageStylePrompt}
+              onChange={(e) => setDeckImageStylePrompt(e.target.value)}
+              rows={8}
+              className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-fuchsia-500/40 placeholder:text-slate-500 focus:ring"
+              placeholder="例如：academic minimalist style, clean layout..."
+            />
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setImageStyleDialogOpen(false)}
+                className="rounded border border-slate-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
+              >
+                關閉
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!pdfId) {
+                    setImageStyleDialogOpen(false);
+                    return;
+                  }
+                  void (async () => {
+                    try {
+                      const res = await updatePdfImageStyleSettings(pdfId, deckImageStylePrompt);
+                      setDetail((prev) => (prev ? { ...prev, image_style_prompt: res.image_style_prompt, updated_at: res.updated_at } : prev));
+                      setRegenAllMsg('已儲存整份圖片風格設定，後續重生會自動套用');
+                    } catch (err) {
+                      setRegenAllMsg(err instanceof ApiError ? err.message : '儲存圖片風格設定失敗');
+                    } finally {
+                      setImageStyleDialogOpen(false);
+                    }
+                  })();
+                }}
+                className="rounded border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-200"
+              >
+                儲存設定
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {regenAllDialogOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
           <div className="w-full max-w-xl rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl">
@@ -1782,6 +1989,9 @@ export default function PlayPage() {
               可多選；執行順序固定為 <span className="font-semibold text-slate-200">圖檔 → 逐字稿 → 語音</span>。
             </p>
             <div className="mb-3 space-y-2">
+              <div className="rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100">
+                已套用整份圖片風格設定（可於上方「🖼️ 風格」調整）。
+              </div>
               <label className="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-200">
                 <input
                   type="checkbox"

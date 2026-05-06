@@ -105,6 +105,7 @@ export async function startProcessing(
     ttsVoice?: string;
     ttsSpeed?: number;
     scriptMaxCharsPerPage?: number;
+    imageStylePrompt?: string;
   } = {},
 ): Promise<StartProcessingResponse> {
   const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/start`, {
@@ -116,12 +117,34 @@ export async function startProcessing(
       tts_voice: opts.ttsVoice,
       tts_speed: opts.ttsSpeed,
       script_max_chars_per_page: opts.scriptMaxCharsPerPage,
+      image_style_prompt: opts.imageStylePrompt,
     }),
   });
   if (!resp.ok) {
     throw await parseErrorBody(resp);
   }
   return (await resp.json()) as StartProcessingResponse;
+}
+
+export interface ImagePromptTemplate {
+  key: string;
+  label: string;
+  description: string;
+  prompt_en: string;
+  prompt_zh: string;
+}
+
+export interface ImagePromptTemplatesResponse {
+  templates: ImagePromptTemplate[];
+  default_template_key: string | null;
+}
+
+export async function getImagePromptTemplates(): Promise<ImagePromptTemplatesResponse> {
+  const resp = await fetch('/api/system/image-prompt-templates');
+  if (!resp.ok) {
+    throw await parseErrorBody(resp);
+  }
+  return (await resp.json()) as ImagePromptTemplatesResponse;
 }
 
 export interface RegenerateAudioResponse {
@@ -328,6 +351,21 @@ export async function updatePdfTtsSettings(
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as UpdateTtsSettingsResponse;
+}
+
+export async function updatePdfImageStyleSettings(
+  id: string,
+  imageStylePrompt: string,
+): Promise<{ id: string; image_style_prompt: string | null; updated_at: string }> {
+  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/image-style-settings`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ image_style_prompt: imageStylePrompt }),
+  });
+  if (!resp.ok) {
+    throw await parseErrorBody(resp);
+  }
+  return (await resp.json()) as { id: string; image_style_prompt: string | null; updated_at: string };
 }
 
 export async function regenerateAllImages(

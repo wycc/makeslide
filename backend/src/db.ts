@@ -85,6 +85,10 @@ function migrate(): void {
     db.exec(`ALTER TABLE pdfs ADD COLUMN script_max_chars_per_page INTEGER`);
     logger.info('Added column pdfs.script_max_chars_per_page');
   }
+  if (!columnExists('pdfs', 'image_style_prompt')) {
+    db.exec(`ALTER TABLE pdfs ADD COLUMN image_style_prompt TEXT`);
+    logger.info('Added column pdfs.image_style_prompt');
+  }
 
   // pages table: drop legacy M1 version (it was never populated) and recreate
   // with the M2 schema. Safe because M1 never wrote rows here.

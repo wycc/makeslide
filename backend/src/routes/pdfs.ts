@@ -5,7 +5,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { nanoid } from 'nanoid';
 import { z } from 'zod';
 import { db } from '../db';
-import { config } from '../config';
+import { config, OPENAI_TTS_VOICES } from '../config';
 import {
   coverImagePath,
   createPdfDir,
@@ -23,6 +23,7 @@ import {
   writeSourceText,
 } from '../services/storage';
 import { getOpenAIClient } from '../services/openai';
+import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../services/imagePromptTemplates';
 import { enqueuePdfProcessing } from '../worker/pipeline';
 import { generateVideo } from '../worker/steps/generateVideo';
 import {
@@ -65,9 +66,10 @@ const StartBodySchema = z.object({
     .optional()
     .default(''),
   require_script_confirmation: z.boolean().optional().default(false),
-  tts_voice: z.string().min(1).max(32).optional(),
+  tts_voice: z.enum(OPENAI_TTS_VOICES).optional(),
   tts_speed: z.number().min(0.25).max(4).optional(),
   script_max_chars_per_page: z.number().int().min(80).max(2000).optional(),
+  image_style_prompt: z.string().max(8000, 'image_style_prompt 不可超過 8000 字').optional(),
 });
 
 const PageParamSchema = z.object({
@@ -124,8 +126,16 @@ const MovePageBodySchema = z.object({
 });
 
 const UpdateTtsSettingsBodySchema = z.object({
-  tts_voice: z.string().min(1, 'tts_voice 不可為空').max(32, 'tts_voice 過長'),
+  tts_voice: z.enum(OPENAI_TTS_VOICES, { message: '不支援的 tts_voice' }),
   tts_speed: z.number().min(0.25, 'tts_speed 過小').max(4, 'tts_speed 過大'),
+});
+
+const UpdateImageStyleSettingsBodySchema = z.object({
+  image_style_prompt: z
+    .string()
+    .max(8000, 'image_style_prompt 不可超過 8000 字')
+    .optional()
+    .default(''),
 });
 
 const UpdateTitleBodySchema = z.object({
@@ -151,10 +161,10 @@ const RegenerateBatchBodySchema = z.object({
     })
     .optional(),
   audio: z
-    .object({
-      voice: z.string().min(1).max(32).optional(),
-      speed: z.number().min(0.25).max(4).optional(),
-    })
+        .object({
+          voice: z.enum(OPENAI_TTS_VOICES).optional(),
+          speed: z.number().min(0.25).max(4).optional(),
+        })
     .optional(),
   images: z
     .object({
@@ -219,6 +229,7 @@ function rowToListItem(row: PdfRow): PdfListItem {
     tts_voice: row.tts_voice,
     tts_speed: row.tts_speed,
     script_max_chars_per_page: row.script_max_chars_per_page,
+    image_style_prompt: row.image_style_prompt ?? null,
     created_at: row.created_at,
   };
 }
@@ -248,6 +259,7 @@ function rowToDetail(row: PdfRow, pages: PageRow[]): PdfDetail {
     tts_voice: row.tts_voice,
     tts_speed: row.tts_speed,
     script_max_chars_per_page: row.script_max_chars_per_page,
+    image_style_prompt: row.image_style_prompt ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
     video_url: fs.existsSync(videoPath(row.id)) ? `/api/pdfs/${row.id}/video` : null,
@@ -359,6 +371,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
         tts_voice: null,
         tts_speed: null,
         script_max_chars_per_page: null,
+        image_style_prompt: null,
         created_at: createdAt,
         updated_at: createdAt,
         pages: [] as PdfMetadataPage[],
@@ -368,9 +381,9 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
       db.prepare(
         `INSERT INTO pdfs (id, title, original_filename, status, page_count,
                            progress_step, error_message, user_prompt, require_script_confirmation,
-                           tts_voice, tts_speed, script_max_chars_per_page,
+                           tts_voice, tts_speed, script_max_chars_per_page, image_style_prompt,
                            created_at, updated_at)
-         VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, ?, ?)`,
+         VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL, ?, ?)`,
       ).run(pdfId, title, filename, status, createdAt, createdAt);
     } catch (err) {
       request.log.error({ err, pdfId }, 'Failed to persist uploaded PDF');
@@ -397,6 +410,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
       tts_voice: null,
       tts_speed: null,
       script_max_chars_per_page: null,
+      image_style_prompt: null,
       created_at: createdAt,
     });
   });
@@ -428,7 +442,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
         `SELECT id, title, original_filename, status, page_count, progress_step,
                 progress_current, progress_total,
                 error_message, user_prompt, require_script_confirmation,
-                tts_voice, tts_speed, script_max_chars_per_page,
+                tts_voice, tts_speed, script_max_chars_per_page, image_style_prompt,
                 created_at, updated_at
            FROM pdfs WHERE id = ?`,
       )
@@ -456,6 +470,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
     const ttsVoice = parsedBody.data.tts_voice?.trim() || null;
     const ttsSpeed = parsedBody.data.tts_speed ?? null;
     const scriptMaxCharsPerPage = parsedBody.data.script_max_chars_per_page ?? null;
+    const imageStylePrompt = parsedBody.data.image_style_prompt?.trim() || null;
     const updatedAt = nowIso();
     db.prepare(
       `UPDATE pdfs
@@ -465,6 +480,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
              tts_voice = ?,
              tts_speed = ?,
              script_max_chars_per_page = ?,
+             image_style_prompt = ?,
              error_message = NULL,
              updated_at = ?
        WHERE id = ?`,
@@ -474,6 +490,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
       ttsVoice,
       ttsSpeed,
       scriptMaxCharsPerPage,
+      imageStylePrompt,
       updatedAt,
       id,
     );
@@ -488,6 +505,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
         meta.tts_voice = ttsVoice;
         meta.tts_speed = ttsSpeed;
         meta.script_max_chars_per_page = scriptMaxCharsPerPage;
+        meta.image_style_prompt = imageStylePrompt;
         meta.status = 'uploaded';
         meta.updated_at = updatedAt;
         meta.error_message = null;
@@ -510,6 +528,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
       tts_voice: ttsVoice,
       tts_speed: ttsSpeed,
       script_max_chars_per_page: scriptMaxCharsPerPage,
+      image_style_prompt: imageStylePrompt,
       updated_at: updatedAt,
     });
   });
@@ -921,13 +940,12 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
         }
       }
 
-      const mergedPrompt = [
-        '請產生一張 16:9 的現代知識型簡報頁，視覺風格接近 NotebookLM（資訊圖卡、清楚層級、留白充足）。',
-        '不要在圖片中加入任何 Slide 編號（例如 Slide 1、第 1 頁、Page 1）。',
-        `頁面文字內容（參考）：\n${pageText || '(無)'}`,
-        `目前逐字稿（參考）：\n${pageScript || '(無)'}`,
-        `使用者修改需求：\n${prompt}`,
-      ].join('\n\n');
+      const mergedPrompt = buildImagePrompt({
+        stylePrompt: IMAGE_PROMPT_TEMPLATES[0]?.prompt_en,
+        pageText,
+        pageScript,
+        userAdjustmentPrompt: prompt,
+      });
 
       const edited = await client.images.generate({
         model: config.openaiImageModel,
@@ -1000,6 +1018,38 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(200).send({ id, tts_voice: ttsVoice, tts_speed: ttsSpeed, updated_at: updatedAt });
   });
 
+  app.patch('/api/pdfs/:id/image-style-settings', async (request, reply) => {
+    const parsedParams = IdParamSchema.safeParse(request.params);
+    if (!parsedParams.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const parsedBody = UpdateImageStyleSettingsBodySchema.safeParse(request.body ?? {});
+    if (!parsedBody.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', parsedBody.error.issues[0]?.message ?? 'Invalid body'));
+    }
+
+    const { id } = parsedParams.data;
+    const row = db.prepare(`SELECT id FROM pdfs WHERE id = ?`).get(id) as { id: string } | undefined;
+    if (!row) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+
+    const imageStylePrompt = parsedBody.data.image_style_prompt.trim() || null;
+    const updatedAt = nowIso();
+    db.prepare(`UPDATE pdfs SET image_style_prompt = ?, updated_at = ? WHERE id = ?`).run(imageStylePrompt, updatedAt, id);
+
+    try {
+      const meta = await readMetadata(id);
+      if (meta) {
+        meta.image_style_prompt = imageStylePrompt;
+        meta.updated_at = updatedAt;
+        await writeMetadata(id, meta);
+      }
+    } catch {
+      // non-fatal
+    }
+
+    return reply.code(200).send({ id, image_style_prompt: imageStylePrompt, updated_at: updatedAt });
+  });
+
   app.post('/api/pdfs/:id/regenerate-images', async (request, reply) => {
     const parsedParams = IdParamSchema.safeParse(request.params);
     if (!parsedParams.success) {
@@ -1044,14 +1094,12 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
           }
         }
 
-        const mergedPrompt = [
-          '請產生一張 16:9 的現代知識型簡報頁，視覺風格接近 NotebookLM（資訊圖卡、清楚層級、留白充足）。',
-          '請保持全份簡報視覺風格一致。',
-          '不要在圖片中加入任何 Slide 編號（例如 Slide 1、第 1 頁、Page 1）。',
-          `整份調整需求：\n${prompt}`,
-          `本頁文字內容（參考）：\n${pageText || '(無)'}`,
-          `本頁逐字稿（參考）：\n${pageScript || '(無)'}`,
-        ].join('\n\n');
+        const mergedPrompt = buildImagePrompt({
+          stylePrompt: IMAGE_PROMPT_TEMPLATES[0]?.prompt_en,
+          deckAdjustmentPrompt: prompt,
+          pageText,
+          pageScript,
+        });
 
         const generated = await client.images.generate({
           model: config.openaiImageModel,
@@ -1191,6 +1239,15 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
         .send(errorResponse('JOB_NOT_FOUND', '沒有任何重生任務紀錄'));
     }
     return reply.send(state);
+  });
+
+  // GET /api/system/image-prompt-templates
+  // 回傳生圖專用風格模板，供前端顯示與讓使用者二次編輯。
+  app.get('/api/system/image-prompt-templates', async (_request, reply) => {
+    return reply.send({
+      templates: IMAGE_PROMPT_TEMPLATES,
+      default_template_key: IMAGE_PROMPT_TEMPLATES[0]?.key ?? null,
+    });
   });
 
   // POST /api/pdfs/:id/regenerate/cancel
@@ -2004,7 +2061,9 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
       .prepare(
         `SELECT id, title, original_filename, status, page_count, progress_step,
                 progress_current, progress_total,
-                error_message, user_prompt, require_script_confirmation, created_at, updated_at
+                error_message, user_prompt, require_script_confirmation,
+                tts_voice, tts_speed, script_max_chars_per_page, image_style_prompt,
+                created_at, updated_at
          FROM pdfs WHERE id = ?`,
       )
       .get(parsed.data.id) as PdfRow | undefined;
