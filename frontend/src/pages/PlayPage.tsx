@@ -100,6 +100,7 @@ export default function PlayPage() {
   const [imageStyleTemplates, setImageStyleTemplates] = useState<ImagePromptTemplate[]>([]);
   const [selectedImageStyleTemplateKey, setSelectedImageStyleTemplateKey] = useState('');
   const [regenAllPrompt, setRegenAllPrompt] = useState('請讓整份簡報的圖像風格一致，色調、字體與版面語言維持統一。');
+  const [regenScriptPrompt, setRegenScriptPrompt] = useState('請以原始重點為主，語句更口語、自然，並加強頁與頁之間的銜接。');
   const [regenAllBusy, setRegenAllBusy] = useState(false);
   const [regenAllMsg, setRegenAllMsg] = useState<string | null>(null);
   // 「重生」多選項目：圖檔 / 逐字稿 / 語音。後端 `/api/pdfs/:id/regenerate` 會依
@@ -772,7 +773,7 @@ export default function PlayPage() {
     preRegenPageIdxRef.current = currentIdx;
     try {
       const started = await startRegenerateJob(pdfId, {
-        scripts: regenOptions.script ? { prompt: '' } : null,
+        scripts: regenOptions.script ? { prompt: regenScriptPrompt.trim() } : null,
         audio: regenOptions.audio ? {} : null,
         images: regenOptions.image
           ? {
@@ -791,7 +792,7 @@ export default function PlayPage() {
       setRegenAllMsg(err instanceof ApiError ? err.message : '重生失敗');
       setRegenAllBusy(false);
     }
-  }, [pdfId, regenAllPrompt, regenAnySelected, regenOptions, regenJobRunning, currentIdx, deckImageStylePrompt]);
+  }, [pdfId, regenAllPrompt, regenScriptPrompt, regenAnySelected, regenOptions, regenJobRunning, currentIdx, deckImageStylePrompt]);
 
   const handleStopRegenerate = useCallback(async () => {
     if (!pdfId || !regenJob) return;
@@ -2032,6 +2033,19 @@ export default function PlayPage() {
                   rows={4}
                   className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-fuchsia-500/40 placeholder:text-slate-500 focus:ring"
                   placeholder="輸入整份風格調整提示詞..."
+                  disabled={regenAllBusy}
+                />
+              </div>
+            ) : null}
+            {regenOptions.script ? (
+              <div className="mb-2">
+                <label className="mb-1 block text-xs text-slate-400">逐字稿重生提示詞</label>
+                <textarea
+                  value={regenScriptPrompt}
+                  onChange={(e) => setRegenScriptPrompt(e.target.value)}
+                  rows={3}
+                  className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-fuchsia-500/40 placeholder:text-slate-500 focus:ring"
+                  placeholder="例如：請以更精煉、口語、易懂的方式重寫，並保留每頁核心重點"
                   disabled={regenAllBusy}
                 />
               </div>
