@@ -52,6 +52,32 @@ function formatTime(seconds: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
+function getAnyFullscreenElement(): Element | null {
+  const doc = document as Document & {
+    webkitFullscreenElement?: Element | null;
+    msFullscreenElement?: Element | null;
+  };
+  return doc.fullscreenElement ?? doc.webkitFullscreenElement ?? doc.msFullscreenElement ?? null;
+}
+
+async function exitAnyFullscreen(): Promise<void> {
+  const doc = document as Document & {
+    webkitExitFullscreen?: () => Promise<void> | void;
+    msExitFullscreen?: () => Promise<void> | void;
+  };
+  if (doc.exitFullscreen) {
+    await doc.exitFullscreen();
+    return;
+  }
+  if (doc.webkitExitFullscreen) {
+    await doc.webkitExitFullscreen();
+    return;
+  }
+  if (doc.msExitFullscreen) {
+    await doc.msExitFullscreen();
+  }
+}
+
 export default function PlayPage() {
   const { id: pdfId } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -440,13 +466,21 @@ export default function PlayPage() {
         ev.preventDefault();
         goNext();
       } else if (ev.key === 'Escape') {
-        ev.preventDefault();
-        navigate('/');
+        if (imageOnlyFullscreen) {
+          ev.preventDefault();
+          setImageOnlyFullscreen(false);
+          return;
+        }
+        const isFullscreen = Boolean(getAnyFullscreenElement());
+        if (isFullscreen) {
+          ev.preventDefault();
+          void exitAnyFullscreen().catch(() => undefined);
+        }
       }
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [playPause, goPrev, goNext, navigate]);
+    window.addEventListener('keydown', onKey, { capture: true });
+    return () => window.removeEventListener('keydown', onKey, { capture: true });
+  }, [playPause, goPrev, goNext, navigate, imageOnlyFullscreen]);
 
   const currentScript =
     currentPage != null ? scripts[currentPage.page_number] ?? '' : '';
