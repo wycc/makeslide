@@ -49,6 +49,7 @@ interface PromptModalProps {
       ttsVoice: string;
       ttsSpeed: number;
       scriptMaxCharsPerPage: number;
+      tonePrompt?: string;
       imageStylePrompt?: string;
     },
   ) => Promise<void>;
@@ -68,6 +69,7 @@ export default function PromptModal({
   const [ttsVoice, setTtsVoice] = useState<string>(TTS_VOICES[0]);
   const [ttsSpeed, setTtsSpeed] = useState(1);
   const [scriptMaxCharsPerPage, setScriptMaxCharsPerPage] = useState(150);
+  const [tonePrompt, setTonePrompt] = useState('語氣自然、親切、節奏分明，重點前可稍作鋪陳，段落銜接流暢。');
   const [imageTemplates, setImageTemplates] = useState<ImagePromptTemplate[]>([]);
   const [selectedImageTemplateKey, setSelectedImageTemplateKey] = useState<string>('');
   const [imageStylePrompt, setImageStylePrompt] = useState<string>('');
@@ -126,6 +128,7 @@ export default function PromptModal({
         ttsVoice,
         ttsSpeed: normalizedTtsSpeed,
         scriptMaxCharsPerPage,
+        tonePrompt: tonePrompt.trim() || undefined,
         imageStylePrompt: imageStylePrompt.trim() || undefined,
       });
       // Parent is responsible for closing the modal on success.
@@ -256,6 +259,18 @@ export default function PromptModal({
               />
             </label>
           </div>
+
+          <label className="mt-3 block text-xs text-slate-300">
+            語氣提示詞（影響逐字稿生成/改寫）
+            <textarea
+              rows={2}
+              className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100"
+              value={tonePrompt}
+              onChange={(ev) => setTonePrompt(ev.target.value)}
+              disabled={submitting}
+              placeholder="例如：沉穩專業、句尾俐落；重點前放慢語速的文字節奏"
+            />
+          </label>
 
           <div className="mt-4 rounded-lg border border-slate-700 bg-slate-950 px-3 py-3">
             <p className="mb-2 text-xs font-medium text-slate-300">圖片風格模板（生圖專用）</p>

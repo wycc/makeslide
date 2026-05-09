@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ApiError, uploadPdf } from '../lib/api';
+import { ApiError, createYoutubeTask, uploadPdf } from '../lib/api';
 import type { UploadResponse } from '../types';
 
 interface UploadButtonProps {
@@ -17,6 +17,10 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0); // 0..100
   const [error, setError] = useState<string | null>(null);
+  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [youtubeLang, setYoutubeLang] = useState('zh-TW');
+  const [isSubmittingYoutube, setIsSubmittingYoutube] = useState(false);
+  const [showYoutubePanel, setShowYoutubePanel] = useState(false);
 
   const handlePickPdf = () => {
     if (isUploading) return;
@@ -68,6 +72,40 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
     }
   };
 
+  const handleSubmitYoutube = async () => {
+    if (isSubmittingYoutube || isUploading) return;
+    const url = youtubeUrl.trim();
+    if (!url) {
+      setError('請輸入 YouTube URL');
+      return;
+    }
+    setError(null);
+    setIsSubmittingYoutube(true);
+    try {
+      const resp = await createYoutubeTask(url, youtubeLang.trim() || undefined);
+      onUploaded({
+        id: resp.id,
+        status: 'uploaded',
+        title: `YouTube ${resp.source_video_id}`,
+        original_filename: resp.source_url,
+        user_prompt: null,
+        require_script_confirmation: false,
+        created_at: resp.created_at,
+      });
+      setYoutubeUrl('');
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(`建立 YouTube 任務失敗：${err.message}`);
+      } else if (err instanceof Error) {
+        setError(`建立 YouTube 任務失敗：${err.message}`);
+      } else {
+        setError('建立 YouTube 任務失敗：未知錯誤');
+      }
+    } finally {
+      setIsSubmittingYoutube(false);
+    }
+  };
+
 
   return (
     <div className="flex flex-col items-start gap-2">
@@ -103,6 +141,15 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
           貼上 TXT
         </button>
 
+        <button
+          type="button"
+          onClick={() => setShowYoutubePanel((v) => !v)}
+          disabled={isUploading || isSubmittingYoutube}
+          className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/50 bg-emerald-900/30 px-4 py-2 text-sm font-medium text-emerald-200 shadow transition hover:bg-emerald-800/40 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {showYoutubePanel ? '收合 YouTube 匯入' : 'YouTube 匯入'}
+        </button>
+
         <input
           ref={fileInputRef}
           type="file"
@@ -120,6 +167,35 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
           </div>
         )}
       </div>
+
+      {showYoutubePanel && (
+        <div className="flex w-full flex-wrap items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-950/20 p-3">
+          <input
+            type="url"
+            value={youtubeUrl}
+            onChange={(e) => setYoutubeUrl(e.target.value)}
+            placeholder="貼上 YouTube URL"
+            className="min-w-[260px] flex-1 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-400"
+            disabled={isSubmittingYoutube || isUploading}
+          />
+          <input
+            type="text"
+            value={youtubeLang}
+            onChange={(e) => setYoutubeLang(e.target.value)}
+            placeholder="字幕語言 (選填，例如 zh-TW)"
+            className="w-44 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-400"
+            disabled={isSubmittingYoutube || isUploading}
+          />
+          <button
+            type="button"
+            onClick={handleSubmitYoutube}
+            disabled={isSubmittingYoutube || isUploading}
+            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isSubmittingYoutube ? '建立中...' : '建立 YouTube 任務'}
+          </button>
+        </div>
+      )}
       {error && <p className="text-sm text-rose-400">{error}</p>}
     </div>
   );

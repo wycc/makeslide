@@ -59,6 +59,10 @@ export interface PdfRow {
   tts_speed: number | null;
   script_max_chars_per_page: number | null;
   image_style_prompt?: string | null;
+  source_type?: 'pdf' | 'youtube';
+  source_url?: string | null;
+  source_video_id?: string | null;
+  source_caption_language?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -92,6 +96,10 @@ export interface PdfListItem {
   tts_speed?: number | null;
   script_max_chars_per_page?: number | null;
   image_style_prompt?: string | null;
+  source_type?: 'pdf' | 'youtube';
+  source_url?: string | null;
+  source_video_id?: string | null;
+  source_caption_language?: string | null;
   created_at: string;
 }
 
@@ -121,6 +129,11 @@ export interface PdfDetail {
   tts_speed?: number | null;
   script_max_chars_per_page?: number | null;
   image_style_prompt?: string | null;
+  source_type?: 'pdf' | 'youtube';
+  source_url?: string | null;
+  source_video_id?: string | null;
+  source_caption_language?: string | null;
+  outline_url?: string | null;
   created_at: string;
   updated_at: string;
   video_url?: string | null;
@@ -173,6 +186,13 @@ export interface PdfMetadata {
   tts_speed?: number | null;
   script_max_chars_per_page?: number | null;
   image_style_prompt?: string | null;
+  source_type?: 'pdf' | 'youtube';
+  source_url?: string | null;
+  source_video_id?: string | null;
+  source_caption_language?: string | null;
+  captions_raw?: string | null;
+  captions_normalized?: string | null;
+  outline?: string | null;
   created_at: string;
   updated_at: string;
   video?: string | null;

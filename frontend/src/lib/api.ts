@@ -64,6 +64,34 @@ export async function fetchPdfDetail(id: string): Promise<PdfDetail> {
   return (await resp.json()) as PdfDetail;
 }
 
+export interface CreateYoutubeTaskResponse {
+  id: string;
+  status: string;
+  source_type: 'youtube';
+  source_url: string;
+  source_video_id: string;
+  source_caption_language: string | null;
+  created_at: string;
+}
+
+export async function createYoutubeTask(
+  youtubeUrl: string,
+  language?: string,
+): Promise<CreateYoutubeTaskResponse> {
+  const resp = await fetch('/api/youtube', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      youtube_url: youtubeUrl,
+      language: language?.trim() || undefined,
+    }),
+  });
+  if (!resp.ok) {
+    throw await parseErrorBody(resp);
+  }
+  return (await resp.json()) as CreateYoutubeTaskResponse;
+}
+
 export async function deletePdf(id: string): Promise<void> {
   const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}`, {
     method: 'DELETE',
@@ -105,6 +133,7 @@ export async function startProcessing(
     ttsVoice?: string;
     ttsSpeed?: number;
     scriptMaxCharsPerPage?: number;
+    tonePrompt?: string;
     imageStylePrompt?: string;
   } = {},
 ): Promise<StartProcessingResponse> {
@@ -117,6 +146,7 @@ export async function startProcessing(
       tts_voice: opts.ttsVoice,
       tts_speed: opts.ttsSpeed,
       script_max_chars_per_page: opts.scriptMaxCharsPerPage,
+      tone_prompt: opts.tonePrompt,
       image_style_prompt: opts.imageStylePrompt,
     }),
   });

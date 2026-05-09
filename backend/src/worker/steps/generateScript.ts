@@ -188,6 +188,31 @@ async function loadPageImageDataUrl(
 }
 
 const MAX_USER_PROMPT_CHARS_IN_SYSTEM = 2000;
+const TONE_MARKER_PATTERN = /\[\[\s*[^\]]+\s*\]\]/;
+const LEGACY_TONE_MARKER_RE = /\[\[\s*話氣提示伺\s*:\s*([^\]]+?)\s*\]\]/g;
+
+function normalizeLegacyToneMarkers(script: string): string {
+  return script.replace(LEGACY_TONE_MARKER_RE, (_m, tone: string) => `[[ ${String(tone).trim()} ]]`);
+}
+
+function ensureToneMarkers(script: string): string {
+  const text = normalizeLegacyToneMarkers(script).trim();
+  if (!text) return text;
+  if (TONE_MARKER_PATTERN.test(text)) return text;
+  const chunks = text
+    .split(/(?<=[。！？!?])\s*/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  if (chunks.length <= 1) {
+    return `[[ 平穩敘述 ]]${text}`;
+  }
+  return chunks
+    .map((c, i) => {
+      const tone = i === 0 ? '穩重開場' : i === chunks.length - 1 ? '收束總結' : '親切解釋';
+      return `[[ ${tone} ]]${c}`;
+    })
+    .join('');
+}
 
 function sanitiseUserPrompt(raw: string | null | undefined): string {
   if (!raw) return '';
@@ -216,6 +241,12 @@ function buildSystemPrompt(
     '8. 避免使用「這一頁／本頁／此頁／本張」等單頁指稱，改以連續敘事方式銜接，讓整段旁白更流暢。',
     '9. 回傳 JSON，格式固定為 {"script": "..."}，不要夾帶其他欄位或說明。',
     '10. 請儘量使用比喻、故事、類比等方式來講解，讓內容生動有趣，避免乾巴巴地照抄文字內容。',
+    '11. 逐字稿必須使用「語氣分段標記」格式：[[ 語氣描述 ]]段落文字。',
+    '12. 每一段正文前都要有一個標記；至少 2 段。標記本身不朗讀，僅供 TTS 分段控制語氣。',
+    '13. 禁止輸出其他標記語法；只允許 [[ ... ]]。',
+    '14. 嚴禁輸出「話氣提示伺」這五個字，也嚴禁輸出「[[ 話氣提示伺: ... ]]」格式。',
+    '15. 若你原本想輸出舊格式，必須改寫成新格式，例如把「[[ 話氣提示伺: 穩重開場 ]]」改成「[[ 穩重開場 ]]」。',
+    '16. 輸出示例（僅示意格式）：{"script":"[[ xxxx ]]今天我們先看核心問題。[[ yyyy ]]接著用一個生活化例子說明。[[ zzzz ]]最後整理三個重點。"}',
   ];
 
   const sanitized = sanitiseUserPrompt(userPrompt);
@@ -278,6 +309,7 @@ function buildUserText(ctx: PromptContext): string {
   lines.push('【投影片圖像】請觀察附上的圖片，結合圖表、示意圖、條列與排版來講解。');
   lines.push('');
   lines.push('避免使用「這一頁／本頁／此頁／本張」等單頁指稱，改用連續敘事語氣。');
+  lines.push('可在適當位置插入語氣分段標記：[[ 穩重開場 ]]、[[ 親切解釋 ]]、[[ 重點強調 ]]、[[ 收束總結 ]]，供 TTS 分段。');
   lines.push('請以 JSON 格式回覆：{"script": "逐字稿內容..."}');
   return lines.join('\n');
 }
@@ -469,9 +501,10 @@ export async function generateScript(
           ],
           schema: ScriptResponseSchema,
           label,
-          maxTokens: 600,
+          maxTokens: 2400,
           temperature: 0.6,
         });
+        //const script = ensureToneMarkers(data.script.trim());
         const script = data.script.trim();
         if (!script) {
           throw new Error('LLM returned empty script');
@@ -595,7 +628,7 @@ export async function generateScript(
     }
 
     for (const r of results) {
-      const rewritten = byPage.get(r.pageNumber);
+      const rewritten = ensureToneMarkers(byPage.get(r.pageNumber)?.trim() ?? '');
       if (!rewritten) continue;
       await fs.promises.writeFile(r.scriptPath, rewritten, 'utf8');
       r.script = rewritten;

@@ -139,7 +139,7 @@ export async function generateTitle(
     ],
     schema: TitleResponseSchema,
     label,
-    maxTokens: 120,
+    maxTokens: 3200,
     temperature: 0.5,
   });
 

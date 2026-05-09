@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { z } from 'zod';
 import { config } from '../config';
 import { db } from '../db';
 import { logger } from '../logger';
@@ -10,8 +11,14 @@ import {
   pdfDir,
   readMetadata,
   sourceTextPath,
+  writeSourceText,
+  youtubeCaptionsNormalizedPath,
+  youtubeCaptionsRawPath,
+  youtubeOutlinePath,
   writeMetadata,
 } from '../services/storage';
+import { fetchYoutubeCaptions } from '../services/youtubeCaptions';
+import { callChatJSON } from '../services/openai';
 import type {
   PageRow,
   PageStatus,
@@ -37,6 +44,102 @@ import { getProcessingQueue } from './queue';
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+const YoutubeOutlineSchema = z.object({
+  slides: z
+    .array(
+      z.object({
+        title: z.string().min(1),
+        bullets: z.array(z.string().min(1)).min(2).max(6).optional(),
+        key_points: z.array(z.string().min(1)).min(2).max(6).optional(),
+      }),
+    )
+    .min(3)
+    .max(20),
+});
+
+async function buildYoutubeOutlineAsSlideText(params: {
+  videoId: string;
+  language: string | null;
+  normalizedText: string;
+}): Promise<string> {
+  const { videoId, language, normalizedText } = params;
+  const trimmed = normalizedText.trim();
+  if (!trimmed) {
+    return [
+      'Slide 1: 影片重點（無字幕）',
+      '- 目前無可用字幕內容。',
+      '- 請稍後重試或改用其他語言字幕。',
+    ].join('\n');
+  }
+
+  const input = trimmed.length > 16000 ? trimmed.slice(0, 16000) : trimmed;
+  const system = [
+    '你是簡報大綱助理。',
+    '請根據字幕內容整理成投影片大綱。',
+    '務必輸出結構化 JSON，不要輸出 markdown。',
+  ].join('\n');
+  const user = [
+    `影片 ID：${videoId}`,
+    `字幕語言：${language ?? 'unknown'}`,
+    '請根據逐字稿產生投影片大綱，需儘量包括括影片內容。每頁需有標題與 2~6 點重點，放在 bullets 陣列之中。',
+    '每一頁大綱重點要精簡、可讀、避免逐字轉錄。',
+    '',
+    '字幕內容如下：',
+    input,
+  ].join('\n');
+
+  const r = await callChatJSON({
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: user },
+    ],
+    schema: YoutubeOutlineSchema,
+    maxTokens: 6400,
+    temperature: 0.4,
+    label: 'youtube-outline-slide-text',
+  });
+
+  logger.info(
+    {
+      videoId,
+      language: language ?? 'unknown',
+      outlineJsonPretty: JSON.stringify(r.data, null, 2),
+    },
+    'YouTube outline LLM JSON (pretty)',
+  );
+  console.log(r.data);
+  const lines: string[] = [];
+  r.data.slides.forEach((s, idx) => {
+    const normalizedBullets = (s.bullets ?? s.key_points ?? [])
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0);
+    if (normalizedBullets.length === 0) return;
+    lines.push(`Slide ${idx + 1}: ${s.title.trim()}`);
+    for (const b of normalizedBullets) lines.push(`- ${b}`);
+    lines.push('');
+  });
+  const rendered = lines.join('\n').trim();
+  console.log(rendered);
+  if (rendered) return rendered;
+
+  const fallbackPoints = trimmed
+    .split('\n')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .slice(0, 6);
+  if (fallbackPoints.length === 0) {
+    return [
+      'Slide 1: 影片重點（暫無可用內容）',
+      '- LLM 未產出可用條列。',
+      '- 請稍後重試或調整字幕語言。',
+    ].join('\n');
+  }
+  return [
+    'Slide 1: 影片重點整理',
+    ...fallbackPoints.map((p) => `- ${p}`),
+  ].join('\n');
 }
 
 function toRelative(pdfId: string, absPath: string): string {
@@ -97,6 +200,7 @@ function getPdfRow(pdfId: string): PdfRow | undefined {
               progress_current, progress_total,
               error_message, user_prompt, require_script_confirmation,
               tts_voice, tts_speed, script_max_chars_per_page,
+              source_type, source_url, source_video_id, source_caption_language,
               created_at, updated_at
          FROM pdfs WHERE id = ?`,
     )
@@ -282,6 +386,62 @@ async function runPipeline(pdfId: string): Promise<void> {
   await persistMetadata(pdfId);
 
   try {
+    if ((row.source_type ?? 'pdf') === 'youtube') {
+      const videoId = row.source_video_id ?? null;
+      if (!videoId) {
+        throw new Error('Missing source_video_id for youtube task');
+      }
+      setProgress(pdfId, 'extracting_text', 0, 1);
+      await persistMetadata(pdfId);
+      const cap = await fetchYoutubeCaptions(videoId, row.source_caption_language ?? undefined);
+
+      await fs.promises.writeFile(
+        youtubeCaptionsRawPath(pdfId),
+        JSON.stringify({
+          videoId,
+          language: cap.language,
+          lines: cap.lines,
+        }, null, 2),
+        'utf8',
+      );
+      await fs.promises.writeFile(youtubeCaptionsNormalizedPath(pdfId), cap.normalizedText, 'utf8');
+      setProgress(pdfId, 'scripting', 0, 1);
+      await persistMetadata(pdfId);
+
+      const outline = await buildYoutubeOutlineAsSlideText({
+        videoId,
+        language: cap.language,
+        normalizedText: cap.normalizedText,
+      });
+      await fs.promises.writeFile(youtubeOutlinePath(pdfId), outline, 'utf8');
+      await writeSourceText(pdfId, outline);
+
+      const now = nowIso();
+      db.prepare(
+        `UPDATE pdfs
+            SET title = COALESCE(title, ?),
+                source_caption_language = COALESCE(source_caption_language, ?),
+                updated_at = ?
+          WHERE id = ?`,
+      ).run(`YouTube ${videoId}`, cap.language, now, pdfId);
+
+      const m = await readMetadata(pdfId);
+      if (m) {
+        m.updated_at = now;
+        m.source_type = 'youtube';
+        m.source_video_id = videoId;
+        m.source_caption_language = m.source_caption_language ?? cap.language ?? null;
+        m.captions_raw = 'captions.raw.json';
+        m.captions_normalized = 'captions.normalized.txt';
+        m.outline = 'outline.md';
+        await writeMetadata(pdfId, m);
+      }
+      logger.info(
+        { pdfId, videoId, lines: cap.lines.length },
+        'Pipeline: youtube captions + outline prepared, continue with TXT pipeline',
+      );
+    }
+
     // -------- Step 1: render pages + cover --------
     let pageCount = row.page_count;
     const alreadyRendered =
@@ -741,6 +901,14 @@ export function enqueuePdfProcessing(pdfId: string): void {
       logger.error({ err, pdfId }, 'Pipeline task rejected');
       inFlight.delete(pdfId);
     });
+}
+
+/**
+ * YouTube 任務先沿用同一個佇列入口；實際流程會在後續 patch
+ * 依 source_type 分流到專用 pipeline。
+ */
+export function enqueueYoutubeProcessing(pdfId: string): void {
+  enqueuePdfProcessing(pdfId);
 }
 
 /**

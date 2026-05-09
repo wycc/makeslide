@@ -166,7 +166,13 @@ export async function callChatJSON<T>(
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const startedAt = Date.now();
     let completion: ChatCompletion;
-    const maxTokens = params.maxTokens ?? 800;
+    const requestedMaxTokens = params.maxTokens ?? 800;
+    // Keep generation ceilings generous to avoid finish_reason=length truncation.
+    // Content length constraints should be enforced primarily by prompt/schema.
+    const generousBaseMaxTokens = Math.max(requestedMaxTokens, 4000);
+    const maxTokens = attempt === 1
+      ? generousBaseMaxTokens
+      : Math.min(16000, Math.max(generousBaseMaxTokens, Math.ceil(generousBaseMaxTokens * 1.8)));
     const temperature = params.temperature ?? 0.6;
     const tokenLimitField = supportsMaxCompletionTokens(model)
       ? 'max_completion_tokens'
@@ -218,11 +224,16 @@ export async function callChatJSON<T>(
 
     const latencyMs = Date.now() - startedAt;
     const rawContent = completion.choices[0]?.message?.content ?? '';
+    const finishReason = completion.choices[0]?.finish_reason ?? null;
     const usage: TokenUsage = {
       prompt_tokens: completion.usage?.prompt_tokens ?? 0,
       completion_tokens: completion.usage?.completion_tokens ?? 0,
       total_tokens: completion.usage?.total_tokens ?? 0,
     };
+    console.log(JSON.stringify(params.messages));
+    console.log('---------------');
+    console.log(JSON.stringify(completion));
+    console.log({ rawContent, usage, latencyMs });
     await appendLlmResponseLog({
       ts: new Date().toISOString(),
       label: params.label ?? null,
@@ -230,13 +241,32 @@ export async function callChatJSON<T>(
       attempt,
       latencyMs,
       usage,
-      finish_reason: completion.choices[0]?.finish_reason ?? null,
+      finish_reason: finishReason,
       refusal: (completion.choices[0]?.message as { refusal?: unknown } | undefined)?.refusal ?? null,
       raw_content: rawContent,
       raw_content_length: rawContent.length,
     });
 
+    if (finishReason === 'length' && attempt < maxAttempts) {
+      logger.warn(
+        {
+          label: params.label,
+          model,
+          attempt,
+          latencyMs,
+          usage,
+          requestedMaxTokens,
+          generousBaseMaxTokens,
+          nextMaxTokens: Math.min(16000, Math.max(generousBaseMaxTokens, Math.ceil(generousBaseMaxTokens * 1.8))),
+        },
+        'OpenAI response hit max token limit (finish_reason=length) — retrying with larger maxTokens',
+      );
+      continue;
+    }
+
     try {
+      console.log(rawContent);
+
       const parsed = JSON.parse(rawContent) as unknown;
       const validated = params.schema.parse(parsed);
       logger.debug(
@@ -252,6 +282,7 @@ export async function callChatJSON<T>(
       return { data: validated, usage, latencyMs, rawContent };
     } catch (err) {
       lastErr = err;
+      console.log(err);
       logger.warn(
         {
           label: params.label,

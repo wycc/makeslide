@@ -159,6 +159,7 @@ export default function HomePage() {
         ttsVoice: string;
         ttsSpeed: number;
         scriptMaxCharsPerPage: number;
+        tonePrompt?: string;
       },
     ) => {
       if (!promptTarget) return;

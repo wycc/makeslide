@@ -18,13 +18,14 @@ import {
   removePdfDir,
   safeJoinPdfPath,
   videoPath,
+  youtubeOutlinePath,
   writeMetadata,
   writeSourcePdf,
   writeSourceText,
 } from '../services/storage';
 import { getOpenAIClient } from '../services/openai';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../services/imagePromptTemplates';
-import { enqueuePdfProcessing } from '../worker/pipeline';
+import { enqueuePdfProcessing, enqueueYoutubeProcessing } from '../worker/pipeline';
 import { generateVideo } from '../worker/steps/generateVideo';
 import {
   getRegenerateJob,
@@ -69,6 +70,7 @@ const StartBodySchema = z.object({
   tts_voice: z.enum(OPENAI_TTS_VOICES).optional(),
   tts_speed: z.number().min(0.25).max(4).optional(),
   script_max_chars_per_page: z.number().int().min(80).max(2000).optional(),
+  tone_prompt: z.string().max(1000, 'tone_prompt 不可超過 1000 字').optional(),
   image_style_prompt: z.string().max(8000, 'image_style_prompt 不可超過 8000 字').optional(),
 });
 
@@ -84,6 +86,28 @@ const PageParamSchema = z.object({
 const RegenerateAudioBodySchema = z.object({
   script: z.string().min(1, 'script 不可為空').max(4096, 'script 不可超過 4096 字'),
 });
+
+const TTS_TONE_MARKER_RE = /\[\[\s*([^\]]+)\s*\]\]/g;
+
+function splitTtsSegments(script: string): Array<{ instruction: string; text: string }> {
+  const out: Array<{ instruction: string; text: string }> = [];
+  let currentInstruction = '平穩敘述';
+  let lastIdx = 0;
+  TTS_TONE_MARKER_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = TTS_TONE_MARKER_RE.exec(script)) !== null) {
+    const seg = script.slice(lastIdx, m.index).trim();
+    if (seg) out.push({ instruction: currentInstruction, text: seg });
+    currentInstruction = (m[1] ?? '').trim() || '平穩敘述';
+    lastIdx = m.index + m[0].length;
+  }
+  const tail = script.slice(lastIdx).trim();
+  if (tail) out.push({ instruction: currentInstruction, text: tail });
+  if (out.length === 0 && script.trim()) {
+    out.push({ instruction: '平穩敘述', text: script.trim() });
+  }
+  return out;
+}
 
 const RewriteScriptBodySchema = z.object({
   prompt: z.string().max(2000, 'prompt 不可超過 2000 字'),
@@ -147,6 +171,11 @@ const UpdateTitleBodySchema = z.object({
 
 const UpdatePromptBodySchema = z.object({
   prompt: z.string().max(MAX_USER_PROMPT_CHARS, `提示詞不可超過 ${MAX_USER_PROMPT_CHARS} 字`),
+});
+
+const YoutubeCreateBodySchema = z.object({
+  youtube_url: z.string().url('youtube_url 格式錯誤'),
+  language: z.string().trim().min(2).max(16).optional(),
 });
 
 const RegenerateAllImagesBodySchema = z.object({
@@ -233,6 +262,10 @@ function rowToListItem(row: PdfRow): PdfListItem {
     tts_speed: row.tts_speed,
     script_max_chars_per_page: row.script_max_chars_per_page,
     image_style_prompt: row.image_style_prompt ?? null,
+    source_type: row.source_type ?? 'pdf',
+    source_url: row.source_url ?? null,
+    source_video_id: row.source_video_id ?? null,
+    source_caption_language: row.source_caption_language ?? null,
     created_at: row.created_at,
   };
 }
@@ -263,11 +296,36 @@ function rowToDetail(row: PdfRow, pages: PageRow[]): PdfDetail {
     tts_speed: row.tts_speed,
     script_max_chars_per_page: row.script_max_chars_per_page,
     image_style_prompt: row.image_style_prompt ?? null,
+    source_type: row.source_type ?? 'pdf',
+    source_url: row.source_url ?? null,
+    source_video_id: row.source_video_id ?? null,
+    source_caption_language: row.source_caption_language ?? null,
+    outline_url: fs.existsSync(youtubeOutlinePath(row.id)) ? `/api/pdfs/${row.id}/outline` : null,
     created_at: row.created_at,
     updated_at: row.updated_at,
     video_url: fs.existsSync(videoPath(row.id)) ? `/api/pdfs/${row.id}/video` : null,
     pages: detailPages,
   };
+}
+
+function extractYoutubeVideoId(url: string): string | null {
+  try {
+    const u = new URL(url);
+    if (u.hostname.includes('youtu.be')) {
+      const id = u.pathname.replace(/^\//, '').split('/')[0];
+      return id && id.length >= 6 ? id : null;
+    }
+    if (u.hostname.includes('youtube.com')) {
+      const id = u.searchParams.get('v');
+      if (id && id.length >= 6) return id;
+      const parts = u.pathname.split('/').filter(Boolean);
+      const embedIdx = parts.findIndex((p) => p === 'embed' || p === 'shorts');
+      if (embedIdx >= 0 && parts[embedIdx + 1]) return parts[embedIdx + 1] ?? null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 function streamFile(
@@ -418,6 +476,86 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
     });
   });
 
+  app.post('/api/youtube', async (request, reply) => {
+    const parsedBody = YoutubeCreateBodySchema.safeParse(request.body ?? {});
+    if (!parsedBody.success) {
+      return reply
+        .code(400)
+        .send(errorResponse('INVALID_REQUEST', parsedBody.error.issues[0]?.message ?? 'Invalid body'));
+    }
+
+    const youtubeUrl = parsedBody.data.youtube_url.trim();
+    const videoId = extractYoutubeVideoId(youtubeUrl);
+    if (!videoId) {
+      return reply.code(400).send(errorResponse('INVALID_YOUTUBE_URL', '無法解析 YouTube 影片 ID'));
+    }
+
+    const pdfId = nanoid(PDF_ID_SIZE);
+    const createdAt = nowIso();
+    const status: PdfStatus = 'uploaded';
+    const language = parsedBody.data.language?.trim() || null;
+
+    try {
+      createPdfDir(pdfId);
+      const metadata: PdfMetadata = {
+        id: pdfId,
+        title: `YouTube ${videoId}`,
+        original_filename: youtubeUrl,
+        status,
+        progress_step: null,
+        progress_current: null,
+        progress_total: null,
+        page_count: null,
+        error_message: null,
+        source_type: 'youtube',
+        source_url: youtubeUrl,
+        source_video_id: videoId,
+        source_caption_language: language,
+        pages: [],
+        created_at: createdAt,
+        updated_at: createdAt,
+      };
+      await writeMetadata(pdfId, metadata);
+
+      db.prepare(
+        `INSERT INTO pdfs (id, title, original_filename, status, page_count,
+                           progress_step, error_message, user_prompt, require_script_confirmation,
+                           tts_voice, tts_speed, script_max_chars_per_page, image_style_prompt,
+                           source_type, source_url, source_video_id, source_caption_language,
+                           created_at, updated_at)
+         VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        pdfId,
+        `YouTube ${videoId}`,
+        youtubeUrl,
+        status,
+        'youtube',
+        youtubeUrl,
+        videoId,
+        language,
+        createdAt,
+        createdAt,
+      );
+    } catch (err) {
+      request.log.error({ err, pdfId }, 'Failed to create youtube task');
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to create youtube task'));
+    }
+
+    // YouTube tasks now follow the same prompt-first lifecycle as PDF upload:
+    // keep `awaiting_prompt` here and only start pipeline when user submits
+    // POST /api/pdfs/:id/start.
+
+    return reply.code(201).send({
+      id: pdfId,
+      status,
+      source_type: 'youtube',
+      source_url: youtubeUrl,
+      source_video_id: videoId,
+      source_caption_language: language,
+      created_at: createdAt,
+    });
+  });
+
   // POST /api/pdfs/:id/start — user submits their style prompt and asks
   // the backend to run the full pipeline. Idempotent: re-posting after
   // processing has started is a no-op (409-ish response code, not error).
@@ -469,6 +607,13 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const prompt = parsedBody.data.prompt.trim();
+    const tonePrompt = parsedBody.data.tone_prompt?.trim() || '';
+    const mergedPrompt = [
+      prompt,
+      tonePrompt ? `【語氣提示詞】\n${tonePrompt}` : '',
+    ]
+      .filter((s) => s && s.trim().length > 0)
+      .join('\n\n');
     const requireScriptConfirmation = parsedBody.data.require_script_confirmation;
     const ttsVoice = parsedBody.data.tts_voice?.trim() || null;
     const ttsSpeed = parsedBody.data.tts_speed ?? null;
@@ -488,7 +633,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
              updated_at = ?
        WHERE id = ?`,
     ).run(
-      prompt.length > 0 ? prompt : null,
+      mergedPrompt.length > 0 ? mergedPrompt : null,
       requireScriptConfirmation ? 1 : 0,
       ttsVoice,
       ttsSpeed,
@@ -503,7 +648,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
     try {
       const meta = await readMetadata(id);
       if (meta) {
-        meta.user_prompt = prompt.length > 0 ? prompt : null;
+        meta.user_prompt = mergedPrompt.length > 0 ? mergedPrompt : null;
         meta.require_script_confirmation = requireScriptConfirmation;
         meta.tts_voice = ttsVoice;
         meta.tts_speed = ttsSpeed;
@@ -526,7 +671,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(202).send({
       id,
       status: 'uploaded' as PdfStatus,
-      user_prompt: prompt.length > 0 ? prompt : null,
+      user_prompt: mergedPrompt.length > 0 ? mergedPrompt : null,
       require_script_confirmation: requireScriptConfirmation,
       tts_voice: ttsVoice,
       tts_speed: ttsSpeed,
@@ -1501,14 +1646,33 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
       const voice = pdfRow.tts_voice?.trim() || config.openaiTtsVoice;
       const speed = pdfRow.tts_speed ?? config.openaiTtsSpeed;
       const client = getOpenAIClient();
-      const ttsResp = await client.audio.speech.create({
-        model: config.openaiTtsModel,
-        voice,
-        input: script,
-        response_format: config.openaiTtsFormat,
-        speed,
-      });
-      const audioBuffer = Buffer.from(await ttsResp.arrayBuffer());
+      const segments = splitTtsSegments(script);
+      const buffers: Buffer[] = [];
+      for (const seg of segments) {
+        request.log.info(
+          {
+            pdfId: id,
+            pageNumber: n,
+            instruction: seg.instruction,
+            text: seg.text,
+          },
+          'regenerate-audio: tts segment request',
+        );
+        const ttsResp = await client.audio.speech.create({
+          model: config.openaiTtsModel,
+          voice,
+          instructions: seg.instruction,
+          input: seg.text,
+          response_format: config.openaiTtsFormat,
+          speed,
+        });
+        const b = Buffer.from(await ttsResp.arrayBuffer());
+        if (b.byteLength === 0) {
+          throw new Error('OpenAI returned empty audio buffer');
+        }
+        buffers.push(b);
+      }
+      const audioBuffer = Buffer.concat(buffers);
       if (audioBuffer.byteLength === 0) {
         throw new Error('OpenAI returned empty audio buffer');
       }
@@ -1688,6 +1852,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
+      const rewriteMaxOutputTokens = 4800;
       const result = await getOpenAIClient().chat.completions.create({
         model: config.openaiLlmModel,
         messages: [
@@ -1703,8 +1868,8 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
         ],
         response_format: { type: 'json_object' },
         ...(config.openaiLlmModel.toLowerCase().startsWith('gpt-5.5')
-          ? { max_completion_tokens: 1200 }
-          : { max_tokens: 1200 }),
+          ? { max_completion_tokens: rewriteMaxOutputTokens }
+          : { max_tokens: rewriteMaxOutputTokens }),
       });
 
       const raw = result.choices[0]?.message?.content ?? '';
@@ -1925,7 +2090,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
         'page chat request summary',
       );
 
-      const chatMaxOutputTokens = 1600;
+      const chatMaxOutputTokens = 6400;
 
       const completion = await client.chat.completions.create({
         model,
@@ -2072,6 +2237,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
                 progress_current, progress_total,
                 error_message, user_prompt, require_script_confirmation,
                 tts_voice, tts_speed, script_max_chars_per_page, image_style_prompt,
+                source_type, source_url, source_video_id, source_caption_language,
                 created_at, updated_at
          FROM pdfs WHERE id = ?`,
       )
@@ -2242,6 +2408,26 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(404).send(errorResponse('VIDEO_NOT_FOUND', 'Video not found'));
     }
     return streamFile(reply, abs, 'video/mp4', 'public, max-age=3600');
+  });
+
+  // GET /api/pdfs/:id/outline
+  app.get('/api/pdfs/:id/outline', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const { id } = parsed.data;
+    const row = db.prepare(`SELECT id FROM pdfs WHERE id = ?`).get(id) as { id: string } | undefined;
+    if (!row) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    const abs = youtubeOutlinePath(id);
+    try {
+      await fs.promises.access(abs, fs.constants.R_OK);
+    } catch {
+      return reply.code(404).send(errorResponse('OUTLINE_NOT_FOUND', 'Outline not found'));
+    }
+    return streamFile(reply, abs, 'text/markdown; charset=utf-8', 'public, max-age=60');
   });
 
   // GET /api/pdfs/:id/pages/:n/image

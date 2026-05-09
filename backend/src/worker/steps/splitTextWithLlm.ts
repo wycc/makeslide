@@ -104,7 +104,7 @@ async function splitChunkWithLlm(chunk: string): Promise<SplitTextWithLlmResult>
       { role: 'user', content: user },
     ],
     schema: SplitSchema,
-    maxTokens: 1200,
+    maxTokens: 4800,
     temperature: 0.3,
     label: 'split-text-with-llm',
   });

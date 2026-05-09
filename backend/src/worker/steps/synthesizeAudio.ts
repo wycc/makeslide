@@ -16,6 +16,7 @@ const TTS_MAX_ATTEMPTS = 10;
 const TTS_RETRY_INITIAL_DELAY_MS = 1000;
 const TTS_RETRY_MAX_DELAY_MS = 15000;
 const TTS_RETRY_FACTOR = 2;
+const TONE_MARKER_RE = /\[\[\s*([^\]]+)\s*\]\]/g;
 
 export interface SynthesizeAudioPageResult {
   pageNumber: number;
@@ -93,6 +94,26 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function splitByToneMarkers(script: string): Array<{ instruction: string; text: string }> {
+  const out: Array<{ instruction: string; text: string }> = [];
+  let currentInstruction = '平穩敘述';
+  let lastIdx = 0;
+  TONE_MARKER_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = TONE_MARKER_RE.exec(script)) !== null) {
+    const seg = script.slice(lastIdx, m.index).trim();
+    if (seg) out.push({ instruction: currentInstruction, text: seg });
+    currentInstruction = (m[1] ?? '').trim() || '平穩敘述';
+    lastIdx = m.index + m[0].length;
+  }
+  const tail = script.slice(lastIdx).trim();
+  if (tail) out.push({ instruction: currentInstruction, text: tail });
+  if (out.length === 0 && script.trim()) {
+    out.push({ instruction: '平穩敘述', text: script.trim() });
+  }
+  return out;
+}
+
 async function synthesizeOnePage(params: {
   pdfId: string;
   pageNumber: number;
@@ -116,18 +137,23 @@ async function synthesizeOnePage(params: {
   if (!input) {
     throw new Error(`Page ${pageNumber} has empty script, cannot synthesize`);
   }
-  if (input.length > TTS_INPUT_MAX_CHARS) {
+  const rawSegments = splitByToneMarkers(input);
+  const segments = rawSegments.map((seg) => {
+    if (seg.text.length <= TTS_INPUT_MAX_CHARS) return seg;
     logger.warn(
       {
         pdfId,
         pageNumber,
-        originalChars: input.length,
+        originalChars: seg.text.length,
         maxChars: TTS_INPUT_MAX_CHARS,
       },
-      'synthesizeAudio: script exceeds TTS input limit, truncating',
+      'synthesizeAudio: segment exceeds TTS input limit, truncating',
     );
-    input = input.slice(0, TTS_INPUT_MAX_CHARS);
-  }
+    return {
+      ...seg,
+      text: seg.text.slice(0, TTS_INPUT_MAX_CHARS),
+    };
+  });
 
   const client = getOpenAIClient();
   let lastErr: unknown;
@@ -136,17 +162,32 @@ async function synthesizeOnePage(params: {
   for (let attempt = 1; attempt <= TTS_MAX_ATTEMPTS; attempt++) {
     const startedAt = Date.now();
     try {
-      const response = await client.audio.speech.create({
-        model: config.openaiTtsModel,
-        voice,
-        input,
-        response_format: config.openaiTtsFormat,
-        speed,
-      });
-      const buffer = Buffer.from(await response.arrayBuffer());
-      if (buffer.byteLength === 0) {
-        throw new Error('OpenAI returned empty audio buffer');
+      const buffers: Buffer[] = [];
+      for (const seg of segments) {
+        console.log({ seg });
+        logger.info(
+          {
+            pdfId,
+            pageNumber,
+            instruction: seg.instruction,
+            text: seg.text,
+          },
+          'synthesizeAudio: tts segment request',
+        );
+        const response = await client.audio.speech.create({
+          model: config.openaiTtsModel,
+          voice,
+          input: seg.text,
+          response_format: config.openaiTtsFormat,
+          speed,
+        });
+        const b = Buffer.from(await response.arrayBuffer());
+        if (b.byteLength === 0) {
+          throw new Error('OpenAI returned empty audio buffer');
+        }
+        buffers.push(b);
       }
+      const buffer = Buffer.concat(buffers);
       await fs.promises.writeFile(absPath, buffer);
 
       const latencyMs = Date.now() - startedAt;
@@ -157,6 +198,7 @@ async function synthesizeOnePage(params: {
           pdfId,
           pageNumber,
           chars: input.length,
+          segments: segments.length,
           bytes: buffer.byteLength,
           durationSeconds: duration,
           latencyMs,

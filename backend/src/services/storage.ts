@@ -91,6 +91,18 @@ export function videoPath(pdfId: string): string {
   return path.join(pdfDir(pdfId), 'video.mp4');
 }
 
+export function youtubeCaptionsRawPath(pdfId: string): string {
+  return path.join(pdfDir(pdfId), 'captions.raw.json');
+}
+
+export function youtubeCaptionsNormalizedPath(pdfId: string): string {
+  return path.join(pdfDir(pdfId), 'captions.normalized.txt');
+}
+
+export function youtubeOutlinePath(pdfId: string): string {
+  return path.join(pdfDir(pdfId), 'outline.md');
+}
+
 export function createPdfDir(pdfId: string): string {
   const dir = pdfDir(pdfId);
   fs.mkdirSync(dir, { recursive: true });

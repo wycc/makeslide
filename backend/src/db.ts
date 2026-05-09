@@ -89,6 +89,22 @@ function migrate(): void {
     db.exec(`ALTER TABLE pdfs ADD COLUMN image_style_prompt TEXT`);
     logger.info('Added column pdfs.image_style_prompt');
   }
+  if (!columnExists('pdfs', 'source_type')) {
+    db.exec(`ALTER TABLE pdfs ADD COLUMN source_type TEXT NOT NULL DEFAULT 'pdf'`);
+    logger.info('Added column pdfs.source_type');
+  }
+  if (!columnExists('pdfs', 'source_url')) {
+    db.exec(`ALTER TABLE pdfs ADD COLUMN source_url TEXT`);
+    logger.info('Added column pdfs.source_url');
+  }
+  if (!columnExists('pdfs', 'source_video_id')) {
+    db.exec(`ALTER TABLE pdfs ADD COLUMN source_video_id TEXT`);
+    logger.info('Added column pdfs.source_video_id');
+  }
+  if (!columnExists('pdfs', 'source_caption_language')) {
+    db.exec(`ALTER TABLE pdfs ADD COLUMN source_caption_language TEXT`);
+    logger.info('Added column pdfs.source_caption_language');
+  }
 
   // pages table: drop legacy M1 version (it was never populated) and recreate
   // with the M2 schema. Safe because M1 never wrote rows here.
