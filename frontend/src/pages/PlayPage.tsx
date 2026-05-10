@@ -43,6 +43,74 @@ import type {
 
 const POLL_INTERVAL_MS = 3000;
 const AUDIO_RETRY_DELAY_MS = 800;
+const SENTENCE_MATCH_RE = /[^。！？!?；;\n]+[。！？!?；;]?|\n+/g;
+const TONE_MARKER_RE = /\[\[\s*[^\]]+\s*\]\]/g;
+
+interface SentenceTimelineItem {
+  text: string;
+  start: number;
+  end: number;
+}
+
+function splitScriptIntoSentences(script: string): string[] {
+  const withoutToneMarkers = script.replace(TONE_MARKER_RE, ' ');
+  const normalized = withoutToneMarkers.replace(/\r\n?/g, '\n').trim();
+  if (!normalized) return [];
+  const parts = normalized.match(SENTENCE_MATCH_RE) ?? [];
+  return parts
+    .map((s) => s.trim())
+    .filter((s) => s !== '');
+}
+
+function buildSentenceTimeline(sentences: string[], duration: number): SentenceTimelineItem[] {
+  if (!Number.isFinite(duration) || duration <= 0 || sentences.length === 0) return [];
+  // 估時模型：先估每句「朗讀秒數」與「句後停頓秒數」，再按整頁 duration 等比縮放。
+  const CJK_CHAR_RE = /[\u3400-\u9FFF\uF900-\uFAFF]/;
+  const STRONG_END_RE = /[。！？.!?]$/;
+  const MEDIUM_END_RE = /[；;]$/;
+  const LIGHT_END_RE = /[，,、:]$/;
+
+  const estimateSpeakSeconds = (text: string): number => {
+    const compact = text.replace(/\s+/g, '');
+    if (!compact) return 0.08;
+    let sec = 0;
+    for (const ch of compact) {
+      if (CJK_CHAR_RE.test(ch)) sec += 0.15;
+      else if (/\d/.test(ch)) sec += 0.14;
+      else if (/[A-Za-z]/.test(ch)) sec += 0.09;
+      else sec += 0.06;
+    }
+    return Math.max(0.12, sec);
+  };
+
+  const estimatePauseSeconds = (text: string, isLast: boolean): number => {
+    if (isLast) return 0;
+    const compact = text.replace(/\s+/g, '');
+    if (STRONG_END_RE.test(compact)) return 0.32;
+    if (MEDIUM_END_RE.test(compact)) return 0.22;
+    if (LIGHT_END_RE.test(compact)) return 0.16;
+    return 0.12;
+  };
+
+  const rough = sentences.map((text, idx) => {
+    const speak = estimateSpeakSeconds(text);
+    const pause = estimatePauseSeconds(text, idx === sentences.length - 1);
+    return { text, speak, pause, total: speak + pause };
+  });
+
+  const roughTotal = rough.reduce((acc, item) => acc + item.total, 0);
+  if (!(roughTotal > 0)) return [];
+  const scale = duration / roughTotal;
+
+  let cursor = 0;
+  return rough.map((item, idx) => {
+    const seg = item.total * scale;
+    const start = cursor;
+    const end = idx === rough.length - 1 ? duration : Math.min(duration, cursor + seg);
+    cursor = end;
+    return { text: item.text, start, end };
+  });
+}
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return '00:00';
@@ -484,6 +552,25 @@ export default function PlayPage() {
 
   const currentScript =
     currentPage != null ? scripts[currentPage.page_number] ?? '' : '';
+
+  const currentSentence = useMemo(() => {
+    if (!currentScript.trim()) return '';
+    const sentences = splitScriptIntoSentences(currentScript);
+    if (sentences.length === 0) return '';
+    if (sentences.length === 1) return sentences[0];
+
+    const timeline = buildSentenceTimeline(sentences, duration);
+    if (timeline.length === 0) return sentences[0];
+
+    const t = Number.isFinite(currentTime) ? Math.max(0, currentTime) : 0;
+    const hit = timeline.find((item) => t >= item.start && t < item.end);
+    if (hit) return hit.text;
+    const first = timeline[0];
+    const last = timeline[timeline.length - 1];
+    if (!first || !last) return sentences[0];
+    if (t >= last.end) return last.text;
+    return first.text;
+  }, [currentScript, currentTime, duration]);
 
   useEffect(() => {
     setEditingScript(currentScript);
@@ -1197,6 +1284,13 @@ export default function PlayPage() {
           >
             離開全螢幕
           </button>
+          {currentSentence ? (
+            <div className="pointer-events-none absolute bottom-4 left-1/2 w-[min(92vw,1000px)] -translate-x-1/2 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+              <div className="mx-auto rounded-md bg-black/65 px-4 py-2 text-center text-base font-medium leading-relaxed text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] md:text-lg">
+                <p className="line-clamp-2 whitespace-pre-wrap">{currentSentence}</p>
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -1487,7 +1581,7 @@ export default function PlayPage() {
             }}
             tabIndex={0}
           >
-            <div className="flex h-full w-full max-w-4xl items-center justify-center">
+            <div className="relative flex h-full w-full max-w-4xl items-center justify-center">
               {currentPage?.image_url ? (
                 <img
                   key={currentPage.page_number}
@@ -1500,6 +1594,13 @@ export default function PlayPage() {
                   無法顯示投影片
                 </div>
               )}
+              {currentSentence ? (
+                <div className="pointer-events-none absolute bottom-3 left-1/2 w-[min(92%,900px)] -translate-x-1/2 px-2">
+                  <div className="mx-auto rounded-md bg-black/60 px-4 py-2 text-center text-sm font-medium leading-relaxed text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] md:text-base">
+                    <p className="line-clamp-2 whitespace-pre-wrap">{currentSentence}</p>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </section>
 
