@@ -33,6 +33,8 @@ cd "$SCRIPT_DIR"
 FORCE_INSTALL=0
 CLEAN_INSTALL=0
 MODE="all"   # all | backend | frontend
+PORT="${PORT:-8888}"
+FRONTEND_BUILD_WATCH=1
 
 # ──────────────────────────────────────────────────────────────────────────────
 # --help
@@ -49,6 +51,8 @@ makeslide 一鍵啟動腳本
   --clean            刪除所有 node_modules 後重新安裝
   --backend-only     只啟動 backend（Fastify API）
   --frontend-only    只啟動 frontend（Vite dev server）
+  --port <number>    設定統一對外 port（預設 8888）
+  --no-watch-build   all 模式下不啟動 frontend build --watch
   -h, --help         顯示本說明
 
 預設行為：
@@ -58,7 +62,7 @@ makeslide 一鍵啟動腳本
   4. 若無 .env 則從 .env.example 複製並暫停等待編輯
   5. 建立 storage/、data/ 目錄
   6. 必要時執行 npm install
-  7. 執行 npm run dev（前後端同時啟動）
+  7. all 模式：frontend build 後由 backend（production static）同一 port 對外
 
 範例：
   ./start.sh                       # 一般啟動
@@ -66,6 +70,7 @@ makeslide 一鍵啟動腳本
   ./start.sh --clean               # 清除 node_modules 後重裝並啟動
   ./start.sh --backend-only        # 只啟動 backend
   ./start.sh --frontend-only       # 只啟動 frontend
+  ./start.sh --port 8888           # 單一入口 port=8888
 EOF
 }
 
@@ -78,6 +83,15 @@ while [[ $# -gt 0 ]]; do
     --clean)          CLEAN_INSTALL=1; FORCE_INSTALL=1; shift ;;
     --backend-only)   MODE="backend"; shift ;;
     --frontend-only)  MODE="frontend"; shift ;;
+    --port)
+      if [[ $# -lt 2 ]]; then
+        log_error "--port 需要一個數字參數"
+        exit 2
+      fi
+      PORT="$2"
+      shift 2
+      ;;
+    --no-watch-build) FRONTEND_BUILD_WATCH=0; shift ;;
     -h|--help)        print_help; exit 0 ;;
     *)
       log_error "未知選項：$1"
@@ -87,6 +101,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if ! [[ "$PORT" =~ ^[0-9]+$ ]] || [[ "$PORT" -lt 1 || "$PORT" -gt 65535 ]]; then
+  log_error "port 必須是 1~65535 的整數（目前：$PORT）"
+  exit 2
+fi
 
 printf '%s🎬 makeslide 啟動中…%s\n' "$C_BOLD" "$C_RESET"
 
@@ -246,16 +265,47 @@ trap cleanup INT TERM
 
 case "$MODE" in
   all)
-    log_info "執行 npm run dev（backend + frontend）"
-    npm run dev &
+    log_info "all 模式使用單一入口 port：$PORT"
+    log_info "先建置 frontend 靜態檔（供 backend static serving）"
+    npm --workspace frontend run build
+
+    if [[ "$FRONTEND_BUILD_WATCH" -eq 1 ]]; then
+      log_info "啟動 frontend build watcher（背景）"
+      npm --workspace frontend run build -- --watch &
+      WATCH_PID=$!
+      # shellcheck disable=SC2034
+      CHILD_PID=""
+      # 以 backend 作為主前景程序，watcher 由 cleanup 一併回收
+      cleanup() {
+        local code=$?
+        if [[ -n "${WATCH_PID:-}" ]] && kill -0 "$WATCH_PID" 2>/dev/null; then
+          kill -TERM "$WATCH_PID" 2>/dev/null || true
+        fi
+        if [[ -n "$CHILD_PID" ]] && kill -0 "$CHILD_PID" 2>/dev/null; then
+          kill -TERM "$CHILD_PID" 2>/dev/null || true
+          for _ in 1 2 3 4 5; do
+            kill -0 "$CHILD_PID" 2>/dev/null || break
+            sleep 1
+          done
+          if kill -0 "$CHILD_PID" 2>/dev/null; then
+            kill -KILL -"$CHILD_PID" 2>/dev/null || kill -KILL "$CHILD_PID" 2>/dev/null || true
+          fi
+        fi
+        exit "$code"
+      }
+      trap cleanup INT TERM
+    fi
+
+    log_info "以 production static 模式啟動 backend（對外 port=$PORT）"
+    PORT="$PORT" NODE_ENV=production npm run dev:backend &
     ;;
   backend)
-    log_info "執行 npm run dev:backend"
-    npm run dev:backend &
+    log_info "執行 npm run dev:backend（port=$PORT）"
+    PORT="$PORT" npm run dev:backend &
     ;;
   frontend)
-    log_info "執行 npm run dev:frontend"
-    npm run dev:frontend &
+    log_info "執行 npm run dev:frontend（vite port=$PORT）"
+    npm run dev:frontend -- --port "$PORT" &
     ;;
 esac
 
