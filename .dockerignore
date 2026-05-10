@@ -1,0 +1,11 @@
+storage/
+data/
+
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+.git/
+.DS_Store
+npm-debug.log*
+

@@ -1,6 +1,9 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
+import fastifyStatic from '@fastify/static';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { config } from './config';
 import { logger } from './logger';
 import { pdfRoutes } from './routes/pdfs';
@@ -12,6 +15,8 @@ import { getProcessingQueue } from './worker/queue';
 import './db'; // Initialize DB and run migrations
 
 export async function buildApp() {
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const frontendDist = path.resolve(__dirname, '..', '..', 'frontend', 'dist');
   const app = Fastify({
     logger,
     bodyLimit: config.maxUploadBytes + 1024 * 1024, // small slack for headers
@@ -32,6 +37,15 @@ export async function buildApp() {
   app.get('/api/health', async () => ({ ok: true }));
 
   await app.register(pdfRoutes);
+
+  // Serve frontend static bundle in production container.
+  if (process.env.NODE_ENV === 'production') {
+    await app.register(fastifyStatic, {
+      root: frontendDist,
+      prefix: '/',
+      index: ['index.html'],
+    });
+  }
 
   app.setErrorHandler((err, request, reply) => {
     request.log.error({ err }, 'Unhandled error');
