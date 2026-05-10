@@ -227,9 +227,23 @@ function buildSystemPrompt(
   userPrompt: string | null | undefined,
   targetChars: number,
 ): string {
+  const ttsRewriteRules = [
+    '請改寫成適合 TTS 朗讀的逐字稿。',
+    '',
+    '要求：',
+    '1. 使用自然口語，不要像書面文章。',
+    '2. 每句話盡量短。',
+    '3. 重要概念前後加入停頓。',
+    '4. 加入少量「好」、「那我們來看」、「這裡有一個重點」等自然轉場。',
+    '5. 避免過度誇張，不要像廣告配音。',
+    '6. 語氣像老師在課堂上清楚解釋。',
+    '7. 輸出時保留段落換行，方便 TTS 產生停頓。',
+  ];
+
   const base = [
     '你是一位專業的中文簡報講師與旁白配音員。',
     `你的任務：根據單一簡報頁的**文字 + 投影片圖像**，生成一段適合直接朗讀的**繁體中文逐字稿**（建議約 ${targetChars} 字）。`,
+    ...ttsRewriteRules,
     '嚴格規則：',
     '1. 只輸出純粹口語化的連貫段落，不要 Markdown、不要項目符號、不要標題、不要表情符號、不要英文括號註解。',
     '2. 語氣自然、像真人對觀眾講解，避免贅詞與口頭禪。',
@@ -315,9 +329,23 @@ function buildUserText(ctx: PromptContext): string {
 }
 
 function buildDeckRewriteSystemPrompt(userPrompt: string | null | undefined): string {
+  const ttsRewriteRules = [
+    '請改寫成適合 TTS 朗讀的逐字稿。',
+    '',
+    '要求：',
+    '1. 使用自然口語，不要像書面文章。',
+    '2. 每句話盡量短。',
+    '3. 重要概念前後加入停頓。',
+    '4. 加入少量「好」、「那我們來看」、「這裡有一個重點」等自然轉場。',
+    '5. 避免過度誇張，不要像廣告配音。',
+    '6. 語氣像老師在課堂上清楚解釋。',
+    '7. 輸出時保留段落換行，方便 TTS 產生停頓。',
+  ];
+
   const base = [
     '你是一位專業的繁體中文簡報旁白編輯。',
     '任務：根據「全頁逐字稿草稿」，重新潤飾每一頁，讓整份簡報聽起來更連貫、自然、有過場。',
+    ...ttsRewriteRules,
     '規則：',
     '1. 必須輸出 JSON：{"pages":[{"page_number":1,"script":"..."}, ...]}，不要其他欄位。',
     '2. pages 的數量與 page_number 必須和輸入完全一致，不可增刪頁。',
