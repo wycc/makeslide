@@ -52,7 +52,7 @@ export default function PdfCard({ pdf, onDelete, onDuplicate, onClick }: PdfCard
     pdf.status === 'processing' &&
     pdf.progress_step === 'rendering' &&
     (pdf.progress_current ?? 0) > 0
-      ? `/api/pdfs/${encodeURIComponent(pdf.id)}/pages/${encodeURIComponent(String(pdf.progress_current))}/image?t=${encodeURIComponent(String(pdf.progress_current))}`
+      ? `api/pdfs/${encodeURIComponent(pdf.id)}/pages/${encodeURIComponent(String(pdf.progress_current))}/image?t=${encodeURIComponent(String(pdf.progress_current))}`
       : null;
   const coverSrc = livePagePreviewUrl ?? pdf.cover_url;
 

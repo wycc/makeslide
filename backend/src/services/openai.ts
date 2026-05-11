@@ -7,6 +7,7 @@ import { config } from '../config';
 import { logger } from '../logger';
 
 let cachedClient: OpenAI | null = null;
+let runtimeApiKeyOverride: string | null = null;
 const LLM_REQUEST_LOG_FILE = path.join(process.cwd(), 'backend', 'data', 'llm-requests.log.jsonl');
 
 function extractImageFileName(url: string): string {
@@ -86,13 +87,14 @@ async function appendLlmResponseLog(entry: unknown): Promise<void> {
  */
 export function getOpenAIClient(): OpenAI {
   if (cachedClient) return cachedClient;
-  if (!config.openaiApiKey) {
+  const apiKey = (runtimeApiKeyOverride ?? process.env.OPENAI_API_KEY ?? config.openaiApiKey).trim();
+  if (!apiKey) {
     throw new Error(
       'OPENAI_API_KEY is not set — cannot call OpenAI. Update your .env and restart.',
     );
   }
   cachedClient = new OpenAI({
-    apiKey: config.openaiApiKey,
+    apiKey,
     timeout: config.openaiRequestTimeoutMs,
     maxRetries: config.openaiMaxRetries,
   });
@@ -106,6 +108,12 @@ export function getOpenAIClient(): OpenAI {
     'OpenAI client initialised',
   );
   return cachedClient;
+}
+
+export function setOpenAIApiKeyRuntime(apiKey: string): void {
+  runtimeApiKeyOverride = apiKey.trim();
+  process.env.OPENAI_API_KEY = runtimeApiKeyOverride;
+  cachedClient = null;
 }
 
 export interface TokenUsage {

@@ -2,17 +2,27 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from './config';
 import { logger } from './logger';
-import { pdfRoutes } from './routes/pdfs';
 import { ensureStorageRoot } from './services/storage';
-import { migrateLegacyPngToJpgOnStartup } from './services/imageMigration';
-import { checkPoppler } from './worker/poppler';
-import { rescanPendingOnStartup } from './worker/pipeline';
-import { getProcessingQueue } from './worker/queue';
-import './db'; // Initialize DB and run migrations
+
+function ensureWorkspaceRuntimePaths(): void {
+  const dbDir = path.dirname(config.dbPath);
+  const storageDir = config.storageRoot;
+  try {
+    fs.mkdirSync(dbDir, { recursive: true });
+  } catch {
+    // ignore mkdir failure
+  }
+  try {
+    fs.mkdirSync(storageDir, { recursive: true });
+  } catch {
+    // ignore mkdir failure
+  }
+}
 
 export async function buildApp() {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -21,6 +31,8 @@ export async function buildApp() {
     logger,
     bodyLimit: config.maxUploadBytes + 1024 * 1024, // small slack for headers
   });
+  const nbPrefix = config.nbPrefix;
+  const withNbPrefix = (route: string): string => (nbPrefix ? `${nbPrefix}${route}` : route);
 
   await app.register(cors, {
     origin: true,
@@ -34,15 +46,16 @@ export async function buildApp() {
     },
   });
 
-  app.get('/api/health', async () => ({ ok: true }));
+  app.get(withNbPrefix('/api/health'), async () => ({ ok: true }));
 
-  await app.register(pdfRoutes);
+  const { pdfRoutes } = await import('./routes/pdfs');
+  await app.register(pdfRoutes, { prefix: nbPrefix || undefined });
 
   // Serve frontend static bundle in production container.
   if (process.env.NODE_ENV === 'production') {
     await app.register(fastifyStatic, {
       root: frontendDist,
-      prefix: '/',
+      prefix: `${nbPrefix || ''}/`,
       index: ['index.html'],
     });
   }
@@ -80,6 +93,14 @@ export async function buildApp() {
 }
 
 async function main(): Promise<void> {
+  ensureWorkspaceRuntimePaths();
+  await import('./db'); // Initialize DB and run migrations after path setup
+
+  const { migrateLegacyPngToJpgOnStartup } = await import('./services/imageMigration');
+  const { checkPoppler } = await import('./worker/poppler');
+  const { getProcessingQueue } = await import('./worker/queue');
+  const { rescanPendingOnStartup } = await import('./worker/pipeline');
+
   ensureStorageRoot();
   await migrateLegacyPngToJpgOnStartup();
 

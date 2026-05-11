@@ -5,6 +5,7 @@ import type { PdfMetadata } from '../types';
 
 export function ensureStorageRoot(): void {
   fs.mkdirSync(config.storageRoot, { recursive: true });
+  fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
 }
 
 export function pdfDir(pdfId: string): string {

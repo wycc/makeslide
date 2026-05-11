@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ApiError,
   deletePdf,
@@ -211,7 +211,15 @@ export default function HomePage() {
             <h1 className="text-xl font-semibold tracking-tight">makeslide</h1>
             <p className="text-xs text-slate-400">PDF 語音簡報生成與播放（M2 預覽）</p>
           </div>
-          <UploadButton onUploaded={handleUploaded} />
+          <div className="flex items-center gap-2">
+            <Link
+              to="/settings"
+              className="inline-flex items-center rounded-md border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 hover:text-white"
+            >
+              設定 API Key
+            </Link>
+            <UploadButton onUploaded={handleUploaded} />
+          </div>
         </div>
       </header>
 

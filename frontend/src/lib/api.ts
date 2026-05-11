@@ -45,7 +45,7 @@ async function parseErrorBody(resp: Response): Promise<ApiError> {
 }
 
 export async function fetchPdfs(): Promise<PdfListItem[]> {
-  const resp = await fetch('/api/pdfs');
+  const resp = await fetch('api/pdfs');
   if (!resp.ok) {
     throw await parseErrorBody(resp);
   }
@@ -57,7 +57,7 @@ export async function fetchPdfs(): Promise<PdfListItem[]> {
 }
 
 export async function fetchPdfDetail(id: string): Promise<PdfDetail> {
-  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}`);
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}`);
   if (!resp.ok) {
     throw await parseErrorBody(resp);
   }
@@ -78,7 +78,7 @@ export async function createYoutubeTask(
   youtubeUrl: string,
   language?: string,
 ): Promise<CreateYoutubeTaskResponse> {
-  const resp = await fetch('/api/youtube', {
+  const resp = await fetch('api/youtube', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -93,7 +93,7 @@ export async function createYoutubeTask(
 }
 
 export async function deletePdf(id: string): Promise<void> {
-  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}`, {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   });
   if (!resp.ok && resp.status !== 204) {
@@ -102,7 +102,7 @@ export async function deletePdf(id: string): Promise<void> {
 }
 
 export async function duplicatePdf(id: string): Promise<PdfListItem> {
-  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/duplicate`, {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/duplicate`, {
     method: 'POST',
   });
   if (!resp.ok) {
@@ -112,7 +112,7 @@ export async function duplicatePdf(id: string): Promise<PdfListItem> {
 }
 
 export async function retryFailedPdf(id: string): Promise<{ id: string; status: string; updated_at: string }> {
-  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/retry`, {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/retry`, {
     method: 'POST',
   });
   if (!resp.ok) {
@@ -137,7 +137,7 @@ export async function startProcessing(
     imageStylePrompt?: string;
   } = {},
 ): Promise<StartProcessingResponse> {
-  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/start`, {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/start`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -170,7 +170,7 @@ export interface ImagePromptTemplatesResponse {
 }
 
 export async function getImagePromptTemplates(): Promise<ImagePromptTemplatesResponse> {
-  const resp = await fetch('/api/system/image-prompt-templates');
+  const resp = await fetch('api/system/image-prompt-templates');
   if (!resp.ok) {
     throw await parseErrorBody(resp);
   }
@@ -263,7 +263,7 @@ export async function fetchPagePrompt(
   id: string,
   pageNumber: number,
 ): Promise<PagePromptResponse> {
-  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/prompt`);
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/prompt`);
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as PagePromptResponse;
 }
@@ -272,7 +272,7 @@ export async function updatePdfTitle(
   id: string,
   title: string,
 ): Promise<UpdatePdfTitleResponse> {
-  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/title`, {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/title`, {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ title }),
@@ -286,7 +286,7 @@ export async function updatePdfPrompt(
   pageNumber: number,
   prompt: string,
 ): Promise<UpdatePdfPromptResponse> {
-  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/prompt`, {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/prompt`, {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ prompt }),
@@ -302,7 +302,7 @@ export interface RegenerateAllImagesResponse {
 }
 
 export async function addSlide(id: string, afterPageNumber: number): Promise<AddSlideResponse> {
-  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/pages`, {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ after_page_number: afterPageNumber }),
@@ -313,7 +313,7 @@ export async function addSlide(id: string, afterPageNumber: number): Promise<Add
 
 export async function deleteSlide(id: string, pageNumber: number): Promise<DeleteSlideResponse> {
   const resp = await fetch(
-    `/api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}`,
+    `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}`,
     { method: 'DELETE' },
   );
   if (!resp.ok) throw await parseErrorBody(resp);
@@ -325,7 +325,7 @@ export async function moveSlide(
   fromPageNumber: number,
   toPageNumber: number,
 ): Promise<MoveSlideResponse> {
-  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/pages/move`, {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/move`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -345,7 +345,7 @@ export async function replaceSlideImage(
   const form = new FormData();
   form.append('file', file);
   const resp = await fetch(
-    `/api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/replace-image`,
+    `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/replace-image`,
     { method: 'POST', body: form },
   );
   if (!resp.ok) throw await parseErrorBody(resp);
@@ -358,7 +358,7 @@ export async function regenerateSlideImage(
   prompt: string,
 ): Promise<RegenerateSlideImageResponse> {
   const resp = await fetch(
-    `/api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/regenerate-image`,
+    `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/regenerate-image`,
     {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -374,7 +374,7 @@ export async function updatePdfTtsSettings(
   ttsVoice: string,
   ttsSpeed: number,
 ): Promise<UpdateTtsSettingsResponse> {
-  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/tts-settings`, {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/tts-settings`, {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ tts_voice: ttsVoice, tts_speed: ttsSpeed }),
@@ -387,7 +387,7 @@ export async function updatePdfImageStyleSettings(
   id: string,
   imageStylePrompt: string,
 ): Promise<{ id: string; image_style_prompt: string | null; updated_at: string }> {
-  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/image-style-settings`, {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/image-style-settings`, {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ image_style_prompt: imageStylePrompt }),
@@ -402,7 +402,7 @@ export async function regenerateAllImages(
   id: string,
   prompt: string,
 ): Promise<RegenerateAllImagesResponse> {
-  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/regenerate-images`, {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/regenerate-images`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ prompt }),
@@ -439,7 +439,7 @@ export async function startRegenerateJob(
   if (options.images) {
     body.images = { prompt: options.images.prompt };
   }
-  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/regenerate`, {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/regenerate`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
@@ -451,7 +451,7 @@ export async function startRegenerateJob(
 /** 查詢批次重生任務的最新進度。未建立過任務時會回傳 404 ApiError。 */
 export async function fetchRegenerateStatus(id: string): Promise<RegenJobState> {
   const resp = await fetch(
-    `/api/pdfs/${encodeURIComponent(id)}/regenerate/status`,
+    `api/pdfs/${encodeURIComponent(id)}/regenerate/status`,
   );
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as RegenJobState;
@@ -463,7 +463,7 @@ export async function fetchRegenerateStatus(id: string): Promise<RegenJobState> 
  */
 export async function cancelRegenerateJob(id: string): Promise<RegenJobState> {
   const resp = await fetch(
-    `/api/pdfs/${encodeURIComponent(id)}/regenerate/cancel`,
+    `api/pdfs/${encodeURIComponent(id)}/regenerate/cancel`,
     { method: 'POST' },
   );
   if (!resp.ok) throw await parseErrorBody(resp);
@@ -478,7 +478,7 @@ export async function rollbackRegenerate(
   id: string,
 ): Promise<RollbackRegenerateResponse> {
   const resp = await fetch(
-    `/api/pdfs/${encodeURIComponent(id)}/regenerate/rollback`,
+    `api/pdfs/${encodeURIComponent(id)}/regenerate/rollback`,
     { method: 'POST' },
   );
   if (!resp.ok) throw await parseErrorBody(resp);
@@ -486,7 +486,7 @@ export async function rollbackRegenerate(
 }
 
 export async function generatePdfVideo(id: string): Promise<GenerateVideoResponse> {
-  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/generate-video`, {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/generate-video`, {
     method: 'POST',
   });
   if (!resp.ok) {
@@ -501,7 +501,7 @@ export async function regeneratePageAudio(
   script: string,
 ): Promise<RegenerateAudioResponse> {
   const resp = await fetch(
-    `/api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/regenerate-audio`,
+    `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/regenerate-audio`,
     {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -527,7 +527,7 @@ export async function rewritePageScript(
   history: ChatMessage[] = [],
 ): Promise<RewriteScriptResponse> {
   const resp = await fetch(
-    `/api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/rewrite-script`,
+    `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/rewrite-script`,
     {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -561,7 +561,7 @@ export function uploadPdf(file: File, opts: UploadOptions = {}): Promise<UploadR
     formData.append('file', file);
 
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', '/api/pdfs');
+    xhr.open('POST', 'api/pdfs');
 
     xhr.upload.onprogress = (ev) => {
       if (ev.lengthComputable && opts.onProgress) {
@@ -613,7 +613,7 @@ export async function chatWithPageContext(
   history: ChatMessage[],
 ): Promise<PageChatResponse> {
   const resp = await fetch(
-    `/api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/chat`,
+    `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/chat`,
     {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -631,7 +631,7 @@ export async function fetchPageChatHistory(
   pageNumber: number,
 ): Promise<ChatHistoryResponse> {
   const resp = await fetch(
-    `/api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/chat-history`,
+    `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/chat-history`,
   );
   if (!resp.ok) {
     throw await parseErrorBody(resp);
@@ -641,10 +641,30 @@ export async function fetchPageChatHistory(
 
 export async function clearPageChatHistory(id: string, pageNumber: number): Promise<void> {
   const resp = await fetch(
-    `/api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/chat-history`,
+    `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/chat-history`,
     { method: 'DELETE' },
   );
   if (!resp.ok && resp.status !== 204) {
     throw await parseErrorBody(resp);
   }
+}
+
+export interface OpenAIKeyStatusResponse {
+  has_key: boolean;
+}
+
+export async function getOpenAIKeyStatus(): Promise<OpenAIKeyStatusResponse> {
+  const resp = await fetch('api/system/openai-key-status');
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as OpenAIKeyStatusResponse;
+}
+
+export async function setOpenAIApiKey(apiKey: string): Promise<{ ok: boolean; has_key: boolean }> {
+  const resp = await fetch('api/system/openai-api-key', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ api_key: apiKey }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { ok: boolean; has_key: boolean };
 }

@@ -23,7 +23,7 @@ import {
   writeSourcePdf,
   writeSourceText,
 } from '../services/storage';
-import { getOpenAIClient } from '../services/openai';
+import { getOpenAIClient, setOpenAIApiKeyRuntime } from '../services/openai';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../services/imagePromptTemplates';
 import { enqueuePdfProcessing, enqueueYoutubeProcessing } from '../worker/pipeline';
 import { generateVideo } from '../worker/steps/generateVideo';
@@ -1396,6 +1396,32 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
       templates: IMAGE_PROMPT_TEMPLATES,
       default_template_key: IMAGE_PROMPT_TEMPLATES[0]?.key ?? null,
     });
+  });
+
+  app.get('/api/system/openai-key-status', async (_request, reply) => {
+    const hasKey = Boolean(process.env.OPENAI_API_KEY?.trim() || config.openaiApiKey);
+    return reply.send({ has_key: hasKey });
+  });
+
+  app.patch('/api/system/openai-api-key', async (request, reply) => {
+    const BodySchema = z.object({ api_key: z.string().trim().min(1) });
+    const parsed = BodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'api_key is required'));
+    }
+
+    const envPath = path.join(config.repoRoot, '.env');
+    const nextKey = parsed.data.api_key.trim();
+    let content = '';
+    if (fs.existsSync(envPath)) content = await fs.promises.readFile(envPath, 'utf8');
+
+    const line = `OPENAI_API_KEY=${nextKey}`;
+    if (/^OPENAI_API_KEY=.*/m.test(content)) content = content.replace(/^OPENAI_API_KEY=.*/m, line);
+    else content = content.trimEnd() + `\n${line}\n`;
+
+    await fs.promises.writeFile(envPath, content, 'utf8');
+    setOpenAIApiKeyRuntime(nextKey);
+    return reply.send({ ok: true, has_key: true });
   });
 
   // POST /api/pdfs/:id/regenerate/cancel

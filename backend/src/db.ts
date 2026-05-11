@@ -5,7 +5,7 @@ import { config } from './config';
 import { logger } from './logger';
 
 // Ensure DB directory exists
-fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
+//fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
 
 export const db = new Database(config.dbPath);
 db.pragma('journal_mode = WAL');

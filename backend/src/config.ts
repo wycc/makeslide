@@ -138,6 +138,7 @@ const EnvSchema = z.object({
     .optional()
     .transform((v) => (v ? Number(v) : 2))
     .pipe(z.number().int().positive()),
+  NB_PREFIX: z.string().optional().default(''),
 });
 
 const parsed = EnvSchema.safeParse(process.env);
@@ -148,6 +149,13 @@ if (!parsed.success) {
 }
 
 const env = parsed.data;
+
+function normalizeNbPrefix(raw: string): string {
+  const v = raw.trim();
+  if (!v) return '';
+  const withLeadingSlash = v.startsWith('/') ? v : `/${v}`;
+  return withLeadingSlash.replace(/\/+$/, '');
+}
 
 export const config = {
   port: env.PORT,
@@ -184,6 +192,7 @@ export const config = {
   openaiTtsFormat: env.OPENAI_TTS_FORMAT,
   openaiTtsSpeed: env.OPENAI_TTS_SPEED,
   ttsConcurrency: env.TTS_CONCURRENCY,
+  nbPrefix: normalizeNbPrefix(env.NB_PREFIX),
 } as const;
 
 export type AppConfig = typeof config;

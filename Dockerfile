@@ -44,13 +44,14 @@ COPY --from=build /app/backend/src ./backend/src
 COPY --from=build /app/frontend/dist ./frontend/dist
 
 # app data dirs
-RUN mkdir -p /app/data /home/jovyan/storage \
-  && rm -rf /app/storage \
-  && ln -s /home/jovyan/storage /app/storage
+RUN mkdir -p /home/jovyan/storage /home/jovyan/data \
+  && rm -rf /app/storage /app/data \
+  && ln -s /home/jovyan/storage /app/storage \
+  && ln -s /home/jovyan/data /app/data
 
 ENV NODE_ENV=production
 ENV PORT=8888
 
 EXPOSE 8888
 
-CMD ["npx", "tsx", "backend/src/server.ts"]
+CMD ["bash", "-lc", "cd /app && while true; do npx tsx backend/src/server.ts; echo 'server exited, restarting in 2s...'; sleep 2; done"]
