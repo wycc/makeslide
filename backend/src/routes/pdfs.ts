@@ -23,7 +23,7 @@ import {
   writeSourcePdf,
   writeSourceText,
 } from '../services/storage';
-import { getOpenAIClient, setOpenAIApiKeyRuntime } from '../services/openai';
+import { callChatJSON, getOpenAIClient, setOpenAIApiKeyRuntime } from '../services/openai';
 import { getRuntimeAiSettings, persistEnvSettings, setRuntimeAiSettings } from '../services/aiSettings';
 import { synthesizeGeminiSpeech } from '../services/gemini';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../services/imagePromptTemplates';
@@ -2047,96 +2047,53 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const runtime = getRuntimeAiSettings();
-      const ttsStyleHint =
-        runtime.ttsProvider === 'gemini'
-          ? [
-              '【TTS 引擎：Gemini】',
-              '語氣控制重點：',
-              '- 避免過多語助詞與贅字（例如連續的「嗯、啊、就是」）。',
-              '- 句子更短、節奏更穩，標點要明確（逗號、句號、頓號）。',
-              '- 段落切分清楚，每段 1~3 句，避免單段過長。',
-              '- 轉場詞保守使用，以自然、清楚為優先。',
-            ].join('\n')
-          : [
-              '【TTS 引擎：OpenAI】',
-              '語氣控制重點：',
-              '- 可保留少量口語轉場（如「好」、「那我們來看」），提升聽感自然度。',
-              '- 句長可中等，但避免過長複句。',
-              '- 重要概念前後保留停頓，段落銜接流暢。',
-            ].join('\n');
-      const rewriteMaxOutputTokens = 4800;
-      const llmModel = runtime.llmProvider === 'gemini' ? runtime.geminiLlmModel : runtime.openaiLlmModel;
-      const raw = (
-        await (async () => {
-          if (runtime.llmProvider === 'gemini') {
-            const geminiApiKey = runtime.geminiApiKey.trim();
-            if (!geminiApiKey) {
-              throw new Error('GERMINI_API_KEY/GEMINI_API_KEY is empty');
-            }
-            const resp = await fetch(
-              `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(llmModel)}:generateContent?key=${encodeURIComponent(geminiApiKey)}`,
-              {
-                method: 'POST',
-                headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({
-                  contents: [
-                    {
-                      role: 'user',
-                      parts: [
-                        {
-                          text:
-                            '你是逐字稿編修助理。請根據使用者提示改寫逐字稿，語言使用繁體中文。必須優先做到：本頁內容與前後頁之間銜接自然、過場順暢、語氣一致。請改寫成適合 TTS 朗讀的逐字稿：使用自然口語、每句盡量短、重要概念前後保留停頓、加入少量自然轉場（如「好」、「那我們來看」、「這裡有一個重點」）、避免誇張廣告腔、語氣像老師清楚解釋，並保留段落換行。若參考素材不足，也必須先產出可朗讀草稿，不可回覆無法說明或拒答。僅輸出 JSON 物件，格式為 {"script":"..."}。\n\n' +
-                            `${ttsStyleHint}\n\n` +
-                            userContent
-                              .map((p) => (p.type === 'text' ? p.text : '[image attached]'))
-                              .join('\n\n'),
-                        },
-                      ],
-                    },
-                  ],
-                  generationConfig: {
-                    responseMimeType: 'application/json',
-                    maxOutputTokens: rewriteMaxOutputTokens,
-                    temperature: 0.5,
-                  },
-                }),
-              },
-            );
-            if (!resp.ok) {
-              const body = await resp.text().catch(() => '');
-              throw new Error(
-                `Gemini rewrite request failed: HTTP ${resp.status}${body ? ` - ${body.slice(0, 500)}` : ''}`,
-              );
-            }
-            const json = (await resp.json()) as any;
-            return json?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-          }
+      const llmModel =
+        runtime.llmProvider === 'gemini' ? runtime.geminiLlmModel : runtime.openaiLlmModel;
 
-          const result = await getOpenAIClient().chat.completions.create({
-            model: llmModel,
-            messages: [
-              {
-                role: 'system',
-                content:
-                  '你是逐字稿編修助理。請根據使用者提示改寫逐字稿，語言使用繁體中文。必須優先做到：本頁內容與前後頁之間銜接自然、過場順暢、語氣一致。請改寫成適合 TTS 朗讀的逐字稿：使用自然口語、每句盡量短、重要概念前後保留停頓、加入少量自然轉場（如「好」、「那我們來看」、「這裡有一個重點」）、避免誇張廣告腔、語氣像老師清楚解釋，並保留段落換行。若參考素材不足，也必須先產出可朗讀草稿，不可回覆無法說明或拒答。僅輸出 JSON 物件，格式為 {"script":"..."}。\n\n' +
-                  ttsStyleHint,
-              },
-              {
-                role: 'user',
-                content: userContent,
-              },
-            ],
-            response_format: { type: 'json_object' },
-            ...(llmModel.toLowerCase().startsWith('gpt-5.5')
-              ? { max_completion_tokens: rewriteMaxOutputTokens }
-              : { max_tokens: rewriteMaxOutputTokens }),
-          });
-          return result.choices[0]?.message?.content ?? '';
-        })()
-      ).trim();
-      const parsed = RewriteSchema.safeParse(JSON.parse(raw));
+      const geminiPodcastRules = [
+        '根據以下文章內容，整理出雙人 Podcast 逐字稿，遵循以下規則：',
+        '- 逐字稿使用繁體中文。',
+        '- 逐字稿總長度約 1000 字。',
+        '- 分別有 主持人 "Speaker 1" 與 主持人 "Speaker 2"，"Speaker 1" 為台灣人年輕女性、"Speaker 2" 為台灣人年輕男性。',
+        '- 如果有必要，主持人互相使用 "你" 稱呼。',
+        '- 皆使用台灣用語、台灣連接詞，可以適時使用台灣狀聲詞。',
+        '- 如果有需要描述語氣、情緒，使用 "{{}}"，例如 "{{哈哈大笑}}" 或 "{{難過情緒}}"。',
+        '- 只需要輸出逐字稿，不需要其他說明。',
+      ].join('\n');
+
+      const openaiRules = [
+        '請改寫成適合 TTS 朗讀的逐字稿。',
+        '要求：',
+        '1. 使用自然口語，不要像書面文章。',
+        '2. 每句話盡量短。',
+        '3. 重要概念前後加入停頓。',
+        '4. 加入少量「好」、「那我們來看」、「這裡有一個重點」等自然轉場。',
+        '5. 避免過度誇張，不要像廣告配音。',
+        '6. 語氣像老師在課堂上清楚解釋。',
+        '7. 輸出時保留段落換行，方便 TTS 產生停頓。',
+        '8. 輸出 JSON，格式固定為 {"script":"..."}。',
+      ].join('\n');
+
+      const systemPrompt =
+        runtime.ttsProvider === 'gemini'
+          ? `你是逐字稿編修助理。${geminiPodcastRules}\n請回傳 JSON，格式固定為 {"script":"..."}。`
+          : `你是逐字稿編修助理。${openaiRules}`;
+
+      const { data } = await callChatJSON({
+        model: llmModel,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userContent },
+        ],
+        schema: RewriteSchema,
+        label: `rewrite-script p${n}`,
+        maxTokens: 4800,
+        temperature: 0.5,
+      });
+
+      const parsed = RewriteSchema.safeParse(data);
       if (!parsed.success) {
-        request.log.warn({ pdfId: id, pageNumber: n, raw }, 'rewrite-script invalid JSON shape');
+        request.log.warn({ pdfId: id, pageNumber: n, data }, 'rewrite-script invalid JSON shape');
         return reply
           .code(502)
           .send(errorResponse('MODEL_OUTPUT_INVALID', '模型輸出格式錯誤，請重試'));

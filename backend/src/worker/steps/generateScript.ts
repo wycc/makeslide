@@ -5,6 +5,7 @@ import type { ChatCompletionContentPart } from 'openai/resources/chat/completion
 import { config } from '../../config';
 import { logger } from '../../logger';
 import { callChatJSON, type TokenUsage } from '../../services/openai';
+import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { pageScriptPath, pageTextPath } from '../../services/storage';
 
 export interface ScriptPageResult {
@@ -226,7 +227,41 @@ function sanitiseUserPrompt(raw: string | null | undefined): string {
 function buildSystemPrompt(
   userPrompt: string | null | undefined,
   targetChars: number,
+  ttsProvider: 'openai' | 'gemini',
 ): string {
+  if (ttsProvider === 'gemini') {
+    const base = [
+      '你是一位 Podcast 逐字稿編輯助理。',
+      '根據以下文章內容，整理出雙人 Podcast 逐字稿，遵循以下規則：',
+      '- 逐字稿使用繁體中文。',
+      '- 逐字稿總長度約 1000 字。',
+      '- 分別有 主持人 "Speaker 1" 與 主持人 "Speaker 2"，"Speaker 1" 為台灣人年輕女性、"Speaker 2" 為台灣人年輕男性。',
+      '- 如果有必要，主持人互相使用 "你" 稱呼。',
+      '- 皆使用台灣用語、台灣連接詞，可以適時使用台灣狀聲詞。',
+      '- 如果有需要描述語氣、情緒，使用 "{{}}"，例如 "{{哈哈大笑}}" 或 "{{難過情緒}}"。',
+      '- 只需要輸出逐字稿，不需要其他說明。',
+      '- <其他要求，例如流程、架構、著重特定聽者>',
+      '',
+      '逐字稿範例：',
+      'Speaker 1: {{驚嘆}} 哇塞！各位聽眾朋友，你們知道嗎？',
+      'Speaker 2: {{疑問語氣}} 最近有什麼有趣的新聞嗎？',
+      'Speaker 1: NotebookLM 最近加入一個「Audio Overviews」新功能。',
+      'Speaker 2: {{小小的疑問}} 你是說 Google 推出的 NotebookLM 嗎？',
+      'Speaker 1: 沒錯！它最近有個新功能，可以把 PDF、影片、圖檔這些資料，直接做成精美的簡報，而且還有圖片跟流暢的旁白喔！據說它可能用了那個很威的影片生成模型 Veo2。',
+      'Speaker 2: {{語氣轉折、好奇}} 不過咧，講到這裡，可能有些台灣朋友會想說：「{{疑問語氣}} 那中文版可以用嗎？」',
+      'Speaker 1: {{微微嘆氣}} 欸，很可惜，目前中文版的 NotebookLM 還沒看到這個 Video Overviews 的功能...',
+      '',
+      '請回傳 JSON，格式固定為 {"script": "..."}，不要夾帶其他欄位或說明。',
+    ];
+    const sanitized = sanitiseUserPrompt(userPrompt);
+    if (sanitized) {
+      base.push('');
+      base.push('【使用者指定的風格 / 語氣 / 聽眾要求】');
+      base.push(sanitized);
+    }
+    return base.join('\n');
+  }
+
   const ttsRewriteRules = [
     '請改寫成適合 TTS 朗讀的逐字稿。',
     '',
@@ -329,6 +364,23 @@ function buildUserText(ctx: PromptContext): string {
 }
 
 function buildDeckRewriteSystemPrompt(userPrompt: string | null | undefined): string {
+  const runtime = getRuntimeAiSettings();
+  if (runtime.ttsProvider === 'gemini') {
+    const base = [
+      '你是一位 Podcast 逐字稿總編輯。',
+      '請把各頁草稿改寫成雙人對談形式（Speaker 1 / Speaker 2），使用繁體中文與台灣口語。',
+      '保留重點，語氣自然，必要時可用 {{語氣描述}}。',
+      '只輸出 JSON：{"pages":[{"page_number":1,"script":"..."}, ...]}。',
+    ];
+    const sanitized = sanitiseUserPrompt(userPrompt);
+    if (sanitized) {
+      base.push('');
+      base.push('【使用者風格要求】');
+      base.push(sanitized);
+    }
+    return base.join('\n');
+  }
+
   const ttsRewriteRules = [
     '請改寫成適合 TTS 朗讀的逐字稿。',
     '',
@@ -429,7 +481,9 @@ export async function generateScript(
 ): Promise<GenerateScriptResult> {
   const { pdfId, pageCount, pages, onPage, userPrompt, shouldAbort } = opts;
   const targetChars = opts.maxCharsPerPage ?? config.openaiScriptTargetChars;
-  const system = buildSystemPrompt(userPrompt, targetChars);
+  const runtime = getRuntimeAiSettings();
+  const system = buildSystemPrompt(userPrompt, targetChars, runtime.ttsProvider);
+  console.log('System prompt for script generation:\n', system);
   if (userPrompt && userPrompt.trim()) {
     logger.info(
       { pdfId, promptPreview: userPrompt.trim().slice(0, 80) },
