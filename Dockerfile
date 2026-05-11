@@ -39,6 +39,7 @@ RUN npm install
 # backend runtime artifacts
 COPY --from=build /app/backend/dist ./backend/dist
 COPY --from=build /app/backend/src ./backend/src
+COPY --from=build /app/.env.example ./.env.example
 
 # frontend static assets (served by backend route if configured)
 COPY --from=build /app/frontend/dist ./frontend/dist
@@ -54,4 +55,4 @@ ENV PORT=8888
 
 EXPOSE 8888
 
-CMD ["bash", "-lc", "cd /app && while true; do npx tsx backend/src/server.ts; echo 'server exited, restarting in 2s...'; sleep 2; done"]
+CMD ["bash", "-lc", "mkdir -p /home/jovyan/data /home/jovyan/storage && [ -f /home/jovyan/.env ] || cp /app/.env.example /home/jovyan/.env && cd /app && while true; do npx tsx backend/src/server.ts; echo 'server exited, restarting in 2s...'; sleep 2; done"]

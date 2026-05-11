@@ -239,7 +239,7 @@ function coverUrl(row: PdfRow): string | null {
     const coverJpg = coverImagePath(row.id);
     const coverPng = path.join(config.storageRoot, row.id, 'cover.png');
     return (fs.existsSync(coverJpg) || fs.existsSync(coverPng))
-      ? `/api/pdfs/${row.id}/cover`
+      ? `api/pdfs/${row.id}/cover`
       : null;
   } catch {
     return null;
@@ -273,10 +273,10 @@ function rowToListItem(row: PdfRow): PdfListItem {
 function rowToDetail(row: PdfRow, pages: PageRow[]): PdfDetail {
   const detailPages: PdfDetailPage[] = pages.map((p) => ({
     page_number: p.page_number,
-    image_url: p.image_path ? `/api/pdfs/${row.id}/pages/${p.page_number}/image` : null,
-    text_url: p.text_path ? `/api/pdfs/${row.id}/pages/${p.page_number}/text` : null,
-    script_url: p.script_path ? `/api/pdfs/${row.id}/pages/${p.page_number}/script` : null,
-    audio_url: p.audio_path ? `/api/pdfs/${row.id}/pages/${p.page_number}/audio` : null,
+    image_url: p.image_path ? `api/pdfs/${row.id}/pages/${p.page_number}/image` : null,
+    text_url: p.text_path ? `api/pdfs/${row.id}/pages/${p.page_number}/text` : null,
+    script_url: p.script_path ? `api/pdfs/${row.id}/pages/${p.page_number}/script` : null,
+    audio_url: p.audio_path ? `api/pdfs/${row.id}/pages/${p.page_number}/audio` : null,
     audio_duration_seconds: p.audio_duration_seconds,
     status: p.status,
   }));
@@ -300,10 +300,10 @@ function rowToDetail(row: PdfRow, pages: PageRow[]): PdfDetail {
     source_url: row.source_url ?? null,
     source_video_id: row.source_video_id ?? null,
     source_caption_language: row.source_caption_language ?? null,
-    outline_url: fs.existsSync(youtubeOutlinePath(row.id)) ? `/api/pdfs/${row.id}/outline` : null,
+    outline_url: fs.existsSync(youtubeOutlinePath(row.id)) ? `api/pdfs/${row.id}/outline` : null,
     created_at: row.created_at,
     updated_at: row.updated_at,
-    video_url: fs.existsSync(videoPath(row.id)) ? `/api/pdfs/${row.id}/video` : null,
+    video_url: fs.existsSync(videoPath(row.id)) ? `api/pdfs/${row.id}/video` : null,
     pages: detailPages,
   };
 }
@@ -1042,7 +1042,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
       // non-fatal
     }
 
-    return reply.code(200).send({ id, page_number: n, image_url: `/api/pdfs/${id}/pages/${n}/image`, updated_at: now });
+    return reply.code(200).send({ id, page_number: n, image_url: `api/pdfs/${id}/pages/${n}/image`, updated_at: now });
   });
 
   app.post('/api/pdfs/:id/pages/:n/regenerate-image', async (request, reply) => {
@@ -1118,7 +1118,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
       } catch {
         // non-fatal
       }
-      return reply.code(200).send({ id, page_number: n, image_url: `/api/pdfs/${id}/pages/${n}/image`, updated_at: now });
+      return reply.code(200).send({ id, page_number: n, image_url: `api/pdfs/${id}/pages/${n}/image`, updated_at: now });
     } catch (err) {
       request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to regenerate image by prompt');
       return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to regenerate image'));
@@ -1754,8 +1754,8 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(200).send({
         id,
         page_number: n,
-        script_url: `/api/pdfs/${id}/pages/${n}/script`,
-        audio_url: `/api/pdfs/${id}/pages/${n}/audio`,
+        script_url: `api/pdfs/${id}/pages/${n}/script`,
+        audio_url: `api/pdfs/${id}/pages/${n}/audio`,
         audio_bytes: audioBuffer.byteLength,
         audio_mime: 'audio/mpeg',
         updated_at: updatedAt,
@@ -2005,7 +2005,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
 
       return reply.code(200).send({
         id,
-        video_url: `/api/pdfs/${id}/video`,
+        video_url: `api/pdfs/${id}/video`,
         updated_at: updatedAt,
       });
     } catch (err) {

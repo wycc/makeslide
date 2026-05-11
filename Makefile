@@ -3,7 +3,7 @@ DOCKER ?= docker
 # Docker Hub account / repository / tag
 DOCKERHUB_ACCOUNT ?= wycca1
 IMAGE_NAME ?= makeslide-app
-TAG ?= v1.0.4
+TAG ?= v1.0.7
 IMAGE ?= $(DOCKERHUB_ACCOUNT)/$(IMAGE_NAME):$(TAG)
 
 .PHONY: help docker-build docker-push docker-run docker-login

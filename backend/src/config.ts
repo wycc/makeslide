@@ -23,6 +23,8 @@ const repoRoot = path.resolve(__dirname, '..', '..');
 dotenv.config({ path: path.join(repoRoot, '.env') });
 // Also allow backend/.env for local overrides
 dotenv.config({ path: path.join(repoRoot, 'backend', '.env'), override: false });
+// In container deployment, also allow runtime overrides from jovyan home.
+dotenv.config({ path: '/home/jovyan/.env', override: false });
 
 const EnvSchema = z.object({
   PORT: z
