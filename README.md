@@ -1,20 +1,21 @@
 # makeslide
 
-語音簡報生成與播放系統。詳細設計請見 [`docs/design.md`](docs/design.md)。
+![screen](./screen1.png)
 
-這個計畫提供了一個和 NotebookLM 中產生影片類似的功能。它目前可以接受 PDF 檔，從其中抽出簡報所需的圖片。也可以接受一個簡報大綱，
-一般使用 chatGPT 產生的簡報大綱都可以使用。只要頁和頁間使用 ## Slide XX 區隔即可。它會使用簡報大綱的內容產生圖片，接下來再使用
-圖片產生逐字檔，不論圖片是由 PDF 或是由簡報大綱產生都可以。最後再從逐字稿配上語音。
+語音簡報生成與播放系統。詳細設計請見 [`docs/design.md`](docs/design.md)。  
+Voice presentation generation and playback system. See [`docs/design.md`](docs/design.md) for detailed design.
 
-目前只支援繁體中文，稍後會把其它語言加上去。
+這個專案提供類似 NotebookLM 影片生成的工作流：可接受 PDF，抽取頁面圖片與文字，產生逐字稿，再合成語音。也支援以簡報大綱（例如 ChatGPT 產生、以 `## Slide XX` 分頁）直接產圖、產稿、配音。  
+This project provides a NotebookLM-like video/presentation workflow: ingest PDF, extract page images and text, generate narration scripts, then synthesize speech. It also supports outline-driven generation (for example, ChatGPT output split by `## Slide XX`) to create images, scripts, and audio.
 
-## 目錄結構
 
-```
+## 目錄結構 / Project Structure
+
+```text
 makeslide/
 ├── backend/       # Fastify + TypeScript API server
 ├── frontend/      # React + Vite + Tailwind SPA
-├── storage/       # 執行期產物（gitignored）
+├── storage/       # 執行期產物（gitignored）/ runtime artifacts (gitignored)
 │   └── <pdf_id>/
 │       ├── source.pdf
 │       ├── metadata.json
@@ -23,121 +24,136 @@ makeslide/
 │           ├── 001.png
 │           ├── 001.text.txt
 │           └── ...
-├── data/          # SQLite DB 檔案（gitignored）
+├── data/          # SQLite DB 檔案（gitignored）/ SQLite DB files (gitignored)
 └── docs/
 ```
 
-## 前置需求
+## 前置需求 / Prerequisites
 
-- Node.js 20 LTS 以上
+- Node.js 20 LTS+
 - npm 10+
-- **poppler-utils**（提供 `pdftoppm` 與 `pdfinfo`，M2 PDF → PNG 轉圖使用）
-  - Ubuntu / Debian：`sudo apt-get install poppler-utils`
-  - macOS：`brew install poppler`
-  - 驗證：`pdftoppm -v`、`pdfinfo -v`
+- **poppler-utils**（提供 `pdftoppm` 與 `pdfinfo`，供 PDF 轉圖）  
+  **poppler-utils** (provides `pdftoppm` and `pdfinfo` for PDF-to-image rendering)
+  - Ubuntu / Debian: `sudo apt-get install poppler-utils`
+  - macOS: `brew install poppler`
+  - 驗證 / Verify: `pdftoppm -v`、`pdfinfo -v`
 
-若未安裝，backend 啟動時會於 log 警告，上傳 PDF 後會轉為 `failed` 狀態並於 `error_message` 說明。
+若未安裝 poppler，backend 啟動時會警告，上傳 PDF 後會進入 `failed`，並在 `error_message` 說明。  
+If poppler is missing, backend will warn at startup; uploaded PDFs may enter `failed` with details in `error_message`.
 
-## 快速啟動（推薦）
+## 快速啟動（推薦）/ Quick Start (Recommended)
 
-1. 建議使用 [nvm](https://github.com/nvm-sh/nvm) 管理 Node 版本（專案已附 [`.nvmrc`](.nvmrc:1)，鎖定 Node 20）：
+1. 建議使用 [nvm](https://github.com/nvm-sh/nvm)（專案附 [` .nvmrc `](.nvmrc) 鎖定 Node 20）。  
+   Use [nvm](https://github.com/nvm-sh/nvm) (project includes [`.nvmrc`](.nvmrc) targeting Node 20).
 
    ```bash
    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
-   # 重新開一個 shell 後：
+   # 開新 shell 後 / after opening a new shell:
    nvm install 20 && nvm use 20
    ```
 
-2. 複製環境變數並填入 `OPENAI_API_KEY`
+2. 複製環境變數並填入 `OPENAI_API_KEY`。  
+   Copy env file and set `OPENAI_API_KEY`.
 
    ```bash
    cp .env.example .env
-   # 編輯 .env
+   # 編輯 .env / edit .env
    ```
 
-3. 一鍵啟動（自動檢查 Node 版本、poppler、.env、建立目錄、必要時 npm install，再啟動前後端）：
+3. 一鍵啟動（檢查 Node / poppler / .env，建立目錄，必要時安裝套件，啟動前後端）。  
+   Start with one command (checks Node/poppler/.env, prepares directories, installs deps if needed, starts backend + frontend).
 
    ```bash
    ./start.sh
    ```
 
-可用選項：
+可用選項 / Available options:
 
 ```bash
-./start.sh --help             # 列出所有選項
-./start.sh --install          # 強制重新 npm install
-./start.sh --clean            # 清除 node_modules 後重裝並啟動
-./start.sh --backend-only     # 只啟動 backend (Fastify)
-./start.sh --frontend-only    # 只啟動 frontend (Vite)
+./start.sh --help             # 列出所有選項 / show all options
+./start.sh --install          # 強制重新 npm install / force npm install
+./start.sh --clean            # 清除 node_modules 後重裝並啟動 / reinstall from clean state
+./start.sh --backend-only     # 只啟動 backend / backend only
+./start.sh --frontend-only    # 只啟動 frontend / frontend only
 ```
 
-按 Ctrl+C 可優雅地終結前後端子程序。
+按 `Ctrl+C` 可優雅終止子程序。  
+Press `Ctrl+C` for graceful shutdown.
 
-## 手動啟動（備選）
+## 手動啟動（備選）/ Manual Start (Alternative)
 
-若不使用 [`start.sh`](start.sh:1)，可手動進行：
+若不使用 [`start.sh`](start.sh)：  
+If you do not use [`start.sh`](start.sh):
 
 ```bash
 cp .env.example .env
 npm install
-```
-
-`npm install` 會同時安裝 backend 與 frontend 相依套件（npm workspaces）。
-
-```bash
 npm run dev
 ```
 
-- Backend 監聽於 `http://localhost:3000`
-- Frontend 監聽於 `http://localhost:5173`（Vite dev server 已設定 `/api` proxy 到 backend）
+`npm install` 會安裝 backend/frontend（npm workspaces）。  
+`npm install` installs both backend and frontend via npm workspaces.
 
-亦可分別啟動：
+- Backend: `http://localhost:3000`
+- Frontend: `http://localhost:5173`（dev server 會把 `/api` proxy 到 backend）  
+  Frontend dev server proxies `/api` to backend.
+
+也可分別啟動 / You can also run separately:
 
 ```bash
 npm run dev:backend
 npm run dev:frontend
 ```
 
-## 已實作 API
+## 已實作 API / Implemented API
 
-| Method | Path | 說明 |
-|--------|------|------|
-| GET | `/api/health` | 健康檢查 |
-| POST | `/api/pdfs` | 上傳 PDF（multipart/form-data，欄位 `file`）；完成後自動入列處理 |
-| GET | `/api/pdfs` | 列出所有 PDF（含 `cover_url`、`progress_step`、`page_count`） |
-| GET | `/api/pdfs/:id` | 取得單筆詳情（含每頁 `image_url` / `text_url`） |
-| GET | `/api/pdfs/:id/cover` | 取得封面縮圖（`image/png`） |
-| GET | `/api/pdfs/:id/pages/:n/image` | 取得第 `n` 頁影像 |
-| GET | `/api/pdfs/:id/pages/:n/text` | 取得第 `n` 頁抽取文字（`text/plain; charset=utf-8`） |
-| DELETE | `/api/pdfs/:id` | 刪除 PDF（同步清除 `pages` 與 `storage/<pdf_id>/`） |
+| Method | Path | 說明（中文） | Description (EN) |
+|---|---|---|---|
+| GET | `/api/health` | 健康檢查 | Health check |
+| POST | `/api/pdfs` | 上傳 PDF（`multipart/form-data`，欄位 `file`） | Upload PDF (`multipart/form-data`, field `file`) |
+| GET | `/api/pdfs` | 列出 PDF（含封面與進度） | List PDFs (with cover and progress) |
+| GET | `/api/pdfs/:id` | 取得單筆詳情（含頁面資源 URL） | Get PDF detail (with page asset URLs) |
+| GET | `/api/pdfs/:id/cover` | 取得封面縮圖 | Get cover thumbnail |
+| GET | `/api/pdfs/:id/pages/:n/image` | 取得第 n 頁影像 | Get page image |
+| GET | `/api/pdfs/:id/pages/:n/text` | 取得第 n 頁文字 | Get extracted page text |
+| DELETE | `/api/pdfs/:id` | 刪除 PDF 與相關產物 | Delete PDF and related artifacts |
 
-## 處理管線
+## 處理管線 / Processing Pipeline
 
+```text
+上傳 / Upload → uploaded
+               ↓ enqueue
+               processing + progress_step=rendering       (pdftoppm + cover generation)
+               ↓
+               processing + progress_step=extracting_text (page text extraction)
+               ↓
+               processing + progress_step=text_extracted  (M2 end; waiting for next stage)
 ```
-上傳 → uploaded
-      ↓ enqueue
-      processing + progress_step=rendering       (pdftoppm 產生每頁 PNG + sharp 產生 cover.png)
-      ↓
-      processing + progress_step=extracting_text (pdfjs-dist legacy 逐頁抽文字)
-      ↓
-      processing + progress_step=text_extracted  (M2 結束，status 保留 processing 等 M3)
-```
 
-- 背景執行緒：`p-queue`，並行數由 `PROCESS_CONCURRENCY` 控制。
-- 崩潰復原：啟動時掃描 `status IN ('uploaded','processing')` 的 PDF 自動重新入列。
-- 同一個 `pdf_id` 不會被重覆處理（in-memory guard + DB 終態判斷）。
+- 背景佇列 / Queue: `p-queue`（並行數由 `PROCESS_CONCURRENCY` 控制）  
+  Concurrency is controlled by `PROCESS_CONCURRENCY`.
+- 崩潰復原：啟動時會重新入列 `uploaded/processing`。  
+  Crash recovery: re-enqueues PDFs in `uploaded/processing` on startup.
+- 同一 `pdf_id` 不重複處理。  
+  The same `pdf_id` is guarded against duplicate processing.
 
-## 環境變數
+## 環境變數 / Environment Variables
 
-請見 [`.env.example`](.env.example)。核心變數：
+請見 [`.env.example`](.env.example)。核心變數如下：  
+See [`.env.example`](.env.example). Core variables:
 
-| 變數 | 預設 | 說明 |
-|------|------|------|
-| `PORT` | `3000` | Fastify listening port |
-| `STORAGE_ROOT` | `./storage` | PDF 與產物根目錄 |
-| `DB_PATH` | `./data/app.db` | SQLite 路徑 |
-| `MAX_UPLOAD_MB` | `50` | 上傳大小上限 |
-| `LOG_LEVEL` | `info` | pino log level |
-| `PROCESS_CONCURRENCY` | `2` | M2：同時處理中的 PDF 數 |
-| `RENDER_DPI` | `150` | M2：pdftoppm 解析度 |
-| `POPPLER_BIN_PATH` | `` | M2：poppler 二進位目錄（留空走 `PATH`） |
+| 變數 / Variable | 預設 / Default | 說明（中文） | Description (EN) |
+|---|---:|---|---|
+| `PORT` | `3000` | Fastify 監聽埠 | Fastify listening port |
+| `STORAGE_ROOT` | `./storage` | 產物根目錄 | Artifact root directory |
+| `DB_PATH` | `./data/app.db` | SQLite 路徑 | SQLite DB path |
+| `MAX_UPLOAD_MB` | `50` | 上傳大小上限 | Upload size limit |
+| `LOG_LEVEL` | `info` | 日誌等級 | Log level |
+| `PROCESS_CONCURRENCY` | `2` | 同時處理 PDF 數 | Number of PDFs processed concurrently |
+| `RENDER_DPI` | `150` | PDF 轉圖解析度 | PDF rendering DPI |
+| `POPPLER_BIN_PATH` | `` | poppler bin 目錄（空值表示用 PATH） | poppler bin directory (empty means use PATH) |
+
+## 相關文件 / Additional Docs
+
+- 系統設計：[`docs/design.md`](docs/design.md)  
+  System design: [`docs/design.md`](docs/design.md)
