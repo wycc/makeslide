@@ -5,6 +5,8 @@ import type { ChatCompletion, ChatCompletionMessageParam } from 'openai/resource
 import { z } from 'zod';
 import { config } from '../config';
 import { logger } from '../logger';
+import { callGeminiJson } from './gemini';
+import { getRuntimeAiSettings } from './aiSettings';
 
 let cachedClient: OpenAI | null = null;
 let runtimeApiKeyOverride: string | null = null;
@@ -166,6 +168,24 @@ function isRetryable(err: unknown): boolean {
 export async function callChatJSON<T>(
   params: ChatJSONParams<T>,
 ): Promise<ChatJSONResult<T>> {
+  const runtime = getRuntimeAiSettings();
+  if (runtime.llmProvider === 'gemini') {
+    const model = params.model ?? runtime.geminiLlmModel;
+    const startedAt = Date.now();
+    const result = await callGeminiJson({
+      model,
+      messages: params.messages,
+      schema: params.schema,
+      maxTokens: params.maxTokens,
+      temperature: params.temperature,
+    });
+    return {
+      data: result.data,
+      usage: result.usage,
+      latencyMs: Date.now() - startedAt,
+      rawContent: result.rawContent,
+    };
+  }
   const client = getOpenAIClient();
   const model = params.model ?? config.openaiLlmModel;
   const maxAttempts = 2; // parse/validate retries (on top of SDK retries)

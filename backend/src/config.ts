@@ -58,7 +58,12 @@ const EnvSchema = z.object({
   // M3: OpenAI LLM settings. API key is validated lazily inside the pipeline
   // so the server can still boot (and serve M2 endpoints) without a key.
   OPENAI_API_KEY: z.string().optional().default(''),
+  GERMINI_API_KEY: z.string().optional().default(''),
+  GEMINI_API_KEY: z.string().optional().default(''),
+  LLM_PROVIDER: z.enum(['openai', 'gemini']).optional().default('openai'),
+  TTS_PROVIDER: z.enum(['openai', 'gemini']).optional().default('openai'),
   OPENAI_LLM_MODEL: z.string().optional().default('gpt-4o-mini'),
+  GEMINI_LLM_MODEL: z.string().optional().default('gemini-2.0-flash'),
   OPENAI_SCRIPT_LANGUAGE: z.string().optional().default('zh-TW'),
   OPENAI_SCRIPT_TARGET_CHARS: z
     .string()
@@ -125,6 +130,7 @@ const EnvSchema = z.object({
     .enum(['gpt-4o-mini-tts', 'tts-1', 'tts-1-hd'])
     .optional()
     .default('gpt-4o-mini-tts'),
+  GEMINI_TTS_MODEL: z.string().optional().default('gemini-2.5-flash-preview-tts'),
   OPENAI_TTS_VOICE: z
     .enum(OPENAI_TTS_VOICES)
     .optional()
@@ -173,7 +179,11 @@ export const config = {
   popplerBinPath: env.POPPLER_BIN_PATH.trim(),
   // M3
   openaiApiKey: env.OPENAI_API_KEY.trim(),
+  geminiApiKey: (env.GERMINI_API_KEY || env.GEMINI_API_KEY).trim(),
+  llmProvider: env.LLM_PROVIDER,
+  ttsProvider: env.TTS_PROVIDER,
   openaiLlmModel: env.OPENAI_LLM_MODEL,
+  geminiLlmModel: env.GEMINI_LLM_MODEL,
   openaiScriptLanguage: env.OPENAI_SCRIPT_LANGUAGE,
   openaiScriptTargetChars: env.OPENAI_SCRIPT_TARGET_CHARS,
   openaiScriptStyle: env.OPENAI_SCRIPT_STYLE,
@@ -190,6 +200,7 @@ export const config = {
   openaiImageTimeoutMsHighQuality: env.OPENAI_IMAGE_TIMEOUT_MS_HIGH_QUALITY,
   // M4
   openaiTtsModel: env.OPENAI_TTS_MODEL,
+  geminiTtsModel: env.GEMINI_TTS_MODEL,
   openaiTtsVoice: env.OPENAI_TTS_VOICE,
   openaiTtsFormat: env.OPENAI_TTS_FORMAT,
   openaiTtsSpeed: env.OPENAI_TTS_SPEED,

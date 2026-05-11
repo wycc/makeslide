@@ -24,6 +24,7 @@ import {
   writeSourceText,
 } from '../services/storage';
 import { getOpenAIClient, setOpenAIApiKeyRuntime } from '../services/openai';
+import { getRuntimeAiSettings, persistEnvSettings, setRuntimeAiSettings } from '../services/aiSettings';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../services/imagePromptTemplates';
 import { enqueuePdfProcessing, enqueueYoutubeProcessing } from '../worker/pipeline';
 import { generateVideo } from '../worker/steps/generateVideo';
@@ -1399,7 +1400,8 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get('/api/system/openai-key-status', async (_request, reply) => {
-    const hasKey = Boolean(process.env.OPENAI_API_KEY?.trim() || config.openaiApiKey);
+    const runtime = getRuntimeAiSettings();
+    const hasKey = Boolean(runtime.openaiApiKey?.trim());
     return reply.send({ has_key: hasKey });
   });
 
@@ -1421,7 +1423,72 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
 
     await fs.promises.writeFile(envPath, content, 'utf8');
     setOpenAIApiKeyRuntime(nextKey);
+    setRuntimeAiSettings({ openaiApiKey: nextKey });
     return reply.send({ ok: true, has_key: true });
+  });
+
+  app.get('/api/system/ai-settings', async (_request, reply) => {
+    const runtime = getRuntimeAiSettings();
+    return reply.send({
+      openai_api_key: runtime.openaiApiKey,
+      gemini_api_key: runtime.geminiApiKey,
+      has_openai_key: Boolean(runtime.openaiApiKey.trim()),
+      has_gemini_key: Boolean(runtime.geminiApiKey.trim()),
+      llm_provider: runtime.llmProvider,
+      tts_provider: runtime.ttsProvider,
+      openai_llm_model: runtime.openaiLlmModel,
+      gemini_llm_model: runtime.geminiLlmModel,
+      openai_tts_model: runtime.openaiTtsModel,
+      gemini_tts_model: runtime.geminiTtsModel,
+    });
+  });
+
+  app.patch('/api/system/ai-settings', async (request, reply) => {
+    const BodySchema = z.object({
+      openai_api_key: z.string().trim().min(1).optional(),
+      gemini_api_key: z.string().trim().min(1).optional(),
+      llm_provider: z.enum(['openai', 'gemini']).optional(),
+      tts_provider: z.enum(['openai', 'gemini']).optional(),
+      openai_llm_model: z.string().trim().min(1).optional(),
+      gemini_llm_model: z.string().trim().min(1).optional(),
+      openai_tts_model: z.string().trim().min(1).optional(),
+      gemini_tts_model: z.string().trim().min(1).optional(),
+    });
+    const parsed = BodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid AI settings payload'));
+    }
+
+    const next = parsed.data;
+    const runtimeUpdate = {
+      ...(next.openai_api_key ? { openaiApiKey: next.openai_api_key } : {}),
+      ...(next.gemini_api_key ? { geminiApiKey: next.gemini_api_key } : {}),
+      ...(next.llm_provider ? { llmProvider: next.llm_provider } : {}),
+      ...(next.tts_provider ? { ttsProvider: next.tts_provider } : {}),
+      ...(next.openai_llm_model ? { openaiLlmModel: next.openai_llm_model } : {}),
+      ...(next.gemini_llm_model ? { geminiLlmModel: next.gemini_llm_model } : {}),
+      ...(next.openai_tts_model ? { openaiTtsModel: next.openai_tts_model } : {}),
+      ...(next.gemini_tts_model ? { geminiTtsModel: next.gemini_tts_model } : {}),
+    };
+
+    await persistEnvSettings(runtimeUpdate);
+    const runtime = setRuntimeAiSettings(runtimeUpdate);
+    if (runtimeUpdate.openaiApiKey) {
+      setOpenAIApiKeyRuntime(runtimeUpdate.openaiApiKey);
+    }
+
+    return reply.send({
+      openai_api_key: runtime.openaiApiKey,
+      gemini_api_key: runtime.geminiApiKey,
+      has_openai_key: Boolean(runtime.openaiApiKey.trim()),
+      has_gemini_key: Boolean(runtime.geminiApiKey.trim()),
+      llm_provider: runtime.llmProvider,
+      tts_provider: runtime.ttsProvider,
+      openai_llm_model: runtime.openaiLlmModel,
+      gemini_llm_model: runtime.geminiLlmModel,
+      openai_tts_model: runtime.openaiTtsModel,
+      gemini_tts_model: runtime.geminiTtsModel,
+    });
   });
 
   // POST /api/pdfs/:id/regenerate/cancel

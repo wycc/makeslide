@@ -1,10 +1,22 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ApiError, getOpenAIKeyStatus, setOpenAIApiKey } from '../lib/api';
+import {
+  ApiError,
+  getSystemAiSettings,
+  updateSystemAiSettings,
+  type SystemAiSettings,
+} from '../lib/api';
 
-export default function SettingsPage() {
+export default function SettingsPage() { 
   const navigate = useNavigate();
-  const [apiKey, setApiKey] = useState('');
+  const [openaiApiKey, setOpenaiApiKey] = useState('');
+  const [geminiApiKey, setGeminiApiKey] = useState('');
+  const [llmProvider, setLlmProvider] = useState<'openai' | 'gemini'>('openai');
+  const [ttsProvider, setTtsProvider] = useState<'openai' | 'gemini'>('openai');
+  const [openaiLlmModel, setOpenaiLlmModel] = useState('gpt-4o-mini');
+  const [geminiLlmModel, setGeminiLlmModel] = useState('gemini-2.0-flash');
+  const [openaiTtsModel, setOpenaiTtsModel] = useState('gpt-4o-mini-tts');
+  const [geminiTtsModel, setGeminiTtsModel] = useState('gemini-2.5-flash-preview-tts');
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
@@ -13,8 +25,18 @@ export default function SettingsPage() {
   const loadStatus = useCallback(async () => {
     setLoading(true);
     try {
-      const s = await getOpenAIKeyStatus();
-      if (s.has_key) setMsg('目前已設定 API Key。若要更新，請重新輸入並儲存。');
+      const s: SystemAiSettings = await getSystemAiSettings();
+      setOpenaiApiKey(s.openai_api_key ?? '');
+      setGeminiApiKey(s.gemini_api_key ?? '');
+      setLlmProvider(s.llm_provider);
+      setTtsProvider(s.tts_provider);
+      setOpenaiLlmModel(s.openai_llm_model);
+      setGeminiLlmModel(s.gemini_llm_model);
+      setOpenaiTtsModel(s.openai_tts_model);
+      setGeminiTtsModel(s.gemini_tts_model);
+      if (s.has_openai_key || s.has_gemini_key) {
+        setMsg('已載入目前 AI 設定。若要更新 API Key，請輸入後儲存。');
+      }
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : '讀取設定狀態失敗');
     } finally {
@@ -29,29 +51,60 @@ export default function SettingsPage() {
   const onSave = useCallback(async () => {
     setErr(null);
     setMsg(null);
-    const next = apiKey.trim();
-    if (!next) {
-      setErr('請輸入 API Key');
+    if (llmProvider === 'openai' && !openaiApiKey.trim()) {
+      setErr('目前 LLM 使用 OpenAI，請至少填入 OPENAI_API_KEY');
+      return;
+    }
+    if (llmProvider === 'gemini' && !geminiApiKey.trim()) {
+      setErr('目前 LLM 使用 Gemini，請至少填入 GEMINI_API_KEY');
+      return;
+    }
+    if (ttsProvider === 'openai' && !openaiApiKey.trim()) {
+      setErr('目前 TTS 使用 OpenAI，請至少填入 OPENAI_API_KEY');
+      return;
+    }
+    if (ttsProvider === 'gemini' && !geminiApiKey.trim()) {
+      setErr('目前 TTS 使用 Gemini，請至少填入 GEMINI_API_KEY');
       return;
     }
     setSaving(true);
     try {
-      await setOpenAIApiKey(next);
-      setMsg('API Key 已儲存');
-      setApiKey('');
+      await updateSystemAiSettings({
+        openai_api_key: openaiApiKey.trim() || undefined,
+        gemini_api_key: geminiApiKey.trim() || undefined,
+        llm_provider: llmProvider,
+        tts_provider: ttsProvider,
+        openai_llm_model: openaiLlmModel.trim(),
+        gemini_llm_model: geminiLlmModel.trim(),
+        openai_tts_model: openaiTtsModel.trim(),
+        gemini_tts_model: geminiTtsModel.trim(),
+      });
+      setMsg('AI 設定已儲存');
+      setOpenaiApiKey('');
+      setGeminiApiKey('');
       window.setTimeout(() => navigate('/'), 300);
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : '儲存失敗');
     } finally {
       setSaving(false);
     }
-  }, [apiKey, navigate]);
+  }, [
+    geminiApiKey,
+    geminiLlmModel,
+    geminiTtsModel,
+    llmProvider,
+    navigate,
+    openaiApiKey,
+    openaiLlmModel,
+    openaiTtsModel,
+    ttsProvider,
+  ]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <header className="border-b border-slate-800 bg-slate-900/40 backdrop-blur">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-4">
-          <h1 className="text-lg font-semibold">OpenAI API Key 設定</h1>
+          <h1 className="text-lg font-semibold">AI 設定（OpenAI / Gemini）</h1>
           <Link className="text-sm text-slate-300 hover:text-white" to="/">
             返回首頁
           </Link>
@@ -69,15 +122,69 @@ export default function SettingsPage() {
             {msg}
           </div>
         ) : null}
-        <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+        <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="block text-sm text-slate-300">
+              LLM 供應商
+              <select
+                value={llmProvider}
+                onChange={(e) => setLlmProvider(e.target.value as 'openai' | 'gemini')}
+                className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              >
+                <option value="openai">OpenAI</option>
+                <option value="gemini">Gemini</option>
+              </select>
+            </label>
+            <label className="block text-sm text-slate-300">
+              TTS 供應商
+              <select
+                value={ttsProvider}
+                onChange={(e) => setTtsProvider(e.target.value as 'openai' | 'gemini')}
+                className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              >
+                <option value="openai">OpenAI</option>
+                <option value="gemini">Gemini</option>
+              </select>
+            </label>
+          </div>
+
           <label className="mb-2 block text-sm text-slate-300">OPENAI_API_KEY</label>
           <input
             type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
+            value={openaiApiKey}
+            onChange={(e) => setOpenaiApiKey(e.target.value)}
             className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none ring-0 focus:border-slate-500"
             placeholder="sk-..."
           />
+
+          <label className="mb-2 block text-sm text-slate-300">GEMINI_API_KEY</label>
+          <input
+            type="password"
+            value={geminiApiKey}
+            onChange={(e) => setGeminiApiKey(e.target.value)}
+            className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none ring-0 focus:border-slate-500"
+            placeholder="AIza..."
+          />
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="block text-sm text-slate-300">
+              OpenAI LLM Model
+              <input value={openaiLlmModel} onChange={(e) => setOpenaiLlmModel(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+            </label>
+            <label className="block text-sm text-slate-300">
+              Gemini LLM Model
+              <input value={geminiLlmModel} onChange={(e) => setGeminiLlmModel(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+            </label>
+            <label className="block text-sm text-slate-300">
+              OpenAI TTS Model
+              <input value={openaiTtsModel} onChange={(e) => setOpenaiTtsModel(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+            </label>
+            <label className="block text-sm text-slate-300">
+              Gemini TTS Model
+              <input value={geminiTtsModel} onChange={(e) => setGeminiTtsModel(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+            </label>
+          </div>
+
           <div className="mt-3 flex justify-end">
             <button
               type="button"

@@ -5,6 +5,8 @@ import { APIError } from 'openai';
 import { config } from '../../config';
 import { logger } from '../../logger';
 import { getOpenAIClient } from '../../services/openai';
+import { synthesizeGeminiSpeech } from '../../services/gemini';
+import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { pageAudioPath, pageScriptPath } from '../../services/storage';
 
 /**
@@ -155,7 +157,9 @@ async function synthesizeOnePage(params: {
     };
   });
 
-  const client = getOpenAIClient();
+  const runtime = getRuntimeAiSettings();
+  const provider = runtime.ttsProvider;
+  const client = provider === 'openai' ? getOpenAIClient() : null;
   let lastErr: unknown;
   let delayMs = TTS_RETRY_INITIAL_DELAY_MS;
 
@@ -174,14 +178,23 @@ async function synthesizeOnePage(params: {
           },
           'synthesizeAudio: tts segment request',
         );
-        const response = await client.audio.speech.create({
-          model: config.openaiTtsModel,
-          voice,
-          input: seg.text,
-          response_format: config.openaiTtsFormat,
-          speed,
-        });
-        const b = Buffer.from(await response.arrayBuffer());
+        let b: Buffer;
+        if (provider === 'gemini') {
+          b = await synthesizeGeminiSpeech({
+            model: runtime.geminiTtsModel,
+            text: seg.text,
+            voiceName: voice,
+          });
+        } else {
+          const response = await client!.audio.speech.create({
+            model: runtime.openaiTtsModel || config.openaiTtsModel,
+            voice,
+            input: seg.text,
+            response_format: config.openaiTtsFormat,
+            speed,
+          });
+          b = Buffer.from(await response.arrayBuffer());
+        }
         if (b.byteLength === 0) {
           throw new Error('OpenAI returned empty audio buffer');
         }
@@ -205,7 +218,7 @@ async function synthesizeOnePage(params: {
           attempt,
           voice,
           speed,
-          model: config.openaiTtsModel,
+          model: provider === 'gemini' ? runtime.geminiTtsModel : runtime.openaiTtsModel,
         },
         'synthesizeAudio: page done',
       );

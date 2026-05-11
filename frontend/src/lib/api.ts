@@ -653,10 +653,52 @@ export interface OpenAIKeyStatusResponse {
   has_key: boolean;
 }
 
+export interface SystemAiSettings {
+  openai_api_key?: string;
+  gemini_api_key?: string;
+  has_openai_key: boolean;
+  has_gemini_key: boolean;
+  llm_provider: 'openai' | 'gemini';
+  tts_provider: 'openai' | 'gemini';
+  openai_llm_model: string;
+  gemini_llm_model: string;
+  openai_tts_model: string;
+  gemini_tts_model: string;
+}
+
+export interface UpdateSystemAiSettingsPayload {
+  openai_api_key?: string;
+  gemini_api_key?: string;
+  llm_provider?: 'openai' | 'gemini';
+  tts_provider?: 'openai' | 'gemini';
+  openai_llm_model?: string;
+  gemini_llm_model?: string;
+  openai_tts_model?: string;
+  gemini_tts_model?: string;
+}
+
 export async function getOpenAIKeyStatus(): Promise<OpenAIKeyStatusResponse> {
   const resp = await fetch('api/system/openai-key-status');
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as OpenAIKeyStatusResponse;
+}
+
+export async function getSystemAiSettings(): Promise<SystemAiSettings> {
+  const resp = await fetch('api/system/ai-settings');
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as SystemAiSettings;
+}
+
+export async function updateSystemAiSettings(
+  payload: UpdateSystemAiSettingsPayload,
+): Promise<SystemAiSettings> {
+  const resp = await fetch('api/system/ai-settings', {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as SystemAiSettings;
 }
 
 export async function setOpenAIApiKey(apiKey: string): Promise<{ ok: boolean; has_key: boolean }> {
