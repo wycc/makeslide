@@ -706,9 +706,21 @@ export default function PlayPage() {
       }
 
       setScripts((prev) => ({ ...prev, [currentPage.page_number]: nextScript }));
+      // 同步更新 detail 內目前頁的 audio_url，避免 UI 仍綁舊 URL 看不到新檔。
+      setDetail((prev) => {
+        if (!prev) return prev;
+        const pages = prev.pages.map((p) =>
+          p.page_number === currentPage.page_number
+            ? { ...p, audio_url: res.audio_url, status: 'audio_ready' as const }
+            : p,
+        );
+        return { ...prev, pages, updated_at: res.updated_at };
+      });
+
       const audio = audioRef.current;
-      if (audio && currentPage.audio_url) {
-        const nextUrl = `${currentPage.audio_url}?t=${Date.now()}&u=${encodeURIComponent(res.updated_at)}`;
+      const latestAudioUrl = res.audio_url || currentPage.audio_url;
+      if (audio && latestAudioUrl) {
+        const nextUrl = `${latestAudioUrl}${latestAudioUrl.includes('?') ? '&' : '?'}t=${Date.now()}&u=${encodeURIComponent(res.updated_at)}`;
         audio.pause();
         audio.src = nextUrl;
         audio.load();

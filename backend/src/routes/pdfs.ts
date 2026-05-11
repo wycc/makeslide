@@ -25,6 +25,7 @@ import {
 } from '../services/storage';
 import { getOpenAIClient, setOpenAIApiKeyRuntime } from '../services/openai';
 import { getRuntimeAiSettings, persistEnvSettings, setRuntimeAiSettings } from '../services/aiSettings';
+import { synthesizeGeminiSpeech } from '../services/gemini';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../services/imagePromptTemplates';
 import { enqueuePdfProcessing, enqueueYoutubeProcessing } from '../worker/pipeline';
 import { generateVideo } from '../worker/steps/generateVideo';
@@ -215,6 +216,66 @@ function errorResponse(code: string, message: string): ApiError {
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+function detectAudioMimeFromBuffer(buf: Buffer): 'audio/mpeg' | 'audio/wav' | 'application/octet-stream' {
+  if (buf.length >= 12) {
+    const riff = buf.toString('ascii', 0, 4);
+    const wave = buf.toString('ascii', 8, 12);
+    if (riff === 'RIFF' && wave === 'WAVE') return 'audio/wav';
+  }
+  if (buf.length >= 3) {
+    const id3 = buf.toString('ascii', 0, 3);
+    if (id3 === 'ID3') return 'audio/mpeg';
+  }
+  if (buf.length >= 2) {
+    const b0 = buf[0] ?? 0;
+    const b1 = buf[1] ?? 0;
+    // MP3 frame sync: 0xFFEx
+    if (b0 === 0xff && (b1 & 0xe0) === 0xe0) return 'audio/mpeg';
+  }
+  return 'application/octet-stream';
+}
+
+function parseWavPcmChunk(buf: Buffer): { sampleRate: number; channels: number; bitsPerSample: number; data: Buffer } | null {
+  if (buf.length < 44) return null;
+  if (buf.toString('ascii', 0, 4) !== 'RIFF' || buf.toString('ascii', 8, 12) !== 'WAVE') return null;
+  const channels = buf.readUInt16LE(22);
+  const sampleRate = buf.readUInt32LE(24);
+  const bitsPerSample = buf.readUInt16LE(34);
+  let off = 12;
+  while (off + 8 <= buf.length) {
+    const id = buf.toString('ascii', off, off + 4);
+    const size = buf.readUInt32LE(off + 4);
+    const start = off + 8;
+    const end = start + size;
+    if (end > buf.length) break;
+    if (id === 'data') return { sampleRate, channels, bitsPerSample, data: buf.subarray(start, end) };
+    off = end + (size % 2);
+  }
+  return null;
+}
+
+function buildWavPcm16(pcm: Buffer, sampleRate: number, channels: number): Buffer {
+  const bitsPerSample = 16;
+  const byteRate = sampleRate * channels * (bitsPerSample / 8);
+  const blockAlign = channels * (bitsPerSample / 8);
+  const dataSize = pcm.length;
+  const header = Buffer.alloc(44);
+  header.write('RIFF', 0, 'ascii');
+  header.writeUInt32LE(36 + dataSize, 4);
+  header.write('WAVE', 8, 'ascii');
+  header.write('fmt ', 12, 'ascii');
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(channels, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(byteRate, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(bitsPerSample, 34);
+  header.write('data', 36, 'ascii');
+  header.writeUInt32LE(dataSize, 40);
+  return Buffer.concat([header, pcm]);
 }
 
 function rewritePagePathsToMatchNumber(pdfId: string, pageCount: number): void {
@@ -1736,9 +1797,11 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
         // ignore stale file removal errors
       }
 
+      const runtime = getRuntimeAiSettings();
+      const ttsProvider = runtime.ttsProvider;
       const voice = pdfRow.tts_voice?.trim() || config.openaiTtsVoice;
       const speed = pdfRow.tts_speed ?? config.openaiTtsSpeed;
-      const client = getOpenAIClient();
+      const client = ttsProvider === 'openai' ? getOpenAIClient() : null;
       const segments = splitTtsSegments(script);
       const buffers: Buffer[] = [];
       for (const seg of segments) {
@@ -1751,23 +1814,51 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
           },
           'regenerate-audio: tts segment request',
         );
-        const ttsResp = await client.audio.speech.create({
-          model: config.openaiTtsModel,
-          voice,
-          instructions: seg.instruction,
-          input: seg.text,
-          response_format: config.openaiTtsFormat,
-          speed,
-        });
-        const b = Buffer.from(await ttsResp.arrayBuffer());
+        let b: Buffer;
+        if (ttsProvider === 'gemini') {
+          b = await synthesizeGeminiSpeech({
+            model: runtime.geminiTtsModel,
+            text: seg.text,
+            voiceName: voice,
+          });
+        } else {
+          const ttsResp = await client!.audio.speech.create({
+            model: runtime.openaiTtsModel || config.openaiTtsModel,
+            voice,
+            instructions: seg.instruction,
+            input: seg.text,
+            response_format: config.openaiTtsFormat,
+            speed,
+          });
+          b = Buffer.from(await ttsResp.arrayBuffer());
+        }
         if (b.byteLength === 0) {
-          throw new Error('OpenAI returned empty audio buffer');
+          throw new Error(`${ttsProvider} returned empty audio buffer`);
         }
         buffers.push(b);
       }
-      const audioBuffer = Buffer.concat(buffers);
+      let audioBuffer: Buffer;
+      if (ttsProvider === 'gemini') {
+        const parsed = buffers.map((b) => parseWavPcmChunk(b));
+        const first = parsed.find((p) => p !== null) ?? null;
+        if (first && first.bitsPerSample === 16) {
+          const pcm = Buffer.concat(
+            parsed
+              .map((p, idx) => {
+                if (!p) return buffers[idx] ?? Buffer.alloc(0);
+                return p.data;
+              })
+              .filter((b) => b.length > 0),
+          );
+          audioBuffer = buildWavPcm16(pcm, first.sampleRate, first.channels);
+        } else {
+          audioBuffer = Buffer.concat(buffers);
+        }
+      } else {
+        audioBuffer = Buffer.concat(buffers);
+      }
       if (audioBuffer.byteLength === 0) {
-        throw new Error('OpenAI returned empty audio buffer');
+        throw new Error(`${ttsProvider} returned empty audio buffer`);
       }
       await fs.promises.writeFile(absAudioPath, audioBuffer);
       request.log.info(
@@ -1818,13 +1909,14 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
         request.log.warn({ err, pdfId: id, pageNumber: n }, 'Failed to sync metadata after regenerate-audio');
       }
 
+      const responseAudioMime = detectAudioMimeFromBuffer(audioBuffer);
       return reply.code(200).send({
         id,
         page_number: n,
         script_url: `api/pdfs/${id}/pages/${n}/script`,
         audio_url: `api/pdfs/${id}/pages/${n}/audio`,
         audio_bytes: audioBuffer.byteLength,
-        audio_mime: 'audio/mpeg',
+        audio_mime: responseAudioMime,
         updated_at: updatedAt,
       });
     } catch (err) {
@@ -1954,27 +2046,94 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
+      const runtime = getRuntimeAiSettings();
+      const ttsStyleHint =
+        runtime.ttsProvider === 'gemini'
+          ? [
+              '【TTS 引擎：Gemini】',
+              '語氣控制重點：',
+              '- 避免過多語助詞與贅字（例如連續的「嗯、啊、就是」）。',
+              '- 句子更短、節奏更穩，標點要明確（逗號、句號、頓號）。',
+              '- 段落切分清楚，每段 1~3 句，避免單段過長。',
+              '- 轉場詞保守使用，以自然、清楚為優先。',
+            ].join('\n')
+          : [
+              '【TTS 引擎：OpenAI】',
+              '語氣控制重點：',
+              '- 可保留少量口語轉場（如「好」、「那我們來看」），提升聽感自然度。',
+              '- 句長可中等，但避免過長複句。',
+              '- 重要概念前後保留停頓，段落銜接流暢。',
+            ].join('\n');
       const rewriteMaxOutputTokens = 4800;
-      const result = await getOpenAIClient().chat.completions.create({
-        model: config.openaiLlmModel,
-        messages: [
-          {
-            role: 'system',
-            content:
-              '你是逐字稿編修助理。請根據使用者提示改寫逐字稿，語言使用繁體中文。必須優先做到：本頁內容與前後頁之間銜接自然、過場順暢、語氣一致。請改寫成適合 TTS 朗讀的逐字稿：使用自然口語、每句盡量短、重要概念前後保留停頓、加入少量自然轉場（如「好」、「那我們來看」、「這裡有一個重點」）、避免誇張廣告腔、語氣像老師清楚解釋，並保留段落換行。若參考素材不足，也必須先產出可朗讀草稿，不可回覆無法說明或拒答。僅輸出 JSON 物件，格式為 {"script":"..."}。',
-          },
-          {
-            role: 'user',
-            content: userContent,
-          },
-        ],
-        response_format: { type: 'json_object' },
-        ...(config.openaiLlmModel.toLowerCase().startsWith('gpt-5.5')
-          ? { max_completion_tokens: rewriteMaxOutputTokens }
-          : { max_tokens: rewriteMaxOutputTokens }),
-      });
+      const llmModel = runtime.llmProvider === 'gemini' ? runtime.geminiLlmModel : runtime.openaiLlmModel;
+      const raw = (
+        await (async () => {
+          if (runtime.llmProvider === 'gemini') {
+            const geminiApiKey = runtime.geminiApiKey.trim();
+            if (!geminiApiKey) {
+              throw new Error('GERMINI_API_KEY/GEMINI_API_KEY is empty');
+            }
+            const resp = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(llmModel)}:generateContent?key=${encodeURIComponent(geminiApiKey)}`,
+              {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({
+                  contents: [
+                    {
+                      role: 'user',
+                      parts: [
+                        {
+                          text:
+                            '你是逐字稿編修助理。請根據使用者提示改寫逐字稿，語言使用繁體中文。必須優先做到：本頁內容與前後頁之間銜接自然、過場順暢、語氣一致。請改寫成適合 TTS 朗讀的逐字稿：使用自然口語、每句盡量短、重要概念前後保留停頓、加入少量自然轉場（如「好」、「那我們來看」、「這裡有一個重點」）、避免誇張廣告腔、語氣像老師清楚解釋，並保留段落換行。若參考素材不足，也必須先產出可朗讀草稿，不可回覆無法說明或拒答。僅輸出 JSON 物件，格式為 {"script":"..."}。\n\n' +
+                            `${ttsStyleHint}\n\n` +
+                            userContent
+                              .map((p) => (p.type === 'text' ? p.text : '[image attached]'))
+                              .join('\n\n'),
+                        },
+                      ],
+                    },
+                  ],
+                  generationConfig: {
+                    responseMimeType: 'application/json',
+                    maxOutputTokens: rewriteMaxOutputTokens,
+                    temperature: 0.5,
+                  },
+                }),
+              },
+            );
+            if (!resp.ok) {
+              const body = await resp.text().catch(() => '');
+              throw new Error(
+                `Gemini rewrite request failed: HTTP ${resp.status}${body ? ` - ${body.slice(0, 500)}` : ''}`,
+              );
+            }
+            const json = (await resp.json()) as any;
+            return json?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+          }
 
-      const raw = result.choices[0]?.message?.content ?? '';
+          const result = await getOpenAIClient().chat.completions.create({
+            model: llmModel,
+            messages: [
+              {
+                role: 'system',
+                content:
+                  '你是逐字稿編修助理。請根據使用者提示改寫逐字稿，語言使用繁體中文。必須優先做到：本頁內容與前後頁之間銜接自然、過場順暢、語氣一致。請改寫成適合 TTS 朗讀的逐字稿：使用自然口語、每句盡量短、重要概念前後保留停頓、加入少量自然轉場（如「好」、「那我們來看」、「這裡有一個重點」）、避免誇張廣告腔、語氣像老師清楚解釋，並保留段落換行。若參考素材不足，也必須先產出可朗讀草稿，不可回覆無法說明或拒答。僅輸出 JSON 物件，格式為 {"script":"..."}。\n\n' +
+                  ttsStyleHint,
+              },
+              {
+                role: 'user',
+                content: userContent,
+              },
+            ],
+            response_format: { type: 'json_object' },
+            ...(llmModel.toLowerCase().startsWith('gpt-5.5')
+              ? { max_completion_tokens: rewriteMaxOutputTokens }
+              : { max_tokens: rewriteMaxOutputTokens }),
+          });
+          return result.choices[0]?.message?.content ?? '';
+        })()
+      ).trim();
       const parsed = RewriteSchema.safeParse(JSON.parse(raw));
       if (!parsed.success) {
         request.log.warn({ pdfId: id, pageNumber: n, raw }, 'rewrite-script invalid JSON shape');
@@ -2714,7 +2873,20 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
     const size = stat.size;
     const rangeHeader = request.headers.range;
     reply.header('accept-ranges', 'bytes');
-    reply.header('content-type', 'audio/mpeg');
+    let contentType: string = 'audio/mpeg';
+    try {
+      const head = Buffer.alloc(16);
+      const fd = fs.openSync(abs, 'r');
+      try {
+        fs.readSync(fd, head, 0, 16, 0);
+      } finally {
+        fs.closeSync(fd);
+      }
+      contentType = detectAudioMimeFromBuffer(head);
+    } catch {
+      contentType = 'audio/mpeg';
+    }
+    reply.header('content-type', contentType);
     reply.header('cache-control', 'public, max-age=3600');
 
     if (rangeHeader) {
