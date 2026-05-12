@@ -32,7 +32,11 @@ import {
   rewritePageScript,
   type ImagePromptTemplate,
 } from '../lib/api';
-import { TTS_VOICES } from '../lib/ttsVoices';
+import {
+  DEFAULT_TTS_VOICE_BY_PROVIDER,
+  TTS_VOICES_BY_PROVIDER,
+  type TtsProvider,
+} from '../lib/ttsVoices';
 import type {
   ChatMessage,
   PdfDetail,
@@ -221,6 +225,9 @@ export default function PlayPage() {
   const IMAGE_MSG_PREFIX = '[image] ';
   const imageInputRef = useRef<HTMLInputElement | null>(null);
 
+  const ttsProvider: TtsProvider = detail?.tts_provider === 'gemini' ? 'gemini' : 'openai';
+  const availableTtsVoices = TTS_VOICES_BY_PROVIDER[ttsProvider];
+
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const currentAudioTokenRef = useRef(0);
   const audioRetryTimerRef = useRef<number | null>(null);
@@ -311,6 +318,11 @@ export default function PlayPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (availableTtsVoices.some((voice) => voice === ttsVoice)) return;
+    setTtsVoice(DEFAULT_TTS_VOICE_BY_PROVIDER[ttsProvider]);
+  }, [availableTtsVoices, ttsProvider, ttsVoice]);
 
   const applyImageStyleTemplate = useCallback(
     (key: string) => {
@@ -2030,7 +2042,7 @@ export default function PlayPage() {
                   disabled={ttsBusy}
                   className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs"
                 >
-                  {TTS_VOICES.map((v) => (
+                  {availableTtsVoices.map((v) => (
                     <option key={v} value={v}>{v}</option>
                   ))}
                 </select>

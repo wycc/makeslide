@@ -309,6 +309,7 @@ function coverUrl(row: PdfRow): string | null {
 }
 
 function rowToListItem(row: PdfRow): PdfListItem {
+  const runtime = getRuntimeAiSettings();
   return {
     id: row.id,
     title: row.title,
@@ -320,6 +321,7 @@ function rowToListItem(row: PdfRow): PdfListItem {
     cover_url: coverUrl(row),
     user_prompt: row.user_prompt,
     require_script_confirmation: row.require_script_confirmation === 1,
+    tts_provider: runtime.ttsProvider,
     tts_voice: row.tts_voice,
     tts_speed: row.tts_speed,
     script_max_chars_per_page: row.script_max_chars_per_page,
@@ -333,6 +335,7 @@ function rowToListItem(row: PdfRow): PdfListItem {
 }
 
 function rowToDetail(row: PdfRow, pages: PageRow[]): PdfDetail {
+  const runtime = getRuntimeAiSettings();
   const detailPages: PdfDetailPage[] = pages.map((p) => ({
     page_number: p.page_number,
     image_url: p.image_path ? `api/pdfs/${row.id}/pages/${p.page_number}/image` : null,
@@ -354,6 +357,7 @@ function rowToDetail(row: PdfRow, pages: PageRow[]): PdfDetail {
     error_message: row.error_message,
     user_prompt: row.user_prompt,
     require_script_confirmation: row.require_script_confirmation === 1,
+    tts_provider: runtime.ttsProvider,
     tts_voice: row.tts_voice,
     tts_speed: row.tts_speed,
     script_max_chars_per_page: row.script_max_chars_per_page,

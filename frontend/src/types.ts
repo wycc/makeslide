@@ -39,6 +39,7 @@ export interface PdfListItem {
   cover_url: string | null;
   user_prompt: string | null;
   require_script_confirmation: boolean;
+  tts_provider?: 'openai' | 'gemini';
   tts_voice?: string | null;
   tts_speed?: number | null;
   script_max_chars_per_page?: number | null;
@@ -68,6 +69,7 @@ export interface PdfDetail {
   error_message: string | null;
   user_prompt: string | null;
   require_script_confirmation: boolean;
+  tts_provider?: 'openai' | 'gemini';
   tts_voice?: string | null;
   tts_speed?: number | null;
   script_max_chars_per_page?: number | null;

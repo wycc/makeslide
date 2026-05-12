@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { TTS_VOICES } from '../lib/ttsVoices';
+import {
+  DEFAULT_TTS_VOICE_BY_PROVIDER,
+  TTS_VOICES_BY_PROVIDER,
+  type TtsProvider,
+} from '../lib/ttsVoices';
 import { getImagePromptTemplates, type ImagePromptTemplate } from '../lib/api';
 
 export interface PromptPreset {
@@ -41,6 +45,7 @@ interface PromptModalProps {
   pdfTitle: string | null;
   /** Initial prompt text (e.g. a previously submitted prompt). */
   initialValue?: string;
+  ttsProvider?: TtsProvider;
   /** Called when user clicks submit. Should throw on failure to show error. */
   onSubmit: (
     prompt: string,
@@ -60,13 +65,15 @@ interface PromptModalProps {
 export default function PromptModal({
   pdfTitle,
   initialValue = '',
+  ttsProvider = 'openai',
   onSubmit,
   onClose,
 }: PromptModalProps) {
+  const availableTtsVoices = TTS_VOICES_BY_PROVIDER[ttsProvider];
   const [value, setValue] = useState<string>(initialValue);
   const [submitting, setSubmitting] = useState(false);
   const [requireScriptConfirmation, setRequireScriptConfirmation] = useState(false);
-  const [ttsVoice, setTtsVoice] = useState<string>(TTS_VOICES[0]);
+  const [ttsVoice, setTtsVoice] = useState<string>(DEFAULT_TTS_VOICE_BY_PROVIDER[ttsProvider]);
   const [ttsSpeed, setTtsSpeed] = useState(1);
   const [scriptMaxCharsPerPage, setScriptMaxCharsPerPage] = useState(150);
   const [tonePrompt, setTonePrompt] = useState('語氣自然、親切、節奏分明，重點前可稍作鋪陳，段落銜接流暢。');
@@ -100,6 +107,11 @@ export default function PromptModal({
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (availableTtsVoices.some((voice) => voice === ttsVoice)) return;
+    setTtsVoice(DEFAULT_TTS_VOICE_BY_PROVIDER[ttsProvider]);
+  }, [availableTtsVoices, ttsProvider, ttsVoice]);
 
   // Esc closes (only when not submitting).
   useEffect(() => {
@@ -225,7 +237,7 @@ export default function PromptModal({
                 onChange={(ev) => setTtsVoice(ev.target.value)}
                 disabled={submitting}
               >
-                {TTS_VOICES.map((v) => (
+                {availableTtsVoices.map((v) => (
                   <option key={v} value={v}>{v}</option>
                 ))}
               </select>

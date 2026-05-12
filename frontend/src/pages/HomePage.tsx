@@ -20,6 +20,7 @@ interface PromptTarget {
   id: string;
   title: string | null;
   initialValue: string;
+  ttsProvider: 'openai' | 'gemini';
 }
 
 export default function HomePage() {
@@ -126,6 +127,7 @@ export default function HomePage() {
       id: pdf.id,
       title,
       initialValue: initial,
+      ttsProvider: 'tts_provider' in pdf && pdf.tts_provider === 'gemini' ? 'gemini' : 'openai',
     });
   }, []);
 
@@ -266,6 +268,7 @@ export default function HomePage() {
         <PromptModal
           pdfTitle={promptTarget.title}
           initialValue={promptTarget.initialValue}
+          ttsProvider={promptTarget.ttsProvider}
           onSubmit={handlePromptSubmit}
           onClose={handlePromptClose}
         />
