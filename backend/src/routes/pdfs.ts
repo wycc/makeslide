@@ -26,6 +26,7 @@ import {
 import { callChatJSON, getOpenAIClient, setOpenAIApiKeyRuntime } from '../services/openai';
 import { getRuntimeAiSettings, persistEnvSettings, setRuntimeAiSettings } from '../services/aiSettings';
 import { synthesizeGeminiSpeech } from '../services/gemini';
+import { loadPromptTemplate } from '../services/promptTemplates';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../services/imagePromptTemplates';
 import { enqueuePdfProcessing, enqueueYoutubeProcessing } from '../worker/pipeline';
 import { generateVideo } from '../worker/steps/generateVideo';
@@ -2112,16 +2113,10 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
       const llmModel =
         runtime.llmProvider === 'gemini' ? runtime.geminiLlmModel : runtime.openaiLlmModel;
 
-      const geminiPodcastRules = [
-        '根據以下文章內容，整理出雙人 Podcast 逐字稿，遵循以下規則：',
-        '- 逐字稿使用繁體中文。',
-        '- 逐字稿總長度約 1000 字。',
-        '- 分別有 主持人 "Speaker 1" 與 主持人 "Speaker 2"，"Speaker 1" 為台灣人年輕女性、"Speaker 2" 為台灣人年輕男性。',
-        '- 如果有必要，主持人互相使用 "你" 稱呼。',
-        '- 皆使用台灣用語、台灣連接詞，可以適時使用台灣狀聲詞。',
-        '- 如果有需要描述語氣、情緒，使用 "{{}}"，例如 "{{哈哈大笑}}" 或 "{{難過情緒}}"。',
-        '- 只需要輸出逐字稿，不需要其他說明。',
-      ].join('\n');
+      const geminiPodcastRules = loadPromptTemplate(
+        'backend/prompts/rewrite-script-gemini.md',
+        '請改寫為雙人 Podcast 逐字稿，並回傳 JSON：{"script":"..."}。',
+      );
 
       const speakerPersonaLines = [
         runtime.geminiTtsSpeaker1?.trim() ? `- Speaker 1 人設：${runtime.geminiTtsSpeaker1.trim()}` : '',
@@ -2130,18 +2125,10 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
         .filter(Boolean)
         .join('\n');
 
-      const openaiRules = [
-        '請改寫成適合 TTS 朗讀的逐字稿。',
-        '要求：',
-        '1. 使用自然口語，不要像書面文章。',
-        '2. 每句話盡量短。',
-        '3. 重要概念前後加入停頓。',
-        '4. 加入少量「好」、「那我們來看」、「這裡有一個重點」等自然轉場。',
-        '5. 避免過度誇張，不要像廣告配音。',
-        '6. 語氣像老師在課堂上清楚解釋。',
-        '7. 輸出時保留段落換行，方便 TTS 產生停頓。',
-        '8. 輸出 JSON，格式固定為 {"script":"..."}。',
-      ].join('\n');
+      const openaiRules = loadPromptTemplate(
+        'backend/prompts/rewrite-script-openai.md',
+        '請改寫成適合 TTS 朗讀逐字稿，並回傳 JSON：{"script":"..."}。',
+      );
 
       const systemPrompt =
         runtime.ttsProvider === 'gemini'

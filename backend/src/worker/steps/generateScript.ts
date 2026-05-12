@@ -6,6 +6,7 @@ import { config } from '../../config';
 import { logger } from '../../logger';
 import { callChatJSON, type TokenUsage } from '../../services/openai';
 import { getRuntimeAiSettings } from '../../services/aiSettings';
+import { loadPromptTemplate, renderPromptTemplate } from '../../services/promptTemplates';
 import { pageScriptPath, pageTextPath } from '../../services/storage';
 
 export interface ScriptPageResult {
@@ -232,42 +233,32 @@ function buildSystemPrompt(
   geminiSpeaker2Persona?: string,
 ): string {
   if (ttsProvider === 'gemini') {
-    const base = [
-      '你是一位 Podcast 逐字稿編輯助理。',
-      '根據以下文章內容，整理出雙人 Podcast 逐字稿，遵循以下規則：',
-      '- 逐字稿使用繁體中文。',
-      '- 逐字稿總長度約 1000 字。',
-      '- 分別有 主持人 "Speaker 1" 與 主持人 "Speaker 2"，"Speaker 1" 為台灣人年輕女性、"Speaker 2" 為台灣人年輕男性。',
-      '- 如果有必要，主持人互相使用 "你" 稱呼。',
-      '- 皆使用台灣用語、台灣連接詞，可以適時使用台灣狀聲詞。',
-      '- 如果有需要描述語氣、情緒，使用 "{{}}"，例如 "{{哈哈大笑}}" 或 "{{難過情緒}}"。',
-      '- 只需要輸出逐字稿，不需要其他說明。',
-      '- <其他要求，例如流程、架構、著重特定聽者>',
-      '',
-      '逐字稿範例：',
-      'Speaker 1: {{驚嘆}} 哇塞！各位聽眾朋友，你們知道嗎？',
-      'Speaker 2: {{疑問語氣}} 最近有什麼有趣的新聞嗎？',
-      'Speaker 1: NotebookLM 最近加入一個「Audio Overviews」新功能。',
-      'Speaker 2: {{小小的疑問}} 你是說 Google 推出的 NotebookLM 嗎？',
-      'Speaker 1: 沒錯！它最近有個新功能，可以把 PDF、影片、圖檔這些資料，直接做成精美的簡報，而且還有圖片跟流暢的旁白喔！據說它可能用了那個很威的影片生成模型 Veo2。',
-      'Speaker 2: {{語氣轉折、好奇}} 不過咧，講到這裡，可能有些台灣朋友會想說：「{{疑問語氣}} 那中文版可以用嗎？」',
-      'Speaker 1: {{微微嘆氣}} 欸，很可惜，目前中文版的 NotebookLM 還沒看到這個 Video Overviews 的功能...',
-      '',
-      '請回傳 JSON，格式固定為 {"script": "..."}，不要夾帶其他欄位或說明。',
-    ];
+    const fallback = '你是一位 Podcast 逐字稿編輯助理。請輸出 JSON：{"script":"..."}';
+    const template = loadPromptTemplate('backend/prompts/generate-script-gemini.md', fallback);
+    const base = [template];
     const sanitized = sanitiseUserPrompt(userPrompt);
     const speaker1 = geminiSpeaker1Persona?.trim();
     const speaker2 = geminiSpeaker2Persona?.trim();
     if (speaker1 || speaker2) {
+      const speakerBlockTpl = loadPromptTemplate(
+        'backend/prompts/partials/gemini-speaker-persona-block.md',
+        '【雙主持人角色人設（優先遵守）】\n{{speaker1_line}}\n{{speaker2_line}}',
+      );
       base.push('');
-      base.push('【雙主持人角色人設（優先遵守）】');
-      if (speaker1) base.push(`- Speaker 1 人設：${speaker1}`);
-      if (speaker2) base.push(`- Speaker 2 人設：${speaker2}`);
+      base.push(
+        renderPromptTemplate(speakerBlockTpl, {
+          speaker1_line: speaker1 ? `- Speaker 1 人設：${speaker1}` : '',
+          speaker2_line: speaker2 ? `- Speaker 2 人設：${speaker2}` : '',
+        }),
+      );
     }
     if (sanitized) {
+      const userBlockTpl = loadPromptTemplate(
+        'backend/prompts/partials/user-style-block.md',
+        '【使用者指定的風格 / 語氣 / 聽眾要求】\n{{user_prompt}}',
+      );
       base.push('');
-      base.push('【使用者指定的風格 / 語氣 / 聽眾要求】');
-      base.push(sanitized);
+      base.push(renderPromptTemplate(userBlockTpl, { user_prompt: sanitized }));
     }
     return base.join('\n');
   }
@@ -286,35 +277,23 @@ function buildSystemPrompt(
   ];
 
   const base = [
-    '你是一位專業的中文簡報講師與旁白配音員。',
-    `你的任務：根據單一簡報頁的**文字 + 投影片圖像**，生成一段適合直接朗讀的**繁體中文逐字稿**（建議約 ${targetChars} 字）。`,
-    ...ttsRewriteRules,
-    '嚴格規則：',
-    '1. 只輸出純粹口語化的連貫段落，不要 Markdown、不要項目符號、不要標題、不要表情符號、不要英文括號註解。',
-    '2. 語氣自然、像真人對觀眾講解，避免贅詞與口頭禪。',
-    '3. 使用繁體中文，術語保留原文（如有必要）。',
-    '4. 每段以句號、問號或驚嘆號作為結尾。',
-    '5. 要充分利用投影片圖像：讀懂其中的**標題、條列、流程圖、示意圖、圖表與程式碼**，並轉成口語敘述；若圖像呈現的資訊比文字更豐富，以圖像為準。',
-    '6. 必須與**上一頁結尾**銜接、並為**下一頁**做自然鋪陳，整份簡報聽起來是一個連貫的故事；但不要重複上一頁已講過的內容，也不要提前劇透下一頁的細節。',
-    '7. 字數目標只是建議，不是硬性限制：內容較多時可自然加長，內容較少時可自然縮短；不要為了湊字數而重複、灌水或加入無關內容。',
-    '8. 避免使用「這一頁／本頁／此頁／本張」等單頁指稱，改以連續敘事方式銜接，讓整段旁白更流暢。',
-    '9. 回傳 JSON，格式固定為 {"script": "..."}，不要夾帶其他欄位或說明。',
-    '10. 請儘量使用比喻、故事、類比等方式來講解，讓內容生動有趣，避免乾巴巴地照抄文字內容。',
-    '11. 逐字稿必須使用「語氣分段標記」格式：[[ 語氣描述 ]]段落文字。',
-    '12. 每一段正文前都要有一個標記；至少 2 段。標記本身不朗讀，僅供 TTS 分段控制語氣。',
-    '13. 禁止輸出其他標記語法；只允許 [[ ... ]]。',
-    '14. 嚴禁輸出「話氣提示伺」這五個字，也嚴禁輸出「[[ 話氣提示伺: ... ]]」格式。',
-    '15. 若你原本想輸出舊格式，必須改寫成新格式，例如把「[[ 話氣提示伺: 穩重開場 ]]」改成「[[ 穩重開場 ]]」。',
-    '16. 輸出示例（僅示意格式）：{"script":"[[ xxxx ]]今天我們先看核心問題。[[ yyyy ]]接著用一個生活化例子說明。[[ zzzz ]]最後整理三個重點。"}',
+    renderPromptTemplate(
+      loadPromptTemplate(
+        'backend/prompts/generate-script-openai.md',
+        `你是一位專業的中文簡報講師與旁白配音員。你的任務：生成繁體中文逐字稿（建議約 ${targetChars} 字）。請回傳 JSON：{"script":"..."}`,
+      ),
+      { target_chars: String(targetChars) },
+    ),
   ];
 
   const sanitized = sanitiseUserPrompt(userPrompt);
   if (sanitized) {
-    base.push('');
-    base.push(
-      '【使用者指定的風格 / 語氣 / 聽眾要求】（優先遵守；若與上述規則衝突時，仍須維持逐字稿結構，但語氣、人稱、情緒強度可依照此要求調整。請勿把這段內容直接複製到輸出裡。）',
+    const userBlockTpl = loadPromptTemplate(
+      'backend/prompts/partials/user-style-block-openai.md',
+      '【使用者指定的風格 / 語氣 / 聽眾要求】（優先遵守；若與上述規則衝突時，仍須維持逐字稿結構，但語氣、人稱、情緒強度可依照此要求調整。請勿把這段內容直接複製到輸出裡。）\n{{user_prompt}}',
     );
-    base.push(sanitized);
+    base.push('');
+    base.push(renderPromptTemplate(userBlockTpl, { user_prompt: sanitized }));
   }
 
   return base.join('\n');
@@ -331,56 +310,44 @@ interface PromptContext {
 }
 
 function buildUserText(ctx: PromptContext): string {
-  const lines: string[] = [];
-  lines.push(`目前頁碼：第 ${ctx.pageNumber} 頁 / 共 ${ctx.pageCount} 頁。`);
-  lines.push(`建議字數：約 ${ctx.targetChars} 字（可依素材多寡彈性調整）。`);
-  lines.push('字數以資訊完整與講解流暢為優先：內容多可較長，內容少可較短，避免為湊字數而灌水。');
-  lines.push(`輸出語言：${config.openaiScriptLanguage}（繁體中文）。`);
+  const previousBlock = ctx.previousContext
+    ? `【上一頁腳本（已產生，供銜接參考，請勿重複其句子）】\n${ctx.previousContext}`
+    : ctx.pageNumber === 1
+      ? '【備註】這是第一頁，請自然地作為開場引言。'
+      : '';
 
-  if (ctx.previousContext) {
-    lines.push('');
-    lines.push('【上一頁腳本（已產生，供銜接參考，請勿重複其句子）】');
-    lines.push(ctx.previousContext);
-  } else if (ctx.pageNumber === 1) {
-    lines.push('');
-    lines.push('【備註】這是第一頁，請自然地作為開場引言。');
-  }
+  const nextBlock = ctx.nextContext
+    ? `【下一頁原文（預告參考；只做銜接鋪陳，請勿把下一頁的細節講完）】\n${ctx.nextContext}`
+    : ctx.pageNumber === ctx.pageCount
+      ? '【備註】這是最後一頁，請自然地作為總結 / 收尾。'
+      : '';
 
-  if (ctx.nextContext) {
-    lines.push('');
-    lines.push('【下一頁原文（預告參考；只做銜接鋪陳，請勿把下一頁的細節講完）】');
-    lines.push(ctx.nextContext);
-  } else if (ctx.pageNumber === ctx.pageCount) {
-    lines.push('');
-    lines.push('【備註】這是最後一頁，請自然地作為總結 / 收尾。');
-  }
+  const pageTextBlock = (ctx.pageEmpty || ctx.pageText.trim().length === 0)
+    ? '【頁面文字】（此處可能抽不到文字，例如封面、分隔頁或純圖像。請**根據附上的投影片圖像**與前後頁脈絡，給出合理的講解。）'
+    : `【頁面原始文字（pdf 抽取，可能有排版殘留）】\n${clipText(ctx.pageText)}`;
 
-  lines.push('');
-  if (ctx.pageEmpty || ctx.pageText.trim().length === 0) {
-    lines.push(
-      '【頁面文字】（此處可能抽不到文字，例如封面、分隔頁或純圖像。請**根據附上的投影片圖像**與前後頁脈絡，給出合理的講解。）',
-    );
-  } else {
-    lines.push('【頁面原始文字（pdf 抽取，可能有排版殘留）】');
-    lines.push(clipText(ctx.pageText));
-  }
-  lines.push('');
-  lines.push('【投影片圖像】請觀察附上的圖片，結合圖表、示意圖、條列與排版來講解。');
-  lines.push('');
-  lines.push('避免使用「這一頁／本頁／此頁／本張」等單頁指稱，改用連續敘事語氣。');
-  lines.push('可在適當位置插入語氣分段標記：[[ 穩重開場 ]]、[[ 親切解釋 ]]、[[ 重點強調 ]]、[[ 收束總結 ]]，供 TTS 分段。');
-  lines.push('請以 JSON 格式回覆：{"script": "逐字稿內容..."}');
-  return lines.join('\n');
+  const fallback =
+    '目前頁碼：第 {{page_number}} 頁 / 共 {{page_count}} 頁。\n建議字數：約 {{target_chars}} 字。\n{{previous_block}}\n{{next_block}}\n{{page_text_block}}\n請以 JSON 格式回覆：{"script": "逐字稿內容..."}';
+  const template = loadPromptTemplate('backend/prompts/generate-script-usertext.md', fallback);
+  return renderPromptTemplate(template, {
+    page_number: String(ctx.pageNumber),
+    page_count: String(ctx.pageCount),
+    target_chars: String(ctx.targetChars),
+    output_language: config.openaiScriptLanguage,
+    previous_block: previousBlock,
+    next_block: nextBlock,
+    page_text_block: pageTextBlock,
+  });
 }
 
 function buildDeckRewriteSystemPrompt(userPrompt: string | null | undefined): string {
   const runtime = getRuntimeAiSettings();
   if (runtime.ttsProvider === 'gemini') {
     const base = [
-      '你是一位 Podcast 逐字稿總編輯。',
-      '請把各頁草稿改寫成雙人對談形式（Speaker 1 / Speaker 2），使用繁體中文與台灣口語。',
-      '保留重點，語氣自然，必要時可用 {{語氣描述}}。',
-      '只輸出 JSON：{"pages":[{"page_number":1,"script":"..."}, ...]}。',
+      loadPromptTemplate(
+        'backend/prompts/rewrite-script-gemini.md',
+        '你是一位 Podcast 逐字稿總編輯。只輸出 JSON：{"pages":[{"page_number":1,"script":"..."}, ...]}。',
+      ),
     ];
     const sanitized = sanitiseUserPrompt(userPrompt);
     const speaker1 = runtime.geminiTtsSpeaker1?.trim();
@@ -734,7 +701,7 @@ export async function generateScript(
     }
 
     for (const r of results) {
-      const rewritten = ensureToneMarkers(byPage.get(r.pageNumber)?.trim() ?? '');
+      const rewritten = byPage.get(r.pageNumber)?.trim() ?? '';
       if (!rewritten) continue;
       await fs.promises.writeFile(r.scriptPath, rewritten, 'utf8');
       r.script = rewritten;
