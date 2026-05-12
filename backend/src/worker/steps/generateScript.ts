@@ -329,7 +329,7 @@ function buildUserText(ctx: PromptContext): string {
   const fallback =
     '目前頁碼：第 {{page_number}} 頁 / 共 {{page_count}} 頁。\n建議字數：約 {{target_chars}} 字。\n{{previous_block}}\n{{next_block}}\n{{page_text_block}}\n請以 JSON 格式回覆：{"script": "逐字稿內容..."}';
   const template = loadPromptTemplate('backend/prompts/generate-script-usertext.md', fallback);
-  return renderPromptTemplate(template, {
+  const rendered = renderPromptTemplate(template, {
     page_number: String(ctx.pageNumber),
     page_count: String(ctx.pageCount),
     target_chars: String(ctx.targetChars),
@@ -338,6 +338,10 @@ function buildUserText(ctx: PromptContext): string {
     next_block: nextBlock,
     page_text_block: pageTextBlock,
   });
+  return rendered
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 function buildDeckRewriteSystemPrompt(userPrompt: string | null | undefined): string {
