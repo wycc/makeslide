@@ -8,6 +8,19 @@ Voice presentation generation and playback system. See [`docs/design.md`](docs/d
 這個專案提供類似 NotebookLM 影片生成的工作流：可接受 PDF，抽取頁面圖片與文字，產生逐字稿，再合成語音。也支援以簡報大綱（例如 ChatGPT 產生、以 `## Slide XX` 分頁）直接產圖、產稿、配音。  
 This project provides a NotebookLM-like video/presentation workflow: ingest PDF, extract page images and text, generate narration scripts, then synthesize speech. It also supports outline-driven generation (for example, ChatGPT output split by `## Slide XX`) to create images, scripts, and audio.
 
+# Execute in docker
+```
+# mkdir home1
+# docker run -d -v home1:/home/jovyan/ -p 8888:8888 wycca1/makeslide:latest
+ ```
+ Please use the above command to start the makeslide inside the docker. You can use
+ ```
+ http://127.0.0.1:8888/
+ ```
+ in your browser to open the application and then input your OpenAI API key to staret the apoplication.
+
+ ![alt text](apikeyinput.png)
+
 * [User Guide](docs/userguide.md)
 
 ## 目錄結構 / Project Structure
