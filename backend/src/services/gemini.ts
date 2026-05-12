@@ -41,6 +41,17 @@ function normalizeGeminiVoiceName(input?: string): string {
   return 'Kore';
 }
 
+function pickSecondaryGeminiVoice(primary: string): string {
+  // Prefer a stable contrast voice for multi-speaker; fallback to any valid different voice.
+  const preferred = ['Puck', 'Leda', 'Fenrir', 'Charon', 'Orus', 'Kore'];
+  const hit = preferred.find((v) => v !== primary && GEMINI_VOICES.has(v));
+  if (hit) return hit;
+  for (const v of GEMINI_VOICES) {
+    if (v !== primary) return v;
+  }
+  return primary;
+}
+
 function buildWavFromPcm16(pcm: Buffer, sampleRate: number, channels: number): Buffer {
   const bitsPerSample = 16;
   const byteRate = sampleRate * channels * (bitsPerSample / 8);
@@ -156,17 +167,42 @@ export async function synthesizeGeminiSpeech(params: {
   const ttsPrompt = personaHints
     ? `${personaHints}\n\nPlease synthesize naturally with subtle distinction where appropriate.\nText:\n${params.text}`
     : params.text;
-  const body = {
-    contents: [{ role: 'user', parts: [{ text: ttsPrompt }] }],
-    generationConfig: {
-      responseModalities: ['AUDIO'],
-      speechConfig: {
+  const hasSpeakerDialog = /(^|\n)\s*Speaker\s*1\s*:/i.test(params.text)
+    || /(^|\n)\s*Speaker\s*2\s*:/i.test(params.text);
+  const speaker2Voice = pickSecondaryGeminiVoice(voiceName);
+
+  const speechConfig = hasSpeakerDialog
+    ? {
+        multiSpeakerVoiceConfig: {
+          speakerVoiceConfigs: [
+            {
+              speaker: 'Speaker 1',
+              voiceConfig: {
+                prebuiltVoiceConfig: { voiceName },
+              },
+            },
+            {
+              speaker: 'Speaker 2',
+              voiceConfig: {
+                prebuiltVoiceConfig: { voiceName: speaker2Voice },
+              },
+            },
+          ],
+        },
+      }
+    : {
         voiceConfig: {
           prebuiltVoiceConfig: {
             voiceName,
           },
         },
-      },
+      };
+
+  const body = {
+    contents: [{ role: 'user', parts: [{ text: ttsPrompt }] }],
+    generationConfig: {
+      responseModalities: ['AUDIO'],
+      speechConfig,
     },
   };
   const resp = await fetch(

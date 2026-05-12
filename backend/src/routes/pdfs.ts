@@ -62,6 +62,36 @@ const IdParamSchema = z.object({
 // the user. We cap length to avoid embedding megabytes of prompt into the
 // DB or the per-page LLM call.
 const MAX_USER_PROMPT_CHARS = 2000;
+const GEMINI_TTS_VOICES = [
+  'Kore',
+  'Puck',
+  'Charon',
+  'Fenrir',
+  'Leda',
+  'Orus',
+  'Aoede',
+  'Callirrhoe',
+  'Autonoe',
+  'Enceladus',
+  'Iapetus',
+  'Umbriel',
+  'Algieba',
+  'Despina',
+  'Erinome',
+  'Algenib',
+  'Rasalgethi',
+  'Laomedeia',
+  'Achernar',
+  'Alnilam',
+  'Schedar',
+  'Gacrux',
+] as const;
+
+function isSupportedVoiceByProvider(provider: 'openai' | 'gemini', voice: string): boolean {
+  const pool = provider === 'gemini' ? GEMINI_TTS_VOICES : OPENAI_TTS_VOICES;
+  return (pool as readonly string[]).includes(voice);
+}
+
 const StartBodySchema = z.object({
   prompt: z
     .string()
@@ -69,7 +99,7 @@ const StartBodySchema = z.object({
     .optional()
     .default(''),
   require_script_confirmation: z.boolean().optional().default(false),
-  tts_voice: z.enum(OPENAI_TTS_VOICES).optional(),
+  tts_voice: z.string().trim().min(1).optional(),
   tts_speed: z.number().min(0.25).max(4).optional(),
   script_max_chars_per_page: z.number().int().min(80).max(2000).optional(),
   tone_prompt: z.string().max(1000, 'tone_prompt 不可超過 1000 字').optional(),
@@ -155,7 +185,7 @@ const MovePageBodySchema = z.object({
 });
 
 const UpdateTtsSettingsBodySchema = z.object({
-  tts_voice: z.enum(OPENAI_TTS_VOICES, { message: '不支援的 tts_voice' }),
+  tts_voice: z.string().trim().min(1, '不支援的 tts_voice'),
   tts_speed: z.number().min(0.25, 'tts_speed 過小').max(4, 'tts_speed 過大'),
 });
 
@@ -196,7 +226,7 @@ const RegenerateBatchBodySchema = z.object({
     .optional(),
   audio: z
         .object({
-          voice: z.enum(OPENAI_TTS_VOICES).optional(),
+          voice: z.string().trim().min(1).optional(),
           speed: z.number().min(0.25).max(4).optional(),
         })
     .optional(),
@@ -683,6 +713,12 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
     const requireScriptConfirmation = parsedBody.data.require_script_confirmation;
     const ttsVoice = parsedBody.data.tts_voice?.trim() || null;
     const ttsSpeed = parsedBody.data.tts_speed ?? null;
+    const runtimeForTts = getRuntimeAiSettings();
+    if (ttsVoice && !isSupportedVoiceByProvider(runtimeForTts.ttsProvider, ttsVoice)) {
+      return reply
+        .code(400)
+        .send(errorResponse('INVALID_REQUEST', `不支援的 tts_voice for provider=${runtimeForTts.ttsProvider}: ${ttsVoice}`));
+    }
     const scriptMaxCharsPerPage = parsedBody.data.script_max_chars_per_page ?? null;
     const imageStylePrompt = parsedBody.data.image_style_prompt?.trim() || null;
     const updatedAt = nowIso();
@@ -1207,6 +1243,12 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
 
     const ttsVoice = parsedBody.data.tts_voice.trim();
     const ttsSpeed = parsedBody.data.tts_speed;
+    const runtimeForTts = getRuntimeAiSettings();
+    if (!isSupportedVoiceByProvider(runtimeForTts.ttsProvider, ttsVoice)) {
+      return reply
+        .code(400)
+        .send(errorResponse('INVALID_REQUEST', `不支援的 tts_voice for provider=${runtimeForTts.ttsProvider}: ${ttsVoice}`));
+    }
     const updatedAt = nowIso();
 
     db.prepare(
@@ -1374,6 +1416,12 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
     }
     const { id } = parsedParams.data;
     const body = parsedBody.data;
+    const runtimeForTts = getRuntimeAiSettings();
+    if (body.audio?.voice && !isSupportedVoiceByProvider(runtimeForTts.ttsProvider, body.audio.voice)) {
+      return reply
+        .code(400)
+        .send(errorResponse('INVALID_REQUEST', `不支援的 audio.voice for provider=${runtimeForTts.ttsProvider}: ${body.audio.voice}`));
+    }
 
     const row = db
       .prepare(`SELECT id, page_count FROM pdfs WHERE id = ?`)
