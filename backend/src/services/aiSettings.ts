@@ -13,6 +13,8 @@ export interface RuntimeAiSettings {
   geminiLlmModel: string;
   openaiTtsModel: string;
   geminiTtsModel: string;
+  geminiTtsSpeaker1: string;
+  geminiTtsSpeaker2: string;
 }
 
 let runtime: RuntimeAiSettings = {
@@ -24,6 +26,8 @@ let runtime: RuntimeAiSettings = {
   geminiLlmModel: config.geminiLlmModel,
   openaiTtsModel: config.openaiTtsModel,
   geminiTtsModel: config.geminiTtsModel,
+  geminiTtsSpeaker1: process.env.GEMINI_TTS_SPEAKER1?.trim() || '',
+  geminiTtsSpeaker2: process.env.GEMINI_TTS_SPEAKER2?.trim() || '',
 };
 
 export function getRuntimeAiSettings(): RuntimeAiSettings {
@@ -43,6 +47,8 @@ export function setRuntimeAiSettings(next: Partial<RuntimeAiSettings>): RuntimeA
   if (typeof next.geminiLlmModel === 'string') process.env.GEMINI_LLM_MODEL = next.geminiLlmModel;
   if (typeof next.openaiTtsModel === 'string') process.env.OPENAI_TTS_MODEL = next.openaiTtsModel;
   if (typeof next.geminiTtsModel === 'string') process.env.GEMINI_TTS_MODEL = next.geminiTtsModel;
+  if (typeof next.geminiTtsSpeaker1 === 'string') process.env.GEMINI_TTS_SPEAKER1 = next.geminiTtsSpeaker1;
+  if (typeof next.geminiTtsSpeaker2 === 'string') process.env.GEMINI_TTS_SPEAKER2 = next.geminiTtsSpeaker2;
   return { ...runtime };
 }
 
@@ -60,6 +66,8 @@ export async function persistEnvSettings(next: Partial<RuntimeAiSettings>): Prom
     ['GEMINI_LLM_MODEL', next.geminiLlmModel],
     ['OPENAI_TTS_MODEL', next.openaiTtsModel],
     ['GEMINI_TTS_MODEL', next.geminiTtsModel],
+    ['GEMINI_TTS_SPEAKER1', next.geminiTtsSpeaker1],
+    ['GEMINI_TTS_SPEAKER2', next.geminiTtsSpeaker2],
   ];
 
   for (const [key, raw] of pairs) {

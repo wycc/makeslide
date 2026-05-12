@@ -1505,6 +1505,8 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
       gemini_llm_model: runtime.geminiLlmModel,
       openai_tts_model: runtime.openaiTtsModel,
       gemini_tts_model: runtime.geminiTtsModel,
+      gemini_tts_speaker1: runtime.geminiTtsSpeaker1,
+      gemini_tts_speaker2: runtime.geminiTtsSpeaker2,
     });
   });
 
@@ -1518,6 +1520,8 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
       gemini_llm_model: z.string().trim().min(1).optional(),
       openai_tts_model: z.string().trim().min(1).optional(),
       gemini_tts_model: z.string().trim().min(1).optional(),
+      gemini_tts_speaker1: z.string().max(200).optional(),
+      gemini_tts_speaker2: z.string().max(200).optional(),
     });
     const parsed = BodySchema.safeParse(request.body);
     if (!parsed.success) {
@@ -1534,6 +1538,8 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
       ...(next.gemini_llm_model ? { geminiLlmModel: next.gemini_llm_model } : {}),
       ...(next.openai_tts_model ? { openaiTtsModel: next.openai_tts_model } : {}),
       ...(next.gemini_tts_model ? { geminiTtsModel: next.gemini_tts_model } : {}),
+      ...(typeof next.gemini_tts_speaker1 === 'string' ? { geminiTtsSpeaker1: next.gemini_tts_speaker1.trim() } : {}),
+      ...(typeof next.gemini_tts_speaker2 === 'string' ? { geminiTtsSpeaker2: next.gemini_tts_speaker2.trim() } : {}),
     };
 
     await persistEnvSettings(runtimeUpdate);
@@ -1553,6 +1559,8 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
       gemini_llm_model: runtime.geminiLlmModel,
       openai_tts_model: runtime.openaiTtsModel,
       gemini_tts_model: runtime.geminiTtsModel,
+      gemini_tts_speaker1: runtime.geminiTtsSpeaker1,
+      gemini_tts_speaker2: runtime.geminiTtsSpeaker2,
     });
   });
 
@@ -1824,6 +1832,8 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
             model: runtime.geminiTtsModel,
             text: seg.text,
             voiceName: voice,
+            speaker1Persona: runtime.geminiTtsSpeaker1,
+            speaker2Persona: runtime.geminiTtsSpeaker2,
           });
         } else {
           const ttsResp = await client!.audio.speech.create({
@@ -2065,6 +2075,13 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
         '- 只需要輸出逐字稿，不需要其他說明。',
       ].join('\n');
 
+      const speakerPersonaLines = [
+        runtime.geminiTtsSpeaker1?.trim() ? `- Speaker 1 人設：${runtime.geminiTtsSpeaker1.trim()}` : '',
+        runtime.geminiTtsSpeaker2?.trim() ? `- Speaker 2 人設：${runtime.geminiTtsSpeaker2.trim()}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n');
+
       const openaiRules = [
         '請改寫成適合 TTS 朗讀的逐字稿。',
         '要求：',
@@ -2080,7 +2097,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
 
       const systemPrompt =
         runtime.ttsProvider === 'gemini'
-          ? `你是逐字稿編修助理。${geminiPodcastRules}\n請回傳 JSON，格式固定為 {"script":"..."}。`
+          ? `你是逐字稿編修助理。${geminiPodcastRules}${speakerPersonaLines ? `\n${speakerPersonaLines}` : ''}\n請回傳 JSON，格式固定為 {"script":"..."}。`
           : `你是逐字稿編修助理。${openaiRules}`;
 
       const { data } = await callChatJSON({

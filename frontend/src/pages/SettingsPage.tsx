@@ -17,6 +17,8 @@ export default function SettingsPage() {
   const [geminiLlmModel, setGeminiLlmModel] = useState('gemini-2.0-flash');
   const [openaiTtsModel, setOpenaiTtsModel] = useState('gpt-4o-mini-tts');
   const [geminiTtsModel, setGeminiTtsModel] = useState('gemini-2.5-flash-preview-tts');
+  const [geminiTtsSpeaker1, setGeminiTtsSpeaker1] = useState('');
+  const [geminiTtsSpeaker2, setGeminiTtsSpeaker2] = useState('');
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
@@ -34,6 +36,8 @@ export default function SettingsPage() {
       setGeminiLlmModel(s.gemini_llm_model);
       setOpenaiTtsModel(s.openai_tts_model);
       setGeminiTtsModel(s.gemini_tts_model);
+      setGeminiTtsSpeaker1(s.gemini_tts_speaker1 ?? '');
+      setGeminiTtsSpeaker2(s.gemini_tts_speaker2 ?? '');
       if (s.has_openai_key || s.has_gemini_key) {
         setMsg('已載入目前 AI 設定。若要更新 API Key，請輸入後儲存。');
       }
@@ -78,6 +82,8 @@ export default function SettingsPage() {
         gemini_llm_model: geminiLlmModel.trim(),
         openai_tts_model: openaiTtsModel.trim(),
         gemini_tts_model: geminiTtsModel.trim(),
+        gemini_tts_speaker1: geminiTtsSpeaker1.trim(),
+        gemini_tts_speaker2: geminiTtsSpeaker2.trim(),
       });
       setMsg('AI 設定已儲存');
       setOpenaiApiKey('');
@@ -92,6 +98,8 @@ export default function SettingsPage() {
     geminiApiKey,
     geminiLlmModel,
     geminiTtsModel,
+    geminiTtsSpeaker1,
+    geminiTtsSpeaker2,
     llmProvider,
     navigate,
     openaiApiKey,
@@ -182,6 +190,14 @@ export default function SettingsPage() {
             <label className="block text-sm text-slate-300">
               Gemini TTS Model
               <input value={geminiTtsModel} onChange={(e) => setGeminiTtsModel(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+            </label>
+            <label className="block text-sm text-slate-300">
+              Gemini Speaker 1 人設（選填）
+              <input value={geminiTtsSpeaker1} onChange={(e) => setGeminiTtsSpeaker1(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder="例如：沉穩、專業、男聲主持" />
+            </label>
+            <label className="block text-sm text-slate-300">
+              Gemini Speaker 2 人設（選填）
+              <input value={geminiTtsSpeaker2} onChange={(e) => setGeminiTtsSpeaker2(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder="例如：活潑、親切、女聲來賓" />
             </label>
           </div>
 

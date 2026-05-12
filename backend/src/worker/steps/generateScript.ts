@@ -228,6 +228,8 @@ function buildSystemPrompt(
   userPrompt: string | null | undefined,
   targetChars: number,
   ttsProvider: 'openai' | 'gemini',
+  geminiSpeaker1Persona?: string,
+  geminiSpeaker2Persona?: string,
 ): string {
   if (ttsProvider === 'gemini') {
     const base = [
@@ -254,6 +256,14 @@ function buildSystemPrompt(
       '請回傳 JSON，格式固定為 {"script": "..."}，不要夾帶其他欄位或說明。',
     ];
     const sanitized = sanitiseUserPrompt(userPrompt);
+    const speaker1 = geminiSpeaker1Persona?.trim();
+    const speaker2 = geminiSpeaker2Persona?.trim();
+    if (speaker1 || speaker2) {
+      base.push('');
+      base.push('【雙主持人角色人設（優先遵守）】');
+      if (speaker1) base.push(`- Speaker 1 人設：${speaker1}`);
+      if (speaker2) base.push(`- Speaker 2 人設：${speaker2}`);
+    }
     if (sanitized) {
       base.push('');
       base.push('【使用者指定的風格 / 語氣 / 聽眾要求】');
@@ -373,6 +383,14 @@ function buildDeckRewriteSystemPrompt(userPrompt: string | null | undefined): st
       '只輸出 JSON：{"pages":[{"page_number":1,"script":"..."}, ...]}。',
     ];
     const sanitized = sanitiseUserPrompt(userPrompt);
+    const speaker1 = runtime.geminiTtsSpeaker1?.trim();
+    const speaker2 = runtime.geminiTtsSpeaker2?.trim();
+    if (speaker1 || speaker2) {
+      base.push('');
+      base.push('【雙主持人角色人設（優先遵守）】');
+      if (speaker1) base.push(`- Speaker 1 人設：${speaker1}`);
+      if (speaker2) base.push(`- Speaker 2 人設：${speaker2}`);
+    }
     if (sanitized) {
       base.push('');
       base.push('【使用者風格要求】');
@@ -482,7 +500,13 @@ export async function generateScript(
   const { pdfId, pageCount, pages, onPage, userPrompt, shouldAbort } = opts;
   const targetChars = opts.maxCharsPerPage ?? config.openaiScriptTargetChars;
   const runtime = getRuntimeAiSettings();
-  const system = buildSystemPrompt(userPrompt, targetChars, runtime.ttsProvider);
+  const system = buildSystemPrompt(
+    userPrompt,
+    targetChars,
+    runtime.ttsProvider,
+    runtime.geminiTtsSpeaker1,
+    runtime.geminiTtsSpeaker2,
+  );
   console.log('System prompt for script generation:\n', system);
   if (userPrompt && userPrompt.trim()) {
     logger.info(

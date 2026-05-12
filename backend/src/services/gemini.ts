@@ -142,11 +142,22 @@ export async function synthesizeGeminiSpeech(params: {
   model: string;
   text: string;
   voiceName?: string;
+  speaker1Persona?: string;
+  speaker2Persona?: string;
 }): Promise<Buffer> {
   const apiKey = getGeminiApiKey();
   const voiceName = normalizeGeminiVoiceName(params.voiceName);
+  const personaHints = [
+    params.speaker1Persona?.trim() ? `Speaker1 persona: ${params.speaker1Persona.trim()}` : '',
+    params.speaker2Persona?.trim() ? `Speaker2 persona: ${params.speaker2Persona.trim()}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+  const ttsPrompt = personaHints
+    ? `${personaHints}\n\nPlease synthesize naturally with subtle distinction where appropriate.\nText:\n${params.text}`
+    : params.text;
   const body = {
-    contents: [{ role: 'user', parts: [{ text: params.text }] }],
+    contents: [{ role: 'user', parts: [{ text: ttsPrompt }] }],
     generationConfig: {
       responseModalities: ['AUDIO'],
       speechConfig: {
