@@ -1,0 +1,15 @@
+import type { FastifyInstance } from 'fastify';
+import { registerUploadRoutes } from './upload';
+import { registerDetailRoutes } from './detail';
+import { registerPageOperationsRoutes } from './page-operations';
+import { registerRegenerateRoutes } from './regenerate';
+import { registerAdminRoutes } from './admin';
+
+export async function pdfRoutes(app: FastifyInstance): Promise<void> {
+  await registerUploadRoutes(app);
+  await registerDetailRoutes(app);
+  await registerPageOperationsRoutes(app);
+  await registerRegenerateRoutes(app);
+  await registerAdminRoutes(app);
+}
+

@@ -1,7 +1,25 @@
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ApiError, createYoutubeTask, uploadPdf } from '../lib/api';
+import { ApiError, createYoutubeTask, mapApiErrorToHumanMessage, uploadPdf } from '../lib/api';
 import type { UploadResponse } from '../types';
+
+function buildRecoveryGuide(err: unknown): string[] {
+  if (err instanceof ApiError) {
+    if (err.code === 'API_KEY_MISSING') {
+      return ['到「設定 API Key」頁面補齊金鑰。', '儲存後回到此頁重新送出。'];
+    }
+    if (err.code === 'POPPLER_NOT_FOUND' || err.code === 'DEPENDENCY_MISSING') {
+      return ['依文件安裝 poppler（pdftoppm / pdftotext）。', '確認命令可在 PATH 執行後重試。'];
+    }
+    if (err.code === 'MODEL_QUOTA_EXCEEDED' || err.code === 'MODEL_UNAVAILABLE') {
+      return ['稍後再試，或切換模型/供應商。', '若持續失敗，先以較小內容測試流程。'];
+    }
+    if (err.code === 'INVALID_UPLOAD_TYPE' || err.code === 'INVALID_URL') {
+      return ['確認檔案格式（PDF/TXT）或 YouTube URL 正確。', '避免使用無效連結或損毀檔案。'];
+    }
+  }
+  return ['檢查輸入內容後重試。', '參考錯誤碼文件對照進一步排查。'];
+}
 
 interface UploadButtonProps {
   /**
@@ -21,10 +39,12 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
   const [youtubeLang, setYoutubeLang] = useState('zh-TW');
   const [isSubmittingYoutube, setIsSubmittingYoutube] = useState(false);
   const [showYoutubePanel, setShowYoutubePanel] = useState(false);
+  const [recoveryGuide, setRecoveryGuide] = useState<string[]>([]);
 
   const handlePickPdf = () => {
     if (isUploading) return;
     setError(null);
+    setRecoveryGuide([]);
     fileInputRef.current?.click();
   };
 
@@ -60,11 +80,16 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
       onUploaded(resp);
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(`上傳失敗：${err.message}`);
+        const h = mapApiErrorToHumanMessage(err);
+        setError(`上傳失敗：${h.title}｜${h.message}（建議：${h.nextStep}）`);
+        setRecoveryGuide(buildRecoveryGuide(err));
       } else if (err instanceof Error) {
-        setError(`上傳失敗：${err.message}`);
+        const h = mapApiErrorToHumanMessage(err);
+        setError(`上傳失敗：${h.title}｜${h.message}（建議：${h.nextStep}）`);
+        setRecoveryGuide(buildRecoveryGuide(err));
       } else {
         setError('上傳失敗：未知錯誤');
+        setRecoveryGuide(buildRecoveryGuide(err));
       }
     } finally {
       setIsUploading(false);
@@ -80,6 +105,7 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
       return;
     }
     setError(null);
+    setRecoveryGuide([]);
     setIsSubmittingYoutube(true);
     try {
       const resp = await createYoutubeTask(url, youtubeLang.trim() || undefined);
@@ -95,11 +121,16 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
       setYoutubeUrl('');
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(`建立 YouTube 任務失敗：${err.message}`);
+        const h = mapApiErrorToHumanMessage(err);
+        setError(`建立 YouTube 任務失敗：${h.title}｜${h.message}（建議：${h.nextStep}）`);
+        setRecoveryGuide(buildRecoveryGuide(err));
       } else if (err instanceof Error) {
-        setError(`建立 YouTube 任務失敗：${err.message}`);
+        const h = mapApiErrorToHumanMessage(err);
+        setError(`建立 YouTube 任務失敗：${h.title}｜${h.message}（建議：${h.nextStep}）`);
+        setRecoveryGuide(buildRecoveryGuide(err));
       } else {
         setError('建立 YouTube 任務失敗：未知錯誤');
+        setRecoveryGuide(buildRecoveryGuide(err));
       }
     } finally {
       setIsSubmittingYoutube(false);
@@ -196,7 +227,26 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
           </button>
         </div>
       )}
-      {error && <p className="text-sm text-rose-400">{error}</p>}
+      {error && (
+        <div className="rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+          <p>{error}</p>
+          {recoveryGuide.length > 0 && (
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-rose-100/90">
+              {recoveryGuide.map((tip) => (
+                <li key={tip}>{tip}</li>
+              ))}
+            </ul>
+          )}
+          <a
+            href="/docs/error-codes.md"
+            target="_blank"
+            rel="noreferrer"
+            className="mt-2 inline-block underline underline-offset-2 hover:text-white"
+          >
+            查看錯誤碼文件（docs/error-codes.md）
+          </a>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,0 +1,126 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { buildApp } from '../src/server';
+import { db } from '../src/db';
+import { config } from '../src/config';
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function seedReadyPdfFor(pdfId: string, pageCount: number): void {
+  const t = nowIso();
+  db.prepare(`DELETE FROM pages WHERE pdf_id = ?`).run(pdfId);
+  db.prepare(`DELETE FROM pdfs WHERE id = ?`).run(pdfId);
+  db.prepare(
+    `INSERT INTO pdfs (id,title,original_filename,status,page_count,progress_step,progress_current,progress_total,error_message,user_prompt,require_script_confirmation,tts_voice,tts_speed,script_max_chars_per_page,created_at,updated_at)
+     VALUES (?,?,?,'ready',?,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,NULL,?,?)`,
+  ).run(pdfId, 'regenerate-matrix', 'regenerate-matrix.pdf', pageCount, t, t);
+
+  const pagesDir = path.join(config.storageRoot, pdfId, 'pages');
+  fs.mkdirSync(pagesDir, { recursive: true });
+  for (let i = 1; i <= pageCount; i++) {
+    const p = String(i).padStart(3, '0');
+    db.prepare(
+      `INSERT INTO pages (pdf_id,page_number,image_path,text_path,script_path,audio_path,audio_duration_seconds,status,error_message,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,NULL,'audio_ready',NULL,?,?)`,
+    ).run(pdfId, i, `pages/${p}.png`, `pages/${p}.text.txt`, `pages/${p}.script.txt`, `pages/${p}.mp3`, t, t);
+    fs.writeFileSync(path.join(pagesDir, `${p}.png`), Buffer.from([137, 80, 78, 71]));
+    fs.writeFileSync(path.join(pagesDir, `${p}.text.txt`), `text-${i}`, 'utf8');
+    fs.writeFileSync(path.join(pagesDir, `${p}.script.txt`), `script-${i}`, 'utf8');
+    fs.writeFileSync(path.join(pagesDir, `${p}.mp3`), Buffer.from([0x49, 0x44, 0x33]));
+  }
+}
+
+test('regenerate: start -> status -> conflict, and cancel on non-active job should fail', async () => {
+  const id = 'regen-matrix-job-01';
+  seedReadyPdfFor(id, 2);
+  const app = await buildApp();
+
+  const startResp = await app.inject({
+    method: 'POST',
+    url: `/api/pdfs/${id}/regenerate`,
+    payload: { scripts: { prompt: 'rewrite brief' } },
+  });
+  assert.equal(startResp.statusCode, 202);
+
+  const statusResp = await app.inject({
+    method: 'GET',
+    url: `/api/pdfs/${id}/regenerate/status`,
+  });
+  assert.equal(statusResp.statusCode, 200);
+
+  const conflictResp = await app.inject({
+    method: 'POST',
+    url: `/api/pdfs/${id}/regenerate`,
+    payload: { scripts: { prompt: 'rewrite again' } },
+  });
+  assert.equal(conflictResp.statusCode, 409);
+
+  await new Promise((r) => setTimeout(r, 50));
+  const cancelResp = await app.inject({ method: 'POST', url: `/api/pdfs/${id}/regenerate/cancel` });
+  assert.ok([202, 409].includes(cancelResp.statusCode));
+
+  await app.close();
+});
+
+test('rollback: snapshot not found should fail; rollback while running should conflict', async () => {
+  const missingId = 'regen-matrix-rollback-01';
+  seedReadyPdfFor(missingId, 2);
+  const app = await buildApp();
+
+  const noSnapshot = await app.inject({ method: 'POST', url: `/api/pdfs/${missingId}/regenerate/rollback` });
+  assert.equal(noSnapshot.statusCode, 404);
+
+  const runningId = 'regen-matrix-rollback-02';
+  seedReadyPdfFor(runningId, 2);
+  const started = await app.inject({
+    method: 'POST',
+    url: `/api/pdfs/${runningId}/regenerate`,
+    payload: { scripts: { prompt: 'create snapshot' } },
+  });
+  assert.equal(started.statusCode, 202);
+
+  const rollbackWhileRunning = await app.inject({ method: 'POST', url: `/api/pdfs/${runningId}/regenerate/rollback` });
+  assert.equal(rollbackWhileRunning.statusCode, 409);
+
+  const cancel = await app.inject({ method: 'POST', url: `/api/pdfs/${runningId}/regenerate/cancel` });
+  assert.ok([202, 409].includes(cancel.statusCode));
+
+  await app.close();
+});
+
+test('page operations boundaries: move invalid index, delete non-existing page, add with negative index', async () => {
+  const id = 'regen-matrix-pageops-01';
+  seedReadyPdfFor(id, 3);
+  const app = await buildApp();
+
+  const moveInvalidFrom = await app.inject({
+    method: 'POST',
+    url: `/api/pdfs/${id}/pages/move`,
+    payload: { from_page_number: 0, to_page_number: 1 },
+  });
+  assert.equal(moveInvalidFrom.statusCode, 400);
+
+  const moveInvalidTo = await app.inject({
+    method: 'POST',
+    url: `/api/pdfs/${id}/pages/move`,
+    payload: { from_page_number: 1, to_page_number: 99 },
+  });
+  assert.equal(moveInvalidTo.statusCode, 400);
+
+  const deleteMissing = await app.inject({ method: 'DELETE', url: `/api/pdfs/${id}/pages/99` });
+  assert.equal(deleteMissing.statusCode, 404);
+
+  const addNegative = await app.inject({
+    method: 'POST',
+    url: `/api/pdfs/${id}/pages`,
+    payload: { after_page_number: -1 },
+  });
+  assert.equal(addNegative.statusCode, 400);
+
+  await app.close();
+});
+

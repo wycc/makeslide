@@ -135,13 +135,13 @@ npm run dev:frontend
 ## 處理管線 / Processing Pipeline
 
 ```text
-上傳 / Upload → uploaded
-               ↓ enqueue
-               processing + progress_step=rendering       (pdftoppm + cover generation)
+上傳 / Upload → awaiting_prompt（可選，等待使用者提示）
+               ↓ start
+               uploaded → processing
                ↓
-               processing + progress_step=extracting_text (page text extraction)
+               rendering / extracting_text / generating_script / synthesizing_audio / generating_title
                ↓
-               processing + progress_step=text_extracted  (M2 end; waiting for next stage)
+               ready（或 failed）
 ```
 
 - 背景佇列 / Queue: `p-queue`（並行數由 `PROCESS_CONCURRENCY` 控制）  
@@ -171,3 +171,5 @@ See [`.env.example`](.env.example). Core variables:
 
 - 系統設計：[`docs/design.md`](docs/design.md)  
   System design: [`docs/design.md`](docs/design.md)
+- 錯誤碼與使用者提示：[`docs/error-codes.md`](docs/error-codes.md)  
+  Error codes and user-facing hints: [`docs/error-codes.md`](docs/error-codes.md)

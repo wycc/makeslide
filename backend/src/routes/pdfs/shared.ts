@@ -4,8 +4,8 @@ import sharp from 'sharp';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { nanoid } from 'nanoid';
 import { z } from 'zod';
-import { db } from '../db';
-import { config, OPENAI_TTS_VOICES } from '../config';
+import { db } from '../../db';
+import { config, OPENAI_TTS_VOICES } from '../../config';
 import {
   coverImagePath,
   createPdfDir,
@@ -22,20 +22,20 @@ import {
   writeMetadata,
   writeSourcePdf,
   writeSourceText,
-} from '../services/storage';
-import { callChatJSON, getOpenAIClient, setOpenAIApiKeyRuntime } from '../services/openai';
-import { getRuntimeAiSettings, persistEnvSettings, setRuntimeAiSettings } from '../services/aiSettings';
-import { synthesizeGeminiSpeech } from '../services/gemini';
-import { loadPromptTemplate } from '../services/promptTemplates';
-import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../services/imagePromptTemplates';
-import { enqueuePdfProcessing, enqueueYoutubeProcessing } from '../worker/pipeline';
-import { generateVideo } from '../worker/steps/generateVideo';
+} from '../../services/storage';
+import { callChatJSON, getOpenAIClient, setOpenAIApiKeyRuntime } from '../../services/openai';
+import { getRuntimeAiSettings, persistEnvSettings, setRuntimeAiSettings } from '../../services/aiSettings';
+import { synthesizeGeminiSpeech } from '../../services/gemini';
+import { loadPromptTemplate } from '../../services/promptTemplates';
+import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
+import { enqueuePdfProcessing, enqueueYoutubeProcessing } from '../../worker/pipeline';
+import { generateVideo } from '../../worker/steps/generateVideo';
 import {
   getRegenerateJob,
   requestCancelRegenerateJob,
   rollbackRegenerate,
   startRegenerateJob,
-} from '../worker/regenerate';
+} from '../../worker/regenerate';
 import type {
   ApiError,
   PageRow,
@@ -46,16 +46,16 @@ import type {
   PdfMetadataPage,
   PdfRow,
   PdfStatus,
-} from '../types';
+} from '../../types';
 import type { ChatCompletionContentPart } from 'openai/resources/chat/completions';
 
-const PDF_ID_SIZE = 10;
+export const PDF_ID_SIZE = 10;
 
 // pdf_id: nanoid alphanumeric + _ - only; our ids are 10-chars.
 // Accept a slightly wider window (8-32) for forward compat but enforce charset.
 const PDF_ID_RE = /^[A-Za-z0-9_-]{8,32}$/;
 
-const IdParamSchema = z.object({
+export const IdParamSchema = z.object({
   id: z.string().regex(PDF_ID_RE, 'Invalid pdf id'),
 });
 
@@ -88,12 +88,12 @@ const GEMINI_TTS_VOICES = [
   'Gacrux',
 ] as const;
 
-function isSupportedVoiceByProvider(provider: 'openai' | 'gemini', voice: string): boolean {
+export function isSupportedVoiceByProvider(provider: 'openai' | 'gemini', voice: string): boolean {
   const pool = provider === 'gemini' ? GEMINI_TTS_VOICES : OPENAI_TTS_VOICES;
   return (pool as readonly string[]).includes(voice);
 }
 
-const StartBodySchema = z.object({
+export const StartBodySchema = z.object({
   prompt: z
     .string()
     .max(MAX_USER_PROMPT_CHARS, `提示詞不可超過 ${MAX_USER_PROMPT_CHARS} 字`)
@@ -107,7 +107,7 @@ const StartBodySchema = z.object({
   image_style_prompt: z.string().max(8000, 'image_style_prompt 不可超過 8000 字').optional(),
 });
 
-const PageParamSchema = z.object({
+export const PageParamSchema = z.object({
   id: z.string().regex(PDF_ID_RE, 'Invalid pdf id'),
   n: z
     .string()
@@ -160,7 +160,7 @@ const RewriteScriptBodySchema = z.object({
     .default([]),
 });
 
-const RegenerateImageBodySchema = z.object({
+export const RegenerateImageBodySchema = z.object({
   prompt: z.string().min(1, 'prompt 不可為空').max(2000, 'prompt 不可超過 2000 字'),
 });
 
@@ -176,11 +176,11 @@ const PageChatBodySchema = z.object({
   history: z.array(ChatMessageSchema).max(20).optional().default([]),
 });
 
-const AddPageBodySchema = z.object({
+export const AddPageBodySchema = z.object({
   after_page_number: z.number().int().min(0).optional().default(0),
 });
 
-const MovePageBodySchema = z.object({
+export const MovePageBodySchema = z.object({
   from_page_number: z.number().int().positive(),
   to_page_number: z.number().int().positive(),
 });
@@ -198,15 +198,15 @@ const UpdateImageStyleSettingsBodySchema = z.object({
     .default(''),
 });
 
-const UpdateTitleBodySchema = z.object({
+export const UpdateTitleBodySchema = z.object({
   title: z.string().min(1, 'title 不可為空').max(200, 'title 過長'),
 });
 
-const UpdatePromptBodySchema = z.object({
+export const UpdatePromptBodySchema = z.object({
   prompt: z.string().max(MAX_USER_PROMPT_CHARS, `提示詞不可超過 ${MAX_USER_PROMPT_CHARS} 字`),
 });
 
-const YoutubeCreateBodySchema = z.object({
+export const YoutubeCreateBodySchema = z.object({
   youtube_url: z.string().url('youtube_url 格式錯誤'),
   language: z.string().trim().min(2).max(16).optional(),
 });
@@ -241,15 +241,30 @@ const RegenerateBatchBodySchema = z.object({
     .optional(),
 });
 
-function errorResponse(code: string, message: string): ApiError {
+export const UpdateSystemAiSettingsBodySchema = z.object({
+  openai_api_key: z.string().optional(),
+  gemini_api_key: z.string().optional(),
+  llm_provider: z.enum(['openai', 'gemini']).optional(),
+  tts_provider: z.enum(['openai', 'gemini']).optional(),
+  openai_llm_model: z.string().optional(),
+  gemini_llm_model: z.string().optional(),
+  openai_tts_model: z.string().optional(),
+  gemini_tts_model: z.string().optional(),
+  gemini_tts_speaker1: z.string().optional(),
+  gemini_tts_speaker2: z.string().optional(),
+});
+
+export { RegenerateBatchBodySchema };
+
+export function errorResponse(code: string, message: string): ApiError {
   return { error: { code, message } };
 }
 
-function nowIso(): string {
+export function nowIso(): string {
   return new Date().toISOString();
 }
 
-function detectAudioMimeFromBuffer(buf: Buffer): 'audio/mpeg' | 'audio/wav' | 'application/octet-stream' {
+export function detectAudioMimeFromBuffer(buf: Buffer): 'audio/mpeg' | 'audio/wav' | 'application/octet-stream' {
   if (buf.length >= 12) {
     const riff = buf.toString('ascii', 0, 4);
     const wave = buf.toString('ascii', 8, 12);
@@ -309,7 +324,7 @@ function buildWavPcm16(pcm: Buffer, sampleRate: number, channels: number): Buffe
   return Buffer.concat([header, pcm]);
 }
 
-function rewritePagePathsToMatchNumber(pdfId: string, pageCount: number): void {
+export function rewritePagePathsToMatchNumber(pdfId: string, pageCount: number): void {
   const pad = pageCount > 999 ? 4 : 3;
   db.prepare(
     `UPDATE pages
@@ -339,7 +354,7 @@ function coverUrl(row: PdfRow): string | null {
   }
 }
 
-function rowToListItem(row: PdfRow): PdfListItem {
+export function rowToListItem(row: PdfRow): PdfListItem {
   const runtime = getRuntimeAiSettings();
   return {
     id: row.id,
@@ -365,7 +380,7 @@ function rowToListItem(row: PdfRow): PdfListItem {
   };
 }
 
-function rowToDetail(row: PdfRow, pages: PageRow[]): PdfDetail {
+export function rowToDetail(row: PdfRow, pages: PageRow[]): PdfDetail {
   const runtime = getRuntimeAiSettings();
   const detailPages: PdfDetailPage[] = pages.map((p) => ({
     page_number: p.page_number,
@@ -405,7 +420,7 @@ function rowToDetail(row: PdfRow, pages: PageRow[]): PdfDetail {
   };
 }
 
-function extractYoutubeVideoId(url: string): string | null {
+export function extractYoutubeVideoId(url: string): string | null {
   try {
     const u = new URL(url);
     if (u.hostname.includes('youtu.be')) {
@@ -425,7 +440,7 @@ function extractYoutubeVideoId(url: string): string | null {
   }
 }
 
-function streamFile(
+export function streamFile(
   reply: FastifyReply,
   filePath: string,
   contentType: string,
@@ -436,9 +451,4 @@ function streamFile(
   reply.header('content-length', String(stat.size));
   reply.header('cache-control', cacheControl);
   return reply.send(fs.createReadStream(filePath));
-}
-
-export async function pdfRoutes(app: FastifyInstance): Promise<void> {
-  // migrated entrypoint
-  return import('./pdfs/index').then((m) => m.pdfRoutes(app));
 }

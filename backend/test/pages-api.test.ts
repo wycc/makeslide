@@ -269,3 +269,28 @@ test('create presentation then add/delete on different positions should remain c
 
   await app.close();
 });
+
+
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { normalizeErrorCode } from '../src/errors';
+
+test('error code normalize: upload type', () => {
+  assert.equal(normalizeErrorCode('INVALID_MIME'), 'INVALID_UPLOAD_TYPE');
+});
+
+test('error code normalize: url', () => {
+  assert.equal(normalizeErrorCode('INVALID_YOUTUBE_URL'), 'INVALID_URL');
+});
+
+test('error code normalize: resource not found', () => {
+  assert.equal(normalizeErrorCode('PAGE_AUDIO_NOT_FOUND'), 'RESOURCE_NOT_FOUND');
+});
+
+test('error code normalize: job conflict', () => {
+  assert.equal(normalizeErrorCode('JOB_ALREADY_RUNNING'), 'JOB_CONFLICT');
+});
+
+test('error code normalize: pass through', () => {
+  assert.equal(normalizeErrorCode('INTERNAL_ERROR'), 'INTERNAL_ERROR');
+});

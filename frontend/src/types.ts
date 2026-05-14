@@ -87,6 +87,7 @@ export interface UploadResponse {
   original_filename: string;
   user_prompt: string | null;
   require_script_confirmation: boolean;
+  tts_provider?: 'openai' | 'gemini';
   created_at: string;
 }
 
