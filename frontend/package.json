@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "dev": "../scripts/with-node-env.sh vite",
+    "build": "../scripts/with-node-env.sh tsc --noEmit && ../scripts/with-node-env.sh vite build",
+    "preview": "../scripts/with-node-env.sh vite preview",
+    "typecheck": "../scripts/with-node-env.sh tsc --noEmit"
   },
   "dependencies": {
     "react": "^18.3.1",

@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { buildApp } from '../src/server';
 import { db } from '../src/db';
 import { finishArtifact, finishRun, finishStage, startArtifact, startRun, startStage } from '../src/services/timing';
+import { setOpenAIClientForTest } from '../src/services/openai';
+import { renderTextPagesWithLlm } from '../src/worker/steps/renderTextPagesWithLlm';
 
 const PDF_ID = 'test-timing-01';
 
@@ -64,6 +66,113 @@ test('timing service writes events and updates summaries', () => {
   assert.equal(timing.status, 'succeeded');
   assert.equal(timing.duration_ms, 42);
   assert.equal(timing.reason, 'initial');
+});
+
+test('TXT image timing can use render-step duration instead of callback duration', () => {
+  seedPdf();
+  const run = startRun({ pdfId: PDF_ID, runType: 'initial', triggeredBy: 'system' });
+  const artifact = startArtifact({
+    run,
+    pageNumber: 1,
+    artifact: 'image',
+    reason: 'initial',
+    metadata: { source_type: 'text', precision: 'step_timing' },
+  });
+
+  const startedAt = '2026-05-15T02:00:00.000Z';
+  const endedAt = '2026-05-15T02:00:12.345Z';
+  finishArtifact(artifact, 'succeeded', {
+    startedAt,
+    endedAt,
+    durationMs: 12_345,
+    outputPath: 'pages/001.png',
+    metadata: { source_type: 'text', precision: 'step_timing', reused: false },
+  });
+
+  const timing = db
+    .prepare(`SELECT started_at, ended_at, duration_ms FROM page_artifact_timings WHERE pdf_id = ? AND page_number = 1 AND artifact = 'image'`)
+    .get(PDF_ID) as { started_at: string; ended_at: string; duration_ms: number };
+  assert.equal(timing.started_at, startedAt);
+  assert.equal(timing.ended_at, endedAt);
+  assert.equal(timing.duration_ms, 12_345);
+});
+
+test('TXT LLM image generation retries transient errors then succeeds with image timeout', async () => {
+  const calls: Array<{ body: unknown; options: { timeout?: number } | undefined }> = [];
+  const transient = Object.assign(new Error('rate limited'), { status: 429, code: 'rate_limit_exceeded', type: 'rate_limit_error' });
+  setOpenAIClientForTest({
+    images: {
+      generate: async (body: unknown, options?: { timeout?: number }) => {
+        calls.push({ body, options });
+        if (calls.length === 1) throw transient;
+        return { data: [{ b64_json: Buffer.from('png').toString('base64') }] };
+      },
+    },
+  } as never);
+
+  const events: Array<{ pageNumber: number; info: { status?: string; attempt?: number; timeoutMs?: number } }> = [];
+  const result = await renderTextPagesWithLlm({
+    pdfId: 'test-timing-render-retry',
+    pages: [{ pageNumber: 1, content: '第一頁內容' }],
+    onPage: (pageNumber, _imagePath, info) => events.push({ pageNumber, info }),
+  });
+
+  assert.equal(result.pageCount, 1);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0]?.options?.timeout, events[0]?.info.timeoutMs);
+  assert.equal(events[0]?.pageNumber, 1);
+  assert.equal(events[0]?.info.status, 'succeeded');
+  assert.equal(events[0]?.info.attempt, 2);
+  setOpenAIClientForTest(null);
+});
+
+test('TXT LLM image generation final failure can be recorded as failed image artifact timing', async () => {
+  seedPdf();
+  const run = startRun({ pdfId: PDF_ID, runType: 'initial', triggeredBy: 'system' });
+  const h = startArtifact({
+    run,
+    pageNumber: 1,
+    artifact: 'image',
+    reason: 'initial',
+    metadata: { source_type: 'text', precision: 'step_timing' },
+  });
+  const startedAt = '2026-05-15T02:10:00.000Z';
+  const endedAt = '2026-05-15T02:10:30.000Z';
+  finishArtifact(h, 'failed', {
+    startedAt,
+    endedAt,
+    durationMs: 30_000,
+    outputPath: null,
+    error: { code: 'ETIMEDOUT', message: 'image request timed out' },
+    metadata: {
+      source_type: 'text',
+      precision: 'step_timing',
+      attempt: 3,
+      model: 'gpt-image-2',
+      promptLength: 1234,
+      timeoutMs: 60000,
+      errorStatus: null,
+      errorType: 'APIConnectionTimeoutError',
+    },
+  });
+
+  const timing = db
+    .prepare(`SELECT status, duration_ms, output_path, error_code, error_message FROM page_artifact_timings WHERE pdf_id = ? AND page_number = 1 AND artifact = 'image'`)
+    .get(PDF_ID) as { status: string; duration_ms: number; output_path: string | null; error_code: string; error_message: string };
+  assert.equal(timing.status, 'failed');
+  assert.equal(timing.duration_ms, 30_000);
+  assert.equal(timing.output_path, null);
+  assert.equal(timing.error_code, 'ETIMEDOUT');
+  assert.equal(timing.error_message, 'image request timed out');
+
+  const event = db
+    .prepare(`SELECT event_type, metadata_json FROM page_artifact_events WHERE pdf_id = ? AND page_number = 1 AND artifact = 'image' AND event_type = 'failed'`)
+    .get(PDF_ID) as { event_type: string; metadata_json: string };
+  assert.equal(event.event_type, 'failed');
+  const metadata = JSON.parse(event.metadata_json) as { attempt: number; promptLength: number; timeoutMs: number };
+  assert.equal(metadata.attempt, 3);
+  assert.equal(metadata.promptLength, 1234);
+  assert.equal(metadata.timeoutMs, 60000);
 });
 
 test('GET /api/pdfs/:id includes page timings with null fallback for missing artifacts', async () => {

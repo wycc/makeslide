@@ -118,6 +118,10 @@ export function setOpenAIApiKeyRuntime(apiKey: string): void {
   cachedClient = null;
 }
 
+export function setOpenAIClientForTest(client: OpenAI | null): void {
+  cachedClient = client;
+}
+
 export interface TokenUsage {
   prompt_tokens: number;
   completion_tokens: number;

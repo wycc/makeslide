@@ -8,12 +8,99 @@ import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../../services/imagePr
 export interface RenderTextPagesWithLlmOptions {
   pdfId: string;
   pages: Array<{ pageNumber: number; content: string; slideLabel?: string }>;
-  onPage?: (pageNumber: number, imagePath: string) => void;
+  onPage?: (pageNumber: number, imagePath: string, info: RenderTextPageTimingInfo) => void;
+}
+
+export interface RenderTextPageTimingInfo {
+  imagePath: string;
+  startedAt: string;
+  endedAt: string;
+  latencyMs: number;
+  reused: boolean;
+  status?: 'succeeded' | 'failed' | 'skipped';
+  attempt?: number;
+  model?: string;
+  promptLength?: number;
+  timeoutMs?: number;
+  error?: RenderTextPageErrorInfo;
+  metadata?: Record<string, unknown>;
+}
+
+export interface RenderTextPageErrorInfo {
+  status?: number | null;
+  code?: string | null;
+  type?: string | null;
+  message: string;
 }
 
 export interface RenderTextPagesWithLlmResult {
   pageCount: number;
   pagePaths: string[];
+}
+
+const IMAGE_GENERATION_MAX_ATTEMPTS = 3;
+const IMAGE_GENERATION_BACKOFF_BASE_MS = 500;
+
+function imageTimeoutMs(): number {
+  return config.openaiImageQuality === 'high'
+    ? config.openaiImageTimeoutMsHighQuality
+    : config.openaiImageTimeoutMs;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function extractErrorInfo(err: unknown): RenderTextPageErrorInfo {
+  const e = err as {
+    status?: unknown;
+    code?: unknown;
+    type?: unknown;
+    name?: unknown;
+    message?: unknown;
+    cause?: { code?: unknown; message?: unknown };
+  };
+  const status = typeof e?.status === 'number' ? e.status : null;
+  const code = typeof e?.code === 'string'
+    ? e.code
+    : typeof e?.cause?.code === 'string'
+      ? e.cause.code
+      : null;
+  const type = typeof e?.type === 'string'
+    ? e.type
+    : typeof e?.name === 'string'
+      ? e.name
+      : null;
+  const message = typeof e?.message === 'string'
+    ? e.message
+    : typeof e?.cause?.message === 'string'
+      ? e.cause.message
+      : String(err);
+  return { status, code, type, message };
+}
+
+function isTransientImageError(err: unknown): boolean {
+  const info = extractErrorInfo(err);
+  if (info.status === 429) return true;
+  if (typeof info.status === 'number' && info.status >= 500 && info.status < 600) return true;
+  const code = (info.code ?? '').toUpperCase();
+  const type = (info.type ?? '').toLowerCase();
+  const message = info.message.toLowerCase();
+  return [
+    'ETIMEDOUT',
+    'ECONNRESET',
+    'ECONNREFUSED',
+    'EPIPE',
+    'ENOTFOUND',
+    'EAI_AGAIN',
+    'UND_ERR_CONNECT_TIMEOUT',
+    'UND_ERR_HEADERS_TIMEOUT',
+    'UND_ERR_BODY_TIMEOUT',
+  ].includes(code) || type.includes('timeout') || message.includes('timeout') || message.includes('timed out');
+}
+
+function retryDelayMs(attempt: number): number {
+  return IMAGE_GENERATION_BACKOFF_BASE_MS * 2 ** (attempt - 1);
 }
 
 export async function renderTextPagesWithLlm(
@@ -25,7 +112,8 @@ export async function renderTextPagesWithLlm(
   await fs.promises.mkdir(pagesDir(opts.pdfId), { recursive: true });
 
   for (const p of opts.pages) {
-    const startedAt = Date.now();
+    const startedAtMs = Date.now();
+    const startedAt = new Date(startedAtMs).toISOString();
     const imagePath = pageImagePath(opts.pdfId, p.pageNumber, pageCount);
     const textPath = pageTextPath(opts.pdfId, p.pageNumber, pageCount);
 
@@ -45,7 +133,14 @@ export async function renderTextPagesWithLlm(
           },
           'Text image generation: reuse existing image (idempotent skip)',
         );
-        opts.onPage?.(p.pageNumber, imagePath);
+        const endedAt = new Date().toISOString();
+        opts.onPage?.(p.pageNumber, imagePath, {
+          imagePath,
+          startedAt,
+          endedAt,
+          latencyMs: Date.parse(endedAt) - Date.parse(startedAt),
+          reused: true,
+        });
         continue;
       }
     } catch (err) {
@@ -78,44 +173,145 @@ export async function renderTextPagesWithLlm(
     });
 
     let image;
-    try {
-      image = await client.images.generate({
+    let finalAttempt = 0;
+    let lastErrorInfo: RenderTextPageErrorInfo | null = null;
+    const timeoutMs = imageTimeoutMs();
+    for (let attempt = 1; attempt <= IMAGE_GENERATION_MAX_ATTEMPTS; attempt++) {
+      finalAttempt = attempt;
+      try {
+        image = await client.images.generate(
+          {
+            model: config.openaiImageModel,
+            prompt,
+            size: '1536x1024',
+          },
+          { timeout: timeoutMs },
+        );
+        break;
+      } catch (err) {
+        const errorInfo = extractErrorInfo(err);
+        lastErrorInfo = errorInfo;
+        const transient = isTransientImageError(err);
+        const willRetry = transient && attempt < IMAGE_GENERATION_MAX_ATTEMPTS;
+        logger[willRetry ? 'warn' : 'error'](
+          {
+            pdfId: opts.pdfId,
+            pageNumber: p.pageNumber,
+            pageCount,
+            attempt,
+            maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS,
+            model: config.openaiImageModel,
+            promptLength: prompt.length,
+            timeoutMs,
+            latencyMs: Date.now() - startedAtMs,
+            transient,
+            willRetry,
+            error: errorInfo,
+          },
+          willRetry ? 'Text image generation: page attempt failed, retrying' : 'Text image generation: page failed',
+        );
+        if (!willRetry) {
+          const endedAt = new Date().toISOString();
+          opts.onPage?.(p.pageNumber, imagePath, {
+            imagePath,
+            startedAt,
+            endedAt,
+            latencyMs: Date.parse(endedAt) - Date.parse(startedAt),
+            reused: false,
+            status: 'failed',
+            attempt,
+            model: config.openaiImageModel,
+            promptLength: prompt.length,
+            timeoutMs,
+            error: errorInfo,
+            metadata: {
+              source_type: 'text',
+              precision: 'step_timing',
+              maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS,
+              transient,
+            },
+          });
+          throw err;
+        }
+        await sleep(retryDelayMs(attempt));
+      }
+    }
+
+    if (!image) {
+      const err = new Error(`LLM image generation failed at page ${p.pageNumber}: no image response`);
+      lastErrorInfo = extractErrorInfo(err);
+      const endedAt = new Date().toISOString();
+      opts.onPage?.(p.pageNumber, imagePath, {
+        imagePath,
+        startedAt,
+        endedAt,
+        latencyMs: Date.parse(endedAt) - Date.parse(startedAt),
+        reused: false,
+        status: 'failed',
+        attempt: finalAttempt,
         model: config.openaiImageModel,
-        prompt,
-        size: '1536x1024',
+        promptLength: prompt.length,
+        timeoutMs,
+        error: lastErrorInfo,
+        metadata: { source_type: 'text', precision: 'step_timing', maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS },
       });
-    } catch (err) {
-      logger.error(
-        {
-          pdfId: opts.pdfId,
-          pageNumber: p.pageNumber,
-          pageCount,
-          latencyMs: Date.now() - startedAt,
-          error: err instanceof Error ? err.message : String(err),
-        },
-        'Text image generation: page failed',
-      );
       throw err;
     }
 
     const first = image.data?.[0];
     const b64 = first?.b64_json;
-    if (!b64) throw new Error(`LLM image generation failed at page ${p.pageNumber}`);
+    if (!b64) {
+      const err = new Error(`LLM image generation failed at page ${p.pageNumber}: missing b64_json`);
+      lastErrorInfo = extractErrorInfo(err);
+      const endedAt = new Date().toISOString();
+      opts.onPage?.(p.pageNumber, imagePath, {
+        imagePath,
+        startedAt,
+        endedAt,
+        latencyMs: Date.parse(endedAt) - Date.parse(startedAt),
+        reused: false,
+        status: 'failed',
+        attempt: finalAttempt,
+        model: config.openaiImageModel,
+        promptLength: prompt.length,
+        timeoutMs,
+        error: lastErrorInfo,
+        metadata: { source_type: 'text', precision: 'step_timing', maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS },
+      });
+      throw err;
+    }
 
     await fs.promises.writeFile(imagePath, Buffer.from(b64, 'base64'));
     await fs.promises.writeFile(textPath, p.content, 'utf8');
+    const endedAt = new Date().toISOString();
+    const latencyMs = Date.parse(endedAt) - Date.parse(startedAt);
     pagePaths.push(imagePath);
     logger.info(
         {
           pdfId: opts.pdfId,
           pageNumber: p.pageNumber,
           pageCount,
-          latencyMs: Date.now() - startedAt,
+          latencyMs,
           model: config.openaiImageModel,
+          attempt: finalAttempt,
+          promptLength: prompt.length,
+          timeoutMs,
         },
         'Text image generation: page done',
       );
-    opts.onPage?.(p.pageNumber, imagePath);
+    opts.onPage?.(p.pageNumber, imagePath, {
+      imagePath,
+      startedAt,
+      endedAt,
+      latencyMs,
+      reused: false,
+      status: 'succeeded',
+      attempt: finalAttempt,
+      model: config.openaiImageModel,
+      promptLength: prompt.length,
+      timeoutMs,
+      metadata: { source_type: 'text', precision: 'step_timing', maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS },
+    });
   }
 
   if (pagePaths[0]) {

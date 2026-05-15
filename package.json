@@ -8,11 +8,14 @@
     "frontend"
   ],
   "scripts": {
-    "dev": "concurrently -n backend,frontend -c blue,green \"npm:dev:backend\" \"npm:dev:frontend\"",
+    "dev": "scripts/with-node-env.sh concurrently -n backend,frontend -c blue,green \"npm:dev:backend\" \"npm:dev:frontend\"",
     "dev:backend": "npm --workspace backend run dev",
     "dev:frontend": "npm --workspace frontend run dev",
-    "build": "npm --workspace backend run build && npm --workspace frontend run build",
-    "install:all": "npm install"
+    "build": "scripts/with-node-env.sh npm --workspace backend run build && scripts/with-node-env.sh npm --workspace frontend run build",
+    "install:all": "scripts/with-node-env.sh npm install",
+    "test": "scripts/with-node-env.sh npm --workspace backend test",
+    "lint": "scripts/with-node-env.sh npm run typecheck",
+    "typecheck": "scripts/with-node-env.sh npm --workspace backend run typecheck && scripts/with-node-env.sh npm --workspace frontend run typecheck"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

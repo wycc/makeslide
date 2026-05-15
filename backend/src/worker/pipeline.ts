@@ -490,9 +490,37 @@ async function runPipeline(pdfId: string): Promise<void> {
             return await renderTextPagesWithLlm({
               pdfId,
               pages: split.pages,
-              onPage: (n, imagePath) => {
-                const h = textImageHandles.get(n) ?? startArtifact({ run, pageNumber: n, artifact: 'image', reason: runType === 'resume' ? 'resume' : 'initial', metadata: { source_type: 'text', precision: 'callback_completion' } });
-                finishArtifact(h, 'succeeded', { outputPath: toRelative(pdfId, imagePath), metadata: { source_type: 'text', precision: 'callback_completion' } });
+              onPage: (n, imagePath, info) => {
+                const h = textImageHandles.get(n) ?? startArtifact({ run, pageNumber: n, artifact: 'image', reason: runType === 'resume' ? 'resume' : 'initial', metadata: { source_type: 'text', precision: 'step_timing' } });
+                textImageHandles.set(n, h);
+                const status = info.status ?? (info.reused ? 'skipped' : 'succeeded');
+                finishArtifact(h, status, {
+                  startedAt: info.startedAt,
+                  endedAt: info.endedAt,
+                  durationMs: info.latencyMs,
+                  outputPath: status === 'failed' ? null : toRelative(pdfId, imagePath),
+                  error: info.error ? { code: info.error.code ?? info.error.type ?? null, message: info.error.message } : undefined,
+                  metadata: {
+                    source_type: 'text',
+                    precision: 'step_timing',
+                    reused: info.reused,
+                    attempt: info.attempt ?? null,
+                    model: info.model ?? null,
+                    promptLength: info.promptLength ?? null,
+                    timeoutMs: info.timeoutMs ?? null,
+                    errorStatus: info.error?.status ?? null,
+                    errorType: info.error?.type ?? null,
+                    ...(info.metadata ?? {}),
+                  },
+                });
+                if (status === 'failed') {
+                  upsertPage(pdfId, n, {
+                    status: 'failed',
+                    error_message: info.error?.message ?? 'Text image generation failed',
+                  });
+                  bumpProgress(pdfId, n);
+                  return;
+                }
                 upsertPage(pdfId, n, {
                   image_path: toRelative(pdfId, imagePath),
                   status: 'rendered',

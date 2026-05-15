@@ -5,11 +5,11 @@
   "type": "module",
   "main": "dist/server.js",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "build": "tsc -p tsconfig.json",
-    "start": "node dist/server.js",
-    "typecheck": "tsc --noEmit",
-    "test": "tsx --test ./test/*.test.ts"
+    "dev": "../scripts/with-node-env.sh tsx watch src/server.ts",
+    "build": "../scripts/with-node-env.sh tsc -p tsconfig.json",
+    "start": "../scripts/with-node-env.sh node dist/server.js",
+    "typecheck": "../scripts/with-node-env.sh tsc --noEmit",
+    "test": "../scripts/with-node-env.sh tsx --test ./test/*.test.ts"
   },
   "dependencies": {
     "@fastify/cors": "^9.0.1",
