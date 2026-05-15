@@ -154,6 +154,116 @@ function migrate(): void {
     logger.info('Added column pages.page_prompt');
   }
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS pipeline_runs (
+      id TEXT PRIMARY KEY,
+      pdf_id TEXT NOT NULL,
+      run_type TEXT NOT NULL,
+      parent_run_id TEXT,
+      triggered_by TEXT NOT NULL,
+      status TEXT NOT NULL,
+      attempt INTEGER NOT NULL,
+      started_at TEXT NOT NULL,
+      ended_at TEXT,
+      duration_ms INTEGER,
+      sla_status TEXT,
+      error_code TEXT,
+      error_message TEXT,
+      metadata_json TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (pdf_id) REFERENCES pdfs(id) ON DELETE CASCADE,
+      FOREIGN KEY (parent_run_id) REFERENCES pipeline_runs(id) ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_pipeline_runs_pdf_started ON pipeline_runs(pdf_id, started_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_pipeline_runs_status_started ON pipeline_runs(status, started_at DESC);
+
+    CREATE TABLE IF NOT EXISTS pipeline_stage_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id TEXT NOT NULL,
+      pdf_id TEXT NOT NULL,
+      stage TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      attempt INTEGER NOT NULL,
+      occurred_at TEXT NOT NULL,
+      duration_ms INTEGER,
+      sla_status TEXT,
+      error_code TEXT,
+      error_message TEXT,
+      metadata_json TEXT,
+      FOREIGN KEY (run_id) REFERENCES pipeline_runs(id) ON DELETE CASCADE,
+      FOREIGN KEY (pdf_id) REFERENCES pdfs(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_pipeline_stage_events_run_stage ON pipeline_stage_events(run_id, stage, attempt, occurred_at);
+    CREATE INDEX IF NOT EXISTS idx_pipeline_stage_events_pdf ON pipeline_stage_events(pdf_id, occurred_at DESC);
+
+    CREATE TABLE IF NOT EXISTS pipeline_stage_summaries (
+      run_id TEXT NOT NULL,
+      pdf_id TEXT NOT NULL,
+      stage TEXT NOT NULL,
+      attempt INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      started_at TEXT,
+      ended_at TEXT,
+      duration_ms INTEGER,
+      sla_target_ms INTEGER,
+      sla_status TEXT NOT NULL DEFAULT 'unknown',
+      error_code TEXT,
+      error_message TEXT,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (run_id, stage),
+      FOREIGN KEY (run_id) REFERENCES pipeline_runs(id) ON DELETE CASCADE,
+      FOREIGN KEY (pdf_id) REFERENCES pdfs(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS page_artifact_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id TEXT NOT NULL,
+      pdf_id TEXT NOT NULL,
+      page_number INTEGER NOT NULL,
+      artifact TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      attempt INTEGER NOT NULL,
+      reason TEXT NOT NULL,
+      occurred_at TEXT NOT NULL,
+      duration_ms INTEGER,
+      sla_status TEXT,
+      output_path TEXT,
+      error_code TEXT,
+      error_message TEXT,
+      metadata_json TEXT,
+      FOREIGN KEY (run_id) REFERENCES pipeline_runs(id) ON DELETE CASCADE,
+      FOREIGN KEY (pdf_id) REFERENCES pdfs(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_page_artifact_events_pdf_page ON page_artifact_events(pdf_id, page_number, artifact, occurred_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_page_artifact_events_run ON page_artifact_events(run_id, page_number, artifact, attempt);
+
+    CREATE TABLE IF NOT EXISTS page_artifact_timings (
+      pdf_id TEXT NOT NULL,
+      page_number INTEGER NOT NULL,
+      artifact TEXT NOT NULL,
+      run_id TEXT NOT NULL,
+      attempt INTEGER NOT NULL,
+      reason TEXT NOT NULL,
+      status TEXT NOT NULL,
+      started_at TEXT,
+      ended_at TEXT,
+      duration_ms INTEGER,
+      sla_target_ms INTEGER,
+      sla_status TEXT NOT NULL DEFAULT 'unknown',
+      output_path TEXT,
+      error_code TEXT,
+      error_message TEXT,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (pdf_id, page_number, artifact),
+      FOREIGN KEY (pdf_id) REFERENCES pdfs(id) ON DELETE CASCADE,
+      FOREIGN KEY (run_id) REFERENCES pipeline_runs(id) ON DELETE CASCADE
+    );
+  `);
+
   logger.info({ dbPath: config.dbPath }, 'Database migrations applied');
 }
 

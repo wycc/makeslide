@@ -70,6 +70,8 @@ export interface SynthesizeAudioPageResult {
   bytes: number;
   durationSeconds: number | null;
   generatedAt: string;
+  startedAt: string;
+  endedAt: string;
   latencyMs: number;
   skipped: boolean;
 }
@@ -89,7 +91,7 @@ export interface SynthesizeAudioOptions {
    * idempotent skips). `done` is 1-based count of pages finished so far.
    * Safe to invoke from within concurrent workers.
    */
-  onPage?: (pageNumber: number, done: number) => void;
+  onPage?: (pageNumber: number, done: number, info?: { startedAt: string; endedAt: string; skipped: boolean; audioPath: string; durationSeconds: number | null }) => void;
   voice?: string | null;
   speed?: number | null;
   /**
@@ -208,6 +210,7 @@ async function synthesizeOnePage(params: {
 
   for (let attempt = 1; attempt <= TTS_MAX_ATTEMPTS; attempt++) {
     const startedAt = Date.now();
+    const startedAtIso = new Date().toISOString();
     try {
       const buffers: Buffer[] = [];
       for (const seg of segments) {
@@ -287,13 +290,16 @@ async function synthesizeOnePage(params: {
         'synthesizeAudio: page done',
       );
 
+      const endedAtIso = new Date().toISOString();
       return {
         pageNumber,
         audioPath: absPath,
         chars: input.length,
         bytes: buffer.byteLength,
         durationSeconds: duration,
-        generatedAt: new Date().toISOString(),
+        generatedAt: endedAtIso,
+        startedAt: startedAtIso,
+        endedAt: endedAtIso,
         latencyMs,
         skipped: false,
       };
@@ -343,6 +349,8 @@ async function synthesizeOnePage(params: {
     bytes: 0,
     durationSeconds: null,
     generatedAt: new Date().toISOString(),
+    startedAt: new Date().toISOString(),
+    endedAt: new Date().toISOString(),
     latencyMs: 0,
     skipped: true,
   };
@@ -386,7 +394,13 @@ export async function synthesizeAudio(
           });
           results[idx] = res;
           done += 1;
-          onPage?.(page.pageNumber, done);
+          onPage?.(page.pageNumber, done, {
+            startedAt: res.startedAt,
+            endedAt: res.endedAt,
+            skipped: res.skipped,
+            audioPath: res.audioPath,
+            durationSeconds: res.durationSeconds,
+          });
         } catch (err) {
           const code = (err as Error & { code?: string }).code;
           if (code === 'CANCELLED') {

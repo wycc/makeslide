@@ -41,6 +41,16 @@ import {
   synthesizeAudio,
 } from './steps/synthesizeAudio';
 import { getProcessingQueue } from './queue';
+import {
+  finishArtifact,
+  finishRun,
+  finishStage,
+  recordApproxArtifact,
+  startArtifact,
+  startRun,
+  startStage,
+  type TimingArtifactHandle,
+} from '../services/timing';
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -375,6 +385,14 @@ async function runPipeline(pdfId: string): Promise<void> {
     return;
   }
 
+  const runType = row.status === 'processing' || row.progress_step ? 'resume' : 'initial';
+  const run = startRun({
+    pdfId,
+    runType,
+    triggeredBy: runType === 'resume' ? 'startup_recovery' : 'system',
+    metadata: { resumeFrom: row.progress_step ?? 'start', source_type: row.source_type ?? 'pdf' },
+  });
+
   logger.info(
     { pdfId, resumeFrom: row.progress_step ?? 'start' },
     'Pipeline: start',
@@ -387,6 +405,7 @@ async function runPipeline(pdfId: string): Promise<void> {
 
   try {
     if ((row.source_type ?? 'pdf') === 'youtube') {
+      const stage = startStage(run, 'source_prepare', { source_type: 'youtube' });
       const videoId = row.source_video_id ?? null;
       if (!videoId) {
         throw new Error('Missing source_video_id for youtube task');
@@ -440,6 +459,7 @@ async function runPipeline(pdfId: string): Promise<void> {
         { pdfId, videoId, lines: cap.lines.length },
         'Pipeline: youtube captions + outline prepared, continue with TXT pipeline',
       );
+      finishStage(stage, 'succeeded', { videoId, captions: cap.lines.length });
     }
 
     // -------- Step 1: render pages + cover --------
@@ -450,22 +470,29 @@ async function runPipeline(pdfId: string): Promise<void> {
       row.progress_step === 'scripting' ||
       row.progress_step === 'script_ready';
     if (!alreadyRendered || !pageCount) {
+      const renderStage = startStage(run, 'render_pages', { alreadyRendered: false });
       // pdftoppm renders every page in a single spawn so we can only surface
       // 0/? → pageCount/pageCount. For TXT+LLM image generation we can expose
       // per-page progress because we know the split result up-front.
       setProgress(pdfId, 'rendering', 0, 0);
       await persistMetadata(pdfId);
       const isTextImport = fs.existsSync(sourceTextPath(pdfId));
+      const renderStartedAtMs = Date.now();
+      const textImageHandles = new Map<number, TimingArtifactHandle | null>();
       const r = isTextImport
         ? await (async () => {
             const raw = await fs.promises.readFile(sourceTextPath(pdfId), 'utf8');
+            const splitStage = startStage(run, 'split_text', { source_type: 'text' });
             const split = await splitTextWithLlm(raw);
+            finishStage(splitStage, 'succeeded', { pages: split.pages.length });
             setProgress(pdfId, 'rendering', 0, split.pages.length);
             await persistMetadata(pdfId);
             return await renderTextPagesWithLlm({
               pdfId,
               pages: split.pages,
               onPage: (n, imagePath) => {
+                const h = textImageHandles.get(n) ?? startArtifact({ run, pageNumber: n, artifact: 'image', reason: runType === 'resume' ? 'resume' : 'initial', metadata: { source_type: 'text', precision: 'callback_completion' } });
+                finishArtifact(h, 'succeeded', { outputPath: toRelative(pdfId, imagePath), metadata: { source_type: 'text', precision: 'callback_completion' } });
                 upsertPage(pdfId, n, {
                   image_path: toRelative(pdfId, imagePath),
                   status: 'rendered',
@@ -483,6 +510,16 @@ async function runPipeline(pdfId: string): Promise<void> {
         if (!abs) continue;
         const pageNumber = i + 1;
         if (!isTextImport) {
+          const avgDuration = r.pagePaths.length > 0 ? (Date.now() - renderStartedAtMs) / r.pagePaths.length : 0;
+          recordApproxArtifact({
+            run,
+            pageNumber,
+            artifact: 'image',
+            reason: runType === 'resume' ? 'resume' : 'initial',
+            outputPath: toRelative(pdfId, abs),
+            durationMs: avgDuration,
+            metadata: { precision: 'batch_average', reason: 'pdftoppm renders pages in one batch' },
+          });
           upsertPage(pdfId, pageNumber, {
             image_path: toRelative(pdfId, abs),
             status: 'rendered',
@@ -491,6 +528,7 @@ async function runPipeline(pdfId: string): Promise<void> {
         }
       }
       await persistMetadata(pdfId);
+      finishStage(renderStage, 'succeeded', { pageCount, precision: isTextImport ? 'per_page_callback' : 'batch' });
     } else {
       logger.info({ pdfId, pageCount }, 'Pipeline: reuse rendered pages (resume)');
     }
@@ -507,13 +545,19 @@ async function runPipeline(pdfId: string): Promise<void> {
 
     let textResult: Array<{ pageNumber: number; empty: boolean; textPath: string }>;
     if (!alreadyTextDone) {
+      const textStage = startStage(run, 'extract_text', { pageCount });
+      const textHandles = new Map<number, TimingArtifactHandle | null>();
       setProgress(pdfId, 'extracting_text', 0, pageCount);
       await persistMetadata(pdfId);
       const { pages } = await extractText(pdfId, pageCount, (pageNumber) => {
+        const h = textHandles.get(pageNumber) ?? startArtifact({ run, pageNumber, artifact: 'text', reason: runType === 'resume' ? 'resume' : 'initial', metadata: { precision: 'callback_completion' } });
+        textHandles.set(pageNumber, h);
         bumpProgress(pdfId, pageNumber);
       });
       textResult = pages;
       for (const p of pages) {
+        const h = textHandles.get(p.pageNumber) ?? startArtifact({ run, pageNumber: p.pageNumber, artifact: 'text', reason: runType === 'resume' ? 'resume' : 'initial', metadata: { precision: 'post_step' } });
+        finishArtifact(h, 'succeeded', { outputPath: toRelative(pdfId, p.textPath), metadata: { empty: p.empty, precision: 'callback_completion' } });
         upsertPage(pdfId, p.pageNumber, {
           text_path: toRelative(pdfId, p.textPath),
           status: 'text_ready',
@@ -564,6 +608,7 @@ async function runPipeline(pdfId: string): Promise<void> {
         await writeMetadata(pdfId, meta);
       }
       logger.info({ pdfId, pageCount }, 'Pipeline: M2 stages complete');
+      finishStage(textStage, 'succeeded', { pageCount });
     } else {
       // Rebuild textResult from disk + metadata on resume.
       const existingMeta = (await readMetadata(pdfId)) ?? null;
@@ -585,6 +630,7 @@ async function runPipeline(pdfId: string): Promise<void> {
     // For TXT or PDF, generate title from available extracted page text before
     // script/audio stages so UI can show a better title as early as possible.
     try {
+      const titleStage = startStage(run, 'generate_title', { pageCount });
       const titleResult = await generateTitle(pdfId, pageCount, { userPrompt });
       updatePdf(pdfId, { title: titleResult.title });
       await persistMetadata(pdfId, {
@@ -614,7 +660,9 @@ async function runPipeline(pdfId: string): Promise<void> {
         },
         'Pipeline: early title generated',
       );
+      finishStage(titleStage, 'succeeded', { source: titleResult.source, usage: titleResult.usage });
     } catch (err) {
+      finishStage(startStage(run, 'generate_title'), 'failed', undefined, { message: err instanceof Error ? err.message : String(err) });
       logger.warn(
         {
           pdfId,
@@ -636,6 +684,8 @@ async function runPipeline(pdfId: string): Promise<void> {
     }
 
     setProgress(pdfId, 'scripting', 0, pageCount);
+    const scriptStage = startStage(run, 'generate_scripts', { pageCount });
+    const scriptHandles = new Map<number, TimingArtifactHandle | null>();
     updatePdf(pdfId, { error_message: null });
     await persistMetadata(pdfId);
 
@@ -670,7 +720,17 @@ async function runPipeline(pdfId: string): Promise<void> {
       pages: pagesForScript,
       userPrompt,
       maxCharsPerPage: scriptMaxCharsPerPage,
-      onPage: (_pageNumber, done) => {
+      onPage: (pageNumber, done, info) => {
+        const h = scriptHandles.get(pageNumber) ?? startArtifact({ run, pageNumber, artifact: 'script', reason: runType === 'resume' ? 'resume' : 'initial', metadata: { precision: info ? 'step_timing' : 'callback_completion' } });
+        scriptHandles.set(pageNumber, h);
+        if (info) {
+          finishArtifact(h, info.skipped ? 'skipped' : 'succeeded', {
+            startedAt: info.startedAt,
+            endedAt: info.endedAt,
+            outputPath: toRelative(pdfId, info.scriptPath),
+            metadata: { skipped: info.skipped, precision: 'step_timing' },
+          });
+        }
         bumpProgress(pdfId, done);
       },
     });
@@ -728,6 +788,7 @@ async function runPipeline(pdfId: string): Promise<void> {
       },
       'Pipeline: M3 script stage complete',
     );
+    finishStage(scriptStage, 'succeeded', { generated: scriptResult.pages.filter((p) => !p.skipped).length, skipped: scriptResult.pages.filter((p) => p.skipped).length });
 
     // -------- Step 5 (M4): per-page TTS synthesis --------
     const latestAfterScript = getPdfRow(pdfId);
@@ -755,6 +816,8 @@ async function runPipeline(pdfId: string): Promise<void> {
     }
 
     setProgress(pdfId, 'synthesizing', 0, nonEmptyScripts.length);
+    const audioStage = startStage(run, 'synthesize_audio', { pages: nonEmptyScripts.length });
+    const audioHandles = new Map<number, TimingArtifactHandle | null>();
     updatePdf(pdfId, { error_message: null });
     await persistMetadata(pdfId);
 
@@ -779,7 +842,17 @@ async function runPipeline(pdfId: string): Promise<void> {
       pages: nonEmptyScripts,
       voice: ttsVoiceForRun,
       speed: ttsSpeedForRun,
-      onPage: (_pageNumber, done) => {
+      onPage: (pageNumber, done, info) => {
+        const h = audioHandles.get(pageNumber) ?? startArtifact({ run, pageNumber, artifact: 'audio', reason: runType === 'resume' ? 'resume' : 'initial', metadata: { precision: info ? 'step_timing' : 'callback_completion' } });
+        audioHandles.set(pageNumber, h);
+        if (info) {
+          finishArtifact(h, info.skipped ? 'skipped' : 'succeeded', {
+            startedAt: info.startedAt,
+            endedAt: info.endedAt,
+            outputPath: toRelative(pdfId, info.audioPath),
+            metadata: { skipped: info.skipped, duration_seconds: info.durationSeconds, precision: 'step_timing' },
+          });
+        }
         bumpProgress(pdfId, done);
       },
     });
@@ -846,9 +919,14 @@ async function runPipeline(pdfId: string): Promise<void> {
       },
       'Pipeline: M4 TTS stage complete — pdf ready',
     );
+    finishStage(audioStage, 'succeeded', { generated: ttsResult.pages.filter((p) => !p.skipped).length, skipped: ttsResult.pages.filter((p) => p.skipped).length });
+    const finalizeStage = startStage(run, 'finalize');
+    finishStage(finalizeStage, 'succeeded');
+    finishRun(run, 'succeeded');
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error({ err, pdfId }, 'Pipeline failed');
+    finishRun(run, 'failed', { message });
     updatePdf(pdfId, {
       status: 'failed',
       error_message: message,

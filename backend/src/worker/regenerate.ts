@@ -19,6 +19,15 @@ import {
 import type { PageStatus, PdfRow } from '../types';
 import { generateScript } from './steps/generateScript';
 import { readScriptsForTts, synthesizeAudio } from './steps/synthesizeAudio';
+import {
+  finishArtifact,
+  finishRun,
+  finishStage,
+  startArtifact,
+  startRun,
+  startStage,
+  type TimingRunContext,
+} from '../services/timing';
 
 /**
  * 批次「重生」任務：使用者從前端一次勾選多個項目（逐字稿 / 語音 / 圖檔）後，
@@ -85,6 +94,7 @@ export interface RegenJobState {
   // NEW: 快照與還原
   snapshot_id: string | null;
   rollback_available: boolean;
+  timing_run_id?: string | null;
 }
 
 export interface RegenerateOptions {
@@ -511,6 +521,7 @@ export function startRegenerateJob(
     last_generated_page: null,
     snapshot_id: null,
     rollback_available: false,
+    timing_run_id: null,
   };
   jobs.set(pdfId, state);
   void runJob(state, options, stepNames, pageCount).catch((err) => {
@@ -551,6 +562,13 @@ async function runJob(
   }
 
   state.status = 'running';
+  const timingRun = startRun({
+    pdfId: state.pdf_id,
+    runType: stepNames.length === 1 ? 'regenerate_artifact' : 'regenerate_batch',
+    triggeredBy: 'user',
+    metadata: { job_id: state.job_id, steps: stepNames },
+  });
+  state.timing_run_id = timingRun?.runId ?? null;
   state.updated_at = nowIso();
   logger.info(
     {
@@ -577,13 +595,19 @@ async function runJob(
       state.updated_at = nowIso();
 
       try {
+        const timingStage = startStage(
+          timingRun,
+          step.name === 'script' ? 'generate_scripts' : step.name === 'audio' ? 'synthesize_audio' : 'render_pages',
+          { job_id: state.job_id, regenerate: true },
+        );
         if (step.name === 'script') {
-          await runRegenerateScripts(state, step, options.scripts ?? {}, shouldAbort);
+          await runRegenerateScripts(state, step, options.scripts ?? {}, shouldAbort, timingRun);
         } else if (step.name === 'audio') {
-          await runRegenerateAudio(state, step, options.audio ?? {}, shouldAbort);
+          await runRegenerateAudio(state, step, options.audio ?? {}, shouldAbort, timingRun);
         } else if (step.name === 'image') {
-          await runRegenerateImages(state, step, options.images!, shouldAbort);
+          await runRegenerateImages(state, step, options.images!, shouldAbort, timingRun);
         }
+        finishStage(timingStage, 'succeeded', { completed: step.completed, total: step.total });
         step.status = 'completed';
         step.finished_at = nowIso();
       } catch (err) {
@@ -597,6 +621,16 @@ async function runJob(
         step.status = 'failed';
         step.error = err instanceof Error ? err.message : String(err);
         step.finished_at = nowIso();
+        finishStage(
+          startStage(
+            timingRun,
+            step.name === 'script' ? 'generate_scripts' : step.name === 'audio' ? 'synthesize_audio' : 'render_pages',
+            { job_id: state.job_id, regenerate: true, failed_before_stage_handle: true },
+          ),
+          'failed',
+          undefined,
+          { message: step.error },
+        );
         throw err;
       } finally {
         state.updated_at = nowIso();
@@ -612,6 +646,7 @@ async function runJob(
       { pdfId: state.pdf_id, jobId: state.job_id },
       'regenerate job: completed',
     );
+    finishRun(timingRun, 'succeeded');
   } catch (err) {
     const code = (err as Error & { code?: string }).code;
     if (code === 'CANCELLED' || state.cancel_requested) {
@@ -626,6 +661,9 @@ async function runJob(
         'regenerate job: failed',
       );
     }
+    finishRun(timingRun, state.status === 'cancelled' ? 'canceled' : 'failed', {
+      message: err instanceof Error ? err.message : String(err),
+    });
     state.finished_at = nowIso();
     state.updated_at = nowIso();
   }
@@ -724,6 +762,7 @@ async function runRegenerateScripts(
   step: RegenStepProgress,
   opts: { prompt?: string | null },
   shouldAbort: () => boolean,
+  timingRun: TimingRunContext | null,
 ): Promise<void> {
   const pdfId = state.pdf_id;
   const pdfRow = getPdfRowStrict(pdfId);
@@ -788,7 +827,22 @@ async function runRegenerateScripts(
     pages,
     userPrompt,
     maxCharsPerPage: scriptMaxCharsPerPage,
-    onPage: (pn, done) => {
+    onPage: (pn, done, info) => {
+      if (info) {
+        const h = startArtifact({
+          run: timingRun,
+          pageNumber: pn,
+          artifact: 'script',
+          reason: 'regenerate',
+          metadata: { job_id: state.job_id, precision: 'step_timing' },
+        });
+        finishArtifact(h, info.skipped ? 'skipped' : 'succeeded', {
+          startedAt: info.startedAt,
+          endedAt: info.endedAt,
+          outputPath: path.relative(pdfDir(pdfId), info.scriptPath),
+          metadata: { job_id: state.job_id, skipped: info.skipped, precision: 'step_timing' },
+        });
+      }
       markPageProgress(state, pn, done, step);
     },
     shouldAbort,
@@ -839,6 +893,7 @@ async function runRegenerateAudio(
   step: RegenStepProgress,
   opts: { voice?: string | null; speed?: number | null },
   shouldAbort: () => boolean,
+  timingRun: TimingRunContext | null,
 ): Promise<void> {
   const pdfId = state.pdf_id;
   const pdfRow = getPdfRowStrict(pdfId);
@@ -870,7 +925,22 @@ async function runRegenerateAudio(
     pages: nonEmpty,
     voice,
     speed,
-    onPage: (pn, done) => {
+    onPage: (pn, done, info) => {
+      if (info) {
+        const h = startArtifact({
+          run: timingRun,
+          pageNumber: pn,
+          artifact: 'audio',
+          reason: 'regenerate',
+          metadata: { job_id: state.job_id, precision: 'step_timing' },
+        });
+        finishArtifact(h, info.skipped ? 'skipped' : 'succeeded', {
+          startedAt: info.startedAt,
+          endedAt: info.endedAt,
+          outputPath: path.relative(pdfDir(pdfId), info.audioPath),
+          metadata: { job_id: state.job_id, skipped: info.skipped, duration_seconds: info.durationSeconds, precision: 'step_timing' },
+        });
+      }
       markPageProgress(state, pn, done, step);
     },
     shouldAbort,
@@ -921,6 +991,7 @@ async function runRegenerateImages(
   step: RegenStepProgress,
   opts: { prompt: string },
   shouldAbort: () => boolean,
+  timingRun: TimingRunContext | null,
 ): Promise<void> {
   const pdfId = state.pdf_id;
   const pdfRow = getPdfRowStrict(pdfId);
@@ -981,6 +1052,13 @@ async function runRegenerateImages(
       pageScript,
     });
 
+    const artifactHandle = startArtifact({
+      run: timingRun,
+      pageNumber: p.page_number,
+      artifact: 'image',
+      reason: 'regenerate',
+      metadata: { job_id: state.job_id, precision: 'inline' },
+    });
     const generated = await withExponentialBackoffRetry(
       () =>
         client.images.generate({
@@ -1018,6 +1096,11 @@ async function runRegenerateImages(
       })
       .png()
       .toFile(pageImagePath(pdfId, p.page_number, pageCount));
+
+    finishArtifact(artifactHandle, 'succeeded', {
+      outputPath: path.posix.join('pages', `${String(p.page_number).padStart(pagePadFor(pageCount), '0')}.png`),
+      metadata: { job_id: state.job_id, precision: 'inline' },
+    });
 
     markPageProgress(state, p.page_number, step.completed + 1, step);
   }

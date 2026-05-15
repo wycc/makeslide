@@ -49,7 +49,7 @@ export interface GenerateScriptOptions {
    * Optional progress callback fired after each page completes (including
    * idempotent skips). `done` is 1-based count of pages finished so far.
    */
-  onPage?: (pageNumber: number, done: number) => void;
+  onPage?: (pageNumber: number, done: number, info?: { startedAt: string; endedAt: string; skipped: boolean; scriptPath: string }) => void;
   /**
    * Optional cancellation probe. Invoked before each page; if it returns
    * true, script generation throws `CANCELLED` immediately without
@@ -505,6 +505,7 @@ export async function generateScript(
     }
     const pageInfo = pages[i]!;
     const nextInfo = pages[i + 1];
+    const pageStartedAt = new Date().toISOString();
 
     const existing = await readExistingScript(pdfId, pageInfo.pageNumber, pageCount);
     if (existing) {
@@ -523,7 +524,13 @@ export async function generateScript(
         'generateScript: reuse existing script (idempotent skip)',
       );
       done += 1;
-      onPage?.(pageInfo.pageNumber, done);
+      const endedAt = new Date().toISOString();
+      onPage?.(pageInfo.pageNumber, done, {
+        startedAt: pageStartedAt,
+        endedAt,
+        skipped: true,
+        scriptPath: pageScriptPath(pdfId, pageInfo.pageNumber, pageCount),
+      });
       continue;
     }
 
@@ -628,7 +635,13 @@ export async function generateScript(
       );
       previousScript = '';
       done += 1;
-      onPage?.(pageInfo.pageNumber, done);
+      const endedAt = new Date().toISOString();
+      onPage?.(pageInfo.pageNumber, done, {
+        startedAt: pageStartedAt,
+        endedAt,
+        skipped: true,
+        scriptPath: pageScriptPath(pdfId, pageInfo.pageNumber, pageCount),
+      });
       continue;
     }
 
@@ -663,7 +676,12 @@ export async function generateScript(
       skipped: false,
     });
     done += 1;
-    onPage?.(pageInfo.pageNumber, done);
+    onPage?.(pageInfo.pageNumber, done, {
+      startedAt: pageStartedAt,
+      endedAt: new Date().toISOString(),
+      skipped: false,
+      scriptPath,
+    });
   }
 
   logger.info(

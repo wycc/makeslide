@@ -17,6 +17,7 @@ import {
   rowToDetail,
   rowToListItem,
   streamFile,
+  timingRowsToPageMap,
 } from './shared';
 
 export async function registerDetailRoutes(app: FastifyInstance): Promise<void> {
@@ -63,7 +64,15 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
          FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
       )
       .all(parsed.data.id) as PageRow[];
-    return reply.send(rowToDetail(row, pages));
+    const timingRows = db
+      .prepare(
+        `SELECT page_number, artifact, status, duration_ms, started_at, ended_at,
+                sla_target_ms, sla_status, run_id, attempt, reason, error_code, error_message
+           FROM page_artifact_timings
+          WHERE pdf_id = ?`,
+      )
+      .all(parsed.data.id) as Parameters<typeof timingRowsToPageMap>[0];
+    return reply.send(rowToDetail(row, pages, timingRowsToPageMap(timingRows)));
   });
 
   // PATCH /api/pdfs/:id/title

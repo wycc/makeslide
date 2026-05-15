@@ -9,7 +9,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test ./test/pages-api.test.ts"
+    "test": "tsx --test ./test/*.test.ts"
   },
   "dependencies": {
     "@fastify/cors": "^9.0.1",

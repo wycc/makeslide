@@ -41,6 +41,8 @@ import type {
   PageRow,
   PdfDetail,
   PdfDetailPage,
+  PdfDetailPageTimingItem,
+  PdfDetailPageTimings,
   PdfListItem,
   PdfMetadata,
   PdfMetadataPage,
@@ -380,7 +382,48 @@ export function rowToListItem(row: PdfRow): PdfListItem {
   };
 }
 
-export function rowToDetail(row: PdfRow, pages: PageRow[]): PdfDetail {
+export type PageTimingsByPage = Map<number, PdfDetailPageTimings>;
+
+const emptyPageTimings = (): PdfDetailPageTimings => ({ image: null, text: null, script: null, audio: null });
+
+export function timingRowsToPageMap(rows: Array<{
+  page_number: number;
+  artifact: PdfDetailPageTimingItem['artifact'];
+  status: PdfDetailPageTimingItem['status'];
+  duration_ms: number | null;
+  started_at: string | null;
+  ended_at: string | null;
+  sla_target_ms: number | null;
+  sla_status: PdfDetailPageTimingItem['sla_status'];
+  run_id: string | null;
+  attempt: number | null;
+  reason: PdfDetailPageTimingItem['reason'];
+  error_code: string | null;
+  error_message: string | null;
+}>): PageTimingsByPage {
+  const map: PageTimingsByPage = new Map();
+  for (const r of rows) {
+    const timings = map.get(r.page_number) ?? emptyPageTimings();
+    timings[r.artifact] = {
+      artifact: r.artifact,
+      status: r.status,
+      duration_ms: r.duration_ms,
+      started_at: r.started_at,
+      ended_at: r.ended_at,
+      sla_target_ms: r.sla_target_ms,
+      sla_status: r.sla_status,
+      run_id: r.run_id,
+      attempt: r.attempt,
+      reason: r.reason,
+      error_code: r.error_code,
+      error_message: r.error_message,
+    };
+    map.set(r.page_number, timings);
+  }
+  return map;
+}
+
+export function rowToDetail(row: PdfRow, pages: PageRow[], timingsByPage: PageTimingsByPage = new Map()): PdfDetail {
   const runtime = getRuntimeAiSettings();
   const detailPages: PdfDetailPage[] = pages.map((p) => ({
     page_number: p.page_number,
@@ -390,6 +433,7 @@ export function rowToDetail(row: PdfRow, pages: PageRow[]): PdfDetail {
     audio_url: p.audio_path ? `api/pdfs/${row.id}/pages/${p.page_number}/audio` : null,
     audio_duration_seconds: p.audio_duration_seconds,
     status: p.status,
+    timings: timingsByPage.get(p.page_number) ?? emptyPageTimings(),
   }));
   return {
     id: row.id,

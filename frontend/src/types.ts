@@ -28,6 +28,33 @@ export type PageStatus =
   | 'audio_ready'
   | 'failed';
 
+export type PageArtifact = 'image' | 'text' | 'script' | 'audio';
+export type PageArtifactReason = 'initial' | 'regenerate' | 'resume' | 'retry' | 'dependency_changed' | 'manual_edit';
+export type TimingEventStatus = 'running' | 'succeeded' | 'failed' | 'skipped' | 'canceled' | 'unknown';
+export type TimingSlaStatus = 'met' | 'warning' | 'breached' | 'unknown';
+
+export interface PdfDetailPageTimingItem {
+  artifact: PageArtifact;
+  status: TimingEventStatus;
+  duration_ms: number | null;
+  started_at: string | null;
+  ended_at: string | null;
+  sla_target_ms: number | null;
+  sla_status: TimingSlaStatus;
+  run_id: string | null;
+  attempt: number | null;
+  reason: PageArtifactReason | null;
+  error_code?: string | null;
+  error_message?: string | null;
+}
+
+export interface PdfDetailPageTimings {
+  image: PdfDetailPageTimingItem | null;
+  text: PdfDetailPageTimingItem | null;
+  script: PdfDetailPageTimingItem | null;
+  audio: PdfDetailPageTimingItem | null;
+}
+
 export interface PdfListItem {
   id: string;
   title: string | null;
@@ -55,6 +82,7 @@ export interface PdfDetailPage {
   audio_url?: string | null;
   audio_duration_seconds?: number | null;
   status: PageStatus;
+  timings?: PdfDetailPageTimings | null;
 }
 
 export interface PdfDetail {
