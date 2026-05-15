@@ -239,7 +239,7 @@ export default function PlayPage() {
   const [titleInput, setTitleInput] = useState('');
   const [titleBusy, setTitleBusy] = useState(false);
   const [titleMsg, setTitleMsg] = useState<string | null>(null);
-  const [editTab, setEditTab] = useState<'script' | 'prompt'>('script');
+  const [editTab, setEditTab] = useState<'script' | 'prompt' | 'system'>('script');
   const [promptInput, setPromptInput] = useState('');
   const [promptBusy, setPromptBusy] = useState(false);
   const [promptMsg, setPromptMsg] = useState<string | null>(null);
@@ -1758,7 +1758,6 @@ export default function PlayPage() {
           {/* Script panel */}
           <section className="border-t border-slate-800 bg-slate-950">
             <div className="px-4 py-4">
-              <PageTimingChips page={currentPage} />
               <div className="mb-3 flex overflow-hidden rounded-md border border-slate-700 bg-slate-900/60">
                 <button
                   type="button"
@@ -1773,6 +1772,13 @@ export default function PlayPage() {
                   className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'prompt' ? 'bg-slate-800 text-cyan-200' : 'text-slate-400'}`}
                 >
                   🪄 提示詞
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditTab('system')}
+                  className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'system' ? 'bg-slate-800 text-amber-200' : 'text-slate-400'}`}
+                >
+                  🧾 系統資料
                 </button>
               </div>
 
@@ -1802,7 +1808,7 @@ export default function PlayPage() {
                     </button>
                   </div>
                 </>
-              ) : (
+              ) : editTab === 'prompt' ? (
                 <>
                   <h2 className="mb-2 text-sm font-semibold text-slate-300">🪄 提示詞（第 {currentPage?.page_number ?? '-'} 頁）</h2>
                   <textarea
@@ -1825,6 +1831,79 @@ export default function PlayPage() {
                       {promptBusy ? '儲存中…' : '儲存提示詞'}
                     </button>
                   </div>
+                </>
+              ) : (
+                <>
+                  <h2 className="mb-2 text-sm font-semibold text-slate-300">🧾 系統資料（第 {currentPage?.page_number ?? '-'} 頁）</h2>
+                  <div className="rounded-md border border-slate-800 bg-slate-900/50 p-3 text-xs text-slate-300">
+                    <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <div>
+                        <dt className="text-slate-500">PDF ID</dt>
+                        <dd className="break-all font-mono text-slate-200">{detail.id}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-slate-500">狀態</dt>
+                        <dd className="text-slate-200">{detail.status}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-slate-500">原始檔名</dt>
+                        <dd className="break-all text-slate-200">{detail.original_filename}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-slate-500">頁數</dt>
+                        <dd className="text-slate-200">{detail.page_count ?? totalPages}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-slate-500">TTS</dt>
+                        <dd className="text-slate-200">{detail.tts_provider ?? 'openai'} / {detail.tts_voice ?? '-'} / {detail.tts_speed ?? '-'}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-slate-500">目前頁狀態</dt>
+                        <dd className="text-slate-200">{currentPage?.status ?? '-'}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-slate-500">建立時間</dt>
+                        <dd className="font-mono text-slate-200">{detail.created_at}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-slate-500">更新時間</dt>
+                        <dd className="font-mono text-slate-200">{detail.updated_at}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                  <div className="mt-3 overflow-x-auto rounded-md border border-slate-800">
+                    <table className="min-w-full divide-y divide-slate-800 text-left text-xs">
+                      <thead className="bg-slate-900/70 text-slate-400">
+                        <tr>
+                          <th className="px-3 py-2">步驟</th>
+                          <th className="px-3 py-2">狀態</th>
+                          <th className="px-3 py-2">耗時</th>
+                          <th className="px-3 py-2">SLA</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800 bg-slate-950/40">
+                        {([
+                          ['image', '圖片'],
+                          ['text', '文字'],
+                          ['script', '講稿'],
+                          ['audio', '語音'],
+                        ] as const).map(([key, label]) => {
+                          const timing = currentPage?.timings?.[key] ?? null;
+                          return (
+                            <tr key={key}>
+                              <td className="whitespace-nowrap px-3 py-2 text-slate-200">{label}</td>
+                              <td className="whitespace-nowrap px-3 py-2 text-slate-300">{timing?.status ?? '尚無紀錄'}</td>
+                              <td className="whitespace-nowrap px-3 py-2 font-mono text-slate-200">{timing?.status === 'running' ? '產生中' : formatDurationMs(timing?.duration_ms)}</td>
+                              <td className="whitespace-nowrap px-3 py-2 text-slate-400">
+                                {timing ? `${timing.sla_status}${timing.sla_target_ms != null ? ` / ${formatDurationMs(timing.sla_target_ms)}` : ''}` : '-'}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  {currentPage?.timings ? <div className="mt-3"><PageTimingChips page={currentPage} /></div> : null}
                 </>
               )}
             </div>
