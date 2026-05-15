@@ -47,6 +47,18 @@ function imageTimeoutMs(): number {
     : config.openaiImageTimeoutMs;
 }
 
+function imageResponseShape(image: unknown): Record<string, unknown> {
+  const payload = image as { data?: unknown } | null | undefined;
+  const data = Array.isArray(payload?.data) ? payload.data : [];
+  const first = data[0] as Record<string, unknown> | undefined;
+  return {
+    dataLength: data.length,
+    firstKeys: first ? Object.keys(first) : [],
+    hasB64Json: typeof first?.b64_json === 'string' && first.b64_json.length > 0,
+    hasUrl: typeof first?.url === 'string' && first.url.length > 0,
+  };
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -184,6 +196,7 @@ export async function renderTextPagesWithLlm(
             model: config.openaiImageModel,
             prompt,
             size: '1536x1024',
+            quality: config.openaiImageQuality,
           },
           { timeout: timeoutMs },
         );
@@ -201,6 +214,7 @@ export async function renderTextPagesWithLlm(
             attempt,
             maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS,
             model: config.openaiImageModel,
+            quality: config.openaiImageQuality,
             promptLength: prompt.length,
             timeoutMs,
             latencyMs: Date.now() - startedAtMs,
@@ -221,15 +235,16 @@ export async function renderTextPagesWithLlm(
             status: 'failed',
             attempt,
             model: config.openaiImageModel,
-            promptLength: prompt.length,
-            timeoutMs,
-            error: errorInfo,
             metadata: {
               source_type: 'text',
               precision: 'step_timing',
               maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS,
               transient,
+              quality: config.openaiImageQuality,
             },
+            promptLength: prompt.length,
+            timeoutMs,
+            error: errorInfo,
           });
           throw err;
         }
@@ -241,6 +256,21 @@ export async function renderTextPagesWithLlm(
       const err = new Error(`LLM image generation failed at page ${p.pageNumber}: no image response`);
       lastErrorInfo = extractErrorInfo(err);
       const endedAt = new Date().toISOString();
+      const responseShape = imageResponseShape(image);
+      logger.error(
+        {
+          pdfId: opts.pdfId,
+          pageNumber: p.pageNumber,
+          pageCount,
+          model: config.openaiImageModel,
+          quality: config.openaiImageQuality,
+          promptLength: prompt.length,
+          timeoutMs,
+          attempt: finalAttempt,
+          responseShape,
+        },
+        'Text image generation: empty image response',
+      );
       opts.onPage?.(p.pageNumber, imagePath, {
         imagePath,
         startedAt,
@@ -253,7 +283,13 @@ export async function renderTextPagesWithLlm(
         promptLength: prompt.length,
         timeoutMs,
         error: lastErrorInfo,
-        metadata: { source_type: 'text', precision: 'step_timing', maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS },
+        metadata: {
+          source_type: 'text',
+          precision: 'step_timing',
+          maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS,
+          quality: config.openaiImageQuality,
+          responseShape,
+        },
       });
       throw err;
     }
@@ -264,6 +300,21 @@ export async function renderTextPagesWithLlm(
       const err = new Error(`LLM image generation failed at page ${p.pageNumber}: missing b64_json`);
       lastErrorInfo = extractErrorInfo(err);
       const endedAt = new Date().toISOString();
+      const responseShape = imageResponseShape(image);
+      logger.error(
+        {
+          pdfId: opts.pdfId,
+          pageNumber: p.pageNumber,
+          pageCount,
+          model: config.openaiImageModel,
+          quality: config.openaiImageQuality,
+          promptLength: prompt.length,
+          timeoutMs,
+          attempt: finalAttempt,
+          responseShape,
+        },
+        'Text image generation: missing b64_json in image response',
+      );
       opts.onPage?.(p.pageNumber, imagePath, {
         imagePath,
         startedAt,
@@ -276,7 +327,13 @@ export async function renderTextPagesWithLlm(
         promptLength: prompt.length,
         timeoutMs,
         error: lastErrorInfo,
-        metadata: { source_type: 'text', precision: 'step_timing', maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS },
+        metadata: {
+          source_type: 'text',
+          precision: 'step_timing',
+          maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS,
+          quality: config.openaiImageQuality,
+          responseShape,
+        },
       });
       throw err;
     }
@@ -293,6 +350,7 @@ export async function renderTextPagesWithLlm(
           pageCount,
           latencyMs,
           model: config.openaiImageModel,
+          quality: config.openaiImageQuality,
           attempt: finalAttempt,
           promptLength: prompt.length,
           timeoutMs,
@@ -310,7 +368,12 @@ export async function renderTextPagesWithLlm(
       model: config.openaiImageModel,
       promptLength: prompt.length,
       timeoutMs,
-      metadata: { source_type: 'text', precision: 'step_timing', maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS },
+      metadata: {
+        source_type: 'text',
+        precision: 'step_timing',
+        maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS,
+        quality: config.openaiImageQuality,
+      },
     });
   }
 

@@ -98,6 +98,7 @@ test('TXT image timing can use render-step duration instead of callback duration
 });
 
 test('TXT LLM image generation retries transient errors then succeeds with image timeout', async () => {
+  const pdfId = `test-timing-render-retry-${Date.now()}`;
   const calls: Array<{ body: unknown; options: { timeout?: number } | undefined }> = [];
   const transient = Object.assign(new Error('rate limited'), { status: 429, code: 'rate_limit_exceeded', type: 'rate_limit_error' });
   setOpenAIClientForTest({
@@ -112,13 +113,14 @@ test('TXT LLM image generation retries transient errors then succeeds with image
 
   const events: Array<{ pageNumber: number; info: { status?: string; attempt?: number; timeoutMs?: number } }> = [];
   const result = await renderTextPagesWithLlm({
-    pdfId: 'test-timing-render-retry',
+    pdfId,
     pages: [{ pageNumber: 1, content: '第一頁內容' }],
     onPage: (pageNumber, _imagePath, info) => events.push({ pageNumber, info }),
   });
 
   assert.equal(result.pageCount, 1);
   assert.equal(calls.length, 2);
+  assert.equal((calls[0]?.body as { quality?: string } | undefined)?.quality, 'low');
   assert.equal(calls[0]?.options?.timeout, events[0]?.info.timeoutMs);
   assert.equal(events[0]?.pageNumber, 1);
   assert.equal(events[0]?.info.status, 'succeeded');
