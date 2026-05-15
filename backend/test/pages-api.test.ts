@@ -270,6 +270,60 @@ test('create presentation then add/delete on different positions should remain c
   await app.close();
 });
 
+test('DELETE /api/pdfs/:id should delete presentation, pages, timing rows and storage directory', async () => {
+  const pdfId = 'test-delete-pdf-01';
+  seedReadyPdfFor(pdfId, 2);
+  const t = nowIso();
+  const runId = `${pdfId}-run`;
+  db.prepare(
+    `INSERT INTO pipeline_runs (id,pdf_id,run_type,parent_run_id,triggered_by,status,attempt,started_at,created_at,updated_at)
+     VALUES (?,?,?,NULL,?,?,?,?,?,?)`,
+  ).run(runId, pdfId, 'initial', 'test', 'completed', 1, t, t, t);
+  db.prepare(
+    `INSERT INTO pipeline_stage_events (run_id,pdf_id,stage,event_type,attempt,occurred_at)
+     VALUES (?,?,?,?,?,?)`,
+  ).run(runId, pdfId, 'text', 'completed', 1, t);
+  db.prepare(
+    `INSERT INTO pipeline_stage_summaries (run_id,pdf_id,stage,attempt,status,sla_status,updated_at)
+     VALUES (?,?,?,?,?,?,?)`,
+  ).run(runId, pdfId, 'text', 1, 'completed', 'ok', t);
+  db.prepare(
+    `INSERT INTO page_artifact_events (run_id,pdf_id,page_number,artifact,event_type,attempt,reason,occurred_at)
+     VALUES (?,?,?,?,?,?,?,?)`,
+  ).run(runId, pdfId, 1, 'text', 'completed', 1, 'test', t);
+  db.prepare(
+    `INSERT INTO page_artifact_timings (pdf_id,page_number,artifact,run_id,attempt,reason,status,sla_status,updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?)`,
+  ).run(pdfId, 1, 'text', runId, 1, 'test', 'completed', 'ok', t);
+
+  const pdfDir = path.join(config.storageRoot, pdfId);
+  assert.equal(fs.existsSync(pdfDir), true);
+
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'DELETE', url: `/api/pdfs/${pdfId}` });
+  assert.equal(resp.statusCode, 204);
+  assert.equal(resp.body, '');
+
+  assert.equal(db.prepare(`SELECT COUNT(*) AS c FROM pdfs WHERE id = ?`).get(pdfId).c, 0);
+  assert.equal(db.prepare(`SELECT COUNT(*) AS c FROM pages WHERE pdf_id = ?`).get(pdfId).c, 0);
+  assert.equal(db.prepare(`SELECT COUNT(*) AS c FROM pipeline_runs WHERE pdf_id = ?`).get(pdfId).c, 0);
+  assert.equal(db.prepare(`SELECT COUNT(*) AS c FROM pipeline_stage_events WHERE pdf_id = ?`).get(pdfId).c, 0);
+  assert.equal(db.prepare(`SELECT COUNT(*) AS c FROM pipeline_stage_summaries WHERE pdf_id = ?`).get(pdfId).c, 0);
+  assert.equal(db.prepare(`SELECT COUNT(*) AS c FROM page_artifact_events WHERE pdf_id = ?`).get(pdfId).c, 0);
+  assert.equal(db.prepare(`SELECT COUNT(*) AS c FROM page_artifact_timings WHERE pdf_id = ?`).get(pdfId).c, 0);
+  assert.equal(fs.existsSync(pdfDir), false);
+
+  await app.close();
+});
+
+test('DELETE /api/pdfs/:id should return PDF_NOT_FOUND for missing presentation', async () => {
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'DELETE', url: '/api/pdfs/missing-pdf-01' });
+  assert.equal(resp.statusCode, 404);
+  assert.deepEqual(resp.json(), { error: { code: 'PDF_NOT_FOUND', message: 'PDF not found' } });
+  await app.close();
+});
+
 
 import test from 'node:test';
 import assert from 'node:assert/strict';

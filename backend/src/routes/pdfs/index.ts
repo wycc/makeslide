@@ -4,12 +4,13 @@ import { registerDetailRoutes } from './detail';
 import { registerPageOperationsRoutes } from './page-operations';
 import { registerRegenerateRoutes } from './regenerate';
 import { registerAdminRoutes } from './admin';
+import { registerDeleteRoutes } from './delete';
 
 export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerUploadRoutes(app);
   await registerDetailRoutes(app);
+  await registerDeleteRoutes(app);
   await registerPageOperationsRoutes(app);
   await registerRegenerateRoutes(app);
   await registerAdminRoutes(app);
 }
-
