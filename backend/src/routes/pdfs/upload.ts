@@ -19,7 +19,7 @@ import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { enqueuePdfProcessing } from '../../worker/pipeline';
 import { generateVideo } from '../../worker/steps/generateVideo';
 import type { ApiError, PageRow, PdfListItem, PdfMetadata, PdfMetadataPage, PdfRow, PdfStatus } from '../../types';
-import { rowToListItem, IdParamSchema, StartBodySchema, YoutubeCreateBodySchema, nowIso, errorResponse, PDF_ID_SIZE, isSupportedVoiceByProvider, extractYoutubeVideoId } from './shared';
+import { rowToListItem, IdParamSchema, StartBodySchema, YoutubeCreateBodySchema, nowIso, errorResponse, PDF_ID_SIZE, DEFAULT_PDF_CATEGORY, isSupportedVoiceByProvider, extractYoutubeVideoId } from './shared';
 
 export async function registerUploadRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/pdfs', async (request: FastifyRequest, reply: FastifyReply) => {
@@ -108,6 +108,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         error_message: null,
         user_prompt: null,
         require_script_confirmation: false,
+        category: DEFAULT_PDF_CATEGORY,
         tts_voice: null,
         tts_speed: null,
         script_max_chars_per_page: null,
@@ -120,11 +121,12 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
 
       db.prepare(
         `INSERT INTO pdfs (id, title, original_filename, status, page_count,
-                           progress_step, error_message, user_prompt, require_script_confirmation,
-                           tts_voice, tts_speed, script_max_chars_per_page, image_style_prompt,
-                           created_at, updated_at)
-         VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL, ?, ?)`,
-      ).run(pdfId, title, filename, status, createdAt, createdAt);
+                            progress_step, error_message, user_prompt, require_script_confirmation,
+                            category,
+                            tts_voice, tts_speed, script_max_chars_per_page, image_style_prompt,
+                            created_at, updated_at)
+         VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, ?, NULL, NULL, NULL, NULL, ?, ?)`,
+      ).run(pdfId, title, filename, status, DEFAULT_PDF_CATEGORY, createdAt, createdAt);
     } catch (err) {
       request.log.error({ err, pdfId }, 'Failed to persist uploaded PDF');
       try {
@@ -147,6 +149,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       original_filename: filename,
       user_prompt: null,
       require_script_confirmation: false,
+      category: DEFAULT_PDF_CATEGORY,
       tts_voice: null,
       tts_speed: null,
       script_max_chars_per_page: null,
@@ -186,6 +189,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         progress_total: null,
         page_count: null,
         error_message: null,
+        category: DEFAULT_PDF_CATEGORY,
         source_type: 'youtube',
         source_url: youtubeUrl,
         source_video_id: videoId,
@@ -198,16 +202,18 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
 
       db.prepare(
         `INSERT INTO pdfs (id, title, original_filename, status, page_count,
-                           progress_step, error_message, user_prompt, require_script_confirmation,
-                           tts_voice, tts_speed, script_max_chars_per_page, image_style_prompt,
-                           source_type, source_url, source_video_id, source_caption_language,
-                           created_at, updated_at)
-         VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?)`,
+                            progress_step, error_message, user_prompt, require_script_confirmation,
+                            category,
+                            tts_voice, tts_speed, script_max_chars_per_page, image_style_prompt,
+                            source_type, source_url, source_video_id, source_caption_language,
+                            created_at, updated_at)
+         VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, ?, NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?)`,
       ).run(
         pdfId,
         `YouTube ${videoId}`,
         youtubeUrl,
         status,
+        DEFAULT_PDF_CATEGORY,
         'youtube',
         youtubeUrl,
         videoId,
@@ -231,6 +237,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       source_url: youtubeUrl,
       source_video_id: videoId,
       source_caption_language: language,
+      category: DEFAULT_PDF_CATEGORY,
       created_at: createdAt,
     });
   });
@@ -434,7 +441,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         `SELECT id, title, original_filename, status, page_count, progress_step,
                 progress_current, progress_total,
                 error_message, user_prompt, require_script_confirmation,
-                tts_voice, tts_speed, script_max_chars_per_page,
+                category, tts_voice, tts_speed, script_max_chars_per_page,
                 created_at, updated_at
            FROM pdfs WHERE id = ?`,
       )
@@ -607,6 +614,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         progress_total: metadata.progress_total,
         page_count: metadata.page_count,
         error_message: metadata.error_message,
+        category: metadata.category?.trim() || source.category?.trim() || DEFAULT_PDF_CATEGORY,
         pages: metadata.pages,
         created_at: now,
         updated_at: now,
@@ -614,11 +622,12 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
 
       db.prepare(
         `INSERT INTO pdfs (id, title, original_filename, status, page_count,
-                           progress_step, progress_current, progress_total,
-                           error_message, user_prompt, require_script_confirmation,
-                           tts_voice, tts_speed, script_max_chars_per_page,
-                           created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                            progress_step, progress_current, progress_total,
+                            error_message, user_prompt, require_script_confirmation,
+                            category,
+                            tts_voice, tts_speed, script_max_chars_per_page,
+                            created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         newId,
         newTitle,
@@ -631,6 +640,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         source.error_message,
         source.user_prompt,
         source.require_script_confirmation,
+        source.category?.trim() || DEFAULT_PDF_CATEGORY,
         source.tts_voice,
         source.tts_speed,
         source.script_max_chars_per_page,

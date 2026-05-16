@@ -109,6 +109,7 @@ export interface CreateYoutubeTaskResponse {
   source_url: string;
   source_video_id: string;
   source_caption_language: string | null;
+  category: string;
   created_at: string;
 }
 
@@ -147,6 +148,33 @@ export async function duplicatePdf(id: string): Promise<PdfListItem> {
     throw await parseErrorBody(resp);
   }
   return (await resp.json()) as PdfListItem;
+}
+
+export async function updatePdfCategory(
+  id: string,
+  category: string,
+): Promise<{ id: string; category: string; updated_at: string }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/category`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ category }),
+  });
+  if (!resp.ok) {
+    throw await parseErrorBody(resp);
+  }
+  return (await resp.json()) as { id: string; category: string; updated_at: string };
+}
+
+export async function deleteCategory(
+  category: string,
+): Promise<{ category: string; reassigned_to: string; affected_count: number; updated_at: string }> {
+  const resp = await fetch(`api/categories/${encodeURIComponent(category)}`, {
+    method: 'DELETE',
+  });
+  if (!resp.ok) {
+    throw await parseErrorBody(resp);
+  }
+  return (await resp.json()) as { category: string; reassigned_to: string; affected_count: number; updated_at: string };
 }
 
 export async function retryFailedPdf(id: string): Promise<{ id: string; status: string; updated_at: string }> {

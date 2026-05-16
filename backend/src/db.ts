@@ -105,6 +105,10 @@ function migrate(): void {
     db.exec(`ALTER TABLE pdfs ADD COLUMN source_caption_language TEXT`);
     logger.info('Added column pdfs.source_caption_language');
   }
+  if (!columnExists('pdfs', 'category')) {
+    db.exec(`ALTER TABLE pdfs ADD COLUMN category TEXT NOT NULL DEFAULT 'general'`);
+    logger.info('Added column pdfs.category');
+  }
 
   // pages table: drop legacy M1 version (it was never populated) and recreate
   // with the M2 schema. Safe because M1 never wrote rows here.

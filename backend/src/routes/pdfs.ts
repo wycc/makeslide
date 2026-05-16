@@ -54,6 +54,7 @@ const PDF_ID_SIZE = 10;
 // pdf_id: nanoid alphanumeric + _ - only; our ids are 10-chars.
 // Accept a slightly wider window (8-32) for forward compat but enforce charset.
 const PDF_ID_RE = /^[A-Za-z0-9_-]{8,32}$/;
+const DEFAULT_PDF_CATEGORY = 'general';
 
 const IdParamSchema = z.object({
   id: z.string().regex(PDF_ID_RE, 'Invalid pdf id'),
@@ -352,6 +353,7 @@ function rowToListItem(row: PdfRow): PdfListItem {
     cover_url: coverUrl(row),
     user_prompt: row.user_prompt,
     require_script_confirmation: row.require_script_confirmation === 1,
+    category: row.category?.trim() || DEFAULT_PDF_CATEGORY,
     tts_provider: runtime.ttsProvider,
     tts_voice: row.tts_voice,
     tts_speed: row.tts_speed,
@@ -388,6 +390,7 @@ function rowToDetail(row: PdfRow, pages: PageRow[]): PdfDetail {
     error_message: row.error_message,
     user_prompt: row.user_prompt,
     require_script_confirmation: row.require_script_confirmation === 1,
+    category: row.category?.trim() || DEFAULT_PDF_CATEGORY,
     tts_provider: runtime.ttsProvider,
     tts_voice: row.tts_voice,
     tts_speed: row.tts_speed,

@@ -2,11 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ApiError,
+  deleteCategory,
   deletePdf,
   duplicatePdf,
   fetchPdfs,
   retryFailedPdf,
   startProcessing,
+  updatePdfCategory,
 } from '../lib/api';
 import type { PdfListItem, UploadResponse } from '../types';
 import PdfCard from '../components/PdfCard';
@@ -16,6 +18,7 @@ import UploadButton from '../components/UploadButton';
 const POLL_INTERVAL_ACTIVE_MS = 5000;
 const POLL_INTERVAL_IDLE_MS = 30000;
 const DEFAULT_PROMPT_TTS_PROVIDER = 'gemini' as const;
+const DEFAULT_CATEGORY = 'general';
 
 interface PromptTarget {
   id: string;
@@ -33,6 +36,26 @@ export default function HomePage() {
   const [toast, setToast] = useState<string | null>(null);
   const toastTimerRef = useRef<number | null>(null);
   const [promptTarget, setPromptTarget] = useState<PromptTarget | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<string>('__all__');
+
+  const allCategories = items.reduce<string[]>((categories, pdf) => {
+    const category = pdf.category?.trim() || DEFAULT_CATEGORY;
+    if (!categories.includes(category)) categories.push(category);
+    return categories;
+  }, []);
+  const filteredItems = categoryFilter === '__all__'
+    ? items
+    : items.filter((pdf) => (pdf.category?.trim() || DEFAULT_CATEGORY) === categoryFilter);
+  const categoryGroups = filteredItems.reduce<Array<{ category: string; items: PdfListItem[] }>>((groups, pdf) => {
+    const category = pdf.category?.trim() || DEFAULT_CATEGORY;
+    const group = groups.find((g) => g.category === category);
+    if (group) {
+      group.items.push(pdf);
+    } else {
+      groups.push({ category, items: [pdf] });
+    }
+    return groups;
+  }, []);
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -113,6 +136,41 @@ export default function HomePage() {
       } catch (err) {
         const msg = err instanceof ApiError ? err.message : '複製失敗';
         showToast(`複製失敗：${msg}`);
+      }
+    },
+    [showToast],
+  );
+
+  const handleCategoryChange = useCallback(
+    async (id: string, category: string) => {
+      try {
+        const updated = await updatePdfCategory(id, category);
+        setItems((prev) => prev.map((p) => (p.id === id ? { ...p, category: updated.category } : p)));
+        showToast(`已移至 ${updated.category}`);
+      } catch (err) {
+        const msg = err instanceof ApiError ? err.message : '更新類別失敗';
+        showToast(`更新類別失敗：${msg}`);
+      }
+    },
+    [showToast],
+  );
+
+  const handleDeleteCategory = useCallback(
+    async (category: string) => {
+      if (category === DEFAULT_CATEGORY) {
+        showToast('general 類別不可刪除');
+        return;
+      }
+      const ok = window.confirm(`刪除類別「${category}」？此類別中的簡報會移到 general。`);
+      if (!ok) return;
+      try {
+        const resp = await deleteCategory(category);
+        setItems((prev) => prev.map((p) => (p.category === category ? { ...p, category: resp.reassigned_to } : p)));
+        setCategoryFilter((prev) => (prev === category ? '__all__' : prev));
+        showToast(`已刪除類別，${resp.affected_count} 個簡報移至 ${resp.reassigned_to}`);
+      } catch (err) {
+        const msg = err instanceof ApiError ? err.message : '刪除類別失敗';
+        showToast(`刪除類別失敗：${msg}`);
       }
     },
     [showToast],
@@ -266,15 +324,64 @@ export default function HomePage() {
         )}
 
         {items.length > 0 && (
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
-            {items.map((pdf) => (
-              <PdfCard
-                key={pdf.id}
-                pdf={pdf}
-                onDelete={handleDelete}
-                onDuplicate={handleDuplicate}
-                onClick={handleCardClick}
-              />
+          <section className="mb-6 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+            <label className="flex flex-col gap-2 text-sm text-slate-300 sm:max-w-xs">
+              顯示類別
+              <select
+                value={categoryFilter}
+                onChange={(ev) => setCategoryFilter(ev.target.value)}
+                className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition hover:border-slate-500"
+              >
+                <option value="__all__">全部類別</option>
+                {allCategories.map((category) => (
+                  <option key={category} value={category}>{category}</option>
+                ))}
+              </select>
+            </label>
+          </section>
+        )}
+
+        {items.length > 0 && categoryGroups.length === 0 && (
+          <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/40 p-10 text-center">
+            <p className="text-slate-300">此類別目前沒有簡報</p>
+          </div>
+        )}
+
+        {categoryGroups.length > 0 && (
+          <div className="space-y-8">
+            {categoryGroups.map((group) => (
+              <section key={group.category} aria-labelledby={`category-${group.category}`}>
+                <div className="mb-3 flex flex-wrap items-center gap-3">
+                  <h2 id={`category-${group.category}`} className="text-lg font-semibold text-slate-100">
+                    {group.category}
+                  </h2>
+                  <span className="rounded-full border border-slate-700 px-2 py-0.5 text-xs text-slate-400">
+                    {group.items.length} 個簡報
+                  </span>
+                  {group.category !== DEFAULT_CATEGORY && (
+                    <button
+                      type="button"
+                      onClick={() => void handleDeleteCategory(group.category)}
+                      className="rounded-md border border-rose-500/40 px-2 py-1 text-xs text-rose-300 transition hover:bg-rose-500/10"
+                    >
+                      刪除類別
+                    </button>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
+                  {group.items.map((pdf) => (
+                    <PdfCard
+                      key={pdf.id}
+                      pdf={pdf}
+                      categories={allCategories}
+                      onDelete={handleDelete}
+                      onDuplicate={handleDuplicate}
+                      onCategoryChange={handleCategoryChange}
+                      onClick={handleCardClick}
+                    />
+                  ))}
+                </div>
+              </section>
             ))}
           </div>
         )}

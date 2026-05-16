@@ -36,7 +36,7 @@ export async function buildApp() {
 
   await app.register(cors, {
     origin: true,
-    methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
   });
 
   await app.register(multipart, {

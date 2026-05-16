@@ -116,6 +116,7 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
         original_filename: resp.source_url,
         user_prompt: null,
         require_script_confirmation: false,
+        category: resp.category ?? 'general',
         created_at: resp.created_at,
       });
       setYoutubeUrl('');

@@ -13,8 +13,10 @@ const PROGRESS_LABELS: Record<string, string> = {
 
 interface PdfCardProps {
   pdf: PdfListItem;
+  categories: string[];
   onDelete: (id: string) => Promise<void> | void;
   onDuplicate: (id: string) => Promise<void> | void;
+  onCategoryChange: (id: string, category: string) => Promise<void> | void;
   onClick?: (pdf: PdfListItem) => void;
 }
 
@@ -34,9 +36,10 @@ function formatDate(iso: string): string {
   }
 }
 
-export default function PdfCard({ pdf, onDelete, onDuplicate, onClick }: PdfCardProps) {
+export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onCategoryChange, onClick }: PdfCardProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDuplicating, setIsDuplicating] = useState(false);
+  const [isChangingCategory, setIsChangingCategory] = useState(false);
 
   const progressTotal = pdf.progress_total ?? 0;
   const progressCurrentRaw = pdf.progress_current ?? 0;
@@ -81,6 +84,24 @@ export default function PdfCard({ pdf, onDelete, onDuplicate, onClick }: PdfCard
       await onDuplicate(pdf.id);
     } finally {
       setIsDuplicating(false);
+    }
+  };
+
+  const handleCategoryChange = async (ev: React.ChangeEvent<HTMLSelectElement>) => {
+    ev.stopPropagation();
+    const value = ev.target.value;
+    let nextCategory = value;
+    if (value === '__new__') {
+      const entered = window.prompt('請輸入新類別名稱');
+      nextCategory = entered?.trim() ?? '';
+      if (!nextCategory) return;
+    }
+    if (nextCategory === (pdf.category?.trim() || 'general')) return;
+    setIsChangingCategory(true);
+    try {
+      await onCategoryChange(pdf.id, nextCategory);
+    } finally {
+      setIsChangingCategory(false);
     }
   };
 
@@ -152,6 +173,20 @@ export default function PdfCard({ pdf, onDelete, onDuplicate, onClick }: PdfCard
         <h3 className="line-clamp-2 text-sm font-semibold text-slate-100" title={pdf.title ?? ''}>
           {pdf.title ?? '(未命名)'}
         </h3>
+        <label className="flex flex-col gap-1 text-[11px] text-slate-400" onClick={(ev) => ev.stopPropagation()}>
+          類別
+          <select
+            value={pdf.category?.trim() || 'general'}
+            onChange={handleCategoryChange}
+            disabled={isChangingCategory}
+            className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-200 outline-none transition hover:border-slate-500 disabled:opacity-60"
+          >
+            {categories.map((category) => (
+              <option key={category} value={category}>{category}</option>
+            ))}
+            <option value="__new__">＋新增類別…</option>
+          </select>
+        </label>
         <div className="flex items-center justify-between text-xs text-slate-400">
           <span>{formatDate(pdf.created_at)}</span>
           <span>{pdf.page_count != null ? `${pdf.page_count} 頁` : ''}</span>

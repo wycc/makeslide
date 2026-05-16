@@ -1,7 +1,8 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import fs from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
+import { z } from 'zod';
 import { db } from '../../db';
 import { config } from '../../config';
 import type { PageRow, PdfListItem, PdfRow } from '../../types';
@@ -9,6 +10,8 @@ import { coverImagePath, readMetadata, safeJoinPdfPath, videoPath, writeMetadata
 import {
   IdParamSchema,
   PageParamSchema,
+  DEFAULT_PDF_CATEGORY,
+  UpdateCategoryBodySchema,
   UpdatePromptBodySchema,
   UpdateTitleBodySchema,
   detectAudioMimeFromBuffer,
@@ -26,10 +29,10 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     const rows = db
       .prepare(
         `SELECT id, title, original_filename, status, page_count, progress_step,
-                progress_current, progress_total,
-                error_message, user_prompt, require_script_confirmation, created_at, updated_at
-         FROM pdfs
-         ORDER BY created_at DESC`,
+                 progress_current, progress_total,
+                error_message, user_prompt, require_script_confirmation, category, created_at, updated_at
+          FROM pdfs
+          ORDER BY created_at DESC`,
       )
       .all() as PdfRow[];
     const items: PdfListItem[] = rows.map(rowToListItem);
@@ -47,6 +50,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
         `SELECT id, title, original_filename, status, page_count, progress_step,
                 progress_current, progress_total,
                 error_message, user_prompt, require_script_confirmation,
+                category,
                 tts_voice, tts_speed, script_max_chars_per_page, image_style_prompt,
                 source_type, source_url, source_video_id, source_caption_language,
                 created_at, updated_at
@@ -108,6 +112,77 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     }
 
     return reply.send({ id, title, updated_at: now });
+  });
+
+  async function handleUpdatePdfCategory(request: FastifyRequest, reply: FastifyReply) {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const body = UpdateCategoryBodySchema.safeParse(request.body ?? {});
+    if (!body.success) {
+      return reply
+        .code(400)
+        .send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
+    }
+    const { id } = parsed.data;
+    const row = db.prepare(`SELECT id FROM pdfs WHERE id = ?`).get(id) as { id: string } | undefined;
+    if (!row) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+
+    const now = nowIso();
+    const category = body.data.category.trim();
+    db.prepare(`UPDATE pdfs SET category = ?, updated_at = ? WHERE id = ?`).run(category, now, id);
+
+    try {
+      const metadata = await readMetadata(id);
+      if (metadata) {
+        metadata.category = category;
+        metadata.updated_at = now;
+        await writeMetadata(id, metadata);
+      }
+    } catch (err) {
+      request.log.warn({ err, id }, 'Failed to update metadata category');
+    }
+
+    return reply.send({ id, category, updated_at: now });
+  }
+
+  app.patch('/api/pdfs/:id/category', handleUpdatePdfCategory);
+  app.post('/api/pdfs/:id/category', handleUpdatePdfCategory);
+
+  app.delete('/api/categories/:category', async (request, reply) => {
+    const parsed = z.object({ category: z.string().min(1).max(80) }).safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid category parameter'));
+    }
+    const category = decodeURIComponent(parsed.data.category).trim();
+    if (!category) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'category 不可為空'));
+    }
+    if (category === DEFAULT_PDF_CATEGORY) {
+      return reply.code(409).send(errorResponse('INVALID_STATE', 'general 類別不可刪除'));
+    }
+
+    const now = nowIso();
+    const rows = db.prepare(`SELECT id FROM pdfs WHERE category = ?`).all(category) as Array<{ id: string }>;
+    db.prepare(`UPDATE pdfs SET category = ?, updated_at = ? WHERE category = ?`).run(DEFAULT_PDF_CATEGORY, now, category);
+
+    for (const row of rows) {
+      try {
+        const metadata = await readMetadata(row.id);
+        if (metadata) {
+          metadata.category = DEFAULT_PDF_CATEGORY;
+          metadata.updated_at = now;
+          await writeMetadata(row.id, metadata);
+        }
+      } catch (err) {
+        request.log.warn({ err, id: row.id, category }, 'Failed to sync metadata category after category delete');
+      }
+    }
+
+    return reply.send({ category, reassigned_to: DEFAULT_PDF_CATEGORY, affected_count: rows.length, updated_at: now });
   });
 
   // GET /api/pdfs/:id/pages/:n/prompt
