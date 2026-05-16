@@ -362,6 +362,88 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     return reply.code(200).send({ id, page_count: pageCount, updated_at: now });
   });
 
+  app.delete('/api/pdfs/:id/pages/:n', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+
+    const { id, n } = parsed.data;
+    const row = db.prepare(`SELECT * FROM pdfs WHERE id = ?`).get(id) as PdfRow | undefined;
+    if (!row) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (row.status !== 'ready' || !row.page_count || row.page_count <= 0) {
+      return reply.code(409).send(errorResponse('INVALID_STATE', 'Only ready deck can delete slide'));
+    }
+
+    const oldCount = row.page_count;
+    if (n < 1) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid page number'));
+    }
+    if (n > oldCount) {
+      return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+    }
+    if (oldCount <= 1) {
+      return reply.code(409).send(errorResponse('INVALID_STATE', 'Cannot delete the last slide'));
+    }
+
+    const pageRow = db
+      .prepare(`SELECT page_number FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .get(id, n) as { page_number: number } | undefined;
+    if (!pageRow) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+
+    const now = nowIso();
+    const newCount = oldCount - 1;
+    const updates = Array.from({ length: oldCount - n }, (_, i) => ({ from: n + i + 1, to: n + i }));
+    const filesToDelete = [
+      pageImagePath(id, n, oldCount),
+      pageTextPath(id, n, oldCount),
+      pageScriptPath(id, n, oldCount),
+      path.join(path.dirname(pageImagePath(id, n, oldCount)), `${String(n).padStart(oldCount > 999 ? 4 : 3, '0')}.png`),
+      path.join(path.dirname(pageImagePath(id, n, oldCount)), `${String(n).padStart(oldCount > 999 ? 4 : 3, '0')}.mp3`),
+    ];
+
+    const tx = db.transaction(() => {
+      db.prepare(`DELETE FROM pages WHERE pdf_id = ? AND page_number = ?`).run(id, n);
+      db.prepare(
+        `UPDATE pages
+            SET page_number = page_number - 1,
+                updated_at = ?
+          WHERE pdf_id = ? AND page_number > ?`,
+      ).run(now, id, n);
+      db.prepare(`UPDATE pdfs SET page_count = ?, updated_at = ? WHERE id = ?`).run(newCount, now, id);
+      rewritePagePathsToMatchNumber(id, newCount);
+    });
+
+    try {
+      tx();
+      await Promise.all(filesToDelete.map((file) => fs.promises.rm(file, { force: true })));
+      await renumberPageArtifacts(id, oldCount, updates);
+
+      const meta = await readMetadata(id);
+      if (meta) {
+        const metaRows = db
+          .prepare(`SELECT page_number, image_path, text_path, script_path, audio_path, status FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`)
+          .all(id) as Array<{ page_number: number; image_path: string | null; text_path: string | null; script_path: string | null; audio_path: string | null; status: string }>;
+        meta.page_count = newCount;
+        meta.pages = metaRows.map((p) => ({
+          page_number: p.page_number,
+          image: p.image_path,
+          text: p.text_path,
+          script: p.script_path,
+          audio: p.audio_path,
+          status: p.status as PageRow['status'],
+        }));
+        meta.updated_at = now;
+        await writeMetadata(id, meta);
+      }
+
+      return reply.code(200).send({ id, page_count: newCount, updated_at: now });
+    } catch (err) {
+      request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to delete page');
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to delete page'));
+    }
+  });
+
   app.post('/api/pdfs/:id/pages/:n/replace-image', async (request, reply) => {
     const parsed = PageParamSchema.safeParse(request.params);
     if (!parsed.success) {
