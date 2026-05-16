@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { toFile } from 'openai';
 import fs from 'node:fs';
 import path from 'node:path';
+import { nanoid } from 'nanoid';
 import { z } from 'zod';
 import sharp from 'sharp';
 import { db } from '../../db';
@@ -48,6 +49,8 @@ const EDIT_SLIDE_IMAGE_PROMPT_FALLBACK = [
   '',
   '{{base_prompt}}',
 ].join('\n');
+
+const IMAGE_CANDIDATE_ID_RE = /^[A-Za-z0-9_-]{6,64}$/;
 
 const MAX_USER_PROMPT_CHARS_IN_REWRITE_SYSTEM = 1200;
 
@@ -521,6 +524,9 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     }
     const { id, n } = parsed.data;
     const prompt = parsedBody.data.prompt.trim();
+    const historyPrompt = parsedBody.data.history
+      .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
+      .join('\n');
 
     const pdfRow = db
       .prepare(`SELECT page_count, user_prompt, script_max_chars_per_page FROM pdfs WHERE id = ?`)
@@ -565,7 +571,10 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         stylePrompt: IMAGE_PROMPT_TEMPLATES[0]?.prompt_en,
         pageText,
         pageScript,
-        userAdjustmentPrompt: prompt,
+        userAdjustmentPrompt: [
+          historyPrompt ? `Conversation history for iterative image editing:\n${historyPrompt}` : '',
+          `Current user adjustment request:\n${prompt}`,
+        ].filter(Boolean).join('\n\n'),
       });
 
       const editPrompt = renderPromptTemplate(
@@ -582,26 +591,50 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       const b64 = edited.data?.[0]?.b64_json;
       if (!b64) throw new Error('OpenAI image edit returned empty result');
       const newBuf = Buffer.from(b64, 'base64');
-      const outPath = pageImagePath(id, n, pdfRow.page_count);
-      await sharp(newBuf).resize(1920, 1080, { fit: 'contain', background: { r: 255, g: 255, b: 255 } }).jpeg({ quality: 82, mozjpeg: true }).toFile(outPath);
+      const candidateId = nanoid(10);
+      const candidateRelPath = path.posix.join('pages', `${String(n).padStart(pdfRow.page_count > 999 ? 4 : 3, '0')}.candidate.${candidateId}.jpg`);
+      const candidatePath = safeJoinPdfPath(id, candidateRelPath);
+      await sharp(newBuf).resize(1920, 1080, { fit: 'contain', background: { r: 255, g: 255, b: 255 } }).jpeg({ quality: 82, mozjpeg: true }).toFile(candidatePath);
 
       const now = nowIso();
-      db.prepare(`UPDATE pages SET updated_at = ? WHERE pdf_id = ? AND page_number = ?`).run(now, id, n);
-      db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(now, id);
-      try {
-        const meta = await readMetadata(id);
-        if (meta) {
-          meta.updated_at = now;
-          await writeMetadata(id, meta);
-        }
-      } catch {
-        // non-fatal
-      }
-      return reply.code(200).send({ id, page_number: n, image_url: `api/pdfs/${id}/pages/${n}/image`, updated_at: now });
+      return reply.code(200).send({
+        id,
+        page_number: n,
+        image_url: `api/pdfs/${id}/pages/${n}/image-candidates/${candidateId}`,
+        candidate_id: candidateId,
+        updated_at: now,
+      });
     } catch (err) {
       request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to regenerate image by prompt');
       return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to regenerate image'));
     }
+  });
+
+  app.get('/api/pdfs/:id/pages/:n/image-candidates/:candidateId', async (request, reply) => {
+    const parsedPage = PageParamSchema.safeParse(request.params);
+    const candidateId = (request.params as { candidateId?: string }).candidateId ?? '';
+    if (!parsedPage.success || !IMAGE_CANDIDATE_ID_RE.test(candidateId)) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id, page number, or candidate id'));
+    }
+
+    const { id, n } = parsedPage.data;
+    const pdfRow = db.prepare(`SELECT page_count FROM pdfs WHERE id = ?`).get(id) as { page_count: number | null } | undefined;
+    if (!pdfRow?.page_count || n > pdfRow.page_count) {
+      return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+    }
+
+    const relPath = path.posix.join('pages', `${String(n).padStart(pdfRow.page_count > 999 ? 4 : 3, '0')}.candidate.${candidateId}.jpg`);
+    let abs: string;
+    try {
+      abs = safeJoinPdfPath(id, relPath);
+      await fs.promises.access(abs, fs.constants.R_OK);
+    } catch {
+      return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Image candidate ${candidateId} not found`));
+    }
+
+    reply.header('content-type', 'image/jpeg');
+    reply.header('cache-control', 'no-store');
+    return reply.send(fs.createReadStream(abs));
   });
 
   app.post('/api/pdfs/:id/pages/:n/rewrite-script', async (request, reply) => {

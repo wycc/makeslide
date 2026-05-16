@@ -278,6 +278,7 @@ export default function PlayPage() {
   // 避免 completion 的自動跳頁多次觸發；每一個 job_id 只跳一次。
   const autoJumpedJobIdRef = useRef<string | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const [imagePreviewPageNumber, setImagePreviewPageNumber] = useState<number | null>(null);
   const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
   const [draggingPage, setDraggingPage] = useState<number | null>(null);
   // 手機模式下的 tab 切換（桌面模式忽略此 state，永遠並排顯示）
@@ -411,33 +412,6 @@ export default function PlayPage() {
     } finally {
       setImageStyleDialogOpen(true);
     }
-  }, [pdfId]);
-
-  // 掛載時檢查是否有正在進行中的批次重生任務；若有則接上並繼續顯示進度。
-  useEffect(() => {
-    if (!pdfId) return;
-    let cancelled = false;
-    fetchRegenerateStatus(pdfId)
-      .then((state) => {
-        if (cancelled) return;
-        if (
-          state.status === 'running' ||
-          state.status === 'pending' ||
-          state.status === 'cancelling'
-        ) {
-          setRegenJob(state);
-          setRegenAllBusy(true);
-        } else if (state.rollback_available) {
-          // 終止的任務若仍可還原，也顯示 banner 讓使用者決定
-          setRegenJob(state);
-        }
-      })
-      .catch(() => {
-        // 404 = 沒有任何任務紀錄，忽略即可。
-      });
-    return () => {
-      cancelled = true;
-    };
   }, [pdfId]);
 
   const pages = detail?.pages ?? [];
@@ -1071,6 +1045,11 @@ export default function PlayPage() {
         }
       } catch (err) {
         if (cancelled) return;
+        if (err instanceof ApiError && err.status === 404) {
+          setRegenJob(null);
+          setRegenAllBusy(false);
+          return;
+        }
         setRegenAllMsg(err instanceof ApiError ? err.message : '取得進度失敗');
       }
     };
@@ -1188,24 +1167,40 @@ export default function PlayPage() {
     setSlideBusy(true);
     setSlideError(null);
     try {
-      const res = await regenerateSlideImage(pdfId, currentPage.page_number, merged);
+      const nextHistory = [...chatHistory, { role: 'user' as const, content: `【修改圖片】${trimmed}` }];
+      setChatHistory(nextHistory);
+      const res = await regenerateSlideImage(pdfId, currentPage.page_number, merged, chatHistory);
       const preview = `${res.image_url}${res.image_url.includes('?') ? '&' : '?'}t=${encodeURIComponent(res.updated_at)}`;
       setChatHistory((prev) => [
         ...prev,
-        { role: 'user', content: `【修改圖片】${trimmed}` },
         { role: 'assistant', content: `${IMAGE_MSG_PREFIX}${preview}` },
       ]);
     } catch (err) {
+      setChatHistory(chatHistory);
       setSlideError(err instanceof ApiError ? err.message : '修改圖片失敗');
     } finally {
       setSlideBusy(false);
     }
-  }, [pdfId, currentPage, chatInput, reloadDetail, deckImageStylePrompt]);
+  }, [pdfId, currentPage, chatInput, chatHistory, deckImageStylePrompt]);
 
   const handleApplyPreviewImage = useCallback(async () => {
+    if (!pdfId || !imagePreviewUrl || !imagePreviewPageNumber) return;
+    setSlideBusy(true);
+    setSlideError(null);
+    try {
+      const resp = await fetch(imagePreviewUrl);
+      if (!resp.ok) throw new Error('Failed to fetch preview image');
+      const blob = await resp.blob();
+      const file = new File([blob], `page-${imagePreviewPageNumber}-candidate.jpg`, { type: blob.type || 'image/jpeg' });
+      await replaceSlideImage(pdfId, imagePreviewPageNumber, file);
+      await reloadDetail();
+    } catch (err) {
+      setSlideError(err instanceof ApiError ? err.message : '套用圖片失敗');
+    } finally {
+      setSlideBusy(false);
+    }
     setImagePreviewOpen(false);
-    await reloadDetail();
-  }, [reloadDetail]);
+  }, [pdfId, imagePreviewUrl, imagePreviewPageNumber, reloadDetail]);
 
   const hasChatInput = chatInput.trim().length > 0;
 
@@ -2134,6 +2129,7 @@ export default function PlayPage() {
                         const url = m.content.slice(IMAGE_MSG_PREFIX.length).trim();
                         if (!url) return;
                         setImagePreviewUrl(url);
+                        setImagePreviewPageNumber(currentPage?.page_number ?? null);
                         setImagePreviewOpen(true);
                       }}
                       className="inline-block overflow-hidden rounded-md border border-cyan-500/40 hover:border-cyan-300"

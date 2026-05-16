@@ -162,13 +162,14 @@ export const RewriteScriptBodySchema = z.object({
     .default([]),
 });
 
-export const RegenerateImageBodySchema = z.object({
-  prompt: z.string().min(1, 'prompt 不可為空').max(2000, 'prompt 不可超過 2000 字'),
-});
-
 const ChatMessageSchema = z.object({
   role: z.enum(['user', 'assistant']),
   content: z.string().min(1).max(4000),
+});
+
+export const RegenerateImageBodySchema = z.object({
+  prompt: z.string().min(1, 'prompt 不可為空').max(2000, 'prompt 不可超過 2000 字'),
+  history: z.array(ChatMessageSchema).max(20).optional().default([]),
 });
 
 const ChatHistorySchema = z.array(ChatMessageSchema);

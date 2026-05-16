@@ -267,6 +267,7 @@ export interface RegenerateSlideImageResponse {
   id: string;
   page_number: number;
   image_url: string;
+  candidate_id?: string;
   updated_at: string;
 }
 
@@ -394,13 +395,14 @@ export async function regenerateSlideImage(
   id: string,
   pageNumber: number,
   prompt: string,
+  history: ChatMessage[] = [],
 ): Promise<RegenerateSlideImageResponse> {
   const resp = await fetch(
     `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/regenerate-image`,
     {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({ prompt, history }),
     },
   );
   if (!resp.ok) throw await parseErrorBody(resp);
