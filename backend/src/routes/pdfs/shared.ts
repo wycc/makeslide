@@ -118,7 +118,7 @@ export const PageParamSchema = z.object({
     .pipe(z.number().int().positive().max(99999)),
 });
 
-const RegenerateAudioBodySchema = z.object({
+export const RegenerateAudioBodySchema = z.object({
   script: z.string().min(1, 'script 不可為空').max(4096, 'script 不可超過 4096 字'),
 });
 
@@ -144,7 +144,7 @@ function splitTtsSegments(script: string): Array<{ instruction: string; text: st
   return out;
 }
 
-const RewriteScriptBodySchema = z.object({
+export const RewriteScriptBodySchema = z.object({
   prompt: z.string().max(2000, 'prompt 不可超過 2000 字'),
   script: z.string().max(4096, 'script 不可超過 4096 字'),
   previous_script: z.string().max(4096, 'previous_script 不可超過 4096 字').optional().default(''),

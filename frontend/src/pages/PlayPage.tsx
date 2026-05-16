@@ -283,6 +283,7 @@ export default function PlayPage() {
   // 手機模式下的 tab 切換（桌面模式忽略此 state，永遠並排顯示）
   const [activeTab, setActiveTab] = useState<'play' | 'qa'>('play');
   const [imageOnlyFullscreen, setImageOnlyFullscreen] = useState(false);
+  const [slideImageScale, setSlideImageScale] = useState(1);
   const IMAGE_MSG_PREFIX = '[image] ';
   const imageInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -443,6 +444,7 @@ export default function PlayPage() {
   const deckPages: PdfDetailPage[] = useMemo(() => pages, [pages]);
   const currentPage: PdfDetailPage | null = deckPages[currentIdx] ?? null;
   const totalPages = deckPages.length;
+  const slideImageMaxHeightVh = Math.round(52 * slideImageScale);
   const imageBustKey = detail?.updated_at ?? '';
   const withImageBust = useCallback(
     (url: string | null | undefined) => {
@@ -1500,6 +1502,27 @@ export default function PlayPage() {
             >
               全螢幕
             </button>
+            <div className="col-span-2 flex items-center justify-center gap-1 rounded-md border border-slate-700 px-2 py-1 md:col-span-1" title="調整圖片與下方資料區比例">
+              <button
+                type="button"
+                onClick={() => setSlideImageScale((scale) => Math.max(0.65, Number((scale - 0.1).toFixed(2))))}
+                className="rounded px-2 py-0.5 text-sm text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                disabled={slideImageScale <= 0.65}
+                aria-label="縮小圖片區"
+              >
+                −
+              </button>
+              <span className="w-10 text-center text-xs tabular-nums text-slate-400">{Math.round(slideImageScale * 100)}%</span>
+              <button
+                type="button"
+                onClick={() => setSlideImageScale((scale) => Math.min(1.35, Number((scale + 0.1).toFixed(2))))}
+                className="rounded px-2 py-0.5 text-sm text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                disabled={slideImageScale >= 1.35}
+                aria-label="放大圖片區"
+              >
+                ＋
+              </button>
+            </div>
             <button
               type="button"
               onClick={() => setTtsDialogOpen(true)}
@@ -1672,10 +1695,14 @@ export default function PlayPage() {
                   key={currentPage.page_number}
                   src={withImageBust(currentPage.image_url) ?? currentPage.image_url}
                   alt={`第 ${currentPage.page_number} 頁`}
-                  className="max-h-[52vh] w-auto rounded-lg border border-slate-800 shadow-xl"
+                  className="w-auto rounded-lg border border-slate-800 shadow-xl"
+                  style={{ maxHeight: `${slideImageMaxHeightVh}vh` }}
                 />
               ) : (
-                <div className="flex h-[52vh] w-full items-center justify-center rounded-lg border border-slate-800 text-slate-500">
+                <div
+                  className="flex w-full items-center justify-center rounded-lg border border-slate-800 text-slate-500"
+                  style={{ height: `${slideImageMaxHeightVh}vh` }}
+                >
                   無法顯示投影片
                 </div>
               )}

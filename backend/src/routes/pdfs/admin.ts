@@ -1,9 +1,17 @@
 import type { FastifyInstance } from 'fastify';
 import { getRuntimeAiSettings, persistEnvSettings, setRuntimeAiSettings } from '../../services/aiSettings';
 import { setOpenAIApiKeyRuntime } from '../../services/openai';
+import { IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
 import { UpdateSystemAiSettingsBodySchema, errorResponse } from './shared';
 
 export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
+  app.get('/api/system/image-prompt-templates', async (_request, reply) => {
+    return reply.code(200).send({
+      templates: IMAGE_PROMPT_TEMPLATES,
+      default_template_key: IMAGE_PROMPT_TEMPLATES[0]?.key ?? null,
+    });
+  });
+
   app.get('/api/system/openai-key-status', async (_request, reply) => {
     const runtime = getRuntimeAiSettings();
     return reply.code(200).send({ has_key: runtime.openaiApiKey.trim().length > 0 });

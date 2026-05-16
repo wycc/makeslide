@@ -1,19 +1,24 @@
 import type { FastifyInstance } from 'fastify';
 import fs from 'node:fs';
 import path from 'node:path';
+import { z } from 'zod';
 import sharp from 'sharp';
 import { db } from '../../db';
 import { config } from '../../config';
 import type { PageRow, PdfRow } from '../../types';
+import { callChatJSON } from '../../services/openai';
 import { getOpenAIClient } from '../../services/openai';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
 import { safeJoinPdfPath } from '../../services/storage';
+import { synthesizeAudio } from '../../worker/steps/synthesizeAudio';
 import {
   AddPageBodySchema,
   IdParamSchema,
   MovePageBodySchema,
   PageParamSchema,
+  RegenerateAudioBodySchema,
   RegenerateImageBodySchema,
+  RewriteScriptBodySchema,
   errorResponse,
   nowIso,
   rewritePagePathsToMatchNumber,
@@ -26,6 +31,34 @@ import {
   renumberPageArtifacts,
   writeMetadata,
 } from '../../services/storage';
+
+const RewriteScriptResponseSchema = z.object({
+  script: z.string().min(1).max(4096),
+});
+
+const ChatMessageSchema = z.object({
+  role: z.enum(['user', 'assistant']),
+  content: z.string().min(1).max(4000),
+});
+
+const PageChatBodySchema = z.object({
+  question: z.string().min(1, 'question 不可為空').max(4000, 'question 不可超過 4000 字'),
+  history: z.array(ChatMessageSchema).max(20).optional().default([]),
+});
+
+const PageChatResponseSchema = z.object({
+  answer: z.string().min(1).max(4000),
+});
+
+function parseChatHistory(json: string | null): Array<z.infer<typeof ChatMessageSchema>> {
+  if (!json) return [];
+  try {
+    const parsed = z.array(ChatMessageSchema).safeParse(JSON.parse(json));
+    return parsed.success ? parsed.data : [];
+  } catch {
+    return [];
+  }
+}
 
 export async function registerPageOperationsRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/pdfs/:id/pages', async (request, reply) => {
@@ -342,6 +375,254 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     } catch (err) {
       request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to regenerate image by prompt');
       return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to regenerate image'));
+    }
+  });
+
+  app.post('/api/pdfs/:id/pages/:n/rewrite-script', async (request, reply) => {
+    const parsedParams = PageParamSchema.safeParse(request.params);
+    if (!parsedParams.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const parsedBody = RewriteScriptBodySchema.safeParse(request.body ?? {});
+    if (!parsedBody.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', parsedBody.error.issues[0]?.message ?? 'Invalid body'));
+    }
+
+    const { id, n } = parsedParams.data;
+    const body = parsedBody.data;
+    const pdfRow = db.prepare(`SELECT page_count FROM pdfs WHERE id = ?`).get(id) as { page_count: number | null } | undefined;
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!pdfRow.page_count || n > pdfRow.page_count) {
+      return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+    }
+
+    const pageRow = db
+      .prepare(`SELECT script_path, chat_history_json FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .get(id, n) as { script_path: string | null; chat_history_json: string | null } | undefined;
+    if (!pageRow?.script_path) {
+      return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+    }
+
+    try {
+      const prompt = body.prompt.trim() || '請在保留原意與適合朗讀的前提下，潤飾這頁逐字稿。';
+      const currentScript = body.current_script.trim() || body.script.trim();
+      const result = await callChatJSON({
+        label: `rewrite-script page/${id}/${n}`,
+        schema: RewriteScriptResponseSchema,
+        maxTokens: 1200,
+        temperature: 0.5,
+        messages: [
+          {
+            role: 'system',
+            content:
+              '你是一位繁體中文 Podcast 逐字稿編輯。請只輸出 JSON：{"script":"..."}。script 必須保留事實與上下文連貫，適合 TTS 朗讀，不要加入 Markdown。',
+          },
+          {
+            role: 'user',
+            content: [
+              `使用者修改指示：${prompt}`,
+              `上一頁逐字稿：${body.previous_script.trim() || '（無）'}`,
+              `本頁目前逐字稿：${currentScript}`,
+              `下一頁逐字稿：${body.next_script.trim() || '（無）'}`,
+              body.history.length > 0
+                ? `最近對話：${body.history.map((m) => `${m.role}: ${m.content}`).join('\n')}`
+                : '最近對話：（無）',
+            ].join('\n\n'),
+          },
+        ],
+      });
+
+      const script = result.data.script.trim();
+      await fs.promises.writeFile(safeJoinPdfPath(id, pageRow.script_path), script, 'utf8');
+      const now = nowIso();
+      const nextHistory = [...body.history, { role: 'user' as const, content: prompt }, { role: 'assistant' as const, content: script }].slice(-20);
+      db.prepare(`UPDATE pages SET chat_history_json = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`).run(
+        JSON.stringify(nextHistory),
+        now,
+        id,
+        n,
+      );
+      db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(now, id);
+
+      try {
+        const meta = await readMetadata(id);
+        if (meta) {
+          meta.updated_at = now;
+          await writeMetadata(id, meta);
+        }
+      } catch {
+        // non-fatal
+      }
+
+      return reply.code(200).send({ id, page_number: n, script });
+    } catch (err) {
+      request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to rewrite page script');
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to rewrite script'));
+    }
+  });
+
+  app.post('/api/pdfs/:id/pages/:n/regenerate-audio', async (request, reply) => {
+    const parsedParams = PageParamSchema.safeParse(request.params);
+    if (!parsedParams.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const parsedBody = RegenerateAudioBodySchema.safeParse(request.body ?? {});
+    if (!parsedBody.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', parsedBody.error.issues[0]?.message ?? 'Invalid body'));
+    }
+
+    const { id, n } = parsedParams.data;
+    const pdfRow = db
+      .prepare(`SELECT page_count, tts_voice, tts_speed FROM pdfs WHERE id = ?`)
+      .get(id) as { page_count: number | null; tts_voice: string | null; tts_speed: number | null } | undefined;
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!pdfRow.page_count || n > pdfRow.page_count) {
+      return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+    }
+
+    const pageRow = db
+      .prepare(`SELECT script_path FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .get(id, n) as { script_path: string | null } | undefined;
+    if (!pageRow?.script_path) {
+      return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+    }
+
+    try {
+      const script = parsedBody.data.script.trim();
+      await fs.promises.writeFile(safeJoinPdfPath(id, pageRow.script_path), script, 'utf8');
+      const result = await synthesizeAudio({
+        pdfId: id,
+        pageCount: pdfRow.page_count,
+        pages: [{ pageNumber: n, script }],
+        voice: pdfRow.tts_voice ?? undefined,
+        speed: pdfRow.tts_speed ?? undefined,
+      });
+      const audio = result.pages[0];
+      if (!audio) throw new Error('Audio synthesis returned no page result');
+      const relAudioPath = path.posix.join('pages', `${String(n).padStart(pdfRow.page_count > 999 ? 4 : 3, '0')}.mp3`);
+      const now = nowIso();
+      db.prepare(
+        `UPDATE pages
+            SET script_path = ?, audio_path = ?, audio_duration_seconds = ?, status = 'audio_ready', error_message = NULL, updated_at = ?
+          WHERE pdf_id = ? AND page_number = ?`,
+      ).run(pageRow.script_path, relAudioPath, audio.durationSeconds, now, id, n);
+      db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(now, id);
+
+      try {
+        const meta = await readMetadata(id);
+        if (meta) {
+          const page = meta.pages.find((p) => p.page_number === n);
+          if (page) {
+            page.script = pageRow.script_path;
+            page.audio = relAudioPath;
+            page.audio_duration_seconds = audio.durationSeconds;
+            page.status = 'audio_ready';
+          }
+          meta.updated_at = now;
+          await writeMetadata(id, meta);
+        }
+      } catch {
+        // non-fatal
+      }
+
+      return reply.code(200).send({
+        id,
+        page_number: n,
+        script_url: `api/pdfs/${id}/pages/${n}/script`,
+        audio_url: `api/pdfs/${id}/pages/${n}/audio`,
+        updated_at: now,
+        audio_bytes: audio.bytes,
+        audio_mime: 'audio/mpeg',
+      });
+    } catch (err) {
+      request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to regenerate page audio');
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to regenerate page audio'));
+    }
+  });
+
+  app.get('/api/pdfs/:id/pages/:n/chat-history', async (request, reply) => {
+    const parsedParams = PageParamSchema.safeParse(request.params);
+    if (!parsedParams.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const { id, n } = parsedParams.data;
+    const pageRow = db
+      .prepare(`SELECT chat_history_json FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .get(id, n) as { chat_history_json: string | null } | undefined;
+    if (!pageRow) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+    return reply.code(200).send({ history: parseChatHistory(pageRow.chat_history_json) });
+  });
+
+  app.delete('/api/pdfs/:id/pages/:n/chat-history', async (request, reply) => {
+    const parsedParams = PageParamSchema.safeParse(request.params);
+    if (!parsedParams.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const { id, n } = parsedParams.data;
+    const info = db
+      .prepare(`UPDATE pages SET chat_history_json = NULL, updated_at = ? WHERE pdf_id = ? AND page_number = ?`)
+      .run(nowIso(), id, n);
+    if (info.changes === 0) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+    return reply.code(204).send();
+  });
+
+  app.post('/api/pdfs/:id/pages/:n/chat', async (request, reply) => {
+    const parsedParams = PageParamSchema.safeParse(request.params);
+    if (!parsedParams.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const parsedBody = PageChatBodySchema.safeParse(request.body ?? {});
+    if (!parsedBody.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', parsedBody.error.issues[0]?.message ?? 'Invalid body'));
+    }
+
+    const { id, n } = parsedParams.data;
+    const pageRow = db
+      .prepare(`SELECT text_path, script_path, chat_history_json FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .get(id, n) as { text_path: string | null; script_path: string | null; chat_history_json: string | null } | undefined;
+    if (!pageRow) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+
+    try {
+      const pageText = pageRow.text_path ? await fs.promises.readFile(safeJoinPdfPath(id, pageRow.text_path), 'utf8').catch(() => '') : '';
+      const pageScript = pageRow.script_path ? await fs.promises.readFile(safeJoinPdfPath(id, pageRow.script_path), 'utf8').catch(() => '') : '';
+      const existingHistory = parseChatHistory(pageRow.chat_history_json);
+      const requestHistory = parsedBody.data.history.length > 0 ? parsedBody.data.history : existingHistory;
+      const result = await callChatJSON({
+        label: `page-chat ${id}/${n}`,
+        schema: PageChatResponseSchema,
+        maxTokens: 1200,
+        temperature: 0.4,
+        messages: [
+          {
+            role: 'system',
+            content: '你是繁體中文簡報與逐字稿助理。請只輸出 JSON：{"answer":"..."}。回答需精簡、可操作，根據頁面文字與逐字稿內容。',
+          },
+          {
+            role: 'user',
+            content: [
+              `頁碼：${n}`,
+              `頁面文字：${pageText.trim() || '（無）'}`,
+              `頁面逐字稿：${pageScript.trim() || '（無）'}`,
+              requestHistory.length > 0
+                ? `最近對話：${requestHistory.map((m) => `${m.role}: ${m.content}`).join('\n')}`
+                : '最近對話：（無）',
+              `使用者問題：${parsedBody.data.question}`,
+            ].join('\n\n'),
+          },
+        ],
+      });
+      const answer = result.data.answer.trim();
+      const nextHistory = [...requestHistory, { role: 'user' as const, content: parsedBody.data.question }, { role: 'assistant' as const, content: answer }].slice(-20);
+      db.prepare(`UPDATE pages SET chat_history_json = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`).run(
+        JSON.stringify(nextHistory),
+        nowIso(),
+        id,
+        n,
+      );
+      return reply.code(200).send({ answer });
+    } catch (err) {
+      request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to chat with page context');
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to chat with page context'));
     }
   });
 }
