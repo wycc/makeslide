@@ -8,7 +8,9 @@ import { config } from '../../config';
 import type { PageRow, PdfRow } from '../../types';
 import { callChatJSON } from '../../services/openai';
 import { getOpenAIClient } from '../../services/openai';
+import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
+import { loadPromptTemplate, renderPromptTemplate } from '../../services/promptTemplates';
 import { safeJoinPdfPath } from '../../services/storage';
 import { synthesizeAudio } from '../../worker/steps/synthesizeAudio';
 import {
@@ -35,6 +37,121 @@ import {
 const RewriteScriptResponseSchema = z.object({
   script: z.string().min(1).max(4096),
 });
+
+const MAX_USER_PROMPT_CHARS_IN_REWRITE_SYSTEM = 1200;
+
+function sanitiseRewriteUserPrompt(raw: string | null | undefined): string {
+  if (!raw) return '';
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  return trimmed.length > MAX_USER_PROMPT_CHARS_IN_REWRITE_SYSTEM
+    ? trimmed.slice(0, MAX_USER_PROMPT_CHARS_IN_REWRITE_SYSTEM) + '……（已截斷）'
+    : trimmed;
+}
+
+function buildRewriteScriptSystemPrompt(params: {
+  userPrompt: string | null | undefined;
+  targetChars: number;
+}): string {
+  const runtime = getRuntimeAiSettings();
+  if (runtime.ttsProvider === 'gemini') {
+    const fallback = '你是一位 Podcast 逐字稿編輯助理。請輸出 JSON：{"script":"..."}';
+    const template = loadPromptTemplate('backend/prompts/generate-script-gemini.md', fallback);
+    const base = [template];
+    const speaker1 = runtime.geminiTtsSpeaker1?.trim();
+    const speaker2 = runtime.geminiTtsSpeaker2?.trim();
+    if (speaker1 || speaker2) {
+      const speakerBlockTpl = loadPromptTemplate(
+        'backend/prompts/partials/gemini-speaker-persona-block.md',
+        '【雙主持人角色人設（優先遵守）】\n{{speaker1_line}}\n{{speaker2_line}}',
+      );
+      base.push('');
+      base.push(
+        renderPromptTemplate(speakerBlockTpl, {
+          speaker1_line: speaker1 ? `- Speaker 1 人設：${speaker1}` : '',
+          speaker2_line: speaker2 ? `- Speaker 2 人設：${speaker2}` : '',
+        }),
+      );
+    }
+    const sanitized = sanitiseRewriteUserPrompt(params.userPrompt);
+    if (sanitized) {
+      const userBlockTpl = loadPromptTemplate(
+        'backend/prompts/partials/user-style-block.md',
+        '【使用者指定的風格 / 語氣 / 聽眾要求】\n{{user_prompt}}',
+      );
+      base.push('');
+      base.push(renderPromptTemplate(userBlockTpl, { user_prompt: sanitized }));
+    }
+    return base.join('\n');
+  }
+
+  const base = [
+    renderPromptTemplate(
+      loadPromptTemplate(
+        'backend/prompts/generate-script-openai.md',
+        `你是一位專業的中文簡報講師與旁白配音員。你的任務：生成繁體中文逐字稿（建議約 ${params.targetChars} 字）。請回傳 JSON：{"script":"..."}`,
+      ),
+      { target_chars: String(params.targetChars) },
+    ),
+  ];
+  const sanitized = sanitiseRewriteUserPrompt(params.userPrompt);
+  if (sanitized) {
+    const userBlockTpl = loadPromptTemplate(
+      'backend/prompts/partials/user-style-block-openai.md',
+      '【使用者指定的風格 / 語氣 / 聽眾要求】（優先遵守；若與上述規則衝突時，仍須維持逐字稿結構，但語氣、人稱、情緒強度可依照此要求調整。請勿把這段內容直接複製到輸出裡。）\n{{user_prompt}}',
+    );
+    base.push('');
+    base.push(renderPromptTemplate(userBlockTpl, { user_prompt: sanitized }));
+  }
+  return base.join('\n');
+}
+
+function buildRewriteScriptUserPrompt(params: {
+  pageNumber: number;
+  pageCount: number;
+  targetChars: number;
+  editPrompt: string;
+  previousScript: string;
+  currentScript: string;
+  nextScript: string;
+  history: Array<{ role: 'user' | 'assistant'; content: string }>;
+}): string {
+  const previousBlock = params.previousScript.trim()
+    ? `【上一頁逐字稿（供銜接參考，請勿重複其句子）】\n${params.previousScript.trim()}`
+    : params.pageNumber === 1
+      ? '【備註】這是第一頁，請自然地作為開場引言。'
+      : '【上一頁逐字稿】（無）';
+  const nextBlock = params.nextScript.trim()
+    ? `【下一頁逐字稿（供銜接鋪陳，請勿提前講完下一頁細節）】\n${params.nextScript.trim()}`
+    : params.pageNumber === params.pageCount
+      ? '【備註】這是最後一頁，請自然地作為總結 / 收尾。'
+      : '【下一頁逐字稿】（無）';
+  const historyBlock = params.history.length > 0
+    ? `【最近對話】\n${params.history.map((m) => `${m.role}: ${m.content}`).join('\n')}`
+    : '【最近對話】（無）';
+
+  return [
+    `目前頁碼：第 ${params.pageNumber} 頁 / 共 ${params.pageCount} 頁。`,
+    `建議字數：約 ${params.targetChars} 字（可依素材多寡彈性調整）。`,
+    '字數以資訊完整與講解流暢為優先：內容多可較長，內容少可較短，避免為湊字數而灌水。',
+    `輸出語言：${config.openaiScriptLanguage}（繁體中文）。`,
+    '',
+    previousBlock,
+    nextBlock,
+    '',
+    '【本頁目前逐字稿】',
+    params.currentScript.trim(),
+    '',
+    `【使用者修改指示】\n${params.editPrompt}`,
+    '',
+    historyBlock,
+    '',
+    '請依照修改指示重寫「本頁目前逐字稿」，並維持與生成路徑一致的風格、語氣、格式與建議字數。',
+    '上一頁與下一頁逐字稿只用來確認頁間一致性和連續性；不要把前後頁內容整段併入本頁。',
+    '避免使用「這一頁／本頁／此頁／本張」等單頁指稱，改用連續敘事語氣。',
+    '請以 JSON 格式回覆：{"script": "逐字稿內容..."}',
+  ].join('\n');
+}
 
 const ChatMessageSchema = z.object({
   role: z.enum(['user', 'assistant']),
@@ -168,7 +285,9 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
 
     const { id } = parsedParams.data;
     const { from_page_number: from, to_page_number: to } = parsedBody.data;
-    const pdfRow = db.prepare(`SELECT page_count FROM pdfs WHERE id = ?`).get(id) as { page_count: number | null } | undefined;
+    const pdfRow = db
+      .prepare(`SELECT page_count, user_prompt, script_max_chars_per_page FROM pdfs WHERE id = ?`)
+      .get(id) as { page_count: number | null; user_prompt: string | null; script_max_chars_per_page: number | null } | undefined;
     if (!pdfRow?.page_count) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     }
@@ -310,7 +429,9 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     const { id, n } = parsed.data;
     const prompt = parsedBody.data.prompt.trim();
 
-    const pdfRow = db.prepare(`SELECT page_count FROM pdfs WHERE id = ?`).get(id) as { page_count: number | null } | undefined;
+    const pdfRow = db
+      .prepare(`SELECT page_count, user_prompt, script_max_chars_per_page FROM pdfs WHERE id = ?`)
+      .get(id) as { page_count: number | null; user_prompt: string | null; script_max_chars_per_page: number | null } | undefined;
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     if (!pdfRow.page_count || n > pdfRow.page_count) {
       return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
@@ -390,7 +511,9 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
 
     const { id, n } = parsedParams.data;
     const body = parsedBody.data;
-    const pdfRow = db.prepare(`SELECT page_count FROM pdfs WHERE id = ?`).get(id) as { page_count: number | null } | undefined;
+    const pdfRow = db
+      .prepare(`SELECT page_count, user_prompt, script_max_chars_per_page FROM pdfs WHERE id = ?`)
+      .get(id) as { page_count: number | null; user_prompt: string | null; script_max_chars_per_page: number | null } | undefined;
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     if (!pdfRow.page_count || n > pdfRow.page_count) {
       return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
@@ -406,28 +529,32 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     try {
       const prompt = body.prompt.trim() || '請在保留原意與適合朗讀的前提下，潤飾這頁逐字稿。';
       const currentScript = body.current_script.trim() || body.script.trim();
+      const targetChars = pdfRow.script_max_chars_per_page ?? config.openaiScriptTargetChars;
       const result = await callChatJSON({
         label: `rewrite-script page/${id}/${n}`,
         schema: RewriteScriptResponseSchema,
-        maxTokens: 1200,
+        maxTokens: 2400,
         temperature: 0.5,
         messages: [
           {
             role: 'system',
-            content:
-              '你是一位繁體中文 Podcast 逐字稿編輯。請只輸出 JSON：{"script":"..."}。script 必須保留事實與上下文連貫，適合 TTS 朗讀，不要加入 Markdown。',
+            content: buildRewriteScriptSystemPrompt({
+              userPrompt: pdfRow.user_prompt,
+              targetChars,
+            }),
           },
           {
             role: 'user',
-            content: [
-              `使用者修改指示：${prompt}`,
-              `上一頁逐字稿：${body.previous_script.trim() || '（無）'}`,
-              `本頁目前逐字稿：${currentScript}`,
-              `下一頁逐字稿：${body.next_script.trim() || '（無）'}`,
-              body.history.length > 0
-                ? `最近對話：${body.history.map((m) => `${m.role}: ${m.content}`).join('\n')}`
-                : '最近對話：（無）',
-            ].join('\n\n'),
+            content: buildRewriteScriptUserPrompt({
+              pageNumber: n,
+              pageCount: pdfRow.page_count,
+              targetChars,
+              editPrompt: prompt,
+              previousScript: body.previous_script,
+              currentScript,
+              nextScript: body.next_script,
+              history: body.history,
+            }),
           },
         ],
       });
