@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { toFile } from 'openai';
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
@@ -37,6 +38,16 @@ import {
 const RewriteScriptResponseSchema = z.object({
   script: z.string().min(1).max(4096),
 });
+
+const EDIT_SLIDE_IMAGE_PROMPT_FALLBACK = [
+  'You are editing an existing presentation slide image provided as the input image.',
+  'Use the uploaded image as the strict visual source of truth.',
+  'Preserve the original slide layout, composition, colors, typography style, relative object positions, diagrams, icons, and readable text unless the user explicitly asks to change those specific elements.',
+  'Only make the minimal edits required by the user adjustment prompt. Do not redesign the slide, do not invent unrelated visual elements, and do not change the overall style beyond the requested modification.',
+  'If the request is ambiguous, prefer conservative local edits and keep the original image as unchanged as possible.',
+  '',
+  '{{base_prompt}}',
+].join('\n');
 
 const MAX_USER_PROMPT_CHARS_IN_REWRITE_SYSTEM = 1200;
 
@@ -544,16 +555,28 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         }
       }
 
-      const mergedPrompt = buildImagePrompt({
+      const currentImagePath = pageRow.image_path
+        ? safeJoinPdfPath(id, pageRow.image_path)
+        : pageImagePath(id, n, pdfRow.page_count);
+      const currentImageBuffer = await fs.promises.readFile(currentImagePath);
+      const currentImageForEdit = await toFile(currentImageBuffer, `page-${n}.jpg`, { type: 'image/jpeg' });
+
+      const basePrompt = buildImagePrompt({
         stylePrompt: IMAGE_PROMPT_TEMPLATES[0]?.prompt_en,
         pageText,
         pageScript,
         userAdjustmentPrompt: prompt,
       });
 
-      const edited = await client.images.generate({
+      const editPrompt = renderPromptTemplate(
+        loadPromptTemplate('backend/prompts/edit-slide-image.md', EDIT_SLIDE_IMAGE_PROMPT_FALLBACK),
+        { base_prompt: basePrompt },
+      );
+
+      const edited = await client.images.edit({
         model: config.openaiImageModel,
-        prompt: mergedPrompt,
+        image: currentImageForEdit,
+        prompt: editPrompt,
         size: '1536x1024',
       });
       const b64 = edited.data?.[0]?.b64_json;
