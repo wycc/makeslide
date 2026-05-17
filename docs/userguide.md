@@ -1,13 +1,16 @@
 # OpenAI 金鑰設定 / Setup OpenAI Key
 
-![alt text](image.png)
+![alt text](image-3.png)
 
 我們可以在這裡設定 API 金鑰，這是產生投影片圖片、文字與音訊所必需的。  
 You can configure the API key here, which is required to generate slide images, text, and audio.
 
+除了大語言模型的 API KEY 外，我們也可以設定 TTS 的供應商。另外，我們可以選擇不同的模型和 TTS 中語音的人設。
+
+
 # 文件列表 / Document List
 
-![alt text](image-1.png)
+![alt text](image-4.png)
 
 我們可以上傳 PDF、純文字，或 YouTube 連結作為投影片內容來源。  
 You can upload PDF files, plain text, or YouTube links as the content source for slides.
@@ -38,11 +41,18 @@ In addition, we provide the previous and next page TTS text to help the LLM gene
 
 # 文字 / Text
 
+![alt text](image-5.png)
+
 如果上傳的是文字內容，系統會將其切分成多頁。每頁需以 `Slide XXX` 開頭。系統會以該段文字作為提示詞，並為每頁生成圖片。  
 If plain text is uploaded, it is split into multiple pages. Each page should start with `Slide XXX`. The text is used as the prompt to generate an image for each page.
 
 接著，系統會以與 PDF 相同的流程產生 TTS 文字與音訊。  
 Then, the system generates TTS text and audio using the same process as PDF input.
+
+![alt text](image-6.png)
+
+除了事先寫好的大綱外，也可以用對話的方式請語言模型產生適當的大綱。
+
 
 # YouTube
 
@@ -51,3 +61,72 @@ If a YouTube link is uploaded, the system fetches captions and uses an LLM to ge
 
 最後，系統會使用提示詞與圖片來生成 TTS 文字與音訊。  
 Finally, the system uses the prompt and image to generate TTS text and audio.
+
+# 類別
+
+![alt text](image-7.png)
+
+類別選單可以用來選則要顯示的簡報，這個可以幫助我們快速找到要的簡報。
+
+# 播放器
+
+![alt text](image-8.png)
+
+選擇任何一個簡報就可以進入播放器，如果簡報還沒有完全生成，進入播放器後會進入唯讀模式。
+
+這個頁面中除了顯示每一頁簡報的圖片，提示詞，逐字稿和系統資料外。也提供了完整的編輯功能，我們可以修改每
+一頁簡報的任何部份。
+
+## 選擇投影片
+
+![alt text](image-9.png)
+
+有二個方式可以選擇投影片，首先是使用撥放器上的上一頁/下一頁圖示。
+
+![alt text](image-10.png)
+
+另一個方式是使用投影片管理功能直接選擇一頁
+
+## 撥放簡報
+
+![alt text](image-11.png)
+
+按下撥放鍵就可以開使撥放簡報，此時可以用上方的全螢幕鍵切至全螢幕模式。一張投影片撥放完成後會自動進入下一張。
+
+在全螢幕撥放模式中，我們可以使用方向鍵跳至下一頁或上一頁。按下 ESC 鍵可以離開全螢幕模式。
+
+## 編緝功能
+
+![alt text](image-12.png)
+
+makeslide 提供了很完整的編輯功能。我們可以提供一些額外的提示詞來修改目前的內容，除了目前的提示詞外，
+不同的動作可能會用到一些不同的內容。
+
+* 修改提示詞
+* 修改圖片，會使用目前的圖片和提示詞及逐字稿來產生圖片。
+* 修改逐字稿，會使用目前頁面的圖片和提示詞產生逐字稿，上一頁和下一頁的逐字稿也會被使用，以確認逐字稿的流暢度。
+* 語言，會使用逐字稿產生語言，目前設定內的資料會被使用來客製化語音的內容。我們可以透過提示詞來修改語氣。
+
+## 即時投票(realtime poll)
+
+![alt text](image-13.png)
+
+在簡報過程中，我們可以定義投票的功能，收集聽眾的想法。
+
+![alt text](image-14.png)
+
+按下設定可以顯示編輯器。
+
+![alt text](image-15.png)
+
+按下開始會啟動投票
+
+
+
+
+
+
+
+
+
+
