@@ -113,6 +113,23 @@ export interface PdfDetail {
   pages: PdfDetailPage[];
 }
 
+export interface PagePollOption {
+  text: string;
+  votes: number;
+}
+
+export interface PagePoll {
+  id: number;
+  pdf_id: string;
+  page_number: number;
+  question: string;
+  options: PagePollOption[];
+  total_votes: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface UploadResponse {
   id: string;
   status: PdfStatus;

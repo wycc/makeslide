@@ -155,6 +155,32 @@ function migrate(): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_regenerate_jobs_status_updated ON regenerate_jobs(status, updated_at DESC);
+
+    CREATE TABLE IF NOT EXISTS page_polls (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      pdf_id TEXT NOT NULL,
+      page_number INTEGER NOT NULL,
+      question TEXT NOT NULL,
+      options_json TEXT NOT NULL,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (pdf_id, page_number) REFERENCES pages(pdf_id, page_number) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_page_polls_pdf_page ON page_polls(pdf_id, page_number, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS page_poll_votes (
+      poll_id INTEGER NOT NULL,
+      voter_id TEXT NOT NULL,
+      option_index INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (poll_id, voter_id),
+      FOREIGN KEY (poll_id) REFERENCES page_polls(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_page_poll_votes_poll ON page_poll_votes(poll_id);
   `);
 
   // M4: add audio_duration_seconds column if missing
