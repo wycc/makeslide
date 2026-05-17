@@ -6,6 +6,7 @@
     [x] 可以在特定畫面加上 realtime poll 的功能，可以加上一個問題，在螢幕上顯示問題和幾個可能的答案。讓所有在同一個頁面的使用者都可以選擇答案。（完成分支：feature/realtime-poll）
 [x] 完成 PendingTask.md #12 可觀測性儀表（成功率/失敗率/成本）（完成分支：feature/observability-dashboard）
 [x] 完成 PendingTask.md #6 狀態機單一來源（完成分支：feature/status-machine-single-source）
+[x] 完成 PendingTask.md #15 Queue 抽象層（為分散式擴充預備）（完成分支：feature/queue-abstraction）
 
 ## 工作記錄
 - 時間：2026-05-17 16:10（Asia/Taipei）
@@ -42,3 +43,8 @@
 - 工作內容：完成 PendingTask.md #6「狀態機單一來源」，新增後端 lifecycle status 單一來源模組，集中定義 PDF/Page 狀態、進度步驟、狀態辨識與轉換規則；後端型別改由該模組匯出，資料庫啟動遷移會依單一來源清單正規化非法 PDF/Page 狀態，並補上狀態機與正規化測試。
 - 所在分支：feature/status-machine-single-source
 - 驗證：cd backend && ../scripts/with-node-env.sh npx tsx --test ./test/status-machine.test.ts && cd .. && npm --prefix backend run build；npm --prefix backend test -- status-machine.test.ts（失敗：專案測試腳本會先執行全部 backend/test/*.test.ts，既有 pages-api 測試仍預期 pages/*.png，但目前實際為 pages/*.jpg）
+
+- 時間：2026-05-17 17:41（Asia/Taipei）
+- 工作內容：完成 PendingTask.md #15「Queue 抽象層（為分散式擴充預備）」，將後端 PDF processing queue 從直接依賴 PQueue 收斂為 ProcessingQueue/ProcessingQueueAdapter 抽象，保留記憶體 PQueue 實作並提供可替換 adapter 與佇列統計，為後續分散式 queue adapter 預留介面；補上 adapter 建立、單例重用與切換重建的單元測試。
+- 所在分支：feature/queue-abstraction
+- 驗證：cd backend && ../scripts/with-node-env.sh npx tsx --test ./test/queue.test.ts && cd .. && npm --prefix backend run build；npm --prefix backend test -- queue.test.ts（失敗：專案測試腳本會先執行全部 backend/test/*.test.ts，既有 pages-api 測試仍預期 pages/*.png，但目前實際為 pages/*.jpg）
