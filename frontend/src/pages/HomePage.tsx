@@ -19,6 +19,19 @@ const POLL_INTERVAL_ACTIVE_MS = 5000;
 const POLL_INTERVAL_IDLE_MS = 30000;
 const DEFAULT_PROMPT_TTS_PROVIDER = 'gemini' as const;
 const DEFAULT_CATEGORY = 'general';
+const RECENT_CATEGORY = '最近的簡報';
+
+const compareByTitle = (a: PdfListItem, b: PdfListItem) => {
+  const titleA = a.title?.trim() || a.id;
+  const titleB = b.title?.trim() || b.id;
+  return titleA.localeCompare(titleB, 'zh-Hant', { numeric: true, sensitivity: 'base' });
+};
+
+const compareByCreatedAtDesc = (a: PdfListItem, b: PdfListItem) => {
+  const timeA = Date.parse(a.created_at);
+  const timeB = Date.parse(b.created_at);
+  return (Number.isNaN(timeB) ? 0 : timeB) - (Number.isNaN(timeA) ? 0 : timeA);
+};
 
 interface PromptTarget {
   id: string;
@@ -42,20 +55,24 @@ export default function HomePage() {
     const category = pdf.category?.trim() || DEFAULT_CATEGORY;
     if (!categories.includes(category)) categories.push(category);
     return categories;
-  }, []);
-  const filteredItems = categoryFilter === '__all__'
+  }, []).sort((a, b) => a.localeCompare(b, 'zh-Hant', { numeric: true, sensitivity: 'base' }));
+  const filteredItems = categoryFilter === '__all__' || categoryFilter === '__recent__'
     ? items
     : items.filter((pdf) => (pdf.category?.trim() || DEFAULT_CATEGORY) === categoryFilter);
-  const categoryGroups = filteredItems.reduce<Array<{ category: string; items: PdfListItem[] }>>((groups, pdf) => {
-    const category = pdf.category?.trim() || DEFAULT_CATEGORY;
-    const group = groups.find((g) => g.category === category);
-    if (group) {
-      group.items.push(pdf);
-    } else {
-      groups.push({ category, items: [pdf] });
-    }
-    return groups;
-  }, []);
+  const categoryGroups = categoryFilter === '__recent__'
+    ? [{ category: RECENT_CATEGORY, items: [...items].sort(compareByCreatedAtDesc) }]
+    : filteredItems.reduce<Array<{ category: string; items: PdfListItem[] }>>((groups, pdf) => {
+      const category = pdf.category?.trim() || DEFAULT_CATEGORY;
+      const group = groups.find((g) => g.category === category);
+      if (group) {
+        group.items.push(pdf);
+      } else {
+        groups.push({ category, items: [pdf] });
+      }
+      return groups;
+    }, [])
+      .map((group) => ({ ...group, items: [...group.items].sort(compareByTitle) }))
+      .sort((a, b) => a.category.localeCompare(b.category, 'zh-Hant', { numeric: true, sensitivity: 'base' }));
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -333,6 +350,7 @@ export default function HomePage() {
                 className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition hover:border-slate-500"
               >
                 <option value="__all__">全部類別</option>
+                <option value="__recent__">{RECENT_CATEGORY}</option>
                 {allCategories.map((category) => (
                   <option key={category} value={category}>{category}</option>
                 ))}
@@ -358,7 +376,7 @@ export default function HomePage() {
                   <span className="rounded-full border border-slate-700 px-2 py-0.5 text-xs text-slate-400">
                     {group.items.length} 個簡報
                   </span>
-                  {group.category !== DEFAULT_CATEGORY && (
+                  {group.category !== DEFAULT_CATEGORY && group.category !== RECENT_CATEGORY && (
                     <button
                       type="button"
                       onClick={() => void handleDeleteCategory(group.category)}
