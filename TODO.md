@@ -3,7 +3,7 @@
 [x] (merge)在PlayPage 中加入更新封面的按鍵，將封面更新為目前頁目的圖片（完成分支：feature/update-cover-from-current-page）
 [x] (merge)產生的過程中也允許進入 PlayPage, 可以流覽內容，播放音檔。但所有更改和生成的功能都要禁用（完成分支：feature/playpage-readonly-while-processing）
 [x] (merge)加上從提示詞生成的功能，使用者只提供一個提示詞說明要產生的內容，會先生成 TXT 需要的文字，再使用原 TXT 上傳的流程產生完整簡報（完成分支：feature/prompt-to-text-import）
-[x] 加上教學互動功能（完成分支：feature/realtime-poll）
+[x] (merge)加上教學互動功能（完成分支：feature/realtime-poll）
     [x] 可以在特定畫面加上 realtime poll 的功能，可以加上一個問題，在螢幕上顯示問題和幾個可能的答案。讓所有在同一個頁面的使用者都可以選擇答案。（完成分支：feature/realtime-poll）
 [x] 完成 PendingTask.md #12 可觀測性儀表（成功率/失敗率/成本）（完成分支：feature/observability-dashboard）
 [x] 完成 PendingTask.md #6 狀態機單一來源（完成分支：feature/status-machine-single-source）
@@ -70,7 +70,7 @@
 
 # Second Batch
 [x] 將取代目前頁圖片的按鍵去掉，我們己經可以可以直接拖到圖片上，不需要這個區域。（完成分支：feature/remove-replace-current-page-image-button）
-[ ] 在問答頁上加上一個放大縮小的按鍵，讓我們可以讓問答的區塊佔整個右邊。
+[x] 在問答頁上加上一個放大縮小的按鍵，讓我們可以讓問答的區塊佔整個右邊。（完成分支：feature/qa-panel-expand-toggle）
 [x] 在手機模式上，把標題縮小一點讓返回按鍵可以顯示在一行上。（完成分支：feature/mobile-playpage-title-fit）
 [x] 在手機模式上，把播放的進度列中進度條縮短一些讓後線長度可以完整顯示。（完成分支：feature/mobile-progress-bar-time-fit）
 [x] 把顯示類別的選擇記下來，回到首頁時會顯示之前的設定（完成分支：feature/persist-home-category-filter）
@@ -108,4 +108,9 @@
 - 時間：2026-05-18 04:30（Asia/Taipei）
 - 工作內容：完成「在手機模式上，把播放的進度列中進度條縮短一些讓後線長度可以完整顯示」，調整播放頁播放器控制列手機版排版，讓按鈕列可換行，進度條與時間顯示共用下一列並保留固定時間欄寬，避免目前時間/總長度在窄螢幕被截斷。
 - 所在分支：feature/mobile-progress-bar-time-fit
+- 驗證：npm --prefix frontend run build；git diff --check
+
+- 時間：2026-05-18 04:41（Asia/Taipei）
+- 工作內容：完成「在問答頁上加上一個放大縮小的按鍵，讓我們可以讓問答的區塊佔整個右邊」，播放頁問答區標題列新增桌面版放大/還原按鈕，放大時隱藏左側播放欄並讓右側問答欄佔滿可用寬度，手機版維持原本 tab 體驗。
+- 所在分支：feature/qa-panel-expand-toggle
 - 驗證：npm --prefix frontend run build；git diff --check
