@@ -166,6 +166,7 @@ export default function PlayPage() {
   const [rewriteBusy, setRewriteBusy] = useState(false);
   const [rewriteError, setRewriteError] = useState<string | null>(null);
   const [finished, setFinished] = useState(false);
+  const [classroomMode, setClassroomMode] = useState(false);
   const [editingScript, setEditingScript] = useState('');
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
@@ -480,11 +481,11 @@ export default function PlayPage() {
     setIsPlaying(false);
     if (currentIdx < totalPages - 1) {
       setCurrentIdx((i) => i + 1);
-      setIsPlaying(true); // autoplay next
+      setIsPlaying(!classroomMode); // autoplay next unless classroom mode pauses for teacher explanation
     } else {
       setFinished(true);
     }
-  }, [currentIdx, totalPages]);
+  }, [classroomMode, currentIdx, totalPages]);
 
   const handleSeek = useCallback(
     (ev: React.ChangeEvent<HTMLInputElement>) => {
@@ -1857,6 +1858,26 @@ export default function PlayPage() {
             <div className="w-24 whitespace-nowrap text-right font-mono text-xs text-slate-300">
               {formatTime(currentTime)} / {formatTime(duration)}
             </div>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">
+            <div>
+              <span className="font-semibold text-slate-200">上課模式</span>
+              <span className="ml-2 text-slate-400">
+                {classroomMode ? '每頁播放完會先停在下一頁，方便老師講解。' : '關閉時會自動連續播放下一頁。'}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setClassroomMode((enabled) => !enabled)}
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                classroomMode
+                  ? 'border-amber-400/60 bg-amber-400/15 text-amber-100 hover:bg-amber-400/25'
+                  : 'border-slate-700 bg-slate-950 text-slate-300 hover:bg-slate-800'
+              }`}
+              aria-pressed={classroomMode}
+            >
+              {classroomMode ? '已開啟' : '開啟'}
+            </button>
           </div>
             </div>
           </section>
