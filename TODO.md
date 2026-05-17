@@ -81,7 +81,7 @@
 [ ] 加上使用 google 帳號的功能
 [ ] API key 和一些整體設定要存在帳號中，例如 .env。每一個帳號會在一個單獨的目錄中，
 [x] 當帳號的 credit 用完時，要顯示錯誤對話框提示使用者去充值。（完成分支：feature/credit-exhausted-dialog）
-[ ] 使用語音產生 realtime poll
+[x] 使用語音產生 realtime poll（完成分支：feature/voice-generated-realtime-poll）
 
 ## 工作記錄
 
@@ -134,3 +134,8 @@
 - 工作內容：完成「當帳號的 credit 用完時，要顯示錯誤對話框提示使用者去充值」，前端 API 錯誤解析會辨識 credit/quota 類錯誤碼並發出全站事件，App 掛載 credit 用盡對話框，提示使用者前往設定或充值/更新付款方式後再重試。
 - 所在分支：feature/credit-exhausted-dialog
 - 驗證：npm --prefix frontend run build && git diff --check
+
+- 時間：2026-05-18 05:32（Asia/Taipei）
+- 工作內容：完成「使用語音產生 realtime poll」，後端新增依本頁語音逐字稿與頁面文字用 AI 產生 realtime poll 的 API，會直接建立並啟用投票；播放頁投票設定區新增「用本頁語音稿產生投票」按鈕與可選提示欄位，生成後可立即開始輪詢與投票。
+- 所在分支：feature/voice-generated-realtime-poll
+- 驗證：npm --prefix backend run build && npm --prefix frontend run build && git diff --check
