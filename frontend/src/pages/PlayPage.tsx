@@ -1414,8 +1414,12 @@ export default function PlayPage() {
               </button>
               <button
                 type="button"
-                onClick={() => void handleApplyPreviewImage()}
-                className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-3 py-1.5 text-sm text-emerald-200 hover:bg-emerald-500/25"
+                onClick={() => {
+                  if (isReadOnlyProcessing) return;
+                  void handleApplyPreviewImage();
+                }}
+                disabled={isReadOnlyProcessing}
+                className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-3 py-1.5 text-sm text-emerald-200 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 套用取代原圖
               </button>
