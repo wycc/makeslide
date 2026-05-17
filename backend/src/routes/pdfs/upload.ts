@@ -10,6 +10,7 @@ import {
   createPdfDir,
   readMetadata,
   removePdfDir,
+  sourcePdfPath,
   writeMetadata,
   writeSourcePdf,
   writeSourceText,
@@ -17,6 +18,7 @@ import {
 } from '../../services/storage';
 import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { callChatJSON } from '../../services/openai';
+import { extractPdfText } from '../../worker/poppler';
 import { enqueuePdfProcessing } from '../../worker/pipeline';
 import { generateVideo } from '../../worker/steps/generateVideo';
 import type { ApiError, PageRow, PdfListItem, PdfMetadata, PdfMetadataPage, PdfRow, PdfStatus } from '../../types';
@@ -42,6 +44,15 @@ const PromptChatSchema = z.object({
   assistant_message: z.string().min(1).max(2000),
   outline_text: z.string().min(1).max(12000),
 });
+
+const PdfImportModeSchema = z.enum(['slides', 'document']);
+
+function multipartFieldValue(field: unknown): string | undefined {
+  const first = Array.isArray(field) ? field[0] : field;
+  if (!first || typeof first !== 'object') return undefined;
+  const value = (first as { value?: unknown }).value;
+  return typeof value === 'string' ? value : undefined;
+}
 
 const PromptTextSchema = z.object({
   title: z.string().min(1).max(120),
@@ -282,6 +293,17 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         .send(errorResponse('NO_FILE', 'No file field found in request'));
     }
 
+    const pdfImportModeValue = multipartFieldValue(file.fields.pdf_import_mode);
+    const parsedPdfImportMode = PdfImportModeSchema.safeParse(
+      typeof pdfImportModeValue === 'string' ? pdfImportModeValue : 'slides',
+    );
+    if (!parsedPdfImportMode.success) {
+      return reply
+        .code(400)
+        .send(errorResponse('INVALID_REQUEST', 'pdf_import_mode 必須是 slides 或 document'));
+    }
+    const pdfImportMode = parsedPdfImportMode.data;
+
     const filename = sanitizeUploadFilename(file.filename, '.pdf');
     const mimetype = file.mimetype ?? '';
     const hasPdfExt = filename.toLowerCase().endsWith('.pdf');
@@ -351,6 +373,13 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       createPdfDir(pdfId);
       if (isPdf) {
         await writeSourcePdf(pdfId, buffer);
+        if (pdfImportMode === 'document') {
+          const extractedText = await extractPdfText(sourcePdfPath(pdfId));
+          if (!extractedText) {
+            throw new Error('PDF 文件模式無法抽取可分頁文字');
+          }
+          await writeSourceText(pdfId, extractedText);
+        }
       } else {
         await writeSourceText(pdfId, buffer.toString('utf8'));
       }
