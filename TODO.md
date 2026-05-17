@@ -76,7 +76,7 @@
 [x] 把顯示類別的選擇記下來，回到首頁時會顯示之前的設定（完成分支：feature/persist-home-category-filter）
 [x] 把左上角的名稱留下 makeslide 就好了（完成分支：feature/header-brand-makeslide-only）
 [x] 在上傳 PDF 時，如果內容不是一個簡報的內容，則請將整個文字取出再請 AI 分頁，不要把一般論文每一頁當成簡報處理。如果自動偵測不好做，至少做成讓使用者手動選擇。（完成分支：feature/pdf-document-import-mode）
-[ ] 加上自動出考題功能，在 PlayPage 中可以新增考題功能，自動出考題，可以選擇單選或多選。使用者可以提示 AI 有關考題的內容。生成的考題提供讓使用者再手工微調的功能。
+[x] 加上自動出考題功能，在 PlayPage 中可以新增考題功能，自動出考題，可以選擇單選或多選。使用者可以提示 AI 有關考題的內容。生成的考題提供讓使用者再手工微調的功能。（完成分支：feature/auto-quiz-generation）
 [x] 加上上課模式，每撥放一頁就停下來。讓老師講解。（完成分支：feature/classroom-pause-after-each-page）
 [ ] 加上使用 google 帳號的功能
 [ ] API key 和一些整體設定要存在帳號中，例如 .env。每一個帳號會在一個單獨的目錄中，
@@ -124,3 +124,8 @@
 - 工作內容：完成「加上上課模式，每撥放一頁就停下來。讓老師講解」，播放頁新增上課模式切換；開啟後目前頁音訊播放完會先切到下一頁並保持暫停，讓老師可逐頁講解，關閉時維持原本自動連續播放。
 - 所在分支：feature/classroom-pause-after-each-page
 - 驗證：npm --prefix frontend run build && git diff --check
+
+- 時間：2026-05-18 05:12（Asia/Taipei）
+- 工作內容：完成「加上自動出考題功能」，後端新增本頁考題生成 API，依頁面文字與逐字稿用 AI 產生單選或多選題；播放頁新增自動出題面板，可輸入出題提示，生成後可直接手工微調題目、選項、正確答案與解析。
+- 所在分支：feature/auto-quiz-generation
+- 驗證：npm --prefix backend run build && npm --prefix frontend run build && git diff --check
