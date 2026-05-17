@@ -78,7 +78,7 @@
 [x] 在上傳 PDF 時，如果內容不是一個簡報的內容，則請將整個文字取出再請 AI 分頁，不要把一般論文每一頁當成簡報處理。如果自動偵測不好做，至少做成讓使用者手動選擇。（完成分支：feature/pdf-document-import-mode）
 [x] 加上自動出考題功能，在 PlayPage 中可以新增考題功能，自動出考題，可以選擇單選或多選。使用者可以提示 AI 有關考題的內容。生成的考題提供讓使用者再手工微調的功能。（完成分支：feature/auto-quiz-generation）
 [x] 加上上課模式，每撥放一頁就停下來。讓老師講解。（完成分支：feature/classroom-pause-after-each-page）
-[ ] 加上使用 google 帳號的功能
+[x] 加上使用 google 帳號的功能（完成分支：feature/google-account-login）
 [x] API key 和一些整體設定要存在帳號中，例如 .env。每一個帳號會在一個單獨的目錄中，（完成分支：feature/account-scoped-ai-settings）
 [x] 當帳號的 credit 用完時，要顯示錯誤對話框提示使用者去充值。（完成分支：feature/credit-exhausted-dialog）
 [x] 使用語音產生 realtime poll（完成分支：feature/voice-generated-realtime-poll）
@@ -143,4 +143,9 @@
 - 時間：2026-05-18 05:41（Asia/Taipei）
 - 工作內容：完成「API key 和一些整體設定要存在帳號中」，後端 AI 設定改由帳號專屬 accounts/<account>/settings.env 載入與儲存，預設帳號為 default 並可用 MAKESLIDE_ACCOUNT_ID 切換；設定 API 回傳帳號與設定檔位置，前端設定頁顯示目前帳號與保存路徑，並將 accounts/ 加入忽略清單避免提交 API key。
 - 所在分支：feature/account-scoped-ai-settings
+- 驗證：npm --prefix backend run build && npm --prefix frontend run build && git diff --check
+
+- 時間：2026-05-18 05:51（Asia/Taipei）
+- 工作內容：完成「加上使用 google 帳號的功能」，後端新增 Google OAuth 登入、callback、登入狀態與登出 API，使用簽章 HttpOnly cookie 保存本機 session；前端設定頁新增 Google 帳號區塊，可顯示登入狀態、啟動 Google 登入與登出，並在 .env.example 補上 OAuth 設定欄位。
+- 所在分支：feature/google-account-login
 - 驗證：npm --prefix backend run build && npm --prefix frontend run build && git diff --check
