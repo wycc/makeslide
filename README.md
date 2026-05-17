@@ -2,26 +2,38 @@
 
 ![screen](./screen1.png)
 
-語音簡報生成與播放系統。詳細設計請見 [`docs/design.md`](docs/design.md)。  
-Voice presentation generation and playback system. See [`docs/design.md`](docs/design.md) for detailed design.
+語音簡報生成與播放系統。
+Voice presentation generation and playback system.
 
-這個專案提供類似 NotebookLM 影片生成的工作流：可接受 PDF，抽取頁面圖片與文字，產生逐字稿，再合成語音。也支援以簡報大綱（例如 ChatGPT 產生、以 `## Slide XX` 分頁）直接產圖、產稿、配音。  
+這個專案提供類似 NotebookLM 影片生成的工作流：可接受 PDF，抽取頁面圖片與文字，產生逐字稿，再合成語音。也支援以簡報大綱（例如 ChatGPT 產生、以 `## Slide XX` 分頁）直接產圖、產稿、配音。
 This project provides a NotebookLM-like video/presentation workflow: ingest PDF, extract page images and text, generate narration scripts, then synthesize speech. It also supports outline-driven generation (for example, ChatGPT output split by `## Slide XX`) to create images, scripts, and audio.
 
-# Execute in docker
+## 文件導覽 / Documentation
+
+- 使用者操作教學：[`docs/userguide.md`](docs/userguide.md)
+  User guide for setup, upload workflows, playback, editing, and realtime poll.
+- 系統設計：[`docs/design.md`](docs/design.md)
+  Architecture and processing pipeline design notes.
+- 錯誤碼與使用者提示：[`docs/error-codes.md`](docs/error-codes.md)
+  Error codes and recommended user-facing actions.
+- Pipeline 階段與頁面耗時：[`docs/pipeline-stage-and-page-timing.md`](docs/pipeline-stage-and-page-timing.md)
+  Timing event and page duration reference.
+
+## Docker 啟動 / Run with Docker
+
+```bash
+mkdir -p home1
+docker run -d -v home1:/home/jovyan/ -p 8888:8888 wycca1/makeslide:latest
 ```
-# mkdir home1
-# docker run -d -v home1:/home/jovyan/ -p 8888:8888 wycca1/makeslide:latest
- ```
- Please use the above command to start the makeslide inside the docker. You can use
- ```
- http://127.0.0.1:8888/
- ```
- in your browser to open the application and then input your OpenAI API key to staret the apoplication.
 
- ![alt text](apikeyinput.png)
+啟動後在瀏覽器開啟下列網址，並輸入 OpenAI API key 即可開始使用。
+After starting the container, open the following URL in your browser and enter your OpenAI API key to start using the application.
 
-* [User Guide](docs/userguide.md)
+```text
+http://127.0.0.1:8888/
+```
+
+![OpenAI API key input](apikeyinput.png)
 
 ## 目錄結構 / Project Structure
 
@@ -46,18 +58,18 @@ makeslide/
 
 - Node.js 20 LTS+
 - npm 10+
-- **poppler-utils**（提供 `pdftoppm` 與 `pdfinfo`，供 PDF 轉圖）  
+- **poppler-utils**（提供 `pdftoppm` 與 `pdfinfo`，供 PDF 轉圖）
   **poppler-utils** (provides `pdftoppm` and `pdfinfo` for PDF-to-image rendering)
   - Ubuntu / Debian: `sudo apt-get install poppler-utils`
   - macOS: `brew install poppler`
   - 驗證 / Verify: `pdftoppm -v`、`pdfinfo -v`
 
-若未安裝 poppler，backend 啟動時會警告，上傳 PDF 後會進入 `failed`，並在 `error_message` 說明。  
+若未安裝 poppler，backend 啟動時會警告，上傳 PDF 後會進入 `failed`，並在 `error_message` 說明。
 If poppler is missing, backend will warn at startup; uploaded PDFs may enter `failed` with details in `error_message`.
 
 ## 快速啟動（推薦）/ Quick Start (Recommended)
 
-1. 建議使用 [nvm](https://github.com/nvm-sh/nvm)（專案附 [` .nvmrc `](.nvmrc) 鎖定 Node 20）。  
+1. 建議使用 [nvm](https://github.com/nvm-sh/nvm)（專案附 [` .nvmrc `](.nvmrc) 鎖定 Node 20）。
    Use [nvm](https://github.com/nvm-sh/nvm) (project includes [`.nvmrc`](.nvmrc) targeting Node 20).
 
    ```bash
@@ -66,7 +78,7 @@ If poppler is missing, backend will warn at startup; uploaded PDFs may enter `fa
    nvm install 20 && nvm use 20
    ```
 
-2. 複製環境變數並填入 `OPENAI_API_KEY`。  
+2. 複製環境變數並填入 `OPENAI_API_KEY`。
    Copy env file and set `OPENAI_API_KEY`.
 
    ```bash
@@ -74,7 +86,7 @@ If poppler is missing, backend will warn at startup; uploaded PDFs may enter `fa
    # 編輯 .env / edit .env
    ```
 
-3. 一鍵啟動（檢查 Node / poppler / .env，建立目錄，必要時安裝套件，啟動前後端）。  
+3. 一鍵啟動（檢查 Node / poppler / .env，建立目錄，必要時安裝套件，啟動前後端）。
    Start with one command (checks Node/poppler/.env, prepares directories, installs deps if needed, starts backend + frontend).
 
    ```bash
@@ -91,12 +103,12 @@ If poppler is missing, backend will warn at startup; uploaded PDFs may enter `fa
 ./start.sh --frontend-only    # 只啟動 frontend / frontend only
 ```
 
-按 `Ctrl+C` 可優雅終止子程序。  
+按 `Ctrl+C` 可優雅終止子程序。
 Press `Ctrl+C` for graceful shutdown.
 
 ## 手動啟動（備選）/ Manual Start (Alternative)
 
-若不使用 [`start.sh`](start.sh)：  
+若不使用 [`start.sh`](start.sh)：
 If you do not use [`start.sh`](start.sh):
 
 ```bash
@@ -105,11 +117,11 @@ npm install
 npm run dev
 ```
 
-`npm install` 會安裝 backend/frontend（npm workspaces）。  
+`npm install` 會安裝 backend/frontend（npm workspaces）。
 `npm install` installs both backend and frontend via npm workspaces.
 
 - Backend: `http://localhost:3000`
-- Frontend: `http://localhost:5173`（dev server 會把 `/api` proxy 到 backend）  
+- Frontend: `http://localhost:5173`（dev server 會把 `/api` proxy 到 backend）
   Frontend dev server proxies `/api` to backend.
 
 也可分別啟動 / You can also run separately:
@@ -144,16 +156,16 @@ npm run dev:frontend
                ready（或 failed）
 ```
 
-- 背景佇列 / Queue: `p-queue`（並行數由 `PROCESS_CONCURRENCY` 控制）  
+- 背景佇列 / Queue: `p-queue`（並行數由 `PROCESS_CONCURRENCY` 控制）
   Concurrency is controlled by `PROCESS_CONCURRENCY`.
-- 崩潰復原：啟動時會重新入列 `uploaded/processing`。  
+- 崩潰復原：啟動時會重新入列 `uploaded/processing`。
   Crash recovery: re-enqueues PDFs in `uploaded/processing` on startup.
-- 同一 `pdf_id` 不重複處理。  
+- 同一 `pdf_id` 不重複處理。
   The same `pdf_id` is guarded against duplicate processing.
 
 ## 環境變數 / Environment Variables
 
-請見 [`.env.example`](.env.example)。核心變數如下：  
+請見 [`.env.example`](.env.example)。核心變數如下：
 See [`.env.example`](.env.example). Core variables:
 
 | 變數 / Variable | 預設 / Default | 說明（中文） | Description (EN) |
@@ -169,7 +181,5 @@ See [`.env.example`](.env.example). Core variables:
 
 ## 相關文件 / Additional Docs
 
-- 系統設計：[`docs/design.md`](docs/design.md)  
-  System design: [`docs/design.md`](docs/design.md)
-- 錯誤碼與使用者提示：[`docs/error-codes.md`](docs/error-codes.md)  
-  Error codes and user-facing hints: [`docs/error-codes.md`](docs/error-codes.md)
+請見上方「文件導覽 / Documentation」。
+See the “Documentation” section above.
