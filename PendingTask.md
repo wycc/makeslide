@@ -11,7 +11,7 @@
 - [x] #7 錯誤碼字典 + 前端可行動提示（優先級：P1；難度：低）
 - [ ] #8 任務取消語義一致化（優先級：P1；難度：中）
 - [ ] #9 長任務進度 + ETA（優先級：P1；難度：中）
-- [ ] #10 靜態資源版本指紋與快取策略（優先級：P1；難度：中）
+- [x] #10 靜態資源版本指紋與快取策略（優先級：P1；難度：中；分支：feature/static-asset-cache-policy-v2）
 - [x] #11 輸入防護與內容資安強化（優先級：P0；難度：中；分支：feature/input-security-hardening）
 - [ ] #12 可觀測性儀表（成功率/失敗率/成本）（優先級：P1；難度：中）
 - [x] #13 測試矩陣補強（重生/回滾/頁面操作）（優先級：P0；難度：中）
@@ -21,10 +21,11 @@
 
 ## 已完成摘要
 
-已完成 6 項改善項目：
+已完成 7 項改善項目：
 
 - #1 拆分超大路由模組
 - #7 錯誤碼字典 + 前端可行動提示
+- #10 靜態資源版本指紋與快取策略（分支：feature/static-asset-cache-policy-v2）
 - #11 輸入防護與內容資安強化（分支：feature/input-security-hardening）
 - #13 測試矩陣補強（重生/回滾/頁面操作）
 - #14 文件對齊實作現況
@@ -41,10 +42,10 @@
 5. #5 前端 API client 分域拆分（P1；中）
 6. #8 任務取消語義一致化（P1；中）
 7. #9 長任務進度 + ETA（P1；中）
-8. #10 靜態資源版本指紋與快取策略（P1；中）
-9. #12 可觀測性儀表（成功率/失敗率/成本）（P1；中）
-10. #15 Queue 抽象層（為分散式擴充預備）（P2；高）
+8. #12 可觀測性儀表（成功率/失敗率/成本）（P1；中）
+9. #15 Queue 抽象層（為分散式擴充預備）（P2；高）
 
 ## 工作記錄
 
 - 2026-05-17 11:23 Asia/Taipei：完成 #11 輸入防護與內容資安強化。新增上傳檔名清理、控制字元移除與安全 fallback，PDF 上傳改以 `%PDF-` 檔頭驗證內容、TXT 上傳拒絕 NUL/非 UTF-8 內容；YouTube 匯入限制為 YouTube 網域並加強語言代碼格式驗證；補上輸入防護 API 測試。所在分支：feature/input-security-hardening。
+- 2026-05-17 15:16 Asia/Taipei：完成 #10 靜態資源版本指紋與快取策略。前端 Vite production build 明確輸出含 hash 的 entry/chunk/asset 檔名並產生 manifest；後端 production 靜態檔服務依檔名套用快取策略，指紋資源使用一年 immutable 快取，index.html 與 manifest 使用 no-cache，其它未指紋資源使用短效快取；補上靜態快取策略單元測試並完成後端 typecheck、單檔測試與前端 build 驗證。所在分支：feature/static-asset-cache-policy-v2。

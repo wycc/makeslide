@@ -1,13 +1,14 @@
-import Fastify from 'fastify';
-import cors from '@fastify/cors';
-import multipart from '@fastify/multipart';
-import fastifyStatic from '@fastify/static';
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { config } from './config';
-import { logger } from './logger';
-import { ensureStorageRoot } from './services/storage';
+import Fastify from "fastify";
+import cors from "@fastify/cors";
+import multipart from "@fastify/multipart";
+import fastifyStatic from "@fastify/static";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { config } from "./config";
+import { logger } from "./logger";
+import { ensureStorageRoot } from "./services/storage";
+import { cacheControlForStaticAsset } from "./staticCache";
 
 function ensureWorkspaceRuntimePaths(): void {
   const dbDir = path.dirname(config.dbPath);
@@ -26,17 +27,18 @@ function ensureWorkspaceRuntimePaths(): void {
 
 export async function buildApp() {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  const frontendDist = path.resolve(__dirname, '..', '..', 'frontend', 'dist');
+  const frontendDist = path.resolve(__dirname, "..", "..", "frontend", "dist");
   const app = Fastify({
     logger,
     bodyLimit: config.maxUploadBytes + 1024 * 1024, // small slack for headers
   });
   const nbPrefix = config.nbPrefix;
-  const withNbPrefix = (route: string): string => (nbPrefix ? `${nbPrefix}${route}` : route);
+  const withNbPrefix = (route: string): string =>
+    nbPrefix ? `${nbPrefix}${route}` : route;
 
   await app.register(cors, {
     origin: true,
-    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
   });
 
   await app.register(multipart, {
@@ -46,36 +48,43 @@ export async function buildApp() {
     },
   });
 
-  app.get(withNbPrefix('/api/health'), async () => ({ ok: true }));
+  app.get(withNbPrefix("/api/health"), async () => ({ ok: true }));
 
-  const { pdfRoutes } = await import('./routes/pdfs');
+  const { pdfRoutes } = await import("./routes/pdfs");
   await app.register(pdfRoutes, { prefix: nbPrefix || undefined });
 
   // Serve frontend static bundle in production container.
-  if (process.env.NODE_ENV === 'production') {
+  if (process.env.NODE_ENV === "production") {
     await app.register(fastifyStatic, {
       root: frontendDist,
-      prefix: `${nbPrefix || ''}/`,
-      index: ['index.html'],
+      prefix: `${nbPrefix || ""}/`,
+      index: ["index.html"],
+      setHeaders(res, filePath) {
+        res.setHeader("Cache-Control", cacheControlForStaticAsset(filePath));
+      },
     });
   }
 
   app.setErrorHandler((err, request, reply) => {
-    request.log.error({ err }, 'Unhandled error');
+    request.log.error({ err }, "Unhandled error");
     const anyErr = err as unknown as { code?: string; statusCode?: number };
-    if (anyErr.code === 'FST_REQ_FILE_TOO_LARGE' || anyErr.code === 'FST_FILES_LIMIT') {
+    if (
+      anyErr.code === "FST_REQ_FILE_TOO_LARGE" ||
+      anyErr.code === "FST_FILES_LIMIT"
+    ) {
       return reply.code(413).send({
         error: {
-          code: 'FILE_TOO_LARGE',
+          code: "FILE_TOO_LARGE",
           message: `File exceeds maximum size of ${config.maxUploadMb} MB`,
         },
       });
     }
-    const status = anyErr.statusCode && anyErr.statusCode >= 400 ? anyErr.statusCode : 500;
+    const status =
+      anyErr.statusCode && anyErr.statusCode >= 400 ? anyErr.statusCode : 500;
     return reply.code(status).send({
       error: {
-        code: status === 500 ? 'INTERNAL_ERROR' : 'REQUEST_ERROR',
-        message: err.message || 'Internal error',
+        code: status === 500 ? "INTERNAL_ERROR" : "REQUEST_ERROR",
+        message: err.message || "Internal error",
       },
     });
   });
@@ -83,8 +92,8 @@ export async function buildApp() {
   app.setNotFoundHandler((_request, reply) => {
     reply.code(404).send({
       error: {
-        code: 'NOT_FOUND',
-        message: 'Route not found',
+        code: "NOT_FOUND",
+        message: "Route not found",
       },
     });
   });
@@ -94,12 +103,13 @@ export async function buildApp() {
 
 async function main(): Promise<void> {
   ensureWorkspaceRuntimePaths();
-  await import('./db'); // Initialize DB and run migrations after path setup
+  await import("./db"); // Initialize DB and run migrations after path setup
 
-  const { migrateLegacyPngToJpgOnStartup } = await import('./services/imageMigration');
-  const { checkPoppler } = await import('./worker/poppler');
-  const { getProcessingQueue } = await import('./worker/queue');
-  const { rescanPendingOnStartup } = await import('./worker/pipeline');
+  const { migrateLegacyPngToJpgOnStartup } =
+    await import("./services/imageMigration");
+  const { checkPoppler } = await import("./worker/poppler");
+  const { getProcessingQueue } = await import("./worker/queue");
+  const { rescanPendingOnStartup } = await import("./worker/pipeline");
 
   ensureStorageRoot();
   await migrateLegacyPngToJpgOnStartup();
@@ -111,9 +121,9 @@ async function main(): Promise<void> {
       language: config.openaiScriptLanguage,
       targetChars: config.openaiScriptTargetChars,
       maxPages: config.openaiMaxPages,
-      apiKey: config.openaiApiKey ? '(set)' : '(missing)',
+      apiKey: config.openaiApiKey ? "(set)" : "(missing)",
     },
-    'OpenAI M3 settings',
+    "OpenAI M3 settings",
   );
 
   // M4: TTS settings
@@ -125,7 +135,7 @@ async function main(): Promise<void> {
       ttsSpeed: config.openaiTtsSpeed,
       ttsConcurrency: config.ttsConcurrency,
     },
-    'OpenAI M4 TTS settings',
+    "OpenAI M4 TTS settings",
   );
 
   // Warn (but don't crash) when poppler binaries are unavailable — the
@@ -134,16 +144,16 @@ async function main(): Promise<void> {
   if (!popplerCheck.pdftoppm || !popplerCheck.pdfinfo) {
     logger.warn(
       {
-        popplerBinPath: config.popplerBinPath || '(PATH)',
+        popplerBinPath: config.popplerBinPath || "(PATH)",
         pdftoppm: popplerCheck.pdftoppm,
         pdfinfo: popplerCheck.pdfinfo,
       },
-      'poppler-utils not fully available — install with e.g. `sudo apt-get install poppler-utils` or `brew install poppler`. PDF processing will fail until this is resolved.',
+      "poppler-utils not fully available — install with e.g. `sudo apt-get install poppler-utils` or `brew install poppler`. PDF processing will fail until this is resolved.",
     );
   } else {
     logger.info(
-      { versionOutput: popplerCheck.versionOutput.trim().split('\n')[0] },
-      'poppler-utils detected',
+      { versionOutput: popplerCheck.versionOutput.trim().split("\n")[0] },
+      "poppler-utils detected",
     );
   }
 
@@ -153,17 +163,21 @@ async function main(): Promise<void> {
 
   const app = await buildApp();
   try {
-    await app.listen({ port: config.port, host: '0.0.0.0' });
+    await app.listen({ port: config.port, host: "0.0.0.0" });
     logger.info(
-      { port: config.port, storageRoot: config.storageRoot, dbPath: config.dbPath },
-      'Backend server listening',
+      {
+        port: config.port,
+        storageRoot: config.storageRoot,
+        dbPath: config.dbPath,
+      },
+      "Backend server listening",
     );
   } catch (err) {
-    logger.error({ err }, 'Failed to start server');
+    logger.error({ err }, "Failed to start server");
     process.exit(1);
   }
 }
 
-if (process.env.NODE_ENV !== 'test') {
+if (process.env.NODE_ENV !== "test") {
   main();
 }
