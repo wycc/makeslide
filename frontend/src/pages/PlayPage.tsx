@@ -230,6 +230,7 @@ export default function PlayPage() {
   const [draggingPage, setDraggingPage] = useState<number | null>(null);
   // 手機模式下的 tab 切換（桌面模式忽略此 state，永遠並排顯示）
   const [activeTab, setActiveTab] = useState<'play' | 'qa'>('play');
+  const [qaPanelExpanded, setQaPanelExpanded] = useState(false);
   const [imageOnlyFullscreen, setImageOnlyFullscreen] = useState(false);
   const [slideImageScale, setSlideImageScale] = useState(1);
   const IMAGE_MSG_PREFIX = '[image] ';
@@ -1736,7 +1737,7 @@ export default function PlayPage() {
 
         {/* Left: player + script（手機：僅於 play tab 顯示；桌面：永遠顯示） */}
         <div
-          className={`min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950/70 md:flex ${
+          className={`min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950/70 ${qaPanelExpanded ? 'md:hidden' : 'md:flex'} ${
             activeTab === 'play' ? 'flex' : 'hidden'
           }`}
         >
@@ -2020,7 +2021,7 @@ export default function PlayPage() {
 
         {/* Right: thumbnails + LLM chat panel（手機：僅於 qa tab 顯示；桌面：永遠顯示） */}
         <aside
-          className={`max-h-[calc(100vh-7rem)] w-full shrink-0 flex-col gap-3 overflow-y-auto md:flex md:w-[360px] ${
+          className={`max-h-[calc(100vh-7rem)] w-full shrink-0 flex-col gap-3 overflow-y-auto md:flex ${qaPanelExpanded ? 'md:min-w-0 md:flex-1' : 'md:w-[360px]'} ${
             activeTab === 'qa' ? 'flex' : 'hidden'
           }`}
         >
@@ -2336,9 +2337,20 @@ export default function PlayPage() {
 
           <section className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-lg border border-slate-800 bg-slate-900/40">
           <div className="border-b border-slate-800 px-4 py-3">
-          <h2 className="mb-2 text-sm font-semibold text-slate-300">
-            💬 本頁問答（含本頁圖片與文字上下文）
-          </h2>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h2 className="min-w-0 truncate text-sm font-semibold text-slate-300">
+              💬 本頁問答（含本頁圖片與文字上下文）
+            </h2>
+            <button
+              type="button"
+              onClick={() => setQaPanelExpanded((v) => !v)}
+              className="hidden shrink-0 rounded-md border border-cyan-500/50 bg-cyan-500/10 px-2 py-1 text-xs text-cyan-200 hover:bg-cyan-500/20 md:inline-flex"
+              aria-pressed={qaPanelExpanded}
+              title={qaPanelExpanded ? '還原問答區寬度' : '放大問答區到整個右側'}
+            >
+              {qaPanelExpanded ? '還原' : '放大'}
+            </button>
+          </div>
           <div className="flex justify-end">
             <button
               type="button"
