@@ -419,6 +419,10 @@ export default function PlayPage() {
   const deckPages: PdfDetailPage[] = useMemo(() => pages, [pages]);
   const currentPage: PdfDetailPage | null = deckPages[currentIdx] ?? null;
   const totalPages = deckPages.length;
+  const isReadOnlyProcessing = detail != null && detail.status !== 'ready';
+  const readOnlyReason = isReadOnlyProcessing
+    ? `產生過程中可瀏覽與播放；目前狀態為 ${detail.status}${detail.progress_step ? ` / ${detail.progress_step}` : ''}，所有更改與生成功能暫時停用。`
+    : null;
   const slideImageMaxHeightVh = Math.round(52 * slideImageScale);
   const imageBustKey = detail?.updated_at ?? '';
   const withImageBust = useCallback(
@@ -680,6 +684,7 @@ export default function PlayPage() {
   }, [pdfId, currentPage?.page_number]);
 
   const handleSendChat = useCallback(async () => {
+    if (isReadOnlyProcessing) return;
     if (!pdfId || !currentPage) return;
     const question = chatInput.trim();
     if (!question) return;
@@ -696,9 +701,10 @@ export default function PlayPage() {
     } finally {
       setChatBusy(false);
     }
-  }, [pdfId, currentPage, chatInput, chatHistory]);
+  }, [pdfId, currentPage, chatInput, chatHistory, isReadOnlyProcessing]);
 
   const handleRegenerateAudio = useCallback(async () => {
+    if (isReadOnlyProcessing) return;
     if (!pdfId || !currentPage) return;
     const nextScript = editingScript.trim();
     if (!nextScript) {
@@ -790,9 +796,10 @@ export default function PlayPage() {
     } finally {
       setEditorBusy(false);
     }
-  }, [pdfId, currentPage, editingScript]);
+  }, [pdfId, currentPage, editingScript, isReadOnlyProcessing]);
 
   const handleRewriteScript = useCallback(async () => {
+    if (isReadOnlyProcessing) return;
     if (!pdfId || !currentPage) return;
     const prompt = chatInput.trim();
     const sourceScript = editingScript.trim();
@@ -828,9 +835,10 @@ export default function PlayPage() {
     } finally {
       setRewriteBusy(false);
     }
-  }, [pdfId, currentPage, chatInput, editingScript, chatHistory, currentIdx, deckPages, scripts]);
+  }, [pdfId, currentPage, chatInput, editingScript, chatHistory, currentIdx, deckPages, scripts, isReadOnlyProcessing]);
 
   const handleClearChat = useCallback(async () => {
+    if (isReadOnlyProcessing) return;
     if (!pdfId || !currentPage) return;
     setChatBusy(true);
     setChatError(null);
@@ -843,9 +851,10 @@ export default function PlayPage() {
     } finally {
       setChatBusy(false);
     }
-  }, [pdfId, currentPage]);
+  }, [pdfId, currentPage, isReadOnlyProcessing]);
 
   const handleGenerateVideo = useCallback(async () => {
+    if (isReadOnlyProcessing) return;
     if (!pdfId) return;
     setVideoBusy(true);
     setVideoError(null);
@@ -858,9 +867,10 @@ export default function PlayPage() {
     } finally {
       setVideoBusy(false);
     }
-  }, [pdfId]);
+  }, [pdfId, isReadOnlyProcessing]);
 
   const handleSaveTtsSettings = useCallback(async () => {
+    if (isReadOnlyProcessing) return;
     if (!pdfId) return;
     setTtsBusy(true);
     setTtsMsg(null);
@@ -882,9 +892,10 @@ export default function PlayPage() {
     } finally {
       setTtsBusy(false);
     }
-  }, [pdfId, ttsVoice, ttsSpeed]);
+  }, [pdfId, ttsVoice, ttsSpeed, isReadOnlyProcessing]);
 
   const handleSaveTitle = useCallback(async () => {
+    if (isReadOnlyProcessing) return;
     if (!pdfId) return;
     const nextTitle = titleInput.trim();
     if (!nextTitle) {
@@ -910,9 +921,10 @@ export default function PlayPage() {
     } finally {
       setTitleBusy(false);
     }
-  }, [pdfId, titleInput]);
+  }, [pdfId, titleInput, isReadOnlyProcessing]);
 
   const handleSavePrompt = useCallback(async () => {
+    if (isReadOnlyProcessing) return;
     if (!pdfId || !currentPage) return;
     setPromptBusy(true);
     setPromptMsg(null);
@@ -926,7 +938,7 @@ export default function PlayPage() {
     } finally {
       setPromptBusy(false);
     }
-  }, [pdfId, currentPage, promptInput]);
+  }, [pdfId, currentPage, promptInput, isReadOnlyProcessing]);
 
   const reloadDetail = useCallback(async () => {
     if (!pdfId) return;
@@ -947,6 +959,7 @@ export default function PlayPage() {
   const showRegenBanner = regenJob != null && !regenBannerDismissed;
 
   const handleConfirmRegenerate = useCallback(async () => {
+    if (isReadOnlyProcessing) return;
     if (!pdfId) return;
     if (regenJobRunning) return; // 防重複提交
     if (!regenAnySelected) {
@@ -986,7 +999,7 @@ export default function PlayPage() {
       setRegenAllMsg(err instanceof ApiError ? err.message : '重生失敗');
       setRegenAllBusy(false);
     }
-  }, [pdfId, regenAllPrompt, regenScriptPrompt, regenAnySelected, regenOptions, regenJobRunning, currentIdx, deckImageStylePrompt]);
+  }, [pdfId, regenAllPrompt, regenScriptPrompt, regenAnySelected, regenOptions, regenJobRunning, currentIdx, deckImageStylePrompt, isReadOnlyProcessing]);
 
   const handleStopRegenerate = useCallback(async () => {
     if (!pdfId || !regenJob) return;
@@ -1092,6 +1105,7 @@ export default function PlayPage() {
   }, [regenJob, reloadDetail]);
 
   const handleAddSlideAfterCurrent = useCallback(async () => {
+    if (isReadOnlyProcessing) return;
     if (!pdfId || !currentPage) return;
     setSlideBusy(true);
     setSlideError(null);
@@ -1104,9 +1118,10 @@ export default function PlayPage() {
     } finally {
       setSlideBusy(false);
     }
-  }, [pdfId, currentPage]);
+  }, [pdfId, currentPage, isReadOnlyProcessing]);
 
   const handleDeleteCurrentSlide = useCallback(async () => {
+    if (isReadOnlyProcessing) return;
     if (!pdfId || !currentPage) return;
     if (!window.confirm(`確定刪除第 ${currentPage.page_number} 頁？`)) return;
     setSlideBusy(true);
@@ -1120,10 +1135,11 @@ export default function PlayPage() {
     } finally {
       setSlideBusy(false);
     }
-  }, [pdfId, currentPage]);
+  }, [pdfId, currentPage, isReadOnlyProcessing]);
 
   const handleMoveSlide = useCallback(
     async (fromPageNumber: number, toPageNumber: number) => {
+      if (isReadOnlyProcessing) return;
       if (!pdfId || fromPageNumber === toPageNumber) return;
       setSlideBusy(true);
       setSlideError(null);
@@ -1137,11 +1153,12 @@ export default function PlayPage() {
         setSlideBusy(false);
       }
     },
-    [pdfId, reloadDetail],
+    [pdfId, reloadDetail, isReadOnlyProcessing],
   );
 
   const handleReplaceImageFile = useCallback(
     async (file: File, targetPageNumber?: number) => {
+      if (isReadOnlyProcessing) return;
       if (!pdfId || !currentPage) return;
       const pageNumber = targetPageNumber ?? currentPage.page_number;
       setSlideBusy(true);
@@ -1155,7 +1172,7 @@ export default function PlayPage() {
         setSlideBusy(false);
       }
     },
-    [pdfId, currentPage, reloadDetail],
+    [pdfId, currentPage, reloadDetail, isReadOnlyProcessing],
   );
 
   const handleUpdateCoverFromCurrentPage = useCallback(async () => {
@@ -1177,6 +1194,7 @@ export default function PlayPage() {
   }, [pdfId, currentPage, reloadDetail]);
 
   const handleRegenerateImageWithPrompt = useCallback(async () => {
+    if (isReadOnlyProcessing) return;
     if (!pdfId || !currentPage) return;
     const trimmed = chatInput.trim() || '保留版型，讓文字更清晰、重點更聚焦';
     const merged = [
@@ -1200,9 +1218,10 @@ export default function PlayPage() {
     } finally {
       setSlideBusy(false);
     }
-  }, [pdfId, currentPage, chatInput, chatHistory, deckImageStylePrompt]);
+  }, [pdfId, currentPage, chatInput, chatHistory, deckImageStylePrompt, isReadOnlyProcessing]);
 
   const handleApplyPreviewImage = useCallback(async () => {
+    if (isReadOnlyProcessing) return;
     if (!pdfId || !imagePreviewUrl || !imagePreviewPageNumber) return;
     setSlideBusy(true);
     setSlideError(null);
@@ -1219,7 +1238,7 @@ export default function PlayPage() {
       setSlideBusy(false);
     }
     setImagePreviewOpen(false);
-  }, [pdfId, imagePreviewUrl, imagePreviewPageNumber, reloadDetail]);
+  }, [pdfId, imagePreviewUrl, imagePreviewPageNumber, reloadDetail, isReadOnlyProcessing]);
 
   const hasChatInput = chatInput.trim().length > 0;
 
@@ -1273,7 +1292,7 @@ export default function PlayPage() {
         hasClipboard: !!e.clipboardData,
         itemCount: e.clipboardData?.items?.length ?? 0,
       });
-      if (!currentPage) return;
+      if (!currentPage || isReadOnlyProcessing) return;
       const target = e.target as HTMLElement | null;
       if (
         target &&
@@ -1309,7 +1328,7 @@ export default function PlayPage() {
 
     window.addEventListener('paste', onPasteGlobal);
     return () => window.removeEventListener('paste', onPasteGlobal);
-  }, [currentPage, handleReplaceImageFile]);
+  }, [currentPage, handleReplaceImageFile, isReadOnlyProcessing]);
 
   // ---- Render loading / error states ----
   if (!pdfId) {
@@ -1339,22 +1358,15 @@ export default function PlayPage() {
     );
   }
 
-  if (detail.status !== 'ready') {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-slate-950 text-slate-100">
-        <p className="text-slate-300">尚未處理完成（{detail.status}{detail.progress_step ? ` / ${detail.progress_step}` : ''}）</p>
-        <p className="text-xs text-slate-500">系統將每 3 秒重新檢查一次狀態…</p>
-        <Link to="/" className="text-sm text-slate-400 underline">
-          返回首頁
-        </Link>
-      </div>
-    );
-  }
-
   if (totalPages === 0) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-slate-950 text-slate-100">
-        <p className="text-slate-300">這份 PDF 沒有可播放的語音頁面</p>
+        <p className="text-slate-300">
+          {isReadOnlyProcessing
+            ? `尚未產生可瀏覽的頁面（${detail.status}${detail.progress_step ? ` / ${detail.progress_step}` : ''}）`
+            : '這份 PDF 沒有可播放的語音頁面'}
+        </p>
+        {isReadOnlyProcessing ? <p className="text-xs text-slate-500">系統將每 3 秒重新檢查一次狀態…</p> : null}
         <Link to="/" className="text-sm text-slate-400 underline">
           返回首頁
         </Link>
@@ -1421,8 +1433,12 @@ export default function PlayPage() {
               </button>
               <button
                 type="button"
-                onClick={() => void handleApplyPreviewImage()}
-                className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-3 py-1.5 text-sm text-emerald-200 hover:bg-emerald-500/25"
+                onClick={() => {
+                  if (isReadOnlyProcessing) return;
+                  void handleApplyPreviewImage();
+                }}
+                disabled={isReadOnlyProcessing}
+                className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-3 py-1.5 text-sm text-emerald-200 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 套用取代原圖
               </button>
@@ -1484,13 +1500,14 @@ export default function PlayPage() {
             <input
               value={titleInput}
               onChange={(e) => setTitleInput(e.target.value)}
+              disabled={isReadOnlyProcessing}
               className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-center text-sm text-slate-100"
               maxLength={200}
             />
             <button
               type="button"
               onClick={() => void handleSaveTitle()}
-              disabled={titleBusy || !titleInput.trim()}
+              disabled={isReadOnlyProcessing || titleBusy || !titleInput.trim()}
               className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-2 py-1 text-xs text-cyan-200 disabled:opacity-40"
             >
               {titleBusy ? '儲存中…' : '更新標題'}
@@ -1500,6 +1517,13 @@ export default function PlayPage() {
             頁 {currentIdx + 1}/{totalPages}
           </div>
         </div>
+        {readOnlyReason ? (
+          <div className="mx-auto w-full max-w-5xl px-4 pb-3">
+            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+              {readOnlyReason}
+            </div>
+          </div>
+        ) : null}
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-2 px-4 pb-3 md:flex-row md:items-center md:justify-between md:gap-3">
           <div className="text-xs text-slate-400">
             {videoError ? <span className="text-rose-300">{videoError}</span> : null}
@@ -1540,6 +1564,7 @@ export default function PlayPage() {
             <button
               type="button"
               onClick={() => setTtsDialogOpen(true)}
+              disabled={isReadOnlyProcessing}
               className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
               title="語音設定"
               aria-label="語音設定"
@@ -1549,6 +1574,7 @@ export default function PlayPage() {
             <button
               type="button"
               onClick={() => void openImageStyleDialog()}
+              disabled={isReadOnlyProcessing}
               className="rounded-md border border-cyan-500/40 bg-cyan-500/10 px-3 py-1.5 text-sm text-cyan-200 hover:bg-cyan-500/20"
               title="圖片風格設定"
               aria-label="圖片風格設定"
@@ -1558,7 +1584,7 @@ export default function PlayPage() {
             <button
               type="button"
               onClick={() => void handleGenerateVideo()}
-              disabled={videoBusy}
+              disabled={isReadOnlyProcessing || videoBusy}
               className="rounded-md border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-sm text-amber-200 hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {videoBusy ? '產生影片中…' : videoUrl ? '重新產生影片' : '產生影片'}
@@ -1683,6 +1709,7 @@ export default function PlayPage() {
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
               e.preventDefault();
+              if (isReadOnlyProcessing) return;
               const f = e.dataTransfer.files?.[0];
               if (f && currentPage) void handleReplaceImageFile(f, currentPage.page_number);
             }}
@@ -1692,6 +1719,7 @@ export default function PlayPage() {
                 itemCount: e.clipboardData.items.length,
                 items: Array.from(e.clipboardData.items).map((it) => ({ kind: it.kind, type: it.type })),
               });
+              if (isReadOnlyProcessing) return;
               const file = Array.from(e.clipboardData.items)
                 .map((it) => (it.kind === 'file' ? it.getAsFile() : null))
                 .find((f): f is File => !!f);
@@ -1831,6 +1859,7 @@ export default function PlayPage() {
                   <textarea
                     value={editingScript}
                     onChange={(e) => setEditingScript(e.target.value)}
+                    disabled={isReadOnlyProcessing}
                     rows={6}
                     className="w-full rounded-md border border-slate-700 bg-slate-900/70 p-3 text-sm leading-relaxed text-slate-100 outline-none ring-emerald-500/40 placeholder:text-slate-500 focus:ring"
                     placeholder="請輸入本頁逐字稿..."
@@ -1842,7 +1871,7 @@ export default function PlayPage() {
                     <button
                       type="button"
                       onClick={() => void handleRegenerateAudio()}
-                      disabled={editorBusy || !hasScriptChanges}
+                      disabled={isReadOnlyProcessing || editorBusy || !hasScriptChanges}
                       className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-3 py-1.5 text-sm text-emerald-200 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       {editorBusy ? '重生中…' : '儲存並重生語音'}
@@ -1855,6 +1884,7 @@ export default function PlayPage() {
                   <textarea
                     value={promptInput}
                     onChange={(e) => setPromptInput(e.target.value)}
+                    disabled={isReadOnlyProcessing}
                     rows={6}
                     className="w-full rounded-md border border-slate-700 bg-slate-900/70 p-3 text-sm leading-relaxed text-slate-100 outline-none ring-cyan-500/40 placeholder:text-slate-500 focus:ring"
                     placeholder="請輸入這份簡報的風格提示詞..."
@@ -1866,7 +1896,7 @@ export default function PlayPage() {
                     <button
                       type="button"
                       onClick={() => void handleSavePrompt()}
-                      disabled={promptBusy}
+                      disabled={isReadOnlyProcessing || promptBusy}
                       className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       {promptBusy ? '儲存中…' : '儲存提示詞'}
@@ -1965,12 +1995,14 @@ export default function PlayPage() {
                   <button
                     type="button"
                     onClick={() => {
+                      if (isReadOnlyProcessing) return;
                       // 若非執行中才清掉舊訊息；執行中時保留以便顯示進度。
                       if (!regenJobRunning) {
                         setRegenAllMsg(null);
                       }
                       setRegenAllDialogOpen(true);
                     }}
+                    disabled={isReadOnlyProcessing}
                     className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-2 py-1 text-xs text-fuchsia-200 hover:bg-fuchsia-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                     title="重生（可選逐字稿/語音/圖檔）"
                   >
@@ -1983,7 +2015,7 @@ export default function PlayPage() {
                   <button
                     type="button"
                     onClick={() => void handleAddSlideAfterCurrent()}
-                    disabled={slideBusy || !currentPage}
+                    disabled={isReadOnlyProcessing || slideBusy || !currentPage}
                     className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-2 py-1 text-xs text-emerald-200 disabled:opacity-40"
                   >
                     新增
@@ -1991,7 +2023,7 @@ export default function PlayPage() {
                   <button
                     type="button"
                     onClick={() => void handleDeleteCurrentSlide()}
-                    disabled={slideBusy || !currentPage || totalPages <= 1}
+                    disabled={isReadOnlyProcessing || slideBusy || !currentPage || totalPages <= 1}
                     className="rounded-md border border-rose-500/50 bg-rose-500/15 px-2 py-1 text-xs text-rose-200 disabled:opacity-40"
                   >
                     刪除
@@ -2004,11 +2036,13 @@ export default function PlayPage() {
               className="grid max-h-48 grid-cols-4 gap-2 overflow-y-auto p-3"
               onDragOver={(e) => {
                 e.preventDefault();
+                if (isReadOnlyProcessing) return;
                 e.dataTransfer.dropEffect = 'move';
               }}
               onDropCapture={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
+                if (isReadOnlyProcessing) return;
                 const fromText =
                   e.dataTransfer.getData('application/x-page-number') ||
                   e.dataTransfer.getData('text/plain');
@@ -2027,6 +2061,7 @@ export default function PlayPage() {
                   itemCount: e.clipboardData.items.length,
                   items: Array.from(e.clipboardData.items).map((it) => ({ kind: it.kind, type: it.type })),
                 });
+                if (isReadOnlyProcessing) return;
                 const file = Array.from(e.clipboardData.items)
                   .map((it) => (it.kind === 'file' ? it.getAsFile() : null))
                   .find((f): f is File => !!f);
@@ -2046,11 +2081,13 @@ export default function PlayPage() {
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => {
                     e.preventDefault();
+                    if (isReadOnlyProcessing) return;
                     // Reorder is handled by parent onDropCapture to avoid double requests.
                     const f = e.dataTransfer.files?.[0];
                     if (f) void handleReplaceImageFile(f, p.page_number);
                   }}
                   onPaste={(e) => {
+                    if (isReadOnlyProcessing) return;
                     const file = Array.from(e.clipboardData.items)
                       .map((it) => (it.kind === 'file' ? it.getAsFile() : null))
                       .find((f): f is File => !!f);
@@ -2061,8 +2098,12 @@ export default function PlayPage() {
                 >
                   <button
                     type="button"
-                    draggable={!slideBusy}
+                    draggable={!isReadOnlyProcessing && !slideBusy}
                     onDragStart={(e) => {
+                      if (isReadOnlyProcessing) {
+                        e.preventDefault();
+                        return;
+                      }
                       setDraggingPage(p.page_number);
                       e.dataTransfer.setData('application/x-page-number', String(p.page_number));
                       e.dataTransfer.setData('text/plain', String(p.page_number));
@@ -2081,17 +2122,32 @@ export default function PlayPage() {
                   >
                     ↕
                   </button>
-                  {(p.thumbnail_url ?? p.image_url) ? (
+                  {(() => {
+                    const thumbSrc = isReadOnlyProcessing
+                      ? p.image_url
+                      : (p.thumbnail_url ?? p.image_url);
+                    return thumbSrc ? (
                     <img
-                      src={withImageBust(p.thumbnail_url ?? p.image_url) ?? (p.thumbnail_url ?? p.image_url) ?? ''}
+                      src={withImageBust(thumbSrc) ?? thumbSrc}
                       alt={`第 ${p.page_number} 頁縮圖`}
                       className="h-14 w-full object-cover"
+                      onError={(e) => {
+                        const img = e.currentTarget;
+                        const fallback = p.image_url;
+                        if (!fallback || img.dataset.fallbackApplied === 'true') {
+                          img.style.display = 'none';
+                          return;
+                        }
+                        img.dataset.fallbackApplied = 'true';
+                        img.src = withImageBust(fallback) ?? fallback;
+                      }}
                     />
-                  ) : (
+                    ) : (
                     <div className="flex h-14 w-full items-center justify-center bg-slate-800 text-[10px] text-slate-400">
                       無圖片
                     </div>
-                  )}
+                    );
+                  })()}
                 </div>
               ))}
             </div>
@@ -2102,6 +2158,7 @@ export default function PlayPage() {
                 accept="image/png,image/jpeg,image/webp"
                 className="hidden"
                 onChange={(e) => {
+                  if (isReadOnlyProcessing) return;
                   const f = e.target.files?.[0];
                   if (f) void handleReplaceImageFile(f);
                   e.currentTarget.value = '';
@@ -2110,7 +2167,7 @@ export default function PlayPage() {
               <button
                 type="button"
                 onClick={() => imageInputRef.current?.click()}
-                disabled={slideBusy || !currentPage}
+                disabled={isReadOnlyProcessing || slideBusy || !currentPage}
                 className="w-full rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-xs text-cyan-200 disabled:opacity-40"
               >
                 取代目前頁圖片（可拖放/貼上）
@@ -2136,7 +2193,7 @@ export default function PlayPage() {
             <button
               type="button"
               onClick={() => void handleClearChat()}
-              disabled={chatBusy || chatHistory.length === 0}
+              disabled={isReadOnlyProcessing || chatBusy || chatHistory.length === 0}
               className="rounded-md border border-rose-500/50 bg-rose-500/15 px-2 py-1 text-xs text-rose-200 hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-40"
             >
               清除全部訊息
@@ -2178,20 +2235,22 @@ export default function PlayPage() {
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
               onKeyDown={(e) => {
+                if (isReadOnlyProcessing) return;
                 if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault();
                   void handleSendChat();
                 }
               }}
               rows={3}
-              placeholder="可輸入問題，或輸入逐字稿修改指示（Shift+Enter 換行）"
+              disabled={isReadOnlyProcessing}
+              placeholder={isReadOnlyProcessing ? '處理中為唯讀模式，問答與修改功能暫停' : '可輸入問題，或輸入逐字稿修改指示（Shift+Enter 換行）'}
               className="flex-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-emerald-500/40 placeholder:text-slate-500 focus:ring"
             />
               <div className="flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => void handleRegenerateImageWithPrompt()}
-                  disabled={slideBusy || !currentPage}
+                  disabled={isReadOnlyProcessing || slideBusy || !currentPage}
                   className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   修改圖片
@@ -2199,7 +2258,7 @@ export default function PlayPage() {
                 <button
                   type="button"
                   onClick={() => void handleRewriteScript()}
-                  disabled={rewriteBusy}
+                  disabled={isReadOnlyProcessing || rewriteBusy}
                   className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-3 py-2 text-sm text-fuchsia-200 hover:bg-fuchsia-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {rewriteBusy ? '修改中…' : '修改逐字稿'}
@@ -2207,7 +2266,7 @@ export default function PlayPage() {
                 <button
                   type="button"
                   onClick={() => void handleSendChat()}
-                  disabled={chatBusy || !hasChatInput}
+                  disabled={isReadOnlyProcessing || chatBusy || !hasChatInput}
                   className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {chatBusy ? '詢問中…' : '詢問'}
@@ -2231,7 +2290,7 @@ export default function PlayPage() {
                 <select
                   value={ttsVoice}
                   onChange={(e) => setTtsVoice(e.target.value)}
-                  disabled={ttsBusy}
+                  disabled={isReadOnlyProcessing || ttsBusy}
                   className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs"
                 >
                   {availableTtsVoices.map((v) => (
@@ -2248,7 +2307,7 @@ export default function PlayPage() {
                   step={0.05}
                   value={ttsSpeed}
                   onChange={(e) => setTtsSpeed(Number(e.target.value))}
-                  disabled={ttsBusy}
+                  disabled={isReadOnlyProcessing || ttsBusy}
                   className="flex-1 accent-cyan-500"
                 />
                 <span className="w-10 text-right text-xs tabular-nums text-slate-300">{ttsSpeed.toFixed(2)}</span>
@@ -2266,7 +2325,7 @@ export default function PlayPage() {
               <button
                 type="button"
                 onClick={() => void handleSaveTtsSettings()}
-                disabled={ttsBusy}
+                disabled={isReadOnlyProcessing || ttsBusy}
                 className="rounded border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-200 disabled:opacity-40"
               >
                 {ttsBusy ? '儲存中…' : '儲存設定'}
@@ -2296,6 +2355,7 @@ export default function PlayPage() {
               <button
                 type="button"
                 onClick={() => applyImageStyleTemplate(selectedImageStyleTemplateKey)}
+                disabled={isReadOnlyProcessing}
                 className="rounded border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25"
               >
                 套用模板
@@ -2304,6 +2364,7 @@ export default function PlayPage() {
             <textarea
               value={deckImageStylePrompt}
               onChange={(e) => setDeckImageStylePrompt(e.target.value)}
+              disabled={isReadOnlyProcessing}
               rows={8}
               className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-fuchsia-500/40 placeholder:text-slate-500 focus:ring"
               placeholder="例如：academic minimalist style, clean layout..."
@@ -2323,6 +2384,7 @@ export default function PlayPage() {
                     setImageStyleDialogOpen(false);
                     return;
                   }
+                  if (isReadOnlyProcessing) return;
                   void (async () => {
                     try {
                       const res = await updatePdfImageStyleSettings(pdfId, deckImageStylePrompt);
@@ -2335,6 +2397,7 @@ export default function PlayPage() {
                     }
                   })();
                 }}
+                disabled={isReadOnlyProcessing}
                 className="rounded border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-200"
               >
                 儲存設定
@@ -2361,7 +2424,7 @@ export default function PlayPage() {
                   className="accent-fuchsia-500"
                   checked={regenOptions.image}
                   onChange={(e) => setRegenOptions((prev) => ({ ...prev, image: e.target.checked }))}
-                  disabled={regenAllBusy}
+                  disabled={isReadOnlyProcessing || regenAllBusy}
                 />
                 <span>圖檔</span>
               </label>
@@ -2371,7 +2434,7 @@ export default function PlayPage() {
                   className="accent-fuchsia-500"
                   checked={regenOptions.script}
                   onChange={(e) => setRegenOptions((prev) => ({ ...prev, script: e.target.checked }))}
-                  disabled={regenAllBusy}
+                  disabled={isReadOnlyProcessing || regenAllBusy}
                 />
                 <span>逐字稿</span>
               </label>
@@ -2381,7 +2444,7 @@ export default function PlayPage() {
                   className="accent-fuchsia-500"
                   checked={regenOptions.audio}
                   onChange={(e) => setRegenOptions((prev) => ({ ...prev, audio: e.target.checked }))}
-                  disabled={regenAllBusy}
+                  disabled={isReadOnlyProcessing || regenAllBusy}
                 />
                 <span>語音</span>
               </label>
@@ -2395,7 +2458,7 @@ export default function PlayPage() {
                   rows={4}
                   className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-fuchsia-500/40 placeholder:text-slate-500 focus:ring"
                   placeholder="輸入整份風格調整提示詞..."
-                  disabled={regenAllBusy}
+                  disabled={isReadOnlyProcessing || regenAllBusy}
                 />
               </div>
             ) : null}
@@ -2408,7 +2471,7 @@ export default function PlayPage() {
                   rows={3}
                   className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-fuchsia-500/40 placeholder:text-slate-500 focus:ring"
                   placeholder="例如：請以更精煉、口語、易懂的方式重寫，並保留每頁核心重點"
-                  disabled={regenAllBusy}
+                  disabled={isReadOnlyProcessing || regenAllBusy}
                 />
               </div>
             ) : null}
@@ -2449,7 +2512,7 @@ export default function PlayPage() {
               <button
                 type="button"
                 onClick={() => void handleConfirmRegenerate()}
-                disabled={regenAllBusy || !regenAnySelected}
+                disabled={isReadOnlyProcessing || regenAllBusy || !regenAnySelected}
                 className="rounded border border-fuchsia-500/50 bg-fuchsia-500/15 px-3 py-1.5 text-sm text-fuchsia-200 disabled:cursor-not-allowed disabled:opacity-40"
                 title={!regenAnySelected ? '請至少選擇一個項目' : ''}
               >
