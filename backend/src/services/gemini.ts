@@ -110,7 +110,7 @@ function normalizeMessages(messages: ChatCompletionMessageParam[]): string {
 export async function callGeminiJson<T>(params: {
   model: string;
   messages: ChatCompletionMessageParam[];
-  schema: z.ZodType<T>;
+  schema: z.ZodType<T, z.ZodTypeDef, unknown>;
   maxTokens?: number;
   temperature?: number;
 }): Promise<{ data: T; usage: GeminiUsage; rawContent: string }> {

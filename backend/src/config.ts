@@ -98,7 +98,7 @@ const EnvSchema = z.object({
   OPENAI_REQUEST_TIMEOUT_MS: z
     .string()
     .optional()
-    .transform((v) => (v ? Number(v) : 60000))
+    .transform((v) => (v ? Number(v) : 240000))
     .pipe(z.number().int().positive()),
   OPENAI_MAX_RETRIES: z
     .string()

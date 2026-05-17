@@ -16,12 +16,258 @@ import {
   videoPath,
 } from '../../services/storage';
 import { getRuntimeAiSettings } from '../../services/aiSettings';
+import { callChatJSON } from '../../services/openai';
 import { enqueuePdfProcessing } from '../../worker/pipeline';
 import { generateVideo } from '../../worker/steps/generateVideo';
 import type { ApiError, PageRow, PdfListItem, PdfMetadata, PdfMetadataPage, PdfRow, PdfStatus } from '../../types';
 import { rowToListItem, IdParamSchema, StartBodySchema, YoutubeCreateBodySchema, nowIso, errorResponse, PDF_ID_SIZE, DEFAULT_PDF_CATEGORY, isSupportedVoiceByProvider, extractYoutubeVideoId, looksLikePdf, looksLikeUtf8Text, sanitizeUploadFilename, titleFromUploadFilename } from './shared';
 
+const PromptTextBodySchema = z.object({
+  prompt: z.string().trim().min(10, 'prompt 至少需要 10 個字').max(4000, 'prompt 不可超過 4000 字'),
+});
+
+const PromptChatBodySchema = z.object({
+  messages: z
+    .array(
+      z.object({
+        role: z.enum(['user', 'assistant']),
+        content: z.string().trim().min(1).max(4000),
+      }),
+    )
+    .min(1)
+    .max(20),
+});
+
+const PromptChatSchema = z.object({
+  assistant_message: z.string().min(1).max(2000),
+  outline_text: z.string().min(1).max(12000),
+});
+
+const PromptTextSchema = z.object({
+  title: z.string().min(1).max(120),
+  slides: z
+    .array(
+      z
+        .object({
+          title: z.string().min(1).max(160),
+          bullets: z.array(z.string().min(1).max(300)).min(2).max(6).optional(),
+          points: z.array(z.string().min(1).max(300)).min(2).max(6).optional(),
+        })
+        .transform((slide, ctx) => {
+          const bullets = slide.bullets ?? slide.points;
+          if (!bullets) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: '每頁投影片必須包含 bullets 陣列',
+              path: ['bullets'],
+            });
+            return z.NEVER;
+          }
+          return { title: slide.title, bullets };
+        }),
+    )
+    .min(3)
+    .max(20),
+});
+
+function renderPromptText(data: z.infer<typeof PromptTextSchema>): string {
+  return data.slides
+    .map((slide, idx) => {
+      const lines = [`Slide ${idx + 1}: ${slide.title.trim()}`];
+      for (const bullet of slide.bullets) {
+        const trimmed = bullet.trim();
+        if (trimmed) lines.push(`- ${trimmed}`);
+      }
+      return lines.join('\n');
+    })
+    .join('\n\n')
+    .trim();
+}
+
+async function continuePromptOutlineChat(
+  messages: z.infer<typeof PromptChatBodySchema>['messages'],
+): Promise<z.infer<typeof PromptChatSchema>> {
+  const conversation = messages
+    .map((message) => `${message.role === 'user' ? '使用者' : 'AI'}：${message.content}`)
+    .join('\n\n');
+  const result = await callChatJSON({
+    messages: [
+      {
+        role: 'system',
+        content: [
+          '你是簡報大綱規劃助理，目標是透過多輪對話協助使用者逐步完成可匯入 TXT 流程的簡報大綱。',
+          '請根據目前對話產生下一則助理回覆，並同步維護一份完整 outline_text。',
+          'assistant_message 應該自然、簡潔，指出目前大綱狀態，必要時只問 1 到 3 個最重要的澄清問題。',
+          'outline_text 必須是可直接匯入 TXT 流程的投影片文字，格式使用 Slide 1: 標題，下一行用 - 表示 2 到 6 個重點。',
+          '即使資訊不足，也要依目前資訊提供合理草稿；使用者後續回答時再更新 outline_text。',
+          '務必輸出 JSON，不要輸出 markdown。',
+        ].join('\n'),
+      },
+      {
+        role: 'user',
+        content: [
+          '以下是目前對話紀錄，請延續對話並更新簡報大綱。',
+          '',
+          conversation,
+          '',
+          '請輸出：',
+          '{"assistant_message":"給使用者的下一則回覆","outline_text":"完整 TXT 投影片大綱"}',
+        ].join('\n'),
+      },
+    ],
+    schema: PromptChatSchema,
+    maxTokens: 5000,
+    temperature: 0.5,
+    label: 'prompt-outline-chat',
+  });
+  return result.data;
+}
+
+async function generateSlideTextFromPrompt(prompt: string): Promise<{ title: string; text: string }> {
+  const result = await callChatJSON({
+    messages: [
+      {
+        role: 'system',
+        content: [
+          '你是簡報內容企劃助理。',
+          '請根據使用者提示詞產生可匯入 TXT 流程的投影片文字。',
+          '務必輸出結構化 JSON，不要輸出 markdown。',
+          'JSON 格式必須完全符合：{"title":"簡報標題","slides":[{"title":"頁面標題","bullets":["重點1","重點2"]}]}。',
+          '每一頁只能使用 bullets 欄位表示重點，不要使用 points、items、content 或其他欄位名稱。',
+        ].join('\n'),
+      },
+      {
+        role: 'user',
+        content: [
+          '請根據以下需求規劃 3 到 12 頁投影片。',
+          '每頁需要清楚 title 與 2 到 6 個 bullets。',
+          '內容要足夠完整，讓後續 TXT 上傳流程能產生完整簡報。',
+          '請只輸出 JSON 物件，slides 內每個項目都必須包含 title 與 bullets。',
+          '',
+          '使用者提示詞：',
+          prompt,
+        ].join('\n'),
+      },
+    ],
+    schema: PromptTextSchema,
+    maxTokens: 6400,
+    temperature: 0.5,
+    label: 'prompt-to-slide-text',
+  });
+  return {
+    title: result.data.title.trim(),
+    text: renderPromptText(result.data),
+  };
+}
+
 export async function registerUploadRoutes(app: FastifyInstance): Promise<void> {
+  app.post('/api/prompt-chat', async (request, reply) => {
+    const parsedBody = PromptChatBodySchema.safeParse(request.body ?? {});
+    if (!parsedBody.success) {
+      return reply
+        .code(400)
+        .send(errorResponse('INVALID_REQUEST', parsedBody.error.issues[0]?.message ?? 'Invalid body'));
+    }
+
+    try {
+      const result = await continuePromptOutlineChat(parsedBody.data.messages);
+      return reply.send(result);
+    } catch (err) {
+      request.log.error({ err }, 'Failed to continue prompt outline chat');
+      return reply
+        .code(502)
+        .send(errorResponse('LLM_GENERATION_FAILED', err instanceof Error ? err.message : 'Failed to continue prompt outline chat'));
+    }
+  });
+
+  app.post('/api/prompt-text', async (request, reply) => {
+    const parsedBody = PromptTextBodySchema.safeParse(request.body ?? {});
+    if (!parsedBody.success) {
+      return reply
+        .code(400)
+        .send(errorResponse('INVALID_REQUEST', parsedBody.error.issues[0]?.message ?? 'Invalid body'));
+    }
+
+    let generated: { title: string; text: string };
+    try {
+      generated = await generateSlideTextFromPrompt(parsedBody.data.prompt);
+    } catch (err) {
+      request.log.error({ err }, 'Failed to generate slide text from prompt');
+      return reply
+        .code(502)
+        .send(errorResponse('LLM_GENERATION_FAILED', err instanceof Error ? err.message : 'Failed to generate slide text'));
+    }
+
+    if (!generated.text) {
+      return reply.code(502).send(errorResponse('LLM_GENERATION_FAILED', 'Generated slide text is empty'));
+    }
+
+    const pdfId = nanoid(PDF_ID_SIZE);
+    const createdAt = nowIso();
+    const title = generated.title || '提示詞生成簡報';
+    const filename = `${titleFromUploadFilename(title)}.txt`;
+    const status: PdfStatus = 'awaiting_prompt';
+
+    try {
+      createPdfDir(pdfId);
+      await writeSourceText(pdfId, generated.text);
+      const metadata: PdfMetadata = {
+        id: pdfId,
+        title,
+        original_filename: filename,
+        status,
+        progress_step: null,
+        progress_current: null,
+        progress_total: null,
+        page_count: null,
+        error_message: null,
+        user_prompt: null,
+        require_script_confirmation: false,
+        category: DEFAULT_PDF_CATEGORY,
+        tts_voice: null,
+        tts_speed: null,
+        script_max_chars_per_page: null,
+        image_style_prompt: null,
+        created_at: createdAt,
+        updated_at: createdAt,
+        pages: [] as PdfMetadataPage[],
+      };
+      await writeMetadata(pdfId, metadata);
+
+      db.prepare(
+        `INSERT INTO pdfs (id, title, original_filename, status, page_count,
+                            progress_step, error_message, user_prompt, require_script_confirmation,
+                            category,
+                            tts_voice, tts_speed, script_max_chars_per_page, image_style_prompt,
+                            created_at, updated_at)
+         VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, ?, NULL, NULL, NULL, NULL, ?, ?)`,
+      ).run(pdfId, title, filename, status, DEFAULT_PDF_CATEGORY, createdAt, createdAt);
+    } catch (err) {
+      request.log.error({ err, pdfId }, 'Failed to persist prompt generated TXT');
+      try {
+        await removePdfDir(pdfId);
+      } catch {
+        // ignore
+      }
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to save generated TXT'));
+    }
+
+    return reply.code(201).send({
+      id: pdfId,
+      status,
+      title,
+      original_filename: filename,
+      user_prompt: null,
+      require_script_confirmation: false,
+      category: DEFAULT_PDF_CATEGORY,
+      tts_voice: null,
+      tts_speed: null,
+      script_max_chars_per_page: null,
+      image_style_prompt: null,
+      created_at: createdAt,
+    });
+  });
+
   app.post('/api/pdfs', async (request: FastifyRequest, reply: FastifyReply) => {
     if (!request.isMultipart()) {
       return reply
