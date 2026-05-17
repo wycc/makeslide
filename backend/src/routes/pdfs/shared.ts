@@ -54,6 +54,11 @@ import type { ChatCompletionContentPart } from 'openai/resources/chat/completion
 
 export const PDF_ID_SIZE = 10;
 export const DEFAULT_PDF_CATEGORY = 'general';
+export const MAX_UPLOAD_FILENAME_CHARS = 180;
+
+const CONTROL_CHARS_RE = /[\u0000-\u001f\u007f]/g;
+const WINDOWS_RESERVED_FILENAME_CHARS_RE = /[<>:"/\\|?*]/g;
+const SAFE_FALLBACK_FILENAME = 'upload';
 
 // pdf_id: nanoid alphanumeric + _ - only; our ids are 10-chars.
 // Accept a slightly wider window (8-32) for forward compat but enforce charset.
@@ -216,8 +221,20 @@ export const UpdatePromptBodySchema = z.object({
 });
 
 export const YoutubeCreateBodySchema = z.object({
-  youtube_url: z.string().url('youtube_url 格式錯誤'),
-  language: z.string().trim().min(2).max(16).optional(),
+  youtube_url: z
+    .string()
+    .trim()
+    .url('youtube_url 格式錯誤')
+    .max(2048, 'youtube_url 過長')
+    .refine((value) => {
+      try {
+        const host = new URL(value).hostname.toLowerCase();
+        return host === 'youtube.com' || host.endsWith('.youtube.com') || host === 'youtu.be';
+      } catch {
+        return false;
+      }
+    }, '僅支援 YouTube 網址'),
+  language: z.string().trim().regex(/^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8}){0,3}$/, 'language 格式錯誤').optional(),
 });
 
 const RegenerateAllImagesBodySchema = z.object({
@@ -271,6 +288,37 @@ export function errorResponse(code: string, message: string): ApiError {
 
 export function nowIso(): string {
   return new Date().toISOString();
+}
+
+export function stripControlChars(value: string): string {
+  return value.replace(CONTROL_CHARS_RE, '');
+}
+
+export function sanitizeUploadFilename(filename: string | undefined | null, fallbackExt = ''): string {
+  const base = path.basename(stripControlChars(filename?.trim() || SAFE_FALLBACK_FILENAME));
+  const sanitized = base
+    .replace(WINDOWS_RESERVED_FILENAME_CHARS_RE, '_')
+    .replace(/\s+/g, ' ')
+    .replace(/^\.+/, '')
+    .trim()
+    .slice(0, MAX_UPLOAD_FILENAME_CHARS);
+  const fallback = `${SAFE_FALLBACK_FILENAME}${fallbackExt}`;
+  return sanitized || fallback;
+}
+
+export function titleFromUploadFilename(filename: string): string {
+  const parsed = path.parse(filename);
+  return stripControlChars(parsed.name).trim().slice(0, 200) || filename;
+}
+
+export function looksLikePdf(buffer: Buffer): boolean {
+  return buffer.length >= 5 && buffer.subarray(0, 5).toString('ascii') === '%PDF-';
+}
+
+export function looksLikeUtf8Text(buffer: Buffer): boolean {
+  if (buffer.includes(0)) return false;
+  const decoded = buffer.toString('utf8');
+  return Buffer.from(decoded, 'utf8').equals(buffer);
 }
 
 export function detectAudioMimeFromBuffer(buf: Buffer): 'audio/mpeg' | 'audio/wav' | 'application/octet-stream' {

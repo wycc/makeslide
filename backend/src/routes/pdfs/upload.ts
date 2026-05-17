@@ -19,7 +19,7 @@ import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { enqueuePdfProcessing } from '../../worker/pipeline';
 import { generateVideo } from '../../worker/steps/generateVideo';
 import type { ApiError, PageRow, PdfListItem, PdfMetadata, PdfMetadataPage, PdfRow, PdfStatus } from '../../types';
-import { rowToListItem, IdParamSchema, StartBodySchema, YoutubeCreateBodySchema, nowIso, errorResponse, PDF_ID_SIZE, DEFAULT_PDF_CATEGORY, isSupportedVoiceByProvider, extractYoutubeVideoId } from './shared';
+import { rowToListItem, IdParamSchema, StartBodySchema, YoutubeCreateBodySchema, nowIso, errorResponse, PDF_ID_SIZE, DEFAULT_PDF_CATEGORY, isSupportedVoiceByProvider, extractYoutubeVideoId, looksLikePdf, looksLikeUtf8Text, sanitizeUploadFilename, titleFromUploadFilename } from './shared';
 
 export async function registerUploadRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/pdfs', async (request: FastifyRequest, reply: FastifyReply) => {
@@ -36,7 +36,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         .send(errorResponse('NO_FILE', 'No file field found in request'));
     }
 
-    const filename = file.filename ?? 'upload.pdf';
+    const filename = sanitizeUploadFilename(file.filename, '.pdf');
     const mimetype = file.mimetype ?? '';
     const hasPdfExt = filename.toLowerCase().endsWith('.pdf');
     const hasPdfMime = mimetype === 'application/pdf';
@@ -82,9 +82,21 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         );
     }
 
+    if (isPdf && !looksLikePdf(buffer)) {
+      return reply
+        .code(400)
+        .send(errorResponse('INVALID_UPLOAD_CONTENT', 'PDF 檔案內容格式不正確'));
+    }
+
+    if (isTxt && !looksLikeUtf8Text(buffer)) {
+      return reply
+        .code(400)
+        .send(errorResponse('INVALID_UPLOAD_CONTENT', 'TXT 檔案必須是 UTF-8 文字內容'));
+    }
+
     const pdfId = nanoid(PDF_ID_SIZE);
     const createdAt = nowIso();
-    const title = filename.replace(/\.pdf$/i, '').trim() || filename;
+    const title = titleFromUploadFilename(filename);
     // Do NOT start the pipeline here — wait for the user to submit a
     // style / tone prompt via POST /api/pdfs/:id/start.
     const status: PdfStatus = 'awaiting_prompt';

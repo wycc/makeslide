@@ -25,15 +25,15 @@
       "expirationMinute": "00",
       "requireActivity": false,
       "active": true,
-      "taskInteraction": "interrupt",
+      "taskInteraction": "wait",
       "inactivityDelay": "1",
-      "lastExecutionTime": "2026-05-17T02:53:00.350Z",
-      "lastSkippedTime": "2026-05-17T02:35:00.044Z",
-      "lastTaskId": "019e33d9-ec3c-708a-8d1f-417cfb000d2e",
-      "nextExecutionTime": "2026-05-17T02:54:00.350Z",
+      "lastExecutionTime": "2026-05-17T03:21:01.159Z",
+      "lastSkippedTime": "2026-05-17T03:25:00.162Z",
+      "lastTaskId": "019e33f3-91e5-72bf-b2b1-4f78c900aa95",
+      "nextExecutionTime": "2026-05-17T03:26:00.162Z",
       "modeDisplayName": "Code",
       "createdAt": "2026-05-17T02:21:04.374Z",
-      "updatedAt": "2026-05-17T02:50:06.617Z"
+      "updatedAt": "2026-05-17T03:09:22.956Z"
     }
   ]
 }
