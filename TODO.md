@@ -9,6 +9,7 @@
 [x] 完成 PendingTask.md #15 Queue 抽象層（為分散式擴充預備）（完成分支：feature/queue-abstraction）
 [x] 完成 PendingTask.md #4 播放頁模組化（完成分支：feature/playpage-modularization）
 [x] 完成 PendingTask.md #4 播放頁模組化追蹤清單收斂（完成分支：feature/pendingtask-playpage-modularization-sync）
+[x] 完成 PendingTask.md 已完成項目追蹤清單同步（完成分支：feature/pendingtask-completed-items-sync）
 
 ## 工作記錄
 - 時間：2026-05-17 16:10（Asia/Taipei）
@@ -60,3 +61,8 @@
 - 工作內容：完成 PendingTask.md #4「播放頁模組化追蹤清單收斂」，依 TODO.md 既有完成記錄將 PendingTask.md 的 #4 標記完成、補上完成分支、更新已完成摘要與後續建議順序，使待辦追蹤文件與 master TODO.md 對齊。
 - 所在分支：feature/pendingtask-playpage-modularization-sync
 - 驗證：git show --stat --oneline HEAD && git diff-tree --no-commit-id --name-only -r HEAD
+
+- 時間：2026-05-17 20:20（Asia/Taipei）
+- 工作內容：完成 PendingTask.md 已完成項目追蹤清單同步，依 TODO.md 既有完成記錄將 PendingTask.md 的 #4、#6、#12、#15 標記完成、補上完成分支、更新已完成摘要與後續建議順序，讓追蹤清單反映所有改善項目皆已完成。
+- 所在分支：feature/pendingtask-completed-items-sync
+- 驗證：grep -n "\\[ \\]" PendingTask.md || true；git diff --check；git show --stat --oneline HEAD
