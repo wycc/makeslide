@@ -178,6 +178,7 @@ export interface RegenStepProgress {
   status: RegenStepStatus;
   total: number;
   completed: number;
+  eta_seconds: number | null;
   error: string | null;
   started_at: string | null;
   finished_at: string | null;
@@ -198,6 +199,8 @@ export interface RegenJobState {
   cancel_requested: boolean;
   last_processed_page: number | null;
   last_generated_page: number | null;
+  eta_seconds: number | null;
+  estimated_completion_at: string | null;
   snapshot_id: string | null;
   rollback_available: boolean;
 }
