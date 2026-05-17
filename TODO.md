@@ -1,5 +1,5 @@
-[x] 首次流程導引應該只有在列表是空的時候才出現。（完成分支：feature/onboarding-empty-list-only）
-[x] 在PlayPage 中加入更新封面的按鍵，將封面更新為目前頁目的圖片（完成分支：feature/update-cover-from-current-page）
+[x] (merge)首次流程導引應該只有在列表是空的時候才出現。（完成分支：feature/onboarding-empty-list-only）
+[x] (merge)在PlayPage 中加入更新封面的按鍵，將封面更新為目前頁目的圖片（完成分支：feature/update-cover-from-current-page）
 [x] 產生的過程中也允許進入 PlayPage, 可以流覽內容，播放音檔。但所有更改和生成的功能都要禁用（完成分支：feature/playpage-readonly-while-processing）
 [ ] 加上從提示詞生成的功能，使用者只提供一個提示詞說明要產生的內容，會先生成 TXT 需要的文字，再使用原 TXT 上傳的流程產生完整簡報
 [ ] 加上教學互動功能
@@ -20,3 +20,4 @@
 - 工作內容：完成「產生的過程中也允許進入 PlayPage, 可以流覽內容，播放音檔。但所有更改和生成的功能都要禁用」，首頁處理中項目可進入播放頁，播放頁在非 ready 狀態保留瀏覽與播放能力並以唯讀提示停用標題、提示詞、語音設定、圖片替換、投影片管理、問答修改、逐字稿重生、圖片重生、影片產生與整份重生等會寫入或生成的操作。
 - 所在分支：feature/playpage-readonly-while-processing
 - 驗證：npm --prefix frontend run build
+
