@@ -7,7 +7,7 @@ import { db } from '../../db';
 import { config } from '../../config';
 import type { PageRow, PdfListItem, PdfRow } from '../../types';
 import { coverImagePath, readMetadata, safeJoinPdfPath, videoPath, writeMetadata, youtubeOutlinePath } from '../../services/storage';
-import { ensureCoverThumbnail, ensurePageThumbnail } from '../../services/thumbnails';
+import { ensureCoverThumbnail, ensurePageThumbnail, generateCoverThumbnail } from '../../services/thumbnails';
 import {
   IdParamSchema,
   PageParamSchema,
@@ -238,6 +238,59 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     db.prepare(`UPDATE pages SET updated_at = ? WHERE pdf_id = ? AND page_number = ?`).run(now, id, n);
     db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(now, id);
     return reply.send({ id, page_number: n, page_prompt: prompt || null, updated_at: now });
+  });
+
+  // POST /api/pdfs/:id/cover/from-page/:n
+  app.post('/api/pdfs/:id/cover/from-page/:n', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const { id, n } = parsed.data;
+    const pageRow = db
+      .prepare(`SELECT image_path FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .get(id, n) as { image_path: string | null } | undefined;
+    if (!pageRow) {
+      return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+    }
+    if (!pageRow.image_path) {
+      return reply.code(409).send(errorResponse('PAGE_IMAGE_NOT_FOUND', 'Page image not ready'));
+    }
+
+    let sourcePath: string;
+    try {
+      const abs = safeJoinPdfPath(id, pageRow.image_path);
+      const legacyPng = abs.replace(/\.jpg$/i, '.png');
+      const existingPath = fs.existsSync(abs) ? abs : fs.existsSync(legacyPng) ? legacyPng : null;
+      if (!existingPath) {
+        return reply.code(404).send(errorResponse('PAGE_IMAGE_NOT_FOUND', 'Page image file missing'));
+      }
+      sourcePath = existingPath;
+    } catch (err) {
+      request.log.warn({ err, id, n, stored: pageRow.image_path }, 'Path traversal blocked');
+      return reply.code(400).send(errorResponse('INVALID_PATH', 'Invalid stored path'));
+    }
+
+    const now = nowIso();
+    const cover = coverImagePath(id);
+    try {
+      await fs.promises.mkdir(path.dirname(cover), { recursive: true });
+      await sharp(sourcePath).jpeg({ quality: 80, mozjpeg: true }).toFile(cover);
+      await generateCoverThumbnail(id, cover);
+    } catch (err) {
+      request.log.error({ err, id, n, sourcePath }, 'Failed to update cover from page');
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to update cover'));
+    }
+
+    db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(now, id);
+    const coverCacheKey = encodeURIComponent(now);
+    return reply.send({
+      id,
+      page_number: n,
+      cover_url: `api/pdfs/${id}/cover?t=${coverCacheKey}`,
+      cover_thumbnail_url: `api/pdfs/${id}/cover/thumbnail?t=${coverCacheKey}`,
+      updated_at: now,
+    });
   });
 
   // GET /api/pdfs/:id/cover

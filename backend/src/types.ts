@@ -158,6 +158,7 @@ export interface PdfListItem {
   source_video_id?: string | null;
   source_caption_language?: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 export interface PdfDetailPage {

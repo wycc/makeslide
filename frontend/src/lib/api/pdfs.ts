@@ -269,6 +269,26 @@ export async function updatePdfPrompt(
   return (await resp.json()) as UpdatePdfPromptResponse;
 }
 
+export interface UpdatePdfCoverFromPageResponse {
+  id: string;
+  page_number: number;
+  cover_url: string;
+  cover_thumbnail_url: string;
+  updated_at: string;
+}
+
+export async function updatePdfCoverFromPage(
+  id: string,
+  pageNumber: number,
+): Promise<UpdatePdfCoverFromPageResponse> {
+  const resp = await fetch(
+    `api/pdfs/${encodeURIComponent(id)}/cover/from-page/${encodeURIComponent(String(pageNumber))}`,
+    { method: 'POST' },
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as UpdatePdfCoverFromPageResponse;
+}
+
 export interface RegenerateAllImagesResponse {
   id: string;
   page_count: number;
@@ -564,4 +584,3 @@ export async function clearPageChatHistory(id: string, pageNumber: number): Prom
     throw await parseErrorBody(resp);
   }
 }
-

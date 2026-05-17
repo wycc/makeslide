@@ -325,6 +325,10 @@ function rewritePagePathsToMatchNumber(pdfId: string, pageCount: number): void {
   ).run(pdfId);
 }
 
+function coverCacheKey(row: PdfRow): string {
+  return encodeURIComponent(row.updated_at || row.created_at || row.id);
+}
+
 function coverUrl(row: PdfRow): string | null {
   // Cover exists iff cover.jpg/cover.png is on disk. For efficiency, probe once here
   // instead of stat-ing for every list row; M2 ensures cover is written as
@@ -333,7 +337,7 @@ function coverUrl(row: PdfRow): string | null {
     const coverJpg = coverImagePath(row.id);
     const coverPng = path.join(config.storageRoot, row.id, 'cover.png');
     return (fs.existsSync(coverJpg) || fs.existsSync(coverPng))
-      ? `api/pdfs/${row.id}/cover`
+      ? `api/pdfs/${row.id}/cover?t=${coverCacheKey(row)}`
       : null;
   } catch {
     return null;
@@ -364,6 +368,7 @@ function rowToListItem(row: PdfRow): PdfListItem {
     source_video_id: row.source_video_id ?? null,
     source_caption_language: row.source_caption_language ?? null,
     created_at: row.created_at,
+    updated_at: row.updated_at,
   };
 }
 
