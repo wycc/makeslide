@@ -1,47 +1,6 @@
-/**
- * PDF lifecycle states.
- *
- * - `awaiting_prompt`: just uploaded; backend is waiting for the user to
- *   submit a style / tone prompt before firing the pipeline.
- * - `uploaded`: user submitted the prompt (or skipped it); queued to run
- *   but not yet started. On server crash recovery, rows in this state are
- *   re-enqueued automatically.
- * - `processing`: pipeline actively running.
- * - `ready`: all pages rendered + script + audio done.
- * - `failed`: pipeline threw; see `error_message`.
- */
-export type PdfStatus =
-  | 'awaiting_prompt'
-  | 'uploaded'
-  | 'processing'
-  | 'awaiting_script_confirmation'
-  | 'ready'
-  | 'failed';
+import type { PageStatus, PdfStatus, ProgressStep } from './statusMachine';
 
-/**
- * Pipeline progress indicator written alongside status while a PDF is being
- * processed. Stored as a column on `pdfs` and in `metadata.json`.
- *
- * M2 stages: rendering → text_extracted.
- * M3/M4 will extend this with scripting / synthesizing.
- */
-export type ProgressStep =
-  | null
-  | 'rendering'
-  | 'extracting_text'
-  | 'text_extracted'
-  | 'scripting'
-  | 'script_ready'
-  | 'synthesizing'
-  | 'rendering_video';
-
-export type PageStatus =
-  | 'pending'
-  | 'rendered'
-  | 'text_ready'
-  | 'script_ready'
-  | 'audio_ready'
-  | 'failed';
+export type { PageStatus, PdfStatus, ProgressStep } from './statusMachine';
 
 export type PipelineRunType =
   | 'initial'
