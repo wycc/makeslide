@@ -20,6 +20,7 @@ const POLL_INTERVAL_IDLE_MS = 30000;
 const DEFAULT_PROMPT_TTS_PROVIDER = 'gemini' as const;
 const DEFAULT_CATEGORY = 'general';
 const RECENT_CATEGORY = '最近的簡報';
+const CATEGORY_FILTER_STORAGE_KEY = 'makeslide.home.categoryFilter';
 
 const compareByTitle = (a: PdfListItem, b: PdfListItem) => {
   const titleA = a.title?.trim() || a.id;
@@ -40,6 +41,11 @@ interface PromptTarget {
   ttsProvider: 'openai' | 'gemini';
 }
 
+const readStoredCategoryFilter = () => {
+  if (typeof window === 'undefined') return '__all__';
+  return window.localStorage.getItem(CATEGORY_FILTER_STORAGE_KEY) || '__all__';
+};
+
 export default function HomePage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -49,7 +55,7 @@ export default function HomePage() {
   const [toast, setToast] = useState<string | null>(null);
   const toastTimerRef = useRef<number | null>(null);
   const [promptTarget, setPromptTarget] = useState<PromptTarget | null>(null);
-  const [categoryFilter, setCategoryFilter] = useState<string>('__all__');
+  const [categoryFilter, setCategoryFilter] = useState<string>(readStoredCategoryFilter);
 
   const allCategories = items.reduce<string[]>((categories, pdf) => {
     const category = pdf.category?.trim() || DEFAULT_CATEGORY;
@@ -80,6 +86,11 @@ export default function HomePage() {
       window.clearTimeout(toastTimerRef.current);
     }
     toastTimerRef.current = window.setTimeout(() => setToast(null), 2500);
+  }, []);
+
+  const updateCategoryFilter = useCallback((nextFilter: string) => {
+    setCategoryFilter(nextFilter);
+    window.localStorage.setItem(CATEGORY_FILTER_STORAGE_KEY, nextFilter);
   }, []);
 
   const load = useCallback(async (opts: { silent?: boolean } = {}) => {
@@ -191,7 +202,11 @@ export default function HomePage() {
       try {
         const resp = await deleteCategory(category);
         setItems((prev) => prev.map((p) => (p.category === category ? { ...p, category: resp.reassigned_to } : p)));
-        setCategoryFilter((prev) => (prev === category ? '__all__' : prev));
+        setCategoryFilter((prev) => {
+          if (prev !== category) return prev;
+          window.localStorage.setItem(CATEGORY_FILTER_STORAGE_KEY, '__all__');
+          return '__all__';
+        });
         showToast(`已刪除類別，${resp.affected_count} 個簡報移至 ${resp.reassigned_to}`);
       } catch (err) {
         const msg = err instanceof ApiError ? err.message : '刪除類別失敗';
@@ -360,7 +375,7 @@ export default function HomePage() {
               顯示類別
               <select
                 value={categoryFilter}
-                onChange={(ev) => setCategoryFilter(ev.target.value)}
+                onChange={(ev) => updateCategoryFilter(ev.target.value)}
                 className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition hover:border-slate-500"
               >
                 <option value="__all__">全部類別</option>
