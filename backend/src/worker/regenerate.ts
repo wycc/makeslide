@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
+import { generatePageThumbnail } from '../services/thumbnails';
 import { nanoid } from 'nanoid';
 import { config } from '../config';
 import { db } from '../db';
@@ -1094,11 +1095,12 @@ async function runRegenerateImages(
         fit: 'contain',
         background: { r: 255, g: 255, b: 255 },
       })
-      .png()
+      .jpeg({ quality: 82, mozjpeg: true })
       .toFile(pageImagePath(pdfId, p.page_number, pageCount));
+    await generatePageThumbnail(pdfId, p.page_number, pageCount, pageImagePath(pdfId, p.page_number, pageCount));
 
     finishArtifact(artifactHandle, 'succeeded', {
-      outputPath: path.posix.join('pages', `${String(p.page_number).padStart(pagePadFor(pageCount), '0')}.png`),
+      outputPath: path.posix.join('pages', `${String(p.page_number).padStart(pagePadFor(pageCount), '0')}.jpg`),
       metadata: { job_id: state.job_id, precision: 'inline' },
     });
 

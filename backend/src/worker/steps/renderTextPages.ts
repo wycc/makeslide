@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import sharp from 'sharp';
 import { coverImagePath, pageImagePath, pageTextPath, sourceTextPath } from '../../services/storage';
+import { generateCoverThumbnail, generatePageThumbnail } from '../../services/thumbnails';
 
 const PAGE_WIDTH = 1920;
 const PAGE_HEIGHT = 1080;
@@ -79,14 +80,16 @@ export async function renderTextPages(pdfId: string): Promise<RenderTextPagesRes
     const imagePath = pageImagePath(pdfId, pageNumber, pageCount);
     const textPath = pageTextPath(pdfId, pageNumber, pageCount);
     await renderPageImage(pages[i] ?? '', imagePath);
+    await generatePageThumbnail(pdfId, pageNumber, pageCount, imagePath);
     await fs.promises.writeFile(textPath, pages[i] ?? '', 'utf8');
     pagePaths.push(imagePath);
   }
 
   if (pagePaths[0]) {
-    await fs.promises.copyFile(pagePaths[0], coverImagePath(pdfId));
+    const coverPath = coverImagePath(pdfId);
+    await fs.promises.copyFile(pagePaths[0], coverPath);
+    await generateCoverThumbnail(pdfId, coverPath);
   }
 
   return { pageCount, pagePaths };
 }
-

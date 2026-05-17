@@ -8,6 +8,7 @@ import { db } from '../../db';
 import { config, OPENAI_TTS_VOICES } from '../../config';
 import {
   coverImagePath,
+  coverThumbnailPath,
   createPdfDir,
   pageAudioPath,
   pageImagePath,
@@ -362,6 +363,19 @@ function coverUrl(row: PdfRow): string | null {
   }
 }
 
+function coverThumbnailUrl(row: PdfRow): string | null {
+  try {
+    const coverThumb = coverThumbnailPath(row.id);
+    const coverJpg = coverImagePath(row.id);
+    const coverPng = path.join(config.storageRoot, row.id, 'cover.png');
+    return (fs.existsSync(coverThumb) || fs.existsSync(coverJpg) || fs.existsSync(coverPng))
+      ? `api/pdfs/${row.id}/cover/thumbnail`
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export function rowToListItem(row: PdfRow): PdfListItem {
   const runtime = getRuntimeAiSettings();
   return {
@@ -373,6 +387,7 @@ export function rowToListItem(row: PdfRow): PdfListItem {
     progress_current: row.progress_current,
     progress_total: row.progress_total,
     cover_url: coverUrl(row),
+    cover_thumbnail_url: coverThumbnailUrl(row),
     user_prompt: row.user_prompt,
     require_script_confirmation: row.require_script_confirmation === 1,
     category: row.category?.trim() || DEFAULT_PDF_CATEGORY,
@@ -435,6 +450,7 @@ export function rowToDetail(row: PdfRow, pages: PageRow[], timingsByPage: PageTi
   const detailPages: PdfDetailPage[] = pages.map((p) => ({
     page_number: p.page_number,
     image_url: p.image_path ? `api/pdfs/${row.id}/pages/${p.page_number}/image` : null,
+    thumbnail_url: p.image_path ? `api/pdfs/${row.id}/pages/${p.page_number}/thumbnail` : null,
     text_url: p.text_path ? `api/pdfs/${row.id}/pages/${p.page_number}/text` : null,
     script_url: p.script_path ? `api/pdfs/${row.id}/pages/${p.page_number}/script` : null,
     audio_url: p.audio_path ? `api/pdfs/${row.id}/pages/${p.page_number}/audio` : null,

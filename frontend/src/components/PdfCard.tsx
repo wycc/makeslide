@@ -55,9 +55,9 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onCate
     pdf.status === 'processing' &&
     pdf.progress_step === 'rendering' &&
     (pdf.progress_current ?? 0) > 0
-      ? `api/pdfs/${encodeURIComponent(pdf.id)}/pages/${encodeURIComponent(String(pdf.progress_current))}/image?t=${encodeURIComponent(String(pdf.progress_current))}`
+      ? `api/pdfs/${encodeURIComponent(pdf.id)}/pages/${encodeURIComponent(String(pdf.progress_current))}/thumbnail?t=${encodeURIComponent(String(pdf.progress_current))}`
       : null;
-  const coverSrc = livePagePreviewUrl ?? pdf.cover_url;
+  const coverSrc = livePagePreviewUrl ?? pdf.cover_thumbnail_url ?? pdf.cover_url;
 
   const handleDelete = async (ev: React.MouseEvent) => {
     ev.stopPropagation();

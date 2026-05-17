@@ -2062,9 +2062,9 @@ export default function PlayPage() {
                   >
                     ↕
                   </button>
-                  {p.image_url ? (
+                  {(p.thumbnail_url ?? p.image_url) ? (
                     <img
-                      src={withImageBust(p.image_url) ?? p.image_url}
+                      src={withImageBust(p.thumbnail_url ?? p.image_url) ?? (p.thumbnail_url ?? p.image_url) ?? ''}
                       alt={`第 ${p.page_number} 頁縮圖`}
                       className="h-14 w-full object-cover"
                     />

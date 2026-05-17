@@ -28,13 +28,16 @@ import {
   rewritePagePathsToMatchNumber,
 } from './shared';
 import {
+  coverImagePath,
   pageImagePath,
+  pageThumbnailPath,
   pageScriptPath,
   pageTextPath,
   readMetadata,
   renumberPageArtifacts,
   writeMetadata,
 } from '../../services/storage';
+import { generateCoverThumbnail, generatePageThumbnail } from '../../services/thumbnails';
 
 const RewriteScriptResponseSchema = z.object({
   script: z.string().min(1).max(4096),
@@ -259,6 +262,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       })
         .jpeg({ quality: 82, mozjpeg: true })
         .toFile(pageImagePath(id, inserted, oldCount + 1));
+      await generatePageThumbnail(id, inserted, oldCount + 1, pageImagePath(id, inserted, oldCount + 1));
       await fs.promises.writeFile(pageTextPath(id, inserted, oldCount + 1), '', 'utf8');
       await fs.promises.writeFile(pageScriptPath(id, inserted, oldCount + 1), '', 'utf8');
       const meta = await readMetadata(id);
@@ -410,6 +414,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     const updates = Array.from({ length: oldCount - n }, (_, i) => ({ from: n + i + 1, to: n + i }));
     const filesToDelete = [
       pageImagePath(id, n, oldCount),
+      pageThumbnailPath(id, n, oldCount),
       pageTextPath(id, n, oldCount),
       pageScriptPath(id, n, oldCount),
       path.join(path.dirname(pageImagePath(id, n, oldCount)), `${String(n).padStart(oldCount > 999 ? 4 : 3, '0')}.png`),
@@ -492,6 +497,12 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       .resize(1920, 1080, { fit: 'contain', background: { r: 255, g: 255, b: 255 } })
       .jpeg({ quality: 82, mozjpeg: true })
       .toFile(outPath);
+    await generatePageThumbnail(id, n, row.page_count, outPath);
+    if (n === 1) {
+      const coverPath = coverImagePath(id);
+      await fs.promises.copyFile(outPath, coverPath);
+      await generateCoverThumbnail(id, coverPath);
+    }
 
     const relImagePath = path.posix.join('pages', `${String(n).padStart(row.page_count > 999 ? 4 : 3, '0')}.jpg`);
     const now = nowIso();

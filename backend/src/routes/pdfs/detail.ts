@@ -7,6 +7,7 @@ import { db } from '../../db';
 import { config } from '../../config';
 import type { PageRow, PdfListItem, PdfRow } from '../../types';
 import { coverImagePath, readMetadata, safeJoinPdfPath, videoPath, writeMetadata, youtubeOutlinePath } from '../../services/storage';
+import { ensureCoverThumbnail, ensurePageThumbnail } from '../../services/thumbnails';
 import {
   IdParamSchema,
   PageParamSchema,
@@ -268,6 +269,27 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     return streamFile(reply, coverPath, mime, 'public, max-age=300');
   });
 
+  // GET /api/pdfs/:id/cover/thumbnail
+  app.get('/api/pdfs/:id/cover/thumbnail', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const exists = db.prepare(`SELECT id FROM pdfs WHERE id = ?`).get(parsed.data.id) as { id: string } | undefined;
+    if (!exists) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', 'PDF not found'));
+    }
+    const cover = coverImagePath(parsed.data.id);
+    const legacyCoverPng = path.join(config.storageRoot, parsed.data.id, 'cover.png');
+    const coverPath = fs.existsSync(cover) ? cover : fs.existsSync(legacyCoverPng) ? legacyCoverPng : null;
+    if (!coverPath) {
+      return reply.code(404).send(errorResponse('COVER_NOT_READY', 'Cover image not generated yet'));
+    }
+    const thumb = await ensureCoverThumbnail(parsed.data.id, coverPath);
+    if (!thumb) return reply.code(404).send(errorResponse('COVER_NOT_READY', 'Cover thumbnail not generated yet'));
+    return streamFile(reply, thumb, 'image/jpeg', 'public, max-age=3600');
+  });
+
   // GET /api/pdfs/:id/video
   app.get('/api/pdfs/:id/video', async (request, reply) => {
     const parsed = IdParamSchema.safeParse(request.params);
@@ -350,6 +372,41 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     }
     const mime = imagePath.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
     return streamFile(reply, imagePath, mime, 'public, max-age=300');
+  });
+
+  // GET /api/pdfs/:id/pages/:n/thumbnail
+  app.get('/api/pdfs/:id/pages/:n/thumbnail', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const { id, n } = parsed.data;
+    const pageRow = db
+      .prepare(
+        `SELECT p.image_path, d.page_count
+           FROM pages p
+           JOIN pdfs d ON d.id = p.pdf_id
+          WHERE p.pdf_id = ? AND p.page_number = ?`,
+      )
+      .get(id, n) as { image_path: string | null; page_count: number | null } | undefined;
+    if (!pageRow?.image_path || !pageRow.page_count) {
+      return reply.code(404).send(errorResponse('PAGE_IMAGE_NOT_FOUND', 'Page image not found'));
+    }
+    let abs: string;
+    try {
+      abs = safeJoinPdfPath(id, pageRow.image_path);
+    } catch (err) {
+      request.log.warn({ err, id, n, stored: pageRow.image_path }, 'Path traversal blocked');
+      return reply.code(400).send(errorResponse('INVALID_PATH', 'Invalid stored path'));
+    }
+    const legacyPng = abs.replace(/\.jpg$/i, '.png');
+    const imagePath = fs.existsSync(abs) ? abs : fs.existsSync(legacyPng) ? legacyPng : null;
+    if (!imagePath) {
+      return reply.code(404).send(errorResponse('PAGE_IMAGE_NOT_FOUND', 'Page image file missing'));
+    }
+    const thumb = await ensurePageThumbnail(id, n, pageRow.page_count, imagePath);
+    if (!thumb) return reply.code(404).send(errorResponse('PAGE_IMAGE_NOT_FOUND', 'Page thumbnail missing'));
+    return streamFile(reply, thumb, 'image/jpeg', 'public, max-age=3600');
   });
 
   // GET /api/pdfs/:id/pages/:n/text

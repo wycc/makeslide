@@ -10,6 +10,7 @@ import {
   sourcePdfPath,
 } from '../../services/storage';
 import { getPdfPageCount, pdftoppmBin, runCommand } from '../poppler';
+import { generateCoverThumbnail, generatePageThumbnail } from '../../services/thumbnails';
 
 const COVER_WIDTH_PX = 400;
 
@@ -81,6 +82,7 @@ export async function renderPages(pdfId: string): Promise<RenderResult> {
     await sharp(from)
       .jpeg({ quality: 82, mozjpeg: true })
       .toFile(jpgOut);
+    await generatePageThumbnail(pdfId, num, pageCount, jpgOut);
     fs.unlinkSync(from);
     pagePaths.push(jpgOut);
   }
@@ -91,6 +93,7 @@ export async function renderPages(pdfId: string): Promise<RenderResult> {
     .resize({ width: COVER_WIDTH_PX, withoutEnlargement: true })
     .jpeg({ quality: 80, mozjpeg: true })
     .toFile(coverPath);
+  await generateCoverThumbnail(pdfId, coverPath);
 
   logger.info({ pdfId, pageCount, coverPath }, 'Rendered pages and cover');
 

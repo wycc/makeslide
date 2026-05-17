@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { coverImagePath, pageImagePath, pageTextPath, pagesDir } from '../../services/storage';
+import { generateCoverThumbnail, generatePageThumbnail, ensurePageThumbnail } from '../../services/thumbnails';
 import { getOpenAIClient } from '../../services/openai';
 import { logger } from '../../logger';
 import { config } from '../../config';
@@ -134,6 +135,7 @@ export async function renderTextPagesWithLlm(
     try {
       const st = await fs.promises.stat(imagePath);
       if (st.isFile() && st.size > 0) {
+        await ensurePageThumbnail(opts.pdfId, p.pageNumber, pageCount, imagePath);
         await fs.promises.writeFile(textPath, p.content, 'utf8');
         pagePaths.push(imagePath);
         logger.info(
@@ -339,6 +341,7 @@ export async function renderTextPagesWithLlm(
     }
 
     await fs.promises.writeFile(imagePath, Buffer.from(b64, 'base64'));
+    await generatePageThumbnail(opts.pdfId, p.pageNumber, pageCount, imagePath);
     await fs.promises.writeFile(textPath, p.content, 'utf8');
     const endedAt = new Date().toISOString();
     const latencyMs = Date.parse(endedAt) - Date.parse(startedAt);
@@ -378,7 +381,9 @@ export async function renderTextPagesWithLlm(
   }
 
   if (pagePaths[0]) {
-    await fs.promises.copyFile(pagePaths[0], coverImagePath(opts.pdfId));
+    const coverPath = coverImagePath(opts.pdfId);
+    await fs.promises.copyFile(pagePaths[0], coverPath);
+    await generateCoverThumbnail(opts.pdfId, coverPath);
   }
 
   return { pageCount, pagePaths };

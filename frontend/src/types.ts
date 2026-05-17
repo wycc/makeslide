@@ -64,6 +64,7 @@ export interface PdfListItem {
   progress_current: number | null;
   progress_total: number | null;
   cover_url: string | null;
+  cover_thumbnail_url?: string | null;
   user_prompt: string | null;
   require_script_confirmation: boolean;
   category: string;
@@ -78,6 +79,7 @@ export interface PdfListItem {
 export interface PdfDetailPage {
   page_number: number;
   image_url: string | null;
+  thumbnail_url?: string | null;
   text_url: string | null;
   script_url?: string | null;
   audio_url?: string | null;
