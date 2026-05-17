@@ -1815,7 +1815,7 @@ export default function PlayPage() {
               播放完成
             </div>
           )}
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <button
               type="button"
               onClick={goPrev}
@@ -1851,10 +1851,10 @@ export default function PlayPage() {
               max={1000}
               value={progressRatio}
               onChange={handleSeek}
-              className="flex-1 accent-emerald-500"
+              className="order-2 min-w-0 flex-[1_1_calc(100%-5.75rem)] accent-emerald-500 sm:order-none sm:flex-1"
               aria-label="進度條"
             />
-            <div className="w-24 whitespace-nowrap text-right font-mono text-xs text-slate-300">
+            <div className="order-3 w-[5.25rem] shrink-0 whitespace-nowrap text-right font-mono text-[11px] text-slate-300 sm:order-none sm:w-24 sm:text-xs">
               {formatTime(currentTime)} / {formatTime(duration)}
             </div>
           </div>
