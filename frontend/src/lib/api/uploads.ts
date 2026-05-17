@@ -6,6 +6,10 @@ export interface UploadOptions {
   signal?: AbortSignal;
 }
 
+export interface GeneratePromptTextRequest {
+  prompt: string;
+}
+
 /**
  * Upload a PDF file via XHR so we can report progress.
  */
@@ -60,3 +64,18 @@ export function uploadPdf(file: File, opts: UploadOptions = {}): Promise<UploadR
   });
 }
 
+export async function generatePromptTextUpload(body: GeneratePromptTextRequest): Promise<UploadResponse> {
+  const resp = await fetch('api/prompt-text', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data: unknown = await resp.json().catch(() => null);
+  if (!resp.ok) {
+    if (isApiErrorBody(data)) {
+      throw new ApiError(data.error.message, data.error.code, resp.status);
+    }
+    throw new ApiError(`HTTP ${resp.status}`, 'HTTP_ERROR', resp.status);
+  }
+  return data as UploadResponse;
+}
