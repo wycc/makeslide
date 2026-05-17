@@ -233,7 +233,6 @@ export default function PlayPage() {
   const [imageOnlyFullscreen, setImageOnlyFullscreen] = useState(false);
   const [slideImageScale, setSlideImageScale] = useState(1);
   const IMAGE_MSG_PREFIX = '[image] ';
-  const imageInputRef = useRef<HTMLInputElement | null>(null);
 
   const ttsProvider: TtsProvider = detail?.tts_provider === 'gemini' ? 'gemini' : 'openai';
   const availableTtsVoices = TTS_VOICES_BY_PROVIDER[ttsProvider];
@@ -2189,31 +2188,11 @@ export default function PlayPage() {
               ))}
             </div>
             <div className="border-t border-slate-800 px-3 py-2">
-              <input
-                ref={imageInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                className="hidden"
-                onChange={(e) => {
-                  if (isReadOnlyProcessing) return;
-                  const f = e.target.files?.[0];
-                  if (f) void handleReplaceImageFile(f);
-                  e.currentTarget.value = '';
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => imageInputRef.current?.click()}
-                disabled={isReadOnlyProcessing || slideBusy || !currentPage}
-                className="w-full rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-xs text-cyan-200 disabled:opacity-40"
-              >
-                取代目前頁圖片（可拖放/貼上）
-              </button>
               <button
                 type="button"
                 onClick={() => void handleUpdateCoverFromCurrentPage()}
                 disabled={slideBusy || !currentPage?.image_url}
-                className="mt-2 w-full rounded-md border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-xs text-amber-200 hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                className="w-full rounded-md border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-xs text-amber-200 hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                 title="將首頁列表封面更新為目前選取頁面的圖片"
               >
                 將目前頁設為封面
