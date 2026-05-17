@@ -305,23 +305,25 @@ export default function HomePage() {
       </header>
 
       <main className="mx-auto max-w-7xl px-4 py-6">
-        <section className="mb-6 rounded-xl border border-slate-700 bg-slate-900/50 p-4">
-          <h2 className="text-sm font-semibold text-slate-100">首次流程導引</h2>
-          <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-slate-300">
-            <li>Step 1 準備 API key</li>
-            <li>Step 2 匯入來源（PDF / Text / YouTube）</li>
-            <li>Step 3 啟動處理與等待</li>
-            <li>Step 4 進入播放頁調整</li>
-          </ol>
-          <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-400">
-            <a className="underline underline-offset-2 hover:text-slate-200" href="/docs/error-codes.md" target="_blank" rel="noreferrer">
-              錯誤碼對照（docs/error-codes.md）
-            </a>
-            <a className="underline underline-offset-2 hover:text-slate-200" href="/docs/userguide.md" target="_blank" rel="noreferrer">
-              使用指南（docs/userguide.md）
-            </a>
-          </div>
-        </section>
+        {!loading && items.length === 0 && !error && (
+          <section className="mb-6 rounded-xl border border-slate-700 bg-slate-900/50 p-4">
+            <h2 className="text-sm font-semibold text-slate-100">首次流程導引</h2>
+            <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-slate-300">
+              <li>Step 1 準備 API key</li>
+              <li>Step 2 匯入來源（PDF / Text / YouTube）</li>
+              <li>Step 3 啟動處理與等待</li>
+              <li>Step 4 進入播放頁調整</li>
+            </ol>
+            <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-400">
+              <a className="underline underline-offset-2 hover:text-slate-200" href="/docs/error-codes.md" target="_blank" rel="noreferrer">
+                錯誤碼對照（docs/error-codes.md）
+              </a>
+              <a className="underline underline-offset-2 hover:text-slate-200" href="/docs/userguide.md" target="_blank" rel="noreferrer">
+                使用指南（docs/userguide.md）
+              </a>
+            </div>
+          </section>
+        )}
 
         {loading && items.length === 0 && (
           <p className="text-sm text-slate-400">載入中…</p>
