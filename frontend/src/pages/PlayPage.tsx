@@ -48,7 +48,6 @@ import type {
   ChatMessage,
   PdfDetail,
   PdfDetailPage,
-  PdfDetailPageTimingItem,
   PagePoll,
   RegenJobState,
 } from '../types';
@@ -218,6 +217,8 @@ export default function PlayPage() {
   const [pollBusy, setPollBusy] = useState(false);
   const [pollError, setPollError] = useState<string | null>(null);
   const [pollVotes, setPollVotes] = useState<Record<number, number>>({});
+  const [pollSettingsOpen, setPollSettingsOpen] = useState(false);
+  const [pollStarted, setPollStarted] = useState(false);
   // 在按下「確認」啟動重生前記住目前頁碼，供 rollback 後跳回。
   const preRegenPageIdxRef = useRef<number | null>(null);
   const pollVoterIdRef = useRef<string>('');
@@ -639,7 +640,7 @@ export default function PlayPage() {
   }, []);
 
   useEffect(() => {
-    if (!pdfId || !currentPage) return;
+    if (!pollStarted || !pdfId || !currentPage) return;
     let cancelled = false;
     let timer: number | null = null;
     const loadPolls = async () => {
@@ -658,7 +659,7 @@ export default function PlayPage() {
       cancelled = true;
       if (timer != null) window.clearTimeout(timer);
     };
-  }, [pdfId, currentPage?.page_number]);
+  }, [pollStarted, pdfId, currentPage?.page_number]);
 
   const handleSendChat = useCallback(async () => {
     if (isReadOnlyProcessing) return;
@@ -702,12 +703,25 @@ export default function PlayPage() {
       setPagePolls((prev) => [poll, ...prev]);
       setPollQuestion('');
       setPollOptionsText('同意\n不同意');
+      setPollStarted(true);
     } catch (err) {
       setPollError(err instanceof ApiError ? err.message : '建立投票失敗');
     } finally {
       setPollBusy(false);
     }
   }, [pdfId, currentPage, pollQuestion, pollOptionsText]);
+
+  const handleStartPoll = useCallback(() => {
+    setPollStarted(true);
+    setPollError(null);
+  }, []);
+
+  const handleStopPoll = useCallback(() => {
+    setPollStarted(false);
+    setPagePolls([]);
+    setPollVotes({});
+    setPollError(null);
+  }, []);
 
   const handleVotePoll = useCallback(async (pollId: number, optionIndex: number) => {
     if (!pdfId) return;
@@ -2208,77 +2222,116 @@ export default function PlayPage() {
           </section>
 
           <section className="rounded-lg border border-slate-800 bg-slate-900/40">
-            <div className="border-b border-slate-800 px-4 py-3">
-              <h2 className="text-sm font-semibold text-slate-300">📊 Realtime Poll（第 {currentPage?.page_number ?? '-'} 頁）</h2>
-              <p className="mt-1 text-xs text-slate-500">同一頁面的使用者可選擇答案，結果每數秒自動更新。</p>
-            </div>
-            <div className="space-y-3 p-3">
-              <div className="rounded-md border border-slate-800 bg-slate-950/50 p-3">
-                <input
-                  value={pollQuestion}
-                  onChange={(e) => setPollQuestion(e.target.value)}
-                  maxLength={300}
-                  placeholder="輸入投票問題"
-                  className="mb-2 w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-cyan-500/40 placeholder:text-slate-500 focus:ring"
-                />
-                <textarea
-                  value={pollOptionsText}
-                  onChange={(e) => setPollOptionsText(e.target.value)}
-                  rows={3}
-                  placeholder="每行一個答案選項"
-                  className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-cyan-500/40 placeholder:text-slate-500 focus:ring"
-                />
+            <div className="flex items-center justify-between gap-2 px-3 py-2">
+              <div className="min-w-0">
+                <h2 className="truncate text-sm font-semibold text-slate-300">📊 Realtime Poll</h2>
+                <p className="text-[11px] text-slate-500">
+                  {pollStarted ? `第 ${currentPage?.page_number ?? '-'} 頁投票中` : '尚未開始，不顯示結果'}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => void handleCreatePoll()}
-                  disabled={pollBusy || !currentPage}
-                  className="mt-2 w-full rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-xs text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                  onClick={() => setPollSettingsOpen((v) => !v)}
+                  className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
                 >
-                  {pollBusy ? '處理中…' : '建立本頁投票'}
+                  {pollSettingsOpen ? '收合設定' : '設定'}
                 </button>
-                {pollError ? <p className="mt-2 text-xs text-rose-300">{pollError}</p> : null}
+                {pollStarted ? (
+                  <button
+                    type="button"
+                    onClick={handleStopPoll}
+                    className="rounded-md border border-rose-500/50 bg-rose-500/10 px-2 py-1 text-xs text-rose-200 hover:bg-rose-500/20"
+                  >
+                    結束
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleStartPoll}
+                    disabled={!currentPage}
+                    className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-2 py-1 text-xs text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    開始
+                  </button>
+                )}
               </div>
-
-              {pagePolls.length === 0 ? (
-                <div className="rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2 text-xs text-slate-500">
-                  本頁尚無投票。
-                </div>
-              ) : (
-                pagePolls.map((poll) => (
-                  <div key={poll.id} className="rounded-md border border-slate-800 bg-slate-950/50 p-3">
-                    <div className="mb-2 flex items-start justify-between gap-2">
-                      <h3 className="text-sm font-medium text-slate-200">{poll.question}</h3>
-                      <span className="shrink-0 rounded-full border border-slate-700 px-2 py-0.5 text-[10px] text-slate-400">
-                        {poll.total_votes} 票
-                      </span>
-                    </div>
-                    <div className="space-y-2">
-                      {poll.options.map((option, idx) => {
-                        const ratio = poll.total_votes > 0 ? Math.round((option.votes / poll.total_votes) * 100) : 0;
-                        const selected = pollVotes[poll.id] === idx;
-                        return (
-                          <button
-                            key={`${poll.id}-${idx}`}
-                            type="button"
-                            onClick={() => void handleVotePoll(poll.id, idx)}
-                            disabled={pollBusy || !poll.is_active}
-                            className={`w-full rounded-md border px-3 py-2 text-left text-xs transition ${selected ? 'border-emerald-400 bg-emerald-500/15 text-emerald-100' : 'border-slate-700 bg-slate-900/70 text-slate-200 hover:bg-slate-800'} disabled:cursor-not-allowed disabled:opacity-60`}
-                          >
-                            <div className="mb-1 flex items-center justify-between gap-2">
-                              <span>{option.text}</span>
-                              <span className="font-mono text-slate-400">{option.votes} · {ratio}%</span>
-                            </div>
-                            <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
-                              <div className="h-full rounded-full bg-cyan-400" style={{ width: `${ratio}%` }} />
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))
-              )}
             </div>
+            {(pollSettingsOpen || pollStarted || pollError) && (
+              <div className="space-y-2 border-t border-slate-800 p-2">
+                {pollSettingsOpen && (
+                  <div className="rounded-md border border-slate-800 bg-slate-950/50 p-2">
+                    <input
+                      value={pollQuestion}
+                      onChange={(e) => setPollQuestion(e.target.value)}
+                      maxLength={300}
+                      placeholder="輸入投票問題"
+                      className="mb-2 w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 outline-none ring-cyan-500/40 placeholder:text-slate-500 focus:ring"
+                    />
+                    <textarea
+                      value={pollOptionsText}
+                      onChange={(e) => setPollOptionsText(e.target.value)}
+                      rows={2}
+                      placeholder="每行一個答案選項"
+                      className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 outline-none ring-cyan-500/40 placeholder:text-slate-500 focus:ring"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void handleCreatePoll()}
+                      disabled={pollBusy || !currentPage}
+                      className="mt-2 w-full rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-xs text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {pollBusy ? '處理中…' : '建立並開始本頁投票'}
+                    </button>
+                  </div>
+                )}
+                {pollError ? <p className="text-xs text-rose-300">{pollError}</p> : null}
+
+                {pollStarted && (
+                  <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
+                    {pagePolls.length === 0 ? (
+                      <div className="rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1.5 text-xs text-slate-500">
+                        已開始輪詢，本頁尚無投票。
+                      </div>
+                    ) : (
+                      pagePolls.map((poll) => (
+                        <div key={poll.id} className="rounded-md border border-slate-800 bg-slate-950/50 p-2">
+                          <div className="mb-1 flex items-start justify-between gap-2">
+                            <h3 className="text-xs font-medium text-slate-200">{poll.question}</h3>
+                            <span className="shrink-0 rounded-full border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-400">
+                              {poll.total_votes} 票
+                            </span>
+                          </div>
+                          <div className="space-y-1.5">
+                            {poll.options.map((option, idx) => {
+                              const ratio = poll.total_votes > 0 ? Math.round((option.votes / poll.total_votes) * 100) : 0;
+                              const selected = pollVotes[poll.id] === idx;
+                              return (
+                                <button
+                                  key={`${poll.id}-${idx}`}
+                                  type="button"
+                                  onClick={() => void handleVotePoll(poll.id, idx)}
+                                  disabled={pollBusy || !poll.is_active}
+                                  className={`w-full rounded-md border px-2 py-1.5 text-left text-xs transition ${selected ? 'border-emerald-400 bg-emerald-500/15 text-emerald-100' : 'border-slate-700 bg-slate-900/70 text-slate-200 hover:bg-slate-800'} disabled:cursor-not-allowed disabled:opacity-60`}
+                                >
+                                  <div className="mb-1 flex items-center justify-between gap-2">
+                                    <span className="truncate">{option.text}</span>
+                                    <span className="font-mono text-[10px] text-slate-400">{option.votes} · {ratio}%</span>
+                                  </div>
+                                  <div className="h-1 overflow-hidden rounded-full bg-slate-800">
+                                    <div className="h-full rounded-full bg-cyan-400" style={{ width: `${ratio}%` }} />
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </section>
 
           <section className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-lg border border-slate-800 bg-slate-900/40">
