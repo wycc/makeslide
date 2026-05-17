@@ -25,6 +25,7 @@ import {
   regeneratePageAudio,
   rollbackRegenerate,
   startRegenerateJob,
+  updatePdfCoverFromPage,
   updatePdfImageStyleSettings,
   updatePdfTtsSettings,
   updatePdfPrompt,
@@ -1157,6 +1158,24 @@ export default function PlayPage() {
     [pdfId, currentPage, reloadDetail],
   );
 
+  const handleUpdateCoverFromCurrentPage = useCallback(async () => {
+    if (!pdfId || !currentPage) return;
+    if (!currentPage.image_url) {
+      setSlideError('目前頁沒有可用圖片，無法更新封面');
+      return;
+    }
+    setSlideBusy(true);
+    setSlideError(null);
+    try {
+      await updatePdfCoverFromPage(pdfId, currentPage.page_number);
+      await reloadDetail();
+    } catch (err) {
+      setSlideError(err instanceof ApiError ? err.message : '更新封面失敗');
+    } finally {
+      setSlideBusy(false);
+    }
+  }, [pdfId, currentPage, reloadDetail]);
+
   const handleRegenerateImageWithPrompt = useCallback(async () => {
     if (!pdfId || !currentPage) return;
     const trimmed = chatInput.trim() || '保留版型，讓文字更清晰、重點更聚焦';
@@ -2095,6 +2114,15 @@ export default function PlayPage() {
                 className="w-full rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-xs text-cyan-200 disabled:opacity-40"
               >
                 取代目前頁圖片（可拖放/貼上）
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleUpdateCoverFromCurrentPage()}
+                disabled={slideBusy || !currentPage?.image_url}
+                className="mt-2 w-full rounded-md border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-xs text-amber-200 hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                title="將首頁列表封面更新為目前選取頁面的圖片"
+              >
+                將目前頁設為封面
               </button>
             </div>
           </section>
