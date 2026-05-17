@@ -174,6 +174,40 @@ test('DELETE /api/pdfs/:id/pages/:n should succeed even when some artifact files
   await app.close();
 });
 
+test('DELETE /api/pdfs/:id/pages/:n should cancel running artifact timing for deleted page', async () => {
+  seedReadyPdfFor(PDF_ID, 4);
+  const startedAt = nowIso();
+  const runId = 'delete-page-running-image-test';
+  db.prepare(
+    `INSERT INTO pipeline_runs
+       (id, pdf_id, run_type, parent_run_id, triggered_by, status, attempt, started_at, created_at, updated_at)
+     VALUES (?, ?, 'regenerate', NULL, 'test', 'running', 1, ?, ?, ?)`,
+  ).run(runId, PDF_ID, startedAt, startedAt, startedAt);
+  db.prepare(
+    `INSERT INTO page_artifact_timings
+       (pdf_id, page_number, artifact, run_id, attempt, reason, status, started_at, ended_at, duration_ms, sla_target_ms, sla_status, output_path, error_code, error_message, updated_at)
+     VALUES (?, 2, 'image', ?, 1, 'regenerate', 'running', ?, NULL, NULL, 30000, 'unknown', NULL, NULL, NULL, ?)`,
+  ).run(PDF_ID, runId, startedAt, startedAt);
+
+  const app = await buildApp();
+  const resp = await app.inject({
+    method: 'DELETE',
+    url: `/api/pdfs/${PDF_ID}/pages/2`,
+  });
+  assert.equal(resp.statusCode, 200);
+
+  const timing = db
+    .prepare(`SELECT status, ended_at, error_code, error_message FROM page_artifact_timings WHERE pdf_id = ? AND page_number = 2 AND artifact = 'image'`)
+    .get(PDF_ID) as { status: string; ended_at: string | null; error_code: string | null; error_message: string | null };
+  assert.equal(timing.status, 'canceled');
+  assert.equal(typeof timing.ended_at, 'string');
+  assert.equal(timing.error_code, 'PAGE_DELETED');
+  assert.match(timing.error_message ?? '', /deleted/);
+  assertDeckAligned(PDF_ID);
+
+  await app.close();
+});
+
 test('DELETE /api/pdfs/:id/pages/:n should remove page by script content and compact correctly', async () => {
   seedReadyPdfFor(PDF_ID, 5);
   const app = await buildApp();
