@@ -87,6 +87,30 @@ export async function setOpenAIApiKey(apiKey: string): Promise<{ ok: boolean; ha
   return (await resp.json()) as { ok: boolean; has_key: boolean };
 }
 
+export interface AuthStatus {
+  google_enabled: boolean;
+  authenticated: boolean;
+  user: null | {
+    provider: 'google';
+    sub: string;
+    email: string;
+    name?: string;
+    picture?: string;
+  };
+}
+
+export async function getAuthStatus(): Promise<AuthStatus> {
+  const resp = await fetch('api/auth/status');
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as AuthStatus;
+}
+
+export async function logoutAuth(): Promise<{ ok: boolean }> {
+  const resp = await fetch('api/auth/logout', { method: 'POST' });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { ok: boolean };
+}
+
 export interface ObservabilityStatusCount {
   status: string;
   count: number;
