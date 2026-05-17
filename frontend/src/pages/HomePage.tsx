@@ -262,6 +262,10 @@ export default function HomePage() {
         openPromptFor(pdf);
         return;
       }
+      if (pdf.status === 'uploaded' || pdf.status === 'processing') {
+        navigate(`/play/${pdf.id}`);
+        return;
+      }
       if (pdf.status !== 'ready') {
         if (pdf.status === 'failed') {
           void (async () => {
@@ -281,7 +285,7 @@ export default function HomePage() {
       }
       navigate(`/play/${pdf.id}`);
     },
-    [navigate, openPromptFor, showToast],
+    [navigate, openPromptFor, showToast, load],
   );
 
   return (
