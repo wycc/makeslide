@@ -69,7 +69,7 @@
 - 驗證：grep -n "\\[ \\]" PendingTask.md || true；git diff --check；git show --stat --oneline HEAD
 
 # Second Batch
-[ ] 將取代目前頁圖片的按鍵去掉，我們己經可以可以直接拖到圖片上，不需要這個區域。
+[x] 將取代目前頁圖片的按鍵去掉，我們己經可以可以直接拖到圖片上，不需要這個區域。（完成分支：feature/remove-replace-current-page-image-button）
 [ ] 在問答頁上加上一個放大縮小的按鍵，讓我們可以讓問答的區塊佔整個右邊。
 [ ] 在手機模式上，把標題縮小一點讓返回按鍵可以顯示在一行上。
 [ ] 在手機模式上，把播放的進度列中進度條縮短一些讓後線長度可以完整顯示。
@@ -93,4 +93,9 @@
 - 時間：2026-05-18 04:00（Asia/Taipei）
 - 工作內容：完成「把顯示類別的選擇記下來，回到首頁時會顯示之前的設定」，首頁顯示類別選擇會寫入瀏覽器 localStorage，重新進入首頁時自動套用上次選擇；若刪除目前選取的類別，會同步回復並記錄為全部類別。
 - 所在分支：feature/persist-home-category-filter
+- 驗證：npm --prefix frontend run build
+
+- 時間：2026-05-18 04:10（Asia/Taipei）
+- 工作內容：完成「將取代目前頁圖片的按鍵去掉」，移除播放頁投影片管理區底部的「取代目前頁圖片（可拖放/貼上）」檔案選擇按鈕與專用隱藏 input，保留既有拖放與貼上圖片取代流程。
+- 所在分支：feature/remove-replace-current-page-image-button
 - 驗證：npm --prefix frontend run build
