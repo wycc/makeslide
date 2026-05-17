@@ -80,7 +80,7 @@
 [x] 加上上課模式，每撥放一頁就停下來。讓老師講解。（完成分支：feature/classroom-pause-after-each-page）
 [ ] 加上使用 google 帳號的功能
 [ ] API key 和一些整體設定要存在帳號中，例如 .env。每一個帳號會在一個單獨的目錄中，
-[ ] 當帳號的 credit 用完時，要顯示錯誤對話框提示使用者去充值。
+[x] 當帳號的 credit 用完時，要顯示錯誤對話框提示使用者去充值。（完成分支：feature/credit-exhausted-dialog）
 [ ] 使用語音產生 realtime poll
 
 ## 工作記錄
@@ -129,3 +129,8 @@
 - 工作內容：完成「加上自動出考題功能」，後端新增本頁考題生成 API，依頁面文字與逐字稿用 AI 產生單選或多選題；播放頁新增自動出題面板，可輸入出題提示，生成後可直接手工微調題目、選項、正確答案與解析。
 - 所在分支：feature/auto-quiz-generation
 - 驗證：npm --prefix backend run build && npm --prefix frontend run build && git diff --check
+
+- 時間：2026-05-18 05:20（Asia/Taipei）
+- 工作內容：完成「當帳號的 credit 用完時，要顯示錯誤對話框提示使用者去充值」，前端 API 錯誤解析會辨識 credit/quota 類錯誤碼並發出全站事件，App 掛載 credit 用盡對話框，提示使用者前往設定或充值/更新付款方式後再重試。
+- 所在分支：feature/credit-exhausted-dialog
+- 驗證：npm --prefix frontend run build && git diff --check
