@@ -71,6 +71,7 @@ export interface RegenStepProgress {
   status: RegenStepStatus;
   total: number;
   completed: number;
+  eta_seconds: number | null;
   error: string | null;
   started_at: string | null;
   finished_at: string | null;
@@ -92,6 +93,8 @@ export interface RegenJobState {
   cancel_requested: boolean;
   last_processed_page: number | null;
   last_generated_page: number | null;
+  eta_seconds: number | null;
+  estimated_completion_at: string | null;
   // NEW: 快照與還原
   snapshot_id: string | null;
   rollback_available: boolean;
@@ -175,6 +178,34 @@ function readPersistedRegenerateJob(pdfId: string): RegenJobState | null {
 function setStateUpdated(state: RegenJobState, updatedAt = nowIso()): void {
   state.updated_at = updatedAt;
   persistRegenerateJob(state);
+}
+
+function calculateStepEtaSeconds(step: RegenStepProgress, nowMs = Date.now()): number | null {
+  if (!step.started_at || step.total <= 0 || step.completed <= 0 || step.completed >= step.total) {
+    return null;
+  }
+  const startedMs = Date.parse(step.started_at);
+  if (!Number.isFinite(startedMs) || nowMs <= startedMs) return null;
+  const elapsedSeconds = (nowMs - startedMs) / 1000;
+  const secondsPerUnit = elapsedSeconds / step.completed;
+  return Math.max(1, Math.ceil(secondsPerUnit * (step.total - step.completed)));
+}
+
+function refreshJobEta(state: RegenJobState, nowMs = Date.now()): void {
+  for (const step of state.steps) {
+    step.eta_seconds = step.status === 'running' ? calculateStepEtaSeconds(step, nowMs) : null;
+  }
+
+  const currentStep = state.steps.find((step) => step.status === 'running') ?? null;
+  const currentEta = currentStep?.eta_seconds ?? null;
+  state.eta_seconds = currentEta;
+  state.estimated_completion_at =
+    currentEta != null ? new Date(nowMs + currentEta * 1000).toISOString() : null;
+}
+
+function updateStateProgress(state: RegenJobState, updatedAt = nowIso()): void {
+  refreshJobEta(state, Date.parse(updatedAt));
+  setStateUpdated(state, updatedAt);
 }
 
 export function getRegenerateJob(pdfId: string): RegenJobState | null {
@@ -595,6 +626,7 @@ export function startRegenerateJob(
       status: 'pending',
       total: pageCount,
       completed: 0,
+      eta_seconds: null,
       error: null,
       started_at: null,
       finished_at: null,
@@ -610,6 +642,8 @@ export function startRegenerateJob(
     cancel_requested: false,
     last_processed_page: null,
     last_generated_page: null,
+    eta_seconds: null,
+    estimated_completion_at: null,
     snapshot_id: null,
     rollback_available: false,
     timing_run_id: null,
@@ -681,7 +715,7 @@ async function runJob(
       step.status = 'running';
       step.started_at = nowIso();
       step.completed = 0;
-      setStateUpdated(state);
+      updateStateProgress(state);
 
       try {
         const timingStage = startStage(
@@ -698,17 +732,20 @@ async function runJob(
         }
         finishStage(timingStage, 'succeeded', { completed: step.completed, total: step.total });
         step.status = 'completed';
+        step.eta_seconds = null;
         step.finished_at = nowIso();
       } catch (err) {
         const code = (err as Error & { code?: string }).code;
         if (code === 'CANCELLED' || state.cancel_requested) {
           step.status = 'cancelled';
           step.error = null;
+          step.eta_seconds = null;
           step.finished_at = nowIso();
           throw makeCancelledError();
         }
         step.status = 'failed';
         step.error = err instanceof Error ? err.message : String(err);
+        step.eta_seconds = null;
         step.finished_at = nowIso();
         finishStage(
           startStage(
@@ -728,6 +765,8 @@ async function runJob(
 
     state.current_step = null;
     state.status = 'completed';
+    state.eta_seconds = null;
+    state.estimated_completion_at = null;
     state.finished_at = nowIso();
     state.message = '重生完成';
     setStateUpdated(state);
@@ -774,7 +813,7 @@ function markPageProgress(
   step.completed = done;
   state.last_processed_page = pageNumber;
   state.last_generated_page = pageNumber;
-  setStateUpdated(state);
+  updateStateProgress(state);
 }
 
 function isRetryableOpenAIError(err: unknown): boolean {
