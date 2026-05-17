@@ -5,45 +5,44 @@
 - [x] #1 拆分超大路由模組（優先級：P0；難度：中）
 - [x] #2 Pipeline 階段事件標準化與 SLA 追蹤（優先級：P0；難度：中；分支：feature/pipeline-stage-sla-tracking）
 - [x] #3 Regenerate 狀態持久化（優先級：P0；難度：中；分支：feature/regenerate-state-persistence）
-- [x] #4 播放頁模組化（優先級：P0；難度：高；分支：feature/playpage-modularization）
+- [x] #4 播放頁模組化（優先級：P0；難度：高；分支：feature/playpage-modularization；追蹤同步分支：feature/pendingtask-playpage-modularization-sync）
 - [x] #5 前端 API client 分域拆分（優先級：P1；難度：中；分支：feature/frontend-api-domain-split）
-- [ ] #6 狀態機單一來源（優先級：P0；難度：中）
+- [x] #6 狀態機單一來源（優先級：P0；難度：中；分支：feature/status-machine-single-source）
 - [x] #7 錯誤碼字典 + 前端可行動提示（優先級：P1；難度：低）
 - [x] #8 任務取消語義一致化（優先級：P1；難度：中；分支：feature/task-cancel-semantics）
 - [x] #9 長任務進度 + ETA（優先級：P1；難度：中；分支：feature/long-task-progress-eta）
 - [x] #10 靜態資源版本指紋與快取策略（優先級：P1；難度：中；分支：feature/static-asset-cache-policy-v2）
 - [x] #11 輸入防護與內容資安強化（優先級：P0；難度：中；分支：feature/input-security-hardening）
-- [ ] #12 可觀測性儀表（成功率/失敗率/成本）（優先級：P1；難度：中）
+- [x] #12 可觀測性儀表（成功率/失敗率/成本）（優先級：P1；難度：中；分支：feature/observability-dashboard）
 - [x] #13 測試矩陣補強（重生/回滾/頁面操作）（優先級：P0；難度：中）
 - [x] #14 文件對齊實作現況（優先級：P1；難度：低）
-- [ ] #15 Queue 抽象層（為分散式擴充預備）（優先級：P2；難度：高）
+- [x] #15 Queue 抽象層（為分散式擴充預備）（優先級：P2；難度：高；分支：feature/queue-abstraction）
 - [x] #16 新手導引與失敗復原 UX（優先級：P2；難度：低）
 
 ## 已完成摘要
 
-已完成 13 項改善項目：
+已完成 16 項改善項目：
 
 - #1 拆分超大路由模組
 - #2 Pipeline 階段事件標準化與 SLA 追蹤（分支：feature/pipeline-stage-sla-tracking）
 - #3 Regenerate 狀態持久化（分支：feature/regenerate-state-persistence）
-- #4 播放頁模組化（分支：feature/playpage-modularization）
+- #4 播放頁模組化（分支：feature/playpage-modularization；追蹤同步分支：feature/pendingtask-playpage-modularization-sync）
+- #6 狀態機單一來源（分支：feature/status-machine-single-source）
 - #5 前端 API client 分域拆分（分支：feature/frontend-api-domain-split）
 - #7 錯誤碼字典 + 前端可行動提示
 - #10 靜態資源版本指紋與快取策略（分支：feature/static-asset-cache-policy-v2）
 - #8 任務取消語義一致化（分支：feature/task-cancel-semantics）
 - #9 長任務進度 + ETA（分支：feature/long-task-progress-eta）
 - #11 輸入防護與內容資安強化（分支：feature/input-security-hardening）
+- #12 可觀測性儀表（成功率/失敗率/成本）（分支：feature/observability-dashboard）
 - #13 測試矩陣補強（重生/回滾/頁面操作）
 - #14 文件對齊實作現況
+- #15 Queue 抽象層（為分散式擴充預備）（分支：feature/queue-abstraction）
 - #16 新手導引與失敗復原 UX
 
 ## 後續建議順序
 
-依優先級 P0 → P1 → P2 排序，建議後續處理順序如下：
-
-1. #6 狀態機單一來源（P0；中）
-2. #12 可觀測性儀表（成功率/失敗率/成本）（P1；中）
-3. #15 Queue 抽象層（為分散式擴充預備）（P2；高）
+目前所有改善項目皆已完成，後續可依新需求新增下一階段工作。
 
 ## 工作記錄
 
@@ -56,3 +55,4 @@
 - 2026-05-17 15:46 Asia/Taipei：完成 #8 任務取消語義一致化後續收斂。新增取消完成收斂 helper，確保 cancelled 任務清空 current_step、running 步驟標為 cancelled、pending 步驟標為 skipped，取消等待訊息依是否已有 current_step 顯示不同安全停止點提示；補上 regenerate matrix 測試驗證最終取消狀態不殘留 running/pending 步驟與持久化狀態一致。所在分支：feature/task-cancel-semantics。
 - 2026-05-17 15:53 Asia/Taipei：完成 #9 長任務進度 + ETA。重生任務狀態新增整體 eta_seconds、estimated_completion_at 與每步 eta_seconds，依目前步驟已完成頁數與耗時推估剩餘秒數並持久化；播放頁重生進度區塊顯示預估剩餘時間、預計完成時間與目前步驟 ETA；已執行後端 typecheck、前端 typecheck 與前端 production build 驗證。所在分支：feature/long-task-progress-eta。
 - 2026-05-17 20:15 Asia/Taipei：完成 #4 播放頁模組化追蹤清單收斂。依 TODO.md 中既有完成記錄，將 PendingTask.md 的 #4 標記完成、補上完成分支、更新已完成摘要與後續建議順序，使待辦追蹤文件與 master TODO.md 對齊。所在分支：feature/pendingtask-playpage-modularization-sync。
+- 2026-05-17 20:19 Asia/Taipei：完成追蹤清單同步。依 TODO.md 已完成紀錄，將 #4 播放頁模組化、#6 狀態機單一來源、#12 可觀測性儀表與 #15 Queue 抽象層補上完成狀態與分支資訊，並更新已完成摘要與後續建議順序。所在分支：feature/pendingtask-completed-items-sync。
