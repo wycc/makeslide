@@ -178,6 +178,14 @@ export default function HomePage() {
         showToast('general 類別不可刪除');
         return;
       }
+      const hasProcessingItem = items.some((pdf) => {
+        const pdfCategory = pdf.category?.trim() || DEFAULT_CATEGORY;
+        return pdfCategory === category && (pdf.status === 'uploaded' || pdf.status === 'processing');
+      });
+      if (hasProcessingItem) {
+        showToast('此類別仍有簡報產生中，暫時不可刪除');
+        return;
+      }
       const ok = window.confirm(`刪除類別「${category}」？此類別中的簡報會移到 general。`);
       if (!ok) return;
       try {
@@ -190,7 +198,7 @@ export default function HomePage() {
         showToast(`刪除類別失敗：${msg}`);
       }
     },
-    [showToast],
+    [items, showToast],
   );
 
   const openPromptFor = useCallback((pdf: PdfListItem | UploadResponse) => {

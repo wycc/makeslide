@@ -40,6 +40,7 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onCate
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDuplicating, setIsDuplicating] = useState(false);
   const [isChangingCategory, setIsChangingCategory] = useState(false);
+  const isProcessing = pdf.status === 'uploaded' || pdf.status === 'processing';
 
   const progressTotal = pdf.progress_total ?? 0;
   const progressCurrentRaw = pdf.progress_current ?? 0;
@@ -61,7 +62,7 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onCate
 
   const handleDelete = async (ev: React.MouseEvent) => {
     ev.stopPropagation();
-    if (isDeleting) return;
+    if (isProcessing || isDeleting) return;
     const ok = window.confirm(`確定刪除「${pdf.title ?? pdf.id}」？此動作無法復原。`);
     if (!ok) return;
     setIsDeleting(true);
@@ -78,7 +79,7 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onCate
 
   const handleDuplicate = async (ev: React.MouseEvent) => {
     ev.stopPropagation();
-    if (isDuplicating) return;
+    if (isProcessing || isDuplicating) return;
     setIsDuplicating(true);
     try {
       await onDuplicate(pdf.id);
@@ -89,6 +90,7 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onCate
 
   const handleCategoryChange = async (ev: React.ChangeEvent<HTMLSelectElement>) => {
     ev.stopPropagation();
+    if (isProcessing) return;
     const value = ev.target.value;
     let nextCategory = value;
     if (value === '__new__') {
@@ -178,7 +180,8 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onCate
           <select
             value={pdf.category?.trim() || 'general'}
             onChange={handleCategoryChange}
-            disabled={isChangingCategory}
+            disabled={isProcessing || isChangingCategory}
+            title={isProcessing ? '產生過程中暫停更改類別' : undefined}
             className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-200 outline-none transition hover:border-slate-500 disabled:opacity-60"
           >
             {categories.map((category) => (
@@ -225,7 +228,8 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onCate
             <button
               type="button"
               onClick={handleDuplicate}
-              disabled={isDuplicating}
+              disabled={isProcessing || isDuplicating}
+              title={isProcessing ? '產生過程中暫停複製' : undefined}
               className="rounded-md border border-cyan-500/40 px-2 py-1 text-xs text-cyan-300 transition hover:bg-cyan-500/10 disabled:opacity-50"
             >
               {isDuplicating ? '複製中…' : '複製'}
@@ -233,7 +237,8 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onCate
             <button
               type="button"
               onClick={handleDelete}
-              disabled={isDeleting}
+              disabled={isProcessing || isDeleting}
+              title={isProcessing ? '產生過程中暫停刪除' : undefined}
               className="rounded-md border border-rose-500/40 px-2 py-1 text-xs text-rose-300 transition hover:bg-rose-500/10 disabled:opacity-50"
             >
               {isDeleting ? '刪除中…' : '刪除'}

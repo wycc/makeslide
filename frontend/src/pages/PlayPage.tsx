@@ -2103,17 +2103,32 @@ export default function PlayPage() {
                   >
                     ↕
                   </button>
-                  {(p.thumbnail_url ?? p.image_url) ? (
+                  {(() => {
+                    const thumbSrc = isReadOnlyProcessing
+                      ? p.image_url
+                      : (p.thumbnail_url ?? p.image_url);
+                    return thumbSrc ? (
                     <img
-                      src={withImageBust(p.thumbnail_url ?? p.image_url) ?? (p.thumbnail_url ?? p.image_url) ?? ''}
+                      src={withImageBust(thumbSrc) ?? thumbSrc}
                       alt={`第 ${p.page_number} 頁縮圖`}
                       className="h-14 w-full object-cover"
+                      onError={(e) => {
+                        const img = e.currentTarget;
+                        const fallback = p.image_url;
+                        if (!fallback || img.dataset.fallbackApplied === 'true') {
+                          img.style.display = 'none';
+                          return;
+                        }
+                        img.dataset.fallbackApplied = 'true';
+                        img.src = withImageBust(fallback) ?? fallback;
+                      }}
                     />
-                  ) : (
+                    ) : (
                     <div className="flex h-14 w-full items-center justify-center bg-slate-800 text-[10px] text-slate-400">
                       無圖片
                     </div>
-                  )}
+                    );
+                  })()}
                 </div>
               ))}
             </div>
