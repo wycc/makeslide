@@ -6,7 +6,7 @@
       "mode": "code",
       "taskInstructions": "檢查 PendingTask.md 的內容，選擇一個尚未完成的工作，將他完成並存在一個單獨的分支中。完成後要回來更新 PendingTask 的內容，並記錄存在那一個分支中。並在文件最後新增工作記錄，包括工作內容時間和所在分支。",
       "scheduleType": "time",
-      "timeInterval": "1",
+      "timeInterval": "10",
       "timeUnit": "minute",
       "selectedDays": {
         "sun": true,
@@ -27,13 +27,13 @@
       "active": true,
       "taskInteraction": "wait",
       "inactivityDelay": "1",
-      "lastExecutionTime": "2026-05-17T03:21:01.159Z",
+      "lastExecutionTime": "2026-05-17T03:26:00.585Z",
       "lastSkippedTime": "2026-05-17T03:25:00.162Z",
-      "lastTaskId": "019e33f3-91e5-72bf-b2b1-4f78c900aa95",
-      "nextExecutionTime": "2026-05-17T03:26:00.162Z",
+      "lastTaskId": "019e33f8-2388-707e-a58a-64e9d61efec1",
+      "nextExecutionTime": "2026-05-17T03:36:00.585Z",
       "modeDisplayName": "Code",
       "createdAt": "2026-05-17T02:21:04.374Z",
-      "updatedAt": "2026-05-17T03:09:22.956Z"
+      "updatedAt": "2026-05-17T03:26:28.602Z"
     }
   ]
 }
