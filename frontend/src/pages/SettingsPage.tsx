@@ -113,9 +113,14 @@ export default function SettingsPage() {
       <header className="border-b border-slate-800 bg-slate-900/40 backdrop-blur">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-4">
           <h1 className="text-lg font-semibold">AI 設定（OpenAI / Gemini）</h1>
-          <Link className="text-sm text-slate-300 hover:text-white" to="/">
-            返回首頁
-          </Link>
+          <div className="flex items-center gap-3 text-sm">
+            <Link className="text-slate-300 hover:text-white" to="/system">
+              系統儀表
+            </Link>
+            <Link className="text-slate-300 hover:text-white" to="/">
+              返回首頁
+            </Link>
+          </div>
         </div>
       </header>
       <main className="mx-auto max-w-3xl px-4 py-6">

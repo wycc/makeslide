@@ -5,6 +5,7 @@ import { registerPageOperationsRoutes } from './page-operations';
 import { registerRegenerateRoutes } from './regenerate';
 import { registerAdminRoutes } from './admin';
 import { registerDeleteRoutes } from './delete';
+import { registerObservabilityRoutes } from './observability';
 
 export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerUploadRoutes(app);
@@ -13,4 +14,5 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerPageOperationsRoutes(app);
   await registerRegenerateRoutes(app);
   await registerAdminRoutes(app);
+  await registerObservabilityRoutes(app);
 }
