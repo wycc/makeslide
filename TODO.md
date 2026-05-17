@@ -4,6 +4,7 @@
 [x] 加上從提示詞生成的功能，使用者只提供一個提示詞說明要產生的內容，會先生成 TXT 需要的文字，再使用原 TXT 上傳的流程產生完整簡報（完成分支：feature/prompt-to-text-import）
 [x] 加上教學互動功能（完成分支：feature/realtime-poll）
     [x] 可以在特定畫面加上 realtime poll 的功能，可以加上一個問題，在螢幕上顯示問題和幾個可能的答案。讓所有在同一個頁面的使用者都可以選擇答案。（完成分支：feature/realtime-poll）
+[x] 完成 PendingTask.md #12 可觀測性儀表（成功率/失敗率/成本）（完成分支：feature/observability-dashboard）
 
 ## 工作記錄
 - 時間：2026-05-17 16:10（Asia/Taipei）
@@ -29,4 +30,9 @@
 - 時間：2026-05-17 17:13（Asia/Taipei）
 - 工作內容：完成「加上教學互動功能」中的 realtime poll，後端新增每頁投票與投票紀錄資料表/API，播放頁可為目前頁建立投票問題與多個答案選項，同頁使用者可選擇答案並透過輪詢看到即時票數與比例。
 - 所在分支：feature/realtime-poll
+- 驗證：npm --prefix backend run build && npm --prefix frontend run build
+
+- 時間：2026-05-17 17:24（Asia/Taipei）
+- 工作內容：完成 PendingTask.md #12「可觀測性儀表（成功率/失敗率/成本）」，新增後端 /api/system/observability 統計簡報成功率/失敗率、pipeline run 狀態、stage/artifact 分布與 LLM token/估算成本，前端新增 /system 系統可觀測性儀表頁與設定頁入口。
+- 所在分支：feature/observability-dashboard
 - 驗證：npm --prefix backend run build && npm --prefix frontend run build
