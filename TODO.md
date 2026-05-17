@@ -5,6 +5,7 @@
 [x] 加上教學互動功能（完成分支：feature/realtime-poll）
     [x] 可以在特定畫面加上 realtime poll 的功能，可以加上一個問題，在螢幕上顯示問題和幾個可能的答案。讓所有在同一個頁面的使用者都可以選擇答案。（完成分支：feature/realtime-poll）
 [x] 完成 PendingTask.md #12 可觀測性儀表（成功率/失敗率/成本）（完成分支：feature/observability-dashboard）
+[x] 完成 PendingTask.md #6 狀態機單一來源（完成分支：feature/status-machine-single-source）
 
 ## 工作記錄
 - 時間：2026-05-17 16:10（Asia/Taipei）
@@ -36,3 +37,8 @@
 - 工作內容：完成 PendingTask.md #12「可觀測性儀表（成功率/失敗率/成本）」，新增後端 /api/system/observability 統計簡報成功率/失敗率、pipeline run 狀態、stage/artifact 分布與 LLM token/估算成本，前端新增 /system 系統可觀測性儀表頁與設定頁入口。
 - 所在分支：feature/observability-dashboard
 - 驗證：npm --prefix backend run build && npm --prefix frontend run build
+
+- 時間：2026-05-17 17:33（Asia/Taipei）
+- 工作內容：完成 PendingTask.md #6「狀態機單一來源」，新增後端 lifecycle status 單一來源模組，集中定義 PDF/Page 狀態、進度步驟、狀態辨識與轉換規則；後端型別改由該模組匯出，資料庫啟動遷移會依單一來源清單正規化非法 PDF/Page 狀態，並補上狀態機與正規化測試。
+- 所在分支：feature/status-machine-single-source
+- 驗證：cd backend && ../scripts/with-node-env.sh npx tsx --test ./test/status-machine.test.ts && cd .. && npm --prefix backend run build；npm --prefix backend test -- status-machine.test.ts（失敗：專案測試腳本會先執行全部 backend/test/*.test.ts，既有 pages-api 測試仍預期 pages/*.png，但目前實際為 pages/*.jpg）
