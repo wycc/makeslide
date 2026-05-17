@@ -1,7 +1,8 @@
+# First Batch
 [x] (merge)首次流程導引應該只有在列表是空的時候才出現。（完成分支：feature/onboarding-empty-list-only）
 [x] (merge)在PlayPage 中加入更新封面的按鍵，將封面更新為目前頁目的圖片（完成分支：feature/update-cover-from-current-page）
-[x] 產生的過程中也允許進入 PlayPage, 可以流覽內容，播放音檔。但所有更改和生成的功能都要禁用（完成分支：feature/playpage-readonly-while-processing）
-[x] 加上從提示詞生成的功能，使用者只提供一個提示詞說明要產生的內容，會先生成 TXT 需要的文字，再使用原 TXT 上傳的流程產生完整簡報（完成分支：feature/prompt-to-text-import）
+[x] (merge)產生的過程中也允許進入 PlayPage, 可以流覽內容，播放音檔。但所有更改和生成的功能都要禁用（完成分支：feature/playpage-readonly-while-processing）
+[x] (merge)加上從提示詞生成的功能，使用者只提供一個提示詞說明要產生的內容，會先生成 TXT 需要的文字，再使用原 TXT 上傳的流程產生完整簡報（完成分支：feature/prompt-to-text-import）
 [x] 加上教學互動功能（完成分支：feature/realtime-poll）
     [x] 可以在特定畫面加上 realtime poll 的功能，可以加上一個問題，在螢幕上顯示問題和幾個可能的答案。讓所有在同一個頁面的使用者都可以選擇答案。（完成分支：feature/realtime-poll）
 [x] 完成 PendingTask.md #12 可觀測性儀表（成功率/失敗率/成本）（完成分支：feature/observability-dashboard）
@@ -66,3 +67,25 @@
 - 工作內容：完成 PendingTask.md 已完成項目追蹤清單同步，依 TODO.md 既有完成記錄將 PendingTask.md 的 #4、#6、#12、#15 標記完成、補上完成分支、更新已完成摘要與後續建議順序，讓追蹤清單反映所有改善項目皆已完成。
 - 所在分支：feature/pendingtask-completed-items-sync
 - 驗證：grep -n "\\[ \\]" PendingTask.md || true；git diff --check；git show --stat --oneline HEAD
+
+# Second Batch
+[ ] 將取代目前頁圖片的按鍵去掉，我們己經可以可以直接拖到圖片上，不需要這個區域。
+[ ] 在問答頁上加上一個放大縮小的按鍵，讓我們可以讓問答的區塊佔整個右邊。
+[ ] 在手機模式上，把標題縮小一點讓返回按鍵可以顯示在一行上。
+[ ] 在手機模式上，把播放的進度列中進度條縮短一些讓後線長度可以完整顯示。
+[ ] 把顯示類別的選擇記下來，回到首頁時會顯示之前的設定
+[x] 把左上角的名稱留下 makeslide 就好了（完成分支：feature/header-brand-makeslide-only）
+[ ] 在上傳 PDF 時，如果內容不是一個簡報的內容，則請將整個文字取出再請 AI 分頁，不要把一般論文每一頁當成簡報處理。如果自動偵測不好做，至少做成讓使用者手動選擇。
+[ ] 加上自動出考題功能，在 PlayPage 中可以新增考題功能，自動出考題，可以選擇單選或多選。使用者可以提示 AI 有關考題的內容。生成的考題提供讓使用者再手工微調的功能。
+[ ] 加上上課模式，每撥放一頁就停下來。讓老師講解。
+[ ] 加上使用 google 帳號的功能
+[ ] API key 和一些整體設定要存在帳號中，例如 .env。每一個帳號會在一個單獨的目錄中，
+[ ] 當帳號的 credit 用完時，要顯示錯誤對話框提示使用者去充值。
+[ ] 使用語音產生 realtime poll
+
+## 工作記錄
+
+- 時間：2026-05-18 03:50（Asia/Taipei）
+- 工作內容：完成「把左上角的名稱留下 makeslide 就好了」，移除首頁左上角品牌名稱下方的「PDF 語音簡報生成與播放（M2 預覽）」副標，讓頁首只保留 makeslide 名稱。
+- 所在分支：feature/header-brand-makeslide-only
+- 驗證：npm --prefix frontend run build
