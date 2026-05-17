@@ -1,7 +1,8 @@
 # TODO 狀態摘要
 
 - 目前無未完成項目；First Batch、Second Batch 與文件整理項目皆已完成並記錄完成分支。
-- 最後確認時間：2026-05-18 06:40（Asia/Taipei）
+- 最後確認時間：2026-05-18 06:50（Asia/Taipei）
+- 最近檢查：已確認 TODO.md 與 PendingTask.md 皆無未完成清單項目。
 
 # First Batch
 [x] (merge)首次流程導引應該只有在列表是空的時候才出現。（完成分支：feature/onboarding-empty-list-only）
@@ -19,6 +20,7 @@
 [x] 整理 TODO.md 工作記錄章節，將兩個工作記錄改為清楚的 First Batch / Second Batch 記錄區塊（完成分支：feature/todo-worklog-batch-sections）
 [x] 補上 TODO.md 目前無未完成項目的狀態摘要（完成分支：feature/todo-no-pending-summary）
 [x] 將使用者教學投影片 PDF 納入 README 文件入口（完成分支：feature/docs-userguide-slides-link）
+[x] 清理 TODO.md 狀態摘要時間與檢查記錄（完成分支：feature/todo-status-check-record-cleanup）
 
 ## First Batch 工作記錄
 - 時間：2026-05-17 16:10（Asia/Taipei）
@@ -186,3 +188,8 @@
 - 工作內容：完成「將使用者教學投影片 PDF 納入 README 文件入口」，在 README 文件導覽加入 User Guide Slides (PDF) 連結，並將 docs/userguide-slides.pdf 納入工作分支提交，讓使用者可從專案入口直接取得投影片版教學。
 - 所在分支：feature/docs-userguide-slides-link
 - 驗證：git diff --check -- README.md；確認 docs/userguide-slides.pdf 存在且檔頭為 %PDF-1.4
+
+- 時間：2026-05-18 06:50（Asia/Taipei）
+- 工作內容：完成「清理 TODO.md 狀態摘要時間與檢查記錄」，更新文件開頭最後確認時間，補上最近檢查說明，並確認 TODO.md 與 PendingTask.md 皆無未完成清單項目。
+- 所在分支：feature/todo-status-check-record-cleanup
+- 驗證：grep -n "\\[ \\]" TODO.md PendingTask.md || true；git diff --check -- TODO.md
