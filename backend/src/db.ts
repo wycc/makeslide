@@ -3,6 +3,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { config } from './config';
 import { logger } from './logger';
+import { PDF_STATUSES, PAGE_STATUSES } from './statusMachine';
 
 // Ensure DB directory exists
 //fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
@@ -157,6 +158,8 @@ function migrate(): void {
     CREATE INDEX IF NOT EXISTS idx_regenerate_jobs_status_updated ON regenerate_jobs(status, updated_at DESC);
   `);
 
+  normalizeLifecycleStatuses();
+
   // M4: add audio_duration_seconds column if missing
   if (!columnExists('pages', 'audio_duration_seconds')) {
     db.exec(`ALTER TABLE pages ADD COLUMN audio_duration_seconds REAL`);
@@ -282,6 +285,40 @@ function migrate(): void {
   `);
 
   logger.info({ dbPath: config.dbPath }, 'Database migrations applied');
+}
+
+function normalizeLifecycleStatuses(): void {
+  const now = new Date().toISOString();
+  const pdfPlaceholders = PDF_STATUSES.map(() => '?').join(', ');
+  const pagePlaceholders = PAGE_STATUSES.map(() => '?').join(', ');
+
+  const invalidPdfs = db
+    .prepare(`SELECT COUNT(*) AS count FROM pdfs WHERE status NOT IN (${pdfPlaceholders})`)
+    .get(...PDF_STATUSES) as { count: number };
+  if (invalidPdfs.count > 0) {
+    db.prepare(
+      `UPDATE pdfs
+          SET status = 'failed',
+              error_message = COALESCE(error_message, 'Invalid lifecycle status normalized during migration'),
+              updated_at = ?
+        WHERE status NOT IN (${pdfPlaceholders})`,
+    ).run(now, ...PDF_STATUSES);
+    logger.warn({ count: invalidPdfs.count }, 'Normalized invalid PDF lifecycle statuses');
+  }
+
+  const invalidPages = db
+    .prepare(`SELECT COUNT(*) AS count FROM pages WHERE status NOT IN (${pagePlaceholders})`)
+    .get(...PAGE_STATUSES) as { count: number };
+  if (invalidPages.count > 0) {
+    db.prepare(
+      `UPDATE pages
+          SET status = 'failed',
+              error_message = COALESCE(error_message, 'Invalid lifecycle status normalized during migration'),
+              updated_at = ?
+        WHERE status NOT IN (${pagePlaceholders})`,
+    ).run(now, ...PAGE_STATUSES);
+    logger.warn({ count: invalidPages.count }, 'Normalized invalid page lifecycle statuses');
+  }
 }
 
 migrate();
