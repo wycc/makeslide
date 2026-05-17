@@ -52,6 +52,14 @@ test('regenerate: start -> status -> conflict, and cancel on non-active job shou
   });
   assert.equal(statusResp.statusCode, 200);
 
+  const persisted = db
+    .prepare(`SELECT job_id, status, state_json FROM regenerate_jobs WHERE pdf_id = ?`)
+    .get(id) as { job_id: string; status: string; state_json: string } | undefined;
+  assert.ok(persisted);
+  assert.equal(persisted.job_id, startResp.json().job_id);
+  assert.ok(['pending', 'running', 'completed', 'failed', 'cancelling', 'cancelled'].includes(persisted.status));
+  assert.equal(JSON.parse(persisted.state_json).pdf_id, id);
+
   const conflictResp = await app.inject({
     method: 'POST',
     url: `/api/pdfs/${id}/regenerate`,

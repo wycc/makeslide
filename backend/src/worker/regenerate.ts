@@ -38,8 +38,8 @@ import {
  *   1. 圖檔重生最耗時且與逐字稿/語音互相獨立，優先啟動可讓使用者最早看到視覺結果。
  *   2. 逐字稿變動會讓原本的語音失效，所以語音必須在逐字稿之後。
  *
- * 狀態只存在記憶體中；若伺服器重啟，前端會收到 404 並把 UI 視為「已結束」。
- * 這對本專案的情境（單機、手動觸發）已經足夠。
+ * 狀態會同步持久化到 regenerate_jobs 資料表；若伺服器重啟，
+ * 前端仍可查到最後一次任務狀態與 rollback 可用性。
  *
  * Snapshot / rollback：
  *   啟動任務前，對每個頁面的三種資產（image/script/audio）做一份磁碟快照並
@@ -131,8 +131,73 @@ function getPdfRowStrict(pdfId: string): PdfRow {
   return row;
 }
 
+function cloneJobState(state: RegenJobState): RegenJobState {
+  return JSON.parse(JSON.stringify(state)) as RegenJobState;
+}
+
+function persistRegenerateJob(state: RegenJobState): void {
+  const snapshot = cloneJobState(state);
+  db.prepare(
+    `INSERT INTO regenerate_jobs (
+        pdf_id, job_id, state_json, status, started_at, updated_at, finished_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(pdf_id) DO UPDATE SET
+        job_id = excluded.job_id,
+        state_json = excluded.state_json,
+        status = excluded.status,
+        started_at = excluded.started_at,
+        updated_at = excluded.updated_at,
+        finished_at = excluded.finished_at`,
+  ).run(
+    snapshot.pdf_id,
+    snapshot.job_id,
+    JSON.stringify(snapshot),
+    snapshot.status,
+    snapshot.started_at,
+    snapshot.updated_at,
+    snapshot.finished_at,
+  );
+}
+
+function readPersistedRegenerateJob(pdfId: string): RegenJobState | null {
+  const row = db
+    .prepare(`SELECT state_json FROM regenerate_jobs WHERE pdf_id = ?`)
+    .get(pdfId) as { state_json: string } | undefined;
+  if (!row) return null;
+  try {
+    return JSON.parse(row.state_json) as RegenJobState;
+  } catch (err) {
+    logger.warn({ err, pdfId }, 'regenerate job: failed to parse persisted state');
+    return null;
+  }
+}
+
+function setStateUpdated(state: RegenJobState, updatedAt = nowIso()): void {
+  state.updated_at = updatedAt;
+  persistRegenerateJob(state);
+}
+
 export function getRegenerateJob(pdfId: string): RegenJobState | null {
-  return jobs.get(pdfId) ?? null;
+  const inMemory = jobs.get(pdfId);
+  if (inMemory) return inMemory;
+  const persisted = readPersistedRegenerateJob(pdfId);
+  if (!persisted) return null;
+  // 重啟後沒有背景 runner 可繼續進行；將未完成狀態標示為失敗，避免 UI 無限等待。
+  if (
+    persisted.status === 'pending' ||
+    persisted.status === 'running' ||
+    persisted.status === 'cancelling'
+  ) {
+    persisted.status = 'failed';
+    persisted.error = '伺服器重啟，重生任務已中斷';
+    persisted.message = persisted.rollback_available
+      ? '伺服器重啟導致任務中斷，可按「還原」回復到重生前狀態'
+      : '伺服器重啟導致任務中斷';
+    persisted.finished_at = nowIso();
+    setStateUpdated(persisted, persisted.finished_at);
+  }
+  jobs.set(pdfId, persisted);
+  return persisted;
 }
 
 // ---------------------------------------------------------------------------
@@ -312,7 +377,7 @@ export async function rollbackRegenerate(pdfId: string): Promise<{
   }
 
   // 若任務仍在執行中（含 cancelling），不允許 rollback 以免與背景寫入衝突。
-  const existing = jobs.get(pdfId);
+  const existing = jobs.get(pdfId) ?? readPersistedRegenerateJob(pdfId);
   if (
     existing &&
     (existing.status === 'running' ||
@@ -397,12 +462,13 @@ export async function rollbackRegenerate(pdfId: string): Promise<{
   await deleteSnapshot(pdfId);
 
   // 若記憶體中仍有 job 紀錄，將 rollback 狀態關閉。
-  const job = jobs.get(pdfId);
+  const job = jobs.get(pdfId) ?? readPersistedRegenerateJob(pdfId);
   if (job) {
     job.rollback_available = false;
     job.snapshot_id = null;
-    job.updated_at = updatedAt;
     job.message = '已還原至重生前狀態';
+    setStateUpdated(job, updatedAt);
+    jobs.set(pdfId, job);
   }
 
   logger.info(
@@ -426,7 +492,7 @@ export async function rollbackRegenerate(pdfId: string): Promise<{
  * 送出取消請求（不會同步終止任務，會在下一個安全檢查點返回）。
  */
 export function requestCancelRegenerateJob(pdfId: string): RegenJobState {
-  const state = jobs.get(pdfId);
+  const state = jobs.get(pdfId) ?? readPersistedRegenerateJob(pdfId);
   if (!state) {
     const err = new Error('JOB_NOT_FOUND');
     (err as Error & { code?: string }).code = 'JOB_NOT_FOUND';
@@ -445,8 +511,9 @@ export function requestCancelRegenerateJob(pdfId: string): RegenJobState {
   if (state.status === 'pending' || state.status === 'running') {
     state.status = 'cancelling';
   }
-  state.updated_at = nowIso();
   state.message = '已送出停止請求，等待目前處理中的頁面完成';
+  setStateUpdated(state);
+  jobs.set(pdfId, state);
   logger.info(
     { pdfId, jobId: state.job_id, currentStep: state.current_step },
     'regenerate job: cancel requested',
@@ -466,7 +533,7 @@ export function startRegenerateJob(
   pdfId: string,
   options: RegenerateOptions,
 ): RegenJobState {
-  const existing = jobs.get(pdfId);
+  const existing = jobs.get(pdfId) ?? readPersistedRegenerateJob(pdfId);
   if (
     existing &&
     (existing.status === 'running' ||
@@ -525,6 +592,7 @@ export function startRegenerateJob(
     timing_run_id: null,
   };
   jobs.set(pdfId, state);
+  persistRegenerateJob(state);
   void runJob(state, options, stepNames, pageCount).catch((err) => {
     logger.error({ err, pdfId }, 'regenerate job runner rejected');
   });
@@ -542,14 +610,14 @@ async function runJob(
     const manifest = await createSnapshot(state.pdf_id, pageCount, stepNames);
     state.snapshot_id = manifest.snapshot_id;
     state.rollback_available = true;
-    state.updated_at = nowIso();
+    setStateUpdated(state);
   } catch (err) {
     state.status = 'failed';
     state.error = `snapshot failed: ${
       err instanceof Error ? err.message : String(err)
     }`;
     state.finished_at = nowIso();
-    state.updated_at = nowIso();
+    setStateUpdated(state);
     logger.error({ err, pdfId: state.pdf_id }, 'regenerate job: snapshot failed');
     return;
   }
@@ -557,8 +625,8 @@ async function runJob(
   if (state.cancel_requested) {
     state.status = 'cancelled';
     state.finished_at = nowIso();
-    state.updated_at = nowIso();
     state.message = '已取消（尚未開始執行）';
+    setStateUpdated(state);
     return;
   }
 
@@ -570,7 +638,7 @@ async function runJob(
     metadata: { job_id: state.job_id, steps: stepNames },
   });
   state.timing_run_id = timingRun?.runId ?? null;
-  state.updated_at = nowIso();
+  setStateUpdated(state);
   logger.info(
     {
       pdfId: state.pdf_id,
@@ -593,7 +661,7 @@ async function runJob(
       step.status = 'running';
       step.started_at = nowIso();
       step.completed = 0;
-      state.updated_at = nowIso();
+      setStateUpdated(state);
 
       try {
         const timingStage = startStage(
@@ -634,15 +702,15 @@ async function runJob(
         );
         throw err;
       } finally {
-        state.updated_at = nowIso();
+        setStateUpdated(state);
       }
     }
 
     state.current_step = null;
     state.status = 'completed';
     state.finished_at = nowIso();
-    state.updated_at = nowIso();
     state.message = '重生完成';
+    setStateUpdated(state);
     logger.info(
       { pdfId: state.pdf_id, jobId: state.job_id },
       'regenerate job: completed',
@@ -666,7 +734,7 @@ async function runJob(
       message: err instanceof Error ? err.message : String(err),
     });
     state.finished_at = nowIso();
-    state.updated_at = nowIso();
+    setStateUpdated(state);
   }
 }
 
@@ -685,7 +753,7 @@ function markPageProgress(
   step.completed = done;
   state.last_processed_page = pageNumber;
   state.last_generated_page = pageNumber;
-  state.updated_at = nowIso();
+  setStateUpdated(state);
 }
 
 function isRetryableOpenAIError(err: unknown): boolean {

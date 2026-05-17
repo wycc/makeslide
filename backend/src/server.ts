@@ -164,6 +164,10 @@ async function main(): Promise<void> {
   }
 }
 
-if (process.env.NODE_ENV !== 'test') {
+const isDirectRun = process.argv[1]
+  ? path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+  : false;
+
+if (isDirectRun && process.env.NODE_ENV !== 'test') {
   main();
 }

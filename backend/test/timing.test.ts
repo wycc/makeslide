@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildApp } from '../src/server';
 import { db } from '../src/db';
-import { finishArtifact, finishRun, finishStage, startArtifact, startRun, startStage } from '../src/services/timing';
+import { evaluateSla, finishArtifact, finishRun, finishStage, getTimingEventSchema, startArtifact, startRun, startStage, TIMING_EVENT_SCHEMA_VERSION } from '../src/services/timing';
 import { setOpenAIClientForTest } from '../src/services/openai';
 import { renderTextPagesWithLlm } from '../src/worker/steps/renderTextPagesWithLlm';
 
@@ -68,6 +68,61 @@ test('timing service writes events and updates summaries', () => {
   assert.equal(timing.reason, 'initial');
 });
 
+test('timing event schema exposes standardized values and SLA targets', () => {
+  const schema = getTimingEventSchema();
+  assert.equal(schema.version, TIMING_EVENT_SCHEMA_VERSION);
+  assert.deepEqual(schema.values.stages, [
+    'queue_wait',
+    'source_prepare',
+    'render_pages',
+    'extract_text',
+    'split_text',
+    'generate_scripts',
+    'synthesize_audio',
+    'generate_title',
+    'generate_video',
+    'finalize',
+  ]);
+  assert.deepEqual(schema.values.artifacts, ['image', 'text', 'script', 'audio']);
+  assert.equal(schema.slaTargetsMs.stages.render_pages, 120_000);
+  assert.equal(schema.slaTargetsMs.artifacts.image, 30_000);
+});
+
+test('timing events include schema version in metadata', () => {
+  seedPdf();
+  const run = startRun({ pdfId: PDF_ID, runType: 'initial', triggeredBy: 'system', metadata: { resumeFrom: 'start' } });
+  const stage = startStage(run, 'render_pages', { pageCount: 1 });
+  finishStage(stage, 'succeeded', { pageCount: 1 });
+  const artifact = startArtifact({ run, pageNumber: 1, artifact: 'image', reason: 'initial', metadata: { precision: 'batch_average' } });
+  finishArtifact(artifact, 'succeeded', { outputPath: 'pages/001.png', durationMs: 42, metadata: { precision: 'batch_average' } });
+
+  const runRow = db.prepare(`SELECT metadata_json FROM pipeline_runs WHERE id = ?`).get(run!.runId) as { metadata_json: string };
+  assert.equal(JSON.parse(runRow.metadata_json).schema_version, TIMING_EVENT_SCHEMA_VERSION);
+
+  const stageEvents = db.prepare(`SELECT event_type, metadata_json FROM pipeline_stage_events WHERE run_id = ? ORDER BY id ASC`).all(run!.runId) as Array<{ event_type: string; metadata_json: string }>;
+  assert.equal(stageEvents.length, 2);
+  for (const event of stageEvents) {
+    const metadata = JSON.parse(event.metadata_json) as { schema_version: number };
+    assert.equal(metadata.schema_version, TIMING_EVENT_SCHEMA_VERSION);
+  }
+
+  const artifactEvents = db.prepare(`SELECT event_type, metadata_json FROM page_artifact_events WHERE run_id = ? ORDER BY id ASC`).all(run!.runId) as Array<{ event_type: string; metadata_json: string }>;
+  assert.equal(artifactEvents.length, 2);
+  for (const event of artifactEvents) {
+    const metadata = JSON.parse(event.metadata_json) as { schema_version: number };
+    assert.equal(metadata.schema_version, TIMING_EVENT_SCHEMA_VERSION);
+  }
+});
+
+test('SLA evaluation returns met, warning, breached, and unknown thresholds', () => {
+  assert.equal(evaluateSla(100, 100), 'met');
+  assert.equal(evaluateSla(101, 100), 'warning');
+  assert.equal(evaluateSla(150, 100), 'warning');
+  assert.equal(evaluateSla(151, 100), 'breached');
+  assert.equal(evaluateSla(null, 100), 'unknown');
+  assert.equal(evaluateSla(100, 0), 'unknown');
+});
+
 test('TXT image timing can use render-step duration instead of callback duration', () => {
   seedPdf();
   const run = startRun({ pdfId: PDF_ID, runType: 'initial', triggeredBy: 'system' });
@@ -101,12 +156,14 @@ test('TXT LLM image generation retries transient errors then succeeds with image
   const pdfId = `test-timing-render-retry-${Date.now()}`;
   const calls: Array<{ body: unknown; options: { timeout?: number } | undefined }> = [];
   const transient = Object.assign(new Error('rate limited'), { status: 429, code: 'rate_limit_exceeded', type: 'rate_limit_error' });
+  const onePixelPngBase64 =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
   setOpenAIClientForTest({
     images: {
       generate: async (body: unknown, options?: { timeout?: number }) => {
         calls.push({ body, options });
         if (calls.length === 1) throw transient;
-        return { data: [{ b64_json: Buffer.from('png').toString('base64') }] };
+        return { data: [{ b64_json: onePixelPngBase64 }] };
       },
     },
   } as never);

@@ -11,6 +11,57 @@ import type {
   TimingSlaStatus,
 } from '../types';
 
+export const TIMING_EVENT_SCHEMA_VERSION = 1;
+
+export const TIMING_EVENT_VALUES = {
+  runTypes: [
+    'initial',
+    'retry',
+    'resume',
+    'regenerate_batch',
+    'regenerate_page',
+    'regenerate_artifact',
+    'generate_video',
+  ] as const satisfies readonly PipelineRunType[],
+  runStatuses: [
+    'running',
+    'succeeded',
+    'failed',
+    'canceled',
+    'partial',
+  ] as const satisfies readonly PipelineRunStatus[],
+  stages: [
+    'queue_wait',
+    'source_prepare',
+    'render_pages',
+    'extract_text',
+    'split_text',
+    'generate_scripts',
+    'synthesize_audio',
+    'generate_title',
+    'generate_video',
+    'finalize',
+  ] as const satisfies readonly PipelineStage[],
+  artifacts: ['image', 'text', 'script', 'audio'] as const satisfies readonly PageArtifact[],
+  artifactReasons: [
+    'initial',
+    'regenerate',
+    'resume',
+    'retry',
+    'dependency_changed',
+    'manual_edit',
+  ] as const satisfies readonly PageArtifactReason[],
+  eventStatuses: [
+    'running',
+    'succeeded',
+    'failed',
+    'skipped',
+    'canceled',
+    'unknown',
+  ] as const satisfies readonly TimingEventStatus[],
+  slaStatuses: ['met', 'warning', 'breached', 'unknown'] as const satisfies readonly TimingSlaStatus[],
+};
+
 export const SLA_TARGETS_MS = {
   stages: {
     queue_wait: 30_000,
@@ -43,6 +94,33 @@ function safeJson(value: unknown): string | null {
   } catch {
     return JSON.stringify({ unserializable: true });
   }
+}
+
+export function getTimingEventSchema() {
+  return {
+    version: TIMING_EVENT_SCHEMA_VERSION,
+    values: TIMING_EVENT_VALUES,
+    slaTargetsMs: SLA_TARGETS_MS,
+  } as const;
+}
+
+function assertAllowedValue<T extends string>(kind: string, value: T, allowed: readonly T[]): void {
+  if (!allowed.includes(value)) {
+    throw new Error(`Invalid timing ${kind}: ${value}`);
+  }
+}
+
+function withTimingMetadata(metadata: unknown): string {
+  const base =
+    metadata != null && typeof metadata === 'object' && !Array.isArray(metadata)
+      ? metadata
+      : metadata == null
+        ? {}
+        : { value: metadata };
+  return safeJson({
+    schema_version: TIMING_EVENT_SCHEMA_VERSION,
+    ...base,
+  }) ?? JSON.stringify({ schema_version: TIMING_EVENT_SCHEMA_VERSION });
 }
 
 function durationFrom(startedAt: string, endedAt: string): number {
@@ -110,6 +188,7 @@ export function startRun(params: {
   metadata?: unknown;
 }): TimingRunContext | null {
   try {
+    assertAllowedValue('run_type', params.runType, TIMING_EVENT_VALUES.runTypes);
     const startedAt = nowIso();
     const runId = `run_${nanoid(12)}`;
     const attempt = nextRunAttempt(params.pdfId, params.runType);
@@ -117,7 +196,7 @@ export function startRun(params: {
       `INSERT INTO pipeline_runs
         (id, pdf_id, run_type, parent_run_id, triggered_by, status, attempt, started_at, ended_at, duration_ms, sla_status, error_code, error_message, metadata_json, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, 'running', ?, ?, NULL, NULL, 'unknown', NULL, NULL, ?, ?, ?)`,
-    ).run(runId, params.pdfId, params.runType, params.parentRunId ?? null, params.triggeredBy, attempt, startedAt, safeJson(params.metadata), startedAt, startedAt);
+    ).run(runId, params.pdfId, params.runType, params.parentRunId ?? null, params.triggeredBy, attempt, startedAt, withTimingMetadata(params.metadata), startedAt, startedAt);
     return { runId, pdfId: params.pdfId, startedAt };
   } catch (err) {
     logger.warn({ err, pdfId: params.pdfId }, 'timing: startRun failed');
@@ -128,6 +207,7 @@ export function startRun(params: {
 export function finishRun(ctx: TimingRunContext | null, status: PipelineRunStatus, error?: { code?: string | null; message?: string | null }): void {
   if (!ctx) return;
   try {
+    assertAllowedValue('run_status', status, TIMING_EVENT_VALUES.runStatuses);
     const endedAt = nowIso();
     const durationMs = durationFrom(ctx.startedAt, endedAt);
     const stageStatuses = db
@@ -155,12 +235,13 @@ export function finishRun(ctx: TimingRunContext | null, status: PipelineRunStatu
 export function startStage(ctx: TimingRunContext | null, stage: PipelineStage, metadata?: unknown): TimingStageHandle | null {
   if (!ctx) return null;
   try {
+    assertAllowedValue('stage', stage, TIMING_EVENT_VALUES.stages);
     const startedAt = nowIso();
     const attempt = nextStageAttempt(ctx.runId, stage);
     db.prepare(
       `INSERT INTO pipeline_stage_events (run_id, pdf_id, stage, event_type, attempt, occurred_at, duration_ms, sla_status, error_code, error_message, metadata_json)
        VALUES (?, ?, ?, 'started', ?, ?, NULL, NULL, NULL, NULL, ?)`,
-    ).run(ctx.runId, ctx.pdfId, stage, attempt, startedAt, safeJson(metadata));
+    ).run(ctx.runId, ctx.pdfId, stage, attempt, startedAt, withTimingMetadata(metadata));
     db.prepare(
       `INSERT INTO pipeline_stage_summaries (run_id, pdf_id, stage, attempt, status, started_at, ended_at, duration_ms, sla_target_ms, sla_status, error_code, error_message, updated_at)
        VALUES (?, ?, ?, ?, 'running', ?, NULL, NULL, ?, 'unknown', NULL, NULL, ?)
@@ -176,6 +257,7 @@ export function startStage(ctx: TimingRunContext | null, stage: PipelineStage, m
 export function finishStage(handle: TimingStageHandle | null, status: Exclude<TimingEventStatus, 'running'>, metadata?: unknown, error?: { code?: string | null; message?: string | null }): void {
   if (!handle) return;
   try {
+    assertAllowedValue('event_status', status, TIMING_EVENT_VALUES.eventStatuses);
     const endedAt = nowIso();
     const durationMs = durationFrom(handle.startedAt, endedAt);
     const target = SLA_TARGETS_MS.stages[handle.stage] ?? null;
@@ -183,7 +265,7 @@ export function finishStage(handle: TimingStageHandle | null, status: Exclude<Ti
     db.prepare(
       `INSERT INTO pipeline_stage_events (run_id, pdf_id, stage, event_type, attempt, occurred_at, duration_ms, sla_status, error_code, error_message, metadata_json)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(handle.runId, handle.pdfId, handle.stage, status, handle.attempt, endedAt, durationMs, slaStatus, error?.code ?? null, error?.message ?? null, safeJson(metadata));
+    ).run(handle.runId, handle.pdfId, handle.stage, status, handle.attempt, endedAt, durationMs, slaStatus, error?.code ?? null, error?.message ?? null, withTimingMetadata(metadata));
     db.prepare(
       `UPDATE pipeline_stage_summaries
           SET status = ?, ended_at = ?, duration_ms = ?, sla_target_ms = ?, sla_status = ?, error_code = ?, error_message = ?, updated_at = ?
@@ -203,12 +285,14 @@ export function startArtifact(params: {
 }): TimingArtifactHandle | null {
   if (!params.run) return null;
   try {
+    assertAllowedValue('artifact', params.artifact, TIMING_EVENT_VALUES.artifacts);
+    assertAllowedValue('artifact_reason', params.reason, TIMING_EVENT_VALUES.artifactReasons);
     const startedAt = nowIso();
     const attempt = nextArtifactAttempt(params.run.runId, params.pageNumber, params.artifact);
     db.prepare(
       `INSERT INTO page_artifact_events (run_id, pdf_id, page_number, artifact, event_type, attempt, reason, occurred_at, duration_ms, sla_status, output_path, error_code, error_message, metadata_json)
        VALUES (?, ?, ?, ?, 'started', ?, ?, ?, NULL, NULL, NULL, NULL, NULL, ?)`,
-    ).run(params.run.runId, params.run.pdfId, params.pageNumber, params.artifact, attempt, params.reason, startedAt, safeJson(params.metadata));
+    ).run(params.run.runId, params.run.pdfId, params.pageNumber, params.artifact, attempt, params.reason, startedAt, withTimingMetadata(params.metadata));
     db.prepare(
       `INSERT INTO page_artifact_timings (pdf_id, page_number, artifact, run_id, attempt, reason, status, started_at, ended_at, duration_ms, sla_target_ms, sla_status, output_path, error_code, error_message, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, 'running', ?, NULL, NULL, ?, 'unknown', NULL, NULL, NULL, ?)
@@ -224,6 +308,7 @@ export function startArtifact(params: {
 export function finishArtifact(handle: TimingArtifactHandle | null, status: Exclude<TimingEventStatus, 'running'>, opts: { outputPath?: string | null; metadata?: unknown; error?: { code?: string | null; message?: string | null }; startedAt?: string; endedAt?: string; durationMs?: number | null } = {}): void {
   if (!handle) return;
   try {
+    assertAllowedValue('event_status', status, TIMING_EVENT_VALUES.eventStatuses);
     const endedAt = opts.endedAt ?? nowIso();
     const startedAt = opts.startedAt ?? handle.startedAt;
     const durationMs = opts.durationMs ?? durationFrom(startedAt, endedAt);
@@ -232,7 +317,7 @@ export function finishArtifact(handle: TimingArtifactHandle | null, status: Excl
     db.prepare(
       `INSERT INTO page_artifact_events (run_id, pdf_id, page_number, artifact, event_type, attempt, reason, occurred_at, duration_ms, sla_status, output_path, error_code, error_message, metadata_json)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(handle.runId, handle.pdfId, handle.pageNumber, handle.artifact, status, handle.attempt, handle.reason, endedAt, durationMs, slaStatus, opts.outputPath ?? null, opts.error?.code ?? null, opts.error?.message ?? null, safeJson(opts.metadata));
+    ).run(handle.runId, handle.pdfId, handle.pageNumber, handle.artifact, status, handle.attempt, handle.reason, endedAt, durationMs, slaStatus, opts.outputPath ?? null, opts.error?.code ?? null, opts.error?.message ?? null, withTimingMetadata(opts.metadata));
     db.prepare(
       `UPDATE page_artifact_timings
           SET status = ?, started_at = ?, ended_at = ?, duration_ms = ?, sla_target_ms = ?, sla_status = ?, output_path = ?, error_code = ?, error_message = ?, updated_at = ?
