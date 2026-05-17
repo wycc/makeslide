@@ -24,7 +24,7 @@ export async function registerRegenerateRoutes(app: FastifyInstance): Promise<vo
       if (msg === 'PDF_NOT_FOUND') {
         return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsedParams.data.id} not found`));
       }
-      if (msg === 'REGENERATE_JOB_ALREADY_RUNNING') {
+      if (msg === 'REGENERATE_JOB_ALREADY_RUNNING' || msg === 'JOB_ALREADY_RUNNING') {
         return reply.code(409).send(errorResponse('INVALID_STATE', 'Regenerate job is already running'));
       }
       request.log.error({ err, pdfId: parsedParams.data.id }, 'Failed to start regenerate job');
@@ -47,9 +47,21 @@ export async function registerRegenerateRoutes(app: FastifyInstance): Promise<vo
     if (!parsedParams.success) {
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
     }
-    const state = requestCancelRegenerateJob(parsedParams.data.id);
-    if (!state) return reply.code(404).send(errorResponse('REGENERATE_JOB_NOT_FOUND', 'Regenerate job not found'));
-    return reply.code(202).send(state);
+    try {
+      const state = requestCancelRegenerateJob(parsedParams.data.id);
+      if (!state) return reply.code(404).send(errorResponse('REGENERATE_JOB_NOT_FOUND', 'Regenerate job not found'));
+      return reply.code(202).send(state);
+    } catch (err) {
+      const code = (err as { code?: string })?.code;
+      if (code === 'JOB_NOT_FOUND') {
+        return reply.code(404).send(errorResponse('REGENERATE_JOB_NOT_FOUND', 'Regenerate job not found'));
+      }
+      if (code === 'JOB_NOT_ACTIVE') {
+        return reply.code(409).send(errorResponse('INVALID_STATE', 'Regenerate job is not active'));
+      }
+      request.log.error({ err, pdfId: parsedParams.data.id }, 'Failed to cancel regenerate job');
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to cancel regenerate job'));
+    }
   });
 
   app.post('/api/pdfs/:id/regenerate/rollback', async (request, reply) => {

@@ -142,6 +142,19 @@ function migrate(): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_pages_pdf ON pages(pdf_id);
+
+    CREATE TABLE IF NOT EXISTS regenerate_jobs (
+      pdf_id TEXT PRIMARY KEY,
+      job_id TEXT NOT NULL,
+      state_json TEXT NOT NULL,
+      status TEXT NOT NULL,
+      started_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      finished_at TEXT,
+      FOREIGN KEY (pdf_id) REFERENCES pdfs(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_regenerate_jobs_status_updated ON regenerate_jobs(status, updated_at DESC);
   `);
 
   // M4: add audio_duration_seconds column if missing
