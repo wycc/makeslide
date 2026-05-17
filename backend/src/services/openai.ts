@@ -138,7 +138,7 @@ export interface ChatJSONResult<T> {
 export interface ChatJSONParams<T> {
   model?: string;
   messages: ChatCompletionMessageParam[];
-  schema: z.ZodType<T>;
+  schema: z.ZodType<T, z.ZodTypeDef, unknown>;
   /** Enforce a sensible cap; defaults to 800 which is plenty for a ~150-char script. */
   maxTokens?: number;
   temperature?: number;

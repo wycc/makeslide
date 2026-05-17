@@ -30,10 +30,24 @@ const PromptTextSchema = z.object({
   title: z.string().min(1).max(120),
   slides: z
     .array(
-      z.object({
-        title: z.string().min(1).max(160),
-        bullets: z.array(z.string().min(1).max(300)).min(2).max(6),
-      }),
+      z
+        .object({
+          title: z.string().min(1).max(160),
+          bullets: z.array(z.string().min(1).max(300)).min(2).max(6).optional(),
+          points: z.array(z.string().min(1).max(300)).min(2).max(6).optional(),
+        })
+        .transform((slide, ctx) => {
+          const bullets = slide.bullets ?? slide.points;
+          if (!bullets) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: '每頁投影片必須包含 bullets 陣列',
+              path: ['bullets'],
+            });
+            return z.NEVER;
+          }
+          return { title: slide.title, bullets };
+        }),
     )
     .min(3)
     .max(20),
@@ -62,14 +76,17 @@ async function generateSlideTextFromPrompt(prompt: string): Promise<{ title: str
           '你是簡報內容企劃助理。',
           '請根據使用者提示詞產生可匯入 TXT 流程的投影片文字。',
           '務必輸出結構化 JSON，不要輸出 markdown。',
+          'JSON 格式必須完全符合：{"title":"簡報標題","slides":[{"title":"頁面標題","bullets":["重點1","重點2"]}]}。',
+          '每一頁只能使用 bullets 欄位表示重點，不要使用 points、items、content 或其他欄位名稱。',
         ].join('\n'),
       },
       {
         role: 'user',
         content: [
           '請根據以下需求規劃 3 到 12 頁投影片。',
-          '每頁需要清楚標題與 2 到 6 個重點。',
+          '每頁需要清楚 title 與 2 到 6 個 bullets。',
           '內容要足夠完整，讓後續 TXT 上傳流程能產生完整簡報。',
+          '請只輸出 JSON 物件，slides 內每個項目都必須包含 title 與 bullets。',
           '',
           '使用者提示詞：',
           prompt,
