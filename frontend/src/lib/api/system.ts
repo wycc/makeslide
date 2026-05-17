@@ -86,3 +86,46 @@ export async function setOpenAIApiKey(apiKey: string): Promise<{ ok: boolean; ha
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as { ok: boolean; has_key: boolean };
 }
+
+export interface ObservabilityStatusCount {
+  status: string;
+  count: number;
+}
+
+export interface ObservabilityMetrics {
+  generated_at: string;
+  pdfs: {
+    total: number;
+    completed: number;
+    failed: number;
+    processing: number;
+    success_rate: number;
+    failure_rate: number;
+  };
+  pipeline_runs: {
+    total: number;
+    succeeded: number;
+    failed: number;
+    running: number;
+    success_rate: number;
+    failure_rate: number;
+    average_duration_ms: number | null;
+  };
+  stages: ObservabilityStatusCount[];
+  artifacts: ObservabilityStatusCount[];
+  llm_usage: {
+    requests: number;
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+    total_latency_ms: number;
+    average_latency_ms: number | null;
+    estimated_cost_usd: number | null;
+  };
+}
+
+export async function getObservabilityMetrics(): Promise<ObservabilityMetrics> {
+  const resp = await fetch('api/system/observability');
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as ObservabilityMetrics;
+}

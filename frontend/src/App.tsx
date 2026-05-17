@@ -3,6 +3,7 @@ import HomePage from './pages/HomePage';
 import ImportTextPage from './pages/ImportTextPage';
 import PlayPage from './pages/PlayPage';
 import SettingsPage from './pages/SettingsPage';
+import SystemDataPage from './pages/SystemDataPage';
 import { useEffect, useState } from 'react';
 import { getOpenAIKeyStatus } from './lib/api';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -44,6 +45,7 @@ export default function App() {
       <Route path="/import-text" element={<ImportTextPage />} />
       <Route path="/play/:id" element={<PlayPage />} />
       <Route path="/settings" element={<SettingsPage />} />
+      <Route path="/system" element={<SystemDataPage />} />
       <Route
         path="*"
         element={
