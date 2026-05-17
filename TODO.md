@@ -72,7 +72,7 @@
 [x] 將取代目前頁圖片的按鍵去掉，我們己經可以可以直接拖到圖片上，不需要這個區域。（完成分支：feature/remove-replace-current-page-image-button）
 [ ] 在問答頁上加上一個放大縮小的按鍵，讓我們可以讓問答的區塊佔整個右邊。
 [x] 在手機模式上，把標題縮小一點讓返回按鍵可以顯示在一行上。（完成分支：feature/mobile-playpage-title-fit）
-[ ] 在手機模式上，把播放的進度列中進度條縮短一些讓後線長度可以完整顯示。
+[x] 在手機模式上，把播放的進度列中進度條縮短一些讓後線長度可以完整顯示。（完成分支：feature/mobile-progress-bar-time-fit）
 [x] 把顯示類別的選擇記下來，回到首頁時會顯示之前的設定（完成分支：feature/persist-home-category-filter）
 [x] 把左上角的名稱留下 makeslide 就好了（完成分支：feature/header-brand-makeslide-only）
 [ ] 在上傳 PDF 時，如果內容不是一個簡報的內容，則請將整個文字取出再請 AI 分頁，不要把一般論文每一頁當成簡報處理。如果自動偵測不好做，至少做成讓使用者手動選擇。
@@ -104,3 +104,8 @@
 - 工作內容：完成「在手機模式上，把標題縮小一點讓返回按鍵可以顯示在一行上」，調整播放頁手機版 header 間距、返回按鍵與標題輸入框字級，並避免返回按鍵、更新標題與頁碼換行，讓窄螢幕標題列可維持單行顯示。
 - 所在分支：feature/mobile-playpage-title-fit
 - 驗證：npm --prefix frontend run build
+
+- 時間：2026-05-18 04:30（Asia/Taipei）
+- 工作內容：完成「在手機模式上，把播放的進度列中進度條縮短一些讓後線長度可以完整顯示」，調整播放頁播放器控制列手機版排版，讓按鈕列可換行，進度條與時間顯示共用下一列並保留固定時間欄寬，避免目前時間/總長度在窄螢幕被截斷。
+- 所在分支：feature/mobile-progress-bar-time-fit
+- 驗證：npm --prefix frontend run build；git diff --check
