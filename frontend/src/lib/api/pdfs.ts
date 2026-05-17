@@ -2,6 +2,7 @@ import type {
   ChatHistoryResponse,
   ChatMessage,
   PageChatResponse,
+  PagePoll,
   PdfDetail,
   PdfListItem,
   RegenJobState,
@@ -267,6 +268,33 @@ export async function updatePdfPrompt(
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as UpdatePdfPromptResponse;
+}
+
+export async function fetchPagePolls(id: string, pageNumber: number): Promise<PagePoll[]> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/polls`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  const data = (await resp.json()) as { polls?: PagePoll[] };
+  return Array.isArray(data.polls) ? data.polls : [];
+}
+
+export async function createPagePoll(id: string, pageNumber: number, question: string, options: string[]): Promise<PagePoll> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/polls`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ question, options }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as PagePoll;
+}
+
+export async function votePagePoll(id: string, pollId: number, voterId: string, optionIndex: number): Promise<PagePoll> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/polls/${encodeURIComponent(String(pollId))}/votes`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ voter_id: voterId, option_index: optionIndex }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as PagePoll;
 }
 
 export interface UpdatePdfCoverFromPageResponse {

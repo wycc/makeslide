@@ -220,6 +220,28 @@ export const UpdatePromptBodySchema = z.object({
   prompt: z.string().max(MAX_USER_PROMPT_CHARS, `提示詞不可超過 ${MAX_USER_PROMPT_CHARS} 字`),
 });
 
+export const CreatePollBodySchema = z.object({
+  question: z.string().trim().min(1, 'question 不可為空').max(300, 'question 不可超過 300 字'),
+  options: z
+    .array(z.string().trim().min(1, '選項不可為空').max(120, '選項不可超過 120 字'))
+    .min(2, '至少需要 2 個選項')
+    .max(6, '最多 6 個選項'),
+});
+
+export const PollParamSchema = z.object({
+  id: z.string().regex(PDF_ID_RE, 'Invalid pdf id'),
+  pollId: z
+    .string()
+    .regex(/^[1-9]\d{0,9}$/, 'Invalid poll id')
+    .transform((v) => Number(v))
+    .pipe(z.number().int().positive()),
+});
+
+export const VotePollBodySchema = z.object({
+  voter_id: z.string().trim().min(8, 'voter_id 太短').max(80, 'voter_id 過長'),
+  option_index: z.number().int().min(0).max(5),
+});
+
 export const YoutubeCreateBodySchema = z.object({
   youtube_url: z
     .string()

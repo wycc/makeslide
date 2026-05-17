@@ -11,10 +11,13 @@ import { ensureCoverThumbnail, ensurePageThumbnail, generateCoverThumbnail } fro
 import {
   IdParamSchema,
   PageParamSchema,
+  PollParamSchema,
+  CreatePollBodySchema,
   DEFAULT_PDF_CATEGORY,
   UpdateCategoryBodySchema,
   UpdatePromptBodySchema,
   UpdateTitleBodySchema,
+  VotePollBodySchema,
   detectAudioMimeFromBuffer,
   errorResponse,
   nowIso,
@@ -23,6 +26,43 @@ import {
   streamFile,
   timingRowsToPageMap,
 } from './shared';
+
+interface PagePollRow {
+  id: number;
+  pdf_id: string;
+  page_number: number;
+  question: string;
+  options_json: string;
+  is_active: number;
+  created_at: string;
+  updated_at: string;
+}
+
+function rowToPoll(row: PagePollRow) {
+  let optionTexts: string[] = [];
+  try {
+    const parsed = JSON.parse(row.options_json) as unknown;
+    if (Array.isArray(parsed)) optionTexts = parsed.filter((v): v is string => typeof v === 'string');
+  } catch {
+    optionTexts = [];
+  }
+  const counts = db
+    .prepare(`SELECT option_index, COUNT(*) AS votes FROM page_poll_votes WHERE poll_id = ? GROUP BY option_index`)
+    .all(row.id) as Array<{ option_index: number; votes: number }>;
+  const countByOption = new Map(counts.map((item) => [item.option_index, item.votes]));
+  const options = optionTexts.map((text, idx) => ({ text, votes: countByOption.get(idx) ?? 0 }));
+  return {
+    id: row.id,
+    pdf_id: row.pdf_id,
+    page_number: row.page_number,
+    question: row.question,
+    options,
+    total_votes: options.reduce((sum, option) => sum + option.votes, 0),
+    is_active: row.is_active === 1,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
 
 export async function registerDetailRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/pdfs
@@ -238,6 +278,60 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     db.prepare(`UPDATE pages SET updated_at = ? WHERE pdf_id = ? AND page_number = ?`).run(now, id, n);
     db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(now, id);
     return reply.send({ id, page_number: n, page_prompt: prompt || null, updated_at: now });
+  });
+
+  app.get('/api/pdfs/:id/pages/:n/polls', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    const { id, n } = parsed.data;
+    const page = db.prepare(`SELECT pdf_id FROM pages WHERE pdf_id = ? AND page_number = ?`).get(id, n);
+    if (!page) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+    const rows = db
+      .prepare(`SELECT id, pdf_id, page_number, question, options_json, is_active, created_at, updated_at FROM page_polls WHERE pdf_id = ? AND page_number = ? ORDER BY created_at DESC`)
+      .all(id, n) as PagePollRow[];
+    return reply.send({ polls: rows.map(rowToPoll) });
+  });
+
+  app.post('/api/pdfs/:id/pages/:n/polls', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    const body = CreatePollBodySchema.safeParse(request.body ?? {});
+    if (!body.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
+    const { id, n } = parsed.data;
+    const page = db.prepare(`SELECT pdf_id FROM pages WHERE pdf_id = ? AND page_number = ?`).get(id, n);
+    if (!page) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+    const now = nowIso();
+    const options = body.data.options.map((option) => option.trim()).filter(Boolean);
+    const result = db
+      .prepare(`INSERT INTO page_polls (pdf_id, page_number, question, options_json, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)`)
+      .run(id, n, body.data.question.trim(), JSON.stringify(options), now, now);
+    const row = db
+      .prepare(`SELECT id, pdf_id, page_number, question, options_json, is_active, created_at, updated_at FROM page_polls WHERE id = ?`)
+      .get(result.lastInsertRowid) as PagePollRow;
+    return reply.code(201).send(rowToPoll(row));
+  });
+
+  app.post('/api/pdfs/:id/polls/:pollId/votes', async (request, reply) => {
+    const parsed = PollParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or poll id'));
+    const body = VotePollBodySchema.safeParse(request.body ?? {});
+    if (!body.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
+    const { id, pollId } = parsed.data;
+    const row = db
+      .prepare(`SELECT id, pdf_id, page_number, question, options_json, is_active, created_at, updated_at FROM page_polls WHERE id = ? AND pdf_id = ?`)
+      .get(pollId, id) as PagePollRow | undefined;
+    if (!row) return reply.code(404).send(errorResponse('POLL_NOT_FOUND', `Poll ${pollId} not found`));
+    if (row.is_active !== 1) return reply.code(409).send(errorResponse('POLL_CLOSED', 'Poll is closed'));
+    const options = JSON.parse(row.options_json) as string[];
+    if (body.data.option_index >= options.length) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid option_index'));
+    const now = nowIso();
+    db.prepare(`INSERT INTO page_poll_votes (poll_id, voter_id, option_index, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(poll_id, voter_id) DO UPDATE SET option_index = excluded.option_index, updated_at = excluded.updated_at`)
+      .run(pollId, body.data.voter_id, body.data.option_index, now, now);
+    db.prepare(`UPDATE page_polls SET updated_at = ? WHERE id = ?`).run(now, pollId);
+    const updated = db
+      .prepare(`SELECT id, pdf_id, page_number, question, options_json, is_active, created_at, updated_at FROM page_polls WHERE id = ?`)
+      .get(pollId) as PagePollRow;
+    return reply.send(rowToPoll(updated));
   });
 
   // POST /api/pdfs/:id/cover/from-page/:n
