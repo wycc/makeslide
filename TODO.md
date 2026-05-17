@@ -7,6 +7,7 @@
 [x] 完成 PendingTask.md #12 可觀測性儀表（成功率/失敗率/成本）（完成分支：feature/observability-dashboard）
 [x] 完成 PendingTask.md #6 狀態機單一來源（完成分支：feature/status-machine-single-source）
 [x] 完成 PendingTask.md #15 Queue 抽象層（為分散式擴充預備）（完成分支：feature/queue-abstraction）
+[x] 完成 PendingTask.md #4 播放頁模組化（完成分支：feature/playpage-modularization）
 
 ## 工作記錄
 - 時間：2026-05-17 16:10（Asia/Taipei）
@@ -48,3 +49,8 @@
 - 工作內容：完成 PendingTask.md #15「Queue 抽象層（為分散式擴充預備）」，將後端 PDF processing queue 從直接依賴 PQueue 收斂為 ProcessingQueue/ProcessingQueueAdapter 抽象，保留記憶體 PQueue 實作並提供可替換 adapter 與佇列統計，為後續分散式 queue adapter 預留介面；補上 adapter 建立、單例重用與切換重建的單元測試。
 - 所在分支：feature/queue-abstraction
 - 驗證：cd backend && ../scripts/with-node-env.sh npx tsx --test ./test/queue.test.ts && cd .. && npm --prefix backend run build；npm --prefix backend test -- queue.test.ts（失敗：專案測試腳本會先執行全部 backend/test/*.test.ts，既有 pages-api 測試仍預期 pages/*.png，但目前實際為 pages/*.jpg）
+
+- 時間：2026-05-17 17:51（Asia/Taipei）
+- 工作內容：完成 PendingTask.md #4「播放頁模組化」，將 PlayPage 中可獨立維護的格式化工具、頁面耗時晶片與重生進度 UI 拆分到 frontend/src/pages/play/ 子模組，降低播放頁主檔責任並維持既有播放、耗時顯示與重生進度行為。
+- 所在分支：feature/playpage-modularization
+- 驗證：npm --prefix frontend run build
