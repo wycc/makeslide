@@ -10,7 +10,7 @@
 - [ ] #6 狀態機單一來源（優先級：P0；難度：中）
 - [x] #7 錯誤碼字典 + 前端可行動提示（優先級：P1；難度：低）
 - [x] #8 任務取消語義一致化（優先級：P1；難度：中；分支：feature/task-cancel-semantics）
-- [ ] #9 長任務進度 + ETA（優先級：P1；難度：中）
+- [x] #9 長任務進度 + ETA（優先級：P1；難度：中；分支：feature/long-task-progress-eta）
 - [x] #10 靜態資源版本指紋與快取策略（優先級：P1；難度：中；分支：feature/static-asset-cache-policy-v2）
 - [x] #11 輸入防護與內容資安強化（優先級：P0；難度：中；分支：feature/input-security-hardening）
 - [ ] #12 可觀測性儀表（成功率/失敗率/成本）（優先級：P1；難度：中）
@@ -21,7 +21,7 @@
 
 ## 已完成摘要
 
-已完成 11 項改善項目：
+已完成 12 項改善項目：
 
 - #1 拆分超大路由模組
 - #2 Pipeline 階段事件標準化與 SLA 追蹤（分支：feature/pipeline-stage-sla-tracking）
@@ -30,6 +30,7 @@
 - #7 錯誤碼字典 + 前端可行動提示
 - #10 靜態資源版本指紋與快取策略（分支：feature/static-asset-cache-policy-v2）
 - #8 任務取消語義一致化（分支：feature/task-cancel-semantics）
+- #9 長任務進度 + ETA（分支：feature/long-task-progress-eta）
 - #11 輸入防護與內容資安強化（分支：feature/input-security-hardening）
 - #13 測試矩陣補強（重生/回滾/頁面操作）
 - #14 文件對齊實作現況
@@ -41,9 +42,8 @@
 
 1. #4 播放頁模組化（P0；高）
 2. #6 狀態機單一來源（P0；中）
-3. #9 長任務進度 + ETA（P1；中）
-4. #12 可觀測性儀表（成功率/失敗率/成本）（P1；中）
-5. #15 Queue 抽象層（為分散式擴充預備）（P2；高）
+3. #12 可觀測性儀表（成功率/失敗率/成本）（P1；中）
+4. #15 Queue 抽象層（為分散式擴充預備）（P2；高）
 
 ## 工作記錄
 
@@ -54,3 +54,4 @@
 - 2026-05-17 12:20 Asia/Taipei：完成 #8 任務取消語義一致化。取消請求統一以 cancelling 作為等待安全停止點的中介狀態，重複取消保持 202 冪等回應並保留 cancel_requested；任務真正停止時收斂為 cancelled、清空 current_step，將尚未執行步驟標為 skipped，並補上 regenerate matrix 測試驗證取消回應與持久化狀態。所在分支：feature/task-cancel-semantics。
 - 2026-05-17 12:28 Asia/Taipei：完成 #5 前端 API client 分域拆分。將原本集中在單一 API client 的通用錯誤處理、PDF/頁面/重生操作、系統設定與上傳功能拆分為 common、pdfs、system、uploads 等分域模組，保留原 api.ts barrel export 以維持既有呼叫端相容；已執行前端 typecheck 與 production build 驗證。所在分支：feature/frontend-api-domain-split。
 - 2026-05-17 15:46 Asia/Taipei：完成 #8 任務取消語義一致化後續收斂。新增取消完成收斂 helper，確保 cancelled 任務清空 current_step、running 步驟標為 cancelled、pending 步驟標為 skipped，取消等待訊息依是否已有 current_step 顯示不同安全停止點提示；補上 regenerate matrix 測試驗證最終取消狀態不殘留 running/pending 步驟與持久化狀態一致。所在分支：feature/task-cancel-semantics。
+- 2026-05-17 15:53 Asia/Taipei：完成 #9 長任務進度 + ETA。重生任務狀態新增整體 eta_seconds、estimated_completion_at 與每步 eta_seconds，依目前步驟已完成頁數與耗時推估剩餘秒數並持久化；播放頁重生進度區塊顯示預估剩餘時間、預計完成時間與目前步驟 ETA；已執行後端 typecheck、前端 typecheck 與前端 production build 驗證。所在分支：feature/long-task-progress-eta。
