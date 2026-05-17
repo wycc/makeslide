@@ -83,6 +83,7 @@
 [x] 當帳號的 credit 用完時，要顯示錯誤對話框提示使用者去充值。（完成分支：feature/credit-exhausted-dialog）
 [x] 使用語音產生 realtime poll（完成分支：feature/voice-generated-realtime-poll）
 [x] 整理 README 文件入口與 Docker 啟動說明（完成分支：feature/docs-entrypoint-cleanup）
+[x] 刪除頁面時若該頁仍有未完成圖片生成，允許刪除並收斂該頁執行中 artifact timing 為取消狀態（完成分支：feature/delete-page-pending-image-generation）
 
 ## 工作記錄
 
@@ -155,3 +156,8 @@
 - 工作內容：完成「整理 README 文件入口與 Docker 啟動說明」，新增文件導覽區集中連結使用者教學、系統設計、錯誤碼與 pipeline timing 文件，並整理 Docker 啟動段落、修正拼字與圖片替代文字。
 - 所在分支：feature/docs-entrypoint-cleanup
 - 驗證：git diff --check -- README.md；檢查 README.md 行尾空白
+
+- 時間：2026-05-18 06:13（Asia/Taipei）
+- 工作內容：完成「刪除頁面時有未完成的圖片生成仍允許刪除並由後端處理 queue/timing」，刪除頁面交易會將該頁仍在 running 的 artifact timing 收斂為 canceled，標記 PAGE_DELETED，避免頁面刪除後留下無限執行中的圖片生成紀錄；並補上刪除頁面時取消 running image artifact timing 的後端測試。
+- 所在分支：feature/delete-page-pending-image-generation
+- 驗證：npm --prefix backend run build && git diff --check；cd backend && ../scripts/with-node-env.sh npx tsx --test ./test/pages-api.test.ts（失敗：既有 pages-api 測試仍預期 pages/*.png，但目前實際為 pages/*.jpg）
