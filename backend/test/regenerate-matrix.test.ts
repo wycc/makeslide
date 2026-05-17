@@ -100,6 +100,47 @@ test('rollback: snapshot not found should fail; rollback while running should co
   await app.close();
 });
 
+test('regenerate cancel: final state should not leave running or pending steps', async () => {
+  const id = 'regen-matrix-cancel-01';
+  seedReadyPdfFor(id, 3);
+  const app = await buildApp();
+
+  const started = await app.inject({
+    method: 'POST',
+    url: `/api/pdfs/${id}/regenerate`,
+    payload: { scripts: { prompt: 'cancel semantics' }, audio: { voice: 'alloy' } },
+  });
+  assert.equal(started.statusCode, 202);
+
+  const cancel = await app.inject({ method: 'POST', url: `/api/pdfs/${id}/regenerate/cancel` });
+  assert.equal(cancel.statusCode, 202);
+  assert.equal(cancel.json().status, 'cancelling');
+  assert.equal(cancel.json().cancel_requested, true);
+
+  let finalState = cancel.json();
+  for (let i = 0; i < 30; i++) {
+    const status = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/regenerate/status` });
+    assert.equal(status.statusCode, 200);
+    finalState = status.json();
+    if (finalState.status === 'cancelled') break;
+    await new Promise((r) => setTimeout(r, 25));
+  }
+
+  assert.equal(finalState.status, 'cancelled');
+  assert.equal(finalState.current_step, null);
+  assert.ok(finalState.finished_at);
+  assert.ok(finalState.steps.every((step: { status: string }) => step.status !== 'running' && step.status !== 'pending'));
+
+  const persisted = db
+    .prepare(`SELECT status, state_json FROM regenerate_jobs WHERE pdf_id = ?`)
+    .get(id) as { status: string; state_json: string } | undefined;
+  assert.ok(persisted);
+  assert.equal(persisted.status, 'cancelled');
+  assert.equal(JSON.parse(persisted.state_json).current_step, null);
+
+  await app.close();
+});
+
 test('page operations boundaries: move invalid index, delete non-existing page, add with negative index', async () => {
   const id = 'regen-matrix-pageops-01';
   seedReadyPdfFor(id, 3);

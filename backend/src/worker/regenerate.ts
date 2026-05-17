@@ -511,7 +511,9 @@ export function requestCancelRegenerateJob(pdfId: string): RegenJobState {
   if (state.status === 'pending' || state.status === 'running') {
     state.status = 'cancelling';
   }
-  state.message = '已送出停止請求，等待目前處理中的頁面完成';
+  state.message = state.current_step
+    ? '已送出停止請求，等待目前處理中的頁面完成'
+    : '已送出停止請求，等待任務進入安全停止點';
   setStateUpdated(state);
   jobs.set(pdfId, state);
   logger.info(
@@ -519,6 +521,27 @@ export function requestCancelRegenerateJob(pdfId: string): RegenJobState {
     'regenerate job: cancel requested',
   );
   return state;
+}
+
+function finalizeCancelledJob(state: RegenJobState, message: string): void {
+  const finishedAt = nowIso();
+  state.status = 'cancelled';
+  state.error = null;
+  state.message = message;
+  state.current_step = null;
+  state.finished_at = finishedAt;
+  for (const step of state.steps) {
+    if (step.status === 'running') {
+      step.status = 'cancelled';
+      step.error = null;
+      step.finished_at = step.finished_at ?? finishedAt;
+    } else if (step.status === 'pending') {
+      step.status = 'skipped';
+      step.error = null;
+      step.finished_at = finishedAt;
+    }
+  }
+  setStateUpdated(state, finishedAt);
 }
 
 // ---------------------------------------------------------------------------
@@ -623,10 +646,7 @@ async function runJob(
   }
 
   if (state.cancel_requested) {
-    state.status = 'cancelled';
-    state.finished_at = nowIso();
-    state.message = '已取消（尚未開始執行）';
-    setStateUpdated(state);
+    finalizeCancelledJob(state, '已取消（尚未開始執行）');
     return;
   }
 
@@ -718,10 +738,9 @@ async function runJob(
     finishRun(timingRun, 'succeeded');
   } catch (err) {
     const code = (err as Error & { code?: string }).code;
-    if (code === 'CANCELLED' || state.cancel_requested) {
-      state.status = 'cancelled';
-      state.error = null;
-      state.message = '已停止，可按「還原」回復到重生前狀態';
+    const wasCancelled = code === 'CANCELLED' || state.cancel_requested;
+    if (wasCancelled) {
+      finalizeCancelledJob(state, '已停止，可按「還原」回復到重生前狀態');
     } else {
       state.status = 'failed';
       state.error = err instanceof Error ? err.message : String(err);
@@ -730,11 +749,13 @@ async function runJob(
         'regenerate job: failed',
       );
     }
-    finishRun(timingRun, state.status === 'cancelled' ? 'canceled' : 'failed', {
+    finishRun(timingRun, wasCancelled ? 'canceled' : 'failed', {
       message: err instanceof Error ? err.message : String(err),
     });
-    state.finished_at = nowIso();
-    setStateUpdated(state);
+    if (!wasCancelled) {
+      state.finished_at = nowIso();
+      setStateUpdated(state);
+    }
   }
 }
 
