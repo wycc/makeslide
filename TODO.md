@@ -11,8 +11,9 @@
 [x] 完成 PendingTask.md #4 播放頁模組化（完成分支：feature/playpage-modularization）
 [x] 完成 PendingTask.md #4 播放頁模組化追蹤清單收斂（完成分支：feature/pendingtask-playpage-modularization-sync）
 [x] 完成 PendingTask.md 已完成項目追蹤清單同步（完成分支：feature/pendingtask-completed-items-sync）
+[x] 整理 TODO.md 工作記錄章節，將兩個工作記錄改為清楚的 First Batch / Second Batch 記錄區塊（完成分支：feature/todo-worklog-batch-sections）
 
-## 工作記錄
+## First Batch 工作記錄
 - 時間：2026-05-17 16:10（Asia/Taipei）
 - 工作內容：完成「首次流程導引應該只有在列表是空的時候才出現」，在首頁列表載入完成、無錯誤且簡報列表為空時才顯示首次流程導引。
 - 所在分支：feature/onboarding-empty-list-only
@@ -85,7 +86,7 @@
 [x] 整理 README 文件入口與 Docker 啟動說明（完成分支：feature/docs-entrypoint-cleanup）
 [x] 刪除頁面時若該頁仍有未完成圖片生成，允許刪除並收斂該頁執行中 artifact timing 為取消狀態（完成分支：feature/delete-page-pending-image-generation）
 
-## 工作記錄
+## Second Batch 工作記錄
 
 - 時間：2026-05-18 03:50（Asia/Taipei）
 - 工作內容：完成「把左上角的名稱留下 makeslide 就好了」，移除首頁左上角品牌名稱下方的「PDF 語音簡報生成與播放（M2 預覽）」副標，讓頁首只保留 makeslide 名稱。
@@ -161,3 +162,10 @@
 - 工作內容：完成「刪除頁面時有未完成的圖片生成仍允許刪除並由後端處理 queue/timing」，刪除頁面交易會將該頁仍在 running 的 artifact timing 收斂為 canceled，標記 PAGE_DELETED，避免頁面刪除後留下無限執行中的圖片生成紀錄；並補上刪除頁面時取消 running image artifact timing 的後端測試。
 - 所在分支：feature/delete-page-pending-image-generation
 - 驗證：npm --prefix backend run build && git diff --check；cd backend && ../scripts/with-node-env.sh npx tsx --test ./test/pages-api.test.ts（失敗：既有 pages-api 測試仍預期 pages/*.png，但目前實際為 pages/*.jpg）
+
+## 文件整理工作記錄
+
+- 時間：2026-05-18 06:21（Asia/Taipei）
+- 工作內容：完成「整理 TODO.md 工作記錄章節」，將原本重複命名的兩個「工作記錄」章節改為「First Batch 工作記錄」與「Second Batch 工作記錄」，讓批次待辦與對應紀錄區塊更容易辨識。
+- 所在分支：feature/todo-worklog-batch-sections
+- 驗證：git diff --check -- TODO.md
