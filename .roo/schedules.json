@@ -4,7 +4,7 @@
       "id": "1778984464374",
       "name": "每天更新 makeslide 功能",
       "mode": "code",
-      "taskInstructions": "檢查 PendingTask.md 的內容，選擇一個尚未完成的工作，將他完成並存在一個單獨的分支中。完成後要回來更新 master 中的 PendingTask 的內容，並記錄存在那一個分支中。並在文件最後新增工作記錄，包括工作內容時間和所在分支。",
+      "taskInstructions": "檢查 TODO.md 的內容，選擇一個尚未完成的工作，將他完成並存在一個單獨的分支中。完成後要回來更新 master 中的 TODO.md 的內容，並記錄存在那一個分支中。並在文件最後新增工作記錄，包括工作內容時間和所在分支。",
       "scheduleType": "time",
       "timeInterval": "10",
       "timeUnit": "minute",
@@ -27,13 +27,13 @@
       "active": true,
       "taskInteraction": "wait",
       "inactivityDelay": "1",
-      "lastExecutionTime": "2026-05-17T07:49:01.343Z",
+      "lastExecutionTime": "2026-05-17T08:39:00.708Z",
       "lastSkippedTime": "2026-05-17T04:48:00.053Z",
-      "lastTaskId": "019e34e8-ef1e-700a-a8a1-64aaccabc267",
-      "nextExecutionTime": "2026-05-17T07:59:00.343Z",
+      "lastTaskId": "019e3516-b363-75df-9fdc-b9a9eec56bb3",
+      "nextExecutionTime": "2026-05-17T08:49:00.708Z",
       "modeDisplayName": "Code",
       "createdAt": "2026-05-17T02:21:04.374Z",
-      "updatedAt": "2026-05-17T07:37:32.812Z"
+      "updatedAt": "2026-05-17T08:08:56.920Z"
     }
   ]
 }

@@ -283,11 +283,12 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     }
 
     db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(now, id);
+    const coverCacheKey = encodeURIComponent(now);
     return reply.send({
       id,
       page_number: n,
-      cover_url: `api/pdfs/${id}/cover`,
-      cover_thumbnail_url: `api/pdfs/${id}/cover/thumbnail`,
+      cover_url: `api/pdfs/${id}/cover?t=${coverCacheKey}`,
+      cover_thumbnail_url: `api/pdfs/${id}/cover/thumbnail?t=${coverCacheKey}`,
       updated_at: now,
     });
   });

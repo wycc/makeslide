@@ -74,6 +74,7 @@ export interface PdfListItem {
   script_max_chars_per_page?: number | null;
   image_style_prompt?: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 export interface PdfDetailPage {
