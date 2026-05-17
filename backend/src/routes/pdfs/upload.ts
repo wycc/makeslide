@@ -26,6 +26,23 @@ const PromptTextBodySchema = z.object({
   prompt: z.string().trim().min(10, 'prompt 至少需要 10 個字').max(4000, 'prompt 不可超過 4000 字'),
 });
 
+const PromptChatBodySchema = z.object({
+  messages: z
+    .array(
+      z.object({
+        role: z.enum(['user', 'assistant']),
+        content: z.string().trim().min(1).max(4000),
+      }),
+    )
+    .min(1)
+    .max(20),
+});
+
+const PromptChatSchema = z.object({
+  assistant_message: z.string().min(1).max(2000),
+  outline_text: z.string().min(1).max(12000),
+});
+
 const PromptTextSchema = z.object({
   title: z.string().min(1).max(120),
   slides: z
@@ -67,6 +84,45 @@ function renderPromptText(data: z.infer<typeof PromptTextSchema>): string {
     .trim();
 }
 
+async function continuePromptOutlineChat(
+  messages: z.infer<typeof PromptChatBodySchema>['messages'],
+): Promise<z.infer<typeof PromptChatSchema>> {
+  const conversation = messages
+    .map((message) => `${message.role === 'user' ? '使用者' : 'AI'}：${message.content}`)
+    .join('\n\n');
+  const result = await callChatJSON({
+    messages: [
+      {
+        role: 'system',
+        content: [
+          '你是簡報大綱規劃助理，目標是透過多輪對話協助使用者逐步完成可匯入 TXT 流程的簡報大綱。',
+          '請根據目前對話產生下一則助理回覆，並同步維護一份完整 outline_text。',
+          'assistant_message 應該自然、簡潔，指出目前大綱狀態，必要時只問 1 到 3 個最重要的澄清問題。',
+          'outline_text 必須是可直接匯入 TXT 流程的投影片文字，格式使用 Slide 1: 標題，下一行用 - 表示 2 到 6 個重點。',
+          '即使資訊不足，也要依目前資訊提供合理草稿；使用者後續回答時再更新 outline_text。',
+          '務必輸出 JSON，不要輸出 markdown。',
+        ].join('\n'),
+      },
+      {
+        role: 'user',
+        content: [
+          '以下是目前對話紀錄，請延續對話並更新簡報大綱。',
+          '',
+          conversation,
+          '',
+          '請輸出：',
+          '{"assistant_message":"給使用者的下一則回覆","outline_text":"完整 TXT 投影片大綱"}',
+        ].join('\n'),
+      },
+    ],
+    schema: PromptChatSchema,
+    maxTokens: 5000,
+    temperature: 0.5,
+    label: 'prompt-outline-chat',
+  });
+  return result.data;
+}
+
 async function generateSlideTextFromPrompt(prompt: string): Promise<{ title: string; text: string }> {
   const result = await callChatJSON({
     messages: [
@@ -105,6 +161,25 @@ async function generateSlideTextFromPrompt(prompt: string): Promise<{ title: str
 }
 
 export async function registerUploadRoutes(app: FastifyInstance): Promise<void> {
+  app.post('/api/prompt-chat', async (request, reply) => {
+    const parsedBody = PromptChatBodySchema.safeParse(request.body ?? {});
+    if (!parsedBody.success) {
+      return reply
+        .code(400)
+        .send(errorResponse('INVALID_REQUEST', parsedBody.error.issues[0]?.message ?? 'Invalid body'));
+    }
+
+    try {
+      const result = await continuePromptOutlineChat(parsedBody.data.messages);
+      return reply.send(result);
+    } catch (err) {
+      request.log.error({ err }, 'Failed to continue prompt outline chat');
+      return reply
+        .code(502)
+        .send(errorResponse('LLM_GENERATION_FAILED', err instanceof Error ? err.message : 'Failed to continue prompt outline chat'));
+    }
+  });
+
   app.post('/api/prompt-text', async (request, reply) => {
     const parsedBody = PromptTextBodySchema.safeParse(request.body ?? {});
     if (!parsedBody.success) {

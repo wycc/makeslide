@@ -10,6 +10,20 @@ export interface GeneratePromptTextRequest {
   prompt: string;
 }
 
+export interface PromptChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface PromptChatRequest {
+  messages: PromptChatMessage[];
+}
+
+export interface PromptChatResponse {
+  assistant_message: string;
+  outline_text: string;
+}
+
 /**
  * Upload a PDF file via XHR so we can report progress.
  */
@@ -78,4 +92,20 @@ export async function generatePromptTextUpload(body: GeneratePromptTextRequest):
     throw new ApiError(`HTTP ${resp.status}`, 'HTTP_ERROR', resp.status);
   }
   return data as UploadResponse;
+}
+
+export async function continuePromptOutlineChat(body: PromptChatRequest): Promise<PromptChatResponse> {
+  const resp = await fetch('api/prompt-chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data: unknown = await resp.json().catch(() => null);
+  if (!resp.ok) {
+    if (isApiErrorBody(data)) {
+      throw new ApiError(data.error.message, data.error.code, resp.status);
+    }
+    throw new ApiError(`HTTP ${resp.status}`, 'HTTP_ERROR', resp.status);
+  }
+  return data as PromptChatResponse;
 }
