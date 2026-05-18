@@ -270,12 +270,10 @@
 [x] （merge）一般文件分頁處理時，請將全部文字全部取出，然後再重新產生簡報大綱。不必照原始分頁。（完成分支：feature/thirdbatch-pdf-fulltext-resplit-outline-20260518-1741）
 [x] (merge) 一般文件分頁處理時，在產生圖片時，把原始文件也傳給 AI。讓他有從中取出圖片的可能性。（完成分支：feature/thirdbatch-document-image-gen-include-source-20260518-1750）
 [x] (merge) 簡報預設在個人帳戶下，每一個帳戶要看到不同的簡報。但也可以將簡報設定為 private/public or public editable，這樣每個人都可以看到，但每個人只能編輯自己的簡報或是被設成 public editable 的簡報。（完成分支：feature/thirdbatch-pdf-ownership-visibility-20260518-1833）
-[ ] 改用 https 
-[ ] 允許使用者用語音輸入產生投票，方便教師當場產生投票。請使用 WebAudio 錄音.　產生時把逐字稿和提示詞和語音一起傳送出去。如果語音模型不接受語音檔，則先用 ASR 把它轉換成文字。
 [x] (merge) 新增分享功能，可以產生簡報的 URL。使用這個 URL 不必經過認証，可以直接分享簡報。分享可以是 read-only 和 editable。這個分享和分享給其它使用者是不同的功能。（完成分支：feature/thirdbatch-share-url-20260518-1810）
-[x] 手機板的首頁上方的按鍵改成二排（完成分支：feature/thirdbatch-home-mobile-top-buttons-two-rows-20260518-1720）
-[x] 幫 webapp 加上桌面 icon（完成分支：feature/thirdbatch-webapp-desktop-icon-20260518-1709）
-[x] 播放時候讓手機不要變成黑畫面(有語音播放時)（完成分支：feature/thirdbatch-mobile-playback-keep-screen-awake-20260518-1730）
+[x] (merge) 手機板的首頁上方的按鍵改成二排（完成分支：feature/thirdbatch-home-mobile-top-buttons-two-rows-20260518-1720）
+[x] (merge)幫 webapp 加上桌面 icon（完成分支：feature/thirdbatch-webapp-desktop-icon-20260518-1709）
+[x] (merge) 播放時候讓手機不要變成黑畫面(有語音播放時)（完成分支：feature/thirdbatch-mobile-playback-keep-screen-awake-20260518-1730）
 [x] 提供同步模式，任何一個 session 進入播放模式，會自動變成 master，其它的使用者自動進入同步模式。螢幕會跟著 master 同步移動。（完成分支：feature/thirdbatch-playback-sync-master-20260518-1825）
 
 ## Third Batch 工作記錄
@@ -324,3 +322,8 @@
 - 工作內容：完成「簡報預設在個人帳戶下，每一個帳戶要看到不同的簡報。但也可以將簡報設定為 private/public or public editable，這樣每個人都可以看到，但每個人只能編輯自己的簡報或是被設成 public editable 的簡報。」；後端新增 `pdfs.owner_sub` 與 `pdfs.visibility` 欄位、上傳時綁定擁有者、列表與詳情依 owner/visibility 做讀取權限過濾，並新增 `PATCH /api/pdfs/:id/visibility` 讓擁有者可切換 `private/public/public_editable`，同時限制非擁有者僅能編輯 `public_editable` 簡報。
 - 所在分支：feature/thirdbatch-pdf-ownership-visibility-20260518-1833
 - 驗證：npm --prefix backend run build；git diff --check
+
+# Fourth batch
+[ ] 改用 https 
+[ ] 允許使用者用語音輸入產生投票，方便教師當場產生投票。請使用 WebAudio 錄音.　產生時把逐字稿和提示詞和語音一起傳送出去。如果語音模型不接受語音檔，則先用 ASR 把它轉換成文字。
+[ ] 新增一個按鍵顯示分享連結
