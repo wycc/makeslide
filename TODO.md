@@ -1,8 +1,8 @@
 # TODO 狀態摘要
 
-- Third Batch 仍有未完成項目；本次已完成其中「播放時候讓手機不要變成黑畫面(有語音播放時)」。
-- 最後確認時間：2026-05-18 17:31（Asia/Taipei）
-- 最近檢查：已完成 Third Batch「播放時候讓手機不要變成黑畫面(有語音播放時)」，實作與提交分支為 feature/thirdbatch-mobile-playback-keep-screen-awake-20260518-1730，並已回到 master 更新 TODO 狀態與工作記錄。
+- Third Batch 仍有未完成項目；本次已完成其中「一般文件分頁處理時，請將全部文字全部取出，然後再重新產生簡報大綱。不必照原始分頁。」。
+- 最後確認時間：2026-05-18 17:42（Asia/Taipei）
+- 最近檢查：已完成 Third Batch「一般文件分頁處理時，請將全部文字全部取出，然後再重新產生簡報大綱。不必照原始分頁。」；實作與提交分支為 feature/thirdbatch-pdf-fulltext-resplit-outline-20260518-1741，並已回到 master 更新 TODO 狀態與工作記錄。
 
 # First Batch
 [x] (merge)首次流程導引應該只有在列表是空的時候才出現。（完成分支：feature/onboarding-empty-list-only）
@@ -267,7 +267,7 @@
 
 
 # Third Batch
-[ ] 一般文件分頁處理時，請將全部文字全部取出，然後再重新產生簡報大綱。不必照原始分頁。
+[x] 一般文件分頁處理時，請將全部文字全部取出，然後再重新產生簡報大綱。不必照原始分頁。（完成分支：feature/thirdbatch-pdf-fulltext-resplit-outline-20260518-1741）
 [ ] 一般文件分頁處理時，在產生圖片時，把原始文件也傳給 AI。讓他有從中取出圖片的可能性。
 [ ] 簡報預設在個人帳戶下，每一個帳戶要看到不同的簡報。但也可以將簡報設定為 private/public or public editable，這樣每個人都可以看到，但每個人只能編輯自己的簡報或是被設成 public editable 的簡報。
 [ ] 允許使用者用語音輸入產生投票，方便教師當場產生投票。產生時把逐字稿和提示詞和語音一起傳送出去。如果語音模型不接受語音檔，則先用 ASR 把它轉換成文字。
@@ -293,3 +293,8 @@
 - 工作內容：完成「播放時候讓手機不要變成黑畫面(有語音播放時)」，在播放頁加入 Screen Wake Lock 機制，語音播放中會請求保持螢幕喚醒，暫停/停止/離開頁面時釋放，並在分頁重新可見且仍播放時自動重取，降低手機播放時自動黑屏風險。
 - 所在分支：feature/thirdbatch-mobile-playback-keep-screen-awake-20260518-1730
 - 驗證：npm --prefix frontend run build；git diff --check -- TODO.md
+
+- 時間：2026-05-18 17:42（Asia/Taipei）
+- 工作內容：完成「一般文件分頁處理時，請將全部文字全部取出，然後再重新產生簡報大綱。不必照原始分頁。」；在後端 pipeline 中新增 PDF 全文重切流程：先彙整每頁抽取文字，再以 LLM 重分頁並重建圖片與文字頁，後續腳本/TTS 依新頁面結構進行，不再綁定原始 PDF 分頁。
+- 所在分支：feature/thirdbatch-pdf-fulltext-resplit-outline-20260518-1741
+- 驗證：npm --prefix backend run build；git diff --check -- TODO.md
