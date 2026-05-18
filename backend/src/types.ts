@@ -180,6 +180,7 @@ export interface PdfDetail {
   outline_url?: string | null;
   created_at: string;
   updated_at: string;
+  share_mode?: 'read_only' | 'editable';
   video_url?: string | null;
   pages: PdfDetailPage[];
 }

@@ -31,6 +31,40 @@ export async function fetchPdfDetail(id: string): Promise<PdfDetail> {
   return (await resp.json()) as PdfDetail;
 }
 
+export type ShareAccessMode = 'read_only' | 'editable';
+
+export interface ShareInfoResponse {
+  token: string;
+  pdf_id: string;
+  access: ShareAccessMode;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateShareResponse extends ShareInfoResponse {
+  share_url: string;
+}
+
+export async function resolveShareToken(token: string): Promise<ShareInfoResponse> {
+  const resp = await fetch(`api/share/${encodeURIComponent(token)}`);
+  if (!resp.ok) {
+    throw await parseErrorBody(resp);
+  }
+  return (await resp.json()) as ShareInfoResponse;
+}
+
+export async function createPdfShare(id: string, access: ShareAccessMode): Promise<CreateShareResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/share`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ access }),
+  });
+  if (!resp.ok) {
+    throw await parseErrorBody(resp);
+  }
+  return (await resp.json()) as CreateShareResponse;
+}
+
 export interface CreateYoutubeTaskResponse {
   id: string;
   status: string;

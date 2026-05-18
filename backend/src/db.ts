@@ -190,6 +190,17 @@ function migrate(): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_page_poll_votes_poll ON page_poll_votes(poll_id);
+
+    CREATE TABLE IF NOT EXISTS pdf_shares (
+      token TEXT PRIMARY KEY,
+      pdf_id TEXT NOT NULL,
+      access TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (pdf_id) REFERENCES pdfs(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_pdf_shares_pdf ON pdf_shares(pdf_id, created_at DESC);
   `);
 
   normalizeLifecycleStatuses();
