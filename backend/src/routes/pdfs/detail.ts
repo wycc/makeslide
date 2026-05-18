@@ -7,6 +7,7 @@ import { db } from '../../db';
 import { config } from '../../config';
 import type { PageRow, PdfListItem, PdfRow } from '../../types';
 import { coverImagePath, readMetadata, safeJoinPdfPath, videoPath, writeMetadata, youtubeOutlinePath } from '../../services/storage';
+import { decodeSession, parseCookies } from '../auth';
 import { ensureCoverThumbnail, ensurePageThumbnail, generateCoverThumbnail } from '../../services/thumbnails';
 import {
   IdParamSchema,
@@ -15,6 +16,7 @@ import {
   CreatePollBodySchema,
   DEFAULT_PDF_CATEGORY,
   UpdateCategoryBodySchema,
+  UpdateVisibilityBodySchema,
   UpdatePromptBodySchema,
   UpdateTitleBodySchema,
   VotePollBodySchema,
@@ -36,6 +38,23 @@ interface PagePollRow {
   is_active: number;
   created_at: string;
   updated_at: string;
+}
+
+function sessionSub(request: FastifyRequest): string | null {
+  const session = decodeSession(parseCookies(request).makeslide_session);
+  return session?.sub ?? null;
+}
+
+function canReadPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
+  if (!row.owner_sub) return true;
+  if (sub && row.owner_sub === sub) return true;
+  return row.visibility === 'public' || row.visibility === 'public_editable';
+}
+
+function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
+  if (!row.owner_sub) return true;
+  if (sub && row.owner_sub === sub) return true;
+  return row.visibility === 'public_editable';
 }
 
 function rowToPoll(row: PagePollRow) {
@@ -66,17 +85,20 @@ function rowToPoll(row: PagePollRow) {
 
 export async function registerDetailRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/pdfs
-  app.get('/api/pdfs', async (_request, reply) => {
+  app.get('/api/pdfs', async (request, reply) => {
+    const sub = sessionSub(request);
     const rows = db
       .prepare(
         `SELECT id, title, original_filename, status, page_count, progress_step,
                  progress_current, progress_total,
-                error_message, user_prompt, require_script_confirmation, category, created_at, updated_at
-          FROM pdfs
-          ORDER BY created_at DESC`,
+                error_message, user_prompt, require_script_confirmation, category,
+                owner_sub, visibility,
+                created_at, updated_at
+           FROM pdfs
+           ORDER BY created_at DESC`,
       )
       .all() as PdfRow[];
-    const items: PdfListItem[] = rows.map(rowToListItem);
+    const items: PdfListItem[] = rows.filter((row) => canReadPdf(sub, row)).map(rowToListItem);
     return reply.send(items);
   });
 
@@ -92,6 +114,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
                 progress_current, progress_total,
                 error_message, user_prompt, require_script_confirmation,
                 category,
+                owner_sub, visibility,
                 tts_voice, tts_speed, script_max_chars_per_page, image_style_prompt,
                 source_type, source_url, source_video_id, source_caption_language,
                 created_at, updated_at
@@ -100,6 +123,10 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       .get(parsed.data.id) as PdfRow | undefined;
     if (!row) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
+    }
+    const sub = sessionSub(request);
+    if (!canReadPdf(sub, row)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報'));
     }
     const pages = db
       .prepare(
@@ -133,9 +160,12 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
         .send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
     }
     const { id } = parsed.data;
-    const row = db.prepare(`SELECT id FROM pdfs WHERE id = ?`).get(id) as { id: string } | undefined;
+    const row = db.prepare(`SELECT id, owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as Pick<PdfRow, 'id' | 'owner_sub' | 'visibility'> | undefined;
     if (!row) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    if (!canEditPdf(sessionSub(request), row)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
     }
     const now = nowIso();
     const title = body.data.title.trim();
@@ -167,9 +197,12 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
         .send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
     }
     const { id } = parsed.data;
-    const row = db.prepare(`SELECT id FROM pdfs WHERE id = ?`).get(id) as { id: string } | undefined;
+    const row = db.prepare(`SELECT id, owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as Pick<PdfRow, 'id' | 'owner_sub' | 'visibility'> | undefined;
     if (!row) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    if (!canEditPdf(sessionSub(request), row)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
     }
 
     const now = nowIso();
@@ -192,6 +225,45 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
 
   app.patch('/api/pdfs/:id/category', handleUpdatePdfCategory);
   app.post('/api/pdfs/:id/category', handleUpdatePdfCategory);
+
+  app.patch('/api/pdfs/:id/visibility', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const body = UpdateVisibilityBodySchema.safeParse(request.body ?? {});
+    if (!body.success) {
+      return reply
+        .code(400)
+        .send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
+    }
+    const { id } = parsed.data;
+    const row = db
+      .prepare(`SELECT id, owner_sub, visibility FROM pdfs WHERE id = ?`)
+      .get(id) as Pick<PdfRow, 'id' | 'owner_sub' | 'visibility'> | undefined;
+    if (!row) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    if (!canEditPdf(sessionSub(request), row)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
+    }
+    const now = nowIso();
+    const visibility = body.data.visibility;
+    db.prepare(`UPDATE pdfs SET visibility = ?, updated_at = ? WHERE id = ?`).run(visibility, now, id);
+
+    try {
+      const metadata = await readMetadata(id);
+      if (metadata) {
+        metadata.visibility = visibility;
+        metadata.updated_at = now;
+        await writeMetadata(id, metadata);
+      }
+    } catch (err) {
+      request.log.warn({ err, id }, 'Failed to update metadata visibility');
+    }
+
+    return reply.send({ id, visibility, updated_at: now });
+  });
 
   app.delete('/api/categories/:category', async (request, reply) => {
     const parsed = z.object({ category: z.string().min(1).max(80) }).safeParse(request.params);

@@ -110,6 +110,14 @@ function migrate(): void {
     db.exec(`ALTER TABLE pdfs ADD COLUMN category TEXT NOT NULL DEFAULT 'general'`);
     logger.info('Added column pdfs.category');
   }
+  if (!columnExists('pdfs', 'owner_sub')) {
+    db.exec(`ALTER TABLE pdfs ADD COLUMN owner_sub TEXT`);
+    logger.info('Added column pdfs.owner_sub');
+  }
+  if (!columnExists('pdfs', 'visibility')) {
+    db.exec(`ALTER TABLE pdfs ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private'`);
+    logger.info('Added column pdfs.visibility');
+  }
 
   // pages table: drop legacy M1 version (it was never populated) and recreate
   // with the M2 schema. Safe because M1 never wrote rows here.

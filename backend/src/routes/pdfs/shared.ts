@@ -216,6 +216,10 @@ export const UpdateCategoryBodySchema = z.object({
   category: z.string().trim().min(1, 'category 不可為空').max(80, 'category 過長'),
 });
 
+export const UpdateVisibilityBodySchema = z.object({
+  visibility: z.enum(['private', 'public', 'public_editable']),
+});
+
 export const UpdatePromptBodySchema = z.object({
   prompt: z.string().max(MAX_USER_PROMPT_CHARS, `提示詞不可超過 ${MAX_USER_PROMPT_CHARS} 字`),
 });
@@ -469,6 +473,8 @@ export function rowToListItem(row: PdfRow): PdfListItem {
     user_prompt: row.user_prompt,
     require_script_confirmation: row.require_script_confirmation === 1,
     category: row.category?.trim() || DEFAULT_PDF_CATEGORY,
+    owner_sub: row.owner_sub ?? null,
+    visibility: row.visibility ?? 'private',
     tts_provider: runtime.ttsProvider,
     tts_voice: row.tts_voice,
     tts_speed: row.tts_speed,
@@ -550,6 +556,8 @@ export function rowToDetail(row: PdfRow, pages: PageRow[], timingsByPage: PageTi
     user_prompt: row.user_prompt,
     require_script_confirmation: row.require_script_confirmation === 1,
     category: row.category?.trim() || DEFAULT_PDF_CATEGORY,
+    owner_sub: row.owner_sub ?? null,
+    visibility: row.visibility ?? 'private',
     tts_provider: runtime.ttsProvider,
     tts_voice: row.tts_voice,
     tts_speed: row.tts_speed,

@@ -23,6 +23,12 @@ import { enqueuePdfProcessing } from '../../worker/pipeline';
 import { generateVideo } from '../../worker/steps/generateVideo';
 import type { ApiError, PageRow, PdfListItem, PdfMetadata, PdfMetadataPage, PdfRow, PdfStatus } from '../../types';
 import { rowToListItem, IdParamSchema, StartBodySchema, YoutubeCreateBodySchema, nowIso, errorResponse, PDF_ID_SIZE, DEFAULT_PDF_CATEGORY, isSupportedVoiceByProvider, extractYoutubeVideoId, looksLikePdf, looksLikeUtf8Text, sanitizeUploadFilename, titleFromUploadFilename } from './shared';
+import { decodeSession, parseCookies } from '../auth';
+
+function ownerSubFromRequest(request: FastifyRequest): string | null {
+  const session = decodeSession(parseCookies(request).makeslide_session);
+  return session?.sub ?? null;
+}
 
 const PromptTextBodySchema = z.object({
   prompt: z.string().trim().min(10, 'prompt 至少需要 10 個字').max(4000, 'prompt 不可超過 4000 字'),
@@ -218,6 +224,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
     const title = generated.title || '提示詞生成簡報';
     const filename = `${titleFromUploadFilename(title)}.txt`;
     const status: PdfStatus = 'awaiting_prompt';
+    const ownerSub = ownerSubFromRequest(request);
 
     try {
       createPdfDir(pdfId);
@@ -235,6 +242,8 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         user_prompt: null,
         require_script_confirmation: false,
         category: DEFAULT_PDF_CATEGORY,
+        owner_sub: ownerSub,
+        visibility: 'private',
         tts_voice: null,
         tts_speed: null,
         script_max_chars_per_page: null,
@@ -248,11 +257,11 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       db.prepare(
         `INSERT INTO pdfs (id, title, original_filename, status, page_count,
                             progress_step, error_message, user_prompt, require_script_confirmation,
-                            category,
+                            category, owner_sub, visibility,
                             tts_voice, tts_speed, script_max_chars_per_page, image_style_prompt,
                             created_at, updated_at)
-         VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, ?, NULL, NULL, NULL, NULL, ?, ?)`,
-      ).run(pdfId, title, filename, status, DEFAULT_PDF_CATEGORY, createdAt, createdAt);
+         VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?)`,
+      ).run(pdfId, title, filename, status, DEFAULT_PDF_CATEGORY, ownerSub, 'private', createdAt, createdAt);
     } catch (err) {
       request.log.error({ err, pdfId }, 'Failed to persist prompt generated TXT');
       try {
@@ -368,6 +377,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
     // Do NOT start the pipeline here — wait for the user to submit a
     // style / tone prompt via POST /api/pdfs/:id/start.
     const status: PdfStatus = 'awaiting_prompt';
+    const ownerSub = ownerSubFromRequest(request);
 
     try {
       createPdfDir(pdfId);
@@ -396,6 +406,8 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         user_prompt: null,
         require_script_confirmation: false,
         category: DEFAULT_PDF_CATEGORY,
+        owner_sub: ownerSub,
+        visibility: 'private',
         tts_voice: null,
         tts_speed: null,
         script_max_chars_per_page: null,
@@ -409,11 +421,11 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       db.prepare(
         `INSERT INTO pdfs (id, title, original_filename, status, page_count,
                             progress_step, error_message, user_prompt, require_script_confirmation,
-                            category,
+                            category, owner_sub, visibility,
                             tts_voice, tts_speed, script_max_chars_per_page, image_style_prompt,
                             created_at, updated_at)
-         VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, ?, NULL, NULL, NULL, NULL, ?, ?)`,
-      ).run(pdfId, title, filename, status, DEFAULT_PDF_CATEGORY, createdAt, createdAt);
+         VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?)`,
+      ).run(pdfId, title, filename, status, DEFAULT_PDF_CATEGORY, ownerSub, 'private', createdAt, createdAt);
     } catch (err) {
       request.log.error({ err, pdfId }, 'Failed to persist uploaded PDF');
       try {
@@ -463,6 +475,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
     const createdAt = nowIso();
     const status: PdfStatus = 'uploaded';
     const language = parsedBody.data.language?.trim() || null;
+    const ownerSub = ownerSubFromRequest(request);
 
     try {
       createPdfDir(pdfId);
@@ -477,6 +490,8 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         page_count: null,
         error_message: null,
         category: DEFAULT_PDF_CATEGORY,
+        owner_sub: ownerSub,
+        visibility: 'private',
         source_type: 'youtube',
         source_url: youtubeUrl,
         source_video_id: videoId,
@@ -490,17 +505,19 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       db.prepare(
         `INSERT INTO pdfs (id, title, original_filename, status, page_count,
                             progress_step, error_message, user_prompt, require_script_confirmation,
-                            category,
+                            category, owner_sub, visibility,
                             tts_voice, tts_speed, script_max_chars_per_page, image_style_prompt,
                             source_type, source_url, source_video_id, source_caption_language,
                             created_at, updated_at)
-         VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, ?, NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?)`,
       ).run(
         pdfId,
         `YouTube ${videoId}`,
         youtubeUrl,
         status,
         DEFAULT_PDF_CATEGORY,
+        ownerSub,
+        'private',
         'youtube',
         youtubeUrl,
         videoId,
