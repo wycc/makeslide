@@ -57,6 +57,25 @@ const IMAGE_CANDIDATE_ID_RE = /^[A-Za-z0-9_-]{6,64}$/;
 
 const MAX_USER_PROMPT_CHARS_IN_REWRITE_SYSTEM = 1200;
 
+function cancelRunningPageArtifactsForDeletedPage(pdfId: string, pageNumber: number, now: string): void {
+  db.prepare(
+    `UPDATE page_artifact_timings
+        SET status = 'canceled',
+            ended_at = COALESCE(ended_at, ?),
+            duration_ms = CASE
+              WHEN started_at IS NOT NULL AND ended_at IS NULL THEN MAX(0, CAST((julianday(?) - julianday(started_at)) * 86400000 AS INTEGER))
+              ELSE duration_ms
+            END,
+            sla_status = 'unknown',
+            error_code = 'PAGE_DELETED',
+            error_message = 'Page was deleted while artifact generation was still running',
+            updated_at = ?
+      WHERE pdf_id = ?
+        AND page_number = ?
+        AND status = 'running'`,
+  ).run(now, now, now, pdfId, pageNumber);
+}
+
 function sanitiseRewriteUserPrompt(raw: string | null | undefined): string {
   if (!raw) return '';
   const trimmed = raw.trim();
@@ -422,6 +441,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     ];
 
     const tx = db.transaction(() => {
+      cancelRunningPageArtifactsForDeletedPage(id, n, now);
       db.prepare(`DELETE FROM pages WHERE pdf_id = ? AND page_number = ?`).run(id, n);
       db.prepare(
         `UPDATE pages
