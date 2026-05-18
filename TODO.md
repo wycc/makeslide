@@ -1,8 +1,8 @@
 # TODO 狀態摘要
 
-- Third Batch 仍有未完成項目；本次已完成其中「一般文件分頁處理時，在產生圖片時，把原始文件也傳給 AI。讓他有從中取出圖片的可能性。」。
-- 最後確認時間：2026-05-18 17:53（Asia/Taipei）
-- 最近檢查：已完成 Third Batch「一般文件分頁處理時，在產生圖片時，把原始文件也傳給 AI。讓他有從中取出圖片的可能性。」；實作與提交分支為 feature/thirdbatch-document-image-gen-include-source-20260518-1750，並已回到 master 更新 TODO 狀態與工作記錄。
+- Third Batch 仍有未完成項目；本次已完成其中「允許使用者用語音輸入產生投票，方便教師當場產生投票。產生時把逐字稿和提示詞和語音一起傳送出去。如果語音模型不接受語音檔，則先用 ASR 把它轉換成文字。」。
+- 最後確認時間：2026-05-18 18:05（Asia/Taipei）
+- 最近檢查：已完成 Third Batch「允許使用者用語音輸入產生投票，方便教師當場產生投票。產生時把逐字稿和提示詞和語音一起傳送出去。如果語音模型不接受語音檔，則先用 ASR 把它轉換成文字。」；實作與提交分支為 feature/thirdbatch-voice-input-poll-20260518-1805，並已回到 master 更新 TODO 狀態與工作記錄。
 
 # First Batch
 [x] (merge)首次流程導引應該只有在列表是空的時候才出現。（完成分支：feature/onboarding-empty-list-only）
@@ -270,7 +270,7 @@
 [x] 一般文件分頁處理時，請將全部文字全部取出，然後再重新產生簡報大綱。不必照原始分頁。（完成分支：feature/thirdbatch-pdf-fulltext-resplit-outline-20260518-1741）
 [x] 一般文件分頁處理時，在產生圖片時，把原始文件也傳給 AI。讓他有從中取出圖片的可能性。（完成分支：feature/thirdbatch-document-image-gen-include-source-20260518-1750）
 [ ] 簡報預設在個人帳戶下，每一個帳戶要看到不同的簡報。但也可以將簡報設定為 private/public or public editable，這樣每個人都可以看到，但每個人只能編輯自己的簡報或是被設成 public editable 的簡報。
-[ ] 允許使用者用語音輸入產生投票，方便教師當場產生投票。產生時把逐字稿和提示詞和語音一起傳送出去。如果語音模型不接受語音檔，則先用 ASR 把它轉換成文字。
+[x] 允許使用者用語音輸入產生投票，方便教師當場產生投票。產生時把逐字稿和提示詞和語音一起傳送出去。如果語音模型不接受語音檔，則先用 ASR 把它轉換成文字。（完成分支：feature/thirdbatch-voice-input-poll-20260518-1805）
 [ ] 新增分享功能，可以產生簡報的 URL。使用這個 URL 不必經過認証，可以直接分享簡報。分享可以是 read-only 和 editable。這個分享和分享給其它使用者是不同的功能。
 [x] 手機板的首頁上方的按鍵改成二排（完成分支：feature/thirdbatch-home-mobile-top-buttons-two-rows-20260518-1720）
 [x] 幫 webapp 加上桌面 icon（完成分支：feature/thirdbatch-webapp-desktop-icon-20260518-1709）
@@ -303,3 +303,8 @@
 - 工作內容：完成「一般文件分頁處理時，在產生圖片時，把原始文件也傳給 AI。讓他有從中取出圖片的可能性。」；在文件匯入（document mode）的 LLM 產圖流程中附帶原始 `source.pdf`（大小上限內以 data URL 傳入 `input_image`），使模型可參考原始文件圖文元素生成頁面圖片，並補充執行中繼資料標記是否成功附帶來源 PDF。
 - 所在分支：feature/thirdbatch-document-image-gen-include-source-20260518-1750
 - 驗證：npm --prefix backend run build；git diff --check -- TODO.md
+
+- 時間：2026-05-18 18:05（Asia/Taipei）
+- 工作內容：完成「允許使用者用語音輸入產生投票，方便教師當場產生投票。產生時把逐字稿和提示詞和語音一起傳送出去。如果語音模型不接受語音檔，則先用 ASR 把它轉換成文字。」；後端新增 `/api/pdfs/:id/pages/:n/polls/voice` multipart API，會接收語音檔與可選提示詞，先以 ASR（whisper-1）轉寫，再把「逐字稿 + 提示詞 + 本頁文字 + 本頁逐字稿」送給 AI 產生投票；前端在播放頁 Realtime Poll 設定區新增語音檔上傳、提示詞輸入與「用語音建立並開始本頁投票」操作，並顯示轉寫結果。
+- 所在分支：feature/thirdbatch-voice-input-poll-20260518-1805
+- 驗證：npm --prefix backend run build && npm --prefix frontend run build；git diff --check -- TODO.md
