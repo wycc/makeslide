@@ -7,6 +7,8 @@ import type {
   PdfListItem,
   RegenJobState,
   RollbackRegenerateResponse,
+  SyncJoinResponse,
+  SyncStateResponse,
   StartProcessingResponse,
 } from '../../types';
 import { ApiError, parseErrorBody } from './common';
@@ -478,6 +480,47 @@ export async function fetchRegenerateStatus(id: string): Promise<RegenJobState> 
   );
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as RegenJobState;
+}
+
+export async function joinPlaybackSync(id: string, clientId: string): Promise<SyncJoinResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/sync/join`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ client_id: clientId }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as SyncJoinResponse;
+}
+
+export async function fetchPlaybackSyncState(id: string, clientId?: string): Promise<SyncStateResponse> {
+  const q = clientId ? `?client_id=${encodeURIComponent(clientId)}` : '';
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/sync/state${q}`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as SyncStateResponse;
+}
+
+export async function updatePlaybackSyncState(
+  id: string,
+  clientId: string,
+  payload: { page_number: number; is_playing: boolean; current_time: number },
+): Promise<{ ok: boolean; role: 'master'; updated_at: string }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/sync/state`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ client_id: clientId, ...payload }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { ok: boolean; role: 'master'; updated_at: string };
+}
+
+export async function leavePlaybackSync(id: string, clientId: string): Promise<{ ok: boolean }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/sync/leave`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ client_id: clientId }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { ok: boolean };
 }
 
 /**

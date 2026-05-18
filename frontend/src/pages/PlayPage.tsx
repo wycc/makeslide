@@ -18,7 +18,10 @@ import {
   fetchPagePolls,
   fetchPagePrompt,
   fetchPageChatHistory,
+  fetchPlaybackSyncState,
   getImagePromptTemplates,
+  joinPlaybackSync,
+  leavePlaybackSync,
   fetchRegenerateStatus,
   generatePdfVideo,
   moveSlide,
@@ -32,6 +35,7 @@ import {
   updatePdfTtsSettings,
   updatePdfPrompt,
   updatePdfTitle,
+  updatePlaybackSyncState,
   votePagePoll,
   rewritePageScript,
   type ImagePromptTemplate,
@@ -233,6 +237,11 @@ export default function PlayPage() {
   // 手機模式下的 tab 切換（桌面模式忽略此 state，永遠並排顯示）
   const [activeTab, setActiveTab] = useState<'play' | 'qa'>('play');
   const [qaPanelExpanded, setQaPanelExpanded] = useState(false);
+  const [syncEnabled, setSyncEnabled] = useState(false);
+  const [syncRole, setSyncRole] = useState<'master' | 'follower'>('follower');
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const syncClientIdRef = useRef<string>('');
+  const applyingRemoteSyncRef = useRef(false);
   const [imageOnlyFullscreen, setImageOnlyFullscreen] = useState(false);
   const [slideImageScale, setSlideImageScale] = useState(1);
   const IMAGE_MSG_PREFIX = '[image] ';
@@ -459,6 +468,7 @@ export default function PlayPage() {
 
   // ---- Controls ----
   const playPause = useCallback(() => {
+    if (syncEnabled && syncRole !== 'master') return;
     const audio = audioRef.current;
     if (!audio) return;
     if (classroomMode && classroomAwaitingNext && currentIdx < totalPages - 1) {
@@ -473,19 +483,21 @@ export default function PlayPage() {
     } else {
       audio.pause();
     }
-  }, [classroomAwaitingNext, classroomMode, currentIdx, totalPages]);
+  }, [classroomAwaitingNext, classroomMode, currentIdx, syncEnabled, syncRole, totalPages]);
 
   const goPrev = useCallback(() => {
+    if (syncEnabled && syncRole !== 'master') return;
     setClassroomAwaitingNext(false);
     setFinished(false);
     setCurrentIdx((i) => Math.max(0, i - 1));
-  }, []);
+  }, [syncEnabled, syncRole]);
 
   const goNext = useCallback(() => {
+    if (syncEnabled && syncRole !== 'master') return;
     setClassroomAwaitingNext(false);
     setFinished(false);
     setCurrentIdx((i) => Math.min(totalPages - 1, i + 1));
-  }, [totalPages]);
+  }, [syncEnabled, syncRole, totalPages]);
 
   const handleEnded = useCallback(() => {
     setIsPlaying(false);
@@ -504,13 +516,90 @@ export default function PlayPage() {
 
   const handleSeek = useCallback(
     (ev: React.ChangeEvent<HTMLInputElement>) => {
+      if (syncEnabled && syncRole !== 'master') return;
       const audio = audioRef.current;
       if (!audio || !Number.isFinite(duration) || duration <= 0) return;
       const ratio = Number(ev.target.value) / 1000;
       audio.currentTime = ratio * duration;
     },
-    [duration],
+    [duration, syncEnabled, syncRole],
   );
+
+  useEffect(() => {
+    if (!syncEnabled || !pdfId) return;
+    const storageKey = `makeslide.sync.client.${pdfId}`;
+    const existing = window.localStorage.getItem(storageKey);
+    const next = existing || `sync-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    window.localStorage.setItem(storageKey, next);
+    syncClientIdRef.current = next;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const joined = await joinPlaybackSync(pdfId, next);
+        if (cancelled) return;
+        setSyncRole(joined.role);
+        setSyncError(null);
+      } catch (err) {
+        if (cancelled) return;
+        setSyncError(err instanceof ApiError ? err.message : '同步模式連線失敗');
+        setSyncEnabled(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (syncClientIdRef.current) {
+        void leavePlaybackSync(pdfId, syncClientIdRef.current).catch(() => undefined);
+      }
+    };
+  }, [syncEnabled, pdfId]);
+
+  useEffect(() => {
+    if (!syncEnabled || !pdfId || !syncClientIdRef.current) return;
+    if (syncRole !== 'master') return;
+    if (applyingRemoteSyncRef.current) return;
+    const pageNumber = Math.max(1, currentIdx + 1);
+    const time = Number.isFinite(currentTime) ? Math.max(0, currentTime) : 0;
+    void updatePlaybackSyncState(pdfId, syncClientIdRef.current, {
+      page_number: pageNumber,
+      is_playing: isPlaying,
+      current_time: time,
+    }).catch((err) => {
+      setSyncError(err instanceof ApiError ? err.message : '同步狀態更新失敗');
+    });
+  }, [syncEnabled, syncRole, pdfId, currentIdx, isPlaying, currentTime]);
+
+  useEffect(() => {
+    if (!syncEnabled || !pdfId || !syncClientIdRef.current) return;
+    const timer = window.setInterval(() => {
+      void (async () => {
+        try {
+          const state = await fetchPlaybackSyncState(pdfId, syncClientIdRef.current);
+          setSyncRole(state.role);
+          if (state.role === 'master') return;
+          applyingRemoteSyncRef.current = true;
+          const targetIdx = Math.max(0, state.page_number - 1);
+          setCurrentIdx((prev) => (prev === targetIdx ? prev : targetIdx));
+          const audio = audioRef.current;
+          if (audio) {
+            const nextTime = Number.isFinite(state.current_time) ? Math.max(0, state.current_time) : 0;
+            const drift = Math.abs((audio.currentTime || 0) - nextTime);
+            if (drift > 0.8) audio.currentTime = nextTime;
+            if (state.is_playing) {
+              void audio.play().catch(() => setIsPlaying(false));
+            } else {
+              audio.pause();
+            }
+          }
+          setSyncError(null);
+        } catch (err) {
+          setSyncError(err instanceof ApiError ? err.message : '同步輪詢失敗');
+        } finally {
+          applyingRemoteSyncRef.current = false;
+        }
+      })();
+    }, 1200);
+    return () => window.clearInterval(timer);
+  }, [syncEnabled, pdfId]);
 
   const handleRetry = useCallback(() => {
     const audio = audioRef.current;
@@ -1566,10 +1655,23 @@ export default function PlayPage() {
               {titleBusy ? '儲存中…' : '更新標題'}
             </button>
           </div>
-          <div className="shrink-0 whitespace-nowrap text-right text-xs text-slate-400 sm:w-20 sm:text-sm">
-            頁 {currentIdx + 1}/{totalPages}
+            <div className="shrink-0 whitespace-nowrap text-right text-xs text-slate-400 sm:w-20 sm:text-sm">
+              頁 {currentIdx + 1}/{totalPages}
+            </div>
+            <label className="ml-2 inline-flex items-center gap-1 text-xs text-slate-300">
+              <input
+                type="checkbox"
+                checked={syncEnabled}
+                onChange={(e) => {
+                  setSyncEnabled(e.target.checked);
+                  setSyncError(null);
+                }}
+              />
+              同步模式
+              {syncEnabled ? `(${syncRole === 'master' ? 'master' : 'follower'})` : ''}
+            </label>
           </div>
-        </div>
+          {syncError ? <div className="mt-1 text-xs text-rose-300">{syncError}</div> : null}
         {readOnlyReason ? (
           <div className="mx-auto w-full max-w-5xl px-4 pb-3">
             <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">

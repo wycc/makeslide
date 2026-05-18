@@ -229,3 +229,27 @@ export interface RollbackRegenerateResponse {
   asset_types: RegenStepName[];
   snapshot_id: string;
 }
+
+export type SyncRole = 'master' | 'follower';
+
+export interface SyncJoinResponse {
+  pdf_id: string;
+  role: SyncRole;
+  master_client_id: string | null;
+  page_number: number;
+  is_playing: boolean;
+  current_time: number;
+  updated_at: string;
+  master_expires_at: string | null;
+}
+
+export interface SyncStateResponse {
+  pdf_id: string;
+  role: SyncRole;
+  master_client_id: string | null;
+  page_number: number;
+  is_playing: boolean;
+  current_time: number;
+  updated_at: string;
+  master_expires_at: string | null;
+}
