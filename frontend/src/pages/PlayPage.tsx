@@ -229,6 +229,8 @@ export default function PlayPage() {
   const [shareBusy, setShareBusy] = useState(false);
   const [shareMessage, setShareMessage] = useState<string | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [shareUrl, setShareUrl] = useState('');
   // 在按下「確認」啟動重生前記住目前頁碼，供 rollback 後跳回。
   const preRegenPageIdxRef = useRef<number | null>(null);
   const pollVoterIdRef = useRef<string>('');
@@ -1039,8 +1041,15 @@ export default function PlayPage() {
     try {
       const res = await createPdfShare(pdfId, shareAccess);
       const absoluteUrl = `${window.location.origin}${res.share_url}`;
-      await navigator.clipboard.writeText(absoluteUrl);
-      setShareMessage(`已建立並複製分享連結（${shareAccess === 'editable' ? '可編輯' : '唯讀'}）`);
+      setShareUrl(absoluteUrl);
+      setShareDialogOpen(true);
+      try {
+        await navigator.clipboard.writeText(absoluteUrl);
+        setShareMessage(`已建立並複製分享連結（${shareAccess === 'editable' ? '可編輯' : '唯讀'}）`);
+      } catch {
+        setShareMessage(`分享連結已建立：${absoluteUrl}`);
+        setShareError('已建立分享連結，但瀏覽器不允許自動複製，請手動複製上述連結。');
+      }
     } catch (err) {
       setShareError(err instanceof ApiError ? err.message : '建立分享連結失敗');
     } finally {
@@ -1591,12 +1600,16 @@ export default function PlayPage() {
       {/* Header */}
       <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-2 py-2 sm:gap-3 sm:px-4 sm:py-3">
-          <Link
-            to="/"
-            className="shrink-0 whitespace-nowrap rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800 sm:px-3 sm:text-sm"
-          >
-            ← 返回
-          </Link>
+          {!currentShareToken ? (
+            <Link
+              to="/"
+              className="shrink-0 whitespace-nowrap rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800 sm:px-3 sm:text-sm"
+            >
+              ← 返回
+            </Link>
+          ) : (
+            <div className="w-16 shrink-0 sm:w-20" aria-hidden="true" />
+          )}
           <div className="flex min-w-0 flex-1 items-center justify-center gap-1 sm:gap-2">
             <input
               value={titleInput}
@@ -2769,6 +2782,46 @@ export default function PlayPage() {
                 title={!regenAnySelected ? '請至少選擇一個項目' : ''}
               >
                 {regenAllBusy ? '重生中…' : regenJob?.status === 'completed' ? '再次重生' : '確認'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {shareDialogOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
+          <div className="w-full max-w-2xl rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl">
+            <h3 className="text-base font-semibold text-slate-100">分享連結已建立</h3>
+            <p className="mt-2 text-sm text-slate-300">請複製以下 URL 並分享給他人：</p>
+            <textarea
+              readOnly
+              value={shareUrl}
+              onFocus={(e) => e.currentTarget.select()}
+              className="mt-3 h-24 w-full resize-none rounded-md border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs text-emerald-200 outline-none"
+            />
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!shareUrl) return;
+                  try {
+                    await navigator.clipboard.writeText(shareUrl);
+                    setShareMessage('已複製分享連結');
+                    setShareError(null);
+                  } catch {
+                    setShareError('瀏覽器不允許自動複製，請手動複製。');
+                  }
+                }}
+                className="rounded border border-violet-500/50 bg-violet-500/15 px-3 py-1.5 text-sm text-violet-200 hover:bg-violet-500/25"
+              >
+                複製連結
+              </button>
+              <button
+                type="button"
+                onClick={() => setShareDialogOpen(false)}
+                className="rounded border border-slate-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
+              >
+                關閉
               </button>
             </div>
           </div>
