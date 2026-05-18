@@ -1,8 +1,8 @@
 # TODO 狀態摘要
 
-- Third Batch 仍有未完成項目；本次已完成其中「新增分享功能，可以產生簡報的 URL。使用這個 URL 不必經過認証，可以直接分享簡報。分享可以是 read-only 和 editable。這個分享和分享給其它使用者是不同的功能。」。
-- 最後確認時間：2026-05-18 18:18（Asia/Taipei）
-- 最近檢查：已完成 Third Batch「新增分享功能，可以產生簡報的 URL。使用這個 URL 不必經過認証，可以直接分享簡報。分享可以是 read-only 和 editable。這個分享和分享給其它使用者是不同的功能。」；實作與提交分支為 feature/thirdbatch-share-url-20260518-1810，並已回到 master 更新 TODO 狀態與工作記錄。
+- Third Batch 仍有未完成項目；本次已完成其中「提供同步模式，任何一個 session 進入播放模式，會自動變成 master，其它的使用者自動進入同步模式。螢幕會跟著 master 同步移動。」。
+- 最後確認時間：2026-05-18 18:27（Asia/Taipei）
+- 最近檢查：已完成 Third Batch「提供同步模式，任何一個 session 進入播放模式，會自動變成 master，其它的使用者自動進入同步模式。螢幕會跟著 master 同步移動。」；實作與提交分支為 feature/thirdbatch-playback-sync-master-20260518-1825，並已回到 master 更新 TODO 狀態與工作記錄。
 
 # First Batch
 [x] (merge)首次流程導引應該只有在列表是空的時候才出現。（完成分支：feature/onboarding-empty-list-only）
@@ -275,7 +275,7 @@
 [x] 手機板的首頁上方的按鍵改成二排（完成分支：feature/thirdbatch-home-mobile-top-buttons-two-rows-20260518-1720）
 [x] 幫 webapp 加上桌面 icon（完成分支：feature/thirdbatch-webapp-desktop-icon-20260518-1709）
 [x] 播放時候讓手機不要變成黑畫面(有語音播放時)（完成分支：feature/thirdbatch-mobile-playback-keep-screen-awake-20260518-1730）
-[ ] 提供同步模式，任何一個 session 進入播放模式，會自動變成 master，其它的使用者自動進入同步模式。螢幕會跟著 master 同步移動。
+[x] 提供同步模式，任何一個 session 進入播放模式，會自動變成 master，其它的使用者自動進入同步模式。螢幕會跟著 master 同步移動。（完成分支：feature/thirdbatch-playback-sync-master-20260518-1825）
 
 ## Third Batch 工作記錄
 
@@ -313,3 +313,8 @@
 - 工作內容：完成「新增分享功能，可以產生簡報的 URL。使用這個 URL 不必經過認証，可以直接分享簡報。分享可以是 read-only 和 editable。這個分享和分享給其它使用者是不同的功能。」；後端新增 `pdf_shares` 資料表與 `/api/pdfs/:id/share`、`/api/share/:token` API，支援建立唯讀/可編輯分享 token；前端播放頁新增分享連結建立 UI（可選 read-only/editable 並複製 URL），進入 `?share=<token>` 時會驗證 token 並套用權限，唯讀分享會停用所有修改/生成功能，且分享連結可在未登入或未設定 API key 情況下直接開啟。
 - 所在分支：feature/thirdbatch-share-url-20260518-1810
 - 驗證：npm --prefix backend run build && npm --prefix frontend run build；git diff --check -- TODO.md
+
+- 時間：2026-05-18 18:27（Asia/Taipei）
+- 工作內容：完成「提供同步模式，任何一個 session 進入播放模式，會自動變成 master，其它的使用者自動進入同步模式。螢幕會跟著 master 同步移動。」；後端新增 `/api/pdfs/:id/sync/*` 同步 API（join/state/leave）並以 client_id 自動選主，前端播放頁新增同步模式切換與 master/follower 狀態顯示，follower 會跟隨 master 的頁碼、播放/暫停與播放時間。
+- 所在分支：feature/thirdbatch-playback-sync-master-20260518-1825
+- 驗證：npm --prefix backend run build && npm --prefix frontend run build；git diff --check
