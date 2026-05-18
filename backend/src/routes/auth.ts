@@ -10,7 +10,7 @@ const SESSION_COOKIE = 'makeslide_session';
 const OAUTH_STATE_COOKIE = 'makeslide_oauth_state';
 const GOOGLE_OAUTH_CLIENT_ID_SUFFIX = '.apps.googleusercontent.com';
 
-interface GoogleAccountSession {
+export interface GoogleAccountSession {
   provider: 'google';
   sub: string;
   email: string;
@@ -48,7 +48,7 @@ function encodeSession(session: GoogleAccountSession): string {
   return `${payload}.${signPayload(payload)}`;
 }
 
-function decodeSession(value: string | undefined): GoogleAccountSession | null {
+export function decodeSession(value: string | undefined): GoogleAccountSession | null {
   if (!value) return null;
   const [payload, signature] = value.split('.');
   if (!payload || !signature || signPayload(payload) !== signature) return null;
@@ -60,7 +60,7 @@ function decodeSession(value: string | undefined): GoogleAccountSession | null {
   }
 }
 
-function parseCookies(request: FastifyRequest): Record<string, string> {
+export function parseCookies(request: FastifyRequest): Record<string, string> {
   const header = request.headers.cookie;
   if (!header) return {};
   return Object.fromEntries(
