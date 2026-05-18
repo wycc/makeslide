@@ -1526,31 +1526,31 @@ export default function PlayPage() {
 
       {/* Header */}
       <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-2 py-2 sm:gap-3 sm:px-4 sm:py-3">
           <Link
             to="/"
-            className="rounded-md border border-slate-700 px-3 py-1 text-sm text-slate-300 hover:bg-slate-800"
+            className="shrink-0 whitespace-nowrap rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800 sm:px-3 sm:text-sm"
           >
             ← 返回
           </Link>
-          <div className="flex flex-1 items-center justify-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center justify-center gap-1 sm:gap-2">
             <input
               value={titleInput}
               onChange={(e) => setTitleInput(e.target.value)}
               disabled={isReadOnlyProcessing}
-              className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-center text-sm text-slate-100"
+              className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-900 px-1.5 py-1 text-center text-xs text-slate-100 sm:px-2 sm:text-sm"
               maxLength={200}
             />
             <button
               type="button"
               onClick={() => void handleSaveTitle()}
               disabled={isReadOnlyProcessing || titleBusy || !titleInput.trim()}
-              className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-2 py-1 text-xs text-cyan-200 disabled:opacity-40"
+              className="shrink-0 whitespace-nowrap rounded-md border border-cyan-500/50 bg-cyan-500/15 px-1.5 py-1 text-[11px] text-cyan-200 disabled:opacity-40 sm:px-2 sm:text-xs"
             >
               {titleBusy ? '儲存中…' : '更新標題'}
             </button>
           </div>
-          <div className="w-20 text-right text-sm text-slate-400">
+          <div className="shrink-0 whitespace-nowrap text-right text-xs text-slate-400 sm:w-20 sm:text-sm">
             頁 {currentIdx + 1}/{totalPages}
           </div>
         </div>
