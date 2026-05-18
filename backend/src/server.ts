@@ -53,6 +53,9 @@ export async function buildApp() {
   const { pdfRoutes } = await import("./routes/pdfs");
   await app.register(pdfRoutes, { prefix: nbPrefix || undefined });
 
+  const { authRoutes } = await import("./routes/auth");
+  await app.register(authRoutes, { prefix: nbPrefix || undefined });
+
   // Serve frontend static bundle in production container.
   if (process.env.NODE_ENV === "production") {
     await app.register(fastifyStatic, {

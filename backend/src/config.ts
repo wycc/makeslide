@@ -146,6 +146,15 @@ const EnvSchema = z.object({
     .optional()
     .transform((v) => (v ? Number(v) : 2))
     .pipe(z.number().int().positive()),
+  GOOGLE_CLIENT_ID: z.string().optional().default(''),
+  GOOGLE_CLIENT_SECRET: z.string().optional().default(''),
+  GOOGLE_REDIRECT_URI: z.string().optional().default(''),
+  GOOGLE_AUTH_ENABLED: z
+    .string()
+    .optional()
+    .default('true')
+    .transform((v) => v.toLowerCase() !== 'false'),
+  AUTH_SESSION_SECRET: z.string().optional().default('makeslide-dev-session-secret'),
   NB_PREFIX: z.string().optional().default(''),
 });
 
@@ -205,6 +214,11 @@ export const config = {
   openaiTtsFormat: env.OPENAI_TTS_FORMAT,
   openaiTtsSpeed: env.OPENAI_TTS_SPEED,
   ttsConcurrency: env.TTS_CONCURRENCY,
+  googleClientId: env.GOOGLE_CLIENT_ID.trim(),
+  googleClientSecret: env.GOOGLE_CLIENT_SECRET.trim(),
+  googleRedirectUri: env.GOOGLE_REDIRECT_URI.trim(),
+  googleAuthEnabled: env.GOOGLE_AUTH_ENABLED,
+  authSessionSecret: env.AUTH_SESSION_SECRET,
   nbPrefix: normalizeNbPrefix(env.NB_PREFIX),
 } as const;
 

@@ -5,8 +5,10 @@ import PlayPage from './pages/PlayPage';
 import SettingsPage from './pages/SettingsPage';
 import SystemDataPage from './pages/SystemDataPage';
 import { useEffect, useState } from 'react';
-import { getOpenAIKeyStatus } from './lib/api';
+import { getAuthStatus, getOpenAIKeyStatus } from './lib/api';
 import { useLocation, useNavigate } from 'react-router-dom';
+
+const PUBLIC_AUTH_PATHS = new Set(['/settings']);
 
 export default function App() {
   const [checked, setChecked] = useState(false);
@@ -17,6 +19,13 @@ export default function App() {
     let alive = true;
     void (async () => {
       try {
+        const auth = await getAuthStatus();
+        if (!alive) return;
+        if (auth.google_enabled && !auth.authenticated && !PUBLIC_AUTH_PATHS.has(location.pathname)) {
+          navigate('/settings', { replace: true });
+          return;
+        }
+
         const status = await getOpenAIKeyStatus();
         if (!alive) return;
         if (!status.has_key && location.pathname !== '/settings') {
