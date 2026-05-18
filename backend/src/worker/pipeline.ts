@@ -566,12 +566,12 @@ async function runPipeline(pdfId: string): Promise<void> {
     }
 
     // -------- Step 2: extract text --------
-    const alreadyTextDone =
+  const alreadyTextDone =
       row.progress_step === 'text_extracted' ||
       row.progress_step === 'scripting' ||
       row.progress_step === 'script_ready';
 
-    let textResult: Array<{ pageNumber: number; empty: boolean; textPath: string }>;
+  let textResult: Array<{ pageNumber: number; empty: boolean; textPath: string }>;
     if (!alreadyTextDone) {
       const textStage = startStage(run, 'extract_text', { pageCount });
       const textHandles = new Map<number, TimingArtifactHandle | null>();
@@ -647,6 +647,121 @@ async function runPipeline(pdfId: string): Promise<void> {
         textResult.push({ pageNumber: n, empty, textPath: tp });
       }
       logger.info({ pdfId, pageCount }, 'Pipeline: reuse extracted text (resume)');
+    }
+
+    // -------- Step 2.5: PDF full-text re-split (Third Batch) --------
+    // For normal PDF uploads (non-TXT/non-YouTube), merge all extracted page
+    // text and regenerate deck outline/pages without preserving source paging.
+    const isTextImportForResplit = fs.existsSync(sourceTextPath(pdfId));
+    const sourceType = row.source_type ?? 'pdf';
+    const shouldResplitPdfFullText = !isTextImportForResplit && sourceType === 'pdf' && !alreadyTextDone;
+    if (shouldResplitPdfFullText) {
+      const fullText = (
+        await Promise.all(
+          textResult.map(async (t) => {
+            try {
+              return await fs.promises.readFile(t.textPath, 'utf8');
+            } catch {
+              return '';
+            }
+          }),
+        )
+      )
+        .join('\n\n')
+        .trim();
+
+      const splitStage = startStage(run, 'split_text', { source_type: 'pdf_fulltext' });
+      const split = await splitTextWithLlm(fullText);
+      finishStage(splitStage, 'succeeded', {
+        source_type: 'pdf_fulltext',
+        source_pages: pageCount,
+        pages: split.pages.length,
+      });
+
+      // Rebuild page artifacts from the re-split result so downstream script /
+      // TTS follows the regenerated deck structure (not original PDF paging).
+      await fs.promises.rm(path.join(pdfDir(pdfId), 'pages'), { recursive: true, force: true });
+      db.prepare(`DELETE FROM pages WHERE pdf_id = ?`).run(pdfId);
+
+      setProgress(pdfId, 'rendering', 0, split.pages.length);
+      await persistMetadata(pdfId);
+
+      const textImageHandles = new Map<number, TimingArtifactHandle | null>();
+      const rendered = await renderTextPagesWithLlm({
+        pdfId,
+        pages: split.pages,
+        onPage: (n, imagePath, info) => {
+          const h = textImageHandles.get(n) ?? startArtifact({ run, pageNumber: n, artifact: 'image', reason: runType === 'resume' ? 'resume' : 'initial', metadata: { source_type: 'pdf_fulltext', precision: 'step_timing' } });
+          textImageHandles.set(n, h);
+          const status = info.status ?? (info.reused ? 'skipped' : 'succeeded');
+          finishArtifact(h, status, {
+            startedAt: info.startedAt,
+            endedAt: info.endedAt,
+            durationMs: info.latencyMs,
+            outputPath: status === 'failed' ? null : toRelative(pdfId, imagePath),
+            error: info.error ? { code: info.error.code ?? info.error.type ?? null, message: info.error.message } : undefined,
+            metadata: {
+              source_type: 'pdf_fulltext',
+              precision: 'step_timing',
+              reused: info.reused,
+              attempt: info.attempt ?? null,
+              model: info.model ?? null,
+              promptLength: info.promptLength ?? null,
+              timeoutMs: info.timeoutMs ?? null,
+              errorStatus: info.error?.status ?? null,
+              errorType: info.error?.type ?? null,
+              ...(info.metadata ?? {}),
+            },
+          });
+          if (status === 'failed') {
+            upsertPage(pdfId, n, {
+              status: 'failed',
+              error_message: info.error?.message ?? 'PDF full-text image generation failed',
+            });
+            bumpProgress(pdfId, n);
+            return;
+          }
+          upsertPage(pdfId, n, {
+            image_path: toRelative(pdfId, imagePath),
+            status: 'rendered',
+            error_message: null,
+          });
+          bumpProgress(pdfId, n);
+        },
+      });
+
+      const rebuiltPageCount = rendered.pageCount;
+      pageCount = rebuiltPageCount;
+      updatePdf(pdfId, { page_count: rebuiltPageCount });
+      setProgress(pdfId, 'extracting_text', 0, rebuiltPageCount);
+      await persistMetadata(pdfId, {
+        notes: 'Third Batch: rebuilt from merged full-text and regenerated slide outline/pages',
+      });
+
+      textResult = split.pages.map((p) => ({
+        pageNumber: p.pageNumber,
+        empty: p.content.trim().length === 0,
+        textPath: pageTextPath(pdfId, p.pageNumber, rebuiltPageCount),
+      }));
+
+      for (const p of split.pages) {
+        const textPath = pageTextPath(pdfId, p.pageNumber, rebuiltPageCount);
+        await fs.promises.writeFile(textPath, p.content, 'utf8');
+        upsertPage(pdfId, p.pageNumber, {
+          text_path: toRelative(pdfId, textPath),
+          status: 'text_ready',
+          error_message: null,
+        });
+      }
+
+      setProgress(pdfId, 'text_extracted', rebuiltPageCount, rebuiltPageCount);
+      await persistMetadata(pdfId, {
+        notes: 'Third Batch: source PDF paging replaced by full-text re-split deck pages',
+      });
+      logger.info(
+        { pdfId, sourcePages: row.page_count ?? null, rebuiltPages: rebuiltPageCount },
+        'Pipeline: PDF full-text re-split complete',
+      );
     }
 
     // Fetch the latest row to pick up user prompt / TTS settings submitted via
