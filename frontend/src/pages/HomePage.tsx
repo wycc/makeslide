@@ -315,10 +315,7 @@ export default function HomePage() {
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <header className="border-b border-slate-800 bg-slate-900/40 backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-xl font-semibold tracking-tight">makeslide</h1>
-            <p className="text-xs text-slate-400">PDF 語音簡報生成與播放（M2 預覽）</p>
-          </div>
+          <h1 className="text-xl font-semibold tracking-tight">makeslide</h1>
           <div className="flex items-center gap-2">
             <Link
               to="/settings"
