@@ -8,6 +8,7 @@ const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_USERINFO_URL = 'https://openidconnect.googleapis.com/v1/userinfo';
 const SESSION_COOKIE = 'makeslide_session';
 const OAUTH_STATE_COOKIE = 'makeslide_oauth_state';
+const GOOGLE_OAUTH_CLIENT_ID_SUFFIX = '.apps.googleusercontent.com';
 
 interface GoogleAccountSession {
   provider: 'google';
@@ -88,25 +89,47 @@ function authBaseUrl(request: FastifyRequest): string {
 }
 
 function redirectUri(request: FastifyRequest): string {
-  return config.googleRedirectUri || `${authBaseUrl(request)}/api/auth/google/callback`;
+  if (!config.googleRedirectUri) {
+    return `${authBaseUrl(request)}/api/auth/google/callback`;
+  }
+  if (config.googleRedirectUri.startsWith('/')) {
+    return `${authBaseUrl(request)}${config.googleRedirectUri}`;
+  }
+  return config.googleRedirectUri;
 }
 
 export async function authRoutes(app: FastifyInstance) {
   app.get('/api/auth/status', async (request) => {
     const session = decodeSession(parseCookies(request)[SESSION_COOKIE]);
     return {
-      google_enabled: Boolean(config.googleClientId && config.googleClientSecret),
+      google_enabled: Boolean(config.googleAuthEnabled && config.googleClientId && config.googleClientSecret),
       authenticated: Boolean(session),
       user: session,
     };
   });
 
   app.get('/api/auth/google/start', async (request, reply) => {
+    if (!config.googleAuthEnabled) {
+      return reply.code(503).send({
+        error: {
+          code: 'GOOGLE_AUTH_DISABLED',
+          message: 'Google 登入已停用',
+        },
+      });
+    }
     if (!config.googleClientId || !config.googleClientSecret) {
       return reply.code(503).send({
         error: {
           code: 'GOOGLE_AUTH_NOT_CONFIGURED',
           message: 'Google 登入尚未設定 GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET',
+        },
+      });
+    }
+    if (!config.googleClientId.endsWith(GOOGLE_OAUTH_CLIENT_ID_SUFFIX)) {
+      return reply.code(503).send({
+        error: {
+          code: 'GOOGLE_AUTH_CLIENT_ID_INVALID',
+          message: `GOOGLE_CLIENT_ID 看起來不是 OAuth Web Client ID，應以 ${GOOGLE_OAUTH_CLIENT_ID_SUFFIX} 結尾`,
         },
       });
     }
@@ -154,7 +177,7 @@ export async function authRoutes(app: FastifyInstance) {
     }
     const user = GoogleUserInfoSchema.parse(await userResp.json());
     setCookie(reply, SESSION_COOKIE, encodeSession({ provider: 'google', ...user }), 30 * 24 * 60 * 60);
-    return reply.redirect(`${config.nbPrefix || ''}/settings`);
+    return reply.redirect(`${config.nbPrefix || ''}/#/settings`);
   });
 
   app.post('/api/auth/logout', async (_request, reply) => {

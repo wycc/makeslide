@@ -154,38 +154,38 @@ export default function SettingsPage() {
             {msg}
           </div>
         ) : null}
-        <div className="mb-4 rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-base font-semibold text-slate-100">Google 帳號</h2>
-              {authStatus?.authenticated && authStatus.user ? (
-                <p className="mt-1 text-sm text-slate-300">
-                  已登入：{authStatus.user.name ? `${authStatus.user.name}（${authStatus.user.email}）` : authStatus.user.email}
-                </p>
-              ) : authStatus?.google_enabled ? (
-                <p className="mt-1 text-sm text-slate-400">可使用 Google 帳號登入，登入後會建立本機 session。</p>
+        {authStatus?.google_enabled || authStatus?.authenticated ? (
+          <div className="mb-4 rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-base font-semibold text-slate-100">Google 帳號</h2>
+                {authStatus?.authenticated && authStatus.user ? (
+                  <p className="mt-1 text-sm text-slate-300">
+                    已登入：{authStatus.user.name ? `${authStatus.user.name}（${authStatus.user.email}）` : authStatus.user.email}
+                  </p>
+                ) : (
+                  <p className="mt-1 text-sm text-slate-400">可使用 Google 帳號登入，登入後會建立本機 session。</p>
+                )}
+              </div>
+              {authStatus?.authenticated ? (
+                <button
+                  type="button"
+                  onClick={() => void onLogout()}
+                  className="rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800"
+                >
+                  登出
+                </button>
               ) : (
-                <p className="mt-1 text-sm text-amber-200">尚未設定 GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET。</p>
+                <a
+                  href="api/auth/google/start"
+                  className="rounded-md bg-slate-100 px-4 py-2 text-center text-sm font-medium text-slate-900 hover:bg-white"
+                >
+                  使用 Google 登入
+                </a>
               )}
             </div>
-            {authStatus?.authenticated ? (
-              <button
-                type="button"
-                onClick={() => void onLogout()}
-                className="rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800"
-              >
-                登出
-              </button>
-            ) : (
-              <a
-                href="api/auth/google/start"
-                className={`rounded-md px-4 py-2 text-center text-sm font-medium ${authStatus?.google_enabled ? 'bg-slate-100 text-slate-900' : 'pointer-events-none bg-slate-700 text-slate-400'}`}
-              >
-                使用 Google 登入
-              </a>
-            )}
           </div>
-        </div>
+        ) : null}
         <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/40 p-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="block text-sm text-slate-300">

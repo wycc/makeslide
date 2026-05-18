@@ -6,9 +6,12 @@ import {
   deletePdf,
   duplicatePdf,
   fetchPdfs,
+  getAuthStatus,
+  logoutAuth,
   retryFailedPdf,
   startProcessing,
   updatePdfCategory,
+  type AuthStatus,
 } from '../lib/api';
 import type { PdfListItem, UploadResponse } from '../types';
 import PdfCard from '../components/PdfCard';
@@ -50,6 +53,7 @@ export default function HomePage() {
   const toastTimerRef = useRef<number | null>(null);
   const [promptTarget, setPromptTarget] = useState<PromptTarget | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>('__all__');
+  const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
 
   const allCategories = items.reduce<string[]>((categories, pdf) => {
     const category = pdf.category?.trim() || DEFAULT_CATEGORY;
@@ -104,6 +108,21 @@ export default function HomePage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const auth = await getAuthStatus();
+        if (alive) setAuthStatus(auth);
+      } catch {
+        if (alive) setAuthStatus(null);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // Adaptive polling: 5s while any item is still processing, 30s otherwise.
   // `awaiting_prompt` is *not* considered active (server is idle waiting for
@@ -264,6 +283,18 @@ export default function HomePage() {
     setPromptTarget(null);
   }, []);
 
+  const handleLogout = useCallback(async () => {
+    try {
+      await logoutAuth();
+      setAuthStatus((prev) => (prev ? { ...prev, authenticated: false, user: null } : prev));
+      showToast('已登出 Google 帳號');
+      navigate('/settings', { replace: true });
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : '登出失敗';
+      showToast(`登出失敗：${msg}`);
+    }
+  }, [navigate, showToast]);
+
   const handleCardClick = useCallback(
     (pdf: PdfListItem) => {
       if (pdf.status === 'awaiting_prompt') {
@@ -305,6 +336,16 @@ export default function HomePage() {
             <p className="text-xs text-slate-400">PDF 語音簡報生成與播放（M2 預覽）</p>
           </div>
           <div className="flex items-center gap-2">
+            {authStatus?.authenticated ? (
+              <button
+                type="button"
+                onClick={() => void handleLogout()}
+                className="inline-flex items-center rounded-md border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 hover:text-white"
+                title={authStatus.user?.email ? `登出 ${authStatus.user.email}` : '登出 Google 帳號'}
+              >
+                登出
+              </button>
+            ) : null}
             <Link
               to="/settings"
               className="inline-flex items-center rounded-md border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 hover:text-white"
