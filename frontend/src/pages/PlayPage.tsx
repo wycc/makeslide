@@ -230,6 +230,7 @@ export default function PlayPage() {
   const [draggingPage, setDraggingPage] = useState<number | null>(null);
   // 手機模式下的 tab 切換（桌面模式忽略此 state，永遠並排顯示）
   const [activeTab, setActiveTab] = useState<'play' | 'qa'>('play');
+  const [qaPanelExpanded, setQaPanelExpanded] = useState(false);
   const [imageOnlyFullscreen, setImageOnlyFullscreen] = useState(false);
   const [slideImageScale, setSlideImageScale] = useState(1);
   const IMAGE_MSG_PREFIX = '[image] ';
@@ -2023,7 +2024,7 @@ export default function PlayPage() {
             activeTab === 'qa' ? 'flex' : 'hidden'
           }`}
         >
-          <section className="rounded-lg border border-slate-800 bg-slate-900/40">
+          <section className={`rounded-lg border border-slate-800 bg-slate-900/40 ${qaPanelExpanded ? 'md:hidden' : ''}`}>
             <div className="border-b border-slate-800 px-4 py-3">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-sm font-semibold text-slate-300">🧩 投影片管理</h2>
@@ -2200,7 +2201,7 @@ export default function PlayPage() {
             </div>
           </section>
 
-          <section className="rounded-lg border border-slate-800 bg-slate-900/40">
+          <section className={`rounded-lg border border-slate-800 bg-slate-900/40 ${qaPanelExpanded ? 'md:hidden' : ''}`}>
             <div className="flex items-center justify-between gap-2 px-3 py-2">
               <div className="min-w-0">
                 <h2 className="truncate text-sm font-semibold text-slate-300">📊 Realtime Poll</h2>
@@ -2315,9 +2316,20 @@ export default function PlayPage() {
 
           <section className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-lg border border-slate-800 bg-slate-900/40">
           <div className="border-b border-slate-800 px-4 py-3">
-          <h2 className="mb-2 text-sm font-semibold text-slate-300">
-            💬 本頁問答（含本頁圖片與文字上下文）
-          </h2>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h2 className="min-w-0 truncate text-sm font-semibold text-slate-300">
+              💬 本頁問答（含本頁圖片與文字上下文）
+            </h2>
+            <button
+              type="button"
+              onClick={() => setQaPanelExpanded((v) => !v)}
+              className="hidden shrink-0 rounded-md border border-cyan-500/50 bg-cyan-500/10 px-2 py-1 text-xs text-cyan-200 hover:bg-cyan-500/20 md:inline-flex"
+              aria-pressed={qaPanelExpanded}
+              title={qaPanelExpanded ? '還原右側欄內容' : '讓問答佔滿右側欄'}
+            >
+              {qaPanelExpanded ? '還原' : '放大'}
+            </button>
+          </div>
           <div className="flex justify-end">
             <button
               type="button"
