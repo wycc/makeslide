@@ -1,0 +1,17 @@
+{
+  "name": "makeslide",
+  "short_name": "makeslide",
+  "description": "PDF 語音簡報生成與播放",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "icons": [
+    {
+      "src": "/icons/makeslide-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
