@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { coverImagePath, pageImagePath, pageTextPath, pagesDir } from '../../services/storage';
+import { coverImagePath, pageImagePath, pageTextPath, pagesDir, sourcePdfPath } from '../../services/storage';
 import { generateCoverThumbnail, generatePageThumbnail, ensurePageThumbnail } from '../../services/thumbnails';
 import { getOpenAIClient } from '../../services/openai';
 import { logger } from '../../logger';
@@ -41,6 +41,7 @@ export interface RenderTextPagesWithLlmResult {
 
 const IMAGE_GENERATION_MAX_ATTEMPTS = 3;
 const IMAGE_GENERATION_BACKOFF_BASE_MS = 500;
+const SOURCE_PDF_MAX_INLINE_BYTES = 5 * 1024 * 1024;
 
 function imageTimeoutMs(): number {
   return config.openaiImageQuality === 'high'
@@ -116,12 +117,27 @@ function retryDelayMs(attempt: number): number {
   return IMAGE_GENERATION_BACKOFF_BASE_MS * 2 ** (attempt - 1);
 }
 
+async function buildSourcePdfDataUrl(pdfId: string): Promise<string | null> {
+  const sourcePath = sourcePdfPath(pdfId);
+  try {
+    const st = await fs.promises.stat(sourcePath);
+    if (!st.isFile() || st.size <= 0 || st.size > SOURCE_PDF_MAX_INLINE_BYTES) {
+      return null;
+    }
+    const buf = await fs.promises.readFile(sourcePath);
+    return `data:application/pdf;base64,${buf.toString('base64')}`;
+  } catch {
+    return null;
+  }
+}
+
 export async function renderTextPagesWithLlm(
   opts: RenderTextPagesWithLlmOptions,
 ): Promise<RenderTextPagesWithLlmResult> {
   const client = getOpenAIClient();
   const pageCount = opts.pages.length;
   const pagePaths: string[] = [];
+  const sourcePdfDataUrl = await buildSourcePdfDataUrl(opts.pdfId);
   await fs.promises.mkdir(pagesDir(opts.pdfId), { recursive: true });
 
   for (const p of opts.pages) {
@@ -193,15 +209,16 @@ export async function renderTextPagesWithLlm(
     for (let attempt = 1; attempt <= IMAGE_GENERATION_MAX_ATTEMPTS; attempt++) {
       finalAttempt = attempt;
       try {
-        image = await client.images.generate(
-          {
-            model: config.openaiImageModel,
-            prompt,
-            size: '1536x1024',
-            quality: config.openaiImageQuality,
-          },
-          { timeout: timeoutMs },
-        );
+        const imagePayload: Record<string, unknown> = {
+          model: config.openaiImageModel,
+          prompt,
+          size: '1536x1024',
+          quality: config.openaiImageQuality,
+        };
+        if (sourcePdfDataUrl) {
+          imagePayload.input_image = sourcePdfDataUrl;
+        }
+        image = await client.images.generate(imagePayload as never, { timeout: timeoutMs });
         break;
       } catch (err) {
         const errorInfo = extractErrorInfo(err);
@@ -243,6 +260,7 @@ export async function renderTextPagesWithLlm(
               maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS,
               transient,
               quality: config.openaiImageQuality,
+              sourcePdfAttached: !!sourcePdfDataUrl,
             },
             promptLength: prompt.length,
             timeoutMs,
@@ -291,6 +309,7 @@ export async function renderTextPagesWithLlm(
           maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS,
           quality: config.openaiImageQuality,
           responseShape,
+          sourcePdfAttached: !!sourcePdfDataUrl,
         },
       });
       throw err;
@@ -335,6 +354,7 @@ export async function renderTextPagesWithLlm(
           maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS,
           quality: config.openaiImageQuality,
           responseShape,
+          sourcePdfAttached: !!sourcePdfDataUrl,
         },
       });
       throw err;
@@ -376,6 +396,7 @@ export async function renderTextPagesWithLlm(
         precision: 'step_timing',
         maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS,
         quality: config.openaiImageQuality,
+        sourcePdfAttached: !!sourcePdfDataUrl,
       },
     });
   }
