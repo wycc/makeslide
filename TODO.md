@@ -1,8 +1,8 @@
 # TODO 狀態摘要
 
-- Third Batch 仍有未完成項目；本次已完成其中「提供同步模式，任何一個 session 進入播放模式，會自動變成 master，其它的使用者自動進入同步模式。螢幕會跟著 master 同步移動。」。
-- 最後確認時間：2026-05-18 18:27（Asia/Taipei）
-- 最近檢查：已完成 Third Batch「提供同步模式，任何一個 session 進入播放模式，會自動變成 master，其它的使用者自動進入同步模式。螢幕會跟著 master 同步移動。」；實作與提交分支為 feature/thirdbatch-playback-sync-master-20260518-1825，並已回到 master 更新 TODO 狀態與工作記錄。
+- Third Batch 已無未完成項目；本次已完成其中「簡報預設在個人帳戶下，每一個帳戶要看到不同的簡報。但也可以將簡報設定為 private/public or public editable，這樣每個人都可以看到，但每個人只能編輯自己的簡報或是被設成 public editable 的簡報。」。
+- 最後確認時間：2026-05-18 18:38（Asia/Taipei）
+- 最近檢查：已完成 Third Batch「簡報預設在個人帳戶下，每一個帳戶要看到不同的簡報。但也可以將簡報設定為 private/public or public editable，這樣每個人都可以看到，但每個人只能編輯自己的簡報或是被設成 public editable 的簡報。」；實作與提交分支為 feature/thirdbatch-pdf-ownership-visibility-20260518-1833，並已回到 master 更新 TODO 狀態與工作記錄。
 
 # First Batch
 [x] (merge)首次流程導引應該只有在列表是空的時候才出現。（完成分支：feature/onboarding-empty-list-only）
@@ -269,7 +269,7 @@
 # Third Batch
 [x] 一般文件分頁處理時，請將全部文字全部取出，然後再重新產生簡報大綱。不必照原始分頁。（完成分支：feature/thirdbatch-pdf-fulltext-resplit-outline-20260518-1741）
 [x] 一般文件分頁處理時，在產生圖片時，把原始文件也傳給 AI。讓他有從中取出圖片的可能性。（完成分支：feature/thirdbatch-document-image-gen-include-source-20260518-1750）
-[ ] 簡報預設在個人帳戶下，每一個帳戶要看到不同的簡報。但也可以將簡報設定為 private/public or public editable，這樣每個人都可以看到，但每個人只能編輯自己的簡報或是被設成 public editable 的簡報。
+[x] 簡報預設在個人帳戶下，每一個帳戶要看到不同的簡報。但也可以將簡報設定為 private/public or public editable，這樣每個人都可以看到，但每個人只能編輯自己的簡報或是被設成 public editable 的簡報。（完成分支：feature/thirdbatch-pdf-ownership-visibility-20260518-1833）
 [x] 允許使用者用語音輸入產生投票，方便教師當場產生投票。產生時把逐字稿和提示詞和語音一起傳送出去。如果語音模型不接受語音檔，則先用 ASR 把它轉換成文字。（完成分支：feature/thirdbatch-voice-input-poll-20260518-1805）
 [x] 新增分享功能，可以產生簡報的 URL。使用這個 URL 不必經過認証，可以直接分享簡報。分享可以是 read-only 和 editable。這個分享和分享給其它使用者是不同的功能。（完成分支：feature/thirdbatch-share-url-20260518-1810）
 [x] 手機板的首頁上方的按鍵改成二排（完成分支：feature/thirdbatch-home-mobile-top-buttons-two-rows-20260518-1720）
@@ -318,3 +318,8 @@
 - 工作內容：完成「提供同步模式，任何一個 session 進入播放模式，會自動變成 master，其它的使用者自動進入同步模式。螢幕會跟著 master 同步移動。」；後端新增 `/api/pdfs/:id/sync/*` 同步 API（join/state/leave）並以 client_id 自動選主，前端播放頁新增同步模式切換與 master/follower 狀態顯示，follower 會跟隨 master 的頁碼、播放/暫停與播放時間。
 - 所在分支：feature/thirdbatch-playback-sync-master-20260518-1825
 - 驗證：npm --prefix backend run build && npm --prefix frontend run build；git diff --check
+
+- 時間：2026-05-18 18:38（Asia/Taipei）
+- 工作內容：完成「簡報預設在個人帳戶下，每一個帳戶要看到不同的簡報。但也可以將簡報設定為 private/public or public editable，這樣每個人都可以看到，但每個人只能編輯自己的簡報或是被設成 public editable 的簡報。」；後端新增 `pdfs.owner_sub` 與 `pdfs.visibility` 欄位、上傳時綁定擁有者、列表與詳情依 owner/visibility 做讀取權限過濾，並新增 `PATCH /api/pdfs/:id/visibility` 讓擁有者可切換 `private/public/public_editable`，同時限制非擁有者僅能編輯 `public_editable` 簡報。
+- 所在分支：feature/thirdbatch-pdf-ownership-visibility-20260518-1833
+- 驗證：npm --prefix backend run build；git diff --check
