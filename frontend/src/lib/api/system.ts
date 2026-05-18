@@ -104,7 +104,18 @@ export interface AuthStatus {
 
 export async function getAuthStatus(): Promise<AuthStatus> {
   const resp = await fetch('api/auth/status');
-  if (!resp.ok) throw await parseErrorBody(resp);
+  if (!resp.ok) {
+    const err = await parseErrorBody(resp);
+    // 舊版後端可能尚未提供 /api/auth/status，避免前端直接崩潰。
+    if (resp.status === 404) {
+      return {
+        google_enabled: false,
+        authenticated: false,
+        user: null,
+      };
+    }
+    throw err;
+  }
   return (await resp.json()) as AuthStatus;
 }
 
