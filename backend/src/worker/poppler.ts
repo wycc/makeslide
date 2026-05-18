@@ -23,6 +23,10 @@ export function pdfinfoBin(): string {
   return resolveBin('pdfinfo');
 }
 
+export function pdftotextBin(): string {
+  return resolveBin('pdftotext');
+}
+
 /**
  * Spawn a command and buffer stdout / stderr. Rejects on non-zero exit.
  */
@@ -100,6 +104,15 @@ export async function checkPoppler(): Promise<PopplerCheck> {
     check.pdfinfo = false;
   }
   return check;
+}
+
+export async function extractPdfText(sourcePath: string): Promise<string> {
+  const { stdout } = await runCommand(
+    pdftotextBin(),
+    ['-layout', '-enc', 'UTF-8', sourcePath, '-'],
+    { timeoutMs: 120000 },
+  );
+  return stdout.replace(/\u0000/g, '').trim();
 }
 
 /**

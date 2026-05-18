@@ -4,6 +4,7 @@ import { ApiError, isApiErrorBody } from './common';
 export interface UploadOptions {
   onProgress?: (loaded: number, total: number) => void;
   signal?: AbortSignal;
+  pdfImportMode?: 'slides' | 'document';
 }
 
 export interface GeneratePromptTextRequest {
@@ -31,6 +32,7 @@ export function uploadPdf(file: File, opts: UploadOptions = {}): Promise<UploadR
   return new Promise<UploadResponse>((resolve, reject) => {
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('pdf_import_mode', opts.pdfImportMode ?? 'slides');
 
     const xhr = new XMLHttpRequest();
     xhr.open('POST', 'api/pdfs');
