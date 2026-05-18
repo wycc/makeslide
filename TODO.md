@@ -102,7 +102,7 @@
 [x] (merged)加上使用 google 帳號的功能（完成分支：feature/google-account-login）
 [x] (merged)API key 和一些整體設定要存在帳號中，例如 .env。每一個帳號會在一個單獨的目錄中，（完成分支：feature/account-scoped-ai-settings）
 [x] (merged)當帳號的 credit 用完時，要顯示錯誤對話框提示使用者去充值。（完成分支：feature/credit-exhausted-dialog）
-[x] 使用語音產生 realtime poll（完成分支：feature/voice-generated-realtime-poll）
+[*] 使用語音產生 realtime poll（完成分支：feature/voice-generated-realtime-poll）
 [x] (merge)整理 README 文件入口與 Docker 啟動說明（完成分支：feature/docs-entrypoint-cleanup）
 [x] 刪除頁面時若該頁仍有未完成圖片生成，允許刪除並收斂該頁執行中 artifact timing 為取消狀態（完成分支：feature/delete-page-pending-image-generation）
 
@@ -270,4 +270,6 @@
 [ ] 一般文件分頁處理時，請將全部文字全部取出，然後再重新產生簡報大綱。不必照原始分頁。
 [ ] 一般文件分頁處理時，在產生圖片時，把原始文件也傳給 AI。讓他有從中取出圖片的可能性。
 [ ] 簡報預設在個人帳戶下，每一個帳戶要看到不同的簡報。但也可以將簡報設定為 private/public or public editable，這樣每個人都可以看到，但每個人只能編輯自己的簡報或是被設成 public editable 的簡報。
+[ ] 充許使用者用語音輸入產生投票，方便教師當場產生投票。產生時把逐字稿和提示詞和語音一起傳送出去。如果語音模型不接受語音檔，則先用 ASR 把它轉換成文字。
+
 
