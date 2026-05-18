@@ -90,20 +90,20 @@
 - 驗證：grep -n "\\[ \\]" PendingTask.md || true；git diff --check；git show --stat --oneline HEAD
 
 # Second Batch
-[x] 將取代目前頁圖片的按鍵去掉，我們己經可以可以直接拖到圖片上，不需要這個區域。（完成分支：feature/remove-replace-current-page-image-button）
-[x] 在問答頁上加上一個放大縮小的按鍵，讓我們可以讓問答的區塊佔整個右邊。（完成分支：feature/qa-panel-expand-toggle）
-[x] 在手機模式上，把標題縮小一點讓返回按鍵可以顯示在一行上。（完成分支：feature/mobile-playpage-title-fit）
-[x] 在手機模式上，把播放的進度列中進度條縮短一些讓後線長度可以完整顯示。（完成分支：feature/mobile-progress-bar-time-fit）
-[x] 把顯示類別的選擇記下來，回到首頁時會顯示之前的設定（完成分支：feature/persist-home-category-filter）
-[x] 把左上角的名稱留下 makeslide 就好了（完成分支：feature/header-brand-makeslide-only）
-[x] 在上傳 PDF 時，如果內容不是一個簡報的內容，則請將整個文字取出再請 AI 分頁，不要把一般論文每一頁當成簡報處理。如果自動偵測不好做，至少做成讓使用者手動選擇。（完成分支：feature/pdf-document-import-mode）
-[x] 加上自動出考題功能，在 PlayPage 中可以新增考題功能，自動出考題，可以選擇單選或多選。使用者可以提示 AI 有關考題的內容。生成的考題提供讓使用者再手工微調的功能。（完成分支：feature/auto-quiz-generation）
-[x] 加上上課模式，每撥放一頁就停下來。讓老師講解。（完成分支：feature/classroom-pause-after-each-page）
-[x] 加上使用 google 帳號的功能（完成分支：feature/google-account-login）
-[x] API key 和一些整體設定要存在帳號中，例如 .env。每一個帳號會在一個單獨的目錄中，（完成分支：feature/account-scoped-ai-settings）
-[x] 當帳號的 credit 用完時，要顯示錯誤對話框提示使用者去充值。（完成分支：feature/credit-exhausted-dialog）
+[x] (merged)將取代目前頁圖片的按鍵去掉，我們己經可以可以直接拖到圖片上，不需要這個區域。（完成分支：feature/remove-replace-current-page-image-button）
+[x] (merged)在問答頁上加上一個放大縮小的按鍵，讓我們可以讓問答的區塊佔整個右邊。（完成分支：feature/qa-panel-expand-toggle）
+[x] (merged)在手機模式上，把標題縮小一點讓返回按鍵可以顯示在一行上。（完成分支：feature/mobile-playpage-title-fit）
+[x] (merged)在手機模式上，把播放的進度列中進度條縮短一些讓後線長度可以完整顯示。（完成分支：feature/mobile-progress-bar-time-fit）
+[x] (merged)把顯示類別的選擇記下來，回到首頁時會顯示之前的設定（完成分支：feature/persist-home-category-filter）
+[x] (merged)把左上角的名稱留下 makeslide 就好了（完成分支：feature/header-brand-makeslide-only）
+[*] (merged)在上傳 PDF 時，如果內容不是一個簡報的內容，則請將整個文字取出再請 AI 分頁，不要把一般論文每一頁當成簡報處理。如果自動偵測不好做，至少做成讓使用者手動選擇。（完成分支：feature/pdf-document-import-mode）
+[x] (merged)加上自動出考題功能，在 PlayPage 中可以新增考題功能，自動出考題，可以選擇單選或多選。使用者可以提示 AI 有關考題的內容。生成的考題提供讓使用者再手工微調的功能。（完成分支：feature/auto-quiz-generation）
+[x] (merged)加上上課模式，每撥放一頁就停下來。讓老師講解。（完成分支：feature/classroom-pause-after-each-page）
+[x] (merged)加上使用 google 帳號的功能（完成分支：feature/google-account-login）
+[x] (merged)API key 和一些整體設定要存在帳號中，例如 .env。每一個帳號會在一個單獨的目錄中，（完成分支：feature/account-scoped-ai-settings）
+[x] (merged)當帳號的 credit 用完時，要顯示錯誤對話框提示使用者去充值。（完成分支：feature/credit-exhausted-dialog）
 [x] 使用語音產生 realtime poll（完成分支：feature/voice-generated-realtime-poll）
-[x] 整理 README 文件入口與 Docker 啟動說明（完成分支：feature/docs-entrypoint-cleanup）
+[x] (merge)整理 README 文件入口與 Docker 啟動說明（完成分支：feature/docs-entrypoint-cleanup）
 [x] 刪除頁面時若該頁仍有未完成圖片生成，允許刪除並收斂該頁執行中 artifact timing 為取消狀態（完成分支：feature/delete-page-pending-image-generation）
 
 ## Second Batch 工作記錄
@@ -264,3 +264,10 @@
 - 工作內容：完成「再次確認 master TODO.md 無未完成項目並更新工作記錄」，檢查 master 中 TODO.md 未列出任何未完成核取項目，並同步確認 PendingTask.md 也無未完成清單項目；由於無實作型待辦可選，本次以獨立分支記錄確認工作，並回到 master 更新 TODO.md 的狀態摘要、完成清單與工作記錄。
 - 所在分支：feature/todo-no-pending-recheck-20260518-0859
 - 驗證：git show master:TODO.md | grep -n "\[ \]" || true；git show master:PendingTask.md | grep -n "\[ \]" || true；git diff --check HEAD~1..HEAD
+
+
+# Third Batch
+[ ] 一般文件分頁處理時，請將全部文字全部取出，然後再重新產生簡報大綱。不必照原始分頁。
+[ ] 一般文件分頁處理時，在產生圖片時，把原始文件也傳給 AI。讓他有從中取出圖片的可能性。
+[ ] 簡報預設在個人帳戶下，每一個帳戶要看到不同的簡報。但也可以將簡報設定為 private/public or public editable，這樣每個人都可以看到，但每個人只能編輯自己的簡報或是被設成 public editable 的簡報。
+
