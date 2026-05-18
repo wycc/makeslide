@@ -1,8 +1,8 @@
 # TODO 狀態摘要
 
-- 目前無未完成項目；First Batch、Second Batch 與文件整理項目皆已完成並記錄完成分支。
-- 最後確認時間：2026-05-18 08:59（Asia/Taipei）
-- 最近檢查：已再次確認 master 的 TODO.md 與 PendingTask.md 皆無未完成清單項目，並以獨立分支 feature/todo-no-pending-recheck-20260518-0859 記錄本次確認工作。
+- Third Batch 仍有未完成項目；本次已完成其中「幫 webapp 加上桌面 icon」。
+- 最後確認時間：2026-05-18 17:11（Asia/Taipei）
+- 最近檢查：已完成 Third Batch「幫 webapp 加上桌面 icon」，實作與提交分支為 feature/thirdbatch-webapp-desktop-icon-20260518-1709，並已回到 master 更新 TODO 狀態與工作記錄。
 
 # First Batch
 [x] (merge)首次流程導引應該只有在列表是空的時候才出現。（完成分支：feature/onboarding-empty-list-only）
@@ -273,7 +273,13 @@
 [ ] 允許使用者用語音輸入產生投票，方便教師當場產生投票。產生時把逐字稿和提示詞和語音一起傳送出去。如果語音模型不接受語音檔，則先用 ASR 把它轉換成文字。
 [ ] 新增分享功能，可以產生簡報的 URL。使用這個 URL 不必經過認証，可以直接分享簡報。分享可以是 read-only 和 editable。這個分享和分享給其它使用者是不同的功能。
 [ ] 手機板的首頁上方的按鍵改成二排
-[ ] 幫 webapp 加上桌面 icon
+[x] 幫 webapp 加上桌面 icon（完成分支：feature/thirdbatch-webapp-desktop-icon-20260518-1709）
 [ ] 播放時候讓手機不要變成黑畫面(有語音播放時)
 [ ] 提供同步模式，任何一個 session 進入播放模式，會自動變成 master，其它的使用者自動進入同步模式。螢幕會跟著 master 同步移動。
 
+## Third Batch 工作記錄
+
+- 時間：2026-05-18 17:11（Asia/Taipei）
+- 工作內容：完成「幫 webapp 加上桌面 icon」，前端新增 /icons/makeslide-icon.svg 與 /manifest.webmanifest，並在 index.html 掛載 favicon、apple-touch-icon 與 manifest，讓 WebApp 具備桌面安裝圖示。
+- 所在分支：feature/thirdbatch-webapp-desktop-icon-20260518-1709
+- 驗證：npm --prefix frontend run build；git diff --check -- TODO.md
