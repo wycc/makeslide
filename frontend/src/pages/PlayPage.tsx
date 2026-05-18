@@ -166,6 +166,8 @@ export default function PlayPage() {
   const [rewriteBusy, setRewriteBusy] = useState(false);
   const [rewriteError, setRewriteError] = useState<string | null>(null);
   const [finished, setFinished] = useState(false);
+  const [classroomMode, setClassroomMode] = useState(false);
+  const [classroomAwaitingNext, setClassroomAwaitingNext] = useState(false);
   const [editingScript, setEditingScript] = useState('');
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
@@ -459,19 +461,28 @@ export default function PlayPage() {
   const playPause = useCallback(() => {
     const audio = audioRef.current;
     if (!audio) return;
+    if (classroomMode && classroomAwaitingNext && currentIdx < totalPages - 1) {
+      setClassroomAwaitingNext(false);
+      setFinished(false);
+      setCurrentIdx((i) => Math.min(totalPages - 1, i + 1));
+      setIsPlaying(true);
+      return;
+    }
     if (audio.paused) {
       void audio.play().catch(() => setIsPlaying(false));
     } else {
       audio.pause();
     }
-  }, []);
+  }, [classroomAwaitingNext, classroomMode, currentIdx, totalPages]);
 
   const goPrev = useCallback(() => {
+    setClassroomAwaitingNext(false);
     setFinished(false);
     setCurrentIdx((i) => Math.max(0, i - 1));
   }, []);
 
   const goNext = useCallback(() => {
+    setClassroomAwaitingNext(false);
     setFinished(false);
     setCurrentIdx((i) => Math.min(totalPages - 1, i + 1));
   }, [totalPages]);
@@ -479,12 +490,17 @@ export default function PlayPage() {
   const handleEnded = useCallback(() => {
     setIsPlaying(false);
     if (currentIdx < totalPages - 1) {
+      if (classroomMode) {
+        setClassroomAwaitingNext(true);
+        return;
+      }
       setCurrentIdx((i) => i + 1);
-      setIsPlaying(true); // autoplay next
+      setIsPlaying(true);
     } else {
+      setClassroomAwaitingNext(false);
       setFinished(true);
     }
-  }, [currentIdx, totalPages]);
+  }, [classroomMode, currentIdx, totalPages]);
 
   const handleSeek = useCallback(
     (ev: React.ChangeEvent<HTMLInputElement>) => {
@@ -1815,7 +1831,12 @@ export default function PlayPage() {
               播放完成
             </div>
           )}
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          {classroomMode && classroomAwaitingNext && !finished && (
+            <div className="rounded-md border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-sm text-amber-100">
+              本頁播放完畢，停留在目前頁。按空白鍵進入下一頁並播放。
+            </div>
+          )}
+          <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={goPrev}
@@ -1830,10 +1851,10 @@ export default function PlayPage() {
               type="button"
               onClick={playPause}
               className="rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm hover:bg-slate-700"
-              aria-label={isPlaying ? '暫停' : '播放'}
-              title={isPlaying ? '暫停 (Space)' : '播放 (Space)'}
+              aria-label={classroomMode && classroomAwaitingNext ? '下一頁並播放' : isPlaying ? '暫停' : '播放'}
+              title={classroomMode && classroomAwaitingNext ? '下一頁並播放 (Space)' : isPlaying ? '暫停 (Space)' : '播放 (Space)'}
             >
-              {isPlaying ? '⏸' : '▶︎'}
+              {classroomMode && classroomAwaitingNext ? '⏭▶︎' : isPlaying ? '⏸' : '▶︎'}
             </button>
             <button
               type="button"
@@ -1857,6 +1878,26 @@ export default function PlayPage() {
             <div className="order-3 w-[5.25rem] shrink-0 whitespace-nowrap text-right font-mono text-[11px] text-slate-300 sm:order-none sm:w-24 sm:text-xs">
               {formatTime(currentTime)} / {formatTime(duration)}
             </div>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">
+            <div>
+              <span className="font-semibold text-slate-200">上課模式</span>
+              <span className="ml-2 text-slate-400">
+                {classroomMode ? '每頁播放完會停在目前頁，按空白鍵才進入下一頁。' : '關閉時會自動連續播放下一頁。'}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setClassroomMode((enabled) => !enabled)}
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                classroomMode
+                  ? 'border-amber-400/60 bg-amber-400/15 text-amber-100 hover:bg-amber-400/25'
+                  : 'border-slate-700 bg-slate-950 text-slate-300 hover:bg-slate-800'
+              }`}
+              aria-pressed={classroomMode}
+            >
+              {classroomMode ? '已開啟' : '開啟'}
+            </button>
           </div>
             </div>
           </section>
