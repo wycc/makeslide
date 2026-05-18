@@ -143,7 +143,7 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
 
   return (
     <div className="flex flex-col items-start gap-2">
-      <div className="flex items-center gap-3">
+      <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:gap-3">
         <label className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200">
           <span className="whitespace-nowrap">PDF 內容</span>
           <select
