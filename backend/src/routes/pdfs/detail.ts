@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import fs from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
+import crypto from 'node:crypto';
 import { z } from 'zod';
 import { db } from '../../db';
 import { config } from '../../config';
@@ -36,6 +37,25 @@ interface PagePollRow {
   is_active: number;
   created_at: string;
   updated_at: string;
+}
+
+const ShareTokenParamSchema = z.object({
+  token: z.string().regex(/^[A-Za-z0-9_-]{12,128}$/, 'Invalid share token'),
+});
+
+const CreatePdfShareBodySchema = z.object({
+  access: z.enum(['read_only', 'editable']),
+});
+
+function generateShareToken(): string {
+  return crypto.randomBytes(18).toString('base64url');
+}
+
+function getShareMode(request: FastifyRequest): 'read_only' | 'editable' | null {
+  const raw = request.headers['x-makeslide-share-mode'];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (value === 'read_only' || value === 'editable') return value;
+  return null;
 }
 
 function rowToPoll(row: PagePollRow) {
@@ -117,7 +137,85 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
           WHERE pdf_id = ?`,
       )
       .all(parsed.data.id) as Parameters<typeof timingRowsToPageMap>[0];
-    return reply.send(rowToDetail(row, pages, timingRowsToPageMap(timingRows)));
+    const detail = rowToDetail(row, pages, timingRowsToPageMap(timingRows));
+    const shareMode = getShareMode(request);
+    if (shareMode) {
+      return reply.send({
+        ...detail,
+        share_mode: shareMode,
+      });
+    }
+    return reply.send(detail);
+  });
+
+  app.post('/api/pdfs/:id/share', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const body = CreatePdfShareBodySchema.safeParse(request.body ?? {});
+    if (!body.success) {
+      return reply
+        .code(400)
+        .send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
+    }
+    const row = db
+      .prepare(`SELECT id FROM pdfs WHERE id = ?`)
+      .get(parsed.data.id) as { id: string } | undefined;
+    if (!row) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
+    }
+
+    const now = nowIso();
+    const token = generateShareToken();
+    db.prepare(
+      `INSERT INTO pdf_shares (token, pdf_id, access, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?)`,
+    ).run(token, parsed.data.id, body.data.access, now, now);
+
+    return reply.send({
+      token,
+      pdf_id: parsed.data.id,
+      access: body.data.access,
+      share_url: `${config.nbPrefix || ''}/#/play/${encodeURIComponent(parsed.data.id)}?share=${encodeURIComponent(token)}`,
+      created_at: now,
+      updated_at: now,
+    });
+  });
+
+  app.get('/api/share/:token', async (request, reply) => {
+    const parsed = ShareTokenParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid share token'));
+    }
+    const row = db
+      .prepare(
+        `SELECT s.token, s.pdf_id, s.access, s.created_at, s.updated_at,
+                p.id AS existing_pdf_id
+           FROM pdf_shares s
+           LEFT JOIN pdfs p ON p.id = s.pdf_id
+          WHERE s.token = ?`,
+      )
+      .get(parsed.data.token) as
+      | {
+          token: string;
+          pdf_id: string;
+          access: 'read_only' | 'editable';
+          created_at: string;
+          updated_at: string;
+          existing_pdf_id: string | null;
+        }
+      | undefined;
+    if (!row || !row.existing_pdf_id) {
+      return reply.code(404).send(errorResponse('SHARE_NOT_FOUND', '分享連結不存在或已失效'));
+    }
+    return reply.send({
+      token: row.token,
+      pdf_id: row.pdf_id,
+      access: row.access,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    });
   });
 
   // PATCH /api/pdfs/:id/title

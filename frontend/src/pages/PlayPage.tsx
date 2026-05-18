@@ -5,7 +5,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ApiError,
   chatWithPageContext,
@@ -13,11 +13,13 @@ import {
   cancelRegenerateJob,
   clearPageChatHistory,
   createPagePoll,
+  createPdfShare,
   deleteSlide,
   fetchPdfDetail,
   fetchPagePolls,
   fetchPagePrompt,
   fetchPageChatHistory,
+  resolveShareToken,
   getImagePromptTemplates,
   fetchRegenerateStatus,
   generatePdfVideo,
@@ -35,6 +37,7 @@ import {
   votePagePoll,
   rewritePageScript,
   type ImagePromptTemplate,
+  type ShareAccessMode,
 } from '../lib/api';
 import {
   DEFAULT_TTS_VOICE_BY_PROVIDER,
@@ -152,6 +155,7 @@ async function exitAnyFullscreen(): Promise<void> {
 export default function PlayPage() {
   const { id: pdfId } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [detail, setDetail] = useState<PdfDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -221,6 +225,10 @@ export default function PlayPage() {
   const [pollVotes, setPollVotes] = useState<Record<number, number>>({});
   const [pollSettingsOpen, setPollSettingsOpen] = useState(false);
   const [pollStarted, setPollStarted] = useState(false);
+  const [shareAccess, setShareAccess] = useState<ShareAccessMode>('read_only');
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareMessage, setShareMessage] = useState<string | null>(null);
+  const [shareError, setShareError] = useState<string | null>(null);
   // 在按下「確認」啟動重生前記住目前頁碼，供 rollback 後跳回。
   const preRegenPageIdxRef = useRef<number | null>(null);
   const pollVoterIdRef = useRef<string>('');
@@ -277,6 +285,8 @@ export default function PlayPage() {
     [clearAudioRetryTimer],
   );
 
+  const currentShareToken = searchParams.get('share')?.trim() || '';
+
   // ---- Load detail (+ poll until ready) ----
   useEffect(() => {
     if (!pdfId) return;
@@ -285,11 +295,20 @@ export default function PlayPage() {
 
     const load = async () => {
       try {
+        let shareMode: ShareAccessMode | null = null;
+        if (currentShareToken) {
+          const share = await resolveShareToken(currentShareToken);
+          if (share.pdf_id !== pdfId) {
+            throw new ApiError('分享連結與簡報不符', 'INVALID_SHARE_TARGET', 400);
+          }
+          shareMode = share.access;
+        }
         const d = await fetchPdfDetail(pdfId);
         if (cancelled) return;
-        setDetail(d);
-        setVideoUrl(d.video_url ?? null);
-        setTitleInput(d.title ?? d.original_filename);
+        const detailWithShare = shareMode ? { ...d, share_mode: shareMode } : d;
+        setDetail(detailWithShare);
+        setVideoUrl(detailWithShare.video_url ?? null);
+        setTitleInput(detailWithShare.title ?? detailWithShare.original_filename);
         // page prompts are managed per page in local state
         setTtsVoice(d.tts_voice?.trim() || 'alloy');
         setTtsSpeed(d.tts_speed ?? 1);
@@ -297,7 +316,7 @@ export default function PlayPage() {
         if (d.image_style_prompt && d.image_style_prompt.trim()) {
           setDeckImageStylePrompt(d.image_style_prompt);
         }
-        if (d.status !== 'ready') {
+        if (detailWithShare.status !== 'ready') {
           timer = window.setTimeout(load, POLL_INTERVAL_MS);
         }
       } catch (err) {
@@ -311,7 +330,7 @@ export default function PlayPage() {
       cancelled = true;
       if (timer != null) window.clearTimeout(timer);
     };
-  }, [pdfId]);
+  }, [pdfId, currentShareToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -367,9 +386,12 @@ export default function PlayPage() {
   const deckPages: PdfDetailPage[] = useMemo(() => pages, [pages]);
   const currentPage: PdfDetailPage | null = deckPages[currentIdx] ?? null;
   const totalPages = deckPages.length;
-  const isReadOnlyProcessing = detail != null && detail.status !== 'ready';
+  const shareIsReadOnly = detail?.share_mode === 'read_only';
+  const isReadOnlyProcessing = (detail != null && detail.status !== 'ready') || shareIsReadOnly;
   const readOnlyReason = isReadOnlyProcessing
-    ? `產生過程中可瀏覽與播放；目前狀態為 ${detail.status}${detail.progress_step ? ` / ${detail.progress_step}` : ''}，所有更改與生成功能暫時停用。`
+    ? shareIsReadOnly
+      ? '此分享連結為唯讀模式：可瀏覽與播放，但不可修改或生成功能。'
+      : `產生過程中可瀏覽與播放；目前狀態為 ${detail.status}${detail.progress_step ? ` / ${detail.progress_step}` : ''}，所有更改與生成功能暫時停用。`
     : null;
   const slideImageMaxHeightVh = Math.round(52 * slideImageScale);
   const imageBustKey = detail?.updated_at ?? '';
@@ -995,10 +1017,36 @@ export default function PlayPage() {
 
   const reloadDetail = useCallback(async () => {
     if (!pdfId) return;
+    let shareMode: ShareAccessMode | null = null;
+    if (currentShareToken) {
+      const share = await resolveShareToken(currentShareToken);
+      if (share.pdf_id !== pdfId) {
+        throw new ApiError('分享連結與簡報不符', 'INVALID_SHARE_TARGET', 400);
+      }
+      shareMode = share.access;
+    }
     const d = await fetchPdfDetail(pdfId);
-    setDetail(d);
-    setVideoUrl(d.video_url ?? null);
-  }, [pdfId]);
+    const detailWithShare = shareMode ? { ...d, share_mode: shareMode } : d;
+    setDetail(detailWithShare);
+    setVideoUrl(detailWithShare.video_url ?? null);
+  }, [pdfId, currentShareToken]);
+
+  const handleCreateShareLink = useCallback(async () => {
+    if (!pdfId) return;
+    setShareBusy(true);
+    setShareError(null);
+    setShareMessage(null);
+    try {
+      const res = await createPdfShare(pdfId, shareAccess);
+      const absoluteUrl = `${window.location.origin}${res.share_url}`;
+      await navigator.clipboard.writeText(absoluteUrl);
+      setShareMessage(`已建立並複製分享連結（${shareAccess === 'editable' ? '可編輯' : '唯讀'}）`);
+    } catch (err) {
+      setShareError(err instanceof ApiError ? err.message : '建立分享連結失敗');
+    } finally {
+      setShareBusy(false);
+    }
+  }, [pdfId, shareAccess]);
 
   const regenAnySelected = regenOptions.image || regenOptions.script || regenOptions.audio;
   const regenJobRunning =
@@ -1578,9 +1626,11 @@ export default function PlayPage() {
           </div>
         ) : null}
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-2 px-4 pb-3 md:flex-row md:items-center md:justify-between md:gap-3">
-          <div className="text-xs text-slate-400">
+          <div className="space-y-1 text-xs text-slate-400">
             {videoError ? <span className="text-rose-300">{videoError}</span> : null}
             {!videoError && titleMsg ? <span className="text-slate-300">{titleMsg}</span> : null}
+            {shareMessage ? <div className="text-emerald-300">{shareMessage}</div> : null}
+            {shareError ? <div className="text-rose-300">{shareError}</div> : null}
           </div>
           {/* 手機：一排 3 欄（設定 / 產生影片 / 開啟影片）；桌面：維持原本 flex 排列。
               註：「重生」按鍵已搬到右側問答區（aside）。 */}
@@ -1661,6 +1711,26 @@ export default function PlayPage() {
                 開啟影片
               </button>
             )}
+            {!currentShareToken ? (
+              <div className="col-span-3 flex items-center gap-2 rounded-md border border-slate-700/80 px-2 py-1 md:col-span-1">
+                <select
+                  value={shareAccess}
+                  onChange={(e) => setShareAccess((e.target.value as ShareAccessMode) || 'read_only')}
+                  className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200"
+                >
+                  <option value="read_only">分享唯讀</option>
+                  <option value="editable">分享可編輯</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={() => void handleCreateShareLink()}
+                  disabled={shareBusy}
+                  className="rounded-md border border-violet-500/50 bg-violet-500/15 px-3 py-1.5 text-xs text-violet-200 hover:bg-violet-500/25 disabled:opacity-40"
+                >
+                  {shareBusy ? '建立中…' : '建立分享連結'}
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
         {showRegenBanner ? (

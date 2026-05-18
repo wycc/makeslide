@@ -11,6 +11,11 @@ import CreditExhaustedDialog from './components/CreditExhaustedDialog';
 
 const PUBLIC_AUTH_PATHS = new Set(['/settings']);
 
+function hasShareToken(search: string): boolean {
+  const token = new URLSearchParams(search).get('share');
+  return Boolean(token && token.trim());
+}
+
 export default function App() {
   const [checked, setChecked] = useState(false);
   const navigate = useNavigate();
@@ -22,14 +27,15 @@ export default function App() {
       try {
         const auth = await getAuthStatus();
         if (!alive) return;
-        if (auth.google_enabled && !auth.authenticated && !PUBLIC_AUTH_PATHS.has(location.pathname)) {
+        const sharedAccess = hasShareToken(location.search);
+        if (auth.google_enabled && !auth.authenticated && !PUBLIC_AUTH_PATHS.has(location.pathname) && !sharedAccess) {
           navigate('/settings', { replace: true });
           return;
         }
 
         const status = await getOpenAIKeyStatus();
         if (!alive) return;
-        if (!status.has_key && location.pathname !== '/settings') {
+        if (!status.has_key && location.pathname !== '/settings' && !sharedAccess) {
           navigate('/settings', { replace: true });
         }
       } finally {
@@ -39,7 +45,7 @@ export default function App() {
     return () => {
       alive = false;
     };
-  }, [location.pathname, navigate]);
+  }, [location.pathname, location.search, navigate]);
 
   if (!checked) {
     return (

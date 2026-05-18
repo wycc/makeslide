@@ -107,6 +107,7 @@ export interface PdfDetail {
   tts_speed?: number | null;
   script_max_chars_per_page?: number | null;
   image_style_prompt?: string | null;
+  share_mode?: 'read_only' | 'editable';
   created_at: string;
   updated_at: string;
   video_url?: string | null;
