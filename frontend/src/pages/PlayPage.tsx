@@ -1737,7 +1737,7 @@ export default function PlayPage() {
 
         {/* Left: player + script（手機：僅於 play tab 顯示；桌面：永遠顯示） */}
         <div
-          className={`min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950/70 ${qaPanelExpanded ? 'md:hidden' : 'md:flex'} ${
+          className={`min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950/70 md:flex ${
             activeTab === 'play' ? 'flex' : 'hidden'
           }`}
         >
@@ -2021,11 +2021,11 @@ export default function PlayPage() {
 
         {/* Right: thumbnails + LLM chat panel（手機：僅於 qa tab 顯示；桌面：永遠顯示） */}
         <aside
-          className={`max-h-[calc(100vh-7rem)] w-full shrink-0 flex-col gap-3 overflow-y-auto md:flex ${qaPanelExpanded ? 'md:min-w-0 md:flex-1' : 'md:w-[360px]'} ${
+          className={`max-h-[calc(100vh-7rem)] w-full shrink-0 flex-col gap-3 overflow-y-auto md:flex md:w-[360px] ${
             activeTab === 'qa' ? 'flex' : 'hidden'
           }`}
         >
-          <section className="rounded-lg border border-slate-800 bg-slate-900/40">
+          <section className={`rounded-lg border border-slate-800 bg-slate-900/40 ${qaPanelExpanded ? 'md:hidden' : ''}`}>
             <div className="border-b border-slate-800 px-4 py-3">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-sm font-semibold text-slate-300">🧩 投影片管理</h2>
@@ -2222,7 +2222,7 @@ export default function PlayPage() {
             </div>
           </section>
 
-          <section className="rounded-lg border border-slate-800 bg-slate-900/40">
+          <section className={`rounded-lg border border-slate-800 bg-slate-900/40 ${qaPanelExpanded ? 'md:hidden' : ''}`}>
             <div className="flex items-center justify-between gap-2 px-3 py-2">
               <div className="min-w-0">
                 <h2 className="truncate text-sm font-semibold text-slate-300">📊 Realtime Poll</h2>
@@ -2346,7 +2346,7 @@ export default function PlayPage() {
               onClick={() => setQaPanelExpanded((v) => !v)}
               className="hidden shrink-0 rounded-md border border-cyan-500/50 bg-cyan-500/10 px-2 py-1 text-xs text-cyan-200 hover:bg-cyan-500/20 md:inline-flex"
               aria-pressed={qaPanelExpanded}
-              title={qaPanelExpanded ? '還原問答區寬度' : '放大問答區到整個右側'}
+              title={qaPanelExpanded ? '還原右側欄內容' : '讓問答佔滿右側欄'}
             >
               {qaPanelExpanded ? '還原' : '放大'}
             </button>
