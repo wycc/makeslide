@@ -1,8 +1,8 @@
 # TODO 狀態摘要
 
-- Third Batch 仍有未完成項目；本次已完成其中「手機板的首頁上方的按鍵改成二排」。
-- 最後確認時間：2026-05-18 17:21（Asia/Taipei）
-- 最近檢查：已完成 Third Batch「手機板的首頁上方的按鍵改成二排」，實作與提交分支為 feature/thirdbatch-home-mobile-top-buttons-two-rows-20260518-1720，並已回到 master 更新 TODO 狀態與工作記錄。
+- Third Batch 仍有未完成項目；本次已完成其中「播放時候讓手機不要變成黑畫面(有語音播放時)」。
+- 最後確認時間：2026-05-18 17:31（Asia/Taipei）
+- 最近檢查：已完成 Third Batch「播放時候讓手機不要變成黑畫面(有語音播放時)」，實作與提交分支為 feature/thirdbatch-mobile-playback-keep-screen-awake-20260518-1730，並已回到 master 更新 TODO 狀態與工作記錄。
 
 # First Batch
 [x] (merge)首次流程導引應該只有在列表是空的時候才出現。（完成分支：feature/onboarding-empty-list-only）
@@ -274,7 +274,7 @@
 [ ] 新增分享功能，可以產生簡報的 URL。使用這個 URL 不必經過認証，可以直接分享簡報。分享可以是 read-only 和 editable。這個分享和分享給其它使用者是不同的功能。
 [x] 手機板的首頁上方的按鍵改成二排（完成分支：feature/thirdbatch-home-mobile-top-buttons-two-rows-20260518-1720）
 [x] 幫 webapp 加上桌面 icon（完成分支：feature/thirdbatch-webapp-desktop-icon-20260518-1709）
-[ ] 播放時候讓手機不要變成黑畫面(有語音播放時)
+[x] 播放時候讓手機不要變成黑畫面(有語音播放時)（完成分支：feature/thirdbatch-mobile-playback-keep-screen-awake-20260518-1730）
 [ ] 提供同步模式，任何一個 session 進入播放模式，會自動變成 master，其它的使用者自動進入同步模式。螢幕會跟著 master 同步移動。
 
 ## Third Batch 工作記錄
@@ -287,4 +287,9 @@
 - 時間：2026-05-18 17:21（Asia/Taipei）
 - 工作內容：完成「手機板的首頁上方的按鍵改成二排」，將首頁上方匯入操作區在手機版改為兩欄網格排列（桌面版維持原本單列），讓上方按鍵在小螢幕以二排列顯示。
 - 所在分支：feature/thirdbatch-home-mobile-top-buttons-two-rows-20260518-1720
+- 驗證：npm --prefix frontend run build；git diff --check -- TODO.md
+
+- 時間：2026-05-18 17:31（Asia/Taipei）
+- 工作內容：完成「播放時候讓手機不要變成黑畫面(有語音播放時)」，在播放頁加入 Screen Wake Lock 機制，語音播放中會請求保持螢幕喚醒，暫停/停止/離開頁面時釋放，並在分頁重新可見且仍播放時自動重取，降低手機播放時自動黑屏風險。
+- 所在分支：feature/thirdbatch-mobile-playback-keep-screen-awake-20260518-1730
 - 驗證：npm --prefix frontend run build；git diff --check -- TODO.md
