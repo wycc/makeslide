@@ -1,5 +1,10 @@
 import type { FastifyInstance } from 'fastify';
-import { getRuntimeAiSettings, persistEnvSettings, setRuntimeAiSettings } from '../../services/aiSettings';
+import {
+  getAccountSettingsLocation,
+  getRuntimeAiSettings,
+  persistEnvSettings,
+  setRuntimeAiSettings,
+} from '../../services/aiSettings';
 import { setOpenAIApiKeyRuntime } from '../../services/openai';
 import { IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
 import { UpdateSystemAiSettingsBodySchema, errorResponse } from './shared';
@@ -28,7 +33,11 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/api/system/ai-settings', async (_request, reply) => {
     const runtime = getRuntimeAiSettings();
+    const location = getAccountSettingsLocation();
     return reply.code(200).send({
+      account_id: location.accountId,
+      account_settings_dir: location.accountDir,
+      account_settings_file: location.envPath,
       openai_api_key: runtime.openaiApiKey,
       gemini_api_key: runtime.geminiApiKey,
       llm_provider: runtime.llmProvider,
@@ -63,7 +72,11 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
     if (typeof next.openaiApiKey === 'string') setOpenAIApiKeyRuntime(next.openaiApiKey);
     const runtime = setRuntimeAiSettings(next);
     await persistEnvSettings(next);
+    const location = getAccountSettingsLocation();
     return reply.code(200).send({
+      account_id: location.accountId,
+      account_settings_dir: location.accountDir,
+      account_settings_file: location.envPath,
       openai_api_key: runtime.openaiApiKey,
       gemini_api_key: runtime.geminiApiKey,
       llm_provider: runtime.llmProvider,

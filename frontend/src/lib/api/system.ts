@@ -26,6 +26,9 @@ export interface OpenAIKeyStatusResponse {
 }
 
 export interface SystemAiSettings {
+  account_id?: string;
+  account_settings_dir?: string;
+  account_settings_file?: string;
   openai_api_key?: string;
   gemini_api_key?: string;
   has_openai_key: boolean;

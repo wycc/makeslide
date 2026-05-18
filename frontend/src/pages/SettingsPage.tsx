@@ -22,6 +22,8 @@ export default function SettingsPage() {
   const [geminiTtsModel, setGeminiTtsModel] = useState('gemini-2.5-flash-preview-tts');
   const [geminiTtsSpeaker1, setGeminiTtsSpeaker1] = useState('');
   const [geminiTtsSpeaker2, setGeminiTtsSpeaker2] = useState('');
+  const [accountSettingsFile, setAccountSettingsFile] = useState('');
+  const [accountId, setAccountId] = useState('default');
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
@@ -44,6 +46,8 @@ export default function SettingsPage() {
       setGeminiTtsModel(s.gemini_tts_model);
       setGeminiTtsSpeaker1(s.gemini_tts_speaker1 ?? '');
       setGeminiTtsSpeaker2(s.gemini_tts_speaker2 ?? '');
+      setAccountId(s.account_id ?? 'default');
+      setAccountSettingsFile(s.account_settings_file ?? '');
       if (s.has_openai_key || s.has_gemini_key) {
         setMsg('已載入目前 AI 設定。若要更新 API Key，請輸入後儲存。');
       }
@@ -187,6 +191,13 @@ export default function SettingsPage() {
           </div>
         ) : null}
         <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+          <div className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-xs text-slate-400">
+            <div>目前帳號：<span className="font-mono text-slate-200">{accountId}</span></div>
+            {accountSettingsFile ? (
+              <div className="mt-1 break-all">設定會保存到帳號專屬檔案：<span className="font-mono text-slate-200">{accountSettingsFile}</span></div>
+            ) : null}
+          </div>
+
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="block text-sm text-slate-300">
               LLM 供應商

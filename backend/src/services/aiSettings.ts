@@ -17,6 +17,61 @@ export interface RuntimeAiSettings {
   geminiTtsSpeaker2: string;
 }
 
+export interface AccountSettingsLocation {
+  accountId: string;
+  accountDir: string;
+  envPath: string;
+}
+
+const DEFAULT_ACCOUNT_ID = process.env.MAKESLIDE_ACCOUNT_ID?.trim() || 'default';
+
+function sanitizeAccountId(accountId: string): string {
+  const sanitized = accountId.trim().replace(/[^a-zA-Z0-9._-]/g, '_').replace(/^\.+/, '');
+  return sanitized || 'default';
+}
+
+export function getAccountSettingsLocation(accountId = DEFAULT_ACCOUNT_ID): AccountSettingsLocation {
+  const safeAccountId = sanitizeAccountId(accountId);
+  const accountDir = path.join(config.repoRoot, 'accounts', safeAccountId);
+  return {
+    accountId: safeAccountId,
+    accountDir,
+    envPath: path.join(accountDir, 'settings.env'),
+  };
+}
+
+function parseEnvContent(content: string): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    const idx = line.indexOf('=');
+    if (idx < 0) continue;
+    const key = line.slice(0, idx).trim();
+    const value = line.slice(idx + 1).trim();
+    if (key) values[key] = value;
+  }
+  return values;
+}
+
+function loadAccountEnvSettings(): Partial<RuntimeAiSettings> {
+  const { envPath } = getAccountSettingsLocation();
+  if (!fs.existsSync(envPath)) return {};
+  const values = parseEnvContent(fs.readFileSync(envPath, 'utf8'));
+  return {
+    openaiApiKey: values.OPENAI_API_KEY,
+    geminiApiKey: values.GEMINI_API_KEY,
+    llmProvider: values.LLM_PROVIDER === 'gemini' ? 'gemini' : values.LLM_PROVIDER === 'openai' ? 'openai' : undefined,
+    ttsProvider: values.TTS_PROVIDER === 'gemini' ? 'gemini' : values.TTS_PROVIDER === 'openai' ? 'openai' : undefined,
+    openaiLlmModel: values.OPENAI_LLM_MODEL,
+    geminiLlmModel: values.GEMINI_LLM_MODEL,
+    openaiTtsModel: values.OPENAI_TTS_MODEL,
+    geminiTtsModel: values.GEMINI_TTS_MODEL,
+    geminiTtsSpeaker1: values.GEMINI_TTS_SPEAKER1,
+    geminiTtsSpeaker2: values.GEMINI_TTS_SPEAKER2,
+  };
+}
+
 let runtime: RuntimeAiSettings = {
   openaiApiKey: config.openaiApiKey,
   geminiApiKey: config.geminiApiKey,
@@ -28,6 +83,13 @@ let runtime: RuntimeAiSettings = {
   geminiTtsModel: config.geminiTtsModel,
   geminiTtsSpeaker1: process.env.GEMINI_TTS_SPEAKER1?.trim() || '',
   geminiTtsSpeaker2: process.env.GEMINI_TTS_SPEAKER2?.trim() || '',
+};
+
+runtime = {
+  ...runtime,
+  ...Object.fromEntries(
+    Object.entries(loadAccountEnvSettings()).filter(([, value]) => typeof value === 'string' && value.trim().length > 0),
+  ),
 };
 
 export function getRuntimeAiSettings(): RuntimeAiSettings {
@@ -53,7 +115,7 @@ export function setRuntimeAiSettings(next: Partial<RuntimeAiSettings>): RuntimeA
 }
 
 export async function persistEnvSettings(next: Partial<RuntimeAiSettings>): Promise<void> {
-  const envPath = path.join(config.repoRoot, '.env');
+  const { accountDir, envPath } = getAccountSettingsLocation();
   let content = '';
   if (fs.existsSync(envPath)) content = await fs.promises.readFile(envPath, 'utf8');
 
@@ -79,5 +141,6 @@ export async function persistEnvSettings(next: Partial<RuntimeAiSettings>): Prom
     else content = `${content.trimEnd()}\n${line}\n`;
   }
 
-  await fs.promises.writeFile(envPath, content, 'utf8');
+  await fs.promises.mkdir(accountDir, { recursive: true, mode: 0o700 });
+  await fs.promises.writeFile(envPath, content, { encoding: 'utf8', mode: 0o600 });
 }
