@@ -7,6 +7,7 @@ import SystemDataPage from './pages/SystemDataPage';
 import { useEffect, useState } from 'react';
 import { getAuthStatus, getOpenAIKeyStatus } from './lib/api';
 import { useLocation, useNavigate } from 'react-router-dom';
+import CreditExhaustedDialog from './components/CreditExhaustedDialog';
 
 const PUBLIC_AUTH_PATHS = new Set(['/settings']);
 
@@ -49,20 +50,23 @@ export default function App() {
   }
 
   return (
-    <Routes>
-      <Route path="/" element={<HomePage />} />
-      <Route path="/import-text" element={<ImportTextPage />} />
-      <Route path="/play/:id" element={<PlayPage />} />
-      <Route path="/settings" element={<SettingsPage />} />
-      <Route path="/system" element={<SystemDataPage />} />
-      <Route
-        path="*"
-        element={
-          <div className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-100">
-            <p>404 Not Found</p>
-          </div>
-        }
-      />
-    </Routes>
+    <>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/import-text" element={<ImportTextPage />} />
+        <Route path="/play/:id" element={<PlayPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/system" element={<SystemDataPage />} />
+        <Route
+          path="*"
+          element={
+            <div className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-100">
+              <p>404 Not Found</p>
+            </div>
+          }
+        />
+      </Routes>
+      <CreditExhaustedDialog />
+    </>
   );
 }
