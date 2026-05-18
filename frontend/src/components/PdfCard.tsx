@@ -40,7 +40,9 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onCate
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDuplicating, setIsDuplicating] = useState(false);
   const [isChangingCategory, setIsChangingCategory] = useState(false);
-  const isProcessing = pdf.status === 'uploaded' || pdf.status === 'processing';
+  // `uploaded` / `processing` 都允許刪除；
+  // `isProcessing` 僅用於限制「複製」與「改類別」這類非刪除操作。
+  const isProcessing = pdf.status === 'processing';
 
   const progressTotal = pdf.progress_total ?? 0;
   const progressCurrentRaw = pdf.progress_current ?? 0;
@@ -62,7 +64,7 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onCate
 
   const handleDelete = async (ev: React.MouseEvent) => {
     ev.stopPropagation();
-    if (isProcessing || isDeleting) return;
+    if (isDeleting) return;
     const ok = window.confirm(`確定刪除「${pdf.title ?? pdf.id}」？此動作無法復原。`);
     if (!ok) return;
     setIsDeleting(true);
@@ -237,8 +239,7 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onCate
             <button
               type="button"
               onClick={handleDelete}
-              disabled={isProcessing || isDeleting}
-              title={isProcessing ? '產生過程中暫停刪除' : undefined}
+              disabled={isDeleting}
               className="rounded-md border border-rose-500/40 px-2 py-1 text-xs text-rose-300 transition hover:bg-rose-500/10 disabled:opacity-50"
             >
               {isDeleting ? '刪除中…' : '刪除'}

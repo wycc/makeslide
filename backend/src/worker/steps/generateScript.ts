@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import sharp from 'sharp';
 import { z } from 'zod';
 import type { ChatCompletionContentPart } from 'openai/resources/chat/completions';
@@ -84,6 +85,17 @@ const SCRIPT_MAX_ATTEMPTS = 10;
 const SCRIPT_RETRY_INITIAL_DELAY_MS = 1000;
 const SCRIPT_RETRY_MAX_DELAY_MS = 15000;
 const SCRIPT_RETRY_FACTOR = 2;
+
+async function writeUtf8Ensured(filePath: string, content: string): Promise<void> {
+  try {
+    await fs.promises.writeFile(filePath, content, 'utf8');
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== 'ENOENT') throw err;
+    await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.promises.writeFile(filePath, content, 'utf8');
+  }
+}
 
 function clipText(text: string, max: number = MAX_TEXT_CHARS_PER_PAGE): string {
   const t = text.trim();
@@ -469,6 +481,10 @@ export async function generateScript(
   opts: GenerateScriptOptions,
 ): Promise<GenerateScriptResult> {
   const { pdfId, pageCount, pages, onPage, userPrompt, shouldAbort } = opts;
+  if (pages[0]) {
+    const firstScriptPath = pageScriptPath(pdfId, pages[0].pageNumber, pageCount);
+    await fs.promises.mkdir(path.dirname(firstScriptPath), { recursive: true });
+  }
   const targetChars = opts.maxCharsPerPage ?? config.openaiScriptTargetChars;
   const runtime = getRuntimeAiSettings();
   const system = buildSystemPrompt(
@@ -647,7 +663,7 @@ export async function generateScript(
 
     const { script, usage, latencyMs } = success;
     const scriptPath = pageScriptPath(pdfId, pageInfo.pageNumber, pageCount);
-    await fs.promises.writeFile(scriptPath, script, 'utf8');
+    await writeUtf8Ensured(scriptPath, script);
 
     totalUsage.prompt_tokens += usage.prompt_tokens;
     totalUsage.completion_tokens += usage.completion_tokens;
@@ -725,7 +741,7 @@ export async function generateScript(
     for (const r of results) {
       const rewritten = byPage.get(r.pageNumber)?.trim() ?? '';
       if (!rewritten) continue;
-      await fs.promises.writeFile(r.scriptPath, rewritten, 'utf8');
+      await writeUtf8Ensured(r.scriptPath, rewritten);
       r.script = rewritten;
       r.chars = rewritten.length;
       r.generatedAt = new Date().toISOString();

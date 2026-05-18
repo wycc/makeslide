@@ -300,7 +300,15 @@ export function startArtifact(params: {
     ).run(params.run.pdfId, params.pageNumber, params.artifact, params.run.runId, attempt, params.reason, startedAt, SLA_TARGETS_MS.artifacts[params.artifact] ?? null, startedAt);
     return { runId: params.run.runId, pdfId: params.run.pdfId, pageNumber: params.pageNumber, artifact: params.artifact, attempt, reason: params.reason, startedAt };
   } catch (err) {
-    logger.warn({ err, runId: params.run.runId, artifact: params.artifact, pageNumber: params.pageNumber }, 'timing: startArtifact failed');
+    const code = (err as { code?: string } | null | undefined)?.code;
+    if (code === 'SQLITE_CONSTRAINT_FOREIGNKEY') {
+      logger.info(
+        { runId: params.run.runId, artifact: params.artifact, pageNumber: params.pageNumber, code },
+        'timing: startArtifact skipped (run/pdf no longer exists)',
+      );
+    } else {
+      logger.warn({ err, runId: params.run.runId, artifact: params.artifact, pageNumber: params.pageNumber }, 'timing: startArtifact failed');
+    }
     return null;
   }
 }
@@ -324,7 +332,15 @@ export function finishArtifact(handle: TimingArtifactHandle | null, status: Excl
         WHERE pdf_id = ? AND page_number = ? AND artifact = ?`,
     ).run(status, startedAt, endedAt, durationMs, target, slaStatus, opts.outputPath ?? null, opts.error?.code ?? null, opts.error?.message ?? null, endedAt, handle.pdfId, handle.pageNumber, handle.artifact);
   } catch (err) {
-    logger.warn({ err, runId: handle.runId, artifact: handle.artifact, pageNumber: handle.pageNumber }, 'timing: finishArtifact failed');
+    const code = (err as { code?: string } | null | undefined)?.code;
+    if (code === 'SQLITE_CONSTRAINT_FOREIGNKEY') {
+      logger.info(
+        { runId: handle.runId, artifact: handle.artifact, pageNumber: handle.pageNumber, code },
+        'timing: finishArtifact skipped (run/pdf no longer exists)',
+      );
+    } else {
+      logger.warn({ err, runId: handle.runId, artifact: handle.artifact, pageNumber: handle.pageNumber }, 'timing: finishArtifact failed');
+    }
   }
 }
 
