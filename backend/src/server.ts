@@ -163,6 +163,16 @@ async function main(): Promise<void> {
   // Initialise queue + crash-recovery rescan
   getProcessingQueue();
   rescanPendingOnStartup();
+  // Defensive self-healing: periodically rescan pending rows in case a job
+  // stays in `uploaded` after transient enqueue misses.
+  const rescanTimer = setInterval(() => {
+    try {
+      rescanPendingOnStartup();
+    } catch (err) {
+      logger.warn({ err }, 'Startup rescan interval failed (non-fatal)');
+    }
+  }, 30_000);
+  rescanTimer.unref();
 
   const app = await buildApp();
   try {

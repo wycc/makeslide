@@ -41,3 +41,4 @@ coverage/
 
 # Vite
 .vite/
+log.txt
