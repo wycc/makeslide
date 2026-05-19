@@ -126,6 +126,7 @@ export interface PagePoll {
   question: string;
   options: PagePollOption[];
   total_votes: number;
+  answered_count?: number;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -242,6 +243,7 @@ export interface SyncJoinResponse {
   current_time: number;
   updated_at: string;
   master_expires_at: string | null;
+  online_count?: number;
 }
 
 export interface SyncStateResponse {
@@ -253,4 +255,5 @@ export interface SyncStateResponse {
   current_time: number;
   updated_at: string;
   master_expires_at: string | null;
+  online_count?: number;
 }

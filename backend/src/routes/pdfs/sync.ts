@@ -9,6 +9,7 @@ interface SyncSessionState {
   pdfId: string;
   masterClientId: string | null;
   masterExpiresAt: number;
+  clients: Map<string, number>;
   pageNumber: number;
   isPlaying: boolean;
   currentTime: number;
@@ -17,6 +18,7 @@ interface SyncSessionState {
 
 const sessions = new Map<string, SyncSessionState>();
 const MASTER_TTL_MS = 20_000;
+const CLIENT_TTL_MS = 30_000;
 
 function ensurePdfExists(id: string): boolean {
   const row = db.prepare(`SELECT id FROM pdfs WHERE id = ?`).get(id) as { id: string } | undefined;
@@ -30,7 +32,9 @@ function nowMs(): number {
 function getSession(pdfId: string): SyncSessionState {
   const hit = sessions.get(pdfId);
   if (hit) {
-    if (hit.masterClientId && hit.masterExpiresAt <= nowMs()) {
+    pruneExpiredClients(hit);
+    const now = nowMs();
+    if (hit.masterClientId && hit.masterExpiresAt <= now) {
       hit.masterClientId = null;
     }
     return hit;
@@ -39,6 +43,7 @@ function getSession(pdfId: string): SyncSessionState {
     pdfId,
     masterClientId: null,
     masterExpiresAt: 0,
+    clients: new Map(),
     pageNumber: 1,
     isPlaying: false,
     currentTime: 0,
@@ -50,6 +55,25 @@ function getSession(pdfId: string): SyncSessionState {
 
 function roleFor(session: SyncSessionState, clientId: string): SyncRole {
   return session.masterClientId === clientId ? 'master' : 'follower';
+}
+
+function pruneExpiredClients(session: SyncSessionState): void {
+  const now = nowMs();
+  for (const [clientId, expiresAt] of session.clients.entries()) {
+    if (expiresAt <= now) {
+      session.clients.delete(clientId);
+    }
+  }
+}
+
+function touchClient(session: SyncSessionState, clientId: string): void {
+  pruneExpiredClients(session);
+  session.clients.set(clientId, nowMs() + CLIENT_TTL_MS);
+}
+
+function onlineClientCount(session: SyncSessionState): number {
+  pruneExpiredClients(session);
+  return session.clients.size;
 }
 
 export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
@@ -74,6 +98,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     }
     const { client_id: clientId } = parsedBody.data;
     const session = getSession(id);
+    touchClient(session, clientId);
     if (!session.masterClientId || session.masterExpiresAt <= nowMs()) {
       session.masterClientId = clientId;
       session.masterExpiresAt = nowMs() + MASTER_TTL_MS;
@@ -88,6 +113,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       current_time: session.currentTime,
       updated_at: session.updatedAt,
       master_expires_at: new Date(session.masterExpiresAt).toISOString(),
+      online_count: onlineClientCount(session),
     });
   });
 
@@ -104,6 +130,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     const { client_id: clientId, page_number: pageNumber, is_playing: isPlaying, current_time: currentTime } =
       parsedBody.data;
     const session = getSession(id);
+    touchClient(session, clientId);
     if (!session.masterClientId || session.masterExpiresAt <= nowMs()) {
       session.masterClientId = clientId;
     }
@@ -130,6 +157,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     }
     const clientId = parsedQuery.data.client_id;
     const session = getSession(id);
+    if (clientId) touchClient(session, clientId);
     const role = clientId ? roleFor(session, clientId) : 'follower';
     return reply.send({
       pdf_id: id,
@@ -142,6 +170,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       master_expires_at: session.masterClientId
         ? new Date(session.masterExpiresAt).toISOString()
         : null,
+      online_count: onlineClientCount(session),
     });
   });
 
@@ -154,6 +183,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     const { id } = parsedParams.data;
     const { client_id: clientId } = parsedBody.data;
     const session = getSession(id);
+    session.clients.delete(clientId);
     if (session.masterClientId === clientId) {
       session.masterClientId = null;
       session.masterExpiresAt = 0;
@@ -164,4 +194,3 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ ok: true });
   });
 }
-

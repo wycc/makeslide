@@ -257,6 +257,7 @@ export default function PlayPage() {
   const [syncEnabled, setSyncEnabled] = useState(false);
   const [syncRole, setSyncRole] = useState<'master' | 'follower'>('follower');
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncOnlineCount, setSyncOnlineCount] = useState<number | null>(null);
   const syncClientIdRef = useRef<string>('');
   const applyingRemoteSyncRef = useRef(false);
   const [imageOnlyFullscreen, setImageOnlyFullscreen] = useState(false);
@@ -622,6 +623,7 @@ export default function PlayPage() {
         const joined = await joinPlaybackSync(pdfId, next);
         if (cancelled) return;
         setSyncRole(joined.role);
+        setSyncOnlineCount(joined.online_count ?? null);
         setSyncError(null);
       } catch (err) {
         if (cancelled) return;
@@ -659,6 +661,7 @@ export default function PlayPage() {
         try {
           const state = await fetchPlaybackSyncState(pdfId, syncClientIdRef.current);
           setSyncRole(state.role);
+          setSyncOnlineCount(state.online_count ?? null);
           if (state.role === 'master') return;
           applyingRemoteSyncRef.current = true;
           const targetIdx = Math.max(0, state.page_number - 1);
@@ -2564,9 +2567,16 @@ export default function PlayPage() {
                         <div key={poll.id} className="rounded-md border border-slate-800 bg-slate-950/50 p-2">
                           <div className="mb-1 flex items-start justify-between gap-2">
                             <h3 className="text-xs font-medium text-slate-200">{poll.question}</h3>
-                            <span className="shrink-0 rounded-full border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-400">
-                              {poll.total_votes} 票
-                            </span>
+                            <div className="flex shrink-0 flex-wrap justify-end gap-1">
+                              {syncEnabled && syncRole === 'master' ? (
+                                <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-200">
+                                  在線 {syncOnlineCount ?? '-'} 人 · 已答 {poll.answered_count ?? poll.total_votes} 人
+                                </span>
+                              ) : null}
+                              <span className="rounded-full border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-400">
+                                {poll.total_votes} 票
+                              </span>
+                            </div>
                           </div>
                           <div className="space-y-1.5">
                             {poll.options.map((option, idx) => {
