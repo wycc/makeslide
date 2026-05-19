@@ -1,8 +1,8 @@
 # TODO 狀態摘要
 
-- Third Batch 已無未完成項目；Fourth batch 本次已完成「全螢幕上課模式播放完顯示 Space 鍵提示」修正；仍有其他 Fourth batch 未完成項目。
-- 最後確認時間：2026-05-20 02:20（Asia/Taipei）
-- 最近檢查：已完成 Fourth batch「在全螢幕模式時，當在上課模式播放一頁完成時，在 master 模式的session 會在字幕的位置顯示請按 space 鍵進入下一頁。」；實作與提交分支為 feature/fourthbatch-fullscreen-classroom-space-hint-20260520-0220，並已回到 master 更新 TODO 狀態與工作記錄。
+- Third Batch 已無未完成項目；Fourth batch 本次已完成「PlayPage 顯示本頁 QR code」功能；仍有其他 Fourth batch 未完成項目。
+- 最後確認時間：2026-05-20 02:31（Asia/Taipei）
+- 最近檢查：已完成 Fourth batch「在 PlayPage 中加上一個顯示本頁 qrcode 的按鍵。按下後就在圖片區顯示 qrcode，直到按下撥放鍵或是換頁為止。」；實作與提交分支為 feature/playpage-current-page-qrcode-20260520-0229，並已回到 master 更新 TODO 狀態與工作記錄。
 
 # First Batch
 [x] (merge)首次流程導引應該只有在列表是空的時候才出現。（完成分支：feature/onboarding-empty-list-only）
@@ -335,7 +335,7 @@
 [ ] Realtime poll 在按下開使投票時，所有在全螢幕模式的客戶端都自動顯示投票畫面
 [x] Realtime poll 在每一個投票問題後加上刪除的按鍵（完成分支：feature/fourthbatch-realtime-poll-delete-button-20260520-0200）
 [ ] realtime poll 加上一個不要顯示投票結果的checkbox。此時大家只看的到自己的選擇。把這個checkbox 關閉後，結果就會顯示出來。
-[ ] 在 PlayPage 中加上一個顯示本頁 qrcode 的按鍵。按下後就在圖片區顯示 qrcode，直到按下撥放鍵或是換頁為止。
+[x] 在 PlayPage 中加上一個顯示本頁 qrcode 的按鍵。按下後就在圖片區顯示 qrcode，直到按下撥放鍵或是換頁為止。（完成分支：feature/playpage-current-page-qrcode-20260520-0229）
 [ ] 老師端(master) 強制所有學生靜音 / 解鎖自行播放
 [ ] 所有進入 follower 模式的 session 都會強迫輸入一個代號
 [ ] 在 master 端投票時顯示目前在線人數，己作答人數
@@ -382,3 +382,8 @@
 - 工作內容：完成「在全螢幕模式時，當在上課模式播放一頁完成時，在 master 模式的session 會在字幕的位置顯示請按 space 鍵進入下一頁。」；播放頁新增上課模式等待下一頁提示判斷，僅在未同步或同步 master session 顯示，並在圖片全螢幕字幕位置以醒目提示取代字幕，提示按 Space 進入下一頁。
 - 所在分支：feature/fourthbatch-fullscreen-classroom-space-hint-20260520-0220
 - 驗證：npm --prefix frontend run build && git diff --check -- frontend/src/pages/PlayPage.tsx
+
+- 時間：2026-05-20 02:31（Asia/Taipei）
+- 工作內容：完成「在 PlayPage 中加上一個顯示本頁 qrcode 的按鍵。按下後就在圖片區顯示 qrcode，直到按下撥放鍵或是換頁為止。」；播放頁新增 QR 按鍵，按下後會暫停目前播放並在投影片圖片區顯示目前頁 URL 的 QR code，按播放鍵、上一頁、下一頁或點選縮圖換頁時會自動回到投影片畫面。
+- 所在分支：feature/playpage-current-page-qrcode-20260520-0229
+- 驗證：npm --prefix frontend run build && git diff --check -- frontend/src/pages/PlayPage.tsx TODO.md
