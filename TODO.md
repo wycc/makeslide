@@ -1,8 +1,8 @@
 # TODO 狀態摘要
 
-- Third Batch 已無未完成項目；Fourth batch 本次已完成「整個簡報所有語音檔的長度會在產生時就先全部加起來，當成整個簡報的時間存在資料庫中。並顯示在播放界面中。請放在時間的後面。」。
-- 最後確認時間：2026-05-20 01:54（Asia/Taipei）
-- 最近檢查：已完成 Fourth batch「整個簡報所有語音檔的長度會在產生時就先全部加起來，當成整個簡報的時間存在資料庫中。並顯示在播放界面中。請放在時間的後面。」；實作與提交分支為 feature/fourthbatch-total-audio-duration-20260520-0149，並已回到 master 更新 TODO 狀態與工作記錄。
+- Third Batch 已無未完成項目；Fourth batch 本次已完成「Realtime poll 在每一個投票問題後加上刪除的按鍵」；仍有其他 Fourth batch 未完成項目。
+- 最後確認時間：2026-05-20 02:01（Asia/Taipei）
+- 最近檢查：已完成 Fourth batch「Realtime poll 在每一個投票問題後加上刪除的按鍵」；實作與提交分支為 feature/fourthbatch-realtime-poll-delete-button-20260520-0200，並已回到 master 更新 TODO 狀態與工作記錄。
 
 # First Batch
 [x] (merge)首次流程導引應該只有在列表是空的時候才出現。（完成分支：feature/onboarding-empty-list-only）
@@ -333,7 +333,7 @@
 [ ] 在全螢幕模式時，當在上課模式播放一頁完成時，在 master 模式的session 會在字幕的位置顯示請按 space 鍵進入下一頁。
 [ ] 同步模式的 follower 在取消同步模式或離開播放頁面前都要保持不進入背景
 [ ] Realtime poll 在按下開使投票時，所有在全螢幕模式的客戶端都自動顯示投票畫面
-[ ] Realtime poll 在每一個投票問題後加上刪除的按鍵
+[x] Realtime poll 在每一個投票問題後加上刪除的按鍵（完成分支：feature/fourthbatch-realtime-poll-delete-button-20260520-0200）
 [ ] realtime poll 加上一個不要顯示投票結果的checkbox。此時大家只看的到自己的選擇。把這個checkbox 關閉後，結果就會顯示出來。
 [ ] 在 PlayPage 中加上一個顯示本頁 qrcode 的按鍵。按下後就在圖片區顯示 qrcode，直到按下撥放鍵或是換頁為止。
 [ ] 老師端(master) 強制所有學生靜音 / 解鎖自行播放
@@ -366,4 +366,9 @@
 - 時間：2026-05-20 01:54（Asia/Taipei）
 - 工作內容：完成「整個簡報所有語音檔的長度會在產生時就先全部加起來，當成整個簡報的時間存在資料庫中。並顯示在播放界面中。請放在時間的後面。」；後端新增 pdfs.total_audio_duration_seconds 欄位，初次產生與重生語音後會彙總所有頁面 audio_duration_seconds 並同步到 metadata.json/API 回傳，播放頁會在目前頁時間後顯示整份簡報總長。
 - 所在分支：feature/fourthbatch-total-audio-duration-20260520-0149
+- 驗證：npm --prefix backend run build && npm --prefix frontend run build && git diff --check
+
+- 時間：2026-05-20 02:01（Asia/Taipei）
+- 工作內容：完成「Realtime poll 在每一個投票問題後加上刪除的按鍵」；後端新增刪除投票 API，刪除投票時會連同既有投票紀錄一併移除；前端 Realtime Poll 每個投票問題顯示刪除按鈕，刪除前會確認並即時從列表與本機投票狀態移除。
+- 所在分支：feature/fourthbatch-realtime-poll-delete-button-20260520-0200
 - 驗證：npm --prefix backend run build && npm --prefix frontend run build && git diff --check
