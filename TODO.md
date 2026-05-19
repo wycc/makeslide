@@ -1,8 +1,8 @@
 # TODO 狀態摘要
 
-- Third Batch 已無未完成項目；Fourth batch 本次已完成「下一頁的圖會被事先載入cache 住，讓切換時會比較順暢」。
-- 最後確認時間：2026-05-20 01:30（Asia/Taipei）
-- 最近檢查：已完成 Fourth batch「下一頁的圖會被事先載入cache 住，讓切換時會比較順暢」；實作與提交分支為 feature/fourthbatch-next-slide-image-preload-20260520-0130，並已回到 master 更新 TODO 狀態與工作記錄。
+- Third Batch 已無未完成項目；Fourth batch 本次已完成「加上一個 audio mute 的 checkbox」。
+- 最後確認時間：2026-05-20 01:40（Asia/Taipei）
+- 最近檢查：已完成 Fourth batch「加上一個 audio mute 的 checkbox」；實作與提交分支為 feature/fourthbatch-audio-mute-checkbox-20260520-0140，並已回到 master 更新 TODO 狀態與工作記錄。
 
 # First Batch
 [x] (merge)首次流程導引應該只有在列表是空的時候才出現。（完成分支：feature/onboarding-empty-list-only）
@@ -326,7 +326,7 @@
 # Fourth batch
 [ ] 允許使用者用語音輸入產生投票，方便教師當場產生投票。請使用 WebAudio 錄音.　產生時把逐字稿和提示詞和語音一起傳送出去。如果語音模型不接受語音檔，則先用 ASR 把它轉換成文字。
 [x] 新增一個按鍵顯示分享連結（完成分支：feature/fourthbatch-show-share-link-button-20260520-0119）
-[ ] 加上一個 audio mute 的 checkbox。主要是在同步模式時，不要撥放聲音。這樣可以在教室中使用，讓所有人可以看螢幕上的資料，但聽公撥 speaker 的聲音。follower 預設會 mute。如果人是在遠端，需要自行打開聲音。
+[x] 加上一個 audio mute 的 checkbox。主要是在同步模式時，不要撥放聲音。這樣可以在教室中使用，讓所有人可以看螢幕上的資料，但聽公撥 speaker 的聲音。follower 預設會 mute。如果人是在遠端，需要自行打開聲音。（完成分支：feature/fourthbatch-audio-mute-checkbox-20260520-0140）
 [x] 下一頁的圖會被事先載入cache 住，讓切換時會比較順暢（完成分支：feature/fourthbatch-next-slide-image-preload-20260520-0130）
 [ ] 整個簡報所有語音檔的長度會在產生時就先全部加起來，當成整個簡報的時間存在資料庫中。並顯示在播放界面中。請放在時間的後面。
 [ ] 同步模式的 master 模式在 pause audio 後，過一陣子會自動變成 follower 模式，請修正這個問題。
@@ -356,4 +356,9 @@
 - 時間：2026-05-20 01:30（Asia/Taipei）
 - 工作內容：完成「下一頁的圖會被事先載入cache 住，讓切換時會比較順暢」；播放頁在目前頁變更時會使用與主圖一致的 cache bust URL 預載接下來兩頁圖片，保留圖片物件引用並呼叫瀏覽器解碼，讓切換頁面時可直接使用已載入的圖片快取。
 - 所在分支：feature/fourthbatch-next-slide-image-preload-20260520-0130
+- 驗證：npm --prefix frontend run build && git diff --check -- frontend/src/pages/PlayPage.tsx
+
+- 時間：2026-05-20 01:40（Asia/Taipei）
+- 工作內容：完成「加上一個 audio mute 的 checkbox」；播放頁新增音訊靜音 checkbox 並綁定 audio 元素 muted 狀態，同步模式進入 follower 角色時會自動預設靜音，遠端使用者仍可自行取消靜音播放本機聲音。
+- 所在分支：feature/fourthbatch-audio-mute-checkbox-20260520-0140
 - 驗證：npm --prefix frontend run build && git diff --check -- frontend/src/pages/PlayPage.tsx
