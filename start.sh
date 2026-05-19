@@ -35,6 +35,10 @@ CLEAN_INSTALL=0
 MODE="all"   # all | backend | frontend
 PORT="${PORT:-8888}"
 FRONTEND_BUILD_WATCH=1
+HTTPS_MODE=0
+HTTPS_CERT_DIR="${HTTPS_CERT_DIR:-$SCRIPT_DIR/.certs}"
+HTTPS_KEY_PATH="${HTTPS_KEY_PATH:-$HTTPS_CERT_DIR/localhost-key.pem}"
+HTTPS_CERT_PATH="${HTTPS_CERT_PATH:-$HTTPS_CERT_DIR/localhost-cert.pem}"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # --help
@@ -52,6 +56,9 @@ makeslide 一鍵啟動腳本
   --backend-only     只啟動 backend（Fastify API）
   --frontend-only    只啟動 frontend（Vite dev server）
   --port <number>    設定統一對外 port（預設 8888）
+  --https            使用 HTTPS 模式啟動（若無憑證會自動產生本機 self-signed 憑證）
+  --https-key <path> HTTPS private key 路徑（預設 .certs/localhost-key.pem）
+  --https-cert <path> HTTPS certificate 路徑（預設 .certs/localhost-cert.pem）
   --no-watch-build   all 模式下不啟動 frontend build --watch
   -h, --help         顯示本說明
 
@@ -71,6 +78,7 @@ makeslide 一鍵啟動腳本
   ./start.sh --backend-only        # 只啟動 backend
   ./start.sh --frontend-only       # 只啟動 frontend
   ./start.sh --port 8888           # 單一入口 port=8888
+  ./start.sh --https --port 8888   # 以 HTTPS 模式啟動 https://localhost:8888
 EOF
 }
 
@@ -92,6 +100,23 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --no-watch-build) FRONTEND_BUILD_WATCH=0; shift ;;
+    --https)          HTTPS_MODE=1; shift ;;
+    --https-key)
+      if [[ $# -lt 2 ]]; then
+        log_error "--https-key 需要一個路徑參數"
+        exit 2
+      fi
+      HTTPS_KEY_PATH="$2"
+      shift 2
+      ;;
+    --https-cert)
+      if [[ $# -lt 2 ]]; then
+        log_error "--https-cert 需要一個路徑參數"
+        exit 2
+      fi
+      HTTPS_CERT_PATH="$2"
+      shift 2
+      ;;
     -h|--help)        print_help; exit 0 ;;
     *)
       log_error "未知選項：$1"
@@ -207,6 +232,29 @@ mkdir -p "$SCRIPT_DIR/storage" "$SCRIPT_DIR/data"
 log_info "storage/、data/ 就緒"
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Step 5.5: HTTPS 憑證
+# ──────────────────────────────────────────────────────────────────────────────
+if [[ "$HTTPS_MODE" -eq 1 ]]; then
+  log_step "準備 HTTPS 憑證"
+  mkdir -p "$(dirname "$HTTPS_KEY_PATH")" "$(dirname "$HTTPS_CERT_PATH")"
+  if [[ ! -f "$HTTPS_KEY_PATH" || ! -f "$HTTPS_CERT_PATH" ]]; then
+    if ! command -v openssl >/dev/null 2>&1; then
+      log_error "找不到 openssl，無法自動產生 HTTPS 憑證；請安裝 openssl 或用 --https-key/--https-cert 指定既有憑證。"
+      exit 1
+    fi
+    log_warn "找不到 HTTPS 憑證，產生本機 self-signed 憑證（瀏覽器會顯示不受信任警告）"
+    openssl req -x509 -newkey rsa:2048 -nodes \
+      -keyout "$HTTPS_KEY_PATH" \
+      -out "$HTTPS_CERT_PATH" \
+      -days 365 \
+      -subj "/CN=localhost" \
+      -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" >/dev/null 2>&1
+  fi
+  log_info "HTTPS key：$HTTPS_KEY_PATH"
+  log_info "HTTPS cert：$HTTPS_CERT_PATH"
+fi
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Step 6: 依賴安裝
 # ──────────────────────────────────────────────────────────────────────────────
 log_step "檢查 / 安裝依賴"
@@ -241,6 +289,9 @@ fi
 # Step 7: 啟動 dev server
 # ──────────────────────────────────────────────────────────────────────────────
 log_step "啟動 dev server (mode=$MODE)"
+if [[ "$HTTPS_MODE" -eq 1 ]]; then
+  log_info "HTTPS 模式：啟用"
+fi
 
 CHILD_PID=""
 cleanup() {
@@ -297,15 +348,27 @@ case "$MODE" in
     fi
 
     log_info "以 production static 模式啟動 backend（對外 port=$PORT）"
-    PORT="$PORT" NODE_ENV=production npm run dev:backend &
+    if [[ "$HTTPS_MODE" -eq 1 ]]; then
+      PORT="$PORT" NODE_ENV=production HTTPS_KEY_PATH="$HTTPS_KEY_PATH" HTTPS_CERT_PATH="$HTTPS_CERT_PATH" npm run dev:backend &
+    else
+      PORT="$PORT" NODE_ENV=production npm run dev:backend &
+    fi
     ;;
   backend)
     log_info "執行 npm run dev:backend（port=$PORT）"
-    PORT="$PORT" npm run dev:backend &
+    if [[ "$HTTPS_MODE" -eq 1 ]]; then
+      PORT="$PORT" HTTPS_KEY_PATH="$HTTPS_KEY_PATH" HTTPS_CERT_PATH="$HTTPS_CERT_PATH" npm run dev:backend &
+    else
+      PORT="$PORT" npm run dev:backend &
+    fi
     ;;
   frontend)
     log_info "執行 npm run dev:frontend（vite port=$PORT）"
-    npm run dev:frontend -- --port "$PORT" &
+    if [[ "$HTTPS_MODE" -eq 1 ]]; then
+      npm run dev:frontend -- --port "$PORT" --host 0.0.0.0 --https --key "$HTTPS_KEY_PATH" --cert "$HTTPS_CERT_PATH" &
+    else
+      npm run dev:frontend -- --port "$PORT" &
+    fi
     ;;
 esac
 

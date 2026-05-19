@@ -83,7 +83,7 @@ function clearCookie(reply: FastifyReply, name: string): void {
 }
 
 function authBaseUrl(request: FastifyRequest): string {
-  const proto = request.headers['x-forwarded-proto']?.toString().split(',')[0] || 'http';
+  const proto = request.headers['x-forwarded-proto']?.toString().split(',')[0] || 'https';
   const host = request.headers['x-forwarded-host']?.toString().split(',')[0] || request.headers.host || `localhost:${config.port}`;
   return `${proto}://${host}${config.nbPrefix}`;
 }

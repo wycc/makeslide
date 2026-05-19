@@ -155,6 +155,8 @@ const EnvSchema = z.object({
     .default('true')
     .transform((v) => v.toLowerCase() !== 'false'),
   AUTH_SESSION_SECRET: z.string().optional().default('makeslide-dev-session-secret'),
+  HTTPS_KEY_PATH: z.string().optional().default(''),
+  HTTPS_CERT_PATH: z.string().optional().default(''),
   NB_PREFIX: z.string().optional().default(''),
 });
 
@@ -219,6 +221,8 @@ export const config = {
   googleRedirectUri: env.GOOGLE_REDIRECT_URI.trim(),
   googleAuthEnabled: env.GOOGLE_AUTH_ENABLED,
   authSessionSecret: env.AUTH_SESSION_SECRET,
+  httpsKeyPath: env.HTTPS_KEY_PATH.trim(),
+  httpsCertPath: env.HTTPS_CERT_PATH.trim(),
   nbPrefix: normalizeNbPrefix(env.NB_PREFIX),
 } as const;
 
