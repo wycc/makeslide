@@ -231,6 +231,7 @@ export default function PlayPage() {
   const [pagePolls, setPagePolls] = useState<PagePoll[]>([]);
   const [pollQuestion, setPollQuestion] = useState('');
   const [pollOptionsText, setPollOptionsText] = useState('同意\n不同意');
+  const [pollShowResults, setPollShowResults] = useState(true);
   const [pollBusy, setPollBusy] = useState(false);
   const [pollError, setPollError] = useState<string | null>(null);
   const [pollVotes, setPollVotes] = useState<Record<number, number>>({});
@@ -888,7 +889,7 @@ export default function PlayPage() {
     setPollBusy(true);
     setPollError(null);
     try {
-      const poll = await createPagePoll(pdfId, currentPage.page_number, question, options);
+      const poll = await createPagePoll(pdfId, currentPage.page_number, question, options, pollShowResults);
       setPagePolls((prev) => [poll, ...prev]);
       setPollQuestion('');
       setPollOptionsText('同意\n不同意');
@@ -898,7 +899,7 @@ export default function PlayPage() {
     } finally {
       setPollBusy(false);
     }
-  }, [pdfId, currentPage, pollQuestion, pollOptionsText]);
+  }, [pdfId, currentPage, pollQuestion, pollOptionsText, pollShowResults]);
 
   const handleStartPoll = useCallback(() => {
     setPollStarted(true);
@@ -2541,6 +2542,18 @@ export default function PlayPage() {
                       placeholder="每行一個答案選項"
                       className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 outline-none ring-cyan-500/40 placeholder:text-slate-500 focus:ring"
                     />
+                    <label className="mt-2 flex items-start gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-2 py-1.5 text-xs text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={pollShowResults}
+                        onChange={(e) => setPollShowResults(e.target.checked)}
+                        className="mt-0.5 h-3.5 w-3.5 accent-cyan-400"
+                      />
+                      <span>
+                        顯示投票結果
+                        <span className="block text-[11px] text-slate-500">關閉時，學生只會看到自己的選擇；票數會持續收集。</span>
+                      </span>
+                    </label>
                     <button
                       type="button"
                       onClick={() => void handleCreatePoll()}
@@ -2565,13 +2578,14 @@ export default function PlayPage() {
                           <div className="mb-1 flex items-start justify-between gap-2">
                             <h3 className="text-xs font-medium text-slate-200">{poll.question}</h3>
                             <span className="shrink-0 rounded-full border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-400">
-                              {poll.total_votes} 票
+                              {poll.show_results ? `${poll.total_votes} 票` : '隱藏結果'}
                             </span>
                           </div>
                           <div className="space-y-1.5">
                             {poll.options.map((option, idx) => {
                               const ratio = poll.total_votes > 0 ? Math.round((option.votes / poll.total_votes) * 100) : 0;
                               const selected = pollVotes[poll.id] === idx;
+                              const showOptionResults = poll.show_results;
                               return (
                                 <button
                                   key={`${poll.id}-${idx}`}
@@ -2582,11 +2596,15 @@ export default function PlayPage() {
                                 >
                                   <div className="mb-1 flex items-center justify-between gap-2">
                                     <span className="truncate">{option.text}</span>
-                                    <span className="font-mono text-[10px] text-slate-400">{option.votes} · {ratio}%</span>
+                                    <span className="font-mono text-[10px] text-slate-400">
+                                      {showOptionResults ? `${option.votes} · ${ratio}%` : selected ? '已選擇' : '—'}
+                                    </span>
                                   </div>
-                                  <div className="h-1 overflow-hidden rounded-full bg-slate-800">
-                                    <div className="h-full rounded-full bg-cyan-400" style={{ width: `${ratio}%` }} />
-                                  </div>
+                                  {showOptionResults ? (
+                                    <div className="h-1 overflow-hidden rounded-full bg-slate-800">
+                                      <div className="h-full rounded-full bg-cyan-400" style={{ width: `${ratio}%` }} />
+                                    </div>
+                                  ) : null}
                                 </button>
                               );
                             })}

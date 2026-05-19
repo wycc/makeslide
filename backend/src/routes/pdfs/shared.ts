@@ -230,6 +230,7 @@ export const CreatePollBodySchema = z.object({
     .array(z.string().trim().min(1, '選項不可為空').max(120, '選項不可超過 120 字'))
     .min(2, '至少需要 2 個選項')
     .max(6, '最多 6 個選項'),
+  show_results: z.boolean().optional().default(true),
 });
 
 export const PollParamSchema = z.object({
