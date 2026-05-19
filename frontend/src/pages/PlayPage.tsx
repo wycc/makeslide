@@ -259,6 +259,7 @@ export default function PlayPage() {
   const [syncError, setSyncError] = useState<string | null>(null);
   const syncClientIdRef = useRef<string>('');
   const applyingRemoteSyncRef = useRef(false);
+  const latestSyncStateRef = useRef({ currentIdx: 0, isPlaying: false, currentTime: 0 });
   const [imageOnlyFullscreen, setImageOnlyFullscreen] = useState(false);
   const [slideImageScale, setSlideImageScale] = useState(1);
   const IMAGE_MSG_PREFIX = '[image] ';
@@ -610,6 +611,10 @@ export default function PlayPage() {
   );
 
   useEffect(() => {
+    latestSyncStateRef.current = { currentIdx, isPlaying, currentTime };
+  }, [currentIdx, isPlaying, currentTime]);
+
+  useEffect(() => {
     if (!syncEnabled || !pdfId) return;
     const storageKey = `makeslide.sync.client.${pdfId}`;
     const existing = window.localStorage.getItem(storageKey);
@@ -657,6 +662,18 @@ export default function PlayPage() {
     const timer = window.setInterval(() => {
       void (async () => {
         try {
+          if (syncRole === 'master') {
+            const latest = latestSyncStateRef.current;
+            const pageNumber = Math.max(1, latest.currentIdx + 1);
+            const time = Number.isFinite(latest.currentTime) ? Math.max(0, latest.currentTime) : 0;
+            await updatePlaybackSyncState(pdfId, syncClientIdRef.current, {
+              page_number: pageNumber,
+              is_playing: latest.isPlaying,
+              current_time: time,
+            });
+            setSyncError(null);
+            return;
+          }
           const state = await fetchPlaybackSyncState(pdfId, syncClientIdRef.current);
           setSyncRole(state.role);
           if (state.role === 'master') return;
@@ -683,7 +700,7 @@ export default function PlayPage() {
       })();
     }, 1200);
     return () => window.clearInterval(timer);
-  }, [syncEnabled, pdfId]);
+  }, [syncEnabled, syncRole, pdfId]);
 
   const handleRetry = useCallback(() => {
     const audio = audioRef.current;
