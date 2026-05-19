@@ -74,6 +74,7 @@ export interface PdfRow {
   tts_speed: number | null;
   script_max_chars_per_page: number | null;
   image_style_prompt?: string | null;
+  total_audio_duration_seconds?: number | null;
   source_type?: 'pdf' | 'youtube';
   source_url?: string | null;
   source_video_id?: string | null;
@@ -116,6 +117,7 @@ export interface PdfListItem {
   tts_speed?: number | null;
   script_max_chars_per_page?: number | null;
   image_style_prompt?: string | null;
+  total_audio_duration_seconds?: number | null;
   source_type?: 'pdf' | 'youtube';
   source_url?: string | null;
   source_video_id?: string | null;
@@ -173,6 +175,7 @@ export interface PdfDetail {
   tts_speed?: number | null;
   script_max_chars_per_page?: number | null;
   image_style_prompt?: string | null;
+  total_audio_duration_seconds?: number | null;
   source_type?: 'pdf' | 'youtube';
   source_url?: string | null;
   source_video_id?: string | null;
@@ -234,6 +237,7 @@ export interface PdfMetadata {
   tts_speed?: number | null;
   script_max_chars_per_page?: number | null;
   image_style_prompt?: string | null;
+  total_audio_duration_seconds?: number | null;
   source_type?: 'pdf' | 'youtube';
   source_url?: string | null;
   source_video_id?: string | null;

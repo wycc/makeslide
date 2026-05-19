@@ -113,6 +113,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
                  progress_current, progress_total,
                 error_message, user_prompt, require_script_confirmation, category,
                 owner_sub, visibility,
+                total_audio_duration_seconds,
                 created_at, updated_at
            FROM pdfs
            ORDER BY created_at DESC`,
@@ -136,6 +137,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
                 category,
                 owner_sub, visibility,
                 tts_voice, tts_speed, script_max_chars_per_page, image_style_prompt,
+                total_audio_duration_seconds,
                 source_type, source_url, source_video_id, source_caption_language,
                 created_at, updated_at
          FROM pdfs WHERE id = ?`,
