@@ -12,7 +12,16 @@ interface SyncSessionState {
   pageNumber: number;
   isPlaying: boolean;
   currentTime: number;
+  questions: SyncFollowerQuestion[];
   updatedAt: string;
+}
+
+interface SyncFollowerQuestion {
+  id: string;
+  client_id: string;
+  question: string;
+  show_on_screen: boolean;
+  created_at: string;
 }
 
 const sessions = new Map<string, SyncSessionState>();
@@ -42,6 +51,7 @@ function getSession(pdfId: string): SyncSessionState {
     pageNumber: 1,
     isPlaying: false,
     currentTime: 0,
+    questions: [],
     updatedAt: nowIso(),
   };
   sessions.set(pdfId, created);
@@ -54,6 +64,14 @@ function roleFor(session: SyncSessionState, clientId: string): SyncRole {
 
 export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
   const ClientBodySchema = z.object({ client_id: z.string().trim().min(1).max(128) });
+  const QuestionBodySchema = z.object({
+    client_id: z.string().trim().min(1).max(128),
+    question: z.string().trim().min(1).max(500),
+  });
+  const ToggleQuestionBodySchema = z.object({
+    client_id: z.string().trim().min(1).max(128),
+    show_on_screen: z.boolean(),
+  });
   const UpdateBodySchema = z.object({
     client_id: z.string().trim().min(1).max(128),
     page_number: z.number().int().min(1),
@@ -86,6 +104,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       page_number: session.pageNumber,
       is_playing: session.isPlaying,
       current_time: session.currentTime,
+      questions: session.questions,
       updated_at: session.updatedAt,
       master_expires_at: new Date(session.masterExpiresAt).toISOString(),
     });
@@ -138,6 +157,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       page_number: session.pageNumber,
       is_playing: session.isPlaying,
       current_time: session.currentTime,
+      questions: session.questions,
       updated_at: session.updatedAt,
       master_expires_at: session.masterClientId
         ? new Date(session.masterExpiresAt).toISOString()
@@ -163,5 +183,49 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     }
     return reply.send({ ok: true });
   });
-}
 
+  app.post('/api/pdfs/:id/sync/questions', async (request, reply) => {
+    const parsedParams = IdParamSchema.safeParse(request.params);
+    const parsedBody = QuestionBodySchema.safeParse(request.body);
+    if (!parsedParams.success || !parsedBody.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid sync question request'));
+    }
+    const { id } = parsedParams.data;
+    if (!ensurePdfExists(id)) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    const session = getSession(id);
+    const now = nowIso();
+    const question: SyncFollowerQuestion = {
+      id: `q-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      client_id: parsedBody.data.client_id,
+      question: parsedBody.data.question,
+      show_on_screen: false,
+      created_at: now,
+    };
+    session.questions = [question, ...session.questions].slice(0, 50);
+    session.updatedAt = now;
+    return reply.code(201).send(question);
+  });
+
+  app.patch('/api/pdfs/:id/sync/questions/:questionId', async (request, reply) => {
+    const parsedParams = z.object({ id: z.string().min(1), questionId: z.string().min(1) }).safeParse(request.params);
+    const parsedBody = ToggleQuestionBodySchema.safeParse(request.body);
+    if (!parsedParams.success || !parsedBody.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid sync question update request'));
+    }
+    const { id, questionId } = parsedParams.data;
+    if (!ensurePdfExists(id)) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    const session = getSession(id);
+    if (session.masterClientId !== parsedBody.data.client_id) {
+      return reply.code(403).send(errorResponse('SYNC_NOT_MASTER', 'Only master can update question visibility'));
+    }
+    const question = session.questions.find((item) => item.id === questionId);
+    if (!question) return reply.code(404).send(errorResponse('QUESTION_NOT_FOUND', 'Question not found'));
+    question.show_on_screen = parsedBody.data.show_on_screen;
+    session.updatedAt = nowIso();
+    return reply.send(question);
+  });
+}

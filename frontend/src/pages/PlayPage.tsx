@@ -38,6 +38,8 @@ import {
   updatePdfPrompt,
   updatePdfTitle,
   updatePlaybackSyncState,
+  submitSyncFollowerQuestion,
+  updateSyncQuestionVisibility,
   votePagePoll,
   rewritePageScript,
   type ImagePromptTemplate,
@@ -57,6 +59,7 @@ import type {
   PdfDetailPage,
   PagePoll,
   RegenJobState,
+  SyncFollowerQuestion,
 } from '../types';
 
 const POLL_INTERVAL_MS = 3000;
@@ -257,6 +260,9 @@ export default function PlayPage() {
   const [syncEnabled, setSyncEnabled] = useState(false);
   const [syncRole, setSyncRole] = useState<'master' | 'follower'>('follower');
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncQuestions, setSyncQuestions] = useState<SyncFollowerQuestion[]>([]);
+  const [syncQuestionInput, setSyncQuestionInput] = useState('');
+  const [syncQuestionBusy, setSyncQuestionBusy] = useState(false);
   const syncClientIdRef = useRef<string>('');
   const applyingRemoteSyncRef = useRef(false);
   const [imageOnlyFullscreen, setImageOnlyFullscreen] = useState(false);
@@ -622,6 +628,7 @@ export default function PlayPage() {
         const joined = await joinPlaybackSync(pdfId, next);
         if (cancelled) return;
         setSyncRole(joined.role);
+        setSyncQuestions(joined.questions ?? []);
         setSyncError(null);
       } catch (err) {
         if (cancelled) return;
@@ -659,6 +666,7 @@ export default function PlayPage() {
         try {
           const state = await fetchPlaybackSyncState(pdfId, syncClientIdRef.current);
           setSyncRole(state.role);
+          setSyncQuestions(state.questions ?? []);
           if (state.role === 'master') return;
           applyingRemoteSyncRef.current = true;
           const targetIdx = Math.max(0, state.page_number - 1);
@@ -684,6 +692,37 @@ export default function PlayPage() {
     }, 1200);
     return () => window.clearInterval(timer);
   }, [syncEnabled, pdfId]);
+
+  const handleSubmitSyncQuestion = useCallback(async () => {
+    if (!pdfId || !syncClientIdRef.current) return;
+    const question = syncQuestionInput.trim();
+    if (!question) return;
+    setSyncQuestionBusy(true);
+    try {
+      const created = await submitSyncFollowerQuestion(pdfId, syncClientIdRef.current, question);
+      setSyncQuestions((items) => [created, ...items.filter((item) => item.id !== created.id)]);
+      setSyncQuestionInput('');
+      setSyncError(null);
+    } catch (err) {
+      setSyncError(err instanceof ApiError ? err.message : '問題送出失敗');
+    } finally {
+      setSyncQuestionBusy(false);
+    }
+  }, [pdfId, syncQuestionInput]);
+
+  const handleToggleSyncQuestionVisibility = useCallback(
+    async (questionId: string, showOnScreen: boolean) => {
+      if (!pdfId || !syncClientIdRef.current || syncRole !== 'master') return;
+      try {
+        const updated = await updateSyncQuestionVisibility(pdfId, syncClientIdRef.current, questionId, showOnScreen);
+        setSyncQuestions((items) => items.map((item) => (item.id === updated.id ? updated : item)));
+        setSyncError(null);
+      } catch (err) {
+        setSyncError(err instanceof ApiError ? err.message : '問題顯示狀態更新失敗');
+      }
+    },
+    [pdfId, syncRole],
+  );
 
   const handleRetry = useCallback(() => {
     const audio = audioRef.current;
@@ -1635,6 +1674,7 @@ export default function PlayPage() {
 
   const progressRatio =
     duration > 0 ? Math.min(1, currentTime / duration) * 1000 : 0;
+  const visibleSyncQuestions = syncQuestions.filter((item) => item.show_on_screen);
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
@@ -1661,6 +1701,15 @@ export default function PlayPage() {
               <div className="mx-auto rounded-md bg-black/65 px-4 py-2 text-center text-base font-medium leading-relaxed text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] md:text-lg">
                 <p className="line-clamp-2 whitespace-pre-wrap">{currentSentence}</p>
               </div>
+            </div>
+          ) : null}
+          {visibleSyncQuestions.length > 0 ? (
+            <div className="pointer-events-none absolute left-1/2 top-6 w-[min(92vw,900px)] -translate-x-1/2 space-y-2">
+              {visibleSyncQuestions.slice(0, 3).map((item) => (
+                <div key={item.id} className="rounded-xl border border-cyan-300/50 bg-slate-950/80 px-4 py-3 text-center text-lg font-semibold text-cyan-50 shadow-2xl">
+                  Q：{item.question}
+                </div>
+              ))}
             </div>
           ) : null}
         </div>
@@ -1793,6 +1842,62 @@ export default function PlayPage() {
             </label>
           </div>
           {syncError ? <div className="mt-1 text-xs text-rose-300">{syncError}</div> : null}
+          {syncEnabled ? (
+            <div className="mx-auto w-full max-w-5xl px-4 pb-3">
+              <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-3 text-xs text-cyan-50">
+                {syncRole === 'master' ? (
+                  <div className="space-y-2">
+                    <div className="font-semibold">Follower 提問（可決定是否顯示在投影片上）</div>
+                    {syncQuestions.length === 0 ? (
+                      <div className="text-cyan-100/70">目前尚無 follower 問題。</div>
+                    ) : (
+                      <div className="max-h-40 space-y-2 overflow-auto pr-1">
+                        {syncQuestions.map((item) => (
+                          <div key={item.id} className="flex items-start justify-between gap-2 rounded-md border border-cyan-400/20 bg-slate-950/40 p-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="break-words text-sm text-slate-100">{item.question}</div>
+                              <div className="mt-0.5 text-[11px] text-slate-400">{new Date(item.created_at).toLocaleTimeString()}</div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => void handleToggleSyncQuestionVisibility(item.id, !item.show_on_screen)}
+                              className="shrink-0 rounded-md border border-cyan-400/40 px-2 py-1 text-[11px] text-cyan-100 hover:bg-cyan-400/10"
+                            >
+                              {item.show_on_screen ? '隱藏' : '顯示'}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <input
+                      value={syncQuestionInput}
+                      onChange={(e) => setSyncQuestionInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          void handleSubmitSyncQuestion();
+                        }
+                      }}
+                      maxLength={500}
+                      placeholder="輸入想問老師的問題…"
+                      className="min-w-0 flex-1 rounded-md border border-cyan-500/40 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void handleSubmitSyncQuestion()}
+                      disabled={syncQuestionBusy || !syncQuestionInput.trim()}
+                      className="rounded-md border border-cyan-400/60 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-100 disabled:opacity-40"
+                    >
+                      {syncQuestionBusy ? '送出中…' : '送出問題'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : null}
         {readOnlyReason ? (
           <div className="mx-auto w-full max-w-5xl px-4 pb-3">
             <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
@@ -2051,6 +2156,15 @@ export default function PlayPage() {
                   <div className="mx-auto rounded-md bg-black/60 px-4 py-2 text-center text-sm font-medium leading-relaxed text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] md:text-base">
                     <p className="line-clamp-2 whitespace-pre-wrap">{currentSentence}</p>
                   </div>
+                </div>
+              ) : null}
+              {visibleSyncQuestions.length > 0 ? (
+                <div className="pointer-events-none absolute left-1/2 top-3 w-[min(92%,850px)] -translate-x-1/2 space-y-2 px-2">
+                  {visibleSyncQuestions.slice(0, 2).map((item) => (
+                    <div key={item.id} className="rounded-lg border border-cyan-300/50 bg-slate-950/80 px-4 py-2 text-center text-sm font-semibold text-cyan-50 shadow-xl md:text-base">
+                      Q：{item.question}
+                    </div>
+                  ))}
                 </div>
               ) : null}
             </div>
