@@ -1,8 +1,8 @@
 # TODO 狀態摘要
 
-- Third Batch 已無未完成項目；Fourth batch 本次已完成「follower 模式可以輸入問題，master 可以決定是否要把問題顯示在畫面上」功能；仍有其他 Fourth batch 未完成項目。
-- 最後確認時間：2026-05-20 05:13（Asia/Taipei）
-- 最近檢查：已完成 Fourth batch「follower 模式可以輸入問題，master 可以決定是否要把問題顯示在畫面上」；實作與提交分支為 feature/fourthbatch-follower-questions-20260520-0510，並已回到 master 更新 TODO 狀態與工作記錄。
+- Third Batch 已無未完成項目；Fourth batch 本次已完成「master 可以使用 s 鍵切換是否顯示 follower 問題」功能；仍有其他 Fourth batch 未完成項目。
+- 最後確認時間：2026-05-20 05:21（Asia/Taipei）
+- 最近檢查：已完成 Fourth batch「master 可以使用 s 鍵切換是否顯示 follower 問題」；實作與提交分支為 feature/fourthbatch-master-toggle-follower-questions-20260520-0520，並已回到 master 更新 TODO 狀態與工作記錄。
 
 # First Batch
 [x] (merge)首次流程導引應該只有在列表是空的時候才出現。（完成分支：feature/onboarding-empty-list-only）
@@ -340,13 +340,19 @@
 [x] 所有進入 follower 模式的 session 都會強迫輸入一個代號（完成分支：feature/fourthbatch-follower-require-code-20260520-0451）
 [x] 在 master 端投票時顯示目前在線人數，己作答人數（完成分支：feature/fourthbatch-master-poll-attendance-20260520-0500）
 [x] follower 模式可以輸入問題，master 可以決定是否要把問題顯示在畫面上。（完成分支：feature/fourthbatch-follower-questions-20260520-0510）
-[ ] master 可以使用 s 鍵切換是否顯示 follower 問題
+[x] master 可以使用 s 鍵切換是否顯示 follower 問題（完成分支：feature/fourthbatch-master-toggle-follower-questions-20260520-0520）
 [ ] master 可以按下 a 鍵讓 AI 來總結並回答 follower 的問題
 [ ] 提供自動產生測驗的功能，我們會進入一個單獨的測驗生成畫面。讓老師下提示詞請 AI 產生測驗。老師可以重複下指令修改問題列表，或是直接手動修改問題。問題列表可以被存下來多次使用。
 [ ] master 可以在問題列表後按下開始測驗按鍵。就會顯示目前上線人的名單，master 可以請所有人確認後按下開始按鍵。follower 就可以開始作答。master 按下結束按鍵後就停止作答，並公佈答案和每一題所有人回答的結果。
 [ ] 提供一個產生 PDF 功能，會產生一個包括整個簡報和簡報逐字檔。方便學生下載後使用其它工具使用。
 
 ## Fourth batch 工作記錄
+
+
+- 時間：2026-05-20 05:21（Asia/Taipei）
+- 工作內容：完成「master 可以使用 s 鍵切換是否顯示 follower 問題」；播放頁同步模式 master 端可按 s 快捷鍵切換 follower 提問顯示狀態，有顯示中問題時會隱藏目前顯示問題，沒有顯示中問題時會顯示最新未顯示問題，並在 master 提問面板標示快捷鍵提示。
+- 所在分支：feature/fourthbatch-master-toggle-follower-questions-20260520-0520
+- 驗證：npm --prefix frontend run build && git diff --check
 
 - 時間：2026-05-20 01:20（Asia/Taipei）
 - 工作內容：完成「新增一個按鍵顯示分享連結」；播放頁在建立分享連結後會保留該 URL，並在分享工具列新增「顯示分享連結」按鍵，可重新開啟分享連結對話框供複製，不需要再次建立新分享 token。
