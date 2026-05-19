@@ -1,8 +1,8 @@
 # TODO 狀態摘要
 
-- Third Batch 已無未完成項目；Fourth batch 本次已完成「在 master 端投票時顯示目前在線人數，已作答人數」功能；仍有其他 Fourth batch 未完成項目。
-- 最後確認時間：2026-05-20 05:01（Asia/Taipei）
-- 最近檢查：已完成 Fourth batch「在 master 端投票時顯示目前在線人數，已作答人數」；實作與提交分支為 feature/fourthbatch-master-poll-attendance-20260520-0500，並已回到 master 更新 TODO 狀態與工作記錄。
+- Third Batch 已無未完成項目；Fourth batch 本次已完成「follower 模式可以輸入問題，master 可以決定是否要把問題顯示在畫面上」功能；仍有其他 Fourth batch 未完成項目。
+- 最後確認時間：2026-05-20 05:13（Asia/Taipei）
+- 最近檢查：已完成 Fourth batch「follower 模式可以輸入問題，master 可以決定是否要把問題顯示在畫面上」；實作與提交分支為 feature/fourthbatch-follower-questions-20260520-0510，並已回到 master 更新 TODO 狀態與工作記錄。
 
 # First Batch
 [x] (merge)首次流程導引應該只有在列表是空的時候才出現。（完成分支：feature/onboarding-empty-list-only）
@@ -339,7 +339,7 @@
 [x] 老師端(master) 強制所有學生靜音 / 解鎖自行播放（完成分支：feature/fourthbatch-master-force-follower-audio-lock-20260520-0320）
 [x] 所有進入 follower 模式的 session 都會強迫輸入一個代號（完成分支：feature/fourthbatch-follower-require-code-20260520-0451）
 [x] 在 master 端投票時顯示目前在線人數，己作答人數（完成分支：feature/fourthbatch-master-poll-attendance-20260520-0500）
-[ ] follower 模式可以輸入問題，master 可以決定是否要把問題顯示在畫面上。
+[x] follower 模式可以輸入問題，master 可以決定是否要把問題顯示在畫面上。（完成分支：feature/fourthbatch-follower-questions-20260520-0510）
 [ ] master 可以使用 s 鍵切換是否顯示 follower 問題
 [ ] master 可以按下 a 鍵讓 AI 來總結並回答 follower 的問題
 [ ] 提供自動產生測驗的功能，我們會進入一個單獨的測驗生成畫面。讓老師下提示詞請 AI 產生測驗。老師可以重複下指令修改問題列表，或是直接手動修改問題。問題列表可以被存下來多次使用。
@@ -423,3 +423,8 @@
 - 工作內容：完成「在 master 端投票時顯示目前在線人數，己作答人數」；同步模式後端會追蹤目前在線 client 數並在同步狀態回傳 online_count，投票 API 回傳唯一 voter 的 answered_count，播放頁 master 端在 Realtime Poll 題目旁顯示在線人數與已作答人數，方便老師掌握投票參與狀況。
 - 所在分支：feature/fourthbatch-master-poll-attendance-20260520-0500
 - 驗證：npm --prefix backend run build && npm --prefix frontend run build
+
+- 時間：2026-05-20 05:13（Asia/Taipei）
+- 工作內容：完成「follower 模式可以輸入問題，master 可以決定是否要把問題顯示在畫面上」；同步模式後端新增 follower 提問清單與 master 顯示狀態切換 API，前端 follower 可在同步模式輸入並送出問題，master 可在播放頁查看問題並切換是否覆蓋顯示於投影片與全螢幕畫面。
+- 所在分支：feature/fourthbatch-follower-questions-20260520-0510
+- 驗證：npm --prefix backend run build && npm --prefix frontend run build && git diff --check
