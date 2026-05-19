@@ -1,8 +1,8 @@
 # TODO 狀態摘要
 
-- Third Batch 已無未完成項目；Fourth batch 本次已完成「Realtime poll 在全螢幕客戶端自動顯示投票畫面」功能；仍有其他 Fourth batch 未完成項目。
-- 最後確認時間：2026-05-20 03:01（Asia/Taipei）
-- 最近檢查：已完成 Fourth batch「Realtime poll 在按下開始投票時，所有在全螢幕模式的客戶端都自動顯示投票畫面」；實作與提交分支為 feature/fourthbatch-fullscreen-poll-auto-show-20260520-0259，並已回到 master 更新 TODO 狀態與工作記錄。
+- Third Batch 已無未完成項目；Fourth batch 本次已完成「允許使用者用 WebAudio 語音輸入產生投票」功能；仍有其他 Fourth batch 未完成項目。
+- 最後確認時間：2026-05-20 03:13（Asia/Taipei）
+- 最近檢查：已完成 Fourth batch「允許使用者用語音輸入產生投票，方便教師當場產生投票。請使用 WebAudio 錄音」；實作與提交分支為 feature/fourthbatch-webaudio-voice-poll-20260520-0310，並已回到 master 更新 TODO 狀態與工作記錄。
 
 # First Batch
 [x] (merge)首次流程導引應該只有在列表是空的時候才出現。（完成分支：feature/onboarding-empty-list-only）
@@ -324,7 +324,7 @@
 - 驗證：npm --prefix backend run build；git diff --check
 
 # Fourth batch
-[ ] 允許使用者用語音輸入產生投票，方便教師當場產生投票。請使用 WebAudio 錄音.　產生時把逐字稿和提示詞和語音一起傳送出去。如果語音模型不接受語音檔，則先用 ASR 把它轉換成文字。
+[x] 允許使用者用語音輸入產生投票，方便教師當場產生投票。請使用 WebAudio 錄音.　產生時把逐字稿和提示詞和語音一起傳送出去。如果語音模型不接受語音檔，則先用 ASR 把它轉換成文字。（完成分支：feature/fourthbatch-webaudio-voice-poll-20260520-0310）
 [x] 新增一個按鍵顯示分享連結（完成分支：feature/fourthbatch-show-share-link-button-20260520-0119）
 [x] 加上一個 audio mute 的 checkbox。主要是在同步模式時，不要撥放聲音。這樣可以在教室中使用，讓所有人可以看螢幕上的資料，但聽公撥 speaker 的聲音。follower 預設會 mute。如果人是在遠端，需要自行打開聲音。（完成分支：feature/fourthbatch-audio-mute-checkbox-20260520-0140）
 [x] 下一頁的圖會被事先載入cache 住，讓切換時會比較順暢（完成分支：feature/fourthbatch-next-slide-image-preload-20260520-0130）
@@ -403,3 +403,8 @@
 - 工作內容：完成「Realtime poll 在按下開始投票時，所有在全螢幕模式的客戶端都自動顯示投票畫面」；播放頁在全螢幕模式會持續輪詢本頁投票，偵測到啟用中的投票後自動進入投票狀態，並在全螢幕投影片上覆蓋可直接作答的投票面板。
 - 所在分支：feature/fourthbatch-fullscreen-poll-auto-show-20260520-0259
 - 驗證：npm --prefix frontend run build && git diff --check -- frontend/src/pages/PlayPage.tsx
+
+- 時間：2026-05-20 03:13（Asia/Taipei）
+- 工作內容：完成「允許使用者用語音輸入產生投票，方便教師當場產生投票。請使用 WebAudio 錄音」；播放頁 Realtime Poll 設定區新增 WebAudio 錄音、錄音預覽、提示詞輸入與「用錄音建立並開始投票」操作，後端新增 multipart 語音投票 API，會以 ASR 轉寫錄音後連同提示詞、本頁文字與講稿交給 AI 產生並啟用本頁投票。
+- 所在分支：feature/fourthbatch-webaudio-voice-poll-20260520-0310
+- 驗證：npm --prefix backend run build && npm --prefix frontend run build；git diff --check
