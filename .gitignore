@@ -42,3 +42,5 @@ coverage/
 # Vite
 .vite/
 log.txt
+.certs/localhost-cert.pem
+.certs/localhost-key.pem
