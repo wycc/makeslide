@@ -514,16 +514,18 @@ export default function PlayPage() {
     [clearAudioRetryTimer, releaseWakeLock],
   );
 
+  const shouldKeepScreenAwake = isPlaying || (syncEnabled && syncRole === 'follower');
+
   useEffect(() => {
-    if (isPlaying) {
+    if (shouldKeepScreenAwake) {
       void acquireWakeLock();
     } else {
       void releaseWakeLock();
     }
-  }, [isPlaying, acquireWakeLock, releaseWakeLock]);
+  }, [shouldKeepScreenAwake, acquireWakeLock, releaseWakeLock]);
 
   useEffect(() => {
-    if (!isPlaying) return;
+    if (!shouldKeepScreenAwake) return;
     const onVisibility = () => {
       if (document.visibilityState === 'visible') {
         void acquireWakeLock();
@@ -531,7 +533,7 @@ export default function PlayPage() {
     };
     document.addEventListener('visibilitychange', onVisibility);
     return () => document.removeEventListener('visibilitychange', onVisibility);
-  }, [isPlaying, acquireWakeLock]);
+  }, [shouldKeepScreenAwake, acquireWakeLock]);
 
   // ---- Prefetch next page assets ----
   useEffect(() => {
