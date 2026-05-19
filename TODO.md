@@ -1,8 +1,8 @@
 # TODO 狀態摘要
 
-- Third Batch 已無未完成項目；Fourth batch 本次已完成「提供自動產生測驗的功能」；仍有其他 Fourth batch 未完成項目。
-- 最後確認時間：2026-05-20 05:54（Asia/Taipei）
-- 最近檢查：已完成 Fourth batch「提供自動產生測驗的功能，我們會進入一個單獨的測驗生成畫面」；實作與提交分支為 feature/fourthbatch-auto-quiz-builder-20260520-0550，並已回到 master 更新 TODO 狀態與工作記錄。
+- Third Batch 已無未完成項目；Fourth batch 本次已完成「master 可以在問題列表後按下開始測驗按鍵」；仍有其他 Fourth batch 未完成項目。
+- 最後確認時間：2026-05-20 06:05（Asia/Taipei）
+- 最近檢查：已完成 Fourth batch「master 可以在問題列表後按下開始測驗按鍵。就會顯示目前上線人的名單，master 可以請所有人確認後按下開始按鍵。follower 就可以開始作答。master 按下結束按鍵後就停止作答，並公佈答案和每一題所有人回答的結果。」；實作與提交分支為 feature/fourthbatch-live-quiz-session-20260520-0559，並已回到 master 更新 TODO 狀態與工作記錄。
 
 # First Batch
 [x] (merge)首次流程導引應該只有在列表是空的時候才出現。（完成分支：feature/onboarding-empty-list-only）
@@ -343,7 +343,7 @@
 [x] master 可以使用 s 鍵切換是否顯示 follower 問題（完成分支：feature/fourthbatch-master-toggle-follower-questions-20260520-0520）
 [x] master 可以按下 a 鍵讓 AI 來總結並回答 follower 的問題（完成分支：feature/fourthbatch-ai-answer-follower-questions-20260520-0530）
 [x] 提供自動產生測驗的功能，我們會進入一個單獨的測驗生成畫面。讓老師下提示詞請 AI 產生測驗。老師可以重複下指令修改問題列表，或是直接手動修改問題。問題列表可以被存下來多次使用。（完成分支：feature/fourthbatch-auto-quiz-builder-20260520-0550）
-[ ] master 可以在問題列表後按下開始測驗按鍵。就會顯示目前上線人的名單，master 可以請所有人確認後按下開始按鍵。follower 就可以開始作答。master 按下結束按鍵後就停止作答，並公佈答案和每一題所有人回答的結果。
+[x] master 可以在問題列表後按下開始測驗按鍵。就會顯示目前上線人的名單，master 可以請所有人確認後按下開始按鍵。follower 就可以開始作答。master 按下結束按鍵後就停止作答，並公佈答案和每一題所有人回答的結果。（完成分支：feature/fourthbatch-live-quiz-session-20260520-0559）
 [x] 提供一個產生 PDF 功能，會產生一個包括整個簡報和簡報逐字檔。方便學生下載後使用其它工具使用。（完成分支：feature/fourthbatch-pdf-handout-export-20260520-0540）
 
 ## Fourth batch 工作記錄
@@ -449,4 +449,9 @@
 - 時間：2026-05-20 05:54（Asia/Taipei）
 - 工作內容：完成「提供自動產生測驗的功能」；新增單獨測驗生成頁面，老師可載入既有測驗、輸入提示詞請 AI 依整份簡報內容產生或修改題目列表，也可手動編輯題目、單選/多選、選項、答案與解析，並將問題列表儲存為可重複使用的測驗。
 - 所在分支：feature/fourthbatch-auto-quiz-builder-20260520-0550
+- 驗證：npm --prefix backend run build && npm --prefix frontend run build && git diff --check
+
+- 時間：2026-05-20 06:05（Asia/Taipei）
+- 工作內容：完成「master 可以在問題列表後按下開始測驗按鍵」；同步模式後端新增即時測驗 session、線上名單、開始作答、結束公布與 follower 送出答案 API，前端播放頁新增即時測驗面板，master 可貼上題目 JSON 建立/重設測驗、確認上線名單後開始作答並結束公布答案與每題統計，follower 會在同步模式看到作答介面並可送出答案。
+- 所在分支：feature/fourthbatch-live-quiz-session-20260520-0559
 - 驗證：npm --prefix backend run build && npm --prefix frontend run build && git diff --check
