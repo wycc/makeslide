@@ -1,8 +1,8 @@
 # TODO 狀態摘要
 
-- Third Batch 已無未完成項目；本次已完成其中「簡報預設在個人帳戶下，每一個帳戶要看到不同的簡報。但也可以將簡報設定為 private/public or public editable，這樣每個人都可以看到，但每個人只能編輯自己的簡報或是被設成 public editable 的簡報。」。
-- 最後確認時間：2026-05-18 18:38（Asia/Taipei）
-- 最近檢查：已完成 Third Batch「簡報預設在個人帳戶下，每一個帳戶要看到不同的簡報。但也可以將簡報設定為 private/public or public editable，這樣每個人都可以看到，但每個人只能編輯自己的簡報或是被設成 public editable 的簡報。」；實作與提交分支為 feature/thirdbatch-pdf-ownership-visibility-20260518-1833，並已回到 master 更新 TODO 狀態與工作記錄。
+- Third Batch 已無未完成項目；Fourth batch 本次已完成「新增一個按鍵顯示分享連結」。
+- 最後確認時間：2026-05-20 01:20（Asia/Taipei）
+- 最近檢查：已完成 Fourth batch「新增一個按鍵顯示分享連結」；實作與提交分支為 feature/fourthbatch-show-share-link-button-20260520-0119，並已回到 master 更新 TODO 狀態與工作記錄。
 
 # First Batch
 [x] (merge)首次流程導引應該只有在列表是空的時候才出現。（完成分支：feature/onboarding-empty-list-only）
@@ -325,7 +325,7 @@
 
 # Fourth batch
 [ ] 允許使用者用語音輸入產生投票，方便教師當場產生投票。請使用 WebAudio 錄音.　產生時把逐字稿和提示詞和語音一起傳送出去。如果語音模型不接受語音檔，則先用 ASR 把它轉換成文字。
-[ ] 新增一個按鍵顯示分享連結
+[x] 新增一個按鍵顯示分享連結（完成分支：feature/fourthbatch-show-share-link-button-20260520-0119）
 [ ] 加上一個 audio mute 的 checkbox。主要是在同步模式時，不要撥放聲音。這樣可以在教室中使用，讓所有人可以看螢幕上的資料，但聽公撥 speaker 的聲音。follower 預設會 mute。如果人是在遠端，需要自行打開聲音。
 [ ] 下一頁的圖會被事先載入cache 住，讓切換時會比較順暢
 [ ] 整個簡報所有語音檔的長度會在產生時就先全部加起來，當成整個簡報的時間存在資料庫中。並顯示在播放界面中。請放在時間的後面。
@@ -345,3 +345,10 @@
 [ ] 提供自動產生測驗的功能，我們會進入一個單獨的測驗生成畫面。讓老師下提示詞請 AI 產生測驗。老師可以重複下指令修改問題列表，或是直接手動修改問題。問題列表可以被存下來多次使用。
 [ ] master 可以在問題列表後按下開始測驗按鍵。就會顯示目前上線人的名單，master 可以請所有人確認後按下開始按鍵。follower 就可以開始作答。master 按下結束按鍵後就停止作答，並公佈答案和每一題所有人回答的結果。
 [ ] 提供一個產生 PDF 功能，會產生一個包括整個簡報和簡報逐字檔。方便學生下載後使用其它工具使用。
+
+## Fourth batch 工作記錄
+
+- 時間：2026-05-20 01:20（Asia/Taipei）
+- 工作內容：完成「新增一個按鍵顯示分享連結」；播放頁在建立分享連結後會保留該 URL，並在分享工具列新增「顯示分享連結」按鍵，可重新開啟分享連結對話框供複製，不需要再次建立新分享 token。
+- 所在分支：feature/fourthbatch-show-share-link-button-20260520-0119
+- 驗證：npm --prefix frontend run build && git diff --check
