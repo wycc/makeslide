@@ -257,6 +257,8 @@ export default function PlayPage() {
   const [syncEnabled, setSyncEnabled] = useState(false);
   const [syncRole, setSyncRole] = useState<'master' | 'follower'>('follower');
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [followerAudioUnlocked, setFollowerAudioUnlocked] = useState(false);
+  const [audioMuted, setAudioMuted] = useState(false);
   const syncClientIdRef = useRef<string>('');
   const applyingRemoteSyncRef = useRef(false);
   const [imageOnlyFullscreen, setImageOnlyFullscreen] = useState(false);
@@ -337,6 +339,19 @@ export default function PlayPage() {
   );
 
   const currentShareToken = searchParams.get('share')?.trim() || '';
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.muted = audioMuted;
+  }, [audioMuted]);
+
+  useEffect(() => {
+    if (!syncEnabled || syncRole !== 'follower') return;
+    if (!followerAudioUnlocked) {
+      setAudioMuted(true);
+    }
+  }, [syncEnabled, syncRole, followerAudioUnlocked]);
 
   // ---- Load detail (+ poll until ready) ----
   useEffect(() => {
@@ -622,6 +637,10 @@ export default function PlayPage() {
         const joined = await joinPlaybackSync(pdfId, next);
         if (cancelled) return;
         setSyncRole(joined.role);
+        setFollowerAudioUnlocked(joined.follower_audio_unlocked);
+        if (joined.role === 'follower' && !joined.follower_audio_unlocked) {
+          setAudioMuted(true);
+        }
         setSyncError(null);
       } catch (err) {
         if (cancelled) return;
@@ -647,10 +666,11 @@ export default function PlayPage() {
       page_number: pageNumber,
       is_playing: isPlaying,
       current_time: time,
+      follower_audio_unlocked: followerAudioUnlocked,
     }).catch((err) => {
       setSyncError(err instanceof ApiError ? err.message : '同步狀態更新失敗');
     });
-  }, [syncEnabled, syncRole, pdfId, currentIdx, isPlaying, currentTime]);
+  }, [syncEnabled, syncRole, pdfId, currentIdx, isPlaying, currentTime, followerAudioUnlocked]);
 
   useEffect(() => {
     if (!syncEnabled || !pdfId || !syncClientIdRef.current) return;
@@ -659,7 +679,11 @@ export default function PlayPage() {
         try {
           const state = await fetchPlaybackSyncState(pdfId, syncClientIdRef.current);
           setSyncRole(state.role);
+          setFollowerAudioUnlocked(state.follower_audio_unlocked);
           if (state.role === 'master') return;
+          if (!state.follower_audio_unlocked) {
+            setAudioMuted(true);
+          }
           applyingRemoteSyncRef.current = true;
           const targetIdx = Math.max(0, state.page_number - 1);
           setCurrentIdx((prev) => (prev === targetIdx ? prev : targetIdx));
@@ -1710,6 +1734,7 @@ export default function PlayPage() {
       <audio
         ref={audioRef}
         preload="auto"
+        muted={audioMuted}
         onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
         onCanPlay={() => {
           clearAudioRetryTimer();
@@ -2124,6 +2149,47 @@ export default function PlayPage() {
               {formatTime(currentTime)} / {formatTime(duration)}
             </div>
           </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">
+            <div>
+              <span className="font-semibold text-slate-200">音訊</span>
+              <span className="ml-2 text-slate-400">
+                {syncEnabled && syncRole === 'follower' && !followerAudioUnlocked
+                  ? '老師端已強制學生端靜音。'
+                  : audioMuted
+                    ? '目前本機靜音。'
+                    : '目前本機可播放聲音。'}
+              </span>
+            </div>
+            <label className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-950 px-3 py-1 text-xs text-slate-300">
+              <input
+                type="checkbox"
+                checked={audioMuted}
+                disabled={syncEnabled && syncRole === 'follower' && !followerAudioUnlocked}
+                onChange={(event) => setAudioMuted(event.target.checked)}
+              />
+              本機靜音
+            </label>
+          </div>
+          {syncEnabled && syncRole === 'master' ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100">
+              <div>
+                <span className="font-semibold">學生端音訊控制</span>
+                <span className="ml-2 text-cyan-200/80">
+                  {followerAudioUnlocked
+                    ? '已解鎖，學生可自行取消靜音播放。'
+                    : '已鎖定，所有 follower 會被強制靜音。'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFollowerAudioUnlocked((unlocked) => !unlocked)}
+                className="rounded-full border border-cyan-300/50 bg-cyan-950/40 px-3 py-1 text-xs font-medium text-cyan-100 hover:bg-cyan-900/60"
+                aria-pressed={followerAudioUnlocked}
+              >
+                {followerAudioUnlocked ? '強制所有學生靜音' : '解鎖學生自行播放'}
+              </button>
+            </div>
+          ) : null}
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">
             <div>
               <span className="font-semibold text-slate-200">上課模式</span>
