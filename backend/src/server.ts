@@ -28,10 +28,18 @@ function ensureWorkspaceRuntimePaths(): void {
 export async function buildApp() {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const frontendDist = path.resolve(__dirname, "..", "..", "frontend", "dist");
-  const app = Fastify({
+  const httpsOptions = config.httpsKeyPath && config.httpsCertPath
+    ? {
+        key: fs.readFileSync(path.resolve(config.repoRoot, config.httpsKeyPath)),
+        cert: fs.readFileSync(path.resolve(config.repoRoot, config.httpsCertPath)),
+      }
+    : undefined;
+  const fastifyOptions = {
     logger,
     bodyLimit: config.maxUploadBytes + 1024 * 1024, // small slack for headers
-  });
+    ...(httpsOptions ? { https: httpsOptions } : {}),
+  };
+  const app = Fastify(fastifyOptions);
   const nbPrefix = config.nbPrefix;
   const withNbPrefix = (route: string): string =>
     nbPrefix ? `${nbPrefix}${route}` : route;
@@ -179,6 +187,7 @@ async function main(): Promise<void> {
     await app.listen({ port: config.port, host: "0.0.0.0" });
     logger.info(
       {
+        protocol: config.httpsKeyPath && config.httpsCertPath ? "https" : "http",
         port: config.port,
         storageRoot: config.storageRoot,
         dbPath: config.dbPath,

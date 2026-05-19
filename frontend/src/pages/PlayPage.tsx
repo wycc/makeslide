@@ -70,6 +70,13 @@ interface SentenceTimelineItem {
   end: number;
 }
 
+interface WakeLockSentinelLike {
+  released: boolean;
+  release: () => Promise<void>;
+  addEventListener?: (type: 'release', listener: () => void) => void;
+  removeEventListener?: (type: 'release', listener: () => void) => void;
+}
+
 function splitScriptIntoSentences(script: string): string[] {
   const withoutToneMarkers = script.replace(TONE_MARKER_RE, ' ');
   const normalized = withoutToneMarkers.replace(/\r\n?/g, '\n').trim();
@@ -265,6 +272,39 @@ export default function PlayPage() {
   // prefetch refs so GC doesn't drop them mid-load
   const prefetchedAudioRef = useRef<HTMLAudioElement | null>(null);
   const prefetchedImageRef = useRef<HTMLImageElement | null>(null);
+  const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
+
+  const acquireWakeLock = useCallback(async () => {
+    if (typeof navigator === 'undefined') return;
+    const wakeLockApi = (navigator as Navigator & {
+      wakeLock?: { request: (type: 'screen') => Promise<WakeLockSentinelLike> };
+    }).wakeLock;
+    if (!wakeLockApi?.request) return;
+    if (wakeLockRef.current && !wakeLockRef.current.released) return;
+    try {
+      const sentinel = await wakeLockApi.request('screen');
+      wakeLockRef.current = sentinel;
+      const onRelease = () => {
+        wakeLockRef.current = null;
+      };
+      sentinel.addEventListener?.('release', onRelease);
+    } catch {
+      // 手機瀏覽器/權限可能拒絕，忽略即可
+    }
+  }, []);
+
+  const releaseWakeLock = useCallback(async () => {
+    const sentinel = wakeLockRef.current;
+    if (!sentinel) return;
+    wakeLockRef.current = null;
+    try {
+      if (!sentinel.released) {
+        await sentinel.release();
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const clearAudioRetryTimer = useCallback(() => {
     if (audioRetryTimerRef.current != null) {
@@ -469,9 +509,29 @@ export default function PlayPage() {
   useEffect(
     () => () => {
       clearAudioRetryTimer();
+      void releaseWakeLock();
     },
-    [clearAudioRetryTimer],
+    [clearAudioRetryTimer, releaseWakeLock],
   );
+
+  useEffect(() => {
+    if (isPlaying) {
+      void acquireWakeLock();
+    } else {
+      void releaseWakeLock();
+    }
+  }, [isPlaying, acquireWakeLock, releaseWakeLock]);
+
+  useEffect(() => {
+    if (!isPlaying) return;
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void acquireWakeLock();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [isPlaying, acquireWakeLock]);
 
   // ---- Prefetch next page assets ----
   useEffect(() => {
