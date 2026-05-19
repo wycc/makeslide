@@ -1,8 +1,8 @@
 # TODO 狀態摘要
 
-- Third Batch 已無未完成項目；Fourth batch 本次已完成「PlayPage 顯示本頁 QR code」功能；仍有其他 Fourth batch 未完成項目。
-- 最後確認時間：2026-05-20 02:31（Asia/Taipei）
-- 最近檢查：已完成 Fourth batch「在 PlayPage 中加上一個顯示本頁 qrcode 的按鍵。按下後就在圖片區顯示 qrcode，直到按下撥放鍵或是換頁為止。」；實作與提交分支為 feature/playpage-current-page-qrcode-20260520-0229，並已回到 master 更新 TODO 狀態與工作記錄。
+- Third Batch 已無未完成項目；Fourth batch 本次已完成「realtime poll 不顯示投票結果」功能；仍有其他 Fourth batch 未完成項目。
+- 最後確認時間：2026-05-20 02:43（Asia/Taipei）
+- 最近檢查：已完成 Fourth batch「realtime poll 加上一個不要顯示投票結果的checkbox。此時大家只看的到自己的選擇。把這個checkbox 關閉後，結果就會顯示出來。」；實作與提交分支為 feature/fourthbatch-poll-hide-results-20260520-0239，並已回到 master 更新 TODO 狀態與工作記錄。
 
 # First Batch
 [x] (merge)首次流程導引應該只有在列表是空的時候才出現。（完成分支：feature/onboarding-empty-list-only）
@@ -334,7 +334,7 @@
 [ ] 同步模式的 follower 在取消同步模式或離開播放頁面前都要保持不進入背景
 [ ] Realtime poll 在按下開使投票時，所有在全螢幕模式的客戶端都自動顯示投票畫面
 [x] Realtime poll 在每一個投票問題後加上刪除的按鍵（完成分支：feature/fourthbatch-realtime-poll-delete-button-20260520-0200）
-[ ] realtime poll 加上一個不要顯示投票結果的checkbox。此時大家只看的到自己的選擇。把這個checkbox 關閉後，結果就會顯示出來。
+[x] realtime poll 加上一個不要顯示投票結果的checkbox。此時大家只看的到自己的選擇。把這個checkbox 關閉後，結果就會顯示出來。（完成分支：feature/fourthbatch-poll-hide-results-20260520-0239）
 [x] 在 PlayPage 中加上一個顯示本頁 qrcode 的按鍵。按下後就在圖片區顯示 qrcode，直到按下撥放鍵或是換頁為止。（完成分支：feature/playpage-current-page-qrcode-20260520-0229）
 [ ] 老師端(master) 強制所有學生靜音 / 解鎖自行播放
 [ ] 所有進入 follower 模式的 session 都會強迫輸入一個代號
@@ -387,3 +387,8 @@
 - 工作內容：完成「在 PlayPage 中加上一個顯示本頁 qrcode 的按鍵。按下後就在圖片區顯示 qrcode，直到按下撥放鍵或是換頁為止。」；播放頁新增 QR 按鍵，按下後會暫停目前播放並在投影片圖片區顯示目前頁 URL 的 QR code，按播放鍵、上一頁、下一頁或點選縮圖換頁時會自動回到投影片畫面。
 - 所在分支：feature/playpage-current-page-qrcode-20260520-0229
 - 驗證：npm --prefix frontend run build && git diff --check -- frontend/src/pages/PlayPage.tsx TODO.md
+
+- 時間：2026-05-20 02:43（Asia/Taipei）
+- 工作內容：完成「realtime poll 加上一個不要顯示投票結果的 checkbox」；後端投票資料新增 show_results 欄位並在建立/查詢/投票回應中保留設定，前端建立投票時可勾選是否顯示結果，關閉時投票畫面只顯示使用者自己的選擇並隱藏票數、比例與進度條。
+- 所在分支：feature/fourthbatch-poll-hide-results-20260520-0239
+- 驗證：npm --prefix backend run build && npm --prefix frontend run build && git diff --check
