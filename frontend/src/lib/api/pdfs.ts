@@ -5,6 +5,8 @@ import type {
   PagePoll,
   PdfDetail,
   PdfListItem,
+  QuizQuestion,
+  QuizSet,
   RegenJobState,
   RollbackRegenerateResponse,
   SyncJoinResponse,
@@ -331,6 +333,43 @@ export async function votePagePoll(id: string, pollId: number, voterId: string, 
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as PagePoll;
+}
+
+export async function fetchQuizSets(id: string): Promise<QuizSet[]> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/quizzes`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  const data = (await resp.json()) as { quizzes?: QuizSet[] };
+  return Array.isArray(data.quizzes) ? data.quizzes : [];
+}
+
+export async function generateQuizSet(
+  id: string,
+  prompt: string,
+  existingQuestions: QuizQuestion[],
+): Promise<{ title: string; questions: QuizQuestion[] }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/quizzes/generate`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ prompt, existing_questions: existingQuestions }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { title: string; questions: QuizQuestion[] };
+}
+
+export async function saveQuizSet(
+  id: string,
+  payload: { title: string; prompt: string; questions: QuizQuestion[]; quizId?: number | null },
+): Promise<QuizSet> {
+  const url = payload.quizId
+    ? `api/pdfs/${encodeURIComponent(id)}/quizzes/${encodeURIComponent(String(payload.quizId))}`
+    : `api/pdfs/${encodeURIComponent(id)}/quizzes`;
+  const resp = await fetch(url, {
+    method: payload.quizId ? 'PUT' : 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ title: payload.title, prompt: payload.prompt, questions: payload.questions }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as QuizSet;
 }
 
 export interface UpdatePdfCoverFromPageResponse {
