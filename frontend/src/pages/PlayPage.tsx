@@ -257,6 +257,7 @@ export default function PlayPage() {
   const [syncEnabled, setSyncEnabled] = useState(false);
   const [syncRole, setSyncRole] = useState<'master' | 'follower'>('follower');
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncFollowerCode, setSyncFollowerCode] = useState('');
   const syncClientIdRef = useRef<string>('');
   const applyingRemoteSyncRef = useRef(false);
   const [imageOnlyFullscreen, setImageOnlyFullscreen] = useState(false);
@@ -619,7 +620,20 @@ export default function PlayPage() {
     let cancelled = false;
     void (async () => {
       try {
-        const joined = await joinPlaybackSync(pdfId, next);
+        let joined = await joinPlaybackSync(pdfId, next);
+        if (joined.role === 'follower' && !joined.follower_code) {
+          const storageCodeKey = `makeslide.sync.followerCode.${pdfId}`;
+          const savedCode = window.localStorage.getItem(storageCodeKey)?.trim() || '';
+          const enteredCode = window.prompt('請輸入你的代號才能進入 follower 同步模式', savedCode)?.trim() || '';
+          if (!enteredCode) {
+            throw new ApiError('進入 follower 同步模式需要輸入代號', 'SYNC_FOLLOWER_CODE_REQUIRED', 400);
+          }
+          window.localStorage.setItem(storageCodeKey, enteredCode);
+          joined = await joinPlaybackSync(pdfId, next, enteredCode);
+          setSyncFollowerCode(enteredCode);
+        } else {
+          setSyncFollowerCode(joined.follower_code ?? '');
+        }
         if (cancelled) return;
         setSyncRole(joined.role);
         setSyncError(null);
@@ -1791,6 +1805,11 @@ export default function PlayPage() {
               同步模式
               {syncEnabled ? `(${syncRole === 'master' ? 'master' : 'follower'})` : ''}
             </label>
+            {syncEnabled && syncRole === 'follower' && syncFollowerCode ? (
+              <span className="ml-1 rounded-full border border-slate-700 px-2 py-0.5 text-[11px] text-slate-300">
+                代號：{syncFollowerCode}
+              </span>
+            ) : null}
           </div>
           {syncError ? <div className="mt-1 text-xs text-rose-300">{syncError}</div> : null}
         {readOnlyReason ? (

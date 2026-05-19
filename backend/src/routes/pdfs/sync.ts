@@ -9,6 +9,7 @@ interface SyncSessionState {
   pdfId: string;
   masterClientId: string | null;
   masterExpiresAt: number;
+  followerCodes: Map<string, string>;
   pageNumber: number;
   isPlaying: boolean;
   currentTime: number;
@@ -39,6 +40,7 @@ function getSession(pdfId: string): SyncSessionState {
     pdfId,
     masterClientId: null,
     masterExpiresAt: 0,
+    followerCodes: new Map<string, string>(),
     pageNumber: 1,
     isPlaying: false,
     currentTime: 0,
@@ -53,7 +55,10 @@ function roleFor(session: SyncSessionState, clientId: string): SyncRole {
 }
 
 export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
-  const ClientBodySchema = z.object({ client_id: z.string().trim().min(1).max(128) });
+  const ClientBodySchema = z.object({
+    client_id: z.string().trim().min(1).max(128),
+    follower_code: z.string().trim().min(1).max(64).optional(),
+  });
   const UpdateBodySchema = z.object({
     client_id: z.string().trim().min(1).max(128),
     page_number: z.number().int().min(1),
@@ -72,16 +77,25 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     if (!ensurePdfExists(id)) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     }
-    const { client_id: clientId } = parsedBody.data;
+    const { client_id: clientId, follower_code: followerCode } = parsedBody.data;
     const session = getSession(id);
     if (!session.masterClientId || session.masterExpiresAt <= nowMs()) {
       session.masterClientId = clientId;
       session.masterExpiresAt = nowMs() + MASTER_TTL_MS;
       session.updatedAt = nowIso();
+    } else if (session.masterClientId !== clientId) {
+      if (!followerCode) {
+        return reply
+          .code(400)
+          .send(errorResponse('SYNC_FOLLOWER_CODE_REQUIRED', 'Follower sessions must provide a display code'));
+      }
+      session.followerCodes.set(clientId, followerCode);
+      session.updatedAt = nowIso();
     }
     return reply.send({
       pdf_id: id,
       role: roleFor(session, clientId),
+      follower_code: session.followerCodes.get(clientId) ?? null,
       master_client_id: session.masterClientId,
       page_number: session.pageNumber,
       is_playing: session.isPlaying,
@@ -161,7 +175,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       session.currentTime = 0;
       session.updatedAt = nowIso();
     }
+    session.followerCodes.delete(clientId);
     return reply.send({ ok: true });
   });
 }
-
