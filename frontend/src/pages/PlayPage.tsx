@@ -1206,6 +1206,15 @@ export default function PlayPage() {
     }
   }, [pdfId, shareAccess]);
 
+  const handleShowShareLink = useCallback(() => {
+    if (!shareUrl) {
+      setShareError('尚未建立分享連結，請先建立分享連結。');
+      return;
+    }
+    setShareError(null);
+    setShareDialogOpen(true);
+  }, [shareUrl]);
+
   const regenAnySelected = regenOptions.image || regenOptions.script || regenOptions.audio;
   const regenJobRunning =
     regenJob?.status === 'running' ||
@@ -1904,6 +1913,15 @@ export default function PlayPage() {
                 >
                   {shareBusy ? '建立中…' : '建立分享連結'}
                 </button>
+                {shareUrl ? (
+                  <button
+                    type="button"
+                    onClick={handleShowShareLink}
+                    className="rounded-md border border-slate-600 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
+                  >
+                    顯示分享連結
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </div>
