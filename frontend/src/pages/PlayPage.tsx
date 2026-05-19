@@ -271,7 +271,7 @@ export default function PlayPage() {
   const audioRetryTimerRef = useRef<number | null>(null);
   // prefetch refs so GC doesn't drop them mid-load
   const prefetchedAudioRef = useRef<HTMLAudioElement | null>(null);
-  const prefetchedImageRef = useRef<HTMLImageElement | null>(null);
+  const prefetchedImageRefs = useRef<HTMLImageElement[]>([]);
   const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
 
   const acquireWakeLock = useCallback(async () => {
@@ -533,22 +533,32 @@ export default function PlayPage() {
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, [isPlaying, acquireWakeLock]);
 
-  // ---- Prefetch next page assets ----
+  // ---- Prefetch upcoming page assets ----
   useEffect(() => {
-    const next = deckPages[currentIdx + 1];
-    if (!next) return;
-    if (next.image_url) {
+    const upcomingImages = deckPages
+      .slice(currentIdx + 1, currentIdx + 3)
+      .map((page) => withImageBust(page.image_url) ?? page.image_url)
+      .filter((url): url is string => Boolean(url));
+
+    prefetchedImageRefs.current = upcomingImages.map((url) => {
       const img = new Image();
-      img.src = next.image_url;
-      prefetchedImageRef.current = img;
-    }
-    if (next.audio_url) {
+      img.decoding = 'async';
+      img.loading = 'eager';
+      img.src = url;
+      if (typeof img.decode === 'function') {
+        void img.decode().catch(() => undefined);
+      }
+      return img;
+    });
+
+    const next = deckPages[currentIdx + 1];
+    if (next?.audio_url) {
       const a = new Audio();
       a.preload = 'auto';
       a.src = next.audio_url;
       prefetchedAudioRef.current = a;
     }
-  }, [currentIdx, deckPages]);
+  }, [currentIdx, deckPages, withImageBust]);
 
   // ---- Controls ----
   const playPause = useCallback(() => {
