@@ -242,6 +242,7 @@ export default function PlayPage() {
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
+  const [pageQrVisible, setPageQrVisible] = useState(false);
   // 在按下「確認」啟動重生前記住目前頁碼，供 rollback 後跳回。
   const preRegenPageIdxRef = useRef<number | null>(null);
   const pollVoterIdRef = useRef<string>('');
@@ -454,6 +455,16 @@ export default function PlayPage() {
     },
     [imageBustKey],
   );
+  const currentPageUrl = useMemo(() => {
+    if (!pdfId || !currentPage) return '';
+    const params = new URLSearchParams(searchParams);
+    params.set('page', String(currentPage.page_number));
+    const query = params.toString();
+    return `${window.location.origin}/play/${encodeURIComponent(pdfId)}${query ? `?${query}` : ''}`;
+  }, [currentPage?.page_number, pdfId, searchParams]);
+  const currentPageQrUrl = currentPageUrl
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=360x360&margin=12&data=${encodeURIComponent(currentPageUrl)}`
+    : '';
 
   // ---- Fetch all scripts once pages are ready ----
   useEffect(() => {
@@ -555,6 +566,7 @@ export default function PlayPage() {
     if (syncEnabled && syncRole !== 'master') return;
     const audio = audioRef.current;
     if (!audio) return;
+    setPageQrVisible(false);
     if (classroomMode && classroomAwaitingNext && currentIdx < totalPages - 1) {
       setClassroomAwaitingNext(false);
       setFinished(false);
@@ -571,6 +583,7 @@ export default function PlayPage() {
 
   const goPrev = useCallback(() => {
     if (syncEnabled && syncRole !== 'master') return;
+    setPageQrVisible(false);
     setClassroomAwaitingNext(false);
     setFinished(false);
     setCurrentIdx((i) => Math.max(0, i - 1));
@@ -578,6 +591,7 @@ export default function PlayPage() {
 
   const goNext = useCallback(() => {
     if (syncEnabled && syncRole !== 'master') return;
+    setPageQrVisible(false);
     setClassroomAwaitingNext(false);
     setFinished(false);
     setCurrentIdx((i) => Math.min(totalPages - 1, i + 1));
@@ -597,6 +611,16 @@ export default function PlayPage() {
       setFinished(true);
     }
   }, [classroomMode, currentIdx, totalPages]);
+
+  const showCurrentPageQr = useCallback(() => {
+    if (!currentPageUrl) return;
+    const audio = audioRef.current;
+    if (audio && !audio.paused) {
+      audio.pause();
+    }
+    setIsPlaying(false);
+    setPageQrVisible(true);
+  }, [currentPageUrl]);
 
   const handleSeek = useCallback(
     (ev: React.ChangeEvent<HTMLInputElement>) => {
@@ -2030,7 +2054,25 @@ export default function PlayPage() {
             tabIndex={0}
           >
             <div className="relative flex h-full w-full max-w-4xl items-center justify-center">
-              {currentPage?.image_url ? (
+              {pageQrVisible && currentPageQrUrl ? (
+                <div
+                  className="flex w-full flex-col items-center justify-center gap-4 rounded-lg border border-cyan-500/40 bg-slate-950 p-6 text-center shadow-xl"
+                  style={{ minHeight: `${slideImageMaxHeightVh}vh` }}
+                >
+                  <div className="rounded-2xl bg-white p-4 shadow-lg">
+                    <img
+                      src={currentPageQrUrl}
+                      alt={`第 ${currentPage?.page_number ?? '-'} 頁 QR code`}
+                      className="h-64 w-64 max-w-[70vw] rounded md:h-80 md:w-80"
+                    />
+                  </div>
+                  <div className="max-w-xl text-sm text-slate-300">
+                    <p className="font-semibold text-cyan-100">掃描後開啟第 {currentPage?.page_number ?? '-'} 頁</p>
+                    <p className="mt-1 break-all font-mono text-[11px] text-slate-500">{currentPageUrl}</p>
+                    <p className="mt-2 text-xs text-slate-400">按播放鍵或切換頁面後會自動回到投影片畫面。</p>
+                  </div>
+                </div>
+              ) : currentPage?.image_url ? (
                 <img
                   key={currentPage.page_number}
                   src={withImageBust(currentPage.image_url) ?? currentPage.image_url}
@@ -2110,6 +2152,21 @@ export default function PlayPage() {
               title="下一頁 (→)"
             >
               ⏭
+            </button>
+            <button
+              type="button"
+              onClick={showCurrentPageQr}
+              disabled={!currentPageUrl}
+              className={`rounded-full border px-3 py-2 text-sm disabled:opacity-30 ${
+                pageQrVisible
+                  ? 'border-cyan-400/70 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/30'
+                  : 'border-slate-700 hover:bg-slate-800'
+              }`}
+              aria-pressed={pageQrVisible}
+              aria-label="顯示本頁 QR code"
+              title="顯示本頁 QR code"
+            >
+              QR
             </button>
             <input
               type="range"
@@ -2400,7 +2457,10 @@ export default function PlayPage() {
                 <div
                   key={p.page_number}
                   data-page-number={p.page_number}
-                  onClick={() => setCurrentIdx(idx)}
+                  onClick={() => {
+                    setPageQrVisible(false);
+                    setCurrentIdx(idx);
+                  }}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => {
                     e.preventDefault();
