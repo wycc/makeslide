@@ -1,8 +1,8 @@
 # TODO 狀態摘要
 
-- Third Batch 已無未完成項目；Fourth batch 本次已完成「允許使用者用 WebAudio 語音輸入產生投票」功能；仍有其他 Fourth batch 未完成項目。
-- 最後確認時間：2026-05-20 03:13（Asia/Taipei）
-- 最近檢查：已完成 Fourth batch「允許使用者用語音輸入產生投票，方便教師當場產生投票。請使用 WebAudio 錄音」；實作與提交分支為 feature/fourthbatch-webaudio-voice-poll-20260520-0310，並已回到 master 更新 TODO 狀態與工作記錄。
+- Third Batch 已無未完成項目；Fourth batch 本次已完成「老師端(master) 強制所有學生靜音 / 解鎖自行播放」功能；仍有其他 Fourth batch 未完成項目。
+- 最後確認時間：2026-05-20 03:22（Asia/Taipei）
+- 最近檢查：已完成 Fourth batch「老師端(master) 強制所有學生靜音 / 解鎖自行播放」；實作與提交分支為 feature/fourthbatch-master-force-follower-audio-lock-20260520-0320，並已回到 master 更新 TODO 狀態與工作記錄。
 
 # First Batch
 [x] (merge)首次流程導引應該只有在列表是空的時候才出現。（完成分支：feature/onboarding-empty-list-only）
@@ -336,7 +336,7 @@
 [x] Realtime poll 在每一個投票問題後加上刪除的按鍵（完成分支：feature/fourthbatch-realtime-poll-delete-button-20260520-0200）
 [x] realtime poll 加上一個不要顯示投票結果的checkbox。此時大家只看的到自己的選擇。把這個checkbox 關閉後，結果就會顯示出來。（完成分支：feature/fourthbatch-poll-hide-results-20260520-0239）
 [x] 在 PlayPage 中加上一個顯示本頁 qrcode 的按鍵。按下後就在圖片區顯示 qrcode，直到按下撥放鍵或是換頁為止。（完成分支：feature/playpage-current-page-qrcode-20260520-0229）
-[ ] 老師端(master) 強制所有學生靜音 / 解鎖自行播放
+[x] 老師端(master) 強制所有學生靜音 / 解鎖自行播放（完成分支：feature/fourthbatch-master-force-follower-audio-lock-20260520-0320）
 [ ] 所有進入 follower 模式的 session 都會強迫輸入一個代號
 [ ] 在 master 端投票時顯示目前在線人數，己作答人數
 [ ] follower 模式可以輸入問題，master 可以決定是否要把問題顯示在畫面上。
@@ -408,3 +408,8 @@
 - 工作內容：完成「允許使用者用語音輸入產生投票，方便教師當場產生投票。請使用 WebAudio 錄音」；播放頁 Realtime Poll 設定區新增 WebAudio 錄音、錄音預覽、提示詞輸入與「用錄音建立並開始投票」操作，後端新增 multipart 語音投票 API，會以 ASR 轉寫錄音後連同提示詞、本頁文字與講稿交給 AI 產生並啟用本頁投票。
 - 所在分支：feature/fourthbatch-webaudio-voice-poll-20260520-0310
 - 驗證：npm --prefix backend run build && npm --prefix frontend run build；git diff --check
+
+- 時間：2026-05-20 03:22（Asia/Taipei）
+- 工作內容：完成「老師端(master) 強制所有學生靜音 / 解鎖自行播放」；同步模式狀態新增 follower 音訊解鎖旗標，master 可在播放頁切換「強制所有學生靜音」與「解鎖學生自行播放」，follower 在鎖定時會被強制本機靜音且無法取消，解鎖後可自行調整本機靜音。
+- 所在分支：feature/fourthbatch-master-force-follower-audio-lock-20260520-0320
+- 驗證：git diff --check && npm --prefix backend run build && npm --prefix frontend run build
