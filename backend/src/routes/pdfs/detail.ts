@@ -29,6 +29,7 @@ import {
   streamFile,
   timingRowsToPageMap,
 } from './shared';
+import { callChatJSON, transcribeAudioBuffer } from '../../services/openai';
 
 interface PagePollRow {
   id: number;
@@ -40,6 +41,17 @@ interface PagePollRow {
   created_at: string;
   updated_at: string;
 }
+
+interface PageVoiceContextRow {
+  page_number: number;
+  text: string | null;
+  script: string | null;
+}
+
+const VoicePollSchema = z.object({
+  question: z.string().trim().min(1).max(300),
+  options: z.array(z.string().trim().min(1).max(120)).min(2).max(6),
+});
 
 function sessionSub(request: FastifyRequest): string | null {
   const session = decodeSession(parseCookies(request).makeslide_session);
@@ -479,6 +491,52 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       .prepare(`SELECT id, pdf_id, page_number, question, options_json, is_active, created_at, updated_at FROM page_polls WHERE id = ?`)
       .get(result.lastInsertRowid) as PagePollRow;
     return reply.code(201).send(rowToPoll(row));
+  });
+
+  app.post('/api/pdfs/:id/pages/:n/polls/voice', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid page parameter'));
+    const { id, n } = parsed.data;
+    const pdf = db.prepare(`SELECT id, owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as Pick<PdfRow, 'id' | 'owner_sub' | 'visibility'> | undefined;
+    if (!pdf) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), pdf)) return reply.code(403).send(errorResponse('FORBIDDEN', 'No edit permission'));
+
+    const part = await request.file();
+    if (!part) return reply.code(400).send(errorResponse('AUDIO_REQUIRED', 'audio file is required'));
+    const audioBuffer = await part.toBuffer();
+    if (audioBuffer.length === 0) return reply.code(400).send(errorResponse('AUDIO_EMPTY', 'audio file is empty'));
+    const prompt = typeof part.fields.prompt === 'object' && 'value' in part.fields.prompt
+      ? String(part.fields.prompt.value ?? '').trim().slice(0, 1000)
+      : '';
+    const transcript = await transcribeAudioBuffer(
+      audioBuffer,
+      part.filename || `voice-poll-${id}-${n}.webm`,
+      part.mimetype || 'audio/webm',
+    );
+    if (!transcript) return reply.code(422).send(errorResponse('TRANSCRIPT_EMPTY', 'No speech could be transcribed'));
+
+    const page = db
+      .prepare(`SELECT page_number, text, script FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .get(id, n) as PageVoiceContextRow | undefined;
+    const generated = await callChatJSON({
+      label: 'voice_poll_generation',
+      schema: VoicePollSchema,
+      maxTokens: 700,
+      temperature: 0.4,
+      messages: [
+        { role: 'system', content: '你是教學現場的助教。請根據教師語音、可選提示詞、投影片文字與逐字稿，產生一個適合即時投票的單選問題。只回傳 JSON：{"question":"...","options":["...", "..."]}。選項 2 到 6 個，文字精簡。' },
+        { role: 'user', content: `教師語音逐字稿：\n${transcript}\n\n教師補充提示詞：\n${prompt || '（無）'}\n\n本頁投影片文字：\n${page?.text || '（無）'}\n\n本頁既有講稿：\n${page?.script || '（無）'}` },
+      ],
+    });
+    const now = nowIso();
+    const options = generated.data.options.map((option) => option.trim()).filter(Boolean).slice(0, 6);
+    const result = db
+      .prepare(`INSERT INTO page_polls (pdf_id, page_number, question, options_json, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)`)
+      .run(id, n, generated.data.question.trim(), JSON.stringify(options), now, now);
+    const row = db
+      .prepare(`SELECT id, pdf_id, page_number, question, options_json, is_active, created_at, updated_at FROM page_polls WHERE id = ?`)
+      .get(result.lastInsertRowid) as PagePollRow;
+    return reply.code(201).send({ poll: rowToPoll(row), transcript });
   });
 
   app.post('/api/pdfs/:id/polls/:pollId/votes', async (request, reply) => {

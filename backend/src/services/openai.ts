@@ -1,4 +1,5 @@
 import OpenAI, { APIError } from 'openai';
+import { toFile } from 'openai/uploads';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ChatCompletion, ChatCompletionMessageParam } from 'openai/resources/chat/completions';
@@ -120,6 +121,25 @@ export function setOpenAIApiKeyRuntime(apiKey: string): void {
 
 export function setOpenAIClientForTest(client: OpenAI | null): void {
   cachedClient = client;
+}
+
+export async function transcribeAudioBuffer(
+  audio: Buffer,
+  filename: string,
+  mimeType: string,
+): Promise<string> {
+  const client = getOpenAIClient();
+  const file = await toFile(audio, filename, { type: mimeType });
+  const startedAt = Date.now();
+  const transcription = await client.audio.transcriptions.create({
+    file,
+    model: 'whisper-1',
+  });
+  logger.info(
+    { filename, mimeType, bytes: audio.length, latencyMs: Date.now() - startedAt },
+    'OpenAI audio transcription completed',
+  );
+  return transcription.text.trim();
 }
 
 export interface TokenUsage {

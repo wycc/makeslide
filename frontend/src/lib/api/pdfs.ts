@@ -323,6 +323,29 @@ export async function createPagePoll(id: string, pageNumber: number, question: s
   return (await resp.json()) as PagePoll;
 }
 
+export interface CreateVoicePagePollResponse {
+  poll: PagePoll;
+  transcript: string;
+}
+
+export async function createVoicePagePoll(
+  id: string,
+  pageNumber: number,
+  audio: Blob,
+  prompt: string,
+): Promise<CreateVoicePagePollResponse> {
+  const form = new FormData();
+  const ext = audio.type.includes('mp4') ? 'm4a' : 'webm';
+  form.append('audio', audio, `voice-poll.${ext}`);
+  form.append('prompt', prompt);
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/polls/voice`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as CreateVoicePagePollResponse;
+}
+
 export async function votePagePoll(id: string, pollId: number, voterId: string, optionIndex: number): Promise<PagePoll> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/polls/${encodeURIComponent(String(pollId))}/votes`, {
     method: 'POST',
