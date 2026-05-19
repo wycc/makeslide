@@ -650,11 +650,15 @@ async function runPipeline(pdfId: string): Promise<void> {
     }
 
     // -------- Step 2.5: PDF full-text re-split (Third Batch) --------
-    // For normal PDF uploads (non-TXT/non-YouTube), merge all extracted page
-    // text and regenerate deck outline/pages without preserving source paging.
+    // NOTE:
+    // This branch rewrites source PDF paging by merging full text and asking LLM
+    // to split again. In production this can collapse a multi-page PDF into a
+    // single page (or otherwise drift from source pagination), which is not
+    // acceptable for users expecting page-by-page processing.
+    // Keep this path disabled by default; preserve original PDF page structure.
     const isTextImportForResplit = fs.existsSync(sourceTextPath(pdfId));
     const sourceType = row.source_type ?? 'pdf';
-    const shouldResplitPdfFullText = !isTextImportForResplit && sourceType === 'pdf' && !alreadyTextDone;
+    const shouldResplitPdfFullText = false && !isTextImportForResplit && sourceType === 'pdf' && !alreadyTextDone;
     if (shouldResplitPdfFullText) {
       const fullText = (
         await Promise.all(

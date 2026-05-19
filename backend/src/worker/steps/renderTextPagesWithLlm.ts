@@ -201,6 +201,9 @@ export async function renderTextPagesWithLlm(
         p.content,
       ].join('\n\n'),
     });
+    const promptWithSourceHint = sourcePdfDataUrl
+      ? `${prompt}\n\n[Context]\nA source PDF exists for this slide deck. Keep generated visuals semantically aligned with the provided slide text.`
+      : prompt;
 
     let image;
     let finalAttempt = 0;
@@ -211,13 +214,10 @@ export async function renderTextPagesWithLlm(
       try {
         const imagePayload: Record<string, unknown> = {
           model: config.openaiImageModel,
-          prompt,
+          prompt: promptWithSourceHint,
           size: '1536x1024',
           quality: config.openaiImageQuality,
         };
-        if (sourcePdfDataUrl) {
-          imagePayload.input_image = sourcePdfDataUrl;
-        }
         image = await client.images.generate(imagePayload as never, { timeout: timeoutMs });
         break;
       } catch (err) {

@@ -56,8 +56,9 @@ function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibil
   if (!row.owner_sub) return true;
   if (sub && row.owner_sub === sub) return true;
   return row.visibility === 'public_editable';
+}
 
-  const ShareTokenParamSchema = z.object({
+const ShareTokenParamSchema = z.object({
   token: z.string().regex(/^[A-Za-z0-9_-]{12,128}$/, 'Invalid share token'),
 });
 
