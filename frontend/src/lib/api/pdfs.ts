@@ -7,6 +7,8 @@ import type {
   PdfListItem,
   RegenJobState,
   RollbackRegenerateResponse,
+  SyncAiAnswer,
+  SyncFollowerQuestion,
   SyncJoinResponse,
   SyncStateResponse,
   StartProcessingResponse,
@@ -555,6 +557,47 @@ export async function leavePlaybackSync(id: string, clientId: string): Promise<{
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as { ok: boolean };
+}
+
+export async function submitSyncFollowerQuestion(
+  id: string,
+  clientId: string,
+  question: string,
+  code?: string,
+): Promise<SyncFollowerQuestion> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/sync/questions`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ client_id: clientId, question, code }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as SyncFollowerQuestion;
+}
+
+export async function toggleSyncDisplayedQuestion(
+  id: string,
+  clientId: string,
+): Promise<{ ok: boolean; displayed_question_id: string | null }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/sync/questions/toggle-display`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ client_id: clientId }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { ok: boolean; displayed_question_id: string | null };
+}
+
+export async function answerSyncFollowerQuestionsWithAi(
+  id: string,
+  clientId: string,
+): Promise<SyncAiAnswer> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/sync/questions/ai-answer`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ client_id: clientId }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as SyncAiAnswer;
 }
 
 /**

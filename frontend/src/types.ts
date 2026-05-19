@@ -233,6 +233,21 @@ export interface RollbackRegenerateResponse {
 
 export type SyncRole = 'master' | 'follower';
 
+export interface SyncFollowerQuestion {
+  id: string;
+  clientId: string;
+  code: string | null;
+  question: string;
+  createdAt: string;
+}
+
+export interface SyncAiAnswer {
+  id: string;
+  answer: string;
+  questionIds: string[];
+  createdAt: string;
+}
+
 export interface SyncJoinResponse {
   pdf_id: string;
   role: SyncRole;
@@ -240,6 +255,9 @@ export interface SyncJoinResponse {
   page_number: number;
   is_playing: boolean;
   current_time: number;
+  follower_questions: SyncFollowerQuestion[];
+  displayed_question_id: string | null;
+  ai_answer: SyncAiAnswer | null;
   updated_at: string;
   master_expires_at: string | null;
 }
@@ -251,6 +269,9 @@ export interface SyncStateResponse {
   page_number: number;
   is_playing: boolean;
   current_time: number;
+  follower_questions: SyncFollowerQuestion[];
+  displayed_question_id: string | null;
+  ai_answer: SyncAiAnswer | null;
   updated_at: string;
   master_expires_at: string | null;
 }

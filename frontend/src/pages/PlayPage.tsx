@@ -8,6 +8,7 @@ import {
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ApiError,
+  answerSyncFollowerQuestionsWithAi,
   chatWithPageContext,
   addSlide,
   cancelRegenerateJob,
@@ -32,6 +33,8 @@ import {
   regeneratePageAudio,
   rollbackRegenerate,
   startRegenerateJob,
+  submitSyncFollowerQuestion,
+  toggleSyncDisplayedQuestion,
   updatePdfCoverFromPage,
   updatePdfImageStyleSettings,
   updatePdfTtsSettings,
@@ -57,6 +60,8 @@ import type {
   PdfDetailPage,
   PagePoll,
   RegenJobState,
+  SyncAiAnswer,
+  SyncFollowerQuestion,
 } from '../types';
 
 const POLL_INTERVAL_MS = 3000;
@@ -257,6 +262,12 @@ export default function PlayPage() {
   const [syncEnabled, setSyncEnabled] = useState(false);
   const [syncRole, setSyncRole] = useState<'master' | 'follower'>('follower');
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncFollowerCode, setSyncFollowerCode] = useState('');
+  const [syncFollowerQuestionInput, setSyncFollowerQuestionInput] = useState('');
+  const [syncFollowerQuestions, setSyncFollowerQuestions] = useState<SyncFollowerQuestion[]>([]);
+  const [syncDisplayedQuestionId, setSyncDisplayedQuestionId] = useState<string | null>(null);
+  const [syncAiAnswer, setSyncAiAnswer] = useState<SyncAiAnswer | null>(null);
+  const [syncAiAnswerBusy, setSyncAiAnswerBusy] = useState(false);
   const syncClientIdRef = useRef<string>('');
   const applyingRemoteSyncRef = useRef(false);
   const [imageOnlyFullscreen, setImageOnlyFullscreen] = useState(false);
@@ -622,6 +633,9 @@ export default function PlayPage() {
         const joined = await joinPlaybackSync(pdfId, next);
         if (cancelled) return;
         setSyncRole(joined.role);
+        setSyncFollowerQuestions(joined.follower_questions ?? []);
+        setSyncDisplayedQuestionId(joined.displayed_question_id ?? null);
+        setSyncAiAnswer(joined.ai_answer ?? null);
         setSyncError(null);
       } catch (err) {
         if (cancelled) return;
@@ -659,6 +673,9 @@ export default function PlayPage() {
         try {
           const state = await fetchPlaybackSyncState(pdfId, syncClientIdRef.current);
           setSyncRole(state.role);
+          setSyncFollowerQuestions(state.follower_questions ?? []);
+          setSyncDisplayedQuestionId(state.displayed_question_id ?? null);
+          setSyncAiAnswer(state.ai_answer ?? null);
           if (state.role === 'master') return;
           applyingRemoteSyncRef.current = true;
           const targetIdx = Math.max(0, state.page_number - 1);
@@ -684,6 +701,51 @@ export default function PlayPage() {
     }, 1200);
     return () => window.clearInterval(timer);
   }, [syncEnabled, pdfId]);
+
+  const handleSubmitFollowerQuestion = useCallback(async () => {
+    if (!pdfId || !syncClientIdRef.current) return;
+    const question = syncFollowerQuestionInput.trim();
+    if (!question) return;
+    try {
+      const item = await submitSyncFollowerQuestion(
+        pdfId,
+        syncClientIdRef.current,
+        question,
+        syncFollowerCode.trim() || undefined,
+      );
+      setSyncFollowerQuestions((prev) => [item, ...prev]);
+      setSyncFollowerQuestionInput('');
+      setSyncError(null);
+    } catch (err) {
+      setSyncError(err instanceof ApiError ? err.message : '送出問題失敗');
+    }
+  }, [pdfId, syncFollowerCode, syncFollowerQuestionInput]);
+
+  const handleToggleDisplayedQuestion = useCallback(async () => {
+    if (!pdfId || !syncClientIdRef.current) return;
+    try {
+      const result = await toggleSyncDisplayedQuestion(pdfId, syncClientIdRef.current);
+      setSyncDisplayedQuestionId(result.displayed_question_id);
+      setSyncError(null);
+    } catch (err) {
+      setSyncError(err instanceof ApiError ? err.message : '切換顯示問題失敗');
+    }
+  }, [pdfId]);
+
+  const handleAiAnswerFollowerQuestions = useCallback(async () => {
+    if (!pdfId || !syncClientIdRef.current || syncAiAnswerBusy) return;
+    setSyncAiAnswerBusy(true);
+    try {
+      const answer = await answerSyncFollowerQuestionsWithAi(pdfId, syncClientIdRef.current);
+      setSyncAiAnswer(answer);
+      setSyncDisplayedQuestionId(null);
+      setSyncError(null);
+    } catch (err) {
+      setSyncError(err instanceof ApiError ? err.message : 'AI 回答 follower 問題失敗');
+    } finally {
+      setSyncAiAnswerBusy(false);
+    }
+  }, [pdfId, syncAiAnswerBusy]);
 
   const handleRetry = useCallback(() => {
     const audio = audioRef.current;
@@ -722,6 +784,9 @@ export default function PlayPage() {
       } else if (ev.key === 'ArrowRight') {
         ev.preventDefault();
         goNext();
+      } else if (ev.key.toLowerCase() === 'a' && syncEnabled && syncRole === 'master') {
+        ev.preventDefault();
+        void handleAiAnswerFollowerQuestions();
       } else if (ev.key === 'Escape') {
         if (imageOnlyFullscreen) {
           ev.preventDefault();
@@ -737,7 +802,7 @@ export default function PlayPage() {
     };
     window.addEventListener('keydown', onKey, { capture: true });
     return () => window.removeEventListener('keydown', onKey, { capture: true });
-  }, [playPause, goPrev, goNext, navigate, imageOnlyFullscreen]);
+  }, [playPause, goPrev, goNext, navigate, imageOnlyFullscreen, syncEnabled, syncRole, handleAiAnswerFollowerQuestions]);
 
   const currentScript =
     currentPage != null ? scripts[currentPage.page_number] ?? '' : '';
@@ -1635,6 +1700,10 @@ export default function PlayPage() {
 
   const progressRatio =
     duration > 0 ? Math.min(1, currentTime / duration) * 1000 : 0;
+  const syncDisplayedQuestion = syncDisplayedQuestionId
+    ? syncFollowerQuestions.find((q) => q.id === syncDisplayedQuestionId) ?? null
+    : null;
+  const syncOverlayText = syncAiAnswer?.answer || syncDisplayedQuestion?.question || '';
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
@@ -1656,7 +1725,13 @@ export default function PlayPage() {
           >
             離開全螢幕
           </button>
-          {currentSentence ? (
+          {syncOverlayText ? (
+            <div className="pointer-events-none absolute bottom-4 left-1/2 w-[min(92vw,1000px)] -translate-x-1/2 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+              <div className="mx-auto rounded-md bg-cyan-950/85 px-4 py-3 text-center text-base font-medium leading-relaxed text-cyan-50 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] md:text-lg">
+                <p className="line-clamp-5 whitespace-pre-wrap">{syncOverlayText}</p>
+              </div>
+            </div>
+          ) : currentSentence ? (
             <div className="pointer-events-none absolute bottom-4 left-1/2 w-[min(92vw,1000px)] -translate-x-1/2 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
               <div className="mx-auto rounded-md bg-black/65 px-4 py-2 text-center text-base font-medium leading-relaxed text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] md:text-lg">
                 <p className="line-clamp-2 whitespace-pre-wrap">{currentSentence}</p>
@@ -1793,6 +1868,80 @@ export default function PlayPage() {
             </label>
           </div>
           {syncError ? <div className="mt-1 text-xs text-rose-300">{syncError}</div> : null}
+          {syncEnabled ? (
+            <div className="mx-auto w-full max-w-5xl px-4 pb-3">
+              <div className="rounded-md border border-slate-700 bg-slate-900/80 p-3 text-xs text-slate-200">
+                {syncRole === 'follower' ? (
+                  <div className="grid gap-2 md:grid-cols-[8rem_1fr_auto] md:items-center">
+                    <input
+                      value={syncFollowerCode}
+                      onChange={(e) => setSyncFollowerCode(e.target.value)}
+                      placeholder="代號"
+                      className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-100"
+                      maxLength={80}
+                    />
+                    <input
+                      value={syncFollowerQuestionInput}
+                      onChange={(e) => setSyncFollowerQuestionInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') void handleSubmitFollowerQuestion();
+                      }}
+                      placeholder="輸入要問 master 的問題"
+                      className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-100"
+                      maxLength={500}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void handleSubmitFollowerQuestion()}
+                      disabled={!syncFollowerQuestionInput.trim()}
+                      className="rounded border border-cyan-500/50 bg-cyan-500/15 px-3 py-1 text-cyan-100 disabled:opacity-40"
+                    >
+                      送出問題
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="font-medium text-slate-100">
+                        Follower 問題：{syncFollowerQuestions.length} 題
+                        <span className="ml-2 text-slate-400">按 a 讓 AI 總結並回答</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void handleToggleDisplayedQuestion()}
+                          disabled={syncFollowerQuestions.length === 0}
+                          className="rounded border border-slate-600 px-2 py-1 text-slate-200 disabled:opacity-40"
+                        >
+                          {syncDisplayedQuestionId ? '隱藏問題' : '顯示最新問題'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleAiAnswerFollowerQuestions()}
+                          disabled={syncAiAnswerBusy || syncFollowerQuestions.length === 0}
+                          className="rounded border border-emerald-500/50 bg-emerald-500/15 px-2 py-1 text-emerald-100 disabled:opacity-40"
+                        >
+                          {syncAiAnswerBusy ? 'AI 回答中…' : 'AI 總結回答 (a)'}
+                        </button>
+                      </div>
+                    </div>
+                    {syncAiAnswer ? (
+                      <div className="rounded border border-cyan-500/30 bg-cyan-500/10 p-2 text-cyan-50 whitespace-pre-wrap">
+                        {syncAiAnswer.answer}
+                      </div>
+                    ) : null}
+                    <div className="max-h-28 space-y-1 overflow-auto">
+                      {syncFollowerQuestions.slice(0, 5).map((q) => (
+                        <div key={q.id} className="rounded bg-slate-950/70 px-2 py-1">
+                          <span className="text-cyan-300">{q.code || '匿名'}：</span>{q.question}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : null}
         {readOnlyReason ? (
           <div className="mx-auto w-full max-w-5xl px-4 pb-3">
             <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
