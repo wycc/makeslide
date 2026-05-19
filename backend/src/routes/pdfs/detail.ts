@@ -481,6 +481,16 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     return reply.code(201).send(rowToPoll(row));
   });
 
+  app.delete('/api/pdfs/:id/polls/:pollId', async (request, reply) => {
+    const parsed = PollParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or poll id'));
+    const { id, pollId } = parsed.data;
+    const row = db.prepare(`SELECT id FROM page_polls WHERE id = ? AND pdf_id = ?`).get(pollId, id) as { id: number } | undefined;
+    if (!row) return reply.code(404).send(errorResponse('POLL_NOT_FOUND', `Poll ${pollId} not found`));
+    db.prepare(`DELETE FROM page_polls WHERE id = ? AND pdf_id = ?`).run(pollId, id);
+    return reply.code(204).send();
+  });
+
   app.post('/api/pdfs/:id/polls/:pollId/votes', async (request, reply) => {
     const parsed = PollParamSchema.safeParse(request.params);
     if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or poll id'));
