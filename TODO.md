@@ -1,8 +1,8 @@
 # TODO 狀態摘要
 
-- Third Batch 已無未完成項目；Fourth batch 本次已完成「Realtime poll 在每一個投票問題後加上刪除的按鍵」；仍有其他 Fourth batch 未完成項目。
-- 最後確認時間：2026-05-20 02:01（Asia/Taipei）
-- 最近檢查：已完成 Fourth batch「Realtime poll 在每一個投票問題後加上刪除的按鍵」；實作與提交分支為 feature/fourthbatch-realtime-poll-delete-button-20260520-0200，並已回到 master 更新 TODO 狀態與工作記錄。
+- Third Batch 已無未完成項目；Fourth batch 本次已完成「同步模式的 master 模式在 pause audio 後，過一陣子會自動變成 follower 模式」修正；仍有其他 Fourth batch 未完成項目。
+- 最後確認時間：2026-05-20 02:10（Asia/Taipei）
+- 最近檢查：已完成 Fourth batch「同步模式的 master 模式在 pause audio 後，過一陣子會自動變成 follower 模式，請修正這個問題。」；實作與提交分支為 feature/fourthbatch-sync-master-pause-retain-master-20260520-0209，並已回到 master 更新 TODO 狀態與工作記錄。
 
 # First Batch
 [x] (merge)首次流程導引應該只有在列表是空的時候才出現。（完成分支：feature/onboarding-empty-list-only）
@@ -329,7 +329,7 @@
 [x] 加上一個 audio mute 的 checkbox。主要是在同步模式時，不要撥放聲音。這樣可以在教室中使用，讓所有人可以看螢幕上的資料，但聽公撥 speaker 的聲音。follower 預設會 mute。如果人是在遠端，需要自行打開聲音。（完成分支：feature/fourthbatch-audio-mute-checkbox-20260520-0140）
 [x] 下一頁的圖會被事先載入cache 住，讓切換時會比較順暢（完成分支：feature/fourthbatch-next-slide-image-preload-20260520-0130）
 [x] 整個簡報所有語音檔的長度會在產生時就先全部加起來，當成整個簡報的時間存在資料庫中。並顯示在播放界面中。請放在時間的後面。（完成分支：feature/fourthbatch-total-audio-duration-20260520-0149）
-[ ] 同步模式的 master 模式在 pause audio 後，過一陣子會自動變成 follower 模式，請修正這個問題。
+[x] 同步模式的 master 模式在 pause audio 後，過一陣子會自動變成 follower 模式，請修正這個問題。（完成分支：feature/fourthbatch-sync-master-pause-retain-master-20260520-0209）
 [ ] 在全螢幕模式時，當在上課模式播放一頁完成時，在 master 模式的session 會在字幕的位置顯示請按 space 鍵進入下一頁。
 [ ] 同步模式的 follower 在取消同步模式或離開播放頁面前都要保持不進入背景
 [ ] Realtime poll 在按下開使投票時，所有在全螢幕模式的客戶端都自動顯示投票畫面
@@ -372,3 +372,8 @@
 - 工作內容：完成「Realtime poll 在每一個投票問題後加上刪除的按鍵」；後端新增刪除投票 API，刪除投票時會連同既有投票紀錄一併移除；前端 Realtime Poll 每個投票問題顯示刪除按鈕，刪除前會確認並即時從列表與本機投票狀態移除。
 - 所在分支：feature/fourthbatch-realtime-poll-delete-button-20260520-0200
 - 驗證：npm --prefix backend run build && npm --prefix frontend run build && git diff --check
+
+- 時間：2026-05-20 02:10（Asia/Taipei）
+- 工作內容：完成「同步模式的 master 模式在 pause audio 後，過一陣子會自動變成 follower 模式」修正；播放頁同步模式 master 會保存最新頁碼、播放狀態與播放時間，並在同步輪詢期間即使暫停且時間不再變動也定期送出同步狀態，持續延長後端 master TTL，避免暫停一段時間後被判定過期而變成 follower。
+- 所在分支：feature/fourthbatch-sync-master-pause-retain-master-20260520-0209
+- 驗證：npm --prefix frontend run build && git diff --check -- frontend/src/pages/PlayPage.tsx
