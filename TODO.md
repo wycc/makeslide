@@ -1,8 +1,8 @@
 # TODO 狀態摘要
 
-- Third Batch 已無未完成項目；Fourth batch 本次已完成「master 可以在問題列表後按下開始測驗按鍵」；仍有其他 Fourth batch 未完成項目。
-- 最後確認時間：2026-05-20 06:05（Asia/Taipei）
-- 最近檢查：已完成 Fourth batch「master 可以在問題列表後按下開始測驗按鍵。就會顯示目前上線人的名單，master 可以請所有人確認後按下開始按鍵。follower 就可以開始作答。master 按下結束按鍵後就停止作答，並公佈答案和每一題所有人回答的結果。」；實作與提交分支為 feature/fourthbatch-live-quiz-session-20260520-0559，並已回到 master 更新 TODO 狀態與工作記錄。
+- Third Batch 已無未完成項目；Fourth batch 已無未完成項目；本次已完成 TODO 非標準完成標記收斂。
+- 最後確認時間：2026-05-20 06:40（Asia/Taipei）
+- 最近檢查：已將 Second Batch 兩筆已有完成分支與工作記錄、但仍使用 `[*]` 的項目改為標準 `[x]` 完成標記；實作與提交分支為 feature/todo-completed-marker-normalization-20260520-0640，並已回到 master 更新 TODO 狀態與工作記錄。
 
 # First Batch
 [x] (merge)首次流程導引應該只有在列表是空的時候才出現。（完成分支：feature/onboarding-empty-list-only）
@@ -96,13 +96,13 @@
 [x] (merged)在手機模式上，把播放的進度列中進度條縮短一些讓後線長度可以完整顯示。（完成分支：feature/mobile-progress-bar-time-fit）
 [x] (merged)把顯示類別的選擇記下來，回到首頁時會顯示之前的設定（完成分支：feature/persist-home-category-filter）
 [x] (merged)把左上角的名稱留下 makeslide 就好了（完成分支：feature/header-brand-makeslide-only）
-[*] (merged)在上傳 PDF 時，如果內容不是一個簡報的內容，則請將整個文字取出再請 AI 分頁，不要把一般論文每一頁當成簡報處理。如果自動偵測不好做，至少做成讓使用者手動選擇。（完成分支：feature/pdf-document-import-mode）
+[x] (merged)在上傳 PDF 時，如果內容不是一個簡報的內容，則請將整個文字取出再請 AI 分頁，不要把一般論文每一頁當成簡報處理。如果自動偵測不好做，至少做成讓使用者手動選擇。（完成分支：feature/pdf-document-import-mode）
 [x] (merged)加上自動出考題功能，在 PlayPage 中可以新增考題功能，自動出考題，可以選擇單選或多選。使用者可以提示 AI 有關考題的內容。生成的考題提供讓使用者再手工微調的功能。（完成分支：feature/auto-quiz-generation）
 [x] (merged)加上上課模式，每撥放一頁就停下來。讓老師講解。（完成分支：feature/classroom-pause-after-each-page）
 [x] (merged)加上使用 google 帳號的功能（完成分支：feature/google-account-login）
 [x] (merged)API key 和一些整體設定要存在帳號中，例如 .env。每一個帳號會在一個單獨的目錄中，（完成分支：feature/account-scoped-ai-settings）
 [x] (merged)當帳號的 credit 用完時，要顯示錯誤對話框提示使用者去充值。（完成分支：feature/credit-exhausted-dialog）
-[*] 使用語音產生 realtime poll（完成分支：feature/voice-generated-realtime-poll）
+[x] 使用語音產生 realtime poll（完成分支：feature/voice-generated-realtime-poll）
 [x] (merge)整理 README 文件入口與 Docker 啟動說明（完成分支：feature/docs-entrypoint-cleanup）
 [x] 刪除頁面時若該頁仍有未完成圖片生成，允許刪除並收斂該頁執行中 artifact timing 為取消狀態（完成分支：feature/delete-page-pending-image-generation）
 
@@ -455,3 +455,8 @@
 - 工作內容：完成「master 可以在問題列表後按下開始測驗按鍵」；同步模式後端新增即時測驗 session、線上名單、開始作答、結束公布與 follower 送出答案 API，前端播放頁新增即時測驗面板，master 可貼上題目 JSON 建立/重設測驗、確認上線名單後開始作答並結束公布答案與每題統計，follower 會在同步模式看到作答介面並可送出答案。
 - 所在分支：feature/fourthbatch-live-quiz-session-20260520-0559
 - 驗證：npm --prefix backend run build && npm --prefix frontend run build && git diff --check
+
+- 時間：2026-05-20 06:40（Asia/Taipei）
+- 工作內容：完成「TODO 非標準完成標記收斂」；檢查 master 中 TODO.md 發現 Second Batch 兩筆項目已有完成分支與工作記錄，但仍以 `[*]` 標示，將其統一改為標準 `[x]` 完成標記，讓 TODO 狀態摘要與清單一致顯示目前無未完成項目。
+- 所在分支：feature/todo-completed-marker-normalization-20260520-0640
+- 驗證：grep -n "\\[\\*\\]" TODO.md || true；grep -n "\\[ \\]" TODO.md PendingTask.md || true；git diff --check -- TODO.md
