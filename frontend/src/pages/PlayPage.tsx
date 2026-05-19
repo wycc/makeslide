@@ -1635,6 +1635,8 @@ export default function PlayPage() {
 
   const progressRatio =
     duration > 0 ? Math.min(1, currentTime / duration) * 1000 : 0;
+  const shouldShowClassroomNextHint =
+    classroomMode && classroomAwaitingNext && !finished && (!syncEnabled || syncRole === 'master');
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
@@ -1656,10 +1658,18 @@ export default function PlayPage() {
           >
             離開全螢幕
           </button>
-          {currentSentence ? (
+          {shouldShowClassroomNextHint || currentSentence ? (
             <div className="pointer-events-none absolute bottom-4 left-1/2 w-[min(92vw,1000px)] -translate-x-1/2 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-              <div className="mx-auto rounded-md bg-black/65 px-4 py-2 text-center text-base font-medium leading-relaxed text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] md:text-lg">
-                <p className="line-clamp-2 whitespace-pre-wrap">{currentSentence}</p>
+              <div
+                className={`mx-auto rounded-md px-4 py-2 text-center text-base font-medium leading-relaxed text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] md:text-lg ${
+                  shouldShowClassroomNextHint
+                    ? 'border border-amber-300/50 bg-amber-500/25 text-amber-50'
+                    : 'bg-black/65'
+                }`}
+              >
+                <p className="line-clamp-2 whitespace-pre-wrap">
+                  {shouldShowClassroomNextHint ? '本頁播放完畢，請按 Space 鍵進入下一頁。' : currentSentence}
+                </p>
               </div>
             </div>
           ) : null}
