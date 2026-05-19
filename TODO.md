@@ -1,8 +1,8 @@
 # TODO 狀態摘要
 
-- Third Batch 已無未完成項目；Fourth batch 本次已完成「同步模式 follower 保持螢幕喚醒」功能；仍有其他 Fourth batch 未完成項目。
-- 最後確認時間：2026-05-20 02:50（Asia/Taipei）
-- 最近檢查：已完成 Fourth batch「同步模式的 follower 在取消同步模式或離開播放頁面前都要保持不進入背景」；實作與提交分支為 feature/fourthbatch-follower-wake-lock-20260520-0249，並已回到 master 更新 TODO 狀態與工作記錄。
+- Third Batch 已無未完成項目；Fourth batch 本次已完成「Realtime poll 在全螢幕客戶端自動顯示投票畫面」功能；仍有其他 Fourth batch 未完成項目。
+- 最後確認時間：2026-05-20 03:01（Asia/Taipei）
+- 最近檢查：已完成 Fourth batch「Realtime poll 在按下開始投票時，所有在全螢幕模式的客戶端都自動顯示投票畫面」；實作與提交分支為 feature/fourthbatch-fullscreen-poll-auto-show-20260520-0259，並已回到 master 更新 TODO 狀態與工作記錄。
 
 # First Batch
 [x] (merge)首次流程導引應該只有在列表是空的時候才出現。（完成分支：feature/onboarding-empty-list-only）
@@ -332,7 +332,7 @@
 [x] 同步模式的 master 模式在 pause audio 後，過一陣子會自動變成 follower 模式，請修正這個問題。（完成分支：feature/fourthbatch-sync-master-pause-retain-master-20260520-0209）
 [x] 在全螢幕模式時，當在上課模式播放一頁完成時，在 master 模式的session 會在字幕的位置顯示請按 space 鍵進入下一頁。（完成分支：feature/fourthbatch-fullscreen-classroom-space-hint-20260520-0220）
 [x] 同步模式的 follower 在取消同步模式或離開播放頁面前都要保持不進入背景（完成分支：feature/fourthbatch-follower-wake-lock-20260520-0249）
-[ ] Realtime poll 在按下開使投票時，所有在全螢幕模式的客戶端都自動顯示投票畫面
+[x] Realtime poll 在按下開使投票時，所有在全螢幕模式的客戶端都自動顯示投票畫面（完成分支：feature/fourthbatch-fullscreen-poll-auto-show-20260520-0259）
 [x] Realtime poll 在每一個投票問題後加上刪除的按鍵（完成分支：feature/fourthbatch-realtime-poll-delete-button-20260520-0200）
 [x] realtime poll 加上一個不要顯示投票結果的checkbox。此時大家只看的到自己的選擇。把這個checkbox 關閉後，結果就會顯示出來。（完成分支：feature/fourthbatch-poll-hide-results-20260520-0239）
 [x] 在 PlayPage 中加上一個顯示本頁 qrcode 的按鍵。按下後就在圖片區顯示 qrcode，直到按下撥放鍵或是換頁為止。（完成分支：feature/playpage-current-page-qrcode-20260520-0229）
@@ -397,4 +397,9 @@
 - 時間：2026-05-20 02:50（Asia/Taipei）
 - 工作內容：完成「同步模式的 follower 在取消同步模式或離開播放頁面前都要保持不進入背景」；播放頁將螢幕喚醒條件擴充為「正在播放音訊」或「同步模式 follower」，follower 即使本機靜音/未播放也會持有 Screen Wake Lock，取消同步、切回 master、停止播放或離開頁面時會釋放，並在頁面重新可見時自動重新取得喚醒鎖。
 - 所在分支：feature/fourthbatch-follower-wake-lock-20260520-0249
+- 驗證：npm --prefix frontend run build && git diff --check -- frontend/src/pages/PlayPage.tsx
+
+- 時間：2026-05-20 03:01（Asia/Taipei）
+- 工作內容：完成「Realtime poll 在按下開始投票時，所有在全螢幕模式的客戶端都自動顯示投票畫面」；播放頁在全螢幕模式會持續輪詢本頁投票，偵測到啟用中的投票後自動進入投票狀態，並在全螢幕投影片上覆蓋可直接作答的投票面板。
+- 所在分支：feature/fourthbatch-fullscreen-poll-auto-show-20260520-0259
 - 驗證：npm --prefix frontend run build && git diff --check -- frontend/src/pages/PlayPage.tsx
