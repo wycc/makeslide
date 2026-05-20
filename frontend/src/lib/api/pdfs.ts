@@ -8,6 +8,7 @@ import type {
   RegenJobState,
   RollbackRegenerateResponse,
   SyncJoinResponse,
+  SyncFollowerQuestion,
   SyncStateResponse,
   StartProcessingResponse,
 } from '../../types';
@@ -577,6 +578,35 @@ export async function updatePlaybackSyncState(
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as { ok: boolean; role: 'master'; updated_at: string };
+}
+
+export async function submitSyncFollowerQuestion(
+  id: string,
+  clientId: string,
+  question: string,
+): Promise<SyncFollowerQuestion> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/sync/questions`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ client_id: clientId, question }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as SyncFollowerQuestion;
+}
+
+export async function updateSyncQuestionVisibility(
+  id: string,
+  clientId: string,
+  questionId: string,
+  showOnScreen: boolean,
+): Promise<SyncFollowerQuestion> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/sync/questions/${encodeURIComponent(questionId)}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ client_id: clientId, show_on_screen: showOnScreen }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as SyncFollowerQuestion;
 }
 
 export async function leavePlaybackSync(id: string, clientId: string): Promise<{ ok: boolean }> {

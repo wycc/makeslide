@@ -237,6 +237,14 @@ export interface RollbackRegenerateResponse {
 
 export type SyncRole = 'master' | 'follower';
 
+export interface SyncFollowerQuestion {
+  id: string;
+  client_id: string;
+  question: string;
+  show_on_screen: boolean;
+  created_at: string;
+}
+
 export interface SyncJoinResponse {
   pdf_id: string;
   role: SyncRole;
@@ -246,6 +254,7 @@ export interface SyncJoinResponse {
   is_playing: boolean;
   current_time: number;
   follower_audio_unlocked: boolean;
+  questions: SyncFollowerQuestion[];
   updated_at: string;
   master_expires_at: string | null;
   online_count?: number;
@@ -260,7 +269,7 @@ export interface SyncStateResponse {
   is_playing: boolean;
   current_time: number;
   follower_audio_unlocked: boolean;
-  updated_at: string;
   master_expires_at: string | null;
   online_count?: number;
+  questions?: SyncFollowerQuestion[];
 }
