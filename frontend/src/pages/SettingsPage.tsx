@@ -11,6 +11,7 @@ import {
 } from '../lib/api';
 
 export default function SettingsPage() { 
+  const LOCAL_USER_CODE_KEY = 'makeslide.user_code';
   const navigate = useNavigate();
   const [openaiApiKey, setOpenaiApiKey] = useState('');
   const [geminiApiKey, setGeminiApiKey] = useState('');
@@ -24,6 +25,7 @@ export default function SettingsPage() {
   const [geminiTtsSpeaker2, setGeminiTtsSpeaker2] = useState('');
   const [accountSettingsFile, setAccountSettingsFile] = useState('');
   const [accountId, setAccountId] = useState('default');
+  const [userCode, setUserCode] = useState('');
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
@@ -48,6 +50,8 @@ export default function SettingsPage() {
       setGeminiTtsSpeaker2(s.gemini_tts_speaker2 ?? '');
       setAccountId(s.account_id ?? 'default');
       setAccountSettingsFile(s.account_settings_file ?? '');
+      const cachedUserCode = window.localStorage.getItem(LOCAL_USER_CODE_KEY)?.trim() ?? '';
+      setUserCode((auth?.authenticated ? s.user_code : cachedUserCode) ?? '');
       if (s.has_openai_key || s.has_gemini_key) {
         setMsg('已載入目前 AI 設定。若要更新 API Key，請輸入後儲存。');
       }
@@ -107,7 +111,13 @@ export default function SettingsPage() {
         gemini_tts_model: geminiTtsModel.trim(),
         gemini_tts_speaker1: geminiTtsSpeaker1.trim(),
         gemini_tts_speaker2: geminiTtsSpeaker2.trim(),
+        user_code: authStatus?.authenticated ? userCode.trim() : undefined,
       });
+      if (authStatus?.authenticated) {
+        window.localStorage.removeItem(LOCAL_USER_CODE_KEY);
+      } else {
+        window.localStorage.setItem(LOCAL_USER_CODE_KEY, userCode.trim());
+      }
       setMsg('AI 設定已儲存');
       setOpenaiApiKey('');
       setGeminiApiKey('');
@@ -129,6 +139,8 @@ export default function SettingsPage() {
     openaiLlmModel,
     openaiTtsModel,
     ttsProvider,
+    userCode,
+    authStatus,
   ]);
 
   return (
@@ -199,6 +211,21 @@ export default function SettingsPage() {
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="block text-sm text-slate-300 sm:col-span-2">
+              使用者代碼
+              <input
+                value={userCode}
+                onChange={(e) => setUserCode(e.target.value)}
+                className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                placeholder="例如：teacher-101"
+                maxLength={128}
+              />
+              <span className="mt-1 block text-xs text-slate-500">
+                {authStatus?.authenticated
+                  ? '已登入：儲存到帳號設定。'
+                  : '未登入：儲存到此瀏覽器（Application/Local Storage）。'}
+              </span>
+            </label>
             <label className="block text-sm text-slate-300">
               LLM 供應商
               <select

@@ -41,6 +41,7 @@ export interface SystemAiSettings {
   gemini_tts_model: string;
   gemini_tts_speaker1?: string;
   gemini_tts_speaker2?: string;
+  user_code?: string;
 }
 
 export interface UpdateSystemAiSettingsPayload {
@@ -54,6 +55,7 @@ export interface UpdateSystemAiSettingsPayload {
   gemini_tts_model?: string;
   gemini_tts_speaker1?: string;
   gemini_tts_speaker2?: string;
+  user_code?: string;
 }
 
 export async function getOpenAIKeyStatus(): Promise<OpenAIKeyStatusResponse> {

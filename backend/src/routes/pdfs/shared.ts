@@ -305,6 +305,7 @@ export const UpdateSystemAiSettingsBodySchema = z.object({
   gemini_tts_model: z.string().optional(),
   gemini_tts_speaker1: z.string().optional(),
   gemini_tts_speaker2: z.string().optional(),
+  user_code: z.string().max(128).optional(),
 });
 
 export { RegenerateBatchBodySchema };

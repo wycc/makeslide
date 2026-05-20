@@ -15,6 +15,7 @@ export interface RuntimeAiSettings {
   geminiTtsModel: string;
   geminiTtsSpeaker1: string;
   geminiTtsSpeaker2: string;
+  userCode: string;
 }
 
 export interface AccountSettingsLocation {
@@ -69,6 +70,7 @@ function loadAccountEnvSettings(): Partial<RuntimeAiSettings> {
     geminiTtsModel: values.GEMINI_TTS_MODEL,
     geminiTtsSpeaker1: values.GEMINI_TTS_SPEAKER1,
     geminiTtsSpeaker2: values.GEMINI_TTS_SPEAKER2,
+    userCode: values.USER_CODE,
   };
 }
 
@@ -83,6 +85,7 @@ let runtime: RuntimeAiSettings = {
   geminiTtsModel: config.geminiTtsModel,
   geminiTtsSpeaker1: process.env.GEMINI_TTS_SPEAKER1?.trim() || '',
   geminiTtsSpeaker2: process.env.GEMINI_TTS_SPEAKER2?.trim() || '',
+  userCode: process.env.USER_CODE?.trim() || '',
 };
 
 runtime = {
@@ -111,6 +114,7 @@ export function setRuntimeAiSettings(next: Partial<RuntimeAiSettings>): RuntimeA
   if (typeof next.geminiTtsModel === 'string') process.env.GEMINI_TTS_MODEL = next.geminiTtsModel;
   if (typeof next.geminiTtsSpeaker1 === 'string') process.env.GEMINI_TTS_SPEAKER1 = next.geminiTtsSpeaker1;
   if (typeof next.geminiTtsSpeaker2 === 'string') process.env.GEMINI_TTS_SPEAKER2 = next.geminiTtsSpeaker2;
+  if (typeof next.userCode === 'string') process.env.USER_CODE = next.userCode;
   return { ...runtime };
 }
 
@@ -130,6 +134,7 @@ export async function persistEnvSettings(next: Partial<RuntimeAiSettings>): Prom
     ['GEMINI_TTS_MODEL', next.geminiTtsModel],
     ['GEMINI_TTS_SPEAKER1', next.geminiTtsSpeaker1],
     ['GEMINI_TTS_SPEAKER2', next.geminiTtsSpeaker2],
+    ['USER_CODE', next.userCode],
   ];
 
   for (const [key, raw] of pairs) {

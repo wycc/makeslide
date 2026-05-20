@@ -545,11 +545,14 @@ export async function fetchRegenerateStatus(id: string): Promise<RegenJobState> 
   return (await resp.json()) as RegenJobState;
 }
 
-export async function joinPlaybackSync(id: string, clientId: string): Promise<SyncJoinResponse> {
+export async function joinPlaybackSync(id: string, clientId: string, followerCode?: string): Promise<SyncJoinResponse> {
+  const body: { client_id: string; follower_code?: string } = { client_id: clientId };
+  const code = followerCode?.trim();
+  if (code) body.follower_code = code;
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/sync/join`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ client_id: clientId }),
+    body: JSON.stringify(body),
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as SyncJoinResponse;

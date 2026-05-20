@@ -24,6 +24,8 @@ import {
   resolveShareToken,
   fetchPlaybackSyncState,
   getImagePromptTemplates,
+  getAuthStatus,
+  getSystemAiSettings,
   joinPlaybackSync,
   leavePlaybackSync,
   fetchRegenerateStatus,
@@ -63,6 +65,7 @@ import type {
 
 const POLL_INTERVAL_MS = 3000;
 const AUDIO_RETRY_DELAY_MS = 800;
+const LOCAL_USER_CODE_KEY = 'makeslide.user_code';
 const SENTENCE_MATCH_RE = /[^。！？!?；;\n]+[。！？!?；;]?|\n+/g;
 const TONE_MARKER_RE = /\[\[\s*[^\]]+\s*\]\]/g;
 
@@ -268,6 +271,7 @@ export default function PlayPage() {
   const [audioMuted, setAudioMuted] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [followerAudioUnlocked, setFollowerAudioUnlocked] = useState(false);
+  const [syncFollowerCode, setSyncFollowerCode] = useState('');
   const syncClientIdRef = useRef<string>('');
   const applyingRemoteSyncRef = useRef(false);
   const previousSyncRoleRef = useRef<'master' | 'follower' | null>(null);
@@ -689,7 +693,46 @@ export default function PlayPage() {
     let cancelled = false;
     void (async () => {
       try {
-        const joined = await joinPlaybackSync(pdfId, next);
+        const legacyStorageCodeKey = `makeslide.sync.followerCode.${pdfId}`;
+        const savedGlobalCode = window.localStorage.getItem(LOCAL_USER_CODE_KEY)?.trim() || '';
+        const savedLegacyCode = window.localStorage.getItem(legacyStorageCodeKey)?.trim() || '';
+        let savedCode = savedGlobalCode || savedLegacyCode;
+
+        if (!savedCode) {
+          try {
+            const auth = await getAuthStatus();
+            if (auth.authenticated) {
+              const settings = await getSystemAiSettings();
+              savedCode = settings.user_code?.trim() || '';
+            }
+          } catch {
+            // non-fatal: fallback to prompt flow
+          }
+        }
+
+        let joined;
+        try {
+          joined = await joinPlaybackSync(pdfId, next, savedCode || undefined);
+        } catch (err) {
+          if (err instanceof ApiError && err.code === 'SYNC_FOLLOWER_CODE_REQUIRED') {
+            const enteredCode = window.prompt('請輸入你的代號才能進入 follower 同步模式', savedCode)?.trim() || '';
+            if (!enteredCode) {
+              throw new ApiError('進入 follower 同步模式需要輸入代號', 'SYNC_FOLLOWER_CODE_REQUIRED', 400);
+            }
+            window.localStorage.setItem(legacyStorageCodeKey, enteredCode);
+            window.localStorage.setItem(LOCAL_USER_CODE_KEY, enteredCode);
+            joined = await joinPlaybackSync(pdfId, next, enteredCode);
+          } else {
+            throw err;
+          }
+        }
+
+        const resolvedFollowerCode = joined.follower_code?.trim() || '';
+        if (resolvedFollowerCode) {
+          window.localStorage.setItem(legacyStorageCodeKey, resolvedFollowerCode);
+          window.localStorage.setItem(LOCAL_USER_CODE_KEY, resolvedFollowerCode);
+        }
+        setSyncFollowerCode(resolvedFollowerCode);
         if (cancelled) return;
         setSyncRole(joined.role);
         setFollowerAudioUnlocked(joined.follower_audio_unlocked);
@@ -746,6 +789,7 @@ export default function PlayPage() {
           }
           const state = await fetchPlaybackSyncState(pdfId, syncClientIdRef.current);
           setSyncRole(state.role);
+          setSyncFollowerCode(state.follower_code ?? '');
           setFollowerAudioUnlocked(state.follower_audio_unlocked);
           if (state.role === 'master') return;
           if (!state.follower_audio_unlocked) {
@@ -2055,6 +2099,11 @@ export default function PlayPage() {
               同步模式
               {syncEnabled ? `(${syncRole === 'master' ? 'master' : 'follower'})` : ''}
             </label>
+            {syncEnabled && syncRole === 'follower' && syncFollowerCode ? (
+              <span className="ml-1 rounded-full border border-slate-700 px-2 py-0.5 text-[11px] text-slate-300">
+                代號：{syncFollowerCode}
+              </span>
+            ) : null}
           </div>
           {syncError ? <div className="mt-1 text-xs text-rose-300">{syncError}</div> : null}
         {readOnlyReason ? (
