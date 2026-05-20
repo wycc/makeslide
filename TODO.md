@@ -1,8 +1,8 @@
 # TODO 狀態摘要
 
 - Third Batch 已無未完成項目；Fourth batch 已無未完成項目；本次重新確認 master TODO.md 無未完成核取項目。
-- 最後確認時間：2026-05-20 08:19（Asia/Taipei）
-- 最近檢查：重新檢查 master 中 TODO.md 與 PendingTask.md，未發現行首 `[ ]` 或 `[*]` 未完成核取項目；本次確認保存分支為 feature/todo-no-pending-recheck-20260520-0819，並回到 master 更新 TODO 狀態與工作記錄。
+- 最後確認時間：2026-05-20 22:31（Asia/Taipei）
+- 最近檢查：完成 Fifth batch「realtime poll 在全螢幕時，應該只有在 master 有打開 realtime poll 的功能時才會出現」，完成分支為 feature/fifthbatch-fullscreen-poll-master-only-20260520-2230，並回到 master 更新 TODO 狀態與工作記錄。
 
 # First Batch
 [x] (merge)首次流程導引應該只有在列表是空的時候才出現。（完成分支：feature/onboarding-empty-list-only）
@@ -519,8 +519,17 @@
 - 驗證：git show master:TODO.md | grep -nE '^[[:space:]]*[-*]?[[:space:]]*\[[[:space:]]\]|^[[:space:]]*[-*]?[[:space:]]*\[\*\]' || true；git show master:PendingTask.md | grep -nE '^[[:space:]]*[-*]?[[:space:]]*\[[[:space:]]\]|^[[:space:]]*[-*]?[[:space:]]*\[\*\]' || true；git diff --check -- docs/todo-rechecks/2026-05-20-0819.md；git diff --check -- TODO.md
 
 # Fifth batch
-[ ] realtime poll 加上一個不要顯示投票結果的checkbox。此時大家只看的到自己的選擇。把這個checkbox 關閉後，結果就會顯示出來。
+[x] realtime poll 在全螢幕時，應該只有在 master 有打開 realtime poll 的功能時才會出現（完成分支：feature/fifthbatch-fullscreen-poll-master-only-20260520-2230）
+[ ] 當同步打開時，master 的本機靜音模式應該是關閉革
 [ ] master 可以按下 a 鍵讓 AI 來總結並回答 follower 的問題
 [ ] 提供自動產生測驗的功能，我們會進入一個單獨的測驗生成畫面。讓老師下提示詞請 AI 產生測驗。老師可以重複下指令修改問題列表，或是直接手動修改問題。問題列表可以被存下來多次使用。
 [ ] master 可以在問題列表後按下開始測驗按鍵。就會顯示目前上線人的名單，master 可以請所有人確認後按下開始按鍵。follower 就可以開始作答。master 按下結束按鍵後就停止作答，並公佈答案和每一題所有人回答的結果。
 [ ] 提供一個產生 PDF 功能，會產生一個包括整個簡報和簡報逐字檔。方便學生下載後使用其它工具使用。
+[ ] follower 在全螢幕時，應該有一個題問，按鍵打開提供對話框
+
+## Fifth batch 工作記錄
+
+- 時間：2026-05-20 22:31（Asia/Taipei）
+- 工作內容：完成「realtime poll 在全螢幕時，應該只有在 master 有打開 realtime poll 的功能時才會出現」；調整播放頁全螢幕投票自動偵測條件，只有同步模式開啟時才會在全螢幕輪詢 active poll 並自動顯示投票覆蓋層，避免一般全螢幕瀏覽因既有 active poll 自動跳出投票畫面。
+- 所在分支：feature/fifthbatch-fullscreen-poll-master-only-20260520-2230
+- 驗證：npm --prefix frontend run build && git diff --check -- frontend/src/pages/PlayPage.tsx
