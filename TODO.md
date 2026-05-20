@@ -1,8 +1,8 @@
 # TODO 狀態摘要
 
 - Third Batch 已無未完成項目；Fourth batch 已無未完成項目；本次重新確認 master TODO.md 無未完成核取項目。
-- 最後確認時間：2026-05-20 22:31（Asia/Taipei）
-- 最近檢查：完成並修正 Fifth batch「realtime poll 在全螢幕時，應該只有在 master 有打開 realtime poll 的功能時才會出現」，完成分支為 feature/fifthbatch-fullscreen-poll-master-only-20260520-2230；進入全螢幕不會自動打開 realtime poll。
+- 最後確認時間：2026-05-20 22:43（Asia/Taipei）
+- 最近檢查：完成並修正 Fifth batch「當同步打開時，master 的本機靜音模式應該是關閉」，完成分支為 feature/fifthbatch-sync-master-unmuted-20260520-2242；同步模式成為 master 時會自動解除本機靜音。
 
 # First Batch
 [x] (merge)首次流程導引應該只有在列表是空的時候才出現。（完成分支：feature/onboarding-empty-list-only）
@@ -520,7 +520,7 @@
 
 # Fifth batch
 [x] realtime poll 在全螢幕時，應該只有在 master 有打開 realtime poll 的功能時才會出現（完成分支：feature/fifthbatch-fullscreen-poll-master-only-20260520-2230）
-[ ] 當同步打開時，master 的本機靜音模式應該是關閉革
+[x] 當同步打開時，master 的本機靜音模式應該是關閉（完成分支：feature/fifthbatch-sync-master-unmuted-20260520-2242）
 [ ] master 可以按下 a 鍵讓 AI 來總結並回答 follower 的問題
 [ ] 提供自動產生測驗的功能，我們會進入一個單獨的測驗生成畫面。讓老師下提示詞請 AI 產生測驗。老師可以重複下指令修改問題列表，或是直接手動修改問題。問題列表可以被存下來多次使用。
 [ ] master 可以在問題列表後按下開始測驗按鍵。就會顯示目前上線人的名單，master 可以請所有人確認後按下開始按鍵。follower 就可以開始作答。master 按下結束按鍵後就停止作答，並公佈答案和每一題所有人回答的結果。
@@ -533,3 +533,8 @@
 - 工作內容：完成「realtime poll 在全螢幕時，應該只有在 master 有打開 realtime poll 的功能時才會出現」；修正播放頁投票輪詢條件，只有老師/使用者明確開始投票後才輪詢並顯示 active poll，進入全螢幕本身不會自動啟動或打開 realtime poll，避免一般全螢幕瀏覽因既有 active poll 自動跳出投票畫面。
 - 所在分支：feature/fifthbatch-fullscreen-poll-master-only-20260520-2230
 - 驗證：npm --prefix frontend run build && git diff --check -- frontend/src/pages/PlayPage.tsx；確認 pollStarted 為 false 時進入全螢幕不會觸發 fetchPagePolls 或 setPollStarted(true)
+
+- 時間：2026-05-20 22:43（Asia/Taipei）
+- 工作內容：完成「當同步打開時，master 的本機靜音模式應該是關閉」；播放頁同步模式在加入、輪詢或角色切換判定為 master 時會自動將本機音訊靜音關閉，並保留 follower 被老師鎖定時強制靜音的行為。
+- 所在分支：feature/fifthbatch-sync-master-unmuted-20260520-2242
+- 驗證：npm --prefix frontend run build && git diff --check -- frontend/src/pages/PlayPage.tsx
