@@ -268,7 +268,6 @@ export default function PlayPage() {
   const [audioMuted, setAudioMuted] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [followerAudioUnlocked, setFollowerAudioUnlocked] = useState(false);
-  const [audioMuted, setAudioMuted] = useState(false);
   const syncClientIdRef = useRef<string>('');
   const applyingRemoteSyncRef = useRef(false);
   const previousSyncRoleRef = useRef<'master' | 'follower' | null>(null);
@@ -2449,8 +2448,11 @@ export default function PlayPage() {
               <input
                 type="checkbox"
                 checked={audioMuted}
-                disabled={syncEnabled && syncRole === 'follower' && !followerAudioUnlocked}
-                onChange={(event) => setAudioMuted(event.target.checked)}
+                disabled={syncEnabled && syncRole === 'follower'}
+                onChange={(event) => {
+                  if (syncEnabled && syncRole === 'follower') return;
+                  setAudioMuted(event.target.checked);
+                }}
               />
               本機靜音
             </label>
