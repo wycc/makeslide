@@ -1,8 +1,8 @@
 # TODO 狀態摘要
 
-- Third Batch 已無未完成項目；Fourth batch 已無未完成項目；Fifth batch 尚餘「播放頁音訊/模式設定整合成狀態列」未完成。
-- 最後確認時間：2026-05-20 23:06（Asia/Taipei）
-- 最近檢查：完成 Fifth batch「follower 在全螢幕時，應該有一個題問，按鍵打開提供對話框」，實作分支為 feature/fifthbatch-fullscreen-follower-question-dialog-20260520-2304。
+- Third Batch 已無未完成項目；Fourth batch 已無未完成項目；Fifth batch 已無未完成項目。
+- 最後確認時間：2026-05-20 23:17（Asia/Taipei）
+- 最近檢查：完成 Fifth batch「播放頁中的音訊/學生端音訊控制/上課模式/音訊靜音等設定整合成一個狀態列，在最後加上一個設定按鍵，按下後才層開成現在的界面」，實作分支為 feature/fifthbatch-playpage-audio-statusbar-20260520-2315。
 
 # First Batch
 [x] (merge)首次流程導引應該只有在列表是空的時候才出現。（完成分支：feature/onboarding-empty-list-only）
@@ -344,7 +344,7 @@
 [x] (merge)同步模式的 follower 在取消同步模式或離開播放頁面前都要保持不進入背景（完成分支：feature/fourthbatch-follower-wake-lock-20260520-0249）
 [x] (merge)Realtime poll 在按下開使投票時，所有在全螢幕模式的客戶端都自動顯示投票畫面（完成分支：feature/fourthbatch-fullscreen-poll-auto-show-20260520-0259）
 [x] (merge)Realtime poll 在每一個投票問題後加上刪除的按鍵（完成分支：feature/fourthbatch-realtime-poll-delete-button-20260520-0200）
-[*] (merge)realtim  poll 加上一個不要顯示投票結果的checkbox。此時大家只看的到自己的選擇。把這個checkbox 關閉後，結果就會顯示出來。（完成分支：feature/fourthbatch-poll-hide-results-20260520-0239）
+[x] (merge)realtim  poll 加上一個不要顯示投票結果的checkbox。此時大家只看的到自己的選擇。把這個checkbox 關閉後，結果就會顯示出來。（完成分支：feature/fourthbatch-poll-hide-results-20260520-0239）
 [x] (merge) 在 PlayPage 中加上一個顯示本頁 qrcode 的按鍵。按下後就在圖片區顯示 qrcode，直到按下撥放鍵或是換頁為止。（完成分支：feature/playpage-current-page-qrcode-20260520-0229）
 [x] 老師端(master) 強制所有學生靜音 / 解鎖自行播放（完成分支：feature/fourthbatch-master-force-follower-audio-lock-20260520-0320）
 [x] 所有進入 follower 模式的 session 都會強迫輸入一個代號（完成分支：feature/fourthbatch-follower-require-code-20260520-0451）
@@ -526,7 +526,7 @@
 [x] master 可以在問題列表後按下開始測驗按鍵。就會顯示目前上線人的名單，master 可以請所有人確認後按下開始按鍵。follower 就可以開始作答。master 按下結束按鍵後就停止作答，並公佈答案和每一題所有人回答的結果。（完成分支：feature/fourthbatch-live-quiz-session-20260520-0559；清單同步分支：feature/fifthbatch-todo-sync-existing-completions-20260520-2254）
 [x] 提供一個產生 PDF 功能，會產生一個包括整個簡報和簡報逐字檔。方便學生下載後使用其它工具使用。（完成分支：feature/fourthbatch-pdf-handout-export-20260520-0540；清單同步分支：feature/fifthbatch-todo-sync-existing-completions-20260520-2254）
 [x] follower 在全螢幕時，應該有一個題問，按鍵打開提供對話框（完成分支：feature/fifthbatch-fullscreen-follower-question-dialog-20260520-2304）
-[ ] 播放頁中的音訊/學生端音訊控制/上課模式/音訊靜音等設定整合成一個狀態列，在最後加上一個設定按鍵，按下後才層開成現在的界面
+[x] 播放頁中的音訊/學生端音訊控制/上課模式/音訊靜音等設定整合成一個狀態列，在最後加上一個設定按鍵，按下後才層開成現在的界面（完成分支：feature/fifthbatch-playpage-audio-statusbar-20260520-2315）
 ## Fifth batch 工作記錄
 
 - 時間：2026-05-20 22:31（Asia/Taipei）
@@ -547,4 +547,9 @@
 - 時間：2026-05-20 23:06（Asia/Taipei）
 - 工作內容：完成「follower 在全螢幕時，應該有一個題問，按鍵打開提供對話框」；播放頁全螢幕同步 follower 角色會顯示「提問」按鍵，按下後開啟對話框，可輸入問題並送到 master 端既有 follower 提問列表，送出成功後自動關閉對話框。
 - 所在分支：feature/fifthbatch-fullscreen-follower-question-dialog-20260520-2304
+- 驗證：npm --prefix frontend run build && git diff --check -- frontend/src/pages/PlayPage.tsx
+
+- 時間：2026-05-20 23:17（Asia/Taipei）
+- 工作內容：完成「播放頁中的音訊/學生端音訊控制/上課模式/音訊靜音等設定整合成一個狀態列，在最後加上一個設定按鍵，按下後才層開成現在的界面」；播放頁控制列新增播放設定狀態列，集中顯示本機音訊、上課模式與同步模式學生端音訊狀態，原本音訊、學生端音訊控制與上課模式詳細設定改由狀態列右側「設定」按鍵展開。
+- 所在分支：feature/fifthbatch-playpage-audio-statusbar-20260520-2315
 - 驗證：npm --prefix frontend run build && git diff --check -- frontend/src/pages/PlayPage.tsx
