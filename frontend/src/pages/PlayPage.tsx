@@ -13,6 +13,7 @@ import {
   cancelRegenerateJob,
   clearPageChatHistory,
   createPagePoll,
+  createVoicePagePoll,
   createPdfShare,
   deleteSlide,
   fetchPdfDetail,
@@ -233,6 +234,11 @@ export default function PlayPage() {
   const [pollOptionsText, setPollOptionsText] = useState('同意\n不同意');
   const [pollBusy, setPollBusy] = useState(false);
   const [pollError, setPollError] = useState<string | null>(null);
+  const [voicePollPrompt, setVoicePollPrompt] = useState('');
+  const [voicePollRecording, setVoicePollRecording] = useState(false);
+  const [voicePollAudio, setVoicePollAudio] = useState<Blob | null>(null);
+  const [voicePollAudioUrl, setVoicePollAudioUrl] = useState('');
+  const [voicePollTranscript, setVoicePollTranscript] = useState('');
   const [pollVotes, setPollVotes] = useState<Record<number, number>>({});
   const [pollSettingsOpen, setPollSettingsOpen] = useState(false);
   const [pollStarted, setPollStarted] = useState(false);
@@ -273,6 +279,9 @@ export default function PlayPage() {
   const prefetchedAudioRef = useRef<HTMLAudioElement | null>(null);
   const prefetchedImageRef = useRef<HTMLImageElement | null>(null);
   const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
+  const voicePollRecorderRef = useRef<MediaRecorder | null>(null);
+  const voicePollStreamRef = useRef<MediaStream | null>(null);
+  const voicePollChunksRef = useRef<Blob[]>([]);
 
   const acquireWakeLock = useCallback(async () => {
     if (typeof navigator === 'undefined') return;
@@ -899,6 +908,77 @@ export default function PlayPage() {
       setPollBusy(false);
     }
   }, [pdfId, currentPage, pollQuestion, pollOptionsText]);
+
+  const stopVoicePollTracks = useCallback(() => {
+    voicePollStreamRef.current?.getTracks().forEach((track) => track.stop());
+    voicePollStreamRef.current = null;
+  }, []);
+
+  const handleStartVoicePollRecording = useCallback(async () => {
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setPollError('此瀏覽器不支援 WebAudio 錄音');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : undefined;
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      voicePollChunksRef.current = [];
+      voicePollStreamRef.current = stream;
+      voicePollRecorderRef.current = recorder;
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) voicePollChunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        const blob = new Blob(voicePollChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        setVoicePollAudio(blob);
+        setVoicePollAudioUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return URL.createObjectURL(blob);
+        });
+        setVoicePollRecording(false);
+        stopVoicePollTracks();
+      };
+      recorder.start();
+      setVoicePollRecording(true);
+      setPollError(null);
+    } catch (err) {
+      stopVoicePollTracks();
+      setVoicePollRecording(false);
+      setPollError(err instanceof Error ? `無法開始錄音：${err.message}` : '無法開始錄音');
+    }
+  }, [stopVoicePollTracks]);
+
+  const handleStopVoicePollRecording = useCallback(() => {
+    const recorder = voicePollRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') recorder.stop();
+  }, []);
+
+  const handleCreateVoicePoll = useCallback(async () => {
+    if (!pdfId || !currentPage || !voicePollAudio) return;
+    setPollBusy(true);
+    setPollError(null);
+    try {
+      const res = await createVoicePagePoll(pdfId, currentPage.page_number, voicePollAudio, voicePollPrompt);
+      setPagePolls((prev) => [res.poll, ...prev]);
+      setVoicePollTranscript(res.transcript);
+      setVoicePollAudio(null);
+      setVoicePollAudioUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return '';
+      });
+      setPollStarted(true);
+    } catch (err) {
+      setPollError(err instanceof ApiError ? err.message : '用語音建立投票失敗');
+    } finally {
+      setPollBusy(false);
+    }
+  }, [pdfId, currentPage, voicePollAudio, voicePollPrompt]);
+
+  useEffect(() => () => {
+    stopVoicePollTracks();
+    if (voicePollAudioUrl) URL.revokeObjectURL(voicePollAudioUrl);
+  }, [stopVoicePollTracks, voicePollAudioUrl]);
 
   const handleStartPoll = useCallback(() => {
     setPollStarted(true);
@@ -2549,6 +2629,37 @@ export default function PlayPage() {
                     >
                       {pollBusy ? '處理中…' : '建立並開始本頁投票'}
                     </button>
+                    <div className="mt-3 rounded-md border border-slate-800 bg-slate-950/60 p-2">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <p className="text-xs font-medium text-slate-300">WebAudio 語音產生投票</p>
+                        <button
+                          type="button"
+                          onClick={() => voicePollRecording ? handleStopVoicePollRecording() : void handleStartVoicePollRecording()}
+                          disabled={pollBusy || !currentPage}
+                          className={`rounded-md border px-2 py-1 text-[11px] disabled:cursor-not-allowed disabled:opacity-40 ${voicePollRecording ? 'border-rose-400/60 bg-rose-500/15 text-rose-200' : 'border-emerald-400/60 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25'}`}
+                        >
+                          {voicePollRecording ? '停止錄音' : '開始錄音'}
+                        </button>
+                      </div>
+                      <textarea
+                        value={voicePollPrompt}
+                        onChange={(e) => setVoicePollPrompt(e.target.value)}
+                        rows={2}
+                        maxLength={1000}
+                        placeholder="可選：補充希望 AI 產生投票的方向"
+                        className="mb-2 w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 outline-none ring-cyan-500/40 placeholder:text-slate-500 focus:ring"
+                      />
+                      {voicePollAudioUrl ? <audio controls src={voicePollAudioUrl} className="mb-2 w-full" /> : null}
+                      <button
+                        type="button"
+                        onClick={() => void handleCreateVoicePoll()}
+                        disabled={pollBusy || !currentPage || !voicePollAudio || voicePollRecording}
+                        className="w-full rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-xs text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {pollBusy ? '處理中…' : '用錄音建立並開始投票'}
+                      </button>
+                      {voicePollTranscript ? <p className="mt-2 text-[11px] text-slate-400">最近轉寫：{voicePollTranscript}</p> : null}
+                    </div>
                   </div>
                 )}
                 {pollError ? <p className="text-xs text-rose-300">{pollError}</p> : null}
