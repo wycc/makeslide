@@ -2,7 +2,7 @@
 
 - Third Batch 已無未完成項目；Fourth batch 已無未完成項目；本次重新確認 master TODO.md 無未完成核取項目。
 - 最後確認時間：2026-05-20 22:31（Asia/Taipei）
-- 最近檢查：完成 Fifth batch「realtime poll 在全螢幕時，應該只有在 master 有打開 realtime poll 的功能時才會出現」，完成分支為 feature/fifthbatch-fullscreen-poll-master-only-20260520-2230，並回到 master 更新 TODO 狀態與工作記錄。
+- 最近檢查：完成並修正 Fifth batch「realtime poll 在全螢幕時，應該只有在 master 有打開 realtime poll 的功能時才會出現」，完成分支為 feature/fifthbatch-fullscreen-poll-master-only-20260520-2230；進入全螢幕不會自動打開 realtime poll。
 
 # First Batch
 [x] (merge)首次流程導引應該只有在列表是空的時候才出現。（完成分支：feature/onboarding-empty-list-only）
@@ -526,10 +526,10 @@
 [ ] master 可以在問題列表後按下開始測驗按鍵。就會顯示目前上線人的名單，master 可以請所有人確認後按下開始按鍵。follower 就可以開始作答。master 按下結束按鍵後就停止作答，並公佈答案和每一題所有人回答的結果。
 [ ] 提供一個產生 PDF 功能，會產生一個包括整個簡報和簡報逐字檔。方便學生下載後使用其它工具使用。
 [ ] follower 在全螢幕時，應該有一個題問，按鍵打開提供對話框
-
+[ ] 播放頁中的音訊/學生端音訊控制/上課模式/音訊靜音等設定整合成一個狀態列，在最後加上一個設定按鍵，按下後才層開成現在的界面
 ## Fifth batch 工作記錄
 
 - 時間：2026-05-20 22:31（Asia/Taipei）
-- 工作內容：完成「realtime poll 在全螢幕時，應該只有在 master 有打開 realtime poll 的功能時才會出現」；調整播放頁全螢幕投票自動偵測條件，只有同步模式開啟時才會在全螢幕輪詢 active poll 並自動顯示投票覆蓋層，避免一般全螢幕瀏覽因既有 active poll 自動跳出投票畫面。
+- 工作內容：完成「realtime poll 在全螢幕時，應該只有在 master 有打開 realtime poll 的功能時才會出現」；修正播放頁投票輪詢條件，只有老師/使用者明確開始投票後才輪詢並顯示 active poll，進入全螢幕本身不會自動啟動或打開 realtime poll，避免一般全螢幕瀏覽因既有 active poll 自動跳出投票畫面。
 - 所在分支：feature/fifthbatch-fullscreen-poll-master-only-20260520-2230
-- 驗證：npm --prefix frontend run build && git diff --check -- frontend/src/pages/PlayPage.tsx
+- 驗證：npm --prefix frontend run build && git diff --check -- frontend/src/pages/PlayPage.tsx；確認 pollStarted 為 false 時進入全螢幕不會觸發 fetchPagePolls 或 setPollStarted(true)
