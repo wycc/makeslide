@@ -17,6 +17,9 @@ interface SyncSessionState {
   currentTime: number;
   followerAudioUnlocked: boolean;
   realtimePollStarted: boolean;
+  quizMode: boolean;
+  activeQuizId: number | null;
+  quizShowAnswers: boolean;
   followerQuestions: SyncFollowerQuestion[];
   displayedQuestionId: string | null;
   aiAnswer: SyncAiAnswer | null;
@@ -85,6 +88,9 @@ function buildStateResponse(session: SyncSessionState, pdfId: string, role: Sync
     current_time: session.currentTime,
     follower_audio_unlocked: session.followerAudioUnlocked,
     realtime_poll_started: session.realtimePollStarted,
+    quiz_mode: session.quizMode,
+    active_quiz_id: session.activeQuizId,
+    quiz_show_answers: session.quizShowAnswers,
     follower_questions: followerQuestions,
     questions: followerQuestions,
     displayed_question_id: session.displayedQuestionId,
@@ -116,6 +122,9 @@ function getSession(pdfId: string): SyncSessionState {
     currentTime: 0,
     followerAudioUnlocked: false,
     realtimePollStarted: false,
+    quizMode: false,
+    activeQuizId: null,
+    quizShowAnswers: false,
     followerQuestions: [],
     displayedQuestionId: null,
     aiAnswer: null,
@@ -167,6 +176,9 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     current_time: z.number().min(0),
     follower_audio_unlocked: z.boolean().optional(),
     realtime_poll_started: z.boolean().optional(),
+    quiz_mode: z.boolean().optional(),
+    active_quiz_id: z.number().int().positive().nullable().optional(),
+    quiz_show_answers: z.boolean().optional(),
   });
   const StateQuerySchema = z.object({ client_id: z.string().trim().min(1).max(128).optional() });
 
@@ -216,6 +228,9 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       current_time: currentTime,
       follower_audio_unlocked: followerAudioUnlocked,
       realtime_poll_started: realtimePollStarted,
+      quiz_mode: quizMode,
+      active_quiz_id: activeQuizId,
+      quiz_show_answers: quizShowAnswers,
     } = parsedBody.data;
     const session = getSession(id);
     touchClient(session, clientId);
@@ -231,6 +246,15 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     session.currentTime = currentTime;
     if (typeof followerAudioUnlocked === 'boolean') session.followerAudioUnlocked = followerAudioUnlocked;
     if (typeof realtimePollStarted === 'boolean') session.realtimePollStarted = realtimePollStarted;
+    if (typeof activeQuizId !== 'undefined') session.activeQuizId = activeQuizId;
+    if (typeof quizShowAnswers === 'boolean') session.quizShowAnswers = quizShowAnswers;
+    if (typeof quizMode === 'boolean') {
+      session.quizMode = quizMode;
+      if (!quizMode) {
+        session.activeQuizId = null;
+        session.quizShowAnswers = false;
+      }
+    }
     session.updatedAt = nowIso();
     return reply.send({ ok: true, role: 'master', updated_at: session.updatedAt });
   });
@@ -269,6 +293,9 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       session.currentTime = 0;
       session.followerAudioUnlocked = false;
       session.realtimePollStarted = false;
+      session.quizMode = false;
+      session.activeQuizId = null;
+      session.quizShowAnswers = false;
       session.displayedQuestionId = null;
       session.aiAnswer = null;
       session.updatedAt = nowIso();

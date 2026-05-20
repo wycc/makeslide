@@ -292,6 +292,9 @@ export interface SyncJoinResponse {
   current_time: number;
   follower_audio_unlocked: boolean;
   realtime_poll_started: boolean;
+  quiz_mode: boolean;
+  active_quiz_id: number | null;
+  quiz_show_answers: boolean;
   follower_questions: SyncFollowerQuestion[];
   questions: SyncFollowerQuestion[];
   displayed_question_id: string | null;
@@ -311,6 +314,9 @@ export interface SyncStateResponse {
   current_time: number;
   follower_audio_unlocked: boolean;
   realtime_poll_started: boolean;
+  quiz_mode: boolean;
+  active_quiz_id: number | null;
+  quiz_show_answers: boolean;
   follower_questions: SyncFollowerQuestion[];
   displayed_question_id: string | null;
   ai_answer: SyncAiAnswer | null;

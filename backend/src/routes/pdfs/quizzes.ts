@@ -15,7 +15,12 @@ const QuizQuestionSchema = z.object({
   answer_indices: z.array(z.number().int().min(0).max(7)).min(1).max(8),
   explanation: z.string().trim().max(1200).optional().default(''),
 });
+const GeneratedQuizQuestionSchema = QuizQuestionSchema.extend({
+  id: z.string().trim().min(1).max(80).optional(),
+});
 const QuizQuestionsSchema = z.array(QuizQuestionSchema).min(1).max(50);
+const ExistingQuizQuestionsSchema = z.array(QuizQuestionSchema).max(50);
+const GeneratedQuizQuestionsSchema = z.array(GeneratedQuizQuestionSchema).min(1).max(50);
 
 const SaveQuizBodySchema = z.object({
   title: z.string().trim().min(1).max(200),
@@ -25,7 +30,7 @@ const SaveQuizBodySchema = z.object({
 
 const GenerateQuizBodySchema = z.object({
   prompt: z.string().trim().min(1).max(4000),
-  existing_questions: QuizQuestionsSchema.optional().default([]),
+  existing_questions: ExistingQuizQuestionsSchema.optional().default([]),
 });
 
 const QuizParamSchema = z.object({
@@ -81,13 +86,13 @@ async function readPageContext(pdfId: string, pageCount: number | null): Promise
 }
 
 function normalizeQuestions(input: unknown) {
-  const parsed = QuizQuestionsSchema.parse(input);
+  const parsed = GeneratedQuizQuestionsSchema.parse(input);
   return parsed.map((q, idx) => {
     const maxIndex = q.options.length - 1;
     const answers = Array.from(new Set(q.answer_indices.filter((answer) => answer >= 0 && answer <= maxIndex)));
     return {
       ...q,
-      id: q.id || `q${idx + 1}`,
+      id: q.id?.trim() || `q${idx + 1}`,
       answer_indices: q.type === 'single' ? [answers[0] ?? 0] : answers.length > 0 ? answers : [0],
     };
   });
@@ -117,7 +122,7 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
         { role: 'system', content: '你是繁體中文教學測驗設計助理。請只輸出 JSON，格式為 {"title":"...","questions":[...]}。每題 type 為 single 或 multiple，options 是 {text} 陣列，answer_indices 是 0-based 正確選項索引，並提供 explanation。' },
         { role: 'user', content: [`簡報標題：${pdf.title ?? '未命名簡報'}`, `老師提示詞：${body.data.prompt}`, `既有問題列表（可依提示詞修改、增刪或重寫）：${JSON.stringify(body.data.existing_questions)}`, `簡報內容：\n${context}`].join('\n\n') },
       ],
-      schema: z.object({ title: z.string().trim().min(1).max(200), questions: QuizQuestionsSchema }),
+      schema: z.object({ title: z.string().trim().min(1).max(200), questions: GeneratedQuizQuestionsSchema }),
       maxTokens: 5000,
       temperature: 0.4,
     });

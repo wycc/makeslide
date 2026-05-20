@@ -696,6 +696,16 @@ export default function PlayPage() {
           setSyncFollowerQuestions(state.follower_questions ?? []);
           setSyncDisplayedQuestionId(state.displayed_question_id ?? null);
           setSyncAiAnswer(state.ai_answer ?? null);
+          if (
+            state.role !== 'master'
+            && imageOnlyFullscreen
+            && state.quiz_mode
+            && typeof state.active_quiz_id === 'number'
+            && state.active_quiz_id > 0
+          ) {
+            navigate(`/play/${encodeURIComponent(pdfId)}/quizzes`, { replace: true });
+            return;
+          }
           if (state.role === 'master') return;
           applyingRemoteSyncRef.current = true;
           const targetIdx = Math.max(0, state.page_number - 1);
@@ -720,7 +730,7 @@ export default function PlayPage() {
       })();
     }, 1200);
     return () => window.clearInterval(timer);
-  }, [syncEnabled, pdfId]);
+  }, [syncEnabled, pdfId, imageOnlyFullscreen, navigate]);
 
   const handleSubmitFollowerQuestion = useCallback(async () => {
     if (!pdfId || !syncClientIdRef.current) return;
