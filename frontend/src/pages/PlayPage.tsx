@@ -877,7 +877,7 @@ export default function PlayPage() {
   }, []);
 
   useEffect(() => {
-    if (!pollStarted || !pdfId || !currentPage) return;
+    if ((!pollStarted && !imageOnlyFullscreen) || !pdfId || !currentPage) return;
     let cancelled = false;
     let timer: number | null = null;
     const loadPolls = async () => {
@@ -885,6 +885,9 @@ export default function PlayPage() {
         const polls = await fetchPagePolls(pdfId, currentPage.page_number);
         if (cancelled) return;
         setPagePolls(polls);
+        if (!pollStarted && imageOnlyFullscreen && polls.some((poll) => poll.is_active)) {
+          setPollStarted(true);
+        }
         setPollError(null);
       } catch (err) {
         if (!cancelled) setPollError(err instanceof ApiError ? err.message : '讀取投票失敗');
@@ -896,7 +899,7 @@ export default function PlayPage() {
       cancelled = true;
       if (timer != null) window.clearTimeout(timer);
     };
-  }, [pollStarted, pdfId, currentPage?.page_number]);
+  }, [pollStarted, imageOnlyFullscreen, pdfId, currentPage?.page_number]);
 
   const handleSendChat = useCallback(async () => {
     if (isReadOnlyProcessing) return;
@@ -1765,6 +1768,8 @@ export default function PlayPage() {
     duration > 0 ? Math.min(1, currentTime / duration) * 1000 : 0;
   const shouldShowClassroomNextHint =
     classroomMode && classroomAwaitingNext && !finished && (!syncEnabled || syncRole === 'master');
+  const visiblePagePolls = pagePolls.filter((poll) => poll.is_active);
+  const showFullscreenPoll = imageOnlyFullscreen && pollStarted && visiblePagePolls.length > 0;
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
@@ -1798,6 +1803,54 @@ export default function PlayPage() {
                 <p className="line-clamp-2 whitespace-pre-wrap">
                   {shouldShowClassroomNextHint ? '本頁播放完畢，請按 Space 鍵進入下一頁。' : currentSentence}
                 </p>
+              </div>
+            </div>
+          ) : null}
+          {showFullscreenPoll ? (
+            <div className="absolute inset-x-3 bottom-4 z-[110] max-h-[70vh] overflow-y-auto rounded-xl border border-cyan-400/40 bg-slate-950/90 p-3 shadow-2xl backdrop-blur md:left-auto md:right-4 md:top-20 md:w-[min(420px,42vw)]">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-sm font-semibold text-cyan-100">📊 Realtime Poll</h2>
+                  <p className="text-[11px] text-slate-400">全螢幕投票已自動顯示，請選擇答案。</p>
+                </div>
+                <span className="shrink-0 rounded-full border border-cyan-400/40 px-2 py-0.5 text-[11px] text-cyan-100">
+                  第 {currentPage?.page_number ?? '-'} 頁
+                </span>
+              </div>
+              <div className="space-y-2">
+                {visiblePagePolls.map((poll) => (
+                  <div key={`fullscreen-${poll.id}`} className="rounded-lg border border-slate-700 bg-slate-900/80 p-2">
+                    <div className="mb-2 flex items-start justify-between gap-2">
+                      <h3 className="text-sm font-medium leading-snug text-slate-100">{poll.question}</h3>
+                      <span className="shrink-0 rounded-full border border-slate-600 px-1.5 py-0.5 text-[10px] text-slate-300">
+                        {poll.total_votes} 票
+                      </span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {poll.options.map((option, idx) => {
+                        const ratio = poll.total_votes > 0 ? Math.round((option.votes / poll.total_votes) * 100) : 0;
+                        const selected = pollVotes[poll.id] === idx;
+                        return (
+                          <button
+                            key={`fullscreen-${poll.id}-${idx}`}
+                            type="button"
+                            onClick={() => void handleVotePoll(poll.id, idx)}
+                            disabled={pollBusy || !poll.is_active}
+                            className={`w-full rounded-md border px-3 py-2 text-left text-sm transition ${selected ? 'border-emerald-300 bg-emerald-500/20 text-emerald-50' : 'border-slate-600 bg-slate-800/80 text-slate-100 hover:bg-slate-700'} disabled:cursor-not-allowed disabled:opacity-60`}
+                          >
+                            <div className="mb-1 flex items-center justify-between gap-2">
+                              <span className="min-w-0 truncate">{option.text}</span>
+                              <span className="font-mono text-[11px] text-slate-300">{option.votes} · {ratio}%</span>
+                            </div>
+                            <div className="h-1.5 overflow-hidden rounded-full bg-slate-700">
+                              <div className="h-full rounded-full bg-cyan-300" style={{ width: `${ratio}%` }} />
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           ) : null}
