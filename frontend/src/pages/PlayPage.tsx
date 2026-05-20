@@ -364,7 +364,9 @@ export default function PlayPage() {
     if (!syncEnabled || syncRole !== 'follower') return;
     if (!followerAudioUnlocked) {
       setAudioMuted(true);
+      return;
     }
+    setAudioMuted(false);
   }, [syncEnabled, syncRole, followerAudioUnlocked]);
 
   // ---- Load detail (+ poll until ready) ----
@@ -2448,9 +2450,9 @@ export default function PlayPage() {
               <input
                 type="checkbox"
                 checked={audioMuted}
-                disabled={syncEnabled && syncRole === 'follower'}
+                disabled={syncEnabled && syncRole === 'follower' && !followerAudioUnlocked}
                 onChange={(event) => {
-                  if (syncEnabled && syncRole === 'follower') return;
+                  if (syncEnabled && syncRole === 'follower' && !followerAudioUnlocked) return;
                   setAudioMuted(event.target.checked);
                 }}
               />
