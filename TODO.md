@@ -351,10 +351,10 @@
 [x] 在 master 端投票時顯示目前在線人數，己作答人數（完成分支：feature/fourthbatch-master-poll-attendance-20260520-0500）
 [x] follower 模式可以輸入問題，master 可以決定是否要把問題顯示在畫面上。（完成分支：feature/fourthbatch-follower-questions-20260520-0510）
 [x] master 可以使用 s 鍵切換是否顯示 follower 問題（完成分支：feature/fourthbatch-master-toggle-follower-questions-20260520-0520）
-[x] master 可以按下 a 鍵讓 AI 來總結並回答 follower 的問題（完成分支：feature/fourthbatch-ai-answer-follower-questions-20260520-0530）
-[x] 提供自動產生測驗的功能，我們會進入一個單獨的測驗生成畫面。讓老師下提示詞請 AI 產生測驗。老師可以重複下指令修改問題列表，或是直接手動修改問題。問題列表可以被存下來多次使用。（完成分支：feature/fourthbatch-auto-quiz-builder-20260520-0550）
-[x] master 可以在問題列表後按下開始測驗按鍵。就會顯示目前上線人的名單，master 可以請所有人確認後按下開始按鍵。follower 就可以開始作答。master 按下結束按鍵後就停止作答，並公佈答案和每一題所有人回答的結果。（完成分支：feature/fourthbatch-live-quiz-session-20260520-0559）
-[x] 提供一個產生 PDF 功能，會產生一個包括整個簡報和簡報逐字檔。方便學生下載後使用其它工具使用。（完成分支：feature/fourthbatch-pdf-handout-export-20260520-0540）
+[ ] master 可以按下 a 鍵讓 AI 來總結並回答 follower 的問題（完成分支：feature/fourthbatch-ai-answer-follower-questions-20260520-0530）
+[ ] 提供自動產生測驗的功能，我們會進入一個單獨的測驗生成畫面。讓老師下提示詞請 AI 產生測驗。老師可以重複下指令修改問題列表，或是直接手動修改問題。問題列表可以被存下來多次使用。（完成分支：feature/fourthbatch-auto-quiz-builder-20260520-0550）
+[ ] master 可以在問題列表後按下開始測驗按鍵。就會顯示目前上線人的名單，master 可以請所有人確認後按下開始按鍵。follower 就可以開始作答。master 按下結束按鍵後就停止作答，並公佈答案和每一題所有人回答的結果。（完成分支：feature/fourthbatch-live-quiz-session-20260520-0559）
+[ ] 提供一個產生 PDF 功能，會產生一個包括整個簡報和簡報逐字檔。方便學生下載後使用其它工具使用。（完成分支：feature/fourthbatch-pdf-handout-export-20260520-0540）
 
 ## Fourth batch 工作記錄
 
