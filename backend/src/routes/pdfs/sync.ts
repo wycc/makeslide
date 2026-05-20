@@ -15,6 +15,7 @@ interface SyncSessionState {
   isPlaying: boolean;
   currentTime: number;
   followerAudioUnlocked: boolean;
+  realtimePollStarted: boolean;
   questions: SyncFollowerQuestion[];
   updatedAt: string;
 }
@@ -60,6 +61,7 @@ function getSession(pdfId: string): SyncSessionState {
     isPlaying: false,
     currentTime: 0,
     followerAudioUnlocked: false,
+    realtimePollStarted: false,
     questions: [],
     updatedAt: nowIso(),
   };
@@ -109,6 +111,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     is_playing: z.boolean(),
     current_time: z.number().min(0),
     follower_audio_unlocked: z.boolean().optional(),
+    realtime_poll_started: z.boolean().optional(),
   });
   const StateQuerySchema = z.object({ client_id: z.string().trim().min(1).max(128).optional() });
 
@@ -147,6 +150,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       is_playing: session.isPlaying,
       current_time: session.currentTime,
       follower_audio_unlocked: session.followerAudioUnlocked,
+      realtime_poll_started: session.realtimePollStarted,
       questions: session.questions,
       updated_at: session.updatedAt,
       master_expires_at: new Date(session.masterExpiresAt).toISOString(),
@@ -170,6 +174,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       is_playing: isPlaying,
       current_time: currentTime,
       follower_audio_unlocked: followerAudioUnlocked,
+      realtime_poll_started: realtimePollStarted,
     } = parsedBody.data;
     const session = getSession(id);
     touchClient(session, clientId);
@@ -185,6 +190,9 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     session.currentTime = currentTime;
     if (typeof followerAudioUnlocked === 'boolean') {
       session.followerAudioUnlocked = followerAudioUnlocked;
+    }
+    if (typeof realtimePollStarted === 'boolean') {
+      session.realtimePollStarted = realtimePollStarted;
     }
     session.updatedAt = nowIso();
     return reply.send({ ok: true, role: 'master', updated_at: session.updatedAt });
@@ -213,6 +221,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       is_playing: session.isPlaying,
       current_time: session.currentTime,
       follower_audio_unlocked: session.followerAudioUnlocked,
+      realtime_poll_started: session.realtimePollStarted,
       questions: session.questions,
       updated_at: session.updatedAt,
       master_expires_at: session.masterClientId
@@ -238,6 +247,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       session.isPlaying = false;
       session.currentTime = 0;
       session.followerAudioUnlocked = false;
+      session.realtimePollStarted = false;
       session.updatedAt = nowIso();
     }
     session.followerCodes.delete(clientId);

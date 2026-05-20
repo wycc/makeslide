@@ -254,6 +254,7 @@ export interface SyncJoinResponse {
   is_playing: boolean;
   current_time: number;
   follower_audio_unlocked: boolean;
+  realtime_poll_started: boolean;
   questions: SyncFollowerQuestion[];
   updated_at: string;
   master_expires_at: string | null;
@@ -269,6 +270,7 @@ export interface SyncStateResponse {
   is_playing: boolean;
   current_time: number;
   follower_audio_unlocked: boolean;
+  realtime_poll_started: boolean;
   updated_at: string;
   master_expires_at: string | null;
   online_count?: number;

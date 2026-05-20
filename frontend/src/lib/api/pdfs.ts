@@ -569,7 +569,7 @@ export async function fetchPlaybackSyncState(id: string, clientId?: string): Pro
 export async function updatePlaybackSyncState(
   id: string,
   clientId: string,
-  payload: { page_number: number; is_playing: boolean; current_time: number; follower_audio_unlocked?: boolean },
+  payload: { page_number: number; is_playing: boolean; current_time: number; follower_audio_unlocked?: boolean; realtime_poll_started?: boolean },
 ): Promise<{ ok: boolean; role: 'master'; updated_at: string }> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/sync/state`, {
     method: 'POST',

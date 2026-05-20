@@ -743,6 +743,9 @@ export default function PlayPage() {
         if (cancelled) return;
         setSyncRole(joined.role);
         setFollowerAudioUnlocked(joined.follower_audio_unlocked);
+        if (joined.role === 'follower') {
+          setPollStarted(joined.realtime_poll_started);
+        }
         if (joined.role === 'follower' && !joined.follower_audio_unlocked) {
           setAudioMuted(true);
         }
@@ -774,10 +777,11 @@ export default function PlayPage() {
       is_playing: isPlaying,
       current_time: time,
       follower_audio_unlocked: followerAudioUnlocked,
+      realtime_poll_started: pollStarted,
     }).catch((err) => {
       setSyncError(err instanceof ApiError ? err.message : '同步狀態更新失敗');
     });
-  }, [syncEnabled, syncRole, pdfId, currentIdx, isPlaying, currentTime, followerAudioUnlocked]);
+  }, [syncEnabled, syncRole, pdfId, currentIdx, isPlaying, currentTime, followerAudioUnlocked, pollStarted]);
 
   useEffect(() => {
     if (!syncEnabled || !pdfId || !syncClientIdRef.current) return;
@@ -792,6 +796,7 @@ export default function PlayPage() {
               page_number: pageNumber,
               is_playing: latest.isPlaying,
               current_time: time,
+              realtime_poll_started: pollStarted,
             });
           }
           const state = await fetchPlaybackSyncState(pdfId, syncClientIdRef.current);
@@ -801,6 +806,7 @@ export default function PlayPage() {
           setSyncOnlineCount(state.online_count ?? null);
           setSyncQuestions(state.questions ?? []);
           if (state.role === 'master') return;
+          setPollStarted(state.realtime_poll_started);
           if (!state.follower_audio_unlocked) {
             setAudioMuted(true);
           }
@@ -827,7 +833,7 @@ export default function PlayPage() {
       })();
     }, 1200);
     return () => window.clearInterval(timer);
-  }, [syncEnabled, syncRole, pdfId]);
+  }, [syncEnabled, syncRole, pdfId, pollStarted]);
 
   useEffect(() => {
     const previousRole = previousSyncRoleRef.current;
