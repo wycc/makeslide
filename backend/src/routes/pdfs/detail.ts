@@ -113,6 +113,9 @@ function rowToPoll(row: PagePollRow) {
     .all(row.id) as Array<{ option_index: number; votes: number }>;
   const countByOption = new Map(counts.map((item) => [item.option_index, item.votes]));
   const options = optionTexts.map((text, idx) => ({ text, votes: countByOption.get(idx) ?? 0 }));
+  const answered = db
+    .prepare(`SELECT COUNT(DISTINCT voter_id) AS count FROM page_poll_votes WHERE poll_id = ?`)
+    .get(row.id) as { count: number } | undefined;
   return {
     id: row.id,
     pdf_id: row.pdf_id,
@@ -120,6 +123,7 @@ function rowToPoll(row: PagePollRow) {
     question: row.question,
     options,
     total_votes: options.reduce((sum, option) => sum + option.votes, 0),
+    answered_count: answered?.count ?? 0,
     is_active: row.is_active === 1,
     show_results: row.show_results === 1,
     created_at: row.created_at,

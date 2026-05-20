@@ -128,6 +128,7 @@ export interface PagePoll {
   question: string;
   options: PagePollOption[];
   total_votes: number;
+  answered_count?: number;
   is_active: boolean;
   show_results: boolean;
   created_at: string;
@@ -247,6 +248,7 @@ export interface SyncJoinResponse {
   follower_audio_unlocked: boolean;
   updated_at: string;
   master_expires_at: string | null;
+  online_count?: number;
 }
 
 export interface SyncStateResponse {
@@ -260,4 +262,5 @@ export interface SyncStateResponse {
   follower_audio_unlocked: boolean;
   updated_at: string;
   master_expires_at: string | null;
+  online_count?: number;
 }

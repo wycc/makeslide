@@ -270,6 +270,7 @@ export default function PlayPage() {
   const [syncRole, setSyncRole] = useState<'master' | 'follower'>('follower');
   const [audioMuted, setAudioMuted] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncOnlineCount, setSyncOnlineCount] = useState<number | null>(null);
   const [followerAudioUnlocked, setFollowerAudioUnlocked] = useState(false);
   const [syncFollowerCode, setSyncFollowerCode] = useState('');
   const syncClientIdRef = useRef<string>('');
@@ -739,6 +740,7 @@ export default function PlayPage() {
         if (joined.role === 'follower' && !joined.follower_audio_unlocked) {
           setAudioMuted(true);
         }
+        setSyncOnlineCount(joined.online_count ?? null);
         setSyncError(null);
       } catch (err) {
         if (cancelled) return;
@@ -791,6 +793,7 @@ export default function PlayPage() {
           setSyncRole(state.role);
           setSyncFollowerCode(state.follower_code ?? '');
           setFollowerAudioUnlocked(state.follower_audio_unlocked);
+          setSyncOnlineCount(state.online_count ?? null);
           if (state.role === 'master') return;
           if (!state.follower_audio_unlocked) {
             setAudioMuted(true);
@@ -3034,8 +3037,14 @@ export default function PlayPage() {
                           <div className="mb-1 flex items-start justify-between gap-2">
                             <h3 className="text-xs font-medium text-slate-200">{poll.question}</h3>
                             <div className="flex shrink-0 items-center gap-1">
+                              <div className="flex flex-wrap justify-end gap-1">
+                              {syncEnabled && syncRole === 'master' ? (
+                                <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-200">
+                                  在線 {syncOnlineCount ?? '-'} 人 · 已答 {poll.answered_count ?? poll.total_votes} 人
+                                </span>
+                              ) : null}
                               <span className="rounded-full border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-400">
-                                {poll.total_votes} 票
+                                  {poll.total_votes} 票
                               </span>
                               <button
                                 type="button"
@@ -3048,7 +3057,8 @@ export default function PlayPage() {
                             </div>
                             <span className="shrink-0 rounded-full border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-400">
                               {poll.show_results ? `${poll.total_votes} 票` : '隱藏結果'}
-                            </span>
+                              </span>
+                            </div>
                           </div>
                           <div className="space-y-1.5">
                             {poll.options.map((option, idx) => {
