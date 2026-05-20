@@ -135,6 +135,31 @@ export interface PagePoll {
   updated_at: string;
 }
 
+export type QuizQuestionType = 'single' | 'multiple';
+
+export interface QuizOption {
+  text: string;
+}
+
+export interface QuizQuestion {
+  id: string;
+  type: QuizQuestionType;
+  question: string;
+  options: QuizOption[];
+  answer_indices: number[];
+  explanation: string;
+}
+
+export interface QuizSet {
+  id: number;
+  pdf_id: string;
+  title: string;
+  prompt: string;
+  questions: QuizQuestion[];
+  created_at: string;
+  updated_at: string;
+}
+
 export interface UploadResponse {
   id: string;
   status: PdfStatus;

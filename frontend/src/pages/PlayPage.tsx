@@ -2049,6 +2049,12 @@ export default function PlayPage() {
             >
               {videoBusy ? '產生影片中…' : videoUrl ? '重新產生影片' : '產生影片'}
             </button>
+            <Link
+              to={`/play/${encodeURIComponent(pdfId ?? '')}/quizzes`}
+              className={`rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-3 py-1.5 text-center text-sm text-fuchsia-100 hover:bg-fuchsia-500/25 ${isReadOnlyProcessing ? 'pointer-events-none opacity-40' : ''}`}
+            >
+              測驗生成
+            </Link>
             {videoUrl ? (
               <a
                 href={videoUrl}

@@ -2,6 +2,7 @@ import { Route, Routes } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import ImportTextPage from './pages/ImportTextPage';
 import PlayPage from './pages/PlayPage';
+import QuizBuilderPage from './pages/QuizBuilderPage';
 import SettingsPage from './pages/SettingsPage';
 import SystemDataPage from './pages/SystemDataPage';
 import { useEffect, useState } from 'react';
@@ -61,6 +62,7 @@ export default function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/import-text" element={<ImportTextPage />} />
         <Route path="/play/:id" element={<PlayPage />} />
+        <Route path="/play/:id/quizzes" element={<QuizBuilderPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/system" element={<SystemDataPage />} />
         <Route
