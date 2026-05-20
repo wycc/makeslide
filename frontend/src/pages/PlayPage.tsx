@@ -261,6 +261,8 @@ export default function PlayPage() {
   const [qaPanelExpanded, setQaPanelExpanded] = useState(false);
   const [syncEnabled, setSyncEnabled] = useState(false);
   const [syncRole, setSyncRole] = useState<'master' | 'follower'>('follower');
+  const [audioMuted, setAudioMuted] = useState(false);
+  const [playbackSettingsOpen, setPlaybackSettingsOpen] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncFollowerCode, setSyncFollowerCode] = useState('');
   const [syncFollowerQuestionInput, setSyncFollowerQuestionInput] = useState('');
@@ -2423,6 +2425,103 @@ export default function PlayPage() {
             >
               {classroomMode ? '已開啟' : '開啟'}
             </button>
+          <div className="rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold text-slate-200">播放設定</span>
+                <span className={`rounded-full border px-2 py-0.5 ${audioMuted ? 'border-amber-400/50 bg-amber-400/10 text-amber-100' : 'border-emerald-400/40 bg-emerald-400/10 text-emerald-100'}`}>
+                  {audioMuted ? '本機靜音' : '本機有聲'}
+                </span>
+                <span className={`rounded-full border px-2 py-0.5 ${classroomMode ? 'border-amber-400/50 bg-amber-400/10 text-amber-100' : 'border-slate-700 bg-slate-950 text-slate-400'}`}>
+                  {classroomMode ? '上課模式' : '連續播放'}
+                </span>
+                {syncEnabled && syncRole === 'master' ? (
+                  <span className="rounded-full border border-cyan-400/40 bg-cyan-400/10 px-2 py-0.5 text-cyan-100">
+                    學生端音訊：{followerAudioUnlocked ? '可自行播放' : '強制靜音'}
+                  </span>
+                ) : null}
+                {syncEnabled && syncRole === 'follower' && !followerAudioUnlocked ? (
+                  <span className="rounded-full border border-cyan-400/40 bg-cyan-400/10 px-2 py-0.5 text-cyan-100">老師端強制靜音</span>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                onClick={() => setPlaybackSettingsOpen((open) => !open)}
+                className="rounded-full border border-slate-700 bg-slate-950 px-3 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
+                aria-expanded={playbackSettingsOpen}
+              >
+                ⚙️ 設定
+              </button>
+            </div>
+            {playbackSettingsOpen ? (
+              <div className="mt-3 space-y-2 border-t border-slate-800 pt-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-950/70 px-3 py-2">
+                  <div>
+                    <span className="font-semibold text-slate-200">音訊</span>
+                    <span className="ml-2 text-slate-400">
+                      {syncEnabled && syncRole === 'follower' && !followerAudioUnlocked
+                        ? '老師端已強制學生端靜音。'
+                        : audioMuted
+                          ? '目前本機靜音。'
+                          : '目前本機可播放聲音。'}
+                    </span>
+                  </div>
+                  <label className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-medium text-slate-300 hover:bg-slate-800">
+                    <input
+                      type="checkbox"
+                      checked={audioMuted}
+                      disabled={syncEnabled && syncRole === 'follower' && !followerAudioUnlocked}
+                      onChange={(event) => {
+                        if (syncEnabled && syncRole === 'follower' && !followerAudioUnlocked) return;
+                        setAudioMuted(event.target.checked);
+                      }}
+                      className="accent-cyan-500"
+                    />
+                    本機靜音
+                  </label>
+                </div>
+                {syncEnabled && syncRole === 'master' ? (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-cyan-100">
+                    <div>
+                      <span className="font-semibold">學生端音訊控制</span>
+                      <span className="ml-2 text-cyan-200/80">
+                        {followerAudioUnlocked
+                          ? '已解鎖，學生可自行取消靜音播放。'
+                          : '已鎖定，所有 follower 會被強制靜音。'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFollowerAudioUnlocked((unlocked) => !unlocked)}
+                      className="rounded-full border border-cyan-300/50 bg-cyan-950/40 px-3 py-1 text-xs font-medium text-cyan-100 hover:bg-cyan-900/60"
+                      aria-pressed={followerAudioUnlocked}
+                    >
+                      {followerAudioUnlocked ? '強制所有學生靜音' : '解鎖學生自行播放'}
+                    </button>
+                  </div>
+                ) : null}
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-950/70 px-3 py-2">
+                  <div>
+                    <span className="font-semibold text-slate-200">上課模式</span>
+                    <span className="ml-2 text-slate-400">
+                      {classroomMode ? '每頁播放完會停在目前頁，按空白鍵才進入下一頁。' : '關閉時會自動連續播放下一頁。'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setClassroomMode((enabled) => !enabled)}
+                    className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                      classroomMode
+                        ? 'border-amber-400/60 bg-amber-400/15 text-amber-100 hover:bg-amber-400/25'
+                        : 'border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800'
+                    }`}
+                    aria-pressed={classroomMode}
+                  >
+                    {classroomMode ? '已開啟' : '開啟'}
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
             </div>
           </section>
