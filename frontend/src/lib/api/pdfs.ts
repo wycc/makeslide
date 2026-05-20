@@ -313,11 +313,11 @@ export async function fetchPagePolls(id: string, pageNumber: number): Promise<Pa
   return Array.isArray(data.polls) ? data.polls : [];
 }
 
-export async function createPagePoll(id: string, pageNumber: number, question: string, options: string[]): Promise<PagePoll> {
+export async function createPagePoll(id: string, pageNumber: number, question: string, options: string[], showResults = true): Promise<PagePoll> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/polls`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ question, options }),
+    body: JSON.stringify({ question, options, show_results: showResults }),
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as PagePoll;

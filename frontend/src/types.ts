@@ -129,6 +129,7 @@ export interface PagePoll {
   options: PagePollOption[];
   total_votes: number;
   is_active: boolean;
+  show_results: boolean;
   created_at: string;
   updated_at: string;
 }

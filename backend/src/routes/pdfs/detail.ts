@@ -38,6 +38,7 @@ interface PagePollRow {
   question: string;
   options_json: string;
   is_active: number;
+  show_results: number;
   created_at: string;
   updated_at: string;
 }
@@ -120,6 +121,7 @@ function rowToPoll(row: PagePollRow) {
     options,
     total_votes: options.reduce((sum, option) => sum + option.votes, 0),
     is_active: row.is_active === 1,
+    show_results: row.show_results === 1,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -481,7 +483,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     const page = db.prepare(`SELECT pdf_id FROM pages WHERE pdf_id = ? AND page_number = ?`).get(id, n);
     if (!page) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
     const rows = db
-      .prepare(`SELECT id, pdf_id, page_number, question, options_json, is_active, created_at, updated_at FROM page_polls WHERE pdf_id = ? AND page_number = ? ORDER BY created_at DESC`)
+      .prepare(`SELECT id, pdf_id, page_number, question, options_json, is_active, show_results, created_at, updated_at FROM page_polls WHERE pdf_id = ? AND page_number = ? ORDER BY created_at DESC`)
       .all(id, n) as PagePollRow[];
     return reply.send({ polls: rows.map(rowToPoll) });
   });
@@ -497,10 +499,10 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     const now = nowIso();
     const options = body.data.options.map((option) => option.trim()).filter(Boolean);
     const result = db
-      .prepare(`INSERT INTO page_polls (pdf_id, page_number, question, options_json, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)`)
-      .run(id, n, body.data.question.trim(), JSON.stringify(options), now, now);
+      .prepare(`INSERT INTO page_polls (pdf_id, page_number, question, options_json, is_active, show_results, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?, ?)`)
+      .run(id, n, body.data.question.trim(), JSON.stringify(options), body.data.show_results ? 1 : 0, now, now);
     const row = db
-      .prepare(`SELECT id, pdf_id, page_number, question, options_json, is_active, created_at, updated_at FROM page_polls WHERE id = ?`)
+      .prepare(`SELECT id, pdf_id, page_number, question, options_json, is_active, show_results, created_at, updated_at FROM page_polls WHERE id = ?`)
       .get(result.lastInsertRowid) as PagePollRow;
     return reply.code(201).send(rowToPoll(row));
   });
@@ -571,7 +573,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     if (!body.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
     const { id, pollId } = parsed.data;
     const row = db
-      .prepare(`SELECT id, pdf_id, page_number, question, options_json, is_active, created_at, updated_at FROM page_polls WHERE id = ? AND pdf_id = ?`)
+      .prepare(`SELECT id, pdf_id, page_number, question, options_json, is_active, show_results, created_at, updated_at FROM page_polls WHERE id = ? AND pdf_id = ?`)
       .get(pollId, id) as PagePollRow | undefined;
     if (!row) return reply.code(404).send(errorResponse('POLL_NOT_FOUND', `Poll ${pollId} not found`));
     if (row.is_active !== 1) return reply.code(409).send(errorResponse('POLL_CLOSED', 'Poll is closed'));
@@ -582,7 +584,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       .run(pollId, body.data.voter_id, body.data.option_index, now, now);
     db.prepare(`UPDATE page_polls SET updated_at = ? WHERE id = ?`).run(now, pollId);
     const updated = db
-      .prepare(`SELECT id, pdf_id, page_number, question, options_json, is_active, created_at, updated_at FROM page_polls WHERE id = ?`)
+      .prepare(`SELECT id, pdf_id, page_number, question, options_json, is_active, show_results, created_at, updated_at FROM page_polls WHERE id = ?`)
       .get(pollId) as PagePollRow;
     return reply.send(rowToPoll(updated));
   });

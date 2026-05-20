@@ -176,6 +176,7 @@ function migrate(): void {
       question TEXT NOT NULL,
       options_json TEXT NOT NULL,
       is_active INTEGER NOT NULL DEFAULT 1,
+      show_results INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       FOREIGN KEY (pdf_id, page_number) REFERENCES pages(pdf_id, page_number) ON DELETE CASCADE
@@ -221,6 +222,10 @@ function migrate(): void {
   if (!columnExists('pages', 'page_prompt')) {
     db.exec(`ALTER TABLE pages ADD COLUMN page_prompt TEXT`);
     logger.info('Added column pages.page_prompt');
+  }
+  if (!columnExists('page_polls', 'show_results')) {
+    db.exec(`ALTER TABLE page_polls ADD COLUMN show_results INTEGER NOT NULL DEFAULT 1`);
+    logger.info('Added column page_polls.show_results');
   }
 
   db.exec(`
