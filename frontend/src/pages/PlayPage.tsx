@@ -268,6 +268,10 @@ export default function PlayPage() {
   const [syncDisplayedQuestionId, setSyncDisplayedQuestionId] = useState<string | null>(null);
   const [syncAiAnswer, setSyncAiAnswer] = useState<SyncAiAnswer | null>(null);
   const [syncAiAnswerBusy, setSyncAiAnswerBusy] = useState(false);
+  const [syncQuestions, setSyncQuestions] = useState<SyncFollowerQuestion[]>([]);
+  const [syncQuestionInput, setSyncQuestionInput] = useState('');
+  const [syncQuestionBusy, setSyncQuestionBusy] = useState(false);
+  const [fullscreenQuestionDialogOpen, setFullscreenQuestionDialogOpen] = useState(false);
   const syncClientIdRef = useRef<string>('');
   const applyingRemoteSyncRef = useRef(false);
   const [imageOnlyFullscreen, setImageOnlyFullscreen] = useState(false);
@@ -745,6 +749,10 @@ export default function PlayPage() {
       );
       setSyncFollowerQuestions((prev) => [item, ...prev]);
       setSyncFollowerQuestionInput('');
+      const created = await submitSyncFollowerQuestion(pdfId, syncClientIdRef.current, question);
+      setSyncQuestions((items) => [created, ...items.filter((item) => item.id !== created.id)]);
+      setSyncQuestionInput('');
+      setFullscreenQuestionDialogOpen(false);
       setSyncError(null);
     } catch (err) {
       setSyncError(err instanceof ApiError ? err.message : '送出問題失敗');
@@ -1764,6 +1772,62 @@ export default function PlayPage() {
                   : 'bottom-4 pb-[max(0.5rem,env(safe-area-inset-bottom))]'
               }`}
             >
+          {syncEnabled && syncRole === 'follower' ? (
+            <button
+              type="button"
+              onClick={() => setFullscreenQuestionDialogOpen(true)}
+              className="absolute left-4 top-4 rounded-md border border-cyan-400/60 bg-cyan-500/20 px-3 py-1.5 text-sm font-medium text-cyan-50 shadow-lg hover:bg-cyan-500/30"
+            >
+              提問
+            </button>
+          ) : null}
+          {syncEnabled && syncRole === 'follower' && fullscreenQuestionDialogOpen ? (
+            <div className="absolute inset-0 z-[120] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
+              <div className="w-full max-w-lg rounded-xl border border-cyan-400/40 bg-slate-950 p-4 text-slate-100 shadow-2xl">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-base font-semibold text-cyan-100">向老師提問</h2>
+                    <p className="mt-1 text-xs text-slate-400">問題會送到 master 端，由老師決定是否顯示在畫面上。</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setFullscreenQuestionDialogOpen(false)}
+                    className="shrink-0 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
+                  >
+                    關閉
+                  </button>
+                </div>
+                <textarea
+                  value={syncQuestionInput}
+                  onChange={(e) => setSyncQuestionInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                      e.preventDefault();
+                      void handleSubmitSyncQuestion();
+                    }
+                  }}
+                  maxLength={500}
+                  rows={4}
+                  autoFocus
+                  placeholder="輸入想問老師的問題…"
+                  className="w-full resize-none rounded-lg border border-cyan-500/40 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-500 focus:border-cyan-300"
+                />
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="text-xs text-slate-500">{syncQuestionInput.length}/500，可按 Ctrl/⌘ + Enter 送出</div>
+                  <button
+                    type="button"
+                    onClick={() => void handleSubmitSyncQuestion()}
+                    disabled={syncQuestionBusy || !syncQuestionInput.trim()}
+                    className="rounded-md border border-cyan-400/60 bg-cyan-500/20 px-4 py-2 text-sm font-medium text-cyan-50 hover:bg-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {syncQuestionBusy ? '送出中…' : '送出問題'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+          {shouldShowClassroomNextHint || currentSentence ? (
+            <div className="pointer-events-none absolute bottom-4 left-1/2 w-[min(92vw,1000px)] -translate-x-1/2 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
               <div
                 className={`mx-auto overflow-y-auto rounded-md bg-cyan-950/90 px-4 text-center font-medium leading-relaxed text-cyan-50 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${
                   syncOverlayIsAiAnswer
