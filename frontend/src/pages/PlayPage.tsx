@@ -263,6 +263,7 @@ export default function PlayPage() {
   const [syncRole, setSyncRole] = useState<'master' | 'follower'>('follower');
   const [audioMuted, setAudioMuted] = useState(false);
   const [playbackSettingsOpen, setPlaybackSettingsOpen] = useState(false);
+  const [followerAudioUnlocked, setFollowerAudioUnlocked] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncFollowerCode, setSyncFollowerCode] = useState('');
   const [syncFollowerQuestionInput, setSyncFollowerQuestionInput] = useState('');
@@ -270,7 +271,6 @@ export default function PlayPage() {
   const [syncDisplayedQuestionId, setSyncDisplayedQuestionId] = useState<string | null>(null);
   const [syncAiAnswer, setSyncAiAnswer] = useState<SyncAiAnswer | null>(null);
   const [syncAiAnswerBusy, setSyncAiAnswerBusy] = useState(false);
-  const [, setSyncQuestions] = useState<SyncFollowerQuestion[]>([]);
   const [syncQuestionInput, setSyncQuestionInput] = useState('');
   const [syncQuestionBusy] = useState(false);
   const [fullscreenQuestionDialogOpen, setFullscreenQuestionDialogOpen] = useState(false);
@@ -2425,6 +2425,7 @@ export default function PlayPage() {
             >
               {classroomMode ? '已開啟' : '開啟'}
             </button>
+          </div>
           <div className="rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
