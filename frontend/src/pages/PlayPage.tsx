@@ -262,9 +262,11 @@ export default function PlayPage() {
   const [qaPanelExpanded, setQaPanelExpanded] = useState(false);
   const [syncEnabled, setSyncEnabled] = useState(false);
   const [syncRole, setSyncRole] = useState<'master' | 'follower'>('follower');
+  const [audioMuted, setAudioMuted] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const syncClientIdRef = useRef<string>('');
   const applyingRemoteSyncRef = useRef(false);
+  const previousSyncRoleRef = useRef<'master' | 'follower' | null>(null);
   const [imageOnlyFullscreen, setImageOnlyFullscreen] = useState(false);
   const [slideImageScale, setSlideImageScale] = useState(1);
   const IMAGE_MSG_PREFIX = '[image] ';
@@ -693,6 +695,14 @@ export default function PlayPage() {
     }, 1200);
     return () => window.clearInterval(timer);
   }, [syncEnabled, pdfId]);
+
+  useEffect(() => {
+    const previousRole = previousSyncRoleRef.current;
+    if (syncEnabled && syncRole === 'follower' && previousRole !== 'follower') {
+      setAudioMuted(true);
+    }
+    previousSyncRoleRef.current = syncEnabled ? syncRole : null;
+  }, [syncEnabled, syncRole]);
 
   const handleRetry = useCallback(() => {
     const audio = audioRef.current;
@@ -1799,6 +1809,7 @@ export default function PlayPage() {
       <audio
         ref={audioRef}
         preload="auto"
+        muted={audioMuted}
         onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
         onCanPlay={() => {
           clearAudioRetryTimer();
@@ -2241,6 +2252,25 @@ export default function PlayPage() {
             >
               {classroomMode ? '已開啟' : '開啟'}
             </button>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">
+            <div>
+              <span className="font-semibold text-slate-200">音訊靜音</span>
+              <span className="ml-2 text-slate-400">
+                {audioMuted
+                  ? '目前不播放本機聲音，適合教室同步觀看公播音訊。'
+                  : '目前會播放本機聲音；遠端參與者可自行開啟。'}
+              </span>
+            </div>
+            <label className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-950 px-3 py-1 text-xs font-medium text-slate-300 hover:bg-slate-800">
+              <input
+                type="checkbox"
+                checked={audioMuted}
+                onChange={(e) => setAudioMuted(e.target.checked)}
+                className="accent-cyan-500"
+              />
+              靜音
+            </label>
           </div>
             </div>
           </section>
