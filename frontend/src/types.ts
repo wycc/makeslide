@@ -243,6 +243,7 @@ export interface SyncJoinResponse {
   page_number: number;
   is_playing: boolean;
   current_time: number;
+  follower_audio_unlocked: boolean;
   updated_at: string;
   master_expires_at: string | null;
 }
@@ -254,6 +255,7 @@ export interface SyncStateResponse {
   page_number: number;
   is_playing: boolean;
   current_time: number;
+  follower_audio_unlocked: boolean;
   updated_at: string;
   master_expires_at: string | null;
 }

@@ -12,6 +12,7 @@ interface SyncSessionState {
   pageNumber: number;
   isPlaying: boolean;
   currentTime: number;
+  followerAudioUnlocked: boolean;
   updatedAt: string;
 }
 
@@ -42,6 +43,7 @@ function getSession(pdfId: string): SyncSessionState {
     pageNumber: 1,
     isPlaying: false,
     currentTime: 0,
+    followerAudioUnlocked: false,
     updatedAt: nowIso(),
   };
   sessions.set(pdfId, created);
@@ -59,6 +61,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     page_number: z.number().int().min(1),
     is_playing: z.boolean(),
     current_time: z.number().min(0),
+    follower_audio_unlocked: z.boolean().optional(),
   });
   const StateQuerySchema = z.object({ client_id: z.string().trim().min(1).max(128).optional() });
 
@@ -86,6 +89,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       page_number: session.pageNumber,
       is_playing: session.isPlaying,
       current_time: session.currentTime,
+      follower_audio_unlocked: session.followerAudioUnlocked,
       updated_at: session.updatedAt,
       master_expires_at: new Date(session.masterExpiresAt).toISOString(),
     });
@@ -101,8 +105,13 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     if (!ensurePdfExists(id)) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     }
-    const { client_id: clientId, page_number: pageNumber, is_playing: isPlaying, current_time: currentTime } =
-      parsedBody.data;
+    const {
+      client_id: clientId,
+      page_number: pageNumber,
+      is_playing: isPlaying,
+      current_time: currentTime,
+      follower_audio_unlocked: followerAudioUnlocked,
+    } = parsedBody.data;
     const session = getSession(id);
     if (!session.masterClientId || session.masterExpiresAt <= nowMs()) {
       session.masterClientId = clientId;
@@ -114,6 +123,9 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     session.pageNumber = pageNumber;
     session.isPlaying = isPlaying;
     session.currentTime = currentTime;
+    if (typeof followerAudioUnlocked === 'boolean') {
+      session.followerAudioUnlocked = followerAudioUnlocked;
+    }
     session.updatedAt = nowIso();
     return reply.send({ ok: true, role: 'master', updated_at: session.updatedAt });
   });
@@ -138,6 +150,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       page_number: session.pageNumber,
       is_playing: session.isPlaying,
       current_time: session.currentTime,
+      follower_audio_unlocked: session.followerAudioUnlocked,
       updated_at: session.updatedAt,
       master_expires_at: session.masterClientId
         ? new Date(session.masterExpiresAt).toISOString()
@@ -159,9 +172,9 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       session.masterExpiresAt = 0;
       session.isPlaying = false;
       session.currentTime = 0;
+      session.followerAudioUnlocked = false;
       session.updatedAt = nowIso();
     }
     return reply.send({ ok: true });
   });
 }
-
