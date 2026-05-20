@@ -2084,6 +2084,14 @@ export default function PlayPage() {
                 開啟影片
               </button>
             )}
+            <a
+              href={`api/pdfs/${encodeURIComponent(pdfId)}/handout.pdf`}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-center text-sm text-cyan-100 hover:bg-cyan-500/25"
+            >
+              下載講義 PDF
+            </a>
             {!currentShareToken ? (
               <div className="col-span-3 flex items-center gap-2 rounded-md border border-slate-700/80 px-2 py-1 md:col-span-1">
                 <select
