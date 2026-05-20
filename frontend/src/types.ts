@@ -239,10 +239,22 @@ export type SyncRole = 'master' | 'follower';
 
 export interface SyncFollowerQuestion {
   id: string;
-  client_id: string;
+  clientId: string;
+  client_id?: string;
+  code: string | null;
   question: string;
-  show_on_screen: boolean;
-  created_at: string;
+  show_on_screen?: boolean;
+  createdAt: string;
+  created_at?: string;
+}
+
+export interface SyncAiAnswer {
+  id: string;
+  answer: string;
+  questionIds: string[];
+  question_ids?: string[];
+  createdAt: string;
+  created_at?: string;
 }
 
 export interface SyncJoinResponse {
@@ -255,7 +267,10 @@ export interface SyncJoinResponse {
   current_time: number;
   follower_audio_unlocked: boolean;
   realtime_poll_started: boolean;
+  follower_questions: SyncFollowerQuestion[];
   questions: SyncFollowerQuestion[];
+  displayed_question_id: string | null;
+  ai_answer: SyncAiAnswer | null;
   updated_at: string;
   master_expires_at: string | null;
   online_count?: number;
@@ -271,6 +286,9 @@ export interface SyncStateResponse {
   current_time: number;
   follower_audio_unlocked: boolean;
   realtime_poll_started: boolean;
+  follower_questions: SyncFollowerQuestion[];
+  displayed_question_id: string | null;
+  ai_answer: SyncAiAnswer | null;
   updated_at: string;
   master_expires_at: string | null;
   online_count?: number;

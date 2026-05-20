@@ -8,14 +8,13 @@ import {
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ApiError,
+  answerSyncFollowerQuestionsWithAi,
   chatWithPageContext,
   addSlide,
   cancelRegenerateJob,
   clearPageChatHistory,
   createPagePoll,
-  createVoicePagePoll,
   createPdfShare,
-  deletePagePoll,
   deleteSlide,
   fetchPdfDetail,
   fetchPagePolls,
@@ -24,8 +23,6 @@ import {
   resolveShareToken,
   fetchPlaybackSyncState,
   getImagePromptTemplates,
-  getAuthStatus,
-  getSystemAiSettings,
   joinPlaybackSync,
   leavePlaybackSync,
   fetchRegenerateStatus,
@@ -36,14 +33,14 @@ import {
   regeneratePageAudio,
   rollbackRegenerate,
   startRegenerateJob,
+  submitSyncFollowerQuestion,
+  toggleSyncDisplayedQuestion,
   updatePdfCoverFromPage,
   updatePdfImageStyleSettings,
   updatePdfTtsSettings,
   updatePdfPrompt,
   updatePdfTitle,
   updatePlaybackSyncState,
-  submitSyncFollowerQuestion,
-  updateSyncQuestionVisibility,
   votePagePoll,
   rewritePageScript,
   type ImagePromptTemplate,
@@ -63,12 +60,12 @@ import type {
   PdfDetailPage,
   PagePoll,
   RegenJobState,
+  SyncAiAnswer,
   SyncFollowerQuestion,
 } from '../types';
 
 const POLL_INTERVAL_MS = 3000;
 const AUDIO_RETRY_DELAY_MS = 800;
-const LOCAL_USER_CODE_KEY = 'makeslide.user_code';
 const SENTENCE_MATCH_RE = /[^。！？!?；;\n]+[。！？!?；;]?|\n+/g;
 const TONE_MARKER_RE = /\[\[\s*[^\]]+\s*\]\]/g;
 
@@ -239,14 +236,8 @@ export default function PlayPage() {
   const [pagePolls, setPagePolls] = useState<PagePoll[]>([]);
   const [pollQuestion, setPollQuestion] = useState('');
   const [pollOptionsText, setPollOptionsText] = useState('同意\n不同意');
-  const [pollShowResults, setPollShowResults] = useState(true);
   const [pollBusy, setPollBusy] = useState(false);
   const [pollError, setPollError] = useState<string | null>(null);
-  const [voicePollPrompt, setVoicePollPrompt] = useState('');
-  const [voicePollRecording, setVoicePollRecording] = useState(false);
-  const [voicePollAudio, setVoicePollAudio] = useState<Blob | null>(null);
-  const [voicePollAudioUrl, setVoicePollAudioUrl] = useState('');
-  const [voicePollTranscript, setVoicePollTranscript] = useState('');
   const [pollVotes, setPollVotes] = useState<Record<number, number>>({});
   const [pollSettingsOpen, setPollSettingsOpen] = useState(false);
   const [pollStarted, setPollStarted] = useState(false);
@@ -256,7 +247,6 @@ export default function PlayPage() {
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
-  const [pageQrVisible, setPageQrVisible] = useState(false);
   // 在按下「確認」啟動重生前記住目前頁碼，供 rollback 後跳回。
   const preRegenPageIdxRef = useRef<number | null>(null);
   const pollVoterIdRef = useRef<string>('');
@@ -271,18 +261,15 @@ export default function PlayPage() {
   const [qaPanelExpanded, setQaPanelExpanded] = useState(false);
   const [syncEnabled, setSyncEnabled] = useState(false);
   const [syncRole, setSyncRole] = useState<'master' | 'follower'>('follower');
-  const [audioMuted, setAudioMuted] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
-  const [syncOnlineCount, setSyncOnlineCount] = useState<number | null>(null);
-  const [followerAudioUnlocked, setFollowerAudioUnlocked] = useState(false);
   const [syncFollowerCode, setSyncFollowerCode] = useState('');
-  const [syncQuestions, setSyncQuestions] = useState<SyncFollowerQuestion[]>([]);
-  const [syncQuestionInput, setSyncQuestionInput] = useState('');
-  const [syncQuestionBusy, setSyncQuestionBusy] = useState(false);
+  const [syncFollowerQuestionInput, setSyncFollowerQuestionInput] = useState('');
+  const [syncFollowerQuestions, setSyncFollowerQuestions] = useState<SyncFollowerQuestion[]>([]);
+  const [syncDisplayedQuestionId, setSyncDisplayedQuestionId] = useState<string | null>(null);
+  const [syncAiAnswer, setSyncAiAnswer] = useState<SyncAiAnswer | null>(null);
+  const [syncAiAnswerBusy, setSyncAiAnswerBusy] = useState(false);
   const syncClientIdRef = useRef<string>('');
   const applyingRemoteSyncRef = useRef(false);
-  const previousSyncRoleRef = useRef<'master' | 'follower' | null>(null);
-  const latestSyncStateRef = useRef({ currentIdx: 0, isPlaying: false, currentTime: 0 });
   const [imageOnlyFullscreen, setImageOnlyFullscreen] = useState(false);
   const [slideImageScale, setSlideImageScale] = useState(1);
   const IMAGE_MSG_PREFIX = '[image] ';
@@ -295,11 +282,8 @@ export default function PlayPage() {
   const audioRetryTimerRef = useRef<number | null>(null);
   // prefetch refs so GC doesn't drop them mid-load
   const prefetchedAudioRef = useRef<HTMLAudioElement | null>(null);
-  const prefetchedImageRefs = useRef<HTMLImageElement[]>([]);
+  const prefetchedImageRef = useRef<HTMLImageElement | null>(null);
   const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
-  const voicePollRecorderRef = useRef<MediaRecorder | null>(null);
-  const voicePollStreamRef = useRef<MediaStream | null>(null);
-  const voicePollChunksRef = useRef<Blob[]>([]);
 
   const acquireWakeLock = useCallback(async () => {
     if (typeof navigator === 'undefined') return;
@@ -364,25 +348,6 @@ export default function PlayPage() {
   );
 
   const currentShareToken = searchParams.get('share')?.trim() || '';
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.muted = audioMuted;
-  }, [audioMuted]);
-
-  useEffect(() => {
-    if (!syncEnabled) return;
-    if (syncRole === 'master') {
-      setAudioMuted(false);
-      return;
-    }
-    if (!followerAudioUnlocked) {
-      setAudioMuted(true);
-      return;
-    }
-    setAudioMuted(false);
-  }, [syncEnabled, syncRole, followerAudioUnlocked]);
 
   // ---- Load detail (+ poll until ready) ----
   useEffect(() => {
@@ -500,16 +465,6 @@ export default function PlayPage() {
     },
     [imageBustKey],
   );
-  const currentPageUrl = useMemo(() => {
-    if (!pdfId || !currentPage) return '';
-    const params = new URLSearchParams(searchParams);
-    params.set('page', String(currentPage.page_number));
-    const query = params.toString();
-    return `${window.location.origin}/play/${encodeURIComponent(pdfId)}${query ? `?${query}` : ''}`;
-  }, [currentPage?.page_number, pdfId, searchParams]);
-  const currentPageQrUrl = currentPageUrl
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=360x360&margin=12&data=${encodeURIComponent(currentPageUrl)}`
-    : '';
 
   // ---- Fetch all scripts once pages are ready ----
   useEffect(() => {
@@ -570,18 +525,16 @@ export default function PlayPage() {
     [clearAudioRetryTimer, releaseWakeLock],
   );
 
-  const shouldKeepScreenAwake = isPlaying || (syncEnabled && syncRole === 'follower');
-
   useEffect(() => {
-    if (shouldKeepScreenAwake) {
+    if (isPlaying) {
       void acquireWakeLock();
     } else {
       void releaseWakeLock();
     }
-  }, [shouldKeepScreenAwake, acquireWakeLock, releaseWakeLock]);
+  }, [isPlaying, acquireWakeLock, releaseWakeLock]);
 
   useEffect(() => {
-    if (!shouldKeepScreenAwake) return;
+    if (!isPlaying) return;
     const onVisibility = () => {
       if (document.visibilityState === 'visible') {
         void acquireWakeLock();
@@ -589,41 +542,30 @@ export default function PlayPage() {
     };
     document.addEventListener('visibilitychange', onVisibility);
     return () => document.removeEventListener('visibilitychange', onVisibility);
-  }, [shouldKeepScreenAwake, acquireWakeLock]);
+  }, [isPlaying, acquireWakeLock]);
 
-  // ---- Prefetch upcoming page assets ----
+  // ---- Prefetch next page assets ----
   useEffect(() => {
-    const upcomingImages = deckPages
-      .slice(currentIdx + 1, currentIdx + 3)
-      .map((page) => withImageBust(page.image_url) ?? page.image_url)
-      .filter((url): url is string => Boolean(url));
-
-    prefetchedImageRefs.current = upcomingImages.map((url) => {
-      const img = new Image();
-      img.decoding = 'async';
-      img.loading = 'eager';
-      img.src = url;
-      if (typeof img.decode === 'function') {
-        void img.decode().catch(() => undefined);
-      }
-      return img;
-    });
-
     const next = deckPages[currentIdx + 1];
-    if (next?.audio_url) {
+    if (!next) return;
+    if (next.image_url) {
+      const img = new Image();
+      img.src = next.image_url;
+      prefetchedImageRef.current = img;
+    }
+    if (next.audio_url) {
       const a = new Audio();
       a.preload = 'auto';
       a.src = next.audio_url;
       prefetchedAudioRef.current = a;
     }
-  }, [currentIdx, deckPages, withImageBust]);
+  }, [currentIdx, deckPages]);
 
   // ---- Controls ----
   const playPause = useCallback(() => {
     if (syncEnabled && syncRole !== 'master') return;
     const audio = audioRef.current;
     if (!audio) return;
-    setPageQrVisible(false);
     if (classroomMode && classroomAwaitingNext && currentIdx < totalPages - 1) {
       setClassroomAwaitingNext(false);
       setFinished(false);
@@ -640,7 +582,6 @@ export default function PlayPage() {
 
   const goPrev = useCallback(() => {
     if (syncEnabled && syncRole !== 'master') return;
-    setPageQrVisible(false);
     setClassroomAwaitingNext(false);
     setFinished(false);
     setCurrentIdx((i) => Math.max(0, i - 1));
@@ -648,7 +589,6 @@ export default function PlayPage() {
 
   const goNext = useCallback(() => {
     if (syncEnabled && syncRole !== 'master') return;
-    setPageQrVisible(false);
     setClassroomAwaitingNext(false);
     setFinished(false);
     setCurrentIdx((i) => Math.min(totalPages - 1, i + 1));
@@ -669,16 +609,6 @@ export default function PlayPage() {
     }
   }, [classroomMode, currentIdx, totalPages]);
 
-  const showCurrentPageQr = useCallback(() => {
-    if (!currentPageUrl) return;
-    const audio = audioRef.current;
-    if (audio && !audio.paused) {
-      audio.pause();
-    }
-    setIsPlaying(false);
-    setPageQrVisible(true);
-  }, [currentPageUrl]);
-
   const handleSeek = useCallback(
     (ev: React.ChangeEvent<HTMLInputElement>) => {
       if (syncEnabled && syncRole !== 'master') return;
@@ -691,10 +621,6 @@ export default function PlayPage() {
   );
 
   useEffect(() => {
-    latestSyncStateRef.current = { currentIdx, isPlaying, currentTime };
-  }, [currentIdx, isPlaying, currentTime]);
-
-  useEffect(() => {
     if (!syncEnabled || !pdfId) return;
     const storageKey = `makeslide.sync.client.${pdfId}`;
     const existing = window.localStorage.getItem(storageKey);
@@ -704,59 +630,12 @@ export default function PlayPage() {
     let cancelled = false;
     void (async () => {
       try {
-        const legacyStorageCodeKey = `makeslide.sync.followerCode.${pdfId}`;
-        const savedGlobalCode = window.localStorage.getItem(LOCAL_USER_CODE_KEY)?.trim() || '';
-        const savedLegacyCode = window.localStorage.getItem(legacyStorageCodeKey)?.trim() || '';
-        let savedCode = savedGlobalCode || savedLegacyCode;
-
-        if (!savedCode) {
-          try {
-            const auth = await getAuthStatus();
-            if (auth.authenticated) {
-              const settings = await getSystemAiSettings();
-              savedCode = settings.user_code?.trim() || '';
-            }
-          } catch {
-            // non-fatal: fallback to prompt flow
-          }
-        }
-
-        let joined;
-        try {
-          joined = await joinPlaybackSync(pdfId, next, savedCode || undefined);
-        } catch (err) {
-          if (err instanceof ApiError && err.code === 'SYNC_FOLLOWER_CODE_REQUIRED') {
-            const enteredCode = window.prompt('請輸入你的代號才能進入 follower 同步模式', savedCode)?.trim() || '';
-            if (!enteredCode) {
-              throw new ApiError('進入 follower 同步模式需要輸入代號', 'SYNC_FOLLOWER_CODE_REQUIRED', 400);
-            }
-            window.localStorage.setItem(legacyStorageCodeKey, enteredCode);
-            window.localStorage.setItem(LOCAL_USER_CODE_KEY, enteredCode);
-            joined = await joinPlaybackSync(pdfId, next, enteredCode);
-          } else {
-            throw err;
-          }
-        }
-
-        const resolvedFollowerCode = joined.follower_code?.trim() || '';
-        if (resolvedFollowerCode) {
-          window.localStorage.setItem(legacyStorageCodeKey, resolvedFollowerCode);
-          window.localStorage.setItem(LOCAL_USER_CODE_KEY, resolvedFollowerCode);
-        }
-        setSyncFollowerCode(resolvedFollowerCode);
+        const joined = await joinPlaybackSync(pdfId, next);
         if (cancelled) return;
         setSyncRole(joined.role);
-        setFollowerAudioUnlocked(joined.follower_audio_unlocked);
-        if (joined.role === 'follower') {
-          setPollStarted(joined.realtime_poll_started);
-        }
-        if (joined.role === 'follower' && !joined.follower_audio_unlocked) {
-          setAudioMuted(true);
-        } else if (joined.role === 'master') {
-          setAudioMuted(false);
-        }
-        setSyncOnlineCount(joined.online_count ?? null);
-        setSyncQuestions(joined.questions ?? []);
+        setSyncFollowerQuestions(joined.follower_questions ?? []);
+        setSyncDisplayedQuestionId(joined.displayed_question_id ?? null);
+        setSyncAiAnswer(joined.ai_answer ?? null);
         setSyncError(null);
       } catch (err) {
         if (cancelled) return;
@@ -782,42 +661,22 @@ export default function PlayPage() {
       page_number: pageNumber,
       is_playing: isPlaying,
       current_time: time,
-      follower_audio_unlocked: followerAudioUnlocked,
-      realtime_poll_started: pollStarted,
     }).catch((err) => {
       setSyncError(err instanceof ApiError ? err.message : '同步狀態更新失敗');
     });
-  }, [syncEnabled, syncRole, pdfId, currentIdx, isPlaying, currentTime, followerAudioUnlocked, pollStarted]);
+  }, [syncEnabled, syncRole, pdfId, currentIdx, isPlaying, currentTime]);
 
   useEffect(() => {
     if (!syncEnabled || !pdfId || !syncClientIdRef.current) return;
     const timer = window.setInterval(() => {
       void (async () => {
         try {
-          if (syncRole === 'master') {
-            const latest = latestSyncStateRef.current;
-            const pageNumber = Math.max(1, latest.currentIdx + 1);
-            const time = Number.isFinite(latest.currentTime) ? Math.max(0, latest.currentTime) : 0;
-            await updatePlaybackSyncState(pdfId, syncClientIdRef.current, {
-              page_number: pageNumber,
-              is_playing: latest.isPlaying,
-              current_time: time,
-              realtime_poll_started: pollStarted,
-            });
-          }
           const state = await fetchPlaybackSyncState(pdfId, syncClientIdRef.current);
           setSyncRole(state.role);
-          setSyncFollowerCode(state.follower_code ?? '');
-          setFollowerAudioUnlocked(state.follower_audio_unlocked);
-          setSyncOnlineCount(state.online_count ?? null);
-          setSyncQuestions(state.questions ?? []);
-          if (state.role === 'master') {
-            setAudioMuted(false);
-            return;
-          }
-          if (!state.follower_audio_unlocked) {
-            setAudioMuted(true);
-          }
+          setSyncFollowerQuestions(state.follower_questions ?? []);
+          setSyncDisplayedQuestionId(state.displayed_question_id ?? null);
+          setSyncAiAnswer(state.ai_answer ?? null);
+          if (state.role === 'master') return;
           applyingRemoteSyncRef.current = true;
           const targetIdx = Math.max(0, state.page_number - 1);
           setCurrentIdx((prev) => (prev === targetIdx ? prev : targetIdx));
@@ -841,77 +700,52 @@ export default function PlayPage() {
       })();
     }, 1200);
     return () => window.clearInterval(timer);
-  }, [syncEnabled, syncRole, pdfId, pollStarted]);
+  }, [syncEnabled, pdfId]);
 
-  useEffect(() => {
-    const previousRole = previousSyncRoleRef.current;
-    if (syncEnabled && syncRole === 'master') {
-      setAudioMuted(false);
-    }
-    if (syncEnabled && syncRole === 'follower' && previousRole !== 'follower') {
-      setAudioMuted(true);
-    }
-    previousSyncRoleRef.current = syncEnabled ? syncRole : null;
-  }, [syncEnabled, syncRole]);
-
-  const handleSubmitSyncQuestion = useCallback(async () => {
+  const handleSubmitFollowerQuestion = useCallback(async () => {
     if (!pdfId || !syncClientIdRef.current) return;
-    const question = syncQuestionInput.trim();
+    const question = syncFollowerQuestionInput.trim();
     if (!question) return;
-    setSyncQuestionBusy(true);
     try {
-      const created = await submitSyncFollowerQuestion(pdfId, syncClientIdRef.current, question);
-      setSyncQuestions((items) => [created, ...items.filter((item) => item.id !== created.id)]);
-      setSyncQuestionInput('');
+      const item = await submitSyncFollowerQuestion(
+        pdfId,
+        syncClientIdRef.current,
+        question,
+        syncFollowerCode.trim() || undefined,
+      );
+      setSyncFollowerQuestions((prev) => [item, ...prev]);
+      setSyncFollowerQuestionInput('');
       setSyncError(null);
     } catch (err) {
-      setSyncError(err instanceof ApiError ? err.message : '問題送出失敗');
+      setSyncError(err instanceof ApiError ? err.message : '送出問題失敗');
+    }
+  }, [pdfId, syncFollowerCode, syncFollowerQuestionInput]);
+
+  const handleToggleDisplayedQuestion = useCallback(async () => {
+    if (!pdfId || !syncClientIdRef.current) return;
+    try {
+      const result = await toggleSyncDisplayedQuestion(pdfId, syncClientIdRef.current);
+      setSyncDisplayedQuestionId(result.displayed_question_id);
+      setSyncError(null);
+    } catch (err) {
+      setSyncError(err instanceof ApiError ? err.message : '切換顯示問題失敗');
+    }
+  }, [pdfId]);
+
+  const handleAiAnswerFollowerQuestions = useCallback(async () => {
+    if (!pdfId || !syncClientIdRef.current || syncAiAnswerBusy) return;
+    setSyncAiAnswerBusy(true);
+    try {
+      const answer = await answerSyncFollowerQuestionsWithAi(pdfId, syncClientIdRef.current);
+      setSyncAiAnswer(answer);
+      setSyncDisplayedQuestionId(null);
+      setSyncError(null);
+    } catch (err) {
+      setSyncError(err instanceof ApiError ? err.message : 'AI 回答 follower 問題失敗');
     } finally {
-      setSyncQuestionBusy(false);
+      setSyncAiAnswerBusy(false);
     }
-  }, [pdfId, syncQuestionInput]);
-
-  const handleToggleSyncQuestionVisibility = useCallback(
-    async (questionId: string, showOnScreen: boolean) => {
-      if (!pdfId || !syncClientIdRef.current || syncRole !== 'master') return;
-      try {
-        const updated = await updateSyncQuestionVisibility(pdfId, syncClientIdRef.current, questionId, showOnScreen);
-        setSyncQuestions((items) => items.map((item) => (item.id === updated.id ? updated : item)));
-        setSyncError(null);
-      } catch (err) {
-        setSyncError(err instanceof ApiError ? err.message : '問題顯示狀態更新失敗');
-      }
-    },
-    [pdfId, syncRole],
-  );
-
-  const handleToggleLatestSyncQuestionVisibility = useCallback(async () => {
-    if (!pdfId || !syncClientIdRef.current || syncRole !== 'master' || syncQuestions.length === 0) return;
-    const visibleQuestions = syncQuestions.filter((item) => item.show_on_screen);
-    try {
-      if (visibleQuestions.length > 0) {
-        await Promise.all(
-          visibleQuestions.map((item) =>
-            updateSyncQuestionVisibility(pdfId, syncClientIdRef.current, item.id, false),
-          ),
-        );
-        setSyncQuestions((items) => items.map((item) => ({ ...item, show_on_screen: false })));
-      } else {
-        const latestHiddenQuestion = syncQuestions.find((item) => !item.show_on_screen);
-        if (!latestHiddenQuestion) return;
-        const updated = await updateSyncQuestionVisibility(
-          pdfId,
-          syncClientIdRef.current,
-          latestHiddenQuestion.id,
-          true,
-        );
-        setSyncQuestions((items) => items.map((item) => (item.id === updated.id ? updated : item)));
-      }
-      setSyncError(null);
-    } catch (err) {
-      setSyncError(err instanceof ApiError ? err.message : '問題顯示狀態更新失敗');
-    }
-  }, [pdfId, syncRole, syncQuestions]);
+  }, [pdfId, syncAiAnswerBusy]);
 
   const handleRetry = useCallback(() => {
     const audio = audioRef.current;
@@ -950,11 +784,9 @@ export default function PlayPage() {
       } else if (ev.key === 'ArrowRight') {
         ev.preventDefault();
         goNext();
-      } else if (ev.key.toLowerCase() === 's') {
-        if (syncEnabled && syncRole === 'master') {
-          ev.preventDefault();
-          void handleToggleLatestSyncQuestionVisibility();
-        }
+      } else if (ev.key.toLowerCase() === 'a' && syncEnabled && syncRole === 'master') {
+        ev.preventDefault();
+        void handleAiAnswerFollowerQuestions();
       } else if (ev.key === 'Escape') {
         if (imageOnlyFullscreen) {
           ev.preventDefault();
@@ -970,7 +802,7 @@ export default function PlayPage() {
     };
     window.addEventListener('keydown', onKey, { capture: true });
     return () => window.removeEventListener('keydown', onKey, { capture: true });
-  }, [playPause, goPrev, goNext, navigate, imageOnlyFullscreen, syncEnabled, syncRole, handleToggleLatestSyncQuestionVisibility]);
+  }, [playPause, goPrev, goNext, navigate, imageOnlyFullscreen, syncEnabled, syncRole, handleAiAnswerFollowerQuestions]);
 
   const currentScript =
     currentPage != null ? scripts[currentPage.page_number] ?? '' : '';
@@ -1121,7 +953,7 @@ export default function PlayPage() {
     setPollBusy(true);
     setPollError(null);
     try {
-      const poll = await createPagePoll(pdfId, currentPage.page_number, question, options, pollShowResults);
+      const poll = await createPagePoll(pdfId, currentPage.page_number, question, options);
       setPagePolls((prev) => [poll, ...prev]);
       setPollQuestion('');
       setPollOptionsText('同意\n不同意');
@@ -1131,78 +963,7 @@ export default function PlayPage() {
     } finally {
       setPollBusy(false);
     }
-  }, [pdfId, currentPage, pollQuestion, pollOptionsText, pollShowResults]);
-
-  const stopVoicePollTracks = useCallback(() => {
-    voicePollStreamRef.current?.getTracks().forEach((track) => track.stop());
-    voicePollStreamRef.current = null;
-  }, []);
-
-  const handleStartVoicePollRecording = useCallback(async () => {
-    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
-      setPollError('此瀏覽器不支援 WebAudio 錄音');
-      return;
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : undefined;
-      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-      voicePollChunksRef.current = [];
-      voicePollStreamRef.current = stream;
-      voicePollRecorderRef.current = recorder;
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) voicePollChunksRef.current.push(event.data);
-      };
-      recorder.onstop = () => {
-        const blob = new Blob(voicePollChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
-        setVoicePollAudio(blob);
-        setVoicePollAudioUrl((prev) => {
-          if (prev) URL.revokeObjectURL(prev);
-          return URL.createObjectURL(blob);
-        });
-        setVoicePollRecording(false);
-        stopVoicePollTracks();
-      };
-      recorder.start();
-      setVoicePollRecording(true);
-      setPollError(null);
-    } catch (err) {
-      stopVoicePollTracks();
-      setVoicePollRecording(false);
-      setPollError(err instanceof Error ? `無法開始錄音：${err.message}` : '無法開始錄音');
-    }
-  }, [stopVoicePollTracks]);
-
-  const handleStopVoicePollRecording = useCallback(() => {
-    const recorder = voicePollRecorderRef.current;
-    if (recorder && recorder.state !== 'inactive') recorder.stop();
-  }, []);
-
-  const handleCreateVoicePoll = useCallback(async () => {
-    if (!pdfId || !currentPage || !voicePollAudio) return;
-    setPollBusy(true);
-    setPollError(null);
-    try {
-      const res = await createVoicePagePoll(pdfId, currentPage.page_number, voicePollAudio, voicePollPrompt);
-      setPagePolls((prev) => [res.poll, ...prev]);
-      setVoicePollTranscript(res.transcript);
-      setVoicePollAudio(null);
-      setVoicePollAudioUrl((prev) => {
-        if (prev) URL.revokeObjectURL(prev);
-        return '';
-      });
-      setPollStarted(true);
-    } catch (err) {
-      setPollError(err instanceof ApiError ? err.message : '用語音建立投票失敗');
-    } finally {
-      setPollBusy(false);
-    }
-  }, [pdfId, currentPage, voicePollAudio, voicePollPrompt]);
-
-  useEffect(() => () => {
-    stopVoicePollTracks();
-    if (voicePollAudioUrl) URL.revokeObjectURL(voicePollAudioUrl);
-  }, [stopVoicePollTracks, voicePollAudioUrl]);
+  }, [pdfId, currentPage, pollQuestion, pollOptionsText]);
 
   const handleStartPoll = useCallback(() => {
     setPollStarted(true);
@@ -1228,27 +989,6 @@ export default function PlayPage() {
       setPollVotes((prev) => ({ ...prev, [pollId]: optionIndex }));
     } catch (err) {
       setPollError(err instanceof ApiError ? err.message : '投票失敗');
-    } finally {
-      setPollBusy(false);
-    }
-  }, [pdfId]);
-
-  const handleDeletePoll = useCallback(async (pollId: number) => {
-    if (!pdfId) return;
-    const ok = window.confirm('確定要刪除這個投票問題嗎？已收集的投票結果也會一併刪除。');
-    if (!ok) return;
-    setPollBusy(true);
-    setPollError(null);
-    try {
-      await deletePagePoll(pdfId, pollId);
-      setPagePolls((prev) => prev.filter((item) => item.id !== pollId));
-      setPollVotes((prev) => {
-        const next = { ...prev };
-        delete next[pollId];
-        return next;
-      });
-    } catch (err) {
-      setPollError(err instanceof ApiError ? err.message : '刪除投票失敗');
     } finally {
       setPollBusy(false);
     }
@@ -1530,15 +1270,6 @@ export default function PlayPage() {
       setShareBusy(false);
     }
   }, [pdfId, shareAccess]);
-
-  const handleShowShareLink = useCallback(() => {
-    if (!shareUrl) {
-      setShareError('尚未建立分享連結，請先建立分享連結。');
-      return;
-    }
-    setShareError(null);
-    setShareDialogOpen(true);
-  }, [shareUrl]);
 
   const regenAnySelected = regenOptions.image || regenOptions.script || regenOptions.audio;
   const regenJobRunning =
@@ -1969,11 +1700,10 @@ export default function PlayPage() {
 
   const progressRatio =
     duration > 0 ? Math.min(1, currentTime / duration) * 1000 : 0;
-  const shouldShowClassroomNextHint =
-    classroomMode && classroomAwaitingNext && !finished && (!syncEnabled || syncRole === 'master');
-  const visiblePagePolls = pagePolls.filter((poll) => poll.is_active);
-  const showFullscreenPoll = imageOnlyFullscreen && pollStarted && visiblePagePolls.length > 0;
-  const visibleSyncQuestions = syncQuestions.filter((item) => item.show_on_screen);
+  const syncDisplayedQuestion = syncDisplayedQuestionId
+    ? syncFollowerQuestions.find((q) => q.id === syncDisplayedQuestionId) ?? null
+    : null;
+  const syncOverlayText = syncAiAnswer?.answer || syncDisplayedQuestion?.question || '';
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
@@ -1995,76 +1725,17 @@ export default function PlayPage() {
           >
             離開全螢幕
           </button>
-          {shouldShowClassroomNextHint || currentSentence ? (
+          {syncOverlayText ? (
             <div className="pointer-events-none absolute bottom-4 left-1/2 w-[min(92vw,1000px)] -translate-x-1/2 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-              <div
-                className={`mx-auto rounded-md px-4 py-2 text-center text-base font-medium leading-relaxed text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] md:text-lg ${
-                  shouldShowClassroomNextHint
-                    ? 'border border-amber-300/50 bg-amber-500/25 text-amber-50'
-                    : 'bg-black/65'
-                }`}
-              >
-                <p className="line-clamp-2 whitespace-pre-wrap">
-                  {shouldShowClassroomNextHint ? '本頁播放完畢，請按 Space 鍵進入下一頁。' : currentSentence}
-                </p>
+              <div className="mx-auto rounded-md bg-cyan-950/85 px-4 py-3 text-center text-base font-medium leading-relaxed text-cyan-50 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] md:text-lg">
+                <p className="line-clamp-5 whitespace-pre-wrap">{syncOverlayText}</p>
               </div>
             </div>
-          ) : null}
-          {showFullscreenPoll ? (
-            <div className="absolute inset-x-3 bottom-4 z-[110] max-h-[70vh] overflow-y-auto rounded-xl border border-cyan-400/40 bg-slate-950/90 p-3 shadow-2xl backdrop-blur md:left-auto md:right-4 md:top-20 md:w-[min(420px,42vw)]">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <div>
-                  <h2 className="text-sm font-semibold text-cyan-100">📊 Realtime Poll</h2>
-                  <p className="text-[11px] text-slate-400">全螢幕投票已自動顯示，請選擇答案。</p>
-                </div>
-                <span className="shrink-0 rounded-full border border-cyan-400/40 px-2 py-0.5 text-[11px] text-cyan-100">
-                  第 {currentPage?.page_number ?? '-'} 頁
-                </span>
+          ) : currentSentence ? (
+            <div className="pointer-events-none absolute bottom-4 left-1/2 w-[min(92vw,1000px)] -translate-x-1/2 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+              <div className="mx-auto rounded-md bg-black/65 px-4 py-2 text-center text-base font-medium leading-relaxed text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] md:text-lg">
+                <p className="line-clamp-2 whitespace-pre-wrap">{currentSentence}</p>
               </div>
-              <div className="space-y-2">
-                {visiblePagePolls.map((poll) => (
-                  <div key={`fullscreen-${poll.id}`} className="rounded-lg border border-slate-700 bg-slate-900/80 p-2">
-                    <div className="mb-2 flex items-start justify-between gap-2">
-                      <h3 className="text-sm font-medium leading-snug text-slate-100">{poll.question}</h3>
-                      <span className="shrink-0 rounded-full border border-slate-600 px-1.5 py-0.5 text-[10px] text-slate-300">
-                        {poll.total_votes} 票
-                      </span>
-                    </div>
-                    <div className="space-y-1.5">
-                      {poll.options.map((option, idx) => {
-                        const ratio = poll.total_votes > 0 ? Math.round((option.votes / poll.total_votes) * 100) : 0;
-                        const selected = pollVotes[poll.id] === idx;
-                        return (
-                          <button
-                            key={`fullscreen-${poll.id}-${idx}`}
-                            type="button"
-                            onClick={() => void handleVotePoll(poll.id, idx)}
-                            disabled={pollBusy || !poll.is_active}
-                            className={`w-full rounded-md border px-3 py-2 text-left text-sm transition ${selected ? 'border-emerald-300 bg-emerald-500/20 text-emerald-50' : 'border-slate-600 bg-slate-800/80 text-slate-100 hover:bg-slate-700'} disabled:cursor-not-allowed disabled:opacity-60`}
-                          >
-                            <div className="mb-1 flex items-center justify-between gap-2">
-                              <span className="min-w-0 truncate">{option.text}</span>
-                              <span className="font-mono text-[11px] text-slate-300">{option.votes} · {ratio}%</span>
-                            </div>
-                            <div className="h-1.5 overflow-hidden rounded-full bg-slate-700">
-                              <div className="h-full rounded-full bg-cyan-300" style={{ width: `${ratio}%` }} />
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-          {visibleSyncQuestions.length > 0 ? (
-            <div className="pointer-events-none absolute left-1/2 top-6 w-[min(92vw,900px)] -translate-x-1/2 space-y-2">
-              {visibleSyncQuestions.slice(0, 3).map((item) => (
-                <div key={item.id} className="rounded-xl border border-cyan-300/50 bg-slate-950/80 px-4 py-3 text-center text-lg font-semibold text-cyan-50 shadow-2xl">
-                  Q：{item.question}
-                </div>
-              ))}
             </div>
           ) : null}
         </div>
@@ -2114,7 +1785,6 @@ export default function PlayPage() {
       <audio
         ref={audioRef}
         preload="auto"
-        muted={audioMuted}
         onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
         onCanPlay={() => {
           clearAudioRetryTimer();
@@ -2196,64 +1866,77 @@ export default function PlayPage() {
               同步模式
               {syncEnabled ? `(${syncRole === 'master' ? 'master' : 'follower'})` : ''}
             </label>
-            {syncEnabled && syncRole === 'follower' && syncFollowerCode ? (
-              <span className="ml-1 rounded-full border border-slate-700 px-2 py-0.5 text-[11px] text-slate-300">
-                代號：{syncFollowerCode}
-              </span>
-            ) : null}
           </div>
           {syncError ? <div className="mt-1 text-xs text-rose-300">{syncError}</div> : null}
           {syncEnabled ? (
             <div className="mx-auto w-full max-w-5xl px-4 pb-3">
-              <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-3 text-xs text-cyan-50">
-                {syncRole === 'master' ? (
-                  <div className="space-y-2">
-                    <div className="font-semibold">Follower 提問（可按 s 顯示最新問題／隱藏目前顯示問題）</div>
-                    {syncQuestions.length === 0 ? (
-                      <div className="text-cyan-100/70">目前尚無 follower 問題。</div>
-                    ) : (
-                      <div className="max-h-40 space-y-2 overflow-auto pr-1">
-                        {syncQuestions.map((item) => (
-                          <div key={item.id} className="flex items-start justify-between gap-2 rounded-md border border-cyan-400/20 bg-slate-950/40 p-2">
-                            <div className="min-w-0 flex-1">
-                              <div className="break-words text-sm text-slate-100">{item.question}</div>
-                              <div className="mt-0.5 text-[11px] text-slate-400">{new Date(item.created_at).toLocaleTimeString()}</div>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => void handleToggleSyncQuestionVisibility(item.id, !item.show_on_screen)}
-                              className="shrink-0 rounded-md border border-cyan-400/40 px-2 py-1 text-[11px] text-cyan-100 hover:bg-cyan-400/10"
-                            >
-                              {item.show_on_screen ? '隱藏' : '顯示'}
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="rounded-md border border-slate-700 bg-slate-900/80 p-3 text-xs text-slate-200">
+                {syncRole === 'follower' ? (
+                  <div className="grid gap-2 md:grid-cols-[8rem_1fr_auto] md:items-center">
                     <input
-                      value={syncQuestionInput}
-                      onChange={(e) => setSyncQuestionInput(e.target.value)}
+                      value={syncFollowerCode}
+                      onChange={(e) => setSyncFollowerCode(e.target.value)}
+                      placeholder="代號"
+                      className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-100"
+                      maxLength={80}
+                    />
+                    <input
+                      value={syncFollowerQuestionInput}
+                      onChange={(e) => setSyncFollowerQuestionInput(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault();
-                          void handleSubmitSyncQuestion();
-                        }
+                        if (e.key === 'Enter') void handleSubmitFollowerQuestion();
                       }}
+                      placeholder="輸入要問 master 的問題"
+                      className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-100"
                       maxLength={500}
-                      placeholder="輸入想問老師的問題…"
-                      className="min-w-0 flex-1 rounded-md border border-cyan-500/40 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500"
                     />
                     <button
                       type="button"
-                      onClick={() => void handleSubmitSyncQuestion()}
-                      disabled={syncQuestionBusy || !syncQuestionInput.trim()}
-                      className="rounded-md border border-cyan-400/60 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-100 disabled:opacity-40"
+                      onClick={() => void handleSubmitFollowerQuestion()}
+                      disabled={!syncFollowerQuestionInput.trim()}
+                      className="rounded border border-cyan-500/50 bg-cyan-500/15 px-3 py-1 text-cyan-100 disabled:opacity-40"
                     >
-                      {syncQuestionBusy ? '送出中…' : '送出問題'}
+                      送出問題
                     </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="font-medium text-slate-100">
+                        Follower 問題：{syncFollowerQuestions.length} 題
+                        <span className="ml-2 text-slate-400">按 a 讓 AI 總結並回答</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void handleToggleDisplayedQuestion()}
+                          disabled={syncFollowerQuestions.length === 0}
+                          className="rounded border border-slate-600 px-2 py-1 text-slate-200 disabled:opacity-40"
+                        >
+                          {syncDisplayedQuestionId ? '隱藏問題' : '顯示最新問題'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleAiAnswerFollowerQuestions()}
+                          disabled={syncAiAnswerBusy || syncFollowerQuestions.length === 0}
+                          className="rounded border border-emerald-500/50 bg-emerald-500/15 px-2 py-1 text-emerald-100 disabled:opacity-40"
+                        >
+                          {syncAiAnswerBusy ? 'AI 回答中…' : 'AI 總結回答 (a)'}
+                        </button>
+                      </div>
+                    </div>
+                    {syncAiAnswer ? (
+                      <div className="rounded border border-cyan-500/30 bg-cyan-500/10 p-2 text-cyan-50 whitespace-pre-wrap">
+                        {syncAiAnswer.answer}
+                      </div>
+                    ) : null}
+                    <div className="max-h-28 space-y-1 overflow-auto">
+                      {syncFollowerQuestions.slice(0, 5).map((q) => (
+                        <div key={q.id} className="rounded bg-slate-950/70 px-2 py-1">
+                          <span className="text-cyan-300">{q.code || '匿名'}：</span>{q.question}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -2370,15 +2053,6 @@ export default function PlayPage() {
                 >
                   {shareBusy ? '建立中…' : '建立分享連結'}
                 </button>
-                {shareUrl ? (
-                  <button
-                    type="button"
-                    onClick={handleShowShareLink}
-                    className="rounded-md border border-slate-600 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
-                  >
-                    顯示分享連結
-                  </button>
-                ) : null}
               </div>
             ) : null}
           </div>
@@ -2505,25 +2179,7 @@ export default function PlayPage() {
             tabIndex={0}
           >
             <div className="relative flex h-full w-full max-w-4xl items-center justify-center">
-              {pageQrVisible && currentPageQrUrl ? (
-                <div
-                  className="flex w-full flex-col items-center justify-center gap-4 rounded-lg border border-cyan-500/40 bg-slate-950 p-6 text-center shadow-xl"
-                  style={{ minHeight: `${slideImageMaxHeightVh}vh` }}
-                >
-                  <div className="rounded-2xl bg-white p-4 shadow-lg">
-                    <img
-                      src={currentPageQrUrl}
-                      alt={`第 ${currentPage?.page_number ?? '-'} 頁 QR code`}
-                      className="h-64 w-64 max-w-[70vw] rounded md:h-80 md:w-80"
-                    />
-                  </div>
-                  <div className="max-w-xl text-sm text-slate-300">
-                    <p className="font-semibold text-cyan-100">掃描後開啟第 {currentPage?.page_number ?? '-'} 頁</p>
-                    <p className="mt-1 break-all font-mono text-[11px] text-slate-500">{currentPageUrl}</p>
-                    <p className="mt-2 text-xs text-slate-400">按播放鍵或切換頁面後會自動回到投影片畫面。</p>
-                  </div>
-                </div>
-              ) : currentPage?.image_url ? (
+              {currentPage?.image_url ? (
                 <img
                   key={currentPage.page_number}
                   src={withImageBust(currentPage.image_url) ?? currentPage.image_url}
@@ -2544,15 +2200,6 @@ export default function PlayPage() {
                   <div className="mx-auto rounded-md bg-black/60 px-4 py-2 text-center text-sm font-medium leading-relaxed text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] md:text-base">
                     <p className="line-clamp-2 whitespace-pre-wrap">{currentSentence}</p>
                   </div>
-                </div>
-              ) : null}
-              {visibleSyncQuestions.length > 0 ? (
-                <div className="pointer-events-none absolute left-1/2 top-3 w-[min(92%,850px)] -translate-x-1/2 space-y-2 px-2">
-                  {visibleSyncQuestions.slice(0, 2).map((item) => (
-                    <div key={item.id} className="rounded-lg border border-cyan-300/50 bg-slate-950/80 px-4 py-2 text-center text-sm font-semibold text-cyan-50 shadow-xl md:text-base">
-                      Q：{item.question}
-                    </div>
-                  ))}
                 </div>
               ) : null}
             </div>
@@ -2613,21 +2260,6 @@ export default function PlayPage() {
             >
               ⏭
             </button>
-            <button
-              type="button"
-              onClick={showCurrentPageQr}
-              disabled={!currentPageUrl}
-              className={`rounded-full border px-3 py-2 text-sm disabled:opacity-30 ${
-                pageQrVisible
-                  ? 'border-cyan-400/70 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/30'
-                  : 'border-slate-700 hover:bg-slate-800'
-              }`}
-              aria-pressed={pageQrVisible}
-              aria-label="顯示本頁 QR code"
-              title="顯示本頁 QR code"
-            >
-              QR
-            </button>
             <input
               type="range"
               min={0}
@@ -2640,56 +2272,7 @@ export default function PlayPage() {
             <div className="order-3 w-[5.25rem] shrink-0 whitespace-nowrap text-right font-mono text-[11px] text-slate-300 sm:order-none sm:w-24 sm:text-xs">
               {formatTime(currentTime)} / {formatTime(duration)}
             </div>
-            {detail?.total_audio_duration_seconds != null && detail.total_audio_duration_seconds > 0 && (
-              <div className="order-4 shrink-0 whitespace-nowrap text-right font-mono text-[11px] text-slate-400 sm:order-none sm:text-xs">
-                總長 {formatTime(detail.total_audio_duration_seconds)}
-              </div>
-            )}
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">
-            <div>
-              <span className="font-semibold text-slate-200">音訊</span>
-              <span className="ml-2 text-slate-400">
-                {syncEnabled && syncRole === 'follower' && !followerAudioUnlocked
-                  ? '老師端已強制學生端靜音。'
-                  : audioMuted
-                    ? '目前本機靜音。'
-                    : '目前本機可播放聲音。'}
-              </span>
-            </div>
-            <label className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-950 px-3 py-1 text-xs text-slate-300">
-              <input
-                type="checkbox"
-                checked={audioMuted}
-                disabled={syncEnabled && syncRole === 'follower' && !followerAudioUnlocked}
-                onChange={(event) => {
-                  if (syncEnabled && syncRole === 'follower' && !followerAudioUnlocked) return;
-                  setAudioMuted(event.target.checked);
-                }}
-              />
-              本機靜音
-            </label>
-          </div>
-          {syncEnabled && syncRole === 'master' ? (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100">
-              <div>
-                <span className="font-semibold">學生端音訊控制</span>
-                <span className="ml-2 text-cyan-200/80">
-                  {followerAudioUnlocked
-                    ? '已解鎖，學生可自行取消靜音播放。'
-                    : '已鎖定，所有 follower 會被強制靜音。'}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setFollowerAudioUnlocked((unlocked) => !unlocked)}
-                className="rounded-full border border-cyan-300/50 bg-cyan-950/40 px-3 py-1 text-xs font-medium text-cyan-100 hover:bg-cyan-900/60"
-                aria-pressed={followerAudioUnlocked}
-              >
-                {followerAudioUnlocked ? '強制所有學生靜音' : '解鎖學生自行播放'}
-              </button>
-            </div>
-          ) : null}
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">
             <div>
               <span className="font-semibold text-slate-200">上課模式</span>
@@ -2709,25 +2292,6 @@ export default function PlayPage() {
             >
               {classroomMode ? '已開啟' : '開啟'}
             </button>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">
-            <div>
-              <span className="font-semibold text-slate-200">音訊靜音</span>
-              <span className="ml-2 text-slate-400">
-                {audioMuted
-                  ? '目前不播放本機聲音，適合教室同步觀看公播音訊。'
-                  : '目前會播放本機聲音；遠端參與者可自行開啟。'}
-              </span>
-            </div>
-            <label className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-950 px-3 py-1 text-xs font-medium text-slate-300 hover:bg-slate-800">
-              <input
-                type="checkbox"
-                checked={audioMuted}
-                onChange={(e) => setAudioMuted(e.target.checked)}
-                className="accent-cyan-500"
-              />
-              靜音
-            </label>
           </div>
             </div>
           </section>
@@ -2985,10 +2549,7 @@ export default function PlayPage() {
                 <div
                   key={p.page_number}
                   data-page-number={p.page_number}
-                  onClick={() => {
-                    setPageQrVisible(false);
-                    setCurrentIdx(idx);
-                  }}
+                  onClick={() => setCurrentIdx(idx)}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => {
                     e.preventDefault();
@@ -3129,18 +2690,6 @@ export default function PlayPage() {
                       placeholder="每行一個答案選項"
                       className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 outline-none ring-cyan-500/40 placeholder:text-slate-500 focus:ring"
                     />
-                    <label className="mt-2 flex items-start gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-2 py-1.5 text-xs text-slate-300">
-                      <input
-                        type="checkbox"
-                        checked={pollShowResults}
-                        onChange={(e) => setPollShowResults(e.target.checked)}
-                        className="mt-0.5 h-3.5 w-3.5 accent-cyan-400"
-                      />
-                      <span>
-                        顯示投票結果
-                        <span className="block text-[11px] text-slate-500">關閉時，學生只會看到自己的選擇；票數會持續收集。</span>
-                      </span>
-                    </label>
                     <button
                       type="button"
                       onClick={() => void handleCreatePoll()}
@@ -3149,37 +2698,6 @@ export default function PlayPage() {
                     >
                       {pollBusy ? '處理中…' : '建立並開始本頁投票'}
                     </button>
-                    <div className="mt-3 rounded-md border border-slate-800 bg-slate-950/60 p-2">
-                      <div className="mb-2 flex items-center justify-between gap-2">
-                        <p className="text-xs font-medium text-slate-300">WebAudio 語音產生投票</p>
-                        <button
-                          type="button"
-                          onClick={() => voicePollRecording ? handleStopVoicePollRecording() : void handleStartVoicePollRecording()}
-                          disabled={pollBusy || !currentPage}
-                          className={`rounded-md border px-2 py-1 text-[11px] disabled:cursor-not-allowed disabled:opacity-40 ${voicePollRecording ? 'border-rose-400/60 bg-rose-500/15 text-rose-200' : 'border-emerald-400/60 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25'}`}
-                        >
-                          {voicePollRecording ? '停止錄音' : '開始錄音'}
-                        </button>
-                      </div>
-                      <textarea
-                        value={voicePollPrompt}
-                        onChange={(e) => setVoicePollPrompt(e.target.value)}
-                        rows={2}
-                        maxLength={1000}
-                        placeholder="可選：補充希望 AI 產生投票的方向"
-                        className="mb-2 w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 outline-none ring-cyan-500/40 placeholder:text-slate-500 focus:ring"
-                      />
-                      {voicePollAudioUrl ? <audio controls src={voicePollAudioUrl} className="mb-2 w-full" /> : null}
-                      <button
-                        type="button"
-                        onClick={() => void handleCreateVoicePoll()}
-                        disabled={pollBusy || !currentPage || !voicePollAudio || voicePollRecording}
-                        className="w-full rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-xs text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        {pollBusy ? '處理中…' : '用錄音建立並開始投票'}
-                      </button>
-                      {voicePollTranscript ? <p className="mt-2 text-[11px] text-slate-400">最近轉寫：{voicePollTranscript}</p> : null}
-                    </div>
                   </div>
                 )}
                 {pollError ? <p className="text-xs text-rose-300">{pollError}</p> : null}
@@ -3195,35 +2713,14 @@ export default function PlayPage() {
                         <div key={poll.id} className="rounded-md border border-slate-800 bg-slate-950/50 p-2">
                           <div className="mb-1 flex items-start justify-between gap-2">
                             <h3 className="text-xs font-medium text-slate-200">{poll.question}</h3>
-                            <div className="flex shrink-0 items-center gap-1">
-                              <div className="flex flex-wrap justify-end gap-1">
-                              {syncEnabled && syncRole === 'master' ? (
-                                <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-200">
-                                  在線 {syncOnlineCount ?? '-'} 人 · 已答 {poll.answered_count ?? poll.total_votes} 人
-                                </span>
-                              ) : null}
-                              <span className="rounded-full border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-400">
-                                  {poll.total_votes} 票
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => void handleDeletePoll(poll.id)}
-                                disabled={pollBusy}
-                                className="rounded-md border border-rose-500/50 bg-rose-500/10 px-1.5 py-0.5 text-[10px] text-rose-200 hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-                              >
-                                刪除
-                              </button>
-                            </div>
                             <span className="shrink-0 rounded-full border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-400">
-                              {poll.show_results ? `${poll.total_votes} 票` : '隱藏結果'}
-                              </span>
-                            </div>
+                              {poll.total_votes} 票
+                            </span>
                           </div>
                           <div className="space-y-1.5">
                             {poll.options.map((option, idx) => {
                               const ratio = poll.total_votes > 0 ? Math.round((option.votes / poll.total_votes) * 100) : 0;
                               const selected = pollVotes[poll.id] === idx;
-                              const showOptionResults = poll.show_results;
                               return (
                                 <button
                                   key={`${poll.id}-${idx}`}
@@ -3234,15 +2731,11 @@ export default function PlayPage() {
                                 >
                                   <div className="mb-1 flex items-center justify-between gap-2">
                                     <span className="truncate">{option.text}</span>
-                                    <span className="font-mono text-[10px] text-slate-400">
-                                      {showOptionResults ? `${option.votes} · ${ratio}%` : selected ? '已選擇' : '—'}
-                                    </span>
+                                    <span className="font-mono text-[10px] text-slate-400">{option.votes} · {ratio}%</span>
                                   </div>
-                                  {showOptionResults ? (
-                                    <div className="h-1 overflow-hidden rounded-full bg-slate-800">
-                                      <div className="h-full rounded-full bg-cyan-400" style={{ width: `${ratio}%` }} />
-                                    </div>
-                                  ) : null}
+                                  <div className="h-1 overflow-hidden rounded-full bg-slate-800">
+                                    <div className="h-full rounded-full bg-cyan-400" style={{ width: `${ratio}%` }} />
+                                  </div>
                                 </button>
                               );
                             })}
