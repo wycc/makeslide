@@ -334,27 +334,23 @@
 - 驗證：npm --prefix backend run build；git diff --check
 
 # Fourth batch
-[x] 允許使用者用語音輸入產生投票，方便教師當場產生投票。請使用 WebAudio 錄音.　產生時把逐字稿和提示詞和語音一起傳送出去。如果語音模型不接受語音檔，則先用 ASR 把它轉換成文字。（完成分支：feature/fourthbatch-webaudio-voice-poll-20260520-0310）
-[x] 新增一個按鍵顯示分享連結（完成分支：feature/fourthbatch-show-share-link-button-20260520-0119）
-[x] 加上一個 audio mute 的 checkbox。主要是在同步模式時，不要撥放聲音。這樣可以在教室中使用，讓所有人可以看螢幕上的資料，但聽公撥 speaker 的聲音。follower 預設會 mute。如果人是在遠端，需要自行打開聲音。（完成分支：feature/fourthbatch-audio-mute-checkbox-20260520-0140）
-[x] 下一頁的圖會被事先載入cache 住，讓切換時會比較順暢（完成分支：feature/fourthbatch-next-slide-image-preload-20260520-0130）
-[x] 整個簡報所有語音檔的長度會在產生時就先全部加起來，當成整個簡報的時間存在資料庫中。並顯示在播放界面中。請放在時間的後面。（完成分支：feature/fourthbatch-total-audio-duration-20260520-0149）
-[x] 同步模式的 master 模式在 pause audio 後，過一陣子會自動變成 follower 模式，請修正這個問題。（完成分支：feature/fourthbatch-sync-master-pause-retain-master-20260520-0209）
-[x] 在全螢幕模式時，當在上課模式播放一頁完成時，在 master 模式的session 會在字幕的位置顯示請按 space 鍵進入下一頁。（完成分支：feature/fourthbatch-fullscreen-classroom-space-hint-20260520-0220）
-[x] 同步模式的 follower 在取消同步模式或離開播放頁面前都要保持不進入背景（完成分支：feature/fourthbatch-follower-wake-lock-20260520-0249）
-[x] Realtime poll 在按下開使投票時，所有在全螢幕模式的客戶端都自動顯示投票畫面（完成分支：feature/fourthbatch-fullscreen-poll-auto-show-20260520-0259）
-[x] Realtime poll 在每一個投票問題後加上刪除的按鍵（完成分支：feature/fourthbatch-realtime-poll-delete-button-20260520-0200）
-[x] realtime poll 加上一個不要顯示投票結果的checkbox。此時大家只看的到自己的選擇。把這個checkbox 關閉後，結果就會顯示出來。（完成分支：feature/fourthbatch-poll-hide-results-20260520-0239）
-[x] 在 PlayPage 中加上一個顯示本頁 qrcode 的按鍵。按下後就在圖片區顯示 qrcode，直到按下撥放鍵或是換頁為止。（完成分支：feature/playpage-current-page-qrcode-20260520-0229）
+[x] (merge) 允許使用者用語音輸入產生投票，方便教師當場產生投票。請使用 WebAudio 錄音.　產生時把逐字稿和提示詞和語音一起傳送出去。如果語音模型不接受語音檔，則先用 ASR 把它轉換成文字。（完成分支：feature/fourthbatch-webaudio-voice-poll-20260520-0310）
+[x] (merge)新增一個按鍵顯示分享連結（完成分支：feature/fourthbatch-show-share-link-button-20260520-0119）
+[x] (merge)加上一個 audio mute 的 checkbox。主要是在同步模式時，不要撥放聲音。這樣可以在教室中使用，讓所有人可以看螢幕上的資料，但聽公撥 speaker 的聲音。follower 預設會 mute。如果人是在遠端，需要自行打開聲音。（完成分支：feature/fourthbatch-audio-mute-checkbox-20260520-0140）
+[x] (merge)下一頁的圖會被事先載入cache 住，讓切換時會比較順暢（完成分支：feature/fourthbatch-next-slide-image-preload-20260520-0130）
+[x] (merge)整個簡報所有語音檔的長度會在產生時就先全部加起來，當成整個簡報的時間存在資料庫中。並顯示在播放界面中。請放在時間的後面。（完成分支：feature/fourthbatch-total-audio-duration-20260520-0149）
+[x] (merge)同步模式的 master 模式在 pause audio 後，過一陣子會自動變成 follower 模式，請修正這個問題。（完成分支：feature/fourthbatch-sync-master-pause-retain-master-20260520-0209）
+[x] (merge)在全螢幕模式時，當在上課模式播放一頁完成時，在 master 模式的session 會在字幕的位置顯示請按 space 鍵進入下一頁。（完成分支：feature/fourthbatch-fullscreen-classroom-space-hint-20260520-0220）
+[x] (merge)同步模式的 follower 在取消同步模式或離開播放頁面前都要保持不進入背景（完成分支：feature/fourthbatch-follower-wake-lock-20260520-0249）
+[x] (merge)Realtime poll 在按下開使投票時，所有在全螢幕模式的客戶端都自動顯示投票畫面（完成分支：feature/fourthbatch-fullscreen-poll-auto-show-20260520-0259）
+[x] (merge)Realtime poll 在每一個投票問題後加上刪除的按鍵（完成分支：feature/fourthbatch-realtime-poll-delete-button-20260520-0200）
+[*] (merge)realtim  poll 加上一個不要顯示投票結果的checkbox。此時大家只看的到自己的選擇。把這個checkbox 關閉後，結果就會顯示出來。（完成分支：feature/fourthbatch-poll-hide-results-20260520-0239）
+[x] (merge) 在 PlayPage 中加上一個顯示本頁 qrcode 的按鍵。按下後就在圖片區顯示 qrcode，直到按下撥放鍵或是換頁為止。（完成分支：feature/playpage-current-page-qrcode-20260520-0229）
 [x] 老師端(master) 強制所有學生靜音 / 解鎖自行播放（完成分支：feature/fourthbatch-master-force-follower-audio-lock-20260520-0320）
 [x] 所有進入 follower 模式的 session 都會強迫輸入一個代號（完成分支：feature/fourthbatch-follower-require-code-20260520-0451）
 [x] 在 master 端投票時顯示目前在線人數，己作答人數（完成分支：feature/fourthbatch-master-poll-attendance-20260520-0500）
 [x] follower 模式可以輸入問題，master 可以決定是否要把問題顯示在畫面上。（完成分支：feature/fourthbatch-follower-questions-20260520-0510）
 [x] master 可以使用 s 鍵切換是否顯示 follower 問題（完成分支：feature/fourthbatch-master-toggle-follower-questions-20260520-0520）
-[ ] master 可以按下 a 鍵讓 AI 來總結並回答 follower 的問題（完成分支：feature/fourthbatch-ai-answer-follower-questions-20260520-0530）
-[ ] 提供自動產生測驗的功能，我們會進入一個單獨的測驗生成畫面。讓老師下提示詞請 AI 產生測驗。老師可以重複下指令修改問題列表，或是直接手動修改問題。問題列表可以被存下來多次使用。（完成分支：feature/fourthbatch-auto-quiz-builder-20260520-0550）
-[ ] master 可以在問題列表後按下開始測驗按鍵。就會顯示目前上線人的名單，master 可以請所有人確認後按下開始按鍵。follower 就可以開始作答。master 按下結束按鍵後就停止作答，並公佈答案和每一題所有人回答的結果。（完成分支：feature/fourthbatch-live-quiz-session-20260520-0559）
-[ ] 提供一個產生 PDF 功能，會產生一個包括整個簡報和簡報逐字檔。方便學生下載後使用其它工具使用。（完成分支：feature/fourthbatch-pdf-handout-export-20260520-0540）
 
 ## Fourth batch 工作記錄
 
@@ -399,7 +395,7 @@
 - 工作內容：完成「Realtime poll 在每一個投票問題後加上刪除的按鍵」；後端新增刪除投票 API，刪除投票時會連同既有投票紀錄一併移除；前端 Realtime Poll 每個投票問題顯示刪除按鈕，刪除前會確認並即時從列表與本機投票狀態移除。
 - 所在分支：feature/fourthbatch-realtime-poll-delete-button-20260520-0200
 - 驗證：npm --prefix backend run build && npm --prefix frontend run build && git diff --check
-
+（完成分支：feature/fourthbatch-pdf-handout-export-20260520-0540）
 - 時間：2026-05-20 02:10（Asia/Taipei）
 - 工作內容：完成「同步模式的 master 模式在 pause audio 後，過一陣子會自動變成 follower 模式」修正；播放頁同步模式 master 會保存最新頁碼、播放狀態與播放時間，並在同步輪詢期間即使暫停且時間不再變動也定期送出同步狀態，持續延長後端 master TTL，避免暫停一段時間後被判定過期而變成 follower。
 - 所在分支：feature/fourthbatch-sync-master-pause-retain-master-20260520-0209
@@ -521,3 +517,10 @@
 - 工作內容：完成「重新確認 master TODO.md 無未完成項目並更新工作記錄」；檢查 master 中 TODO.md 與 PendingTask.md，未發現行首 `[ ]` 或 `[*]` 未完成核取項目。由於無實作型待辦可選，本次以獨立分支保存確認記錄，並回到 master 更新 TODO.md 的狀態摘要與工作記錄。
 - 所在分支：feature/todo-no-pending-recheck-20260520-0819
 - 驗證：git show master:TODO.md | grep -nE '^[[:space:]]*[-*]?[[:space:]]*\[[[:space:]]\]|^[[:space:]]*[-*]?[[:space:]]*\[\*\]' || true；git show master:PendingTask.md | grep -nE '^[[:space:]]*[-*]?[[:space:]]*\[[[:space:]]\]|^[[:space:]]*[-*]?[[:space:]]*\[\*\]' || true；git diff --check -- docs/todo-rechecks/2026-05-20-0819.md；git diff --check -- TODO.md
+
+# Fifth batch
+[ ] realtime poll 加上一個不要顯示投票結果的checkbox。此時大家只看的到自己的選擇。把這個checkbox 關閉後，結果就會顯示出來。
+[ ] master 可以按下 a 鍵讓 AI 來總結並回答 follower 的問題
+[ ] 提供自動產生測驗的功能，我們會進入一個單獨的測驗生成畫面。讓老師下提示詞請 AI 產生測驗。老師可以重複下指令修改問題列表，或是直接手動修改問題。問題列表可以被存下來多次使用。
+[ ] master 可以在問題列表後按下開始測驗按鍵。就會顯示目前上線人的名單，master 可以請所有人確認後按下開始按鍵。follower 就可以開始作答。master 按下結束按鍵後就停止作答，並公佈答案和每一題所有人回答的結果。
+[ ] 提供一個產生 PDF 功能，會產生一個包括整個簡報和簡報逐字檔。方便學生下載後使用其它工具使用。
