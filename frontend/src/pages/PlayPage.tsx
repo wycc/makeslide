@@ -630,9 +630,29 @@ export default function PlayPage() {
     let cancelled = false;
     void (async () => {
       try {
-        const joined = await joinPlaybackSync(pdfId, next);
+        const followerCodeKey = `makeslide.sync.followerCode.${pdfId}`;
+        let followerCode = window.localStorage.getItem(followerCodeKey)?.trim() || '';
+        let joined;
+        try {
+          joined = await joinPlaybackSync(pdfId, next, followerCode || undefined);
+        } catch (err) {
+          if (!(err instanceof ApiError) || err.code !== 'SYNC_FOLLOWER_CODE_REQUIRED') {
+            throw err;
+          }
+          const entered = window.prompt('請輸入你的顯示代號才能加入 follower 同步模式', followerCode)?.trim() || '';
+          if (!entered) {
+            throw new ApiError('加入 follower 同步模式需要輸入顯示代號', 'SYNC_FOLLOWER_CODE_REQUIRED', 400);
+          }
+          followerCode = entered;
+          window.localStorage.setItem(followerCodeKey, followerCode);
+          joined = await joinPlaybackSync(pdfId, next, followerCode);
+        }
         if (cancelled) return;
+        if (joined.follower_code?.trim()) {
+          window.localStorage.setItem(followerCodeKey, joined.follower_code.trim());
+        }
         setSyncRole(joined.role);
+        setSyncFollowerCode(joined.follower_code?.trim() || followerCode);
         setSyncFollowerQuestions(joined.follower_questions ?? []);
         setSyncDisplayedQuestionId(joined.displayed_question_id ?? null);
         setSyncAiAnswer(joined.ai_answer ?? null);
@@ -1704,6 +1724,7 @@ export default function PlayPage() {
     ? syncFollowerQuestions.find((q) => q.id === syncDisplayedQuestionId) ?? null
     : null;
   const syncOverlayText = syncAiAnswer?.answer || syncDisplayedQuestion?.question || '';
+  const syncOverlayIsAiAnswer = Boolean(syncAiAnswer?.answer);
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
@@ -1726,9 +1747,21 @@ export default function PlayPage() {
             離開全螢幕
           </button>
           {syncOverlayText ? (
-            <div className="pointer-events-none absolute bottom-4 left-1/2 w-[min(92vw,1000px)] -translate-x-1/2 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-              <div className="mx-auto rounded-md bg-cyan-950/85 px-4 py-3 text-center text-base font-medium leading-relaxed text-cyan-50 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] md:text-lg">
-                <p className="line-clamp-5 whitespace-pre-wrap">{syncOverlayText}</p>
+            <div
+              className={`pointer-events-none absolute left-1/2 w-[min(94vw,1100px)] -translate-x-1/2 px-3 ${
+                syncOverlayIsAiAnswer
+                  ? 'bottom-6 max-h-[70vh] pb-[max(0.5rem,env(safe-area-inset-bottom))]'
+                  : 'bottom-4 pb-[max(0.5rem,env(safe-area-inset-bottom))]'
+              }`}
+            >
+              <div
+                className={`mx-auto overflow-y-auto rounded-md bg-cyan-950/90 px-4 text-center font-medium leading-relaxed text-cyan-50 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${
+                  syncOverlayIsAiAnswer
+                    ? 'max-h-[70vh] py-4 text-sm md:text-base'
+                    : 'py-3 text-base md:text-lg'
+                }`}
+              >
+                <p className={`${syncOverlayIsAiAnswer ? '' : 'line-clamp-5'} whitespace-pre-wrap`}>{syncOverlayText}</p>
               </div>
             </div>
           ) : currentSentence ? (
@@ -1926,7 +1959,7 @@ export default function PlayPage() {
                       </div>
                     </div>
                     {syncAiAnswer ? (
-                      <div className="rounded border border-cyan-500/30 bg-cyan-500/10 p-2 text-cyan-50 whitespace-pre-wrap">
+                      <div className="max-h-72 overflow-y-auto rounded border border-cyan-500/30 bg-cyan-500/10 p-3 text-cyan-50 whitespace-pre-wrap">
                         {syncAiAnswer.answer}
                       </div>
                     ) : null}
