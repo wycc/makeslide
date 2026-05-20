@@ -1045,7 +1045,8 @@ export default function PlayPage() {
   }, []);
 
   useEffect(() => {
-    if ((!pollStarted && !imageOnlyFullscreen) || !pdfId || !currentPage) return;
+    const shouldAutoCheckFullscreenPoll = imageOnlyFullscreen && syncEnabled;
+    if ((!pollStarted && !shouldAutoCheckFullscreenPoll) || !pdfId || !currentPage) return;
     let cancelled = false;
     let timer: number | null = null;
     const loadPolls = async () => {
@@ -1053,7 +1054,7 @@ export default function PlayPage() {
         const polls = await fetchPagePolls(pdfId, currentPage.page_number);
         if (cancelled) return;
         setPagePolls(polls);
-        if (!pollStarted && imageOnlyFullscreen && polls.some((poll) => poll.is_active)) {
+        if (!pollStarted && shouldAutoCheckFullscreenPoll && polls.some((poll) => poll.is_active)) {
           setPollStarted(true);
         }
         setPollError(null);
@@ -1067,7 +1068,7 @@ export default function PlayPage() {
       cancelled = true;
       if (timer != null) window.clearTimeout(timer);
     };
-  }, [pollStarted, imageOnlyFullscreen, pdfId, currentPage?.page_number]);
+  }, [pollStarted, imageOnlyFullscreen, syncEnabled, pdfId, currentPage?.page_number]);
 
   const handleSendChat = useCallback(async () => {
     if (isReadOnlyProcessing) return;
