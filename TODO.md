@@ -1,8 +1,8 @@
 # TODO 狀態摘要
 
-- Third Batch 已無未完成項目；Fourth batch 已無未完成項目；Fifth batch 部分項目已由既有 Fourth batch 實作完成並完成清單同步。
-- 最後確認時間：2026-05-20 22:54（Asia/Taipei）
-- 最近檢查：完成 Fifth batch 清單同步，將已在既有分支完成並記錄的「master 可以按下 a 鍵讓 AI 來總結並回答 follower 的問題」、「提供自動產生測驗的功能」、「master 可以在問題列表後按下開始測驗按鍵」、「提供一個產生 PDF 功能」標記完成；本次同步分支為 feature/fifthbatch-todo-sync-existing-completions-20260520-2254。
+- Third Batch 已無未完成項目；Fourth batch 已無未完成項目；Fifth batch 尚餘「播放頁音訊/模式設定整合成狀態列」未完成。
+- 最後確認時間：2026-05-20 23:06（Asia/Taipei）
+- 最近檢查：完成 Fifth batch「follower 在全螢幕時，應該有一個題問，按鍵打開提供對話框」，實作分支為 feature/fifthbatch-fullscreen-follower-question-dialog-20260520-2304。
 
 # First Batch
 [x] (merge)首次流程導引應該只有在列表是空的時候才出現。（完成分支：feature/onboarding-empty-list-only）
@@ -525,7 +525,7 @@
 [x] 提供自動產生測驗的功能，我們會進入一個單獨的測驗生成畫面。讓老師下提示詞請 AI 產生測驗。老師可以重複下指令修改問題列表，或是直接手動修改問題。問題列表可以被存下來多次使用。（完成分支：feature/fourthbatch-auto-quiz-builder-20260520-0550；清單同步分支：feature/fifthbatch-todo-sync-existing-completions-20260520-2254）
 [x] master 可以在問題列表後按下開始測驗按鍵。就會顯示目前上線人的名單，master 可以請所有人確認後按下開始按鍵。follower 就可以開始作答。master 按下結束按鍵後就停止作答，並公佈答案和每一題所有人回答的結果。（完成分支：feature/fourthbatch-live-quiz-session-20260520-0559；清單同步分支：feature/fifthbatch-todo-sync-existing-completions-20260520-2254）
 [x] 提供一個產生 PDF 功能，會產生一個包括整個簡報和簡報逐字檔。方便學生下載後使用其它工具使用。（完成分支：feature/fourthbatch-pdf-handout-export-20260520-0540；清單同步分支：feature/fifthbatch-todo-sync-existing-completions-20260520-2254）
-[ ] follower 在全螢幕時，應該有一個題問，按鍵打開提供對話框
+[x] follower 在全螢幕時，應該有一個題問，按鍵打開提供對話框（完成分支：feature/fifthbatch-fullscreen-follower-question-dialog-20260520-2304）
 [ ] 播放頁中的音訊/學生端音訊控制/上課模式/音訊靜音等設定整合成一個狀態列，在最後加上一個設定按鍵，按下後才層開成現在的界面
 ## Fifth batch 工作記錄
 
@@ -543,3 +543,8 @@
 - 工作內容：完成「Fifth batch 已有完成記錄項目的 TODO 清單同步」；檢查 master 的 TODO.md 發現 Fifth batch 中「AI 總結回答 follower 問題」、「自動產生測驗」、「開始測驗作答流程」與「產生含簡報與逐字稿 PDF」已在 Fourth batch 工作記錄中有完成分支與驗證紀錄，但 Fifth batch 清單仍列為未完成，故將這四項標記為完成並補上原完成分支與本次清單同步分支。
 - 所在分支：feature/fifthbatch-todo-sync-existing-completions-20260520-2254
 - 驗證：git grep -n "^\[ \]" -- TODO.md；git diff --check -- TODO.md
+
+- 時間：2026-05-20 23:06（Asia/Taipei）
+- 工作內容：完成「follower 在全螢幕時，應該有一個題問，按鍵打開提供對話框」；播放頁全螢幕同步 follower 角色會顯示「提問」按鍵，按下後開啟對話框，可輸入問題並送到 master 端既有 follower 提問列表，送出成功後自動關閉對話框。
+- 所在分支：feature/fifthbatch-fullscreen-follower-question-dialog-20260520-2304
+- 驗證：npm --prefix frontend run build && git diff --check -- frontend/src/pages/PlayPage.tsx
