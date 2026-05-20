@@ -44,8 +44,18 @@ interface PagePollRow {
 
 interface PageVoiceContextRow {
   page_number: number;
-  text: string | null;
-  script: string | null;
+  text_path: string | null;
+  script_path: string | null;
+}
+
+function readOptionalPageText(pdfId: string, relativePath: string | null): string {
+  if (!relativePath) return '';
+  try {
+    const filePath = safeJoinPdfPath(pdfId, relativePath);
+    return fs.readFileSync(filePath, 'utf8');
+  } catch {
+    return '';
+  }
 }
 
 const VoicePollSchema = z.object({
@@ -516,8 +526,11 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     if (!transcript) return reply.code(422).send(errorResponse('TRANSCRIPT_EMPTY', 'No speech could be transcribed'));
 
     const page = db
-      .prepare(`SELECT page_number, text, script FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .prepare(`SELECT page_number, text_path, script_path FROM pages WHERE pdf_id = ? AND page_number = ?`)
       .get(id, n) as PageVoiceContextRow | undefined;
+    if (!page) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+    const pageText = readOptionalPageText(id, page.text_path);
+    const pageScript = readOptionalPageText(id, page.script_path);
     const generated = await callChatJSON({
       label: 'voice_poll_generation',
       schema: VoicePollSchema,
@@ -525,7 +538,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       temperature: 0.4,
       messages: [
         { role: 'system', content: '你是教學現場的助教。請根據教師語音、可選提示詞、投影片文字與逐字稿，產生一個適合即時投票的單選問題。只回傳 JSON：{"question":"...","options":["...", "..."]}。選項 2 到 6 個，文字精簡。' },
-        { role: 'user', content: `教師語音逐字稿：\n${transcript}\n\n教師補充提示詞：\n${prompt || '（無）'}\n\n本頁投影片文字：\n${page?.text || '（無）'}\n\n本頁既有講稿：\n${page?.script || '（無）'}` },
+        { role: 'user', content: `教師語音逐字稿：\n${transcript}\n\n教師補充提示詞：\n${prompt || '（無）'}\n\n本頁投影片文字：\n${pageText || '（無）'}\n\n本頁既有講稿：\n${pageScript || '（無）'}` },
       ],
     });
     const now = nowIso();
