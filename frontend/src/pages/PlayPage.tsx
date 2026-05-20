@@ -2242,6 +2242,11 @@ export default function PlayPage() {
             <div className="order-3 w-[5.25rem] shrink-0 whitespace-nowrap text-right font-mono text-[11px] text-slate-300 sm:order-none sm:w-24 sm:text-xs">
               {formatTime(currentTime)} / {formatTime(duration)}
             </div>
+            {detail?.total_audio_duration_seconds != null && detail.total_audio_duration_seconds > 0 && (
+              <div className="order-4 shrink-0 whitespace-nowrap text-right font-mono text-[11px] text-slate-400 sm:order-none sm:text-xs">
+                總長 {formatTime(detail.total_audio_duration_seconds)}
+              </div>
+            )}
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">
             <div>

@@ -118,6 +118,10 @@ function migrate(): void {
     db.exec(`ALTER TABLE pdfs ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private'`);
     logger.info('Added column pdfs.visibility');
   }
+  if (!columnExists('pdfs', 'total_audio_duration_seconds')) {
+    db.exec(`ALTER TABLE pdfs ADD COLUMN total_audio_duration_seconds REAL`);
+    logger.info('Added column pdfs.total_audio_duration_seconds');
+  }
 
   // pages table: drop legacy M1 version (it was never populated) and recreate
   // with the M2 schema. Safe because M1 never wrote rows here.

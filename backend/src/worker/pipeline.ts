@@ -167,6 +167,7 @@ function updatePdf(
     error_message: string | null;
     title: string | null;
     user_prompt: string | null;
+    total_audio_duration_seconds: number | null;
   }>,
 ): void {
   const keys = Object.keys(fields) as (keyof typeof fields)[];
@@ -203,12 +204,25 @@ function bumpProgress(pdfId: string, current: number): void {
   updatePdf(pdfId, { progress_current: current });
 }
 
+function sumAudioDurationSeconds(values: Array<number | null | undefined>): number | null {
+  let total = 0;
+  let count = 0;
+  for (const value of values) {
+    if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+      total += value;
+      count += 1;
+    }
+  }
+  return count > 0 ? Math.round(total * 1000) / 1000 : null;
+}
+
 function getPdfRow(pdfId: string): PdfRow | undefined {
   return db
     .prepare(
       `SELECT id, title, original_filename, status, page_count, progress_step,
               progress_current, progress_total,
               error_message, user_prompt, require_script_confirmation,
+              total_audio_duration_seconds,
               tts_voice, tts_speed, script_max_chars_per_page,
               source_type, source_url, source_video_id, source_caption_language,
               created_at, updated_at
@@ -336,6 +350,7 @@ async function persistMetadata(
     page_count: row.page_count,
     error_message: row.error_message,
     user_prompt: row.user_prompt,
+    total_audio_duration_seconds: row.total_audio_duration_seconds ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
     pages,
@@ -1012,6 +1027,7 @@ async function runPipeline(pdfId: string): Promise<void> {
         status: 'audio_ready',
       });
     }
+    const totalAudioDurationSeconds = sumAudioDurationSeconds(ttsResult.pages.map((p) => p.durationSeconds));
 
     // Merge tts chars + model info into metadata.
     const metaAfterScript = (await readMetadata(pdfId)) ?? null;
@@ -1050,6 +1066,7 @@ async function runPipeline(pdfId: string): Promise<void> {
       progress_current: null,
       progress_total: null,
       error_message: null,
+      total_audio_duration_seconds: totalAudioDurationSeconds,
     });
     await persistMetadata(pdfId, {
       models: mergedModels2,
@@ -1063,6 +1080,7 @@ async function runPipeline(pdfId: string): Promise<void> {
         generatedAudio: ttsResult.pages.filter((p) => !p.skipped).length,
         skippedAudio: ttsResult.pages.filter((p) => p.skipped).length,
         ttsCharsTotal: ttsResult.totalChars,
+        totalAudioDurationSeconds,
       },
       'Pipeline: M4 TTS stage complete — pdf ready',
     );

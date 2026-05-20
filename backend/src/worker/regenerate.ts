@@ -191,6 +191,18 @@ function calculateStepEtaSeconds(step: RegenStepProgress, nowMs = Date.now()): n
   return Math.max(1, Math.ceil(secondsPerUnit * (step.total - step.completed)));
 }
 
+function sumAudioDurationSeconds(values: Array<number | null | undefined>): number | null {
+  let total = 0;
+  let count = 0;
+  for (const value of values) {
+    if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+      total += value;
+      count += 1;
+    }
+  }
+  return count > 0 ? Math.round(total * 1000) / 1000 : null;
+}
+
 function refreshJobEta(state: RegenJobState, nowMs = Date.now()): void {
   for (const step of state.steps) {
     step.eta_seconds = step.status === 'running' ? calculateStepEtaSeconds(step, nowMs) : null;
@@ -1090,10 +1102,19 @@ async function runRegenerateAudio(
         WHERE pdf_id = ? AND page_number = ?`,
     ).run(relPath, a.durationSeconds, updatedAt, pdfId, a.pageNumber);
   }
-  db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(updatedAt, pdfId);
+  const durationRows = db
+    .prepare(`SELECT audio_duration_seconds FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`)
+    .all(pdfId) as Array<{ audio_duration_seconds: number | null }>;
+  const totalAudioDurationSeconds = sumAudioDurationSeconds(durationRows.map((row) => row.audio_duration_seconds));
+  db.prepare(`UPDATE pdfs SET total_audio_duration_seconds = ?, updated_at = ? WHERE id = ?`).run(
+    totalAudioDurationSeconds,
+    updatedAt,
+    pdfId,
+  );
   try {
     const meta = await readMetadata(pdfId);
     if (meta) {
+      meta.total_audio_duration_seconds = totalAudioDurationSeconds;
       for (const a of res.pages) {
         const padded = String(a.pageNumber).padStart(pad, '0');
         const mp = meta.pages.find((x) => x.page_number === a.pageNumber);

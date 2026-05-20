@@ -73,6 +73,7 @@ export interface PdfListItem {
   tts_speed?: number | null;
   script_max_chars_per_page?: number | null;
   image_style_prompt?: string | null;
+  total_audio_duration_seconds?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -107,6 +108,7 @@ export interface PdfDetail {
   tts_speed?: number | null;
   script_max_chars_per_page?: number | null;
   image_style_prompt?: string | null;
+  total_audio_duration_seconds?: number | null;
   share_mode?: 'read_only' | 'editable';
   created_at: string;
   updated_at: string;
