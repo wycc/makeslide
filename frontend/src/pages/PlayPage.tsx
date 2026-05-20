@@ -1045,8 +1045,7 @@ export default function PlayPage() {
   }, []);
 
   useEffect(() => {
-    const shouldAutoCheckFullscreenPoll = imageOnlyFullscreen && syncEnabled;
-    if ((!pollStarted && !shouldAutoCheckFullscreenPoll) || !pdfId || !currentPage) return;
+    if (!pollStarted || !pdfId || !currentPage) return;
     let cancelled = false;
     let timer: number | null = null;
     const loadPolls = async () => {
@@ -1054,9 +1053,6 @@ export default function PlayPage() {
         const polls = await fetchPagePolls(pdfId, currentPage.page_number);
         if (cancelled) return;
         setPagePolls(polls);
-        if (!pollStarted && shouldAutoCheckFullscreenPoll && polls.some((poll) => poll.is_active)) {
-          setPollStarted(true);
-        }
         setPollError(null);
       } catch (err) {
         if (!cancelled) setPollError(err instanceof ApiError ? err.message : '讀取投票失敗');
@@ -1068,7 +1064,7 @@ export default function PlayPage() {
       cancelled = true;
       if (timer != null) window.clearTimeout(timer);
     };
-  }, [pollStarted, imageOnlyFullscreen, syncEnabled, pdfId, currentPage?.page_number]);
+  }, [pollStarted, pdfId, currentPage?.page_number]);
 
   const handleSendChat = useCallback(async () => {
     if (isReadOnlyProcessing) return;
