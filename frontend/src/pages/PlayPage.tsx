@@ -2001,7 +2001,7 @@ export default function PlayPage() {
           </div>
           {/* 手機：一排 3 欄（設定 / 產生影片 / 開啟影片）；桌面：維持原本 flex 排列。
               註：「重生」按鍵已搬到右側問答區（aside）。 */}
-          <div className="grid grid-cols-3 gap-2 md:flex md:items-center md:gap-2">
+          <div className="grid grid-cols-3 gap-2 md:flex md:flex-wrap md:items-center md:justify-end md:gap-2">
             <button
               type="button"
               onClick={() => setImageOnlyFullscreen(true)}
