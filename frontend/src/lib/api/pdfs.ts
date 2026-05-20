@@ -345,6 +345,12 @@ export async function createVoicePagePoll(
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as CreateVoicePagePollResponse;
 }
+export async function deletePagePoll(id: string, pollId: number): Promise<void> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/polls/${encodeURIComponent(String(pollId))}`, {
+    method: 'DELETE',
+  });
+  if (!resp.ok && resp.status !== 204) throw await parseErrorBody(resp);
+}
 
 export async function votePagePoll(id: string, pollId: number, voterId: string, optionIndex: number): Promise<PagePoll> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/polls/${encodeURIComponent(String(pollId))}/votes`, {

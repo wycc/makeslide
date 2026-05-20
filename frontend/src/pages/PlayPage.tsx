@@ -15,6 +15,7 @@ import {
   createPagePoll,
   createVoicePagePoll,
   createPdfShare,
+  deletePagePoll,
   deleteSlide,
   fetchPdfDetail,
   fetchPagePolls,
@@ -1046,6 +1047,27 @@ export default function PlayPage() {
       setPollVotes((prev) => ({ ...prev, [pollId]: optionIndex }));
     } catch (err) {
       setPollError(err instanceof ApiError ? err.message : '投票失敗');
+    } finally {
+      setPollBusy(false);
+    }
+  }, [pdfId]);
+
+  const handleDeletePoll = useCallback(async (pollId: number) => {
+    if (!pdfId) return;
+    const ok = window.confirm('確定要刪除這個投票問題嗎？已收集的投票結果也會一併刪除。');
+    if (!ok) return;
+    setPollBusy(true);
+    setPollError(null);
+    try {
+      await deletePagePoll(pdfId, pollId);
+      setPagePolls((prev) => prev.filter((item) => item.id !== pollId));
+      setPollVotes((prev) => {
+        const next = { ...prev };
+        delete next[pollId];
+        return next;
+      });
+    } catch (err) {
+      setPollError(err instanceof ApiError ? err.message : '刪除投票失敗');
     } finally {
       setPollBusy(false);
     }
@@ -2820,9 +2842,19 @@ export default function PlayPage() {
                         <div key={poll.id} className="rounded-md border border-slate-800 bg-slate-950/50 p-2">
                           <div className="mb-1 flex items-start justify-between gap-2">
                             <h3 className="text-xs font-medium text-slate-200">{poll.question}</h3>
-                            <span className="shrink-0 rounded-full border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-400">
-                              {poll.total_votes} 票
-                            </span>
+                            <div className="flex shrink-0 items-center gap-1">
+                              <span className="rounded-full border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-400">
+                                {poll.total_votes} 票
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => void handleDeletePoll(poll.id)}
+                                disabled={pollBusy}
+                                className="rounded-md border border-rose-500/50 bg-rose-500/10 px-1.5 py-0.5 text-[10px] text-rose-200 hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                刪除
+                              </button>
+                            </div>
                           </div>
                           <div className="space-y-1.5">
                             {poll.options.map((option, idx) => {
