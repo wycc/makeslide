@@ -269,6 +269,7 @@ export interface SyncStateResponse {
   is_playing: boolean;
   current_time: number;
   follower_audio_unlocked: boolean;
+  updated_at: string;
   master_expires_at: string | null;
   online_count?: number;
   questions?: SyncFollowerQuestion[];

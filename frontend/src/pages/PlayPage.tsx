@@ -868,6 +868,34 @@ export default function PlayPage() {
     [pdfId, syncRole],
   );
 
+  const handleToggleLatestSyncQuestionVisibility = useCallback(async () => {
+    if (!pdfId || !syncClientIdRef.current || syncRole !== 'master' || syncQuestions.length === 0) return;
+    const visibleQuestions = syncQuestions.filter((item) => item.show_on_screen);
+    try {
+      if (visibleQuestions.length > 0) {
+        await Promise.all(
+          visibleQuestions.map((item) =>
+            updateSyncQuestionVisibility(pdfId, syncClientIdRef.current, item.id, false),
+          ),
+        );
+        setSyncQuestions((items) => items.map((item) => ({ ...item, show_on_screen: false })));
+      } else {
+        const latestHiddenQuestion = syncQuestions.find((item) => !item.show_on_screen);
+        if (!latestHiddenQuestion) return;
+        const updated = await updateSyncQuestionVisibility(
+          pdfId,
+          syncClientIdRef.current,
+          latestHiddenQuestion.id,
+          true,
+        );
+        setSyncQuestions((items) => items.map((item) => (item.id === updated.id ? updated : item)));
+      }
+      setSyncError(null);
+    } catch (err) {
+      setSyncError(err instanceof ApiError ? err.message : '問題顯示狀態更新失敗');
+    }
+  }, [pdfId, syncRole, syncQuestions]);
+
   const handleRetry = useCallback(() => {
     const audio = audioRef.current;
     if (!audio || !currentPage?.audio_url) return;
@@ -905,6 +933,11 @@ export default function PlayPage() {
       } else if (ev.key === 'ArrowRight') {
         ev.preventDefault();
         goNext();
+      } else if (ev.key.toLowerCase() === 's') {
+        if (syncEnabled && syncRole === 'master') {
+          ev.preventDefault();
+          void handleToggleLatestSyncQuestionVisibility();
+        }
       } else if (ev.key === 'Escape') {
         if (imageOnlyFullscreen) {
           ev.preventDefault();
@@ -920,7 +953,7 @@ export default function PlayPage() {
     };
     window.addEventListener('keydown', onKey, { capture: true });
     return () => window.removeEventListener('keydown', onKey, { capture: true });
-  }, [playPause, goPrev, goNext, navigate, imageOnlyFullscreen]);
+  }, [playPause, goPrev, goNext, navigate, imageOnlyFullscreen, syncEnabled, syncRole, handleToggleLatestSyncQuestionVisibility]);
 
   const currentScript =
     currentPage != null ? scripts[currentPage.page_number] ?? '' : '';
@@ -2161,7 +2194,7 @@ export default function PlayPage() {
               <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-3 text-xs text-cyan-50">
                 {syncRole === 'master' ? (
                   <div className="space-y-2">
-                    <div className="font-semibold">Follower 提問（可決定是否顯示在投影片上）</div>
+                    <div className="font-semibold">Follower 提問（可按 s 顯示最新問題／隱藏目前顯示問題）</div>
                     {syncQuestions.length === 0 ? (
                       <div className="text-cyan-100/70">目前尚無 follower 問題。</div>
                     ) : (
