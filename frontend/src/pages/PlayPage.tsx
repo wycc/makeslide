@@ -372,7 +372,11 @@ export default function PlayPage() {
   }, [audioMuted]);
 
   useEffect(() => {
-    if (!syncEnabled || syncRole !== 'follower') return;
+    if (!syncEnabled) return;
+    if (syncRole === 'master') {
+      setAudioMuted(false);
+      return;
+    }
     if (!followerAudioUnlocked) {
       setAudioMuted(true);
       return;
@@ -748,6 +752,8 @@ export default function PlayPage() {
         }
         if (joined.role === 'follower' && !joined.follower_audio_unlocked) {
           setAudioMuted(true);
+        } else if (joined.role === 'master') {
+          setAudioMuted(false);
         }
         setSyncOnlineCount(joined.online_count ?? null);
         setSyncQuestions(joined.questions ?? []);
@@ -805,8 +811,10 @@ export default function PlayPage() {
           setFollowerAudioUnlocked(state.follower_audio_unlocked);
           setSyncOnlineCount(state.online_count ?? null);
           setSyncQuestions(state.questions ?? []);
-          if (state.role === 'master') return;
-          setPollStarted(state.realtime_poll_started);
+          if (state.role === 'master') {
+            setAudioMuted(false);
+            return;
+          }
           if (!state.follower_audio_unlocked) {
             setAudioMuted(true);
           }
@@ -837,6 +845,9 @@ export default function PlayPage() {
 
   useEffect(() => {
     const previousRole = previousSyncRoleRef.current;
+    if (syncEnabled && syncRole === 'master') {
+      setAudioMuted(false);
+    }
     if (syncEnabled && syncRole === 'follower' && previousRole !== 'follower') {
       setAudioMuted(true);
     }
