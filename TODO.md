@@ -521,11 +521,11 @@
 # Fifth batch
 [x] (merge)realtime poll 在全螢幕時，應該只有在 master 有打開 realtime poll 的功能時才會出現（完成分支：feature/fifthbatch-fullscreen-poll-master-only-20260520-2230）
 [x] (merge)當同步打開時，master 的本機靜音模式應該是關閉（完成分支：feature/fifthbatch-sync-master-unmuted-20260520-2242）
-[x] master 可以按下 a 鍵讓 AI 來總結並回答 follower 的問題（完成分支：feature/fourthbatch-ai-answer-follower-questions-20260520-0530；清單同步分支：feature/fifthbatch-todo-sync-existing-completions-20260520-2254）
-[x] 提供自動產生測驗的功能，我們會進入一個單獨的測驗生成畫面。讓老師下提示詞請 AI 產生測驗。老師可以重複下指令修改問題列表，或是直接手動修改問題。問題列表可以被存下來多次使用。（完成分支：feature/fourthbatch-auto-quiz-builder-20260520-0550；清單同步分支：feature/fifthbatch-todo-sync-existing-completions-20260520-2254）
-[x] master 可以在問題列表後按下開始測驗按鍵。就會顯示目前上線人的名單，master 可以請所有人確認後按下開始按鍵。follower 就可以開始作答。master 按下結束按鍵後就停止作答，並公佈答案和每一題所有人回答的結果。（完成分支：feature/fourthbatch-live-quiz-session-20260520-0559；清單同步分支：feature/fifthbatch-todo-sync-existing-completions-20260520-2254）
-[x] 提供一個產生 PDF 功能，會產生一個包括整個簡報和簡報逐字檔。方便學生下載後使用其它工具使用。（完成分支：feature/fourthbatch-pdf-handout-export-20260520-0540；清單同步分支：feature/fifthbatch-todo-sync-existing-completions-20260520-2254）
-[x] follower 在全螢幕時，應該有一個題問，按鍵打開提供對話框（完成分支：feature/fifthbatch-fullscreen-follower-question-dialog-20260520-2304）
+[x] (merge)master 可以按下 a 鍵讓 AI 來總結並回答 follower 的問題（完成分支：feature/fourthbatch-ai-answer-follower-questions-20260520-0530；清單同步分支：feature/fifthbatch-todo-sync-existing-completions-20260520-2254）
+[x] (merge)提供自動產生測驗的功能，我們會進入一個單獨的測驗生成畫面。讓老師下提示詞請 AI 產生測驗。老師可以重複下指令修改問題列表，或是直接手動修改問題。問題列表可以被存下來多次使用。（完成分支：feature/fourthbatch-auto-quiz-builder-20260520-0550；清單同步分支：feature/fifthbatch-todo-sync-existing-completions-20260520-2254）
+[*] master 可以在問題列表後按下開始測驗按鍵。就會顯示目前上線人的名單，master 可以請所有人確認後按下開始按鍵。follower 就可以開始作答。master 按下結束按鍵後就停止作答，並公佈答案和每一題所有人回答的結果。（完成分支：feature/fourthbatch-live-quiz-session-20260520-0559；清單同步分支：feature/fifthbatch-todo-sync-existing-completions-20260520-2254）
+[x] (merge)提供一個產生 PDF 功能，會產生一個包括整個簡報和簡報逐字檔。方便學生下載後使用其它工具使用。（完成分支：feature/fourthbatch-pdf-handout-export-20260520-0540；清單同步分支：feature/fifthbatch-todo-sync-existing-completions-20260520-2254）
+[x] (merge)follower 在全螢幕時，應該有一個題問，按鍵打開提供對話框（完成分支：feature/fifthbatch-fullscreen-follower-question-dialog-20260520-2304）
 [x] 播放頁中的音訊/學生端音訊控制/上課模式/音訊靜音等設定整合成一個狀態列，在最後加上一個設定按鍵，按下後才層開成現在的界面（完成分支：feature/fifthbatch-playpage-audio-statusbar-20260520-2315）
 ## Fifth batch 工作記錄
 
