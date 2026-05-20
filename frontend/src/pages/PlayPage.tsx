@@ -268,9 +268,9 @@ export default function PlayPage() {
   const [syncDisplayedQuestionId, setSyncDisplayedQuestionId] = useState<string | null>(null);
   const [syncAiAnswer, setSyncAiAnswer] = useState<SyncAiAnswer | null>(null);
   const [syncAiAnswerBusy, setSyncAiAnswerBusy] = useState(false);
-  const [syncQuestions, setSyncQuestions] = useState<SyncFollowerQuestion[]>([]);
+  const [, setSyncQuestions] = useState<SyncFollowerQuestion[]>([]);
   const [syncQuestionInput, setSyncQuestionInput] = useState('');
-  const [syncQuestionBusy, setSyncQuestionBusy] = useState(false);
+  const [syncQuestionBusy] = useState(false);
   const [fullscreenQuestionDialogOpen, setFullscreenQuestionDialogOpen] = useState(false);
   const syncClientIdRef = useRef<string>('');
   const applyingRemoteSyncRef = useRef(false);
@@ -738,7 +738,10 @@ export default function PlayPage() {
 
   const handleSubmitFollowerQuestion = useCallback(async () => {
     if (!pdfId || !syncClientIdRef.current) return;
-    const question = syncFollowerQuestionInput.trim();
+    // 全螢幕對話框使用 syncQuestionInput，header 同步列使用 syncFollowerQuestionInput；
+    // 任一非空即視為要送出的內容。
+    const question =
+      syncQuestionInput.trim() || syncFollowerQuestionInput.trim();
     if (!question) return;
     try {
       const item = await submitSyncFollowerQuestion(
@@ -749,15 +752,13 @@ export default function PlayPage() {
       );
       setSyncFollowerQuestions((prev) => [item, ...prev]);
       setSyncFollowerQuestionInput('');
-      const created = await submitSyncFollowerQuestion(pdfId, syncClientIdRef.current, question);
-      setSyncQuestions((items) => [created, ...items.filter((item) => item.id !== created.id)]);
       setSyncQuestionInput('');
       setFullscreenQuestionDialogOpen(false);
       setSyncError(null);
     } catch (err) {
       setSyncError(err instanceof ApiError ? err.message : '送出問題失敗');
     }
-  }, [pdfId, syncFollowerCode, syncFollowerQuestionInput]);
+  }, [pdfId, syncFollowerCode, syncFollowerQuestionInput, syncQuestionInput]);
 
   const handleToggleDisplayedQuestion = useCallback(async () => {
     if (!pdfId || !syncClientIdRef.current) return;
@@ -1772,6 +1773,15 @@ export default function PlayPage() {
                   : 'bottom-4 pb-[max(0.5rem,env(safe-area-inset-bottom))]'
               }`}
             >
+              <div
+                className={`mx-auto overflow-y-auto rounded-md bg-cyan-950/90 px-4 text-center font-medium leading-relaxed text-cyan-50 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${
+                  syncOverlayIsAiAnswer ? 'max-h-[70vh] py-4 text-sm md:text-base' : 'py-3 text-base md:text-lg'
+                }`}
+              >
+                <p className={`${syncOverlayIsAiAnswer ? '' : 'line-clamp-5'} whitespace-pre-wrap`}>{syncOverlayText}</p>
+              </div>
+            </div>
+          ) : null}
           {syncEnabled && syncRole === 'follower' ? (
             <button
               type="button"
@@ -1803,7 +1813,7 @@ export default function PlayPage() {
                   onKeyDown={(e) => {
                     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
                       e.preventDefault();
-                      void handleSubmitSyncQuestion();
+                      void handleSubmitFollowerQuestion();
                     }
                   }}
                   maxLength={500}
@@ -1816,7 +1826,7 @@ export default function PlayPage() {
                   <div className="text-xs text-slate-500">{syncQuestionInput.length}/500，可按 Ctrl/⌘ + Enter 送出</div>
                   <button
                     type="button"
-                    onClick={() => void handleSubmitSyncQuestion()}
+                    onClick={() => void handleSubmitFollowerQuestion()}
                     disabled={syncQuestionBusy || !syncQuestionInput.trim()}
                     className="rounded-md border border-cyan-400/60 bg-cyan-500/20 px-4 py-2 text-sm font-medium text-cyan-50 hover:bg-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-40"
                   >
@@ -1826,7 +1836,7 @@ export default function PlayPage() {
               </div>
             </div>
           ) : null}
-          {shouldShowClassroomNextHint || currentSentence ? (
+          {classroomMode && classroomAwaitingNext || currentSentence ? (
             <div className="pointer-events-none absolute bottom-4 left-1/2 w-[min(92vw,1000px)] -translate-x-1/2 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
               <div
                 className={`mx-auto overflow-y-auto rounded-md bg-cyan-950/90 px-4 text-center font-medium leading-relaxed text-cyan-50 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${
