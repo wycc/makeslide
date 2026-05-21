@@ -243,11 +243,15 @@ function buildSystemPrompt(
   ttsProvider: 'openai' | 'gemini',
   geminiSpeaker1Persona?: string,
   geminiSpeaker2Persona?: string,
+  contentLanguage: 'zh-TW' | 'en' = 'zh-TW',
 ): string {
+  const languageInstruction = contentLanguage === 'en'
+    ? '【輸出語言】請用英文產生逐字稿、旁白與所有可朗讀內容；即使使用者提示或投影片文字是中文，也要翻譯並自然改寫成英文。'
+    : '【輸出語言】請用繁體中文產生逐字稿、旁白與所有可朗讀內容；即使使用者提示或投影片文字是英文，也要翻譯並自然改寫成繁體中文。';
   if (ttsProvider === 'gemini') {
     const fallback = '你是一位 Podcast 逐字稿編輯助理。請輸出 JSON：{"script":"..."}';
     const template = loadPromptTemplate('backend/prompts/generate-script-gemini.md', fallback);
-    const base = [template];
+    const base = [template, '', languageInstruction];
     const sanitized = sanitiseUserPrompt(userPrompt);
     const speaker1 = geminiSpeaker1Persona?.trim();
     const speaker2 = geminiSpeaker2Persona?.trim();
@@ -296,6 +300,8 @@ function buildSystemPrompt(
       ),
       { target_chars: String(targetChars) },
     ),
+    '',
+    languageInstruction,
   ];
 
   const sanitized = sanitiseUserPrompt(userPrompt);
@@ -493,6 +499,7 @@ export async function generateScript(
     runtime.ttsProvider,
     runtime.geminiTtsSpeaker1,
     runtime.geminiTtsSpeaker2,
+    runtime.contentLanguage,
   );
   console.log('System prompt for script generation:\n', system);
   if (userPrompt && userPrompt.trim()) {

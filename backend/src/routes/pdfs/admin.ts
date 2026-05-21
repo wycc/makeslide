@@ -49,6 +49,8 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       gemini_tts_speaker1: runtime.geminiTtsSpeaker1,
       gemini_tts_speaker2: runtime.geminiTtsSpeaker2,
       user_code: runtime.userCode,
+      ui_language: runtime.uiLanguage,
+      content_language: runtime.contentLanguage,
     });
   });
 
@@ -70,6 +72,8 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       geminiTtsSpeaker1: data.gemini_tts_speaker1,
       geminiTtsSpeaker2: data.gemini_tts_speaker2,
       userCode: data.user_code,
+      uiLanguage: data.ui_language,
+      contentLanguage: data.content_language,
     };
     if (typeof next.openaiApiKey === 'string') setOpenAIApiKeyRuntime(next.openaiApiKey);
     const runtime = setRuntimeAiSettings(next);
@@ -90,6 +94,8 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       gemini_tts_speaker1: runtime.geminiTtsSpeaker1,
       gemini_tts_speaker2: runtime.geminiTtsSpeaker2,
       user_code: runtime.userCode,
+      ui_language: runtime.uiLanguage,
+      content_language: runtime.contentLanguage,
     });
   });
 }

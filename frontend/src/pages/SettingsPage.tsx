@@ -9,14 +9,27 @@ import {
   type AuthStatus,
   type SystemAiSettings,
 } from '../lib/api';
+import {
+  CONTENT_LANGUAGE_STORAGE_KEY,
+  LANGUAGE_OPTIONS,
+  UI_LANGUAGE_STORAGE_KEY,
+  type AppLanguage,
+  getStoredContentLanguage,
+  getStoredUiLanguage,
+  storeLanguageSettings,
+  useI18n,
+} from '../i18n';
 
 export default function SettingsPage() { 
   const LOCAL_USER_CODE_KEY = 'makeslide.user_code';
   const navigate = useNavigate();
+  const { t } = useI18n();
   const [openaiApiKey, setOpenaiApiKey] = useState('');
   const [geminiApiKey, setGeminiApiKey] = useState('');
   const [llmProvider, setLlmProvider] = useState<'openai' | 'gemini'>('openai');
   const [ttsProvider, setTtsProvider] = useState<'openai' | 'gemini'>('openai');
+  const [uiLanguage, setUiLanguage] = useState<AppLanguage>(() => getStoredUiLanguage());
+  const [contentLanguage, setContentLanguage] = useState<AppLanguage>(() => getStoredContentLanguage());
   const [openaiLlmModel, setOpenaiLlmModel] = useState('gpt-4o-mini');
   const [geminiLlmModel, setGeminiLlmModel] = useState('gemini-2.0-flash');
   const [openaiTtsModel, setOpenaiTtsModel] = useState('gpt-4o-mini-tts');
@@ -50,17 +63,23 @@ export default function SettingsPage() {
       setGeminiTtsSpeaker2(s.gemini_tts_speaker2 ?? '');
       setAccountId(s.account_id ?? 'default');
       setAccountSettingsFile(s.account_settings_file ?? '');
+      const loadedUiLanguage = s.ui_language ?? getStoredUiLanguage();
+      const loadedContentLanguage = s.content_language ?? getStoredContentLanguage();
+      setUiLanguage(loadedUiLanguage);
+      setContentLanguage(loadedContentLanguage);
+      window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, loadedUiLanguage);
+      window.localStorage.setItem(CONTENT_LANGUAGE_STORAGE_KEY, loadedContentLanguage);
       const cachedUserCode = window.localStorage.getItem(LOCAL_USER_CODE_KEY)?.trim() ?? '';
       setUserCode((auth?.authenticated ? s.user_code : cachedUserCode) ?? '');
       if (s.has_openai_key || s.has_gemini_key) {
-        setMsg('已載入目前 AI 設定。若要更新 API Key，請輸入後儲存。');
+        setMsg(t('settings.loaded'));
       }
     } catch (e) {
-      setErr(e instanceof ApiError ? e.message : '讀取設定狀態失敗');
+      setErr(e instanceof ApiError ? e.message : t('settings.loadError'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   const onLogout = useCallback(async () => {
     setErr(null);
@@ -69,11 +88,11 @@ export default function SettingsPage() {
       await logoutAuth();
       const auth = await getAuthStatus();
       setAuthStatus(auth);
-      setMsg('已登出 Google 帳號');
+      setMsg(t('settings.logoutSuccess'));
     } catch (e) {
-      setErr(e instanceof ApiError ? e.message : '登出失敗');
+      setErr(e instanceof ApiError ? e.message : t('settings.logoutError'));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void loadStatus();
@@ -83,19 +102,19 @@ export default function SettingsPage() {
     setErr(null);
     setMsg(null);
     if (llmProvider === 'openai' && !openaiApiKey.trim()) {
-      setErr('目前 LLM 使用 OpenAI，請至少填入 OPENAI_API_KEY');
+      setErr(t('settings.openaiKeyRequiredForLlm'));
       return;
     }
     if (llmProvider === 'gemini' && !geminiApiKey.trim()) {
-      setErr('目前 LLM 使用 Gemini，請至少填入 GEMINI_API_KEY');
+      setErr(t('settings.geminiKeyRequiredForLlm'));
       return;
     }
     if (ttsProvider === 'openai' && !openaiApiKey.trim()) {
-      setErr('目前 TTS 使用 OpenAI，請至少填入 OPENAI_API_KEY');
+      setErr(t('settings.openaiKeyRequiredForTts'));
       return;
     }
     if (ttsProvider === 'gemini' && !geminiApiKey.trim()) {
-      setErr('目前 TTS 使用 Gemini，請至少填入 GEMINI_API_KEY');
+      setErr(t('settings.geminiKeyRequiredForTts'));
       return;
     }
     setSaving(true);
@@ -112,18 +131,21 @@ export default function SettingsPage() {
         gemini_tts_speaker1: geminiTtsSpeaker1.trim(),
         gemini_tts_speaker2: geminiTtsSpeaker2.trim(),
         user_code: authStatus?.authenticated ? userCode.trim() : undefined,
+        ui_language: uiLanguage,
+        content_language: contentLanguage,
       });
+      storeLanguageSettings(uiLanguage, contentLanguage);
       if (authStatus?.authenticated) {
         window.localStorage.removeItem(LOCAL_USER_CODE_KEY);
       } else {
         window.localStorage.setItem(LOCAL_USER_CODE_KEY, userCode.trim());
       }
-      setMsg('AI 設定已儲存');
+      setMsg(t('settings.saved'));
       setOpenaiApiKey('');
       setGeminiApiKey('');
       window.setTimeout(() => navigate('/'), 300);
     } catch (e) {
-      setErr(e instanceof ApiError ? e.message : '儲存失敗');
+      setErr(e instanceof ApiError ? e.message : t('settings.saveError'));
     } finally {
       setSaving(false);
     }
@@ -133,6 +155,7 @@ export default function SettingsPage() {
     geminiTtsModel,
     geminiTtsSpeaker1,
     geminiTtsSpeaker2,
+    contentLanguage,
     llmProvider,
     navigate,
     openaiApiKey,
@@ -141,25 +164,27 @@ export default function SettingsPage() {
     ttsProvider,
     userCode,
     authStatus,
+    uiLanguage,
+    t,
   ]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <header className="border-b border-slate-800 bg-slate-900/40 backdrop-blur">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-4">
-          <h1 className="text-lg font-semibold">AI 設定（OpenAI / Gemini）</h1>
+          <h1 className="text-lg font-semibold">{t('settings.title')}</h1>
           <div className="flex items-center gap-3 text-sm">
             <Link className="text-slate-300 hover:text-white" to="/system">
-              系統儀表
+              {t('settings.systemDashboard')}
             </Link>
             <Link className="text-slate-300 hover:text-white" to="/">
-              返回首頁
+              {t('settings.backHome')}
             </Link>
           </div>
         </div>
       </header>
       <main className="mx-auto max-w-3xl px-4 py-6">
-        {loading ? <p className="text-sm text-slate-400">載入中…</p> : null}
+        {loading ? <p className="text-sm text-slate-400">{t('settings.loading')}</p> : null}
         {err ? (
           <div className="mb-3 rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
             {err}
@@ -174,13 +199,13 @@ export default function SettingsPage() {
           <div className="mb-4 rounded-xl border border-slate-800 bg-slate-900/40 p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="text-base font-semibold text-slate-100">Google 帳號</h2>
+                <h2 className="text-base font-semibold text-slate-100">{t('settings.googleAccount')}</h2>
                 {authStatus?.authenticated && authStatus.user ? (
                   <p className="mt-1 text-sm text-slate-300">
                     已登入：{authStatus.user.name ? `${authStatus.user.name}（${authStatus.user.email}）` : authStatus.user.email}
                   </p>
                 ) : (
-                  <p className="mt-1 text-sm text-slate-400">可使用 Google 帳號登入，登入後會建立本機 session。</p>
+                  <p className="mt-1 text-sm text-slate-400">{t('settings.googleLoginHint')}</p>
                 )}
               </div>
               {authStatus?.authenticated ? (
@@ -189,14 +214,14 @@ export default function SettingsPage() {
                   onClick={() => void onLogout()}
                   className="rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800"
                 >
-                  登出
+                  {t('settings.logout')}
                 </button>
               ) : (
                 <a
                   href="api/auth/google/start"
                   className="rounded-md bg-slate-100 px-4 py-2 text-center text-sm font-medium text-slate-900 hover:bg-white"
                 >
-                  使用 Google 登入
+                  {t('settings.googleLogin')}
                 </a>
               )}
             </div>
@@ -204,30 +229,55 @@ export default function SettingsPage() {
         ) : null}
         <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/40 p-4">
           <div className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-xs text-slate-400">
-            <div>目前帳號：<span className="font-mono text-slate-200">{accountId}</span></div>
+            <div>{t('settings.currentAccount')}<span className="font-mono text-slate-200">{accountId}</span></div>
             {accountSettingsFile ? (
-              <div className="mt-1 break-all">設定會保存到帳號專屬檔案：<span className="font-mono text-slate-200">{accountSettingsFile}</span></div>
+              <div className="mt-1 break-all">{t('settings.accountFilePrefix')}<span className="font-mono text-slate-200">{accountSettingsFile}</span></div>
             ) : null}
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="block text-sm text-slate-300 sm:col-span-2">
-              使用者代碼
+              {t('settings.userCode')}
               <input
                 value={userCode}
                 onChange={(e) => setUserCode(e.target.value)}
                 className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                placeholder="例如：teacher-101"
+                placeholder={t('settings.userCodePlaceholder')}
                 maxLength={128}
               />
               <span className="mt-1 block text-xs text-slate-500">
                 {authStatus?.authenticated
-                  ? '已登入：儲存到帳號設定。'
-                  : '未登入：儲存到此瀏覽器（Application/Local Storage）。'}
+                  ? t('settings.userCodeAccount')
+                  : t('settings.userCodeLocal')}
               </span>
             </label>
             <label className="block text-sm text-slate-300">
-              LLM 供應商
+              {t('settings.uiLanguage')}
+              <select
+                value={uiLanguage}
+                onChange={(e) => setUiLanguage(e.target.value as AppLanguage)}
+                className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              >
+                {LANGUAGE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.nativeLabel}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm text-slate-300">
+              {t('settings.contentLanguage')}
+              <select
+                value={contentLanguage}
+                onChange={(e) => setContentLanguage(e.target.value as AppLanguage)}
+                className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              >
+                {LANGUAGE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.nativeLabel}</option>
+                ))}
+              </select>
+              <span className="mt-1 block text-xs text-slate-500">{t('settings.contentLanguageHint')}</span>
+            </label>
+            <label className="block text-sm text-slate-300">
+              {t('settings.llmProvider')}
               <select
                 value={llmProvider}
                 onChange={(e) => setLlmProvider(e.target.value as 'openai' | 'gemini')}
@@ -238,7 +288,7 @@ export default function SettingsPage() {
               </select>
             </label>
             <label className="block text-sm text-slate-300">
-              TTS 供應商
+              {t('settings.ttsProvider')}
               <select
                 value={ttsProvider}
                 onChange={(e) => setTtsProvider(e.target.value as 'openai' | 'gemini')}
@@ -286,12 +336,12 @@ export default function SettingsPage() {
               <input value={geminiTtsModel} onChange={(e) => setGeminiTtsModel(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
             </label>
             <label className="block text-sm text-slate-300">
-              Gemini Speaker 1 人設（選填）
-              <input value={geminiTtsSpeaker1} onChange={(e) => setGeminiTtsSpeaker1(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder="例如：沉穩、專業、男聲主持" />
+              {t('settings.geminiSpeaker1')}
+              <input value={geminiTtsSpeaker1} onChange={(e) => setGeminiTtsSpeaker1(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder={t('settings.geminiSpeaker1Placeholder')} />
             </label>
             <label className="block text-sm text-slate-300">
-              Gemini Speaker 2 人設（選填）
-              <input value={geminiTtsSpeaker2} onChange={(e) => setGeminiTtsSpeaker2(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder="例如：活潑、親切、女聲來賓" />
+              {t('settings.geminiSpeaker2')}
+              <input value={geminiTtsSpeaker2} onChange={(e) => setGeminiTtsSpeaker2(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder={t('settings.geminiSpeaker2Placeholder')} />
             </label>
           </div>
 
@@ -302,7 +352,7 @@ export default function SettingsPage() {
               disabled={saving}
               className="rounded-md bg-slate-100 px-4 py-2 text-sm font-medium text-slate-900 disabled:opacity-50"
             >
-              {saving ? '儲存中…' : '儲存'}
+              {saving ? t('settings.saving') : t('settings.save')}
             </button>
           </div>
         </div>

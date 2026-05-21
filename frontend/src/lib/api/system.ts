@@ -1,5 +1,7 @@
 import { parseErrorBody } from './common';
 
+export type AppLanguage = 'zh-TW' | 'en';
+
 export interface ImagePromptTemplate {
   key: string;
   label: string;
@@ -42,6 +44,8 @@ export interface SystemAiSettings {
   gemini_tts_speaker1?: string;
   gemini_tts_speaker2?: string;
   user_code?: string;
+  ui_language: AppLanguage;
+  content_language: AppLanguage;
 }
 
 export interface UpdateSystemAiSettingsPayload {
@@ -56,6 +60,8 @@ export interface UpdateSystemAiSettingsPayload {
   gemini_tts_speaker1?: string;
   gemini_tts_speaker2?: string;
   user_code?: string;
+  ui_language?: AppLanguage;
+  content_language?: AppLanguage;
 }
 
 export async function getOpenAIKeyStatus(): Promise<OpenAIKeyStatusResponse> {
