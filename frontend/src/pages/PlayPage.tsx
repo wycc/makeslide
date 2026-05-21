@@ -2430,26 +2430,6 @@ export default function PlayPage() {
               {formatTime(currentTime)} / {formatTime(duration)}
             </div>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">
-            <div>
-              <span className="font-semibold text-slate-200">上課模式</span>
-              <span className="ml-2 text-slate-400">
-                {classroomMode ? '每頁播放完會停在目前頁，按空白鍵才進入下一頁。' : '關閉時會自動連續播放下一頁。'}
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setClassroomMode((enabled) => !enabled)}
-              className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                classroomMode
-                  ? 'border-amber-400/60 bg-amber-400/15 text-amber-100 hover:bg-amber-400/25'
-                  : 'border-slate-700 bg-slate-950 text-slate-300 hover:bg-slate-800'
-              }`}
-              aria-pressed={classroomMode}
-            >
-              {classroomMode ? '已開啟' : '開啟'}
-            </button>
-          </div>
           <div className="rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
