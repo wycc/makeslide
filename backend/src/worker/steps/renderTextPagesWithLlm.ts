@@ -5,6 +5,7 @@ import { getOpenAIClient } from '../../services/openai';
 import { logger } from '../../logger';
 import { config } from '../../config';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
+import { db } from '../../db';
 
 export interface RenderTextPagesWithLlmOptions {
   pdfId: string;
@@ -137,6 +138,10 @@ export async function renderTextPagesWithLlm(
   const client = getOpenAIClient();
   const pageCount = opts.pages.length;
   const pagePaths: string[] = [];
+  const styleRow = db
+    .prepare('SELECT image_style_prompt FROM pdfs WHERE id = ?')
+    .get(opts.pdfId) as { image_style_prompt?: string | null } | undefined;
+  const deckStylePrompt = styleRow?.image_style_prompt?.trim() || IMAGE_PROMPT_TEMPLATES[0]?.prompt_en;
   const sourcePdfDataUrl = await buildSourcePdfDataUrl(opts.pdfId);
   await fs.promises.mkdir(pagesDir(opts.pdfId), { recursive: true });
 
@@ -190,14 +195,13 @@ export async function renderTextPagesWithLlm(
     );
 
     const prompt = buildImagePrompt({
-      stylePrompt: IMAGE_PROMPT_TEMPLATES[0]?.prompt_en,
+      stylePrompt: deckStylePrompt,
       slideLabel: p.slideLabel ?? null,
       textBody: [
-        '目標是「視覺化摘要」而不是全文轉貼。請把重點轉成圖像與結構，不要做文字牆。',
-        '版型要求：1 個主標題 + 3~5 個關鍵短句（每句 ≤ 14 字）+ 1 個大型視覺主體（流程圖/關係圖/圖示群/概念圖）。',
-        '文字規範：繁體中文、精簡短句、可讀性高；避免長段落、密集條列、過小字。',
-        '視覺規範：扁平化圖示、卡片分區、柔和對比、資訊圖表感；可用抽象圖形輔助理解。',
-        '禁止項目：整頁密集文字、逐字抄錄、黑底白字純文本頁、學術論文式排版。',
+        '請優先遵守「生圖風格模板」指定的視覺語彙（配色、光影、材質、構圖語氣、插畫/資訊圖特徵）。',
+        '將內容做視覺化摘要，不要逐字抄錄；保留少量必要文字即可。',
+        '若內容與風格衝突，優先保留風格一致性，再調整內容呈現方式。',
+        '避免整頁密集文字與純文本排版。',
         p.content,
       ].join('\n\n'),
     });
@@ -218,6 +222,7 @@ export async function renderTextPagesWithLlm(
           size: '1536x1024',
           quality: config.openaiImageQuality,
         };
+        console.log(imagePayload);
         image = await client.images.generate(imagePayload as never, { timeout: timeoutMs });
         break;
       } catch (err) {

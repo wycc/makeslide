@@ -2015,16 +2015,10 @@ export default function PlayPage() {
               </div>
             </div>
           ) : null}
-          {classroomMode && classroomAwaitingNext || currentSentence ? (
+          {(classroomMode && classroomAwaitingNext) ? (
             <div className="pointer-events-none absolute bottom-4 left-1/2 w-[min(92vw,1000px)] -translate-x-1/2 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-              <div
-                className={`mx-auto overflow-y-auto rounded-md bg-cyan-950/90 px-4 text-center font-medium leading-relaxed text-cyan-50 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${
-                  syncOverlayIsAiAnswer
-                    ? 'max-h-[70vh] py-4 text-sm md:text-base'
-                    : 'py-3 text-base md:text-lg'
-                }`}
-              >
-                <p className={`${syncOverlayIsAiAnswer ? '' : 'line-clamp-5'} whitespace-pre-wrap`}>{syncOverlayText}</p>
+              <div className="mx-auto rounded-md bg-cyan-950/90 px-4 py-3 text-center text-base font-medium leading-relaxed text-cyan-50 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] md:text-lg">
+                <p className="whitespace-pre-wrap">等待下一頁…</p>
               </div>
             </div>
           ) : currentSentence ? (

@@ -1145,6 +1145,7 @@ async function runRegenerateImages(
 ): Promise<void> {
   const pdfId = state.pdf_id;
   const pdfRow = getPdfRowStrict(pdfId);
+  const deckStylePrompt = pdfRow.image_style_prompt?.trim() || IMAGE_PROMPT_TEMPLATES[0]?.prompt_en;
   const pageCount = pdfRow.page_count ?? 0;
   if (pageCount <= 0) throw new Error('page_count 不可用');
   const prompt = opts.prompt.trim();
@@ -1196,7 +1197,7 @@ async function runRegenerateImages(
     }
 
     const mergedPrompt = buildImagePrompt({
-      stylePrompt: IMAGE_PROMPT_TEMPLATES[0]?.prompt_en,
+      stylePrompt: deckStylePrompt,
       deckAdjustmentPrompt: prompt,
       pageText,
       pageScript,
