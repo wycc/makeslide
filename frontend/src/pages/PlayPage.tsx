@@ -280,6 +280,8 @@ export default function PlayPage() {
   const [slideImageScale, setSlideImageScale] = useState(1);
   const IMAGE_MSG_PREFIX = '[image] ';
 
+  const effectiveAudioMuted = audioMuted || (syncEnabled && syncRole === 'follower' && !followerAudioUnlocked);
+
   const ttsProvider: TtsProvider = detail?.tts_provider === 'gemini' ? 'gemini' : 'openai';
   const availableTtsVoices = TTS_VOICES_BY_PROVIDER[ttsProvider];
 
@@ -683,6 +685,8 @@ export default function PlayPage() {
         }
         setSyncRole(joined.role);
         setSyncFollowerCode(joined.follower_code?.trim() || followerCode);
+        setFollowerAudioUnlocked(joined.follower_audio_unlocked);
+        if (joined.role === 'follower' && !joined.follower_audio_unlocked) setAudioMuted(true);
         setSyncFollowerQuestions(joined.follower_questions ?? []);
         setSyncDisplayedQuestionId(joined.displayed_question_id ?? null);
         setSyncAiAnswer(joined.ai_answer ?? null);
@@ -711,10 +715,11 @@ export default function PlayPage() {
       page_number: pageNumber,
       is_playing: isPlaying,
       current_time: time,
+      follower_audio_unlocked: followerAudioUnlocked,
     }).catch((err) => {
       setSyncError(err instanceof ApiError ? err.message : '同步狀態更新失敗');
     });
-  }, [syncEnabled, syncRole, pdfId, currentIdx, isPlaying, currentTime]);
+  }, [syncEnabled, syncRole, pdfId, currentIdx, isPlaying, currentTime, followerAudioUnlocked]);
 
   useEffect(() => {
     if (!syncEnabled || !pdfId || !syncClientIdRef.current) return;
@@ -723,6 +728,10 @@ export default function PlayPage() {
         try {
           const state = await fetchPlaybackSyncState(pdfId, syncClientIdRef.current);
           setSyncRole(state.role);
+          setFollowerAudioUnlocked(state.follower_audio_unlocked);
+          if (state.role !== 'master' && !state.follower_audio_unlocked) {
+            setAudioMuted(true);
+          }
           setSyncFollowerQuestions(state.follower_questions ?? []);
           setSyncDisplayedQuestionId(state.displayed_question_id ?? null);
           setSyncAiAnswer(state.ai_answer ?? null);
@@ -1928,6 +1937,7 @@ export default function PlayPage() {
       <audio
         ref={audioRef}
         preload="auto"
+        muted={effectiveAudioMuted}
         onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
         onCanPlay={() => {
           clearAudioRetryTimer();
@@ -2434,8 +2444,8 @@ export default function PlayPage() {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-semibold text-slate-200">播放設定</span>
-                <span className={`rounded-full border px-2 py-0.5 ${audioMuted ? 'border-amber-400/50 bg-amber-400/10 text-amber-100' : 'border-emerald-400/40 bg-emerald-400/10 text-emerald-100'}`}>
-                  {audioMuted ? '本機靜音' : '本機有聲'}
+                <span className={`rounded-full border px-2 py-0.5 ${effectiveAudioMuted ? 'border-amber-400/50 bg-amber-400/10 text-amber-100' : 'border-emerald-400/40 bg-emerald-400/10 text-emerald-100'}`}>
+                  {effectiveAudioMuted ? '本機靜音' : '本機有聲'}
                 </span>
                 <span className={`rounded-full border px-2 py-0.5 ${classroomMode ? 'border-amber-400/50 bg-amber-400/10 text-amber-100' : 'border-slate-700 bg-slate-950 text-slate-400'}`}>
                   {classroomMode ? '上課模式' : '連續播放'}
@@ -2466,7 +2476,7 @@ export default function PlayPage() {
                     <span className="ml-2 text-slate-400">
                       {syncEnabled && syncRole === 'follower' && !followerAudioUnlocked
                         ? '老師端已強制學生端靜音。'
-                        : audioMuted
+                        : effectiveAudioMuted
                           ? '目前本機靜音。'
                           : '目前本機可播放聲音。'}
                     </span>
