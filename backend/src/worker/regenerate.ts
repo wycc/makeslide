@@ -294,7 +294,7 @@ function snapshotBackupFilePath(
 ): string {
   const padded = String(pageNumber).padStart(pagePadFor(pageCount), '0');
   const ext =
-    assetType === 'image' ? '.png' : assetType === 'script' ? '.script.txt' : '.mp3';
+    assetType === 'image' ? '.png' : assetType === 'script' ? '.script.txt' : '.m4a';
   return path.join(snapshotPagesDirOf(pdfId), `${padded}${ext}`);
 }
 
@@ -1091,7 +1091,7 @@ async function runRegenerateAudio(
   const pad = pagePadFor(pageCount);
   for (const a of res.pages) {
     const padded = String(a.pageNumber).padStart(pad, '0');
-    const relPath = path.posix.join('pages', `${padded}.mp3`);
+    const relPath = path.posix.join('pages', `${padded}.m4a`);
     db.prepare(
       `UPDATE pages
           SET audio_path = ?,
@@ -1119,7 +1119,7 @@ async function runRegenerateAudio(
         const padded = String(a.pageNumber).padStart(pad, '0');
         const mp = meta.pages.find((x) => x.page_number === a.pageNumber);
         if (mp) {
-          mp.audio = path.posix.join('pages', `${padded}.mp3`);
+          mp.audio = path.posix.join('pages', `${padded}.m4a`);
           mp.audio_duration_seconds = a.durationSeconds;
           mp.audio_generated_at = updatedAt;
           mp.status = 'audio_ready';

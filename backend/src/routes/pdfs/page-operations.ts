@@ -256,7 +256,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         `pages/${String(inserted).padStart(oldCount > 999 ? 4 : 3, '0')}.jpg`,
         `pages/${String(inserted).padStart(oldCount > 999 ? 4 : 3, '0')}.text.txt`,
         `pages/${String(inserted).padStart(oldCount > 999 ? 4 : 3, '0')}.script.txt`,
-        `pages/${String(inserted).padStart(oldCount > 999 ? 4 : 3, '0')}.mp3`,
+        `pages/${String(inserted).padStart(oldCount > 999 ? 4 : 3, '0')}.m4a`,
         now,
         now,
       );
@@ -437,7 +437,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       pageTextPath(id, n, oldCount),
       pageScriptPath(id, n, oldCount),
       path.join(path.dirname(pageImagePath(id, n, oldCount)), `${String(n).padStart(oldCount > 999 ? 4 : 3, '0')}.png`),
-      path.join(path.dirname(pageImagePath(id, n, oldCount)), `${String(n).padStart(oldCount > 999 ? 4 : 3, '0')}.mp3`),
+      path.join(path.dirname(pageImagePath(id, n, oldCount)), `${String(n).padStart(oldCount > 999 ? 4 : 3, '0')}.m4a`),
     ];
 
     const tx = db.transaction(() => {
@@ -795,7 +795,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       });
       const audio = result.pages[0];
       if (!audio) throw new Error('Audio synthesis returned no page result');
-      const relAudioPath = path.posix.join('pages', `${String(n).padStart(pdfRow.page_count > 999 ? 4 : 3, '0')}.mp3`);
+      const relAudioPath = path.posix.join('pages', `${String(n).padStart(pdfRow.page_count > 999 ? 4 : 3, '0')}.m4a`);
       const now = nowIso();
       db.prepare(
         `UPDATE pages

@@ -8,6 +8,7 @@ import { getOpenAIClient } from '../../services/openai';
 import { synthesizeGeminiSpeech } from '../../services/gemini';
 import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { pageAudioPath, pageScriptPath } from '../../services/storage';
+import { runCommand } from './generateVideo';
 
 function parseWavPcmChunk(buf: Buffer): { sampleRate: number; channels: number; bitsPerSample: number; data: Buffer } | null {
   if (buf.length < 44) return null;
@@ -268,7 +269,24 @@ async function synthesizeOnePage(params: {
       } else {
         buffer = Buffer.concat(buffers);
       }
-      await fs.promises.writeFile(absPath, buffer);
+      const tmpMp3Path = absPath.endsWith('.m4a') ? absPath.replace(/\.m4a$/i, '.tmp.mp3') : `${absPath}.tmp.mp3`;
+      await fs.promises.writeFile(tmpMp3Path, buffer);
+      try {
+        await runCommand('ffmpeg', [
+          '-y',
+          '-i',
+          tmpMp3Path,
+          '-c:a',
+          'aac',
+          '-b:a',
+          '128k',
+          '-movflags',
+          '+faststart',
+          absPath,
+        ]);
+      } finally {
+        await fs.promises.rm(tmpMp3Path, { force: true });
+      }
 
       const latencyMs = Date.now() - startedAt;
       const duration = await readAudioDuration(absPath);

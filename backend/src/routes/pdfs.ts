@@ -319,7 +319,7 @@ function rewritePagePathsToMatchNumber(pdfId: string, pageCount: number): void {
             script_path = 'pages/' || printf('%0${pad}d', page_number) || '.script.txt',
             audio_path = CASE
               WHEN audio_path IS NULL THEN NULL
-              ELSE 'pages/' || printf('%0${pad}d', page_number) || '.mp3'
+              ELSE 'pages/' || printf('%0${pad}d', page_number) || '.m4a'
             END
       WHERE pdf_id = ?`,
   ).run(pdfId);

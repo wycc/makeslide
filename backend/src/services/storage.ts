@@ -99,7 +99,7 @@ export function pageAudioPath(
 ): string {
   return path.join(
     pagesDir(pdfId),
-    `${formatPageNumber(pageNumber, pageCount)}.mp3`,
+    `${formatPageNumber(pageNumber, pageCount)}.m4a`,
   );
 }
 
@@ -166,7 +166,7 @@ export async function renumberPageArtifacts(
   const dir = pagesDir(pdfId);
   await fs.promises.mkdir(dir, { recursive: true });
 
-  const suffixes = ['.jpg', '.thumb.jpg', '.png', '.text.txt', '.script.txt', '.mp3'] as const;
+  const suffixes = ['.jpg', '.thumb.jpg', '.png', '.text.txt', '.script.txt', '.mp3', '.m4a'] as const;
   const tempMoves: Array<{ from: string; to: string }> = [];
 
   for (const item of updates) {
