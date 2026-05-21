@@ -66,6 +66,7 @@ import type {
 
 const POLL_INTERVAL_MS = 3000;
 const AUDIO_RETRY_DELAY_MS = 800;
+const PREFETCH_START_DELAY_MS = 1200;
 const SENTENCE_MATCH_RE = /[^。！？!?；;\n]+[。！？!?；;]?|\n+/g;
 const TONE_MARKER_RE = /\[\[\s*[^\]]+\s*\]\]/g;
 
@@ -247,6 +248,7 @@ export default function PlayPage() {
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
+  const [playQrCodeUrl, setPlayQrCodeUrl] = useState<string | null>(null);
   // 在按下「確認」啟動重生前記住目前頁碼，供 rollback 後跳回。
   const preRegenPageIdxRef = useRef<number | null>(null);
   const pollVoterIdRef = useRef<string>('');
@@ -256,6 +258,7 @@ export default function PlayPage() {
   const [imagePreviewPageNumber, setImagePreviewPageNumber] = useState<number | null>(null);
   const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
   const [draggingPage, setDraggingPage] = useState<number | null>(null);
+  const [thumbLoadUntilIdx, setThumbLoadUntilIdx] = useState(0);
   // 手機模式下的 tab 切換（桌面模式忽略此 state，永遠並排顯示）
   const [activeTab, setActiveTab] = useState<'play' | 'qa'>('play');
   const [qaPanelExpanded, setQaPanelExpanded] = useState(false);
@@ -459,6 +462,21 @@ export default function PlayPage() {
   const totalPages = deckPages.length;
   const shareIsReadOnly = detail?.share_mode === 'read_only';
   const isReadOnlyProcessing = (detail != null && detail.status !== 'ready') || shareIsReadOnly;
+  useEffect(() => {
+    if (deckPages.length === 0) {
+      setThumbLoadUntilIdx(0);
+      return;
+    }
+    setThumbLoadUntilIdx((prev) => {
+      const maxIdx = deckPages.length - 1;
+      const initialWindow = Math.min(4, maxIdx);
+      const base = Math.max(prev, initialWindow);
+      if (base > maxIdx) return maxIdx;
+      if (currentIdx > base) return currentIdx;
+      return base;
+    });
+  }, [deckPages.length, currentIdx]);
+
   const readOnlyReason = isReadOnlyProcessing
     ? shareIsReadOnly
       ? '此分享連結為唯讀模式：可瀏覽與播放，但不可修改或生成功能。'
@@ -479,27 +497,42 @@ export default function PlayPage() {
   useEffect(() => {
     if (deckPages.length === 0) return;
     let cancelled = false;
-    (async () => {
-      const entries = await Promise.all(
-        deckPages.map(async (p) => {
-          if (!p.script_url) return [p.page_number, ''] as const;
-          try {
-            const bust = `t=${Date.now()}`;
-            const url = p.script_url.includes('?') ? `${p.script_url}&${bust}` : `${p.script_url}?${bust}`;
-            const resp = await fetch(url, { cache: 'no-store' });
-            if (!resp.ok) return [p.page_number, ''] as const;
-            const t = await resp.text();
-            return [p.page_number, t] as const;
-          } catch {
-            return [p.page_number, ''] as const;
-          }
-        }),
-      );
-      if (cancelled) return;
-      const next: Record<number, string> = {};
-      for (const [n, s] of entries) next[n] = s;
-      setScripts(next);
-    })();
+    // 改為「背景漸進載入」：避免一次 Promise.all 佔用網路/主執行緒，
+    // 讓同步 join/poll 與首屏互動更快開始。
+    const queue = [...deckPages];
+    const concurrency = 1;
+
+    const loadOne = async (p: PdfDetailPage) => {
+      if (!p.script_url) {
+        if (!cancelled) {
+          setScripts((prev) => (prev[p.page_number] === '' ? prev : { ...prev, [p.page_number]: '' }));
+        }
+        return;
+      }
+      try {
+        const bust = `t=${Date.now()}`;
+        const url = p.script_url.includes('?') ? `${p.script_url}&${bust}` : `${p.script_url}?${bust}`;
+        const resp = await fetch(url, { cache: 'no-store' });
+        const text = resp.ok ? await resp.text() : '';
+        if (!cancelled) {
+          setScripts((prev) => ({ ...prev, [p.page_number]: text }));
+        }
+      } catch {
+        if (!cancelled) {
+          setScripts((prev) => ({ ...prev, [p.page_number]: '' }));
+        }
+      }
+    };
+
+    const worker = async () => {
+      while (!cancelled) {
+        const next = queue.shift();
+        if (!next) return;
+        await loadOne(next);
+      }
+    };
+
+    void Promise.all(Array.from({ length: concurrency }, () => worker()));
     return () => {
       cancelled = true;
     };
@@ -559,43 +592,53 @@ export default function PlayPage() {
 
   // ---- Prefetch current image + next page assets ----
   useEffect(() => {
+    let timer: number | null = null;
     const current = deckPages[currentIdx] ?? null;
     const next = deckPages[currentIdx + 1] ?? null;
 
-    // 目前頁：先預熱，避免切入頁面時首播卡住
-    if (current?.image_url) {
-      const img = new Image();
-      img.src = withImageBust(current.image_url) ?? current.image_url;
-      prefetchedImageRef.current = img;
-    } else {
-      prefetchedImageRef.current = null;
-    }
-    // 下一頁：提前預載，提升自動切頁銜接
-    if (next?.image_url) {
-      const img = new Image();
-      img.src = withImageBust(next.image_url) ?? next.image_url;
-      prefetchedImageNextRef.current = img;
-    } else {
-      prefetchedImageNextRef.current = null;
-    }
-    if (next?.audio_url) {
-      const a = new Audio();
-      a.preload = 'auto';
-      // 與正式播放使用同一組版本 URL，才能真正命中快取
-      const nextVersionKey = detail?.updated_at ? encodeURIComponent(detail.updated_at) : '';
-      a.src = nextVersionKey
-        ? `${next.audio_url}${next.audio_url.includes('?') ? '&' : '?'}v=${nextVersionKey}`
-        : next.audio_url;
-      a.load();
-      prefetchedAudioNextRef.current = a;
-    } else {
-      prefetchedAudioNextRef.current = null;
-    }
+    // 延後預載：先讓同步模式初始化（join/state polling）取得時機，
+    // 再進行圖片/音訊預抓，避免初始網路壅塞影響 follower 進場。
+    timer = window.setTimeout(() => {
+      // 目前頁：先預熱，避免切入頁面時首播卡住
+      if (current?.image_url) {
+        const img = new Image();
+        img.src = withImageBust(current.image_url) ?? current.image_url;
+        prefetchedImageRef.current = img;
+      } else {
+        prefetchedImageRef.current = null;
+      }
+      // 下一頁：提前預載，提升自動切頁銜接
+      if (next?.image_url) {
+        const img = new Image();
+        img.src = withImageBust(next.image_url) ?? next.image_url;
+        prefetchedImageNextRef.current = img;
+      } else {
+        prefetchedImageNextRef.current = null;
+      }
+      if (next?.audio_url) {
+        const a = new Audio();
+        a.preload = 'auto';
+        // 與正式播放使用同一組版本 URL，才能真正命中快取
+        const nextVersionKey = detail?.updated_at ? encodeURIComponent(detail.updated_at) : '';
+        a.src = nextVersionKey
+          ? `${next.audio_url}${next.audio_url.includes('?') ? '&' : '?'}v=${nextVersionKey}`
+          : next.audio_url;
+        a.load();
+        prefetchedAudioNextRef.current = a;
+      } else {
+        prefetchedAudioNextRef.current = null;
+      }
+    }, PREFETCH_START_DELAY_MS);
+
+    return () => {
+      if (timer != null) window.clearTimeout(timer);
+    };
   }, [currentIdx, deckPages, withImageBust, detail?.updated_at]);
 
   // ---- Controls ----
   const playPause = useCallback(() => {
     if (syncEnabled && syncRole !== 'master') return;
+    setPlayQrCodeUrl(null);
     const audio = audioRef.current;
     if (!audio) return;
     if (classroomMode && classroomAwaitingNext && currentIdx < totalPages - 1) {
@@ -614,6 +657,7 @@ export default function PlayPage() {
 
   const goPrev = useCallback(() => {
     if (syncEnabled && syncRole !== 'master') return;
+    setPlayQrCodeUrl(null);
     setClassroomAwaitingNext(false);
     setFinished(false);
     setCurrentIdx((i) => Math.max(0, i - 1));
@@ -621,10 +665,26 @@ export default function PlayPage() {
 
   const goNext = useCallback(() => {
     if (syncEnabled && syncRole !== 'master') return;
+    setPlayQrCodeUrl(null);
     setClassroomAwaitingNext(false);
     setFinished(false);
     setCurrentIdx((i) => Math.min(totalPages - 1, i + 1));
   }, [syncEnabled, syncRole, totalPages]);
+
+  const handleShowPlayQrCode = useCallback(async () => {
+    if (!pdfId) return;
+    try {
+      const res = await createPdfShare(pdfId, shareAccess);
+      const absoluteUrl = `${window.location.origin}${res.share_url}`;
+      setShareUrl(absoluteUrl);
+      const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=520x520&data=${encodeURIComponent(absoluteUrl)}`;
+      setPlayQrCodeUrl(qrSrc);
+      setShareMessage(`已產生分享 QR Code（${shareAccess === 'editable' ? '可編輯' : '唯讀'}）`);
+      setShareError(null);
+    } catch (err) {
+      setShareError(err instanceof ApiError ? err.message : '建立分享 QR Code 失敗');
+    }
+  }, [pdfId, shareAccess]);
 
   const handleEnded = useCallback(() => {
     setIsPlaying(false);
@@ -752,6 +812,16 @@ export default function PlayPage() {
     if (applyingRemoteSyncRef.current) return;
     const pageNumber = Math.max(1, currentIdx + 1);
     const time = Number.isFinite(currentTime) ? Math.max(0, currentTime) : 0;
+    // eslint-disable-next-line no-console
+    console.info('[sync][master->state] push', {
+      pdfId,
+      clientId: syncClientIdRef.current,
+      syncRole,
+      pageNumber,
+      isPlaying,
+      currentTime: time,
+      followerAudioUnlocked,
+    });
     void updatePlaybackSyncState(pdfId, syncClientIdRef.current, {
       page_number: pageNumber,
       is_playing: isPlaying,
@@ -764,10 +834,26 @@ export default function PlayPage() {
 
   useEffect(() => {
     if (!syncEnabled || !pdfId || !syncClientIdRef.current) return;
+    // eslint-disable-next-line no-console
+    console.info('[sync][poll] start', {
+      pdfId,
+      clientId: syncClientIdRef.current,
+      localRole: syncRole,
+    });
     const timer = window.setInterval(() => {
       void (async () => {
         try {
           const state = await fetchPlaybackSyncState(pdfId, syncClientIdRef.current);
+          // eslint-disable-next-line no-console
+          console.info('[sync][poll] state', {
+            pdfId,
+            clientId: syncClientIdRef.current,
+            localRole: syncRole,
+            serverRole: state.role,
+            page: state.page_number,
+            playing: state.is_playing,
+            t: state.current_time,
+          });
           setSyncRole(state.role);
           setFollowerAudioUnlocked(state.follower_audio_unlocked);
           if (state.role !== 'master' && !state.follower_audio_unlocked) {
@@ -789,6 +875,15 @@ export default function PlayPage() {
           if (state.role === 'master') return;
           applyingRemoteSyncRef.current = true;
           const targetIdx = Math.max(0, state.page_number - 1);
+          // eslint-disable-next-line no-console
+          console.info('[sync][follower] apply-remote', {
+            pdfId,
+            clientId: syncClientIdRef.current,
+            targetIdx,
+            targetPage: state.page_number,
+            currentIdx,
+            playing: state.is_playing,
+          });
           setCurrentIdx((prev) => (prev === targetIdx ? prev : targetIdx));
           const audio = audioRef.current;
           if (audio) {
@@ -809,8 +904,16 @@ export default function PlayPage() {
         }
       })();
     }, 1200);
-    return () => window.clearInterval(timer);
-  }, [syncEnabled, pdfId, imageOnlyFullscreen, navigate]);
+    return () => {
+      // eslint-disable-next-line no-console
+      console.info('[sync][poll] stop', {
+        pdfId,
+        clientId: syncClientIdRef.current,
+        localRole: syncRole,
+      });
+      window.clearInterval(timer);
+    };
+  }, [syncEnabled, pdfId, imageOnlyFullscreen, navigate, syncRole, currentIdx]);
 
   const handleSubmitFollowerQuestion = useCallback(async () => {
     if (!pdfId || !syncClientIdRef.current) return;
@@ -2256,7 +2359,7 @@ export default function PlayPage() {
                   disabled={shareBusy}
                   className="rounded-md border border-violet-500/50 bg-violet-500/15 px-3 py-1.5 text-xs text-violet-200 hover:bg-violet-500/25 disabled:opacity-40"
                 >
-                  {shareBusy ? '建立中…' : '建立分享連結'}
+                  {shareBusy ? '建立中…' : '▦ 建立分享連結'}
                 </button>
               </div>
             ) : null}
@@ -2384,7 +2487,17 @@ export default function PlayPage() {
             tabIndex={0}
           >
             <div className="relative flex h-full w-full max-w-4xl items-center justify-center">
-              {currentPage?.image_url ? (
+              {playQrCodeUrl ? (
+                <div className="flex flex-col items-center gap-3 rounded-lg border border-slate-700 bg-slate-900/80 p-4 shadow-xl">
+                  <img
+                    src={playQrCodeUrl}
+                    alt="分享連結 QR Code"
+                    className="w-auto rounded-md border border-slate-700 bg-white p-2"
+                    style={{ maxHeight: `${slideImageMaxHeightVh}vh` }}
+                  />
+                  {shareUrl ? <p className="max-w-[85vw] break-all text-center text-xs text-slate-300">{shareUrl}</p> : null}
+                </div>
+              ) : currentPage?.image_url ? (
                 <img
                   key={currentPage.page_number}
                   src={withImageBust(currentPage.image_url) ?? currentPage.image_url}
@@ -2464,6 +2577,16 @@ export default function PlayPage() {
               title="下一頁 (→)"
             >
               ⏭
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleShowPlayQrCode()}
+              disabled={!pdfId}
+              className="rounded-full border border-violet-500/50 bg-violet-500/15 px-3 py-2 text-sm text-violet-200 hover:bg-violet-500/25 disabled:opacity-40"
+              aria-label="顯示分享 QR Code"
+              title="產生分享 QR Code"
+            >
+              ▦
             </button>
             <input
               type="range"
@@ -2881,12 +3004,25 @@ export default function PlayPage() {
                     const thumbSrc = isReadOnlyProcessing
                       ? p.image_url
                       : (p.thumbnail_url ?? p.image_url);
-                    return thumbSrc ? (
+                    const shouldLoadThumb = idx <= thumbLoadUntilIdx || idx === currentIdx;
+                    return thumbSrc && shouldLoadThumb ? (
                     <img
                       src={withImageBust(thumbSrc) ?? thumbSrc}
                       alt={`第 ${p.page_number} 頁縮圖`}
                       className="h-14 w-full object-cover"
+                      onLoad={() => {
+                        setThumbLoadUntilIdx((prev) => {
+                          const next = idx + 1;
+                          if (next >= deckPages.length) return prev;
+                          return Math.max(prev, next);
+                        });
+                      }}
                       onError={(e) => {
+                        setThumbLoadUntilIdx((prev) => {
+                          const next = idx + 1;
+                          if (next >= deckPages.length) return prev;
+                          return Math.max(prev, next);
+                        });
                         const img = e.currentTarget;
                         const fallback = p.image_url;
                         if (!fallback || img.dataset.fallbackApplied === 'true') {
@@ -2899,7 +3035,7 @@ export default function PlayPage() {
                     />
                     ) : (
                     <div className="flex h-14 w-full items-center justify-center bg-slate-800 text-[10px] text-slate-400">
-                      無圖片
+                      {thumbSrc ? '載入中…' : '無圖片'}
                     </div>
                     );
                   })()}
