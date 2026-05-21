@@ -42,8 +42,23 @@ interface SyncAiAnswer {
 }
 
 const sessions = new Map<string, SyncSessionState>();
-const MASTER_TTL_MS = 20_000;
+const MASTER_TTL_MS = 10 * 60 * 1000;
 const CLIENT_TTL_MS = 30_000;
+
+interface SyncSessionRow {
+  pdf_id: string;
+  master_client_id: string | null;
+  master_expires_at: string | null;
+  page_number: number;
+  is_playing: 0 | 1;
+  current_time: number;
+  follower_audio_unlocked: 0 | 1;
+  realtime_poll_started: 0 | 1;
+  quiz_mode: 0 | 1;
+  active_quiz_id: number | null;
+  quiz_show_answers: 0 | 1;
+  updated_at: string;
+}
 
 function ensurePdfExists(id: string): boolean {
   const row = db.prepare(`SELECT id FROM pdfs WHERE id = ?`).get(id) as { id: string } | undefined;
@@ -52,6 +67,88 @@ function ensurePdfExists(id: string): boolean {
 
 function nowMs(): number {
   return Date.now();
+}
+
+function rowToExpiresAt(row: SyncSessionRow): number {
+  return row.master_expires_at ? Date.parse(row.master_expires_at) : 0;
+}
+
+function clearPersistedMasterIfExpired(row: SyncSessionRow): SyncSessionRow {
+  const expiresAt = rowToExpiresAt(row);
+  if (row.master_client_id && expiresAt <= nowMs()) {
+    const updatedAt = nowIso();
+    db.prepare(
+      `UPDATE pdf_sync_sessions
+          SET master_client_id = NULL,
+              master_expires_at = NULL,
+              is_playing = 0,
+              current_time = 0,
+              follower_audio_unlocked = 0,
+              realtime_poll_started = 0,
+              quiz_mode = 0,
+              active_quiz_id = NULL,
+              quiz_show_answers = 0,
+              updated_at = ?
+        WHERE pdf_id = ?`,
+    ).run(updatedAt, row.pdf_id);
+    return {
+      ...row,
+      master_client_id: null,
+      master_expires_at: null,
+      is_playing: 0,
+      current_time: 0,
+      follower_audio_unlocked: 0,
+      realtime_poll_started: 0,
+      quiz_mode: 0,
+      active_quiz_id: null,
+      quiz_show_answers: 0,
+      updated_at: updatedAt,
+    };
+  }
+  return row;
+}
+
+function getPersistedSession(pdfId: string): SyncSessionRow | null {
+  const row = db.prepare(`SELECT * FROM pdf_sync_sessions WHERE pdf_id = ?`).get(pdfId) as SyncSessionRow | undefined;
+  return row ? clearPersistedMasterIfExpired(row) : null;
+}
+
+function upsertPersistedSession(session: SyncSessionState): void {
+  const now = nowIso();
+  const masterExpiresAt = session.masterClientId ? new Date(session.masterExpiresAt).toISOString() : null;
+  db.prepare(
+    `INSERT INTO pdf_sync_sessions (
+       pdf_id, master_client_id, master_expires_at, page_number, is_playing, current_time,
+       follower_audio_unlocked, realtime_poll_started, quiz_mode, active_quiz_id, quiz_show_answers,
+       created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(pdf_id) DO UPDATE SET
+       master_client_id = excluded.master_client_id,
+       master_expires_at = excluded.master_expires_at,
+       page_number = excluded.page_number,
+       is_playing = excluded.is_playing,
+       current_time = excluded.current_time,
+       follower_audio_unlocked = excluded.follower_audio_unlocked,
+       realtime_poll_started = excluded.realtime_poll_started,
+       quiz_mode = excluded.quiz_mode,
+       active_quiz_id = excluded.active_quiz_id,
+       quiz_show_answers = excluded.quiz_show_answers,
+       updated_at = excluded.updated_at`,
+  ).run(
+    session.pdfId,
+    session.masterClientId,
+    masterExpiresAt,
+    session.pageNumber,
+    session.isPlaying ? 1 : 0,
+    session.currentTime,
+    session.followerAudioUnlocked ? 1 : 0,
+    session.realtimePollStarted ? 1 : 0,
+    session.quizMode ? 1 : 0,
+    session.activeQuizId,
+    session.quizShowAnswers ? 1 : 0,
+    now,
+    session.updatedAt,
+  );
 }
 
 function toQuestionResponse(question: SyncFollowerQuestion): SyncFollowerQuestion & {
@@ -108,27 +205,38 @@ function getSession(pdfId: string): SyncSessionState {
     const now = nowMs();
     if (hit.masterClientId && hit.masterExpiresAt <= now) {
       hit.masterClientId = null;
+      hit.masterExpiresAt = 0;
+      hit.isPlaying = false;
+      hit.currentTime = 0;
+      hit.followerAudioUnlocked = false;
+      hit.realtimePollStarted = false;
+      hit.quizMode = false;
+      hit.activeQuizId = null;
+      hit.quizShowAnswers = false;
+      hit.updatedAt = nowIso();
+      upsertPersistedSession(hit);
     }
     return hit;
   }
+  const persisted = getPersistedSession(pdfId);
   const created: SyncSessionState = {
     pdfId,
-    masterClientId: null,
-    masterExpiresAt: 0,
+    masterClientId: persisted?.master_client_id ?? null,
+    masterExpiresAt: persisted ? rowToExpiresAt(persisted) : 0,
     followerCodes: new Map<string, string>(),
     clients: new Map(),
-    pageNumber: 1,
-    isPlaying: false,
-    currentTime: 0,
-    followerAudioUnlocked: false,
-    realtimePollStarted: false,
-    quizMode: false,
-    activeQuizId: null,
-    quizShowAnswers: false,
+    pageNumber: persisted?.page_number ?? 1,
+    isPlaying: Boolean(persisted?.is_playing),
+    currentTime: persisted?.current_time ?? 0,
+    followerAudioUnlocked: Boolean(persisted?.follower_audio_unlocked),
+    realtimePollStarted: Boolean(persisted?.realtime_poll_started),
+    quizMode: Boolean(persisted?.quiz_mode),
+    activeQuizId: persisted?.active_quiz_id ?? null,
+    quizShowAnswers: Boolean(persisted?.quiz_show_answers),
     followerQuestions: [],
     displayedQuestionId: null,
     aiAnswer: null,
-    updatedAt: nowIso(),
+    updatedAt: persisted?.updated_at ?? nowIso(),
   };
   sessions.set(pdfId, created);
   return created;
@@ -199,6 +307,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       session.masterClientId = clientId;
       session.masterExpiresAt = nowMs() + MASTER_TTL_MS;
       session.updatedAt = nowIso();
+      upsertPersistedSession(session);
     } else if (session.masterClientId !== clientId) {
       if (!followerCode) {
         return reply
@@ -256,6 +365,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       }
     }
     session.updatedAt = nowIso();
+    upsertPersistedSession(session);
     return reply.send({ ok: true, role: 'master', updated_at: session.updatedAt });
   });
 
@@ -299,6 +409,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       session.displayedQuestionId = null;
       session.aiAnswer = null;
       session.updatedAt = nowIso();
+      upsertPersistedSession(session);
     }
     session.followerCodes.delete(clientId);
     return reply.send({ ok: true });
