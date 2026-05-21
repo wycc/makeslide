@@ -653,7 +653,15 @@ export default function PlayPage() {
   );
 
   useEffect(() => {
+    if (!pdfId) return;
+    const enabledKey = `makeslide.sync.enabled.${pdfId}`;
+    setSyncEnabled(window.localStorage.getItem(enabledKey) === '1');
+  }, [pdfId]);
+
+  useEffect(() => {
     if (!syncEnabled || !pdfId) return;
+    const enabledKey = `makeslide.sync.enabled.${pdfId}`;
+    window.localStorage.setItem(enabledKey, '1');
     const storageKey = `makeslide.sync.client.${pdfId}`;
     const existing = window.localStorage.getItem(storageKey);
     const next = existing || `sync-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -699,11 +707,31 @@ export default function PlayPage() {
     })();
     return () => {
       cancelled = true;
-      if (syncClientIdRef.current) {
-        void leavePlaybackSync(pdfId, syncClientIdRef.current).catch(() => undefined);
-      }
     };
   }, [syncEnabled, pdfId]);
+
+  const handleSyncEnabledChange = useCallback(
+    (checked: boolean) => {
+      if (!pdfId) return;
+      const enabledKey = `makeslide.sync.enabled.${pdfId}`;
+      if (checked) {
+        window.localStorage.setItem(enabledKey, '1');
+        setSyncError(null);
+        setSyncEnabled(true);
+        return;
+      }
+      window.localStorage.removeItem(enabledKey);
+      setSyncError(null);
+      setSyncEnabled(false);
+      setSyncRole('follower');
+      const clientId = syncClientIdRef.current;
+      syncClientIdRef.current = '';
+      if (clientId) {
+        void leavePlaybackSync(pdfId, clientId).catch(() => undefined);
+      }
+    },
+    [pdfId],
+  );
 
   useEffect(() => {
     if (!syncEnabled || !pdfId || !syncClientIdRef.current) return;
@@ -2011,10 +2039,7 @@ export default function PlayPage() {
               <input
                 type="checkbox"
                 checked={syncEnabled}
-                onChange={(e) => {
-                  setSyncEnabled(e.target.checked);
-                  setSyncError(null);
-                }}
+                onChange={(e) => handleSyncEnabledChange(e.target.checked)}
               />
               同步模式
               {syncEnabled ? `(${syncRole === 'master' ? 'master' : 'follower'})` : ''}
