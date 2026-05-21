@@ -207,6 +207,25 @@ function migrate(): void {
 
     CREATE INDEX IF NOT EXISTS idx_pdf_shares_pdf ON pdf_shares(pdf_id, created_at DESC);
 
+    CREATE TABLE IF NOT EXISTS pdf_sync_sessions (
+      pdf_id TEXT PRIMARY KEY,
+      master_client_id TEXT,
+      master_expires_at TEXT,
+      page_number INTEGER NOT NULL DEFAULT 1,
+      is_playing INTEGER NOT NULL DEFAULT 0,
+      current_time REAL NOT NULL DEFAULT 0,
+      follower_audio_unlocked INTEGER NOT NULL DEFAULT 0,
+      realtime_poll_started INTEGER NOT NULL DEFAULT 0,
+      quiz_mode INTEGER NOT NULL DEFAULT 0,
+      active_quiz_id INTEGER,
+      quiz_show_answers INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (pdf_id) REFERENCES pdfs(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_pdf_sync_sessions_master_expires ON pdf_sync_sessions(master_expires_at);
+
     CREATE TABLE IF NOT EXISTS quiz_sets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       pdf_id TEXT NOT NULL,
