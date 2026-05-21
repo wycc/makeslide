@@ -655,17 +655,30 @@ export default function PlayPage() {
   useEffect(() => {
     if (!pdfId) return;
     const enabledKey = `makeslide.sync.enabled.${pdfId}`;
-    setSyncEnabled(window.localStorage.getItem(enabledKey) === '1');
-  }, [pdfId]);
+    const stored = window.localStorage.getItem(enabledKey);
+    if (stored === '1') {
+      setSyncEnabled(true);
+      return;
+    }
+    // follower 常由分享連結進入；若尚未有本機設定，預設自動開啟同步模式。
+    if (currentShareToken) {
+      window.localStorage.setItem(enabledKey, '1');
+      setSyncEnabled(true);
+      return;
+    }
+    setSyncEnabled(false);
+  }, [pdfId, currentShareToken]);
 
   useEffect(() => {
     if (!syncEnabled || !pdfId) return;
     const enabledKey = `makeslide.sync.enabled.${pdfId}`;
     window.localStorage.setItem(enabledKey, '1');
+    // client_id 必須「每個分頁唯一」；若用 localStorage 會在同瀏覽器多分頁共用，
+    // 造成第二個分頁被視為同一 client，無法正確進入 follower。
     const storageKey = `makeslide.sync.client.${pdfId}`;
-    const existing = window.localStorage.getItem(storageKey);
+    const existing = window.sessionStorage.getItem(storageKey);
     const next = existing || `sync-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    window.localStorage.setItem(storageKey, next);
+    window.sessionStorage.setItem(storageKey, next);
     syncClientIdRef.current = next;
     let cancelled = false;
     void (async () => {
