@@ -287,8 +287,9 @@ export default function PlayPage() {
   const currentAudioTokenRef = useRef(0);
   const audioRetryTimerRef = useRef<number | null>(null);
   // prefetch refs so GC doesn't drop them mid-load
-  const prefetchedAudioRef = useRef<HTMLAudioElement | null>(null);
   const prefetchedImageRef = useRef<HTMLImageElement | null>(null);
+  const prefetchedAudioNextRef = useRef<HTMLAudioElement | null>(null);
+  const prefetchedImageNextRef = useRef<HTMLImageElement | null>(null);
   const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
 
   const acquireWakeLock = useCallback(async () => {
@@ -511,7 +512,11 @@ export default function PlayPage() {
     const token = currentAudioTokenRef.current + 1;
     currentAudioTokenRef.current = token;
     clearAudioRetryTimer();
-    const nextUrl = `${audioUrl}${audioUrl.includes('?') ? '&' : '?'}t=${Date.now()}`;
+    // 使用穩定版本鍵：同一版本 URL 不變可命中 cache；內容更新時（updated_at 改變）才換 URL
+    const versionKey = detail?.updated_at ? encodeURIComponent(detail.updated_at) : '';
+    const nextUrl = versionKey
+      ? `${audioUrl}${audioUrl.includes('?') ? '&' : '?'}v=${versionKey}`
+      : audioUrl;
     audio.src = nextUrl;
     audio.load();
     setCurrentTime(0);
@@ -550,22 +555,41 @@ export default function PlayPage() {
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, [isPlaying, acquireWakeLock]);
 
-  // ---- Prefetch next page assets ----
+  // ---- Prefetch current image + next page assets ----
   useEffect(() => {
-    const next = deckPages[currentIdx + 1];
-    if (!next) return;
-    if (next.image_url) {
+    const current = deckPages[currentIdx] ?? null;
+    const next = deckPages[currentIdx + 1] ?? null;
+
+    // 目前頁：先預熱，避免切入頁面時首播卡住
+    if (current?.image_url) {
       const img = new Image();
-      img.src = next.image_url;
+      img.src = withImageBust(current.image_url) ?? current.image_url;
       prefetchedImageRef.current = img;
+    } else {
+      prefetchedImageRef.current = null;
     }
-    if (next.audio_url) {
+    // 下一頁：提前預載，提升自動切頁銜接
+    if (next?.image_url) {
+      const img = new Image();
+      img.src = withImageBust(next.image_url) ?? next.image_url;
+      prefetchedImageNextRef.current = img;
+    } else {
+      prefetchedImageNextRef.current = null;
+    }
+    if (next?.audio_url) {
       const a = new Audio();
       a.preload = 'auto';
-      a.src = next.audio_url;
-      prefetchedAudioRef.current = a;
+      // 與正式播放使用同一組版本 URL，才能真正命中快取
+      const nextVersionKey = detail?.updated_at ? encodeURIComponent(detail.updated_at) : '';
+      a.src = nextVersionKey
+        ? `${next.audio_url}${next.audio_url.includes('?') ? '&' : '?'}v=${nextVersionKey}`
+        : next.audio_url;
+      a.load();
+      prefetchedAudioNextRef.current = a;
+    } else {
+      prefetchedAudioNextRef.current = null;
     }
-  }, [currentIdx, deckPages]);
+  }, [currentIdx, deckPages, withImageBust, detail?.updated_at]);
 
   // ---- Controls ----
   const playPause = useCallback(() => {
