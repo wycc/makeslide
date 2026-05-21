@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { spawn } from 'node:child_process';
 import PQueue from 'p-queue';
 import { parseFile } from 'music-metadata';
 import { APIError } from 'openai';
@@ -8,6 +9,21 @@ import { getOpenAIClient } from '../../services/openai';
 import { synthesizeGeminiSpeech } from '../../services/gemini';
 import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { pageAudioPath, pageScriptPath } from '../../services/storage';
+
+function runCommand(command: string, args: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stderr = '';
+    child.stderr.on('data', (d) => {
+      stderr += d.toString();
+    });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`${command} exited with code ${code}: ${stderr.trim()}`));
+    });
+  });
+}
 
 function parseWavPcmChunk(buf: Buffer): { sampleRate: number; channels: number; bitsPerSample: number; data: Buffer } | null {
   if (buf.length < 44) return null;
@@ -177,6 +193,7 @@ async function synthesizeOnePage(params: {
     throw err;
   }
   const absPath = pageAudioPath(pdfId, pageNumber, pageCount);
+  const targetPath = absPath.replace(/\.mp3$/i, '.m4a');
 
   // Always regenerate audio so updated voice/speed settings reliably apply.
 
@@ -268,10 +285,29 @@ async function synthesizeOnePage(params: {
       } else {
         buffer = Buffer.concat(buffers);
       }
-      await fs.promises.writeFile(absPath, buffer);
+      const tmpInputPath = provider === 'gemini'
+        ? `${targetPath}.tmp.wav`
+        : `${targetPath}.tmp.mp3`;
+      await fs.promises.writeFile(tmpInputPath, buffer);
+      try {
+        await runCommand('ffmpeg', [
+          '-y',
+          '-i',
+          tmpInputPath,
+          '-c:a',
+          'aac',
+          '-b:a',
+          '128k',
+          '-movflags',
+          '+faststart',
+          targetPath,
+        ]);
+      } finally {
+        await fs.promises.rm(tmpInputPath, { force: true });
+      }
 
       const latencyMs = Date.now() - startedAt;
-      const duration = await readAudioDuration(absPath);
+      const duration = await readAudioDuration(targetPath);
 
       logger.info(
         {
@@ -293,7 +329,7 @@ async function synthesizeOnePage(params: {
       const endedAtIso = new Date().toISOString();
       return {
         pageNumber,
-        audioPath: absPath,
+        audioPath: targetPath,
         chars: input.length,
         bytes: buffer.byteLength,
         durationSeconds: duration,
@@ -344,7 +380,7 @@ async function synthesizeOnePage(params: {
 
   return {
     pageNumber,
-    audioPath: absPath,
+    audioPath: targetPath,
     chars: input.length,
     bytes: 0,
     durationSeconds: null,
