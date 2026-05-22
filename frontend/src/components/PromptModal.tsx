@@ -5,10 +5,11 @@ import {
   type TtsProvider,
 } from '../lib/ttsVoices';
 import { getImagePromptTemplates, type ImagePromptTemplate } from '../lib/api';
+import { useI18n, type TranslationKey } from '../i18n';
 
 export interface PromptPreset {
-  label: string;
-  prompt: string;
+  labelKey: TranslationKey;
+  promptKey: TranslationKey;
 }
 
 /**
@@ -17,24 +18,20 @@ export interface PromptPreset {
  */
 const PRESETS: PromptPreset[] = [
   {
-    label: '課堂老師（親切、有例子）',
-    prompt:
-      '請以大學授課老師的親切口吻講解，偶爾穿插生活化的例子、打比方讓聽眾更容易理解；避免太多專有名詞堆砌，遇到術語請稍微解釋。',
+    labelKey: 'promptModal.presetTeacherLabel',
+    promptKey: 'promptModal.presetTeacherPrompt',
   },
   {
-    label: '企業簡報（正式、專業）',
-    prompt:
-      '請用正式、專業、有邏輯層次的語氣向企業決策者說明，強調重點、結論與行動建議；避免口語贅詞，不要使用感嘆語氣。',
+    labelKey: 'promptModal.presetBusinessLabel',
+    promptKey: 'promptModal.presetBusinessPrompt',
   },
   {
-    label: 'Podcast 科普主持（輕鬆、故事感）',
-    prompt:
-      '以 Podcast 主持人的輕鬆語氣說故事，像在跟朋友聊天；保留專業內容，但加入轉折、反問、驚嘆等口語元素，讓人聽得下去。',
+    labelKey: 'promptModal.presetPodcastLabel',
+    promptKey: 'promptModal.presetPodcastPrompt',
   },
   {
-    label: '技術分享會（工程師向工程師）',
-    prompt:
-      '聽眾是資深工程師，請用精確、務實、技術導向的語氣講解，可直接使用專有名詞並強調設計取捨、邊界條件與實作細節，不需過度簡化。',
+    labelKey: 'promptModal.presetTechLabel',
+    promptKey: 'promptModal.presetTechPrompt',
   },
 ];
 
@@ -69,6 +66,7 @@ export default function PromptModal({
   onSubmit,
   onClose,
 }: PromptModalProps) {
+  const { language, t } = useI18n();
   const availableTtsVoices = TTS_VOICES_BY_PROVIDER[ttsProvider];
   const [value, setValue] = useState<string>(initialValue);
   const [submitting, setSubmitting] = useState(false);
@@ -76,7 +74,7 @@ export default function PromptModal({
   const [ttsVoice, setTtsVoice] = useState<string>(DEFAULT_TTS_VOICE_BY_PROVIDER[ttsProvider]);
   const [ttsSpeed, setTtsSpeed] = useState(1);
   const [scriptMaxCharsPerPage, setScriptMaxCharsPerPage] = useState(150);
-  const [tonePrompt, setTonePrompt] = useState('語氣自然、親切、節奏分明，重點前可稍作鋪陳，段落銜接流暢。');
+  const [tonePrompt, setTonePrompt] = useState(t('promptModal.defaultTonePrompt'));
   const [imageTemplates, setImageTemplates] = useState<ImagePromptTemplate[]>([]);
   const [selectedImageTemplateKey, setSelectedImageTemplateKey] = useState<string>('');
   const [imageStylePrompt, setImageStylePrompt] = useState<string>('');
@@ -98,7 +96,7 @@ export default function PromptModal({
         const key = resp.default_template_key ?? resp.templates[0]?.key ?? '';
         setSelectedImageTemplateKey(key);
         const hit = resp.templates.find((t) => t.key === key) ?? resp.templates[0];
-        setImageStylePrompt(hit?.prompt_en ?? '');
+        setImageStylePrompt(hit ? getLocalizedImagePrompt(hit) : '');
       } catch {
         // non-fatal: keep modal usable even if template endpoint fails
       }
@@ -106,7 +104,7 @@ export default function PromptModal({
     return () => {
       active = false;
     };
-  }, []);
+  }, [language]);
 
   useEffect(() => {
     if (availableTtsVoices.some((voice) => voice === ttsVoice)) return;
@@ -127,7 +125,7 @@ export default function PromptModal({
   const handleSubmit = async (prompt: string) => {
     if (submitting) return;
     if (prompt.length > MAX_PROMPT_CHARS) {
-      setError(`提示詞不可超過 ${MAX_PROMPT_CHARS} 字`);
+      setError(t('promptModal.errorPromptTooLong').replace('{max}', String(MAX_PROMPT_CHARS)));
       return;
     }
     setSubmitting(true);
@@ -146,7 +144,7 @@ export default function PromptModal({
       // Parent is responsible for closing the modal on success.
     } catch (err) {
       const msg =
-        err instanceof Error ? err.message : typeof err === 'string' ? err : '提交失敗';
+        err instanceof Error ? err.message : typeof err === 'string' ? err : t('promptModal.submitFailed');
       setError(msg);
     } finally {
       setSubmitting(false);
@@ -162,29 +160,32 @@ export default function PromptModal({
   };
 
   const applyPreset = (p: PromptPreset) => {
-    setValue(p.prompt);
+    setValue(t(p.promptKey));
     textareaRef.current?.focus();
   };
 
   const onSelectImageTemplate = (key: string) => {
     setSelectedImageTemplateKey(key);
     const hit = imageTemplates.find((t) => t.key === key);
-    if (hit) setImageStylePrompt(hit.prompt_en);
+    if (hit) setImageStylePrompt(getLocalizedImagePrompt(hit));
   };
+
+  const getLocalizedImagePrompt = (template: ImagePromptTemplate) =>
+    language === 'zh-TW' ? template.prompt_zh : template.prompt_en;
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="輸入生成風格提示詞"
+        aria-label={t('promptModal.dialogLabel')}
         className="w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl"
       >
         <div className="border-b border-slate-800 bg-slate-900/80 px-5 py-4">
-          <h2 className="text-base font-semibold text-slate-100">設定生成風格</h2>
+          <h2 className="text-base font-semibold text-slate-100">{t('promptModal.title')}</h2>
           <p className="mt-1 text-xs text-slate-400">
-            {pdfTitle ? `《${pdfTitle}》` : '這份 PDF'}
-            {' '}上傳完成。請告訴 AI 你想要的語氣、聽眾、風格或任何自訂指示，再開始產生逐字稿與語音。
+            {(pdfTitle ? t('promptModal.uploadCompleteNamed').replace('{title}', pdfTitle) : t('promptModal.uploadCompleteUnnamed'))}{' '}
+            {t('promptModal.description')}
           </p>
         </div>
 
@@ -193,7 +194,7 @@ export default function PromptModal({
             htmlFor="prompt-textarea"
             className="mb-1 block text-xs font-medium text-slate-300"
           >
-            你的提示詞（選填）
+            {t('promptModal.promptLabel')}
           </label>
           <textarea
             id="prompt-textarea"
@@ -203,11 +204,11 @@ export default function PromptModal({
             disabled={submitting}
             rows={6}
             maxLength={MAX_PROMPT_CHARS + 50}
-            placeholder="例如：請用大學授課老師的親切語氣，對初學者講解，遇到術語請稍作解釋…"
+            placeholder={t('promptModal.promptPlaceholder')}
             className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:opacity-60"
           />
           <div className="mt-1 flex items-center justify-between text-xs text-slate-500">
-            <span>留白或跳過代表使用預設（中性、專業、自然）。</span>
+            <span>{t('promptModal.blankHint')}</span>
             <span
               className={
                 value.length > MAX_PROMPT_CHARS ? 'text-rose-400' : undefined
@@ -225,12 +226,12 @@ export default function PromptModal({
               onChange={(ev) => setRequireScriptConfirmation(ev.target.checked)}
               disabled={submitting}
             />
-            <span>逐字稿產生後先讓我確認，再開始生成語音檔</span>
+            <span>{t('promptModal.requireScriptConfirmation')}</span>
           </label>
 
           <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
             <label className="text-xs text-slate-300">
-              語音人物
+              {t('promptModal.ttsVoice')}
               <select
                 className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100"
                 value={ttsVoice}
@@ -244,7 +245,7 @@ export default function PromptModal({
             </label>
 
             <label className="text-xs text-slate-300">
-              語速（0.25–4）
+              {t('promptModal.ttsSpeed')}
               <input
                 type="number"
                 min={0.25}
@@ -258,7 +259,7 @@ export default function PromptModal({
             </label>
 
             <label className="text-xs text-slate-300">
-              每頁最大長度
+              {t('promptModal.maxLengthPerPage')}
               <input
                 type="number"
                 min={80}
@@ -273,21 +274,21 @@ export default function PromptModal({
           </div>
 
           <label className="mt-3 block text-xs text-slate-300">
-            語氣提示詞（影響逐字稿生成/改寫）
+            {t('promptModal.tonePromptLabel')}
             <textarea
               rows={2}
               className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100"
               value={tonePrompt}
               onChange={(ev) => setTonePrompt(ev.target.value)}
               disabled={submitting}
-              placeholder="例如：沉穩專業、句尾俐落；重點前放慢語速的文字節奏"
+              placeholder={t('promptModal.tonePromptPlaceholder')}
             />
           </label>
 
           <div className="mt-4 rounded-lg border border-slate-700 bg-slate-950 px-3 py-3">
-            <p className="mb-2 text-xs font-medium text-slate-300">圖片風格模板（生圖專用）</p>
+            <p className="mb-2 text-xs font-medium text-slate-300">{t('promptModal.imageTemplateSection')}</p>
             <label className="text-xs text-slate-300">
-              模板
+              {t('promptModal.template')}
               <select
                 className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100"
                 value={selectedImageTemplateKey}
@@ -295,12 +296,12 @@ export default function PromptModal({
                 disabled={submitting || imageTemplates.length === 0}
               >
                 {imageTemplates.map((t) => (
-                  <option key={t.key} value={t.key}>{t.label}</option>
+                  <option key={t.key} value={t.key}>{language === 'zh-TW' ? t.label : t.key.replaceAll('_', ' ')}</option>
                 ))}
               </select>
             </label>
             <label className="mt-2 block text-xs text-slate-300">
-              模板內容（可自行修改）
+              {t('promptModal.templateContent')}
               <textarea
                 rows={3}
                 className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100"
@@ -312,18 +313,18 @@ export default function PromptModal({
           </div>
 
           <div className="mt-4">
-            <p className="mb-2 text-xs font-medium text-slate-300">常用範本（點擊套用）</p>
+            <p className="mb-2 text-xs font-medium text-slate-300">{t('promptModal.presetsSection')}</p>
             <div className="flex flex-wrap gap-2">
               {PRESETS.map((p) => (
                 <button
-                  key={p.label}
+                  key={p.labelKey}
                   type="button"
                   onClick={() => applyPreset(p)}
                   disabled={submitting}
                   className="rounded-full border border-slate-700 bg-slate-800 px-3 py-1 text-xs text-slate-200 transition hover:border-indigo-400 hover:text-indigo-200 disabled:opacity-60"
-                  title={p.prompt}
+                  title={t(p.promptKey)}
                 >
-                  {p.label}
+                  {t(p.labelKey)}
                 </button>
               ))}
             </div>
@@ -343,7 +344,7 @@ export default function PromptModal({
             disabled={submitting}
             className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 transition hover:bg-slate-800 disabled:opacity-60"
           >
-            稍後再設定
+            {t('promptModal.setLater')}
           </button>
           <button
             type="button"
@@ -351,7 +352,7 @@ export default function PromptModal({
             disabled={submitting}
             className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 transition hover:bg-slate-800 disabled:opacity-60"
           >
-            直接使用預設
+            {t('promptModal.useDefault')}
           </button>
           <button
             type="button"
@@ -359,7 +360,7 @@ export default function PromptModal({
             disabled={submitting}
             className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white shadow transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {submitting ? '送出中…' : '開始生成'}
+            {submitting ? t('promptModal.submitting') : t('promptModal.startGeneration')}
           </button>
         </div>
       </div>
