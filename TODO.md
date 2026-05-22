@@ -7,7 +7,7 @@
 [x] 請將 PlayPage中所有文字都做翻譯（完成於分支: feature/todo-playpage-i18n-20260522）
 [ ] 請將 PlayPage 中所有文字都做翻譯
 [x] 請將 上傳 PDF 中所有文字都做翻譯（完成於分支: feature/todo-upload-pdf-i18n-20260522）
-[ ] 請將 貼上 TXT 中所有文字都做翻譯
+[x] 請將 貼上 TXT 中所有文字都做翻譯（完成於分支: feature/todo-import-text-i18n-20260522）
 
 ---
 ## 工作記錄
@@ -38,3 +38,7 @@
 - 時間: 2026-05-22 10:29:30 +0800
 - 分支: feature/todo-upload-pdf-i18n-20260522
 - 內容: 完成上傳 PDF 區塊可見文字 i18n 化，新增 upload.* 中英文翻譯鍵，將 PDF 匯入模式、上傳按鈕、YouTube 匯入、錯誤提示與復原建議改用翻譯檔。
+
+- 時間: 2026-05-22 11:09:00 +0800
+- 分支: feature/todo-import-text-i18n-20260522
+- 內容: 完成貼上 TXT 匯入頁可見文字 i18n 化，新增 importText.* 中英文翻譯鍵，將頁面標題、流程導引、匯入模式、AI 大綱對話、按鈕、錯誤訊息與復原建議改用翻譯檔。
