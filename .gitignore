@@ -44,3 +44,4 @@ coverage/
 log.txt
 .certs/localhost-cert.pem
 .certs/localhost-key.pem
+.roo/schedules.json
