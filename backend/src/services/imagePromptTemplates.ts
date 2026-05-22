@@ -4,7 +4,16 @@ export interface ImagePromptTemplate {
     | 'technology_blueprint'
     | 'medical_textbook'
     | 'storybook_education'
-    | 'isometric_3d_infographic';
+    | 'isometric_3d_infographic'
+    | 'ghibli_anime'
+    | 'anime_cel_shading'
+    | 'makoto_shinkai'
+    | 'claymation_3d'
+    | 'isometric_vibrant'
+    | 'lego_bricks'
+    | 'watercolor_pastel'
+    | 'oil_painting_impasto'
+    | 'cyberpunk_neon';
   label: string;
   description: string;
   prompt_en: string;
@@ -57,6 +66,69 @@ export const IMAGE_PROMPT_TEMPLATES: ImagePromptTemplate[] = [
     prompt_zh:
       '3D 等距資訊圖風，乾淨幾何造型，現代 UI 元素，分層工作流程，柔和陰影，粉彩科技配色，適合系統總覽與平台簡報',
   },
+  {
+    key: 'ghibli_anime',
+    label: '吉卜力動漫風',
+    description: '卡通敘事、角色導向、溫暖幻想感場景',
+    prompt_en: 'Studio Ghibli style, Hayao Miyazaki, anime art style',
+    prompt_zh: '吉卜力動畫風格，宮崎駿感，日系動漫插畫風',
+  },
+  {
+    key: 'anime_cel_shading',
+    label: '日系賽璐璐風',
+    description: '二次元人物、清晰輪廓、平塗光影',
+    prompt_en: 'Anime cel shading, Japanese illustration',
+    prompt_zh: '日系賽璐璐上色，清楚線條與平塗陰影的日本插畫風',
+  },
+  {
+    key: 'makoto_shinkai',
+    label: '新海誠電影風',
+    description: '高細節天空、光影戲劇性、電影感構圖',
+    prompt_en: 'Makoto Shinkai style, highly detailed, beautiful sky, cinematic lighting',
+    prompt_zh: '新海誠風格，高細節、絕美天空、電影級光影',
+  },
+  {
+    key: 'claymation_3d',
+    label: '3D 黏土質感風',
+    description: '可愛角色、柔光、可觸感材質',
+    prompt_en: '3D clay rendering, cute, soft lighting, tactile texture',
+    prompt_zh: '3D 黏土渲染，可愛造型，柔和打光，具觸感紋理',
+  },
+  {
+    key: 'isometric_vibrant',
+    label: '3D 等角鮮明風',
+    description: '等角視角、亮彩色塊、乾淨背景',
+    prompt_en: '3D isometric illustration, vibrant colors, clean background',
+    prompt_zh: '3D 等角插畫，鮮明色彩，背景乾淨俐落',
+  },
+  {
+    key: 'lego_bricks',
+    label: '樂高積木風',
+    description: '積木造型、拼裝感、玩具質地',
+    prompt_en: 'Made of lego bricks, highly detailed',
+    prompt_zh: '由樂高積木構成，高細節拼裝風格',
+  },
+  {
+    key: 'watercolor_pastel',
+    label: '水彩粉彩風',
+    description: '柔和筆觸、淡雅色彩、手繪感',
+    prompt_en: 'Watercolor illustration, soft brush strokes, pastel colors',
+    prompt_zh: '水彩插畫，柔和筆觸，粉彩色調',
+  },
+  {
+    key: 'oil_painting_impasto',
+    label: '厚塗油畫風',
+    description: '厚重筆觸、經典畫布感、藝術性強',
+    prompt_en: 'Impasto oil painting, thick brush strokes, classic art',
+    prompt_zh: '厚塗油畫風，粗厚筆觸，經典藝術質感',
+  },
+  {
+    key: 'cyberpunk_neon',
+    label: '賽博龐克霓虹風',
+    description: '未來城市、霓虹燈光、暗色氛圍',
+    prompt_en: 'Cyberpunk style, neon lights, futuristic, dark atmosphere',
+    prompt_zh: '賽博龐克風格，霓虹光效，未來感，暗色氛圍',
+  },
 ];
 
 export const IMAGE_PROMPT_GENERAL_RULES = [
@@ -98,4 +170,3 @@ export function buildImagePrompt(params: {
   }
   return lines.join('\n\n');
 }
-
