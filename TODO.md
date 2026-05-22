@@ -8,6 +8,9 @@
 [x] 請將 上傳 PDF 中所有文字都做翻譯（完成於分支: feature/todo-upload-pdf-i18n-20260522）
 [x] 請將 貼上 TXT 中所有文字都做翻譯（完成於分支: feature/todo-import-text-i18n-20260522）
 [x] 重新確認 master TODO.md 無未完成項目並更新工作記錄（完成於分支: feature/todo-no-pending-recheck-20260522-1124）
+[x] 產生的標題也要根據內容語言設定選擇語言（完成於分支: feature/todo-title-content-language-20260523）
+[ ] 當使用文本產生大網時要根據內容語言設定選擇語言，如果內容語言是中文時要產生繁體中文
+[ ] 在全螢幕模式時， click 螢幕可以 pause/resume 語言播放。pause 的時候要在左上角顯示 pause 圖示
 
 ---
 ## 工作記錄
@@ -46,3 +49,7 @@
 - 時間: 2026-05-22 11:24:00 +0800
 - 分支: feature/todo-no-pending-recheck-20260522-1124
 - 內容: 檢查 master 中 TODO.md 未發現未完成核取項目；由於無實作型待辦可選，本次以獨立分支保存複查提交，並回到 master 更新 TODO.md 完成清單與工作記錄。
+
+- 時間: 2026-05-23 01:26:00 +0800
+- 分支: feature/todo-title-content-language-20260523
+- 內容: 完成標題產生依內容語言設定輸出；英文內容語言時改用英文標題規則與提示，繁體中文內容語言時明確要求翻譯並輸出繁體中文標題，同時在標題產生日誌記錄 contentLanguage。
