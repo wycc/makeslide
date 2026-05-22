@@ -54,6 +54,7 @@ import {
 import { formatDurationMs, formatTime } from './play/formatters';
 import { PageTimingChips } from './play/PageTimingChips';
 import { RegenerateProgress } from './play/RegenerateProgress';
+import { useI18n } from '../i18n';
 import type {
   ChatMessage,
   PdfDetail,
@@ -170,6 +171,7 @@ async function exitAnyFullscreen(): Promise<void> {
 }
 
 export default function PlayPage() {
+  const { t } = useI18n();
   const { id: pdfId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -1206,7 +1208,7 @@ export default function PlayPage() {
       setPagePolls((prev) => prev.map((item) => (item.id === poll.id ? poll : item)));
       setPollVotes((prev) => ({ ...prev, [pollId]: optionIndex }));
     } catch (err) {
-      setPollError(err instanceof ApiError ? err.message : '投票失敗');
+      setPollError(err instanceof ApiError ? err.message : t('play.pollVoteFailed'));
     } finally {
       setPollBusy(false);
     }
@@ -1217,7 +1219,7 @@ export default function PlayPage() {
     if (!pdfId || !currentPage) return;
     const nextScript = editingScript.trim();
     if (!nextScript) {
-      setEditorError('文稿不可為空');
+      setEditorError(t('play.scriptRequired'));
       return;
     }
     setEditorBusy(true);
@@ -1301,7 +1303,7 @@ export default function PlayPage() {
         pageNumber: currentPage?.page_number,
         error: err,
       });
-      setEditorError(err instanceof ApiError ? err.message : '重生語音失敗');
+      setEditorError(err instanceof ApiError ? err.message : t('play.regenerateAudioFailed'));
     } finally {
       setEditorBusy(false);
     }
@@ -1340,7 +1342,7 @@ export default function PlayPage() {
       setChatHistory((prev) => [...prev, { role: 'assistant', content: res.script }]);
     } catch (err) {
       setChatHistory(chatHistory);
-      setRewriteError(err instanceof ApiError ? err.message : '逐字稿改寫失敗');
+      setRewriteError(err instanceof ApiError ? err.message : t('play.rewriteScriptFailed'));
     } finally {
       setRewriteBusy(false);
     }
@@ -1356,7 +1358,7 @@ export default function PlayPage() {
       setChatHistory([]);
       setChatInput('');
     } catch (err) {
-      setChatError(err instanceof ApiError ? err.message : '清除問答失敗');
+      setChatError(err instanceof ApiError ? err.message : t('play.clearChatFailed'));
     } finally {
       setChatBusy(false);
     }
@@ -1372,7 +1374,7 @@ export default function PlayPage() {
       setVideoUrl(res.video_url);
       setDetail((prev) => (prev ? { ...prev, video_url: res.video_url, updated_at: res.updated_at } : prev));
     } catch (err) {
-      setVideoError(err instanceof ApiError ? err.message : '產生影片失敗');
+      setVideoError(err instanceof ApiError ? err.message : t('play.generateVideoFailed'));
     } finally {
       setVideoBusy(false);
     }
@@ -1395,9 +1397,9 @@ export default function PlayPage() {
             }
           : prev,
       );
-      setTtsMsg('語音設定已儲存');
+      setTtsMsg(t('play.ttsSettingsSaved'));
     } catch (err) {
-      setTtsMsg(err instanceof ApiError ? err.message : '儲存語音設定失敗');
+      setTtsMsg(err instanceof ApiError ? err.message : t('play.ttsSettingsSaveFailed'));
     } finally {
       setTtsBusy(false);
     }
@@ -1408,7 +1410,7 @@ export default function PlayPage() {
     if (!pdfId) return;
     const nextTitle = titleInput.trim();
     if (!nextTitle) {
-      setTitleMsg('標題不可為空');
+      setTitleMsg(t('play.titleRequired'));
       return;
     }
     setTitleBusy(true);
@@ -1424,9 +1426,9 @@ export default function PlayPage() {
             }
           : prev,
       );
-      setTitleMsg('標題已更新');
+      setTitleMsg(t('play.titleUpdated'));
     } catch (err) {
-      setTitleMsg(err instanceof ApiError ? err.message : '更新標題失敗');
+      setTitleMsg(err instanceof ApiError ? err.message : t('play.titleUpdateFailed'));
     } finally {
       setTitleBusy(false);
     }
@@ -1441,9 +1443,9 @@ export default function PlayPage() {
       const res = await updatePdfPrompt(pdfId, currentPage.page_number, promptInput);
       setPagePrompts((prev) => ({ ...prev, [res.page_number]: res.page_prompt ?? '' }));
       setDetail((prev) => (prev ? { ...prev, updated_at: res.updated_at } : prev));
-      setPromptMsg('提示詞已更新');
+      setPromptMsg(t('play.promptUpdated'));
     } catch (err) {
-      setPromptMsg(err instanceof ApiError ? err.message : '更新提示詞失敗');
+      setPromptMsg(err instanceof ApiError ? err.message : t('play.promptUpdateFailed'));
     } finally {
       setPromptBusy(false);
     }
@@ -1505,13 +1507,13 @@ export default function PlayPage() {
     if (!pdfId) return;
     if (regenJobRunning) return; // 防重複提交
     if (!regenAnySelected) {
-      setRegenAllMsg('請至少選擇一個重生項目');
+      setRegenAllMsg(t('play.selectOneRegenItem'));
       return;
     }
     if (regenOptions.image) {
       const p = regenAllPrompt.trim();
       if (!p) {
-        setRegenAllMsg('圖檔提示詞不可為空');
+        setRegenAllMsg(t('play.imagePromptRequired'));
         return;
       }
     }
@@ -1536,9 +1538,9 @@ export default function PlayPage() {
       autoJumpedJobIdRef.current = null;
       setRegenJob(started);
       setRegenAllDialogOpen(false); // 關閉對話框，讓進度顯示在主畫面
-      setRegenAllMsg('重生任務已啟動，進度顯示在畫面上方');
+      setRegenAllMsg(t('play.regenStarted'));
     } catch (err) {
-      setRegenAllMsg(err instanceof ApiError ? err.message : '重生失敗');
+      setRegenAllMsg(err instanceof ApiError ? err.message : t('play.regenFailed'));
       setRegenAllBusy(false);
     }
   }, [pdfId, regenAllPrompt, regenScriptPrompt, regenAnySelected, regenOptions, regenJobRunning, currentIdx, deckImageStylePrompt, isReadOnlyProcessing]);
@@ -1549,9 +1551,9 @@ export default function PlayPage() {
     try {
       const next = await cancelRegenerateJob(pdfId);
       setRegenJob(next);
-      setRegenAllMsg('已送出停止請求，等待目前頁面處理完成…');
+      setRegenAllMsg(t('play.stopRequested'));
     } catch (err) {
-      setRegenAllMsg(err instanceof ApiError ? err.message : '停止失敗');
+      setRegenAllMsg(err instanceof ApiError ? err.message : t('play.stopFailed'));
     } finally {
       setRegenStopBusy(false);
     }
@@ -1559,7 +1561,7 @@ export default function PlayPage() {
 
   const handleRollbackRegenerate = useCallback(async () => {
     if (!pdfId) return;
-    if (!window.confirm('確定要還原到重生前的狀態？此操作無法復原。')) return;
+    if (!window.confirm(t('play.confirmRollback'))) return;
     setRegenRollbackBusy(true);
     try {
       await rollbackRegenerate(pdfId);
@@ -1573,10 +1575,10 @@ export default function PlayPage() {
       // 清除記憶體中的 job，隱藏 banner
       setRegenJob(null);
       setRegenBannerDismissed(false);
-      setRegenAllMsg('已還原至重生前狀態');
+      setRegenAllMsg(t('play.rollbackDone'));
       autoJumpedJobIdRef.current = null;
     } catch (err) {
-      setRegenAllMsg(err instanceof ApiError ? err.message : '還原失敗');
+      setRegenAllMsg(err instanceof ApiError ? err.message : t('play.rollbackFailed'));
     } finally {
       setRegenRollbackBusy(false);
     }
@@ -1606,7 +1608,7 @@ export default function PlayPage() {
           setRegenAllBusy(false);
           return;
         }
-        setRegenAllMsg(err instanceof ApiError ? err.message : '取得進度失敗');
+        setRegenAllMsg(err instanceof ApiError ? err.message : t('play.fetchProgressFailed'));
       }
     };
     timer = window.setTimeout(tick, 1500);
@@ -1627,11 +1629,11 @@ export default function PlayPage() {
     if (!terminal) return;
     setRegenAllBusy(false);
     if (regenJob.status === 'completed') {
-      setRegenAllMsg('重生完成');
+      setRegenAllMsg(t('play.regenCompleted'));
     } else if (regenJob.status === 'failed') {
-      setRegenAllMsg(regenJob.error ?? '重生失敗');
+      setRegenAllMsg(regenJob.error ?? t('play.regenFailed'));
     } else {
-      setRegenAllMsg('已停止生成');
+      setRegenAllMsg(t('play.regenCancelled'));
     }
     void reloadDetail();
     // 自動跳頁：優先跳到 last_processed_page（使用者可看到剛生成的頁）。
@@ -1656,7 +1658,7 @@ export default function PlayPage() {
       // 等後端新增完成後再整頁重載，避免讀到中間狀態。
       window.location.reload();
     } catch (err) {
-      setSlideError(err instanceof ApiError ? err.message : '新增投影片失敗');
+      setSlideError(err instanceof ApiError ? err.message : t('play.addSlideFailed'));
     } finally {
       setSlideBusy(false);
     }
@@ -1673,7 +1675,7 @@ export default function PlayPage() {
       // 等後端刪除完成後再整頁重載，避免讀到中間狀態。
       window.location.reload();
     } catch (err) {
-      setSlideError(err instanceof ApiError ? err.message : '刪除投影片失敗');
+      setSlideError(err instanceof ApiError ? err.message : t('play.deleteSlideFailed'));
     } finally {
       setSlideBusy(false);
     }
@@ -1690,7 +1692,7 @@ export default function PlayPage() {
         await reloadDetail();
         setCurrentIdx(Math.max(0, toPageNumber - 1));
       } catch (err) {
-        setSlideError(err instanceof ApiError ? err.message : '調整頁面順序失敗');
+        setSlideError(err instanceof ApiError ? err.message : t('play.moveSlideFailed'));
       } finally {
         setSlideBusy(false);
       }
@@ -1709,7 +1711,7 @@ export default function PlayPage() {
         await replaceSlideImage(pdfId, pageNumber, file);
         await reloadDetail();
       } catch (err) {
-        setSlideError(err instanceof ApiError ? err.message : '替換圖片失敗');
+        setSlideError(err instanceof ApiError ? err.message : t('play.replaceImageFailed'));
       } finally {
         setSlideBusy(false);
       }
@@ -1720,7 +1722,7 @@ export default function PlayPage() {
   const handleUpdateCoverFromCurrentPage = useCallback(async () => {
     if (!pdfId || !currentPage) return;
     if (!currentPage.image_url) {
-      setSlideError('目前頁沒有可用圖片，無法更新封面');
+      setSlideError(t('play.noImageForCover'));
       return;
     }
     setSlideBusy(true);
@@ -1729,7 +1731,7 @@ export default function PlayPage() {
       await updatePdfCoverFromPage(pdfId, currentPage.page_number);
       await reloadDetail();
     } catch (err) {
-      setSlideError(err instanceof ApiError ? err.message : '更新封面失敗');
+      setSlideError(err instanceof ApiError ? err.message : t('play.updateCoverFailed'));
     } finally {
       setSlideBusy(false);
     }
@@ -1738,7 +1740,7 @@ export default function PlayPage() {
   const handleRegenerateImageWithPrompt = useCallback(async () => {
     if (isReadOnlyProcessing) return;
     if (!pdfId || !currentPage) return;
-    const trimmed = chatInput.trim() || '保留版型，讓文字更清晰、重點更聚焦';
+    const trimmed = chatInput.trim() || t('play.defaultImageEditPrompt');
     const merged = [
       `整份圖片風格（固定套用）：\n${deckImageStylePrompt.trim() || '(無)'}`,
       `單張調整需求：\n${trimmed}`,
@@ -1756,7 +1758,7 @@ export default function PlayPage() {
       ]);
     } catch (err) {
       setChatHistory(chatHistory);
-      setSlideError(err instanceof ApiError ? err.message : '修改圖片失敗');
+      setSlideError(err instanceof ApiError ? err.message : t('play.editImageFailed'));
     } finally {
       setSlideBusy(false);
     }
@@ -1775,7 +1777,7 @@ export default function PlayPage() {
       await replaceSlideImage(pdfId, imagePreviewPageNumber, file);
       await reloadDetail();
     } catch (err) {
-      setSlideError(err instanceof ApiError ? err.message : '套用圖片失敗');
+      setSlideError(err instanceof ApiError ? err.message : t('play.applyImageFailed'));
     } finally {
       setSlideBusy(false);
     }
@@ -1906,9 +1908,9 @@ export default function PlayPage() {
         <p className="text-slate-300">
           {isReadOnlyProcessing
             ? `尚未產生可瀏覽的頁面（${detail.status}${detail.progress_step ? ` / ${detail.progress_step}` : ''}）`
-            : '這份 PDF 沒有可播放的語音頁面'}
+            : t('play.noPlayablePages')}
         </p>
-        {isReadOnlyProcessing ? <p className="text-xs text-slate-500">系統將每 3 秒重新檢查一次狀態…</p> : null}
+        {isReadOnlyProcessing ? <p className="text-xs text-slate-500">{t('play.autoRefreshStatus')}</p> : null}
         <Link to="/" className="text-sm text-slate-400 underline">
           返回首頁
         </Link>
@@ -1935,7 +1937,7 @@ export default function PlayPage() {
               className="max-h-screen max-w-screen object-contain"
             />
           ) : (
-            <div className="text-slate-300">無法顯示投影片</div>
+            <div className="text-slate-300">{t('play.cannotDisplaySlide')}</div>
           )}
           <button
             type="button"
@@ -1975,8 +1977,8 @@ export default function PlayPage() {
               <div className="w-full max-w-lg rounded-xl border border-cyan-400/40 bg-slate-950 p-4 text-slate-100 shadow-2xl">
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div>
-                    <h2 className="text-base font-semibold text-cyan-100">向老師提問</h2>
-                    <p className="mt-1 text-xs text-slate-400">問題會送到 master 端，由老師決定是否顯示在畫面上。</p>
+                    <h2 className="text-base font-semibold text-cyan-100">{t('play.askTeacher')}</h2>
+                    <p className="mt-1 text-xs text-slate-400">{t('play.questionSentToMaster')}</p>
                   </div>
                   <button
                     type="button"
@@ -1998,7 +2000,7 @@ export default function PlayPage() {
                   maxLength={500}
                   rows={4}
                   autoFocus
-                  placeholder="輸入想問老師的問題…"
+                  placeholder={t('play.questionPlaceholder')}
                   className="w-full resize-none rounded-lg border border-cyan-500/40 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-500 focus:border-cyan-300"
                 />
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -2018,7 +2020,7 @@ export default function PlayPage() {
           {(classroomMode && classroomAwaitingNext) ? (
             <div className="pointer-events-none absolute bottom-4 left-1/2 w-[min(92vw,1000px)] -translate-x-1/2 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
               <div className="mx-auto rounded-md bg-cyan-950/90 px-4 py-3 text-center text-base font-medium leading-relaxed text-cyan-50 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] md:text-lg">
-                <p className="whitespace-pre-wrap">等待下一頁…</p>
+                <p className="whitespace-pre-wrap">{t('play.waitingNextPage')}</p>
               </div>
             </div>
           ) : currentSentence ? (
@@ -2043,9 +2045,9 @@ export default function PlayPage() {
       {imagePreviewOpen && imagePreviewUrl ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
           <div className="w-full max-w-4xl rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl">
-            <h3 className="mb-3 text-sm font-semibold text-slate-200">圖片產生結果預覽</h3>
+            <h3 className="mb-3 text-sm font-semibold text-slate-200">{t('play.imagePreviewTitle')}</h3>
             <div className="mb-4 flex max-h-[70vh] items-center justify-center overflow-auto rounded-lg border border-slate-800 bg-slate-950 p-2">
-              <img src={imagePreviewUrl} alt="生成結果預覽" className="max-h-[64vh] w-auto rounded" />
+              <img src={imagePreviewUrl} alt={t('play.generatedPreviewAlt')} className="max-h-[64vh] w-auto rounded" />
             </div>
             <div className="flex justify-end gap-2">
               <button
@@ -2164,7 +2166,7 @@ export default function PlayPage() {
                     <input
                       value={syncFollowerCode}
                       onChange={(e) => setSyncFollowerCode(e.target.value)}
-                      placeholder="代號"
+                      placeholder={t('play.codePlaceholder')}
                       className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-100"
                       maxLength={80}
                     />
@@ -2174,7 +2176,7 @@ export default function PlayPage() {
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') void handleSubmitFollowerQuestion();
                       }}
-                      placeholder="輸入要問 master 的問題"
+                      placeholder={t('play.askMasterPlaceholder')}
                       className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-100"
                       maxLength={500}
                     />
@@ -2251,7 +2253,7 @@ export default function PlayPage() {
               type="button"
               onClick={() => setImageOnlyFullscreen(true)}
               className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
-              title="全螢幕圖片模式"
+              title={t('play.fullscreenImageMode')}
             >
               全螢幕
             </button>
@@ -2261,7 +2263,7 @@ export default function PlayPage() {
                 onClick={() => setSlideImageScale((scale) => Math.max(0.65, Number((scale - 0.1).toFixed(2))))}
                 className="rounded px-2 py-0.5 text-sm text-slate-300 hover:bg-slate-800 disabled:opacity-40"
                 disabled={slideImageScale <= 0.65}
-                aria-label="縮小圖片區"
+                aria-label={t('play.shrinkImageArea')}
               >
                 −
               </button>
@@ -2271,7 +2273,7 @@ export default function PlayPage() {
                 onClick={() => setSlideImageScale((scale) => Math.min(1.35, Number((scale + 0.1).toFixed(2))))}
                 className="rounded px-2 py-0.5 text-sm text-slate-300 hover:bg-slate-800 disabled:opacity-40"
                 disabled={slideImageScale >= 1.35}
-                aria-label="放大圖片區"
+                aria-label={t('play.enlargeImageArea')}
               >
                 ＋
               </button>
@@ -2281,8 +2283,8 @@ export default function PlayPage() {
               onClick={() => setTtsDialogOpen(true)}
               disabled={isReadOnlyProcessing}
               className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
-              title="語音設定"
-              aria-label="語音設定"
+              title={t('play.ttsSettings')}
+              aria-label={t('play.ttsSettings')}
             >
               ⚙️ 設定
             </button>
@@ -2302,7 +2304,7 @@ export default function PlayPage() {
               disabled={isReadOnlyProcessing || videoBusy}
               className="rounded-md border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-sm text-amber-200 hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {videoBusy ? '產生影片中…' : videoUrl ? '重新產生影片' : '產生影片'}
+              {videoBusy ? t('play.generatingVideo') : videoUrl ? t('play.regenerateVideo') : t('play.generateVideo')}
             </button>
             <Link
               to={`/play/${encodeURIComponent(pdfId ?? '')}/quizzes`}
@@ -2344,8 +2346,8 @@ export default function PlayPage() {
                   onChange={(e) => setShareAccess((e.target.value as ShareAccessMode) || 'read_only')}
                   className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200"
                 >
-                  <option value="read_only">分享唯讀</option>
-                  <option value="editable">分享可編輯</option>
+                  <option value="read_only">{t('play.shareReadOnly')}</option>
+                  <option value="editable">{t('play.shareEditable')}</option>
                 </select>
                 <button
                   type="button"
@@ -2353,7 +2355,7 @@ export default function PlayPage() {
                   disabled={shareBusy}
                   className="rounded-md border border-violet-500/50 bg-violet-500/15 px-3 py-1.5 text-xs text-violet-200 hover:bg-violet-500/25 disabled:opacity-40"
                 >
-                  {shareBusy ? '建立中…' : '▦ 建立分享連結'}
+                  {shareBusy ? t('play.creating') : `▦ ${t('play.createShareLink')}`}
                 </button>
               </div>
             ) : null}
@@ -2598,7 +2600,7 @@ export default function PlayPage() {
           <div className="rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="font-semibold text-slate-200">播放設定</span>
+                <span className="font-semibold text-slate-200">{t('play.playbackSettings')}</span>
                 <span className={`rounded-full border px-2 py-0.5 ${effectiveAudioMuted ? 'border-amber-400/50 bg-amber-400/10 text-amber-100' : 'border-emerald-400/40 bg-emerald-400/10 text-emerald-100'}`}>
                   {effectiveAudioMuted ? '本機靜音' : '本機有聲'}
                 </span>
@@ -2627,7 +2629,7 @@ export default function PlayPage() {
               <div className="mt-3 space-y-2 border-t border-slate-800 pt-3">
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-950/70 px-3 py-2">
                   <div>
-                    <span className="font-semibold text-slate-200">音訊</span>
+                    <span className="font-semibold text-slate-200">{t('play.audio')}</span>
                     <span className="ml-2 text-slate-400">
                       {syncEnabled && syncRole === 'follower' && !followerAudioUnlocked
                         ? '老師端已強制學生端靜音。'
@@ -2653,7 +2655,7 @@ export default function PlayPage() {
                 {syncEnabled && syncRole === 'master' ? (
                   <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-cyan-100">
                     <div>
-                      <span className="font-semibold">學生端音訊控制</span>
+                      <span className="font-semibold">{t('play.studentAudioControl')}</span>
                       <span className="ml-2 text-cyan-200/80">
                         {followerAudioUnlocked
                           ? '已解鎖，學生可自行取消靜音播放。'
@@ -2672,7 +2674,7 @@ export default function PlayPage() {
                 ) : null}
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-950/70 px-3 py-2">
                   <div>
-                    <span className="font-semibold text-slate-200">上課模式</span>
+                    <span className="font-semibold text-slate-200">{t('play.classroomMode')}</span>
                     <span className="ml-2 text-slate-400">
                       {classroomMode ? '每頁播放完會停在目前頁，按空白鍵才進入下一頁。' : '關閉時會自動連續播放下一頁。'}
                     </span>
@@ -2734,7 +2736,7 @@ export default function PlayPage() {
                     disabled={isReadOnlyProcessing}
                     rows={6}
                     className="w-full rounded-md border border-slate-700 bg-slate-900/70 p-3 text-sm leading-relaxed text-slate-100 outline-none ring-emerald-500/40 placeholder:text-slate-500 focus:ring"
-                    placeholder="請輸入本頁逐字稿..."
+                    placeholder={t('play.scriptPlaceholder')}
                   />
                   <div className="mt-2 flex items-center justify-between gap-3">
                     <div className="text-xs text-slate-400">
@@ -2759,7 +2761,7 @@ export default function PlayPage() {
                     disabled={isReadOnlyProcessing}
                     rows={6}
                     className="w-full rounded-md border border-slate-700 bg-slate-900/70 p-3 text-sm leading-relaxed text-slate-100 outline-none ring-cyan-500/40 placeholder:text-slate-500 focus:ring"
-                    placeholder="請輸入這份簡報的風格提示詞..."
+                    placeholder={t('play.promptPlaceholder')}
                   />
                   <div className="mt-2 flex items-center justify-between gap-3">
                     <div className="text-xs text-slate-400">
@@ -2785,15 +2787,15 @@ export default function PlayPage() {
                         <dd className="break-all font-mono text-slate-200">{detail.id}</dd>
                       </div>
                       <div>
-                        <dt className="text-slate-500">狀態</dt>
+                        <dt className="text-slate-500">{t('play.status')}</dt>
                         <dd className="text-slate-200">{detail.status}</dd>
                       </div>
                       <div>
-                        <dt className="text-slate-500">原始檔名</dt>
+                        <dt className="text-slate-500">{t('play.originalFilename')}</dt>
                         <dd className="break-all text-slate-200">{detail.original_filename}</dd>
                       </div>
                       <div>
-                        <dt className="text-slate-500">頁數</dt>
+                        <dt className="text-slate-500">{t('play.pageCount')}</dt>
                         <dd className="text-slate-200">{detail.page_count ?? totalPages}</dd>
                       </div>
                       <div>
@@ -2801,15 +2803,15 @@ export default function PlayPage() {
                         <dd className="text-slate-200">{detail.tts_provider ?? 'openai'} / {detail.tts_voice ?? '-'} / {detail.tts_speed ?? '-'}</dd>
                       </div>
                       <div>
-                        <dt className="text-slate-500">目前頁狀態</dt>
+                        <dt className="text-slate-500">{t('play.currentPageStatus')}</dt>
                         <dd className="text-slate-200">{currentPage?.status ?? '-'}</dd>
                       </div>
                       <div>
-                        <dt className="text-slate-500">建立時間</dt>
+                        <dt className="text-slate-500">{t('play.createdAt')}</dt>
                         <dd className="font-mono text-slate-200">{detail.created_at}</dd>
                       </div>
                       <div>
-                        <dt className="text-slate-500">更新時間</dt>
+                        <dt className="text-slate-500">{t('play.updatedAt')}</dt>
                         <dd className="font-mono text-slate-200">{detail.updated_at}</dd>
                       </div>
                     </dl>
@@ -2818,9 +2820,9 @@ export default function PlayPage() {
                     <table className="min-w-full divide-y divide-slate-800 text-left text-xs">
                       <thead className="bg-slate-900/70 text-slate-400">
                         <tr>
-                          <th className="px-3 py-2">步驟</th>
-                          <th className="px-3 py-2">狀態</th>
-                          <th className="px-3 py-2">耗時</th>
+                          <th className="px-3 py-2">{t('play.step')}</th>
+                          <th className="px-3 py-2">{t('play.status')}</th>
+                          <th className="px-3 py-2">{t('play.duration')}</th>
                           <th className="px-3 py-2">SLA</th>
                         </tr>
                       </thead>
@@ -2862,7 +2864,7 @@ export default function PlayPage() {
           <section className={`rounded-lg border border-slate-800 bg-slate-900/40 ${qaPanelExpanded ? 'md:hidden' : ''}`}>
             <div className="border-b border-slate-800 px-4 py-3">
               <div className="flex items-center justify-between gap-2">
-                <h2 className="text-sm font-semibold text-slate-300">🧩 投影片管理</h2>
+                <h2 className="text-sm font-semibold text-slate-300">🧩 {t('play.slideManagement')}</h2>
                 <div className="flex gap-2">
                   <button
                     type="button"
@@ -3093,14 +3095,14 @@ export default function PlayPage() {
                       value={pollQuestion}
                       onChange={(e) => setPollQuestion(e.target.value)}
                       maxLength={300}
-                      placeholder="輸入投票問題"
+                      placeholder={t('play.pollQuestionPlaceholder')}
                       className="mb-2 w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 outline-none ring-cyan-500/40 placeholder:text-slate-500 focus:ring"
                     />
                     <textarea
                       value={pollOptionsText}
                       onChange={(e) => setPollOptionsText(e.target.value)}
                       rows={2}
-                      placeholder="每行一個答案選項"
+                      placeholder={t('play.pollOptionsPlaceholder')}
                       className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 outline-none ring-cyan-500/40 placeholder:text-slate-500 focus:ring"
                     />
                     <button
@@ -3191,7 +3193,7 @@ export default function PlayPage() {
           </div>
           <div className="flex-1 space-y-2 overflow-y-auto p-3 text-sm">
             {chatHistory.length === 0 ? (
-              <div className="text-slate-500">尚無對話，請輸入問題。</div>
+              <div className="text-slate-500">{t('play.noChat')}</div>
             ) : (
               chatHistory.map((m, idx) => (
                 <div key={idx} className={m.role === 'user' ? 'text-slate-100' : 'text-emerald-200'}>
@@ -3275,7 +3277,7 @@ export default function PlayPage() {
             <h3 className="mb-3 text-sm font-semibold text-slate-200">語音設定</h3>
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs text-slate-300">聲音</span>
+                <span className="text-xs text-slate-300">{t('play.voice')}</span>
                 <select
                   value={ttsVoice}
                   onChange={(e) => setTtsVoice(e.target.value)}
@@ -3288,7 +3290,7 @@ export default function PlayPage() {
                 </select>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-300">速度</span>
+                <span className="text-xs text-slate-300">{t('play.speed')}</span>
                 <input
                   type="range"
                   min={0.5}
@@ -3327,7 +3329,7 @@ export default function PlayPage() {
       {imageStyleDialogOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
           <div className="w-full max-w-2xl rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl">
-            <h3 className="mb-2 text-sm font-semibold text-slate-200">整份簡報圖片風格設定</h3>
+            <h3 className="mb-2 text-sm font-semibold text-slate-200">{t('play.deckImageStyleTitle')}</h3>
             <p className="mb-3 text-xs text-slate-400">
               這個風格會套用在後續的單張與多張圖片重生。可填入你偏好的風格模板並自行調整。
             </p>
@@ -3399,7 +3401,7 @@ export default function PlayPage() {
       {regenAllDialogOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
           <div className="w-full max-w-xl rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl">
-            <h3 className="mb-3 text-sm font-semibold text-slate-200">選擇重生項目</h3>
+            <h3 className="mb-3 text-sm font-semibold text-slate-200">{t('play.selectRegenItems')}</h3>
             <p className="mb-3 text-xs text-slate-400">
               可多選；執行順序固定為 <span className="font-semibold text-slate-200">圖檔 → 逐字稿 → 語音</span>。
             </p>
@@ -3415,7 +3417,7 @@ export default function PlayPage() {
                   onChange={(e) => setRegenOptions((prev) => ({ ...prev, image: e.target.checked }))}
                   disabled={isReadOnlyProcessing || regenAllBusy}
                 />
-                <span>圖檔</span>
+                <span>{t('play.image')}</span>
               </label>
               <label className="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-200">
                 <input
@@ -3435,12 +3437,12 @@ export default function PlayPage() {
                   onChange={(e) => setRegenOptions((prev) => ({ ...prev, audio: e.target.checked }))}
                   disabled={isReadOnlyProcessing || regenAllBusy}
                 />
-                <span>語音</span>
+                <span>{t('play.audioItem')}</span>
               </label>
             </div>
             {regenOptions.image ? (
               <div className="mb-2">
-                <label className="mb-1 block text-xs text-slate-400">圖檔重生提示詞</label>
+                <label className="mb-1 block text-xs text-slate-400">{t('play.imageRegenPrompt')}</label>
                 <textarea
                   value={regenAllPrompt}
                   onChange={(e) => setRegenAllPrompt(e.target.value)}
@@ -3453,7 +3455,7 @@ export default function PlayPage() {
             ) : null}
             {regenOptions.script ? (
               <div className="mb-2">
-                <label className="mb-1 block text-xs text-slate-400">逐字稿重生提示詞</label>
+                <label className="mb-1 block text-xs text-slate-400">{t('play.scriptRegenPrompt')}</label>
                 <textarea
                   value={regenScriptPrompt}
                   onChange={(e) => setRegenScriptPrompt(e.target.value)}
@@ -3515,8 +3517,8 @@ export default function PlayPage() {
       {shareDialogOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
           <div className="w-full max-w-2xl rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl">
-            <h3 className="text-base font-semibold text-slate-100">分享連結已建立</h3>
-            <p className="mt-2 text-sm text-slate-300">請複製以下 URL 並分享給他人：</p>
+            <h3 className="text-base font-semibold text-slate-100">{t('play.shareLinkCreated')}</h3>
+            <p className="mt-2 text-sm text-slate-300">{t('play.copyShareUrlHint')}</p>
             <textarea
               readOnly
               value={shareUrl}
