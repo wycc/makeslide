@@ -2,23 +2,26 @@ import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ApiError, createYoutubeTask, mapApiErrorToHumanMessage, uploadPdf } from '../lib/api';
 import type { UploadResponse } from '../types';
+import { useI18n } from '../i18n';
 
-function buildRecoveryGuide(err: unknown): string[] {
+type T = ReturnType<typeof useI18n>['t'];
+
+function buildRecoveryGuide(err: unknown, t: T): string[] {
   if (err instanceof ApiError) {
     if (err.code === 'API_KEY_MISSING') {
-      return ['到「設定 API Key」頁面補齊金鑰。', '儲存後回到此頁重新送出。'];
+      return [t('upload.recoveryApiKey1'), t('upload.recoveryApiKey2')];
     }
     if (err.code === 'POPPLER_NOT_FOUND' || err.code === 'DEPENDENCY_MISSING') {
-      return ['依文件安裝 poppler（pdftoppm / pdftotext）。', '確認命令可在 PATH 執行後重試。'];
+      return [t('upload.recoveryDependency1'), t('upload.recoveryDependency2')];
     }
     if (err.code === 'MODEL_QUOTA_EXCEEDED' || err.code === 'MODEL_UNAVAILABLE') {
-      return ['稍後再試，或切換模型/供應商。', '若持續失敗，先以較小內容測試流程。'];
+      return [t('upload.recoveryModel1'), t('upload.recoveryModel2')];
     }
     if (err.code === 'INVALID_UPLOAD_TYPE' || err.code === 'INVALID_URL') {
-      return ['確認檔案格式（PDF/TXT）或 YouTube URL 正確。', '避免使用無效連結或損毀檔案。'];
+      return [t('upload.recoveryInvalidInput1'), t('upload.recoveryInvalidInput2')];
     }
   }
-  return ['檢查輸入內容後重試。', '參考錯誤碼文件對照進一步排查。'];
+  return [t('upload.recoveryDefault1'), t('upload.recoveryDefault2')];
 }
 
 interface UploadButtonProps {
@@ -30,6 +33,7 @@ interface UploadButtonProps {
 }
 
 export default function UploadButton({ onUploaded }: UploadButtonProps) {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -63,7 +67,7 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
     const lower = file.name.toLowerCase();
     const isPdf = lower.endsWith('.pdf') || file.type === 'application/pdf';
     if (!isPdf) {
-      setError('請選擇 PDF 檔案');
+      setError(t('upload.selectPdfFile'));
       return;
     }
 
@@ -83,15 +87,15 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
     } catch (err) {
       if (err instanceof ApiError) {
         const h = mapApiErrorToHumanMessage(err);
-        setError(`上傳失敗：${h.title}｜${h.message}（建議：${h.nextStep}）`);
-        setRecoveryGuide(buildRecoveryGuide(err));
+        setError(t('upload.uploadFailedDetail').replace('{title}', h.title).replace('{message}', h.message).replace('{nextStep}', h.nextStep));
+        setRecoveryGuide(buildRecoveryGuide(err, t));
       } else if (err instanceof Error) {
         const h = mapApiErrorToHumanMessage(err);
-        setError(`上傳失敗：${h.title}｜${h.message}（建議：${h.nextStep}）`);
-        setRecoveryGuide(buildRecoveryGuide(err));
+        setError(t('upload.uploadFailedDetail').replace('{title}', h.title).replace('{message}', h.message).replace('{nextStep}', h.nextStep));
+        setRecoveryGuide(buildRecoveryGuide(err, t));
       } else {
-        setError('上傳失敗：未知錯誤');
-        setRecoveryGuide(buildRecoveryGuide(err));
+        setError(t('upload.uploadFailedUnknown'));
+        setRecoveryGuide(buildRecoveryGuide(err, t));
       }
     } finally {
       setIsUploading(false);
@@ -103,7 +107,7 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
     if (isSubmittingYoutube || isUploading) return;
     const url = youtubeUrl.trim();
     if (!url) {
-      setError('請輸入 YouTube URL');
+      setError(t('upload.enterYoutubeUrl'));
       return;
     }
     setError(null);
@@ -125,15 +129,15 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
     } catch (err) {
       if (err instanceof ApiError) {
         const h = mapApiErrorToHumanMessage(err);
-        setError(`建立 YouTube 任務失敗：${h.title}｜${h.message}（建議：${h.nextStep}）`);
-        setRecoveryGuide(buildRecoveryGuide(err));
+        setError(t('upload.youtubeTaskFailedDetail').replace('{title}', h.title).replace('{message}', h.message).replace('{nextStep}', h.nextStep));
+        setRecoveryGuide(buildRecoveryGuide(err, t));
       } else if (err instanceof Error) {
         const h = mapApiErrorToHumanMessage(err);
-        setError(`建立 YouTube 任務失敗：${h.title}｜${h.message}（建議：${h.nextStep}）`);
-        setRecoveryGuide(buildRecoveryGuide(err));
+        setError(t('upload.youtubeTaskFailedDetail').replace('{title}', h.title).replace('{message}', h.message).replace('{nextStep}', h.nextStep));
+        setRecoveryGuide(buildRecoveryGuide(err, t));
       } else {
-        setError('建立 YouTube 任務失敗：未知錯誤');
-        setRecoveryGuide(buildRecoveryGuide(err));
+        setError(t('upload.youtubeTaskFailedUnknown'));
+        setRecoveryGuide(buildRecoveryGuide(err, t));
       }
     } finally {
       setIsSubmittingYoutube(false);
@@ -145,15 +149,15 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
     <div className="flex flex-col items-start gap-2">
       <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:gap-3">
         <label className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200">
-          <span className="whitespace-nowrap">PDF 內容</span>
+          <span className="whitespace-nowrap">{t('upload.pdfContent')}</span>
           <select
             value={pdfImportMode}
             onChange={(e) => setPdfImportMode(e.target.value as 'slides' | 'document')}
             disabled={isUploading}
             className="rounded-md border border-slate-600 bg-slate-800 px-2 py-1 text-sm text-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <option value="slides">簡報逐頁處理</option>
-            <option value="document">一般文件 AI 分頁</option>
+            <option value="slides">{t('upload.modeSlides')}</option>
+            <option value="document">{t('upload.modeDocument')}</option>
           </select>
         </label>
 
@@ -176,7 +180,7 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
               clipRule="evenodd"
             />
           </svg>
-          {isUploading ? `上傳中 ${progress}%` : '上傳 PDF'}
+          {isUploading ? t('upload.uploading').replace('{progress}', String(progress)) : t('upload.uploadPdf')}
         </button>
 
         <button
@@ -185,7 +189,7 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
           disabled={isUploading}
           className="inline-flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-100 shadow transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          貼上 TXT
+          {t('upload.pasteTxt')}
         </button>
 
         <button
@@ -194,7 +198,7 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
           disabled={isUploading || isSubmittingYoutube}
           className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/50 bg-emerald-900/30 px-4 py-2 text-sm font-medium text-emerald-200 shadow transition hover:bg-emerald-800/40 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {showYoutubePanel ? '收合 YouTube 匯入' : 'YouTube 匯入'}
+          {showYoutubePanel ? t('upload.collapseYoutubeImport') : t('upload.youtubeImport')}
         </button>
 
         <input
@@ -221,7 +225,7 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
             type="url"
             value={youtubeUrl}
             onChange={(e) => setYoutubeUrl(e.target.value)}
-            placeholder="貼上 YouTube URL"
+            placeholder={t('upload.youtubeUrlPlaceholder')}
             className="min-w-[260px] flex-1 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-400"
             disabled={isSubmittingYoutube || isUploading}
           />
@@ -229,7 +233,7 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
             type="text"
             value={youtubeLang}
             onChange={(e) => setYoutubeLang(e.target.value)}
-            placeholder="字幕語言 (選填，例如 zh-TW)"
+            placeholder={t('upload.subtitleLanguagePlaceholder')}
             className="w-44 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-400"
             disabled={isSubmittingYoutube || isUploading}
           />
@@ -239,7 +243,7 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
             disabled={isSubmittingYoutube || isUploading}
             className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isSubmittingYoutube ? '建立中...' : '建立 YouTube 任務'}
+            {isSubmittingYoutube ? t('upload.creating') : t('upload.createYoutubeTask')}
           </button>
         </div>
       )}
@@ -259,7 +263,7 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
             rel="noreferrer"
             className="mt-2 inline-block underline underline-offset-2 hover:text-white"
           >
-            查看錯誤碼文件（docs/error-codes.md）
+            {t('upload.errorCodeGuide')}
           </a>
         </div>
       )}

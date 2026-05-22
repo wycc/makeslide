@@ -23,7 +23,6 @@ const POLL_INTERVAL_ACTIVE_MS = 5000;
 const POLL_INTERVAL_IDLE_MS = 30000;
 const DEFAULT_PROMPT_TTS_PROVIDER = 'gemini' as const;
 const DEFAULT_CATEGORY = 'general';
-const RECENT_CATEGORY = '最近的簡報';
 const CATEGORY_FILTER_STORAGE_KEY = 'makeslide.home.categoryFilter';
 
 const compareByTitle = (a: PdfListItem, b: PdfListItem) => {
@@ -52,6 +51,7 @@ const readStoredCategoryFilter = () => {
 
 export default function HomePage() {
   const { t } = useI18n();
+  const RECENT_CATEGORY = t('home.recentCategory');
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [items, setItems] = useState<PdfListItem[]>([]);
