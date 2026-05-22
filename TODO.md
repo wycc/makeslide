@@ -6,7 +6,7 @@
 [x] 請將首頁中所有文字都做翻譯（完成於分支: feature/todo-homepage-i18n-20260522）
 [x] 請將 PlayPage中所有文字都做翻譯（完成於分支: feature/todo-playpage-i18n-20260522）
 [ ] 請將 PlayPage 中所有文字都做翻譯
-[ ] 請將 上傳 PDF 中所有文字都做翻譯
+[x] 請將 上傳 PDF 中所有文字都做翻譯（完成於分支: feature/todo-upload-pdf-i18n-20260522）
 [ ] 請將 貼上 TXT 中所有文字都做翻譯
 
 ---
@@ -34,3 +34,7 @@
 - 時間: 2026-05-22 10:20:00 +0800
 - 分支: feature/todo-playpage-i18n-20260522
 - 內容: 完成 PlayPage 主要可見文字 i18n 化，新增 play.* 中英文翻譯鍵，導入 useI18n 並替換頁面標籤、按鈕、提示、錯誤訊息與對話框文字。
+
+- 時間: 2026-05-22 10:29:30 +0800
+- 分支: feature/todo-upload-pdf-i18n-20260522
+- 內容: 完成上傳 PDF 區塊可見文字 i18n 化，新增 upload.* 中英文翻譯鍵，將 PDF 匯入模式、上傳按鈕、YouTube 匯入、錯誤提示與復原建議改用翻譯檔。
