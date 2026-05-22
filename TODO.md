@@ -10,7 +10,7 @@
 [x] 重新確認 master TODO.md 無未完成項目並更新工作記錄（完成於分支: feature/todo-no-pending-recheck-20260522-1124）
 [x] 產生的標題也要根據內容語言設定選擇語言（完成於分支: feature/todo-title-content-language-20260523）
 [x] 當使用文本產生大網時要根據內容語言設定選擇語言，如果內容語言是中文時要產生繁體中文（完成於分支: feature/todo-text-outline-content-language-20260523）
-[ ] 在全螢幕模式時， click 螢幕可以 pause/resume 語言播放。pause 的時候要在左上角顯示 pause 圖示
+[x] 在全螢幕模式時， click 螢幕可以 pause/resume 語言播放。pause 的時候要在左上角顯示 pause 圖示（完成於分支: feature/fullscreen-click-pause-audio-20260523）
 
 ---
 ## 工作記錄
@@ -57,3 +57,7 @@
 - 時間: 2026-05-23 01:36:00 +0800
 - 分支: feature/todo-text-outline-content-language-20260523
 - 內容: 完成文本產生大綱依內容語言設定輸出；全文大綱與 chunk fallback 流程會讀取 contentLanguage，英文設定時輸出英文投影片標題與重點，繁體中文設定時翻譯並自然改寫為繁體中文，同時在相關日誌記錄 contentLanguage。
+
+- 時間: 2026-05-23 01:45:00 +0800
+- 分支: feature/fullscreen-click-pause-audio-20260523
+- 內容: 完成全螢幕播放模式下點擊投影片可切換語音 pause/resume；暫停時於左上角顯示 pause 圖示，並避免離開全螢幕與提問對話等互動控制誤觸播放切換。
