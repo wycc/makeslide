@@ -301,6 +301,9 @@ export default function PlayPage() {
   const prefetchedAudioNextRef = useRef<HTMLAudioElement | null>(null);
   const prefetchedImageNextRef = useRef<HTMLImageElement | null>(null);
   const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
+  const resumePositionRef = useRef<number | null>(null);
+  const hasRestoredProgressRef = useRef(false);
+  const persistProgressTimerRef = useRef<number | null>(null);
 
   const acquireWakeLock = useCallback(async () => {
     if (typeof navigator === 'undefined') return;
@@ -365,6 +368,16 @@ export default function PlayPage() {
   );
 
   const currentShareToken = searchParams.get('share')?.trim() || '';
+  const playbackProgressStorageKey = pdfId ? `makeslide.playback.progress.${pdfId}` : '';
+
+  useEffect(() => {
+    hasRestoredProgressRef.current = false;
+    resumePositionRef.current = null;
+    if (persistProgressTimerRef.current != null) {
+      window.clearTimeout(persistProgressTimerRef.current);
+      persistProgressTimerRef.current = null;
+    }
+  }, [pdfId]);
 
   // ---- Load detail (+ poll until ready) ----
   useEffect(() => {
@@ -497,6 +510,56 @@ export default function PlayPage() {
     },
     [imageBustKey],
   );
+
+  useEffect(() => {
+    if (!pdfId || !playbackProgressStorageKey || deckPages.length === 0) return;
+    if (hasRestoredProgressRef.current) return;
+    hasRestoredProgressRef.current = true;
+    try {
+      const raw = window.localStorage.getItem(playbackProgressStorageKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { page_number?: number; current_time?: number };
+      const pageNumber = Number(parsed.page_number);
+      const savedTime = Number(parsed.current_time);
+      if (Number.isFinite(pageNumber) && pageNumber >= 1) {
+        const targetIdx = Math.min(deckPages.length - 1, Math.max(0, Math.floor(pageNumber) - 1));
+        setCurrentIdx(targetIdx);
+      }
+      if (Number.isFinite(savedTime) && savedTime >= 0) {
+        resumePositionRef.current = savedTime;
+      }
+    } catch {
+      // ignore broken localStorage payload
+    }
+  }, [pdfId, deckPages.length, playbackProgressStorageKey]);
+
+  useEffect(() => {
+    if (!pdfId || !playbackProgressStorageKey || deckPages.length === 0 || !currentPage) return;
+    if (persistProgressTimerRef.current != null) {
+      window.clearTimeout(persistProgressTimerRef.current);
+    }
+    persistProgressTimerRef.current = window.setTimeout(() => {
+      try {
+        window.localStorage.setItem(
+          playbackProgressStorageKey,
+          JSON.stringify({
+            page_number: currentPage.page_number,
+            current_time: Number.isFinite(currentTime) ? Math.max(0, currentTime) : 0,
+            updated_at: Date.now(),
+          }),
+        );
+      } catch {
+        // ignore storage quota/security errors
+      }
+      persistProgressTimerRef.current = null;
+    }, 300);
+    return () => {
+      if (persistProgressTimerRef.current != null) {
+        window.clearTimeout(persistProgressTimerRef.current);
+        persistProgressTimerRef.current = null;
+      }
+    };
+  }, [pdfId, playbackProgressStorageKey, deckPages.length, currentPage?.page_number, currentTime]);
 
   // ---- Fetch all scripts once pages are ready ----
   useEffect(() => {
@@ -2094,6 +2157,14 @@ export default function PlayPage() {
         muted={effectiveAudioMuted}
         onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
         onCanPlay={() => {
+          if (resumePositionRef.current != null && audioRef.current) {
+            const maxSeek = Number.isFinite(audioRef.current.duration)
+              ? Math.max(0, audioRef.current.duration - 0.01)
+              : resumePositionRef.current;
+            audioRef.current.currentTime = Math.min(resumePositionRef.current, maxSeek);
+            setCurrentTime(audioRef.current.currentTime || 0);
+            resumePositionRef.current = null;
+          }
           clearAudioRetryTimer();
           setAudioError(null);
           if (isPlaying) {
