@@ -67,6 +67,7 @@ import type {
 const POLL_INTERVAL_MS = 3000;
 const AUDIO_RETRY_DELAY_MS = 800;
 const PREFETCH_START_DELAY_MS = 1200;
+const CHAT_HISTORY_REQUEST_LIMIT = 20;
 const SENTENCE_MATCH_RE = /[^。！？!?；;\n]+[。！？!?；;]?|\n+/g;
 const TONE_MARKER_RE = /\[\[\s*[^\]]+\s*\]\]/g;
 
@@ -81,6 +82,10 @@ interface WakeLockSentinelLike {
   release: () => Promise<void>;
   addEventListener?: (type: 'release', listener: () => void) => void;
   removeEventListener?: (type: 'release', listener: () => void) => void;
+}
+
+function limitChatHistoryForRequest(history: ChatMessage[]): ChatMessage[] {
+  return history.slice(-CHAT_HISTORY_REQUEST_LIMIT);
 }
 
 function splitScriptIntoSentences(script: string): string[] {
@@ -1144,7 +1149,12 @@ export default function PlayPage() {
     setChatBusy(true);
     setChatError(null);
     try {
-      const res = await chatWithPageContext(pdfId, currentPage.page_number, question, chatHistory);
+      const res = await chatWithPageContext(
+        pdfId,
+        currentPage.page_number,
+        question,
+        limitChatHistoryForRequest(chatHistory),
+      );
       setChatHistory((prev) => [...prev, { role: 'assistant', content: res.answer }]);
     } catch (err) {
       setChatError(err instanceof ApiError ? err.message : '對話失敗');
@@ -1334,7 +1344,7 @@ export default function PlayPage() {
               ? (scripts[deckPages[currentIdx + 1]?.page_number ?? -1] ?? '').trim()
               : '',
         },
-        chatHistory,
+        limitChatHistoryForRequest(chatHistory),
       );
       setEditingScript(res.script);
       setChatHistory((prev) => [...prev, { role: 'assistant', content: res.script }]);
@@ -1748,7 +1758,12 @@ export default function PlayPage() {
     try {
       const nextHistory = [...chatHistory, { role: 'user' as const, content: `【修改圖片】${trimmed}` }];
       setChatHistory(nextHistory);
-      const res = await regenerateSlideImage(pdfId, currentPage.page_number, merged, chatHistory);
+      const res = await regenerateSlideImage(
+        pdfId,
+        currentPage.page_number,
+        merged,
+        limitChatHistoryForRequest(chatHistory),
+      );
       const preview = `${res.image_url}${res.image_url.includes('?') ? '&' : '?'}t=${encodeURIComponent(res.updated_at)}`;
       setChatHistory((prev) => [
         ...prev,
