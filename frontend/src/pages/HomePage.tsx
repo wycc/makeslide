@@ -17,6 +17,7 @@ import type { PdfListItem, UploadResponse } from '../types';
 import PdfCard from '../components/PdfCard';
 import PromptModal from '../components/PromptModal';
 import UploadButton from '../components/UploadButton';
+import { useI18n } from '../i18n';
 
 const POLL_INTERVAL_ACTIVE_MS = 5000;
 const POLL_INTERVAL_IDLE_MS = 30000;
@@ -50,6 +51,7 @@ const readStoredCategoryFilter = () => {
 };
 
 export default function HomePage() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [items, setItems] = useState<PdfListItem[]>([]);
@@ -109,7 +111,7 @@ export default function HomePage() {
           ? err.message
           : err instanceof Error
             ? err.message
-            : '載入失敗';
+          : t('home.loadFailed');
       setError(msg);
     } finally {
       if (!opts.silent) setLoading(false);
@@ -165,10 +167,10 @@ export default function HomePage() {
       try {
         await deletePdf(id);
         setItems((prev) => prev.filter((p) => p.id !== id));
-        showToast('已刪除');
+        showToast(t('home.deleted'));
       } catch (err) {
-        const msg = err instanceof ApiError ? err.message : '刪除失敗';
-        showToast(`刪除失敗：${msg}`);
+        const msg = err instanceof ApiError ? err.message : t('home.deleteFailed');
+        showToast(`${t('home.deleteFailed')}：${msg}`);
       }
     },
     [showToast],
@@ -179,10 +181,10 @@ export default function HomePage() {
       try {
         const copied = await duplicatePdf(id);
         setItems((prev) => [copied, ...prev]);
-        showToast('已複製');
+        showToast(t('home.duplicated'));
       } catch (err) {
-        const msg = err instanceof ApiError ? err.message : '複製失敗';
-        showToast(`複製失敗：${msg}`);
+        const msg = err instanceof ApiError ? err.message : t('home.duplicateFailed');
+        showToast(`${t('home.duplicateFailed')}：${msg}`);
       }
     },
     [showToast],
@@ -193,10 +195,10 @@ export default function HomePage() {
       try {
         const updated = await updatePdfCategory(id, category);
         setItems((prev) => prev.map((p) => (p.id === id ? { ...p, category: updated.category } : p)));
-        showToast(`已移至 ${updated.category}`);
+        showToast(t('home.movedToCategory').replace('{category}', updated.category));
       } catch (err) {
-        const msg = err instanceof ApiError ? err.message : '更新類別失敗';
-        showToast(`更新類別失敗：${msg}`);
+        const msg = err instanceof ApiError ? err.message : t('home.updateCategoryFailed');
+        showToast(`${t('home.updateCategoryFailed')}：${msg}`);
       }
     },
     [showToast],
@@ -205,7 +207,7 @@ export default function HomePage() {
   const handleDeleteCategory = useCallback(
     async (category: string) => {
       if (category === DEFAULT_CATEGORY) {
-        showToast('general 類別不可刪除');
+        showToast(t('home.defaultCategoryCannotDelete'));
         return;
       }
       const hasProcessingItem = items.some((pdf) => {
@@ -213,10 +215,10 @@ export default function HomePage() {
         return pdfCategory === category && (pdf.status === 'uploaded' || pdf.status === 'processing');
       });
       if (hasProcessingItem) {
-        showToast('此類別仍有簡報產生中，暫時不可刪除');
+        showToast(t('home.categoryHasProcessingItems'));
         return;
       }
-      const ok = window.confirm(`刪除類別「${category}」？此類別中的簡報會移到 general。`);
+      const ok = window.confirm(t('home.confirmDeleteCategory').replace('{category}', category));
       if (!ok) return;
       try {
         const resp = await deleteCategory(category);
@@ -226,10 +228,14 @@ export default function HomePage() {
           window.localStorage.setItem(CATEGORY_FILTER_STORAGE_KEY, '__all__');
           return '__all__';
         });
-        showToast(`已刪除類別，${resp.affected_count} 個簡報移至 ${resp.reassigned_to}`);
+        showToast(
+          t('home.categoryDeletedAndReassigned')
+            .replace('{count}', String(resp.affected_count))
+            .replace('{category}', resp.reassigned_to),
+        );
       } catch (err) {
-        const msg = err instanceof ApiError ? err.message : '刪除類別失敗';
-        showToast(`刪除類別失敗：${msg}`);
+        const msg = err instanceof ApiError ? err.message : t('home.deleteCategoryFailed');
+        showToast(`${t('home.deleteCategoryFailed')}：${msg}`);
       }
     },
     [items, showToast],
@@ -288,7 +294,7 @@ export default function HomePage() {
       if (!promptTarget) return;
       await startProcessing(promptTarget.id, prompt, requireScriptConfirmation, opts);
       setPromptTarget(null);
-      showToast(prompt ? '已送出提示詞，開始生成' : '使用預設風格，開始生成');
+      showToast(prompt ? t('home.promptSubmitted') : t('home.defaultStyleStarted'));
       void load({ silent: true });
     },
     [promptTarget, showToast, load],
@@ -302,11 +308,11 @@ export default function HomePage() {
     try {
       await logoutAuth();
       setAuthStatus((prev) => (prev ? { ...prev, authenticated: false, user: null } : prev));
-      showToast('已登出 Google 帳號');
+      showToast(t('home.logoutSuccess'));
       navigate('/settings', { replace: true });
     } catch (err) {
-      const msg = err instanceof ApiError ? err.message : '登出失敗';
-      showToast(`登出失敗：${msg}`);
+      const msg = err instanceof ApiError ? err.message : t('home.logoutFailed');
+      showToast(`${t('home.logoutFailed')}：${msg}`);
     }
   }, [navigate, showToast]);
 
@@ -325,16 +331,16 @@ export default function HomePage() {
           void (async () => {
             try {
               await retryFailedPdf(pdf.id);
-              showToast('已重新排入處理佇列');
+              showToast(t('home.retryQueued'));
               await load({ silent: true });
             } catch (err) {
-              const msg = err instanceof ApiError ? err.message : '重試失敗';
-              showToast(`重試失敗：${msg}`);
+              const msg = err instanceof ApiError ? err.message : t('home.retryFailed');
+              showToast(`${t('home.retryFailed')}：${msg}`);
             }
           })();
           return;
         }
-        showToast('尚未處理完成');
+        showToast(t('home.notReadyYet'));
         return;
       }
       navigate(`/play/${pdf.id}`);
@@ -353,16 +359,16 @@ export default function HomePage() {
                 type="button"
                 onClick={() => void handleLogout()}
                 className="inline-flex items-center rounded-md border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 hover:text-white"
-                title={authStatus.user?.email ? `登出 ${authStatus.user.email}` : '登出 Google 帳號'}
+                title={authStatus.user?.email ? `${t('home.logout')} ${authStatus.user.email}` : t('home.logoutGoogle')}
               >
-                登出
+                {t('home.logout')}
               </button>
             ) : null}
             <Link
               to="/settings"
               className="inline-flex items-center rounded-md border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 hover:text-white"
             >
-              設定 API Key
+              {t('home.apiKeySettings')}
             </Link>
             <UploadButton onUploaded={handleUploaded} />
           </div>
@@ -372,26 +378,26 @@ export default function HomePage() {
       <main className="mx-auto max-w-7xl px-4 py-6">
         {!loading && items.length === 0 && !error && (
           <section className="mb-6 rounded-xl border border-slate-700 bg-slate-900/50 p-4">
-            <h2 className="text-sm font-semibold text-slate-100">首次流程導引</h2>
+            <h2 className="text-sm font-semibold text-slate-100">{t('home.firstTimeGuide')}</h2>
             <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-slate-300">
-              <li>Step 1 準備 API key</li>
-              <li>Step 2 匯入來源（PDF / Text / YouTube）</li>
-              <li>Step 3 啟動處理與等待</li>
-              <li>Step 4 進入播放頁調整</li>
+              <li>{t('home.step1')}</li>
+              <li>{t('home.step2')}</li>
+              <li>{t('home.step3')}</li>
+              <li>{t('home.step4')}</li>
             </ol>
             <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-400">
               <a className="underline underline-offset-2 hover:text-slate-200" href="/docs/error-codes.md" target="_blank" rel="noreferrer">
-                錯誤碼對照（docs/error-codes.md）
+                {t('home.errorCodeGuide')}
               </a>
               <a className="underline underline-offset-2 hover:text-slate-200" href="/docs/userguide.md" target="_blank" rel="noreferrer">
-                使用指南（docs/userguide.md）
+                {t('home.userGuide')}
               </a>
             </div>
           </section>
         )}
 
         {loading && items.length === 0 && (
-          <p className="text-sm text-slate-400">載入中…</p>
+          <p className="text-sm text-slate-400">{t('home.loading')}</p>
         )}
 
         {error && (
@@ -402,21 +408,21 @@ export default function HomePage() {
 
         {!loading && items.length === 0 && !error && (
           <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/40 p-10 text-center">
-            <p className="text-slate-300">尚無任何 PDF</p>
-            <p className="mt-1 text-sm text-slate-500">點擊右上角「上傳 PDF」開始使用</p>
+            <p className="text-slate-300">{t('home.noPdf')}</p>
+            <p className="mt-1 text-sm text-slate-500">{t('home.clickUpload')}</p>
           </div>
         )}
 
         {items.length > 0 && (
           <section className="mb-6 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
             <label className="flex flex-col gap-2 text-sm text-slate-300 sm:max-w-xs">
-              顯示類別
+              {t('home.showCategory')}
               <select
                 value={categoryFilter}
                 onChange={(ev) => updateCategoryFilter(ev.target.value)}
                 className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition hover:border-slate-500"
               >
-                <option value="__all__">全部類別</option>
+                <option value="__all__">{t('home.allCategories')}</option>
                 <option value="__recent__">{RECENT_CATEGORY}</option>
                 {allCategories.map((category) => (
                   <option key={category} value={category}>{category}</option>
@@ -428,7 +434,7 @@ export default function HomePage() {
 
         {items.length > 0 && categoryGroups.length === 0 && (
           <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/40 p-10 text-center">
-            <p className="text-slate-300">此類別目前沒有簡報</p>
+            <p className="text-slate-300">{t('home.noSlidesInCategory')}</p>
           </div>
         )}
 
@@ -441,7 +447,7 @@ export default function HomePage() {
                     {group.category}
                   </h2>
                   <span className="rounded-full border border-slate-700 px-2 py-0.5 text-xs text-slate-400">
-                    {group.items.length} 個簡報
+                    {t('home.slideCount').replace('{count}', String(group.items.length))}
                   </span>
                   {group.category !== DEFAULT_CATEGORY && group.category !== RECENT_CATEGORY && (
                     <button
@@ -449,7 +455,7 @@ export default function HomePage() {
                       onClick={() => void handleDeleteCategory(group.category)}
                       className="rounded-md border border-rose-500/40 px-2 py-1 text-xs text-rose-300 transition hover:bg-rose-500/10"
                     >
-                      刪除類別
+                      {t('home.deleteCategory')}
                     </button>
                   )}
                 </div>
