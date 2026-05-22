@@ -7,21 +7,27 @@ import {
   uploadPdf,
   type PromptChatMessage,
 } from '../lib/api';
+import { useI18n, type TranslationKey } from '../i18n';
 
 type ImportMode = 'paste' | 'prompt';
 
-function buildRecoveryGuide(err: unknown): string[] {
+function formatTemplate(template: string, values: Record<string, string>): string {
+  return Object.entries(values).reduce((result, [key, value]) => result.replaceAll(`{${key}}`, value), template);
+}
+
+function buildRecoveryGuide(err: unknown, t: (key: TranslationKey) => string): string[] {
   if (err instanceof ApiError) {
-    if (err.code === 'API_KEY_MISSING') return ['先到設定頁補上 API key。', '回到此頁重新送出文字。'];
-    if (err.code === 'POPPLER_NOT_FOUND' || err.code === 'DEPENDENCY_MISSING') return ['安裝 poppler 相關工具。', '確認環境 PATH 後重試。'];
-    if (err.code === 'MODEL_QUOTA_EXCEEDED' || err.code === 'MODEL_UNAVAILABLE') return ['稍後重試或切換模型。', '先縮短文本再測試流程。'];
-    if (err.code === 'INVALID_UPLOAD_TYPE' || err.code === 'INVALID_URL') return ['檢查輸入格式是否正確。', '確認來源內容有效且可讀取。'];
+    if (err.code === 'API_KEY_MISSING') return [t('importText.recoveryApiKey1'), t('importText.recoveryApiKey2')];
+    if (err.code === 'POPPLER_NOT_FOUND' || err.code === 'DEPENDENCY_MISSING') return [t('importText.recoveryDependency1'), t('importText.recoveryDependency2')];
+    if (err.code === 'MODEL_QUOTA_EXCEEDED' || err.code === 'MODEL_UNAVAILABLE') return [t('importText.recoveryModel1'), t('importText.recoveryModel2')];
+    if (err.code === 'INVALID_UPLOAD_TYPE' || err.code === 'INVALID_URL') return [t('importText.recoveryInvalidInput1'), t('importText.recoveryInvalidInput2')];
   }
-  return ['檢查內容後重試。', '必要時參考錯誤碼文件。'];
+  return [t('importText.recoveryDefault1'), t('importText.recoveryDefault2')];
 }
 
 export default function ImportTextPage() {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const [mode, setMode] = useState<ImportMode>('paste');
   const [text, setText] = useState('');
   const [isUploading, setIsUploading] = useState(false);
@@ -36,7 +42,7 @@ export default function ImportTextPage() {
   const handleSubmit = async () => {
     const content = text.trim();
     if (!content) {
-      setError('請先貼上文字內容');
+      setError(t('importText.errorPasteContentRequired'));
       return;
     }
     setIsUploading(true);
@@ -53,14 +59,14 @@ export default function ImportTextPage() {
     } catch (err) {
       if (err instanceof ApiError) {
         const h = mapApiErrorToHumanMessage(err);
-        setError(`上傳失敗：${h.title}｜${h.message}（建議：${h.nextStep}）`);
+        setError(formatTemplate(t('importText.uploadFailedDetail'), { title: h.title, message: h.message, nextStep: h.nextStep }));
       } else if (err instanceof Error) {
         const h = mapApiErrorToHumanMessage(err);
-        setError(`上傳失敗：${h.title}｜${h.message}（建議：${h.nextStep}）`);
+        setError(formatTemplate(t('importText.uploadFailedDetail'), { title: h.title, message: h.message, nextStep: h.nextStep }));
       } else {
-        setError('上傳失敗：未知錯誤');
+        setError(t('importText.uploadFailedUnknown'));
       }
-      setRecoveryGuide(buildRecoveryGuide(err));
+      setRecoveryGuide(buildRecoveryGuide(err, t));
     } finally {
       setIsUploading(false);
       setProgress(0);
@@ -70,7 +76,7 @@ export default function ImportTextPage() {
   const handleSendChat = async () => {
     const content = chatInput.trim();
     if (!content) {
-      setError('請先輸入想和 AI 討論的簡報需求');
+      setError(t('importText.errorPromptRequired'));
       return;
     }
     const nextMessages: PromptChatMessage[] = [...chatMessages, { role: 'user', content }];
@@ -87,14 +93,14 @@ export default function ImportTextPage() {
     } catch (err) {
       if (err instanceof ApiError) {
         const h = mapApiErrorToHumanMessage(err);
-        setError(`AI 對話失敗：${h.title}｜${h.message}（建議：${h.nextStep}）`);
+        setError(formatTemplate(t('importText.chatFailedDetail'), { title: h.title, message: h.message, nextStep: h.nextStep }));
       } else if (err instanceof Error) {
         const h = mapApiErrorToHumanMessage(err);
-        setError(`AI 對話失敗：${h.title}｜${h.message}（建議：${h.nextStep}）`);
+        setError(formatTemplate(t('importText.chatFailedDetail'), { title: h.title, message: h.message, nextStep: h.nextStep }));
       } else {
-        setError('AI 對話失敗：未知錯誤');
+        setError(t('importText.chatFailedUnknown'));
       }
-      setRecoveryGuide(buildRecoveryGuide(err));
+      setRecoveryGuide(buildRecoveryGuide(err, t));
     } finally {
       setIsChatting(false);
     }
@@ -103,7 +109,7 @@ export default function ImportTextPage() {
   const handleCreateFromOutline = async () => {
     const content = (outlineText || text).trim();
     if (!content) {
-      setError('請先透過對話產生簡報大綱');
+      setError(t('importText.errorOutlineRequired'));
       return;
     }
     setText(content);
@@ -121,14 +127,14 @@ export default function ImportTextPage() {
     } catch (err) {
       if (err instanceof ApiError) {
         const h = mapApiErrorToHumanMessage(err);
-        setError(`建立簡報失敗：${h.title}｜${h.message}（建議：${h.nextStep}）`);
+        setError(formatTemplate(t('importText.createFailedDetail'), { title: h.title, message: h.message, nextStep: h.nextStep }));
       } else if (err instanceof Error) {
         const h = mapApiErrorToHumanMessage(err);
-        setError(`建立簡報失敗：${h.title}｜${h.message}（建議：${h.nextStep}）`);
+        setError(formatTemplate(t('importText.createFailedDetail'), { title: h.title, message: h.message, nextStep: h.nextStep }));
       } else {
-        setError('建立簡報失敗：未知錯誤');
+        setError(t('importText.createFailedUnknown'));
       }
-      setRecoveryGuide(buildRecoveryGuide(err));
+      setRecoveryGuide(buildRecoveryGuide(err, t));
     } finally {
       setIsUploading(false);
       setProgress(0);
@@ -139,31 +145,31 @@ export default function ImportTextPage() {
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <div className="mx-auto w-full max-w-6xl px-4 py-6">
         <div className="mb-4 flex items-center justify-between">
-          <h1 className="text-xl font-semibold">貼上文字匯入</h1>
+          <h1 className="text-xl font-semibold">{t('importText.title')}</h1>
           <button
             type="button"
             onClick={() => navigate('/')}
             className="rounded-md border border-slate-600 px-3 py-1.5 text-sm hover:bg-slate-800"
           >
-            返回首頁
+            {t('importText.backHome')}
           </button>
         </div>
 
         <section className="mb-4 rounded-xl border border-slate-700 bg-slate-900/50 p-4">
-          <h2 className="text-sm font-semibold">首次流程導引（Text 匯入）</h2>
+          <h2 className="text-sm font-semibold">{t('importText.firstTimeGuide')}</h2>
           <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-slate-300">
-            <li>Step 1 準備 API key</li>
-            <li>Step 2 匯入來源（PDF / Text / YouTube）</li>
-            <li>Step 3 啟動處理與等待</li>
-            <li>Step 4 進入播放頁調整</li>
+            <li>{t('importText.step1')}</li>
+            <li>{t('importText.step2')}</li>
+            <li>{t('importText.step3')}</li>
+            <li>{t('importText.step4')}</li>
           </ol>
           <a className="mt-2 inline-block text-xs underline underline-offset-2 text-slate-400 hover:text-slate-200" href="/docs/error-codes.md" target="_blank" rel="noreferrer">
-            查看錯誤碼文件（docs/error-codes.md）
+            {t('importText.errorCodeGuide')}
           </a>
         </section>
 
         <section className="mb-4 rounded-xl border border-slate-700 bg-slate-900/50 p-4">
-          <h2 className="text-sm font-semibold">匯入方式</h2>
+          <h2 className="text-sm font-semibold">{t('importText.importMethod')}</h2>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <button
               type="button"
@@ -174,8 +180,8 @@ export default function ImportTextPage() {
                   : 'border-slate-700 bg-slate-950/60 text-slate-300 hover:border-slate-500'
               }`}
             >
-              <span className="block text-sm font-medium">貼上現有文字</span>
-              <span className="mt-1 block text-xs text-slate-400">直接使用貼上的 TXT 內容進入原本流程。</span>
+              <span className="block text-sm font-medium">{t('importText.modePasteTitle')}</span>
+              <span className="mt-1 block text-xs text-slate-400">{t('importText.modePasteDescription')}</span>
             </button>
             <button
               type="button"
@@ -186,8 +192,8 @@ export default function ImportTextPage() {
                   : 'border-slate-700 bg-slate-950/60 text-slate-300 hover:border-slate-500'
               }`}
             >
-              <span className="block text-sm font-medium">從提示詞生成</span>
-              <span className="mt-1 block text-xs text-slate-400">透過多輪對話和 AI 逐步完成簡報大綱，再進入 TXT 上傳後續流程。</span>
+              <span className="block text-sm font-medium">{t('importText.modePromptTitle')}</span>
+              <span className="mt-1 block text-xs text-slate-400">{t('importText.modePromptDescription')}</span>
             </button>
           </div>
         </section>
@@ -196,22 +202,22 @@ export default function ImportTextPage() {
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="請貼上要轉成簡報的文字內容"
+            placeholder={t('importText.pastePlaceholder')}
             className="h-[70vh] w-full rounded-lg border border-slate-700 bg-slate-900 p-4 text-sm leading-7 text-slate-100 outline-none focus:border-indigo-400"
           />
         ) : (
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.9fr)]">
             <section className="rounded-xl border border-slate-700 bg-slate-900/60 p-4">
               <div className="mb-3">
-                <h2 className="text-sm font-semibold text-slate-100">AI 大綱對話</h2>
+                <h2 className="text-sm font-semibold text-slate-100">{t('importText.aiOutlineChat')}</h2>
                 <p className="mt-1 text-xs text-slate-400">
-                  先描述主題、聽眾、頁數、重點或風格；AI 會持續更新右側大綱。
+                  {t('importText.aiOutlineDescription')}
                 </p>
               </div>
               <div className="mb-3 h-[44vh] overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/70 p-3">
                 {chatMessages.length === 0 ? (
                   <div className="rounded-lg border border-dashed border-slate-700 p-4 text-sm text-slate-400">
-                    範例：請幫我做一份 8 頁簡報，介紹傳統機器學習中的無監督學習，對象是大學部學生，重點放在 K-means 與相關方法。
+                    {t('importText.chatExample')}
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -225,7 +231,7 @@ export default function ImportTextPage() {
                         }`}
                       >
                         <div className="mb-1 text-xs font-medium text-slate-400">
-                          {message.role === 'user' ? '你' : 'AI'}
+                          {message.role === 'user' ? t('importText.chatRoleUser') : t('importText.chatRoleAi')}
                         </div>
                         <div className="whitespace-pre-wrap">{message.content}</div>
                       </div>
@@ -236,7 +242,7 @@ export default function ImportTextPage() {
               <textarea
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
-                placeholder="輸入下一輪需求，例如：請改成 10 頁、加入 DBSCAN 比較、語氣更適合高中生..."
+                placeholder={t('importText.chatInputPlaceholder')}
                 className="h-28 w-full rounded-lg border border-slate-700 bg-slate-950 p-3 text-sm leading-6 text-slate-100 outline-none focus:border-indigo-400"
                 disabled={isChatting || isUploading}
               />
@@ -247,7 +253,7 @@ export default function ImportTextPage() {
                   disabled={isChatting || isUploading}
                   className="rounded-md bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {isChatting ? 'AI 思考中…' : chatMessages.length === 0 ? '開始規劃' : '送出並更新大綱'}
+                  {isChatting ? t('importText.aiThinking') : chatMessages.length === 0 ? t('importText.startPlanning') : t('importText.sendAndUpdateOutline')}
                 </button>
                 {chatMessages.length > 0 && (
                   <button
@@ -261,7 +267,7 @@ export default function ImportTextPage() {
                     disabled={isChatting || isUploading}
                     className="rounded-md border border-slate-600 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    重新開始
+                    {t('importText.restart')}
                   </button>
                 )}
               </div>
@@ -270,8 +276,8 @@ export default function ImportTextPage() {
             <section className="rounded-xl border border-slate-700 bg-slate-900/60 p-4">
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-sm font-semibold text-slate-100">目前簡報大綱</h2>
-                  <p className="mt-1 text-xs text-slate-400">可手動微調，確認後建立 TXT 任務。</p>
+                  <h2 className="text-sm font-semibold text-slate-100">{t('importText.currentOutline')}</h2>
+                  <p className="mt-1 text-xs text-slate-400">{t('importText.currentOutlineDescription')}</p>
                 </div>
                 <button
                   type="button"
@@ -279,7 +285,7 @@ export default function ImportTextPage() {
                   disabled={isUploading || isChatting || !(outlineText || text).trim()}
                   className="shrink-0 rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {isUploading ? `建立中 ${progress}%` : '用此大綱建立簡報'}
+                  {isUploading ? formatTemplate(t('importText.creatingProgress'), { progress: String(progress) }) : t('importText.createFromOutline')}
                 </button>
               </div>
               <textarea
@@ -288,7 +294,7 @@ export default function ImportTextPage() {
                   setOutlineText(e.target.value);
                   setText(e.target.value);
                 }}
-                placeholder="AI 產生的大綱會出現在這裡。格式範例：\nSlide 1: 標題\n- 重點一\n- 重點二"
+                placeholder={t('importText.outlinePlaceholder')}
                 className="h-[58vh] w-full rounded-lg border border-slate-700 bg-slate-950 p-4 text-sm leading-7 text-slate-100 outline-none focus:border-indigo-400"
               />
             </section>
@@ -303,7 +309,7 @@ export default function ImportTextPage() {
               disabled={isUploading}
               className="rounded-md bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isUploading ? `上傳中 ${progress}%` : '送出 TXT'}
+              {isUploading ? formatTemplate(t('importText.uploadingProgress'), { progress: String(progress) }) : t('importText.submitTxt')}
             </button>
           )}
           {error && (
