@@ -8,6 +8,18 @@ Voice presentation generation and playback system.
 這個專案提供類似 NotebookLM 影片生成的工作流：可接受 PDF，抽取頁面圖片與文字，產生逐字稿，再合成語音。也支援以簡報大綱（例如 ChatGPT 產生、以 `## Slide XX` 分頁）直接產圖、產稿、配音。
 This project provides a NotebookLM-like video/presentation workflow: ingest PDF, extract page images and text, generate narration scripts, then synthesize speech. It also supports outline-driven generation (for example, ChatGPT output split by `## Slide XX`) to create images, scripts, and audio.
 
+請使用下面連結取得 demo
+
+Please use the following links for online demo.
+
+http://120.126.23.25:12345/notebook/aictest001/m4/
+
+account/pass: demo/demo
+
+You can use the docker image from docker hub wycca1/makeslide-app:v1.1.
+
+
+
 ## 文件導覽 / Documentation
 
 - 使用者操作教學：[`docs/userguide.md`](docs/userguide.md)
