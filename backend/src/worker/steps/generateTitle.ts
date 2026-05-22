@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import { z } from 'zod';
 import { logger } from '../../logger';
+import { type AppLanguage, getRuntimeAiSettings } from '../../services/aiSettings';
 import { callChatJSON, type TokenUsage } from '../../services/openai';
 import { pageScriptPath, pageTextPath } from '../../services/storage';
 
@@ -75,35 +76,56 @@ function sanitiseUserPrompt(raw: string | null | undefined): string {
     : trimmed;
 }
 
-function buildSystem(userPrompt: string | null | undefined): string {
-  const base = [
-    '你是一位資深的中文編輯，擅長為簡報製作簡潔有力的繁體中文標題。',
-    '規則：',
-    '1. 10–25 個中文字，不可超過 25 字，也不可少於 10 字。',
-    '2. 使用繁體中文；若含專有名詞可保留原文。',
-    '3. 結尾**不要**使用任何標點符號（句號、問號、驚嘆號、冒號、分號、括號等）。',
-    '4. 避免以「這份」、「關於」、「本簡報」、「一份」、「淺談」等空泛開頭。',
-    '5. 直接描述主題或核心結論，精簡有力。',
-    '6. 回傳 JSON：{"title": "..."}，不要夾帶其他欄位或說明。',
-  ];
+function buildSystem(userPrompt: string | null | undefined, contentLanguage: AppLanguage): string {
+  const base = contentLanguage === 'en'
+    ? [
+        'You are a senior English editor who creates concise, compelling titles for slide decks.',
+        'Rules:',
+        '1. Write the title in English, even if the source content or user prompt is Chinese; translate and summarize naturally.',
+        '2. Use 4–12 English words, no more than 60 characters.',
+        '3. Do not end with punctuation of any kind (period, question mark, exclamation mark, colon, semicolon, parentheses, etc.).',
+        '4. Avoid vague openings such as "This", "About", "A", "An", "The", "Introduction to", or "Overview of".',
+        '5. Describe the topic or core conclusion directly and powerfully.',
+        '6. Return JSON: {"title": "..."}; do not include any other fields or explanations.',
+      ]
+    : [
+        '你是一位資深的中文編輯，擅長為簡報製作簡潔有力的繁體中文標題。',
+        '規則：',
+        '1. 使用繁體中文產生標題；即使來源內容或使用者提示是英文，也要翻譯並自然整理成繁體中文。',
+        '2. 10–25 個中文字，不可超過 25 字，也不可少於 10 字。',
+        '3. 若含專有名詞可保留原文。',
+        '4. 結尾**不要**使用任何標點符號（句號、問號、驚嘆號、冒號、分號、括號等）。',
+        '5. 避免以「這份」、「關於」、「本簡報」、「一份」、「淺談」等空泛開頭。',
+        '6. 直接描述主題或核心結論，精簡有力。',
+        '7. 回傳 JSON：{"title": "..."}，不要夾帶其他欄位或說明。',
+      ];
   const sanitized = sanitiseUserPrompt(userPrompt);
   if (sanitized) {
     base.push('');
-    base.push(
-      '【使用者指定的風格／語氣／聽眾要求】（優先遵守；仍須符合上述字數與標點限制。請勿把這段內容直接塞進標題裡。）',
-    );
+    base.push(contentLanguage === 'en'
+      ? '[User-specified style / tone / audience requirements] (Follow these with priority while still obeying the language, length, and punctuation rules above. Do not copy this text directly into the title.)'
+      : '【使用者指定的風格／語氣／聽眾要求】（優先遵守；仍須符合上述語言、字數與標點限制。請勿把這段內容直接塞進標題裡。）');
     base.push(sanitized);
   }
   return base.join('\n');
 }
 
-function buildUser(corpus: string): string {
+function buildUser(corpus: string, contentLanguage: AppLanguage): string {
+  if (contentLanguage === 'en') {
+    return [
+      'Below are transcript / source excerpts from each page of a slide deck:',
+      '-----------------',
+      corpus,
+      '-----------------',
+      'Name the whole slide deck in English based on the content. Follow every rule in the system message and return JSON: {"title": "..."}',
+    ].join('\n');
+  }
   return [
     '以下為一份簡報各頁的逐字稿 / 原文節錄：',
     '-----------------',
     corpus,
     '-----------------',
-    '請依內容為整份簡報命名，遵守系統訊息中所有規則，回傳 JSON：{"title": "..."}',
+    '請依內容為整份簡報命名，遵守系統訊息中所有規則，並以繁體中文回傳 JSON：{"title": "..."}',
   ].join('\n');
 }
 
@@ -113,6 +135,10 @@ export interface GenerateTitleOptions {
    * Optional.
    */
   userPrompt?: string | null;
+  /**
+   * Target language for generated content. Defaults to runtime AI settings.
+   */
+  contentLanguage?: AppLanguage;
 }
 
 /**
@@ -130,12 +156,13 @@ export async function generateTitle(
     throw new Error('No script/text content available for title generation');
   }
   const clipped = clipCorpus(corpus);
+  const contentLanguage = opts.contentLanguage ?? getRuntimeAiSettings().contentLanguage;
 
   const label = `title(${source})`;
   const { data, usage, latencyMs } = await callChatJSON({
     messages: [
-      { role: 'system', content: buildSystem(opts.userPrompt) },
-      { role: 'user', content: buildUser(clipped) },
+      { role: 'system', content: buildSystem(opts.userPrompt, contentLanguage) },
+      { role: 'user', content: buildUser(clipped, contentLanguage) },
     ],
     schema: TitleResponseSchema,
     label,
@@ -151,7 +178,7 @@ export async function generateTitle(
   }
 
   logger.info(
-    { pdfId, title, chars: title.length, source, latencyMs, usage },
+    { pdfId, title, chars: title.length, source, contentLanguage, latencyMs, usage },
     'generateTitle: done',
   );
 
