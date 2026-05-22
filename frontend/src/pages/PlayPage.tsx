@@ -1000,7 +1000,8 @@ export default function PlayPage() {
       }
       if (ev.key === ' ' || ev.code === 'Space') {
         ev.preventDefault();
-        playPause();
+        // 空白鍵固定為下一頁，不再切換播放/暫停
+        goNext();
       } else if (ev.key === 'ArrowLeft') {
         ev.preventDefault();
         goPrev();
