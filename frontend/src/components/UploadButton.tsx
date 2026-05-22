@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useI18n } from '../i18n';
 import { ApiError, createYoutubeTask, mapApiErrorToHumanMessage, uploadPdf } from '../lib/api';
 import type { UploadResponse } from '../types';
 import { useI18n } from '../i18n';
@@ -35,6 +36,7 @@ interface UploadButtonProps {
 export default function UploadButton({ onUploaded }: UploadButtonProps) {
   const { t } = useI18n();
   const navigate = useNavigate();
+  const { t } = useI18n();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0); // 0..100
