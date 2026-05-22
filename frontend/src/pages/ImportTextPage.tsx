@@ -203,7 +203,7 @@ export default function ImportTextPage() {
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder={t('importText.pastePlaceholder')}
-            className="h-[70vh] w-full rounded-lg border border-slate-700 bg-slate-900 p-4 text-sm leading-7 text-slate-100 outline-none focus:border-indigo-400"
+            className="min-h-[20rem] h-[calc(100vh-25rem)] w-full rounded-lg border border-slate-700 bg-slate-900 p-4 text-sm leading-7 text-slate-100 outline-none focus:border-indigo-400"
           />
         ) : (
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.9fr)]">
@@ -301,7 +301,7 @@ export default function ImportTextPage() {
           </div>
         )}
 
-        <div className="mt-3 flex items-center gap-3">
+        <div className="sticky bottom-0 mt-3 flex items-center gap-3 border-t border-slate-800 bg-slate-950/95 py-3 backdrop-blur supports-[backdrop-filter]:bg-slate-950/80">
           {mode === 'paste' && (
             <button
               type="button"
