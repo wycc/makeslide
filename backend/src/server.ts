@@ -10,6 +10,12 @@ import { logger } from "./logger";
 import { ensureStorageRoot } from "./services/storage";
 import { cacheControlForStaticAsset } from "./staticCache";
 
+function shouldSuppressRequestLog(url: string | undefined): boolean {
+  if (!config.suppressPollingRequestLogs || !url) return false;
+  const pathOnly = url.split("?")[0] ?? url;
+  return config.pollingRequestLogPaths.some((pathPrefix) => pathOnly.startsWith(pathPrefix));
+}
+
 function ensureWorkspaceRuntimePaths(): void {
   const dbDir = path.dirname(config.dbPath);
   const storageDir = config.storageRoot;
@@ -36,6 +42,7 @@ export async function buildApp() {
     : undefined;
   const fastifyOptions = {
     logger,
+    disableRequestLogging: config.suppressPollingRequestLogs,
     bodyLimit: config.maxUploadBytes + 1024 * 1024, // small slack for headers
     ...(httpsOptions ? { https: httpsOptions } : {}),
   };
@@ -55,6 +62,21 @@ export async function buildApp() {
       files: 1,
     },
   });
+
+  if (config.suppressPollingRequestLogs) {
+    app.addHook("onRequest", async (request) => {
+      if (shouldSuppressRequestLog(request.raw.url)) return;
+      request.log.info({ req: request }, "incoming request");
+    });
+
+    app.addHook("onResponse", async (request, reply) => {
+      if (shouldSuppressRequestLog(request.raw.url)) return;
+      request.log.info(
+        { res: reply, responseTime: reply.elapsedTime },
+        "request completed",
+      );
+    });
+  }
 
   app.get(withNbPrefix("/api/health"), async () => ({ ok: true }));
 

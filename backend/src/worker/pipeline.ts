@@ -65,8 +65,7 @@ const YoutubeOutlineSchema = z.object({
         key_points: z.array(z.string().min(1)).min(2).max(6).optional(),
       }),
     )
-    .min(3)
-    .max(20),
+    .min(3),
 });
 
 async function buildYoutubeOutlineAsSlideText(params: {
@@ -93,7 +92,7 @@ async function buildYoutubeOutlineAsSlideText(params: {
   const user = [
     `影片 ID：${videoId}`,
     `字幕語言：${language ?? 'unknown'}`,
-    '請根據逐字稿產生投影片大綱，需儘量包括括影片內容。每頁需有標題與 2~6 點重點，放在 bullets 陣列之中。',
+    '請根據逐字稿產生投影片大綱，需儘量包括影片內容。每頁需有標題與 2~6 點重點，放在 bullets 陣列之中。',
     '每一頁大綱重點要精簡、可讀、避免逐字轉錄。',
     '',
     '字幕內容如下：',

@@ -43,6 +43,12 @@ const EnvSchema = z.object({
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
     .optional()
     .default('info'),
+  SUPPRESS_POLLING_REQUEST_LOGS: z
+    .string()
+    .optional()
+    .default('false')
+    .transform((v) => v.toLowerCase() === 'true'),
+  POLLING_REQUEST_LOG_PATHS: z.string().optional().default('/api/pdfs'),
   // M2: pipeline settings
   PROCESS_CONCURRENCY: z
     .string()
@@ -179,6 +185,10 @@ function normalizeNbPrefix(raw: string): string {
 export const config = {
   port: env.PORT,
   logLevel: env.LOG_LEVEL,
+  suppressPollingRequestLogs: env.SUPPRESS_POLLING_REQUEST_LOGS,
+  pollingRequestLogPaths: env.POLLING_REQUEST_LOG_PATHS.split(',')
+    .map((v) => v.trim())
+    .filter(Boolean),
   storageRoot: path.resolve(repoRoot, env.STORAGE_ROOT),
   dbPath: path.resolve(repoRoot, env.DB_PATH),
   maxUploadBytes: env.MAX_UPLOAD_MB * 1024 * 1024,
