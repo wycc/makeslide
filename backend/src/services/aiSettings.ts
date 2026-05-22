@@ -3,6 +3,7 @@ import path from 'node:path';
 import { config } from '../config';
 
 export type AiProvider = 'openai' | 'gemini';
+export type AppLanguage = 'zh-TW' | 'en';
 
 export interface RuntimeAiSettings {
   openaiApiKey: string;
@@ -16,6 +17,8 @@ export interface RuntimeAiSettings {
   geminiTtsSpeaker1: string;
   geminiTtsSpeaker2: string;
   userCode: string;
+  uiLanguage: AppLanguage;
+  contentLanguage: AppLanguage;
 }
 
 export interface AccountSettingsLocation {
@@ -71,6 +74,8 @@ function loadAccountEnvSettings(): Partial<RuntimeAiSettings> {
     geminiTtsSpeaker1: values.GEMINI_TTS_SPEAKER1,
     geminiTtsSpeaker2: values.GEMINI_TTS_SPEAKER2,
     userCode: values.USER_CODE,
+    uiLanguage: values.UI_LANGUAGE === 'en' ? 'en' : values.UI_LANGUAGE === 'zh-TW' ? 'zh-TW' : undefined,
+    contentLanguage: values.CONTENT_LANGUAGE === 'en' ? 'en' : values.CONTENT_LANGUAGE === 'zh-TW' ? 'zh-TW' : undefined,
   };
 }
 
@@ -86,6 +91,8 @@ let runtime: RuntimeAiSettings = {
   geminiTtsSpeaker1: process.env.GEMINI_TTS_SPEAKER1?.trim() || '',
   geminiTtsSpeaker2: process.env.GEMINI_TTS_SPEAKER2?.trim() || '',
   userCode: process.env.USER_CODE?.trim() || '',
+  uiLanguage: process.env.UI_LANGUAGE === 'en' ? 'en' : 'zh-TW',
+  contentLanguage: process.env.CONTENT_LANGUAGE === 'en' ? 'en' : 'zh-TW',
 };
 
 runtime = {
@@ -115,6 +122,8 @@ export function setRuntimeAiSettings(next: Partial<RuntimeAiSettings>): RuntimeA
   if (typeof next.geminiTtsSpeaker1 === 'string') process.env.GEMINI_TTS_SPEAKER1 = next.geminiTtsSpeaker1;
   if (typeof next.geminiTtsSpeaker2 === 'string') process.env.GEMINI_TTS_SPEAKER2 = next.geminiTtsSpeaker2;
   if (typeof next.userCode === 'string') process.env.USER_CODE = next.userCode;
+  if (typeof next.uiLanguage === 'string') process.env.UI_LANGUAGE = next.uiLanguage;
+  if (typeof next.contentLanguage === 'string') process.env.CONTENT_LANGUAGE = next.contentLanguage;
   return { ...runtime };
 }
 
@@ -135,6 +144,8 @@ export async function persistEnvSettings(next: Partial<RuntimeAiSettings>): Prom
     ['GEMINI_TTS_SPEAKER1', next.geminiTtsSpeaker1],
     ['GEMINI_TTS_SPEAKER2', next.geminiTtsSpeaker2],
     ['USER_CODE', next.userCode],
+    ['UI_LANGUAGE', next.uiLanguage],
+    ['CONTENT_LANGUAGE', next.contentLanguage],
   ];
 
   for (const [key, raw] of pairs) {
