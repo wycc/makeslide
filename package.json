@@ -18,7 +18,8 @@
     "typecheck": "scripts/with-node-env.sh npm --workspace backend run typecheck && scripts/with-node-env.sh npm --workspace frontend run typecheck"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "playwright": "^1.60.0"
   },
   "engines": {
     "node": ">=20.0.0",
