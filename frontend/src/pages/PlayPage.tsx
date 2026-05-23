@@ -2006,7 +2006,20 @@ export default function PlayPage() {
   return (
     <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
       {imageOnlyFullscreen ? (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black">
+        <div
+          className="fixed inset-0 z-[100] flex cursor-pointer items-center justify-center bg-black"
+          onClick={() => playPause()}
+          role="button"
+          tabIndex={-1}
+          aria-label={isPlaying ? '暫停語音播放' : '繼續語音播放'}
+        >
+          {!isPlaying ? (
+            <div className="pointer-events-none absolute left-4 top-4 flex h-12 w-12 items-center justify-center rounded-full border border-white/35 bg-black/55 text-white shadow-lg backdrop-blur-sm">
+              <span className="sr-only">語音已暫停</span>
+              <span className="h-6 w-2 rounded-sm bg-current" aria-hidden="true" />
+              <span className="ml-2 h-6 w-2 rounded-sm bg-current" aria-hidden="true" />
+            </div>
+          ) : null}
           {currentPage?.image_url ? (
             <img
               src={withImageBust(currentPage.image_url) ?? currentPage.image_url}
@@ -2018,7 +2031,10 @@ export default function PlayPage() {
           )}
           <button
             type="button"
-            onClick={() => setImageOnlyFullscreen(false)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setImageOnlyFullscreen(false);
+            }}
             className="absolute right-4 top-4 rounded-md border border-slate-500 bg-slate-900/70 px-3 py-1.5 text-sm text-slate-100"
           >
             離開全螢幕
@@ -2043,14 +2059,20 @@ export default function PlayPage() {
           {syncEnabled && syncRole === 'follower' ? (
             <button
               type="button"
-              onClick={() => setFullscreenQuestionDialogOpen(true)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setFullscreenQuestionDialogOpen(true);
+              }}
               className="absolute left-4 top-4 rounded-md border border-cyan-400/60 bg-cyan-500/20 px-3 py-1.5 text-sm font-medium text-cyan-50 shadow-lg hover:bg-cyan-500/30"
             >
               提問
             </button>
           ) : null}
           {syncEnabled && syncRole === 'follower' && fullscreenQuestionDialogOpen ? (
-            <div className="absolute inset-0 z-[120] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
+            <div
+              className="absolute inset-0 z-[120] flex cursor-default items-center justify-center bg-black/55 p-4 backdrop-blur-sm"
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="w-full max-w-lg rounded-xl border border-cyan-400/40 bg-slate-950 p-4 text-slate-100 shadow-2xl">
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div>
