@@ -443,6 +443,36 @@ export default function PlayPage() {
     };
   }, [pdfId, currentShareToken]);
 
+  // 頁面載入時，嘗試回復重生任務狀態
+  useEffect(() => {
+    if (!pdfId) return;
+    let cancelled = false;
+    const restoreRegenJob = async () => {
+      try {
+        const job = await fetchRegenerateStatus(pdfId);
+        if (cancelled) return;
+        const isRunning =
+          job.status === 'running' ||
+          job.status === 'pending' ||
+          job.status === 'cancelling';
+        if (isRunning) {
+          setRegenJob(job);
+          setRegenAllBusy(true);
+        }
+      } catch (err) {
+        // 404 代表沒有重生任務，忽略即可
+        if (!(err instanceof ApiError && err.status === 404)) {
+          // eslint-disable-next-line no-console
+          console.warn('Failed to fetch regenerate status on load', err);
+        }
+      }
+    };
+    void restoreRegenJob();
+    return () => {
+      cancelled = true;
+    };
+  }, [pdfId]);
+
   useEffect(() => {
     let cancelled = false;
     void (async () => {
