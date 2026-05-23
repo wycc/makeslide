@@ -15,6 +15,8 @@
 [x] 重新確認 master TODO.md 無未完成項目並更新工作記錄（完成於分支: feature/todo-no-pending-recheck-20260523-0154）
 
 [x] 重新確認 master TODO.md 無未完成項目並更新工作記錄（完成於分支: feature/todo-no-pending-recheck-20260523-0204）
+[ ] 在 dockerfile 中加入 ffmpeg 套件安裝，把版本改成 1.1.1
+[ ] 在重生簡報時，如果 page reload，進度會不見，但背後仍在生成。應該重 reload 後回復生成中的狀態
 
 ---
 ## 工作記錄
