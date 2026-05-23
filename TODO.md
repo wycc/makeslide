@@ -16,7 +16,7 @@
 
 [x] 重新確認 master TODO.md 無未完成項目並更新工作記錄（完成於分支: feature/todo-no-pending-recheck-20260523-0204）
 [x] 在 dockerfile 中加入 ffmpeg 套件安裝，把版本改成 1.1.1（完成於分支: feature/docker-ffmpeg-version-1.1.1-20260523）
-[ ] 在重生簡報時，如果 page reload，進度會不見，但背後仍在生成。應該重 reload 後回復生成中的狀態
+[x] 在重生簡報時，如果 page reload，進度會不見，但背後仍在生成。應該重 reload 後回復生成中的狀態（完成於分支: feature/restore-regenerate-progress-on-reload）
 [x] 將全螢幕改成真正的全螢幕, 而不是只是整個流覽器 window（完成於分支: feature/fullscreen-api-support-20260523）
 ---
 ## 工作記錄
@@ -83,3 +83,7 @@
 - 時間: 2026-05-23 13:12:00 +0800
 - 分支: feature/fullscreen-api-support-20260523
 - 內容: 將全螢幕功能改為真正的 HTML5 Fullscreen API。在 PlayPage 中實作跨瀏覽器的全螢幕請求與退出函數，並透過 React Ref 綁定全螢幕容器。同時監聽瀏覽器的 `fullscreenchange` 事件，以確保使用者按 Escape 鍵或透過瀏覽器 UI 退出全螢幕時，`imageOnlyFullscreen` 狀態能與實際全螢幕狀態保持同步。
+
+- 時間: 2026-05-23 13:17:00 +0800
+- 分支: feature/restore-regenerate-progress-on-reload
+- 內容: 實作簡報重生時 page reload 的進度回復機制。在 PlayPage 載入時主動向後端查詢重生任務狀態，若任務處於 running、pending 或 cancelling 狀態，則將其設定到 regenJob 狀態中並啟用 regenAllBusy，使前端能自動回復生成中的進度條顯示與輪詢。
