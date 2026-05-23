@@ -109,6 +109,7 @@ export const StartBodySchema = z.object({
     .optional()
     .default(''),
   require_script_confirmation: z.boolean().optional().default(false),
+  require_split_confirmation: z.boolean().optional().default(false),
   tts_voice: z.string().trim().min(1).optional(),
   tts_speed: z.number().min(0.25).max(4).optional(),
   script_max_chars_per_page: z.number().int().min(80).max(2000).optional(),
@@ -476,6 +477,7 @@ export function rowToListItem(row: PdfRow): PdfListItem {
     cover_thumbnail_url: coverThumbnailUrl(row),
     user_prompt: row.user_prompt,
     require_script_confirmation: row.require_script_confirmation === 1,
+    require_split_confirmation: row.require_split_confirmation === 1,
     category: row.category?.trim() || DEFAULT_PDF_CATEGORY,
     owner_sub: row.owner_sub ?? null,
     visibility: row.visibility ?? 'private',
@@ -560,6 +562,7 @@ export function rowToDetail(row: PdfRow, pages: PageRow[], timingsByPage: PageTi
     error_message: row.error_message,
     user_prompt: row.user_prompt,
     require_script_confirmation: row.require_script_confirmation === 1,
+    require_split_confirmation: row.require_split_confirmation === 1,
     category: row.category?.trim() || DEFAULT_PDF_CATEGORY,
     owner_sub: row.owner_sub ?? null,
     visibility: row.visibility ?? 'private',

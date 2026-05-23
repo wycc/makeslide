@@ -609,6 +609,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       .filter((s) => s && s.trim().length > 0)
       .join('\n\n');
     const requireScriptConfirmation = parsedBody.data.require_script_confirmation;
+    const requireSplitConfirmation = parsedBody.data.require_split_confirmation;
     const ttsVoice = parsedBody.data.tts_voice?.trim() || null;
     const ttsSpeed = parsedBody.data.tts_speed ?? null;
     const runtimeForTts = getRuntimeAiSettings();
@@ -625,6 +626,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
          SET user_prompt = ?,
              status = 'uploaded',
              require_script_confirmation = ?,
+             require_split_confirmation = ?,
              tts_voice = ?,
              tts_speed = ?,
              script_max_chars_per_page = ?,
@@ -635,6 +637,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
     ).run(
       mergedPrompt.length > 0 ? mergedPrompt : null,
       requireScriptConfirmation ? 1 : 0,
+      requireSplitConfirmation ? 1 : 0,
       ttsVoice,
       ttsSpeed,
       scriptMaxCharsPerPage,
@@ -650,6 +653,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       if (meta) {
         meta.user_prompt = mergedPrompt.length > 0 ? mergedPrompt : null;
         meta.require_script_confirmation = requireScriptConfirmation;
+        meta.require_split_confirmation = requireSplitConfirmation;
         meta.tts_voice = ttsVoice;
         meta.tts_speed = ttsSpeed;
         meta.script_max_chars_per_page = scriptMaxCharsPerPage;
@@ -673,6 +677,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       status: 'uploaded' as PdfStatus,
       user_prompt: mergedPrompt.length > 0 ? mergedPrompt : null,
       require_script_confirmation: requireScriptConfirmation,
+      require_split_confirmation: requireSplitConfirmation,
       tts_voice: ttsVoice,
       tts_speed: ttsSpeed,
       script_max_chars_per_page: scriptMaxCharsPerPage,

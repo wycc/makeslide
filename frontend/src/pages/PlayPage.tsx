@@ -26,6 +26,7 @@ import {
   joinPlaybackSync,
   leavePlaybackSync,
   fetchRegenerateStatus,
+  confirmScript,
   generatePdfVideo,
   moveSlide,
   regenerateSlideImage,
@@ -256,6 +257,7 @@ export default function PlayPage() {
   const [regenJob, setRegenJob] = useState<RegenJobState | null>(null);
   const [regenStopBusy, setRegenStopBusy] = useState(false);
   const [regenRollbackBusy, setRegenRollbackBusy] = useState(false);
+  const [confirmScriptBusy, setConfirmScriptBusy] = useState(false);
   const [regenBannerDismissed, setRegenBannerDismissed] = useState(false);
   const [pagePolls, setPagePolls] = useState<PagePoll[]>([]);
   const [pollQuestion, setPollQuestion] = useState('');
@@ -528,7 +530,11 @@ export default function PlayPage() {
   const currentPage: PdfDetailPage | null = deckPages[currentIdx] ?? null;
   const totalPages = deckPages.length;
   const shareIsReadOnly = detail?.share_mode === 'read_only';
-  const isReadOnlyProcessing = (detail != null && detail.status !== 'ready') || shareIsReadOnly;
+  const isReadOnlyProcessing =
+    (detail != null &&
+      detail.status !== 'ready' &&
+      detail.status !== 'awaiting_script_confirmation') ||
+    shareIsReadOnly;
   useEffect(() => {
     if (deckPages.length === 0) {
       setThumbLoadUntilIdx(0);
@@ -1704,6 +1710,19 @@ export default function PlayPage() {
     }
   }, [pdfId, regenAllPrompt, regenScriptPrompt, regenAnySelected, regenOptions, regenJobRunning, currentIdx, deckImageStylePrompt, isReadOnlyProcessing]);
 
+  const handleConfirmScript = useCallback(async () => {
+    if (!pdfId) return;
+    setConfirmScriptBusy(true);
+    try {
+      await confirmScript(pdfId);
+      void reloadDetail();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : '確認失敗');
+    } finally {
+      setConfirmScriptBusy(false);
+    }
+  }, [pdfId, reloadDetail]);
+
   const handleStopRegenerate = useCallback(async () => {
     if (!pdfId || !regenJob) return;
     setRegenStopBusy(true);
@@ -2115,7 +2134,9 @@ export default function PlayPage() {
               className="max-h-screen max-w-screen object-contain"
             />
           ) : (
-            <div className="text-slate-300">無法顯示投影片</div>
+            <div className="text-slate-300">
+              {detail?.status === 'awaiting_script_confirmation' ? '等待確認分頁結果（確認後將開始產生圖片）' : '圖片產生中…'}
+            </div>
           )}
           <button
             type="button"
@@ -2434,6 +2455,26 @@ export default function PlayPage() {
             </div>
           </div>
         ) : null}
+        {detail?.status === 'awaiting_script_confirmation' ? (
+          <div className="mx-auto w-full max-w-5xl px-4 pb-3">
+            <div className="flex flex-col gap-3 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-medium">AI 分頁與逐字稿已產生！</p>
+                <p className="text-xs text-emerald-200/80 mt-0.5">
+                  您可以在下方瀏覽並編輯每一頁的文字內容。確認無誤後，請點擊右側按鈕開始產生投影片圖片與語音。
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleConfirmScript()}
+                disabled={confirmScriptBusy}
+                className="shrink-0 rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {confirmScriptBusy ? '處理中…' : '確認分頁並開始產生圖片與語音'}
+              </button>
+            </div>
+          </div>
+        ) : null}
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-2 px-4 pb-3 md:flex-row md:items-center md:justify-between md:gap-3">
           <div className="space-y-1 text-xs text-slate-400">
             {videoError ? <span className="text-rose-300">{videoError}</span> : null}
@@ -2701,7 +2742,7 @@ export default function PlayPage() {
                   className="flex w-full items-center justify-center rounded-lg border border-slate-800 text-slate-500"
                   style={{ height: `${slideImageMaxHeightVh}vh` }}
                 >
-                  無法顯示投影片
+                  {detail?.status === 'awaiting_script_confirmation' ? '等待確認分頁結果（確認後將開始產生圖片）' : '圖片產生中…'}
                 </div>
               )}
               {currentSentence ? (

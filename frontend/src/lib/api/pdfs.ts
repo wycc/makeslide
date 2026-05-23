@@ -170,6 +170,7 @@ export async function startProcessing(
     scriptMaxCharsPerPage?: number;
     tonePrompt?: string;
     imageStylePrompt?: string;
+    requireSplitConfirmation?: boolean;
   } = {},
 ): Promise<StartProcessingResponse> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/start`, {
@@ -178,6 +179,7 @@ export async function startProcessing(
     body: JSON.stringify({
       prompt,
       require_script_confirmation: requireScriptConfirmation,
+      require_split_confirmation: opts.requireSplitConfirmation,
       tts_voice: opts.ttsVoice,
       tts_speed: opts.ttsSpeed,
       script_max_chars_per_page: opts.scriptMaxCharsPerPage,
@@ -811,4 +813,12 @@ export async function clearPageChatHistory(id: string, pageNumber: number): Prom
   if (!resp.ok && resp.status !== 204) {
     throw await parseErrorBody(resp);
   }
+}
+
+export async function confirmScript(id: string): Promise<{ id: string; status: string }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/confirm-script`, {
+    method: 'POST',
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { id: string; status: string };
 }

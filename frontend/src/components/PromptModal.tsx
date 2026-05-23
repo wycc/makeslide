@@ -58,6 +58,7 @@ interface PromptModalProps {
       scriptMaxCharsPerPage: number;
       tonePrompt?: string;
       imageStylePrompt?: string;
+      requireSplitConfirmation?: boolean;
     },
   ) => Promise<void>;
   /** Called when the user cancels / dismisses the modal. */
@@ -76,6 +77,7 @@ export default function PromptModal({
   const [value, setValue] = useState<string>(initialValue);
   const [submitting, setSubmitting] = useState(false);
   const [requireScriptConfirmation, setRequireScriptConfirmation] = useState(false);
+  const [requireSplitConfirmation, setRequireSplitConfirmation] = useState(false);
   const [ttsVoice, setTtsVoice] = useState<string>(DEFAULT_TTS_VOICE_BY_PROVIDER[ttsProvider]);
   const [ttsSpeed, setTtsSpeed] = useState(1);
   const [scriptMaxCharsPerPage, setScriptMaxCharsPerPage] = useState(150);
@@ -146,6 +148,7 @@ export default function PromptModal({
         scriptMaxCharsPerPage,
         tonePrompt: tonePrompt.trim() || undefined,
         imageStylePrompt: imageStylePrompt.trim() || undefined,
+        requireSplitConfirmation,
       });
       // Parent is responsible for closing the modal on success.
     } catch (err) {
@@ -258,16 +261,29 @@ export default function PromptModal({
             </div>
           </div>
 
-          <label className="mt-3 flex items-start gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200">
-            <input
-              type="checkbox"
-              className="mt-0.5"
-              checked={requireScriptConfirmation}
-              onChange={(ev) => setRequireScriptConfirmation(ev.target.checked)}
-              disabled={submitting}
-            />
-            <span>{t('promptModal.requireScriptConfirmation')}</span>
-          </label>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <label className="flex items-start gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={requireSplitConfirmation}
+                onChange={(ev) => setRequireSplitConfirmation(ev.target.checked)}
+                disabled={submitting}
+              />
+              <span>{t('promptModal.requireSplitConfirmation')}</span>
+            </label>
+
+            <label className="flex items-start gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={requireScriptConfirmation}
+                onChange={(ev) => setRequireScriptConfirmation(ev.target.checked)}
+                disabled={submitting}
+              />
+              <span>{t('promptModal.requireScriptConfirmation')}</span>
+            </label>
+          </div>
 
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
             <label className="text-xs text-slate-300">

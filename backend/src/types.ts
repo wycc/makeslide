@@ -67,6 +67,7 @@ export interface PdfRow {
   error_message: string | null;
   user_prompt: string | null;
   require_script_confirmation: number;
+  require_split_confirmation: number;
   category: string;
   owner_sub?: string | null;
   visibility?: 'private' | 'public' | 'public_editable';
@@ -109,6 +110,7 @@ export interface PdfListItem {
   cover_thumbnail_url?: string | null;
   user_prompt: string | null;
   require_script_confirmation: boolean;
+  require_split_confirmation: boolean;
   category: string;
   owner_sub?: string | null;
   visibility?: 'private' | 'public' | 'public_editable';
@@ -167,6 +169,7 @@ export interface PdfDetail {
   error_message: string | null;
   user_prompt: string | null;
   require_script_confirmation: boolean;
+  require_split_confirmation: boolean;
   category: string;
   owner_sub?: string | null;
   visibility?: 'private' | 'public' | 'public_editable';
@@ -230,6 +233,7 @@ export interface PdfMetadata {
   error_message: string | null;
   user_prompt?: string | null;
   require_script_confirmation?: boolean;
+  require_split_confirmation?: boolean;
   category?: string | null;
   owner_sub?: string | null;
   visibility?: 'private' | 'public' | 'public_editable';
