@@ -2,11 +2,12 @@ FROM node:20-bookworm AS build
 
 WORKDIR /app
 
-# native modules (sharp / better-sqlite3) + runtime dependency poppler
+# native modules (sharp / better-sqlite3) + runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     make \
     g++ \
+    ffmpeg \
     poppler-utils \
   && rm -rf /var/lib/apt/lists/*
 
@@ -26,6 +27,7 @@ FROM node:20-bookworm-slim AS runtime
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
     poppler-utils \
   && rm -rf /var/lib/apt/lists/*
 
