@@ -461,6 +461,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       script_max_chars_per_page: null,
       image_style_prompt: null,
       created_at: createdAt,
+      has_source_text: isTxt || pdfImportMode === 'document',
     });
   });
 
