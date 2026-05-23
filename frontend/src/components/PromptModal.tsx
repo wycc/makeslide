@@ -8,6 +8,7 @@ import { getImagePromptTemplates, type ImagePromptTemplate } from '../lib/api';
 import { useI18n, type TranslationKey } from '../i18n';
 
 export interface PromptPreset {
+  key: string;
   labelKey: TranslationKey;
   promptKey: TranslationKey;
 }
@@ -18,18 +19,22 @@ export interface PromptPreset {
  */
 const PRESETS: PromptPreset[] = [
   {
+    key: 'teacher',
     labelKey: 'promptModal.presetTeacherLabel',
     promptKey: 'promptModal.presetTeacherPrompt',
   },
   {
+    key: 'business',
     labelKey: 'promptModal.presetBusinessLabel',
     promptKey: 'promptModal.presetBusinessPrompt',
   },
   {
+    key: 'podcast',
     labelKey: 'promptModal.presetPodcastLabel',
     promptKey: 'promptModal.presetPodcastPrompt',
   },
   {
+    key: 'tech',
     labelKey: 'promptModal.presetTechLabel',
     promptKey: 'promptModal.presetTechPrompt',
   },
@@ -75,6 +80,7 @@ export default function PromptModal({
   const [ttsSpeed, setTtsSpeed] = useState(1);
   const [scriptMaxCharsPerPage, setScriptMaxCharsPerPage] = useState(150);
   const [tonePrompt, setTonePrompt] = useState(t('promptModal.defaultTonePrompt'));
+  const [selectedPresetKey, setSelectedPresetKey] = useState<string>(PRESETS[0]?.key ?? '');
   const [imageTemplates, setImageTemplates] = useState<ImagePromptTemplate[]>([]);
   const [selectedImageTemplateKey, setSelectedImageTemplateKey] = useState<string>('');
   const [imageStylePrompt, setImageStylePrompt] = useState<string>('');
@@ -159,9 +165,16 @@ export default function PromptModal({
     void handleSubmit('');
   };
 
-  const applyPreset = (p: PromptPreset) => {
-    setValue(t(p.promptKey));
-    textareaRef.current?.focus();
+  const onSelectPreset = (key: string) => {
+    setSelectedPresetKey(key);
+  };
+
+  const applySelectedPreset = () => {
+    const hit = PRESETS.find((p) => p.key === selectedPresetKey);
+    if (hit) {
+      setValue(t(hit.promptKey));
+      textareaRef.current?.focus();
+    }
   };
 
   const onSelectImageTemplate = (key: string) => {
@@ -174,14 +187,14 @@ export default function PromptModal({
     language === 'zh-TW' ? template.prompt_zh : template.prompt_en;
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-sm">
       <div
         role="dialog"
         aria-modal="true"
         aria-label={t('promptModal.dialogLabel')}
-        className="w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl"
+        className="w-full max-w-xl overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl"
       >
-        <div className="border-b border-slate-800 bg-slate-900/80 px-5 py-4">
+        <div className="border-b border-slate-800 bg-slate-900/80 px-4 py-3">
           <h2 className="text-base font-semibold text-slate-100">{t('promptModal.title')}</h2>
           <p className="mt-1 text-xs text-slate-400">
             {(pdfTitle ? t('promptModal.uploadCompleteNamed').replace('{title}', pdfTitle) : t('promptModal.uploadCompleteUnnamed'))}{' '}
@@ -189,7 +202,7 @@ export default function PromptModal({
           </p>
         </div>
 
-        <div className="max-h-[70vh] overflow-y-auto px-5 py-4">
+        <div className="px-4 py-3">
           <label
             htmlFor="prompt-textarea"
             className="mb-1 block text-xs font-medium text-slate-300"
@@ -202,7 +215,7 @@ export default function PromptModal({
             value={value}
             onChange={(ev) => setValue(ev.target.value)}
             disabled={submitting}
-            rows={6}
+            rows={4}
             maxLength={MAX_PROMPT_CHARS + 50}
             placeholder={t('promptModal.promptPlaceholder')}
             className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:opacity-60"
@@ -218,7 +231,34 @@ export default function PromptModal({
             </span>
           </div>
 
-          <label className="mt-4 flex items-start gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200">
+          <div className="mt-3 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2">
+            <p className="mb-2 text-xs font-medium text-slate-300">{t('promptModal.presetsSection')}</p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+              <label className="text-xs text-slate-300">
+                {t('promptModal.template')}
+                <select
+                  className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100"
+                  value={selectedPresetKey}
+                  onChange={(ev) => onSelectPreset(ev.target.value)}
+                  disabled={submitting}
+                >
+                  {PRESETS.map((p) => (
+                    <option key={p.key} value={p.key}>{t(p.labelKey)}</option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={applySelectedPreset}
+                disabled={submitting}
+                className="rounded border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:opacity-60"
+              >
+                套用模板
+              </button>
+            </div>
+          </div>
+
+          <label className="mt-3 flex items-start gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200">
             <input
               type="checkbox"
               className="mt-0.5"
@@ -229,7 +269,7 @@ export default function PromptModal({
             <span>{t('promptModal.requireScriptConfirmation')}</span>
           </label>
 
-          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
             <label className="text-xs text-slate-300">
               {t('promptModal.ttsVoice')}
               <select
@@ -273,10 +313,10 @@ export default function PromptModal({
             </label>
           </div>
 
-          <label className="mt-3 block text-xs text-slate-300">
+          <label className="mt-2 block text-xs text-slate-300">
             {t('promptModal.tonePromptLabel')}
             <textarea
-              rows={2}
+              rows={1}
               className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100"
               value={tonePrompt}
               onChange={(ev) => setTonePrompt(ev.target.value)}
@@ -285,7 +325,7 @@ export default function PromptModal({
             />
           </label>
 
-          <div className="mt-4 rounded-lg border border-slate-700 bg-slate-950 px-3 py-3">
+          <div className="mt-3 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2">
             <p className="mb-2 text-xs font-medium text-slate-300">{t('promptModal.imageTemplateSection')}</p>
             <label className="text-xs text-slate-300">
               {t('promptModal.template')}
@@ -303,31 +343,13 @@ export default function PromptModal({
             <label className="mt-2 block text-xs text-slate-300">
               {t('promptModal.templateContent')}
               <textarea
-                rows={3}
+                rows={2}
                 className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100"
                 value={imageStylePrompt}
                 onChange={(ev) => setImageStylePrompt(ev.target.value)}
                 disabled={submitting}
               />
             </label>
-          </div>
-
-          <div className="mt-4">
-            <p className="mb-2 text-xs font-medium text-slate-300">{t('promptModal.presetsSection')}</p>
-            <div className="flex flex-wrap gap-2">
-              {PRESETS.map((p) => (
-                <button
-                  key={p.labelKey}
-                  type="button"
-                  onClick={() => applyPreset(p)}
-                  disabled={submitting}
-                  className="rounded-full border border-slate-700 bg-slate-800 px-3 py-1 text-xs text-slate-200 transition hover:border-indigo-400 hover:text-indigo-200 disabled:opacity-60"
-                  title={t(p.promptKey)}
-                >
-                  {t(p.labelKey)}
-                </button>
-              ))}
-            </div>
           </div>
 
           {error && (
@@ -337,7 +359,7 @@ export default function PromptModal({
           )}
         </div>
 
-        <div className="flex flex-col-reverse gap-2 border-t border-slate-800 bg-slate-900/80 px-5 py-3 sm:flex-row sm:justify-end">
+        <div className="flex flex-col-reverse gap-2 border-t border-slate-800 bg-slate-900/80 px-4 py-2.5 sm:flex-row sm:justify-end">
           <button
             type="button"
             onClick={onClose}
