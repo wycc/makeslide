@@ -74,6 +74,7 @@ export interface PdfListItem {
   script_max_chars_per_page?: number | null;
   image_style_prompt?: string | null;
   total_audio_duration_seconds?: number | null;
+  has_source_text?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -110,6 +111,7 @@ export interface PdfDetail {
   image_style_prompt?: string | null;
   total_audio_duration_seconds?: number | null;
   share_mode?: 'read_only' | 'editable';
+  has_source_text?: boolean;
   created_at: string;
   updated_at: string;
   video_url?: string | null;
@@ -168,6 +170,7 @@ export interface UploadResponse {
   user_prompt: string | null;
   require_script_confirmation: boolean;
   category: string;
+  has_source_text?: boolean;
   tts_provider?: 'openai' | 'gemini';
   created_at: string;
 }

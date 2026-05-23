@@ -43,6 +43,7 @@ interface PromptTarget {
   initialValue: string;
   ttsProvider: 'openai' | 'gemini';
   pageCount: number | null;
+  hasSourceText: boolean;
 }
 
 const readStoredCategoryFilter = () => {
@@ -257,6 +258,7 @@ export default function HomePage() {
           ? pdf.tts_provider
           : DEFAULT_PROMPT_TTS_PROVIDER,
       pageCount: 'page_count' in pdf ? pdf.page_count : null,
+      hasSourceText: 'has_source_text' in pdf ? Boolean(pdf.has_source_text) : false,
     });
   }, []);
 
@@ -491,7 +493,7 @@ export default function HomePage() {
           pdfTitle={promptTarget.title}
           initialValue={promptTarget.initialValue}
           ttsProvider={promptTarget.ttsProvider}
-          showSplitConfirmation={promptTarget.pageCount === null}
+          showSplitConfirmation={promptTarget.hasSourceText}
           onSubmit={handlePromptSubmit}
           onClose={handlePromptClose}
         />
