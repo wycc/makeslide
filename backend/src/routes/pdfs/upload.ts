@@ -60,6 +60,11 @@ function multipartFieldValue(field: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
+function shouldDeferTitleToAiForTxtImport(filename: string): boolean {
+  const normalized = path.basename(filename).toLowerCase();
+  return normalized === 'pasted.txt' || normalized === 'prompt-outline.txt';
+}
+
 const PromptTextSchema = z.object({
   title: z.string().min(1).max(120),
   slides: z
@@ -373,7 +378,9 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
 
     const pdfId = nanoid(PDF_ID_SIZE);
     const createdAt = nowIso();
-    const title = titleFromUploadFilename(filename);
+    const title = isTxt && shouldDeferTitleToAiForTxtImport(filename)
+      ? null
+      : titleFromUploadFilename(filename);
     // Do NOT start the pipeline here — wait for the user to submit a
     // style / tone prompt via POST /api/pdfs/:id/start.
     const status: PdfStatus = 'awaiting_prompt';

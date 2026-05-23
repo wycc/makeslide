@@ -163,7 +163,7 @@ export interface QuizSet {
 export interface UploadResponse {
   id: string;
   status: PdfStatus;
-  title: string;
+  title: string | null;
   original_filename: string;
   user_prompt: string | null;
   require_script_confirmation: boolean;

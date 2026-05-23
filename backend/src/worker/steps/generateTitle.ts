@@ -16,7 +16,7 @@ const TitleResponseSchema = z.object({
   title: z
     .string()
     .min(2)
-    .max(40)
+    .max(60)
     .transform((s) => s.trim()),
 });
 
