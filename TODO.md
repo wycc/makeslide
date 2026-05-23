@@ -15,9 +15,9 @@
 [x] 重新確認 master TODO.md 無未完成項目並更新工作記錄（完成於分支: feature/todo-no-pending-recheck-20260523-0154）
 
 [x] 重新確認 master TODO.md 無未完成項目並更新工作記錄（完成於分支: feature/todo-no-pending-recheck-20260523-0204）
-[ ] 在 dockerfile 中加入 ffmpeg 套件安裝，把版本改成 1.1.1
+[x] 在 dockerfile 中加入 ffmpeg 套件安裝，把版本改成 1.1.1（完成於分支: feature/docker-ffmpeg-version-1.1.1-20260523）
 [ ] 在重生簡報時，如果 page reload，進度會不見，但背後仍在生成。應該重 reload 後回復生成中的狀態
-
+[ ] 將全螢幕改成真正的全螢幕, 而不是只是整個流覽器 window
 ---
 ## 工作記錄
 - 時間: 2026-05-21 09:08:06 +0800
@@ -75,3 +75,7 @@
 - 時間: 2026-05-23 02:04:00 +0800
 - 分支: feature/todo-no-pending-recheck-20260523-0204
 - 內容: 重新確認 master 中 TODO.md 未發現行首未完成核取項目；由於沒有可實作的未完成工作，本次以獨立分支保存複查記錄 docs/todo-rechecks/2026-05-23-0204.md，並回到 master 更新 TODO.md 完成清單與工作記錄。
+
+- 時間: 2026-05-23 13:03:00 +0800
+- 分支: feature/docker-ffmpeg-version-1.1.1-20260523
+- 內容: 完成 Docker 映像 build/runtime 階段安裝 ffmpeg，並將根目錄、backend、frontend package 版本與 lockfile 版本同步更新為 1.1.1；功能分支已通過 npm run build，npm test 仍受既有 pages-api 測試預期 png 但實際 jpg 的失敗影響。
