@@ -156,6 +156,24 @@ function getAnyFullscreenElement(): Element | null {
   return doc.fullscreenElement ?? doc.webkitFullscreenElement ?? doc.msFullscreenElement ?? null;
 }
 
+async function requestAnyFullscreen(element: HTMLElement): Promise<void> {
+  const el = element as HTMLElement & {
+    webkitRequestFullscreen?: () => Promise<void> | void;
+    msRequestFullscreen?: () => Promise<void> | void;
+  };
+  if (el.requestFullscreen) {
+    await el.requestFullscreen();
+    return;
+  }
+  if (el.webkitRequestFullscreen) {
+    await el.webkitRequestFullscreen();
+    return;
+  }
+  if (el.msRequestFullscreen) {
+    await el.msRequestFullscreen();
+  }
+}
+
 async function exitAnyFullscreen(): Promise<void> {
   const doc = document as Document & {
     webkitExitFullscreen?: () => Promise<void> | void;
@@ -285,6 +303,7 @@ export default function PlayPage() {
   const syncClientIdRef = useRef<string>('');
   const applyingRemoteSyncRef = useRef(false);
   const [imageOnlyFullscreen, setImageOnlyFullscreen] = useState(false);
+  const fullscreenContainerRef = useRef<HTMLDivElement | null>(null);
   const [slideImageScale, setSlideImageScale] = useState(1);
   const IMAGE_MSG_PREFIX = '[image] ';
 
@@ -1090,6 +1109,44 @@ export default function PlayPage() {
     window.addEventListener('keydown', onKey, { capture: true });
     return () => window.removeEventListener('keydown', onKey, { capture: true });
   }, [playPause, goPrev, goNext, navigate, imageOnlyFullscreen, syncEnabled, syncRole, handleAiAnswerFollowerQuestions]);
+
+  // ---- Fullscreen API integration ----
+  useEffect(() => {
+    if (imageOnlyFullscreen && fullscreenContainerRef.current) {
+      const isAlreadyFullscreen = Boolean(getAnyFullscreenElement());
+      if (!isAlreadyFullscreen) {
+        requestAnyFullscreen(fullscreenContainerRef.current).catch((err) => {
+          console.error('Failed to enter fullscreen:', err);
+        });
+      }
+    } else if (!imageOnlyFullscreen) {
+      const isAlreadyFullscreen = Boolean(getAnyFullscreenElement());
+      if (isAlreadyFullscreen) {
+        exitAnyFullscreen().catch((err) => {
+          console.error('Failed to exit fullscreen:', err);
+        });
+      }
+    }
+  }, [imageOnlyFullscreen]);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const isFullscreen = Boolean(getAnyFullscreenElement());
+      if (!isFullscreen && imageOnlyFullscreen) {
+        setImageOnlyFullscreen(false);
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('msfullscreenchange', handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('msfullscreenchange', handleFullscreenChange);
+    };
+  }, [imageOnlyFullscreen]);
 
   const currentScript =
     currentPage != null ? scripts[currentPage.page_number] ?? '' : '';
@@ -2007,6 +2064,7 @@ export default function PlayPage() {
     <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
       {imageOnlyFullscreen ? (
         <div
+          ref={fullscreenContainerRef}
           className="fixed inset-0 z-[100] flex cursor-pointer items-center justify-center bg-black"
           onClick={() => playPause()}
           role="button"
