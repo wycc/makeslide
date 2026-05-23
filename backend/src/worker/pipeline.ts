@@ -220,7 +220,7 @@ function getPdfRow(pdfId: string): PdfRow | undefined {
     .prepare(
       `SELECT id, title, original_filename, status, page_count, progress_step,
               progress_current, progress_total,
-              error_message, user_prompt, require_script_confirmation,
+              error_message, user_prompt, require_script_confirmation, require_split_confirmation,
               total_audio_duration_seconds,
               tts_voice, tts_speed, script_max_chars_per_page,
               source_type, source_url, source_video_id, source_caption_language,
