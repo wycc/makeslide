@@ -495,12 +495,101 @@ async function runPipeline(pdfId: string): Promise<void> {
       const textImageHandles = new Map<number, TimingArtifactHandle | null>();
       const r = isTextImport
         ? await (async () => {
+            const existingPages = listPageRows(pdfId);
+            if (existingPages.length > 0) {
+              logger.info({ pdfId, pages: existingPages.length }, 'Pipeline: use existing split pages');
+              const pages = existingPages.map((p) => {
+                const textContent = fs.readFileSync(path.join(pdfDir(pdfId), p.text_path!), 'utf8');
+                const lines = textContent.split('\n');
+                const titleLine = lines[0] || '';
+                const title = titleLine.replace(/^Slide \d+:\s*/i, '').trim();
+                return {
+                  pageNumber: p.page_number,
+                  content: textContent,
+                  slideLabel: title || undefined,
+                };
+              });
+              setProgress(pdfId, 'rendering', 0, pages.length);
+              return await renderTextPagesWithLlm({
+                pdfId,
+                pages,
+                onPage: (n, imagePath, info) => {
+                  const h = textImageHandles.get(n) ?? startArtifact({ run, pageNumber: n, artifact: 'image', reason: runType === 'resume' ? 'resume' : 'initial', metadata: { source_type: 'text', precision: 'step_timing' } });
+                  textImageHandles.set(n, h);
+                  const status = info.status ?? (info.reused ? 'skipped' : 'succeeded');
+                  finishArtifact(h, status, {
+                    startedAt: info.startedAt,
+                    endedAt: info.endedAt,
+                    durationMs: info.latencyMs,
+                    outputPath: status === 'failed' ? null : toRelative(pdfId, imagePath),
+                    error: info.error ? { code: info.error.code ?? info.error.type ?? null, message: info.error.message } : undefined,
+                    metadata: {
+                      source_type: 'text',
+                      precision: 'step_timing',
+                      reused: info.reused,
+                      attempt: info.attempt ?? null,
+                      model: info.model ?? null,
+                      promptLength: info.promptLength ?? null,
+                      timeoutMs: info.timeoutMs ?? null,
+                      errorStatus: info.error?.status ?? null,
+                      errorType: info.error?.type ?? null,
+                      ...(info.metadata ?? {}),
+                    },
+                  });
+                  if (status === 'failed') {
+                    upsertPage(pdfId, n, {
+                      status: 'failed',
+                      error_message: info.error?.message ?? 'Text image generation failed',
+                    });
+                    bumpProgress(pdfId, n);
+                    return;
+                  }
+                  upsertPage(pdfId, n, {
+                    image_path: toRelative(pdfId, imagePath),
+                    status: 'rendered',
+                  });
+                  bumpProgress(pdfId, n);
+                },
+              });
+            }
+
             const raw = await fs.promises.readFile(sourceTextPath(pdfId), 'utf8');
             const splitStage = startStage(run, 'split_text', { source_type: 'text' });
             const split = await splitTextWithLlm(raw);
             finishStage(splitStage, 'succeeded', { pages: split.pages.length });
-            setProgress(pdfId, 'rendering', 0, split.pages.length);
+
+            const pagesDir = path.join(pdfDir(pdfId), 'pages');
+            if (!fs.existsSync(pagesDir)) {
+              await fs.promises.mkdir(pagesDir, { recursive: true });
+            }
+            for (const page of split.pages) {
+              const pageText = page.content;
+              const textPath = pageTextPath(pdfId, page.pageNumber, split.pages.length);
+              await fs.promises.writeFile(textPath, pageText, 'utf8');
+              upsertPage(pdfId, page.pageNumber, {
+                status: 'pending',
+                text_path: toRelative(pdfId, textPath),
+              });
+            }
             await persistMetadata(pdfId);
+
+            const latest = getPdfRow(pdfId);
+            if (latest?.require_split_confirmation === 1) {
+              updatePdf(pdfId, {
+                status: 'awaiting_script_confirmation',
+                progress_step: 'script_ready',
+                progress_current: split.pages.length,
+                progress_total: split.pages.length,
+                error_message: null,
+              });
+              await persistMetadata(pdfId, {
+                notes: 'Text split complete; awaiting user confirmation before rendering images',
+              });
+              logger.info({ pdfId }, 'Pipeline: waiting for split confirmation');
+              throw new Error('AWAITING_SPLIT_CONFIRMATION');
+            }
+
+            setProgress(pdfId, 'rendering', 0, split.pages.length);
             return await renderTextPagesWithLlm({
               pdfId,
               pages: split.pages,
@@ -1089,6 +1178,11 @@ async function runPipeline(pdfId: string): Promise<void> {
     finishRun(run, 'succeeded');
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    if (message === 'AWAITING_SPLIT_CONFIRMATION') {
+      logger.info({ pdfId }, 'Pipeline: paused for split confirmation');
+      finishRun(run, 'succeeded');
+      return;
+    }
     logger.error({ err, pdfId }, 'Pipeline failed');
     finishRun(run, 'failed', { message });
     updatePdf(pdfId, {

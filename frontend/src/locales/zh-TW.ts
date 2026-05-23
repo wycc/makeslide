@@ -189,6 +189,7 @@ export const zhTW = {
   'promptModal.promptPlaceholder': '例如：請用大學授課老師的親切語氣，對初學者講解，遇到術語請稍作解釋…',
   'promptModal.blankHint': '留白或跳過代表使用預設（中性、專業、自然）。',
   'promptModal.requireScriptConfirmation': '逐字稿產生後先讓我確認，再開始生成語音檔',
+  'promptModal.requireSplitConfirmation': 'AI 分頁後先讓我確認，再開始產生圖片',
   'promptModal.ttsVoice': '語音人物',
   'promptModal.ttsSpeed': '語速（0.25–4）',
   'promptModal.maxLengthPerPage': '每頁最大長度',

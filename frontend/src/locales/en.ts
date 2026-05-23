@@ -189,6 +189,7 @@ export const en = {
   'promptModal.promptPlaceholder': 'For example: Explain this to beginners in a friendly college lecturer tone, and briefly explain technical terms…',
   'promptModal.blankHint': 'Leave blank or skip to use the default style (neutral, professional, natural).',
   'promptModal.requireScriptConfirmation': 'Let me review the transcript before generating audio',
+  'promptModal.requireSplitConfirmation': 'Let me review the AI split results before rendering images',
   'promptModal.ttsVoice': 'Voice',
   'promptModal.ttsSpeed': 'Speed (0.25–4)',
   'promptModal.maxLengthPerPage': 'Max length per page',

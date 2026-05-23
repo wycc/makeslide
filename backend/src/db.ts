@@ -74,6 +74,13 @@ function migrate(): void {
     logger.info('Added column pdfs.require_script_confirmation');
   }
 
+  if (!columnExists('pdfs', 'require_split_confirmation')) {
+    db.exec(
+      `ALTER TABLE pdfs ADD COLUMN require_split_confirmation INTEGER NOT NULL DEFAULT 0`,
+    );
+    logger.info('Added column pdfs.require_split_confirmation');
+  }
+
   if (!columnExists('pdfs', 'tts_voice')) {
     db.exec(`ALTER TABLE pdfs ADD COLUMN tts_voice TEXT`);
     logger.info('Added column pdfs.tts_voice');
