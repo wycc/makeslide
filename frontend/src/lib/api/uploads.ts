@@ -31,8 +31,12 @@ export interface PromptChatResponse {
 export function uploadPdf(file: File, opts: UploadOptions = {}): Promise<UploadResponse> {
   return new Promise<UploadResponse>((resolve, reject) => {
     const formData = new FormData();
-    formData.append('file', file);
+    // NOTE:
+    // Fastify's request.file() may parse multipart fields incrementally.
+    // Put mode field before file to ensure backend can read pdf_import_mode
+    // consistently when deciding slides vs document flow.
     formData.append('pdf_import_mode', opts.pdfImportMode ?? 'slides');
+    formData.append('file', file);
 
     const xhr = new XMLHttpRequest();
     xhr.open('POST', 'api/pdfs');

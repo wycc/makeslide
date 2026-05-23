@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ApiError,
+  confirmScript,
   deleteCategory,
   deletePdf,
   duplicatePdf,
@@ -64,6 +65,7 @@ export default function HomePage() {
   const toastTimerRef = useRef<number | null>(null);
   const [promptTarget, setPromptTarget] = useState<PromptTarget | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>(readStoredCategoryFilter);
+  const [continuingPdfId, setContinuingPdfId] = useState<string | null>(null);
 
   const allCategories = items.reduce<string[]>((categories, pdf) => {
     const category = pdf.category?.trim() || DEFAULT_CATEGORY;
@@ -326,7 +328,11 @@ export default function HomePage() {
         openPromptFor(pdf);
         return;
       }
-      if (pdf.status === 'uploaded' || pdf.status === 'processing') {
+      if (
+        pdf.status === 'uploaded' ||
+        pdf.status === 'processing' ||
+        pdf.status === 'awaiting_script_confirmation'
+      ) {
         navigate(`/play/${pdf.id}`);
         return;
       }
@@ -350,6 +356,24 @@ export default function HomePage() {
       navigate(`/play/${pdf.id}`);
     },
     [navigate, openPromptFor, showToast, load],
+  );
+
+  const handleContinueGeneration = useCallback(
+    async (pdf: PdfListItem) => {
+      if (pdf.status !== 'awaiting_script_confirmation') return;
+      setContinuingPdfId(pdf.id);
+      try {
+        await confirmScript(pdf.id);
+        showToast(t('home.continueQueued'));
+        await load({ silent: true });
+      } catch (err) {
+        const msg = err instanceof ApiError ? err.message : t('home.continueFailed');
+        showToast(`${t('home.continueFailed')}：${msg}`);
+      } finally {
+        setContinuingPdfId(null);
+      }
+    },
+    [load, showToast, t],
   );
 
   return (
@@ -472,6 +496,8 @@ export default function HomePage() {
                       onDelete={handleDelete}
                       onDuplicate={handleDuplicate}
                       onCategoryChange={handleCategoryChange}
+                      onContinue={handleContinueGeneration}
+                      continuing={continuingPdfId === pdf.id}
                       onClick={handleCardClick}
                     />
                   ))}

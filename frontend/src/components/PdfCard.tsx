@@ -18,6 +18,8 @@ interface PdfCardProps {
   onDelete: (id: string) => Promise<void> | void;
   onDuplicate: (id: string) => Promise<void> | void;
   onCategoryChange: (id: string, category: string) => Promise<void> | void;
+  onContinue?: (pdf: PdfListItem) => Promise<void> | void;
+  continuing?: boolean;
   onClick?: (pdf: PdfListItem) => void;
 }
 
@@ -37,7 +39,7 @@ function formatDate(iso: string): string {
   }
 }
 
-export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onCategoryChange, onClick }: PdfCardProps) {
+export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onCategoryChange, onContinue, continuing = false, onClick }: PdfCardProps) {
   const { t } = useI18n();
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDuplicating, setIsDuplicating] = useState(false);
@@ -79,6 +81,12 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onCate
 
   const handleCardClick = () => {
     onClick?.(pdf);
+  };
+
+  const handleContinue = async (ev: React.MouseEvent) => {
+    ev.stopPropagation();
+    if (!onContinue || continuing) return;
+    await onContinue(pdf);
   };
 
   const handleDuplicate = async (ev: React.MouseEvent) => {
@@ -224,6 +232,15 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onCate
               className="rounded-md border border-sky-500/50 bg-sky-500/10 px-2 py-1 text-xs font-medium text-sky-200 transition hover:bg-sky-500/20"
             >
               {t('card.inputPrompt')}
+            </button>
+          ) : pdf.status === 'awaiting_script_confirmation' ? (
+            <button
+              type="button"
+              onClick={(ev) => void handleContinue(ev)}
+              disabled={continuing}
+              className="rounded-md border border-emerald-500/50 bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-200 transition hover:bg-emerald-500/20 disabled:opacity-50"
+            >
+              {continuing ? t('card.continuing') : t('card.continueGeneration')}
             </button>
           ) : (
             <span />
