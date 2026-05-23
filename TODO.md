@@ -18,6 +18,7 @@
 [x] 在 dockerfile 中加入 ffmpeg 套件安裝，把版本改成 1.1.1（完成於分支: feature/docker-ffmpeg-version-1.1.1-20260523）
 [x] 在重生簡報時，如果 page reload，進度會不見，但背後仍在生成。應該重 reload 後回復生成中的狀態（完成於分支: feature/restore-regenerate-progress-on-reload）
 [x] 將全螢幕改成真正的全螢幕, 而不是只是整個流覽器 window（完成於分支: feature/fullscreen-api-support-20260523）
+[x] 使用 AI 分頁時，請在 AI 分完頁後，讓使用者有檢查分頁結果的能力。可以加一個 checkbox 讓使用者選擇要先確認後再開始產生圖片（完成於分支: feature/ai-split-confirm）
 ---
 ## 工作記錄
 - 時間: 2026-05-21 09:08:06 +0800
@@ -87,3 +88,7 @@
 - 時間: 2026-05-23 13:17:00 +0800
 - 分支: feature/restore-regenerate-progress-on-reload
 - 內容: 實作簡報重生時 page reload 的進度回復機制。在 PlayPage 載入時主動向後端查詢重生任務狀態，若任務處於 running、pending 或 cancelling 狀態，則將其設定到 regenJob 狀態中並啟用 regenAllBusy，使前端能自動回復生成中的進度條顯示與輪詢。
+
+- 時間: 2026-05-23 14:42:00 +0800
+- 分支: feature/ai-split-confirm
+- 內容: 實作 AI 分頁確認機制。在 PromptModal 中新增「AI 分頁後先讓我確認，再開始產生圖片」的 checkbox。後端在 AI 分頁完成後，若勾選此選項，會將分頁結果寫入資料庫與磁碟，並將狀態設為 awaiting_script_confirmation 暫停 pipeline。前端在該狀態下允許使用者瀏覽與編輯每一頁的文字，並提供「確認分頁並開始產生圖片與語音」的按鈕，確認後繼續執行 pipeline，且避免覆蓋使用者的編輯。
