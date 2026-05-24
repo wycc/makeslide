@@ -212,3 +212,11 @@
 - 時間: 2026-05-24 10:31:00 +0800
 - 分支: feature/todo-no-pending-recheck-20260524-1031
 - 內容: 重新確認 master 中 TODO.md 未發現行首未完成核取項目；由於沒有可實作的未完成工作，本次以獨立分支保存複查記錄 docs/todo-rechecks/2026-05-24-1031.md，並回到 master 更新 TODO.md 完成清單與工作記錄。
+
+[x] 將開啟影片的功能改成下載影片。讓使用者下載後再自行去播放。（完成於分支: feature/download-video-instead-open-20260524）
+
+# 工作記錄
+
+- 時間: 2026-05-24 11:16:00 +0800
+- 分支: feature/download-video-instead-open-20260524
+- 內容: 完成將播放頁中已產生影片的「開啟影片」連結改為「下載影片」，移除新分頁開啟行為並加入 download 屬性；功能分支已通過 frontend build 驗證。回到 master 更新 TODO.md，記錄完成項目與所在分支。
