@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
+import { toFile } from 'openai';
 import { generatePageThumbnail } from '../services/thumbnails';
 import { nanoid } from 'nanoid';
 import { config } from '../config';
@@ -8,6 +9,7 @@ import { db } from '../db';
 import { logger } from '../logger';
 import { getOpenAIClient } from '../services/openai';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../services/imagePromptTemplates';
+import { loadPromptTemplate, renderPromptTemplate } from '../services/promptTemplates';
 import {
   pageAudioPath,
   pageImagePath,
@@ -108,6 +110,16 @@ export interface RegenerateOptions {
 }
 
 const jobs = new Map<string, RegenJobState>();
+
+const EDIT_SLIDE_IMAGE_PROMPT_FALLBACK = [
+  'You are editing an existing presentation slide image provided as the input image.',
+  'Use the uploaded image as the strict visual source of truth.',
+  'Preserve the original slide layout, composition, colors, typography style, relative object positions, diagrams, icons, and readable text unless the user explicitly asks to change those specific elements.',
+  'Only make the minimal edits required by the user adjustment prompt. Do not redesign the slide, do not invent unrelated visual elements, and do not change the overall style beyond the requested modification.',
+  'If the request is ambiguous, prefer conservative local edits and keep the original image as unchanged as possible.',
+  '',
+  '{{base_prompt}}',
+].join('\n');
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -1199,12 +1211,20 @@ async function runRegenerateImages(
       }
     }
 
-    const mergedPrompt = buildImagePrompt({
+    const basePrompt = buildImagePrompt({
       stylePrompt: deckStylePrompt,
-      deckAdjustmentPrompt: prompt,
       pageText,
       pageScript,
+      userAdjustmentPrompt: `Current user adjustment request:\n${prompt}`,
     });
+    const editPrompt = renderPromptTemplate(
+      loadPromptTemplate('backend/prompts/edit-slide-image.md', EDIT_SLIDE_IMAGE_PROMPT_FALLBACK),
+      { base_prompt: basePrompt },
+    );
+
+    const currentImagePath = pageImagePath(pdfId, p.page_number, pageCount);
+    const currentImageBuffer = await fs.promises.readFile(currentImagePath);
+    const currentImageForEdit = await toFile(currentImageBuffer, `page-${p.page_number}.jpg`, { type: 'image/jpeg' });
 
     const artifactHandle = startArtifact({
       run: timingRun,
@@ -1215,11 +1235,12 @@ async function runRegenerateImages(
     });
     const generated = await withExponentialBackoffRetry(
       () =>
-        client.images.generate({
+        client.images.edit({
           model: config.openaiImageModel,
-          prompt: mergedPrompt,
+          image: currentImageForEdit,
+          prompt: editPrompt,
           size: '1536x1024',
-          quality: imageQuality,
+          quality: 'low',
         }, {
           timeout: imageTimeoutMs,
         }),
