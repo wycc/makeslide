@@ -20,6 +20,7 @@
 [x] 將全螢幕改成真正的全螢幕, 而不是只是整個流覽器 window（完成於分支: feature/fullscreen-api-support-20260523）
 [x] 使用 AI 分頁時，請在 AI 分完頁後，讓使用者有檢查分頁結果的能力。可以加一個 checkbox 讓使用者選擇要先確認後再開始產生圖片（完成於分支: feature/ai-split-confirm）
 [x] 在修訂逐字稿時，我們會希望它的視窗可以把完整的逐字稿儘量顯示出來。所以我們要加上一個按鍵把上方播放器收成一個排在右上方的小視窗，而將左邊全部留給逐字稿的區域。所以請在逐字稿的 notebook 列上加一個圖示可以切換模式。（完成於分支: feature/transcript-player-compact-toggle-20260524）
+[x] 重新確認 master TODO.md 無未完成項目並更新工作記錄（完成於分支: feature/todo-no-pending-recheck-20260524-0926）
 ---
 ## 工作記錄
 - 時間: 2026-05-21 09:08:06 +0800
@@ -97,3 +98,6 @@
 - 時間: 2026-05-24 09:22:00 +0800
 - 分支: feature/transcript-player-compact-toggle-20260524
 - 內容: 完成逐字稿編輯版面切換功能；在逐字稿 notebook 列新增播放器縮小/還原圖示按鈕，縮小模式會把播放器與控制列收成桌面版右上方小視窗，並將左側空間留給逐字稿編輯區以顯示更多完整內容。
+- 時間: 2026-05-24 09:26:00 +0800
+- 分支: feature/todo-no-pending-recheck-20260524-0926
+- 內容: 重新確認 master 中 TODO.md 未發現行首未完成核取項目；由於沒有可實作的未完成工作，本次以獨立分支保存複查記錄 docs/todo-rechecks/2026-05-24-0926.md，並回到 master 更新 TODO.md 完成清單與工作記錄。
