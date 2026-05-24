@@ -57,7 +57,7 @@ export const en = {
   'home.notReadyYet': 'Not finished processing yet',
   'home.logout': 'Sign out',
   'home.logoutGoogle': 'Sign out of Google account',
-  'home.apiKeySettings': 'API Key Settings',
+  'home.apiKeySettings': 'Settings',
   'home.recentCategory': 'Recent slides',
   'home.firstTimeGuide': 'First-time setup guide',
   'home.step1': 'Step 1 Prepare API keys',

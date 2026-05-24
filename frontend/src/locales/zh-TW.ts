@@ -57,7 +57,7 @@ export const zhTW = {
   'home.notReadyYet': '尚未處理完成',
   'home.logout': '登出',
   'home.logoutGoogle': '登出 Google 帳號',
-  'home.apiKeySettings': '設定 API Key',
+  'home.apiKeySettings': '設定',
   'home.recentCategory': '最近的簡報',
   'home.firstTimeGuide': '首次流程導引',
   'home.step1': '第 1 步：準備 API Key',
