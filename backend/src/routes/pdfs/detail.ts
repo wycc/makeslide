@@ -593,6 +593,25 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     return reply.send(rowToPoll(updated));
   });
 
+  app.post('/api/pdfs/:id/polls/:pollId/reset-votes', async (request, reply) => {
+    const parsed = PollParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or poll id'));
+    const { id, pollId } = parsed.data;
+    const row = db
+      .prepare(`SELECT id, pdf_id, page_number, question, options_json, is_active, show_results, created_at, updated_at FROM page_polls WHERE id = ? AND pdf_id = ?`)
+      .get(pollId, id) as PagePollRow | undefined;
+    if (!row) return reply.code(404).send(errorResponse('POLL_NOT_FOUND', `Poll ${pollId} not found`));
+
+    const now = nowIso();
+    db.prepare(`DELETE FROM page_poll_votes WHERE poll_id = ?`).run(pollId);
+    db.prepare(`UPDATE page_polls SET updated_at = ? WHERE id = ?`).run(now, pollId);
+
+    const updated = db
+      .prepare(`SELECT id, pdf_id, page_number, question, options_json, is_active, show_results, created_at, updated_at FROM page_polls WHERE id = ?`)
+      .get(pollId) as PagePollRow;
+    return reply.send(rowToPoll(updated));
+  });
+
   // POST /api/pdfs/:id/cover/from-page/:n
   app.post('/api/pdfs/:id/cover/from-page/:n', async (request, reply) => {
     const parsed = PageParamSchema.safeParse(request.params);

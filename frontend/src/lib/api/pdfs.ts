@@ -368,6 +368,14 @@ export async function votePagePoll(id: string, pollId: number, voterId: string, 
   return (await resp.json()) as PagePoll;
 }
 
+export async function resetPagePollVotes(id: string, pollId: number): Promise<PagePoll> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/polls/${encodeURIComponent(String(pollId))}/reset-votes`, {
+    method: 'POST',
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as PagePoll;
+}
+
 export async function fetchQuizSets(id: string): Promise<QuizSet[]> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/quizzes`);
   if (!resp.ok) throw await parseErrorBody(resp);

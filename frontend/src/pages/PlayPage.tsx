@@ -32,6 +32,7 @@ import {
   regenerateSlideImage,
   replaceSlideImage,
   regeneratePageAudio,
+  resetPagePollVotes,
   rollbackRegenerate,
   startRegenerateJob,
   submitSyncFollowerQuestion,
@@ -306,6 +307,7 @@ export default function PlayPage() {
   const [syncAiAnswer, setSyncAiAnswer] = useState<SyncAiAnswer | null>(null);
   const [syncRealtimePollStarted, setSyncRealtimePollStarted] = useState(false);
   const [syncPollShowResults, setSyncPollShowResults] = useState(false);
+  const [syncDisplayedPollId, setSyncDisplayedPollId] = useState<number | null>(null);
   const [syncAiAnswerBusy, setSyncAiAnswerBusy] = useState(false);
   const [syncQuestionInput, setSyncQuestionInput] = useState('');
   const [syncQuestionBusy] = useState(false);
@@ -908,6 +910,11 @@ export default function PlayPage() {
         setSyncAiAnswer(joined.ai_answer ?? null);
         setSyncRealtimePollStarted(Boolean(joined.realtime_poll_started));
         setSyncPollShowResults(Boolean(joined.quiz_show_answers));
+        setSyncDisplayedPollId(
+          typeof joined.active_quiz_id === 'number' && joined.active_quiz_id > 0
+            ? joined.active_quiz_id
+            : null,
+        );
         setSyncError(null);
       } catch (err) {
         if (cancelled) return;
@@ -966,10 +973,11 @@ export default function PlayPage() {
       follower_audio_unlocked: followerAudioUnlocked,
       realtime_poll_started: pollStarted,
       quiz_show_answers: syncPollShowResults,
+      active_quiz_id: syncDisplayedPollId,
     }).catch((err) => {
       setSyncError(err instanceof ApiError ? err.message : '同步狀態更新失敗');
     });
-  }, [syncEnabled, syncRole, pdfId, currentIdx, isPlaying, currentTime, followerAudioUnlocked, pollStarted, syncPollShowResults]);
+  }, [syncEnabled, syncRole, pdfId, currentIdx, isPlaying, currentTime, followerAudioUnlocked, pollStarted, syncPollShowResults, syncDisplayedPollId]);
 
   useEffect(() => {
     if (!syncEnabled || syncRole !== 'master' || !pdfId) return;
@@ -988,6 +996,7 @@ export default function PlayPage() {
         follower_audio_unlocked: followerAudioUnlocked,
         realtime_poll_started: pollStarted,
         quiz_show_answers: syncPollShowResults,
+        active_quiz_id: syncDisplayedPollId,
         cursor_x: next.x,
         cursor_y: next.y,
       }).catch(() => undefined);
@@ -1022,7 +1031,7 @@ export default function PlayPage() {
       }
       pendingCursorRef.current = null;
     };
-  }, [syncEnabled, syncRole, pdfId, imageOnlyFullscreen, currentIdx, isPlaying, currentTime, followerAudioUnlocked, pollStarted, syncPollShowResults]);
+  }, [syncEnabled, syncRole, pdfId, imageOnlyFullscreen, currentIdx, isPlaying, currentTime, followerAudioUnlocked, pollStarted, syncPollShowResults, syncDisplayedPollId]);
 
   useEffect(() => {
     if (!syncEnabled || !pdfId || !syncClientIdRef.current) return;
@@ -1059,6 +1068,11 @@ export default function PlayPage() {
           setSyncAiAnswer(state.ai_answer ?? null);
           setSyncRealtimePollStarted(Boolean(state.realtime_poll_started));
           setSyncPollShowResults(Boolean(state.quiz_show_answers));
+          setSyncDisplayedPollId(
+            typeof state.active_quiz_id === 'number' && state.active_quiz_id > 0
+              ? state.active_quiz_id
+              : null,
+          );
           if (typeof state.cursor_x === 'number' && typeof state.cursor_y === 'number') {
             setRemoteCursor({
               x: Math.min(1, Math.max(0, state.cursor_x)),
@@ -1447,6 +1461,7 @@ export default function PlayPage() {
   const handleStopPoll = useCallback(() => {
     setPollStarted(false);
     setSyncPollShowResults(false);
+    setSyncDisplayedPollId(null);
     setPagePolls([]);
     setPollVotes({});
     setPollError(null);
@@ -1468,6 +1483,47 @@ export default function PlayPage() {
       setPollBusy(false);
     }
   }, [pdfId]);
+
+  const handleResetPollVotes = useCallback(async (pollId: number) => {
+    if (!pdfId) return;
+    setPollBusy(true);
+    setPollError(null);
+    try {
+      const poll = await resetPagePollVotes(pdfId, pollId);
+      setPagePolls((prev) => prev.map((item) => (item.id === poll.id ? poll : item)));
+      setPollVotes((prev) => {
+        const next = { ...prev };
+        delete next[pollId];
+        return next;
+      });
+    } catch (err) {
+      setPollError(err instanceof ApiError ? err.message : '清除投票結果失敗');
+    } finally {
+      setPollBusy(false);
+    }
+  }, [pdfId]);
+
+  const handleSelectDisplayedPoll = useCallback(
+    async (pollId: number) => {
+      setSyncDisplayedPollId(pollId);
+      if (!syncEnabled || syncRole !== 'master' || !pdfId || !syncClientIdRef.current) return;
+      try {
+        await updatePlaybackSyncState(pdfId, syncClientIdRef.current, {
+          page_number: Math.max(1, currentIdx + 1),
+          is_playing: isPlaying,
+          current_time: Number.isFinite(currentTime) ? Math.max(0, currentTime) : 0,
+          follower_audio_unlocked: followerAudioUnlocked,
+          realtime_poll_started: pollStarted,
+          quiz_show_answers: syncPollShowResults,
+          active_quiz_id: pollId,
+        });
+        setSyncError(null);
+      } catch (err) {
+        setSyncError(err instanceof ApiError ? err.message : '同步顯示題目失敗');
+      }
+    },
+    [syncEnabled, syncRole, pdfId, currentIdx, isPlaying, currentTime, followerAudioUnlocked, pollStarted, syncPollShowResults],
+  );
 
   const handleRegenerateAudio = useCallback(async () => {
     if (isReadOnlyProcessing) return;
@@ -2205,7 +2261,14 @@ export default function PlayPage() {
   const syncOverlayIsAiAnswer = Boolean(syncAiAnswer?.answer);
   const activePoll =
     (pollStarted || (syncEnabled && syncRole === 'follower' && syncRealtimePollStarted)) && pagePolls.length > 0
-      ? pagePolls.find((poll) => poll.is_active) ?? pagePolls[0] ?? null
+      ? (
+        (syncDisplayedPollId != null
+          ? pagePolls.find((poll) => poll.id === syncDisplayedPollId)
+          : null)
+        ?? pagePolls.find((poll) => poll.is_active)
+        ?? pagePolls[0]
+        ?? null
+      )
       : null;
   const activePollQuestion = activePoll?.question ?? '';
 
@@ -3573,6 +3636,29 @@ export default function PlayPage() {
                               {poll.total_votes} 票
                             </span>
                           </div>
+                          {syncEnabled && syncRole === 'master' ? (
+                            <div className="mb-2 flex justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => void handleSelectDisplayedPoll(poll.id)}
+                                className={`rounded border px-2 py-1 text-[11px] ${
+                                  syncDisplayedPollId === poll.id
+                                    ? 'border-cyan-300/80 bg-cyan-500/30 text-cyan-50'
+                                    : 'border-cyan-500/50 bg-cyan-500/15 text-cyan-200 hover:bg-cyan-500/25'
+                                }`}
+                              >
+                                {syncDisplayedPollId === poll.id ? '目前顯示題目' : '顯示這題到全螢幕'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleResetPollVotes(poll.id)}
+                                disabled={pollBusy || poll.total_votes === 0}
+                                className="rounded border border-amber-500/50 bg-amber-500/15 px-2 py-1 text-[11px] text-amber-200 hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                清除結果
+                              </button>
+                            </div>
+                          ) : null}
                           <div className="space-y-1.5">
                             {poll.options.map((option, idx) => {
                               const ratio = poll.total_votes > 0 ? Math.round((option.votes / poll.total_votes) * 100) : 0;
