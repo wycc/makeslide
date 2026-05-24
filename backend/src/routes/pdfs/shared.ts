@@ -277,6 +277,12 @@ const RegenerateBatchBodySchema = z.object({
         .max(2000, 'prompt 不可超過 2000 字')
         .optional()
         .default(''),
+      script_max_chars_per_page: z
+        .number()
+        .int()
+        .min(80, 'script_max_chars_per_page 不可小於 80')
+        .max(2000, 'script_max_chars_per_page 不可大於 2000')
+        .optional(),
     })
     .optional(),
   audio: z

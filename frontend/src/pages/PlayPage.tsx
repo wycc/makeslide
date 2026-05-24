@@ -245,6 +245,7 @@ export default function PlayPage() {
   const [selectedImageStyleTemplateKey, setSelectedImageStyleTemplateKey] = useState('');
   const [regenAllPrompt, setRegenAllPrompt] = useState('請讓整份簡報的圖像風格一致，色調、字體與版面語言維持統一。');
   const [regenScriptPrompt, setRegenScriptPrompt] = useState('請以原始重點為主，語句更口語、自然，並加強頁與頁之間的銜接。');
+  const [regenScriptMaxCharsPerPage, setRegenScriptMaxCharsPerPage] = useState<number>(350);
   const [regenAllBusy, setRegenAllBusy] = useState(false);
   const [regenAllMsg, setRegenAllMsg] = useState<string | null>(null);
   // 「重生」多選項目：圖檔 / 逐字稿 / 語音。後端 `/api/pdfs/:id/regenerate` 會依
@@ -1689,7 +1690,12 @@ export default function PlayPage() {
     preRegenPageIdxRef.current = currentIdx;
     try {
       const started = await startRegenerateJob(pdfId, {
-        scripts: regenOptions.script ? { prompt: regenScriptPrompt.trim() } : null,
+        scripts: regenOptions.script
+          ? {
+              prompt: regenScriptPrompt.trim(),
+              script_max_chars_per_page: regenScriptMaxCharsPerPage,
+            }
+          : null,
         audio: regenOptions.audio ? {} : null,
         images: regenOptions.image
           ? {
@@ -1708,7 +1714,7 @@ export default function PlayPage() {
       setRegenAllMsg(err instanceof ApiError ? err.message : '重生失敗');
       setRegenAllBusy(false);
     }
-  }, [pdfId, regenAllPrompt, regenScriptPrompt, regenAnySelected, regenOptions, regenJobRunning, currentIdx, deckImageStylePrompt, isReadOnlyProcessing]);
+  }, [pdfId, regenAllPrompt, regenScriptPrompt, regenScriptMaxCharsPerPage, regenAnySelected, regenOptions, regenJobRunning, currentIdx, deckImageStylePrompt, isReadOnlyProcessing]);
 
   const handleConfirmScript = useCallback(async () => {
     if (!pdfId) return;
@@ -3110,6 +3116,13 @@ export default function PlayPage() {
                       if (!regenJobRunning) {
                         setRegenAllMsg(null);
                       }
+                      const fallback = 350;
+                      const fromDetail = detail?.script_max_chars_per_page;
+                      const nextMaxChars =
+                        typeof fromDetail === 'number' && Number.isFinite(fromDetail)
+                          ? Math.max(80, Math.min(2000, Math.round(fromDetail)))
+                          : fallback;
+                      setRegenScriptMaxCharsPerPage(nextMaxChars);
                       setRegenAllDialogOpen(true);
                     }}
                     disabled={isReadOnlyProcessing}
@@ -3700,6 +3713,24 @@ export default function PlayPage() {
                   placeholder="例如：請以更精煉、口語、易懂的方式重寫，並保留每頁核心重點"
                   disabled={isReadOnlyProcessing || regenAllBusy}
                 />
+                <div className="mt-2">
+                  <label className="mb-1 block text-xs text-slate-400">逐字稿每頁最大長度</label>
+                  <input
+                    type="number"
+                    min={80}
+                    max={2000}
+                    step={1}
+                    value={regenScriptMaxCharsPerPage}
+                    onChange={(e) => {
+                      const raw = Number(e.target.value);
+                      if (!Number.isFinite(raw)) return;
+                      const normalized = Math.max(80, Math.min(2000, Math.round(raw)));
+                      setRegenScriptMaxCharsPerPage(normalized);
+                    }}
+                    className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-fuchsia-500/40 placeholder:text-slate-500 focus:ring"
+                    disabled={isReadOnlyProcessing || regenAllBusy}
+                  />
+                </div>
               </div>
             ) : null}
             {regenOptions.script && regenOptions.audio ? null : regenOptions.script ? (

@@ -102,7 +102,7 @@ export interface RegenJobState {
 }
 
 export interface RegenerateOptions {
-  scripts?: { prompt?: string | null } | null;
+  scripts?: { prompt?: string | null; script_max_chars_per_page?: number | null } | null;
   audio?: { voice?: string | null; speed?: number | null } | null;
   images?: { prompt: string } | null;
 }
@@ -901,7 +901,7 @@ async function withExponentialBackoffRetry<T>(
 async function runRegenerateScripts(
   state: RegenJobState,
   step: RegenStepProgress,
-  opts: { prompt?: string | null },
+  opts: { prompt?: string | null; script_max_chars_per_page?: number | null },
   shouldAbort: () => boolean,
   timingRun: TimingRunContext | null,
 ): Promise<void> {
@@ -960,7 +960,10 @@ async function runRegenerateScripts(
   }
 
   const userPrompt = (opts.prompt ?? pdfRow.user_prompt ?? '').toString().trim() || null;
-  const scriptMaxCharsPerPage = pdfRow.script_max_chars_per_page ?? null;
+  const scriptMaxCharsPerPage =
+    typeof opts.script_max_chars_per_page === 'number'
+      ? opts.script_max_chars_per_page
+      : (pdfRow.script_max_chars_per_page ?? null);
 
   await generateScript({
     pdfId,

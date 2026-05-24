@@ -543,7 +543,7 @@ export async function regenerateAllImages(
 }
 
 export interface StartRegenerateOptions {
-  scripts?: { prompt?: string } | null;
+  scripts?: { prompt?: string; script_max_chars_per_page?: number } | null;
   audio?: { voice?: string; speed?: number } | null;
   images?: { prompt: string } | null;
 }
@@ -559,7 +559,11 @@ export async function startRegenerateJob(
 ): Promise<RegenJobState> {
   const body: Record<string, unknown> = {};
   if (options.scripts) {
-    body.scripts = { prompt: options.scripts.prompt ?? '' };
+    const scriptsBody: Record<string, unknown> = { prompt: options.scripts.prompt ?? '' };
+    if (options.scripts.script_max_chars_per_page !== undefined) {
+      scriptsBody.script_max_chars_per_page = options.scripts.script_max_chars_per_page;
+    }
+    body.scripts = scriptsBody;
   }
   if (options.audio) {
     const audioBody: Record<string, unknown> = {};
