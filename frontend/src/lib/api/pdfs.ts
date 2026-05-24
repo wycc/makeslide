@@ -624,6 +624,8 @@ export async function updatePlaybackSyncState(
     quiz_mode?: boolean;
     active_quiz_id?: number | null;
     quiz_show_answers?: boolean;
+    cursor_x?: number | null;
+    cursor_y?: number | null;
   },
 ): Promise<{ ok: boolean; role: 'master'; updated_at: string }> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/sync/state`, {

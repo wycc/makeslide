@@ -305,6 +305,8 @@ export interface SyncJoinResponse {
   updated_at: string;
   master_expires_at: string | null;
   online_count?: number;
+  cursor_x?: number | null;
+  cursor_y?: number | null;
 }
 
 export interface SyncStateResponse {
@@ -327,4 +329,6 @@ export interface SyncStateResponse {
   master_expires_at: string | null;
   online_count?: number;
   questions?: SyncFollowerQuestion[];
+  cursor_x?: number | null;
+  cursor_y?: number | null;
 }

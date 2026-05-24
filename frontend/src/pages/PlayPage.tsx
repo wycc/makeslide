@@ -68,6 +68,10 @@ import type {
 const POLL_INTERVAL_MS = 3000;
 const AUDIO_RETRY_DELAY_MS = 800;
 const PREFETCH_START_DELAY_MS = 1200;
+const SYNC_POLL_INTERVAL_MS = 1200;
+const SYNC_POLL_INTERVAL_FULLSCREEN_MS = 250;
+const SYNC_CURSOR_PUSH_INTERVAL_MS = 60;
+const SYNC_CURSOR_PUSH_INTERVAL_FULLSCREEN_MS = 24;
 const CHAT_HISTORY_REQUEST_LIMIT = 20;
 const SENTENCE_MATCH_RE = /[^。！？!?；;\n]+[。！？!?；;]?|\n+/g;
 const TONE_MARKER_RE = /\[\[\s*[^\]]+\s*\]\]/g;
@@ -304,6 +308,7 @@ export default function PlayPage() {
   const [syncQuestionInput, setSyncQuestionInput] = useState('');
   const [syncQuestionBusy] = useState(false);
   const [fullscreenQuestionDialogOpen, setFullscreenQuestionDialogOpen] = useState(false);
+  const [remoteCursor, setRemoteCursor] = useState<{ x: number; y: number } | null>(null);
   const syncClientIdRef = useRef<string>('');
   const applyingRemoteSyncRef = useRef(false);
   const [imageOnlyFullscreen, setImageOnlyFullscreen] = useState(false);
@@ -324,9 +329,12 @@ export default function PlayPage() {
   const prefetchedAudioNextRef = useRef<HTMLAudioElement | null>(null);
   const prefetchedImageNextRef = useRef<HTMLImageElement | null>(null);
   const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
+  const fullscreenImageRef = useRef<HTMLImageElement | null>(null);
   const resumePositionRef = useRef<number | null>(null);
   const hasRestoredProgressRef = useRef(false);
   const persistProgressTimerRef = useRef<number | null>(null);
+  const cursorPushRafRef = useRef<number | null>(null);
+  const pendingCursorRef = useRef<{ x: number; y: number } | null>(null);
 
   const acquireWakeLock = useCallback(async () => {
     if (typeof navigator === 'undefined') return;
@@ -958,6 +966,57 @@ export default function PlayPage() {
   }, [syncEnabled, syncRole, pdfId, currentIdx, isPlaying, currentTime, followerAudioUnlocked]);
 
   useEffect(() => {
+    if (!syncEnabled || syncRole !== 'master' || !pdfId) return;
+    if (!imageOnlyFullscreen) return;
+    const root = fullscreenContainerRef.current;
+    if (!root) return;
+    const flush = () => {
+      cursorPushRafRef.current = null;
+      const next = pendingCursorRef.current;
+      if (!next || !syncClientIdRef.current) return;
+      pendingCursorRef.current = null;
+      void updatePlaybackSyncState(pdfId, syncClientIdRef.current, {
+        page_number: Math.max(1, currentIdx + 1),
+        is_playing: isPlaying,
+        current_time: Number.isFinite(currentTime) ? Math.max(0, currentTime) : 0,
+        follower_audio_unlocked: followerAudioUnlocked,
+        cursor_x: next.x,
+        cursor_y: next.y,
+      }).catch(() => undefined);
+    };
+    const onPointerMove = (ev: PointerEvent) => {
+      const rect = (fullscreenImageRef.current ?? root).getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      if (
+        ev.clientX < rect.left ||
+        ev.clientX > rect.right ||
+        ev.clientY < rect.top ||
+        ev.clientY > rect.bottom
+      ) {
+        return;
+      }
+      const x = Math.min(1, Math.max(0, (ev.clientX - rect.left) / rect.width));
+      const y = Math.min(1, Math.max(0, (ev.clientY - rect.top) / rect.height));
+      pendingCursorRef.current = { x, y };
+      if (cursorPushRafRef.current == null) {
+        cursorPushRafRef.current = window.setTimeout(
+          flush,
+          imageOnlyFullscreen ? SYNC_CURSOR_PUSH_INTERVAL_FULLSCREEN_MS : SYNC_CURSOR_PUSH_INTERVAL_MS,
+        );
+      }
+    };
+    root.addEventListener('pointermove', onPointerMove);
+    return () => {
+      root.removeEventListener('pointermove', onPointerMove);
+      if (cursorPushRafRef.current != null) {
+        window.clearTimeout(cursorPushRafRef.current);
+        cursorPushRafRef.current = null;
+      }
+      pendingCursorRef.current = null;
+    };
+  }, [syncEnabled, syncRole, pdfId, imageOnlyFullscreen, currentIdx, isPlaying, currentTime, followerAudioUnlocked]);
+
+  useEffect(() => {
     if (!syncEnabled || !pdfId || !syncClientIdRef.current) return;
     // eslint-disable-next-line no-console
     console.info('[sync][poll] start', {
@@ -965,6 +1024,9 @@ export default function PlayPage() {
       clientId: syncClientIdRef.current,
       localRole: syncRole,
     });
+    const pollInterval = imageOnlyFullscreen
+      ? SYNC_POLL_INTERVAL_FULLSCREEN_MS
+      : SYNC_POLL_INTERVAL_MS;
     const timer = window.setInterval(() => {
       void (async () => {
         try {
@@ -987,6 +1049,14 @@ export default function PlayPage() {
           setSyncFollowerQuestions(state.follower_questions ?? []);
           setSyncDisplayedQuestionId(state.displayed_question_id ?? null);
           setSyncAiAnswer(state.ai_answer ?? null);
+          if (typeof state.cursor_x === 'number' && typeof state.cursor_y === 'number') {
+            setRemoteCursor({
+              x: Math.min(1, Math.max(0, state.cursor_x)),
+              y: Math.min(1, Math.max(0, state.cursor_y)),
+            });
+          } else {
+            setRemoteCursor(null);
+          }
           if (
             state.role !== 'master'
             && imageOnlyFullscreen
@@ -1028,7 +1098,7 @@ export default function PlayPage() {
           applyingRemoteSyncRef.current = false;
         }
       })();
-    }, 1200);
+    }, pollInterval);
     return () => {
       // eslint-disable-next-line no-console
       console.info('[sync][poll] stop', {
@@ -1120,8 +1190,13 @@ export default function PlayPage() {
       }
       if (ev.key === ' ' || ev.code === 'Space') {
         ev.preventDefault();
-        // 空白鍵固定為下一頁，不再切換播放/暫停
-        goNext();
+        // 全螢幕模式下，空白鍵切換播放/暫停；非全螢幕維持下一頁。
+        const isFullscreen = Boolean(getAnyFullscreenElement()) || imageOnlyFullscreen;
+        if (isFullscreen) {
+          playPause();
+        } else {
+          goNext();
+        }
       } else if (ev.key === 'ArrowLeft') {
         ev.preventDefault();
         goPrev();
@@ -2121,7 +2196,11 @@ export default function PlayPage() {
       {imageOnlyFullscreen ? (
         <div
           ref={fullscreenContainerRef}
-          className="fixed inset-0 z-[100] flex cursor-pointer items-center justify-center bg-black"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black"
+          style={{
+            cursor:
+              "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56' viewBox='0 0 56 56'%3E%3Ccircle cx='28' cy='28' r='8' fill='none' stroke='%23ef4444' stroke-width='2.5'/%3E%3Cline x1='28' y1='2' x2='28' y2='20' stroke='%23ef4444' stroke-width='2.5' stroke-linecap='round'/%3E%3Cline x1='28' y1='36' x2='28' y2='54' stroke='%23ef4444' stroke-width='2.5' stroke-linecap='round'/%3E%3Cline x1='2' y1='28' x2='20' y2='28' stroke='%23ef4444' stroke-width='2.5' stroke-linecap='round'/%3E%3Cline x1='36' y1='28' x2='54' y2='28' stroke='%23ef4444' stroke-width='2.5' stroke-linecap='round'/%3E%3Ccircle cx='28' cy='28' r='1.5' fill='%23ef4444'/%3E%3C/svg%3E\") 28 28, crosshair",
+          }}
           onClick={() => playPause()}
           role="button"
           tabIndex={-1}
@@ -2136,6 +2215,7 @@ export default function PlayPage() {
           ) : null}
           {currentPage?.image_url ? (
             <img
+              ref={fullscreenImageRef}
               src={withImageBust(currentPage.image_url) ?? currentPage.image_url}
               alt={`第 ${currentPage.page_number} 頁`}
               className="max-h-screen max-w-screen object-contain"
@@ -2170,6 +2250,33 @@ export default function PlayPage() {
               >
                 <p className={`${syncOverlayIsAiAnswer ? '' : 'line-clamp-5'} whitespace-pre-wrap`}>{syncOverlayText}</p>
               </div>
+            </div>
+          ) : null}
+          {syncEnabled && syncRole === 'follower' && remoteCursor ? (
+            <div
+              className="pointer-events-none absolute z-[130]"
+              style={(() => {
+                const rootRect = fullscreenContainerRef.current?.getBoundingClientRect();
+                const imageRect = (fullscreenImageRef.current ?? fullscreenContainerRef.current)?.getBoundingClientRect();
+                if (!rootRect || !imageRect || rootRect.width <= 0 || rootRect.height <= 0) {
+                  return {
+                    left: `${remoteCursor.x * 100}%`,
+                    top: `${remoteCursor.y * 100}%`,
+                    transform: 'translate(-50%, -50%)',
+                  } as const;
+                }
+                const leftPx = imageRect.left - rootRect.left + remoteCursor.x * imageRect.width;
+                const topPx = imageRect.top - rootRect.top + remoteCursor.y * imageRect.height;
+                return {
+                  left: `${(leftPx / rootRect.width) * 100}%`,
+                  top: `${(topPx / rootRect.height) * 100}%`,
+                  transform: 'translate(-50%, -50%)',
+                } as const;
+              })()}
+            >
+              <div className="h-8 w-8 rounded-full border-2 border-red-500/90 shadow-[0_0_10px_rgba(239,68,68,0.75)]" />
+              <div className="absolute left-1/2 top-1/2 h-12 w-[2px] -translate-x-1/2 -translate-y-1/2 bg-red-500/85" />
+              <div className="absolute left-1/2 top-1/2 h-[2px] w-12 -translate-x-1/2 -translate-y-1/2 bg-red-500/85" />
             </div>
           ) : null}
           {syncEnabled && syncRole === 'follower' ? (

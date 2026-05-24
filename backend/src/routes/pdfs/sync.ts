@@ -24,6 +24,8 @@ interface SyncSessionState {
   displayedQuestionId: string | null;
   aiAnswer: SyncAiAnswer | null;
   updatedAt: string;
+  cursorX: number | null;
+  cursorY: number | null;
 }
 
 interface SyncFollowerQuestion {
@@ -195,6 +197,8 @@ function buildStateResponse(session: SyncSessionState, pdfId: string, role: Sync
     updated_at: session.updatedAt,
     master_expires_at: session.masterClientId ? new Date(session.masterExpiresAt).toISOString() : null,
     online_count: onlineClientCount(session),
+    cursor_x: session.cursorX,
+    cursor_y: session.cursorY,
   };
 }
 
@@ -237,6 +241,8 @@ function getSession(pdfId: string): SyncSessionState {
     displayedQuestionId: null,
     aiAnswer: null,
     updatedAt: persisted?.updated_at ?? nowIso(),
+    cursorX: null,
+    cursorY: null,
   };
   sessions.set(pdfId, created);
   return created;
@@ -287,6 +293,8 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     quiz_mode: z.boolean().optional(),
     active_quiz_id: z.number().int().positive().nullable().optional(),
     quiz_show_answers: z.boolean().optional(),
+    cursor_x: z.number().min(0).max(1).nullable().optional(),
+    cursor_y: z.number().min(0).max(1).nullable().optional(),
   });
   const StateQuerySchema = z.object({ client_id: z.string().trim().min(1).max(128).optional() });
 
@@ -340,6 +348,8 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       quiz_mode: quizMode,
       active_quiz_id: activeQuizId,
       quiz_show_answers: quizShowAnswers,
+      cursor_x: cursorX,
+      cursor_y: cursorY,
     } = parsedBody.data;
     const session = getSession(id);
     touchClient(session, clientId);
@@ -364,6 +374,8 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
         session.quizShowAnswers = false;
       }
     }
+    if (typeof cursorX !== 'undefined') session.cursorX = cursorX;
+    if (typeof cursorY !== 'undefined') session.cursorY = cursorY;
     session.updatedAt = nowIso();
     upsertPersistedSession(session);
     return reply.send({ ok: true, role: 'master', updated_at: session.updatedAt });
