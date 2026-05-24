@@ -225,6 +225,7 @@ export default function PlayPage() {
   const [titleBusy, setTitleBusy] = useState(false);
   const [titleMsg, setTitleMsg] = useState<string | null>(null);
   const [editTab, setEditTab] = useState<'script' | 'prompt' | 'system'>('script');
+  const [playerCompactMode, setPlayerCompactMode] = useState(false);
   const [promptInput, setPromptInput] = useState('');
   const [promptBusy, setPromptBusy] = useState(false);
   const [promptMsg, setPromptMsg] = useState<string | null>(null);
@@ -2693,12 +2694,18 @@ export default function PlayPage() {
         {/* Left: player + script（手機：僅於 play tab 顯示；桌面：永遠顯示） */}
         <div
           className={`min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950/70 md:flex ${
+            playerCompactMode ? 'md:grid md:grid-cols-[minmax(0,1fr)_320px] md:grid-rows-[auto_1fr] md:items-start' : ''
+          } ${
             activeTab === 'play' ? 'flex' : 'hidden'
           }`}
         >
           {/* Slide image */}
           <section
-            className="flex flex-1 items-center justify-center px-4 py-6"
+            className={`flex items-center justify-center px-4 py-6 ${
+              playerCompactMode
+                ? 'md:col-start-2 md:row-start-1 md:flex-none md:px-3 md:py-3'
+                : 'flex-1'
+            }`}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
               e.preventDefault();
@@ -2724,7 +2731,7 @@ export default function PlayPage() {
             }}
             tabIndex={0}
           >
-            <div className="relative flex h-full w-full max-w-4xl items-center justify-center">
+            <div className={`relative flex h-full w-full items-center justify-center ${playerCompactMode ? 'max-w-xs' : 'max-w-4xl'}`}>
               {playQrCodeUrl ? (
                 <div className="flex flex-col items-center gap-3 rounded-lg border border-slate-700 bg-slate-900/80 p-4 shadow-xl">
                   <img
@@ -2736,17 +2743,17 @@ export default function PlayPage() {
                   {shareUrl ? <p className="max-w-[85vw] break-all text-center text-xs text-slate-300">{shareUrl}</p> : null}
                 </div>
               ) : currentPage?.image_url ? (
-                <img
-                  key={currentPage.page_number}
-                  src={withImageBust(currentPage.image_url) ?? currentPage.image_url}
-                  alt={`第 ${currentPage.page_number} 頁`}
-                  className="w-auto rounded-lg border border-slate-800 shadow-xl"
-                  style={{ maxHeight: `${slideImageMaxHeightVh}vh` }}
-                />
+                  <img
+                    key={currentPage.page_number}
+                    src={withImageBust(currentPage.image_url) ?? currentPage.image_url}
+                    alt={`第 ${currentPage.page_number} 頁`}
+                    className="w-auto rounded-lg border border-slate-800 shadow-xl"
+                    style={{ maxHeight: playerCompactMode ? '22vh' : `${slideImageMaxHeightVh}vh` }}
+                  />
               ) : (
                 <div
                   className="flex w-full items-center justify-center rounded-lg border border-slate-800 text-slate-500"
-                  style={{ height: `${slideImageMaxHeightVh}vh` }}
+                  style={{ height: playerCompactMode ? '22vh' : `${slideImageMaxHeightVh}vh` }}
                 >
                   {detail?.status === 'awaiting_script_confirmation' ? '等待確認分頁結果（確認後將開始產生圖片）' : '圖片產生中…'}
                 </div>
@@ -2762,8 +2769,8 @@ export default function PlayPage() {
           </section>
 
           {/* Controls */}
-          <section className="border-t border-slate-800 bg-slate-900/50">
-            <div className="flex flex-col gap-3 px-4 py-4">
+          <section className={`border-t border-slate-800 bg-slate-900/50 ${playerCompactMode ? 'md:col-start-2 md:row-start-2' : ''}`}>
+            <div className={`flex flex-col gap-3 px-4 py-4 ${playerCompactMode ? 'md:px-3 md:py-3' : ''}`}>
           {audioError && (
             <div className="flex items-center justify-between rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
               <span>{audioError}</span>
@@ -2941,7 +2948,7 @@ export default function PlayPage() {
           </section>
 
           {/* Script panel */}
-          <section className="border-t border-slate-800 bg-slate-950">
+          <section className={`border-t border-slate-800 bg-slate-950 ${playerCompactMode ? 'md:col-start-1 md:row-span-2 md:row-start-1 md:h-full md:border-r' : ''}`}>
             <div className="px-4 py-4">
               <div className="mb-3 flex overflow-hidden rounded-md border border-slate-700 bg-slate-900/60">
                 <button
@@ -2965,6 +2972,17 @@ export default function PlayPage() {
                 >
                   🧾 系統資料
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setPlayerCompactMode((compact) => !compact)}
+                  className={`shrink-0 border-l border-slate-700 px-3 py-1.5 text-sm ${
+                    playerCompactMode ? 'bg-emerald-500/15 text-emerald-200' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                  }`}
+                  aria-pressed={playerCompactMode}
+                  title={playerCompactMode ? '還原播放器版面' : '縮小播放器，放大逐字稿編輯區'}
+                >
+                  {playerCompactMode ? '↙️' : '↗️'}
+                </button>
               </div>
 
               {editTab === 'script' ? (
@@ -2976,7 +2994,7 @@ export default function PlayPage() {
                     value={editingScript}
                     onChange={(e) => setEditingScript(e.target.value)}
                     disabled={isReadOnlyProcessing}
-                    rows={6}
+                    rows={playerCompactMode ? 18 : 6}
                     className="w-full rounded-md border border-slate-700 bg-slate-900/70 p-3 text-sm leading-relaxed text-slate-100 outline-none ring-emerald-500/40 placeholder:text-slate-500 focus:ring"
                     placeholder="請輸入本頁逐字稿..."
                   />
