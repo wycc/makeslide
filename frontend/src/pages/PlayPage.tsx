@@ -304,6 +304,8 @@ export default function PlayPage() {
   const [syncFollowerQuestions, setSyncFollowerQuestions] = useState<SyncFollowerQuestion[]>([]);
   const [syncDisplayedQuestionId, setSyncDisplayedQuestionId] = useState<string | null>(null);
   const [syncAiAnswer, setSyncAiAnswer] = useState<SyncAiAnswer | null>(null);
+  const [syncRealtimePollStarted, setSyncRealtimePollStarted] = useState(false);
+  const [syncPollShowResults, setSyncPollShowResults] = useState(false);
   const [syncAiAnswerBusy, setSyncAiAnswerBusy] = useState(false);
   const [syncQuestionInput, setSyncQuestionInput] = useState('');
   const [syncQuestionBusy] = useState(false);
@@ -904,6 +906,8 @@ export default function PlayPage() {
         setSyncFollowerQuestions(joined.follower_questions ?? []);
         setSyncDisplayedQuestionId(joined.displayed_question_id ?? null);
         setSyncAiAnswer(joined.ai_answer ?? null);
+        setSyncRealtimePollStarted(Boolean(joined.realtime_poll_started));
+        setSyncPollShowResults(Boolean(joined.quiz_show_answers));
         setSyncError(null);
       } catch (err) {
         if (cancelled) return;
@@ -960,10 +964,12 @@ export default function PlayPage() {
       is_playing: isPlaying,
       current_time: time,
       follower_audio_unlocked: followerAudioUnlocked,
+      realtime_poll_started: pollStarted,
+      quiz_show_answers: syncPollShowResults,
     }).catch((err) => {
       setSyncError(err instanceof ApiError ? err.message : '同步狀態更新失敗');
     });
-  }, [syncEnabled, syncRole, pdfId, currentIdx, isPlaying, currentTime, followerAudioUnlocked]);
+  }, [syncEnabled, syncRole, pdfId, currentIdx, isPlaying, currentTime, followerAudioUnlocked, pollStarted, syncPollShowResults]);
 
   useEffect(() => {
     if (!syncEnabled || syncRole !== 'master' || !pdfId) return;
@@ -980,6 +986,8 @@ export default function PlayPage() {
         is_playing: isPlaying,
         current_time: Number.isFinite(currentTime) ? Math.max(0, currentTime) : 0,
         follower_audio_unlocked: followerAudioUnlocked,
+        realtime_poll_started: pollStarted,
+        quiz_show_answers: syncPollShowResults,
         cursor_x: next.x,
         cursor_y: next.y,
       }).catch(() => undefined);
@@ -1014,7 +1022,7 @@ export default function PlayPage() {
       }
       pendingCursorRef.current = null;
     };
-  }, [syncEnabled, syncRole, pdfId, imageOnlyFullscreen, currentIdx, isPlaying, currentTime, followerAudioUnlocked]);
+  }, [syncEnabled, syncRole, pdfId, imageOnlyFullscreen, currentIdx, isPlaying, currentTime, followerAudioUnlocked, pollStarted, syncPollShowResults]);
 
   useEffect(() => {
     if (!syncEnabled || !pdfId || !syncClientIdRef.current) return;
@@ -1049,6 +1057,8 @@ export default function PlayPage() {
           setSyncFollowerQuestions(state.follower_questions ?? []);
           setSyncDisplayedQuestionId(state.displayed_question_id ?? null);
           setSyncAiAnswer(state.ai_answer ?? null);
+          setSyncRealtimePollStarted(Boolean(state.realtime_poll_started));
+          setSyncPollShowResults(Boolean(state.quiz_show_answers));
           if (typeof state.cursor_x === 'number' && typeof state.cursor_y === 'number') {
             setRemoteCursor({
               x: Math.min(1, Math.max(0, state.cursor_x)),
@@ -1350,8 +1360,10 @@ export default function PlayPage() {
     }
   }, []);
 
+  const shouldFetchPolls = pollStarted || (syncEnabled && syncRole === 'follower' && syncRealtimePollStarted);
+
   useEffect(() => {
-    if (!pollStarted || !pdfId || !currentPage) return;
+    if (!shouldFetchPolls || !pdfId || !currentPage) return;
     let cancelled = false;
     let timer: number | null = null;
     const loadPolls = async () => {
@@ -1370,7 +1382,7 @@ export default function PlayPage() {
       cancelled = true;
       if (timer != null) window.clearTimeout(timer);
     };
-  }, [pollStarted, pdfId, currentPage?.page_number]);
+  }, [shouldFetchPolls, pdfId, currentPage?.page_number]);
 
   const handleSendChat = useCallback(async () => {
     if (isReadOnlyProcessing) return;
@@ -1434,6 +1446,7 @@ export default function PlayPage() {
 
   const handleStopPoll = useCallback(() => {
     setPollStarted(false);
+    setSyncPollShowResults(false);
     setPagePolls([]);
     setPollVotes({});
     setPollError(null);
@@ -2190,6 +2203,11 @@ export default function PlayPage() {
     : null;
   const syncOverlayText = syncAiAnswer?.answer || syncDisplayedQuestion?.question || '';
   const syncOverlayIsAiAnswer = Boolean(syncAiAnswer?.answer);
+  const activePoll =
+    (pollStarted || (syncEnabled && syncRole === 'follower' && syncRealtimePollStarted)) && pagePolls.length > 0
+      ? pagePolls.find((poll) => poll.is_active) ?? pagePolls[0] ?? null
+      : null;
+  const activePollQuestion = activePoll?.question ?? '';
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
@@ -2343,6 +2361,49 @@ export default function PlayPage() {
             <div className="pointer-events-none absolute bottom-4 left-1/2 w-[min(92vw,1000px)] -translate-x-1/2 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
               <div className="mx-auto rounded-md bg-cyan-950/90 px-4 py-3 text-center text-base font-medium leading-relaxed text-cyan-50 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] md:text-lg">
                 <p className="whitespace-pre-wrap">等待下一頁…</p>
+              </div>
+            </div>
+          ) : activePollQuestion ? (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/35 px-4">
+              <div className="w-[min(92vw,1100px)] rounded-xl border border-cyan-200/70 bg-slate-950/95 px-5 py-5 text-center text-white shadow-[0_18px_50px_rgba(0,0,0,0.78)] backdrop-blur-md md:px-8 md:py-7">
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-200">Realtime Poll</p>
+                <p className="mt-3 whitespace-pre-wrap text-2xl font-extrabold leading-relaxed text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] md:text-4xl">
+                  {activePollQuestion}
+                </p>
+                {activePoll?.options?.length ? (
+                  <div className="mt-5 grid grid-cols-1 gap-2 text-left md:grid-cols-2 md:gap-3">
+                    {activePoll.options.map((option, idx) => (
+                      <button
+                        key={`${activePoll.id}-${idx}`}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleVotePoll(activePoll.id, idx);
+                        }}
+                        disabled={pollBusy || !activePoll.is_active}
+                        className={`rounded-lg border px-4 py-3 text-left text-base font-semibold shadow-[0_2px_10px_rgba(0,0,0,0.35)] md:text-lg ${
+                          pollVotes[activePoll.id] === idx
+                            ? 'border-emerald-300/90 bg-emerald-600/45 text-white'
+                            : 'border-cyan-200/65 bg-slate-900/88 text-white hover:bg-slate-800/95'
+                        } disabled:cursor-not-allowed disabled:opacity-55`}
+                      >
+                        <span className="mr-2 text-cyan-200">{idx + 1}.</span>
+                        <span className="whitespace-pre-wrap">{option.text}</span>
+                        {syncPollShowResults ? (
+                          <span className="mt-2 block text-xs text-cyan-100/90">
+                            {option.votes} 票
+                            {activePoll.total_votes > 0
+                              ? ` · ${Math.round((option.votes / activePoll.total_votes) * 100)}%`
+                              : ' · 0%'}
+                          </span>
+                        ) : null}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {syncPollShowResults ? (
+                  <p className="mt-3 text-xs text-cyan-100/90">目前總票數：{activePoll?.total_votes ?? 0}</p>
+                ) : null}
               </div>
             </div>
           ) : currentSentence ? (
@@ -3456,6 +3517,15 @@ export default function PlayPage() {
                     開始
                   </button>
                 )}
+                {syncEnabled && syncRole === 'master' && pollStarted ? (
+                  <button
+                    type="button"
+                    onClick={() => setSyncPollShowResults((v) => !v)}
+                    className="rounded-md border border-emerald-500/50 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-200 hover:bg-emerald-500/20"
+                  >
+                    {syncPollShowResults ? '隱藏結果' : '顯示結果'}
+                  </button>
+                ) : null}
               </div>
             </div>
             {(pollSettingsOpen || pollStarted || pollError) && (
