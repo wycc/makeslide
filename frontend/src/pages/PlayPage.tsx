@@ -225,7 +225,6 @@ export default function PlayPage() {
   const [titleBusy, setTitleBusy] = useState(false);
   const [titleMsg, setTitleMsg] = useState<string | null>(null);
   const [editTab, setEditTab] = useState<'script' | 'prompt' | 'system'>('script');
-  const [playerCompactMode, setPlayerCompactMode] = useState(false);
   const [promptInput, setPromptInput] = useState('');
   const [promptBusy, setPromptBusy] = useState(false);
   const [promptMsg, setPromptMsg] = useState<string | null>(null);
@@ -289,6 +288,7 @@ export default function PlayPage() {
   // 手機模式下的 tab 切換（桌面模式忽略此 state，永遠並排顯示）
   const [activeTab, setActiveTab] = useState<'play' | 'qa'>('play');
   const [qaPanelExpanded, setQaPanelExpanded] = useState(false);
+  const [transcriptFocusMode, setTranscriptFocusMode] = useState(false);
   const [syncEnabled, setSyncEnabled] = useState(false);
   const [syncRole, setSyncRole] = useState<'master' | 'follower'>('follower');
   const [audioMuted, setAudioMuted] = useState(false);
@@ -2489,7 +2489,7 @@ export default function PlayPage() {
             {shareMessage ? <div className="text-emerald-300">{shareMessage}</div> : null}
             {shareError ? <div className="text-rose-300">{shareError}</div> : null}
           </div>
-          {/* 手機：一排 3 欄（設定 / 產生影片 / 開啟影片）；桌面：維持原本 flex 排列。
+          {/* 手機：一排 3 欄（設定 / 產生影片 / 下載影片）；桌面：維持原本 flex 排列。
               註：「重生」按鍵已搬到右側問答區（aside）。 */}
           <div className="grid grid-cols-3 gap-2 md:flex md:flex-wrap md:items-center md:justify-end md:gap-2">
             <button
@@ -2558,11 +2558,10 @@ export default function PlayPage() {
             {videoUrl ? (
               <a
                 href={videoUrl}
-                target="_blank"
-                rel="noreferrer"
+                download
                 className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-center text-sm text-cyan-200 hover:bg-cyan-500/25"
               >
-                開啟影片
+                下載影片
               </a>
             ) : (
               <button
@@ -2571,7 +2570,7 @@ export default function PlayPage() {
                 className="cursor-not-allowed rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-500 opacity-60"
                 title="尚未產生影片"
               >
-                開啟影片
+                下載影片
               </button>
             )}
             <a
@@ -2693,19 +2692,17 @@ export default function PlayPage() {
 
         {/* Left: player + script（手機：僅於 play tab 顯示；桌面：永遠顯示） */}
         <div
-          className={`min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950/70 md:flex ${
-            playerCompactMode ? 'md:grid md:grid-cols-[minmax(0,1fr)_320px] md:grid-rows-[auto_1fr] md:items-start' : ''
-          } ${
+          className={`relative min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950/70 md:flex ${
             activeTab === 'play' ? 'flex' : 'hidden'
           }`}
         >
           {/* Slide image */}
           <section
-            className={`flex items-center justify-center px-4 py-6 ${
-              playerCompactMode
-                ? 'md:col-start-2 md:row-start-1 md:flex-none md:px-3 md:py-3'
-                : 'flex-1'
-            }`}
+            className={
+              transcriptFocusMode
+                ? 'absolute right-4 top-4 z-20 flex h-40 w-64 items-center justify-center rounded-lg border border-slate-700 bg-slate-950/95 px-2 py-2 shadow-2xl md:h-48 md:w-80'
+                : 'flex flex-1 items-center justify-center px-4 py-6'
+            }
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
               e.preventDefault();
@@ -2731,29 +2728,29 @@ export default function PlayPage() {
             }}
             tabIndex={0}
           >
-            <div className={`relative flex h-full w-full items-center justify-center ${playerCompactMode ? 'max-w-xs' : 'max-w-4xl'}`}>
+            <div className="relative flex h-full w-full max-w-4xl items-center justify-center">
               {playQrCodeUrl ? (
                 <div className="flex flex-col items-center gap-3 rounded-lg border border-slate-700 bg-slate-900/80 p-4 shadow-xl">
                   <img
                     src={playQrCodeUrl}
                     alt="分享連結 QR Code"
                     className="w-auto rounded-md border border-slate-700 bg-white p-2"
-                    style={{ maxHeight: `${slideImageMaxHeightVh}vh` }}
+                    style={{ maxHeight: transcriptFocusMode ? '8rem' : `${slideImageMaxHeightVh}vh` }}
                   />
-                  {shareUrl ? <p className="max-w-[85vw] break-all text-center text-xs text-slate-300">{shareUrl}</p> : null}
+                  {!transcriptFocusMode && shareUrl ? <p className="max-w-[85vw] break-all text-center text-xs text-slate-300">{shareUrl}</p> : null}
                 </div>
               ) : currentPage?.image_url ? (
-                  <img
-                    key={currentPage.page_number}
-                    src={withImageBust(currentPage.image_url) ?? currentPage.image_url}
-                    alt={`第 ${currentPage.page_number} 頁`}
-                    className="w-auto rounded-lg border border-slate-800 shadow-xl"
-                    style={{ maxHeight: playerCompactMode ? '22vh' : `${slideImageMaxHeightVh}vh` }}
-                  />
+                <img
+                  key={currentPage.page_number}
+                  src={withImageBust(currentPage.image_url) ?? currentPage.image_url}
+                  alt={`第 ${currentPage.page_number} 頁`}
+                  className="w-auto rounded-lg border border-slate-800 shadow-xl"
+                  style={{ maxHeight: transcriptFocusMode ? '10rem' : `${slideImageMaxHeightVh}vh` }}
+                />
               ) : (
                 <div
                   className="flex w-full items-center justify-center rounded-lg border border-slate-800 text-slate-500"
-                  style={{ height: playerCompactMode ? '22vh' : `${slideImageMaxHeightVh}vh` }}
+                  style={{ height: transcriptFocusMode ? '10rem' : `${slideImageMaxHeightVh}vh` }}
                 >
                   {detail?.status === 'awaiting_script_confirmation' ? '等待確認分頁結果（確認後將開始產生圖片）' : '圖片產生中…'}
                 </div>
@@ -2769,8 +2766,8 @@ export default function PlayPage() {
           </section>
 
           {/* Controls */}
-          <section className={`border-t border-slate-800 bg-slate-900/50 ${playerCompactMode ? 'md:col-start-2 md:row-start-2' : ''}`}>
-            <div className={`flex flex-col gap-3 px-4 py-4 ${playerCompactMode ? 'md:px-3 md:py-3' : ''}`}>
+          <section className={transcriptFocusMode ? 'absolute right-4 top-44 z-20 w-64 rounded-lg border border-slate-700 bg-slate-950/95 shadow-2xl md:top-56 md:w-80' : 'border-t border-slate-800 bg-slate-900/50'}>
+            <div className={transcriptFocusMode ? 'flex flex-col gap-2 px-3 py-3' : 'flex flex-col gap-3 px-4 py-4'}>
           {audioError && (
             <div className="flex items-center justify-between rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
               <span>{audioError}</span>
@@ -2793,7 +2790,7 @@ export default function PlayPage() {
               本頁播放完畢，停留在目前頁。按空白鍵進入下一頁並播放。
             </div>
           )}
-          <div className="flex items-center gap-3">
+          <div className={`flex items-center gap-3 ${transcriptFocusMode ? 'flex-wrap' : ''}`}>
             <button
               type="button"
               onClick={goPrev}
@@ -2846,7 +2843,7 @@ export default function PlayPage() {
               {formatTime(currentTime)} / {formatTime(duration)}
             </div>
           </div>
-          <div className="rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">
+          <div className={transcriptFocusMode ? 'hidden' : 'rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300'}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-semibold text-slate-200">播放設定</span>
@@ -2948,8 +2945,8 @@ export default function PlayPage() {
           </section>
 
           {/* Script panel */}
-          <section className={`border-t border-slate-800 bg-slate-950 ${playerCompactMode ? 'md:col-start-1 md:row-span-2 md:row-start-1 md:h-full md:border-r' : ''}`}>
-            <div className="px-4 py-4">
+          <section className={`border-t border-slate-800 bg-slate-950 ${transcriptFocusMode ? 'flex min-h-[65vh] flex-1 flex-col' : ''}`}>
+            <div className={`px-4 py-4 ${transcriptFocusMode ? 'flex flex-1 flex-col pr-4 md:pr-[22rem]' : ''}`}>
               <div className="mb-3 flex overflow-hidden rounded-md border border-slate-700 bg-slate-900/60">
                 <button
                   type="button"
@@ -2974,14 +2971,14 @@ export default function PlayPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setPlayerCompactMode((compact) => !compact)}
+                  onClick={() => setTranscriptFocusMode((enabled) => !enabled)}
                   className={`shrink-0 border-l border-slate-700 px-3 py-1.5 text-sm ${
-                    playerCompactMode ? 'bg-emerald-500/15 text-emerald-200' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                    transcriptFocusMode ? 'bg-emerald-500/15 text-emerald-200' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
                   }`}
-                  aria-pressed={playerCompactMode}
-                  title={playerCompactMode ? '還原播放器版面' : '縮小播放器，放大逐字稿編輯區'}
+                  aria-pressed={transcriptFocusMode}
+                  title={transcriptFocusMode ? '還原播放器版面' : '縮小播放器，放大逐字稿編輯區'}
                 >
-                  {playerCompactMode ? '↙️' : '↗️'}
+                  {transcriptFocusMode ? '↙' : '↗'}
                 </button>
               </div>
 
@@ -2994,8 +2991,8 @@ export default function PlayPage() {
                     value={editingScript}
                     onChange={(e) => setEditingScript(e.target.value)}
                     disabled={isReadOnlyProcessing}
-                    rows={playerCompactMode ? 18 : 6}
-                    className="w-full rounded-md border border-slate-700 bg-slate-900/70 p-3 text-sm leading-relaxed text-slate-100 outline-none ring-emerald-500/40 placeholder:text-slate-500 focus:ring"
+                    rows={transcriptFocusMode ? 18 : 6}
+                    className={`w-full rounded-md border border-slate-700 bg-slate-900/70 p-3 text-sm leading-relaxed text-slate-100 outline-none ring-emerald-500/40 placeholder:text-slate-500 focus:ring ${transcriptFocusMode ? 'min-h-[55vh] flex-1' : ''}`}
                     placeholder="請輸入本頁逐字稿..."
                   />
                   <div className="mt-2 flex items-center justify-between gap-3">
