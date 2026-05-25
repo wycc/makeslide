@@ -225,7 +225,6 @@ export default function PlayPage() {
   const [chatBusy, setChatBusy] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const [videoBusy, setVideoBusy] = useState(false);
-  const [videoBusySeconds, setVideoBusySeconds] = useState(0);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [titleInput, setTitleInput] = useState('');
@@ -1706,7 +1705,6 @@ export default function PlayPage() {
     if (isReadOnlyProcessing) return;
     if (!pdfId) return;
     setVideoBusy(true);
-    setVideoBusySeconds(0);
     setVideoError(null);
     try {
       const res = await generatePdfVideo(pdfId);
@@ -1720,15 +1718,43 @@ export default function PlayPage() {
   }, [pdfId, isReadOnlyProcessing]);
 
   useEffect(() => {
-    if (!videoBusy) {
-      setVideoBusySeconds(0);
+    if (!videoBusy || !pdfId) return;
+    let cancelled = false;
+    const timer = window.setInterval(() => {
+      void (async () => {
+        try {
+          const d = await fetchPdfDetail(pdfId);
+          if (cancelled) return;
+          setDetail((prev) => {
+            if (!prev) return d;
+            return {
+              ...prev,
+              progress_step: d.progress_step,
+              progress_current: d.progress_current,
+              progress_total: d.progress_total,
+              updated_at: d.updated_at,
+            };
+          });
+        } catch {
+          // non-fatal while video rendering
+        }
+      })();
+    }, 1000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [videoBusy, pdfId]);
+
+  useEffect(() => {
+    const isRenderingVideo = detail?.progress_step === 'rendering_video';
+    if (isRenderingVideo) {
+      setVideoBusy(true);
+      setVideoError(null);
       return;
     }
-    const timer = window.setInterval(() => {
-      setVideoBusySeconds((prev) => prev + 1);
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, [videoBusy]);
+    setVideoBusy(false);
+  }, [detail?.progress_step]);
 
   const handleSaveTtsSettings = useCallback(async () => {
     if (isReadOnlyProcessing) return;
@@ -2310,6 +2336,12 @@ export default function PlayPage() {
       )
       : null;
   const activePollQuestion = activePoll?.question ?? '';
+  const videoProgressCurrent = Math.max(0, detail.progress_current ?? 0);
+  const videoProgressTotal = Math.max(0, detail.progress_total ?? 0);
+  const videoProgressText =
+    videoBusy && videoProgressTotal > 0
+      ? `${videoProgressCurrent}/${videoProgressTotal}`
+      : null;
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
@@ -2818,7 +2850,7 @@ export default function PlayPage() {
               className="rounded-md border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-sm text-amber-200 hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {videoBusy
-                ? `產生影片中… ${videoBusySeconds}s`
+                ? `產生影片中…${videoProgressText ? ` ${videoProgressText}` : ''}`
                 : videoUrl
                   ? '重新產生影片'
                   : '產生影片'}

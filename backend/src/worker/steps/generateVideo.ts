@@ -8,6 +8,7 @@ export interface GenerateVideoInput {
   pdfId: string;
   pageCount: number;
   pageNumbers: number[];
+  onProgress?: (current: number, total: number) => Promise<void> | void;
 }
 
 export interface GenerateVideoResult {
@@ -17,7 +18,7 @@ export interface GenerateVideoResult {
 export async function generateVideo(
   input: GenerateVideoInput,
 ): Promise<GenerateVideoResult> {
-  const { pdfId, pageCount, pageNumbers } = input;
+  const { pdfId, pageCount, pageNumbers, onProgress } = input;
   if (pageNumbers.length === 0) {
     throw new Error('No pages available for video rendering');
   }
@@ -63,6 +64,7 @@ export async function generateVideo(
       ]);
 
       segmentPaths.push(segment);
+      await onProgress?.(segmentPaths.length, pageNumbers.length);
     }
 
     if (segmentPaths.length === 0) {

@@ -851,14 +851,41 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
     }
 
     try {
+      const startedAt = nowIso();
+      db.prepare(
+        `UPDATE pdfs
+            SET progress_step = ?,
+                progress_current = ?,
+                progress_total = ?,
+                error_message = NULL,
+                updated_at = ?
+          WHERE id = ?`,
+      ).run('rendering_video', 0, pageNumbers.length, startedAt, id);
       const result = await generateVideo({
         pdfId: id,
         pageCount: pdfRow.page_count,
         pageNumbers,
+        onProgress: (current, total) => {
+          db.prepare(
+            `UPDATE pdfs
+                SET progress_step = ?,
+                    progress_current = ?,
+                    progress_total = ?,
+                    updated_at = ?
+              WHERE id = ?`,
+          ).run('rendering_video', current, total, nowIso(), id);
+        },
       });
       const relVideo = path.relative(path.join(config.storageRoot, id), result.outputPath);
       const updatedAt = nowIso();
-      db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(updatedAt, id);
+      db.prepare(
+        `UPDATE pdfs
+            SET progress_step = NULL,
+                progress_current = NULL,
+                progress_total = NULL,
+                updated_at = ?
+          WHERE id = ?`,
+      ).run(updatedAt, id);
 
       try {
         const meta = await readMetadata(id);
@@ -877,6 +904,14 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         updated_at: updatedAt,
       });
     } catch (err) {
+      db.prepare(
+        `UPDATE pdfs
+            SET progress_step = NULL,
+                progress_current = NULL,
+                progress_total = NULL,
+                updated_at = ?
+          WHERE id = ?`,
+      ).run(nowIso(), id);
       request.log.error({ err, pdfId: id }, 'Failed to generate video');
       return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to generate video'));
     }

@@ -167,7 +167,7 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onCate
               <span className="truncate">{progressStepLabel}</span>
               {progressTotal > 0 && (
                 <span className="shrink-0 text-slate-200">
-                  {progressCurrent}/{progressTotal} ({progressPct}%)
+                  {progressCurrent}/{progressTotal}
                 </span>
               )}
             </div>
