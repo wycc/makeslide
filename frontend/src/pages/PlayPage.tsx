@@ -66,7 +66,11 @@ import type {
   SyncAiAnswer,
   SyncFollowerQuestion,
 } from '../types';
-import { getStoredPlaybackSpeed, getStoredShowSubtitle } from '../i18n';
+import {
+  SHOW_SUBTITLE_STORAGE_KEY,
+  getStoredPlaybackSpeed,
+  getStoredShowSubtitle,
+} from '../i18n';
 
 const POLL_INTERVAL_MS = 3000;
 const AUDIO_RETRY_DELAY_MS = 800;
@@ -3238,6 +3242,25 @@ export default function PlayPage() {
                   <select value={String(playbackRate)} onChange={(e)=>setPlaybackRate(Number(e.target.value))} className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200">
                     {[0.5,0.75,1,1.25,1.5,2].map((speed)=><option key={speed} value={String(speed)}>{speed}x</option>)}
                   </select>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-950/70 px-3 py-2">
+                  <div>
+                    <span className="font-semibold text-slate-200">字幕</span>
+                    <span className="ml-2 text-slate-400">切換是否顯示目前句子字幕。</span>
+                  </div>
+                  <label className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-medium text-slate-300 hover:bg-slate-800">
+                    <input
+                      type="checkbox"
+                      checked={showSubtitle}
+                      onChange={(event) => {
+                        const next = event.target.checked;
+                        setShowSubtitle(next);
+                        window.localStorage.setItem(SHOW_SUBTITLE_STORAGE_KEY, next ? '1' : '0');
+                      }}
+                      className="accent-cyan-500"
+                    />
+                    {showSubtitle ? 'ON' : 'OFF'}
+                  </label>
                 </div>
                 {syncEnabled && syncRole === 'master' ? (
                   <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-cyan-100">
