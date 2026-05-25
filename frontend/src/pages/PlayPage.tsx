@@ -66,7 +66,7 @@ import type {
   SyncAiAnswer,
   SyncFollowerQuestion,
 } from '../types';
-import { getStoredPlaybackSpeed } from '../i18n';
+import { getStoredPlaybackSpeed, getStoredShowSubtitle } from '../i18n';
 
 const POLL_INTERVAL_MS = 3000;
 const AUDIO_RETRY_DELAY_MS = 800;
@@ -300,6 +300,7 @@ export default function PlayPage() {
   const [syncRole, setSyncRole] = useState<'master' | 'follower'>('follower');
   const [audioMuted, setAudioMuted] = useState(false);
   const [playbackRate, setPlaybackRate] = useState<number>(() => getStoredPlaybackSpeed());
+  const [showSubtitle, setShowSubtitle] = useState<boolean>(() => getStoredShowSubtitle());
   const [playbackSettingsOpen, setPlaybackSettingsOpen] = useState(false);
   const [followerAudioUnlocked, setFollowerAudioUnlocked] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -335,6 +336,26 @@ export default function PlayPage() {
     audio.playbackRate = playbackRate;
     window.localStorage.setItem('makeslide.playback_speed', String(playbackRate));
   }, [playbackRate]);
+  useEffect(() => {
+    const onStorageChanged = () => {
+      setShowSubtitle(getStoredShowSubtitle());
+    };
+    window.addEventListener('storage', onStorageChanged);
+    window.addEventListener('makeslide:language-settings-changed', onStorageChanged);
+    return () => {
+      window.removeEventListener('storage', onStorageChanged);
+      window.removeEventListener('makeslide:language-settings-changed', onStorageChanged);
+    };
+  }, []);
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        setShowSubtitle(getStoredShowSubtitle());
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
   const currentAudioTokenRef = useRef(0);
   const audioRetryTimerRef = useRef<number | null>(null);
   // prefetch refs so GC doesn't drop them mid-load
@@ -2548,7 +2569,7 @@ export default function PlayPage() {
                 ) : null}
               </div>
             </div>
-          ) : currentSentence ? (
+          ) : showSubtitle && currentSentence ? (
             <div className="pointer-events-none absolute bottom-4 left-1/2 w-[min(92vw,1000px)] -translate-x-1/2 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
               <div className="mx-auto rounded-md bg-black/65 px-4 py-2 text-center text-base font-medium leading-relaxed text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] md:text-lg">
                 <p className="line-clamp-2 whitespace-pre-wrap">{currentSentence}</p>
@@ -3069,7 +3090,7 @@ export default function PlayPage() {
                   {detail?.status === 'awaiting_script_confirmation' ? '等待確認分頁結果（確認後將開始產生圖片）' : '圖片產生中…'}
                 </div>
               )}
-              {currentSentence ? (
+              {showSubtitle && currentSentence ? (
                 <div className="pointer-events-none absolute bottom-3 left-1/2 w-[min(92%,900px)] -translate-x-1/2 px-2">
                   <div className="mx-auto rounded-md bg-black/60 px-4 py-2 text-center text-sm font-medium leading-relaxed text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] md:text-base">
                     <p className="line-clamp-2 whitespace-pre-wrap">{currentSentence}</p>

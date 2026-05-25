@@ -14,6 +14,7 @@ export const LANGUAGE_OPTIONS: Array<{ value: AppLanguage; label: string; native
 export const UI_LANGUAGE_STORAGE_KEY = 'makeslide.ui_language';
 export const CONTENT_LANGUAGE_STORAGE_KEY = 'makeslide.content_language';
 export const PLAYBACK_SPEED_STORAGE_KEY = 'makeslide.playback_speed';
+export const SHOW_SUBTITLE_STORAGE_KEY = 'makeslide.show_subtitle';
 
 const dictionaries = {
   'zh-TW': zhTW,
@@ -82,4 +83,11 @@ export function normalizePlaybackSpeed(value: unknown, fallback = 1): number {
 export function getStoredPlaybackSpeed(): number {
   if (typeof window === 'undefined') return 1;
   return normalizePlaybackSpeed(window.localStorage.getItem(PLAYBACK_SPEED_STORAGE_KEY), 1);
+}
+
+export function getStoredShowSubtitle(): boolean {
+  if (typeof window === 'undefined') return true;
+  const raw = window.localStorage.getItem(SHOW_SUBTITLE_STORAGE_KEY);
+  if (raw == null) return true;
+  return raw === '1' || raw.toLowerCase() === 'true';
 }

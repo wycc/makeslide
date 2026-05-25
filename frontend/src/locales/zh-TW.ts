@@ -26,6 +26,7 @@ export const zhTW = {
   'settings.uiLanguage': '界面文字語言',
   'settings.contentLanguage': '產生結果語言',
   'settings.playbackSpeed': '播放速度',
+  'settings.showSubtitle': '顯示字幕',
   'settings.contentLanguageHint': '影響新產生的圖片、逐字稿與語音提示語言；可與界面語言不同。',
   'settings.llmProvider': 'LLM 供應商',
   'settings.ttsProvider': 'TTS 供應商',
