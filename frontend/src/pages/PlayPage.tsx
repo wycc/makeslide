@@ -14,6 +14,7 @@ import {
   cancelRegenerateJob,
   clearPageChatHistory,
   createPagePoll,
+  deletePagePoll,
   createPdfShare,
   deleteSlide,
   fetchPdfDetail,
@@ -224,6 +225,7 @@ export default function PlayPage() {
   const [chatBusy, setChatBusy] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const [videoBusy, setVideoBusy] = useState(false);
+  const [videoBusySeconds, setVideoBusySeconds] = useState(0);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [titleInput, setTitleInput] = useState('');
@@ -1374,7 +1376,10 @@ export default function PlayPage() {
     }
   }, []);
 
-  const shouldFetchPolls = pollStarted || (syncEnabled && syncRole === 'follower' && syncRealtimePollStarted);
+  const shouldFetchPolls =
+    pollStarted ||
+    pollSettingsOpen ||
+    (syncEnabled && syncRole === 'follower' && syncRealtimePollStarted);
 
   useEffect(() => {
     if (!shouldFetchPolls || !pdfId || !currentPage) return;
@@ -1502,6 +1507,28 @@ export default function PlayPage() {
       setPollBusy(false);
     }
   }, [pdfId]);
+
+  const handleDeletePoll = useCallback(async (pollId: number) => {
+    if (!pdfId) return;
+    setPollBusy(true);
+    setPollError(null);
+    try {
+      await deletePagePoll(pdfId, pollId);
+      setPagePolls((prev) => prev.filter((item) => item.id !== pollId));
+      setPollVotes((prev) => {
+        const next = { ...prev };
+        delete next[pollId];
+        return next;
+      });
+      if (syncDisplayedPollId === pollId) {
+        setSyncDisplayedPollId(null);
+      }
+    } catch (err) {
+      setPollError(err instanceof ApiError ? err.message : '刪除投票問題失敗');
+    } finally {
+      setPollBusy(false);
+    }
+  }, [pdfId, syncDisplayedPollId]);
 
   const handleSelectDisplayedPoll = useCallback(
     async (pollId: number) => {
@@ -1679,6 +1706,7 @@ export default function PlayPage() {
     if (isReadOnlyProcessing) return;
     if (!pdfId) return;
     setVideoBusy(true);
+    setVideoBusySeconds(0);
     setVideoError(null);
     try {
       const res = await generatePdfVideo(pdfId);
@@ -1690,6 +1718,17 @@ export default function PlayPage() {
       setVideoBusy(false);
     }
   }, [pdfId, isReadOnlyProcessing]);
+
+  useEffect(() => {
+    if (!videoBusy) {
+      setVideoBusySeconds(0);
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setVideoBusySeconds((prev) => prev + 1);
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [videoBusy]);
 
   const handleSaveTtsSettings = useCallback(async () => {
     if (isReadOnlyProcessing) return;
@@ -2778,7 +2817,11 @@ export default function PlayPage() {
               disabled={isReadOnlyProcessing || videoBusy}
               className="rounded-md border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-sm text-amber-200 hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {videoBusy ? '產生影片中…' : videoUrl ? '重新產生影片' : '產生影片'}
+              {videoBusy
+                ? `產生影片中… ${videoBusySeconds}s`
+                : videoUrl
+                  ? '重新產生影片'
+                  : '產生影片'}
             </button>
             <Link
               to={`/play/${encodeURIComponent(pdfId ?? '')}/quizzes`}
@@ -3621,11 +3664,11 @@ export default function PlayPage() {
                 )}
                 {pollError ? <p className="text-xs text-rose-300">{pollError}</p> : null}
 
-                {pollStarted && (
+                {(pollStarted || pollSettingsOpen) && (
                   <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
                     {pagePolls.length === 0 ? (
                       <div className="rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1.5 text-xs text-slate-500">
-                        已開始輪詢，本頁尚無投票。
+                        {pollStarted ? '已開始輪詢，本頁尚無投票。' : '本頁尚無已建立的投票問題。'}
                       </div>
                     ) : (
                       pagePolls.map((poll) => (
@@ -3656,6 +3699,14 @@ export default function PlayPage() {
                                 className="rounded border border-amber-500/50 bg-amber-500/15 px-2 py-1 text-[11px] text-amber-200 hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                               >
                                 清除結果
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleDeletePoll(poll.id)}
+                                disabled={pollBusy}
+                                className="rounded border border-rose-500/50 bg-rose-500/15 px-2 py-1 text-[11px] text-rose-200 hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                刪除題目
                               </button>
                             </div>
                           ) : null}
