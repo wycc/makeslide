@@ -72,6 +72,8 @@ export const zhTW = {
   'home.noPdf': '尚無任何 PDF',
   'home.clickUpload': '點擊右上角「上傳 PDF」開始使用',
   'home.showCategory': '顯示類別',
+  'home.filterByTitle': '標題篩選',
+  'home.filterByTitlePlaceholder': '輸入關鍵字搜尋標題',
   'home.allCategories': '全部類別',
   'home.manageDisplayCategories': '管理顯示類別',
   'home.newCategoryPlaceholder': '輸入新類別名稱',

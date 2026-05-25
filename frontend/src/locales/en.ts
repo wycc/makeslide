@@ -72,6 +72,8 @@ export const en = {
   'home.noPdf': 'No PDF yet',
   'home.clickUpload': 'Click "Upload PDF" in the top-right to get started',
   'home.showCategory': 'Show category',
+  'home.filterByTitle': 'Filter by title',
+  'home.filterByTitlePlaceholder': 'Enter keywords to search titles',
   'home.allCategories': 'All categories',
   'home.manageDisplayCategories': 'Manage display categories',
   'home.newCategoryPlaceholder': 'Enter a new category name',
