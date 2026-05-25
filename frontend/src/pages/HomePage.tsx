@@ -25,6 +25,7 @@ const POLL_INTERVAL_IDLE_MS = 30000;
 const DEFAULT_PROMPT_TTS_PROVIDER = 'gemini' as const;
 const DEFAULT_CATEGORY = 'general';
 const CATEGORY_FILTER_STORAGE_KEY = 'makeslide.home.categoryFilter';
+const CUSTOM_CATEGORIES_STORAGE_KEY = 'makeslide.home.customCategories';
 
 const compareByTitle = (a: PdfListItem, b: PdfListItem) => {
   const titleA = a.title?.trim() || a.id;
@@ -52,6 +53,21 @@ const readStoredCategoryFilter = () => {
   return window.localStorage.getItem(CATEGORY_FILTER_STORAGE_KEY) || '__all__';
 };
 
+const readStoredCustomCategories = () => {
+  if (typeof window === 'undefined') return [] as string[];
+  try {
+    const raw = window.localStorage.getItem(CUSTOM_CATEGORIES_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((value) => (typeof value === 'string' ? value.trim() : ''))
+      .filter((value) => Boolean(value));
+  } catch {
+    return [];
+  }
+};
+
 export default function HomePage() {
   const { t } = useI18n();
   const RECENT_CATEGORY = t('home.recentCategory');
@@ -65,13 +81,17 @@ export default function HomePage() {
   const toastTimerRef = useRef<number | null>(null);
   const [promptTarget, setPromptTarget] = useState<PromptTarget | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>(readStoredCategoryFilter);
+  const [customCategories, setCustomCategories] = useState<string[]>(readStoredCustomCategories);
+  const [newCategoryName, setNewCategoryName] = useState('');
   const [continuingPdfId, setContinuingPdfId] = useState<string | null>(null);
 
-  const allCategories = items.reduce<string[]>((categories, pdf) => {
+  const itemCategories = items.reduce<string[]>((categories, pdf) => {
     const category = pdf.category?.trim() || DEFAULT_CATEGORY;
     if (!categories.includes(category)) categories.push(category);
     return categories;
   }, []).sort((a, b) => a.localeCompare(b, 'zh-Hant', { numeric: true, sensitivity: 'base' }));
+  const allCategories = Array.from(new Set([...itemCategories, ...customCategories]))
+    .sort((a, b) => a.localeCompare(b, 'zh-Hant', { numeric: true, sensitivity: 'base' }));
   const filteredItems = categoryFilter === '__all__' || categoryFilter === '__recent__'
     ? items
     : items.filter((pdf) => (pdf.category?.trim() || DEFAULT_CATEGORY) === categoryFilter);
@@ -102,6 +122,44 @@ export default function HomePage() {
     setCategoryFilter(nextFilter);
     window.localStorage.setItem(CATEGORY_FILTER_STORAGE_KEY, nextFilter);
   }, []);
+
+  const persistCustomCategories = useCallback((next: string[]) => {
+    setCustomCategories(next);
+    window.localStorage.setItem(CUSTOM_CATEGORIES_STORAGE_KEY, JSON.stringify(next));
+  }, []);
+
+  const handleAddCustomCategory = useCallback(() => {
+    const category = newCategoryName.trim();
+    if (!category) {
+      showToast(t('home.categoryNameRequired'));
+      return;
+    }
+    if (allCategories.includes(category)) {
+      showToast(t('home.categoryAlreadyExists').replace('{category}', category));
+      return;
+    }
+    const next = [...customCategories, category]
+      .sort((a, b) => a.localeCompare(b, 'zh-Hant', { numeric: true, sensitivity: 'base' }));
+    persistCustomCategories(next);
+    setNewCategoryName('');
+    showToast(t('home.categoryAdded').replace('{category}', category));
+  }, [allCategories, customCategories, newCategoryName, persistCustomCategories, showToast, t]);
+
+  const handleDeleteCustomCategory = useCallback((category: string) => {
+    const usedByPdf = items.some((pdf) => (pdf.category?.trim() || DEFAULT_CATEGORY) === category);
+    if (usedByPdf) {
+      showToast(t('home.categoryInUseCannotDelete'));
+      return;
+    }
+    const next = customCategories.filter((value) => value !== category);
+    persistCustomCategories(next);
+    setCategoryFilter((prev) => {
+      if (prev !== category) return prev;
+      window.localStorage.setItem(CATEGORY_FILTER_STORAGE_KEY, '__all__');
+      return '__all__';
+    });
+    showToast(t('home.categoryDeleted').replace('{category}', category));
+  }, [customCategories, items, persistCustomCategories, showToast, t]);
 
   const load = useCallback(async (opts: { silent?: boolean } = {}) => {
     if (!opts.silent) setLoading(true);
@@ -457,6 +515,39 @@ export default function HomePage() {
                 ))}
               </select>
             </label>
+            <div className="mt-4 space-y-2">
+              <div className="text-xs text-slate-400">{t('home.manageDisplayCategories')}</div>
+              <div className="flex gap-2">
+                <input
+                  value={newCategoryName}
+                  onChange={(ev) => setNewCategoryName(ev.target.value)}
+                  placeholder={t('home.newCategoryPlaceholder')}
+                  className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition hover:border-slate-500"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddCustomCategory}
+                  className="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 hover:bg-slate-800"
+                >
+                  {t('home.addCategory')}
+                </button>
+              </div>
+              {customCategories.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {customCategories.map((category) => (
+                    <button
+                      key={category}
+                      type="button"
+                      onClick={() => handleDeleteCustomCategory(category)}
+                      className="rounded-full border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:border-rose-500/50 hover:text-rose-300"
+                      title={t('home.deleteCategory')}
+                    >
+                      {category} ×
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </section>
         )}
 
