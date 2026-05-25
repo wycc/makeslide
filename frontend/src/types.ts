@@ -117,6 +117,17 @@ export interface PdfDetail {
   updated_at: string;
   video_url?: string | null;
   pages: PdfDetailPage[];
+  sources?: PdfSourceItem[];
+}
+
+export interface PdfSourceItem {
+  id: number;
+  pdf_id: string;
+  source_kind: 'pdf' | 'txt' | 'youtube_caption';
+  source_name: string | null;
+  content_text: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface PagePollOption {

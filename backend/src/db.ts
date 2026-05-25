@@ -245,6 +245,19 @@ function migrate(): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_quiz_sets_pdf_updated ON quiz_sets(pdf_id, updated_at DESC);
+
+    CREATE TABLE IF NOT EXISTS pdf_sources (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      pdf_id TEXT NOT NULL,
+      source_kind TEXT NOT NULL,
+      source_name TEXT,
+      content_text TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (pdf_id) REFERENCES pdfs(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_pdf_sources_pdf_created ON pdf_sources(pdf_id, created_at ASC);
   `);
 
   normalizeLifecycleStatuses();
