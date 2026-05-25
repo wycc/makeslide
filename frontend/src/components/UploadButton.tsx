@@ -42,7 +42,6 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [youtubeLang, setYoutubeLang] = useState('zh-TW');
   const [pdfImportMode, setPdfImportMode] = useState<'slides' | 'document'>('slides');
-  const [showPdfModePicker, setShowPdfModePicker] = useState(false);
   const [isSubmittingYoutube, setIsSubmittingYoutube] = useState(false);
   const [showYoutubePanel, setShowYoutubePanel] = useState(false);
   const [recoveryGuide, setRecoveryGuide] = useState<string[]>([]);
@@ -51,13 +50,6 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
     if (isUploading) return;
     setError(null);
     setRecoveryGuide([]);
-    setShowPdfModePicker((v) => !v);
-  };
-
-  const handlePickPdfWithMode = (mode: 'slides' | 'document') => {
-    if (isUploading) return;
-    setPdfImportMode(mode);
-    setShowPdfModePicker(false);
     fileInputRef.current?.click();
   };
 
@@ -156,6 +148,19 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
   return (
     <div className="flex flex-col items-start gap-2">
       <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:gap-3">
+        <label className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200">
+          <span className="whitespace-nowrap">{t('upload.pdfContent')}</span>
+          <select
+            value={pdfImportMode}
+            onChange={(e) => setPdfImportMode(e.target.value as 'slides' | 'document')}
+            disabled={isUploading}
+            className="rounded-md border border-slate-600 bg-slate-800 px-2 py-1 text-sm text-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <option value="slides">{t('upload.modeSlides')}</option>
+            <option value="document">{t('upload.modeDocument')}</option>
+          </select>
+        </label>
+
         <button
           type="button"
           onClick={handlePickPdf}
@@ -177,26 +182,6 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
           </svg>
           {isUploading ? t('upload.uploading').replace('{progress}', String(progress)) : t('upload.uploadPdf')}
         </button>
-
-        {showPdfModePicker && !isUploading && (
-          <div className="col-span-2 flex w-full flex-wrap items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 sm:w-auto">
-            <span className="whitespace-nowrap">{t('upload.pdfContent')}</span>
-            <button
-              type="button"
-              onClick={() => handlePickPdfWithMode('slides')}
-              className="rounded-md border border-slate-600 bg-slate-800 px-3 py-1 text-slate-100 transition hover:bg-slate-700"
-            >
-              {t('upload.modeSlides')}
-            </button>
-            <button
-              type="button"
-              onClick={() => handlePickPdfWithMode('document')}
-              className="rounded-md border border-slate-600 bg-slate-800 px-3 py-1 text-slate-100 transition hover:bg-slate-700"
-            >
-              {t('upload.modeDocument')}
-            </button>
-          </div>
-        )}
 
         <button
           type="button"
