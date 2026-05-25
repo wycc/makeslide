@@ -30,6 +30,7 @@ export const en = {
   'settings.contentLanguageHint': 'Affects prompts for newly generated images, transcripts, and audio; it can differ from the interface language.',
   'settings.llmProvider': 'LLM provider',
   'settings.ttsProvider': 'TTS provider',
+  'settings.googleAuthEnabled': 'Enable Google account login',
   'settings.geminiSpeaker1': 'Gemini Speaker 1 persona (optional)',
   'settings.geminiSpeaker2': 'Gemini Speaker 2 persona (optional)',
   'settings.geminiSpeaker1Placeholder': 'For example: calm, professional, male host',

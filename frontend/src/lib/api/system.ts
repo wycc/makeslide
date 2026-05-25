@@ -46,6 +46,10 @@ export interface SystemAiSettings {
   user_code?: string;
   ui_language: AppLanguage;
   content_language: AppLanguage;
+  google_auth_enabled?: boolean;
+  google_client_id?: string;
+  google_client_secret?: string;
+  google_redirect_uri?: string;
 }
 
 export interface UpdateSystemAiSettingsPayload {
@@ -62,6 +66,10 @@ export interface UpdateSystemAiSettingsPayload {
   user_code?: string;
   ui_language?: AppLanguage;
   content_language?: AppLanguage;
+  google_auth_enabled?: boolean;
+  google_client_id?: string;
+  google_client_secret?: string;
+  google_redirect_uri?: string;
 }
 
 export async function getOpenAIKeyStatus(): Promise<OpenAIKeyStatusResponse> {

@@ -51,6 +51,10 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       user_code: runtime.userCode,
       ui_language: runtime.uiLanguage,
       content_language: runtime.contentLanguage,
+      google_auth_enabled: runtime.googleAuthEnabled,
+      google_client_id: runtime.googleClientId,
+      google_client_secret: runtime.googleClientSecret,
+      google_redirect_uri: runtime.googleRedirectUri,
     });
   });
 
@@ -74,6 +78,10 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       userCode: data.user_code,
       uiLanguage: data.ui_language,
       contentLanguage: data.content_language,
+      googleAuthEnabled: data.google_auth_enabled,
+      googleClientId: data.google_client_id,
+      googleClientSecret: data.google_client_secret,
+      googleRedirectUri: data.google_redirect_uri,
     };
     if (typeof next.openaiApiKey === 'string') setOpenAIApiKeyRuntime(next.openaiApiKey);
     const runtime = setRuntimeAiSettings(next);
@@ -96,6 +104,10 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       user_code: runtime.userCode,
       ui_language: runtime.uiLanguage,
       content_language: runtime.contentLanguage,
+      google_auth_enabled: runtime.googleAuthEnabled,
+      google_client_id: runtime.googleClientId,
+      google_client_secret: runtime.googleClientSecret,
+      google_redirect_uri: runtime.googleRedirectUri,
     });
   });
 }
