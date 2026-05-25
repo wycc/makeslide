@@ -209,7 +209,7 @@
 # New Batch
 [x] 請在產生影片的功能時，把進度顯示在按鍵上（完成於分支: feature/video-button-progress-20260525）
 [x] 讓顯示類別可以新增和刪除（完成於分支: feature/category-add-delete-20260525）
-[ ] 把 PDF 內容的選項改成按下上傳 PDF 後再出現讓使用者選則
+[x] 把 PDF 內容的選項改成按下上傳 PDF 後再出現讓使用者選則（完成於分支: feature/pdf-mode-after-upload-click-20260525）
 [ ] 在設定中加入播放速度的選擇
 [x] 在設定中加入是否顯示字幕的選擇（完成於分支: feature/todo-playback-speed-setting-20260525）
 [ ] 在播放頁加入來源 tab，將 PDF/TXT/youtube caption 放在這邊。並新增上傳 PDF/TXT 的功能。所有的來源都會在生成逐字稿時被一起送出去。
@@ -222,3 +222,7 @@
 - 時間: 2026-05-25 13:37:06 +0800
 - 分支: feature/todo-playback-speed-setting-20260525
 - 內容: 完成「設定中加入是否顯示字幕的選擇」：新增設定頁字幕顯示開關（localStorage 儲存），並在播放頁字幕疊層依設定顯示/隱藏；同步補上中英文翻譯鍵值與 i18n 讀取函式。功能實作於獨立分支提交，完成後回到 master 更新 TODO.md 與工作記錄。
+
+- 時間: 2026-05-25 15:31:00 +0800
+- 分支: feature/pdf-mode-after-upload-click-20260525
+- 內容: 完成「把 PDF 內容的選項改成按下上傳 PDF 後再出現讓使用者選則」：首頁改為先按上傳 PDF 才顯示 slides/document 選項，使用者選擇後再開啟檔案挑選器。功能已在獨立分支提交；frontend build 仍受既有型別錯誤影響（HomePage.tsx 未使用變數、PlayPage.tsx rendering_video 型別比對），與本次修改無直接關聯。
