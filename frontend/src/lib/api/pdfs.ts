@@ -262,6 +262,13 @@ export interface UpdatePdfTitleResponse {
   updated_at: string;
 }
 
+export interface RegeneratePdfTitleResponse {
+  id: string;
+  title: string;
+  updated_at: string;
+  source: 'script' | 'text';
+}
+
 export interface UpdatePdfPromptResponse {
   id: string;
   page_number: number;
@@ -296,6 +303,14 @@ export async function updatePdfTitle(
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as UpdatePdfTitleResponse;
+}
+
+export async function regeneratePdfTitle(id: string): Promise<RegeneratePdfTitleResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/regenerate-title`, {
+    method: 'POST',
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as RegeneratePdfTitleResponse;
 }
 
 export async function updatePdfPrompt(

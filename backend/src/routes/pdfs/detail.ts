@@ -30,6 +30,7 @@ import {
   timingRowsToPageMap,
 } from './shared';
 import { callChatJSON, transcribeAudioBuffer } from '../../services/openai';
+import { generateTitle } from '../../worker/steps/generateTitle';
 
 interface PagePollRow {
   id: number;
@@ -311,6 +312,53 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     }
 
     return reply.send({ id, title, updated_at: now });
+  });
+
+  // POST /api/pdfs/:id/regenerate-title
+  app.post('/api/pdfs/:id/regenerate-title', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const { id } = parsed.data;
+    const row = db
+      .prepare(`SELECT id, owner_sub, visibility, page_count, user_prompt FROM pdfs WHERE id = ?`)
+      .get(id) as Pick<PdfRow, 'id' | 'owner_sub' | 'visibility' | 'page_count' | 'user_prompt'> | undefined;
+    if (!row) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    if (!canEditPdf(sessionSub(request), row)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
+    }
+
+    const pageCount =
+      typeof row.page_count === 'number' && Number.isFinite(row.page_count) && row.page_count > 0
+        ? row.page_count
+        : (db
+            .prepare(`SELECT COUNT(*) AS c FROM pages WHERE pdf_id = ?`)
+            .get(id) as { c: number } | undefined)?.c ?? 0;
+    if (pageCount <= 0) {
+      return reply.code(409).send(errorResponse('INVALID_STATE', '尚無可用內容可重新生成標題'));
+    }
+
+    const result = await generateTitle(id, pageCount, {
+      userPrompt: row.user_prompt ?? null,
+    });
+    const now = nowIso();
+    db.prepare(`UPDATE pdfs SET title = ?, updated_at = ? WHERE id = ?`).run(result.title, now, id);
+
+    try {
+      const metadata = await readMetadata(id);
+      if (metadata) {
+        metadata.title = result.title;
+        metadata.updated_at = now;
+        await writeMetadata(id, metadata);
+      }
+    } catch (err) {
+      request.log.warn({ err, id }, 'Failed to update metadata title after regenerate-title');
+    }
+
+    return reply.send({ id, title: result.title, updated_at: now, source: result.source });
   });
 
   async function handleUpdatePdfCategory(request: FastifyRequest, reply: FastifyReply) {

@@ -42,6 +42,7 @@ import {
   updatePdfImageStyleSettings,
   updatePdfTtsSettings,
   updatePdfPrompt,
+  regeneratePdfTitle,
   updatePdfTitle,
   updatePlaybackSyncState,
   votePagePoll,
@@ -1843,6 +1844,31 @@ export default function PlayPage() {
     }
   }, [pdfId, titleInput, isReadOnlyProcessing]);
 
+  const handleRegenerateTitle = useCallback(async () => {
+    if (isReadOnlyProcessing) return;
+    if (!pdfId) return;
+    setTitleBusy(true);
+    setTitleMsg(null);
+    try {
+      const res = await regeneratePdfTitle(pdfId);
+      setTitleInput(res.title);
+      setDetail((prev) =>
+        prev
+          ? {
+              ...prev,
+              title: res.title,
+              updated_at: res.updated_at,
+            }
+          : prev,
+      );
+      setTitleMsg('標題已重新生成');
+    } catch (err) {
+      setTitleMsg(err instanceof ApiError ? err.message : '重新生成標題失敗');
+    } finally {
+      setTitleBusy(false);
+    }
+  }, [pdfId, isReadOnlyProcessing]);
+
   const handleSavePrompt = useCallback(async () => {
     if (isReadOnlyProcessing) return;
     if (!pdfId || !currentPage) return;
@@ -2700,6 +2726,14 @@ export default function PlayPage() {
               className="shrink-0 whitespace-nowrap rounded-md border border-cyan-500/50 bg-cyan-500/15 px-1.5 py-1 text-[11px] text-cyan-200 disabled:opacity-40 sm:px-2 sm:text-xs"
             >
               {titleBusy ? '儲存中…' : '更新標題'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleRegenerateTitle()}
+              disabled={isReadOnlyProcessing || titleBusy}
+              className="shrink-0 whitespace-nowrap rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-1.5 py-1 text-[11px] text-fuchsia-200 disabled:opacity-40 sm:px-2 sm:text-xs"
+            >
+              {titleBusy ? '處理中…' : '重新生成標題'}
             </button>
           </div>
             <div className="shrink-0 whitespace-nowrap text-right text-xs text-slate-400 sm:w-20 sm:text-sm">
