@@ -19,6 +19,10 @@ export interface RuntimeAiSettings {
   userCode: string;
   uiLanguage: AppLanguage;
   contentLanguage: AppLanguage;
+  googleAuthEnabled: boolean;
+  googleClientId: string;
+  googleClientSecret: string;
+  googleRedirectUri: string;
 }
 
 export interface AccountSettingsLocation {
@@ -76,6 +80,15 @@ function loadAccountEnvSettings(): Partial<RuntimeAiSettings> {
     userCode: values.USER_CODE,
     uiLanguage: values.UI_LANGUAGE === 'en' ? 'en' : values.UI_LANGUAGE === 'zh-TW' ? 'zh-TW' : undefined,
     contentLanguage: values.CONTENT_LANGUAGE === 'en' ? 'en' : values.CONTENT_LANGUAGE === 'zh-TW' ? 'zh-TW' : undefined,
+    googleAuthEnabled:
+      values.GOOGLE_AUTH_ENABLED === 'true'
+        ? true
+        : values.GOOGLE_AUTH_ENABLED === 'false'
+          ? false
+          : undefined,
+    googleClientId: values.GOOGLE_CLIENT_ID,
+    googleClientSecret: values.GOOGLE_CLIENT_SECRET,
+    googleRedirectUri: values.GOOGLE_REDIRECT_URI,
   };
 }
 
@@ -93,6 +106,10 @@ let runtime: RuntimeAiSettings = {
   userCode: process.env.USER_CODE?.trim() || '',
   uiLanguage: process.env.UI_LANGUAGE === 'en' ? 'en' : 'zh-TW',
   contentLanguage: process.env.CONTENT_LANGUAGE === 'en' ? 'en' : 'zh-TW',
+  googleAuthEnabled: config.googleAuthEnabled,
+  googleClientId: config.googleClientId,
+  googleClientSecret: config.googleClientSecret,
+  googleRedirectUri: config.googleRedirectUri,
 };
 
 runtime = {
@@ -124,6 +141,10 @@ export function setRuntimeAiSettings(next: Partial<RuntimeAiSettings>): RuntimeA
   if (typeof next.userCode === 'string') process.env.USER_CODE = next.userCode;
   if (typeof next.uiLanguage === 'string') process.env.UI_LANGUAGE = next.uiLanguage;
   if (typeof next.contentLanguage === 'string') process.env.CONTENT_LANGUAGE = next.contentLanguage;
+  if (typeof next.googleAuthEnabled === 'boolean') process.env.GOOGLE_AUTH_ENABLED = next.googleAuthEnabled ? 'true' : 'false';
+  if (typeof next.googleClientId === 'string') process.env.GOOGLE_CLIENT_ID = next.googleClientId;
+  if (typeof next.googleClientSecret === 'string') process.env.GOOGLE_CLIENT_SECRET = next.googleClientSecret;
+  if (typeof next.googleRedirectUri === 'string') process.env.GOOGLE_REDIRECT_URI = next.googleRedirectUri;
   return { ...runtime };
 }
 
@@ -146,6 +167,10 @@ export async function persistEnvSettings(next: Partial<RuntimeAiSettings>): Prom
     ['USER_CODE', next.userCode],
     ['UI_LANGUAGE', next.uiLanguage],
     ['CONTENT_LANGUAGE', next.contentLanguage],
+    ['GOOGLE_AUTH_ENABLED', typeof next.googleAuthEnabled === 'boolean' ? (next.googleAuthEnabled ? 'true' : 'false') : undefined],
+    ['GOOGLE_CLIENT_ID', next.googleClientId],
+    ['GOOGLE_CLIENT_SECRET', next.googleClientSecret],
+    ['GOOGLE_REDIRECT_URI', next.googleRedirectUri],
   ];
 
   for (const [key, raw] of pairs) {

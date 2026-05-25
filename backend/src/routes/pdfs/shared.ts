@@ -315,6 +315,10 @@ export const UpdateSystemAiSettingsBodySchema = z.object({
   user_code: z.string().max(128).optional(),
   ui_language: z.enum(['zh-TW', 'en']).optional(),
   content_language: z.enum(['zh-TW', 'en']).optional(),
+  google_auth_enabled: z.boolean().optional(),
+  google_client_id: z.string().optional(),
+  google_client_secret: z.string().optional(),
+  google_redirect_uri: z.string().optional(),
 });
 
 export { RegenerateBatchBodySchema };

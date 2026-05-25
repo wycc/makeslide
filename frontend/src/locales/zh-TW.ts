@@ -30,6 +30,7 @@ export const zhTW = {
   'settings.contentLanguageHint': '影響新產生的圖片、逐字稿與語音提示語言；可與界面語言不同。',
   'settings.llmProvider': 'LLM 供應商',
   'settings.ttsProvider': 'TTS 供應商',
+  'settings.googleAuthEnabled': '啟用 Google 帳號登入',
   'settings.geminiSpeaker1': 'Gemini Speaker 1 人設（選填）',
   'settings.geminiSpeaker2': 'Gemini Speaker 2 人設（選填）',
   'settings.geminiSpeaker1Placeholder': '例如：沉穩、專業、男聲主持',

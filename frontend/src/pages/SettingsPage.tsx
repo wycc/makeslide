@@ -47,6 +47,10 @@ export default function SettingsPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
+  const [googleAuthEnabled, setGoogleAuthEnabled] = useState(false);
+  const [googleClientId, setGoogleClientId] = useState('');
+  const [googleClientSecret, setGoogleClientSecret] = useState('');
+  const [googleRedirectUri, setGoogleRedirectUri] = useState('');
 
   const loadStatus = useCallback(async () => {
     setLoading(true);
@@ -73,6 +77,10 @@ export default function SettingsPage() {
       window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, loadedUiLanguage);
       window.localStorage.setItem(CONTENT_LANGUAGE_STORAGE_KEY, loadedContentLanguage);
       setPlaybackSpeed(getStoredPlaybackSpeed());
+      setGoogleAuthEnabled(Boolean(s.google_auth_enabled));
+      setGoogleClientId(s.google_client_id ?? '');
+      setGoogleClientSecret(s.google_client_secret ?? '');
+      setGoogleRedirectUri(s.google_redirect_uri ?? '');
       const cachedUserCode = window.localStorage.getItem(LOCAL_USER_CODE_KEY)?.trim() ?? '';
       setUserCode((auth?.authenticated ? s.user_code : cachedUserCode) ?? '');
       if (s.has_openai_key || s.has_gemini_key) {
@@ -137,6 +145,10 @@ export default function SettingsPage() {
         user_code: authStatus?.authenticated ? userCode.trim() : undefined,
         ui_language: uiLanguage,
         content_language: contentLanguage,
+        google_auth_enabled: googleAuthEnabled,
+        google_client_id: googleClientId.trim(),
+        google_client_secret: googleClientSecret.trim(),
+        google_redirect_uri: googleRedirectUri.trim(),
       });
       storeLanguageSettings(uiLanguage, contentLanguage);
       window.localStorage.setItem(PLAYBACK_SPEED_STORAGE_KEY, String(playbackSpeed));
@@ -171,6 +183,10 @@ export default function SettingsPage() {
     userCode,
     authStatus,
     uiLanguage,
+    googleAuthEnabled,
+    googleClientId,
+    googleClientSecret,
+    googleRedirectUri,
     t,
   ]);
 
@@ -316,6 +332,48 @@ export default function SettingsPage() {
                 <option value="gemini">Gemini</option>
               </select>
             </label>
+            <label className="block text-sm text-slate-300 sm:col-span-2">
+              <span className="inline-flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={googleAuthEnabled}
+                  onChange={(e) => setGoogleAuthEnabled(e.target.checked)}
+                />
+                {t('settings.googleAuthEnabled')}
+              </span>
+            </label>
+            {googleAuthEnabled ? (
+              <>
+                <label className="block text-sm text-slate-300 sm:col-span-2">
+                  GOOGLE_CLIENT_ID
+                  <input
+                    value={googleClientId}
+                    onChange={(e) => setGoogleClientId(e.target.value)}
+                    className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                    placeholder="xxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com"
+                  />
+                </label>
+                <label className="block text-sm text-slate-300 sm:col-span-2">
+                  GOOGLE_CLIENT_SECRET
+                  <input
+                    type="password"
+                    value={googleClientSecret}
+                    onChange={(e) => setGoogleClientSecret(e.target.value)}
+                    className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                    placeholder="GOCSPX-..."
+                  />
+                </label>
+                <label className="block text-sm text-slate-300 sm:col-span-2">
+                  GOOGLE_REDIRECT_URI
+                  <input
+                    value={googleRedirectUri}
+                    onChange={(e) => setGoogleRedirectUri(e.target.value)}
+                    className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                    placeholder="https://your-domain.example/api/auth/google/callback"
+                  />
+                </label>
+              </>
+            ) : null}
           </div>
 
           <label className="mb-2 block text-sm text-slate-300">OPENAI_API_KEY</label>
