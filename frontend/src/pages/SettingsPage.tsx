@@ -12,11 +12,13 @@ import {
 import {
   CONTENT_LANGUAGE_STORAGE_KEY,
   PLAYBACK_SPEED_STORAGE_KEY,
+  SHOW_SUBTITLE_STORAGE_KEY,
   LANGUAGE_OPTIONS,
   UI_LANGUAGE_STORAGE_KEY,
   type AppLanguage,
   getStoredContentLanguage,
   getStoredPlaybackSpeed,
+  getStoredShowSubtitle,
   getStoredUiLanguage,
   storeLanguageSettings,
   useI18n,
@@ -33,6 +35,7 @@ export default function SettingsPage() {
   const [uiLanguage, setUiLanguage] = useState<AppLanguage>(() => getStoredUiLanguage());
   const [contentLanguage, setContentLanguage] = useState<AppLanguage>(() => getStoredContentLanguage());
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(() => getStoredPlaybackSpeed());
+  const [showSubtitle, setShowSubtitle] = useState<boolean>(() => getStoredShowSubtitle());
   const [openaiLlmModel, setOpenaiLlmModel] = useState('gpt-4o-mini');
   const [geminiLlmModel, setGeminiLlmModel] = useState('gemini-2.0-flash');
   const [openaiTtsModel, setOpenaiTtsModel] = useState('gpt-4o-mini-tts');
@@ -73,6 +76,7 @@ export default function SettingsPage() {
       window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, loadedUiLanguage);
       window.localStorage.setItem(CONTENT_LANGUAGE_STORAGE_KEY, loadedContentLanguage);
       setPlaybackSpeed(getStoredPlaybackSpeed());
+      setShowSubtitle(getStoredShowSubtitle());
       const cachedUserCode = window.localStorage.getItem(LOCAL_USER_CODE_KEY)?.trim() ?? '';
       setUserCode((auth?.authenticated ? s.user_code : cachedUserCode) ?? '');
       if (s.has_openai_key || s.has_gemini_key) {
@@ -140,6 +144,7 @@ export default function SettingsPage() {
       });
       storeLanguageSettings(uiLanguage, contentLanguage);
       window.localStorage.setItem(PLAYBACK_SPEED_STORAGE_KEY, String(playbackSpeed));
+      window.localStorage.setItem(SHOW_SUBTITLE_STORAGE_KEY, showSubtitle ? '1' : '0');
       if (authStatus?.authenticated) {
         window.localStorage.removeItem(LOCAL_USER_CODE_KEY);
       } else {
@@ -162,6 +167,7 @@ export default function SettingsPage() {
     geminiTtsSpeaker2,
     contentLanguage,
     playbackSpeed,
+    showSubtitle,
     llmProvider,
     navigate,
     openaiApiKey,
@@ -293,6 +299,20 @@ export default function SettingsPage() {
                   <option key={speed} value={String(speed)}>{speed}x</option>
                 ))}
               </select>
+            </label>
+            <label className="block text-sm text-slate-300">
+              {t('settings.showSubtitle')}
+              <div className="mt-2">
+                <label className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-medium text-slate-300 hover:bg-slate-800">
+                  <input
+                    type="checkbox"
+                    checked={showSubtitle}
+                    onChange={(e) => setShowSubtitle(e.target.checked)}
+                    className="accent-emerald-500"
+                  />
+                  {showSubtitle ? 'ON' : 'OFF'}
+                </label>
+              </div>
             </label>
             <label className="block text-sm text-slate-300">
               {t('settings.llmProvider')}

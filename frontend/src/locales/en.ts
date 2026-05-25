@@ -26,6 +26,7 @@ export const en = {
   'settings.uiLanguage': 'Interface language',
   'settings.contentLanguage': 'Generated content language',
   'settings.playbackSpeed': 'Playback speed',
+  'settings.showSubtitle': 'Show subtitles',
   'settings.contentLanguageHint': 'Affects prompts for newly generated images, transcripts, and audio; it can differ from the interface language.',
   'settings.llmProvider': 'LLM provider',
   'settings.ttsProvider': 'TTS provider',
