@@ -50,6 +50,7 @@ export async function buildApp() {
   const nbPrefix = config.nbPrefix;
   const withNbPrefix = (route: string): string =>
     nbPrefix ? `${nbPrefix}${route}` : route;
+  const routePrefixes = nbPrefix ? [undefined, nbPrefix] : [undefined];
 
   await app.register(cors, {
     origin: true,
@@ -78,13 +79,20 @@ export async function buildApp() {
     });
   }
 
-  app.get(withNbPrefix("/api/health"), async () => ({ ok: true }));
+  app.get('/api/health', async () => ({ ok: true }));
+  if (nbPrefix) {
+    app.get(withNbPrefix('/api/health'), async () => ({ ok: true }));
+  }
 
   const { pdfRoutes } = await import("./routes/pdfs");
-  await app.register(pdfRoutes, { prefix: nbPrefix || undefined });
+  for (const prefix of routePrefixes) {
+    await app.register(pdfRoutes, { prefix });
+  }
 
   const { authRoutes } = await import("./routes/auth");
-  await app.register(authRoutes, { prefix: nbPrefix || undefined });
+  for (const prefix of routePrefixes) {
+    await app.register(authRoutes, { prefix });
+  }
 
   // Serve frontend static bundle in production container.
   if (process.env.NODE_ENV === "production") {
