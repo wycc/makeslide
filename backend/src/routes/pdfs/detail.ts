@@ -1,12 +1,13 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import sharp from 'sharp';
 import crypto from 'node:crypto';
 import { z } from 'zod';
 import { db } from '../../db';
 import { config } from '../../config';
-import type { PageRow, PdfListItem, PdfRow } from '../../types';
+import type { PageRow, PdfListItem, PdfRow, PdfSourceItem } from '../../types';
 import { coverImagePath, readMetadata, safeJoinPdfPath, videoPath, writeMetadata, youtubeOutlinePath } from '../../services/storage';
 import { decodeSession, parseCookies } from '../auth';
 import { ensureCoverThumbnail, ensurePageThumbnail, generateCoverThumbnail } from '../../services/thumbnails';
@@ -31,6 +32,7 @@ import {
 } from './shared';
 import { callChatJSON, transcribeAudioBuffer } from '../../services/openai';
 import { generateTitle } from '../../worker/steps/generateTitle';
+import { extractPdfText } from '../../worker/poppler';
 
 interface PagePollRow {
   id: number;
@@ -48,6 +50,16 @@ interface PageVoiceContextRow {
   page_number: number;
   text_path: string | null;
   script_path: string | null;
+}
+
+interface PdfSourceRow {
+  id: number;
+  pdf_id: string;
+  source_kind: 'pdf' | 'txt' | 'youtube_caption';
+  source_name: string | null;
+  content_text: string;
+  created_at: string;
+  updated_at: string;
 }
 
 function readOptionalPageText(pdfId: string, relativePath: string | null): string {
@@ -196,14 +208,134 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       )
       .all(parsed.data.id) as Parameters<typeof timingRowsToPageMap>[0];
     const detail = rowToDetail(row, pages, timingRowsToPageMap(timingRows));
+    const sources = db
+      .prepare(
+        `SELECT id, pdf_id, source_kind, source_name, content_text, created_at, updated_at
+           FROM pdf_sources
+          WHERE pdf_id = ?
+          ORDER BY created_at ASC, id ASC`,
+      )
+      .all(parsed.data.id) as PdfSourceRow[];
+    const sourceItems: PdfSourceItem[] = sources.map((s) => ({
+      id: s.id,
+      pdf_id: s.pdf_id,
+      source_kind: s.source_kind,
+      source_name: s.source_name,
+      content_text: s.content_text,
+      created_at: s.created_at,
+      updated_at: s.updated_at,
+    }));
     const shareMode = getShareMode(request);
     if (shareMode) {
       return reply.send({
         ...detail,
+        sources: sourceItems,
         share_mode: shareMode,
       });
     }
-    return reply.send(detail);
+    return reply.send({ ...detail, sources: sourceItems });
+  });
+
+  app.post('/api/pdfs/:id/sources/txt', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const body = z
+      .object({
+        source_name: z.string().trim().max(200).optional(),
+        content_text: z.string().trim().min(1).max(120000),
+      })
+      .safeParse(request.body ?? {});
+    if (!body.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
+    }
+    const row = db
+      .prepare(`SELECT id, owner_sub, visibility FROM pdfs WHERE id = ?`)
+      .get(parsed.data.id) as Pick<PdfRow, 'id' | 'owner_sub' | 'visibility'> | undefined;
+    if (!row) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
+    const sub = sessionSub(request);
+    if (!canEditPdf(sub, row)) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
+
+    const now = nowIso();
+    const result = db
+      .prepare(
+        `INSERT INTO pdf_sources (pdf_id, source_kind, source_name, content_text, created_at, updated_at)
+         VALUES (?, 'txt', ?, ?, ?, ?)`,
+      )
+      .run(
+        parsed.data.id,
+        body.data.source_name?.trim() || null,
+        body.data.content_text.trim(),
+        now,
+        now,
+      );
+    const inserted = db
+      .prepare(
+        `SELECT id, pdf_id, source_kind, source_name, content_text, created_at, updated_at
+           FROM pdf_sources
+          WHERE id = ?`,
+      )
+      .get(result.lastInsertRowid) as PdfSourceRow;
+    return reply.code(201).send(inserted);
+  });
+
+  app.post('/api/pdfs/:id/sources/pdf', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const part = await request.file();
+    if (!part) return reply.code(400).send(errorResponse('FILE_REQUIRED', 'file is required'));
+    const row = db
+      .prepare(`SELECT id, owner_sub, visibility FROM pdfs WHERE id = ?`)
+      .get(parsed.data.id) as Pick<PdfRow, 'id' | 'owner_sub' | 'visibility'> | undefined;
+    if (!row) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
+    const sub = sessionSub(request);
+    if (!canEditPdf(sub, row)) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
+
+    const fileName = part.filename || 'source.pdf';
+    const lower = fileName.toLowerCase();
+    if (!lower.endsWith('.pdf') && part.mimetype !== 'application/pdf') {
+      return reply.code(400).send(errorResponse('INVALID_UPLOAD_TYPE', 'Only PDF is supported'));
+    }
+    const chunks: Buffer[] = [];
+    for await (const chunk of part.file) chunks.push(chunk as Buffer);
+    const data = Buffer.concat(chunks);
+    if (data.length === 0) return reply.code(400).send(errorResponse('FILE_REQUIRED', 'file is empty'));
+
+    let text = '';
+    const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'makeslide-source-pdf-'));
+    const tempPdfPath = path.join(tempDir, 'source.pdf');
+    try {
+      await fs.promises.writeFile(tempPdfPath, data);
+      text = (await extractPdfText(tempPdfPath)).trim();
+    } catch {
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to parse PDF text'));
+    } finally {
+      try {
+        await fs.promises.rm(tempDir, { recursive: true, force: true });
+      } catch {
+        // ignore cleanup errors
+      }
+    }
+    if (!text) return reply.code(422).send(errorResponse('EMPTY_SOURCE_TEXT', 'No readable text in uploaded PDF'));
+
+    const now = nowIso();
+    const result = db
+      .prepare(
+        `INSERT INTO pdf_sources (pdf_id, source_kind, source_name, content_text, created_at, updated_at)
+         VALUES (?, 'pdf', ?, ?, ?, ?)`,
+      )
+      .run(parsed.data.id, fileName, text.slice(0, 120000), now, now);
+    const inserted = db
+      .prepare(
+        `SELECT id, pdf_id, source_kind, source_name, content_text, created_at, updated_at
+           FROM pdf_sources
+          WHERE id = ?`,
+      )
+      .get(result.lastInsertRowid) as PdfSourceRow;
+    return reply.code(201).send(inserted);
   });
 
   app.post('/api/pdfs/:id/share', async (request, reply) => {

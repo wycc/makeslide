@@ -14,6 +14,7 @@ import type {
   SyncJoinResponse,
   SyncStateResponse,
   StartProcessingResponse,
+  PdfSourceItem,
 } from '../../types';
 import { ApiError, parseErrorBody } from './common';
 
@@ -35,6 +36,30 @@ export async function fetchPdfDetail(id: string): Promise<PdfDetail> {
     throw await parseErrorBody(resp);
   }
   return (await resp.json()) as PdfDetail;
+}
+
+export async function addPdfTextSource(
+  id: string,
+  payload: { source_name?: string; content_text: string },
+): Promise<PdfSourceItem> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/sources/txt`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as PdfSourceItem;
+}
+
+export async function addPdfFileSource(id: string, file: File): Promise<PdfSourceItem> {
+  const form = new FormData();
+  form.append('file', file);
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/sources/pdf`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as PdfSourceItem;
 }
 
 export type ShareAccessMode = 'read_only' | 'editable';

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import type { ChatCompletionContentPart } from 'openai/resources/chat/completions';
 import { config } from '../../config';
 import { logger } from '../../logger';
+import { db } from '../../db';
 import { callChatJSON, type TokenUsage } from '../../services/openai';
 import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { loadPromptTemplate, renderPromptTemplate } from '../../services/promptTemplates';
@@ -325,6 +326,7 @@ interface PromptContext {
   pageEmpty: boolean;
   previousContext: string;
   nextContext: string;
+  extraSourcesText: string;
 }
 
 function buildUserText(ctx: PromptContext): string {
@@ -344,8 +346,12 @@ function buildUserText(ctx: PromptContext): string {
     ? '【頁面文字】（此處可能抽不到文字，例如封面、分隔頁或純圖像。請**根據附上的投影片圖像**與前後頁脈絡，給出合理的講解。）'
     : `【頁面原始文字（pdf 抽取，可能有排版殘留）】\n${clipText(ctx.pageText)}`;
 
+  const extraSourceBlock = ctx.extraSourcesText.trim()
+    ? `【補充來源（PDF/TXT/YouTube 字幕等）】\n${ctx.extraSourcesText.trim()}`
+    : '';
+
   const fallback =
-    '目前頁碼：第 {{page_number}} 頁 / 共 {{page_count}} 頁。\n建議字數：約 {{target_chars}} 字。\n{{previous_block}}\n{{next_block}}\n{{page_text_block}}\n請以 JSON 格式回覆：{"script": "逐字稿內容..."}';
+    '目前頁碼：第 {{page_number}} 頁 / 共 {{page_count}} 頁。\n建議字數：約 {{target_chars}} 字。\n{{previous_block}}\n{{next_block}}\n{{page_text_block}}\n{{extra_source_block}}\n請以 JSON 格式回覆：{"script": "逐字稿內容..."}';
   const template = loadPromptTemplate('backend/prompts/generate-script-usertext.md', fallback);
   const rendered = renderPromptTemplate(template, {
     page_number: String(ctx.pageNumber),
@@ -355,6 +361,7 @@ function buildUserText(ctx: PromptContext): string {
     previous_block: previousBlock,
     next_block: nextBlock,
     page_text_block: pageTextBlock,
+    extra_source_block: extraSourceBlock,
   });
   return rendered
     .replace(/[ \t]+\n/g, '\n')
@@ -487,6 +494,23 @@ export async function generateScript(
   opts: GenerateScriptOptions,
 ): Promise<GenerateScriptResult> {
   const { pdfId, pageCount, pages, onPage, userPrompt, shouldAbort } = opts;
+  const extraSourcesRows = db
+    .prepare(
+      `SELECT source_kind, source_name, content_text
+         FROM pdf_sources
+        WHERE pdf_id = ?
+        ORDER BY created_at ASC, id ASC`,
+    )
+    .all(pdfId) as Array<{ source_kind: string; source_name: string | null; content_text: string }>;
+  const extraSourcesText = extraSourcesRows
+    .map((s, idx) => {
+      const kind = (s.source_kind || 'txt').toUpperCase();
+      const name = s.source_name?.trim() ? ` (${s.source_name.trim()})` : '';
+      const body = clipText(s.content_text || '', 2000);
+      return `來源 ${idx + 1} [${kind}]${name}:\n${body}`;
+    })
+    .filter((x) => x.trim().length > 0)
+    .join('\n\n');
   if (pages[0]) {
     const firstScriptPath = pageScriptPath(pdfId, pages[0].pageNumber, pageCount);
     await fs.promises.mkdir(path.dirname(firstScriptPath), { recursive: true });
@@ -570,6 +594,7 @@ export async function generateScript(
       pageEmpty: pageInfo.empty,
       previousContext,
       nextContext,
+      extraSourcesText,
     });
 
     // Always attach the current page image as a vision input when available.

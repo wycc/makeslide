@@ -8,6 +8,8 @@ import {
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ApiError,
+  addPdfFileSource,
+  addPdfTextSource,
   answerSyncFollowerQuestionsWithAi,
   chatWithPageContext,
   addSlide,
@@ -66,6 +68,7 @@ import type {
   RegenJobState,
   SyncAiAnswer,
   SyncFollowerQuestion,
+  PdfSourceItem,
 } from '../types';
 import {
   SHOW_SUBTITLE_STORAGE_KEY,
@@ -236,8 +239,14 @@ export default function PlayPage() {
   const [titleInput, setTitleInput] = useState('');
   const [titleBusy, setTitleBusy] = useState(false);
   const [titleMsg, setTitleMsg] = useState<string | null>(null);
-  const [editTab, setEditTab] = useState<'script' | 'prompt' | 'system'>('script');
+  const [editTab, setEditTab] = useState<'script' | 'prompt' | 'source' | 'system'>('script');
   const [promptInput, setPromptInput] = useState('');
+  const [sourceTextName, setSourceTextName] = useState('');
+  const [sourceTextContent, setSourceTextContent] = useState('');
+  const [sourceBusy, setSourceBusy] = useState(false);
+  const [sourceMsg, setSourceMsg] = useState<string | null>(null);
+  const [sourceErr, setSourceErr] = useState<string | null>(null);
+  const sourcePdfInputRef = useRef<HTMLInputElement | null>(null);
   const [promptBusy, setPromptBusy] = useState(false);
   const [promptMsg, setPromptMsg] = useState<string | null>(null);
   const [pagePrompts, setPagePrompts] = useState<Record<number, string>>({});
@@ -328,6 +337,7 @@ export default function PlayPage() {
   const fullscreenContainerRef = useRef<HTMLDivElement | null>(null);
   const [slideImageScale, setSlideImageScale] = useState(1);
   const IMAGE_MSG_PREFIX = '[image] ';
+  const sourceItems: PdfSourceItem[] = detail?.sources ?? [];
 
   const effectiveAudioMuted = audioMuted || (syncEnabled && syncRole === 'follower' && !followerAudioUnlocked);
 
@@ -1886,6 +1896,55 @@ export default function PlayPage() {
     }
   }, [pdfId, currentPage, promptInput, isReadOnlyProcessing]);
 
+  const handleAddTxtSource = useCallback(async () => {
+    if (!pdfId) return;
+    const content = sourceTextContent.trim();
+    if (!content) {
+      setSourceErr('請先輸入來源文字內容');
+      return;
+    }
+    setSourceBusy(true);
+    setSourceErr(null);
+    setSourceMsg(null);
+    try {
+      const created = await addPdfTextSource(pdfId, {
+        source_name: sourceTextName.trim() || undefined,
+        content_text: content,
+      });
+      setDetail((prev) => {
+        if (!prev) return prev;
+        const prevSources = prev.sources ?? [];
+        return { ...prev, sources: [...prevSources, created] };
+      });
+      setSourceTextContent('');
+      setSourceMsg('已新增文字來源');
+    } catch (err) {
+      setSourceErr(err instanceof ApiError ? err.message : '新增文字來源失敗');
+    } finally {
+      setSourceBusy(false);
+    }
+  }, [pdfId, sourceTextContent, sourceTextName]);
+
+  const handleAddPdfSource = useCallback(async (file: File) => {
+    if (!pdfId) return;
+    setSourceBusy(true);
+    setSourceErr(null);
+    setSourceMsg(null);
+    try {
+      const created = await addPdfFileSource(pdfId, file);
+      setDetail((prev) => {
+        if (!prev) return prev;
+        const prevSources = prev.sources ?? [];
+        return { ...prev, sources: [...prevSources, created] };
+      });
+      setSourceMsg('已新增 PDF 來源');
+    } catch (err) {
+      setSourceErr(err instanceof ApiError ? err.message : '新增 PDF 來源失敗');
+    } finally {
+      setSourceBusy(false);
+    }
+  }, [pdfId]);
+
   const reloadDetail = useCallback(async () => {
     if (!pdfId) return;
     let shareMode: ShareAccessMode | null = null;
@@ -3369,6 +3428,13 @@ export default function PlayPage() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => setEditTab('source')}
+                  className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'source' ? 'bg-slate-800 text-violet-200' : 'text-slate-400'}`}
+                >
+                  📚 來源
+                </button>
+                <button
+                  type="button"
                   onClick={() => setTranscriptFocusMode((enabled) => !enabled)}
                   className={`shrink-0 border-l border-slate-700 px-3 py-1.5 text-sm ${
                     transcriptFocusMode ? 'bg-emerald-500/15 text-emerald-200' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
@@ -3430,6 +3496,78 @@ export default function PlayPage() {
                     >
                       {promptBusy ? '儲存中…' : '儲存提示詞'}
                     </button>
+                  </div>
+                </>
+              ) : editTab === 'source' ? (
+                <>
+                  <h2 className="mb-2 text-sm font-semibold text-slate-300">📚 來源管理</h2>
+                  <div className="space-y-3">
+                    <div className="rounded-md border border-slate-800 bg-slate-900/50 p-3">
+                      <p className="mb-2 text-xs text-slate-400">新增 TXT 來源（會在生成逐字稿時一起送出）</p>
+                      <input
+                        value={sourceTextName}
+                        onChange={(e) => setSourceTextName(e.target.value)}
+                        placeholder="來源名稱（選填）"
+                        className="mb-2 w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100"
+                      />
+                      <textarea
+                        value={sourceTextContent}
+                        onChange={(e) => setSourceTextContent(e.target.value)}
+                        rows={5}
+                        placeholder="貼上來源文字內容"
+                        className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100"
+                      />
+                      <div className="mt-2 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => void handleAddTxtSource()}
+                          disabled={sourceBusy || isReadOnlyProcessing}
+                          className="rounded-md border border-violet-500/50 bg-violet-500/15 px-3 py-1.5 text-sm text-violet-200 disabled:opacity-40"
+                        >
+                          新增 TXT 來源
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="rounded-md border border-slate-800 bg-slate-900/50 p-3">
+                      <p className="mb-2 text-xs text-slate-400">新增 PDF 來源（會擷取文字並在生成逐字稿時一起送出）</p>
+                      <input
+                        ref={sourcePdfInputRef}
+                        type="file"
+                        accept="application/pdf,.pdf"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) void handleAddPdfSource(file);
+                          e.currentTarget.value = '';
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => sourcePdfInputRef.current?.click()}
+                        disabled={sourceBusy || isReadOnlyProcessing}
+                        className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-200 disabled:opacity-40"
+                      >
+                        上傳 PDF 來源
+                      </button>
+                    </div>
+
+                    {sourceErr ? <p className="text-xs text-rose-300">{sourceErr}</p> : null}
+                    {sourceMsg ? <p className="text-xs text-emerald-300">{sourceMsg}</p> : null}
+
+                    <div className="rounded-md border border-slate-800 bg-slate-900/50 p-3">
+                      <p className="mb-2 text-xs text-slate-400">目前來源清單（{sourceItems.length}）</p>
+                      <div className="max-h-52 space-y-2 overflow-y-auto">
+                        {sourceItems.length === 0 ? (
+                          <p className="text-xs text-slate-500">尚未新增額外來源</p>
+                        ) : sourceItems.map((s) => (
+                          <div key={s.id} className="rounded border border-slate-700 px-2 py-1.5">
+                            <p className="text-xs text-slate-300">[{s.source_kind}] {s.source_name ?? '未命名來源'}</p>
+                            <p className="mt-1 line-clamp-2 text-xs text-slate-400">{s.content_text}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </>
               ) : (
