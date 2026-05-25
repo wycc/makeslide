@@ -25,6 +25,7 @@ export const en = {
   'settings.userCodeLocal': 'Not signed in: saved in this browser (Application/Local Storage).',
   'settings.uiLanguage': 'Interface language',
   'settings.contentLanguage': 'Generated content language',
+  'settings.playbackSpeed': 'Playback speed',
   'settings.contentLanguageHint': 'Affects prompts for newly generated images, transcripts, and audio; it can differ from the interface language.',
   'settings.llmProvider': 'LLM provider',
   'settings.ttsProvider': 'TTS provider',

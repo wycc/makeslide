@@ -25,6 +25,7 @@ export const zhTW = {
   'settings.userCodeLocal': '未登入：儲存到此瀏覽器（Application/Local Storage）。',
   'settings.uiLanguage': '界面文字語言',
   'settings.contentLanguage': '產生結果語言',
+  'settings.playbackSpeed': '播放速度',
   'settings.contentLanguageHint': '影響新產生的圖片、逐字稿與語音提示語言；可與界面語言不同。',
   'settings.llmProvider': 'LLM 供應商',
   'settings.ttsProvider': 'TTS 供應商',

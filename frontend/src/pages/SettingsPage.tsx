@@ -11,10 +11,12 @@ import {
 } from '../lib/api';
 import {
   CONTENT_LANGUAGE_STORAGE_KEY,
+  PLAYBACK_SPEED_STORAGE_KEY,
   LANGUAGE_OPTIONS,
   UI_LANGUAGE_STORAGE_KEY,
   type AppLanguage,
   getStoredContentLanguage,
+  getStoredPlaybackSpeed,
   getStoredUiLanguage,
   storeLanguageSettings,
   useI18n,
@@ -30,6 +32,7 @@ export default function SettingsPage() {
   const [ttsProvider, setTtsProvider] = useState<'openai' | 'gemini'>('openai');
   const [uiLanguage, setUiLanguage] = useState<AppLanguage>(() => getStoredUiLanguage());
   const [contentLanguage, setContentLanguage] = useState<AppLanguage>(() => getStoredContentLanguage());
+  const [playbackSpeed, setPlaybackSpeed] = useState<number>(() => getStoredPlaybackSpeed());
   const [openaiLlmModel, setOpenaiLlmModel] = useState('gpt-4o-mini');
   const [geminiLlmModel, setGeminiLlmModel] = useState('gemini-2.0-flash');
   const [openaiTtsModel, setOpenaiTtsModel] = useState('gpt-4o-mini-tts');
@@ -69,6 +72,7 @@ export default function SettingsPage() {
       setContentLanguage(loadedContentLanguage);
       window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, loadedUiLanguage);
       window.localStorage.setItem(CONTENT_LANGUAGE_STORAGE_KEY, loadedContentLanguage);
+      setPlaybackSpeed(getStoredPlaybackSpeed());
       const cachedUserCode = window.localStorage.getItem(LOCAL_USER_CODE_KEY)?.trim() ?? '';
       setUserCode((auth?.authenticated ? s.user_code : cachedUserCode) ?? '');
       if (s.has_openai_key || s.has_gemini_key) {
@@ -135,6 +139,7 @@ export default function SettingsPage() {
         content_language: contentLanguage,
       });
       storeLanguageSettings(uiLanguage, contentLanguage);
+      window.localStorage.setItem(PLAYBACK_SPEED_STORAGE_KEY, String(playbackSpeed));
       if (authStatus?.authenticated) {
         window.localStorage.removeItem(LOCAL_USER_CODE_KEY);
       } else {
@@ -156,6 +161,7 @@ export default function SettingsPage() {
     geminiTtsSpeaker1,
     geminiTtsSpeaker2,
     contentLanguage,
+    playbackSpeed,
     llmProvider,
     navigate,
     openaiApiKey,
@@ -275,6 +281,18 @@ export default function SettingsPage() {
                 ))}
               </select>
               <span className="mt-1 block text-xs text-slate-500">{t('settings.contentLanguageHint')}</span>
+            </label>
+            <label className="block text-sm text-slate-300">
+              {t('settings.playbackSpeed')}
+              <select
+                value={String(playbackSpeed)}
+                onChange={(e) => setPlaybackSpeed(Number(e.target.value))}
+                className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              >
+                {[0.5, 0.75, 1, 1.25, 1.5, 2].map((speed) => (
+                  <option key={speed} value={String(speed)}>{speed}x</option>
+                ))}
+              </select>
             </label>
             <label className="block text-sm text-slate-300">
               {t('settings.llmProvider')}

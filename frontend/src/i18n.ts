@@ -13,6 +13,7 @@ export const LANGUAGE_OPTIONS: Array<{ value: AppLanguage; label: string; native
 
 export const UI_LANGUAGE_STORAGE_KEY = 'makeslide.ui_language';
 export const CONTENT_LANGUAGE_STORAGE_KEY = 'makeslide.content_language';
+export const PLAYBACK_SPEED_STORAGE_KEY = 'makeslide.playback_speed';
 
 const dictionaries = {
   'zh-TW': zhTW,
@@ -69,4 +70,16 @@ export function useI18n() {
   const t = useCallback((key: TranslationKey) => translate(language, key), [language]);
 
   return useMemo(() => ({ language, contentLanguage, t }), [contentLanguage, language, t]);
+}
+
+export function normalizePlaybackSpeed(value: unknown, fallback = 1): number {
+  const n = typeof value === 'string' ? Number(value) : typeof value === 'number' ? value : NaN;
+  if (!Number.isFinite(n)) return fallback;
+  const allowed = [0.5, 0.75, 1, 1.25, 1.5, 2];
+  return allowed.includes(n) ? n : fallback;
+}
+
+export function getStoredPlaybackSpeed(): number {
+  if (typeof window === 'undefined') return 1;
+  return normalizePlaybackSpeed(window.localStorage.getItem(PLAYBACK_SPEED_STORAGE_KEY), 1);
 }

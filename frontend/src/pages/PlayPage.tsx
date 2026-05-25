@@ -66,6 +66,7 @@ import type {
   SyncAiAnswer,
   SyncFollowerQuestion,
 } from '../types';
+import { getStoredPlaybackSpeed } from '../i18n';
 
 const POLL_INTERVAL_MS = 3000;
 const AUDIO_RETRY_DELAY_MS = 800;
@@ -298,6 +299,7 @@ export default function PlayPage() {
   const [syncEnabled, setSyncEnabled] = useState(false);
   const [syncRole, setSyncRole] = useState<'master' | 'follower'>('follower');
   const [audioMuted, setAudioMuted] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState<number>(() => getStoredPlaybackSpeed());
   const [playbackSettingsOpen, setPlaybackSettingsOpen] = useState(false);
   const [followerAudioUnlocked, setFollowerAudioUnlocked] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -327,6 +329,12 @@ export default function PlayPage() {
   const availableTtsVoices = TTS_VOICES_BY_PROVIDER[ttsProvider];
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.playbackRate = playbackRate;
+    window.localStorage.setItem('makeslide.playback_speed', String(playbackRate));
+  }, [playbackRate]);
   const currentAudioTokenRef = useRef(0);
   const audioRetryTimerRef = useRef<number | null>(null);
   // prefetch refs so GC doesn't drop them mid-load
@@ -3203,6 +3211,12 @@ export default function PlayPage() {
                     />
                     本機靜音
                   </label>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-950/70 px-3 py-2">
+                  <div><span className="font-semibold text-slate-200">播放速度</span></div>
+                  <select value={String(playbackRate)} onChange={(e)=>setPlaybackRate(Number(e.target.value))} className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200">
+                    {[0.5,0.75,1,1.25,1.5,2].map((speed)=><option key={speed} value={String(speed)}>{speed}x</option>)}
+                  </select>
                 </div>
                 {syncEnabled && syncRole === 'master' ? (
                   <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-cyan-100">
