@@ -189,6 +189,7 @@ export const zhTW = {
   'status.ready': '已完成',
   'status.failed': '失敗',
   'progress.rendering': '產生投影片圖片',
+  'progress.renderingVideo': '產生影片',
   'progress.extractingText': '抽取文字',
   'progress.textExtracted': '文字已抽取',
   'progress.scripting': '產生逐字稿',

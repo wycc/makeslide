@@ -14,6 +14,7 @@ export type PdfStatus =
 export type ProgressStep =
   | null
   | 'rendering'
+  | 'rendering_video'
   | 'extracting_text'
   | 'text_extracted'
   | 'scripting'

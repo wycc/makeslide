@@ -43,6 +43,7 @@ const STATUS_STYLES: Record<PdfStatus, { labelKey: Parameters<ReturnType<typeof 
 
 const PROGRESS_LABEL_KEYS: Record<Exclude<ProgressStep, null>, Parameters<ReturnType<typeof useI18n>['t']>[0]> = {
   rendering: 'progress.rendering',
+  rendering_video: 'progress.renderingVideo',
   extracting_text: 'progress.extractingText',
   text_extracted: 'progress.textExtracted',
   scripting: 'progress.scripting',

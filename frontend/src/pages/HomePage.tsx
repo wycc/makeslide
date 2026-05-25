@@ -151,22 +151,6 @@ export default function HomePage() {
     showToast(t('home.categoryAdded').replace('{category}', category));
   }, [allCategories, customCategories, persistCustomCategories, showToast, t, updateCategoryFilter]);
 
-  const handleDeleteCustomCategory = useCallback((category: string) => {
-    const usedByPdf = items.some((pdf) => (pdf.category?.trim() || DEFAULT_CATEGORY) === category);
-    if (usedByPdf) {
-      showToast(t('home.categoryInUseCannotDelete'));
-      return;
-    }
-    const next = customCategories.filter((value) => value !== category);
-    persistCustomCategories(next);
-    setCategoryFilter((prev) => {
-      if (prev !== category) return prev;
-      window.localStorage.setItem(CATEGORY_FILTER_STORAGE_KEY, '__all__');
-      return '__all__';
-    });
-    showToast(t('home.categoryDeleted').replace('{category}', category));
-  }, [customCategories, items, persistCustomCategories, showToast, t]);
-
   const load = useCallback(async (opts: { silent?: boolean } = {}) => {
     if (!opts.silent) setLoading(true);
     try {

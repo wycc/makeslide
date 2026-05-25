@@ -189,6 +189,7 @@ export const en = {
   'status.ready': 'Ready',
   'status.failed': 'Failed',
   'progress.rendering': 'Rendering slide images',
+  'progress.renderingVideo': 'Rendering video',
   'progress.extractingText': 'Extracting text',
   'progress.textExtracted': 'Text extracted',
   'progress.scripting': 'Generating script',
