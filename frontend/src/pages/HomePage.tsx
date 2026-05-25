@@ -24,6 +24,7 @@ const POLL_INTERVAL_ACTIVE_MS = 5000;
 const POLL_INTERVAL_IDLE_MS = 30000;
 const DEFAULT_PROMPT_TTS_PROVIDER = 'gemini' as const;
 const DEFAULT_CATEGORY = 'general';
+const ADD_CATEGORY_OPTION_VALUE = '__add_category__';
 const CATEGORY_FILTER_STORAGE_KEY = 'makeslide.home.categoryFilter';
 const CUSTOM_CATEGORIES_STORAGE_KEY = 'makeslide.home.customCategories';
 
@@ -82,7 +83,6 @@ export default function HomePage() {
   const [promptTarget, setPromptTarget] = useState<PromptTarget | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>(readStoredCategoryFilter);
   const [customCategories, setCustomCategories] = useState<string[]>(readStoredCustomCategories);
-  const [newCategoryName, setNewCategoryName] = useState('');
   const [continuingPdfId, setContinuingPdfId] = useState<string | null>(null);
 
   const itemCategories = items.reduce<string[]>((categories, pdf) => {
@@ -128,22 +128,28 @@ export default function HomePage() {
     window.localStorage.setItem(CUSTOM_CATEGORIES_STORAGE_KEY, JSON.stringify(next));
   }, []);
 
-  const handleAddCustomCategory = useCallback(() => {
-    const category = newCategoryName.trim();
-    if (!category) {
-      showToast(t('home.categoryNameRequired'));
+  const handleCategoryFilterSelect = useCallback((value: string) => {
+    if (value !== ADD_CATEGORY_OPTION_VALUE) {
+      updateCategoryFilter(value);
       return;
     }
+
+    const input = window.prompt(t('home.newCategoryPlaceholder'));
+    const category = input?.trim() || '';
+    if (!category) return;
+
     if (allCategories.includes(category)) {
       showToast(t('home.categoryAlreadyExists').replace('{category}', category));
+      updateCategoryFilter(category);
       return;
     }
+
     const next = [...customCategories, category]
       .sort((a, b) => a.localeCompare(b, 'zh-Hant', { numeric: true, sensitivity: 'base' }));
     persistCustomCategories(next);
-    setNewCategoryName('');
+    updateCategoryFilter(category);
     showToast(t('home.categoryAdded').replace('{category}', category));
-  }, [allCategories, customCategories, newCategoryName, persistCustomCategories, showToast, t]);
+  }, [allCategories, customCategories, persistCustomCategories, showToast, t, updateCategoryFilter]);
 
   const handleDeleteCustomCategory = useCallback((category: string) => {
     const usedByPdf = items.some((pdf) => (pdf.category?.trim() || DEFAULT_CATEGORY) === category);
@@ -505,55 +511,35 @@ export default function HomePage() {
               {t('home.showCategory')}
               <select
                 value={categoryFilter}
-                onChange={(ev) => updateCategoryFilter(ev.target.value)}
+                onChange={(ev) => handleCategoryFilterSelect(ev.target.value)}
                 className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition hover:border-slate-500"
               >
                 <option value="__all__">{t('home.allCategories')}</option>
                 <option value="__recent__">{RECENT_CATEGORY}</option>
+                <option value={ADD_CATEGORY_OPTION_VALUE}>{t('home.addCategory')}…</option>
                 {allCategories.map((category) => (
                   <option key={category} value={category}>{category}</option>
                 ))}
               </select>
             </label>
-            <div className="mt-4 space-y-2">
-              <div className="text-xs text-slate-400">{t('home.manageDisplayCategories')}</div>
-              <div className="flex gap-2">
-                <input
-                  value={newCategoryName}
-                  onChange={(ev) => setNewCategoryName(ev.target.value)}
-                  placeholder={t('home.newCategoryPlaceholder')}
-                  className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition hover:border-slate-500"
-                />
-                <button
-                  type="button"
-                  onClick={handleAddCustomCategory}
-                  className="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 hover:bg-slate-800"
-                >
-                  {t('home.addCategory')}
-                </button>
-              </div>
-              {customCategories.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {customCategories.map((category) => (
-                    <button
-                      key={category}
-                      type="button"
-                      onClick={() => handleDeleteCustomCategory(category)}
-                      className="rounded-full border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:border-rose-500/50 hover:text-rose-300"
-                      title={t('home.deleteCategory')}
-                    >
-                      {category} ×
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            {/* custom category management UI removed; category creation is only via dropdown option */}
           </section>
         )}
 
         {items.length > 0 && categoryGroups.length === 0 && (
           <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/40 p-10 text-center">
             <p className="text-slate-300">{t('home.noSlidesInCategory')}</p>
+            {categoryFilter !== '__all__' &&
+              categoryFilter !== '__recent__' &&
+              categoryFilter !== DEFAULT_CATEGORY && (
+                <button
+                  type="button"
+                  onClick={() => void handleDeleteCategory(categoryFilter)}
+                  className="mt-4 rounded-md border border-rose-500/40 px-3 py-1.5 text-xs text-rose-300 transition hover:bg-rose-500/10"
+                >
+                  {t('home.deleteCategory')}
+                </button>
+              )}
           </div>
         )}
 
