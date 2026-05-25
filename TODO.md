@@ -214,6 +214,11 @@
 [x] 在播放頁加入來源 tab，將 PDF/TXT/youtube caption 放在這邊。並新增上傳 PDF/TXT 的功能。所有的來源都會在生成逐字稿時被一起送出去。（完成於分支: feature/playpage-source-tab-and-multi-source-transcript-20260525）
 [x] (merge)新增重新生成標題的功能（完成於分支: feature/regenerate-title-20260525）
 [x] (merge)將顯示字幕移到 PlayPage 之中變成簡報的設定。（完成於分支: feature/move-subtitle-setting-to-playpage-20260525）
+[ ] 加首頁的每一個卡片上加上 export 的功能，把一個簡報所有資料都 export 成一個 zip 檔
+[ ] 在首頁的上方加上一個 import 的按鍵，將 export 的 zip 檔匯入
+[x] 在顯示類別選擇旁加上一個 filter 欄位，我們可以使用 keyword 找簡報，主要是以標題為 search 的範圍（完成於分支: feature/home-keyword-filter-20260525）
+[x] 在設定中加上啟動 google account login 的功能，當 enable 時，出現一個設定按鍵, 提供輸入 GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI 的功能（完成於分支: feature/google-auth-settings-ui-config-20260525）
+
 
 - 時間: 2026-05-25 11:03:56 +0800
 - 分支: feature/category-add-delete-20260525
@@ -238,3 +243,12 @@
 - 時間: 2026-05-25 18:30:00 +0800
 - 分支: feature/playpage-source-tab-and-multi-source-transcript-20260525
 - 內容: 完成「播放頁來源 tab + 上傳 PDF/TXT + 逐字稿合併來源」：於 PlayPage 新增來源分頁並支援新增 TXT/PDF 來源；後端新增 `pdf_sources` 資料表與 `/api/pdfs/:id/sources/txt`、`/api/pdfs/:id/sources/pdf` API；逐字稿生成時會將所有來源文字一併附加到提示內容。功能已在獨立分支提交；lint/typecheck 通過，`npm test` 受既有 pages-api/regenerate 測試基線問題影響未全綠，與本次修改無直接關聯。
+
+- 時間: 2026-05-25 19:36:00 +0800
+- 分支: feature/home-keyword-filter-20260525
+- 內容: 完成「在顯示類別選擇旁加上一個 filter 欄位」：首頁類別選擇旁新增標題關鍵字篩選輸入框，支援依標題即時過濾簡報卡片並保留既有類別篩選邏輯；同時新增中英文翻譯鍵值。功能已在獨立分支提交，`npm --prefix frontend run build` 驗證通過。
+
+
+- 時間: 2026-05-25 20:07:55 +0800
+- 分支: feature/google-auth-settings-ui-config-20260525
+- 內容: 完成設定頁 Google login 啟用開關與 GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET/GOOGLE_REDIRECT_URI 輸入欄位，並串接後端 /api/system/ai-settings 設定持久化。
