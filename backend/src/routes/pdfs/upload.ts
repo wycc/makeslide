@@ -388,17 +388,20 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
 
     try {
       createPdfDir(pdfId);
+      let sourceContentText = '';
       if (isPdf) {
         await writeSourcePdf(pdfId, buffer);
+        sourceContentText = await extractPdfText(sourcePdfPath(pdfId));
         if (pdfImportMode === 'document') {
-          const extractedText = await extractPdfText(sourcePdfPath(pdfId));
+          const extractedText = sourceContentText;
           if (!extractedText) {
             throw new Error('PDF 文件模式無法抽取可分頁文字');
           }
           await writeSourceText(pdfId, extractedText);
         }
       } else {
-        await writeSourceText(pdfId, buffer.toString('utf8'));
+        sourceContentText = buffer.toString('utf8');
+        await writeSourceText(pdfId, sourceContentText);
       }
       const metadata: PdfMetadata = {
         id: pdfId,
@@ -433,6 +436,19 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
                             created_at, updated_at)
          VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?)`,
       ).run(pdfId, title, filename, status, DEFAULT_PDF_CATEGORY, ownerSub, 'private', createdAt, createdAt);
+
+      db.prepare(
+        `INSERT INTO pdf_sources (pdf_id, source_kind, source_name, content_text, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      ).run(
+        pdfId,
+        isPdf ? 'pdf' : 'txt',
+        filename,
+        (sourceContentText || '').trim(),
+        createdAt,
+        createdAt,
+      );
+
     } catch (err) {
       request.log.error({ err, pdfId }, 'Failed to persist uploaded PDF');
       try {
@@ -530,6 +546,17 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         youtubeUrl,
         videoId,
         language,
+        createdAt,
+        createdAt,
+      );
+
+      db.prepare(
+        `INSERT INTO pdf_sources (pdf_id, source_kind, source_name, content_text, created_at, updated_at)
+         VALUES (?, 'youtube_caption', ?, ?, ?, ?)`,
+      ).run(
+        pdfId,
+        `YouTube ${videoId}`,
+        '',
         createdAt,
         createdAt,
       );
