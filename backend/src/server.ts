@@ -84,6 +84,19 @@ export async function buildApp() {
     app.get(withNbPrefix('/api/health'), async () => ({ ok: true }));
   }
 
+  app.get('/', async (_request, reply) => {
+    if (nbPrefix) {
+      return reply.redirect(302, `${nbPrefix}/`);
+    }
+    return reply.redirect(302, '/index.html');
+  });
+
+  if (nbPrefix) {
+    app.get(`${nbPrefix}/`, async (_request, reply) => {
+      return reply.redirect(302, `${nbPrefix}/index.html`);
+    });
+  }
+
   const { pdfRoutes } = await import("./routes/pdfs");
   for (const prefix of routePrefixes) {
     await app.register(pdfRoutes, { prefix });
