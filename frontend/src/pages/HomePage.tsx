@@ -27,6 +27,7 @@ const DEFAULT_CATEGORY = 'general';
 const ADD_CATEGORY_OPTION_VALUE = '__add_category__';
 const CATEGORY_FILTER_STORAGE_KEY = 'makeslide.home.categoryFilter';
 const CUSTOM_CATEGORIES_STORAGE_KEY = 'makeslide.home.customCategories';
+const TITLE_FILTER_STORAGE_KEY = 'makeslide.home.titleFilter';
 
 const compareByTitle = (a: PdfListItem, b: PdfListItem) => {
   const titleA = a.title?.trim() || a.id;
@@ -69,6 +70,11 @@ const readStoredCustomCategories = () => {
   }
 };
 
+const readStoredTitleFilter = () => {
+  if (typeof window === 'undefined') return '';
+  return window.localStorage.getItem(TITLE_FILTER_STORAGE_KEY) || '';
+};
+
 export default function HomePage() {
   const { t } = useI18n();
   const RECENT_CATEGORY = t('home.recentCategory');
@@ -83,6 +89,7 @@ export default function HomePage() {
   const [promptTarget, setPromptTarget] = useState<PromptTarget | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>(readStoredCategoryFilter);
   const [customCategories, setCustomCategories] = useState<string[]>(readStoredCustomCategories);
+  const [titleFilter, setTitleFilter] = useState<string>(readStoredTitleFilter);
   const [continuingPdfId, setContinuingPdfId] = useState<string | null>(null);
 
   const itemCategories = items.reduce<string[]>((categories, pdf) => {
@@ -92,9 +99,16 @@ export default function HomePage() {
   }, []).sort((a, b) => a.localeCompare(b, 'zh-Hant', { numeric: true, sensitivity: 'base' }));
   const allCategories = Array.from(new Set([...itemCategories, ...customCategories]))
     .sort((a, b) => a.localeCompare(b, 'zh-Hant', { numeric: true, sensitivity: 'base' }));
-  const filteredItems = categoryFilter === '__all__' || categoryFilter === '__recent__'
+  const categoryFilteredItems = categoryFilter === '__all__' || categoryFilter === '__recent__'
     ? items
     : items.filter((pdf) => (pdf.category?.trim() || DEFAULT_CATEGORY) === categoryFilter);
+  const normalizedTitleFilter = titleFilter.trim().toLocaleLowerCase();
+  const filteredItems = normalizedTitleFilter
+    ? categoryFilteredItems.filter((pdf) => {
+      const title = (pdf.title?.trim() || '').toLocaleLowerCase();
+      return title.includes(normalizedTitleFilter);
+    })
+    : categoryFilteredItems;
   const categoryGroups = categoryFilter === '__recent__'
     ? [{ category: RECENT_CATEGORY, items: [...items].sort(compareByCreatedAtDesc) }]
     : filteredItems.reduce<Array<{ category: string; items: PdfListItem[] }>>((groups, pdf) => {
@@ -121,6 +135,11 @@ export default function HomePage() {
   const updateCategoryFilter = useCallback((nextFilter: string) => {
     setCategoryFilter(nextFilter);
     window.localStorage.setItem(CATEGORY_FILTER_STORAGE_KEY, nextFilter);
+  }, []);
+
+  const updateTitleFilter = useCallback((nextFilter: string) => {
+    setTitleFilter(nextFilter);
+    window.localStorage.setItem(TITLE_FILTER_STORAGE_KEY, nextFilter);
   }, []);
 
   const persistCustomCategories = useCallback((next: string[]) => {
@@ -491,21 +510,33 @@ export default function HomePage() {
 
         {items.length > 0 && (
           <section className="mb-6 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-            <label className="flex flex-col gap-2 text-sm text-slate-300 sm:max-w-xs">
-              {t('home.showCategory')}
-              <select
-                value={categoryFilter}
-                onChange={(ev) => handleCategoryFilterSelect(ev.target.value)}
-                className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition hover:border-slate-500"
-              >
-                <option value="__all__">{t('home.allCategories')}</option>
-                <option value="__recent__">{RECENT_CATEGORY}</option>
-                <option value={ADD_CATEGORY_OPTION_VALUE}>{t('home.addCategory')}…</option>
-                {allCategories.map((category) => (
-                  <option key={category} value={category}>{category}</option>
-                ))}
-              </select>
-            </label>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <label className="flex flex-col gap-2 text-sm text-slate-300 sm:max-w-xs">
+                {t('home.showCategory')}
+                <select
+                  value={categoryFilter}
+                  onChange={(ev) => handleCategoryFilterSelect(ev.target.value)}
+                  className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition hover:border-slate-500"
+                >
+                  <option value="__all__">{t('home.allCategories')}</option>
+                  <option value="__recent__">{RECENT_CATEGORY}</option>
+                  <option value={ADD_CATEGORY_OPTION_VALUE}>{t('home.addCategory')}…</option>
+                  {allCategories.map((category) => (
+                    <option key={category} value={category}>{category}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-2 text-sm text-slate-300 sm:w-80">
+                {t('home.filterByTitle')}
+                <input
+                  type="text"
+                  value={titleFilter}
+                  onChange={(ev) => updateTitleFilter(ev.target.value)}
+                  placeholder={t('home.filterByTitlePlaceholder')}
+                  className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition hover:border-slate-500 focus:border-indigo-400"
+                />
+              </label>
+            </div>
             {/* custom category management UI removed; category creation is only via dropdown option */}
           </section>
         )}
