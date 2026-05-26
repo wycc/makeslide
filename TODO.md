@@ -214,7 +214,7 @@
 [x] 在播放頁加入來源 tab，將 PDF/TXT/youtube caption 放在這邊。並新增上傳 PDF/TXT 的功能。所有的來源都會在生成逐字稿時被一起送出去。（完成於分支: feature/playpage-source-tab-and-multi-source-transcript-20260525）
 [x] (merge)新增重新生成標題的功能（完成於分支: feature/regenerate-title-20260525）
 [x] (merge)將顯示字幕移到 PlayPage 之中變成簡報的設定。（完成於分支: feature/move-subtitle-setting-to-playpage-20260525）
-[ ] 加首頁的每一個卡片上加上 export 的功能，把一個簡報所有資料都 export 成一個 zip 檔
+[x] 加首頁的每一個卡片上加上 export 的功能，把一個簡報所有資料都 export 成一個 zip 檔（完成於分支: feature/home-card-export-zip-20260526-from-master）
 [ ] 在首頁的上方加上一個 import 的按鍵，將 export 的 zip 檔匯入
 [x] 在顯示類別選擇旁加上一個 filter 欄位，我們可以使用 keyword 找簡報，主要是以標題為 search 的範圍（完成於分支: feature/home-keyword-filter-20260525）
 [x] 在設定中加上啟動 google account login 的功能，當 enable 時，出現一個設定按鍵, 提供輸入 GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI 的功能（完成於分支: feature/google-auth-settings-ui-config-20260525）
@@ -252,3 +252,7 @@
 - 時間: 2026-05-25 20:07:55 +0800
 - 分支: feature/google-auth-settings-ui-config-20260525
 - 內容: 完成設定頁 Google login 啟用開關與 GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET/GOOGLE_REDIRECT_URI 輸入欄位，並串接後端 /api/system/ai-settings 設定持久化。
+
+- 時間: 2026-05-26 13:24:00 +0800
+- 分支: feature/home-card-export-zip-20260526-from-master
+- 內容: 完成首頁卡片匯出功能，新增後端 /api/pdfs/:id/export.zip 與前端卡片匯出按鍵，將單一簡報所有資料打包為 ZIP 下載。
