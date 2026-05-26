@@ -9,6 +9,7 @@ import { registerObservabilityRoutes } from './observability';
 import { registerSyncRoutes } from './sync';
 import { registerQuizRoutes } from './quizzes';
 import { registerHandoutRoutes } from './handout';
+import { registerExportRoutes } from './export';
 
 export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerUploadRoutes(app);
@@ -21,4 +22,5 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerSyncRoutes(app);
   await registerQuizRoutes(app);
   await registerHandoutRoutes(app);
+  await registerExportRoutes(app);
 }

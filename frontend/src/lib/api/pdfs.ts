@@ -144,6 +144,14 @@ export async function duplicatePdf(id: string): Promise<PdfListItem> {
   return (await resp.json()) as PdfListItem;
 }
 
+export async function exportPdfZip(id: string): Promise<Blob> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/export.zip`);
+  if (!resp.ok) {
+    throw await parseErrorBody(resp);
+  }
+  return await resp.blob();
+}
+
 export async function updatePdfCategory(
   id: string,
   category: string,

@@ -17,6 +17,7 @@ interface PdfCardProps {
   categories: string[];
   onDelete: (id: string) => Promise<void> | void;
   onDuplicate: (id: string) => Promise<void> | void;
+  onExport: (id: string) => Promise<void> | void;
   onCategoryChange: (id: string, category: string) => Promise<void> | void;
   onContinue?: (pdf: PdfListItem) => Promise<void> | void;
   continuing?: boolean;
@@ -39,10 +40,11 @@ function formatDate(iso: string): string {
   }
 }
 
-export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onCategoryChange, onContinue, continuing = false, onClick }: PdfCardProps) {
+export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExport, onCategoryChange, onContinue, continuing = false, onClick }: PdfCardProps) {
   const { t } = useI18n();
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDuplicating, setIsDuplicating] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [isChangingCategory, setIsChangingCategory] = useState(false);
   // `uploaded` / `processing` 都允許刪除；
   // `isProcessing` 僅用於限制「複製」與「改類別」這類非刪除操作。
@@ -116,6 +118,17 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onCate
       await onCategoryChange(pdf.id, nextCategory);
     } finally {
       setIsChangingCategory(false);
+    }
+  };
+
+  const handleExport = async (ev: React.MouseEvent) => {
+    ev.stopPropagation();
+    if (isExporting) return;
+    setIsExporting(true);
+    try {
+      await onExport(pdf.id);
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -246,6 +259,14 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onCate
             <span />
           )}
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleExport}
+              disabled={isExporting}
+              className="rounded-md border border-indigo-500/40 px-2 py-1 text-xs text-indigo-300 transition hover:bg-indigo-500/10 disabled:opacity-50"
+            >
+              {isExporting ? t('card.exporting') : t('card.export')}
+            </button>
             <button
               type="button"
               onClick={handleDuplicate}
