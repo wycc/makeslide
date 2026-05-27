@@ -6,6 +6,7 @@ import {
   deleteCategory,
   deletePdf,
   duplicatePdf,
+  exportPdfZip,
   fetchPdfs,
   getAuthStatus,
   logoutAuth,
@@ -259,6 +260,28 @@ export default function HomePage() {
       }
     },
     [showToast],
+  );
+
+  const handleExport = useCallback(
+    async (id: string) => {
+      try {
+        const blob = await exportPdfZip(id);
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${id}.zip`;
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        showToast(t('home.exported'));
+      } catch (err) {
+        const msg = err instanceof ApiError ? err.message : t('home.exportFailed');
+        showToast(`${t('home.exportFailed')}：${msg}`);
+      }
+    },
+    [showToast, t],
   );
 
   const handleCategoryChange = useCallback(
@@ -587,6 +610,7 @@ export default function HomePage() {
                       categories={allCategories}
                       onDelete={handleDelete}
                       onDuplicate={handleDuplicate}
+                      onExport={handleExport}
                       onCategoryChange={handleCategoryChange}
                       onContinue={handleContinueGeneration}
                       continuing={continuingPdfId === pdf.id}
