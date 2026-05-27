@@ -67,12 +67,12 @@ export async function registerExportRoutes(app: FastifyInstance): Promise<void> 
 
     try {
       await runZipCommand(sourceDir, zipPath);
-      const stat = await fs.promises.stat(zipPath);
+      const zipBuffer = await fs.promises.readFile(zipPath);
       reply.header('content-type', 'application/zip');
-      reply.header('content-length', String(stat.size));
+      reply.header('content-length', String(zipBuffer.byteLength));
       reply.header('cache-control', 'no-store');
       reply.header('content-disposition', `attachment; filename="${encodeURIComponent(zipFileName)}"`);
-      return reply.send(fs.createReadStream(zipPath));
+      return reply.send(zipBuffer);
     } catch {
       return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to export zip'));
     } finally {
