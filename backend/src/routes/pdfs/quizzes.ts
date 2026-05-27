@@ -17,6 +17,11 @@ const QuizQuestionSchema = z.object({
 });
 const GeneratedQuizQuestionSchema = QuizQuestionSchema.extend({
   id: z.string().trim().min(1).max(80).optional(),
+  options: z
+    .array(z.union([QuizOptionSchema, z.string().trim().min(1).max(300)]))
+    .min(2)
+    .max(8)
+    .transform((options) => options.map((option) => (typeof option === 'string' ? { text: option } : option))),
 });
 const QuizQuestionsSchema = z.array(QuizQuestionSchema).min(1).max(50);
 const ExistingQuizQuestionsSchema = z.array(QuizQuestionSchema).max(50);

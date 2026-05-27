@@ -39,6 +39,7 @@ export default function QuizBuilderPage() {
   const [syncQuizShowAnswers, setSyncQuizShowAnswers] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [studentAnswers, setStudentAnswers] = useState<Record<string, number[]>>({});
+  const [showEditorAnswers, setShowEditorAnswers] = useState(false);
   const syncClientIdRef = useRef('');
 
   useEffect(() => {
@@ -311,6 +312,13 @@ export default function QuizBuilderPage() {
               <button type="button" onClick={() => void handleGenerate()} disabled={busy || !prompt.trim()} className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-4 py-2 text-sm text-fuchsia-100 hover:bg-fuchsia-500/25 disabled:opacity-50">{busy ? '處理中…' : '請 AI 產生/修改問題列表'}</button>
               <button type="button" onClick={() => void handleSave()} disabled={busy || !canSave} className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-4 py-2 text-sm text-emerald-100 hover:bg-emerald-500/25 disabled:opacity-50">儲存測驗</button>
               <button type="button" onClick={() => setQuestions((prev) => [...prev, emptyQuestion(prev.length)])} className="rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800">手動新增問題</button>
+              <button
+                type="button"
+                onClick={() => setShowEditorAnswers((prev) => !prev)}
+                className="rounded-md border border-amber-500/50 bg-amber-500/10 px-4 py-2 text-sm text-amber-100 hover:bg-amber-500/20"
+              >
+                {showEditorAnswers ? '隱藏答案與解析' : '顯示答案與解析'}
+              </button>
             </div>
             {message ? <p className="mt-2 text-sm text-emerald-300">{message}</p> : null}
             {error ? <p className="mt-2 text-sm text-rose-300">{error}</p> : null}
@@ -329,12 +337,16 @@ export default function QuizBuilderPage() {
               <div className="mt-3 space-y-2">
                 {q.options.map((option, oIdx) => (
                   <div key={oIdx} className="flex items-center gap-2">
-                    <input type={q.type === 'single' ? 'radio' : 'checkbox'} checked={q.answer_indices.includes(oIdx)} onChange={() => toggleAnswer(qIdx, oIdx)} />
+                    {showEditorAnswers ? (
+                      <input type={q.type === 'single' ? 'radio' : 'checkbox'} checked={q.answer_indices.includes(oIdx)} onChange={() => toggleAnswer(qIdx, oIdx)} />
+                    ) : null}
                     <input value={option.text} onChange={(e) => updateOption(qIdx, oIdx, e.target.value)} placeholder={`選項 ${oIdx + 1}`} className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
                   </div>
                 ))}
               </div>
-              <textarea value={q.explanation} onChange={(e) => updateQuestion(qIdx, { explanation: e.target.value })} rows={2} placeholder="解析" className="mt-3 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+              {showEditorAnswers ? (
+                <textarea value={q.explanation} onChange={(e) => updateQuestion(qIdx, { explanation: e.target.value })} rows={2} placeholder="解析" className="mt-3 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+              ) : null}
             </div>
           ))}
           </>
