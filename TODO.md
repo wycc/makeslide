@@ -215,7 +215,7 @@
 [x] (merge)新增重新生成標題的功能（完成於分支: feature/regenerate-title-20260525）
 [x] (merge)將顯示字幕移到 PlayPage 之中變成簡報的設定。（完成於分支: feature/move-subtitle-setting-to-playpage-20260525）
 [x] 加首頁的每一個卡片上加上 export 的功能，把一個簡報所有資料都 export 成一個 zip 檔（完成於分支: feature/home-card-export-zip-20260526-from-master）
-[ ] 在首頁的上方加上一個 import 的按鍵，將 export 的 zip 檔匯入
+[x] 在首頁的上方加上一個 import 的按鍵，將 export 的 zip 檔匯入（完成於分支: feature/home-import-zip-20260527）
 [x] 在顯示類別選擇旁加上一個 filter 欄位，我們可以使用 keyword 找簡報，主要是以標題為 search 的範圍（完成於分支: feature/home-keyword-filter-20260525）
 [x] 在設定中加上啟動 google account login 的功能，當 enable 時，出現一個設定按鍵, 提供輸入 GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI 的功能（完成於分支: feature/google-auth-settings-ui-config-20260525）
 
@@ -256,3 +256,37 @@
 - 時間: 2026-05-26 13:24:00 +0800
 - 分支: feature/home-card-export-zip-20260526-from-master
 - 內容: 完成首頁卡片匯出功能，新增後端 /api/pdfs/:id/export.zip 與前端卡片匯出按鍵，將單一簡報所有資料打包為 ZIP 下載。
+
+- 時間: 2026-05-27 10:17:00 +0800
+- 分支: feature/home-import-zip-20260527
+- 內容: 完成首頁新增 Import 按鍵與匯入 export ZIP 的流程，於獨立分支實作後回到 master 更新 TODO.md，勾選完成項目並記錄分支資訊。
+- [x] 重新確認 master TODO.md 無未完成項目並更新工作記錄（完成於分支: feature/todo-no-pending-recheck-20260527-1026）
+
+# 工作記錄
+
+- 時間: 2026-05-27 10:26:00 +0800
+- 分支: feature/todo-no-pending-recheck-20260527-1026
+- 內容: 重新確認 master 中 TODO.md 未發現行首未完成核取項目；由於沒有可實作的未完成工作，本次以獨立分支保存複查記錄 docs/todo-rechecks/2026-05-27-1026.md，並回到 master 更新 TODO.md 完成清單與工作記錄。
+- [x] 重新確認 master TODO.md 無未完成項目並更新工作記錄（完成於分支: feature/todo-no-pending-recheck-20260527-1042）
+
+# 工作記錄
+
+- 時間: 2026-05-27 10:46:00 +0800
+- 分支: feature/todo-no-pending-recheck-20260527-1042
+- 內容: 重新確認 master 中 TODO.md 未發現行首未完成核取項目；由於沒有可實作的未完成工作，本次以獨立分支保存複查記錄 docs/todo-rechecks/2026-05-27-1042.md，並回到 master 更新 TODO.md 完成清單與工作記錄。
+
+- [x] 重新確認 master TODO.md 無未完成項目並更新工作記錄（完成於分支: feature/todo-no-pending-recheck-20260527-1048）
+
+# 工作記錄
+
+- 時間: 2026-05-27 10:48:00 +0800
+- 分支: feature/todo-no-pending-recheck-20260527-1048
+- 內容: 重新確認 master 中 TODO.md 未發現行首未完成核取項目；由於沒有可實作的未完成工作，本次以獨立分支保存複查記錄 docs/todo-rechecks/2026-05-27-1048.md，並回到 master 更新 TODO.md 完成清單與工作記錄。
+
+- [x] 重新確認 master TODO.md 無未完成項目並更新工作記錄（完成於分支: feature/todo-no-pending-recheck-2026-05-27-1123）
+
+# 工作記錄
+
+- 時間: 2026-05-27 11:23:53 +0800
+- 分支: feature/todo-no-pending-recheck-2026-05-27-1123
+- 內容: 重新確認 master 中 TODO.md 未發現行首未完成核取項目；由於沒有可實作的未完成工作，本次以獨立分支保存複查記錄 docs/todo-rechecks/2026-05-27-1123.md，並回到 master 更新 TODO.md 完成清單與工作記錄。
