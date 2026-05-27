@@ -3176,8 +3176,12 @@ export default function PlayPage() {
                   key={currentPage.page_number}
                   src={withImageBust(currentPage.image_url) ?? currentPage.image_url}
                   alt={`第 ${currentPage.page_number} 頁`}
-                  className="w-auto rounded-lg border border-slate-800 shadow-xl"
+                  className="w-auto cursor-pointer rounded-lg border border-slate-800 shadow-xl"
                   style={{ maxHeight: transcriptFocusMode ? '10rem' : `${slideImageMaxHeightVh}vh` }}
+                  onClick={() => playPause()}
+                  role="button"
+                  tabIndex={-1}
+                  aria-label={isPlaying ? '暫停語音播放' : '繼續語音播放'}
                 />
               ) : (
                 <div
