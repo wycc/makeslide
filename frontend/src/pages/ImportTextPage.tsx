@@ -38,6 +38,7 @@ export default function ImportTextPage() {
   const [chatMessages, setChatMessages] = useState<PromptChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [outlineText, setOutlineText] = useState('');
+  const uploadProgressLabel = formatTemplate(t('importText.uploadingProgress'), { progress: String(progress) });
 
   const handleSubmit = async () => {
     const content = text.trim();
@@ -196,15 +197,41 @@ export default function ImportTextPage() {
               <span className="mt-1 block text-xs text-slate-400">{t('importText.modePromptDescription')}</span>
             </button>
           </div>
+          <p className="mt-3 text-xs text-slate-400">
+            {mode === 'paste'
+              ? '目前模式：貼上匯入（下方會顯示文字貼上區）'
+              : '目前模式：AI 生成大綱（若要看到貼上區，請切換到「貼上匯入」）'}
+          </p>
         </section>
 
         {mode === 'paste' ? (
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder={t('importText.pastePlaceholder')}
-            className="min-h-[20rem] h-[calc(100vh-25rem)] w-full rounded-lg border border-slate-700 bg-slate-900 p-4 text-sm leading-7 text-slate-100 outline-none focus:border-indigo-400"
-          />
+          <div className="space-y-3">
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder={t('importText.pastePlaceholder')}
+              className="min-h-[20rem] h-[calc(100vh-25rem)] w-full rounded-lg border border-slate-700 bg-slate-900 p-4 text-sm leading-7 text-slate-100 outline-none focus:border-indigo-400"
+            />
+            {isUploading && (
+              <div className="rounded-lg border border-indigo-400/40 bg-indigo-500/10 p-3">
+                <div className="mb-2 flex items-center justify-between text-xs text-indigo-100">
+                  <span>{uploadProgressLabel}</span>
+                  <span>{progress}%</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
+                  <div
+                    className="h-full rounded-full bg-indigo-400 transition-all duration-200"
+                    style={{ width: `${progress}%` }}
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={progress}
+                    aria-label={uploadProgressLabel}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
         ) : (
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.9fr)]">
             <section className="rounded-xl border border-slate-700 bg-slate-900/60 p-4">
@@ -297,6 +324,25 @@ export default function ImportTextPage() {
                 placeholder={t('importText.outlinePlaceholder')}
                 className="h-[58vh] w-full rounded-lg border border-slate-700 bg-slate-950 p-4 text-sm leading-7 text-slate-100 outline-none focus:border-indigo-400"
               />
+              {isUploading && (
+                <div className="mt-3 rounded-lg border border-emerald-400/40 bg-emerald-500/10 p-3">
+                  <div className="mb-2 flex items-center justify-between text-xs text-emerald-100">
+                    <span>{uploadProgressLabel}</span>
+                    <span>{progress}%</span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
+                    <div
+                      className="h-full rounded-full bg-emerald-400 transition-all duration-200"
+                      style={{ width: `${progress}%` }}
+                      role="progressbar"
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={progress}
+                      aria-label={uploadProgressLabel}
+                    />
+                  </div>
+                </div>
+              )}
             </section>
           </div>
         )}

@@ -16,7 +16,7 @@ import type {
   StartProcessingResponse,
   PdfSourceItem,
 } from '../../types';
-import { ApiError, parseErrorBody } from './common';
+import { ApiError, isApiErrorBody, parseErrorBody } from './common';
 
 export async function fetchPdfs(): Promise<PdfListItem[]> {
   const resp = await fetch('api/pdfs');
@@ -152,17 +152,63 @@ export async function exportPdfZip(id: string): Promise<Blob> {
   return await resp.blob();
 }
 
-export async function importPdfZip(file: File): Promise<PdfListItem> {
-  const form = new FormData();
-  form.append('file', file);
-  const resp = await fetch('api/pdfs/import.zip', {
-    method: 'POST',
-    body: form,
+export async function importPdfZip(
+  file: File,
+  opts: { onProgress?: (loaded: number, total: number) => void; signal?: AbortSignal } = {},
+): Promise<PdfListItem> {
+  return await new Promise<PdfListItem>((resolve, reject) => {
+    const form = new FormData();
+    form.append('file', file);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', 'api/pdfs/import.zip');
+
+    xhr.upload.onprogress = (ev) => {
+      if (ev.lengthComputable && opts.onProgress) {
+        opts.onProgress(ev.loaded, ev.total);
+      }
+    };
+
+    xhr.onerror = () => {
+      reject(new ApiError('Network error', 'NETWORK_ERROR', 0));
+    };
+
+    xhr.onabort = () => {
+      reject(new ApiError('Upload aborted', 'ABORTED', 0));
+    };
+
+    xhr.onload = () => {
+      const text = xhr.responseText;
+      let body: unknown = null;
+      try {
+        body = text ? JSON.parse(text) : null;
+      } catch {
+        // ignore
+      }
+
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(body as PdfListItem);
+        return;
+      }
+
+      if (isApiErrorBody(body)) {
+        reject(new ApiError(body.error.message, body.error.code, xhr.status));
+        return;
+      }
+
+      reject(new ApiError(`HTTP ${xhr.status}`, 'HTTP_ERROR', xhr.status));
+    };
+
+    if (opts.signal) {
+      if (opts.signal.aborted) {
+        xhr.abort();
+        return;
+      }
+      opts.signal.addEventListener('abort', () => xhr.abort(), { once: true });
+    }
+
+    xhr.send(form);
   });
-  if (!resp.ok) {
-    throw await parseErrorBody(resp);
-  }
-  return (await resp.json()) as PdfListItem;
 }
 
 export async function updatePdfCategory(
