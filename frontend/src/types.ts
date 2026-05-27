@@ -162,6 +162,7 @@ export interface QuizQuestion {
   options: QuizOption[];
   answer_indices: number[];
   explanation: string;
+  score?: number | null;
 }
 
 export interface QuizSet {

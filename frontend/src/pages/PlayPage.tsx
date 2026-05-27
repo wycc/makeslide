@@ -966,6 +966,8 @@ export default function PlayPage() {
       } catch (err) {
         if (cancelled) return;
         setSyncError(err instanceof ApiError ? err.message : '同步模式連線失敗');
+        const enabledKey = `makeslide.sync.enabled.${pdfId}`;
+        window.localStorage.removeItem(enabledKey);
         setSyncEnabled(false);
       }
     })();

@@ -20,7 +20,43 @@ function emptyQuestion(index: number): QuizQuestion {
     options: [{ text: '' }, { text: '' }, { text: '' }, { text: '' }],
     answer_indices: [0],
     explanation: '',
+    score: null,
   };
+}
+
+function normalizeQuestionScores(questions: QuizQuestion[]): number[] {
+  if (questions.length === 0) return [];
+  const TOTAL = 100;
+  const explicit = questions.map((q) => (typeof q.score === 'number' && Number.isFinite(q.score) && q.score >= 0 ? q.score : null));
+  const assigned = explicit.reduce<number>((acc, v) => acc + (v ?? 0), 0);
+  const emptyIndices = explicit.map((v, i) => (v == null ? i : -1)).filter((i) => i >= 0);
+  const remaining = Math.max(0, TOTAL - assigned);
+  const even = emptyIndices.length > 0 ? remaining / emptyIndices.length : 0;
+  return explicit.map((v) => (v == null ? (emptyIndices.length > 0 ? even : 0) : v));
+}
+
+function isCorrectAnswer(question: QuizQuestion, selected: number[]): boolean {
+  const a = Array.from(new Set(question.answer_indices)).sort((x, y) => x - y);
+  const b = Array.from(new Set(selected)).sort((x, y) => x - y);
+  if (a.length !== b.length) return false;
+  return a.every((v, i) => v === b[i]);
+}
+
+function calcQuestionScore(question: QuizQuestion, selected: number[], questionScore: number): number {
+  if (question.type === 'single') {
+    return isCorrectAnswer(question, selected) ? questionScore : 0;
+  }
+  const optionCount = question.options.length;
+  if (optionCount <= 0) return 0;
+  const perOption = questionScore / optionCount;
+  const selectedSet = new Set(selected);
+  let earned = 0;
+  for (let idx = 0; idx < optionCount; idx += 1) {
+    const shouldSelect = question.answer_indices.includes(idx);
+    const didSelect = selectedSet.has(idx);
+    if (shouldSelect === didSelect) earned += perOption;
+  }
+  return earned;
 }
 
 export default function QuizBuilderPage() {
@@ -82,24 +118,79 @@ export default function QuizBuilderPage() {
   useEffect(() => {
     if (!pdfId) return;
     const storageKey = `makeslide.sync.client.${pdfId}`;
-    const existing = window.localStorage.getItem(storageKey);
-    const next = existing || `sync-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    window.localStorage.setItem(storageKey, next);
+    const roleKey = `makeslide.sync.role.${pdfId}`;
+    const existing = window.sessionStorage.getItem(storageKey);
+    const preferredRole = window.localStorage.getItem(roleKey) === 'master' ? 'master' : 'follower';
+    const next = (existing && existing.trim()) || `sync-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    window.sessionStorage.setItem(storageKey, next);
     syncClientIdRef.current = next;
+    if (preferredRole === 'master') setSyncRole('master');
     let cancelled = false;
+    let joinedOnce = false;
+
+    const resolveRole = (incomingRole: 'master' | 'follower'): 'master' | 'follower' => {
+      const localPreferred = window.localStorage.getItem(roleKey) === 'master';
+      if (incomingRole === 'master' || localPreferred) return 'master';
+      return 'follower';
+    };
 
     const refresh = async () => {
+      let clientId = syncClientIdRef.current.trim();
+      const followerCodeKey = `makeslide.sync.followerCode.${pdfId}`;
+      let followerCode = window.localStorage.getItem(followerCodeKey)?.trim() || '';
+      if (!clientId) {
+        clientId = `sync-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        syncClientIdRef.current = clientId;
+        window.sessionStorage.setItem(storageKey, clientId);
+      }
       try {
-        try {
-          const joined = await joinPlaybackSync(pdfId, next);
+        if (!joinedOnce) {
+          try {
+            const joined = await joinPlaybackSync(pdfId, clientId, followerCode || undefined);
+            if (cancelled) return;
+            joinedOnce = true;
+            if (joined.follower_code?.trim()) {
+              followerCode = joined.follower_code.trim();
+              window.localStorage.setItem(followerCodeKey, followerCode);
+            }
+            const nextRole = resolveRole(joined.role);
+            setSyncRole(nextRole);
+            window.localStorage.setItem(roleKey, nextRole);
+            setSyncActiveQuizId(joined.active_quiz_id ?? null);
+            setSyncQuizShowAnswers(joined.quiz_show_answers ?? false);
+          } catch (err) {
+            if (err instanceof ApiError && err.status === 400) {
+              if (err.code === 'SYNC_FOLLOWER_CODE_REQUIRED') {
+                const entered = window.prompt('請輸入你的顯示代號才能加入 follower 同步模式', followerCode)?.trim() || '';
+                if (!entered) throw err;
+                followerCode = entered;
+                window.localStorage.setItem(followerCodeKey, followerCode);
+              }
+              const regenerated = `sync-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+              syncClientIdRef.current = regenerated;
+              window.sessionStorage.setItem(storageKey, regenerated);
+              const joined = await joinPlaybackSync(pdfId, regenerated, followerCode || undefined);
+              if (cancelled) return;
+              joinedOnce = true;
+              if (joined.follower_code?.trim()) {
+                followerCode = joined.follower_code.trim();
+                window.localStorage.setItem(followerCodeKey, followerCode);
+              }
+              const nextRole = resolveRole(joined.role);
+              setSyncRole(nextRole);
+              window.localStorage.setItem(roleKey, nextRole);
+              setSyncActiveQuizId(joined.active_quiz_id ?? null);
+              setSyncQuizShowAnswers(joined.quiz_show_answers ?? false);
+            } else {
+              throw err;
+            }
+          }
+        } else {
+          const state = await fetchPlaybackSyncState(pdfId, clientId);
           if (cancelled) return;
-          setSyncRole(joined.role);
-          setSyncActiveQuizId(joined.active_quiz_id ?? null);
-          setSyncQuizShowAnswers(joined.quiz_show_answers ?? false);
-        } catch (err) {
-          const state = await fetchPlaybackSyncState(pdfId, next);
-          if (cancelled) return;
-          setSyncRole(state.role);
+          const nextRole = resolveRole(state.role);
+          setSyncRole(nextRole);
+          window.localStorage.setItem(roleKey, nextRole);
           setSyncActiveQuizId(state.active_quiz_id ?? null);
           setSyncQuizShowAnswers(state.quiz_show_answers ?? false);
         }
@@ -170,6 +261,10 @@ export default function QuizBuilderPage() {
 
   const handleStartQuiz = useCallback(
     async (quizId: number) => {
+      if (syncRole !== 'master') {
+        setSyncError('僅 master 可開始測驗');
+        return;
+      }
       try {
         await sendQuizSyncState(quizId, false);
         setMessage('已開始測驗，follower 會進入測驗模式且暫不顯示答案。');
@@ -178,11 +273,15 @@ export default function QuizBuilderPage() {
         setSyncError(err instanceof ApiError ? err.message : '開始測驗失敗');
       }
     },
-    [sendQuizSyncState, pdfId, navigate],
+    [sendQuizSyncState, pdfId, navigate, syncRole],
   );
 
   const handleFinishQuiz = useCallback(
     async (quizId: number) => {
+      if (syncRole !== 'master') {
+        setSyncError('僅 master 可結束測驗');
+        return;
+      }
       try {
         await sendQuizSyncState(quizId, true);
         setMessage('已結束測驗，follower 現在會顯示正確答案與解析。');
@@ -190,7 +289,7 @@ export default function QuizBuilderPage() {
         setSyncError(err instanceof ApiError ? err.message : '結束測驗失敗');
       }
     },
-    [sendQuizSyncState],
+    [sendQuizSyncState, syncRole],
   );
 
   const handleGenerate = async () => {
@@ -228,6 +327,18 @@ export default function QuizBuilderPage() {
 
   const renderQuizTakingView = (quiz: QuizSet) => (
     <div className="rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/10 p-4">
+      {syncQuizShowAnswers ? (() => {
+        const scoreTable = normalizeQuestionScores(quiz.questions);
+        const total = quiz.questions.reduce((acc, q, idx) => {
+          const selected = studentAnswers[q.id] ?? [];
+          return acc + calcQuestionScore(q, selected, scoreTable[idx] ?? 0);
+        }, 0);
+        return (
+          <div className="mb-3 rounded border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+            測驗總分：{Math.round(total * 100) / 100} / 100
+          </div>
+        );
+      })() : null}
       <div className="mb-4">
         <h2 className="text-lg font-semibold text-fuchsia-50">測驗進行中：{quiz.title}</h2>
         <p className="mt-1 text-sm text-fuchsia-100/80">
@@ -237,9 +348,12 @@ export default function QuizBuilderPage() {
       <div className="space-y-4">
         {quiz.questions.map((q, qIdx) => {
           const selected = studentAnswers[q.id] ?? [];
+          const scoreTable = normalizeQuestionScores(quiz.questions);
+          const qScore = scoreTable[qIdx] ?? 0;
+          const earned = calcQuestionScore(q, selected, qScore);
           return (
             <div key={q.id} className="rounded-lg border border-slate-700 bg-slate-950/70 p-4">
-              <h3 className="font-medium text-slate-100">第 {qIdx + 1} 題：{q.question}</h3>
+              <h3 className="font-medium text-slate-100">第 {qIdx + 1} 題（{Math.round(qScore * 100) / 100} 分）：{q.question}</h3>
               <div className="mt-3 space-y-2">
                 {q.options.map((option, oIdx) => {
                   const isCorrect = q.answer_indices.includes(oIdx);
@@ -258,6 +372,11 @@ export default function QuizBuilderPage() {
                   );
                 })}
               </div>
+              {syncQuizShowAnswers ? (
+                <p className={`mt-2 text-xs ${earned > 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+                  本題得分：{Math.round(earned * 100) / 100} / {Math.round(qScore * 100) / 100}
+                </p>
+              ) : null}
               {syncQuizShowAnswers ? <p className="mt-3 rounded bg-slate-900 px-3 py-2 text-sm text-slate-200">解析：{q.explanation || '（無解析）'}</p> : null}
             </div>
           );
@@ -278,7 +397,8 @@ export default function QuizBuilderPage() {
           <button type="button" onClick={() => { setSelectedQuizId(null); setTitle('課堂測驗'); setQuestions([emptyQuestion(0)]); }} className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800">新增測驗</button>
         </div>
       </header>
-      <main className="mx-auto grid max-w-5xl gap-4 px-4 py-4 lg:grid-cols-[240px_1fr]">
+      <main className={`mx-auto grid max-w-5xl gap-4 px-4 py-4 ${isFollowerTesting ? '' : 'lg:grid-cols-[240px_1fr]'}`}>
+        {isFollowerTesting ? null : (
         <aside className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
           <h2 className="text-sm font-semibold text-slate-200">已儲存測驗</h2>
           <p className="mt-1 text-xs text-slate-500">同步角色：{syncRole === 'master' ? 'master' : 'follower'}</p>
@@ -291,16 +411,23 @@ export default function QuizBuilderPage() {
                   <span className="block font-medium">{quiz.title}</span>
                   <span className="text-xs text-slate-500">{quiz.questions.length} 題</span>
                 </button>
-                {syncRole === 'master' ? (
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    <button type="button" onClick={() => void handleStartQuiz(quiz.id)} className="rounded border border-fuchsia-500/50 bg-fuchsia-500/15 px-2 py-1 text-xs text-fuchsia-100">開始測試</button>
-                    <button type="button" onClick={() => void handleFinishQuiz(quiz.id)} disabled={syncActiveQuizId !== quiz.id} className="rounded border border-emerald-500/50 bg-emerald-500/15 px-2 py-1 text-xs text-emerald-100 disabled:opacity-40">結束並顯示答案</button>
-                  </div>
-                ) : null}
+                <div className="mt-2 flex flex-wrap gap-1">
+                  <button
+                    type="button"
+                    onClick={() => void handleStartQuiz(quiz.id)}
+                    className="rounded border border-fuchsia-500/50 bg-fuchsia-500/15 px-2 py-1 text-xs text-fuchsia-100"
+                    title={syncRole === 'master' ? '開始測驗並同步至所有 follower' : '僅 master 可開始測驗'}
+                  >
+                    開始測驗
+                  </button>
+                  <button type="button" onClick={() => void handleFinishQuiz(quiz.id)} disabled={syncActiveQuizId !== quiz.id} className="rounded border border-emerald-500/50 bg-emerald-500/15 px-2 py-1 text-xs text-emerald-100 disabled:opacity-40">結束並顯示答案</button>
+                </div>
               </div>
             ))}
           </div>
+          {syncRole !== 'master' ? <p className="mt-2 text-[11px] text-slate-500">目前角色是 follower，僅 master 可開始測驗。</p> : null}
         </aside>
+        )}
         <section className="space-y-4">
           {isFollowerTesting && activeQuiz ? renderQuizTakingView(activeQuiz) : null}
           {isFollowerTesting ? null : (
@@ -336,6 +463,24 @@ export default function QuizBuilderPage() {
                 <option value="multiple">多選</option>
               </select>
               <textarea value={q.question} onChange={(e) => updateQuestion(qIdx, { question: e.target.value })} rows={2} placeholder="輸入題目" className="mt-3 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+              <label className="mt-3 block text-xs text-slate-400">本題分數（留空則自動分配）</label>
+              <input
+                type="number"
+                min={0}
+                step="0.5"
+                value={typeof q.score === 'number' ? q.score : ''}
+                onChange={(e) => {
+                  const raw = e.target.value.trim();
+                  if (!raw) {
+                    updateQuestion(qIdx, { score: null });
+                    return;
+                  }
+                  const n = Number(raw);
+                  updateQuestion(qIdx, { score: Number.isFinite(n) && n >= 0 ? n : null });
+                }}
+                placeholder="例如 20"
+                className="mt-1 w-48 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              />
               <div className="mt-3 space-y-2">
                 {q.options.map((option, oIdx) => (
                   <div key={oIdx} className="flex items-center gap-2">
