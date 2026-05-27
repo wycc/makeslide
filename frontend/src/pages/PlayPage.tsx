@@ -2658,6 +2658,14 @@ export default function PlayPage() {
                   >
                     結束投票
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setSyncPollShowResults((prev) => !prev)}
+                    disabled={!pollStarted}
+                    className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-xs text-cyan-100 disabled:opacity-40"
+                  >
+                    {syncPollShowResults ? '隱藏結果' : '顯示結果'}
+                  </button>
                 </div>
 
                 <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
@@ -2678,7 +2686,6 @@ export default function PlayPage() {
                         }`}
                       >
                         <div className="font-medium">{poll.question}</div>
-                        <div className="mt-0.5 text-[11px] text-slate-400">#{poll.id} · {poll.total_votes} 票</div>
                       </button>
                     ))
                   )}
