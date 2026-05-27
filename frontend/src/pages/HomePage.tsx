@@ -8,6 +8,7 @@ import {
   duplicatePdf,
   fetchPdfs,
   getAuthStatus,
+  importPdfZip,
   logoutAuth,
   retryFailedPdf,
   startProcessing,
@@ -91,6 +92,7 @@ export default function HomePage() {
   const [customCategories, setCustomCategories] = useState<string[]>(readStoredCustomCategories);
   const [titleFilter, setTitleFilter] = useState<string>(readStoredTitleFilter);
   const [continuingPdfId, setContinuingPdfId] = useState<string | null>(null);
+  const zipImportInputRef = useRef<HTMLInputElement | null>(null);
 
   const itemCategories = items.reduce<string[]>((categories, pdf) => {
     const category = pdf.category?.trim() || DEFAULT_CATEGORY;
@@ -294,6 +296,27 @@ export default function HomePage() {
     [showToast],
   );
 
+  const handleImportZipClick = useCallback(() => {
+    zipImportInputRef.current?.click();
+  }, []);
+
+  const handleImportZipChange = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      event.target.value = '';
+      if (!file) return;
+      try {
+        const imported = await importPdfZip(file);
+        setItems((prev) => [imported, ...prev]);
+        showToast(t('home.imported'));
+      } catch (err) {
+        const msg = err instanceof ApiError ? err.message : t('home.importFailed');
+        showToast(`${t('home.importFailed')}：${msg}`);
+      }
+    },
+    [showToast, t],
+  );
+
   const handleDeleteCategory = useCallback(
     async (category: string) => {
       if (category === DEFAULT_CATEGORY) {
@@ -468,6 +491,13 @@ export default function HomePage() {
         <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-xl font-semibold tracking-tight">makeslide</h1>
           <div className="flex items-center gap-2">
+            <input
+              ref={zipImportInputRef}
+              type="file"
+              accept=".zip,application/zip"
+              className="hidden"
+              onChange={(event) => void handleImportZipChange(event)}
+            />
             {authStatus?.authenticated ? (
               <button
                 type="button"
@@ -484,6 +514,13 @@ export default function HomePage() {
             >
               {t('home.apiKeySettings')}
             </Link>
+            <button
+              type="button"
+              onClick={handleImportZipClick}
+              className="inline-flex items-center rounded-md border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 hover:text-white"
+            >
+              {t('home.importZip')}
+            </button>
             <UploadButton onUploaded={handleUploaded} />
           </div>
         </div>

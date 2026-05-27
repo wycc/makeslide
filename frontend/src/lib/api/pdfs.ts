@@ -152,6 +152,19 @@ export async function exportPdfZip(id: string): Promise<Blob> {
   return await resp.blob();
 }
 
+export async function importPdfZip(file: File): Promise<PdfListItem> {
+  const form = new FormData();
+  form.append('file', file);
+  const resp = await fetch('api/pdfs/import.zip', {
+    method: 'POST',
+    body: form,
+  });
+  if (!resp.ok) {
+    throw await parseErrorBody(resp);
+  }
+  return (await resp.json()) as PdfListItem;
+}
+
 export async function updatePdfCategory(
   id: string,
   category: string,
