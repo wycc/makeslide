@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ApiError,
   fetchPdfDetail,
@@ -25,6 +25,7 @@ function emptyQuestion(index: number): QuizQuestion {
 
 export default function QuizBuilderPage() {
   const { id: pdfId } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [detail, setDetail] = useState<PdfDetail | null>(null);
   const [savedQuizzes, setSavedQuizzes] = useState<QuizSet[]>([]);
   const [selectedQuizId, setSelectedQuizId] = useState<number | null>(null);
@@ -172,11 +173,12 @@ export default function QuizBuilderPage() {
       try {
         await sendQuizSyncState(quizId, false);
         setMessage('已開始測驗，follower 會進入測驗模式且暫不顯示答案。');
+        if (pdfId) navigate(`/play/${encodeURIComponent(pdfId)}?fullscreen=1`);
       } catch (err) {
         setSyncError(err instanceof ApiError ? err.message : '開始測驗失敗');
       }
     },
-    [sendQuizSyncState],
+    [sendQuizSyncState, pdfId, navigate],
   );
 
   const handleFinishQuiz = useCallback(

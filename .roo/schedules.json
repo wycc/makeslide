@@ -20,20 +20,19 @@
       "startDate": "",
       "startHour": "",
       "startMinute": "00",
-      "expirationDate": "",
-      "expirationHour": "00",
+      "expirationDate": "2026-05-27",
+      "expirationHour": "13",
       "expirationMinute": "00",
       "requireActivity": false,
       "active": false,
       "taskInteraction": "wait",
       "inactivityDelay": "1",
-      "lastExecutionTime": "2026-05-23T05:15:01.995Z",
-      "lastSkippedTime": "2026-05-23T05:04:00.004Z",
-      "lastTaskId": "019e5342-1be4-747d-9c16-2a7ab212294b",
-      "nextExecutionTime": "2026-05-23T06:35:00.995Z",
+      "lastExecutionTime": "2026-05-27T04:58:02.287Z",
+      "lastSkippedTime": "2026-05-27T02:47:00.276Z",
+      "lastTaskId": "019e67cb-fcae-77e5-a7ce-8c49e3245f5d",
       "modeDisplayName": "Code",
       "createdAt": "2026-05-17T02:21:04.374Z",
-      "updatedAt": "2026-05-17T08:53:20.316Z"
+      "updatedAt": "2026-05-27T01:59:16.727Z"
     }
   ]
 }

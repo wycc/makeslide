@@ -449,6 +449,7 @@ export default function PlayPage() {
   );
 
   const currentShareToken = searchParams.get('share')?.trim() || '';
+  const shouldAutoFullscreen = searchParams.get('fullscreen') === '1';
   const playbackProgressStorageKey = pdfId ? `makeslide.playback.progress.${pdfId}` : '';
 
   useEffect(() => {
@@ -1396,6 +1397,11 @@ export default function PlayPage() {
   }, [pdfId, currentPage?.page_number]);
 
   const hasScriptChanges = editingScript !== currentScript;
+
+  useEffect(() => {
+    if (!shouldAutoFullscreen) return;
+    setImageOnlyFullscreen(true);
+  }, [shouldAutoFullscreen]);
 
   useEffect(() => {
     if (!pdfId || !currentPage) return;
