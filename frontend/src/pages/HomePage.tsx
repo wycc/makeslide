@@ -92,6 +92,8 @@ export default function HomePage() {
   const [customCategories, setCustomCategories] = useState<string[]>(readStoredCustomCategories);
   const [titleFilter, setTitleFilter] = useState<string>(readStoredTitleFilter);
   const [continuingPdfId, setContinuingPdfId] = useState<string | null>(null);
+  const [isImportingZip, setIsImportingZip] = useState(false);
+  const [zipImportProgress, setZipImportProgress] = useState(0);
   const zipImportInputRef = useRef<HTMLInputElement | null>(null);
 
   const itemCategories = items.reduce<string[]>((categories, pdf) => {
@@ -305,13 +307,22 @@ export default function HomePage() {
       const file = event.target.files?.[0];
       event.target.value = '';
       if (!file) return;
+      setIsImportingZip(true);
+      setZipImportProgress(0);
       try {
-        const imported = await importPdfZip(file);
+        const imported = await importPdfZip(file, {
+          onProgress: (loaded, total) => {
+            if (total > 0) setZipImportProgress(Math.round((loaded / total) * 100));
+          },
+        });
         setItems((prev) => [imported, ...prev]);
         showToast(t('home.imported'));
       } catch (err) {
         const msg = err instanceof ApiError ? err.message : t('home.importFailed');
         showToast(`${t('home.importFailed')}：${msg}`);
+      } finally {
+        setIsImportingZip(false);
+        setZipImportProgress(0);
       }
     },
     [showToast, t],
@@ -490,7 +501,8 @@ export default function HomePage() {
       <header className="border-b border-slate-800 bg-slate-900/40 backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-xl font-semibold tracking-tight">makeslide</h1>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col items-end gap-2">
+            <div className="flex items-center gap-2">
             <input
               ref={zipImportInputRef}
               type="file"
@@ -517,11 +529,32 @@ export default function HomePage() {
             <button
               type="button"
               onClick={handleImportZipClick}
+              disabled={isImportingZip}
               className="inline-flex items-center rounded-md border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 hover:text-white"
             >
               {t('home.importZip')}
             </button>
             <UploadButton onUploaded={handleUploaded} />
+            </div>
+            {isImportingZip && (
+              <div className="w-full max-w-sm rounded-lg border border-indigo-400/40 bg-indigo-500/10 p-2">
+                <div className="mb-1 flex items-center justify-between text-xs text-indigo-100">
+                  <span>ZIP 匯入中…</span>
+                  <span>{zipImportProgress}%</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
+                  <div
+                    className="h-full rounded-full bg-indigo-400 transition-all duration-200"
+                    style={{ width: `${zipImportProgress}%` }}
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={zipImportProgress}
+                    aria-label="ZIP 匯入進度"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </header>
