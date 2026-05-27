@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { config } from '../config';
+import { getRuntimeAiSettings } from '../services/aiSettings';
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -100,16 +101,18 @@ function redirectUri(request: FastifyRequest): string {
 
 export async function authRoutes(app: FastifyInstance) {
   app.get('/api/auth/status', async (request) => {
+    const runtime = getRuntimeAiSettings();
     const session = decodeSession(parseCookies(request)[SESSION_COOKIE]);
     return {
-      google_enabled: Boolean(config.googleAuthEnabled && config.googleClientId && config.googleClientSecret),
+      google_enabled: Boolean(runtime.googleAuthEnabled && runtime.googleClientId && runtime.googleClientSecret),
       authenticated: Boolean(session),
       user: session,
     };
   });
 
   app.get('/api/auth/google/start', async (request, reply) => {
-    if (!config.googleAuthEnabled) {
+    const runtime = getRuntimeAiSettings();
+    if (!runtime.googleAuthEnabled) {
       return reply.code(503).send({
         error: {
           code: 'GOOGLE_AUTH_DISABLED',
@@ -117,7 +120,7 @@ export async function authRoutes(app: FastifyInstance) {
         },
       });
     }
-    if (!config.googleClientId || !config.googleClientSecret) {
+    if (!runtime.googleClientId || !runtime.googleClientSecret) {
       return reply.code(503).send({
         error: {
           code: 'GOOGLE_AUTH_NOT_CONFIGURED',
@@ -125,7 +128,7 @@ export async function authRoutes(app: FastifyInstance) {
         },
       });
     }
-    if (!config.googleClientId.endsWith(GOOGLE_OAUTH_CLIENT_ID_SUFFIX)) {
+    if (!runtime.googleClientId.endsWith(GOOGLE_OAUTH_CLIENT_ID_SUFFIX)) {
       return reply.code(503).send({
         error: {
           code: 'GOOGLE_AUTH_CLIENT_ID_INVALID',
@@ -136,7 +139,7 @@ export async function authRoutes(app: FastifyInstance) {
     const state = crypto.randomBytes(24).toString('base64url');
     setCookie(reply, OAUTH_STATE_COOKIE, state, 10 * 60);
     const params = new URLSearchParams({
-      client_id: config.googleClientId,
+      client_id: runtime.googleClientId,
       redirect_uri: redirectUri(request),
       response_type: 'code',
       scope: 'openid email profile',
@@ -147,6 +150,7 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   app.get('/api/auth/google/callback', async (request, reply) => {
+    const runtime = getRuntimeAiSettings();
     const query = z.object({ code: z.string(), state: z.string() }).safeParse(request.query);
     const expectedState = parseCookies(request)[OAUTH_STATE_COOKIE];
     clearCookie(reply, OAUTH_STATE_COOKIE);
@@ -159,8 +163,8 @@ export async function authRoutes(app: FastifyInstance) {
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         code: query.data.code,
-        client_id: config.googleClientId,
-        client_secret: config.googleClientSecret,
+        client_id: runtime.googleClientId,
+        client_secret: runtime.googleClientSecret,
         redirect_uri: redirectUri(request),
         grant_type: 'authorization_code',
       }),

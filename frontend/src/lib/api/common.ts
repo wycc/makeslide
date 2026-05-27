@@ -12,6 +12,20 @@ export class ApiError extends Error {
   }
 }
 
+let authRedirecting = false;
+
+function maybeRedirectToGoogleLogin(resp: Response): void {
+  if (typeof window === 'undefined') return;
+  if (resp.status !== 401) return;
+  if (authRedirecting) return;
+
+  const path = window.location.pathname;
+  if (path.includes('/api/auth/google/start')) return;
+
+  authRedirecting = true;
+  window.location.assign('api/auth/google/start');
+}
+
 export function isApiErrorBody(value: unknown): value is ApiErrorBody {
   if (typeof value !== 'object' || value === null) return false;
   const err = (value as { error?: unknown }).error;
@@ -99,6 +113,7 @@ export function mapApiErrorToHumanMessage(err: unknown): HumanReadableApiError {
 }
 
 export async function parseErrorBody(resp: Response): Promise<ApiError> {
+  maybeRedirectToGoogleLogin(resp);
   let body: unknown = null;
   try {
     body = await resp.json();
