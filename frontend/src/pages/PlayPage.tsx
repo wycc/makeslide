@@ -330,6 +330,7 @@ export default function PlayPage() {
   const [syncQuestionInput, setSyncQuestionInput] = useState('');
   const [syncQuestionBusy] = useState(false);
   const [fullscreenQuestionDialogOpen, setFullscreenQuestionDialogOpen] = useState(false);
+  const [fullscreenPollControlOpen, setFullscreenPollControlOpen] = useState(false);
   const [remoteCursor, setRemoteCursor] = useState<{ x: number; y: number } | null>(null);
   const syncClientIdRef = useRef<string>('');
   const applyingRemoteSyncRef = useRef(false);
@@ -1275,7 +1276,18 @@ export default function PlayPage() {
       } else if (ev.key.toLowerCase() === 'a' && syncEnabled && syncRole === 'master') {
         ev.preventDefault();
         void handleAiAnswerFollowerQuestions();
+      } else if (ev.code === 'KeyP' || ev.key.toLowerCase() === 'p') {
+        const isFullscreen = Boolean(getAnyFullscreenElement()) || imageOnlyFullscreen;
+        if (isFullscreen && syncRole === 'master') {
+          ev.preventDefault();
+          setFullscreenPollControlOpen((open) => !open);
+        }
       } else if (ev.key === 'Escape') {
+        if (fullscreenPollControlOpen) {
+          ev.preventDefault();
+          setFullscreenPollControlOpen(false);
+          return;
+        }
         if (imageOnlyFullscreen) {
           ev.preventDefault();
           setImageOnlyFullscreen(false);
@@ -1290,7 +1302,7 @@ export default function PlayPage() {
     };
     window.addEventListener('keydown', onKey, { capture: true });
     return () => window.removeEventListener('keydown', onKey, { capture: true });
-  }, [playPause, goPrev, goNext, navigate, imageOnlyFullscreen, syncEnabled, syncRole, handleAiAnswerFollowerQuestions]);
+  }, [playPause, goPrev, goNext, navigate, imageOnlyFullscreen, syncEnabled, syncRole, handleAiAnswerFollowerQuestions, fullscreenPollControlOpen]);
 
   // ---- Fullscreen API integration ----
   useEffect(() => {
@@ -2605,6 +2617,71 @@ export default function PlayPage() {
                   >
                     {syncQuestionBusy ? '送出中…' : '送出問題'}
                   </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+          {syncEnabled && syncRole === 'master' && fullscreenPollControlOpen ? (
+            <div
+              className="absolute inset-0 z-[121] flex cursor-default items-start justify-end p-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="w-full max-w-md rounded-xl border border-cyan-400/40 bg-slate-950/95 p-4 text-slate-100 shadow-2xl">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-base font-semibold text-cyan-100">Realtime Poll 控制</h2>
+                    <p className="mt-1 text-xs text-slate-400">按 P 開關面板，Esc 關閉。</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setFullscreenPollControlOpen(false)}
+                    className="shrink-0 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
+                  >
+                    關閉
+                  </button>
+                </div>
+
+                <div className="mb-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleStartPoll()}
+                    disabled={pollStarted}
+                    className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-3 py-1.5 text-xs text-emerald-100 disabled:opacity-40"
+                  >
+                    開始投票
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleStopPoll()}
+                    disabled={!pollStarted}
+                    className="rounded-md border border-rose-500/50 bg-rose-500/15 px-3 py-1.5 text-xs text-rose-100 disabled:opacity-40"
+                  >
+                    結束投票
+                  </button>
+                </div>
+
+                <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                  {pagePolls.length === 0 ? (
+                    <div className="rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1.5 text-xs text-slate-500">
+                      目前頁尚無投票題目
+                    </div>
+                  ) : (
+                    pagePolls.map((poll) => (
+                      <button
+                        key={poll.id}
+                        type="button"
+                        onClick={() => void handleSelectDisplayedPoll(poll.id)}
+                        className={`w-full rounded-md border px-3 py-2 text-left text-xs ${
+                          syncDisplayedPollId === poll.id
+                            ? 'border-cyan-300/80 bg-cyan-500/20 text-cyan-50'
+                            : 'border-slate-700 bg-slate-900/70 text-slate-200 hover:bg-slate-800'
+                        }`}
+                      >
+                        <div className="font-medium">{poll.question}</div>
+                        <div className="mt-0.5 text-[11px] text-slate-400">#{poll.id} · {poll.total_votes} 票</div>
+                      </button>
+                    ))
+                  )}
                 </div>
               </div>
             </div>

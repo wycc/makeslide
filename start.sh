@@ -35,6 +35,7 @@ CLEAN_INSTALL=0
 MODE="all"   # all | backend | frontend
 PORT="${PORT:-8888}"
 FRONTEND_BUILD_WATCH=1
+DEV_MODE=0
 HTTPS_MODE=0
 HTTPS_CERT_DIR="${HTTPS_CERT_DIR:-$SCRIPT_DIR/.certs}"
 HTTPS_KEY_PATH="${HTTPS_KEY_PATH:-$HTTPS_CERT_DIR/localhost-key.pem}"
@@ -60,6 +61,7 @@ makeslide 一鍵啟動腳本
   --https-key <path> HTTPS private key 路徑（預設 .certs/localhost-key.pem）
   --https-cert <path> HTTPS certificate 路徑（預設 .certs/localhost-cert.pem）
   --no-watch-build   all 模式下不啟動 frontend build --watch
+  --dev              frontend build 使用 development mode + sourcemap
   -h, --help         顯示本說明
 
 預設行為：
@@ -100,6 +102,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --no-watch-build) FRONTEND_BUILD_WATCH=0; shift ;;
+    --dev)            DEV_MODE=1; shift ;;
     --https)          HTTPS_MODE=1; shift ;;
     --https-key)
       if [[ $# -lt 2 ]]; then
@@ -317,12 +320,22 @@ trap cleanup INT TERM
 case "$MODE" in
   all)
     log_info "all 模式使用單一入口 port：$PORT"
-    log_info "先建置 frontend 靜態檔（供 backend static serving）"
-    npm --workspace frontend run build
+    if [[ "$DEV_MODE" -eq 1 ]]; then
+      log_info "先建置 frontend 靜態檔（dev mode + sourcemap，供 backend static serving）"
+      npm --workspace frontend run build -- --mode development --sourcemap
+    else
+      log_info "先建置 frontend 靜態檔（供 backend static serving）"
+      npm --workspace frontend run build
+    fi
 
     if [[ "$FRONTEND_BUILD_WATCH" -eq 1 ]]; then
-      log_info "啟動 frontend build watcher（背景）"
-      npm --workspace frontend run build -- --watch &
+      if [[ "$DEV_MODE" -eq 1 ]]; then
+        log_info "啟動 frontend build watcher（dev mode + sourcemap，背景）"
+        npm --workspace frontend run build -- --mode development --sourcemap --watch &
+      else
+        log_info "啟動 frontend build watcher（背景）"
+        npm --workspace frontend run build -- --watch &
+      fi
       WATCH_PID=$!
       # shellcheck disable=SC2034
       CHILD_PID=""
