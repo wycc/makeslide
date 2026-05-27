@@ -7,6 +7,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "./config";
 import { logger } from "./logger";
+import { decodeSession, parseCookies } from "./routes/auth";
+import { getRuntimeAiSettings } from "./services/aiSettings";
 import { ensureStorageRoot } from "./services/storage";
 import { cacheControlForStaticAsset } from "./staticCache";
 
@@ -29,6 +31,21 @@ function ensureWorkspaceRuntimePaths(): void {
   } catch {
     // ignore mkdir failure
   }
+}
+
+function isApiAuthExemptPath(pathname: string): boolean {
+  return pathname === '/api/health'
+    || pathname.startsWith('/api/auth/')
+    || pathname.startsWith('/api/share/');
+}
+
+function stripNbPrefix(pathname: string): string {
+  if (!config.nbPrefix) return pathname;
+  if (pathname === config.nbPrefix) return '/';
+  if (pathname.startsWith(`${config.nbPrefix}/`)) {
+    return pathname.slice(config.nbPrefix.length);
+  }
+  return pathname;
 }
 
 export async function buildApp() {
@@ -78,6 +95,34 @@ export async function buildApp() {
       );
     });
   }
+
+  app.addHook('onRequest', async (request, reply) => {
+    const runtime = getRuntimeAiSettings();
+    const googleAuthActive = Boolean(
+      runtime.googleAuthEnabled
+      && runtime.googleClientId
+      && runtime.googleClientSecret,
+    );
+    if (!googleAuthActive) return;
+
+    const url = request.raw.url ?? '';
+    const pathname = url.split('?')[0] ?? url;
+    const normalizedPath = stripNbPrefix(pathname);
+    if (isApiAuthExemptPath(normalizedPath)) return;
+
+    // 僅保護 API；前端靜態資源與頁面路由不在此攔截。
+    if (!normalizedPath.startsWith('/api/')) return;
+
+    const session = decodeSession(parseCookies(request).makeslide_session);
+    if (session) return;
+
+    return reply.code(401).send({
+      error: {
+        code: 'AUTH_REQUIRED',
+        message: 'Google 登入已啟用，請先登入。',
+      },
+    });
+  });
 
   app.get('/api/health', async () => ({ ok: true }));
   if (nbPrefix) {
