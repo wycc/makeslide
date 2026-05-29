@@ -9,6 +9,7 @@ import { getOpenAIClient } from '../../services/openai';
 import { synthesizeGeminiSpeech } from '../../services/gemini';
 import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { pageAudioPath, pageScriptPath } from '../../services/storage';
+import { savePageGenerationPrompt } from '../../db';
 
 function runCommand(command: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -408,6 +409,20 @@ export async function synthesizeAudio(
   const { pdfId, pageCount, pages, onPage, shouldAbort } = opts;
   const voice = opts.voice?.trim() || config.openaiTtsVoice;
   const speed = opts.speed ?? config.openaiTtsSpeed;
+  const runtime = getRuntimeAiSettings();
+  const ttsModel = runtime.ttsProvider === 'gemini' ? 'gemini-tts' : (config.openaiTtsModel ?? 'tts-1');
+
+  // Record audio generation parameters for each page (best-effort)
+  for (const page of pages) {
+    savePageGenerationPrompt(
+      pdfId,
+      page.pageNumber,
+      'audio',
+      `provider: ${runtime.ttsProvider}\nvoice: ${voice}\nspeed: ${speed}\nscript:\n${page.script}`,
+      ttsModel,
+    );
+  }
+
   const sorted = [...pages].sort((a, b) => a.pageNumber - b.pageNumber);
 
   const queue = new PQueue({ concurrency: config.ttsConcurrency });

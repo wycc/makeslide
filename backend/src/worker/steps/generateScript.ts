@@ -5,7 +5,7 @@ import { z } from 'zod';
 import type { ChatCompletionContentPart } from 'openai/resources/chat/completions';
 import { config } from '../../config';
 import { logger } from '../../logger';
-import { db } from '../../db';
+import { db, savePageGenerationPrompt } from '../../db';
 import { callChatJSON, type TokenUsage } from '../../services/openai';
 import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { loadPromptTemplate, renderPromptTemplate } from '../../services/promptTemplates';
@@ -614,6 +614,14 @@ export async function generateScript(
         image_url: { url: imageDataUrl, detail: 'auto' },
       });
     }
+
+    savePageGenerationPrompt(
+      pdfId,
+      pageInfo.pageNumber,
+      'script',
+      `[SYSTEM]\n${system}\n\n[USER]\n${userText}`,
+      config.openaiLlmModel,
+    );
 
     const label = `script p${pageInfo.pageNumber}/${pageCount}`;
     let lastErr: unknown;

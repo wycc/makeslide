@@ -1,9 +1,11 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import fs from 'node:fs';
+import { pipeline } from 'node:stream/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { nanoid } from 'nanoid';
+import { config } from '../../config';
 import { db } from '../../db';
 import { createPdfDir } from '../../services/storage';
 import type { PdfMetadata, PdfRow } from '../../types';
@@ -31,13 +33,15 @@ function runUnzipCommand(zipPath: string, outputDir: string): Promise<void> {
 
 export async function registerImportRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/pdfs/import.zip', async (request, reply) => {
-    const file = await request.file();
+    const file = await request.file({ limits: { fileSize: config.maxImportBytes } });
     if (!file) {
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Missing zip file'));
     }
 
     const uploadName = file.filename?.trim() || 'import.zip';
     if (!uploadName.toLowerCase().endsWith('.zip')) {
+      // drain the stream to avoid keeping the connection open
+      file.file.resume();
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Only .zip files are supported'));
     }
 
@@ -50,8 +54,13 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
 
     try {
       await fs.promises.mkdir(extractedDir, { recursive: true });
-      const data = await file.toBuffer();
-      await fs.promises.writeFile(zipPath, data);
+      // Stream directly to disk to avoid loading large archives into memory
+      await pipeline(file.file, fs.createWriteStream(zipPath));
+      if (file.file.truncated) {
+        return reply
+          .code(413)
+          .send(errorResponse('FILE_TOO_LARGE', `Import zip must be under ${config.maxImportMb} MB`));
+      }
       await runUnzipCommand(zipPath, extractedDir);
 
       const metadataPath = path.join(extractedDir, 'metadata.json');

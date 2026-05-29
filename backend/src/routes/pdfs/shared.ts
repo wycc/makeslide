@@ -422,6 +422,31 @@ function buildWavPcm16(pcm: Buffer, sampleRate: number, channels: number): Buffe
   return Buffer.concat([header, pcm]);
 }
 
+/**
+ * Shift page_number by `delta` in all child tables that reference pages.
+ * Must be called inside the same transaction as the corresponding pages UPDATE.
+ * Use `filter` to limit which pages are shifted:
+ *   - 'all'         → every page of this PDF
+ *   - { gt: N }     → only page_number > N
+ *   - { gtTmp: N }  → only page_number > N (use after the first +100000 temp shift)
+ */
+export function shiftChildPageNumbers(
+  pdfId: string,
+  delta: number,
+  filter: 'all' | { gt: number },
+): void {
+  if (filter === 'all') {
+    db.prepare(`UPDATE page_polls SET page_number = page_number + ? WHERE pdf_id = ?`).run(
+      delta,
+      pdfId,
+    );
+  } else {
+    db.prepare(
+      `UPDATE page_polls SET page_number = page_number + ? WHERE pdf_id = ? AND page_number > ?`,
+    ).run(delta, pdfId, filter.gt);
+  }
+}
+
 export function rewritePagePathsToMatchNumber(pdfId: string, pageCount: number): void {
   const pad = pageCount > 999 ? 4 : 3;
   db.prepare(

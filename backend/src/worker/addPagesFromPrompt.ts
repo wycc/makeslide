@@ -10,6 +10,7 @@ import {
   pagesDir,
   pdfDir,
   readMetadata,
+  renumberPageArtifacts,
   writeMetadata,
 } from '../services/storage';
 import { callChatJSON } from '../services/openai';
@@ -17,6 +18,7 @@ import type { PageRow, PdfMetadataPage, PdfRow } from '../types';
 import { renderTextPagesWithLlm } from './steps/renderTextPagesWithLlm';
 import { generateScript } from './steps/generateScript';
 import { synthesizeAudio } from './steps/synthesizeAudio';
+import { rewritePagePathsToMatchNumber, shiftChildPageNumbers } from '../routes/pdfs/shared';
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -35,6 +37,7 @@ export interface AddPagesJobState {
   progress: { current: number; total: number } | null;
   addedPageNumbers: number[];
   totalPagesAfter: number | null;
+  insertAfterPage: number | null;
   error: string | null;
   startedAt: string;
   updatedAt: string;
@@ -58,8 +61,43 @@ const AddPagesSlideSchema = z.object({
     .max(10),
 });
 
+function parseOutlineText(text: string): Array<{ title: string; bullets: string[] }> {
+  const slides: Array<{ title: string; bullets: string[] }> = [];
+  let current: { title: string; bullets: string[] } | null = null;
+
+  for (const rawLine of text.split('\n')) {
+    const line = rawLine.trim();
+    if (!line) {
+      if (current && current.bullets.length >= 2) {
+        slides.push(current);
+        current = null;
+      }
+      continue;
+    }
+    if (line.startsWith('-') || line.startsWith('•') || line.startsWith('*')) {
+      const bullet = line.replace(/^[-•*]\s*/, '').trim();
+      if (bullet && current) {
+        current.bullets.push(bullet);
+      }
+    } else {
+      // Title line, possibly with "Slide N:" prefix
+      const titleMatch = line.match(/^(?:Slide\s*\d+\s*[:：]\s*)?(.+)$/i);
+      const title = (titleMatch ? (titleMatch[1] ?? line) : line).trim();
+      if (!title) continue;
+      if (current && current.bullets.length >= 2) {
+        slides.push(current);
+      }
+      current = { title, bullets: [] };
+    }
+  }
+  if (current && current.bullets.length >= 2) {
+    slides.push(current);
+  }
+  return slides;
+}
+
 function renderNewSlideTexts(
-  slides: z.infer<typeof AddPagesSlideSchema>['slides'],
+  slides: Array<{ title: string; bullets: string[] }>,
   startPageNumber: number,
 ): Array<{ pageNumber: number; content: string }> {
   return slides.map((slide, idx) => {
@@ -77,7 +115,7 @@ async function generateOutlineForNewPages(params: {
   existingContext: string;
   userPrompt: string;
   existingPageCount: number;
-}): Promise<z.infer<typeof AddPagesSlideSchema>['slides']> {
+}): Promise<Array<{ title: string; bullets: string[] }>> {
   const result = await callChatJSON({
     messages: [
       {
@@ -113,6 +151,62 @@ async function generateOutlineForNewPages(params: {
   return result.data.slides;
 }
 
+export const AddPagesOutlineChatSchema = z.object({
+  assistant_message: z.string().min(1),
+  outline_text: z.string().min(1),
+});
+
+export async function continueAddPagesOutlineChat(params: {
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+  existingContext: string;
+  existingPageCount: number;
+}): Promise<z.infer<typeof AddPagesOutlineChatSchema>> {
+  const { messages, existingContext, existingPageCount } = params;
+  const conversation = messages
+    .map((m) => `${m.role === 'user' ? '使用者' : 'AI'}：${m.content}`)
+    .join('\n\n');
+
+  const result = await callChatJSON({
+    messages: [
+      {
+        role: 'system',
+        content: [
+          `你是簡報大綱規劃助理，協助使用者為現有 ${existingPageCount} 頁簡報追加新的投影片頁面。`,
+          '現有部分頁面摘要如下：',
+          '',
+          existingContext,
+          '',
+          '你的任務是根據使用者需求生成「補充大綱」，這些是要插入現有簡報的新頁面。',
+          '新頁面不可重複現有內容，必須連貫且延伸現有主題。',
+          'outline_text 格式：每個投影片以「標題」開頭，下一行起用 - 列 2 到 6 個重點，以空白行分隔各頁。',
+          '範例：',
+          '深度學習應用',
+          '- CNN 圖像辨識',
+          '- RNN 序列處理',
+          '- Transformer 注意力機制',
+          '',
+          '請輸出 JSON，格式：{"assistant_message":"給使用者的回覆","outline_text":"補充投影片大綱"}。',
+        ].join('\n'),
+      },
+      {
+        role: 'user',
+        content: [
+          '以下是對話記錄，請延續並更新大綱：',
+          '',
+          conversation,
+          '',
+          '請輸出：{"assistant_message":"...","outline_text":"..."}',
+        ].join('\n'),
+      },
+    ],
+    schema: AddPagesOutlineChatSchema,
+    maxTokens: 4000,
+    temperature: 0.5,
+    label: 'add-pages-outline-chat',
+  });
+  return result.data;
+}
+
 function updateJob(pdfId: string, updates: Partial<AddPagesJobState>): void {
   const current = jobs.get(pdfId);
   if (current) {
@@ -120,7 +214,12 @@ function updateJob(pdfId: string, updates: Partial<AddPagesJobState>): void {
   }
 }
 
-async function runAddPagesJob(pdfId: string, prompt: string): Promise<void> {
+async function runAddPagesJob(
+  pdfId: string,
+  prompt: string,
+  outlineText: string | undefined,
+  insertAfterPage: number | undefined,
+): Promise<void> {
   updateJob(pdfId, { status: 'running' });
 
   try {
@@ -137,13 +236,20 @@ async function runAddPagesJob(pdfId: string, prompt: string): Promise<void> {
     }
 
     const existingPageCount = row.page_count;
+
+    // Determine where to insert
+    const insertAfter =
+      insertAfterPage !== undefined && insertAfterPage >= 0 && insertAfterPage <= existingPageCount
+        ? insertAfterPage
+        : existingPageCount;
+
     const pageRows = db
       .prepare(
         `SELECT page_number, text_path FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
       )
       .all(pdfId) as Array<{ page_number: number; text_path: string | null }>;
 
-    // Read existing texts for context (up to 12 pages, max 8000 chars)
+    // Build existing context from surrounding pages for LLM
     const existingTexts = await Promise.all(
       pageRows.map(async (p) => {
         if (!p.text_path) return '';
@@ -161,23 +267,59 @@ async function runAddPagesJob(pdfId: string, prompt: string): Promise<void> {
       .join('\n\n---\n\n')
       .slice(0, 8000);
 
-    // Step 1: Generate outline
+    // Step 1: Generate or parse outline
     updateJob(pdfId, {
       step: 'generating_outline',
       progress: { current: 0, total: 1 },
     });
 
-    const newSlides = await generateOutlineForNewPages({
-      existingContext,
-      userPrompt: prompt,
-      existingPageCount,
-    });
+    let newSlides: Array<{ title: string; bullets: string[] }>;
+
+    if (outlineText) {
+      newSlides = parseOutlineText(outlineText);
+      if (newSlides.length === 0) {
+        throw new Error('無法從大綱文字解析出有效投影片（每頁至少需要標題與 2 個重點）');
+      }
+    } else {
+      newSlides = await generateOutlineForNewPages({
+        existingContext,
+        userPrompt: prompt,
+        existingPageCount,
+      });
+    }
 
     updateJob(pdfId, { progress: { current: 1, total: 1 } });
 
-    const newPageCount = existingPageCount + newSlides.length;
-    const startPageNumber = existingPageCount + 1;
+    const insertCount = newSlides.length;
+    const newPageCount = existingPageCount + insertCount;
+    const startPageNumber = insertAfter + 1;
     const newPagesData = renderNewSlideTexts(newSlides, startPageNumber);
+
+    // Shift existing pages if inserting in the middle
+    if (insertAfter < existingPageCount) {
+      const pagesToShift = existingPageCount - insertAfter;
+      db.transaction(() => {
+        db.prepare(
+          `UPDATE pages SET page_number = page_number + ? + 100000 WHERE pdf_id = ? AND page_number > ?`,
+        ).run(insertCount, pdfId, insertAfter);
+        shiftChildPageNumbers(pdfId, insertCount + 100000, { gt: insertAfter });
+        db.prepare(
+          `UPDATE pages SET page_number = page_number - 100000 WHERE pdf_id = ? AND page_number > ?`,
+        ).run(pdfId, insertAfter + 100000);
+        shiftChildPageNumbers(pdfId, -100000, { gt: insertAfter + 100000 });
+        rewritePagePathsToMatchNumber(pdfId, newPageCount);
+      })();
+
+      // Rename artifact files for shifted pages (descending to avoid collisions)
+      await renumberPageArtifacts(
+        pdfId,
+        existingPageCount,
+        Array.from({ length: pagesToShift }, (_, i) => ({
+          from: existingPageCount - i,
+          to: existingPageCount - i + insertCount,
+        })),
+      );
+    }
 
     // Ensure pages directory exists
     await fs.promises.mkdir(pagesDir(pdfId), { recursive: true });
@@ -209,7 +351,7 @@ async function runAddPagesJob(pdfId: string, prompt: string): Promise<void> {
     // Step 2: Render images
     updateJob(pdfId, {
       step: 'rendering_images',
-      progress: { current: 0, total: newSlides.length },
+      progress: { current: 0, total: insertCount },
     });
 
     let renderedCount = 0;
@@ -220,7 +362,7 @@ async function runAddPagesJob(pdfId: string, prompt: string): Promise<void> {
       onPage: (pageNumber, imagePath) => {
         renderedCount++;
         updateJob(pdfId, {
-          progress: { current: renderedCount, total: newSlides.length },
+          progress: { current: renderedCount, total: insertCount },
         });
         const relImagePath = path.relative(pdfDir(pdfId), imagePath);
         db.prepare(
@@ -232,7 +374,7 @@ async function runAddPagesJob(pdfId: string, prompt: string): Promise<void> {
     // Step 3: Generate scripts
     updateJob(pdfId, {
       step: 'generating_scripts',
-      progress: { current: 0, total: newSlides.length },
+      progress: { current: 0, total: insertCount },
     });
 
     const pagesForScript = newPagesData.map((p) => ({
@@ -252,7 +394,7 @@ async function runAddPagesJob(pdfId: string, prompt: string): Promise<void> {
       onPage: () => {
         scriptCount++;
         updateJob(pdfId, {
-          progress: { current: scriptCount, total: newSlides.length },
+          progress: { current: scriptCount, total: insertCount },
         });
       },
     });
@@ -263,10 +405,10 @@ async function runAddPagesJob(pdfId: string, prompt: string): Promise<void> {
       ).run(path.relative(pdfDir(pdfId), sp.scriptPath), nowIso(), pdfId, sp.pageNumber);
     }
 
-    // Step 4: Synthesize audio - read scripts for only new pages
+    // Step 4: Synthesize audio
     updateJob(pdfId, {
       step: 'synthesizing_audio',
-      progress: { current: 0, total: newSlides.length },
+      progress: { current: 0, total: insertCount },
     });
 
     const newPageScripts: Array<{ pageNumber: number; script: string }> = [];
@@ -340,7 +482,7 @@ async function runAddPagesJob(pdfId: string, prompt: string): Promise<void> {
     });
 
     logger.info(
-      { pdfId, addedPages: newSlides.length, newPageCount },
+      { pdfId, addedPages: insertCount, newPageCount, insertAfter },
       'add-pages-from-prompt: done',
     );
   } catch (err) {
@@ -355,9 +497,15 @@ async function runAddPagesJob(pdfId: string, prompt: string): Promise<void> {
   }
 }
 
+export interface StartAddPagesOptions {
+  prompt: string;
+  outlineText?: string;
+  insertAfterPage?: number;
+}
+
 export async function startAddPagesFromPrompt(
   pdfId: string,
-  prompt: string,
+  opts: StartAddPagesOptions,
 ): Promise<AddPagesJobState> {
   const existing = jobs.get(pdfId);
   if (existing && (existing.status === 'pending' || existing.status === 'running')) {
@@ -387,13 +535,14 @@ export async function startAddPagesFromPrompt(
     progress: null,
     addedPageNumbers: [],
     totalPagesAfter: null,
+    insertAfterPage: opts.insertAfterPage ?? null,
     error: null,
     startedAt: nowIso(),
     updatedAt: nowIso(),
   };
   jobs.set(pdfId, job);
 
-  void runAddPagesJob(pdfId, prompt).catch((err) => {
+  void runAddPagesJob(pdfId, opts.prompt, opts.outlineText, opts.insertAfterPage).catch((err) => {
     logger.error({ err, pdfId }, 'add-pages-from-prompt: uncaught error in runner');
   });
 

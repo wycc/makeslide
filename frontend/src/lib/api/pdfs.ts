@@ -820,19 +820,30 @@ export interface AddPagesJobState {
   progress: { current: number; total: number } | null;
   addedPageNumbers: number[];
   totalPagesAfter: number | null;
+  insertAfterPage: number | null;
   error: string | null;
   startedAt: string;
   updatedAt: string;
 }
 
+export interface StartAddPagesOptions {
+  prompt?: string;
+  outlineText?: string;
+  insertAfterPage?: number;
+}
+
 export async function startAddPagesFromPrompt(
   id: string,
-  prompt: string,
+  opts: StartAddPagesOptions,
 ): Promise<AddPagesJobState> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/add-pages-from-prompt`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ prompt }),
+    body: JSON.stringify({
+      prompt: opts.prompt ?? '',
+      outline_text: opts.outlineText,
+      insert_after_page: opts.insertAfterPage,
+    }),
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as AddPagesJobState;
@@ -844,6 +855,47 @@ export async function fetchAddPagesStatus(id: string): Promise<AddPagesJobState>
   );
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as AddPagesJobState;
+}
+
+export interface AddPagesOutlineChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface AddPagesOutlineChatResponse {
+  assistant_message: string;
+  outline_text: string;
+}
+
+export interface PageGenerationPrompt {
+  stage: string;
+  prompt_text: string;
+  model: string | null;
+  created_at: string;
+}
+
+export async function fetchPageGenerationPrompts(
+  pdfId: string,
+  pageNumber: number,
+): Promise<PageGenerationPrompt[]> {
+  const resp = await fetch(
+    `api/pdfs/${encodeURIComponent(pdfId)}/pages/${encodeURIComponent(String(pageNumber))}/generation-prompts`,
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as PageGenerationPrompt[];
+}
+
+export async function continueAddPagesOutlineChat(
+  pdfId: string,
+  messages: AddPagesOutlineChatMessage[],
+): Promise<AddPagesOutlineChatResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(pdfId)}/add-pages-outline-chat`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ messages }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as AddPagesOutlineChatResponse;
 }
 
 export async function cancelRegenerateJob(id: string): Promise<RegenJobState> {

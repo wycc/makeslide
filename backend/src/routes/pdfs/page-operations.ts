@@ -26,6 +26,7 @@ import {
   errorResponse,
   nowIso,
   rewritePagePathsToMatchNumber,
+  shiftChildPageNumbers,
 } from './shared';
 import {
   coverImagePath,
@@ -242,11 +243,13 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
             SET page_number = page_number + 100000
           WHERE pdf_id = ? AND page_number > ?`,
       ).run(id, after);
+      shiftChildPageNumbers(id, 100000, { gt: after });
       db.prepare(
         `UPDATE pages
             SET page_number = page_number - 99999
           WHERE pdf_id = ? AND page_number > ?`,
       ).run(id, after + 100000);
+      shiftChildPageNumbers(id, -99999, { gt: after + 100000 });
       db.prepare(
         `INSERT INTO pages (pdf_id, page_number, image_path, text_path, script_path, audio_path, audio_duration_seconds, status, error_message, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, NULL, 'audio_ready', NULL, ?, ?)`,
@@ -355,7 +358,10 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     const now = nowIso();
     const updates: Array<{ from: number; to: number }> = [];
     const tx = db.transaction(() => {
+      // Step 1: shift all pages (and child tables) to temp range to avoid pk collisions
       db.prepare(`UPDATE pages SET page_number = page_number + 100000 WHERE pdf_id = ?`).run(id);
+      shiftChildPageNumbers(id, 100000, 'all');
+      // Step 2: move each page (and its child rows) to the final position
       for (let i = 0; i < order.length; i++) {
         const src = order[i];
         if (src == null) continue;
@@ -364,6 +370,11 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         db.prepare(`UPDATE pages SET page_number = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`).run(
           dst,
           now,
+          id,
+          src + 100000,
+        );
+        db.prepare(`UPDATE page_polls SET page_number = ? WHERE pdf_id = ? AND page_number = ?`).run(
+          dst,
           id,
           src + 100000,
         );

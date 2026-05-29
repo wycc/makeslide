@@ -49,7 +49,9 @@ import {
   updatePlaybackSyncState,
   votePagePoll,
   rewritePageScript,
+  fetchPageGenerationPrompts,
   type ImagePromptTemplate,
+  type PageGenerationPrompt,
   type ShareAccessMode,
 } from '../lib/api';
 import AddPagesFromPromptModal from '../components/AddPagesFromPromptModal';
@@ -249,6 +251,9 @@ export default function PlayPage() {
   const [sourceMsg, setSourceMsg] = useState<string | null>(null);
   const [sourceErr, setSourceErr] = useState<string | null>(null);
   const sourcePdfInputRef = useRef<HTMLInputElement | null>(null);
+  const [genPrompts, setGenPrompts] = useState<PageGenerationPrompt[]>([]);
+  const [genPromptsLoading, setGenPromptsLoading] = useState(false);
+  const [expandedGenPrompt, setExpandedGenPrompt] = useState<string | null>(null);
   const [promptBusy, setPromptBusy] = useState(false);
   const [promptMsg, setPromptMsg] = useState<string | null>(null);
   const [pagePrompts, setPagePrompts] = useState<Record<number, string>>({});
@@ -3559,7 +3564,16 @@ export default function PlayPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setEditTab('source')}
+                  onClick={() => {
+                    setEditTab('source');
+                    if (currentPage && pdfId) {
+                      setGenPromptsLoading(true);
+                      void fetchPageGenerationPrompts(pdfId, currentPage.page_number)
+                        .then((r) => { setGenPrompts(r); })
+                        .catch(() => { setGenPrompts([]); })
+                        .finally(() => { setGenPromptsLoading(false); });
+                    }
+                  }}
                   className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'source' ? 'bg-slate-800 text-violet-200' : 'text-slate-400'}`}
                 >
                   📚 來源
@@ -3698,6 +3712,47 @@ export default function PlayPage() {
                           </div>
                         ))}
                       </div>
+                    </div>
+
+                    <div className="rounded-md border border-slate-800 bg-slate-900/50 p-3">
+                      <p className="mb-2 text-xs text-slate-400">
+                        🔍 第 {currentPage?.page_number ?? '-'} 頁 生成記錄
+                      </p>
+                      {genPromptsLoading ? (
+                        <p className="text-xs text-slate-500">載入中…</p>
+                      ) : genPrompts.length === 0 ? (
+                        <p className="text-xs text-slate-500">尚無生成記錄（重新生成後才會出現）</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {genPrompts.map((gp) => {
+                            const stageLabel =
+                              gp.stage === 'image' ? '🖼 圖片生成提示' :
+                              gp.stage === 'script' ? '📝 逐字稿生成提示' :
+                              gp.stage === 'audio' ? '🔊 語音合成參數' : gp.stage;
+                            const isExpanded = expandedGenPrompt === gp.stage;
+                            return (
+                              <div key={gp.stage} className="rounded border border-slate-700">
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedGenPrompt(isExpanded ? null : gp.stage)}
+                                  className="flex w-full items-center justify-between px-2 py-1.5 text-left text-xs"
+                                >
+                                  <span className="font-medium text-slate-200">{stageLabel}</span>
+                                  <span className="flex items-center gap-2 text-slate-400">
+                                    {gp.model && <span className="font-mono">{gp.model}</span>}
+                                    <span>{isExpanded ? '▲' : '▼'}</span>
+                                  </span>
+                                </button>
+                                {isExpanded && (
+                                  <pre className="max-h-64 overflow-y-auto border-t border-slate-700 bg-slate-950 px-2 py-2 text-xs text-slate-300 leading-5 whitespace-pre-wrap break-all">
+                                    {gp.prompt_text}
+                                  </pre>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </>
@@ -4554,6 +4609,7 @@ export default function PlayPage() {
       {showAddPagesModal && pdfId ? (
         <AddPagesFromPromptModal
           pdfId={pdfId}
+          insertAfterPage={currentPage?.page_number ?? totalPages}
           onClose={() => setShowAddPagesModal(false)}
           onDone={async (totalPagesAfter) => {
             setShowAddPagesModal(false);

@@ -341,5 +341,11 @@
 
 
 # New TODO
-[ ] 新增多頁的提示，改成先提供一個和 貼上 TXT 類似的畫面。可以選擇自行輸入大綱或讓 LLM 生成大綱，只是現在把新的項目插入目前位置上。
-[ ] 把目前頁面提示詞，圖片，逐字稿和語音生成時的提供伺都完遫記錄下來。在來源中讓我們可以逐一檢視它的內容。
+[x] 新增多頁的提示，改成先提供一個和 貼上 TXT 類似的畫面。可以選擇自行輸入大綱或讓 LLM 生成大綱，只是現在把新的項目插入目前位置上。（完成於分支: feature/add-pages-outline-modes-insert-position-20260530）
+[x] 把目前頁面提示詞，圖片，逐字稿和語音生成時的提供伺都完遫記錄下來。在來源中讓我們可以逐一檢視它的內容。（完成於分支: feature/add-pages-outline-modes-insert-position-20260530）
+
+# 工作記錄
+
+- 時間: 2026-05-30 00:00:00 +0800
+- 分支: feature/add-pages-outline-modes-insert-position-20260530
+- 內容: (1) 改造新增多頁 modal 為三段式流程（模式選擇 → 大綱輸入/AI 對話 → 確認生成）；支援手動輸入大綱和 AI 聊天生成大綱兩種模式；後端新增 outline-chat 端點讀取現有投影片脈絡；新頁面插入在目前頁之後（而非尾端）；後端實作 parseOutlineText 解析文字大綱並執行 page renumbering + artifact renaming。(2) 新增每頁生成記錄功能：在 DB 加入 page_generation_prompts 表；renderTextPagesWithLlm/generateScript/synthesizeAudio 三個步驟生成後均記錄提示詞與模型；後端新增 GET /api/pdfs/:id/pages/:n/generation-prompts 端點；前端在來源 tab 新增「生成記錄」區段，可逐一展開檢視圖片/逐字稿/語音的生成提示。

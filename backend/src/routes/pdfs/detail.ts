@@ -5,7 +5,7 @@ import os from 'node:os';
 import sharp from 'sharp';
 import crypto from 'node:crypto';
 import { z } from 'zod';
-import { db } from '../../db';
+import { db, getPageGenerationPrompts } from '../../db';
 import { config } from '../../config';
 import type { PageRow, PdfListItem, PdfRow, PdfSourceItem } from '../../types';
 import { coverImagePath, readMetadata, safeJoinPdfPath, videoPath, writeMetadata, youtubeOutlinePath } from '../../services/storage';
@@ -1162,5 +1162,15 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
 
     reply.header('content-length', String(size));
     return reply.send(fs.createReadStream(abs));
+  });
+
+  app.get('/api/pdfs/:id/pages/:n/generation-prompts', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const { id, n } = parsed.data;
+    const prompts = getPageGenerationPrompts(id, n);
+    return reply.code(200).send(prompts);
   });
 }

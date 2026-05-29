@@ -367,6 +367,19 @@ function migrate(): void {
     CREATE INDEX IF NOT EXISTS idx_page_artifact_events_pdf_page ON page_artifact_events(pdf_id, page_number, artifact, occurred_at DESC);
     CREATE INDEX IF NOT EXISTS idx_page_artifact_events_run ON page_artifact_events(run_id, page_number, artifact, attempt);
 
+    CREATE TABLE IF NOT EXISTS page_generation_prompts (
+      pdf_id TEXT NOT NULL,
+      page_number INTEGER NOT NULL,
+      stage TEXT NOT NULL,
+      prompt_text TEXT NOT NULL,
+      model TEXT,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (pdf_id, page_number, stage),
+      FOREIGN KEY (pdf_id) REFERENCES pdfs(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_page_gen_prompts_pdf ON page_generation_prompts(pdf_id, page_number);
+
     CREATE TABLE IF NOT EXISTS page_artifact_timings (
       pdf_id TEXT NOT NULL,
       page_number INTEGER NOT NULL,
@@ -431,4 +444,42 @@ migrate();
 
 export function closeDb(): void {
   db.close();
+}
+
+export function savePageGenerationPrompt(
+  pdfId: string,
+  pageNumber: number,
+  stage: 'image' | 'script' | 'audio',
+  promptText: string,
+  model?: string,
+): void {
+  try {
+    db.prepare(
+      `INSERT OR REPLACE INTO page_generation_prompts (pdf_id, page_number, stage, prompt_text, model, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run(pdfId, pageNumber, stage, promptText, model ?? null, new Date().toISOString());
+  } catch {
+    // best-effort; never block generation
+  }
+}
+
+export interface PageGenerationPrompt {
+  stage: string;
+  prompt_text: string;
+  model: string | null;
+  created_at: string;
+}
+
+export function getPageGenerationPrompts(
+  pdfId: string,
+  pageNumber: number,
+): PageGenerationPrompt[] {
+  return db
+    .prepare(
+      `SELECT stage, prompt_text, model, created_at
+         FROM page_generation_prompts
+        WHERE pdf_id = ? AND page_number = ?
+        ORDER BY CASE stage WHEN 'image' THEN 1 WHEN 'script' THEN 2 WHEN 'audio' THEN 3 ELSE 4 END`,
+    )
+    .all(pdfId, pageNumber) as PageGenerationPrompt[];
 }

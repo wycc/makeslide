@@ -1,14 +1,32 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { getAddPagesJob, startAddPagesFromPrompt } from '../../worker/addPagesFromPrompt';
+import {
+  getAddPagesJob,
+  startAddPagesFromPrompt,
+  continueAddPagesOutlineChat,
+} from '../../worker/addPagesFromPrompt';
 import { IdParamSchema, errorResponse } from './shared';
+import { db } from '../../db';
+import path from 'node:path';
+import fs from 'node:fs';
+import { pdfDir } from '../../services/storage';
 
 const AddPagesFromPromptBodySchema = z.object({
-  prompt: z
-    .string()
-    .trim()
-    .min(5, 'prompt 至少需要 5 個字')
-    .max(2000, 'prompt 不可超過 2000 字'),
+  prompt: z.string().trim().max(2000).default(''),
+  outline_text: z.string().trim().max(10000).optional(),
+  insert_after_page: z.number().int().min(0).optional(),
+});
+
+const AddPagesOutlineChatBodySchema = z.object({
+  messages: z
+    .array(
+      z.object({
+        role: z.enum(['user', 'assistant']),
+        content: z.string().min(1).max(2000),
+      }),
+    )
+    .min(1)
+    .max(20),
 });
 
 export async function registerAddPagesRoutes(app: FastifyInstance): Promise<void> {
@@ -29,11 +47,20 @@ export async function registerAddPagesRoutes(app: FastifyInstance): Promise<void
         );
     }
 
+    const { prompt, outline_text, insert_after_page } = parsedBody.data;
+
+    if (!outline_text && prompt.length < 5) {
+      return reply
+        .code(400)
+        .send(errorResponse('INVALID_REQUEST', 'prompt 至少需要 5 個字，或提供 outline_text'));
+    }
+
     try {
-      const state = await startAddPagesFromPrompt(
-        parsedParams.data.id,
-        parsedBody.data.prompt,
-      );
+      const state = await startAddPagesFromPrompt(parsedParams.data.id, {
+        prompt,
+        outlineText: outline_text,
+        insertAfterPage: insert_after_page,
+      });
       return reply.code(202).send(state);
     } catch (err) {
       const code = (err as { code?: string })?.code;
@@ -69,5 +96,54 @@ export async function registerAddPagesRoutes(app: FastifyInstance): Promise<void
         .send(errorResponse('ADD_PAGES_JOB_NOT_FOUND', 'No add-pages job found for this deck'));
     }
     return reply.code(200).send(state);
+  });
+
+  app.post('/api/pdfs/:id/add-pages-outline-chat', async (request, reply) => {
+    const parsedParams = IdParamSchema.safeParse(request.params);
+    if (!parsedParams.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const parsedBody = AddPagesOutlineChatBodySchema.safeParse(request.body ?? {});
+    if (!parsedBody.success) {
+      return reply
+        .code(400)
+        .send(errorResponse('INVALID_REQUEST', parsedBody.error.issues[0]?.message ?? 'Invalid body'));
+    }
+
+    const { id } = parsedParams.data;
+    const pdfRow = db
+      .prepare(`SELECT page_count FROM pdfs WHERE id = ?`)
+      .get(id) as { page_count: number | null } | undefined;
+    if (!pdfRow) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+
+    const pageRows = db
+      .prepare(`SELECT page_number, text_path FROM pages WHERE pdf_id = ? ORDER BY page_number ASC LIMIT 12`)
+      .all(id) as Array<{ page_number: number; text_path: string | null }>;
+
+    const texts = await Promise.all(
+      pageRows.map(async (p) => {
+        if (!p.text_path) return '';
+        try {
+          return await fs.promises.readFile(path.join(pdfDir(id), p.text_path), 'utf8');
+        } catch {
+          return '';
+        }
+      }),
+    );
+    const existingContext = texts.filter(Boolean).join('\n\n---\n\n').slice(0, 6000);
+
+    try {
+      const result = await continueAddPagesOutlineChat({
+        messages: parsedBody.data.messages,
+        existingContext,
+        existingPageCount: pdfRow.page_count ?? 0,
+      });
+      return reply.code(200).send(result);
+    } catch (err) {
+      request.log.error({ err, pdfId: id }, 'Failed to run add-pages outline chat');
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to generate outline'));
+    }
   });
 }

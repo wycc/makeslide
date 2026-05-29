@@ -5,7 +5,7 @@ import { getOpenAIClient } from '../../services/openai';
 import { logger } from '../../logger';
 import { config } from '../../config';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
-import { db } from '../../db';
+import { db, savePageGenerationPrompt } from '../../db';
 
 export interface RenderTextPagesWithLlmOptions {
   pdfId: string;
@@ -210,6 +210,8 @@ export async function renderTextPagesWithLlm(
     const promptWithSourceHint = sourcePdfDataUrl
       ? `${prompt}\n\n[Context]\nA source PDF exists for this slide deck. Keep generated visuals semantically aligned with the provided slide text.`
       : prompt;
+
+    savePageGenerationPrompt(opts.pdfId, p.pageNumber, 'image', promptWithSourceHint, config.openaiImageModel);
 
     let image;
     let finalAttempt = 0;

@@ -39,6 +39,11 @@ const EnvSchema = z.object({
     .optional()
     .transform((v) => (v ? Number(v) : 50))
     .pipe(z.number().int().positive()),
+  MAX_IMPORT_MB: z
+    .string()
+    .optional()
+    .transform((v) => (v ? Number(v) : 2048))
+    .pipe(z.number().int().positive()),
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
     .optional()
@@ -193,6 +198,8 @@ export const config = {
   dbPath: path.resolve(repoRoot, env.DB_PATH),
   maxUploadBytes: env.MAX_UPLOAD_MB * 1024 * 1024,
   maxUploadMb: env.MAX_UPLOAD_MB,
+  maxImportBytes: env.MAX_IMPORT_MB * 1024 * 1024,
+  maxImportMb: env.MAX_IMPORT_MB,
   repoRoot,
   // M2
   processConcurrency: env.PROCESS_CONCURRENCY,
