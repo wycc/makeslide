@@ -214,7 +214,7 @@
 [x] 在播放頁加入來源 tab，將 PDF/TXT/youtube caption 放在這邊。並新增上傳 PDF/TXT 的功能。所有的來源都會在生成逐字稿時被一起送出去。（完成於分支: feature/playpage-source-tab-and-multi-source-transcript-20260525）
 [x] (merge)新增重新生成標題的功能（完成於分支: feature/regenerate-title-20260525）
 [x] (merge)將顯示字幕移到 PlayPage 之中變成簡報的設定。（完成於分支: feature/move-subtitle-setting-to-playpage-20260525）
-[x] 加首頁的每一個卡片上加上 export 的功能，把一個簡報所有資料都 export 成一個 zip 檔（完成於分支: feature/home-card-export-zip-20260526-from-master）
+[x] (merge)加首頁的每一個卡片上加上 export 的功能，把一個簡報所有資料都 export 成一個 zip 檔（完成於分支: feature/home-card-export-zip-20260526-from-master）
 [x] 在首頁的上方加上一個 import 的按鍵，將 export 的 zip 檔匯入（完成於分支: feature/home-import-zip-20260527）
 [x] 在顯示類別選擇旁加上一個 filter 欄位，我們可以使用 keyword 找簡報，主要是以標題為 search 的範圍（完成於分支: feature/home-keyword-filter-20260525）
 [x] 在設定中加上啟動 google account login 的功能，當 enable 時，出現一個設定按鍵, 提供輸入 GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI 的功能（完成於分支: feature/google-auth-settings-ui-config-20260525）
@@ -338,3 +338,8 @@
 - 時間: 2026-05-27 12:58:00 +0800
 - 分支: feature/todo-no-pending-recheck-20260527-1258
 - 內容: 重新確認 master 中 TODO.md 未發現行首未完成核取項目；由於沒有可實作的未完成工作，本次以獨立分支保存複查記錄 docs/todo-rechecks/2026-05-27-1258.md，並回到 master 更新 TODO.md 完成清單與工作記錄。
+
+
+# New TODO
+[ ] 新增多頁的提示，改成先提供一個和 貼上 TXT 類似的畫面。可以選擇自行輸入大綱或讓 LLM 生成大綱，只是現在把新的項目插入目前位置上。
+[ ] 把目前頁面提示詞，圖片，逐字稿和語音生成時的提供伺都完遫記錄下來。在來源中讓我們可以逐一檢視它的內容。

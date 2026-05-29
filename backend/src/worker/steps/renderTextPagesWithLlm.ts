@@ -10,6 +10,8 @@ import { db } from '../../db';
 export interface RenderTextPagesWithLlmOptions {
   pdfId: string;
   pages: Array<{ pageNumber: number; content: string; slideLabel?: string }>;
+  /** Override total page count for path naming (used when rendering a subset of pages). Defaults to pages.length. */
+  totalPageCount?: number;
   onPage?: (pageNumber: number, imagePath: string, info: RenderTextPageTimingInfo) => void;
 }
 
@@ -136,7 +138,7 @@ export async function renderTextPagesWithLlm(
   opts: RenderTextPagesWithLlmOptions,
 ): Promise<RenderTextPagesWithLlmResult> {
   const client = getOpenAIClient();
-  const pageCount = opts.pages.length;
+  const pageCount = opts.totalPageCount ?? opts.pages.length;
   const pagePaths: string[] = [];
   const styleRow = db
     .prepare('SELECT image_style_prompt FROM pdfs WHERE id = ?')

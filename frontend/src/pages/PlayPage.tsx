@@ -52,6 +52,7 @@ import {
   type ImagePromptTemplate,
   type ShareAccessMode,
 } from '../lib/api';
+import AddPagesFromPromptModal from '../components/AddPagesFromPromptModal';
 import {
   DEFAULT_TTS_VOICE_BY_PROVIDER,
   TTS_VOICES_BY_PROVIDER,
@@ -253,6 +254,7 @@ export default function PlayPage() {
   const [pagePrompts, setPagePrompts] = useState<Record<number, string>>({});
   const [slideBusy, setSlideBusy] = useState(false);
   const [slideError, setSlideError] = useState<string | null>(null);
+  const [showAddPagesModal, setShowAddPagesModal] = useState(false);
   const [ttsVoice, setTtsVoice] = useState('alloy');
   const [ttsSpeed, setTtsSpeed] = useState(1);
   const [ttsBusy, setTtsBusy] = useState(false);
@@ -3825,6 +3827,15 @@ export default function PlayPage() {
                   </button>
                   <button
                     type="button"
+                    onClick={() => setShowAddPagesModal(true)}
+                    disabled={isReadOnlyProcessing || slideBusy}
+                    className="rounded-md border border-indigo-500/50 bg-indigo-500/15 px-2 py-1 text-xs text-indigo-200 disabled:opacity-40"
+                    title="根據提示詞新增多頁投影片"
+                  >
+                    新增多頁
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => void handleDeleteCurrentSlide()}
                     disabled={isReadOnlyProcessing || slideBusy || !currentPage || totalPages <= 1}
                     className="rounded-md border border-rose-500/50 bg-rose-500/15 px-2 py-1 text-xs text-rose-200 disabled:opacity-40"
@@ -4539,6 +4550,17 @@ export default function PlayPage() {
             </div>
           </div>
         </div>
+      ) : null}
+      {showAddPagesModal && pdfId ? (
+        <AddPagesFromPromptModal
+          pdfId={pdfId}
+          onClose={() => setShowAddPagesModal(false)}
+          onDone={async (totalPagesAfter) => {
+            setShowAddPagesModal(false);
+            await reloadDetail();
+            setCurrentIdx(totalPagesAfter - 1);
+          }}
+        />
       ) : null}
     </div>
   );

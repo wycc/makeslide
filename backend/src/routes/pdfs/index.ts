@@ -11,6 +11,7 @@ import { registerQuizRoutes } from './quizzes';
 import { registerHandoutRoutes } from './handout';
 import { registerExportRoutes } from './export';
 import { registerImportRoutes } from './import';
+import { registerAddPagesRoutes } from './add-pages';
 
 export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerUploadRoutes(app);
@@ -25,4 +26,5 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerHandoutRoutes(app);
   await registerExportRoutes(app);
   await registerImportRoutes(app);
+  await registerAddPagesRoutes(app);
 }

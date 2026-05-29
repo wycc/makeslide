@@ -807,6 +807,45 @@ export async function answerSyncFollowerQuestionsWithAi(
  * 向後端送出「停止正在執行中的重生任務」請求；實際會在下一個頁面安全檢查點
  * 停止，並讓 status 進入 `cancelling` → `cancelled`。
  */
+export type AddPagesStep =
+  | 'generating_outline'
+  | 'rendering_images'
+  | 'generating_scripts'
+  | 'synthesizing_audio';
+
+export interface AddPagesJobState {
+  pdfId: string;
+  status: 'pending' | 'running' | 'done' | 'failed';
+  step: AddPagesStep | null;
+  progress: { current: number; total: number } | null;
+  addedPageNumbers: number[];
+  totalPagesAfter: number | null;
+  error: string | null;
+  startedAt: string;
+  updatedAt: string;
+}
+
+export async function startAddPagesFromPrompt(
+  id: string,
+  prompt: string,
+): Promise<AddPagesJobState> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/add-pages-from-prompt`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ prompt }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as AddPagesJobState;
+}
+
+export async function fetchAddPagesStatus(id: string): Promise<AddPagesJobState> {
+  const resp = await fetch(
+    `api/pdfs/${encodeURIComponent(id)}/add-pages-from-prompt/status`,
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as AddPagesJobState;
+}
+
 export async function cancelRegenerateJob(id: string): Promise<RegenJobState> {
   const resp = await fetch(
     `api/pdfs/${encodeURIComponent(id)}/regenerate/cancel`,
