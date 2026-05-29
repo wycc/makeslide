@@ -216,6 +216,7 @@ export default function PlayPage() {
   const [detail, setDetail] = useState<PdfDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [currentIdx, setCurrentIdx] = useState(0);
+  const [displayedImageSrc, setDisplayedImageSrc] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -626,6 +627,27 @@ export default function PlayPage() {
     },
     [imageBustKey],
   );
+
+  const targetImageSrc = useMemo(() => {
+    if (!currentPage?.image_url) return null;
+    return withImageBust(currentPage.image_url) ?? currentPage.image_url;
+  }, [currentPage?.image_url, withImageBust]);
+
+  useEffect(() => {
+    if (!targetImageSrc) {
+      setDisplayedImageSrc(null);
+      return;
+    }
+    const img = new Image();
+    const settle = () => setDisplayedImageSrc(targetImageSrc);
+    img.onload = settle;
+    img.onerror = settle;
+    img.src = targetImageSrc;
+    return () => {
+      img.onload = null;
+      img.onerror = null;
+    };
+  }, [targetImageSrc]);
 
   useEffect(() => {
     if (!pdfId || !playbackProgressStorageKey || deckPages.length === 0) return;
@@ -2186,15 +2208,15 @@ export default function PlayPage() {
     setSlideBusy(true);
     setSlideError(null);
     try {
-      await addSlide(pdfId, currentPage.page_number);
-      // 等後端新增完成後再整頁重載，避免讀到中間狀態。
-      window.location.reload();
+      const res = await addSlide(pdfId, currentPage.page_number);
+      await reloadDetail();
+      setCurrentIdx(res.page_number - 1);
     } catch (err) {
       setSlideError(err instanceof ApiError ? err.message : '新增投影片失敗');
     } finally {
       setSlideBusy(false);
     }
-  }, [pdfId, currentPage, isReadOnlyProcessing]);
+  }, [pdfId, currentPage, isReadOnlyProcessing, reloadDetail]);
 
   const handleDeleteCurrentSlide = useCallback(async () => {
     if (isReadOnlyProcessing) return;
@@ -2202,16 +2224,18 @@ export default function PlayPage() {
     if (!window.confirm(`確定刪除第 ${currentPage.page_number} 頁？`)) return;
     setSlideBusy(true);
     setSlideError(null);
+    const idxBeforeDelete = currentIdx;
+    const totalBeforeDelete = totalPages;
     try {
       await deleteSlide(pdfId, currentPage.page_number);
-      // 等後端刪除完成後再整頁重載，避免讀到中間狀態。
-      window.location.reload();
+      await reloadDetail();
+      setCurrentIdx(Math.max(0, Math.min(idxBeforeDelete, totalBeforeDelete - 2)));
     } catch (err) {
       setSlideError(err instanceof ApiError ? err.message : '刪除投影片失敗');
     } finally {
       setSlideBusy(false);
     }
-  }, [pdfId, currentPage, isReadOnlyProcessing]);
+  }, [pdfId, currentPage, currentIdx, totalPages, isReadOnlyProcessing, reloadDetail]);
 
   const handleMoveSlide = useCallback(
     async (fromPageNumber: number, toPageNumber: number) => {
@@ -2503,11 +2527,11 @@ export default function PlayPage() {
               <span className="ml-2 h-6 w-2 rounded-sm bg-current" aria-hidden="true" />
             </div>
           ) : null}
-          {currentPage?.image_url ? (
+          {currentPage?.image_url || displayedImageSrc ? (
             <img
               ref={fullscreenImageRef}
-              src={withImageBust(currentPage.image_url) ?? currentPage.image_url}
-              alt={`第 ${currentPage.page_number} 頁`}
+              src={displayedImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
+              alt={`第 ${currentPage?.page_number ?? ''} 頁`}
               className="max-h-screen max-w-screen object-contain"
             />
           ) : (
@@ -3263,11 +3287,10 @@ export default function PlayPage() {
                   />
                   {!transcriptFocusMode && shareUrl ? <p className="max-w-[85vw] break-all text-center text-xs text-slate-300">{shareUrl}</p> : null}
                 </div>
-              ) : currentPage?.image_url ? (
+              ) : currentPage?.image_url || displayedImageSrc ? (
                 <img
-                  key={currentPage.page_number}
-                  src={withImageBust(currentPage.image_url) ?? currentPage.image_url}
-                  alt={`第 ${currentPage.page_number} 頁`}
+                  src={displayedImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
+                  alt={`第 ${currentPage?.page_number ?? ''} 頁`}
                   className="w-auto cursor-pointer rounded-lg border border-slate-800 shadow-xl"
                   style={{ maxHeight: transcriptFocusMode ? '10rem' : `${slideImageMaxHeightVh}vh` }}
                   onClick={() => playPause()}
@@ -3296,18 +3319,6 @@ export default function PlayPage() {
           {/* Controls */}
           <section className={transcriptFocusMode ? 'absolute right-4 top-44 z-20 w-64 rounded-lg border border-slate-700 bg-slate-950/95 shadow-2xl md:top-56 md:w-80' : 'border-t border-slate-800 bg-slate-900/50'}>
             <div className={transcriptFocusMode ? 'flex flex-col gap-2 px-3 py-3' : 'flex flex-col gap-3 px-4 py-4'}>
-          {audioError && (
-            <div className="flex items-center justify-between rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
-              <span>{audioError}</span>
-              <button
-                type="button"
-                onClick={handleRetry}
-                className="rounded border border-rose-300/50 px-2 py-0.5 text-xs hover:bg-rose-500/20"
-              >
-                重試
-              </button>
-            </div>
-          )}
           {finished && (
             <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
               播放完成
@@ -3329,15 +3340,37 @@ export default function PlayPage() {
             >
               ⏮
             </button>
-            <button
-              type="button"
-              onClick={playPause}
-              className="rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm hover:bg-slate-700"
-              aria-label={classroomMode && classroomAwaitingNext ? '下一頁並播放' : isPlaying ? '暫停' : '播放'}
-              title={classroomMode && classroomAwaitingNext ? '下一頁並播放 (Space)' : isPlaying ? '暫停 (Space)' : '播放 (Space)'}
-            >
-              {classroomMode && classroomAwaitingNext ? '⏭▶︎' : isPlaying ? '⏸' : '▶︎'}
-            </button>
+            {audioError ? (
+              <button
+                type="button"
+                onClick={handleRetry}
+                className="rounded-full border border-rose-500/50 bg-rose-500/15 px-4 py-2 text-sm text-rose-300 hover:bg-rose-500/25"
+                aria-label="語音載入失敗，點擊重試"
+                title={audioError}
+              >
+                ▶︎
+              </button>
+            ) : !currentPage?.audio_url ? (
+              <button
+                type="button"
+                disabled
+                className="rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm opacity-30 cursor-not-allowed"
+                aria-label="此頁無語音"
+                title="此頁無語音"
+              >
+                ▶︎
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={playPause}
+                className="rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm hover:bg-slate-700"
+                aria-label={classroomMode && classroomAwaitingNext ? '下一頁並播放' : isPlaying ? '暫停' : '播放'}
+                title={classroomMode && classroomAwaitingNext ? '下一頁並播放 (Space)' : isPlaying ? '暫停 (Space)' : '播放 (Space)'}
+              >
+                {classroomMode && classroomAwaitingNext ? '⏭▶︎' : isPlaying ? '⏸' : '▶︎'}
+              </button>
+            )}
             <button
               type="button"
               onClick={goNext}
