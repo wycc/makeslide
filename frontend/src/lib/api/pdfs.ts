@@ -348,6 +348,12 @@ export interface UpdateTtsSettingsResponse {
   updated_at: string;
 }
 
+export interface UpdateScriptSettingsResponse {
+  id: string;
+  script_max_chars_per_page: number | null;
+  updated_at: string;
+}
+
 export interface UpdatePdfTitleResponse {
   id: string;
   title: string;
@@ -627,6 +633,19 @@ export async function updatePdfTtsSettings(
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as UpdateTtsSettingsResponse;
+}
+
+export async function updatePdfScriptSettings(
+  id: string,
+  scriptMaxCharsPerPage: number | null,
+): Promise<UpdateScriptSettingsResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/script-settings`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ script_max_chars_per_page: scriptMaxCharsPerPage }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as UpdateScriptSettingsResponse;
 }
 
 export async function updatePdfImageStyleSettings(

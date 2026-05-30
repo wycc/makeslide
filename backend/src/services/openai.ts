@@ -211,7 +211,7 @@ export async function callChatJSON<T>(
     };
   }
   const client = getOpenAIClient();
-  const model = params.model ?? config.openaiLlmModel;
+  const model = params.model ?? runtime.openaiLlmModel;
   const maxAttempts = 2; // parse/validate retries (on top of SDK retries)
   let lastErr: unknown;
 

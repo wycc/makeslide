@@ -20,9 +20,36 @@ export interface YoutubeCaptionResult {
 
 const YT_DLP_DOWNLOAD_URL = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp';
 
-async function canRun(bin: string): Promise<boolean> {
+// yt-dlp requires Python >= 3.10. The bundled zipapp's shebang (#!/usr/bin/env
+// python3) may resolve to an older interpreter (e.g. Anaconda 3.8), so we run it
+// with an explicitly resolved interpreter instead of relying on the shebang.
+const PYTHON_CANDIDATES = ['python3.12', 'python3.11', 'python3.10', 'python3'];
+
+let cachedPython: string | null | undefined;
+async function resolvePython(): Promise<string | null> {
+  if (cachedPython !== undefined) return cachedPython;
+  for (const py of PYTHON_CANDIDATES) {
+    const ok = await new Promise<boolean>((resolve) => {
+      const p = spawn(
+        py,
+        ['-c', 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)'],
+        { stdio: 'ignore' },
+      );
+      p.on('close', (code) => resolve(code === 0));
+      p.on('error', () => resolve(false));
+    });
+    if (ok) {
+      cachedPython = py;
+      return py;
+    }
+  }
+  cachedPython = null;
+  return null;
+}
+
+async function canRun(python: string, bin: string): Promise<boolean> {
   return await new Promise<boolean>((resolve) => {
-    const p = spawn(bin, ['--version'], { stdio: 'ignore' });
+    const p = spawn(python, [bin, '--version'], { stdio: 'ignore' });
     p.on('close', (code) => resolve(code === 0));
     p.on('error', () => resolve(false));
   });
@@ -52,7 +79,7 @@ async function downloadFile(url: string, dest: string): Promise<void> {
   });
 }
 
-async function ensureYtDlpBinary(): Promise<string | null> {
+async function ensureYtDlpBinary(python: string): Promise<string | null> {
   const workspaceYtDlpPath = path.resolve(process.cwd(), 'yt-dlp');
   const localCandidates = [
     workspaceYtDlpPath,
@@ -60,7 +87,7 @@ async function ensureYtDlpBinary(): Promise<string | null> {
   ];
 
   for (const p of localCandidates) {
-    if (await canRun(p)) return p;
+    if (await canRun(python, p)) return p;
   }
 
   const binPath: string = workspaceYtDlpPath;
@@ -74,7 +101,7 @@ async function ensureYtDlpBinary(): Promise<string | null> {
   try {
     await downloadFile(YT_DLP_DOWNLOAD_URL, binPath);
     await fs.promises.chmod(binPath, 0o755);
-    if (await canRun(binPath)) return binPath;
+    if (await canRun(python, binPath)) return binPath;
   } catch {
     return null;
   }

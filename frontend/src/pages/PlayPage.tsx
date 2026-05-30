@@ -42,6 +42,7 @@ import {
   toggleSyncDisplayedQuestion,
   updatePdfCoverFromPage,
   updatePdfImageStyleSettings,
+  updatePdfScriptSettings,
   updatePdfTtsSettings,
   updatePdfPrompt,
   regeneratePdfTitle,
@@ -262,6 +263,7 @@ export default function PlayPage() {
   const [showAddPagesModal, setShowAddPagesModal] = useState(false);
   const [ttsVoice, setTtsVoice] = useState('alloy');
   const [ttsSpeed, setTtsSpeed] = useState(1);
+  const [scriptMaxCharsPerPage, setScriptMaxCharsPerPage] = useState<number | null>(null);
   const [ttsBusy, setTtsBusy] = useState(false);
   const [ttsMsg, setTtsMsg] = useState<string | null>(null);
   const [ttsDialogOpen, setTtsDialogOpen] = useState(false);
@@ -494,6 +496,7 @@ export default function PlayPage() {
         // page prompts are managed per page in local state
         setTtsVoice(d.tts_voice?.trim() || 'alloy');
         setTtsSpeed(d.tts_speed ?? 1);
+        setScriptMaxCharsPerPage(typeof d.script_max_chars_per_page === 'number' ? d.script_max_chars_per_page : null);
         setLoadError(null);
         if (d.image_style_prompt && d.image_style_prompt.trim()) {
           setDeckImageStylePrompt(d.image_style_prompt);
@@ -1855,24 +1858,28 @@ export default function PlayPage() {
     setTtsBusy(true);
     setTtsMsg(null);
     try {
-      const res = await updatePdfTtsSettings(pdfId, ttsVoice, ttsSpeed);
+      const [ttsRes, scriptRes] = await Promise.all([
+        updatePdfTtsSettings(pdfId, ttsVoice, ttsSpeed),
+        updatePdfScriptSettings(pdfId, scriptMaxCharsPerPage),
+      ]);
       setDetail((prev) =>
         prev
           ? {
               ...prev,
-              tts_voice: res.tts_voice,
-              tts_speed: res.tts_speed,
-              updated_at: res.updated_at,
+              tts_voice: ttsRes.tts_voice,
+              tts_speed: ttsRes.tts_speed,
+              script_max_chars_per_page: scriptRes.script_max_chars_per_page,
+              updated_at: ttsRes.updated_at,
             }
           : prev,
       );
-      setTtsMsg('語音設定已儲存');
+      setTtsMsg('設定已儲存');
     } catch (err) {
-      setTtsMsg(err instanceof ApiError ? err.message : '儲存語音設定失敗');
+      setTtsMsg(err instanceof ApiError ? err.message : '儲存設定失敗');
     } finally {
       setTtsBusy(false);
     }
-  }, [pdfId, ttsVoice, ttsSpeed, isReadOnlyProcessing]);
+  }, [pdfId, ttsVoice, ttsSpeed, scriptMaxCharsPerPage, isReadOnlyProcessing]);
 
   const handleSaveTitle = useCallback(async () => {
     if (isReadOnlyProcessing) return;
@@ -4309,7 +4316,7 @@ export default function PlayPage() {
       {ttsDialogOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
           <div className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl">
-            <h3 className="mb-3 text-sm font-semibold text-slate-200">語音設定</h3>
+            <h3 className="mb-3 text-sm font-semibold text-slate-200">生成設定</h3>
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs text-slate-300">聲音</span>
@@ -4337,6 +4344,29 @@ export default function PlayPage() {
                   className="flex-1 accent-cyan-500"
                 />
                 <span className="w-10 text-right text-xs tabular-nums text-slate-300">{ttsSpeed.toFixed(2)}</span>
+              </div>
+              <div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-slate-300">逐字稿每頁上限字數</span>
+                  <span className="text-xs text-slate-500">（留空使用系統預設）</span>
+                </div>
+                <input
+                  type="number"
+                  min={80}
+                  max={2000}
+                  step={10}
+                  placeholder="系統預設"
+                  value={scriptMaxCharsPerPage ?? ''}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (raw === '') { setScriptMaxCharsPerPage(null); return; }
+                    const n = Number(raw);
+                    if (!Number.isFinite(n)) return;
+                    setScriptMaxCharsPerPage(Math.max(80, Math.min(2000, Math.round(n))));
+                  }}
+                  disabled={isReadOnlyProcessing || ttsBusy}
+                  className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100 placeholder:text-slate-500"
+                />
               </div>
               {ttsMsg ? <p className="text-xs text-slate-400">{ttsMsg}</p> : null}
             </div>

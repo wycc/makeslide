@@ -6,7 +6,7 @@ import path from 'node:path';
 import { nanoid } from 'nanoid';
 import { z } from 'zod';
 import sharp from 'sharp';
-import { db } from '../../db';
+import { db, savePageGenerationPrompt } from '../../db';
 import { config } from '../../config';
 import type { PageRow, PdfRow } from '../../types';
 import { callChatJSON } from '../../services/openai';
@@ -16,6 +16,7 @@ import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../../services/imagePr
 import { loadPromptTemplate, renderPromptTemplate } from '../../services/promptTemplates';
 import { safeJoinPdfPath } from '../../services/storage';
 import { synthesizeAudio } from '../../worker/steps/synthesizeAudio';
+import { scriptCharBounds } from '../../worker/steps/generateScript';
 import {
   AddPageBodySchema,
   IdParamSchema,
@@ -92,10 +93,12 @@ function buildRewriteScriptSystemPrompt(params: {
   targetChars: number;
 }): string {
   const runtime = getRuntimeAiSettings();
+  const charBounds = scriptCharBounds(params.targetChars);
+  const charLimitInstruction = `【字數限制】逐字稿長度必須控制在 ${charBounds.min}～${charBounds.max} 字之間（目標約 ${params.targetChars} 字）：內容多時請優先濃縮、只挑核心重點講，不可超過 ${charBounds.max} 字上限；內容少時可適度展開，但不要灌水。`;
   if (runtime.ttsProvider === 'gemini') {
     const fallback = '你是一位 Podcast 逐字稿編輯助理。請輸出 JSON：{"script":"..."}';
     const template = loadPromptTemplate('backend/prompts/generate-script-gemini.md', fallback);
-    const base = [template];
+    const base = [template, '', charLimitInstruction];
     const speaker1 = runtime.geminiTtsSpeaker1?.trim();
     const speaker2 = runtime.geminiTtsSpeaker2?.trim();
     if (speaker1 || speaker2) {
@@ -127,9 +130,9 @@ function buildRewriteScriptSystemPrompt(params: {
     renderPromptTemplate(
       loadPromptTemplate(
         'backend/prompts/generate-script-openai.md',
-        `你是一位專業的中文簡報講師與旁白配音員。你的任務：生成繁體中文逐字稿（建議約 ${params.targetChars} 字）。請回傳 JSON：{"script":"..."}`,
+        `你是一位專業的中文簡報講師與旁白配音員。你的任務：生成繁體中文逐字稿（目標約 ${params.targetChars} 字，必須控制在 ${charBounds.min}～${charBounds.max} 字之間）。請回傳 JSON：{"script":"..."}`,
       ),
-      { target_chars: String(params.targetChars) },
+      { target_chars: String(params.targetChars), min_chars: String(charBounds.min), max_chars: String(charBounds.max) },
     ),
   ];
   const sanitized = sanitiseRewriteUserPrompt(params.userPrompt);
@@ -168,10 +171,11 @@ function buildRewriteScriptUserPrompt(params: {
     ? `【最近對話】\n${params.history.map((m) => `${m.role}: ${m.content}`).join('\n')}`
     : '【最近對話】（無）';
 
+  const bounds = scriptCharBounds(params.targetChars);
   return [
     `目前頁碼：第 ${params.pageNumber} 頁 / 共 ${params.pageCount} 頁。`,
-    `建議字數：約 ${params.targetChars} 字（可依素材多寡彈性調整）。`,
-    '字數以資訊完整與講解流暢為優先：內容多可較長，內容少可較短，避免為湊字數而灌水。',
+    `目標字數：約 ${params.targetChars} 字，長度必須落在 ${bounds.min}～${bounds.max} 字之間。`,
+    `請在這個字數範圍內把重點講清楚；內容多時優先濃縮、挑核心重點，不可超過 ${bounds.max} 字上限，不要為了湊字數而灌水。`,
     `輸出語言：${config.openaiScriptLanguage}（繁體中文）。`,
     '',
     previousBlock,
@@ -184,7 +188,7 @@ function buildRewriteScriptUserPrompt(params: {
     '',
     historyBlock,
     '',
-    '請依照修改指示重寫「本頁目前逐字稿」，並維持與生成路徑一致的風格、語氣、格式與建議字數。',
+    `請依照修改指示重寫「本頁目前逐字稿」，並維持與生成路徑一致的風格、語氣、格式；字數必須落在 ${bounds.min}～${bounds.max} 字之間。`,
     '上一頁與下一頁逐字稿只用來確認頁間一致性和連續性；不要把前後頁內容整段併入本頁。',
     '避免使用「這一頁／本頁／此頁／本張」等單頁指稱，改用連續敘事語氣。',
     '請以 JSON 格式回覆：{"script": "逐字稿內容..."}',
@@ -767,6 +771,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
 
       const script = result.data.script.trim();
       await fs.promises.writeFile(safeJoinPdfPath(id, pageRow.script_path), script, 'utf8');
+      savePageGenerationPrompt(id, n, 'script', userText, getRuntimeAiSettings().openaiLlmModel);
       const now = nowIso();
       const nextHistory = [...body.history, { role: 'user' as const, content: prompt }, { role: 'assistant' as const, content: script }].slice(-20);
       db.prepare(`UPDATE pages SET chat_history_json = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`).run(

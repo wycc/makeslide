@@ -1173,4 +1173,55 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     const prompts = getPageGenerationPrompts(id, n);
     return reply.code(200).send(prompts);
   });
+
+  // PATCH /api/pdfs/:id/tts-settings
+  app.patch('/api/pdfs/:id/tts-settings', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const body = z.object({
+      tts_voice: z.string().trim().min(1, '不支援的 tts_voice'),
+      tts_speed: z.number().min(0.25, 'tts_speed 過小').max(4, 'tts_speed 過大'),
+    }).safeParse(request.body ?? {});
+    if (!body.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
+    }
+    const { id } = parsed.data;
+    const row = db.prepare(`SELECT id, owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as Pick<PdfRow, 'id' | 'owner_sub' | 'visibility'> | undefined;
+    if (!row) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), row)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
+    }
+    const now = nowIso();
+    db.prepare(`UPDATE pdfs SET tts_voice = ?, tts_speed = ?, updated_at = ? WHERE id = ?`).run(
+      body.data.tts_voice, body.data.tts_speed, now, id,
+    );
+    return reply.send({ id, tts_voice: body.data.tts_voice, tts_speed: body.data.tts_speed, updated_at: now });
+  });
+
+  // PATCH /api/pdfs/:id/script-settings
+  app.patch('/api/pdfs/:id/script-settings', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const body = z.object({
+      script_max_chars_per_page: z.number().int().min(80).max(2000).nullable(),
+    }).safeParse(request.body ?? {});
+    if (!body.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
+    }
+    const { id } = parsed.data;
+    const row = db.prepare(`SELECT id, owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as Pick<PdfRow, 'id' | 'owner_sub' | 'visibility'> | undefined;
+    if (!row) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), row)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
+    }
+    const now = nowIso();
+    db.prepare(`UPDATE pdfs SET script_max_chars_per_page = ?, updated_at = ? WHERE id = ?`).run(
+      body.data.script_max_chars_per_page, now, id,
+    );
+    return reply.send({ id, script_max_chars_per_page: body.data.script_max_chars_per_page, updated_at: now });
+  });
 }

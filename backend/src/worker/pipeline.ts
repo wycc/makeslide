@@ -19,6 +19,7 @@ import {
 } from '../services/storage';
 import { fetchYoutubeCaptions } from '../services/youtubeCaptions';
 import { callChatJSON } from '../services/openai';
+import { getRuntimeAiSettings } from '../services/aiSettings';
 import type {
   PageRow,
   PageStatus,
@@ -886,7 +887,7 @@ async function runPipeline(pdfId: string): Promise<void> {
       await persistMetadata(pdfId, {
         models: {
           ...((await readMetadata(pdfId))?.models ?? {}),
-          llm: config.openaiLlmModel,
+          llm: getRuntimeAiSettings().openaiLlmModel,
         },
         usage: {
           ...((await readMetadata(pdfId))?.usage ?? {}),
