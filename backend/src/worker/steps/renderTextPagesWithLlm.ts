@@ -15,6 +15,8 @@ export interface RenderTextPagesWithLlmOptions {
   onPage?: (pageNumber: number, imagePath: string, info: RenderTextPageTimingInfo) => void;
   /** Optional abort probe checked before each page. Throws CANCELLED if true. */
   shouldAbort?: () => boolean;
+  /** When true, skip updating cover.jpg after rendering. Use when adding pages to an existing deck. */
+  skipCoverUpdate?: boolean;
 }
 
 export interface RenderTextPageTimingInfo {
@@ -417,7 +419,7 @@ export async function renderTextPagesWithLlm(
     });
   }
 
-  if (pagePaths[0]) {
+  if (pagePaths[0] && !opts.skipCoverUpdate) {
     const coverPath = coverImagePath(opts.pdfId);
     await fs.promises.copyFile(pagePaths[0], coverPath);
     await generateCoverThumbnail(opts.pdfId, coverPath);

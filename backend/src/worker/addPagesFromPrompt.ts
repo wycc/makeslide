@@ -432,6 +432,7 @@ async function runAddPagesJob(
       pages: newPagesData,
       totalPageCount: newPageCount,
       shouldAbort,
+      skipCoverUpdate: true,
       onPage: (pageNumber, imagePath) => {
         renderedCount++;
         updateJob(pdfId, {
