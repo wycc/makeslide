@@ -113,7 +113,12 @@ async function fetchByYtDlp(videoId: string, language?: string | null): Promise<
   const base = path.join(tmpDir, 'cap');
   const preferred = (language?.trim() || 'zh-TW');
   const url = `https://www.youtube.com/watch?v=${videoId}`;
-  const ytDlpBin = await ensureYtDlpBinary();
+  const python = await resolvePython();
+  if (!python) {
+    logger.error({ videoId }, 'no Python >= 3.10 interpreter found for yt-dlp');
+    return null;
+  }
+  const ytDlpBin = await ensureYtDlpBinary(python);
   if (!ytDlpBin) return null;
 
   const langCandidates = Array.from(
@@ -121,10 +126,11 @@ async function fetchByYtDlp(videoId: string, language?: string | null): Promise<
   );
   const runYtDlp = async (bin: string, cmdArgs: string[]): Promise<boolean> =>
     await new Promise<boolean>((resolve) => {
-      const cmdline = `${bin} ${cmdArgs.map((a) => (/\s/.test(a) ? JSON.stringify(a) : a)).join(' ')}`;
+      const spawnArgs = [bin, ...cmdArgs];
+      const cmdline = `${python} ${spawnArgs.map((a) => (/\s/.test(a) ? JSON.stringify(a) : a)).join(' ')}`;
       logger.info({ videoId, command: cmdline }, 'yt-dlp spawn');
 
-      const p = spawn(bin, cmdArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+      const p = spawn(python, spawnArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
       let stdout = '';
       let stderr = '';
       p.stdout?.on('data', (buf) => {
