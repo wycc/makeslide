@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { toFile } from 'openai';
+import type { ChatCompletionContentPart } from 'openai/resources/chat/completions';
 import fs from 'node:fs';
 import path from 'node:path';
 import { nanoid } from 'nanoid';
@@ -211,6 +212,18 @@ function parseChatHistory(json: string | null): Array<z.infer<typeof ChatMessage
     return parsed.success ? parsed.data : [];
   } catch {
     return [];
+  }
+}
+
+async function loadPageImageAsDataUrl(absPath: string): Promise<string | null> {
+  try {
+    const buf = await sharp(absPath)
+      .resize({ width: config.openaiScriptImageMaxWidth, withoutEnlargement: true, fit: 'inside' })
+      .jpeg({ quality: 82, mozjpeg: true })
+      .toBuffer();
+    return `data:image/jpeg;base64,${buf.toString('base64')}`;
+  } catch {
+    return null;
   }
 }
 
@@ -700,8 +713,8 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     }
 
     const pageRow = db
-      .prepare(`SELECT script_path, chat_history_json FROM pages WHERE pdf_id = ? AND page_number = ?`)
-      .get(id, n) as { script_path: string | null; chat_history_json: string | null } | undefined;
+      .prepare(`SELECT script_path, chat_history_json, image_path FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .get(id, n) as { script_path: string | null; chat_history_json: string | null; image_path: string | null } | undefined;
     if (!pageRow?.script_path) {
       return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
     }
@@ -710,6 +723,28 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       const prompt = body.prompt.trim() || '請在保留原意與適合朗讀的前提下，潤飾這頁逐字稿。';
       const currentScript = body.current_script.trim() || body.script.trim();
       const targetChars = pdfRow.script_max_chars_per_page ?? config.openaiScriptTargetChars;
+
+      const imageDataUrl = pageRow.image_path
+        ? await loadPageImageAsDataUrl(safeJoinPdfPath(id, pageRow.image_path))
+        : null;
+
+      const userText = buildRewriteScriptUserPrompt({
+        pageNumber: n,
+        pageCount: pdfRow.page_count,
+        targetChars,
+        editPrompt: prompt,
+        previousScript: body.previous_script,
+        currentScript,
+        nextScript: body.next_script,
+        history: body.history,
+      });
+
+      const userContent: ChatCompletionContentPart[] = [];
+      if (imageDataUrl) {
+        userContent.push({ type: 'image_url', image_url: { url: imageDataUrl, detail: 'high' } });
+      }
+      userContent.push({ type: 'text', text: userText });
+
       const result = await callChatJSON({
         label: `rewrite-script page/${id}/${n}`,
         schema: RewriteScriptResponseSchema,
@@ -725,16 +760,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
           },
           {
             role: 'user',
-            content: buildRewriteScriptUserPrompt({
-              pageNumber: n,
-              pageCount: pdfRow.page_count,
-              targetChars,
-              editPrompt: prompt,
-              previousScript: body.previous_script,
-              currentScript,
-              nextScript: body.next_script,
-              history: body.history,
-            }),
+            content: userContent,
           },
         ],
       });

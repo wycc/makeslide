@@ -605,23 +605,20 @@ export async function generateScript(
       extraSourcesText,
     });
 
-    // Always attach the current page image as a vision input when available.
-    let imageDataUrl: string | null = null;
-    imageDataUrl = await loadPageImageDataUrl(
+    const imageDataUrl = await loadPageImageDataUrl(
       pdfId,
       pageInfo.pageNumber,
       pageInfo.imagePath,
     );
 
-    const userContent: ChatCompletionContentPart[] = [
-      { type: 'text', text: userText },
-    ];
+    const userContent: ChatCompletionContentPart[] = [];
     if (imageDataUrl) {
       userContent.push({
         type: 'image_url',
-        image_url: { url: imageDataUrl, detail: 'auto' },
+        image_url: { url: imageDataUrl, detail: 'high' },
       });
     }
+    userContent.push({ type: 'text', text: userText });
 
     savePageGenerationPrompt(
       pdfId,
