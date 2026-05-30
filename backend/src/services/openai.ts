@@ -90,7 +90,7 @@ async function appendLlmResponseLog(entry: unknown): Promise<void> {
  */
 export function getOpenAIClient(): OpenAI {
   if (cachedClient) return cachedClient;
-  const apiKey = (runtimeApiKeyOverride ?? process.env.OPENAI_API_KEY ?? config.openaiApiKey).trim();
+  const apiKey = (runtimeApiKeyOverride ?? getRuntimeAiSettings().openaiApiKey ?? '').trim();
   if (!apiKey) {
     throw new Error(
       'OPENAI_API_KEY is not set — cannot call OpenAI. Update your .env and restart.',
