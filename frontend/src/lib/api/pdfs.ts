@@ -813,14 +813,21 @@ export type AddPagesStep =
   | 'generating_scripts'
   | 'synthesizing_audio';
 
+export interface AddPagesPageResult {
+  pageNumber: number;
+  imageDone: boolean;
+  scriptPreview: string | null;
+}
+
 export interface AddPagesJobState {
   pdfId: string;
-  status: 'pending' | 'running' | 'done' | 'failed';
+  status: 'pending' | 'running' | 'done' | 'failed' | 'cancelled';
   step: AddPagesStep | null;
   progress: { current: number; total: number } | null;
   addedPageNumbers: number[];
   totalPagesAfter: number | null;
   insertAfterPage: number | null;
+  pageResults: AddPagesPageResult[];
   error: string | null;
   startedAt: string;
   updatedAt: string;
@@ -857,6 +864,14 @@ export async function fetchAddPagesStatus(id: string): Promise<AddPagesJobState>
   return (await resp.json()) as AddPagesJobState;
 }
 
+export async function cancelAddPagesJob(id: string): Promise<void> {
+  const resp = await fetch(
+    `api/pdfs/${encodeURIComponent(id)}/add-pages-from-prompt/cancel`,
+    { method: 'POST' },
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+}
+
 export interface AddPagesOutlineChatMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -888,11 +903,12 @@ export async function fetchPageGenerationPrompts(
 export async function continueAddPagesOutlineChat(
   pdfId: string,
   messages: AddPagesOutlineChatMessage[],
+  insertAfterPage?: number,
 ): Promise<AddPagesOutlineChatResponse> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(pdfId)}/add-pages-outline-chat`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ messages }),
+    body: JSON.stringify({ messages, insert_after_page: insertAfterPage }),
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as AddPagesOutlineChatResponse;

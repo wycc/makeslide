@@ -4,6 +4,8 @@ import {
   getAddPagesJob,
   startAddPagesFromPrompt,
   continueAddPagesOutlineChat,
+  buildInsertionContext,
+  abortAddPagesJob,
 } from '../../worker/addPagesFromPrompt';
 import { IdParamSchema, errorResponse } from './shared';
 import { db } from '../../db';
@@ -27,6 +29,7 @@ const AddPagesOutlineChatBodySchema = z.object({
     )
     .min(1)
     .max(20),
+  insert_after_page: z.number().int().min(0).optional(),
 });
 
 export async function registerAddPagesRoutes(app: FastifyInstance): Promise<void> {
@@ -98,6 +101,20 @@ export async function registerAddPagesRoutes(app: FastifyInstance): Promise<void
     return reply.code(200).send(state);
   });
 
+  app.post('/api/pdfs/:id/add-pages-from-prompt/cancel', async (request, reply) => {
+    const parsedParams = IdParamSchema.safeParse(request.params);
+    if (!parsedParams.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const cancelled = abortAddPagesJob(parsedParams.data.id);
+    if (!cancelled) {
+      return reply
+        .code(409)
+        .send(errorResponse('INVALID_STATE', 'No running add-pages job to cancel'));
+    }
+    return reply.code(200).send({ cancelled: true });
+  });
+
   app.post('/api/pdfs/:id/add-pages-outline-chat', async (request, reply) => {
     const parsedParams = IdParamSchema.safeParse(request.params);
     if (!parsedParams.success) {
@@ -118,27 +135,31 @@ export async function registerAddPagesRoutes(app: FastifyInstance): Promise<void
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     }
 
+    const pageCount = pdfRow.page_count ?? 0;
+    const insertAfter = parsedBody.data.insert_after_page ?? pageCount;
+
     const pageRows = db
-      .prepare(`SELECT page_number, text_path FROM pages WHERE pdf_id = ? ORDER BY page_number ASC LIMIT 12`)
+      .prepare(`SELECT page_number, text_path FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`)
       .all(id) as Array<{ page_number: number; text_path: string | null }>;
 
-    const texts = await Promise.all(
+    const pageTexts = await Promise.all(
       pageRows.map(async (p) => {
-        if (!p.text_path) return '';
+        if (!p.text_path) return { page_number: p.page_number, text: '' };
         try {
-          return await fs.promises.readFile(path.join(pdfDir(id), p.text_path), 'utf8');
+          const text = await fs.promises.readFile(path.join(pdfDir(id), p.text_path), 'utf8');
+          return { page_number: p.page_number, text };
         } catch {
-          return '';
+          return { page_number: p.page_number, text: '' };
         }
       }),
     );
-    const existingContext = texts.filter(Boolean).join('\n\n---\n\n').slice(0, 6000);
+    const existingContext = buildInsertionContext(pageTexts, insertAfter);
 
     try {
       const result = await continueAddPagesOutlineChat({
         messages: parsedBody.data.messages,
         existingContext,
-        existingPageCount: pdfRow.page_count ?? 0,
+        existingPageCount: pageCount,
       });
       return reply.code(200).send(result);
     } catch (err) {

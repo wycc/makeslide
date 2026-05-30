@@ -59,6 +59,14 @@ export interface GenerateScriptOptions {
    * in-flight OpenAI call will run to completion.
    */
   shouldAbort?: () => boolean;
+  /**
+   * Additional pages whose scripts are already on disk and should be included
+   * as context in the deck-rewrite pass but NOT themselves regenerated.
+   * Useful when inserting new pages into an existing deck: pass the
+   * surrounding pages so the rewrite produces scripts that flow naturally.
+   * Only `pageNumber` and `script` are needed.
+   */
+  rewriteContextPages?: Array<{ pageNumber: number; script: string }>;
 }
 
 const ScriptResponseSchema = z.object({
@@ -752,8 +760,17 @@ export async function generateScript(
     'generateScript: all pages complete',
   );
 
-  // Second pass: rewrite whole deck scripts for cross-page continuity.
-  const sorted = [...results].sort((a, b) => a.pageNumber - b.pageNumber);
+  // Second pass: rewrite scripts for cross-page continuity.
+  // When rewriteContextPages is provided, merge them with the newly generated
+  // scripts so the rewrite sees surrounding pages — but only write back the
+  // pages that were actually generated in this call.
+  const newPageNumbers = new Set(results.map((r) => r.pageNumber));
+  const contextPages = opts.rewriteContextPages ?? [];
+  const allForRewrite: Array<{ pageNumber: number; script: string }> = [
+    ...contextPages.filter((c) => !newPageNumbers.has(c.pageNumber)),
+    ...results.map((r) => ({ pageNumber: r.pageNumber, script: r.script })),
+  ].sort((a, b) => a.pageNumber - b.pageNumber);
+
   const rewriteLabel = `script-rewrite deck/${pageCount}`;
   try {
     const { data, usage, latencyMs } = await callChatJSON({
@@ -763,13 +780,13 @@ export async function generateScript(
           role: 'user',
           content: buildDeckRewriteUserText(
             pageCount,
-            sorted.map((r) => ({ pageNumber: r.pageNumber, script: r.script })),
+            allForRewrite,
           ),
         },
       ],
       schema: ScriptDeckRewriteSchema,
       label: rewriteLabel,
-      maxTokens: Math.max(1200, pageCount * 260),
+      maxTokens: Math.max(1200, allForRewrite.length * 260),
       temperature: 0.5,
     });
 
@@ -778,6 +795,7 @@ export async function generateScript(
       byPage.set(p.page_number, p.script.trim());
     }
 
+    // Only write back scripts for pages that were generated in this call
     for (const r of results) {
       const rewritten = byPage.get(r.pageNumber)?.trim() ?? '';
       if (!rewritten) continue;
@@ -793,7 +811,7 @@ export async function generateScript(
     totalUsage.total_tokens += usage.total_tokens;
 
     logger.info(
-      { pdfId, pageCount, latencyMs, usage },
+      { pdfId, pageCount, latencyMs, usage, contextPageCount: contextPages.length },
       'generateScript: deck rewrite pass complete',
     );
   } catch (err) {

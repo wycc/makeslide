@@ -13,6 +13,8 @@ export interface RenderTextPagesWithLlmOptions {
   /** Override total page count for path naming (used when rendering a subset of pages). Defaults to pages.length. */
   totalPageCount?: number;
   onPage?: (pageNumber: number, imagePath: string, info: RenderTextPageTimingInfo) => void;
+  /** Optional abort probe checked before each page. Throws CANCELLED if true. */
+  shouldAbort?: () => boolean;
 }
 
 export interface RenderTextPageTimingInfo {
@@ -148,6 +150,11 @@ export async function renderTextPagesWithLlm(
   await fs.promises.mkdir(pagesDir(opts.pdfId), { recursive: true });
 
   for (const p of opts.pages) {
+    if (opts.shouldAbort?.()) {
+      const err = new Error('CANCELLED');
+      (err as Error & { code?: string }).code = 'CANCELLED';
+      throw err;
+    }
     const startedAtMs = Date.now();
     const startedAt = new Date(startedAtMs).toISOString();
     const imagePath = pageImagePath(opts.pdfId, p.pageNumber, pageCount);

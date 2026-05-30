@@ -30,14 +30,21 @@ export type AddPagesStep =
   | 'generating_scripts'
   | 'synthesizing_audio';
 
+export interface AddPagesPageResult {
+  pageNumber: number;
+  imageDone: boolean;
+  scriptPreview: string | null;
+}
+
 export interface AddPagesJobState {
   pdfId: string;
-  status: 'pending' | 'running' | 'done' | 'failed';
+  status: 'pending' | 'running' | 'done' | 'failed' | 'cancelled';
   step: AddPagesStep | null;
   progress: { current: number; total: number } | null;
   addedPageNumbers: number[];
   totalPagesAfter: number | null;
   insertAfterPage: number | null;
+  pageResults: AddPagesPageResult[];
   error: string | null;
   startedAt: string;
   updatedAt: string;
@@ -47,6 +54,13 @@ const jobs = new Map<string, AddPagesJobState>();
 
 export function getAddPagesJob(pdfId: string): AddPagesJobState | undefined {
   return jobs.get(pdfId);
+}
+
+export function abortAddPagesJob(pdfId: string): boolean {
+  const job = jobs.get(pdfId);
+  if (!job || (job.status !== 'pending' && job.status !== 'running')) return false;
+  jobs.set(pdfId, { ...job, status: 'cancelled', updatedAt: nowIso() });
+  return true;
 }
 
 const AddPagesSlideSchema = z.object({
@@ -80,7 +94,6 @@ function parseOutlineText(text: string): Array<{ title: string; bullets: string[
         current.bullets.push(bullet);
       }
     } else {
-      // Title line, possibly with "Slide N:" prefix
       const titleMatch = line.match(/^(?:Slide\s*\d+\s*[:：]\s*)?(.+)$/i);
       const title = (titleMatch ? (titleMatch[1] ?? line) : line).trim();
       if (!title) continue;
@@ -94,6 +107,41 @@ function parseOutlineText(text: string): Array<{ title: string; bullets: string[
     slides.push(current);
   }
   return slides;
+}
+
+/**
+ * Build insertion context: focus on pages surrounding the insertion point.
+ */
+export function buildInsertionContext(
+  pageTexts: Array<{ page_number: number; text: string }>,
+  insertAfter: number,
+  maxPages = 12,
+  maxChars = 8000,
+): string {
+  if (pageTexts.length === 0) return '';
+
+  const before = pageTexts.filter((p) => p.page_number <= insertAfter);
+  const after = pageTexts.filter((p) => p.page_number > insertAfter);
+
+  const headPages = pageTexts.slice(0, 2);
+  const beforePages = before.slice(-5);
+  const afterPages = after.slice(0, 5);
+
+  const seen = new Set<number>();
+  const selected: Array<{ page_number: number; text: string }> = [];
+  for (const p of [...headPages, ...beforePages, ...afterPages]) {
+    if (!seen.has(p.page_number) && p.text.trim()) {
+      seen.add(p.page_number);
+      selected.push(p);
+    }
+  }
+  selected.sort((a, b) => a.page_number - b.page_number);
+
+  return selected
+    .slice(0, maxPages)
+    .map((p) => `[第 ${p.page_number} 頁]\n${p.text.trim()}`)
+    .join('\n\n---\n\n')
+    .slice(0, maxChars);
 }
 
 function renderNewSlideTexts(
@@ -214,6 +262,22 @@ function updateJob(pdfId: string, updates: Partial<AddPagesJobState>): void {
   }
 }
 
+function updatePageResult(
+  pdfId: string,
+  pageNumber: number,
+  patch: Partial<AddPagesPageResult>,
+): void {
+  const job = jobs.get(pdfId);
+  if (!job) return;
+  const existing = job.pageResults.find((r) => r.pageNumber === pageNumber);
+  if (existing) {
+    Object.assign(existing, patch);
+  } else {
+    job.pageResults.push({ pageNumber, imageDone: false, scriptPreview: null, ...patch });
+  }
+  job.updatedAt = nowIso();
+}
+
 async function runAddPagesJob(
   pdfId: string,
   prompt: string,
@@ -221,6 +285,8 @@ async function runAddPagesJob(
   insertAfterPage: number | undefined,
 ): Promise<void> {
   updateJob(pdfId, { status: 'running' });
+
+  const shouldAbort = (): boolean => jobs.get(pdfId)?.status === 'cancelled';
 
   try {
     const row = db
@@ -237,7 +303,6 @@ async function runAddPagesJob(
 
     const existingPageCount = row.page_count;
 
-    // Determine where to insert
     const insertAfter =
       insertAfterPage !== undefined && insertAfterPage >= 0 && insertAfterPage <= existingPageCount
         ? insertAfterPage
@@ -249,29 +314,26 @@ async function runAddPagesJob(
       )
       .all(pdfId) as Array<{ page_number: number; text_path: string | null }>;
 
-    // Build existing context from surrounding pages for LLM
-    const existingTexts = await Promise.all(
+    const pageTextsWithContent = await Promise.all(
       pageRows.map(async (p) => {
-        if (!p.text_path) return '';
+        if (!p.text_path) return { page_number: p.page_number, text: '' };
         try {
-          const fullPath = path.join(pdfDir(pdfId), p.text_path);
-          return await fs.promises.readFile(fullPath, 'utf8');
+          const text = await fs.promises.readFile(path.join(pdfDir(pdfId), p.text_path), 'utf8');
+          return { page_number: p.page_number, text };
         } catch {
-          return '';
+          return { page_number: p.page_number, text: '' };
         }
       }),
     );
-    const existingContext = existingTexts
-      .filter(Boolean)
-      .slice(0, 12)
-      .join('\n\n---\n\n')
-      .slice(0, 8000);
+    const existingContext = buildInsertionContext(pageTextsWithContent, insertAfter);
 
     // Step 1: Generate or parse outline
     updateJob(pdfId, {
       step: 'generating_outline',
       progress: { current: 0, total: 1 },
     });
+
+    if (shouldAbort()) throw Object.assign(new Error('CANCELLED'), { code: 'CANCELLED' });
 
     let newSlides: Array<{ title: string; bullets: string[] }>;
 
@@ -290,10 +352,21 @@ async function runAddPagesJob(
 
     updateJob(pdfId, { progress: { current: 1, total: 1 } });
 
+    if (shouldAbort()) throw Object.assign(new Error('CANCELLED'), { code: 'CANCELLED' });
+
     const insertCount = newSlides.length;
     const newPageCount = existingPageCount + insertCount;
     const startPageNumber = insertAfter + 1;
     const newPagesData = renderNewSlideTexts(newSlides, startPageNumber);
+
+    // Initialise per-page result placeholders
+    updateJob(pdfId, {
+      pageResults: newPagesData.map((p) => ({
+        pageNumber: p.pageNumber,
+        imageDone: false,
+        scriptPreview: null,
+      })),
+    });
 
     // Shift existing pages if inserting in the middle
     if (insertAfter < existingPageCount) {
@@ -310,7 +383,6 @@ async function runAddPagesJob(
         rewritePagePathsToMatchNumber(pdfId, newPageCount);
       })();
 
-      // Rename artifact files for shifted pages (descending to avoid collisions)
       await renumberPageArtifacts(
         pdfId,
         existingPageCount,
@@ -359,17 +431,21 @@ async function runAddPagesJob(
       pdfId,
       pages: newPagesData,
       totalPageCount: newPageCount,
+      shouldAbort,
       onPage: (pageNumber, imagePath) => {
         renderedCount++;
         updateJob(pdfId, {
           progress: { current: renderedCount, total: insertCount },
         });
+        updatePageResult(pdfId, pageNumber, { imageDone: true });
         const relImagePath = path.relative(pdfDir(pdfId), imagePath);
         db.prepare(
           `UPDATE pages SET image_path = ?, status = 'rendered', updated_at = ? WHERE pdf_id = ? AND page_number = ?`,
         ).run(relImagePath, nowIso(), pdfId, pageNumber);
       },
     });
+
+    if (shouldAbort()) throw Object.assign(new Error('CANCELLED'), { code: 'CANCELLED' });
 
     // Step 3: Generate scripts
     updateJob(pdfId, {
@@ -384,6 +460,34 @@ async function runAddPagesJob(
       imagePath: pageImagePath(pdfId, p.pageNumber, newPageCount),
     }));
 
+    const firstNewPage = startPageNumber;
+    const lastNewPage = startPageNumber + insertCount - 1;
+    const contextPageNums: number[] = [];
+    for (let i = Math.max(1, firstNewPage - 5); i < firstNewPage; i++) contextPageNums.push(i);
+    for (let i = lastNewPage + 1; i <= Math.min(newPageCount, lastNewPage + 5); i++) contextPageNums.push(i);
+
+    const surroundingRows =
+      contextPageNums.length > 0
+        ? (db
+            .prepare(
+              `SELECT page_number, script_path FROM pages
+                WHERE pdf_id = ? AND page_number IN (${contextPageNums.map(() => '?').join(',')})
+                ORDER BY page_number ASC`,
+            )
+            .all(pdfId, ...contextPageNums) as Array<{ page_number: number; script_path: string | null }>)
+        : [];
+
+    const rewriteContextPages: Array<{ pageNumber: number; script: string }> = [];
+    for (const r of surroundingRows) {
+      if (!r.script_path) continue;
+      try {
+        const script = await fs.promises.readFile(path.join(pdfDir(pdfId), r.script_path), 'utf8');
+        if (script.trim()) rewriteContextPages.push({ pageNumber: r.page_number, script: script.trim() });
+      } catch {
+        // skip if file missing
+      }
+    }
+
     let scriptCount = 0;
     const scriptResult = await generateScript({
       pdfId,
@@ -391,11 +495,20 @@ async function runAddPagesJob(
       pages: pagesForScript,
       userPrompt: row.user_prompt,
       maxCharsPerPage: row.script_max_chars_per_page,
-      onPage: () => {
+      rewriteContextPages,
+      shouldAbort,
+      onPage: (pageNumber) => {
         scriptCount++;
         updateJob(pdfId, {
           progress: { current: scriptCount, total: insertCount },
         });
+        // Read script to get preview
+        const scriptPath = pageScriptPath(pdfId, pageNumber, newPageCount);
+        fs.promises.readFile(scriptPath, 'utf8').then((s) => {
+          updatePageResult(pdfId, pageNumber, {
+            scriptPreview: s.trim().slice(0, 120) || null,
+          });
+        }).catch(() => {});
       },
     });
 
@@ -404,6 +517,8 @@ async function runAddPagesJob(
         `UPDATE pages SET script_path = ?, status = 'script_ready', updated_at = ? WHERE pdf_id = ? AND page_number = ?`,
       ).run(path.relative(pdfDir(pdfId), sp.scriptPath), nowIso(), pdfId, sp.pageNumber);
     }
+
+    if (shouldAbort()) throw Object.assign(new Error('CANCELLED'), { code: 'CANCELLED' });
 
     // Step 4: Synthesize audio
     updateJob(pdfId, {
@@ -430,6 +545,7 @@ async function runAddPagesJob(
       pages: nonEmptyScripts,
       voice: row.tts_voice,
       speed: row.tts_speed,
+      shouldAbort,
       onPage: () => {
         audioCount++;
         updateJob(pdfId, {
@@ -486,6 +602,17 @@ async function runAddPagesJob(
       'add-pages-from-prompt: done',
     );
   } catch (err) {
+    const code = (err as { code?: string })?.code;
+    if (code === 'CANCELLED') {
+      // Job was already set to 'cancelled' by abortAddPagesJob; just log
+      logger.info({ pdfId }, 'add-pages-from-prompt: cancelled by user');
+      // Ensure status stays cancelled
+      const current = jobs.get(pdfId);
+      if (current && current.status !== 'cancelled') {
+        updateJob(pdfId, { status: 'cancelled', step: null, progress: null });
+      }
+      return;
+    }
     const message = err instanceof Error ? err.message : String(err);
     logger.error({ err, pdfId }, 'add-pages-from-prompt: failed');
     updateJob(pdfId, {
@@ -536,6 +663,7 @@ export async function startAddPagesFromPrompt(
     addedPageNumbers: [],
     totalPagesAfter: null,
     insertAfterPage: opts.insertAfterPage ?? null,
+    pageResults: [],
     error: null,
     startedAt: nowIso(),
     updatedAt: nowIso(),

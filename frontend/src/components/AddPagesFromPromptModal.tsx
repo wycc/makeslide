@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ApiError,
+  cancelAddPagesJob,
   continueAddPagesOutlineChat,
   fetchAddPagesStatus,
   startAddPagesFromPrompt,
@@ -25,7 +26,7 @@ const STEP_LABELS: Record<string, string> = {
   synthesizing_audio: '合成語音…',
 };
 
-const POLL_INTERVAL_MS = 2500;
+const POLL_INTERVAL_MS = 2000;
 
 export default function AddPagesFromPromptModal({
   pdfId,
@@ -50,6 +51,7 @@ export default function AddPagesFromPromptModal({
   // Generation phase
   const [jobState, setJobState] = useState<AddPagesJobState | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   // Common
   const [error, setError] = useState<string | null>(null);
@@ -73,6 +75,8 @@ export default function AddPagesFromPromptModal({
       } else if (state.status === 'failed') {
         stopPolling();
         setError(state.error ?? '新增失敗，請稍後重試');
+      } else if (state.status === 'cancelled') {
+        stopPolling();
       }
     } catch {
       // ignore transient poll errors
@@ -89,7 +93,6 @@ export default function AddPagesFromPromptModal({
     }
   }, [chatMessages]);
 
-  // Send chat message in AI mode
   const handleSendChat = async () => {
     const content = chatInput.trim();
     if (!content || isChatting) return;
@@ -102,7 +105,7 @@ export default function AddPagesFromPromptModal({
     setIsChatting(true);
     setError(null);
     try {
-      const resp = await continueAddPagesOutlineChat(pdfId, nextMessages);
+      const resp = await continueAddPagesOutlineChat(pdfId, nextMessages, insertAfterPage);
       setOutlineText(resp.outline_text);
       setChatMessages([...nextMessages, { role: 'assistant', content: resp.assistant_message }]);
     } catch (err) {
@@ -112,7 +115,6 @@ export default function AddPagesFromPromptModal({
     }
   };
 
-  // Confirm outline and move to review
   const handleConfirmOutline = () => {
     const text = mode === 'manual' ? manualText.trim() : outlineText.trim();
     if (!text) {
@@ -124,7 +126,6 @@ export default function AddPagesFromPromptModal({
     setPhase('review');
   };
 
-  // Start generation
   const handleStartGeneration = async () => {
     const text = outlineText.trim();
     if (!text) {
@@ -149,9 +150,29 @@ export default function AddPagesFromPromptModal({
     }
   };
 
-  const isGenerating = jobState?.status === 'pending' || jobState?.status === 'running';
+  const handleCancel = async () => {
+    if (isCancelling) return;
+    setIsCancelling(true);
+    try {
+      await cancelAddPagesJob(pdfId);
+      stopPolling();
+      const state = await fetchAddPagesStatus(pdfId).catch(() => null);
+      if (state) setJobState(state);
+    } catch {
+      // already cancelled or error — refetch state
+      try {
+        const state = await fetchAddPagesStatus(pdfId);
+        setJobState(state);
+      } catch {}
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
+  const isRunning = jobState?.status === 'pending' || jobState?.status === 'running';
   const isDone = jobState?.status === 'done';
   const isFailed = jobState?.status === 'failed';
+  const isCancelled = jobState?.status === 'cancelled';
 
   const stepLabel = jobState?.step ? (STEP_LABELS[jobState.step] ?? jobState.step) : null;
   const progress = jobState?.progress;
@@ -160,18 +181,21 @@ export default function AddPagesFromPromptModal({
       ? Math.round((progress.current / progress.total) * 100)
       : null;
 
+  const pageResults = jobState?.pageResults ?? [];
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="mx-4 flex w-full max-w-xl flex-col rounded-xl border border-slate-700 bg-slate-900 shadow-2xl"
-        style={{ maxHeight: '90vh' }}>
-
+      <div
+        className="mx-4 flex w-full max-w-2xl flex-col rounded-xl border border-slate-700 bg-slate-900 shadow-2xl"
+        style={{ maxHeight: '90vh' }}
+      >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 px-5 py-3">
           <h2 className="text-sm font-semibold text-slate-100">從大綱新增多頁投影片</h2>
           <button
             type="button"
             onClick={onClose}
-            disabled={isGenerating}
+            disabled={isRunning}
             className="rounded-md p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-200 disabled:opacity-40"
             aria-label="關閉"
           >
@@ -244,8 +268,6 @@ export default function AddPagesFromPromptModal({
               <p className="mb-3 text-xs text-slate-400">
                 描述你想補充的主題，AI 會根據現有簡報內容生成大綱。可以多輪對話調整。
               </p>
-
-              {/* Chat history */}
               {chatMessages.length > 0 && (
                 <div className="mb-3 max-h-64 space-y-2 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950 p-3">
                   {chatMessages.map((msg, i) => (
@@ -253,20 +275,14 @@ export default function AddPagesFromPromptModal({
                       key={i}
                       className={`text-xs leading-5 ${msg.role === 'user' ? 'text-slate-100' : 'text-indigo-200'}`}
                     >
-                      <span className="font-semibold">
-                        {msg.role === 'user' ? '你' : 'AI'}：
-                      </span>
+                      <span className="font-semibold">{msg.role === 'user' ? '你' : 'AI'}：</span>
                       <span className="whitespace-pre-wrap">{msg.content}</span>
                     </div>
                   ))}
-                  {isChatting && (
-                    <p className="text-xs text-slate-500">AI 思考中…</p>
-                  )}
+                  {isChatting && <p className="text-xs text-slate-500">AI 思考中…</p>}
                   <div ref={chatBottomRef} />
                 </div>
               )}
-
-              {/* Current outline preview */}
               {outlineText && (
                 <div className="mb-3">
                   <p className="mb-1 text-xs text-slate-500">目前大綱預覽：</p>
@@ -275,8 +291,6 @@ export default function AddPagesFromPromptModal({
                   </pre>
                 </div>
               )}
-
-              {/* Chat input */}
               <div className="flex gap-2">
                 <textarea
                   value={chatInput}
@@ -323,14 +337,15 @@ export default function AddPagesFromPromptModal({
 
           {/* Phase: generating */}
           {phase === 'generating' && (
-            <>
-              {isGenerating && (
-                <div className="space-y-3">
+            <div className="space-y-4">
+              {/* Step + progress bar */}
+              {(isRunning || isCancelling) && (
+                <div className="space-y-2">
                   <div className="flex items-center gap-2 text-sm text-slate-300">
                     <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-indigo-400 border-t-transparent" />
-                    <span>{stepLabel ?? '處理中…'}</span>
+                    <span>{isCancelling ? '正在取消…' : (stepLabel ?? '處理中…')}</span>
                   </div>
-                  {progressPct !== null && (
+                  {progressPct !== null && !isCancelling && (
                     <div>
                       <div className="mb-1 flex justify-between text-xs text-slate-400">
                         <span>{progress?.current} / {progress?.total}</span>
@@ -344,38 +359,72 @@ export default function AddPagesFromPromptModal({
                       </div>
                     </div>
                   )}
-                  <p className="text-xs text-slate-500">生成圖片與語音需要一些時間，請稍候…</p>
+                </div>
+              )}
+
+              {/* Per-page preview grid */}
+              {pageResults.length > 0 && (
+                <div>
+                  <p className="mb-2 text-xs text-slate-400">生成中的頁面預覽：</p>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    {pageResults.map((pr) => (
+                      <div
+                        key={pr.pageNumber}
+                        className="overflow-hidden rounded-lg border border-slate-700 bg-slate-950"
+                      >
+                        {/* Image area */}
+                        <div className="relative aspect-[3/2] w-full bg-slate-800">
+                          {pr.imageDone ? (
+                            <img
+                              src={`api/pdfs/${encodeURIComponent(pdfId)}/pages/${pr.pageNumber}/thumbnail`}
+                              alt={`第 ${pr.pageNumber} 頁`}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-full items-center justify-center">
+                              <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-slate-500 border-t-transparent" />
+                            </div>
+                          )}
+                          <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1 text-xs text-slate-300">
+                            第 {pr.pageNumber} 頁
+                          </span>
+                        </div>
+                        {/* Script preview */}
+                        <div className="px-2 py-1.5">
+                          {pr.scriptPreview ? (
+                            <p className="line-clamp-3 text-xs leading-4 text-slate-400">
+                              {pr.scriptPreview}
+                            </p>
+                          ) : (
+                            <p className="text-xs text-slate-600">逐字稿生成中…</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
               {isDone && (
-                <div className="space-y-3">
-                  <p className="text-sm text-emerald-300">
-                    已成功新增 {jobState.addedPageNumbers.length} 頁！（總頁數：{jobState.totalPagesAfter}）
-                  </p>
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500"
-                  >
-                    完成
-                  </button>
-                </div>
+                <p className="text-sm text-emerald-300">
+                  已成功新增 {jobState.addedPageNumbers.length} 頁！（總頁數：{jobState.totalPagesAfter}）
+                </p>
+              )}
+
+              {isCancelled && (
+                <p className="text-sm text-amber-300">已取消。已完成的頁面已儲存。</p>
               )}
 
               {isFailed && (
-                <div className="space-y-3">
-                  <p className="text-sm text-rose-400">
-                    新增失敗：{jobState?.error ?? '未知錯誤'}
-                  </p>
-                  {error && <p className="text-xs text-rose-400">{error}</p>}
-                </div>
+                <p className="text-sm text-rose-400">
+                  新增失敗：{jobState?.error ?? '未知錯誤'}
+                </p>
               )}
-            </>
+            </div>
           )}
         </div>
 
-        {/* Footer buttons */}
+        {/* Footer */}
         <div className="border-t border-slate-800 px-5 py-3">
           {phase === 'mode-select' && (
             <div className="flex justify-end">
@@ -429,15 +478,27 @@ export default function AddPagesFromPromptModal({
             </div>
           )}
 
-          {phase === 'generating' && (isFailed) && (
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-md border border-slate-600 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800"
-              >
-                關閉
-              </button>
+          {phase === 'generating' && (
+            <div className="flex justify-between">
+              {isRunning && (
+                <button
+                  type="button"
+                  onClick={() => void handleCancel()}
+                  disabled={isCancelling}
+                  className="rounded-md border border-rose-500/50 bg-rose-500/10 px-4 py-2 text-sm text-rose-300 hover:bg-rose-500/20 disabled:opacity-50"
+                >
+                  {isCancelling ? '取消中…' : '中斷生成'}
+                </button>
+              )}
+              {(isDone || isCancelled || isFailed) && (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className={`rounded-md px-4 py-2 text-sm font-medium text-white ${isDone ? 'bg-emerald-600 hover:bg-emerald-500' : 'border border-slate-600 text-slate-200 hover:bg-slate-800'}`}
+                >
+                  {isDone ? '完成' : '關閉'}
+                </button>
+              )}
             </div>
           )}
         </div>
