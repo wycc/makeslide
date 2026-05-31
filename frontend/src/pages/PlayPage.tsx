@@ -77,8 +77,10 @@ import type {
 } from '../types';
 import {
   SHOW_SUBTITLE_STORAGE_KEY,
+  INTERACTIVE_MODE_STORAGE_KEY,
   getStoredPlaybackSpeed,
   getStoredShowSubtitle,
+  getStoredInteractiveMode,
 } from '../i18n';
 
 const POLL_INTERVAL_MS = 3000;
@@ -234,6 +236,7 @@ export default function PlayPage() {
   const [finished, setFinished] = useState(false);
   const [classroomMode, setClassroomMode] = useState(false);
   const [classroomAwaitingNext, setClassroomAwaitingNext] = useState(false);
+  const [interactiveMode, setInteractiveMode] = useState<boolean>(() => getStoredInteractiveMode());
   const [editingScript, setEditingScript] = useState('');
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
@@ -915,8 +918,15 @@ export default function PlayPage() {
 
   const handleEnded = useCallback(() => {
     setIsPlaying(false);
+    // 互動模式：每頁播放結束後自動啟動 realtime poll，並停在當頁等待互動。
+    if (interactiveMode) {
+      setPollStarted(true);
+      setPollError(null);
+      // 全螢幕 master 模式下自動展開 poll 控制面板
+      setFullscreenPollControlOpen(true);
+    }
     if (currentIdx < totalPages - 1) {
-      if (classroomMode) {
+      if (classroomMode || interactiveMode) {
         setClassroomAwaitingNext(true);
         return;
       }
@@ -926,7 +936,7 @@ export default function PlayPage() {
       setClassroomAwaitingNext(false);
       setFinished(true);
     }
-  }, [classroomMode, currentIdx, totalPages]);
+  }, [classroomMode, interactiveMode, currentIdx, totalPages]);
 
   const handleSeek = useCallback(
     (ev: React.ChangeEvent<HTMLInputElement>) => {
@@ -1585,7 +1595,21 @@ export default function PlayPage() {
     setPagePolls([]);
     setPollVotes({});
     setPollError(null);
-  }, []);
+    setFullscreenPollControlOpen(false);
+    // 互動模式：結束投票後自動進入下一頁（未開同步，或是 master 才執行翻頁）
+    if (interactiveMode && (!syncEnabled || syncRole !== 'follower')) {
+      setClassroomAwaitingNext(false);
+      setFinished(false);
+      setCurrentIdx((i) => {
+        if (i < totalPages - 1) {
+          setIsPlaying(true);
+          return i + 1;
+        }
+        setFinished(true);
+        return i;
+      });
+    }
+  }, [interactiveMode, syncEnabled, syncRole, totalPages]);
 
   const handleVotePoll = useCallback(async (pollId: number, optionIndex: number) => {
     if (!pdfId) return;
@@ -3625,6 +3649,11 @@ export default function PlayPage() {
                 <span className={`rounded-full border px-2 py-0.5 ${classroomMode ? 'border-amber-400/50 bg-amber-400/10 text-amber-100' : 'border-slate-700 bg-slate-950 text-slate-400'}`}>
                   {classroomMode ? '上課模式' : '連續播放'}
                 </span>
+                {interactiveMode ? (
+                  <span className="rounded-full border border-cyan-400/50 bg-cyan-400/10 px-2 py-0.5 text-cyan-100">
+                    互動模式
+                  </span>
+                ) : null}
                 {syncEnabled && syncRole === 'master' ? (
                   <span className="rounded-full border border-cyan-400/40 bg-cyan-400/10 px-2 py-0.5 text-cyan-100">
                     學生端音訊：{followerAudioUnlocked ? '可自行播放' : '強制靜音'}
@@ -3733,6 +3762,34 @@ export default function PlayPage() {
                     aria-pressed={classroomMode}
                   >
                     {classroomMode ? '已開啟' : '開啟'}
+                  </button>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-950/70 px-3 py-2">
+                  <div>
+                    <span className="font-semibold text-slate-200">互動模式</span>
+                    <span className="ml-2 text-slate-400">
+                      {interactiveMode
+                        ? '每頁播放完會停在目前頁並自動啟動 Realtime Poll。'
+                        : '關閉時播放結束不會自動開始投票。'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setInteractiveMode((enabled) => {
+                        const next = !enabled;
+                        window.localStorage.setItem(INTERACTIVE_MODE_STORAGE_KEY, next ? '1' : '0');
+                        return next;
+                      })
+                    }
+                    className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                      interactiveMode
+                        ? 'border-cyan-400/60 bg-cyan-400/15 text-cyan-100 hover:bg-cyan-400/25'
+                        : 'border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800'
+                    }`}
+                    aria-pressed={interactiveMode}
+                  >
+                    {interactiveMode ? '已開啟' : '開啟'}
                   </button>
                 </div>
               </div>

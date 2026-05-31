@@ -15,6 +15,7 @@ export const UI_LANGUAGE_STORAGE_KEY = 'makeslide.ui_language';
 export const CONTENT_LANGUAGE_STORAGE_KEY = 'makeslide.content_language';
 export const PLAYBACK_SPEED_STORAGE_KEY = 'makeslide.playback_speed';
 export const SHOW_SUBTITLE_STORAGE_KEY = 'makeslide.show_subtitle';
+export const INTERACTIVE_MODE_STORAGE_KEY = 'makeslide.interactive_mode';
 
 const dictionaries = {
   'zh-TW': zhTW,
@@ -89,5 +90,12 @@ export function getStoredShowSubtitle(): boolean {
   if (typeof window === 'undefined') return true;
   const raw = window.localStorage.getItem(SHOW_SUBTITLE_STORAGE_KEY);
   if (raw == null) return true;
+  return raw === '1' || raw.toLowerCase() === 'true';
+}
+
+export function getStoredInteractiveMode(): boolean {
+  if (typeof window === 'undefined') return false;
+  const raw = window.localStorage.getItem(INTERACTIVE_MODE_STORAGE_KEY);
+  if (raw == null) return false;
   return raw === '1' || raw.toLowerCase() === 'true';
 }
