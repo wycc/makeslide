@@ -356,7 +356,9 @@ export default function PlayPage() {
   const availableTtsVoices = TTS_VOICES_BY_PROVIDER[ttsProvider];
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const playbackRateRef = useRef<number>(playbackRate);
   useEffect(() => {
+    playbackRateRef.current = playbackRate;
     const audio = audioRef.current;
     if (!audio) return;
     audio.playbackRate = playbackRate;
@@ -452,6 +454,7 @@ export default function PlayPage() {
         });
         audio.src = retryUrl;
         audio.load();
+        audio.playbackRate = playbackRateRef.current;
         setAudioError('語音載入失敗，正在自動重試…');
       }, AUDIO_RETRY_DELAY_MS);
     },
@@ -770,6 +773,8 @@ export default function PlayPage() {
       : audioUrl;
     audio.src = nextUrl;
     audio.load();
+    // load() 會把 playbackRate 重置回 1.0，換頁後需重新套用使用者設定的速度
+    audio.playbackRate = playbackRateRef.current;
     setCurrentTime(0);
     setDuration(0);
     setAudioError(null);
