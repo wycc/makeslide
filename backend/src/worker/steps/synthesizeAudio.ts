@@ -248,8 +248,8 @@ async function synthesizeOnePage(params: {
             model: runtime.geminiTtsModel,
             text: seg.text,
             voiceName: voice,
-            speaker1Persona: runtime.geminiTtsSpeaker1,
-            speaker2Persona: runtime.geminiTtsSpeaker2,
+            speaker1VoiceName: runtime.geminiTtsSpeaker1Voice,
+            speaker2VoiceName: runtime.geminiTtsSpeaker2Voice,
           });
         } else {
           const response = await client!.audio.speech.create({

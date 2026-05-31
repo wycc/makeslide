@@ -41,16 +41,6 @@ function normalizeGeminiVoiceName(input?: string): string {
   return 'Kore';
 }
 
-function pickSecondaryGeminiVoice(primary: string): string {
-  // Prefer a stable contrast voice for multi-speaker; fallback to any valid different voice.
-  const preferred = ['Puck', 'Leda', 'Fenrir', 'Charon', 'Orus', 'Kore'];
-  const hit = preferred.find((v) => v !== primary && GEMINI_VOICES.has(v));
-  if (hit) return hit;
-  for (const v of GEMINI_VOICES) {
-    if (v !== primary) return v;
-  }
-  return primary;
-}
 
 function buildWavFromPcm16(pcm: Buffer, sampleRate: number, channels: number): Buffer {
   const bitsPerSample = 16;
@@ -152,24 +142,27 @@ export async function callGeminiJson<T>(params: {
 export async function synthesizeGeminiSpeech(params: {
   model: string;
   text: string;
+  /** Primary / single-narrator voice (the per-PDF tts_voice). */
   voiceName?: string;
-  speaker1Persona?: string;
-  speaker2Persona?: string;
+  /** Explicit voice for "Speaker 1" lines in dual-host scripts. Falls back to voiceName. */
+  speaker1VoiceName?: string;
+  /** Explicit voice for "Speaker 2" lines in dual-host scripts. Falls back to voiceName. */
+  speaker2VoiceName?: string;
 }): Promise<Buffer> {
   const apiKey = getGeminiApiKey();
   const voiceName = normalizeGeminiVoiceName(params.voiceName);
-  const personaHints = [
-    params.speaker1Persona?.trim() ? `Speaker1 persona: ${params.speaker1Persona.trim()}` : '',
-    params.speaker2Persona?.trim() ? `Speaker2 persona: ${params.speaker2Persona.trim()}` : '',
-  ]
-    .filter(Boolean)
-    .join('\n');
-  const ttsPrompt = personaHints
-    ? `${personaHints}\n\nPlease synthesize naturally with subtle distinction where appropriate.\nText:\n${params.text}`
-    : params.text;
+  // 性別/音色一律由 prebuilt voice 決定，不再把人設文字塞進朗讀內容（避免與聲線打架而漂移）。
+  const ttsPrompt = params.text;
+  // 只有腳本實際出現 Speaker 1:/Speaker 2: 對白時才用多人模式。
   const hasSpeakerDialog = /(^|\n)\s*Speaker\s*1\s*:/i.test(params.text)
     || /(^|\n)\s*Speaker\s*2\s*:/i.test(params.text);
-  const speaker2Voice = pickSecondaryGeminiVoice(voiceName);
+  // 兩位主持人的聲音都由設定明確指定，未指定時沿用主聲音（不再由程式自動挑對比聲線）。
+  const speaker1Voice = params.speaker1VoiceName?.trim()
+    ? normalizeGeminiVoiceName(params.speaker1VoiceName)
+    : voiceName;
+  const speaker2Voice = params.speaker2VoiceName?.trim()
+    ? normalizeGeminiVoiceName(params.speaker2VoiceName)
+    : voiceName;
 
   const speechConfig = hasSpeakerDialog
     ? {
@@ -178,7 +171,7 @@ export async function synthesizeGeminiSpeech(params: {
             {
               speaker: 'Speaker 1',
               voiceConfig: {
-                prebuiltVoiceConfig: { voiceName },
+                prebuiltVoiceConfig: { voiceName: speaker1Voice },
               },
             },
             {

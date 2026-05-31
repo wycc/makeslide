@@ -345,7 +345,10 @@ export default function PlayPage() {
   const syncClientIdRef = useRef<string>('');
   const applyingRemoteSyncRef = useRef(false);
   const [imageOnlyFullscreen, setImageOnlyFullscreen] = useState(false);
+  // 全螢幕版面：'image' = 純圖片（字幕單行疊在下方）；'split' = 左圖右整頁字幕；'edit' = 左圖右逐字稿編輯。
+  const [fullscreenLayout, setFullscreenLayout] = useState<'image' | 'split' | 'edit'>('image');
   const fullscreenContainerRef = useRef<HTMLDivElement | null>(null);
+  const activeSentenceRef = useRef<HTMLParagraphElement | null>(null);
   const [slideImageScale, setSlideImageScale] = useState(1);
   const IMAGE_MSG_PREFIX = '[image] ';
   const sourceItems: PdfSourceItem[] = detail?.sources ?? [];
@@ -1385,24 +1388,33 @@ export default function PlayPage() {
   const currentScript =
     currentPage != null ? scripts[currentPage.page_number] ?? '' : '';
 
-  const currentSentence = useMemo(() => {
-    if (!currentScript.trim()) return '';
-    const sentences = splitScriptIntoSentences(currentScript);
-    if (sentences.length === 0) return '';
-    if (sentences.length === 1) return sentences[0];
+  // 整頁字幕（依標點/換行切句），供「全螢幕字幕」版面一次顯示整頁。
+  const pageSentences = useMemo(
+    () => splitScriptIntoSentences(currentScript),
+    [currentScript],
+  );
 
-    const timeline = buildSentenceTimeline(sentences, duration);
-    if (timeline.length === 0) return sentences[0];
-
+  // 目前正在播放（朗讀）的句子索引；-1 代表本頁無字幕。
+  const activeSentenceIdx = useMemo(() => {
+    if (pageSentences.length === 0) return -1;
+    if (pageSentences.length === 1) return 0;
+    const timeline = buildSentenceTimeline(pageSentences, duration);
+    if (timeline.length === 0) return 0;
     const t = Number.isFinite(currentTime) ? Math.max(0, currentTime) : 0;
-    const hit = timeline.find((item) => t >= item.start && t < item.end);
-    if (hit) return hit.text;
-    const first = timeline[0];
+    const hit = timeline.findIndex((item) => t >= item.start && t < item.end);
+    if (hit >= 0) return hit;
     const last = timeline[timeline.length - 1];
-    if (!first || !last) return sentences[0];
-    if (t >= last.end) return last.text;
-    return first.text;
-  }, [currentScript, currentTime, duration]);
+    if (last && t >= last.end) return timeline.length - 1;
+    return 0;
+  }, [pageSentences, currentTime, duration]);
+
+  const currentSentence = activeSentenceIdx >= 0 ? pageSentences[activeSentenceIdx] ?? '' : '';
+
+  // 全螢幕字幕版面下，自動把目前播放的句子捲動到可視範圍中央。
+  useEffect(() => {
+    if (!imageOnlyFullscreen || fullscreenLayout !== 'split') return;
+    activeSentenceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [imageOnlyFullscreen, fullscreenLayout, activeSentenceIdx]);
 
   useEffect(() => {
     setEditingScript(currentScript);
@@ -2546,7 +2558,130 @@ export default function PlayPage() {
               <span className="ml-2 h-6 w-2 rounded-sm bg-current" aria-hidden="true" />
             </div>
           ) : null}
-          {currentPage?.image_url || displayedImageSrc ? (
+          {fullscreenLayout === 'split' || fullscreenLayout === 'edit' ? (
+            <div className="flex h-full w-full items-stretch">
+              <div className="flex h-full w-1/2 shrink-0 flex-col p-2">
+                <div className="flex min-h-0 flex-1 items-center justify-center">
+                  {currentPage?.image_url || displayedImageSrc ? (
+                    <img
+                      ref={fullscreenImageRef}
+                      src={displayedImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
+                      alt={`第 ${currentPage?.page_number ?? ''} 頁`}
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  ) : (
+                    <div className="text-slate-300">
+                      {detail?.status === 'awaiting_script_confirmation' ? '等待確認分頁結果（確認後將開始產生圖片）' : '圖片產生中…'}
+                    </div>
+                  )}
+                </div>
+                {fullscreenLayout === 'edit' ? (
+                  <div
+                    className="mt-2 flex shrink-0 cursor-default items-center justify-center gap-3"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        goPrev();
+                      }}
+                      disabled={currentIdx === 0}
+                      className="rounded-md border border-slate-600 bg-slate-900/70 px-4 py-2 text-sm text-slate-100 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                      title="上一頁"
+                      aria-label="上一頁"
+                    >
+                      ◀ 上一頁
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        playPause();
+                      }}
+                      className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-5 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-500/25"
+                      title={isPlaying ? '暫停' : '播放'}
+                      aria-label={isPlaying ? '暫停' : '播放'}
+                    >
+                      {isPlaying ? '⏸ 暫停' : '▶ 播放'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        goNext();
+                      }}
+                      disabled={currentIdx >= totalPages - 1}
+                      className="rounded-md border border-slate-600 bg-slate-900/70 px-4 py-2 text-sm text-slate-100 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                      title="下一頁"
+                      aria-label="下一頁"
+                    >
+                      下一頁 ▶
+                    </button>
+                    <span className="ml-1 text-sm tabular-nums text-slate-400">
+                      {currentIdx + 1}/{totalPages}
+                    </span>
+                  </div>
+                ) : null}
+              </div>
+              {fullscreenLayout === 'split' ? (
+                <div className="h-full w-1/2 overflow-y-auto px-6 py-10 md:px-10 md:py-14">
+                  {pageSentences.length > 0 ? (
+                    <div className="mx-auto max-w-2xl space-y-3">
+                      {pageSentences.map((sentence, idx) => {
+                        const isActive = idx === activeSentenceIdx;
+                        return (
+                          <p
+                            key={idx}
+                            ref={isActive ? activeSentenceRef : undefined}
+                            className={`whitespace-pre-wrap rounded-md px-3 py-1.5 text-xl leading-relaxed transition-colors md:text-2xl lg:text-3xl ${
+                              isActive
+                                ? 'bg-cyan-500/15 font-bold text-cyan-300 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]'
+                                : 'text-slate-500'
+                            }`}
+                          >
+                            {sentence}
+                          </p>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-slate-500">（本頁尚無字幕）</div>
+                  )}
+                </div>
+              ) : (
+                // 全螢幕編輯：右側為可編輯的逐字稿。stopPropagation 避免點擊/輸入時觸發播放切換。
+                <div
+                  className="flex h-full w-1/2 cursor-default flex-col px-6 py-10 md:px-10 md:py-12"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <h2 className="mb-3 shrink-0 text-base font-semibold text-slate-200 md:text-lg">
+                    📝 編輯逐字稿（第 {currentPage?.page_number ?? '-'} 頁）
+                  </h2>
+                  <textarea
+                    value={editingScript}
+                    onChange={(e) => setEditingScript(e.target.value)}
+                    disabled={isReadOnlyProcessing}
+                    className="w-full flex-1 cursor-text resize-none rounded-md border border-slate-700 bg-slate-900/70 p-4 text-base leading-relaxed text-slate-100 outline-none ring-emerald-500/40 placeholder:text-slate-500 focus:ring md:text-lg"
+                    placeholder="請輸入本頁逐字稿..."
+                  />
+                  <div className="mt-3 flex shrink-0 items-center justify-between gap-3">
+                    <div className="text-xs text-slate-400">
+                      {editorError ? <span className="text-rose-300">{editorError}</span> : '儲存後會僅重生此頁語音'}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void handleRegenerateAudio()}
+                      disabled={isReadOnlyProcessing || editorBusy || !hasScriptChanges}
+                      className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-4 py-2 text-sm text-emerald-200 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {editorBusy ? '重生中…' : '儲存並重生語音'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : currentPage?.image_url || displayedImageSrc ? (
             <img
               ref={fullscreenImageRef}
               src={displayedImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
@@ -2558,16 +2693,43 @@ export default function PlayPage() {
               {detail?.status === 'awaiting_script_confirmation' ? '等待確認分頁結果（確認後將開始產生圖片）' : '圖片產生中…'}
             </div>
           )}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setImageOnlyFullscreen(false);
-            }}
-            className="absolute right-4 top-4 rounded-md border border-slate-500 bg-slate-900/70 px-3 py-1.5 text-sm text-slate-100"
-          >
-            離開全螢幕
-          </button>
+          <div className="absolute right-4 top-4 flex items-center gap-2">
+            <div className="flex items-center overflow-hidden rounded-md border border-slate-500 bg-slate-900/70 text-sm">
+              {([
+                ['image', '圖片'],
+                ['split', '字幕'],
+                ['edit', '編輯'],
+              ] as const).map(([mode, label]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFullscreenLayout(mode);
+                  }}
+                  aria-pressed={fullscreenLayout === mode}
+                  className={`px-3 py-1.5 ${
+                    fullscreenLayout === mode
+                      ? 'bg-cyan-500/25 font-medium text-cyan-100'
+                      : 'text-slate-200 hover:bg-slate-800'
+                  }`}
+                  title={`全螢幕${label}版面`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setImageOnlyFullscreen(false);
+              }}
+              className="rounded-md border border-slate-500 bg-slate-900/70 px-3 py-1.5 text-sm text-slate-100"
+            >
+              離開全螢幕
+            </button>
+          </div>
           {syncOverlayText ? (
             <div
               className={`pointer-events-none absolute left-1/2 w-[min(94vw,1100px)] -translate-x-1/2 px-3 ${
@@ -2793,7 +2955,7 @@ export default function PlayPage() {
                 ) : null}
               </div>
             </div>
-          ) : showSubtitle && currentSentence ? (
+          ) : showSubtitle && currentSentence && fullscreenLayout === 'image' ? (
             <div className="pointer-events-none absolute bottom-4 left-1/2 w-[min(92vw,1000px)] -translate-x-1/2 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
               <div className="mx-auto rounded-md bg-black/65 px-4 py-2 text-center text-base font-medium leading-relaxed text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] md:text-lg">
                 <p className="line-clamp-2 whitespace-pre-wrap">{currentSentence}</p>
@@ -3057,11 +3219,37 @@ export default function PlayPage() {
           <div className="grid grid-cols-3 gap-2 md:flex md:flex-wrap md:items-center md:justify-end md:gap-2">
             <button
               type="button"
-              onClick={() => setImageOnlyFullscreen(true)}
+              onClick={() => {
+                setFullscreenLayout('image');
+                setImageOnlyFullscreen(true);
+              }}
               className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
               title="全螢幕圖片模式"
             >
               全螢幕
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setFullscreenLayout('split');
+                setImageOnlyFullscreen(true);
+              }}
+              className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
+              title="全螢幕字幕模式（左圖右字，整頁字幕一次顯示）"
+            >
+              全螢幕字幕
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setFullscreenLayout('edit');
+                setImageOnlyFullscreen(true);
+              }}
+              disabled={isReadOnlyProcessing}
+              className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+              title="全螢幕編輯模式（左圖右逐字稿，可直接編輯並重生語音）"
+            >
+              全螢幕編輯
             </button>
             <div className="col-span-2 flex items-center justify-center gap-1 rounded-md border border-slate-700 px-2 py-1 md:col-span-1" title="調整圖片與下方資料區比例">
               <button

@@ -15,6 +15,8 @@ export const OPENAI_TTS_VOICES = [
 // Backward-compatible export for existing callers.
 export const TTS_VOICES = OPENAI_TTS_VOICES;
 
+// Keep in sync with backend GEMINI_VOICES (services/gemini.ts) so the picker never
+// offers a name the backend will silently coerce to a fallback voice.
 export const GEMINI_TTS_VOICES = [
   'Kore',
   'Puck',
@@ -22,8 +24,56 @@ export const GEMINI_TTS_VOICES = [
   'Fenrir',
   'Leda',
   'Orus',
-  'Zephyr',
+  'Aoede',
+  'Callirrhoe',
+  'Autonoe',
+  'Enceladus',
+  'Iapetus',
+  'Umbriel',
+  'Algieba',
+  'Despina',
+  'Erinome',
+  'Algenib',
+  'Rasalgethi',
+  'Laomedeia',
+  'Achernar',
+  'Alnilam',
+  'Schedar',
+  'Gacrux',
 ] as const;
+
+// Approximate perceived gender per Gemini prebuilt voice (M = male, F = female).
+// Used only to label the picker so users can reliably pick a male/female voice —
+// in Gemini TTS the prebuilt voice is the only stable gender control.
+export const GEMINI_TTS_VOICE_GENDER: Record<string, 'M' | 'F'> = {
+  Kore: 'F',
+  Puck: 'M',
+  Charon: 'M',
+  Fenrir: 'M',
+  Leda: 'F',
+  Orus: 'M',
+  Aoede: 'F',
+  Callirrhoe: 'F',
+  Autonoe: 'F',
+  Enceladus: 'M',
+  Iapetus: 'M',
+  Umbriel: 'M',
+  Algieba: 'M',
+  Despina: 'F',
+  Erinome: 'F',
+  Algenib: 'M',
+  Rasalgethi: 'M',
+  Laomedeia: 'F',
+  Achernar: 'F',
+  Alnilam: 'M',
+  Schedar: 'M',
+  Gacrux: 'F',
+};
+
+export function geminiVoiceLabel(voice: string): string {
+  const g = GEMINI_TTS_VOICE_GENDER[voice];
+  return g ? `${voice}（${g === 'M' ? '男' : '女'}）` : voice;
+}
 
 export const TTS_VOICES_BY_PROVIDER = {
   openai: OPENAI_TTS_VOICES,

@@ -21,6 +21,7 @@ import {
   storeLanguageSettings,
   useI18n,
 } from '../i18n';
+import { GEMINI_TTS_VOICES, geminiVoiceLabel } from '../lib/ttsVoices';
 
 export default function SettingsPage() { 
   const LOCAL_USER_CODE_KEY = 'makeslide.user_code';
@@ -39,6 +40,8 @@ export default function SettingsPage() {
   const [geminiTtsModel, setGeminiTtsModel] = useState('gemini-2.5-flash-preview-tts');
   const [geminiTtsSpeaker1, setGeminiTtsSpeaker1] = useState('');
   const [geminiTtsSpeaker2, setGeminiTtsSpeaker2] = useState('');
+  const [geminiTtsSpeaker1Voice, setGeminiTtsSpeaker1Voice] = useState('');
+  const [geminiTtsSpeaker2Voice, setGeminiTtsSpeaker2Voice] = useState('');
   const [accountSettingsFile, setAccountSettingsFile] = useState('');
   const [accountId, setAccountId] = useState('default');
   const [userCode, setUserCode] = useState('');
@@ -68,6 +71,8 @@ export default function SettingsPage() {
       setGeminiTtsModel(s.gemini_tts_model);
       setGeminiTtsSpeaker1(s.gemini_tts_speaker1 ?? '');
       setGeminiTtsSpeaker2(s.gemini_tts_speaker2 ?? '');
+      setGeminiTtsSpeaker1Voice(s.gemini_tts_speaker1_voice ?? '');
+      setGeminiTtsSpeaker2Voice(s.gemini_tts_speaker2_voice ?? '');
       setAccountId(s.account_id ?? 'default');
       setAccountSettingsFile(s.account_settings_file ?? '');
       const loadedUiLanguage = s.ui_language ?? getStoredUiLanguage();
@@ -142,6 +147,8 @@ export default function SettingsPage() {
         gemini_tts_model: geminiTtsModel.trim(),
         gemini_tts_speaker1: geminiTtsSpeaker1.trim(),
         gemini_tts_speaker2: geminiTtsSpeaker2.trim(),
+        gemini_tts_speaker1_voice: geminiTtsSpeaker1Voice.trim(),
+        gemini_tts_speaker2_voice: geminiTtsSpeaker2Voice.trim(),
         user_code: authStatus?.authenticated ? userCode.trim() : undefined,
         ui_language: uiLanguage,
         content_language: contentLanguage,
@@ -172,6 +179,8 @@ export default function SettingsPage() {
     geminiTtsModel,
     geminiTtsSpeaker1,
     geminiTtsSpeaker2,
+    geminiTtsSpeaker1Voice,
+    geminiTtsSpeaker2Voice,
     contentLanguage,
     playbackSpeed,
     llmProvider,
@@ -416,8 +425,38 @@ export default function SettingsPage() {
               <input value={geminiTtsSpeaker1} onChange={(e) => setGeminiTtsSpeaker1(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder={t('settings.geminiSpeaker1Placeholder')} />
             </label>
             <label className="block text-sm text-slate-300">
+              {t('settings.geminiSpeaker1Voice')}
+              <select
+                value={geminiTtsSpeaker1Voice}
+                onChange={(e) => setGeminiTtsSpeaker1Voice(e.target.value)}
+                className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              >
+                <option value="">{t('settings.geminiSpeakerVoiceInherit')}</option>
+                {GEMINI_TTS_VOICES.map((v) => (
+                  <option key={v} value={v}>
+                    {geminiVoiceLabel(v)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm text-slate-300">
               {t('settings.geminiSpeaker2')}
               <input value={geminiTtsSpeaker2} onChange={(e) => setGeminiTtsSpeaker2(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder={t('settings.geminiSpeaker2Placeholder')} />
+            </label>
+            <label className="block text-sm text-slate-300">
+              {t('settings.geminiSpeaker2Voice')}
+              <select
+                value={geminiTtsSpeaker2Voice}
+                onChange={(e) => setGeminiTtsSpeaker2Voice(e.target.value)}
+                className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              >
+                <option value="">{t('settings.geminiSpeakerVoiceInherit')}</option>
+                {GEMINI_TTS_VOICES.map((v) => (
+                  <option key={v} value={v}>
+                    {geminiVoiceLabel(v)}
+                  </option>
+                ))}
+              </select>
             </label>
           </div>
 

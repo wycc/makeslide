@@ -43,6 +43,8 @@ export interface SystemAiSettings {
   gemini_tts_model: string;
   gemini_tts_speaker1?: string;
   gemini_tts_speaker2?: string;
+  gemini_tts_speaker1_voice?: string;
+  gemini_tts_speaker2_voice?: string;
   user_code?: string;
   ui_language: AppLanguage;
   content_language: AppLanguage;
@@ -63,6 +65,8 @@ export interface UpdateSystemAiSettingsPayload {
   gemini_tts_model?: string;
   gemini_tts_speaker1?: string;
   gemini_tts_speaker2?: string;
+  gemini_tts_speaker1_voice?: string;
+  gemini_tts_speaker2_voice?: string;
   user_code?: string;
   ui_language?: AppLanguage;
   content_language?: AppLanguage;

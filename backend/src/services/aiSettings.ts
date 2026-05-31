@@ -16,6 +16,8 @@ export interface RuntimeAiSettings {
   geminiTtsModel: string;
   geminiTtsSpeaker1: string;
   geminiTtsSpeaker2: string;
+  geminiTtsSpeaker1Voice: string;
+  geminiTtsSpeaker2Voice: string;
   userCode: string;
   uiLanguage: AppLanguage;
   contentLanguage: AppLanguage;
@@ -77,6 +79,8 @@ function loadAccountEnvSettings(): Partial<RuntimeAiSettings> {
     geminiTtsModel: values.GEMINI_TTS_MODEL,
     geminiTtsSpeaker1: values.GEMINI_TTS_SPEAKER1,
     geminiTtsSpeaker2: values.GEMINI_TTS_SPEAKER2,
+    geminiTtsSpeaker1Voice: values.GEMINI_TTS_SPEAKER1_VOICE,
+    geminiTtsSpeaker2Voice: values.GEMINI_TTS_SPEAKER2_VOICE,
     userCode: values.USER_CODE,
     uiLanguage: values.UI_LANGUAGE === 'en' ? 'en' : values.UI_LANGUAGE === 'zh-TW' ? 'zh-TW' : undefined,
     contentLanguage: values.CONTENT_LANGUAGE === 'en' ? 'en' : values.CONTENT_LANGUAGE === 'zh-TW' ? 'zh-TW' : undefined,
@@ -103,6 +107,8 @@ let runtime: RuntimeAiSettings = {
   geminiTtsModel: config.geminiTtsModel,
   geminiTtsSpeaker1: process.env.GEMINI_TTS_SPEAKER1?.trim() || '',
   geminiTtsSpeaker2: process.env.GEMINI_TTS_SPEAKER2?.trim() || '',
+  geminiTtsSpeaker1Voice: process.env.GEMINI_TTS_SPEAKER1_VOICE?.trim() || '',
+  geminiTtsSpeaker2Voice: process.env.GEMINI_TTS_SPEAKER2_VOICE?.trim() || '',
   userCode: process.env.USER_CODE?.trim() || '',
   uiLanguage: process.env.UI_LANGUAGE === 'en' ? 'en' : 'zh-TW',
   contentLanguage: process.env.CONTENT_LANGUAGE === 'en' ? 'en' : 'zh-TW',
@@ -138,6 +144,8 @@ export function setRuntimeAiSettings(next: Partial<RuntimeAiSettings>): RuntimeA
   if (typeof next.geminiTtsModel === 'string') process.env.GEMINI_TTS_MODEL = next.geminiTtsModel;
   if (typeof next.geminiTtsSpeaker1 === 'string') process.env.GEMINI_TTS_SPEAKER1 = next.geminiTtsSpeaker1;
   if (typeof next.geminiTtsSpeaker2 === 'string') process.env.GEMINI_TTS_SPEAKER2 = next.geminiTtsSpeaker2;
+  if (typeof next.geminiTtsSpeaker1Voice === 'string') process.env.GEMINI_TTS_SPEAKER1_VOICE = next.geminiTtsSpeaker1Voice;
+  if (typeof next.geminiTtsSpeaker2Voice === 'string') process.env.GEMINI_TTS_SPEAKER2_VOICE = next.geminiTtsSpeaker2Voice;
   if (typeof next.userCode === 'string') process.env.USER_CODE = next.userCode;
   if (typeof next.uiLanguage === 'string') process.env.UI_LANGUAGE = next.uiLanguage;
   if (typeof next.contentLanguage === 'string') process.env.CONTENT_LANGUAGE = next.contentLanguage;
@@ -164,6 +172,8 @@ export async function persistEnvSettings(next: Partial<RuntimeAiSettings>): Prom
     ['GEMINI_TTS_MODEL', next.geminiTtsModel],
     ['GEMINI_TTS_SPEAKER1', next.geminiTtsSpeaker1],
     ['GEMINI_TTS_SPEAKER2', next.geminiTtsSpeaker2],
+    ['GEMINI_TTS_SPEAKER1_VOICE', next.geminiTtsSpeaker1Voice],
+    ['GEMINI_TTS_SPEAKER2_VOICE', next.geminiTtsSpeaker2Voice],
     ['USER_CODE', next.userCode],
     ['UI_LANGUAGE', next.uiLanguage],
     ['CONTENT_LANGUAGE', next.contentLanguage],
