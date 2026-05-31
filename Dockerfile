@@ -26,11 +26,14 @@ FROM node:20-bookworm-slim AS runtime
 
 WORKDIR /app
 
-# python3 (>= 3.10) is required to run the yt-dlp zipapp; bookworm ships 3.11
+# python3 (>= 3.10) is required to run the yt-dlp zipapp; bookworm ships 3.11.
+# ca-certificates provides the system CA bundle that Python's ssl uses to verify
+# HTTPS certs (the slim base image ships none, breaking yt-dlp's TLS).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     poppler-utils \
     python3 \
+    ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
 # keep production install simple with workspace support
