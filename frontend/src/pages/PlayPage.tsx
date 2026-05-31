@@ -3125,7 +3125,7 @@ export default function PlayPage() {
             {videoUrl ? (
               <a
                 href={videoUrl}
-                download
+                download={`${(titleInput.trim() || pdfId || 'video').replace(/[\\/:*?"<>|]+/g, '_').slice(0, 100)}.mp4`}
                 className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-center text-sm text-cyan-200 hover:bg-cyan-500/25"
               >
                 下載影片
