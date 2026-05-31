@@ -1430,7 +1430,7 @@ export default function PlayPage() {
     if (pageSentences.length === 1) return 0;
     const timeline = buildSentenceTimeline(pageSentences, duration);
     if (timeline.length === 0) return 0;
-    const t = Number.isFinite(currentTime) ? Math.max(0, currentTime) : 0;
+    const t = Number.isFinite(currentTime) ? Math.max(0, currentTime + 0.5) : 0;
     const hit = timeline.findIndex((item) => t >= item.start && t < item.end);
     if (hit >= 0) return hit;
     const last = timeline[timeline.length - 1];
@@ -4563,7 +4563,7 @@ export default function PlayPage() {
                 <button
                   type="button"
                   onClick={() => void handleRewriteScript()}
-                  disabled={isReadOnlyProcessing || rewriteBusy}
+                  disabled={isReadOnlyProcessing || rewriteBusy || !hasChatInput}
                   className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-3 py-2 text-sm text-fuchsia-200 hover:bg-fuchsia-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {rewriteBusy ? '修改中…' : '修改逐字稿'}
