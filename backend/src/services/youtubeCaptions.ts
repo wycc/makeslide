@@ -5,6 +5,7 @@ import https from 'node:https';
 import os from 'node:os';
 import path from 'node:path';
 import { logger } from '../logger';
+import { transcribeAudioBuffer } from './openai';
 
 export interface YoutubeCaptionLine {
   start: number;
@@ -52,6 +53,69 @@ async function canRun(python: string, bin: string): Promise<boolean> {
     const p = spawn(python, [bin, '--version'], { stdio: 'ignore' });
     p.on('close', (code) => resolve(code === 0));
     p.on('error', () => resolve(false));
+  });
+}
+
+// Run yt-dlp through the resolved Python interpreter and resolve to true on exit
+// code 0. stdout/stderr are captured and logged (truncated) for diagnostics.
+async function runYtDlp(
+  python: string,
+  ytDlpBin: string,
+  cmdArgs: string[],
+  videoId: string,
+): Promise<boolean> {
+  return await new Promise<boolean>((resolve) => {
+    // Recent yt-dlp needs a JavaScript runtime to solve YouTube's player
+    // challenges; without one extraction fails with "This video is not
+    // available". Point it at the same Node binary running this backend.
+    const spawnArgs = [ytDlpBin, '--js-runtimes', `node:${process.execPath}`, ...cmdArgs];
+    const cmdline = `${python} ${spawnArgs.map((a) => (/\s/.test(a) ? JSON.stringify(a) : a)).join(' ')}`;
+    logger.info({ videoId, command: cmdline }, 'yt-dlp spawn');
+
+    const p = spawn(python, spawnArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    p.stdout?.on('data', (buf) => {
+      stdout += String(buf);
+    });
+    p.stderr?.on('data', (buf) => {
+      stderr += String(buf);
+    });
+
+    p.on('close', (code, signal) => {
+      const outShort = stdout.length > 4000 ? `${stdout.slice(0, 4000)}\n...[truncated]` : stdout;
+      const errShort = stderr.length > 4000 ? `${stderr.slice(0, 4000)}\n...[truncated]` : stderr;
+      logger.info(
+        { videoId, exitCode: code, signal, stdout: outShort, stderr: errShort },
+        'yt-dlp finished',
+      );
+      resolve(code === 0);
+    });
+    p.on('error', (err) => {
+      logger.error({ err, videoId, command: cmdline }, 'yt-dlp spawn error');
+      resolve(false);
+    });
+  });
+}
+
+async function runFfmpeg(args: string[], videoId: string): Promise<boolean> {
+  return await new Promise<boolean>((resolve) => {
+    const p = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    let stderr = '';
+    p.stderr?.on('data', (buf) => {
+      stderr += String(buf);
+    });
+    p.on('close', (code) => {
+      if (code !== 0) {
+        const errShort = stderr.length > 2000 ? `${stderr.slice(0, 2000)}\n...[truncated]` : stderr;
+        logger.warn({ videoId, exitCode: code, stderr: errShort }, 'ffmpeg finished with error');
+      }
+      resolve(code === 0);
+    });
+    p.on('error', (err) => {
+      logger.error({ err, videoId }, 'ffmpeg spawn error');
+      resolve(false);
+    });
   });
 }
 
@@ -124,42 +188,6 @@ async function fetchByYtDlp(videoId: string, language?: string | null): Promise<
   const langCandidates = Array.from(
     new Set([preferred, 'zh-TW', 'zh-Hant', 'zh', 'ja', 'en-US', 'en']),
   );
-  const runYtDlp = async (bin: string, cmdArgs: string[]): Promise<boolean> =>
-    await new Promise<boolean>((resolve) => {
-      const spawnArgs = [bin, ...cmdArgs];
-      const cmdline = `${python} ${spawnArgs.map((a) => (/\s/.test(a) ? JSON.stringify(a) : a)).join(' ')}`;
-      logger.info({ videoId, command: cmdline }, 'yt-dlp spawn');
-
-      const p = spawn(python, spawnArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
-      let stdout = '';
-      let stderr = '';
-      p.stdout?.on('data', (buf) => {
-        stdout += String(buf);
-      });
-      p.stderr?.on('data', (buf) => {
-        stderr += String(buf);
-      });
-
-      p.on('close', (code, signal) => {
-        const outShort = stdout.length > 4000 ? `${stdout.slice(0, 4000)}\n...[truncated]` : stdout;
-        const errShort = stderr.length > 4000 ? `${stderr.slice(0, 4000)}\n...[truncated]` : stderr;
-        logger.info(
-          {
-            videoId,
-            exitCode: code,
-            signal,
-            stdout: outShort,
-            stderr: errShort,
-          },
-          'yt-dlp finished',
-        );
-        resolve(code === 0);
-      });
-      p.on('error', (err) => {
-        logger.error({ err, videoId, command: cmdline }, 'yt-dlp spawn error');
-        resolve(false);
-      });
-    });
 
   for (const lang of langCandidates) {
     const args = [
@@ -173,7 +201,7 @@ async function fetchByYtDlp(videoId: string, language?: string | null): Promise<
       url,
     ];
 
-    const ok = await runYtDlp(ytDlpBin, args);
+    const ok = await runYtDlp(python, ytDlpBin, args, videoId);
     if (!ok) continue;
 
     const files = await fs.promises.readdir(tmpDir);
@@ -197,6 +225,103 @@ async function fetchByYtDlp(videoId: string, language?: string | null): Promise<
     };
   }
   return null;
+}
+
+// OpenAI's transcription endpoint caps uploads at 25 MB. We download a low
+// bitrate mono mp3 and split it into time-based chunks so even long videos stay
+// comfortably under the limit (48 kbps mono ≈ 7 MB / 20 min).
+const STT_CHUNK_SECONDS = 20 * 60;
+
+// Fallback when no subtitle track is available at all: download the audio with
+// yt-dlp and transcribe it with OpenAI speech-to-text. Returns null (rather than
+// throwing) so the caller can fall through to a NO_CAPTION_AVAILABLE error.
+async function transcribeByStt(
+  videoId: string,
+  language?: string | null,
+): Promise<YoutubeCaptionResult | null> {
+  const python = await resolvePython();
+  if (!python) {
+    logger.error({ videoId }, 'no Python >= 3.10 interpreter found for yt-dlp (STT fallback)');
+    return null;
+  }
+  const ytDlpBin = await ensureYtDlpBinary(python);
+  if (!ytDlpBin) return null;
+
+  const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ms-ytstt-'));
+  try {
+    const url = `https://www.youtube.com/watch?v=${videoId}`;
+    logger.info({ videoId }, 'youtube STT fallback: downloading audio');
+    const downloaded = await runYtDlp(
+      python,
+      ytDlpBin,
+      [
+        '-x',
+        '--audio-format', 'mp3',
+        // Downmix to mono 16 kHz at a low bitrate — plenty for speech and keeps
+        // chunks small enough for the transcription endpoint.
+        '--postprocessor-args', 'ffmpeg:-ac 1 -ar 16000 -b:a 48k',
+        '--ignore-errors',
+        '-o', path.join(tmpDir, 'audio.%(ext)s'),
+        url,
+      ],
+      videoId,
+    );
+    if (!downloaded) return null;
+
+    const mp3 = (await fs.promises.readdir(tmpDir)).find((f) => f.endsWith('.mp3'));
+    if (!mp3) {
+      logger.warn({ videoId }, 'youtube STT fallback: no audio file produced');
+      return null;
+    }
+    const audioPath = path.join(tmpDir, mp3);
+
+    // Split into chunks; mp3 frames are self-contained so a stream copy is safe.
+    const segmented = await runFfmpeg(
+      [
+        '-i', audioPath,
+        '-f', 'segment',
+        '-segment_time', String(STT_CHUNK_SECONDS),
+        '-c', 'copy',
+        path.join(tmpDir, 'chunk_%03d.mp3'),
+      ],
+      videoId,
+    );
+    let chunkFiles = segmented
+      ? (await fs.promises.readdir(tmpDir)).filter((f) => /^chunk_\d+\.mp3$/.test(f)).sort()
+      : [];
+    if (chunkFiles.length === 0) chunkFiles = [mp3];
+
+    const texts: string[] = [];
+    for (const chunk of chunkFiles) {
+      const buf = await fs.promises.readFile(path.join(tmpDir, chunk));
+      if (buf.length === 0) continue;
+      try {
+        const text = await transcribeAudioBuffer(buf, chunk, 'audio/mpeg');
+        if (text) texts.push(text);
+      } catch (err) {
+        logger.error({ err, videoId, chunk }, 'youtube STT fallback: transcription failed');
+        return null;
+      }
+    }
+
+    const normalized = texts.join('\n').trim();
+    if (!normalized) return null;
+    const lines = normalized
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    logger.info(
+      { videoId, chunks: chunkFiles.length, lines: lines.length },
+      'youtube STT fallback: transcription succeeded',
+    );
+    return {
+      language: language ?? null,
+      lines: lines.map((t, i) => ({ start: i, dur: 0, text: t })),
+      normalizedText: normalized,
+    };
+  } finally {
+    await fs.promises.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+  }
 }
 
 function normalizeLineText(text: string): string {
@@ -243,6 +368,15 @@ export async function fetchYoutubeCaptions(
     } catch (err) {
       lastErr = err;
     }
+  }
+
+  // No subtitle track of any kind was available — fall back to speech-to-text.
+  logger.info({ videoId }, 'no caption track available, falling back to STT');
+  try {
+    const byStt = await transcribeByStt(videoId, language);
+    if (byStt) return byStt;
+  } catch (err) {
+    logger.error({ err, videoId }, 'STT fallback threw');
   }
 
   if (lastErr instanceof Error) {
