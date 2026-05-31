@@ -349,3 +349,15 @@
 - 時間: 2026-05-30 00:00:00 +0800
 - 分支: feature/add-pages-outline-modes-insert-position-20260530
 - 內容: (1) 改造新增多頁 modal 為三段式流程（模式選擇 → 大綱輸入/AI 對話 → 確認生成）；支援手動輸入大綱和 AI 聊天生成大綱兩種模式；後端新增 outline-chat 端點讀取現有投影片脈絡；新頁面插入在目前頁之後（而非尾端）；後端實作 parseOutlineText 解析文字大綱並執行 page renumbering + artifact renaming。(2) 新增每頁生成記錄功能：在 DB 加入 page_generation_prompts 表；renderTextPagesWithLlm/generateScript/synthesizeAudio 三個步驟生成後均記錄提示詞與模型；後端新增 GET /api/pdfs/:id/pages/:n/generation-prompts 端點；前端在來源 tab 新增「生成記錄」區段，可逐一展開檢視圖片/逐字稿/語音的生成提示。
+
+# 新的功能
+
+[ ] 在使用 youtube 匯入時，加上下載及語音轉文字的階段。
+[x] 提供使用 openrouter 做為 LLM 模型的支援，把設定重構，為支援各式不同 provider 做準備。（完成於分支: feature/openrouter-llm-support-20260601）
+[ ] 在重生中加上一個改寫提示詞的功能，可以接受一個使用者的提示詞重新改寫每一頁的提示詞，然後再逐步進行圖片，逐字稿，語音的改寫過程。這個功能要求 LLM 檢視每一頁決定是否有需要調整提示詞，只對提示詞做最小修改。以避免需要重新產生每一頁的逐字稿，當逐字稿沒有改變時就不要重新做圖片/逐字稿/語音的產生，以減少時間和費用。
+
+## 工作記錄
+
+- 時間: 2026-06-01 00:00:00 +0800
+- 分支: feature/openrouter-llm-support-20260601
+- 內容: 完成 OpenRouter LLM 支援：新增 LlmProvider（openai/gemini/openrouter）與 TtsProvider（openai/gemini）兩個獨立型別；加入 OPENROUTER_API_KEY 與 OPENROUTER_LLM_MODEL 設定，並於 config、aiSettings、persist/load env、/api/system/ai-settings API 全面接通；getOpenRouterClient() 建立指向 openrouter.ai/api/v1 的 OpenAI 相容用戶端，callChatJSON() 在 provider 為 openrouter 時自動路由；設定頁新增 OPENROUTER_API_KEY 欄位、模型輸入框與 LLM 供應商選項，並補上中英文翻譯。
