@@ -918,15 +918,32 @@ export default function PlayPage() {
 
   const handleEnded = useCallback(() => {
     setIsPlaying(false);
-    // 互動模式：每頁播放結束後自動啟動 realtime poll，並停在當頁等待互動。
     if (interactiveMode) {
-      setPollStarted(true);
-      setPollError(null);
-      // 全螢幕 master 模式下自動展開 poll 控制面板
-      setFullscreenPollControlOpen(true);
+      if (pagePolls.length > 0) {
+        // 當頁有投票：啟動 poll，停在此頁等待互動
+        setPollStarted(true);
+        setPollError(null);
+        setFullscreenPollControlOpen(true);
+        if (currentIdx < totalPages - 1) {
+          setClassroomAwaitingNext(true);
+        } else {
+          setFinished(true);
+        }
+        return;
+      } else if (!classroomMode) {
+        // 當頁無投票且非上課模式：直接進入下一頁
+        if (currentIdx < totalPages - 1) {
+          setCurrentIdx((i) => i + 1);
+          setIsPlaying(true);
+        } else {
+          setFinished(true);
+        }
+        return;
+      }
+      // 當頁無投票 + 上課模式：走下方 classroomMode 邏輯
     }
     if (currentIdx < totalPages - 1) {
-      if (classroomMode || interactiveMode) {
+      if (classroomMode) {
         setClassroomAwaitingNext(true);
         return;
       }
@@ -936,7 +953,7 @@ export default function PlayPage() {
       setClassroomAwaitingNext(false);
       setFinished(true);
     }
-  }, [classroomMode, interactiveMode, currentIdx, totalPages]);
+  }, [classroomMode, interactiveMode, pagePolls.length, currentIdx, totalPages]);
 
   const handleSeek = useCallback(
     (ev: React.ChangeEvent<HTMLInputElement>) => {
@@ -1504,6 +1521,7 @@ export default function PlayPage() {
   const shouldFetchPolls =
     pollStarted ||
     pollSettingsOpen ||
+    interactiveMode ||
     (syncEnabled && syncRole === 'follower' && syncRealtimePollStarted);
 
   useEffect(() => {
