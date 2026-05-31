@@ -352,11 +352,15 @@
 
 # 新的功能
 
-[ ] 在使用 youtube 匯入時，加上下載及語音轉文字的階段。
+[x] 在使用 youtube 匯入時，加上下載及語音轉文字的階段。（完成於分支: feature/youtube-download-stt-stages-20260601）
 [x] 提供使用 openrouter 做為 LLM 模型的支援，把設定重構，為支援各式不同 provider 做準備。（完成於分支: feature/openrouter-llm-support-20260601）
 [ ] 在重生中加上一個改寫提示詞的功能，可以接受一個使用者的提示詞重新改寫每一頁的提示詞，然後再逐步進行圖片，逐字稿，語音的改寫過程。這個功能要求 LLM 檢視每一頁決定是否有需要調整提示詞，只對提示詞做最小修改。以避免需要重新產生每一頁的逐字稿，當逐字稿沒有改變時就不要重新做圖片/逐字稿/語音的產生，以減少時間和費用。
 
 ## 工作記錄
+
+- 時間: 2026-06-01 00:00:00 +0800
+- 分支: feature/youtube-download-stt-stages-20260601
+- 內容: 新增 YouTube 下載與語音轉文字的可見進度階段；於 statusMachine 加入 downloading_captions、downloading_audio、transcribing_audio 三個 ProgressStep；fetchYoutubeCaptions() 接受 onProgress callback 並於各階段觸發；transcribeByStt() 在開始 STT 前觸發 transcribing_audio；pipeline 將 callback 串接 setProgress + persistMetadata，讓 UI 即時顯示目前子步驟；StatusBadge、frontend ProgressStep 型別與中英文翻譯同步更新。
 
 - 時間: 2026-06-01 00:00:00 +0800
 - 分支: feature/openrouter-llm-support-20260601
