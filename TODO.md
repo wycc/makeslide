@@ -354,9 +354,13 @@
 
 [x] 在使用 youtube 匯入時，加上下載及語音轉文字的階段。（完成於分支: feature/youtube-download-stt-stages-20260601）
 [x] 提供使用 openrouter 做為 LLM 模型的支援，把設定重構，為支援各式不同 provider 做準備。（完成於分支: feature/openrouter-llm-support-20260601）
-[ ] 在重生中加上一個改寫提示詞的功能，可以接受一個使用者的提示詞重新改寫每一頁的提示詞，然後再逐步進行圖片，逐字稿，語音的改寫過程。這個功能要求 LLM 檢視每一頁決定是否有需要調整提示詞，只對提示詞做最小修改。以避免需要重新產生每一頁的逐字稿，當逐字稿沒有改變時就不要重新做圖片/逐字稿/語音的產生，以減少時間和費用。
+[x] 在重生中加上一個改寫提示詞的功能，可以接受一個使用者的提示詞重新改寫每一頁的提示詞，然後再逐步進行圖片，逐字稿，語音的改寫過程。這個功能要求 LLM 檢視每一頁決定是否有需要調整提示詞，只對提示詞做最小修改。以避免需要重新產生每一頁的逐字稿，當逐字稿沒有改變時就不要重新做圖片/逐字稿/語音的產生，以減少時間和費用。（完成於分支: feature/regen-prompt-rewrite-20260601）
 
 ## 工作記錄
+
+- 時間: 2026-06-01 00:00:00 +0800
+- 分支: feature/regen-prompt-rewrite-20260601
+- 內容: 在重生流程中加入「改寫提示詞」模式：LLM 逐頁審視現有圖片提示詞，根據使用者輸入的改寫指示做最小修改（PromptRewriteDecisionSchema），只對提示詞有變化的頁面執行圖片重生（呼叫 images.edit），並可選擇性地對這些頁面重生逐字稿與語音，未變化頁面完全跳過以節省時間和費用。後端新增 RegenerateBatchBodySchema.prompt_rewrite、runPromptRewrite()、RegenStepName 'rewrite'、SnapshotAssetType 分離、runRegenerateScripts/Audio 的 pageFilter 參數；前端在重生對話中新增模式切換（一般重生 / 改寫提示詞），提供改寫指示輸入框與逐字稿/語音選項；StatusBadge 與 ProgressStep 類型同步更新。
 
 - 時間: 2026-06-01 00:00:00 +0800
 - 分支: feature/youtube-download-stt-stages-20260601
