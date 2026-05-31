@@ -59,6 +59,7 @@ import AddPagesFromPromptModal from '../components/AddPagesFromPromptModal';
 import {
   DEFAULT_TTS_VOICE_BY_PROVIDER,
   TTS_VOICES_BY_PROVIDER,
+  geminiVoiceLabel,
   type TtsProvider,
 } from '../lib/ttsVoices';
 import { formatDurationMs, formatTime } from './play/formatters';
@@ -264,6 +265,7 @@ export default function PlayPage() {
   const [ttsVoice, setTtsVoice] = useState('alloy');
   const [ttsSpeed, setTtsSpeed] = useState(1);
   const [scriptMaxCharsPerPage, setScriptMaxCharsPerPage] = useState<number | null>(null);
+  const [hostMode, setHostMode] = useState<'solo' | 'dual'>('solo');
   const [ttsBusy, setTtsBusy] = useState(false);
   const [ttsMsg, setTtsMsg] = useState<string | null>(null);
   const [ttsDialogOpen, setTtsDialogOpen] = useState(false);
@@ -503,6 +505,7 @@ export default function PlayPage() {
         setTtsVoice(d.tts_voice?.trim() || 'alloy');
         setTtsSpeed(d.tts_speed ?? 1);
         setScriptMaxCharsPerPage(typeof d.script_max_chars_per_page === 'number' ? d.script_max_chars_per_page : null);
+        setHostMode(d.host_mode === 'dual' ? 'dual' : 'solo');
         setLoadError(null);
         if (d.image_style_prompt && d.image_style_prompt.trim()) {
           setDeckImageStylePrompt(d.image_style_prompt);
@@ -1877,7 +1880,7 @@ export default function PlayPage() {
     try {
       const [ttsRes, scriptRes] = await Promise.all([
         updatePdfTtsSettings(pdfId, ttsVoice, ttsSpeed),
-        updatePdfScriptSettings(pdfId, scriptMaxCharsPerPage),
+        updatePdfScriptSettings(pdfId, scriptMaxCharsPerPage, hostMode),
       ]);
       setDetail((prev) =>
         prev
@@ -1885,18 +1888,19 @@ export default function PlayPage() {
               ...prev,
               tts_voice: ttsRes.tts_voice,
               tts_speed: ttsRes.tts_speed,
+              host_mode: hostMode,
               script_max_chars_per_page: scriptRes.script_max_chars_per_page,
               updated_at: ttsRes.updated_at,
             }
           : prev,
       );
-      setTtsMsg('設定已儲存');
+      setTtsMsg('設定已儲存（主持模式變更需重新產生逐字稿才會套用）');
     } catch (err) {
       setTtsMsg(err instanceof ApiError ? err.message : '儲存設定失敗');
     } finally {
       setTtsBusy(false);
     }
-  }, [pdfId, ttsVoice, ttsSpeed, scriptMaxCharsPerPage, isReadOnlyProcessing]);
+  }, [pdfId, ttsVoice, ttsSpeed, scriptMaxCharsPerPage, hostMode, isReadOnlyProcessing]);
 
   const handleSaveTitle = useCallback(async () => {
     if (isReadOnlyProcessing) return;
@@ -4520,10 +4524,41 @@ export default function PlayPage() {
                   className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs"
                 >
                   {availableTtsVoices.map((v) => (
-                    <option key={v} value={v}>{v}</option>
+                    <option key={v} value={v}>{ttsProvider === 'gemini' ? geminiVoiceLabel(v) : v}</option>
                   ))}
                 </select>
               </div>
+              {ttsProvider === 'gemini' ? (
+                <div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-slate-300">主持模式</span>
+                    <div className="flex overflow-hidden rounded border border-slate-700">
+                      {([
+                        ['solo', '單人旁白'],
+                        ['dual', '雙人對談'],
+                      ] as const).map(([mode, label]) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => setHostMode(mode)}
+                          disabled={isReadOnlyProcessing || ttsBusy}
+                          aria-pressed={hostMode === mode}
+                          className={`px-3 py-1 text-xs ${
+                            hostMode === mode
+                              ? 'bg-cyan-500/25 font-medium text-cyan-100'
+                              : 'text-slate-300 hover:bg-slate-800'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">
+                    雙人對談才會使用上方人設與 Speaker 1／2 聲音；變更後需重新產生逐字稿才會套用。
+                  </p>
+                </div>
+              ) : null}
               <div className="flex items-center gap-2">
                 <span className="text-xs text-slate-300">速度</span>
                 <input

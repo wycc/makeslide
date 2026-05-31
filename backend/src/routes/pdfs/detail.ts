@@ -177,7 +177,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
                 error_message, user_prompt, require_script_confirmation,
                 category,
                 owner_sub, visibility,
-                tts_voice, tts_speed, script_max_chars_per_page, image_style_prompt,
+                tts_voice, tts_speed, host_mode, script_max_chars_per_page, image_style_prompt,
                 total_audio_duration_seconds,
                 source_type, source_url, source_video_id, source_caption_language,
                 created_at, updated_at
@@ -1208,6 +1208,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     }
     const body = z.object({
       script_max_chars_per_page: z.number().int().min(80).max(2000).nullable(),
+      host_mode: z.enum(['solo', 'dual']).optional(),
     }).safeParse(request.body ?? {});
     if (!body.success) {
       return reply.code(400).send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
@@ -1219,9 +1220,20 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
     }
     const now = nowIso();
-    db.prepare(`UPDATE pdfs SET script_max_chars_per_page = ?, updated_at = ? WHERE id = ?`).run(
-      body.data.script_max_chars_per_page, now, id,
-    );
-    return reply.send({ id, script_max_chars_per_page: body.data.script_max_chars_per_page, updated_at: now });
+    if (body.data.host_mode) {
+      db.prepare(`UPDATE pdfs SET script_max_chars_per_page = ?, host_mode = ?, updated_at = ? WHERE id = ?`).run(
+        body.data.script_max_chars_per_page, body.data.host_mode, now, id,
+      );
+    } else {
+      db.prepare(`UPDATE pdfs SET script_max_chars_per_page = ?, updated_at = ? WHERE id = ?`).run(
+        body.data.script_max_chars_per_page, now, id,
+      );
+    }
+    return reply.send({
+      id,
+      script_max_chars_per_page: body.data.script_max_chars_per_page,
+      ...(body.data.host_mode ? { host_mode: body.data.host_mode } : {}),
+      updated_at: now,
+    });
   });
 }

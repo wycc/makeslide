@@ -108,6 +108,7 @@ export interface PdfDetail {
   tts_provider?: 'openai' | 'gemini';
   tts_voice?: string | null;
   tts_speed?: number | null;
+  host_mode?: 'solo' | 'dual';
   script_max_chars_per_page?: number | null;
   image_style_prompt?: string | null;
   total_audio_duration_seconds?: number | null;

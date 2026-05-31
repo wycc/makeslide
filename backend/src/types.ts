@@ -73,6 +73,7 @@ export interface PdfRow {
   visibility?: 'private' | 'public' | 'public_editable';
   tts_voice: string | null;
   tts_speed: number | null;
+  host_mode?: string | null;
   script_max_chars_per_page: number | null;
   image_style_prompt?: string | null;
   total_audio_duration_seconds?: number | null;
@@ -117,6 +118,7 @@ export interface PdfListItem {
   tts_provider?: 'openai' | 'gemini';
   tts_voice?: string | null;
   tts_speed?: number | null;
+  host_mode?: 'solo' | 'dual';
   script_max_chars_per_page?: number | null;
   image_style_prompt?: string | null;
   total_audio_duration_seconds?: number | null;
@@ -176,6 +178,7 @@ export interface PdfDetail {
   tts_provider?: 'openai' | 'gemini';
   tts_voice?: string | null;
   tts_speed?: number | null;
+  host_mode?: 'solo' | 'dual';
   script_max_chars_per_page?: number | null;
   image_style_prompt?: string | null;
   total_audio_duration_seconds?: number | null;

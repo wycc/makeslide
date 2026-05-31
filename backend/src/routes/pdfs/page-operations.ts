@@ -16,7 +16,7 @@ import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../../services/imagePr
 import { loadPromptTemplate, renderPromptTemplate } from '../../services/promptTemplates';
 import { safeJoinPdfPath } from '../../services/storage';
 import { synthesizeAudio } from '../../worker/steps/synthesizeAudio';
-import { scriptCharBounds } from '../../worker/steps/generateScript';
+import { scriptCharBounds, getPdfHostMode } from '../../worker/steps/generateScript';
 import {
   AddPageBodySchema,
   IdParamSchema,
@@ -91,28 +91,37 @@ function sanitiseRewriteUserPrompt(raw: string | null | undefined): string {
 function buildRewriteScriptSystemPrompt(params: {
   userPrompt: string | null | undefined;
   targetChars: number;
+  hostMode?: 'solo' | 'dual';
 }): string {
   const runtime = getRuntimeAiSettings();
+  const isDual = params.hostMode === 'dual';
   const charBounds = scriptCharBounds(params.targetChars);
   const charLimitInstruction = `【字數限制】逐字稿長度必須控制在 ${charBounds.min}～${charBounds.max} 字之間（目標約 ${params.targetChars} 字）：內容多時請優先濃縮、只挑核心重點講，不可超過 ${charBounds.max} 字上限；內容少時可適度展開，但不要灌水。`;
   if (runtime.ttsProvider === 'gemini') {
-    const fallback = '你是一位 Podcast 逐字稿編輯助理。請輸出 JSON：{"script":"..."}';
-    const template = loadPromptTemplate('backend/prompts/generate-script-gemini.md', fallback);
+    const fallback = isDual
+      ? '你是一位 Podcast 逐字稿編輯助理。請輸出 JSON：{"script":"..."}'
+      : '你是一位繁體中文簡報旁白編輯。請輸出 JSON：{"script":"..."}';
+    const template = loadPromptTemplate(
+      isDual ? 'backend/prompts/generate-script-gemini.md' : 'backend/prompts/generate-script-gemini-solo.md',
+      fallback,
+    );
     const base = [template, '', charLimitInstruction];
-    const speaker1 = runtime.geminiTtsSpeaker1?.trim();
-    const speaker2 = runtime.geminiTtsSpeaker2?.trim();
-    if (speaker1 || speaker2) {
-      const speakerBlockTpl = loadPromptTemplate(
-        'backend/prompts/partials/gemini-speaker-persona-block.md',
-        '【雙主持人角色人設（優先遵守）】\n{{speaker1_line}}\n{{speaker2_line}}',
-      );
-      base.push('');
-      base.push(
-        renderPromptTemplate(speakerBlockTpl, {
-          speaker1_line: speaker1 ? `- Speaker 1 人設：${speaker1}` : '',
-          speaker2_line: speaker2 ? `- Speaker 2 人設：${speaker2}` : '',
-        }),
-      );
+    if (isDual) {
+      const speaker1 = runtime.geminiTtsSpeaker1?.trim();
+      const speaker2 = runtime.geminiTtsSpeaker2?.trim();
+      if (speaker1 || speaker2) {
+        const speakerBlockTpl = loadPromptTemplate(
+          'backend/prompts/partials/gemini-speaker-persona-block.md',
+          '【雙主持人角色人設（優先遵守）】\n{{speaker1_line}}\n{{speaker2_line}}',
+        );
+        base.push('');
+        base.push(
+          renderPromptTemplate(speakerBlockTpl, {
+            speaker1_line: speaker1 ? `- Speaker 1 人設：${speaker1}` : '',
+            speaker2_line: speaker2 ? `- Speaker 2 人設：${speaker2}` : '',
+          }),
+        );
+      }
     }
     const sanitized = sanitiseRewriteUserPrompt(params.userPrompt);
     if (sanitized) {
@@ -760,6 +769,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
             content: buildRewriteScriptSystemPrompt({
               userPrompt: pdfRow.user_prompt,
               targetChars,
+              hostMode: getPdfHostMode(id),
             }),
           },
           {

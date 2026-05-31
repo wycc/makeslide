@@ -638,11 +638,15 @@ export async function updatePdfTtsSettings(
 export async function updatePdfScriptSettings(
   id: string,
   scriptMaxCharsPerPage: number | null,
+  hostMode?: 'solo' | 'dual',
 ): Promise<UpdateScriptSettingsResponse> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/script-settings`, {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ script_max_chars_per_page: scriptMaxCharsPerPage }),
+    body: JSON.stringify({
+      script_max_chars_per_page: scriptMaxCharsPerPage,
+      ...(hostMode ? { host_mode: hostMode } : {}),
+    }),
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as UpdateScriptSettingsResponse;

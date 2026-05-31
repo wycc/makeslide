@@ -85,6 +85,11 @@ function migrate(): void {
     db.exec(`ALTER TABLE pdfs ADD COLUMN tts_voice TEXT`);
     logger.info('Added column pdfs.tts_voice');
   }
+  if (!columnExists('pdfs', 'host_mode')) {
+    // 'solo' = 單人旁白；'dual' = 雙主持人對話。預設單人最穩定。
+    db.exec(`ALTER TABLE pdfs ADD COLUMN host_mode TEXT NOT NULL DEFAULT 'solo'`);
+    logger.info('Added column pdfs.host_mode');
+  }
   if (!columnExists('pdfs', 'tts_speed')) {
     db.exec(`ALTER TABLE pdfs ADD COLUMN tts_speed REAL`);
     logger.info('Added column pdfs.tts_speed');

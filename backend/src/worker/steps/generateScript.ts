@@ -257,6 +257,18 @@ function sanitiseUserPrompt(raw: string | null | undefined): string {
     : trimmed;
 }
 
+/** Read the per-PDF host mode ('solo' single narrator | 'dual' two-host podcast). Defaults to 'solo'. */
+export function getPdfHostMode(pdfId: string): 'solo' | 'dual' {
+  try {
+    const row = db.prepare(`SELECT host_mode FROM pdfs WHERE id = ?`).get(pdfId) as
+      | { host_mode?: string | null }
+      | undefined;
+    return row?.host_mode === 'dual' ? 'dual' : 'solo';
+  } catch {
+    return 'solo';
+  }
+}
+
 function buildSystemPrompt(
   userPrompt: string | null | undefined,
   targetChars: number,
@@ -264,6 +276,7 @@ function buildSystemPrompt(
   geminiSpeaker1Persona?: string,
   geminiSpeaker2Persona?: string,
   contentLanguage: 'zh-TW' | 'en' = 'zh-TW',
+  hostMode: 'solo' | 'dual' = 'solo',
 ): string {
   const languageInstruction = contentLanguage === 'en'
     ? '【輸出語言】請用英文產生逐字稿、旁白與所有可朗讀內容；即使使用者提示或投影片文字是中文，也要翻譯並自然改寫成英文。'
@@ -271,24 +284,33 @@ function buildSystemPrompt(
   const bounds = scriptCharBounds(targetChars);
   const charLimitInstruction = `【字數限制】每頁逐字稿長度必須控制在 ${bounds.min}～${bounds.max} 字之間（目標約 ${targetChars} 字）：內容多時請優先濃縮、只挑核心重點講，不可超過 ${bounds.max} 字上限；內容少時可適度展開，但不要灌水。`;
   if (ttsProvider === 'gemini') {
-    const fallback = '你是一位 Podcast 逐字稿編輯助理。請輸出 JSON：{"script":"..."}';
-    const template = loadPromptTemplate('backend/prompts/generate-script-gemini.md', fallback);
+    const isDual = hostMode === 'dual';
+    const fallback = isDual
+      ? '你是一位 Podcast 逐字稿編輯助理。請輸出 JSON：{"script":"..."}'
+      : '你是一位繁體中文簡報旁白編輯。請輸出 JSON：{"script":"..."}';
+    const template = loadPromptTemplate(
+      isDual ? 'backend/prompts/generate-script-gemini.md' : 'backend/prompts/generate-script-gemini-solo.md',
+      fallback,
+    );
     const base = [template, '', languageInstruction, '', charLimitInstruction];
     const sanitized = sanitiseUserPrompt(userPrompt);
-    const speaker1 = geminiSpeaker1Persona?.trim();
-    const speaker2 = geminiSpeaker2Persona?.trim();
-    if (speaker1 || speaker2) {
-      const speakerBlockTpl = loadPromptTemplate(
-        'backend/prompts/partials/gemini-speaker-persona-block.md',
-        '【雙主持人角色人設（優先遵守）】\n{{speaker1_line}}\n{{speaker2_line}}',
-      );
-      base.push('');
-      base.push(
-        renderPromptTemplate(speakerBlockTpl, {
-          speaker1_line: speaker1 ? `- Speaker 1 人設：${speaker1}` : '',
-          speaker2_line: speaker2 ? `- Speaker 2 人設：${speaker2}` : '',
-        }),
-      );
+    // 人設僅在雙人模式下加入；單人模式不附加任何 Speaker 人設。
+    if (isDual) {
+      const speaker1 = geminiSpeaker1Persona?.trim();
+      const speaker2 = geminiSpeaker2Persona?.trim();
+      if (speaker1 || speaker2) {
+        const speakerBlockTpl = loadPromptTemplate(
+          'backend/prompts/partials/gemini-speaker-persona-block.md',
+          '【雙主持人角色人設（優先遵守）】\n{{speaker1_line}}\n{{speaker2_line}}',
+        );
+        base.push('');
+        base.push(
+          renderPromptTemplate(speakerBlockTpl, {
+            speaker1_line: speaker1 ? `- Speaker 1 人設：${speaker1}` : '',
+            speaker2_line: speaker2 ? `- Speaker 2 人設：${speaker2}` : '',
+          }),
+        );
+      }
     }
     if (sanitized) {
       const userBlockTpl = loadPromptTemplate(
@@ -396,26 +418,32 @@ function buildUserText(ctx: PromptContext): string {
 function buildDeckRewriteSystemPrompt(
   userPrompt: string | null | undefined,
   targetChars: number,
+  hostMode: 'solo' | 'dual' = 'solo',
 ): string {
   const runtime = getRuntimeAiSettings();
   const bounds = scriptCharBounds(targetChars);
   if (runtime.ttsProvider === 'gemini') {
+    const isDual = hostMode === 'dual';
     const base = [
       loadPromptTemplate(
-        'backend/prompts/rewrite-script-gemini.md',
-        '你是一位 Podcast 逐字稿總編輯。只輸出 JSON：{"pages":[{"page_number":1,"script":"..."}, ...]}。',
+        isDual ? 'backend/prompts/rewrite-script-gemini.md' : 'backend/prompts/rewrite-script-gemini-solo.md',
+        isDual
+          ? '你是一位 Podcast 逐字稿總編輯。只輸出 JSON：{"pages":[{"page_number":1,"script":"..."}, ...]}。'
+          : '你是一位繁體中文簡報旁白總編輯。只輸出 JSON：{"pages":[{"page_number":1,"script":"..."}, ...]}。',
       ),
       '',
       `【字數限制】每頁逐字稿長度必須控制在 ${bounds.min}～${bounds.max} 字之間（目標約 ${targetChars} 字）：潤飾後不可超過 ${bounds.max} 字上限，內容多時優先濃縮挑重點，不要為達字數而灌水。`,
     ];
     const sanitized = sanitiseUserPrompt(userPrompt);
-    const speaker1 = runtime.geminiTtsSpeaker1?.trim();
-    const speaker2 = runtime.geminiTtsSpeaker2?.trim();
-    if (speaker1 || speaker2) {
-      base.push('');
-      base.push('【雙主持人角色人設（優先遵守）】');
-      if (speaker1) base.push(`- Speaker 1 人設：${speaker1}`);
-      if (speaker2) base.push(`- Speaker 2 人設：${speaker2}`);
+    if (isDual) {
+      const speaker1 = runtime.geminiTtsSpeaker1?.trim();
+      const speaker2 = runtime.geminiTtsSpeaker2?.trim();
+      if (speaker1 || speaker2) {
+        base.push('');
+        base.push('【雙主持人角色人設（優先遵守）】');
+        if (speaker1) base.push(`- Speaker 1 人設：${speaker1}`);
+        if (speaker2) base.push(`- Speaker 2 人設：${speaker2}`);
+      }
     }
     if (sanitized) {
       base.push('');
@@ -547,6 +575,7 @@ export async function generateScript(
   }
   const targetChars = opts.maxCharsPerPage ?? config.openaiScriptTargetChars;
   const runtime = getRuntimeAiSettings();
+  const hostMode = getPdfHostMode(pdfId);
   const system = buildSystemPrompt(
     userPrompt,
     targetChars,
@@ -554,6 +583,7 @@ export async function generateScript(
     runtime.geminiTtsSpeaker1,
     runtime.geminiTtsSpeaker2,
     runtime.contentLanguage,
+    hostMode,
   );
   console.log('System prompt for script generation:\n', system);
   if (userPrompt && userPrompt.trim()) {
@@ -794,7 +824,7 @@ export async function generateScript(
   try {
     const { data, usage, latencyMs } = await callChatJSON({
       messages: [
-        { role: 'system', content: buildDeckRewriteSystemPrompt(userPrompt, targetChars) },
+        { role: 'system', content: buildDeckRewriteSystemPrompt(userPrompt, targetChars, hostMode) },
         {
           role: 'user',
           content: buildDeckRewriteUserText(
