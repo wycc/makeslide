@@ -425,9 +425,16 @@ async function runPipeline(pdfId: string): Promise<void> {
       if (!videoId) {
         throw new Error('Missing source_video_id for youtube task');
       }
-      setProgress(pdfId, 'extracting_text', 0, 1);
+      setProgress(pdfId, 'downloading_captions', 0, 1);
       await persistMetadata(pdfId);
-      const cap = await fetchYoutubeCaptions(videoId, row.source_caption_language ?? undefined);
+      const cap = await fetchYoutubeCaptions(
+        videoId,
+        row.source_caption_language ?? undefined,
+        async (step) => {
+          setProgress(pdfId, step, 0, 1);
+          await persistMetadata(pdfId);
+        },
+      );
 
       await fs.promises.writeFile(
         youtubeCaptionsRawPath(pdfId),

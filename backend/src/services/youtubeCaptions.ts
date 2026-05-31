@@ -238,6 +238,7 @@ const STT_CHUNK_SECONDS = 20 * 60;
 async function transcribeByStt(
   videoId: string,
   language?: string | null,
+  onProgress?: (step: YoutubeProgressStep) => void,
 ): Promise<YoutubeCaptionResult | null> {
   const python = await resolvePython();
   if (!python) {
@@ -291,6 +292,7 @@ async function transcribeByStt(
       : [];
     if (chunkFiles.length === 0) chunkFiles = [mp3];
 
+    onProgress?.('transcribing_audio');
     const texts: string[] = [];
     for (const chunk of chunkFiles) {
       const buf = await fs.promises.readFile(path.join(tmpDir, chunk));
@@ -328,10 +330,14 @@ function normalizeLineText(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
+export type YoutubeProgressStep = 'downloading_captions' | 'downloading_audio' | 'transcribing_audio';
+
 export async function fetchYoutubeCaptions(
   videoId: string,
   language?: string | null,
+  onProgress?: (step: YoutubeProgressStep) => void,
 ): Promise<YoutubeCaptionResult> {
+  onProgress?.('downloading_captions');
   const byYtDlp = await fetchByYtDlp(videoId, language);
   if (byYtDlp) return byYtDlp;
   const candidates = Array.from(
@@ -370,10 +376,11 @@ export async function fetchYoutubeCaptions(
     }
   }
 
-  // No subtitle track of any kind was available — fall back to speech-to-text.
-  logger.info({ videoId }, 'no caption track available, falling back to STT');
+  // No subtitle track of any kind — fall back to download + speech-to-text.
+  logger.info({ videoId }, 'no caption track available, falling back to download + STT');
+  onProgress?.('downloading_audio');
   try {
-    const byStt = await transcribeByStt(videoId, language);
+    const byStt = await transcribeByStt(videoId, language, onProgress);
     if (byStt) return byStt;
   } catch (err) {
     logger.error({ err, videoId }, 'STT fallback threw');
