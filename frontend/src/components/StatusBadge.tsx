@@ -49,6 +49,9 @@ const PROGRESS_LABEL_KEYS: Record<Exclude<ProgressStep, null>, Parameters<Return
   scripting: 'progress.scripting',
   script_ready: 'progress.scriptReady',
   synthesizing: 'progress.synthesizing',
+  downloading_captions: 'progress.downloadingCaptions',
+  downloading_audio: 'progress.downloadingAudio',
+  transcribing_audio: 'progress.transcribingAudio',
 };
 
 export default function StatusBadge({

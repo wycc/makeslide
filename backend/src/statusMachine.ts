@@ -28,6 +28,9 @@ export const PROGRESS_STEPS = [
   'script_ready',
   'synthesizing',
   'rendering_video',
+  'downloading_captions',
+  'downloading_audio',
+  'transcribing_audio',
 ] as const;
 
 export type ProgressStep = null | (typeof PROGRESS_STEPS)[number];

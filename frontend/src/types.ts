@@ -19,7 +19,10 @@ export type ProgressStep =
   | 'text_extracted'
   | 'scripting'
   | 'script_ready'
-  | 'synthesizing';
+  | 'synthesizing'
+  | 'downloading_captions'
+  | 'downloading_audio'
+  | 'transcribing_audio';
 
 export type PageStatus =
   | 'pending'
