@@ -450,10 +450,17 @@
 - 時間: 2026-06-01 08:00:00 +0800
 - 分支: feature/todo-no-pending-recheck-20260601-0800
 - 內容: 重新確認 master 中 TODO.md 未發現行首未完成核取項目；本次以獨立分支保存複查記錄 docs/todo-rechecks/2026-06-01-0800.md，並回到 master 更新工作記錄。
-[x] 重新確認 master TODO.md 無未完成項目並更新工作記錄（完成於分支: feature/todo-no-pending-recheck-20260601-0810）
+
+# 2026-6-1
+
+[ ] 下載 youtube 時，下載字幕檔的動作不應該叫產生字幕檔，應該叫下載字幕檔。
+[ ] 下載 youtube 時，下載的字幕檔應該被存下來當成是來源，可以在來源被檢視。
+[ ] 下載 youtube 時，下載的語音檔應該被存下來當成是來源，可以在來源被檢視。STT 轉出的字幕檔也應被存下來可以在來源被檢視。
+
+[x] 修正 YouTube 字幕過多頁數不足的問題：去除 VTT inline timing markers 和重複行，並將大綱生成的字幕輸入上限從 16K 提高到 64K（完成於分支: feature/youtube-captions-coverage-20260601）
 
 ## 工作記錄
 
-- 時間: 2026-06-01 08:10:00 +0800
-- 分支: feature/todo-no-pending-recheck-20260601-0810
-- 內容: 重新確認 master 中 TODO.md 未發現行首未完成核取項目；本次以獨立分支保存複查記錄 docs/todo-rechecks/2026-06-01-0810.md，並回到 master 更新工作記錄。
+- 時間: 2026-06-01 01:10:00 +0800
+- 分支: feature/youtube-captions-coverage-20260601
+- 內容: 修正 YouTube auto-caption VTT 字幕清理不足導致簡報頁數偏少的問題。`fetchByYtDlp` 新增 strip inline timing markers（`<00:00:04.095><c>字</c>` 格式）及去除相鄰重複行（自動字幕每句重複 2-3 次）；`buildYoutubeOutlineAsSlideText` 的字幕輸入上限從 16K 提高到 64K，確保長達 80 分鐘的日文講座（原僅涵蓋前 3.5 分鐘）和 20 分鐘英文講座（原僅涵蓋 26%）的全部內容都能送入 LLM 大綱生成。
