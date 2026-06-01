@@ -214,13 +214,24 @@ async function fetchByYtDlp(videoId: string, language?: string | null): Promise<
     const lines = raw
       .split('\n')
       .map((s) => s.trim())
-      .filter((s) => s && !s.startsWith('WEBVTT') && !s.includes('-->') && !/^\d+$/.test(s));
-    const normalized = lines.join('\n').trim();
+      // Drop VTT structural lines
+      .filter((s) => s && !s.startsWith('WEBVTT') && !s.includes('-->') && !/^\d+$/.test(s))
+      // Strip inline timing markers emitted by YouTube auto-captions: <00:00:04.095><c>word</c>
+      .map((s) => s.replace(/<[^>]+>/g, '').trim())
+      .filter((s) => s.length > 0);
+
+    // Deduplicate consecutive identical lines (auto-captions repeat each phrase 2-3×)
+    const deduped: string[] = [];
+    for (const line of lines) {
+      if (deduped[deduped.length - 1] !== line) deduped.push(line);
+    }
+
+    const normalized = deduped.join('\n').trim();
     if (!normalized) continue;
 
     return {
       language: lang,
-      lines: lines.map((t, i) => ({ start: i, dur: 0, text: t })),
+      lines: deduped.map((t, i) => ({ start: i, dur: 0, text: t })),
       normalizedText: normalized,
     };
   }

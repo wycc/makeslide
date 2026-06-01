@@ -84,7 +84,7 @@ async function buildYoutubeOutlineAsSlideText(params: {
     ].join('\n');
   }
 
-  const input = trimmed.length > 16000 ? trimmed.slice(0, 16000) : trimmed;
+  const input = trimmed.length > 64000 ? trimmed.slice(0, 64000) : trimmed;
   const system = [
     '你是簡報大綱助理。',
     '請根據字幕內容整理成投影片大綱。',
