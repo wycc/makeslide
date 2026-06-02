@@ -11,53 +11,72 @@ Voice presentation generation and playback system.
 
 ### v1.4（2026-05-31）
 
-**投票與課堂互動**
+**投票與課堂互動 / Poll & Classroom Interaction**
 - 新增全螢幕投票控制面板（鍵盤 `P` 開關）及投票結果顯示切換按鈕。
+  Added fullscreen poll control panel (toggle with `P`) and a button to show/hide poll results.
 - 新增「互動模式」：每頁語音結束後自動暫停並啟動即時投票，設定持久化於瀏覽器。
+  Added "Interactive Mode": automatically pauses after each slide's audio and starts a live poll; setting is persisted in the browser.
 
-**AI 測驗（Quiz）**
+**AI 測驗 / AI Quiz**
 - 測驗問題 schema 更新，新增自動計分與 sync role 管理；測驗播放時自動進入全螢幕。
+  Updated quiz question schema with automatic scoring and sync role management; quiz playback auto-enters fullscreen.
 
-**AI 多頁新增**
+**AI 多頁新增 / AI Multi-Page Insertion**
 - 可在現有簡報中插入任意頁數：輸入大綱 → AI 展開 → 圖片 / 腳本 / 語音逐頁生成，支援即時進度與中途取消。
+  Insert any number of slides into an existing presentation: enter an outline → AI expands → images/scripts/audio generated per page, with live progress and mid-run cancellation.
 
-**認證與匯出入**
+**認證與匯出入 / Auth & Import/Export**
 - Google OAuth 設定可於 SettingsPage 直接設定 Client ID / Secret / Redirect URI，無需重啟。
+  Google OAuth can be configured at runtime in SettingsPage (Client ID / Secret / Redirect URI) without restart.
 - 首頁卡片一鍵 ZIP 匯出；首頁新增 ZIP 匯入（含進度條與取消）。
+  One-click ZIP export from home card; ZIP import added to homepage with progress bar and cancellation.
 - 首頁類別旁新增標題關鍵字篩選欄位。
+  Added a keyword filter beside the category selector on the homepage.
 
-**AI 內容生成**
+**AI 內容生成 / AI Content Generation**
 - OpenAI 腳本重寫改用 vision API，可參考投影片圖片重寫。
+  OpenAI script rewriting now uses the vision API, taking slide images into account.
 - 新增每頁腳本長度限制設定。
+  Added per-page script length limit setting.
 - YouTube 匯入 yt-dlp 執行與 Python 環境問題修正。
+  Fixed yt-dlp execution and Python environment issues for YouTube import.
 
 ---
 
 ### v1.4.1（2026-06-01）
 
 - Docker 映像修正：於 runtime stage 安裝 `python3` 與 `ca-certificates`，確保 yt-dlp 在容器內正常執行。
+  Docker image fix: install `python3` and `ca-certificates` in the runtime stage so yt-dlp works correctly inside the container.
 
 ---
 
 ### 開發中 / Unreleased（2026-06-03）
 
-**語音合成**
+**語音合成 / Speech Synthesis**
 - Gemini TTS 雙人模式新增明確語音選項（Charon / Aoede 等），可指定 Speaker A / B 各自的聲音。
+  Gemini TTS dual-speaker mode now supports explicit voice selection (Charon, Aoede, etc.) for Speaker A and B independently.
 - Gemini TTS 新增「單人旁白」模式，由單一旁白者朗讀整頁腳本。
+  Added "solo narrator" mode for Gemini TTS: a single narrator reads the full script.
 
-**LLM 支援**
+**LLM 支援 / LLM Support**
 - 新增 OpenRouter 作為 LLM 供應商，可在設定頁填入 API Key 與模型名稱切換；LLM 與 TTS 供應商設定分離。
+  Added OpenRouter as an LLM provider; configure API key and model name in Settings. LLM and TTS provider settings are now separate.
 
-**重生流程**
+**重生流程 / Regeneration**
 - 新增「改寫提示詞」重生模式：LLM 逐頁檢視現有圖片提示詞，根據使用者指示做最小修改，只對有變動的頁面重生圖片 / 腳本 / 語音，跳過其餘頁面以節省費用。
+  Added "rewrite prompts" regeneration mode: LLM reviews each page's image prompt and makes minimal edits per user instructions; only changed pages are regenerated (image/script/audio), skipping unchanged pages to save cost.
 
-**YouTube 匯入**
+**YouTube 匯入 / YouTube Import**
 - 新增下載與 STT 可見進度階段（`downloading_captions` / `downloading_audio` / `transcribing_audio`）。
+  Added visible progress stages for download and STT (`downloading_captions` / `downloading_audio` / `transcribing_audio`).
 - 修正 VTT auto-caption 清理不足問題：去除 inline timing markers 與相鄰重複行；字幕輸入上限從 16K 提升至 64K，確保長影片全覆蓋。
+  Fixed insufficient VTT auto-caption cleaning: strip inline timing markers and deduplicate adjacent lines; caption input limit raised from 16K to 64K for full coverage of long videos.
 
-**手寫標注**
+**手寫標注 / Handwriting Annotation**
 - 全螢幕模式下按 `W` 開啟手寫工具列，可選 6 色、細 / 中 / 粗三檔，手寫內容定期存回伺服器，切換頁面自動回復。
+  Press `W` in fullscreen to open the handwriting toolbar; choose from 6 colors and 3 line widths. Strokes are saved to the server periodically and restored when returning to the same page.
 - 工具列提供三種模式切換：✏️ 筆（畫圖）、🖱️ 游標（點擊投影片仍可 pause/resume）、⬜ 橡皮擦（智慧型：碰到即移除整條筆劃）。
+  Three toolbar modes: ✏️ Pen (draw), 🖱️ Cursor (click-to-pause/resume still works), ⬜ Eraser (smart: touching a stroke removes the entire stroke instantly).
 
 ---
 
