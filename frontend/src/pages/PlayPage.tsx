@@ -2625,7 +2625,7 @@ export default function PlayPage() {
             cursor:
               "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56' viewBox='0 0 56 56'%3E%3Ccircle cx='28' cy='28' r='8' fill='none' stroke='%23ef4444' stroke-width='2.5'/%3E%3Cline x1='28' y1='2' x2='28' y2='20' stroke='%23ef4444' stroke-width='2.5' stroke-linecap='round'/%3E%3Cline x1='28' y1='36' x2='28' y2='54' stroke='%23ef4444' stroke-width='2.5' stroke-linecap='round'/%3E%3Cline x1='2' y1='28' x2='20' y2='28' stroke='%23ef4444' stroke-width='2.5' stroke-linecap='round'/%3E%3Cline x1='36' y1='28' x2='54' y2='28' stroke='%23ef4444' stroke-width='2.5' stroke-linecap='round'/%3E%3Ccircle cx='28' cy='28' r='1.5' fill='%23ef4444'/%3E%3C/svg%3E\") 28 28, crosshair",
           }}
-          onClick={() => playPause()}
+          onClick={() => { if (!drawingMode || drawingTool === 'cursor') playPause(); }}
           role="button"
           tabIndex={-1}
           aria-label={isPlaying ? '暫停語音播放' : '繼續語音播放'}
@@ -2642,12 +2642,25 @@ export default function PlayPage() {
               <div className="flex h-full w-1/2 shrink-0 flex-col p-2">
                 <div className="flex min-h-0 flex-1 items-center justify-center">
                   {currentPage?.image_url || displayedImageSrc ? (
-                    <img
-                      ref={fullscreenImageRef}
-                      src={displayedImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
-                      alt={`第 ${currentPage?.page_number ?? ''} 頁`}
-                      className="max-h-full max-w-full object-contain"
-                    />
+                    <div className="relative" style={{ lineHeight: 0 }}>
+                      <img
+                        ref={fullscreenImageRef}
+                        src={displayedImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
+                        alt={`第 ${currentPage?.page_number ?? ''} 頁`}
+                        className="max-h-full max-w-full object-contain"
+                      />
+                      {pdfId && currentPage && (
+                        <DrawingCanvas
+                          ref={drawingCanvasRef}
+                          pdfId={pdfId}
+                          pageNumber={currentPage.page_number}
+                          enabled={drawingMode && drawingTool !== 'cursor'}
+                          color={drawingColor}
+                          lineWidth={drawingTool === 'eraser' ? drawingLineWidth * 3 : drawingLineWidth}
+                          eraser={drawingTool === 'eraser'}
+                        />
+                      )}
+                    </div>
                   ) : (
                     <div className="text-slate-300">
                       {detail?.status === 'awaiting_script_confirmation' ? '等待確認分頁結果（確認後將開始產生圖片）' : '圖片產生中…'}
@@ -2761,15 +2774,75 @@ export default function PlayPage() {
               )}
             </div>
           ) : currentPage?.image_url || displayedImageSrc ? (
-            <img
-              ref={fullscreenImageRef}
-              src={displayedImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
-              alt={`第 ${currentPage?.page_number ?? ''} 頁`}
-              className="max-h-screen max-w-screen object-contain"
-            />
+            <div className="relative" style={{ lineHeight: 0 }}>
+              <img
+                ref={fullscreenImageRef}
+                src={displayedImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
+                alt={`第 ${currentPage?.page_number ?? ''} 頁`}
+                className="max-h-screen max-w-screen object-contain"
+              />
+              {pdfId && currentPage && (
+                <DrawingCanvas
+                  ref={drawingCanvasRef}
+                  pdfId={pdfId}
+                  pageNumber={currentPage.page_number}
+                  enabled={drawingMode && drawingTool !== 'cursor'}
+                  color={drawingColor}
+                  lineWidth={drawingTool === 'eraser' ? drawingLineWidth * 3 : drawingLineWidth}
+                  eraser={drawingTool === 'eraser'}
+                />
+              )}
+            </div>
           ) : (
             <div className="text-slate-300">
               {detail?.status === 'awaiting_script_confirmation' ? '等待確認分頁結果（確認後將開始產生圖片）' : '圖片產生中…'}
+            </div>
+          )}
+          {/* Drawing toolbar inside fullscreen */}
+          {drawingMode && pdfId && currentPage && !playQrCodeUrl && (
+            <div
+              className="absolute left-2 top-2 z-30 flex flex-col gap-1.5 rounded-lg border border-slate-600 bg-slate-900/95 p-1.5 shadow-xl backdrop-blur-sm"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-1">
+                <button type="button" title="筆" aria-label="筆模式"
+                  className={`flex h-7 w-7 items-center justify-center rounded border text-sm ${drawingTool === 'pen' ? 'border-slate-300 bg-slate-700 text-white' : 'border-slate-600 text-slate-400 hover:bg-slate-800'}`}
+                  onClick={() => setDrawingTool('pen')}>✏️</button>
+                <button type="button" title="游標" aria-label="游標模式"
+                  className={`flex h-7 w-7 items-center justify-center rounded border text-sm ${drawingTool === 'cursor' ? 'border-slate-300 bg-slate-700 text-white' : 'border-slate-600 text-slate-400 hover:bg-slate-800'}`}
+                  onClick={() => setDrawingTool('cursor')}>🖱️</button>
+                <button type="button" title="橡皮擦" aria-label="橡皮擦模式"
+                  className={`flex h-7 w-7 items-center justify-center rounded border text-sm ${drawingTool === 'eraser' ? 'border-slate-300 bg-slate-700 text-white' : 'border-slate-600 text-slate-400 hover:bg-slate-800'}`}
+                  onClick={() => setDrawingTool('eraser')}>⬜</button>
+                <button type="button" title="清除本頁所有手寫" aria-label="清除"
+                  className="flex h-7 w-7 items-center justify-center rounded border border-rose-600/50 bg-rose-600/20 text-sm text-rose-300 hover:bg-rose-600/30"
+                  onClick={() => drawingCanvasRef.current?.clearAll()}>🗑️</button>
+                <button type="button" title="關閉手寫（W）" aria-label="關閉"
+                  className="flex h-7 w-7 items-center justify-center rounded border border-slate-600 text-xs text-slate-400 hover:bg-slate-800"
+                  onClick={() => { setDrawingMode(false); setDrawingTool('pen'); }}>✕</button>
+              </div>
+              {drawingTool !== 'cursor' && (
+                <div className="flex flex-wrap gap-1">
+                  {DRAWING_COLORS.map(({ value, label }) => (
+                    <button key={value} type="button" title={label}
+                      className={`h-5 w-5 rounded-full border-2 transition-transform ${drawingColor === value ? 'scale-110 border-white' : 'border-transparent hover:border-slate-400'}`}
+                      style={{ background: value }}
+                      onClick={() => setDrawingColor(value)} aria-label={label} />
+                  ))}
+                </div>
+              )}
+              {drawingTool !== 'cursor' && (
+                <div className="flex gap-1">
+                  {DRAWING_WIDTHS.map(({ value, label }) => (
+                    <button key={value} type="button" title={label}
+                      className={`flex h-7 w-7 items-center justify-center rounded border ${drawingLineWidth === value ? 'border-slate-300 bg-slate-700' : 'border-slate-600 hover:bg-slate-800'}`}
+                      onClick={() => setDrawingLineWidth(value)} aria-label={label}>
+                      <span className="block rounded-full" style={{ width: `${Math.min(value * 2, 14)}px`, height: `${Math.min(value * 2, 14)}px`, background: drawingTool === 'eraser' ? '#94a3b8' : drawingColor }} />
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
           <div className="absolute right-4 top-4 flex items-center gap-2">
@@ -3609,93 +3682,6 @@ export default function PlayPage() {
                   style={{ height: transcriptFocusMode ? '10rem' : `${slideImageMaxHeightVh}vh` }}
                 >
                   {detail?.status === 'awaiting_script_confirmation' ? '等待確認分頁結果（確認後將開始產生圖片）' : '圖片產生中…'}
-                </div>
-              )}
-              {/* Drawing toolbar — only in fullscreen */}
-              {drawingMode && imageOnlyFullscreen && pdfId && currentPage && !playQrCodeUrl && (
-                <div
-                  className="absolute left-2 top-2 z-30 flex flex-col gap-1.5 rounded-lg border border-slate-600 bg-slate-900/95 p-1.5 shadow-xl backdrop-blur-sm"
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {/* Mode row: pen / cursor / eraser + clear + close */}
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      title="筆"
-                      aria-label="筆模式"
-                      className={`flex h-7 w-7 items-center justify-center rounded border text-sm ${drawingTool === 'pen' ? 'border-slate-300 bg-slate-700 text-white' : 'border-slate-600 text-slate-400 hover:bg-slate-800'}`}
-                      onClick={() => setDrawingTool('pen')}
-                    >✏️</button>
-                    <button
-                      type="button"
-                      title="游標"
-                      aria-label="游標模式"
-                      className={`flex h-7 w-7 items-center justify-center rounded border text-sm ${drawingTool === 'cursor' ? 'border-slate-300 bg-slate-700 text-white' : 'border-slate-600 text-slate-400 hover:bg-slate-800'}`}
-                      onClick={() => setDrawingTool('cursor')}
-                    >🖱️</button>
-                    <button
-                      type="button"
-                      title="橡皮擦"
-                      aria-label="橡皮擦模式"
-                      className={`flex h-7 w-7 items-center justify-center rounded border text-sm ${drawingTool === 'eraser' ? 'border-slate-300 bg-slate-700 text-white' : 'border-slate-600 text-slate-400 hover:bg-slate-800'}`}
-                      onClick={() => setDrawingTool('eraser')}
-                    >⬜</button>
-                    <button
-                      type="button"
-                      title="清除本頁所有手寫"
-                      aria-label="清除"
-                      className="flex h-7 w-7 items-center justify-center rounded border border-rose-600/50 bg-rose-600/20 text-sm text-rose-300 hover:bg-rose-600/30"
-                      onClick={() => drawingCanvasRef.current?.clearAll()}
-                    >🗑️</button>
-                    <button
-                      type="button"
-                      title="關閉手寫（W）"
-                      aria-label="關閉"
-                      className="flex h-7 w-7 items-center justify-center rounded border border-slate-600 text-xs text-slate-400 hover:bg-slate-800"
-                      onClick={() => setDrawingMode(false)}
-                    >✕</button>
-                  </div>
-                  {/* Color swatches (hidden in cursor mode) */}
-                  {drawingTool !== 'cursor' && (
-                    <div className="flex flex-wrap gap-1">
-                      {DRAWING_COLORS.map(({ value, label }) => (
-                        <button
-                          key={value}
-                          type="button"
-                          title={label}
-                          className={`h-5 w-5 rounded-full border-2 transition-transform ${drawingColor === value ? 'scale-110 border-white' : 'border-transparent hover:border-slate-400'}`}
-                          style={{ background: value }}
-                          onClick={() => setDrawingColor(value)}
-                          aria-label={label}
-                        />
-                      ))}
-                    </div>
-                  )}
-                  {/* Line width (hidden in cursor mode) */}
-                  {drawingTool !== 'cursor' && (
-                    <div className="flex gap-1">
-                      {DRAWING_WIDTHS.map(({ value, label }) => (
-                        <button
-                          key={value}
-                          type="button"
-                          title={label}
-                          className={`flex h-7 w-7 items-center justify-center rounded border ${drawingLineWidth === value ? 'border-slate-300 bg-slate-700' : 'border-slate-600 hover:bg-slate-800'}`}
-                          onClick={() => setDrawingLineWidth(value)}
-                          aria-label={label}
-                        >
-                          <span
-                            className="block rounded-full"
-                            style={{
-                              width: `${Math.min(value * 2, 14)}px`,
-                              height: `${Math.min(value * 2, 14)}px`,
-                              background: drawingTool === 'eraser' ? '#94a3b8' : drawingColor,
-                            }}
-                          />
-                        </button>
-                      ))}
-                    </div>
-                  )}
                 </div>
               )}
               {showSubtitle && currentSentence ? (
