@@ -13,13 +13,55 @@ const SAVE_DEBOUNCE_MS = 1500;
 export interface DrawingStroke {
   color: string;
   lineWidth: number; // logical width in ref-space units
-  points: [number, number][]; // each point: [x/REF_W, y/REF_H] in [0,1]
-  isEraser?: boolean;
+  points: [number, number][]; // each point: [x_norm, y_norm] in [0,1]
+  isEraser?: boolean; // kept for backward-compat with saved data
 }
 
 export interface DrawingData {
   strokes: DrawingStroke[];
 }
+
+// ---- hit-test helpers (pixel space) ----
+
+function distSq(ax: number, ay: number, bx: number, by: number): number {
+  return (ax - bx) ** 2 + (ay - by) ** 2;
+}
+
+function distPointToSegment(
+  px: number, py: number,
+  ax: number, ay: number,
+  bx: number, by: number,
+): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return Math.sqrt(distSq(px, py, ax, ay));
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+  return Math.sqrt(distSq(px, py, ax + t * dx, ay + t * dy));
+}
+
+function strokeHitsPoint(
+  stroke: DrawingStroke,
+  ex: number, ey: number,
+  radius: number,
+  cw: number, ch: number,
+): boolean {
+  const pts = stroke.points;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i];
+    if (!p) continue;
+    const px = p[0] * cw;
+    const py = p[1] * ch;
+    if (distSq(ex, ey, px, py) <= radius * radius) return true;
+    if (i + 1 < pts.length) {
+      const q = pts[i + 1];
+      if (q && distPointToSegment(ex, ey, px, py, q[0] * cw, q[1] * ch) <= radius) return true;
+    }
+  }
+  return false;
+}
+
+// ---- server helpers ----
 
 async function fetchDrawingFromServer(pdfId: string, pageNumber: number): Promise<DrawingData | null> {
   try {
@@ -49,6 +91,8 @@ async function saveDrawingToServer(
     },
   );
 }
+
+// ---- component ----
 
 export interface DrawingCanvasHandle {
   clearAll: () => void;
@@ -83,6 +127,7 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
         ctx.save();
         ctx.beginPath();
         if (stroke.isEraser) {
+          // backward-compat: old saved eraser strokes rendered with destination-out
           ctx.globalCompositeOperation = 'destination-out';
           ctx.strokeStyle = 'rgba(0,0,0,1)';
         } else {
@@ -178,45 +223,70 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
       ];
     }, []);
 
+    // Erase any strokes touched by the current pointer position.
+    const eraseAt = useCallback((nx: number, ny: number) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ex = nx * canvas.width;
+      const ey = ny * canvas.height;
+      // eraser hit radius = half the eraser stroke width in pixels
+      const radius = (lineWidth / REF_H) * canvas.height / 2;
+      const before = strokesRef.current.length;
+      strokesRef.current = strokesRef.current.filter(
+        (s) => !strokeHitsPoint(s, ex, ey, radius, canvas.width, canvas.height),
+      );
+      if (strokesRef.current.length !== before) redraw();
+    }, [lineWidth, redraw]);
+
     const handlePointerDown = useCallback(
       (e: React.PointerEvent<HTMLCanvasElement>) => {
         if (!enabled) return;
         e.preventDefault();
         canvasRef.current?.setPointerCapture(e.pointerId);
         isDrawingRef.current = true;
-        const norm = getNorm(e);
-        currentStrokeRef.current = {
-          color,
-          lineWidth: lineWidth * (REF_H / 1080),
-          points: [norm],
-          isEraser: eraser,
-        };
+        if (eraser) {
+          currentStrokeRef.current = null;
+          eraseAt(...getNorm(e));
+        } else {
+          currentStrokeRef.current = {
+            color,
+            lineWidth: lineWidth * (REF_H / 1080),
+            points: [getNorm(e)],
+          };
+        }
       },
-      [enabled, color, lineWidth, eraser, getNorm],
+      [enabled, color, lineWidth, eraser, getNorm, eraseAt],
     );
 
     const handlePointerMove = useCallback(
       (e: React.PointerEvent<HTMLCanvasElement>) => {
-        if (!enabled || !isDrawingRef.current || !currentStrokeRef.current) return;
+        if (!enabled || !isDrawingRef.current) return;
         e.preventDefault();
-        currentStrokeRef.current.points.push(getNorm(e));
-        redraw();
+        if (eraser) {
+          eraseAt(...getNorm(e));
+        } else {
+          if (!currentStrokeRef.current) return;
+          currentStrokeRef.current.points.push(getNorm(e));
+          redraw();
+        }
       },
-      [enabled, redraw, getNorm],
+      [enabled, eraser, redraw, getNorm, eraseAt],
     );
 
     const handlePointerUp = useCallback(
       (_e: React.PointerEvent<HTMLCanvasElement>) => {
-        if (!isDrawingRef.current || !currentStrokeRef.current) return;
+        if (!isDrawingRef.current) return;
         isDrawingRef.current = false;
-        if (currentStrokeRef.current.points.length >= 2) {
-          strokesRef.current.push(currentStrokeRef.current);
-          scheduleSave();
+        if (!eraser && currentStrokeRef.current) {
+          if (currentStrokeRef.current.points.length >= 2) {
+            strokesRef.current.push(currentStrokeRef.current);
+          }
+          currentStrokeRef.current = null;
+          redraw();
         }
-        currentStrokeRef.current = null;
-        redraw();
+        scheduleSave();
       },
-      [redraw, scheduleSave],
+      [eraser, redraw, scheduleSave],
     );
 
     const cursor = !enabled ? 'default' : eraser ? 'cell' : 'crosshair';
