@@ -56,6 +56,7 @@ import {
   type ShareAccessMode,
 } from '../lib/api';
 import AddPagesFromPromptModal from '../components/AddPagesFromPromptModal';
+import DrawingCanvas, { type DrawingCanvasHandle } from '../components/DrawingCanvas';
 import {
   DEFAULT_TTS_VOICE_BY_PROVIDER,
   TTS_VOICES_BY_PROVIDER,
@@ -82,6 +83,21 @@ import {
   getStoredShowSubtitle,
   getStoredInteractiveMode,
 } from '../i18n';
+
+const DRAWING_COLORS = [
+  { value: '#ef4444', label: '紅色' },
+  { value: '#3b82f6', label: '藍色' },
+  { value: '#1e293b', label: '黑色' },
+  { value: '#fbbf24', label: '黃色' },
+  { value: '#22c55e', label: '綠色' },
+  { value: '#f8fafc', label: '白色' },
+] as const;
+
+const DRAWING_WIDTHS = [
+  { value: 3, label: '細' },
+  { value: 6, label: '中' },
+  { value: 12, label: '粗' },
+] as const;
 
 const POLL_INTERVAL_MS = 3000;
 const AUDIO_RETRY_DELAY_MS = 800;
@@ -357,6 +373,12 @@ export default function PlayPage() {
   const [slideImageScale, setSlideImageScale] = useState(1);
   const IMAGE_MSG_PREFIX = '[image] ';
   const sourceItems: PdfSourceItem[] = detail?.sources ?? [];
+
+  // ---- Drawing / annotation state ----
+  const [drawingMode, setDrawingMode] = useState(false);
+  const [drawingColor, setDrawingColor] = useState('#ef4444');
+  const [drawingLineWidth, setDrawingLineWidth] = useState(6);
+  const drawingCanvasRef = useRef<DrawingCanvasHandle | null>(null);
 
   const effectiveAudioMuted = audioMuted || (syncEnabled && syncRole === 'follower' && !followerAudioUnlocked);
 
@@ -1355,7 +1377,15 @@ export default function PlayPage() {
           ev.preventDefault();
           setFullscreenPollControlOpen((open) => !open);
         }
+      } else if (ev.key.toLowerCase() === 'w') {
+        ev.preventDefault();
+        setDrawingMode((prev) => !prev);
       } else if (ev.key === 'Escape') {
+        if (drawingMode) {
+          ev.preventDefault();
+          setDrawingMode(false);
+          return;
+        }
         if (fullscreenPollControlOpen) {
           ev.preventDefault();
           setFullscreenPollControlOpen(false);
@@ -1375,7 +1405,7 @@ export default function PlayPage() {
     };
     window.addEventListener('keydown', onKey, { capture: true });
     return () => window.removeEventListener('keydown', onKey, { capture: true });
-  }, [playPause, goPrev, goNext, navigate, imageOnlyFullscreen, syncEnabled, syncRole, handleAiAnswerFollowerQuestions, fullscreenPollControlOpen]);
+  }, [playPause, goPrev, goNext, navigate, imageOnlyFullscreen, syncEnabled, syncRole, handleAiAnswerFollowerQuestions, fullscreenPollControlOpen, drawingMode]);
 
   // ---- Fullscreen API integration ----
   useEffect(() => {
@@ -3541,22 +3571,99 @@ export default function PlayPage() {
                   {!transcriptFocusMode && shareUrl ? <p className="max-w-[85vw] break-all text-center text-xs text-slate-300">{shareUrl}</p> : null}
                 </div>
               ) : currentPage?.image_url || displayedImageSrc ? (
-                <img
-                  src={displayedImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
-                  alt={`第 ${currentPage?.page_number ?? ''} 頁`}
-                  className="w-auto cursor-pointer rounded-lg border border-slate-800 shadow-xl"
-                  style={{ maxHeight: transcriptFocusMode ? '10rem' : `${slideImageMaxHeightVh}vh` }}
-                  onClick={() => playPause()}
-                  role="button"
-                  tabIndex={-1}
-                  aria-label={isPlaying ? '暫停語音播放' : '繼續語音播放'}
-                />
+                <div
+                  className="relative inline-block"
+                  style={{ lineHeight: 0, maxHeight: transcriptFocusMode ? '10rem' : `${slideImageMaxHeightVh}vh` }}
+                >
+                  <img
+                    src={displayedImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
+                    alt={`第 ${currentPage?.page_number ?? ''} 頁`}
+                    className="block h-auto w-auto rounded-lg border border-slate-800 shadow-xl"
+                    style={{
+                      maxHeight: transcriptFocusMode ? '10rem' : `${slideImageMaxHeightVh}vh`,
+                      cursor: drawingMode ? 'default' : 'pointer',
+                    }}
+                    onClick={() => { if (!drawingMode) playPause(); }}
+                    role="button"
+                    tabIndex={-1}
+                    aria-label={isPlaying ? '暫停語音播放' : '繼續語音播放'}
+                  />
+                  {pdfId && currentPage && (
+                    <DrawingCanvas
+                      ref={drawingCanvasRef}
+                      pdfId={pdfId}
+                      pageNumber={currentPage.page_number}
+                      enabled={drawingMode}
+                      color={drawingColor}
+                      lineWidth={drawingLineWidth}
+                    />
+                  )}
+                </div>
               ) : (
                 <div
                   className="flex w-full items-center justify-center rounded-lg border border-slate-800 text-slate-500"
                   style={{ height: transcriptFocusMode ? '10rem' : `${slideImageMaxHeightVh}vh` }}
                 >
                   {detail?.status === 'awaiting_script_confirmation' ? '等待確認分頁結果（確認後將開始產生圖片）' : '圖片產生中…'}
+                </div>
+              )}
+              {/* Drawing toolbar */}
+              {drawingMode && pdfId && currentPage && !playQrCodeUrl && (
+                <div
+                  className="absolute left-2 top-2 z-30 flex flex-col gap-1.5 rounded-lg border border-slate-600 bg-slate-900/95 p-2 shadow-xl backdrop-blur-sm"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex flex-wrap gap-1">
+                    {DRAWING_COLORS.map(({ value, label }) => (
+                      <button
+                        key={value}
+                        type="button"
+                        title={label}
+                        className={`h-6 w-6 rounded-full border-2 transition-transform ${drawingColor === value ? 'scale-110 border-white' : 'border-transparent hover:border-slate-400'}`}
+                        style={{ background: value }}
+                        onClick={() => setDrawingColor(value)}
+                        aria-label={label}
+                      />
+                    ))}
+                  </div>
+                  <div className="flex gap-1">
+                    {DRAWING_WIDTHS.map(({ value, label }) => (
+                      <button
+                        key={value}
+                        type="button"
+                        title={label}
+                        className={`flex h-8 w-8 items-center justify-center rounded border ${drawingLineWidth === value ? 'border-slate-300 bg-slate-700' : 'border-slate-600 hover:bg-slate-800'}`}
+                        onClick={() => setDrawingLineWidth(value)}
+                        aria-label={label}
+                      >
+                        <span
+                          className="block rounded-full"
+                          style={{
+                            width: `${Math.min(value * 2, 16)}px`,
+                            height: `${Math.min(value * 2, 16)}px`,
+                            background: drawingColor,
+                          }}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    className="rounded border border-rose-600/50 bg-rose-600/20 px-2 py-1 text-xs text-rose-300 hover:bg-rose-600/30"
+                    onClick={() => drawingCanvasRef.current?.clearAll()}
+                    title="清除本頁所有手寫"
+                  >
+                    清除
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded border border-slate-600 px-2 py-1 text-xs text-slate-400 hover:bg-slate-800"
+                    onClick={() => setDrawingMode(false)}
+                    title="關閉手寫（W）"
+                  >
+                    ✕ 關閉
+                  </button>
                 </div>
               )}
               {showSubtitle && currentSentence ? (
