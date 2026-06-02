@@ -406,6 +406,17 @@ function migrate(): void {
       FOREIGN KEY (pdf_id) REFERENCES pdfs(id) ON DELETE CASCADE,
       FOREIGN KEY (run_id) REFERENCES pipeline_runs(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS page_drawings (
+      pdf_id TEXT NOT NULL,
+      page_number INTEGER NOT NULL,
+      drawing_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (pdf_id, page_number),
+      FOREIGN KEY (pdf_id) REFERENCES pdfs(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_page_drawings_pdf ON page_drawings(pdf_id);
   `);
 
   logger.info({ dbPath: config.dbPath }, 'Database migrations applied');
