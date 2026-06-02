@@ -5,6 +5,62 @@
 語音簡報生成與播放系統。
 Voice presentation generation and playback system.
 
+---
+
+## 近期重要更新 / Recent Changes (since v1.3)
+
+### v1.4（2026-05-31）
+
+**投票與課堂互動**
+- 新增全螢幕投票控制面板（鍵盤 `P` 開關）及投票結果顯示切換按鈕。
+- 新增「互動模式」：每頁語音結束後自動暫停並啟動即時投票，設定持久化於瀏覽器。
+
+**AI 測驗（Quiz）**
+- 測驗問題 schema 更新，新增自動計分與 sync role 管理；測驗播放時自動進入全螢幕。
+
+**AI 多頁新增**
+- 可在現有簡報中插入任意頁數：輸入大綱 → AI 展開 → 圖片 / 腳本 / 語音逐頁生成，支援即時進度與中途取消。
+
+**認證與匯出入**
+- Google OAuth 設定可於 SettingsPage 直接設定 Client ID / Secret / Redirect URI，無需重啟。
+- 首頁卡片一鍵 ZIP 匯出；首頁新增 ZIP 匯入（含進度條與取消）。
+- 首頁類別旁新增標題關鍵字篩選欄位。
+
+**AI 內容生成**
+- OpenAI 腳本重寫改用 vision API，可參考投影片圖片重寫。
+- 新增每頁腳本長度限制設定。
+- YouTube 匯入 yt-dlp 執行與 Python 環境問題修正。
+
+---
+
+### v1.4.1（2026-06-01）
+
+- Docker 映像修正：於 runtime stage 安裝 `python3` 與 `ca-certificates`，確保 yt-dlp 在容器內正常執行。
+
+---
+
+### 開發中 / Unreleased（2026-06-03）
+
+**語音合成**
+- Gemini TTS 雙人模式新增明確語音選項（Charon / Aoede 等），可指定 Speaker A / B 各自的聲音。
+- Gemini TTS 新增「單人旁白」模式，由單一旁白者朗讀整頁腳本。
+
+**LLM 支援**
+- 新增 OpenRouter 作為 LLM 供應商，可在設定頁填入 API Key 與模型名稱切換；LLM 與 TTS 供應商設定分離。
+
+**重生流程**
+- 新增「改寫提示詞」重生模式：LLM 逐頁檢視現有圖片提示詞，根據使用者指示做最小修改，只對有變動的頁面重生圖片 / 腳本 / 語音，跳過其餘頁面以節省費用。
+
+**YouTube 匯入**
+- 新增下載與 STT 可見進度階段（`downloading_captions` / `downloading_audio` / `transcribing_audio`）。
+- 修正 VTT auto-caption 清理不足問題：去除 inline timing markers 與相鄰重複行；字幕輸入上限從 16K 提升至 64K，確保長影片全覆蓋。
+
+**手寫標注**
+- 全螢幕模式下按 `W` 開啟手寫工具列，可選 6 色、細 / 中 / 粗三檔，手寫內容定期存回伺服器，切換頁面自動回復。
+- 工具列提供三種模式切換：✏️ 筆（畫圖）、🖱️ 游標（點擊投影片仍可 pause/resume）、⬜ 橡皮擦（智慧型：碰到即移除整條筆劃）。
+
+---
+
 這個專案提供類似 NotebookLM 影片生成的工作流：可接受 PDF，抽取頁面圖片與文字，產生逐字稿，再合成語音。也支援以簡報大綱（例如 ChatGPT 產生、以 `## Slide XX` 分頁）直接產圖、產稿、配音。
 This project provides a NotebookLM-like video/presentation workflow: ingest PDF, extract page images and text, generate narration scripts, then synthesize speech. It also supports outline-driven generation (for example, ChatGPT output split by `## Slide XX`) to create images, scripts, and audio.
 
