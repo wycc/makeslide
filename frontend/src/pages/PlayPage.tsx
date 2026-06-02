@@ -1379,14 +1379,9 @@ export default function PlayPage() {
           setFullscreenPollControlOpen((open) => !open);
         }
       } else if (ev.key.toLowerCase() === 'w') {
-        const isFullscreen = Boolean(getAnyFullscreenElement()) || imageOnlyFullscreen;
-        if (isFullscreen) {
-          ev.preventDefault();
-          setDrawingMode((prev) => {
-            if (prev) setDrawingTool('pen');
-            return !prev;
-          });
-        }
+        ev.preventDefault();
+        setDrawingMode((prev) => !prev);
+        if (drawingMode) setDrawingTool('pen');
       } else if (ev.key === 'Escape') {
         if (drawingMode) {
           ev.preventDefault();
