@@ -457,6 +457,7 @@
 [ ] 下載 youtube 時，下載的字幕檔應該被存下來當成是來源，可以在來源被檢視。
 [ ] 下載 youtube 時，下載的語音檔應該被存下來當成是來源，可以在來源被檢視。STT 轉出的字幕檔也應被存下來可以在來源被檢視。
 [ ] 在上傳 PDF 時,　要提供選項單入或雙人的選項
+[ ] 在
 [x] 修正 YouTube 字幕過多頁數不足的問題：去除 VTT inline timing markers 和重複行，並將大綱生成的字幕輸入上限從 16K 提高到 64K（完成於分支: feature/youtube-captions-coverage-20260601）
 
 ## 工作記錄
@@ -466,9 +467,14 @@
 - 內容: 修正 YouTube auto-caption VTT 字幕清理不足導致簡報頁數偏少的問題。`fetchByYtDlp` 新增 strip inline timing markers（`<00:00:04.095><c>字</c>` 格式）及去除相鄰重複行（自動字幕每句重複 2-3 次）；`buildYoutubeOutlineAsSlideText` 的字幕輸入上限從 16K 提高到 64K，確保長達 80 分鐘的日文講座（原僅涵蓋前 3.5 分鐘）和 20 分鐘英文講座（原僅涵蓋 26%）的全部內容都能送入 LLM 大綱生成。
 
 [x] 加上手寫功能：按 W 開啟手寫功能表，可選線的顏色（6色）和粗細（3檔），有清除鍵刪除本頁手寫，手寫定期儲存回伺服器，下次進入同一頁時自動回復（完成於分支: feature/handwriting-drawing-20260602）
+[x] 手寫工具改進：只在全螢幕顯示，清除和關閉改成小圖示按鍵，加上模式切換（筆/游標/橡皮擦）（完成於分支: feature/handwriting-fullscreen-modes-20260603）
 
 ## 工作記錄
 
 - 時間: 2026-06-02 00:00:00 +0800
 - 分支: feature/handwriting-drawing-20260602
 - 內容: 在播放頁加上手寫標注功能。後端新增 `page_drawings` 資料表與 GET/PUT/DELETE `/api/pdfs/:id/pages/:n/drawing` API；前端新增 `DrawingCanvas` 元件（`<canvas>` 疊加在投影片圖片上，使用 PointerEvent 繪圖，1.5 秒去彈跳自動儲存）；PlayPage 在投影片圖片外加上 `relative inline-block` 包裝並疊入畫布，按 W 或 Escape 切換手寫模式，模式開啟時顯示浮動功能列（6 色色盤、細/中/粗三檔、清除、關閉），切換頁面時自動載入該頁已儲存的手寫。
+
+- 時間: 2026-06-03 00:00:00 +0800
+- 分支: feature/handwriting-fullscreen-modes-20260603
+- 內容: 手寫工具列改為僅在全螢幕模式下顯示；清除和關閉按鍵縮小為 28px 圖示按鈕（🗑️ ✕）；新增模式切換列（✏️ 筆、🖱️ 游標、⬜ 橡皮擦）；游標模式下畫布不捕捉 pointer events，點擊投影片可正常 pause/resume；橡皮擦使用 destination-out 合成模式清除筆跡；W 鍵只在全螢幕時有效，Escape 關閉手寫並重置為筆模式。
