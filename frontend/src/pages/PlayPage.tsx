@@ -376,6 +376,7 @@ export default function PlayPage() {
 
   // ---- Drawing / annotation state ----
   const [drawingMode, setDrawingMode] = useState(false);
+  const [drawingTool, setDrawingTool] = useState<'pen' | 'cursor' | 'eraser'>('pen');
   const [drawingColor, setDrawingColor] = useState('#ef4444');
   const [drawingLineWidth, setDrawingLineWidth] = useState(6);
   const drawingCanvasRef = useRef<DrawingCanvasHandle | null>(null);
@@ -1378,12 +1379,19 @@ export default function PlayPage() {
           setFullscreenPollControlOpen((open) => !open);
         }
       } else if (ev.key.toLowerCase() === 'w') {
-        ev.preventDefault();
-        setDrawingMode((prev) => !prev);
+        const isFullscreen = Boolean(getAnyFullscreenElement()) || imageOnlyFullscreen;
+        if (isFullscreen) {
+          ev.preventDefault();
+          setDrawingMode((prev) => {
+            if (prev) setDrawingTool('pen');
+            return !prev;
+          });
+        }
       } else if (ev.key === 'Escape') {
         if (drawingMode) {
           ev.preventDefault();
           setDrawingMode(false);
+          setDrawingTool('pen');
           return;
         }
         if (fullscreenPollControlOpen) {
@@ -3581,9 +3589,9 @@ export default function PlayPage() {
                     className="block h-auto w-auto rounded-lg border border-slate-800 shadow-xl"
                     style={{
                       maxHeight: transcriptFocusMode ? '10rem' : `${slideImageMaxHeightVh}vh`,
-                      cursor: drawingMode ? 'default' : 'pointer',
+                      cursor: (drawingMode && drawingTool !== 'cursor') ? 'default' : 'pointer',
                     }}
-                    onClick={() => { if (!drawingMode) playPause(); }}
+                    onClick={() => { if (!drawingMode || drawingTool === 'cursor') playPause(); }}
                     role="button"
                     tabIndex={-1}
                     aria-label={isPlaying ? '暫停語音播放' : '繼續語音播放'}
@@ -3593,9 +3601,10 @@ export default function PlayPage() {
                       ref={drawingCanvasRef}
                       pdfId={pdfId}
                       pageNumber={currentPage.page_number}
-                      enabled={drawingMode}
+                      enabled={drawingMode && drawingTool !== 'cursor'}
                       color={drawingColor}
-                      lineWidth={drawingLineWidth}
+                      lineWidth={drawingTool === 'eraser' ? drawingLineWidth * 3 : drawingLineWidth}
+                      eraser={drawingTool === 'eraser'}
                     />
                   )}
                 </div>
@@ -3607,63 +3616,91 @@ export default function PlayPage() {
                   {detail?.status === 'awaiting_script_confirmation' ? '等待確認分頁結果（確認後將開始產生圖片）' : '圖片產生中…'}
                 </div>
               )}
-              {/* Drawing toolbar */}
-              {drawingMode && pdfId && currentPage && !playQrCodeUrl && (
+              {/* Drawing toolbar — only in fullscreen */}
+              {drawingMode && imageOnlyFullscreen && pdfId && currentPage && !playQrCodeUrl && (
                 <div
-                  className="absolute left-2 top-2 z-30 flex flex-col gap-1.5 rounded-lg border border-slate-600 bg-slate-900/95 p-2 shadow-xl backdrop-blur-sm"
+                  className="absolute left-2 top-2 z-30 flex flex-col gap-1.5 rounded-lg border border-slate-600 bg-slate-900/95 p-1.5 shadow-xl backdrop-blur-sm"
                   onPointerDown={(e) => e.stopPropagation()}
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <div className="flex flex-wrap gap-1">
-                    {DRAWING_COLORS.map(({ value, label }) => (
-                      <button
-                        key={value}
-                        type="button"
-                        title={label}
-                        className={`h-6 w-6 rounded-full border-2 transition-transform ${drawingColor === value ? 'scale-110 border-white' : 'border-transparent hover:border-slate-400'}`}
-                        style={{ background: value }}
-                        onClick={() => setDrawingColor(value)}
-                        aria-label={label}
-                      />
-                    ))}
+                  {/* Mode row: pen / cursor / eraser + clear + close */}
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      title="筆"
+                      aria-label="筆模式"
+                      className={`flex h-7 w-7 items-center justify-center rounded border text-sm ${drawingTool === 'pen' ? 'border-slate-300 bg-slate-700 text-white' : 'border-slate-600 text-slate-400 hover:bg-slate-800'}`}
+                      onClick={() => setDrawingTool('pen')}
+                    >✏️</button>
+                    <button
+                      type="button"
+                      title="游標"
+                      aria-label="游標模式"
+                      className={`flex h-7 w-7 items-center justify-center rounded border text-sm ${drawingTool === 'cursor' ? 'border-slate-300 bg-slate-700 text-white' : 'border-slate-600 text-slate-400 hover:bg-slate-800'}`}
+                      onClick={() => setDrawingTool('cursor')}
+                    >🖱️</button>
+                    <button
+                      type="button"
+                      title="橡皮擦"
+                      aria-label="橡皮擦模式"
+                      className={`flex h-7 w-7 items-center justify-center rounded border text-sm ${drawingTool === 'eraser' ? 'border-slate-300 bg-slate-700 text-white' : 'border-slate-600 text-slate-400 hover:bg-slate-800'}`}
+                      onClick={() => setDrawingTool('eraser')}
+                    >⬜</button>
+                    <button
+                      type="button"
+                      title="清除本頁所有手寫"
+                      aria-label="清除"
+                      className="flex h-7 w-7 items-center justify-center rounded border border-rose-600/50 bg-rose-600/20 text-sm text-rose-300 hover:bg-rose-600/30"
+                      onClick={() => drawingCanvasRef.current?.clearAll()}
+                    >🗑️</button>
+                    <button
+                      type="button"
+                      title="關閉手寫（W）"
+                      aria-label="關閉"
+                      className="flex h-7 w-7 items-center justify-center rounded border border-slate-600 text-xs text-slate-400 hover:bg-slate-800"
+                      onClick={() => setDrawingMode(false)}
+                    >✕</button>
                   </div>
-                  <div className="flex gap-1">
-                    {DRAWING_WIDTHS.map(({ value, label }) => (
-                      <button
-                        key={value}
-                        type="button"
-                        title={label}
-                        className={`flex h-8 w-8 items-center justify-center rounded border ${drawingLineWidth === value ? 'border-slate-300 bg-slate-700' : 'border-slate-600 hover:bg-slate-800'}`}
-                        onClick={() => setDrawingLineWidth(value)}
-                        aria-label={label}
-                      >
-                        <span
-                          className="block rounded-full"
-                          style={{
-                            width: `${Math.min(value * 2, 16)}px`,
-                            height: `${Math.min(value * 2, 16)}px`,
-                            background: drawingColor,
-                          }}
+                  {/* Color swatches (hidden in cursor mode) */}
+                  {drawingTool !== 'cursor' && (
+                    <div className="flex flex-wrap gap-1">
+                      {DRAWING_COLORS.map(({ value, label }) => (
+                        <button
+                          key={value}
+                          type="button"
+                          title={label}
+                          className={`h-5 w-5 rounded-full border-2 transition-transform ${drawingColor === value ? 'scale-110 border-white' : 'border-transparent hover:border-slate-400'}`}
+                          style={{ background: value }}
+                          onClick={() => setDrawingColor(value)}
+                          aria-label={label}
                         />
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    type="button"
-                    className="rounded border border-rose-600/50 bg-rose-600/20 px-2 py-1 text-xs text-rose-300 hover:bg-rose-600/30"
-                    onClick={() => drawingCanvasRef.current?.clearAll()}
-                    title="清除本頁所有手寫"
-                  >
-                    清除
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded border border-slate-600 px-2 py-1 text-xs text-slate-400 hover:bg-slate-800"
-                    onClick={() => setDrawingMode(false)}
-                    title="關閉手寫（W）"
-                  >
-                    ✕ 關閉
-                  </button>
+                      ))}
+                    </div>
+                  )}
+                  {/* Line width (hidden in cursor mode) */}
+                  {drawingTool !== 'cursor' && (
+                    <div className="flex gap-1">
+                      {DRAWING_WIDTHS.map(({ value, label }) => (
+                        <button
+                          key={value}
+                          type="button"
+                          title={label}
+                          className={`flex h-7 w-7 items-center justify-center rounded border ${drawingLineWidth === value ? 'border-slate-300 bg-slate-700' : 'border-slate-600 hover:bg-slate-800'}`}
+                          onClick={() => setDrawingLineWidth(value)}
+                          aria-label={label}
+                        >
+                          <span
+                            className="block rounded-full"
+                            style={{
+                              width: `${Math.min(value * 2, 14)}px`,
+                              height: `${Math.min(value * 2, 14)}px`,
+                              background: drawingTool === 'eraser' ? '#94a3b8' : drawingColor,
+                            }}
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
               {showSubtitle && currentSentence ? (

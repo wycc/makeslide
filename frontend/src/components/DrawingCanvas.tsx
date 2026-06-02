@@ -14,6 +14,7 @@ export interface DrawingStroke {
   color: string;
   lineWidth: number; // logical width in ref-space units
   points: [number, number][]; // each point: [x/REF_W, y/REF_H] in [0,1]
+  isEraser?: boolean;
 }
 
 export interface DrawingData {
@@ -59,10 +60,11 @@ export interface DrawingCanvasProps {
   enabled: boolean;
   color: string;
   lineWidth: number;
+  eraser?: boolean;
 }
 
 const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
-  function DrawingCanvas({ pdfId, pageNumber, enabled, color, lineWidth }, ref) {
+  function DrawingCanvas({ pdfId, pageNumber, enabled, color, lineWidth, eraser }, ref) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const strokesRef = useRef<DrawingStroke[]>([]);
     const currentStrokeRef = useRef<DrawingStroke | null>(null);
@@ -80,7 +82,13 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
         if (stroke.points.length < 2) return;
         ctx.save();
         ctx.beginPath();
-        ctx.strokeStyle = stroke.color;
+        if (stroke.isEraser) {
+          ctx.globalCompositeOperation = 'destination-out';
+          ctx.strokeStyle = 'rgba(0,0,0,1)';
+        } else {
+          ctx.globalCompositeOperation = 'source-over';
+          ctx.strokeStyle = stroke.color;
+        }
         ctx.lineWidth = (stroke.lineWidth / REF_H) * canvas.height;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
@@ -181,9 +189,10 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
           color,
           lineWidth: lineWidth * (REF_H / 1080),
           points: [norm],
+          isEraser: eraser,
         };
       },
-      [enabled, color, lineWidth, getNorm],
+      [enabled, color, lineWidth, eraser, getNorm],
     );
 
     const handlePointerMove = useCallback(
@@ -210,6 +219,8 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
       [redraw, scheduleSave],
     );
 
+    const cursor = !enabled ? 'default' : eraser ? 'cell' : 'crosshair';
+
     return (
       <canvas
         ref={canvasRef}
@@ -219,7 +230,7 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
           width: '100%',
           height: '100%',
           pointerEvents: enabled ? 'auto' : 'none',
-          cursor: enabled ? 'crosshair' : 'default',
+          cursor,
           touchAction: 'none',
           borderRadius: 'inherit',
         }}
