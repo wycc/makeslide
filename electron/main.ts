@@ -1,3 +1,6 @@
+// Must be set before any backend imports so pino-pretty transport is skipped
+process.env.NODE_ENV ??= 'production';
+
 import { app, BrowserWindow, shell } from 'electron';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';

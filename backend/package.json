@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "../scripts/with-node-env.sh tsx watch src/server.ts",
     "build": "../scripts/with-node-env.sh tsc -p tsconfig.json",
-    "build:bundle": "esbuild src/server.ts --bundle --platform=node --format=cjs --outfile=dist/server.bundle.cjs --external:better-sqlite3 --external:sharp --external:@img --external:canvas --external:ffmpeg-static --external:\"pdfjs-dist/*\" --external:pdfjs-dist \"--define:import.meta.url=__importMetaUrl\" \"--banner:js=const __importMetaUrl = require('url').pathToFileURL(__filename).href;\"",
+    "build:bundle": "node build-bundle.mjs",
     "start": "../scripts/with-node-env.sh node dist/server.js",
     "typecheck": "../scripts/with-node-env.sh tsc --noEmit",
     "test": "../scripts/with-node-env.sh tsx --test ./test/*.test.ts"
