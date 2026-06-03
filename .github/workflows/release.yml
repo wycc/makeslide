@@ -114,9 +114,13 @@ jobs:
           "
 
       # Bypass scripts/with-node-env.sh (bash-only wrapper, not needed on CI)
-      - name: Build backend
+      - name: Build backend (tsc)
         working-directory: backend
         run: npx tsc -p tsconfig.json
+
+      - name: Bundle backend for Electron (esbuild)
+        working-directory: backend
+        run: npm run build:bundle
 
       - name: Build frontend
         working-directory: frontend

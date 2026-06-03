@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "../scripts/with-node-env.sh tsx watch src/server.ts",
     "build": "../scripts/with-node-env.sh tsc -p tsconfig.json",
+    "build:bundle": "esbuild src/server.ts --bundle --platform=node --format=esm --outfile=dist/server.bundle.js --external:better-sqlite3 --external:sharp --external:@img --external:canvas --external:ffmpeg-static --external:\"pdfjs-dist/*\" --external:pdfjs-dist",
     "start": "../scripts/with-node-env.sh node dist/server.js",
     "typecheck": "../scripts/with-node-env.sh tsc --noEmit",
     "test": "../scripts/with-node-env.sh tsx --test ./test/*.test.ts"
@@ -35,6 +36,7 @@
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.11",
     "@types/node": "^20.14.10",
+    "esbuild": "^0.27.7",
     "tsx": "^4.19.0",
     "typescript": "^5.5.3"
   }

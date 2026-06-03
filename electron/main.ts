@@ -32,7 +32,8 @@ function createWindow(): void {
 async function startBackend(): Promise<number> {
   // In the packaged app, the backend is at resources/app/backend/dist/server.js.
   // In development, __dirname is electron/ so go up one level.
-  const serverPath = path.join(__dirname, '..', 'backend', 'dist', 'server.js');
+  // Use the esbuild bundle (all pure-JS deps inlined; native addons remain external).
+  const serverPath = path.join(__dirname, '..', 'backend', 'dist', 'server.bundle.js');
   // On Windows, path.join() produces "C:\..." which is not a valid ESM URL scheme.
   // pathToFileURL converts it to "file:///C:/..." before dynamic import().
   const serverUrl = pathToFileURL(serverPath).href;
