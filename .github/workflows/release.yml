@@ -1,0 +1,120 @@
+name: Release
+
+# Triggered by pushing a version tag (e.g. git tag v1.5.0 && git push origin v1.5.0)
+# or manually via workflow_dispatch (useful for re-running on an existing tag like v1.4.1).
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to build (e.g. v1.4.1)'
+        required: true
+        default: 'v1.4.1'
+
+env:
+  # Works for both triggers: dispatch overrides, push falls back to ref_name
+  TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  # ──────────────────────────────────────────────
+  # 1. Ensure the GitHub Release exists
+  # ──────────────────────────────────────────────
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create release if it does not exist
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "${{ env.TAG }}" --repo "${{ github.repository }}" 2>/dev/null || \
+            gh release create "${{ env.TAG }}" \
+              --repo "${{ github.repository }}" \
+              --title "${{ env.TAG }}" \
+              --notes "Release ${{ env.TAG }}"
+
+  # ──────────────────────────────────────────────
+  # 2. Build & push Docker image
+  # ──────────────────────────────────────────────
+  docker:
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        run: |
+          docker build -t wycca1/makeslide-app:${{ env.TAG }} .
+          docker push wycca1/makeslide-app:${{ env.TAG }}
+
+  # ──────────────────────────────────────────────
+  # 3. Build Windows exe (windows-latest for correct native binaries)
+  # ──────────────────────────────────────────────
+  dist-win:
+    needs: create-release
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Sync package.json version with the release tag so the output filename
+      # matches: MakeSlide-1.4.1-win-x64.zip
+      - name: Set version from tag
+        shell: bash
+        run: |
+          VERSION="${{ env.TAG }}"
+          VERSION="${VERSION#v}"
+          node -e "
+            const fs = require('fs');
+            const p = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            p.version = '$VERSION';
+            fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');
+          "
+
+      - name: Build backend & frontend
+        run: npm run build
+
+      - name: Build Electron main
+        run: npx tsc -p electron/tsconfig.json
+
+      - name: Package Windows exe
+        run: npx electron-builder --win --config electron-builder.json
+
+      - name: Upload installer and zip to release
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ env.TAG }}"
+          VERSION="${VERSION#v}"
+          REPO="${{ github.repository }}"
+          # Upload installer (.exe) if present, then the portable zip
+          if ls dist-electron/*Setup*.exe 2>/dev/null; then
+            gh release upload "${{ env.TAG }}" dist-electron/*Setup*.exe \
+              --repo "$REPO" --clobber
+          fi
+          gh release upload "${{ env.TAG }}" \
+            "dist-electron/MakeSlide-${VERSION}-win-x64.zip" \
+            --repo "$REPO" --clobber
