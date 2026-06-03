@@ -11,22 +11,14 @@
     "backend/dist/server.bundle.cjs",
     "frontend/dist/**/*",
     "package.json",
-    "node_modules/better-sqlite3/**/*",
-    "node_modules/sharp/**/*",
-    "node_modules/@img/**/*",
-    "node_modules/canvas/**/*",
-    "node_modules/ffmpeg-static/**/*",
-    "node_modules/pdfjs-dist/**/*"
+    { "from": "node_modules/better-sqlite3", "to": "node_modules/better-sqlite3" },
+    { "from": "node_modules/sharp",          "to": "node_modules/sharp" },
+    { "from": "node_modules/@img",           "to": "node_modules/@img" },
+    { "from": "node_modules/canvas",         "to": "node_modules/canvas" },
+    { "from": "node_modules/ffmpeg-static",  "to": "node_modules/ffmpeg-static" },
+    { "from": "node_modules/pdfjs-dist",     "to": "node_modules/pdfjs-dist" }
   ],
-  "asar": true,
-  "asarUnpack": [
-    "**/node_modules/ffmpeg-static/**",
-    "**/node_modules/sharp/**",
-    "**/node_modules/@img/**",
-    "**/node_modules/better-sqlite3/**",
-    "**/node_modules/canvas/**",
-    "**/node_modules/pdfjs-dist/**"
-  ],
+  "asar": false,
   "artifactName": "${productName}-${version}-win-x64.${ext}",
   "win": {
     "target": [
