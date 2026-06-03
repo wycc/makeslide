@@ -32,6 +32,7 @@ export interface SystemAiSettings {
   account_settings_dir?: string;
   account_settings_file?: string;
   openai_api_key?: string;
+  openai_base_url?: string;
   gemini_api_key?: string;
   has_openai_key: boolean;
   has_gemini_key: boolean;
@@ -56,6 +57,7 @@ export interface SystemAiSettings {
 
 export interface UpdateSystemAiSettingsPayload {
   openai_api_key?: string;
+  openai_base_url?: string;
   gemini_api_key?: string;
   llm_provider?: 'openai' | 'gemini';
   tts_provider?: 'openai' | 'gemini';

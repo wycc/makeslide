@@ -1,8 +1,11 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import ffmpegStatic from 'ffmpeg-static';
 import { pageAudioPath, pageImagePath, videoPath } from '../../services/storage';
 import { runCommand } from '../poppler';
+
+const FFMPEG = ffmpegStatic ?? 'ffmpeg';
 
 export interface GenerateVideoInput {
   pdfId: string;
@@ -37,7 +40,7 @@ export async function generateVideo(
       const audio = pageAudioPath(pdfId, pageNumber, pageCount);
       const segment = path.join(segmentsDir, `${String(i + 1).padStart(4, '0')}.mp4`);
 
-      await runCommand('ffmpeg', [
+      await runCommand(FFMPEG, [
         '-y',
         '-loop',
         '1',
@@ -77,7 +80,7 @@ export async function generateVideo(
     await fs.promises.writeFile(concatFile, concatContent + '\n', 'utf8');
 
     const output = videoPath(pdfId);
-    await runCommand('ffmpeg', [
+    await runCommand(FFMPEG, [
       '-y',
       '-f',
       'concat',

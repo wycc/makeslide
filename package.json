@@ -7,11 +7,18 @@
     "backend",
     "frontend"
   ],
+  "main": "electron-dist/main.js",
   "scripts": {
     "dev": "scripts/with-node-env.sh concurrently -n backend,frontend -c blue,green \"npm:dev:backend\" \"npm:dev:frontend\"",
     "dev:backend": "npm --workspace backend run dev",
     "dev:frontend": "npm --workspace frontend run dev",
     "build": "scripts/with-node-env.sh npm --workspace backend run build && scripts/with-node-env.sh npm --workspace frontend run build",
+    "build:electron": "tsc -p electron/tsconfig.json",
+    "build:all": "npm run build && npm run build:electron",
+    "electron:dev": "npm run build && npm run build:electron && electron .",
+    "dist:win": "npm run build:all && electron-builder --win --config electron-builder.json",
+    "dist:mac": "npm run build:all && electron-builder --mac --config electron-builder.json",
+    "dist:linux": "npm run build:all && electron-builder --linux --config electron-builder.json",
     "install:all": "scripts/with-node-env.sh npm install",
     "test": "scripts/with-node-env.sh npm --workspace backend test",
     "lint": "scripts/with-node-env.sh npm run typecheck",
@@ -19,6 +26,8 @@
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
+    "electron": "^42.3.2",
+    "electron-builder": "^26.8.1",
     "playwright": "^1.60.0"
   },
   "engines": {

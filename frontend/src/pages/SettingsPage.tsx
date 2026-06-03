@@ -54,6 +54,9 @@ export default function SettingsPage() {
   const [googleClientId, setGoogleClientId] = useState('');
   const [googleClientSecret, setGoogleClientSecret] = useState('');
   const [googleRedirectUri, setGoogleRedirectUri] = useState('');
+  const [cguAirEnabled, setCguAirEnabled] = useState(false);
+
+  const CGU_AIR_BASE_URL = 'https://air.cgu.edu.tw/cgullmapi/v1';
 
   const loadStatus = useCallback(async () => {
     setLoading(true);
@@ -86,6 +89,7 @@ export default function SettingsPage() {
       setGoogleClientId(s.google_client_id ?? '');
       setGoogleClientSecret(s.google_client_secret ?? '');
       setGoogleRedirectUri(s.google_redirect_uri ?? '');
+      setCguAirEnabled(s.openai_base_url === CGU_AIR_BASE_URL);
       const cachedUserCode = window.localStorage.getItem(LOCAL_USER_CODE_KEY)?.trim() ?? '';
       setUserCode((auth?.authenticated ? s.user_code : cachedUserCode) ?? '');
       if (s.has_openai_key || s.has_gemini_key) {
@@ -138,6 +142,7 @@ export default function SettingsPage() {
     try {
       await updateSystemAiSettings({
         openai_api_key: openaiApiKey.trim() || undefined,
+        openai_base_url: cguAirEnabled ? CGU_AIR_BASE_URL : '',
         gemini_api_key: geminiApiKey.trim() || undefined,
         llm_provider: llmProvider,
         tts_provider: ttsProvider,
@@ -196,6 +201,8 @@ export default function SettingsPage() {
     googleClientId,
     googleClientSecret,
     googleRedirectUri,
+    cguAirEnabled,
+    CGU_AIR_BASE_URL,
     t,
   ]);
 
@@ -393,6 +400,17 @@ export default function SettingsPage() {
             className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none ring-0 focus:border-slate-500"
             placeholder="sk-..."
           />
+
+          <label className="mt-2 block text-sm text-slate-300">
+            <span className="inline-flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={cguAirEnabled}
+                onChange={(e) => setCguAirEnabled(e.target.checked)}
+              />
+              {t('settings.cguAirEnabled')}
+            </span>
+          </label>
 
           <label className="mb-2 block text-sm text-slate-300">GEMINI_API_KEY</label>
           <input

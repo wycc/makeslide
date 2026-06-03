@@ -1,0 +1,47 @@
+{
+  "appId": "com.makeslide.app",
+  "productName": "MakeSlide",
+  "copyright": "Copyright © 2025 MakeSlide",
+  "directories": {
+    "output": "dist-electron",
+    "buildResources": "build"
+  },
+  "files": [
+    "electron-dist/**/*",
+    "backend/dist/**/*",
+    "frontend/dist/**/*",
+    "node_modules/**/*",
+    "backend/node_modules/**/*",
+    "package.json"
+  ],
+  "extraResources": [],
+  "asar": true,
+  "asarUnpack": [
+    "**/node_modules/ffmpeg-static/**",
+    "**/node_modules/sharp/**",
+    "**/node_modules/better-sqlite3/**",
+    "**/node_modules/canvas/**",
+    "**/node_modules/@img/**"
+  ],
+  "win": {
+    "target": [
+      { "target": "nsis", "arch": ["x64"] },
+      { "target": "portable", "arch": ["x64"] }
+    ],
+    "icon": "build/icon.ico"
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "installerIcon": "build/icon.ico",
+    "uninstallerIcon": "build/icon.ico"
+  },
+  "mac": {
+    "target": [{ "target": "dmg", "arch": ["x64", "arm64"] }],
+    "icon": "build/icon.icns"
+  },
+  "linux": {
+    "target": [{ "target": "AppImage", "arch": ["x64"] }],
+    "icon": "build/icon.png"
+  }
+}

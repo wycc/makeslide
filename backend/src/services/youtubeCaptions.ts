@@ -1,5 +1,8 @@
 import { getSubtitles } from 'youtube-caption-extractor';
 import { spawn } from 'node:child_process';
+import ffmpegStatic from 'ffmpeg-static';
+
+const FFMPEG = ffmpegStatic ?? 'ffmpeg';
 import fs from 'node:fs';
 import https from 'node:https';
 import os from 'node:os';
@@ -100,7 +103,7 @@ async function runYtDlp(
 
 async function runFfmpeg(args: string[], videoId: string): Promise<boolean> {
   return await new Promise<boolean>((resolve) => {
-    const p = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    const p = spawn(FFMPEG, args, { stdio: ['ignore', 'ignore', 'pipe'] });
     let stderr = '';
     p.stderr?.on('data', (buf) => {
       stderr += String(buf);
@@ -271,6 +274,7 @@ async function transcribeByStt(
         '--audio-format', 'mp3',
         // Downmix to mono 16 kHz at a low bitrate — plenty for speech and keeps
         // chunks small enough for the transcription endpoint.
+        '--ffmpeg-location', FFMPEG,
         '--postprocessor-args', 'ffmpeg:-ac 1 -ar 16000 -b:a 48k',
         '--ignore-errors',
         '-o', path.join(tmpDir, 'audio.%(ext)s'),

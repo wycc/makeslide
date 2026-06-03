@@ -7,6 +7,7 @@ export type AppLanguage = 'zh-TW' | 'en';
 
 export interface RuntimeAiSettings {
   openaiApiKey: string;
+  openaiBaseUrl: string;
   geminiApiKey: string;
   llmProvider: AiProvider;
   ttsProvider: AiProvider;
@@ -70,6 +71,7 @@ function loadAccountEnvSettings(): Partial<RuntimeAiSettings> {
   const values = parseEnvContent(fs.readFileSync(envPath, 'utf8'));
   return {
     openaiApiKey: values.OPENAI_API_KEY,
+    openaiBaseUrl: values.OPENAI_BASE_URL,
     geminiApiKey: values.GEMINI_API_KEY,
     llmProvider: values.LLM_PROVIDER === 'gemini' ? 'gemini' : values.LLM_PROVIDER === 'openai' ? 'openai' : undefined,
     ttsProvider: values.TTS_PROVIDER === 'gemini' ? 'gemini' : values.TTS_PROVIDER === 'openai' ? 'openai' : undefined,
@@ -98,6 +100,7 @@ function loadAccountEnvSettings(): Partial<RuntimeAiSettings> {
 
 let runtime: RuntimeAiSettings = {
   openaiApiKey: config.openaiApiKey,
+  openaiBaseUrl: process.env.OPENAI_BASE_URL?.trim() || '',
   geminiApiKey: config.geminiApiKey,
   llmProvider: config.llmProvider,
   ttsProvider: config.ttsProvider,
@@ -135,6 +138,7 @@ export function setRuntimeAiSettings(next: Partial<RuntimeAiSettings>): RuntimeA
     ...next,
   };
   if (typeof next.openaiApiKey === 'string') process.env.OPENAI_API_KEY = next.openaiApiKey;
+  if (typeof next.openaiBaseUrl === 'string') process.env.OPENAI_BASE_URL = next.openaiBaseUrl;
   if (typeof next.geminiApiKey === 'string') process.env.GEMINI_API_KEY = next.geminiApiKey;
   if (typeof next.llmProvider === 'string') process.env.LLM_PROVIDER = next.llmProvider;
   if (typeof next.ttsProvider === 'string') process.env.TTS_PROVIDER = next.ttsProvider;
@@ -163,6 +167,7 @@ export async function persistEnvSettings(next: Partial<RuntimeAiSettings>): Prom
 
   const pairs: Array<[string, string | undefined]> = [
     ['OPENAI_API_KEY', next.openaiApiKey],
+    ['OPENAI_BASE_URL', next.openaiBaseUrl],
     ['GEMINI_API_KEY', next.geminiApiKey],
     ['LLM_PROVIDER', next.llmProvider],
     ['TTS_PROVIDER', next.ttsProvider],

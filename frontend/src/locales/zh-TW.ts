@@ -31,6 +31,7 @@ export const zhTW = {
   'settings.llmProvider': 'LLM 供應商',
   'settings.ttsProvider': 'TTS 供應商',
   'settings.googleAuthEnabled': '啟用 Google 帳號登入',
+  'settings.cguAirEnabled': '使用長庚大學 CGU Air API（將 baseURL 改為 https://air.cgu.edu.tw/cgullmapi/v1）',
   'settings.geminiSpeaker1': 'Gemini Speaker 1 人設（選填）',
   'settings.geminiSpeaker2': 'Gemini Speaker 2 人設（選填）',
   'settings.geminiSpeaker1Placeholder': '例如：沉穩、專業、男聲主持',

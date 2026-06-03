@@ -5,7 +5,7 @@ import {
   persistEnvSettings,
   setRuntimeAiSettings,
 } from '../../services/aiSettings';
-import { setOpenAIApiKeyRuntime } from '../../services/openai';
+import { setOpenAIApiKeyRuntime, setOpenAIBaseUrlRuntime } from '../../services/openai';
 import { IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
 import { UpdateSystemAiSettingsBodySchema, errorResponse } from './shared';
 
@@ -39,6 +39,7 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       account_settings_dir: location.accountDir,
       account_settings_file: location.envPath,
       openai_api_key: runtime.openaiApiKey,
+      openai_base_url: runtime.openaiBaseUrl,
       gemini_api_key: runtime.geminiApiKey,
       llm_provider: runtime.llmProvider,
       tts_provider: runtime.ttsProvider,
@@ -68,6 +69,7 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
     const data = parsed.data;
     const next = {
       openaiApiKey: data.openai_api_key,
+      openaiBaseUrl: data.openai_base_url,
       geminiApiKey: data.gemini_api_key,
       llmProvider: data.llm_provider,
       ttsProvider: data.tts_provider,
@@ -88,6 +90,7 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       googleRedirectUri: data.google_redirect_uri,
     };
     if (typeof next.openaiApiKey === 'string') setOpenAIApiKeyRuntime(next.openaiApiKey);
+    if (typeof next.openaiBaseUrl === 'string') setOpenAIBaseUrlRuntime(next.openaiBaseUrl);
     const runtime = setRuntimeAiSettings(next);
     await persistEnvSettings(next);
     const location = getAccountSettingsLocation();
@@ -96,6 +99,7 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       account_settings_dir: location.accountDir,
       account_settings_file: location.envPath,
       openai_api_key: runtime.openaiApiKey,
+      openai_base_url: runtime.openaiBaseUrl,
       gemini_api_key: runtime.geminiApiKey,
       llm_provider: runtime.llmProvider,
       tts_provider: runtime.ttsProvider,

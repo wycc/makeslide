@@ -1,5 +1,8 @@
 import fs from 'node:fs';
 import { spawn } from 'node:child_process';
+import ffmpegStatic from 'ffmpeg-static';
+
+const FFMPEG = ffmpegStatic ?? 'ffmpeg';
 import PQueue from 'p-queue';
 import { parseFile } from 'music-metadata';
 import { APIError } from 'openai';
@@ -291,7 +294,7 @@ async function synthesizeOnePage(params: {
         : `${targetPath}.tmp.mp3`;
       await fs.promises.writeFile(tmpInputPath, buffer);
       try {
-        await runCommand('ffmpeg', [
+        await runCommand(FFMPEG, [
           '-y',
           '-i',
           tmpInputPath,

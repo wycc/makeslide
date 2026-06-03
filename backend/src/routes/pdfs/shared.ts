@@ -303,6 +303,7 @@ const RegenerateBatchBodySchema = z.object({
 
 export const UpdateSystemAiSettingsBodySchema = z.object({
   openai_api_key: z.string().optional(),
+  openai_base_url: z.string().optional(),
   gemini_api_key: z.string().optional(),
   llm_provider: z.enum(['openai', 'gemini']).optional(),
   tts_provider: z.enum(['openai', 'gemini']).optional(),

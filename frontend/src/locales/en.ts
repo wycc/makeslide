@@ -31,6 +31,7 @@ export const en = {
   'settings.llmProvider': 'LLM provider',
   'settings.ttsProvider': 'TTS provider',
   'settings.googleAuthEnabled': 'Enable Google account login',
+  'settings.cguAirEnabled': 'Use CGU Air API — Chang Gung University (sets baseURL to https://air.cgu.edu.tw/cgullmapi/v1)',
   'settings.geminiSpeaker1': 'Gemini Speaker 1 persona (optional)',
   'settings.geminiSpeaker2': 'Gemini Speaker 2 persona (optional)',
   'settings.geminiSpeaker1Placeholder': 'For example: calm, professional, male host',

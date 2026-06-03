@@ -200,7 +200,11 @@ export async function buildApp() {
   return app;
 }
 
-async function main(): Promise<void> {
+/**
+ * Start the backend server. Returns the port it is listening on.
+ * Called both by the CLI entry point and by the Electron main process.
+ */
+export async function startServer(): Promise<number> {
   ensureWorkspaceRuntimePaths();
   await import("./db"); // Initialize DB and run migrations after path setup
 
@@ -237,30 +241,15 @@ async function main(): Promise<void> {
     "OpenAI M4 TTS settings",
   );
 
-  // Warn (but don't crash) when poppler binaries are unavailable — the
-  // pipeline will fail clearly for individual jobs in that case.
   const popplerCheck = await checkPoppler();
-  if (!popplerCheck.pdftoppm || !popplerCheck.pdfinfo) {
-    logger.warn(
-      {
-        popplerBinPath: config.popplerBinPath || "(PATH)",
-        pdftoppm: popplerCheck.pdftoppm,
-        pdfinfo: popplerCheck.pdfinfo,
-      },
-      "poppler-utils not fully available — install with e.g. `sudo apt-get install poppler-utils` or `brew install poppler`. PDF processing will fail until this is resolved.",
-    );
-  } else {
-    logger.info(
-      { versionOutput: popplerCheck.versionOutput.trim().split("\n")[0] },
-      "poppler-utils detected",
-    );
-  }
+  logger.info(
+    { versionOutput: popplerCheck.versionOutput.trim().split("\n")[0] },
+    "PDF renderer ready",
+  );
 
   // Initialise queue + crash-recovery rescan
   getProcessingQueue();
   rescanPendingOnStartup();
-  // Defensive self-healing: periodically rescan pending rows in case a job
-  // stays in `uploaded` after transient enqueue misses.
   const rescanTimer = setInterval(() => {
     try {
       rescanPendingOnStartup();
@@ -271,17 +260,22 @@ async function main(): Promise<void> {
   rescanTimer.unref();
 
   const app = await buildApp();
+  await app.listen({ port: config.port, host: "0.0.0.0" });
+  logger.info(
+    {
+      protocol: config.httpsKeyPath && config.httpsCertPath ? "https" : "http",
+      port: config.port,
+      storageRoot: config.storageRoot,
+      dbPath: config.dbPath,
+    },
+    "Backend server listening",
+  );
+  return config.port;
+}
+
+async function main(): Promise<void> {
   try {
-    await app.listen({ port: config.port, host: "0.0.0.0" });
-    logger.info(
-      {
-        protocol: config.httpsKeyPath && config.httpsCertPath ? "https" : "http",
-        port: config.port,
-        storageRoot: config.storageRoot,
-        dbPath: config.dbPath,
-      },
-      "Backend server listening",
-    );
+    await startServer();
   } catch (err) {
     logger.error({ err }, "Failed to start server");
     process.exit(1);

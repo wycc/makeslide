@@ -2,6 +2,10 @@ import OpenAI, { APIError } from 'openai';
 import { toFile } from 'openai/uploads';
 import fs from 'node:fs';
 import path from 'node:path';
+import { brotliDecompress as brotliDecompressRaw } from 'node:zlib';
+import { promisify } from 'node:util';
+
+const brotliDecompressAsync = promisify(brotliDecompressRaw);
 import type { ChatCompletion, ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { z } from 'zod';
 import { config } from '../config';
@@ -11,6 +15,7 @@ import { getRuntimeAiSettings } from './aiSettings';
 
 let cachedClient: OpenAI | null = null;
 let runtimeApiKeyOverride: string | null = null;
+let runtimeBaseUrlOverride: string | null = null;
 const LLM_REQUEST_LOG_FILE = path.join(process.cwd(), 'backend', 'data', 'llm-requests.log.jsonl');
 
 function extractImageFileName(url: string): string {
@@ -90,20 +95,60 @@ async function appendLlmResponseLog(entry: unknown): Promise<void> {
  */
 export function getOpenAIClient(): OpenAI {
   if (cachedClient) return cachedClient;
-  const apiKey = (runtimeApiKeyOverride ?? getRuntimeAiSettings().openaiApiKey ?? '').trim();
+  const settings = getRuntimeAiSettings();
+  const apiKey = (runtimeApiKeyOverride ?? settings.openaiApiKey ?? '').trim();
   if (!apiKey) {
     throw new Error(
       'OPENAI_API_KEY is not set — cannot call OpenAI. Update your .env and restart.',
     );
   }
+  const baseURL = (runtimeBaseUrlOverride ?? settings.openaiBaseUrl ?? '').trim() || undefined;
+
+  const debugFetch: typeof globalThis.fetch = async (url, init) => {
+    const resp = await globalThis.fetch(url as Parameters<typeof globalThis.fetch>[0], init);
+    const clone = resp.clone();
+    const buf = Buffer.from(await clone.arrayBuffer());
+
+    const respHeaders: Record<string, string> = {};
+    resp.headers.forEach((v, k) => { respHeaders[k] = v; });
+    console.log(`[OpenAI raw response] status=${resp.status} url=${url.toString()}`);
+    console.log(`[OpenAI raw headers] ${JSON.stringify(respHeaders)}`);
+    console.log(`[OpenAI raw hex] ${buf.toString('hex')}`);
+    console.log(`[OpenAI raw utf8] ${buf.toString('utf8')}`);
+
+    // Auto-fix: if server sent brotli without Content-Encoding header, decompress manually
+    const contentEncoding = resp.headers.get('content-encoding') ?? '';
+    if (contentEncoding.includes('br') || (!contentEncoding && buf[0] === 0x1b)) {
+      try {
+        const decompressed = await brotliDecompressAsync(buf);
+        console.log(`[OpenAI brotli decompressed] ${decompressed.toString('utf8')}`);
+        const fixedHeaders = new Headers(resp.headers);
+        fixedHeaders.delete('content-encoding');
+        fixedHeaders.delete('content-length');
+        return new Response(decompressed, {
+          status: resp.status,
+          statusText: resp.statusText,
+          headers: fixedHeaders,
+        });
+      } catch (e) {
+        console.log(`[OpenAI brotli decompress failed] ${String(e)}`);
+      }
+    }
+
+    return resp;
+  };
+
   cachedClient = new OpenAI({
     apiKey,
+    baseURL,
+    fetch: debugFetch,
     timeout: config.openaiRequestTimeoutMs,
     maxRetries: config.openaiMaxRetries,
   });
   logger.info(
     {
       model: config.openaiLlmModel,
+      baseURL: baseURL ?? '(default)',
       timeoutMs: config.openaiRequestTimeoutMs,
       maxRetries: config.openaiMaxRetries,
       maxPages: config.openaiMaxPages,
@@ -116,6 +161,11 @@ export function getOpenAIClient(): OpenAI {
 export function setOpenAIApiKeyRuntime(apiKey: string): void {
   runtimeApiKeyOverride = apiKey.trim();
   process.env.OPENAI_API_KEY = runtimeApiKeyOverride;
+  cachedClient = null;
+}
+
+export function setOpenAIBaseUrlRuntime(baseUrl: string): void {
+  runtimeBaseUrlOverride = baseUrl.trim() || null;
   cachedClient = null;
 }
 
@@ -282,7 +332,7 @@ export async function callChatJSON<T>(
       completion_tokens: completion.usage?.completion_tokens ?? 0,
       total_tokens: completion.usage?.total_tokens ?? 0,
     };
-    console.log(JSON.stringify(params.messages));
+    console.log(JSON.stringify(sanitizeMessagesForLog(params.messages)));
     console.log('---------------');
     console.log(JSON.stringify(completion));
     console.log({ rawContent, usage, latencyMs });
