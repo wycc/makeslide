@@ -128,7 +128,7 @@ jobs:
         run: npx tsc -p electron/tsconfig.json
 
       - name: Package Windows exe
-        run: npx electron-builder --win --config electron-builder.json
+        run: npx electron-builder --win --config electron-builder.json --publish never
 
       - name: Upload installer and zip to release
         shell: bash
