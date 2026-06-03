@@ -93,8 +93,16 @@ jobs:
             fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');
           "
 
-      - name: Build backend & frontend
-        run: npm run build
+      # Bypass scripts/with-node-env.sh (bash-only wrapper, not needed on CI)
+      - name: Build backend
+        working-directory: backend
+        run: npx tsc -p tsconfig.json
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npx tsc --noEmit
+          npx vite build
 
       - name: Build Electron main
         run: npx tsc -p electron/tsconfig.json
