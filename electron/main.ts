@@ -1,6 +1,6 @@
 import { app, BrowserWindow, shell } from 'electron';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -33,7 +33,10 @@ async function startBackend(): Promise<number> {
   // In the packaged app, the backend is at resources/app/backend/dist/server.js.
   // In development, __dirname is electron/ so go up one level.
   const serverPath = path.join(__dirname, '..', 'backend', 'dist', 'server.js');
-  const { startServer } = await import(serverPath) as { startServer: () => Promise<number> };
+  // On Windows, path.join() produces "C:\..." which is not a valid ESM URL scheme.
+  // pathToFileURL converts it to "file:///C:/..." before dynamic import().
+  const serverUrl = pathToFileURL(serverPath).href;
+  const { startServer } = await import(serverUrl) as { startServer: () => Promise<number> };
   return startServer();
 }
 
