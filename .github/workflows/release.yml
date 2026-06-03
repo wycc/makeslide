@@ -118,7 +118,9 @@ jobs:
         working-directory: backend
         run: npx tsc -p tsconfig.json
 
-      - name: Bundle backend for Electron (esbuild)
+      # Bundle backend as CJS so Electron's asar-patched require() can resolve
+      # native addons (better-sqlite3, canvas, sharp…) in app.asar.unpacked.
+      - name: Bundle backend for Electron (esbuild CJS)
         working-directory: backend
         run: npm run build:bundle
 

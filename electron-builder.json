@@ -8,7 +8,7 @@
   },
   "files": [
     "electron-dist/**/*",
-    "backend/dist/server.bundle.js",
+    "backend/dist/server.bundle.cjs",
     "frontend/dist/**/*",
     "package.json",
     "node_modules/better-sqlite3/**/*",

@@ -4,6 +4,7 @@
   "private": true,
   "description": "PDF 語音簡報生成與播放系統 (M1)",
   "author": "MakeSlide",
+  "type": "module",
   "workspaces": [
     "backend",
     "frontend"
