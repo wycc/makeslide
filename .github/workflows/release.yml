@@ -16,6 +16,7 @@ on:
 env:
   # Works for both triggers: dispatch overrides, push falls back to ref_name
   TAG: ${{ inputs.tag || github.ref_name }}
+  DOCKER_IMAGE: wycca1/makeslide-app
 
 jobs:
   # ──────────────────────────────────────────────
@@ -26,15 +27,33 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Create release if it does not exist
+      - name: Create or update release with Docker usage
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release view "${{ env.TAG }}" --repo "${{ github.repository }}" 2>/dev/null || \
-            gh release create "${{ env.TAG }}" \
-              --repo "${{ github.repository }}" \
-              --title "${{ env.TAG }}" \
-              --notes "Release ${{ env.TAG }}"
+          TAG="${{ env.TAG }}"
+          IMAGE="${{ env.DOCKER_IMAGE }}:${TAG}"
+          REPO="${{ github.repository }}"
+
+          DOCKER_BLOCK="## Docker Image
+
+          \`\`\`bash
+          docker pull ${IMAGE}
+          docker run --rm -p 8888:8888 --env-file .env ${IMAGE}
+          \`\`\`"
+
+          if EXISTING=$(gh release view "$TAG" --repo "$REPO" --json body -q '.body' 2>/dev/null); then
+            # Release exists — append Docker block only if not already present
+            if ! echo "$EXISTING" | grep -q "docker pull"; then
+              printf '%s\n\n%s\n' "$EXISTING" "$DOCKER_BLOCK" > /tmp/notes.txt
+              gh release edit "$TAG" --repo "$REPO" --notes-file /tmp/notes.txt
+            fi
+          else
+            # New release — create with Docker block as initial notes
+            printf '%s\n' "$DOCKER_BLOCK" > /tmp/notes.txt
+            gh release create "$TAG" --repo "$REPO" \
+              --title "$TAG" --notes-file /tmp/notes.txt
+          fi
 
   # ──────────────────────────────────────────────
   # 2. Build & push Docker image
