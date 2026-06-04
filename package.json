@@ -27,7 +27,7 @@
     "typecheck": "scripts/with-node-env.sh npm --workspace backend run typecheck && scripts/with-node-env.sh npm --workspace frontend run typecheck"
   },
   "dependencies": {
-    "better-sqlite3": "*",
+    "better-sqlite3": "^12.0.0",
     "canvas": "*",
     "sharp": "*",
     "ffmpeg-static": "*",
