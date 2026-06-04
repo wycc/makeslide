@@ -26,6 +26,13 @@
     "lint": "scripts/with-node-env.sh npm run typecheck",
     "typecheck": "scripts/with-node-env.sh npm --workspace backend run typecheck && scripts/with-node-env.sh npm --workspace frontend run typecheck"
   },
+  "dependencies": {
+    "better-sqlite3": "*",
+    "canvas": "*",
+    "sharp": "*",
+    "ffmpeg-static": "*",
+    "pdfjs-dist": "*"
+  },
   "devDependencies": {
     "concurrently": "^8.2.2",
     "electron": "^42.3.2",
