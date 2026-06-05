@@ -477,3 +477,11 @@
 - 時間: 2026-06-03 00:00:00 +0800
 - 分支: feature/handwriting-fullscreen-modes-20260603
 - 內容: 手寫工具列改為僅在全螢幕模式下顯示；清除和關閉按鍵縮小為 28px 圖示按鈕（🗑️ ✕）；新增模式切換列（✏️ 筆、🖱️ 游標、⬜ 橡皮擦）；游標模式下畫布不捕捉 pointer events，點擊投影片可正常 pause/resume；橡皮擦使用 destination-out 合成模式清除筆跡；W 鍵只在全螢幕時有效，Escape 關閉手寫並重置為筆模式。
+
+[x] 生成可在 Windows 上執行的 exe 檔並測試可以執行（完成於分支: feature/windows-exe-build-20260605）
+
+## 工作記錄
+
+- 時間: 2026-06-05 09:37:00 +0800
+- 分支: feature/windows-exe-build-20260605
+- 內容: 完成 Windows exe 打包與執行測試。修正 electron/main.ts 以使用 pathToFileURL 解決 Windows 路徑不相容問題（file:///C:/... 格式）、改用 server.bundle.cjs 以支援 asar native addon 解析、並在 backend import 前設定 NODE_ENV=production 跳過 pino-pretty。使用 electron-builder 打包產出 dist-electron/MakeSlide-1.1.1-win-x64.exe（153MB NSIS 安裝器）與 MakeSlide-1.1.1-win-x64.zip。啟動 win-unpacked/MakeSlide.exe 後確認 4 個 Electron 進程正常運行（主進程 + 渲染進程）。打包時繞過 7zip symlink 限制的方法：建立 7za.bat 包裝器將退出碼 2 轉為 0，透過 SZA_PATH 環境變數讓 app-builder 使用此包裝器。

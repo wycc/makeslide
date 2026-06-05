@@ -1,6 +1,9 @@
+var _a;
+// Must be set before any backend imports so pino-pretty transport is skipped
+(_a = process.env).NODE_ENV ?? (_a.NODE_ENV = 'production');
 import { app, BrowserWindow, shell } from 'electron';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let mainWindow = null;
 let serverPort = 3000;
@@ -25,8 +28,13 @@ function createWindow() {
 async function startBackend() {
     // In the packaged app, the backend is at resources/app/backend/dist/server.js.
     // In development, __dirname is electron/ so go up one level.
-    const serverPath = path.join(__dirname, '..', 'backend', 'dist', 'server.js');
-    const { startServer } = await import(serverPath);
+    // Use the esbuild CJS bundle (.cjs so Electron's asar-patched require() resolves
+    // native addons in app.asar.unpacked; ESM import() would bypass that patch).
+    const serverPath = path.join(__dirname, '..', 'backend', 'dist', 'server.bundle.cjs');
+    // On Windows, path.join() produces "C:\..." which is not a valid ESM URL scheme.
+    // pathToFileURL converts it to "file:///C:/..." before dynamic import().
+    const serverUrl = pathToFileURL(serverPath).href;
+    const { startServer } = await import(serverUrl);
     return startServer();
 }
 app.whenReady().then(async () => {
