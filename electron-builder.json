@@ -16,14 +16,10 @@
   "artifactName": "${productName}-${version}-win-x64.${ext}",
   "win": {
     "target": [
-      { "target": "nsis", "arch": ["x64"] },
-      { "target": "zip",  "arch": ["x64"] }
+      { "target": "portable", "arch": ["x64"] },
+      { "target": "zip",      "arch": ["x64"] }
     ],
     "icon": "build/icon.ico"
-  },
-  "nsis": {
-    "oneClick": false,
-    "allowToChangeInstallationDirectory": true
   },
   "mac": {
     "target": [{ "target": "dmg", "arch": ["x64", "arm64"] }],
