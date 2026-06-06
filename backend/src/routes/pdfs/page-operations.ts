@@ -706,7 +706,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     let maskBuffer: Buffer | null = null;
     let referenceBuffer: Buffer | null = null;
     let prompt = '';
-    const parts = request.parts();
+    const parts = request.parts({ limits: { files: 2 } });
     for await (const part of parts) {
       if (part.type === 'file') {
         const buf = await part.toBuffer();
