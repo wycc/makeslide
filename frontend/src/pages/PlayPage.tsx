@@ -309,6 +309,7 @@ export default function PlayPage() {
     audio: false,
   });
   const [regenJob, setRegenJob] = useState<RegenJobState | null>(null);
+  const [regenSelectedPages, setRegenSelectedPages] = useState<Set<number>>(new Set());
   const [regenStopBusy, setRegenStopBusy] = useState(false);
   const [regenRollbackBusy, setRegenRollbackBusy] = useState(false);
   const [confirmScriptBusy, setConfirmScriptBusy] = useState(false);
@@ -2180,6 +2181,9 @@ export default function PlayPage() {
     setRegenBannerDismissed(false);
     // 記住啟動前的頁碼，之後 rollback 可以跳回
     preRegenPageIdxRef.current = currentIdx;
+    const selectedPageNumbers = regenSelectedPages.size > 0
+      ? Array.from(regenSelectedPages).sort((a, b) => a - b)
+      : undefined;
     try {
       const started = await startRegenerateJob(pdfId, {
         scripts: regenOptions.script
@@ -2197,6 +2201,7 @@ export default function PlayPage() {
               ].join('\n\n'),
             }
           : null,
+        page_numbers: selectedPageNumbers,
       });
       autoJumpedJobIdRef.current = null;
       setRegenJob(started);
@@ -2206,7 +2211,7 @@ export default function PlayPage() {
       setRegenAllMsg(err instanceof ApiError ? err.message : '重生失敗');
       setRegenAllBusy(false);
     }
-  }, [pdfId, regenAllPrompt, regenScriptPrompt, regenScriptMaxCharsPerPage, regenAnySelected, regenOptions, regenJobRunning, currentIdx, deckImageStylePrompt, isReadOnlyProcessing]);
+  }, [pdfId, regenAllPrompt, regenScriptPrompt, regenScriptMaxCharsPerPage, regenAnySelected, regenOptions, regenJobRunning, currentIdx, deckImageStylePrompt, isReadOnlyProcessing, regenSelectedPages]);
 
   const handleConfirmScript = useCallback(async () => {
     if (!pdfId) return;
@@ -4500,7 +4505,31 @@ export default function PlayPage() {
                 <div
                   key={p.page_number}
                   data-page-number={p.page_number}
-                  onClick={() => setCurrentIdx(idx)}
+                  onClick={(e) => {
+                    if (e.ctrlKey || e.metaKey) {
+                      e.preventDefault();
+                      setRegenSelectedPages((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(p.page_number)) next.delete(p.page_number);
+                        else next.add(p.page_number);
+                        return next;
+                      });
+                    } else if (e.shiftKey) {
+                      e.preventDefault();
+                      const from = Math.min(currentIdx, idx);
+                      const to = Math.max(currentIdx, idx);
+                      setRegenSelectedPages((prev) => {
+                        const next = new Set(prev);
+                        for (let i = from; i <= to; i++) {
+                          const page = deckPages[i];
+                          if (page) next.add(page.page_number);
+                        }
+                        return next;
+                      });
+                    } else {
+                      setCurrentIdx(idx);
+                    }
+                  }}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => {
                     e.preventDefault();
@@ -4516,8 +4545,14 @@ export default function PlayPage() {
                       .find((f): f is File => !!f);
                     if (file) void handleReplaceImageFile(file, p.page_number);
                   }}
-                  className={`relative overflow-hidden rounded border ${idx === currentIdx ? 'border-cyan-400' : 'border-slate-700'} ${draggingPage === p.page_number ? 'opacity-50' : ''}`}
-                  title={`第 ${p.page_number} 頁`}
+                  className={`relative overflow-hidden rounded border ${
+                    regenSelectedPages.has(p.page_number)
+                      ? 'border-fuchsia-400 ring-1 ring-fuchsia-500/50'
+                      : idx === currentIdx
+                        ? 'border-cyan-400'
+                        : 'border-slate-700'
+                  } ${draggingPage === p.page_number ? 'opacity-50' : ''}`}
+                  title={`第 ${p.page_number} 頁${regenSelectedPages.has(p.page_number) ? '（已選取重生）' : ''}`}
                 >
                   <button
                     type="button"
@@ -4587,6 +4622,24 @@ export default function PlayPage() {
                 </div>
               ))}
             </div>
+            {regenSelectedPages.size > 0 ? (
+              <div className="flex items-center justify-between gap-2 border-t border-fuchsia-500/30 bg-fuchsia-500/10 px-3 py-1.5">
+                <span className="text-xs text-fuchsia-300">
+                  已選 {regenSelectedPages.size} 頁將重生（Ctrl/Shift 點選）
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setRegenSelectedPages(new Set())}
+                  className="text-xs text-fuchsia-400 hover:text-fuchsia-200"
+                >
+                  清除
+                </button>
+              </div>
+            ) : (
+              <div className="border-t border-slate-800/50 px-3 py-1">
+                <p className="text-[10px] text-slate-600">Ctrl/Shift 點選縮圖可選取特定頁面重生</p>
+              </div>
+            )}
             <div className="border-t border-slate-800 px-3 py-2">
               <button
                 type="button"
@@ -5123,6 +5176,11 @@ export default function PlayPage() {
             <p className="mb-3 text-xs text-slate-400">
               可多選；執行順序固定為 <span className="font-semibold text-slate-200">圖檔 → 逐字稿 → 語音</span>。
             </p>
+            <div className="mb-3 rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-3 py-2 text-xs text-fuchsia-200">
+              {regenSelectedPages.size > 0
+                ? `僅重生已選取的 ${regenSelectedPages.size} 張投影片（第 ${Array.from(regenSelectedPages).sort((a, b) => a - b).join('、') } 頁）`
+                : `重生全部 ${deckPages.length} 張投影片`}
+            </div>
             <div className="mb-3 space-y-2">
               <div className="rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100">
                 已套用整份圖片風格設定（可於上方「🖼️ 風格」調整）。

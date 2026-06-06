@@ -299,6 +299,9 @@ const RegenerateBatchBodySchema = z.object({
         .max(4000, 'images.prompt 不可超過 4000 字'),
     })
     .optional(),
+  page_numbers: z
+    .array(z.number().int().min(1))
+    .optional(),
 });
 
 export const UpdateSystemAiSettingsBodySchema = z.object({

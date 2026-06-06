@@ -107,6 +107,7 @@ export interface RegenerateOptions {
   scripts?: { prompt?: string | null; script_max_chars_per_page?: number | null } | null;
   audio?: { voice?: string | null; speed?: number | null } | null;
   images?: { prompt: string } | null;
+  page_numbers?: number[] | null;
 }
 
 const jobs = new Map<string, RegenJobState>();
@@ -747,12 +748,13 @@ async function runJob(
           step.name === 'script' ? 'generate_scripts' : step.name === 'audio' ? 'synthesize_audio' : 'render_pages',
           { job_id: state.job_id, regenerate: true },
         );
+        const pageNumbers = options.page_numbers?.length ? options.page_numbers : null;
         if (step.name === 'script') {
-          await runRegenerateScripts(state, step, options.scripts ?? {}, shouldAbort, timingRun);
+          await runRegenerateScripts(state, step, options.scripts ?? {}, shouldAbort, timingRun, pageNumbers);
         } else if (step.name === 'audio') {
-          await runRegenerateAudio(state, step, options.audio ?? {}, shouldAbort, timingRun);
+          await runRegenerateAudio(state, step, options.audio ?? {}, shouldAbort, timingRun, pageNumbers);
         } else if (step.name === 'image') {
-          await runRegenerateImages(state, step, options.images!, shouldAbort, timingRun);
+          await runRegenerateImages(state, step, options.images!, shouldAbort, timingRun, pageNumbers);
         }
         finishStage(timingStage, 'succeeded', { completed: step.completed, total: step.total });
         step.status = 'completed';
@@ -916,17 +918,19 @@ async function runRegenerateScripts(
   opts: { prompt?: string | null; script_max_chars_per_page?: number | null },
   shouldAbort: () => boolean,
   timingRun: TimingRunContext | null,
+  pageNumbers: number[] | null = null,
 ): Promise<void> {
   const pdfId = state.pdf_id;
   const pdfRow = getPdfRowStrict(pdfId);
   const pageCount = pdfRow.page_count ?? 0;
   if (pageCount <= 0) throw new Error('page_count 不可用');
 
-  const pageRows = db
+  const allPageRows = db
     .prepare(
       `SELECT page_number, text_path FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
     )
     .all(pdfId) as Array<{ page_number: number; text_path: string | null }>;
+  const pageRows = pageNumbers ? allPageRows.filter((p) => pageNumbers.includes(p.page_number)) : allPageRows;
   step.total = pageRows.length;
   const imageQuality = config.openaiImageQuality;
   const imageTimeoutMs =
@@ -1050,6 +1054,7 @@ async function runRegenerateAudio(
   opts: { voice?: string | null; speed?: number | null },
   shouldAbort: () => boolean,
   timingRun: TimingRunContext | null,
+  pageNumbers: number[] | null = null,
 ): Promise<void> {
   const pdfId = state.pdf_id;
   const pdfRow = getPdfRowStrict(pdfId);
@@ -1057,7 +1062,8 @@ async function runRegenerateAudio(
   if (pageCount <= 0) throw new Error('page_count 不可用');
 
   // 刪除既有語音，避免 synthesizeAudio idempotent skip 拿到舊音檔。
-  for (let n = 1; n <= pageCount; n++) {
+  const pagesToDelete = pageNumbers ?? Array.from({ length: pageCount }, (_, i) => i + 1);
+  for (const n of pagesToDelete) {
     try {
       await fs.promises.rm(pageAudioPath(pdfId, n, pageCount), { force: true });
     } catch {
@@ -1065,8 +1071,9 @@ async function runRegenerateAudio(
     }
   }
 
-  const scripts = await readScriptsForTts(pdfId, pageCount);
-  const nonEmpty = scripts.filter((s) => s.script.trim().length > 0);
+  const allScripts = await readScriptsForTts(pdfId, pageCount);
+  const filtered = pageNumbers ? allScripts.filter((s) => pageNumbers.includes(s.pageNumber)) : allScripts;
+  const nonEmpty = filtered.filter((s) => s.script.trim().length > 0);
   step.total = nonEmpty.length;
   if (nonEmpty.length === 0) {
     throw new Error('沒有可用的逐字稿，無法批次重生語音');
@@ -1157,6 +1164,7 @@ async function runRegenerateImages(
   opts: { prompt: string },
   shouldAbort: () => boolean,
   timingRun: TimingRunContext | null,
+  pageNumbers: number[] | null = null,
 ): Promise<void> {
   const pdfId = state.pdf_id;
   const pdfRow = getPdfRowStrict(pdfId);
@@ -1166,7 +1174,7 @@ async function runRegenerateImages(
   const prompt = opts.prompt.trim();
   if (!prompt) throw new Error('圖檔提示詞不可為空');
 
-  const pageRows = db
+  const allPageRows = db
     .prepare(
       `SELECT page_number, text_path, script_path
          FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
@@ -1176,6 +1184,7 @@ async function runRegenerateImages(
     text_path: string | null;
     script_path: string | null;
   }>;
+  const pageRows = pageNumbers ? allPageRows.filter((p) => pageNumbers.includes(p.page_number)) : allPageRows;
   step.total = pageRows.length;
   const imageQuality = config.openaiImageQuality;
   const imageTimeoutMs =

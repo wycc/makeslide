@@ -17,6 +17,7 @@ export async function registerRegenerateRoutes(app: FastifyInstance): Promise<vo
         scripts: parsedBody.data.scripts,
         audio: parsedBody.data.audio,
         images: parsedBody.data.images,
+        page_numbers: parsedBody.data.page_numbers,
       });
       return reply.code(202).send(state);
     } catch (err) {

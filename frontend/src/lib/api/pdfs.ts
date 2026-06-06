@@ -711,6 +711,7 @@ export interface StartRegenerateOptions {
   scripts?: { prompt?: string; script_max_chars_per_page?: number } | null;
   audio?: { voice?: string; speed?: number } | null;
   images?: { prompt: string } | null;
+  page_numbers?: number[] | null;
 }
 
 /**
@@ -738,6 +739,9 @@ export async function startRegenerateJob(
   }
   if (options.images) {
     body.images = { prompt: options.images.prompt };
+  }
+  if (options.page_numbers?.length) {
+    body.page_numbers = options.page_numbers;
   }
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/regenerate`, {
     method: 'POST',
