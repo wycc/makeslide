@@ -485,3 +485,11 @@
 - 時間: 2026-06-07 00:41:00 +0800
 - 分支: feature/chat-image-inpaint-20260607
 - 內容: 在播放頁問答區加入圖片貼上與 AI inpainting 功能。後端新增 `POST /api/pdfs/:id/pages/:n/inpaint-image` multipart 端點，從磁碟讀取目前投影片圖片，接收可選的遮罩 PNG（透明=修改區域、白=保留）和參考圖、提示詞，呼叫 GPT-Image-2 `images.edit` API（size 1536x1024），結果存為 page candidate；前端在投影片圖片上疊加透明 div overlay，按「選取區域」鈕後可拖曳選定修改範圍（normalized 座標，生成遮罩時換算至 1536x1024），貼入剪貼簿圖片作為參考圖（僅顯示縮圖預覽）；有選區或參考圖時「修改圖片」按鈕呼叫 inpaintImage()，否則走既有 regenerate 流程；前端 api 新增 `inpaintImage()` 與 `InpaintImageResponse` 型別。
+
+[x] 請使用 git 來管理簡報，每一次的變更都 commit 到 local git 中並自動產生 commit message。圖片和逐字稿都可以獨立的檢查過去的版本並回到指定的版本（完成於分支: feature/git-version-management-20260607）
+
+## 工作記錄
+
+- 時間: 2026-06-07 00:00:00 +0800
+- 分支: feature/git-version-management-20260607
+- 內容: 為每一個簡報的 storage 目錄建立獨立的 git 倉庫，追蹤圖片（`.jpg`）和逐字稿（`.script.txt`）檔案。新增 `backend/src/services/presentationGit.ts` 服務（ensurePresentationRepo、commitPresentationFile、getPresentationFileHistory、getPresentationFileAtCommit、restorePresentationFile）。在 `generateScript.ts`、`renderTextPagesWithLlm.ts`、`regenerate.ts` 和 `page-operations.ts` 的每次寫入後自動 commit，commit message 帶有頁碼與操作類型。新增 API 路由 `versioning.ts`（GET .../image/history、GET .../script/history、GET .../image/versions/:hash、GET .../script/versions/:hash、POST .../image/restore/:hash、POST .../script/restore/:hash）。前端新增對應 API 函式及版本歷史彈窗 UI，PlayPage 聊天工具列加入「🖼 版本」和「📝 版本」按鈕，可瀏覽歷史版本並一鍵還原。
