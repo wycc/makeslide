@@ -632,13 +632,13 @@ export async function regenerateSlideImage(
 export async function inpaintImage(
   id: string,
   pageNumber: number,
-  imageFile: File,
   maskFile: File | null,
+  referenceFile: File | null,
   prompt: string,
 ): Promise<InpaintImageResponse> {
   const form = new FormData();
-  form.append('image', imageFile);
   if (maskFile) form.append('mask', maskFile);
+  if (referenceFile) form.append('reference', referenceFile);
   form.append('prompt', prompt);
   const resp = await fetch(
     `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/inpaint-image`,

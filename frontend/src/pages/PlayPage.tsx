@@ -339,12 +339,13 @@ export default function PlayPage() {
   // ---- Chat image attachment (inpaint) state ----
   const [chatPastedImage, setChatPastedImage] = useState<File | null>(null);
   const [chatPastedImageUrl, setChatPastedImageUrl] = useState<string | null>(null);
-  const [chatPastedImageSize, setChatPastedImageSize] = useState<{ w: number; h: number } | null>(null);
-  const [chatMaskRect, setChatMaskRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const [chatInpaintBusy, setChatInpaintBusy] = useState(false);
   const [chatInpaintError, setChatInpaintError] = useState<string | null>(null);
-  const chatAttachCanvasRef = useRef<HTMLDivElement | null>(null);
-  const chatAttachDragRef = useRef<{ startX: number; startY: number } | null>(null);
+  // Region selection on the slide image (for mask generation)
+  const [imageEditSelectMode, setImageEditSelectMode] = useState(false);
+  const [imageEditRegion, setImageEditRegion] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const imageEditRegionOverlayRef = useRef<HTMLDivElement | null>(null);
+  const imageEditDragRef = useRef<{ startX: number; startY: number } | null>(null);
   const [draggingPage, setDraggingPage] = useState<number | null>(null);
   const [thumbLoadUntilIdx, setThumbLoadUntilIdx] = useState(0);
   // 手機模式下的 tab 切換（桌面模式忽略此 state，永遠並排顯示）
@@ -2469,56 +2470,64 @@ export default function PlayPage() {
     if (chatPastedImageUrl) URL.revokeObjectURL(chatPastedImageUrl);
     setChatPastedImage(null);
     setChatPastedImageUrl(null);
-    setChatPastedImageSize(null);
-    setChatMaskRect(null);
     setChatInpaintError(null);
   }, [chatPastedImageUrl]);
 
-  const handleInpaintImage = useCallback(async () => {
-    if (isReadOnlyProcessing || !pdfId || !currentPage || !chatPastedImage) return;
-    const prompt = chatInput.trim() || '根據圖片內容進行優化';
+  const clearImageEditRegion = useCallback(() => {
+    setImageEditRegion(null);
+    const overlay = imageEditRegionOverlayRef.current;
+    if (overlay) overlay.style.display = 'none';
+  }, []);
 
+  const handleInpaintImage = useCallback(async () => {
+    if (isReadOnlyProcessing || !pdfId || !currentPage) return;
+    const prompt = chatInput.trim() || '根據指示修改投影片圖片';
+
+    // Generate mask PNG at 1536×1024 (same as the slide image size used by the API)
     let maskFile: File | null = null;
-    if (chatMaskRect && chatPastedImageSize) {
-      const { w: imgW, h: imgH } = chatPastedImageSize;
+    if (imageEditRegion) {
+      const W = 1536, H = 1024;
       const mc = document.createElement('canvas');
-      mc.width = imgW;
-      mc.height = imgH;
+      mc.width = W;
+      mc.height = H;
       const mctx = mc.getContext('2d');
       if (mctx) {
-        // white = keep, transparent = modify
-        mctx.fillStyle = 'white';
-        mctx.fillRect(0, 0, imgW, imgH);
-        mctx.clearRect(
-          Math.round(chatMaskRect.x * imgW),
-          Math.round(chatMaskRect.y * imgH),
-          Math.round(chatMaskRect.w * imgW),
-          Math.round(chatMaskRect.h * imgH),
+        mctx.fillStyle = 'white';       // white = keep
+        mctx.fillRect(0, 0, W, H);
+        mctx.clearRect(                  // transparent = modify
+          Math.round(imageEditRegion.x * W),
+          Math.round(imageEditRegion.y * H),
+          Math.round(imageEditRegion.w * W),
+          Math.round(imageEditRegion.h * H),
         );
         const maskBlob: Blob | null = await new Promise((resolve) => mc.toBlob(resolve, 'image/png'));
         if (maskBlob) maskFile = new File([maskBlob], 'mask.png', { type: 'image/png' });
       }
     }
 
-    const nextHistory = [...chatHistory, { role: 'user' as const, content: `【修改貼上的圖片】${prompt}` }];
+    const regionNote = imageEditRegion ? '（標示區域）' : '';
+    const refNote = chatPastedImage ? '（含參考圖）' : '';
+    const nextHistory = [...chatHistory, { role: 'user' as const, content: `【修改投影片圖片${regionNote}${refNote}】${prompt}` }];
     setChatHistory(nextHistory);
     setChatInpaintBusy(true);
     setChatInpaintError(null);
     try {
-      const res = await inpaintImage(pdfId, currentPage.page_number, chatPastedImage, maskFile, prompt);
+      const res = await inpaintImage(pdfId, currentPage.page_number, maskFile, chatPastedImage, prompt);
       const preview = `${res.image_url}?t=${encodeURIComponent(res.updated_at)}`;
       setChatHistory((prev) => [
         ...prev,
         { role: 'assistant', content: `${IMAGE_MSG_PREFIX}${preview}` },
       ]);
       clearChatPastedImage();
+      clearImageEditRegion();
+      setImageEditSelectMode(false);
     } catch (err) {
       setChatHistory(chatHistory);
       setChatInpaintError(err instanceof ApiError ? err.message : '修改圖片失敗');
     } finally {
       setChatInpaintBusy(false);
     }
-  }, [isReadOnlyProcessing, pdfId, currentPage, chatPastedImage, chatInput, chatMaskRect, chatPastedImageSize, chatHistory, clearChatPastedImage]);
+  }, [isReadOnlyProcessing, pdfId, currentPage, chatInput, imageEditRegion, chatPastedImage, chatHistory, clearChatPastedImage, clearImageEditRegion]);
 
   const hasChatInput = chatInput.trim().length > 0;
 
@@ -3722,9 +3731,9 @@ export default function PlayPage() {
                     className="block h-auto w-auto rounded-lg border border-slate-800 shadow-xl"
                     style={{
                       maxHeight: transcriptFocusMode ? '10rem' : `${slideImageMaxHeightVh}vh`,
-                      cursor: (drawingMode && drawingTool !== 'cursor') ? 'default' : 'pointer',
+                      cursor: imageEditSelectMode ? 'crosshair' : (drawingMode && drawingTool !== 'cursor') ? 'default' : 'pointer',
                     }}
-                    onClick={() => { if (!drawingMode || drawingTool === 'cursor') playPause(); }}
+                    onClick={() => { if (!imageEditSelectMode && (!drawingMode || drawingTool === 'cursor')) playPause(); }}
                     role="button"
                     tabIndex={-1}
                     aria-label={isPlaying ? '暫停語音播放' : '繼續語音播放'}
@@ -3734,10 +3743,81 @@ export default function PlayPage() {
                       ref={drawingCanvasRef}
                       pdfId={pdfId}
                       pageNumber={currentPage.page_number}
-                      enabled={drawingMode && drawingTool !== 'cursor'}
+                      enabled={!imageEditSelectMode && drawingMode && drawingTool !== 'cursor'}
                       color={drawingColor}
                       lineWidth={drawingTool === 'eraser' ? drawingLineWidth * 3 : drawingLineWidth}
                       eraser={drawingTool === 'eraser'}
+                    />
+                  )}
+                  {/* Region selector overlay (for inpainting) */}
+                  {imageEditSelectMode && (
+                    <div
+                      className="absolute inset-0 rounded-lg"
+                      style={{ cursor: 'crosshair' }}
+                      onPointerDown={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        imageEditDragRef.current = {
+                          startX: (e.clientX - rect.left) / rect.width,
+                          startY: (e.clientY - rect.top) / rect.height,
+                        };
+                        e.currentTarget.setPointerCapture(e.pointerId);
+                        const overlay = imageEditRegionOverlayRef.current;
+                        if (overlay) overlay.style.display = 'none';
+                      }}
+                      onPointerMove={(e) => {
+                        if (!imageEditDragRef.current) return;
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const nx = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+                        const ny = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
+                        const { startX, startY } = imageEditDragRef.current;
+                        const x = Math.min(startX, nx);
+                        const y = Math.min(startY, ny);
+                        const w = Math.abs(nx - startX);
+                        const h = Math.abs(ny - startY);
+                        const overlay = imageEditRegionOverlayRef.current;
+                        if (overlay) {
+                          overlay.style.display = 'block';
+                          overlay.style.left = `${x * 100}%`;
+                          overlay.style.top = `${y * 100}%`;
+                          overlay.style.width = `${w * 100}%`;
+                          overlay.style.height = `${h * 100}%`;
+                        }
+                      }}
+                      onPointerUp={(e) => {
+                        if (!imageEditDragRef.current) return;
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const nx = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+                        const ny = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
+                        const { startX, startY } = imageEditDragRef.current;
+                        imageEditDragRef.current = null;
+                        const x = Math.min(startX, nx);
+                        const y = Math.min(startY, ny);
+                        const w = Math.abs(nx - startX);
+                        const h = Math.abs(ny - startY);
+                        if (w > 0.02 && h > 0.02) {
+                          setImageEditRegion({ x, y, w, h });
+                        } else {
+                          clearImageEditRegion();
+                        }
+                      }}
+                    />
+                  )}
+                  {/* Region overlay: shows live drag preview and committed selection */}
+                  {(imageEditSelectMode || imageEditRegion) && (
+                    <div
+                      ref={imageEditRegionOverlayRef}
+                      style={{
+                        display: imageEditRegion ? 'block' : 'none',
+                        position: 'absolute',
+                        left: imageEditRegion ? `${imageEditRegion.x * 100}%` : '0',
+                        top: imageEditRegion ? `${imageEditRegion.y * 100}%` : '0',
+                        width: imageEditRegion ? `${imageEditRegion.w * 100}%` : '0',
+                        height: imageEditRegion ? `${imageEditRegion.h * 100}%` : '0',
+                        border: '2px solid rgba(0,200,255,0.95)',
+                        backgroundColor: 'rgba(0,160,255,0.18)',
+                        pointerEvents: 'none',
+                        boxSizing: 'border-box',
+                      }}
                     />
                   )}
                 </div>
@@ -4726,84 +4806,34 @@ export default function PlayPage() {
           </div>
           <div className="border-t border-slate-800 p-3">
             <div className="flex flex-col gap-2">
+              {/* Reference image thumbnail (paste from clipboard) */}
               {chatPastedImageUrl && (
-                <div className="flex flex-col gap-1">
-                  <div className="relative inline-block self-start">
+                <div className="flex items-center gap-2">
+                  <div className="relative inline-block shrink-0">
                     <img
                       src={chatPastedImageUrl}
-                      alt="貼上的圖片"
-                      className="max-h-40 max-w-full rounded-md border border-slate-600 object-contain"
-                      onLoad={(e) => {
-                        const img = e.currentTarget;
-                        setChatPastedImageSize({ w: img.naturalWidth, h: img.naturalHeight });
-                      }}
-                    />
-                    <div
-                      className="absolute inset-0 cursor-crosshair rounded-md"
-                      onPointerDown={(e) => {
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        chatAttachDragRef.current = {
-                          startX: (e.clientX - rect.left) / rect.width,
-                          startY: (e.clientY - rect.top) / rect.height,
-                        };
-                        e.currentTarget.setPointerCapture(e.pointerId);
-                        const overlay = chatAttachCanvasRef.current;
-                        if (overlay) overlay.style.display = 'none';
-                      }}
-                      onPointerMove={(e) => {
-                        if (!chatAttachDragRef.current) return;
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        const nx = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-                        const ny = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
-                        const { startX, startY } = chatAttachDragRef.current;
-                        const x = Math.min(startX, nx);
-                        const y = Math.min(startY, ny);
-                        const w = Math.abs(nx - startX);
-                        const h = Math.abs(ny - startY);
-                        const overlay = chatAttachCanvasRef.current;
-                        if (overlay) {
-                          overlay.style.display = 'block';
-                          overlay.style.left = `${x * 100}%`;
-                          overlay.style.top = `${y * 100}%`;
-                          overlay.style.width = `${w * 100}%`;
-                          overlay.style.height = `${h * 100}%`;
-                        }
-                      }}
-                      onPointerUp={(e) => {
-                        if (!chatAttachDragRef.current) return;
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        const nx = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-                        const ny = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
-                        const { startX, startY } = chatAttachDragRef.current;
-                        chatAttachDragRef.current = null;
-                        const x = Math.min(startX, nx);
-                        const y = Math.min(startY, ny);
-                        const w = Math.abs(nx - startX);
-                        const h = Math.abs(ny - startY);
-                        if (w > 0.03 && h > 0.03) {
-                          setChatMaskRect({ x, y, w, h });
-                        } else {
-                          setChatMaskRect(null);
-                          const overlay = chatAttachCanvasRef.current;
-                          if (overlay) overlay.style.display = 'none';
-                        }
-                      }}
-                    />
-                    {/* Drag preview / committed selection overlay */}
-                    <div
-                      ref={chatAttachCanvasRef}
-                      style={{ display: chatMaskRect ? 'block' : 'none', position: 'absolute', border: '2px solid rgba(0,180,255,0.9)', backgroundColor: 'rgba(0,150,255,0.18)', pointerEvents: 'none', ...(chatMaskRect ? { left: `${chatMaskRect.x * 100}%`, top: `${chatMaskRect.y * 100}%`, width: `${chatMaskRect.w * 100}%`, height: `${chatMaskRect.h * 100}%` } : {}) }}
+                      alt="參考圖"
+                      className="max-h-16 w-auto rounded border border-slate-600 object-contain"
                     />
                     <button
                       type="button"
                       onClick={clearChatPastedImage}
-                      className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-slate-900/80 text-xs text-slate-200 hover:bg-rose-600"
-                      title="移除圖片"
+                      className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-slate-900 text-[10px] text-slate-200 hover:bg-rose-600"
+                      title="移除參考圖"
                     >✕</button>
                   </div>
-                  <p className="text-xs text-slate-500">
-                    {chatMaskRect ? '已標示修改區域（拖曳重畫，或點空白清除）' : '拖曳標示要修改的區域（可略過，直接修改整張圖）'}
-                  </p>
+                  <p className="text-xs text-slate-400">參考圖（貼上的圖片）</p>
+                </div>
+              )}
+              {/* Region selection status */}
+              {imageEditRegion && (
+                <div className="flex items-center gap-2 text-xs text-cyan-400">
+                  <span>已標示修改區域</span>
+                  <button
+                    type="button"
+                    onClick={clearImageEditRegion}
+                    className="text-slate-400 hover:text-rose-400"
+                  >✕ 清除</button>
                 </div>
               )}
               <textarea
@@ -4829,11 +4859,33 @@ export default function PlayPage() {
                 }}
                 rows={3}
                 disabled={isReadOnlyProcessing}
-                placeholder={isReadOnlyProcessing ? '處理中為唯讀模式，問答與修改功能暫停' : '可輸入問題或修改指示（Shift+Enter 換行；可貼上圖片再修改）'}
+                placeholder={isReadOnlyProcessing ? '處理中為唯讀模式，問答與修改功能暫停' : '可輸入修改指示或問題（Shift+Enter 換行；可貼上參考圖）'}
                 className="flex-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-emerald-500/40 placeholder:text-slate-500 focus:ring"
               />
-              <div className="flex items-center justify-end gap-2">
-                {chatPastedImage ? (
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {/* Region select toggle */}
+                {!isReadOnlyProcessing && currentPage?.image_url && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImageEditSelectMode((v) => {
+                        if (v) clearImageEditRegion();
+                        return !v;
+                      });
+                    }}
+                    aria-pressed={imageEditSelectMode}
+                    className={`rounded-md border px-3 py-2 text-sm ${
+                      imageEditSelectMode
+                        ? 'border-cyan-400/70 bg-cyan-500/25 text-cyan-100'
+                        : 'border-slate-600 bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
+                    }`}
+                    title="在左側投影片圖片上拖曳選取要修改的區域"
+                  >
+                    {imageEditSelectMode ? '取消選區' : '選取區域'}
+                  </button>
+                )}
+                {/* Inpaint or regenerate */}
+                {(imageEditRegion || chatPastedImage) ? (
                   <button
                     type="button"
                     onClick={() => void handleInpaintImage()}
