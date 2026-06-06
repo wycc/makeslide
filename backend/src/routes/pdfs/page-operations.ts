@@ -733,15 +733,19 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         .resize(1536, 1024, { fit: 'contain', background: { r: 255, g: 255, b: 255 } })
         .png()
         .toBuffer();
-      const slideFile = await toFile(slideResizedBuffer, `slide-${n}.png`, { type: 'image/png' });
-
-      const images: Parameters<typeof client.images.edit>[0]['image'] = referenceBuffer?.length
-        ? [slideFile, await toFile(referenceBuffer, 'reference.png', { type: 'image/png' })]
-        : slideFile;
-
       const maskFile = (maskBuffer && maskBuffer.length)
         ? await toFile(maskBuffer, 'mask.png', { type: 'image/png' })
         : undefined;
+
+      // When a mask is present but no reference image is provided, pass the current slide
+      // as both the source image and the reference so the model has content context for the
+      // masked region instead of filling it with black.
+      const slideFile = await toFile(slideResizedBuffer, `slide-${n}.png`, { type: 'image/png' });
+      const images: Parameters<typeof client.images.edit>[0]['image'] = referenceBuffer?.length
+        ? [slideFile, await toFile(referenceBuffer, 'reference.png', { type: 'image/png' })]
+        : maskFile
+          ? [slideFile, await toFile(slideResizedBuffer, `slide-ref-${n}.png`, { type: 'image/png' })]
+          : slideFile;
 
       const edited = await client.images.edit({
         model: 'gpt-image-2',
