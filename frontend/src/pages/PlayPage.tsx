@@ -34,6 +34,7 @@ import {
   moveSlide,
   regenerateSlideImage,
   replaceSlideImage,
+  inpaintImage,
   regeneratePageAudio,
   resetPagePollVotes,
   rollbackRegenerate,
@@ -335,6 +336,15 @@ export default function PlayPage() {
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [imagePreviewPageNumber, setImagePreviewPageNumber] = useState<number | null>(null);
   const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
+  // ---- Chat image attachment (inpaint) state ----
+  const [chatPastedImage, setChatPastedImage] = useState<File | null>(null);
+  const [chatPastedImageUrl, setChatPastedImageUrl] = useState<string | null>(null);
+  const [chatPastedImageSize, setChatPastedImageSize] = useState<{ w: number; h: number } | null>(null);
+  const [chatMaskRect, setChatMaskRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const [chatInpaintBusy, setChatInpaintBusy] = useState(false);
+  const [chatInpaintError, setChatInpaintError] = useState<string | null>(null);
+  const chatAttachCanvasRef = useRef<HTMLDivElement | null>(null);
+  const chatAttachDragRef = useRef<{ startX: number; startY: number } | null>(null);
   const [draggingPage, setDraggingPage] = useState<number | null>(null);
   const [thumbLoadUntilIdx, setThumbLoadUntilIdx] = useState(0);
   // 手機模式下的 tab 切換（桌面模式忽略此 state，永遠並排顯示）
@@ -2454,6 +2464,61 @@ export default function PlayPage() {
     }
     setImagePreviewOpen(false);
   }, [pdfId, imagePreviewUrl, imagePreviewPageNumber, reloadDetail, isReadOnlyProcessing]);
+
+  const clearChatPastedImage = useCallback(() => {
+    if (chatPastedImageUrl) URL.revokeObjectURL(chatPastedImageUrl);
+    setChatPastedImage(null);
+    setChatPastedImageUrl(null);
+    setChatPastedImageSize(null);
+    setChatMaskRect(null);
+    setChatInpaintError(null);
+  }, [chatPastedImageUrl]);
+
+  const handleInpaintImage = useCallback(async () => {
+    if (isReadOnlyProcessing || !pdfId || !currentPage || !chatPastedImage) return;
+    const prompt = chatInput.trim() || '根據圖片內容進行優化';
+
+    let maskFile: File | null = null;
+    if (chatMaskRect && chatPastedImageSize) {
+      const { w: imgW, h: imgH } = chatPastedImageSize;
+      const mc = document.createElement('canvas');
+      mc.width = imgW;
+      mc.height = imgH;
+      const mctx = mc.getContext('2d');
+      if (mctx) {
+        // white = keep, transparent = modify
+        mctx.fillStyle = 'white';
+        mctx.fillRect(0, 0, imgW, imgH);
+        mctx.clearRect(
+          Math.round(chatMaskRect.x * imgW),
+          Math.round(chatMaskRect.y * imgH),
+          Math.round(chatMaskRect.w * imgW),
+          Math.round(chatMaskRect.h * imgH),
+        );
+        const maskBlob: Blob | null = await new Promise((resolve) => mc.toBlob(resolve, 'image/png'));
+        if (maskBlob) maskFile = new File([maskBlob], 'mask.png', { type: 'image/png' });
+      }
+    }
+
+    const nextHistory = [...chatHistory, { role: 'user' as const, content: `【修改貼上的圖片】${prompt}` }];
+    setChatHistory(nextHistory);
+    setChatInpaintBusy(true);
+    setChatInpaintError(null);
+    try {
+      const res = await inpaintImage(pdfId, currentPage.page_number, chatPastedImage, maskFile, prompt);
+      const preview = `${res.image_url}?t=${encodeURIComponent(res.updated_at)}`;
+      setChatHistory((prev) => [
+        ...prev,
+        { role: 'assistant', content: `${IMAGE_MSG_PREFIX}${preview}` },
+      ]);
+      clearChatPastedImage();
+    } catch (err) {
+      setChatHistory(chatHistory);
+      setChatInpaintError(err instanceof ApiError ? err.message : '修改圖片失敗');
+    } finally {
+      setChatInpaintBusy(false);
+    }
+  }, [isReadOnlyProcessing, pdfId, currentPage, chatPastedImage, chatInput, chatMaskRect, chatPastedImageSize, chatHistory, clearChatPastedImage]);
 
   const hasChatInput = chatInput.trim().length > 0;
 
@@ -4661,30 +4726,132 @@ export default function PlayPage() {
           </div>
           <div className="border-t border-slate-800 p-3">
             <div className="flex flex-col gap-2">
-            <textarea
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (isReadOnlyProcessing) return;
-                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+              {chatPastedImageUrl && (
+                <div className="flex flex-col gap-1">
+                  <div className="relative inline-block self-start">
+                    <img
+                      src={chatPastedImageUrl}
+                      alt="貼上的圖片"
+                      className="max-h-40 max-w-full rounded-md border border-slate-600 object-contain"
+                      onLoad={(e) => {
+                        const img = e.currentTarget;
+                        setChatPastedImageSize({ w: img.naturalWidth, h: img.naturalHeight });
+                      }}
+                    />
+                    <div
+                      className="absolute inset-0 cursor-crosshair rounded-md"
+                      onPointerDown={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        chatAttachDragRef.current = {
+                          startX: (e.clientX - rect.left) / rect.width,
+                          startY: (e.clientY - rect.top) / rect.height,
+                        };
+                        e.currentTarget.setPointerCapture(e.pointerId);
+                        const overlay = chatAttachCanvasRef.current;
+                        if (overlay) overlay.style.display = 'none';
+                      }}
+                      onPointerMove={(e) => {
+                        if (!chatAttachDragRef.current) return;
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const nx = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+                        const ny = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
+                        const { startX, startY } = chatAttachDragRef.current;
+                        const x = Math.min(startX, nx);
+                        const y = Math.min(startY, ny);
+                        const w = Math.abs(nx - startX);
+                        const h = Math.abs(ny - startY);
+                        const overlay = chatAttachCanvasRef.current;
+                        if (overlay) {
+                          overlay.style.display = 'block';
+                          overlay.style.left = `${x * 100}%`;
+                          overlay.style.top = `${y * 100}%`;
+                          overlay.style.width = `${w * 100}%`;
+                          overlay.style.height = `${h * 100}%`;
+                        }
+                      }}
+                      onPointerUp={(e) => {
+                        if (!chatAttachDragRef.current) return;
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const nx = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+                        const ny = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
+                        const { startX, startY } = chatAttachDragRef.current;
+                        chatAttachDragRef.current = null;
+                        const x = Math.min(startX, nx);
+                        const y = Math.min(startY, ny);
+                        const w = Math.abs(nx - startX);
+                        const h = Math.abs(ny - startY);
+                        if (w > 0.03 && h > 0.03) {
+                          setChatMaskRect({ x, y, w, h });
+                        } else {
+                          setChatMaskRect(null);
+                          const overlay = chatAttachCanvasRef.current;
+                          if (overlay) overlay.style.display = 'none';
+                        }
+                      }}
+                    />
+                    {/* Drag preview / committed selection overlay */}
+                    <div
+                      ref={chatAttachCanvasRef}
+                      style={{ display: chatMaskRect ? 'block' : 'none', position: 'absolute', border: '2px solid rgba(0,180,255,0.9)', backgroundColor: 'rgba(0,150,255,0.18)', pointerEvents: 'none', ...(chatMaskRect ? { left: `${chatMaskRect.x * 100}%`, top: `${chatMaskRect.y * 100}%`, width: `${chatMaskRect.w * 100}%`, height: `${chatMaskRect.h * 100}%` } : {}) }}
+                    />
+                    <button
+                      type="button"
+                      onClick={clearChatPastedImage}
+                      className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-slate-900/80 text-xs text-slate-200 hover:bg-rose-600"
+                      title="移除圖片"
+                    >✕</button>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    {chatMaskRect ? '已標示修改區域（拖曳重畫，或點空白清除）' : '拖曳標示要修改的區域（可略過，直接修改整張圖）'}
+                  </p>
+                </div>
+              )}
+              <textarea
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (isReadOnlyProcessing) return;
+                  if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    void handleSendChat();
+                  }
+                }}
+                onPaste={(e) => {
+                  const items = Array.from(e.clipboardData?.items ?? []);
+                  const imgItem = items.find((it) => it.kind === 'file' && /^image\//i.test(it.type));
+                  if (!imgItem) return;
                   e.preventDefault();
-                  void handleSendChat();
-                }
-              }}
-              rows={3}
-              disabled={isReadOnlyProcessing}
-              placeholder={isReadOnlyProcessing ? '處理中為唯讀模式，問答與修改功能暫停' : '可輸入問題，或輸入逐字稿修改指示（Shift+Enter 換行）'}
-              className="flex-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-emerald-500/40 placeholder:text-slate-500 focus:ring"
-            />
+                  const file = imgItem.getAsFile();
+                  if (!file) return;
+                  clearChatPastedImage();
+                  setChatPastedImage(file);
+                  setChatPastedImageUrl(URL.createObjectURL(file));
+                }}
+                rows={3}
+                disabled={isReadOnlyProcessing}
+                placeholder={isReadOnlyProcessing ? '處理中為唯讀模式，問答與修改功能暫停' : '可輸入問題或修改指示（Shift+Enter 換行；可貼上圖片再修改）'}
+                className="flex-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-emerald-500/40 placeholder:text-slate-500 focus:ring"
+              />
               <div className="flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => void handleRegenerateImageWithPrompt()}
-                  disabled={isReadOnlyProcessing || slideBusy || !currentPage}
-                  className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  修改圖片
-                </button>
+                {chatPastedImage ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleInpaintImage()}
+                    disabled={isReadOnlyProcessing || chatInpaintBusy || !currentPage}
+                    className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {chatInpaintBusy ? '修改中…' : '修改圖片'}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => void handleRegenerateImageWithPrompt()}
+                    disabled={isReadOnlyProcessing || slideBusy || !currentPage}
+                    className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    修改圖片
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => void handleRewriteScript()}
@@ -4705,6 +4872,7 @@ export default function PlayPage() {
             </div>
             {chatError ? <p className="mt-1 text-xs text-rose-300">{chatError}</p> : null}
             {rewriteError ? <p className="mt-1 text-xs text-rose-300">{rewriteError}</p> : null}
+            {chatInpaintError ? <p className="mt-1 text-xs text-rose-300">{chatInpaintError}</p> : null}
           </div>
           </section>
         </aside>

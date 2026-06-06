@@ -341,6 +341,14 @@ export interface RegenerateSlideImageResponse {
   updated_at: string;
 }
 
+export interface InpaintImageResponse {
+  id: string;
+  page_number: number;
+  image_url: string;
+  candidate_id: string;
+  updated_at: string;
+}
+
 export interface UpdateTtsSettingsResponse {
   id: string;
   tts_voice: string;
@@ -619,6 +627,25 @@ export async function regenerateSlideImage(
   );
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as RegenerateSlideImageResponse;
+}
+
+export async function inpaintImage(
+  id: string,
+  pageNumber: number,
+  imageFile: File,
+  maskFile: File | null,
+  prompt: string,
+): Promise<InpaintImageResponse> {
+  const form = new FormData();
+  form.append('image', imageFile);
+  if (maskFile) form.append('mask', maskFile);
+  form.append('prompt', prompt);
+  const resp = await fetch(
+    `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/inpaint-image`,
+    { method: 'POST', body: form },
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as InpaintImageResponse;
 }
 
 export async function updatePdfTtsSettings(
