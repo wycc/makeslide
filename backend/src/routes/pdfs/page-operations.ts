@@ -678,6 +678,11 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     }
   });
 
+  // POST /api/pdfs/:id/pages/:n/inpaint-image
+  // multipart fields: mask (PNG, optional), reference (file, optional), prompt (text)
+  // Reads the current slide image from disk as the source; the mask marks the region to
+  // modify (transparent = edit, white = keep); the optional reference image is passed as
+  // an additional context image to gpt-image-2.
   app.post('/api/pdfs/:id/pages/:n/inpaint-image', async (request, reply) => {
     const parsed = PageParamSchema.safeParse(request.params);
     if (!parsed.success) {
@@ -687,24 +692,29 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Expected multipart/form-data'));
     }
     const { id, n } = parsed.data;
-    const pdfRow = db.prepare(`SELECT page_count FROM pdfs WHERE id = ?`).get(id) as { page_count: number | null } | undefined;
+
+    const pdfRow = db
+      .prepare(`SELECT page_count FROM pdfs WHERE id = ?`)
+      .get(id) as { page_count: number | null } | undefined;
     if (!pdfRow?.page_count) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
 
-    let imageBuffer: Buffer | null = null;
+    const pageRow = db
+      .prepare(`SELECT image_path FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .get(id, n) as { image_path: string | null } | undefined;
+    if (!pageRow) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+
     let maskBuffer: Buffer | null = null;
+    let referenceBuffer: Buffer | null = null;
     let prompt = '';
     const parts = request.parts();
     for await (const part of parts) {
       if (part.type === 'file') {
         const buf = await part.toBuffer();
-        if (part.fieldname === 'image') imageBuffer = buf;
-        else if (part.fieldname === 'mask') maskBuffer = buf;
+        if (part.fieldname === 'mask') maskBuffer = buf;
+        else if (part.fieldname === 'reference') referenceBuffer = buf;
       } else {
         if (part.fieldname === 'prompt') prompt = String(part.value ?? '');
       }
-    }
-    if (!imageBuffer || !imageBuffer.length) {
-      return reply.code(400).send(errorResponse('NO_FILE', 'Missing image field'));
     }
     if (!prompt.trim()) {
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Missing prompt field'));
@@ -712,15 +722,27 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
 
     try {
       const client = getOpenAIClient();
-      const imageFile = await toFile(imageBuffer, 'input.png', { type: 'image/png' });
+
+      // Read current slide image from disk
+      const currentImagePath = pageRow.image_path
+        ? safeJoinPdfPath(id, pageRow.image_path)
+        : pageImagePath(id, n, pdfRow.page_count);
+      const slideBuffer = await fs.promises.readFile(currentImagePath);
+      const slideFile = await toFile(slideBuffer, `slide-${n}.jpg`, { type: 'image/jpeg' });
+
+      const images: Parameters<typeof client.images.edit>[0]['image'] = referenceBuffer?.length
+        ? [slideFile, await toFile(referenceBuffer, 'reference.png', { type: 'image/png' })]
+        : slideFile;
+
       const maskFile = (maskBuffer && maskBuffer.length)
         ? await toFile(maskBuffer, 'mask.png', { type: 'image/png' })
         : undefined;
+
       const edited = await client.images.edit({
         model: 'gpt-image-2',
-        image: imageFile,
+        image: images,
         prompt: prompt.trim(),
-        size: '1024x1024',
+        size: '1536x1024',
         ...(maskFile ? { mask: maskFile } : {}),
       });
       const b64 = (edited as { data?: Array<{ b64_json?: string }> }).data?.[0]?.b64_json;
