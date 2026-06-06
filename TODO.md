@@ -482,6 +482,6 @@
 
 ## 工作記錄
 
-- 時間: 2026-06-07 00:00:00 +0800
+- 時間: 2026-06-07 00:41:00 +0800
 - 分支: feature/chat-image-inpaint-20260607
-- 內容: 在播放頁問答區加入圖片貼上與 inpainting 功能。後端新增 `POST /api/pdfs/:id/pages/:n/inpaint-image` multipart 端點，接收 image + mask（可選）+ prompt，呼叫 GPT-Image-2 `images.edit` API，結果存為 page candidate；前端 PlayPage 新增 `chatPastedImage` 等狀態、textarea `onPaste` 捕捉圖片貼上、縮圖預覽 + 拖曳矩形選區（div overlay 直接操作 style 避免 re-render）、`handleInpaintImage` callback，修改圖片按鈕依是否有貼上圖片切換為 inpaint 或原 regenerate 模式；前端 api 新增 `inpaintImage()` 函數及 `InpaintImageResponse` 型別。
+- 內容: 在播放頁問答區加入圖片貼上與 AI inpainting 功能。後端新增 `POST /api/pdfs/:id/pages/:n/inpaint-image` multipart 端點，從磁碟讀取目前投影片圖片，接收可選的遮罩 PNG（透明=修改區域、白=保留）和參考圖、提示詞，呼叫 GPT-Image-2 `images.edit` API（size 1536x1024），結果存為 page candidate；前端在投影片圖片上疊加透明 div overlay，按「選取區域」鈕後可拖曳選定修改範圍（normalized 座標，生成遮罩時換算至 1536x1024），貼入剪貼簿圖片作為參考圖（僅顯示縮圖預覽）；有選區或參考圖時「修改圖片」按鈕呼叫 inpaintImage()，否則走既有 regenerate 流程；前端 api 新增 `inpaintImage()` 與 `InpaintImageResponse` 型別。
