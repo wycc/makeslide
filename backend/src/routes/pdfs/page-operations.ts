@@ -723,12 +723,17 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     try {
       const client = getOpenAIClient();
 
-      // Read current slide image from disk
+      // Read current slide image from disk and resize to 1536x1024 to match mask dimensions.
+      // GPT-Image-2 requires the mask to be the same size as the input image.
       const currentImagePath = pageRow.image_path
         ? safeJoinPdfPath(id, pageRow.image_path)
         : pageImagePath(id, n, pdfRow.page_count);
-      const slideBuffer = await fs.promises.readFile(currentImagePath);
-      const slideFile = await toFile(slideBuffer, `slide-${n}.jpg`, { type: 'image/jpeg' });
+      const rawSlideBuffer = await fs.promises.readFile(currentImagePath);
+      const slideResizedBuffer = await sharp(rawSlideBuffer)
+        .resize(1536, 1024, { fit: 'contain', background: { r: 255, g: 255, b: 255 } })
+        .png()
+        .toBuffer();
+      const slideFile = await toFile(slideResizedBuffer, `slide-${n}.png`, { type: 'image/png' });
 
       const images: Parameters<typeof client.images.edit>[0]['image'] = referenceBuffer?.length
         ? [slideFile, await toFile(referenceBuffer, 'reference.png', { type: 'image/png' })]
