@@ -678,6 +678,78 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     }
   });
 
+  app.post('/api/pdfs/:id/pages/:n/inpaint-image', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    if (!request.isMultipart()) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Expected multipart/form-data'));
+    }
+    const { id, n } = parsed.data;
+    const pdfRow = db.prepare(`SELECT page_count FROM pdfs WHERE id = ?`).get(id) as { page_count: number | null } | undefined;
+    if (!pdfRow?.page_count) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+
+    let imageBuffer: Buffer | null = null;
+    let maskBuffer: Buffer | null = null;
+    let prompt = '';
+    const parts = request.parts();
+    for await (const part of parts) {
+      if (part.type === 'file') {
+        const buf = await part.toBuffer();
+        if (part.fieldname === 'image') imageBuffer = buf;
+        else if (part.fieldname === 'mask') maskBuffer = buf;
+      } else {
+        if (part.fieldname === 'prompt') prompt = String(part.value ?? '');
+      }
+    }
+    if (!imageBuffer || !imageBuffer.length) {
+      return reply.code(400).send(errorResponse('NO_FILE', 'Missing image field'));
+    }
+    if (!prompt.trim()) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Missing prompt field'));
+    }
+
+    try {
+      const client = getOpenAIClient();
+      const imageFile = await toFile(imageBuffer, 'input.png', { type: 'image/png' });
+      const maskFile = (maskBuffer && maskBuffer.length)
+        ? await toFile(maskBuffer, 'mask.png', { type: 'image/png' })
+        : undefined;
+      const edited = await client.images.edit({
+        model: 'gpt-image-2',
+        image: imageFile,
+        prompt: prompt.trim(),
+        size: '1024x1024',
+        ...(maskFile ? { mask: maskFile } : {}),
+      });
+      const b64 = (edited as { data?: Array<{ b64_json?: string }> }).data?.[0]?.b64_json;
+      if (!b64) throw new Error('OpenAI image edit returned empty result');
+
+      const newBuf = Buffer.from(b64, 'base64');
+      const candidateId = nanoid(10);
+      const padLen = pdfRow.page_count > 999 ? 4 : 3;
+      const candidateRelPath = path.posix.join('pages', `${String(n).padStart(padLen, '0')}.candidate.${candidateId}.jpg`);
+      const candidatePath = safeJoinPdfPath(id, candidateRelPath);
+      await sharp(newBuf)
+        .resize(1920, 1080, { fit: 'contain', background: { r: 255, g: 255, b: 255 } })
+        .jpeg({ quality: 82, mozjpeg: true })
+        .toFile(candidatePath);
+
+      const now = nowIso();
+      return reply.code(200).send({
+        id,
+        page_number: n,
+        image_url: `api/pdfs/${id}/pages/${n}/image-candidates/${candidateId}`,
+        candidate_id: candidateId,
+        updated_at: now,
+      });
+    } catch (err) {
+      request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to inpaint image');
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to inpaint image'));
+    }
+  });
+
   app.get('/api/pdfs/:id/pages/:n/image-candidates/:candidateId', async (request, reply) => {
     const parsedPage = PageParamSchema.safeParse(request.params);
     const candidateId = (request.params as { candidateId?: string }).candidateId ?? '';
