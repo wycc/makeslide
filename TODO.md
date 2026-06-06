@@ -477,3 +477,11 @@
 - 時間: 2026-06-03 00:00:00 +0800
 - 分支: feature/handwriting-fullscreen-modes-20260603
 - 內容: 手寫工具列改為僅在全螢幕模式下顯示；清除和關閉按鍵縮小為 28px 圖示按鈕（🗑️ ✕）；新增模式切換列（✏️ 筆、🖱️ 游標、⬜ 橡皮擦）；游標模式下畫布不捕捉 pointer events，點擊投影片可正常 pause/resume；橡皮擦使用 destination-out 合成模式清除筆跡；W 鍵只在全螢幕時有效，Escape 關閉手寫並重置為筆模式。
+
+[x] 在對話區貼上圖片，顯示小圖縮圖，可拖曳標示修改區域，按下修改圖片時使用 GPT-Image-2 inpainting 修改（完成於分支: feature/chat-image-inpaint-20260607）
+
+## 工作記錄
+
+- 時間: 2026-06-07 00:00:00 +0800
+- 分支: feature/chat-image-inpaint-20260607
+- 內容: 在播放頁問答區加入圖片貼上與 inpainting 功能。後端新增 `POST /api/pdfs/:id/pages/:n/inpaint-image` multipart 端點，接收 image + mask（可選）+ prompt，呼叫 GPT-Image-2 `images.edit` API，結果存為 page candidate；前端 PlayPage 新增 `chatPastedImage` 等狀態、textarea `onPaste` 捕捉圖片貼上、縮圖預覽 + 拖曳矩形選區（div overlay 直接操作 style 避免 re-render）、`handleInpaintImage` callback，修改圖片按鈕依是否有貼上圖片切換為 inpaint 或原 regenerate 模式；前端 api 新增 `inpaintImage()` 函數及 `InpaintImageResponse` 型別。
