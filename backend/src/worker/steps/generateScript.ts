@@ -9,7 +9,8 @@ import { db, savePageGenerationPrompt } from '../../db';
 import { callChatJSON, type TokenUsage } from '../../services/openai';
 import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { loadPromptTemplate, renderPromptTemplate } from '../../services/promptTemplates';
-import { pageScriptPath, pageTextPath } from '../../services/storage';
+import { pageScriptPath, pageTextPath, pdfDir } from '../../services/storage';
+import { commitPresentationFile } from '../../services/presentationGit';
 
 export interface ScriptPageResult {
   pageNumber: number;
@@ -761,6 +762,8 @@ export async function generateScript(
     const { script, usage, latencyMs } = success;
     const scriptPath = pageScriptPath(pdfId, pageInfo.pageNumber, pageCount);
     await writeUtf8Ensured(scriptPath, script);
+    const relScript = scriptPath.replace(pdfDir(pdfId) + '/', '');
+    void commitPresentationFile(pdfId, relScript, `script: generate page ${pageInfo.pageNumber}`);
 
     totalUsage.prompt_tokens += usage.prompt_tokens;
     totalUsage.completion_tokens += usage.completion_tokens;
@@ -853,6 +856,8 @@ export async function generateScript(
       r.chars = rewritten.length;
       r.generatedAt = new Date().toISOString();
       r.skipped = false;
+      const relScript = r.scriptPath.replace(pdfDir(pdfId) + '/', '');
+      void commitPresentationFile(pdfId, relScript, `script: rewrite page ${r.pageNumber}`);
     }
 
     totalUsage.prompt_tokens += usage.prompt_tokens;

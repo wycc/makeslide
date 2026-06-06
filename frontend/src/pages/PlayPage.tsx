@@ -52,6 +52,13 @@ import {
   votePagePoll,
   rewritePageScript,
   fetchPageGenerationPrompts,
+  fetchImageHistory,
+  fetchScriptHistory,
+  imageVersionUrl,
+  fetchScriptVersion,
+  restoreImageVersion,
+  restoreScriptVersion,
+  type FileVersionEntry,
   type ImagePromptTemplate,
   type PageGenerationPrompt,
   type ShareAccessMode,
@@ -337,6 +344,16 @@ export default function PlayPage() {
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [imagePreviewPageNumber, setImagePreviewPageNumber] = useState<number | null>(null);
   const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
+  // ---- Version history state ----
+  const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
+  const [versionHistoryType, setVersionHistoryType] = useState<'image' | 'script'>('image');
+  const [versionHistoryPage, setVersionHistoryPage] = useState<number | null>(null);
+  const [versionHistoryEntries, setVersionHistoryEntries] = useState<FileVersionEntry[]>([]);
+  const [versionHistoryLoading, setVersionHistoryLoading] = useState(false);
+  const [versionPreviewHash, setVersionPreviewHash] = useState<string | null>(null);
+  const [versionPreviewScript, setVersionPreviewScript] = useState<string | null>(null);
+  const [versionRestoring, setVersionRestoring] = useState(false);
+  const [versionError, setVersionError] = useState<string | null>(null);
   // ---- Chat image attachment (inpaint) state ----
   const [chatPastedImage, setChatPastedImage] = useState<File | null>(null);
   const [chatPastedImageUrl, setChatPastedImageUrl] = useState<string | null>(null);
@@ -2479,6 +2496,62 @@ export default function PlayPage() {
     setChatInpaintError(null);
   }, [chatPastedImageUrl]);
 
+  const openVersionHistory = useCallback(async (type: 'image' | 'script', pageNumber: number) => {
+    if (!pdfId) return;
+    setVersionHistoryType(type);
+    setVersionHistoryPage(pageNumber);
+    setVersionHistoryEntries([]);
+    setVersionPreviewHash(null);
+    setVersionPreviewScript(null);
+    setVersionError(null);
+    setVersionHistoryOpen(true);
+    setVersionHistoryLoading(true);
+    try {
+      const resp = type === 'image'
+        ? await fetchImageHistory(pdfId, pageNumber)
+        : await fetchScriptHistory(pdfId, pageNumber);
+      setVersionHistoryEntries(resp.history);
+    } catch {
+      setVersionError('無法載入版本歷史');
+    } finally {
+      setVersionHistoryLoading(false);
+    }
+  }, [pdfId]);
+
+  const handleVersionPreview = useCallback(async (hash: string) => {
+    if (!pdfId || versionHistoryPage == null) return;
+    setVersionPreviewHash(hash);
+    if (versionHistoryType === 'script') {
+      try {
+        const text = await fetchScriptVersion(pdfId, versionHistoryPage, hash);
+        setVersionPreviewScript(text);
+      } catch {
+        setVersionPreviewScript(null);
+      }
+    } else {
+      setVersionPreviewScript(null);
+    }
+  }, [pdfId, versionHistoryPage, versionHistoryType]);
+
+  const handleVersionRestore = useCallback(async () => {
+    if (!pdfId || versionHistoryPage == null || !versionPreviewHash) return;
+    setVersionRestoring(true);
+    setVersionError(null);
+    try {
+      if (versionHistoryType === 'image') {
+        await restoreImageVersion(pdfId, versionHistoryPage, versionPreviewHash);
+      } else {
+        await restoreScriptVersion(pdfId, versionHistoryPage, versionPreviewHash);
+      }
+      await reloadDetail();
+      setVersionHistoryOpen(false);
+    } catch (err) {
+      setVersionError(err instanceof ApiError ? err.message : '還原失敗');
+    } finally {
+      setVersionRestoring(false);
+    }
+  }, [pdfId, versionHistoryPage, versionPreviewHash, versionHistoryType, reloadDetail]);
+
   const clearImageEditRegion = useCallback(() => {
     setImageEditRegion(null);
     const overlay = imageEditRegionOverlayRef.current;
@@ -3202,6 +3275,80 @@ export default function PlayPage() {
           <div className="rounded-lg border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-200 shadow-xl">
             <span className="mr-2 inline-block h-3 w-3 animate-pulse rounded-full bg-cyan-400" />
             圖片產生中…
+          </div>
+        </div>
+      ) : null}
+
+      {versionHistoryOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
+          <div className="flex w-full max-w-5xl flex-col rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl" style={{ maxHeight: '90vh' }}>
+            <h3 className="mb-3 text-sm font-semibold text-slate-200">
+              {versionHistoryType === 'image' ? '圖片' : '逐字稿'}版本歷史
+              {versionHistoryPage != null ? `（第 ${versionHistoryPage} 頁）` : ''}
+            </h3>
+            {versionError ? (
+              <p className="mb-2 text-xs text-rose-400">{versionError}</p>
+            ) : null}
+            <div className="flex flex-1 gap-3 overflow-hidden">
+              {/* Left: version list */}
+              <div className="w-64 flex-shrink-0 overflow-y-auto rounded-lg border border-slate-700 bg-slate-950">
+                {versionHistoryLoading ? (
+                  <p className="p-3 text-xs text-slate-400">載入中…</p>
+                ) : versionHistoryEntries.length === 0 ? (
+                  <p className="p-3 text-xs text-slate-400">尚無版本記錄</p>
+                ) : (
+                  versionHistoryEntries.map((entry) => (
+                    <button
+                      key={entry.hash}
+                      type="button"
+                      onClick={() => void handleVersionPreview(entry.hash)}
+                      className={`w-full border-b border-slate-800 px-3 py-2 text-left text-xs hover:bg-slate-800 ${versionPreviewHash === entry.hash ? 'bg-slate-800 text-emerald-300' : 'text-slate-300'}`}
+                    >
+                      <div className="font-mono text-[10px] text-slate-500">{entry.hash.slice(0, 7)}</div>
+                      <div className="mt-0.5 truncate">{entry.message}</div>
+                      <div className="mt-0.5 text-[10px] text-slate-500">
+                        {new Date(entry.date).toLocaleString('zh-TW', { dateStyle: 'short', timeStyle: 'short' })}
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+              {/* Right: preview area */}
+              <div className="flex flex-1 flex-col items-center justify-center overflow-auto rounded-lg border border-slate-800 bg-slate-950 p-2">
+                {versionPreviewHash == null ? (
+                  <p className="text-xs text-slate-500">點選左側版本以預覽</p>
+                ) : versionHistoryType === 'image' && pdfId && versionHistoryPage != null ? (
+                  <img
+                    src={`${imageVersionUrl(pdfId, versionHistoryPage, versionPreviewHash)}?t=${Date.now()}`}
+                    alt="歷史版本圖片"
+                    className="max-h-[55vh] w-auto rounded"
+                  />
+                ) : versionHistoryType === 'script' ? (
+                  versionPreviewScript != null ? (
+                    <pre className="h-full w-full overflow-auto whitespace-pre-wrap p-3 text-xs text-slate-200">{versionPreviewScript}</pre>
+                  ) : (
+                    <p className="text-xs text-slate-500">載入中…</p>
+                  )
+                ) : null}
+              </div>
+            </div>
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setVersionHistoryOpen(false)}
+                className="rounded-md border border-slate-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
+              >
+                關閉
+              </button>
+              <button
+                type="button"
+                disabled={versionPreviewHash == null || versionRestoring || isReadOnlyProcessing}
+                onClick={() => void handleVersionRestore()}
+                className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-3 py-1.5 text-sm text-emerald-200 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {versionRestoring ? '還原中…' : '還原至此版本'}
+              </button>
+            </div>
           </div>
         </div>
       ) : null}
@@ -4977,6 +5124,24 @@ export default function PlayPage() {
                   className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {chatBusy ? '詢問中…' : '詢問'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => currentPage && void openVersionHistory('image', currentPage.page_number)}
+                  disabled={!currentPage}
+                  title="查看此頁圖片的歷史版本"
+                  className="rounded-md border border-slate-600 px-2 py-2 text-sm text-slate-400 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  🖼 版本
+                </button>
+                <button
+                  type="button"
+                  onClick={() => currentPage && void openVersionHistory('script', currentPage.page_number)}
+                  disabled={!currentPage}
+                  title="查看此頁逐字稿的歷史版本"
+                  className="rounded-md border border-slate-600 px-2 py-2 text-sm text-slate-400 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  📝 版本
                 </button>
               </div>
             </div>

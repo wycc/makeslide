@@ -21,6 +21,7 @@ import {
 } from '../services/storage';
 import type { PageStatus, PdfRow } from '../types';
 import { generateScript } from './steps/generateScript';
+import { commitPresentationFile } from '../services/presentationGit';
 import { readScriptsForTts, synthesizeAudio } from './steps/synthesizeAudio';
 import {
   finishArtifact,
@@ -1281,6 +1282,8 @@ async function runRegenerateImages(
       .jpeg({ quality: 82, mozjpeg: true })
       .toFile(pageImagePath(pdfId, p.page_number, pageCount));
     await generatePageThumbnail(pdfId, p.page_number, pageCount, pageImagePath(pdfId, p.page_number, pageCount));
+    const relImg = path.posix.join('pages', `${String(p.page_number).padStart(pagePadFor(pageCount), '0')}.jpg`);
+    void commitPresentationFile(pdfId, relImg, `image: regenerate page ${p.page_number}`);
 
     finishArtifact(artifactHandle, 'succeeded', {
       outputPath: path.posix.join('pages', `${String(p.page_number).padStart(pagePadFor(pageCount), '0')}.jpg`),

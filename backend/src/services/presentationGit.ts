@@ -1,0 +1,191 @@
+import { execFile as execFileCb } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import { promisify } from 'node:util';
+import { pdfDir } from './storage';
+import { logger } from '../logger';
+
+const execFile = promisify(execFileCb);
+
+const GIT_USER_NAME = 'makeslide';
+const GIT_USER_EMAIL = 'makeslide@local';
+
+const GITIGNORE_CONTENT = [
+  '*.m4a',
+  '*.mp3',
+  '*.thumb.jpg',
+  '*.candidate.*.jpg',
+  'source.pdf',
+  'source.txt',
+  '*.raw.json',
+  '*.normalized.txt',
+  'outline.md',
+  'cover.jpg',
+  'cover.thumb.jpg',
+  'video.mp4',
+].join('\n') + '\n';
+
+function gitOpts(dir: string) {
+  return {
+    cwd: dir,
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: GIT_USER_NAME,
+      GIT_AUTHOR_EMAIL: GIT_USER_EMAIL,
+      GIT_COMMITTER_NAME: GIT_USER_NAME,
+      GIT_COMMITTER_EMAIL: GIT_USER_EMAIL,
+    },
+  };
+}
+
+async function git(dir: string, args: string[]): Promise<string> {
+  const { stdout } = await execFile('git', args, gitOpts(dir));
+  return stdout.trim();
+}
+
+/** Initialize a git repo inside the presentation storage directory if not already done. */
+export async function ensurePresentationRepo(pdfId: string): Promise<void> {
+  const dir = pdfDir(pdfId);
+  const gitDir = path.join(dir, '.git');
+  try {
+    await fs.promises.access(gitDir, fs.constants.F_OK);
+    return; // already initialized
+  } catch {
+    // not initialized yet
+  }
+
+  try {
+    await execFile('git', ['init', '-b', 'main'], gitOpts(dir));
+    await fs.promises.writeFile(path.join(dir, '.gitignore'), GITIGNORE_CONTENT, 'utf8');
+    await execFile('git', ['add', '.gitignore'], gitOpts(dir));
+    await execFile(
+      'git',
+      ['commit', '-m', 'chore: init presentation repository', '--allow-empty'],
+      gitOpts(dir),
+    );
+  } catch (err) {
+    logger.warn({ err, pdfId }, 'presentationGit: failed to init repo');
+  }
+}
+
+/**
+ * Commit a file into the presentation's git repo.
+ * `relPath` is relative to the presentation directory (e.g. "pages/001.jpg").
+ */
+export async function commitPresentationFile(
+  pdfId: string,
+  relPath: string,
+  message: string,
+): Promise<void> {
+  const dir = pdfDir(pdfId);
+  try {
+    await ensurePresentationRepo(pdfId);
+    await execFile('git', ['add', '--', relPath], gitOpts(dir));
+    // Check if there is actually something to commit
+    const status = await git(dir, ['status', '--porcelain', '--', relPath]);
+    if (!status) return; // nothing changed
+    await execFile('git', ['commit', '-m', message, '--', relPath], gitOpts(dir));
+  } catch (err) {
+    // Non-fatal: versioning failures must not break the main flow
+    logger.warn({ err, pdfId, relPath }, 'presentationGit: commit failed');
+  }
+}
+
+/**
+ * Commit multiple files in a single commit.
+ */
+export async function commitPresentationFiles(
+  pdfId: string,
+  relPaths: string[],
+  message: string,
+): Promise<void> {
+  if (relPaths.length === 0) return;
+  const dir = pdfDir(pdfId);
+  try {
+    await ensurePresentationRepo(pdfId);
+    await execFile('git', ['add', '--', ...relPaths], gitOpts(dir));
+    const status = await git(dir, ['status', '--porcelain']);
+    if (!status) return;
+    await execFile('git', ['commit', '-m', message, '--', ...relPaths], gitOpts(dir));
+  } catch (err) {
+    logger.warn({ err, pdfId, relPaths }, 'presentationGit: multi-file commit failed');
+  }
+}
+
+export interface FileVersionEntry {
+  hash: string;
+  date: string;
+  message: string;
+}
+
+/**
+ * Return the git log for a specific file inside a presentation repo.
+ * `relPath` is relative to the presentation directory.
+ */
+export async function getPresentationFileHistory(
+  pdfId: string,
+  relPath: string,
+): Promise<FileVersionEntry[]> {
+  const dir = pdfDir(pdfId);
+  try {
+    const out = await git(dir, [
+      'log',
+      '--follow',
+      '--format=%H\x1f%aI\x1f%s',
+      '--',
+      relPath,
+    ]);
+    if (!out) return [];
+    return out
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => {
+        const [hash = '', date = '', ...rest] = line.split('\x1f');
+        return { hash, date, message: rest.join('\x1f') };
+      });
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Return the raw file content at a specific commit hash.
+ * Suitable for binary (image) and text (script) files.
+ */
+export async function getPresentationFileAtCommit(
+  pdfId: string,
+  relPath: string,
+  hash: string,
+): Promise<Buffer> {
+  const dir = pdfDir(pdfId);
+  const { stdout } = await execFile(
+    'git',
+    ['show', `${hash}:${relPath}`],
+    { ...gitOpts(dir), encoding: 'buffer' } as Parameters<typeof execFile>[2],
+  );
+  return stdout as unknown as Buffer;
+}
+
+/**
+ * Restore a file in the working tree to the state at a given commit and
+ * create a new commit recording the rollback.
+ */
+export async function restorePresentationFile(
+  pdfId: string,
+  relPath: string,
+  hash: string,
+  message: string,
+): Promise<void> {
+  const dir = pdfDir(pdfId);
+  await ensurePresentationRepo(pdfId);
+  // Write old version back to disk
+  const content = await getPresentationFileAtCommit(pdfId, relPath, hash);
+  const abs = path.join(dir, relPath);
+  await fs.promises.mkdir(path.dirname(abs), { recursive: true });
+  await fs.promises.writeFile(abs, content);
+  // Commit the restore
+  await execFile('git', ['add', '--', relPath], gitOpts(dir));
+  const status = await git(dir, ['status', '--porcelain', '--', relPath]);
+  if (!status) return; // already at that version
+  await execFile('git', ['commit', '-m', message, '--', relPath], gitOpts(dir));
+}
