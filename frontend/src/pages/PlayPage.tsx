@@ -1367,6 +1367,7 @@ export default function PlayPage() {
       }
       if (ev.key === ' ' || ev.code === 'Space') {
         ev.preventDefault();
+        if (imageEditSelectMode) return;
         // 全螢幕模式下，空白鍵切換播放/暫停；非全螢幕維持下一頁。
         const isFullscreen = Boolean(getAnyFullscreenElement()) || imageOnlyFullscreen;
         if (isFullscreen) {
@@ -2699,7 +2700,7 @@ export default function PlayPage() {
             cursor:
               "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56' viewBox='0 0 56 56'%3E%3Ccircle cx='28' cy='28' r='8' fill='none' stroke='%23ef4444' stroke-width='2.5'/%3E%3Cline x1='28' y1='2' x2='28' y2='20' stroke='%23ef4444' stroke-width='2.5' stroke-linecap='round'/%3E%3Cline x1='28' y1='36' x2='28' y2='54' stroke='%23ef4444' stroke-width='2.5' stroke-linecap='round'/%3E%3Cline x1='2' y1='28' x2='20' y2='28' stroke='%23ef4444' stroke-width='2.5' stroke-linecap='round'/%3E%3Cline x1='36' y1='28' x2='54' y2='28' stroke='%23ef4444' stroke-width='2.5' stroke-linecap='round'/%3E%3Ccircle cx='28' cy='28' r='1.5' fill='%23ef4444'/%3E%3C/svg%3E\") 28 28, crosshair",
           }}
-          onClick={() => { if (!drawingMode || drawingTool === 'cursor') playPause(); }}
+          onClick={() => { if (!imageEditSelectMode && (!drawingMode || drawingTool === 'cursor')) playPause(); }}
           role="button"
           tabIndex={-1}
           aria-label={isPlaying ? '暫停語音播放' : '繼續語音播放'}
@@ -3755,6 +3756,7 @@ export default function PlayPage() {
                     <div
                       className="absolute inset-0 rounded-lg"
                       style={{ cursor: 'crosshair', zIndex: 30, userSelect: 'none', touchAction: 'none' }}
+                      onClick={(e) => e.stopPropagation()}
                       onPointerDown={(e) => {
                         e.preventDefault();
                         const rect = e.currentTarget.getBoundingClientRect();
