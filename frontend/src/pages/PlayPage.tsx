@@ -3729,6 +3729,7 @@ export default function PlayPage() {
                     src={displayedImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
                     alt={`第 ${currentPage?.page_number ?? ''} 頁`}
                     className="block h-auto w-auto rounded-lg border border-slate-800 shadow-xl"
+                    draggable={false}
                     style={{
                       maxHeight: transcriptFocusMode ? '10rem' : `${slideImageMaxHeightVh}vh`,
                       cursor: imageEditSelectMode ? 'crosshair' : (drawingMode && drawingTool !== 'cursor') ? 'default' : 'pointer',
@@ -3753,8 +3754,9 @@ export default function PlayPage() {
                   {imageEditSelectMode && (
                     <div
                       className="absolute inset-0 rounded-lg"
-                      style={{ cursor: 'crosshair' }}
+                      style={{ cursor: 'crosshair', zIndex: 30, userSelect: 'none', touchAction: 'none' }}
                       onPointerDown={(e) => {
+                        e.preventDefault();
                         const rect = e.currentTarget.getBoundingClientRect();
                         imageEditDragRef.current = {
                           startX: (e.clientX - rect.left) / rect.width,
@@ -3765,6 +3767,7 @@ export default function PlayPage() {
                         if (overlay) overlay.style.display = 'none';
                       }}
                       onPointerMove={(e) => {
+                        e.preventDefault();
                         if (!imageEditDragRef.current) return;
                         const rect = e.currentTarget.getBoundingClientRect();
                         const nx = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
