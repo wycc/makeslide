@@ -2835,7 +2835,11 @@ export default function PlayPage() {
                     </div>
                   ) : (
                     <div className="text-slate-300">
-                      {detail?.status === 'awaiting_script_confirmation' ? '等待確認分頁結果（確認後將開始產生圖片）' : '圖片產生中…'}
+                      {currentPage?.status === 'failed'
+                        ? `本頁產生失敗${currentPage.error_message ? `：${currentPage.error_message}` : ''}`
+                        : detail?.status === 'awaiting_script_confirmation'
+                          ? '等待確認分頁結果（確認後將開始產生圖片）'
+                          : '圖片產生中…'}
                     </div>
                   )}
                 </div>
@@ -2967,7 +2971,11 @@ export default function PlayPage() {
             </div>
           ) : (
             <div className="text-slate-300">
-              {detail?.status === 'awaiting_script_confirmation' ? '等待確認分頁結果（確認後將開始產生圖片）' : '圖片產生中…'}
+              {currentPage?.status === 'failed'
+                        ? `本頁產生失敗${currentPage.error_message ? `：${currentPage.error_message}` : ''}`
+                        : detail?.status === 'awaiting_script_confirmation'
+                          ? '等待確認分頁結果（確認後將開始產生圖片）'
+                          : '圖片產生中…'}
             </div>
           )}
           {/* Drawing toolbar inside fullscreen */}
@@ -3585,6 +3593,22 @@ export default function PlayPage() {
             </div>
           </div>
         ) : null}
+        {detail?.status === 'failed' && detail.error_message ? (
+          <div className="mx-auto w-full max-w-5xl px-4 pb-3">
+            <div className="rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+              <span className="font-medium">產生失敗：</span>
+              <span className="whitespace-pre-wrap">{detail.error_message}</span>
+            </div>
+          </div>
+        ) : null}
+        {currentPage?.status === 'failed' && currentPage.error_message ? (
+          <div className="mx-auto w-full max-w-5xl px-4 pb-3">
+            <div className="rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+              <span className="font-medium">第 {currentPage.page_number} 頁產生失敗：</span>
+              <span className="whitespace-pre-wrap">{currentPage.error_message}</span>
+            </div>
+          </div>
+        ) : null}
         {detail?.status === 'awaiting_script_confirmation' ? (
           <div className="mx-auto w-full max-w-5xl px-4 pb-3">
             <div className="flex flex-col gap-3 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100 sm:flex-row sm:items-center sm:justify-between">
@@ -4022,7 +4046,11 @@ export default function PlayPage() {
                   className="flex w-full items-center justify-center rounded-lg border border-slate-800 text-slate-500"
                   style={{ height: transcriptFocusMode ? '10rem' : `${slideImageMaxHeightVh}vh` }}
                 >
-                  {detail?.status === 'awaiting_script_confirmation' ? '等待確認分頁結果（確認後將開始產生圖片）' : '圖片產生中…'}
+                  {currentPage?.status === 'failed'
+                        ? `本頁產生失敗${currentPage.error_message ? `：${currentPage.error_message}` : ''}`
+                        : detail?.status === 'awaiting_script_confirmation'
+                          ? '等待確認分頁結果（確認後將開始產生圖片）'
+                          : '圖片產生中…'}
                 </div>
               )}
               {showSubtitle && currentSentence ? (
