@@ -1,5 +1,6 @@
 import { execFile as execFileCb } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { pdfDir } from './storage';
@@ -173,10 +174,147 @@ export function buildAuthenticatedRepoUrl(repoUrl: string, token: string): strin
   }
 }
 
+const TEXT_MERGE_EXTENSIONS = new Set(['.txt', '.md', '.json']);
+
+function isTextMergeCandidate(relPath: string): boolean {
+  return TEXT_MERGE_EXTENSIONS.has(path.extname(relPath).toLowerCase());
+}
+
+/** Read a file at a given conflict stage (`:1:path`/`:2:path`/`:3:path`); null if absent there. */
+async function showStagedBlob(dir: string, ref: string): Promise<string | null> {
+  try {
+    const { stdout } = await execFile('git', ['show', ref], gitOpts(dir));
+    return stdout;
+  } catch {
+    return null; // not present at this stage (e.g. add/add or modify/delete conflict)
+  }
+}
+
+/**
+ * Resolve a conflicted text file with a union merge: every line either side
+ * added is kept (identical changes collapse to one copy, conflicting edits
+ * are concatenated) instead of leaving conflict markers or dropping a side.
+ */
+async function resolveTextConflict(pdfId: string, dir: string, relPath: string): Promise<void> {
+  const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'makeslide-merge-'));
+  try {
+    const [base, ours, theirs] = await Promise.all([
+      showStagedBlob(dir, `:1:${relPath}`),
+      showStagedBlob(dir, `:2:${relPath}`),
+      showStagedBlob(dir, `:3:${relPath}`),
+    ]);
+    const basePath = path.join(tmpDir, 'base');
+    const oursPath = path.join(tmpDir, 'ours');
+    const theirsPath = path.join(tmpDir, 'theirs');
+    await Promise.all([
+      fs.promises.writeFile(basePath, base ?? ''),
+      fs.promises.writeFile(oursPath, ours ?? ''),
+      fs.promises.writeFile(theirsPath, theirs ?? ''),
+    ]);
+    const { stdout } = await execFile(
+      'git',
+      ['merge-file', '--union', '-p', oursPath, basePath, theirsPath],
+      gitOpts(dir),
+    );
+    await fs.promises.writeFile(path.join(dir, relPath), stdout, 'utf8');
+  } catch (err) {
+    logger.warn({ err, pdfId, relPath }, 'presentationGit: text union merge failed, leaving conflict markers');
+  } finally {
+    await fs.promises.rm(tmpDir, { recursive: true, force: true });
+  }
+}
+
+async function lastCommitTimeForPath(dir: string, ref: string, relPath: string): Promise<number> {
+  try {
+    const out = await git(dir, ['log', '-1', '--format=%ct', ref, '--', relPath]);
+    return out ? Number.parseInt(out, 10) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Resolve a conflicted non-text file (image/audio/video/pdf/...) by keeping
+ * whichever side committed a change to that path more recently — binary
+ * content cannot be merged line-by-line, so "newest wins" is the best
+ * automatic resolution available.
+ */
+async function resolveBinaryConflict(
+  pdfId: string,
+  dir: string,
+  relPath: string,
+  remoteRef: string,
+): Promise<void> {
+  const [oursTime, theirsTime] = await Promise.all([
+    lastCommitTimeForPath(dir, 'HEAD', relPath),
+    lastCommitTimeForPath(dir, remoteRef, relPath),
+  ]);
+  const side = theirsTime > oursTime ? 'theirs' : 'ours';
+  try {
+    await execFile('git', ['checkout', `--${side}`, '--', relPath], gitOpts(dir));
+  } catch (err) {
+    // Path absent on the chosen (newer) side — a delete/modify conflict; drop it.
+    logger.warn({ err, pdfId, relPath, side }, 'presentationGit: binary conflict checkout failed, removing file');
+    await execFile('git', ['rm', '-f', '--ignore-unmatch', '--', relPath], gitOpts(dir));
+  }
+}
+
+/**
+ * Fetch the presentation's branch from the configured GitHub remote and merge
+ * it into the local branch before pushing, so edits made on another machine
+ * are folded in instead of being clobbered by the subsequent force-push.
+ * Each machine initializes its own local repo, so histories are unrelated;
+ * conflicts are resolved automatically — text files (scripts, captions,
+ * outline, metadata) via a union merge that keeps both sides' edits, and
+ * every other (binary) file by keeping whichever side last touched the path
+ * more recently.
+ */
+async function pullAndMergeFromGitHub(pdfId: string, dir: string, authenticatedUrl: string): Promise<void> {
+  const remoteRef = `refs/remotes/github-sync/${pdfId}`;
+  try {
+    await execFile('git', ['fetch', authenticatedUrl, `refs/heads/${pdfId}:${remoteRef}`], gitOpts(dir));
+  } catch {
+    return; // remote branch doesn't exist yet — nothing to pull
+  }
+
+  try {
+    await execFile(
+      'git',
+      ['merge', '--no-edit', '--allow-unrelated-histories', remoteRef],
+      gitOpts(dir),
+    );
+    return; // already up to date, fast-forwarded, or merged cleanly
+  } catch {
+    // fall through to conflict resolution below
+  }
+
+  const conflicted = (await git(dir, ['diff', '--name-only', '--diff-filter=U']))
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  for (const relPath of conflicted) {
+    if (isTextMergeCandidate(relPath)) {
+      await resolveTextConflict(pdfId, dir, relPath);
+    } else {
+      await resolveBinaryConflict(pdfId, dir, relPath, remoteRef);
+    }
+    await execFile('git', ['add', '--', relPath], gitOpts(dir));
+  }
+
+  try {
+    await execFile('git', ['commit', '--no-edit'], gitOpts(dir));
+  } catch (err) {
+    logger.warn({ err, pdfId }, 'presentationGit: failed to finalize merge commit');
+  }
+}
+
 /**
  * Push a presentation's local git repository to a branch named after the
  * presentation id on the configured GitHub remote. Each presentation keeps
  * its own branch so multiple presentations can share a single repository.
+ * Pulls and auto-merges remote changes first so syncing from multiple
+ * machines folds edits together instead of overwriting them.
  */
 export async function pushPresentationToGitHub(
   pdfId: string,
@@ -190,6 +328,7 @@ export async function pushPresentationToGitHub(
   await ensurePresentationRepo(pdfId);
   await commitAllPendingChanges(pdfId, dir, 'sync: snapshot before GitHub push');
   const authenticatedUrl = buildAuthenticatedRepoUrl(trimmedRepoUrl, token);
+  await pullAndMergeFromGitHub(pdfId, dir, authenticatedUrl);
   const branch = await git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']);
   await execFile(
     'git',
