@@ -53,6 +53,8 @@ export interface SystemAiSettings {
   google_client_id?: string;
   google_client_secret?: string;
   google_redirect_uri?: string;
+  github_repo_url?: string;
+  github_token?: string;
 }
 
 export interface UpdateSystemAiSettingsPayload {
@@ -76,6 +78,8 @@ export interface UpdateSystemAiSettingsPayload {
   google_client_id?: string;
   google_client_secret?: string;
   google_redirect_uri?: string;
+  github_repo_url?: string;
+  github_token?: string;
 }
 
 export async function getOpenAIKeyStatus(): Promise<OpenAIKeyStatusResponse> {

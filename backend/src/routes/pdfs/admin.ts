@@ -7,7 +7,9 @@ import {
 } from '../../services/aiSettings';
 import { setOpenAIApiKeyRuntime, setOpenAIBaseUrlRuntime } from '../../services/openai';
 import { IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
-import { UpdateSystemAiSettingsBodySchema, errorResponse } from './shared';
+import { pushPresentationToGitHub } from '../../services/presentationGit';
+import { db } from '../../db';
+import { IdParamSchema, UpdateSystemAiSettingsBodySchema, errorResponse } from './shared';
 
 export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/system/image-prompt-templates', async (_request, reply) => {
@@ -58,6 +60,8 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       google_client_id: runtime.googleClientId,
       google_client_secret: runtime.googleClientSecret,
       google_redirect_uri: runtime.googleRedirectUri,
+      github_repo_url: runtime.githubRepoUrl,
+      github_token: runtime.githubToken,
     });
   });
 
@@ -88,6 +92,8 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       googleClientId: data.google_client_id,
       googleClientSecret: data.google_client_secret,
       googleRedirectUri: data.google_redirect_uri,
+      githubRepoUrl: data.github_repo_url,
+      githubToken: data.github_token,
     };
     if (typeof next.openaiApiKey === 'string') setOpenAIApiKeyRuntime(next.openaiApiKey);
     if (typeof next.openaiBaseUrl === 'string') setOpenAIBaseUrlRuntime(next.openaiBaseUrl);
@@ -118,6 +124,34 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       google_client_id: runtime.googleClientId,
       google_client_secret: runtime.googleClientSecret,
       google_redirect_uri: runtime.googleRedirectUri,
+      github_repo_url: runtime.githubRepoUrl,
+      github_token: runtime.githubToken,
     });
+  });
+
+  app.post('/api/pdfs/:id/github-sync', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id'));
+    }
+    const { id } = parsed.data;
+    const row = db.prepare(`SELECT id FROM pdfs WHERE id = ?`).get(id) as { id: string } | undefined;
+    if (!row) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+
+    const runtime = getRuntimeAiSettings();
+    const repoUrl = runtime.githubRepoUrl.trim();
+    if (!repoUrl) {
+      return reply.code(400).send(errorResponse('GITHUB_NOT_CONFIGURED', '尚未設定 GitHub Repository'));
+    }
+
+    try {
+      await pushPresentationToGitHub(id, repoUrl, runtime.githubToken);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      app.log.warn({ err, pdfId: id }, 'github-sync: push failed');
+      return reply.code(502).send(errorResponse('GITHUB_SYNC_FAILED', message));
+    }
+
+    return reply.code(200).send({ ok: true, id, branch: id, repo_url: repoUrl });
   });
 }

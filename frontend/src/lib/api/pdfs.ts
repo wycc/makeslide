@@ -1172,6 +1172,21 @@ export interface RestoreScriptResponse {
   updated_at: string;
 }
 
+// ---- GitHub sync ----
+
+export interface GithubSyncResponse {
+  ok: boolean;
+  id: string;
+  branch: string;
+  repo_url: string;
+}
+
+export async function syncPresentationToGitHub(id: string): Promise<GithubSyncResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/github-sync`, { method: 'POST' });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as GithubSyncResponse;
+}
+
 export async function restoreScriptVersion(
   id: string,
   pageNumber: number,

@@ -26,6 +26,8 @@ export interface RuntimeAiSettings {
   googleClientId: string;
   googleClientSecret: string;
   googleRedirectUri: string;
+  githubRepoUrl: string;
+  githubToken: string;
 }
 
 export interface AccountSettingsLocation {
@@ -95,6 +97,8 @@ function loadAccountEnvSettings(): Partial<RuntimeAiSettings> {
     googleClientId: values.GOOGLE_CLIENT_ID,
     googleClientSecret: values.GOOGLE_CLIENT_SECRET,
     googleRedirectUri: values.GOOGLE_REDIRECT_URI,
+    githubRepoUrl: values.GITHUB_REPO_URL,
+    githubToken: values.GITHUB_TOKEN,
   };
 }
 
@@ -119,6 +123,8 @@ let runtime: RuntimeAiSettings = {
   googleClientId: config.googleClientId,
   googleClientSecret: config.googleClientSecret,
   googleRedirectUri: config.googleRedirectUri,
+  githubRepoUrl: process.env.GITHUB_REPO_URL?.trim() || '',
+  githubToken: process.env.GITHUB_TOKEN?.trim() || '',
 };
 
 runtime = {
@@ -157,6 +163,8 @@ export function setRuntimeAiSettings(next: Partial<RuntimeAiSettings>): RuntimeA
   if (typeof next.googleClientId === 'string') process.env.GOOGLE_CLIENT_ID = next.googleClientId;
   if (typeof next.googleClientSecret === 'string') process.env.GOOGLE_CLIENT_SECRET = next.googleClientSecret;
   if (typeof next.googleRedirectUri === 'string') process.env.GOOGLE_REDIRECT_URI = next.googleRedirectUri;
+  if (typeof next.githubRepoUrl === 'string') process.env.GITHUB_REPO_URL = next.githubRepoUrl;
+  if (typeof next.githubToken === 'string') process.env.GITHUB_TOKEN = next.githubToken;
   return { ...runtime };
 }
 
@@ -186,6 +194,8 @@ export async function persistEnvSettings(next: Partial<RuntimeAiSettings>): Prom
     ['GOOGLE_CLIENT_ID', next.googleClientId],
     ['GOOGLE_CLIENT_SECRET', next.googleClientSecret],
     ['GOOGLE_REDIRECT_URI', next.googleRedirectUri],
+    ['GITHUB_REPO_URL', next.githubRepoUrl],
+    ['GITHUB_TOKEN', next.githubToken],
   ];
 
   for (const [key, raw] of pairs) {

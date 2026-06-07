@@ -325,6 +325,8 @@ export const UpdateSystemAiSettingsBodySchema = z.object({
   google_client_id: z.string().optional(),
   google_client_secret: z.string().optional(),
   google_redirect_uri: z.string().optional(),
+  github_repo_url: z.string().optional(),
+  github_token: z.string().optional(),
 });
 
 export { RegenerateBatchBodySchema };

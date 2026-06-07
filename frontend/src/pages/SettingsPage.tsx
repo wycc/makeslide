@@ -54,6 +54,8 @@ export default function SettingsPage() {
   const [googleClientId, setGoogleClientId] = useState('');
   const [googleClientSecret, setGoogleClientSecret] = useState('');
   const [googleRedirectUri, setGoogleRedirectUri] = useState('');
+  const [githubRepoUrl, setGithubRepoUrl] = useState('');
+  const [githubToken, setGithubToken] = useState('');
   const [cguAirEnabled, setCguAirEnabled] = useState(false);
 
   const CGU_AIR_BASE_URL = 'https://air.cgu.edu.tw/cgullmapi/v1';
@@ -89,6 +91,8 @@ export default function SettingsPage() {
       setGoogleClientId(s.google_client_id ?? '');
       setGoogleClientSecret(s.google_client_secret ?? '');
       setGoogleRedirectUri(s.google_redirect_uri ?? '');
+      setGithubRepoUrl(s.github_repo_url ?? '');
+      setGithubToken(s.github_token ?? '');
       setCguAirEnabled(s.openai_base_url === CGU_AIR_BASE_URL);
       const cachedUserCode = window.localStorage.getItem(LOCAL_USER_CODE_KEY)?.trim() ?? '';
       setUserCode((auth?.authenticated ? s.user_code : cachedUserCode) ?? '');
@@ -161,6 +165,8 @@ export default function SettingsPage() {
         google_client_id: googleClientId.trim(),
         google_client_secret: googleClientSecret.trim(),
         google_redirect_uri: googleRedirectUri.trim(),
+        github_repo_url: githubRepoUrl.trim(),
+        github_token: githubToken.trim(),
       });
       storeLanguageSettings(uiLanguage, contentLanguage);
       window.localStorage.setItem(PLAYBACK_SPEED_STORAGE_KEY, String(playbackSpeed));
@@ -201,6 +207,8 @@ export default function SettingsPage() {
     googleClientId,
     googleClientSecret,
     googleRedirectUri,
+    githubRepoUrl,
+    githubToken,
     cguAirEnabled,
     CGU_AIR_BASE_URL,
     t,
@@ -390,6 +398,32 @@ export default function SettingsPage() {
                 </label>
               </>
             ) : null}
+          </div>
+
+          <div className="mb-6 rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+            <h2 className="mb-1 text-base font-semibold text-slate-100">{t('settings.githubSync')}</h2>
+            <p className="mb-3 text-sm text-slate-400">{t('settings.githubSyncHint')}</p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block text-sm text-slate-300 sm:col-span-2">
+                GITHUB_REPO_URL
+                <input
+                  value={githubRepoUrl}
+                  onChange={(e) => setGithubRepoUrl(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                  placeholder="https://github.com/your-name/your-repo.git"
+                />
+              </label>
+              <label className="block text-sm text-slate-300 sm:col-span-2">
+                GITHUB_TOKEN
+                <input
+                  type="password"
+                  value={githubToken}
+                  onChange={(e) => setGithubToken(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                  placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                />
+              </label>
+            </div>
           </div>
 
           <label className="mb-2 block text-sm text-slate-300">OPENAI_API_KEY</label>
