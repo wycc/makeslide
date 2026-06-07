@@ -502,3 +502,7 @@
 - 時間: 2026-06-07 12:15:00 +0800
 - 分支: feature/github-sync-settings-20260607
 - 內容: 修正先前 `.gitignore` 排除過多檔案、導致同步到另一台機器後無法還原的問題。盤點每個被排除的檔案是否能由已追蹤內容「精確重生」：縮圖（`*.thumb.jpg`）、封面（`cover.jpg`/`cover.thumb.jpg`）是對已追蹤頁面圖片做純粹的決定性縮圖，可安全排除；但旁白語音（`*.m4a`/`*.mp3`，雲端 TTS 結果不保證逐位元重現）、AI 候選圖片（`*.candidate.*.jpg`，gpt-image 生成）、原始來源（`source.pdf`/`source.txt`）、原始字幕（`*.raw.json`）、正規化字幕（`*.normalized.txt`，依賴未追蹤的 raw.json）、大綱（`outline.md`，LLM 產生）與成品影片（`video.mp4`，依賴非決定性語音與外部編碼器版本）皆屬原始輸入或非決定性產物，無法精確重生，因此都應改為追蹤。`presentationGit.ts` 的 `GITIGNORE_CONTENT` 縮減為僅 `*.thumb.jpg`、`cover.jpg`、`cover.thumb.jpg`；`ensurePresentationRepo` 新增 `refreshGitignore`，讓既有（在舊規則下建立）的簡報倉庫也會更新 `.gitignore` 並 commit；`pushPresentationToGitHub` 推送前呼叫新增的 `commitAllPendingChanges`（`git add -A` + commit），確保所有新近變成可追蹤的檔案在不需逐一在 worker 步驟中呼叫 commitPresentationFile 的情況下，也會被收進同步內容。
+
+- 時間: 2026-06-07 12:40:00 +0800
+- 分支: feature/github-sync-settings-20260607
+- 內容: 依使用者進一步指示，連同步驟中保留的「可決定性重生」例外（`*.thumb.jpg`、`cover.jpg`、`cover.thumb.jpg`）與 `metadata.json` 也一併改為追蹤——不再區分是否可重生，pages 目錄與簡報根目錄下所有檔案都進入版本控制。`presentationGit.ts` 的 `GITIGNORE_CONTENT` 改為空字串，`refreshGitignore` 會將舊倉庫的 `.gitignore` 一併重設為空，確保所有檔案（含縮圖、封面、metadata.json）都能在下一次同步時被 `commitAllPendingChanges`/`git add -A` 收錄並推送到 GitHub。
