@@ -487,9 +487,14 @@
 - 內容: 在播放頁問答區加入圖片貼上與 AI inpainting 功能。後端新增 `POST /api/pdfs/:id/pages/:n/inpaint-image` multipart 端點，從磁碟讀取目前投影片圖片，接收可選的遮罩 PNG（透明=修改區域、白=保留）和參考圖、提示詞，呼叫 GPT-Image-2 `images.edit` API（size 1536x1024），結果存為 page candidate；前端在投影片圖片上疊加透明 div overlay，按「選取區域」鈕後可拖曳選定修改範圍（normalized 座標，生成遮罩時換算至 1536x1024），貼入剪貼簿圖片作為參考圖（僅顯示縮圖預覽）；有選區或參考圖時「修改圖片」按鈕呼叫 inpaintImage()，否則走既有 regenerate 流程；前端 api 新增 `inpaintImage()` 與 `InpaintImageResponse` 型別。
 
 [x] (merge)請使用 git 來管理簡報，每一次的變更都 commit 到 local git 中並自動產生 commit message。圖片和逐字稿都可以獨立的檢查過去的版本並回到指定的版本（完成於分支: feature/git-version-management-20260607）
+[x] 在設定中，加入一個 github repository 的設定，和一個 token 的設定。讓我們可以把每一個簡報同步到 github 上。也可以在另外一台電腦把個人的 repository 同步過去（完成於分支: feature/github-sync-settings-20260607）
 
 ## 工作記錄
 
 - 時間: 2026-06-07 00:00:00 +0800
 - 分支: feature/git-version-management-20260607
 - 內容: 為每一個簡報的 storage 目錄建立獨立的 git 倉庫，追蹤圖片（`.jpg`）和逐字稿（`.script.txt`）檔案。新增 `backend/src/services/presentationGit.ts` 服務（ensurePresentationRepo、commitPresentationFile、getPresentationFileHistory、getPresentationFileAtCommit、restorePresentationFile）。在 `generateScript.ts`、`renderTextPagesWithLlm.ts`、`regenerate.ts` 和 `page-operations.ts` 的每次寫入後自動 commit，commit message 帶有頁碼與操作類型。新增 API 路由 `versioning.ts`（GET .../image/history、GET .../script/history、GET .../image/versions/:hash、GET .../script/versions/:hash、POST .../image/restore/:hash、POST .../script/restore/:hash）。前端新增對應 API 函式及版本歷史彈窗 UI，PlayPage 聊天工具列加入「🖼 版本」和「📝 版本」按鈕，可瀏覽歷史版本並一鍵還原。
+
+- 時間: 2026-06-07 11:30:00 +0800
+- 分支: feature/github-sync-settings-20260607
+- 內容: 在系統設定中新增 GITHUB_REPO_URL 與 GITHUB_TOKEN 兩個帳號層級設定（後端 `aiSettings.ts` 持久化到 `accounts/<id>/settings.env`，`/api/system/ai-settings` GET/PATCH 回傳與更新這兩個欄位，設定頁加入對應輸入框）。新增 `presentationGit.ts` 的 `pushPresentationToGitHub`，會以 token 組成 `https://x-access-token:<token>@...` 形式的認證 URL，將每個簡報既有的本機 git 倉庫推送（force push）到設定中 GitHub repository 的「以簡報 id 命名的分支」上；新增路由 `POST /api/pdfs/:id/github-sync` 觸發同步。PlayPage 工具列加入「⤴ 同步到 GitHub」按鈕呼叫此 API。由於設定為帳號層級（存在各自的 settings.env），在另一台機器上填入相同 repository 與個人 token，即可用同一機制把該機器上的簡報同步過去。
