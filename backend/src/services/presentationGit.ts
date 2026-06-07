@@ -112,6 +112,51 @@ export async function commitPresentationFiles(
   }
 }
 
+/**
+ * Build an authenticated remote URL by embedding a personal access token
+ * into an https GitHub repository URL (e.g. https://x-access-token:<token>@github.com/owner/repo.git).
+ * Non-https URLs (e.g. git@github.com:...) are returned unchanged since tokens
+ * cannot be embedded in the SSH form.
+ */
+export function buildAuthenticatedRepoUrl(repoUrl: string, token: string): string {
+  const trimmedUrl = repoUrl.trim();
+  const trimmedToken = token.trim();
+  if (!trimmedToken) return trimmedUrl;
+  try {
+    const parsed = new URL(trimmedUrl);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return trimmedUrl;
+    parsed.username = 'x-access-token';
+    parsed.password = trimmedToken;
+    return parsed.toString();
+  } catch {
+    return trimmedUrl;
+  }
+}
+
+/**
+ * Push a presentation's local git repository to a branch named after the
+ * presentation id on the configured GitHub remote. Each presentation keeps
+ * its own branch so multiple presentations can share a single repository.
+ */
+export async function pushPresentationToGitHub(
+  pdfId: string,
+  repoUrl: string,
+  token: string,
+): Promise<void> {
+  const trimmedRepoUrl = repoUrl.trim();
+  if (!trimmedRepoUrl) throw new Error('GitHub repository URL is not configured');
+
+  const dir = pdfDir(pdfId);
+  await ensurePresentationRepo(pdfId);
+  const authenticatedUrl = buildAuthenticatedRepoUrl(trimmedRepoUrl, token);
+  const branch = await git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']);
+  await execFile(
+    'git',
+    ['push', authenticatedUrl, `${branch}:refs/heads/${pdfId}`, '--force'],
+    gitOpts(dir),
+  );
+}
+
 export interface FileVersionEntry {
   hash: string;
   date: string;

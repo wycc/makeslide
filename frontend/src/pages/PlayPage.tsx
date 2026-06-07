@@ -58,6 +58,7 @@ import {
   fetchScriptVersion,
   restoreImageVersion,
   restoreScriptVersion,
+  syncPresentationToGitHub,
   type FileVersionEntry,
   type ImagePromptTemplate,
   type PageGenerationPrompt,
@@ -333,6 +334,9 @@ export default function PlayPage() {
   const [shareBusy, setShareBusy] = useState(false);
   const [shareMessage, setShareMessage] = useState<string | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
+  const [githubSyncBusy, setGithubSyncBusy] = useState(false);
+  const [githubSyncMessage, setGithubSyncMessage] = useState<string | null>(null);
+  const [githubSyncError, setGithubSyncError] = useState<string | null>(null);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
   const [playQrCodeUrl, setPlayQrCodeUrl] = useState<string | null>(null);
@@ -2143,6 +2147,21 @@ export default function PlayPage() {
     setVideoUrl(detailWithShare.video_url ?? null);
   }, [pdfId, currentShareToken]);
 
+  const handleSyncToGithub = useCallback(async () => {
+    if (!pdfId) return;
+    setGithubSyncBusy(true);
+    setGithubSyncError(null);
+    setGithubSyncMessage(null);
+    try {
+      await syncPresentationToGitHub(pdfId);
+      setGithubSyncMessage('已同步到 GitHub');
+    } catch (err) {
+      setGithubSyncError(err instanceof ApiError ? err.message : '同步到 GitHub 失敗');
+    } finally {
+      setGithubSyncBusy(false);
+    }
+  }, [pdfId]);
+
   const handleCreateShareLink = useCallback(async () => {
     if (!pdfId) return;
     setShareBusy(true);
@@ -3592,6 +3611,8 @@ export default function PlayPage() {
             {!videoError && titleMsg ? <span className="text-slate-300">{titleMsg}</span> : null}
             {shareMessage ? <div className="text-emerald-300">{shareMessage}</div> : null}
             {shareError ? <div className="text-rose-300">{shareError}</div> : null}
+            {githubSyncMessage ? <div className="text-emerald-300">{githubSyncMessage}</div> : null}
+            {githubSyncError ? <div className="text-rose-300">{githubSyncError}</div> : null}
           </div>
           {/* 手機：一排 3 欄（設定 / 產生影片 / 下載影片）；桌面：維持原本 flex 排列。
               註：「重生」按鍵已搬到右側問答區（aside）。 */}
@@ -3715,6 +3736,15 @@ export default function PlayPage() {
             >
               下載講義 PDF
             </a>
+            <button
+              type="button"
+              onClick={() => void handleSyncToGithub()}
+              disabled={githubSyncBusy}
+              className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-3 py-1.5 text-sm text-emerald-200 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+              title="將此簡報同步到設定中的 GitHub repository"
+            >
+              {githubSyncBusy ? '同步中…' : '⤴ 同步到 GitHub'}
+            </button>
             {!currentShareToken ? (
               <div className="col-span-3 flex items-center gap-2 rounded-md border border-slate-700/80 px-2 py-1 md:col-span-1">
                 <select
