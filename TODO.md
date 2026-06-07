@@ -506,3 +506,7 @@
 - 時間: 2026-06-07 12:40:00 +0800
 - 分支: feature/github-sync-settings-20260607
 - 內容: 依使用者進一步指示，連同步驟中保留的「可決定性重生」例外（`*.thumb.jpg`、`cover.jpg`、`cover.thumb.jpg`）與 `metadata.json` 也一併改為追蹤——不再區分是否可重生，pages 目錄與簡報根目錄下所有檔案都進入版本控制。`presentationGit.ts` 的 `GITIGNORE_CONTENT` 改為空字串，`refreshGitignore` 會將舊倉庫的 `.gitignore` 一併重設為空，確保所有檔案（含縮圖、封面、metadata.json）都能在下一次同步時被 `commitAllPendingChanges`/`git add -A` 收錄並推送到 GitHub。
+
+- 時間: 2026-06-07 17:05:00 +0800
+- 分支: feature/github-sync-settings-20260607
+- 內容: 同步到 GitHub 前先 pull 並自動合併遠端分支，避免從第二台機器同步時用 force push 覆蓋掉對方已推送的內容。`pushPresentationToGitHub` 改為先 `commitAllPendingChanges`，再以新增的 `pullAndMergeFromGitHub` fetch 簡報對應分支並 `git merge --allow-unrelated-histories`（每台機器各自 `git init`，分支歷史互不相關，需允許合併不相關歷史）。發生衝突時依檔案類型自動解決：文字檔（`.txt`/`.md`/`.json`，包含逐字稿、字幕、大綱、metadata）透過 `resolveTextConflict` 以 `git merge-file --union` 做文字合併，保留雙方修改而不留下衝突標記；其餘檔案（圖片、語音、影片等二進位內容無法逐行合併）由 `resolveBinaryConflict` 比較兩側最後一次修改該路徑的 commit 時間（`lastCommitTimeForPath`），自動取較新的版本（`git checkout --ours/--theirs`），最後以 `git commit --no-edit` 完成合併再推送。已用模擬的雙機獨立倉庫驗證 add/add 衝突的文字聯集合併與二進位新舊版本選擇皆正確運作。
