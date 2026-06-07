@@ -1104,3 +1104,83 @@ export async function confirmScript(id: string): Promise<{ id: string; status: s
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as { id: string; status: string };
 }
+
+// ---- Versioning (git history) ----
+
+export interface FileVersionEntry {
+  hash: string;
+  date: string;
+  message: string;
+}
+
+export interface FileHistoryResponse {
+  history: FileVersionEntry[];
+}
+
+export async function fetchImageHistory(id: string, pageNumber: number): Promise<FileHistoryResponse> {
+  const resp = await fetch(
+    `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/image/history`,
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as FileHistoryResponse;
+}
+
+export async function fetchScriptHistory(id: string, pageNumber: number): Promise<FileHistoryResponse> {
+  const resp = await fetch(
+    `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/script/history`,
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as FileHistoryResponse;
+}
+
+export function imageVersionUrl(id: string, pageNumber: number, hash: string): string {
+  return `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/image/versions/${encodeURIComponent(hash)}`;
+}
+
+export async function fetchScriptVersion(id: string, pageNumber: number, hash: string): Promise<string> {
+  const resp = await fetch(
+    `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/script/versions/${encodeURIComponent(hash)}`,
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return resp.text();
+}
+
+export interface RestoreImageResponse {
+  id: string;
+  page_number: number;
+  image_url: string;
+  updated_at: string;
+}
+
+export async function restoreImageVersion(
+  id: string,
+  pageNumber: number,
+  hash: string,
+): Promise<RestoreImageResponse> {
+  const resp = await fetch(
+    `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/image/restore/${encodeURIComponent(hash)}`,
+    { method: 'POST' },
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as RestoreImageResponse;
+}
+
+export interface RestoreScriptResponse {
+  id: string;
+  page_number: number;
+  script: string;
+  updated_at: string;
+}
+
+export async function restoreScriptVersion(
+  id: string,
+  pageNumber: number,
+  hash: string,
+): Promise<RestoreScriptResponse> {
+  const resp = await fetch(
+    `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/script/restore/${encodeURIComponent(hash)}`,
+    { method: 'POST' },
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as RestoreScriptResponse;
+}

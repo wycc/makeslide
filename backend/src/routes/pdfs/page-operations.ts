@@ -39,8 +39,10 @@ import {
   readMetadata,
   renumberPageArtifacts,
   writeMetadata,
+  pdfDir,
 } from '../../services/storage';
 import { generateCoverThumbnail, generatePageThumbnail } from '../../services/thumbnails';
+import { commitPresentationFile } from '../../services/presentationGit';
 
 const RewriteScriptResponseSchema = z.object({
   script: z.string().min(1).max(4096),
@@ -562,6 +564,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     }
 
     const relImagePath = path.posix.join('pages', `${String(n).padStart(row.page_count > 999 ? 4 : 3, '0')}.jpg`);
+    void commitPresentationFile(id, relImagePath, `image: replace page ${n} (user upload)`);
     const now = nowIso();
     db.prepare(`UPDATE pages SET image_path = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`).run(relImagePath, now, id, n);
     db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(now, id);
@@ -884,6 +887,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
 
       const script = result.data.script.trim();
       await fs.promises.writeFile(safeJoinPdfPath(id, pageRow.script_path), script, 'utf8');
+      void commitPresentationFile(id, pageRow.script_path, `script: rewrite page ${n} via chat`);
       savePageGenerationPrompt(id, n, 'script', userText, getRuntimeAiSettings().openaiLlmModel);
       const now = nowIso();
       const nextHistory = [...body.history, { role: 'user' as const, content: prompt }, { role: 'assistant' as const, content: script }].slice(-20);
@@ -941,6 +945,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     try {
       const script = parsedBody.data.script.trim();
       await fs.promises.writeFile(safeJoinPdfPath(id, pageRow.script_path), script, 'utf8');
+      void commitPresentationFile(id, pageRow.script_path, `script: update page ${n} for audio regeneration`);
       const result = await synthesizeAudio({
         pdfId: id,
         pageCount: pdfRow.page_count,

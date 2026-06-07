@@ -1,5 +1,7 @@
 import fs from 'node:fs';
-import { coverImagePath, pageImagePath, pageTextPath, pagesDir, sourcePdfPath } from '../../services/storage';
+import path from 'node:path';
+import { coverImagePath, pageImagePath, pageTextPath, pagesDir, pdfDir, sourcePdfPath } from '../../services/storage';
+import { commitPresentationFiles } from '../../services/presentationGit';
 import { generateCoverThumbnail, generatePageThumbnail, ensurePageThumbnail } from '../../services/thumbnails';
 import { getOpenAIClient } from '../../services/openai';
 import { logger } from '../../logger';
@@ -381,6 +383,13 @@ export async function renderTextPagesWithLlm(
     await fs.promises.writeFile(imagePath, Buffer.from(b64, 'base64'));
     await generatePageThumbnail(opts.pdfId, p.pageNumber, pageCount, imagePath);
     await fs.promises.writeFile(textPath, p.content, 'utf8');
+    const dir = pdfDir(opts.pdfId);
+    const relImage = path.relative(dir, imagePath);
+    void commitPresentationFiles(
+      opts.pdfId,
+      [relImage],
+      `image: generate page ${p.pageNumber}`,
+    );
     const endedAt = new Date().toISOString();
     const latencyMs = Date.parse(endedAt) - Date.parse(startedAt);
     pagePaths.push(imagePath);
