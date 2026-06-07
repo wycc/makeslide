@@ -4263,17 +4263,6 @@ export default function PlayPage() {
                 >
                   📝 逐字稿
                 </button>
-                {editTab === 'script' ? (
-                  <button
-                    type="button"
-                    onClick={() => currentPage && void openVersionHistory('script', currentPage.page_number)}
-                    disabled={!currentPage}
-                    title="查看此頁逐字稿的歷史版本"
-                    className="shrink-0 border-l border-slate-700 px-3 py-1.5 text-sm text-slate-400 hover:bg-slate-800 hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    🕘 版本
-                  </button>
-                ) : null}
                 <button
                   type="button"
                   onClick={() => setEditTab('prompt')}
@@ -4319,9 +4308,20 @@ export default function PlayPage() {
 
               {editTab === 'script' ? (
                 <>
-                  <h2 className="mb-2 text-sm font-semibold text-slate-300">
-                    📝 逐字稿（第 {currentPage?.page_number ?? '-'} 頁）
-                  </h2>
+                  <div className="mb-2 flex items-center justify-between">
+                    <h2 className="text-sm font-semibold text-slate-300">
+                      📝 逐字稿（第 {currentPage?.page_number ?? '-'} 頁）
+                    </h2>
+                    <button
+                      type="button"
+                      onClick={() => currentPage && void openVersionHistory('script', currentPage.page_number)}
+                      disabled={!currentPage}
+                      title="查看此頁逐字稿的歷史版本"
+                      className="rounded-md border border-slate-600 px-2 py-1 text-xs text-slate-400 hover:bg-slate-800 hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      🕘 版本
+                    </button>
+                  </div>
                   <textarea
                     value={editingScript}
                     onChange={(e) => setEditingScript(e.target.value)}
