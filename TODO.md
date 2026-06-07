@@ -498,3 +498,7 @@
 - 時間: 2026-06-07 11:30:00 +0800
 - 分支: feature/github-sync-settings-20260607
 - 內容: 在系統設定中新增 GITHUB_REPO_URL 與 GITHUB_TOKEN 兩個帳號層級設定（後端 `aiSettings.ts` 持久化到 `accounts/<id>/settings.env`，`/api/system/ai-settings` GET/PATCH 回傳與更新這兩個欄位，設定頁加入對應輸入框）。新增 `presentationGit.ts` 的 `pushPresentationToGitHub`，會以 token 組成 `https://x-access-token:<token>@...` 形式的認證 URL，將每個簡報既有的本機 git 倉庫推送（force push）到設定中 GitHub repository 的「以簡報 id 命名的分支」上；新增路由 `POST /api/pdfs/:id/github-sync` 觸發同步。PlayPage 工具列加入「⤴ 同步到 GitHub」按鈕呼叫此 API。由於設定為帳號層級（存在各自的 settings.env），在另一台機器上填入相同 repository 與個人 token，即可用同一機制把該機器上的簡報同步過去。
+
+- 時間: 2026-06-07 12:15:00 +0800
+- 分支: feature/github-sync-settings-20260607
+- 內容: 修正先前 `.gitignore` 排除過多檔案、導致同步到另一台機器後無法還原的問題。盤點每個被排除的檔案是否能由已追蹤內容「精確重生」：縮圖（`*.thumb.jpg`）、封面（`cover.jpg`/`cover.thumb.jpg`）是對已追蹤頁面圖片做純粹的決定性縮圖，可安全排除；但旁白語音（`*.m4a`/`*.mp3`，雲端 TTS 結果不保證逐位元重現）、AI 候選圖片（`*.candidate.*.jpg`，gpt-image 生成）、原始來源（`source.pdf`/`source.txt`）、原始字幕（`*.raw.json`）、正規化字幕（`*.normalized.txt`，依賴未追蹤的 raw.json）、大綱（`outline.md`，LLM 產生）與成品影片（`video.mp4`，依賴非決定性語音與外部編碼器版本）皆屬原始輸入或非決定性產物，無法精確重生，因此都應改為追蹤。`presentationGit.ts` 的 `GITIGNORE_CONTENT` 縮減為僅 `*.thumb.jpg`、`cover.jpg`、`cover.thumb.jpg`；`ensurePresentationRepo` 新增 `refreshGitignore`，讓既有（在舊規則下建立）的簡報倉庫也會更新 `.gitignore` 並 commit；`pushPresentationToGitHub` 推送前呼叫新增的 `commitAllPendingChanges`（`git add -A` + commit），確保所有新近變成可追蹤的檔案在不需逐一在 worker 步驟中呼叫 commitPresentationFile 的情況下，也會被收進同步內容。
