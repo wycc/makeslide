@@ -456,6 +456,7 @@
 [ ] 下載 youtube 時，下載字幕檔的動作不應該叫產生字幕檔，應該叫下載字幕檔。
 [ ] 下載 youtube 時，下載的字幕檔應該被存下來當成是來源，可以在來源被檢視。
 [ ] 下載 youtube 時，下載的語音檔應該被存下來當成是來源，可以在來源被檢視。STT 轉出的字幕檔也應被存下來可以在來源被檢視。
+[x] 當收到 LLM provider 傳回的錯誤時，應該要顯示給使用者看。（完成於分支: feature/show-llm-provider-error-to-user-20260607）
 [ ] 在上傳 PDF 時,　要提供選項單入或雙人的選項
 [x] 修正 YouTube 字幕過多頁數不足的問題：去除 VTT inline timing markers 和重複行，並將大綱生成的字幕輸入上限從 16K 提高到 64K（完成於分支: feature/youtube-captions-coverage-20260601）
 
@@ -510,3 +511,7 @@
 - 時間: 2026-06-07 17:05:00 +0800
 - 分支: feature/github-sync-settings-20260607
 - 內容: 同步到 GitHub 前先 pull 並自動合併遠端分支，避免從第二台機器同步時用 force push 覆蓋掉對方已推送的內容。`pushPresentationToGitHub` 改為先 `commitAllPendingChanges`，再以新增的 `pullAndMergeFromGitHub` fetch 簡報對應分支並 `git merge --allow-unrelated-histories`（每台機器各自 `git init`，分支歷史互不相關，需允許合併不相關歷史）。發生衝突時依檔案類型自動解決：文字檔（`.txt`/`.md`/`.json`，包含逐字稿、字幕、大綱、metadata）透過 `resolveTextConflict` 以 `git merge-file --union` 做文字合併，保留雙方修改而不留下衝突標記；其餘檔案（圖片、語音、影片等二進位內容無法逐行合併）由 `resolveBinaryConflict` 比較兩側最後一次修改該路徑的 commit 時間（`lastCommitTimeForPath`），自動取較新的版本（`git checkout --ours/--theirs`），最後以 `git commit --no-edit` 完成合併再推送。已用模擬的雙機獨立倉庫驗證 add/add 衝突的文字聯集合併與二進位新舊版本選擇皆正確運作。
+
+- 時間: 2026-06-07 18:20:00 +0800
+- 分支: feature/show-llm-provider-error-to-user-20260607
+- 內容: 讓 LLM/圖片生成 provider 回傳的錯誤（例如 gpt-image-2 的 moderation_blocked）能顯示給使用者，而不是只停在後端 log。後端原本就把全域錯誤存在 `pdfs.error_message`、單頁錯誤存在 `pages.error_message`，但 API 回傳的 `PdfDetailPage` 缺少單頁 `error_message` 欄位、前端也完全沒有顯示這些錯誤。修正：在 `PdfDetailPage` 型別與 `rowToDetail()` 補上 `error_message`；前端 PlayPage 在簡報整體失敗（`status === 'failed'`）時於頂部顯示錯誤橫幅，在目前頁失敗時顯示該頁專屬的錯誤橫幅，並把原本一律顯示「圖片產生中…」的佔位文字改為依該頁狀態顯示「本頁產生失敗：<原因>」。
