@@ -486,7 +486,7 @@
 - 分支: feature/chat-image-inpaint-20260607
 - 內容: 在播放頁問答區加入圖片貼上與 AI inpainting 功能。後端新增 `POST /api/pdfs/:id/pages/:n/inpaint-image` multipart 端點，從磁碟讀取目前投影片圖片，接收可選的遮罩 PNG（透明=修改區域、白=保留）和參考圖、提示詞，呼叫 GPT-Image-2 `images.edit` API（size 1536x1024），結果存為 page candidate；前端在投影片圖片上疊加透明 div overlay，按「選取區域」鈕後可拖曳選定修改範圍（normalized 座標，生成遮罩時換算至 1536x1024），貼入剪貼簿圖片作為參考圖（僅顯示縮圖預覽）；有選區或參考圖時「修改圖片」按鈕呼叫 inpaintImage()，否則走既有 regenerate 流程；前端 api 新增 `inpaintImage()` 與 `InpaintImageResponse` 型別。
 
-[x] 請使用 git 來管理簡報，每一次的變更都 commit 到 local git 中並自動產生 commit message。圖片和逐字稿都可以獨立的檢查過去的版本並回到指定的版本（完成於分支: feature/git-version-management-20260607）
+[x] (merge)請使用 git 來管理簡報，每一次的變更都 commit 到 local git 中並自動產生 commit message。圖片和逐字稿都可以獨立的檢查過去的版本並回到指定的版本（完成於分支: feature/git-version-management-20260607）
 
 ## 工作記錄
 
