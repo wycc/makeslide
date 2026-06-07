@@ -592,6 +592,7 @@ export function rowToDetail(row: PdfRow, pages: PageRow[], timingsByPage: PageTi
     audio_url: p.audio_path ? `api/pdfs/${row.id}/pages/${p.page_number}/audio` : null,
     audio_duration_seconds: p.audio_duration_seconds,
     status: p.status,
+    error_message: p.error_message,
     timings: timingsByPage.get(p.page_number) ?? emptyPageTimings(),
   }));
   return {
