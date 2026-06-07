@@ -458,6 +458,7 @@
 [ ] 下載 youtube 時，下載的語音檔應該被存下來當成是來源，可以在來源被檢視。STT 轉出的字幕檔也應被存下來可以在來源被檢視。
 [x] 當收到 LLM provider 傳回的錯誤時，應該要顯示給使用者看。（完成於分支: feature/show-llm-provider-error-to-user-20260607）
 [ ] 在上傳 PDF 時,　要提供選項單入或雙人的選項
+[x] gpt-image-2 的錯誤請重試一次，不要直接判定失敗（完成於分支: feature/retry-gpt-image-moderation-blocked-20260608）
 [x] 修正 YouTube 字幕過多頁數不足的問題：去除 VTT inline timing markers 和重複行，並將大綱生成的字幕輸入上限從 16K 提高到 64K（完成於分支: feature/youtube-captions-coverage-20260601）
 
 ## 工作記錄
@@ -515,3 +516,7 @@
 - 時間: 2026-06-07 18:20:00 +0800
 - 分支: feature/show-llm-provider-error-to-user-20260607
 - 內容: 讓 LLM/圖片生成 provider 回傳的錯誤（例如 gpt-image-2 的 moderation_blocked）能顯示給使用者，而不是只停在後端 log。後端原本就把全域錯誤存在 `pdfs.error_message`、單頁錯誤存在 `pages.error_message`，但 API 回傳的 `PdfDetailPage` 缺少單頁 `error_message` 欄位、前端也完全沒有顯示這些錯誤。修正：在 `PdfDetailPage` 型別與 `rowToDetail()` 補上 `error_message`；前端 PlayPage 在簡報整體失敗（`status === 'failed'`）時於頂部顯示錯誤橫幅，在目前頁失敗時顯示該頁專屬的錯誤橫幅，並把原本一律顯示「圖片產生中…」的佔位文字改為依該頁狀態顯示「本頁產生失敗：<原因>」。
+
+- 時間: 2026-06-08 09:10:00 +0800
+- 分支: feature/retry-gpt-image-moderation-blocked-20260608
+- 內容: 修正 gpt-image-2 圖片生成遇到 `moderation_blocked`（OpenAI 安全系統誤判拒絕）時直接判定該頁失敗、不重試的問題；這類錯誤往往重試一次就能成功。在 `renderTextPagesWithLlm.ts` 新增 `isModerationBlockedImageError()`（偵測 `code === 'moderation_blocked'` 或訊息包含 "rejected by the safety system"），並在既有的重試迴圈中加入 `MODERATION_BLOCKED_MAX_ATTEMPTS = 2`，讓這類錯誤額外獲得一次重試機會（不影響原本 transient 錯誤最多重試到 `IMAGE_GENERATION_MAX_ATTEMPTS = 3` 的邏輯），並在 log 與失敗 metadata 中記錄 `moderationBlocked` 旗標方便追蹤。
