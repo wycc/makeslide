@@ -3892,6 +3892,15 @@ export default function PlayPage() {
                     tabIndex={-1}
                     aria-label={isPlaying ? '暫停語音播放' : '繼續語音播放'}
                   />
+                  <button
+                    type="button"
+                    onClick={() => currentPage && void openVersionHistory('image', currentPage.page_number)}
+                    disabled={!currentPage}
+                    title="查看此頁圖片的歷史版本"
+                    className="absolute right-2 top-2 z-20 rounded-md border border-slate-600 bg-slate-900/80 px-2 py-1 text-xs text-slate-300 backdrop-blur hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    🖼 版本
+                  </button>
                   {pdfId && currentPage && (
                     <DrawingCanvas
                       ref={drawingCanvasRef}
@@ -4254,6 +4263,17 @@ export default function PlayPage() {
                 >
                   📝 逐字稿
                 </button>
+                {editTab === 'script' ? (
+                  <button
+                    type="button"
+                    onClick={() => currentPage && void openVersionHistory('script', currentPage.page_number)}
+                    disabled={!currentPage}
+                    title="查看此頁逐字稿的歷史版本"
+                    className="shrink-0 border-l border-slate-700 px-3 py-1.5 text-sm text-slate-400 hover:bg-slate-800 hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    🕘 版本
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => setEditTab('prompt')}
@@ -5124,24 +5144,6 @@ export default function PlayPage() {
                   className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {chatBusy ? '詢問中…' : '詢問'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => currentPage && void openVersionHistory('image', currentPage.page_number)}
-                  disabled={!currentPage}
-                  title="查看此頁圖片的歷史版本"
-                  className="rounded-md border border-slate-600 px-2 py-2 text-sm text-slate-400 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  🖼 版本
-                </button>
-                <button
-                  type="button"
-                  onClick={() => currentPage && void openVersionHistory('script', currentPage.page_number)}
-                  disabled={!currentPage}
-                  title="查看此頁逐字稿的歷史版本"
-                  className="rounded-md border border-slate-600 px-2 py-2 text-sm text-slate-400 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  📝 版本
                 </button>
               </div>
             </div>
