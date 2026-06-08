@@ -2,12 +2,12 @@ import crypto from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { config } from '../config';
-import { getRuntimeAiSettings } from '../services/aiSettings';
+import { getSystemAuthSettings } from '../services/aiSettings';
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_USERINFO_URL = 'https://openidconnect.googleapis.com/v1/userinfo';
-const SESSION_COOKIE = 'makeslide_session';
+export const SESSION_COOKIE = 'makeslide_session';
 const OAUTH_STATE_COOKIE = 'makeslide_oauth_state';
 const GOOGLE_OAUTH_CLIENT_ID_SUFFIX = '.apps.googleusercontent.com';
 
@@ -101,7 +101,7 @@ function redirectUri(request: FastifyRequest): string {
 
 export async function authRoutes(app: FastifyInstance) {
   app.get('/api/auth/status', async (request) => {
-    const runtime = getRuntimeAiSettings();
+    const runtime = getSystemAuthSettings();
     const session = decodeSession(parseCookies(request)[SESSION_COOKIE]);
     return {
       google_enabled: Boolean(runtime.googleAuthEnabled && runtime.googleClientId && runtime.googleClientSecret),
@@ -111,7 +111,7 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   app.get('/api/auth/google/start', async (request, reply) => {
-    const runtime = getRuntimeAiSettings();
+    const runtime = getSystemAuthSettings();
     if (!runtime.googleAuthEnabled) {
       return reply.code(503).send({
         error: {
@@ -150,7 +150,7 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   app.get('/api/auth/google/callback', async (request, reply) => {
-    const runtime = getRuntimeAiSettings();
+    const runtime = getSystemAuthSettings();
     const query = z.object({ code: z.string(), state: z.string() }).safeParse(request.query);
     const expectedState = parseCookies(request)[OAUTH_STATE_COOKIE];
     clearCookie(reply, OAUTH_STATE_COOKIE);

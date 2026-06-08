@@ -21,6 +21,7 @@ import {
 import { fetchYoutubeCaptions } from '../services/youtubeCaptions';
 import { callChatJSON } from '../services/openai';
 import { getRuntimeAiSettings } from '../services/aiSettings';
+import { accountIdFromOwnerSub, runWithAccountId } from '../services/accountContext';
 import type {
   PageRow,
   PageStatus,
@@ -226,6 +227,7 @@ function getPdfRow(pdfId: string): PdfRow | undefined {
               total_audio_duration_seconds,
               tts_voice, tts_speed, script_max_chars_per_page,
               source_type, source_url, source_video_id, source_caption_language,
+              owner_sub,
               created_at, updated_at
          FROM pdfs WHERE id = ?`,
     )
@@ -1250,11 +1252,12 @@ export function enqueuePdfProcessing(pdfId: string): void {
   }
 
   inFlight.add(pdfId);
+  const accountId = accountIdFromOwnerSub(row.owner_sub);
   const queue = getProcessingQueue();
   void queue
     .add(async () => {
       try {
-        await runPipeline(pdfId);
+        await runWithAccountId(accountId, () => runPipeline(pdfId));
       } finally {
         inFlight.delete(pdfId);
       }

@@ -14,6 +14,7 @@ import {
   writeMetadata,
 } from '../services/storage';
 import { callChatJSON } from '../services/openai';
+import { accountIdFromOwnerSub, runWithAccountId } from '../services/accountContext';
 import type { PageRow, PdfMetadataPage, PdfRow } from '../types';
 import { renderTextPagesWithLlm } from './steps/renderTextPagesWithLlm';
 import { generateScript } from './steps/generateScript';
@@ -635,8 +636,8 @@ export async function startAddPagesFromPrompt(
   }
 
   const row = db
-    .prepare(`SELECT status, page_count FROM pdfs WHERE id = ?`)
-    .get(pdfId) as { status: string; page_count: number | null } | undefined;
+    .prepare(`SELECT status, page_count, owner_sub FROM pdfs WHERE id = ?`)
+    .get(pdfId) as { status: string; page_count: number | null; owner_sub: string | null } | undefined;
   if (!row) {
     const err = new Error('PDF_NOT_FOUND') as Error & { code: string };
     err.code = 'PDF_NOT_FOUND';
@@ -663,7 +664,10 @@ export async function startAddPagesFromPrompt(
   };
   jobs.set(pdfId, job);
 
-  void runAddPagesJob(pdfId, opts.prompt, opts.outlineText, opts.insertAfterPage).catch((err) => {
+  const accountId = accountIdFromOwnerSub(row.owner_sub);
+  void runWithAccountId(accountId, () =>
+    runAddPagesJob(pdfId, opts.prompt, opts.outlineText, opts.insertAfterPage),
+  ).catch((err) => {
     logger.error({ err, pdfId }, 'add-pages-from-prompt: uncaught error in runner');
   });
 
