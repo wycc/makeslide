@@ -461,6 +461,7 @@
 [x] gpt-image-2 的錯誤請重試一次，不要直接判定失敗（完成於分支: feature/retry-gpt-image-moderation-blocked-20260608）
 [x] 修正 YouTube 字幕過多頁數不足的問題：去除 VTT inline timing markers 和重複行，並將大綱生成的字幕輸入上限從 16K 提高到 64K（完成於分支: feature/youtube-captions-coverage-20260601）
 [x] 將頁面產物檔案（圖片/縮圖/逐字稿/腳本/語音）改用建立時就決定、永不改變的 page_uid 命名，取代依頁碼命名；解決搬移/插入/刪除頁面時 cascading rename 導致 git 無法偵測 rename、`git log --follow` 斷裂的結構性問題（完成於分支: feature/stable-page-uid-filenames-20260608）
+[x] 修正自動生成測驗時沒有把逐字稿/投影片文字傳給 LLM（送出的簡報內容全部都是「（無）」）的問題（完成於分支: fix/quiz-empty-transcript-missing-files-20260608）
 
 ## 工作記錄
 
@@ -525,3 +526,7 @@
 - 時間: 2026-06-08 14:00:00 +0800
 - 分支: feature/stable-page-uid-filenames-20260608
 - 內容: 將頁面產物檔案（image/thumbnail/text/script/audio）的命名方式從「依頁碼」（`pages/003.jpg`）改為「建立時產生、永不改變的 page_uid」（`pages/<uid>.jpg`），`page_number` 變成純粹的 DB 排序索引。背景：原本搬移/插入/刪除頁面時 `renumberPageArtifacts` 會把磁碟檔案整批 `fs.rename` 以對齊新頁碼，但這種「同路徑換內容」的 cascading rename 在 git 眼中只是一連串 M/A/D，完全無法被偵測為 rename，導致 `git log --follow` 斷裂、無法追蹤某張投影片內容的連續歷史。修正：`pages` 表新增 `page_uid`（nanoid(10)，含回填與唯一索引），`storage.ts` 的 `pageImagePath`/`pageThumbnailPath`/`pageTextPath`/`pageScriptPath`/`pageAudioPath` 改為 `(pdfId, pageUid)` 簽名，移除 `pagePad`/`formatPageNumber`/`renumberPageArtifacts`/`rewritePagePathsToMatchNumber`；所有建立頁面的路徑（`pipeline.ts`、`upload.ts`、`import.ts`、`addPagesFromPrompt.ts`、`page-operations.ts`）都產生並寫入 `page_uid`；`page-operations.ts` 的搬移/插入/刪除端點移除 renumbering 呼叫，現在純粹是 `UPDATE pages SET page_number = ...`，完全不動磁碟檔案；`versioning.ts`、`regenerate.ts`、`detail.ts`、`quizzes.ts` 與各 worker step（`extractText`/`generateScript`/`generateTitle`/`generateVideo`/`synthesizeAudio`/`renderPages`/`renderTextPages*`）改用 DB 內 `page_uid` 或既有路徑欄位重建路徑。新增一次性遷移腳本 `backend/scripts/migrate-page-uids.ts`，把既有簡報的 `pages/00N.*` 改名為 `pages/<uid>.*` 並以 `git add -A` 提交（讓 git 對「從未被 commit 過」與「曾經被 commit 過」的簡報都能正確處理：前者單純記錄為新增，後者能因內容 100% 相似而被偵測成 rename，延續 `--follow` 歷史）；已在實際簡報 `l5mI-kjYmJ`（15 頁、75 個產物檔）上驗證遷移、DB 路徑欄位、`metadata.json` 與 `pageXxxPath` helper 解析皆正確一致，且 `npx tsc --noEmit` 全專案通過。
+
+- 時間: 2026-06-08 15:40:00 +0800
+- 分支: fix/quiz-empty-transcript-missing-files-20260608
+- 內容: 修正自動生成測驗時「老師提示詞有送達，但簡報內容全部都是（無）」的問題。根因不在程式碼邏輯，而是前一天的 page_uid 重構（分支 feature/stable-page-uid-filenames-20260608）留下的資料遷移缺口：程式碼已改用 `pages/<page_uid>.text.txt`／`pages/<page_uid>.script.txt` 路徑讀取頁面文字與逐字稿，但隨附的一次性遷移腳本 `backend/scripts/migrate-page-uids.ts`（負責把舊簡報的 `pages/00N.*` 改名成 `pages/<page_uid>.*`）並未對既有簡報實際執行；`readPageContext()` 用 `fs.readFile(...).catch(() => '')` 靜默吞掉「找不到檔案」的錯誤，導致每一頁都送出「投影片文字：（無）／逐字稿：（無）」。已從 LLM 請求日誌（`backend/backend/data/llm-requests.log.jsonl`）實際比對驗證：提示詞正常送達，唯獨簡報內容全空。修復分兩部分：(1) 對 18 個受影響簡報執行 `migrate-page-uids.ts`，把約 2756 個頁面產物檔（image/thumbnail/text/script/audio）從舊的頁碼命名改為 page_uid 命名，同步更新 DB 的 `text_path`/`script_path` 與各簡報 git repo 的 commit；(2) 在 `backend/src/routes/pdfs/quizzes.ts` 新增 `readPageArtifact()` 包裝讀檔，讀取失敗時改為寫入 warn log（含 pdfId、頁碼、檔案類型、路徑與錯誤訊息），避免未來再發生「資料不一致卻毫無痕跡」的靜默失敗。
