@@ -72,12 +72,15 @@ import DrawingCanvas, { type DrawingCanvasHandle, type DrawingData, type Drawing
 import {
   DEFAULT_TTS_VOICE_BY_PROVIDER,
   TTS_VOICES_BY_PROVIDER,
-  geminiVoiceLabel,
   type TtsProvider,
 } from '../lib/ttsVoices';
 import { formatDurationMs, formatTime } from './play/formatters';
 import { PageTimingChips } from './play/PageTimingChips';
 import { RegenerateProgress } from './play/RegenerateProgress';
+import { TtsDialog } from './play/TtsDialog';
+import { ImageStyleDialog } from './play/ImageStyleDialog';
+import { RegenAllDialog } from './play/RegenAllDialog';
+import { ShareDialog } from './play/ShareDialog';
 import type {
   ChatMessage,
   PdfDetail,
@@ -717,6 +720,26 @@ export default function PlayPage() {
       detail.status !== 'ready' &&
       detail.status !== 'awaiting_script_confirmation') ||
     shareIsReadOnly;
+
+  const handleSaveImageStyle = useCallback(() => {
+    if (!pdfId) {
+      setImageStyleDialogOpen(false);
+      return;
+    }
+    if (isReadOnlyProcessing) return;
+    void (async () => {
+      try {
+        const res = await updatePdfImageStyleSettings(pdfId, deckImageStylePrompt);
+        setDetail((prev) => (prev ? { ...prev, image_style_prompt: res.image_style_prompt, updated_at: res.updated_at } : prev));
+        setRegenAllMsg('已儲存整份圖片風格設定，後續重生會自動套用');
+      } catch (err) {
+        setRegenAllMsg(err instanceof ApiError ? err.message : '儲存圖片風格設定失敗');
+      } finally {
+        setImageStyleDialogOpen(false);
+      }
+    })();
+  }, [pdfId, isReadOnlyProcessing, deckImageStylePrompt]);
+
   useEffect(() => {
     if (deckPages.length === 0) {
       setThumbLoadUntilIdx(0);
@@ -5352,363 +5375,77 @@ export default function PlayPage() {
       </main>
 
       {ttsDialogOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
-          <div className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl">
-            <h3 className="mb-3 text-sm font-semibold text-slate-200">生成設定</h3>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs text-slate-300">聲音</span>
-                <select
-                  value={ttsVoice}
-                  onChange={(e) => setTtsVoice(e.target.value)}
-                  disabled={isReadOnlyProcessing || ttsBusy}
-                  className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs"
-                >
-                  {availableTtsVoices.map((v) => (
-                    <option key={v} value={v}>{ttsProvider === 'gemini' ? geminiVoiceLabel(v) : v}</option>
-                  ))}
-                </select>
-              </div>
-              {ttsProvider === 'gemini' ? (
-                <div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-slate-300">主持模式</span>
-                    <div className="flex overflow-hidden rounded border border-slate-700">
-                      {([
-                        ['solo', '單人旁白'],
-                        ['dual', '雙人對談'],
-                      ] as const).map(([mode, label]) => (
-                        <button
-                          key={mode}
-                          type="button"
-                          onClick={() => setHostMode(mode)}
-                          disabled={isReadOnlyProcessing || ttsBusy}
-                          aria-pressed={hostMode === mode}
-                          className={`px-3 py-1 text-xs ${
-                            hostMode === mode
-                              ? 'bg-cyan-500/25 font-medium text-cyan-100'
-                              : 'text-slate-300 hover:bg-slate-800'
-                          }`}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <p className="mt-1 text-xs text-slate-500">
-                    雙人對談才會使用上方人設與 Speaker 1／2 聲音；變更後需重新產生逐字稿才會套用。
-                  </p>
-                </div>
-              ) : null}
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-300">速度</span>
-                <input
-                  type="range"
-                  min={0.5}
-                  max={2}
-                  step={0.05}
-                  value={ttsSpeed}
-                  onChange={(e) => setTtsSpeed(Number(e.target.value))}
-                  disabled={isReadOnlyProcessing || ttsBusy}
-                  className="flex-1 accent-cyan-500"
-                />
-                <span className="w-10 text-right text-xs tabular-nums text-slate-300">{ttsSpeed.toFixed(2)}</span>
-              </div>
-              <div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-slate-300">逐字稿每頁上限字數</span>
-                  <span className="text-xs text-slate-500">（留空使用系統預設）</span>
-                </div>
-                <input
-                  type="number"
-                  min={80}
-                  max={2000}
-                  step={10}
-                  placeholder="系統預設"
-                  value={scriptMaxCharsPerPage ?? ''}
-                  onChange={(e) => {
-                    const raw = e.target.value;
-                    if (raw === '') { setScriptMaxCharsPerPage(null); return; }
-                    const n = Number(raw);
-                    if (!Number.isFinite(n)) return;
-                    setScriptMaxCharsPerPage(Math.max(80, Math.min(2000, Math.round(n))));
-                  }}
-                  disabled={isReadOnlyProcessing || ttsBusy}
-                  className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100 placeholder:text-slate-500"
-                />
-              </div>
-              {ttsMsg ? <p className="text-xs text-slate-400">{ttsMsg}</p> : null}
-            </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setTtsDialogOpen(false)}
-                className="rounded border border-slate-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
-              >
-                關閉
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleSaveTtsSettings()}
-                disabled={isReadOnlyProcessing || ttsBusy}
-                className="rounded border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-200 disabled:opacity-40"
-              >
-                {ttsBusy ? '儲存中…' : '儲存設定'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <TtsDialog
+          ttsProvider={ttsProvider}
+          availableTtsVoices={availableTtsVoices}
+          ttsVoice={ttsVoice}
+          onTtsVoiceChange={setTtsVoice}
+          hostMode={hostMode}
+          onHostModeChange={setHostMode}
+          ttsSpeed={ttsSpeed}
+          onTtsSpeedChange={setTtsSpeed}
+          scriptMaxCharsPerPage={scriptMaxCharsPerPage}
+          onScriptMaxCharsPerPageChange={setScriptMaxCharsPerPage}
+          ttsMsg={ttsMsg}
+          ttsBusy={ttsBusy}
+          isReadOnlyProcessing={isReadOnlyProcessing}
+          onClose={() => setTtsDialogOpen(false)}
+          onSave={() => void handleSaveTtsSettings()}
+        />
       ) : null}
 
       {imageStyleDialogOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
-          <div className="w-full max-w-2xl rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl">
-            <h3 className="mb-2 text-sm font-semibold text-slate-200">整份簡報圖片風格設定</h3>
-            <p className="mb-3 text-xs text-slate-400">
-              這個風格會套用在後續的單張與多張圖片重生。可填入你偏好的風格模板並自行調整。
-            </p>
-            <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
-              <select
-                value={selectedImageStyleTemplateKey}
-                onChange={(e) => setSelectedImageStyleTemplateKey(e.target.value)}
-                className="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
-              >
-                {imageStyleTemplates.map((t) => (
-                  <option key={t.key} value={t.key}>{t.label}</option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={() => applyImageStyleTemplate(selectedImageStyleTemplateKey)}
-                disabled={isReadOnlyProcessing}
-                className="rounded border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25"
-              >
-                套用模板
-              </button>
-            </div>
-            <textarea
-              value={deckImageStylePrompt}
-              onChange={(e) => setDeckImageStylePrompt(e.target.value)}
-              disabled={isReadOnlyProcessing}
-              rows={8}
-              className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-fuchsia-500/40 placeholder:text-slate-500 focus:ring"
-              placeholder="例如：academic minimalist style, clean layout..."
-            />
-            <div className="mt-3 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setImageStyleDialogOpen(false)}
-                className="rounded border border-slate-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
-              >
-                關閉
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!pdfId) {
-                    setImageStyleDialogOpen(false);
-                    return;
-                  }
-                  if (isReadOnlyProcessing) return;
-                  void (async () => {
-                    try {
-                      const res = await updatePdfImageStyleSettings(pdfId, deckImageStylePrompt);
-                      setDetail((prev) => (prev ? { ...prev, image_style_prompt: res.image_style_prompt, updated_at: res.updated_at } : prev));
-                      setRegenAllMsg('已儲存整份圖片風格設定，後續重生會自動套用');
-                    } catch (err) {
-                      setRegenAllMsg(err instanceof ApiError ? err.message : '儲存圖片風格設定失敗');
-                    } finally {
-                      setImageStyleDialogOpen(false);
-                    }
-                  })();
-                }}
-                disabled={isReadOnlyProcessing}
-                className="rounded border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-200"
-              >
-                儲存設定
-              </button>
-            </div>
-          </div>
-        </div>
+        <ImageStyleDialog
+          imageStyleTemplates={imageStyleTemplates}
+          selectedImageStyleTemplateKey={selectedImageStyleTemplateKey}
+          onSelectedImageStyleTemplateKeyChange={setSelectedImageStyleTemplateKey}
+          onApplyTemplate={applyImageStyleTemplate}
+          deckImageStylePrompt={deckImageStylePrompt}
+          onDeckImageStylePromptChange={setDeckImageStylePrompt}
+          isReadOnlyProcessing={isReadOnlyProcessing}
+          onClose={() => setImageStyleDialogOpen(false)}
+          onSave={handleSaveImageStyle}
+        />
       ) : null}
-
       {regenAllDialogOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
-          <div className="w-full max-w-xl rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl">
-            <h3 className="mb-3 text-sm font-semibold text-slate-200">選擇重生項目</h3>
-            <p className="mb-3 text-xs text-slate-400">
-              可多選；執行順序固定為 <span className="font-semibold text-slate-200">圖檔 → 逐字稿 → 語音</span>。
-            </p>
-            <div className="mb-3 rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-3 py-2 text-xs text-fuchsia-200">
-              {regenSelectedPages.size > 0
-                ? `僅重生已選取的 ${regenSelectedPages.size} 張投影片（第 ${Array.from(regenSelectedPages).sort((a, b) => a - b).join('、') } 頁）`
-                : `重生全部 ${deckPages.length} 張投影片`}
-            </div>
-            <div className="mb-3 space-y-2">
-              <div className="rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100">
-                已套用整份圖片風格設定（可於上方「🖼️ 風格」調整）。
-              </div>
-              <label className="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-200">
-                <input
-                  type="checkbox"
-                  className="accent-fuchsia-500"
-                  checked={regenOptions.image}
-                  onChange={(e) => setRegenOptions((prev) => ({ ...prev, image: e.target.checked }))}
-                  disabled={isReadOnlyProcessing || regenAllBusy}
-                />
-                <span>圖檔</span>
-              </label>
-              <label className="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-200">
-                <input
-                  type="checkbox"
-                  className="accent-fuchsia-500"
-                  checked={regenOptions.script}
-                  onChange={(e) => setRegenOptions((prev) => ({ ...prev, script: e.target.checked }))}
-                  disabled={isReadOnlyProcessing || regenAllBusy}
-                />
-                <span>逐字稿</span>
-              </label>
-              <label className="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-200">
-                <input
-                  type="checkbox"
-                  className="accent-fuchsia-500"
-                  checked={regenOptions.audio}
-                  onChange={(e) => setRegenOptions((prev) => ({ ...prev, audio: e.target.checked }))}
-                  disabled={isReadOnlyProcessing || regenAllBusy}
-                />
-                <span>語音</span>
-              </label>
-            </div>
-            {regenOptions.image ? (
-              <div className="mb-2">
-                <label className="mb-1 block text-xs text-slate-400">圖檔重生提示詞</label>
-                <textarea
-                  value={regenAllPrompt}
-                  onChange={(e) => setRegenAllPrompt(e.target.value)}
-                  rows={4}
-                  className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-fuchsia-500/40 placeholder:text-slate-500 focus:ring"
-                  placeholder="輸入整份風格調整提示詞..."
-                  disabled={isReadOnlyProcessing || regenAllBusy}
-                />
-              </div>
-            ) : null}
-            {regenOptions.script ? (
-              <div className="mb-2">
-                <label className="mb-1 block text-xs text-slate-400">逐字稿重生提示詞</label>
-                <textarea
-                  value={regenScriptPrompt}
-                  onChange={(e) => setRegenScriptPrompt(e.target.value)}
-                  rows={3}
-                  className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-fuchsia-500/40 placeholder:text-slate-500 focus:ring"
-                  placeholder="例如：請以更精煉、口語、易懂的方式重寫，並保留每頁核心重點"
-                  disabled={isReadOnlyProcessing || regenAllBusy}
-                />
-                <div className="mt-2">
-                  <label className="mb-1 block text-xs text-slate-400">逐字稿每頁最大長度</label>
-                  <input
-                    type="number"
-                    min={80}
-                    max={2000}
-                    step={1}
-                    value={regenScriptMaxCharsPerPage}
-                    onChange={(e) => {
-                      const raw = Number(e.target.value);
-                      if (!Number.isFinite(raw)) return;
-                      const normalized = Math.max(80, Math.min(2000, Math.round(raw)));
-                      setRegenScriptMaxCharsPerPage(normalized);
-                    }}
-                    className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-fuchsia-500/40 placeholder:text-slate-500 focus:ring"
-                    disabled={isReadOnlyProcessing || regenAllBusy}
-                  />
-                </div>
-              </div>
-            ) : null}
-            {regenOptions.script && regenOptions.audio ? null : regenOptions.script ? (
-              <p className="mb-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-                提醒：若僅重生逐字稿，原有語音可能與新的逐字稿不相符，建議同時勾選「語音」。
-              </p>
-            ) : null}
-            <RegenerateProgress job={regenJob} />
-            {regenAllMsg ? (
-              <p
-                className={`mt-2 text-xs ${
-                  regenJob?.status === 'completed'
-                    ? 'text-emerald-300'
-                    : regenJob?.status === 'failed'
-                      ? 'text-rose-300'
-                      : 'text-slate-300'
-                }`}
-              >
-                {regenAllMsg}
-              </p>
-            ) : null}
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setRegenAllDialogOpen(false);
-                  if (!regenJobRunning) {
-                    setRegenJob(null);
-                    setRegenAllMsg(null);
-                  }
-                }}
-                disabled={regenAllBusy}
-                className="rounded border border-slate-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-40"
-              >
-                {regenJobRunning ? '關閉（背景繼續）' : regenJob ? '關閉' : '取消'}
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleConfirmRegenerate()}
-                disabled={isReadOnlyProcessing || regenAllBusy || !regenAnySelected}
-                className="rounded border border-fuchsia-500/50 bg-fuchsia-500/15 px-3 py-1.5 text-sm text-fuchsia-200 disabled:cursor-not-allowed disabled:opacity-40"
-                title={!regenAnySelected ? '請至少選擇一個項目' : ''}
-              >
-                {regenAllBusy ? '重生中…' : regenJob?.status === 'completed' ? '再次重生' : '確認'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <RegenAllDialog
+          deckPagesCount={deckPages.length}
+          regenSelectedPages={regenSelectedPages}
+          regenOptions={regenOptions}
+          onRegenOptionsChange={setRegenOptions}
+          regenAllPrompt={regenAllPrompt}
+          onRegenAllPromptChange={setRegenAllPrompt}
+          regenScriptPrompt={regenScriptPrompt}
+          onRegenScriptPromptChange={setRegenScriptPrompt}
+          regenScriptMaxCharsPerPage={regenScriptMaxCharsPerPage}
+          onRegenScriptMaxCharsPerPageChange={setRegenScriptMaxCharsPerPage}
+          regenJob={regenJob}
+          regenAllMsg={regenAllMsg}
+          regenAllBusy={regenAllBusy}
+          regenJobRunning={regenJobRunning}
+          regenAnySelected={regenAnySelected}
+          isReadOnlyProcessing={isReadOnlyProcessing}
+          onClose={() => {
+            setRegenAllDialogOpen(false);
+            if (!regenJobRunning) {
+              setRegenJob(null);
+              setRegenAllMsg(null);
+            }
+          }}
+          onConfirm={() => void handleConfirmRegenerate()}
+        />
       ) : null}
 
       {shareDialogOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
-          <div className="w-full max-w-2xl rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl">
-            <h3 className="text-base font-semibold text-slate-100">分享連結已建立</h3>
-            <p className="mt-2 text-sm text-slate-300">請複製以下 URL 並分享給他人：</p>
-            <textarea
-              readOnly
-              value={shareUrl}
-              onFocus={(e) => e.currentTarget.select()}
-              className="mt-3 h-24 w-full resize-none rounded-md border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs text-emerald-200 outline-none"
-            />
-            <div className="mt-4 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={async () => {
-                  if (!shareUrl) return;
-                  try {
-                    await navigator.clipboard.writeText(shareUrl);
-                    setShareMessage('已複製分享連結');
-                    setShareError(null);
-                  } catch {
-                    setShareError('瀏覽器不允許自動複製，請手動複製。');
-                  }
-                }}
-                className="rounded border border-violet-500/50 bg-violet-500/15 px-3 py-1.5 text-sm text-violet-200 hover:bg-violet-500/25"
-              >
-                複製連結
-              </button>
-              <button
-                type="button"
-                onClick={() => setShareDialogOpen(false)}
-                className="rounded border border-slate-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
-              >
-                關閉
-              </button>
-            </div>
-          </div>
-        </div>
+        <ShareDialog
+          shareUrl={shareUrl}
+          onCopySuccess={() => {
+            setShareMessage('已複製分享連結');
+            setShareError(null);
+          }}
+          onCopyError={() => setShareError('瀏覽器不允許自動複製，請手動複製。')}
+          onClose={() => setShareDialogOpen(false)}
+        />
       ) : null}
       {showAddPagesModal && pdfId ? (
         <AddPagesFromPromptModal
