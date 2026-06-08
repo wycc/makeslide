@@ -5,6 +5,8 @@ import type {
   PagePoll,
   PdfDetail,
   PdfListItem,
+  QuizAttempt,
+  QuizAttemptsResponse,
   QuizQuestion,
   QuizSet,
   RegenJobState,
@@ -856,6 +858,26 @@ export async function submitSyncQuizProgress(
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as { ok: boolean };
+}
+
+export async function submitQuizAttempt(
+  id: string,
+  quizId: number,
+  payload: { client_id: string; session_id: string; code?: string | null; answers: Record<string, number[]>; score?: number },
+): Promise<QuizAttempt> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/quizzes/${quizId}/attempts`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as QuizAttempt;
+}
+
+export async function fetchQuizAttempts(id: string, quizId: number): Promise<QuizAttemptsResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/quizzes/${quizId}/attempts`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as QuizAttemptsResponse;
 }
 
 export async function answerSyncFollowerQuestionsWithAi(

@@ -306,6 +306,29 @@ export interface SyncQuizProgress {
   updated_at: string;
 }
 
+export interface QuizAttempt {
+  id: number;
+  quiz_id: number;
+  session_id: string;
+  client_id: string;
+  code: string | null;
+  answers: Record<string, number[]>;
+  score: number | null;
+  submitted_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface QuizAttemptSession {
+  session_id: string;
+  submitted_at: string;
+  attempts: QuizAttempt[];
+}
+
+export interface QuizAttemptsResponse {
+  sessions: QuizAttemptSession[];
+}
+
 export interface SyncAiAnswer {
   id: string;
   answer: string;
@@ -327,6 +350,7 @@ export interface SyncJoinResponse {
   realtime_poll_started: boolean;
   quiz_mode: boolean;
   active_quiz_id: number | null;
+  quiz_session_id?: string | null;
   quiz_show_answers: boolean;
   follower_questions: SyncFollowerQuestion[];
   questions: SyncFollowerQuestion[];
@@ -352,6 +376,7 @@ export interface SyncStateResponse {
   realtime_poll_started: boolean;
   quiz_mode: boolean;
   active_quiz_id: number | null;
+  quiz_session_id?: string | null;
   quiz_show_answers: boolean;
   follower_questions: SyncFollowerQuestion[];
   displayed_question_id: string | null;

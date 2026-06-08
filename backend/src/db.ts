@@ -273,6 +273,25 @@ function migrate(): void {
 
     CREATE INDEX IF NOT EXISTS idx_quiz_sets_pdf_updated ON quiz_sets(pdf_id, updated_at DESC);
 
+    CREATE TABLE IF NOT EXISTS quiz_attempts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      pdf_id TEXT NOT NULL,
+      quiz_id INTEGER NOT NULL,
+      session_id TEXT NOT NULL,
+      client_id TEXT NOT NULL,
+      code TEXT,
+      answers_json TEXT NOT NULL,
+      score REAL,
+      submitted_at TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (pdf_id) REFERENCES pdfs(id) ON DELETE CASCADE,
+      FOREIGN KEY (quiz_id) REFERENCES quiz_sets(id) ON DELETE CASCADE,
+      UNIQUE (session_id, client_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_quiz_attempts_quiz_session ON quiz_attempts(quiz_id, session_id, submitted_at DESC);
+
     CREATE TABLE IF NOT EXISTS pdf_sources (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       pdf_id TEXT NOT NULL,

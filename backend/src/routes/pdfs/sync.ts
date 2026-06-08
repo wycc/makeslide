@@ -19,6 +19,7 @@ interface SyncSessionState {
   realtimePollStarted: boolean;
   quizMode: boolean;
   activeQuizId: number | null;
+  quizSessionId: string | null;
   quizShowAnswers: boolean;
   followerQuestions: SyncFollowerQuestion[];
   displayedQuestionId: string | null;
@@ -220,6 +221,7 @@ function buildStateResponse(session: SyncSessionState, pdfId: string, role: Sync
     realtime_poll_started: session.realtimePollStarted,
     quiz_mode: session.quizMode,
     active_quiz_id: session.activeQuizId,
+    quiz_session_id: session.quizSessionId,
     quiz_show_answers: session.quizShowAnswers,
     follower_questions: followerQuestions,
     questions: followerQuestions,
@@ -252,6 +254,7 @@ function getSession(pdfId: string): SyncSessionState {
       hit.activeQuizId = null;
       hit.quizShowAnswers = false;
       hit.quizProgress.clear();
+      hit.quizSessionId = null;
       hit.updatedAt = nowIso();
       upsertPersistedSession(hit);
     }
@@ -271,6 +274,7 @@ function getSession(pdfId: string): SyncSessionState {
     realtimePollStarted: Boolean(persisted?.realtime_poll_started),
     quizMode: Boolean(persisted?.quiz_mode),
     activeQuizId: persisted?.active_quiz_id ?? null,
+    quizSessionId: null,
     quizShowAnswers: Boolean(persisted?.quiz_show_answers),
     followerQuestions: [],
     displayedQuestionId: null,
@@ -421,6 +425,9 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     }
     if (session.activeQuizId !== previousActiveQuizId) {
       session.quizProgress.clear();
+      session.quizSessionId = session.activeQuizId
+        ? `qs-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+        : null;
     }
     if (typeof cursorX !== 'undefined') session.cursorX = cursorX;
     if (typeof cursorY !== 'undefined') session.cursorY = cursorY;
@@ -470,6 +477,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       session.displayedQuestionId = null;
       session.aiAnswer = null;
       session.quizProgress.clear();
+      session.quizSessionId = null;
       session.updatedAt = nowIso();
       upsertPersistedSession(session);
     }

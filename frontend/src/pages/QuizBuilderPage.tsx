@@ -4,14 +4,23 @@ import {
   ApiError,
   fetchPdfDetail,
   fetchPlaybackSyncState,
+  fetchQuizAttempts,
   fetchQuizSets,
   generateQuizSet,
   joinPlaybackSync,
   saveQuizSet,
+  submitQuizAttempt,
   submitSyncQuizProgress,
   updatePlaybackSyncState,
 } from '../lib/api';
-import type { PdfDetail, QuizQuestion, QuizQuestionType, QuizSet, SyncQuizProgress } from '../types';
+import type {
+  PdfDetail,
+  QuizAttemptSession,
+  QuizQuestion,
+  QuizQuestionType,
+  QuizSet,
+  SyncQuizProgress,
+} from '../types';
 
 function emptyQuestion(index: number): QuizQuestion {
   return {
@@ -74,13 +83,20 @@ export default function QuizBuilderPage() {
   const [error, setError] = useState<string | null>(null);
   const [syncRole, setSyncRole] = useState<'master' | 'follower'>('follower');
   const [syncActiveQuizId, setSyncActiveQuizId] = useState<number | null>(null);
+  const [syncQuizSessionId, setSyncQuizSessionId] = useState<string | null>(null);
   const [syncQuizShowAnswers, setSyncQuizShowAnswers] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [studentAnswers, setStudentAnswers] = useState<Record<string, number[]>>({});
   const [showEditorAnswers, setShowEditorAnswers] = useState(false);
   const [syncQuizProgress, setSyncQuizProgress] = useState<SyncQuizProgress[]>([]);
+  const [historyQuizId, setHistoryQuizId] = useState<number | null>(null);
+  const [historySessions, setHistorySessions] = useState<QuizAttemptSession[]>([]);
+  const [historyBusy, setHistoryBusy] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const syncClientIdRef = useRef('');
   const lastReportedProgressRef = useRef<{ quizId: number; answeredCount: number; submitted: boolean } | null>(null);
+  const submittedAttemptRef = useRef<string | null>(null);
+  const previousActiveQuizIdRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!pdfId) return;
@@ -142,6 +158,39 @@ export default function QuizBuilderPage() {
   }, [pdfId, isFollowerTesting, activeQuiz, studentAnswers]);
 
   useEffect(() => {
+    if (!pdfId || syncRole !== 'follower' || !activeQuiz || !syncQuizShowAnswers || !syncQuizSessionId) return;
+    const clientId = syncClientIdRef.current;
+    if (!clientId) return;
+    const key = `${syncQuizSessionId}:${clientId}`;
+    if (submittedAttemptRef.current === key) return;
+    submittedAttemptRef.current = key;
+    const scoreTable = normalizeQuestionScores(activeQuiz.questions);
+    const score = activeQuiz.questions.reduce((acc, q, idx) => {
+      const selected = studentAnswers[q.id] ?? [];
+      return acc + calcQuestionScore(q, selected, scoreTable[idx] ?? 0);
+    }, 0);
+    const followerCodeKey = `makeslide.sync.followerCode.${pdfId}`;
+    const code = window.localStorage.getItem(followerCodeKey)?.trim() || null;
+    void submitQuizAttempt(pdfId, activeQuiz.id, {
+      client_id: clientId,
+      session_id: syncQuizSessionId,
+      code,
+      answers: studentAnswers,
+      score: Math.round(score * 100) / 100,
+    }).catch(() => {
+      submittedAttemptRef.current = null;
+    });
+  }, [pdfId, syncRole, activeQuiz, syncQuizShowAnswers, syncQuizSessionId, studentAnswers]);
+
+  useEffect(() => {
+    const previous = previousActiveQuizIdRef.current;
+    previousActiveQuizIdRef.current = syncActiveQuizId;
+    if (syncRole === 'follower' && previous != null && syncActiveQuizId == null && pdfId) {
+      navigate(`/play/${encodeURIComponent(pdfId)}?fullscreen=1`);
+    }
+  }, [syncRole, syncActiveQuizId, pdfId, navigate]);
+
+  useEffect(() => {
     if (!pdfId) return;
     const storageKey = `makeslide.sync.client.${pdfId}`;
     const roleKey = `makeslide.sync.role.${pdfId}`;
@@ -183,6 +232,7 @@ export default function QuizBuilderPage() {
             setSyncRole(nextRole);
             window.localStorage.setItem(roleKey, nextRole);
             setSyncActiveQuizId(joined.active_quiz_id ?? null);
+            setSyncQuizSessionId(joined.quiz_session_id ?? null);
             setSyncQuizShowAnswers(joined.quiz_show_answers ?? false);
             setSyncQuizProgress(joined.quiz_progress ?? []);
           } catch (err) {
@@ -220,6 +270,7 @@ export default function QuizBuilderPage() {
           setSyncRole(nextRole);
           window.localStorage.setItem(roleKey, nextRole);
           setSyncActiveQuizId(state.active_quiz_id ?? null);
+          setSyncQuizSessionId(state.quiz_session_id ?? null);
           setSyncQuizShowAnswers(state.quiz_show_answers ?? false);
           setSyncQuizProgress(state.quiz_progress ?? []);
         }
@@ -288,6 +339,22 @@ export default function QuizBuilderPage() {
     [pdfId],
   );
 
+  const sendQuizEndState = useCallback(async () => {
+    if (!pdfId || !syncClientIdRef.current) return;
+    await updatePlaybackSyncState(pdfId, syncClientIdRef.current, {
+      page_number: 1,
+      is_playing: false,
+      current_time: 0,
+      quiz_mode: false,
+      active_quiz_id: null,
+      quiz_show_answers: false,
+    });
+    setSyncActiveQuizId(null);
+    setSyncQuizSessionId(null);
+    setSyncQuizShowAnswers(false);
+    setSyncError(null);
+  }, [pdfId]);
+
   const handleStartQuiz = useCallback(
     async (quizId: number) => {
       if (syncRole !== 'master') {
@@ -305,20 +372,54 @@ export default function QuizBuilderPage() {
     [sendQuizSyncState, pdfId, navigate, syncRole],
   );
 
-  const handleFinishQuiz = useCallback(
+  const handleShowAnswers = useCallback(
     async (quizId: number) => {
+      if (syncRole !== 'master') {
+        setSyncError('僅 master 可顯示答案');
+        return;
+      }
+      try {
+        await sendQuizSyncState(quizId, true);
+        setMessage('已顯示答案，follower 無法再修改作答，並會看到正確答案與解析。');
+      } catch (err) {
+        setSyncError(err instanceof ApiError ? err.message : '顯示答案失敗');
+      }
+    },
+    [sendQuizSyncState, syncRole],
+  );
+
+  const handleEndQuiz = useCallback(
+    async () => {
       if (syncRole !== 'master') {
         setSyncError('僅 master 可結束測驗');
         return;
       }
       try {
-        await sendQuizSyncState(quizId, true);
-        setMessage('已結束測驗，follower 現在會顯示正確答案與解析。');
+        await sendQuizEndState();
+        setMessage('已結束測驗，follower 會回到全螢幕播放畫面。');
       } catch (err) {
         setSyncError(err instanceof ApiError ? err.message : '結束測驗失敗');
       }
     },
-    [sendQuizSyncState, syncRole],
+    [sendQuizEndState, syncRole],
+  );
+
+  const loadQuizHistory = useCallback(
+    async (quizId: number) => {
+      if (!pdfId) return;
+      setHistoryQuizId(quizId);
+      setHistoryBusy(true);
+      setHistoryError(null);
+      try {
+        const resp = await fetchQuizAttempts(pdfId, quizId);
+        setHistorySessions(resp.sessions);
+      } catch (err) {
+        setHistoryError(err instanceof ApiError ? err.message : '讀取測驗歷史紀錄失敗');
+      } finally {
+        setHistoryBusy(false);
+      }
+    },
+    [pdfId],
   );
 
   const handleGenerate = async () => {
@@ -451,7 +552,32 @@ export default function QuizBuilderPage() {
                   >
                     開始測驗
                   </button>
-                  <button type="button" onClick={() => void handleFinishQuiz(quiz.id)} disabled={syncActiveQuizId !== quiz.id} className="rounded border border-emerald-500/50 bg-emerald-500/15 px-2 py-1 text-xs text-emerald-100 disabled:opacity-40">結束並顯示答案</button>
+                  <button
+                    type="button"
+                    onClick={() => void handleShowAnswers(quiz.id)}
+                    disabled={syncActiveQuizId !== quiz.id || syncQuizShowAnswers}
+                    className="rounded border border-amber-500/50 bg-amber-500/15 px-2 py-1 text-xs text-amber-100 disabled:opacity-40"
+                    title="停止作答並顯示正確答案，follower 仍停留在測驗畫面"
+                  >
+                    顯示答案
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleEndQuiz()}
+                    disabled={syncActiveQuizId !== quiz.id}
+                    className="rounded border border-emerald-500/50 bg-emerald-500/15 px-2 py-1 text-xs text-emerald-100 disabled:opacity-40"
+                    title="結束測驗，follower 會回到全螢幕播放畫面"
+                  >
+                    結束
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void loadQuizHistory(quiz.id)}
+                    className="rounded border border-slate-600 bg-slate-800/60 px-2 py-1 text-xs text-slate-200 hover:bg-slate-800"
+                    title="查看此測驗每一次測試的作答歷史紀錄"
+                  >
+                    歷史紀錄
+                  </button>
                 </div>
               </div>
             ))}
@@ -485,6 +611,46 @@ export default function QuizBuilderPage() {
                   })}
                 </ul>
               )}
+            </div>
+          ) : null}
+          {syncRole === 'master' && historyQuizId != null ? (
+            <div className="mt-4 border-t border-slate-800 pt-3">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold text-slate-200">
+                  測驗歷史紀錄
+                  {(() => {
+                    const quiz = savedQuizzes.find((q) => q.id === historyQuizId);
+                    return quiz ? `：${quiz.title}` : '';
+                  })()}
+                </h2>
+                <button type="button" onClick={() => { setHistoryQuizId(null); setHistorySessions([]); setHistoryError(null); }} className="text-xs text-slate-500 hover:text-slate-300">關閉</button>
+              </div>
+              {historyBusy ? <p className="mt-1 text-xs text-slate-500">讀取中…</p> : null}
+              {historyError ? <p className="mt-1 text-xs text-rose-400">{historyError}</p> : null}
+              {!historyBusy && !historyError && historySessions.length === 0 ? (
+                <p className="mt-1 text-xs text-slate-500">這個測驗尚未有任何作答紀錄。</p>
+              ) : null}
+              <ul className="mt-2 space-y-3">
+                {historySessions.map((session) => (
+                  <li key={session.session_id} className="rounded-md border border-slate-700 bg-slate-950 px-2 py-2 text-xs">
+                    <div className="font-medium text-slate-300">
+                      測試時間：{new Date(session.submitted_at).toLocaleString()}
+                      <span className="ml-2 text-slate-500">（{session.attempts.length} 人作答）</span>
+                    </div>
+                    <ul className="mt-1.5 space-y-1">
+                      {session.attempts.map((attempt) => (
+                        <li key={attempt.id} className="flex items-center justify-between gap-2 rounded border border-slate-800 bg-slate-900 px-2 py-1">
+                          <span className="truncate text-slate-200">{attempt.code || '匿名學員'}</span>
+                          <span className="text-slate-400">
+                            {attempt.score != null ? `${Math.round(attempt.score * 100) / 100} 分` : '未計分'}
+                            <span className="ml-2 text-slate-500">{new Date(attempt.submitted_at).toLocaleTimeString()}</span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                ))}
+              </ul>
             </div>
           ) : null}
         </aside>

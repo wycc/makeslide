@@ -44,6 +44,52 @@ const QuizParamSchema = z.object({
   quizId: z.string().regex(/^[1-9]\d{0,9}$/).transform(Number),
 });
 
+const QuizAttemptAnswersSchema = z.record(z.string(), z.array(z.number().int().min(0).max(7)));
+
+const SubmitQuizAttemptBodySchema = z.object({
+  client_id: z.string().trim().min(1).max(128),
+  session_id: z.string().trim().min(1).max(80),
+  code: z.string().trim().max(80).optional(),
+  answers: QuizAttemptAnswersSchema,
+  score: z.number().min(0).max(1000).optional(),
+});
+
+interface QuizAttemptRow {
+  id: number;
+  pdf_id: string;
+  quiz_id: number;
+  session_id: string;
+  client_id: string;
+  code: string | null;
+  answers_json: string;
+  score: number | null;
+  submitted_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+function rowToQuizAttempt(row: QuizAttemptRow) {
+  let answers: unknown = {};
+  try {
+    answers = JSON.parse(row.answers_json);
+  } catch {
+    answers = {};
+  }
+  const parsed = QuizAttemptAnswersSchema.safeParse(answers);
+  return {
+    id: row.id,
+    quiz_id: row.quiz_id,
+    session_id: row.session_id,
+    client_id: row.client_id,
+    code: row.code,
+    answers: parsed.success ? parsed.data : {},
+    score: row.score,
+    submitted_at: row.submitted_at,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
 interface QuizSetRow {
   id: number;
   pdf_id: string;
@@ -171,5 +217,61 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
     if (result.changes === 0) return reply.code(404).send(errorResponse('QUIZ_NOT_FOUND', `Quiz ${parsed.data.quizId} not found`));
     const row = db.prepare(`SELECT id, pdf_id, title, prompt, questions_json, created_at, updated_at FROM quiz_sets WHERE id = ?`).get(parsed.data.quizId) as QuizSetRow;
     return reply.send(rowToQuiz(row));
+  });
+
+  app.post('/api/pdfs/:id/quizzes/:quizId/attempts', async (request, reply) => {
+    const parsed = QuizParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid quiz parameters'));
+    const body = SubmitQuizAttemptBodySchema.safeParse(request.body ?? {});
+    if (!body.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
+    const quiz = db.prepare(`SELECT id FROM quiz_sets WHERE id = ? AND pdf_id = ?`).get(parsed.data.quizId, parsed.data.id) as { id: number } | undefined;
+    if (!quiz) return reply.code(404).send(errorResponse('QUIZ_NOT_FOUND', `Quiz ${parsed.data.quizId} not found`));
+    const now = nowIso();
+    const code = body.data.code?.trim() || null;
+    const score = typeof body.data.score === 'number' ? body.data.score : null;
+    const answersJson = JSON.stringify(body.data.answers);
+    db.prepare(
+      `INSERT INTO quiz_attempts (pdf_id, quiz_id, session_id, client_id, code, answers_json, score, submitted_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (session_id, client_id) DO UPDATE SET
+         code = excluded.code,
+         answers_json = excluded.answers_json,
+         score = excluded.score,
+         submitted_at = excluded.submitted_at,
+         updated_at = excluded.updated_at`,
+    ).run(parsed.data.id, parsed.data.quizId, body.data.session_id, body.data.client_id, code, answersJson, score, now, now, now);
+    const row = db
+      .prepare(
+        `SELECT id, pdf_id, quiz_id, session_id, client_id, code, answers_json, score, submitted_at, created_at, updated_at
+         FROM quiz_attempts WHERE session_id = ? AND client_id = ?`,
+      )
+      .get(body.data.session_id, body.data.client_id) as QuizAttemptRow;
+    return reply.code(201).send(rowToQuizAttempt(row));
+  });
+
+  app.get('/api/pdfs/:id/quizzes/:quizId/attempts', async (request, reply) => {
+    const parsed = QuizParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid quiz parameters'));
+    const quiz = db.prepare(`SELECT id FROM quiz_sets WHERE id = ? AND pdf_id = ?`).get(parsed.data.quizId, parsed.data.id) as { id: number } | undefined;
+    if (!quiz) return reply.code(404).send(errorResponse('QUIZ_NOT_FOUND', `Quiz ${parsed.data.quizId} not found`));
+    const rows = db
+      .prepare(
+        `SELECT id, pdf_id, quiz_id, session_id, client_id, code, answers_json, score, submitted_at, created_at, updated_at
+         FROM quiz_attempts WHERE quiz_id = ? ORDER BY submitted_at DESC`,
+      )
+      .all(parsed.data.quizId) as QuizAttemptRow[];
+    const attempts = rows.map(rowToQuizAttempt);
+    const sessionsMap = new Map<string, { session_id: string; submitted_at: string; attempts: ReturnType<typeof rowToQuizAttempt>[] }>();
+    for (const attempt of attempts) {
+      const existing = sessionsMap.get(attempt.session_id);
+      if (existing) {
+        existing.attempts.push(attempt);
+        if (attempt.submitted_at > existing.submitted_at) existing.submitted_at = attempt.submitted_at;
+      } else {
+        sessionsMap.set(attempt.session_id, { session_id: attempt.session_id, submitted_at: attempt.submitted_at, attempts: [attempt] });
+      }
+    }
+    const sessions = Array.from(sessionsMap.values()).sort((a, b) => (a.submitted_at < b.submitted_at ? 1 : -1));
+    return reply.send({ sessions });
   });
 }
