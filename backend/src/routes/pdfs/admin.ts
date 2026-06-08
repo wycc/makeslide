@@ -1,9 +1,13 @@
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import {
   getAccountSettingsLocation,
+  getAdminAccountIds,
   getRuntimeAiSettings,
+  isAdminAccount,
   persistEnvSettings,
   setRuntimeAiSettings,
+  transferAdminAccount,
 } from '../../services/aiSettings';
 import { setOpenAIApiKeyRuntime, setOpenAIBaseUrlRuntime } from '../../services/openai';
 import { currentAccountId } from '../../services/accountContext';
@@ -11,6 +15,58 @@ import { IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
 import { pushPresentationToGitHub } from '../../services/presentationGit';
 import { db } from '../../db';
 import { IdParamSchema, UpdateSystemAiSettingsBodySchema, errorResponse } from './shared';
+
+const TransferAdminBodySchema = z.object({
+  account_id: z.string().trim().min(1).max(256),
+});
+
+const SYSTEM_AUTH_SETTING_KEYS = [
+  'google_auth_enabled',
+  'google_client_id',
+  'google_client_secret',
+  'google_redirect_uri',
+] as const;
+
+function hasSystemAuthSettingsUpdate(data: Record<string, unknown>): boolean {
+  return SYSTEM_AUTH_SETTING_KEYS.some((key) => data[key] !== undefined);
+}
+
+function aiSettingsResponse(accountId: string, isAdmin: boolean) {
+  const runtime = getRuntimeAiSettings(accountId);
+  const location = getAccountSettingsLocation(accountId);
+  const response: Record<string, unknown> = {
+    account_id: location.accountId,
+    account_settings_dir: location.accountDir,
+    account_settings_file: location.envPath,
+    is_admin: isAdmin,
+    openai_api_key: runtime.openaiApiKey,
+    openai_base_url: runtime.openaiBaseUrl,
+    gemini_api_key: runtime.geminiApiKey,
+    llm_provider: runtime.llmProvider,
+    tts_provider: runtime.ttsProvider,
+    openai_llm_model: runtime.openaiLlmModel,
+    gemini_llm_model: runtime.geminiLlmModel,
+    openai_tts_model: runtime.openaiTtsModel,
+    gemini_tts_model: runtime.geminiTtsModel,
+    gemini_tts_speaker1: runtime.geminiTtsSpeaker1,
+    gemini_tts_speaker2: runtime.geminiTtsSpeaker2,
+    gemini_tts_speaker1_voice: runtime.geminiTtsSpeaker1Voice,
+    gemini_tts_speaker2_voice: runtime.geminiTtsSpeaker2Voice,
+    user_code: runtime.userCode,
+    ui_language: runtime.uiLanguage,
+    content_language: runtime.contentLanguage,
+    github_repo_url: runtime.githubRepoUrl,
+    github_token: runtime.githubToken,
+  };
+  if (isAdmin) {
+    response.google_auth_enabled = runtime.googleAuthEnabled;
+    response.google_client_id = runtime.googleClientId;
+    response.google_client_secret = runtime.googleClientSecret;
+    response.google_redirect_uri = runtime.googleRedirectUri;
+    response.admin_account_ids = getAdminAccountIds();
+  }
+  return response;
+}
 
 export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/system/image-prompt-templates', async (_request, reply) => {
@@ -37,35 +93,7 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/api/system/ai-settings', async (_request, reply) => {
     const accountId = currentAccountId();
-    const runtime = getRuntimeAiSettings(accountId);
-    const location = getAccountSettingsLocation(accountId);
-    return reply.code(200).send({
-      account_id: location.accountId,
-      account_settings_dir: location.accountDir,
-      account_settings_file: location.envPath,
-      openai_api_key: runtime.openaiApiKey,
-      openai_base_url: runtime.openaiBaseUrl,
-      gemini_api_key: runtime.geminiApiKey,
-      llm_provider: runtime.llmProvider,
-      tts_provider: runtime.ttsProvider,
-      openai_llm_model: runtime.openaiLlmModel,
-      gemini_llm_model: runtime.geminiLlmModel,
-      openai_tts_model: runtime.openaiTtsModel,
-      gemini_tts_model: runtime.geminiTtsModel,
-      gemini_tts_speaker1: runtime.geminiTtsSpeaker1,
-      gemini_tts_speaker2: runtime.geminiTtsSpeaker2,
-      gemini_tts_speaker1_voice: runtime.geminiTtsSpeaker1Voice,
-      gemini_tts_speaker2_voice: runtime.geminiTtsSpeaker2Voice,
-      user_code: runtime.userCode,
-      ui_language: runtime.uiLanguage,
-      content_language: runtime.contentLanguage,
-      google_auth_enabled: runtime.googleAuthEnabled,
-      google_client_id: runtime.googleClientId,
-      google_client_secret: runtime.googleClientSecret,
-      google_redirect_uri: runtime.googleRedirectUri,
-      github_repo_url: runtime.githubRepoUrl,
-      github_token: runtime.githubToken,
-    });
+    return reply.code(200).send(aiSettingsResponse(accountId, isAdminAccount(accountId)));
   });
 
   app.patch('/api/system/ai-settings', async (request, reply) => {
@@ -74,6 +102,11 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send(errorResponse('INVALID_REQUEST', parsed.error.issues[0]?.message ?? 'Invalid body'));
     }
     const data = parsed.data;
+    const accountId = currentAccountId();
+    const accountIsAdmin = isAdminAccount(accountId);
+    if (!accountIsAdmin && hasSystemAuthSettingsUpdate(data)) {
+      return reply.code(403).send(errorResponse('ADMIN_REQUIRED', '只有 admin 可以修改 Google 登入設定'));
+    }
     const next = {
       openaiApiKey: data.openai_api_key,
       openaiBaseUrl: data.openai_base_url,
@@ -98,39 +131,29 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       githubRepoUrl: data.github_repo_url,
       githubToken: data.github_token,
     };
-    const accountId = currentAccountId();
     if (typeof next.openaiApiKey === 'string') setOpenAIApiKeyRuntime(accountId, next.openaiApiKey);
     if (typeof next.openaiBaseUrl === 'string') setOpenAIBaseUrlRuntime(accountId, next.openaiBaseUrl);
-    const runtime = setRuntimeAiSettings(accountId, next);
+    setRuntimeAiSettings(accountId, next);
     await persistEnvSettings(accountId, next);
-    const location = getAccountSettingsLocation(accountId);
-    return reply.code(200).send({
-      account_id: location.accountId,
-      account_settings_dir: location.accountDir,
-      account_settings_file: location.envPath,
-      openai_api_key: runtime.openaiApiKey,
-      openai_base_url: runtime.openaiBaseUrl,
-      gemini_api_key: runtime.geminiApiKey,
-      llm_provider: runtime.llmProvider,
-      tts_provider: runtime.ttsProvider,
-      openai_llm_model: runtime.openaiLlmModel,
-      gemini_llm_model: runtime.geminiLlmModel,
-      openai_tts_model: runtime.openaiTtsModel,
-      gemini_tts_model: runtime.geminiTtsModel,
-      gemini_tts_speaker1: runtime.geminiTtsSpeaker1,
-      gemini_tts_speaker2: runtime.geminiTtsSpeaker2,
-      gemini_tts_speaker1_voice: runtime.geminiTtsSpeaker1Voice,
-      gemini_tts_speaker2_voice: runtime.geminiTtsSpeaker2Voice,
-      user_code: runtime.userCode,
-      ui_language: runtime.uiLanguage,
-      content_language: runtime.contentLanguage,
-      google_auth_enabled: runtime.googleAuthEnabled,
-      google_client_id: runtime.googleClientId,
-      google_client_secret: runtime.googleClientSecret,
-      google_redirect_uri: runtime.googleRedirectUri,
-      github_repo_url: runtime.githubRepoUrl,
-      github_token: runtime.githubToken,
-    });
+    return reply.code(200).send(aiSettingsResponse(accountId, accountIsAdmin));
+  });
+
+  app.patch('/api/system/admin', async (request, reply) => {
+    const accountId = currentAccountId();
+    if (!isAdminAccount(accountId)) {
+      return reply.code(403).send(errorResponse('ADMIN_REQUIRED', '只有 admin 可以移交 admin 權限'));
+    }
+    const parsed = TransferAdminBodySchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', parsed.error.issues[0]?.message ?? 'Invalid body'));
+    }
+    try {
+      const adminAccountIds = await transferAdminAccount(parsed.data.account_id);
+      return reply.code(200).send({ ok: true, admin_account_ids: adminAccountIds });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return reply.code(400).send(errorResponse('INVALID_ADMIN_ACCOUNT', message));
+    }
   });
 
   app.post('/api/pdfs/:id/github-sync', async (request, reply) => {

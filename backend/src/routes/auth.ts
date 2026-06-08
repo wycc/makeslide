@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { config } from '../config';
-import { getSystemAuthSettings } from '../services/aiSettings';
+import { ensureAdminAccount, getSystemAuthSettings, isAdminAccount } from '../services/aiSettings';
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -107,6 +107,7 @@ export async function authRoutes(app: FastifyInstance) {
       google_enabled: Boolean(runtime.googleAuthEnabled && runtime.googleClientId && runtime.googleClientSecret),
       authenticated: Boolean(session),
       user: session,
+      is_admin: session ? isAdminAccount(session.sub) : false,
     };
   });
 
@@ -180,6 +181,7 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.code(502).send({ error: { code: 'GOOGLE_USERINFO_FAILED', message: 'Google 帳號資訊讀取失敗' } });
     }
     const user = GoogleUserInfoSchema.parse(await userResp.json());
+    await ensureAdminAccount(user.sub);
     setCookie(reply, SESSION_COOKIE, encodeSession({ provider: 'google', ...user }), 30 * 24 * 60 * 60);
     return reply.redirect(`${config.nbPrefix || ''}/#/settings`);
   });

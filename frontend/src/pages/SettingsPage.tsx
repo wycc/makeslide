@@ -5,6 +5,7 @@ import {
   getAuthStatus,
   getSystemAiSettings,
   logoutAuth,
+  transferAdminAccount,
   updateSystemAiSettings,
   type AuthStatus,
   type SystemAiSettings,
@@ -49,10 +50,14 @@ export default function SettingsPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
+  const [settingsIsAdmin, setSettingsIsAdmin] = useState(false);
   const [googleAuthEnabled, setGoogleAuthEnabled] = useState(false);
   const [googleClientId, setGoogleClientId] = useState('');
   const [googleClientSecret, setGoogleClientSecret] = useState('');
   const [googleRedirectUri, setGoogleRedirectUri] = useState('');
+  const [adminAccountIds, setAdminAccountIds] = useState<string[]>([]);
+  const [adminTransferAccountId, setAdminTransferAccountId] = useState('');
+  const [adminTransferBusy, setAdminTransferBusy] = useState(false);
   const [githubRepoUrl, setGithubRepoUrl] = useState('');
   const [githubToken, setGithubToken] = useState('');
   const [cguAirEnabled, setCguAirEnabled] = useState(false);
@@ -65,6 +70,7 @@ export default function SettingsPage() {
       const s: SystemAiSettings = await getSystemAiSettings();
       const auth = await getAuthStatus();
       setAuthStatus(auth);
+      setSettingsIsAdmin(Boolean(s.is_admin));
       setOpenaiApiKey(s.openai_api_key ?? '');
       setGeminiApiKey(s.gemini_api_key ?? '');
       setLlmProvider(s.llm_provider);
@@ -89,6 +95,7 @@ export default function SettingsPage() {
       setGoogleClientId(s.google_client_id ?? '');
       setGoogleClientSecret(s.google_client_secret ?? '');
       setGoogleRedirectUri(s.google_redirect_uri ?? '');
+      setAdminAccountIds(s.admin_account_ids ?? []);
       setGithubRepoUrl(s.github_repo_url ?? '');
       setGithubToken(s.github_token ?? '');
       setCguAirEnabled(s.openai_base_url === CGU_AIR_BASE_URL);
@@ -103,6 +110,8 @@ export default function SettingsPage() {
       setLoading(false);
     }
   }, [t]);
+
+  const isAdmin = Boolean(authStatus?.is_admin || settingsIsAdmin);
 
   const onLogout = useCallback(async () => {
     setErr(null);
@@ -159,10 +168,14 @@ export default function SettingsPage() {
         user_code: authStatus?.authenticated ? userCode.trim() : undefined,
         ui_language: uiLanguage,
         content_language: contentLanguage,
-        google_auth_enabled: googleAuthEnabled,
-        google_client_id: googleClientId.trim(),
-        google_client_secret: googleClientSecret.trim(),
-        google_redirect_uri: googleRedirectUri.trim(),
+        ...(isAdmin
+          ? {
+              google_auth_enabled: googleAuthEnabled,
+              google_client_id: googleClientId.trim(),
+              google_client_secret: googleClientSecret.trim(),
+              google_redirect_uri: googleRedirectUri.trim(),
+            }
+          : {}),
         github_repo_url: githubRepoUrl.trim(),
         github_token: githubToken.trim(),
       });
@@ -205,12 +218,31 @@ export default function SettingsPage() {
     googleClientId,
     googleClientSecret,
     googleRedirectUri,
+    isAdmin,
     githubRepoUrl,
     githubToken,
     cguAirEnabled,
     CGU_AIR_BASE_URL,
     t,
   ]);
+
+  const onTransferAdmin = useCallback(async () => {
+    const target = adminTransferAccountId.trim();
+    if (!target) return;
+    setErr(null);
+    setMsg(null);
+    setAdminTransferBusy(true);
+    try {
+      const result = await transferAdminAccount(target);
+      setAdminAccountIds(result.admin_account_ids);
+      setAdminTransferAccountId('');
+      setMsg(t('settings.adminTransferred'));
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : t('settings.adminTransferError'));
+    } finally {
+      setAdminTransferBusy(false);
+    }
+  }, [adminTransferAccountId, t]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -351,46 +383,73 @@ export default function SettingsPage() {
                 <option value="gemini">Gemini</option>
               </select>
             </label>
-            <label className="block text-sm text-slate-300 sm:col-span-2">
-              <span className="inline-flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={googleAuthEnabled}
-                  onChange={(e) => setGoogleAuthEnabled(e.target.checked)}
-                />
-                {t('settings.googleAuthEnabled')}
-              </span>
-            </label>
-            {googleAuthEnabled ? (
+            {isAdmin ? (
               <>
                 <label className="block text-sm text-slate-300 sm:col-span-2">
-                  GOOGLE_CLIENT_ID
-                  <input
-                    value={googleClientId}
-                    onChange={(e) => setGoogleClientId(e.target.value)}
-                    className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                    placeholder="xxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com"
-                  />
+                  <span className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={googleAuthEnabled}
+                      onChange={(e) => setGoogleAuthEnabled(e.target.checked)}
+                    />
+                    {t('settings.googleAuthEnabled')}
+                  </span>
                 </label>
-                <label className="block text-sm text-slate-300 sm:col-span-2">
-                  GOOGLE_CLIENT_SECRET
-                  <input
-                    type="password"
-                    value={googleClientSecret}
-                    onChange={(e) => setGoogleClientSecret(e.target.value)}
-                    className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                    placeholder="GOCSPX-..."
-                  />
-                </label>
-                <label className="block text-sm text-slate-300 sm:col-span-2">
-                  GOOGLE_REDIRECT_URI
-                  <input
-                    value={googleRedirectUri}
-                    onChange={(e) => setGoogleRedirectUri(e.target.value)}
-                    className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                    placeholder="https://your-domain.example/api/auth/google/callback"
-                  />
-                </label>
+                {googleAuthEnabled ? (
+                  <>
+                    <label className="block text-sm text-slate-300 sm:col-span-2">
+                      GOOGLE_CLIENT_ID
+                      <input
+                        value={googleClientId}
+                        onChange={(e) => setGoogleClientId(e.target.value)}
+                        className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                        placeholder="xxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com"
+                      />
+                    </label>
+                    <label className="block text-sm text-slate-300 sm:col-span-2">
+                      GOOGLE_CLIENT_SECRET
+                      <input
+                        type="password"
+                        value={googleClientSecret}
+                        onChange={(e) => setGoogleClientSecret(e.target.value)}
+                        className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                        placeholder="GOCSPX-..."
+                      />
+                    </label>
+                    <label className="block text-sm text-slate-300 sm:col-span-2">
+                      GOOGLE_REDIRECT_URI
+                      <input
+                        value={googleRedirectUri}
+                        onChange={(e) => setGoogleRedirectUri(e.target.value)}
+                        className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                        placeholder="https://your-domain.example/api/auth/google/callback"
+                      />
+                    </label>
+                  </>
+                ) : null}
+                <div className="sm:col-span-2 rounded-lg border border-slate-800 bg-slate-950/60 p-3">
+                  <div className="mb-2 text-sm font-medium text-slate-200">{t('settings.adminTransfer')}</div>
+                  <div className="mb-2 text-xs text-slate-500">
+                    {t('settings.currentAdmins')}
+                    <span className="font-mono text-slate-300">{adminAccountIds.join(', ') || accountId}</span>
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <input
+                      value={adminTransferAccountId}
+                      onChange={(e) => setAdminTransferAccountId(e.target.value)}
+                      className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                      placeholder={t('settings.adminTransferPlaceholder')}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void onTransferAdmin()}
+                      disabled={adminTransferBusy || !adminTransferAccountId.trim()}
+                      className="rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+                    >
+                      {adminTransferBusy ? t('settings.saving') : t('settings.adminTransferButton')}
+                    </button>
+                  </div>
+                </div>
               </>
             ) : null}
           </div>

@@ -41,6 +41,7 @@ export interface SystemAuthSettings {
   googleClientId: string;
   googleClientSecret: string;
   googleRedirectUri: string;
+  adminAccountIds: string[];
 }
 
 export interface RuntimeAiSettings extends PerAccountAiSettings, SystemAuthSettings {}
@@ -91,6 +92,15 @@ function asLanguage(value: string | undefined): AppLanguage | undefined {
 
 function asBoolean(value: string | undefined): boolean | undefined {
   return value === 'true' ? true : value === 'false' ? false : undefined;
+}
+
+function parseAdminAccountIds(value: string | undefined): string[] | undefined {
+  if (value === undefined) return undefined;
+  const ids = value
+    .split(',')
+    .map((id) => sanitizeAccountId(id))
+    .filter((id) => id.length > 0 && id !== DEFAULT_ACCOUNT_ID);
+  return Array.from(new Set(ids));
 }
 
 function definedEntries<T extends object>(obj: T): Partial<T> {
@@ -196,6 +206,7 @@ function baseSystemAuthSettings(): SystemAuthSettings {
     googleClientId: config.googleClientId,
     googleClientSecret: config.googleClientSecret,
     googleRedirectUri: config.googleRedirectUri,
+    adminAccountIds: parseAdminAccountIds(process.env.ADMIN_ACCOUNT_IDS) ?? [],
   };
 }
 
@@ -206,6 +217,7 @@ function loadSystemAuthOverrides(): Partial<SystemAuthSettings> {
     googleClientId: values.GOOGLE_CLIENT_ID,
     googleClientSecret: values.GOOGLE_CLIENT_SECRET,
     googleRedirectUri: values.GOOGLE_REDIRECT_URI,
+    adminAccountIds: parseAdminAccountIds(values.ADMIN_ACCOUNT_IDS),
   });
 }
 
@@ -222,6 +234,7 @@ const SYSTEM_ENV_PAIRS: Array<[string, keyof SystemAuthSettings]> = [
   ['GOOGLE_CLIENT_ID', 'googleClientId'],
   ['GOOGLE_CLIENT_SECRET', 'googleClientSecret'],
   ['GOOGLE_REDIRECT_URI', 'googleRedirectUri'],
+  ['ADMIN_ACCOUNT_IDS', 'adminAccountIds'],
 ];
 
 export function getSystemAuthSettings(): SystemAuthSettings {
@@ -236,6 +249,35 @@ export function setSystemAuthSettings(next: Partial<SystemAuthSettings>): System
 
 export async function persistSystemAuthSettings(next: Partial<SystemAuthSettings>): Promise<void> {
   await writeEnvOverrides(DEFAULT_ACCOUNT_ID, SYSTEM_ENV_PAIRS, next);
+}
+
+export function getAdminAccountIds(): string[] {
+  return [...loadSystemAuthSettings().adminAccountIds];
+}
+
+export function isAdminAccount(accountId: string = currentAccountId()): boolean {
+  const safeAccountId = sanitizeAccountId(accountId);
+  return loadSystemAuthSettings().adminAccountIds.includes(safeAccountId);
+}
+
+export async function ensureAdminAccount(accountId: string): Promise<boolean> {
+  const safeAccountId = sanitizeAccountId(accountId);
+  if (safeAccountId === DEFAULT_ACCOUNT_ID) return false;
+  const current = loadSystemAuthSettings();
+  if (current.adminAccountIds.length > 0) return false;
+  setSystemAuthSettings({ adminAccountIds: [safeAccountId] });
+  await persistSystemAuthSettings({ adminAccountIds: [safeAccountId] });
+  return true;
+}
+
+export async function transferAdminAccount(accountId: string): Promise<string[]> {
+  const safeAccountId = sanitizeAccountId(accountId);
+  if (safeAccountId === DEFAULT_ACCOUNT_ID) {
+    throw new Error('Cannot transfer admin to the default account');
+  }
+  setSystemAuthSettings({ adminAccountIds: [safeAccountId] });
+  await persistSystemAuthSettings({ adminAccountIds: [safeAccountId] });
+  return getAdminAccountIds();
 }
 
 // ---------------------------------------------------------------------------
@@ -283,6 +325,7 @@ function splitSettingsUpdate(next: Partial<RuntimeAiSettings>): {
     'googleClientId',
     'googleClientSecret',
     'googleRedirectUri',
+    'adminAccountIds',
   ];
   const systemPart: Partial<SystemAuthSettings> = {};
   const accountPart: Partial<PerAccountAiSettings> = {};
@@ -300,7 +343,7 @@ function splitSettingsUpdate(next: Partial<RuntimeAiSettings>): {
 async function writeEnvOverrides<K extends string>(
   accountId: string,
   pairs: Array<[string, K]>,
-  next: Partial<Record<K, string | boolean | AiProvider | AppLanguage | undefined>>,
+  next: Partial<Record<K, string | boolean | string[] | AiProvider | AppLanguage | undefined>>,
 ): Promise<void> {
   const { accountDir, envPath } = getAccountSettingsLocation(accountId);
   let content = '';
@@ -309,7 +352,11 @@ async function writeEnvOverrides<K extends string>(
   for (const [envKey, settingKey] of pairs) {
     const raw = next[settingKey];
     if (raw === undefined) continue;
-    const value = typeof raw === 'boolean' ? (raw ? 'true' : 'false') : String(raw).trim();
+    const value = Array.isArray(raw)
+      ? raw.map((item) => sanitizeAccountId(item)).filter((item) => item.length > 0).join(',')
+      : typeof raw === 'boolean'
+        ? (raw ? 'true' : 'false')
+        : String(raw).trim();
     const line = `${envKey}=${value}`;
     const re = new RegExp(`^${envKey}=.*`, 'm');
     if (re.test(content)) content = content.replace(re, line);

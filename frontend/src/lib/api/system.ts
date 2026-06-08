@@ -49,10 +49,12 @@ export interface SystemAiSettings {
   user_code?: string;
   ui_language: AppLanguage;
   content_language: AppLanguage;
+  is_admin?: boolean;
   google_auth_enabled?: boolean;
   google_client_id?: string;
   google_client_secret?: string;
   google_redirect_uri?: string;
+  admin_account_ids?: string[];
   github_repo_url?: string;
   github_token?: string;
 }
@@ -106,6 +108,16 @@ export async function updateSystemAiSettings(
   return (await resp.json()) as SystemAiSettings;
 }
 
+export async function transferAdminAccount(accountId: string): Promise<{ ok: boolean; admin_account_ids: string[] }> {
+  const resp = await fetch('api/system/admin', {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ account_id: accountId }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { ok: boolean; admin_account_ids: string[] };
+}
+
 export async function setOpenAIApiKey(apiKey: string): Promise<{ ok: boolean; has_key: boolean }> {
   const resp = await fetch('api/system/openai-api-key', {
     method: 'PATCH',
@@ -119,6 +131,7 @@ export async function setOpenAIApiKey(apiKey: string): Promise<{ ok: boolean; ha
 export interface AuthStatus {
   google_enabled: boolean;
   authenticated: boolean;
+  is_admin?: boolean;
   user: null | {
     provider: 'google';
     sub: string;
