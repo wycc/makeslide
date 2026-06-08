@@ -12,10 +12,30 @@ import { config } from '../config';
 import { logger } from '../logger';
 import { callGeminiJson } from './gemini';
 import { getRuntimeAiSettings } from './aiSettings';
+import { currentAccountId, sanitizeAccountId } from './accountContext';
 
-let cachedClient: OpenAI | null = null;
-let runtimeApiKeyOverride: string | null = null;
-let runtimeBaseUrlOverride: string | null = null;
+interface AccountOpenAiState {
+  client: OpenAI | null;
+  apiKeyOverride: string | null;
+  baseUrlOverride: string | null;
+}
+
+// 每個帳號各自快取自己的 OpenAI client / API key 覆寫值，避免使用者 A 變更
+// API key 時意外影響到使用者 B 正在進行中或稍後才執行的請求。
+const accountStates = new Map<string, AccountOpenAiState>();
+
+function getAccountState(accountId: string): AccountOpenAiState {
+  const safeAccountId = sanitizeAccountId(accountId);
+  let state = accountStates.get(safeAccountId);
+  if (!state) {
+    state = { client: null, apiKeyOverride: null, baseUrlOverride: null };
+    accountStates.set(safeAccountId, state);
+  }
+  return state;
+}
+
+// 僅供測試使用：強制所有帳號回傳同一顆 stub client。
+let testClientOverride: OpenAI | null | undefined;
 const LLM_REQUEST_LOG_FILE = path.join(process.cwd(), 'backend', 'data', 'llm-requests.log.jsonl');
 
 function extractImageFileName(url: string): string {
@@ -93,16 +113,20 @@ async function appendLlmResponseLog(entry: unknown): Promise<void> {
  * missing so the server can still start (and serve M2 endpoints) when the
  * operator has not configured M3 yet.
  */
-export function getOpenAIClient(): OpenAI {
-  if (cachedClient) return cachedClient;
-  const settings = getRuntimeAiSettings();
-  const apiKey = (runtimeApiKeyOverride ?? settings.openaiApiKey ?? '').trim();
+export function getOpenAIClient(accountId: string = currentAccountId()): OpenAI {
+  if (testClientOverride !== undefined) return testClientOverride as OpenAI;
+
+  const state = getAccountState(accountId);
+  if (state.client) return state.client;
+
+  const settings = getRuntimeAiSettings(accountId);
+  const apiKey = (state.apiKeyOverride ?? settings.openaiApiKey ?? '').trim();
   if (!apiKey) {
     throw new Error(
       'OPENAI_API_KEY is not set — cannot call OpenAI. Update your .env and restart.',
     );
   }
-  const baseURL = (runtimeBaseUrlOverride ?? settings.openaiBaseUrl ?? '').trim() || undefined;
+  const baseURL = (state.baseUrlOverride ?? settings.openaiBaseUrl ?? '').trim() || undefined;
 
   const debugFetch: typeof globalThis.fetch = async (url, init) => {
     const resp = await globalThis.fetch(url as Parameters<typeof globalThis.fetch>[0], init);
@@ -138,7 +162,7 @@ export function getOpenAIClient(): OpenAI {
     return resp;
   };
 
-  cachedClient = new OpenAI({
+  state.client = new OpenAI({
     apiKey,
     baseURL,
     fetch: debugFetch,
@@ -147,6 +171,7 @@ export function getOpenAIClient(): OpenAI {
   });
   logger.info(
     {
+      accountId: sanitizeAccountId(accountId),
       model: config.openaiLlmModel,
       baseURL: baseURL ?? '(default)',
       timeoutMs: config.openaiRequestTimeoutMs,
@@ -155,22 +180,23 @@ export function getOpenAIClient(): OpenAI {
     },
     'OpenAI client initialised',
   );
-  return cachedClient;
+  return state.client;
 }
 
-export function setOpenAIApiKeyRuntime(apiKey: string): void {
-  runtimeApiKeyOverride = apiKey.trim();
-  process.env.OPENAI_API_KEY = runtimeApiKeyOverride;
-  cachedClient = null;
+export function setOpenAIApiKeyRuntime(accountId: string, apiKey: string): void {
+  const state = getAccountState(accountId);
+  state.apiKeyOverride = apiKey.trim();
+  state.client = null;
 }
 
-export function setOpenAIBaseUrlRuntime(baseUrl: string): void {
-  runtimeBaseUrlOverride = baseUrl.trim() || null;
-  cachedClient = null;
+export function setOpenAIBaseUrlRuntime(accountId: string, baseUrl: string): void {
+  const state = getAccountState(accountId);
+  state.baseUrlOverride = baseUrl.trim() || null;
+  state.client = null;
 }
 
 export function setOpenAIClientForTest(client: OpenAI | null): void {
-  cachedClient = client;
+  testClientOverride = client;
 }
 
 export async function transcribeAudioBuffer(

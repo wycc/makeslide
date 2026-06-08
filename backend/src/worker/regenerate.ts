@@ -8,6 +8,7 @@ import { config } from '../config';
 import { db } from '../db';
 import { logger } from '../logger';
 import { getOpenAIClient } from '../services/openai';
+import { accountIdFromOwnerSub, runWithAccountId } from '../services/accountContext';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../services/imagePromptTemplates';
 import { loadPromptTemplate, renderPromptTemplate } from '../services/promptTemplates';
 import {
@@ -138,6 +139,7 @@ function getPdfRowStrict(pdfId: string): PdfRow {
               progress_current, progress_total,
               error_message, user_prompt, require_script_confirmation,
               tts_voice, tts_speed, script_max_chars_per_page,
+              owner_sub,
               created_at, updated_at
          FROM pdfs WHERE id = ?`,
     )
@@ -678,7 +680,8 @@ export function startRegenerateJob(
   };
   jobs.set(pdfId, state);
   persistRegenerateJob(state);
-  void runJob(state, options, stepNames, pageCount).catch((err) => {
+  const accountId = accountIdFromOwnerSub(row.owner_sub);
+  void runWithAccountId(accountId, () => runJob(state, options, stepNames, pageCount)).catch((err) => {
     logger.error({ err, pdfId }, 'regenerate job runner rejected');
   });
   return state;

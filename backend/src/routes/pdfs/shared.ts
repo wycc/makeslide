@@ -21,6 +21,7 @@ import {
 } from '../../services/storage';
 import { callChatJSON, getOpenAIClient, setOpenAIApiKeyRuntime } from '../../services/openai';
 import { getRuntimeAiSettings, persistEnvSettings, setRuntimeAiSettings } from '../../services/aiSettings';
+import { accountIdFromOwnerSub } from '../../services/accountContext';
 import { synthesizeGeminiSpeech } from '../../services/gemini';
 import { loadPromptTemplate } from '../../services/promptTemplates';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
@@ -487,7 +488,7 @@ function coverThumbnailUrl(row: PdfRow): string | null {
 }
 
 export function rowToListItem(row: PdfRow): PdfListItem {
-  const runtime = getRuntimeAiSettings();
+  const runtime = getRuntimeAiSettings(accountIdFromOwnerSub(row.owner_sub));
   return {
     id: row.id,
     title: row.title,
@@ -563,7 +564,7 @@ export function timingRowsToPageMap(rows: Array<{
 }
 
 export function rowToDetail(row: PdfRow, pages: PageRow[], timingsByPage: PageTimingsByPage = new Map()): PdfDetail {
-  const runtime = getRuntimeAiSettings();
+  const runtime = getRuntimeAiSettings(accountIdFromOwnerSub(row.owner_sub));
   const detailPages: PdfDetailPage[] = pages.map((p) => ({
     page_number: p.page_number,
     image_url: p.image_path ? `api/pdfs/${row.id}/pages/${p.page_number}/image` : null,

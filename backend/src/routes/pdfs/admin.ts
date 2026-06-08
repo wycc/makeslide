@@ -6,6 +6,7 @@ import {
   setRuntimeAiSettings,
 } from '../../services/aiSettings';
 import { setOpenAIApiKeyRuntime, setOpenAIBaseUrlRuntime } from '../../services/openai';
+import { currentAccountId } from '../../services/accountContext';
 import { IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
 import { pushPresentationToGitHub } from '../../services/presentationGit';
 import { db } from '../../db';
@@ -27,15 +28,17 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
   app.patch('/api/system/openai-api-key', async (request, reply) => {
     const body = request.body as { api_key?: string };
     const apiKey = (body?.api_key ?? '').trim();
-    setOpenAIApiKeyRuntime(apiKey);
-    setRuntimeAiSettings({ openaiApiKey: apiKey });
-    await persistEnvSettings({ openaiApiKey: apiKey });
+    const accountId = currentAccountId();
+    setOpenAIApiKeyRuntime(accountId, apiKey);
+    setRuntimeAiSettings(accountId, { openaiApiKey: apiKey });
+    await persistEnvSettings(accountId, { openaiApiKey: apiKey });
     return reply.code(200).send({ ok: true, has_key: apiKey.length > 0 });
   });
 
   app.get('/api/system/ai-settings', async (_request, reply) => {
-    const runtime = getRuntimeAiSettings();
-    const location = getAccountSettingsLocation();
+    const accountId = currentAccountId();
+    const runtime = getRuntimeAiSettings(accountId);
+    const location = getAccountSettingsLocation(accountId);
     return reply.code(200).send({
       account_id: location.accountId,
       account_settings_dir: location.accountDir,
@@ -95,11 +98,12 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       githubRepoUrl: data.github_repo_url,
       githubToken: data.github_token,
     };
-    if (typeof next.openaiApiKey === 'string') setOpenAIApiKeyRuntime(next.openaiApiKey);
-    if (typeof next.openaiBaseUrl === 'string') setOpenAIBaseUrlRuntime(next.openaiBaseUrl);
-    const runtime = setRuntimeAiSettings(next);
-    await persistEnvSettings(next);
-    const location = getAccountSettingsLocation();
+    const accountId = currentAccountId();
+    if (typeof next.openaiApiKey === 'string') setOpenAIApiKeyRuntime(accountId, next.openaiApiKey);
+    if (typeof next.openaiBaseUrl === 'string') setOpenAIBaseUrlRuntime(accountId, next.openaiBaseUrl);
+    const runtime = setRuntimeAiSettings(accountId, next);
+    await persistEnvSettings(accountId, next);
+    const location = getAccountSettingsLocation(accountId);
     return reply.code(200).send({
       account_id: location.accountId,
       account_settings_dir: location.accountDir,

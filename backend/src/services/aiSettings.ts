@@ -1,11 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '../config';
+import { DEFAULT_ACCOUNT_ID, currentAccountId, sanitizeAccountId } from './accountContext';
 
 export type AiProvider = 'openai' | 'gemini';
 export type AppLanguage = 'zh-TW' | 'en';
 
-export interface RuntimeAiSettings {
+/**
+ * 帳號層級設定：每個使用者（以 Google sub 區分）各自擁有一份，存放在
+ * accounts/<accountId>/settings.env，彼此完全獨立、不共用快取。
+ */
+export interface PerAccountAiSettings {
   openaiApiKey: string;
   openaiBaseUrl: string;
   geminiApiKey: string;
@@ -22,13 +27,23 @@ export interface RuntimeAiSettings {
   userCode: string;
   uiLanguage: AppLanguage;
   contentLanguage: AppLanguage;
+  githubRepoUrl: string;
+  githubToken: string;
+}
+
+/**
+ * 系統層級設定：Google 登入是「進入帳號之前」就要用到的設定，因此整個服務
+ * 只有一份，固定存放在 DEFAULT_ACCOUNT_ID（accounts/default/settings.env）
+ * 之中，不隨登入者切換。
+ */
+export interface SystemAuthSettings {
   googleAuthEnabled: boolean;
   googleClientId: string;
   googleClientSecret: string;
   googleRedirectUri: string;
-  githubRepoUrl: string;
-  githubToken: string;
 }
+
+export interface RuntimeAiSettings extends PerAccountAiSettings, SystemAuthSettings {}
 
 export interface AccountSettingsLocation {
   accountId: string;
@@ -36,14 +51,7 @@ export interface AccountSettingsLocation {
   envPath: string;
 }
 
-const DEFAULT_ACCOUNT_ID = process.env.MAKESLIDE_ACCOUNT_ID?.trim() || 'default';
-
-function sanitizeAccountId(accountId: string): string {
-  const sanitized = accountId.trim().replace(/[^a-zA-Z0-9._-]/g, '_').replace(/^\.+/, '');
-  return sanitized || 'default';
-}
-
-export function getAccountSettingsLocation(accountId = DEFAULT_ACCOUNT_ID): AccountSettingsLocation {
+export function getAccountSettingsLocation(accountId: string = DEFAULT_ACCOUNT_ID): AccountSettingsLocation {
   const safeAccountId = sanitizeAccountId(accountId);
   const accountDir = path.join(config.repoRoot, 'accounts', safeAccountId);
   return {
@@ -67,16 +75,68 @@ function parseEnvContent(content: string): Record<string, string> {
   return values;
 }
 
-function loadAccountEnvSettings(): Partial<RuntimeAiSettings> {
-  const { envPath } = getAccountSettingsLocation();
+function readEnvFile(accountId: string): Record<string, string> {
+  const { envPath } = getAccountSettingsLocation(accountId);
   if (!fs.existsSync(envPath)) return {};
-  const values = parseEnvContent(fs.readFileSync(envPath, 'utf8'));
+  return parseEnvContent(fs.readFileSync(envPath, 'utf8'));
+}
+
+function asProvider(value: string | undefined): AiProvider | undefined {
+  return value === 'gemini' ? 'gemini' : value === 'openai' ? 'openai' : undefined;
+}
+
+function asLanguage(value: string | undefined): AppLanguage | undefined {
+  return value === 'en' ? 'en' : value === 'zh-TW' ? 'zh-TW' : undefined;
+}
+
+function asBoolean(value: string | undefined): boolean | undefined {
+  return value === 'true' ? true : value === 'false' ? false : undefined;
+}
+
+function definedEntries<T extends object>(obj: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, value]) => {
+      if (typeof value === 'string') return value.trim().length > 0;
+      return value !== undefined;
+    }),
+  ) as Partial<T>;
+}
+
+// ---------------------------------------------------------------------------
+// 帳號層級設定（AI provider、模型、語音、語言、GitHub 同步……）
+// ---------------------------------------------------------------------------
+
+function basePerAccountSettings(): PerAccountAiSettings {
   return {
+    openaiApiKey: config.openaiApiKey,
+    openaiBaseUrl: process.env.OPENAI_BASE_URL?.trim() || '',
+    geminiApiKey: config.geminiApiKey,
+    llmProvider: config.llmProvider,
+    ttsProvider: config.ttsProvider,
+    openaiLlmModel: config.openaiLlmModel,
+    geminiLlmModel: config.geminiLlmModel,
+    openaiTtsModel: config.openaiTtsModel,
+    geminiTtsModel: config.geminiTtsModel,
+    geminiTtsSpeaker1: process.env.GEMINI_TTS_SPEAKER1?.trim() || '',
+    geminiTtsSpeaker2: process.env.GEMINI_TTS_SPEAKER2?.trim() || '',
+    geminiTtsSpeaker1Voice: process.env.GEMINI_TTS_SPEAKER1_VOICE?.trim() || '',
+    geminiTtsSpeaker2Voice: process.env.GEMINI_TTS_SPEAKER2_VOICE?.trim() || '',
+    userCode: process.env.USER_CODE?.trim() || '',
+    uiLanguage: process.env.UI_LANGUAGE === 'en' ? 'en' : 'zh-TW',
+    contentLanguage: process.env.CONTENT_LANGUAGE === 'en' ? 'en' : 'zh-TW',
+    githubRepoUrl: process.env.GITHUB_REPO_URL?.trim() || '',
+    githubToken: process.env.GITHUB_TOKEN?.trim() || '',
+  };
+}
+
+function loadPerAccountOverrides(accountId: string): Partial<PerAccountAiSettings> {
+  const values = readEnvFile(accountId);
+  return definedEntries({
     openaiApiKey: values.OPENAI_API_KEY,
     openaiBaseUrl: values.OPENAI_BASE_URL,
     geminiApiKey: values.GEMINI_API_KEY,
-    llmProvider: values.LLM_PROVIDER === 'gemini' ? 'gemini' : values.LLM_PROVIDER === 'openai' ? 'openai' : undefined,
-    ttsProvider: values.TTS_PROVIDER === 'gemini' ? 'gemini' : values.TTS_PROVIDER === 'openai' ? 'openai' : undefined,
+    llmProvider: asProvider(values.LLM_PROVIDER),
+    ttsProvider: asProvider(values.TTS_PROVIDER),
     openaiLlmModel: values.OPENAI_LLM_MODEL,
     geminiLlmModel: values.GEMINI_LLM_MODEL,
     openaiTtsModel: values.OPENAI_TTS_MODEL,
@@ -86,127 +146,193 @@ function loadAccountEnvSettings(): Partial<RuntimeAiSettings> {
     geminiTtsSpeaker1Voice: values.GEMINI_TTS_SPEAKER1_VOICE,
     geminiTtsSpeaker2Voice: values.GEMINI_TTS_SPEAKER2_VOICE,
     userCode: values.USER_CODE,
-    uiLanguage: values.UI_LANGUAGE === 'en' ? 'en' : values.UI_LANGUAGE === 'zh-TW' ? 'zh-TW' : undefined,
-    contentLanguage: values.CONTENT_LANGUAGE === 'en' ? 'en' : values.CONTENT_LANGUAGE === 'zh-TW' ? 'zh-TW' : undefined,
-    googleAuthEnabled:
-      values.GOOGLE_AUTH_ENABLED === 'true'
-        ? true
-        : values.GOOGLE_AUTH_ENABLED === 'false'
-          ? false
-          : undefined,
+    uiLanguage: asLanguage(values.UI_LANGUAGE),
+    contentLanguage: asLanguage(values.CONTENT_LANGUAGE),
+    githubRepoUrl: values.GITHUB_REPO_URL,
+    githubToken: values.GITHUB_TOKEN,
+  });
+}
+
+// 每個帳號各自一份快取，彼此獨立；絕不互相讀取或回退到別人的設定。
+const perAccountCache = new Map<string, PerAccountAiSettings>();
+
+function loadPerAccountSettings(accountId: string): PerAccountAiSettings {
+  const safeAccountId = sanitizeAccountId(accountId);
+  const cached = perAccountCache.get(safeAccountId);
+  if (cached) return cached;
+  const merged: PerAccountAiSettings = { ...basePerAccountSettings(), ...loadPerAccountOverrides(safeAccountId) };
+  perAccountCache.set(safeAccountId, merged);
+  return merged;
+}
+
+const PER_ACCOUNT_ENV_PAIRS: Array<[string, keyof PerAccountAiSettings]> = [
+  ['OPENAI_API_KEY', 'openaiApiKey'],
+  ['OPENAI_BASE_URL', 'openaiBaseUrl'],
+  ['GEMINI_API_KEY', 'geminiApiKey'],
+  ['LLM_PROVIDER', 'llmProvider'],
+  ['TTS_PROVIDER', 'ttsProvider'],
+  ['OPENAI_LLM_MODEL', 'openaiLlmModel'],
+  ['GEMINI_LLM_MODEL', 'geminiLlmModel'],
+  ['OPENAI_TTS_MODEL', 'openaiTtsModel'],
+  ['GEMINI_TTS_MODEL', 'geminiTtsModel'],
+  ['GEMINI_TTS_SPEAKER1', 'geminiTtsSpeaker1'],
+  ['GEMINI_TTS_SPEAKER2', 'geminiTtsSpeaker2'],
+  ['GEMINI_TTS_SPEAKER1_VOICE', 'geminiTtsSpeaker1Voice'],
+  ['GEMINI_TTS_SPEAKER2_VOICE', 'geminiTtsSpeaker2Voice'],
+  ['USER_CODE', 'userCode'],
+  ['UI_LANGUAGE', 'uiLanguage'],
+  ['CONTENT_LANGUAGE', 'contentLanguage'],
+  ['GITHUB_REPO_URL', 'githubRepoUrl'],
+  ['GITHUB_TOKEN', 'githubToken'],
+];
+
+// ---------------------------------------------------------------------------
+// 系統層級設定（Google 登入）：全服務只有一份，固定存在 DEFAULT_ACCOUNT_ID 下
+// ---------------------------------------------------------------------------
+
+function baseSystemAuthSettings(): SystemAuthSettings {
+  return {
+    googleAuthEnabled: config.googleAuthEnabled,
+    googleClientId: config.googleClientId,
+    googleClientSecret: config.googleClientSecret,
+    googleRedirectUri: config.googleRedirectUri,
+  };
+}
+
+function loadSystemAuthOverrides(): Partial<SystemAuthSettings> {
+  const values = readEnvFile(DEFAULT_ACCOUNT_ID);
+  return definedEntries({
+    googleAuthEnabled: asBoolean(values.GOOGLE_AUTH_ENABLED),
     googleClientId: values.GOOGLE_CLIENT_ID,
     googleClientSecret: values.GOOGLE_CLIENT_SECRET,
     googleRedirectUri: values.GOOGLE_REDIRECT_URI,
-    githubRepoUrl: values.GITHUB_REPO_URL,
-    githubToken: values.GITHUB_TOKEN,
-  };
+  });
 }
 
-let runtime: RuntimeAiSettings = {
-  openaiApiKey: config.openaiApiKey,
-  openaiBaseUrl: process.env.OPENAI_BASE_URL?.trim() || '',
-  geminiApiKey: config.geminiApiKey,
-  llmProvider: config.llmProvider,
-  ttsProvider: config.ttsProvider,
-  openaiLlmModel: config.openaiLlmModel,
-  geminiLlmModel: config.geminiLlmModel,
-  openaiTtsModel: config.openaiTtsModel,
-  geminiTtsModel: config.geminiTtsModel,
-  geminiTtsSpeaker1: process.env.GEMINI_TTS_SPEAKER1?.trim() || '',
-  geminiTtsSpeaker2: process.env.GEMINI_TTS_SPEAKER2?.trim() || '',
-  geminiTtsSpeaker1Voice: process.env.GEMINI_TTS_SPEAKER1_VOICE?.trim() || '',
-  geminiTtsSpeaker2Voice: process.env.GEMINI_TTS_SPEAKER2_VOICE?.trim() || '',
-  userCode: process.env.USER_CODE?.trim() || '',
-  uiLanguage: process.env.UI_LANGUAGE === 'en' ? 'en' : 'zh-TW',
-  contentLanguage: process.env.CONTENT_LANGUAGE === 'en' ? 'en' : 'zh-TW',
-  googleAuthEnabled: config.googleAuthEnabled,
-  googleClientId: config.googleClientId,
-  googleClientSecret: config.googleClientSecret,
-  googleRedirectUri: config.googleRedirectUri,
-  githubRepoUrl: process.env.GITHUB_REPO_URL?.trim() || '',
-  githubToken: process.env.GITHUB_TOKEN?.trim() || '',
-};
+let systemAuthCache: SystemAuthSettings | null = null;
 
-runtime = {
-  ...runtime,
-  ...Object.fromEntries(
-    Object.entries(loadAccountEnvSettings()).filter(([, value]) => typeof value === 'string' && value.trim().length > 0),
-  ),
-};
-
-export function getRuntimeAiSettings(): RuntimeAiSettings {
-  return { ...runtime };
+function loadSystemAuthSettings(): SystemAuthSettings {
+  if (systemAuthCache) return systemAuthCache;
+  systemAuthCache = { ...baseSystemAuthSettings(), ...loadSystemAuthOverrides() };
+  return systemAuthCache;
 }
 
-export function setRuntimeAiSettings(next: Partial<RuntimeAiSettings>): RuntimeAiSettings {
-  runtime = {
-    ...runtime,
-    ...next,
-  };
-  if (typeof next.openaiApiKey === 'string') process.env.OPENAI_API_KEY = next.openaiApiKey;
-  if (typeof next.openaiBaseUrl === 'string') process.env.OPENAI_BASE_URL = next.openaiBaseUrl;
-  if (typeof next.geminiApiKey === 'string') process.env.GEMINI_API_KEY = next.geminiApiKey;
-  if (typeof next.llmProvider === 'string') process.env.LLM_PROVIDER = next.llmProvider;
-  if (typeof next.ttsProvider === 'string') process.env.TTS_PROVIDER = next.ttsProvider;
-  if (typeof next.openaiLlmModel === 'string') process.env.OPENAI_LLM_MODEL = next.openaiLlmModel;
-  if (typeof next.geminiLlmModel === 'string') process.env.GEMINI_LLM_MODEL = next.geminiLlmModel;
-  if (typeof next.openaiTtsModel === 'string') process.env.OPENAI_TTS_MODEL = next.openaiTtsModel;
-  if (typeof next.geminiTtsModel === 'string') process.env.GEMINI_TTS_MODEL = next.geminiTtsModel;
-  if (typeof next.geminiTtsSpeaker1 === 'string') process.env.GEMINI_TTS_SPEAKER1 = next.geminiTtsSpeaker1;
-  if (typeof next.geminiTtsSpeaker2 === 'string') process.env.GEMINI_TTS_SPEAKER2 = next.geminiTtsSpeaker2;
-  if (typeof next.geminiTtsSpeaker1Voice === 'string') process.env.GEMINI_TTS_SPEAKER1_VOICE = next.geminiTtsSpeaker1Voice;
-  if (typeof next.geminiTtsSpeaker2Voice === 'string') process.env.GEMINI_TTS_SPEAKER2_VOICE = next.geminiTtsSpeaker2Voice;
-  if (typeof next.userCode === 'string') process.env.USER_CODE = next.userCode;
-  if (typeof next.uiLanguage === 'string') process.env.UI_LANGUAGE = next.uiLanguage;
-  if (typeof next.contentLanguage === 'string') process.env.CONTENT_LANGUAGE = next.contentLanguage;
-  if (typeof next.googleAuthEnabled === 'boolean') process.env.GOOGLE_AUTH_ENABLED = next.googleAuthEnabled ? 'true' : 'false';
-  if (typeof next.googleClientId === 'string') process.env.GOOGLE_CLIENT_ID = next.googleClientId;
-  if (typeof next.googleClientSecret === 'string') process.env.GOOGLE_CLIENT_SECRET = next.googleClientSecret;
-  if (typeof next.googleRedirectUri === 'string') process.env.GOOGLE_REDIRECT_URI = next.googleRedirectUri;
-  if (typeof next.githubRepoUrl === 'string') process.env.GITHUB_REPO_URL = next.githubRepoUrl;
-  if (typeof next.githubToken === 'string') process.env.GITHUB_TOKEN = next.githubToken;
-  return { ...runtime };
+const SYSTEM_ENV_PAIRS: Array<[string, keyof SystemAuthSettings]> = [
+  ['GOOGLE_AUTH_ENABLED', 'googleAuthEnabled'],
+  ['GOOGLE_CLIENT_ID', 'googleClientId'],
+  ['GOOGLE_CLIENT_SECRET', 'googleClientSecret'],
+  ['GOOGLE_REDIRECT_URI', 'googleRedirectUri'],
+];
+
+export function getSystemAuthSettings(): SystemAuthSettings {
+  return { ...loadSystemAuthSettings() };
 }
 
-export async function persistEnvSettings(next: Partial<RuntimeAiSettings>): Promise<void> {
-  const { accountDir, envPath } = getAccountSettingsLocation();
+export function setSystemAuthSettings(next: Partial<SystemAuthSettings>): SystemAuthSettings {
+  const current = loadSystemAuthSettings();
+  systemAuthCache = { ...current, ...next };
+  return { ...systemAuthCache };
+}
+
+export async function persistSystemAuthSettings(next: Partial<SystemAuthSettings>): Promise<void> {
+  await writeEnvOverrides(DEFAULT_ACCOUNT_ID, SYSTEM_ENV_PAIRS, next);
+}
+
+// ---------------------------------------------------------------------------
+// 對外介面：依「目前帳號情境」（見 accountContext）讀寫設定
+// ---------------------------------------------------------------------------
+
+/**
+ * 取得指定帳號（預設為目前情境帳號）的有效設定（帳號層級設定 + 系統層級登入設定）。
+ * 不同帳號各自快取、各自讀取自己的 settings.env，不會互相影響。
+ */
+export function getRuntimeAiSettings(accountId: string = currentAccountId()): RuntimeAiSettings {
+  return { ...loadPerAccountSettings(accountId), ...loadSystemAuthSettings() };
+}
+
+/**
+ * 更新指定帳號（預設為目前情境帳號）的記憶體快取。Google 登入相關欄位永遠
+ * 寫入系統層級快取（與帳號無關），其餘欄位只影響該帳號自己的快取。
+ *
+ * 注意：刻意不寫入 process.env —— 那是跨帳號共用的全域狀態，寫入會讓不同
+ * 使用者的設定互相覆蓋，正是多帳號設計要避免的「後台混用」問題。
+ */
+export function setRuntimeAiSettings(
+  accountId: string = currentAccountId(),
+  next: Partial<RuntimeAiSettings> = {},
+): RuntimeAiSettings {
+  const safeAccountId = sanitizeAccountId(accountId);
+  const { systemPart, accountPart } = splitSettingsUpdate(next);
+
+  if (Object.keys(systemPart).length > 0) {
+    setSystemAuthSettings(systemPart);
+  }
+  if (Object.keys(accountPart).length > 0) {
+    const current = loadPerAccountSettings(safeAccountId);
+    perAccountCache.set(safeAccountId, { ...current, ...accountPart });
+  }
+  return getRuntimeAiSettings(safeAccountId);
+}
+
+function splitSettingsUpdate(next: Partial<RuntimeAiSettings>): {
+  systemPart: Partial<SystemAuthSettings>;
+  accountPart: Partial<PerAccountAiSettings>;
+} {
+  const systemKeys: Array<keyof SystemAuthSettings> = [
+    'googleAuthEnabled',
+    'googleClientId',
+    'googleClientSecret',
+    'googleRedirectUri',
+  ];
+  const systemPart: Partial<SystemAuthSettings> = {};
+  const accountPart: Partial<PerAccountAiSettings> = {};
+  for (const [key, value] of Object.entries(next)) {
+    if (value === undefined) continue;
+    if ((systemKeys as string[]).includes(key)) {
+      (systemPart as Record<string, unknown>)[key] = value;
+    } else {
+      (accountPart as Record<string, unknown>)[key] = value;
+    }
+  }
+  return { systemPart, accountPart };
+}
+
+async function writeEnvOverrides<K extends string>(
+  accountId: string,
+  pairs: Array<[string, K]>,
+  next: Partial<Record<K, string | boolean | AiProvider | AppLanguage | undefined>>,
+): Promise<void> {
+  const { accountDir, envPath } = getAccountSettingsLocation(accountId);
   let content = '';
   if (fs.existsSync(envPath)) content = await fs.promises.readFile(envPath, 'utf8');
 
-  const pairs: Array<[string, string | undefined]> = [
-    ['OPENAI_API_KEY', next.openaiApiKey],
-    ['OPENAI_BASE_URL', next.openaiBaseUrl],
-    ['GEMINI_API_KEY', next.geminiApiKey],
-    ['LLM_PROVIDER', next.llmProvider],
-    ['TTS_PROVIDER', next.ttsProvider],
-    ['OPENAI_LLM_MODEL', next.openaiLlmModel],
-    ['GEMINI_LLM_MODEL', next.geminiLlmModel],
-    ['OPENAI_TTS_MODEL', next.openaiTtsModel],
-    ['GEMINI_TTS_MODEL', next.geminiTtsModel],
-    ['GEMINI_TTS_SPEAKER1', next.geminiTtsSpeaker1],
-    ['GEMINI_TTS_SPEAKER2', next.geminiTtsSpeaker2],
-    ['GEMINI_TTS_SPEAKER1_VOICE', next.geminiTtsSpeaker1Voice],
-    ['GEMINI_TTS_SPEAKER2_VOICE', next.geminiTtsSpeaker2Voice],
-    ['USER_CODE', next.userCode],
-    ['UI_LANGUAGE', next.uiLanguage],
-    ['CONTENT_LANGUAGE', next.contentLanguage],
-    ['GOOGLE_AUTH_ENABLED', typeof next.googleAuthEnabled === 'boolean' ? (next.googleAuthEnabled ? 'true' : 'false') : undefined],
-    ['GOOGLE_CLIENT_ID', next.googleClientId],
-    ['GOOGLE_CLIENT_SECRET', next.googleClientSecret],
-    ['GOOGLE_REDIRECT_URI', next.googleRedirectUri],
-    ['GITHUB_REPO_URL', next.githubRepoUrl],
-    ['GITHUB_TOKEN', next.githubToken],
-  ];
-
-  for (const [key, raw] of pairs) {
-    if (typeof raw !== 'string') continue;
-    const value = raw.trim();
-    const line = `${key}=${value}`;
-    const re = new RegExp(`^${key}=.*`, 'm');
+  for (const [envKey, settingKey] of pairs) {
+    const raw = next[settingKey];
+    if (raw === undefined) continue;
+    const value = typeof raw === 'boolean' ? (raw ? 'true' : 'false') : String(raw).trim();
+    const line = `${envKey}=${value}`;
+    const re = new RegExp(`^${envKey}=.*`, 'm');
     if (re.test(content)) content = content.replace(re, line);
     else content = `${content.trimEnd()}\n${line}\n`;
   }
 
   await fs.promises.mkdir(accountDir, { recursive: true, mode: 0o700 });
   await fs.promises.writeFile(envPath, content, { encoding: 'utf8', mode: 0o600 });
+}
+
+/**
+ * 將設定寫入磁碟。系統層級欄位（Google 登入）寫進 DEFAULT_ACCOUNT_ID 的設定檔，
+ * 其餘欄位寫進指定帳號（預設為目前情境帳號）自己的設定檔，兩者互不交叉。
+ */
+export async function persistEnvSettings(
+  accountId: string = currentAccountId(),
+  next: Partial<RuntimeAiSettings> = {},
+): Promise<void> {
+  const { systemPart, accountPart } = splitSettingsUpdate(next);
+  if (Object.keys(systemPart).length > 0) {
+    await writeEnvOverrides(DEFAULT_ACCOUNT_ID, SYSTEM_ENV_PAIRS, systemPart);
+  }
+  if (Object.keys(accountPart).length > 0) {
+    await writeEnvOverrides(sanitizeAccountId(accountId), PER_ACCOUNT_ENV_PAIRS, accountPart);
+  }
 }

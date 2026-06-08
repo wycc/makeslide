@@ -1,4 +1,4 @@
-import Fastify from "fastify";
+import Fastify, { type FastifyRequest } from "fastify";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
@@ -7,10 +7,31 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "./config";
 import { logger } from "./logger";
-import { decodeSession, parseCookies } from "./routes/auth";
-import { getRuntimeAiSettings } from "./services/aiSettings";
+import { decodeSession, parseCookies, SESSION_COOKIE } from "./routes/auth";
+import { getSystemAuthSettings } from "./services/aiSettings";
+import { accountIdFromOwnerSub, runWithAccountId } from "./services/accountContext";
+import { db } from "./db";
 import { ensureStorageRoot } from "./services/storage";
 import { cacheControlForStaticAsset } from "./staticCache";
+
+/**
+ * 解析這個請求應該在哪個帳號的情境中執行：
+ * - 路徑帶有簡報 id（/api/pdfs/:id/...）時，一律採用該簡報擁有者的帳號 ——
+ *   這樣不管是誰觸發處理（含 public_editable 簡報的協作者），都會用「這份
+ *   簡報所屬帳號」的 AI 設定與金鑰，行為可預期、不會把協作者的金鑰用到別人
+ *   的簡報上。
+ * - 否則（例如帳號設定頁、建立新簡報）採用登入者自己的帳號。
+ */
+function resolveAccountIdForRequest(request: FastifyRequest): string {
+  const params = request.params as Record<string, unknown> | undefined;
+  const pdfId = typeof params?.id === 'string' ? params.id : null;
+  if (pdfId) {
+    const row = db.prepare(`SELECT owner_sub FROM pdfs WHERE id = ?`).get(pdfId) as { owner_sub: string | null } | undefined;
+    if (row) return accountIdFromOwnerSub(row.owner_sub);
+  }
+  const session = decodeSession(parseCookies(request)[SESSION_COOKIE]);
+  return accountIdFromOwnerSub(session?.sub ?? null);
+}
 
 function shouldSuppressRequestLog(url: string | undefined): boolean {
   if (!config.suppressPollingRequestLogs || !url) return false;
@@ -96,8 +117,17 @@ export async function buildApp() {
     });
   }
 
+  // 多帳號設計：在進入路由與其餘 hook 之前，先依請求解析出「目前帳號」並
+  // 建立 AsyncLocalStorage 情境。之後整條請求鏈（含 getRuntimeAiSettings()／
+  // getOpenAIClient() 等呼叫，無論在路由處理常式或更深的服務層）都會自動
+  // 取得正確且互不混用的帳號設定。
+  app.addHook('onRequest', (request, _reply, done) => {
+    const accountId = resolveAccountIdForRequest(request);
+    runWithAccountId(accountId, () => done());
+  });
+
   app.addHook('onRequest', async (request, reply) => {
-    const runtime = getRuntimeAiSettings();
+    const runtime = getSystemAuthSettings();
     const googleAuthActive = Boolean(
       runtime.googleAuthEnabled
       && runtime.googleClientId

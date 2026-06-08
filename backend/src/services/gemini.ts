@@ -76,7 +76,7 @@ function parseMimeRateAndChannels(mimeType: string): { sampleRate: number; chann
 }
 
 function getGeminiApiKey(): string {
-  const key = (process.env.GEMINI_API_KEY ?? getRuntimeAiSettings().geminiApiKey ?? '').trim();
+  const key = (getRuntimeAiSettings().geminiApiKey ?? '').trim();
   if (!key) throw new Error('GEMINI_API_KEY is not set — cannot call Gemini');
   return key;
 }
