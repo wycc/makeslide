@@ -79,6 +79,8 @@ export interface PdfListItem {
   image_style_prompt?: string | null;
   total_audio_duration_seconds?: number | null;
   has_source_text?: boolean;
+  github_sync_dirty?: boolean;
+  github_synced_at?: string | null;
   created_at: string;
   updated_at: string;
 }

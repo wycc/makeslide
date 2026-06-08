@@ -433,7 +433,7 @@ function buildDeckRewriteSystemPrompt(
           : '你是一位繁體中文簡報旁白總編輯。只輸出 JSON：{"pages":[{"page_number":1,"script":"..."}, ...]}。',
       ),
       '',
-      `【字數限制】每頁逐字稿長度必須控制在 ${bounds.min}～${bounds.max} 字之間（目標約 ${targetChars} 字）：潤飾後不可超過 ${bounds.max} 字上限，內容多時優先濃縮挑重點，不要為達字數而灌水。`,
+      `【字數限制】每頁逐字稿長度必須控制在 ${bounds.min}～${bounds.max} 字之間（目標和原稿越接近越好）：內容多時優先濃縮挑重點，不可超過 ${bounds.max} 字上限；內容偏少時可適度展開、補足語氣與轉場，不要大幅刪減原意，也不可低於 ${bounds.min} 字下限。`,
     ];
     const sanitized = sanitiseUserPrompt(userPrompt);
     if (isDual) {
@@ -474,7 +474,7 @@ function buildDeckRewriteSystemPrompt(
     '規則：',
     '1. 必須輸出 JSON：{"pages":[{"page_number":1,"script":"..."}, ...]}，不要其他欄位。',
     '2. pages 的數量與 page_number 必須和輸入完全一致，不可增刪頁。',
-    `3. 每頁字數必須控制在 ${bounds.min}～${bounds.max} 字之間（目標約 ${targetChars} 字）：潤飾後**不可超過 ${bounds.max} 字上限**，內容多時優先濃縮挑重點，不要為達字數而灌水。`,
+    `3. 每頁字數必須控制在 ${bounds.min}～${bounds.max} 字之間（目標和原稿越接近越好）：內容多時優先濃縮挑重點，**不可超過 ${bounds.max} 字上限**；內容偏少時可適度展開、補足語氣與轉場，不要大幅刪減原意，**也不可低於 ${bounds.min} 字下限**。`,
     '4. 可以調整句子銜接與語氣，但不要憑空捏造與投影片無關的新事實。',
     '5. 每頁腳本仍要可獨立朗讀，並在頁與頁之間有連續性。',
     '6. 避免使用「這一頁／本頁／此頁／本張」等單頁指稱，讓整份旁白聽感更連續。',

@@ -109,6 +109,8 @@ export const en = {
   'card.awaitingPrompt': 'Not started — click the card to enter a style prompt.',
   'card.failedTitle': 'Processing failed',
   'card.failedMessage': 'Processing failed. Click to retry or delete.',
+  'card.githubSynced': 'Synced to GitHub',
+  'card.githubUnsynced': 'Has changes not yet synced to GitHub',
   'card.inputPrompt': 'Enter prompt',
   'card.continueGeneration': 'Continue generation',
   'card.continuing': 'Continuing…',

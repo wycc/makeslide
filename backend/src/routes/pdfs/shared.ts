@@ -535,6 +535,8 @@ export function rowToListItem(row: PdfRow): PdfListItem {
     source_url: row.source_url ?? null,
     source_video_id: row.source_video_id ?? null,
     source_caption_language: row.source_caption_language ?? null,
+    github_sync_dirty: row.github_sync_dirty === 1,
+    github_synced_at: row.github_synced_at ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };

@@ -81,6 +81,8 @@ export interface PdfRow {
   source_url?: string | null;
   source_video_id?: string | null;
   source_caption_language?: string | null;
+  github_sync_dirty?: number;
+  github_synced_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -126,6 +128,8 @@ export interface PdfListItem {
   source_url?: string | null;
   source_video_id?: string | null;
   source_caption_language?: string | null;
+  github_sync_dirty?: boolean;
+  github_synced_at?: string | null;
   created_at: string;
   updated_at: string;
 }

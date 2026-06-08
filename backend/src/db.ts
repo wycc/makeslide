@@ -135,6 +135,19 @@ function migrate(): void {
     logger.info('Added column pdfs.total_audio_duration_seconds');
   }
 
+  // GitHub sync status: `github_sync_dirty` flips to 1 whenever a presentation
+  // file is committed locally, and back to 0 once that commit has been pushed
+  // (see services/presentationGit.ts). `github_synced_at` records the last
+  // successful push so the UI can show "synced" vs "has unsynced changes".
+  if (!columnExists('pdfs', 'github_sync_dirty')) {
+    db.exec(`ALTER TABLE pdfs ADD COLUMN github_sync_dirty INTEGER NOT NULL DEFAULT 0`);
+    logger.info('Added column pdfs.github_sync_dirty');
+  }
+  if (!columnExists('pdfs', 'github_synced_at')) {
+    db.exec(`ALTER TABLE pdfs ADD COLUMN github_synced_at TEXT`);
+    logger.info('Added column pdfs.github_synced_at');
+  }
+
   // pages table: drop legacy M1 version (it was never populated) and recreate
   // with the M2 schema. Safe because M1 never wrote rows here.
   if (tableExists('pages')) {

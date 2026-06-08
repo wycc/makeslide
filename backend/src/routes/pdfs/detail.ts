@@ -155,6 +155,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
                 error_message, user_prompt, require_script_confirmation, category,
                 owner_sub, visibility,
                 total_audio_duration_seconds,
+                github_sync_dirty, github_synced_at,
                 created_at, updated_at
            FROM pdfs
            ORDER BY created_at DESC`,

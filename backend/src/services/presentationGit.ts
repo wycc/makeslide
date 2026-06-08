@@ -5,8 +5,30 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { pdfDir } from './storage';
 import { logger } from '../logger';
+import { db } from '../db';
 
 const execFile = promisify(execFileCb);
+
+/** Mark a presentation as having local commits not yet pushed to GitHub. */
+function markGithubSyncDirty(pdfId: string): void {
+  try {
+    db.prepare(`UPDATE pdfs SET github_sync_dirty = 1 WHERE id = ?`).run(pdfId);
+  } catch (err) {
+    logger.warn({ err, pdfId }, 'presentationGit: failed to mark github sync dirty');
+  }
+}
+
+/** Mark a presentation as fully pushed to GitHub as of now. */
+function markGithubSynced(pdfId: string): void {
+  try {
+    db.prepare(`UPDATE pdfs SET github_sync_dirty = 0, github_synced_at = ? WHERE id = ?`).run(
+      new Date().toISOString(),
+      pdfId,
+    );
+  } catch (err) {
+    logger.warn({ err, pdfId }, 'presentationGit: failed to mark github synced');
+  }
+}
 
 const GIT_USER_NAME = 'makeslide';
 const GIT_USER_EMAIL = 'makeslide@local';
@@ -104,6 +126,7 @@ async function commitAllPendingChanges(pdfId: string, dir: string, message: stri
     const status = await git(dir, ['status', '--porcelain']);
     if (!status) return;
     await execFile('git', ['commit', '-m', message], gitOpts(dir));
+    markGithubSyncDirty(pdfId);
   } catch (err) {
     logger.warn({ err, pdfId }, 'presentationGit: failed to commit pending changes');
   }
@@ -126,6 +149,7 @@ export async function commitPresentationFile(
     const status = await git(dir, ['status', '--porcelain', '--', relPath]);
     if (!status) return; // nothing changed
     await execFile('git', ['commit', '-m', message, '--', relPath], gitOpts(dir));
+    markGithubSyncDirty(pdfId);
   } catch (err) {
     // Non-fatal: versioning failures must not break the main flow
     logger.warn({ err, pdfId, relPath }, 'presentationGit: commit failed');
@@ -148,6 +172,7 @@ export async function commitPresentationFiles(
     const status = await git(dir, ['status', '--porcelain']);
     if (!status) return;
     await execFile('git', ['commit', '-m', message, '--', ...relPaths], gitOpts(dir));
+    markGithubSyncDirty(pdfId);
   } catch (err) {
     logger.warn({ err, pdfId, relPaths }, 'presentationGit: multi-file commit failed');
   }
@@ -335,6 +360,7 @@ export async function pushPresentationToGitHub(
     ['push', authenticatedUrl, `${branch}:refs/heads/${pdfId}`, '--force'],
     gitOpts(dir),
   );
+  markGithubSynced(pdfId);
 }
 
 export interface FileVersionEntry {

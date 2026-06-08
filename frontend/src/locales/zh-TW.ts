@@ -109,6 +109,8 @@ export const zhTW = {
   'card.awaitingPrompt': '尚未開始 — 點擊卡片以輸入風格提示詞。',
   'card.failedTitle': '處理失敗',
   'card.failedMessage': '處理失敗，可點擊重試或刪除',
+  'card.githubSynced': '已同步到 GitHub',
+  'card.githubUnsynced': '有未同步到 GitHub 的變更',
   'card.inputPrompt': '輸入提示詞',
   'card.continueGeneration': '繼續生成',
   'card.continuing': '繼續中…',
