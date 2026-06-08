@@ -1445,28 +1445,28 @@ export default function PlayPage() {
   }, [playPause, goPrev, goNext, navigate, imageOnlyFullscreen, syncEnabled, syncRole, handleAiAnswerFollowerQuestions, fullscreenPollControlOpen, drawingMode]);
 
   // ---- Fullscreen API integration ----
+  // 編輯版面不進入瀏覽器原生全螢幕：原生全螢幕的 ESC 退出行為無法被 JS 攔截，
+  // 會導致使用者在編輯逐字稿時按 ESC（例如取消輸入法選字）就整個跳出全螢幕。
+  // 改用純 CSS 覆蓋層即可避免觸發瀏覽器原生 ESC 行為，由自訂鍵盤處理邏輯接管。
   useEffect(() => {
-    if (imageOnlyFullscreen && fullscreenContainerRef.current) {
-      const isAlreadyFullscreen = Boolean(getAnyFullscreenElement());
+    const isAlreadyFullscreen = Boolean(getAnyFullscreenElement());
+    if (imageOnlyFullscreen && fullscreenLayout !== 'edit' && fullscreenContainerRef.current) {
       if (!isAlreadyFullscreen) {
         requestAnyFullscreen(fullscreenContainerRef.current).catch((err) => {
           console.error('Failed to enter fullscreen:', err);
         });
       }
-    } else if (!imageOnlyFullscreen) {
-      const isAlreadyFullscreen = Boolean(getAnyFullscreenElement());
-      if (isAlreadyFullscreen) {
-        exitAnyFullscreen().catch((err) => {
-          console.error('Failed to exit fullscreen:', err);
-        });
-      }
+    } else if ((!imageOnlyFullscreen || fullscreenLayout === 'edit') && isAlreadyFullscreen) {
+      exitAnyFullscreen().catch((err) => {
+        console.error('Failed to exit fullscreen:', err);
+      });
     }
-  }, [imageOnlyFullscreen]);
+  }, [imageOnlyFullscreen, fullscreenLayout]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
       const isFullscreen = Boolean(getAnyFullscreenElement());
-      if (!isFullscreen && imageOnlyFullscreen) {
+      if (!isFullscreen && imageOnlyFullscreen && fullscreenLayout !== 'edit') {
         setImageOnlyFullscreen(false);
       }
     };
@@ -1480,7 +1480,7 @@ export default function PlayPage() {
       document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
       document.removeEventListener('msfullscreenchange', handleFullscreenChange);
     };
-  }, [imageOnlyFullscreen]);
+  }, [imageOnlyFullscreen, fullscreenLayout]);
 
   const currentScript =
     currentPage != null ? scripts[currentPage.page_number] ?? '' : '';
