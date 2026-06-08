@@ -460,6 +460,7 @@
 [ ] 在上傳 PDF 時,　要提供選項單入或雙人的選項
 [x] gpt-image-2 的錯誤請重試一次，不要直接判定失敗（完成於分支: feature/retry-gpt-image-moderation-blocked-20260608）
 [x] 修正 YouTube 字幕過多頁數不足的問題：去除 VTT inline timing markers 和重複行，並將大綱生成的字幕輸入上限從 16K 提高到 64K（完成於分支: feature/youtube-captions-coverage-20260601）
+[x] 將頁面產物檔案（圖片/縮圖/逐字稿/腳本/語音）改用建立時就決定、永不改變的 page_uid 命名，取代依頁碼命名；解決搬移/插入/刪除頁面時 cascading rename 導致 git 無法偵測 rename、`git log --follow` 斷裂的結構性問題（完成於分支: feature/stable-page-uid-filenames-20260608）
 
 ## 工作記錄
 
@@ -520,3 +521,7 @@
 - 時間: 2026-06-08 09:10:00 +0800
 - 分支: feature/retry-gpt-image-moderation-blocked-20260608
 - 內容: 修正 gpt-image-2 圖片生成遇到 `moderation_blocked`（OpenAI 安全系統誤判拒絕）時直接判定該頁失敗、不重試的問題；這類錯誤往往重試一次就能成功。在 `renderTextPagesWithLlm.ts` 新增 `isModerationBlockedImageError()`（偵測 `code === 'moderation_blocked'` 或訊息包含 "rejected by the safety system"），並在既有的重試迴圈中加入 `MODERATION_BLOCKED_MAX_ATTEMPTS = 2`，讓這類錯誤額外獲得一次重試機會（不影響原本 transient 錯誤最多重試到 `IMAGE_GENERATION_MAX_ATTEMPTS = 3` 的邏輯），並在 log 與失敗 metadata 中記錄 `moderationBlocked` 旗標方便追蹤。
+
+- 時間: 2026-06-08 14:00:00 +0800
+- 分支: feature/stable-page-uid-filenames-20260608
+- 內容: 將頁面產物檔案（image/thumbnail/text/script/audio）的命名方式從「依頁碼」（`pages/003.jpg`）改為「建立時產生、永不改變的 page_uid」（`pages/<uid>.jpg`），`page_number` 變成純粹的 DB 排序索引。背景：原本搬移/插入/刪除頁面時 `renumberPageArtifacts` 會把磁碟檔案整批 `fs.rename` 以對齊新頁碼，但這種「同路徑換內容」的 cascading rename 在 git 眼中只是一連串 M/A/D，完全無法被偵測為 rename，導致 `git log --follow` 斷裂、無法追蹤某張投影片內容的連續歷史。修正：`pages` 表新增 `page_uid`（nanoid(10)，含回填與唯一索引），`storage.ts` 的 `pageImagePath`/`pageThumbnailPath`/`pageTextPath`/`pageScriptPath`/`pageAudioPath` 改為 `(pdfId, pageUid)` 簽名，移除 `pagePad`/`formatPageNumber`/`renumberPageArtifacts`/`rewritePagePathsToMatchNumber`；所有建立頁面的路徑（`pipeline.ts`、`upload.ts`、`import.ts`、`addPagesFromPrompt.ts`、`page-operations.ts`）都產生並寫入 `page_uid`；`page-operations.ts` 的搬移/插入/刪除端點移除 renumbering 呼叫，現在純粹是 `UPDATE pages SET page_number = ...`，完全不動磁碟檔案；`versioning.ts`、`regenerate.ts`、`detail.ts`、`quizzes.ts` 與各 worker step（`extractText`/`generateScript`/`generateTitle`/`generateVideo`/`synthesizeAudio`/`renderPages`/`renderTextPages*`）改用 DB 內 `page_uid` 或既有路徑欄位重建路徑。新增一次性遷移腳本 `backend/scripts/migrate-page-uids.ts`，把既有簡報的 `pages/00N.*` 改名為 `pages/<uid>.*` 並以 `git add -A` 提交（讓 git 對「從未被 commit 過」與「曾經被 commit 過」的簡報都能正確處理：前者單純記錄為新增，後者能因內容 100% 相似而被偵測成 rename，延續 `--follow` 歷史）；已在實際簡報 `l5mI-kjYmJ`（15 頁、75 個產物檔）上驗證遷移、DB 路徑欄位、`metadata.json` 與 `pageXxxPath` helper 解析皆正確一致，且 `npx tsc --noEmit` 全專案通過。
