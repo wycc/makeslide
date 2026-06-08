@@ -428,7 +428,20 @@ export default function PlayPage() {
   const [drawingTool, setDrawingTool] = useState<'pen' | 'cursor' | 'eraser'>('pen');
   const [drawingColor, setDrawingColor] = useState('#ef4444');
   const [drawingLineWidth, setDrawingLineWidth] = useState(6);
-  const drawingCanvasRef = useRef<DrawingCanvasHandle | null>(null);
+  // 三個 <DrawingCanvas> 實例（全螢幕分割版面、全螢幕單圖版面、一般版面）即使彼此視覺上互斥，
+  // 在 DOM 中仍可能同時掛載（全螢幕覆蓋層疊加在一般版面之上），共用同一個 ref 會讓它指向
+  // 「最後掛載」的隱藏實例而非使用者實際正在操作的畫布，因此改為各自獨立的 ref。
+  const drawingCanvasSplitRef = useRef<DrawingCanvasHandle | null>(null);
+  const drawingCanvasFullscreenRef = useRef<DrawingCanvasHandle | null>(null);
+  const drawingCanvasMainRef = useRef<DrawingCanvasHandle | null>(null);
+  const getActiveDrawingCanvas = useCallback((): DrawingCanvasHandle | null => {
+    if (imageOnlyFullscreen) {
+      return fullscreenLayout === 'split' || fullscreenLayout === 'edit'
+        ? drawingCanvasSplitRef.current
+        : drawingCanvasFullscreenRef.current;
+    }
+    return drawingCanvasMainRef.current;
+  }, [imageOnlyFullscreen, fullscreenLayout]);
 
   const effectiveAudioMuted = audioMuted || (syncEnabled && syncRole === 'follower' && !followerAudioUnlocked);
   // 同步模式下，手寫工具僅供 master 開啟；follower 只能唯讀鏡射 master 的手寫畫面。
@@ -1175,7 +1188,7 @@ export default function PlayPage() {
       active_quiz_id: syncDisplayedPollId,
       drawing_page_number: pending.pageNumber,
       drawing_json: JSON.stringify(pending.data),
-    }).catch(() => undefined);
+    });
   }, [pdfId, currentIdx, isPlaying, currentTime, followerAudioUnlocked, pollStarted, syncPollShowResults, syncDisplayedPollId]);
 
   const pushLocalDrawingChange = useCallback(
@@ -2943,7 +2956,7 @@ export default function PlayPage() {
                       />
                       {pdfId && currentPage && (
                         <DrawingCanvas
-                          ref={drawingCanvasRef}
+                          ref={drawingCanvasSplitRef}
                           pdfId={pdfId}
                           pageNumber={currentPage.page_number}
                           enabled={canUseDrawingTools && drawingMode && drawingTool !== 'cursor'}
@@ -3081,7 +3094,7 @@ export default function PlayPage() {
               />
               {pdfId && currentPage && (
                 <DrawingCanvas
-                  ref={drawingCanvasRef}
+                  ref={drawingCanvasFullscreenRef}
                   pdfId={pdfId}
                   pageNumber={currentPage.page_number}
                   enabled={canUseDrawingTools && drawingMode && drawingTool !== 'cursor'}
@@ -3121,7 +3134,7 @@ export default function PlayPage() {
                   onClick={() => setDrawingTool('eraser')}>⬜</button>
                 <button type="button" title="清除本頁所有手寫" aria-label="清除"
                   className="flex h-7 w-7 items-center justify-center rounded border border-rose-600/50 bg-rose-600/20 text-sm text-rose-300 hover:bg-rose-600/30"
-                  onClick={() => drawingCanvasRef.current?.clearAll()}>🗑️</button>
+                  onClick={() => getActiveDrawingCanvas()?.clearAll()}>🗑️</button>
                 <button type="button" title="關閉手寫（W）" aria-label="關閉"
                   className="flex h-7 w-7 items-center justify-center rounded border border-slate-600 text-xs text-slate-400 hover:bg-slate-800"
                   onClick={() => { setDrawingMode(false); setDrawingTool('pen'); }}>✕</button>
@@ -4080,7 +4093,7 @@ export default function PlayPage() {
                   </button>
                   {pdfId && currentPage && (
                     <DrawingCanvas
-                      ref={drawingCanvasRef}
+                      ref={drawingCanvasMainRef}
                       pdfId={pdfId}
                       pageNumber={currentPage.page_number}
                       enabled={canUseDrawingTools && !imageEditSelectMode && drawingMode && drawingTool !== 'cursor'}
