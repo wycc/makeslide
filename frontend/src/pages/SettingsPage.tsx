@@ -42,7 +42,6 @@ export default function SettingsPage() {
   const [geminiTtsSpeaker2, setGeminiTtsSpeaker2] = useState('');
   const [geminiTtsSpeaker1Voice, setGeminiTtsSpeaker1Voice] = useState('');
   const [geminiTtsSpeaker2Voice, setGeminiTtsSpeaker2Voice] = useState('');
-  const [accountSettingsFile, setAccountSettingsFile] = useState('');
   const [accountId, setAccountId] = useState('default');
   const [userCode, setUserCode] = useState('');
   const [saving, setSaving] = useState(false);
@@ -79,7 +78,6 @@ export default function SettingsPage() {
       setGeminiTtsSpeaker1Voice(s.gemini_tts_speaker1_voice ?? '');
       setGeminiTtsSpeaker2Voice(s.gemini_tts_speaker2_voice ?? '');
       setAccountId(s.account_id ?? 'default');
-      setAccountSettingsFile(s.account_settings_file ?? '');
       const loadedUiLanguage = s.ui_language ?? getStoredUiLanguage();
       const loadedContentLanguage = s.content_language ?? getStoredContentLanguage();
       setUiLanguage(loadedUiLanguage);
@@ -276,9 +274,6 @@ export default function SettingsPage() {
         <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/40 p-4">
           <div className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-xs text-slate-400">
             <div>{t('settings.currentAccount')}<span className="font-mono text-slate-200">{accountId}</span></div>
-            {accountSettingsFile ? (
-              <div className="mt-1 break-all">{t('settings.accountFilePrefix')}<span className="font-mono text-slate-200">{accountSettingsFile}</span></div>
-            ) : null}
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

@@ -18,7 +18,6 @@ export const zhTW = {
   'settings.logout': '登出',
   'settings.googleLogin': '使用 Google 登入',
   'settings.currentAccount': '目前帳號：',
-  'settings.accountFilePrefix': '設定會保存到帳號專屬檔案：',
   'settings.userCode': '使用者代碼',
   'settings.userCodePlaceholder': '例如：teacher-101',
   'settings.userCodeAccount': '已登入：儲存到帳號設定。',
