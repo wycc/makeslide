@@ -135,13 +135,21 @@ function migrate(): void {
     logger.info('Added column pdfs.total_audio_duration_seconds');
   }
 
-  // GitHub sync status: `github_sync_dirty` flips to 1 whenever a presentation
-  // file is committed locally, and back to 0 once that commit has been pushed
-  // (see services/presentationGit.ts). `github_synced_at` records the last
-  // successful push so the UI can show "synced" vs "has unsynced changes".
-  if (!columnExists('pdfs', 'github_sync_dirty')) {
-    db.exec(`ALTER TABLE pdfs ADD COLUMN github_sync_dirty INTEGER NOT NULL DEFAULT 0`);
-    logger.info('Added column pdfs.github_sync_dirty');
+  // GitHub sync status: `github_synced_commit` records the local git HEAD hash
+  // at the moment of the last successful push, and `github_synced_at` its
+  // timestamp. Whether a presentation currently has unsynced changes is derived
+  // on read by comparing the working tree / current HEAD against this commit
+  // (see services/presentationGit.ts#isGithubSyncDirty) — file writes happen
+  // through many code paths and don't all go through commitPresentationFile,
+  // so a write-time "dirty" flag would miss changes that are only committed in
+  // bulk right before a push.
+  if (columnExists('pdfs', 'github_sync_dirty')) {
+    db.exec(`ALTER TABLE pdfs DROP COLUMN github_sync_dirty`);
+    logger.info('Dropped column pdfs.github_sync_dirty');
+  }
+  if (!columnExists('pdfs', 'github_synced_commit')) {
+    db.exec(`ALTER TABLE pdfs ADD COLUMN github_synced_commit TEXT`);
+    logger.info('Added column pdfs.github_synced_commit');
   }
   if (!columnExists('pdfs', 'github_synced_at')) {
     db.exec(`ALTER TABLE pdfs ADD COLUMN github_synced_at TEXT`);
