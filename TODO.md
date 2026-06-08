@@ -465,6 +465,7 @@
 [x] 當一個測驗開始，我們會在 master 顯示使用正在測試的人，和他們答題的進度。（完成於分支: feature/quiz-master-progress-display-20260608）
 [x] follower 的畫面不應該有新增測驗的按鍵。（完成於分支: feature/quiz-master-progress-display-20260608）
 [x] 將結束並顯示答案分成顯示答案和結束二個功能。按下顯示答案時就停止作答，follower 不能再改答案，並顯示解答。按下結束則 follower 回到全螢幕播放畫面。所有 follower 的答案會被存下來，可在測驗的歷史記錄中查看每一次測試每一個人的答案。（完成於分支: feature/quiz-show-answers-end-history-20260608；修正「結束後歷史記錄無紀錄」於分支: fix/quiz-attempt-not-saved-on-end-20260608）
+[x] 新增顯示每一個人答案的功能（測驗歷史紀錄中可展開查看每位學員逐題的選擇與正確答案對照）（完成於分支: feature/quiz-history-show-individual-answers-20260608）
 
 ## 工作記錄
 
@@ -549,3 +550,7 @@
 - 時間: 2026-06-08 17:55:00 +0800
 - 分支: fix/quiz-attempt-not-saved-on-end-20260608
 - 內容: 修正「測驗結束後歷史記錄裡沒有任何作答紀錄」的問題。根因：原本 follower 的作答只在 `syncQuizShowAnswers` 變成 true（master 按下「顯示答案」鎖定作答）時才透過 `submitQuizAttempt()` 送出；但若 master 直接按「結束」跳過顯示答案，`active_quiz_id` 直接變成 null、`quiz_session_id` 也被後端清空，永遠不會觸發任何提交，導致 `quiz_attempts` 資料表始終是空的。修正為新增 `latestAttemptSnapshotRef`，持續以 ref 紀錄目前測驗 id、session id、follower 代號與最新作答快照（避免在偵測到「測驗結束」當下，`activeQuiz`/`syncQuizSessionId` 等 state 已經被清空而抓不到資料）；抽出共用的 `submitFollowerAttempt()`，分別在「`quiz_show_answers` 變成 true（顯示答案）」與「`active_quiz_id` 由非 null 轉為 null（測驗結束，準備導回全螢幕播放畫面前）」兩個時機呼叫，並沿用既有的 `submittedAttemptRef`（以 `session_id:client_id` 為 key）去重，確保同一次測驗只送出一次、但不論 master 走哪一種流程都會把作答存下來。前端 `npx tsc --noEmit` 與 `npm run build` 皆通過。
+
+- 時間: 2026-06-08 18:20:00 +0800
+- 分支: feature/quiz-history-show-individual-answers-20260608
+- 內容: 在「測驗歷史紀錄」面板中，每位學員的作答列新增「查看作答」按鈕，點擊後展開逐題詳細列表：列出該題所有選項，並以顏色區分「正確答案」（綠色）、「已選但錯誤」（紅色）與未選項目（灰色），同時附上題目解析；再次點擊（顯示為「收合」）可收起。展開狀態以 `viewingAttemptId` 追蹤，切換測驗或關閉歷史面板時自動重設，避免殘留錯誤的展開狀態。前端 `npx tsc --noEmit` 與 `npm run build` 皆通過。
