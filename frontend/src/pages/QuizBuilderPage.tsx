@@ -96,6 +96,13 @@ export default function QuizBuilderPage() {
   const syncClientIdRef = useRef('');
   const lastReportedProgressRef = useRef<{ quizId: number; answeredCount: number; submitted: boolean } | null>(null);
   const submittedAttemptRef = useRef<string | null>(null);
+  const latestAttemptSnapshotRef = useRef<{
+    pdfId: string;
+    quizId: number;
+    sessionId: string;
+    code: string | null;
+    answers: Record<string, number[]>;
+  } | null>(null);
   const previousActiveQuizIdRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -158,37 +165,56 @@ export default function QuizBuilderPage() {
   }, [pdfId, isFollowerTesting, activeQuiz, studentAnswers]);
 
   useEffect(() => {
-    if (!pdfId || syncRole !== 'follower' || !activeQuiz || !syncQuizShowAnswers || !syncQuizSessionId) return;
-    const clientId = syncClientIdRef.current;
-    if (!clientId) return;
-    const key = `${syncQuizSessionId}:${clientId}`;
-    if (submittedAttemptRef.current === key) return;
-    submittedAttemptRef.current = key;
-    const scoreTable = normalizeQuestionScores(activeQuiz.questions);
-    const score = activeQuiz.questions.reduce((acc, q, idx) => {
-      const selected = studentAnswers[q.id] ?? [];
-      return acc + calcQuestionScore(q, selected, scoreTable[idx] ?? 0);
-    }, 0);
+    if (!pdfId || syncRole !== 'follower' || !activeQuiz || !syncQuizSessionId) return;
     const followerCodeKey = `makeslide.sync.followerCode.${pdfId}`;
     const code = window.localStorage.getItem(followerCodeKey)?.trim() || null;
-    void submitQuizAttempt(pdfId, activeQuiz.id, {
-      client_id: clientId,
-      session_id: syncQuizSessionId,
+    latestAttemptSnapshotRef.current = {
+      pdfId,
+      quizId: activeQuiz.id,
+      sessionId: syncQuizSessionId,
       code,
       answers: studentAnswers,
-      score: Math.round(score * 100) / 100,
+    };
+  }, [pdfId, syncRole, activeQuiz, syncQuizSessionId, studentAnswers]);
+
+  const submitFollowerAttempt = useCallback(() => {
+    const snapshot = latestAttemptSnapshotRef.current;
+    const clientId = syncClientIdRef.current;
+    if (!snapshot || !clientId) return;
+    const key = `${snapshot.sessionId}:${clientId}`;
+    if (submittedAttemptRef.current === key) return;
+    submittedAttemptRef.current = key;
+    const quiz = savedQuizzes.find((q) => q.id === snapshot.quizId);
+    let score: number | undefined;
+    if (quiz) {
+      const scoreTable = normalizeQuestionScores(quiz.questions);
+      const total = quiz.questions.reduce((acc, q, idx) => acc + calcQuestionScore(q, snapshot.answers[q.id] ?? [], scoreTable[idx] ?? 0), 0);
+      score = Math.round(total * 100) / 100;
+    }
+    void submitQuizAttempt(snapshot.pdfId, snapshot.quizId, {
+      client_id: clientId,
+      session_id: snapshot.sessionId,
+      code: snapshot.code,
+      answers: snapshot.answers,
+      score,
     }).catch(() => {
       submittedAttemptRef.current = null;
     });
-  }, [pdfId, syncRole, activeQuiz, syncQuizShowAnswers, syncQuizSessionId, studentAnswers]);
+  }, [savedQuizzes]);
+
+  useEffect(() => {
+    if (syncRole !== 'follower' || !syncQuizShowAnswers) return;
+    submitFollowerAttempt();
+  }, [syncRole, syncQuizShowAnswers, submitFollowerAttempt]);
 
   useEffect(() => {
     const previous = previousActiveQuizIdRef.current;
     previousActiveQuizIdRef.current = syncActiveQuizId;
     if (syncRole === 'follower' && previous != null && syncActiveQuizId == null && pdfId) {
+      submitFollowerAttempt();
       navigate(`/play/${encodeURIComponent(pdfId)}?fullscreen=1`);
     }
-  }, [syncRole, syncActiveQuizId, pdfId, navigate]);
+  }, [syncRole, syncActiveQuizId, pdfId, navigate, submitFollowerAttempt]);
 
   useEffect(() => {
     if (!pdfId) return;
