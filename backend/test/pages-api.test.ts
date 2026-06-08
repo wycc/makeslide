@@ -5,10 +5,14 @@ import path from 'node:path';
 import { buildApp } from '../src/server';
 import { db } from '../src/db';
 import { config } from '../src/config';
+import { normalizeErrorCode } from '../src/errors';
+import { setSystemAuthSettings } from '../src/services/aiSettings';
 
 const PDF_ID = 'test-pages-api-01';
 const SESSION_COOKIE =
   'eyJwcm92aWRlciI6Imdvb2dsZSIsInN1YiI6ImFjY291bnQtMSIsImVtYWlsIjoiYWNjb3VudC0xQGV4YW1wbGUuY29tIn0.mDkylBa8ZqLOib7FEOYl6YtwwODNJwieo4kUfAIIimw';
+
+setSystemAuthSettings({ googleAuthEnabled: false });
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -387,13 +391,13 @@ test('DELETE /api/pdfs/:id should delete presentation, pages, timing rows and st
   assert.equal(resp.statusCode, 204);
   assert.equal(resp.body, '');
 
-  assert.equal(db.prepare(`SELECT COUNT(*) AS c FROM pdfs WHERE id = ?`).get(pdfId).c, 0);
-  assert.equal(db.prepare(`SELECT COUNT(*) AS c FROM pages WHERE pdf_id = ?`).get(pdfId).c, 0);
-  assert.equal(db.prepare(`SELECT COUNT(*) AS c FROM pipeline_runs WHERE pdf_id = ?`).get(pdfId).c, 0);
-  assert.equal(db.prepare(`SELECT COUNT(*) AS c FROM pipeline_stage_events WHERE pdf_id = ?`).get(pdfId).c, 0);
-  assert.equal(db.prepare(`SELECT COUNT(*) AS c FROM pipeline_stage_summaries WHERE pdf_id = ?`).get(pdfId).c, 0);
-  assert.equal(db.prepare(`SELECT COUNT(*) AS c FROM page_artifact_events WHERE pdf_id = ?`).get(pdfId).c, 0);
-  assert.equal(db.prepare(`SELECT COUNT(*) AS c FROM page_artifact_timings WHERE pdf_id = ?`).get(pdfId).c, 0);
+  assert.equal((db.prepare(`SELECT COUNT(*) AS c FROM pdfs WHERE id = ?`).get(pdfId) as { c: number }).c, 0);
+  assert.equal((db.prepare(`SELECT COUNT(*) AS c FROM pages WHERE pdf_id = ?`).get(pdfId) as { c: number }).c, 0);
+  assert.equal((db.prepare(`SELECT COUNT(*) AS c FROM pipeline_runs WHERE pdf_id = ?`).get(pdfId) as { c: number }).c, 0);
+  assert.equal((db.prepare(`SELECT COUNT(*) AS c FROM pipeline_stage_events WHERE pdf_id = ?`).get(pdfId) as { c: number }).c, 0);
+  assert.equal((db.prepare(`SELECT COUNT(*) AS c FROM pipeline_stage_summaries WHERE pdf_id = ?`).get(pdfId) as { c: number }).c, 0);
+  assert.equal((db.prepare(`SELECT COUNT(*) AS c FROM page_artifact_events WHERE pdf_id = ?`).get(pdfId) as { c: number }).c, 0);
+  assert.equal((db.prepare(`SELECT COUNT(*) AS c FROM page_artifact_timings WHERE pdf_id = ?`).get(pdfId) as { c: number }).c, 0);
   assert.equal(fs.existsSync(pdfDir), false);
 
   await app.close();
@@ -407,11 +411,97 @@ test('DELETE /api/pdfs/:id should return PDF_NOT_FOUND for missing presentation'
   await app.close();
 });
 
+test('shared sync join grants temporary follower access and revokes it when master leaves', async () => {
+  const pdfId = 'test-shared-sync-01';
+  seedReadyPdfFor(pdfId, 2);
+  const app = await buildApp();
 
-import test from 'node:test';
-import assert from 'node:assert/strict';
-import { normalizeErrorCode } from '../src/errors';
+  const shareResp = await app.inject({
+    method: 'POST',
+    url: `/api/pdfs/${pdfId}/share`,
+    payload: { access: 'read_only' },
+  });
+  assert.equal(shareResp.statusCode, 200);
+  const share = shareResp.json() as { token: string };
 
+  const shareAgainResp = await app.inject({
+    method: 'POST',
+    url: `/api/pdfs/${pdfId}/share`,
+    payload: { access: 'read_only' },
+  });
+  assert.equal(shareAgainResp.statusCode, 200);
+  assert.equal((shareAgainResp.json() as { token: string }).token, share.token);
+
+  const inactiveResp = await app.inject({
+    method: 'POST',
+    url: `/api/pdfs/${pdfId}/sync/share-join`,
+    headers: { 'x-makeslide-share-token': share.token },
+    payload: { client_id: 'follower-before-master' },
+  });
+  assert.equal(inactiveResp.statusCode, 409);
+  assert.equal(inactiveResp.json().error.code, 'SYNC_NOT_ACTIVE');
+
+  const masterResp = await app.inject({
+    method: 'POST',
+    url: `/api/pdfs/${pdfId}/sync/join`,
+    payload: { client_id: 'master-1' },
+  });
+  assert.equal(masterResp.statusCode, 200);
+  assert.equal(masterResp.json().role, 'master');
+
+  const followerResp = await app.inject({
+    method: 'POST',
+    url: `/api/pdfs/${pdfId}/sync/share-join`,
+    headers: { 'x-makeslide-share-token': share.token },
+    payload: { client_id: 'shared-follower-1' },
+  });
+  assert.equal(followerResp.statusCode, 200);
+  const follower = followerResp.json() as { role: string; master_client_id: string | null; follower_code: string | null };
+  assert.equal(follower.role, 'follower');
+  assert.equal(follower.master_client_id, 'master-1');
+  assert.equal(follower.follower_code, null);
+
+  const sharedDetailResp = await app.inject({
+    method: 'GET',
+    url: `/api/pdfs/${pdfId}?share=${encodeURIComponent(share.token)}`,
+  });
+  assert.equal(sharedDetailResp.statusCode, 200);
+
+  const leaveResp = await app.inject({
+    method: 'POST',
+    url: `/api/pdfs/${pdfId}/sync/leave`,
+    payload: { client_id: 'master-1' },
+  });
+  assert.equal(leaveResp.statusCode, 200);
+
+  const stateResp = await app.inject({
+    method: 'GET',
+    url: `/api/pdfs/${pdfId}/sync/state?client_id=shared-follower-1`,
+  });
+  assert.equal(stateResp.statusCode, 200);
+  const state = stateResp.json() as { role: string; master_client_id: string | null };
+  assert.equal(state.role, 'follower');
+  assert.equal(state.master_client_id, null);
+
+  const shareAfterLeaveResp = await app.inject({ method: 'GET', url: `/api/share/${share.token}` });
+  assert.equal(shareAfterLeaveResp.statusCode, 404);
+
+  const sharedDetailAfterLeaveResp = await app.inject({
+    method: 'GET',
+    url: `/api/pdfs/${pdfId}?share=${encodeURIComponent(share.token)}`,
+  });
+  assert.equal(sharedDetailAfterLeaveResp.statusCode, 403);
+
+  const nextShareResp = await app.inject({
+    method: 'POST',
+    url: `/api/pdfs/${pdfId}/share`,
+    payload: { access: 'read_only' },
+  });
+  assert.equal(nextShareResp.statusCode, 200);
+  assert.notEqual((nextShareResp.json() as { token: string }).token, share.token);
+
+  await app.close();
+});
 test('error code normalize: upload type', () => {
   assert.equal(normalizeErrorCode('INVALID_MIME'), 'INVALID_UPLOAD_TYPE');
 });

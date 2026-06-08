@@ -57,7 +57,30 @@ function ensureWorkspaceRuntimePaths(): void {
 function isApiAuthExemptPath(pathname: string): boolean {
   return pathname === '/api/health'
     || pathname.startsWith('/api/auth/')
-    || pathname.startsWith('/api/share/');
+    || pathname.startsWith('/api/share/')
+    || /^\/api\/pdfs\/[^/]+\/sync\/share-join$/.test(pathname);
+}
+
+function shareTokenFromRequest(request: FastifyRequest): string | null {
+  const rawHeader = request.headers['x-makeslide-share-token'];
+  const headerValue = Array.isArray(rawHeader) ? rawHeader[0] : rawHeader;
+  if (typeof headerValue === 'string' && headerValue.trim()) return headerValue.trim();
+  const query = request.query as Record<string, unknown> | undefined;
+  const rawQuery = query?.share;
+  const queryValue = Array.isArray(rawQuery) ? rawQuery[0] : rawQuery;
+  return typeof queryValue === 'string' && queryValue.trim() ? queryValue.trim() : null;
+}
+
+function isShareTokenAuthorizedForRequest(request: FastifyRequest, pathname: string): boolean {
+  if (request.method !== 'GET' && request.method !== 'HEAD') return false;
+  const match = pathname.match(/^\/api\/pdfs\/([^/]+)(?:\/.*)?$/);
+  const pdfId = match?.[1] ? decodeURIComponent(match[1]) : null;
+  const token = shareTokenFromRequest(request);
+  if (!pdfId || !token || !/^[A-Za-z0-9_-]{12,128}$/.test(token)) return false;
+  const row = db
+    .prepare(`SELECT token FROM pdf_shares WHERE token = ? AND pdf_id = ?`)
+    .get(token, pdfId) as { token: string } | undefined;
+  return Boolean(row);
 }
 
 function stripNbPrefix(pathname: string): string {
@@ -139,6 +162,7 @@ export async function buildApp() {
     const pathname = url.split('?')[0] ?? url;
     const normalizedPath = stripNbPrefix(pathname);
     if (isApiAuthExemptPath(normalizedPath)) return;
+    if (isShareTokenAuthorizedForRequest(request, normalizedPath)) return;
 
     // 僅保護 API；前端靜態資源與頁面路由不在此攔截。
     if (!normalizedPath.startsWith('/api/')) return;

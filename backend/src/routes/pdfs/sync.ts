@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
 import { errorResponse, IdParamSchema, nowIso } from './shared';
@@ -6,11 +6,14 @@ import { callChatJSON } from '../../services/openai';
 
 type SyncRole = 'master' | 'follower';
 
+type SyncJoinAccess = 'direct' | 'share';
+
 interface SyncSessionState {
   pdfId: string;
   masterClientId: string | null;
   masterExpiresAt: number;
   followerCodes: Map<string, string>;
+  followerAccess: Map<string, SyncJoinAccess>;
   clients: Map<string, number>;
   pageNumber: number;
   isPlaying: boolean;
@@ -28,6 +31,28 @@ interface SyncSessionState {
   updatedAt: string;
   cursorX: number | null;
   cursorY: number | null;
+}
+
+const ShareTokenParamSchema = z.string().regex(/^[A-Za-z0-9_-]{12,128}$/, 'Invalid share token');
+
+function shareTokenFromRequest(request: FastifyRequest): string | null {
+  const raw = request.headers['x-makeslide-share-token'];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  const token = typeof value === 'string' ? value.trim() : '';
+  return token ? token : null;
+}
+
+function hasValidShareTokenForPdf(pdfId: string, token: string | null): boolean {
+  if (!token || !ShareTokenParamSchema.safeParse(token).success) return false;
+  const row = db
+    .prepare(
+      `SELECT s.token
+         FROM pdf_shares s
+         JOIN pdfs p ON p.id = s.pdf_id
+        WHERE s.token = ? AND s.pdf_id = ?`,
+    )
+    .get(token, pdfId) as { token: string } | undefined;
+  return Boolean(row);
 }
 
 interface SyncQuizProgress {
@@ -120,6 +145,28 @@ function clearPersistedMasterIfExpired(row: SyncSessionRow): SyncSessionRow {
     };
   }
   return row;
+}
+
+function resetSyncMode(session: SyncSessionState): void {
+  session.masterClientId = null;
+  session.masterExpiresAt = 0;
+  session.isPlaying = false;
+  session.currentTime = 0;
+  session.followerAudioUnlocked = false;
+  session.realtimePollStarted = false;
+  session.quizMode = false;
+  session.activeQuizId = null;
+  session.quizShowAnswers = false;
+  session.displayedQuestionId = null;
+  session.aiAnswer = null;
+  session.quizProgress.clear();
+  session.quizSessionId = null;
+  session.followerAccess.clear();
+  session.updatedAt = nowIso();
+}
+
+function revokePdfShares(pdfId: string): void {
+  db.prepare(`DELETE FROM pdf_shares WHERE pdf_id = ?`).run(pdfId);
 }
 
 function getPersistedSession(pdfId: string): SyncSessionRow | null {
@@ -244,18 +291,7 @@ function getSession(pdfId: string): SyncSessionState {
     pruneExpiredClients(hit);
     const now = nowMs();
     if (hit.masterClientId && hit.masterExpiresAt <= now) {
-      hit.masterClientId = null;
-      hit.masterExpiresAt = 0;
-      hit.isPlaying = false;
-      hit.currentTime = 0;
-      hit.followerAudioUnlocked = false;
-      hit.realtimePollStarted = false;
-      hit.quizMode = false;
-      hit.activeQuizId = null;
-      hit.quizShowAnswers = false;
-      hit.quizProgress.clear();
-      hit.quizSessionId = null;
-      hit.updatedAt = nowIso();
+      resetSyncMode(hit);
       upsertPersistedSession(hit);
     }
     return hit;
@@ -266,6 +302,7 @@ function getSession(pdfId: string): SyncSessionState {
     masterClientId: persisted?.master_client_id ?? null,
     masterExpiresAt: persisted ? rowToExpiresAt(persisted) : 0,
     followerCodes: new Map<string, string>(),
+    followerAccess: new Map<string, SyncJoinAccess>(),
     clients: new Map(),
     pageNumber: persisted?.page_number ?? 1,
     isPlaying: Boolean(persisted?.is_playing),
@@ -316,6 +353,9 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
   const ClientBodySchema = z.object({
     client_id: z.string().trim().min(1).max(128),
     follower_code: z.string().trim().min(1).max(80).optional(),
+  });
+  const ShareJoinBodySchema = z.object({
+    client_id: z.string().trim().min(1).max(128),
   });
   const FollowerQuestionBodySchema = z.object({
     client_id: z.string().trim().min(1).max(128),
@@ -374,6 +414,34 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       session.updatedAt = nowIso();
     }
     return reply.send(buildStateResponse(session, id, roleFor(session, clientId), clientId));
+  });
+
+  app.post('/api/pdfs/:id/sync/share-join', async (request, reply) => {
+    const parsedParams = IdParamSchema.safeParse(request.params);
+    const parsedBody = ShareJoinBodySchema.safeParse(request.body);
+    if (!parsedParams.success || !parsedBody.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid shared sync join request'));
+    }
+    const { id } = parsedParams.data;
+    if (!ensurePdfExists(id)) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    const shareToken = shareTokenFromRequest(request);
+    if (!hasValidShareTokenForPdf(id, shareToken)) {
+      return reply.code(403).send(errorResponse('INVALID_SHARE_TOKEN', '分享連結不存在、已失效，或不屬於此簡報'));
+    }
+    const { client_id: clientId } = parsedBody.data;
+    const session = getSession(id);
+    touchClient(session, clientId);
+    if (!session.masterClientId || session.masterExpiresAt <= nowMs()) {
+      return reply.code(409).send(errorResponse('SYNC_NOT_ACTIVE', '原使用者尚未開啟定步模式'));
+    }
+    if (session.masterClientId === clientId) {
+      return reply.send(buildStateResponse(session, id, 'master', clientId));
+    }
+    session.followerAccess.set(clientId, 'share');
+    session.updatedAt = nowIso();
+    return reply.send(buildStateResponse(session, id, 'follower', clientId));
   });
 
   app.post('/api/pdfs/:id/sync/state', async (request, reply) => {
@@ -465,23 +533,12 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     session.clients.delete(clientId);
     session.quizProgress.delete(clientId);
     if (session.masterClientId === clientId) {
-      session.masterClientId = null;
-      session.masterExpiresAt = 0;
-      session.isPlaying = false;
-      session.currentTime = 0;
-      session.followerAudioUnlocked = false;
-      session.realtimePollStarted = false;
-      session.quizMode = false;
-      session.activeQuizId = null;
-      session.quizShowAnswers = false;
-      session.displayedQuestionId = null;
-      session.aiAnswer = null;
-      session.quizProgress.clear();
-      session.quizSessionId = null;
-      session.updatedAt = nowIso();
+      resetSyncMode(session);
+      revokePdfShares(id);
       upsertPersistedSession(session);
     }
     session.followerCodes.delete(clientId);
+    session.followerAccess.delete(clientId);
     return reply.send({ ok: true });
   });
 

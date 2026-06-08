@@ -114,6 +114,29 @@ function getShareMode(request: FastifyRequest): 'read_only' | 'editable' | null 
   return null;
 }
 
+function getShareToken(request: FastifyRequest): string | null {
+  const rawHeader = request.headers['x-makeslide-share-token'];
+  const headerValue = Array.isArray(rawHeader) ? rawHeader[0] : rawHeader;
+  if (typeof headerValue === 'string' && headerValue.trim()) return headerValue.trim();
+  const query = request.query as Record<string, unknown> | undefined;
+  const rawQuery = query?.share;
+  const queryValue = Array.isArray(rawQuery) ? rawQuery[0] : rawQuery;
+  return typeof queryValue === 'string' && queryValue.trim() ? queryValue.trim() : null;
+}
+
+function shareAccessForPdf(request: FastifyRequest, pdfId: string): 'read_only' | 'editable' | null {
+  const token = getShareToken(request);
+  if (!token || !ShareTokenParamSchema.safeParse({ token }).success) return null;
+  const row = db
+    .prepare(
+      `SELECT access
+         FROM pdf_shares
+        WHERE token = ? AND pdf_id = ?`,
+    )
+    .get(token, pdfId) as { access: 'read_only' | 'editable' } | undefined;
+  return row?.access ?? null;
+}
+
 function rowToPoll(row: PagePollRow) {
   let optionTexts: string[] = [];
   try {
@@ -200,7 +223,8 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
     }
     const sub = sessionSub(request);
-    if (!canReadPdf(sub, row)) {
+    const shareAccess = shareAccessForPdf(request, parsed.data.id);
+    if (!shareAccess && !canReadPdf(sub, row)) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報'));
     }
     const pages = db
@@ -237,7 +261,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       created_at: s.created_at,
       updated_at: s.updated_at,
     }));
-    const shareMode = getShareMode(request);
+    const shareMode = shareAccess ?? getShareMode(request);
     if (shareMode) {
       return reply.send({
         ...detail,
@@ -366,6 +390,34 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       .get(parsed.data.id) as { id: string } | undefined;
     if (!row) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
+    }
+
+    const existing = db
+      .prepare(
+        `SELECT token, pdf_id, access, created_at, updated_at
+           FROM pdf_shares
+          WHERE pdf_id = ? AND access = ?
+          ORDER BY created_at ASC
+          LIMIT 1`,
+      )
+      .get(parsed.data.id, body.data.access) as
+      | {
+          token: string;
+          pdf_id: string;
+          access: 'read_only' | 'editable';
+          created_at: string;
+          updated_at: string;
+        }
+      | undefined;
+    if (existing) {
+      return reply.send({
+        token: existing.token,
+        pdf_id: existing.pdf_id,
+        access: existing.access,
+        share_url: `${config.nbPrefix || ''}/#/play/${encodeURIComponent(existing.pdf_id)}?share=${encodeURIComponent(existing.token)}`,
+        created_at: existing.created_at,
+        updated_at: existing.updated_at,
+      });
     }
 
     const now = nowIso();

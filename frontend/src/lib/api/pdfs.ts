@@ -32,8 +32,10 @@ export async function fetchPdfs(): Promise<PdfListItem[]> {
   return data as PdfListItem[];
 }
 
-export async function fetchPdfDetail(id: string): Promise<PdfDetail> {
-  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}`);
+export async function fetchPdfDetail(id: string, shareToken?: string): Promise<PdfDetail> {
+  const token = shareToken?.trim();
+  const suffix = token ? `?share=${encodeURIComponent(token)}` : '';
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}${suffix}`);
   if (!resp.ok) {
     throw await parseErrorBody(resp);
   }
@@ -771,6 +773,23 @@ export async function joinPlaybackSync(id: string, clientId: string, followerCod
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as SyncJoinResponse;
+}
+
+export async function joinSharedPlaybackSync(
+  id: string,
+  clientId: string,
+  shareToken: string,
+): Promise<SyncJoinResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/sync/share-join`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-makeslide-share-token': shareToken,
+    },
+    body: JSON.stringify({ client_id: clientId }),
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as SyncJoinResponse;

@@ -26,6 +26,7 @@ import {
   resolveShareToken,
   fetchPlaybackSyncState,
   getImagePromptTemplates,
+  joinSharedPlaybackSync,
   joinPlaybackSync,
   leavePlaybackSync,
   fetchRegenerateStatus,
@@ -554,7 +555,7 @@ export default function PlayPage() {
           }
           shareMode = share.access;
         }
-        const d = await fetchPdfDetail(pdfId);
+        const d = await fetchPdfDetail(pdfId, currentShareToken || undefined);
         if (cancelled) return;
         const detailWithShare = shareMode ? { ...d, share_mode: shareMode } : d;
         setDetail(detailWithShare);
@@ -700,10 +701,21 @@ export default function PlayPage() {
   const withImageBust = useCallback(
     (url: string | null | undefined) => {
       if (!url) return null;
-      const q = `t=${encodeURIComponent(imageBustKey)}`;
+      const parts = [`t=${encodeURIComponent(imageBustKey)}`];
+      if (currentShareToken) parts.push(`share=${encodeURIComponent(currentShareToken)}`);
+      const q = parts.join('&');
       return url.includes('?') ? `${url}&${q}` : `${url}?${q}`;
     },
-    [imageBustKey],
+    [imageBustKey, currentShareToken],
+  );
+
+  const withShareToken = useCallback(
+    (url: string | null | undefined) => {
+      if (!url || !currentShareToken) return url ?? null;
+      const q = `share=${encodeURIComponent(currentShareToken)}`;
+      return url.includes('?') ? `${url}&${q}` : `${url}?${q}`;
+    },
+    [currentShareToken],
   );
 
   const targetImageSrc = useMemo(() => {
@@ -795,7 +807,8 @@ export default function PlayPage() {
       }
       try {
         const bust = `t=${Date.now()}`;
-        const url = p.script_url.includes('?') ? `${p.script_url}&${bust}` : `${p.script_url}?${bust}`;
+        const scriptUrl = withShareToken(p.script_url) ?? p.script_url;
+        const url = scriptUrl.includes('?') ? `${scriptUrl}&${bust}` : `${scriptUrl}?${bust}`;
         const resp = await fetch(url, { cache: 'no-store' });
         const text = resp.ok ? await resp.text() : '';
         if (!cancelled) {
@@ -820,13 +833,13 @@ export default function PlayPage() {
     return () => {
       cancelled = true;
     };
-  }, [deckPages]);
+  }, [deckPages, withShareToken]);
 
   // ---- Swap audio src when current page changes ----
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !currentPage || !currentPage.audio_url) return;
-    const audioUrl = currentPage.audio_url;
+    const audioUrl = withShareToken(currentPage.audio_url) ?? currentPage.audio_url;
     const pageNumber = currentPage.page_number;
     const token = currentAudioTokenRef.current + 1;
     currentAudioTokenRef.current = token;
@@ -847,7 +860,7 @@ export default function PlayPage() {
       void audio.play().catch(() => scheduleAudioReload(token, audioUrl, pageNumber));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage?.page_number, clearAudioRetryTimer, scheduleAudioReload]);
+  }, [currentPage?.page_number, clearAudioRetryTimer, scheduleAudioReload, withShareToken]);
 
   useEffect(
     () => () => {
@@ -906,9 +919,10 @@ export default function PlayPage() {
         a.preload = 'auto';
         // 與正式播放使用同一組版本 URL，才能真正命中快取
         const nextVersionKey = detail?.updated_at ? encodeURIComponent(detail.updated_at) : '';
+        const nextAudioUrl = withShareToken(next.audio_url) ?? next.audio_url;
         a.src = nextVersionKey
-          ? `${next.audio_url}${next.audio_url.includes('?') ? '&' : '?'}v=${nextVersionKey}`
-          : next.audio_url;
+          ? `${nextAudioUrl}${nextAudioUrl.includes('?') ? '&' : '?'}v=${nextVersionKey}`
+          : nextAudioUrl;
         a.load();
         prefetchedAudioNextRef.current = a;
       } else {
@@ -1057,8 +1071,13 @@ export default function PlayPage() {
         let followerCode = window.localStorage.getItem(followerCodeKey)?.trim() || '';
         let joined;
         try {
-          joined = await joinPlaybackSync(pdfId, next, followerCode || undefined);
+          joined = currentShareToken
+            ? await joinSharedPlaybackSync(pdfId, next, currentShareToken)
+            : await joinPlaybackSync(pdfId, next, followerCode || undefined);
         } catch (err) {
+          if (currentShareToken) {
+            throw err;
+          }
           if (!(err instanceof ApiError) || err.code !== 'SYNC_FOLLOWER_CODE_REQUIRED') {
             throw err;
           }
@@ -1100,7 +1119,7 @@ export default function PlayPage() {
     return () => {
       cancelled = true;
     };
-  }, [syncEnabled, pdfId]);
+  }, [syncEnabled, pdfId, currentShareToken]);
 
   const handleSyncEnabledChange = useCallback(
     (checked: boolean) => {
@@ -1235,6 +1254,14 @@ export default function PlayPage() {
           });
           setSyncRole(state.role);
           setFollowerAudioUnlocked(state.follower_audio_unlocked);
+          if (currentShareToken && !state.master_client_id) {
+            window.localStorage.removeItem(`makeslide.sync.enabled.${pdfId}`);
+            setSyncEnabled(false);
+            setSyncRole('follower');
+            syncClientIdRef.current = '';
+            setSyncError(null);
+            return;
+          }
           if (state.role !== 'master' && !state.follower_audio_unlocked) {
             setAudioMuted(true);
           }
@@ -1307,7 +1334,7 @@ export default function PlayPage() {
       });
       window.clearInterval(timer);
     };
-  }, [syncEnabled, pdfId, imageOnlyFullscreen, navigate, syncRole, currentIdx]);
+  }, [syncEnabled, pdfId, imageOnlyFullscreen, navigate, syncRole, currentIdx, currentShareToken]);
 
   const handleSubmitFollowerQuestion = useCallback(async () => {
     if (!pdfId || !syncClientIdRef.current) return;
@@ -1362,7 +1389,7 @@ export default function PlayPage() {
   const handleRetry = useCallback(() => {
     const audio = audioRef.current;
     if (!audio || !currentPage?.audio_url) return;
-    const audioUrl = currentPage.audio_url;
+    const audioUrl = withShareToken(currentPage.audio_url) ?? currentPage.audio_url;
     const pageNumber = currentPage.page_number;
     const token = currentAudioTokenRef.current + 1;
     currentAudioTokenRef.current = token;
@@ -1372,7 +1399,7 @@ export default function PlayPage() {
     audio.src = retryUrl;
     audio.load();
     void audio.play().catch(() => scheduleAudioReload(token, audioUrl, pageNumber));
-  }, [currentPage, clearAudioRetryTimer, scheduleAudioReload]);
+  }, [currentPage, clearAudioRetryTimer, scheduleAudioReload, withShareToken]);
 
   // ---- Keyboard shortcuts ----
   useEffect(() => {
@@ -2141,7 +2168,7 @@ export default function PlayPage() {
       }
       shareMode = share.access;
     }
-    const d = await fetchPdfDetail(pdfId);
+    const d = await fetchPdfDetail(pdfId, currentShareToken || undefined);
     const detailWithShare = shareMode ? { ...d, share_mode: shareMode } : d;
     setDetail(detailWithShare);
     setVideoUrl(detailWithShare.video_url ?? null);
@@ -3433,7 +3460,7 @@ export default function PlayPage() {
               if (currentPage?.audio_url) {
                 scheduleAudioReload(
                   currentAudioTokenRef.current,
-                  currentPage.audio_url,
+                  withShareToken(currentPage.audio_url) ?? currentPage.audio_url,
                   currentPage.page_number,
                 );
               }
@@ -3453,7 +3480,7 @@ export default function PlayPage() {
           if (currentPage?.audio_url) {
             scheduleAudioReload(
               currentAudioTokenRef.current,
-              currentPage.audio_url,
+              withShareToken(currentPage.audio_url) ?? currentPage.audio_url,
               currentPage.page_number,
             );
           }
