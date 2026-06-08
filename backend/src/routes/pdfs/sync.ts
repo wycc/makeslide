@@ -31,6 +31,8 @@ interface SyncSessionState {
   updatedAt: string;
   cursorX: number | null;
   cursorY: number | null;
+  drawingPageNumber: number | null;
+  drawingJson: string | null;
 }
 
 const ShareTokenParamSchema = z.string().regex(/^[A-Za-z0-9_-]{12,128}$/, 'Invalid share token');
@@ -282,6 +284,8 @@ function buildStateResponse(session: SyncSessionState, pdfId: string, role: Sync
     online_count: onlineClientCount(session),
     cursor_x: session.cursorX,
     cursor_y: session.cursorY,
+    drawing_page_number: session.drawingPageNumber,
+    drawing_json: session.drawingJson,
   };
 }
 
@@ -320,6 +324,8 @@ function getSession(pdfId: string): SyncSessionState {
     updatedAt: persisted?.updated_at ?? nowIso(),
     cursorX: null,
     cursorY: null,
+    drawingPageNumber: null,
+    drawingJson: null,
   };
   sessions.set(pdfId, created);
   return created;
@@ -383,6 +389,8 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     quiz_show_answers: z.boolean().optional(),
     cursor_x: z.number().min(0).max(1).nullable().optional(),
     cursor_y: z.number().min(0).max(1).nullable().optional(),
+    drawing_page_number: z.number().int().min(1).nullable().optional(),
+    drawing_json: z.string().max(2_000_000).nullable().optional(),
   });
   const StateQuerySchema = z.object({ client_id: z.string().trim().min(1).max(128).optional() });
 
@@ -461,6 +469,8 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       quiz_show_answers: quizShowAnswers,
       cursor_x: cursorX,
       cursor_y: cursorY,
+      drawing_page_number: drawingPageNumber,
+      drawing_json: drawingJson,
     } = parsedBody.data;
     const session = getSession(id);
     touchClient(session, clientId);
@@ -494,6 +504,8 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     }
     if (typeof cursorX !== 'undefined') session.cursorX = cursorX;
     if (typeof cursorY !== 'undefined') session.cursorY = cursorY;
+    if (typeof drawingPageNumber !== 'undefined') session.drawingPageNumber = drawingPageNumber;
+    if (typeof drawingJson !== 'undefined') session.drawingJson = drawingJson;
     session.updatedAt = nowIso();
     upsertPersistedSession(session);
     return reply.send({ ok: true, role: 'master', updated_at: session.updatedAt });

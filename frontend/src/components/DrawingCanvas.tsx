@@ -105,15 +105,30 @@ export interface DrawingCanvasProps {
   color: string;
   lineWidth: number;
   eraser?: boolean;
+  // 提供時改為「唯讀鏡射」模式：直接以外部資料（同步狀態）覆蓋顯示，不從伺服器載入也不可編輯/儲存。
+  // 供同步模式下的 follower 即時鏡射 master 正在繪製的手寫畫面（與游標同一個同步管道，速度一致）。
+  remoteData?: DrawingData | null;
+  // master 端每次本機筆劃變化時回呼，供外層透過同步狀態頻道即時推送給 follower。
+  onLocalChange?: (data: DrawingData) => void;
 }
 
 const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
-  function DrawingCanvas({ pdfId, pageNumber, enabled, color, lineWidth, eraser }, ref) {
+  function DrawingCanvas({ pdfId, pageNumber, enabled, color, lineWidth, eraser, remoteData, onLocalChange }, ref) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const strokesRef = useRef<DrawingStroke[]>([]);
     const currentStrokeRef = useRef<DrawingStroke | null>(null);
     const isDrawingRef = useRef(false);
     const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const notifyLocalChange = useCallback(() => {
+      if (!onLocalChange) return;
+      const snapshot: DrawingData = {
+        strokes: currentStrokeRef.current
+          ? [...strokesRef.current, currentStrokeRef.current]
+          : strokesRef.current,
+      };
+      onLocalChange(snapshot);
+    }, [onLocalChange]);
 
     const redraw = useCallback(() => {
       const canvas = canvasRef.current;
@@ -174,8 +189,9 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
       return () => observer.disconnect();
     }, [redraw]);
 
-    // Load saved drawing when page changes.
+    // Load saved drawing when page changes（remoteData 模式下改由同步狀態即時提供內容，不向伺服器讀取，避免互相覆蓋）。
     useEffect(() => {
+      if (remoteData !== undefined) return;
       let cancelled = false;
       strokesRef.current = [];
       currentStrokeRef.current = null;
@@ -188,7 +204,16 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
       return () => {
         cancelled = true;
       };
-    }, [pdfId, pageNumber, redraw]);
+    }, [pdfId, pageNumber, redraw, remoteData]);
+
+    // 同步模式下的唯讀鏡射：直接套用外部（同步狀態頻道）即時提供的筆劃資料並重繪，
+    // 與游標走同一個推送/輪詢頻道，更新速度一致。
+    useEffect(() => {
+      if (remoteData === undefined) return;
+      strokesRef.current = remoteData?.strokes ?? [];
+      currentStrokeRef.current = null;
+      redraw();
+    }, [remoteData, redraw]);
 
     const scheduleSave = useCallback(() => {
       if (saveTimerRef.current !== null) clearTimeout(saveTimerRef.current);
@@ -208,9 +233,10 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
           isDrawingRef.current = false;
           redraw();
           void saveDrawingToServer(pdfId, pageNumber, { strokes: [] });
+          notifyLocalChange();
         },
       }),
-      [pdfId, pageNumber, redraw],
+      [pdfId, pageNumber, redraw, notifyLocalChange],
     );
 
     const getNorm = useCallback((e: React.PointerEvent<HTMLCanvasElement>): [number, number] => {
@@ -254,8 +280,9 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
             points: [getNorm(e)],
           };
         }
+        notifyLocalChange();
       },
-      [enabled, color, lineWidth, eraser, getNorm, eraseAt],
+      [enabled, color, lineWidth, eraser, getNorm, eraseAt, notifyLocalChange],
     );
 
     const handlePointerMove = useCallback(
@@ -269,8 +296,9 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
           currentStrokeRef.current.points.push(getNorm(e));
           redraw();
         }
+        notifyLocalChange();
       },
-      [enabled, eraser, redraw, getNorm, eraseAt],
+      [enabled, eraser, redraw, getNorm, eraseAt, notifyLocalChange],
     );
 
     const handlePointerUp = useCallback(
@@ -285,8 +313,9 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
           redraw();
         }
         scheduleSave();
+        notifyLocalChange();
       },
-      [eraser, redraw, scheduleSave],
+      [eraser, redraw, scheduleSave, notifyLocalChange],
     );
 
     const cursor = !enabled ? 'default' : eraser ? 'cell' : 'crosshair';

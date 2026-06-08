@@ -362,6 +362,8 @@ export interface SyncJoinResponse {
   online_count?: number;
   cursor_x?: number | null;
   cursor_y?: number | null;
+  drawing_page_number?: number | null;
+  drawing_json?: string | null;
 }
 
 export interface SyncStateResponse {
@@ -388,4 +390,6 @@ export interface SyncStateResponse {
   questions?: SyncFollowerQuestion[];
   cursor_x?: number | null;
   cursor_y?: number | null;
+  drawing_page_number?: number | null;
+  drawing_json?: string | null;
 }

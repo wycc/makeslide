@@ -68,7 +68,7 @@ import {
   type ShareAccessMode,
 } from '../lib/api';
 import AddPagesFromPromptModal from '../components/AddPagesFromPromptModal';
-import DrawingCanvas, { type DrawingCanvasHandle } from '../components/DrawingCanvas';
+import DrawingCanvas, { type DrawingCanvasHandle, type DrawingData, type DrawingStroke } from '../components/DrawingCanvas';
 import {
   DEFAULT_TTS_VOICE_BY_PROVIDER,
   TTS_VOICES_BY_PROVIDER,
@@ -411,6 +411,7 @@ export default function PlayPage() {
   const [fullscreenQuestionDialogOpen, setFullscreenQuestionDialogOpen] = useState(false);
   const [fullscreenPollControlOpen, setFullscreenPollControlOpen] = useState(false);
   const [remoteCursor, setRemoteCursor] = useState<{ x: number; y: number } | null>(null);
+  const [syncDrawingState, setSyncDrawingState] = useState<{ pageNumber: number; strokes: DrawingStroke[] } | null>(null);
   const syncClientIdRef = useRef<string>('');
   const applyingRemoteSyncRef = useRef(false);
   const [imageOnlyFullscreen, setImageOnlyFullscreen] = useState(false);
@@ -430,6 +431,9 @@ export default function PlayPage() {
   const drawingCanvasRef = useRef<DrawingCanvasHandle | null>(null);
 
   const effectiveAudioMuted = audioMuted || (syncEnabled && syncRole === 'follower' && !followerAudioUnlocked);
+  // 同步模式下，手寫工具僅供 master 開啟；follower 只能唯讀鏡射 master 的手寫畫面。
+  const canUseDrawingTools = !syncEnabled || syncRole === 'master';
+  const isSyncFollower = syncEnabled && syncRole === 'follower';
 
   const ttsProvider: TtsProvider = detail?.tts_provider === 'gemini' ? 'gemini' : 'openai';
   const availableTtsVoices = TTS_VOICES_BY_PROVIDER[ttsProvider];
@@ -476,6 +480,8 @@ export default function PlayPage() {
   const persistProgressTimerRef = useRef<number | null>(null);
   const cursorPushRafRef = useRef<number | null>(null);
   const pendingCursorRef = useRef<{ x: number; y: number } | null>(null);
+  const drawingPushTimerRef = useRef<number | null>(null);
+  const pendingDrawingRef = useRef<{ pageNumber: number; data: DrawingData } | null>(null);
 
   const acquireWakeLock = useCallback(async () => {
     if (typeof navigator === 'undefined') return;
@@ -685,6 +691,12 @@ export default function PlayPage() {
   const pages = detail?.pages ?? [];
   const deckPages: PdfDetailPage[] = useMemo(() => pages, [pages]);
   const currentPage: PdfDetailPage | null = deckPages[currentIdx] ?? null;
+  // Follower 端僅在目前頁面與 master 推送的手寫頁碼一致時套用鏡射內容，否則維持空白（undefined 表示維持一般模式）。
+  const remoteDrawingData: DrawingData | undefined = isSyncFollower
+    ? (currentPage && syncDrawingState && syncDrawingState.pageNumber === currentPage.page_number
+        ? { strokes: syncDrawingState.strokes }
+        : { strokes: [] })
+    : undefined;
   const totalPages = deckPages.length;
   const shareIsReadOnly = detail?.share_mode === 'read_only';
   const isReadOnlyProcessing =
@@ -1115,6 +1127,14 @@ export default function PlayPage() {
     };
   }, [syncEnabled, pdfId, currentShareToken]);
 
+  // 同步模式下手寫工具僅 master 可用；若目前角色變成 follower（例如 master 易主），強制關閉手寫模式。
+  useEffect(() => {
+    if (!canUseDrawingTools && drawingMode) {
+      setDrawingMode(false);
+      setDrawingTool('pen');
+    }
+  }, [canUseDrawingTools, drawingMode]);
+
   const handleSyncEnabledChange = useCallback(
     (checked: boolean) => {
       if (!pdfId) return;
@@ -1134,9 +1154,53 @@ export default function PlayPage() {
       if (clientId) {
         void leavePlaybackSync(pdfId, clientId).catch(() => undefined);
       }
+      setSyncDrawingState(null);
     },
     [pdfId],
   );
+
+  // Master 端手寫筆劃變化：與游標走同一個推送頻道、相同節流間隔，確保 follower 端鏡射速度一致。
+  const flushLocalDrawingPush = useCallback(() => {
+    drawingPushTimerRef.current = null;
+    const pending = pendingDrawingRef.current;
+    if (!pending || !pdfId || !syncClientIdRef.current) return;
+    pendingDrawingRef.current = null;
+    void updatePlaybackSyncState(pdfId, syncClientIdRef.current, {
+      page_number: Math.max(1, currentIdx + 1),
+      is_playing: isPlaying,
+      current_time: Number.isFinite(currentTime) ? Math.max(0, currentTime) : 0,
+      follower_audio_unlocked: followerAudioUnlocked,
+      realtime_poll_started: pollStarted,
+      quiz_show_answers: syncPollShowResults,
+      active_quiz_id: syncDisplayedPollId,
+      drawing_page_number: pending.pageNumber,
+      drawing_json: JSON.stringify(pending.data),
+    }).catch(() => undefined);
+  }, [pdfId, currentIdx, isPlaying, currentTime, followerAudioUnlocked, pollStarted, syncPollShowResults, syncDisplayedPollId]);
+
+  const pushLocalDrawingChange = useCallback(
+    (data: DrawingData) => {
+      if (!syncEnabled || syncRole !== 'master' || !pdfId || !syncClientIdRef.current || !currentPage) return;
+      pendingDrawingRef.current = { pageNumber: currentPage.page_number, data };
+      if (drawingPushTimerRef.current == null) {
+        drawingPushTimerRef.current = window.setTimeout(
+          flushLocalDrawingPush,
+          imageOnlyFullscreen ? SYNC_CURSOR_PUSH_INTERVAL_FULLSCREEN_MS : SYNC_CURSOR_PUSH_INTERVAL_MS,
+        );
+      }
+    },
+    [syncEnabled, syncRole, pdfId, currentPage, imageOnlyFullscreen, flushLocalDrawingPush],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (drawingPushTimerRef.current != null) {
+        window.clearTimeout(drawingPushTimerRef.current);
+        drawingPushTimerRef.current = null;
+      }
+      pendingDrawingRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     if (!syncEnabled || !pdfId || !syncClientIdRef.current) return;
@@ -1276,6 +1340,23 @@ export default function PlayPage() {
             });
           } else {
             setRemoteCursor(null);
+          }
+          if (
+            state.role !== 'master'
+            && typeof state.drawing_page_number === 'number'
+            && typeof state.drawing_json === 'string'
+          ) {
+            try {
+              const parsed = JSON.parse(state.drawing_json) as DrawingData;
+              setSyncDrawingState({
+                pageNumber: state.drawing_page_number,
+                strokes: Array.isArray(parsed?.strokes) ? parsed.strokes : [],
+              });
+            } catch {
+              setSyncDrawingState(null);
+            }
+          } else if (state.role !== 'master') {
+            setSyncDrawingState(null);
           }
           if (
             state.role !== 'master'
@@ -1435,6 +1516,7 @@ export default function PlayPage() {
           setFullscreenPollControlOpen((open) => !open);
         }
       } else if (ev.key.toLowerCase() === 'w') {
+        if (!canUseDrawingTools) return;
         ev.preventDefault();
         setDrawingMode((prev) => !prev);
         if (drawingMode) setDrawingTool('pen');
@@ -1464,7 +1546,7 @@ export default function PlayPage() {
     };
     window.addEventListener('keydown', onKey, { capture: true });
     return () => window.removeEventListener('keydown', onKey, { capture: true });
-  }, [playPause, goPrev, goNext, navigate, imageOnlyFullscreen, isLockedFullscreen, syncEnabled, syncRole, handleAiAnswerFollowerQuestions, fullscreenPollControlOpen, drawingMode]);
+  }, [playPause, goPrev, goNext, navigate, imageOnlyFullscreen, isLockedFullscreen, syncEnabled, syncRole, canUseDrawingTools, handleAiAnswerFollowerQuestions, fullscreenPollControlOpen, drawingMode]);
 
   // ---- Fullscreen API integration ----
   // 編輯版面、以及透過分享連結鎖定的全螢幕都不進入瀏覽器原生全螢幕：
@@ -2864,10 +2946,12 @@ export default function PlayPage() {
                           ref={drawingCanvasRef}
                           pdfId={pdfId}
                           pageNumber={currentPage.page_number}
-                          enabled={drawingMode && drawingTool !== 'cursor'}
+                          enabled={canUseDrawingTools && drawingMode && drawingTool !== 'cursor'}
                           color={drawingColor}
                           lineWidth={drawingTool === 'eraser' ? drawingLineWidth * 3 : drawingLineWidth}
                           eraser={drawingTool === 'eraser'}
+                          remoteData={isSyncFollower ? remoteDrawingData : undefined}
+                          onLocalChange={pushLocalDrawingChange}
                         />
                       )}
                     </div>
@@ -3000,10 +3084,12 @@ export default function PlayPage() {
                   ref={drawingCanvasRef}
                   pdfId={pdfId}
                   pageNumber={currentPage.page_number}
-                  enabled={drawingMode && drawingTool !== 'cursor'}
+                  enabled={canUseDrawingTools && drawingMode && drawingTool !== 'cursor'}
                   color={drawingColor}
                   lineWidth={drawingTool === 'eraser' ? drawingLineWidth * 3 : drawingLineWidth}
                   eraser={drawingTool === 'eraser'}
+                  remoteData={isSyncFollower ? remoteDrawingData : undefined}
+                  onLocalChange={pushLocalDrawingChange}
                 />
               )}
             </div>
@@ -3997,10 +4083,12 @@ export default function PlayPage() {
                       ref={drawingCanvasRef}
                       pdfId={pdfId}
                       pageNumber={currentPage.page_number}
-                      enabled={!imageEditSelectMode && drawingMode && drawingTool !== 'cursor'}
+                      enabled={canUseDrawingTools && !imageEditSelectMode && drawingMode && drawingTool !== 'cursor'}
                       color={drawingColor}
                       lineWidth={drawingTool === 'eraser' ? drawingLineWidth * 3 : drawingLineWidth}
                       eraser={drawingTool === 'eraser'}
+                      remoteData={isSyncFollower ? remoteDrawingData : undefined}
+                      onLocalChange={pushLocalDrawingChange}
                     />
                   )}
                   {/* Region selector overlay (for inpainting) */}
