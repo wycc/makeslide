@@ -462,6 +462,7 @@
 [x] 修正 YouTube 字幕過多頁數不足的問題：去除 VTT inline timing markers 和重複行，並將大綱生成的字幕輸入上限從 16K 提高到 64K（完成於分支: feature/youtube-captions-coverage-20260601）
 [x] 將頁面產物檔案（圖片/縮圖/逐字稿/腳本/語音）改用建立時就決定、永不改變的 page_uid 命名，取代依頁碼命名；解決搬移/插入/刪除頁面時 cascading rename 導致 git 無法偵測 rename、`git log --follow` 斷裂的結構性問題（完成於分支: feature/stable-page-uid-filenames-20260608）
 [x] 修正自動生成測驗時沒有把逐字稿/投影片文字傳給 LLM（送出的簡報內容全部都是「（無）」）的問題（完成於分支: fix/quiz-empty-transcript-missing-files-20260608）
+[x] 當一個測驗開始，我們會在 master 顯示使用正在測試的人，和他們答題的進度。（完成於分支: feature/quiz-master-progress-display-20260608）
 
 ## 工作記錄
 
@@ -530,3 +531,7 @@
 - 時間: 2026-06-08 15:40:00 +0800
 - 分支: fix/quiz-empty-transcript-missing-files-20260608
 - 內容: 修正自動生成測驗時「老師提示詞有送達，但簡報內容全部都是（無）」的問題。根因不在程式碼邏輯，而是前一天的 page_uid 重構（分支 feature/stable-page-uid-filenames-20260608）留下的資料遷移缺口：程式碼已改用 `pages/<page_uid>.text.txt`／`pages/<page_uid>.script.txt` 路徑讀取頁面文字與逐字稿，但隨附的一次性遷移腳本 `backend/scripts/migrate-page-uids.ts`（負責把舊簡報的 `pages/00N.*` 改名成 `pages/<page_uid>.*`）並未對既有簡報實際執行；`readPageContext()` 用 `fs.readFile(...).catch(() => '')` 靜默吞掉「找不到檔案」的錯誤，導致每一頁都送出「投影片文字：（無）／逐字稿：（無）」。已從 LLM 請求日誌（`backend/backend/data/llm-requests.log.jsonl`）實際比對驗證：提示詞正常送達，唯獨簡報內容全空。修復分兩部分：(1) 對 18 個受影響簡報執行 `migrate-page-uids.ts`，把約 2756 個頁面產物檔（image/thumbnail/text/script/audio）從舊的頁碼命名改為 page_uid 命名，同步更新 DB 的 `text_path`/`script_path` 與各簡報 git repo 的 commit；(2) 在 `backend/src/routes/pdfs/quizzes.ts` 新增 `readPageArtifact()` 包裝讀檔，讀取失敗時改為寫入 warn log（含 pdfId、頁碼、檔案類型、路徑與錯誤訊息），避免未來再發生「資料不一致卻毫無痕跡」的靜默失敗。
+
+- 時間: 2026-06-08 16:20:00 +0800
+- 分支: feature/quiz-master-progress-display-20260608
+- 內容: 完成「測驗開始時於 master 顯示作答中學員與進度」。後端 `sync.ts` 的 `SyncSessionState` 新增 `quizProgress: Map<clientId, SyncQuizProgress>`，新增 `POST /api/pdfs/:id/sync/quiz/progress` 端點讓 follower 回報目前測驗的已答題數/總題數/是否完成；`buildStateResponse` 新增 `quiz_progress` 欄位（僅回傳屬於目前 `active_quiz_id` 的進度），並在 master 到期、master 離開、follower 離開或更換測驗時清除舊進度，避免顯示過期資料。前端 `QuizBuilderPage.tsx` 中 follower 作答時會 debounce 呼叫新增的 `submitSyncQuizProgress()` 回報進度（完成定義為已作答全部題目）；master 端的「已儲存測驗」面板新增「測驗中的學員」區塊，列出每位學員的代號、已答題數/總題數與進度條，完成後以綠色標示「已完成」。新增 `SyncQuizProgress` 型別並更新 `SyncJoinResponse`/`SyncStateResponse`。後端與前端 `npx tsc --noEmit` 與 `npm run build` 皆通過。
