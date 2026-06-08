@@ -296,6 +296,16 @@ export interface SyncFollowerQuestion {
   created_at?: string;
 }
 
+export interface SyncQuizProgress {
+  client_id: string;
+  code: string | null;
+  quiz_id: number;
+  answered_count: number;
+  total_questions: number;
+  submitted: boolean;
+  updated_at: string;
+}
+
 export interface SyncAiAnswer {
   id: string;
   answer: string;
@@ -321,6 +331,7 @@ export interface SyncJoinResponse {
   follower_questions: SyncFollowerQuestion[];
   questions: SyncFollowerQuestion[];
   displayed_question_id: string | null;
+  quiz_progress?: SyncQuizProgress[];
   ai_answer: SyncAiAnswer | null;
   updated_at: string;
   master_expires_at: string | null;
@@ -344,6 +355,7 @@ export interface SyncStateResponse {
   quiz_show_answers: boolean;
   follower_questions: SyncFollowerQuestion[];
   displayed_question_id: string | null;
+  quiz_progress?: SyncQuizProgress[];
   ai_answer: SyncAiAnswer | null;
   updated_at: string;
   master_expires_at: string | null;

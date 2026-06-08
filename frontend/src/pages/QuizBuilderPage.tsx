@@ -8,9 +8,10 @@ import {
   generateQuizSet,
   joinPlaybackSync,
   saveQuizSet,
+  submitSyncQuizProgress,
   updatePlaybackSyncState,
 } from '../lib/api';
-import type { PdfDetail, QuizQuestion, QuizQuestionType, QuizSet } from '../types';
+import type { PdfDetail, QuizQuestion, QuizQuestionType, QuizSet, SyncQuizProgress } from '../types';
 
 function emptyQuestion(index: number): QuizQuestion {
   return {
@@ -77,7 +78,9 @@ export default function QuizBuilderPage() {
   const [syncError, setSyncError] = useState<string | null>(null);
   const [studentAnswers, setStudentAnswers] = useState<Record<string, number[]>>({});
   const [showEditorAnswers, setShowEditorAnswers] = useState(false);
+  const [syncQuizProgress, setSyncQuizProgress] = useState<SyncQuizProgress[]>([]);
   const syncClientIdRef = useRef('');
+  const lastReportedProgressRef = useRef<{ quizId: number; answeredCount: number; submitted: boolean } | null>(null);
 
   useEffect(() => {
     if (!pdfId) return;
@@ -114,6 +117,29 @@ export default function QuizBuilderPage() {
   );
 
   const isFollowerTesting = syncRole === 'follower' && activeQuiz != null;
+
+  useEffect(() => {
+    if (!pdfId || !isFollowerTesting || !activeQuiz) return;
+    const clientId = syncClientIdRef.current;
+    if (!clientId) return;
+    const totalQuestions = activeQuiz.questions.length;
+    const answeredCount = activeQuiz.questions.filter((q) => (studentAnswers[q.id] ?? []).length > 0).length;
+    const submitted = totalQuestions > 0 && answeredCount >= totalQuestions;
+    const last = lastReportedProgressRef.current;
+    if (last && last.quizId === activeQuiz.id && last.answeredCount === answeredCount && last.submitted === submitted) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      lastReportedProgressRef.current = { quizId: activeQuiz.id, answeredCount, submitted };
+      void submitSyncQuizProgress(pdfId, clientId, {
+        quiz_id: activeQuiz.id,
+        answered_count: answeredCount,
+        total_questions: totalQuestions,
+        submitted,
+      }).catch(() => {});
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [pdfId, isFollowerTesting, activeQuiz, studentAnswers]);
 
   useEffect(() => {
     if (!pdfId) return;
@@ -158,6 +184,7 @@ export default function QuizBuilderPage() {
             window.localStorage.setItem(roleKey, nextRole);
             setSyncActiveQuizId(joined.active_quiz_id ?? null);
             setSyncQuizShowAnswers(joined.quiz_show_answers ?? false);
+            setSyncQuizProgress(joined.quiz_progress ?? []);
           } catch (err) {
             if (err instanceof ApiError && err.status === 400) {
               if (err.code === 'SYNC_FOLLOWER_CODE_REQUIRED') {
@@ -181,6 +208,7 @@ export default function QuizBuilderPage() {
               window.localStorage.setItem(roleKey, nextRole);
               setSyncActiveQuizId(joined.active_quiz_id ?? null);
               setSyncQuizShowAnswers(joined.quiz_show_answers ?? false);
+              setSyncQuizProgress(joined.quiz_progress ?? []);
             } else {
               throw err;
             }
@@ -193,6 +221,7 @@ export default function QuizBuilderPage() {
           window.localStorage.setItem(roleKey, nextRole);
           setSyncActiveQuizId(state.active_quiz_id ?? null);
           setSyncQuizShowAnswers(state.quiz_show_answers ?? false);
+          setSyncQuizProgress(state.quiz_progress ?? []);
         }
         setSyncError(null);
       } catch (err) {
@@ -426,6 +455,36 @@ export default function QuizBuilderPage() {
             ))}
           </div>
           {syncRole !== 'master' ? <p className="mt-2 text-[11px] text-slate-500">目前角色是 follower，僅 master 可開始測驗。</p> : null}
+          {syncRole === 'master' && syncActiveQuizId != null ? (
+            <div className="mt-4 border-t border-slate-800 pt-3">
+              <h2 className="text-sm font-semibold text-slate-200">測驗中的學員</h2>
+              {syncQuizProgress.length === 0 ? (
+                <p className="mt-1 text-xs text-slate-500">目前還沒有人開始作答。</p>
+              ) : (
+                <ul className="mt-2 space-y-2">
+                  {syncQuizProgress.map((p) => {
+                    const ratio = p.total_questions > 0 ? Math.min(1, p.answered_count / p.total_questions) : 0;
+                    return (
+                      <li key={p.client_id} className="rounded-md border border-slate-700 bg-slate-950 px-2 py-2 text-xs">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate font-medium text-slate-200">{p.code || '匿名學員'}</span>
+                          <span className={p.submitted ? 'text-emerald-300' : 'text-slate-400'}>
+                            {p.answered_count} / {p.total_questions}{p.submitted ? '・已完成' : ''}
+                          </span>
+                        </div>
+                        <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+                          <div
+                            className={`h-full rounded-full ${p.submitted ? 'bg-emerald-500' : 'bg-fuchsia-500'}`}
+                            style={{ width: `${Math.round(ratio * 100)}%` }}
+                          />
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          ) : null}
         </aside>
         )}
         <section className="space-y-4">
