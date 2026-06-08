@@ -463,6 +463,7 @@
 [x] 將頁面產物檔案（圖片/縮圖/逐字稿/腳本/語音）改用建立時就決定、永不改變的 page_uid 命名，取代依頁碼命名；解決搬移/插入/刪除頁面時 cascading rename 導致 git 無法偵測 rename、`git log --follow` 斷裂的結構性問題（完成於分支: feature/stable-page-uid-filenames-20260608）
 [x] 修正自動生成測驗時沒有把逐字稿/投影片文字傳給 LLM（送出的簡報內容全部都是「（無）」）的問題（完成於分支: fix/quiz-empty-transcript-missing-files-20260608）
 [x] 當一個測驗開始，我們會在 master 顯示使用正在測試的人，和他們答題的進度。（完成於分支: feature/quiz-master-progress-display-20260608）
+[x] follower 的畫面不應該有新增測驗的按鍵。（完成於分支: feature/quiz-master-progress-display-20260608）
 
 ## 工作記錄
 
@@ -535,3 +536,7 @@
 - 時間: 2026-06-08 16:20:00 +0800
 - 分支: feature/quiz-master-progress-display-20260608
 - 內容: 完成「測驗開始時於 master 顯示作答中學員與進度」。後端 `sync.ts` 的 `SyncSessionState` 新增 `quizProgress: Map<clientId, SyncQuizProgress>`，新增 `POST /api/pdfs/:id/sync/quiz/progress` 端點讓 follower 回報目前測驗的已答題數/總題數/是否完成；`buildStateResponse` 新增 `quiz_progress` 欄位（僅回傳屬於目前 `active_quiz_id` 的進度），並在 master 到期、master 離開、follower 離開或更換測驗時清除舊進度，避免顯示過期資料。前端 `QuizBuilderPage.tsx` 中 follower 作答時會 debounce 呼叫新增的 `submitSyncQuizProgress()` 回報進度（完成定義為已作答全部題目）；master 端的「已儲存測驗」面板新增「測驗中的學員」區塊，列出每位學員的代號、已答題數/總題數與進度條，完成後以綠色標示「已完成」。新增 `SyncQuizProgress` 型別並更新 `SyncJoinResponse`/`SyncStateResponse`。後端與前端 `npx tsc --noEmit` 與 `npm run build` 皆通過。
+
+- 時間: 2026-06-08 16:35:00 +0800
+- 分支: feature/quiz-master-progress-display-20260608
+- 內容: 修正「follower 的畫面不應該有新增測驗的按鍵」：QuizBuilderPage.tsx 標頭原本不論同步角色都會顯示「新增測驗」按鈕，現改為僅在 `syncRole === 'master'` 時顯示，因為新增/編輯測驗屬於出題者操作，follower 只需要作答。
