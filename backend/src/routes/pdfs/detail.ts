@@ -9,6 +9,7 @@ import { db, getPageGenerationPrompts } from '../../db';
 import { config } from '../../config';
 import type { PageRow, PdfListItem, PdfRow, PdfSourceItem } from '../../types';
 import { coverImagePath, readMetadata, safeJoinPdfPath, videoPath, writeMetadata, youtubeOutlinePath } from '../../services/storage';
+import { isGithubSyncDirty } from '../../services/presentationGit';
 import { decodeSession, parseCookies } from '../auth';
 import { ensureCoverThumbnail, ensurePageThumbnail, generateCoverThumbnail } from '../../services/thumbnails';
 import {
@@ -155,13 +156,23 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
                 error_message, user_prompt, require_script_confirmation, category,
                 owner_sub, visibility,
                 total_audio_duration_seconds,
-                github_sync_dirty, github_synced_at,
+                github_synced_commit, github_synced_at,
                 created_at, updated_at
            FROM pdfs
            ORDER BY created_at DESC`,
       )
       .all() as PdfRow[];
-    const items: PdfListItem[] = rows.filter((row) => canReadPdf(sub, row)).map(rowToListItem);
+    const items: PdfListItem[] = await Promise.all(
+      rows
+        .filter((row) => canReadPdf(sub, row))
+        .map(async (row) => {
+          const item = rowToListItem(row);
+          if (row.github_synced_commit) {
+            item.github_sync_dirty = await isGithubSyncDirty(row.id, row.github_synced_commit);
+          }
+          return item;
+        }),
+    );
     return reply.send(items);
   });
 

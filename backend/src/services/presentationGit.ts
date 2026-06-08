@@ -9,24 +9,34 @@ import { db } from '../db';
 
 const execFile = promisify(execFileCb);
 
-/** Mark a presentation as having local commits not yet pushed to GitHub. */
-function markGithubSyncDirty(pdfId: string): void {
+/** Record the local git HEAD that was just pushed to GitHub, and when. */
+function markGithubSynced(pdfId: string, commitHash: string): void {
   try {
-    db.prepare(`UPDATE pdfs SET github_sync_dirty = 1 WHERE id = ?`).run(pdfId);
+    db.prepare(
+      `UPDATE pdfs SET github_synced_commit = ?, github_synced_at = ? WHERE id = ?`,
+    ).run(commitHash, new Date().toISOString(), pdfId);
   } catch (err) {
-    logger.warn({ err, pdfId }, 'presentationGit: failed to mark github sync dirty');
+    logger.warn({ err, pdfId }, 'presentationGit: failed to mark github synced');
   }
 }
 
-/** Mark a presentation as fully pushed to GitHub as of now. */
-function markGithubSynced(pdfId: string): void {
+/**
+ * Whether a presentation has local changes that haven't made it to GitHub yet:
+ * either uncommitted working-tree changes, or commits made after the last
+ * successful push. Many writes (audio, metadata, ...) only get committed in
+ * bulk right before a push (see commitAllPendingChanges), so this must be
+ * computed from the actual repo state rather than tracked at write time.
+ */
+export async function isGithubSyncDirty(pdfId: string, syncedCommit: string): Promise<boolean> {
+  const dir = pdfDir(pdfId);
   try {
-    db.prepare(`UPDATE pdfs SET github_sync_dirty = 0, github_synced_at = ? WHERE id = ?`).run(
-      new Date().toISOString(),
-      pdfId,
-    );
+    const status = await git(dir, ['status', '--porcelain']);
+    if (status) return true;
+    const head = await git(dir, ['rev-parse', 'HEAD']);
+    return head !== syncedCommit;
   } catch (err) {
-    logger.warn({ err, pdfId }, 'presentationGit: failed to mark github synced');
+    logger.warn({ err, pdfId }, 'presentationGit: failed to compute github sync dirty state');
+    return false;
   }
 }
 
@@ -126,7 +136,6 @@ async function commitAllPendingChanges(pdfId: string, dir: string, message: stri
     const status = await git(dir, ['status', '--porcelain']);
     if (!status) return;
     await execFile('git', ['commit', '-m', message], gitOpts(dir));
-    markGithubSyncDirty(pdfId);
   } catch (err) {
     logger.warn({ err, pdfId }, 'presentationGit: failed to commit pending changes');
   }
@@ -149,7 +158,6 @@ export async function commitPresentationFile(
     const status = await git(dir, ['status', '--porcelain', '--', relPath]);
     if (!status) return; // nothing changed
     await execFile('git', ['commit', '-m', message, '--', relPath], gitOpts(dir));
-    markGithubSyncDirty(pdfId);
   } catch (err) {
     // Non-fatal: versioning failures must not break the main flow
     logger.warn({ err, pdfId, relPath }, 'presentationGit: commit failed');
@@ -172,7 +180,6 @@ export async function commitPresentationFiles(
     const status = await git(dir, ['status', '--porcelain']);
     if (!status) return;
     await execFile('git', ['commit', '-m', message, '--', ...relPaths], gitOpts(dir));
-    markGithubSyncDirty(pdfId);
   } catch (err) {
     logger.warn({ err, pdfId, relPaths }, 'presentationGit: multi-file commit failed');
   }
@@ -360,7 +367,8 @@ export async function pushPresentationToGitHub(
     ['push', authenticatedUrl, `${branch}:refs/heads/${pdfId}`, '--force'],
     gitOpts(dir),
   );
-  markGithubSynced(pdfId);
+  const headHash = await git(dir, ['rev-parse', 'HEAD']);
+  markGithubSynced(pdfId, headHash);
 }
 
 export interface FileVersionEntry {
