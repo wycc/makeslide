@@ -641,8 +641,12 @@ export default function QuizBuilderPage() {
               )}
             </div>
           ) : null}
+        </aside>
+        )}
+        <section className="space-y-4">
+          {isFollowerTesting && activeQuiz ? renderQuizTakingView(activeQuiz) : null}
           {syncRole === 'master' && historyQuizId != null ? (
-            <div className="mt-4 border-t border-slate-800 pt-3">
+            <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-sm font-semibold text-slate-200">
                   測驗歷史紀錄
@@ -660,7 +664,7 @@ export default function QuizBuilderPage() {
               ) : null}
               <ul className="mt-2 space-y-3">
                 {historySessions.map((session) => (
-                  <li key={session.session_id} className="rounded-md border border-slate-700 bg-slate-950 px-2 py-2 text-xs">
+                  <li key={session.session_id} className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-xs">
                     <div className="font-medium text-slate-300">
                       測試時間：{new Date(session.submitted_at).toLocaleString()}
                       <span className="ml-2 text-slate-500">（{session.attempts.length} 人作答）</span>
@@ -687,7 +691,7 @@ export default function QuizBuilderPage() {
                             </div>
                             {expanded ? (
                               quiz ? (
-                                <ul className="mt-1.5 space-y-1.5 border-t border-slate-800 pt-1.5">
+                                <ul className="mt-1.5 grid gap-1.5 sm:grid-cols-2 border-t border-slate-800 pt-1.5">
                                   {quiz.questions.map((q) => {
                                     const selected = attempt.answers[q.id] ?? [];
                                     return (
@@ -727,10 +731,6 @@ export default function QuizBuilderPage() {
               </ul>
             </div>
           ) : null}
-        </aside>
-        )}
-        <section className="space-y-4">
-          {isFollowerTesting && activeQuiz ? renderQuizTakingView(activeQuiz) : null}
           {isFollowerTesting ? null : (
           <>
           <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
