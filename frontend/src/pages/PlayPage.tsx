@@ -398,7 +398,6 @@ export default function PlayPage() {
   const [playbackSettingsOpen, setPlaybackSettingsOpen] = useState(false);
   const [followerAudioUnlocked, setFollowerAudioUnlocked] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
-  const [syncFollowerCode, setSyncFollowerCode] = useState('');
   const [syncFollowerQuestionInput, setSyncFollowerQuestionInput] = useState('');
   const [syncFollowerQuestions, setSyncFollowerQuestions] = useState<SyncFollowerQuestion[]>([]);
   const [syncDisplayedQuestionId, setSyncDisplayedQuestionId] = useState<string | null>(null);
@@ -543,6 +542,8 @@ export default function PlayPage() {
 
   const currentShareToken = searchParams.get('share')?.trim() || '';
   const shouldAutoFullscreen = searchParams.get('fullscreen') === '1';
+  // 透過分享連結開啟的簡報需直接進入全螢幕並鎖定，使用者只能在「全螢幕／全螢幕字幕」間切換，不能離開全螢幕。
+  const isLockedFullscreen = Boolean(currentShareToken);
   const playbackProgressStorageKey = pdfId ? `makeslide.playback.progress.${pdfId}` : '';
 
   useEffect(() => {
@@ -1082,35 +1083,12 @@ export default function PlayPage() {
     let cancelled = false;
     void (async () => {
       try {
-        const followerCodeKey = `makeslide.sync.followerCode.${pdfId}`;
-        let followerCode = (await resolveConfiguredUserCode()) || window.localStorage.getItem(followerCodeKey)?.trim() || '';
-        if (followerCode) window.localStorage.setItem(followerCodeKey, followerCode);
-        let joined;
-        try {
-          joined = currentShareToken
-            ? await joinSharedPlaybackSync(pdfId, next, currentShareToken)
-            : await joinPlaybackSync(pdfId, next, followerCode || undefined);
-        } catch (err) {
-          if (currentShareToken) {
-            throw err;
-          }
-          if (!(err instanceof ApiError) || err.code !== 'SYNC_FOLLOWER_CODE_REQUIRED') {
-            throw err;
-          }
-          const entered = window.prompt('請輸入你的顯示代號才能加入 follower 同步模式', followerCode)?.trim() || '';
-          if (!entered) {
-            throw new ApiError('加入 follower 同步模式需要輸入顯示代號', 'SYNC_FOLLOWER_CODE_REQUIRED', 400);
-          }
-          followerCode = entered;
-          window.localStorage.setItem(followerCodeKey, followerCode);
-          joined = await joinPlaybackSync(pdfId, next, followerCode);
-        }
+        const userCode = await resolveConfiguredUserCode();
+        const joined = currentShareToken
+          ? await joinSharedPlaybackSync(pdfId, next, currentShareToken)
+          : await joinPlaybackSync(pdfId, next, userCode || undefined);
         if (cancelled) return;
-        if (joined.follower_code?.trim()) {
-          window.localStorage.setItem(followerCodeKey, joined.follower_code.trim());
-        }
         setSyncRole(joined.role);
-        setSyncFollowerCode(joined.follower_code?.trim() || followerCode);
         setFollowerAudioUnlocked(joined.follower_audio_unlocked);
         if (joined.role === 'follower' && !joined.follower_audio_unlocked) setAudioMuted(true);
         setSyncFollowerQuestions(joined.follower_questions ?? []);
@@ -1360,11 +1338,12 @@ export default function PlayPage() {
       syncQuestionInput.trim() || syncFollowerQuestionInput.trim();
     if (!question) return;
     try {
+      const userCode = await resolveConfiguredUserCode();
       const item = await submitSyncFollowerQuestion(
         pdfId,
         syncClientIdRef.current,
         question,
-        syncFollowerCode.trim() || undefined,
+        userCode || undefined,
       );
       setSyncFollowerQuestions((prev) => [item, ...prev]);
       setSyncFollowerQuestionInput('');
@@ -1374,7 +1353,7 @@ export default function PlayPage() {
     } catch (err) {
       setSyncError(err instanceof ApiError ? err.message : '送出問題失敗');
     }
-  }, [pdfId, syncFollowerCode, syncFollowerQuestionInput, syncQuestionInput]);
+  }, [pdfId, syncFollowerQuestionInput, syncQuestionInput]);
 
   const handleToggleDisplayedQuestion = useCallback(async () => {
     if (!pdfId || !syncClientIdRef.current) return;
@@ -1473,11 +1452,11 @@ export default function PlayPage() {
         }
         if (imageOnlyFullscreen) {
           ev.preventDefault();
-          setImageOnlyFullscreen(false);
+          if (!isLockedFullscreen) setImageOnlyFullscreen(false);
           return;
         }
         const isFullscreen = Boolean(getAnyFullscreenElement());
-        if (isFullscreen) {
+        if (isFullscreen && !isLockedFullscreen) {
           ev.preventDefault();
           void exitAnyFullscreen().catch(() => undefined);
         }
@@ -1485,31 +1464,33 @@ export default function PlayPage() {
     };
     window.addEventListener('keydown', onKey, { capture: true });
     return () => window.removeEventListener('keydown', onKey, { capture: true });
-  }, [playPause, goPrev, goNext, navigate, imageOnlyFullscreen, syncEnabled, syncRole, handleAiAnswerFollowerQuestions, fullscreenPollControlOpen, drawingMode]);
+  }, [playPause, goPrev, goNext, navigate, imageOnlyFullscreen, isLockedFullscreen, syncEnabled, syncRole, handleAiAnswerFollowerQuestions, fullscreenPollControlOpen, drawingMode]);
 
   // ---- Fullscreen API integration ----
-  // 編輯版面不進入瀏覽器原生全螢幕：原生全螢幕的 ESC 退出行為無法被 JS 攔截，
-  // 會導致使用者在編輯逐字稿時按 ESC（例如取消輸入法選字）就整個跳出全螢幕。
+  // 編輯版面、以及透過分享連結鎖定的全螢幕都不進入瀏覽器原生全螢幕：
+  // 原生全螢幕的 ESC 退出行為無法被 JS 攔截，會導致使用者按 ESC 就整個跳出全螢幕
+  // （編輯逐字稿時可能誤按、分享連結模式下則完全不允許離開全螢幕）。
   // 改用純 CSS 覆蓋層即可避免觸發瀏覽器原生 ESC 行為，由自訂鍵盤處理邏輯接管。
   useEffect(() => {
     const isAlreadyFullscreen = Boolean(getAnyFullscreenElement());
-    if (imageOnlyFullscreen && fullscreenLayout !== 'edit' && fullscreenContainerRef.current) {
+    const useNativeFullscreen = fullscreenLayout !== 'edit' && !isLockedFullscreen;
+    if (imageOnlyFullscreen && useNativeFullscreen && fullscreenContainerRef.current) {
       if (!isAlreadyFullscreen) {
         requestAnyFullscreen(fullscreenContainerRef.current).catch((err) => {
           console.error('Failed to enter fullscreen:', err);
         });
       }
-    } else if ((!imageOnlyFullscreen || fullscreenLayout === 'edit') && isAlreadyFullscreen) {
+    } else if ((!imageOnlyFullscreen || !useNativeFullscreen) && isAlreadyFullscreen) {
       exitAnyFullscreen().catch((err) => {
         console.error('Failed to exit fullscreen:', err);
       });
     }
-  }, [imageOnlyFullscreen, fullscreenLayout]);
+  }, [imageOnlyFullscreen, fullscreenLayout, isLockedFullscreen]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
       const isFullscreen = Boolean(getAnyFullscreenElement());
-      if (!isFullscreen && imageOnlyFullscreen && fullscreenLayout !== 'edit') {
+      if (!isFullscreen && imageOnlyFullscreen && fullscreenLayout !== 'edit' && !isLockedFullscreen) {
         setImageOnlyFullscreen(false);
       }
     };
@@ -1523,7 +1504,7 @@ export default function PlayPage() {
       document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
       document.removeEventListener('msfullscreenchange', handleFullscreenChange);
     };
-  }, [imageOnlyFullscreen, fullscreenLayout]);
+  }, [imageOnlyFullscreen, fullscreenLayout, isLockedFullscreen]);
 
   const currentScript =
     currentPage != null ? scripts[currentPage.page_number] ?? '' : '';
@@ -1590,9 +1571,10 @@ export default function PlayPage() {
   const hasScriptChanges = editingScript !== currentScript;
 
   useEffect(() => {
-    if (!shouldAutoFullscreen) return;
+    if (!shouldAutoFullscreen && !isLockedFullscreen) return;
     setImageOnlyFullscreen(true);
-  }, [shouldAutoFullscreen]);
+    if (isLockedFullscreen && fullscreenLayout === 'edit') setFullscreenLayout('image');
+  }, [shouldAutoFullscreen, isLockedFullscreen, fullscreenLayout]);
 
   useEffect(() => {
     if (!pdfId || !currentPage) return;
@@ -3088,6 +3070,7 @@ export default function PlayPage() {
                 ['split', '字幕'],
                 ['edit', '編輯'],
               ] as const).map(([mode, label]) => (
+                isLockedFullscreen && mode === 'edit' ? null : (
                 <button
                   key={mode}
                   type="button"
@@ -3105,18 +3088,21 @@ export default function PlayPage() {
                 >
                   {label}
                 </button>
+                )
               ))}
             </div>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setImageOnlyFullscreen(false);
-              }}
-              className="rounded-md border border-slate-500 bg-slate-900/70 px-3 py-1.5 text-sm text-slate-100"
-            >
-              離開全螢幕
-            </button>
+            {!isLockedFullscreen ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setImageOnlyFullscreen(false);
+                }}
+                className="rounded-md border border-slate-500 bg-slate-900/70 px-3 py-1.5 text-sm text-slate-100"
+              >
+                離開全螢幕
+              </button>
+            ) : null}
           </div>
           {syncOverlayText ? (
             <div
@@ -3572,14 +3558,7 @@ export default function PlayPage() {
             <div className="mx-auto w-full max-w-5xl px-4 pb-3">
               <div className="rounded-md border border-slate-700 bg-slate-900/80 p-3 text-xs text-slate-200">
                 {syncRole === 'follower' ? (
-                  <div className="grid gap-2 md:grid-cols-[8rem_1fr_auto] md:items-center">
-                    <input
-                      value={syncFollowerCode}
-                      onChange={(e) => setSyncFollowerCode(e.target.value)}
-                      placeholder="代號"
-                      className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-100"
-                      maxLength={80}
-                    />
+                  <div className="flex gap-2">
                     <input
                       value={syncFollowerQuestionInput}
                       onChange={(e) => setSyncFollowerQuestionInput(e.target.value)}
@@ -3587,7 +3566,7 @@ export default function PlayPage() {
                         if (e.key === 'Enter') void handleSubmitFollowerQuestion();
                       }}
                       placeholder="輸入要問 master 的問題"
-                      className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-100"
+                      className="flex-1 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-100"
                       maxLength={500}
                     />
                     <button
@@ -3719,18 +3698,20 @@ export default function PlayPage() {
             >
               全螢幕字幕
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setFullscreenLayout('edit');
-                setImageOnlyFullscreen(true);
-              }}
-              disabled={isReadOnlyProcessing}
-              className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
-              title="全螢幕編輯模式（左圖右逐字稿，可直接編輯並重生語音）"
-            >
-              全螢幕編輯
-            </button>
+            {!isLockedFullscreen ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setFullscreenLayout('edit');
+                  setImageOnlyFullscreen(true);
+                }}
+                disabled={isReadOnlyProcessing}
+                className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                title="全螢幕編輯模式（左圖右逐字稿，可直接編輯並重生語音）"
+              >
+                全螢幕編輯
+              </button>
+            ) : null}
             <div className="col-span-2 flex items-center justify-center gap-1 rounded-md border border-slate-700 px-2 py-1 md:col-span-1" title="調整圖片與下方資料區比例">
               <button
                 type="button"

@@ -456,10 +456,10 @@ test('shared sync join grants temporary follower access and revokes it when mast
     payload: { client_id: 'shared-follower-1' },
   });
   assert.equal(followerResp.statusCode, 200);
-  const follower = followerResp.json() as { role: string; master_client_id: string | null; follower_code: string | null };
+  const follower = followerResp.json() as { role: string; master_client_id: string | null; user_code: string | null };
   assert.equal(follower.role, 'follower');
   assert.equal(follower.master_client_id, 'master-1');
-  assert.equal(follower.follower_code, null);
+  assert.equal(follower.user_code, null);
 
   const sharedDetailResp = await app.inject({
     method: 'GET',

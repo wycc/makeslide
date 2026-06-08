@@ -341,7 +341,7 @@ export interface SyncAiAnswer {
 export interface SyncJoinResponse {
   pdf_id: string;
   role: SyncRole;
-  follower_code: string | null;
+  user_code: string | null;
   master_client_id: string | null;
   page_number: number;
   is_playing: boolean;
@@ -367,7 +367,7 @@ export interface SyncJoinResponse {
 export interface SyncStateResponse {
   pdf_id: string;
   role: SyncRole;
-  follower_code: string | null;
+  user_code: string | null;
   master_client_id: string | null;
   page_number: number;
   is_playing: boolean;

@@ -183,15 +183,16 @@ export default function QuizBuilderPage() {
 
   useEffect(() => {
     if (!pdfId || syncRole !== 'follower' || !activeQuiz || !syncQuizSessionId) return;
-    const followerCodeKey = `makeslide.sync.followerCode.${pdfId}`;
-    const code = window.localStorage.getItem(followerCodeKey)?.trim() || null;
-    latestAttemptSnapshotRef.current = {
-      pdfId,
-      quizId: activeQuiz.id,
-      sessionId: syncQuizSessionId,
-      code,
-      answers: studentAnswers,
-    };
+    void (async () => {
+      const code = (await resolveConfiguredUserCode()) || null;
+      latestAttemptSnapshotRef.current = {
+        pdfId,
+        quizId: activeQuiz.id,
+        sessionId: syncQuizSessionId,
+        code,
+        answers: studentAnswers,
+      };
+    })();
   }, [pdfId, syncRole, activeQuiz, syncQuizSessionId, studentAnswers]);
 
   const submitFollowerAttempt = useCallback(() => {
@@ -254,9 +255,7 @@ export default function QuizBuilderPage() {
 
     const refresh = async () => {
       let clientId = syncClientIdRef.current.trim();
-      const followerCodeKey = `makeslide.sync.followerCode.${pdfId}`;
-      let followerCode = (await resolveConfiguredUserCode()) || window.localStorage.getItem(followerCodeKey)?.trim() || '';
-      if (followerCode) window.localStorage.setItem(followerCodeKey, followerCode);
+      const userCode = (await resolveConfiguredUserCode()) || undefined;
       if (!clientId) {
         clientId = `sync-${Date.now()}-${Math.random().toString(36).slice(2)}`;
         syncClientIdRef.current = clientId;
@@ -265,13 +264,9 @@ export default function QuizBuilderPage() {
       try {
         if (!joinedOnce) {
           try {
-            const joined = await joinPlaybackSync(pdfId, clientId, followerCode || undefined);
+            const joined = await joinPlaybackSync(pdfId, clientId, userCode);
             if (cancelled) return;
             joinedOnce = true;
-            if (joined.follower_code?.trim()) {
-              followerCode = joined.follower_code.trim();
-              window.localStorage.setItem(followerCodeKey, followerCode);
-            }
             const nextRole = resolveRole(joined.role);
             setSyncRole(nextRole);
             window.localStorage.setItem(roleKey, nextRole);
@@ -281,22 +276,12 @@ export default function QuizBuilderPage() {
             setSyncQuizProgress(joined.quiz_progress ?? []);
           } catch (err) {
             if (err instanceof ApiError && err.status === 400) {
-              if (err.code === 'SYNC_FOLLOWER_CODE_REQUIRED') {
-                const entered = window.prompt('請輸入你的顯示代號才能加入 follower 同步模式', followerCode)?.trim() || '';
-                if (!entered) throw err;
-                followerCode = entered;
-                window.localStorage.setItem(followerCodeKey, followerCode);
-              }
               const regenerated = `sync-${Date.now()}-${Math.random().toString(36).slice(2)}`;
               syncClientIdRef.current = regenerated;
               window.sessionStorage.setItem(storageKey, regenerated);
-              const joined = await joinPlaybackSync(pdfId, regenerated, followerCode || undefined);
+              const joined = await joinPlaybackSync(pdfId, regenerated, userCode);
               if (cancelled) return;
               joinedOnce = true;
-              if (joined.follower_code?.trim()) {
-                followerCode = joined.follower_code.trim();
-                window.localStorage.setItem(followerCodeKey, followerCode);
-              }
               const nextRole = resolveRole(joined.role);
               setSyncRole(nextRole);
               window.localStorage.setItem(roleKey, nextRole);

@@ -765,10 +765,10 @@ export async function fetchRegenerateStatus(id: string): Promise<RegenJobState> 
   return (await resp.json()) as RegenJobState;
 }
 
-export async function joinPlaybackSync(id: string, clientId: string, followerCode?: string): Promise<SyncJoinResponse> {
-  const body: { client_id: string; follower_code?: string } = { client_id: clientId };
-  const code = followerCode?.trim();
-  if (code) body.follower_code = code;
+export async function joinPlaybackSync(id: string, clientId: string, userCode?: string): Promise<SyncJoinResponse> {
+  const body: { client_id: string; user_code?: string } = { client_id: clientId };
+  const code = userCode?.trim();
+  if (code) body.user_code = code;
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/sync/join`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -841,12 +841,12 @@ export async function submitSyncFollowerQuestion(
   id: string,
   clientId: string,
   question: string,
-  code?: string,
+  userCode?: string,
 ): Promise<SyncFollowerQuestion> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/sync/questions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ client_id: clientId, question, code }),
+    body: JSON.stringify({ client_id: clientId, question, user_code: userCode }),
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as SyncFollowerQuestion;

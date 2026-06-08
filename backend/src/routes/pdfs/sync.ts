@@ -12,7 +12,7 @@ interface SyncSessionState {
   pdfId: string;
   masterClientId: string | null;
   masterExpiresAt: number;
-  followerCodes: Map<string, string>;
+  userCodes: Map<string, string>;
   followerAccess: Map<string, SyncJoinAccess>;
   clients: Map<string, number>;
   pageNumber: number;
@@ -259,7 +259,7 @@ function buildStateResponse(session: SyncSessionState, pdfId: string, role: Sync
   return {
     pdf_id: pdfId,
     role,
-    follower_code: clientId ? (session.followerCodes.get(clientId) ?? null) : null,
+    user_code: clientId ? (session.userCodes.get(clientId) ?? null) : null,
     master_client_id: session.masterClientId,
     page_number: session.pageNumber,
     is_playing: session.isPlaying,
@@ -301,7 +301,7 @@ function getSession(pdfId: string): SyncSessionState {
     pdfId,
     masterClientId: persisted?.master_client_id ?? null,
     masterExpiresAt: persisted ? rowToExpiresAt(persisted) : 0,
-    followerCodes: new Map<string, string>(),
+    userCodes: new Map<string, string>(),
     followerAccess: new Map<string, SyncJoinAccess>(),
     clients: new Map(),
     pageNumber: persisted?.page_number ?? 1,
@@ -352,14 +352,14 @@ function onlineClientCount(session: SyncSessionState): number {
 export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
   const ClientBodySchema = z.object({
     client_id: z.string().trim().min(1).max(128),
-    follower_code: z.string().trim().min(1).max(80).optional(),
+    user_code: z.string().trim().min(1).max(128).optional(),
   });
   const ShareJoinBodySchema = z.object({
     client_id: z.string().trim().min(1).max(128),
   });
   const FollowerQuestionBodySchema = z.object({
     client_id: z.string().trim().min(1).max(128),
-    code: z.string().trim().max(80).optional(),
+    user_code: z.string().trim().max(128).optional(),
     question: z.string().trim().min(1).max(500),
   });
   const MasterQuestionActionBodySchema = z.object({ client_id: z.string().trim().min(1).max(128) });
@@ -396,21 +396,16 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     if (!ensurePdfExists(id)) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     }
-    const { client_id: clientId, follower_code: followerCode } = parsedBody.data;
+    const { client_id: clientId, user_code: userCode } = parsedBody.data;
     const session = getSession(id);
     touchClient(session, clientId);
+    if (userCode) session.userCodes.set(clientId, userCode);
     if (!session.masterClientId || session.masterExpiresAt <= nowMs()) {
       session.masterClientId = clientId;
       session.masterExpiresAt = nowMs() + MASTER_TTL_MS;
       session.updatedAt = nowIso();
       upsertPersistedSession(session);
     } else if (session.masterClientId !== clientId) {
-      if (!followerCode) {
-        return reply
-          .code(400)
-          .send(errorResponse('SYNC_FOLLOWER_CODE_REQUIRED', 'Follower sessions must provide a display code'));
-      }
-      session.followerCodes.set(clientId, followerCode);
       session.updatedAt = nowIso();
     }
     return reply.send(buildStateResponse(session, id, roleFor(session, clientId), clientId));
@@ -537,7 +532,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       revokePdfShares(id);
       upsertPersistedSession(session);
     }
-    session.followerCodes.delete(clientId);
+    session.userCodes.delete(clientId);
     session.followerAccess.delete(clientId);
     return reply.send({ ok: true });
   });
@@ -564,7 +559,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     const now = nowIso();
     session.quizProgress.set(clientId, {
       clientId,
-      code: session.followerCodes.get(clientId) ?? null,
+      code: session.userCodes.get(clientId) ?? null,
       quizId,
       answeredCount,
       totalQuestions,
@@ -585,8 +580,9 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     if (!ensurePdfExists(id)) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     }
-    const { client_id: clientId, code, question } = parsedBody.data;
+    const { client_id: clientId, user_code: userCode, question } = parsedBody.data;
     const session = getSession(id);
+    if (userCode) session.userCodes.set(clientId, userCode);
     if (roleFor(session, clientId) !== 'follower') {
       return reply.code(403).send(errorResponse('SYNC_NOT_FOLLOWER', 'Only followers can submit questions'));
     }
@@ -594,7 +590,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     const item: SyncFollowerQuestion = {
       id: `q-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
       clientId,
-      code: code?.trim() || session.followerCodes.get(clientId) || null,
+      code: userCode?.trim() || session.userCodes.get(clientId) || null,
       question,
       createdAt: now,
     };
