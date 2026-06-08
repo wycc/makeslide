@@ -25,7 +25,9 @@ import {
   fetchPageChatHistory,
   resolveShareToken,
   fetchPlaybackSyncState,
+  getAuthStatus,
   getImagePromptTemplates,
+  getSystemAiSettings,
   joinSharedPlaybackSync,
   joinPlaybackSync,
   leavePlaybackSync,
@@ -117,6 +119,7 @@ const SYNC_POLL_INTERVAL_FULLSCREEN_MS = 250;
 const SYNC_CURSOR_PUSH_INTERVAL_MS = 60;
 const SYNC_CURSOR_PUSH_INTERVAL_FULLSCREEN_MS = 24;
 const CHAT_HISTORY_REQUEST_LIMIT = 20;
+const LOCAL_USER_CODE_KEY = 'makeslide.user_code';
 const SENTENCE_MATCH_RE = /[^。！？!?；;\n]+[。！？!?；;]?|\n+/g;
 const TONE_MARKER_RE = /\[\[\s*[^\]]+\s*\]\]/g;
 
@@ -195,6 +198,18 @@ function buildSentenceTimeline(sentences: string[], duration: number): SentenceT
     cursor = end;
     return { text: item.text, start, end };
   });
+}
+
+async function resolveConfiguredUserCode(): Promise<string> {
+  const localCode = window.localStorage.getItem(LOCAL_USER_CODE_KEY)?.trim() || '';
+  try {
+    const auth = await getAuthStatus();
+    if (!auth.authenticated) return localCode;
+    const settings = await getSystemAiSettings();
+    return settings.user_code?.trim() || localCode;
+  } catch {
+    return localCode;
+  }
 }
 
 function getAnyFullscreenElement(): Element | null {
@@ -1068,7 +1083,8 @@ export default function PlayPage() {
     void (async () => {
       try {
         const followerCodeKey = `makeslide.sync.followerCode.${pdfId}`;
-        let followerCode = window.localStorage.getItem(followerCodeKey)?.trim() || '';
+        let followerCode = (await resolveConfiguredUserCode()) || window.localStorage.getItem(followerCodeKey)?.trim() || '';
+        if (followerCode) window.localStorage.setItem(followerCodeKey, followerCode);
         let joined;
         try {
           joined = currentShareToken
@@ -1603,13 +1619,26 @@ export default function PlayPage() {
   }, [pdfId, currentPage?.page_number]);
 
   useEffect(() => {
-    if (!pollVoterIdRef.current) {
+    let cancelled = false;
+    void (async () => {
       const storageKey = 'makeslide.poll.voterId';
-      const existing = window.localStorage.getItem(storageKey);
-      const next = existing || `voter-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      window.localStorage.setItem(storageKey, next);
-      pollVoterIdRef.current = next;
-    }
+      const configured = await resolveConfiguredUserCode();
+      if (cancelled) return;
+      if (configured) {
+        window.localStorage.setItem(storageKey, configured);
+        pollVoterIdRef.current = configured;
+        return;
+      }
+      if (!pollVoterIdRef.current) {
+        const existing = window.localStorage.getItem(storageKey);
+        const next = existing || `voter-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        window.localStorage.setItem(storageKey, next);
+        pollVoterIdRef.current = next;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const shouldFetchPolls =

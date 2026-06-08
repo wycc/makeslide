@@ -240,7 +240,7 @@ export const PollParamSchema = z.object({
 });
 
 export const VotePollBodySchema = z.object({
-  voter_id: z.string().trim().min(8, 'voter_id 太短').max(80, 'voter_id 過長'),
+  voter_id: z.string().trim().min(1, 'voter_id 太短').max(128, 'voter_id 過長'),
   option_index: z.number().int().min(0).max(5),
 });
 

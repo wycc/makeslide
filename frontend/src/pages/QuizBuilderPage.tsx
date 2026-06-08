@@ -6,6 +6,8 @@ import {
   fetchPlaybackSyncState,
   fetchQuizAttempts,
   fetchQuizSets,
+  getAuthStatus,
+  getSystemAiSettings,
   generateQuizSet,
   joinPlaybackSync,
   saveQuizSet,
@@ -21,6 +23,20 @@ import type {
   QuizSet,
   SyncQuizProgress,
 } from '../types';
+
+const LOCAL_USER_CODE_KEY = 'makeslide.user_code';
+
+async function resolveConfiguredUserCode(): Promise<string> {
+  const localCode = window.localStorage.getItem(LOCAL_USER_CODE_KEY)?.trim() || '';
+  try {
+    const auth = await getAuthStatus();
+    if (!auth.authenticated) return localCode;
+    const settings = await getSystemAiSettings();
+    return settings.user_code?.trim() || localCode;
+  } catch {
+    return localCode;
+  }
+}
 
 function emptyQuestion(index: number): QuizQuestion {
   return {
@@ -239,7 +255,8 @@ export default function QuizBuilderPage() {
     const refresh = async () => {
       let clientId = syncClientIdRef.current.trim();
       const followerCodeKey = `makeslide.sync.followerCode.${pdfId}`;
-      let followerCode = window.localStorage.getItem(followerCodeKey)?.trim() || '';
+      let followerCode = (await resolveConfiguredUserCode()) || window.localStorage.getItem(followerCodeKey)?.trim() || '';
+      if (followerCode) window.localStorage.setItem(followerCodeKey, followerCode);
       if (!clientId) {
         clientId = `sync-${Date.now()}-${Math.random().toString(36).slice(2)}`;
         syncClientIdRef.current = clientId;
