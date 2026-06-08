@@ -572,3 +572,11 @@
 - 時間: 2026-06-08 19:40:00 +0800
 - 分支: feature/per-account-ai-settings-isolation-20260608
 - 內容: 將 AI/帳號設定從「單一全域可變快取＋寫入 process.env」改為「每帳號各自獨立隔離」的設計，避免多人同時使用時設定互相污染。新增 `accountContext.ts`，以 `AsyncLocalStorage` 在請求/背景工作鏈路中隱性攜帶「目前帳號 ID」（帳號 ID 即經過清理的 Google OAuth `sub`，與 `pdfs.owner_sub` 相同）。重寫 `aiSettings.ts`：拆成「帳號層級設定」（OpenAI/Gemini 金鑰、LLM/TTS 模型與語音、語言偏好、GitHub 同步——存於 `accounts/<sub>/settings.env`，各自快取於 `Map`）與「系統層級設定」（Google 登入 `googleAuthEnabled/ClientId/ClientSecret/RedirectUri`——固定存於 `accounts/default/settings.env`，因為登入前還沒有帳號情境，仍須全服務共用），新增 `getSystemAuthSettings`/`setSystemAuthSettings`/`persistSystemAuthSettings`；`getRuntimeAiSettings`/`setRuntimeAiSettings`/`persistEnvSettings` 改為以顯式或目前帳號 ID 操作，且不再寫入 `process.env`（這正是舊版會在並發請求間互相覆蓋金鑰的根因）。`openai.ts` 改用 `Map<accountId, AccountOpenAiState>` 快取各帳號自己的 client/金鑰/base URL；`gemini.ts` 改讀取目前帳號的 `geminiApiKey`。`server.ts` 在所有路由與既有 auth-gate hook 之前加入新的 `onRequest` hook：路徑帶 PDF id（`/api/pdfs/:id/...`）時一律以「該簡報擁有者」的帳號（`owner_sub`）建立情境，否則用登入者自己的帳號，並透過 `runWithAccountId` 包住整個請求生命週期；既有的 Google 登入檢查改用新的 `getSystemAuthSettings()`。`auth.ts` 的登入流程同樣改用系統層設定（並 `export SESSION_COOKIE` 供 `server.ts` 解析請求歸屬帳號）。`admin.ts` 的 `/api/system/openai-api-key`、`/api/system/ai-settings` 等端點改以 `currentAccountId()` 顯式操作對應帳號的設定。`shared.ts` 的 `rowToListItem`/`rowToDetail` 顯示 `tts_provider` 等資訊時改用「簡報擁有者」帳號的設定，而非當下檢視者的設定，確保共享/`public_editable` 簡報的顯示行為可預期。worker 端的 `pipeline.ts`（`enqueuePdfProcessing`）、`addPagesFromPrompt.ts`（`startAddPagesFromPrompt`）、`regenerate.ts`（`startRegenerateJob`）三個背景工作起點皆改為先查出該簡報的 `owner_sub`，以 `runWithAccountId` 包住整個非同步工作，確保整條呼叫鏈（含其中的 `getRuntimeAiSettings()`/`getOpenAIClient()`）自動取得正確帳號的設定。另外新增 `assignPresentationsToAccount.ts` 一次性 script 並執行，把既有 17 份簡報的 `owner_sub` 指派給帳號 `111891044144240617135`。後端 `npm run typecheck` 與 `npm run build` 皆通過；既有測試套件 22 通過/19 失敗與套用變更前完全相同（皆為既存、與本次變更無關的失敗）。
+
+[x] 把設定頁中顯示的帳號設定檔路徑名稱移除（完成於分支: fix/settings-remove-account-file-path-display-20260608）
+
+## 工作記錄
+
+- 時間: 2026-06-08 19:55:00 +0800
+- 分支: fix/settings-remove-account-file-path-display-20260608
+- 內容: 上一個多帳號設定隔離工作完成後，設定頁會顯示「設定會保存到帳號專屬檔案：/home/.../accounts/<sub>/settings.env」這類伺服器端內部路徑；使用者覺得不需要顯示檔名/路徑，因此移除。`SettingsPage.tsx` 移除 `accountSettingsFile` 狀態與其顯示區塊，只保留「目前帳號：<accountId>」；同時移除前端中/英文語系檔（`zh-TW.ts`/`en.ts`）裡僅供該行顯示用的 `settings.accountFilePrefix` 翻譯字串。前端 `npx tsc --noEmit` 通過。
