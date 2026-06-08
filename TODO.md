@@ -464,6 +464,7 @@
 [x] 修正自動生成測驗時沒有把逐字稿/投影片文字傳給 LLM（送出的簡報內容全部都是「（無）」）的問題（完成於分支: fix/quiz-empty-transcript-missing-files-20260608）
 [x] 當一個測驗開始，我們會在 master 顯示使用正在測試的人，和他們答題的進度。（完成於分支: feature/quiz-master-progress-display-20260608）
 [x] follower 的畫面不應該有新增測驗的按鍵。（完成於分支: feature/quiz-master-progress-display-20260608）
+[x] 將結束並顯示答案分成顯示答案和結束二個功能。按下顯示答案時就停止作答，follower 不能再改答案，並顯示解答。按下結束則 follower 回到全螢幕播放畫面。所有 follower 的答案會被存下來，可在測驗的歷史記錄中查看每一次測試每一個人的答案。（完成於分支: feature/quiz-show-answers-end-history-20260608）
 
 ## 工作記錄
 
@@ -540,3 +541,7 @@
 - 時間: 2026-06-08 16:35:00 +0800
 - 分支: feature/quiz-master-progress-display-20260608
 - 內容: 修正「follower 的畫面不應該有新增測驗的按鍵」：QuizBuilderPage.tsx 標頭原本不論同步角色都會顯示「新增測驗」按鈕，現改為僅在 `syncRole === 'master'` 時顯示，因為新增/編輯測驗屬於出題者操作，follower 只需要作答。
+
+- 時間: 2026-06-08 17:20:00 +0800
+- 分支: feature/quiz-show-answers-end-history-20260608
+- 內容: 將測驗的「結束並顯示答案」拆成「顯示答案」與「結束」兩個獨立動作，並把 follower 的作答結果存下來供日後查詢。後端：`db.ts` 新增 `quiz_attempts` 資料表（`UNIQUE(session_id, client_id)`，記錄 pdf/quiz/session/client/代號/答案 JSON/分數/提交時間），`sync.ts` 的 `SyncSessionState` 新增 `quizSessionId`，每次 `active_quiz_id` 變更（開始新測驗）時產生新的 `qs-<timestamp>-<random>` 作為該次測驗的識別碼，測驗結束（`quiz_mode=false`）或 master/follower 離線、過期時清空，並透過 `buildStateResponse` 的 `quiz_session_id` 欄位同步給前端；`quizzes.ts` 新增 `POST /api/pdfs/:id/quizzes/:quizId/attempts`（以 `session_id`+`client_id` upsert 答案與分數）與 `GET .../attempts`（依 session 分組回傳每次測驗各學員的作答歷史）。前端：`sendQuizSyncState`/新增的 `sendQuizEndState` 分別對應「顯示答案」（`quiz_show_answers=true`，停止作答並顯示正解，但仍停留在測驗模式）與「結束」（`quiz_mode=false`，徹底結束測驗）；「已儲存測驗」面板的單一按鈕拆成「顯示答案」「結束」「歷史紀錄」三顆；新增 effect 在 follower 的 `quiz_show_answers` 變成 true（鎖定作答）時自動計分並透過 `submitQuizAttempt()` 送出該次測驗的 session id、答案與分數（以 ref 去重避免重複提交），另一個 effect 偵測 follower 的 `active_quiz_id` 由非 null 轉為 null 時自動導回全螢幕播放畫面；master 端新增「測驗歷史紀錄」面板，可依測驗叫出 `fetchQuizAttempts()`，列出每一次測試的時間、作答人數，以及每位學員的代號、分數與提交時間。後端與前端 `npx tsc --noEmit` 與 `npm run build` 皆通過。
