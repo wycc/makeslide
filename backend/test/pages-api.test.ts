@@ -7,6 +7,8 @@ import { db } from '../src/db';
 import { config } from '../src/config';
 
 const PDF_ID = 'test-pages-api-01';
+const SESSION_COOKIE =
+  'eyJwcm92aWRlciI6Imdvb2dsZSIsInN1YiI6ImFjY291bnQtMSIsImVtYWlsIjoiYWNjb3VudC0xQGV4YW1wbGUuY29tIn0.mDkylBa8ZqLOib7FEOYl6YtwwODNJwieo4kUfAIIimw';
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -62,6 +64,53 @@ function seedReadyPdfFor(pdfId: string, pageCount: number): void {
     fs.writeFileSync(path.join(pagesDir, `${p}.mp3`), Buffer.from([0x49, 0x44, 0x33]));
   }
 }
+
+function seedListPdf(pdfId: string, title: string, ownerSub: string | null, visibility: 'private' | 'public' | 'public_editable' = 'private'): void {
+  const t = nowIso();
+  db.prepare(`DELETE FROM pages WHERE pdf_id = ?`).run(pdfId);
+  db.prepare(`DELETE FROM pdfs WHERE id = ?`).run(pdfId);
+  db.prepare(
+    `INSERT INTO pdfs (id,title,original_filename,status,page_count,progress_step,progress_current,progress_total,error_message,user_prompt,require_script_confirmation,owner_sub,visibility,tts_voice,tts_speed,script_max_chars_per_page,created_at,updated_at)
+     VALUES (?,?,?,'ready',1,NULL,NULL,NULL,NULL,NULL,0,?,?,NULL,NULL,NULL,?,?)`,
+  ).run(pdfId, title, `${pdfId}.pdf`, ownerSub, visibility, t, t);
+}
+
+test('GET /api/pdfs should not list presentations without an owner account', async () => {
+  seedListPdf('list-owned-01', 'owned', 'account-1');
+  seedListPdf('list-orphan-01', 'orphan', null);
+  seedListPdf('list-public-01', 'public', 'account-2', 'public');
+
+  const app = await buildApp();
+  const resp = await app.inject({
+    method: 'GET',
+    url: '/api/pdfs',
+    headers: { cookie: `makeslide_session=${encodeURIComponent(SESSION_COOKIE)}` },
+  });
+
+  assert.equal(resp.statusCode, 200);
+  const items = resp.json() as Array<{ id: string }>;
+  assert.deepEqual(
+    items.filter((item) => item.id.startsWith('list-')).map((item) => item.id).sort(),
+    ['list-owned-01', 'list-public-01'],
+  );
+
+  await app.close();
+});
+
+test('GET /api/pdfs/:id should deny presentations without an owner account', async () => {
+  seedListPdf('detail-orphan-01', 'orphan detail', null);
+
+  const app = await buildApp();
+  const resp = await app.inject({
+    method: 'GET',
+    url: '/api/pdfs/detail-orphan-01',
+    headers: { cookie: `makeslide_session=${encodeURIComponent(SESSION_COOKIE)}` },
+  });
+
+  assert.equal(resp.statusCode, 403);
+
+  await app.close();
+});
 
 test('POST /api/pdfs/:id/pages should insert one page and keep path aligned', async () => {
   seedReadyPdfFor(PDF_ID, 3);
