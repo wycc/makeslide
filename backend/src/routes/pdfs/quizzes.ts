@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
+import { logger } from '../../logger';
 import { callChatJSON } from '../../services/openai';
 import { pageScriptPath, pageTextPath } from '../../services/storage';
 import { errorResponse, IdParamSchema } from './shared';
@@ -76,6 +77,18 @@ function rowToQuiz(row: QuizSetRow) {
   };
 }
 
+async function readPageArtifact(pdfId: string, page: number, kind: '投影片文字' | '逐字稿', filePath: string): Promise<string> {
+  try {
+    return await fs.readFile(filePath, 'utf8');
+  } catch (err) {
+    logger.warn(
+      { pdfId, page, kind, filePath, error: err instanceof Error ? err.message : String(err) },
+      'quiz-generate: page artifact file missing — sending empty content to LLM',
+    );
+    return '';
+  }
+}
+
 async function readPageContext(pdfId: string, pageCount: number | null): Promise<string> {
   const count = Math.max(0, pageCount ?? 0);
   const pageRows = db
@@ -84,8 +97,8 @@ async function readPageContext(pdfId: string, pageCount: number | null): Promise
   const chunks: string[] = [];
   for (const { page_number: page, page_uid: uid } of pageRows.slice(0, count || pageRows.length)) {
     const [text, script] = await Promise.all([
-      fs.readFile(pageTextPath(pdfId, uid), 'utf8').catch(() => ''),
-      fs.readFile(pageScriptPath(pdfId, uid), 'utf8').catch(() => ''),
+      readPageArtifact(pdfId, page, '投影片文字', pageTextPath(pdfId, uid)),
+      readPageArtifact(pdfId, page, '逐字稿', pageScriptPath(pdfId, uid)),
     ]);
     const body = [`投影片文字：${text.trim() || '（無）'}`, `逐字稿：${script.trim() || '（無）'}`].join('\n');
     chunks.push(`第 ${page} 頁\n${body}`);
