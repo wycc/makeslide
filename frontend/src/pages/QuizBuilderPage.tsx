@@ -423,7 +423,9 @@ export default function QuizBuilderPage() {
             <h1 className="mt-1 text-xl font-semibold">自動測驗生成</h1>
             <p className="text-xs text-slate-400">{detail?.title ?? '載入簡報中…'}</p>
           </div>
-          <button type="button" onClick={() => { setSelectedQuizId(null); setTitle('課堂測驗'); setQuestions([emptyQuestion(0)]); }} className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800">新增測驗</button>
+          {syncRole === 'master' ? (
+            <button type="button" onClick={() => { setSelectedQuizId(null); setTitle('課堂測驗'); setQuestions([emptyQuestion(0)]); }} className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800">新增測驗</button>
+          ) : null}
         </div>
       </header>
       <main className={`mx-auto grid max-w-5xl gap-4 px-4 py-4 ${isFollowerTesting ? '' : 'lg:grid-cols-[240px_1fr]'}`}>
