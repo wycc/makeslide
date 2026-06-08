@@ -391,12 +391,11 @@ export default function QuizBuilderPage() {
       try {
         await sendQuizSyncState(quizId, false);
         setMessage('已開始測驗，follower 會進入測驗模式且暫不顯示答案。');
-        if (pdfId) navigate(`/play/${encodeURIComponent(pdfId)}?fullscreen=1`);
       } catch (err) {
         setSyncError(err instanceof ApiError ? err.message : '開始測驗失敗');
       }
     },
-    [sendQuizSyncState, pdfId, navigate, syncRole],
+    [sendQuizSyncState, syncRole],
   );
 
   const handleShowAnswers = useCallback(
