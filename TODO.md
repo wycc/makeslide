@@ -466,6 +466,7 @@
 [x] follower 的畫面不應該有新增測驗的按鍵。（完成於分支: feature/quiz-master-progress-display-20260608）
 [x] 將結束並顯示答案分成顯示答案和結束二個功能。按下顯示答案時就停止作答，follower 不能再改答案，並顯示解答。按下結束則 follower 回到全螢幕播放畫面。所有 follower 的答案會被存下來，可在測驗的歷史記錄中查看每一次測試每一個人的答案。（完成於分支: feature/quiz-show-answers-end-history-20260608；修正「結束後歷史記錄無紀錄」於分支: fix/quiz-attempt-not-saved-on-end-20260608）
 [x] 新增顯示每一個人答案的功能（測驗歷史紀錄中可展開查看每位學員逐題的選擇與正確答案對照）（完成於分支: feature/quiz-history-show-individual-answers-20260608）
+[x] 把歷史記錄移到右側（完成於分支: feature/quiz-history-move-to-right-panel-20260608）
 
 ## 工作記錄
 
@@ -554,3 +555,7 @@
 - 時間: 2026-06-08 18:20:00 +0800
 - 分支: feature/quiz-history-show-individual-answers-20260608
 - 內容: 在「測驗歷史紀錄」面板中，每位學員的作答列新增「查看作答」按鈕，點擊後展開逐題詳細列表：列出該題所有選項，並以顏色區分「正確答案」（綠色）、「已選但錯誤」（紅色）與未選項目（灰色），同時附上題目解析；再次點擊（顯示為「收合」）可收起。展開狀態以 `viewingAttemptId` 追蹤，切換測驗或關閉歷史面板時自動重設，避免殘留錯誤的展開狀態。前端 `npx tsc --noEmit` 與 `npm run build` 皆通過。
+
+- 時間: 2026-06-08 18:40:00 +0800
+- 分支: feature/quiz-history-move-to-right-panel-20260608
+- 內容: 將「測驗歷史紀錄」面板從左側 240px 寬的「已儲存測驗」清單下方移到右側較寬的內容區（與測驗編輯器同一欄）。原本位置狹窄，每位學員展開後的逐題作答內容會被擠成一長條、不易閱讀；移到右側後改用獨立卡片樣式呈現，並讓展開的逐題清單以雙欄格線（`sm:grid-cols-2`）排列，方便一次比對多題作答狀況。前端 `npx tsc --noEmit` 與 `npm run build` 皆通過。
