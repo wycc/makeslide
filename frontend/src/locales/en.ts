@@ -18,7 +18,6 @@ export const en = {
   'settings.logout': 'Sign out',
   'settings.googleLogin': 'Sign in with Google',
   'settings.currentAccount': 'Current account: ',
-  'settings.accountFilePrefix': 'Settings are saved to the account file: ',
   'settings.userCode': 'User code',
   'settings.userCodePlaceholder': 'For example: teacher-101',
   'settings.userCodeAccount': 'Signed in: saved to account settings.',
