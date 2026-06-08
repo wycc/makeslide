@@ -999,14 +999,9 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     }
     const { id, n } = parsed.data;
     const pageRow = db
-      .prepare(
-        `SELECT p.image_path, d.page_count
-           FROM pages p
-           JOIN pdfs d ON d.id = p.pdf_id
-          WHERE p.pdf_id = ? AND p.page_number = ?`,
-      )
-      .get(id, n) as { image_path: string | null; page_count: number | null } | undefined;
-    if (!pageRow?.image_path || !pageRow.page_count) {
+      .prepare(`SELECT image_path, page_uid FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .get(id, n) as { image_path: string | null; page_uid: string } | undefined;
+    if (!pageRow?.image_path) {
       return reply.code(404).send(errorResponse('PAGE_IMAGE_NOT_FOUND', 'Page image not found'));
     }
     let abs: string;
@@ -1021,7 +1016,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     if (!imagePath) {
       return reply.code(404).send(errorResponse('PAGE_IMAGE_NOT_FOUND', 'Page image file missing'));
     }
-    const thumb = await ensurePageThumbnail(id, n, pageRow.page_count, imagePath);
+    const thumb = await ensurePageThumbnail(id, pageRow.page_uid, imagePath);
     if (!thumb) return reply.code(404).send(errorResponse('PAGE_IMAGE_NOT_FOUND', 'Page thumbnail missing'));
     return streamFile(reply, thumb, 'image/jpeg', 'public, max-age=3600');
   });

@@ -1,8 +1,9 @@
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
+import { nanoid } from 'nanoid';
+import { db } from '../../db';
 import { logger } from '../../logger';
 import {
-  formatPageNumber,
   pageTextPath,
   sourcePdfPath,
   sourceTextPath,
@@ -62,11 +63,24 @@ export async function extractText(
   pageCount: number,
   onPage?: (pageNumber: number) => void,
 ): Promise<ExtractTextResult> {
+  const existingUidRows = db
+    .prepare(`SELECT page_number, page_uid FROM pages WHERE pdf_id = ?`)
+    .all(pdfId) as Array<{ page_number: number; page_uid: string }>;
+  const pageUidByNumber = new Map(existingUidRows.map((r) => [r.page_number, r.page_uid]));
+  const uidFor = (pageNumber: number): string => {
+    let uid = pageUidByNumber.get(pageNumber);
+    if (!uid) {
+      uid = nanoid(10);
+      pageUidByNumber.set(pageNumber, uid);
+    }
+    return uid;
+  };
+
   const sourceTxt = sourceTextPath(pdfId);
   if (fs.existsSync(sourceTxt)) {
     const pages: ExtractTextResult['pages'] = [];
     for (let pageNumber = 1; pageNumber <= pageCount; pageNumber++) {
-      const textPath = pageTextPath(pdfId, pageNumber, pageCount);
+      const textPath = pageTextPath(pdfId, uidFor(pageNumber));
       let text = '';
       try {
         text = await fs.promises.readFile(textPath, 'utf8');
@@ -117,7 +131,7 @@ export async function extractText(
         page.cleanup?.();
       }
 
-      const textPath = pageTextPath(pdfId, pageNumber, pageCount);
+      const textPath = pageTextPath(pdfId, uidFor(pageNumber));
       await fs.promises.writeFile(textPath, text, 'utf8');
 
       pages.push({
@@ -131,7 +145,7 @@ export async function extractText(
     // If pdfjs reported fewer pages than pdfinfo (rare), fill the rest with
     // empty files so the page inventory stays consistent.
     for (let pageNumber = limit + 1; pageNumber <= pageCount; pageNumber++) {
-      const textPath = pageTextPath(pdfId, pageNumber, pageCount);
+      const textPath = pageTextPath(pdfId, uidFor(pageNumber));
       await fs.promises.writeFile(textPath, '', 'utf8');
       pages.push({ pageNumber, empty: true, textPath });
       onPage?.(pageNumber);
@@ -142,7 +156,7 @@ export async function extractText(
 
   const emptyCount = pages.filter((p) => p.empty).length;
   logger.info(
-    { pdfId, pageCount, emptyCount, paddedWidth: formatPageNumber(1, pageCount).length },
+    { pdfId, pageCount, emptyCount },
     'Extracted page text',
   );
   return { pages };

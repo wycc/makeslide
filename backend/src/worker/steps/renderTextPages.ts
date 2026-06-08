@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import sharp from 'sharp';
+import { nanoid } from 'nanoid';
 import { coverImagePath, pageImagePath, pageTextPath, sourceTextPath } from '../../services/storage';
 import { generateCoverThumbnail, generatePageThumbnail } from '../../services/thumbnails';
 
@@ -76,11 +77,11 @@ export async function renderTextPages(pdfId: string): Promise<RenderTextPagesRes
   const pagePaths: string[] = [];
 
   for (let i = 0; i < pages.length; i++) {
-    const pageNumber = i + 1;
-    const imagePath = pageImagePath(pdfId, pageNumber, pageCount);
-    const textPath = pageTextPath(pdfId, pageNumber, pageCount);
+    const pageUid = nanoid(10);
+    const imagePath = pageImagePath(pdfId, pageUid);
+    const textPath = pageTextPath(pdfId, pageUid);
     await renderPageImage(pages[i] ?? '', imagePath);
-    await generatePageThumbnail(pdfId, pageNumber, pageCount, imagePath);
+    await generatePageThumbnail(pdfId, pageUid, imagePath);
     await fs.promises.writeFile(textPath, pages[i] ?? '', 'utf8');
     pagePaths.push(imagePath);
   }

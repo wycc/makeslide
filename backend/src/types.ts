@@ -90,6 +90,7 @@ export interface PdfRow {
 export interface PageRow {
   pdf_id: string;
   page_number: number;
+  page_uid: string;
   image_path: string | null;
   text_path: string | null;
   script_path: string | null;

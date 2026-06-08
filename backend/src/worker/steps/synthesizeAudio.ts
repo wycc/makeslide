@@ -12,7 +12,7 @@ import { getOpenAIClient } from '../../services/openai';
 import { synthesizeGeminiSpeech } from '../../services/gemini';
 import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { pageAudioPath, pageScriptPath } from '../../services/storage';
-import { savePageGenerationPrompt } from '../../db';
+import { db, savePageGenerationPrompt } from '../../db';
 
 function runCommand(command: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -184,19 +184,19 @@ function splitByToneMarkers(script: string): Array<{ instruction: string; text: 
 async function synthesizeOnePage(params: {
   pdfId: string;
   pageNumber: number;
-  pageCount: number;
+  pageUid: string;
   script: string;
   voice: string;
   speed: number;
   shouldAbort?: () => boolean;
 }): Promise<SynthesizeAudioPageResult> {
-  const { pdfId, pageNumber, pageCount, script, voice, speed, shouldAbort } = params;
+  const { pdfId, pageNumber, pageUid, script, voice, speed, shouldAbort } = params;
   if (shouldAbort?.()) {
     const err = new Error('CANCELLED');
     (err as Error & { code?: string }).code = 'CANCELLED';
     throw err;
   }
-  const absPath = pageAudioPath(pdfId, pageNumber, pageCount);
+  const absPath = pageAudioPath(pdfId, pageUid);
   const targetPath = absPath.replace(/\.mp3$/i, '.m4a');
 
   // Always regenerate audio so updated voice/speed settings reliably apply.
@@ -410,6 +410,10 @@ export async function synthesizeAudio(
   opts: SynthesizeAudioOptions,
 ): Promise<SynthesizeAudioResult> {
   const { pdfId, pageCount, pages, onPage, shouldAbort } = opts;
+  const pageUidRows = db
+    .prepare(`SELECT page_number, page_uid FROM pages WHERE pdf_id = ?`)
+    .all(pdfId) as Array<{ page_number: number; page_uid: string }>;
+  const pageUidByNumber = new Map(pageUidRows.map((r) => [r.page_number, r.page_uid]));
   const voice = opts.voice?.trim() || config.openaiTtsVoice;
   const speed = opts.speed ?? config.openaiTtsSpeed;
   const runtime = getRuntimeAiSettings();
@@ -437,10 +441,12 @@ export async function synthesizeAudio(
     sorted.map((page, idx) =>
       queue.add(async () => {
         try {
+          const uid = pageUidByNumber.get(page.pageNumber);
+          if (!uid) throw new Error(`page_uid not found for page ${page.pageNumber}`);
           const res = await synthesizeOnePage({
             pdfId,
             pageNumber: page.pageNumber,
-            pageCount,
+            pageUid: uid,
             script: page.script,
             voice,
             speed,
@@ -494,9 +500,12 @@ export async function readScriptsForTts(
   pdfId: string,
   pageCount: number,
 ): Promise<Array<{ pageNumber: number; script: string }>> {
+  const pageUidRows = db
+    .prepare(`SELECT page_number, page_uid FROM pages WHERE pdf_id = ? AND page_number <= ? ORDER BY page_number ASC`)
+    .all(pdfId, pageCount) as Array<{ page_number: number; page_uid: string }>;
   const out: Array<{ pageNumber: number; script: string }> = [];
-  for (let n = 1; n <= pageCount; n++) {
-    const p = pageScriptPath(pdfId, n, pageCount);
+  for (const { page_number: n, page_uid: uid } of pageUidRows) {
+    const p = pageScriptPath(pdfId, uid);
     try {
       const content = await fs.promises.readFile(p, 'utf8');
       out.push({ pageNumber: n, script: content });

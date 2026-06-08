@@ -9,7 +9,7 @@ import { db, savePageGenerationPrompt } from '../../db';
 import { callChatJSON, type TokenUsage } from '../../services/openai';
 import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { loadPromptTemplate, renderPromptTemplate } from '../../services/promptTemplates';
-import { pageScriptPath, pageTextPath, pdfDir } from '../../services/storage';
+import { pageScriptPath, pdfDir } from '../../services/storage';
 import { commitPresentationFile } from '../../services/presentationGit';
 
 export interface ScriptPageResult {
@@ -504,26 +504,11 @@ function buildDeckRewriteUserText(
   return lines.join('\n');
 }
 
-async function readPageText(
-  pdfId: string,
-  pageNumber: number,
-  pageCount: number,
-): Promise<string> {
-  const p = pageTextPath(pdfId, pageNumber, pageCount);
-  try {
-    return await fs.promises.readFile(p, 'utf8');
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return '';
-    throw err;
-  }
-}
-
 async function readExistingScript(
   pdfId: string,
-  pageNumber: number,
-  pageCount: number,
+  pageUid: string,
 ): Promise<string | null> {
-  const p = pageScriptPath(pdfId, pageNumber, pageCount);
+  const p = pageScriptPath(pdfId, pageUid);
   try {
     const content = await fs.promises.readFile(p, 'utf8');
     return content.trim().length > 0 ? content : null;
@@ -553,6 +538,15 @@ export async function generateScript(
   opts: GenerateScriptOptions,
 ): Promise<GenerateScriptResult> {
   const { pdfId, pageCount, pages, onPage, userPrompt, shouldAbort } = opts;
+  const pageUidRows = db
+    .prepare(`SELECT page_number, page_uid FROM pages WHERE pdf_id = ?`)
+    .all(pdfId) as Array<{ page_number: number; page_uid: string }>;
+  const pageUidByNumber = new Map(pageUidRows.map((r) => [r.page_number, r.page_uid]));
+  const uidFor = (pageNumber: number): string => {
+    const uid = pageUidByNumber.get(pageNumber);
+    if (!uid) throw new Error(`page_uid not found for page ${pageNumber}`);
+    return uid;
+  };
   const extraSourcesRows = db
     .prepare(
       `SELECT source_kind, source_name, content_text
@@ -571,7 +565,7 @@ export async function generateScript(
     .filter((x) => x.trim().length > 0)
     .join('\n\n');
   if (pages[0]) {
-    const firstScriptPath = pageScriptPath(pdfId, pages[0].pageNumber, pageCount);
+    const firstScriptPath = pageScriptPath(pdfId, uidFor(pages[0].pageNumber));
     await fs.promises.mkdir(path.dirname(firstScriptPath), { recursive: true });
   }
   const targetChars = opts.maxCharsPerPage ?? config.openaiScriptTargetChars;
@@ -615,12 +609,12 @@ export async function generateScript(
     const nextInfo = pages[i + 1];
     const pageStartedAt = new Date().toISOString();
 
-    const existing = await readExistingScript(pdfId, pageInfo.pageNumber, pageCount);
+    const existing = await readExistingScript(pdfId, uidFor(pageInfo.pageNumber));
     if (existing) {
       previousScript = existing;
       results.push({
         pageNumber: pageInfo.pageNumber,
-        scriptPath: pageScriptPath(pdfId, pageInfo.pageNumber, pageCount),
+        scriptPath: pageScriptPath(pdfId, uidFor(pageInfo.pageNumber)),
         script: existing,
         chars: existing.length,
         generatedAt: new Date().toISOString(),
@@ -637,7 +631,7 @@ export async function generateScript(
         startedAt: pageStartedAt,
         endedAt,
         skipped: true,
-        scriptPath: pageScriptPath(pdfId, pageInfo.pageNumber, pageCount),
+        scriptPath: pageScriptPath(pdfId, uidFor(pageInfo.pageNumber)),
       });
       continue;
     }
@@ -754,13 +748,13 @@ export async function generateScript(
         startedAt: pageStartedAt,
         endedAt,
         skipped: true,
-        scriptPath: pageScriptPath(pdfId, pageInfo.pageNumber, pageCount),
+        scriptPath: pageScriptPath(pdfId, uidFor(pageInfo.pageNumber)),
       });
       continue;
     }
 
     const { script, usage, latencyMs } = success;
-    const scriptPath = pageScriptPath(pdfId, pageInfo.pageNumber, pageCount);
+    const scriptPath = pageScriptPath(pdfId, uidFor(pageInfo.pageNumber));
     await writeUtf8Ensured(scriptPath, script);
     const relScript = scriptPath.replace(pdfDir(pdfId) + '/', '');
     void commitPresentationFile(pdfId, relScript, `script: generate page ${pageInfo.pageNumber}`);
@@ -890,11 +884,15 @@ export async function readScripts(
   pdfId: string,
   pageCount: number,
 ): Promise<Array<{ pageNumber: number; script: string }>> {
+  const pageUidRows = db
+    .prepare(`SELECT page_number, page_uid FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`)
+    .all(pdfId) as Array<{ page_number: number; page_uid: string }>;
   const out: Array<{ pageNumber: number; script: string }> = [];
-  for (let n = 1; n <= pageCount; n++) {
+  for (const { page_number: n, page_uid: uid } of pageUidRows) {
+    if (n > pageCount) continue;
     try {
       const content = await fs.promises.readFile(
-        pageScriptPath(pdfId, n, pageCount),
+        pageScriptPath(pdfId, uid),
         'utf8',
       );
       out.push({ pageNumber: n, script: content.trim() });

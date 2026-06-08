@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import { z } from 'zod';
 import { logger } from '../../logger';
+import { db } from '../../db';
 import { type AppLanguage, getRuntimeAiSettings } from '../../services/aiSettings';
 import { callChatJSON, type TokenUsage } from '../../services/openai';
 import { pageScriptPath, pageTextPath } from '../../services/storage';
@@ -33,9 +34,13 @@ async function collectCorpus(
   pdfId: string,
   pageCount: number,
 ): Promise<{ corpus: string; source: 'script' | 'text' }> {
+  const pageUidRows = db
+    .prepare(`SELECT page_number, page_uid FROM pages WHERE pdf_id = ? AND page_number <= ? ORDER BY page_number ASC`)
+    .all(pdfId, pageCount) as Array<{ page_number: number; page_uid: string }>;
+
   const scripts: string[] = [];
-  for (let n = 1; n <= pageCount; n++) {
-    const s = await readFileOrNull(pageScriptPath(pdfId, n, pageCount));
+  for (const { page_uid: uid } of pageUidRows) {
+    const s = await readFileOrNull(pageScriptPath(pdfId, uid));
     if (s && s.trim()) scripts.push(s.trim());
   }
   if (scripts.length > 0) {
@@ -43,8 +48,8 @@ async function collectCorpus(
   }
   // Fallback: use extracted text if no scripts exist.
   const texts: string[] = [];
-  for (let n = 1; n <= pageCount; n++) {
-    const t = await readFileOrNull(pageTextPath(pdfId, n, pageCount));
+  for (const { page_uid: uid } of pageUidRows) {
+    const t = await readFileOrNull(pageTextPath(pdfId, uid));
     if (t && t.trim()) texts.push(t.trim());
   }
   return { corpus: texts.join('\n\n'), source: 'text' };

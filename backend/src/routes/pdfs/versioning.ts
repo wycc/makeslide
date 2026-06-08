@@ -1,12 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import path from 'node:path';
 import { db } from '../../db';
-import {
-  pageImagePath,
-  pageScriptPath,
-  pdfDir,
-  safeJoinPdfPath,
-} from '../../services/storage';
+import { safeJoinPdfPath } from '../../services/storage';
 import {
   getPresentationFileHistory,
   getPresentationFileAtCommit,
@@ -18,8 +12,15 @@ import { readMetadata, writeMetadata } from '../../services/storage';
 
 const HASH_RE = /^[0-9a-f]{7,40}$/;
 
-function pagePad(pageCount: number) {
-  return pageCount > 999 ? 4 : 3;
+function getPageArtifactPaths(
+  pdfId: string,
+  pageNumber: number,
+): { page_uid: string; image_path: string | null; script_path: string | null } | undefined {
+  return db
+    .prepare(`SELECT page_uid, image_path, script_path FROM pages WHERE pdf_id = ? AND page_number = ?`)
+    .get(pdfId, pageNumber) as
+    | { page_uid: string; image_path: string | null; script_path: string | null }
+    | undefined;
 }
 
 export async function registerVersioningRoutes(app: FastifyInstance): Promise<void> {
@@ -30,16 +31,10 @@ export async function registerVersioningRoutes(app: FastifyInstance): Promise<vo
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
     }
     const { id, n } = parsed.data;
-    const row = db
-      .prepare(`SELECT page_count FROM pdfs WHERE id = ?`)
-      .get(id) as { page_count: number | null } | undefined;
-    if (!row?.page_count) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    const page = getPageArtifactPaths(id, n);
+    if (!page?.image_path) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
 
-    const relPath = path.posix.join(
-      'pages',
-      `${String(n).padStart(pagePad(row.page_count), '0')}.jpg`,
-    );
-    const history = await getPresentationFileHistory(id, relPath);
+    const history = await getPresentationFileHistory(id, page.image_path);
     return reply.send({ history });
   });
 
@@ -50,16 +45,10 @@ export async function registerVersioningRoutes(app: FastifyInstance): Promise<vo
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
     }
     const { id, n } = parsed.data;
-    const row = db
-      .prepare(`SELECT page_count FROM pdfs WHERE id = ?`)
-      .get(id) as { page_count: number | null } | undefined;
-    if (!row?.page_count) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    const page = getPageArtifactPaths(id, n);
+    if (!page?.script_path) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
 
-    const relPath = path.posix.join(
-      'pages',
-      `${String(n).padStart(pagePad(row.page_count), '0')}.script.txt`,
-    );
-    const history = await getPresentationFileHistory(id, relPath);
+    const history = await getPresentationFileHistory(id, page.script_path);
     return reply.send({ history });
   });
 
@@ -71,17 +60,11 @@ export async function registerVersioningRoutes(app: FastifyInstance): Promise<vo
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid params'));
     }
     const { id, n } = parsed.data;
-    const row = db
-      .prepare(`SELECT page_count FROM pdfs WHERE id = ?`)
-      .get(id) as { page_count: number | null } | undefined;
-    if (!row?.page_count) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    const page = getPageArtifactPaths(id, n);
+    if (!page?.script_path) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
 
-    const relPath = path.posix.join(
-      'pages',
-      `${String(n).padStart(pagePad(row.page_count), '0')}.script.txt`,
-    );
     try {
-      const buf = await getPresentationFileAtCommit(id, relPath, hash);
+      const buf = await getPresentationFileAtCommit(id, page.script_path, hash);
       reply.header('content-type', 'text/plain; charset=utf-8');
       return reply.send(buf.toString('utf8'));
     } catch {
@@ -97,17 +80,11 @@ export async function registerVersioningRoutes(app: FastifyInstance): Promise<vo
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid params'));
     }
     const { id, n } = parsed.data;
-    const row = db
-      .prepare(`SELECT page_count FROM pdfs WHERE id = ?`)
-      .get(id) as { page_count: number | null } | undefined;
-    if (!row?.page_count) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    const page = getPageArtifactPaths(id, n);
+    if (!page?.image_path) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
 
-    const relPath = path.posix.join(
-      'pages',
-      `${String(n).padStart(pagePad(row.page_count), '0')}.jpg`,
-    );
     try {
-      const buf = await getPresentationFileAtCommit(id, relPath, hash);
+      const buf = await getPresentationFileAtCommit(id, page.image_path, hash);
       reply.header('content-type', 'image/jpeg');
       reply.header('cache-control', 'no-store');
       return reply.send(buf);
@@ -124,25 +101,19 @@ export async function registerVersioningRoutes(app: FastifyInstance): Promise<vo
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid params'));
     }
     const { id, n } = parsed.data;
-    const row = db
-      .prepare(`SELECT page_count FROM pdfs WHERE id = ?`)
-      .get(id) as { page_count: number | null } | undefined;
-    if (!row?.page_count) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    const page = getPageArtifactPaths(id, n);
+    if (!page?.image_path) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
 
-    const relPath = path.posix.join(
-      'pages',
-      `${String(n).padStart(pagePad(row.page_count), '0')}.jpg`,
-    );
     try {
       await restorePresentationFile(
         id,
-        relPath,
+        page.image_path,
         hash,
         `image: restore page ${n} to ${hash.slice(0, 7)}`,
       );
       // Regenerate thumbnail
-      const absPath = safeJoinPdfPath(id, relPath);
-      await generatePageThumbnail(id, n, row.page_count, absPath);
+      const absPath = safeJoinPdfPath(id, page.image_path);
+      await generatePageThumbnail(id, page.page_uid, absPath);
 
       const now = nowIso();
       db.prepare(`UPDATE pages SET updated_at = ? WHERE pdf_id = ? AND page_number = ?`).run(now, id, n);
@@ -178,19 +149,13 @@ export async function registerVersioningRoutes(app: FastifyInstance): Promise<vo
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid params'));
     }
     const { id, n } = parsed.data;
-    const row = db
-      .prepare(`SELECT page_count FROM pdfs WHERE id = ?`)
-      .get(id) as { page_count: number | null } | undefined;
-    if (!row?.page_count) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    const page = getPageArtifactPaths(id, n);
+    if (!page?.script_path) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
 
-    const relPath = path.posix.join(
-      'pages',
-      `${String(n).padStart(pagePad(row.page_count), '0')}.script.txt`,
-    );
     try {
       await restorePresentationFile(
         id,
-        relPath,
+        page.script_path,
         hash,
         `script: restore page ${n} to ${hash.slice(0, 7)}`,
       );
@@ -200,7 +165,7 @@ export async function registerVersioningRoutes(app: FastifyInstance): Promise<vo
       db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(now, id);
 
       // Read restored script content to return to client
-      const scriptContent = (await getPresentationFileAtCommit(id, relPath, hash)).toString('utf8');
+      const scriptContent = (await getPresentationFileAtCommit(id, page.script_path, hash)).toString('utf8');
 
       try {
         const meta = await readMetadata(id);

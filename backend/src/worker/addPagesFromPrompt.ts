@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
+import { nanoid } from 'nanoid';
 import { db } from '../db';
 import { logger } from '../logger';
 import {
@@ -10,7 +11,6 @@ import {
   pagesDir,
   pdfDir,
   readMetadata,
-  renumberPageArtifacts,
   writeMetadata,
 } from '../services/storage';
 import { callChatJSON } from '../services/openai';
@@ -18,7 +18,7 @@ import type { PageRow, PdfMetadataPage, PdfRow } from '../types';
 import { renderTextPagesWithLlm } from './steps/renderTextPagesWithLlm';
 import { generateScript } from './steps/generateScript';
 import { synthesizeAudio } from './steps/synthesizeAudio';
-import { rewritePagePathsToMatchNumber, shiftChildPageNumbers } from '../routes/pdfs/shared';
+import { shiftChildPageNumbers } from '../routes/pdfs/shared';
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -370,7 +370,6 @@ async function runAddPagesJob(
 
     // Shift existing pages if inserting in the middle
     if (insertAfter < existingPageCount) {
-      const pagesToShift = existingPageCount - insertAfter;
       db.transaction(() => {
         db.prepare(
           `UPDATE pages SET page_number = page_number + ? + 100000 WHERE pdf_id = ? AND page_number > ?`,
@@ -380,36 +379,29 @@ async function runAddPagesJob(
           `UPDATE pages SET page_number = page_number - 100000 WHERE pdf_id = ? AND page_number > ?`,
         ).run(pdfId, insertAfter + 100000);
         shiftChildPageNumbers(pdfId, -100000, { gt: insertAfter + 100000 });
-        rewritePagePathsToMatchNumber(pdfId, newPageCount);
       })();
-
-      await renumberPageArtifacts(
-        pdfId,
-        existingPageCount,
-        Array.from({ length: pagesToShift }, (_, i) => ({
-          from: existingPageCount - i,
-          to: existingPageCount - i + insertCount,
-        })),
-      );
     }
 
     // Ensure pages directory exists
     await fs.promises.mkdir(pagesDir(pdfId), { recursive: true });
 
     // Write text files and insert DB rows for new pages
+    const newPageUidByNumber = new Map<number, string>();
     for (const page of newPagesData) {
-      const textPath = pageTextPath(pdfId, page.pageNumber, newPageCount);
+      const existing = db
+        .prepare(`SELECT page_number, page_uid FROM pages WHERE pdf_id = ? AND page_number = ?`)
+        .get(pdfId, page.pageNumber) as { page_number: number; page_uid: string } | undefined;
+      const pageUid = existing?.page_uid ?? nanoid(10);
+      newPageUidByNumber.set(page.pageNumber, pageUid);
+      const textPath = pageTextPath(pdfId, pageUid);
       await fs.promises.writeFile(textPath, page.content, 'utf8');
       const relTextPath = path.relative(pdfDir(pdfId), textPath);
-      const existing = db
-        .prepare(`SELECT page_number FROM pages WHERE pdf_id = ? AND page_number = ?`)
-        .get(pdfId, page.pageNumber);
       if (!existing) {
         const now = nowIso();
         db.prepare(
-          `INSERT INTO pages (pdf_id, page_number, text_path, status, created_at, updated_at)
-           VALUES (?, ?, ?, 'pending', ?, ?)`,
-        ).run(pdfId, page.pageNumber, relTextPath, now, now);
+          `INSERT INTO pages (pdf_id, page_number, page_uid, text_path, status, created_at, updated_at)
+           VALUES (?, ?, ?, ?, 'pending', ?, ?)`,
+        ).run(pdfId, page.pageNumber, pageUid, relTextPath, now, now);
       }
     }
 
@@ -429,7 +421,7 @@ async function runAddPagesJob(
     let renderedCount = 0;
     await renderTextPagesWithLlm({
       pdfId,
-      pages: newPagesData,
+      pages: newPagesData.map((p) => ({ ...p, pageUid: newPageUidByNumber.get(p.pageNumber)! })),
       totalPageCount: newPageCount,
       shouldAbort,
       skipCoverUpdate: true,
@@ -458,7 +450,7 @@ async function runAddPagesJob(
       pageNumber: p.pageNumber,
       text: p.content,
       empty: false,
-      imagePath: pageImagePath(pdfId, p.pageNumber, newPageCount),
+      imagePath: pageImagePath(pdfId, newPageUidByNumber.get(p.pageNumber)!),
     }));
 
     const firstNewPage = startPageNumber;
@@ -504,7 +496,7 @@ async function runAddPagesJob(
           progress: { current: scriptCount, total: insertCount },
         });
         // Read script to get preview
-        const scriptPath = pageScriptPath(pdfId, pageNumber, newPageCount);
+        const scriptPath = pageScriptPath(pdfId, newPageUidByNumber.get(pageNumber)!);
         fs.promises.readFile(scriptPath, 'utf8').then((s) => {
           updatePageResult(pdfId, pageNumber, {
             scriptPreview: s.trim().slice(0, 120) || null,

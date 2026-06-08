@@ -11,7 +11,7 @@ import { db, savePageGenerationPrompt } from '../../db';
 
 export interface RenderTextPagesWithLlmOptions {
   pdfId: string;
-  pages: Array<{ pageNumber: number; content: string; slideLabel?: string }>;
+  pages: Array<{ pageNumber: number; pageUid: string; content: string; slideLabel?: string }>;
   /** Override total page count for path naming (used when rendering a subset of pages). Defaults to pages.length. */
   totalPageCount?: number;
   onPage?: (pageNumber: number, imagePath: string, info: RenderTextPageTimingInfo) => void;
@@ -46,6 +46,7 @@ export interface RenderTextPageErrorInfo {
 export interface RenderTextPagesWithLlmResult {
   pageCount: number;
   pagePaths: string[];
+  pageUids: string[];
 }
 
 const IMAGE_GENERATION_MAX_ATTEMPTS = 3;
@@ -146,6 +147,7 @@ export async function renderTextPagesWithLlm(
   const client = getOpenAIClient();
   const pageCount = opts.totalPageCount ?? opts.pages.length;
   const pagePaths: string[] = [];
+  const pageUids: string[] = [];
   const styleRow = db
     .prepare('SELECT image_style_prompt FROM pdfs WHERE id = ?')
     .get(opts.pdfId) as { image_style_prompt?: string | null } | undefined;
@@ -161,17 +163,18 @@ export async function renderTextPagesWithLlm(
     }
     const startedAtMs = Date.now();
     const startedAt = new Date(startedAtMs).toISOString();
-    const imagePath = pageImagePath(opts.pdfId, p.pageNumber, pageCount);
-    const textPath = pageTextPath(opts.pdfId, p.pageNumber, pageCount);
+    const imagePath = pageImagePath(opts.pdfId, p.pageUid);
+    const textPath = pageTextPath(opts.pdfId, p.pageUid);
 
     // Idempotency: if image already exists and non-empty, keep it and skip
     // re-generation. Still sync text file so downstream steps read latest text.
     try {
       const st = await fs.promises.stat(imagePath);
       if (st.isFile() && st.size > 0) {
-        await ensurePageThumbnail(opts.pdfId, p.pageNumber, pageCount, imagePath);
+        await ensurePageThumbnail(opts.pdfId, p.pageUid, imagePath);
         await fs.promises.writeFile(textPath, p.content, 'utf8');
         pagePaths.push(imagePath);
+        pageUids.push(p.pageUid);
         logger.info(
           {
             pdfId: opts.pdfId,
@@ -381,7 +384,7 @@ export async function renderTextPagesWithLlm(
     }
 
     await fs.promises.writeFile(imagePath, Buffer.from(b64, 'base64'));
-    await generatePageThumbnail(opts.pdfId, p.pageNumber, pageCount, imagePath);
+    await generatePageThumbnail(opts.pdfId, p.pageUid, imagePath);
     await fs.promises.writeFile(textPath, p.content, 'utf8');
     const dir = pdfDir(opts.pdfId);
     const relImage = path.relative(dir, imagePath);
@@ -393,6 +396,7 @@ export async function renderTextPagesWithLlm(
     const endedAt = new Date().toISOString();
     const latencyMs = Date.parse(endedAt) - Date.parse(startedAt);
     pagePaths.push(imagePath);
+    pageUids.push(p.pageUid);
     logger.info(
         {
           pdfId: opts.pdfId,
@@ -434,5 +438,5 @@ export async function renderTextPagesWithLlm(
     await generateCoverThumbnail(opts.pdfId, coverPath);
   }
 
-  return { pageCount, pagePaths };
+  return { pageCount, pagePaths, pageUids };
 }

@@ -175,8 +175,8 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
 
       if (Array.isArray(metadata.pages) && metadata.pages.length > 0) {
         const insertPage = db.prepare(
-          `INSERT INTO pages (pdf_id, page_number, image_path, text_path, script_path, audio_path, status, error_message, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO pages (pdf_id, page_number, page_uid, image_path, text_path, script_path, audio_path, status, error_message, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         );
         for (const p of metadata.pages) {
           const pageNumber = typeof p.page_number === 'number' && Number.isFinite(p.page_number)
@@ -191,6 +191,7 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
           insertPage.run(
             id,
             pageNumber,
+            nanoid(10),
             imagePath,
             textPath,
             scriptPath,
