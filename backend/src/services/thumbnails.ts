@@ -17,11 +17,10 @@ async function writeJpegThumbnail(sourcePath: string, thumbnailPath: string, wid
 
 export async function generatePageThumbnail(
   pdfId: string,
-  pageNumber: number,
-  pageCount: number,
+  pageUid: string,
   sourcePath: string,
 ): Promise<string> {
-  return writeJpegThumbnail(sourcePath, pageThumbnailPath(pdfId, pageNumber, pageCount), PAGE_THUMBNAIL_WIDTH_PX);
+  return writeJpegThumbnail(sourcePath, pageThumbnailPath(pdfId, pageUid), PAGE_THUMBNAIL_WIDTH_PX);
 }
 
 export async function generateCoverThumbnail(pdfId: string, sourcePath = coverImagePath(pdfId)): Promise<string> {
@@ -30,14 +29,13 @@ export async function generateCoverThumbnail(pdfId: string, sourcePath = coverIm
 
 export async function ensurePageThumbnail(
   pdfId: string,
-  pageNumber: number,
-  pageCount: number,
+  pageUid: string,
   sourcePath: string,
 ): Promise<string | null> {
-  const thumbnailPath = pageThumbnailPath(pdfId, pageNumber, pageCount);
+  const thumbnailPath = pageThumbnailPath(pdfId, pageUid);
   if (fs.existsSync(thumbnailPath)) return thumbnailPath;
   if (!fs.existsSync(sourcePath)) return null;
-  return generatePageThumbnail(pdfId, pageNumber, pageCount, sourcePath);
+  return generatePageThumbnail(pdfId, pageUid, sourcePath);
 }
 
 export async function ensureCoverThumbnail(pdfId: string, sourcePath = coverImagePath(pdfId)): Promise<string | null> {

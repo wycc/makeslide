@@ -1029,22 +1029,23 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
 
       const pages = db
         .prepare(
-          `SELECT pdf_id, page_number, image_path, text_path, script_path,
+          `SELECT pdf_id, page_number, page_uid, image_path, text_path, script_path,
                   audio_path, audio_duration_seconds, status, error_message,
                   created_at, updated_at
              FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
         )
         .all(id) as PageRow[];
       const insertPage = db.prepare(
-        `INSERT INTO pages (pdf_id, page_number, image_path, text_path, script_path,
+        `INSERT INTO pages (pdf_id, page_number, page_uid, image_path, text_path, script_path,
                             audio_path, audio_duration_seconds, status, error_message,
                             created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       );
       for (const p of pages) {
         insertPage.run(
           newId,
           p.page_number,
+          p.page_uid,
           p.image_path,
           p.text_path,
           p.script_path,

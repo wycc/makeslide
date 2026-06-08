@@ -78,11 +78,14 @@ function rowToQuiz(row: QuizSetRow) {
 
 async function readPageContext(pdfId: string, pageCount: number | null): Promise<string> {
   const count = Math.max(0, pageCount ?? 0);
+  const pageRows = db
+    .prepare(`SELECT page_number, page_uid FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`)
+    .all(pdfId) as Array<{ page_number: number; page_uid: string }>;
   const chunks: string[] = [];
-  for (let page = 1; page <= count; page += 1) {
+  for (const { page_number: page, page_uid: uid } of pageRows.slice(0, count || pageRows.length)) {
     const [text, script] = await Promise.all([
-      fs.readFile(pageTextPath(pdfId, page, count), 'utf8').catch(() => ''),
-      fs.readFile(pageScriptPath(pdfId, page, count), 'utf8').catch(() => ''),
+      fs.readFile(pageTextPath(pdfId, uid), 'utf8').catch(() => ''),
+      fs.readFile(pageScriptPath(pdfId, uid), 'utf8').catch(() => ''),
     ]);
     const body = [`投影片文字：${text.trim() || '（無）'}`, `逐字稿：${script.trim() || '（無）'}`].join('\n');
     chunks.push(`第 ${page} 頁\n${body}`);

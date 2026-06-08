@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import ffmpegStatic from 'ffmpeg-static';
+import { db } from '../../db';
 import { pageAudioPath, pageImagePath, videoPath } from '../../services/storage';
 import { runCommand } from '../poppler';
 
@@ -21,10 +22,14 @@ export interface GenerateVideoResult {
 export async function generateVideo(
   input: GenerateVideoInput,
 ): Promise<GenerateVideoResult> {
-  const { pdfId, pageCount, pageNumbers, onProgress } = input;
+  const { pdfId, pageNumbers, onProgress } = input;
   if (pageNumbers.length === 0) {
     throw new Error('No pages available for video rendering');
   }
+  const pageUidRows = db
+    .prepare(`SELECT page_number, page_uid FROM pages WHERE pdf_id = ?`)
+    .all(pdfId) as Array<{ page_number: number; page_uid: string }>;
+  const pageUidByNumber = new Map(pageUidRows.map((r) => [r.page_number, r.page_uid]));
 
   const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'makeslide-ffmpeg-'));
   const concatFile = path.join(tmpDir, 'concat.txt');
@@ -36,8 +41,10 @@ export async function generateVideo(
     for (let i = 0; i < pageNumbers.length; i++) {
       const pageNumber = pageNumbers[i];
       if (!pageNumber) continue;
-      const image = pageImagePath(pdfId, pageNumber, pageCount);
-      const audio = pageAudioPath(pdfId, pageNumber, pageCount);
+      const uid = pageUidByNumber.get(pageNumber);
+      if (!uid) continue;
+      const image = pageImagePath(pdfId, uid);
+      const audio = pageAudioPath(pdfId, uid);
       const segment = path.join(segmentsDir, `${String(i + 1).padStart(4, '0')}.mp4`);
 
       await runCommand(FFMPEG, [

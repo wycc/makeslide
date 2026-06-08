@@ -27,7 +27,6 @@ import {
   RewriteScriptBodySchema,
   errorResponse,
   nowIso,
-  rewritePagePathsToMatchNumber,
   shiftChildPageNumbers,
 } from './shared';
 import {
@@ -36,8 +35,8 @@ import {
   pageThumbnailPath,
   pageScriptPath,
   pageTextPath,
+  pageAudioPath,
   readMetadata,
-  renumberPageArtifacts,
   writeMetadata,
   pdfDir,
 } from '../../services/storage';
@@ -265,6 +264,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     }
     const inserted = after + 1;
     const now = nowIso();
+    const pageUid = nanoid(10);
     const tx = db.transaction(() => {
       db.prepare(
         `UPDATE pages
@@ -279,29 +279,24 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       ).run(id, after + 100000);
       shiftChildPageNumbers(id, -99999, { gt: after + 100000 });
       db.prepare(
-        `INSERT INTO pages (pdf_id, page_number, image_path, text_path, script_path, audio_path, audio_duration_seconds, status, error_message, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, NULL, 'audio_ready', NULL, ?, ?)`,
+        `INSERT INTO pages (pdf_id, page_number, page_uid, image_path, text_path, script_path, audio_path, audio_duration_seconds, status, error_message, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'audio_ready', NULL, ?, ?)`,
       ).run(
         id,
         inserted,
-        `pages/${String(inserted).padStart(oldCount > 999 ? 4 : 3, '0')}.jpg`,
-        `pages/${String(inserted).padStart(oldCount > 999 ? 4 : 3, '0')}.text.txt`,
-        `pages/${String(inserted).padStart(oldCount > 999 ? 4 : 3, '0')}.script.txt`,
-        `pages/${String(inserted).padStart(oldCount > 999 ? 4 : 3, '0')}.m4a`,
+        pageUid,
+        `pages/${pageUid}.jpg`,
+        `pages/${pageUid}.text.txt`,
+        `pages/${pageUid}.script.txt`,
+        `pages/${pageUid}.m4a`,
         now,
         now,
       );
       db.prepare(`UPDATE pdfs SET page_count = ?, updated_at = ? WHERE id = ?`).run(oldCount + 1, now, id);
-      rewritePagePathsToMatchNumber(id, oldCount + 1);
     });
 
     try {
       tx();
-      await renumberPageArtifacts(
-        id,
-        oldCount,
-        Array.from({ length: oldCount - after }, (_, i) => ({ from: oldCount - i, to: oldCount - i + 1 })),
-      );
       await sharp({
         create: {
           width: 1920,
@@ -311,10 +306,10 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         },
       })
         .jpeg({ quality: 82, mozjpeg: true })
-        .toFile(pageImagePath(id, inserted, oldCount + 1));
-      await generatePageThumbnail(id, inserted, oldCount + 1, pageImagePath(id, inserted, oldCount + 1));
-      await fs.promises.writeFile(pageTextPath(id, inserted, oldCount + 1), '', 'utf8');
-      await fs.promises.writeFile(pageScriptPath(id, inserted, oldCount + 1), '', 'utf8');
+        .toFile(pageImagePath(id, pageUid));
+      await generatePageThumbnail(id, pageUid, pageImagePath(id, pageUid));
+      await fs.promises.writeFile(pageTextPath(id, pageUid), '', 'utf8');
+      await fs.promises.writeFile(pageScriptPath(id, pageUid), '', 'utf8');
       const meta = await readMetadata(id);
       if (meta) {
         meta.page_count = oldCount + 1;
@@ -384,17 +379,17 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     order.splice(toIdx, 0, moved);
 
     const now = nowIso();
-    const updates: Array<{ from: number; to: number }> = [];
     const tx = db.transaction(() => {
       // Step 1: shift all pages (and child tables) to temp range to avoid pk collisions
       db.prepare(`UPDATE pages SET page_number = page_number + 100000 WHERE pdf_id = ?`).run(id);
       shiftChildPageNumbers(id, 100000, 'all');
       // Step 2: move each page (and its child rows) to the final position
+      // (file paths are keyed by the page's stable page_uid, not its number,
+      // so this is a pure DB reorder — no artifact files need to move)
       for (let i = 0; i < order.length; i++) {
         const src = order[i];
         if (src == null) continue;
         const dst = i + 1;
-        updates.push({ from: src, to: dst });
         db.prepare(`UPDATE pages SET page_number = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`).run(
           dst,
           now,
@@ -408,12 +403,10 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         );
       }
       db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(now, id);
-      rewritePagePathsToMatchNumber(id, pageCount);
     });
 
     try {
       tx();
-      await renumberPageArtifacts(id, pageCount, updates);
       const meta = await readMetadata(id);
       if (meta) {
         const metaRows = db
@@ -463,20 +456,19 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     }
 
     const pageRow = db
-      .prepare(`SELECT page_number FROM pages WHERE pdf_id = ? AND page_number = ?`)
-      .get(id, n) as { page_number: number } | undefined;
+      .prepare(`SELECT page_number, page_uid FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .get(id, n) as { page_number: number; page_uid: string } | undefined;
     if (!pageRow) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
 
     const now = nowIso();
     const newCount = oldCount - 1;
-    const updates = Array.from({ length: oldCount - n }, (_, i) => ({ from: n + i + 1, to: n + i }));
+    const deletedUid = pageRow.page_uid;
     const filesToDelete = [
-      pageImagePath(id, n, oldCount),
-      pageThumbnailPath(id, n, oldCount),
-      pageTextPath(id, n, oldCount),
-      pageScriptPath(id, n, oldCount),
-      path.join(path.dirname(pageImagePath(id, n, oldCount)), `${String(n).padStart(oldCount > 999 ? 4 : 3, '0')}.png`),
-      path.join(path.dirname(pageImagePath(id, n, oldCount)), `${String(n).padStart(oldCount > 999 ? 4 : 3, '0')}.m4a`),
+      pageImagePath(id, deletedUid),
+      pageThumbnailPath(id, deletedUid),
+      pageTextPath(id, deletedUid),
+      pageScriptPath(id, deletedUid),
+      pageAudioPath(id, deletedUid),
     ];
 
     const tx = db.transaction(() => {
@@ -489,13 +481,11 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
           WHERE pdf_id = ? AND page_number > ?`,
       ).run(now, id, n);
       db.prepare(`UPDATE pdfs SET page_count = ?, updated_at = ? WHERE id = ?`).run(newCount, now, id);
-      rewritePagePathsToMatchNumber(id, newCount);
     });
 
     try {
       tx();
       await Promise.all(filesToDelete.map((file) => fs.promises.rm(file, { force: true })));
-      await renumberPageArtifacts(id, oldCount, updates);
 
       const meta = await readMetadata(id);
       if (meta) {
@@ -532,8 +522,8 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     }
     const { id, n } = parsed.data;
     const pageRow = db
-      .prepare(`SELECT pdf_id, page_number FROM pages WHERE pdf_id = ? AND page_number = ?`)
-      .get(id, n) as { pdf_id: string; page_number: number } | undefined;
+      .prepare(`SELECT pdf_id, page_number, page_uid FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .get(id, n) as { pdf_id: string; page_number: number; page_uid: string } | undefined;
     if (!pageRow) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
 
     const row = db.prepare(`SELECT page_count FROM pdfs WHERE id = ?`).get(id) as { page_count: number | null } | undefined;
@@ -551,19 +541,19 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       return reply.code(400).send(errorResponse('INVALID_MIME', 'Image must be decodable'));
     }
 
-    const outPath = pageImagePath(id, n, row.page_count);
+    const outPath = pageImagePath(id, pageRow.page_uid);
     await sharp(imageBuffer)
       .resize(1920, 1080, { fit: 'contain', background: { r: 255, g: 255, b: 255 } })
       .jpeg({ quality: 82, mozjpeg: true })
       .toFile(outPath);
-    await generatePageThumbnail(id, n, row.page_count, outPath);
+    await generatePageThumbnail(id, pageRow.page_uid, outPath);
     if (n === 1) {
       const coverPath = coverImagePath(id);
       await fs.promises.copyFile(outPath, coverPath);
       await generateCoverThumbnail(id, coverPath);
     }
 
-    const relImagePath = path.posix.join('pages', `${String(n).padStart(row.page_count > 999 ? 4 : 3, '0')}.jpg`);
+    const relImagePath = path.posix.join('pages', `${pageRow.page_uid}.jpg`);
     void commitPresentationFile(id, relImagePath, `image: replace page ${n} (user upload)`);
     const now = nowIso();
     db.prepare(`UPDATE pages SET image_path = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`).run(relImagePath, now, id, n);
@@ -607,8 +597,8 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
     }
     const pageRow = db
-      .prepare(`SELECT image_path, text_path, script_path FROM pages WHERE pdf_id = ? AND page_number = ?`)
-      .get(id, n) as { image_path: string | null; text_path: string | null; script_path: string | null } | undefined;
+      .prepare(`SELECT image_path, text_path, script_path, page_uid FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .get(id, n) as { image_path: string | null; text_path: string | null; script_path: string | null; page_uid: string } | undefined;
     if (!pageRow) {
       return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
     }
@@ -634,7 +624,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
 
       const currentImagePath = pageRow.image_path
         ? safeJoinPdfPath(id, pageRow.image_path)
-        : pageImagePath(id, n, pdfRow.page_count);
+        : pageImagePath(id, pageRow.page_uid);
       const currentImageBuffer = await fs.promises.readFile(currentImagePath);
       const currentImageForEdit = await toFile(currentImageBuffer, `page-${n}.jpg`, { type: 'image/jpeg' });
 
@@ -702,8 +692,8 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     if (!pdfRow?.page_count) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
 
     const pageRow = db
-      .prepare(`SELECT image_path FROM pages WHERE pdf_id = ? AND page_number = ?`)
-      .get(id, n) as { image_path: string | null } | undefined;
+      .prepare(`SELECT image_path, page_uid FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .get(id, n) as { image_path: string | null; page_uid: string } | undefined;
     if (!pageRow) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
 
     let maskBuffer: Buffer | null = null;
@@ -730,7 +720,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       // GPT-Image-2 requires the mask to be the same size as the input image.
       const currentImagePath = pageRow.image_path
         ? safeJoinPdfPath(id, pageRow.image_path)
-        : pageImagePath(id, n, pdfRow.page_count);
+        : pageImagePath(id, pageRow.page_uid);
       const rawSlideBuffer = await fs.promises.readFile(currentImagePath);
       const slideResizedBuffer = await sharp(rawSlideBuffer)
         .resize(1536, 1024, { fit: 'contain', background: { r: 255, g: 255, b: 255 } })

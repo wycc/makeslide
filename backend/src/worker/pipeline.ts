@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
+import { nanoid } from 'nanoid';
 import { config } from '../config';
 import { db } from '../db';
 import { logger } from '../logger';
@@ -234,7 +235,7 @@ function getPdfRow(pdfId: string): PdfRow | undefined {
 function listPageRows(pdfId: string): PageRow[] {
   return db
     .prepare(
-      `SELECT pdf_id, page_number, image_path, text_path, script_path,
+      `SELECT pdf_id, page_number, page_uid, image_path, text_path, script_path,
               audio_path, audio_duration_seconds, status, error_message,
               created_at, updated_at
          FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
@@ -246,6 +247,7 @@ function upsertPage(
   pdfId: string,
   pageNumber: number,
   fields: Partial<{
+    page_uid: string;
     image_path: string | null;
     text_path: string | null;
     script_path: string | null;
@@ -272,12 +274,13 @@ function upsertPage(
   } else {
     db.prepare(
       `INSERT INTO pages
-        (pdf_id, page_number, image_path, text_path, script_path, audio_path,
+        (pdf_id, page_number, page_uid, image_path, text_path, script_path, audio_path,
          audio_duration_seconds, status, error_message, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       pdfId,
       pageNumber,
+      fields.page_uid ?? nanoid(10),
       fields.image_path ?? null,
       fields.text_path ?? null,
       fields.script_path ?? null,
@@ -513,6 +516,7 @@ async function runPipeline(pdfId: string): Promise<void> {
                 const title = titleLine.replace(/^Slide \d+:\s*/i, '').trim();
                 return {
                   pageNumber: p.page_number,
+                  pageUid: p.page_uid,
                   content: textContent,
                   slideLabel: title || undefined,
                 };
@@ -570,11 +574,15 @@ async function runPipeline(pdfId: string): Promise<void> {
             if (!fs.existsSync(pagesDir)) {
               await fs.promises.mkdir(pagesDir, { recursive: true });
             }
+            const splitPageUids = new Map<number, string>();
             for (const page of split.pages) {
               const pageText = page.content;
-              const textPath = pageTextPath(pdfId, page.pageNumber, split.pages.length);
+              const pageUid = nanoid(10);
+              splitPageUids.set(page.pageNumber, pageUid);
+              const textPath = pageTextPath(pdfId, pageUid);
               await fs.promises.writeFile(textPath, pageText, 'utf8');
               upsertPage(pdfId, page.pageNumber, {
+                page_uid: pageUid,
                 status: 'pending',
                 text_path: toRelative(pdfId, textPath),
               });
@@ -600,7 +608,7 @@ async function runPipeline(pdfId: string): Promise<void> {
             setProgress(pdfId, 'rendering', 0, split.pages.length);
             return await renderTextPagesWithLlm({
               pdfId,
-              pages: split.pages,
+              pages: split.pages.map((p) => ({ ...p, pageUid: splitPageUids.get(p.pageNumber)! })),
               onPage: (n, imagePath, info) => {
                 const h = textImageHandles.get(n) ?? startArtifact({ run, pageNumber: n, artifact: 'image', reason: runType === 'resume' ? 'resume' : 'initial', metadata: { source_type: 'text', precision: 'step_timing' } });
                 textImageHandles.set(n, h);
@@ -660,6 +668,7 @@ async function runPipeline(pdfId: string): Promise<void> {
             metadata: { precision: 'batch_average', reason: 'pdftoppm renders pages in one batch' },
           });
           upsertPage(pdfId, pageNumber, {
+            page_uid: r.pageUids[i],
             image_path: toRelative(pdfId, abs),
             status: 'rendered',
           });
@@ -751,9 +760,11 @@ async function runPipeline(pdfId: string): Promise<void> {
     } else {
       // Rebuild textResult from disk + metadata on resume.
       const existingMeta = (await readMetadata(pdfId)) ?? null;
+      const resumePageRows = listPageRows(pdfId);
       textResult = [];
       for (let n = 1; n <= pageCount; n++) {
-        const tp = pageTextPath(pdfId, n, pageCount);
+        const pr = resumePageRows.find((p) => p.page_number === n);
+        const tp = pr?.text_path ? path.join(pdfDir(pdfId), pr.text_path) : pageTextPath(pdfId, pr!.page_uid);
         const empty = !!existingMeta?.pages.find((p) => p.page_number === n)?.text_empty;
         textResult.push({ pageNumber: n, empty, textPath: tp });
       }
@@ -801,10 +812,11 @@ async function runPipeline(pdfId: string): Promise<void> {
       setProgress(pdfId, 'rendering', 0, split.pages.length);
       await persistMetadata(pdfId);
 
+      const resplitPageUids = new Map(split.pages.map((p) => [p.pageNumber, nanoid(10)]));
       const textImageHandles = new Map<number, TimingArtifactHandle | null>();
       const rendered = await renderTextPagesWithLlm({
         pdfId,
-        pages: split.pages,
+        pages: split.pages.map((p) => ({ ...p, pageUid: resplitPageUids.get(p.pageNumber)! })),
         onPage: (n, imagePath, info) => {
           const h = textImageHandles.get(n) ?? startArtifact({ run, pageNumber: n, artifact: 'image', reason: runType === 'resume' ? 'resume' : 'initial', metadata: { source_type: 'pdf_fulltext', precision: 'step_timing' } });
           textImageHandles.set(n, h);
@@ -830,6 +842,7 @@ async function runPipeline(pdfId: string): Promise<void> {
           });
           if (status === 'failed') {
             upsertPage(pdfId, n, {
+              page_uid: resplitPageUids.get(n),
               status: 'failed',
               error_message: info.error?.message ?? 'PDF full-text image generation failed',
             });
@@ -837,6 +850,7 @@ async function runPipeline(pdfId: string): Promise<void> {
             return;
           }
           upsertPage(pdfId, n, {
+            page_uid: resplitPageUids.get(n),
             image_path: toRelative(pdfId, imagePath),
             status: 'rendered',
             error_message: null,
@@ -856,13 +870,15 @@ async function runPipeline(pdfId: string): Promise<void> {
       textResult = split.pages.map((p) => ({
         pageNumber: p.pageNumber,
         empty: p.content.trim().length === 0,
-        textPath: pageTextPath(pdfId, p.pageNumber, rebuiltPageCount),
+        textPath: pageTextPath(pdfId, resplitPageUids.get(p.pageNumber)!),
       }));
 
       for (const p of split.pages) {
-        const textPath = pageTextPath(pdfId, p.pageNumber, rebuiltPageCount);
+        const pageUid = resplitPageUids.get(p.pageNumber)!;
+        const textPath = pageTextPath(pdfId, pageUid);
         await fs.promises.writeFile(textPath, p.content, 'utf8');
         upsertPage(pdfId, p.pageNumber, {
+          page_uid: pageUid,
           text_path: toRelative(pdfId, textPath),
           status: 'text_ready',
           error_message: null,
@@ -955,6 +971,8 @@ async function runPipeline(pdfId: string): Promise<void> {
       empty: boolean;
       imagePath: string;
     }> = [];
+    const scriptStagePageRows = listPageRows(pdfId);
+    const scriptStageUidByNumber = new Map(scriptStagePageRows.map((p) => [p.page_number, p.page_uid]));
     for (const t of textResult) {
       let content = '';
       try {
@@ -966,7 +984,7 @@ async function runPipeline(pdfId: string): Promise<void> {
         pageNumber: t.pageNumber,
         text: content,
         empty: t.empty,
-        imagePath: pageImagePath(pdfId, t.pageNumber, pageCount),
+        imagePath: pageImagePath(pdfId, scriptStageUidByNumber.get(t.pageNumber)!),
       });
     }
 

@@ -10,12 +10,7 @@ import {
   coverImagePath,
   coverThumbnailPath,
   createPdfDir,
-  pageAudioPath,
-  pageImagePath,
-  pageScriptPath,
-  pageTextPath,
   readMetadata,
-  renumberPageArtifacts,
   removePdfDir,
   safeJoinPdfPath,
   videoPath,
@@ -453,21 +448,6 @@ export function shiftChildPageNumbers(
       `UPDATE page_polls SET page_number = page_number + ? WHERE pdf_id = ? AND page_number > ?`,
     ).run(delta, pdfId, filter.gt);
   }
-}
-
-export function rewritePagePathsToMatchNumber(pdfId: string, pageCount: number): void {
-  const pad = pageCount > 999 ? 4 : 3;
-  db.prepare(
-    `UPDATE pages
-        SET image_path = 'pages/' || printf('%0${pad}d', page_number) || '.jpg',
-            text_path = 'pages/' || printf('%0${pad}d', page_number) || '.text.txt',
-            script_path = 'pages/' || printf('%0${pad}d', page_number) || '.script.txt',
-            audio_path = CASE
-              WHEN audio_path IS NULL THEN NULL
-              ELSE 'pages/' || printf('%0${pad}d', page_number) || '.m4a'
-            END
-      WHERE pdf_id = ?`,
-  ).run(pdfId);
 }
 
 function coverCacheKey(row: PdfRow): string {

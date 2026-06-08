@@ -269,6 +269,7 @@ interface SnapshotAssetEntry {
 
 interface SnapshotPageEntry {
   page_number: number;
+  page_uid: string;
   db_status: PageStatus;
   db_image_path: string | null;
   db_script_path: string | null;
@@ -314,13 +315,12 @@ function snapshotBackupFilePath(
 
 function targetFilePath(
   pdfId: string,
-  pageNumber: number,
-  pageCount: number,
+  pageUid: string,
   assetType: RegenStepName,
 ): string {
-  if (assetType === 'image') return pageImagePath(pdfId, pageNumber, pageCount);
-  if (assetType === 'script') return pageScriptPath(pdfId, pageNumber, pageCount);
-  return pageAudioPath(pdfId, pageNumber, pageCount);
+  if (assetType === 'image') return pageImagePath(pdfId, pageUid);
+  if (assetType === 'script') return pageScriptPath(pdfId, pageUid);
+  return pageAudioPath(pdfId, pageUid);
 }
 
 /**
@@ -340,11 +340,12 @@ async function createSnapshot(
 
   const pageRows = db
     .prepare(
-      `SELECT page_number, status, image_path, script_path, audio_path, audio_duration_seconds
+      `SELECT page_number, page_uid, status, image_path, script_path, audio_path, audio_duration_seconds
          FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
     )
     .all(pdfId) as Array<{
     page_number: number;
+    page_uid: string;
     status: PageStatus;
     image_path: string | null;
     script_path: string | null;
@@ -356,6 +357,7 @@ async function createSnapshot(
   for (const row of pageRows) {
     const entry: SnapshotPageEntry = {
       page_number: row.page_number,
+      page_uid: row.page_uid,
       db_status: row.status,
       db_image_path: row.image_path,
       db_script_path: row.script_path,
@@ -363,7 +365,7 @@ async function createSnapshot(
       db_audio_duration_seconds: row.audio_duration_seconds,
     };
     for (const assetType of assetTypes) {
-      const src = targetFilePath(pdfId, row.page_number, pageCount, assetType);
+      const src = targetFilePath(pdfId, row.page_uid, assetType);
       let existed = false;
       try {
         await fs.promises.access(src, fs.constants.F_OK);
@@ -452,7 +454,7 @@ export async function rollbackRegenerate(pdfId: string): Promise<{
   // 先還原所有磁碟檔案；任一步驟失敗就拋錯（保留 snapshot 以便重試）。
   for (const entry of manifest.pages) {
     for (const assetType of manifest.asset_types) {
-      const target = targetFilePath(pdfId, entry.page_number, pageCount, assetType);
+      const target = targetFilePath(pdfId, entry.page_uid, assetType);
       const snap = snapshotBackupFilePath(pdfId, entry.page_number, pageCount, assetType);
       const assetEntry = entry[assetType];
       if (!assetEntry) continue;
@@ -928,9 +930,9 @@ async function runRegenerateScripts(
 
   const allPageRows = db
     .prepare(
-      `SELECT page_number, text_path FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
+      `SELECT page_number, page_uid, text_path FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
     )
-    .all(pdfId) as Array<{ page_number: number; text_path: string | null }>;
+    .all(pdfId) as Array<{ page_number: number; page_uid: string; text_path: string | null }>;
   const pageRows = pageNumbers ? allPageRows.filter((p) => pageNumbers.includes(p.page_number)) : allPageRows;
   step.total = pageRows.length;
   const imageQuality = config.openaiImageQuality;
@@ -942,7 +944,7 @@ async function runRegenerateScripts(
   // 刪除既有腳本檔，避免 generateScript 的 idempotent skip 拿到舊內容。
   for (const p of pageRows) {
     try {
-      await fs.promises.rm(pageScriptPath(pdfId, p.page_number, pageCount), {
+      await fs.promises.rm(pageScriptPath(pdfId, p.page_uid), {
         force: true,
       });
     } catch {
@@ -972,7 +974,7 @@ async function runRegenerateScripts(
       pageNumber: p.page_number,
       text,
       empty: text.trim().length === 0,
-      imagePath: pageImagePath(pdfId, p.page_number, pageCount),
+      imagePath: pageImagePath(pdfId, p.page_uid),
     });
   }
 
@@ -1011,10 +1013,8 @@ async function runRegenerateScripts(
 
   // DB + metadata 同步
   const updatedAt = nowIso();
-  const pad = pagePadFor(pageCount);
   for (const p of pageRows) {
-    const padded = String(p.page_number).padStart(pad, '0');
-    const relPath = path.posix.join('pages', `${padded}.script.txt`);
+    const relPath = path.posix.join('pages', `${p.page_uid}.script.txt`);
     db.prepare(
       `UPDATE pages
           SET script_path = ?,
@@ -1029,8 +1029,7 @@ async function runRegenerateScripts(
     const meta = await readMetadata(pdfId);
     if (meta) {
       for (const p of pageRows) {
-        const padded = String(p.page_number).padStart(pad, '0');
-        const relPath = path.posix.join('pages', `${padded}.script.txt`);
+        const relPath = path.posix.join('pages', `${p.page_uid}.script.txt`);
         const mp = meta.pages.find((x) => x.page_number === p.page_number);
         if (mp) {
           mp.script = relPath;
@@ -1062,11 +1061,18 @@ async function runRegenerateAudio(
   const pageCount = pdfRow.page_count ?? 0;
   if (pageCount <= 0) throw new Error('page_count 不可用');
 
+  const audioPageUidRows = db
+    .prepare(`SELECT page_number, page_uid FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`)
+    .all(pdfId) as Array<{ page_number: number; page_uid: string }>;
+  const audioUidByNumber = new Map(audioPageUidRows.map((p) => [p.page_number, p.page_uid]));
+
   // 刪除既有語音，避免 synthesizeAudio idempotent skip 拿到舊音檔。
   const pagesToDelete = pageNumbers ?? Array.from({ length: pageCount }, (_, i) => i + 1);
   for (const n of pagesToDelete) {
+    const uid = audioUidByNumber.get(n);
+    if (!uid) continue;
     try {
-      await fs.promises.rm(pageAudioPath(pdfId, n, pageCount), { force: true });
+      await fs.promises.rm(pageAudioPath(pdfId, uid), { force: true });
     } catch {
       // ignore
     }
@@ -1111,10 +1117,9 @@ async function runRegenerateAudio(
   });
 
   const updatedAt = nowIso();
-  const pad = pagePadFor(pageCount);
   for (const a of res.pages) {
-    const padded = String(a.pageNumber).padStart(pad, '0');
-    const relPath = path.posix.join('pages', `${padded}.m4a`);
+    const uid = audioUidByNumber.get(a.pageNumber)!;
+    const relPath = path.posix.join('pages', `${uid}.m4a`);
     db.prepare(
       `UPDATE pages
           SET audio_path = ?,
@@ -1139,10 +1144,10 @@ async function runRegenerateAudio(
     if (meta) {
       meta.total_audio_duration_seconds = totalAudioDurationSeconds;
       for (const a of res.pages) {
-        const padded = String(a.pageNumber).padStart(pad, '0');
+        const uid = audioUidByNumber.get(a.pageNumber)!;
         const mp = meta.pages.find((x) => x.page_number === a.pageNumber);
         if (mp) {
-          mp.audio = path.posix.join('pages', `${padded}.m4a`);
+          mp.audio = path.posix.join('pages', `${uid}.m4a`);
           mp.audio_duration_seconds = a.durationSeconds;
           mp.audio_generated_at = updatedAt;
           mp.status = 'audio_ready';
@@ -1177,11 +1182,12 @@ async function runRegenerateImages(
 
   const allPageRows = db
     .prepare(
-      `SELECT page_number, text_path, script_path
+      `SELECT page_number, page_uid, text_path, script_path
          FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
     )
     .all(pdfId) as Array<{
     page_number: number;
+    page_uid: string;
     text_path: string | null;
     script_path: string | null;
   }>;
@@ -1232,7 +1238,7 @@ async function runRegenerateImages(
       { base_prompt: basePrompt },
     );
 
-    const currentImagePath = pageImagePath(pdfId, p.page_number, pageCount);
+    const currentImagePath = pageImagePath(pdfId, p.page_uid);
     const currentImageBuffer = await fs.promises.readFile(currentImagePath);
     const currentImageForEdit = await toFile(currentImageBuffer, `page-${p.page_number}.jpg`, { type: 'image/jpeg' });
 
@@ -1280,13 +1286,13 @@ async function runRegenerateImages(
         background: { r: 255, g: 255, b: 255 },
       })
       .jpeg({ quality: 82, mozjpeg: true })
-      .toFile(pageImagePath(pdfId, p.page_number, pageCount));
-    await generatePageThumbnail(pdfId, p.page_number, pageCount, pageImagePath(pdfId, p.page_number, pageCount));
-    const relImg = path.posix.join('pages', `${String(p.page_number).padStart(pagePadFor(pageCount), '0')}.jpg`);
+      .toFile(pageImagePath(pdfId, p.page_uid));
+    await generatePageThumbnail(pdfId, p.page_uid, pageImagePath(pdfId, p.page_uid));
+    const relImg = path.posix.join('pages', `${p.page_uid}.jpg`);
     void commitPresentationFile(pdfId, relImg, `image: regenerate page ${p.page_number}`);
 
     finishArtifact(artifactHandle, 'succeeded', {
-      outputPath: path.posix.join('pages', `${String(p.page_number).padStart(pagePadFor(pageCount), '0')}.jpg`),
+      outputPath: relImg,
       metadata: { job_id: state.job_id, precision: 'inline' },
     });
 

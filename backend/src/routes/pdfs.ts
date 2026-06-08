@@ -9,12 +9,7 @@ import { config, OPENAI_TTS_VOICES } from '../config';
 import {
   coverImagePath,
   createPdfDir,
-  pageAudioPath,
-  pageImagePath,
-  pageScriptPath,
-  pageTextPath,
   readMetadata,
-  renumberPageArtifacts,
   removePdfDir,
   safeJoinPdfPath,
   videoPath,

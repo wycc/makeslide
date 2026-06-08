@@ -1,11 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
+import { nanoid } from 'nanoid';
 import { config } from '../../config';
 import { logger } from '../../logger';
 import {
   coverImagePath,
-  formatPageNumber,
+  pageImagePath,
   pagesDir,
   sourcePdfPath,
 } from '../../services/storage';
@@ -18,11 +19,13 @@ export interface RenderResult {
   pageCount: number;
   /** Absolute paths of the per-page JPEGs, indexed by `pageNumber - 1`. */
   pagePaths: string[];
+  /** Stable page_uid generated for each page, indexed by `pageNumber - 1`. */
+  pageUids: string[];
   coverPath: string;
 }
 
 /**
- * Render every page of a PDF to `storage/<pdfId>/pages/NNN.jpg` using
+ * Render every page of a PDF to `storage/<pdfId>/pages/<page_uid>.jpg` using
  * pdfjs-dist + canvas, then produce a cover thumbnail from page 1.
  */
 export async function renderPages(pdfId: string): Promise<RenderResult> {
@@ -50,14 +53,17 @@ export async function renderPages(pdfId: string): Promise<RenderResult> {
   }
 
   const pagePaths: string[] = [];
+  const pageUids: string[] = [];
   for (let i = 0; i < pages.length; i++) {
     const pageNumber = i + 1;
-    const jpgOut = path.join(outDir, `${formatPageNumber(pageNumber, pageCount)}.jpg`);
+    const pageUid = nanoid(10);
+    const jpgOut = pageImagePath(pdfId, pageUid);
     await sharp(pages[i])
       .jpeg({ quality: 82, mozjpeg: true })
       .toFile(jpgOut);
-    await generatePageThumbnail(pdfId, pageNumber, pageCount, jpgOut);
+    await generatePageThumbnail(pdfId, pageUid, jpgOut);
     pagePaths.push(jpgOut);
+    pageUids.push(pageUid);
   }
 
   // Build cover from page 1
@@ -70,5 +76,5 @@ export async function renderPages(pdfId: string): Promise<RenderResult> {
 
   logger.info({ pdfId, pageCount, coverPath }, 'Rendered pages and cover');
 
-  return { pageCount, pagePaths, coverPath };
+  return { pageCount, pagePaths, pageUids, coverPath };
 }

@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { nanoid } from 'nanoid';
 import Database from 'better-sqlite3';
 import { config } from './config';
 import { logger } from './logger';
@@ -301,6 +302,30 @@ function migrate(): void {
     db.exec(`ALTER TABLE pages ADD COLUMN page_prompt TEXT`);
     logger.info('Added column pages.page_prompt');
   }
+  // `page_uid` is a stable per-page identifier generated once at creation time
+  // and never changed afterwards. Page artifact files on disk are named after
+  // it (e.g. pages/<uid>.jpg) instead of the page number, so reordering pages
+  // only updates `page_number` in the DB — no file renames are ever needed,
+  // which keeps git history (and `--follow`) tracking each slide's actual
+  // content rather than whatever currently occupies a given position.
+  if (!columnExists('pages', 'page_uid')) {
+    db.exec(`ALTER TABLE pages ADD COLUMN page_uid TEXT`);
+    logger.info('Added column pages.page_uid');
+  }
+  const pagesMissingUid = db
+    .prepare(`SELECT pdf_id, page_number FROM pages WHERE page_uid IS NULL`)
+    .all() as Array<{ pdf_id: string; page_number: number }>;
+  if (pagesMissingUid.length > 0) {
+    const setUid = db.prepare(`UPDATE pages SET page_uid = ? WHERE pdf_id = ? AND page_number = ?`);
+    const backfill = db.transaction((rows: typeof pagesMissingUid) => {
+      for (const row of rows) {
+        setUid.run(nanoid(10), row.pdf_id, row.page_number);
+      }
+    });
+    backfill(pagesMissingUid);
+    logger.info({ count: pagesMissingUid.length }, 'Backfilled page_uid for existing pages');
+  }
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_pages_uid ON pages(pdf_id, page_uid)`);
   if (!columnExists('page_polls', 'show_results')) {
     db.exec(`ALTER TABLE page_polls ADD COLUMN show_results INTEGER NOT NULL DEFAULT 1`);
     logger.info('Added column page_polls.show_results');
