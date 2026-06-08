@@ -93,6 +93,7 @@ export default function QuizBuilderPage() {
   const [historySessions, setHistorySessions] = useState<QuizAttemptSession[]>([]);
   const [historyBusy, setHistoryBusy] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [viewingAttemptId, setViewingAttemptId] = useState<number | null>(null);
   const syncClientIdRef = useRef('');
   const lastReportedProgressRef = useRef<{ quizId: number; answeredCount: number; submitted: boolean } | null>(null);
   const submittedAttemptRef = useRef<string | null>(null);
@@ -434,6 +435,7 @@ export default function QuizBuilderPage() {
     async (quizId: number) => {
       if (!pdfId) return;
       setHistoryQuizId(quizId);
+      setViewingAttemptId(null);
       setHistoryBusy(true);
       setHistoryError(null);
       try {
@@ -649,7 +651,7 @@ export default function QuizBuilderPage() {
                     return quiz ? `：${quiz.title}` : '';
                   })()}
                 </h2>
-                <button type="button" onClick={() => { setHistoryQuizId(null); setHistorySessions([]); setHistoryError(null); }} className="text-xs text-slate-500 hover:text-slate-300">關閉</button>
+                <button type="button" onClick={() => { setHistoryQuizId(null); setHistorySessions([]); setHistoryError(null); setViewingAttemptId(null); }} className="text-xs text-slate-500 hover:text-slate-300">關閉</button>
               </div>
               {historyBusy ? <p className="mt-1 text-xs text-slate-500">讀取中…</p> : null}
               {historyError ? <p className="mt-1 text-xs text-rose-400">{historyError}</p> : null}
@@ -664,15 +666,61 @@ export default function QuizBuilderPage() {
                       <span className="ml-2 text-slate-500">（{session.attempts.length} 人作答）</span>
                     </div>
                     <ul className="mt-1.5 space-y-1">
-                      {session.attempts.map((attempt) => (
-                        <li key={attempt.id} className="flex items-center justify-between gap-2 rounded border border-slate-800 bg-slate-900 px-2 py-1">
-                          <span className="truncate text-slate-200">{attempt.code || '匿名學員'}</span>
-                          <span className="text-slate-400">
-                            {attempt.score != null ? `${Math.round(attempt.score * 100) / 100} 分` : '未計分'}
-                            <span className="ml-2 text-slate-500">{new Date(attempt.submitted_at).toLocaleTimeString()}</span>
-                          </span>
-                        </li>
-                      ))}
+                      {session.attempts.map((attempt) => {
+                        const expanded = viewingAttemptId === attempt.id;
+                        const quiz = savedQuizzes.find((q) => q.id === historyQuizId);
+                        return (
+                          <li key={attempt.id} className="rounded border border-slate-800 bg-slate-900 px-2 py-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="truncate text-slate-200">{attempt.code || '匿名學員'}</span>
+                              <span className="flex items-center gap-2 text-slate-400">
+                                {attempt.score != null ? `${Math.round(attempt.score * 100) / 100} 分` : '未計分'}
+                                <span className="text-slate-500">{new Date(attempt.submitted_at).toLocaleTimeString()}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setViewingAttemptId(expanded ? null : attempt.id)}
+                                  className="rounded border border-slate-700 px-1.5 py-0.5 text-[11px] text-slate-300 hover:bg-slate-800"
+                                >
+                                  {expanded ? '收合' : '查看作答'}
+                                </button>
+                              </span>
+                            </div>
+                            {expanded ? (
+                              quiz ? (
+                                <ul className="mt-1.5 space-y-1.5 border-t border-slate-800 pt-1.5">
+                                  {quiz.questions.map((q) => {
+                                    const selected = attempt.answers[q.id] ?? [];
+                                    return (
+                                      <li key={q.id} className="rounded border border-slate-800 bg-slate-950 px-2 py-1.5">
+                                        <p className="text-slate-200">{q.question}</p>
+                                        <ul className="mt-1 space-y-0.5">
+                                          {q.options.map((opt, oIdx) => {
+                                            const isCorrect = q.answer_indices.includes(oIdx);
+                                            const isSelected = selected.includes(oIdx);
+                                            return (
+                                              <li
+                                                key={oIdx}
+                                                className={`rounded px-1.5 py-0.5 ${isCorrect ? 'text-emerald-300' : isSelected ? 'text-rose-300' : 'text-slate-400'}`}
+                                              >
+                                                {isSelected ? '☑' : '☐'} {opt.text}
+                                                {isCorrect ? <span className="ml-1 text-[10px] text-emerald-400">（正確答案）</span> : null}
+                                                {isSelected && !isCorrect ? <span className="ml-1 text-[10px] text-rose-400">（已選但錯誤）</span> : null}
+                                              </li>
+                                            );
+                                          })}
+                                        </ul>
+                                        {q.explanation ? <p className="mt-1 text-[11px] text-slate-500">解析：{q.explanation}</p> : null}
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              ) : (
+                                <p className="mt-1 text-[11px] text-slate-500">找不到題目內容，無法顯示詳細作答。</p>
+                              )
+                            ) : null}
+                          </li>
+                        );
+                      })}
                     </ul>
                   </li>
                 ))}
