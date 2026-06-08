@@ -844,6 +844,20 @@ export async function toggleSyncDisplayedQuestion(
   return (await resp.json()) as { ok: boolean; displayed_question_id: string | null };
 }
 
+export async function submitSyncQuizProgress(
+  id: string,
+  clientId: string,
+  payload: { quiz_id: number; answered_count: number; total_questions: number; submitted?: boolean },
+): Promise<{ ok: boolean }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/sync/quiz/progress`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ client_id: clientId, ...payload }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { ok: boolean };
+}
+
 export async function answerSyncFollowerQuestionsWithAi(
   id: string,
   clientId: string,

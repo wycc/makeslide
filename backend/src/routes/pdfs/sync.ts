@@ -23,9 +23,20 @@ interface SyncSessionState {
   followerQuestions: SyncFollowerQuestion[];
   displayedQuestionId: string | null;
   aiAnswer: SyncAiAnswer | null;
+  quizProgress: Map<string, SyncQuizProgress>;
   updatedAt: string;
   cursorX: number | null;
   cursorY: number | null;
+}
+
+interface SyncQuizProgress {
+  clientId: string;
+  code: string | null;
+  quizId: number;
+  answeredCount: number;
+  totalQuestions: number;
+  submitted: boolean;
+  updatedAt: string;
 }
 
 interface SyncFollowerQuestion {
@@ -166,6 +177,26 @@ function toQuestionResponse(question: SyncFollowerQuestion): SyncFollowerQuestio
   };
 }
 
+function toQuizProgressResponse(progress: SyncQuizProgress): {
+  client_id: string;
+  code: string | null;
+  quiz_id: number;
+  answered_count: number;
+  total_questions: number;
+  submitted: boolean;
+  updated_at: string;
+} {
+  return {
+    client_id: progress.clientId,
+    code: progress.code,
+    quiz_id: progress.quizId,
+    answered_count: progress.answeredCount,
+    total_questions: progress.totalQuestions,
+    submitted: progress.submitted,
+    updated_at: progress.updatedAt,
+  };
+}
+
 function toAiAnswerResponse(answer: SyncAiAnswer | null): (SyncAiAnswer & { question_ids: string[]; created_at: string }) | null {
   if (!answer) return null;
   return {
@@ -193,6 +224,9 @@ function buildStateResponse(session: SyncSessionState, pdfId: string, role: Sync
     follower_questions: followerQuestions,
     questions: followerQuestions,
     displayed_question_id: session.displayedQuestionId,
+    quiz_progress: Array.from(session.quizProgress.values())
+      .filter((p) => p.quizId === session.activeQuizId)
+      .map(toQuizProgressResponse),
     ai_answer: toAiAnswerResponse(session.aiAnswer),
     updated_at: session.updatedAt,
     master_expires_at: session.masterClientId ? new Date(session.masterExpiresAt).toISOString() : null,
@@ -217,6 +251,7 @@ function getSession(pdfId: string): SyncSessionState {
       hit.quizMode = false;
       hit.activeQuizId = null;
       hit.quizShowAnswers = false;
+      hit.quizProgress.clear();
       hit.updatedAt = nowIso();
       upsertPersistedSession(hit);
     }
@@ -240,6 +275,7 @@ function getSession(pdfId: string): SyncSessionState {
     followerQuestions: [],
     displayedQuestionId: null,
     aiAnswer: null,
+    quizProgress: new Map<string, SyncQuizProgress>(),
     updatedAt: persisted?.updated_at ?? nowIso(),
     cursorX: null,
     cursorY: null,
@@ -257,6 +293,7 @@ function pruneExpiredClients(session: SyncSessionState): void {
   for (const [clientId, expiresAt] of session.clients.entries()) {
     if (expiresAt <= now) {
       session.clients.delete(clientId);
+      session.quizProgress.delete(clientId);
     }
   }
 }
@@ -282,6 +319,13 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     question: z.string().trim().min(1).max(500),
   });
   const MasterQuestionActionBodySchema = z.object({ client_id: z.string().trim().min(1).max(128) });
+  const QuizProgressBodySchema = z.object({
+    client_id: z.string().trim().min(1).max(128),
+    quiz_id: z.number().int().positive(),
+    answered_count: z.number().int().min(0),
+    total_questions: z.number().int().min(0),
+    submitted: z.boolean().optional(),
+  });
   const AiAnswerSchema = z.object({ answer: z.string().min(1).max(2000) });
   const UpdateBodySchema = z.object({
     client_id: z.string().trim().min(1).max(128),
@@ -365,6 +409,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     session.currentTime = currentTime;
     if (typeof followerAudioUnlocked === 'boolean') session.followerAudioUnlocked = followerAudioUnlocked;
     if (typeof realtimePollStarted === 'boolean') session.realtimePollStarted = realtimePollStarted;
+    const previousActiveQuizId = session.activeQuizId;
     if (typeof activeQuizId !== 'undefined') session.activeQuizId = activeQuizId;
     if (typeof quizShowAnswers === 'boolean') session.quizShowAnswers = quizShowAnswers;
     if (typeof quizMode === 'boolean') {
@@ -373,6 +418,9 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
         session.activeQuizId = null;
         session.quizShowAnswers = false;
       }
+    }
+    if (session.activeQuizId !== previousActiveQuizId) {
+      session.quizProgress.clear();
     }
     if (typeof cursorX !== 'undefined') session.cursorX = cursorX;
     if (typeof cursorY !== 'undefined') session.cursorY = cursorY;
@@ -408,6 +456,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     const { client_id: clientId } = parsedBody.data;
     const session = getSession(id);
     session.clients.delete(clientId);
+    session.quizProgress.delete(clientId);
     if (session.masterClientId === clientId) {
       session.masterClientId = null;
       session.masterExpiresAt = 0;
@@ -420,10 +469,44 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       session.quizShowAnswers = false;
       session.displayedQuestionId = null;
       session.aiAnswer = null;
+      session.quizProgress.clear();
       session.updatedAt = nowIso();
       upsertPersistedSession(session);
     }
     session.followerCodes.delete(clientId);
+    return reply.send({ ok: true });
+  });
+
+  app.post('/api/pdfs/:id/sync/quiz/progress', async (request, reply) => {
+    const parsedParams = IdParamSchema.safeParse(request.params);
+    const parsedBody = QuizProgressBodySchema.safeParse(request.body);
+    if (!parsedParams.success || !parsedBody.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid sync quiz progress request'));
+    }
+    const { id } = parsedParams.data;
+    if (!ensurePdfExists(id)) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    const { client_id: clientId, quiz_id: quizId, answered_count: answeredCount, total_questions: totalQuestions, submitted } = parsedBody.data;
+    const session = getSession(id);
+    if (roleFor(session, clientId) !== 'follower') {
+      return reply.code(403).send(errorResponse('SYNC_NOT_FOLLOWER', 'Only followers can report quiz progress'));
+    }
+    if (!session.quizMode || session.activeQuizId !== quizId) {
+      return reply.code(409).send(errorResponse('SYNC_QUIZ_NOT_ACTIVE', 'No matching active quiz to report progress for'));
+    }
+    touchClient(session, clientId);
+    const now = nowIso();
+    session.quizProgress.set(clientId, {
+      clientId,
+      code: session.followerCodes.get(clientId) ?? null,
+      quizId,
+      answeredCount,
+      totalQuestions,
+      submitted: submitted ?? false,
+      updatedAt: now,
+    });
+    session.updatedAt = now;
     return reply.send({ ok: true });
   });
 
