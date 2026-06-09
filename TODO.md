@@ -580,3 +580,19 @@
 - 時間: 2026-06-08 19:55:00 +0800
 - 分支: fix/settings-remove-account-file-path-display-20260608
 - 內容: 上一個多帳號設定隔離工作完成後，設定頁會顯示「設定會保存到帳號專屬檔案：/home/.../accounts/<sub>/settings.env」這類伺服器端內部路徑；使用者覺得不需要顯示檔名/路徑，因此移除。`SettingsPage.tsx` 移除 `accountSettingsFile` 狀態與其顯示區塊，只保留「目前帳號：<accountId>」；同時移除前端中/英文語系檔（`zh-TW.ts`/`en.ts`）裡僅供該行顯示用的 `settings.accountFilePrefix` 翻譯字串。前端 `npx tsc --noEmit` 通過。
+
+[x] 重構 PlayPage（檔案過大，5700+ 行單一函式元件），先抽出獨立對話框元件（完成於分支: refactor/playpage-extract-dialogs）
+
+## 工作記錄
+
+- 時間: 2026-06-09 01:40:00 +0800
+- 分支: refactor/playpage-extract-dialogs
+- 內容: PlayPage.tsx 已成長至 5727 行，單一函式元件內含 100+ 個 useState、約 80 個 useCallback/useEffect，且 JSX render 區塊本身就佔約 2800 行，難以閱讀與維護。撰寫分階段重構計畫（階段 1：抽出自包含的 Dialog/Modal 為獨立展示元件；階段 2：把高耦合的狀態群組整理成自訂 Hook，如 useDrawingSync/useFullscreenPlayback/usePollManagement/useVersionHistory；階段 3：拆分主要 JSX render 樹，如全螢幕版面分支、編輯面板），並於本分支完成風險最低的階段 1：把生成設定（`TtsDialog`）、整份簡報圖片風格設定（`ImageStyleDialog`）、選擇重生項目（`RegenAllDialog`）、分享連結（`ShareDialog`）四個內嵌 modal 抽成 `frontend/src/pages/play/` 下接收 props 的展示元件，延續既有的 `formatters`/`PageTimingChips`/`RegenerateProgress` 拆分慣例；同時把 `ImageStyleDialog` 原本內嵌在 `onClick` 中的儲存邏輯抽成 `handleSaveImageStyle` callback。純結構調整不改變任何使用者可見行為，PlayPage.tsx 由 5727 行降為 5464 行。另外在開始重構前，先把分支上既有未提交的 bug 修正（三個 `<DrawingCanvas>` 共用同一個 `drawingCanvasRef` 導致清除手寫等操作可能指向錯誤實例，已拆分為各版面獨立的 ref）提交到 master（commit dfbc259）。前端 `npx tsc --noEmit` 與 `npm run build` 皆通過；因登入需要 Google OAuth、本機無可用測試帳號，未能完成瀏覽器端 e2e 互動驗證，已改以型別檢查、production build 與逐行比對 diff 確認搬移無邏輯變動。階段 2、3 工程量大且狀態間互相依賴複雜，留待後續分支處理。
+
+[x] 繼續重構 PlayPage Stage 2&3（完成於分支: refactor/playpage-hooks-and-subcomponents）
+
+## 工作記錄
+
+- 時間: 2026-06-09 02:15:00 +0800
+- 分支: refactor/playpage-hooks-and-subcomponents
+- 內容: 繼續前一分支（refactor/playpage-extract-dialogs）的重構，完成 Stage 2 與 Stage 3。Stage 2（自訂 Hook）：將版本歷史的 9 個 useState + 3 個 useCallback 抽成 `useVersionHistory({ pdfId, reloadDetail })` hook（115 行），回傳完整的 state 與 handler 物件，並刪除 PlayPage 中 6 個不再需要的 api import。評估 usePollManagement（`handleStopPoll` 呼叫 8 個跨領域 setter）、useFullscreenPlayback（與 sync/drawing 深度耦合）、useDrawingSync（依賴 imageOnlyFullscreen 等播放狀態）後，確認強行抽出只會讓介面更複雜，不做。Stage 3（JSX 子元件，延續 Stage 1 的 dialog 抽離模式）：新增 `VersionHistoryDialog`（105 行，配合 hook 使用）與 `ImagePreviewDialog`（36 行，4 個 props）。詳細評估 FullscreenView（需 50+ props，因 drawingMode/syncEnabled/pollStarted 等狀態彼此交織）與主編輯面板（chatInput 被 4 個不同 handler 共用）後，確認這兩者在不引入 Context/全面重組 state 的前提下無法乾淨抽離，本次不做。PlayPage.tsx 行數累計：5727（原始）→ 5464（Stage 1）→ 5333（本分支），共減少 394 行；pages/play/ 目錄現有 10 個子模組（hook × 1、component × 9）。
