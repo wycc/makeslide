@@ -612,3 +612,11 @@
 - 時間: 2026-06-09 16:00:00 +0800
 - 分支: refactor/playpage-hooks-and-subcomponents
 - 內容: 完成 PlayPage 重構最終階段。將 renderFullscreenView、renderHeader、renderLeftPanel、renderRightPanel 四個 render helpers 提取為真正的 React 元件：`PlayPageFullscreen.tsx`（全螢幕覆蓋層，含繪圖工具列、字幕、測驗互動）、`PlayPageHeader.tsx`（頂部標題欄，含影片/分享/重生狀態）、`PlayPageSlidePanel.tsx`（左側投影片區域，含圖片預覽、逐字稿編輯、提示詞、設定）、`PlayPageSidebar.tsx`（右側側邊欄，含縮圖清單、投票、聊天）。PlayPageContext 補充 5 個原缺少的欄位（`sourceItems`、`hasScriptChanges`、`syncQuestionBusy`、`openVersionHistory`、`activeSentenceRef`），修正 ref 型別（改用 `RefObject<T>` 取代 `RefObject<T | null>`，解決 JSX ref prop 型別不相容，並統一 PlayPage.tsx 中的 `useRef<T>(null)` 宣告），修正 `handleStartPoll` 及 `handleReplaceImageFile` 的函式簽名。`npx tsc --noEmit` 零錯誤，`npx vite build` 成功（472 KB bundle / 1.71s）。PlayPage.tsx 由重構前的 5727 行降至約 3100 行。
+
+[x] PlayPage 重構階段 6：將 PlayPage.tsx 中功能聚焦的 state/effect/handler 抽離為 custom hooks（完成於分支: refactor/playpage-hooks-and-subcomponents）
+
+## 工作記錄
+
+- 時間: 2026-06-09 22:00:00 +0800
+- 分支: refactor/playpage-hooks-and-subcomponents
+- 內容: 繼上次 React 元件分拆後，進一步將 PlayPage.tsx 中剩餘的 useEffect/useCallback 按功能領域抽離為獨立 custom hook，採用 composition root 模式（PlayPage 呼叫各 hook，將回傳物件 spread 進 _ctxValue）。共建立四個 hook：`useRegeneration.ts`（批次重生任務狀態、輪詢、handlers，減少約 350 行）、`useVideoGeneration.ts`（影片產生 busy/url/progress 與輪詢 effects，減少約 60 行）、`usePdfMetadata.ts`（標題、TTS、分享連結、GitHub 同步的 state 與 handlers，減少約 200 行）、`useSlideManagement.ts`（投影片新增/刪除/移動/替換/更新封面，減少約 130 行）。PlayPage.tsx 由約 3100 行降至 2570 行，共減少約 540 行。`npx tsc --noEmit` 零錯誤，`npx vite build` 成功（474 KB bundle / 1.70s）。
