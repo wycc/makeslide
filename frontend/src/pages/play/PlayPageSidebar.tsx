@@ -1,0 +1,652 @@
+import { usePlayPageContext } from './PlayPageContext';
+
+const IMAGE_MSG_PREFIX = '[image] ';
+
+export function PlayPageSidebar() {
+  const {
+    activeTab,
+    qaPanelExpanded, setQaPanelExpanded,
+    isReadOnlyProcessing,
+    detail,
+    currentPage, currentIdx, deckPages, totalPages,
+    slideBusy, slideError,
+    regenJobRunning, regenAllBusy,
+    setRegenAllMsg,
+    setRegenScriptMaxCharsPerPage,
+    setRegenAllDialogOpen,
+    regenSelectedPages, setRegenSelectedPages,
+    handleAddSlideAfterCurrent,
+    handleDeleteCurrentSlide,
+    handleMoveSlide,
+    handleUpdateCoverFromCurrentPage,
+    setShowAddPagesModal,
+    draggingPage, setDraggingPage,
+    thumbLoadUntilIdx, setThumbLoadUntilIdx,
+    withImageBust, handleReplaceImageFile,
+    setCurrentIdx,
+    pagePolls, pollQuestion, setPollQuestion,
+    pollOptionsText, setPollOptionsText,
+    pollBusy, pollError, pollVotes,
+    pollSettingsOpen, setPollSettingsOpen,
+    pollStarted,
+    syncEnabled, syncRole,
+    syncDisplayedPollId,
+    syncPollShowResults, setSyncPollShowResults,
+    handleStartPoll, handleStopPoll,
+    handleVotePoll, handleResetPollVotes,
+    handleDeletePoll, handleCreatePoll,
+    handleSelectDisplayedPoll,
+    chatHistory,
+    chatInput, setChatInput,
+    chatBusy, chatError,
+    hasChatInput,
+    chatPastedImage, setChatPastedImage,
+    chatPastedImageUrl, setChatPastedImageUrl,
+    clearChatPastedImage,
+    chatInpaintBusy, chatInpaintError,
+    imageEditSelectMode, setImageEditSelectMode,
+    imageEditRegion, clearImageEditRegion,
+    handleSendChat, handleClearChat,
+    handleInpaintImage, handleRegenerateImageWithPrompt,
+    handleRewriteScript,
+    rewriteBusy, rewriteError,
+    setImagePreviewUrl,
+    setImagePreviewPageNumber,
+    setImagePreviewOpen,
+  } = usePlayPageContext();
+
+  return (
+    <aside
+      className={`max-h-[calc(100vh-7rem)] w-full shrink-0 flex-col gap-3 overflow-y-auto md:flex md:w-[360px] ${
+        activeTab === 'qa' ? 'flex' : 'hidden'
+      }`}
+    >
+      <section className={`rounded-lg border border-slate-800 bg-slate-900/40 ${qaPanelExpanded ? 'md:hidden' : ''}`}>
+        <div className="border-b border-slate-800 px-4 py-3">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold text-slate-300">🧩 投影片管理</h2>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (isReadOnlyProcessing) return;
+                  // 若非執行中才清掉舊訊息；執行中時保留以便顯示進度。
+                  if (!regenJobRunning) {
+                    setRegenAllMsg(null);
+                  }
+                  const fallback = 350;
+                  const fromDetail = detail?.script_max_chars_per_page;
+                  const nextMaxChars =
+                    typeof fromDetail === 'number' && Number.isFinite(fromDetail)
+                      ? Math.max(80, Math.min(2000, Math.round(fromDetail)))
+                      : fallback;
+                  setRegenScriptMaxCharsPerPage(nextMaxChars);
+                  setRegenAllDialogOpen(true);
+                }}
+                disabled={isReadOnlyProcessing}
+                className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-2 py-1 text-xs text-fuchsia-200 hover:bg-fuchsia-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                title="重生（可選逐字稿/語音/圖檔）"
+              >
+                {regenJobRunning
+                  ? '重生中…'
+                  : regenAllBusy
+                    ? '啟動中…'
+                    : '重生'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleAddSlideAfterCurrent()}
+                disabled={isReadOnlyProcessing || slideBusy || !currentPage}
+                className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-2 py-1 text-xs text-emerald-200 disabled:opacity-40"
+              >
+                新增
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowAddPagesModal(true)}
+                disabled={isReadOnlyProcessing || slideBusy}
+                className="rounded-md border border-indigo-500/50 bg-indigo-500/15 px-2 py-1 text-xs text-indigo-200 disabled:opacity-40"
+                title="根據提示詞新增多頁投影片"
+              >
+                新增多頁
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDeleteCurrentSlide()}
+                disabled={isReadOnlyProcessing || slideBusy || !currentPage || totalPages <= 1}
+                className="rounded-md border border-rose-500/50 bg-rose-500/15 px-2 py-1 text-xs text-rose-200 disabled:opacity-40"
+              >
+                刪除
+              </button>
+            </div>
+          </div>
+          {slideError ? <p className="mt-2 text-xs text-rose-300">{slideError}</p> : null}
+        </div>
+        <div
+          className="grid max-h-48 grid-cols-4 gap-2 overflow-y-auto p-3"
+          onDragOver={(e) => {
+            e.preventDefault();
+            if (isReadOnlyProcessing) return;
+            e.dataTransfer.dropEffect = 'move';
+          }}
+          onDropCapture={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (isReadOnlyProcessing) return;
+            const fromText =
+              e.dataTransfer.getData('application/x-page-number') ||
+              e.dataTransfer.getData('text/plain');
+            const fromPage = Number(fromText);
+            const targetEl = (e.target as HTMLElement | null)?.closest('[data-page-number]') as HTMLElement | null;
+            const toPage = Number(targetEl?.dataset.pageNumber || '');
+            // eslint-disable-next-line no-console
+            console.info('[reorder][drop-capture]', { fromText, fromPage, toPage, hasTarget: !!targetEl });
+            if (Number.isFinite(fromPage) && fromPage > 0 && Number.isFinite(toPage) && toPage > 0 && fromPage !== toPage) {
+              void handleMoveSlide(fromPage, toPage);
+            }
+          }}
+          onPaste={(e) => {
+            // eslint-disable-next-line no-console
+            console.info('[paste][thumb-grid] event fired', {
+              itemCount: e.clipboardData.items.length,
+              items: Array.from(e.clipboardData.items).map((it) => ({ kind: it.kind, type: it.type })),
+            });
+            if (isReadOnlyProcessing) return;
+            const file = Array.from(e.clipboardData.items)
+              .map((it) => (it.kind === 'file' ? it.getAsFile() : null))
+              .find((f): f is File => !!f);
+            if (!file) {
+              // eslint-disable-next-line no-console
+              console.warn('[paste][thumb-grid] no file found');
+            }
+            if (file) void handleReplaceImageFile(file);
+          }}
+          tabIndex={0}
+        >
+          {deckPages.map((p, idx) => (
+            <div
+              key={p.page_number}
+              data-page-number={p.page_number}
+              onClick={(e) => {
+                if (e.ctrlKey || e.metaKey) {
+                  e.preventDefault();
+                  setRegenSelectedPages((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(p.page_number)) next.delete(p.page_number);
+                    else next.add(p.page_number);
+                    return next;
+                  });
+                } else if (e.shiftKey) {
+                  e.preventDefault();
+                  const from = Math.min(currentIdx, idx);
+                  const to = Math.max(currentIdx, idx);
+                  setRegenSelectedPages((prev) => {
+                    const next = new Set(prev);
+                    for (let i = from; i <= to; i++) {
+                      const page = deckPages[i];
+                      if (page) next.add(page.page_number);
+                    }
+                    return next;
+                  });
+                } else {
+                  setCurrentIdx(idx);
+                }
+              }}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (isReadOnlyProcessing) return;
+                // Reorder is handled by parent onDropCapture to avoid double requests.
+                const f = e.dataTransfer.files?.[0];
+                if (f) void handleReplaceImageFile(f, p.page_number);
+              }}
+              onPaste={(e) => {
+                if (isReadOnlyProcessing) return;
+                const file = Array.from(e.clipboardData.items)
+                  .map((it) => (it.kind === 'file' ? it.getAsFile() : null))
+                  .find((f): f is File => !!f);
+                if (file) void handleReplaceImageFile(file, p.page_number);
+              }}
+              className={`relative overflow-hidden rounded border ${
+                regenSelectedPages.has(p.page_number)
+                  ? 'border-fuchsia-400 ring-1 ring-fuchsia-500/50'
+                  : idx === currentIdx
+                    ? 'border-cyan-400'
+                    : 'border-slate-700'
+              } ${draggingPage === p.page_number ? 'opacity-50' : ''}`}
+              title={`第 ${p.page_number} 頁${regenSelectedPages.has(p.page_number) ? '（已選取重生）' : ''}`}
+            >
+              <button
+                type="button"
+                draggable={!isReadOnlyProcessing && !slideBusy}
+                onDragStart={(e) => {
+                  if (isReadOnlyProcessing) {
+                    e.preventDefault();
+                    return;
+                  }
+                  setDraggingPage(p.page_number);
+                  e.dataTransfer.setData('application/x-page-number', String(p.page_number));
+                  e.dataTransfer.setData('text/plain', String(p.page_number));
+                  e.dataTransfer.effectAllowed = 'move';
+                  // eslint-disable-next-line no-console
+                  console.info('[reorder][dragstart]', { page: p.page_number });
+                }}
+                onDragEnd={() => {
+                  setDraggingPage(null);
+                  // eslint-disable-next-line no-console
+                  console.info('[reorder][dragend]', { page: p.page_number });
+                }}
+                onClick={(e) => e.stopPropagation()}
+                className="absolute right-0 top-0 z-10 rounded-bl bg-slate-900/80 px-1.5 py-0.5 text-[10px] text-slate-200 cursor-grab active:cursor-grabbing"
+                title="拖曳此把手可重排"
+              >
+                ↕
+              </button>
+              {(() => {
+                const thumbSrc = isReadOnlyProcessing
+                  ? p.image_url
+                  : (p.thumbnail_url ?? p.image_url);
+                const shouldLoadThumb = idx <= thumbLoadUntilIdx || idx === currentIdx;
+                return thumbSrc && shouldLoadThumb ? (
+                <img
+                  src={withImageBust(thumbSrc) ?? thumbSrc}
+                  alt={`第 ${p.page_number} 頁縮圖`}
+                  className="h-14 w-full object-cover"
+                  onLoad={() => {
+                    setThumbLoadUntilIdx((prev) => {
+                      const next = idx + 1;
+                      if (next >= deckPages.length) return prev;
+                      return Math.max(prev, next);
+                    });
+                  }}
+                  onError={(e) => {
+                    setThumbLoadUntilIdx((prev) => {
+                      const next = idx + 1;
+                      if (next >= deckPages.length) return prev;
+                      return Math.max(prev, next);
+                    });
+                    const img = e.currentTarget;
+                    const fallback = p.image_url;
+                    if (!fallback || img.dataset.fallbackApplied === 'true') {
+                      img.style.display = 'none';
+                      return;
+                    }
+                    img.dataset.fallbackApplied = 'true';
+                    img.src = withImageBust(fallback) ?? fallback;
+                  }}
+                />
+                ) : (
+                <div className="flex h-14 w-full items-center justify-center bg-slate-800 text-[10px] text-slate-400">
+                  {thumbSrc ? '載入中…' : '無圖片'}
+                </div>
+                );
+              })()}
+            </div>
+          ))}
+        </div>
+        {regenSelectedPages.size > 0 ? (
+          <div className="flex items-center justify-between gap-2 border-t border-fuchsia-500/30 bg-fuchsia-500/10 px-3 py-1.5">
+            <span className="text-xs text-fuchsia-300">
+              已選 {regenSelectedPages.size} 頁將重生（Ctrl/Shift 點選）
+            </span>
+            <button
+              type="button"
+              onClick={() => setRegenSelectedPages(new Set())}
+              className="text-xs text-fuchsia-400 hover:text-fuchsia-200"
+            >
+              清除
+            </button>
+          </div>
+        ) : (
+          <div className="border-t border-slate-800/50 px-3 py-1">
+            <p className="text-[10px] text-slate-600">Ctrl/Shift 點選縮圖可選取特定頁面重生</p>
+          </div>
+        )}
+        <div className="border-t border-slate-800 px-3 py-2">
+          <button
+            type="button"
+            onClick={() => void handleUpdateCoverFromCurrentPage()}
+            disabled={slideBusy || !currentPage?.image_url}
+            className="w-full rounded-md border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-xs text-amber-200 hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+            title="將首頁列表封面更新為目前選取頁面的圖片"
+          >
+            將目前頁設為封面
+          </button>
+        </div>
+      </section>
+
+      <section className={`rounded-lg border border-slate-800 bg-slate-900/40 ${qaPanelExpanded ? 'md:hidden' : ''}`}>
+        <div className="flex items-center justify-between gap-2 px-3 py-2">
+          <div className="min-w-0">
+            <h2 className="truncate text-sm font-semibold text-slate-300">📊 Realtime Poll</h2>
+            <p className="text-[11px] text-slate-500">
+              {pollStarted ? `第 ${currentPage?.page_number ?? '-'} 頁投票中` : '尚未開始，不顯示結果'}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPollSettingsOpen((v) => !v)}
+              className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
+            >
+              {pollSettingsOpen ? '收合設定' : '設定'}
+            </button>
+            {pollStarted ? (
+              <button
+                type="button"
+                onClick={handleStopPoll}
+                className="rounded-md border border-rose-500/50 bg-rose-500/10 px-2 py-1 text-xs text-rose-200 hover:bg-rose-500/20"
+              >
+                結束
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleStartPoll}
+                disabled={!currentPage}
+                className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-2 py-1 text-xs text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                開始
+              </button>
+            )}
+            {syncEnabled && syncRole === 'master' && pollStarted ? (
+              <button
+                type="button"
+                onClick={() => setSyncPollShowResults((v) => !v)}
+                className="rounded-md border border-emerald-500/50 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-200 hover:bg-emerald-500/20"
+              >
+                {syncPollShowResults ? '隱藏結果' : '顯示結果'}
+              </button>
+            ) : null}
+          </div>
+        </div>
+        {(pollSettingsOpen || pollStarted || pollError) && (
+          <div className="space-y-2 border-t border-slate-800 p-2">
+            {pollSettingsOpen && (
+              <div className="rounded-md border border-slate-800 bg-slate-950/50 p-2">
+                <input
+                  value={pollQuestion}
+                  onChange={(e) => setPollQuestion(e.target.value)}
+                  maxLength={300}
+                  placeholder="輸入投票問題"
+                  className="mb-2 w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 outline-none ring-cyan-500/40 placeholder:text-slate-500 focus:ring"
+                />
+                <textarea
+                  value={pollOptionsText}
+                  onChange={(e) => setPollOptionsText(e.target.value)}
+                  rows={2}
+                  placeholder="每行一個答案選項"
+                  className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 outline-none ring-cyan-500/40 placeholder:text-slate-500 focus:ring"
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleCreatePoll()}
+                  disabled={pollBusy || !currentPage}
+                  className="mt-2 w-full rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-xs text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {pollBusy ? '處理中…' : '建立並開始本頁投票'}
+                </button>
+              </div>
+            )}
+            {pollError ? <p className="text-xs text-rose-300">{pollError}</p> : null}
+
+            {(pollStarted || pollSettingsOpen) && (
+              <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
+                {pagePolls.length === 0 ? (
+                  <div className="rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1.5 text-xs text-slate-500">
+                    {pollStarted ? '已開始輪詢，本頁尚無投票。' : '本頁尚無已建立的投票問題。'}
+                  </div>
+                ) : (
+                  pagePolls.map((poll) => (
+                    <div key={poll.id} className="rounded-md border border-slate-800 bg-slate-950/50 p-2">
+                      <div className="mb-1 flex items-start justify-between gap-2">
+                        <h3 className="text-xs font-medium text-slate-200">{poll.question}</h3>
+                        <span className="shrink-0 rounded-full border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-400">
+                          {poll.total_votes} 票
+                        </span>
+                      </div>
+                      {syncEnabled && syncRole === 'master' ? (
+                        <div className="mb-2 flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void handleSelectDisplayedPoll(poll.id)}
+                            className={`rounded border px-2 py-1 text-[11px] ${
+                              syncDisplayedPollId === poll.id
+                                ? 'border-cyan-300/80 bg-cyan-500/30 text-cyan-50'
+                                : 'border-cyan-500/50 bg-cyan-500/15 text-cyan-200 hover:bg-cyan-500/25'
+                            }`}
+                          >
+                            {syncDisplayedPollId === poll.id ? '目前顯示題目' : '顯示這題到全螢幕'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleResetPollVotes(poll.id)}
+                            disabled={pollBusy || poll.total_votes === 0}
+                            className="rounded border border-amber-500/50 bg-amber-500/15 px-2 py-1 text-[11px] text-amber-200 hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            清除結果
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleDeletePoll(poll.id)}
+                            disabled={pollBusy}
+                            className="rounded border border-rose-500/50 bg-rose-500/15 px-2 py-1 text-[11px] text-rose-200 hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            刪除題目
+                          </button>
+                        </div>
+                      ) : null}
+                      <div className="space-y-1.5">
+                        {poll.options.map((option, idx) => {
+                          const ratio = poll.total_votes > 0 ? Math.round((option.votes / poll.total_votes) * 100) : 0;
+                          const selected = pollVotes[poll.id] === idx;
+                          return (
+                            <button
+                              key={`${poll.id}-${idx}`}
+                              type="button"
+                              onClick={() => void handleVotePoll(poll.id, idx)}
+                              disabled={pollBusy || !poll.is_active}
+                              className={`w-full rounded-md border px-2 py-1.5 text-left text-xs transition ${selected ? 'border-emerald-400 bg-emerald-500/15 text-emerald-100' : 'border-slate-700 bg-slate-900/70 text-slate-200 hover:bg-slate-800'} disabled:cursor-not-allowed disabled:opacity-60`}
+                            >
+                              <div className="mb-1 flex items-center justify-between gap-2">
+                                <span className="truncate">{option.text}</span>
+                                <span className="font-mono text-[10px] text-slate-400">{option.votes} · {ratio}%</span>
+                              </div>
+                              <div className="h-1 overflow-hidden rounded-full bg-slate-800">
+                                <div className="h-full rounded-full bg-cyan-400" style={{ width: `${ratio}%` }} />
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
+      <section className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-lg border border-slate-800 bg-slate-900/40">
+      <div className="border-b border-slate-800 px-4 py-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h2 className="min-w-0 truncate text-sm font-semibold text-slate-300">
+          💬 本頁問答（含本頁圖片與文字上下文）
+        </h2>
+        <button
+          type="button"
+          onClick={() => setQaPanelExpanded((v) => !v)}
+          className="hidden shrink-0 rounded-md border border-cyan-500/50 bg-cyan-500/10 px-2 py-1 text-xs text-cyan-200 hover:bg-cyan-500/20 md:inline-flex"
+          aria-pressed={qaPanelExpanded}
+          title={qaPanelExpanded ? '還原右側欄內容' : '讓問答佔滿右側欄'}
+        >
+          {qaPanelExpanded ? '還原' : '放大'}
+        </button>
+      </div>
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => void handleClearChat()}
+          disabled={isReadOnlyProcessing || chatBusy || chatHistory.length === 0}
+          className="rounded-md border border-rose-500/50 bg-rose-500/15 px-2 py-1 text-xs text-rose-200 hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          清除全部訊息
+        </button>
+      </div>
+      </div>
+      <div className="flex-1 space-y-2 overflow-y-auto p-3 text-sm">
+        {chatHistory.length === 0 ? (
+          <div className="text-slate-500">尚無對話，請輸入問題。</div>
+        ) : (
+          chatHistory.map((m, idx) => (
+            <div key={idx} className={m.role === 'user' ? 'text-slate-100' : 'text-emerald-200'}>
+              <span className="mr-2 text-xs uppercase opacity-70">{m.role === 'user' ? '你' : '助教'}</span>
+              {m.role === 'assistant' && m.content.startsWith(IMAGE_MSG_PREFIX) ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = m.content.slice(IMAGE_MSG_PREFIX.length).trim();
+                    if (!url) return;
+                    setImagePreviewUrl(url);
+                    setImagePreviewPageNumber(currentPage?.page_number ?? null);
+                    setImagePreviewOpen(true);
+                  }}
+                  className="inline-block overflow-hidden rounded-md border border-cyan-500/40 hover:border-cyan-300"
+                  title="點擊放大預覽"
+                >
+                  <img src={m.content.slice(IMAGE_MSG_PREFIX.length).trim()} alt="生成圖片結果" className="max-h-36 w-auto" />
+                </button>
+              ) : (
+                <span className="whitespace-pre-wrap">{m.content}</span>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+      <div className="border-t border-slate-800 p-3">
+        <div className="flex flex-col gap-2">
+          {/* Reference image thumbnail (paste from clipboard) */}
+          {chatPastedImageUrl && (
+            <div className="flex items-center gap-2">
+              <div className="relative inline-block shrink-0">
+                <img
+                  src={chatPastedImageUrl}
+                  alt="參考圖"
+                  className="max-h-16 w-auto rounded border border-slate-600 object-contain"
+                />
+                <button
+                  type="button"
+                  onClick={clearChatPastedImage}
+                  className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-slate-900 text-[10px] text-slate-200 hover:bg-rose-600"
+                  title="移除參考圖"
+                >✕</button>
+              </div>
+              <p className="text-xs text-slate-400">參考圖（貼上的圖片）</p>
+            </div>
+          )}
+          {/* Region selection status */}
+          {imageEditRegion && (
+            <div className="flex items-center gap-2 text-xs text-cyan-400">
+              <span>已標示修改區域</span>
+              <button
+                type="button"
+                onClick={clearImageEditRegion}
+                className="text-slate-400 hover:text-rose-400"
+              >✕ 清除</button>
+            </div>
+          )}
+          <textarea
+            value={chatInput}
+            onChange={(e) => setChatInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (isReadOnlyProcessing) return;
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                void handleSendChat();
+              }
+            }}
+            onPaste={(e) => {
+              const items = Array.from(e.clipboardData?.items ?? []);
+              const imgItem = items.find((it) => it.kind === 'file' && /^image\//i.test(it.type));
+              if (!imgItem) return;
+              e.preventDefault();
+              const file = imgItem.getAsFile();
+              if (!file) return;
+              clearChatPastedImage();
+              setChatPastedImage(file);
+              setChatPastedImageUrl(URL.createObjectURL(file));
+            }}
+            rows={3}
+            disabled={isReadOnlyProcessing}
+            placeholder={isReadOnlyProcessing ? '處理中為唯讀模式，問答與修改功能暫停' : '可輸入修改指示或問題（Shift+Enter 換行；可貼上參考圖）'}
+            className="flex-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-emerald-500/40 placeholder:text-slate-500 focus:ring"
+          />
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {/* Region select toggle */}
+            {!isReadOnlyProcessing && currentPage?.image_url && (
+              <button
+                type="button"
+                onClick={() => {
+                  setImageEditSelectMode((v) => {
+                    if (v) clearImageEditRegion();
+                    return !v;
+                  });
+                }}
+                aria-pressed={imageEditSelectMode}
+                className={`rounded-md border px-3 py-2 text-sm ${
+                  imageEditSelectMode
+                    ? 'border-cyan-400/70 bg-cyan-500/25 text-cyan-100'
+                    : 'border-slate-600 bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
+                }`}
+                title="在左側投影片圖片上拖曳選取要修改的區域"
+              >
+                {imageEditSelectMode ? '取消選區' : '選取區域'}
+              </button>
+            )}
+            {/* Inpaint or regenerate */}
+            {(imageEditRegion || chatPastedImage) ? (
+              <button
+                type="button"
+                onClick={() => void handleInpaintImage()}
+                disabled={isReadOnlyProcessing || chatInpaintBusy || !currentPage}
+                className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {chatInpaintBusy ? '修改中…' : '修改圖片'}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void handleRegenerateImageWithPrompt()}
+                disabled={isReadOnlyProcessing || slideBusy || !currentPage}
+                className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                修改圖片
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => void handleRewriteScript()}
+              disabled={isReadOnlyProcessing || rewriteBusy || !hasChatInput}
+              className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-3 py-2 text-sm text-fuchsia-200 hover:bg-fuchsia-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {rewriteBusy ? '修改中…' : '修改逐字稿'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleSendChat()}
+              disabled={isReadOnlyProcessing || chatBusy || !hasChatInput}
+              className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {chatBusy ? '詢問中…' : '詢問'}
+            </button>
+          </div>
+        </div>
+        {chatError ? <p className="mt-1 text-xs text-rose-300">{chatError}</p> : null}
+        {rewriteError ? <p className="mt-1 text-xs text-rose-300">{rewriteError}</p> : null}
+        {chatInpaintError ? <p className="mt-1 text-xs text-rose-300">{chatInpaintError}</p> : null}
+      </div>
+      </section>
+    </aside>
+  );
+}

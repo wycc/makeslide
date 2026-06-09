@@ -1,10 +1,11 @@
 import { createContext, useContext } from 'react';
-import type { ChangeEvent, Dispatch, SetStateAction, RefObject } from 'react';
+import type { ChangeEvent, Dispatch, SetStateAction, RefObject, MutableRefObject } from 'react';
 import type {
   ChatMessage,
   PdfDetail,
   PdfDetailPage,
   PagePoll,
+  PdfSourceItem,
   RegenJobState,
   SyncAiAnswer,
   SyncFollowerQuestion,
@@ -116,7 +117,9 @@ export interface PlayPageContextValue {
   sourceMsg: string | null;
   sourceErr: string | null;
   genPrompts: PageGenerationPrompt[];
+  setGenPrompts: Dispatch<SetStateAction<PageGenerationPrompt[]>>;
   genPromptsLoading: boolean;
+  setGenPromptsLoading: Dispatch<SetStateAction<boolean>>;
   expandedGenPrompt: string | null;
   setExpandedGenPrompt: Dispatch<SetStateAction<string | null>>;
   promptBusy: boolean;
@@ -135,7 +138,9 @@ export interface PlayPageContextValue {
   chatError: string | null;
   hasChatInput: boolean;
   chatPastedImage: File | null;
+  setChatPastedImage: Dispatch<SetStateAction<File | null>>;
   chatPastedImageUrl: string | null;
+  setChatPastedImageUrl: Dispatch<SetStateAction<string | null>>;
   chatInpaintBusy: boolean;
   chatInpaintError: string | null;
   setChatInpaintError: Dispatch<SetStateAction<string | null>>;
@@ -150,11 +155,13 @@ export interface PlayPageContextValue {
   setImageEditRegion: Dispatch<SetStateAction<ImageEditRegion>>;
   clearImageEditRegion: () => void;
   handleInpaintImage: () => void;
-  handleReplaceImageFile: (file: File) => void;
+  handleReplaceImageFile: (file: File, targetPageNumber?: number) => void;
   handleRegenerateImageWithPrompt: () => void;
   handleApplyPreviewImage: () => void;
   imagePreviewUrl: string | null;
+  setImagePreviewUrl: Dispatch<SetStateAction<string | null>>;
   imagePreviewPageNumber: number | null;
+  setImagePreviewPageNumber: Dispatch<SetStateAction<number | null>>;
   imagePreviewOpen: boolean;
   setImagePreviewOpen: Dispatch<SetStateAction<boolean>>;
 
@@ -227,7 +234,7 @@ export interface PlayPageContextValue {
   handleUpdateCoverFromCurrentPage: () => void;
   handleDeletePoll: (pollId: number) => void;
   handleCreatePoll: () => void;
-  handleStartPoll: (pollId: number) => void;
+  handleStartPoll: () => void;
   handleStopPoll: () => void;
   handleVotePoll: (pollId: number, optionIndex: number) => void;
   handleResetPollVotes: (pollId: number) => void;
@@ -287,6 +294,7 @@ export interface PlayPageContextValue {
   setSyncDisplayedPollId: Dispatch<SetStateAction<number | null>>;
   syncRealtimePollStarted: boolean;
   syncPollShowResults: boolean;
+  setSyncPollShowResults: Dispatch<SetStateAction<boolean>>;
 
   // ─── Classroom / interactive ────────────────────────────────────────────────
   classroomMode: boolean;
@@ -357,20 +365,25 @@ export interface PlayPageContextValue {
   withImageBust: (url: string | null | undefined) => string | null;
   withShareToken: (url: string | null | undefined) => string | null;
   targetImageSrc: string | null;
+  sourceItems: PdfSourceItem[];
+  hasScriptChanges: boolean;
+  syncQuestionBusy: boolean;
+  openVersionHistory: (type: 'image' | 'script', pageNumber: number) => void;
   pageSentences: string[];
   currentSentence: string;
   activeSentenceIdx: number;
 
   // ─── Refs used in JSX ───────────────────────────────────────────────────────
-  audioRef: RefObject<HTMLAudioElement | null>;
-  fullscreenContainerRef: RefObject<HTMLDivElement | null>;
-  fullscreenImageRef: RefObject<HTMLImageElement | null>;
-  drawingCanvasSplitRef: RefObject<DrawingCanvasHandle | null>;
-  drawingCanvasMainRef: RefObject<DrawingCanvasHandle | null>;
-  drawingCanvasFullscreenRef: RefObject<DrawingCanvasHandle | null>;
-  sourcePdfInputRef: RefObject<HTMLInputElement | null>;
-  imageEditDragRef: RefObject<{ startX: number; startY: number } | null>;
-  imageEditRegionOverlayRef: RefObject<HTMLDivElement | null>;
+  audioRef: RefObject<HTMLAudioElement>;
+  fullscreenContainerRef: RefObject<HTMLDivElement>;
+  fullscreenImageRef: RefObject<HTMLImageElement>;
+  drawingCanvasSplitRef: RefObject<DrawingCanvasHandle>;
+  drawingCanvasMainRef: RefObject<DrawingCanvasHandle>;
+  drawingCanvasFullscreenRef: RefObject<DrawingCanvasHandle>;
+  sourcePdfInputRef: RefObject<HTMLInputElement>;
+  imageEditDragRef: MutableRefObject<{ startX: number; startY: number } | null>;
+  imageEditRegionOverlayRef: RefObject<HTMLDivElement>;
+  activeSentenceRef: RefObject<HTMLParagraphElement>;
   getActiveDrawingCanvas: () => DrawingCanvasHandle | null;
 
   // ─── Wake lock ──────────────────────────────────────────────────────────────
