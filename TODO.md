@@ -596,3 +596,11 @@
 - 時間: 2026-06-09 12:00:00 +0800
 - 分支: refactor/playpage-hooks-and-subcomponents
 - 內容: 延續 PlayPage 重構。階段 2 抽出 `useVersionHistory` 自訂 Hook（9 個 useState + 3 個 useCallback，封裝版本歷史開啟、預覽、還原邏輯），並同步建立 `VersionHistoryDialog`（15 props 展示元件）與 `ImagePreviewDialog`（4 props 展示元件）；PlayPage.tsx 由 5464 行降至 5333 行。評估另外三個 Hook 候選（usePollManagement、useFullscreenPlayback、useDrawingSync）後發現均因跨領域 setState 深度耦合（特別是 `handleStopPoll` 需觸及 8+ 個不同領域的 setter）無法乾淨抽出，暫緩。階段 3 分析 FullscreenView（需 50+ props）、ChatPanel（`chatInput` state 被 4 個不同 handler 共用）後同樣無法無損抽出，僅完成最乾淨的 ImagePreviewDialog 提取。進一步分析進一步降低 PlayPage 大小的方法後確認：根本瓶頸是共享可變 state——最高 CP 值方案是建立 PlayPageContext（可解鎖 FullscreenView/EditPanel/ThumbnailSidebar 的真正元件提取）；短期可先將 5 個大型 JSX 區塊包成命名 render 輔助函式（renderFullscreenView/renderHeader/renderLeftPanel/renderRightPanel/renderDialogs），使主 return 從 2440 行縮至 130 行，並為後續 Context 方向鋪路。本工作記錄包含此 render 輔助函式重構：5 個 render helpers 定義於 PlayPage 函式閉包內（可直接存取所有 state/handler，無需 props），主 return 精簡為 132 行，TypeScript 零錯誤、Vite production build 通過。
+
+[x] PlayPage 重構階段 4：建立 PlayPageContext，將 PlayPageDialogs 從 render helper 轉為真實 React 元件（完成於分支: refactor/playpage-hooks-and-subcomponents）
+
+## 工作記錄
+
+- 時間: 2026-06-09 14:30:00 +0800
+- 分支: refactor/playpage-hooks-and-subcomponents
+- 內容: 繼前次 render helper 重構，建立 `PlayPageContext.tsx`（god context，定義完整的 `PlayPageContextValue` 介面，含約 250 個 state/handler/computed value/ref 欄位，涵蓋 PDF/播放/TTS/繪圖/版面/同步/測驗/影片等各領域），並在 `PlayPage.tsx` 中組建 `_ctxValue` 物件傳入 `<PlayPageCtx.Provider>`。建立 `PlayPageDialogs.tsx`，成為第一個真正消費 context 的 React 元件，透過 `usePlayPageContext()` 取得所需的 state 與 handler，渲染 TtsDialog、ImageStyleDialog、RegenAllDialog、ShareDialog、AddPagesFromPromptModal 五個對話框（原為 `renderDialogs()` render helper），PlayPage.tsx 對應移除這五個 import 與 renderDialogs 函式定義。修正過程中發現並修正三處 context 型別錯誤：`handleSelectDisplayedPoll` 應為 `(pollId: number) => void`（非 `number | null`）、`videoProgressText` 應為 `string | null`、`targetImageSrc` 應為 `string | null`（非 `string | undefined`）。`npx tsc --noEmit` 零錯誤，`npx vite build` 成功。
