@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { Dispatch, SetStateAction } from 'react';
+import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import {
   ApiError,
   cancelRegenerateJob,
@@ -16,7 +16,8 @@ interface UseRegenerationParams {
   pdfId: string | undefined;
   currentIdx: number;
   isReadOnlyProcessing: boolean;
-  deckImageStylePrompt: string;
+  // ref 避免循環依賴：PlayPage 在 useImageStyle 初始化後同步此 ref
+  deckImageStylePromptRef: MutableRefObject<string>;
   reloadDetail: () => Promise<void>;
   setCurrentIdx: Dispatch<SetStateAction<number>>;
 }
@@ -60,7 +61,7 @@ export function useRegeneration({
   pdfId,
   currentIdx,
   isReadOnlyProcessing,
-  deckImageStylePrompt,
+  deckImageStylePromptRef,
   reloadDetail,
   setCurrentIdx,
 }: UseRegenerationParams): RegenerationState {
@@ -230,7 +231,7 @@ export function useRegeneration({
         images: regenOptions.image
           ? {
               prompt: [
-                `整份圖片風格（固定套用）：\n${deckImageStylePrompt.trim() || '(無)'}`,
+                `整份圖片風格（固定套用）：\n${deckImageStylePromptRef.current?.trim() || '(無)'}`,
                 `本次圖片重生需求：\n${regenAllPrompt.trim()}`,
               ].join('\n\n'),
             }
@@ -254,9 +255,9 @@ export function useRegeneration({
     regenOptions,
     regenJobRunning,
     currentIdx,
-    deckImageStylePrompt,
     isReadOnlyProcessing,
     regenSelectedPages,
+    // deckImageStylePromptRef omitted: ref 本身穩定，透過 .current 讀最新值
   ]);
 
   const handleConfirmScript = useCallback(async () => {

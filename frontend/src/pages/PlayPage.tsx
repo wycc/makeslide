@@ -8,52 +8,17 @@ import {
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ApiError,
-  addPdfFileSource,
-  addPdfTextSource,
   answerSyncFollowerQuestionsWithAi,
-  chatWithPageContext,
-
-
-  clearPageChatHistory,
-  createPagePoll,
-  deletePagePoll,
-
-
   fetchPdfDetail,
-  fetchPagePolls,
-  fetchPagePrompt,
-  fetchPageChatHistory,
   resolveShareToken,
   fetchPlaybackSyncState,
-  getAuthStatus,
-  getImagePromptTemplates,
-  getSystemAiSettings,
   joinSharedPlaybackSync,
   joinPlaybackSync,
   leavePlaybackSync,
-
-
-
-  regenerateSlideImage,
-  replaceSlideImage,
-  inpaintImage,
   regeneratePageAudio,
-  resetPagePollVotes,
-
   submitSyncFollowerQuestion,
   toggleSyncDisplayedQuestion,
-
-  updatePdfImageStyleSettings,
-
-
-  updatePdfPrompt,
-
   updatePlaybackSyncState,
-  votePagePoll,
-  rewritePageScript,
-
-  type ImagePromptTemplate,
-  type PageGenerationPrompt,
   type ShareAccessMode,
 } from '../lib/api';
 import { type DrawingCanvasHandle, type DrawingData, type DrawingStroke } from '../components/DrawingCanvas';
@@ -62,6 +27,12 @@ import { useRegeneration } from './play/useRegeneration';
 import { useVideoGeneration } from './play/useVideoGeneration';
 import { usePdfMetadata } from './play/usePdfMetadata';
 import { useSlideManagement } from './play/useSlideManagement';
+import { useImageStyle } from './play/useImageStyle';
+import { useScriptEditor } from './play/useScriptEditor';
+import { usePromptAndSource } from './play/usePromptAndSource';
+import { useChatAndImageEdit } from './play/useChatAndImageEdit';
+import { usePagePolls } from './play/usePagePolls';
+import { resolveConfiguredUserCode } from './play/utils';
 import { VersionHistoryDialog } from './play/VersionHistoryDialog';
 import { ImagePreviewDialog } from './play/ImagePreviewDialog';
 import { PlayPageCtx } from './play/PlayPageContext';
@@ -71,11 +42,8 @@ import { PlayPageHeader } from './play/PlayPageHeader';
 import { PlayPageSlidePanel } from './play/PlayPageSlidePanel';
 import { PlayPageSidebar } from './play/PlayPageSidebar';
 import type {
-  ChatMessage,
   PdfDetail,
   PdfDetailPage,
-  PagePoll,
-
   SyncAiAnswer,
   SyncFollowerQuestion,
   PdfSourceItem,
@@ -94,8 +62,6 @@ const SYNC_POLL_INTERVAL_MS = 1200;
 const SYNC_POLL_INTERVAL_FULLSCREEN_MS = 250;
 const SYNC_CURSOR_PUSH_INTERVAL_MS = 60;
 const SYNC_CURSOR_PUSH_INTERVAL_FULLSCREEN_MS = 24;
-const CHAT_HISTORY_REQUEST_LIMIT = 20;
-const LOCAL_USER_CODE_KEY = 'makeslide.user_code';
 const SENTENCE_MATCH_RE = /[^。！？!?；;\n]+[。！？!?；;]?|\n+/g;
 const TONE_MARKER_RE = /\[\[\s*[^\]]+\s*\]\]/g;
 
@@ -112,9 +78,7 @@ interface WakeLockSentinelLike {
   removeEventListener?: (type: 'release', listener: () => void) => void;
 }
 
-function limitChatHistoryForRequest(history: ChatMessage[]): ChatMessage[] {
-  return history.slice(-CHAT_HISTORY_REQUEST_LIMIT);
-}
+
 
 function splitScriptIntoSentences(script: string): string[] {
   const withoutToneMarkers = script.replace(TONE_MARKER_RE, ' ');
@@ -176,18 +140,6 @@ function buildSentenceTimeline(sentences: string[], duration: number): SentenceT
   });
 }
 
-async function resolveConfiguredUserCode(): Promise<string> {
-  const localCode = window.localStorage.getItem(LOCAL_USER_CODE_KEY)?.trim() || '';
-  try {
-    const auth = await getAuthStatus();
-    if (!auth.authenticated) return localCode;
-    const settings = await getSystemAiSettings();
-    return settings.user_code?.trim() || localCode;
-  } catch {
-    return localCode;
-  }
-}
-
 function getAnyFullscreenElement(): Element | null {
   const doc = document as Document & {
     webkitFullscreenElement?: Element | null;
@@ -246,62 +198,13 @@ export default function PlayPage() {
   const [duration, setDuration] = useState(0);
   const [scripts, setScripts] = useState<Record<number, string>>({});
   const [audioError, setAudioError] = useState<string | null>(null);
-  const [editorError, setEditorError] = useState<string | null>(null);
-  const [editorBusy, setEditorBusy] = useState(false);
-  const [rewriteBusy, setRewriteBusy] = useState(false);
-  const [rewriteError, setRewriteError] = useState<string | null>(null);
   const [finished, setFinished] = useState(false);
   const [classroomMode, setClassroomMode] = useState(false);
   const [classroomAwaitingNext, setClassroomAwaitingNext] = useState(false);
   const [interactiveMode, setInteractiveMode] = useState<boolean>(() => getStoredInteractiveMode());
-  const [editingScript, setEditingScript] = useState('');
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
-  const [chatInput, setChatInput] = useState('');
-  const [chatBusy, setChatBusy] = useState(false);
-  const [chatError, setChatError] = useState<string | null>(null);
-  const [editTab, setEditTab] = useState<'script' | 'prompt' | 'source' | 'system'>('script');
-  const [promptInput, setPromptInput] = useState('');
-  const [sourceTextName, setSourceTextName] = useState('');
-  const [sourceTextContent, setSourceTextContent] = useState('');
-  const [sourceBusy, setSourceBusy] = useState(false);
-  const [sourceMsg, setSourceMsg] = useState<string | null>(null);
-  const [sourceErr, setSourceErr] = useState<string | null>(null);
   const sourcePdfInputRef = useRef<HTMLInputElement>(null);
-  const [genPrompts, setGenPrompts] = useState<PageGenerationPrompt[]>([]);
-  const [genPromptsLoading, setGenPromptsLoading] = useState(false);
-  const [expandedGenPrompt, setExpandedGenPrompt] = useState<string | null>(null);
-  const [promptBusy, setPromptBusy] = useState(false);
-  const [promptMsg, setPromptMsg] = useState<string | null>(null);
-  const [pagePrompts, setPagePrompts] = useState<Record<number, string>>({});
 
   const [showAddPagesModal, setShowAddPagesModal] = useState(false);
-  const [imageStyleDialogOpen, setImageStyleDialogOpen] = useState(false);
-  const [deckImageStylePrompt, setDeckImageStylePrompt] = useState(
-    'academic minimalist style, clean layout, professional presentation design, soft blue background, clear visual hierarchy, vector illustration, no clutter, high readability',
-  );
-  const [imageStyleTemplates, setImageStyleTemplates] = useState<ImagePromptTemplate[]>([]);
-  const [selectedImageStyleTemplateKey, setSelectedImageStyleTemplateKey] = useState('');
-  const [pagePolls, setPagePolls] = useState<PagePoll[]>([]);
-  const [pollQuestion, setPollQuestion] = useState('');
-  const [pollOptionsText, setPollOptionsText] = useState('同意\n不同意');
-  const [pollBusy, setPollBusy] = useState(false);
-  const [pollError, setPollError] = useState<string | null>(null);
-  const [pollVotes, setPollVotes] = useState<Record<number, number>>({});
-  const [pollSettingsOpen, setPollSettingsOpen] = useState(false);
-  const [pollStarted, setPollStarted] = useState(false);
-  const pollVoterIdRef = useRef<string>('');
-  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
-  const [imagePreviewPageNumber, setImagePreviewPageNumber] = useState<number | null>(null);
-  const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
-  // ---- Version history state (managed by useVersionHistory hook) ----
-  // ---- Chat image attachment (inpaint) state ----
-  const [chatPastedImage, setChatPastedImage] = useState<File | null>(null);
-  const [chatPastedImageUrl, setChatPastedImageUrl] = useState<string | null>(null);
-  const [chatInpaintBusy, setChatInpaintBusy] = useState(false);
-  const [chatInpaintError, setChatInpaintError] = useState<string | null>(null);
-  // Region selection on the slide image (for mask generation)
-  const [imageEditSelectMode, setImageEditSelectMode] = useState(false);
-  const [imageEditRegion, setImageEditRegion] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const imageEditRegionOverlayRef = useRef<HTMLDivElement>(null);
   const imageEditDragRef = useRef<{ startX: number; startY: number } | null>(null);
   const [draggingPage, setDraggingPage] = useState<number | null>(null);
@@ -309,7 +212,6 @@ export default function PlayPage() {
   // 手機模式下的 tab 切換（桌面模式忽略此 state，永遠並排顯示）
   const [activeTab, setActiveTab] = useState<'play' | 'qa'>('play');
   const [qaPanelExpanded, setQaPanelExpanded] = useState(false);
-  const [transcriptFocusMode, setTranscriptFocusMode] = useState(false);
   const [syncEnabled, setSyncEnabled] = useState(false);
   const [syncRole, setSyncRole] = useState<'master' | 'follower'>('follower');
   const [audioMuted, setAudioMuted] = useState(false);
@@ -340,7 +242,6 @@ export default function PlayPage() {
   const fullscreenContainerRef = useRef<HTMLDivElement>(null);
   const activeSentenceRef = useRef<HTMLParagraphElement>(null);
   const [slideImageScale, setSlideImageScale] = useState(1);
-  const IMAGE_MSG_PREFIX = '[image] ';
   const sourceItems: PdfSourceItem[] = detail?.sources ?? [];
 
   // ---- Drawing / annotation state ----
@@ -520,9 +421,6 @@ export default function PlayPage() {
         setScriptMaxCharsPerPage(typeof d.script_max_chars_per_page === 'number' ? d.script_max_chars_per_page : null);
         setHostMode(d.host_mode === 'dual' ? 'dual' : 'solo');
         setLoadError(null);
-        if (d.image_style_prompt && d.image_style_prompt.trim()) {
-          setDeckImageStylePrompt(d.image_style_prompt);
-        }
         if (detailWithShare.status !== 'ready') {
           timer = window.setTimeout(load, POLL_INTERVAL_MS);
         }
@@ -538,51 +436,6 @@ export default function PlayPage() {
       if (timer != null) window.clearTimeout(timer);
     };
   }, [pdfId, currentShareToken]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await getImagePromptTemplates();
-        if (cancelled) return;
-        setImageStyleTemplates(res.templates);
-        const key = res.default_template_key ?? res.templates[0]?.key ?? '';
-        setSelectedImageStyleTemplateKey(key);
-      } catch {
-        // non-fatal
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const applyImageStyleTemplate = useCallback(
-    (key: string) => {
-      setSelectedImageStyleTemplateKey(key);
-      const hit = imageStyleTemplates.find((t) => t.key === key);
-      if (hit) setDeckImageStylePrompt(hit.prompt_en);
-    },
-    [imageStyleTemplates],
-  );
-
-  const openImageStyleDialog = useCallback(async () => {
-    if (!pdfId) {
-      setImageStyleDialogOpen(true);
-      return;
-    }
-    try {
-      const d = await fetchPdfDetail(pdfId);
-      setDetail(d);
-      if (d.image_style_prompt && d.image_style_prompt.trim()) {
-        setDeckImageStylePrompt(d.image_style_prompt);
-      }
-    } catch {
-      // non-fatal: still allow opening dialog with current local value
-    } finally {
-      setImageStyleDialogOpen(true);
-    }
-  }, [pdfId]);
 
   const pages = detail?.pages ?? [];
   const deckPages: PdfDetailPage[] = useMemo(() => pages, [pages]);
@@ -600,25 +453,6 @@ export default function PlayPage() {
       detail.status !== 'ready' &&
       detail.status !== 'awaiting_script_confirmation') ||
     shareIsReadOnly;
-
-  const handleSaveImageStyle = useCallback(() => {
-    if (!pdfId) {
-      setImageStyleDialogOpen(false);
-      return;
-    }
-    if (isReadOnlyProcessing) return;
-    void (async () => {
-      try {
-        const res = await updatePdfImageStyleSettings(pdfId, deckImageStylePrompt);
-        setDetail((prev) => (prev ? { ...prev, image_style_prompt: res.image_style_prompt, updated_at: res.updated_at } : prev));
-        setRegenAllMsg('已儲存整份圖片風格設定，後續重生會自動套用');
-      } catch (err) {
-        setRegenAllMsg(err instanceof ApiError ? err.message : '儲存圖片風格設定失敗');
-      } finally {
-        setImageStyleDialogOpen(false);
-      }
-    })();
-  }, [pdfId, isReadOnlyProcessing, deckImageStylePrompt]);
 
   useEffect(() => {
     if (deckPages.length === 0) {
@@ -915,14 +749,41 @@ export default function PlayPage() {
     setCurrentIdx((i) => Math.min(totalPages - 1, i + 1));
   }, [syncEnabled, syncRole, totalPages]);
 
+  // usePagePolls 必須在 handleEnded 之前宣告，以避免 TDZ 問題
+  const pollState = usePagePolls({
+    pdfId,
+    currentPage,
+    interactiveMode,
+    syncEnabled,
+    syncRole,
+    syncRealtimePollStarted,
+    totalPages,
+    setCurrentIdx,
+    setIsPlaying,
+    setClassroomAwaitingNext,
+    setFinished,
+    setFullscreenPollControlOpen,
+    syncClientIdRef,
+    currentIdx,
+    isPlaying,
+    currentTime,
+    followerAudioUnlocked,
+    syncPollShowResults,
+    setSyncPollShowResults,
+    setSyncDisplayedPollId,
+  });
 
+  // ─── handleEnded (stays in PlayPage) ───────────────────────────────────────
+  // 跨領域協調：同時觸及 pollState（usePage Polls）、playback state（isPlaying/currentIdx/finished）
+  // 以及 classroomMode/interactiveMode 全域開關，三個領域在同一個回呼中依序決策，
+  // 任何一個領域都無法獨自持有完整的 if/else 邏輯。
   const handleEnded = useCallback(() => {
     setIsPlaying(false);
     if (interactiveMode) {
-      if (pagePolls.length > 0) {
+      if (pollState.pagePolls.length > 0) {
         // 當頁有投票：啟動 poll，停在此頁等待互動
-        setPollStarted(true);
-        setPollError(null);
+        pollState.setPollStarted(true);
+        pollState.setPollError(null);
         setFullscreenPollControlOpen(true);
         if (currentIdx < totalPages - 1) {
           setClassroomAwaitingNext(true);
@@ -953,7 +814,7 @@ export default function PlayPage() {
       setClassroomAwaitingNext(false);
       setFinished(true);
     }
-  }, [classroomMode, interactiveMode, pagePolls.length, currentIdx, totalPages]);
+  }, [classroomMode, interactiveMode, pollState.pagePolls.length, currentIdx, totalPages]);
 
   const handleSeek = useCallback(
     (ev: React.ChangeEvent<HTMLInputElement>) => {
@@ -1061,7 +922,13 @@ export default function PlayPage() {
     [pdfId],
   );
 
-  // Master 端手寫筆劃變化：與游標走同一個推送頻道、相同節流間隔，確保 follower 端鏡射速度一致。
+  // ─── Drawing push (stays in PlayPage) ──────────────────────────────────────
+  // flushLocalDrawingPush / pushLocalDrawingChange 與游標推送（cursor push effect）共用
+  // 同一個 updatePlaybackSyncState payload：每次推送都必須帶齊播放位置、投票狀態等欄位，
+  // 才能讓 follower 端一次 tick 拿到所有最新狀態。
+  // 若移入獨立 hook，將需要把 currentIdx/isPlaying/currentTime/pollState 等全部注入，
+  // 且 flushLocalDrawingPush 仍必須與 cursor push effect 的節流間隔完全一致，
+  // 組合複雜度高於保留在 PlayPage 的成本。
   const flushLocalDrawingPush = useCallback(() => {
     drawingPushTimerRef.current = null;
     const pending = pendingDrawingRef.current;
@@ -1072,13 +939,13 @@ export default function PlayPage() {
       is_playing: isPlaying,
       current_time: Number.isFinite(currentTime) ? Math.max(0, currentTime) : 0,
       follower_audio_unlocked: followerAudioUnlocked,
-      realtime_poll_started: pollStarted,
+      realtime_poll_started: pollState.pollStarted,
       quiz_show_answers: syncPollShowResults,
       active_quiz_id: syncDisplayedPollId,
       drawing_page_number: pending.pageNumber,
       drawing_json: JSON.stringify(pending.data),
     });
-  }, [pdfId, currentIdx, isPlaying, currentTime, followerAudioUnlocked, pollStarted, syncPollShowResults, syncDisplayedPollId]);
+  }, [pdfId, currentIdx, isPlaying, currentTime, followerAudioUnlocked, pollState.pollStarted, syncPollShowResults, syncDisplayedPollId]);
 
   const pushLocalDrawingChange = useCallback(
     (data: DrawingData) => {
@@ -1125,13 +992,13 @@ export default function PlayPage() {
       is_playing: isPlaying,
       current_time: time,
       follower_audio_unlocked: followerAudioUnlocked,
-      realtime_poll_started: pollStarted,
+      realtime_poll_started: pollState.pollStarted,
       quiz_show_answers: syncPollShowResults,
       active_quiz_id: syncDisplayedPollId,
     }).catch((err) => {
       setSyncError(err instanceof ApiError ? err.message : '同步狀態更新失敗');
     });
-  }, [syncEnabled, syncRole, pdfId, currentIdx, isPlaying, currentTime, followerAudioUnlocked, pollStarted, syncPollShowResults, syncDisplayedPollId]);
+  }, [syncEnabled, syncRole, pdfId, currentIdx, isPlaying, currentTime, followerAudioUnlocked, pollState.pollStarted, syncPollShowResults, syncDisplayedPollId]);
 
   useEffect(() => {
     if (!syncEnabled || syncRole !== 'master' || !pdfId) return;
@@ -1148,7 +1015,7 @@ export default function PlayPage() {
         is_playing: isPlaying,
         current_time: Number.isFinite(currentTime) ? Math.max(0, currentTime) : 0,
         follower_audio_unlocked: followerAudioUnlocked,
-        realtime_poll_started: pollStarted,
+        realtime_poll_started: pollState.pollStarted,
         quiz_show_answers: syncPollShowResults,
         active_quiz_id: syncDisplayedPollId,
         cursor_x: next.x,
@@ -1185,8 +1052,16 @@ export default function PlayPage() {
       }
       pendingCursorRef.current = null;
     };
-  }, [syncEnabled, syncRole, pdfId, imageOnlyFullscreen, currentIdx, isPlaying, currentTime, followerAudioUnlocked, pollStarted, syncPollShowResults, syncDisplayedPollId]);
+  }, [syncEnabled, syncRole, pdfId, imageOnlyFullscreen, currentIdx, isPlaying, currentTime, followerAudioUnlocked, pollState.pollStarted, syncPollShowResults, syncDisplayedPollId]);
 
+  // ─── Sync mega-polling effect (stays in PlayPage) ───────────────────────────
+  // 這個 effect 同時寫入跨領域的 14+ 個 state setter（音訊 seek/play/pause、
+  // 投票 syncRealtimePollStarted/syncDisplayedPollId/syncPollShowResults、
+  // 繪圖 syncDrawingState、游標 remoteCursor、導航 setCurrentIdx、
+  // sync 元數據 syncRole/syncError/followerAudioUnlocked 等），
+  // 且 master/follower 邏輯完全交織在同一個 setInterval callback 中。
+  // 若拆出 hook 需注入所有 setter 並保留完整 if/else 分支，
+  // 不會減少複雜度；以 reducer 或狀態機重寫才是正確長期方向。
   useEffect(() => {
     if (!syncEnabled || !pdfId || !syncClientIdRef.current) return;
     // eslint-disable-next-line no-console
@@ -1364,6 +1239,11 @@ export default function PlayPage() {
     }
   }, [pdfId, syncAiAnswerBusy]);
 
+  // ─── handleRetry (stays in PlayPage) ───────────────────────────────────────
+  // 直接讀寫 audioRef.current（src/load/play）、currentAudioTokenRef（防競態 token）、
+  // 並呼叫 clearAudioRetryTimer / scheduleAudioReload（同在 PlayPage 的 retry 排程機制）。
+  // 這些 ref 與排程函式都因相同理由（直接操作 <audio> DOM）留在 PlayPage，
+  // 無法在不移走 audioRef 的前提下獨立抽出。
   const handleRetry = useCallback(() => {
     const audio = audioRef.current;
     if (!audio || !currentPage?.audio_url) return;
@@ -1394,7 +1274,7 @@ export default function PlayPage() {
       }
       if (ev.key === ' ' || ev.code === 'Space') {
         ev.preventDefault();
-        if (imageEditSelectMode) return;
+        if (chatState.imageEditSelectMode) return;
         // 全螢幕模式下，空白鍵切換播放/暫停；非全螢幕維持下一頁。
         const isFullscreen = Boolean(getAnyFullscreenElement()) || imageOnlyFullscreen;
         if (isFullscreen) {
@@ -1522,292 +1402,143 @@ export default function PlayPage() {
   }, [imageOnlyFullscreen, fullscreenLayout, activeSentenceIdx]);
 
   useEffect(() => {
-    setEditingScript(currentScript);
-    setEditorError(null);
-  }, [currentPage?.page_number, currentScript]);
-
-  useEffect(() => {
-    const n = currentPage?.page_number;
-    if (!n) {
-      setPromptInput('');
-      return;
-    }
-    setPromptInput(pagePrompts[n] ?? '');
-  }, [currentPage?.page_number, pagePrompts]);
-
-  useEffect(() => {
-    if (!pdfId || !currentPage) return;
-    const n = currentPage.page_number;
-    let cancelled = false;
-    fetchPagePrompt(pdfId, n)
-      .then((res) => {
-        if (cancelled) return;
-        setPagePrompts((prev) => ({ ...prev, [n]: res.page_prompt ?? '' }));
-      })
-      .catch(() => {
-        // keep local fallback
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [pdfId, currentPage?.page_number]);
-
-  const hasScriptChanges = editingScript !== currentScript;
-
-  useEffect(() => {
     if (!shouldAutoFullscreen && !isLockedFullscreen) return;
     setImageOnlyFullscreen(true);
     if (isLockedFullscreen && fullscreenLayout === 'edit') setFullscreenLayout('image');
   }, [shouldAutoFullscreen, isLockedFullscreen, fullscreenLayout]);
 
-  useEffect(() => {
-    if (!pdfId || !currentPage) return;
-    let cancelled = false;
-    setChatBusy(true);
-    setChatError(null);
-    fetchPageChatHistory(pdfId, currentPage.page_number)
-      .then((res) => {
-        if (cancelled) return;
-        setChatHistory(res.history);
-        setChatInput('');
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setChatHistory([]);
-        setChatError(err instanceof ApiError ? err.message : '讀取問答紀錄失敗');
-      })
-      .finally(() => {
-        if (!cancelled) setChatBusy(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [pdfId, currentPage?.page_number]);
+  // ─── Custom hooks ────────────────────────────────────────────────────────────
+  // 宣告在此處（effects 之後、handleRegenerateAudio 之前）確保 deps array 無 TDZ 問題
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const storageKey = 'makeslide.poll.voterId';
-      const configured = await resolveConfiguredUserCode();
-      if (cancelled) return;
-      if (configured) {
-        window.localStorage.setItem(storageKey, configured);
-        pollVoterIdRef.current = configured;
-        return;
-      }
-      if (!pollVoterIdRef.current) {
-        const existing = window.localStorage.getItem(storageKey);
-        const next = existing || `voter-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-        window.localStorage.setItem(storageKey, next);
-        pollVoterIdRef.current = next;
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // ref 先宣告：避免 useRegeneration ↔ useImageStyle 循環依賴
+  const deckImageStylePromptRef = useRef('簡潔商業風格，以深色系為主，文字清晰對比，版面留白充足');
 
-  const shouldFetchPolls =
-    pollStarted ||
-    pollSettingsOpen ||
-    interactiveMode ||
-    (syncEnabled && syncRole === 'follower' && syncRealtimePollStarted);
-
-  useEffect(() => {
-    if (!shouldFetchPolls || !pdfId || !currentPage) return;
-    let cancelled = false;
-    let timer: number | null = null;
-    const loadPolls = async () => {
-      try {
-        const polls = await fetchPagePolls(pdfId, currentPage.page_number);
-        if (cancelled) return;
-        setPagePolls(polls);
-        setPollError(null);
-      } catch (err) {
-        if (!cancelled) setPollError(err instanceof ApiError ? err.message : '讀取投票失敗');
-      }
-      if (!cancelled) timer = window.setTimeout(loadPolls, POLL_INTERVAL_MS);
-    };
-    void loadPolls();
-    return () => {
-      cancelled = true;
-      if (timer != null) window.clearTimeout(timer);
-    };
-  }, [shouldFetchPolls, pdfId, currentPage?.page_number]);
-
-  const handleSendChat = useCallback(async () => {
-    if (isReadOnlyProcessing) return;
-    if (!pdfId || !currentPage) return;
-    const question = chatInput.trim();
-    if (!question) return;
-    const nextHistory = [...chatHistory, { role: 'user' as const, content: question }];
-    setChatHistory(nextHistory);
-    setChatInput('');
-    setChatBusy(true);
-    setChatError(null);
-    try {
-      const res = await chatWithPageContext(
-        pdfId,
-        currentPage.page_number,
-        question,
-        limitChatHistoryForRequest(chatHistory),
-      );
-      setChatHistory((prev) => [...prev, { role: 'assistant', content: res.answer }]);
-    } catch (err) {
-      setChatError(err instanceof ApiError ? err.message : '對話失敗');
-    } finally {
-      setChatBusy(false);
-    }
-  }, [pdfId, currentPage, chatInput, chatHistory, isReadOnlyProcessing]);
-
-  const handleCreatePoll = useCallback(async () => {
-    if (!pdfId || !currentPage) return;
-    const question = pollQuestion.trim();
-    const options = pollOptionsText
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-    if (!question) {
-      setPollError('請輸入投票問題');
-      return;
-    }
-    if (options.length < 2) {
-      setPollError('至少需要兩個答案選項');
-      return;
-    }
-    setPollBusy(true);
-    setPollError(null);
-    try {
-      const poll = await createPagePoll(pdfId, currentPage.page_number, question, options);
-      setPagePolls((prev) => [poll, ...prev]);
-      setPollQuestion('');
-      setPollOptionsText('同意\n不同意');
-      setPollStarted(true);
-    } catch (err) {
-      setPollError(err instanceof ApiError ? err.message : '建立投票失敗');
-    } finally {
-      setPollBusy(false);
-    }
-  }, [pdfId, currentPage, pollQuestion, pollOptionsText]);
-
-  const handleStartPoll = useCallback(() => {
-    setPollStarted(true);
-    setPollError(null);
-  }, []);
-
-  const handleStopPoll = useCallback(() => {
-    setPollStarted(false);
-    setSyncPollShowResults(false);
-    setSyncDisplayedPollId(null);
-    setPagePolls([]);
-    setPollVotes({});
-    setPollError(null);
-    setFullscreenPollControlOpen(false);
-    // 互動模式：結束投票後自動進入下一頁（未開同步，或是 master 才執行翻頁）
-    if (interactiveMode && (!syncEnabled || syncRole !== 'follower')) {
-      setClassroomAwaitingNext(false);
-      setFinished(false);
-      setCurrentIdx((i) => {
-        if (i < totalPages - 1) {
-          setIsPlaying(true);
-          return i + 1;
-        }
-        setFinished(true);
-        return i;
-      });
-    }
-  }, [interactiveMode, syncEnabled, syncRole, totalPages]);
-
-  const handleVotePoll = useCallback(async (pollId: number, optionIndex: number) => {
+  const reloadDetail = useCallback(async () => {
     if (!pdfId) return;
-    const voterId = pollVoterIdRef.current;
-    if (!voterId) return;
-    setPollBusy(true);
-    setPollError(null);
-    try {
-      const poll = await votePagePoll(pdfId, pollId, voterId, optionIndex);
-      setPagePolls((prev) => prev.map((item) => (item.id === poll.id ? poll : item)));
-      setPollVotes((prev) => ({ ...prev, [pollId]: optionIndex }));
-    } catch (err) {
-      setPollError(err instanceof ApiError ? err.message : '投票失敗');
-    } finally {
-      setPollBusy(false);
-    }
-  }, [pdfId]);
-
-  const handleResetPollVotes = useCallback(async (pollId: number) => {
-    if (!pdfId) return;
-    setPollBusy(true);
-    setPollError(null);
-    try {
-      const poll = await resetPagePollVotes(pdfId, pollId);
-      setPagePolls((prev) => prev.map((item) => (item.id === poll.id ? poll : item)));
-      setPollVotes((prev) => {
-        const next = { ...prev };
-        delete next[pollId];
-        return next;
-      });
-    } catch (err) {
-      setPollError(err instanceof ApiError ? err.message : '清除投票結果失敗');
-    } finally {
-      setPollBusy(false);
-    }
-  }, [pdfId]);
-
-  const handleDeletePoll = useCallback(async (pollId: number) => {
-    if (!pdfId) return;
-    setPollBusy(true);
-    setPollError(null);
-    try {
-      await deletePagePoll(pdfId, pollId);
-      setPagePolls((prev) => prev.filter((item) => item.id !== pollId));
-      setPollVotes((prev) => {
-        const next = { ...prev };
-        delete next[pollId];
-        return next;
-      });
-      if (syncDisplayedPollId === pollId) {
-        setSyncDisplayedPollId(null);
+    let shareMode: ShareAccessMode | null = null;
+    if (currentShareToken) {
+      const share = await resolveShareToken(currentShareToken);
+      if (share.pdf_id !== pdfId) {
+        throw new ApiError('分享連結與簡報不符', 'INVALID_SHARE_TARGET', 400);
       }
-    } catch (err) {
-      setPollError(err instanceof ApiError ? err.message : '刪除投票問題失敗');
-    } finally {
-      setPollBusy(false);
+      shareMode = share.access;
     }
-  }, [pdfId, syncDisplayedPollId]);
+    const d = await fetchPdfDetail(pdfId, currentShareToken || undefined);
+    const detailWithShare = shareMode ? { ...d, share_mode: shareMode } : d;
+    setDetail(detailWithShare);
+    setVideoUrl(detailWithShare.video_url ?? null);
+  }, [pdfId, currentShareToken]);
 
-  const handleSelectDisplayedPoll = useCallback(
-    async (pollId: number) => {
-      setSyncDisplayedPollId(pollId);
-      if (!syncEnabled || syncRole !== 'master' || !pdfId || !syncClientIdRef.current) return;
-      try {
-        await updatePlaybackSyncState(pdfId, syncClientIdRef.current, {
-          page_number: Math.max(1, currentIdx + 1),
-          is_playing: isPlaying,
-          current_time: Number.isFinite(currentTime) ? Math.max(0, currentTime) : 0,
-          follower_audio_unlocked: followerAudioUnlocked,
-          realtime_poll_started: pollStarted,
-          quiz_show_answers: syncPollShowResults,
-          active_quiz_id: pollId,
-        });
-        setSyncError(null);
-      } catch (err) {
-        setSyncError(err instanceof ApiError ? err.message : '同步顯示題目失敗');
-      }
-    },
-    [syncEnabled, syncRole, pdfId, currentIdx, isPlaying, currentTime, followerAudioUnlocked, pollStarted, syncPollShowResults],
-  );
+  const {
+    versionHistoryOpen,
+    setVersionHistoryOpen,
+    versionHistoryType,
+    versionHistoryPage,
+    versionHistoryEntries,
+    versionHistoryLoading,
+    versionPreviewHash,
+    versionPreviewScript,
+    versionRestoring,
+    versionError,
+    openVersionHistory,
+    handleVersionPreview,
+    handleVersionRestore,
+  } = useVersionHistory({ pdfId, reloadDetail });
 
+  const videoState = useVideoGeneration({ pdfId, isReadOnlyProcessing, detail, setDetail });
+  const { setVideoUrl } = videoState;
+
+  const metaState = usePdfMetadata({ pdfId, isReadOnlyProcessing, detail, setDetail });
+  const {
+    setTitleInput,
+    setTtsVoice,
+    setTtsSpeed,
+    setScriptMaxCharsPerPage,
+    setHostMode,
+    setPlayQrCodeUrl,
+  } = metaState;
+
+  const regenState = useRegeneration({
+    pdfId,
+    currentIdx,
+    isReadOnlyProcessing,
+    deckImageStylePromptRef,
+    reloadDetail,
+    setCurrentIdx,
+  });
+  const { setRegenAllMsg } = regenState;
+
+  const slideState = useSlideManagement({
+    pdfId,
+    currentPage,
+    currentIdx,
+    totalPages,
+    isReadOnlyProcessing,
+    reloadDetail,
+    setCurrentIdx,
+  });
+  const { slideBusy, setSlideBusy, setSlideError, handleReplaceImageFile } = slideState;
+
+  const imageStyleState = useImageStyle({
+    pdfId,
+    isReadOnlyProcessing,
+    setDetail,
+    setRegenAllMsg,
+  });
+  deckImageStylePromptRef.current = imageStyleState.deckImageStylePrompt;
+
+  const chatState = useChatAndImageEdit({
+    pdfId,
+    currentPage,
+    isReadOnlyProcessing,
+    deckImageStylePrompt: imageStyleState.deckImageStylePrompt,
+    setSlideBusy,
+    setSlideError,
+    reloadDetail,
+    imageEditRegionOverlayRef,
+  });
+
+  const scriptEditorState = useScriptEditor({
+    pdfId,
+    currentPage,
+    currentScript: currentPage ? (scripts[currentPage.page_number] ?? '') : '',
+    currentIdx,
+    deckPages,
+    scripts,
+    isReadOnlyProcessing,
+    chatInput: chatState.chatInput,
+    chatHistory: chatState.chatHistory,
+    setChatHistory: chatState.setChatHistory,
+    setChatInput: chatState.setChatInput,
+  });
+
+  const promptState = usePromptAndSource({
+    pdfId,
+    currentPage,
+    isReadOnlyProcessing,
+    setDetail,
+  });
+
+  // detail ロード後、image_style_prompt を imageStyleState に反映
+  // （load effect は setDeckImageStylePrompt を直接呼べないため、detail 変化を監視）
+  useEffect(() => {
+    if (detail?.image_style_prompt?.trim()) {
+      imageStyleState.setDeckImageStylePrompt(detail.image_style_prompt);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail?.image_style_prompt]);
+
+  // ─── Audio regeneration (stays in PlayPage: directly manipulates audioRef) ─
   const handleRegenerateAudio = useCallback(async () => {
     if (isReadOnlyProcessing) return;
     if (!pdfId || !currentPage) return;
-    const nextScript = editingScript.trim();
+    const nextScript = scriptEditorState.editingScript.trim();
     if (!nextScript) {
-      setEditorError('文稿不可為空');
+      scriptEditorState.setEditorError('文稿不可為空');
       return;
     }
-    setEditorBusy(true);
-    setEditorError(null);
+    scriptEditorState.setEditorBusy(true);
+    scriptEditorState.setEditorError(null);
     setAudioError(null);
     try {
       const res = await regeneratePageAudio(pdfId, currentPage.page_number, nextScript);
@@ -1887,315 +1618,11 @@ export default function PlayPage() {
         pageNumber: currentPage?.page_number,
         error: err,
       });
-      setEditorError(err instanceof ApiError ? err.message : '重生語音失敗');
+      scriptEditorState.setEditorError(err instanceof ApiError ? err.message : '重生語音失敗');
     } finally {
-      setEditorBusy(false);
+      scriptEditorState.setEditorBusy(false);
     }
-  }, [pdfId, currentPage, editingScript, isReadOnlyProcessing]);
-
-  const handleRewriteScript = useCallback(async () => {
-    if (isReadOnlyProcessing) return;
-    if (!pdfId || !currentPage) return;
-    const prompt = chatInput.trim();
-    const sourceScript = editingScript.trim();
-    setRewriteBusy(true);
-    setRewriteError(null);
-    const nextHistory = [...chatHistory, { role: 'user' as const, content: prompt }];
-    setChatHistory(nextHistory);
-    setChatInput('');
-    try {
-      const res = await rewritePageScript(
-        pdfId,
-        currentPage.page_number,
-        prompt,
-        sourceScript,
-        {
-          previousScript:
-            currentIdx > 0
-              ? (scripts[deckPages[currentIdx - 1]?.page_number ?? -1] ?? '').trim()
-              : '',
-          currentScript: sourceScript,
-          nextScript:
-            currentIdx < deckPages.length - 1
-              ? (scripts[deckPages[currentIdx + 1]?.page_number ?? -1] ?? '').trim()
-              : '',
-        },
-        limitChatHistoryForRequest(chatHistory),
-      );
-      setEditingScript(res.script);
-      setChatHistory((prev) => [...prev, { role: 'assistant', content: res.script }]);
-    } catch (err) {
-      setChatHistory(chatHistory);
-      setRewriteError(err instanceof ApiError ? err.message : '逐字稿改寫失敗');
-    } finally {
-      setRewriteBusy(false);
-    }
-  }, [pdfId, currentPage, chatInput, editingScript, chatHistory, currentIdx, deckPages, scripts, isReadOnlyProcessing]);
-
-  const handleClearChat = useCallback(async () => {
-    if (isReadOnlyProcessing) return;
-    if (!pdfId || !currentPage) return;
-    setChatBusy(true);
-    setChatError(null);
-    try {
-      await clearPageChatHistory(pdfId, currentPage.page_number);
-      setChatHistory([]);
-      setChatInput('');
-    } catch (err) {
-      setChatError(err instanceof ApiError ? err.message : '清除問答失敗');
-    } finally {
-      setChatBusy(false);
-    }
-  }, [pdfId, currentPage, isReadOnlyProcessing]);
-
-  const handleSavePrompt = useCallback(async () => {
-    if (isReadOnlyProcessing) return;
-    if (!pdfId || !currentPage) return;
-    setPromptBusy(true);
-    setPromptMsg(null);
-    try {
-      const res = await updatePdfPrompt(pdfId, currentPage.page_number, promptInput);
-      setPagePrompts((prev) => ({ ...prev, [res.page_number]: res.page_prompt ?? '' }));
-      setDetail((prev) => (prev ? { ...prev, updated_at: res.updated_at } : prev));
-      setPromptMsg('提示詞已更新');
-    } catch (err) {
-      setPromptMsg(err instanceof ApiError ? err.message : '更新提示詞失敗');
-    } finally {
-      setPromptBusy(false);
-    }
-  }, [pdfId, currentPage, promptInput, isReadOnlyProcessing]);
-
-  const handleAddTxtSource = useCallback(async () => {
-    if (!pdfId) return;
-    const content = sourceTextContent.trim();
-    if (!content) {
-      setSourceErr('請先輸入來源文字內容');
-      return;
-    }
-    setSourceBusy(true);
-    setSourceErr(null);
-    setSourceMsg(null);
-    try {
-      const created = await addPdfTextSource(pdfId, {
-        source_name: sourceTextName.trim() || undefined,
-        content_text: content,
-      });
-      setDetail((prev) => {
-        if (!prev) return prev;
-        const prevSources = prev.sources ?? [];
-        return { ...prev, sources: [...prevSources, created] };
-      });
-      setSourceTextContent('');
-      setSourceMsg('已新增文字來源');
-    } catch (err) {
-      setSourceErr(err instanceof ApiError ? err.message : '新增文字來源失敗');
-    } finally {
-      setSourceBusy(false);
-    }
-  }, [pdfId, sourceTextContent, sourceTextName]);
-
-  const handleAddPdfSource = useCallback(async (file: File) => {
-    if (!pdfId) return;
-    setSourceBusy(true);
-    setSourceErr(null);
-    setSourceMsg(null);
-    try {
-      const created = await addPdfFileSource(pdfId, file);
-      setDetail((prev) => {
-        if (!prev) return prev;
-        const prevSources = prev.sources ?? [];
-        return { ...prev, sources: [...prevSources, created] };
-      });
-      setSourceMsg('已新增 PDF 來源');
-    } catch (err) {
-      setSourceErr(err instanceof ApiError ? err.message : '新增 PDF 來源失敗');
-    } finally {
-      setSourceBusy(false);
-    }
-  }, [pdfId]);
-
-  const reloadDetail = useCallback(async () => {
-    if (!pdfId) return;
-    let shareMode: ShareAccessMode | null = null;
-    if (currentShareToken) {
-      const share = await resolveShareToken(currentShareToken);
-      if (share.pdf_id !== pdfId) {
-        throw new ApiError('分享連結與簡報不符', 'INVALID_SHARE_TARGET', 400);
-      }
-      shareMode = share.access;
-    }
-    const d = await fetchPdfDetail(pdfId, currentShareToken || undefined);
-    const detailWithShare = shareMode ? { ...d, share_mode: shareMode } : d;
-    setDetail(detailWithShare);
-    setVideoUrl(detailWithShare.video_url ?? null);
-  }, [pdfId, currentShareToken]);
-
-  const {
-    versionHistoryOpen,
-    setVersionHistoryOpen,
-    versionHistoryType,
-    versionHistoryPage,
-    versionHistoryEntries,
-    versionHistoryLoading,
-    versionPreviewHash,
-    versionPreviewScript,
-    versionRestoring,
-    versionError,
-    openVersionHistory,
-    handleVersionPreview,
-    handleVersionRestore,
-  } = useVersionHistory({ pdfId, reloadDetail });
-
-  const regenState = useRegeneration({
-    pdfId,
-    currentIdx,
-    isReadOnlyProcessing,
-    deckImageStylePrompt,
-    reloadDetail,
-    setCurrentIdx,
-  });
-  const { setRegenAllMsg } = regenState;
-
-  const videoState = useVideoGeneration({ pdfId, isReadOnlyProcessing, detail, setDetail });
-  const { setVideoUrl } = videoState;
-
-  const metaState = usePdfMetadata({ pdfId, isReadOnlyProcessing, detail, setDetail });
-  const {
-    setTitleInput,
-    setTtsVoice,
-    setTtsSpeed,
-    setScriptMaxCharsPerPage,
-    setHostMode,
-    setPlayQrCodeUrl,
-  } = metaState;
-
-  const slideState = useSlideManagement({
-    pdfId,
-    currentPage,
-    currentIdx,
-    totalPages,
-    isReadOnlyProcessing,
-    reloadDetail,
-    setCurrentIdx,
-  });
-  const { slideBusy, setSlideBusy, setSlideError, handleReplaceImageFile } = slideState;
-
-  const handleRegenerateImageWithPrompt = useCallback(async () => {
-    if (isReadOnlyProcessing) return;
-    if (!pdfId || !currentPage) return;
-    const trimmed = chatInput.trim() || '保留版型，讓文字更清晰、重點更聚焦';
-    const merged = [
-      `整份圖片風格（固定套用）：\n${deckImageStylePrompt.trim() || '(無)'}`,
-      `單張調整需求：\n${trimmed}`,
-    ].join('\n\n');
-    setSlideBusy(true);
-    setSlideError(null);
-    try {
-      const nextHistory = [...chatHistory, { role: 'user' as const, content: `【修改圖片】${trimmed}` }];
-      setChatHistory(nextHistory);
-      const res = await regenerateSlideImage(
-        pdfId,
-        currentPage.page_number,
-        merged,
-        limitChatHistoryForRequest(chatHistory),
-      );
-      const preview = `${res.image_url}${res.image_url.includes('?') ? '&' : '?'}t=${encodeURIComponent(res.updated_at)}`;
-      setChatHistory((prev) => [
-        ...prev,
-        { role: 'assistant', content: `${IMAGE_MSG_PREFIX}${preview}` },
-      ]);
-    } catch (err) {
-      setChatHistory(chatHistory);
-      setSlideError(err instanceof ApiError ? err.message : '修改圖片失敗');
-    } finally {
-      setSlideBusy(false);
-    }
-  }, [pdfId, currentPage, chatInput, chatHistory, deckImageStylePrompt, isReadOnlyProcessing]);
-
-  const handleApplyPreviewImage = useCallback(async () => {
-    if (isReadOnlyProcessing) return;
-    if (!pdfId || !imagePreviewUrl || !imagePreviewPageNumber) return;
-    setSlideBusy(true);
-    setSlideError(null);
-    try {
-      const resp = await fetch(imagePreviewUrl);
-      if (!resp.ok) throw new Error('Failed to fetch preview image');
-      const blob = await resp.blob();
-      const file = new File([blob], `page-${imagePreviewPageNumber}-candidate.jpg`, { type: blob.type || 'image/jpeg' });
-      await replaceSlideImage(pdfId, imagePreviewPageNumber, file);
-      await reloadDetail();
-    } catch (err) {
-      setSlideError(err instanceof ApiError ? err.message : '套用圖片失敗');
-    } finally {
-      setSlideBusy(false);
-    }
-    setImagePreviewOpen(false);
-  }, [pdfId, imagePreviewUrl, imagePreviewPageNumber, reloadDetail, isReadOnlyProcessing]);
-
-  const clearChatPastedImage = useCallback(() => {
-    if (chatPastedImageUrl) URL.revokeObjectURL(chatPastedImageUrl);
-    setChatPastedImage(null);
-    setChatPastedImageUrl(null);
-    setChatInpaintError(null);
-  }, [chatPastedImageUrl]);
-
-  const clearImageEditRegion = useCallback(() => {
-    setImageEditRegion(null);
-    const overlay = imageEditRegionOverlayRef.current;
-    if (overlay) overlay.style.display = 'none';
-  }, []);
-
-  const handleInpaintImage = useCallback(async () => {
-    if (isReadOnlyProcessing || !pdfId || !currentPage) return;
-    const prompt = chatInput.trim() || '根據指示修改投影片圖片';
-
-    // Generate mask PNG at 1536×1024 (same as the slide image size used by the API)
-    let maskFile: File | null = null;
-    if (imageEditRegion) {
-      const W = 1536, H = 1024;
-      const mc = document.createElement('canvas');
-      mc.width = W;
-      mc.height = H;
-      const mctx = mc.getContext('2d');
-      if (mctx) {
-        mctx.fillStyle = 'white';       // white = keep
-        mctx.fillRect(0, 0, W, H);
-        mctx.clearRect(                  // transparent = modify
-          Math.round(imageEditRegion.x * W),
-          Math.round(imageEditRegion.y * H),
-          Math.round(imageEditRegion.w * W),
-          Math.round(imageEditRegion.h * H),
-        );
-        const maskBlob: Blob | null = await new Promise((resolve) => mc.toBlob(resolve, 'image/png'));
-        if (maskBlob) maskFile = new File([maskBlob], 'mask.png', { type: 'image/png' });
-      }
-    }
-
-    const regionNote = imageEditRegion ? '（標示區域）' : '';
-    const refNote = chatPastedImage ? '（含參考圖）' : '';
-    const nextHistory = [...chatHistory, { role: 'user' as const, content: `【修改投影片圖片${regionNote}${refNote}】${prompt}` }];
-    setChatHistory(nextHistory);
-    setChatInpaintBusy(true);
-    setChatInpaintError(null);
-    try {
-      const res = await inpaintImage(pdfId, currentPage.page_number, maskFile, chatPastedImage, prompt);
-      const preview = `${res.image_url}?t=${encodeURIComponent(res.updated_at)}`;
-      setChatHistory((prev) => [
-        ...prev,
-        { role: 'assistant', content: `${IMAGE_MSG_PREFIX}${preview}` },
-      ]);
-      clearChatPastedImage();
-      clearImageEditRegion();
-      setImageEditSelectMode(false);
-    } catch (err) {
-      setChatHistory(chatHistory);
-      setChatInpaintError(err instanceof ApiError ? err.message : '修改圖片失敗');
-    } finally {
-      setChatInpaintBusy(false);
-    }
-  }, [isReadOnlyProcessing, pdfId, currentPage, chatInput, imageEditRegion, chatPastedImage, chatHistory, clearChatPastedImage, clearImageEditRegion]);
-
-  const hasChatInput = chatInput.trim().length > 0;
+  }, [pdfId, currentPage, scriptEditorState.editingScript, isReadOnlyProcessing]);
 
   useEffect(() => {
     const itemAsString = (item: DataTransferItem): Promise<string> =>
@@ -2329,14 +1756,16 @@ export default function PlayPage() {
     );
   }
 
+  const hasScriptChanges = scriptEditorState.editingScript !== (currentPage ? (scripts[currentPage.page_number] ?? '') : '');
+
   const activePoll =
-    (pollStarted || (syncEnabled && syncRole === 'follower' && syncRealtimePollStarted)) && pagePolls.length > 0
+    (pollState.pollStarted || (syncEnabled && syncRole === 'follower' && syncRealtimePollStarted)) && pollState.pagePolls.length > 0
       ? (
         (syncDisplayedPollId != null
-          ? pagePolls.find((poll) => poll.id === syncDisplayedPollId)
+          ? pollState.pagePolls.find((poll) => poll.id === syncDisplayedPollId)
           : null)
-        ?? pagePolls.find((poll) => poll.is_active)
-        ?? pagePolls[0]
+        ?? pollState.pagePolls.find((poll) => poll.is_active)
+        ?? pollState.pagePolls[0]
         ?? null
       )
       : null;
@@ -2361,46 +1790,28 @@ export default function PlayPage() {
     audioError, ...slideState,
     showAddPagesModal, setShowAddPagesModal, draggingPage, setDraggingPage,
     thumbLoadUntilIdx, setThumbLoadUntilIdx,
-    // script / editor
-    editingScript, setEditingScript, editorError, setEditorError, editorBusy, setEditorBusy,
-    rewriteBusy, rewriteError, setRewriteError, editTab, setEditTab,
-    transcriptFocusMode, setTranscriptFocusMode, handleRewriteScript, handleRetry,
-    // prompt / source
-    promptInput, setPromptInput, sourceTextName, setSourceTextName,
-    sourceTextContent, setSourceTextContent, sourceBusy, sourceMsg, sourceErr,
-    genPrompts, setGenPrompts, genPromptsLoading, setGenPromptsLoading, expandedGenPrompt, setExpandedGenPrompt,
-    promptBusy, promptMsg, pagePrompts, handleSavePrompt, handleAddPdfSource, handleAddTxtSource,
-    // chat
-    chatHistory, setChatHistory, chatInput, setChatInput, chatBusy, chatError, hasChatInput,
-    chatPastedImage, setChatPastedImage, chatPastedImageUrl, setChatPastedImageUrl,
-    chatInpaintBusy, chatInpaintError, setChatInpaintError,
-    handleSendChat, handleClearChat, clearChatPastedImage,
-    // image edit / inpaint
-    imageEditSelectMode, setImageEditSelectMode, imageEditRegion, setImageEditRegion,
-    clearImageEditRegion, handleInpaintImage, handleReplaceImageFile,
-    handleRegenerateImageWithPrompt, handleApplyPreviewImage,
-    imagePreviewUrl, setImagePreviewUrl, imagePreviewPageNumber, setImagePreviewPageNumber,
-    imagePreviewOpen, setImagePreviewOpen,
-    // TTS / audio
+    // script / editor (from useScriptEditor)
+    ...scriptEditorState,
+    handleRetry,
+    // prompt / source (from usePromptAndSource)
+    ...promptState,
+    // chat + image edit / inpaint (from useChatAndImageEdit)
+    ...chatState,
+    handleReplaceImageFile,
+    // TTS / audio (from usePdfMetadata + PlayPage)
     ...metaState,
     handleRegenerateAudio,
-    // image style
-    imageStyleDialogOpen, setImageStyleDialogOpen, imageStyleTemplates,
-    selectedImageStyleTemplateKey, setSelectedImageStyleTemplateKey,
-    deckImageStylePrompt, setDeckImageStylePrompt, applyImageStyleTemplate,
-    openImageStyleDialog, handleSaveImageStyle,
-    // regen
+    // image style (from useImageStyle)
+    ...imageStyleState,
+    // regen (from useRegeneration)
     ...regenState,
-    // slide actions
-    handleDeletePoll, handleCreatePoll, handleStartPoll,
-    handleStopPoll, handleVotePoll, handleResetPollVotes, handleSelectDisplayedPoll,
-    // video
-    ...videoState,
-    // poll
-    pagePolls, pollQuestion, setPollQuestion, pollOptionsText, setPollOptionsText,
-    pollBusy, pollError, pollVotes, pollSettingsOpen, setPollSettingsOpen, pollStarted,
-    activePoll, activePollQuestion, syncDisplayedPollId, setSyncDisplayedPollId,
+    // poll (from usePagePolls)
+    ...pollState,
+    activePoll, activePollQuestion,
+    syncDisplayedPollId, setSyncDisplayedPollId,
     syncRealtimePollStarted, syncPollShowResults, setSyncPollShowResults,
+    // video (from useVideoGeneration)
+    ...videoState,
     // classroom
     classroomMode, setClassroomMode, classroomAwaitingNext, interactiveMode, setInteractiveMode,
     // sync
@@ -2466,12 +1877,12 @@ export default function PlayPage() {
         />
       ) : null}
 
-      {imagePreviewOpen && imagePreviewUrl ? (
+      {chatState.imagePreviewOpen && chatState.imagePreviewUrl ? (
         <ImagePreviewDialog
-          imagePreviewUrl={imagePreviewUrl}
+          imagePreviewUrl={chatState.imagePreviewUrl}
           isReadOnlyProcessing={isReadOnlyProcessing}
-          onClose={() => setImagePreviewOpen(false)}
-          onApply={() => void handleApplyPreviewImage()}
+          onClose={() => chatState.setImagePreviewOpen(false)}
+          onApply={() => void chatState.handleApplyPreviewImage()}
         />
       ) : null}
 
