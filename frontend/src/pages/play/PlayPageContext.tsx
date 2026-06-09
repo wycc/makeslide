@@ -1,0 +1,403 @@
+import { createContext, useContext } from 'react';
+import type { ChangeEvent, Dispatch, SetStateAction, RefObject, MutableRefObject } from 'react';
+import type {
+  ChatMessage,
+  PdfDetail,
+  PdfDetailPage,
+  PagePoll,
+  PdfSourceItem,
+  RegenJobState,
+  SyncAiAnswer,
+  SyncFollowerQuestion,
+} from '../../types';
+import type { ImagePromptTemplate, PageGenerationPrompt, ShareAccessMode } from '../../lib/api';
+import type { TtsProvider } from '../../lib/ttsVoices';
+import type { DrawingCanvasHandle, DrawingData, DrawingStroke } from '../../components/DrawingCanvas';
+
+// ── Inline alias types ────────────────────────────────────────────────────────
+type HostMode = 'solo' | 'dual';
+type EditTab = 'script' | 'prompt' | 'source' | 'system';
+type ActiveTab = 'play' | 'qa';
+type SyncRole = 'master' | 'follower';
+type FullscreenLayout = 'image' | 'split' | 'edit';
+type DrawingTool = 'pen' | 'cursor' | 'eraser';
+type RegenOptions = { image: boolean; script: boolean; audio: boolean };
+type ImageEditRegion = { x: number; y: number; w: number; h: number } | null;
+
+// ── Full context interface ────────────────────────────────────────────────────
+export interface PlayPageContextValue {
+  // ─── Routing / identity ─────────────────────────────────────────────────────
+  pdfId: string | undefined;
+  currentShareToken: string;
+  isLockedFullscreen: boolean;
+
+  // ─── Deck data (derived) ────────────────────────────────────────────────────
+  detail: PdfDetail | null;
+  setDetail: Dispatch<SetStateAction<PdfDetail | null>>;
+  deckPages: PdfDetailPage[];
+  currentPage: PdfDetailPage | null;
+  currentIdx: number;
+  setCurrentIdx: Dispatch<SetStateAction<number>>;
+  totalPages: number;
+  loadError: string | null;
+
+  // ─── Playback ───────────────────────────────────────────────────────────────
+  isPlaying: boolean;
+  setIsPlaying: Dispatch<SetStateAction<boolean>>;
+  currentTime: number;
+  setCurrentTime: Dispatch<SetStateAction<number>>;
+  duration: number;
+  setDuration: Dispatch<SetStateAction<number>>;
+  finished: boolean;
+  setFinished: Dispatch<SetStateAction<boolean>>;
+  audioMuted: boolean;
+  setAudioMuted: Dispatch<SetStateAction<boolean>>;
+  effectiveAudioMuted: boolean;
+  playbackRate: number;
+  setPlaybackRate: Dispatch<SetStateAction<number>>;
+  showSubtitle: boolean;
+  setShowSubtitle: Dispatch<SetStateAction<boolean>>;
+  playbackSettingsOpen: boolean;
+  setPlaybackSettingsOpen: Dispatch<SetStateAction<boolean>>;
+  followerAudioUnlocked: boolean;
+  setFollowerAudioUnlocked: Dispatch<SetStateAction<boolean>>;
+  scripts: Record<number, string>;
+  setScripts: Dispatch<SetStateAction<Record<number, string>>>;
+  displayedImageSrc: string | null;
+  setDisplayedImageSrc: Dispatch<SetStateAction<string | null>>;
+
+  // ─── Playback actions ───────────────────────────────────────────────────────
+  playPause: () => void;
+  goPrev: () => void;
+  goNext: () => void;
+  handleEnded: () => void;
+  handleSeek: (ev: ChangeEvent<HTMLInputElement>) => void;
+  scheduleAudioReload: (token: number, audioUrl: string, pageNumber?: number) => void;
+  clearAudioRetryTimer: () => void;
+  reloadDetail: () => Promise<void>;
+
+  // ─── Slide navigation state ─────────────────────────────────────────────────
+  audioError: string | null;
+  slideBusy: boolean;
+  setSlideBusy: Dispatch<SetStateAction<boolean>>;
+  slideError: string | null;
+  setSlideError: Dispatch<SetStateAction<string | null>>;
+  showAddPagesModal: boolean;
+  setShowAddPagesModal: Dispatch<SetStateAction<boolean>>;
+  draggingPage: number | null;
+  setDraggingPage: Dispatch<SetStateAction<number | null>>;
+  thumbLoadUntilIdx: number;
+  setThumbLoadUntilIdx: Dispatch<SetStateAction<number>>;
+
+  // ─── Script / editor ────────────────────────────────────────────────────────
+  editingScript: string;
+  setEditingScript: Dispatch<SetStateAction<string>>;
+  editorError: string | null;
+  setEditorError: Dispatch<SetStateAction<string | null>>;
+  editorBusy: boolean;
+  setEditorBusy: Dispatch<SetStateAction<boolean>>;
+  rewriteBusy: boolean;
+  rewriteError: string | null;
+  setRewriteError: Dispatch<SetStateAction<string | null>>;
+  editTab: EditTab;
+  setEditTab: Dispatch<SetStateAction<EditTab>>;
+  transcriptFocusMode: boolean;
+  setTranscriptFocusMode: Dispatch<SetStateAction<boolean>>;
+  handleRewriteScript: () => void;
+  handleRetry: () => void;
+
+  // ─── Prompt / source ────────────────────────────────────────────────────────
+  promptInput: string;
+  setPromptInput: Dispatch<SetStateAction<string>>;
+  sourceTextName: string;
+  setSourceTextName: Dispatch<SetStateAction<string>>;
+  sourceTextContent: string;
+  setSourceTextContent: Dispatch<SetStateAction<string>>;
+  sourceBusy: boolean;
+  sourceMsg: string | null;
+  sourceErr: string | null;
+  genPrompts: PageGenerationPrompt[];
+  setGenPrompts: Dispatch<SetStateAction<PageGenerationPrompt[]>>;
+  genPromptsLoading: boolean;
+  setGenPromptsLoading: Dispatch<SetStateAction<boolean>>;
+  expandedGenPrompt: string | null;
+  setExpandedGenPrompt: Dispatch<SetStateAction<string | null>>;
+  promptBusy: boolean;
+  promptMsg: string | null;
+  pagePrompts: Record<number, string>;
+  handleSavePrompt: () => void;
+  handleAddPdfSource: (file: File) => void;
+  handleAddTxtSource: () => void;
+
+  // ─── Chat ───────────────────────────────────────────────────────────────────
+  chatHistory: ChatMessage[];
+  setChatHistory: Dispatch<SetStateAction<ChatMessage[]>>;
+  chatInput: string;
+  setChatInput: Dispatch<SetStateAction<string>>;
+  chatBusy: boolean;
+  chatError: string | null;
+  hasChatInput: boolean;
+  chatPastedImage: File | null;
+  setChatPastedImage: Dispatch<SetStateAction<File | null>>;
+  chatPastedImageUrl: string | null;
+  setChatPastedImageUrl: Dispatch<SetStateAction<string | null>>;
+  chatInpaintBusy: boolean;
+  chatInpaintError: string | null;
+  setChatInpaintError: Dispatch<SetStateAction<string | null>>;
+  handleSendChat: () => void;
+  handleClearChat: () => void;
+  clearChatPastedImage: () => void;
+
+  // ─── Image edit / inpaint ───────────────────────────────────────────────────
+  imageEditSelectMode: boolean;
+  setImageEditSelectMode: Dispatch<SetStateAction<boolean>>;
+  imageEditRegion: ImageEditRegion;
+  setImageEditRegion: Dispatch<SetStateAction<ImageEditRegion>>;
+  clearImageEditRegion: () => void;
+  handleInpaintImage: () => void;
+  handleReplaceImageFile: (file: File, targetPageNumber?: number) => void;
+  handleRegenerateImageWithPrompt: () => void;
+  handleApplyPreviewImage: () => void;
+  imagePreviewUrl: string | null;
+  setImagePreviewUrl: Dispatch<SetStateAction<string | null>>;
+  imagePreviewPageNumber: number | null;
+  setImagePreviewPageNumber: Dispatch<SetStateAction<number | null>>;
+  imagePreviewOpen: boolean;
+  setImagePreviewOpen: Dispatch<SetStateAction<boolean>>;
+
+  // ─── TTS / audio settings ───────────────────────────────────────────────────
+  ttsProvider: TtsProvider;
+  availableTtsVoices: readonly string[];
+  ttsVoice: string;
+  setTtsVoice: Dispatch<SetStateAction<string>>;
+  ttsSpeed: number;
+  setTtsSpeed: Dispatch<SetStateAction<number>>;
+  scriptMaxCharsPerPage: number | null;
+  setScriptMaxCharsPerPage: Dispatch<SetStateAction<number | null>>;
+  hostMode: HostMode;
+  setHostMode: Dispatch<SetStateAction<HostMode>>;
+  ttsBusy: boolean;
+  ttsMsg: string | null;
+  ttsDialogOpen: boolean;
+  setTtsDialogOpen: Dispatch<SetStateAction<boolean>>;
+  handleSaveTtsSettings: () => void;
+  handleRegenerateAudio: () => void;
+
+  // ─── Image style ────────────────────────────────────────────────────────────
+  imageStyleDialogOpen: boolean;
+  setImageStyleDialogOpen: Dispatch<SetStateAction<boolean>>;
+  imageStyleTemplates: ImagePromptTemplate[];
+  selectedImageStyleTemplateKey: string;
+  setSelectedImageStyleTemplateKey: Dispatch<SetStateAction<string>>;
+  deckImageStylePrompt: string;
+  setDeckImageStylePrompt: Dispatch<SetStateAction<string>>;
+  applyImageStyleTemplate: (key: string) => void;
+  openImageStyleDialog: () => void;
+  handleSaveImageStyle: () => void;
+
+  // ─── Regenerate ─────────────────────────────────────────────────────────────
+  regenAllDialogOpen: boolean;
+  setRegenAllDialogOpen: Dispatch<SetStateAction<boolean>>;
+  regenAllPrompt: string;
+  setRegenAllPrompt: Dispatch<SetStateAction<string>>;
+  regenScriptPrompt: string;
+  setRegenScriptPrompt: Dispatch<SetStateAction<string>>;
+  regenScriptMaxCharsPerPage: number;
+  setRegenScriptMaxCharsPerPage: Dispatch<SetStateAction<number>>;
+  regenAllBusy: boolean;
+  regenAllMsg: string | null;
+  setRegenAllMsg: Dispatch<SetStateAction<string | null>>;
+  regenOptions: RegenOptions;
+  setRegenOptions: Dispatch<SetStateAction<RegenOptions>>;
+  regenJob: RegenJobState | null;
+  setRegenJob: Dispatch<SetStateAction<RegenJobState | null>>;
+  regenSelectedPages: Set<number>;
+  setRegenSelectedPages: Dispatch<SetStateAction<Set<number>>>;
+  regenStopBusy: boolean;
+  regenRollbackBusy: boolean;
+  confirmScriptBusy: boolean;
+  regenBannerDismissed: boolean;
+  setRegenBannerDismissed: Dispatch<SetStateAction<boolean>>;
+  regenAnySelected: boolean;
+  regenJobRunning: boolean;
+  regenJobTerminal: boolean;
+  showRegenBanner: boolean;
+  handleConfirmRegenerate: () => void;
+  handleStopRegenerate: () => void;
+  handleRollbackRegenerate: () => void;
+  handleConfirmScript: () => void;
+
+  // ─── Slide actions ──────────────────────────────────────────────────────────
+  handleAddSlideAfterCurrent: () => void;
+  handleDeleteCurrentSlide: () => void;
+  handleMoveSlide: (from: number, to: number) => void;
+  handleUpdateCoverFromCurrentPage: () => void;
+  handleDeletePoll: (pollId: number) => void;
+  handleCreatePoll: () => void;
+  handleStartPoll: () => void;
+  handleStopPoll: () => void;
+  handleVotePoll: (pollId: number, optionIndex: number) => void;
+  handleResetPollVotes: (pollId: number) => void;
+  handleSelectDisplayedPoll: (pollId: number) => void;
+
+  // ─── Title ──────────────────────────────────────────────────────────────────
+  titleInput: string;
+  setTitleInput: Dispatch<SetStateAction<string>>;
+  titleBusy: boolean;
+  titleMsg: string | null;
+  videoError: string | null;
+  shareMessage: string | null;
+  setShareMessage: Dispatch<SetStateAction<string | null>>;
+  shareError: string | null;
+  setShareError: Dispatch<SetStateAction<string | null>>;
+  handleSaveTitle: () => void;
+  handleRegenerateTitle: () => void;
+
+  // ─── Video ──────────────────────────────────────────────────────────────────
+  videoBusy: boolean;
+  videoUrl: string | null;
+  videoProgressText: string | null;
+  handleGenerateVideo: () => void;
+
+  // ─── Share / QR ─────────────────────────────────────────────────────────────
+  shareDialogOpen: boolean;
+  setShareDialogOpen: Dispatch<SetStateAction<boolean>>;
+  shareUrl: string;
+  shareAccess: ShareAccessMode;
+  setShareAccess: Dispatch<SetStateAction<ShareAccessMode>>;
+  shareBusy: boolean;
+  playQrCodeUrl: string | null;
+  handleCreateShareLink: () => void;
+  handleShowPlayQrCode: () => void;
+
+  // ─── GitHub sync ────────────────────────────────────────────────────────────
+  githubSyncBusy: boolean;
+  githubSyncMessage: string | null;
+  githubSyncError: string | null;
+  handleSyncToGithub: () => void;
+
+  // ─── Poll state ─────────────────────────────────────────────────────────────
+  pagePolls: PagePoll[];
+  pollQuestion: string;
+  setPollQuestion: Dispatch<SetStateAction<string>>;
+  pollOptionsText: string;
+  setPollOptionsText: Dispatch<SetStateAction<string>>;
+  pollBusy: boolean;
+  pollError: string | null;
+  pollVotes: Record<number, number>;
+  pollSettingsOpen: boolean;
+  setPollSettingsOpen: Dispatch<SetStateAction<boolean>>;
+  pollStarted: boolean;
+  activePoll: PagePoll | null;
+  activePollQuestion: string;
+  syncDisplayedPollId: number | null;
+  setSyncDisplayedPollId: Dispatch<SetStateAction<number | null>>;
+  syncRealtimePollStarted: boolean;
+  syncPollShowResults: boolean;
+  setSyncPollShowResults: Dispatch<SetStateAction<boolean>>;
+
+  // ─── Classroom / interactive ────────────────────────────────────────────────
+  classroomMode: boolean;
+  setClassroomMode: Dispatch<SetStateAction<boolean>>;
+  classroomAwaitingNext: boolean;
+  interactiveMode: boolean;
+  setInteractiveMode: Dispatch<SetStateAction<boolean>>;
+
+  // ─── Sync ───────────────────────────────────────────────────────────────────
+  syncEnabled: boolean;
+  setSyncEnabled: Dispatch<SetStateAction<boolean>>;
+  syncRole: SyncRole;
+  setSyncRole: Dispatch<SetStateAction<SyncRole>>;
+  syncError: string | null;
+  setSyncError: Dispatch<SetStateAction<string | null>>;
+  syncFollowerQuestionInput: string;
+  setSyncFollowerQuestionInput: Dispatch<SetStateAction<string>>;
+  syncFollowerQuestions: SyncFollowerQuestion[];
+  syncDisplayedQuestionId: string | null;
+  syncAiAnswer: SyncAiAnswer | null;
+  syncAiAnswerBusy: boolean;
+  syncQuestionInput: string;
+  setSyncQuestionInput: Dispatch<SetStateAction<string>>;
+  fullscreenQuestionDialogOpen: boolean;
+  setFullscreenQuestionDialogOpen: Dispatch<SetStateAction<boolean>>;
+  fullscreenPollControlOpen: boolean;
+  setFullscreenPollControlOpen: Dispatch<SetStateAction<boolean>>;
+  remoteCursor: { x: number; y: number } | null;
+  syncDrawingState: { pageNumber: number; strokes: DrawingStroke[] } | null;
+  isSyncFollower: boolean;
+  canUseDrawingTools: boolean;
+  handleSyncEnabledChange: (enabled: boolean) => void;
+  handleSubmitFollowerQuestion: () => void;
+  handleToggleDisplayedQuestion: () => void;
+  handleAiAnswerFollowerQuestions: () => void;
+
+  // ─── Fullscreen / layout ────────────────────────────────────────────────────
+  imageOnlyFullscreen: boolean;
+  setImageOnlyFullscreen: Dispatch<SetStateAction<boolean>>;
+  fullscreenLayout: FullscreenLayout;
+  setFullscreenLayout: Dispatch<SetStateAction<FullscreenLayout>>;
+  slideImageScale: number;
+  setSlideImageScale: Dispatch<SetStateAction<number>>;
+  slideImageMaxHeightVh: number;
+  activeTab: ActiveTab;
+  setActiveTab: Dispatch<SetStateAction<ActiveTab>>;
+  qaPanelExpanded: boolean;
+  setQaPanelExpanded: Dispatch<SetStateAction<boolean>>;
+
+  // ─── Drawing ────────────────────────────────────────────────────────────────
+  drawingMode: boolean;
+  setDrawingMode: Dispatch<SetStateAction<boolean>>;
+  drawingTool: DrawingTool;
+  setDrawingTool: Dispatch<SetStateAction<DrawingTool>>;
+  drawingColor: string;
+  setDrawingColor: Dispatch<SetStateAction<string>>;
+  drawingLineWidth: number;
+  setDrawingLineWidth: Dispatch<SetStateAction<number>>;
+  remoteDrawingData: DrawingData | undefined;
+  pushLocalDrawingChange: (data: DrawingData) => void;
+  flushLocalDrawingPush: () => void;
+
+  // ─── Computed / derived ─────────────────────────────────────────────────────
+  isReadOnlyProcessing: boolean;
+  readOnlyReason: string | null;
+  shareIsReadOnly: boolean;
+  imageBustKey: string;
+  withImageBust: (url: string | null | undefined) => string | null;
+  withShareToken: (url: string | null | undefined) => string | null;
+  targetImageSrc: string | null;
+  sourceItems: PdfSourceItem[];
+  hasScriptChanges: boolean;
+  syncQuestionBusy: boolean;
+  openVersionHistory: (type: 'image' | 'script', pageNumber: number) => void;
+  pageSentences: string[];
+  currentSentence: string;
+  activeSentenceIdx: number;
+
+  // ─── Refs used in JSX ───────────────────────────────────────────────────────
+  audioRef: RefObject<HTMLAudioElement>;
+  fullscreenContainerRef: RefObject<HTMLDivElement>;
+  fullscreenImageRef: RefObject<HTMLImageElement>;
+  drawingCanvasSplitRef: RefObject<DrawingCanvasHandle>;
+  drawingCanvasMainRef: RefObject<DrawingCanvasHandle>;
+  drawingCanvasFullscreenRef: RefObject<DrawingCanvasHandle>;
+  sourcePdfInputRef: RefObject<HTMLInputElement>;
+  imageEditDragRef: MutableRefObject<{ startX: number; startY: number } | null>;
+  imageEditRegionOverlayRef: RefObject<HTMLDivElement>;
+  activeSentenceRef: RefObject<HTMLParagraphElement>;
+  getActiveDrawingCanvas: () => DrawingCanvasHandle | null;
+
+  // ─── Wake lock ──────────────────────────────────────────────────────────────
+  acquireWakeLock: () => void;
+  releaseWakeLock: () => void;
+}
+
+// ── Context instance + hook ───────────────────────────────────────────────────
+export const PlayPageCtx = createContext<PlayPageContextValue | null>(null);
+
+export function usePlayPageContext(): PlayPageContextValue {
+  const ctx = useContext(PlayPageCtx);
+  if (ctx === null) {
+    throw new Error('usePlayPageContext must be called inside <PlayPage>');
+  }
+  return ctx;
+}

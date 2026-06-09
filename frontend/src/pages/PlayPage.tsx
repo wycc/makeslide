@@ -8,108 +8,52 @@ import {
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ApiError,
-  addPdfFileSource,
-  addPdfTextSource,
   answerSyncFollowerQuestionsWithAi,
-  chatWithPageContext,
-  addSlide,
-  cancelRegenerateJob,
-  clearPageChatHistory,
-  createPagePoll,
-  deletePagePoll,
-  createPdfShare,
-  deleteSlide,
   fetchPdfDetail,
-  fetchPagePolls,
-  fetchPagePrompt,
-  fetchPageChatHistory,
   resolveShareToken,
   fetchPlaybackSyncState,
-  getAuthStatus,
-  getImagePromptTemplates,
-  getSystemAiSettings,
   joinSharedPlaybackSync,
   joinPlaybackSync,
   leavePlaybackSync,
-  fetchRegenerateStatus,
-  confirmScript,
-  generatePdfVideo,
-  moveSlide,
-  regenerateSlideImage,
-  replaceSlideImage,
-  inpaintImage,
   regeneratePageAudio,
-  resetPagePollVotes,
-  rollbackRegenerate,
-  startRegenerateJob,
   submitSyncFollowerQuestion,
   toggleSyncDisplayedQuestion,
-  updatePdfCoverFromPage,
-  updatePdfImageStyleSettings,
-  updatePdfScriptSettings,
-  updatePdfTtsSettings,
-  updatePdfPrompt,
-  regeneratePdfTitle,
-  updatePdfTitle,
   updatePlaybackSyncState,
-  votePagePoll,
-  rewritePageScript,
-  fetchPageGenerationPrompts,
-  fetchImageHistory,
-  fetchScriptHistory,
-  imageVersionUrl,
-  fetchScriptVersion,
-  restoreImageVersion,
-  restoreScriptVersion,
-  syncPresentationToGitHub,
-  type FileVersionEntry,
-  type ImagePromptTemplate,
-  type PageGenerationPrompt,
   type ShareAccessMode,
 } from '../lib/api';
-import AddPagesFromPromptModal from '../components/AddPagesFromPromptModal';
-import DrawingCanvas, { type DrawingCanvasHandle, type DrawingData, type DrawingStroke } from '../components/DrawingCanvas';
-import {
-  DEFAULT_TTS_VOICE_BY_PROVIDER,
-  TTS_VOICES_BY_PROVIDER,
-  geminiVoiceLabel,
-  type TtsProvider,
-} from '../lib/ttsVoices';
-import { formatDurationMs, formatTime } from './play/formatters';
-import { PageTimingChips } from './play/PageTimingChips';
-import { RegenerateProgress } from './play/RegenerateProgress';
+import { type DrawingCanvasHandle, type DrawingData, type DrawingStroke } from '../components/DrawingCanvas';
+import { useVersionHistory } from './play/useVersionHistory';
+import { useRegeneration } from './play/useRegeneration';
+import { useVideoGeneration } from './play/useVideoGeneration';
+import { usePdfMetadata } from './play/usePdfMetadata';
+import { useSlideManagement } from './play/useSlideManagement';
+import { useImageStyle } from './play/useImageStyle';
+import { useScriptEditor } from './play/useScriptEditor';
+import { usePromptAndSource } from './play/usePromptAndSource';
+import { useChatAndImageEdit } from './play/useChatAndImageEdit';
+import { usePagePolls } from './play/usePagePolls';
+import { resolveConfiguredUserCode } from './play/utils';
+import { VersionHistoryDialog } from './play/VersionHistoryDialog';
+import { ImagePreviewDialog } from './play/ImagePreviewDialog';
+import { PlayPageCtx } from './play/PlayPageContext';
+import { PlayPageDialogs } from './play/PlayPageDialogs';
+import { PlayPageFullscreen } from './play/PlayPageFullscreen';
+import { PlayPageHeader } from './play/PlayPageHeader';
+import { PlayPageSlidePanel } from './play/PlayPageSlidePanel';
+import { PlayPageSidebar } from './play/PlayPageSidebar';
 import type {
-  ChatMessage,
   PdfDetail,
   PdfDetailPage,
-  PagePoll,
-  RegenJobState,
   SyncAiAnswer,
   SyncFollowerQuestion,
   PdfSourceItem,
 } from '../types';
 import {
-  SHOW_SUBTITLE_STORAGE_KEY,
-  INTERACTIVE_MODE_STORAGE_KEY,
   getStoredPlaybackSpeed,
   getStoredShowSubtitle,
   getStoredInteractiveMode,
 } from '../i18n';
 
-const DRAWING_COLORS = [
-  { value: '#ef4444', label: '紅色' },
-  { value: '#3b82f6', label: '藍色' },
-  { value: '#1e293b', label: '黑色' },
-  { value: '#fbbf24', label: '黃色' },
-  { value: '#22c55e', label: '綠色' },
-  { value: '#f8fafc', label: '白色' },
-] as const;
-
-const DRAWING_WIDTHS = [
-  { value: 3, label: '細' },
-  { value: 6, label: '中' },
-  { value: 12, label: '粗' },
-] as const;
 
 const POLL_INTERVAL_MS = 3000;
 const AUDIO_RETRY_DELAY_MS = 800;
@@ -118,8 +62,6 @@ const SYNC_POLL_INTERVAL_MS = 1200;
 const SYNC_POLL_INTERVAL_FULLSCREEN_MS = 250;
 const SYNC_CURSOR_PUSH_INTERVAL_MS = 60;
 const SYNC_CURSOR_PUSH_INTERVAL_FULLSCREEN_MS = 24;
-const CHAT_HISTORY_REQUEST_LIMIT = 20;
-const LOCAL_USER_CODE_KEY = 'makeslide.user_code';
 const SENTENCE_MATCH_RE = /[^。！？!?；;\n]+[。！？!?；;]?|\n+/g;
 const TONE_MARKER_RE = /\[\[\s*[^\]]+\s*\]\]/g;
 
@@ -136,9 +78,7 @@ interface WakeLockSentinelLike {
   removeEventListener?: (type: 'release', listener: () => void) => void;
 }
 
-function limitChatHistoryForRequest(history: ChatMessage[]): ChatMessage[] {
-  return history.slice(-CHAT_HISTORY_REQUEST_LIMIT);
-}
+
 
 function splitScriptIntoSentences(script: string): string[] {
   const withoutToneMarkers = script.replace(TONE_MARKER_RE, ' ');
@@ -200,18 +140,6 @@ function buildSentenceTimeline(sentences: string[], duration: number): SentenceT
   });
 }
 
-async function resolveConfiguredUserCode(): Promise<string> {
-  const localCode = window.localStorage.getItem(LOCAL_USER_CODE_KEY)?.trim() || '';
-  try {
-    const auth = await getAuthStatus();
-    if (!auth.authenticated) return localCode;
-    const settings = await getSystemAiSettings();
-    return settings.user_code?.trim() || localCode;
-  } catch {
-    return localCode;
-  }
-}
-
 function getAnyFullscreenElement(): Element | null {
   const doc = document as Document & {
     webkitFullscreenElement?: Element | null;
@@ -270,126 +198,20 @@ export default function PlayPage() {
   const [duration, setDuration] = useState(0);
   const [scripts, setScripts] = useState<Record<number, string>>({});
   const [audioError, setAudioError] = useState<string | null>(null);
-  const [editorError, setEditorError] = useState<string | null>(null);
-  const [editorBusy, setEditorBusy] = useState(false);
-  const [rewriteBusy, setRewriteBusy] = useState(false);
-  const [rewriteError, setRewriteError] = useState<string | null>(null);
   const [finished, setFinished] = useState(false);
   const [classroomMode, setClassroomMode] = useState(false);
   const [classroomAwaitingNext, setClassroomAwaitingNext] = useState(false);
   const [interactiveMode, setInteractiveMode] = useState<boolean>(() => getStoredInteractiveMode());
-  const [editingScript, setEditingScript] = useState('');
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
-  const [chatInput, setChatInput] = useState('');
-  const [chatBusy, setChatBusy] = useState(false);
-  const [chatError, setChatError] = useState<string | null>(null);
-  const [videoBusy, setVideoBusy] = useState(false);
-  const [videoError, setVideoError] = useState<string | null>(null);
-  const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  const [titleInput, setTitleInput] = useState('');
-  const [titleBusy, setTitleBusy] = useState(false);
-  const [titleMsg, setTitleMsg] = useState<string | null>(null);
-  const [editTab, setEditTab] = useState<'script' | 'prompt' | 'source' | 'system'>('script');
-  const [promptInput, setPromptInput] = useState('');
-  const [sourceTextName, setSourceTextName] = useState('');
-  const [sourceTextContent, setSourceTextContent] = useState('');
-  const [sourceBusy, setSourceBusy] = useState(false);
-  const [sourceMsg, setSourceMsg] = useState<string | null>(null);
-  const [sourceErr, setSourceErr] = useState<string | null>(null);
-  const sourcePdfInputRef = useRef<HTMLInputElement | null>(null);
-  const [genPrompts, setGenPrompts] = useState<PageGenerationPrompt[]>([]);
-  const [genPromptsLoading, setGenPromptsLoading] = useState(false);
-  const [expandedGenPrompt, setExpandedGenPrompt] = useState<string | null>(null);
-  const [promptBusy, setPromptBusy] = useState(false);
-  const [promptMsg, setPromptMsg] = useState<string | null>(null);
-  const [pagePrompts, setPagePrompts] = useState<Record<number, string>>({});
-  const [slideBusy, setSlideBusy] = useState(false);
-  const [slideError, setSlideError] = useState<string | null>(null);
+  const sourcePdfInputRef = useRef<HTMLInputElement>(null);
+
   const [showAddPagesModal, setShowAddPagesModal] = useState(false);
-  const [ttsVoice, setTtsVoice] = useState('alloy');
-  const [ttsSpeed, setTtsSpeed] = useState(1);
-  const [scriptMaxCharsPerPage, setScriptMaxCharsPerPage] = useState<number | null>(null);
-  const [hostMode, setHostMode] = useState<'solo' | 'dual'>('solo');
-  const [ttsBusy, setTtsBusy] = useState(false);
-  const [ttsMsg, setTtsMsg] = useState<string | null>(null);
-  const [ttsDialogOpen, setTtsDialogOpen] = useState(false);
-  const [regenAllDialogOpen, setRegenAllDialogOpen] = useState(false);
-  const [imageStyleDialogOpen, setImageStyleDialogOpen] = useState(false);
-  const [deckImageStylePrompt, setDeckImageStylePrompt] = useState(
-    'academic minimalist style, clean layout, professional presentation design, soft blue background, clear visual hierarchy, vector illustration, no clutter, high readability',
-  );
-  const [imageStyleTemplates, setImageStyleTemplates] = useState<ImagePromptTemplate[]>([]);
-  const [selectedImageStyleTemplateKey, setSelectedImageStyleTemplateKey] = useState('');
-  const [regenAllPrompt, setRegenAllPrompt] = useState('請讓整份簡報的圖像風格一致，色調、字體與版面語言維持統一。');
-  const [regenScriptPrompt, setRegenScriptPrompt] = useState('請以原始重點為主，語句更口語、自然，並加強頁與頁之間的銜接。');
-  const [regenScriptMaxCharsPerPage, setRegenScriptMaxCharsPerPage] = useState<number>(350);
-  const [regenAllBusy, setRegenAllBusy] = useState(false);
-  const [regenAllMsg, setRegenAllMsg] = useState<string | null>(null);
-  // 「重生」多選項目：圖檔 / 逐字稿 / 語音。後端 `/api/pdfs/:id/regenerate` 會依
-  // image → script → audio 的順序執行，並將進度保存在記憶體供前端輪詢。
-  const [regenOptions, setRegenOptions] = useState<{ image: boolean; script: boolean; audio: boolean }>({
-    image: true,
-    script: false,
-    audio: false,
-  });
-  const [regenJob, setRegenJob] = useState<RegenJobState | null>(null);
-  const [regenSelectedPages, setRegenSelectedPages] = useState<Set<number>>(new Set());
-  const [regenStopBusy, setRegenStopBusy] = useState(false);
-  const [regenRollbackBusy, setRegenRollbackBusy] = useState(false);
-  const [confirmScriptBusy, setConfirmScriptBusy] = useState(false);
-  const [regenBannerDismissed, setRegenBannerDismissed] = useState(false);
-  const [pagePolls, setPagePolls] = useState<PagePoll[]>([]);
-  const [pollQuestion, setPollQuestion] = useState('');
-  const [pollOptionsText, setPollOptionsText] = useState('同意\n不同意');
-  const [pollBusy, setPollBusy] = useState(false);
-  const [pollError, setPollError] = useState<string | null>(null);
-  const [pollVotes, setPollVotes] = useState<Record<number, number>>({});
-  const [pollSettingsOpen, setPollSettingsOpen] = useState(false);
-  const [pollStarted, setPollStarted] = useState(false);
-  const [shareAccess, setShareAccess] = useState<ShareAccessMode>('read_only');
-  const [shareBusy, setShareBusy] = useState(false);
-  const [shareMessage, setShareMessage] = useState<string | null>(null);
-  const [shareError, setShareError] = useState<string | null>(null);
-  const [githubSyncBusy, setGithubSyncBusy] = useState(false);
-  const [githubSyncMessage, setGithubSyncMessage] = useState<string | null>(null);
-  const [githubSyncError, setGithubSyncError] = useState<string | null>(null);
-  const [shareDialogOpen, setShareDialogOpen] = useState(false);
-  const [shareUrl, setShareUrl] = useState('');
-  const [playQrCodeUrl, setPlayQrCodeUrl] = useState<string | null>(null);
-  // 在按下「確認」啟動重生前記住目前頁碼，供 rollback 後跳回。
-  const preRegenPageIdxRef = useRef<number | null>(null);
-  const pollVoterIdRef = useRef<string>('');
-  // 避免 completion 的自動跳頁多次觸發；每一個 job_id 只跳一次。
-  const autoJumpedJobIdRef = useRef<string | null>(null);
-  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
-  const [imagePreviewPageNumber, setImagePreviewPageNumber] = useState<number | null>(null);
-  const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
-  // ---- Version history state ----
-  const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
-  const [versionHistoryType, setVersionHistoryType] = useState<'image' | 'script'>('image');
-  const [versionHistoryPage, setVersionHistoryPage] = useState<number | null>(null);
-  const [versionHistoryEntries, setVersionHistoryEntries] = useState<FileVersionEntry[]>([]);
-  const [versionHistoryLoading, setVersionHistoryLoading] = useState(false);
-  const [versionPreviewHash, setVersionPreviewHash] = useState<string | null>(null);
-  const [versionPreviewScript, setVersionPreviewScript] = useState<string | null>(null);
-  const [versionRestoring, setVersionRestoring] = useState(false);
-  const [versionError, setVersionError] = useState<string | null>(null);
-  // ---- Chat image attachment (inpaint) state ----
-  const [chatPastedImage, setChatPastedImage] = useState<File | null>(null);
-  const [chatPastedImageUrl, setChatPastedImageUrl] = useState<string | null>(null);
-  const [chatInpaintBusy, setChatInpaintBusy] = useState(false);
-  const [chatInpaintError, setChatInpaintError] = useState<string | null>(null);
-  // Region selection on the slide image (for mask generation)
-  const [imageEditSelectMode, setImageEditSelectMode] = useState(false);
-  const [imageEditRegion, setImageEditRegion] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  const imageEditRegionOverlayRef = useRef<HTMLDivElement | null>(null);
+  const imageEditRegionOverlayRef = useRef<HTMLDivElement>(null);
   const imageEditDragRef = useRef<{ startX: number; startY: number } | null>(null);
   const [draggingPage, setDraggingPage] = useState<number | null>(null);
   const [thumbLoadUntilIdx, setThumbLoadUntilIdx] = useState(0);
   // 手機模式下的 tab 切換（桌面模式忽略此 state，永遠並排顯示）
   const [activeTab, setActiveTab] = useState<'play' | 'qa'>('play');
   const [qaPanelExpanded, setQaPanelExpanded] = useState(false);
-  const [transcriptFocusMode, setTranscriptFocusMode] = useState(false);
   const [syncEnabled, setSyncEnabled] = useState(false);
   const [syncRole, setSyncRole] = useState<'master' | 'follower'>('follower');
   const [audioMuted, setAudioMuted] = useState(false);
@@ -417,10 +239,9 @@ export default function PlayPage() {
   const [imageOnlyFullscreen, setImageOnlyFullscreen] = useState(false);
   // 全螢幕版面：'image' = 純圖片（字幕單行疊在下方）；'split' = 左圖右整頁字幕；'edit' = 左圖右逐字稿編輯。
   const [fullscreenLayout, setFullscreenLayout] = useState<'image' | 'split' | 'edit'>('image');
-  const fullscreenContainerRef = useRef<HTMLDivElement | null>(null);
-  const activeSentenceRef = useRef<HTMLParagraphElement | null>(null);
+  const fullscreenContainerRef = useRef<HTMLDivElement>(null);
+  const activeSentenceRef = useRef<HTMLParagraphElement>(null);
   const [slideImageScale, setSlideImageScale] = useState(1);
-  const IMAGE_MSG_PREFIX = '[image] ';
   const sourceItems: PdfSourceItem[] = detail?.sources ?? [];
 
   // ---- Drawing / annotation state ----
@@ -431,9 +252,9 @@ export default function PlayPage() {
   // 三個 <DrawingCanvas> 實例（全螢幕分割版面、全螢幕單圖版面、一般版面）即使彼此視覺上互斥，
   // 在 DOM 中仍可能同時掛載（全螢幕覆蓋層疊加在一般版面之上），共用同一個 ref 會讓它指向
   // 「最後掛載」的隱藏實例而非使用者實際正在操作的畫布，因此改為各自獨立的 ref。
-  const drawingCanvasSplitRef = useRef<DrawingCanvasHandle | null>(null);
-  const drawingCanvasFullscreenRef = useRef<DrawingCanvasHandle | null>(null);
-  const drawingCanvasMainRef = useRef<DrawingCanvasHandle | null>(null);
+  const drawingCanvasSplitRef = useRef<DrawingCanvasHandle>(null);
+  const drawingCanvasFullscreenRef = useRef<DrawingCanvasHandle>(null);
+  const drawingCanvasMainRef = useRef<DrawingCanvasHandle>(null);
   const getActiveDrawingCanvas = useCallback((): DrawingCanvasHandle | null => {
     if (imageOnlyFullscreen) {
       return fullscreenLayout === 'split' || fullscreenLayout === 'edit'
@@ -448,10 +269,8 @@ export default function PlayPage() {
   const canUseDrawingTools = !syncEnabled || syncRole === 'master';
   const isSyncFollower = syncEnabled && syncRole === 'follower';
 
-  const ttsProvider: TtsProvider = detail?.tts_provider === 'gemini' ? 'gemini' : 'openai';
-  const availableTtsVoices = TTS_VOICES_BY_PROVIDER[ttsProvider];
 
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
   const playbackRateRef = useRef<number>(playbackRate);
   useEffect(() => {
     playbackRateRef.current = playbackRate;
@@ -487,7 +306,7 @@ export default function PlayPage() {
   const prefetchedAudioNextRef = useRef<HTMLAudioElement | null>(null);
   const prefetchedImageNextRef = useRef<HTMLImageElement | null>(null);
   const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
-  const fullscreenImageRef = useRef<HTMLImageElement | null>(null);
+  const fullscreenImageRef = useRef<HTMLImageElement>(null);
   const resumePositionRef = useRef<number | null>(null);
   const hasRestoredProgressRef = useRef(false);
   const persistProgressTimerRef = useRef<number | null>(null);
@@ -602,9 +421,6 @@ export default function PlayPage() {
         setScriptMaxCharsPerPage(typeof d.script_max_chars_per_page === 'number' ? d.script_max_chars_per_page : null);
         setHostMode(d.host_mode === 'dual' ? 'dual' : 'solo');
         setLoadError(null);
-        if (d.image_style_prompt && d.image_style_prompt.trim()) {
-          setDeckImageStylePrompt(d.image_style_prompt);
-        }
         if (detailWithShare.status !== 'ready') {
           timer = window.setTimeout(load, POLL_INTERVAL_MS);
         }
@@ -620,86 +436,6 @@ export default function PlayPage() {
       if (timer != null) window.clearTimeout(timer);
     };
   }, [pdfId, currentShareToken]);
-
-  // 頁面載入時，嘗試回復重生任務狀態
-  useEffect(() => {
-    if (!pdfId) return;
-    let cancelled = false;
-    const restoreRegenJob = async () => {
-      try {
-        const job = await fetchRegenerateStatus(pdfId);
-        if (cancelled) return;
-        const isRunning =
-          job.status === 'running' ||
-          job.status === 'pending' ||
-          job.status === 'cancelling';
-        if (isRunning) {
-          setRegenJob(job);
-          setRegenAllBusy(true);
-        }
-      } catch (err) {
-        // 404 代表沒有重生任務，忽略即可
-        if (!(err instanceof ApiError && err.status === 404)) {
-          // eslint-disable-next-line no-console
-          console.warn('Failed to fetch regenerate status on load', err);
-        }
-      }
-    };
-    void restoreRegenJob();
-    return () => {
-      cancelled = true;
-    };
-  }, [pdfId]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await getImagePromptTemplates();
-        if (cancelled) return;
-        setImageStyleTemplates(res.templates);
-        const key = res.default_template_key ?? res.templates[0]?.key ?? '';
-        setSelectedImageStyleTemplateKey(key);
-      } catch {
-        // non-fatal
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (availableTtsVoices.some((voice) => voice === ttsVoice)) return;
-    setTtsVoice(DEFAULT_TTS_VOICE_BY_PROVIDER[ttsProvider]);
-  }, [availableTtsVoices, ttsProvider, ttsVoice]);
-
-  const applyImageStyleTemplate = useCallback(
-    (key: string) => {
-      setSelectedImageStyleTemplateKey(key);
-      const hit = imageStyleTemplates.find((t) => t.key === key);
-      if (hit) setDeckImageStylePrompt(hit.prompt_en);
-    },
-    [imageStyleTemplates],
-  );
-
-  const openImageStyleDialog = useCallback(async () => {
-    if (!pdfId) {
-      setImageStyleDialogOpen(true);
-      return;
-    }
-    try {
-      const d = await fetchPdfDetail(pdfId);
-      setDetail(d);
-      if (d.image_style_prompt && d.image_style_prompt.trim()) {
-        setDeckImageStylePrompt(d.image_style_prompt);
-      }
-    } catch {
-      // non-fatal: still allow opening dialog with current local value
-    } finally {
-      setImageStyleDialogOpen(true);
-    }
-  }, [pdfId]);
 
   const pages = detail?.pages ?? [];
   const deckPages: PdfDetailPage[] = useMemo(() => pages, [pages]);
@@ -717,6 +453,7 @@ export default function PlayPage() {
       detail.status !== 'ready' &&
       detail.status !== 'awaiting_script_confirmation') ||
     shareIsReadOnly;
+
   useEffect(() => {
     if (deckPages.length === 0) {
       setThumbLoadUntilIdx(0);
@@ -1012,28 +749,41 @@ export default function PlayPage() {
     setCurrentIdx((i) => Math.min(totalPages - 1, i + 1));
   }, [syncEnabled, syncRole, totalPages]);
 
-  const handleShowPlayQrCode = useCallback(async () => {
-    if (!pdfId) return;
-    try {
-      const res = await createPdfShare(pdfId, shareAccess);
-      const absoluteUrl = `${window.location.origin}${res.share_url}`;
-      setShareUrl(absoluteUrl);
-      const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=520x520&data=${encodeURIComponent(absoluteUrl)}`;
-      setPlayQrCodeUrl(qrSrc);
-      setShareMessage(`已產生分享 QR Code（${shareAccess === 'editable' ? '可編輯' : '唯讀'}）`);
-      setShareError(null);
-    } catch (err) {
-      setShareError(err instanceof ApiError ? err.message : '建立分享 QR Code 失敗');
-    }
-  }, [pdfId, shareAccess]);
+  // usePagePolls 必須在 handleEnded 之前宣告，以避免 TDZ 問題
+  const pollState = usePagePolls({
+    pdfId,
+    currentPage,
+    interactiveMode,
+    syncEnabled,
+    syncRole,
+    syncRealtimePollStarted,
+    totalPages,
+    setCurrentIdx,
+    setIsPlaying,
+    setClassroomAwaitingNext,
+    setFinished,
+    setFullscreenPollControlOpen,
+    syncClientIdRef,
+    currentIdx,
+    isPlaying,
+    currentTime,
+    followerAudioUnlocked,
+    syncPollShowResults,
+    setSyncPollShowResults,
+    setSyncDisplayedPollId,
+  });
 
+  // ─── handleEnded (stays in PlayPage) ───────────────────────────────────────
+  // 跨領域協調：同時觸及 pollState（usePage Polls）、playback state（isPlaying/currentIdx/finished）
+  // 以及 classroomMode/interactiveMode 全域開關，三個領域在同一個回呼中依序決策，
+  // 任何一個領域都無法獨自持有完整的 if/else 邏輯。
   const handleEnded = useCallback(() => {
     setIsPlaying(false);
     if (interactiveMode) {
-      if (pagePolls.length > 0) {
+      if (pollState.pagePolls.length > 0) {
         // 當頁有投票：啟動 poll，停在此頁等待互動
-        setPollStarted(true);
-        setPollError(null);
+        pollState.setPollStarted(true);
+        pollState.setPollError(null);
         setFullscreenPollControlOpen(true);
         if (currentIdx < totalPages - 1) {
           setClassroomAwaitingNext(true);
@@ -1064,7 +814,7 @@ export default function PlayPage() {
       setClassroomAwaitingNext(false);
       setFinished(true);
     }
-  }, [classroomMode, interactiveMode, pagePolls.length, currentIdx, totalPages]);
+  }, [classroomMode, interactiveMode, pollState.pagePolls.length, currentIdx, totalPages]);
 
   const handleSeek = useCallback(
     (ev: React.ChangeEvent<HTMLInputElement>) => {
@@ -1172,7 +922,13 @@ export default function PlayPage() {
     [pdfId],
   );
 
-  // Master 端手寫筆劃變化：與游標走同一個推送頻道、相同節流間隔，確保 follower 端鏡射速度一致。
+  // ─── Drawing push (stays in PlayPage) ──────────────────────────────────────
+  // flushLocalDrawingPush / pushLocalDrawingChange 與游標推送（cursor push effect）共用
+  // 同一個 updatePlaybackSyncState payload：每次推送都必須帶齊播放位置、投票狀態等欄位，
+  // 才能讓 follower 端一次 tick 拿到所有最新狀態。
+  // 若移入獨立 hook，將需要把 currentIdx/isPlaying/currentTime/pollState 等全部注入，
+  // 且 flushLocalDrawingPush 仍必須與 cursor push effect 的節流間隔完全一致，
+  // 組合複雜度高於保留在 PlayPage 的成本。
   const flushLocalDrawingPush = useCallback(() => {
     drawingPushTimerRef.current = null;
     const pending = pendingDrawingRef.current;
@@ -1183,13 +939,13 @@ export default function PlayPage() {
       is_playing: isPlaying,
       current_time: Number.isFinite(currentTime) ? Math.max(0, currentTime) : 0,
       follower_audio_unlocked: followerAudioUnlocked,
-      realtime_poll_started: pollStarted,
+      realtime_poll_started: pollState.pollStarted,
       quiz_show_answers: syncPollShowResults,
       active_quiz_id: syncDisplayedPollId,
       drawing_page_number: pending.pageNumber,
       drawing_json: JSON.stringify(pending.data),
     });
-  }, [pdfId, currentIdx, isPlaying, currentTime, followerAudioUnlocked, pollStarted, syncPollShowResults, syncDisplayedPollId]);
+  }, [pdfId, currentIdx, isPlaying, currentTime, followerAudioUnlocked, pollState.pollStarted, syncPollShowResults, syncDisplayedPollId]);
 
   const pushLocalDrawingChange = useCallback(
     (data: DrawingData) => {
@@ -1236,13 +992,13 @@ export default function PlayPage() {
       is_playing: isPlaying,
       current_time: time,
       follower_audio_unlocked: followerAudioUnlocked,
-      realtime_poll_started: pollStarted,
+      realtime_poll_started: pollState.pollStarted,
       quiz_show_answers: syncPollShowResults,
       active_quiz_id: syncDisplayedPollId,
     }).catch((err) => {
       setSyncError(err instanceof ApiError ? err.message : '同步狀態更新失敗');
     });
-  }, [syncEnabled, syncRole, pdfId, currentIdx, isPlaying, currentTime, followerAudioUnlocked, pollStarted, syncPollShowResults, syncDisplayedPollId]);
+  }, [syncEnabled, syncRole, pdfId, currentIdx, isPlaying, currentTime, followerAudioUnlocked, pollState.pollStarted, syncPollShowResults, syncDisplayedPollId]);
 
   useEffect(() => {
     if (!syncEnabled || syncRole !== 'master' || !pdfId) return;
@@ -1259,7 +1015,7 @@ export default function PlayPage() {
         is_playing: isPlaying,
         current_time: Number.isFinite(currentTime) ? Math.max(0, currentTime) : 0,
         follower_audio_unlocked: followerAudioUnlocked,
-        realtime_poll_started: pollStarted,
+        realtime_poll_started: pollState.pollStarted,
         quiz_show_answers: syncPollShowResults,
         active_quiz_id: syncDisplayedPollId,
         cursor_x: next.x,
@@ -1296,8 +1052,16 @@ export default function PlayPage() {
       }
       pendingCursorRef.current = null;
     };
-  }, [syncEnabled, syncRole, pdfId, imageOnlyFullscreen, currentIdx, isPlaying, currentTime, followerAudioUnlocked, pollStarted, syncPollShowResults, syncDisplayedPollId]);
+  }, [syncEnabled, syncRole, pdfId, imageOnlyFullscreen, currentIdx, isPlaying, currentTime, followerAudioUnlocked, pollState.pollStarted, syncPollShowResults, syncDisplayedPollId]);
 
+  // ─── Sync mega-polling effect (stays in PlayPage) ───────────────────────────
+  // 這個 effect 同時寫入跨領域的 14+ 個 state setter（音訊 seek/play/pause、
+  // 投票 syncRealtimePollStarted/syncDisplayedPollId/syncPollShowResults、
+  // 繪圖 syncDrawingState、游標 remoteCursor、導航 setCurrentIdx、
+  // sync 元數據 syncRole/syncError/followerAudioUnlocked 等），
+  // 且 master/follower 邏輯完全交織在同一個 setInterval callback 中。
+  // 若拆出 hook 需注入所有 setter 並保留完整 if/else 分支，
+  // 不會減少複雜度；以 reducer 或狀態機重寫才是正確長期方向。
   useEffect(() => {
     if (!syncEnabled || !pdfId || !syncClientIdRef.current) return;
     // eslint-disable-next-line no-console
@@ -1475,6 +1239,11 @@ export default function PlayPage() {
     }
   }, [pdfId, syncAiAnswerBusy]);
 
+  // ─── handleRetry (stays in PlayPage) ───────────────────────────────────────
+  // 直接讀寫 audioRef.current（src/load/play）、currentAudioTokenRef（防競態 token）、
+  // 並呼叫 clearAudioRetryTimer / scheduleAudioReload（同在 PlayPage 的 retry 排程機制）。
+  // 這些 ref 與排程函式都因相同理由（直接操作 <audio> DOM）留在 PlayPage，
+  // 無法在不移走 audioRef 的前提下獨立抽出。
   const handleRetry = useCallback(() => {
     const audio = audioRef.current;
     if (!audio || !currentPage?.audio_url) return;
@@ -1505,7 +1274,7 @@ export default function PlayPage() {
       }
       if (ev.key === ' ' || ev.code === 'Space') {
         ev.preventDefault();
-        if (imageEditSelectMode) return;
+        if (chatState.imageEditSelectMode) return;
         // 全螢幕模式下，空白鍵切換播放/暫停；非全螢幕維持下一頁。
         const isFullscreen = Boolean(getAnyFullscreenElement()) || imageOnlyFullscreen;
         if (isFullscreen) {
@@ -1633,292 +1402,143 @@ export default function PlayPage() {
   }, [imageOnlyFullscreen, fullscreenLayout, activeSentenceIdx]);
 
   useEffect(() => {
-    setEditingScript(currentScript);
-    setEditorError(null);
-  }, [currentPage?.page_number, currentScript]);
-
-  useEffect(() => {
-    const n = currentPage?.page_number;
-    if (!n) {
-      setPromptInput('');
-      return;
-    }
-    setPromptInput(pagePrompts[n] ?? '');
-  }, [currentPage?.page_number, pagePrompts]);
-
-  useEffect(() => {
-    if (!pdfId || !currentPage) return;
-    const n = currentPage.page_number;
-    let cancelled = false;
-    fetchPagePrompt(pdfId, n)
-      .then((res) => {
-        if (cancelled) return;
-        setPagePrompts((prev) => ({ ...prev, [n]: res.page_prompt ?? '' }));
-      })
-      .catch(() => {
-        // keep local fallback
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [pdfId, currentPage?.page_number]);
-
-  const hasScriptChanges = editingScript !== currentScript;
-
-  useEffect(() => {
     if (!shouldAutoFullscreen && !isLockedFullscreen) return;
     setImageOnlyFullscreen(true);
     if (isLockedFullscreen && fullscreenLayout === 'edit') setFullscreenLayout('image');
   }, [shouldAutoFullscreen, isLockedFullscreen, fullscreenLayout]);
 
-  useEffect(() => {
-    if (!pdfId || !currentPage) return;
-    let cancelled = false;
-    setChatBusy(true);
-    setChatError(null);
-    fetchPageChatHistory(pdfId, currentPage.page_number)
-      .then((res) => {
-        if (cancelled) return;
-        setChatHistory(res.history);
-        setChatInput('');
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setChatHistory([]);
-        setChatError(err instanceof ApiError ? err.message : '讀取問答紀錄失敗');
-      })
-      .finally(() => {
-        if (!cancelled) setChatBusy(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [pdfId, currentPage?.page_number]);
+  // ─── Custom hooks ────────────────────────────────────────────────────────────
+  // 宣告在此處（effects 之後、handleRegenerateAudio 之前）確保 deps array 無 TDZ 問題
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const storageKey = 'makeslide.poll.voterId';
-      const configured = await resolveConfiguredUserCode();
-      if (cancelled) return;
-      if (configured) {
-        window.localStorage.setItem(storageKey, configured);
-        pollVoterIdRef.current = configured;
-        return;
-      }
-      if (!pollVoterIdRef.current) {
-        const existing = window.localStorage.getItem(storageKey);
-        const next = existing || `voter-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-        window.localStorage.setItem(storageKey, next);
-        pollVoterIdRef.current = next;
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // ref 先宣告：避免 useRegeneration ↔ useImageStyle 循環依賴
+  const deckImageStylePromptRef = useRef('簡潔商業風格，以深色系為主，文字清晰對比，版面留白充足');
 
-  const shouldFetchPolls =
-    pollStarted ||
-    pollSettingsOpen ||
-    interactiveMode ||
-    (syncEnabled && syncRole === 'follower' && syncRealtimePollStarted);
-
-  useEffect(() => {
-    if (!shouldFetchPolls || !pdfId || !currentPage) return;
-    let cancelled = false;
-    let timer: number | null = null;
-    const loadPolls = async () => {
-      try {
-        const polls = await fetchPagePolls(pdfId, currentPage.page_number);
-        if (cancelled) return;
-        setPagePolls(polls);
-        setPollError(null);
-      } catch (err) {
-        if (!cancelled) setPollError(err instanceof ApiError ? err.message : '讀取投票失敗');
-      }
-      if (!cancelled) timer = window.setTimeout(loadPolls, POLL_INTERVAL_MS);
-    };
-    void loadPolls();
-    return () => {
-      cancelled = true;
-      if (timer != null) window.clearTimeout(timer);
-    };
-  }, [shouldFetchPolls, pdfId, currentPage?.page_number]);
-
-  const handleSendChat = useCallback(async () => {
-    if (isReadOnlyProcessing) return;
-    if (!pdfId || !currentPage) return;
-    const question = chatInput.trim();
-    if (!question) return;
-    const nextHistory = [...chatHistory, { role: 'user' as const, content: question }];
-    setChatHistory(nextHistory);
-    setChatInput('');
-    setChatBusy(true);
-    setChatError(null);
-    try {
-      const res = await chatWithPageContext(
-        pdfId,
-        currentPage.page_number,
-        question,
-        limitChatHistoryForRequest(chatHistory),
-      );
-      setChatHistory((prev) => [...prev, { role: 'assistant', content: res.answer }]);
-    } catch (err) {
-      setChatError(err instanceof ApiError ? err.message : '對話失敗');
-    } finally {
-      setChatBusy(false);
-    }
-  }, [pdfId, currentPage, chatInput, chatHistory, isReadOnlyProcessing]);
-
-  const handleCreatePoll = useCallback(async () => {
-    if (!pdfId || !currentPage) return;
-    const question = pollQuestion.trim();
-    const options = pollOptionsText
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-    if (!question) {
-      setPollError('請輸入投票問題');
-      return;
-    }
-    if (options.length < 2) {
-      setPollError('至少需要兩個答案選項');
-      return;
-    }
-    setPollBusy(true);
-    setPollError(null);
-    try {
-      const poll = await createPagePoll(pdfId, currentPage.page_number, question, options);
-      setPagePolls((prev) => [poll, ...prev]);
-      setPollQuestion('');
-      setPollOptionsText('同意\n不同意');
-      setPollStarted(true);
-    } catch (err) {
-      setPollError(err instanceof ApiError ? err.message : '建立投票失敗');
-    } finally {
-      setPollBusy(false);
-    }
-  }, [pdfId, currentPage, pollQuestion, pollOptionsText]);
-
-  const handleStartPoll = useCallback(() => {
-    setPollStarted(true);
-    setPollError(null);
-  }, []);
-
-  const handleStopPoll = useCallback(() => {
-    setPollStarted(false);
-    setSyncPollShowResults(false);
-    setSyncDisplayedPollId(null);
-    setPagePolls([]);
-    setPollVotes({});
-    setPollError(null);
-    setFullscreenPollControlOpen(false);
-    // 互動模式：結束投票後自動進入下一頁（未開同步，或是 master 才執行翻頁）
-    if (interactiveMode && (!syncEnabled || syncRole !== 'follower')) {
-      setClassroomAwaitingNext(false);
-      setFinished(false);
-      setCurrentIdx((i) => {
-        if (i < totalPages - 1) {
-          setIsPlaying(true);
-          return i + 1;
-        }
-        setFinished(true);
-        return i;
-      });
-    }
-  }, [interactiveMode, syncEnabled, syncRole, totalPages]);
-
-  const handleVotePoll = useCallback(async (pollId: number, optionIndex: number) => {
+  const reloadDetail = useCallback(async () => {
     if (!pdfId) return;
-    const voterId = pollVoterIdRef.current;
-    if (!voterId) return;
-    setPollBusy(true);
-    setPollError(null);
-    try {
-      const poll = await votePagePoll(pdfId, pollId, voterId, optionIndex);
-      setPagePolls((prev) => prev.map((item) => (item.id === poll.id ? poll : item)));
-      setPollVotes((prev) => ({ ...prev, [pollId]: optionIndex }));
-    } catch (err) {
-      setPollError(err instanceof ApiError ? err.message : '投票失敗');
-    } finally {
-      setPollBusy(false);
-    }
-  }, [pdfId]);
-
-  const handleResetPollVotes = useCallback(async (pollId: number) => {
-    if (!pdfId) return;
-    setPollBusy(true);
-    setPollError(null);
-    try {
-      const poll = await resetPagePollVotes(pdfId, pollId);
-      setPagePolls((prev) => prev.map((item) => (item.id === poll.id ? poll : item)));
-      setPollVotes((prev) => {
-        const next = { ...prev };
-        delete next[pollId];
-        return next;
-      });
-    } catch (err) {
-      setPollError(err instanceof ApiError ? err.message : '清除投票結果失敗');
-    } finally {
-      setPollBusy(false);
-    }
-  }, [pdfId]);
-
-  const handleDeletePoll = useCallback(async (pollId: number) => {
-    if (!pdfId) return;
-    setPollBusy(true);
-    setPollError(null);
-    try {
-      await deletePagePoll(pdfId, pollId);
-      setPagePolls((prev) => prev.filter((item) => item.id !== pollId));
-      setPollVotes((prev) => {
-        const next = { ...prev };
-        delete next[pollId];
-        return next;
-      });
-      if (syncDisplayedPollId === pollId) {
-        setSyncDisplayedPollId(null);
+    let shareMode: ShareAccessMode | null = null;
+    if (currentShareToken) {
+      const share = await resolveShareToken(currentShareToken);
+      if (share.pdf_id !== pdfId) {
+        throw new ApiError('分享連結與簡報不符', 'INVALID_SHARE_TARGET', 400);
       }
-    } catch (err) {
-      setPollError(err instanceof ApiError ? err.message : '刪除投票問題失敗');
-    } finally {
-      setPollBusy(false);
+      shareMode = share.access;
     }
-  }, [pdfId, syncDisplayedPollId]);
+    const d = await fetchPdfDetail(pdfId, currentShareToken || undefined);
+    const detailWithShare = shareMode ? { ...d, share_mode: shareMode } : d;
+    setDetail(detailWithShare);
+    setVideoUrl(detailWithShare.video_url ?? null);
+  }, [pdfId, currentShareToken]);
 
-  const handleSelectDisplayedPoll = useCallback(
-    async (pollId: number) => {
-      setSyncDisplayedPollId(pollId);
-      if (!syncEnabled || syncRole !== 'master' || !pdfId || !syncClientIdRef.current) return;
-      try {
-        await updatePlaybackSyncState(pdfId, syncClientIdRef.current, {
-          page_number: Math.max(1, currentIdx + 1),
-          is_playing: isPlaying,
-          current_time: Number.isFinite(currentTime) ? Math.max(0, currentTime) : 0,
-          follower_audio_unlocked: followerAudioUnlocked,
-          realtime_poll_started: pollStarted,
-          quiz_show_answers: syncPollShowResults,
-          active_quiz_id: pollId,
-        });
-        setSyncError(null);
-      } catch (err) {
-        setSyncError(err instanceof ApiError ? err.message : '同步顯示題目失敗');
-      }
-    },
-    [syncEnabled, syncRole, pdfId, currentIdx, isPlaying, currentTime, followerAudioUnlocked, pollStarted, syncPollShowResults],
-  );
+  const {
+    versionHistoryOpen,
+    setVersionHistoryOpen,
+    versionHistoryType,
+    versionHistoryPage,
+    versionHistoryEntries,
+    versionHistoryLoading,
+    versionPreviewHash,
+    versionPreviewScript,
+    versionRestoring,
+    versionError,
+    openVersionHistory,
+    handleVersionPreview,
+    handleVersionRestore,
+  } = useVersionHistory({ pdfId, reloadDetail });
 
+  const videoState = useVideoGeneration({ pdfId, isReadOnlyProcessing, detail, setDetail });
+  const { setVideoUrl } = videoState;
+
+  const metaState = usePdfMetadata({ pdfId, isReadOnlyProcessing, detail, setDetail });
+  const {
+    setTitleInput,
+    setTtsVoice,
+    setTtsSpeed,
+    setScriptMaxCharsPerPage,
+    setHostMode,
+    setPlayQrCodeUrl,
+  } = metaState;
+
+  const regenState = useRegeneration({
+    pdfId,
+    currentIdx,
+    isReadOnlyProcessing,
+    deckImageStylePromptRef,
+    reloadDetail,
+    setCurrentIdx,
+  });
+  const { setRegenAllMsg } = regenState;
+
+  const slideState = useSlideManagement({
+    pdfId,
+    currentPage,
+    currentIdx,
+    totalPages,
+    isReadOnlyProcessing,
+    reloadDetail,
+    setCurrentIdx,
+  });
+  const { slideBusy, setSlideBusy, setSlideError, handleReplaceImageFile } = slideState;
+
+  const imageStyleState = useImageStyle({
+    pdfId,
+    isReadOnlyProcessing,
+    setDetail,
+    setRegenAllMsg,
+  });
+  deckImageStylePromptRef.current = imageStyleState.deckImageStylePrompt;
+
+  const chatState = useChatAndImageEdit({
+    pdfId,
+    currentPage,
+    isReadOnlyProcessing,
+    deckImageStylePrompt: imageStyleState.deckImageStylePrompt,
+    setSlideBusy,
+    setSlideError,
+    reloadDetail,
+    imageEditRegionOverlayRef,
+  });
+
+  const scriptEditorState = useScriptEditor({
+    pdfId,
+    currentPage,
+    currentScript: currentPage ? (scripts[currentPage.page_number] ?? '') : '',
+    currentIdx,
+    deckPages,
+    scripts,
+    isReadOnlyProcessing,
+    chatInput: chatState.chatInput,
+    chatHistory: chatState.chatHistory,
+    setChatHistory: chatState.setChatHistory,
+    setChatInput: chatState.setChatInput,
+  });
+
+  const promptState = usePromptAndSource({
+    pdfId,
+    currentPage,
+    isReadOnlyProcessing,
+    setDetail,
+  });
+
+  // detail ロード後、image_style_prompt を imageStyleState に反映
+  // （load effect は setDeckImageStylePrompt を直接呼べないため、detail 変化を監視）
+  useEffect(() => {
+    if (detail?.image_style_prompt?.trim()) {
+      imageStyleState.setDeckImageStylePrompt(detail.image_style_prompt);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail?.image_style_prompt]);
+
+  // ─── Audio regeneration (stays in PlayPage: directly manipulates audioRef) ─
   const handleRegenerateAudio = useCallback(async () => {
     if (isReadOnlyProcessing) return;
     if (!pdfId || !currentPage) return;
-    const nextScript = editingScript.trim();
+    const nextScript = scriptEditorState.editingScript.trim();
     if (!nextScript) {
-      setEditorError('文稿不可為空');
+      scriptEditorState.setEditorError('文稿不可為空');
       return;
     }
-    setEditorBusy(true);
-    setEditorError(null);
+    scriptEditorState.setEditorBusy(true);
+    scriptEditorState.setEditorError(null);
     setAudioError(null);
     try {
       const res = await regeneratePageAudio(pdfId, currentPage.page_number, nextScript);
@@ -1998,769 +1618,11 @@ export default function PlayPage() {
         pageNumber: currentPage?.page_number,
         error: err,
       });
-      setEditorError(err instanceof ApiError ? err.message : '重生語音失敗');
+      scriptEditorState.setEditorError(err instanceof ApiError ? err.message : '重生語音失敗');
     } finally {
-      setEditorBusy(false);
+      scriptEditorState.setEditorBusy(false);
     }
-  }, [pdfId, currentPage, editingScript, isReadOnlyProcessing]);
-
-  const handleRewriteScript = useCallback(async () => {
-    if (isReadOnlyProcessing) return;
-    if (!pdfId || !currentPage) return;
-    const prompt = chatInput.trim();
-    const sourceScript = editingScript.trim();
-    setRewriteBusy(true);
-    setRewriteError(null);
-    const nextHistory = [...chatHistory, { role: 'user' as const, content: prompt }];
-    setChatHistory(nextHistory);
-    setChatInput('');
-    try {
-      const res = await rewritePageScript(
-        pdfId,
-        currentPage.page_number,
-        prompt,
-        sourceScript,
-        {
-          previousScript:
-            currentIdx > 0
-              ? (scripts[deckPages[currentIdx - 1]?.page_number ?? -1] ?? '').trim()
-              : '',
-          currentScript: sourceScript,
-          nextScript:
-            currentIdx < deckPages.length - 1
-              ? (scripts[deckPages[currentIdx + 1]?.page_number ?? -1] ?? '').trim()
-              : '',
-        },
-        limitChatHistoryForRequest(chatHistory),
-      );
-      setEditingScript(res.script);
-      setChatHistory((prev) => [...prev, { role: 'assistant', content: res.script }]);
-    } catch (err) {
-      setChatHistory(chatHistory);
-      setRewriteError(err instanceof ApiError ? err.message : '逐字稿改寫失敗');
-    } finally {
-      setRewriteBusy(false);
-    }
-  }, [pdfId, currentPage, chatInput, editingScript, chatHistory, currentIdx, deckPages, scripts, isReadOnlyProcessing]);
-
-  const handleClearChat = useCallback(async () => {
-    if (isReadOnlyProcessing) return;
-    if (!pdfId || !currentPage) return;
-    setChatBusy(true);
-    setChatError(null);
-    try {
-      await clearPageChatHistory(pdfId, currentPage.page_number);
-      setChatHistory([]);
-      setChatInput('');
-    } catch (err) {
-      setChatError(err instanceof ApiError ? err.message : '清除問答失敗');
-    } finally {
-      setChatBusy(false);
-    }
-  }, [pdfId, currentPage, isReadOnlyProcessing]);
-
-  const handleGenerateVideo = useCallback(async () => {
-    if (isReadOnlyProcessing) return;
-    if (!pdfId) return;
-    setVideoBusy(true);
-    setVideoError(null);
-    try {
-      const res = await generatePdfVideo(pdfId);
-      setVideoUrl(res.video_url);
-      setDetail((prev) => (prev ? { ...prev, video_url: res.video_url, updated_at: res.updated_at } : prev));
-    } catch (err) {
-      setVideoError(err instanceof ApiError ? err.message : '產生影片失敗');
-    } finally {
-      setVideoBusy(false);
-    }
-  }, [pdfId, isReadOnlyProcessing]);
-
-  useEffect(() => {
-    if (!videoBusy || !pdfId) return;
-    let cancelled = false;
-    const timer = window.setInterval(() => {
-      void (async () => {
-        try {
-          const d = await fetchPdfDetail(pdfId);
-          if (cancelled) return;
-          setDetail((prev) => {
-            if (!prev) return d;
-            return {
-              ...prev,
-              progress_step: d.progress_step,
-              progress_current: d.progress_current,
-              progress_total: d.progress_total,
-              updated_at: d.updated_at,
-            };
-          });
-        } catch {
-          // non-fatal while video rendering
-        }
-      })();
-    }, 1000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [videoBusy, pdfId]);
-
-  useEffect(() => {
-    const isRenderingVideo = detail?.progress_step === 'rendering_video';
-    if (isRenderingVideo) {
-      setVideoBusy(true);
-      setVideoError(null);
-      return;
-    }
-    setVideoBusy(false);
-  }, [detail?.progress_step]);
-
-  const handleSaveTtsSettings = useCallback(async () => {
-    if (isReadOnlyProcessing) return;
-    if (!pdfId) return;
-    setTtsBusy(true);
-    setTtsMsg(null);
-    try {
-      const [ttsRes, scriptRes] = await Promise.all([
-        updatePdfTtsSettings(pdfId, ttsVoice, ttsSpeed),
-        updatePdfScriptSettings(pdfId, scriptMaxCharsPerPage, hostMode),
-      ]);
-      setDetail((prev) =>
-        prev
-          ? {
-              ...prev,
-              tts_voice: ttsRes.tts_voice,
-              tts_speed: ttsRes.tts_speed,
-              host_mode: hostMode,
-              script_max_chars_per_page: scriptRes.script_max_chars_per_page,
-              updated_at: ttsRes.updated_at,
-            }
-          : prev,
-      );
-      setTtsMsg('設定已儲存（主持模式變更需重新產生逐字稿才會套用）');
-    } catch (err) {
-      setTtsMsg(err instanceof ApiError ? err.message : '儲存設定失敗');
-    } finally {
-      setTtsBusy(false);
-    }
-  }, [pdfId, ttsVoice, ttsSpeed, scriptMaxCharsPerPage, hostMode, isReadOnlyProcessing]);
-
-  const handleSaveTitle = useCallback(async () => {
-    if (isReadOnlyProcessing) return;
-    if (!pdfId) return;
-    const nextTitle = titleInput.trim();
-    if (!nextTitle) {
-      setTitleMsg('標題不可為空');
-      return;
-    }
-    setTitleBusy(true);
-    setTitleMsg(null);
-    try {
-      const res = await updatePdfTitle(pdfId, nextTitle);
-      setDetail((prev) =>
-        prev
-          ? {
-              ...prev,
-              title: res.title,
-              updated_at: res.updated_at,
-            }
-          : prev,
-      );
-      setTitleMsg('標題已更新');
-    } catch (err) {
-      setTitleMsg(err instanceof ApiError ? err.message : '更新標題失敗');
-    } finally {
-      setTitleBusy(false);
-    }
-  }, [pdfId, titleInput, isReadOnlyProcessing]);
-
-  const handleRegenerateTitle = useCallback(async () => {
-    if (isReadOnlyProcessing) return;
-    if (!pdfId) return;
-    setTitleBusy(true);
-    setTitleMsg(null);
-    try {
-      const res = await regeneratePdfTitle(pdfId);
-      setTitleInput(res.title);
-      setDetail((prev) =>
-        prev
-          ? {
-              ...prev,
-              title: res.title,
-              updated_at: res.updated_at,
-            }
-          : prev,
-      );
-      setTitleMsg('標題已重新生成');
-    } catch (err) {
-      setTitleMsg(err instanceof ApiError ? err.message : '重新生成標題失敗');
-    } finally {
-      setTitleBusy(false);
-    }
-  }, [pdfId, isReadOnlyProcessing]);
-
-  const handleSavePrompt = useCallback(async () => {
-    if (isReadOnlyProcessing) return;
-    if (!pdfId || !currentPage) return;
-    setPromptBusy(true);
-    setPromptMsg(null);
-    try {
-      const res = await updatePdfPrompt(pdfId, currentPage.page_number, promptInput);
-      setPagePrompts((prev) => ({ ...prev, [res.page_number]: res.page_prompt ?? '' }));
-      setDetail((prev) => (prev ? { ...prev, updated_at: res.updated_at } : prev));
-      setPromptMsg('提示詞已更新');
-    } catch (err) {
-      setPromptMsg(err instanceof ApiError ? err.message : '更新提示詞失敗');
-    } finally {
-      setPromptBusy(false);
-    }
-  }, [pdfId, currentPage, promptInput, isReadOnlyProcessing]);
-
-  const handleAddTxtSource = useCallback(async () => {
-    if (!pdfId) return;
-    const content = sourceTextContent.trim();
-    if (!content) {
-      setSourceErr('請先輸入來源文字內容');
-      return;
-    }
-    setSourceBusy(true);
-    setSourceErr(null);
-    setSourceMsg(null);
-    try {
-      const created = await addPdfTextSource(pdfId, {
-        source_name: sourceTextName.trim() || undefined,
-        content_text: content,
-      });
-      setDetail((prev) => {
-        if (!prev) return prev;
-        const prevSources = prev.sources ?? [];
-        return { ...prev, sources: [...prevSources, created] };
-      });
-      setSourceTextContent('');
-      setSourceMsg('已新增文字來源');
-    } catch (err) {
-      setSourceErr(err instanceof ApiError ? err.message : '新增文字來源失敗');
-    } finally {
-      setSourceBusy(false);
-    }
-  }, [pdfId, sourceTextContent, sourceTextName]);
-
-  const handleAddPdfSource = useCallback(async (file: File) => {
-    if (!pdfId) return;
-    setSourceBusy(true);
-    setSourceErr(null);
-    setSourceMsg(null);
-    try {
-      const created = await addPdfFileSource(pdfId, file);
-      setDetail((prev) => {
-        if (!prev) return prev;
-        const prevSources = prev.sources ?? [];
-        return { ...prev, sources: [...prevSources, created] };
-      });
-      setSourceMsg('已新增 PDF 來源');
-    } catch (err) {
-      setSourceErr(err instanceof ApiError ? err.message : '新增 PDF 來源失敗');
-    } finally {
-      setSourceBusy(false);
-    }
-  }, [pdfId]);
-
-  const reloadDetail = useCallback(async () => {
-    if (!pdfId) return;
-    let shareMode: ShareAccessMode | null = null;
-    if (currentShareToken) {
-      const share = await resolveShareToken(currentShareToken);
-      if (share.pdf_id !== pdfId) {
-        throw new ApiError('分享連結與簡報不符', 'INVALID_SHARE_TARGET', 400);
-      }
-      shareMode = share.access;
-    }
-    const d = await fetchPdfDetail(pdfId, currentShareToken || undefined);
-    const detailWithShare = shareMode ? { ...d, share_mode: shareMode } : d;
-    setDetail(detailWithShare);
-    setVideoUrl(detailWithShare.video_url ?? null);
-  }, [pdfId, currentShareToken]);
-
-  const handleSyncToGithub = useCallback(async () => {
-    if (!pdfId) return;
-    setGithubSyncBusy(true);
-    setGithubSyncError(null);
-    setGithubSyncMessage(null);
-    try {
-      await syncPresentationToGitHub(pdfId);
-      setGithubSyncMessage('已同步到 GitHub');
-    } catch (err) {
-      setGithubSyncError(err instanceof ApiError ? err.message : '同步到 GitHub 失敗');
-    } finally {
-      setGithubSyncBusy(false);
-    }
-  }, [pdfId]);
-
-  const handleCreateShareLink = useCallback(async () => {
-    if (!pdfId) return;
-    setShareBusy(true);
-    setShareError(null);
-    setShareMessage(null);
-    try {
-      const res = await createPdfShare(pdfId, shareAccess);
-      const absoluteUrl = `${window.location.origin}${res.share_url}`;
-      setShareUrl(absoluteUrl);
-      setShareDialogOpen(true);
-      try {
-        await navigator.clipboard.writeText(absoluteUrl);
-        setShareMessage(`已建立並複製分享連結（${shareAccess === 'editable' ? '可編輯' : '唯讀'}）`);
-      } catch {
-        setShareMessage(`分享連結已建立：${absoluteUrl}`);
-        setShareError('已建立分享連結，但瀏覽器不允許自動複製，請手動複製上述連結。');
-      }
-    } catch (err) {
-      setShareError(err instanceof ApiError ? err.message : '建立分享連結失敗');
-    } finally {
-      setShareBusy(false);
-    }
-  }, [pdfId, shareAccess]);
-
-  const regenAnySelected = regenOptions.image || regenOptions.script || regenOptions.audio;
-  const regenJobRunning =
-    regenJob?.status === 'running' ||
-    regenJob?.status === 'pending' ||
-    regenJob?.status === 'cancelling';
-  const regenJobTerminal =
-    regenJob?.status === 'completed' ||
-    regenJob?.status === 'failed' ||
-    regenJob?.status === 'cancelled';
-  const showRegenBanner = regenJob != null && !regenBannerDismissed;
-
-  const handleConfirmRegenerate = useCallback(async () => {
-    if (isReadOnlyProcessing) return;
-    if (!pdfId) return;
-    if (regenJobRunning) return; // 防重複提交
-    if (!regenAnySelected) {
-      setRegenAllMsg('請至少選擇一個重生項目');
-      return;
-    }
-    if (regenOptions.image) {
-      const p = regenAllPrompt.trim();
-      if (!p) {
-        setRegenAllMsg('圖檔提示詞不可為空');
-        return;
-      }
-    }
-    setRegenAllBusy(true);
-    setRegenAllMsg(null);
-    setRegenBannerDismissed(false);
-    // 記住啟動前的頁碼，之後 rollback 可以跳回
-    preRegenPageIdxRef.current = currentIdx;
-    const selectedPageNumbers = regenSelectedPages.size > 0
-      ? Array.from(regenSelectedPages).sort((a, b) => a - b)
-      : undefined;
-    try {
-      const started = await startRegenerateJob(pdfId, {
-        scripts: regenOptions.script
-          ? {
-              prompt: regenScriptPrompt.trim(),
-              script_max_chars_per_page: regenScriptMaxCharsPerPage,
-            }
-          : null,
-        audio: regenOptions.audio ? {} : null,
-        images: regenOptions.image
-          ? {
-              prompt: [
-                `整份圖片風格（固定套用）：\n${deckImageStylePrompt.trim() || '(無)'}`,
-                `本次圖片重生需求：\n${regenAllPrompt.trim()}`,
-              ].join('\n\n'),
-            }
-          : null,
-        page_numbers: selectedPageNumbers,
-      });
-      autoJumpedJobIdRef.current = null;
-      setRegenJob(started);
-      setRegenAllDialogOpen(false); // 關閉對話框，讓進度顯示在主畫面
-      setRegenAllMsg('重生任務已啟動，進度顯示在畫面上方');
-    } catch (err) {
-      setRegenAllMsg(err instanceof ApiError ? err.message : '重生失敗');
-      setRegenAllBusy(false);
-    }
-  }, [pdfId, regenAllPrompt, regenScriptPrompt, regenScriptMaxCharsPerPage, regenAnySelected, regenOptions, regenJobRunning, currentIdx, deckImageStylePrompt, isReadOnlyProcessing, regenSelectedPages]);
-
-  const handleConfirmScript = useCallback(async () => {
-    if (!pdfId) return;
-    setConfirmScriptBusy(true);
-    try {
-      await confirmScript(pdfId);
-      void reloadDetail();
-    } catch (err) {
-      alert(err instanceof ApiError ? err.message : '確認失敗');
-    } finally {
-      setConfirmScriptBusy(false);
-    }
-  }, [pdfId, reloadDetail]);
-
-  const handleStopRegenerate = useCallback(async () => {
-    if (!pdfId || !regenJob) return;
-    setRegenStopBusy(true);
-    try {
-      const next = await cancelRegenerateJob(pdfId);
-      setRegenJob(next);
-      setRegenAllMsg('已送出停止請求，等待目前頁面處理完成…');
-    } catch (err) {
-      setRegenAllMsg(err instanceof ApiError ? err.message : '停止失敗');
-    } finally {
-      setRegenStopBusy(false);
-    }
-  }, [pdfId, regenJob]);
-
-  const handleRollbackRegenerate = useCallback(async () => {
-    if (!pdfId) return;
-    if (!window.confirm('確定要還原到重生前的狀態？此操作無法復原。')) return;
-    setRegenRollbackBusy(true);
-    try {
-      await rollbackRegenerate(pdfId);
-      // 還原後重新載入詳情
-      await reloadDetail();
-      // 回到啟動前的頁碼（若能取得）
-      const targetIdx = preRegenPageIdxRef.current;
-      if (targetIdx != null) {
-        setCurrentIdx(targetIdx);
-      }
-      // 清除記憶體中的 job，隱藏 banner
-      setRegenJob(null);
-      setRegenBannerDismissed(false);
-      setRegenAllMsg('已還原至重生前狀態');
-      autoJumpedJobIdRef.current = null;
-    } catch (err) {
-      setRegenAllMsg(err instanceof ApiError ? err.message : '還原失敗');
-    } finally {
-      setRegenRollbackBusy(false);
-    }
-  }, [pdfId, reloadDetail]);
-
-  // 輪詢批次重生任務進度。任務進入 completed/failed 後停止輪詢。
-  useEffect(() => {
-    if (!pdfId || !regenJob || !regenJobRunning) return;
-    let cancelled = false;
-    let timer: number | null = null;
-    const tick = async () => {
-      try {
-        const next = await fetchRegenerateStatus(pdfId);
-        if (cancelled) return;
-        setRegenJob(next);
-        if (
-          next.status === 'running' ||
-          next.status === 'pending' ||
-          next.status === 'cancelling'
-        ) {
-          timer = window.setTimeout(tick, 1500);
-        }
-      } catch (err) {
-        if (cancelled) return;
-        if (err instanceof ApiError && err.status === 404) {
-          setRegenJob(null);
-          setRegenAllBusy(false);
-          return;
-        }
-        setRegenAllMsg(err instanceof ApiError ? err.message : '取得進度失敗');
-      }
-    };
-    timer = window.setTimeout(tick, 1500);
-    return () => {
-      cancelled = true;
-      if (timer != null) window.clearTimeout(timer);
-    };
-  }, [pdfId, regenJob?.job_id, regenJobRunning]);
-
-  // 任務結束後：關閉 busy、顯示結果訊息，並重新載入詳情；若有成功完成的頁碼資訊
-  // 則自動切到該頁供使用者檢視。每個 job 只自動跳頁一次。
-  useEffect(() => {
-    if (!regenJob) return;
-    const terminal =
-      regenJob.status === 'completed' ||
-      regenJob.status === 'failed' ||
-      regenJob.status === 'cancelled';
-    if (!terminal) return;
-    setRegenAllBusy(false);
-    if (regenJob.status === 'completed') {
-      setRegenAllMsg('重生完成');
-    } else if (regenJob.status === 'failed') {
-      setRegenAllMsg(regenJob.error ?? '重生失敗');
-    } else {
-      setRegenAllMsg('已停止生成');
-    }
-    void reloadDetail();
-    // 自動跳頁：優先跳到 last_processed_page（使用者可看到剛生成的頁）。
-    if (autoJumpedJobIdRef.current !== regenJob.job_id) {
-      const lastPage =
-        regenJob.last_processed_page ?? regenJob.last_generated_page ?? null;
-      if (lastPage != null) {
-        // page_number 是 1-based，currentIdx 是 0-based
-        setCurrentIdx(Math.max(0, lastPage - 1));
-      }
-      autoJumpedJobIdRef.current = regenJob.job_id;
-    }
-  }, [regenJob, reloadDetail]);
-
-  const handleAddSlideAfterCurrent = useCallback(async () => {
-    if (isReadOnlyProcessing) return;
-    if (!pdfId || !currentPage) return;
-    setSlideBusy(true);
-    setSlideError(null);
-    try {
-      const res = await addSlide(pdfId, currentPage.page_number);
-      await reloadDetail();
-      setCurrentIdx(res.page_number - 1);
-    } catch (err) {
-      setSlideError(err instanceof ApiError ? err.message : '新增投影片失敗');
-    } finally {
-      setSlideBusy(false);
-    }
-  }, [pdfId, currentPage, isReadOnlyProcessing, reloadDetail]);
-
-  const handleDeleteCurrentSlide = useCallback(async () => {
-    if (isReadOnlyProcessing) return;
-    if (!pdfId || !currentPage) return;
-    if (!window.confirm(`確定刪除第 ${currentPage.page_number} 頁？`)) return;
-    setSlideBusy(true);
-    setSlideError(null);
-    const idxBeforeDelete = currentIdx;
-    const totalBeforeDelete = totalPages;
-    try {
-      await deleteSlide(pdfId, currentPage.page_number);
-      await reloadDetail();
-      setCurrentIdx(Math.max(0, Math.min(idxBeforeDelete, totalBeforeDelete - 2)));
-    } catch (err) {
-      setSlideError(err instanceof ApiError ? err.message : '刪除投影片失敗');
-    } finally {
-      setSlideBusy(false);
-    }
-  }, [pdfId, currentPage, currentIdx, totalPages, isReadOnlyProcessing, reloadDetail]);
-
-  const handleMoveSlide = useCallback(
-    async (fromPageNumber: number, toPageNumber: number) => {
-      if (isReadOnlyProcessing) return;
-      if (!pdfId || fromPageNumber === toPageNumber) return;
-      setSlideBusy(true);
-      setSlideError(null);
-      try {
-        await moveSlide(pdfId, fromPageNumber, toPageNumber);
-        await reloadDetail();
-        setCurrentIdx(Math.max(0, toPageNumber - 1));
-      } catch (err) {
-        setSlideError(err instanceof ApiError ? err.message : '調整頁面順序失敗');
-      } finally {
-        setSlideBusy(false);
-      }
-    },
-    [pdfId, reloadDetail, isReadOnlyProcessing],
-  );
-
-  const handleReplaceImageFile = useCallback(
-    async (file: File, targetPageNumber?: number) => {
-      if (isReadOnlyProcessing) return;
-      if (!pdfId || !currentPage) return;
-      const pageNumber = targetPageNumber ?? currentPage.page_number;
-      setSlideBusy(true);
-      setSlideError(null);
-      try {
-        await replaceSlideImage(pdfId, pageNumber, file);
-        await reloadDetail();
-      } catch (err) {
-        setSlideError(err instanceof ApiError ? err.message : '替換圖片失敗');
-      } finally {
-        setSlideBusy(false);
-      }
-    },
-    [pdfId, currentPage, reloadDetail, isReadOnlyProcessing],
-  );
-
-  const handleUpdateCoverFromCurrentPage = useCallback(async () => {
-    if (!pdfId || !currentPage) return;
-    if (!currentPage.image_url) {
-      setSlideError('目前頁沒有可用圖片，無法更新封面');
-      return;
-    }
-    setSlideBusy(true);
-    setSlideError(null);
-    try {
-      await updatePdfCoverFromPage(pdfId, currentPage.page_number);
-      await reloadDetail();
-    } catch (err) {
-      setSlideError(err instanceof ApiError ? err.message : '更新封面失敗');
-    } finally {
-      setSlideBusy(false);
-    }
-  }, [pdfId, currentPage, reloadDetail]);
-
-  const handleRegenerateImageWithPrompt = useCallback(async () => {
-    if (isReadOnlyProcessing) return;
-    if (!pdfId || !currentPage) return;
-    const trimmed = chatInput.trim() || '保留版型，讓文字更清晰、重點更聚焦';
-    const merged = [
-      `整份圖片風格（固定套用）：\n${deckImageStylePrompt.trim() || '(無)'}`,
-      `單張調整需求：\n${trimmed}`,
-    ].join('\n\n');
-    setSlideBusy(true);
-    setSlideError(null);
-    try {
-      const nextHistory = [...chatHistory, { role: 'user' as const, content: `【修改圖片】${trimmed}` }];
-      setChatHistory(nextHistory);
-      const res = await regenerateSlideImage(
-        pdfId,
-        currentPage.page_number,
-        merged,
-        limitChatHistoryForRequest(chatHistory),
-      );
-      const preview = `${res.image_url}${res.image_url.includes('?') ? '&' : '?'}t=${encodeURIComponent(res.updated_at)}`;
-      setChatHistory((prev) => [
-        ...prev,
-        { role: 'assistant', content: `${IMAGE_MSG_PREFIX}${preview}` },
-      ]);
-    } catch (err) {
-      setChatHistory(chatHistory);
-      setSlideError(err instanceof ApiError ? err.message : '修改圖片失敗');
-    } finally {
-      setSlideBusy(false);
-    }
-  }, [pdfId, currentPage, chatInput, chatHistory, deckImageStylePrompt, isReadOnlyProcessing]);
-
-  const handleApplyPreviewImage = useCallback(async () => {
-    if (isReadOnlyProcessing) return;
-    if (!pdfId || !imagePreviewUrl || !imagePreviewPageNumber) return;
-    setSlideBusy(true);
-    setSlideError(null);
-    try {
-      const resp = await fetch(imagePreviewUrl);
-      if (!resp.ok) throw new Error('Failed to fetch preview image');
-      const blob = await resp.blob();
-      const file = new File([blob], `page-${imagePreviewPageNumber}-candidate.jpg`, { type: blob.type || 'image/jpeg' });
-      await replaceSlideImage(pdfId, imagePreviewPageNumber, file);
-      await reloadDetail();
-    } catch (err) {
-      setSlideError(err instanceof ApiError ? err.message : '套用圖片失敗');
-    } finally {
-      setSlideBusy(false);
-    }
-    setImagePreviewOpen(false);
-  }, [pdfId, imagePreviewUrl, imagePreviewPageNumber, reloadDetail, isReadOnlyProcessing]);
-
-  const clearChatPastedImage = useCallback(() => {
-    if (chatPastedImageUrl) URL.revokeObjectURL(chatPastedImageUrl);
-    setChatPastedImage(null);
-    setChatPastedImageUrl(null);
-    setChatInpaintError(null);
-  }, [chatPastedImageUrl]);
-
-  const openVersionHistory = useCallback(async (type: 'image' | 'script', pageNumber: number) => {
-    if (!pdfId) return;
-    setVersionHistoryType(type);
-    setVersionHistoryPage(pageNumber);
-    setVersionHistoryEntries([]);
-    setVersionPreviewHash(null);
-    setVersionPreviewScript(null);
-    setVersionError(null);
-    setVersionHistoryOpen(true);
-    setVersionHistoryLoading(true);
-    try {
-      const resp = type === 'image'
-        ? await fetchImageHistory(pdfId, pageNumber)
-        : await fetchScriptHistory(pdfId, pageNumber);
-      setVersionHistoryEntries(resp.history);
-    } catch {
-      setVersionError('無法載入版本歷史');
-    } finally {
-      setVersionHistoryLoading(false);
-    }
-  }, [pdfId]);
-
-  const handleVersionPreview = useCallback(async (hash: string) => {
-    if (!pdfId || versionHistoryPage == null) return;
-    setVersionPreviewHash(hash);
-    if (versionHistoryType === 'script') {
-      try {
-        const text = await fetchScriptVersion(pdfId, versionHistoryPage, hash);
-        setVersionPreviewScript(text);
-      } catch {
-        setVersionPreviewScript(null);
-      }
-    } else {
-      setVersionPreviewScript(null);
-    }
-  }, [pdfId, versionHistoryPage, versionHistoryType]);
-
-  const handleVersionRestore = useCallback(async () => {
-    if (!pdfId || versionHistoryPage == null || !versionPreviewHash) return;
-    setVersionRestoring(true);
-    setVersionError(null);
-    try {
-      if (versionHistoryType === 'image') {
-        await restoreImageVersion(pdfId, versionHistoryPage, versionPreviewHash);
-      } else {
-        await restoreScriptVersion(pdfId, versionHistoryPage, versionPreviewHash);
-      }
-      await reloadDetail();
-      setVersionHistoryOpen(false);
-    } catch (err) {
-      setVersionError(err instanceof ApiError ? err.message : '還原失敗');
-    } finally {
-      setVersionRestoring(false);
-    }
-  }, [pdfId, versionHistoryPage, versionPreviewHash, versionHistoryType, reloadDetail]);
-
-  const clearImageEditRegion = useCallback(() => {
-    setImageEditRegion(null);
-    const overlay = imageEditRegionOverlayRef.current;
-    if (overlay) overlay.style.display = 'none';
-  }, []);
-
-  const handleInpaintImage = useCallback(async () => {
-    if (isReadOnlyProcessing || !pdfId || !currentPage) return;
-    const prompt = chatInput.trim() || '根據指示修改投影片圖片';
-
-    // Generate mask PNG at 1536×1024 (same as the slide image size used by the API)
-    let maskFile: File | null = null;
-    if (imageEditRegion) {
-      const W = 1536, H = 1024;
-      const mc = document.createElement('canvas');
-      mc.width = W;
-      mc.height = H;
-      const mctx = mc.getContext('2d');
-      if (mctx) {
-        mctx.fillStyle = 'white';       // white = keep
-        mctx.fillRect(0, 0, W, H);
-        mctx.clearRect(                  // transparent = modify
-          Math.round(imageEditRegion.x * W),
-          Math.round(imageEditRegion.y * H),
-          Math.round(imageEditRegion.w * W),
-          Math.round(imageEditRegion.h * H),
-        );
-        const maskBlob: Blob | null = await new Promise((resolve) => mc.toBlob(resolve, 'image/png'));
-        if (maskBlob) maskFile = new File([maskBlob], 'mask.png', { type: 'image/png' });
-      }
-    }
-
-    const regionNote = imageEditRegion ? '（標示區域）' : '';
-    const refNote = chatPastedImage ? '（含參考圖）' : '';
-    const nextHistory = [...chatHistory, { role: 'user' as const, content: `【修改投影片圖片${regionNote}${refNote}】${prompt}` }];
-    setChatHistory(nextHistory);
-    setChatInpaintBusy(true);
-    setChatInpaintError(null);
-    try {
-      const res = await inpaintImage(pdfId, currentPage.page_number, maskFile, chatPastedImage, prompt);
-      const preview = `${res.image_url}?t=${encodeURIComponent(res.updated_at)}`;
-      setChatHistory((prev) => [
-        ...prev,
-        { role: 'assistant', content: `${IMAGE_MSG_PREFIX}${preview}` },
-      ]);
-      clearChatPastedImage();
-      clearImageEditRegion();
-      setImageEditSelectMode(false);
-    } catch (err) {
-      setChatHistory(chatHistory);
-      setChatInpaintError(err instanceof ApiError ? err.message : '修改圖片失敗');
-    } finally {
-      setChatInpaintBusy(false);
-    }
-  }, [isReadOnlyProcessing, pdfId, currentPage, chatInput, imageEditRegion, chatPastedImage, chatHistory, clearChatPastedImage, clearImageEditRegion]);
-
-  const hasChatInput = chatInput.trim().length > 0;
+  }, [pdfId, currentPage, scriptEditorState.editingScript, isReadOnlyProcessing]);
 
   useEffect(() => {
     const itemAsString = (item: DataTransferItem): Promise<string> =>
@@ -2894,549 +1756,99 @@ export default function PlayPage() {
     );
   }
 
-  const progressRatio =
-    duration > 0 ? Math.min(1, currentTime / duration) * 1000 : 0;
-  const syncDisplayedQuestion = syncDisplayedQuestionId
-    ? syncFollowerQuestions.find((q) => q.id === syncDisplayedQuestionId) ?? null
-    : null;
-  const syncOverlayText = syncAiAnswer?.answer || syncDisplayedQuestion?.question || '';
-  const syncOverlayIsAiAnswer = Boolean(syncAiAnswer?.answer);
+  const hasScriptChanges = scriptEditorState.editingScript !== (currentPage ? (scripts[currentPage.page_number] ?? '') : '');
+
   const activePoll =
-    (pollStarted || (syncEnabled && syncRole === 'follower' && syncRealtimePollStarted)) && pagePolls.length > 0
+    (pollState.pollStarted || (syncEnabled && syncRole === 'follower' && syncRealtimePollStarted)) && pollState.pagePolls.length > 0
       ? (
         (syncDisplayedPollId != null
-          ? pagePolls.find((poll) => poll.id === syncDisplayedPollId)
+          ? pollState.pagePolls.find((poll) => poll.id === syncDisplayedPollId)
           : null)
-        ?? pagePolls.find((poll) => poll.is_active)
-        ?? pagePolls[0]
+        ?? pollState.pagePolls.find((poll) => poll.is_active)
+        ?? pollState.pagePolls[0]
         ?? null
       )
       : null;
   const activePollQuestion = activePoll?.question ?? '';
-  const videoProgressCurrent = Math.max(0, detail.progress_current ?? 0);
-  const videoProgressTotal = Math.max(0, detail.progress_total ?? 0);
-  const videoProgressText =
-    videoBusy && videoProgressTotal > 0
-      ? `${videoProgressCurrent}/${videoProgressTotal}`
-      : null;
+
+
+  // ─── Context value ─────────────────────────────────────────────────────────
+  const _ctxValue = {
+    // routing
+    pdfId, currentShareToken, isLockedFullscreen,
+    // deck data
+    detail, setDetail, deckPages, currentPage, currentIdx, setCurrentIdx, totalPages, loadError,
+    // playback
+    isPlaying, setIsPlaying, currentTime, setCurrentTime, duration, setDuration,
+    finished, setFinished, audioMuted, setAudioMuted, effectiveAudioMuted,
+    playbackRate, setPlaybackRate, showSubtitle, setShowSubtitle,
+    playbackSettingsOpen, setPlaybackSettingsOpen, followerAudioUnlocked, setFollowerAudioUnlocked,
+    scripts, setScripts, displayedImageSrc, setDisplayedImageSrc,
+    // playback actions
+    playPause, goPrev, goNext, handleEnded, handleSeek, scheduleAudioReload, clearAudioRetryTimer, reloadDetail,
+    // slide nav
+    audioError, ...slideState,
+    showAddPagesModal, setShowAddPagesModal, draggingPage, setDraggingPage,
+    thumbLoadUntilIdx, setThumbLoadUntilIdx,
+    // script / editor (from useScriptEditor)
+    ...scriptEditorState,
+    handleRetry,
+    // prompt / source (from usePromptAndSource)
+    ...promptState,
+    // chat + image edit / inpaint (from useChatAndImageEdit)
+    ...chatState,
+    handleReplaceImageFile,
+    // TTS / audio (from usePdfMetadata + PlayPage)
+    ...metaState,
+    handleRegenerateAudio,
+    // image style (from useImageStyle)
+    ...imageStyleState,
+    // regen (from useRegeneration)
+    ...regenState,
+    // poll (from usePagePolls)
+    ...pollState,
+    activePoll, activePollQuestion,
+    syncDisplayedPollId, setSyncDisplayedPollId,
+    syncRealtimePollStarted, syncPollShowResults, setSyncPollShowResults,
+    // video (from useVideoGeneration)
+    ...videoState,
+    // classroom
+    classroomMode, setClassroomMode, classroomAwaitingNext, interactiveMode, setInteractiveMode,
+    // sync
+    syncEnabled, setSyncEnabled, syncRole, setSyncRole, syncError, setSyncError,
+    syncFollowerQuestionInput, setSyncFollowerQuestionInput, syncFollowerQuestions,
+    syncDisplayedQuestionId, syncAiAnswer, syncAiAnswerBusy,
+    syncQuestionInput, setSyncQuestionInput, fullscreenQuestionDialogOpen, setFullscreenQuestionDialogOpen,
+    fullscreenPollControlOpen, setFullscreenPollControlOpen, remoteCursor, syncDrawingState,
+    isSyncFollower, canUseDrawingTools, handleSyncEnabledChange, handleSubmitFollowerQuestion,
+    handleToggleDisplayedQuestion, handleAiAnswerFollowerQuestions,
+    // fullscreen / layout
+    imageOnlyFullscreen, setImageOnlyFullscreen, fullscreenLayout, setFullscreenLayout,
+    slideImageScale, setSlideImageScale, slideImageMaxHeightVh, activeTab, setActiveTab,
+    qaPanelExpanded, setQaPanelExpanded,
+    // drawing
+    drawingMode, setDrawingMode, drawingTool, setDrawingTool, drawingColor, setDrawingColor,
+    drawingLineWidth, setDrawingLineWidth, remoteDrawingData, pushLocalDrawingChange, flushLocalDrawingPush,
+    // computed
+    isReadOnlyProcessing, readOnlyReason, shareIsReadOnly, imageBustKey,
+    withImageBust, withShareToken, targetImageSrc,
+    sourceItems, hasScriptChanges, syncQuestionBusy, openVersionHistory,
+    pageSentences, currentSentence, activeSentenceIdx,
+    // refs
+    audioRef, fullscreenContainerRef, fullscreenImageRef, drawingCanvasSplitRef,
+    drawingCanvasMainRef, drawingCanvasFullscreenRef, sourcePdfInputRef,
+    imageEditDragRef, imageEditRegionOverlayRef, activeSentenceRef, getActiveDrawingCanvas,
+    // wake lock
+    acquireWakeLock, releaseWakeLock,
+  };
+
+
+
 
   return (
+    <PlayPageCtx.Provider value={_ctxValue}>
     <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
-      {imageOnlyFullscreen ? (
-        <div
-          ref={fullscreenContainerRef}
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black"
-          style={{
-            cursor:
-              "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56' viewBox='0 0 56 56'%3E%3Ccircle cx='28' cy='28' r='8' fill='none' stroke='%23ef4444' stroke-width='2.5'/%3E%3Cline x1='28' y1='2' x2='28' y2='20' stroke='%23ef4444' stroke-width='2.5' stroke-linecap='round'/%3E%3Cline x1='28' y1='36' x2='28' y2='54' stroke='%23ef4444' stroke-width='2.5' stroke-linecap='round'/%3E%3Cline x1='2' y1='28' x2='20' y2='28' stroke='%23ef4444' stroke-width='2.5' stroke-linecap='round'/%3E%3Cline x1='36' y1='28' x2='54' y2='28' stroke='%23ef4444' stroke-width='2.5' stroke-linecap='round'/%3E%3Ccircle cx='28' cy='28' r='1.5' fill='%23ef4444'/%3E%3C/svg%3E\") 28 28, crosshair",
-          }}
-          onClick={() => { if (!imageEditSelectMode && (!drawingMode || drawingTool === 'cursor')) playPause(); }}
-          role="button"
-          tabIndex={-1}
-          aria-label={isPlaying ? '暫停語音播放' : '繼續語音播放'}
-        >
-          {!isPlaying ? (
-            <div className="pointer-events-none absolute left-4 top-4 flex h-12 w-12 items-center justify-center rounded-full border border-white/35 bg-black/55 text-white shadow-lg backdrop-blur-sm">
-              <span className="sr-only">語音已暫停</span>
-              <span className="h-6 w-2 rounded-sm bg-current" aria-hidden="true" />
-              <span className="ml-2 h-6 w-2 rounded-sm bg-current" aria-hidden="true" />
-            </div>
-          ) : null}
-          {fullscreenLayout === 'split' || fullscreenLayout === 'edit' ? (
-            <div className="flex h-full w-full items-stretch">
-              <div className="flex h-full w-1/2 shrink-0 flex-col p-2">
-                <div className="flex min-h-0 flex-1 items-center justify-center">
-                  {currentPage?.image_url || displayedImageSrc ? (
-                    <div className="relative" style={{ lineHeight: 0 }}>
-                      <img
-                        ref={fullscreenImageRef}
-                        src={displayedImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
-                        alt={`第 ${currentPage?.page_number ?? ''} 頁`}
-                        className="max-h-full max-w-full object-contain"
-                      />
-                      {pdfId && currentPage && (
-                        <DrawingCanvas
-                          ref={drawingCanvasSplitRef}
-                          pdfId={pdfId}
-                          pageNumber={currentPage.page_number}
-                          enabled={canUseDrawingTools && drawingMode && drawingTool !== 'cursor'}
-                          color={drawingColor}
-                          lineWidth={drawingTool === 'eraser' ? drawingLineWidth * 3 : drawingLineWidth}
-                          eraser={drawingTool === 'eraser'}
-                          remoteData={isSyncFollower ? remoteDrawingData : undefined}
-                          onLocalChange={pushLocalDrawingChange}
-                        />
-                      )}
-                    </div>
-                  ) : (
-                    <div className="text-slate-300">
-                      {currentPage?.status === 'failed'
-                        ? `本頁產生失敗${currentPage.error_message ? `：${currentPage.error_message}` : ''}`
-                        : detail?.status === 'awaiting_script_confirmation'
-                          ? '等待確認分頁結果（確認後將開始產生圖片）'
-                          : '圖片產生中…'}
-                    </div>
-                  )}
-                </div>
-                {fullscreenLayout === 'edit' ? (
-                  <div
-                    className="mt-2 flex shrink-0 cursor-default items-center justify-center gap-3"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        goPrev();
-                      }}
-                      disabled={currentIdx === 0}
-                      className="rounded-md border border-slate-600 bg-slate-900/70 px-4 py-2 text-sm text-slate-100 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
-                      title="上一頁"
-                      aria-label="上一頁"
-                    >
-                      ◀ 上一頁
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        playPause();
-                      }}
-                      className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-5 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-500/25"
-                      title={isPlaying ? '暫停' : '播放'}
-                      aria-label={isPlaying ? '暫停' : '播放'}
-                    >
-                      {isPlaying ? '⏸ 暫停' : '▶ 播放'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        goNext();
-                      }}
-                      disabled={currentIdx >= totalPages - 1}
-                      className="rounded-md border border-slate-600 bg-slate-900/70 px-4 py-2 text-sm text-slate-100 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
-                      title="下一頁"
-                      aria-label="下一頁"
-                    >
-                      下一頁 ▶
-                    </button>
-                    <span className="ml-1 text-sm tabular-nums text-slate-400">
-                      {currentIdx + 1}/{totalPages}
-                    </span>
-                  </div>
-                ) : null}
-              </div>
-              {fullscreenLayout === 'split' ? (
-                <div className="h-full w-1/2 overflow-y-auto px-6 py-10 md:px-10 md:py-14">
-                  {pageSentences.length > 0 ? (
-                    <div className="mx-auto max-w-2xl space-y-3">
-                      {pageSentences.map((sentence, idx) => {
-                        const isActive = idx === activeSentenceIdx;
-                        return (
-                          <p
-                            key={idx}
-                            ref={isActive ? activeSentenceRef : undefined}
-                            className={`whitespace-pre-wrap rounded-md px-3 py-1.5 text-xl leading-relaxed transition-colors md:text-2xl lg:text-3xl ${
-                              isActive
-                                ? 'bg-cyan-500/15 font-bold text-cyan-300 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]'
-                                : 'text-slate-500'
-                            }`}
-                          >
-                            {sentence}
-                          </p>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="flex h-full items-center justify-center text-slate-500">（本頁尚無字幕）</div>
-                  )}
-                </div>
-              ) : (
-                // 全螢幕編輯：右側為可編輯的逐字稿。stopPropagation 避免點擊/輸入時觸發播放切換。
-                <div
-                  className="flex h-full w-1/2 cursor-default flex-col px-6 py-10 md:px-10 md:py-12"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <h2 className="mb-3 shrink-0 text-base font-semibold text-slate-200 md:text-lg">
-                    📝 編輯逐字稿（第 {currentPage?.page_number ?? '-'} 頁）
-                  </h2>
-                  <textarea
-                    value={editingScript}
-                    onChange={(e) => setEditingScript(e.target.value)}
-                    disabled={isReadOnlyProcessing}
-                    className="w-full flex-1 cursor-text resize-none rounded-md border border-slate-700 bg-slate-900/70 p-4 text-base leading-relaxed text-slate-100 outline-none ring-emerald-500/40 placeholder:text-slate-500 focus:ring md:text-lg"
-                    placeholder="請輸入本頁逐字稿..."
-                  />
-                  <div className="mt-3 flex shrink-0 items-center justify-between gap-3">
-                    <div className="text-xs text-slate-400">
-                      {editorError ? <span className="text-rose-300">{editorError}</span> : '儲存後會僅重生此頁語音'}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => void handleRegenerateAudio()}
-                      disabled={isReadOnlyProcessing || editorBusy || !hasScriptChanges}
-                      className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-4 py-2 text-sm text-emerald-200 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      {editorBusy ? '重生中…' : '儲存並重生語音'}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : currentPage?.image_url || displayedImageSrc ? (
-            <div className="relative" style={{ lineHeight: 0 }}>
-              <img
-                ref={fullscreenImageRef}
-                src={displayedImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
-                alt={`第 ${currentPage?.page_number ?? ''} 頁`}
-                className="max-h-screen max-w-screen object-contain"
-              />
-              {pdfId && currentPage && (
-                <DrawingCanvas
-                  ref={drawingCanvasFullscreenRef}
-                  pdfId={pdfId}
-                  pageNumber={currentPage.page_number}
-                  enabled={canUseDrawingTools && drawingMode && drawingTool !== 'cursor'}
-                  color={drawingColor}
-                  lineWidth={drawingTool === 'eraser' ? drawingLineWidth * 3 : drawingLineWidth}
-                  eraser={drawingTool === 'eraser'}
-                  remoteData={isSyncFollower ? remoteDrawingData : undefined}
-                  onLocalChange={pushLocalDrawingChange}
-                />
-              )}
-            </div>
-          ) : (
-            <div className="text-slate-300">
-              {currentPage?.status === 'failed'
-                        ? `本頁產生失敗${currentPage.error_message ? `：${currentPage.error_message}` : ''}`
-                        : detail?.status === 'awaiting_script_confirmation'
-                          ? '等待確認分頁結果（確認後將開始產生圖片）'
-                          : '圖片產生中…'}
-            </div>
-          )}
-          {/* Drawing toolbar inside fullscreen */}
-          {drawingMode && pdfId && currentPage && !playQrCodeUrl && (
-            <div
-              className="absolute left-2 top-2 z-30 flex flex-col gap-1.5 rounded-lg border border-slate-600 bg-slate-900/95 p-1.5 shadow-xl backdrop-blur-sm"
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center gap-1">
-                <button type="button" title="筆" aria-label="筆模式"
-                  className={`flex h-7 w-7 items-center justify-center rounded border text-sm ${drawingTool === 'pen' ? 'border-slate-300 bg-slate-700 text-white' : 'border-slate-600 text-slate-400 hover:bg-slate-800'}`}
-                  onClick={() => setDrawingTool('pen')}>✏️</button>
-                <button type="button" title="游標" aria-label="游標模式"
-                  className={`flex h-7 w-7 items-center justify-center rounded border text-sm ${drawingTool === 'cursor' ? 'border-slate-300 bg-slate-700 text-white' : 'border-slate-600 text-slate-400 hover:bg-slate-800'}`}
-                  onClick={() => setDrawingTool('cursor')}>🖱️</button>
-                <button type="button" title="橡皮擦" aria-label="橡皮擦模式"
-                  className={`flex h-7 w-7 items-center justify-center rounded border text-sm ${drawingTool === 'eraser' ? 'border-slate-300 bg-slate-700 text-white' : 'border-slate-600 text-slate-400 hover:bg-slate-800'}`}
-                  onClick={() => setDrawingTool('eraser')}>⬜</button>
-                <button type="button" title="清除本頁所有手寫" aria-label="清除"
-                  className="flex h-7 w-7 items-center justify-center rounded border border-rose-600/50 bg-rose-600/20 text-sm text-rose-300 hover:bg-rose-600/30"
-                  onClick={() => getActiveDrawingCanvas()?.clearAll()}>🗑️</button>
-                <button type="button" title="關閉手寫（W）" aria-label="關閉"
-                  className="flex h-7 w-7 items-center justify-center rounded border border-slate-600 text-xs text-slate-400 hover:bg-slate-800"
-                  onClick={() => { setDrawingMode(false); setDrawingTool('pen'); }}>✕</button>
-              </div>
-              {drawingTool !== 'cursor' && (
-                <div className="flex flex-wrap gap-1">
-                  {DRAWING_COLORS.map(({ value, label }) => (
-                    <button key={value} type="button" title={label}
-                      className={`h-5 w-5 rounded-full border-2 transition-transform ${drawingColor === value ? 'scale-110 border-white' : 'border-transparent hover:border-slate-400'}`}
-                      style={{ background: value }}
-                      onClick={() => setDrawingColor(value)} aria-label={label} />
-                  ))}
-                </div>
-              )}
-              {drawingTool !== 'cursor' && (
-                <div className="flex gap-1">
-                  {DRAWING_WIDTHS.map(({ value, label }) => (
-                    <button key={value} type="button" title={label}
-                      className={`flex h-7 w-7 items-center justify-center rounded border ${drawingLineWidth === value ? 'border-slate-300 bg-slate-700' : 'border-slate-600 hover:bg-slate-800'}`}
-                      onClick={() => setDrawingLineWidth(value)} aria-label={label}>
-                      <span className="block rounded-full" style={{ width: `${Math.min(value * 2, 14)}px`, height: `${Math.min(value * 2, 14)}px`, background: drawingTool === 'eraser' ? '#94a3b8' : drawingColor }} />
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-          <div className="absolute right-4 top-4 flex items-center gap-2">
-            <div className="flex items-center overflow-hidden rounded-md border border-slate-500 bg-slate-900/70 text-sm">
-              {([
-                ['image', '圖片'],
-                ['split', '字幕'],
-                ['edit', '編輯'],
-              ] as const).map(([mode, label]) => (
-                isLockedFullscreen && mode === 'edit' ? null : (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setFullscreenLayout(mode);
-                  }}
-                  aria-pressed={fullscreenLayout === mode}
-                  className={`px-3 py-1.5 ${
-                    fullscreenLayout === mode
-                      ? 'bg-cyan-500/25 font-medium text-cyan-100'
-                      : 'text-slate-200 hover:bg-slate-800'
-                  }`}
-                  title={`全螢幕${label}版面`}
-                >
-                  {label}
-                </button>
-                )
-              ))}
-            </div>
-            {!isLockedFullscreen ? (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setImageOnlyFullscreen(false);
-                }}
-                className="rounded-md border border-slate-500 bg-slate-900/70 px-3 py-1.5 text-sm text-slate-100"
-              >
-                離開全螢幕
-              </button>
-            ) : null}
-          </div>
-          {syncOverlayText ? (
-            <div
-              className={`pointer-events-none absolute left-1/2 w-[min(94vw,1100px)] -translate-x-1/2 px-3 ${
-                syncOverlayIsAiAnswer
-                  ? 'bottom-6 max-h-[70vh] pb-[max(0.5rem,env(safe-area-inset-bottom))]'
-                  : 'bottom-4 pb-[max(0.5rem,env(safe-area-inset-bottom))]'
-              }`}
-            >
-              <div
-                className={`mx-auto overflow-y-auto rounded-md bg-cyan-950/90 px-4 text-center font-medium leading-relaxed text-cyan-50 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${
-                  syncOverlayIsAiAnswer ? 'max-h-[70vh] py-4 text-sm md:text-base' : 'py-3 text-base md:text-lg'
-                }`}
-              >
-                <p className={`${syncOverlayIsAiAnswer ? '' : 'line-clamp-5'} whitespace-pre-wrap`}>{syncOverlayText}</p>
-              </div>
-            </div>
-          ) : null}
-          {syncEnabled && syncRole === 'follower' && remoteCursor ? (
-            <div
-              className="pointer-events-none absolute z-[130]"
-              style={(() => {
-                const rootRect = fullscreenContainerRef.current?.getBoundingClientRect();
-                const imageRect = (fullscreenImageRef.current ?? fullscreenContainerRef.current)?.getBoundingClientRect();
-                if (!rootRect || !imageRect || rootRect.width <= 0 || rootRect.height <= 0) {
-                  return {
-                    left: `${remoteCursor.x * 100}%`,
-                    top: `${remoteCursor.y * 100}%`,
-                    transform: 'translate(-50%, -50%)',
-                  } as const;
-                }
-                const leftPx = imageRect.left - rootRect.left + remoteCursor.x * imageRect.width;
-                const topPx = imageRect.top - rootRect.top + remoteCursor.y * imageRect.height;
-                return {
-                  left: `${(leftPx / rootRect.width) * 100}%`,
-                  top: `${(topPx / rootRect.height) * 100}%`,
-                  transform: 'translate(-50%, -50%)',
-                } as const;
-              })()}
-            >
-              <div className="h-8 w-8 rounded-full border-2 border-red-500/90 shadow-[0_0_10px_rgba(239,68,68,0.75)]" />
-              <div className="absolute left-1/2 top-1/2 h-12 w-[2px] -translate-x-1/2 -translate-y-1/2 bg-red-500/85" />
-              <div className="absolute left-1/2 top-1/2 h-[2px] w-12 -translate-x-1/2 -translate-y-1/2 bg-red-500/85" />
-            </div>
-          ) : null}
-          {syncEnabled && syncRole === 'follower' ? (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setFullscreenQuestionDialogOpen(true);
-              }}
-              className="absolute left-4 top-4 rounded-md border border-cyan-400/60 bg-cyan-500/20 px-3 py-1.5 text-sm font-medium text-cyan-50 shadow-lg hover:bg-cyan-500/30"
-            >
-              提問
-            </button>
-          ) : null}
-          {syncEnabled && syncRole === 'follower' && fullscreenQuestionDialogOpen ? (
-            <div
-              className="absolute inset-0 z-[120] flex cursor-default items-center justify-center bg-black/55 p-4 backdrop-blur-sm"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="w-full max-w-lg rounded-xl border border-cyan-400/40 bg-slate-950 p-4 text-slate-100 shadow-2xl">
-                <div className="mb-3 flex items-start justify-between gap-3">
-                  <div>
-                    <h2 className="text-base font-semibold text-cyan-100">向老師提問</h2>
-                    <p className="mt-1 text-xs text-slate-400">問題會送到 master 端，由老師決定是否顯示在畫面上。</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setFullscreenQuestionDialogOpen(false)}
-                    className="shrink-0 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
-                  >
-                    關閉
-                  </button>
-                </div>
-                <textarea
-                  value={syncQuestionInput}
-                  onChange={(e) => setSyncQuestionInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-                      e.preventDefault();
-                      void handleSubmitFollowerQuestion();
-                    }
-                  }}
-                  maxLength={500}
-                  rows={4}
-                  autoFocus
-                  placeholder="輸入想問老師的問題…"
-                  className="w-full resize-none rounded-lg border border-cyan-500/40 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-500 focus:border-cyan-300"
-                />
-                <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="text-xs text-slate-500">{syncQuestionInput.length}/500，可按 Ctrl/⌘ + Enter 送出</div>
-                  <button
-                    type="button"
-                    onClick={() => void handleSubmitFollowerQuestion()}
-                    disabled={syncQuestionBusy || !syncQuestionInput.trim()}
-                    className="rounded-md border border-cyan-400/60 bg-cyan-500/20 px-4 py-2 text-sm font-medium text-cyan-50 hover:bg-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    {syncQuestionBusy ? '送出中…' : '送出問題'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : null}
-          {syncEnabled && syncRole === 'master' && fullscreenPollControlOpen ? (
-            <div
-              className="absolute inset-0 z-[121] flex cursor-default items-start justify-end p-4"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="w-full max-w-md rounded-xl border border-cyan-400/40 bg-slate-950/95 p-4 text-slate-100 shadow-2xl">
-                <div className="mb-3 flex items-start justify-between gap-3">
-                  <div>
-                    <h2 className="text-base font-semibold text-cyan-100">Realtime Poll 控制</h2>
-                    <p className="mt-1 text-xs text-slate-400">按 P 開關面板，Esc 關閉。</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setFullscreenPollControlOpen(false)}
-                    className="shrink-0 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
-                  >
-                    關閉
-                  </button>
-                </div>
-
-                <div className="mb-3 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleStartPoll()}
-                    disabled={pollStarted}
-                    className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-3 py-1.5 text-xs text-emerald-100 disabled:opacity-40"
-                  >
-                    開始投票
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleStopPoll()}
-                    disabled={!pollStarted}
-                    className="rounded-md border border-rose-500/50 bg-rose-500/15 px-3 py-1.5 text-xs text-rose-100 disabled:opacity-40"
-                  >
-                    結束投票
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSyncPollShowResults((prev) => !prev)}
-                    disabled={!pollStarted}
-                    className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-xs text-cyan-100 disabled:opacity-40"
-                  >
-                    {syncPollShowResults ? '隱藏結果' : '顯示結果'}
-                  </button>
-                </div>
-
-                <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
-                  {pagePolls.length === 0 ? (
-                    <div className="rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1.5 text-xs text-slate-500">
-                      目前頁尚無投票題目
-                    </div>
-                  ) : (
-                    pagePolls.map((poll) => (
-                      <button
-                        key={poll.id}
-                        type="button"
-                        onClick={() => void handleSelectDisplayedPoll(poll.id)}
-                        className={`w-full rounded-md border px-3 py-2 text-left text-xs ${
-                          syncDisplayedPollId === poll.id
-                            ? 'border-cyan-300/80 bg-cyan-500/20 text-cyan-50'
-                            : 'border-slate-700 bg-slate-900/70 text-slate-200 hover:bg-slate-800'
-                        }`}
-                      >
-                        <div className="font-medium">{poll.question}</div>
-                      </button>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-          ) : null}
-          {(classroomMode && classroomAwaitingNext) ? (
-            <div className="pointer-events-none absolute bottom-4 left-1/2 w-[min(92vw,1000px)] -translate-x-1/2 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-              <div className="mx-auto rounded-md bg-cyan-950/90 px-4 py-3 text-center text-base font-medium leading-relaxed text-cyan-50 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] md:text-lg">
-                <p className="whitespace-pre-wrap">等待下一頁…</p>
-              </div>
-            </div>
-          ) : activePollQuestion ? (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/35 px-4">
-              <div className="w-[min(92vw,1100px)] rounded-xl border border-cyan-200/70 bg-slate-950/95 px-5 py-5 text-center text-white shadow-[0_18px_50px_rgba(0,0,0,0.78)] backdrop-blur-md md:px-8 md:py-7">
-                <p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-200">Realtime Poll</p>
-                <p className="mt-3 whitespace-pre-wrap text-2xl font-extrabold leading-relaxed text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] md:text-4xl">
-                  {activePollQuestion}
-                </p>
-                {activePoll?.options?.length ? (
-                  <div className="mt-5 grid grid-cols-1 gap-2 text-left md:grid-cols-2 md:gap-3">
-                    {activePoll.options.map((option, idx) => (
-                      <button
-                        key={`${activePoll.id}-${idx}`}
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void handleVotePoll(activePoll.id, idx);
-                        }}
-                        disabled={pollBusy || !activePoll.is_active}
-                        className={`rounded-lg border px-4 py-3 text-left text-base font-semibold shadow-[0_2px_10px_rgba(0,0,0,0.35)] md:text-lg ${
-                          pollVotes[activePoll.id] === idx
-                            ? 'border-emerald-300/90 bg-emerald-600/45 text-white'
-                            : 'border-cyan-200/65 bg-slate-900/88 text-white hover:bg-slate-800/95'
-                        } disabled:cursor-not-allowed disabled:opacity-55`}
-                      >
-                        <span className="mr-2 text-cyan-200">{idx + 1}.</span>
-                        <span className="whitespace-pre-wrap">{option.text}</span>
-                        {syncPollShowResults ? (
-                          <span className="mt-2 block text-xs text-cyan-100/90">
-                            {option.votes} 票
-                            {activePoll.total_votes > 0
-                              ? ` · ${Math.round((option.votes / activePoll.total_votes) * 100)}%`
-                              : ' · 0%'}
-                          </span>
-                        ) : null}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-                {syncPollShowResults ? (
-                  <p className="mt-3 text-xs text-cyan-100/90">目前總票數：{activePoll?.total_votes ?? 0}</p>
-                ) : null}
-              </div>
-            </div>
-          ) : showSubtitle && currentSentence && fullscreenLayout === 'image' ? (
-            <div className="pointer-events-none absolute bottom-4 left-1/2 w-[min(92vw,1000px)] -translate-x-1/2 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-              <div className="mx-auto rounded-md bg-black/65 px-4 py-2 text-center text-base font-medium leading-relaxed text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] md:text-lg">
-                <p className="line-clamp-2 whitespace-pre-wrap">{currentSentence}</p>
-              </div>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
+      {imageOnlyFullscreen ? <PlayPageFullscreen /> : null}
 
       {slideBusy ? (
         <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-slate-950/60">
@@ -3448,108 +1860,30 @@ export default function PlayPage() {
       ) : null}
 
       {versionHistoryOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
-          <div className="flex w-full max-w-5xl flex-col rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl" style={{ maxHeight: '90vh' }}>
-            <h3 className="mb-3 text-sm font-semibold text-slate-200">
-              {versionHistoryType === 'image' ? '圖片' : '逐字稿'}版本歷史
-              {versionHistoryPage != null ? `（第 ${versionHistoryPage} 頁）` : ''}
-            </h3>
-            {versionError ? (
-              <p className="mb-2 text-xs text-rose-400">{versionError}</p>
-            ) : null}
-            <div className="flex flex-1 gap-3 overflow-hidden">
-              {/* Left: version list */}
-              <div className="w-64 flex-shrink-0 overflow-y-auto rounded-lg border border-slate-700 bg-slate-950">
-                {versionHistoryLoading ? (
-                  <p className="p-3 text-xs text-slate-400">載入中…</p>
-                ) : versionHistoryEntries.length === 0 ? (
-                  <p className="p-3 text-xs text-slate-400">尚無版本記錄</p>
-                ) : (
-                  versionHistoryEntries.map((entry) => (
-                    <button
-                      key={entry.hash}
-                      type="button"
-                      onClick={() => void handleVersionPreview(entry.hash)}
-                      className={`w-full border-b border-slate-800 px-3 py-2 text-left text-xs hover:bg-slate-800 ${versionPreviewHash === entry.hash ? 'bg-slate-800 text-emerald-300' : 'text-slate-300'}`}
-                    >
-                      <div className="font-mono text-[10px] text-slate-500">{entry.hash.slice(0, 7)}</div>
-                      <div className="mt-0.5 truncate">{entry.message}</div>
-                      <div className="mt-0.5 text-[10px] text-slate-500">
-                        {new Date(entry.date).toLocaleString('zh-TW', { dateStyle: 'short', timeStyle: 'short' })}
-                      </div>
-                    </button>
-                  ))
-                )}
-              </div>
-              {/* Right: preview area */}
-              <div className="flex flex-1 flex-col items-center justify-center overflow-auto rounded-lg border border-slate-800 bg-slate-950 p-2">
-                {versionPreviewHash == null ? (
-                  <p className="text-xs text-slate-500">點選左側版本以預覽</p>
-                ) : versionHistoryType === 'image' && pdfId && versionHistoryPage != null ? (
-                  <img
-                    src={`${imageVersionUrl(pdfId, versionHistoryPage, versionPreviewHash)}?t=${Date.now()}`}
-                    alt="歷史版本圖片"
-                    className="max-h-[55vh] w-auto rounded"
-                  />
-                ) : versionHistoryType === 'script' ? (
-                  versionPreviewScript != null ? (
-                    <pre className="h-full w-full overflow-auto whitespace-pre-wrap p-3 text-xs text-slate-200">{versionPreviewScript}</pre>
-                  ) : (
-                    <p className="text-xs text-slate-500">載入中…</p>
-                  )
-                ) : null}
-              </div>
-            </div>
-            <div className="mt-3 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setVersionHistoryOpen(false)}
-                className="rounded-md border border-slate-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
-              >
-                關閉
-              </button>
-              <button
-                type="button"
-                disabled={versionPreviewHash == null || versionRestoring || isReadOnlyProcessing}
-                onClick={() => void handleVersionRestore()}
-                className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-3 py-1.5 text-sm text-emerald-200 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {versionRestoring ? '還原中…' : '還原至此版本'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <VersionHistoryDialog
+          pdfId={pdfId}
+          versionHistoryType={versionHistoryType}
+          versionHistoryPage={versionHistoryPage}
+          versionHistoryEntries={versionHistoryEntries}
+          versionHistoryLoading={versionHistoryLoading}
+          versionPreviewHash={versionPreviewHash}
+          versionPreviewScript={versionPreviewScript}
+          versionRestoring={versionRestoring}
+          versionError={versionError}
+          isReadOnlyProcessing={isReadOnlyProcessing}
+          onClose={() => setVersionHistoryOpen(false)}
+          onPreview={handleVersionPreview}
+          onRestore={handleVersionRestore}
+        />
       ) : null}
 
-      {imagePreviewOpen && imagePreviewUrl ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
-          <div className="w-full max-w-4xl rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl">
-            <h3 className="mb-3 text-sm font-semibold text-slate-200">圖片產生結果預覽</h3>
-            <div className="mb-4 flex max-h-[70vh] items-center justify-center overflow-auto rounded-lg border border-slate-800 bg-slate-950 p-2">
-              <img src={imagePreviewUrl} alt="生成結果預覽" className="max-h-[64vh] w-auto rounded" />
-            </div>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setImagePreviewOpen(false)}
-                className="rounded-md border border-slate-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
-              >
-                關閉預覽
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (isReadOnlyProcessing) return;
-                  void handleApplyPreviewImage();
-                }}
-                disabled={isReadOnlyProcessing}
-                className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-3 py-1.5 text-sm text-emerald-200 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                套用取代原圖
-              </button>
-            </div>
-          </div>
-        </div>
+      {chatState.imagePreviewOpen && chatState.imagePreviewUrl ? (
+        <ImagePreviewDialog
+          imagePreviewUrl={chatState.imagePreviewUrl}
+          isReadOnlyProcessing={isReadOnlyProcessing}
+          onClose={() => chatState.setImagePreviewOpen(false)}
+          onApply={() => void chatState.handleApplyPreviewImage()}
+        />
       ) : null}
 
       {/* Hidden (but functional) audio element */}
@@ -3602,388 +1936,7 @@ export default function PlayPage() {
       />
 
       {/* Header */}
-      <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-2 py-2 sm:gap-3 sm:px-4 sm:py-3">
-          {!currentShareToken ? (
-            <Link
-              to="/"
-              className="shrink-0 whitespace-nowrap rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800 sm:px-3 sm:text-sm"
-            >
-              ← 返回
-            </Link>
-          ) : (
-            <div className="w-16 shrink-0 sm:w-20" aria-hidden="true" />
-          )}
-          <div className="flex min-w-0 flex-1 items-center justify-center gap-1 sm:gap-2">
-            <input
-              value={titleInput}
-              onChange={(e) => setTitleInput(e.target.value)}
-              disabled={isReadOnlyProcessing}
-              className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-900 px-1.5 py-1 text-center text-xs text-slate-100 sm:px-2 sm:text-sm"
-              maxLength={200}
-            />
-            <button
-              type="button"
-              onClick={() => void handleSaveTitle()}
-              disabled={isReadOnlyProcessing || titleBusy || !titleInput.trim()}
-              className="shrink-0 whitespace-nowrap rounded-md border border-cyan-500/50 bg-cyan-500/15 px-1.5 py-1 text-[11px] text-cyan-200 disabled:opacity-40 sm:px-2 sm:text-xs"
-            >
-              {titleBusy ? '儲存中…' : '更新標題'}
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleRegenerateTitle()}
-              disabled={isReadOnlyProcessing || titleBusy}
-              className="shrink-0 whitespace-nowrap rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-1.5 py-1 text-[11px] text-fuchsia-200 disabled:opacity-40 sm:px-2 sm:text-xs"
-            >
-              {titleBusy ? '處理中…' : '重新生成標題'}
-            </button>
-          </div>
-            <div className="shrink-0 whitespace-nowrap text-right text-xs text-slate-400 sm:w-20 sm:text-sm">
-              頁 {currentIdx + 1}/{totalPages}
-            </div>
-            <label className="ml-2 inline-flex items-center gap-1 text-xs text-slate-300">
-              <input
-                type="checkbox"
-                checked={syncEnabled}
-                onChange={(e) => handleSyncEnabledChange(e.target.checked)}
-              />
-              同步模式
-              {syncEnabled ? `(${syncRole === 'master' ? 'master' : 'follower'})` : ''}
-            </label>
-          </div>
-          {syncError ? <div className="mt-1 text-xs text-rose-300">{syncError}</div> : null}
-          {syncEnabled ? (
-            <div className="mx-auto w-full max-w-5xl px-4 pb-3">
-              <div className="rounded-md border border-slate-700 bg-slate-900/80 p-3 text-xs text-slate-200">
-                {syncRole === 'follower' ? (
-                  <div className="flex gap-2">
-                    <input
-                      value={syncFollowerQuestionInput}
-                      onChange={(e) => setSyncFollowerQuestionInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') void handleSubmitFollowerQuestion();
-                      }}
-                      placeholder="輸入要問 master 的問題"
-                      className="flex-1 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-100"
-                      maxLength={500}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => void handleSubmitFollowerQuestion()}
-                      disabled={!syncFollowerQuestionInput.trim()}
-                      className="rounded border border-cyan-500/50 bg-cyan-500/15 px-3 py-1 text-cyan-100 disabled:opacity-40"
-                    >
-                      送出問題
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="font-medium text-slate-100">
-                        Follower 問題：{syncFollowerQuestions.length} 題
-                        <span className="ml-2 text-slate-400">按 a 讓 AI 總結並回答</span>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => void handleToggleDisplayedQuestion()}
-                          disabled={syncFollowerQuestions.length === 0}
-                          className="rounded border border-slate-600 px-2 py-1 text-slate-200 disabled:opacity-40"
-                        >
-                          {syncDisplayedQuestionId ? '隱藏問題' : '顯示最新問題'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void handleAiAnswerFollowerQuestions()}
-                          disabled={syncAiAnswerBusy || syncFollowerQuestions.length === 0}
-                          className="rounded border border-emerald-500/50 bg-emerald-500/15 px-2 py-1 text-emerald-100 disabled:opacity-40"
-                        >
-                          {syncAiAnswerBusy ? 'AI 回答中…' : 'AI 總結回答 (a)'}
-                        </button>
-                      </div>
-                    </div>
-                    {syncAiAnswer ? (
-                      <div className="max-h-72 overflow-y-auto rounded border border-cyan-500/30 bg-cyan-500/10 p-3 text-cyan-50 whitespace-pre-wrap">
-                        {syncAiAnswer.answer}
-                      </div>
-                    ) : null}
-                    <div className="max-h-28 space-y-1 overflow-auto">
-                      {syncFollowerQuestions.slice(0, 5).map((q) => (
-                        <div key={q.id} className="rounded bg-slate-950/70 px-2 py-1">
-                          <span className="text-cyan-300">{q.code || '匿名'}：</span>{q.question}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : null}
-        {readOnlyReason ? (
-          <div className="mx-auto w-full max-w-5xl px-4 pb-3">
-            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
-              {readOnlyReason}
-            </div>
-          </div>
-        ) : null}
-        {detail?.status === 'failed' && detail.error_message ? (
-          <div className="mx-auto w-full max-w-5xl px-4 pb-3">
-            <div className="rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
-              <span className="font-medium">產生失敗：</span>
-              <span className="whitespace-pre-wrap">{detail.error_message}</span>
-            </div>
-          </div>
-        ) : null}
-        {currentPage?.status === 'failed' && currentPage.error_message ? (
-          <div className="mx-auto w-full max-w-5xl px-4 pb-3">
-            <div className="rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
-              <span className="font-medium">第 {currentPage.page_number} 頁產生失敗：</span>
-              <span className="whitespace-pre-wrap">{currentPage.error_message}</span>
-            </div>
-          </div>
-        ) : null}
-        {detail?.status === 'awaiting_script_confirmation' ? (
-          <div className="mx-auto w-full max-w-5xl px-4 pb-3">
-            <div className="flex flex-col gap-3 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="font-medium">AI 分頁與逐字稿已產生！</p>
-                <p className="text-xs text-emerald-200/80 mt-0.5">
-                  您可以在下方瀏覽並編輯每一頁的文字內容。確認無誤後，請點擊右側按鈕開始產生投影片圖片與語音。
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => void handleConfirmScript()}
-                disabled={confirmScriptBusy}
-                className="shrink-0 rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {confirmScriptBusy ? '處理中…' : '確認分頁並開始產生圖片與語音'}
-              </button>
-            </div>
-          </div>
-        ) : null}
-        <div className="mx-auto flex w-full max-w-5xl flex-col gap-2 px-4 pb-3 md:flex-row md:items-center md:justify-between md:gap-3">
-          <div className="space-y-1 text-xs text-slate-400">
-            {videoError ? <span className="text-rose-300">{videoError}</span> : null}
-            {!videoError && titleMsg ? <span className="text-slate-300">{titleMsg}</span> : null}
-            {shareMessage ? <div className="text-emerald-300">{shareMessage}</div> : null}
-            {shareError ? <div className="text-rose-300">{shareError}</div> : null}
-            {githubSyncMessage ? <div className="text-emerald-300">{githubSyncMessage}</div> : null}
-            {githubSyncError ? <div className="text-rose-300">{githubSyncError}</div> : null}
-          </div>
-          {/* 手機：一排 3 欄（設定 / 產生影片 / 下載影片）；桌面：維持原本 flex 排列。
-              註：「重生」按鍵已搬到右側問答區（aside）。 */}
-          <div className="grid grid-cols-3 gap-2 md:flex md:flex-wrap md:items-center md:justify-end md:gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setFullscreenLayout('image');
-                setImageOnlyFullscreen(true);
-              }}
-              className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
-              title="全螢幕圖片模式"
-            >
-              全螢幕
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setFullscreenLayout('split');
-                setImageOnlyFullscreen(true);
-              }}
-              className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
-              title="全螢幕字幕模式（左圖右字，整頁字幕一次顯示）"
-            >
-              全螢幕字幕
-            </button>
-            {!isLockedFullscreen ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setFullscreenLayout('edit');
-                  setImageOnlyFullscreen(true);
-                }}
-                disabled={isReadOnlyProcessing}
-                className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
-                title="全螢幕編輯模式（左圖右逐字稿，可直接編輯並重生語音）"
-              >
-                全螢幕編輯
-              </button>
-            ) : null}
-            <div className="col-span-2 flex items-center justify-center gap-1 rounded-md border border-slate-700 px-2 py-1 md:col-span-1" title="調整圖片與下方資料區比例">
-              <button
-                type="button"
-                onClick={() => setSlideImageScale((scale) => Math.max(0.65, Number((scale - 0.1).toFixed(2))))}
-                className="rounded px-2 py-0.5 text-sm text-slate-300 hover:bg-slate-800 disabled:opacity-40"
-                disabled={slideImageScale <= 0.65}
-                aria-label="縮小圖片區"
-              >
-                −
-              </button>
-              <span className="w-10 text-center text-xs tabular-nums text-slate-400">{Math.round(slideImageScale * 100)}%</span>
-              <button
-                type="button"
-                onClick={() => setSlideImageScale((scale) => Math.min(1.35, Number((scale + 0.1).toFixed(2))))}
-                className="rounded px-2 py-0.5 text-sm text-slate-300 hover:bg-slate-800 disabled:opacity-40"
-                disabled={slideImageScale >= 1.35}
-                aria-label="放大圖片區"
-              >
-                ＋
-              </button>
-            </div>
-            <button
-              type="button"
-              onClick={() => setTtsDialogOpen(true)}
-              disabled={isReadOnlyProcessing}
-              className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
-              title="語音設定"
-              aria-label="語音設定"
-            >
-              ⚙️ 設定
-            </button>
-            <button
-              type="button"
-              onClick={() => void openImageStyleDialog()}
-              disabled={isReadOnlyProcessing}
-              className="rounded-md border border-cyan-500/40 bg-cyan-500/10 px-3 py-1.5 text-sm text-cyan-200 hover:bg-cyan-500/20"
-              title="圖片風格設定"
-              aria-label="圖片風格設定"
-            >
-              🖼️ 風格
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleGenerateVideo()}
-              disabled={isReadOnlyProcessing || videoBusy}
-              className="rounded-md border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-sm text-amber-200 hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {videoBusy
-                ? `產生影片中…${videoProgressText ? ` ${videoProgressText}` : ''}`
-                : videoUrl
-                  ? '重新產生影片'
-                  : '產生影片'}
-            </button>
-            <Link
-              to={`/play/${encodeURIComponent(pdfId ?? '')}/quizzes`}
-              className={`rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-3 py-1.5 text-center text-sm text-fuchsia-100 hover:bg-fuchsia-500/25 ${isReadOnlyProcessing ? 'pointer-events-none opacity-40' : ''}`}
-            >
-              測驗生成
-            </Link>
-            {videoUrl ? (
-              <a
-                href={videoUrl}
-                download={`${(titleInput.trim() || pdfId || 'video').replace(/[\\/:*?"<>|]+/g, '_').slice(0, 100)}.mp4`}
-                className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-center text-sm text-cyan-200 hover:bg-cyan-500/25"
-              >
-                下載影片
-              </a>
-            ) : (
-              <button
-                type="button"
-                disabled
-                className="cursor-not-allowed rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-500 opacity-60"
-                title="尚未產生影片"
-              >
-                下載影片
-              </button>
-            )}
-            <a
-              href={`api/pdfs/${encodeURIComponent(pdfId)}/handout.pdf`}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-center text-sm text-cyan-100 hover:bg-cyan-500/25"
-            >
-              下載講義 PDF
-            </a>
-            <button
-              type="button"
-              onClick={() => void handleSyncToGithub()}
-              disabled={githubSyncBusy}
-              className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-3 py-1.5 text-sm text-emerald-200 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40"
-              title="將此簡報同步到設定中的 GitHub repository"
-            >
-              {githubSyncBusy ? '同步中…' : '⤴ 同步到 GitHub'}
-            </button>
-            {!currentShareToken ? (
-              <div className="col-span-3 flex items-center gap-2 rounded-md border border-slate-700/80 px-2 py-1 md:col-span-1">
-                <select
-                  value={shareAccess}
-                  onChange={(e) => setShareAccess((e.target.value as ShareAccessMode) || 'read_only')}
-                  className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200"
-                >
-                  <option value="read_only">分享唯讀</option>
-                  <option value="editable">分享可編輯</option>
-                </select>
-                <button
-                  type="button"
-                  onClick={() => void handleCreateShareLink()}
-                  disabled={shareBusy}
-                  className="rounded-md border border-violet-500/50 bg-violet-500/15 px-3 py-1.5 text-xs text-violet-200 hover:bg-violet-500/25 disabled:opacity-40"
-                >
-                  {shareBusy ? '建立中…' : '▦ 建立分享連結'}
-                </button>
-              </div>
-            ) : null}
-          </div>
-        </div>
-        {showRegenBanner ? (
-          <div className="mx-auto w-full max-w-5xl px-4 pb-3">
-            <div className="rounded-md border border-fuchsia-500/40 bg-fuchsia-500/10 px-3 py-2 text-xs text-slate-200">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <span>
-                  重生任務：
-                  {regenJob?.status === 'running'
-                    ? '執行中'
-                    : regenJob?.status === 'pending'
-                      ? '等待中'
-                      : regenJob?.status === 'cancelling'
-                        ? '停止中'
-                        : regenJob?.status === 'cancelled'
-                          ? '已停止'
-                          : regenJob?.status === 'completed'
-                            ? '已完成'
-                            : '失敗'}
-                  {regenJob?.last_processed_page != null
-                    ? ` · 目前頁 ${regenJob.last_processed_page}`
-                    : ''}
-                </span>
-                <div className="flex items-center gap-2">
-                  {regenJobRunning ? (
-                    <button
-                      type="button"
-                      onClick={() => void handleStopRegenerate()}
-                      disabled={regenStopBusy}
-                      className="rounded border border-rose-500/50 bg-rose-500/15 px-2 py-1 text-[11px] text-rose-200 disabled:opacity-40"
-                    >
-                      {regenStopBusy ? '停止中…' : '停止生成'}
-                    </button>
-                  ) : null}
-                  {regenJobTerminal && regenJob?.rollback_available ? (
-                    <button
-                      type="button"
-                      onClick={() => void handleRollbackRegenerate()}
-                      disabled={regenRollbackBusy}
-                      className="rounded border border-amber-500/50 bg-amber-500/15 px-2 py-1 text-[11px] text-amber-200 disabled:opacity-40"
-                    >
-                      {regenRollbackBusy ? '還原中…' : '還原'}
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => setRegenBannerDismissed(true)}
-                    className="rounded border border-slate-600 px-2 py-1 text-[11px] text-slate-300"
-                  >
-                    關閉
-                  </button>
-                </div>
-              </div>
-              <RegenerateProgress job={regenJob} />
-              {regenAllMsg ? <p className="mt-1 text-[11px] text-slate-300">{regenAllMsg}</p> : null}
-            </div>
-          </div>
-        ) : null}
-      </header>
+      <PlayPageHeader />
 
       <main className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col gap-4 px-4 py-4 md:flex-row">
         {/* Mobile-only tab 切換列 */}
@@ -4015,1713 +1968,14 @@ export default function PlayPage() {
         </div>
 
         {/* Left: player + script（手機：僅於 play tab 顯示；桌面：永遠顯示） */}
-        <div
-          className={`relative min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950/70 md:flex ${
-            activeTab === 'play' ? 'flex' : 'hidden'
-          }`}
-        >
-          {/* Slide image */}
-          <section
-            className={
-              transcriptFocusMode
-                ? 'absolute right-4 top-4 z-20 flex h-40 w-64 items-center justify-center rounded-lg border border-slate-700 bg-slate-950/95 px-2 py-2 shadow-2xl md:h-48 md:w-80'
-                : 'flex flex-1 items-center justify-center px-4 py-6'
-            }
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault();
-              if (isReadOnlyProcessing) return;
-              const f = e.dataTransfer.files?.[0];
-              if (f && currentPage) void handleReplaceImageFile(f, currentPage.page_number);
-            }}
-            onPaste={(e) => {
-              // eslint-disable-next-line no-console
-              console.info('[paste][slide-panel] event fired', {
-                itemCount: e.clipboardData.items.length,
-                items: Array.from(e.clipboardData.items).map((it) => ({ kind: it.kind, type: it.type })),
-              });
-              if (isReadOnlyProcessing) return;
-              const file = Array.from(e.clipboardData.items)
-                .map((it) => (it.kind === 'file' ? it.getAsFile() : null))
-                .find((f): f is File => !!f);
-              if (!file) {
-                // eslint-disable-next-line no-console
-                console.warn('[paste][slide-panel] no file found');
-              }
-              if (file && currentPage) void handleReplaceImageFile(file, currentPage.page_number);
-            }}
-            tabIndex={0}
-          >
-            <div className="relative flex h-full w-full max-w-4xl items-center justify-center">
-              {playQrCodeUrl ? (
-                <div className="flex flex-col items-center gap-3 rounded-lg border border-slate-700 bg-slate-900/80 p-4 shadow-xl">
-                  <img
-                    src={playQrCodeUrl}
-                    alt="分享連結 QR Code"
-                    className="w-auto rounded-md border border-slate-700 bg-white p-2"
-                    style={{ maxHeight: transcriptFocusMode ? '8rem' : `${slideImageMaxHeightVh}vh` }}
-                  />
-                  {!transcriptFocusMode && shareUrl ? <p className="max-w-[85vw] break-all text-center text-xs text-slate-300">{shareUrl}</p> : null}
-                </div>
-              ) : currentPage?.image_url || displayedImageSrc ? (
-                <div
-                  className="relative inline-block"
-                  style={{ lineHeight: 0, maxHeight: transcriptFocusMode ? '10rem' : `${slideImageMaxHeightVh}vh` }}
-                >
-                  <img
-                    src={displayedImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
-                    alt={`第 ${currentPage?.page_number ?? ''} 頁`}
-                    className="block h-auto w-auto rounded-lg border border-slate-800 shadow-xl"
-                    draggable={false}
-                    style={{
-                      maxHeight: transcriptFocusMode ? '10rem' : `${slideImageMaxHeightVh}vh`,
-                      cursor: imageEditSelectMode ? 'crosshair' : (drawingMode && drawingTool !== 'cursor') ? 'default' : 'pointer',
-                    }}
-                    onClick={() => { if (!imageEditSelectMode && (!drawingMode || drawingTool === 'cursor')) playPause(); }}
-                    role="button"
-                    tabIndex={-1}
-                    aria-label={isPlaying ? '暫停語音播放' : '繼續語音播放'}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => currentPage && void openVersionHistory('image', currentPage.page_number)}
-                    disabled={!currentPage}
-                    title="查看此頁圖片的歷史版本"
-                    className="absolute right-2 top-2 z-20 rounded-md border border-slate-600 bg-slate-900/80 px-2 py-1 text-xs text-slate-300 backdrop-blur hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    🖼 版本
-                  </button>
-                  {pdfId && currentPage && (
-                    <DrawingCanvas
-                      ref={drawingCanvasMainRef}
-                      pdfId={pdfId}
-                      pageNumber={currentPage.page_number}
-                      enabled={canUseDrawingTools && !imageEditSelectMode && drawingMode && drawingTool !== 'cursor'}
-                      color={drawingColor}
-                      lineWidth={drawingTool === 'eraser' ? drawingLineWidth * 3 : drawingLineWidth}
-                      eraser={drawingTool === 'eraser'}
-                      remoteData={isSyncFollower ? remoteDrawingData : undefined}
-                      onLocalChange={pushLocalDrawingChange}
-                    />
-                  )}
-                  {/* Region selector overlay (for inpainting) */}
-                  {imageEditSelectMode && (
-                    <div
-                      className="absolute inset-0 rounded-lg"
-                      style={{ cursor: 'crosshair', zIndex: 30, userSelect: 'none', touchAction: 'none' }}
-                      onClick={(e) => e.stopPropagation()}
-                      onPointerDown={(e) => {
-                        e.preventDefault();
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        imageEditDragRef.current = {
-                          startX: (e.clientX - rect.left) / rect.width,
-                          startY: (e.clientY - rect.top) / rect.height,
-                        };
-                        e.currentTarget.setPointerCapture(e.pointerId);
-                        const overlay = imageEditRegionOverlayRef.current;
-                        if (overlay) overlay.style.display = 'none';
-                      }}
-                      onPointerMove={(e) => {
-                        e.preventDefault();
-                        if (!imageEditDragRef.current) return;
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        const nx = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-                        const ny = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
-                        const { startX, startY } = imageEditDragRef.current;
-                        const x = Math.min(startX, nx);
-                        const y = Math.min(startY, ny);
-                        const w = Math.abs(nx - startX);
-                        const h = Math.abs(ny - startY);
-                        const overlay = imageEditRegionOverlayRef.current;
-                        if (overlay) {
-                          overlay.style.display = 'block';
-                          overlay.style.left = `${x * 100}%`;
-                          overlay.style.top = `${y * 100}%`;
-                          overlay.style.width = `${w * 100}%`;
-                          overlay.style.height = `${h * 100}%`;
-                        }
-                      }}
-                      onPointerUp={(e) => {
-                        if (!imageEditDragRef.current) return;
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        const nx = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-                        const ny = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
-                        const { startX, startY } = imageEditDragRef.current;
-                        imageEditDragRef.current = null;
-                        const x = Math.min(startX, nx);
-                        const y = Math.min(startY, ny);
-                        const w = Math.abs(nx - startX);
-                        const h = Math.abs(ny - startY);
-                        if (w > 0.02 && h > 0.02) {
-                          setImageEditRegion({ x, y, w, h });
-                        } else {
-                          clearImageEditRegion();
-                        }
-                      }}
-                    />
-                  )}
-                  {/* Region overlay: shows live drag preview and committed selection */}
-                  {(imageEditSelectMode || imageEditRegion) && (
-                    <div
-                      ref={imageEditRegionOverlayRef}
-                      style={{
-                        display: imageEditRegion ? 'block' : 'none',
-                        position: 'absolute',
-                        left: imageEditRegion ? `${imageEditRegion.x * 100}%` : '0',
-                        top: imageEditRegion ? `${imageEditRegion.y * 100}%` : '0',
-                        width: imageEditRegion ? `${imageEditRegion.w * 100}%` : '0',
-                        height: imageEditRegion ? `${imageEditRegion.h * 100}%` : '0',
-                        border: '2px solid rgba(0,200,255,0.95)',
-                        backgroundColor: 'rgba(0,160,255,0.18)',
-                        pointerEvents: 'none',
-                        boxSizing: 'border-box',
-                      }}
-                    />
-                  )}
-                </div>
-              ) : (
-                <div
-                  className="flex w-full items-center justify-center rounded-lg border border-slate-800 text-slate-500"
-                  style={{ height: transcriptFocusMode ? '10rem' : `${slideImageMaxHeightVh}vh` }}
-                >
-                  {currentPage?.status === 'failed'
-                        ? `本頁產生失敗${currentPage.error_message ? `：${currentPage.error_message}` : ''}`
-                        : detail?.status === 'awaiting_script_confirmation'
-                          ? '等待確認分頁結果（確認後將開始產生圖片）'
-                          : '圖片產生中…'}
-                </div>
-              )}
-              {showSubtitle && currentSentence ? (
-                <div className="pointer-events-none absolute bottom-3 left-1/2 w-[min(92%,900px)] -translate-x-1/2 px-2">
-                  <div className="mx-auto rounded-md bg-black/60 px-4 py-2 text-center text-sm font-medium leading-relaxed text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] md:text-base">
-                    <p className="line-clamp-2 whitespace-pre-wrap">{currentSentence}</p>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          </section>
-
-          {/* Controls */}
-          <section className={transcriptFocusMode ? 'absolute right-4 top-44 z-20 w-64 rounded-lg border border-slate-700 bg-slate-950/95 shadow-2xl md:top-56 md:w-80' : 'border-t border-slate-800 bg-slate-900/50'}>
-            <div className={transcriptFocusMode ? 'flex flex-col gap-2 px-3 py-3' : 'flex flex-col gap-3 px-4 py-4'}>
-          {finished && (
-            <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
-              播放完成
-            </div>
-          )}
-          {classroomMode && classroomAwaitingNext && !finished && (
-            <div className="rounded-md border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-sm text-amber-100">
-              本頁播放完畢，停留在目前頁。按空白鍵進入下一頁並播放。
-            </div>
-          )}
-          <div className={`flex items-center gap-3 ${transcriptFocusMode ? 'flex-wrap' : ''}`}>
-            <button
-              type="button"
-              onClick={goPrev}
-              disabled={currentIdx === 0}
-              className="rounded-full border border-slate-700 px-3 py-2 text-sm disabled:opacity-30 hover:bg-slate-800"
-              aria-label="上一頁"
-              title="上一頁 (←)"
-            >
-              ⏮
-            </button>
-            {audioError ? (
-              <button
-                type="button"
-                onClick={handleRetry}
-                className="rounded-full border border-rose-500/50 bg-rose-500/15 px-4 py-2 text-sm text-rose-300 hover:bg-rose-500/25"
-                aria-label="語音載入失敗，點擊重試"
-                title={audioError}
-              >
-                ▶︎
-              </button>
-            ) : !currentPage?.audio_url ? (
-              <button
-                type="button"
-                disabled
-                className="rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm opacity-30 cursor-not-allowed"
-                aria-label="此頁無語音"
-                title="此頁無語音"
-              >
-                ▶︎
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={playPause}
-                className="rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm hover:bg-slate-700"
-                aria-label={classroomMode && classroomAwaitingNext ? '下一頁並播放' : isPlaying ? '暫停' : '播放'}
-                title={classroomMode && classroomAwaitingNext ? '下一頁並播放 (Space)' : isPlaying ? '暫停 (Space)' : '播放 (Space)'}
-              >
-                {classroomMode && classroomAwaitingNext ? '⏭▶︎' : isPlaying ? '⏸' : '▶︎'}
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={goNext}
-              disabled={currentIdx >= totalPages - 1}
-              className="rounded-full border border-slate-700 px-3 py-2 text-sm disabled:opacity-30 hover:bg-slate-800"
-              aria-label="下一頁"
-              title="下一頁 (→)"
-            >
-              ⏭
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleShowPlayQrCode()}
-              disabled={!pdfId}
-              className="rounded-full border border-violet-500/50 bg-violet-500/15 px-3 py-2 text-sm text-violet-200 hover:bg-violet-500/25 disabled:opacity-40"
-              aria-label="顯示分享 QR Code"
-              title="產生分享 QR Code"
-            >
-              ▦
-            </button>
-            <input
-              type="range"
-              min={0}
-              max={1000}
-              value={progressRatio}
-              onChange={handleSeek}
-              className="order-2 min-w-0 flex-[1_1_calc(100%-5.75rem)] accent-emerald-500 sm:order-none sm:flex-1"
-              aria-label="進度條"
-            />
-            <div className="order-3 w-[5.25rem] shrink-0 whitespace-nowrap text-right font-mono text-[11px] text-slate-300 sm:order-none sm:w-24 sm:text-xs">
-              {formatTime(currentTime)} / {formatTime(duration)}
-            </div>
-          </div>
-          <div className={transcriptFocusMode ? 'hidden' : 'rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300'}>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-semibold text-slate-200">播放設定</span>
-                <span className={`rounded-full border px-2 py-0.5 ${effectiveAudioMuted ? 'border-amber-400/50 bg-amber-400/10 text-amber-100' : 'border-emerald-400/40 bg-emerald-400/10 text-emerald-100'}`}>
-                  {effectiveAudioMuted ? '本機靜音' : '本機有聲'}
-                </span>
-                <span className={`rounded-full border px-2 py-0.5 ${classroomMode ? 'border-amber-400/50 bg-amber-400/10 text-amber-100' : 'border-slate-700 bg-slate-950 text-slate-400'}`}>
-                  {classroomMode ? '上課模式' : '連續播放'}
-                </span>
-                {interactiveMode ? (
-                  <span className="rounded-full border border-cyan-400/50 bg-cyan-400/10 px-2 py-0.5 text-cyan-100">
-                    互動模式
-                  </span>
-                ) : null}
-                {syncEnabled && syncRole === 'master' ? (
-                  <span className="rounded-full border border-cyan-400/40 bg-cyan-400/10 px-2 py-0.5 text-cyan-100">
-                    學生端音訊：{followerAudioUnlocked ? '可自行播放' : '強制靜音'}
-                  </span>
-                ) : null}
-                {syncEnabled && syncRole === 'follower' && !followerAudioUnlocked ? (
-                  <span className="rounded-full border border-cyan-400/40 bg-cyan-400/10 px-2 py-0.5 text-cyan-100">老師端強制靜音</span>
-                ) : null}
-              </div>
-              <button
-                type="button"
-                onClick={() => setPlaybackSettingsOpen((open) => !open)}
-                className="rounded-full border border-slate-700 bg-slate-950 px-3 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
-                aria-expanded={playbackSettingsOpen}
-              >
-                ⚙️ 設定
-              </button>
-            </div>
-            {playbackSettingsOpen ? (
-              <div className="mt-3 space-y-2 border-t border-slate-800 pt-3">
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-950/70 px-3 py-2">
-                  <div>
-                    <span className="font-semibold text-slate-200">音訊</span>
-                    <span className="ml-2 text-slate-400">
-                      {syncEnabled && syncRole === 'follower' && !followerAudioUnlocked
-                        ? '老師端已強制學生端靜音。'
-                        : effectiveAudioMuted
-                          ? '目前本機靜音。'
-                          : '目前本機可播放聲音。'}
-                    </span>
-                  </div>
-                  <label className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-medium text-slate-300 hover:bg-slate-800">
-                    <input
-                      type="checkbox"
-                      checked={audioMuted}
-                      disabled={syncEnabled && syncRole === 'follower' && !followerAudioUnlocked}
-                      onChange={(event) => {
-                        if (syncEnabled && syncRole === 'follower' && !followerAudioUnlocked) return;
-                        setAudioMuted(event.target.checked);
-                      }}
-                      className="accent-cyan-500"
-                    />
-                    本機靜音
-                  </label>
-                </div>
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-950/70 px-3 py-2">
-                  <div><span className="font-semibold text-slate-200">播放速度</span></div>
-                  <select value={String(playbackRate)} onChange={(e)=>setPlaybackRate(Number(e.target.value))} className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200">
-                    {[0.5,0.75,1,1.25,1.5,2].map((speed)=><option key={speed} value={String(speed)}>{speed}x</option>)}
-                  </select>
-                </div>
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-950/70 px-3 py-2">
-                  <div>
-                    <span className="font-semibold text-slate-200">字幕</span>
-                    <span className="ml-2 text-slate-400">切換是否顯示目前句子字幕。</span>
-                  </div>
-                  <label className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-medium text-slate-300 hover:bg-slate-800">
-                    <input
-                      type="checkbox"
-                      checked={showSubtitle}
-                      onChange={(event) => {
-                        const next = event.target.checked;
-                        setShowSubtitle(next);
-                        window.localStorage.setItem(SHOW_SUBTITLE_STORAGE_KEY, next ? '1' : '0');
-                      }}
-                      className="accent-cyan-500"
-                    />
-                    {showSubtitle ? 'ON' : 'OFF'}
-                  </label>
-                </div>
-                {syncEnabled && syncRole === 'master' ? (
-                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-cyan-100">
-                    <div>
-                      <span className="font-semibold">學生端音訊控制</span>
-                      <span className="ml-2 text-cyan-200/80">
-                        {followerAudioUnlocked
-                          ? '已解鎖，學生可自行取消靜音播放。'
-                          : '已鎖定，所有 follower 會被強制靜音。'}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setFollowerAudioUnlocked((unlocked) => !unlocked)}
-                      className="rounded-full border border-cyan-300/50 bg-cyan-950/40 px-3 py-1 text-xs font-medium text-cyan-100 hover:bg-cyan-900/60"
-                      aria-pressed={followerAudioUnlocked}
-                    >
-                      {followerAudioUnlocked ? '強制所有學生靜音' : '解鎖學生自行播放'}
-                    </button>
-                  </div>
-                ) : null}
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-950/70 px-3 py-2">
-                  <div>
-                    <span className="font-semibold text-slate-200">上課模式</span>
-                    <span className="ml-2 text-slate-400">
-                      {classroomMode ? '每頁播放完會停在目前頁，按空白鍵才進入下一頁。' : '關閉時會自動連續播放下一頁。'}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setClassroomMode((enabled) => !enabled)}
-                    className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                      classroomMode
-                        ? 'border-amber-400/60 bg-amber-400/15 text-amber-100 hover:bg-amber-400/25'
-                        : 'border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800'
-                    }`}
-                    aria-pressed={classroomMode}
-                  >
-                    {classroomMode ? '已開啟' : '開啟'}
-                  </button>
-                </div>
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-950/70 px-3 py-2">
-                  <div>
-                    <span className="font-semibold text-slate-200">互動模式</span>
-                    <span className="ml-2 text-slate-400">
-                      {interactiveMode
-                        ? '每頁播放完會停在目前頁並自動啟動 Realtime Poll。'
-                        : '關閉時播放結束不會自動開始投票。'}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setInteractiveMode((enabled) => {
-                        const next = !enabled;
-                        window.localStorage.setItem(INTERACTIVE_MODE_STORAGE_KEY, next ? '1' : '0');
-                        return next;
-                      })
-                    }
-                    className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                      interactiveMode
-                        ? 'border-cyan-400/60 bg-cyan-400/15 text-cyan-100 hover:bg-cyan-400/25'
-                        : 'border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800'
-                    }`}
-                    aria-pressed={interactiveMode}
-                  >
-                    {interactiveMode ? '已開啟' : '開啟'}
-                  </button>
-                </div>
-              </div>
-            ) : null}
-          </div>
-            </div>
-          </section>
-
-          {/* Script panel */}
-          <section className={`border-t border-slate-800 bg-slate-950 ${transcriptFocusMode ? 'flex min-h-[65vh] flex-1 flex-col' : ''}`}>
-            <div className={`px-4 py-4 ${transcriptFocusMode ? 'flex flex-1 flex-col pr-4 md:pr-[22rem]' : ''}`}>
-              <div className="mb-3 flex overflow-hidden rounded-md border border-slate-700 bg-slate-900/60">
-                <button
-                  type="button"
-                  onClick={() => setEditTab('script')}
-                  className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'script' ? 'bg-slate-800 text-emerald-200' : 'text-slate-400'}`}
-                >
-                  📝 逐字稿
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEditTab('prompt')}
-                  className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'prompt' ? 'bg-slate-800 text-cyan-200' : 'text-slate-400'}`}
-                >
-                  🪄 提示詞
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEditTab('system')}
-                  className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'system' ? 'bg-slate-800 text-amber-200' : 'text-slate-400'}`}
-                >
-                  🧾 系統資料
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditTab('source');
-                    if (currentPage && pdfId) {
-                      setGenPromptsLoading(true);
-                      void fetchPageGenerationPrompts(pdfId, currentPage.page_number)
-                        .then((r) => { setGenPrompts(r); })
-                        .catch(() => { setGenPrompts([]); })
-                        .finally(() => { setGenPromptsLoading(false); });
-                    }
-                  }}
-                  className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'source' ? 'bg-slate-800 text-violet-200' : 'text-slate-400'}`}
-                >
-                  📚 來源
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTranscriptFocusMode((enabled) => !enabled)}
-                  className={`shrink-0 border-l border-slate-700 px-3 py-1.5 text-sm ${
-                    transcriptFocusMode ? 'bg-emerald-500/15 text-emerald-200' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-                  }`}
-                  aria-pressed={transcriptFocusMode}
-                  title={transcriptFocusMode ? '還原播放器版面' : '縮小播放器，放大逐字稿編輯區'}
-                >
-                  {transcriptFocusMode ? '↙' : '↗'}
-                </button>
-              </div>
-
-              {editTab === 'script' ? (
-                <>
-                  <div className="mb-2 flex items-center justify-between">
-                    <h2 className="text-sm font-semibold text-slate-300">
-                      📝 逐字稿（第 {currentPage?.page_number ?? '-'} 頁）
-                    </h2>
-                    <button
-                      type="button"
-                      onClick={() => currentPage && void openVersionHistory('script', currentPage.page_number)}
-                      disabled={!currentPage}
-                      title="查看此頁逐字稿的歷史版本"
-                      className="rounded-md border border-slate-600 px-2 py-1 text-xs text-slate-400 hover:bg-slate-800 hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      🕘 版本
-                    </button>
-                  </div>
-                  <textarea
-                    value={editingScript}
-                    onChange={(e) => setEditingScript(e.target.value)}
-                    disabled={isReadOnlyProcessing}
-                    rows={transcriptFocusMode ? 18 : 6}
-                    className={`w-full rounded-md border border-slate-700 bg-slate-900/70 p-3 text-sm leading-relaxed text-slate-100 outline-none ring-emerald-500/40 placeholder:text-slate-500 focus:ring ${transcriptFocusMode ? 'min-h-[55vh] flex-1' : ''}`}
-                    placeholder="請輸入本頁逐字稿..."
-                  />
-                  <div className="mt-2 flex items-center justify-between gap-3">
-                    <div className="text-xs text-slate-400">
-                      {editorError ? <span className="text-rose-300">{editorError}</span> : '儲存後會僅重生此頁語音'}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => void handleRegenerateAudio()}
-                      disabled={isReadOnlyProcessing || editorBusy || !hasScriptChanges}
-                      className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-3 py-1.5 text-sm text-emerald-200 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      {editorBusy ? '重生中…' : '儲存並重生語音'}
-                    </button>
-                  </div>
-                </>
-              ) : editTab === 'prompt' ? (
-                <>
-                  <h2 className="mb-2 text-sm font-semibold text-slate-300">🪄 提示詞（第 {currentPage?.page_number ?? '-'} 頁）</h2>
-                  <textarea
-                    value={promptInput}
-                    onChange={(e) => setPromptInput(e.target.value)}
-                    disabled={isReadOnlyProcessing}
-                    rows={6}
-                    className="w-full rounded-md border border-slate-700 bg-slate-900/70 p-3 text-sm leading-relaxed text-slate-100 outline-none ring-cyan-500/40 placeholder:text-slate-500 focus:ring"
-                    placeholder="請輸入這份簡報的風格提示詞..."
-                  />
-                  <div className="mt-2 flex items-center justify-between gap-3">
-                    <div className="text-xs text-slate-400">
-                      {promptMsg ? <span className="text-slate-300">{promptMsg}</span> : '更新後將影響後續以提示詞為基礎的生成'}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => void handleSavePrompt()}
-                      disabled={isReadOnlyProcessing || promptBusy}
-                      className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      {promptBusy ? '儲存中…' : '儲存提示詞'}
-                    </button>
-                  </div>
-                </>
-              ) : editTab === 'source' ? (
-                <>
-                  <h2 className="mb-2 text-sm font-semibold text-slate-300">📚 來源管理</h2>
-                  <div className="space-y-3">
-                    <div className="rounded-md border border-slate-800 bg-slate-900/50 p-3">
-                      <p className="mb-2 text-xs text-slate-400">新增 TXT 來源（會在生成逐字稿時一起送出）</p>
-                      <input
-                        value={sourceTextName}
-                        onChange={(e) => setSourceTextName(e.target.value)}
-                        placeholder="來源名稱（選填）"
-                        className="mb-2 w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100"
-                      />
-                      <textarea
-                        value={sourceTextContent}
-                        onChange={(e) => setSourceTextContent(e.target.value)}
-                        rows={5}
-                        placeholder="貼上來源文字內容"
-                        className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100"
-                      />
-                      <div className="mt-2 flex justify-end">
-                        <button
-                          type="button"
-                          onClick={() => void handleAddTxtSource()}
-                          disabled={sourceBusy || isReadOnlyProcessing}
-                          className="rounded-md border border-violet-500/50 bg-violet-500/15 px-3 py-1.5 text-sm text-violet-200 disabled:opacity-40"
-                        >
-                          新增 TXT 來源
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="rounded-md border border-slate-800 bg-slate-900/50 p-3">
-                      <p className="mb-2 text-xs text-slate-400">新增 PDF 來源（會擷取文字並在生成逐字稿時一起送出）</p>
-                      <input
-                        ref={sourcePdfInputRef}
-                        type="file"
-                        accept="application/pdf,.pdf"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) void handleAddPdfSource(file);
-                          e.currentTarget.value = '';
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => sourcePdfInputRef.current?.click()}
-                        disabled={sourceBusy || isReadOnlyProcessing}
-                        className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-200 disabled:opacity-40"
-                      >
-                        上傳 PDF 來源
-                      </button>
-                    </div>
-
-                    {sourceErr ? <p className="text-xs text-rose-300">{sourceErr}</p> : null}
-                    {sourceMsg ? <p className="text-xs text-emerald-300">{sourceMsg}</p> : null}
-
-                    <div className="rounded-md border border-slate-800 bg-slate-900/50 p-3">
-                      <p className="mb-2 text-xs text-slate-400">目前來源清單（{sourceItems.length}）</p>
-                      <div className="max-h-52 space-y-2 overflow-y-auto">
-                        {sourceItems.length === 0 ? (
-                          <p className="text-xs text-slate-500">尚未新增額外來源</p>
-                        ) : sourceItems.map((s) => (
-                          <div key={s.id} className="rounded border border-slate-700 px-2 py-1.5">
-                            <p className="text-xs text-slate-300">[{s.source_kind}] {s.source_name ?? '未命名來源'}</p>
-                            <p className="mt-1 line-clamp-2 text-xs text-slate-400">{s.content_text}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="rounded-md border border-slate-800 bg-slate-900/50 p-3">
-                      <p className="mb-2 text-xs text-slate-400">
-                        🔍 第 {currentPage?.page_number ?? '-'} 頁 生成記錄
-                      </p>
-                      {genPromptsLoading ? (
-                        <p className="text-xs text-slate-500">載入中…</p>
-                      ) : genPrompts.length === 0 ? (
-                        <p className="text-xs text-slate-500">尚無生成記錄（重新生成後才會出現）</p>
-                      ) : (
-                        <div className="space-y-2">
-                          {genPrompts.map((gp) => {
-                            const stageLabel =
-                              gp.stage === 'image' ? '🖼 圖片生成提示' :
-                              gp.stage === 'script' ? '📝 逐字稿生成提示' :
-                              gp.stage === 'audio' ? '🔊 語音合成參數' : gp.stage;
-                            const isExpanded = expandedGenPrompt === gp.stage;
-                            return (
-                              <div key={gp.stage} className="rounded border border-slate-700">
-                                <button
-                                  type="button"
-                                  onClick={() => setExpandedGenPrompt(isExpanded ? null : gp.stage)}
-                                  className="flex w-full items-center justify-between px-2 py-1.5 text-left text-xs"
-                                >
-                                  <span className="font-medium text-slate-200">{stageLabel}</span>
-                                  <span className="flex items-center gap-2 text-slate-400">
-                                    {gp.model && <span className="font-mono">{gp.model}</span>}
-                                    <span>{isExpanded ? '▲' : '▼'}</span>
-                                  </span>
-                                </button>
-                                {isExpanded && (
-                                  <pre className="max-h-64 overflow-y-auto border-t border-slate-700 bg-slate-950 px-2 py-2 text-xs text-slate-300 leading-5 whitespace-pre-wrap break-all">
-                                    {gp.prompt_text}
-                                  </pre>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <h2 className="mb-2 text-sm font-semibold text-slate-300">🧾 系統資料（第 {currentPage?.page_number ?? '-'} 頁）</h2>
-                  <div className="rounded-md border border-slate-800 bg-slate-900/50 p-3 text-xs text-slate-300">
-                    <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <div>
-                        <dt className="text-slate-500">PDF ID</dt>
-                        <dd className="break-all font-mono text-slate-200">{detail.id}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-slate-500">狀態</dt>
-                        <dd className="text-slate-200">{detail.status}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-slate-500">原始檔名</dt>
-                        <dd className="break-all text-slate-200">{detail.original_filename}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-slate-500">頁數</dt>
-                        <dd className="text-slate-200">{detail.page_count ?? totalPages}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-slate-500">TTS</dt>
-                        <dd className="text-slate-200">{detail.tts_provider ?? 'openai'} / {detail.tts_voice ?? '-'} / {detail.tts_speed ?? '-'}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-slate-500">目前頁狀態</dt>
-                        <dd className="text-slate-200">{currentPage?.status ?? '-'}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-slate-500">建立時間</dt>
-                        <dd className="font-mono text-slate-200">{detail.created_at}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-slate-500">更新時間</dt>
-                        <dd className="font-mono text-slate-200">{detail.updated_at}</dd>
-                      </div>
-                    </dl>
-                  </div>
-                  <div className="mt-3 overflow-x-auto rounded-md border border-slate-800">
-                    <table className="min-w-full divide-y divide-slate-800 text-left text-xs">
-                      <thead className="bg-slate-900/70 text-slate-400">
-                        <tr>
-                          <th className="px-3 py-2">步驟</th>
-                          <th className="px-3 py-2">狀態</th>
-                          <th className="px-3 py-2">耗時</th>
-                          <th className="px-3 py-2">SLA</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800 bg-slate-950/40">
-                        {([
-                          ['image', '圖片'],
-                          ['text', '文字'],
-                          ['script', '講稿'],
-                          ['audio', '語音'],
-                        ] as const).map(([key, label]) => {
-                          const timing = currentPage?.timings?.[key] ?? null;
-                          return (
-                            <tr key={key}>
-                              <td className="whitespace-nowrap px-3 py-2 text-slate-200">{label}</td>
-                              <td className="whitespace-nowrap px-3 py-2 text-slate-300">{timing?.status ?? '尚無紀錄'}</td>
-                              <td className="whitespace-nowrap px-3 py-2 font-mono text-slate-200">{timing?.status === 'running' ? '產生中' : formatDurationMs(timing?.duration_ms)}</td>
-                              <td className="whitespace-nowrap px-3 py-2 text-slate-400">
-                                {timing ? `${timing.sla_status}${timing.sla_target_ms != null ? ` / ${formatDurationMs(timing.sla_target_ms)}` : ''}` : '-'}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                  {currentPage?.timings ? <div className="mt-3"><PageTimingChips page={currentPage} /></div> : null}
-                </>
-              )}
-            </div>
-          </section>
-        </div>
+        <PlayPageSlidePanel />
 
         {/* Right: thumbnails + LLM chat panel（手機：僅於 qa tab 顯示；桌面：永遠顯示） */}
-        <aside
-          className={`max-h-[calc(100vh-7rem)] w-full shrink-0 flex-col gap-3 overflow-y-auto md:flex md:w-[360px] ${
-            activeTab === 'qa' ? 'flex' : 'hidden'
-          }`}
-        >
-          <section className={`rounded-lg border border-slate-800 bg-slate-900/40 ${qaPanelExpanded ? 'md:hidden' : ''}`}>
-            <div className="border-b border-slate-800 px-4 py-3">
-              <div className="flex items-center justify-between gap-2">
-                <h2 className="text-sm font-semibold text-slate-300">🧩 投影片管理</h2>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (isReadOnlyProcessing) return;
-                      // 若非執行中才清掉舊訊息；執行中時保留以便顯示進度。
-                      if (!regenJobRunning) {
-                        setRegenAllMsg(null);
-                      }
-                      const fallback = 350;
-                      const fromDetail = detail?.script_max_chars_per_page;
-                      const nextMaxChars =
-                        typeof fromDetail === 'number' && Number.isFinite(fromDetail)
-                          ? Math.max(80, Math.min(2000, Math.round(fromDetail)))
-                          : fallback;
-                      setRegenScriptMaxCharsPerPage(nextMaxChars);
-                      setRegenAllDialogOpen(true);
-                    }}
-                    disabled={isReadOnlyProcessing}
-                    className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-2 py-1 text-xs text-fuchsia-200 hover:bg-fuchsia-500/25 disabled:cursor-not-allowed disabled:opacity-40"
-                    title="重生（可選逐字稿/語音/圖檔）"
-                  >
-                    {regenJobRunning
-                      ? '重生中…'
-                      : regenAllBusy
-                        ? '啟動中…'
-                        : '重生'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleAddSlideAfterCurrent()}
-                    disabled={isReadOnlyProcessing || slideBusy || !currentPage}
-                    className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-2 py-1 text-xs text-emerald-200 disabled:opacity-40"
-                  >
-                    新增
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowAddPagesModal(true)}
-                    disabled={isReadOnlyProcessing || slideBusy}
-                    className="rounded-md border border-indigo-500/50 bg-indigo-500/15 px-2 py-1 text-xs text-indigo-200 disabled:opacity-40"
-                    title="根據提示詞新增多頁投影片"
-                  >
-                    新增多頁
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleDeleteCurrentSlide()}
-                    disabled={isReadOnlyProcessing || slideBusy || !currentPage || totalPages <= 1}
-                    className="rounded-md border border-rose-500/50 bg-rose-500/15 px-2 py-1 text-xs text-rose-200 disabled:opacity-40"
-                  >
-                    刪除
-                  </button>
-                </div>
-              </div>
-              {slideError ? <p className="mt-2 text-xs text-rose-300">{slideError}</p> : null}
-            </div>
-            <div
-              className="grid max-h-48 grid-cols-4 gap-2 overflow-y-auto p-3"
-              onDragOver={(e) => {
-                e.preventDefault();
-                if (isReadOnlyProcessing) return;
-                e.dataTransfer.dropEffect = 'move';
-              }}
-              onDropCapture={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                if (isReadOnlyProcessing) return;
-                const fromText =
-                  e.dataTransfer.getData('application/x-page-number') ||
-                  e.dataTransfer.getData('text/plain');
-                const fromPage = Number(fromText);
-                const targetEl = (e.target as HTMLElement | null)?.closest('[data-page-number]') as HTMLElement | null;
-                const toPage = Number(targetEl?.dataset.pageNumber || '');
-                // eslint-disable-next-line no-console
-                console.info('[reorder][drop-capture]', { fromText, fromPage, toPage, hasTarget: !!targetEl });
-                if (Number.isFinite(fromPage) && fromPage > 0 && Number.isFinite(toPage) && toPage > 0 && fromPage !== toPage) {
-                  void handleMoveSlide(fromPage, toPage);
-                }
-              }}
-              onPaste={(e) => {
-                // eslint-disable-next-line no-console
-                console.info('[paste][thumb-grid] event fired', {
-                  itemCount: e.clipboardData.items.length,
-                  items: Array.from(e.clipboardData.items).map((it) => ({ kind: it.kind, type: it.type })),
-                });
-                if (isReadOnlyProcessing) return;
-                const file = Array.from(e.clipboardData.items)
-                  .map((it) => (it.kind === 'file' ? it.getAsFile() : null))
-                  .find((f): f is File => !!f);
-                if (!file) {
-                  // eslint-disable-next-line no-console
-                  console.warn('[paste][thumb-grid] no file found');
-                }
-                if (file) void handleReplaceImageFile(file);
-              }}
-              tabIndex={0}
-            >
-              {deckPages.map((p, idx) => (
-                <div
-                  key={p.page_number}
-                  data-page-number={p.page_number}
-                  onClick={(e) => {
-                    if (e.ctrlKey || e.metaKey) {
-                      e.preventDefault();
-                      setRegenSelectedPages((prev) => {
-                        const next = new Set(prev);
-                        if (next.has(p.page_number)) next.delete(p.page_number);
-                        else next.add(p.page_number);
-                        return next;
-                      });
-                    } else if (e.shiftKey) {
-                      e.preventDefault();
-                      const from = Math.min(currentIdx, idx);
-                      const to = Math.max(currentIdx, idx);
-                      setRegenSelectedPages((prev) => {
-                        const next = new Set(prev);
-                        for (let i = from; i <= to; i++) {
-                          const page = deckPages[i];
-                          if (page) next.add(page.page_number);
-                        }
-                        return next;
-                      });
-                    } else {
-                      setCurrentIdx(idx);
-                    }
-                  }}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    if (isReadOnlyProcessing) return;
-                    // Reorder is handled by parent onDropCapture to avoid double requests.
-                    const f = e.dataTransfer.files?.[0];
-                    if (f) void handleReplaceImageFile(f, p.page_number);
-                  }}
-                  onPaste={(e) => {
-                    if (isReadOnlyProcessing) return;
-                    const file = Array.from(e.clipboardData.items)
-                      .map((it) => (it.kind === 'file' ? it.getAsFile() : null))
-                      .find((f): f is File => !!f);
-                    if (file) void handleReplaceImageFile(file, p.page_number);
-                  }}
-                  className={`relative overflow-hidden rounded border ${
-                    regenSelectedPages.has(p.page_number)
-                      ? 'border-fuchsia-400 ring-1 ring-fuchsia-500/50'
-                      : idx === currentIdx
-                        ? 'border-cyan-400'
-                        : 'border-slate-700'
-                  } ${draggingPage === p.page_number ? 'opacity-50' : ''}`}
-                  title={`第 ${p.page_number} 頁${regenSelectedPages.has(p.page_number) ? '（已選取重生）' : ''}`}
-                >
-                  <button
-                    type="button"
-                    draggable={!isReadOnlyProcessing && !slideBusy}
-                    onDragStart={(e) => {
-                      if (isReadOnlyProcessing) {
-                        e.preventDefault();
-                        return;
-                      }
-                      setDraggingPage(p.page_number);
-                      e.dataTransfer.setData('application/x-page-number', String(p.page_number));
-                      e.dataTransfer.setData('text/plain', String(p.page_number));
-                      e.dataTransfer.effectAllowed = 'move';
-                      // eslint-disable-next-line no-console
-                      console.info('[reorder][dragstart]', { page: p.page_number });
-                    }}
-                    onDragEnd={() => {
-                      setDraggingPage(null);
-                      // eslint-disable-next-line no-console
-                      console.info('[reorder][dragend]', { page: p.page_number });
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                    className="absolute right-0 top-0 z-10 rounded-bl bg-slate-900/80 px-1.5 py-0.5 text-[10px] text-slate-200 cursor-grab active:cursor-grabbing"
-                    title="拖曳此把手可重排"
-                  >
-                    ↕
-                  </button>
-                  {(() => {
-                    const thumbSrc = isReadOnlyProcessing
-                      ? p.image_url
-                      : (p.thumbnail_url ?? p.image_url);
-                    const shouldLoadThumb = idx <= thumbLoadUntilIdx || idx === currentIdx;
-                    return thumbSrc && shouldLoadThumb ? (
-                    <img
-                      src={withImageBust(thumbSrc) ?? thumbSrc}
-                      alt={`第 ${p.page_number} 頁縮圖`}
-                      className="h-14 w-full object-cover"
-                      onLoad={() => {
-                        setThumbLoadUntilIdx((prev) => {
-                          const next = idx + 1;
-                          if (next >= deckPages.length) return prev;
-                          return Math.max(prev, next);
-                        });
-                      }}
-                      onError={(e) => {
-                        setThumbLoadUntilIdx((prev) => {
-                          const next = idx + 1;
-                          if (next >= deckPages.length) return prev;
-                          return Math.max(prev, next);
-                        });
-                        const img = e.currentTarget;
-                        const fallback = p.image_url;
-                        if (!fallback || img.dataset.fallbackApplied === 'true') {
-                          img.style.display = 'none';
-                          return;
-                        }
-                        img.dataset.fallbackApplied = 'true';
-                        img.src = withImageBust(fallback) ?? fallback;
-                      }}
-                    />
-                    ) : (
-                    <div className="flex h-14 w-full items-center justify-center bg-slate-800 text-[10px] text-slate-400">
-                      {thumbSrc ? '載入中…' : '無圖片'}
-                    </div>
-                    );
-                  })()}
-                </div>
-              ))}
-            </div>
-            {regenSelectedPages.size > 0 ? (
-              <div className="flex items-center justify-between gap-2 border-t border-fuchsia-500/30 bg-fuchsia-500/10 px-3 py-1.5">
-                <span className="text-xs text-fuchsia-300">
-                  已選 {regenSelectedPages.size} 頁將重生（Ctrl/Shift 點選）
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setRegenSelectedPages(new Set())}
-                  className="text-xs text-fuchsia-400 hover:text-fuchsia-200"
-                >
-                  清除
-                </button>
-              </div>
-            ) : (
-              <div className="border-t border-slate-800/50 px-3 py-1">
-                <p className="text-[10px] text-slate-600">Ctrl/Shift 點選縮圖可選取特定頁面重生</p>
-              </div>
-            )}
-            <div className="border-t border-slate-800 px-3 py-2">
-              <button
-                type="button"
-                onClick={() => void handleUpdateCoverFromCurrentPage()}
-                disabled={slideBusy || !currentPage?.image_url}
-                className="w-full rounded-md border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-xs text-amber-200 hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-40"
-                title="將首頁列表封面更新為目前選取頁面的圖片"
-              >
-                將目前頁設為封面
-              </button>
-            </div>
-          </section>
-
-          <section className={`rounded-lg border border-slate-800 bg-slate-900/40 ${qaPanelExpanded ? 'md:hidden' : ''}`}>
-            <div className="flex items-center justify-between gap-2 px-3 py-2">
-              <div className="min-w-0">
-                <h2 className="truncate text-sm font-semibold text-slate-300">📊 Realtime Poll</h2>
-                <p className="text-[11px] text-slate-500">
-                  {pollStarted ? `第 ${currentPage?.page_number ?? '-'} 頁投票中` : '尚未開始，不顯示結果'}
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPollSettingsOpen((v) => !v)}
-                  className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
-                >
-                  {pollSettingsOpen ? '收合設定' : '設定'}
-                </button>
-                {pollStarted ? (
-                  <button
-                    type="button"
-                    onClick={handleStopPoll}
-                    className="rounded-md border border-rose-500/50 bg-rose-500/10 px-2 py-1 text-xs text-rose-200 hover:bg-rose-500/20"
-                  >
-                    結束
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleStartPoll}
-                    disabled={!currentPage}
-                    className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-2 py-1 text-xs text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    開始
-                  </button>
-                )}
-                {syncEnabled && syncRole === 'master' && pollStarted ? (
-                  <button
-                    type="button"
-                    onClick={() => setSyncPollShowResults((v) => !v)}
-                    className="rounded-md border border-emerald-500/50 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-200 hover:bg-emerald-500/20"
-                  >
-                    {syncPollShowResults ? '隱藏結果' : '顯示結果'}
-                  </button>
-                ) : null}
-              </div>
-            </div>
-            {(pollSettingsOpen || pollStarted || pollError) && (
-              <div className="space-y-2 border-t border-slate-800 p-2">
-                {pollSettingsOpen && (
-                  <div className="rounded-md border border-slate-800 bg-slate-950/50 p-2">
-                    <input
-                      value={pollQuestion}
-                      onChange={(e) => setPollQuestion(e.target.value)}
-                      maxLength={300}
-                      placeholder="輸入投票問題"
-                      className="mb-2 w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 outline-none ring-cyan-500/40 placeholder:text-slate-500 focus:ring"
-                    />
-                    <textarea
-                      value={pollOptionsText}
-                      onChange={(e) => setPollOptionsText(e.target.value)}
-                      rows={2}
-                      placeholder="每行一個答案選項"
-                      className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 outline-none ring-cyan-500/40 placeholder:text-slate-500 focus:ring"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => void handleCreatePoll()}
-                      disabled={pollBusy || !currentPage}
-                      className="mt-2 w-full rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-xs text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      {pollBusy ? '處理中…' : '建立並開始本頁投票'}
-                    </button>
-                  </div>
-                )}
-                {pollError ? <p className="text-xs text-rose-300">{pollError}</p> : null}
-
-                {(pollStarted || pollSettingsOpen) && (
-                  <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
-                    {pagePolls.length === 0 ? (
-                      <div className="rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1.5 text-xs text-slate-500">
-                        {pollStarted ? '已開始輪詢，本頁尚無投票。' : '本頁尚無已建立的投票問題。'}
-                      </div>
-                    ) : (
-                      pagePolls.map((poll) => (
-                        <div key={poll.id} className="rounded-md border border-slate-800 bg-slate-950/50 p-2">
-                          <div className="mb-1 flex items-start justify-between gap-2">
-                            <h3 className="text-xs font-medium text-slate-200">{poll.question}</h3>
-                            <span className="shrink-0 rounded-full border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-400">
-                              {poll.total_votes} 票
-                            </span>
-                          </div>
-                          {syncEnabled && syncRole === 'master' ? (
-                            <div className="mb-2 flex justify-end gap-2">
-                              <button
-                                type="button"
-                                onClick={() => void handleSelectDisplayedPoll(poll.id)}
-                                className={`rounded border px-2 py-1 text-[11px] ${
-                                  syncDisplayedPollId === poll.id
-                                    ? 'border-cyan-300/80 bg-cyan-500/30 text-cyan-50'
-                                    : 'border-cyan-500/50 bg-cyan-500/15 text-cyan-200 hover:bg-cyan-500/25'
-                                }`}
-                              >
-                                {syncDisplayedPollId === poll.id ? '目前顯示題目' : '顯示這題到全螢幕'}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void handleResetPollVotes(poll.id)}
-                                disabled={pollBusy || poll.total_votes === 0}
-                                className="rounded border border-amber-500/50 bg-amber-500/15 px-2 py-1 text-[11px] text-amber-200 hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-40"
-                              >
-                                清除結果
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void handleDeletePoll(poll.id)}
-                                disabled={pollBusy}
-                                className="rounded border border-rose-500/50 bg-rose-500/15 px-2 py-1 text-[11px] text-rose-200 hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-40"
-                              >
-                                刪除題目
-                              </button>
-                            </div>
-                          ) : null}
-                          <div className="space-y-1.5">
-                            {poll.options.map((option, idx) => {
-                              const ratio = poll.total_votes > 0 ? Math.round((option.votes / poll.total_votes) * 100) : 0;
-                              const selected = pollVotes[poll.id] === idx;
-                              return (
-                                <button
-                                  key={`${poll.id}-${idx}`}
-                                  type="button"
-                                  onClick={() => void handleVotePoll(poll.id, idx)}
-                                  disabled={pollBusy || !poll.is_active}
-                                  className={`w-full rounded-md border px-2 py-1.5 text-left text-xs transition ${selected ? 'border-emerald-400 bg-emerald-500/15 text-emerald-100' : 'border-slate-700 bg-slate-900/70 text-slate-200 hover:bg-slate-800'} disabled:cursor-not-allowed disabled:opacity-60`}
-                                >
-                                  <div className="mb-1 flex items-center justify-between gap-2">
-                                    <span className="truncate">{option.text}</span>
-                                    <span className="font-mono text-[10px] text-slate-400">{option.votes} · {ratio}%</span>
-                                  </div>
-                                  <div className="h-1 overflow-hidden rounded-full bg-slate-800">
-                                    <div className="h-full rounded-full bg-cyan-400" style={{ width: `${ratio}%` }} />
-                                  </div>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-          </section>
-
-          <section className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-lg border border-slate-800 bg-slate-900/40">
-          <div className="border-b border-slate-800 px-4 py-3">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <h2 className="min-w-0 truncate text-sm font-semibold text-slate-300">
-              💬 本頁問答（含本頁圖片與文字上下文）
-            </h2>
-            <button
-              type="button"
-              onClick={() => setQaPanelExpanded((v) => !v)}
-              className="hidden shrink-0 rounded-md border border-cyan-500/50 bg-cyan-500/10 px-2 py-1 text-xs text-cyan-200 hover:bg-cyan-500/20 md:inline-flex"
-              aria-pressed={qaPanelExpanded}
-              title={qaPanelExpanded ? '還原右側欄內容' : '讓問答佔滿右側欄'}
-            >
-              {qaPanelExpanded ? '還原' : '放大'}
-            </button>
-          </div>
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={() => void handleClearChat()}
-              disabled={isReadOnlyProcessing || chatBusy || chatHistory.length === 0}
-              className="rounded-md border border-rose-500/50 bg-rose-500/15 px-2 py-1 text-xs text-rose-200 hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              清除全部訊息
-            </button>
-          </div>
-          </div>
-          <div className="flex-1 space-y-2 overflow-y-auto p-3 text-sm">
-            {chatHistory.length === 0 ? (
-              <div className="text-slate-500">尚無對話，請輸入問題。</div>
-            ) : (
-              chatHistory.map((m, idx) => (
-                <div key={idx} className={m.role === 'user' ? 'text-slate-100' : 'text-emerald-200'}>
-                  <span className="mr-2 text-xs uppercase opacity-70">{m.role === 'user' ? '你' : '助教'}</span>
-                  {m.role === 'assistant' && m.content.startsWith(IMAGE_MSG_PREFIX) ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const url = m.content.slice(IMAGE_MSG_PREFIX.length).trim();
-                        if (!url) return;
-                        setImagePreviewUrl(url);
-                        setImagePreviewPageNumber(currentPage?.page_number ?? null);
-                        setImagePreviewOpen(true);
-                      }}
-                      className="inline-block overflow-hidden rounded-md border border-cyan-500/40 hover:border-cyan-300"
-                      title="點擊放大預覽"
-                    >
-                      <img src={m.content.slice(IMAGE_MSG_PREFIX.length).trim()} alt="生成圖片結果" className="max-h-36 w-auto" />
-                    </button>
-                  ) : (
-                    <span className="whitespace-pre-wrap">{m.content}</span>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-          <div className="border-t border-slate-800 p-3">
-            <div className="flex flex-col gap-2">
-              {/* Reference image thumbnail (paste from clipboard) */}
-              {chatPastedImageUrl && (
-                <div className="flex items-center gap-2">
-                  <div className="relative inline-block shrink-0">
-                    <img
-                      src={chatPastedImageUrl}
-                      alt="參考圖"
-                      className="max-h-16 w-auto rounded border border-slate-600 object-contain"
-                    />
-                    <button
-                      type="button"
-                      onClick={clearChatPastedImage}
-                      className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-slate-900 text-[10px] text-slate-200 hover:bg-rose-600"
-                      title="移除參考圖"
-                    >✕</button>
-                  </div>
-                  <p className="text-xs text-slate-400">參考圖（貼上的圖片）</p>
-                </div>
-              )}
-              {/* Region selection status */}
-              {imageEditRegion && (
-                <div className="flex items-center gap-2 text-xs text-cyan-400">
-                  <span>已標示修改區域</span>
-                  <button
-                    type="button"
-                    onClick={clearImageEditRegion}
-                    className="text-slate-400 hover:text-rose-400"
-                  >✕ 清除</button>
-                </div>
-              )}
-              <textarea
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (isReadOnlyProcessing) return;
-                  if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                    e.preventDefault();
-                    void handleSendChat();
-                  }
-                }}
-                onPaste={(e) => {
-                  const items = Array.from(e.clipboardData?.items ?? []);
-                  const imgItem = items.find((it) => it.kind === 'file' && /^image\//i.test(it.type));
-                  if (!imgItem) return;
-                  e.preventDefault();
-                  const file = imgItem.getAsFile();
-                  if (!file) return;
-                  clearChatPastedImage();
-                  setChatPastedImage(file);
-                  setChatPastedImageUrl(URL.createObjectURL(file));
-                }}
-                rows={3}
-                disabled={isReadOnlyProcessing}
-                placeholder={isReadOnlyProcessing ? '處理中為唯讀模式，問答與修改功能暫停' : '可輸入修改指示或問題（Shift+Enter 換行；可貼上參考圖）'}
-                className="flex-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-emerald-500/40 placeholder:text-slate-500 focus:ring"
-              />
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                {/* Region select toggle */}
-                {!isReadOnlyProcessing && currentPage?.image_url && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setImageEditSelectMode((v) => {
-                        if (v) clearImageEditRegion();
-                        return !v;
-                      });
-                    }}
-                    aria-pressed={imageEditSelectMode}
-                    className={`rounded-md border px-3 py-2 text-sm ${
-                      imageEditSelectMode
-                        ? 'border-cyan-400/70 bg-cyan-500/25 text-cyan-100'
-                        : 'border-slate-600 bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
-                    }`}
-                    title="在左側投影片圖片上拖曳選取要修改的區域"
-                  >
-                    {imageEditSelectMode ? '取消選區' : '選取區域'}
-                  </button>
-                )}
-                {/* Inpaint or regenerate */}
-                {(imageEditRegion || chatPastedImage) ? (
-                  <button
-                    type="button"
-                    onClick={() => void handleInpaintImage()}
-                    disabled={isReadOnlyProcessing || chatInpaintBusy || !currentPage}
-                    className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    {chatInpaintBusy ? '修改中…' : '修改圖片'}
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => void handleRegenerateImageWithPrompt()}
-                    disabled={isReadOnlyProcessing || slideBusy || !currentPage}
-                    className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    修改圖片
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => void handleRewriteScript()}
-                  disabled={isReadOnlyProcessing || rewriteBusy || !hasChatInput}
-                  className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-3 py-2 text-sm text-fuchsia-200 hover:bg-fuchsia-500/25 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {rewriteBusy ? '修改中…' : '修改逐字稿'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleSendChat()}
-                  disabled={isReadOnlyProcessing || chatBusy || !hasChatInput}
-                  className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {chatBusy ? '詢問中…' : '詢問'}
-                </button>
-              </div>
-            </div>
-            {chatError ? <p className="mt-1 text-xs text-rose-300">{chatError}</p> : null}
-            {rewriteError ? <p className="mt-1 text-xs text-rose-300">{rewriteError}</p> : null}
-            {chatInpaintError ? <p className="mt-1 text-xs text-rose-300">{chatInpaintError}</p> : null}
-          </div>
-          </section>
-        </aside>
+        <PlayPageSidebar />
       </main>
 
-      {ttsDialogOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
-          <div className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl">
-            <h3 className="mb-3 text-sm font-semibold text-slate-200">生成設定</h3>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs text-slate-300">聲音</span>
-                <select
-                  value={ttsVoice}
-                  onChange={(e) => setTtsVoice(e.target.value)}
-                  disabled={isReadOnlyProcessing || ttsBusy}
-                  className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs"
-                >
-                  {availableTtsVoices.map((v) => (
-                    <option key={v} value={v}>{ttsProvider === 'gemini' ? geminiVoiceLabel(v) : v}</option>
-                  ))}
-                </select>
-              </div>
-              {ttsProvider === 'gemini' ? (
-                <div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-slate-300">主持模式</span>
-                    <div className="flex overflow-hidden rounded border border-slate-700">
-                      {([
-                        ['solo', '單人旁白'],
-                        ['dual', '雙人對談'],
-                      ] as const).map(([mode, label]) => (
-                        <button
-                          key={mode}
-                          type="button"
-                          onClick={() => setHostMode(mode)}
-                          disabled={isReadOnlyProcessing || ttsBusy}
-                          aria-pressed={hostMode === mode}
-                          className={`px-3 py-1 text-xs ${
-                            hostMode === mode
-                              ? 'bg-cyan-500/25 font-medium text-cyan-100'
-                              : 'text-slate-300 hover:bg-slate-800'
-                          }`}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <p className="mt-1 text-xs text-slate-500">
-                    雙人對談才會使用上方人設與 Speaker 1／2 聲音；變更後需重新產生逐字稿才會套用。
-                  </p>
-                </div>
-              ) : null}
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-300">速度</span>
-                <input
-                  type="range"
-                  min={0.5}
-                  max={2}
-                  step={0.05}
-                  value={ttsSpeed}
-                  onChange={(e) => setTtsSpeed(Number(e.target.value))}
-                  disabled={isReadOnlyProcessing || ttsBusy}
-                  className="flex-1 accent-cyan-500"
-                />
-                <span className="w-10 text-right text-xs tabular-nums text-slate-300">{ttsSpeed.toFixed(2)}</span>
-              </div>
-              <div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-slate-300">逐字稿每頁上限字數</span>
-                  <span className="text-xs text-slate-500">（留空使用系統預設）</span>
-                </div>
-                <input
-                  type="number"
-                  min={80}
-                  max={2000}
-                  step={10}
-                  placeholder="系統預設"
-                  value={scriptMaxCharsPerPage ?? ''}
-                  onChange={(e) => {
-                    const raw = e.target.value;
-                    if (raw === '') { setScriptMaxCharsPerPage(null); return; }
-                    const n = Number(raw);
-                    if (!Number.isFinite(n)) return;
-                    setScriptMaxCharsPerPage(Math.max(80, Math.min(2000, Math.round(n))));
-                  }}
-                  disabled={isReadOnlyProcessing || ttsBusy}
-                  className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100 placeholder:text-slate-500"
-                />
-              </div>
-              {ttsMsg ? <p className="text-xs text-slate-400">{ttsMsg}</p> : null}
-            </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setTtsDialogOpen(false)}
-                className="rounded border border-slate-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
-              >
-                關閉
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleSaveTtsSettings()}
-                disabled={isReadOnlyProcessing || ttsBusy}
-                className="rounded border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-200 disabled:opacity-40"
-              >
-                {ttsBusy ? '儲存中…' : '儲存設定'}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {imageStyleDialogOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
-          <div className="w-full max-w-2xl rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl">
-            <h3 className="mb-2 text-sm font-semibold text-slate-200">整份簡報圖片風格設定</h3>
-            <p className="mb-3 text-xs text-slate-400">
-              這個風格會套用在後續的單張與多張圖片重生。可填入你偏好的風格模板並自行調整。
-            </p>
-            <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
-              <select
-                value={selectedImageStyleTemplateKey}
-                onChange={(e) => setSelectedImageStyleTemplateKey(e.target.value)}
-                className="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
-              >
-                {imageStyleTemplates.map((t) => (
-                  <option key={t.key} value={t.key}>{t.label}</option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={() => applyImageStyleTemplate(selectedImageStyleTemplateKey)}
-                disabled={isReadOnlyProcessing}
-                className="rounded border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25"
-              >
-                套用模板
-              </button>
-            </div>
-            <textarea
-              value={deckImageStylePrompt}
-              onChange={(e) => setDeckImageStylePrompt(e.target.value)}
-              disabled={isReadOnlyProcessing}
-              rows={8}
-              className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-fuchsia-500/40 placeholder:text-slate-500 focus:ring"
-              placeholder="例如：academic minimalist style, clean layout..."
-            />
-            <div className="mt-3 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setImageStyleDialogOpen(false)}
-                className="rounded border border-slate-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
-              >
-                關閉
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!pdfId) {
-                    setImageStyleDialogOpen(false);
-                    return;
-                  }
-                  if (isReadOnlyProcessing) return;
-                  void (async () => {
-                    try {
-                      const res = await updatePdfImageStyleSettings(pdfId, deckImageStylePrompt);
-                      setDetail((prev) => (prev ? { ...prev, image_style_prompt: res.image_style_prompt, updated_at: res.updated_at } : prev));
-                      setRegenAllMsg('已儲存整份圖片風格設定，後續重生會自動套用');
-                    } catch (err) {
-                      setRegenAllMsg(err instanceof ApiError ? err.message : '儲存圖片風格設定失敗');
-                    } finally {
-                      setImageStyleDialogOpen(false);
-                    }
-                  })();
-                }}
-                disabled={isReadOnlyProcessing}
-                className="rounded border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-200"
-              >
-                儲存設定
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {regenAllDialogOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
-          <div className="w-full max-w-xl rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl">
-            <h3 className="mb-3 text-sm font-semibold text-slate-200">選擇重生項目</h3>
-            <p className="mb-3 text-xs text-slate-400">
-              可多選；執行順序固定為 <span className="font-semibold text-slate-200">圖檔 → 逐字稿 → 語音</span>。
-            </p>
-            <div className="mb-3 rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-3 py-2 text-xs text-fuchsia-200">
-              {regenSelectedPages.size > 0
-                ? `僅重生已選取的 ${regenSelectedPages.size} 張投影片（第 ${Array.from(regenSelectedPages).sort((a, b) => a - b).join('、') } 頁）`
-                : `重生全部 ${deckPages.length} 張投影片`}
-            </div>
-            <div className="mb-3 space-y-2">
-              <div className="rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100">
-                已套用整份圖片風格設定（可於上方「🖼️ 風格」調整）。
-              </div>
-              <label className="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-200">
-                <input
-                  type="checkbox"
-                  className="accent-fuchsia-500"
-                  checked={regenOptions.image}
-                  onChange={(e) => setRegenOptions((prev) => ({ ...prev, image: e.target.checked }))}
-                  disabled={isReadOnlyProcessing || regenAllBusy}
-                />
-                <span>圖檔</span>
-              </label>
-              <label className="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-200">
-                <input
-                  type="checkbox"
-                  className="accent-fuchsia-500"
-                  checked={regenOptions.script}
-                  onChange={(e) => setRegenOptions((prev) => ({ ...prev, script: e.target.checked }))}
-                  disabled={isReadOnlyProcessing || regenAllBusy}
-                />
-                <span>逐字稿</span>
-              </label>
-              <label className="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-200">
-                <input
-                  type="checkbox"
-                  className="accent-fuchsia-500"
-                  checked={regenOptions.audio}
-                  onChange={(e) => setRegenOptions((prev) => ({ ...prev, audio: e.target.checked }))}
-                  disabled={isReadOnlyProcessing || regenAllBusy}
-                />
-                <span>語音</span>
-              </label>
-            </div>
-            {regenOptions.image ? (
-              <div className="mb-2">
-                <label className="mb-1 block text-xs text-slate-400">圖檔重生提示詞</label>
-                <textarea
-                  value={regenAllPrompt}
-                  onChange={(e) => setRegenAllPrompt(e.target.value)}
-                  rows={4}
-                  className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-fuchsia-500/40 placeholder:text-slate-500 focus:ring"
-                  placeholder="輸入整份風格調整提示詞..."
-                  disabled={isReadOnlyProcessing || regenAllBusy}
-                />
-              </div>
-            ) : null}
-            {regenOptions.script ? (
-              <div className="mb-2">
-                <label className="mb-1 block text-xs text-slate-400">逐字稿重生提示詞</label>
-                <textarea
-                  value={regenScriptPrompt}
-                  onChange={(e) => setRegenScriptPrompt(e.target.value)}
-                  rows={3}
-                  className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-fuchsia-500/40 placeholder:text-slate-500 focus:ring"
-                  placeholder="例如：請以更精煉、口語、易懂的方式重寫，並保留每頁核心重點"
-                  disabled={isReadOnlyProcessing || regenAllBusy}
-                />
-                <div className="mt-2">
-                  <label className="mb-1 block text-xs text-slate-400">逐字稿每頁最大長度</label>
-                  <input
-                    type="number"
-                    min={80}
-                    max={2000}
-                    step={1}
-                    value={regenScriptMaxCharsPerPage}
-                    onChange={(e) => {
-                      const raw = Number(e.target.value);
-                      if (!Number.isFinite(raw)) return;
-                      const normalized = Math.max(80, Math.min(2000, Math.round(raw)));
-                      setRegenScriptMaxCharsPerPage(normalized);
-                    }}
-                    className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-fuchsia-500/40 placeholder:text-slate-500 focus:ring"
-                    disabled={isReadOnlyProcessing || regenAllBusy}
-                  />
-                </div>
-              </div>
-            ) : null}
-            {regenOptions.script && regenOptions.audio ? null : regenOptions.script ? (
-              <p className="mb-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-                提醒：若僅重生逐字稿，原有語音可能與新的逐字稿不相符，建議同時勾選「語音」。
-              </p>
-            ) : null}
-            <RegenerateProgress job={regenJob} />
-            {regenAllMsg ? (
-              <p
-                className={`mt-2 text-xs ${
-                  regenJob?.status === 'completed'
-                    ? 'text-emerald-300'
-                    : regenJob?.status === 'failed'
-                      ? 'text-rose-300'
-                      : 'text-slate-300'
-                }`}
-              >
-                {regenAllMsg}
-              </p>
-            ) : null}
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setRegenAllDialogOpen(false);
-                  if (!regenJobRunning) {
-                    setRegenJob(null);
-                    setRegenAllMsg(null);
-                  }
-                }}
-                disabled={regenAllBusy}
-                className="rounded border border-slate-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-40"
-              >
-                {regenJobRunning ? '關閉（背景繼續）' : regenJob ? '關閉' : '取消'}
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleConfirmRegenerate()}
-                disabled={isReadOnlyProcessing || regenAllBusy || !regenAnySelected}
-                className="rounded border border-fuchsia-500/50 bg-fuchsia-500/15 px-3 py-1.5 text-sm text-fuchsia-200 disabled:cursor-not-allowed disabled:opacity-40"
-                title={!regenAnySelected ? '請至少選擇一個項目' : ''}
-              >
-                {regenAllBusy ? '重生中…' : regenJob?.status === 'completed' ? '再次重生' : '確認'}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {shareDialogOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
-          <div className="w-full max-w-2xl rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl">
-            <h3 className="text-base font-semibold text-slate-100">分享連結已建立</h3>
-            <p className="mt-2 text-sm text-slate-300">請複製以下 URL 並分享給他人：</p>
-            <textarea
-              readOnly
-              value={shareUrl}
-              onFocus={(e) => e.currentTarget.select()}
-              className="mt-3 h-24 w-full resize-none rounded-md border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs text-emerald-200 outline-none"
-            />
-            <div className="mt-4 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={async () => {
-                  if (!shareUrl) return;
-                  try {
-                    await navigator.clipboard.writeText(shareUrl);
-                    setShareMessage('已複製分享連結');
-                    setShareError(null);
-                  } catch {
-                    setShareError('瀏覽器不允許自動複製，請手動複製。');
-                  }
-                }}
-                className="rounded border border-violet-500/50 bg-violet-500/15 px-3 py-1.5 text-sm text-violet-200 hover:bg-violet-500/25"
-              >
-                複製連結
-              </button>
-              <button
-                type="button"
-                onClick={() => setShareDialogOpen(false)}
-                className="rounded border border-slate-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
-              >
-                關閉
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-      {showAddPagesModal && pdfId ? (
-        <AddPagesFromPromptModal
-          pdfId={pdfId}
-          insertAfterPage={currentPage?.page_number ?? totalPages}
-          onClose={() => setShowAddPagesModal(false)}
-          onDone={async (totalPagesAfter) => {
-            setShowAddPagesModal(false);
-            await reloadDetail();
-            setCurrentIdx(totalPagesAfter - 1);
-          }}
-        />
-      ) : null}
+      <PlayPageDialogs />
     </div>
+    </PlayPageCtx.Provider>
   );
 }
