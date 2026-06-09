@@ -604,3 +604,11 @@
 - 時間: 2026-06-09 14:30:00 +0800
 - 分支: refactor/playpage-hooks-and-subcomponents
 - 內容: 繼前次 render helper 重構，建立 `PlayPageContext.tsx`（god context，定義完整的 `PlayPageContextValue` 介面，含約 250 個 state/handler/computed value/ref 欄位，涵蓋 PDF/播放/TTS/繪圖/版面/同步/測驗/影片等各領域），並在 `PlayPage.tsx` 中組建 `_ctxValue` 物件傳入 `<PlayPageCtx.Provider>`。建立 `PlayPageDialogs.tsx`，成為第一個真正消費 context 的 React 元件，透過 `usePlayPageContext()` 取得所需的 state 與 handler，渲染 TtsDialog、ImageStyleDialog、RegenAllDialog、ShareDialog、AddPagesFromPromptModal 五個對話框（原為 `renderDialogs()` render helper），PlayPage.tsx 對應移除這五個 import 與 renderDialogs 函式定義。修正過程中發現並修正三處 context 型別錯誤：`handleSelectDisplayedPoll` 應為 `(pollId: number) => void`（非 `number | null`）、`videoProgressText` 應為 `string | null`、`targetImageSrc` 應為 `string | null`（非 `string | undefined`）。`npx tsc --noEmit` 零錯誤，`npx vite build` 成功。
+
+[x] PlayPage 重構階段 5：將四大版面區塊（全螢幕、標題欄、投影片面板、側邊欄）抽離為獨立 React 元件，以 usePlayPageContext() 消費共享 state（完成於分支: refactor/playpage-hooks-and-subcomponents）
+
+## 工作記錄
+
+- 時間: 2026-06-09 16:00:00 +0800
+- 分支: refactor/playpage-hooks-and-subcomponents
+- 內容: 完成 PlayPage 重構最終階段。將 renderFullscreenView、renderHeader、renderLeftPanel、renderRightPanel 四個 render helpers 提取為真正的 React 元件：`PlayPageFullscreen.tsx`（全螢幕覆蓋層，含繪圖工具列、字幕、測驗互動）、`PlayPageHeader.tsx`（頂部標題欄，含影片/分享/重生狀態）、`PlayPageSlidePanel.tsx`（左側投影片區域，含圖片預覽、逐字稿編輯、提示詞、設定）、`PlayPageSidebar.tsx`（右側側邊欄，含縮圖清單、投票、聊天）。PlayPageContext 補充 5 個原缺少的欄位（`sourceItems`、`hasScriptChanges`、`syncQuestionBusy`、`openVersionHistory`、`activeSentenceRef`），修正 ref 型別（改用 `RefObject<T>` 取代 `RefObject<T | null>`，解決 JSX ref prop 型別不相容，並統一 PlayPage.tsx 中的 `useRef<T>(null)` 宣告），修正 `handleStartPoll` 及 `handleReplaceImageFile` 的函式簽名。`npx tsc --noEmit` 零錯誤，`npx vite build` 成功（472 KB bundle / 1.71s）。PlayPage.tsx 由重構前的 5727 行降至約 3100 行。
