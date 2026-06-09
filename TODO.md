@@ -588,3 +588,11 @@
 - 時間: 2026-06-09 01:40:00 +0800
 - 分支: refactor/playpage-extract-dialogs
 - 內容: PlayPage.tsx 已成長至 5727 行，單一函式元件內含 100+ 個 useState、約 80 個 useCallback/useEffect，且 JSX render 區塊本身就佔約 2800 行，難以閱讀與維護。撰寫分階段重構計畫（階段 1：抽出自包含的 Dialog/Modal 為獨立展示元件；階段 2：把高耦合的狀態群組整理成自訂 Hook，如 useDrawingSync/useFullscreenPlayback/usePollManagement/useVersionHistory；階段 3：拆分主要 JSX render 樹，如全螢幕版面分支、編輯面板），並於本分支完成風險最低的階段 1：把生成設定（`TtsDialog`）、整份簡報圖片風格設定（`ImageStyleDialog`）、選擇重生項目（`RegenAllDialog`）、分享連結（`ShareDialog`）四個內嵌 modal 抽成 `frontend/src/pages/play/` 下接收 props 的展示元件，延續既有的 `formatters`/`PageTimingChips`/`RegenerateProgress` 拆分慣例；同時把 `ImageStyleDialog` 原本內嵌在 `onClick` 中的儲存邏輯抽成 `handleSaveImageStyle` callback。純結構調整不改變任何使用者可見行為，PlayPage.tsx 由 5727 行降為 5464 行。另外在開始重構前，先把分支上既有未提交的 bug 修正（三個 `<DrawingCanvas>` 共用同一個 `drawingCanvasRef` 導致清除手寫等操作可能指向錯誤實例，已拆分為各版面獨立的 ref）提交到 master（commit dfbc259）。前端 `npx tsc --noEmit` 與 `npm run build` 皆通過；因登入需要 Google OAuth、本機無可用測試帳號，未能完成瀏覽器端 e2e 互動驗證，已改以型別檢查、production build 與逐行比對 diff 確認搬移無邏輯變動。階段 2、3 工程量大且狀態間互相依賴複雜，留待後續分支處理。
+
+[x] PlayPage 重構階段 2–3：抽出 useVersionHistory hook、VersionHistoryDialog、ImagePreviewDialog 元件，並將大型 JSX 區塊包成命名 render 輔助函式（完成於分支: refactor/playpage-hooks-and-subcomponents）
+
+## 工作記錄
+
+- 時間: 2026-06-09 12:00:00 +0800
+- 分支: refactor/playpage-hooks-and-subcomponents
+- 內容: 延續 PlayPage 重構。階段 2 抽出 `useVersionHistory` 自訂 Hook（9 個 useState + 3 個 useCallback，封裝版本歷史開啟、預覽、還原邏輯），並同步建立 `VersionHistoryDialog`（15 props 展示元件）與 `ImagePreviewDialog`（4 props 展示元件）；PlayPage.tsx 由 5464 行降至 5333 行。評估另外三個 Hook 候選（usePollManagement、useFullscreenPlayback、useDrawingSync）後發現均因跨領域 setState 深度耦合（特別是 `handleStopPoll` 需觸及 8+ 個不同領域的 setter）無法乾淨抽出，暫緩。階段 3 分析 FullscreenView（需 50+ props）、ChatPanel（`chatInput` state 被 4 個不同 handler 共用）後同樣無法無損抽出，僅完成最乾淨的 ImagePreviewDialog 提取。進一步分析進一步降低 PlayPage 大小的方法後確認：根本瓶頸是共享可變 state——最高 CP 值方案是建立 PlayPageContext（可解鎖 FullscreenView/EditPanel/ThumbnailSidebar 的真正元件提取）；短期可先將 5 個大型 JSX 區塊包成命名 render 輔助函式（renderFullscreenView/renderHeader/renderLeftPanel/renderRightPanel/renderDialogs），使主 return 從 2440 行縮至 130 行，並為後續 Context 方向鋪路。本工作記錄包含此 render 輔助函式重構：5 個 render helpers 定義於 PlayPage 函式閉包內（可直接存取所有 state/handler，無需 props），主 return 精簡為 132 行，TypeScript 零錯誤、Vite production build 通過。
