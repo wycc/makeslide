@@ -620,3 +620,11 @@
 - 時間: 2026-06-09 22:00:00 +0800
 - 分支: refactor/playpage-hooks-and-subcomponents
 - 內容: 繼上次 React 元件分拆後，進一步將 PlayPage.tsx 中剩餘的 useEffect/useCallback 按功能領域抽離為獨立 custom hook，採用 composition root 模式（PlayPage 呼叫各 hook，將回傳物件 spread 進 _ctxValue）。共建立四個 hook：`useRegeneration.ts`（批次重生任務狀態、輪詢、handlers，減少約 350 行）、`useVideoGeneration.ts`（影片產生 busy/url/progress 與輪詢 effects，減少約 60 行）、`usePdfMetadata.ts`（標題、TTS、分享連結、GitHub 同步的 state 與 handlers，減少約 200 行）、`useSlideManagement.ts`（投影片新增/刪除/移動/替換/更新封面，減少約 130 行）。PlayPage.tsx 由約 3100 行降至 2570 行，共減少約 540 行。`npx tsc --noEmit` 零錯誤，`npx vite build` 成功（474 KB bundle / 1.70s）。
+
+[x] PlayPage 重構階段 6（延續）：再抽出五個 custom hooks 並為無法移出的區塊加上架構說明備註（完成於分支: refactor/playpage-hooks-and-subcomponents）
+
+## 工作記錄
+
+- 時間: 2026-06-09 23:30:00 +0800
+- 分支: refactor/playpage-hooks-and-subcomponents
+- 內容: 延續階段 6，再抽出五個 custom hook：`useImageStyle.ts`（整份簡報圖片風格 prompt/templates/dialog，並解決與 useRegeneration 的循環依賴——改傳 MutableRefObject<string> 避免 TDZ）、`useScriptEditor.ts`（逐字稿編輯 state、rewriteScript handlers，含 transcriptFocusMode）、`usePromptAndSource.ts`（頁面 prompt 輸入、來源文字、genPrompts、pagePrompts cache）、`useChatAndImageEdit.ts`（對話問答、inpainting、圖片預覽），以及 `usePagePolls.ts`（投票建立/開始/結束/投票/刪除/選取，含 sync 推送）。PlayPage.tsx 由 2570 行降至約 1980 行（共再減少約 590 行）。對留在 PlayPage 的五個無法抽出區塊加上架構說明備註：`handleEnded`（跨領域：poll/playback/classroomMode）、`handleRetry`（直接操作 audioRef 與 retry token）、`handleRegenerateAudio`（直接 pause/src/load/play audioRef）、`flushLocalDrawingPush`/`pushLocalDrawingChange`（與游標推送共用同一頻道 payload）、sync mega-polling effect（14+ 個跨領域 setter，拆出不減複雜度）。`npx tsc --noEmit` 零錯誤，`npx vite build` 成功（476 KB bundle / 1.74s）。
