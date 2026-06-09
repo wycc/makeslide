@@ -60,7 +60,6 @@ import {
   type PageGenerationPrompt,
   type ShareAccessMode,
 } from '../lib/api';
-import AddPagesFromPromptModal from '../components/AddPagesFromPromptModal';
 import DrawingCanvas, { type DrawingCanvasHandle, type DrawingData, type DrawingStroke } from '../components/DrawingCanvas';
 import {
   DEFAULT_TTS_VOICE_BY_PROVIDER,
@@ -70,13 +69,11 @@ import {
 import { formatDurationMs, formatTime } from './play/formatters';
 import { PageTimingChips } from './play/PageTimingChips';
 import { RegenerateProgress } from './play/RegenerateProgress';
-import { TtsDialog } from './play/TtsDialog';
-import { ImageStyleDialog } from './play/ImageStyleDialog';
-import { RegenAllDialog } from './play/RegenAllDialog';
-import { ShareDialog } from './play/ShareDialog';
 import { useVersionHistory } from './play/useVersionHistory';
 import { VersionHistoryDialog } from './play/VersionHistoryDialog';
 import { ImagePreviewDialog } from './play/ImagePreviewDialog';
+import { PlayPageCtx } from './play/PlayPageContext';
+import { PlayPageDialogs } from './play/PlayPageDialogs';
 import type {
   ChatMessage,
   PdfDetail,
@@ -2891,6 +2888,107 @@ export default function PlayPage() {
       : null;
 
 
+  // ─── Context value ─────────────────────────────────────────────────────────
+  const _ctxValue = {
+    // routing
+    pdfId, currentShareToken, isLockedFullscreen,
+    // deck data
+    detail, setDetail, deckPages, currentPage, currentIdx, setCurrentIdx, totalPages, loadError,
+    // playback
+    isPlaying, setIsPlaying, currentTime, setCurrentTime, duration, setDuration,
+    finished, setFinished, audioMuted, setAudioMuted, effectiveAudioMuted,
+    playbackRate, setPlaybackRate, showSubtitle, setShowSubtitle,
+    playbackSettingsOpen, setPlaybackSettingsOpen, followerAudioUnlocked, setFollowerAudioUnlocked,
+    scripts, setScripts, displayedImageSrc, setDisplayedImageSrc,
+    // playback actions
+    playPause, goPrev, goNext, handleEnded, handleSeek, scheduleAudioReload, clearAudioRetryTimer, reloadDetail,
+    // slide nav
+    audioError, slideBusy, setSlideBusy, slideError, setSlideError,
+    showAddPagesModal, setShowAddPagesModal, draggingPage, setDraggingPage,
+    thumbLoadUntilIdx, setThumbLoadUntilIdx,
+    // script / editor
+    editingScript, setEditingScript, editorError, setEditorError, editorBusy, setEditorBusy,
+    rewriteBusy, rewriteError, setRewriteError, editTab, setEditTab,
+    transcriptFocusMode, setTranscriptFocusMode, handleRewriteScript, handleRetry,
+    // prompt / source
+    promptInput, setPromptInput, sourceTextName, setSourceTextName,
+    sourceTextContent, setSourceTextContent, sourceBusy, sourceMsg, sourceErr,
+    genPrompts, genPromptsLoading, expandedGenPrompt, setExpandedGenPrompt,
+    promptBusy, promptMsg, pagePrompts, handleSavePrompt, handleAddPdfSource, handleAddTxtSource,
+    // chat
+    chatHistory, setChatHistory, chatInput, setChatInput, chatBusy, chatError, hasChatInput,
+    chatPastedImage, chatPastedImageUrl, chatInpaintBusy, chatInpaintError, setChatInpaintError,
+    handleSendChat, handleClearChat, clearChatPastedImage,
+    // image edit / inpaint
+    imageEditSelectMode, setImageEditSelectMode, imageEditRegion, setImageEditRegion,
+    clearImageEditRegion, handleInpaintImage, handleReplaceImageFile,
+    handleRegenerateImageWithPrompt, handleApplyPreviewImage,
+    imagePreviewUrl, imagePreviewPageNumber, imagePreviewOpen, setImagePreviewOpen,
+    // TTS / audio
+    ttsProvider, availableTtsVoices, ttsVoice, setTtsVoice, ttsSpeed, setTtsSpeed,
+    scriptMaxCharsPerPage, setScriptMaxCharsPerPage, hostMode, setHostMode,
+    ttsBusy, ttsMsg, ttsDialogOpen, setTtsDialogOpen, handleSaveTtsSettings, handleRegenerateAudio,
+    // image style
+    imageStyleDialogOpen, setImageStyleDialogOpen, imageStyleTemplates,
+    selectedImageStyleTemplateKey, setSelectedImageStyleTemplateKey,
+    deckImageStylePrompt, setDeckImageStylePrompt, applyImageStyleTemplate,
+    openImageStyleDialog, handleSaveImageStyle,
+    // regen
+    regenAllDialogOpen, setRegenAllDialogOpen, regenAllPrompt, setRegenAllPrompt,
+    regenScriptPrompt, setRegenScriptPrompt, regenScriptMaxCharsPerPage, setRegenScriptMaxCharsPerPage,
+    regenAllBusy, regenAllMsg, setRegenAllMsg, regenOptions, setRegenOptions,
+    regenJob, setRegenJob, regenSelectedPages, setRegenSelectedPages,
+    regenStopBusy, regenRollbackBusy, confirmScriptBusy, regenBannerDismissed, setRegenBannerDismissed,
+    regenAnySelected, regenJobRunning, regenJobTerminal, showRegenBanner,
+    handleConfirmRegenerate, handleStopRegenerate, handleRollbackRegenerate, handleConfirmScript,
+    // slide actions
+    handleAddSlideAfterCurrent, handleDeleteCurrentSlide, handleMoveSlide,
+    handleUpdateCoverFromCurrentPage, handleDeletePoll, handleCreatePoll, handleStartPoll,
+    handleStopPoll, handleVotePoll, handleResetPollVotes, handleSelectDisplayedPoll,
+    // title
+    titleInput, setTitleInput, titleBusy, titleMsg, videoError,
+    shareMessage, setShareMessage, shareError, setShareError, handleSaveTitle, handleRegenerateTitle,
+    // video
+    videoBusy, videoUrl, videoProgressText, handleGenerateVideo,
+    // share / QR
+    shareDialogOpen, setShareDialogOpen, shareUrl, shareAccess, setShareAccess,
+    shareBusy, playQrCodeUrl, handleCreateShareLink, handleShowPlayQrCode,
+    // github
+    githubSyncBusy, githubSyncMessage, githubSyncError, handleSyncToGithub,
+    // poll
+    pagePolls, pollQuestion, setPollQuestion, pollOptionsText, setPollOptionsText,
+    pollBusy, pollError, pollVotes, pollSettingsOpen, setPollSettingsOpen, pollStarted,
+    activePoll, activePollQuestion, syncDisplayedPollId, setSyncDisplayedPollId,
+    syncRealtimePollStarted, syncPollShowResults,
+    // classroom
+    classroomMode, setClassroomMode, classroomAwaitingNext, interactiveMode, setInteractiveMode,
+    // sync
+    syncEnabled, setSyncEnabled, syncRole, setSyncRole, syncError, setSyncError,
+    syncFollowerQuestionInput, setSyncFollowerQuestionInput, syncFollowerQuestions,
+    syncDisplayedQuestionId, syncAiAnswer, syncAiAnswerBusy,
+    syncQuestionInput, setSyncQuestionInput, fullscreenQuestionDialogOpen, setFullscreenQuestionDialogOpen,
+    fullscreenPollControlOpen, setFullscreenPollControlOpen, remoteCursor, syncDrawingState,
+    isSyncFollower, canUseDrawingTools, handleSyncEnabledChange, handleSubmitFollowerQuestion,
+    handleToggleDisplayedQuestion, handleAiAnswerFollowerQuestions,
+    // fullscreen / layout
+    imageOnlyFullscreen, setImageOnlyFullscreen, fullscreenLayout, setFullscreenLayout,
+    slideImageScale, setSlideImageScale, slideImageMaxHeightVh, activeTab, setActiveTab,
+    qaPanelExpanded, setQaPanelExpanded,
+    // drawing
+    drawingMode, setDrawingMode, drawingTool, setDrawingTool, drawingColor, setDrawingColor,
+    drawingLineWidth, setDrawingLineWidth, remoteDrawingData, pushLocalDrawingChange, flushLocalDrawingPush,
+    // computed
+    isReadOnlyProcessing, readOnlyReason, shareIsReadOnly, imageBustKey,
+    withImageBust, withShareToken, targetImageSrc, pageSentences, currentSentence, activeSentenceIdx,
+    // refs
+    audioRef, fullscreenContainerRef, fullscreenImageRef, drawingCanvasSplitRef,
+    drawingCanvasMainRef, drawingCanvasFullscreenRef, sourcePdfInputRef,
+    imageEditDragRef, imageEditRegionOverlayRef, getActiveDrawingCanvas,
+    // wake lock
+    acquireWakeLock, releaseWakeLock,
+  };
+
+
   // ---- Render helpers -------------------------------------------------------
 
   const renderFullscreenView = () => (
@@ -5132,97 +5230,9 @@ export default function PlayPage() {
     </aside>
   );
 
-  const renderDialogs = () => (
-    <>
-      {ttsDialogOpen ? (
-        <TtsDialog
-          ttsProvider={ttsProvider}
-          availableTtsVoices={availableTtsVoices}
-          ttsVoice={ttsVoice}
-          onTtsVoiceChange={setTtsVoice}
-          hostMode={hostMode}
-          onHostModeChange={setHostMode}
-          ttsSpeed={ttsSpeed}
-          onTtsSpeedChange={setTtsSpeed}
-          scriptMaxCharsPerPage={scriptMaxCharsPerPage}
-          onScriptMaxCharsPerPageChange={setScriptMaxCharsPerPage}
-          ttsMsg={ttsMsg}
-          ttsBusy={ttsBusy}
-          isReadOnlyProcessing={isReadOnlyProcessing}
-          onClose={() => setTtsDialogOpen(false)}
-          onSave={() => void handleSaveTtsSettings()}
-        />
-      ) : null}
-
-      {imageStyleDialogOpen ? (
-        <ImageStyleDialog
-          imageStyleTemplates={imageStyleTemplates}
-          selectedImageStyleTemplateKey={selectedImageStyleTemplateKey}
-          onSelectedImageStyleTemplateKeyChange={setSelectedImageStyleTemplateKey}
-          onApplyTemplate={applyImageStyleTemplate}
-          deckImageStylePrompt={deckImageStylePrompt}
-          onDeckImageStylePromptChange={setDeckImageStylePrompt}
-          isReadOnlyProcessing={isReadOnlyProcessing}
-          onClose={() => setImageStyleDialogOpen(false)}
-          onSave={handleSaveImageStyle}
-        />
-      ) : null}
-      {regenAllDialogOpen ? (
-        <RegenAllDialog
-          deckPagesCount={deckPages.length}
-          regenSelectedPages={regenSelectedPages}
-          regenOptions={regenOptions}
-          onRegenOptionsChange={setRegenOptions}
-          regenAllPrompt={regenAllPrompt}
-          onRegenAllPromptChange={setRegenAllPrompt}
-          regenScriptPrompt={regenScriptPrompt}
-          onRegenScriptPromptChange={setRegenScriptPrompt}
-          regenScriptMaxCharsPerPage={regenScriptMaxCharsPerPage}
-          onRegenScriptMaxCharsPerPageChange={setRegenScriptMaxCharsPerPage}
-          regenJob={regenJob}
-          regenAllMsg={regenAllMsg}
-          regenAllBusy={regenAllBusy}
-          regenJobRunning={regenJobRunning}
-          regenAnySelected={regenAnySelected}
-          isReadOnlyProcessing={isReadOnlyProcessing}
-          onClose={() => {
-            setRegenAllDialogOpen(false);
-            if (!regenJobRunning) {
-              setRegenJob(null);
-              setRegenAllMsg(null);
-            }
-          }}
-          onConfirm={() => void handleConfirmRegenerate()}
-        />
-      ) : null}
-
-      {shareDialogOpen ? (
-        <ShareDialog
-          shareUrl={shareUrl}
-          onCopySuccess={() => {
-            setShareMessage('已複製分享連結');
-            setShareError(null);
-          }}
-          onCopyError={() => setShareError('瀏覽器不允許自動複製，請手動複製。')}
-          onClose={() => setShareDialogOpen(false)}
-        />
-      ) : null}
-      {showAddPagesModal && pdfId ? (
-        <AddPagesFromPromptModal
-          pdfId={pdfId}
-          insertAfterPage={currentPage?.page_number ?? totalPages}
-          onClose={() => setShowAddPagesModal(false)}
-          onDone={async (totalPagesAfter) => {
-            setShowAddPagesModal(false);
-            await reloadDetail();
-            setCurrentIdx(totalPagesAfter - 1);
-          }}
-        />
-      ) : null}
-    </>
-  );
 
   return (
+    <PlayPageCtx.Provider value={_ctxValue}>
     <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
       {imageOnlyFullscreen ? renderFullscreenView() : null}
 
@@ -5350,7 +5360,8 @@ export default function PlayPage() {
         {renderRightPanel()}
       </main>
 
-      {renderDialogs()}
+      <PlayPageDialogs />
     </div>
+    </PlayPageCtx.Provider>
   );
 }
