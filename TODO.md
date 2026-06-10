@@ -633,6 +633,7 @@
 
 [x] 當我們複制一個簡報時，需要為新的簡報指定成目前的使用者。（完成於分支: feature/duplicate-assign-current-user-20260610）
 [x] 生成語音時，應該要有單人或雙人模式的選擇（完成於分支: feature/dual-host-openai-tts-20260610）
+[x] 在重生時也需要雙人模式（完成於分支: feature/regen-host-mode-selector-20260610）
 
 ## 工作記錄
 
@@ -643,3 +644,7 @@
 - 時間: 2026-06-10 09:15:00 +0800
 - 分支: feature/dual-host-openai-tts-20260610
 - 內容: 將原本只有 Gemini TTS 才有的「單人旁白／雙人對談」主持模式選擇擴展到 OpenAI TTS provider。新增 `backend/prompts/generate-script-openai-dual.md` 提示範本，產生帶有 `[[ 語氣 ]]Speaker 1: ...` / `[[ 語氣 ]]Speaker 2: ...` 格式的雙人逐字稿（沿用既有 `splitByToneMarkers` 分段邏輯）；`generateScript.ts`（`buildSystemPrompt`、`buildDeckRewriteSystemPrompt`）與 `page-operations.ts`（`buildRewriteScriptSystemPrompt`）在 `host_mode === 'dual'` 且 provider 為 openai 時改用此範本與對應改寫規則。`synthesizeAudio.ts` 新增 `splitSpeakerPrefix()`，於 OpenAI 模式下逐段偵測並去除「Speaker 1:/Speaker 2:」標籤，並依講者切換為新增的 `openai_tts_speaker1_voice`/`openai_tts_speaker2_voice` 設定（未設定則沿用主聲音）。設定面新增對應欄位並貫穿 `aiSettings.ts`、`/api/system/ai-settings`（admin.ts/shared.ts）、前端 `system.ts`、`SettingsPage.tsx`（新增 OpenAI Speaker 1/2 聲音下拉選單）與中英文 i18n。`TtsDialog.tsx` 移除原本僅限 Gemini 才顯示的「主持模式」切換限制，OpenAI 使用者現在也能選擇單人/雙人模式。後端與前端 `npx tsc --noEmit`、`npm run build` 皆通過；`npm test` 26 通過/18 失敗，與套用變更前基線相同（既存、與本次變更無關的 401 認證測試失敗）。
+
+- 時間: 2026-06-10 10:05:00 +0800
+- 分支: feature/regen-host-mode-selector-20260610
+- 內容: 「在重生時也需要雙人模式」：分析後確認後端 `generateScript()`/`synthesizeAudio()` 在重生流程（`runRegenerateScripts`/`runRegenerateAudio`）中本就會即時讀取 `getPdfHostMode(pdfId)` 並依「Speaker 1:/2:」前綴切換語音，不需額外修改；缺口在前端「選擇重生項目」對話框完全沒有主持模式 UI，使用者必須先另外開啟「生成設定」對話框切換並儲存才會套用。修正：`RegenAllDialog.tsx` 在勾選逐字稿或語音時顯示「主持模式」單人旁白／雙人對談切換按鈕（樣式比照 `TtsDialog.tsx`）；`useRegeneration.ts` 新增 `hostMode`/`scriptMaxCharsPerPage`/`setDetail` 參數，於 `handleConfirmRegenerate` 在啟動重生任務前呼叫 `updatePdfScriptSettings()` 持久化所選主持模式；`PlayPageDialogs.tsx`、`PlayPage.tsx` 完成 props/參數串接（沿用既有 `usePdfMetadata` 的 `hostMode`/`scriptMaxCharsPerPage` 狀態）。前端 `npx tsc --noEmit`、`npm run build` 皆通過；後端 `npm test` 26 通過/18 失敗，與套用變更前基線相同（既存、與本次變更無關的 401 認證測試失敗）。
