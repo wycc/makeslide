@@ -22,7 +22,7 @@ import {
   storeLanguageSettings,
   useI18n,
 } from '../i18n';
-import { GEMINI_TTS_VOICES, OPENAI_TTS_VOICES, geminiVoiceLabel } from '../lib/ttsVoices';
+import { GEMINI_TTS_VOICES, OPENAI_TTS_VOICES, geminiVoiceLabel, openaiVoiceLabel } from '../lib/ttsVoices';
 
 export default function SettingsPage() { 
   const LOCAL_USER_CODE_KEY = 'makeslide.user_code';
@@ -593,7 +593,7 @@ export default function SettingsPage() {
               >
                 <option value="">{t('settings.openaiSpeakerVoiceInherit')}</option>
                 {OPENAI_TTS_VOICES.map((v) => (
-                  <option key={v} value={v}>{v}</option>
+                  <option key={v} value={v}>{openaiVoiceLabel(v)}</option>
                 ))}
               </select>
             </label>
@@ -610,7 +610,7 @@ export default function SettingsPage() {
               >
                 <option value="">{t('settings.openaiSpeakerVoiceInherit')}</option>
                 {OPENAI_TTS_VOICES.map((v) => (
-                  <option key={v} value={v}>{v}</option>
+                  <option key={v} value={v}>{openaiVoiceLabel(v)}</option>
                 ))}
               </select>
             </label>
