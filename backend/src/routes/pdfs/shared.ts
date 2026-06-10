@@ -314,6 +314,8 @@ export const UpdateSystemAiSettingsBodySchema = z.object({
   gemini_tts_speaker2: z.string().optional(),
   gemini_tts_speaker1_voice: z.string().optional(),
   gemini_tts_speaker2_voice: z.string().optional(),
+  openai_tts_speaker1_voice: z.string().optional(),
+  openai_tts_speaker2_voice: z.string().optional(),
   user_code: z.string().max(128).optional(),
   ui_language: z.enum(['zh-TW', 'en']).optional(),
   content_language: z.enum(['zh-TW', 'en']).optional(),

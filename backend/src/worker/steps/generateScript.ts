@@ -337,11 +337,14 @@ function buildSystemPrompt(
     '7. 輸出時保留段落換行，方便 TTS 產生停頓。',
   ];
 
+  const isOpenaiDual = hostMode === 'dual';
   const base = [
     renderPromptTemplate(
       loadPromptTemplate(
-        'backend/prompts/generate-script-openai.md',
-        `你是一位專業的中文簡報講師與旁白配音員。你的任務：生成繁體中文逐字稿（目標約 ${targetChars} 字，必須控制在 ${bounds.min}～${bounds.max} 字之間）。請回傳 JSON：{"script":"..."}`,
+        isOpenaiDual ? 'backend/prompts/generate-script-openai-dual.md' : 'backend/prompts/generate-script-openai.md',
+        isOpenaiDual
+          ? `你是一位雙人 Podcast 節目企劃與逐字稿編輯。你的任務：生成繁體中文雙人對談逐字稿（目標約 ${targetChars} 字，必須控制在 ${bounds.min}～${bounds.max} 字之間），由 Speaker 1 與 Speaker 2 輪流對話。請回傳 JSON：{"script":"..."}`
+          : `你是一位專業的中文簡報講師與旁白配音員。你的任務：生成繁體中文逐字稿（目標約 ${targetChars} 字，必須控制在 ${bounds.min}～${bounds.max} 字之間）。請回傳 JSON：{"script":"..."}`,
       ),
       { target_chars: String(targetChars), min_chars: String(bounds.min), max_chars: String(bounds.max) },
     ),
@@ -446,6 +449,38 @@ function buildDeckRewriteSystemPrompt(
         if (speaker2) base.push(`- Speaker 2 人設：${speaker2}`);
       }
     }
+    if (sanitized) {
+      base.push('');
+      base.push('【使用者風格要求】');
+      base.push(sanitized);
+    }
+    return base.join('\n');
+  }
+
+  if (hostMode === 'dual') {
+    const base = [
+      '你是逐字稿編修助理。',
+      '',
+      '任務：根據「全頁逐字稿草稿」，重新潤飾每一頁，產出適合 TTS 朗讀的「雙人 Podcast 對談」逐字稿，由 Speaker 1 與 Speaker 2 輪流對話。',
+      '',
+      '要求：',
+      '1. 使用自然口語對話，不要像書面文章。',
+      '2. 每句話盡量短，雙方互有來回、互相提問與回應，不要其中一人長篇獨白。',
+      '3. 重要概念前後加入停頓。',
+      '4. 加入少量「對」、「沒錯」、「那我們來看」等自然回應與轉場。',
+      '5. 避免過度誇張，不要像廣告配音。',
+      '6. 語氣自然，像兩位主持人在錄音間聊天討論。',
+      '7. 輸出時保留段落換行，方便 TTS 產生停頓。',
+      '規則：',
+      '1. 必須輸出 JSON：{"pages":[{"page_number":1,"script":"..."}, ...]}，不要其他欄位。',
+      '2. pages 的數量與 page_number 必須和輸入完全一致，不可增刪頁。',
+      `3. 每頁字數必須控制在 ${bounds.min}～${bounds.max} 字之間（目標和原稿越接近越好）：內容多時優先濃縮挑重點，**不可超過 ${bounds.max} 字上限**；內容偏少時可適度展開、補足語氣與轉場，不要大幅刪減原意，**也不可低於 ${bounds.min} 字下限**。`,
+      '4. 可以調整句子銜接與語氣，但不要憑空捏造與投影片無關的新事實。',
+      '5. 每頁腳本仍要可獨立朗讀，並在頁與頁之間有連續性。',
+      '6. 避免使用「這一頁／本頁／此頁／本張」等單頁指稱，讓整份節目聽感更連續。',
+      '7. 每一段都要使用「語氣分段標記 + 講者標籤」格式：[[ 語氣描述 ]]Speaker 1: 對白文字 或 [[ 語氣描述 ]]Speaker 2: 對白文字；每頁至少 2 段，且 Speaker 1 與 Speaker 2 都要出現至少一次。',
+    ];
+    const sanitized = sanitiseUserPrompt(userPrompt);
     if (sanitized) {
       base.push('');
       base.push('【使用者風格要求】');

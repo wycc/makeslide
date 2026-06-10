@@ -139,8 +139,10 @@ function buildRewriteScriptSystemPrompt(params: {
   const base = [
     renderPromptTemplate(
       loadPromptTemplate(
-        'backend/prompts/generate-script-openai.md',
-        `你是一位專業的中文簡報講師與旁白配音員。你的任務：生成繁體中文逐字稿（目標約 ${params.targetChars} 字，必須控制在 ${charBounds.min}～${charBounds.max} 字之間）。請回傳 JSON：{"script":"..."}`,
+        isDual ? 'backend/prompts/generate-script-openai-dual.md' : 'backend/prompts/generate-script-openai.md',
+        isDual
+          ? `你是一位雙人 Podcast 節目企劃與逐字稿編輯。你的任務：生成繁體中文雙人對談逐字稿（目標約 ${params.targetChars} 字，必須控制在 ${charBounds.min}～${charBounds.max} 字之間），由 Speaker 1 與 Speaker 2 輪流對話。請回傳 JSON：{"script":"..."}`
+          : `你是一位專業的中文簡報講師與旁白配音員。你的任務：生成繁體中文逐字稿（目標約 ${params.targetChars} 字，必須控制在 ${charBounds.min}～${charBounds.max} 字之間）。請回傳 JSON：{"script":"..."}`,
       ),
       { target_chars: String(params.targetChars), min_chars: String(charBounds.min), max_chars: String(charBounds.max) },
     ),
