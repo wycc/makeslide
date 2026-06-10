@@ -81,6 +81,8 @@ export function PlayPageDialogs() {
           onRegenScriptPromptChange={setRegenScriptPrompt}
           regenScriptMaxCharsPerPage={regenScriptMaxCharsPerPage}
           onRegenScriptMaxCharsPerPageChange={setRegenScriptMaxCharsPerPage}
+          hostMode={hostMode}
+          onHostModeChange={setHostMode}
           regenJob={regenJob}
           regenAllMsg={regenAllMsg}
           regenAllBusy={regenAllBusy}

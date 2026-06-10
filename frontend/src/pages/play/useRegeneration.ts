@@ -7,8 +7,9 @@ import {
   fetchRegenerateStatus,
   rollbackRegenerate,
   startRegenerateJob,
+  updatePdfScriptSettings,
 } from '../../lib/api';
-import type { RegenJobState } from '../../types';
+import type { PdfDetail, RegenJobState } from '../../types';
 
 export type RegenOptions = { image: boolean; script: boolean; audio: boolean };
 
@@ -20,6 +21,9 @@ interface UseRegenerationParams {
   deckImageStylePromptRef: MutableRefObject<string>;
   reloadDetail: () => Promise<void>;
   setCurrentIdx: Dispatch<SetStateAction<number>>;
+  hostMode: 'solo' | 'dual';
+  scriptMaxCharsPerPage: number | null;
+  setDetail: Dispatch<SetStateAction<PdfDetail | null>>;
 }
 
 export interface RegenerationState {
@@ -64,6 +68,9 @@ export function useRegeneration({
   deckImageStylePromptRef,
   reloadDetail,
   setCurrentIdx,
+  hostMode,
+  scriptMaxCharsPerPage,
+  setDetail,
 }: UseRegenerationParams): RegenerationState {
   const [regenAllDialogOpen, setRegenAllDialogOpen] = useState(false);
   const [regenAllPrompt, setRegenAllPrompt] = useState(
@@ -220,6 +227,18 @@ export function useRegeneration({
         ? Array.from(regenSelectedPages).sort((a, b) => a - b)
         : undefined;
     try {
+      if (regenOptions.script || regenOptions.audio) {
+        const scriptRes = await updatePdfScriptSettings(pdfId, scriptMaxCharsPerPage, hostMode);
+        setDetail((prev) =>
+          prev
+            ? {
+                ...prev,
+                host_mode: hostMode,
+                script_max_chars_per_page: scriptRes.script_max_chars_per_page,
+              }
+            : prev,
+        );
+      }
       const started = await startRegenerateJob(pdfId, {
         scripts: regenOptions.script
           ? {
@@ -257,6 +276,9 @@ export function useRegeneration({
     currentIdx,
     isReadOnlyProcessing,
     regenSelectedPages,
+    hostMode,
+    scriptMaxCharsPerPage,
+    setDetail,
     // deckImageStylePromptRef omitted: ref 本身穩定，透過 .current 讀最新值
   ]);
 

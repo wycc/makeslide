@@ -1465,6 +1465,9 @@ export default function PlayPage() {
     deckImageStylePromptRef,
     reloadDetail,
     setCurrentIdx,
+    hostMode: metaState.hostMode,
+    scriptMaxCharsPerPage: metaState.scriptMaxCharsPerPage,
+    setDetail,
   });
   const { setRegenAllMsg } = regenState;
 
