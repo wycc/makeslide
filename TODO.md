@@ -634,6 +634,7 @@
 [x] 當我們複制一個簡報時，需要為新的簡報指定成目前的使用者。（完成於分支: feature/duplicate-assign-current-user-20260610）
 [x] 生成語音時，應該要有單人或雙人模式的選擇（完成於分支: feature/dual-host-openai-tts-20260610）
 [x] 在重生時也需要雙人模式（完成於分支: feature/regen-host-mode-selector-20260610）
+[x] OpenAI 的雙人模式在設定中加上一組 OpenAI 的人設設定（完成於分支: feature/openai-host-persona-settings-20260610）
 
 ## 工作記錄
 
@@ -648,3 +649,7 @@
 - 時間: 2026-06-10 10:05:00 +0800
 - 分支: feature/regen-host-mode-selector-20260610
 - 內容: 「在重生時也需要雙人模式」：分析後確認後端 `generateScript()`/`synthesizeAudio()` 在重生流程（`runRegenerateScripts`/`runRegenerateAudio`）中本就會即時讀取 `getPdfHostMode(pdfId)` 並依「Speaker 1:/2:」前綴切換語音，不需額外修改；缺口在前端「選擇重生項目」對話框完全沒有主持模式 UI，使用者必須先另外開啟「生成設定」對話框切換並儲存才會套用。修正：`RegenAllDialog.tsx` 在勾選逐字稿或語音時顯示「主持模式」單人旁白／雙人對談切換按鈕（樣式比照 `TtsDialog.tsx`）；`useRegeneration.ts` 新增 `hostMode`/`scriptMaxCharsPerPage`/`setDetail` 參數，於 `handleConfirmRegenerate` 在啟動重生任務前呼叫 `updatePdfScriptSettings()` 持久化所選主持模式；`PlayPageDialogs.tsx`、`PlayPage.tsx` 完成 props/參數串接（沿用既有 `usePdfMetadata` 的 `hostMode`/`scriptMaxCharsPerPage` 狀態）。前端 `npx tsc --noEmit`、`npm run build` 皆通過；後端 `npm test` 26 通過/18 失敗，與套用變更前基線相同（既存、與本次變更無關的 401 認證測試失敗）。
+
+- 時間: 2026-06-10 10:30:00 +0800
+- 分支: feature/openai-host-persona-settings-20260610
+- 內容: 「OpenAI 的雙人模式在設定中加上一組 OpenAI 的人設設定」：上一個分支只新增了 OpenAI 雙人模式的 Speaker 1/2 聲音選擇，沒有像 Gemini 一樣有 Speaker 人設文字欄位。新增 `OPENAI_TTS_SPEAKER1`/`OPENAI_TTS_SPEAKER2` 帳號層級設定，貫穿 `aiSettings.ts`（`PerAccountAiSettings`、`basePerAccountSettings`、`loadPerAccountOverrides`、`PER_ACCOUNT_ENV_PAIRS`）、`/api/system/ai-settings`（`shared.ts` 的 `UpdateSystemAiSettingsBodySchema`、`admin.ts` 的 GET 回應與 PATCH 處理）、前端 `system.ts` 型別。`generateScript.ts` 的 `buildSystemPrompt()` 新增 `openaiSpeaker1Persona`/`openaiSpeaker2Persona` 參數，在 `host_mode === 'dual'` 且 provider 為 openai 時，重用既有的 `gemini-speaker-persona-block.md` 範本（內容本就是通用的「雙主持人角色人設」區塊，與 provider 無關）插入 Speaker 1/2 人設；`buildDeckRewriteSystemPrompt()` 的 OpenAI 雙人重排分支同樣加入人設區塊。`page-operations.ts` 的 `buildRewriteScriptSystemPrompt()` 在單頁逐字稿改寫的 OpenAI 雙人模式下也套用相同人設區塊。前端 `SettingsPage.tsx` 在「OpenAI Speaker 1/2 聲音」下拉選單前新增對應的人設文字輸入框，並補上中英文 i18n（`settings.openaiSpeaker1/2` 與 placeholder）。後端 `npx tsc --noEmit`、`npm run build` 皆通過；前端 `npx tsc --noEmit`、`npm run build` 皆通過；後端 `npm test` 26 通過/18 失敗，與套用變更前基線相同（既存、與本次變更無關的 401 認證測試失敗）。
