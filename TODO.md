@@ -635,6 +635,7 @@
 [x] 生成語音時，應該要有單人或雙人模式的選擇（完成於分支: feature/dual-host-openai-tts-20260610）
 [x] 在重生時也需要雙人模式（完成於分支: feature/regen-host-mode-selector-20260610）
 [x] OpenAI 的雙人模式在設定中加上一組 OpenAI 的人設設定（完成於分支: feature/openai-host-persona-settings-20260610）
+[x] OpenAI 語音選單加上男聲/女聲標示，比照 Gemini 聲音選單（完成於分支: feature/openai-voice-gender-labels-20260610）
 
 ## 工作記錄
 
@@ -653,3 +654,7 @@
 - 時間: 2026-06-10 10:30:00 +0800
 - 分支: feature/openai-host-persona-settings-20260610
 - 內容: 「OpenAI 的雙人模式在設定中加上一組 OpenAI 的人設設定」：上一個分支只新增了 OpenAI 雙人模式的 Speaker 1/2 聲音選擇，沒有像 Gemini 一樣有 Speaker 人設文字欄位。新增 `OPENAI_TTS_SPEAKER1`/`OPENAI_TTS_SPEAKER2` 帳號層級設定，貫穿 `aiSettings.ts`（`PerAccountAiSettings`、`basePerAccountSettings`、`loadPerAccountOverrides`、`PER_ACCOUNT_ENV_PAIRS`）、`/api/system/ai-settings`（`shared.ts` 的 `UpdateSystemAiSettingsBodySchema`、`admin.ts` 的 GET 回應與 PATCH 處理）、前端 `system.ts` 型別。`generateScript.ts` 的 `buildSystemPrompt()` 新增 `openaiSpeaker1Persona`/`openaiSpeaker2Persona` 參數，在 `host_mode === 'dual'` 且 provider 為 openai 時，重用既有的 `gemini-speaker-persona-block.md` 範本（內容本就是通用的「雙主持人角色人設」區塊，與 provider 無關）插入 Speaker 1/2 人設；`buildDeckRewriteSystemPrompt()` 的 OpenAI 雙人重排分支同樣加入人設區塊。`page-operations.ts` 的 `buildRewriteScriptSystemPrompt()` 在單頁逐字稿改寫的 OpenAI 雙人模式下也套用相同人設區塊。前端 `SettingsPage.tsx` 在「OpenAI Speaker 1/2 聲音」下拉選單前新增對應的人設文字輸入框，並補上中英文 i18n（`settings.openaiSpeaker1/2` 與 placeholder）。後端 `npx tsc --noEmit`、`npm run build` 皆通過；前端 `npx tsc --noEmit`、`npm run build` 皆通過；後端 `npm test` 26 通過/18 失敗，與套用變更前基線相同（既存、與本次變更無關的 401 認證測試失敗）。
+
+- 時間: 2026-06-10 13:10:00 +0800
+- 分支: feature/openai-voice-gender-labels-20260610
+- 內容: 承接上一個分支「OpenAI 的雙人模式在設定中加上一組 OpenAI 的人設設定」之後，使用者詢問「openai 的聲音是否也和 gemini 一樣，有些適合男聲，有些適合女聲」。確認 `frontend/src/lib/ttsVoices.ts` 原本只有 `GEMINI_TTS_VOICE_GENDER`/`geminiVoiceLabel()` 為 Gemini 聲音標示「(男)/(女)」，OpenAI 聲音選單一律顯示原始名稱。新增對等的 `OPENAI_TTS_VOICE_GENDER`（依 OpenAI 官方語音範例之常見性別印象近似分類：alloy/ash/ballad/echo/fable/onyx/verse 標為男聲，coral/nova/sage/shimmer 標為女聲，並加註 OpenAI 並未官方以性別分類，僅供挑選 Speaker 1/2 聲音參考）與 `openaiVoiceLabel()`，套用至 `TtsDialog.tsx` 主聲音選單（依 provider 分流 geminiVoiceLabel/openaiVoiceLabel）、`SettingsPage.tsx` 的 OpenAI Speaker 1/2 聲音下拉選單，以及 `PromptModal.tsx` 的聲音選單（原本兩種 provider 皆無性別標示，一併補上 provider 分流標示以維持一致性）。前端 `npx tsc --noEmit`、`npm run build` 皆通過。
