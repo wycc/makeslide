@@ -658,3 +658,13 @@
 - 時間: 2026-06-10 13:10:00 +0800
 - 分支: feature/openai-voice-gender-labels-20260610
 - 內容: 承接上一個分支「OpenAI 的雙人模式在設定中加上一組 OpenAI 的人設設定」之後，使用者詢問「openai 的聲音是否也和 gemini 一樣，有些適合男聲，有些適合女聲」。確認 `frontend/src/lib/ttsVoices.ts` 原本只有 `GEMINI_TTS_VOICE_GENDER`/`geminiVoiceLabel()` 為 Gemini 聲音標示「(男)/(女)」，OpenAI 聲音選單一律顯示原始名稱。新增對等的 `OPENAI_TTS_VOICE_GENDER`（依 OpenAI 官方語音範例之常見性別印象近似分類：alloy/ash/ballad/echo/fable/onyx/verse 標為男聲，coral/nova/sage/shimmer 標為女聲，並加註 OpenAI 並未官方以性別分類，僅供挑選 Speaker 1/2 聲音參考）與 `openaiVoiceLabel()`，套用至 `TtsDialog.tsx` 主聲音選單（依 provider 分流 geminiVoiceLabel/openaiVoiceLabel）、`SettingsPage.tsx` 的 OpenAI Speaker 1/2 聲音下拉選單，以及 `PromptModal.tsx` 的聲音選單（原本兩種 provider 皆無性別標示，一併補上 provider 分流標示以維持一致性）。前端 `npx tsc --noEmit`、`npm run build` 皆通過。
+
+# 2026-6-11
+
+[x] 在雙人模式中，提示應使用一問一答的方式讓二個人對談，而不是一人念一段（完成於分支: feature/dual-mode-qa-dialogue-prompt-20260611）
+
+## 工作記錄
+
+- 時間: 2026-06-11 00:00:00 +0800
+- 分支: feature/dual-mode-qa-dialogue-prompt-20260611
+- 內容: 「在雙人模式中，提示應使用一問一答的方式讓二個人對談，而不是一人念一段」：雙人對談逐字稿原本只要求「每句話盡量短，雙方互有來回、互相提問與回應，不要其中一人長篇獨白」，但 LLM 仍常產出一人念一整段內容、另一人僅簡短回應的形式。修正涵蓋初次生成、單頁改寫、整份重排三條路徑、OpenAI 與 Gemini 兩種 TTS provider：`backend/prompts/generate-script-openai-dual.md`（OpenAI 雙人初次生成 + 單頁改寫共用範本）將「互有來回」規則改為明確的「採一問一答方式進行：由一方提出問題、疑惑、好奇點或切入點，另一方簡短回答、解說或回應」，並把段落數下限由 2 段提高為 4 段、要求 Speaker 1/2 交替輪流、避免同一位講者連續出現兩段以上；`backend/prompts/generate-script-gemini.md`（Gemini 雙人初次生成 + 單頁改寫共用範本）與 `backend/prompts/rewrite-script-gemini.md`（Gemini 整份重排）新增相同的一問一答規則；`backend/src/worker/steps/generateScript.ts` 中 OpenAI 雙人「整份重排」的內嵌系統提示（`buildDeckRewriteSystemPrompt`）同步套用一問一答規則與「至少 4 段、交替輪流」的分段要求。後端 `npx tsc --noEmit` 通過。
