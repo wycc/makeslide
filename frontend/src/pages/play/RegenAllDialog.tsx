@@ -18,6 +18,8 @@ interface RegenAllDialogProps {
   onRegenScriptPromptChange: (value: string) => void;
   regenScriptMaxCharsPerPage: number;
   onRegenScriptMaxCharsPerPageChange: (value: number) => void;
+  hostMode: 'solo' | 'dual';
+  onHostModeChange: (mode: 'solo' | 'dual') => void;
   regenJob: RegenJobState | null;
   regenAllMsg: string | null;
   regenAllBusy: boolean;
@@ -39,6 +41,8 @@ export function RegenAllDialog({
   onRegenScriptPromptChange,
   regenScriptMaxCharsPerPage,
   onRegenScriptMaxCharsPerPageChange,
+  hostMode,
+  onHostModeChange,
   regenJob,
   regenAllMsg,
   regenAllBusy,
@@ -97,6 +101,37 @@ export function RegenAllDialog({
             <span>語音</span>
           </label>
         </div>
+        {regenOptions.script || regenOptions.audio ? (
+          <div className="mb-3 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-slate-300">主持模式</span>
+              <div className="flex overflow-hidden rounded border border-slate-700">
+                {([
+                  ['solo', '單人旁白'],
+                  ['dual', '雙人對談'],
+                ] as const).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => onHostModeChange(mode)}
+                    disabled={disabled}
+                    aria-pressed={hostMode === mode}
+                    className={`px-3 py-1 text-xs ${
+                      hostMode === mode
+                        ? 'bg-cyan-500/25 font-medium text-cyan-100'
+                        : 'text-slate-300 hover:bg-slate-800'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <p className="mt-1 text-xs text-slate-500">
+              重生逐字稿／語音時套用此主持模式；雙人對談會使用 Speaker 1／2 人設與聲音設定。
+            </p>
+          </div>
+        ) : null}
         {regenOptions.image ? (
           <div className="mb-2">
             <label className="mb-1 block text-xs text-slate-400">圖檔重生提示詞</label>
