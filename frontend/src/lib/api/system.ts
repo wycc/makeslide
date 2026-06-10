@@ -46,6 +46,8 @@ export interface SystemAiSettings {
   gemini_tts_speaker2?: string;
   gemini_tts_speaker1_voice?: string;
   gemini_tts_speaker2_voice?: string;
+  openai_tts_speaker1?: string;
+  openai_tts_speaker2?: string;
   openai_tts_speaker1_voice?: string;
   openai_tts_speaker2_voice?: string;
   user_code?: string;
@@ -75,6 +77,8 @@ export interface UpdateSystemAiSettingsPayload {
   gemini_tts_speaker2?: string;
   gemini_tts_speaker1_voice?: string;
   gemini_tts_speaker2_voice?: string;
+  openai_tts_speaker1?: string;
+  openai_tts_speaker2?: string;
   openai_tts_speaker1_voice?: string;
   openai_tts_speaker2_voice?: string;
   user_code?: string;
