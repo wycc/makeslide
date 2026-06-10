@@ -628,3 +628,13 @@
 - 時間: 2026-06-09 23:30:00 +0800
 - 分支: refactor/playpage-hooks-and-subcomponents
 - 內容: 延續階段 6，再抽出五個 custom hook：`useImageStyle.ts`（整份簡報圖片風格 prompt/templates/dialog，並解決與 useRegeneration 的循環依賴——改傳 MutableRefObject<string> 避免 TDZ）、`useScriptEditor.ts`（逐字稿編輯 state、rewriteScript handlers，含 transcriptFocusMode）、`usePromptAndSource.ts`（頁面 prompt 輸入、來源文字、genPrompts、pagePrompts cache）、`useChatAndImageEdit.ts`（對話問答、inpainting、圖片預覽），以及 `usePagePolls.ts`（投票建立/開始/結束/投票/刪除/選取，含 sync 推送）。PlayPage.tsx 由 2570 行降至約 1980 行（共再減少約 590 行）。對留在 PlayPage 的五個無法抽出區塊加上架構說明備註：`handleEnded`（跨領域：poll/playback/classroomMode）、`handleRetry`（直接操作 audioRef 與 retry token）、`handleRegenerateAudio`（直接 pause/src/load/play audioRef）、`flushLocalDrawingPush`/`pushLocalDrawingChange`（與游標推送共用同一頻道 payload）、sync mega-polling effect（14+ 個跨領域 setter，拆出不減複雜度）。`npx tsc --noEmit` 零錯誤，`npx vite build` 成功（476 KB bundle / 1.74s）。
+
+# 2026-6-10
+
+[x] 當我們複制一個簡報時，需要為新的簡報指定成目前的使用者。（完成於分支: feature/duplicate-assign-current-user-20260610）
+
+## 工作記錄
+
+- 時間: 2026-06-10 08:45:00 +0800
+- 分支: feature/duplicate-assign-current-user-20260610
+- 內容: 修正 `POST /api/pdfs/:id/duplicate`：複製簡報時，新簡報的 `owner_sub` 與 `visibility` 原本沿用來源 metadata.json 的舊值寫入新的 metadata，但 `pdfs` 資料表的 INSERT 完全沒有寫入這兩欄，導致新簡報的 `owner_sub` 為 NULL；而 `canReadPdf()` 對 `owner_sub` 為 NULL 的簡報一律回傳不可讀，造成複製出來的簡報完全消失於首頁列表。修正後在 `upload.ts` 的 duplicate 端點以 `ownerSubFromRequest(request)` 取得目前登入使用者的 sub，寫入新簡報的 `pdfs.owner_sub`/`metadata.json.owner_sub`，並將 `visibility` 重設為 `'private'`（複製後一律成為使用者自己的私人副本），同時補上回傳用 SELECT 的 `category`/`owner_sub`/`visibility` 欄位使回應內容與資料庫一致。後端 `npx tsc --noEmit`、`npm run build` 皆通過；`npm test` 26 通過/18 失敗，與套用變更前完全相同（皆為既存、與本次變更無關的 401 認證測試失敗）。
