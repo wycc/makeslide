@@ -24,6 +24,8 @@ export interface PerAccountAiSettings {
   geminiTtsSpeaker2: string;
   geminiTtsSpeaker1Voice: string;
   geminiTtsSpeaker2Voice: string;
+  openaiTtsSpeaker1Voice: string;
+  openaiTtsSpeaker2Voice: string;
   userCode: string;
   uiLanguage: AppLanguage;
   contentLanguage: AppLanguage;
@@ -131,6 +133,8 @@ function basePerAccountSettings(): PerAccountAiSettings {
     geminiTtsSpeaker2: process.env.GEMINI_TTS_SPEAKER2?.trim() || '',
     geminiTtsSpeaker1Voice: process.env.GEMINI_TTS_SPEAKER1_VOICE?.trim() || '',
     geminiTtsSpeaker2Voice: process.env.GEMINI_TTS_SPEAKER2_VOICE?.trim() || '',
+    openaiTtsSpeaker1Voice: process.env.OPENAI_TTS_SPEAKER1_VOICE?.trim() || '',
+    openaiTtsSpeaker2Voice: process.env.OPENAI_TTS_SPEAKER2_VOICE?.trim() || '',
     userCode: process.env.USER_CODE?.trim() || '',
     uiLanguage: process.env.UI_LANGUAGE === 'en' ? 'en' : 'zh-TW',
     contentLanguage: process.env.CONTENT_LANGUAGE === 'en' ? 'en' : 'zh-TW',
@@ -155,6 +159,8 @@ function loadPerAccountOverrides(accountId: string): Partial<PerAccountAiSetting
     geminiTtsSpeaker2: values.GEMINI_TTS_SPEAKER2,
     geminiTtsSpeaker1Voice: values.GEMINI_TTS_SPEAKER1_VOICE,
     geminiTtsSpeaker2Voice: values.GEMINI_TTS_SPEAKER2_VOICE,
+    openaiTtsSpeaker1Voice: values.OPENAI_TTS_SPEAKER1_VOICE,
+    openaiTtsSpeaker2Voice: values.OPENAI_TTS_SPEAKER2_VOICE,
     userCode: values.USER_CODE,
     uiLanguage: asLanguage(values.UI_LANGUAGE),
     contentLanguage: asLanguage(values.CONTENT_LANGUAGE),
@@ -189,6 +195,8 @@ const PER_ACCOUNT_ENV_PAIRS: Array<[string, keyof PerAccountAiSettings]> = [
   ['GEMINI_TTS_SPEAKER2', 'geminiTtsSpeaker2'],
   ['GEMINI_TTS_SPEAKER1_VOICE', 'geminiTtsSpeaker1Voice'],
   ['GEMINI_TTS_SPEAKER2_VOICE', 'geminiTtsSpeaker2Voice'],
+  ['OPENAI_TTS_SPEAKER1_VOICE', 'openaiTtsSpeaker1Voice'],
+  ['OPENAI_TTS_SPEAKER2_VOICE', 'openaiTtsSpeaker2Voice'],
   ['USER_CODE', 'userCode'],
   ['UI_LANGUAGE', 'uiLanguage'],
   ['CONTENT_LANGUAGE', 'contentLanguage'],

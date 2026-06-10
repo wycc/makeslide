@@ -55,37 +55,35 @@ export function TtsDialog({
               ))}
             </select>
           </div>
-          {ttsProvider === 'gemini' ? (
-            <div>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs text-slate-300">主持模式</span>
-                <div className="flex overflow-hidden rounded border border-slate-700">
-                  {([
-                    ['solo', '單人旁白'],
-                    ['dual', '雙人對談'],
-                  ] as const).map(([mode, label]) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => onHostModeChange(mode)}
-                      disabled={disabled}
-                      aria-pressed={hostMode === mode}
-                      className={`px-3 py-1 text-xs ${
-                        hostMode === mode
-                          ? 'bg-cyan-500/25 font-medium text-cyan-100'
-                          : 'text-slate-300 hover:bg-slate-800'
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
+          <div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-slate-300">主持模式</span>
+              <div className="flex overflow-hidden rounded border border-slate-700">
+                {([
+                  ['solo', '單人旁白'],
+                  ['dual', '雙人對談'],
+                ] as const).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => onHostModeChange(mode)}
+                    disabled={disabled}
+                    aria-pressed={hostMode === mode}
+                    className={`px-3 py-1 text-xs ${
+                      hostMode === mode
+                        ? 'bg-cyan-500/25 font-medium text-cyan-100'
+                        : 'text-slate-300 hover:bg-slate-800'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
-              <p className="mt-1 text-xs text-slate-500">
-                雙人對談才會使用上方人設與 Speaker 1／2 聲音；變更後需重新產生逐字稿才會套用。
-              </p>
             </div>
-          ) : null}
+            <p className="mt-1 text-xs text-slate-500">
+              雙人對談才會使用 Speaker 1／2 人設與聲音設定；變更後需重新產生逐字稿才會套用。
+            </p>
+          </div>
           <div className="flex items-center gap-2">
             <span className="text-xs text-slate-300">速度</span>
             <input

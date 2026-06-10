@@ -82,6 +82,7 @@ const TTS_RETRY_INITIAL_DELAY_MS = 1000;
 const TTS_RETRY_MAX_DELAY_MS = 15000;
 const TTS_RETRY_FACTOR = 2;
 const TONE_MARKER_RE = /\[\[\s*([^\]]+)\s*\]\]/g;
+const SPEAKER_PREFIX_RE = /^\s*Speaker\s*([12])\s*[:：]\s*/i;
 
 export interface SynthesizeAudioPageResult {
   pageNumber: number;
@@ -181,6 +182,17 @@ function splitByToneMarkers(script: string): Array<{ instruction: string; text: 
   return out;
 }
 
+/**
+ * Strip a leading "Speaker 1:" / "Speaker 2:" label from a dual-host segment
+ * (OpenAI dual mode) so it isn't read aloud, and report which speaker the
+ * segment belongs to so the caller can pick a per-speaker voice.
+ */
+function splitSpeakerPrefix(text: string): { speaker: '1' | '2' | null; text: string } {
+  const m = SPEAKER_PREFIX_RE.exec(text);
+  if (!m) return { speaker: null, text };
+  return { speaker: m[1] as '1' | '2', text: text.slice(m[0].length).trim() };
+}
+
 async function synthesizeOnePage(params: {
   pdfId: string;
   pageNumber: number;
@@ -205,27 +217,43 @@ async function synthesizeOnePage(params: {
   if (!input) {
     throw new Error(`Page ${pageNumber} has empty script, cannot synthesize`);
   }
+  const runtime = getRuntimeAiSettings();
+  const provider = runtime.ttsProvider;
+  const client = provider === 'openai' ? getOpenAIClient() : null;
+
   const rawSegments = splitByToneMarkers(input);
   const segments = rawSegments.map((seg) => {
-    if (seg.text.length <= TTS_INPUT_MAX_CHARS) return seg;
+    // OpenAI 雙人模式：腳本以 "Speaker 1: " / "Speaker 2: " 標籤區分講者，
+    // 朗讀前需去除標籤並依講者切換對應聲音；Gemini 則保留標籤交給其
+    // multiSpeakerVoiceConfig 自行解析。
+    let text = seg.text;
+    let segVoice = voice;
+    if (provider === 'openai') {
+      const { speaker, text: stripped } = splitSpeakerPrefix(seg.text);
+      text = stripped;
+      if (speaker === '1' && runtime.openaiTtsSpeaker1Voice?.trim()) {
+        segVoice = runtime.openaiTtsSpeaker1Voice.trim();
+      } else if (speaker === '2' && runtime.openaiTtsSpeaker2Voice?.trim()) {
+        segVoice = runtime.openaiTtsSpeaker2Voice.trim();
+      }
+    }
+    if (text.length <= TTS_INPUT_MAX_CHARS) return { ...seg, text, voice: segVoice };
     logger.warn(
       {
         pdfId,
         pageNumber,
-        originalChars: seg.text.length,
+        originalChars: text.length,
         maxChars: TTS_INPUT_MAX_CHARS,
       },
       'synthesizeAudio: segment exceeds TTS input limit, truncating',
     );
     return {
       ...seg,
-      text: seg.text.slice(0, TTS_INPUT_MAX_CHARS),
+      text: text.slice(0, TTS_INPUT_MAX_CHARS),
+      voice: segVoice,
     };
   });
 
-  const runtime = getRuntimeAiSettings();
-  const provider = runtime.ttsProvider;
-  const client = provider === 'openai' ? getOpenAIClient() : null;
   let lastErr: unknown;
   let delayMs = TTS_RETRY_INITIAL_DELAY_MS;
 
@@ -257,7 +285,7 @@ async function synthesizeOnePage(params: {
         } else {
           const response = await client!.audio.speech.create({
             model: runtime.openaiTtsModel || config.openaiTtsModel,
-            voice,
+            voice: seg.voice,
             input: seg.text,
             response_format: config.openaiTtsFormat,
             speed,

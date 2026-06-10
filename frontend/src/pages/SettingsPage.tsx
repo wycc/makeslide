@@ -22,7 +22,7 @@ import {
   storeLanguageSettings,
   useI18n,
 } from '../i18n';
-import { GEMINI_TTS_VOICES, geminiVoiceLabel } from '../lib/ttsVoices';
+import { GEMINI_TTS_VOICES, OPENAI_TTS_VOICES, geminiVoiceLabel } from '../lib/ttsVoices';
 
 export default function SettingsPage() { 
   const LOCAL_USER_CODE_KEY = 'makeslide.user_code';
@@ -43,6 +43,8 @@ export default function SettingsPage() {
   const [geminiTtsSpeaker2, setGeminiTtsSpeaker2] = useState('');
   const [geminiTtsSpeaker1Voice, setGeminiTtsSpeaker1Voice] = useState('');
   const [geminiTtsSpeaker2Voice, setGeminiTtsSpeaker2Voice] = useState('');
+  const [openaiTtsSpeaker1Voice, setOpenaiTtsSpeaker1Voice] = useState('');
+  const [openaiTtsSpeaker2Voice, setOpenaiTtsSpeaker2Voice] = useState('');
   const [accountId, setAccountId] = useState('default');
   const [userCode, setUserCode] = useState('');
   const [saving, setSaving] = useState(false);
@@ -83,6 +85,8 @@ export default function SettingsPage() {
       setGeminiTtsSpeaker2(s.gemini_tts_speaker2 ?? '');
       setGeminiTtsSpeaker1Voice(s.gemini_tts_speaker1_voice ?? '');
       setGeminiTtsSpeaker2Voice(s.gemini_tts_speaker2_voice ?? '');
+      setOpenaiTtsSpeaker1Voice(s.openai_tts_speaker1_voice ?? '');
+      setOpenaiTtsSpeaker2Voice(s.openai_tts_speaker2_voice ?? '');
       setAccountId(s.account_id ?? 'default');
       const loadedUiLanguage = s.ui_language ?? getStoredUiLanguage();
       const loadedContentLanguage = s.content_language ?? getStoredContentLanguage();
@@ -165,6 +169,8 @@ export default function SettingsPage() {
         gemini_tts_speaker2: geminiTtsSpeaker2.trim(),
         gemini_tts_speaker1_voice: geminiTtsSpeaker1Voice.trim(),
         gemini_tts_speaker2_voice: geminiTtsSpeaker2Voice.trim(),
+        openai_tts_speaker1_voice: openaiTtsSpeaker1Voice.trim(),
+        openai_tts_speaker2_voice: openaiTtsSpeaker2Voice.trim(),
         user_code: authStatus?.authenticated ? userCode.trim() : undefined,
         ui_language: uiLanguage,
         content_language: contentLanguage,
@@ -203,6 +209,8 @@ export default function SettingsPage() {
     geminiTtsSpeaker2,
     geminiTtsSpeaker1Voice,
     geminiTtsSpeaker2Voice,
+    openaiTtsSpeaker1Voice,
+    openaiTtsSpeaker2Voice,
     contentLanguage,
     playbackSpeed,
     llmProvider,
@@ -561,6 +569,32 @@ export default function SettingsPage() {
                   <option key={v} value={v}>
                     {geminiVoiceLabel(v)}
                   </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm text-slate-300">
+              {t('settings.openaiSpeaker1Voice')}
+              <select
+                value={openaiTtsSpeaker1Voice}
+                onChange={(e) => setOpenaiTtsSpeaker1Voice(e.target.value)}
+                className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              >
+                <option value="">{t('settings.openaiSpeakerVoiceInherit')}</option>
+                {OPENAI_TTS_VOICES.map((v) => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm text-slate-300">
+              {t('settings.openaiSpeaker2Voice')}
+              <select
+                value={openaiTtsSpeaker2Voice}
+                onChange={(e) => setOpenaiTtsSpeaker2Voice(e.target.value)}
+                className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              >
+                <option value="">{t('settings.openaiSpeakerVoiceInherit')}</option>
+                {OPENAI_TTS_VOICES.map((v) => (
+                  <option key={v} value={v}>{v}</option>
                 ))}
               </select>
             </label>
