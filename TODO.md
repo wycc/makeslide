@@ -632,9 +632,14 @@
 # 2026-6-10
 
 [x] 當我們複制一個簡報時，需要為新的簡報指定成目前的使用者。（完成於分支: feature/duplicate-assign-current-user-20260610）
+[x] 生成語音時，應該要有單人或雙人模式的選擇（完成於分支: feature/dual-host-openai-tts-20260610）
 
 ## 工作記錄
 
 - 時間: 2026-06-10 08:45:00 +0800
 - 分支: feature/duplicate-assign-current-user-20260610
 - 內容: 修正 `POST /api/pdfs/:id/duplicate`：複製簡報時，新簡報的 `owner_sub` 與 `visibility` 原本沿用來源 metadata.json 的舊值寫入新的 metadata，但 `pdfs` 資料表的 INSERT 完全沒有寫入這兩欄，導致新簡報的 `owner_sub` 為 NULL；而 `canReadPdf()` 對 `owner_sub` 為 NULL 的簡報一律回傳不可讀，造成複製出來的簡報完全消失於首頁列表。修正後在 `upload.ts` 的 duplicate 端點以 `ownerSubFromRequest(request)` 取得目前登入使用者的 sub，寫入新簡報的 `pdfs.owner_sub`/`metadata.json.owner_sub`，並將 `visibility` 重設為 `'private'`（複製後一律成為使用者自己的私人副本），同時補上回傳用 SELECT 的 `category`/`owner_sub`/`visibility` 欄位使回應內容與資料庫一致。後端 `npx tsc --noEmit`、`npm run build` 皆通過；`npm test` 26 通過/18 失敗，與套用變更前完全相同（皆為既存、與本次變更無關的 401 認證測試失敗）。
+
+- 時間: 2026-06-10 09:15:00 +0800
+- 分支: feature/dual-host-openai-tts-20260610
+- 內容: 將原本只有 Gemini TTS 才有的「單人旁白／雙人對談」主持模式選擇擴展到 OpenAI TTS provider。新增 `backend/prompts/generate-script-openai-dual.md` 提示範本，產生帶有 `[[ 語氣 ]]Speaker 1: ...` / `[[ 語氣 ]]Speaker 2: ...` 格式的雙人逐字稿（沿用既有 `splitByToneMarkers` 分段邏輯）；`generateScript.ts`（`buildSystemPrompt`、`buildDeckRewriteSystemPrompt`）與 `page-operations.ts`（`buildRewriteScriptSystemPrompt`）在 `host_mode === 'dual'` 且 provider 為 openai 時改用此範本與對應改寫規則。`synthesizeAudio.ts` 新增 `splitSpeakerPrefix()`，於 OpenAI 模式下逐段偵測並去除「Speaker 1:/Speaker 2:」標籤，並依講者切換為新增的 `openai_tts_speaker1_voice`/`openai_tts_speaker2_voice` 設定（未設定則沿用主聲音）。設定面新增對應欄位並貫穿 `aiSettings.ts`、`/api/system/ai-settings`（admin.ts/shared.ts）、前端 `system.ts`、`SettingsPage.tsx`（新增 OpenAI Speaker 1/2 聲音下拉選單）與中英文 i18n。`TtsDialog.tsx` 移除原本僅限 Gemini 才顯示的「主持模式」切換限制，OpenAI 使用者現在也能選擇單人/雙人模式。後端與前端 `npx tsc --noEmit`、`npm run build` 皆通過；`npm test` 26 通過/18 失敗，與套用變更前基線相同（既存、與本次變更無關的 401 認證測試失敗）。
