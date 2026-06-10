@@ -972,6 +972,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
     const newId = nanoid(PDF_ID_SIZE);
     const now = nowIso();
     const newTitle = `副本-${source.title ?? source.original_filename ?? source.id}`;
+    const ownerSub = ownerSubFromRequest(request);
 
     try {
       const srcDir = path.join(config.storageRoot, id);
@@ -995,6 +996,8 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         error_message: metadata.error_message,
         category: metadata.category?.trim() || source.category?.trim() || DEFAULT_PDF_CATEGORY,
         pages: metadata.pages,
+        owner_sub: ownerSub,
+        visibility: 'private',
         created_at: now,
         updated_at: now,
       });
@@ -1003,10 +1006,10 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         `INSERT INTO pdfs (id, title, original_filename, status, page_count,
                             progress_step, progress_current, progress_total,
                             error_message, user_prompt, require_script_confirmation,
-                            category,
+                            category, owner_sub, visibility,
                             tts_voice, tts_speed, script_max_chars_per_page,
                             created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         newId,
         newTitle,
@@ -1020,6 +1023,8 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         source.user_prompt,
         source.require_script_confirmation,
         source.category?.trim() || DEFAULT_PDF_CATEGORY,
+        ownerSub,
+        'private',
         source.tts_voice,
         source.tts_speed,
         source.script_max_chars_per_page,
@@ -1076,6 +1081,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         `SELECT id, title, original_filename, status, page_count, progress_step,
                 progress_current, progress_total,
                 error_message, user_prompt, require_script_confirmation,
+                category, owner_sub, visibility,
                 tts_voice, tts_speed, script_max_chars_per_page,
                 created_at, updated_at
            FROM pdfs WHERE id = ?`,
