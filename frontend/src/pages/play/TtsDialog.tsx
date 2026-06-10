@@ -1,4 +1,4 @@
-import { geminiVoiceLabel, type TtsProvider } from '../../lib/ttsVoices';
+import { geminiVoiceLabel, openaiVoiceLabel, type TtsProvider } from '../../lib/ttsVoices';
 
 interface TtsDialogProps {
   ttsProvider: TtsProvider;
@@ -51,7 +51,7 @@ export function TtsDialog({
               className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs"
             >
               {availableTtsVoices.map((v) => (
-                <option key={v} value={v}>{ttsProvider === 'gemini' ? geminiVoiceLabel(v) : v}</option>
+                <option key={v} value={v}>{ttsProvider === 'gemini' ? geminiVoiceLabel(v) : openaiVoiceLabel(v)}</option>
               ))}
             </select>
           </div>

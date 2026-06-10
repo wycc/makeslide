@@ -75,6 +75,29 @@ export function geminiVoiceLabel(voice: string): string {
   return g ? `${voice}（${g === 'M' ? '男' : '女'}）` : voice;
 }
 
+// Approximate perceived gender per OpenAI prebuilt voice (M = male, F = female).
+// OpenAI does not officially classify voices by gender; this reflects common
+// community description and is used only to help users pick distinct
+// Speaker 1 / Speaker 2 voices for dual-host mode.
+export const OPENAI_TTS_VOICE_GENDER: Record<string, 'M' | 'F'> = {
+  alloy: 'M',
+  ash: 'M',
+  ballad: 'M',
+  coral: 'F',
+  echo: 'M',
+  fable: 'M',
+  onyx: 'M',
+  nova: 'F',
+  sage: 'F',
+  shimmer: 'F',
+  verse: 'M',
+};
+
+export function openaiVoiceLabel(voice: string): string {
+  const g = OPENAI_TTS_VOICE_GENDER[voice];
+  return g ? `${voice}（${g === 'M' ? '男' : '女'}）` : voice;
+}
+
 export const TTS_VOICES_BY_PROVIDER = {
   openai: OPENAI_TTS_VOICES,
   gemini: GEMINI_TTS_VOICES,
