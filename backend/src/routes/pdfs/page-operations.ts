@@ -147,6 +147,23 @@ function buildRewriteScriptSystemPrompt(params: {
       { target_chars: String(params.targetChars), min_chars: String(charBounds.min), max_chars: String(charBounds.max) },
     ),
   ];
+  if (isDual) {
+    const speaker1 = runtime.openaiTtsSpeaker1?.trim();
+    const speaker2 = runtime.openaiTtsSpeaker2?.trim();
+    if (speaker1 || speaker2) {
+      const speakerBlockTpl = loadPromptTemplate(
+        'backend/prompts/partials/gemini-speaker-persona-block.md',
+        '【雙主持人角色人設（優先遵守）】\n{{speaker1_line}}\n{{speaker2_line}}',
+      );
+      base.push('');
+      base.push(
+        renderPromptTemplate(speakerBlockTpl, {
+          speaker1_line: speaker1 ? `- Speaker 1 人設：${speaker1}` : '',
+          speaker2_line: speaker2 ? `- Speaker 2 人設：${speaker2}` : '',
+        }),
+      );
+    }
+  }
   const sanitized = sanitiseRewriteUserPrompt(params.userPrompt);
   if (sanitized) {
     const userBlockTpl = loadPromptTemplate(

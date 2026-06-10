@@ -278,6 +278,8 @@ function buildSystemPrompt(
   geminiSpeaker2Persona?: string,
   contentLanguage: 'zh-TW' | 'en' = 'zh-TW',
   hostMode: 'solo' | 'dual' = 'solo',
+  openaiSpeaker1Persona?: string,
+  openaiSpeaker2Persona?: string,
 ): string {
   const languageInstruction = contentLanguage === 'en'
     ? '【輸出語言】請用英文產生逐字稿、旁白與所有可朗讀內容；即使使用者提示或投影片文字是中文，也要翻譯並自然改寫成英文。'
@@ -351,6 +353,25 @@ function buildSystemPrompt(
     '',
     languageInstruction,
   ];
+
+  // 人設僅在雙人模式下加入；單人模式不附加任何 Speaker 人設。
+  if (isOpenaiDual) {
+    const speaker1 = openaiSpeaker1Persona?.trim();
+    const speaker2 = openaiSpeaker2Persona?.trim();
+    if (speaker1 || speaker2) {
+      const speakerBlockTpl = loadPromptTemplate(
+        'backend/prompts/partials/gemini-speaker-persona-block.md',
+        '【雙主持人角色人設（優先遵守）】\n{{speaker1_line}}\n{{speaker2_line}}',
+      );
+      base.push('');
+      base.push(
+        renderPromptTemplate(speakerBlockTpl, {
+          speaker1_line: speaker1 ? `- Speaker 1 人設：${speaker1}` : '',
+          speaker2_line: speaker2 ? `- Speaker 2 人設：${speaker2}` : '',
+        }),
+      );
+    }
+  }
 
   const sanitized = sanitiseUserPrompt(userPrompt);
   if (sanitized) {
@@ -480,6 +501,14 @@ function buildDeckRewriteSystemPrompt(
       '6. 避免使用「這一頁／本頁／此頁／本張」等單頁指稱，讓整份節目聽感更連續。',
       '7. 每一段都要使用「語氣分段標記 + 講者標籤」格式：[[ 語氣描述 ]]Speaker 1: 對白文字 或 [[ 語氣描述 ]]Speaker 2: 對白文字；每頁至少 2 段，且 Speaker 1 與 Speaker 2 都要出現至少一次。',
     ];
+    const speaker1 = runtime.openaiTtsSpeaker1?.trim();
+    const speaker2 = runtime.openaiTtsSpeaker2?.trim();
+    if (speaker1 || speaker2) {
+      base.push('');
+      base.push('【雙主持人角色人設（優先遵守）】');
+      if (speaker1) base.push(`- Speaker 1 人設：${speaker1}`);
+      if (speaker2) base.push(`- Speaker 2 人設：${speaker2}`);
+    }
     const sanitized = sanitiseUserPrompt(userPrompt);
     if (sanitized) {
       base.push('');
@@ -614,6 +643,8 @@ export async function generateScript(
     runtime.geminiTtsSpeaker2,
     runtime.contentLanguage,
     hostMode,
+    runtime.openaiTtsSpeaker1,
+    runtime.openaiTtsSpeaker2,
   );
   console.log('System prompt for script generation:\n', system);
   if (userPrompt && userPrompt.trim()) {

@@ -43,6 +43,8 @@ export default function SettingsPage() {
   const [geminiTtsSpeaker2, setGeminiTtsSpeaker2] = useState('');
   const [geminiTtsSpeaker1Voice, setGeminiTtsSpeaker1Voice] = useState('');
   const [geminiTtsSpeaker2Voice, setGeminiTtsSpeaker2Voice] = useState('');
+  const [openaiTtsSpeaker1, setOpenaiTtsSpeaker1] = useState('');
+  const [openaiTtsSpeaker2, setOpenaiTtsSpeaker2] = useState('');
   const [openaiTtsSpeaker1Voice, setOpenaiTtsSpeaker1Voice] = useState('');
   const [openaiTtsSpeaker2Voice, setOpenaiTtsSpeaker2Voice] = useState('');
   const [accountId, setAccountId] = useState('default');
@@ -85,6 +87,8 @@ export default function SettingsPage() {
       setGeminiTtsSpeaker2(s.gemini_tts_speaker2 ?? '');
       setGeminiTtsSpeaker1Voice(s.gemini_tts_speaker1_voice ?? '');
       setGeminiTtsSpeaker2Voice(s.gemini_tts_speaker2_voice ?? '');
+      setOpenaiTtsSpeaker1(s.openai_tts_speaker1 ?? '');
+      setOpenaiTtsSpeaker2(s.openai_tts_speaker2 ?? '');
       setOpenaiTtsSpeaker1Voice(s.openai_tts_speaker1_voice ?? '');
       setOpenaiTtsSpeaker2Voice(s.openai_tts_speaker2_voice ?? '');
       setAccountId(s.account_id ?? 'default');
@@ -169,6 +173,8 @@ export default function SettingsPage() {
         gemini_tts_speaker2: geminiTtsSpeaker2.trim(),
         gemini_tts_speaker1_voice: geminiTtsSpeaker1Voice.trim(),
         gemini_tts_speaker2_voice: geminiTtsSpeaker2Voice.trim(),
+        openai_tts_speaker1: openaiTtsSpeaker1.trim(),
+        openai_tts_speaker2: openaiTtsSpeaker2.trim(),
         openai_tts_speaker1_voice: openaiTtsSpeaker1Voice.trim(),
         openai_tts_speaker2_voice: openaiTtsSpeaker2Voice.trim(),
         user_code: authStatus?.authenticated ? userCode.trim() : undefined,
@@ -209,6 +215,8 @@ export default function SettingsPage() {
     geminiTtsSpeaker2,
     geminiTtsSpeaker1Voice,
     geminiTtsSpeaker2Voice,
+    openaiTtsSpeaker1,
+    openaiTtsSpeaker2,
     openaiTtsSpeaker1Voice,
     openaiTtsSpeaker2Voice,
     contentLanguage,
@@ -573,6 +581,10 @@ export default function SettingsPage() {
               </select>
             </label>
             <label className="block text-sm text-slate-300">
+              {t('settings.openaiSpeaker1')}
+              <input value={openaiTtsSpeaker1} onChange={(e) => setOpenaiTtsSpeaker1(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder={t('settings.openaiSpeaker1Placeholder')} />
+            </label>
+            <label className="block text-sm text-slate-300">
               {t('settings.openaiSpeaker1Voice')}
               <select
                 value={openaiTtsSpeaker1Voice}
@@ -584,6 +596,10 @@ export default function SettingsPage() {
                   <option key={v} value={v}>{v}</option>
                 ))}
               </select>
+            </label>
+            <label className="block text-sm text-slate-300">
+              {t('settings.openaiSpeaker2')}
+              <input value={openaiTtsSpeaker2} onChange={(e) => setOpenaiTtsSpeaker2(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder={t('settings.openaiSpeaker2Placeholder')} />
             </label>
             <label className="block text-sm text-slate-300">
               {t('settings.openaiSpeaker2Voice')}
