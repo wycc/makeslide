@@ -1,3 +1,4 @@
+import { useI18n } from '../../i18n';
 import { usePlayPageContext } from './PlayPageContext';
 
 const IMAGE_MSG_PREFIX = '[image] ';
@@ -54,6 +55,8 @@ export function PlayPageSidebar() {
     setImagePreviewPageNumber,
     setImagePreviewOpen,
   } = usePlayPageContext();
+
+  const { t } = useI18n();
 
   return (
     <aside
@@ -281,6 +284,11 @@ export function PlayPageSidebar() {
                 </div>
                 );
               })()}
+              {p.render_type === 'gsap-image' ? (
+                <span className="absolute bottom-0 left-0 z-10 rounded-tr bg-fuchsia-600/80 px-1 text-[9px] text-white">
+                  {t('play.animation.badge')}
+                </span>
+              ) : null}
             </div>
           ))}
         </div>

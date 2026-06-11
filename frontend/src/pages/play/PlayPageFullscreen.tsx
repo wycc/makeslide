@@ -1,4 +1,6 @@
 import DrawingCanvas from '../../components/DrawingCanvas';
+import { SlideRenderer } from '../../components/slide/SlideRenderer';
+import { useI18n } from '../../i18n';
 import { usePlayPageContext } from './PlayPageContext';
 
 const DRAWING_COLORS = [
@@ -68,7 +70,13 @@ export function PlayPageFullscreen() {
     showSubtitle,
     hasScriptChanges,
     playQrCodeUrl,
+    currentTime,
+    playbackRate,
+    currentAnimationSpec,
+    setAnimationWarning,
   } = usePlayPageContext();
+
+  const { t } = useI18n();
 
   const syncDisplayedQuestion = syncDisplayedQuestionId
     ? syncFollowerQuestions.find((q) => q.id === syncDisplayedQuestionId) ?? null
@@ -101,13 +109,21 @@ export function PlayPageFullscreen() {
           <div className="flex h-full w-1/2 shrink-0 flex-col p-2">
             <div className="flex min-h-0 flex-1 items-center justify-center">
               {currentPage?.image_url || displayedImageSrc ? (
-                <div className="relative" style={{ lineHeight: 0 }}>
-                  <img
-                    ref={fullscreenImageRef}
-                    src={displayedImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
-                    alt={`第 ${currentPage?.page_number ?? ''} 頁`}
-                    className="max-h-full max-w-full object-contain"
-                  />
+                <SlideRenderer
+                  renderType={currentPage?.render_type}
+                  spec={currentAnimationSpec}
+                  pageKey={`${pdfId ?? ''}:${currentPage?.page_number ?? 0}`}
+                  currentTime={currentTime}
+                  isPlaying={isPlaying}
+                  playbackRate={playbackRate}
+                  onAnimationError={() => setAnimationWarning(t('play.animation.runtimeWarning'))}
+                  wrapperClassName="relative"
+                  wrapperStyle={{ lineHeight: 0 }}
+                  src={displayedImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
+                  alt={`第 ${currentPage?.page_number ?? ''} 頁`}
+                  imgClassName="max-h-full max-w-full object-contain"
+                  imgRef={fullscreenImageRef}
+                >
                   {pdfId && currentPage && (
                     <DrawingCanvas
                       ref={drawingCanvasSplitRef}
@@ -121,7 +137,7 @@ export function PlayPageFullscreen() {
                       onLocalChange={pushLocalDrawingChange}
                     />
                   )}
-                </div>
+                </SlideRenderer>
               ) : (
                 <div className="text-slate-300">
                   {currentPage?.status === 'failed'
@@ -239,13 +255,21 @@ export function PlayPageFullscreen() {
           )}
         </div>
       ) : currentPage?.image_url || displayedImageSrc ? (
-        <div className="relative" style={{ lineHeight: 0 }}>
-          <img
-            ref={fullscreenImageRef}
-            src={displayedImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
-            alt={`第 ${currentPage?.page_number ?? ''} 頁`}
-            className="max-h-screen max-w-screen object-contain"
-          />
+        <SlideRenderer
+          renderType={currentPage?.render_type}
+          spec={currentAnimationSpec}
+          pageKey={`${pdfId ?? ''}:${currentPage?.page_number ?? 0}`}
+          currentTime={currentTime}
+          isPlaying={isPlaying}
+          playbackRate={playbackRate}
+          onAnimationError={() => setAnimationWarning(t('play.animation.runtimeWarning'))}
+          wrapperClassName="relative"
+          wrapperStyle={{ lineHeight: 0 }}
+          src={displayedImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
+          alt={`第 ${currentPage?.page_number ?? ''} 頁`}
+          imgClassName="max-h-screen max-w-screen object-contain"
+          imgRef={fullscreenImageRef}
+        >
           {pdfId && currentPage && (
             <DrawingCanvas
               ref={drawingCanvasFullscreenRef}
@@ -259,7 +283,7 @@ export function PlayPageFullscreen() {
               onLocalChange={pushLocalDrawingChange}
             />
           )}
-        </div>
+        </SlideRenderer>
       ) : (
         <div className="text-slate-300">
           {currentPage?.status === 'failed'

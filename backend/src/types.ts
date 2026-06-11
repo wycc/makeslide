@@ -87,6 +87,8 @@ export interface PdfRow {
   updated_at: string;
 }
 
+export type SlideRenderType = 'static-image' | 'gsap-image';
+
 export interface PageRow {
   pdf_id: string;
   page_number: number;
@@ -98,6 +100,10 @@ export interface PageRow {
   audio_duration_seconds: number | null;
   status: PageStatus;
   error_message: string | null;
+  // GSAP slide animation V1 — older SELECTs that don't need these cast rows
+  // without them, so keep them optional at the type level.
+  render_type?: SlideRenderType | null;
+  animation_spec_path?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -143,6 +149,8 @@ export interface PdfDetailPage {
   script_url: string | null;
   audio_url: string | null;
   audio_duration_seconds: number | null;
+  render_type: SlideRenderType;
+  animation_spec_url: string | null;
   status: PageStatus;
   error_message?: string | null;
   timings?: PdfDetailPageTimings | null;

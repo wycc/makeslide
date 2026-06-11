@@ -34,8 +34,8 @@ export interface ScriptEditorState {
   rewriteBusy: boolean;
   rewriteError: string | null;
   setRewriteError: Dispatch<SetStateAction<string | null>>;
-  editTab: 'script' | 'prompt' | 'source' | 'system';
-  setEditTab: Dispatch<SetStateAction<'script' | 'prompt' | 'source' | 'system'>>;
+  editTab: 'script' | 'prompt' | 'animation' | 'source' | 'system';
+  setEditTab: Dispatch<SetStateAction<'script' | 'prompt' | 'animation' | 'source' | 'system'>>;
   transcriptFocusMode: boolean;
   setTranscriptFocusMode: Dispatch<SetStateAction<boolean>>;
   handleRewriteScript: () => Promise<void>;
@@ -59,7 +59,7 @@ export function useScriptEditor({
   const [editorError, setEditorError] = useState<string | null>(null);
   const [rewriteBusy, setRewriteBusy] = useState(false);
   const [rewriteError, setRewriteError] = useState<string | null>(null);
-  const [editTab, setEditTab] = useState<'script' | 'prompt' | 'source' | 'system'>('script');
+  const [editTab, setEditTab] = useState<'script' | 'prompt' | 'animation' | 'source' | 'system'>('script');
   const [transcriptFocusMode, setTranscriptFocusMode] = useState(false);
 
   // 換頁時重置編輯器內容

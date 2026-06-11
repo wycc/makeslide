@@ -85,6 +85,35 @@ export interface PdfListItem {
   updated_at: string;
 }
 
+export type SlideRenderType = 'static-image' | 'gsap-image';
+
+export type SlideAnimationEffectType =
+  | 'fade-in'
+  | 'zoom-in'
+  | 'zoom-out'
+  | 'pan-left'
+  | 'pan-right'
+  | 'pan-up'
+  | 'pan-down';
+
+export type SlideAnimationEase = 'none' | 'power1.in' | 'power1.out' | 'power1.inOut' | 'power2.inOut';
+
+export interface SlideAnimationEffect {
+  id: string;
+  target: 'slide';
+  type: SlideAnimationEffectType;
+  start: number;
+  duration: number;
+  ease: SlideAnimationEase;
+  params?: Record<string, number>;
+}
+
+export interface SlideAnimationSpec {
+  version: 1;
+  enabled: boolean;
+  effects: SlideAnimationEffect[];
+}
+
 export interface PdfDetailPage {
   page_number: number;
   image_url: string | null;
@@ -93,6 +122,8 @@ export interface PdfDetailPage {
   script_url?: string | null;
   audio_url?: string | null;
   audio_duration_seconds?: number | null;
+  render_type?: SlideRenderType;
+  animation_spec_url?: string | null;
   status: PageStatus;
   error_message?: string | null;
   timings?: PdfDetailPageTimings | null;

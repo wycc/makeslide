@@ -29,6 +29,7 @@ import { usePdfMetadata } from './play/usePdfMetadata';
 import { useSlideManagement } from './play/useSlideManagement';
 import { useImageStyle } from './play/useImageStyle';
 import { useScriptEditor } from './play/useScriptEditor';
+import { usePageAnimation } from './play/usePageAnimation';
 import { usePromptAndSource } from './play/usePromptAndSource';
 import { useChatAndImageEdit } from './play/useChatAndImageEdit';
 import { usePagePolls } from './play/usePagePolls';
@@ -1522,6 +1523,36 @@ export default function PlayPage() {
     setDetail,
   });
 
+  // ─── Slide animation (GSAP V1) ──────────────────────────────────────────────
+  const animationState = usePageAnimation({
+    pdfId,
+    currentPage,
+    shareToken: currentShareToken,
+    editTab: scriptEditorState.editTab,
+    setDetail,
+  });
+  // 動畫 Tab 開啟時用編輯中的 draft 即時預覽，其餘時間用已儲存的 spec
+  const currentAnimationSpec =
+    scriptEditorState.editTab === 'animation' && animationState.animationDraft
+      ? animationState.animationDraft
+      : animationState.animationSavedSpec;
+  const { handleSaveAnimation } = animationState;
+  // 從頭預覽：先儲存（確保重整後一致），再把音訊歸零播放；timeline 由 currentTime 漂移校正自動跳回 0
+  const handlePreviewAnimation = useCallback(() => {
+    void (async () => {
+      const ok = await handleSaveAnimation();
+      if (!ok) return;
+      const audio = audioRef.current;
+      if (!audio) return;
+      audio.currentTime = 0;
+      setCurrentTime(0);
+      setFinished(false);
+      if (audio.paused) {
+        void audio.play().catch(() => setIsPlaying(false));
+      }
+    })();
+  }, [handleSaveAnimation]);
+
   // detail ロード後、image_style_prompt を imageStyleState に反映
   // （load effect は setDeckImageStylePrompt を直接呼べないため、detail 変化を監視）
   useEffect(() => {
@@ -1796,6 +1827,10 @@ export default function PlayPage() {
     // script / editor (from useScriptEditor)
     ...scriptEditorState,
     handleRetry,
+    // slide animation (from usePageAnimation)
+    ...animationState,
+    currentAnimationSpec,
+    handlePreviewAnimation,
     // prompt / source (from usePromptAndSource)
     ...promptState,
     // chat + image edit / inpaint (from useChatAndImageEdit)

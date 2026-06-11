@@ -63,6 +63,10 @@ export function pageAudioPath(pdfId: string, pageUid: string): string {
   return path.join(pagesDir(pdfId), `${pageUid}.m4a`);
 }
 
+export function pageAnimationSpecPath(pdfId: string, pageUid: string): string {
+  return path.join(pagesDir(pdfId), `${pageUid}.animation.json`);
+}
+
 export function videoPath(pdfId: string): string {
   return path.join(pdfDir(pdfId), 'video.mp4');
 }

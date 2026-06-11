@@ -17,6 +17,8 @@ import type {
   SyncStateResponse,
   StartProcessingResponse,
   PdfSourceItem,
+  SlideAnimationSpec,
+  SlideRenderType,
 } from '../../types';
 import { ApiError, isApiErrorBody, parseErrorBody } from './common';
 
@@ -64,6 +66,45 @@ export async function addPdfFileSource(id: string, file: File): Promise<PdfSourc
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as PdfSourceItem;
+}
+
+export interface PageAnimationResponse {
+  page_number: number;
+  render_type: SlideRenderType;
+  spec: SlideAnimationSpec;
+}
+
+export async function fetchPageAnimation(
+  id: string,
+  pageNumber: number,
+  shareToken?: string,
+): Promise<PageAnimationResponse> {
+  const token = shareToken?.trim();
+  const suffix = token ? `?share=${encodeURIComponent(token)}` : '';
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/animation${suffix}`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as PageAnimationResponse;
+}
+
+export interface SavePageAnimationResponse {
+  page_number: number;
+  render_type: SlideRenderType;
+  animation_spec_url: string | null;
+  updated_at: string;
+}
+
+export async function savePageAnimation(
+  id: string,
+  pageNumber: number,
+  spec: SlideAnimationSpec,
+): Promise<SavePageAnimationResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/animation`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ spec }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as SavePageAnimationResponse;
 }
 
 export type ShareAccessMode = 'read_only' | 'editable';
