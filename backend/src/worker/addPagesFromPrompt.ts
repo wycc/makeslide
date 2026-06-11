@@ -549,8 +549,18 @@ async function runAddPagesJob(
     });
 
     for (const a of ttsResult.pages) {
+      if (a.skipped) {
+        logger.error(
+          { pdfId, pageNumber: a.pageNumber, error: a.error },
+          'add-pages-from-prompt: audio synthesis failed for page',
+        );
+        db.prepare(
+          `UPDATE pages SET status = 'failed', error_message = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`,
+        ).run(a.error ?? '語音生成失敗', nowIso(), pdfId, a.pageNumber);
+        continue;
+      }
       db.prepare(
-        `UPDATE pages SET audio_path = ?, audio_duration_seconds = ?, status = 'audio_ready', updated_at = ? WHERE pdf_id = ? AND page_number = ?`,
+        `UPDATE pages SET audio_path = ?, audio_duration_seconds = ?, status = 'audio_ready', error_message = NULL, updated_at = ? WHERE pdf_id = ? AND page_number = ?`,
       ).run(
         path.relative(pdfDir(pdfId), a.audioPath),
         a.durationSeconds,

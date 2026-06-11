@@ -964,6 +964,34 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       });
       const audio = result.pages[0];
       if (!audio) throw new Error('Audio synthesis returned no page result');
+
+      if (audio.skipped) {
+        const reason = audio.error ?? '語音生成失敗';
+        request.log.error({ pdfId: id, pageNumber: n, error: reason }, 'Audio synthesis failed for page');
+        const now = nowIso();
+        db.prepare(
+          `UPDATE pages
+              SET script_path = ?, status = 'failed', error_message = ?, updated_at = ?
+            WHERE pdf_id = ? AND page_number = ?`,
+        ).run(pageRow.script_path, reason, now, id, n);
+        db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(now, id);
+        try {
+          const meta = await readMetadata(id);
+          if (meta) {
+            const page = meta.pages.find((p) => p.page_number === n);
+            if (page) {
+              page.script = pageRow.script_path;
+              page.status = 'failed';
+            }
+            meta.updated_at = now;
+            await writeMetadata(id, meta);
+          }
+        } catch {
+          // non-fatal
+        }
+        return reply.code(502).send(errorResponse('TTS_FAILED', reason));
+      }
+
       const relAudioPath = path.posix.join('pages', `${String(n).padStart(pdfRow.page_count > 999 ? 4 : 3, '0')}.m4a`);
       const now = nowIso();
       db.prepare(

@@ -1107,12 +1107,19 @@ async function runRegenerateAudio(
           reason: 'regenerate',
           metadata: { job_id: state.job_id, precision: 'step_timing' },
         });
-        finishArtifact(h, info.skipped ? 'skipped' : 'succeeded', {
+        finishArtifact(h, info.skipped ? 'failed' : 'succeeded', {
           startedAt: info.startedAt,
           endedAt: info.endedAt,
-          outputPath: path.relative(pdfDir(pdfId), info.audioPath),
+          outputPath: info.skipped ? null : path.relative(pdfDir(pdfId), info.audioPath),
+          error: info.error ? { message: info.error } : undefined,
           metadata: { job_id: state.job_id, skipped: info.skipped, duration_seconds: info.durationSeconds, precision: 'step_timing' },
         });
+        if (info.skipped) {
+          logger.error(
+            { pdfId, pageNumber: pn, jobId: state.job_id, error: info.error },
+            'Regenerate audio: synthesis failed for page',
+          );
+        }
       }
       markPageProgress(state, pn, done, step);
     },
@@ -1122,6 +1129,19 @@ async function runRegenerateAudio(
   const updatedAt = nowIso();
   for (const a of res.pages) {
     const uid = audioUidByNumber.get(a.pageNumber)!;
+    if (a.skipped) {
+      // 既有音檔已於上方刪除，重生失敗時一併清空 audio_path/duration，避免指向不存在的檔案。
+      db.prepare(
+        `UPDATE pages
+            SET audio_path = NULL,
+                audio_duration_seconds = NULL,
+                status = 'failed',
+                error_message = ?,
+                updated_at = ?
+          WHERE pdf_id = ? AND page_number = ?`,
+      ).run(a.error ?? '語音生成失敗', updatedAt, pdfId, a.pageNumber);
+      continue;
+    }
     const relPath = path.posix.join('pages', `${uid}.m4a`);
     db.prepare(
       `UPDATE pages
@@ -1149,12 +1169,17 @@ async function runRegenerateAudio(
       for (const a of res.pages) {
         const uid = audioUidByNumber.get(a.pageNumber)!;
         const mp = meta.pages.find((x) => x.page_number === a.pageNumber);
-        if (mp) {
-          mp.audio = path.posix.join('pages', `${uid}.m4a`);
-          mp.audio_duration_seconds = a.durationSeconds;
-          mp.audio_generated_at = updatedAt;
-          mp.status = 'audio_ready';
+        if (!mp) continue;
+        if (a.skipped) {
+          mp.audio = null;
+          mp.audio_duration_seconds = null;
+          mp.status = 'failed';
+          continue;
         }
+        mp.audio = path.posix.join('pages', `${uid}.m4a`);
+        mp.audio_duration_seconds = a.durationSeconds;
+        mp.audio_generated_at = updatedAt;
+        mp.status = 'audio_ready';
       }
       meta.updated_at = updatedAt;
       await writeMetadata(pdfId, meta);
