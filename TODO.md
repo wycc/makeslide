@@ -662,9 +662,14 @@
 # 2026-6-11
 
 [x] 在雙人模式中，提示應使用一問一答的方式讓二個人對談，而不是一人念一段（完成於分支: feature/dual-mode-qa-dialogue-prompt-20260611）
+[x] 語音產生失敗時，要在 console 和 UI 上顯示失敗的原因（完成於分支: feature/audio-generation-failure-display-20260611）
 
 ## 工作記錄
 
 - 時間: 2026-06-11 00:00:00 +0800
 - 分支: feature/dual-mode-qa-dialogue-prompt-20260611
 - 內容: 「在雙人模式中，提示應使用一問一答的方式讓二個人對談，而不是一人念一段」：雙人對談逐字稿原本只要求「每句話盡量短，雙方互有來回、互相提問與回應，不要其中一人長篇獨白」，但 LLM 仍常產出一人念一整段內容、另一人僅簡短回應的形式。修正涵蓋初次生成、單頁改寫、整份重排三條路徑、OpenAI 與 Gemini 兩種 TTS provider：`backend/prompts/generate-script-openai-dual.md`（OpenAI 雙人初次生成 + 單頁改寫共用範本）將「互有來回」規則改為明確的「採一問一答方式進行：由一方提出問題、疑惑、好奇點或切入點，另一方簡短回答、解說或回應」，並把段落數下限由 2 段提高為 4 段、要求 Speaker 1/2 交替輪流、避免同一位講者連續出現兩段以上；`backend/prompts/generate-script-gemini.md`（Gemini 雙人初次生成 + 單頁改寫共用範本）與 `backend/prompts/rewrite-script-gemini.md`（Gemini 整份重排）新增相同的一問一答規則；`backend/src/worker/steps/generateScript.ts` 中 OpenAI 雙人「整份重排」的內嵌系統提示（`buildDeckRewriteSystemPrompt`）同步套用一問一答規則與「至少 4 段、交替輪流」的分段要求。後端 `npx tsc --noEmit` 通過。
+
+- 時間: 2026-06-11 09:35:00 +0800
+- 分支: feature/audio-generation-failure-display-20260611
+- 內容: 「語音產生失敗時，要在 console 和 UI 上顯示失敗的原因」：`synthesizeAudio.ts` 在 TTS 重試耗盡後，新增 `extractTtsErrorMessage()` 組出包含 HTTP 狀態碼/錯誤代碼的人類可讀錯誤訊息，並在 `logger.error` 與回傳結果（`SynthesizeAudioPageResult.error`）中提供。涵蓋四個呼叫點：主流程 `pipeline.ts` 將失敗頁標記 `pages.status='failed'`、寫入 `error_message`，audio timing stage 標記為 failed；批次重生 `regenerate.ts` 失敗頁清空 `audio_path`/`audio_duration_seconds` 並標記 failed（含 metadata.json 同步）；新增頁面 `addPagesFromPrompt.ts` 失敗頁標記 failed/error_message；單頁重生 `/api/pdfs/:id/pages/:n/regenerate-audio` 端點失敗時回傳 `502 TTS_FAILED` 並標記該頁 failed，讓前端 `handleRegenerateAudio` 立即以 `ApiError.message` 顯示失敗原因。沿用既有圖片產生失敗的 UI 呈現模式（`PlayPageHeader.tsx` 的 `error_message` 紅色橫幅），前端無需改動。後端 `npx tsc --noEmit` 與 `npm run build` 皆通過。
