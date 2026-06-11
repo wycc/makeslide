@@ -95,6 +95,8 @@ export interface SynthesizeAudioPageResult {
   endedAt: string;
   latencyMs: number;
   skipped: boolean;
+  /** Reason the page was skipped (i.e. TTS failed after all retries), if any. */
+  error: string | null;
 }
 
 export interface SynthesizeAudioResult {
@@ -112,7 +114,7 @@ export interface SynthesizeAudioOptions {
    * idempotent skips). `done` is 1-based count of pages finished so far.
    * Safe to invoke from within concurrent workers.
    */
-  onPage?: (pageNumber: number, done: number, info?: { startedAt: string; endedAt: string; skipped: boolean; audioPath: string; durationSeconds: number | null }) => void;
+  onPage?: (pageNumber: number, done: number, info?: { startedAt: string; endedAt: string; skipped: boolean; audioPath: string; durationSeconds: number | null; error: string | null }) => void;
   voice?: string | null;
   speed?: number | null;
   /**
@@ -160,6 +162,24 @@ function isRetryableTtsError(err: unknown): boolean {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Build a human-readable error message for a failed TTS attempt, including
+ * the HTTP status / error code when available so the reason shown in the
+ * console and UI is actionable (e.g. "401 invalid_api_key: Incorrect API key").
+ */
+function extractTtsErrorMessage(err: unknown): string {
+  if (!err || typeof err !== 'object') return String(err);
+  const e = err as { status?: unknown; code?: unknown; type?: unknown; message?: unknown };
+  const status = typeof e.status === 'number' ? e.status : null;
+  const code = typeof e.code === 'string' ? e.code : null;
+  const type = typeof e.type === 'string' ? e.type : null;
+  const message = typeof e.message === 'string' ? e.message : String(err);
+  const prefix = [status != null ? String(status) : null, code ?? type]
+    .filter((v): v is string => !!v)
+    .join(' ');
+  return prefix ? `${prefix}: ${message}` : message;
 }
 
 function splitByToneMarkers(script: string): Array<{ instruction: string; text: string }> {
@@ -370,6 +390,7 @@ async function synthesizeOnePage(params: {
         endedAt: endedAtIso,
         latencyMs,
         skipped: false,
+        error: null,
       };
     } catch (err) {
       lastErr = err;
@@ -400,12 +421,13 @@ async function synthesizeOnePage(params: {
     }
   }
 
+  const errorMessage = extractTtsErrorMessage(lastErr);
   logger.error(
     {
       pdfId,
       pageNumber,
       attempts: TTS_MAX_ATTEMPTS,
-      error: lastErr instanceof Error ? lastErr.message : String(lastErr),
+      error: errorMessage,
     },
     'synthesizeAudio: page failed after max retries, skipping page',
   );
@@ -421,6 +443,7 @@ async function synthesizeOnePage(params: {
     endedAt: new Date().toISOString(),
     latencyMs: 0,
     skipped: true,
+    error: errorMessage,
   };
 }
 
@@ -488,6 +511,7 @@ export async function synthesizeAudio(
             skipped: res.skipped,
             audioPath: res.audioPath,
             durationSeconds: res.durationSeconds,
+            error: res.error,
           });
         } catch (err) {
           const code = (err as Error & { code?: string }).code;

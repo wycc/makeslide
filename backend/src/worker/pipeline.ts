@@ -1124,10 +1124,11 @@ async function runPipeline(pdfId: string): Promise<void> {
         const h = audioHandles.get(pageNumber) ?? startArtifact({ run, pageNumber, artifact: 'audio', reason: runType === 'resume' ? 'resume' : 'initial', metadata: { precision: info ? 'step_timing' : 'callback_completion' } });
         audioHandles.set(pageNumber, h);
         if (info) {
-          finishArtifact(h, info.skipped ? 'skipped' : 'succeeded', {
+          finishArtifact(h, info.skipped ? 'failed' : 'succeeded', {
             startedAt: info.startedAt,
             endedAt: info.endedAt,
-            outputPath: toRelative(pdfId, info.audioPath),
+            outputPath: info.skipped ? null : toRelative(pdfId, info.audioPath),
+            error: info.error ? { message: info.error } : undefined,
             metadata: { skipped: info.skipped, duration_seconds: info.durationSeconds, precision: 'step_timing' },
           });
         }
@@ -1135,12 +1136,26 @@ async function runPipeline(pdfId: string): Promise<void> {
       },
     });
 
-    // Persist per-page audio_path, duration, status.
+    // Persist per-page audio_path, duration, status. A page that failed TTS
+    // after all retries (skipped) is marked 'failed' with the reason so the
+    // UI can surface it instead of silently pretending audio is ready.
     for (const a of ttsResult.pages) {
+      if (a.skipped) {
+        logger.error(
+          { pdfId, pageNumber: a.pageNumber, error: a.error },
+          'Pipeline: audio synthesis failed for page',
+        );
+        upsertPage(pdfId, a.pageNumber, {
+          status: 'failed',
+          error_message: a.error ?? '語音生成失敗',
+        });
+        continue;
+      }
       upsertPage(pdfId, a.pageNumber, {
         audio_path: toRelative(pdfId, a.audioPath),
         audio_duration_seconds: a.durationSeconds,
         status: 'audio_ready',
+        error_message: null,
       });
     }
     const totalAudioDurationSeconds = sumAudioDurationSeconds(ttsResult.pages.map((p) => p.durationSeconds));
@@ -1167,6 +1182,7 @@ async function runPipeline(pdfId: string): Promise<void> {
     });
 
     for (const a of ttsResult.pages) {
+      if (a.skipped) continue;
       await patchPageMetadata(pdfId, a.pageNumber, {
         audio: toRelative(pdfId, a.audioPath),
         audio_chars: a.chars,
@@ -1200,7 +1216,8 @@ async function runPipeline(pdfId: string): Promise<void> {
       },
       'Pipeline: M4 TTS stage complete — pdf ready',
     );
-    finishStage(audioStage, 'succeeded', { generated: ttsResult.pages.filter((p) => !p.skipped).length, skipped: ttsResult.pages.filter((p) => p.skipped).length });
+    const failedAudioPages = ttsResult.pages.filter((p) => p.skipped).length;
+    finishStage(audioStage, failedAudioPages > 0 ? 'failed' : 'succeeded', { generated: ttsResult.pages.filter((p) => !p.skipped).length, skipped: failedAudioPages });
     const finalizeStage = startStage(run, 'finalize');
     finishStage(finalizeStage, 'succeeded');
     finishRun(run, 'succeeded');
