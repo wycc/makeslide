@@ -11,6 +11,9 @@
 > - 前端 API client 實際位於 `frontend/src/lib/api/` 目錄（`pdfs.ts` 等），非單一 `api.ts`。
 > - 路由檔案命名沿用既有 kebab-case 慣例：`page-animation.ts`。
 > - 播放用 spec 由 PlayPage 集中載入並經 context 傳入 renderer（編輯中 draft 可即時預覽），renderer 不自行 fetch。
+>
+> 擴充註記（2026-06-12，逐字稿同步啟動）：
+> - 新增 `effect.startTrigger`：可將效果的開始時間改為「綁定逐字稿句子」，播放到該句時動畫同步開始。詳見 §4.3、§6.5、§7。
 
 ---
 
@@ -91,10 +94,33 @@ ALTER TABLE pages ADD COLUMN animation_spec_path TEXT;
   "effects": [
     { "id": "effect-1", "target": "slide", "type": "fade-in", "start": 0, "duration": 0.8, "ease": "power1.out" },
     { "id": "effect-2", "target": "slide", "type": "zoom-in", "start": 0, "duration": 8, "ease": "none",
-      "params": { "fromScale": 1, "toScale": 1.08 } }
+      "params": { "fromScale": 1, "toScale": 1.08 } },
+    { "id": "effect-3", "target": "slide", "type": "pan-left", "start": 4, "duration": 2, "ease": "power1.inOut",
+      "params": { "distancePct": 5 },
+      "startTrigger": { "type": "transcript-line", "line": 2 } }
   ]
 }
 ```
+
+effect-3 設定了 `startTrigger`：實際播放時的開始秒數會改用「本頁逐字稿第 3 句（index 2）」的估計播放起始時間；`start: 4` 僅作為找不到對應句子時的退回值。詳見 §4.3。
+
+### 4.3 逐字稿同步啟動（startTrigger）
+
+```ts
+interface AnimationStartTrigger {
+  type: 'transcript-line';
+  /** 0-based，對應本頁逐字稿切句後的句子索引 */
+  line: number;
+}
+```
+
+- `AnimationEffect.startTrigger?: AnimationStartTrigger`：選填欄位，前後端型別與 zod schema 同步定義於 `backend/src/services/pageAnimation.ts` 與 `frontend/src/types.ts`。
+- 驗證規則（`StartTriggerSchema`）：`type` 必須為 `'transcript-line'`；`line` 必須為 `0 <= line <= 999`（`MAX_TRANSCRIPT_LINE`）的整數。
+- 語意：
+  - 設定 `startTrigger` 後，效果的播放開始時間 = 本頁逐字稿第 `line` 句（0-based）的估計播放起始秒數。
+  - `start` 欄位仍會儲存，作為「找不到對應句子」時的退回值（例如逐字稿被編輯、句子數量變少導致 `line` 超出範圍）。
+  - 一個 spec 內可有部分效果使用 `startTrigger`、部分使用固定秒數 `start`，互不影響。
+- 解析時機：完全在前端進行（後端僅驗證/儲存原始 `startTrigger`），詳見 §6.5。
 
 ## 5. 動畫效果定義
 
@@ -122,7 +148,8 @@ frontend/src/components/slide/
 ├── useGsapSlideTimeline.ts  # timeline 建立/seek/play/pause/timeScale/kill
 └── buildGsapTimeline.ts     # 白名單 preset → tween
 
-frontend/src/lib/animationSpec.ts  # 前端型別 + default spec
+frontend/src/lib/animationSpec.ts  # 前端型別 + default spec + resolveAnimationSpec
+frontend/src/lib/subtitles.ts      # 逐字稿切句與每句起訖時間估算（字幕高亮、動畫同步共用）
 frontend/src/pages/play/
 ├── AnimationEditorTab.tsx
 └── usePageAnimation.ts
@@ -146,11 +173,52 @@ Props：`renderType`、`src`（由呼叫端算好，含 displayedImageSrc 防閃
 
 縮圖仍用 `<img />`；`render_type === 'gsap-image'` 時加「動畫」小標記。
 
+### 6.5 逐字稿同步解析（resolveAnimationSpec）
+
+字幕高亮原本就需要「整頁逐字稿切句」與「每句估計起訖時間」，動畫的 `startTrigger` 直接重用同一份計算，避免兩套估時邏輯不一致：
+
+- `splitScriptIntoSentences(script)` 與 `buildSentenceTimeline(sentences, duration)` 從 `PlayPage.tsx` 抽出至 `frontend/src/lib/subtitles.ts`，回傳 `SentenceTimelineItem[]`（`{ text, start, end }`，單位秒）。
+- `PlayPage.tsx` 以 `useMemo` 計算：
+  - `pageSentences = splitScriptIntoSentences(currentScript)`，依賴 `[currentScript]`。
+  - `sentenceTimeline = buildSentenceTimeline(pageSentences, duration)`，依賴 `[pageSentences, duration]`（**不**依賴 `currentTime`，避免每次 `timeupdate` 都重算）。
+  - `activeSentenceIdx`（字幕高亮用）改為消費同一份 `sentenceTimeline`，依賴 `[pageSentences, sentenceTimeline, currentTime]`。
+- `frontend/src/lib/animationSpec.ts` 新增 `resolveAnimationSpec(spec, sentenceTimeline)`：
+  - 若 `spec` 內沒有任何效果設定 `startTrigger`，直接回傳原物件參照（不做任何複製）。
+  - 否則回傳一份新 spec，其中每個有 `startTrigger` 的效果，其 `start` 被改寫為 `sentenceTimeline[startTrigger.line].start`；若該 index 不存在（逐字稿被編輯），則保留原本 `start`。
+- `PlayPage.tsx` 的 `currentAnimationSpec` 計算方式：
+
+  ```ts
+  const rawAnimationSpec = editTab === 'animation' && animationDraft ? animationDraft : animationSavedSpec;
+  const currentAnimationSpec = useMemo(
+    () => resolveAnimationSpec(rawAnimationSpec, sentenceTimeline),
+    [rawAnimationSpec, sentenceTimeline],
+  );
+  ```
+
+  `resolveAnimationSpec` 在無 `startTrigger` 時回傳同一個物件參照，因此 `currentAnimationSpec` 的參照只在「`rawAnimationSpec` 真的變了」或「`sentenceTimeline` 真的變了（句子數或 duration 改變）」時才改變，`useGsapSlideTimeline` 不會因為每次渲染都拿到新物件而頻繁重建 timeline。
+- `sentenceTimeline` 同時透過 `PlayPageContext` 提供給 `AnimationEditorTab.tsx`，作為「依逐字稿句子」起始時間模式的句子下拉選單與秒數預覽資料來源（見 §7）。
+
 ## 7. 動畫編輯器 Tab
 
 編輯區由四個 Tab（逐字稿/提示詞/系統資料/來源）擴充為五個，`EditTab` 增加 `'animation'`。
 
 最小 UI：啟用 checkbox、效果清單（type select / start / duration / ease / 刪除）、新增效果、從頭預覽（先儲存 → 音訊 seek 0 → play）、儲存。
+
+### 7.1 起始時間方式（依秒數 / 依逐字稿句子）
+
+每個效果新增「起始時間方式」下拉（`play.animation.startMode`），二擇一：
+
+- **依秒數**（預設、`startTrigger` 為 `undefined`）：維持原本的 `start` 數字輸入框。
+- **依逐字稿句子**（`startTrigger = { type: 'transcript-line', line }`）：數字輸入框改為「句子」下拉選單，列出 `pageSentences`（`1. <句子前 18 字>…`），並在下方顯示「預估開始：X.X 秒」（取自 `sentenceTimeline[line].start`）。
+
+切換行為：
+
+- 切到「依逐字稿句子」：若效果尚未設定 `startTrigger`，預設指向第 1 句（`line: 0`）；已設定者保留原本的 `line`。
+- 切回「依秒數」：將目前換算出的秒數（`sentenceTimeline[line].start`，找不到則沿用舊 `start`）寫回 `start`，並清除 `startTrigger`，讓使用者接手微調。
+
+若該頁尚未有逐字稿（`pageSentences.length === 0`），「依逐字稿句子」選項停用；若效果已設定 `startTrigger` 但本頁逐字稿為空，顯示「本頁尚無逐字稿」提示文字而非空白下拉選單。
+
+`pageSentences` 與 `sentenceTimeline` 透過 `PlayPageContext` 提供給 `AnimationEditorTab.tsx`（與字幕高亮共用同一份計算結果，見 §6.5）。
 
 狀態流（`usePageAnimation.ts`）：
 
@@ -195,6 +263,8 @@ detail API 的 page 物件增加 `render_type` 與 `animation_spec_url`。
 動畫頁面：可啟用、可新增/修改/刪除效果、儲存後重整保留、從頭預覽自 0 秒播放、seek 跳至正確位置、暫停即停、1.5x 同步加速、換頁無殘留 transform、載入失敗退回靜態圖。
 
 同步播放：master/follower 顯示相同動畫頁面；follower 收到 seek 後跳至相同位置；reload 後可恢復。
+
+逐字稿同步：效果設為「依逐字稿句子」並儲存後，重整可保留設定；播放到對應句子時動畫準時開始；逐字稿被編輯導致該行不存在時，效果退回原本 `start` 秒數而非報錯。
 
 ## 12. 後續擴充方向
 

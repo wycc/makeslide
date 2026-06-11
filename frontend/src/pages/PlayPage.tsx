@@ -21,6 +21,8 @@ import {
   updatePlaybackSyncState,
   type ShareAccessMode,
 } from '../lib/api';
+import { resolveAnimationSpec } from '../lib/animationSpec';
+import { splitScriptIntoSentences, buildSentenceTimeline } from '../lib/subtitles';
 import { type DrawingCanvasHandle, type DrawingData, type DrawingStroke } from '../components/DrawingCanvas';
 import { useVersionHistory } from './play/useVersionHistory';
 import { useRegeneration } from './play/useRegeneration';
@@ -63,82 +65,12 @@ const SYNC_POLL_INTERVAL_MS = 1200;
 const SYNC_POLL_INTERVAL_FULLSCREEN_MS = 250;
 const SYNC_CURSOR_PUSH_INTERVAL_MS = 60;
 const SYNC_CURSOR_PUSH_INTERVAL_FULLSCREEN_MS = 24;
-const SENTENCE_MATCH_RE = /[^。！？!?；;\n]+[。！？!?；;]?|\n+/g;
-const TONE_MARKER_RE = /\[\[\s*[^\]]+\s*\]\]/g;
-
-interface SentenceTimelineItem {
-  text: string;
-  start: number;
-  end: number;
-}
 
 interface WakeLockSentinelLike {
   released: boolean;
   release: () => Promise<void>;
   addEventListener?: (type: 'release', listener: () => void) => void;
   removeEventListener?: (type: 'release', listener: () => void) => void;
-}
-
-
-
-function splitScriptIntoSentences(script: string): string[] {
-  const withoutToneMarkers = script.replace(TONE_MARKER_RE, ' ');
-  const normalized = withoutToneMarkers.replace(/\r\n?/g, '\n').trim();
-  if (!normalized) return [];
-  const parts = normalized.match(SENTENCE_MATCH_RE) ?? [];
-  return parts
-    .map((s) => s.trim())
-    .filter((s) => s !== '');
-}
-
-function buildSentenceTimeline(sentences: string[], duration: number): SentenceTimelineItem[] {
-  if (!Number.isFinite(duration) || duration <= 0 || sentences.length === 0) return [];
-  // 估時模型：先估每句「朗讀秒數」與「句後停頓秒數」，再按整頁 duration 等比縮放。
-  const CJK_CHAR_RE = /[\u3400-\u9FFF\uF900-\uFAFF]/;
-  const STRONG_END_RE = /[。！？.!?]$/;
-  const MEDIUM_END_RE = /[；;]$/;
-  const LIGHT_END_RE = /[，,、:]$/;
-
-  const estimateSpeakSeconds = (text: string): number => {
-    const compact = text.replace(/\s+/g, '');
-    if (!compact) return 0.08;
-    let sec = 0;
-    for (const ch of compact) {
-      if (CJK_CHAR_RE.test(ch)) sec += 0.15;
-      else if (/\d/.test(ch)) sec += 0.14;
-      else if (/[A-Za-z]/.test(ch)) sec += 0.09;
-      else sec += 0.06;
-    }
-    return Math.max(0.12, sec);
-  };
-
-  const estimatePauseSeconds = (text: string, isLast: boolean): number => {
-    if (isLast) return 0;
-    const compact = text.replace(/\s+/g, '');
-    if (STRONG_END_RE.test(compact)) return 0.32;
-    if (MEDIUM_END_RE.test(compact)) return 0.22;
-    if (LIGHT_END_RE.test(compact)) return 0.16;
-    return 0.12;
-  };
-
-  const rough = sentences.map((text, idx) => {
-    const speak = estimateSpeakSeconds(text);
-    const pause = estimatePauseSeconds(text, idx === sentences.length - 1);
-    return { text, speak, pause, total: speak + pause };
-  });
-
-  const roughTotal = rough.reduce((acc, item) => acc + item.total, 0);
-  if (!(roughTotal > 0)) return [];
-  const scale = duration / roughTotal;
-
-  let cursor = 0;
-  return rough.map((item, idx) => {
-    const seg = item.total * scale;
-    const start = cursor;
-    const end = idx === rough.length - 1 ? duration : Math.min(duration, cursor + seg);
-    cursor = end;
-    return { text: item.text, start, end };
-  });
 }
 
 function getAnyFullscreenElement(): Element | null {
@@ -1374,25 +1306,30 @@ export default function PlayPage() {
   const currentScript =
     currentPage != null ? scripts[currentPage.page_number] ?? '' : '';
 
-  // 整頁字幕（依標點/換行切句），供「全螢幕字幕」版面一次顯示整頁。
+  // 整頁字幕（依標點/換行切句），供「全螢幕字幕」版面一次顯示整頁，亦供動畫的逐字稿同步使用。
   const pageSentences = useMemo(
     () => splitScriptIntoSentences(currentScript),
     [currentScript],
+  );
+
+  // 各句估計的播放起訖時間；不隨 currentTime 變動，避免動畫 timeline 頻繁重建。
+  const sentenceTimeline = useMemo(
+    () => buildSentenceTimeline(pageSentences, duration),
+    [pageSentences, duration],
   );
 
   // 目前正在播放（朗讀）的句子索引；-1 代表本頁無字幕。
   const activeSentenceIdx = useMemo(() => {
     if (pageSentences.length === 0) return -1;
     if (pageSentences.length === 1) return 0;
-    const timeline = buildSentenceTimeline(pageSentences, duration);
-    if (timeline.length === 0) return 0;
+    if (sentenceTimeline.length === 0) return 0;
     const t = Number.isFinite(currentTime) ? Math.max(0, currentTime + 0.5) : 0;
-    const hit = timeline.findIndex((item) => t >= item.start && t < item.end);
+    const hit = sentenceTimeline.findIndex((item) => t >= item.start && t < item.end);
     if (hit >= 0) return hit;
-    const last = timeline[timeline.length - 1];
-    if (last && t >= last.end) return timeline.length - 1;
+    const last = sentenceTimeline[sentenceTimeline.length - 1];
+    if (last && t >= last.end) return sentenceTimeline.length - 1;
     return 0;
-  }, [pageSentences, currentTime, duration]);
+  }, [pageSentences, sentenceTimeline, currentTime]);
 
   const currentSentence = activeSentenceIdx >= 0 ? pageSentences[activeSentenceIdx] ?? '' : '';
 
@@ -1532,10 +1469,16 @@ export default function PlayPage() {
     setDetail,
   });
   // 動畫 Tab 開啟時用編輯中的 draft 即時預覽，其餘時間用已儲存的 spec
-  const currentAnimationSpec =
+  const rawAnimationSpec =
     scriptEditorState.editTab === 'animation' && animationState.animationDraft
       ? animationState.animationDraft
       : animationState.animationSavedSpec;
+  // 將綁定逐字稿句子的效果，依目前句子時間表換算為實際的 start 秒數；
+  // 若沒有任何效果使用 startTrigger，則回傳原物件參照，避免 GSAP timeline 不必要的重建。
+  const currentAnimationSpec = useMemo(
+    () => resolveAnimationSpec(rawAnimationSpec, sentenceTimeline),
+    [rawAnimationSpec, sentenceTimeline],
+  );
   const { handleSaveAnimation } = animationState;
   // 從頭預覽：先儲存（確保重整後一致），再把音訊歸零播放；timeline 由 currentTime 漂移校正自動跳回 0
   const handlePreviewAnimation = useCallback(() => {
@@ -1871,7 +1814,7 @@ export default function PlayPage() {
     isReadOnlyProcessing, readOnlyReason, shareIsReadOnly, imageBustKey,
     withImageBust, withShareToken, targetImageSrc,
     sourceItems, hasScriptChanges, syncQuestionBusy, openVersionHistory,
-    pageSentences, currentSentence, activeSentenceIdx,
+    pageSentences, currentSentence, activeSentenceIdx, sentenceTimeline,
     // refs
     audioRef, fullscreenContainerRef, fullscreenImageRef, drawingCanvasSplitRef,
     drawingCanvasMainRef, drawingCanvasFullscreenRef, sourcePdfInputRef,

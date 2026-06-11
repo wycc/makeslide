@@ -98,6 +98,13 @@ export type SlideAnimationEffectType =
 
 export type SlideAnimationEase = 'none' | 'power1.in' | 'power1.out' | 'power1.inOut' | 'power2.inOut';
 
+/** Ties an effect's start time to a transcript sentence instead of a fixed offset. */
+export interface SlideAnimationStartTrigger {
+  type: 'transcript-line';
+  /** 0-based index into the page script's sentence list. */
+  line: number;
+}
+
 export interface SlideAnimationEffect {
   id: string;
   target: 'slide';
@@ -106,6 +113,8 @@ export interface SlideAnimationEffect {
   duration: number;
   ease: SlideAnimationEase;
   params?: Record<string, number>;
+  /** When set, `start` is resolved at runtime from this transcript sentence's playback time. */
+  startTrigger?: SlideAnimationStartTrigger;
 }
 
 export interface SlideAnimationSpec {
