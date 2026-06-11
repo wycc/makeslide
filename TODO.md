@@ -683,3 +683,13 @@
 - 時間: 2026-06-11 10:28:00 +0800
 - 分支: feature/gemini-tts-inline-style-tags-20260611
 - 內容: 「將 Gemini TTS 的 inline tags 規則加到產生文稿的提示詞中」：使用者回報 Gemini TTS 偶爾會把逐字稿中的 {{語氣}} 標記照唸出來。追查後確認根因：四個 Gemini 提示詞範本要求 LLM 以 "{{}}" 描述語氣，但 TTS 端的 splitByToneMarkers() 只認得 "[[ ]]" 標記，{{...}} 原封不動留在 seg.text 中送進 Gemini TTS（gemini.ts 的 ttsPrompt = params.text），而 {{}} 並非 Gemini TTS 官方控制語法，模型只是「猜測式」略過，偶爾就會照唸。修正：(1) `backend/prompts/generate-script-gemini.md`、`generate-script-gemini-solo.md`、`rewrite-script-gemini.md`、`rewrite-script-gemini-solo.md` 四個範本（涵蓋初次生成/單頁改寫/整份重排 × 單人/雙人）改為【語氣標籤規則】：要求在情緒轉折處於文字正前方插入英文中括號 inline 標籤（優先使用 [excitedly], [seriously], [cheerfully], [whispers], [gasp], [sighs], [very fast], [slowly]），約每 2-3 句加一次、明確禁止 "{{}}" 與 "[[ ]]" 語法，並更新範例；改寫範本另要求把原稿殘留的 {{}} 改寫成英文標籤或移除。單中括號標籤不會被 TONE_MARKER_RE（僅匹配雙中括號）切走，會原樣傳給 Gemini TTS 由其語意理解。(2) `synthesizeAudio.ts` 朗讀前一律移除殘留的 {{...}} 標記（保險措施，讓既有舊腳本不需重生也不會再被照唸）。後端 `npx tsc --noEmit`、`npm run build` 皆通過；`npm test` 26 通過/18 失敗，與基線相同（既存、與本次變更無關的 401 認證測試失敗）。
+
+# 2026-6-12
+
+[x] 動畫投影片 V1：依 docs/animation-slide-v1-design.md 實作 SlideRenderer、GSAP 動畫播放與動畫編輯 Tab（完成於分支: feature/gsap-slide-animation-v1-20260612）
+
+## 工作記錄
+
+- 時間: 2026-06-12 03:00:00 +0800
+- 分支: feature/gsap-slide-animation-v1-20260612
+- 內容: 完成「動畫投影片 V1」（設計文件 docs/animation-slide-v1-design.md 隨分支提交）。後端：pages 表新增 `render_type`（預設 static-image）與 `animation_spec_path` 欄位；新增 `services/pageAnimation.ts` 以 zod 白名單驗證動畫 spec（7 種 effect type、5 種 ease、start/duration 範圍、effects ≤ 20、params 未知鍵過濾）；新增 `routes/pdfs/page-animation.ts` 提供 `GET/PUT /api/pdfs/:id/pages/:n/animation` 與 `GET .../animation/spec`（Cache-Control: no-store），spec 寫入 `pages/<page_uid>.animation.json`，`enabled` 決定 render_type；detail API 的 page 物件回傳 `render_type` 與 `animation_spec_url`。前端：安裝 gsap，新增 `components/slide/`（SlideRenderer、useGsapSlideTimeline、buildGsapTimeline），動畫套用在含手寫層與 inpaint 選取框的 animated stage 上，疊加層跟著移動且 normalized 座標不受影響；以音訊為唯一時鐘——isPlaying 驅動 play/pause、timeScale 跟隨倍速、currentTime 漂移 >0.3 秒才 seek（涵蓋拖曳進度條與 follower 同步），換頁重建 timeline、unmount kill+clearProps；一般播放區與全螢幕（image/split/edit）改用同一 renderer，靜態頁面 DOM 與原行為完全不變，spec 載入失敗或 GSAP runtime 錯誤時退回靜態圖片並顯示非阻斷式警告；編輯區新增第五個「動畫」Tab（usePageAnimation + AnimationEditorTab）支援啟用、效果新增/修改/刪除、儲存與「從頭預覽」（先儲存→音訊歸零→播放），動畫 Tab 開啟時以編輯中 draft 即時預覽免儲存；縮圖加上動畫標記；新增 play.animation.* 中英文 i18n 鍵。影片輸出維持靜態 JPG 不變。驗證：新增 backend/test/page-animation.test.ts 13 項測試全數通過（validation + API + 損毀檔案 fallback）；前後端 `tsc --noEmit` 與 `npm run build` 皆通過；後端 `npm test` 57 測試 39 通過/18 失敗，失敗數與既有認證基線相同，無新增失敗。
