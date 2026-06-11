@@ -26,7 +26,7 @@ export function splitScriptIntoSentences(script: string): string[] {
 export function buildSentenceTimeline(sentences: string[], duration: number): SentenceTimelineItem[] {
   if (!Number.isFinite(duration) || duration <= 0 || sentences.length === 0) return [];
   // 估時模型：先估每句「朗讀秒數」與「句後停頓秒數」，再按整頁 duration 等比縮放。
-  const CJK_CHAR_RE = /[㐀-鿿豈-﫿]/;
+  const CJK_CHAR_RE = /[\u3400-\u9FFF\uF900-\uFAFF]/;
   const STRONG_END_RE = /[。！？.!?]$/;
   const MEDIUM_END_RE = /[；;]$/;
   const LIGHT_END_RE = /[，,、:]$/;
