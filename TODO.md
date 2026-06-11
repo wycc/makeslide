@@ -663,6 +663,7 @@
 
 [x] 在雙人模式中，提示應使用一問一答的方式讓二個人對談，而不是一人念一段（完成於分支: feature/dual-mode-qa-dialogue-prompt-20260611）
 [x] 語音產生失敗時，要在 console 和 UI 上顯示失敗的原因（完成於分支: feature/audio-generation-failure-display-20260611）
+[x] 修正單頁重生語音 API 寫入錯誤的 audio_path，導致 LB0SmGK_Jf 第 6 頁語音無法播放且無錯誤訊息（完成於分支: fix/regenerate-audio-page-uid-path-20260611）
 
 ## 工作記錄
 
@@ -673,3 +674,7 @@
 - 時間: 2026-06-11 09:35:00 +0800
 - 分支: feature/audio-generation-failure-display-20260611
 - 內容: 「語音產生失敗時，要在 console 和 UI 上顯示失敗的原因」：`synthesizeAudio.ts` 在 TTS 重試耗盡後，新增 `extractTtsErrorMessage()` 組出包含 HTTP 狀態碼/錯誤代碼的人類可讀錯誤訊息，並在 `logger.error` 與回傳結果（`SynthesizeAudioPageResult.error`）中提供。涵蓋四個呼叫點：主流程 `pipeline.ts` 將失敗頁標記 `pages.status='failed'`、寫入 `error_message`，audio timing stage 標記為 failed；批次重生 `regenerate.ts` 失敗頁清空 `audio_path`/`audio_duration_seconds` 並標記 failed（含 metadata.json 同步）；新增頁面 `addPagesFromPrompt.ts` 失敗頁標記 failed/error_message；單頁重生 `/api/pdfs/:id/pages/:n/regenerate-audio` 端點失敗時回傳 `502 TTS_FAILED` 並標記該頁 failed，讓前端 `handleRegenerateAudio` 立即以 `ApiError.message` 顯示失敗原因。沿用既有圖片產生失敗的 UI 呈現模式（`PlayPageHeader.tsx` 的 `error_message` 紅色橫幅），前端無需改動。後端 `npx tsc --noEmit` 與 `npm run build` 皆通過。
+
+- 時間: 2026-06-11 09:50:00 +0800
+- 分支: fix/regenerate-audio-page-uid-path-20260611
+- 內容: 使用者回報「LB0SmGK_Jf 這個簡報的第六頁產生不出來，但也沒有看到什麼錯誤訊息」。追查後發現 `pages.audio_path='pages/006.m4a'`（頁碼補零命名），但 `synthesizeAudio()` 實際是依 `pageAudioPath(pdfId, pageUid)` 寫到 `pages/yY4ruQzKJP.m4a`（page_uid 命名），兩者不一致：語音其實生成成功，但 `/api/pdfs/:id/pages/:n/audio` 依 DB 記錄的路徑找不到檔案，回傳 `404 PAGE_AUDIO_NOT_FOUND`，且因為 TTS 本身沒有失敗，不會觸發 `error_message` 橫幅，造成「沒有錯誤訊息但播放不出來」。根因為 `page-operations.ts` 的 `/api/pdfs/:id/pages/:n/regenerate-audio` 端點仍以「頁碼補零」組出 `relAudioPath` 寫入 DB，是 `feature/stable-page-uid-filenames-20260608` 遷移時遺漏更新的呼叫點。修正：改用 `path.relative(pdfDir(id), audio.audioPath)` 取得 `synthesizeAudio()` 實際寫入的相對路徑，與 `regenerate.ts`/`addPagesFromPrompt.ts` 的作法一致。並修正 `storage/LB0SmGK_Jf/metadata.json` 第 6 頁既有的 `audio: "pages/006.m4a"` 為 `pages/yY4ruQzKJP.m4a`（與實際檔案一致）。`data/app.db` 中該頁 `audio_path` 欄位的同步修正因 Claude Code 權限機制阻擋直接 SQL UPDATE 而尚未套用，待後續處理（例如透過呼叫修正後的 `/regenerate-audio` 端點重生該頁語音以自動寫回正確路徑，或由使用者手動執行 `UPDATE pages SET audio_path = 'pages/yY4ruQzKJP.m4a' WHERE pdf_id='LB0SmGK_Jf' AND page_number=6;`）。後端 `npx tsc --noEmit` 與 `npm run build` 皆通過。
