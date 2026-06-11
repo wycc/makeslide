@@ -687,9 +687,21 @@
 # 2026-6-12
 
 [x] 動畫投影片 V1：依 docs/animation-slide-v1-design.md 實作 SlideRenderer、GSAP 動畫播放與動畫編輯 Tab（完成於分支: feature/gsap-slide-animation-v1-20260612）
+[x] 新增「動畫與逐字稿同步」功能：動畫效果的開始時間可改為綁定逐字稿句子，播放到該句時動畫同步開始（完成於分支: feature/animation-transcript-line-sync-20260612）
 
 ## 工作記錄
 
 - 時間: 2026-06-12 03:00:00 +0800
 - 分支: feature/gsap-slide-animation-v1-20260612
 - 內容: 完成「動畫投影片 V1」（設計文件 docs/animation-slide-v1-design.md 隨分支提交）。後端：pages 表新增 `render_type`（預設 static-image）與 `animation_spec_path` 欄位；新增 `services/pageAnimation.ts` 以 zod 白名單驗證動畫 spec（7 種 effect type、5 種 ease、start/duration 範圍、effects ≤ 20、params 未知鍵過濾）；新增 `routes/pdfs/page-animation.ts` 提供 `GET/PUT /api/pdfs/:id/pages/:n/animation` 與 `GET .../animation/spec`（Cache-Control: no-store），spec 寫入 `pages/<page_uid>.animation.json`，`enabled` 決定 render_type；detail API 的 page 物件回傳 `render_type` 與 `animation_spec_url`。前端：安裝 gsap，新增 `components/slide/`（SlideRenderer、useGsapSlideTimeline、buildGsapTimeline），動畫套用在含手寫層與 inpaint 選取框的 animated stage 上，疊加層跟著移動且 normalized 座標不受影響；以音訊為唯一時鐘——isPlaying 驅動 play/pause、timeScale 跟隨倍速、currentTime 漂移 >0.3 秒才 seek（涵蓋拖曳進度條與 follower 同步），換頁重建 timeline、unmount kill+clearProps；一般播放區與全螢幕（image/split/edit）改用同一 renderer，靜態頁面 DOM 與原行為完全不變，spec 載入失敗或 GSAP runtime 錯誤時退回靜態圖片並顯示非阻斷式警告；編輯區新增第五個「動畫」Tab（usePageAnimation + AnimationEditorTab）支援啟用、效果新增/修改/刪除、儲存與「從頭預覽」（先儲存→音訊歸零→播放），動畫 Tab 開啟時以編輯中 draft 即時預覽免儲存；縮圖加上動畫標記；新增 play.animation.* 中英文 i18n 鍵。影片輸出維持靜態 JPG 不變。驗證：新增 backend/test/page-animation.test.ts 13 項測試全數通過（validation + API + 損毀檔案 fallback）；前後端 `tsc --noEmit` 與 `npm run build` 皆通過；後端 `npm test` 57 測試 39 通過/18 失敗，失敗數與既有認證基線相同，無新增失敗。
+
+- 時間: 2026-06-12 05:40:00 +0800
+- 分支: feature/animation-transcript-line-sync-20260612
+- 內容: 完成「動畫與逐字稿同步」（設計文件 docs/animation-slide-v1-design.md §4.3 / §6.5 / §7.1 隨分支提交）。新增 `effect.startTrigger?: { type: 'transcript-line', line: number }`，可將動畫效果的開始時間改為「播放到本頁逐字稿第 N 句（0-based）時觸發」，而非固定秒數。後端：`backend/src/services/pageAnimation.ts` 新增 `StartTriggerSchema`（`type` 限定 `transcript-line`、`line` 為 0~999 整數），`validateAnimationSpec` 驗證並保留該欄位；`backend/test/page-animation.test.ts` 新增/調整測試，涵蓋合法保留、非法 type/line（負數、非整數、超出上限）拒絕，以及 PUT/GET API 往返保留 `startTrigger`（共 15 項測試全數通過）。前端：將原本內嵌於 `PlayPage.tsx` 的字幕切句/估時邏輯（`splitScriptIntoSentences`、`buildSentenceTimeline`）抽到新檔 `frontend/src/lib/subtitles.ts`，供字幕高亮與動畫同步共用；`frontend/src/lib/animationSpec.ts` 新增 `resolveAnimationSpec(spec, sentenceTimeline)`，將有 `startTrigger` 的效果之 `start` 換算為對應句子的估計播放開始秒數（找不到對應句子時退回原本 `start`），無任何 `startTrigger` 時回傳原物件參照以避免 GSAP timeline 不必要重建；`PlayPage.tsx` 新增 `sentenceTimeline` memo（依賴 `[pageSentences, duration]`，不隨 `currentTime` 變動），`currentAnimationSpec` 改為 `useMemo(() => resolveAnimationSpec(rawSpec, sentenceTimeline), [rawSpec, sentenceTimeline])`，並透過 `PlayPageContext` 提供 `sentenceTimeline` 給編輯器；`AnimationEditorTab.tsx` 每個效果新增「起始時間方式」下拉（依秒數 / 依逐字稿句子），切到「依逐字稿句子」時顯示句子下拉選單（`1. <句子前 18 字>…`）與「預估開始：X.X 秒」，切回「依秒數」時把當下換算秒數寫回 `start` 並清除 `startTrigger`；本頁無逐字稿時停用該選項並顯示提示文字。新增 `play.animation.startMode*` 等中英文 i18n 鍵。驗證：後端 `npx tsx --test test/page-animation.test.ts`（Node v22.12.0）15 項全數通過；前端 `tsc --noEmit` 通過。
+
+
+# 新功能(每一個功能使用一個 branch，做好後也要更新 master 上的設計文件)
+[ ] 加上一個自動生成焦點的功能，打開這個功能後，在產生語音後，自動為每一行逐字稿在螢幕上產生一個指示焦點的動畫。以輔助說明。
+[ ] 除了焦點以外，也可以生成一張小圖或文字做為動畫內容。
+[ ] 加上手動在逐字稿加上動畫指引的功能，這個指引會在生成動畫時傳給 LLM 做參考。
+[ ] 提供多種焦點的功能，例如紅框或 spotlight或引言(圖)
