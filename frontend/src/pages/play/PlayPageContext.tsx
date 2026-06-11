@@ -7,6 +7,7 @@ import type {
   PagePoll,
   PdfSourceItem,
   RegenJobState,
+  SlideAnimationSpec,
   SyncAiAnswer,
   SyncFollowerQuestion,
 } from '../../types';
@@ -16,7 +17,7 @@ import type { DrawingCanvasHandle, DrawingData, DrawingStroke } from '../../comp
 
 // ── Inline alias types ────────────────────────────────────────────────────────
 type HostMode = 'solo' | 'dual';
-type EditTab = 'script' | 'prompt' | 'source' | 'system';
+type EditTab = 'script' | 'prompt' | 'animation' | 'source' | 'system';
 type ActiveTab = 'play' | 'qa';
 type SyncRole = 'master' | 'follower';
 type FullscreenLayout = 'image' | 'split' | 'edit';
@@ -105,6 +106,19 @@ export interface PlayPageContextValue {
   setTranscriptFocusMode: Dispatch<SetStateAction<boolean>>;
   handleRewriteScript: () => void;
   handleRetry: () => void;
+
+  // ─── Slide animation (GSAP V1) ──────────────────────────────────────────────
+  /** 播放時實際採用的 spec（動畫 Tab 開啟時為編輯中 draft，可即時預覽）。 */
+  currentAnimationSpec: SlideAnimationSpec | null;
+  animationDraft: SlideAnimationSpec | null;
+  setAnimationDraft: Dispatch<SetStateAction<SlideAnimationSpec | null>>;
+  animationBusy: boolean;
+  animationError: string | null;
+  animationMessage: string | null;
+  animationWarning: string | null;
+  setAnimationWarning: Dispatch<SetStateAction<string | null>>;
+  handleSaveAnimation: () => Promise<boolean>;
+  handlePreviewAnimation: () => void;
 
   // ─── Prompt / source ────────────────────────────────────────────────────────
   promptInput: string;

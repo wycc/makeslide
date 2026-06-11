@@ -345,6 +345,15 @@ function migrate(): void {
     logger.info({ count: pagesMissingUid.length }, 'Backfilled page_uid for existing pages');
   }
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_pages_uid ON pages(pdf_id, page_uid)`);
+  // GSAP slide animation V1: per-page render mode + animation spec file path.
+  if (!columnExists('pages', 'render_type')) {
+    db.exec(`ALTER TABLE pages ADD COLUMN render_type TEXT NOT NULL DEFAULT 'static-image'`);
+    logger.info('Added column pages.render_type');
+  }
+  if (!columnExists('pages', 'animation_spec_path')) {
+    db.exec(`ALTER TABLE pages ADD COLUMN animation_spec_path TEXT`);
+    logger.info('Added column pages.animation_spec_path');
+  }
   if (!columnExists('page_polls', 'show_results')) {
     db.exec(`ALTER TABLE page_polls ADD COLUMN show_results INTEGER NOT NULL DEFAULT 1`);
     logger.info('Added column page_polls.show_results');

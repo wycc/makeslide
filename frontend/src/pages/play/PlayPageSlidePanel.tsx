@@ -1,8 +1,10 @@
 import DrawingCanvas from '../../components/DrawingCanvas';
+import { SlideRenderer } from '../../components/slide/SlideRenderer';
+import { AnimationEditorTab } from './AnimationEditorTab';
 import { formatTime, formatDurationMs } from './formatters';
 import { PageTimingChips } from './PageTimingChips';
 import { fetchPageGenerationPrompts } from '../../lib/api';
-import { SHOW_SUBTITLE_STORAGE_KEY, INTERACTIVE_MODE_STORAGE_KEY } from '../../i18n';
+import { SHOW_SUBTITLE_STORAGE_KEY, INTERACTIVE_MODE_STORAGE_KEY, useI18n } from '../../i18n';
 import { usePlayPageContext } from './PlayPageContext';
 
 export function PlayPageSlidePanel() {
@@ -67,7 +69,11 @@ export function PlayPageSlidePanel() {
     shareUrl,
     hasScriptChanges,
     sourceItems,
+    currentAnimationSpec,
+    animationWarning, setAnimationWarning,
   } = usePlayPageContext();
+
+  const { t } = useI18n();
 
   const progressRatio = duration > 0 ? Math.min(1, currentTime / duration) * 1000 : 0;
 
@@ -121,33 +127,37 @@ export function PlayPageSlidePanel() {
               {!transcriptFocusMode && shareUrl ? <p className="max-w-[85vw] break-all text-center text-xs text-slate-300">{shareUrl}</p> : null}
             </div>
           ) : currentPage?.image_url || displayedImageSrc ? (
-            <div
-              className="relative inline-block"
-              style={{ lineHeight: 0, maxHeight: transcriptFocusMode ? '10rem' : `${slideImageMaxHeightVh}vh` }}
+            <SlideRenderer
+              renderType={currentPage?.render_type}
+              spec={currentAnimationSpec}
+              pageKey={`${pdfId ?? ''}:${currentPage?.page_number ?? 0}`}
+              currentTime={currentTime}
+              isPlaying={isPlaying}
+              playbackRate={playbackRate}
+              onAnimationError={() => setAnimationWarning(t('play.animation.runtimeWarning'))}
+              wrapperClassName="relative inline-block rounded-lg"
+              wrapperStyle={{ lineHeight: 0, maxHeight: transcriptFocusMode ? '10rem' : `${slideImageMaxHeightVh}vh` }}
+              src={displayedImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
+              alt={`第 ${currentPage?.page_number ?? ''} 頁`}
+              imgClassName="block h-auto w-auto rounded-lg border border-slate-800 shadow-xl"
+              imgStyle={{
+                maxHeight: transcriptFocusMode ? '10rem' : `${slideImageMaxHeightVh}vh`,
+                cursor: imageEditSelectMode ? 'crosshair' : (drawingMode && drawingTool !== 'cursor') ? 'default' : 'pointer',
+              }}
+              onImgClick={() => { if (!imageEditSelectMode && (!drawingMode || drawingTool === 'cursor')) playPause(); }}
+              imgProps={{ role: 'button', tabIndex: -1, 'aria-label': isPlaying ? '暫停語音播放' : '繼續語音播放' }}
+              overlay={
+                <button
+                  type="button"
+                  onClick={() => currentPage && void openVersionHistory('image', currentPage.page_number)}
+                  disabled={!currentPage}
+                  title="查看此頁圖片的歷史版本"
+                  className="absolute right-2 top-2 z-20 rounded-md border border-slate-600 bg-slate-900/80 px-2 py-1 text-xs text-slate-300 backdrop-blur hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  🖼 版本
+                </button>
+              }
             >
-              <img
-                src={displayedImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
-                alt={`第 ${currentPage?.page_number ?? ''} 頁`}
-                className="block h-auto w-auto rounded-lg border border-slate-800 shadow-xl"
-                draggable={false}
-                style={{
-                  maxHeight: transcriptFocusMode ? '10rem' : `${slideImageMaxHeightVh}vh`,
-                  cursor: imageEditSelectMode ? 'crosshair' : (drawingMode && drawingTool !== 'cursor') ? 'default' : 'pointer',
-                }}
-                onClick={() => { if (!imageEditSelectMode && (!drawingMode || drawingTool === 'cursor')) playPause(); }}
-                role="button"
-                tabIndex={-1}
-                aria-label={isPlaying ? '暫停語音播放' : '繼續語音播放'}
-              />
-              <button
-                type="button"
-                onClick={() => currentPage && void openVersionHistory('image', currentPage.page_number)}
-                disabled={!currentPage}
-                title="查看此頁圖片的歷史版本"
-                className="absolute right-2 top-2 z-20 rounded-md border border-slate-600 bg-slate-900/80 px-2 py-1 text-xs text-slate-300 backdrop-blur hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                🖼 版本
-              </button>
               {pdfId && currentPage && (
                 <DrawingCanvas
                   ref={drawingCanvasMainRef}
@@ -235,7 +245,7 @@ export function PlayPageSlidePanel() {
                   }}
                 />
               )}
-            </div>
+            </SlideRenderer>
           ) : (
             <div
               className="flex w-full items-center justify-center rounded-lg border border-slate-800 text-slate-500"
@@ -248,6 +258,11 @@ export function PlayPageSlidePanel() {
                       : '圖片產生中…'}
             </div>
           )}
+          {animationWarning ? (
+            <div className="pointer-events-none absolute left-1/2 top-3 z-30 -translate-x-1/2 rounded-md border border-amber-500/40 bg-amber-950/85 px-3 py-1.5 text-xs text-amber-200">
+              {animationWarning}
+            </div>
+          ) : null}
           {showSubtitle && currentSentence ? (
             <div className="pointer-events-none absolute bottom-3 left-1/2 w-[min(92%,900px)] -translate-x-1/2 px-2">
               <div className="mx-auto rounded-md bg-black/60 px-4 py-2 text-center text-sm font-medium leading-relaxed text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] md:text-base">
@@ -525,6 +540,13 @@ export function PlayPageSlidePanel() {
             </button>
             <button
               type="button"
+              onClick={() => setEditTab('animation')}
+              className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'animation' ? 'bg-slate-800 text-fuchsia-200' : 'text-slate-400'}`}
+            >
+              🎞 {t('play.animation.tab')}
+            </button>
+            <button
+              type="button"
               onClick={() => setEditTab('system')}
               className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'system' ? 'bg-slate-800 text-amber-200' : 'text-slate-400'}`}
             >
@@ -622,6 +644,8 @@ export function PlayPageSlidePanel() {
                 </button>
               </div>
             </>
+          ) : editTab === 'animation' ? (
+            <AnimationEditorTab />
           ) : editTab === 'source' ? (
             <>
               <h2 className="mb-2 text-sm font-semibold text-slate-300">📚 來源管理</h2>
