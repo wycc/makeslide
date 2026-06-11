@@ -237,6 +237,12 @@ async function synthesizeOnePage(params: {
   if (!input) {
     throw new Error(`Page ${pageNumber} has empty script, cannot synthesize`);
   }
+  // 舊版 Gemini 腳本以 {{語氣}} 描述情緒，TTS 不保證會略過、偶爾照唸；
+  // 新版腳本已改用英文中括號標籤（如 [excitedly]），這裡將殘留的 {{...}} 一律移除。
+  input = input.replace(/\{\{[^{}]*\}\}/g, '').replace(/[ \t]{2,}/g, ' ').trim();
+  if (!input) {
+    throw new Error(`Page ${pageNumber} has empty script after removing tone markers, cannot synthesize`);
+  }
   const runtime = getRuntimeAiSettings();
   const provider = runtime.ttsProvider;
   const client = provider === 'openai' ? getOpenAIClient() : null;
