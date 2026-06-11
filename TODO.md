@@ -664,6 +664,7 @@
 [x] 在雙人模式中，提示應使用一問一答的方式讓二個人對談，而不是一人念一段（完成於分支: feature/dual-mode-qa-dialogue-prompt-20260611）
 [x] 語音產生失敗時，要在 console 和 UI 上顯示失敗的原因（完成於分支: feature/audio-generation-failure-display-20260611）
 [x] 修正單頁重生語音 API 寫入錯誤的 audio_path，導致 LB0SmGK_Jf 第 6 頁語音無法播放且無錯誤訊息（完成於分支: fix/regenerate-audio-page-uid-path-20260611）
+[x] 將 Gemini TTS 的 inline tags 規則加到產生文稿的提示詞中，當選擇 Gemini TTS 時使用正確的英文中括號語氣標籤格式產生文稿，取代會被照唸的 {{語氣}} 標記（完成於分支: feature/gemini-tts-inline-style-tags-20260611）
 
 ## 工作記錄
 
@@ -678,3 +679,7 @@
 - 時間: 2026-06-11 09:50:00 +0800
 - 分支: fix/regenerate-audio-page-uid-path-20260611
 - 內容: 使用者回報「LB0SmGK_Jf 這個簡報的第六頁產生不出來，但也沒有看到什麼錯誤訊息」。追查後發現 `pages.audio_path='pages/006.m4a'`（頁碼補零命名），但 `synthesizeAudio()` 實際是依 `pageAudioPath(pdfId, pageUid)` 寫到 `pages/yY4ruQzKJP.m4a`（page_uid 命名），兩者不一致：語音其實生成成功，但 `/api/pdfs/:id/pages/:n/audio` 依 DB 記錄的路徑找不到檔案，回傳 `404 PAGE_AUDIO_NOT_FOUND`，且因為 TTS 本身沒有失敗，不會觸發 `error_message` 橫幅，造成「沒有錯誤訊息但播放不出來」。根因為 `page-operations.ts` 的 `/api/pdfs/:id/pages/:n/regenerate-audio` 端點仍以「頁碼補零」組出 `relAudioPath` 寫入 DB，是 `feature/stable-page-uid-filenames-20260608` 遷移時遺漏更新的呼叫點。修正：改用 `path.relative(pdfDir(id), audio.audioPath)` 取得 `synthesizeAudio()` 實際寫入的相對路徑，與 `regenerate.ts`/`addPagesFromPrompt.ts` 的作法一致。並修正 `storage/LB0SmGK_Jf/metadata.json` 第 6 頁既有的 `audio: "pages/006.m4a"` 為 `pages/yY4ruQzKJP.m4a`（與實際檔案一致）。`data/app.db` 中該頁 `audio_path` 欄位的同步修正因 Claude Code 權限機制阻擋直接 SQL UPDATE 而尚未套用，待後續處理（例如透過呼叫修正後的 `/regenerate-audio` 端點重生該頁語音以自動寫回正確路徑，或由使用者手動執行 `UPDATE pages SET audio_path = 'pages/yY4ruQzKJP.m4a' WHERE pdf_id='LB0SmGK_Jf' AND page_number=6;`）。後端 `npx tsc --noEmit` 與 `npm run build` 皆通過。
+
+- 時間: 2026-06-11 10:28:00 +0800
+- 分支: feature/gemini-tts-inline-style-tags-20260611
+- 內容: 「將 Gemini TTS 的 inline tags 規則加到產生文稿的提示詞中」：使用者回報 Gemini TTS 偶爾會把逐字稿中的 {{語氣}} 標記照唸出來。追查後確認根因：四個 Gemini 提示詞範本要求 LLM 以 "{{}}" 描述語氣，但 TTS 端的 splitByToneMarkers() 只認得 "[[ ]]" 標記，{{...}} 原封不動留在 seg.text 中送進 Gemini TTS（gemini.ts 的 ttsPrompt = params.text），而 {{}} 並非 Gemini TTS 官方控制語法，模型只是「猜測式」略過，偶爾就會照唸。修正：(1) `backend/prompts/generate-script-gemini.md`、`generate-script-gemini-solo.md`、`rewrite-script-gemini.md`、`rewrite-script-gemini-solo.md` 四個範本（涵蓋初次生成/單頁改寫/整份重排 × 單人/雙人）改為【語氣標籤規則】：要求在情緒轉折處於文字正前方插入英文中括號 inline 標籤（優先使用 [excitedly], [seriously], [cheerfully], [whispers], [gasp], [sighs], [very fast], [slowly]），約每 2-3 句加一次、明確禁止 "{{}}" 與 "[[ ]]" 語法，並更新範例；改寫範本另要求把原稿殘留的 {{}} 改寫成英文標籤或移除。單中括號標籤不會被 TONE_MARKER_RE（僅匹配雙中括號）切走，會原樣傳給 Gemini TTS 由其語意理解。(2) `synthesizeAudio.ts` 朗讀前一律移除殘留的 {{...}} 標記（保險措施，讓既有舊腳本不需重生也不會再被照唸）。後端 `npx tsc --noEmit`、`npm run build` 皆通過；`npm test` 26 通過/18 失敗，與基線相同（既存、與本次變更無關的 401 認證測試失敗）。
