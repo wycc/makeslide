@@ -13,6 +13,7 @@ import type {
 } from '../../types';
 import type { ImagePromptTemplate, PageGenerationPrompt, ShareAccessMode } from '../../lib/api';
 import type { TtsProvider } from '../../lib/ttsVoices';
+import type { SentenceTimelineItem } from '../../lib/subtitles';
 import type { DrawingCanvasHandle, DrawingData, DrawingStroke } from '../../components/DrawingCanvas';
 
 // ── Inline alias types ────────────────────────────────────────────────────────
@@ -386,6 +387,8 @@ export interface PlayPageContextValue {
   pageSentences: string[];
   currentSentence: string;
   activeSentenceIdx: number;
+  /** 各句估計的播放起訖時間，供動畫編輯器選擇「依逐字稿句子」起始時間時換算秒數預覽。 */
+  sentenceTimeline: SentenceTimelineItem[];
 
   // ─── Refs used in JSX ───────────────────────────────────────────────────────
   audioRef: RefObject<HTMLAudioElement>;

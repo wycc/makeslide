@@ -111,6 +111,35 @@ test('validateAnimationSpec rejects non-object input', () => {
   assert.equal(validateAnimationSpec('spec').ok, false);
 });
 
+test('validateAnimationSpec accepts and preserves a transcript-line startTrigger', () => {
+  const result = validateAnimationSpec(
+    validSpec([fadeIn({ startTrigger: { type: 'transcript-line', line: 2 } })]),
+  );
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.deepEqual(result.spec.effects[0].startTrigger, { type: 'transcript-line', line: 2 });
+  }
+});
+
+test('validateAnimationSpec rejects an invalid startTrigger', () => {
+  assert.equal(
+    validateAnimationSpec(validSpec([fadeIn({ startTrigger: { type: 'transcript-line', line: -1 } })])).ok,
+    false,
+  );
+  assert.equal(
+    validateAnimationSpec(validSpec([fadeIn({ startTrigger: { type: 'transcript-line', line: 1.5 } })])).ok,
+    false,
+  );
+  assert.equal(
+    validateAnimationSpec(validSpec([fadeIn({ startTrigger: { type: 'transcript-line', line: 1000 } })])).ok,
+    false,
+  );
+  assert.equal(
+    validateAnimationSpec(validSpec([fadeIn({ startTrigger: { type: 'word', line: 0 } })])).ok,
+    false,
+  );
+});
+
 // ── API ───────────────────────────────────────────────────────────────────────
 
 test('GET animation returns default spec when no file exists', async () => {
@@ -132,7 +161,10 @@ test('GET animation returns default spec when no file exists', async () => {
 test('PUT animation with enabled spec writes file and flips render_type', async () => {
   seedAnimationPdf(PDF_ID, 2);
   const app = await buildApp();
-  const spec = validSpec([fadeIn(), fadeIn({ id: 'effect-2', type: 'zoom-in', duration: 8, ease: 'none' })]);
+  const spec = validSpec([
+    fadeIn({ startTrigger: { type: 'transcript-line', line: 0 } }),
+    fadeIn({ id: 'effect-2', type: 'zoom-in', duration: 8, ease: 'none' }),
+  ]);
   const putResp = await app.inject({
     method: 'PUT',
     url: `/api/pdfs/${PDF_ID}/pages/1/animation`,
@@ -161,9 +193,10 @@ test('PUT animation with enabled spec writes file and flips render_type', async 
   });
   assert.equal(specResp.statusCode, 200);
   assert.equal(specResp.headers['cache-control'], 'no-store');
-  const served = specResp.json() as { enabled: boolean; effects: unknown[] };
+  const served = specResp.json() as { enabled: boolean; effects: Array<{ startTrigger?: unknown }> };
   assert.equal(served.enabled, true);
   assert.equal(served.effects.length, 2);
+  assert.deepEqual(served.effects[0].startTrigger, { type: 'transcript-line', line: 0 });
 
   // detail API exposes render_type and animation_spec_url
   const detailResp = await app.inject({

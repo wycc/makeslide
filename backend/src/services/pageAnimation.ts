@@ -16,6 +16,13 @@ export const ANIMATION_EASES = ['none', 'power1.in', 'power1.out', 'power1.inOut
 export type AnimationEffectType = (typeof ANIMATION_EFFECT_TYPES)[number];
 export type AnimationEase = (typeof ANIMATION_EASES)[number];
 
+/** Ties an effect's start time to a transcript sentence instead of a fixed offset. */
+export interface AnimationStartTrigger {
+  type: 'transcript-line';
+  /** 0-based index into the page script's sentence list. */
+  line: number;
+}
+
 export interface AnimationEffect {
   id: string;
   target: 'slide';
@@ -24,6 +31,8 @@ export interface AnimationEffect {
   duration: number;
   ease: AnimationEase;
   params?: Record<string, number>;
+  /** When set, `start` is resolved at runtime from this transcript sentence's playback time. */
+  startTrigger?: AnimationStartTrigger;
 }
 
 export interface AnimationSpec {
@@ -34,6 +43,7 @@ export interface AnimationSpec {
 
 const MAX_EFFECTS = 20;
 const MAX_DURATION_SECONDS = 600;
+const MAX_TRANSCRIPT_LINE = 999;
 
 // Whitelisted numeric params per effect type; unknown keys are stripped, not rejected,
 // so future spec versions can add params without breaking older backends.
@@ -47,6 +57,11 @@ const ALLOWED_PARAM_KEYS: Record<AnimationEffectType, readonly string[]> = {
   'pan-down': ['distancePct'],
 };
 
+const StartTriggerSchema = z.object({
+  type: z.literal('transcript-line'),
+  line: z.number().int().min(0).max(MAX_TRANSCRIPT_LINE),
+});
+
 const EffectSchema = z.object({
   id: z.string().min(1).max(64),
   target: z.literal('slide'),
@@ -55,6 +70,7 @@ const EffectSchema = z.object({
   duration: z.number().gt(0).max(MAX_DURATION_SECONDS),
   ease: z.enum(ANIMATION_EASES),
   params: z.record(z.unknown()).optional(),
+  startTrigger: StartTriggerSchema.optional(),
 });
 
 const SpecSchema = z.object({
@@ -99,6 +115,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       duration: effect.duration,
       ease: effect.ease,
       ...(params ? { params } : {}),
+      ...(effect.startTrigger ? { startTrigger: effect.startTrigger } : {}),
     };
   });
   return { ok: true, spec: { version: 1, enabled: parsed.data.enabled, effects } };

@@ -160,11 +160,11 @@ PlayPage 目前約 1981 行。依「風險 / 效益」分層評估：
 
 | 候選 | 內容 | 預估 |
 |------|------|-----:|
-| `play/subtitles.ts` | `splitScriptIntoSentences` + `buildSentenceTimeline` + 兩個正規表示式 | ~60 行 |
+| ~~`play/subtitles.ts`~~ | ~~`splitScriptIntoSentences` + `buildSentenceTimeline` + 兩個正規表示式~~ | **已完成**：抽至 `frontend/src/lib/subtitles.ts`（2026-06-12，逐字稿同步動畫功能一併重用此邏輯，詳見 `docs/animation-slide-v1-design.md` §6.5） |
 | `play/fullscreenApi.ts` | `getAnyFullscreenElement` / `requestAnyFullscreen` / `exitAnyFullscreen` | ~45 行 |
 
-> 注意：這兩者只是把純函式移到獨立檔，**不改變** PlayPage 的 state 結構，
-> 但能讓主檔聚焦於元件邏輯。建議優先做。
+> 注意：上述抽法只是把純函式移到獨立檔，**不改變** PlayPage 的 state 結構，
+> 但能讓主檔聚焦於元件邏輯。`subtitles.ts` 已完成抽出，§3 行段對照表的行號略有偏移（PlayPage 現約 1962 行），未重新校正。
 
 ### 🟡 中等風險，可抽成內聚 hook（約 –280 行）
 這些 effect/callback 群有清楚邊界，依賴的 state 少且單向：

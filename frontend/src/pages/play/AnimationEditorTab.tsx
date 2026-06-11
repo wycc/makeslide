@@ -20,6 +20,11 @@ function newEffect(): SlideAnimationEffect {
   };
 }
 
+/** 句子文字過長時，於下拉選單中截斷顯示。 */
+function truncateSentence(text: string, maxLen = 18): string {
+  return text.length > maxLen ? `${text.slice(0, maxLen)}…` : text;
+}
+
 export function AnimationEditorTab() {
   const {
     currentPage,
@@ -30,6 +35,8 @@ export function AnimationEditorTab() {
     handleSaveAnimation,
     handlePreviewAnimation,
     isReadOnlyProcessing,
+    pageSentences,
+    sentenceTimeline,
   } = usePlayPageContext();
   const { t } = useI18n();
 
@@ -92,17 +99,80 @@ export function AnimationEditorTab() {
                 </select>
               </label>
               <label className="flex flex-col gap-1 text-xs text-slate-400">
-                {t('play.animation.start')}
-                <input
-                  type="number"
-                  min={0}
-                  step={0.1}
-                  value={effect.start}
+                {t('play.animation.startMode')}
+                <select
+                  value={effect.startTrigger ? 'transcript-line' : 'time'}
                   disabled={disabled}
-                  onChange={(e) => updateEffect(effect.id, { start: Math.max(0, Number(e.target.value) || 0) })}
-                  className="w-20 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
-                />
+                  onChange={(e) => {
+                    if (e.target.value === 'transcript-line') {
+                      updateEffect(effect.id, {
+                        startTrigger: effect.startTrigger ?? { type: 'transcript-line', line: 0 },
+                      });
+                    } else {
+                      const resolved =
+                        effect.startTrigger ? sentenceTimeline[effect.startTrigger.line]?.start : undefined;
+                      updateEffect(effect.id, {
+                        start: resolved ?? effect.start,
+                        startTrigger: undefined,
+                      });
+                    }
+                  }}
+                  className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                >
+                  <option value="time">{t('play.animation.startMode.time')}</option>
+                  <option value="transcript-line" disabled={pageSentences.length === 0}>
+                    {t('play.animation.startMode.transcript')}
+                  </option>
+                </select>
               </label>
+              {effect.startTrigger ? (
+                pageSentences.length > 0 ? (
+                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    {t('play.animation.startTranscriptLine')}
+                    <select
+                      value={effect.startTrigger.line}
+                      disabled={disabled}
+                      onChange={(e) =>
+                        updateEffect(effect.id, {
+                          startTrigger: { type: 'transcript-line', line: Number(e.target.value) },
+                        })
+                      }
+                      className="max-w-[14rem] rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                    >
+                      {pageSentences.map((sentence, idx) => (
+                        <option key={idx} value={idx}>
+                          {idx + 1}. {truncateSentence(sentence)}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="text-[11px] text-slate-500">
+                      {t('play.animation.startResolved')}{' '}
+                      {(sentenceTimeline[effect.startTrigger.line]?.start ?? effect.start).toFixed(1)}
+                      {t('play.animation.seconds')}
+                    </span>
+                  </label>
+                ) : (
+                  <div className="flex flex-col gap-1 text-xs text-slate-400">
+                    {t('play.animation.startTranscriptLine')}
+                    <span className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-500">
+                      {t('play.animation.noTranscript')}
+                    </span>
+                  </div>
+                )
+              ) : (
+                <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  {t('play.animation.start')}
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.1}
+                    value={effect.start}
+                    disabled={disabled}
+                    onChange={(e) => updateEffect(effect.id, { start: Math.max(0, Number(e.target.value) || 0) })}
+                    className="w-20 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                  />
+                </label>
+              )}
               <label className="flex flex-col gap-1 text-xs text-slate-400">
                 {t('play.animation.duration')}
                 <input
