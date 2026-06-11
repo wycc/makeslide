@@ -992,7 +992,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         return reply.code(502).send(errorResponse('TTS_FAILED', reason));
       }
 
-      const relAudioPath = path.posix.join('pages', `${String(n).padStart(pdfRow.page_count > 999 ? 4 : 3, '0')}.m4a`);
+      const relAudioPath = path.relative(pdfDir(id), audio.audioPath);
       const now = nowIso();
       db.prepare(
         `UPDATE pages
