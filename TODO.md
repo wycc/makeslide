@@ -723,7 +723,7 @@
 [x] 提供多種焦點的功能，例如紅框或 spotlight或引言(圖)（完成於分支: feature/animation-focus-effects-20260612，僅完成紅框/聚光燈視覺效果，引言(圖)疊加內容留待後續項目）
 [x] 加上動畫開始時間由逐字稿向前秒數指定的功能（完成於分支: feature/animation-start-offset-20260612）
 [x] 在 upload TXT 時也要加上 host mode 選項（完成於分支: feature/import-text-host-mode-20260612）
-[ ] 在全螢幕時加上左右滑動上一頁下一頁的功能
+[x] 在全螢幕時加上左右滑動上一頁下一頁的功能（完成於分支: feature/fullscreen-swipe-navigation-20260612）
 ## 工作記錄
 
 - 時間: 2026-06-12 11:18:00 +0800
@@ -733,3 +733,7 @@
 - 時間: 2026-06-12 11:45:00 +0800
 - 分支: feature/animation-focus-effects-20260612
 - 內容: 完成「提供多種焦點的功能，例如紅框或 spotlight或引言(圖)」的視覺效果部分。新增兩種動畫效果類型 `highlight-box`（紅框標示）與 `spotlight`（聚光燈），以 overlay 疊加層方式呈現，而非整個 stage 的 transform。後端 `backend/src/services/pageAnimation.ts` 的 `ANIMATION_EFFECT_TYPES` 新增這兩種類型，`ALLOWED_PARAM_KEYS` 為其開放 `xPct`/`yPct`/`widthPct`/`heightPct`（0~100 百分比，未做範圍限制，與既有 `distancePct` 等參數一致）。前端 `frontend/src/types.ts` 的 `SlideAnimationEffectType` 同步新增；`frontend/src/lib/animationSpec.ts` 新增 `FOCUS_EFFECT_TYPES`、`getFocusEffectParams(effect)`（讀取參數並補上預設值 30/30/40/40）。`SlideRenderer.tsx` 新增 `FocusOverlay` 元件，於 animated stage 內為每個 focus 效果渲染一個帶 `data-effect-id` 的疊加 `<div>`（highlight-box 為紅色圓角外框，spotlight 為橢圓形 + `box-shadow: 0 0 0 9999px rgba(0,0,0,0.6)` 暗化遮罩），初始 `opacity:0`；`buildGsapTimeline.ts` 透過 `data-effect-id` 找到該 overlay，對 `autoAlpha` 做 `fromTo(0→1)`（與 fade-in 手法相同，淡入後維持顯示）。`AnimationEditorTab.tsx` 在效果類型為 highlight-box/spotlight 時，新增「焦點位置與大小（%）」四個數字輸入框（X/Y/寬/高，0~100），寫回 `effect.params`。新增中英文 i18n 鍵 `play.animation.type.highlight-box`、`play.animation.type.spotlight`、`play.animation.focusPosition`、`play.animation.focusX/focusY/focusWidth/focusHeight`。並更新設計文件 `docs/animation-slide-v1-design.md`（新增 §5.1 焦點效果說明、§6.6 FocusOverlay 架構、§7 編輯器 UI 說明與檔頭擴充註記）。本次僅完成可手動設定的視覺焦點類型；「引言(圖)」（文字/圖片疊加內容）與「依逐字稿自動產生焦點」（第 720-722 項）留待後續分支。驗證：後端新增 2 項測試（`backend/test/page-animation.test.ts`），`npm test` 63 測試 45 通過/18 失敗，失敗數與既有認證基線相同，無新增失敗；前後端 `npx tsc --noEmit`、後端 `npm run build`、前端 `npx vite build` 皆通過。
+
+- 時間: 2026-06-12 12:05:00 +0800
+- 分支: feature/fullscreen-swipe-navigation-20260612
+- 內容: 完成「在全螢幕時加上左右滑動上一頁下一頁的功能」。於 `frontend/src/pages/play/PlayPageFullscreen.tsx` 的全螢幕容器上新增 `onTouchStart`/`onTouchEnd` 處理：記錄觸控起點座標，放開時計算水平位移 `dx` 與垂直位移 `dy`，當 `|dx| >= 50px`（`SWIPE_THRESHOLD_PX`）且 `|dy| <= 80px`（`SWIPE_VERTICAL_TOLERANCE_PX`）時判定為換頁手勢：向左滑（`dx < 0`）呼叫 `goNext()` 切到下一頁，向右滑（`dx > 0`）呼叫 `goPrev()` 切到上一頁；兩者皆重用既有函式，已內含同步模式下僅 master 可換頁的權限檢查與頁碼邊界 clamp，無需額外處理。滑動觸發時以 `swipeHandledRef` 旗標讓緊接其後的 `onClick` 跳過「點擊暫停/繼續播放」的行為，避免滑動後誤觸暫停。當手寫模式且工具非游標（`drawingMode && drawingTool !== 'cursor'`）時略過手勢判定，讓 `DrawingCanvas` 正常接收觸控繪圖。另為全螢幕「編輯」版面右側可編輯逐字稿區塊新增 `onTouchStart`/`onTouchEnd` 的 `stopPropagation`（沿用既有 `onClick` 的隔離模式），避免在該區域捲動或選取文字時誤觸換頁。驗證：前端 `npx tsc --noEmit` 與 `npx vite build` 皆通過；本次未變更後端程式碼。
