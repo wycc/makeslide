@@ -59,6 +59,8 @@ export function AnimationEditorTab() {
     isReadOnlyProcessing,
     pageSentences,
     sentenceTimeline,
+    aiFocusBusy,
+    handleGenerateAiFocusEffects,
   } = usePlayPageContext();
   const { t } = useI18n();
 
@@ -386,6 +388,18 @@ export function AnimationEditorTab() {
           className="rounded-md border border-cyan-500/50 bg-cyan-500/10 px-3 py-1.5 text-sm text-cyan-200 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {t('play.animation.autoGenerateFocus')}
+        </button>
+        <button
+          type="button"
+          disabled={disabled || pageSentences.length === 0 || aiFocusBusy}
+          title={pageSentences.length === 0 ? t('play.animation.noTranscript') : undefined}
+          onClick={() => {
+            if (draft.effects.length > 0 && !window.confirm(t('play.animation.autoGenerateFocusAiConfirm'))) return;
+            void handleGenerateAiFocusEffects(pageSentences, draft.hints);
+          }}
+          className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/10 px-3 py-1.5 text-sm text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {aiFocusBusy ? t('play.animation.autoGenerateFocusAiBusy') : t('play.animation.autoGenerateFocusAi')}
         </button>
       </div>
 

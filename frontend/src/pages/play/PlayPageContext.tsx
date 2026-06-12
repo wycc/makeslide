@@ -120,6 +120,10 @@ export interface PlayPageContextValue {
   setAnimationWarning: Dispatch<SetStateAction<string | null>>;
   handleSaveAnimation: () => Promise<boolean>;
   handlePreviewAnimation: () => void;
+  /** AI 自動產生逐字稿焦點動畫（呼叫中）。 */
+  aiFocusBusy: boolean;
+  /** 呼叫後端 LLM，依目前逐字稿句子決定每句的焦點效果，並覆蓋 draft 的 effects。 */
+  handleGenerateAiFocusEffects: (sentences: string[], hints?: Record<string, string>) => Promise<boolean>;
 
   // ─── Prompt / source ────────────────────────────────────────────────────────
   promptInput: string;

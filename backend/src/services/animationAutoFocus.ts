@@ -1,0 +1,152 @@
+import crypto from 'node:crypto';
+import { z } from 'zod';
+import { callChatJSON } from './openai';
+import type { AnimationEffect, AnimationEffectType } from './pageAnimation';
+
+/** Effect types this generator may choose; matches `FOCUS_EFFECT_TYPES` on the frontend. */
+const AUTO_FOCUS_AI_EFFECT_TYPES = ['highlight-box', 'spotlight'] as const;
+
+/** Fade-in/out duration applied to every AI-generated effect, matching `generateFocusEffectsFromTranscript`. */
+const AUTO_FOCUS_AI_DURATION_SECONDS = 1.2;
+
+/** Max sentences considered, matching `MAX_SLIDE_ANIMATION_EFFECTS`. */
+const MAX_SENTENCES_FOR_AI = 20;
+
+const MAX_EXIT_DURATION_SECONDS = 30;
+
+const AutoFocusItemSchema = z.object({
+  line: z.number().int().min(0).max(998),
+  show: z.boolean(),
+  type: z.enum(AUTO_FOCUS_AI_EFFECT_TYPES).optional(),
+  xPct: z.number().min(0).max(100).optional(),
+  yPct: z.number().min(0).max(100).optional(),
+  widthPct: z.number().min(1).max(100).optional(),
+  heightPct: z.number().min(1).max(100).optional(),
+  exitDuration: z.number().min(0).max(MAX_EXIT_DURATION_SECONDS).optional(),
+});
+
+export const AutoFocusAiResponseSchema = z.object({
+  effects: z.array(AutoFocusItemSchema).max(MAX_SENTENCES_FOR_AI),
+});
+
+export type AutoFocusAiResponse = z.infer<typeof AutoFocusAiResponseSchema>;
+type AutoFocusAiItem = z.infer<typeof AutoFocusItemSchema>;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function buildAutoFocusSystemPrompt(): string {
+  return [
+    '你是一位簡報動畫設計助理，負責替投影片的逐字稿規劃「焦點動畫」。',
+    '焦點動畫會在播放到指定句子時，於投影片上淡入一個方框，引導觀眾注意畫面中的特定區域，並可在停留一段時間後自動淡出。',
+    '',
+    '你的任務：針對使用者提供的每一句逐字稿（依索引 0 到 N-1），判斷：',
+    '1. show：是否需要在播放到這句時顯示焦點方框。只有當這句明確提到畫面中的具體位置、物件、數據、圖表或重點文字時才顯示；單純的開場、總結、銜接句通常不需要，請避免每句都顯示。',
+    '2. type：highlight-box（醒目方框，框出重點）或 spotlight（聚光燈，方框外區域變暗）。沒有特別理由時優先選 highlight-box。',
+    '3. xPct / yPct / widthPct / heightPct：方框左上角座標與寬高，皆為投影片寬高的百分比（0-100）。請依該句描述的內容，盡量對應到畫面中合理的位置與大小，避免每句都用同一個位置。',
+    '4. exitDuration（選填，秒）：方框淡入完成後要停留多久才自動淡出。如果這句只是短暫提示某個重點，可設定 1-3 秒；如果整句都在說明這個重點，可以不設定（持續顯示）。',
+    '',
+    '座標系統：投影片左上角為原點 (0,0)，x 向右增加、y 向下增加，皆為 0-100 的百分比。',
+    'show 為 false 時，其他欄位可省略。',
+    '',
+    '請只輸出 JSON，格式為：{"effects":[{"line":0,"show":true,"type":"highlight-box","xPct":10,"yPct":20,"widthPct":30,"heightPct":25,"exitDuration":2}, {"line":1,"show":false}, ...]}',
+    'effects 陣列必須包含使用者提供的每一個句子索引，且順序與索引需一致。',
+  ].join('\n');
+}
+
+function buildAutoFocusUserPrompt(params: { pageText: string; sentences: string[]; hints?: Record<string, string> }): string {
+  const limit = Math.min(params.sentences.length, MAX_SENTENCES_FOR_AI);
+  const sentenceLines = params.sentences
+    .slice(0, limit)
+    .map((sentence, idx) => `${idx}. ${sentence}`)
+    .join('\n');
+  const hintEntries = Object.entries(params.hints ?? {}).filter(([line]) => {
+    const idx = Number(line);
+    return Number.isInteger(idx) && idx >= 0 && idx < limit;
+  });
+  const hintLines = hintEntries.length > 0 ? hintEntries.map(([line, text]) => `${line}: ${text}`).join('\n') : '（無）';
+
+  return [
+    '【頁面文字（OCR 擷取，可能含版面雜訊，僅供參考整體版面內容）】',
+    params.pageText.trim() || '（無）',
+    '',
+    `【逐字稿句子（共 ${limit} 句，索引從 0 開始）】`,
+    sentenceLines,
+    '',
+    '【每句動畫提示（使用者填寫，若有請優先參考）】',
+    hintLines,
+    '',
+    `請針對以上 ${limit} 句逐字稿（索引 0 到 ${limit - 1}），逐一決定是否顯示焦點方框及其位置、大小與消失時間。`,
+  ].join('\n');
+}
+
+/**
+ * Maps the AI's per-sentence focus decisions into `AnimationEffect[]`, keeping
+ * only entries with `show: true`, clamping positions/sizes/exitDuration to
+ * sane ranges, and capping the result at `sentenceLimit` (already <= MAX_EFFECTS).
+ * Duplicate `line` entries keep the first occurrence; results are sorted by line.
+ */
+export function mapAutoFocusResponseToEffects(response: AutoFocusAiResponse, sentenceLimit: number): AnimationEffect[] {
+  const byLine = new Map<number, AutoFocusAiItem>();
+  for (const item of response.effects) {
+    if (item.line < 0 || item.line >= sentenceLimit) continue;
+    if (!byLine.has(item.line)) byLine.set(item.line, item);
+  }
+  const lines = Array.from(byLine.keys()).sort((a, b) => a - b);
+  const effects: AnimationEffect[] = [];
+  for (const line of lines) {
+    const item = byLine.get(line);
+    if (!item || !item.show) continue;
+    const type: AnimationEffectType = item.type ?? 'highlight-box';
+    const effect: AnimationEffect = {
+      id: `ai-focus-${line}-${crypto.randomUUID()}`,
+      target: 'slide',
+      type,
+      start: 0,
+      duration: AUTO_FOCUS_AI_DURATION_SECONDS,
+      ease: 'power1.out',
+      startTrigger: { type: 'transcript-line', line },
+      params: {
+        xPct: clamp(item.xPct ?? 30, 0, 95),
+        yPct: clamp(item.yPct ?? 30, 0, 95),
+        widthPct: clamp(item.widthPct ?? 40, 5, 100),
+        heightPct: clamp(item.heightPct ?? 40, 5, 100),
+      },
+    };
+    if (item.exitDuration !== undefined) {
+      effect.exitDuration = clamp(item.exitDuration, 0, MAX_EXIT_DURATION_SECONDS);
+    }
+    effects.push(effect);
+  }
+  return effects;
+}
+
+/**
+ * Asks the configured LLM to decide, per transcript sentence, whether to show
+ * a focus effect and where/how long, then maps the response to
+ * `AnimationEffect[]`. Returns `[]` without calling the LLM if `sentences` is empty.
+ */
+export async function generateAiFocusEffects(params: {
+  pageText: string;
+  sentences: string[];
+  hints?: Record<string, string>;
+  label: string;
+}): Promise<AnimationEffect[]> {
+  const limit = Math.min(params.sentences.length, MAX_SENTENCES_FOR_AI);
+  if (limit === 0) return [];
+  const result = await callChatJSON({
+    label: params.label,
+    schema: AutoFocusAiResponseSchema,
+    maxTokens: 2000,
+    temperature: 0.4,
+    messages: [
+      { role: 'system', content: buildAutoFocusSystemPrompt() },
+      {
+        role: 'user',
+        content: buildAutoFocusUserPrompt({ pageText: params.pageText, sentences: params.sentences, hints: params.hints }),
+      },
+    ],
+  });
+  return mapAutoFocusResponseToEffects(result.data, limit);
+}

@@ -107,6 +107,25 @@ export async function savePageAnimation(
   return (await resp.json()) as SavePageAnimationResponse;
 }
 
+export interface GenerateAiFocusEffectsResponse {
+  effects: SlideAnimationSpec['effects'];
+}
+
+/** Asks the backend's LLM to decide, per transcript sentence, whether/where to show a focus effect. */
+export async function generateAiFocusEffects(
+  id: string,
+  pageNumber: number,
+  body: { sentences: string[]; hints?: Record<string, string> },
+): Promise<GenerateAiFocusEffectsResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/animation/auto-focus-ai`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as GenerateAiFocusEffectsResponse;
+}
+
 export type ShareAccessMode = 'read_only' | 'editable';
 
 export interface ShareInfoResponse {
