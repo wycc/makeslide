@@ -1,7 +1,14 @@
+import { useRef } from 'react';
+import type { TouchEvent } from 'react';
 import DrawingCanvas from '../../components/DrawingCanvas';
 import { SlideRenderer } from '../../components/slide/SlideRenderer';
 import { useI18n } from '../../i18n';
 import { usePlayPageContext } from './PlayPageContext';
+
+/** 觸發換頁所需的最小水平滑動距離（px）。 */
+const SWIPE_THRESHOLD_PX = 50;
+/** 超過此垂直位移視為滾動/手寫而非換頁手勢（px）。 */
+const SWIPE_VERTICAL_TOLERANCE_PX = 80;
 
 const DRAWING_COLORS = [
   { value: '#ef4444', label: '紅色' },
@@ -84,6 +91,34 @@ export function PlayPageFullscreen() {
   const syncOverlayText = syncAiAnswer?.answer || syncDisplayedQuestion?.question || '';
   const syncOverlayIsAiAnswer = Boolean(syncAiAnswer?.answer);
 
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const swipeHandledRef = useRef(false);
+
+  const handleTouchStart = (e: TouchEvent<HTMLDivElement>) => {
+    if (drawingMode && drawingTool !== 'cursor') return;
+    const touch = e.touches[0];
+    if (!touch) return;
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+    swipeHandledRef.current = false;
+  };
+
+  const handleTouchEnd = (e: TouchEvent<HTMLDivElement>) => {
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+    if (!start) return;
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    if (Math.abs(dx) < SWIPE_THRESHOLD_PX || Math.abs(dy) > SWIPE_VERTICAL_TOLERANCE_PX) return;
+    swipeHandledRef.current = true;
+    if (dx < 0) {
+      goNext();
+    } else {
+      goPrev();
+    }
+  };
+
   return (
     <div
       ref={fullscreenContainerRef}
@@ -92,7 +127,15 @@ export function PlayPageFullscreen() {
         cursor:
           "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56' viewBox='0 0 56 56'%3E%3Ccircle cx='28' cy='28' r='8' fill='none' stroke='%23ef4444' stroke-width='2.5'/%3E%3Cline x1='28' y1='2' x2='28' y2='20' stroke='%23ef4444' stroke-width='2.5' stroke-linecap='round'/%3E%3Cline x1='28' y1='36' x2='28' y2='54' stroke='%23ef4444' stroke-width='2.5' stroke-linecap='round'/%3E%3Cline x1='2' y1='28' x2='20' y2='28' stroke='%23ef4444' stroke-width='2.5' stroke-linecap='round'/%3E%3Cline x1='36' y1='28' x2='54' y2='28' stroke='%23ef4444' stroke-width='2.5' stroke-linecap='round'/%3E%3Ccircle cx='28' cy='28' r='1.5' fill='%23ef4444'/%3E%3C/svg%3E\") 28 28, crosshair",
       }}
-      onClick={() => { if (!imageEditSelectMode && (!drawingMode || drawingTool === 'cursor')) playPause(); }}
+      onClick={() => {
+        if (swipeHandledRef.current) {
+          swipeHandledRef.current = false;
+          return;
+        }
+        if (!imageEditSelectMode && (!drawingMode || drawingTool === 'cursor')) playPause();
+      }}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
       role="button"
       tabIndex={-1}
       aria-label={isPlaying ? '暫停語音播放' : '繼續語音播放'}
@@ -223,10 +266,12 @@ export function PlayPageFullscreen() {
               )}
             </div>
           ) : (
-            // 全螢幕編輯：右側為可編輯的逐字稿。stopPropagation 避免點擊/輸入時觸發播放切換。
+            // 全螢幕編輯：右側為可編輯的逐字稿。stopPropagation 避免點擊/觸控時觸發播放切換或滑動換頁。
             <div
               className="flex h-full w-1/2 cursor-default flex-col px-6 py-10 md:px-10 md:py-12"
               onClick={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+              onTouchEnd={(e) => e.stopPropagation()}
             >
               <h2 className="mb-3 shrink-0 text-base font-semibold text-slate-200 md:text-lg">
                 📝 編輯逐字稿（第 {currentPage?.page_number ?? '-'} 頁）
