@@ -17,10 +17,17 @@ export const SLIDE_ANIMATION_EFFECT_TYPES: readonly SlideAnimationEffectType[] =
   'pan-down',
   'highlight-box',
   'spotlight',
+  'text-callout',
 ];
 
-/** Effect types rendered as an overlay element inside the animated stage (vs. a transform on the whole slide). */
+/** Focus-style effect types: a rectangular overlay highlighting an area of the slide. */
 export const FOCUS_EFFECT_TYPES: readonly SlideAnimationEffectType[] = ['highlight-box', 'spotlight'];
+
+/** Effect types rendered as a positioned overlay element inside the animated stage (vs. a transform on the whole slide). */
+export const OVERLAY_EFFECT_TYPES: readonly SlideAnimationEffectType[] = [...FOCUS_EFFECT_TYPES, 'text-callout'];
+
+/** Max length (chars) for a `text-callout` effect's `text`, matching the backend's `MAX_TEXT_CALLOUT_LENGTH`. */
+export const MAX_TEXT_CALLOUT_LENGTH = 80;
 
 export interface FocusEffectParams {
   xPct: number;
@@ -31,7 +38,7 @@ export interface FocusEffectParams {
 
 const DEFAULT_FOCUS_PARAMS: FocusEffectParams = { xPct: 30, yPct: 30, widthPct: 40, heightPct: 40 };
 
-/** Reads an effect's overlay position/size, filling in defaults for unset params. */
+/** Reads an overlay effect's position/size (focus or text-callout), filling in defaults for unset params. */
 export function getFocusEffectParams(effect: SlideAnimationEffect): FocusEffectParams {
   return {
     xPct: effect.params?.xPct ?? DEFAULT_FOCUS_PARAMS.xPct,

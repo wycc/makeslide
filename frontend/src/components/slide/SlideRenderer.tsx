@@ -1,11 +1,11 @@
 import { useRef } from 'react';
 import type { CSSProperties, ImgHTMLAttributes, ReactNode, Ref } from 'react';
 import type { SlideAnimationEffect, SlideAnimationSpec, SlideRenderType } from '../../types';
-import { FOCUS_EFFECT_TYPES, getFocusEffectParams, hasPlayableAnimation } from '../../lib/animationSpec';
+import { OVERLAY_EFFECT_TYPES, getFocusEffectParams, hasPlayableAnimation } from '../../lib/animationSpec';
 import { useGsapSlideTimeline } from './useGsapSlideTimeline';
 
-/** 套用 highlight-box / spotlight 效果的疊加層，由 buildGsapTimeline 透過 data-effect-id 抓取並控制淡入。 */
-function FocusOverlay({ effect }: { effect: SlideAnimationEffect }) {
+/** 套用 highlight-box / spotlight / text-callout 效果的疊加層，由 buildGsapTimeline 透過 data-effect-id 抓取並控制淡入。 */
+function EffectOverlay({ effect }: { effect: SlideAnimationEffect }) {
   const { xPct, yPct, widthPct, heightPct } = getFocusEffectParams(effect);
   const position: CSSProperties = {
     position: 'absolute',
@@ -39,6 +39,30 @@ function FocusOverlay({ effect }: { effect: SlideAnimationEffect }) {
           boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.6)',
         }}
       />
+    );
+  }
+  if (effect.type === 'text-callout') {
+    return (
+      <div
+        data-effect-id={effect.id}
+        style={{
+          ...position,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '0.5em 0.75em',
+          borderRadius: '8px',
+          background: 'rgba(15, 23, 42, 0.85)',
+          color: '#f8fafc',
+          fontSize: '1.25rem',
+          fontWeight: 600,
+          textAlign: 'center',
+          overflow: 'hidden',
+          wordBreak: 'break-word',
+        }}
+      >
+        {effect.text}
+      </div>
     );
   }
   return null;
@@ -130,9 +154,9 @@ export function SlideRenderer({
         {img}
         {children}
         {spec?.effects
-          .filter((effect) => FOCUS_EFFECT_TYPES.includes(effect.type))
+          .filter((effect) => OVERLAY_EFFECT_TYPES.includes(effect.type))
           .map((effect) => (
-            <FocusOverlay key={effect.id} effect={effect} />
+            <EffectOverlay key={effect.id} effect={effect} />
           ))}
       </div>
       {overlay}

@@ -2,8 +2,9 @@ import { useI18n } from '../../i18n';
 import type { TranslationKey } from '../../i18n';
 import type { SlideAnimationEffect, SlideAnimationEffectType, SlideAnimationEase } from '../../types';
 import {
-  FOCUS_EFFECT_TYPES,
   MAX_SLIDE_ANIMATION_EFFECTS,
+  MAX_TEXT_CALLOUT_LENGTH,
+  OVERLAY_EFFECT_TYPES,
   SLIDE_ANIMATION_EASES,
   SLIDE_ANIMATION_EFFECT_TYPES,
   defaultAnimationSpec,
@@ -239,7 +240,21 @@ export function AnimationEditorTab() {
                   ))}
                 </select>
               </label>
-              {FOCUS_EFFECT_TYPES.includes(effect.type) && (
+              {effect.type === 'text-callout' && (
+                <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  {t('play.animation.textContent')}
+                  <input
+                    type="text"
+                    maxLength={MAX_TEXT_CALLOUT_LENGTH}
+                    value={effect.text ?? ''}
+                    disabled={disabled}
+                    placeholder={t('play.animation.textContentPlaceholder')}
+                    onChange={(e) => updateEffect(effect.id, { text: e.target.value })}
+                    className="w-40 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                  />
+                </label>
+              )}
+              {OVERLAY_EFFECT_TYPES.includes(effect.type) && (
                 <div className="flex flex-col gap-1 text-xs text-slate-400">
                   {t('play.animation.focusPosition')}
                   <div className="flex gap-1">

@@ -96,7 +96,8 @@ export type SlideAnimationEffectType =
   | 'pan-up'
   | 'pan-down'
   | 'highlight-box'
-  | 'spotlight';
+  | 'spotlight'
+  | 'text-callout';
 
 export type SlideAnimationEase = 'none' | 'power1.in' | 'power1.out' | 'power1.inOut' | 'power2.inOut';
 
@@ -119,6 +120,8 @@ export interface SlideAnimationEffect {
   params?: Record<string, number>;
   /** When set, `start` is resolved at runtime from this transcript sentence's playback time. */
   startTrigger?: SlideAnimationStartTrigger;
+  /** Caption text for `text-callout` effects (ignored by other effect types). */
+  text?: string;
 }
 
 export interface SlideAnimationSpec {

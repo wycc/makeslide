@@ -11,6 +11,7 @@ export const ANIMATION_EFFECT_TYPES = [
   'pan-down',
   'highlight-box',
   'spotlight',
+  'text-callout',
 ] as const;
 
 export const ANIMATION_EASES = ['none', 'power1.in', 'power1.out', 'power1.inOut', 'power2.inOut'] as const;
@@ -37,6 +38,8 @@ export interface AnimationEffect {
   params?: Record<string, number>;
   /** When set, `start` is resolved at runtime from this transcript sentence's playback time. */
   startTrigger?: AnimationStartTrigger;
+  /** Caption text for `text-callout` effects (ignored by other effect types). */
+  text?: string;
 }
 
 export interface AnimationSpec {
@@ -49,6 +52,7 @@ const MAX_EFFECTS = 20;
 const MAX_DURATION_SECONDS = 600;
 const MAX_TRANSCRIPT_LINE = 999;
 const MAX_START_OFFSET_SECONDS = 60;
+export const MAX_TEXT_CALLOUT_LENGTH = 80;
 
 // Whitelisted numeric params per effect type; unknown keys are stripped, not rejected,
 // so future spec versions can add params without breaking older backends.
@@ -62,6 +66,7 @@ const ALLOWED_PARAM_KEYS: Record<AnimationEffectType, readonly string[]> = {
   'pan-down': ['distancePct'],
   'highlight-box': ['xPct', 'yPct', 'widthPct', 'heightPct'],
   'spotlight': ['xPct', 'yPct', 'widthPct', 'heightPct'],
+  'text-callout': ['xPct', 'yPct', 'widthPct', 'heightPct'],
 };
 
 const StartTriggerSchema = z.object({
@@ -79,6 +84,7 @@ const EffectSchema = z.object({
   ease: z.enum(ANIMATION_EASES),
   params: z.record(z.unknown()).optional(),
   startTrigger: StartTriggerSchema.optional(),
+  text: z.string().max(MAX_TEXT_CALLOUT_LENGTH).optional(),
 });
 
 const SpecSchema = z.object({
@@ -124,6 +130,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ease: effect.ease,
       ...(params ? { params } : {}),
       ...(effect.startTrigger ? { startTrigger: effect.startTrigger } : {}),
+      ...(effect.text !== undefined ? { text: effect.text } : {}),
     };
   });
   return { ok: true, spec: { version: 1, enabled: parsed.data.enabled, effects } };
