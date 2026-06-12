@@ -707,6 +707,10 @@
 - 分支: feature/upload-host-mode-select-20260612
 - 內容: 完成「在上傳 PDF 時要提供選項單人或雙人的選項」。系統原已有 `pdfs.host_mode`（'solo'｜'dual'，預設 'solo'）與 Speaker 1/2 人設/聲音設定，但只能在建立簡報後到播放設定（TtsDialog/RegenAllDialog）中變更，上傳當下一律是 'solo'。後端：`backend/src/routes/pdfs/upload.ts` 為 `POST /api/pdfs`（PDF/TXT 上傳）新增 `host_mode` multipart 欄位解析（`HostModeSchema = z.enum(['solo','dual'])`，預設 'solo'，非法值回 400 INVALID_REQUEST），寫入 `INSERT INTO pdfs` 的 `host_mode` 欄並於回應中回傳；`POST /api/youtube` 的 `YoutubeCreateBodySchema`（`backend/src/routes/pdfs/shared.ts`）新增可選 `host_mode` 欄位，同樣寫入 `pdfs.host_mode` 並回傳。前端：`UploadButton.tsx` 在「上傳 PDF」的內容模式選擇面板（簡報逐頁處理／一般文件 AI 分頁）與「YouTube 匯入」面板中，新增「主持模式」分段切換按鈕（單人旁白／雙人對談，樣式沿用 TtsDialog 的 segmented control），選擇結果透過 `uploadPdf(file, { hostMode })`／`createYoutubeTask(url, lang, hostMode)` 傳給後端；`uploads.ts`／`pdfs.ts`／`types.ts` 新增對應欄位與型別，並補上 `upload.hostModeLabel`／`upload.hostModeSolo`／`upload.hostModeDual` 中英文 i18n 鍵。驗證：前後端 `npx tsc --noEmit` 與 `npm run build` 皆通過；以 `buildApp()` + `app.inject()` 對 `/api/pdfs`（multipart，host_mode=dual/solo/未指定）與 `/api/youtube`（host_mode=dual/solo）逐一驗證回應與 DB 寫入值正確，非法 host_mode 值回 400；後端 `npm test` 59 測試 41 通過/18 失敗，失敗數與既有認證基線相同，無新增失敗。前端 UI 因環境無瀏覽器/螢幕截圖工具，未做實機畫面驗證，僅以程式碼比對既有 segmented control 樣式確認一致性。
 
+- 時間: 2026-06-12 09:54:00 +0800
+- 分支: feature/import-text-host-mode-20260612
+- 內容: 完成「在 upload TXT 時也要加上 host mode 選項」。前一筆工作已讓 `uploadPdf()` 與後端 `/api/pdfs` 支援 `host_mode`（solo/dual），但「貼上 TXT」頁（`ImportTextPage.tsx`）的「貼上匯入」與「AI 生成大綱」兩個流程呼叫 `uploadPdf()` 時皆未帶入該選項，一律沿用後端預設 'solo'。修正：在 `匯入方式` 區塊新增「主持模式」分段切換按鈕（單人旁白／雙人對談，沿用 `UploadButton.tsx` 與 `upload.hostModeLabel`/`upload.hostModeSolo`/`upload.hostModeDual` 既有 i18n 鍵與樣式），新增 `hostMode` state，並將其透過 `uploadPdf(file, { hostMode, onProgress })` 傳給 `handleSubmit`（貼上匯入）與 `handleCreateFromOutline`（AI 大綱建立）兩個建立簡報的呼叫。驗證：前端 `npx tsc --noEmit` 與 `npm run build` 皆通過；後端邏輯沿用前一筆已驗證的 `/api/pdfs` host_mode 處理，未重複測試。前端 UI 因環境無瀏覽器/螢幕截圖工具，未做實機畫面驗證。
+
 
 # 新功能(每一個功能使用一個 branch，做好後也要更新 master 上的設計文件)
 [ ] 加上一個自動生成焦點的功能，打開這個功能後，在產生語音後，自動為每一行逐字稿在螢幕上產生一個指示焦點的動畫。以輔助說明。
@@ -714,3 +718,4 @@
 [ ] 加上手動在逐字稿加上動畫指引的功能，這個指引會在生成動畫時傳給 LLM 做參考。
 [ ] 提供多種焦點的功能，例如紅框或 spotlight或引言(圖)
 [ ] 加上動畫開始時間由逐字稿向前秒數指定的功能
+[x] 在 upload TXT 時也要加上 host mode 選項（完成於分支: feature/import-text-host-mode-20260612）
