@@ -65,6 +65,9 @@ const SYNC_POLL_INTERVAL_MS = 1200;
 const SYNC_POLL_INTERVAL_FULLSCREEN_MS = 250;
 const SYNC_CURSOR_PUSH_INTERVAL_MS = 60;
 const SYNC_CURSOR_PUSH_INTERVAL_FULLSCREEN_MS = 24;
+// 動畫延長播放期間，定期推進 currentTime 的間隔；與音訊 timeupdate 的常見頻率（~4 次/秒）相近，
+// 讓 custom-script 效果的 sandboxed iframe 在延長期間仍能持續收到 `sync` 訊息更新動畫畫面。
+const PAGE_EXTEND_TICK_MS = 250;
 
 interface WakeLockSentinelLike {
   released: boolean;
@@ -296,7 +299,7 @@ export default function PlayPage() {
   // 避免計時器在使用者已離開該頁後才觸發切頁。
   const clearPendingPageExtend = useCallback(() => {
     if (pendingPageExtendTimerRef.current != null) {
-      window.clearTimeout(pendingPageExtendTimerRef.current);
+      window.clearInterval(pendingPageExtendTimerRef.current);
       pendingPageExtendTimerRef.current = null;
     }
     setIsExtendingAnimation(false);
@@ -781,11 +784,27 @@ export default function PlayPage() {
     const rate = playbackRateRef.current > 0 ? playbackRateRef.current : 1;
     if (Number.isFinite(extraSeconds) && extraSeconds > 0.05) {
       setIsExtendingAnimation(true);
-      pendingPageExtendTimerRef.current = window.setTimeout(() => {
-        pendingPageExtendTimerRef.current = null;
-        setIsExtendingAnimation(false);
-        runPageEndedAdvance();
-      }, (extraSeconds / rate) * 1000);
+      const targetTime = animationDurationSecondsRef.current;
+      const baseTime = duration;
+      const startedAtMs = performance.now();
+      // 用 setInterval 持續推進 currentTime，讓 useGsapSlideTimeline 的
+      // postMessage(sync) effect 在延長期間也能跟著更新，custom-script
+      // 效果的內部動畫才不會在語音結束、audio 不再觸發 timeupdate 後停住。
+      pendingPageExtendTimerRef.current = window.setInterval(() => {
+        const elapsedSeconds = ((performance.now() - startedAtMs) / 1000) * rate;
+        const next = baseTime + elapsedSeconds;
+        if (next >= targetTime) {
+          if (pendingPageExtendTimerRef.current != null) {
+            window.clearInterval(pendingPageExtendTimerRef.current);
+            pendingPageExtendTimerRef.current = null;
+          }
+          setCurrentTime(targetTime);
+          setIsExtendingAnimation(false);
+          runPageEndedAdvance();
+          return;
+        }
+        setCurrentTime(next);
+      }, PAGE_EXTEND_TICK_MS);
       return;
     }
     runPageEndedAdvance();
