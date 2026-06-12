@@ -786,6 +786,10 @@
 - 分支: feature/todo-clarify-vague-item-20260612-1910
 - 內容: 複查 TODO.md 中唯一剩餘的未完成項目「新增一個編輯」，發現其未指明編輯對象（哪個頁面/功能/檔案）與想要的行為，專案中已有多種「編輯」相關功能，無法判斷對應到哪一項可實作的具體需求，性質與上一輪移除的空白核取項目類似。本次以獨立分支保存複查記錄 docs/todo-rechecks/2026-06-12-1910.md，並回到 master 移除該行、更新工作記錄。若之後仍需要此功能，請在 TODO.md 中具體說明要編輯的對象與行為。
 
+- 時間: 2026-06-12 19:35:00 +0800
+- 分支: feature/todo-no-pending-recheck-20260612-1935
+- 內容: 重新確認 master 中 TODO.md 未發現行首未完成核取項目；本次以獨立分支保存複查記錄 docs/todo-rechecks/2026-06-12-1935.md，並回到 master 更新工作記錄。
+
 # 新功能(每一個功能使用一個 branch，做好後也要更新 master 上的設計文件)
 
 [x] 每一個動畫都要有消失時間。（完成於分支: feature/animation-exit-duration-20260612，v1 為 highlight-box/spotlight/text-callout 三種 overlay 效果新增選填 `exitDuration`，淡入後可自動淡出；fade-in/zoom/pan 等整頁 transform 效果留待後續版本）
@@ -795,3 +799,4 @@
 [x] 重新確認 master TODO.md 無未完成項目並更新工作記錄（完成於分支: feature/todo-no-pending-recheck-20260612-1755）
 [x] 重新確認 master TODO.md 無未完成項目並更新工作記錄（完成於分支: feature/todo-no-pending-recheck-20260612-1820）
 [x] generateAiFocusEffects中將目前頁面的圖片傳過去以得到比較正確的位置（完成於分支: feature/animation-ai-focus-page-image-20260612，`generateAiFocusEffects` 新增 `imageDataUrl` 參數，AI 自動產生焦點動畫時會將本頁渲染圖片縮圖後一併送給 LLM 作為視覺輸入，並更新提示詞說明依圖片實際版面判斷座標；圖片讀取失敗則回退純文字。同時修正先前提交誤植的系統提示詞文字。圖片僅在 `LLM_PROVIDER=openai` 時實際送出，Gemini 路徑沿用既有限制，詳見 docs/animation-slide-v1-design.md §7.4）
+[x] 重新確認 master TODO.md 無未完成項目並更新工作記錄（完成於分支: feature/todo-no-pending-recheck-20260612-1935）
