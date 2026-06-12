@@ -454,7 +454,7 @@
 # 2026-6-1
 
 [ ] 下載 youtube 時，下載字幕檔的動作不應該叫產生字幕檔，應該叫下載字幕檔。
-[ ] 下載 youtube 時，下載的字幕檔應該被存下來當成是來源，可以在來源被檢視。
+[x] 下載 youtube 時，下載的字幕檔應該被存下來當成是來源，可以在來源被檢視。（完成於分支: feature/youtube-caption-source-persist-20260612）
 [ ] 下載 youtube 時，下載的語音檔應該被存下來當成是來源，可以在來源被檢視。STT 轉出的字幕檔也應被存下來可以在來源被檢視。
 [x] 當收到 LLM provider 傳回的錯誤時，應該要顯示給使用者看。（完成於分支: feature/show-llm-provider-error-to-user-20260607）
 [ ] 在上傳 PDF 時,　要提供選項單入或雙人的選項
@@ -699,9 +699,14 @@
 - 分支: feature/animation-transcript-line-sync-20260612
 - 內容: 完成「動畫與逐字稿同步」（設計文件 docs/animation-slide-v1-design.md §4.3 / §6.5 / §7.1 隨分支提交）。新增 `effect.startTrigger?: { type: 'transcript-line', line: number }`，可將動畫效果的開始時間改為「播放到本頁逐字稿第 N 句（0-based）時觸發」，而非固定秒數。後端：`backend/src/services/pageAnimation.ts` 新增 `StartTriggerSchema`（`type` 限定 `transcript-line`、`line` 為 0~999 整數），`validateAnimationSpec` 驗證並保留該欄位；`backend/test/page-animation.test.ts` 新增/調整測試，涵蓋合法保留、非法 type/line（負數、非整數、超出上限）拒絕，以及 PUT/GET API 往返保留 `startTrigger`（共 15 項測試全數通過）。前端：將原本內嵌於 `PlayPage.tsx` 的字幕切句/估時邏輯（`splitScriptIntoSentences`、`buildSentenceTimeline`）抽到新檔 `frontend/src/lib/subtitles.ts`，供字幕高亮與動畫同步共用；`frontend/src/lib/animationSpec.ts` 新增 `resolveAnimationSpec(spec, sentenceTimeline)`，將有 `startTrigger` 的效果之 `start` 換算為對應句子的估計播放開始秒數（找不到對應句子時退回原本 `start`），無任何 `startTrigger` 時回傳原物件參照以避免 GSAP timeline 不必要重建；`PlayPage.tsx` 新增 `sentenceTimeline` memo（依賴 `[pageSentences, duration]`，不隨 `currentTime` 變動），`currentAnimationSpec` 改為 `useMemo(() => resolveAnimationSpec(rawSpec, sentenceTimeline), [rawSpec, sentenceTimeline])`，並透過 `PlayPageContext` 提供 `sentenceTimeline` 給編輯器；`AnimationEditorTab.tsx` 每個效果新增「起始時間方式」下拉（依秒數 / 依逐字稿句子），切到「依逐字稿句子」時顯示句子下拉選單（`1. <句子前 18 字>…`）與「預估開始：X.X 秒」，切回「依秒數」時把當下換算秒數寫回 `start` 並清除 `startTrigger`；本頁無逐字稿時停用該選項並顯示提示文字。新增 `play.animation.startMode*` 等中英文 i18n 鍵。驗證：後端 `npx tsx --test test/page-animation.test.ts`（Node v22.12.0）15 項全數通過；前端 `tsc --noEmit` 通過。
 
+- 時間: 2026-06-12 09:15:00 +0800
+- 分支: feature/youtube-caption-source-persist-20260612
+- 內容: 完成「下載 youtube 時，下載的字幕檔應該被存下來當成是來源，可以在來源被檢視」。根因：`/api/youtube` 建立任務時即新增一筆 `source_kind='youtube_caption'` 的 `pdf_sources` 紀錄，但 `content_text` 寫入空字串，pipeline 下載並正規化字幕（`captions.normalized.txt`）後從未回寫這筆來源，導致來源清單中的 YouTube 字幕來源永遠是空的。修正：`backend/src/worker/pipeline.ts` 在 `fetchYoutubeCaptions()` 完成、寫入 `captions.raw.json`/`captions.normalized.txt` 後，新增一道 `UPDATE pdf_sources SET content_text = ?`（`cap.normalizedText.slice(0, 120000)`，與既有 PDF 來源上限一致）寫回該筆 youtube_caption 來源。前端 `PlayPageSlidePanel.tsx` 的「目前來源清單」原本只用 `line-clamp-2` 顯示 2 行預覽，現在加上展開/收合按鈕（沿用「生成記錄」的 ▲/▼ 樣式），點擊可在 `<pre>` 中檢視來源完整內容，無內容時顯示「尚無內容」並停用按鈕；新增 `expandedSourceId`/`setExpandedSourceId` 狀態（`usePromptAndSource.ts` → `PlayPageContext`）。後端/前端 `npx tsc --noEmit` 與 `npm run build` 皆通過；後端 `npm test` 59 測試 41 通過/18 失敗，失敗數與既有認證基線相同，無新增失敗。
+
 
 # 新功能(每一個功能使用一個 branch，做好後也要更新 master 上的設計文件)
 [ ] 加上一個自動生成焦點的功能，打開這個功能後，在產生語音後，自動為每一行逐字稿在螢幕上產生一個指示焦點的動畫。以輔助說明。
 [ ] 除了焦點以外，也可以生成一張小圖或文字做為動畫內容。
 [ ] 加上手動在逐字稿加上動畫指引的功能，這個指引會在生成動畫時傳給 LLM 做參考。
 [ ] 提供多種焦點的功能，例如紅框或 spotlight或引言(圖)
+[ ] 加上動畫開始時間由逐字稿向前秒數指定的功能
