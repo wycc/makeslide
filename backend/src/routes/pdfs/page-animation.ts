@@ -1,8 +1,11 @@
 import fs from 'node:fs';
 import type { FastifyInstance } from 'fastify';
+import sharp from 'sharp';
 import { z } from 'zod';
+import { config } from '../../config';
+import { logger } from '../../logger';
 import { db } from '../../db';
-import { pageAnimationSpecPath, safeJoinPdfPath } from '../../services/storage';
+import { pageAnimationSpecPath, pageImagePath, safeJoinPdfPath } from '../../services/storage';
 import {
   MAX_HINT_LENGTH,
   defaultAnimationSpec,
@@ -29,12 +32,36 @@ interface AnimationPageRow {
   render_type: SlideRenderType | null;
   animation_spec_path: string | null;
   text_path: string | null;
+  image_path: string | null;
 }
 
 function getAnimationPageRow(id: string, n: number): AnimationPageRow | undefined {
   return db
-    .prepare(`SELECT page_uid, render_type, animation_spec_path, text_path FROM pages WHERE pdf_id = ? AND page_number = ?`)
+    .prepare(`SELECT page_uid, render_type, animation_spec_path, text_path, image_path FROM pages WHERE pdf_id = ? AND page_number = ?`)
     .get(id, n) as AnimationPageRow | undefined;
+}
+
+/**
+ * Loads the page's rendered image, downsized to `openaiScriptImageMaxWidth`,
+ * as a `data:image/jpeg;base64,...` URL for vision input. Returns `null`
+ * (and logs a warning) if the image is missing or fails to decode, so the
+ * caller can fall back to text-only reasoning.
+ */
+async function loadAnimationPageImageDataUrl(id: string, row: AnimationPageRow): Promise<string | null> {
+  const absPath = row.image_path ? safeJoinPdfPath(id, row.image_path) : pageImagePath(id, row.page_uid);
+  try {
+    const buf = await sharp(absPath)
+      .resize({ width: config.openaiScriptImageMaxWidth, withoutEnlargement: true, fit: 'inside' })
+      .jpeg({ quality: 82, mozjpeg: true })
+      .toBuffer();
+    return `data:image/jpeg;base64,${buf.toString('base64')}`;
+  } catch (err) {
+    logger.warn(
+      { pdfId: id, pageUid: row.page_uid, imagePath: absPath, error: err instanceof Error ? err.message : String(err) },
+      'animation/auto-focus-ai: failed to load page image, falling back to text-only',
+    );
+    return null;
+  }
 }
 
 function readStoredSpec(id: string, pageUid: string): AnimationSpec {
@@ -139,11 +166,13 @@ export async function registerPageAnimationRoutes(app: FastifyInstance): Promise
     const pageText = row.text_path
       ? await fs.promises.readFile(safeJoinPdfPath(id, row.text_path), 'utf8').catch(() => '')
       : '';
+    const imageDataUrl = await loadAnimationPageImageDataUrl(id, row);
     try {
       const effects = await generateAiFocusEffects({
         pageText,
         sentences: parsedBody.data.sentences,
         hints: parsedBody.data.hints,
+        imageDataUrl,
         label: `animation-auto-focus-ai page/${id}/${n}`,
       });
       return reply.code(200).send({ effects });
