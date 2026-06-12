@@ -5,6 +5,7 @@ import type {
   SlideAnimationSpec,
   SlideAnimationStartTrigger,
 } from '../types';
+import { MANIM_HELPER_SCRIPT } from './manimHelperScript';
 import type { SentenceTimelineItem } from './subtitles';
 
 export const SLIDE_ANIMATION_EFFECT_TYPES: readonly SlideAnimationEffectType[] = [
@@ -199,6 +200,11 @@ export function customScriptDurationSeconds(effect: SlideAnimationEffect): numbe
  * whenever the host posts a `{ type: 'sync', t, playing }` message (`t` =
  * seconds since this effect's fade-in began). `code` is base64-encoded so it
  * can be embedded verbatim without any HTML/script-tag escaping concerns.
+ *
+ * `MANIM_HELPER_SCRIPT` runs first and defines `window.Manim`, a small
+ * manim-inspired helper library (coordinate system, color palette, rate
+ * functions, shape mobjects and Create/Write/FadeIn/Transform-style
+ * animations) that `code` can optionally use for "manim 式" animations.
  */
 export function buildCustomScriptSandboxDoc(code: string, durationSeconds: number): string {
   const encoded = code ? utf8ToBase64(code) : '';
@@ -214,6 +220,7 @@ export function buildCustomScriptSandboxDoc(code: string, durationSeconds: numbe
 </head>
 <body>
 <div id="root"></div>
+<script>${MANIM_HELPER_SCRIPT}</script>
 <script>
 (function () {
   "use strict";

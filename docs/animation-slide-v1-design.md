@@ -269,6 +269,28 @@ easing 白名單：`none`、`power1.in`、`power1.out`、`power1.inOut`、`power
   - `playing`：投影片目前是否在播放。
   - 回呼應以 `Math.min(t / api.duration, 1)` 計算 0~1 進度並重繪畫面，讓動畫在 `t: 0 → api.duration` 期間播放「一輪」；達到 1 後維持最終畫面（不重置/不循環），之後效果整體依 `exitDuration`（§5.3）淡出消失。回呼也需能承受 `t` 變小（倒退/重播）而正確重算畫面。
 
+**manim 風格輔助函式庫（window.Manim）**
+
+「支援 manim 式的動畫」（TODO 新功能）v1 以一個內建的 sandbox 輔助函式庫交付，而非真正的 Python manim：
+
+- `frontend/src/lib/manimHelperScript.ts` 匯出 `MANIM_HELPER_SCRIPT`——一段純 ES5 JavaScript 原始碼字串。`buildCustomScriptSandboxDoc` 會在使用者/AI 的 `code` 之前以獨立的 `<script>` 注入此字串，定義全域 `window.Manim`，因此 `code` 執行時即可直接使用。
+- 座標系：以 `root` 中心為原點，x 約 -7~7、y 約 -4~4，`+y` 朝上（與 SVG 相反，函式庫內部以 `toSvgY` 處理 y 軸翻轉），對應 `Manim.config = { width: 14, height: 8 }`；`Manim.createSvg(root)` 會建立一個 `viewBox="-7 -4 14 8"`、`preserveAspectRatio="xMidYMid meet"` 並填滿 `root` 的 `<svg>`。
+- `Manim.colors`：manim 慣用色票（`WHITE`/`BLACK`/`GREY`/`BLUE`/`GREEN`/`RED`/`YELLOW`/`PURPLE`/`ORANGE`/`PINK`/`TEAL`，例如 `BLUE = '#58C4DD'`）。
+- `Manim.rate.linear/smooth/thereAndBack/rushInto/rushFrom(t)`：manim 標準 rate function（`smooth` 為 5 次方 smoothstep `t*t*t*(10-15t+6t*t)`），輸入/輸出皆為 0~1 進度，可疊加在 `Math.min(t/api.duration,1)` 之上調整動畫的速度曲線。
+- `Manim.shapes.circle/square/rectangle/line/arrow/dot/polygon/text(svg, opts)`：建立對應 SVG 形狀並加入 `svg`，回傳 mobject（`{ el, kind, svg }`）；`opts` 可含 `x`/`y`（中心座標，manim 座標系）、`radius`/`size`/`width`/`height`/`points`（`[[x,y],...]`，限 polygon）/`text`，以及 `color`（邊框/線條/文字色，預設 `Manim.colors.WHITE`）、`fill`、`fillOpacity`、`strokeWidth`、`fontSize`。
+- `Manim.animate.create/write/fadeIn/fadeOut/grow/shift/rotate/scale/transform(mobject, ...)`：manim 招牌動畫手法，依「目前進度」（0~1）直接設定 mobject 的視覺狀態，可在每次 `onFrame` 重複呼叫（即覆寫，非累加）：
+  - `create(m, progress)`：以 `el.getTotalLength()` + `stroke-dasharray`/`stroke-dashoffset` 做「描邊繪製」效果（manim 的 `Create`），並同步淡入 `fill-opacity`；`text`/`dot`/`arrow` 退化為 `fadeIn`。
+  - `write(m, progress)`：對 `text` mobject 依進度截斷 `textContent`（manim 的 `Write`）；其他 kind 退化為 `create`。
+  - `fadeIn`/`fadeOut(m, progress)`：設定 `opacity`。
+  - `grow(m, progress, cx?, cy?)`：以 `(cx,cy)` 為中心由 0 縮放到 1（manim 的 `GrowFromCenter`）。
+  - `shift(m, dx, dy, progress)`：依進度位移 `(dx,dy)` 的對應比例（manim 的 `.shift()`）。
+  - `rotate`/`scale(m, value, progress, cx?, cy?)`：以 `(cx,cy)` 為中心旋轉/縮放。
+  - `transform(from, to, progress)`：交叉淡化兩個 mobject 的 `opacity`；若 `from.kind === to.kind`，額外線性插值兩者共有的幾何屬性（`cx`/`cy`/`r`/`x`/`y`/`width`/`height`/`x1`/`y1`/`x2`/`y2`/`font-size`），近似 manim 的 `Transform`。
+- `Manim.lerp(a, b, t)` / `Manim.lerpColor(hex1, hex2, t)`：數值/顏色線性插值（`t` 會被夾在 0~1）。
+- 後端 `animationCustomScript.ts` 的系統提示詞已說明上述 API；當使用者要求「manim 風格」（幾何圖形、座標平面、Create/Write/Transform/FadeIn、深色背景＋粉彩配色等）時，LLM 可選擇使用 `window.Manim` 而非從零手刻 Canvas/SVG。一般（非 manim 風格）的 `custom-script` 請求仍可忽略 `window.Manim`。
+- 編輯器預覽（§7.5 的 `CustomScriptPreview`）與正式播放使用同一個 `buildCustomScriptSandboxDoc`，因此 `window.Manim` 在兩者皆可用，無需額外設定。
+- **v1 範圍**：純 SVG 2D 向量圖形 + 上述動畫手法；不含 LaTeX/MathTex 渲染（需 KaTeX/字型等外部資源，sandbox 禁止網路存取）、不含 `Axes`/`NumberPlane` 座標軸繪製輔助、不含 3D、`transform` 僅做簡單屬性線性插值（非真正路徑變形）。後續版本見 §12。
+
 **播放同步**
 
 - 實際播放時，`useGsapSlideTimeline.ts` 新增一個 effect：每當 `currentTime`/`isPlaying`/`spec`/`pageKey` 變化，對每個 `custom-script` 效果的 iframe `contentWindow` 送出 `{ type: 'sync', t: max(0, currentTime - effect.start), playing: isPlaying }`。
@@ -487,6 +509,7 @@ detail API 的 page 物件增加 `render_type` 與 `animation_spec_url`。
 - V1.1：drawing mode 自動暫停、preset 快速套用、raw JSON 檢視、效果排序、跨頁複製、為 `fade-in`/`zoom-*`/`pan-*` 等整頁 transform 效果提供對稱的「消失（恢復原狀）」可選機制（見 §5.3）。
 - V2：overlay image（小圖疊加內容）、SVG 圖元、物件 target、公式、逐步條列；依 `AnimationSpec.hints` 與逐字稿內容由 LLM 生成動畫 JSON——焦點方框（`highlight-box`/`spotlight`）的時機與位置已於 §7.4 落地，`text-callout`（含 AI 生成文案）與其他效果類型的 AI 生成仍待後續。
 - V2.x：`custom-script`（§5.4）的資料集/模型推論管線——例如載入 MNIST 並以 ResNet50 產生 embedding、PCA 降維至二維後動態顯示分類過程——需要後端提供資料集存取與模型推論服務（sandbox 本身禁止網路存取，無法在前端直接載入外部資料）；v1 僅提供通用 sandboxed 自訂腳本框架與 AI 生成/迭代迴圈，不含此類資料管線。
+- V2.x：`window.Manim`（manim 風格輔助函式庫，§5.4）的擴充——`Axes`/`NumberPlane`（座標軸、格線、`coordsToPoint`）、`MathTex`/`Tex`（需離線 vendored KaTeX 字型，避免 sandbox 網路存取限制）、`transform` 的真正路徑變形（path morphing，而非目前僅線性插值共有屬性）、3D 場景；v1 僅提供 2D SVG mobject（`circle`/`square`/`rectangle`/`line`/`arrow`/`dot`/`polygon`/`text`）與 `Create`/`Write`/`FadeIn`/`FadeOut`/`Transform`/`Shift`/`Rotate`/`Scale`/`GrowFromCenter` 等基本動畫手法。
 - V3：視覺化時間軸、關鍵影格、3D renderer、動畫 MP4 匯出。
 
 ## 13. custom-script V1 hardening checklist
@@ -502,6 +525,7 @@ V1 的「使用提示詞生成動畫」以 `custom-script` 效果交付，重點
 - 編輯器主效果列對 `custom-script` 保持簡化：不顯示 X/Y/W/H 與 ease（速度變化）欄位，只顯示「編輯動畫」按鈕與基本時間控制。提示詞、JavaScript 原始碼與 sandbox display preview 皆移至獨立對話框中。
 - `custom-script` 對話框提供 JavaScript 原始碼編輯器；使用者可在 AI 產生後手動修改 `effect.code`，或直接貼上自寫程式。手動修改會即時更新 sandbox 預覽，並在按「儲存動畫」後與 spec 一起持久化。
 - 若 LLM 產生了不安全或不符合契約的程式，前端顯示可行的重試提示，不會儲存或播放該程式。
+- sandbox 在使用者 `code` 之前注入 `window.Manim`（`frontend/src/lib/manimHelperScript.ts` 的 `MANIM_HELPER_SCRIPT`），提供 manim 風格座標系、色票、rate function、SVG mobject 形狀與 `Create`/`Write`/`FadeIn`/`FadeOut`/`Transform`/`Shift`/`Rotate`/`Scale`/`GrowFromCenter` 動畫；後端系統提示詞已說明此 API，使用者要求「manim 風格」時 LLM 可直接呼叫，詳見 §5.4。
 
 手動 QA 建議：
 
@@ -512,3 +536,4 @@ V1 的「使用提示詞生成動畫」以 `custom-script` 效果交付，重點
 5. 調整效果的「時長」與「顯示後自動消失」秒數後重新產生，確認動畫的「一輪」長度（progress 從 0 到 1 的時間）隨之改變，且播放到底後畫面停留在最終狀態、不會自行重置重播；效果在 `exitDuration` 後依既有淡出機制消失。
 6. 嘗試要求「用 fetch 載入外部 MNIST」或「使用 localStorage」，確認後端回拒絕訊息且 draft 不被寫入不安全 code。
 7. 確認此 v1 只能模擬 MNIST/embedding/PCA 類視覺過程；真正的 MNIST、ResNet50 embedding 與 PCA 計算需後續資料/模型推論服務。
+8. 輸入「用 manim 風格畫一個圓形 Transform 成正方形，並用 Write 顯示一段文字說明」之類提示詞，確認產生的程式碼使用 `window.Manim`（例如 `Manim.shapes.circle`/`Manim.animate.create`/`Manim.animate.transform`/`Manim.animate.write`），預覽中可看到深色背景＋manim 配色、描邊繪製與文字逐字顯示效果，且隨 `t` 從 0 到 `api.duration` 播放一輪後停留在最終畫面。

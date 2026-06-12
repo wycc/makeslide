@@ -58,9 +58,18 @@ test("buildCustomScriptSandboxDoc falls back to a safe default duration for inva
 test("buildCustomScriptSandboxDoc has no unescaped </script> even for adversarial code", () => {
   const code = '</script><script>alert(1)</script>" \' `';
   const html = buildCustomScriptSandboxDoc(code, 10);
-  // Only the two trusted <script> tags from the wrapper itself should remain.
-  assert.equal((html.match(/<script>/g) ?? []).length, 1);
-  assert.equal((html.match(/<\/script>/g) ?? []).length, 1);
+  // Only the two trusted <script> tags (Manim helper + wrapper) should remain.
+  assert.equal((html.match(/<script>/g) ?? []).length, 2);
+  assert.equal((html.match(/<\/script>/g) ?? []).length, 2);
+});
+
+test("buildCustomScriptSandboxDoc injects the window.Manim helper library", () => {
+  const html = buildCustomScriptSandboxDoc("window.renderAnimation = function () {};", 10);
+  assert.match(html, /window\.Manim\s*=/);
+  assert.match(html, /smooth:/);
+  assert.match(html, /colors:/);
+  assert.match(html, /shapes:/);
+  assert.match(html, /animate:/);
 });
 
 test("buildCustomScriptSandboxDoc handles non-Latin1 (multi-byte) code", () => {
