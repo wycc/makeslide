@@ -2,13 +2,22 @@ import { useI18n } from '../../i18n';
 import type { TranslationKey } from '../../i18n';
 import type { SlideAnimationEffect, SlideAnimationEffectType, SlideAnimationEase } from '../../types';
 import {
+  FOCUS_EFFECT_TYPES,
   MAX_SLIDE_ANIMATION_EFFECTS,
   SLIDE_ANIMATION_EASES,
   SLIDE_ANIMATION_EFFECT_TYPES,
   defaultAnimationSpec,
+  getFocusEffectParams,
   resolveStartTriggerSeconds,
 } from '../../lib/animationSpec';
 import { usePlayPageContext } from './PlayPageContext';
+
+const FOCUS_PARAM_LABELS = {
+  xPct: 'play.animation.focusX',
+  yPct: 'play.animation.focusY',
+  widthPct: 'play.animation.focusWidth',
+  heightPct: 'play.animation.focusHeight',
+} as const satisfies Record<string, TranslationKey>;
 
 function newEffect(): SlideAnimationEffect {
   return {
@@ -229,6 +238,35 @@ export function AnimationEditorTab() {
                   ))}
                 </select>
               </label>
+              {FOCUS_EFFECT_TYPES.includes(effect.type) && (
+                <div className="flex flex-col gap-1 text-xs text-slate-400">
+                  {t('play.animation.focusPosition')}
+                  <div className="flex gap-1">
+                    {(Object.keys(FOCUS_PARAM_LABELS) as Array<keyof typeof FOCUS_PARAM_LABELS>).map((key) => (
+                      <label key={key} className="flex flex-col items-center gap-0.5 text-[11px] text-slate-500">
+                        {t(FOCUS_PARAM_LABELS[key])}
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step={1}
+                          value={getFocusEffectParams(effect)[key]}
+                          disabled={disabled}
+                          onChange={(e) =>
+                            updateEffect(effect.id, {
+                              params: {
+                                ...getFocusEffectParams(effect),
+                                [key]: Math.min(100, Math.max(0, Number(e.target.value) || 0)),
+                              },
+                            })
+                          }
+                          className="w-14 rounded-md border border-slate-700 bg-slate-900 px-1 py-1 text-sm text-slate-100"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
               <button
                 type="button"
                 disabled={disabled}

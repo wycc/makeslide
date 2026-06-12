@@ -1,8 +1,48 @@
 import { useRef } from 'react';
 import type { CSSProperties, ImgHTMLAttributes, ReactNode, Ref } from 'react';
-import type { SlideAnimationSpec, SlideRenderType } from '../../types';
-import { hasPlayableAnimation } from '../../lib/animationSpec';
+import type { SlideAnimationEffect, SlideAnimationSpec, SlideRenderType } from '../../types';
+import { FOCUS_EFFECT_TYPES, getFocusEffectParams, hasPlayableAnimation } from '../../lib/animationSpec';
 import { useGsapSlideTimeline } from './useGsapSlideTimeline';
+
+/** 套用 highlight-box / spotlight 效果的疊加層，由 buildGsapTimeline 透過 data-effect-id 抓取並控制淡入。 */
+function FocusOverlay({ effect }: { effect: SlideAnimationEffect }) {
+  const { xPct, yPct, widthPct, heightPct } = getFocusEffectParams(effect);
+  const position: CSSProperties = {
+    position: 'absolute',
+    left: `${xPct}%`,
+    top: `${yPct}%`,
+    width: `${widthPct}%`,
+    height: `${heightPct}%`,
+    opacity: 0,
+    pointerEvents: 'none',
+  };
+  if (effect.type === 'highlight-box') {
+    return (
+      <div
+        data-effect-id={effect.id}
+        style={{
+          ...position,
+          border: '4px solid #ef4444',
+          borderRadius: '8px',
+          boxShadow: '0 0 16px rgba(239, 68, 68, 0.7)',
+        }}
+      />
+    );
+  }
+  if (effect.type === 'spotlight') {
+    return (
+      <div
+        data-effect-id={effect.id}
+        style={{
+          ...position,
+          borderRadius: '50%',
+          boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.6)',
+        }}
+      />
+    );
+  }
+  return null;
+}
 
 export interface SlideRendererProps {
   renderType: SlideRenderType | undefined;
@@ -89,6 +129,11 @@ export function SlideRenderer({
       <div ref={stageRef} className="relative" style={{ lineHeight: 0, willChange: 'transform, opacity' }}>
         {img}
         {children}
+        {spec?.effects
+          .filter((effect) => FOCUS_EFFECT_TYPES.includes(effect.type))
+          .map((effect) => (
+            <FocusOverlay key={effect.id} effect={effect} />
+          ))}
       </div>
       {overlay}
     </div>

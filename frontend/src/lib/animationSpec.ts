@@ -1,4 +1,10 @@
-import type { SlideAnimationEase, SlideAnimationEffectType, SlideAnimationSpec, SlideAnimationStartTrigger } from '../types';
+import type {
+  SlideAnimationEase,
+  SlideAnimationEffect,
+  SlideAnimationEffectType,
+  SlideAnimationSpec,
+  SlideAnimationStartTrigger,
+} from '../types';
 import type { SentenceTimelineItem } from './subtitles';
 
 export const SLIDE_ANIMATION_EFFECT_TYPES: readonly SlideAnimationEffectType[] = [
@@ -9,7 +15,31 @@ export const SLIDE_ANIMATION_EFFECT_TYPES: readonly SlideAnimationEffectType[] =
   'pan-right',
   'pan-up',
   'pan-down',
+  'highlight-box',
+  'spotlight',
 ];
+
+/** Effect types rendered as an overlay element inside the animated stage (vs. a transform on the whole slide). */
+export const FOCUS_EFFECT_TYPES: readonly SlideAnimationEffectType[] = ['highlight-box', 'spotlight'];
+
+export interface FocusEffectParams {
+  xPct: number;
+  yPct: number;
+  widthPct: number;
+  heightPct: number;
+}
+
+const DEFAULT_FOCUS_PARAMS: FocusEffectParams = { xPct: 30, yPct: 30, widthPct: 40, heightPct: 40 };
+
+/** Reads an effect's overlay position/size, filling in defaults for unset params. */
+export function getFocusEffectParams(effect: SlideAnimationEffect): FocusEffectParams {
+  return {
+    xPct: effect.params?.xPct ?? DEFAULT_FOCUS_PARAMS.xPct,
+    yPct: effect.params?.yPct ?? DEFAULT_FOCUS_PARAMS.yPct,
+    widthPct: effect.params?.widthPct ?? DEFAULT_FOCUS_PARAMS.widthPct,
+    heightPct: effect.params?.heightPct ?? DEFAULT_FOCUS_PARAMS.heightPct,
+  };
+}
 
 export const SLIDE_ANIMATION_EASES: readonly SlideAnimationEase[] = [
   'none',

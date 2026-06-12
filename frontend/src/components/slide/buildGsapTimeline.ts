@@ -64,6 +64,12 @@ export function buildGsapTimeline(stage: HTMLElement, spec: SlideAnimationSpec):
         tl.fromTo(stage, { yPercent: -d }, { yPercent: d, ...common }, effect.start);
         break;
       }
+      case 'highlight-box':
+      case 'spotlight': {
+        const overlay = stage.querySelector<HTMLElement>(`[data-effect-id="${effect.id}"]`);
+        if (overlay) tl.fromTo(overlay, { autoAlpha: 0 }, { autoAlpha: 1, ...common }, effect.start);
+        break;
+      }
     }
   }
 
