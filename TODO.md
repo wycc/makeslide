@@ -457,7 +457,7 @@
 [x] 下載 youtube 時，下載的字幕檔應該被存下來當成是來源，可以在來源被檢視。（完成於分支: feature/youtube-caption-source-persist-20260612）
 [ ] 下載 youtube 時，下載的語音檔應該被存下來當成是來源，可以在來源被檢視。STT 轉出的字幕檔也應被存下來可以在來源被檢視。
 [x] 當收到 LLM provider 傳回的錯誤時，應該要顯示給使用者看。（完成於分支: feature/show-llm-provider-error-to-user-20260607）
-[ ] 在上傳 PDF 時,　要提供選項單入或雙人的選項
+[x] 在上傳 PDF 時,　要提供選項單入或雙人的選項（完成於分支: feature/upload-host-mode-select-20260612）
 [x] gpt-image-2 的錯誤請重試一次，不要直接判定失敗（完成於分支: feature/retry-gpt-image-moderation-blocked-20260608）
 [x] 修正 YouTube 字幕過多頁數不足的問題：去除 VTT inline timing markers 和重複行，並將大綱生成的字幕輸入上限從 16K 提高到 64K（完成於分支: feature/youtube-captions-coverage-20260601）
 [x] 將頁面產物檔案（圖片/縮圖/逐字稿/腳本/語音）改用建立時就決定、永不改變的 page_uid 命名，取代依頁碼命名；解決搬移/插入/刪除頁面時 cascading rename 導致 git 無法偵測 rename、`git log --follow` 斷裂的結構性問題（完成於分支: feature/stable-page-uid-filenames-20260608）
@@ -702,6 +702,10 @@
 - 時間: 2026-06-12 09:15:00 +0800
 - 分支: feature/youtube-caption-source-persist-20260612
 - 內容: 完成「下載 youtube 時，下載的字幕檔應該被存下來當成是來源，可以在來源被檢視」。根因：`/api/youtube` 建立任務時即新增一筆 `source_kind='youtube_caption'` 的 `pdf_sources` 紀錄，但 `content_text` 寫入空字串，pipeline 下載並正規化字幕（`captions.normalized.txt`）後從未回寫這筆來源，導致來源清單中的 YouTube 字幕來源永遠是空的。修正：`backend/src/worker/pipeline.ts` 在 `fetchYoutubeCaptions()` 完成、寫入 `captions.raw.json`/`captions.normalized.txt` 後，新增一道 `UPDATE pdf_sources SET content_text = ?`（`cap.normalizedText.slice(0, 120000)`，與既有 PDF 來源上限一致）寫回該筆 youtube_caption 來源。前端 `PlayPageSlidePanel.tsx` 的「目前來源清單」原本只用 `line-clamp-2` 顯示 2 行預覽，現在加上展開/收合按鈕（沿用「生成記錄」的 ▲/▼ 樣式），點擊可在 `<pre>` 中檢視來源完整內容，無內容時顯示「尚無內容」並停用按鈕；新增 `expandedSourceId`/`setExpandedSourceId` 狀態（`usePromptAndSource.ts` → `PlayPageContext`）。後端/前端 `npx tsc --noEmit` 與 `npm run build` 皆通過；後端 `npm test` 59 測試 41 通過/18 失敗，失敗數與既有認證基線相同，無新增失敗。
+
+- 時間: 2026-06-12 09:40:00 +0800
+- 分支: feature/upload-host-mode-select-20260612
+- 內容: 完成「在上傳 PDF 時要提供選項單人或雙人的選項」。系統原已有 `pdfs.host_mode`（'solo'｜'dual'，預設 'solo'）與 Speaker 1/2 人設/聲音設定，但只能在建立簡報後到播放設定（TtsDialog/RegenAllDialog）中變更，上傳當下一律是 'solo'。後端：`backend/src/routes/pdfs/upload.ts` 為 `POST /api/pdfs`（PDF/TXT 上傳）新增 `host_mode` multipart 欄位解析（`HostModeSchema = z.enum(['solo','dual'])`，預設 'solo'，非法值回 400 INVALID_REQUEST），寫入 `INSERT INTO pdfs` 的 `host_mode` 欄並於回應中回傳；`POST /api/youtube` 的 `YoutubeCreateBodySchema`（`backend/src/routes/pdfs/shared.ts`）新增可選 `host_mode` 欄位，同樣寫入 `pdfs.host_mode` 並回傳。前端：`UploadButton.tsx` 在「上傳 PDF」的內容模式選擇面板（簡報逐頁處理／一般文件 AI 分頁）與「YouTube 匯入」面板中，新增「主持模式」分段切換按鈕（單人旁白／雙人對談，樣式沿用 TtsDialog 的 segmented control），選擇結果透過 `uploadPdf(file, { hostMode })`／`createYoutubeTask(url, lang, hostMode)` 傳給後端；`uploads.ts`／`pdfs.ts`／`types.ts` 新增對應欄位與型別，並補上 `upload.hostModeLabel`／`upload.hostModeSolo`／`upload.hostModeDual` 中英文 i18n 鍵。驗證：前後端 `npx tsc --noEmit` 與 `npm run build` 皆通過；以 `buildApp()` + `app.inject()` 對 `/api/pdfs`（multipart，host_mode=dual/solo/未指定）與 `/api/youtube`（host_mode=dual/solo）逐一驗證回應與 DB 寫入值正確，非法 host_mode 值回 400；後端 `npm test` 59 測試 41 通過/18 失敗，失敗數與既有認證基線相同，無新增失敗。前端 UI 因環境無瀏覽器/螢幕截圖工具，未做實機畫面驗證，僅以程式碼比對既有 segmented control 樣式確認一致性。
 
 
 # 新功能(每一個功能使用一個 branch，做好後也要更新 master 上的設計文件)
