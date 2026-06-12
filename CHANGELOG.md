@@ -4,7 +4,7 @@
 
 格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/)。
 
-## [未發布] - 2026-05-31
+## [1.5.0] - 2026-06-12
 
 ### 同步播放 / 課堂模式
 - 新增同步播放模式，自動判定主控端（master）與跟隨端（follower）角色。

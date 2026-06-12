@@ -3,7 +3,7 @@ DOCKER ?= docker
 # Docker Hub account / repository / tag
 DOCKERHUB_ACCOUNT ?= wycca1
 IMAGE_NAME       ?= makeslide-app
-TAG              ?= v1.4.1
+TAG              ?= v1.5.0
 IMAGE            ?= $(DOCKERHUB_ACCOUNT)/$(IMAGE_NAME):$(TAG)
 
 # Windows portable zip output path (version follows Docker TAG)

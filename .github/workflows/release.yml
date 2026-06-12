@@ -1,7 +1,7 @@
 name: Release
 
 # Triggered by pushing a version tag (e.g. git tag v1.5.0 && git push origin v1.5.0)
-# or manually via workflow_dispatch (useful for re-running on an existing tag like v1.4.1).
+# or manually via workflow_dispatch (useful for re-running on an existing tag like v1.5.0).
 on:
   push:
     tags:
@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag to build (e.g. v1.4.1)'
+        description: 'Release tag to build (e.g. v1.5.0)'
         required: true
-        default: 'v1.4.1'
+        default: 'v1.5.0'
 
 env:
   # Works for both triggers: dispatch overrides, push falls back to ref_name
@@ -100,7 +100,7 @@ jobs:
         run: npm ci
 
       # Sync package.json version with the release tag so the output filename
-      # matches: MakeSlide-1.4.1-win-x64.zip
+      # matches: MakeSlide-1.5.0-win-x64.zip
       - name: Set version from tag
         shell: bash
         run: |
