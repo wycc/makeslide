@@ -193,6 +193,35 @@ test('validateAnimationSpec rejects an out-of-range startTrigger offsetSeconds',
   );
 });
 
+test('validateAnimationSpec accepts a text-callout effect with text and overlay params', () => {
+  const result = validateAnimationSpec(
+    validSpec([
+      fadeIn({
+        id: 'effect-1',
+        type: 'text-callout',
+        text: '重點：這裡是關鍵字',
+        params: { xPct: 10, yPct: 20, widthPct: 30, heightPct: 15 },
+      }),
+    ]),
+  );
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.spec.effects[0].text, '重點：這裡是關鍵字');
+    assert.deepEqual(result.spec.effects[0].params, { xPct: 10, yPct: 20, widthPct: 30, heightPct: 15 });
+  }
+});
+
+test('validateAnimationSpec rejects a text-callout effect whose text exceeds the max length', () => {
+  assert.equal(
+    validateAnimationSpec(validSpec([fadeIn({ type: 'text-callout', text: 'x'.repeat(81) })])).ok,
+    false,
+  );
+  assert.equal(
+    validateAnimationSpec(validSpec([fadeIn({ type: 'text-callout', text: 'x'.repeat(80) })])).ok,
+    true,
+  );
+});
+
 // ── API ───────────────────────────────────────────────────────────────────────
 
 test('GET animation returns default spec when no file exists', async () => {

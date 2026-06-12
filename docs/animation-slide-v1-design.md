@@ -23,6 +23,9 @@
 >
 > 擴充註記（2026-06-12，自動產生逐字稿焦點動畫）：
 > - 動畫編輯器新增「自動產生逐字稿焦點動畫」按鈕：依本頁逐字稿句數，一次產生對應數量的 `highlight-box` 效果並各自綁定 `startTrigger`（每句一個，使用預設焦點位置 30/30/40/40，使用者可再逐一調整位置與大小）。為 TODO 第 720 項的 v1 範圍，詳見 §7.2。
+>
+> 擴充註記（2026-06-12，文字說明效果）：
+> - 新增 `text-callout` 效果類型：與 `highlight-box`/`spotlight` 同為 overlay 疊加層，並新增 `effect.text`（純文字，上限 80 字）作為顯示內容，渲染為深色圓角文字框。為 TODO 第 721 項「除了焦點以外，也可以生成一張小圖或文字做為動畫內容」的 v1 範圍（僅文字，圖片內容留待後續項目）。詳見 §5.2、§6.6、§7。
 
 ---
 
@@ -146,6 +149,7 @@ interface AnimationStartTrigger {
 | pan-down | 由上向下平移 | yPercent: -3 → 3 |
 | highlight-box | 於指定區域淡入一個紅色外框，提示焦點 | opacity: 0 → 1 |
 | spotlight | 於指定區域外淡入半透明黑色遮罩，聚焦該區域 | opacity: 0 → 1 |
+| text-callout | 於指定區域淡入一個文字說明框 | opacity: 0 → 1，文字內容見 `effect.text` |
 
 easing 白名單：`none`、`power1.in`、`power1.out`、`power1.inOut`、`power2.inOut`。
 
@@ -169,7 +173,26 @@ easing 白名單：`none`、`power1.in`、`power1.out`、`power1.inOut`、`power
 - `spotlight`：在同一範圍內渲染一個橢圓形區域，外側以 `box-shadow: 0 0 0 9999px rgba(0,0,0,0.6)` 形成大範圍暗化遮罩，達到「聚光燈」效果；`autoAlpha` 同樣由 0 淡入至 1。
 - 兩者皆與 `fade-in` 相同：淡入後維持顯示（v1 不提供自動淡出／pulse，使用者可另外新增第二個效果做淡出）。
 - 驗證規則沿用既有 `params` 白名單機制（`ALLOWED_PARAM_KEYS`），未知鍵過濾、僅接受數值；v1 不對 `xPct`/`yPct`/`widthPct`/`heightPct` 做範圍限制，前端輸入框會夾在 0~100。
-- 「引言(圖)」（文字/圖片疊加內容）屬於後續項目（見 §12 / TODO 新功能區塊）；「依逐字稿自動產生焦點」的編輯器內手動產生按鈕已於 §7.2 提供 v1。
+- 「依逐字稿自動產生焦點」的編輯器內手動產生按鈕已於 §7.2 提供 v1；「文字說明」疊加內容已於 §5.2 提供 v1，「引言(圖)」中的圖片內容仍屬於後續項目（見 §12 / TODO 新功能區塊）。
+
+### 5.2 文字說明效果（text-callout）
+
+`text-callout` 是「除了焦點以外，也可以生成文字做為動畫內容」（TODO 第 721 項）的 v1 實作：與 `highlight-box`/`spotlight` 共用同一套 overlay 疊加層機制（§6.6），額外新增 `effect.text` 欄位作為顯示文字。
+
+```ts
+// effect.params 同 §5.1（位置與大小，0~100 百分比，未提供時套用預設值 30/30/40/40）
+{
+  xPct?: number;
+  yPct?: number;
+  widthPct?: number;
+  heightPct?: number;
+}
+// effect.text：顯示的文字內容（純文字，上限 80 字 = MAX_TEXT_CALLOUT_LENGTH）
+```
+
+- 渲染為一個深色半透明圓角矩形，文字置中顯示（白字、粗體），`autoAlpha` 由 0 淡入至 1，淡入後維持顯示（與 highlight-box/spotlight 相同，v1 不提供自動淡出）。
+- 驗證規則：`text` 為選填字串，最長 80 字（`MAX_TEXT_CALLOUT_LENGTH`，定義於 `backend/src/services/pageAnimation.ts`，前端常數同步於 `frontend/src/lib/animationSpec.ts`）；超過長度回 400 `INVALID_ANIMATION_SPEC`。
+- 圖片內容（「生成一張小圖」）需額外的圖片產生/上傳管線，本次不處理，留待後續項目。
 
 ## 6. 前端架構
 
@@ -206,13 +229,13 @@ Props：`renderType`、`src`（由呼叫端算好，含 displayedImageSrc 防閃
 
 縮圖仍用 `<img />`；`render_type === 'gsap-image'` 時加「動畫」小標記。
 
-### 6.6 焦點 overlay（FocusOverlay）
+### 6.6 效果 overlay（EffectOverlay）
 
-`highlight-box`/`spotlight` 效果（`FOCUS_EFFECT_TYPES`，定義於 `frontend/src/lib/animationSpec.ts`）以額外的疊加 `<div>` 實作，渲染於 animated stage 內（`img` 與 `children` 之後）：
+`highlight-box`/`spotlight`/`text-callout` 效果（`OVERLAY_EFFECT_TYPES`，定義於 `frontend/src/lib/animationSpec.ts`）以額外的疊加 `<div>` 實作，渲染於 animated stage 內（`img` 與 `children` 之後）：
 
-- `SlideRenderer.tsx` 對 `spec.effects` 中屬於 `FOCUS_EFFECT_TYPES` 的每個效果，渲染一個帶 `data-effect-id={effect.id}` 的 `<div>`（`FocusOverlay`），初始 `opacity: 0`、`position: absolute`、`pointer-events: none`，位置/大小取自 `getFocusEffectParams(effect)`（`xPct`/`yPct`/`widthPct`/`heightPct`，含預設值）。
+- `SlideRenderer.tsx` 對 `spec.effects` 中屬於 `OVERLAY_EFFECT_TYPES` 的每個效果，渲染一個帶 `data-effect-id={effect.id}` 的 `<div>`（`EffectOverlay`），初始 `opacity: 0`、`position: absolute`、`pointer-events: none`，位置/大小取自 `getFocusEffectParams(effect)`（`xPct`/`yPct`/`widthPct`/`heightPct`，含預設值）；`text-callout` 額外以 `effect.text` 作為文字內容。
 - `buildGsapTimeline.ts` 透過 `stage.querySelector('[data-effect-id="..."]')` 找到對應 overlay，對其 `autoAlpha` 做 `fromTo(0 → 1)`（與 `fade-in` 相同手法，但作用對象是 overlay 而非整個 stage）。
-- overlay 是 `stage` 的子元素，因此會跟著 `stage` 的 pan/zoom transform 一起移動縮放，焦點位置（百分比座標）相對於投影片內容維持不變。
+- overlay 是 `stage` 的子元素，因此會跟著 `stage` 的 pan/zoom transform 一起移動縮放，位置（百分比座標）相對於投影片內容維持不變。
 - static 分支（無動畫）不渲染 overlay。
 
 ### 6.5 逐字稿同步解析（resolveAnimationSpec）
@@ -246,7 +269,9 @@ Props：`renderType`、`src`（由呼叫端算好，含 displayedImageSrc 防閃
 
 最小 UI：啟用 checkbox、效果清單（type select / start / duration / ease / 刪除）、新增效果、從頭預覽（先儲存 → 音訊 seek 0 → play）、儲存。
 
-效果類型為 `highlight-box` 或 `spotlight`（`FOCUS_EFFECT_TYPES`）時，效果列額外顯示「焦點位置與大小（%）」四個數字輸入框（X / Y / 寬 / 高，0~100，整數），對應 `effect.params.{xPct,yPct,widthPct,heightPct}`；未設定時顯示預設值（30/30/40/40），輸入會夾在 0~100 並寫回 `params`。
+效果類型為 `highlight-box`、`spotlight` 或 `text-callout`（`OVERLAY_EFFECT_TYPES`）時，效果列額外顯示「焦點位置與大小（%）」四個數字輸入框（X / Y / 寬 / 高，0~100，整數），對應 `effect.params.{xPct,yPct,widthPct,heightPct}`；未設定時顯示預設值（30/30/40/40），輸入會夾在 0~100 並寫回 `params`。
+
+效果類型為 `text-callout` 時，另額外顯示「文字內容」文字輸入框，對應 `effect.text`（純文字，上限 80 字 = `MAX_TEXT_CALLOUT_LENGTH`）。
 
 ### 7.1 起始時間方式（依秒數 / 依逐字稿句子）
 
@@ -327,5 +352,5 @@ detail API 的 page 物件增加 `render_type` 與 `animation_spec_url`。
 ## 12. 後續擴充方向
 
 - V1.1：drawing mode 自動暫停、preset 快速套用、raw JSON 檢視、效果排序、跨頁複製。
-- V2：overlay text、SVG 圖元、物件 target、公式、逐步條列、LLM 生成動畫 JSON。
+- V2：overlay image（小圖疊加內容）、SVG 圖元、物件 target、公式、逐步條列、LLM 生成動畫 JSON。
 - V3：視覺化時間軸、關鍵影格、3D renderer、動畫 MP4 匯出。
