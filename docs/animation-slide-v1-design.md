@@ -32,6 +32,9 @@
 >
 > 擴充註記（2026-06-12，效果自動消失）：
 > - `highlight-box`/`spotlight`/`text-callout`（`OVERLAY_EFFECT_TYPES`）新增選填欄位 `exitDuration?: number`（秒）：淡入完成後維持顯示 `exitDuration` 秒，再以相同 `duration`/`ease` 自動淡出。為 TODO「每一個動畫都要有消失時間」之 v1 範圍——僅套用於 overlay 效果；`fade-in`/`zoom-*`/`pan-*` 等整頁 transform 效果本身已有明確的最終狀態，其對稱「恢復原狀」機制留待後續版本（見 §12）。詳見 §5.3、§7。
+>
+> 擴充註記（2026-06-12，AI 自動產生逐字稿焦點動畫）：
+> - 新增 `POST /api/pdfs/:id/pages/:n/animation/auto-focus-ai`：依本頁逐字稿句子（與選填的逐句動畫指引 `hints`、頁面 OCR 文字）呼叫 LLM（`callChatJSON`，沿用 `LLM_PROVIDER` 設定），由 AI 逐句決定是否顯示 `highlight-box`/`spotlight` 焦點方框，以及其位置（`xPct`/`yPct`/`widthPct`/`heightPct`）與消失時間（`exitDuration`，選填）。動畫編輯器新增「🤖 AI 自動產生焦點動畫」按鈕，與既有「🪄 自動產生逐字稿焦點動畫」（固定規則版）並列。為 TODO「自動產生逐字稿焦點功能要用 AI 選擇要在什麼時顯示在什麼位置」之 v1 範圍，亦是 §12 V2「依 `AnimationSpec.hints` 與逐字稿內容由 LLM 生成動畫 JSON」的初步落地（先涵蓋焦點方框的時機與位置，`text-callout` 與其他效果類型留待後續）。詳見 §7.4、§8。
 
 ---
 
@@ -360,19 +363,38 @@ Props：`renderType`、`src`（由呼叫端算好，含 displayedImageSrc 防閃
 - 輸入框內容變更時即時寫回 `draft.hints`；輸入框清空時會從 `hints` 中移除該 key，整個物件變為 `{}` 時改寫為 `undefined`，避免儲存無意義的空欄位。
 - 與效果清單一樣隨 `handleSaveAnimation` 一併儲存於 `<page_uid>.animation.json`；本次不影響任何效果的產生或播放結果。
 
+### 7.4 AI 自動產生焦點動畫
+
+新增「🤖 AI 自動產生焦點動畫」按鈕（`play.animation.autoGenerateFocusAi`），位於「🪄 自動產生逐字稿焦點動畫」按鈕旁。與 §7.2 的固定規則版不同，本功能由 LLM 針對每一句逐字稿個別決定是否顯示效果、效果類型與位置/大小/消失時間。
+
+行為：
+
+- 點擊後呼叫 `POST /api/pdfs/:id/pages/:n/animation/auto-focus-ai`（`generateAiFocusEffects`，`frontend/src/lib/api/pdfs.ts`），帶入 `{ sentences: pageSentences, hints: draft.hints }`。
+- 後端（`backend/src/services/animationAutoFocus.ts`）讀取本頁 OCR 文字（`text_path`）與請求中的逐字稿句子、`hints`，組成提示詞，透過 `callChatJSON`（沿用 `LLM_PROVIDER`/`openaiLlmModel`/`geminiLlmModel` 設定，文字輸入、不含圖片）請 LLM 針對每句（最多 `MAX_SLIDE_ANIMATION_EFFECTS` = 20 句）回傳：
+  - `show`：是否顯示焦點方框。
+  - `type`：`highlight-box` 或 `spotlight`。
+  - `xPct`/`yPct`/`widthPct`/`heightPct`：方框位置與大小（百分比，0-100）。
+  - `exitDuration`（選填，秒，0-30）：淡入完成後停留多久自動淡出。
+- 後端將 `show: true` 的項目轉換為 `AnimationEffect`：`type`/`params`/`exitDuration` 取自 AI 回應（數值會 clamp 到合理範圍），`start = 0`、`duration = 1.2`、`ease = 'power1.out'`、`startTrigger = { type: 'transcript-line', line }`；`show: false` 或重複/超出範圍的 `line` 會被忽略。回應 `{ effects: AnimationEffect[] }`，**不會**寫入已儲存的 spec。
+- 前端收到 `effects` 後以其**取代**目前的 `draft.effects` 並將 `enabled` 設為 `true`（與 §7.2 相同的覆蓋語意）；若目前已有效果設定，先以 `window.confirm`（`play.animation.autoGenerateFocusAiConfirm`）確認。產生中按鈕顯示忙碌文字（`play.animation.autoGenerateFocusAiBusy`）並停用；完成後顯示提示訊息（`play.animation.autoGenerateFocusAiDone`），失敗則顯示錯誤（`play.animation.autoGenerateFocusAiError`）。
+- 本頁尚無逐字稿時按鈕停用，提示文字沿用「本頁尚無逐字稿」（`play.animation.noTranscript`）。
+- 產生後仍是一般 `draft.effects`，可於效果清單中個別調整，並需按「儲存動畫」才會持久化。
+- v1 範圍：僅產生 `highlight-box`/`spotlight` 焦點效果；`text-callout`（含文字內容）與其他效果類型的 AI 生成留待後續版本（見 §12）。
+
 ## 8. Backend API
 
 ```text
-GET /api/pdfs/:id/pages/:n/animation        → { page_number, render_type, spec }（無檔案回 default spec）
-PUT /api/pdfs/:id/pages/:n/animation        → 驗證、寫 JSON、更新 render_type/animation_spec_path
-GET /api/pdfs/:id/pages/:n/animation/spec   → 純 spec JSON，Cache-Control: no-store
+GET  /api/pdfs/:id/pages/:n/animation              → { page_number, render_type, spec }（無檔案回 default spec）
+PUT  /api/pdfs/:id/pages/:n/animation              → 驗證、寫 JSON、更新 render_type/animation_spec_path
+GET  /api/pdfs/:id/pages/:n/animation/spec         → 純 spec JSON，Cache-Control: no-store
+POST /api/pdfs/:id/pages/:n/animation/auto-focus-ai → { effects }（AI 產生，不寫入已儲存 spec，見 §7.4）
 ```
 
 PUT 規則：`spec.enabled === true` → `render_type='gsap-image'`；`false` → `render_type='static-image'`（JSON 保留以便再次啟用）。驗證失敗回 `400 INVALID_ANIMATION_SPEC`。
 
 detail API 的 page 物件增加 `render_type` 與 `animation_spec_url`。
 
-驗證邏輯集中於 `backend/src/services/pageAnimation.ts`（zod），route 於 `backend/src/routes/pdfs/page-animation.ts`。
+驗證邏輯集中於 `backend/src/services/pageAnimation.ts`（zod），route 於 `backend/src/routes/pdfs/page-animation.ts`；AI 自動產生焦點動畫的提示詞與回應映射集中於 `backend/src/services/animationAutoFocus.ts`。
 
 ## 9. 錯誤處理與 fallback
 
@@ -401,5 +423,5 @@ detail API 的 page 物件增加 `render_type` 與 `animation_spec_url`。
 ## 12. 後續擴充方向
 
 - V1.1：drawing mode 自動暫停、preset 快速套用、raw JSON 檢視、效果排序、跨頁複製、為 `fade-in`/`zoom-*`/`pan-*` 等整頁 transform 效果提供對稱的「消失（恢復原狀）」可選機制（見 §5.3）。
-- V2：overlay image（小圖疊加內容）、SVG 圖元、物件 target、公式、逐步條列、依 `AnimationSpec.hints` 與逐字稿內容由 LLM 生成動畫 JSON。
+- V2：overlay image（小圖疊加內容）、SVG 圖元、物件 target、公式、逐步條列；依 `AnimationSpec.hints` 與逐字稿內容由 LLM 生成動畫 JSON——焦點方框（`highlight-box`/`spotlight`）的時機與位置已於 §7.4 落地，`text-callout`（含 AI 生成文案）與其他效果類型的 AI 生成仍待後續。
 - V3：視覺化時間軸、關鍵影格、3D renderer、動畫 MP4 匯出。

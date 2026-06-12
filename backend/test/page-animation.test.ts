@@ -6,7 +6,9 @@ import { buildApp } from '../src/server';
 import { db } from '../src/db';
 import { config } from '../src/config';
 import { setSystemAuthSettings } from '../src/services/aiSettings';
+import { setOpenAIClientForTest } from '../src/services/openai';
 import { defaultAnimationSpec, validateAnimationSpec } from '../src/services/pageAnimation';
+import { mapAutoFocusResponseToEffects } from '../src/services/animationAutoFocus';
 
 const PDF_ID = 'test-page-animation-01';
 const SESSION_COOKIE =
@@ -428,5 +430,138 @@ test('GET animation falls back to the default spec when the stored file is corru
   });
   assert.equal(resp.statusCode, 200);
   assert.deepEqual((resp.json() as { spec: unknown }).spec, defaultAnimationSpec());
+  await app.close();
+});
+
+// ── mapAutoFocusResponseToEffects ──────────────────────────────────────────────
+
+test('mapAutoFocusResponseToEffects keeps only show:true items and fills startTrigger/params', () => {
+  const effects = mapAutoFocusResponseToEffects(
+    {
+      effects: [
+        { line: 0, show: false },
+        { line: 1, show: true, type: 'spotlight', xPct: 10, yPct: 20, widthPct: 30, heightPct: 25, exitDuration: 2 },
+        { line: 2, show: true },
+      ],
+    },
+    3,
+  );
+  assert.equal(effects.length, 2);
+  assert.equal(effects[0].type, 'spotlight');
+  assert.deepEqual(effects[0].startTrigger, { type: 'transcript-line', line: 1 });
+  assert.deepEqual(effects[0].params, { xPct: 10, yPct: 20, widthPct: 30, heightPct: 25 });
+  assert.equal(effects[0].exitDuration, 2);
+  assert.equal(effects[1].type, 'highlight-box');
+  assert.deepEqual(effects[1].startTrigger, { type: 'transcript-line', line: 2 });
+  assert.equal(effects[1].params?.xPct, 30);
+  assert.equal(effects[1].exitDuration, undefined);
+});
+
+test('mapAutoFocusResponseToEffects drops out-of-range/duplicate lines and clamps values', () => {
+  const effects = mapAutoFocusResponseToEffects(
+    {
+      effects: [
+        { line: 0, show: true, xPct: 200, widthPct: 0, exitDuration: 100 },
+        { line: 0, show: true, xPct: 5 },
+        { line: 5, show: true },
+      ],
+    },
+    2,
+  );
+  assert.equal(effects.length, 1);
+  assert.equal(effects[0].params?.xPct, 95);
+  assert.equal(effects[0].params?.widthPct, 5);
+  assert.equal(effects[0].exitDuration, 30);
+});
+
+test('mapAutoFocusResponseToEffects output passes validateAnimationSpec', () => {
+  const effects = mapAutoFocusResponseToEffects(
+    {
+      effects: [
+        { line: 0, show: true, type: 'highlight-box', xPct: 10, yPct: 10, widthPct: 50, heightPct: 50, exitDuration: 1.5 },
+      ],
+    },
+    1,
+  );
+  const result = validateAnimationSpec({ version: 1, enabled: true, effects });
+  assert.equal(result.ok, true);
+});
+
+// ── POST animation/auto-focus-ai ────────────────────────────────────────────────
+
+test('POST animation/auto-focus-ai returns AI-generated effects mapped from sentences', async () => {
+  seedAnimationPdf(PDF_ID, 1);
+  fs.writeFileSync(path.join(config.storageRoot, PDF_ID, 'pages', 'animuid1.text.txt'), '頁面標題\n圖表顯示營收成長', 'utf8');
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  effects: [
+                    { line: 0, show: false },
+                    { line: 1, show: true, type: 'highlight-box', xPct: 10, yPct: 15, widthPct: 40, heightPct: 30, exitDuration: 2 },
+                  ],
+                }),
+              },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+        }),
+      },
+    },
+  } as never);
+
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${PDF_ID}/pages/1/animation/auto-focus-ai`,
+      headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+      payload: { sentences: ['這是開場白。', '請看這張圖表的營收成長。'] },
+    });
+    assert.equal(resp.statusCode, 200);
+    const body = resp.json() as { effects: Array<Record<string, unknown>> };
+    assert.equal(body.effects.length, 1);
+    assert.deepEqual(body.effects[0].startTrigger, { type: 'transcript-line', line: 1 });
+    assert.equal(body.effects[0].type, 'highlight-box');
+    assert.deepEqual(body.effects[0].params, { xPct: 10, yPct: 15, widthPct: 40, heightPct: 30 });
+    assert.equal(body.effects[0].exitDuration, 2);
+
+    const validated = validateAnimationSpec({ version: 1, enabled: true, effects: body.effects });
+    assert.equal(validated.ok, true);
+  } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+  }
+});
+
+test('POST animation/auto-focus-ai returns empty effects without calling the LLM when sentences is empty', async () => {
+  seedAnimationPdf(PDF_ID, 1);
+  const app = await buildApp();
+  const resp = await app.inject({
+    method: 'POST',
+    url: `/api/pdfs/${PDF_ID}/pages/1/animation/auto-focus-ai`,
+    headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+    payload: { sentences: [] },
+  });
+  assert.equal(resp.statusCode, 200);
+  assert.deepEqual(resp.json(), { effects: [] });
+  await app.close();
+});
+
+test('POST animation/auto-focus-ai returns 404 for an unknown page', async () => {
+  seedAnimationPdf(PDF_ID, 1);
+  const app = await buildApp();
+  const resp = await app.inject({
+    method: 'POST',
+    url: `/api/pdfs/${PDF_ID}/pages/99/animation/auto-focus-ai`,
+    headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+    payload: { sentences: ['句子'] },
+  });
+  assert.equal(resp.statusCode, 404);
   await app.close();
 });

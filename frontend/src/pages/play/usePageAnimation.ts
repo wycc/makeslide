@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import { ApiError, fetchPageAnimation, savePageAnimation } from '../../lib/api';
+import { ApiError, fetchPageAnimation, generateAiFocusEffects, savePageAnimation } from '../../lib/api';
 import type { PdfDetail, PdfDetailPage, SlideAnimationSpec } from '../../types';
 import { cloneAnimationSpec, defaultAnimationSpec } from '../../lib/animationSpec';
 import { useI18n } from '../../i18n';
@@ -25,6 +25,10 @@ export interface PageAnimationState {
   animationWarning: string | null;
   setAnimationWarning: Dispatch<SetStateAction<string | null>>;
   handleSaveAnimation: () => Promise<boolean>;
+  /** AI 自動產生逐字稿焦點動畫（呼叫中）。 */
+  aiFocusBusy: boolean;
+  /** 呼叫後端 LLM，依目前逐字稿句子決定每句的焦點效果，並覆蓋 draft 的 effects。 */
+  handleGenerateAiFocusEffects: (sentences: string[], hints?: Record<string, string>) => Promise<boolean>;
 }
 
 export function usePageAnimation({
@@ -41,6 +45,7 @@ export function usePageAnimation({
   const [animationError, setAnimationError] = useState<string | null>(null);
   const [animationMessage, setAnimationMessage] = useState<string | null>(null);
   const [animationWarning, setAnimationWarning] = useState<string | null>(null);
+  const [aiFocusBusy, setAiFocusBusy] = useState(false);
 
   const pageKey = pdfId && currentPage ? `${pdfId}:${currentPage.page_number}` : null;
   const pageKeyRef = useRef(pageKey);
@@ -110,6 +115,31 @@ export function usePageAnimation({
     }
   }, [pdfId, currentPage, animationDraft, setDetail, t]);
 
+  const handleGenerateAiFocusEffects = useCallback(
+    async (sentences: string[], hints?: Record<string, string>): Promise<boolean> => {
+      if (!pdfId || !currentPage || sentences.length === 0) return false;
+      setAiFocusBusy(true);
+      setAnimationError(null);
+      setAnimationMessage(null);
+      try {
+        const res = await generateAiFocusEffects(pdfId, currentPage.page_number, { sentences, hints });
+        setAnimationDraft((prev) => ({
+          ...(prev ?? defaultAnimationSpec()),
+          enabled: true,
+          effects: res.effects,
+        }));
+        setAnimationMessage(t('play.animation.autoGenerateFocusAiDone'));
+        return true;
+      } catch (err) {
+        setAnimationError(err instanceof ApiError ? err.message : t('play.animation.autoGenerateFocusAiError'));
+        return false;
+      } finally {
+        setAiFocusBusy(false);
+      }
+    },
+    [pdfId, currentPage, t],
+  );
+
   return {
     animationSavedSpec,
     animationDraft,
@@ -120,5 +150,7 @@ export function usePageAnimation({
     animationWarning,
     setAnimationWarning,
     handleSaveAnimation,
+    aiFocusBusy,
+    handleGenerateAiFocusEffects,
   };
 }
