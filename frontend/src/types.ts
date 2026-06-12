@@ -137,6 +137,11 @@ export interface SlideAnimationEffect {
   code?: string;
   /** The prompt that produced `code`, kept so the user can iterate. Ignored by other effect types. */
   prompt?: string;
+  /**
+   * Multi-turn chat history with the AI custom-script generator, so each new
+   * prompt can build on prior turns. Ignored by other effect types.
+   */
+  conversation?: ChatMessage[];
 }
 
 export interface SlideAnimationSpec {

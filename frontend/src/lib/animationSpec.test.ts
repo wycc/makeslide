@@ -1,8 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES,
+  MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH,
   MAX_SLIDE_ANIMATION_EFFECTS,
   animationTimelineDurationSeconds,
+  appendConversationMessages,
   buildCustomScriptSandboxDoc,
   cloneAnimationSpec,
   customScriptDurationSeconds,
@@ -166,6 +169,76 @@ test("cloneAnimationSpec preserves custom-script code and prompt without sharing
   assert.equal(clonedEffect.type, "custom-script");
   assert.equal(clonedEffect.prompt, "draw dots");
   assert.match(clonedEffect.code ?? "", /renderAnimation/);
+});
+
+test("cloneAnimationSpec deep-clones a custom-script effect's conversation", () => {
+  const spec = {
+    version: 1 as const,
+    enabled: true,
+    effects: [
+      {
+        id: "effect-1",
+        target: "slide" as const,
+        type: "custom-script" as const,
+        start: 0,
+        duration: 2,
+        ease: "power1.out" as const,
+        conversation: [
+          { role: "user" as const, content: "畫一個圓形" },
+          { role: "assistant" as const, content: "已產生動畫程式碼" },
+        ],
+      },
+    ],
+  };
+  const cloned = cloneAnimationSpec(spec);
+  const clonedEffect = cloned.effects[0];
+  const originalEffect = spec.effects[0];
+  assert.ok(clonedEffect);
+  assert.ok(originalEffect);
+  assert.deepEqual(clonedEffect.conversation, originalEffect.conversation);
+  assert.notEqual(clonedEffect.conversation, originalEffect.conversation);
+  assert.notEqual(clonedEffect.conversation?.[0], originalEffect.conversation?.[0]);
+});
+
+test("cloneAnimationSpec leaves conversation undefined when the original effect has none", () => {
+  const spec = {
+    version: 1 as const,
+    enabled: true,
+    effects: [
+      { id: "effect-1", target: "slide" as const, type: "custom-script" as const, start: 0, duration: 2, ease: "none" as const },
+    ],
+  };
+  const cloned = cloneAnimationSpec(spec);
+  assert.equal(cloned.effects[0]?.conversation, undefined);
+});
+
+test("appendConversationMessages appends messages and truncates long content", () => {
+  const longContent = "x".repeat(MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH + 50);
+  const result = appendConversationMessages(undefined, { role: "user", content: longContent });
+  assert.equal(result.length, 1);
+  assert.equal(result[0]?.content.length, MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH);
+});
+
+test("appendConversationMessages preserves existing messages and appends new ones in order", () => {
+  const existing = [{ role: "user" as const, content: "第一句" }];
+  const result = appendConversationMessages(existing, { role: "assistant", content: "回覆" });
+  assert.deepEqual(result, [
+    { role: "user", content: "第一句" },
+    { role: "assistant", content: "回覆" },
+  ]);
+  // does not mutate the original array
+  assert.equal(existing.length, 1);
+});
+
+test("appendConversationMessages caps total length, dropping the oldest messages first", () => {
+  const existing = Array.from({ length: MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES }, (_, i) => ({
+    role: "user" as const,
+    content: `msg-${i}`,
+  }));
+  const result = appendConversationMessages(existing, { role: "assistant", content: "new" });
+  assert.equal(result.length, MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES);
+  assert.equal(result[0]?.content, "msg-1");
+  assert.equal(result[result.length - 1]?.content, "new");
 });
 
 test("resolveStartTriggerSeconds applies offset and clamps to zero", () => {

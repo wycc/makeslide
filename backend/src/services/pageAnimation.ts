@@ -61,6 +61,17 @@ export interface AnimationEffect {
    * other effect types.
    */
   prompt?: string;
+  /**
+   * Multi-turn chat history with the AI custom-script generator, so each new
+   * prompt can build on prior turns. Ignored by other effect types.
+   */
+  conversation?: ConversationMessage[];
+}
+
+/** A single turn in a `custom-script` effect's AI chat `conversation`. */
+export interface ConversationMessage {
+  role: 'user' | 'assistant';
+  content: string;
 }
 
 export interface AnimationSpec {
@@ -88,6 +99,10 @@ export const MAX_HINT_LENGTH = 200;
 export const MAX_CUSTOM_SCRIPT_CODE_LENGTH = 24000;
 /** Max length (chars) for the prompt used to generate a `custom-script` effect's `code`. */
 export const MAX_CUSTOM_SCRIPT_PROMPT_LENGTH = 300;
+/** Max number of messages kept in a `custom-script` effect's AI chat `conversation`. */
+export const MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES = 40;
+/** Max length (chars) for a single `conversation` message's `content`. */
+export const MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH = 500;
 /** Max output tokens requested from the LLM when generating `custom-script` code (streaming). */
 export const MAX_CUSTOM_SCRIPT_OUTPUT_TOKENS = 24000;
 
@@ -113,6 +128,11 @@ const StartTriggerSchema = z.object({
   offsetSeconds: z.number().min(0).max(MAX_START_OFFSET_SECONDS).optional(),
 });
 
+export const ConversationMessageSchema = z.object({
+  role: z.enum(['user', 'assistant']),
+  content: z.string().max(MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH),
+});
+
 const EffectSchema = z.object({
   id: z.string().min(1).max(64),
   target: z.literal('slide'),
@@ -126,6 +146,7 @@ const EffectSchema = z.object({
   exitDuration: z.number().min(0).max(MAX_DURATION_SECONDS).optional(),
   code: z.string().max(MAX_CUSTOM_SCRIPT_CODE_LENGTH).optional(),
   prompt: z.string().max(MAX_CUSTOM_SCRIPT_PROMPT_LENGTH).optional(),
+  conversation: z.array(ConversationMessageSchema).max(MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES).optional(),
 });
 
 const HintsSchema = z
@@ -182,6 +203,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.exitDuration !== undefined ? { exitDuration: effect.exitDuration } : {}),
       ...(effect.code !== undefined ? { code: effect.code } : {}),
       ...(effect.prompt !== undefined ? { prompt: effect.prompt } : {}),
+      ...(effect.conversation !== undefined ? { conversation: effect.conversation } : {}),
     };
   });
   const hints = parsed.data.hints && Object.keys(parsed.data.hints).length > 0 ? parsed.data.hints : undefined;

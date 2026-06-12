@@ -7,7 +7,9 @@ import { logger } from '../../logger';
 import { db } from '../../db';
 import { pageAnimationSpecPath, pageImagePath, safeJoinPdfPath } from '../../services/storage';
 import {
+  ConversationMessageSchema,
   MAX_CUSTOM_SCRIPT_CODE_LENGTH,
+  MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES,
   MAX_CUSTOM_SCRIPT_PROMPT_LENGTH,
   MAX_HINT_LENGTH,
   defaultAnimationSpec,
@@ -33,6 +35,7 @@ const AutoFocusAiBodySchema = z.object({
 const CustomScriptAiBodySchema = z.object({
   prompt: z.string().min(1).max(MAX_CUSTOM_SCRIPT_PROMPT_LENGTH),
   previousCode: z.string().max(MAX_CUSTOM_SCRIPT_CODE_LENGTH).optional(),
+  history: z.array(ConversationMessageSchema).max(MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES).optional(),
 });
 
 interface AnimationPageRow {
@@ -192,12 +195,12 @@ export async function registerPageAnimationRoutes(app: FastifyInstance): Promise
 
   // Diagnostic helper for users who paste the URL into a browser. The actual
   // generator endpoint is POST-only because it requires a JSON body containing
-  // the prompt and optional previousCode.
+  // the prompt and optional previousCode/history.
   app.get('/api/pdfs/:id/pages/:n/animation/custom-script', async (_request, reply) => {
     return reply
       .header('Allow', 'POST')
       .code(405)
-      .send(errorResponse('METHOD_NOT_ALLOWED', 'Use POST with a JSON body: { prompt, previousCode? }'));
+      .send(errorResponse('METHOD_NOT_ALLOWED', 'Use POST with a JSON body: { prompt, previousCode?, history? }'));
   });
 
   // AI 自訂腳本動畫：依使用者提示詞（與選填的目前程式碼）由 LLM 產生一段在 sandboxed iframe
@@ -242,6 +245,7 @@ export async function registerPageAnimationRoutes(app: FastifyInstance): Promise
         {
           prompt: parsedBody.data.prompt,
           previousCode: parsedBody.data.previousCode,
+          history: parsedBody.data.history,
           pageText,
           label: `animation-custom-script-ai page/${id}/${n}`,
         },

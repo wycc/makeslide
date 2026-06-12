@@ -1,4 +1,5 @@
 import type {
+  ChatMessage,
   SlideAnimationEase,
   SlideAnimationEffect,
   SlideAnimationEffectType,
@@ -44,6 +45,10 @@ export const MAX_HINT_LENGTH = 200;
 export const MAX_CUSTOM_SCRIPT_CODE_LENGTH = 24000;
 /** Max length (chars) for the prompt used to generate a `custom-script` effect's `code`, matching the backend's `MAX_CUSTOM_SCRIPT_PROMPT_LENGTH`. */
 export const MAX_CUSTOM_SCRIPT_PROMPT_LENGTH = 300;
+/** Max number of messages kept in a `custom-script` effect's AI chat `conversation`, matching the backend's `MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES`. */
+export const MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES = 40;
+/** Max length (chars) for a single `conversation` message's `content`, matching the backend's `MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH`. */
+export const MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH = 500;
 
 /** Default `exitDuration` (seconds) suggested when a user first enables auto-hide for an overlay effect. */
 export const DEFAULT_EXIT_DURATION_SECONDS = 2;
@@ -121,9 +126,29 @@ export function cloneAnimationSpec(spec: SlideAnimationSpec): SlideAnimationSpec
       ...e,
       params: e.params ? { ...e.params } : undefined,
       startTrigger: e.startTrigger ? { ...e.startTrigger } : undefined,
+      conversation: e.conversation ? e.conversation.map((m) => ({ ...m })) : undefined,
     })),
     ...(spec.hints ? { hints: { ...spec.hints } } : {}),
   };
+}
+
+/**
+ * Appends one or more messages to a `custom-script` effect's AI chat
+ * `conversation`, truncating each message's `content` to
+ * `MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH` and dropping the oldest
+ * messages beyond `MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES`.
+ */
+export function appendConversationMessages(
+  conversation: ChatMessage[] | undefined,
+  ...messages: ChatMessage[]
+): ChatMessage[] {
+  const next = [
+    ...(conversation ?? []),
+    ...messages.map((m) => ({ ...m, content: m.content.slice(0, MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH) })),
+  ];
+  return next.length > MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES
+    ? next.slice(next.length - MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES)
+    : next;
 }
 
 export function hasPlayableAnimation(spec: SlideAnimationSpec | null | undefined): spec is SlideAnimationSpec {

@@ -8,7 +8,7 @@ import {
   savePageAnimation,
 } from '../../lib/api';
 import type { PdfDetail, PdfDetailPage, SlideAnimationSpec } from '../../types';
-import { cloneAnimationSpec, defaultAnimationSpec } from '../../lib/animationSpec';
+import { appendConversationMessages, cloneAnimationSpec, defaultAnimationSpec } from '../../lib/animationSpec';
 import { useI18n } from '../../i18n';
 
 interface UsePageAnimationParams {
@@ -46,10 +46,11 @@ export interface PageAnimationState {
    */
   customScriptStreamingCode: Record<string, string>;
   /**
-   * 呼叫後端 LLM，依提示詞（與選填的目前程式碼）產生 `custom-script` 效果的程式碼，
-   * 並寫回該效果的 `code`/`prompt` 欄位。
+   * 將使用者輸入的訊息加入該 `custom-script` 效果的對話紀錄（`conversation`），
+   * 連同先前對話與目前程式碼一併送給後端 LLM，並依回應更新 `code` 與對話紀錄
+   * （產生成功時加入完成訊息，失敗時加入錯誤訊息），讓使用者能以多輪對話逐步調整動畫。
    */
-  handleGenerateCustomScriptCode: (effectId: string, prompt: string, previousCode?: string) => Promise<boolean>;
+  handleSendCustomScriptMessage: (effectId: string, message: string) => Promise<boolean>;
 }
 
 export function usePageAnimation({
@@ -164,19 +165,35 @@ export function usePageAnimation({
     [pdfId, currentPage, t],
   );
 
-  const handleGenerateCustomScriptCode = useCallback(
-    async (effectId: string, prompt: string, previousCode?: string): Promise<boolean> => {
-      if (!pdfId || !currentPage || !prompt.trim()) return false;
+  const handleSendCustomScriptMessage = useCallback(
+    async (effectId: string, message: string): Promise<boolean> => {
+      const prompt = message.trim();
+      if (!pdfId || !currentPage || !prompt) return false;
+      const effect = animationDraft?.effects.find((e) => e.id === effectId && e.type === 'custom-script');
+      if (!effect) return false;
+      const previousCode = effect.code;
+      const history = effect.conversation ?? [];
       setCustomScriptBusy(true);
       setCustomScriptBusyEffectId(effectId);
       setAnimationError(null);
       setAnimationMessage(null);
       setCustomScriptStreamingCode((prev) => ({ ...prev, [effectId]: '' }));
+      setAnimationDraft((prev) => {
+        const base = prev ?? defaultAnimationSpec();
+        return {
+          ...base,
+          effects: base.effects.map((e) =>
+            e.id === effectId
+              ? { ...e, conversation: appendConversationMessages(e.conversation, { role: 'user', content: prompt }) }
+              : e,
+          ),
+        };
+      });
       try {
         const res = await generateCustomScriptCode(
           pdfId,
           currentPage.page_number,
-          { prompt, previousCode },
+          { prompt, previousCode, history },
           (delta) => {
             setCustomScriptStreamingCode((prev) => ({ ...prev, [effectId]: (prev[effectId] ?? '') + delta }));
           },
@@ -185,7 +202,18 @@ export function usePageAnimation({
           const base = prev ?? defaultAnimationSpec();
           return {
             ...base,
-            effects: base.effects.map((e) => (e.id === effectId ? { ...e, code: res.code, prompt } : e)),
+            effects: base.effects.map((e) =>
+              e.id === effectId
+                ? {
+                    ...e,
+                    code: res.code,
+                    conversation: appendConversationMessages(e.conversation, {
+                      role: 'assistant',
+                      content: t('play.animation.customScriptDone'),
+                    }),
+                  }
+                : e,
+            ),
           };
         });
         setCustomScriptStreamingCode((prev) => {
@@ -197,20 +225,33 @@ export function usePageAnimation({
         setAnimationMessage(t('play.animation.customScriptDone'));
         return true;
       } catch (err) {
-        if (err instanceof ApiError && err.code === 'UNSAFE_SCRIPT') {
-          setAnimationError(t('play.animation.customScriptUnsafe'));
-        } else if (err instanceof ApiError && err.code === 'INVALID_SCRIPT_CONTRACT') {
-          setAnimationError(t('play.animation.customScriptContractError'));
-        } else {
-          setAnimationError(err instanceof ApiError ? err.message : t('play.animation.customScriptError'));
-        }
+        const message =
+          err instanceof ApiError && err.code === 'UNSAFE_SCRIPT'
+            ? t('play.animation.customScriptUnsafe')
+            : err instanceof ApiError && err.code === 'INVALID_SCRIPT_CONTRACT'
+              ? t('play.animation.customScriptContractError')
+              : err instanceof ApiError
+                ? err.message
+                : t('play.animation.customScriptError');
+        setAnimationDraft((prev) => {
+          const base = prev ?? defaultAnimationSpec();
+          return {
+            ...base,
+            effects: base.effects.map((e) =>
+              e.id === effectId
+                ? { ...e, conversation: appendConversationMessages(e.conversation, { role: 'assistant', content: message }) }
+                : e,
+            ),
+          };
+        });
+        setAnimationError(message);
         return false;
       } finally {
         setCustomScriptBusy(false);
         setCustomScriptBusyEffectId(null);
       }
     },
-    [pdfId, currentPage, t],
+    [pdfId, currentPage, animationDraft, t],
   );
 
   return {
@@ -228,6 +269,6 @@ export function usePageAnimation({
     customScriptBusy,
     customScriptBusyEffectId,
     customScriptStreamingCode,
-    handleGenerateCustomScriptCode,
+    handleSendCustomScriptMessage,
   };
 }
