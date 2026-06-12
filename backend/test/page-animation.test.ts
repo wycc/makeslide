@@ -6,7 +6,7 @@ import sharp from 'sharp';
 import { buildApp } from '../src/server';
 import { db } from '../src/db';
 import { config } from '../src/config';
-import { setSystemAuthSettings } from '../src/services/aiSettings';
+import { getRuntimeAiSettings, setRuntimeAiSettings, setSystemAuthSettings } from '../src/services/aiSettings';
 import { setOpenAIClientForTest } from '../src/services/openai';
 import { defaultAnimationSpec, validateAnimationSpec } from '../src/services/pageAnimation';
 import { mapAutoFocusResponseToEffects } from '../src/services/animationAutoFocus';
@@ -829,6 +829,81 @@ test('POST animation/custom-script streams AI-generated code via SSE and ends wi
     assert.equal(validated.ok, true);
   } finally {
     setOpenAIClientForTest(null);
+    await app.close();
+  }
+});
+
+/** Builds a Gemini `streamGenerateContent?alt=sse` response body: `data: {...}\n\n` blocks, each carrying one `candidates[0].content.parts[0].text` chunk. */
+function geminiSseStream(textPieces: string[]): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  return new ReadableStream({
+    start(controller) {
+      textPieces.forEach((piece, i) => {
+        const chunk: Record<string, unknown> = {
+          candidates: [{ content: { role: 'model', parts: [{ text: piece }] } }],
+        };
+        if (i === textPieces.length - 1) {
+          (chunk.candidates as Array<Record<string, unknown>>)[0]!.finishReason = 'STOP';
+          chunk.usageMetadata = { promptTokenCount: 10, candidatesTokenCount: 20, totalTokenCount: 30 };
+        }
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+      });
+      controller.close();
+    },
+  });
+}
+
+test('POST animation/custom-script streams Gemini-generated code incrementally when LLM_PROVIDER=gemini', async () => {
+  seedAnimationPdf(PDF_ID, 1);
+  const generatedCode =
+    'window.renderAnimation = function (root, api) { api.onFrame(function (frame) { root.style.opacity = String(Math.min(1, frame.t)); }); };';
+  const chunkSize = Math.max(1, Math.ceil(generatedCode.length / 3));
+  const pieces: string[] = [];
+  for (let i = 0; i < generatedCode.length; i += chunkSize) pieces.push(generatedCode.slice(i, i + chunkSize));
+
+  const original = getRuntimeAiSettings('account-1');
+  setRuntimeAiSettings('account-1', { llmProvider: 'gemini', geminiApiKey: 'test-gemini-key' });
+
+  const fetchCalls: string[] = [];
+  const prevFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
+    const url = String(input);
+    if (url.includes('generativelanguage.googleapis.com')) {
+      fetchCalls.push(url);
+      return new Response(geminiSseStream(pieces), { status: 200, headers: { 'content-type': 'text/event-stream' } });
+    }
+    return prevFetch(input as never, init);
+  }) as unknown as typeof fetch;
+
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${PDF_ID}/pages/1/animation/custom-script`,
+      headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+      payload: { prompt: '畫一個會旋轉的圓形' },
+    });
+    assert.equal(resp.statusCode, 200);
+    assert.match(String(resp.headers['content-type']), /^text\/event-stream/);
+
+    const events = parseSseEvents(resp.payload);
+    const deltaEvents = events.filter((e) => e.event === 'delta');
+    assert.ok(deltaEvents.length > 1, 'expected multiple incremental delta events from the Gemini stream');
+    const deltaText = deltaEvents.map((e) => (e.data as { text: string }).text).join('');
+    assert.equal(deltaText, generatedCode);
+
+    const doneEvent = events.find((e) => e.event === 'done');
+    assert.deepEqual(doneEvent?.data, { code: generatedCode });
+
+    assert.equal(fetchCalls.length, 1);
+    assert.match(fetchCalls[0] ?? '', /streamGenerateContent\?alt=sse/);
+  } finally {
+    globalThis.fetch = prevFetch;
+    setRuntimeAiSettings('account-1', {
+      llmProvider: original.llmProvider,
+      geminiApiKey: original.geminiApiKey,
+      geminiLlmModel: original.geminiLlmModel,
+    });
     await app.close();
   }
 });

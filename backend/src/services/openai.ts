@@ -10,7 +10,7 @@ import type { ChatCompletion, ChatCompletionMessageParam } from 'openai/resource
 import { z } from 'zod';
 import { config } from '../config';
 import { logger } from '../logger';
-import { callGeminiJson, callGeminiText } from './gemini';
+import { callGeminiJson, callGeminiTextStream } from './gemini';
 import { getRuntimeAiSettings } from './aiSettings';
 import { currentAccountId, sanitizeAccountId } from './accountContext';
 
@@ -459,10 +459,6 @@ export interface ChatTextStreamParams {
  * Streams a plain-text completion, invoking `onDelta` for each chunk of text
  * as it's generated. Unlike `callChatJSON`, this does not parse/validate the
  * result against a schema — callers receive the raw accumulated text.
- *
- * Gemini does not support token-by-token streaming in this codebase yet, so
- * for that provider the full response is fetched non-streaming and then
- * delivered to `onDelta` as a single chunk once it's ready.
  */
 export async function streamChatText(params: ChatTextStreamParams): Promise<ChatTextStreamResult> {
   const runtime = getRuntimeAiSettings();
@@ -470,13 +466,13 @@ export async function streamChatText(params: ChatTextStreamParams): Promise<Chat
 
   if (runtime.llmProvider === 'gemini') {
     const model = params.model ?? runtime.geminiLlmModel;
-    const result = await callGeminiText({
+    const result = await callGeminiTextStream({
       model,
       messages: params.messages,
       maxTokens: params.maxTokens,
       temperature: params.temperature,
+      onDelta: params.onDelta,
     });
-    if (result.text) params.onDelta(result.text);
     return {
       text: result.text,
       finishReason: 'stop',

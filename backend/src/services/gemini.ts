@@ -140,16 +140,16 @@ export async function callGeminiJson<T>(params: {
 }
 
 /**
- * Non-streaming plain-text completion. Gemini's REST API used here does not
- * support token-by-token streaming, so callers that want a streaming UX
- * (see `streamChatText`) deliver this result to their `onDelta` callback as
- * a single chunk once the full response has arrived.
+ * Streaming plain-text completion via Gemini's `streamGenerateContent` (SSE)
+ * endpoint, invoking `onDelta` for each text chunk as it arrives — mirrors
+ * the incremental UX of `streamChatText`'s OpenAI path.
  */
-export async function callGeminiText(params: {
+export async function callGeminiTextStream(params: {
   model: string;
   messages: ChatCompletionMessageParam[];
   maxTokens?: number;
   temperature?: number;
+  onDelta: (delta: string) => void;
 }): Promise<{ text: string; usage: GeminiUsage }> {
   const apiKey = getGeminiApiKey();
   const prompt = normalizeMessages(params.messages);
@@ -161,7 +161,7 @@ export async function callGeminiText(params: {
     },
   };
   const resp = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(params.model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(params.model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`,
     {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -169,18 +169,49 @@ export async function callGeminiText(params: {
     },
   );
   if (!resp.ok) throw new Error(`Gemini request failed: HTTP ${resp.status}`);
-  const json = (await resp.json()) as any;
-  const text = json?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-  const promptTokens = Number(json?.usageMetadata?.promptTokenCount ?? 0);
-  const completionTokens = Number(json?.usageMetadata?.candidatesTokenCount ?? 0);
-  return {
-    text,
-    usage: {
-      prompt_tokens: promptTokens,
-      completion_tokens: completionTokens,
-      total_tokens: promptTokens + completionTokens,
-    },
+  if (!resp.body) throw new Error('Gemini stream response has no body');
+
+  let text = '';
+  let usage: GeminiUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+
+  const handleLine = (line: string): void => {
+    if (!line.startsWith('data:')) return;
+    const jsonText = line.slice('data:'.length).trim();
+    if (!jsonText) return;
+    const json = JSON.parse(jsonText) as any;
+    const parts = json?.candidates?.[0]?.content?.parts ?? [];
+    for (const part of parts) {
+      const delta = typeof part?.text === 'string' ? part.text : '';
+      if (delta) {
+        text += delta;
+        params.onDelta(delta);
+      }
+    }
+    if (json?.usageMetadata) {
+      usage = {
+        prompt_tokens: Number(json.usageMetadata.promptTokenCount ?? 0),
+        completion_tokens: Number(json.usageMetadata.candidatesTokenCount ?? 0),
+        total_tokens: Number(json.usageMetadata.totalTokenCount ?? 0),
+      };
+    }
   };
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let idx: number;
+    while ((idx = buffer.indexOf('\n')) >= 0) {
+      handleLine(buffer.slice(0, idx).trim());
+      buffer = buffer.slice(idx + 1);
+    }
+  }
+  if (buffer.trim()) handleLine(buffer.trim());
+
+  return { text, usage };
 }
 
 export async function synthesizeGeminiSpeech(params: {
