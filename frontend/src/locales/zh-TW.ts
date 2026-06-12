@@ -283,6 +283,7 @@ export const zhTW = {
   'play.animation.seconds': ' 秒',
   'play.animation.noTranscript': '本頁尚無逐字稿',
   'play.animation.duration': '長度（秒）',
+  'play.animation.exitDuration': '顯示後自動消失',
   'play.animation.ease': '速度變化',
   'play.animation.ease.none': '無速度變化',
   'play.animation.ease.power1In': '慢慢開始',
