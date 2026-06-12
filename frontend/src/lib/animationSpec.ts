@@ -18,13 +18,18 @@ export const SLIDE_ANIMATION_EFFECT_TYPES: readonly SlideAnimationEffectType[] =
   'highlight-box',
   'spotlight',
   'text-callout',
+  'custom-script',
 ];
 
 /** Focus-style effect types: a rectangular overlay highlighting an area of the slide. */
 export const FOCUS_EFFECT_TYPES: readonly SlideAnimationEffectType[] = ['highlight-box', 'spotlight'];
 
 /** Effect types rendered as a positioned overlay element inside the animated stage (vs. a transform on the whole slide). */
-export const OVERLAY_EFFECT_TYPES: readonly SlideAnimationEffectType[] = [...FOCUS_EFFECT_TYPES, 'text-callout'];
+export const OVERLAY_EFFECT_TYPES: readonly SlideAnimationEffectType[] = [
+  ...FOCUS_EFFECT_TYPES,
+  'text-callout',
+  'custom-script',
+];
 
 /** Max length (chars) for a `text-callout` effect's `text`, matching the backend's `MAX_TEXT_CALLOUT_LENGTH`. */
 export const MAX_TEXT_CALLOUT_LENGTH = 80;
@@ -33,6 +38,11 @@ export const MAX_TEXT_CALLOUT_LENGTH = 80;
 export const MAX_HINTS = 50;
 /** Max length (chars) for a single animation hint, matching the backend's `MAX_HINT_LENGTH`. */
 export const MAX_HINT_LENGTH = 200;
+
+/** Max length (chars) for a `custom-script` effect's `code`, matching the backend's `MAX_CUSTOM_SCRIPT_CODE_LENGTH`. */
+export const MAX_CUSTOM_SCRIPT_CODE_LENGTH = 8000;
+/** Max length (chars) for the prompt used to generate a `custom-script` effect's `code`, matching the backend's `MAX_CUSTOM_SCRIPT_PROMPT_LENGTH`. */
+export const MAX_CUSTOM_SCRIPT_PROMPT_LENGTH = 300;
 
 /** Default `exitDuration` (seconds) suggested when a user first enables auto-hide for an overlay effect. */
 export const DEFAULT_EXIT_DURATION_SECONDS = 2;
@@ -155,4 +165,71 @@ export function resolveAnimationSpec(
       return { ...effect, start: resolved };
     }),
   };
+}
+
+/** Encodes a (possibly non-Latin1) string as base64, for safe embedding in a `<script>` block. */
+function utf8ToBase64(input: string): string {
+  const bytes = new TextEncoder().encode(input);
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+/**
+ * Builds the HTML document for a `custom-script` effect's sandboxed
+ * `<iframe sandbox="allow-scripts">` (no `allow-same-origin`, so it has an
+ * opaque origin and cannot reach the parent page, cookies or storage).
+ *
+ * `code` is expected to define `window.renderAnimation(root, api)`, where
+ * `root` is the `#root` element to draw into and `api.onFrame(cb)` registers
+ * a callback invoked with `{ t, playing }` whenever the host posts a
+ * `{ type: 'sync', t, playing }` message (`t` = seconds since this effect's
+ * fade-in began). `code` is base64-encoded so it can be embedded verbatim
+ * without any HTML/script-tag escaping concerns.
+ */
+export function buildCustomScriptSandboxDoc(code: string): string {
+  const encoded = code ? utf8ToBase64(code) : '';
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
+  #root { width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+(function () {
+  "use strict";
+  var root = document.getElementById('root');
+  var listeners = [];
+  var api = { onFrame: function (cb) { listeners.push(cb); } };
+  window.addEventListener('message', function (ev) {
+    var data = ev.data;
+    if (!data || typeof data !== 'object' || data.type !== 'sync') return;
+    for (var i = 0; i < listeners.length; i++) {
+      try { listeners[i]({ t: data.t, playing: data.playing }); } catch (e) { /* ignore listener errors */ }
+    }
+  });
+  function base64ToUtf8(b64) {
+    var binary = atob(b64);
+    var bytes = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  }
+  try {
+    var code = "${encoded}" ? base64ToUtf8("${encoded}") : '';
+    if (code) new Function(code)();
+    if (typeof window.renderAnimation === 'function') {
+      window.renderAnimation(root, api);
+    }
+  } catch (e) {
+    root.textContent = 'Animation error: ' + (e && e.message ? e.message : String(e));
+  }
+})();
+</script>
+</body>
+</html>`;
 }

@@ -10,6 +10,7 @@ import { setSystemAuthSettings } from '../src/services/aiSettings';
 import { setOpenAIClientForTest } from '../src/services/openai';
 import { defaultAnimationSpec, validateAnimationSpec } from '../src/services/pageAnimation';
 import { mapAutoFocusResponseToEffects } from '../src/services/animationAutoFocus';
+import { findUnsafeScriptPattern } from '../src/services/animationCustomScript';
 
 const PDF_ID = 'test-page-animation-01';
 const SESSION_COOKIE =
@@ -241,6 +242,45 @@ test('validateAnimationSpec omits exitDuration when not provided', () => {
   if (result.ok) {
     assert.equal(result.spec.effects[0].exitDuration, undefined);
   }
+});
+
+test('validateAnimationSpec accepts a custom-script effect with code and prompt', () => {
+  const result = validateAnimationSpec(
+    validSpec([
+      fadeIn({
+        id: 'effect-1',
+        type: 'custom-script',
+        code: 'window.renderAnimation = function (root, api) { api.onFrame(function () {}); };',
+        prompt: '畫一個會旋轉的圓形',
+        params: { xPct: 10, yPct: 20, widthPct: 30, heightPct: 40 },
+      }),
+    ]),
+  );
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.match(result.spec.effects[0].code ?? '', /renderAnimation/);
+    assert.equal(result.spec.effects[0].prompt, '畫一個會旋轉的圓形');
+    assert.deepEqual(result.spec.effects[0].params, { xPct: 10, yPct: 20, widthPct: 30, heightPct: 40 });
+  }
+});
+
+test('validateAnimationSpec rejects a custom-script effect whose code or prompt exceed the max length', () => {
+  assert.equal(
+    validateAnimationSpec(validSpec([fadeIn({ type: 'custom-script', code: 'x'.repeat(8001) })])).ok,
+    false,
+  );
+  assert.equal(
+    validateAnimationSpec(validSpec([fadeIn({ type: 'custom-script', code: 'x'.repeat(8000) })])).ok,
+    true,
+  );
+  assert.equal(
+    validateAnimationSpec(validSpec([fadeIn({ type: 'custom-script', prompt: 'x'.repeat(301) })])).ok,
+    false,
+  );
+  assert.equal(
+    validateAnimationSpec(validSpec([fadeIn({ type: 'custom-script', prompt: 'x'.repeat(300) })])).ok,
+    true,
+  );
 });
 
 test('validateAnimationSpec rejects a negative or out-of-range exitDuration', () => {
@@ -617,6 +657,197 @@ test('POST animation/auto-focus-ai returns 404 for an unknown page', async () =>
     url: `/api/pdfs/${PDF_ID}/pages/99/animation/auto-focus-ai`,
     headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
     payload: { sentences: ['句子'] },
+  });
+  assert.equal(resp.statusCode, 404);
+  await app.close();
+});
+
+// ── findUnsafeScriptPattern ──────────────────────────────────────────────────
+
+test('findUnsafeScriptPattern returns null for safe canvas-based code', () => {
+  const code = [
+    'window.renderAnimation = function (root, api) {',
+    '  var canvas = document.createElement("canvas");',
+    '  root.appendChild(canvas);',
+    '  api.onFrame(function (frame) {',
+    '    var ctx = canvas.getContext("2d");',
+    '    ctx.clearRect(0, 0, canvas.width, canvas.height);',
+    '    ctx.fillRect(0, 0, frame.t * 10, 10);',
+    '  });',
+    '};',
+  ].join('\n');
+  assert.equal(findUnsafeScriptPattern(code), null);
+});
+
+test('findUnsafeScriptPattern flags each disallowed API', () => {
+  assert.equal(findUnsafeScriptPattern('fetch("https://evil.example")'), 'fetch');
+  assert.equal(findUnsafeScriptPattern('new XMLHttpRequest()'), 'XMLHttpRequest');
+  assert.equal(findUnsafeScriptPattern('new WebSocket("wss://evil.example")'), 'WebSocket');
+  assert.equal(findUnsafeScriptPattern('import("./evil.js")'), 'import');
+  assert.equal(findUnsafeScriptPattern('require("fs")'), 'require');
+  assert.equal(findUnsafeScriptPattern('eval("alert(1)")'), 'eval');
+  assert.equal(findUnsafeScriptPattern('new Function("return 1")()'), 'new Function');
+  assert.equal(findUnsafeScriptPattern('document.cookie = "x=1"'), 'document.cookie');
+  assert.equal(findUnsafeScriptPattern('localStorage.getItem("x")'), 'localStorage');
+  assert.equal(findUnsafeScriptPattern('sessionStorage.getItem("x")'), 'sessionStorage');
+  assert.equal(findUnsafeScriptPattern('indexedDB.open("db")'), 'indexedDB');
+  assert.equal(findUnsafeScriptPattern('window.parent.postMessage("x", "*")'), 'window.parent');
+  assert.equal(findUnsafeScriptPattern('window.top.location'), 'window.top');
+  assert.equal(findUnsafeScriptPattern('window.frameElement'), 'frameElement');
+});
+
+// ── POST animation/custom-script ─────────────────────────────────────────────
+
+test('POST animation/custom-script returns AI-generated code for a safe script', async () => {
+  seedAnimationPdf(PDF_ID, 1);
+  fs.writeFileSync(path.join(config.storageRoot, PDF_ID, 'pages', 'animuid1.text.txt'), '頁面標題：銷售趨勢', 'utf8');
+  const generatedCode =
+    'window.renderAnimation = function (root, api) { api.onFrame(function (frame) { root.style.opacity = String(Math.min(1, frame.t)); }); };';
+  let capturedMessages: Array<{ role: string; content: unknown }> | undefined;
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async (body: unknown) => {
+          capturedMessages = (body as { messages: Array<{ role: string; content: unknown }> }).messages;
+          return {
+            choices: [
+              { message: { content: JSON.stringify({ code: generatedCode }) }, finish_reason: 'stop' },
+            ],
+            usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+          };
+        },
+      },
+    },
+  } as never);
+
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${PDF_ID}/pages/1/animation/custom-script`,
+      headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+      payload: { prompt: '畫一個會旋轉的圓形' },
+    });
+    assert.equal(resp.statusCode, 200);
+    assert.deepEqual(resp.json(), { code: generatedCode });
+
+    const userMessage = capturedMessages?.find((m) => m.role === 'user');
+    assert.match(String(userMessage?.content), /銷售趨勢/);
+    assert.match(String(userMessage?.content), /畫一個會旋轉的圓形/);
+
+    // round-trips through validateAnimationSpec when stored as a custom-script effect
+    const validated = validateAnimationSpec(
+      validSpec([fadeIn({ type: 'custom-script', code: (resp.json() as { code: string }).code })]),
+    );
+    assert.equal(validated.ok, true);
+  } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+  }
+});
+
+test('POST animation/custom-script includes previousCode in the prompt when iterating', async () => {
+  seedAnimationPdf(PDF_ID, 1);
+  const previousCode = 'window.renderAnimation = function (root, api) {};';
+  let capturedMessages: Array<{ role: string; content: unknown }> | undefined;
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async (body: unknown) => {
+          capturedMessages = (body as { messages: Array<{ role: string; content: unknown }> }).messages;
+          return {
+            choices: [{ message: { content: JSON.stringify({ code: previousCode }) }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+          };
+        },
+      },
+    },
+  } as never);
+
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${PDF_ID}/pages/1/animation/custom-script`,
+      headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+      payload: { prompt: '改成藍色', previousCode },
+    });
+    assert.equal(resp.statusCode, 200);
+    const userMessage = capturedMessages?.find((m) => m.role === 'user');
+    assert.match(String(userMessage?.content), /改成藍色/);
+    assert.match(String(userMessage?.content), /renderAnimation/);
+  } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+  }
+});
+
+test('POST animation/custom-script returns 422 UNSAFE_SCRIPT when the generated code is disallowed', async () => {
+  seedAnimationPdf(PDF_ID, 1);
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async () => ({
+          choices: [
+            {
+              message: { content: JSON.stringify({ code: 'fetch("https://evil.example").then(function () {});' }) },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+        }),
+      },
+    },
+  } as never);
+
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${PDF_ID}/pages/1/animation/custom-script`,
+      headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+      payload: { prompt: '從遠端載入資料並顯示' },
+    });
+    assert.equal(resp.statusCode, 422);
+    assert.equal((resp.json() as { error: { code: string } }).error.code, 'UNSAFE_SCRIPT');
+  } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+  }
+});
+
+test('POST animation/custom-script returns 400 for an empty or too-long prompt', async () => {
+  seedAnimationPdf(PDF_ID, 1);
+  const app = await buildApp();
+  try {
+    const empty = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${PDF_ID}/pages/1/animation/custom-script`,
+      headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+      payload: { prompt: '' },
+    });
+    assert.equal(empty.statusCode, 400);
+
+    const tooLong = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${PDF_ID}/pages/1/animation/custom-script`,
+      headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+      payload: { prompt: 'x'.repeat(301) },
+    });
+    assert.equal(tooLong.statusCode, 400);
+  } finally {
+    await app.close();
+  }
+});
+
+test('POST animation/custom-script returns 404 for an unknown page', async () => {
+  seedAnimationPdf(PDF_ID, 1);
+  const app = await buildApp();
+  const resp = await app.inject({
+    method: 'POST',
+    url: `/api/pdfs/${PDF_ID}/pages/99/animation/custom-script`,
+    headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+    payload: { prompt: '畫一個圓形' },
   });
   assert.equal(resp.statusCode, 404);
   await app.close();

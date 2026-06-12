@@ -7,6 +7,8 @@ import { logger } from '../../logger';
 import { db } from '../../db';
 import { pageAnimationSpecPath, pageImagePath, safeJoinPdfPath } from '../../services/storage';
 import {
+  MAX_CUSTOM_SCRIPT_CODE_LENGTH,
+  MAX_CUSTOM_SCRIPT_PROMPT_LENGTH,
   MAX_HINT_LENGTH,
   defaultAnimationSpec,
   parseStoredAnimationSpec,
@@ -15,6 +17,7 @@ import {
 } from '../../services/pageAnimation';
 import type { AnimationSpec } from '../../services/pageAnimation';
 import { generateAiFocusEffects } from '../../services/animationAutoFocus';
+import { findUnsafeScriptPattern, generateCustomScriptCode } from '../../services/animationCustomScript';
 import type { SlideRenderType } from '../../types';
 import { PageParamSchema, errorResponse, nowIso } from './shared';
 
@@ -25,6 +28,11 @@ const SaveAnimationBodySchema = z.object({
 const AutoFocusAiBodySchema = z.object({
   sentences: z.array(z.string().min(1).max(1000)).max(60),
   hints: z.record(z.string().regex(/^\d+$/), z.string().max(MAX_HINT_LENGTH)).optional(),
+});
+
+const CustomScriptAiBodySchema = z.object({
+  prompt: z.string().min(1).max(MAX_CUSTOM_SCRIPT_PROMPT_LENGTH),
+  previousCode: z.string().max(MAX_CUSTOM_SCRIPT_CODE_LENGTH).optional(),
 });
 
 interface AnimationPageRow {
@@ -179,6 +187,46 @@ export async function registerPageAnimationRoutes(app: FastifyInstance): Promise
     } catch (err) {
       request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to generate AI focus effects');
       return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to generate AI focus effects'));
+    }
+  });
+
+  // AI 自訂腳本動畫：依使用者提示詞（與選填的目前程式碼）由 LLM 產生一段在 sandboxed iframe
+  // 中執行的 JavaScript，供「custom-script」效果使用。不會寫入儲存的 spec，僅回傳程式碼供
+  // 前端合併進編輯中的 draft 效果。
+  app.post('/api/pdfs/:id/pages/:n/animation/custom-script', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const parsedBody = CustomScriptAiBodySchema.safeParse(request.body ?? {});
+    if (!parsedBody.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', parsedBody.error.issues[0]?.message ?? 'Invalid body'));
+    }
+    const { id, n } = parsed.data;
+    const row = getAnimationPageRow(id, n);
+    if (!row) {
+      return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', 'Page not found'));
+    }
+    const pageText = row.text_path
+      ? await fs.promises.readFile(safeJoinPdfPath(id, row.text_path), 'utf8').catch(() => '')
+      : '';
+    try {
+      const result = await generateCustomScriptCode({
+        prompt: parsedBody.data.prompt,
+        previousCode: parsedBody.data.previousCode,
+        pageText,
+        label: `animation-custom-script-ai page/${id}/${n}`,
+      });
+      const unsafe = findUnsafeScriptPattern(result.code);
+      if (unsafe) {
+        return reply
+          .code(422)
+          .send(errorResponse('UNSAFE_SCRIPT', `Generated code uses a disallowed API (${unsafe}); please try a different prompt`));
+      }
+      return reply.code(200).send({ code: result.code });
+    } catch (err) {
+      request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to generate custom-script animation code');
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to generate custom-script animation code'));
     }
   });
 }

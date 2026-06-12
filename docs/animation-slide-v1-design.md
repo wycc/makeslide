@@ -175,6 +175,7 @@ interface AnimationSpec {
 | highlight-box | 於指定區域淡入一個紅色外框，提示焦點 | opacity: 0 → 1 |
 | spotlight | 於指定區域外淡入半透明黑色遮罩，聚焦該區域 | opacity: 0 → 1 |
 | text-callout | 於指定區域淡入一個文字說明框 | opacity: 0 → 1，文字內容見 `effect.text` |
+| custom-script | 於指定區域淡入一個由 AI 依提示詞產生的自訂 JavaScript 動畫（sandboxed iframe） | opacity: 0 → 1，程式碼見 `effect.code`，詳見 §5.4 |
 
 easing 白名單：`none`、`power1.in`、`power1.out`、`power1.inOut`、`power2.inOut`。
 
@@ -235,6 +236,53 @@ easing 白名單：`none`、`power1.in`、`power1.out`、`power1.inOut`、`power
 - 渲染：`buildGsapTimeline.ts` 於既有 `fromTo(overlay, {autoAlpha:0}, {autoAlpha:1, ...})` 之後，若 `effect.exitDuration !== undefined`，再加一個 `to(overlay, {autoAlpha:0, ...}, start+duration+exitDuration)`。
 - 編輯器 UI 見 §7。
 
+### 5.4 自訂腳本動畫（custom-script）
+
+`custom-script` 是「使用提示詞生成動畫」（TODO 新功能）的 v1 實作：使用者輸入提示詞，由 LLM 產生一段 JavaScript 原始碼，於 sandboxed `<iframe>` 中執行並疊加顯示，可反覆下提示詞調整直到滿意為止；產生的動畫可與其他效果（包含其他 `custom-script`）一起播放。
+
+```ts
+// effect.params 同 §5.1（位置與大小，0~100 百分比，未提供時套用預設值 30/30/40/40）
+{
+  xPct?: number;
+  yPct?: number;
+  widthPct?: number;
+  heightPct?: number;
+}
+// effect.code?: string    — AI 產生的 JavaScript 原始碼，上限 8000 字 = MAX_CUSTOM_SCRIPT_CODE_LENGTH
+// effect.prompt?: string  — 產生 code 所用的提示詞，上限 300 字 = MAX_CUSTOM_SCRIPT_PROMPT_LENGTH（供使用者再次編輯/迭代）
+```
+
+**沙箱與安全模型**
+
+- `effect.code` 會被注入到 `<iframe sandbox="allow-scripts">`（**不含** `allow-same-origin`）中執行；該 iframe 因此是不透明來源（opaque origin），無法存取上層頁面 DOM、cookie、`localStorage`/`sessionStorage`/`indexedDB`、`window.parent`/`window.top`，也無法發出任何網路請求（`fetch`/`XMLHttpRequest`/`WebSocket`）。
+- `frontend/src/lib/animationSpec.ts` 的 `buildCustomScriptSandboxDoc(code)` 組出完整 iframe `srcDoc`：將 `code` 以 base64 編碼後嵌入（避免 `</script>`/引號跳脫問題），於受信任的包裝 script 中以 `atob` + `TextDecoder` 還原後用 `new Function(code)()` 執行。
+- 後端 `backend/src/services/animationCustomScript.ts` 的 `findUnsafeScriptPattern(code)` 對 LLM 產生的程式碼做縱深防禦黑名單檢查（`fetch`、`XMLHttpRequest`、`WebSocket`、`import(`、`require(`、`eval(`、`new Function(`、`document.cookie`、`localStorage`、`sessionStorage`、`indexedDB`、`window.parent`、`window.top`、`frameElement`），命中則回 `422 UNSAFE_SCRIPT`，不寫入 draft。
+
+**程式碼契約（window.renderAnimation）**
+
+`effect.code` 必須定義全域函式 `window.renderAnimation(root, api)`：
+
+- `root`：一個已設定好寬高的 `<div id="root">`，產生的視覺內容（canvas / svg / DOM）應加入此元素。
+- `api.onFrame(callback)`：註冊回呼，每當收到 host 端的 `{ type: 'sync', t, playing }` postMessage 時被呼叫：
+  - `t`：自此效果淡入開始（`effect.start`）起算的秒數，下限 0。
+  - `playing`：投影片目前是否在播放。
+  - 回呼應依 `t` 重繪畫面（例如 `t` 除以動畫總長得到 0~1 進度），且需能承受 `t` 變小（倒退/重播）而不出錯。
+
+**播放同步**
+
+- 實際播放時，`useGsapSlideTimeline.ts` 新增一個 effect：每當 `currentTime`/`isPlaying`/`spec`/`pageKey` 變化，對每個 `custom-script` 效果的 iframe `contentWindow` 送出 `{ type: 'sync', t: max(0, currentTime - effect.start), playing: isPlaying }`。
+- `EffectOverlay`（`SlideRenderer.tsx`）渲染方式與其他 `OVERLAY_EFFECT_TYPES` 相同（`data-effect-id`、位置/大小取自 `getFocusEffectParams`、淡入淡出沿用 §5.3 的 `exitDuration` 機制），差異僅在內容是一個 `<iframe sandbox="allow-scripts" srcDoc={buildCustomScriptSandboxDoc(effect.code)} />`。
+
+**AI 產生/迭代**
+
+- `POST /api/pdfs/:id/pages/:n/animation/custom-script`（見 §8）：帶入 `{ prompt, previousCode? }`，後端讀取本頁 OCR 文字作為主題參考，組成提示詞請 LLM 回傳 `{ code }`；通過 `findUnsafeScriptPattern` 檢查後回傳給前端，**不會**寫入已儲存的 spec。
+- 編輯器（§7.5）將回應寫入該效果的 `code`/`prompt` 欄位，使用者可重複輸入新提示詞並帶入目前 `code` 作為 `previousCode` 迭代調整，直到滿意為止；最終仍需按「儲存動畫」才會持久化。
+
+**v1 範圍與後續**
+
+- v1 提供的是「通用」的 sandboxed 自訂腳本框架 + AI 生成/迭代迴圈，使用者可請 AI 產生任意 Canvas/SVG 視覺化（在無外部資源的限制下）。
+- TODO 原始需求中「載入 MNIST 資料集、用 ResNet50 產生 embedding、PCA 降維顯示分類過程」這類具體範例，因需要外部資料集/模型推論管線（且 sandbox 禁止網路存取），**v1 不內建此資料集/模型管線**；使用者仍可請 AI 產生「視覺上模擬」此類分類器訓練過程的動畫（以程式產生的示意資料點），但不會是真實 MNIST/ResNet50/PCA 計算結果。真正串接資料集與模型推論留待後續版本（見 §12）。
+
 ## 6. 前端架構
 
 ### 6.1 新增檔案
@@ -272,9 +320,9 @@ Props：`renderType`、`src`（由呼叫端算好，含 displayedImageSrc 防閃
 
 ### 6.6 效果 overlay（EffectOverlay）
 
-`highlight-box`/`spotlight`/`text-callout` 效果（`OVERLAY_EFFECT_TYPES`，定義於 `frontend/src/lib/animationSpec.ts`）以額外的疊加 `<div>` 實作，渲染於 animated stage 內（`img` 與 `children` 之後）：
+`highlight-box`/`spotlight`/`text-callout`/`custom-script` 效果（`OVERLAY_EFFECT_TYPES`，定義於 `frontend/src/lib/animationSpec.ts`）以額外的疊加 `<div>`（或 `custom-script` 為 `<iframe>`）實作，渲染於 animated stage 內（`img` 與 `children` 之後）：
 
-- `SlideRenderer.tsx` 對 `spec.effects` 中屬於 `OVERLAY_EFFECT_TYPES` 的每個效果，渲染一個帶 `data-effect-id={effect.id}` 的 `<div>`（`EffectOverlay`），初始 `opacity: 0`、`position: absolute`、`pointer-events: none`，位置/大小取自 `getFocusEffectParams(effect)`（`xPct`/`yPct`/`widthPct`/`heightPct`，含預設值）；`text-callout` 額外以 `effect.text` 作為文字內容。
+- `SlideRenderer.tsx` 對 `spec.effects` 中屬於 `OVERLAY_EFFECT_TYPES` 的每個效果，渲染一個帶 `data-effect-id={effect.id}` 的元素（`EffectOverlay`），初始 `opacity: 0`、`position: absolute`、`pointer-events: none`，位置/大小取自 `getFocusEffectParams(effect)`（`xPct`/`yPct`/`widthPct`/`heightPct`，含預設值）；`text-callout` 額外以 `effect.text` 作為文字內容，`custom-script` 則為 `<iframe sandbox="allow-scripts" srcDoc={buildCustomScriptSandboxDoc(effect.code)} />`（詳見 §5.4）。
 - `buildGsapTimeline.ts` 透過 `stage.querySelector('[data-effect-id="..."]')` 找到對應 overlay，對其 `autoAlpha` 做 `fromTo(0 → 1)`（與 `fade-in` 相同手法，但作用對象是 overlay 而非整個 stage）。
 - overlay 是 `stage` 的子元素，因此會跟著 `stage` 的 pan/zoom transform 一起移動縮放，位置（百分比座標）相對於投影片內容維持不變。
 - static 分支（無動畫）不渲染 overlay。
@@ -382,6 +430,17 @@ Props：`renderType`、`src`（由呼叫端算好，含 displayedImageSrc 防閃
 - v1 範圍：僅產生 `highlight-box`/`spotlight` 焦點效果；`text-callout`（含文字內容）與其他效果類型的 AI 生成留待後續版本（見 §12）。
 - 圖片輸入：提示詞會說明「若附帶投影片頁面圖片，請參考圖片中的實際版面決定座標」，讓 `xPct`/`yPct`/`widthPct`/`heightPct` 更貼近畫面實際內容；圖片僅在 `LLM_PROVIDER=openai`（預設）時實際送出——Gemini 路徑（`callGeminiJson`/`normalizeMessages`）目前會將非文字內容部分一律替換為 `'[image]'` 占位字串，與 `generateScript` 的既有限制相同，留待後續一併處理。
 
+### 7.5 AI 自訂腳本動畫（custom-script）
+
+效果類型為 `custom-script` 時，效果列下方額外顯示一個區塊（§5.4 的編輯器入口）：
+
+- **提示詞輸入框**（`play.animation.customScriptPrompt`，多行文字，上限 300 字 = `MAX_CUSTOM_SCRIPT_PROMPT_LENGTH`），對應 `effect.prompt`。
+- **產生/重新產生按鈕**：`effect.code` 為空時顯示「🤖 產生動畫」（`play.animation.customScriptGenerate`），已有 `code` 時顯示「🤖 依提示詞重新產生」（`play.animation.customScriptRegenerate`）；提示詞為空或產生中時停用。產生中顯示忙碌文字（`play.animation.customScriptGenerateBusy`）。
+- 點擊後呼叫 `POST /api/pdfs/:id/pages/:n/animation/custom-script`（`generateCustomScriptCode`，`frontend/src/lib/api/pdfs.ts`），帶入 `{ prompt: effect.prompt, previousCode: effect.code }`；回應的 `code` 與目前 `prompt` 寫回該效果（`usePageAnimation.ts` 的 `handleGenerateCustomScriptCode`）。成功顯示提示訊息（`play.animation.customScriptDone`），失敗顯示錯誤（`play.animation.customScriptError`，含 422 `UNSAFE_SCRIPT` 時的後端錯誤訊息）。
+- `effect.code` 尚未產生時顯示提示文字（`play.animation.customScriptEmpty`）；已產生時，下方即時顯示 `CustomScriptPreview`——一個 sandboxed `<iframe>`，以 `requestAnimationFrame` 持續送出 `{ type: 'sync', t, playing: true }`（`t` 在 `0 ~ previewLoopSeconds(effect)` 之間迴圈，`previewLoopSeconds = clamp(duration + (exitDuration ?? 0), 2, 20)`），讓使用者在反覆調整提示詞時立即看到迴圈播放的結果，無需先儲存或進入播放模式。
+- 效果類型為 `custom-script` 時亦適用 §7（效果列）中對 `OVERLAY_EFFECT_TYPES` 共用的「焦點位置與大小（%）」與「顯示後自動消失」控制項。
+- 與其他效果一樣，調整完成後需按「儲存動畫」才會持久化；`prompt`/`code` 皆隨 spec 一併儲存，重新進入編輯器可繼續迭代。
+
 ## 8. Backend API
 
 ```text
@@ -389,13 +448,14 @@ GET  /api/pdfs/:id/pages/:n/animation              → { page_number, render_typ
 PUT  /api/pdfs/:id/pages/:n/animation              → 驗證、寫 JSON、更新 render_type/animation_spec_path
 GET  /api/pdfs/:id/pages/:n/animation/spec         → 純 spec JSON，Cache-Control: no-store
 POST /api/pdfs/:id/pages/:n/animation/auto-focus-ai → { effects }（AI 產生，不寫入已儲存 spec，見 §7.4）
+POST /api/pdfs/:id/pages/:n/animation/custom-script → { code }（AI 產生/迭代自訂腳本，不寫入已儲存 spec，見 §5.4/§7.5；422 UNSAFE_SCRIPT 表示產生的程式碼命中黑名單）
 ```
 
 PUT 規則：`spec.enabled === true` → `render_type='gsap-image'`；`false` → `render_type='static-image'`（JSON 保留以便再次啟用）。驗證失敗回 `400 INVALID_ANIMATION_SPEC`。
 
 detail API 的 page 物件增加 `render_type` 與 `animation_spec_url`。
 
-驗證邏輯集中於 `backend/src/services/pageAnimation.ts`（zod），route 於 `backend/src/routes/pdfs/page-animation.ts`；AI 自動產生焦點動畫的提示詞與回應映射集中於 `backend/src/services/animationAutoFocus.ts`。
+驗證邏輯集中於 `backend/src/services/pageAnimation.ts`（zod），route 於 `backend/src/routes/pdfs/page-animation.ts`；AI 自動產生焦點動畫的提示詞與回應映射集中於 `backend/src/services/animationAutoFocus.ts`；AI 自訂腳本動畫的提示詞、回應驗證與黑名單檢查集中於 `backend/src/services/animationCustomScript.ts`。
 
 ## 9. 錯誤處理與 fallback
 
@@ -425,4 +485,5 @@ detail API 的 page 物件增加 `render_type` 與 `animation_spec_url`。
 
 - V1.1：drawing mode 自動暫停、preset 快速套用、raw JSON 檢視、效果排序、跨頁複製、為 `fade-in`/`zoom-*`/`pan-*` 等整頁 transform 效果提供對稱的「消失（恢復原狀）」可選機制（見 §5.3）。
 - V2：overlay image（小圖疊加內容）、SVG 圖元、物件 target、公式、逐步條列；依 `AnimationSpec.hints` 與逐字稿內容由 LLM 生成動畫 JSON——焦點方框（`highlight-box`/`spotlight`）的時機與位置已於 §7.4 落地，`text-callout`（含 AI 生成文案）與其他效果類型的 AI 生成仍待後續。
+- V2.x：`custom-script`（§5.4）的資料集/模型推論管線——例如載入 MNIST 並以 ResNet50 產生 embedding、PCA 降維至二維後動態顯示分類過程——需要後端提供資料集存取與模型推論服務（sandbox 本身禁止網路存取，無法在前端直接載入外部資料）；v1 僅提供通用 sandboxed 自訂腳本框架與 AI 生成/迭代迴圈，不含此類資料管線。
 - V3：視覺化時間軸、關鍵影格、3D renderer、動畫 MP4 匯出。

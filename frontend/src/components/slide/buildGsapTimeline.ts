@@ -66,7 +66,8 @@ export function buildGsapTimeline(stage: HTMLElement, spec: SlideAnimationSpec):
       }
       case 'highlight-box':
       case 'spotlight':
-      case 'text-callout': {
+      case 'text-callout':
+      case 'custom-script': {
         const overlay = stage.querySelector<HTMLElement>(`[data-effect-id="${effect.id}"]`);
         if (overlay) {
           tl.fromTo(overlay, { autoAlpha: 0 }, { autoAlpha: 1, ...common }, effect.start);

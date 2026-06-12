@@ -1,7 +1,12 @@
 import { useRef } from 'react';
 import type { CSSProperties, ImgHTMLAttributes, ReactNode, Ref } from 'react';
 import type { SlideAnimationEffect, SlideAnimationSpec, SlideRenderType } from '../../types';
-import { OVERLAY_EFFECT_TYPES, getFocusEffectParams, hasPlayableAnimation } from '../../lib/animationSpec';
+import {
+  OVERLAY_EFFECT_TYPES,
+  buildCustomScriptSandboxDoc,
+  getFocusEffectParams,
+  hasPlayableAnimation,
+} from '../../lib/animationSpec';
 import { useGsapSlideTimeline } from './useGsapSlideTimeline';
 
 /** 套用 highlight-box / spotlight / text-callout 效果的疊加層，由 buildGsapTimeline 透過 data-effect-id 抓取並控制淡入。 */
@@ -63,6 +68,17 @@ function EffectOverlay({ effect }: { effect: SlideAnimationEffect }) {
       >
         {effect.text}
       </div>
+    );
+  }
+  if (effect.type === 'custom-script') {
+    return (
+      <iframe
+        data-effect-id={effect.id}
+        title="custom-script animation"
+        sandbox="allow-scripts"
+        srcDoc={buildCustomScriptSandboxDoc(effect.code ?? '')}
+        style={{ ...position, border: 'none', background: 'transparent' }}
+      />
     );
   }
   return null;
