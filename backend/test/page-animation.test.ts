@@ -154,6 +154,30 @@ test('validateAnimationSpec accepts and preserves a startTrigger offsetSeconds',
   }
 });
 
+test('validateAnimationSpec accepts highlight-box and spotlight effects with focus params', () => {
+  const result = validateAnimationSpec(
+    validSpec([
+      fadeIn({ id: 'effect-1', type: 'highlight-box', params: { xPct: 10, yPct: 20, widthPct: 30, heightPct: 40 } }),
+      fadeIn({ id: 'effect-2', type: 'spotlight', params: { xPct: 5, yPct: 5, widthPct: 25, heightPct: 25 } }),
+    ]),
+  );
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.deepEqual(result.spec.effects[0].params, { xPct: 10, yPct: 20, widthPct: 30, heightPct: 40 });
+    assert.deepEqual(result.spec.effects[1].params, { xPct: 5, yPct: 5, widthPct: 25, heightPct: 25 });
+  }
+});
+
+test('validateAnimationSpec strips unknown params from highlight-box/spotlight effects', () => {
+  const result = validateAnimationSpec(
+    validSpec([fadeIn({ type: 'highlight-box', params: { xPct: 10, distancePct: 5, evil: 'alert(1)' } })]),
+  );
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.deepEqual(result.spec.effects[0].params, { xPct: 10 });
+  }
+});
+
 test('validateAnimationSpec rejects an out-of-range startTrigger offsetSeconds', () => {
   assert.equal(
     validateAnimationSpec(

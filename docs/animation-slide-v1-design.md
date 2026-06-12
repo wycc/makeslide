@@ -17,6 +17,9 @@
 >
 > 擴充註記（2026-06-12，向前秒數）：
 > - `startTrigger` 新增選填欄位 `offsetSeconds`：可指定動畫提前於對應逐字稿句子幾秒開始。詳見 §4.3、§7.1。
+>
+> 擴充註記（2026-06-12，焦點效果）：
+> - 新增兩種「焦點」效果類型 `highlight-box`（紅框標示）與 `spotlight`（聚光燈），以疊加層（overlay）方式渲染於 animated stage 內，可指定位置與大小。詳見 §5.1、§6.2、§6.6。
 
 ---
 
@@ -138,10 +141,32 @@ interface AnimationStartTrigger {
 | pan-right | 由左向右平移 | xPercent: -3 → 3 |
 | pan-up | 由下向上平移 | yPercent: 3 → -3 |
 | pan-down | 由上向下平移 | yPercent: -3 → 3 |
+| highlight-box | 於指定區域淡入一個紅色外框，提示焦點 | opacity: 0 → 1 |
+| spotlight | 於指定區域外淡入半透明黑色遮罩，聚焦該區域 | opacity: 0 → 1 |
 
 easing 白名單：`none`、`power1.in`、`power1.out`、`power1.inOut`、`power2.inOut`。
 
 驗證規則：`start >= 0`、`0 < duration <= 600`、`effects.length <= 20`、`target === 'slide'`、type/ease 必須在白名單、`params` 只接受該 effect type 已定義的數值欄位（未知鍵直接過濾）。
+
+### 5.1 焦點效果（highlight-box / spotlight）
+
+`highlight-box` 與 `spotlight` 是「提供多種焦點」的第一版實作：以疊加層（overlay）標示投影片上的一個矩形區域，而非對整個 stage 做 transform。
+
+```ts
+// effect.params（皆為 0~100 的百分比，相對於投影片顯示尺寸；未提供時套用預設值）
+{
+  xPct?: number;     // 左上角 X 位置，預設 30
+  yPct?: number;     // 左上角 Y 位置，預設 30
+  widthPct?: number; // 寬度，預設 40
+  heightPct?: number; // 高度，預設 40
+}
+```
+
+- `highlight-box`：在 `(xPct, yPct)` ~ `(xPct+widthPct, yPct+heightPct)` 範圍內渲染一個紅色圓角外框（`border + box-shadow`），`autoAlpha` 由 0 淡入至 1。
+- `spotlight`：在同一範圍內渲染一個橢圓形區域，外側以 `box-shadow: 0 0 0 9999px rgba(0,0,0,0.6)` 形成大範圍暗化遮罩，達到「聚光燈」效果；`autoAlpha` 同樣由 0 淡入至 1。
+- 兩者皆與 `fade-in` 相同：淡入後維持顯示（v1 不提供自動淡出／pulse，使用者可另外新增第二個效果做淡出）。
+- 驗證規則沿用既有 `params` 白名單機制（`ALLOWED_PARAM_KEYS`），未知鍵過濾、僅接受數值；v1 不對 `xPct`/`yPct`/`widthPct`/`heightPct` 做範圍限制，前端輸入框會夾在 0~100。
+- 「引言(圖)」（文字/圖片疊加內容）與「依逐字稿自動產生焦點」屬於後續項目（見 §12 / TODO 新功能區塊），本次僅提供可手動設定的視覺焦點效果類型。
 
 ## 6. 前端架構
 
@@ -178,6 +203,15 @@ Props：`renderType`、`src`（由呼叫端算好，含 displayedImageSrc 防閃
 
 縮圖仍用 `<img />`；`render_type === 'gsap-image'` 時加「動畫」小標記。
 
+### 6.6 焦點 overlay（FocusOverlay）
+
+`highlight-box`/`spotlight` 效果（`FOCUS_EFFECT_TYPES`，定義於 `frontend/src/lib/animationSpec.ts`）以額外的疊加 `<div>` 實作，渲染於 animated stage 內（`img` 與 `children` 之後）：
+
+- `SlideRenderer.tsx` 對 `spec.effects` 中屬於 `FOCUS_EFFECT_TYPES` 的每個效果，渲染一個帶 `data-effect-id={effect.id}` 的 `<div>`（`FocusOverlay`），初始 `opacity: 0`、`position: absolute`、`pointer-events: none`，位置/大小取自 `getFocusEffectParams(effect)`（`xPct`/`yPct`/`widthPct`/`heightPct`，含預設值）。
+- `buildGsapTimeline.ts` 透過 `stage.querySelector('[data-effect-id="..."]')` 找到對應 overlay，對其 `autoAlpha` 做 `fromTo(0 → 1)`（與 `fade-in` 相同手法，但作用對象是 overlay 而非整個 stage）。
+- overlay 是 `stage` 的子元素，因此會跟著 `stage` 的 pan/zoom transform 一起移動縮放，焦點位置（百分比座標）相對於投影片內容維持不變。
+- static 分支（無動畫）不渲染 overlay。
+
 ### 6.5 逐字稿同步解析（resolveAnimationSpec）
 
 字幕高亮原本就需要「整頁逐字稿切句」與「每句估計起訖時間」，動畫的 `startTrigger` 直接重用同一份計算，避免兩套估時邏輯不一致：
@@ -208,6 +242,8 @@ Props：`renderType`、`src`（由呼叫端算好，含 displayedImageSrc 防閃
 編輯區由四個 Tab（逐字稿/提示詞/系統資料/來源）擴充為五個，`EditTab` 增加 `'animation'`。
 
 最小 UI：啟用 checkbox、效果清單（type select / start / duration / ease / 刪除）、新增效果、從頭預覽（先儲存 → 音訊 seek 0 → play）、儲存。
+
+效果類型為 `highlight-box` 或 `spotlight`（`FOCUS_EFFECT_TYPES`）時，效果列額外顯示「焦點位置與大小（%）」四個數字輸入框（X / Y / 寬 / 高，0~100，整數），對應 `effect.params.{xPct,yPct,widthPct,heightPct}`；未設定時顯示預設值（30/30/40/40），輸入會夾在 0~100 並寫回 `params`。
 
 ### 7.1 起始時間方式（依秒數 / 依逐字稿句子）
 

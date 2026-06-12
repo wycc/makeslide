@@ -300,6 +300,13 @@ export const en = {
   'play.animation.type.pan-right': 'Pan right',
   'play.animation.type.pan-up': 'Pan up',
   'play.animation.type.pan-down': 'Pan down',
+  'play.animation.type.highlight-box': 'Highlight box',
+  'play.animation.type.spotlight': 'Spotlight',
+  'play.animation.focusPosition': 'Focus position & size (%)',
+  'play.animation.focusX': 'X',
+  'play.animation.focusY': 'Y',
+  'play.animation.focusWidth': 'W',
+  'play.animation.focusHeight': 'H',
   'language.zhTW': '繁體中文',
   'language.en': 'English',
 } as const;

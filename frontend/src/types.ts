@@ -94,7 +94,9 @@ export type SlideAnimationEffectType =
   | 'pan-left'
   | 'pan-right'
   | 'pan-up'
-  | 'pan-down';
+  | 'pan-down'
+  | 'highlight-box'
+  | 'spotlight';
 
 export type SlideAnimationEase = 'none' | 'power1.in' | 'power1.out' | 'power1.inOut' | 'power2.inOut';
 

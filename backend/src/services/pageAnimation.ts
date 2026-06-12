@@ -9,6 +9,8 @@ export const ANIMATION_EFFECT_TYPES = [
   'pan-right',
   'pan-up',
   'pan-down',
+  'highlight-box',
+  'spotlight',
 ] as const;
 
 export const ANIMATION_EASES = ['none', 'power1.in', 'power1.out', 'power1.inOut', 'power2.inOut'] as const;
@@ -58,6 +60,8 @@ const ALLOWED_PARAM_KEYS: Record<AnimationEffectType, readonly string[]> = {
   'pan-right': ['distancePct'],
   'pan-up': ['distancePct'],
   'pan-down': ['distancePct'],
+  'highlight-box': ['xPct', 'yPct', 'widthPct', 'heightPct'],
+  'spotlight': ['xPct', 'yPct', 'widthPct', 'heightPct'],
 };
 
 const StartTriggerSchema = z.object({

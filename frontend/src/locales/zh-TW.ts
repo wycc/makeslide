@@ -300,6 +300,13 @@ export const zhTW = {
   'play.animation.type.pan-right': '向右平移',
   'play.animation.type.pan-up': '向上平移',
   'play.animation.type.pan-down': '向下平移',
+  'play.animation.type.highlight-box': '紅框標示',
+  'play.animation.type.spotlight': '聚光燈',
+  'play.animation.focusPosition': '焦點位置與大小（%）',
+  'play.animation.focusX': 'X',
+  'play.animation.focusY': 'Y',
+  'play.animation.focusWidth': '寬',
+  'play.animation.focusHeight': '高',
   'language.zhTW': '繁體中文',
   'language.en': 'English',
 } as const;
