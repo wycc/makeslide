@@ -866,6 +866,7 @@
 [x] 支援 manim 式的動畫（完成於分支: feature/animation-manim-style-helper-20260612，custom-script sandbox 在使用者程式碼之前注入 `window.Manim`（`frontend/src/lib/manimHelperScript.ts`），提供 manim 風格座標系/色票/rate function/SVG mobject 形狀與 Create/Write/FadeIn/FadeOut/Transform/Shift/Rotate/Scale/GrowFromCenter 動畫；後端提示詞同步說明此 API，使用者要求「manim 風格」時 LLM 可直接呼叫；v1 不含 MathTex/Axes/3D/路徑變形，詳見 docs/animation-slide-v1-design.md §5.4/§12/§13）
 [x] 重新確認 master TODO.md 無未完成項目並更新工作記錄（完成於分支: feature/todo-no-pending-recheck-20260612-1959）
 [x] 重新確認 master TODO.md 無未完成項目並更新工作記錄（完成於分支: feature/todo-no-pending-recheck-20260612-2001）
+[x] 重新確認 master TODO.md 無未完成項目並更新工作記錄（完成於分支: feature/todo-no-pending-recheck-20260612-2004）
 
 - 時間: 2026-06-12 16:52:00 +0800
 - 分支: feature/animation-prompt-custom-script-20260613
@@ -889,3 +890,7 @@
 - 時間: 2026-06-12 20:01:00 +0800
 - 分支: feature/todo-no-pending-recheck-20260612-2001
 - 內容: 重新確認 master 中 TODO.md 未發現行首未完成核取項目；本次以獨立分支保存複查記錄 docs/todo-rechecks/2026-06-12-2001.md，並回到 master 更新工作記錄。
+
+- 時間: 2026-06-12 20:04:00 +0800
+- 分支: feature/todo-no-pending-recheck-20260612-2004
+- 內容: 重新確認 master 中 TODO.md，未發現行首未完成核取項目（`^[ ]`），working tree 亦無未提交變更。本次以獨立分支保存複查記錄（docs/todo-rechecks/2026-06-12-2004.md），並回到 master 更新工作記錄。
