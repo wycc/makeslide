@@ -140,7 +140,7 @@ export interface GenerateCustomScriptCodeResponse {
 export async function generateCustomScriptCode(
   id: string,
   pageNumber: number,
-  body: { prompt: string; previousCode?: string },
+  body: { prompt: string; previousCode?: string; history?: ChatMessage[] },
   onDelta?: (delta: string) => void,
 ): Promise<GenerateCustomScriptCodeResponse> {
   const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/animation/custom-script`, {

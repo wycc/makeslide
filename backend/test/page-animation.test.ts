@@ -8,7 +8,12 @@ import { db } from '../src/db';
 import { config } from '../src/config';
 import { getRuntimeAiSettings, setRuntimeAiSettings, setSystemAuthSettings } from '../src/services/aiSettings';
 import { setOpenAIClientForTest } from '../src/services/openai';
-import { defaultAnimationSpec, validateAnimationSpec } from '../src/services/pageAnimation';
+import {
+  MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES,
+  MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH,
+  defaultAnimationSpec,
+  validateAnimationSpec,
+} from '../src/services/pageAnimation';
 import { mapAutoFocusResponseToEffects } from '../src/services/animationAutoFocus';
 import { findCustomScriptContractIssue, findUnsafeScriptPattern } from '../src/services/animationCustomScript';
 
@@ -281,6 +286,85 @@ test('validateAnimationSpec rejects a custom-script effect whose code or prompt 
     validateAnimationSpec(validSpec([fadeIn({ type: 'custom-script', prompt: 'x'.repeat(300) })])).ok,
     true,
   );
+});
+
+test('validateAnimationSpec accepts and preserves a custom-script effect with conversation history', () => {
+  const result = validateAnimationSpec(
+    validSpec([
+      fadeIn({
+        id: 'effect-1',
+        type: 'custom-script',
+        code: 'window.renderAnimation = function (root, api) { api.onFrame(function () {}); };',
+        conversation: [
+          { role: 'user', content: '畫一個圓形' },
+          { role: 'assistant', content: '已產生動畫程式碼' },
+        ],
+      }),
+    ]),
+  );
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.deepEqual(result.spec.effects[0].conversation, [
+      { role: 'user', content: '畫一個圓形' },
+      { role: 'assistant', content: '已產生動畫程式碼' },
+    ]);
+  }
+});
+
+test('validateAnimationSpec omits conversation when not provided', () => {
+  const result = validateAnimationSpec(validSpec([fadeIn({ type: 'custom-script' })]));
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.spec.effects[0].conversation, undefined);
+  }
+});
+
+test('validateAnimationSpec rejects a conversation with an invalid role or over-length content', () => {
+  assert.equal(
+    validateAnimationSpec(
+      validSpec([fadeIn({ type: 'custom-script', conversation: [{ role: 'system', content: 'x' }] })]),
+    ).ok,
+    false,
+  );
+  assert.equal(
+    validateAnimationSpec(
+      validSpec([
+        fadeIn({
+          type: 'custom-script',
+          conversation: [{ role: 'user', content: 'x'.repeat(MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH + 1) }],
+        }),
+      ]),
+    ).ok,
+    false,
+  );
+  assert.equal(
+    validateAnimationSpec(
+      validSpec([
+        fadeIn({
+          type: 'custom-script',
+          conversation: [{ role: 'user', content: 'x'.repeat(MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH) }],
+        }),
+      ]),
+    ).ok,
+    true,
+  );
+});
+
+test('validateAnimationSpec rejects a conversation exceeding MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES', () => {
+  const tooMany = Array.from({ length: MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES + 1 }, () => ({
+    role: 'user' as const,
+    content: 'x',
+  }));
+  assert.equal(
+    validateAnimationSpec(validSpec([fadeIn({ type: 'custom-script', conversation: tooMany })])).ok,
+    false,
+  );
+
+  const ok = Array.from({ length: MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES }, () => ({
+    role: 'user' as const,
+    content: 'x',
+  }));
+  assert.equal(validateAnimationSpec(validSpec([fadeIn({ type: 'custom-script', conversation: ok })])).ok, true);
 });
 
 test('validateAnimationSpec rejects a negative or out-of-range exitDuration', () => {
@@ -928,6 +1012,70 @@ test('POST animation/custom-script includes previousCode in the prompt when iter
     assert.match(String(userMessage?.content), /renderAnimation/);
   } finally {
     setOpenAIClientForTest(null);
+    await app.close();
+  }
+});
+
+test('POST animation/custom-script forwards conversation history as prior chat turns before the final prompt', async () => {
+  seedAnimationPdf(PDF_ID, 1);
+  const generatedCode = 'window.renderAnimation = function (root, api) { api.onFrame(function () {}); };';
+  let capturedMessages: Array<{ role: string; content: unknown }> | undefined;
+  setOpenAIClientForTest(streamingChatClient(generatedCode, (messages) => { capturedMessages = messages; }) as never);
+
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${PDF_ID}/pages/1/animation/custom-script`,
+      headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+      payload: {
+        prompt: '改成藍色',
+        history: [
+          { role: 'user', content: '畫一個圓形' },
+          { role: 'assistant', content: '已產生動畫程式碼' },
+        ],
+      },
+    });
+    assert.equal(resp.statusCode, 200);
+    assert.ok(capturedMessages);
+    const messages = capturedMessages!;
+    assert.equal(messages[0]?.role, 'system');
+    assert.equal(messages[1]?.role, 'user');
+    assert.equal(messages[1]?.content, '畫一個圓形');
+    assert.equal(messages[2]?.role, 'assistant');
+    assert.equal(messages[2]?.content, '已產生動畫程式碼');
+    const finalMessage = messages[messages.length - 1];
+    assert.equal(finalMessage?.role, 'user');
+    assert.match(String(finalMessage?.content), /改成藍色/);
+  } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+  }
+});
+
+test('POST animation/custom-script returns 400 when history contains an invalid role or over-length content', async () => {
+  seedAnimationPdf(PDF_ID, 1);
+  const app = await buildApp();
+  try {
+    const invalidRole = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${PDF_ID}/pages/1/animation/custom-script`,
+      headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+      payload: { prompt: '畫一個圓形', history: [{ role: 'system', content: 'x' }] },
+    });
+    assert.equal(invalidRole.statusCode, 400);
+
+    const tooLong = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${PDF_ID}/pages/1/animation/custom-script`,
+      headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+      payload: {
+        prompt: '畫一個圓形',
+        history: [{ role: 'user', content: 'x'.repeat(MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH + 1) }],
+      },
+    });
+    assert.equal(tooLong.statusCode, 400);
+  } finally {
     await app.close();
   }
 });

@@ -109,10 +109,12 @@ export function AnimationEditorTab() {
     customScriptBusy,
     customScriptBusyEffectId,
     customScriptStreamingCode,
-    handleGenerateCustomScriptCode,
+    handleSendCustomScriptMessage,
   } = usePlayPageContext();
   const { t } = useI18n();
   const [customScriptDialogEffectId, setCustomScriptDialogEffectId] = useState<string | null>(null);
+  const [customScriptChatInput, setCustomScriptChatInput] = useState('');
+  const customScriptChatScrollRef = useRef<HTMLDivElement>(null);
 
   const draft = animationDraft ?? defaultAnimationSpec();
   const disabled = isReadOnlyProcessing || animationBusy || !currentPage;
@@ -124,6 +126,25 @@ export function AnimationEditorTab() {
   const customScriptSourceValue = customScriptDialogEffect
     ? customScriptStreamingCode[customScriptDialogEffect.id] ?? customScriptDialogEffect.code ?? ''
     : '';
+  const customScriptConversation = customScriptDialogEffect?.conversation ?? [];
+  const customScriptIsBusy = customScriptBusyEffectId === customScriptDialogEffectId;
+
+  // 開啟對話框（或切換效果）時清空尚未送出的訊息。
+  useEffect(() => {
+    setCustomScriptChatInput('');
+  }, [customScriptDialogEffectId]);
+
+  // 對話內容增加或產生中狀態改變時，自動捲動到最新訊息。
+  useEffect(() => {
+    const el = customScriptChatScrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [customScriptConversation.length, customScriptIsBusy]);
+
+  const sendCustomScriptChatMessage = () => {
+    if (!customScriptDialogEffect || disabled || customScriptBusy || !customScriptChatInput.trim()) return;
+    void handleSendCustomScriptMessage(customScriptDialogEffect.id, customScriptChatInput);
+    setCustomScriptChatInput('');
+  };
 
   const updateEffect = (id: string, patch: Partial<SlideAnimationEffect>) => {
     setAnimationDraft((prev) => {
@@ -450,40 +471,61 @@ export function AnimationEditorTab() {
             </div>
             <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto p-4 lg:grid-cols-2">
               <div className="flex min-h-0 flex-col gap-3">
-                <label className="flex flex-col gap-1 text-xs text-slate-400">
-                  {t('play.animation.customScriptPrompt')}
+                <div
+                  ref={customScriptChatScrollRef}
+                  className="flex min-h-[8rem] flex-1 flex-col gap-2 overflow-y-auto rounded-md border border-slate-800 bg-slate-950 p-2"
+                >
+                  {customScriptConversation.length === 0 && !customScriptIsBusy ? (
+                    <div className="m-auto text-xs text-slate-500">
+                      {t('play.animation.customScriptChatEmpty' as TranslationKey)}
+                    </div>
+                  ) : (
+                    <>
+                      {customScriptConversation.map((msg, idx) => (
+                        <div
+                          key={idx}
+                          className={
+                            msg.role === 'user'
+                              ? 'ml-auto max-w-[85%] whitespace-pre-wrap rounded-lg bg-fuchsia-500/20 px-3 py-2 text-sm text-fuchsia-100'
+                              : 'mr-auto max-w-[85%] whitespace-pre-wrap rounded-lg bg-slate-800 px-3 py-2 text-sm text-slate-200'
+                          }
+                        >
+                          {msg.content}
+                        </div>
+                      ))}
+                      {customScriptIsBusy && (
+                        <div className="mr-auto max-w-[85%] rounded-lg bg-slate-800 px-3 py-2 text-sm text-slate-400">
+                          {t('play.animation.customScriptGenerateBusy')}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+                <div className="flex items-end gap-2">
                   <textarea
-                    rows={4}
+                    rows={2}
                     maxLength={MAX_CUSTOM_SCRIPT_PROMPT_LENGTH}
-                    value={customScriptDialogEffect.prompt ?? ''}
-                    disabled={disabled}
-                    placeholder={t('play.animation.customScriptPromptPlaceholder')}
-                    onChange={(e) => updateEffect(customScriptDialogEffect.id, { prompt: e.target.value })}
-                    className="w-full resize-y rounded-md border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-slate-100"
+                    value={customScriptChatInput}
+                    disabled={disabled || customScriptBusy}
+                    placeholder={t('play.animation.customScriptChatInputPlaceholder' as TranslationKey)}
+                    onChange={(e) => setCustomScriptChatInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter' || e.shiftKey) return;
+                      e.preventDefault();
+                      sendCustomScriptChatMessage();
+                    }}
+                    className="flex-1 resize-y rounded-md border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-slate-100"
                   />
-                </label>
-                <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    disabled={disabled || customScriptBusy || !(customScriptDialogEffect.prompt ?? '').trim()}
-                    onClick={() =>
-                      void handleGenerateCustomScriptCode(
-                        customScriptDialogEffect.id,
-                        customScriptDialogEffect.prompt ?? '',
-                        customScriptDialogEffect.code,
-                      )
-                    }
-                    className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/10 px-3 py-1.5 text-sm text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                    disabled={disabled || customScriptBusy || !customScriptChatInput.trim()}
+                    onClick={sendCustomScriptChatMessage}
+                    className="shrink-0 rounded-md border border-fuchsia-500/50 bg-fuchsia-500/10 px-3 py-1.5 text-sm text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    {customScriptBusyEffectId === customScriptDialogEffect.id
+                    {customScriptIsBusy
                       ? t('play.animation.customScriptGenerateBusy')
-                      : customScriptDialogEffect.code
-                        ? t('play.animation.customScriptRegenerate')
-                        : t('play.animation.customScriptGenerate')}
+                      : t('play.animation.customScriptChatSend' as TranslationKey)}
                   </button>
-                  {!customScriptDialogEffect.code && (
-                    <span className="text-xs text-slate-500">{t('play.animation.customScriptEmpty')}</span>
-                  )}
                 </div>
                 <label className="flex min-h-0 flex-1 flex-col gap-1 text-xs text-slate-400">
                   <span className="flex items-center justify-between gap-2">

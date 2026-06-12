@@ -1,5 +1,7 @@
+import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { streamChatText } from './openai';
 import { MAX_CUSTOM_SCRIPT_OUTPUT_TOKENS, MAX_CUSTOM_SCRIPT_PROMPT_LENGTH } from './pageAnimation';
+import type { ConversationMessage } from './pageAnimation';
 
 /**
  * Patterns disallowed in generated `custom-script` code. The sandboxed
@@ -108,18 +110,28 @@ function stripCodeFences(text: string): string {
   return (fenceMatch?.[1] ?? trimmed).trim();
 }
 
+/** Converts a stored chat turn into the LLM message format, preserving its role. */
+function toChatCompletionMessage(message: ConversationMessage): ChatCompletionMessageParam {
+  return message.role === 'assistant'
+    ? { role: 'assistant', content: message.content }
+    : { role: 'user', content: message.content };
+}
+
 /**
  * Asks the configured LLM to generate (or revise) the JavaScript source for
  * a `custom-script` animation effect from a free-text prompt, streaming the
- * raw output as it's generated via `onDelta`. Callers should run
- * `findUnsafeScriptPattern` and `findCustomScriptContractIssue` on the
- * resolved `code` before storing/rendering it.
+ * raw output as it's generated via `onDelta`. `history` carries prior chat
+ * turns (without their generated code) so the LLM has context for
+ * progressive, multi-round edits. Callers should run `findUnsafeScriptPattern`
+ * and `findCustomScriptContractIssue` on the resolved `code` before
+ * storing/rendering it.
  */
 export async function generateCustomScriptCodeStream(
   params: {
     prompt: string;
     previousCode?: string;
     pageText?: string;
+    history?: ConversationMessage[];
     label: string;
   },
   onDelta: (delta: string) => void,
@@ -135,6 +147,7 @@ export async function generateCustomScriptCodeStream(
     temperature: 0.5,
     messages: [
       { role: 'system', content: buildCustomScriptSystemPrompt() },
+      ...(params.history ?? []).map(toChatCompletionMessage),
       { role: 'user', content: userText },
     ],
     onDelta,

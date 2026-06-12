@@ -134,8 +134,8 @@ export interface PlayPageContextValue {
   customScriptBusyEffectId: string | null;
   /** AI 產生 `custom-script` 程式碼時，依 effect id 即時累積的串流輸出文字（產生完成後移除）。 */
   customScriptStreamingCode: Record<string, string>;
-  /** 呼叫後端 LLM，依提示詞（與選填的目前程式碼）產生 `custom-script` 效果的程式碼，並寫回該效果。 */
-  handleGenerateCustomScriptCode: (effectId: string, prompt: string, previousCode?: string) => Promise<boolean>;
+  /** 將訊息加入 `custom-script` 效果的對話紀錄並呼叫後端 LLM 產生/調整程式碼，依結果更新 `code` 與對話紀錄。 */
+  handleSendCustomScriptMessage: (effectId: string, message: string) => Promise<boolean>;
 
   // ─── Prompt / source ────────────────────────────────────────────────────────
   promptInput: string;
