@@ -26,6 +26,9 @@
 >
 > 擴充註記（2026-06-12，文字說明效果）：
 > - 新增 `text-callout` 效果類型：與 `highlight-box`/`spotlight` 同為 overlay 疊加層，並新增 `effect.text`（純文字，上限 80 字）作為顯示內容，渲染為深色圓角文字框。為 TODO 第 721 項「除了焦點以外，也可以生成一張小圖或文字做為動畫內容」的 v1 範圍（僅文字，圖片內容留待後續項目）。詳見 §5.2、§6.6、§7。
+>
+> 擴充註記（2026-06-12，逐字稿動畫指引）：
+> - `AnimationSpec` 新增選填欄位 `hints?: Record<string, string>`（依逐字稿句子索引對應的自由文字動畫指引），動畫編輯器新增逐句輸入 UI。為 TODO「加上手動在逐字稿加上動畫指引的功能，這個指引會在生成動畫時傳給 LLM 做參考」的 v1 範圍——本次僅提供資料模型、驗證與輸入 UI；「生成動畫時傳給 LLM 做參考」留待 V2 LLM 生成動畫管線消費這些 hints。詳見 §4.4、§7.3、§12。
 
 ---
 
@@ -135,6 +138,22 @@ interface AnimationStartTrigger {
   - `start` 欄位仍會儲存，作為「找不到對應句子」時的退回值（例如逐字稿被編輯、句子數量變少導致 `line` 超出範圍）；此時 `offsetSeconds` 不生效。
   - 一個 spec 內可有部分效果使用 `startTrigger`、部分使用固定秒數 `start`，互不影響。
 - 解析時機：完全在前端進行（後端僅驗證/儲存原始 `startTrigger`），詳見 §6.5、§7.1。前端 `frontend/src/lib/animationSpec.ts` 的 `resolveStartTriggerSeconds(startTrigger, sentenceTimeline)` 為共用的解析函式，`resolveAnimationSpec` 與 `AnimationEditorTab.tsx` 的「預估開始」顯示皆呼叫它。
+
+### 4.4 逐字稿動畫指引（hints）
+
+```ts
+interface AnimationSpec {
+  version: 1;
+  enabled: boolean;
+  effects: AnimationEffect[];
+  /** 選填，依逐字稿句子索引（字串）對應的動畫指引文字 */
+  hints?: Record<string, string>;
+}
+```
+
+- `hints` 為選填欄位，key 為本頁逐字稿切句後的句子索引（0-based，以字串表示，如 `"0"`、`"2"`），value 為使用者手動輸入的自由文字動畫指引（例如「放大顯示這個數字」、「指向圖表右下角」）。
+- 驗證規則（`HintsSchema`，定義於 `backend/src/services/pageAnimation.ts`）：key 必須符合 `^\d+$`；value 長度 `<= 200`（`MAX_HINT_LENGTH`）；entries 數量 `<= 50`（`MAX_HINTS`）；空物件 `{}` 會被正規化為 `undefined`（不寫入 spec）。前端常數同步定義於 `frontend/src/lib/animationSpec.ts`。
+- 為 TODO「加上手動在逐字稿加上動畫指引的功能，這個指引會在生成動畫時傳給 LLM 做參考」之 v1 範圍：本次僅提供資料模型、驗證與編輯器 UI（§7.3），讓使用者可逐句填寫指引並隨 spec 一併儲存；「生成動畫時傳給 LLM 做參考」需等待 V2 的 LLM 生成動畫管線（見 §12）才會實際讀取並使用這些 hints。
 
 ## 5. 動畫效果定義
 
@@ -311,6 +330,15 @@ Props：`renderType`、`src`（由呼叫端算好，含 displayedImageSrc 防閃
 - 產生後每個效果仍可於效果清單中個別調整類型、起始時間、長度、緩動與焦點位置/大小，與手動新增的效果一致。
 - 本功能僅在編輯器內提供「一次性產生」的手動操作；TODO 第 720 項所述「打開功能後，產生語音時自動產生」的常駐設定與後端管線整合留待後續項目（見 §12）。
 
+### 7.3 逐字稿動畫指引
+
+當本頁有逐字稿（`pageSentences.length > 0`）時，「自動產生逐字稿焦點動畫」按鈕下方新增「逐字稿動畫指引」區塊（`play.animation.hints`）：
+
+- 上方顯示說明文字（`play.animation.hintsDescription`），告知使用者這些指引未來會作為 AI 自動產生動畫時的參考依據（V2，見 §12）。
+- 為 `pageSentences` 中的每一句顯示一行：左側為該句完整文字（`<idx+1>. <句子>`），右側為一個文字輸入框（`play.animation.hintsPlaceholder`），對應 `draft.hints?.[String(idx)]`（選填，上限 200 字 = `MAX_HINT_LENGTH`）。
+- 輸入框內容變更時即時寫回 `draft.hints`；輸入框清空時會從 `hints` 中移除該 key，整個物件變為 `{}` 時改寫為 `undefined`，避免儲存無意義的空欄位。
+- 與效果清單一樣隨 `handleSaveAnimation` 一併儲存於 `<page_uid>.animation.json`；本次不影響任何效果的產生或播放結果。
+
 ## 8. Backend API
 
 ```text
@@ -352,5 +380,5 @@ detail API 的 page 物件增加 `render_type` 與 `animation_spec_url`。
 ## 12. 後續擴充方向
 
 - V1.1：drawing mode 自動暫停、preset 快速套用、raw JSON 檢視、效果排序、跨頁複製。
-- V2：overlay image（小圖疊加內容）、SVG 圖元、物件 target、公式、逐步條列、LLM 生成動畫 JSON。
+- V2：overlay image（小圖疊加內容）、SVG 圖元、物件 target、公式、逐步條列、依 `AnimationSpec.hints` 與逐字稿內容由 LLM 生成動畫 JSON。
 - V3：視覺化時間軸、關鍵影格、3D renderer、動畫 MP4 匯出。

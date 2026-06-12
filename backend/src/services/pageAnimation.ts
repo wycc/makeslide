@@ -46,6 +46,14 @@ export interface AnimationSpec {
   version: 1;
   enabled: boolean;
   effects: AnimationEffect[];
+  /**
+   * Optional per-sentence animation guidance, keyed by 0-based transcript
+   * line index (as a string). Free-text notes the user writes manually to
+   * describe what animation they want for that sentence; not consumed by
+   * any generator yet — reserved as reference input for a future
+   * LLM-based animation generator (see design doc §12 V2).
+   */
+  hints?: Record<string, string>;
 }
 
 const MAX_EFFECTS = 20;
@@ -53,6 +61,8 @@ const MAX_DURATION_SECONDS = 600;
 const MAX_TRANSCRIPT_LINE = 999;
 const MAX_START_OFFSET_SECONDS = 60;
 export const MAX_TEXT_CALLOUT_LENGTH = 80;
+export const MAX_HINTS = 50;
+export const MAX_HINT_LENGTH = 200;
 
 // Whitelisted numeric params per effect type; unknown keys are stripped, not rejected,
 // so future spec versions can add params without breaking older backends.
@@ -87,10 +97,17 @@ const EffectSchema = z.object({
   text: z.string().max(MAX_TEXT_CALLOUT_LENGTH).optional(),
 });
 
+const HintsSchema = z
+  .record(z.string().regex(/^\d+$/), z.string().max(MAX_HINT_LENGTH))
+  .refine((hints) => Object.keys(hints).length <= MAX_HINTS, {
+    message: `Object must have at most ${MAX_HINTS} keys`,
+  });
+
 const SpecSchema = z.object({
   version: z.literal(1),
   enabled: z.boolean(),
   effects: z.array(EffectSchema).max(MAX_EFFECTS),
+  hints: HintsSchema.optional(),
 });
 
 export function defaultAnimationSpec(): AnimationSpec {
@@ -133,7 +150,8 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.text !== undefined ? { text: effect.text } : {}),
     };
   });
-  return { ok: true, spec: { version: 1, enabled: parsed.data.enabled, effects } };
+  const hints = parsed.data.hints && Object.keys(parsed.data.hints).length > 0 ? parsed.data.hints : undefined;
+  return { ok: true, spec: { version: 1, enabled: parsed.data.enabled, effects, ...(hints ? { hints } : {}) } };
 }
 
 export function renderTypeForSpec(spec: AnimationSpec): SlideRenderType {

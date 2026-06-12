@@ -2,6 +2,7 @@ import { useI18n } from '../../i18n';
 import type { TranslationKey } from '../../i18n';
 import type { SlideAnimationEffect, SlideAnimationEffectType, SlideAnimationEase } from '../../types';
 import {
+  MAX_HINT_LENGTH,
   MAX_SLIDE_ANIMATION_EFFECTS,
   MAX_TEXT_CALLOUT_LENGTH,
   OVERLAY_EFFECT_TYPES,
@@ -70,6 +71,20 @@ export function AnimationEditorTab() {
         ...base,
         effects: base.effects.map((e) => (e.id === id ? { ...e, ...patch } : e)),
       };
+    });
+  };
+
+  const updateHint = (line: number, text: string) => {
+    setAnimationDraft((prev) => {
+      const base = prev ?? defaultAnimationSpec();
+      const hints = { ...(base.hints ?? {}) };
+      const key = String(line);
+      if (text) {
+        hints[key] = text;
+      } else {
+        delete hints[key];
+      }
+      return { ...base, hints: Object.keys(hints).length > 0 ? hints : undefined };
     });
   };
 
@@ -341,6 +356,34 @@ export function AnimationEditorTab() {
           {t('play.animation.autoGenerateFocus')}
         </button>
       </div>
+
+      {pageSentences.length > 0 && (
+        <div className="mb-3">
+          <div className="mb-1 text-xs font-semibold text-slate-400">{t('play.animation.hints')}</div>
+          <div className="mb-2 text-[11px] text-slate-500">{t('play.animation.hintsDescription')}</div>
+          <div className="space-y-2">
+            {pageSentences.map((sentence, idx) => (
+              <div
+                key={idx}
+                className="flex flex-wrap items-start gap-2 rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2"
+              >
+                <div className="min-w-[8rem] flex-1 basis-64 text-xs text-slate-300">
+                  {idx + 1}. {sentence}
+                </div>
+                <input
+                  type="text"
+                  maxLength={MAX_HINT_LENGTH}
+                  value={draft.hints?.[String(idx)] ?? ''}
+                  disabled={disabled}
+                  placeholder={t('play.animation.hintsPlaceholder')}
+                  onChange={(e) => updateHint(idx, e.target.value)}
+                  className="min-w-[12rem] flex-1 basis-64 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center justify-between gap-3">
         <div className="text-xs text-slate-400">

@@ -222,6 +222,41 @@ test('validateAnimationSpec rejects a text-callout effect whose text exceeds the
   );
 });
 
+test('validateAnimationSpec accepts and preserves per-sentence hints', () => {
+  const result = validateAnimationSpec({ ...validSpec([fadeIn()]), hints: { '0': '放大顯示標題', '2': '指向圖表右下角' } });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.deepEqual(result.spec.hints, { '0': '放大顯示標題', '2': '指向圖表右下角' });
+  }
+});
+
+test('validateAnimationSpec omits an empty hints object', () => {
+  const result = validateAnimationSpec({ ...validSpec([fadeIn()]), hints: {} });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.spec.hints, undefined);
+  }
+});
+
+test('validateAnimationSpec rejects hints with non-numeric keys', () => {
+  assert.equal(validateAnimationSpec({ ...validSpec([fadeIn()]), hints: { foo: 'bar' } }).ok, false);
+});
+
+test('validateAnimationSpec rejects a hint value exceeding the max length', () => {
+  assert.equal(validateAnimationSpec({ ...validSpec([fadeIn()]), hints: { '0': 'x'.repeat(201) } }).ok, false);
+  assert.equal(validateAnimationSpec({ ...validSpec([fadeIn()]), hints: { '0': 'x'.repeat(200) } }).ok, true);
+});
+
+test('validateAnimationSpec rejects more than 50 hint entries', () => {
+  const hints: Record<string, string> = {};
+  for (let i = 0; i < 51; i++) hints[String(i)] = 'hint';
+  assert.equal(validateAnimationSpec({ ...validSpec([fadeIn()]), hints }).ok, false);
+
+  const ok: Record<string, string> = {};
+  for (let i = 0; i < 50; i++) ok[String(i)] = 'hint';
+  assert.equal(validateAnimationSpec({ ...validSpec([fadeIn()]), hints: ok }).ok, true);
+});
+
 // ── API ───────────────────────────────────────────────────────────────────────
 
 test('GET animation returns default spec when no file exists', async () => {

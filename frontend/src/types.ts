@@ -128,6 +128,13 @@ export interface SlideAnimationSpec {
   version: 1;
   enabled: boolean;
   effects: SlideAnimationEffect[];
+  /**
+   * Optional per-sentence animation guidance, keyed by 0-based transcript
+   * line index (as a string). Free-text notes the user writes manually to
+   * describe what animation they want for that sentence; reserved as
+   * reference input for a future LLM-based animation generator.
+   */
+  hints?: Record<string, string>;
 }
 
 export interface PdfDetailPage {

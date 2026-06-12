@@ -29,6 +29,11 @@ export const OVERLAY_EFFECT_TYPES: readonly SlideAnimationEffectType[] = [...FOC
 /** Max length (chars) for a `text-callout` effect's `text`, matching the backend's `MAX_TEXT_CALLOUT_LENGTH`. */
 export const MAX_TEXT_CALLOUT_LENGTH = 80;
 
+/** Max number of per-sentence animation hints, matching the backend's `MAX_HINTS`. */
+export const MAX_HINTS = 50;
+/** Max length (chars) for a single animation hint, matching the backend's `MAX_HINT_LENGTH`. */
+export const MAX_HINT_LENGTH = 200;
+
 export interface FocusEffectParams {
   xPct: number;
   yPct: number;
@@ -99,6 +104,7 @@ export function cloneAnimationSpec(spec: SlideAnimationSpec): SlideAnimationSpec
       params: e.params ? { ...e.params } : undefined,
       startTrigger: e.startTrigger ? { ...e.startTrigger } : undefined,
     })),
+    ...(spec.hints ? { hints: { ...spec.hints } } : {}),
   };
 }
 
