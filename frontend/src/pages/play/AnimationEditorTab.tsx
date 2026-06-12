@@ -21,6 +21,14 @@ const FOCUS_PARAM_LABELS = {
   heightPct: 'play.animation.focusHeight',
 } as const satisfies Record<string, TranslationKey>;
 
+const EASE_LABELS = {
+  none: 'play.animation.ease.none',
+  'power1.in': 'play.animation.ease.power1In',
+  'power1.out': 'play.animation.ease.power1Out',
+  'power1.inOut': 'play.animation.ease.power1InOut',
+  'power2.inOut': 'play.animation.ease.power2InOut',
+} as const satisfies Record<SlideAnimationEase, TranslationKey>;
+
 function newEffect(): SlideAnimationEffect {
   return {
     id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `effect-${Date.now()}`,
@@ -235,7 +243,7 @@ export function AnimationEditorTab() {
                 >
                   {SLIDE_ANIMATION_EASES.map((ease) => (
                     <option key={ease} value={ease}>
-                      {ease}
+                      {t(EASE_LABELS[ease])}
                     </option>
                   ))}
                 </select>
