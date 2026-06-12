@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { db, getPageGenerationPrompts } from '../../db';
 import { config } from '../../config';
 import type { PageRow, PdfListItem, PdfRow, PdfSourceItem } from '../../types';
-import { coverImagePath, readMetadata, safeJoinPdfPath, videoPath, writeMetadata, youtubeOutlinePath } from '../../services/storage';
+import { coverImagePath, readMetadata, safeJoinPdfPath, videoPath, writeMetadata, youtubeOutlinePath, youtubeSourceAudioPath } from '../../services/storage';
 import { isGithubSyncDirty } from '../../services/presentationGit';
 import { decodeSession, parseCookies } from '../auth';
 import { ensureCoverThumbnail, ensurePageThumbnail, generateCoverThumbnail } from '../../services/thumbnails';
@@ -23,11 +23,11 @@ import {
   UpdatePromptBodySchema,
   UpdateTitleBodySchema,
   VotePollBodySchema,
-  detectAudioMimeFromBuffer,
   errorResponse,
   nowIso,
   rowToDetail,
   rowToListItem,
+  sendAudioFile,
   streamFile,
   timingRowsToPageMap,
 } from './shared';
@@ -56,7 +56,7 @@ interface PageVoiceContextRow {
 interface PdfSourceRow {
   id: number;
   pdf_id: string;
-  source_kind: 'pdf' | 'txt' | 'youtube_caption';
+  source_kind: 'pdf' | 'txt' | 'youtube_caption' | 'youtube_audio';
   source_name: string | null;
   content_text: string;
   created_at: string;
@@ -1160,67 +1160,26 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       request.log.warn({ err, id, n, stored: pageRow.audio_path }, 'Path traversal blocked');
       return reply.code(400).send(errorResponse('INVALID_PATH', 'Invalid stored path'));
     }
-    let stat: fs.Stats;
-    try {
-      stat = fs.statSync(abs);
-    } catch {
+    if (!fs.existsSync(abs)) {
       return reply.code(404).send(errorResponse('PAGE_AUDIO_NOT_FOUND', 'Page audio file missing'));
     }
+    return sendAudioFile(request, reply, abs);
+  });
 
-    const size = stat.size;
-    const rangeHeader = request.headers.range;
-    reply.header('accept-ranges', 'bytes');
-    let contentType: string = 'audio/mpeg';
-    try {
-      const head = Buffer.alloc(16);
-      const fd = fs.openSync(abs, 'r');
-      try {
-        fs.readSync(fd, head, 0, 16, 0);
-      } finally {
-        fs.closeSync(fd);
-      }
-      contentType = detectAudioMimeFromBuffer(head);
-    } catch {
-      contentType = 'audio/mpeg';
+  // GET /api/pdfs/:id/source-audio (supports HTTP Range for <audio> seeking)
+  // Serves the audio downloaded for the YouTube STT fallback (see
+  // pdf_sources.source_kind = 'youtube_audio').
+  app.get('/api/pdfs/:id/source-audio', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
     }
-    reply.header('content-type', contentType);
-    reply.header('cache-control', 'public, max-age=3600');
-
-    if (rangeHeader) {
-      const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader.trim());
-      if (!match) {
-        reply.header('content-range', `bytes */${size}`);
-        return reply.code(416).send();
-      }
-      const startRaw = match[1];
-      const endRaw = match[2];
-      let start: number;
-      let end: number;
-      if (startRaw === '' && endRaw !== '') {
-        const suffixLen = Number(endRaw);
-        if (!Number.isFinite(suffixLen) || suffixLen <= 0) {
-          reply.header('content-range', `bytes */${size}`);
-          return reply.code(416).send();
-        }
-        start = Math.max(0, size - suffixLen);
-        end = size - 1;
-      } else {
-        start = startRaw === '' ? 0 : Number(startRaw);
-        end = endRaw === '' ? size - 1 : Number(endRaw);
-      }
-      if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start < 0 || end >= size) {
-        reply.header('content-range', `bytes */${size}`);
-        return reply.code(416).send();
-      }
-      const chunk = end - start + 1;
-      reply.header('content-range', `bytes ${start}-${end}/${size}`);
-      reply.header('content-length', String(chunk));
-      reply.code(206);
-      return reply.send(fs.createReadStream(abs, { start, end }));
+    const { id } = parsed.data;
+    const abs = youtubeSourceAudioPath(id);
+    if (!fs.existsSync(abs)) {
+      return reply.code(404).send(errorResponse('SOURCE_AUDIO_NOT_FOUND', 'Source audio not found'));
     }
-
-    reply.header('content-length', String(size));
-    return reply.send(fs.createReadStream(abs));
+    return sendAudioFile(request, reply, abs);
   });
 
   app.get('/api/pdfs/:id/pages/:n/generation-prompts', async (request, reply) => {

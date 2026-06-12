@@ -26,6 +26,7 @@ export function PlayPageSlidePanel() {
     handleSeek, goPrev, goNext,
     isReadOnlyProcessing,
     withImageBust,
+    withShareToken,
     currentSentence,
     editingScript, setEditingScript,
     editorError,
@@ -712,6 +713,16 @@ export function PlayPageSlidePanel() {
                     ) : sourceItems.map((s) => {
                       const isExpanded = expandedSourceId === s.id;
                       const hasContent = s.content_text.trim().length > 0;
+                      if (s.source_kind === 'youtube_audio') {
+                        const audioSrc = withShareToken(`api/pdfs/${s.pdf_id}/source-audio`) ?? `api/pdfs/${s.pdf_id}/source-audio`;
+                        return (
+                          <div key={s.id} className="rounded border border-slate-700 px-2 py-1.5">
+                            <p className="text-xs text-slate-300">[{s.source_kind}] {s.source_name ?? '未命名來源'}</p>
+                            <audio controls preload="none" className="mt-1 w-full" src={audioSrc} />
+                            {hasContent && <p className="mt-1 text-xs text-slate-500">{s.content_text}</p>}
+                          </div>
+                        );
+                      }
                       return (
                         <div key={s.id} className="rounded border border-slate-700 px-2 py-1.5">
                           <button

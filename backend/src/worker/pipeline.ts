@@ -16,6 +16,7 @@ import {
   youtubeCaptionsNormalizedPath,
   youtubeCaptionsRawPath,
   youtubeOutlinePath,
+  youtubeSourceAudioPath,
   writeMetadata,
 } from '../services/storage';
 import { fetchYoutubeCaptions } from '../services/youtubeCaptions';
@@ -439,6 +440,7 @@ async function runPipeline(pdfId: string): Promise<void> {
           setProgress(pdfId, step, 0, 1);
           await persistMetadata(pdfId);
         },
+        youtubeSourceAudioPath(pdfId),
       );
 
       await fs.promises.writeFile(
@@ -478,6 +480,15 @@ async function runPipeline(pdfId: string): Promise<void> {
           WHERE pdf_id = ? AND source_kind = 'youtube_caption'`,
       ).run(cap.normalizedText.slice(0, 120000), now, pdfId);
 
+      // STT fallback（無字幕可下載時）會把下載到的音訊另存一份，讓使用者可在「來源」分頁中播放檢視
+      const hasSourceAudio = fs.existsSync(youtubeSourceAudioPath(pdfId));
+      if (hasSourceAudio) {
+        db.prepare(
+          `INSERT INTO pdf_sources (pdf_id, source_kind, source_name, content_text, created_at, updated_at)
+           VALUES (?, 'youtube_audio', ?, ?, ?, ?)`,
+        ).run(pdfId, `YouTube ${videoId} 音訊`, '（語音辨識（STT）來源音訊，可在下方播放器收聽）', now, now);
+      }
+
       const m = await readMetadata(pdfId);
       if (m) {
         m.updated_at = now;
@@ -487,6 +498,7 @@ async function runPipeline(pdfId: string): Promise<void> {
         m.captions_raw = 'captions.raw.json';
         m.captions_normalized = 'captions.normalized.txt';
         m.outline = 'outline.md';
+        if (hasSourceAudio) m.source_audio = 'source-audio.mp3';
         await writeMetadata(pdfId, m);
       }
       logger.info(

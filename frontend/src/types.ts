@@ -170,7 +170,7 @@ export interface PdfDetail {
 export interface PdfSourceItem {
   id: number;
   pdf_id: string;
-  source_kind: 'pdf' | 'txt' | 'youtube_caption';
+  source_kind: 'pdf' | 'txt' | 'youtube_caption' | 'youtube_audio';
   source_name: string | null;
   content_text: string;
   created_at: string;

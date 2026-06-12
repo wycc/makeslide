@@ -83,6 +83,10 @@ export function youtubeOutlinePath(pdfId: string): string {
   return path.join(pdfDir(pdfId), 'outline.md');
 }
 
+export function youtubeSourceAudioPath(pdfId: string): string {
+  return path.join(pdfDir(pdfId), 'source-audio.mp3');
+}
+
 export function createPdfDir(pdfId: string): string {
   const dir = pdfDir(pdfId);
   fs.mkdirSync(dir, { recursive: true });

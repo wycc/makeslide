@@ -653,3 +653,64 @@ export function streamFile(
   reply.header('cache-control', cacheControl);
   return reply.send(fs.createReadStream(filePath));
 }
+
+// Serve an audio file with HTTP Range support so <audio> elements can seek.
+// Callers are responsible for checking the file exists / mapping 404s before
+// invoking this — it assumes `absPath` points at a readable file.
+export function sendAudioFile(request: FastifyRequest, reply: FastifyReply, absPath: string): FastifyReply {
+  const stat = fs.statSync(absPath);
+  const size = stat.size;
+  const rangeHeader = request.headers.range;
+  reply.header('accept-ranges', 'bytes');
+  let contentType: string = 'audio/mpeg';
+  try {
+    const head = Buffer.alloc(16);
+    const fd = fs.openSync(absPath, 'r');
+    try {
+      fs.readSync(fd, head, 0, 16, 0);
+    } finally {
+      fs.closeSync(fd);
+    }
+    contentType = detectAudioMimeFromBuffer(head);
+  } catch {
+    contentType = 'audio/mpeg';
+  }
+  reply.header('content-type', contentType);
+  reply.header('cache-control', 'public, max-age=3600');
+
+  if (rangeHeader) {
+    const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader.trim());
+    if (!match) {
+      reply.header('content-range', `bytes */${size}`);
+      return reply.code(416).send();
+    }
+    const startRaw = match[1];
+    const endRaw = match[2];
+    let start: number;
+    let end: number;
+    if (startRaw === '' && endRaw !== '') {
+      const suffixLen = Number(endRaw);
+      if (!Number.isFinite(suffixLen) || suffixLen <= 0) {
+        reply.header('content-range', `bytes */${size}`);
+        return reply.code(416).send();
+      }
+      start = Math.max(0, size - suffixLen);
+      end = size - 1;
+    } else {
+      start = startRaw === '' ? 0 : Number(startRaw);
+      end = endRaw === '' ? size - 1 : Number(endRaw);
+    }
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start < 0 || end >= size) {
+      reply.header('content-range', `bytes */${size}`);
+      return reply.code(416).send();
+    }
+    const chunk = end - start + 1;
+    reply.header('content-range', `bytes ${start}-${end}/${size}`);
+    reply.header('content-length', String(chunk));
+    reply.code(206);
+    return reply.send(fs.createReadStream(absPath, { start, end }));
+  }
+
+  reply.header('content-length', String(size));
+  return reply.send(fs.createReadStream(absPath));
+}

@@ -253,6 +253,7 @@ async function transcribeByStt(
   videoId: string,
   language?: string | null,
   onProgress?: (step: YoutubeProgressStep) => void,
+  audioSavePath?: string,
 ): Promise<YoutubeCaptionResult | null> {
   const python = await resolvePython();
   if (!python) {
@@ -290,6 +291,16 @@ async function transcribeByStt(
       return null;
     }
     const audioPath = path.join(tmpDir, mp3);
+
+    // Persist the downloaded audio so it can be reviewed as a source later —
+    // do this before segmenting/cleanup removes the temp directory.
+    if (audioSavePath) {
+      try {
+        await fs.promises.copyFile(audioPath, audioSavePath);
+      } catch (err) {
+        logger.warn({ err, videoId }, 'youtube STT fallback: failed to persist source audio');
+      }
+    }
 
     // Split into chunks; mp3 frames are self-contained so a stream copy is safe.
     const segmented = await runFfmpeg(
@@ -351,6 +362,7 @@ export async function fetchYoutubeCaptions(
   videoId: string,
   language?: string | null,
   onProgress?: (step: YoutubeProgressStep) => void,
+  audioSavePath?: string,
 ): Promise<YoutubeCaptionResult> {
   onProgress?.('downloading_captions');
   const byYtDlp = await fetchByYtDlp(videoId, language);
@@ -395,7 +407,7 @@ export async function fetchYoutubeCaptions(
   logger.info({ videoId }, 'no caption track available, falling back to download + STT');
   onProgress?.('downloading_audio');
   try {
-    const byStt = await transcribeByStt(videoId, language, onProgress);
+    const byStt = await transcribeByStt(videoId, language, onProgress, audioSavePath);
     if (byStt) return byStt;
   } catch (err) {
     logger.error({ err, videoId }, 'STT fallback threw');

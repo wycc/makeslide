@@ -212,7 +212,7 @@ export interface PdfDetail {
 export interface PdfSourceItem {
   id: number;
   pdf_id: string;
-  source_kind: 'pdf' | 'txt' | 'youtube_caption';
+  source_kind: 'pdf' | 'txt' | 'youtube_caption' | 'youtube_audio';
   source_name: string | null;
   content_text: string;
   created_at: string;
@@ -276,6 +276,7 @@ export interface PdfMetadata {
   source_caption_language?: string | null;
   captions_raw?: string | null;
   captions_normalized?: string | null;
+  source_audio?: string | null;
   outline?: string | null;
   created_at: string;
   updated_at: string;
