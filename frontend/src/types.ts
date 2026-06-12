@@ -103,6 +103,8 @@ export interface SlideAnimationStartTrigger {
   type: 'transcript-line';
   /** 0-based index into the page script's sentence list. */
   line: number;
+  /** Seconds to start before the referenced sentence's estimated playback time. */
+  offsetSeconds?: number;
 }
 
 export interface SlideAnimationEffect {

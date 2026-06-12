@@ -14,6 +14,9 @@
 >
 > 擴充註記（2026-06-12，逐字稿同步啟動）：
 > - 新增 `effect.startTrigger`：可將效果的開始時間改為「綁定逐字稿句子」，播放到該句時動畫同步開始。詳見 §4.3、§6.5、§7。
+>
+> 擴充註記（2026-06-12，向前秒數）：
+> - `startTrigger` 新增選填欄位 `offsetSeconds`：可指定動畫提前於對應逐字稿句子幾秒開始。詳見 §4.3、§7.1。
 
 ---
 
@@ -111,16 +114,18 @@ interface AnimationStartTrigger {
   type: 'transcript-line';
   /** 0-based，對應本頁逐字稿切句後的句子索引 */
   line: number;
+  /** 選填，提前於對應句子開始時間幾秒觸發動畫（0~60） */
+  offsetSeconds?: number;
 }
 ```
 
 - `AnimationEffect.startTrigger?: AnimationStartTrigger`：選填欄位，前後端型別與 zod schema 同步定義於 `backend/src/services/pageAnimation.ts` 與 `frontend/src/types.ts`。
-- 驗證規則（`StartTriggerSchema`）：`type` 必須為 `'transcript-line'`；`line` 必須為 `0 <= line <= 999`（`MAX_TRANSCRIPT_LINE`）的整數。
+- 驗證規則（`StartTriggerSchema`）：`type` 必須為 `'transcript-line'`；`line` 必須為 `0 <= line <= 999`（`MAX_TRANSCRIPT_LINE`）的整數；`offsetSeconds`（選填）必須為 `0 <= offsetSeconds <= 60`（`MAX_START_OFFSET_SECONDS`）。
 - 語意：
-  - 設定 `startTrigger` 後，效果的播放開始時間 = 本頁逐字稿第 `line` 句（0-based）的估計播放起始秒數。
-  - `start` 欄位仍會儲存，作為「找不到對應句子」時的退回值（例如逐字稿被編輯、句子數量變少導致 `line` 超出範圍）。
+  - 設定 `startTrigger` 後，效果的播放開始時間 = 本頁逐字稿第 `line` 句（0-based）的估計播放起始秒數，再減去 `offsetSeconds`（預設 0），並下限為 0（不會變成負數）。
+  - `start` 欄位仍會儲存，作為「找不到對應句子」時的退回值（例如逐字稿被編輯、句子數量變少導致 `line` 超出範圍）；此時 `offsetSeconds` 不生效。
   - 一個 spec 內可有部分效果使用 `startTrigger`、部分使用固定秒數 `start`，互不影響。
-- 解析時機：完全在前端進行（後端僅驗證/儲存原始 `startTrigger`），詳見 §6.5。
+- 解析時機：完全在前端進行（後端僅驗證/儲存原始 `startTrigger`），詳見 §6.5、§7.1。前端 `frontend/src/lib/animationSpec.ts` 的 `resolveStartTriggerSeconds(startTrigger, sentenceTimeline)` 為共用的解析函式，`resolveAnimationSpec` 與 `AnimationEditorTab.tsx` 的「預估開始」顯示皆呼叫它。
 
 ## 5. 動畫效果定義
 
@@ -209,12 +214,12 @@ Props：`renderType`、`src`（由呼叫端算好，含 displayedImageSrc 防閃
 每個效果新增「起始時間方式」下拉（`play.animation.startMode`），二擇一：
 
 - **依秒數**（預設、`startTrigger` 為 `undefined`）：維持原本的 `start` 數字輸入框。
-- **依逐字稿句子**（`startTrigger = { type: 'transcript-line', line }`）：數字輸入框改為「句子」下拉選單，列出 `pageSentences`（`1. <句子前 18 字>…`），並在下方顯示「預估開始：X.X 秒」（取自 `sentenceTimeline[line].start`）。
+- **依逐字稿句子**（`startTrigger = { type: 'transcript-line', line, offsetSeconds? }`）：數字輸入框改為「句子」下拉選單，列出 `pageSentences`（`1. <句子前 18 字>…`），其旁新增「提前秒數」數字輸入框（`offsetSeconds`，0~60，預設 0，步距 0.1），並在下方顯示「預估開始：X.X 秒」（取自 `resolveStartTriggerSeconds(startTrigger, sentenceTimeline)` = `sentenceTimeline[line].start - offsetSeconds`，下限 0）。
 
 切換行為：
 
-- 切到「依逐字稿句子」：若效果尚未設定 `startTrigger`，預設指向第 1 句（`line: 0`）；已設定者保留原本的 `line`。
-- 切回「依秒數」：將目前換算出的秒數（`sentenceTimeline[line].start`，找不到則沿用舊 `start`）寫回 `start`，並清除 `startTrigger`，讓使用者接手微調。
+- 切到「依逐字稿句子」：若效果尚未設定 `startTrigger`，預設指向第 1 句（`line: 0`，`offsetSeconds` 未設定）；已設定者保留原本的 `line`/`offsetSeconds`。
+- 切回「依秒數」：將目前換算出的秒數（`resolveStartTriggerSeconds(startTrigger, sentenceTimeline)`，找不到則沿用舊 `start`）寫回 `start`，並清除 `startTrigger`，讓使用者接手微調。
 
 若該頁尚未有逐字稿（`pageSentences.length === 0`），「依逐字稿句子」選項停用；若效果已設定 `startTrigger` 但本頁逐字稿為空，顯示「本頁尚無逐字稿」提示文字而非空白下拉選單。
 

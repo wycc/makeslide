@@ -1,4 +1,4 @@
-import type { SlideAnimationEase, SlideAnimationEffectType, SlideAnimationSpec } from '../types';
+import type { SlideAnimationEase, SlideAnimationEffectType, SlideAnimationSpec, SlideAnimationStartTrigger } from '../types';
 import type { SentenceTimelineItem } from './subtitles';
 
 export const SLIDE_ANIMATION_EFFECT_TYPES: readonly SlideAnimationEffectType[] = [
@@ -52,6 +52,21 @@ export function hasPlayableAnimation(spec: SlideAnimationSpec | null | undefined
  * callers can safely use the result as a memoization/effect dependency
  * without triggering unnecessary GSAP timeline rebuilds.
  */
+/**
+ * Resolves a `startTrigger` to a playback second, applying its optional
+ * `offsetSeconds` (start N seconds before the referenced sentence) and
+ * clamping to 0. Returns `undefined` if the referenced sentence doesn't
+ * exist in `sentenceTimeline` (e.g. the transcript was edited).
+ */
+export function resolveStartTriggerSeconds(
+  startTrigger: SlideAnimationStartTrigger,
+  sentenceTimeline: SentenceTimelineItem[],
+): number | undefined {
+  const target = sentenceTimeline[startTrigger.line];
+  if (!target) return undefined;
+  return Math.max(0, target.start - (startTrigger.offsetSeconds ?? 0));
+}
+
 export function resolveAnimationSpec(
   spec: SlideAnimationSpec | null,
   sentenceTimeline: SentenceTimelineItem[],
@@ -61,9 +76,9 @@ export function resolveAnimationSpec(
     ...spec,
     effects: spec.effects.map((effect) => {
       if (!effect.startTrigger) return effect;
-      const target = sentenceTimeline[effect.startTrigger.line];
-      if (!target) return effect;
-      return { ...effect, start: target.start };
+      const resolved = resolveStartTriggerSeconds(effect.startTrigger, sentenceTimeline);
+      if (resolved === undefined) return effect;
+      return { ...effect, start: resolved };
     }),
   };
 }
