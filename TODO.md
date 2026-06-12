@@ -762,7 +762,12 @@
 - 分支: feature/youtube-caption-download-label-recheck-20260612
 - 內容: 複查「下載 youtube 時，下載字幕檔的動作不應該叫產生字幕檔，應該叫下載字幕檔」。全文搜尋 `frontend/src`、`backend/src`、`docs/` 與 locale 檔，未發現任何將下載字幕標示為「產生字幕（檔）」的殘留字串；目前 `backend/src/services/youtubeCaptions.ts` 的 `fetchYoutubeCaptions`（fetch=下載既有字幕軌，無字幕才 fallback 至 STT 並標示為 `transcribing_audio`/「語音轉文字（STT）」）、`backend/src/worker/pipeline.ts` 的 `setProgress(pdfId, 'downloading_captions', ...)`，以及 `frontend/src/locales/zh-TW.ts`/`en.ts` 的 `progress.downloadingCaptions: '下載字幕'`/`'Downloading captions'` 均已正確標示為「下載」。追溯歷史確認此命名問題已在更早的 commit `445647b`（2026-06-01 05:00:40，"feat(youtube): add visible download and STT progress stages"）修正，而本 TODO 項目是在同日稍晚（09:03）才被記錄、僅未同步勾選。本次無需額外程式碼變更，複查記錄保存於 `docs/todo-rechecks/2026-06-12-youtube-caption-download-label.md`。
 
+- 時間: 2026-06-12 17:05:00 +0800
+- 分支: feature/todo-no-pending-recheck-20260612-1705
+- 內容: 重新確認 master 中 TODO.md 未發現行首未完成核取項目；本次以獨立分支保存複查記錄 docs/todo-rechecks/2026-06-12-1705.md，並回到 master 更新工作記錄。
+
 # 新功能(每一個功能使用一個 branch，做好後也要更新 master 上的設計文件)
 
 [x] 每一個動畫都要有消失時間。（完成於分支: feature/animation-exit-duration-20260612，v1 為 highlight-box/spotlight/text-callout 三種 overlay 效果新增選填 `exitDuration`，淡入後可自動淡出；fade-in/zoom/pan 等整頁 transform 效果留待後續版本）
 [x] 自動產生逐字稿焦點功能要用 AI 選擇要在什麼時顯示在什麼位置。（完成於分支: feature/animation-ai-focus-generation-20260612，v1 新增 `POST /api/pdfs/:id/pages/:n/animation/auto-focus-ai`，由 LLM 依逐字稿句子（與選填 hints、頁面 OCR 文字）逐句決定是否顯示 highlight-box/spotlight 焦點方框及其位置、大小與消失時間，編輯器新增「🤖 AI 自動產生焦點動畫」按鈕與既有固定規則版並列；text-callout 與其他效果類型的 AI 生成留待後續）
+[x] 重新確認 master TODO.md 無未完成項目並更新工作記錄（完成於分支: feature/todo-no-pending-recheck-20260612-1705）
