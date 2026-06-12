@@ -4,6 +4,7 @@ import {
   MAX_SLIDE_ANIMATION_EFFECTS,
   buildCustomScriptSandboxDoc,
   cloneAnimationSpec,
+  customScriptDurationSeconds,
   generateFocusEffectsFromTranscript,
   resolveAnimationSpec,
   resolveStartTriggerSeconds,
@@ -32,7 +33,7 @@ test("generateFocusEffectsFromTranscript returns empty array for no sentences", 
 
 test("buildCustomScriptSandboxDoc embeds the code as base64 and defines #root", () => {
   const code = "window.renderAnimation = function (root, api) { api.onFrame(function () {}); };";
-  const html = buildCustomScriptSandboxDoc(code);
+  const html = buildCustomScriptSandboxDoc(code, 10);
   assert.match(html, /<div id="root"><\/div>/);
   assert.match(html, /window\.renderAnimation/);
 
@@ -43,9 +44,20 @@ test("buildCustomScriptSandboxDoc embeds the code as base64 and defines #root", 
   assert.ok(html.includes(base64));
 });
 
+test("buildCustomScriptSandboxDoc embeds api.duration from the durationSeconds argument", () => {
+  const html = buildCustomScriptSandboxDoc("window.renderAnimation = function () {};", 7.5);
+  assert.match(html, /duration:\s*7\.5/);
+});
+
+test("buildCustomScriptSandboxDoc falls back to a safe default duration for invalid input", () => {
+  assert.match(buildCustomScriptSandboxDoc("", 0), /duration:\s*1\b/);
+  assert.match(buildCustomScriptSandboxDoc("", -5), /duration:\s*1\b/);
+  assert.match(buildCustomScriptSandboxDoc("", Number.NaN), /duration:\s*1\b/);
+});
+
 test("buildCustomScriptSandboxDoc has no unescaped </script> even for adversarial code", () => {
   const code = '</script><script>alert(1)</script>" \' `';
-  const html = buildCustomScriptSandboxDoc(code);
+  const html = buildCustomScriptSandboxDoc(code, 10);
   // Only the two trusted <script> tags from the wrapper itself should remain.
   assert.equal((html.match(/<script>/g) ?? []).length, 1);
   assert.equal((html.match(/<\/script>/g) ?? []).length, 1);
@@ -53,19 +65,31 @@ test("buildCustomScriptSandboxDoc has no unescaped </script> even for adversaria
 
 test("buildCustomScriptSandboxDoc handles non-Latin1 (multi-byte) code", () => {
   const code = "// 旋轉的圓形\nwindow.renderAnimation = function (root, api) {};";
-  const html = buildCustomScriptSandboxDoc(code);
+  const html = buildCustomScriptSandboxDoc(code, 10);
   const base64 = Buffer.from(code, "utf8").toString("base64");
   assert.ok(html.includes(base64));
 });
 
 test("buildCustomScriptSandboxDoc handles empty code without throwing", () => {
-  const html = buildCustomScriptSandboxDoc("");
+  const html = buildCustomScriptSandboxDoc("", 10);
   assert.match(html, /<div id="root"><\/div>/);
 });
 
 test("buildCustomScriptSandboxDoc reports missing renderAnimation for non-empty incompatible code", () => {
-  const html = buildCustomScriptSandboxDoc("var x = 1;");
+  const html = buildCustomScriptSandboxDoc("var x = 1;", 10);
   assert.match(html, /generated code did not define window\.renderAnimation/);
+});
+
+test("customScriptDurationSeconds sums duration and exitDuration, defaulting exitDuration to 0", () => {
+  const base = { id: "e1", target: "slide" as const, type: "custom-script" as const, ease: "none" as const, start: 0 };
+  assert.equal(customScriptDurationSeconds({ ...base, duration: 1.5 }), 1.5);
+  assert.equal(customScriptDurationSeconds({ ...base, duration: 1.5, exitDuration: 8 }), 9.5);
+});
+
+test("customScriptDurationSeconds falls back to 1 for a zero or negative total", () => {
+  const base = { id: "e1", target: "slide" as const, type: "custom-script" as const, ease: "none" as const, start: 0 };
+  assert.equal(customScriptDurationSeconds({ ...base, duration: 0 }), 1);
+  assert.equal(customScriptDurationSeconds({ ...base, duration: -2 }), 1);
 });
 
 test("cloneAnimationSpec preserves custom-script code and prompt without sharing nested objects", () => {

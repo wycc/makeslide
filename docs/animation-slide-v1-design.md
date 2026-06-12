@@ -255,7 +255,7 @@ easing 白名單：`none`、`power1.in`、`power1.out`、`power1.inOut`、`power
 **沙箱與安全模型**
 
 - `effect.code` 會被注入到 `<iframe sandbox="allow-scripts">`（**不含** `allow-same-origin`）中執行；該 iframe 因此是不透明來源（opaque origin），無法存取上層頁面 DOM、cookie、`localStorage`/`sessionStorage`/`indexedDB`、`window.parent`/`window.top`，也無法發出任何網路請求（`fetch`/`XMLHttpRequest`/`WebSocket`）。
-- `frontend/src/lib/animationSpec.ts` 的 `buildCustomScriptSandboxDoc(code)` 組出完整 iframe `srcDoc`：將 `code` 以 base64 編碼後嵌入（避免 `</script>`/引號跳脫問題），於受信任的包裝 script 中以 `atob` + `TextDecoder` 還原後用 `new Function(code)()` 執行。
+- `frontend/src/lib/animationSpec.ts` 的 `buildCustomScriptSandboxDoc(code, durationSeconds)` 組出完整 iframe `srcDoc`：將 `code` 以 base64 編碼後嵌入（避免 `</script>`/引號跳脫問題），於受信任的包裝 script 中以 `atob` + `TextDecoder` 還原後用 `new Function(code)()` 執行；`durationSeconds`（見下方 `api.duration`）來自 `customScriptDurationSeconds(effect) = effect.duration + (effect.exitDuration ?? 0)`。
 - 後端 `backend/src/services/animationCustomScript.ts` 的 `findUnsafeScriptPattern(code)` 對 LLM 產生的程式碼做縱深防禦黑名單檢查（`fetch`、`XMLHttpRequest`、`WebSocket`、`import(`、`require(`、`eval(`、`new Function(`、`document.cookie`、`localStorage`、`sessionStorage`、`indexedDB`、`window.parent`、`window.top`、`frameElement`），命中則回 `422 UNSAFE_SCRIPT`，不寫入 draft。
 
 **程式碼契約（window.renderAnimation）**
@@ -263,15 +263,16 @@ easing 白名單：`none`、`power1.in`、`power1.out`、`power1.inOut`、`power
 `effect.code` 必須定義全域函式 `window.renderAnimation(root, api)`：
 
 - `root`：一個已設定好寬高的 `<div id="root">`，產生的視覺內容（canvas / svg / DOM）應加入此元素。
+- `api.duration`：這個效果的總長度（秒，數字）＝ `effect.duration + (effect.exitDuration ?? 0)`，由使用者在編輯器中設定，由 host 端注入（嵌入 `srcDoc` 時的常數），並非由產生的程式碼自行假設。
 - `api.onFrame(callback)`：註冊回呼，每當收到 host 端的 `{ type: 'sync', t, playing }` postMessage 時被呼叫：
   - `t`：自此效果淡入開始（`effect.start`）起算的秒數，下限 0。
   - `playing`：投影片目前是否在播放。
-  - 回呼應依 `t` 重繪畫面（例如 `t` 除以動畫總長得到 0~1 進度），且需能承受 `t` 變小（倒退/重播）而不出錯。
+  - 回呼應以 `Math.min(t / api.duration, 1)` 計算 0~1 進度並重繪畫面，讓動畫在 `t: 0 → api.duration` 期間播放「一輪」；達到 1 後維持最終畫面（不重置/不循環），之後效果整體依 `exitDuration`（§5.3）淡出消失。回呼也需能承受 `t` 變小（倒退/重播）而正確重算畫面。
 
 **播放同步**
 
 - 實際播放時，`useGsapSlideTimeline.ts` 新增一個 effect：每當 `currentTime`/`isPlaying`/`spec`/`pageKey` 變化，對每個 `custom-script` 效果的 iframe `contentWindow` 送出 `{ type: 'sync', t: max(0, currentTime - effect.start), playing: isPlaying }`。
-- `EffectOverlay`（`SlideRenderer.tsx`）渲染方式與其他 `OVERLAY_EFFECT_TYPES` 相同（`data-effect-id`、位置/大小取自 `getFocusEffectParams`、淡入淡出沿用 §5.3 的 `exitDuration` 機制），差異僅在內容是一個 `<iframe sandbox="allow-scripts" srcDoc={buildCustomScriptSandboxDoc(effect.code)} />`。
+- `EffectOverlay`（`SlideRenderer.tsx`）渲染方式與其他 `OVERLAY_EFFECT_TYPES` 相同（`data-effect-id`、位置/大小取自 `getFocusEffectParams`、淡入淡出沿用 §5.3 的 `exitDuration` 機制），差異僅在內容是一個 `<iframe sandbox="allow-scripts" srcDoc={buildCustomScriptSandboxDoc(effect.code, customScriptDurationSeconds(effect))} />`。
 
 **AI 產生/迭代**
 
@@ -437,7 +438,7 @@ Props：`renderType`、`src`（由呼叫端算好，含 displayedImageSrc 防閃
 - **提示詞輸入框**（`play.animation.customScriptPrompt`，多行文字，上限 300 字 = `MAX_CUSTOM_SCRIPT_PROMPT_LENGTH`），對應 `effect.prompt`。
 - **產生/重新產生按鈕**：`effect.code` 為空時顯示「🤖 產生動畫」（`play.animation.customScriptGenerate`），已有 `code` 時顯示「🤖 依提示詞重新產生」（`play.animation.customScriptRegenerate`）；提示詞為空或產生中時停用。產生中顯示忙碌文字（`play.animation.customScriptGenerateBusy`）。
 - 點擊後呼叫 `POST /api/pdfs/:id/pages/:n/animation/custom-script`（`generateCustomScriptCode`，`frontend/src/lib/api/pdfs.ts`），帶入 `{ prompt: effect.prompt, previousCode: effect.code }`；回應的 `code` 與目前 `prompt` 寫回該效果（`usePageAnimation.ts` 的 `handleGenerateCustomScriptCode`）。成功顯示提示訊息（`play.animation.customScriptDone`），失敗顯示錯誤（`play.animation.customScriptError`，含 422 `UNSAFE_SCRIPT` 時的後端錯誤訊息）。
-- `effect.code` 尚未產生時顯示提示文字（`play.animation.customScriptEmpty`）；已產生時，下方即時顯示 `CustomScriptPreview`——一個 sandboxed `<iframe>`，以 `requestAnimationFrame` 持續送出 `{ type: 'sync', t, playing: true }`（`t` 在 `0 ~ previewLoopSeconds(effect)` 之間迴圈，`previewLoopSeconds = clamp(duration + (exitDuration ?? 0), 2, 20)`），讓使用者在反覆調整提示詞時立即看到迴圈播放的結果，無需先儲存或進入播放模式。
+- `effect.code` 尚未產生時顯示提示文字（`play.animation.customScriptEmpty`）；已產生時，下方即時顯示 `CustomScriptPreview`——一個 sandboxed `<iframe>`，以 `requestAnimationFrame` 持續送出 `{ type: 'sync', t, playing: true }`（`t` 在 `0 ~ previewLoopSeconds(effect)` 之間迴圈，`previewLoopSeconds = clamp(customScriptDurationSeconds(effect), 2, 20)`），讓使用者在反覆調整提示詞時立即看到迴圈播放的結果，無需先儲存或進入播放模式。預覽傳給 sandbox 的 `api.duration` 即為 `previewLoopSeconds(effect)`，與實際播放時的 `customScriptDurationSeconds(effect)` 採同一公式（僅預覽端額外夾在 2~20 秒之間），確保預覽中看到的「一輪」進度與實際播放一致。
 - 效果類型為 `custom-script` 時亦適用 §7（效果列）中對 `OVERLAY_EFFECT_TYPES` 共用的「焦點位置與大小（%）」與「顯示後自動消失」控制項。
 - 與其他效果一樣，調整完成後需按「儲存動畫」才會持久化；`prompt`/`code` 皆隨 spec 一併儲存，重新進入編輯器可繼續迭代。
 
@@ -496,7 +497,8 @@ V1 的「使用提示詞生成動畫」以 `custom-script` 效果交付，重點
 - 產生的程式碼必須符合 `window.renderAnimation(root, api)` 與 `api.onFrame(callback)` 契約；後端會拒絕明顯缺少契約的輸出，前端 sandbox 也會在缺少 `renderAnimation` 時顯示錯誤訊息。
 - 程式碼在 `<iframe sandbox="allow-scripts">` 中執行，不含 `allow-same-origin`，並且後端會額外拒絕 `fetch`、`XMLHttpRequest`、`WebSocket`、`import`、`require`、`eval`、`new Function`、storage、cookie、parent/top/frameElement 等高風險 API。
 - 播放時 host 端以音訊 currentTime 為主時鐘，對每個 `custom-script` iframe 送出 `{ type: 'sync', t, playing }`；`t` 是相對該 effect 起始時間的秒數，支援 seek、暫停、重播與和其他 GSAP/overlay 效果一起播放。
-- 編輯器預覽同樣使用 sandbox iframe，以迴圈時間送出 sync 訊息，讓使用者能反覆調整提示詞直到滿意。
+- 動畫長度由效果設定決定，而非由 AI 自行假設：sandbox 在建立時注入 `api.duration = customScriptDurationSeconds(effect)`（= `effect.duration + (effect.exitDuration ?? 0)`），LLM 提示詞要求以 `Math.min(t / api.duration, 1)` 計算進度，於 `t: 0 → api.duration` 播放「一輪」後維持最終畫面（不重置/不循環）；效果本身再依 `exitDuration`（§5.3）整體淡出消失。
+- 編輯器預覽同樣使用 sandbox iframe，以迴圈時間送出 sync 訊息（迴圈長度 = `previewLoopSeconds(effect)`，與 `api.duration` 同一公式但夾在 2~20 秒），讓使用者能反覆調整提示詞直到滿意。
 - 編輯器主效果列對 `custom-script` 保持簡化：不顯示 X/Y/W/H 與 ease（速度變化）欄位，只顯示「編輯動畫」按鈕與基本時間控制。提示詞、JavaScript 原始碼與 sandbox display preview 皆移至獨立對話框中。
 - `custom-script` 對話框提供 JavaScript 原始碼編輯器；使用者可在 AI 產生後手動修改 `effect.code`，或直接貼上自寫程式。手動修改會即時更新 sandbox 預覽，並在按「儲存動畫」後與 spec 一起持久化。
 - 若 LLM 產生了不安全或不符合契約的程式，前端顯示可行的重試提示，不會儲存或播放該程式。
@@ -507,5 +509,6 @@ V1 的「使用提示詞生成動畫」以 `custom-script` 效果交付，重點
 2. 修改提示詞並重新產生，確認目前列顯示 busy，生成完成後 iframe 重新載入新結果。
 3. 在 JavaScript 原始碼編輯器中手動修改顏色、速度或文字，確認預覽即時更新，儲存後重新整理仍保留修改。
 4. 播放、暫停、seek、從頭預覽、換頁再回來，確認動畫時間與音訊一致且不殘留舊 iframe 狀態。
-5. 嘗試要求「用 fetch 載入外部 MNIST」或「使用 localStorage」，確認後端回拒絕訊息且 draft 不被寫入不安全 code。
-6. 確認此 v1 只能模擬 MNIST/embedding/PCA 類視覺過程；真正的 MNIST、ResNet50 embedding 與 PCA 計算需後續資料/模型推論服務。
+5. 調整效果的「時長」與「顯示後自動消失」秒數後重新產生，確認動畫的「一輪」長度（progress 從 0 到 1 的時間）隨之改變，且播放到底後畫面停留在最終狀態、不會自行重置重播；效果在 `exitDuration` 後依既有淡出機制消失。
+6. 嘗試要求「用 fetch 載入外部 MNIST」或「使用 localStorage」，確認後端回拒絕訊息且 draft 不被寫入不安全 code。
+7. 確認此 v1 只能模擬 MNIST/embedding/PCA 類視覺過程；真正的 MNIST、ResNet50 embedding 與 PCA 計算需後續資料/模型推論服務。

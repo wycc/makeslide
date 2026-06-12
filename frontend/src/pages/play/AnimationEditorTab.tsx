@@ -13,6 +13,7 @@ import {
   SLIDE_ANIMATION_EASES,
   SLIDE_ANIMATION_EFFECT_TYPES,
   buildCustomScriptSandboxDoc,
+  customScriptDurationSeconds,
   defaultAnimationSpec,
   generateFocusEffectsFromTranscript,
   getFocusEffectParams,
@@ -20,9 +21,9 @@ import {
 } from '../../lib/animationSpec';
 import { usePlayPageContext } from './PlayPageContext';
 
-/** 預覽用迴圈總長（秒）：custom-script 效果的淡入+停留時間，並夾在合理範圍內。 */
+/** 預覽用迴圈總長（秒）：與實際播放時傳給 sandbox 的 `api.duration` 相同，並夾在合理範圍內以免預覽迴圈過長。 */
 function previewLoopSeconds(effect: SlideAnimationEffect): number {
-  return Math.min(20, Math.max(2, effect.duration + (effect.exitDuration ?? 0)));
+  return Math.min(20, Math.max(2, customScriptDurationSeconds(effect)));
 }
 
 /**
@@ -54,7 +55,7 @@ function CustomScriptPreview({ effect }: { effect: SlideAnimationEffect }) {
       key={effect.code ?? ''}
       title="custom-script preview"
       sandbox="allow-scripts"
-      srcDoc={buildCustomScriptSandboxDoc(effect.code ?? '')}
+      srcDoc={buildCustomScriptSandboxDoc(effect.code ?? '', loopSeconds)}
       className="h-40 w-full rounded-md border border-slate-700 bg-slate-950"
     />
   );

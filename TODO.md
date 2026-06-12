@@ -860,4 +860,7 @@
 [x] 重新確認 master TODO.md 無未完成項目並更新工作記錄（完成於分支: feature/todo-no-pending-recheck-20260612-2345）
 [x] 重新確認 master TODO.md 無未完成項目並更新工作記錄（完成於分支: feature/todo-no-pending-recheck-20260613-0010）
 [x] 重新確認 master TODO.md 無未完成項目並更新工作記錄（完成於分支: feature/todo-no-pending-recheck-20260613-0035）
-[ ] 新增一個使用提示詞生成動畫的功能，這個功能會直接生成 javascript 程式在 UI 上展示一個複雜的動畫。例如載人 MNIST 資料集並使用 resnet50 產生 embeeding 並使用 PCA 顯示二維的特徵點。顯示數字轉換成點並跑到特徵空間中的位置形成一個分類器的過程。進入這個畫面可以反覆的下提示詞調整結果直到滿意為止。這個動畫可以和其它動畫一起被播放。
+[x] 新增一個使用提示詞生成動畫的功能，這個功能會直接生成 javascript 程式在 UI 上展示一個複雜的動畫。例如載人 MNIST 資料集並使用 resnet50 產生 embeeding 並使用 PCA 顯示二維的特徵點。顯示數字轉換成點並跑到特徵空間中的位置形成一個分類器的過程。進入這個畫面可以反覆的下提示詞調整結果直到滿意為止。這個動畫可以和其它動畫一起被播放。（完成於分支: feature/animation-prompt-custom-script-20260613，v1 提供通用 sandboxed AI 自訂 JS 動畫框架與提示詞生成/迭代迴圈；MNIST/ResNet50/PCA 資料管線留待 V2.x，詳見 docs/animation-slide-v1-design.md §5.4/§12）
+[x] 在自訂動畫的編輯器中，在右邊顯示一個對話框，讓我們可以和 AI 多輪對話逐步修正結果。（已於 master 直接提交完成：commit 886baa7/abaae66/7dbbe61/04404d3/542f428/9e273d4，新增 JavaScript 原始碼編輯器並將 custom-script 編輯移至獨立對話框，含提示詞輸入、產生/重新產生按鈕與即時預覽，支援多輪迭代；詳見 docs/animation-slide-v1-design.md §13）
+[x] 動畫的長度圖定是10 秒，實際長度由效果的長度決定。動畫只顯示一輪，然後在指定的時間後消失。（完成於分支: feature/animation-custom-script-duration-20260612，custom-script sandbox 新增 `api.duration = customScriptDurationSeconds(effect)`，AI 提示詞改為以 `Math.min(t/api.duration,1)` 計算進度、播放一輪後停留在最終畫面，不再由 AI 自行假設總長度；編輯器預覽迴圈長度與此同步，詳見 docs/animation-slide-v1-design.md §5.4/§13）
+[ ] 支援 manim 式的動畫

@@ -176,19 +176,33 @@ function utf8ToBase64(input: string): string {
 }
 
 /**
+ * Total seconds a `custom-script` effect's sandboxed iframe stays visible:
+ * its fade-in (`duration`) plus any hold time before auto-exit
+ * (`exitDuration`). Passed into the sandbox as `api.duration` so generated
+ * code can compute playback progress from the user's configured timing
+ * instead of guessing its own animation length.
+ */
+export function customScriptDurationSeconds(effect: SlideAnimationEffect): number {
+  const total = effect.duration + (effect.exitDuration ?? 0);
+  return Number.isFinite(total) && total > 0 ? total : 1;
+}
+
+/**
  * Builds the HTML document for a `custom-script` effect's sandboxed
  * `<iframe sandbox="allow-scripts">` (no `allow-same-origin`, so it has an
  * opaque origin and cannot reach the parent page, cookies or storage).
  *
  * `code` is expected to define `window.renderAnimation(root, api)`, where
- * `root` is the `#root` element to draw into and `api.onFrame(cb)` registers
- * a callback invoked with `{ t, playing }` whenever the host posts a
- * `{ type: 'sync', t, playing }` message (`t` = seconds since this effect's
- * fade-in began). `code` is base64-encoded so it can be embedded verbatim
- * without any HTML/script-tag escaping concerns.
+ * `root` is the `#root` element to draw into, `api.duration` is the total
+ * playback length in seconds (see `customScriptDurationSeconds`), and
+ * `api.onFrame(cb)` registers a callback invoked with `{ t, playing }`
+ * whenever the host posts a `{ type: 'sync', t, playing }` message (`t` =
+ * seconds since this effect's fade-in began). `code` is base64-encoded so it
+ * can be embedded verbatim without any HTML/script-tag escaping concerns.
  */
-export function buildCustomScriptSandboxDoc(code: string): string {
+export function buildCustomScriptSandboxDoc(code: string, durationSeconds: number): string {
   const encoded = code ? utf8ToBase64(code) : '';
+  const safeDuration = Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : 1;
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -205,7 +219,7 @@ export function buildCustomScriptSandboxDoc(code: string): string {
   "use strict";
   var root = document.getElementById('root');
   var listeners = [];
-  var api = { onFrame: function (cb) { listeners.push(cb); } };
+  var api = { duration: ${safeDuration}, onFrame: function (cb) { listeners.push(cb); } };
   window.addEventListener('message', function (ev) {
     var data = ev.data;
     if (!data || typeof data !== 'object' || data.type !== 'sync') return;

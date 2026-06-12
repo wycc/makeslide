@@ -4,6 +4,7 @@ import type { SlideAnimationEffect, SlideAnimationSpec, SlideRenderType } from '
 import {
   OVERLAY_EFFECT_TYPES,
   buildCustomScriptSandboxDoc,
+  customScriptDurationSeconds,
   getFocusEffectParams,
   hasPlayableAnimation,
 } from '../../lib/animationSpec';
@@ -77,7 +78,7 @@ function EffectOverlay({ effect }: { effect: SlideAnimationEffect }) {
         data-effect-id={effect.id}
         title="custom-script animation"
         sandbox="allow-scripts"
-        srcDoc={buildCustomScriptSandboxDoc(effect.code ?? '')}
+        srcDoc={buildCustomScriptSandboxDoc(effect.code ?? '', customScriptDurationSeconds(effect))}
         style={{ ...position, border: 'none', background: 'transparent' }}
       />
     );
