@@ -497,7 +497,8 @@ V1 的「使用提示詞生成動畫」以 `custom-script` 效果交付，重點
 - 程式碼在 `<iframe sandbox="allow-scripts">` 中執行，不含 `allow-same-origin`，並且後端會額外拒絕 `fetch`、`XMLHttpRequest`、`WebSocket`、`import`、`require`、`eval`、`new Function`、storage、cookie、parent/top/frameElement 等高風險 API。
 - 播放時 host 端以音訊 currentTime 為主時鐘，對每個 `custom-script` iframe 送出 `{ type: 'sync', t, playing }`；`t` 是相對該 effect 起始時間的秒數，支援 seek、暫停、重播與和其他 GSAP/overlay 效果一起播放。
 - 編輯器預覽同樣使用 sandbox iframe，以迴圈時間送出 sync 訊息，讓使用者能反覆調整提示詞直到滿意。
-- 編輯器於 `custom-script` 效果下方提供 JavaScript 原始碼編輯器；使用者可在 AI 產生後手動修改 `effect.code`，或直接貼上自寫程式。手動修改會即時更新 sandbox 預覽，並在按「儲存動畫」後與 spec 一起持久化。
+- 編輯器主效果列對 `custom-script` 保持簡化：不顯示 X/Y/W/H 與 ease（速度變化）欄位，只顯示「編輯動畫」按鈕與基本時間控制。提示詞、JavaScript 原始碼與 sandbox display preview 皆移至獨立對話框中。
+- `custom-script` 對話框提供 JavaScript 原始碼編輯器；使用者可在 AI 產生後手動修改 `effect.code`，或直接貼上自寫程式。手動修改會即時更新 sandbox 預覽，並在按「儲存動畫」後與 spec 一起持久化。
 - 若 LLM 產生了不安全或不符合契約的程式，前端顯示可行的重試提示，不會儲存或播放該程式。
 
 手動 QA 建議：

@@ -341,6 +341,10 @@ export const en = {
   'play.animation.customScriptSource': 'JavaScript source code',
   'play.animation.customScriptSourcePlaceholder': 'Generated or manually edited code. It must define window.renderAnimation(root, api).',
   'play.animation.customScriptSourceHelp': 'Manual edits are previewed immediately and saved with the animation spec. Use api.onFrame(callback) to stay synchronized with playback time.',
+  'play.animation.customScriptEdit': 'Edit animation',
+  'play.animation.customScriptDialogTitle': 'AI custom animation editor',
+  'play.animation.customScriptClose': 'Close',
+  'play.animation.customScriptPreview': 'Display preview',
   'language.zhTW': '繁體中文',
   'language.en': 'English',
 } as const;

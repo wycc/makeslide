@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../../i18n';
 import type { TranslationKey } from '../../i18n';
 import type { SlideAnimationEffect, SlideAnimationEffectType, SlideAnimationEase } from '../../types';
@@ -110,9 +110,14 @@ export function AnimationEditorTab() {
     handleGenerateCustomScriptCode,
   } = usePlayPageContext();
   const { t } = useI18n();
+  const [customScriptDialogEffectId, setCustomScriptDialogEffectId] = useState<string | null>(null);
 
   const draft = animationDraft ?? defaultAnimationSpec();
   const disabled = isReadOnlyProcessing || animationBusy || !currentPage;
+  const customScriptDialogEffect = useMemo(
+    () => draft.effects.find((effect) => effect.id === customScriptDialogEffectId && effect.type === 'custom-script') ?? null,
+    [draft.effects, customScriptDialogEffectId],
+  );
 
   const updateEffect = (id: string, patch: Partial<SlideAnimationEffect>) => {
     setAnimationDraft((prev) => {
@@ -299,21 +304,23 @@ export function AnimationEditorTab() {
                   className="w-20 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
                 />
               </label>
-              <label className="flex flex-col gap-1 text-xs text-slate-400">
-                {t('play.animation.ease')}
-                <select
-                  value={effect.ease}
-                  disabled={disabled}
-                  onChange={(e) => updateEffect(effect.id, { ease: e.target.value as SlideAnimationEase })}
-                  className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
-                >
-                  {SLIDE_ANIMATION_EASES.map((ease) => (
-                    <option key={ease} value={ease}>
-                      {t(EASE_LABELS[ease])}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {effect.type !== 'custom-script' && (
+                <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  {t('play.animation.ease')}
+                  <select
+                    value={effect.ease}
+                    disabled={disabled}
+                    onChange={(e) => updateEffect(effect.id, { ease: e.target.value as SlideAnimationEase })}
+                    className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                  >
+                    {SLIDE_ANIMATION_EASES.map((ease) => (
+                      <option key={ease} value={ease}>
+                        {t(EASE_LABELS[ease])}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               {effect.type === 'text-callout' && (
                 <label className="flex flex-col gap-1 text-xs text-slate-400">
                   {t('play.animation.textContent')}
@@ -328,7 +335,7 @@ export function AnimationEditorTab() {
                   />
                 </label>
               )}
-              {OVERLAY_EFFECT_TYPES.includes(effect.type) && (
+              {OVERLAY_EFFECT_TYPES.includes(effect.type) && effect.type !== 'custom-script' && (
                 <div className="flex flex-col gap-1 text-xs text-slate-400">
                   {t('play.animation.focusPosition')}
                   <div className="flex gap-1">
@@ -388,6 +395,16 @@ export function AnimationEditorTab() {
                   </div>
                 </label>
               )}
+              {effect.type === 'custom-script' && (
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => setCustomScriptDialogEffectId(effect.id)}
+                  className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/10 px-3 py-1.5 text-sm text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {t('play.animation.customScriptEdit' as TranslationKey)}
+                </button>
+              )}
               <button
                 type="button"
                 disabled={disabled}
@@ -402,66 +419,102 @@ export function AnimationEditorTab() {
                 {t('play.animation.delete')}
               </button>
               </div>
-              {effect.type === 'custom-script' && (
-                  <div className="flex flex-col gap-2 border-t border-slate-800 pt-2">
-                  <div className="rounded-md border border-slate-800 bg-slate-950/60 px-2 py-1.5 text-[11px] text-slate-400">
-                    {t('play.animation.customScriptDraftNote')}
-                  </div>
-                  <label className="flex flex-col gap-1 text-xs text-slate-400">
-                    {t('play.animation.customScriptPrompt')}
-                    <textarea
-                      rows={2}
-                      maxLength={MAX_CUSTOM_SCRIPT_PROMPT_LENGTH}
-                      value={effect.prompt ?? ''}
-                      disabled={disabled}
-                      placeholder={t('play.animation.customScriptPromptPlaceholder')}
-                      onChange={(e) => updateEffect(effect.id, { prompt: e.target.value })}
-                      className="w-full resize-y rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
-                    />
-                  </label>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      disabled={disabled || customScriptBusy || !(effect.prompt ?? '').trim()}
-                      onClick={() => void handleGenerateCustomScriptCode(effect.id, effect.prompt ?? '', effect.code)}
-                      className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/10 px-3 py-1.5 text-sm text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      {customScriptBusyEffectId === effect.id
-                        ? t('play.animation.customScriptGenerateBusy')
-                        : effect.code
-                          ? t('play.animation.customScriptRegenerate')
-                          : t('play.animation.customScriptGenerate')}
-                    </button>
-                    {!effect.code && (
-                      <span className="text-xs text-slate-500">{t('play.animation.customScriptEmpty')}</span>
-                    )}
-                  </div>
-                  <label className="flex flex-col gap-1 text-xs text-slate-400">
-                    <span className="flex items-center justify-between gap-2">
-                      <span>{t('play.animation.customScriptSource' as TranslationKey)}</span>
-                      <span className="text-[11px] text-slate-500">
-                        {(effect.code ?? '').length}/{MAX_CUSTOM_SCRIPT_CODE_LENGTH}
-                      </span>
-                    </span>
-                    <textarea
-                      rows={10}
-                      spellCheck={false}
-                      maxLength={MAX_CUSTOM_SCRIPT_CODE_LENGTH}
-                      value={effect.code ?? ''}
-                      disabled={disabled || customScriptBusyEffectId === effect.id}
-                      placeholder={t('play.animation.customScriptSourcePlaceholder' as TranslationKey)}
-                      onChange={(e) => updateEffect(effect.id, { code: e.target.value })}
-                      className="w-full resize-y rounded-md border border-slate-700 bg-slate-950 px-2 py-2 font-mono text-xs leading-relaxed text-slate-100 disabled:opacity-50"
-                    />
-                    <span className="text-[11px] text-slate-500">
-                      {t('play.animation.customScriptSourceHelp' as TranslationKey)}
-                    </span>
-                  </label>
-                  {effect.code && <CustomScriptPreview effect={effect} />}
-                </div>
-              )}
             </div>
           ))}
+        </div>
+      )}
+
+      {customScriptDialogEffect && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="flex max-h-[90vh] w-full max-w-5xl flex-col rounded-xl border border-slate-700 bg-slate-950 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
+              <div>
+                <div className="text-sm font-semibold text-slate-100">
+                  {t('play.animation.customScriptDialogTitle' as TranslationKey)}
+                </div>
+                <div className="text-xs text-slate-500">{t('play.animation.customScriptDraftNote')}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCustomScriptDialogEffectId(null)}
+                className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
+              >
+                {t('play.animation.customScriptClose' as TranslationKey)}
+              </button>
+            </div>
+            <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto p-4 lg:grid-cols-2">
+              <div className="flex min-h-0 flex-col gap-3">
+                <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  {t('play.animation.customScriptPrompt')}
+                  <textarea
+                    rows={4}
+                    maxLength={MAX_CUSTOM_SCRIPT_PROMPT_LENGTH}
+                    value={customScriptDialogEffect.prompt ?? ''}
+                    disabled={disabled}
+                    placeholder={t('play.animation.customScriptPromptPlaceholder')}
+                    onChange={(e) => updateEffect(customScriptDialogEffect.id, { prompt: e.target.value })}
+                    className="w-full resize-y rounded-md border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-slate-100"
+                  />
+                </label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={disabled || customScriptBusy || !(customScriptDialogEffect.prompt ?? '').trim()}
+                    onClick={() =>
+                      void handleGenerateCustomScriptCode(
+                        customScriptDialogEffect.id,
+                        customScriptDialogEffect.prompt ?? '',
+                        customScriptDialogEffect.code,
+                      )
+                    }
+                    className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/10 px-3 py-1.5 text-sm text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {customScriptBusyEffectId === customScriptDialogEffect.id
+                      ? t('play.animation.customScriptGenerateBusy')
+                      : customScriptDialogEffect.code
+                        ? t('play.animation.customScriptRegenerate')
+                        : t('play.animation.customScriptGenerate')}
+                  </button>
+                  {!customScriptDialogEffect.code && (
+                    <span className="text-xs text-slate-500">{t('play.animation.customScriptEmpty')}</span>
+                  )}
+                </div>
+                <label className="flex min-h-0 flex-1 flex-col gap-1 text-xs text-slate-400">
+                  <span className="flex items-center justify-between gap-2">
+                    <span>{t('play.animation.customScriptSource' as TranslationKey)}</span>
+                    <span className="text-[11px] text-slate-500">
+                      {(customScriptDialogEffect.code ?? '').length}/{MAX_CUSTOM_SCRIPT_CODE_LENGTH}
+                    </span>
+                  </span>
+                  <textarea
+                    rows={16}
+                    spellCheck={false}
+                    maxLength={MAX_CUSTOM_SCRIPT_CODE_LENGTH}
+                    value={customScriptDialogEffect.code ?? ''}
+                    disabled={disabled || customScriptBusyEffectId === customScriptDialogEffect.id}
+                    placeholder={t('play.animation.customScriptSourcePlaceholder' as TranslationKey)}
+                    onChange={(e) => updateEffect(customScriptDialogEffect.id, { code: e.target.value })}
+                    className="min-h-64 w-full flex-1 resize-y rounded-md border border-slate-700 bg-slate-950 px-2 py-2 font-mono text-xs leading-relaxed text-slate-100 disabled:opacity-50"
+                  />
+                  <span className="text-[11px] text-slate-500">
+                    {t('play.animation.customScriptSourceHelp' as TranslationKey)}
+                  </span>
+                </label>
+              </div>
+              <div className="flex min-h-0 flex-col gap-2">
+                <div className="text-xs font-semibold text-slate-400">
+                  {t('play.animation.customScriptPreview' as TranslationKey)}
+                </div>
+                {customScriptDialogEffect.code ? (
+                  <CustomScriptPreview effect={customScriptDialogEffect} />
+                ) : (
+                  <div className="flex h-40 items-center justify-center rounded-md border border-slate-800 bg-slate-950 text-xs text-slate-500">
+                    {t('play.animation.customScriptEmpty')}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

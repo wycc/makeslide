@@ -341,6 +341,10 @@ export const zhTW = {
   'play.animation.customScriptSource': 'JavaScript 原始碼',
   'play.animation.customScriptSourcePlaceholder': 'AI 產生或手動編輯的程式碼，必須定義 window.renderAnimation(root, api)。',
   'play.animation.customScriptSourceHelp': '手動修改會立即更新預覽，並在儲存動畫時寫入設定。請使用 api.onFrame(callback) 與播放時間同步。',
+  'play.animation.customScriptEdit': '編輯動畫',
+  'play.animation.customScriptDialogTitle': 'AI 自訂動畫編輯器',
+  'play.animation.customScriptClose': '關閉',
+  'play.animation.customScriptPreview': '顯示預覽',
   'language.zhTW': '繁體中文',
   'language.en': 'English',
 } as const;
