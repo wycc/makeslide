@@ -7,6 +7,7 @@ import {
   cloneAnimationSpec,
   customScriptDurationSeconds,
   generateFocusEffectsFromTranscript,
+  getFocusEffectParams,
   resolveAnimationSpec,
   resolveStartTriggerSeconds,
 } from "./animationSpec";
@@ -181,6 +182,28 @@ test("resolveAnimationSpec keeps original reference when no startTrigger is pres
     effects: [{ id: "e1", target: "slide" as const, type: "custom-script" as const, start: 4, duration: 2, ease: "none" as const }],
   };
   assert.equal(resolveAnimationSpec(spec, []), spec);
+});
+
+test("getFocusEffectParams defaults custom-script to fill the whole slide ((0,0) ~ (100,100))", () => {
+  const effect = {
+    id: "e1", target: "slide" as const, type: "custom-script" as const, ease: "none" as const, start: 0, duration: 1,
+  };
+  assert.deepEqual(getFocusEffectParams(effect), { xPct: 0, yPct: 0, widthPct: 100, heightPct: 100 });
+});
+
+test("getFocusEffectParams defaults highlight-box/spotlight/text-callout to the 30/30/40/40 focus box", () => {
+  const effect = {
+    id: "e1", target: "slide" as const, type: "highlight-box" as const, ease: "none" as const, start: 0, duration: 1,
+  };
+  assert.deepEqual(getFocusEffectParams(effect), { xPct: 30, yPct: 30, widthPct: 40, heightPct: 40 });
+});
+
+test("getFocusEffectParams respects explicit params even for custom-script", () => {
+  const effect = {
+    id: "e1", target: "slide" as const, type: "custom-script" as const, ease: "none" as const, start: 0, duration: 1,
+    params: { xPct: 10, widthPct: 50 },
+  };
+  assert.deepEqual(getFocusEffectParams(effect), { xPct: 10, yPct: 0, widthPct: 50, heightPct: 100 });
 });
 
 test("resolveAnimationSpec resolves custom-script transcript startTrigger", () => {

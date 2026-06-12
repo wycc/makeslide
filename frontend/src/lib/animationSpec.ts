@@ -57,13 +57,17 @@ export interface FocusEffectParams {
 
 const DEFAULT_FOCUS_PARAMS: FocusEffectParams = { xPct: 30, yPct: 30, widthPct: 40, heightPct: 40 };
 
+/** custom-script 的編輯器未提供位置/大小欄位，預設鋪滿整張投影片（(0,0) ~ (100,100)），讓自訂動畫可使用全部畫面。 */
+const DEFAULT_CUSTOM_SCRIPT_PARAMS: FocusEffectParams = { xPct: 0, yPct: 0, widthPct: 100, heightPct: 100 };
+
 /** Reads an overlay effect's position/size (focus or text-callout), filling in defaults for unset params. */
 export function getFocusEffectParams(effect: SlideAnimationEffect): FocusEffectParams {
+  const defaults = effect.type === 'custom-script' ? DEFAULT_CUSTOM_SCRIPT_PARAMS : DEFAULT_FOCUS_PARAMS;
   return {
-    xPct: effect.params?.xPct ?? DEFAULT_FOCUS_PARAMS.xPct,
-    yPct: effect.params?.yPct ?? DEFAULT_FOCUS_PARAMS.yPct,
-    widthPct: effect.params?.widthPct ?? DEFAULT_FOCUS_PARAMS.widthPct,
-    heightPct: effect.params?.heightPct ?? DEFAULT_FOCUS_PARAMS.heightPct,
+    xPct: effect.params?.xPct ?? defaults.xPct,
+    yPct: effect.params?.yPct ?? defaults.yPct,
+    widthPct: effect.params?.widthPct ?? defaults.widthPct,
+    heightPct: effect.params?.heightPct ?? defaults.heightPct,
   };
 }
 

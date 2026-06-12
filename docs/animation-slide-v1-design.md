@@ -241,7 +241,9 @@ easing 白名單：`none`、`power1.in`、`power1.out`、`power1.inOut`、`power
 `custom-script` 是「使用提示詞生成動畫」（TODO 新功能）的 v1 實作：使用者輸入提示詞，由 LLM 產生一段 JavaScript 原始碼，於 sandboxed `<iframe>` 中執行並疊加顯示，可反覆下提示詞調整直到滿意為止；產生的動畫可與其他效果（包含其他 `custom-script`）一起播放。
 
 ```ts
-// effect.params 同 §5.1（位置與大小，0~100 百分比，未提供時套用預設值 30/30/40/40）
+// effect.params 同 §5.1（位置與大小，0~100 百分比）；編輯器未提供欄位讓使用者調整，
+// 未提供時預設鋪滿整張投影片 (0,0) ~ (100,100)（即 xPct/yPct = 0、widthPct/heightPct = 100），
+// 讓自訂動畫可使用全部畫面，與 §5.1 其他焦點效果的預設值 30/30/40/40 不同。
 {
   xPct?: number;
   yPct?: number;
