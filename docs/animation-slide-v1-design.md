@@ -497,12 +497,14 @@ V1 的「使用提示詞生成動畫」以 `custom-script` 效果交付，重點
 - 程式碼在 `<iframe sandbox="allow-scripts">` 中執行，不含 `allow-same-origin`，並且後端會額外拒絕 `fetch`、`XMLHttpRequest`、`WebSocket`、`import`、`require`、`eval`、`new Function`、storage、cookie、parent/top/frameElement 等高風險 API。
 - 播放時 host 端以音訊 currentTime 為主時鐘，對每個 `custom-script` iframe 送出 `{ type: 'sync', t, playing }`；`t` 是相對該 effect 起始時間的秒數，支援 seek、暫停、重播與和其他 GSAP/overlay 效果一起播放。
 - 編輯器預覽同樣使用 sandbox iframe，以迴圈時間送出 sync 訊息，讓使用者能反覆調整提示詞直到滿意。
+- 編輯器於 `custom-script` 效果下方提供 JavaScript 原始碼編輯器；使用者可在 AI 產生後手動修改 `effect.code`，或直接貼上自寫程式。手動修改會即時更新 sandbox 預覽，並在按「儲存動畫」後與 spec 一起持久化。
 - 若 LLM 產生了不安全或不符合契約的程式，前端顯示可行的重試提示，不會儲存或播放該程式。
 
 手動 QA 建議：
 
 1. 新增 `custom-script` 效果，輸入「用 Canvas 畫出多群資料點移動到二維特徵空間並形成分類邊界」之類提示詞，確認可產生、預覽、儲存、重新整理後保留。
 2. 修改提示詞並重新產生，確認目前列顯示 busy，生成完成後 iframe 重新載入新結果。
-3. 播放、暫停、seek、從頭預覽、換頁再回來，確認動畫時間與音訊一致且不殘留舊 iframe 狀態。
-4. 嘗試要求「用 fetch 載入外部 MNIST」或「使用 localStorage」，確認後端回拒絕訊息且 draft 不被寫入不安全 code。
-5. 確認此 v1 只能模擬 MNIST/embedding/PCA 類視覺過程；真正的 MNIST、ResNet50 embedding 與 PCA 計算需後續資料/模型推論服務。
+3. 在 JavaScript 原始碼編輯器中手動修改顏色、速度或文字，確認預覽即時更新，儲存後重新整理仍保留修改。
+4. 播放、暫停、seek、從頭預覽、換頁再回來，確認動畫時間與音訊一致且不殘留舊 iframe 狀態。
+5. 嘗試要求「用 fetch 載入外部 MNIST」或「使用 localStorage」，確認後端回拒絕訊息且 draft 不被寫入不安全 code。
+6. 確認此 v1 只能模擬 MNIST/embedding/PCA 類視覺過程；真正的 MNIST、ResNet50 embedding 與 PCA 計算需後續資料/模型推論服務。

@@ -338,6 +338,9 @@ export const en = {
   'play.animation.customScriptUnsafe': 'The generated animation used a blocked browser API. Try a safer prompt that uses only Canvas, SVG, DOM, and local JavaScript.',
   'play.animation.customScriptContractError': 'The generated animation did not follow the playback contract. Try regenerating or make the prompt mention window.renderAnimation(root, api) and api.onFrame.',
   'play.animation.customScriptDraftNote': 'Generated code is only a draft until you click “Save animation”. The preview runs in a sandbox and cannot load external datasets or models.',
+  'play.animation.customScriptSource': 'JavaScript source code',
+  'play.animation.customScriptSourcePlaceholder': 'Generated or manually edited code. It must define window.renderAnimation(root, api).',
+  'play.animation.customScriptSourceHelp': 'Manual edits are previewed immediately and saved with the animation spec. Use api.onFrame(callback) to stay synchronized with playback time.',
   'language.zhTW': '繁體中文',
   'language.en': 'English',
 } as const;

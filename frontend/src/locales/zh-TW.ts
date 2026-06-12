@@ -338,6 +338,9 @@ export const zhTW = {
   'play.animation.customScriptUnsafe': '產生的動畫使用了被封鎖的瀏覽器 API。請改用只需要 Canvas、SVG、DOM 與本機 JavaScript 的安全提示詞。',
   'play.animation.customScriptContractError': '產生的動畫不符合播放同步契約。請重新產生，或在提示詞中明確要求定義 window.renderAnimation(root, api) 並使用 api.onFrame。',
   'play.animation.customScriptDraftNote': '產生的程式碼在按下「儲存動畫」前只會保存在草稿中。預覽會在沙箱中執行，不能載入外部資料集或模型。',
+  'play.animation.customScriptSource': 'JavaScript 原始碼',
+  'play.animation.customScriptSourcePlaceholder': 'AI 產生或手動編輯的程式碼，必須定義 window.renderAnimation(root, api)。',
+  'play.animation.customScriptSourceHelp': '手動修改會立即更新預覽，並在儲存動畫時寫入設定。請使用 api.onFrame(callback) 與播放時間同步。',
   'language.zhTW': '繁體中文',
   'language.en': 'English',
 } as const;

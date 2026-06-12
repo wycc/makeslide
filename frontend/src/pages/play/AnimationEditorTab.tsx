@@ -4,6 +4,7 @@ import type { TranslationKey } from '../../i18n';
 import type { SlideAnimationEffect, SlideAnimationEffectType, SlideAnimationEase } from '../../types';
 import {
   DEFAULT_EXIT_DURATION_SECONDS,
+  MAX_CUSTOM_SCRIPT_CODE_LENGTH,
   MAX_CUSTOM_SCRIPT_PROMPT_LENGTH,
   MAX_HINT_LENGTH,
   MAX_SLIDE_ANIMATION_EFFECTS,
@@ -435,6 +436,27 @@ export function AnimationEditorTab() {
                       <span className="text-xs text-slate-500">{t('play.animation.customScriptEmpty')}</span>
                     )}
                   </div>
+                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    <span className="flex items-center justify-between gap-2">
+                      <span>{t('play.animation.customScriptSource' as TranslationKey)}</span>
+                      <span className="text-[11px] text-slate-500">
+                        {(effect.code ?? '').length}/{MAX_CUSTOM_SCRIPT_CODE_LENGTH}
+                      </span>
+                    </span>
+                    <textarea
+                      rows={10}
+                      spellCheck={false}
+                      maxLength={MAX_CUSTOM_SCRIPT_CODE_LENGTH}
+                      value={effect.code ?? ''}
+                      disabled={disabled || customScriptBusyEffectId === effect.id}
+                      placeholder={t('play.animation.customScriptSourcePlaceholder' as TranslationKey)}
+                      onChange={(e) => updateEffect(effect.id, { code: e.target.value })}
+                      className="w-full resize-y rounded-md border border-slate-700 bg-slate-950 px-2 py-2 font-mono text-xs leading-relaxed text-slate-100 disabled:opacity-50"
+                    />
+                    <span className="text-[11px] text-slate-500">
+                      {t('play.animation.customScriptSourceHelp' as TranslationKey)}
+                    </span>
+                  </label>
                   {effect.code && <CustomScriptPreview effect={effect} />}
                 </div>
               )}
