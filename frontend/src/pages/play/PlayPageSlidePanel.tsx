@@ -361,7 +361,7 @@ export function PlayPageSlidePanel() {
           aria-label="進度條"
         />
         <div className="order-3 w-[5.25rem] shrink-0 whitespace-nowrap text-right font-mono text-[11px] text-slate-300 sm:order-none sm:w-24 sm:text-xs">
-          {formatTime(currentTime)} / {formatTime(duration)}
+          {formatTime(Math.min(currentTime, duration))} / {formatTime(duration)}
         </div>
       </div>
       <div className={transcriptFocusMode ? 'hidden' : 'rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300'}>
