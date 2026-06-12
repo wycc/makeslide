@@ -860,3 +860,4 @@
 [x] 重新確認 master TODO.md 無未完成項目並更新工作記錄（完成於分支: feature/todo-no-pending-recheck-20260612-2345）
 [x] 重新確認 master TODO.md 無未完成項目並更新工作記錄（完成於分支: feature/todo-no-pending-recheck-20260613-0010）
 [x] 重新確認 master TODO.md 無未完成項目並更新工作記錄（完成於分支: feature/todo-no-pending-recheck-20260613-0035）
+[ ] 新增一個使用提示詞生成動畫的功能，這個功能會直接生成 javascript 程式在 UI 上展示一個複雜的動畫。例如載人 MNIST 資料集並使用 resnet50 產生 embeeding 並使用 PCA 顯示二維的特徵點。顯示數字轉換成點並跑到特徵空間中的位置形成一個分類器的過程。進入這個畫面可以反覆的下提示詞調整結果直到滿意為止。這個動畫可以和其它動畫一起被播放。
