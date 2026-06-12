@@ -721,5 +721,11 @@
 [ ] 除了焦點以外，也可以生成一張小圖或文字做為動畫內容。
 [ ] 加上手動在逐字稿加上動畫指引的功能，這個指引會在生成動畫時傳給 LLM 做參考。
 [ ] 提供多種焦點的功能，例如紅框或 spotlight或引言(圖)
-[ ] 加上動畫開始時間由逐字稿向前秒數指定的功能
+[x] 加上動畫開始時間由逐字稿向前秒數指定的功能（完成於分支: feature/animation-start-offset-20260612）
 [x] 在 upload TXT 時也要加上 host mode 選項（完成於分支: feature/import-text-host-mode-20260612）
+
+## 工作記錄
+
+- 時間: 2026-06-12 11:18:00 +0800
+- 分支: feature/animation-start-offset-20260612
+- 內容: 完成「加上動畫開始時間由逐字稿向前秒數指定的功能」。延續 `feature/animation-transcript-line-sync-20260612` 的 `effect.startTrigger = { type: 'transcript-line', line }`，新增選填欄位 `offsetSeconds`（0~60，秒），讓動畫效果可在對應逐字稿句子開始前 N 秒提前觸發。後端 `backend/src/services/pageAnimation.ts` 的 `StartTriggerSchema` 新增 `offsetSeconds: z.number().min(0).max(60).optional()` 並更新 `AnimationStartTrigger` 型別；前端 `frontend/src/types.ts` 同步新增該欄位。前端 `frontend/src/lib/animationSpec.ts` 新增共用函式 `resolveStartTriggerSeconds(startTrigger, sentenceTimeline)`（= `sentenceTimeline[line].start - (offsetSeconds ?? 0)`，下限 0），`resolveAnimationSpec()` 與「依秒數/依逐字稿句子」模式切換皆改用此函式。`AnimationEditorTab.tsx` 在「依逐字稿句子」模式下新增「提前秒數」數字輸入框，並更新「預估開始」秒數顯示。新增中英文 i18n 鍵 `play.animation.startOffsetSeconds`。並更新設計文件 `docs/animation-slide-v1-design.md` §4.3、§7.1 與檔頭擴充註記。驗證：後端新增/調整 `backend/test/page-animation.test.ts`（含 `offsetSeconds` 驗證與 PUT/GET API 往返保留），`npx tsx --test test/page-animation.test.ts`（Node v22.12.0）17 項全數通過；`npm test` 61 測試 43 通過/18 失敗，失敗數與既有認證基線相同，無新增失敗；前後端 `npx tsc --noEmit` 與 `npx vite build` 皆通過。
