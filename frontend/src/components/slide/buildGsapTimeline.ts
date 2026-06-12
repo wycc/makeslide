@@ -70,7 +70,12 @@ export function buildGsapTimeline(stage: HTMLElement, spec: SlideAnimationSpec):
       case 'custom-script': {
         const overlay = stage.querySelector<HTMLElement>(`[data-effect-id="${effect.id}"]`);
         if (overlay) {
-          tl.fromTo(overlay, { autoAlpha: 0 }, { autoAlpha: 1, ...common }, effect.start);
+          if (effect.type === 'custom-script') {
+            // custom-script 不套用淡入：自訂動畫應從一開始就完全可見，由其內部腳本自行控制畫面呈現。
+            tl.set(overlay, { autoAlpha: 1 }, effect.start);
+          } else {
+            tl.fromTo(overlay, { autoAlpha: 0 }, { autoAlpha: 1, ...common }, effect.start);
+          }
           if (effect.exitDuration !== undefined) {
             tl.to(overlay, { autoAlpha: 0, ...common }, effect.start + effect.duration + effect.exitDuration);
           }

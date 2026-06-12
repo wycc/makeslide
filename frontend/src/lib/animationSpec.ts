@@ -182,7 +182,7 @@ function utf8ToBase64(input: string): string {
 
 /**
  * Total seconds a `custom-script` effect's sandboxed iframe stays visible:
- * its fade-in (`duration`) plus any hold time before auto-exit
+ * its configured `duration` plus any hold time before auto-exit
  * (`exitDuration`). Passed into the sandbox as `api.duration` so generated
  * code can compute playback progress from the user's configured timing
  * instead of guessing its own animation length.
@@ -218,8 +218,9 @@ export function animationTimelineDurationSeconds(spec: SlideAnimationSpec | null
  * playback length in seconds (see `customScriptDurationSeconds`), and
  * `api.onFrame(cb)` registers a callback invoked with `{ t, playing }`
  * whenever the host posts a `{ type: 'sync', t, playing }` message (`t` =
- * seconds since this effect's fade-in began). `code` is base64-encoded so it
- * can be embedded verbatim without any HTML/script-tag escaping concerns.
+ * seconds since this effect started, i.e. `effect.start`). `code` is
+ * base64-encoded so it can be embedded verbatim without any HTML/script-tag
+ * escaping concerns.
  *
  * `MANIM_HELPER_SCRIPT` runs first and defines `window.Manim`, a small
  * manim-inspired helper library (coordinate system, color palette, rate

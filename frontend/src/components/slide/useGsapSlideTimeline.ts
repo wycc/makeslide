@@ -106,7 +106,7 @@ export function useGsapSlideTimeline({
   }, [currentTime]);
 
   // 將目前播放時間/狀態同步給每個 custom-script 效果的 sandboxed iframe，
-  // 讓其內部動畫可依 `t`（自該效果淡入起算的秒數）更新畫面。
+  // 讓其內部動畫可依 `t`（自該效果開始 effect.start 起算的秒數）更新畫面。
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage || !spec) return;

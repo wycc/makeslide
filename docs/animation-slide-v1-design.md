@@ -175,7 +175,7 @@ interface AnimationSpec {
 | highlight-box | 於指定區域淡入一個紅色外框，提示焦點 | opacity: 0 → 1 |
 | spotlight | 於指定區域外淡入半透明黑色遮罩，聚焦該區域 | opacity: 0 → 1 |
 | text-callout | 於指定區域淡入一個文字說明框 | opacity: 0 → 1，文字內容見 `effect.text` |
-| custom-script | 於指定區域淡入一個由 AI 依提示詞產生的自訂 JavaScript 動畫（sandboxed iframe） | opacity: 0 → 1，程式碼見 `effect.code`，詳見 §5.4 |
+| custom-script | 於指定區域立即顯示一個由 AI 依提示詞產生的自訂 JavaScript 動畫（sandboxed iframe），不套用淡入 | opacity: 直接設為 1（無淡入過渡），程式碼見 `effect.code`，詳見 §5.4 |
 
 easing 白名單：`none`、`power1.in`、`power1.out`、`power1.inOut`、`power2.inOut`。
 
@@ -267,7 +267,7 @@ easing 白名單：`none`、`power1.in`、`power1.out`、`power1.inOut`、`power
 - `root`：一個已設定好寬高的 `<div id="root">`，產生的視覺內容（canvas / svg / DOM）應加入此元素。
 - `api.duration`：這個效果的總長度（秒，數字）＝ `effect.duration + (effect.exitDuration ?? 0)`，由使用者在編輯器中設定，由 host 端注入（嵌入 `srcDoc` 時的常數），並非由產生的程式碼自行假設。
 - `api.onFrame(callback)`：註冊回呼，每當收到 host 端的 `{ type: 'sync', t, playing }` postMessage 時被呼叫：
-  - `t`：自此效果淡入開始（`effect.start`）起算的秒數，下限 0。
+  - `t`：自此效果開始（`effect.start`）起算的秒數，下限 0。
   - `playing`：投影片目前是否在播放。
   - 回呼應以 `Math.min(t / api.duration, 1)` 計算 0~1 進度並重繪畫面，讓動畫在 `t: 0 → api.duration` 期間播放「一輪」；達到 1 後維持最終畫面（不重置/不循環），之後效果整體依 `exitDuration`（§5.3）淡出消失。回呼也需能承受 `t` 變小（倒退/重播）而正確重算畫面。
 
@@ -296,7 +296,7 @@ easing 白名單：`none`、`power1.in`、`power1.out`、`power1.inOut`、`power
 **播放同步**
 
 - 實際播放時，`useGsapSlideTimeline.ts` 新增一個 effect：每當 `currentTime`/`isPlaying`/`spec`/`pageKey` 變化，對每個 `custom-script` 效果的 iframe `contentWindow` 送出 `{ type: 'sync', t: max(0, currentTime - effect.start), playing: isPlaying }`。
-- `EffectOverlay`（`SlideRenderer.tsx`）渲染方式與其他 `OVERLAY_EFFECT_TYPES` 相同（`data-effect-id`、位置/大小取自 `getFocusEffectParams`、淡入淡出沿用 §5.3 的 `exitDuration` 機制），差異僅在內容是一個 `<iframe sandbox="allow-scripts" srcDoc={buildCustomScriptSandboxDoc(effect.code, customScriptDurationSeconds(effect))} />`。
+- `EffectOverlay`（`SlideRenderer.tsx`）渲染方式與其他 `OVERLAY_EFFECT_TYPES` 相同（`data-effect-id`、位置/大小取自 `getFocusEffectParams`），內容是一個 `<iframe sandbox="allow-scripts" srcDoc={buildCustomScriptSandboxDoc(effect.code, customScriptDurationSeconds(effect))} />`。**差異**：custom-script 不套用 §5.1 的淡入效果——`buildGsapTimeline.ts` 在 `effect.start` 以 `tl.set(overlay, { autoAlpha: 1 }, effect.start)` 直接顯示（無 0→1 過渡），讓自訂動畫從一開始即完全可見、由其內部腳本自行控制畫面呈現；若設定 `exitDuration`，仍依 §5.3 在 `start + duration + exitDuration` 淡出。
 
 **AI 產生/迭代**
 
