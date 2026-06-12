@@ -71,7 +71,8 @@ makeslide 一鍵啟動腳本
   4. 若無 .env 則從 .env.example 複製並暫停等待編輯
   5. 建立 storage/、data/ 目錄
   6. 必要時執行 npm install
-  7. all 模式：frontend build 後由 backend（production static）同一 port 對外
+  7. 啟動前若偵測到指定 port 已被佔用，會嘗試終止該程序以釋放 port
+  8. all 模式：frontend build 後由 backend（production static）同一 port 對外
 
 範例：
   ./start.sh                       # 一般啟動
@@ -286,6 +287,56 @@ if [[ "$need_install" -eq 1 ]]; then
   npm install
 else
   log_info "依賴已是最新（跳過 npm install；用 --install 強制重裝）"
+fi
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Step 6.5: 釋放已被佔用的 port
+# ──────────────────────────────────────────────────────────────────────────────
+log_step "檢查 port $PORT 是否已被佔用"
+
+find_pids_on_port() {
+  local port="$1"
+  local pids=""
+
+  if command -v lsof >/dev/null 2>&1; then
+    pids="$(lsof -ti tcp:"$port" -sTCP:LISTEN 2>/dev/null || true)"
+  fi
+
+  if [[ -z "$pids" ]] && command -v fuser >/dev/null 2>&1; then
+    pids="$(fuser "${port}/tcp" 2>/dev/null | grep -oE '[0-9]+' || true)"
+  fi
+
+  if [[ -z "$pids" ]] && command -v ss >/dev/null 2>&1; then
+    pids="$(ss -ltnp "sport = :$port" 2>/dev/null | grep -oP 'pid=\K[0-9]+' || true)"
+  fi
+
+  printf '%s\n' "$pids" | sort -u | grep -v '^$' || true
+}
+
+PIDS_ON_PORT="$(find_pids_on_port "$PORT")"
+if [[ -n "$PIDS_ON_PORT" ]]; then
+  log_warn "Port $PORT 已被下列程序佔用，將終止以釋放：$(tr '\n' ' ' <<< "$PIDS_ON_PORT")"
+  while IFS= read -r pid; do
+    [[ -n "$pid" ]] || continue
+    kill -TERM "$pid" 2>/dev/null || true
+  done <<< "$PIDS_ON_PORT"
+
+  for _ in 1 2 3 4 5; do
+    PIDS_ON_PORT="$(find_pids_on_port "$PORT")"
+    [[ -z "$PIDS_ON_PORT" ]] && break
+    sleep 1
+  done
+
+  PIDS_ON_PORT="$(find_pids_on_port "$PORT")"
+  if [[ -n "$PIDS_ON_PORT" ]]; then
+    log_warn "程序仍未結束，強制終止：$(tr '\n' ' ' <<< "$PIDS_ON_PORT")"
+    while IFS= read -r pid; do
+      [[ -n "$pid" ]] || continue
+      kill -KILL "$pid" 2>/dev/null || true
+    done <<< "$PIDS_ON_PORT"
+  fi
+else
+  log_info "Port $PORT 未被佔用"
 fi
 
 # ──────────────────────────────────────────────────────────────────────────────
