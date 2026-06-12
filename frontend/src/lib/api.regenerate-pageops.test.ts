@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ApiError, moveSlide, rollbackRegenerate, startRegenerateJob } from './api';
+import { ApiError, generateCustomScriptCode, moveSlide, rollbackRegenerate, startRegenerateJob } from './api';
 
 type MockResp = {
   ok: boolean;
@@ -75,6 +75,30 @@ test('rollbackRegenerate should throw ApiError on snapshot-not-found', async () 
         return true;
       },
     );
+  } finally {
+    globalThis.fetch = prevFetch;
+  }
+});
+
+test('generateCustomScriptCode should call root API route from nested play pages', async () => {
+  const calls: Array<{ input: unknown; init: RequestInit | undefined }> = [];
+  const prevFetch = globalThis.fetch;
+  globalThis.fetch = ((async (input: unknown, init?: RequestInit): Promise<MockResp> => {
+    calls.push({ input, init });
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ code: 'window.renderAnimation = function (root, api) { api.onFrame(function () {}); };' }),
+    };
+  }) as unknown) as typeof fetch;
+
+  try {
+    const result = await generateCustomScriptCode('deck/with slash', 3, { prompt: '畫資料點動畫', previousCode: 'old code' });
+    assert.match(result.code, /renderAnimation/);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0]?.input, '/api/pdfs/deck%2Fwith%20slash/pages/3/animation/custom-script');
+    assert.equal(calls[0]?.init?.method, 'POST');
+    assert.equal(calls[0]?.init?.body, JSON.stringify({ prompt: '畫資料點動畫', previousCode: 'old code' }));
   } finally {
     globalThis.fetch = prevFetch;
   }

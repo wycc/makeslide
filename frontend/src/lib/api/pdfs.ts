@@ -81,7 +81,7 @@ export async function fetchPageAnimation(
 ): Promise<PageAnimationResponse> {
   const token = shareToken?.trim();
   const suffix = token ? `?share=${encodeURIComponent(token)}` : '';
-  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/animation${suffix}`);
+  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/animation${suffix}`);
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as PageAnimationResponse;
 }
@@ -98,7 +98,7 @@ export async function savePageAnimation(
   pageNumber: number,
   spec: SlideAnimationSpec,
 ): Promise<SavePageAnimationResponse> {
-  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/animation`, {
+  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/animation`, {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ spec }),
@@ -117,7 +117,7 @@ export async function generateAiFocusEffects(
   pageNumber: number,
   body: { sentences: string[]; hints?: Record<string, string> },
 ): Promise<GenerateAiFocusEffectsResponse> {
-  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/animation/auto-focus-ai`, {
+  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/animation/auto-focus-ai`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
@@ -136,7 +136,7 @@ export async function generateCustomScriptCode(
   pageNumber: number,
   body: { prompt: string; previousCode?: string },
 ): Promise<GenerateCustomScriptCodeResponse> {
-  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/animation/custom-script`, {
+  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/animation/custom-script`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
