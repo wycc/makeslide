@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { z } from 'zod';
+import type { ChatCompletionContentPart } from 'openai/resources/chat/completions';
 import { callChatJSON } from './openai';
 import type { AnimationEffect, AnimationEffectType } from './pageAnimation';
 
@@ -43,10 +44,11 @@ function buildAutoFocusSystemPrompt(): string {
     '',
     '你的任務：針對使用者提供的每一句逐字稿（依索引 0 到 N-1），判斷：',
     '1. show：是否需要在播放到這句時顯示焦點方框。只有當這句明確提到畫面中的具體位置、物件、數據、圖表或重點文字時才顯示；單純的開場、總結、銜接句通常不需要，請避免每句都顯示。',
-    '2. -boxtype：highlight（醒目方框，框出重點）或 spotlight（聚光燈，方框外區域變暗）。沒有特別理由時優先選 highlight。',
+    '2. type：highlight-box（醒目方框，框出重點）或 spotlight（聚光燈，方框外區域變暗）。沒有特別理由時優先選 highlight-box。',
     '3. xPct / yPct / widthPct / heightPct：方框左上角座標與寬高，皆為投影片寬高的百分比（0-100）。請依該句描述的內容，盡量對應到畫面中合理的位置與大小，避免每句都用同一個位置。',
     '4. exitDuration（選填，秒）：方框淡入完成後要停留多久才自動淡出。如果這句只是短暫提示某個重點，可設定 1-3 秒；如果整句都在說明這個重點，可以設定一個比較長的時間。',
     '',
+    '若使用者訊息附帶投影片頁面圖片，請參考圖片中的實際版面（文字、圖表、圖片等元素的位置與大小），讓 xPct/yPct/widthPct/heightPct 盡量對應到畫面中真實的區域；若沒有附帶圖片，則依文字描述合理推估。',
     '座標系統：投影片左上角為原點 (0,0)，x 向右增加、y 向下增加，皆為 0-100 的百分比。',
     'show 為 false 時，其他欄位可省略。',
     '',
@@ -126,15 +128,29 @@ export function mapAutoFocusResponseToEffects(response: AutoFocusAiResponse, sen
  * Asks the configured LLM to decide, per transcript sentence, whether to show
  * a focus effect and where/how long, then maps the response to
  * `AnimationEffect[]`. Returns `[]` without calling the LLM if `sentences` is empty.
+ *
+ * When `imageDataUrl` is provided (a `data:image/...` URL of the rendered page),
+ * it is attached to the user message so vision-capable models can determine
+ * more accurate positions/sizes. Falls back to text-only when omitted (also
+ * note: the Gemini provider currently strips non-text content parts, so the
+ * image is only actually used when `LLM_PROVIDER=openai`).
  */
 export async function generateAiFocusEffects(params: {
   pageText: string;
   sentences: string[];
   hints?: Record<string, string>;
+  imageDataUrl?: string | null;
   label: string;
 }): Promise<AnimationEffect[]> {
   const limit = Math.min(params.sentences.length, MAX_SENTENCES_FOR_AI);
   if (limit === 0) return [];
+  const userText = buildAutoFocusUserPrompt({ pageText: params.pageText, sentences: params.sentences, hints: params.hints });
+  const userContent: string | ChatCompletionContentPart[] = params.imageDataUrl
+    ? [
+        { type: 'image_url', image_url: { url: params.imageDataUrl, detail: 'high' } },
+        { type: 'text', text: userText },
+      ]
+    : userText;
   const result = await callChatJSON({
     label: params.label,
     schema: AutoFocusAiResponseSchema,
@@ -142,10 +158,7 @@ export async function generateAiFocusEffects(params: {
     temperature: 0.4,
     messages: [
       { role: 'system', content: buildAutoFocusSystemPrompt() },
-      {
-        role: 'user',
-        content: buildAutoFocusUserPrompt({ pageText: params.pageText, sentences: params.sentences, hints: params.hints }),
-      },
+      { role: 'user', content: userContent },
     ],
   });
   return mapAutoFocusResponseToEffects(result.data, limit);

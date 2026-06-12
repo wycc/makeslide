@@ -370,7 +370,7 @@ Props：`renderType`、`src`（由呼叫端算好，含 displayedImageSrc 防閃
 行為：
 
 - 點擊後呼叫 `POST /api/pdfs/:id/pages/:n/animation/auto-focus-ai`（`generateAiFocusEffects`，`frontend/src/lib/api/pdfs.ts`），帶入 `{ sentences: pageSentences, hints: draft.hints }`。
-- 後端（`backend/src/services/animationAutoFocus.ts`）讀取本頁 OCR 文字（`text_path`）與請求中的逐字稿句子、`hints`，組成提示詞，透過 `callChatJSON`（沿用 `LLM_PROVIDER`/`openaiLlmModel`/`geminiLlmModel` 設定，文字輸入、不含圖片）請 LLM 針對每句（最多 `MAX_SLIDE_ANIMATION_EFFECTS` = 20 句）回傳：
+- 後端（`backend/src/routes/pdfs/page-animation.ts`）讀取本頁 OCR 文字（`text_path`）與本頁渲染圖片（`image_path`，縮小至 `OPENAI_SCRIPT_IMAGE_MAX_WIDTH`、轉 JPEG base64，沿用 `generateScript` 的縮圖設定；讀取失敗則回退為純文字，不中斷）；連同請求中的逐字稿句子、`hints` 一起傳入 `generateAiFocusEffects`（`backend/src/services/animationAutoFocus.ts`）組成提示詞，透過 `callChatJSON`（沿用 `LLM_PROVIDER`/`openaiLlmModel`/`geminiLlmModel` 設定）請 LLM 針對每句（最多 `MAX_SLIDE_ANIMATION_EFFECTS` = 20 句）回傳：
   - `show`：是否顯示焦點方框。
   - `type`：`highlight-box` 或 `spotlight`。
   - `xPct`/`yPct`/`widthPct`/`heightPct`：方框位置與大小（百分比，0-100）。
@@ -380,6 +380,7 @@ Props：`renderType`、`src`（由呼叫端算好，含 displayedImageSrc 防閃
 - 本頁尚無逐字稿時按鈕停用，提示文字沿用「本頁尚無逐字稿」（`play.animation.noTranscript`）。
 - 產生後仍是一般 `draft.effects`，可於效果清單中個別調整，並需按「儲存動畫」才會持久化。
 - v1 範圍：僅產生 `highlight-box`/`spotlight` 焦點效果；`text-callout`（含文字內容）與其他效果類型的 AI 生成留待後續版本（見 §12）。
+- 圖片輸入：提示詞會說明「若附帶投影片頁面圖片，請參考圖片中的實際版面決定座標」，讓 `xPct`/`yPct`/`widthPct`/`heightPct` 更貼近畫面實際內容；圖片僅在 `LLM_PROVIDER=openai`（預設）時實際送出——Gemini 路徑（`callGeminiJson`/`normalizeMessages`）目前會將非文字內容部分一律替換為 `'[image]'` 占位字串，與 `generateScript` 的既有限制相同，留待後續一併處理。
 
 ## 8. Backend API
 

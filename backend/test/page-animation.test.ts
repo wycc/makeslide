@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import sharp from 'sharp';
 import { buildApp } from '../src/server';
 import { db } from '../src/db';
 import { config } from '../src/config';
@@ -533,6 +534,61 @@ test('POST animation/auto-focus-ai returns AI-generated effects mapped from sent
 
     const validated = validateAnimationSpec({ version: 1, enabled: true, effects: body.effects });
     assert.equal(validated.ok, true);
+  } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+  }
+});
+
+test('POST animation/auto-focus-ai attaches the page image as vision input when available', async () => {
+  seedAnimationPdf(PDF_ID, 1);
+  fs.writeFileSync(path.join(config.storageRoot, PDF_ID, 'pages', 'animuid1.text.txt'), '頁面標題\n圖表顯示營收成長', 'utf8');
+  const jpeg = await sharp({ create: { width: 8, height: 8, channels: 3, background: { r: 255, g: 0, b: 0 } } })
+    .jpeg()
+    .toBuffer();
+  fs.writeFileSync(path.join(config.storageRoot, PDF_ID, 'pages', 'animuid1.jpg'), jpeg);
+
+  let capturedMessages: Array<{ role: string; content: unknown }> | undefined;
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async (body: unknown) => {
+          capturedMessages = (body as { messages: Array<{ role: string; content: unknown }> }).messages;
+          return {
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    effects: [{ line: 0, show: true, type: 'spotlight', xPct: 5, yPct: 5, widthPct: 20, heightPct: 20 }],
+                  }),
+                },
+                finish_reason: 'stop',
+              },
+            ],
+            usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+          };
+        },
+      },
+    },
+  } as never);
+
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${PDF_ID}/pages/1/animation/auto-focus-ai`,
+      headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+      payload: { sentences: ['請看這張圖表的營收成長。'] },
+    });
+    assert.equal(resp.statusCode, 200);
+
+    const userMessage = capturedMessages?.find((m) => m.role === 'user');
+    const parts = userMessage?.content as Array<{ type: string; image_url?: { url: string } }> | undefined;
+    assert.ok(Array.isArray(parts));
+    const imagePart = parts.find((p) => p.type === 'image_url');
+    assert.ok(imagePart);
+    assert.match(imagePart!.image_url!.url, /^data:image\/jpeg;base64,/);
+    assert.ok(parts.some((p) => p.type === 'text'));
   } finally {
     setOpenAIClientForTest(null);
     await app.close();
