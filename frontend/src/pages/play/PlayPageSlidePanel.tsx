@@ -14,6 +14,7 @@ export function PlayPageSlidePanel() {
     detail,
     displayedImageSrc,
     isPlaying, playPause,
+    slideAnimationPlaying,
     currentTime, duration,
     finished,
     playbackRate, setPlaybackRate,
@@ -134,7 +135,7 @@ export function PlayPageSlidePanel() {
               spec={currentAnimationSpec}
               pageKey={`${pdfId ?? ''}:${currentPage?.page_number ?? 0}`}
               currentTime={currentTime}
-              isPlaying={isPlaying}
+              isPlaying={slideAnimationPlaying}
               playbackRate={playbackRate}
               onAnimationError={() => setAnimationWarning(t('play.animation.runtimeWarning'))}
               wrapperClassName="relative inline-block rounded-lg"

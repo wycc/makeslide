@@ -21,7 +21,7 @@ import {
   updatePlaybackSyncState,
   type ShareAccessMode,
 } from '../lib/api';
-import { resolveAnimationSpec } from '../lib/animationSpec';
+import { animationTimelineDurationSeconds, resolveAnimationSpec } from '../lib/animationSpec';
 import { splitScriptIntoSentences, buildSentenceTimeline } from '../lib/subtitles';
 import { type DrawingCanvasHandle, type DrawingData, type DrawingStroke } from '../components/DrawingCanvas';
 import { useVersionHistory } from './play/useVersionHistory';
@@ -212,6 +212,11 @@ export default function PlayPage() {
     audio.playbackRate = playbackRate;
     window.localStorage.setItem('makeslide.playback_speed', String(playbackRate));
   }, [playbackRate]);
+  // 動畫長度若超過語音長度，handleEnded 會延後切頁，等動畫播完再切換；
+  // 用 ref 暫存最新的動畫總長，避免 handleEnded 的宣告順序受 currentAnimationSpec TDZ 影響。
+  const animationDurationSecondsRef = useRef(0);
+  const pendingPageExtendTimerRef = useRef<number | null>(null);
+  const [isExtendingAnimation, setIsExtendingAnimation] = useState(false);
   useEffect(() => {
     const onStorageChanged = () => {
       setShowSubtitle(getStoredShowSubtitle());
@@ -285,6 +290,16 @@ export default function PlayPage() {
       window.clearTimeout(audioRetryTimerRef.current);
       audioRetryTimerRef.current = null;
     }
+  }, []);
+
+  // 取消「動畫長度超過語音長度」時延後切頁的計時器；換頁／拖動進度條／手動暫停時呼叫，
+  // 避免計時器在使用者已離開該頁後才觸發切頁。
+  const clearPendingPageExtend = useCallback(() => {
+    if (pendingPageExtendTimerRef.current != null) {
+      window.clearTimeout(pendingPageExtendTimerRef.current);
+      pendingPageExtendTimerRef.current = null;
+    }
+    setIsExtendingAnimation(false);
   }, []);
 
   const scheduleAudioReload = useCallback(
@@ -650,6 +665,12 @@ export default function PlayPage() {
   const playPause = useCallback(() => {
     if (syncEnabled && syncRole !== 'master') return;
     setPlayQrCodeUrl(null);
+    if (isExtendingAnimation) {
+      // 語音已播畢、動畫仍在延長播放中：使用者按下播放/暫停視為提前結束延長，
+      // 取消自動切頁計時器，動畫停在目前畫面，等待使用者手動操作。
+      clearPendingPageExtend();
+      return;
+    }
     const audio = audioRef.current;
     if (!audio) return;
     if (classroomMode && classroomAwaitingNext && currentIdx < totalPages - 1) {
@@ -664,23 +685,25 @@ export default function PlayPage() {
     } else {
       audio.pause();
     }
-  }, [classroomAwaitingNext, classroomMode, currentIdx, syncEnabled, syncRole, totalPages]);
+  }, [classroomAwaitingNext, classroomMode, currentIdx, syncEnabled, syncRole, totalPages, isExtendingAnimation, clearPendingPageExtend]);
 
   const goPrev = useCallback(() => {
     if (syncEnabled && syncRole !== 'master') return;
     setPlayQrCodeUrl(null);
     setClassroomAwaitingNext(false);
     setFinished(false);
+    clearPendingPageExtend();
     setCurrentIdx((i) => Math.max(0, i - 1));
-  }, [syncEnabled, syncRole]);
+  }, [syncEnabled, syncRole, clearPendingPageExtend]);
 
   const goNext = useCallback(() => {
     if (syncEnabled && syncRole !== 'master') return;
     setPlayQrCodeUrl(null);
     setClassroomAwaitingNext(false);
     setFinished(false);
+    clearPendingPageExtend();
     setCurrentIdx((i) => Math.min(totalPages - 1, i + 1));
-  }, [syncEnabled, syncRole, totalPages]);
+  }, [syncEnabled, syncRole, totalPages, clearPendingPageExtend]);
 
   // usePagePolls 必須在 handleEnded 之前宣告，以避免 TDZ 問題
   const pollState = usePagePolls({
@@ -710,8 +733,9 @@ export default function PlayPage() {
   // 跨領域協調：同時觸及 pollState（usePage Polls）、playback state（isPlaying/currentIdx/finished）
   // 以及 classroomMode/interactiveMode 全域開關，三個領域在同一個回呼中依序決策，
   // 任何一個領域都無法獨自持有完整的 if/else 邏輯。
-  const handleEnded = useCallback(() => {
-    setIsPlaying(false);
+  // 拆成 runPageEndedAdvance：實際切頁／結束的邏輯，可在語音結束時立即執行，
+  // 也可在動畫比語音長時，等動畫播完才延後執行。
+  const runPageEndedAdvance = useCallback(() => {
     if (interactiveMode) {
       if (pollState.pagePolls.length > 0) {
         // 當頁有投票：啟動 poll，停在此頁等待互動
@@ -749,16 +773,40 @@ export default function PlayPage() {
     }
   }, [classroomMode, interactiveMode, pollState.pagePolls.length, currentIdx, totalPages]);
 
+  const handleEnded = useCallback(() => {
+    setIsPlaying(false);
+    // 動畫的總長若超過語音長度，先延長本頁顯示時間（讓 GSAP timeline 播完），
+    // 等動畫實際播完後才執行切頁／結束等後續動作。
+    const extraSeconds = animationDurationSecondsRef.current - duration;
+    const rate = playbackRateRef.current > 0 ? playbackRateRef.current : 1;
+    if (Number.isFinite(extraSeconds) && extraSeconds > 0.05) {
+      setIsExtendingAnimation(true);
+      pendingPageExtendTimerRef.current = window.setTimeout(() => {
+        pendingPageExtendTimerRef.current = null;
+        setIsExtendingAnimation(false);
+        runPageEndedAdvance();
+      }, (extraSeconds / rate) * 1000);
+      return;
+    }
+    runPageEndedAdvance();
+  }, [duration, runPageEndedAdvance]);
+
   const handleSeek = useCallback(
     (ev: React.ChangeEvent<HTMLInputElement>) => {
       if (syncEnabled && syncRole !== 'master') return;
       const audio = audioRef.current;
       if (!audio || !Number.isFinite(duration) || duration <= 0) return;
+      clearPendingPageExtend();
       const ratio = Number(ev.target.value) / 1000;
       audio.currentTime = ratio * duration;
     },
-    [duration, syncEnabled, syncRole],
+    [duration, syncEnabled, syncRole, clearPendingPageExtend],
   );
+
+  // 換頁或卸載時，取消尚未觸發的延長切頁計時器，避免在已離開的頁面上執行切頁。
+  useEffect(() => {
+    return () => clearPendingPageExtend();
+  }, [currentIdx, clearPendingPageExtend]);
 
   useEffect(() => {
     if (!pdfId) return;
@@ -1479,6 +1527,14 @@ export default function PlayPage() {
     () => resolveAnimationSpec(rawAnimationSpec, sentenceTimeline),
     [rawAnimationSpec, sentenceTimeline],
   );
+  // 動畫總長：若超過語音長度，handleEnded 會延後切頁直到動畫播完。
+  const animationDurationSeconds = useMemo(
+    () => animationTimelineDurationSeconds(currentAnimationSpec),
+    [currentAnimationSpec],
+  );
+  useEffect(() => {
+    animationDurationSecondsRef.current = animationDurationSeconds;
+  }, [animationDurationSeconds]);
   const { handleSaveAnimation } = animationState;
   // 從頭預覽：先儲存（確保重整後一致），再把音訊歸零播放；timeline 由 currentTime 漂移校正自動跳回 0
   const handlePreviewAnimation = useCallback(() => {
@@ -1761,6 +1817,9 @@ export default function PlayPage() {
     playbackRate, setPlaybackRate, showSubtitle, setShowSubtitle,
     playbackSettingsOpen, setPlaybackSettingsOpen, followerAudioUnlocked, setFollowerAudioUnlocked,
     scripts, setScripts, displayedImageSrc, setDisplayedImageSrc,
+    // 動畫長度超過語音長度時，語音已結束但動畫仍需繼續播放至完成
+    isExtendingAnimation,
+    slideAnimationPlaying: isPlaying || isExtendingAnimation,
     // playback actions
     playPause, goPrev, goNext, handleEnded, handleSeek, scheduleAudioReload, clearAudioRetryTimer, reloadDetail,
     // slide nav

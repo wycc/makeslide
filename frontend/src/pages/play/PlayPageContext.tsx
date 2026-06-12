@@ -46,6 +46,10 @@ export interface PlayPageContextValue {
   // ─── Playback ───────────────────────────────────────────────────────────────
   isPlaying: boolean;
   setIsPlaying: Dispatch<SetStateAction<boolean>>;
+  /** 語音已結束，但動畫長度超過語音長度，目前正在延長播放本頁以等動畫播完。 */
+  isExtendingAnimation: boolean;
+  /** 傳給 SlideRenderer 的 isPlaying：語音播放中或正在延長動畫播放時都為 true，讓 GSAP timeline 繼續播完。 */
+  slideAnimationPlaying: boolean;
   currentTime: number;
   setCurrentTime: Dispatch<SetStateAction<number>>;
   duration: number;

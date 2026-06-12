@@ -189,6 +189,22 @@ export function customScriptDurationSeconds(effect: SlideAnimationEffect): numbe
 }
 
 /**
+ * Total seconds the slide's GSAP animation timeline runs for: the latest
+ * point at which any effect's tween ends (`start + duration`, plus
+ * `exitDuration` for overlay effects that auto-hide). Mirrors
+ * `buildGsapTimeline`'s resulting `tl.duration()` without needing a DOM
+ * stage, so playback code can compare it against the narration audio's
+ * duration and extend the page if the animation runs longer.
+ */
+export function animationTimelineDurationSeconds(spec: SlideAnimationSpec | null): number {
+  if (!spec || !spec.enabled) return 0;
+  return spec.effects.reduce((max, effect) => {
+    const end = effect.start + effect.duration + (effect.exitDuration ?? 0);
+    return Number.isFinite(end) && end > max ? end : max;
+  }, 0);
+}
+
+/**
  * Builds the HTML document for a `custom-script` effect's sandboxed
  * `<iframe sandbox="allow-scripts">` (no `allow-same-origin`, so it has an
  * opaque origin and cannot reach the parent page, cookies or storage).
