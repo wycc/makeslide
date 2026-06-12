@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import { ApiError, fetchPageAnimation, generateAiFocusEffects, savePageAnimation } from '../../lib/api';
+import {
+  ApiError,
+  fetchPageAnimation,
+  generateAiFocusEffects,
+  generateCustomScriptCode,
+  savePageAnimation,
+} from '../../lib/api';
 import type { PdfDetail, PdfDetailPage, SlideAnimationSpec } from '../../types';
 import { cloneAnimationSpec, defaultAnimationSpec } from '../../lib/animationSpec';
 import { useI18n } from '../../i18n';
@@ -29,6 +35,13 @@ export interface PageAnimationState {
   aiFocusBusy: boolean;
   /** 呼叫後端 LLM，依目前逐字稿句子決定每句的焦點效果，並覆蓋 draft 的 effects。 */
   handleGenerateAiFocusEffects: (sentences: string[], hints?: Record<string, string>) => Promise<boolean>;
+  /** AI 產生/重新產生自訂腳本動畫程式碼（呼叫中）。 */
+  customScriptBusy: boolean;
+  /**
+   * 呼叫後端 LLM，依提示詞（與選填的目前程式碼）產生 `custom-script` 效果的程式碼，
+   * 並寫回該效果的 `code`/`prompt` 欄位。
+   */
+  handleGenerateCustomScriptCode: (effectId: string, prompt: string, previousCode?: string) => Promise<boolean>;
 }
 
 export function usePageAnimation({
@@ -46,6 +59,7 @@ export function usePageAnimation({
   const [animationMessage, setAnimationMessage] = useState<string | null>(null);
   const [animationWarning, setAnimationWarning] = useState<string | null>(null);
   const [aiFocusBusy, setAiFocusBusy] = useState(false);
+  const [customScriptBusy, setCustomScriptBusy] = useState(false);
 
   const pageKey = pdfId && currentPage ? `${pdfId}:${currentPage.page_number}` : null;
   const pageKeyRef = useRef(pageKey);
@@ -140,6 +154,33 @@ export function usePageAnimation({
     [pdfId, currentPage, t],
   );
 
+  const handleGenerateCustomScriptCode = useCallback(
+    async (effectId: string, prompt: string, previousCode?: string): Promise<boolean> => {
+      if (!pdfId || !currentPage || !prompt.trim()) return false;
+      setCustomScriptBusy(true);
+      setAnimationError(null);
+      setAnimationMessage(null);
+      try {
+        const res = await generateCustomScriptCode(pdfId, currentPage.page_number, { prompt, previousCode });
+        setAnimationDraft((prev) => {
+          const base = prev ?? defaultAnimationSpec();
+          return {
+            ...base,
+            effects: base.effects.map((e) => (e.id === effectId ? { ...e, code: res.code, prompt } : e)),
+          };
+        });
+        setAnimationMessage(t('play.animation.customScriptDone'));
+        return true;
+      } catch (err) {
+        setAnimationError(err instanceof ApiError ? err.message : t('play.animation.customScriptError'));
+        return false;
+      } finally {
+        setCustomScriptBusy(false);
+      }
+    },
+    [pdfId, currentPage, t],
+  );
+
   return {
     animationSavedSpec,
     animationDraft,
@@ -152,5 +193,7 @@ export function usePageAnimation({
     handleSaveAnimation,
     aiFocusBusy,
     handleGenerateAiFocusEffects,
+    customScriptBusy,
+    handleGenerateCustomScriptCode,
   };
 }

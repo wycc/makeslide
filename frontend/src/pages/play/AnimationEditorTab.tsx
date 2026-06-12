@@ -1,20 +1,63 @@
+import { useEffect, useRef } from 'react';
 import { useI18n } from '../../i18n';
 import type { TranslationKey } from '../../i18n';
 import type { SlideAnimationEffect, SlideAnimationEffectType, SlideAnimationEase } from '../../types';
 import {
   DEFAULT_EXIT_DURATION_SECONDS,
+  MAX_CUSTOM_SCRIPT_PROMPT_LENGTH,
   MAX_HINT_LENGTH,
   MAX_SLIDE_ANIMATION_EFFECTS,
   MAX_TEXT_CALLOUT_LENGTH,
   OVERLAY_EFFECT_TYPES,
   SLIDE_ANIMATION_EASES,
   SLIDE_ANIMATION_EFFECT_TYPES,
+  buildCustomScriptSandboxDoc,
   defaultAnimationSpec,
   generateFocusEffectsFromTranscript,
   getFocusEffectParams,
   resolveStartTriggerSeconds,
 } from '../../lib/animationSpec';
 import { usePlayPageContext } from './PlayPageContext';
+
+/** 預覽用迴圈總長（秒）：custom-script 效果的淡入+停留時間，並夾在合理範圍內。 */
+function previewLoopSeconds(effect: SlideAnimationEffect): number {
+  return Math.min(20, Math.max(2, effect.duration + (effect.exitDuration ?? 0)));
+}
+
+/**
+ * custom-script 效果的即時預覽：在 sandboxed iframe 中載入目前的 `code`，並持續送出
+ * `{ type: 'sync', t, playing: true }` 訊息，讓畫面依 0~loopSeconds 反覆播放，
+ * 方便使用者在反覆調整提示詞時立即看到結果。
+ */
+function CustomScriptPreview({ effect }: { effect: SlideAnimationEffect }) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const loopSeconds = previewLoopSeconds(effect);
+
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+    const startedAt = performance.now();
+    let rafId = 0;
+    const tick = () => {
+      const t = ((performance.now() - startedAt) / 1000) % loopSeconds;
+      iframe.contentWindow?.postMessage({ type: 'sync', t, playing: true }, '*');
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [effect.code, loopSeconds]);
+
+  return (
+    <iframe
+      ref={iframeRef}
+      key={effect.code ?? ''}
+      title="custom-script preview"
+      sandbox="allow-scripts"
+      srcDoc={buildCustomScriptSandboxDoc(effect.code ?? '')}
+      className="h-40 w-full rounded-md border border-slate-700 bg-slate-950"
+    />
+  );
+}
 
 const FOCUS_PARAM_LABELS = {
   xPct: 'play.animation.focusX',
@@ -61,6 +104,8 @@ export function AnimationEditorTab() {
     sentenceTimeline,
     aiFocusBusy,
     handleGenerateAiFocusEffects,
+    customScriptBusy,
+    handleGenerateCustomScriptCode,
   } = usePlayPageContext();
   const { t } = useI18n();
 
@@ -119,8 +164,9 @@ export function AnimationEditorTab() {
           {draft.effects.map((effect) => (
             <div
               key={effect.id}
-              className="flex flex-wrap items-end gap-2 rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2"
+              className="flex flex-col gap-2 rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2"
             >
+              <div className="flex flex-wrap items-end gap-2">
               <label className="flex flex-col gap-1 text-xs text-slate-400">
                 {t('play.animation.effectType')}
                 <select
@@ -353,6 +399,41 @@ export function AnimationEditorTab() {
               >
                 {t('play.animation.delete')}
               </button>
+              </div>
+              {effect.type === 'custom-script' && (
+                <div className="flex flex-col gap-2 border-t border-slate-800 pt-2">
+                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    {t('play.animation.customScriptPrompt')}
+                    <textarea
+                      rows={2}
+                      maxLength={MAX_CUSTOM_SCRIPT_PROMPT_LENGTH}
+                      value={effect.prompt ?? ''}
+                      disabled={disabled}
+                      placeholder={t('play.animation.customScriptPromptPlaceholder')}
+                      onChange={(e) => updateEffect(effect.id, { prompt: e.target.value })}
+                      className="w-full resize-y rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                    />
+                  </label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={disabled || customScriptBusy || !(effect.prompt ?? '').trim()}
+                      onClick={() => void handleGenerateCustomScriptCode(effect.id, effect.prompt ?? '', effect.code)}
+                      className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/10 px-3 py-1.5 text-sm text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {customScriptBusy
+                        ? t('play.animation.customScriptGenerateBusy')
+                        : effect.code
+                          ? t('play.animation.customScriptRegenerate')
+                          : t('play.animation.customScriptGenerate')}
+                    </button>
+                    {!effect.code && (
+                      <span className="text-xs text-slate-500">{t('play.animation.customScriptEmpty')}</span>
+                    )}
+                  </div>
+                  {effect.code && <CustomScriptPreview effect={effect} />}
+                </div>
+              )}
             </div>
           ))}
         </div>

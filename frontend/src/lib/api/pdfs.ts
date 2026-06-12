@@ -126,6 +126,25 @@ export async function generateAiFocusEffects(
   return (await resp.json()) as GenerateAiFocusEffectsResponse;
 }
 
+export interface GenerateCustomScriptCodeResponse {
+  code: string;
+}
+
+/** Asks the backend's LLM to generate (or revise) the JavaScript source for a `custom-script` effect. */
+export async function generateCustomScriptCode(
+  id: string,
+  pageNumber: number,
+  body: { prompt: string; previousCode?: string },
+): Promise<GenerateCustomScriptCodeResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/animation/custom-script`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as GenerateCustomScriptCodeResponse;
+}
+
 export type ShareAccessMode = 'read_only' | 'editable';
 
 export interface ShareInfoResponse {

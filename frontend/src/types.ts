@@ -97,7 +97,8 @@ export type SlideAnimationEffectType =
   | 'pan-down'
   | 'highlight-box'
   | 'spotlight'
-  | 'text-callout';
+  | 'text-callout'
+  | 'custom-script';
 
 export type SlideAnimationEase = 'none' | 'power1.in' | 'power1.out' | 'power1.inOut' | 'power2.inOut';
 
@@ -126,9 +127,16 @@ export interface SlideAnimationEffect {
    * Seconds to remain visible after the fade-in completes before
    * automatically fading back out (same `duration`/`ease` as the fade-in).
    * Only meaningful for overlay effect types (`highlight-box`, `spotlight`,
-   * `text-callout`); ignored by transform effects.
+   * `text-callout`, `custom-script`); ignored by transform effects.
    */
   exitDuration?: number;
+  /**
+   * JavaScript source for `custom-script` effects, executed inside a
+   * sandboxed `<iframe sandbox="allow-scripts">`. Ignored by other effect types.
+   */
+  code?: string;
+  /** The prompt that produced `code`, kept so the user can iterate. Ignored by other effect types. */
+  prompt?: string;
 }
 
 export interface SlideAnimationSpec {

@@ -12,6 +12,7 @@ export const ANIMATION_EFFECT_TYPES = [
   'highlight-box',
   'spotlight',
   'text-callout',
+  'custom-script',
 ] as const;
 
 export const ANIMATION_EASES = ['none', 'power1.in', 'power1.out', 'power1.inOut', 'power2.inOut'] as const;
@@ -44,9 +45,22 @@ export interface AnimationEffect {
    * Seconds to remain visible after the fade-in completes before
    * automatically fading back out (same `duration`/`ease` as the fade-in).
    * Only meaningful for overlay effect types (`highlight-box`, `spotlight`,
-   * `text-callout`); ignored by transform effects.
+   * `text-callout`, `custom-script`); ignored by transform effects.
    */
   exitDuration?: number;
+  /**
+   * JavaScript source for `custom-script` effects, executed inside a
+   * sandboxed `<iframe sandbox="allow-scripts">` (no `allow-same-origin`,
+   * so it has an opaque origin and cannot reach the parent page, cookies,
+   * or storage). Ignored by other effect types.
+   */
+  code?: string;
+  /**
+   * The prompt that produced `code` via the AI custom-script generator.
+   * Stored so the user can re-open the editor and iterate. Ignored by
+   * other effect types.
+   */
+  prompt?: string;
 }
 
 export interface AnimationSpec {
@@ -70,6 +84,10 @@ const MAX_START_OFFSET_SECONDS = 60;
 export const MAX_TEXT_CALLOUT_LENGTH = 80;
 export const MAX_HINTS = 50;
 export const MAX_HINT_LENGTH = 200;
+/** Max length (chars) for a `custom-script` effect's generated JavaScript `code`. */
+export const MAX_CUSTOM_SCRIPT_CODE_LENGTH = 8000;
+/** Max length (chars) for the prompt used to generate a `custom-script` effect's `code`. */
+export const MAX_CUSTOM_SCRIPT_PROMPT_LENGTH = 300;
 
 // Whitelisted numeric params per effect type; unknown keys are stripped, not rejected,
 // so future spec versions can add params without breaking older backends.
@@ -84,6 +102,7 @@ const ALLOWED_PARAM_KEYS: Record<AnimationEffectType, readonly string[]> = {
   'highlight-box': ['xPct', 'yPct', 'widthPct', 'heightPct'],
   'spotlight': ['xPct', 'yPct', 'widthPct', 'heightPct'],
   'text-callout': ['xPct', 'yPct', 'widthPct', 'heightPct'],
+  'custom-script': ['xPct', 'yPct', 'widthPct', 'heightPct'],
 };
 
 const StartTriggerSchema = z.object({
@@ -103,6 +122,8 @@ const EffectSchema = z.object({
   startTrigger: StartTriggerSchema.optional(),
   text: z.string().max(MAX_TEXT_CALLOUT_LENGTH).optional(),
   exitDuration: z.number().min(0).max(MAX_DURATION_SECONDS).optional(),
+  code: z.string().max(MAX_CUSTOM_SCRIPT_CODE_LENGTH).optional(),
+  prompt: z.string().max(MAX_CUSTOM_SCRIPT_PROMPT_LENGTH).optional(),
 });
 
 const HintsSchema = z
@@ -157,6 +178,8 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.startTrigger ? { startTrigger: effect.startTrigger } : {}),
       ...(effect.text !== undefined ? { text: effect.text } : {}),
       ...(effect.exitDuration !== undefined ? { exitDuration: effect.exitDuration } : {}),
+      ...(effect.code !== undefined ? { code: effect.code } : {}),
+      ...(effect.prompt !== undefined ? { prompt: effect.prompt } : {}),
     };
   });
   const hints = parsed.data.hints && Object.keys(parsed.data.hints).length > 0 ? parsed.data.hints : undefined;
