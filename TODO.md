@@ -717,7 +717,7 @@
 
 
 # 新功能(每一個功能使用一個 branch，做好後也要更新 master 上的設計文件)
-[ ] 加上一個自動生成焦點的功能，打開這個功能後，在產生語音後，自動為每一行逐字稿在螢幕上產生一個指示焦點的動畫。以輔助說明。
+[x] 加上一個自動生成焦點的功能，打開這個功能後，在產生語音後，自動為每一行逐字稿在螢幕上產生一個指示焦點的動畫。以輔助說明。（完成於分支: feature/animation-auto-focus-generation-20260612，v1 為編輯器內手動「一次性產生」按鈕，依賴未合併的 feature/animation-focus-effects-20260612；「產生語音後自動產生」的常駐管線留待後續項目）
 [ ] 除了焦點以外，也可以生成一張小圖或文字做為動畫內容。
 [ ] 加上手動在逐字稿加上動畫指引的功能，這個指引會在生成動畫時傳給 LLM 做參考。
 [x] 提供多種焦點的功能，例如紅框或 spotlight或引言(圖)（完成於分支: feature/animation-focus-effects-20260612，僅完成紅框/聚光燈視覺效果，引言(圖)疊加內容留待後續項目）
@@ -737,3 +737,7 @@
 - 時間: 2026-06-12 12:05:00 +0800
 - 分支: feature/fullscreen-swipe-navigation-20260612
 - 內容: 完成「在全螢幕時加上左右滑動上一頁下一頁的功能」。於 `frontend/src/pages/play/PlayPageFullscreen.tsx` 的全螢幕容器上新增 `onTouchStart`/`onTouchEnd` 處理：記錄觸控起點座標，放開時計算水平位移 `dx` 與垂直位移 `dy`，當 `|dx| >= 50px`（`SWIPE_THRESHOLD_PX`）且 `|dy| <= 80px`（`SWIPE_VERTICAL_TOLERANCE_PX`）時判定為換頁手勢：向左滑（`dx < 0`）呼叫 `goNext()` 切到下一頁，向右滑（`dx > 0`）呼叫 `goPrev()` 切到上一頁；兩者皆重用既有函式，已內含同步模式下僅 master 可換頁的權限檢查與頁碼邊界 clamp，無需額外處理。滑動觸發時以 `swipeHandledRef` 旗標讓緊接其後的 `onClick` 跳過「點擊暫停/繼續播放」的行為，避免滑動後誤觸暫停。當手寫模式且工具非游標（`drawingMode && drawingTool !== 'cursor'`）時略過手勢判定，讓 `DrawingCanvas` 正常接收觸控繪圖。另為全螢幕「編輯」版面右側可編輯逐字稿區塊新增 `onTouchStart`/`onTouchEnd` 的 `stopPropagation`（沿用既有 `onClick` 的隔離模式），避免在該區域捲動或選取文字時誤觸換頁。驗證：前端 `npx tsc --noEmit` 與 `npx vite build` 皆通過；本次未變更後端程式碼。
+
+- 時間: 2026-06-12 12:30:00 +0800
+- 分支: feature/animation-auto-focus-generation-20260612
+- 內容: 完成「加上一個自動生成焦點的功能」之 v1（編輯器內一次性手動產生）。本分支基於尚未合併的 `feature/animation-focus-effects-20260612`（提供 `highlight-box`/`spotlight`/`FOCUS_EFFECT_TYPES`/`getFocusEffectParams` 等基礎設施）。`frontend/src/lib/animationSpec.ts` 新增 `generateFocusEffectsFromTranscript(sentenceCount)`：依本頁逐字稿句數，為每一句產生一個 `highlight-box` 效果（`startTrigger: { type: 'transcript-line', line }`、`duration: 1.2`、`ease: 'power1.out'`，位置/大小沿用 §5.1 預設值 30/30/40/40），數量上限為 `MAX_SLIDE_ANIMATION_EFFECTS`（20）。`AnimationEditorTab.tsx` 在「＋ 新增效果」按鈕旁新增「🪄 自動產生逐字稿焦點動畫」按鈕：點擊後以產生結果取代目前 `draft.effects` 並將 `enabled` 設為 `true`；若目前已有效果設定，先以 `window.confirm` 詢問是否覆蓋；本頁尚無逐字稿時按鈕停用。新增中英文 i18n 鍵 `play.animation.autoGenerateFocus`、`play.animation.autoGenerateFocusConfirm`。並更新設計文件 `docs/animation-slide-v1-design.md`：新增 §7.2「自動產生逐字稿焦點動畫」說明、更新 §5.1 與檔頭擴充註記。本次僅提供編輯器內「一次性產生」的手動操作；TODO 第 720 項所述「產生語音後自動產生」的常駐設定與後端管線整合留待後續項目。驗證：新增前端單元測試 `frontend/src/lib/animationSpec.test.ts`（3 項），`npx tsx --test src/lib/animationSpec.test.ts` 全數通過；前端 `npx tsc --noEmit` 與 `npx vite build` 皆通過；本次未變更後端程式碼。
