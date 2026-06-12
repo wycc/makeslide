@@ -786,3 +786,4 @@
 [x] 重新確認 master TODO.md 無未完成項目並更新工作記錄（完成於分支: feature/todo-no-pending-recheck-20260612-1730）
 [x] 重新確認 master TODO.md 無未完成項目並更新工作記錄（完成於分支: feature/todo-no-pending-recheck-20260612-1755）
 [x] 重新確認 master TODO.md 無未完成項目並更新工作記錄（完成於分支: feature/todo-no-pending-recheck-20260612-1820）
+[ ] generateAiFocusEffects中將目前頁面的圖片傳過去以得到比較正確的位置
