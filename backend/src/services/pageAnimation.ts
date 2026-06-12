@@ -21,6 +21,8 @@ export interface AnimationStartTrigger {
   type: 'transcript-line';
   /** 0-based index into the page script's sentence list. */
   line: number;
+  /** Seconds to start before the referenced sentence's estimated playback time. */
+  offsetSeconds?: number;
 }
 
 export interface AnimationEffect {
@@ -44,6 +46,7 @@ export interface AnimationSpec {
 const MAX_EFFECTS = 20;
 const MAX_DURATION_SECONDS = 600;
 const MAX_TRANSCRIPT_LINE = 999;
+const MAX_START_OFFSET_SECONDS = 60;
 
 // Whitelisted numeric params per effect type; unknown keys are stripped, not rejected,
 // so future spec versions can add params without breaking older backends.
@@ -60,6 +63,7 @@ const ALLOWED_PARAM_KEYS: Record<AnimationEffectType, readonly string[]> = {
 const StartTriggerSchema = z.object({
   type: z.literal('transcript-line'),
   line: z.number().int().min(0).max(MAX_TRANSCRIPT_LINE),
+  offsetSeconds: z.number().min(0).max(MAX_START_OFFSET_SECONDS).optional(),
 });
 
 const EffectSchema = z.object({

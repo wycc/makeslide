@@ -6,6 +6,7 @@ import {
   SLIDE_ANIMATION_EASES,
   SLIDE_ANIMATION_EFFECT_TYPES,
   defaultAnimationSpec,
+  resolveStartTriggerSeconds,
 } from '../../lib/animationSpec';
 import { usePlayPageContext } from './PlayPageContext';
 
@@ -109,8 +110,9 @@ export function AnimationEditorTab() {
                         startTrigger: effect.startTrigger ?? { type: 'transcript-line', line: 0 },
                       });
                     } else {
-                      const resolved =
-                        effect.startTrigger ? sentenceTimeline[effect.startTrigger.line]?.start : undefined;
+                      const resolved = effect.startTrigger
+                        ? resolveStartTriggerSeconds(effect.startTrigger, sentenceTimeline)
+                        : undefined;
                       updateEffect(effect.id, {
                         start: resolved ?? effect.start,
                         startTrigger: undefined,
@@ -127,30 +129,57 @@ export function AnimationEditorTab() {
               </label>
               {effect.startTrigger ? (
                 pageSentences.length > 0 ? (
-                  <label className="flex flex-col gap-1 text-xs text-slate-400">
-                    {t('play.animation.startTranscriptLine')}
-                    <select
-                      value={effect.startTrigger.line}
-                      disabled={disabled}
-                      onChange={(e) =>
-                        updateEffect(effect.id, {
-                          startTrigger: { type: 'transcript-line', line: Number(e.target.value) },
-                        })
-                      }
-                      className="max-w-[14rem] rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
-                    >
-                      {pageSentences.map((sentence, idx) => (
-                        <option key={idx} value={idx}>
-                          {idx + 1}. {truncateSentence(sentence)}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="text-[11px] text-slate-500">
-                      {t('play.animation.startResolved')}{' '}
-                      {(sentenceTimeline[effect.startTrigger.line]?.start ?? effect.start).toFixed(1)}
-                      {t('play.animation.seconds')}
-                    </span>
-                  </label>
+                  <>
+                    <label className="flex flex-col gap-1 text-xs text-slate-400">
+                      {t('play.animation.startTranscriptLine')}
+                      <select
+                        value={effect.startTrigger.line}
+                        disabled={disabled}
+                        onChange={(e) =>
+                          updateEffect(effect.id, {
+                            startTrigger: {
+                              ...effect.startTrigger!,
+                              type: 'transcript-line',
+                              line: Number(e.target.value),
+                            },
+                          })
+                        }
+                        className="max-w-[14rem] rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                      >
+                        {pageSentences.map((sentence, idx) => (
+                          <option key={idx} value={idx}>
+                            {idx + 1}. {truncateSentence(sentence)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1 text-xs text-slate-400">
+                      {t('play.animation.startOffsetSeconds')}
+                      <input
+                        type="number"
+                        min={0}
+                        max={60}
+                        step={0.1}
+                        value={effect.startTrigger.offsetSeconds ?? 0}
+                        disabled={disabled}
+                        onChange={(e) =>
+                          updateEffect(effect.id, {
+                            startTrigger: {
+                              ...effect.startTrigger!,
+                              type: 'transcript-line',
+                              offsetSeconds: Math.min(60, Math.max(0, Number(e.target.value) || 0)),
+                            },
+                          })
+                        }
+                        className="w-20 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                      />
+                      <span className="text-[11px] text-slate-500">
+                        {t('play.animation.startResolved')}{' '}
+                        {(resolveStartTriggerSeconds(effect.startTrigger, sentenceTimeline) ?? effect.start).toFixed(1)}
+                        {t('play.animation.seconds')}
+                      </span>
+                    </label>
+                  </>
                 ) : (
                   <div className="flex flex-col gap-1 text-xs text-slate-400">
                     {t('play.animation.startTranscriptLine')}

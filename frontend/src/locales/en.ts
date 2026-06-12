@@ -278,6 +278,7 @@ export const en = {
   'play.animation.startMode.time': 'By seconds',
   'play.animation.startMode.transcript': 'By transcript line',
   'play.animation.startTranscriptLine': 'Sentence',
+  'play.animation.startOffsetSeconds': 'Lead time (s)',
   'play.animation.startResolved': 'Starts at:',
   'play.animation.seconds': 's',
   'play.animation.noTranscript': 'No transcript for this page',

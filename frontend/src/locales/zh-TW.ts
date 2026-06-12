@@ -278,6 +278,7 @@ export const zhTW = {
   'play.animation.startMode.time': '依秒數',
   'play.animation.startMode.transcript': '依逐字稿句子',
   'play.animation.startTranscriptLine': '對應句子',
+  'play.animation.startOffsetSeconds': '提前秒數',
   'play.animation.startResolved': '預估開始：',
   'play.animation.seconds': ' 秒',
   'play.animation.noTranscript': '本頁尚無逐字稿',

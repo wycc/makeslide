@@ -140,6 +140,35 @@ test('validateAnimationSpec rejects an invalid startTrigger', () => {
   );
 });
 
+test('validateAnimationSpec accepts and preserves a startTrigger offsetSeconds', () => {
+  const result = validateAnimationSpec(
+    validSpec([fadeIn({ startTrigger: { type: 'transcript-line', line: 2, offsetSeconds: 1.5 } })]),
+  );
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.deepEqual(result.spec.effects[0].startTrigger, {
+      type: 'transcript-line',
+      line: 2,
+      offsetSeconds: 1.5,
+    });
+  }
+});
+
+test('validateAnimationSpec rejects an out-of-range startTrigger offsetSeconds', () => {
+  assert.equal(
+    validateAnimationSpec(
+      validSpec([fadeIn({ startTrigger: { type: 'transcript-line', line: 0, offsetSeconds: -1 } })]),
+    ).ok,
+    false,
+  );
+  assert.equal(
+    validateAnimationSpec(
+      validSpec([fadeIn({ startTrigger: { type: 'transcript-line', line: 0, offsetSeconds: 61 } })]),
+    ).ok,
+    false,
+  );
+});
+
 // ── API ───────────────────────────────────────────────────────────────────────
 
 test('GET animation returns default spec when no file exists', async () => {
@@ -162,7 +191,7 @@ test('PUT animation with enabled spec writes file and flips render_type', async 
   seedAnimationPdf(PDF_ID, 2);
   const app = await buildApp();
   const spec = validSpec([
-    fadeIn({ startTrigger: { type: 'transcript-line', line: 0 } }),
+    fadeIn({ startTrigger: { type: 'transcript-line', line: 0, offsetSeconds: 1.5 } }),
     fadeIn({ id: 'effect-2', type: 'zoom-in', duration: 8, ease: 'none' }),
   ]);
   const putResp = await app.inject({
@@ -196,7 +225,7 @@ test('PUT animation with enabled spec writes file and flips render_type', async 
   const served = specResp.json() as { enabled: boolean; effects: Array<{ startTrigger?: unknown }> };
   assert.equal(served.enabled, true);
   assert.equal(served.effects.length, 2);
-  assert.deepEqual(served.effects[0].startTrigger, { type: 'transcript-line', line: 0 });
+  assert.deepEqual(served.effects[0].startTrigger, { type: 'transcript-line', line: 0, offsetSeconds: 1.5 });
 
   // detail API exposes render_type and animation_spec_url
   const detailResp = await app.inject({
