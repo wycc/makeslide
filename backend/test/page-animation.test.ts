@@ -718,6 +718,23 @@ test('findCustomScriptContractIssue validates renderAnimation and onFrame contra
 
 // ── POST animation/custom-script ─────────────────────────────────────────────
 
+test('GET animation/custom-script returns 405 diagnostic response because generation is POST-only', async () => {
+  seedAnimationPdf(PDF_ID, 1);
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'GET',
+      url: `/api/pdfs/${PDF_ID}/pages/1/animation/custom-script`,
+      headers: AUTH_HEADERS,
+    });
+    assert.equal(resp.statusCode, 405);
+    assert.equal(resp.headers.allow, 'POST');
+    assert.equal((resp.json() as { error: { code: string } }).error.code, 'METHOD_NOT_ALLOWED');
+  } finally {
+    await app.close();
+  }
+});
+
 test('POST animation/custom-script returns AI-generated code for a safe script', async () => {
   seedAnimationPdf(PDF_ID, 1);
   fs.writeFileSync(path.join(config.storageRoot, PDF_ID, 'pages', 'animuid1.text.txt'), '頁面標題：銷售趨勢', 'utf8');

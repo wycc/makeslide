@@ -190,6 +190,16 @@ export async function registerPageAnimationRoutes(app: FastifyInstance): Promise
     }
   });
 
+  // Diagnostic helper for users who paste the URL into a browser. The actual
+  // generator endpoint is POST-only because it requires a JSON body containing
+  // the prompt and optional previousCode.
+  app.get('/api/pdfs/:id/pages/:n/animation/custom-script', async (_request, reply) => {
+    return reply
+      .header('Allow', 'POST')
+      .code(405)
+      .send(errorResponse('METHOD_NOT_ALLOWED', 'Use POST with a JSON body: { prompt, previousCode? }'));
+  });
+
   // AI 自訂腳本動畫：依使用者提示詞（與選填的目前程式碼）由 LLM 產生一段在 sandboxed iframe
   // 中執行的 JavaScript，供「custom-script」效果使用。不會寫入儲存的 spec，僅回傳程式碼供
   // 前端合併進編輯中的 draft 效果。
