@@ -10,7 +10,7 @@ import type { ChatCompletion, ChatCompletionMessageParam } from 'openai/resource
 import { z } from 'zod';
 import { config } from '../config';
 import { logger } from '../logger';
-import { callGeminiJson } from './gemini';
+import { callGeminiJson, callGeminiText } from './gemini';
 import { getRuntimeAiSettings } from './aiSettings';
 import { currentAccountId, sanitizeAccountId } from './accountContext';
 
@@ -434,4 +434,136 @@ export async function callChatJSON<T>(
       lastErr instanceof Error ? lastErr.message : String(lastErr)
     }`,
   );
+}
+
+export interface ChatTextStreamResult {
+  text: string;
+  finishReason: string | null;
+  usage: TokenUsage;
+  latencyMs: number;
+}
+
+export interface ChatTextStreamParams {
+  model?: string;
+  messages: ChatCompletionMessageParam[];
+  /** Enforce a sensible cap on the LLM's output. */
+  maxTokens?: number;
+  temperature?: number;
+  /** Optional label for logs to locate slow / failing calls. */
+  label?: string;
+  /** Called once per chunk of generated text, in order, as it arrives. */
+  onDelta: (delta: string) => void;
+}
+
+/**
+ * Streams a plain-text completion, invoking `onDelta` for each chunk of text
+ * as it's generated. Unlike `callChatJSON`, this does not parse/validate the
+ * result against a schema — callers receive the raw accumulated text.
+ *
+ * Gemini does not support token-by-token streaming in this codebase yet, so
+ * for that provider the full response is fetched non-streaming and then
+ * delivered to `onDelta` as a single chunk once it's ready.
+ */
+export async function streamChatText(params: ChatTextStreamParams): Promise<ChatTextStreamResult> {
+  const runtime = getRuntimeAiSettings();
+  const startedAt = Date.now();
+
+  if (runtime.llmProvider === 'gemini') {
+    const model = params.model ?? runtime.geminiLlmModel;
+    const result = await callGeminiText({
+      model,
+      messages: params.messages,
+      maxTokens: params.maxTokens,
+      temperature: params.temperature,
+    });
+    if (result.text) params.onDelta(result.text);
+    return {
+      text: result.text,
+      finishReason: 'stop',
+      usage: result.usage,
+      latencyMs: Date.now() - startedAt,
+    };
+  }
+
+  const client = getOpenAIClient();
+  const model = params.model ?? runtime.openaiLlmModel;
+  const maxTokens = Math.max(params.maxTokens ?? 4000, 1);
+  const temperature = params.temperature ?? 0.6;
+  const useTemperature = supportsTemperature(model);
+
+  await appendLlmRequestLog({
+    ts: new Date().toISOString(),
+    label: params.label ?? null,
+    model,
+    stream: true,
+    ...(supportsMaxCompletionTokens(model) ? { max_completion_tokens: maxTokens } : { max_tokens: maxTokens }),
+    ...(useTemperature ? { temperature } : {}),
+    messages: sanitizeMessagesForLog(params.messages),
+  });
+
+  let stream: AsyncIterable<{
+    choices?: Array<{ delta?: { content?: string | null }; finish_reason?: string | null }>;
+    usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | null;
+  }>;
+  try {
+    stream = await client.chat.completions.create({
+      model,
+      messages: params.messages,
+      stream: true,
+      stream_options: { include_usage: true },
+      ...(useTemperature ? { temperature } : {}),
+      ...(supportsMaxCompletionTokens(model)
+        ? { max_completion_tokens: maxTokens }
+        : { max_tokens: maxTokens }),
+    });
+  } catch (err) {
+    const apiErr = err instanceof APIError ? err : null;
+    logger.warn(
+      {
+        label: params.label,
+        model,
+        latencyMs: Date.now() - startedAt,
+        status: apiErr?.status,
+        code: apiErr?.code,
+        message: apiErr?.message ?? (err instanceof Error ? err.message : String(err)),
+      },
+      'OpenAI chat.completions.create (stream) failed',
+    );
+    throw err;
+  }
+
+  let text = '';
+  let finishReason: string | null = null;
+  let usage: TokenUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+
+  for await (const chunk of stream) {
+    const choice = chunk.choices?.[0];
+    const delta = choice?.delta?.content ?? '';
+    if (delta) {
+      text += delta;
+      params.onDelta(delta);
+    }
+    if (choice?.finish_reason) finishReason = choice.finish_reason;
+    if (chunk.usage) {
+      usage = {
+        prompt_tokens: chunk.usage.prompt_tokens ?? 0,
+        completion_tokens: chunk.usage.completion_tokens ?? 0,
+        total_tokens: chunk.usage.total_tokens ?? 0,
+      };
+    }
+  }
+
+  const latencyMs = Date.now() - startedAt;
+  await appendLlmResponseLog({
+    ts: new Date().toISOString(),
+    label: params.label ?? null,
+    model,
+    latencyMs,
+    usage,
+    finish_reason: finishReason,
+    raw_content: text,
+    raw_content_length: text.length,
+  });
+
+  return { text, finishReason, usage, latencyMs };
 }

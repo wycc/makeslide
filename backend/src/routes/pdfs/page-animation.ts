@@ -17,7 +17,7 @@ import {
 } from '../../services/pageAnimation';
 import type { AnimationSpec } from '../../services/pageAnimation';
 import { generateAiFocusEffects } from '../../services/animationAutoFocus';
-import { findCustomScriptContractIssue, findUnsafeScriptPattern, generateCustomScriptCode } from '../../services/animationCustomScript';
+import { findCustomScriptContractIssue, findUnsafeScriptPattern, generateCustomScriptCodeStream } from '../../services/animationCustomScript';
 import type { SlideRenderType } from '../../types';
 import { PageParamSchema, errorResponse, nowIso } from './shared';
 
@@ -203,6 +203,11 @@ export async function registerPageAnimationRoutes(app: FastifyInstance): Promise
   // AI 自訂腳本動畫：依使用者提示詞（與選填的目前程式碼）由 LLM 產生一段在 sandboxed iframe
   // 中執行的 JavaScript，供「custom-script」效果使用。不會寫入儲存的 spec，僅回傳程式碼供
   // 前端合併進編輯中的 draft 效果。
+  //
+  // 回應格式為 SSE（text/event-stream），讓前端可在產生過程中即時顯示輸出：
+  // - event: delta — { text: string }，每次收到一段新產生的程式碼片段
+  // - event: done  — { code: string }，產生完成且通過安全/契約檢查後的最終程式碼
+  // - event: error — { code: string, message: string }，發生錯誤時送出，串流隨即結束
   app.post('/api/pdfs/:id/pages/:n/animation/custom-script', async (request, reply) => {
     const parsed = PageParamSchema.safeParse(request.params);
     if (!parsed.success) {
@@ -220,27 +225,57 @@ export async function registerPageAnimationRoutes(app: FastifyInstance): Promise
     const pageText = row.text_path
       ? await fs.promises.readFile(safeJoinPdfPath(id, row.text_path), 'utf8').catch(() => '')
       : '';
+
+    reply.hijack();
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    const sendEvent = (event: string, data: unknown): void => {
+      reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
     try {
-      const result = await generateCustomScriptCode({
-        prompt: parsedBody.data.prompt,
-        previousCode: parsedBody.data.previousCode,
-        pageText,
-        label: `animation-custom-script-ai page/${id}/${n}`,
-      });
-      const unsafe = findUnsafeScriptPattern(result.code);
-      if (unsafe) {
-        return reply
-          .code(422)
-          .send(errorResponse('UNSAFE_SCRIPT', `Generated code uses a disallowed API (${unsafe}); please try a different prompt`));
+      const result = await generateCustomScriptCodeStream(
+        {
+          prompt: parsedBody.data.prompt,
+          previousCode: parsedBody.data.previousCode,
+          pageText,
+          label: `animation-custom-script-ai page/${id}/${n}`,
+        },
+        (delta) => sendEvent('delta', { text: delta }),
+      );
+      const code = result.code;
+      if (!code) {
+        sendEvent('error', errorResponse('INTERNAL_ERROR', 'Generated code is empty; please try again').error);
+      } else if (code.length > MAX_CUSTOM_SCRIPT_CODE_LENGTH) {
+        sendEvent(
+          'error',
+          errorResponse('SCRIPT_TOO_LONG', `Generated code exceeds ${MAX_CUSTOM_SCRIPT_CODE_LENGTH} characters; please try a simpler prompt`).error,
+        );
+      } else {
+        const unsafe = findUnsafeScriptPattern(code);
+        if (unsafe) {
+          sendEvent(
+            'error',
+            errorResponse('UNSAFE_SCRIPT', `Generated code uses a disallowed API (${unsafe}); please try a different prompt`).error,
+          );
+        } else {
+          const contractIssue = findCustomScriptContractIssue(code);
+          if (contractIssue) {
+            sendEvent('error', errorResponse('INVALID_SCRIPT_CONTRACT', `${contractIssue}; please try a different prompt`).error);
+          } else {
+            sendEvent('done', { code });
+          }
+        }
       }
-      const contractIssue = findCustomScriptContractIssue(result.code);
-      if (contractIssue) {
-        return reply.code(422).send(errorResponse('INVALID_SCRIPT_CONTRACT', `${contractIssue}; please try a different prompt`));
-      }
-      return reply.code(200).send({ code: result.code });
     } catch (err) {
       request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to generate custom-script animation code');
-      return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to generate custom-script animation code'));
+      sendEvent('error', errorResponse('INTERNAL_ERROR', 'Failed to generate custom-script animation code').error);
+    } finally {
+      reply.raw.end();
     }
   });
 }

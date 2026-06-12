@@ -1,12 +1,5 @@
-import { z } from 'zod';
-import { callChatJSON } from './openai';
-import { MAX_CUSTOM_SCRIPT_CODE_LENGTH, MAX_CUSTOM_SCRIPT_PROMPT_LENGTH } from './pageAnimation';
-
-export const CustomScriptAiResponseSchema = z.object({
-  code: z.string().trim().min(1).max(MAX_CUSTOM_SCRIPT_CODE_LENGTH),
-});
-
-export type CustomScriptAiResponse = z.infer<typeof CustomScriptAiResponseSchema>;
+import { streamChatText } from './openai';
+import { MAX_CUSTOM_SCRIPT_OUTPUT_TOKENS, MAX_CUSTOM_SCRIPT_PROMPT_LENGTH } from './pageAnimation';
 
 /**
  * Patterns disallowed in generated `custom-script` code. The sandboxed
@@ -88,7 +81,7 @@ function buildCustomScriptSystemPrompt(): string {
     '',
     '若使用者提供「目前程式碼」，代表使用者想在現有結果的基礎上依新的提示詞調整，請盡量延續其結構並套用變更，而不是整段重寫（除非使用者明確要求重做)。',
     '',
-    '請只輸出 JSON，格式為：{"code": "...完整 JavaScript 原始碼（包含 window.renderAnimation 定義）..."}',
+    '請只輸出完整的 JavaScript 原始碼本身（包含 window.renderAnimation 定義），不要使用 JSON 包裝、不要加上 ```、```javascript 等 markdown 程式碼框，也不要加任何說明文字或註解以外的內容——你的整個回覆會被原封不動當作程式碼使用。',
   ].join('\n');
 }
 
@@ -105,31 +98,46 @@ function buildCustomScriptUserPrompt(params: { prompt: string; previousCode?: st
 }
 
 /**
- * Asks the configured LLM to generate (or revise) the JavaScript source for
- * a `custom-script` animation effect from a free-text prompt. Throws if the
- * LLM response fails schema validation; callers should run
- * `findUnsafeScriptPattern` on the result before storing/rendering it.
+ * Strips a single leading/trailing markdown code fence (e.g. ```js ... ```)
+ * if the LLM wrapped its output despite being asked not to, then trims
+ * surrounding whitespace.
  */
-export async function generateCustomScriptCode(params: {
-  prompt: string;
-  previousCode?: string;
-  pageText?: string;
-  label: string;
-}): Promise<CustomScriptAiResponse> {
+function stripCodeFences(text: string): string {
+  const trimmed = text.trim();
+  const fenceMatch = /^```[a-zA-Z0-9_-]*\n([\s\S]*?)\n?```$/.exec(trimmed);
+  return (fenceMatch?.[1] ?? trimmed).trim();
+}
+
+/**
+ * Asks the configured LLM to generate (or revise) the JavaScript source for
+ * a `custom-script` animation effect from a free-text prompt, streaming the
+ * raw output as it's generated via `onDelta`. Callers should run
+ * `findUnsafeScriptPattern` and `findCustomScriptContractIssue` on the
+ * resolved `code` before storing/rendering it.
+ */
+export async function generateCustomScriptCodeStream(
+  params: {
+    prompt: string;
+    previousCode?: string;
+    pageText?: string;
+    label: string;
+  },
+  onDelta: (delta: string) => void,
+): Promise<{ code: string; finishReason: string | null }> {
   const userText = buildCustomScriptUserPrompt({
     prompt: params.prompt.slice(0, MAX_CUSTOM_SCRIPT_PROMPT_LENGTH),
     previousCode: params.previousCode,
     pageText: params.pageText,
   });
-  const result = await callChatJSON({
+  const result = await streamChatText({
     label: params.label,
-    schema: CustomScriptAiResponseSchema,
-    maxTokens: 4000,
+    maxTokens: MAX_CUSTOM_SCRIPT_OUTPUT_TOKENS,
     temperature: 0.5,
     messages: [
       { role: 'system', content: buildCustomScriptSystemPrompt() },
       { role: 'user', content: userText },
     ],
+    onDelta,
   });
-  return result.data;
+  return { code: stripCodeFences(result.text), finishReason: result.finishReason };
 }

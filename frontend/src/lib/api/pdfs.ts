@@ -130,11 +130,18 @@ export interface GenerateCustomScriptCodeResponse {
   code: string;
 }
 
-/** Asks the backend's LLM to generate (or revise) the JavaScript source for a `custom-script` effect. */
+/**
+ * Asks the backend's LLM to generate (or revise) the JavaScript source for a
+ * `custom-script` effect. The backend responds with an SSE stream:
+ * - `event: delta` — `{ text }`, a chunk of generated code; reported via `onDelta` as it arrives.
+ * - `event: done`  — `{ code }`, the final, validated code.
+ * - `event: error` — `{ code, message }`, thrown as an `ApiError`.
+ */
 export async function generateCustomScriptCode(
   id: string,
   pageNumber: number,
   body: { prompt: string; previousCode?: string },
+  onDelta?: (delta: string) => void,
 ): Promise<GenerateCustomScriptCodeResponse> {
   const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/animation/custom-script`, {
     method: 'POST',
@@ -142,7 +149,57 @@ export async function generateCustomScriptCode(
     body: JSON.stringify(body),
   });
   if (!resp.ok) throw await parseErrorBody(resp);
-  return (await resp.json()) as GenerateCustomScriptCodeResponse;
+  if (!resp.body) throw new ApiError('Empty response body', 'INTERNAL_ERROR', resp.status);
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let code: string | null = null;
+
+  const handleEvent = (block: string): void => {
+    let event = 'message';
+    let data = '';
+    for (const line of block.split('\n')) {
+      if (line.startsWith('event:')) event = line.slice('event:'.length).trim();
+      else if (line.startsWith('data:')) data += line.slice('data:'.length).trim();
+    }
+    if (!data) return;
+    const parsed = JSON.parse(data) as Record<string, unknown>;
+    if (event === 'delta') {
+      const text = parsed.text;
+      if (typeof text === 'string' && text) onDelta?.(text);
+    } else if (event === 'done') {
+      const doneCode = parsed.code;
+      if (typeof doneCode === 'string') code = doneCode;
+    } else if (event === 'error') {
+      throw new ApiError(
+        typeof parsed.message === 'string' ? parsed.message : 'Generation failed',
+        typeof parsed.code === 'string' ? parsed.code : 'INTERNAL_ERROR',
+        resp.status,
+      );
+    }
+  };
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let idx: number;
+      while ((idx = buffer.indexOf('\n\n')) >= 0) {
+        handleEvent(buffer.slice(0, idx));
+        buffer = buffer.slice(idx + 2);
+      }
+    }
+    if (buffer.trim()) handleEvent(buffer);
+  } finally {
+    reader.cancel().catch(() => {});
+  }
+
+  if (code === null) {
+    throw new ApiError('Stream ended without a result', 'INTERNAL_ERROR', resp.status);
+  }
+  return { code };
 }
 
 export type ShareAccessMode = 'read_only' | 'editable';

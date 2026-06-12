@@ -108,6 +108,7 @@ export function AnimationEditorTab() {
     handleGenerateAiFocusEffects,
     customScriptBusy,
     customScriptBusyEffectId,
+    customScriptStreamingCode,
     handleGenerateCustomScriptCode,
   } = usePlayPageContext();
   const { t } = useI18n();
@@ -119,6 +120,10 @@ export function AnimationEditorTab() {
     () => draft.effects.find((effect) => effect.id === customScriptDialogEffectId && effect.type === 'custom-script') ?? null,
     [draft.effects, customScriptDialogEffectId],
   );
+  // AI 產生中（或最近一次產生失敗）時顯示即時串流內容；否則顯示已儲存於 draft 的 code。
+  const customScriptSourceValue = customScriptDialogEffect
+    ? customScriptStreamingCode[customScriptDialogEffect.id] ?? customScriptDialogEffect.code ?? ''
+    : '';
 
   const updateEffect = (id: string, patch: Partial<SlideAnimationEffect>) => {
     setAnimationDraft((prev) => {
@@ -484,14 +489,14 @@ export function AnimationEditorTab() {
                   <span className="flex items-center justify-between gap-2">
                     <span>{t('play.animation.customScriptSource' as TranslationKey)}</span>
                     <span className="text-[11px] text-slate-500">
-                      {(customScriptDialogEffect.code ?? '').length}/{MAX_CUSTOM_SCRIPT_CODE_LENGTH}
+                      {customScriptSourceValue.length}/{MAX_CUSTOM_SCRIPT_CODE_LENGTH}
                     </span>
                   </span>
                   <textarea
                     rows={16}
                     spellCheck={false}
                     maxLength={MAX_CUSTOM_SCRIPT_CODE_LENGTH}
-                    value={customScriptDialogEffect.code ?? ''}
+                    value={customScriptSourceValue}
                     disabled={disabled || customScriptBusyEffectId === customScriptDialogEffect.id}
                     placeholder={t('play.animation.customScriptSourcePlaceholder' as TranslationKey)}
                     onChange={(e) => updateEffect(customScriptDialogEffect.id, { code: e.target.value })}

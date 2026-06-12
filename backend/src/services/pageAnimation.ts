@@ -85,9 +85,11 @@ export const MAX_TEXT_CALLOUT_LENGTH = 80;
 export const MAX_HINTS = 50;
 export const MAX_HINT_LENGTH = 200;
 /** Max length (chars) for a `custom-script` effect's generated JavaScript `code`. */
-export const MAX_CUSTOM_SCRIPT_CODE_LENGTH = 8000;
+export const MAX_CUSTOM_SCRIPT_CODE_LENGTH = 24000;
 /** Max length (chars) for the prompt used to generate a `custom-script` effect's `code`. */
 export const MAX_CUSTOM_SCRIPT_PROMPT_LENGTH = 300;
+/** Max output tokens requested from the LLM when generating `custom-script` code (streaming). */
+export const MAX_CUSTOM_SCRIPT_OUTPUT_TOKENS = 24000;
 
 // Whitelisted numeric params per effect type; unknown keys are stripped, not rejected,
 // so future spec versions can add params without breaking older backends.

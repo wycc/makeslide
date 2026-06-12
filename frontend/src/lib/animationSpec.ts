@@ -41,7 +41,7 @@ export const MAX_HINTS = 50;
 export const MAX_HINT_LENGTH = 200;
 
 /** Max length (chars) for a `custom-script` effect's `code`, matching the backend's `MAX_CUSTOM_SCRIPT_CODE_LENGTH`. */
-export const MAX_CUSTOM_SCRIPT_CODE_LENGTH = 8000;
+export const MAX_CUSTOM_SCRIPT_CODE_LENGTH = 24000;
 /** Max length (chars) for the prompt used to generate a `custom-script` effect's `code`, matching the backend's `MAX_CUSTOM_SCRIPT_PROMPT_LENGTH`. */
 export const MAX_CUSTOM_SCRIPT_PROMPT_LENGTH = 300;
 

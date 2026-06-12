@@ -40,6 +40,12 @@ export interface PageAnimationState {
   /** Effect id currently being generated, so the editor can show per-row busy state. */
   customScriptBusyEffectId: string | null;
   /**
+   * AI 產生 `custom-script` 程式碼時，依 effect id 即時累積的串流輸出文字。產生
+   * 成功後會移除對應的 key，改由 `effect.code` 提供最終內容；產生失敗時則保留，
+   * 讓使用者能看到中途產生的內容以對照錯誤訊息。
+   */
+  customScriptStreamingCode: Record<string, string>;
+  /**
    * 呼叫後端 LLM，依提示詞（與選填的目前程式碼）產生 `custom-script` 效果的程式碼，
    * 並寫回該效果的 `code`/`prompt` 欄位。
    */
@@ -63,6 +69,7 @@ export function usePageAnimation({
   const [aiFocusBusy, setAiFocusBusy] = useState(false);
   const [customScriptBusy, setCustomScriptBusy] = useState(false);
   const [customScriptBusyEffectId, setCustomScriptBusyEffectId] = useState<string | null>(null);
+  const [customScriptStreamingCode, setCustomScriptStreamingCode] = useState<Record<string, string>>({});
 
   const pageKey = pdfId && currentPage ? `${pdfId}:${currentPage.page_number}` : null;
   const pageKeyRef = useRef(pageKey);
@@ -164,14 +171,28 @@ export function usePageAnimation({
       setCustomScriptBusyEffectId(effectId);
       setAnimationError(null);
       setAnimationMessage(null);
+      setCustomScriptStreamingCode((prev) => ({ ...prev, [effectId]: '' }));
       try {
-        const res = await generateCustomScriptCode(pdfId, currentPage.page_number, { prompt, previousCode });
+        const res = await generateCustomScriptCode(
+          pdfId,
+          currentPage.page_number,
+          { prompt, previousCode },
+          (delta) => {
+            setCustomScriptStreamingCode((prev) => ({ ...prev, [effectId]: (prev[effectId] ?? '') + delta }));
+          },
+        );
         setAnimationDraft((prev) => {
           const base = prev ?? defaultAnimationSpec();
           return {
             ...base,
             effects: base.effects.map((e) => (e.id === effectId ? { ...e, code: res.code, prompt } : e)),
           };
+        });
+        setCustomScriptStreamingCode((prev) => {
+          if (!(effectId in prev)) return prev;
+          const next = { ...prev };
+          delete next[effectId];
+          return next;
         });
         setAnimationMessage(t('play.animation.customScriptDone'));
         return true;
@@ -206,6 +227,7 @@ export function usePageAnimation({
     handleGenerateAiFocusEffects,
     customScriptBusy,
     customScriptBusyEffectId,
+    customScriptStreamingCode,
     handleGenerateCustomScriptCode,
   };
 }

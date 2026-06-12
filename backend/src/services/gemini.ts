@@ -139,6 +139,50 @@ export async function callGeminiJson<T>(params: {
   };
 }
 
+/**
+ * Non-streaming plain-text completion. Gemini's REST API used here does not
+ * support token-by-token streaming, so callers that want a streaming UX
+ * (see `streamChatText`) deliver this result to their `onDelta` callback as
+ * a single chunk once the full response has arrived.
+ */
+export async function callGeminiText(params: {
+  model: string;
+  messages: ChatCompletionMessageParam[];
+  maxTokens?: number;
+  temperature?: number;
+}): Promise<{ text: string; usage: GeminiUsage }> {
+  const apiKey = getGeminiApiKey();
+  const prompt = normalizeMessages(params.messages);
+  const body = {
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: {
+      temperature: params.temperature ?? 0.6,
+      maxOutputTokens: params.maxTokens ?? 2048,
+    },
+  };
+  const resp = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(params.model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  );
+  if (!resp.ok) throw new Error(`Gemini request failed: HTTP ${resp.status}`);
+  const json = (await resp.json()) as any;
+  const text = json?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+  const promptTokens = Number(json?.usageMetadata?.promptTokenCount ?? 0);
+  const completionTokens = Number(json?.usageMetadata?.candidatesTokenCount ?? 0);
+  return {
+    text,
+    usage: {
+      prompt_tokens: promptTokens,
+      completion_tokens: completionTokens,
+      total_tokens: promptTokens + completionTokens,
+    },
+  };
+}
+
 export async function synthesizeGeminiSpeech(params: {
   model: string;
   text: string;

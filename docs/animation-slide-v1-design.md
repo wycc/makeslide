@@ -248,7 +248,7 @@ easing 白名單：`none`、`power1.in`、`power1.out`、`power1.inOut`、`power
   widthPct?: number;
   heightPct?: number;
 }
-// effect.code?: string    — AI 產生的 JavaScript 原始碼，上限 8000 字 = MAX_CUSTOM_SCRIPT_CODE_LENGTH
+// effect.code?: string    — AI 產生的 JavaScript 原始碼，上限 24000 字 = MAX_CUSTOM_SCRIPT_CODE_LENGTH
 // effect.prompt?: string  — 產生 code 所用的提示詞，上限 300 字 = MAX_CUSTOM_SCRIPT_PROMPT_LENGTH（供使用者再次編輯/迭代）
 ```
 
@@ -298,8 +298,8 @@ easing 白名單：`none`、`power1.in`、`power1.out`、`power1.inOut`、`power
 
 **AI 產生/迭代**
 
-- `POST /api/pdfs/:id/pages/:n/animation/custom-script`（見 §8）：帶入 `{ prompt, previousCode? }`，後端讀取本頁 OCR 文字作為主題參考，組成提示詞請 LLM 回傳 `{ code }`；通過 `findUnsafeScriptPattern` 檢查後回傳給前端，**不會**寫入已儲存的 spec。
-- 編輯器（§7.5）將回應寫入該效果的 `code`/`prompt` 欄位，使用者可重複輸入新提示詞並帶入目前 `code` 作為 `previousCode` 迭代調整，直到滿意為止；最終仍需按「儲存動畫」才會持久化。
+- `POST /api/pdfs/:id/pages/:n/animation/custom-script`（見 §8）：帶入 `{ prompt, previousCode? }`，後端讀取本頁 OCR 文字作為主題參考，組成提示詞請 LLM 以**串流**（`stream: true`，上限 `MAX_CUSTOM_SCRIPT_OUTPUT_TOKENS = 24000` tokens）產生原始 JavaScript 程式碼（非 JSON 包裝，必要時去除 LLM 誤加的 ```` ``` ```` 圍欄）；回應為 SSE（`text/event-stream`），包含多個 `event: delta`（`{ text }`，逐段輸出片段）後接一個 `event: done`（`{ code }`，完整、已通過檢查的最終程式碼）或 `event: error`（`{ code, message }`）。通過 `findUnsafeScriptPattern`/`findCustomScriptContractIssue`/長度檢查後才送出 `done`，**不會**寫入已儲存的 spec。
+- 編輯器（§7.5）以 `generateCustomScriptCode`（`frontend/src/lib/api/pdfs.ts`）消費此 SSE 串流：每個 `delta` 即時累積顯示於程式碼編輯器（`usePageAnimation.ts` 的 `customScriptStreamingCode`，依 effect id 索引），`done` 時寫入該效果的 `code`/`prompt` 欄位並清除串流暫存，`error` 則拋出 `ApiError`（`code`/`message`）由 UI 顯示。使用者可重複輸入新提示詞並帶入目前 `code` 作為 `previousCode` 迭代調整，直到滿意為止；最終仍需按「儲存動畫」才會持久化。
 
 **v1 範圍與後續**
 
@@ -459,7 +459,7 @@ Props：`renderType`、`src`（由呼叫端算好，含 displayedImageSrc 防閃
 
 - **提示詞輸入框**（`play.animation.customScriptPrompt`，多行文字，上限 300 字 = `MAX_CUSTOM_SCRIPT_PROMPT_LENGTH`），對應 `effect.prompt`。
 - **產生/重新產生按鈕**：`effect.code` 為空時顯示「🤖 產生動畫」（`play.animation.customScriptGenerate`），已有 `code` 時顯示「🤖 依提示詞重新產生」（`play.animation.customScriptRegenerate`）；提示詞為空或產生中時停用。產生中顯示忙碌文字（`play.animation.customScriptGenerateBusy`）。
-- 點擊後呼叫 `POST /api/pdfs/:id/pages/:n/animation/custom-script`（`generateCustomScriptCode`，`frontend/src/lib/api/pdfs.ts`），帶入 `{ prompt: effect.prompt, previousCode: effect.code }`；回應的 `code` 與目前 `prompt` 寫回該效果（`usePageAnimation.ts` 的 `handleGenerateCustomScriptCode`）。成功顯示提示訊息（`play.animation.customScriptDone`），失敗顯示錯誤（`play.animation.customScriptError`，含 422 `UNSAFE_SCRIPT` 時的後端錯誤訊息）。
+- 點擊後呼叫 `POST /api/pdfs/:id/pages/:n/animation/custom-script`（`generateCustomScriptCode`，`frontend/src/lib/api/pdfs.ts`），帶入 `{ prompt: effect.prompt, previousCode: effect.code }`，以 SSE 串流消費回應：產生中，JavaScript 原始碼編輯器即時顯示陸續抵達的 `delta` 內容（`customScriptStreamingCode`，唯讀），讓使用者看到逐步輸出的過程；`done` 時將完整 `code` 與目前 `prompt` 寫回該效果（`usePageAnimation.ts` 的 `handleGenerateCustomScriptCode`）並清除串流暫存，編輯器恢復可編輯。成功顯示提示訊息（`play.animation.customScriptDone`），失敗則於 UI 顯示錯誤訊息（`animationError`）——`error` 事件的 `UNSAFE_SCRIPT`/`INVALID_SCRIPT_CONTRACT` 對應專屬訊息（`play.animation.customScriptUnsafe`/`customScriptContractError`），其餘（含網路錯誤、`SCRIPT_TOO_LONG`、空輸出、串流中斷無 `done`）顯示 `customScriptError` 或後端訊息；此時串流暫存內容會保留在編輯器中，方便使用者對照錯誤訊息。
 - `effect.code` 尚未產生時顯示提示文字（`play.animation.customScriptEmpty`）；已產生時，下方即時顯示 `CustomScriptPreview`——一個 sandboxed `<iframe>`，以 `requestAnimationFrame` 持續送出 `{ type: 'sync', t, playing: true }`（`t` 在 `0 ~ previewLoopSeconds(effect)` 之間迴圈，`previewLoopSeconds = clamp(customScriptDurationSeconds(effect), 2, 20)`），讓使用者在反覆調整提示詞時立即看到迴圈播放的結果，無需先儲存或進入播放模式。預覽傳給 sandbox 的 `api.duration` 即為 `previewLoopSeconds(effect)`，與實際播放時的 `customScriptDurationSeconds(effect)` 採同一公式（僅預覽端額外夾在 2~20 秒之間），確保預覽中看到的「一輪」進度與實際播放一致。
 - 效果類型為 `custom-script` 時亦適用 §7（效果列）中對 `OVERLAY_EFFECT_TYPES` 共用的「焦點位置與大小（%）」與「顯示後自動消失」控制項。
 - 與其他效果一樣，調整完成後需按「儲存動畫」才會持久化；`prompt`/`code` 皆隨 spec 一併儲存，重新進入編輯器可繼續迭代。
@@ -471,7 +471,7 @@ GET  /api/pdfs/:id/pages/:n/animation              → { page_number, render_typ
 PUT  /api/pdfs/:id/pages/:n/animation              → 驗證、寫 JSON、更新 render_type/animation_spec_path
 GET  /api/pdfs/:id/pages/:n/animation/spec         → 純 spec JSON，Cache-Control: no-store
 POST /api/pdfs/:id/pages/:n/animation/auto-focus-ai → { effects }（AI 產生，不寫入已儲存 spec，見 §7.4）
-POST /api/pdfs/:id/pages/:n/animation/custom-script → { code }（AI 產生/迭代自訂腳本，不寫入已儲存 spec，見 §5.4/§7.5；422 UNSAFE_SCRIPT 表示產生的程式碼命中黑名單）
+POST /api/pdfs/:id/pages/:n/animation/custom-script → SSE（text/event-stream）：event: delta {text} *、event: done {code} 或 event: error {code, message}（AI 產生/迭代自訂腳本，不寫入已儲存 spec，見 §5.4/§7.5；UNSAFE_SCRIPT/INVALID_SCRIPT_CONTRACT/SCRIPT_TOO_LONG/INTERNAL_ERROR 為可能的錯誤 code）
 ```
 
 PUT 規則：`spec.enabled === true` → `render_type='gsap-image'`；`false` → `render_type='static-image'`（JSON 保留以便再次啟用）。驗證失敗回 `400 INVALID_ANIMATION_SPEC`。

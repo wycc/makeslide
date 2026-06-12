@@ -266,11 +266,11 @@ test('validateAnimationSpec accepts a custom-script effect with code and prompt'
 
 test('validateAnimationSpec rejects a custom-script effect whose code or prompt exceed the max length', () => {
   assert.equal(
-    validateAnimationSpec(validSpec([fadeIn({ type: 'custom-script', code: 'x'.repeat(8001) })])).ok,
+    validateAnimationSpec(validSpec([fadeIn({ type: 'custom-script', code: 'x'.repeat(24001) })])).ok,
     false,
   );
   assert.equal(
-    validateAnimationSpec(validSpec([fadeIn({ type: 'custom-script', code: 'x'.repeat(8000) })])).ok,
+    validateAnimationSpec(validSpec([fadeIn({ type: 'custom-script', code: 'x'.repeat(24000) })])).ok,
     true,
   );
   assert.equal(
@@ -718,6 +718,58 @@ test('findCustomScriptContractIssue validates renderAnimation and onFrame contra
 
 // ── POST animation/custom-script ─────────────────────────────────────────────
 
+/**
+ * Builds an OpenAI client stub whose `chat.completions.create` returns an
+ * async-iterable stream of `ChatCompletionChunk`-shaped objects, splitting
+ * `text` into a few delta chunks followed by a final chunk carrying
+ * `finish_reason` and `usage` — mirroring `stream: true` responses.
+ */
+function streamingChatClient(
+  text: string,
+  onMessages?: (messages: Array<{ role: string; content: unknown }>) => void,
+) {
+  return {
+    chat: {
+      completions: {
+        create: async (body: unknown) => {
+          const { messages } = body as { messages: Array<{ role: string; content: unknown }> };
+          onMessages?.(messages);
+          const chunkSize = Math.max(1, Math.ceil(text.length / 3));
+          const pieces: string[] = [];
+          for (let i = 0; i < text.length; i += chunkSize) pieces.push(text.slice(i, i + chunkSize));
+          return {
+            [Symbol.asyncIterator]: async function* () {
+              for (const piece of pieces) {
+                yield { choices: [{ delta: { content: piece }, finish_reason: null }] };
+              }
+              yield {
+                choices: [{ delta: {}, finish_reason: 'stop' }],
+                usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+              };
+            },
+          };
+        },
+      },
+    },
+  };
+}
+
+/** Parses an SSE response body (`event: x\ndata: {...}\n\n` blocks) into `{ event, data }` entries. */
+function parseSseEvents(payload: string): Array<{ event: string; data: unknown }> {
+  return payload
+    .split('\n\n')
+    .map((block) => block.trim())
+    .filter((block) => block.length > 0)
+    .map((block) => {
+      const lines = block.split('\n');
+      const eventLine = lines.find((l) => l.startsWith('event:'));
+      const dataLine = lines.find((l) => l.startsWith('data:'));
+      const event = eventLine ? eventLine.slice('event:'.length).trim() : '';
+      const dataRaw = dataLine ? dataLine.slice('data:'.length).trim() : '';
+      return { event, data: dataRaw ? JSON.parse(dataRaw) : undefined };
+    });
+}
+
 test('GET animation/custom-script returns 405 diagnostic response because generation is POST-only', async () => {
   seedAnimationPdf(PDF_ID, 1);
   const app = await buildApp();
@@ -735,27 +787,13 @@ test('GET animation/custom-script returns 405 diagnostic response because genera
   }
 });
 
-test('POST animation/custom-script returns AI-generated code for a safe script', async () => {
+test('POST animation/custom-script streams AI-generated code via SSE and ends with a done event', async () => {
   seedAnimationPdf(PDF_ID, 1);
   fs.writeFileSync(path.join(config.storageRoot, PDF_ID, 'pages', 'animuid1.text.txt'), '頁面標題：銷售趨勢', 'utf8');
   const generatedCode =
     'window.renderAnimation = function (root, api) { api.onFrame(function (frame) { root.style.opacity = String(Math.min(1, frame.t)); }); };';
   let capturedMessages: Array<{ role: string; content: unknown }> | undefined;
-  setOpenAIClientForTest({
-    chat: {
-      completions: {
-        create: async (body: unknown) => {
-          capturedMessages = (body as { messages: Array<{ role: string; content: unknown }> }).messages;
-          return {
-            choices: [
-              { message: { content: JSON.stringify({ code: generatedCode }) }, finish_reason: 'stop' },
-            ],
-            usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
-          };
-        },
-      },
-    },
-  } as never);
+  setOpenAIClientForTest(streamingChatClient(generatedCode, (messages) => { capturedMessages = messages; }) as never);
 
   const app = await buildApp();
   try {
@@ -766,7 +804,19 @@ test('POST animation/custom-script returns AI-generated code for a safe script',
       payload: { prompt: '畫一個會旋轉的圓形' },
     });
     assert.equal(resp.statusCode, 200);
-    assert.deepEqual(resp.json(), { code: generatedCode });
+    assert.match(String(resp.headers['content-type']), /^text\/event-stream/);
+
+    const events = parseSseEvents(resp.payload);
+    const deltaText = events
+      .filter((e) => e.event === 'delta')
+      .map((e) => (e.data as { text: string }).text)
+      .join('');
+    assert.equal(deltaText, generatedCode);
+    assert.ok(events.length > 1, 'expected multiple delta events plus a done event');
+
+    const doneEvent = events.find((e) => e.event === 'done');
+    assert.deepEqual(doneEvent?.data, { code: generatedCode });
+    assert.equal(events[events.length - 1]?.event, 'done');
 
     const userMessage = capturedMessages?.find((m) => m.role === 'user');
     assert.match(String(userMessage?.content), /銷售趨勢/);
@@ -774,7 +824,7 @@ test('POST animation/custom-script returns AI-generated code for a safe script',
 
     // round-trips through validateAnimationSpec when stored as a custom-script effect
     const validated = validateAnimationSpec(
-      validSpec([fadeIn({ type: 'custom-script', code: (resp.json() as { code: string }).code })]),
+      validSpec([fadeIn({ type: 'custom-script', code: (doneEvent?.data as { code: string }).code })]),
     );
     assert.equal(validated.ok, true);
   } finally {
@@ -787,19 +837,7 @@ test('POST animation/custom-script includes previousCode in the prompt when iter
   seedAnimationPdf(PDF_ID, 1);
   const previousCode = 'window.renderAnimation = function (root, api) { api.onFrame(function () {}); };';
   let capturedMessages: Array<{ role: string; content: unknown }> | undefined;
-  setOpenAIClientForTest({
-    chat: {
-      completions: {
-        create: async (body: unknown) => {
-          capturedMessages = (body as { messages: Array<{ role: string; content: unknown }> }).messages;
-          return {
-            choices: [{ message: { content: JSON.stringify({ code: previousCode }) }, finish_reason: 'stop' }],
-            usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
-          };
-        },
-      },
-    },
-  } as never);
+  setOpenAIClientForTest(streamingChatClient(previousCode, (messages) => { capturedMessages = messages; }) as never);
 
   const app = await buildApp();
   try {
@@ -819,23 +857,9 @@ test('POST animation/custom-script includes previousCode in the prompt when iter
   }
 });
 
-test('POST animation/custom-script returns 422 UNSAFE_SCRIPT when the generated code is disallowed', async () => {
+test('POST animation/custom-script sends an UNSAFE_SCRIPT error event when the generated code is disallowed', async () => {
   seedAnimationPdf(PDF_ID, 1);
-  setOpenAIClientForTest({
-    chat: {
-      completions: {
-        create: async () => ({
-          choices: [
-            {
-              message: { content: JSON.stringify({ code: 'fetch("https://evil.example").then(function () {});' }) },
-              finish_reason: 'stop',
-            },
-          ],
-          usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
-        }),
-      },
-    },
-  } as never);
+  setOpenAIClientForTest(streamingChatClient('fetch("https://evil.example").then(function () {});') as never);
 
   const app = await buildApp();
   try {
@@ -845,31 +869,20 @@ test('POST animation/custom-script returns 422 UNSAFE_SCRIPT when the generated 
       headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
       payload: { prompt: '從遠端載入資料並顯示' },
     });
-    assert.equal(resp.statusCode, 422);
-    assert.equal((resp.json() as { error: { code: string } }).error.code, 'UNSAFE_SCRIPT');
+    assert.equal(resp.statusCode, 200);
+    const events = parseSseEvents(resp.payload);
+    const errorEvent = events.find((e) => e.event === 'error');
+    assert.equal((errorEvent?.data as { code: string } | undefined)?.code, 'UNSAFE_SCRIPT');
+    assert.ok(!events.some((e) => e.event === 'done'));
   } finally {
     setOpenAIClientForTest(null);
     await app.close();
   }
 });
 
-test('POST animation/custom-script returns 422 INVALID_SCRIPT_CONTRACT when generated code misses render contract', async () => {
+test('POST animation/custom-script sends an INVALID_SCRIPT_CONTRACT error event when generated code misses render contract', async () => {
   seedAnimationPdf(PDF_ID, 1);
-  setOpenAIClientForTest({
-    chat: {
-      completions: {
-        create: async () => ({
-          choices: [
-            {
-              message: { content: JSON.stringify({ code: 'var canvas = document.createElement("canvas");' }) },
-              finish_reason: 'stop',
-            },
-          ],
-          usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
-        }),
-      },
-    },
-  } as never);
+  setOpenAIClientForTest(streamingChatClient('var canvas = document.createElement("canvas");') as never);
 
   const app = await buildApp();
   try {
@@ -879,26 +892,20 @@ test('POST animation/custom-script returns 422 INVALID_SCRIPT_CONTRACT when gene
       headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
       payload: { prompt: '畫一個圓形' },
     });
-    assert.equal(resp.statusCode, 422);
-    assert.equal((resp.json() as { error: { code: string } }).error.code, 'INVALID_SCRIPT_CONTRACT');
+    assert.equal(resp.statusCode, 200);
+    const events = parseSseEvents(resp.payload);
+    const errorEvent = events.find((e) => e.event === 'error');
+    assert.equal((errorEvent?.data as { code: string } | undefined)?.code, 'INVALID_SCRIPT_CONTRACT');
+    assert.ok(!events.some((e) => e.event === 'done'));
   } finally {
     setOpenAIClientForTest(null);
     await app.close();
   }
 });
 
-test('POST animation/custom-script returns 500 when model returns blank code', async () => {
+test('POST animation/custom-script sends an INTERNAL_ERROR error event when the model returns blank code', async () => {
   seedAnimationPdf(PDF_ID, 1);
-  setOpenAIClientForTest({
-    chat: {
-      completions: {
-        create: async () => ({
-          choices: [{ message: { content: JSON.stringify({ code: '   ' }) }, finish_reason: 'stop' }],
-          usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
-        }),
-      },
-    },
-  } as never);
+  setOpenAIClientForTest(streamingChatClient('   ') as never);
 
   const app = await buildApp();
   try {
@@ -908,8 +915,11 @@ test('POST animation/custom-script returns 500 when model returns blank code', a
       headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
       payload: { prompt: '畫一個圓形' },
     });
-    assert.equal(resp.statusCode, 500);
-    assert.equal((resp.json() as { error: { code: string } }).error.code, 'INTERNAL_ERROR');
+    assert.equal(resp.statusCode, 200);
+    const events = parseSseEvents(resp.payload);
+    const errorEvent = events.find((e) => e.event === 'error');
+    assert.equal((errorEvent?.data as { code: string } | undefined)?.code, 'INTERNAL_ERROR');
+    assert.ok(!events.some((e) => e.event === 'done'));
   } finally {
     setOpenAIClientForTest(null);
     await app.close();
