@@ -148,6 +148,7 @@ export interface CreateYoutubeTaskResponse {
   source_url: string;
   source_video_id: string;
   source_caption_language: string | null;
+  host_mode?: 'solo' | 'dual';
   category: string;
   created_at: string;
 }
@@ -155,6 +156,7 @@ export interface CreateYoutubeTaskResponse {
 export async function createYoutubeTask(
   youtubeUrl: string,
   language?: string,
+  hostMode?: 'solo' | 'dual',
 ): Promise<CreateYoutubeTaskResponse> {
   const resp = await fetch('api/youtube', {
     method: 'POST',
@@ -162,6 +164,7 @@ export async function createYoutubeTask(
     body: JSON.stringify({
       youtube_url: youtubeUrl,
       language: language?.trim() || undefined,
+      host_mode: hostMode,
     }),
   });
   if (!resp.ok) {

@@ -5,6 +5,7 @@ export interface UploadOptions {
   onProgress?: (loaded: number, total: number) => void;
   signal?: AbortSignal;
   pdfImportMode?: 'slides' | 'document';
+  hostMode?: 'solo' | 'dual';
 }
 
 export interface GeneratePromptTextRequest {
@@ -36,6 +37,7 @@ export function uploadPdf(file: File, opts: UploadOptions = {}): Promise<UploadR
     // Put mode field before file to ensure backend can read pdf_import_mode
     // consistently when deciding slides vs document flow.
     formData.append('pdf_import_mode', opts.pdfImportMode ?? 'slides');
+    formData.append('host_mode', opts.hostMode ?? 'solo');
     formData.append('file', file);
 
     const xhr = new XMLHttpRequest();

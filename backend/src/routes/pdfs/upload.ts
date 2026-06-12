@@ -52,6 +52,7 @@ const PromptChatSchema = z.object({
 });
 
 const PdfImportModeSchema = z.enum(['slides', 'document']);
+const HostModeSchema = z.enum(['solo', 'dual']);
 
 function multipartFieldValue(field: unknown): string | undefined {
   const first = Array.isArray(field) ? field[0] : field;
@@ -318,6 +319,17 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
     }
     const pdfImportMode = parsedPdfImportMode.data;
 
+    const hostModeValue = multipartFieldValue(file.fields.host_mode);
+    const parsedHostMode = HostModeSchema.safeParse(
+      typeof hostModeValue === 'string' ? hostModeValue : 'solo',
+    );
+    if (!parsedHostMode.success) {
+      return reply
+        .code(400)
+        .send(errorResponse('INVALID_REQUEST', 'host_mode 必須是 solo 或 dual'));
+    }
+    const hostMode = parsedHostMode.data;
+
     const filename = sanitizeUploadFilename(file.filename, '.pdf');
     const mimetype = file.mimetype ?? '';
     const hasPdfExt = filename.toLowerCase().endsWith('.pdf');
@@ -433,9 +445,10 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
                             progress_step, error_message, user_prompt, require_script_confirmation,
                             category, owner_sub, visibility,
                             tts_voice, tts_speed, script_max_chars_per_page, image_style_prompt,
+                            host_mode,
                             created_at, updated_at)
-         VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?)`,
-      ).run(pdfId, title, filename, status, DEFAULT_PDF_CATEGORY, ownerSub, 'private', createdAt, createdAt);
+         VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?)`,
+      ).run(pdfId, title, filename, status, DEFAULT_PDF_CATEGORY, ownerSub, 'private', hostMode, createdAt, createdAt);
 
       db.prepare(
         `INSERT INTO pdf_sources (pdf_id, source_kind, source_name, content_text, created_at, updated_at)
@@ -476,6 +489,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       tts_speed: null,
       script_max_chars_per_page: null,
       image_style_prompt: null,
+      host_mode: hostMode,
       created_at: createdAt,
       has_source_text: isTxt || pdfImportMode === 'document',
     });
@@ -499,6 +513,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
     const createdAt = nowIso();
     const status: PdfStatus = 'uploaded';
     const language = parsedBody.data.language?.trim() || null;
+    const hostMode = parsedBody.data.host_mode ?? 'solo';
     const ownerSub = ownerSubFromRequest(request);
 
     try {
@@ -531,9 +546,10 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
                             progress_step, error_message, user_prompt, require_script_confirmation,
                             category, owner_sub, visibility,
                             tts_voice, tts_speed, script_max_chars_per_page, image_style_prompt,
+                            host_mode,
                             source_type, source_url, source_video_id, source_caption_language,
                             created_at, updated_at)
-         VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         pdfId,
         `YouTube ${videoId}`,
@@ -542,6 +558,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         DEFAULT_PDF_CATEGORY,
         ownerSub,
         'private',
+        hostMode,
         'youtube',
         youtubeUrl,
         videoId,
@@ -576,6 +593,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       source_url: youtubeUrl,
       source_video_id: videoId,
       source_caption_language: language,
+      host_mode: hostMode,
       category: DEFAULT_PDF_CATEGORY,
       created_at: createdAt,
     });

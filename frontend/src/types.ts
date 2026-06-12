@@ -232,6 +232,7 @@ export interface UploadResponse {
   category: string;
   has_source_text?: boolean;
   tts_provider?: 'openai' | 'gemini';
+  host_mode?: 'solo' | 'dual';
   created_at: string;
 }
 

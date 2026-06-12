@@ -259,6 +259,7 @@ export const YoutubeCreateBodySchema = z.object({
       }
     }, '僅支援 YouTube 網址'),
   language: z.string().trim().regex(/^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8}){0,3}$/, 'language 格式錯誤').optional(),
+  host_mode: z.enum(['solo', 'dual']).optional(),
 });
 
 const RegenerateAllImagesBodySchema = z.object({

@@ -42,6 +42,7 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [youtubeLang, setYoutubeLang] = useState('zh-TW');
   const [pdfImportMode, setPdfImportMode] = useState<'slides' | 'document'>('slides');
+  const [hostMode, setHostMode] = useState<'solo' | 'dual'>('solo');
   const [showPdfModePicker, setShowPdfModePicker] = useState(false);
   const [isSubmittingYoutube, setIsSubmittingYoutube] = useState(false);
   const [showYoutubePanel, setShowYoutubePanel] = useState(false);
@@ -85,6 +86,7 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
     try {
       const resp = await uploadPdf(file, {
         pdfImportMode,
+        hostMode,
         onProgress: (loaded, total) => {
           if (total > 0) {
             setProgress(Math.round((loaded / total) * 100));
@@ -122,7 +124,7 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
     setRecoveryGuide([]);
     setIsSubmittingYoutube(true);
     try {
-      const resp = await createYoutubeTask(url, youtubeLang.trim() || undefined);
+      const resp = await createYoutubeTask(url, youtubeLang.trim() || undefined, hostMode);
       onUploaded({
         id: resp.id,
         status: 'uploaded',
@@ -152,6 +154,29 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
     }
   };
 
+
+  const hostModePicker = (
+    <div className="flex w-full items-center gap-2">
+      <span className="whitespace-nowrap text-xs text-slate-400">{t('upload.hostModeLabel')}</span>
+      <div className="flex overflow-hidden rounded-md border border-slate-600">
+        {(['solo', 'dual'] as const).map((mode) => (
+          <button
+            key={mode}
+            type="button"
+            onClick={() => setHostMode(mode)}
+            aria-pressed={hostMode === mode}
+            className={`px-3 py-1 text-xs ${
+              hostMode === mode
+                ? 'bg-cyan-500/25 font-medium text-cyan-100'
+                : 'text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            {mode === 'solo' ? t('upload.hostModeSolo') : t('upload.hostModeDual')}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     <div className="flex flex-col items-start gap-2">
@@ -195,6 +220,7 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
             >
               {t('upload.modeDocument')}
             </button>
+            {hostModePicker}
           </div>
         )}
 
@@ -260,6 +286,7 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
           >
             {isSubmittingYoutube ? t('upload.creating') : t('upload.createYoutubeTask')}
           </button>
+          {hostModePicker}
         </div>
       )}
       {error && (
