@@ -307,6 +307,8 @@ export const en = {
   'play.animation.focusY': 'Y',
   'play.animation.focusWidth': 'W',
   'play.animation.focusHeight': 'H',
+  'play.animation.autoGenerateFocus': '🪄 Auto-generate focus from transcript',
+  'play.animation.autoGenerateFocusConfirm': 'This will generate one highlight-box focus effect per transcript sentence and replace all current effects. Continue?',
   'language.zhTW': '繁體中文',
   'language.en': 'English',
 } as const;
