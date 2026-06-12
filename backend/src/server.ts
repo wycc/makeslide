@@ -206,6 +206,12 @@ export async function buildApp() {
     await app.register(authRoutes, { prefix });
   }
 
+  if (process.env.LOG_ROUTES === '1') {
+    app.addHook('onReady', async () => {
+      app.log.info({ routes: app.printRoutes() }, 'Registered Fastify routes');
+    });
+  }
+
   // Serve frontend static bundle in production container.
   if (process.env.NODE_ENV === "production") {
     await app.register(fastifyStatic, {
