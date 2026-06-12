@@ -2,6 +2,7 @@ import { useI18n } from '../../i18n';
 import type { TranslationKey } from '../../i18n';
 import type { SlideAnimationEffect, SlideAnimationEffectType, SlideAnimationEase } from '../../types';
 import {
+  DEFAULT_EXIT_DURATION_SECONDS,
   MAX_HINT_LENGTH,
   MAX_SLIDE_ANIMATION_EFFECTS,
   MAX_TEXT_CALLOUT_LENGTH,
@@ -305,6 +306,37 @@ export function AnimationEditorTab() {
                     ))}
                   </div>
                 </div>
+              )}
+              {OVERLAY_EFFECT_TYPES.includes(effect.type) && (
+                <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  {t('play.animation.exitDuration')}
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="checkbox"
+                      checked={effect.exitDuration !== undefined}
+                      disabled={disabled}
+                      onChange={(e) =>
+                        updateEffect(effect.id, {
+                          exitDuration: e.target.checked ? DEFAULT_EXIT_DURATION_SECONDS : undefined,
+                        })
+                      }
+                      className="h-4 w-4 accent-fuchsia-500"
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      max={600}
+                      step={0.1}
+                      value={effect.exitDuration ?? DEFAULT_EXIT_DURATION_SECONDS}
+                      disabled={disabled || effect.exitDuration === undefined}
+                      onChange={(e) =>
+                        updateEffect(effect.id, { exitDuration: Math.max(0, Number(e.target.value) || 0) })
+                      }
+                      className="w-16 rounded-md border border-slate-700 bg-slate-900 px-1 py-1 text-sm text-slate-100 disabled:opacity-40"
+                    />
+                    {t('play.animation.seconds')}
+                  </div>
+                </label>
               )}
               <button
                 type="button"

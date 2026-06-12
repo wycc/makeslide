@@ -40,6 +40,13 @@ export interface AnimationEffect {
   startTrigger?: AnimationStartTrigger;
   /** Caption text for `text-callout` effects (ignored by other effect types). */
   text?: string;
+  /**
+   * Seconds to remain visible after the fade-in completes before
+   * automatically fading back out (same `duration`/`ease` as the fade-in).
+   * Only meaningful for overlay effect types (`highlight-box`, `spotlight`,
+   * `text-callout`); ignored by transform effects.
+   */
+  exitDuration?: number;
 }
 
 export interface AnimationSpec {
@@ -95,6 +102,7 @@ const EffectSchema = z.object({
   params: z.record(z.unknown()).optional(),
   startTrigger: StartTriggerSchema.optional(),
   text: z.string().max(MAX_TEXT_CALLOUT_LENGTH).optional(),
+  exitDuration: z.number().min(0).max(MAX_DURATION_SECONDS).optional(),
 });
 
 const HintsSchema = z
@@ -148,6 +156,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(params ? { params } : {}),
       ...(effect.startTrigger ? { startTrigger: effect.startTrigger } : {}),
       ...(effect.text !== undefined ? { text: effect.text } : {}),
+      ...(effect.exitDuration !== undefined ? { exitDuration: effect.exitDuration } : {}),
     };
   });
   const hints = parsed.data.hints && Object.keys(parsed.data.hints).length > 0 ? parsed.data.hints : undefined;

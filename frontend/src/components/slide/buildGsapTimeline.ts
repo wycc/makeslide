@@ -68,7 +68,12 @@ export function buildGsapTimeline(stage: HTMLElement, spec: SlideAnimationSpec):
       case 'spotlight':
       case 'text-callout': {
         const overlay = stage.querySelector<HTMLElement>(`[data-effect-id="${effect.id}"]`);
-        if (overlay) tl.fromTo(overlay, { autoAlpha: 0 }, { autoAlpha: 1, ...common }, effect.start);
+        if (overlay) {
+          tl.fromTo(overlay, { autoAlpha: 0 }, { autoAlpha: 1, ...common }, effect.start);
+          if (effect.exitDuration !== undefined) {
+            tl.to(overlay, { autoAlpha: 0, ...common }, effect.start + effect.duration + effect.exitDuration);
+          }
+        }
         break;
       }
     }

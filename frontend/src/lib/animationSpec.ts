@@ -34,6 +34,9 @@ export const MAX_HINTS = 50;
 /** Max length (chars) for a single animation hint, matching the backend's `MAX_HINT_LENGTH`. */
 export const MAX_HINT_LENGTH = 200;
 
+/** Default `exitDuration` (seconds) suggested when a user first enables auto-hide for an overlay effect. */
+export const DEFAULT_EXIT_DURATION_SECONDS = 2;
+
 export interface FocusEffectParams {
   xPct: number;
   yPct: number;

@@ -222,6 +222,30 @@ test('validateAnimationSpec rejects a text-callout effect whose text exceeds the
   );
 });
 
+test('validateAnimationSpec accepts and preserves an exitDuration on an overlay effect', () => {
+  const result = validateAnimationSpec(
+    validSpec([fadeIn({ id: 'effect-1', type: 'highlight-box', exitDuration: 2.5 })]),
+  );
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.spec.effects[0].exitDuration, 2.5);
+  }
+});
+
+test('validateAnimationSpec omits exitDuration when not provided', () => {
+  const result = validateAnimationSpec(validSpec([fadeIn({ type: 'highlight-box' })]));
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.spec.effects[0].exitDuration, undefined);
+  }
+});
+
+test('validateAnimationSpec rejects a negative or out-of-range exitDuration', () => {
+  assert.equal(validateAnimationSpec(validSpec([fadeIn({ type: 'highlight-box', exitDuration: -1 })])).ok, false);
+  assert.equal(validateAnimationSpec(validSpec([fadeIn({ type: 'highlight-box', exitDuration: 601 })])).ok, false);
+  assert.equal(validateAnimationSpec(validSpec([fadeIn({ type: 'highlight-box', exitDuration: 0 })])).ok, true);
+});
+
 test('validateAnimationSpec accepts and preserves per-sentence hints', () => {
   const result = validateAnimationSpec({ ...validSpec([fadeIn()]), hints: { '0': '放大顯示標題', '2': '指向圖表右下角' } });
   assert.equal(result.ok, true);

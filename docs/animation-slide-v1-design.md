@@ -29,6 +29,9 @@
 >
 > 擴充註記（2026-06-12，逐字稿動畫指引）：
 > - `AnimationSpec` 新增選填欄位 `hints?: Record<string, string>`（依逐字稿句子索引對應的自由文字動畫指引），動畫編輯器新增逐句輸入 UI。為 TODO「加上手動在逐字稿加上動畫指引的功能，這個指引會在生成動畫時傳給 LLM 做參考」的 v1 範圍——本次僅提供資料模型、驗證與輸入 UI；「生成動畫時傳給 LLM 做參考」留待 V2 LLM 生成動畫管線消費這些 hints。詳見 §4.4、§7.3、§12。
+>
+> 擴充註記（2026-06-12，效果自動消失）：
+> - `highlight-box`/`spotlight`/`text-callout`（`OVERLAY_EFFECT_TYPES`）新增選填欄位 `exitDuration?: number`（秒）：淡入完成後維持顯示 `exitDuration` 秒，再以相同 `duration`/`ease` 自動淡出。為 TODO「每一個動畫都要有消失時間」之 v1 範圍——僅套用於 overlay 效果；`fade-in`/`zoom-*`/`pan-*` 等整頁 transform 效果本身已有明確的最終狀態，其對稱「恢復原狀」機制留待後續版本（見 §12）。詳見 §5.3、§7。
 
 ---
 
@@ -190,7 +193,7 @@ easing 白名單：`none`、`power1.in`、`power1.out`、`power1.inOut`、`power
 
 - `highlight-box`：在 `(xPct, yPct)` ~ `(xPct+widthPct, yPct+heightPct)` 範圍內渲染一個紅色圓角外框（`border + box-shadow`），`autoAlpha` 由 0 淡入至 1。
 - `spotlight`：在同一範圍內渲染一個橢圓形區域，外側以 `box-shadow: 0 0 0 9999px rgba(0,0,0,0.6)` 形成大範圍暗化遮罩，達到「聚光燈」效果；`autoAlpha` 同樣由 0 淡入至 1。
-- 兩者皆與 `fade-in` 相同：淡入後維持顯示（v1 不提供自動淡出／pulse，使用者可另外新增第二個效果做淡出）。
+- 兩者皆與 `fade-in` 相同：淡入後預設維持顯示；可選填 `exitDuration` 讓 overlay 在淡入完成後自動淡出，詳見 §5.3。
 - 驗證規則沿用既有 `params` 白名單機制（`ALLOWED_PARAM_KEYS`），未知鍵過濾、僅接受數值；v1 不對 `xPct`/`yPct`/`widthPct`/`heightPct` 做範圍限制，前端輸入框會夾在 0~100。
 - 「依逐字稿自動產生焦點」的編輯器內手動產生按鈕已於 §7.2 提供 v1；「文字說明」疊加內容已於 §5.2 提供 v1，「引言(圖)」中的圖片內容仍屬於後續項目（見 §12 / TODO 新功能區塊）。
 
@@ -209,9 +212,25 @@ easing 白名單：`none`、`power1.in`、`power1.out`、`power1.inOut`、`power
 // effect.text：顯示的文字內容（純文字，上限 80 字 = MAX_TEXT_CALLOUT_LENGTH）
 ```
 
-- 渲染為一個深色半透明圓角矩形，文字置中顯示（白字、粗體），`autoAlpha` 由 0 淡入至 1，淡入後維持顯示（與 highlight-box/spotlight 相同，v1 不提供自動淡出）。
+- 渲染為一個深色半透明圓角矩形，文字置中顯示（白字、粗體），`autoAlpha` 由 0 淡入至 1，淡入後預設維持顯示；可選填 `exitDuration` 自動淡出，詳見 §5.3（與 highlight-box/spotlight 相同機制）。
 - 驗證規則：`text` 為選填字串，最長 80 字（`MAX_TEXT_CALLOUT_LENGTH`，定義於 `backend/src/services/pageAnimation.ts`，前端常數同步於 `frontend/src/lib/animationSpec.ts`）；超過長度回 400 `INVALID_ANIMATION_SPEC`。
 - 圖片內容（「生成一張小圖」）需額外的圖片產生/上傳管線，本次不處理，留待後續項目。
+
+### 5.3 效果自動消失（exitDuration）
+
+`highlight-box`、`spotlight`、`text-callout`（`OVERLAY_EFFECT_TYPES`）三種 overlay 效果新增選填欄位：
+
+```ts
+// effect.exitDuration?: number  — 秒，0 <= exitDuration <= 600（MAX_DURATION_SECONDS）
+```
+
+- 未設定（`undefined`）時行為與既有版本相同：淡入後維持顯示，直到換頁或 timeline 結束。
+- 設定後，overlay 會在淡入完成（`start + duration`）後再經過 `exitDuration` 秒，以相同的 `duration`/`ease` 淡出（`autoAlpha: 1 → 0`），對應 timeline 時間點為 `start + duration + exitDuration`。
+- `exitDuration = 0` 代表淡入完成後立即開始淡出（不停留）。
+- 僅適用於 `OVERLAY_EFFECT_TYPES`；`fade-in`/`zoom-*`/`pan-*` 等整頁 transform 效果忽略此欄位（其動畫終態本身即為「結果狀態」，不適用「消失」語意，見 §12）。
+- 驗證規則：`z.number().min(0).max(600).optional()`，定義於 `backend/src/services/pageAnimation.ts` 的 `EffectSchema`；超出範圍回 400 `INVALID_ANIMATION_SPEC`。
+- 渲染：`buildGsapTimeline.ts` 於既有 `fromTo(overlay, {autoAlpha:0}, {autoAlpha:1, ...})` 之後，若 `effect.exitDuration !== undefined`，再加一個 `to(overlay, {autoAlpha:0, ...}, start+duration+exitDuration)`。
+- 編輯器 UI 見 §7。
 
 ## 6. 前端架構
 
@@ -291,6 +310,8 @@ Props：`renderType`、`src`（由呼叫端算好，含 displayedImageSrc 防閃
 效果類型為 `highlight-box`、`spotlight` 或 `text-callout`（`OVERLAY_EFFECT_TYPES`）時，效果列額外顯示「焦點位置與大小（%）」四個數字輸入框（X / Y / 寬 / 高，0~100，整數），對應 `effect.params.{xPct,yPct,widthPct,heightPct}`；未設定時顯示預設值（30/30/40/40），輸入會夾在 0~100 並寫回 `params`。
 
 效果類型為 `text-callout` 時，另額外顯示「文字內容」文字輸入框，對應 `effect.text`（純文字，上限 80 字 = `MAX_TEXT_CALLOUT_LENGTH`）。
+
+效果類型為 `highlight-box`、`spotlight` 或 `text-callout`（`OVERLAY_EFFECT_TYPES`）時，再額外顯示「顯示後自動消失」控制項（`play.animation.exitDuration`）：一個 checkbox 加一個秒數輸入框（0~600，步距 0.1，預設 2 秒 = `DEFAULT_EXIT_DURATION_SECONDS`）。勾選後寫入 `effect.exitDuration`，對應 §5.3 的自動淡出行為；取消勾選則將 `exitDuration` 設為 `undefined`，回到「淡入後常駐顯示」的既有行為。
 
 ### 7.1 起始時間方式（依秒數 / 依逐字稿句子）
 
@@ -379,6 +400,6 @@ detail API 的 page 物件增加 `render_type` 與 `animation_spec_url`。
 
 ## 12. 後續擴充方向
 
-- V1.1：drawing mode 自動暫停、preset 快速套用、raw JSON 檢視、效果排序、跨頁複製。
+- V1.1：drawing mode 自動暫停、preset 快速套用、raw JSON 檢視、效果排序、跨頁複製、為 `fade-in`/`zoom-*`/`pan-*` 等整頁 transform 效果提供對稱的「消失（恢復原狀）」可選機制（見 §5.3）。
 - V2：overlay image（小圖疊加內容）、SVG 圖元、物件 target、公式、逐步條列、依 `AnimationSpec.hints` 與逐字稿內容由 LLM 生成動畫 JSON。
 - V3：視覺化時間軸、關鍵影格、3D renderer、動畫 MP4 匯出。
