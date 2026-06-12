@@ -453,7 +453,7 @@
 
 # 2026-6-1
 
-[ ] 下載 youtube 時，下載字幕檔的動作不應該叫產生字幕檔，應該叫下載字幕檔。
+[x] 下載 youtube 時，下載字幕檔的動作不應該叫產生字幕檔，應該叫下載字幕檔。（複查於分支: feature/youtube-caption-download-label-recheck-20260612，確認此命名問題已在更早的 commit 445647b 修正——`downloading_captions` 對應中文「下載字幕」/英文「Downloading captions」，與 STT fallback 的「語音轉文字（STT）」明確區分；全文搜尋無任何「產生字幕（檔）」殘留字串，僅 TODO.md 當時未同步勾選，詳見 docs/todo-rechecks/2026-06-12-youtube-caption-download-label.md）
 [x] 下載 youtube 時，下載的字幕檔應該被存下來當成是來源，可以在來源被檢視。（完成於分支: feature/youtube-caption-source-persist-20260612）
 [x] 下載 youtube 時，下載的語音檔應該被存下來當成是來源，可以在來源被檢視。STT 轉出的字幕檔也應被存下來可以在來源被檢視。（完成於分支: feature/youtube-audio-source-persist-20260612）
 [x] 當收到 LLM provider 傳回的錯誤時，應該要顯示給使用者看。（完成於分支: feature/show-llm-provider-error-to-user-20260607）
@@ -757,6 +757,10 @@
 - 時間: 2026-06-12 16:15:00 +0800
 - 分支: feature/animation-ai-focus-generation-20260612
 - 內容: 完成「自動產生逐字稿焦點功能要用 AI 選擇要在什麼時顯示在什麼位置」之 v1（LLM 版焦點動畫生成）。新增後端服務 `backend/src/services/animationAutoFocus.ts`：以 `callChatJSON`（沿用 `LLM_PROVIDER` 設定）呼叫 LLM，prompt 包含本頁逐字稿句子（最多 20 句）、選填的逐句動畫指引 `hints` 與頁面 OCR 文字，回應為每句的 `show`/`type`（`highlight-box`/`spotlight`）/`xPct`/`yPct`/`widthPct`/`heightPct`/`exitDuration`（皆選填），以 zod schema `AutoFocusAiResponseSchema` 驗證；`mapAutoFocusResponseToEffects` 將回應映射為 `AnimationEffect[]`（僅保留 `show:true`、去重、依 line 排序，`startTrigger:{type:'transcript-line',line}`、`duration:1.2`、`ease:'power1.out'`，位置/大小/`exitDuration` 皆 clamp 至合法範圍），輸出可通過 `validateAnimationSpec`。`backend/src/routes/pdfs/page-animation.ts` 新增 `POST /api/pdfs/:id/pages/:n/animation/auto-focus-ai`：讀取 `pages.text_path`（OCR 文字）並接收前端傳入的 `sentences`/`hints`，呼叫上述服務後回傳 `{ effects }`（不寫入已儲存 spec，由前端合併進編輯中的 draft）；`sentences` 為空時直接回傳 `{ effects: [] }`，未知頁面回 404。前端 `frontend/src/lib/api/pdfs.ts` 新增 `generateAiFocusEffects(id, pageNumber, { sentences, hints })`；`usePageAnimation.ts` 新增 `aiFocusBusy`/`handleGenerateAiFocusEffects`（呼叫後以回應 `effects` 覆蓋 `animationDraft.effects` 並設 `enabled:true`），透過 `PlayPageContext.tsx` 提供給 UI。`AnimationEditorTab.tsx` 在既有「🪄 自動產生逐字稿焦點動畫」（固定規則版）旁新增「🤖 AI 自動產生焦點動畫」按鈕，點擊前以 `window.confirm` 詢問是否覆蓋現有效果，本頁尚無逐字稿時停用。新增中英文 i18n 鍵 `play.animation.autoGenerateFocusAi`/`autoGenerateFocusAiBusy`/`autoGenerateFocusAiConfirm`/`autoGenerateFocusAiDone`/`autoGenerateFocusAiError`。並更新設計文件 `docs/animation-slide-v1-design.md`：新增 §7.4「AI 自動產生焦點動畫」、更新 §8 後端 API 表與 §12（V2 LLM 生成動畫——焦點方框時機/位置已落地，`text-callout` 與其他效果類型留待後續）與檔頭擴充註記。本次僅涵蓋 `highlight-box`/`spotlight` 焦點方框；`text-callout`（含 AI 生成文案）與其他效果類型的 AI 生成留待後續版本。驗證：後端新增 6 項測試（`backend/test/page-animation.test.ts`，涵蓋 `mapAutoFocusResponseToEffects` 映射/過濾/clamp/通過 `validateAnimationSpec`，以及新端點的成功/空輸入/404），`npx tsx --test test/page-animation.test.ts` 35 項全數通過，`npm test` 79 測試 61 通過/18 失敗，失敗數與既有認證基線相同，無新增失敗；前後端 `npx tsc --noEmit`、前端 `npx vite build`、`npx tsx --test src/lib/animationSpec.test.ts`（3 項）皆通過。
+
+- 時間: 2026-06-12 16:40:00 +0800
+- 分支: feature/youtube-caption-download-label-recheck-20260612
+- 內容: 複查「下載 youtube 時，下載字幕檔的動作不應該叫產生字幕檔，應該叫下載字幕檔」。全文搜尋 `frontend/src`、`backend/src`、`docs/` 與 locale 檔，未發現任何將下載字幕標示為「產生字幕（檔）」的殘留字串；目前 `backend/src/services/youtubeCaptions.ts` 的 `fetchYoutubeCaptions`（fetch=下載既有字幕軌，無字幕才 fallback 至 STT 並標示為 `transcribing_audio`/「語音轉文字（STT）」）、`backend/src/worker/pipeline.ts` 的 `setProgress(pdfId, 'downloading_captions', ...)`，以及 `frontend/src/locales/zh-TW.ts`/`en.ts` 的 `progress.downloadingCaptions: '下載字幕'`/`'Downloading captions'` 均已正確標示為「下載」。追溯歷史確認此命名問題已在更早的 commit `445647b`（2026-06-01 05:00:40，"feat(youtube): add visible download and STT progress stages"）修正，而本 TODO 項目是在同日稍晚（09:03）才被記錄、僅未同步勾選。本次無需額外程式碼變更，複查記錄保存於 `docs/todo-rechecks/2026-06-12-youtube-caption-download-label.md`。
 
 # 新功能(每一個功能使用一個 branch，做好後也要更新 master 上的設計文件)
 
