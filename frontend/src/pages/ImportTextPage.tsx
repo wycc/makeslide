@@ -29,6 +29,7 @@ export default function ImportTextPage() {
   const navigate = useNavigate();
   const { t } = useI18n();
   const [mode, setMode] = useState<ImportMode>('paste');
+  const [hostMode, setHostMode] = useState<'solo' | 'dual'>('solo');
   const [text, setText] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [isChatting, setIsChatting] = useState(false);
@@ -52,6 +53,7 @@ export default function ImportTextPage() {
     setRecoveryGuide([]);
     try {
       const resp = await uploadPdf(new File([content], 'pasted.txt', { type: 'text/plain' }), {
+        hostMode,
         onProgress: (loaded, total) => {
           if (total > 0) setProgress(Math.round((loaded / total) * 100));
         },
@@ -120,6 +122,7 @@ export default function ImportTextPage() {
     setRecoveryGuide([]);
     try {
       const resp = await uploadPdf(new File([content], 'prompt-outline.txt', { type: 'text/plain' }), {
+        hostMode,
         onProgress: (loaded, total) => {
           if (total > 0) setProgress(Math.round((loaded / total) * 100));
         },
@@ -202,6 +205,26 @@ export default function ImportTextPage() {
               ? '目前模式：貼上匯入（下方會顯示文字貼上區）'
               : '目前模式：AI 生成大綱（若要看到貼上區，請切換到「貼上匯入」）'}
           </p>
+          <div className="mt-3 flex items-center gap-2">
+            <span className="whitespace-nowrap text-xs text-slate-400">{t('upload.hostModeLabel')}</span>
+            <div className="flex overflow-hidden rounded-md border border-slate-600">
+              {(['solo', 'dual'] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setHostMode(m)}
+                  aria-pressed={hostMode === m}
+                  className={`px-3 py-1 text-xs ${
+                    hostMode === m
+                      ? 'bg-cyan-500/25 font-medium text-cyan-100'
+                      : 'text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  {m === 'solo' ? t('upload.hostModeSolo') : t('upload.hostModeDual')}
+                </button>
+              ))}
+            </div>
+          </div>
         </section>
 
         {mode === 'paste' ? (
