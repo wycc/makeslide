@@ -20,6 +20,9 @@
 >
 > 擴充註記（2026-06-12，焦點效果）：
 > - 新增兩種「焦點」效果類型 `highlight-box`（紅框標示）與 `spotlight`（聚光燈），以疊加層（overlay）方式渲染於 animated stage 內，可指定位置與大小。詳見 §5.1、§6.2、§6.6。
+>
+> 擴充註記（2026-06-12，自動產生逐字稿焦點動畫）：
+> - 動畫編輯器新增「自動產生逐字稿焦點動畫」按鈕：依本頁逐字稿句數，一次產生對應數量的 `highlight-box` 效果並各自綁定 `startTrigger`（每句一個，使用預設焦點位置 30/30/40/40，使用者可再逐一調整位置與大小）。為 TODO 第 720 項的 v1 範圍，詳見 §7.2。
 
 ---
 
@@ -166,7 +169,7 @@ easing 白名單：`none`、`power1.in`、`power1.out`、`power1.inOut`、`power
 - `spotlight`：在同一範圍內渲染一個橢圓形區域，外側以 `box-shadow: 0 0 0 9999px rgba(0,0,0,0.6)` 形成大範圍暗化遮罩，達到「聚光燈」效果；`autoAlpha` 同樣由 0 淡入至 1。
 - 兩者皆與 `fade-in` 相同：淡入後維持顯示（v1 不提供自動淡出／pulse，使用者可另外新增第二個效果做淡出）。
 - 驗證規則沿用既有 `params` 白名單機制（`ALLOWED_PARAM_KEYS`），未知鍵過濾、僅接受數值；v1 不對 `xPct`/`yPct`/`widthPct`/`heightPct` 做範圍限制，前端輸入框會夾在 0~100。
-- 「引言(圖)」（文字/圖片疊加內容）與「依逐字稿自動產生焦點」屬於後續項目（見 §12 / TODO 新功能區塊），本次僅提供可手動設定的視覺焦點效果類型。
+- 「引言(圖)」（文字/圖片疊加內容）屬於後續項目（見 §12 / TODO 新功能區塊）；「依逐字稿自動產生焦點」的編輯器內手動產生按鈕已於 §7.2 提供 v1。
 
 ## 6. 前端架構
 
@@ -268,6 +271,20 @@ Props：`renderType`、`src`（由呼叫端算好，含 displayedImageSrc 防閃
 - 換頁時清空並重載（AbortController 防 race）。
 - 儲存成功後以 `setDetail` 就地更新該頁 `render_type` / `animation_spec_url`。
 - renderer 吃 `effectiveSpec = (editTab === 'animation' && draft) ? draft : savedSpec`，編輯立即預覽、免儲存。
+
+### 7.2 自動產生逐字稿焦點動畫
+
+新增「🪄 自動產生逐字稿焦點動畫」按鈕（`play.animation.autoGenerateFocus`），位於「＋ 新增效果」按鈕旁。
+
+行為：
+
+- 透過 `generateFocusEffectsFromTranscript(pageSentences.length)`（`frontend/src/lib/animationSpec.ts`）為本頁每一句逐字稿產生一個 `highlight-box` 效果，數量上限為 `MAX_SLIDE_ANIMATION_EFFECTS`（20）；每個效果：
+  - `startTrigger = { type: 'transcript-line', line }`（`line` 為句子索引，從 0 開始，依序對應每一句）。
+  - `duration = 1.2`、`ease = 'power1.out'`、`params` 未設定（套用 §5.1 預設焦點位置 30/30/40/40）。
+- 點擊後會以產生結果**取代**目前的 `draft.effects`，並將 `enabled` 設為 `true`；若目前已有效果設定，會先以 `window.confirm` 確認是否覆蓋。
+- 本頁尚無逐字稿（`pageSentences.length === 0`）時按鈕停用，提示文字沿用「本頁尚無逐字稿」（`play.animation.noTranscript`）。
+- 產生後每個效果仍可於效果清單中個別調整類型、起始時間、長度、緩動與焦點位置/大小，與手動新增的效果一致。
+- 本功能僅在編輯器內提供「一次性產生」的手動操作；TODO 第 720 項所述「打開功能後，產生語音時自動產生」的常駐設定與後端管線整合留待後續項目（見 §12）。
 
 ## 8. Backend API
 

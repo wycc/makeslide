@@ -7,6 +7,7 @@ import {
   SLIDE_ANIMATION_EASES,
   SLIDE_ANIMATION_EFFECT_TYPES,
   defaultAnimationSpec,
+  generateFocusEffectsFromTranscript,
   getFocusEffectParams,
   resolveStartTriggerSeconds,
 } from '../../lib/animationSpec';
@@ -285,20 +286,38 @@ export function AnimationEditorTab() {
         </div>
       )}
 
-      <button
-        type="button"
-        disabled={disabled || draft.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS}
-        title={draft.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS ? t('play.animation.maxEffects') : undefined}
-        onClick={() =>
-          setAnimationDraft((prev) => {
-            const base = prev ?? defaultAnimationSpec();
-            return { ...base, effects: [...base.effects, newEffect()] };
-          })
-        }
-        className="mb-3 rounded-md border border-slate-600 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
-      >
-        {t('play.animation.addEffect')}
-      </button>
+      <div className="mb-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={disabled || draft.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS}
+          title={draft.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS ? t('play.animation.maxEffects') : undefined}
+          onClick={() =>
+            setAnimationDraft((prev) => {
+              const base = prev ?? defaultAnimationSpec();
+              return { ...base, effects: [...base.effects, newEffect()] };
+            })
+          }
+          className="rounded-md border border-slate-600 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {t('play.animation.addEffect')}
+        </button>
+        <button
+          type="button"
+          disabled={disabled || pageSentences.length === 0}
+          title={pageSentences.length === 0 ? t('play.animation.noTranscript') : undefined}
+          onClick={() => {
+            if (draft.effects.length > 0 && !window.confirm(t('play.animation.autoGenerateFocusConfirm'))) return;
+            setAnimationDraft((prev) => ({
+              ...(prev ?? defaultAnimationSpec()),
+              enabled: true,
+              effects: generateFocusEffectsFromTranscript(pageSentences.length),
+            }));
+          }}
+          className="rounded-md border border-cyan-500/50 bg-cyan-500/10 px-3 py-1.5 text-sm text-cyan-200 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {t('play.animation.autoGenerateFocus')}
+        </button>
+      </div>
 
       <div className="flex items-center justify-between gap-3">
         <div className="text-xs text-slate-400">

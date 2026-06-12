@@ -41,6 +41,34 @@ export function getFocusEffectParams(effect: SlideAnimationEffect): FocusEffectP
   };
 }
 
+/** Effect type and fade duration used by `generateFocusEffectsFromTranscript`. */
+const AUTO_FOCUS_EFFECT_TYPE: SlideAnimationEffectType = 'highlight-box';
+const AUTO_FOCUS_DURATION_SECONDS = 1.2;
+
+function newAutoFocusEffectId(line: number): string {
+  return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `focus-${line}-${Date.now()}`;
+}
+
+/**
+ * Generates one `highlight-box` focus effect per transcript sentence, each
+ * synced via `startTrigger: { type: 'transcript-line', line }` so it fades
+ * in when that sentence starts playing. Position/size use the default focus
+ * box (center area) — the user can adjust per-effect afterwards. Capped at
+ * `MAX_SLIDE_ANIMATION_EFFECTS`.
+ */
+export function generateFocusEffectsFromTranscript(sentenceCount: number): SlideAnimationEffect[] {
+  const count = Math.min(Math.max(0, sentenceCount), MAX_SLIDE_ANIMATION_EFFECTS);
+  return Array.from({ length: count }, (_, line) => ({
+    id: newAutoFocusEffectId(line),
+    target: 'slide',
+    type: AUTO_FOCUS_EFFECT_TYPE,
+    start: 0,
+    duration: AUTO_FOCUS_DURATION_SECONDS,
+    ease: 'power1.out',
+    startTrigger: { type: 'transcript-line', line },
+  }));
+}
+
 export const SLIDE_ANIMATION_EASES: readonly SlideAnimationEase[] = [
   'none',
   'power1.in',
