@@ -455,7 +455,7 @@
 
 [ ] 下載 youtube 時，下載字幕檔的動作不應該叫產生字幕檔，應該叫下載字幕檔。
 [x] 下載 youtube 時，下載的字幕檔應該被存下來當成是來源，可以在來源被檢視。（完成於分支: feature/youtube-caption-source-persist-20260612）
-[ ] 下載 youtube 時，下載的語音檔應該被存下來當成是來源，可以在來源被檢視。STT 轉出的字幕檔也應被存下來可以在來源被檢視。
+[x] 下載 youtube 時，下載的語音檔應該被存下來當成是來源，可以在來源被檢視。STT 轉出的字幕檔也應被存下來可以在來源被檢視。（完成於分支: feature/youtube-audio-source-persist-20260612）
 [x] 當收到 LLM provider 傳回的錯誤時，應該要顯示給使用者看。（完成於分支: feature/show-llm-provider-error-to-user-20260607）
 [x] 在上傳 PDF 時,　要提供選項單入或雙人的選項（完成於分支: feature/upload-host-mode-select-20260612）
 [x] gpt-image-2 的錯誤請重試一次，不要直接判定失敗（完成於分支: feature/retry-gpt-image-moderation-blocked-20260608）
@@ -710,6 +710,10 @@
 - 時間: 2026-06-12 09:54:00 +0800
 - 分支: feature/import-text-host-mode-20260612
 - 內容: 完成「在 upload TXT 時也要加上 host mode 選項」。前一筆工作已讓 `uploadPdf()` 與後端 `/api/pdfs` 支援 `host_mode`（solo/dual），但「貼上 TXT」頁（`ImportTextPage.tsx`）的「貼上匯入」與「AI 生成大綱」兩個流程呼叫 `uploadPdf()` 時皆未帶入該選項，一律沿用後端預設 'solo'。修正：在 `匯入方式` 區塊新增「主持模式」分段切換按鈕（單人旁白／雙人對談，沿用 `UploadButton.tsx` 與 `upload.hostModeLabel`/`upload.hostModeSolo`/`upload.hostModeDual` 既有 i18n 鍵與樣式），新增 `hostMode` state，並將其透過 `uploadPdf(file, { hostMode, onProgress })` 傳給 `handleSubmit`（貼上匯入）與 `handleCreateFromOutline`（AI 大綱建立）兩個建立簡報的呼叫。驗證：前端 `npx tsc --noEmit` 與 `npm run build` 皆通過；後端邏輯沿用前一筆已驗證的 `/api/pdfs` host_mode 處理，未重複測試。前端 UI 因環境無瀏覽器/螢幕截圖工具，未做實機畫面驗證。
+
+- 時間: 2026-06-12 10:45:00 +0800
+- 分支: feature/youtube-audio-source-persist-20260612
+- 內容: 完成「下載 youtube 時，下載的語音檔應該被存下來當成是來源，可以在來源被檢視。STT 轉出的字幕檔也應被存下來可以在來源被檢視」的剩餘部分（字幕檔部分已於 `feature/youtube-caption-source-persist-20260612` 完成）。根因：YouTube 字幕下載走 STT 後援時，`transcribeByStt()` 會先把影片音訊下載成 mp3 再送語音辨識，完成後整個暫存目錄連同該 mp3 一起被刪除，使用者完全看不到、聽不到原始來源音訊。修正：`backend/src/services/youtubeCaptions.ts` 的 `transcribeByStt`/`fetchYoutubeCaptions` 新增可選參數 `audioSavePath`，在清理暫存目錄前先用 `fs.promises.copyFile` 把下載到的 mp3 複製到永久位置；`backend/src/services/storage.ts` 新增 `youtubeSourceAudioPath(pdfId)` 回傳該永久路徑（`<pdfDir>/source-audio.mp3`）；`backend/src/worker/pipeline.ts` 呼叫 `fetchYoutubeCaptions()` 時傳入該路徑，事後檢查檔案是否存在，若存在則在 `pdf_sources` 新增一筆 `source_kind='youtube_audio'` 紀錄（`content_text` 為提示文字），並寫入 `metadata.source_audio = 'source-audio.mp3'`。型別：前後端 `PdfSourceItem.source_kind` 新增 `'youtube_audio'`，後端 `PdfMetadata` 新增 `source_audio?: string | null`。API：抽出共用 `sendAudioFile()`（`backend/src/routes/pdfs/shared.ts`，支援 HTTP Range／206 partial content／依檔頭偵測 MIME），用它重構既有 `GET /api/pdfs/:id/pages/:n/audio`，並新增 `GET /api/pdfs/:id/source-audio` 提供下載音訊的串流播放。前端 `PlayPageSlidePanel.tsx` 的「目前來源清單」對 `source_kind === 'youtube_audio'` 的項目改渲染 `<audio controls preload="none">`（透過 `withShareToken` 附帶分享權杖）。驗證：前後端 `npx tsc --noEmit` 與 `npm run build` 皆通過；後端 `npm test` 41/59 通過/18 失敗，失敗數與既有認證基線相同、無新增失敗；另以臨時腳本透過 `app.inject()` 驗證 `/api/pdfs/:id/source-audio` 在檔案不存在時回 404、存在時回 200（`content-type: audio/mpeg`、正確 `content-length`）、帶 `Range: bytes=0-99` 時回 206 與正確 `content-range`/`content-length`，並確認 `/api/pdfs/:id` 回應的 `sources` 含 `source_kind: 'youtube_audio'`。
 
 
 # 新功能(每一個功能使用一個 branch，做好後也要更新 master 上的設計文件)
