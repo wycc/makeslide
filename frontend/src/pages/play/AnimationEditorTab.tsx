@@ -470,6 +470,39 @@ export function AnimationEditorTab() {
               </button>
             </div>
             <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto p-4 lg:grid-cols-2">
+              <div className="flex min-h-0 flex-col gap-2">
+                <div className="text-xs font-semibold text-slate-400">
+                  {t('play.animation.customScriptPreview' as TranslationKey)}
+                </div>
+                {customScriptDialogEffect.code ? (
+                  <CustomScriptPreview effect={customScriptDialogEffect} />
+                ) : (
+                  <div className="flex h-40 items-center justify-center rounded-md border border-slate-800 bg-slate-950 text-xs text-slate-500">
+                    {t('play.animation.customScriptEmpty')}
+                  </div>
+                )}
+                <label className="flex min-h-0 flex-1 flex-col gap-1 text-xs text-slate-400">
+                  <span className="flex items-center justify-between gap-2">
+                    <span>{t('play.animation.customScriptSource' as TranslationKey)}</span>
+                    <span className="text-[11px] text-slate-500">
+                      {customScriptSourceValue.length}/{MAX_CUSTOM_SCRIPT_CODE_LENGTH}
+                    </span>
+                  </span>
+                  <textarea
+                    rows={16}
+                    spellCheck={false}
+                    maxLength={MAX_CUSTOM_SCRIPT_CODE_LENGTH}
+                    value={customScriptSourceValue}
+                    disabled={disabled || customScriptBusyEffectId === customScriptDialogEffect.id}
+                    placeholder={t('play.animation.customScriptSourcePlaceholder' as TranslationKey)}
+                    onChange={(e) => updateEffect(customScriptDialogEffect.id, { code: e.target.value })}
+                    className="min-h-64 w-full flex-1 resize-y rounded-md border border-slate-700 bg-slate-950 px-2 py-2 font-mono text-xs leading-relaxed text-slate-100 disabled:opacity-50"
+                  />
+                  <span className="text-[11px] text-slate-500">
+                    {t('play.animation.customScriptSourceHelp' as TranslationKey)}
+                  </span>
+                </label>
+              </div>
               <div className="flex min-h-0 flex-col gap-3">
                 <div
                   ref={customScriptChatScrollRef}
@@ -527,39 +560,6 @@ export function AnimationEditorTab() {
                       : t('play.animation.customScriptChatSend' as TranslationKey)}
                   </button>
                 </div>
-                <label className="flex min-h-0 flex-1 flex-col gap-1 text-xs text-slate-400">
-                  <span className="flex items-center justify-between gap-2">
-                    <span>{t('play.animation.customScriptSource' as TranslationKey)}</span>
-                    <span className="text-[11px] text-slate-500">
-                      {customScriptSourceValue.length}/{MAX_CUSTOM_SCRIPT_CODE_LENGTH}
-                    </span>
-                  </span>
-                  <textarea
-                    rows={16}
-                    spellCheck={false}
-                    maxLength={MAX_CUSTOM_SCRIPT_CODE_LENGTH}
-                    value={customScriptSourceValue}
-                    disabled={disabled || customScriptBusyEffectId === customScriptDialogEffect.id}
-                    placeholder={t('play.animation.customScriptSourcePlaceholder' as TranslationKey)}
-                    onChange={(e) => updateEffect(customScriptDialogEffect.id, { code: e.target.value })}
-                    className="min-h-64 w-full flex-1 resize-y rounded-md border border-slate-700 bg-slate-950 px-2 py-2 font-mono text-xs leading-relaxed text-slate-100 disabled:opacity-50"
-                  />
-                  <span className="text-[11px] text-slate-500">
-                    {t('play.animation.customScriptSourceHelp' as TranslationKey)}
-                  </span>
-                </label>
-              </div>
-              <div className="flex min-h-0 flex-col gap-2">
-                <div className="text-xs font-semibold text-slate-400">
-                  {t('play.animation.customScriptPreview' as TranslationKey)}
-                </div>
-                {customScriptDialogEffect.code ? (
-                  <CustomScriptPreview effect={customScriptDialogEffect} />
-                ) : (
-                  <div className="flex h-40 items-center justify-center rounded-md border border-slate-800 bg-slate-950 text-xs text-slate-500">
-                    {t('play.animation.customScriptEmpty')}
-                  </div>
-                )}
               </div>
             </div>
           </div>
