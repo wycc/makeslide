@@ -17,7 +17,7 @@ import {
 } from '../../services/pageAnimation';
 import type { AnimationSpec } from '../../services/pageAnimation';
 import { generateAiFocusEffects } from '../../services/animationAutoFocus';
-import { findUnsafeScriptPattern, generateCustomScriptCode } from '../../services/animationCustomScript';
+import { findCustomScriptContractIssue, findUnsafeScriptPattern, generateCustomScriptCode } from '../../services/animationCustomScript';
 import type { SlideRenderType } from '../../types';
 import { PageParamSchema, errorResponse, nowIso } from './shared';
 
@@ -222,6 +222,10 @@ export async function registerPageAnimationRoutes(app: FastifyInstance): Promise
         return reply
           .code(422)
           .send(errorResponse('UNSAFE_SCRIPT', `Generated code uses a disallowed API (${unsafe}); please try a different prompt`));
+      }
+      const contractIssue = findCustomScriptContractIssue(result.code);
+      if (contractIssue) {
+        return reply.code(422).send(errorResponse('INVALID_SCRIPT_CONTRACT', `${contractIssue}; please try a different prompt`));
       }
       return reply.code(200).send({ code: result.code });
     } catch (err) {

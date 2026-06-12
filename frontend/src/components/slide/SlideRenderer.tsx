@@ -73,6 +73,7 @@ function EffectOverlay({ effect }: { effect: SlideAnimationEffect }) {
   if (effect.type === 'custom-script') {
     return (
       <iframe
+        key={`${effect.id}:${effect.code ?? ''}`}
         data-effect-id={effect.id}
         title="custom-script animation"
         sandbox="allow-scripts"

@@ -487,3 +487,22 @@ detail API 的 page 物件增加 `render_type` 與 `animation_spec_url`。
 - V2：overlay image（小圖疊加內容）、SVG 圖元、物件 target、公式、逐步條列；依 `AnimationSpec.hints` 與逐字稿內容由 LLM 生成動畫 JSON——焦點方框（`highlight-box`/`spotlight`）的時機與位置已於 §7.4 落地，`text-callout`（含 AI 生成文案）與其他效果類型的 AI 生成仍待後續。
 - V2.x：`custom-script`（§5.4）的資料集/模型推論管線——例如載入 MNIST 並以 ResNet50 產生 embedding、PCA 降維至二維後動態顯示分類過程——需要後端提供資料集存取與模型推論服務（sandbox 本身禁止網路存取，無法在前端直接載入外部資料）；v1 僅提供通用 sandboxed 自訂腳本框架與 AI 生成/迭代迴圈，不含此類資料管線。
 - V3：視覺化時間軸、關鍵影格、3D renderer、動畫 MP4 匯出。
+
+## 13. custom-script V1 hardening checklist
+
+V1 的「使用提示詞生成動畫」以 `custom-script` 效果交付，重點是安全、可迭代、可播放同步，而非真實資料集或模型推論：
+
+- 使用者在動畫 Tab 新增 `custom-script` 效果，輸入提示詞後呼叫 `POST /api/pdfs/:id/pages/:n/animation/custom-script` 產生 JavaScript；回傳結果只寫入前端 draft，必須再按「儲存動畫」才會持久化到 `<page_uid>.animation.json`。
+- 產生的程式碼必須符合 `window.renderAnimation(root, api)` 與 `api.onFrame(callback)` 契約；後端會拒絕明顯缺少契約的輸出，前端 sandbox 也會在缺少 `renderAnimation` 時顯示錯誤訊息。
+- 程式碼在 `<iframe sandbox="allow-scripts">` 中執行，不含 `allow-same-origin`，並且後端會額外拒絕 `fetch`、`XMLHttpRequest`、`WebSocket`、`import`、`require`、`eval`、`new Function`、storage、cookie、parent/top/frameElement 等高風險 API。
+- 播放時 host 端以音訊 currentTime 為主時鐘，對每個 `custom-script` iframe 送出 `{ type: 'sync', t, playing }`；`t` 是相對該 effect 起始時間的秒數，支援 seek、暫停、重播與和其他 GSAP/overlay 效果一起播放。
+- 編輯器預覽同樣使用 sandbox iframe，以迴圈時間送出 sync 訊息，讓使用者能反覆調整提示詞直到滿意。
+- 若 LLM 產生了不安全或不符合契約的程式，前端顯示可行的重試提示，不會儲存或播放該程式。
+
+手動 QA 建議：
+
+1. 新增 `custom-script` 效果，輸入「用 Canvas 畫出多群資料點移動到二維特徵空間並形成分類邊界」之類提示詞，確認可產生、預覽、儲存、重新整理後保留。
+2. 修改提示詞並重新產生，確認目前列顯示 busy，生成完成後 iframe 重新載入新結果。
+3. 播放、暫停、seek、從頭預覽、換頁再回來，確認動畫時間與音訊一致且不殘留舊 iframe 狀態。
+4. 嘗試要求「用 fetch 載入外部 MNIST」或「使用 localStorage」，確認後端回拒絕訊息且 draft 不被寫入不安全 code。
+5. 確認此 v1 只能模擬 MNIST/embedding/PCA 類視覺過程；真正的 MNIST、ResNet50 embedding 與 PCA 計算需後續資料/模型推論服務。

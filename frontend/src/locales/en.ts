@@ -335,6 +335,9 @@ export const en = {
   'play.animation.customScriptEmpty': 'No animation code yet — enter a prompt and click "Generate animation"',
   'play.animation.customScriptDone': 'AI generated a custom animation — preview and save',
   'play.animation.customScriptError': 'AI custom animation generation failed, please try again later',
+  'play.animation.customScriptUnsafe': 'The generated animation used a blocked browser API. Try a safer prompt that uses only Canvas, SVG, DOM, and local JavaScript.',
+  'play.animation.customScriptContractError': 'The generated animation did not follow the playback contract. Try regenerating or make the prompt mention window.renderAnimation(root, api) and api.onFrame.',
+  'play.animation.customScriptDraftNote': 'Generated code is only a draft until you click “Save animation”. The preview runs in a sandbox and cannot load external datasets or models.',
   'language.zhTW': '繁體中文',
   'language.en': 'English',
 } as const;

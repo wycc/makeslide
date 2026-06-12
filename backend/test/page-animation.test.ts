@@ -10,7 +10,7 @@ import { setSystemAuthSettings } from '../src/services/aiSettings';
 import { setOpenAIClientForTest } from '../src/services/openai';
 import { defaultAnimationSpec, validateAnimationSpec } from '../src/services/pageAnimation';
 import { mapAutoFocusResponseToEffects } from '../src/services/animationAutoFocus';
-import { findUnsafeScriptPattern } from '../src/services/animationCustomScript';
+import { findCustomScriptContractIssue, findUnsafeScriptPattern } from '../src/services/animationCustomScript';
 
 const PDF_ID = 'test-page-animation-01';
 const SESSION_COOKIE =
@@ -696,6 +696,26 @@ test('findUnsafeScriptPattern flags each disallowed API', () => {
   assert.equal(findUnsafeScriptPattern('window.frameElement'), 'frameElement');
 });
 
+test('findUnsafeScriptPattern flags common member-access variants', () => {
+  assert.equal(findUnsafeScriptPattern('document [ "cookie" ] = "x=1"'), 'document.cookie');
+  assert.equal(findUnsafeScriptPattern('globalThis.parent.postMessage("x", "*")'), 'window.parent');
+  assert.equal(findUnsafeScriptPattern('self["parent"].postMessage("x", "*")'), 'window.parent');
+  assert.equal(findUnsafeScriptPattern('globalThis.top.location.href = "https://evil.example"'), 'window.top');
+  assert.equal(findUnsafeScriptPattern('self["top"].location'), 'window.top');
+});
+
+test('findCustomScriptContractIssue validates renderAnimation and onFrame contract', () => {
+  assert.equal(findCustomScriptContractIssue('var x = 1;'), 'Generated code must define window.renderAnimation(root, api)');
+  assert.equal(
+    findCustomScriptContractIssue('window.renderAnimation = function (root, api) { root.textContent = "hi"; };'),
+    'Generated code must call api.onFrame(callback) so playback can stay synchronized',
+  );
+  assert.equal(
+    findCustomScriptContractIssue('window.renderAnimation = function (root, api) { api.onFrame(function () {}); };'),
+    null,
+  );
+});
+
 // ── POST animation/custom-script ─────────────────────────────────────────────
 
 test('POST animation/custom-script returns AI-generated code for a safe script', async () => {
@@ -748,7 +768,7 @@ test('POST animation/custom-script returns AI-generated code for a safe script',
 
 test('POST animation/custom-script includes previousCode in the prompt when iterating', async () => {
   seedAnimationPdf(PDF_ID, 1);
-  const previousCode = 'window.renderAnimation = function (root, api) {};';
+  const previousCode = 'window.renderAnimation = function (root, api) { api.onFrame(function () {}); };';
   let capturedMessages: Array<{ role: string; content: unknown }> | undefined;
   setOpenAIClientForTest({
     chat: {
@@ -810,6 +830,69 @@ test('POST animation/custom-script returns 422 UNSAFE_SCRIPT when the generated 
     });
     assert.equal(resp.statusCode, 422);
     assert.equal((resp.json() as { error: { code: string } }).error.code, 'UNSAFE_SCRIPT');
+  } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+  }
+});
+
+test('POST animation/custom-script returns 422 INVALID_SCRIPT_CONTRACT when generated code misses render contract', async () => {
+  seedAnimationPdf(PDF_ID, 1);
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async () => ({
+          choices: [
+            {
+              message: { content: JSON.stringify({ code: 'var canvas = document.createElement("canvas");' }) },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+        }),
+      },
+    },
+  } as never);
+
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${PDF_ID}/pages/1/animation/custom-script`,
+      headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+      payload: { prompt: '畫一個圓形' },
+    });
+    assert.equal(resp.statusCode, 422);
+    assert.equal((resp.json() as { error: { code: string } }).error.code, 'INVALID_SCRIPT_CONTRACT');
+  } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+  }
+});
+
+test('POST animation/custom-script returns 500 when model returns blank code', async () => {
+  seedAnimationPdf(PDF_ID, 1);
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async () => ({
+          choices: [{ message: { content: JSON.stringify({ code: '   ' }) }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+        }),
+      },
+    },
+  } as never);
+
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${PDF_ID}/pages/1/animation/custom-script`,
+      headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+      payload: { prompt: '畫一個圓形' },
+    });
+    assert.equal(resp.statusCode, 500);
+    assert.equal((resp.json() as { error: { code: string } }).error.code, 'INTERNAL_ERROR');
   } finally {
     setOpenAIClientForTest(null);
     await app.close();

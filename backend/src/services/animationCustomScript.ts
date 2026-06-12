@@ -3,7 +3,7 @@ import { callChatJSON } from './openai';
 import { MAX_CUSTOM_SCRIPT_CODE_LENGTH, MAX_CUSTOM_SCRIPT_PROMPT_LENGTH } from './pageAnimation';
 
 export const CustomScriptAiResponseSchema = z.object({
-  code: z.string().min(1).max(MAX_CUSTOM_SCRIPT_CODE_LENGTH),
+  code: z.string().trim().min(1).max(MAX_CUSTOM_SCRIPT_CODE_LENGTH),
 });
 
 export type CustomScriptAiResponse = z.infer<typeof CustomScriptAiResponseSchema>;
@@ -24,11 +24,14 @@ const UNSAFE_PATTERNS: ReadonlyArray<{ pattern: RegExp; label: string }> = [
   { pattern: /\beval\s*\(/i, label: 'eval' },
   { pattern: /new\s+Function\s*\(/i, label: 'new Function' },
   { pattern: /document\s*\.\s*cookie/i, label: 'document.cookie' },
+  { pattern: /document\s*\[\s*['"]cookie['"]\s*\]/i, label: 'document.cookie' },
   { pattern: /localStorage/i, label: 'localStorage' },
   { pattern: /sessionStorage/i, label: 'sessionStorage' },
   { pattern: /indexedDB/i, label: 'indexedDB' },
-  { pattern: /window\s*\.\s*parent/i, label: 'window.parent' },
-  { pattern: /window\s*\.\s*top/i, label: 'window.top' },
+  { pattern: /(?:window|globalThis|self)\s*\.\s*parent/i, label: 'window.parent' },
+  { pattern: /(?:window|globalThis|self)\s*\[\s*['"]parent['"]\s*\]/i, label: 'window.parent' },
+  { pattern: /(?:window|globalThis|self)\s*\.\s*top/i, label: 'window.top' },
+  { pattern: /(?:window|globalThis|self)\s*\[\s*['"]top['"]\s*\]/i, label: 'window.top' },
   { pattern: /frameElement/i, label: 'frameElement' },
 ];
 
@@ -39,6 +42,21 @@ const UNSAFE_PATTERNS: ReadonlyArray<{ pattern: RegExp; label: string }> = [
 export function findUnsafeScriptPattern(code: string): string | null {
   for (const { pattern, label } of UNSAFE_PATTERNS) {
     if (pattern.test(code)) return label;
+  }
+  return null;
+}
+
+/**
+ * Validates the minimal runtime contract expected by the iframe wrapper. The
+ * sandbox itself will fail gracefully when `renderAnimation` is missing, but
+ * rejecting obviously incompatible LLM output gives users a clearer retry path.
+ */
+export function findCustomScriptContractIssue(code: string): string | null {
+  if (!/window\s*\.\s*renderAnimation\s*=|window\s*\[\s*['"]renderAnimation['"]\s*\]\s*=/.test(code)) {
+    return 'Generated code must define window.renderAnimation(root, api)';
+  }
+  if (!/api\s*\.\s*onFrame\s*\(/.test(code)) {
+    return 'Generated code must call api.onFrame(callback) so playback can stay synchronized';
   }
   return null;
 }

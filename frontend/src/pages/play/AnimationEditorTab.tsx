@@ -105,6 +105,7 @@ export function AnimationEditorTab() {
     aiFocusBusy,
     handleGenerateAiFocusEffects,
     customScriptBusy,
+    customScriptBusyEffectId,
     handleGenerateCustomScriptCode,
   } = usePlayPageContext();
   const { t } = useI18n();
@@ -401,7 +402,10 @@ export function AnimationEditorTab() {
               </button>
               </div>
               {effect.type === 'custom-script' && (
-                <div className="flex flex-col gap-2 border-t border-slate-800 pt-2">
+                  <div className="flex flex-col gap-2 border-t border-slate-800 pt-2">
+                  <div className="rounded-md border border-slate-800 bg-slate-950/60 px-2 py-1.5 text-[11px] text-slate-400">
+                    {t('play.animation.customScriptDraftNote')}
+                  </div>
                   <label className="flex flex-col gap-1 text-xs text-slate-400">
                     {t('play.animation.customScriptPrompt')}
                     <textarea
@@ -421,7 +425,7 @@ export function AnimationEditorTab() {
                       onClick={() => void handleGenerateCustomScriptCode(effect.id, effect.prompt ?? '', effect.code)}
                       className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/10 px-3 py-1.5 text-sm text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                      {customScriptBusy
+                      {customScriptBusyEffectId === effect.id
                         ? t('play.animation.customScriptGenerateBusy')
                         : effect.code
                           ? t('play.animation.customScriptRegenerate')

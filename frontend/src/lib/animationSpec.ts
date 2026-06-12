@@ -224,6 +224,8 @@ export function buildCustomScriptSandboxDoc(code: string): string {
     if (code) new Function(code)();
     if (typeof window.renderAnimation === 'function') {
       window.renderAnimation(root, api);
+    } else if (code) {
+      root.textContent = 'Animation error: generated code did not define window.renderAnimation(root, api).';
     }
   } catch (e) {
     root.textContent = 'Animation error: ' + (e && e.message ? e.message : String(e));

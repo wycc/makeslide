@@ -37,6 +37,8 @@ export interface PageAnimationState {
   handleGenerateAiFocusEffects: (sentences: string[], hints?: Record<string, string>) => Promise<boolean>;
   /** AI 產生/重新產生自訂腳本動畫程式碼（呼叫中）。 */
   customScriptBusy: boolean;
+  /** Effect id currently being generated, so the editor can show per-row busy state. */
+  customScriptBusyEffectId: string | null;
   /**
    * 呼叫後端 LLM，依提示詞（與選填的目前程式碼）產生 `custom-script` 效果的程式碼，
    * 並寫回該效果的 `code`/`prompt` 欄位。
@@ -60,6 +62,7 @@ export function usePageAnimation({
   const [animationWarning, setAnimationWarning] = useState<string | null>(null);
   const [aiFocusBusy, setAiFocusBusy] = useState(false);
   const [customScriptBusy, setCustomScriptBusy] = useState(false);
+  const [customScriptBusyEffectId, setCustomScriptBusyEffectId] = useState<string | null>(null);
 
   const pageKey = pdfId && currentPage ? `${pdfId}:${currentPage.page_number}` : null;
   const pageKeyRef = useRef(pageKey);
@@ -158,6 +161,7 @@ export function usePageAnimation({
     async (effectId: string, prompt: string, previousCode?: string): Promise<boolean> => {
       if (!pdfId || !currentPage || !prompt.trim()) return false;
       setCustomScriptBusy(true);
+      setCustomScriptBusyEffectId(effectId);
       setAnimationError(null);
       setAnimationMessage(null);
       try {
@@ -172,10 +176,17 @@ export function usePageAnimation({
         setAnimationMessage(t('play.animation.customScriptDone'));
         return true;
       } catch (err) {
-        setAnimationError(err instanceof ApiError ? err.message : t('play.animation.customScriptError'));
+        if (err instanceof ApiError && err.code === 'UNSAFE_SCRIPT') {
+          setAnimationError(t('play.animation.customScriptUnsafe'));
+        } else if (err instanceof ApiError && err.code === 'INVALID_SCRIPT_CONTRACT') {
+          setAnimationError(t('play.animation.customScriptContractError'));
+        } else {
+          setAnimationError(err instanceof ApiError ? err.message : t('play.animation.customScriptError'));
+        }
         return false;
       } finally {
         setCustomScriptBusy(false);
+        setCustomScriptBusyEffectId(null);
       }
     },
     [pdfId, currentPage, t],
@@ -194,6 +205,7 @@ export function usePageAnimation({
     aiFocusBusy,
     handleGenerateAiFocusEffects,
     customScriptBusy,
+    customScriptBusyEffectId,
     handleGenerateCustomScriptCode,
   };
 }
