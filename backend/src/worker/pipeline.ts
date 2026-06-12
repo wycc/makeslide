@@ -471,6 +471,13 @@ async function runPipeline(pdfId: string): Promise<void> {
           WHERE id = ?`,
       ).run(`YouTube ${videoId}`, cap.language, now, pdfId);
 
+      // 把下載到的字幕內容存進 pdf_sources，讓使用者可以在「來源」分頁檢視
+      db.prepare(
+        `UPDATE pdf_sources
+            SET content_text = ?, updated_at = ?
+          WHERE pdf_id = ? AND source_kind = 'youtube_caption'`,
+      ).run(cap.normalizedText.slice(0, 120000), now, pdfId);
+
       const m = await readMetadata(pdfId);
       if (m) {
         m.updated_at = now;

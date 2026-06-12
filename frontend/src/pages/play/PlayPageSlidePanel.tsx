@@ -69,6 +69,7 @@ export function PlayPageSlidePanel() {
     shareUrl,
     hasScriptChanges,
     sourceItems,
+    expandedSourceId, setExpandedSourceId,
     currentAnimationSpec,
     animationWarning, setAnimationWarning,
   } = usePlayPageContext();
@@ -705,15 +706,33 @@ export function PlayPageSlidePanel() {
 
                 <div className="rounded-md border border-slate-800 bg-slate-900/50 p-3">
                   <p className="mb-2 text-xs text-slate-400">目前來源清單（{sourceItems.length}）</p>
-                  <div className="max-h-52 space-y-2 overflow-y-auto">
+                  <div className="max-h-72 space-y-2 overflow-y-auto">
                     {sourceItems.length === 0 ? (
                       <p className="text-xs text-slate-500">尚未新增額外來源</p>
-                    ) : sourceItems.map((s) => (
-                      <div key={s.id} className="rounded border border-slate-700 px-2 py-1.5">
-                        <p className="text-xs text-slate-300">[{s.source_kind}] {s.source_name ?? '未命名來源'}</p>
-                        <p className="mt-1 line-clamp-2 text-xs text-slate-400">{s.content_text}</p>
-                      </div>
-                    ))}
+                    ) : sourceItems.map((s) => {
+                      const isExpanded = expandedSourceId === s.id;
+                      const hasContent = s.content_text.trim().length > 0;
+                      return (
+                        <div key={s.id} className="rounded border border-slate-700 px-2 py-1.5">
+                          <button
+                            type="button"
+                            onClick={() => hasContent && setExpandedSourceId(isExpanded ? null : s.id)}
+                            disabled={!hasContent}
+                            className="flex w-full items-center justify-between gap-2 text-left disabled:cursor-default"
+                          >
+                            <p className="text-xs text-slate-300">[{s.source_kind}] {s.source_name ?? '未命名來源'}</p>
+                            {hasContent ? <span className="text-xs text-slate-400">{isExpanded ? '▲' : '▼'}</span> : null}
+                          </button>
+                          {!hasContent ? (
+                            <p className="mt-1 text-xs text-slate-500">尚無內容</p>
+                          ) : isExpanded ? (
+                            <pre className="mt-1 max-h-64 overflow-y-auto whitespace-pre-wrap break-all text-xs text-slate-400">{s.content_text}</pre>
+                          ) : (
+                            <p className="mt-1 line-clamp-2 text-xs text-slate-400">{s.content_text}</p>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 

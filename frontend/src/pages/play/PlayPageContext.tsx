@@ -137,6 +137,8 @@ export interface PlayPageContextValue {
   setGenPromptsLoading: Dispatch<SetStateAction<boolean>>;
   expandedGenPrompt: string | null;
   setExpandedGenPrompt: Dispatch<SetStateAction<string | null>>;
+  expandedSourceId: number | null;
+  setExpandedSourceId: Dispatch<SetStateAction<number | null>>;
   promptBusy: boolean;
   promptMsg: string | null;
   pagePrompts: Record<number, string>;

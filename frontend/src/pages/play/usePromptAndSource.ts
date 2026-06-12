@@ -33,6 +33,8 @@ export interface PromptAndSourceState {
   setGenPromptsLoading: Dispatch<SetStateAction<boolean>>;
   expandedGenPrompt: string | null;
   setExpandedGenPrompt: Dispatch<SetStateAction<string | null>>;
+  expandedSourceId: number | null;
+  setExpandedSourceId: Dispatch<SetStateAction<number | null>>;
   promptBusy: boolean;
   promptMsg: string | null;
   pagePrompts: Record<number, string>;
@@ -56,6 +58,7 @@ export function usePromptAndSource({
   const [genPrompts, setGenPrompts] = useState<PageGenerationPrompt[]>([]);
   const [genPromptsLoading, setGenPromptsLoading] = useState(false);
   const [expandedGenPrompt, setExpandedGenPrompt] = useState<string | null>(null);
+  const [expandedSourceId, setExpandedSourceId] = useState<number | null>(null);
   const [promptBusy, setPromptBusy] = useState(false);
   const [promptMsg, setPromptMsg] = useState<string | null>(null);
   const [pagePrompts, setPagePrompts] = useState<Record<number, string>>({});
@@ -173,6 +176,8 @@ export function usePromptAndSource({
     setGenPromptsLoading,
     expandedGenPrompt,
     setExpandedGenPrompt,
+    expandedSourceId,
+    setExpandedSourceId,
     promptBusy,
     promptMsg,
     pagePrompts,
