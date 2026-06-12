@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   MAX_SLIDE_ANIMATION_EFFECTS,
+  animationTimelineDurationSeconds,
   buildCustomScriptSandboxDoc,
   cloneAnimationSpec,
   customScriptDurationSeconds,
@@ -99,6 +100,41 @@ test("customScriptDurationSeconds falls back to 1 for a zero or negative total",
   const base = { id: "e1", target: "slide" as const, type: "custom-script" as const, ease: "none" as const, start: 0 };
   assert.equal(customScriptDurationSeconds({ ...base, duration: 0 }), 1);
   assert.equal(customScriptDurationSeconds({ ...base, duration: -2 }), 1);
+});
+
+test("animationTimelineDurationSeconds returns 0 for a disabled or null spec", () => {
+  const effect = {
+    id: "e1", target: "slide" as const, type: "fade-in" as const, ease: "none" as const, start: 1, duration: 2,
+  };
+  assert.equal(animationTimelineDurationSeconds(null), 0);
+  assert.equal(animationTimelineDurationSeconds({ version: 1, enabled: false, effects: [effect] }), 0);
+});
+
+test("animationTimelineDurationSeconds returns the latest effect end time, including exitDuration", () => {
+  const spec = {
+    version: 1 as const,
+    enabled: true,
+    effects: [
+      { id: "e1", target: "slide" as const, type: "fade-in" as const, ease: "none" as const, start: 0, duration: 2 },
+      {
+        id: "e2", target: "slide" as const, type: "highlight-box" as const, ease: "none" as const,
+        start: 3, duration: 1, exitDuration: 4,
+      },
+    ],
+  };
+  // e1 ends at 0+2=2, e2 ends at 3+1+4=8 → max is 8
+  assert.equal(animationTimelineDurationSeconds(spec), 8);
+});
+
+test("animationTimelineDurationSeconds ignores exitDuration when not set", () => {
+  const spec = {
+    version: 1 as const,
+    enabled: true,
+    effects: [
+      { id: "e1", target: "slide" as const, type: "zoom-in" as const, ease: "none" as const, start: 5, duration: 3 },
+    ],
+  };
+  assert.equal(animationTimelineDurationSeconds(spec), 8);
 });
 
 test("cloneAnimationSpec preserves custom-script code and prompt without sharing nested objects", () => {

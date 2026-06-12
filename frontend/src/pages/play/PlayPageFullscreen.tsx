@@ -35,6 +35,7 @@ export function PlayPageFullscreen() {
     setImageOnlyFullscreen,
     fullscreenLayout, setFullscreenLayout,
     isPlaying,
+    slideAnimationPlaying,
     playPause,
     goPrev, goNext,
     currentPage, currentIdx, totalPages,
@@ -157,7 +158,7 @@ export function PlayPageFullscreen() {
                   spec={currentAnimationSpec}
                   pageKey={`${pdfId ?? ''}:${currentPage?.page_number ?? 0}`}
                   currentTime={currentTime}
-                  isPlaying={isPlaying}
+                  isPlaying={slideAnimationPlaying}
                   playbackRate={playbackRate}
                   onAnimationError={() => setAnimationWarning(t('play.animation.runtimeWarning'))}
                   wrapperClassName="relative"
@@ -305,7 +306,7 @@ export function PlayPageFullscreen() {
           spec={currentAnimationSpec}
           pageKey={`${pdfId ?? ''}:${currentPage?.page_number ?? 0}`}
           currentTime={currentTime}
-          isPlaying={isPlaying}
+          isPlaying={slideAnimationPlaying}
           playbackRate={playbackRate}
           onAnimationError={() => setAnimationWarning(t('play.animation.runtimeWarning'))}
           wrapperClassName="relative"
