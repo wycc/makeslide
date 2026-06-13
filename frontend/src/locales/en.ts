@@ -331,6 +331,8 @@ export const en = {
   'play.animation.customScriptChatEmpty': 'No messages yet — send a message to have the AI generate an animation',
   'play.animation.customScriptChatSend': 'Send',
   'play.animation.customScriptGenerateBusy': 'AI is generating…',
+  'play.animation.customScriptPlanBusy': 'AI is planning implementation steps…',
+  'play.animation.customScriptPlanLabel': '📋 Implementation steps',
   'play.animation.customScriptEmpty': 'No animation code yet — start a conversation on the left to generate one',
   'play.animation.customScriptDone': 'AI generated a custom animation — preview and save',
   'play.animation.customScriptError': 'AI custom animation generation failed, please try again later',

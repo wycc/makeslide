@@ -93,14 +93,18 @@ test('rollbackRegenerate should throw ApiError on snapshot-not-found', async () 
   }
 });
 
-test('generateCustomScriptCode should call root API route from nested play pages and report streamed deltas', async () => {
+test('generateCustomScriptCode should call root API route from nested play pages and report streamed plan and code deltas', async () => {
   const calls: Array<{ input: unknown; init: RequestInit | undefined }> = [];
   const prevFetch = globalThis.fetch;
+  const finalPlan = '1. 建立一個藍色圓形\n2. 隨動畫進度放大圓形';
   const finalCode = 'window.renderAnimation = function (root, api) { api.onFrame(function () {}); };';
   globalThis.fetch = ((async (input: unknown, init?: RequestInit): Promise<Response> => {
     calls.push({ input, init });
     return new Response(
       sseStream([
+        { event: 'plan-delta', data: { text: finalPlan.slice(0, 10) } },
+        { event: 'plan-delta', data: { text: finalPlan.slice(10) } },
+        { event: 'plan-done', data: { plan: finalPlan } },
         { event: 'delta', data: { text: finalCode.slice(0, 10) } },
         { event: 'delta', data: { text: finalCode.slice(10) } },
         { event: 'done', data: { code: finalCode } },
@@ -110,15 +114,24 @@ test('generateCustomScriptCode should call root API route from nested play pages
   }) as unknown) as typeof fetch;
 
   try {
-    const deltas: string[] = [];
+    const planDeltas: string[] = [];
+    const codeDeltas: string[] = [];
+    const planDones: string[] = [];
     const result = await generateCustomScriptCode(
       'deck/with slash',
       3,
       { prompt: '畫資料點動畫', previousCode: 'old code' },
-      (delta) => deltas.push(delta),
+      {
+        onPlanDelta: (delta) => planDeltas.push(delta),
+        onPlanDone: (plan) => planDones.push(plan),
+        onDelta: (delta) => codeDeltas.push(delta),
+      },
     );
     assert.match(result.code, /renderAnimation/);
-    assert.equal(deltas.join(''), finalCode);
+    assert.equal(result.plan, finalPlan);
+    assert.equal(planDeltas.join(''), finalPlan);
+    assert.deepEqual(planDones, [finalPlan]);
+    assert.equal(codeDeltas.join(''), finalCode);
     assert.equal(calls.length, 1);
     assert.equal(calls[0]?.input, '/api/pdfs/deck%2Fwith%20slash/pages/3/animation/custom-script');
     assert.equal(calls[0]?.init?.method, 'POST');

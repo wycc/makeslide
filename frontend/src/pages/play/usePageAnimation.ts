@@ -46,9 +46,17 @@ export interface PageAnimationState {
    */
   customScriptStreamingCode: Record<string, string>;
   /**
+   * AI 產生 `custom-script` 動畫的第一階段：依 effect id 即時累積的「實作步驟」串流
+   * 文字。步驟產生完成後會移除對應的 key，並將完整步驟加入對話紀錄；產生失敗時
+   * 一併移除。
+   */
+  customScriptStreamingPlan: Record<string, string>;
+  /**
    * 將使用者輸入的訊息加入該 `custom-script` 效果的對話紀錄（`conversation`），
-   * 連同先前對話與目前程式碼一併送給後端 LLM，並依回應更新 `code` 與對話紀錄
-   * （產生成功時加入完成訊息，失敗時加入錯誤訊息），讓使用者能以多輪對話逐步調整動畫。
+   * 連同先前對話與目前程式碼一併送給後端 LLM。後端先產生一份實作步驟（顯示於
+   * 對話框中），再依步驟產生程式碼；依回應更新 `code` 與對話紀錄（產生成功時
+   * 依序加入步驟訊息與完成訊息，失敗時加入錯誤訊息），讓使用者能以多輪對話逐步
+   * 調整動畫，並可對照步驟手動修改程式碼。
    */
   handleSendCustomScriptMessage: (effectId: string, message: string) => Promise<boolean>;
 }
@@ -71,6 +79,7 @@ export function usePageAnimation({
   const [customScriptBusy, setCustomScriptBusy] = useState(false);
   const [customScriptBusyEffectId, setCustomScriptBusyEffectId] = useState<string | null>(null);
   const [customScriptStreamingCode, setCustomScriptStreamingCode] = useState<Record<string, string>>({});
+  const [customScriptStreamingPlan, setCustomScriptStreamingPlan] = useState<Record<string, string>>({});
 
   const pageKey = pdfId && currentPage ? `${pdfId}:${currentPage.page_number}` : null;
   const pageKeyRef = useRef(pageKey);
@@ -178,6 +187,7 @@ export function usePageAnimation({
       setAnimationError(null);
       setAnimationMessage(null);
       setCustomScriptStreamingCode((prev) => ({ ...prev, [effectId]: '' }));
+      setCustomScriptStreamingPlan((prev) => ({ ...prev, [effectId]: '' }));
       setAnimationDraft((prev) => {
         const base = prev ?? defaultAnimationSpec();
         return {
@@ -189,13 +199,47 @@ export function usePageAnimation({
           ),
         };
       });
+      const clearStreamingPlan = () => {
+        setCustomScriptStreamingPlan((prev) => {
+          if (!(effectId in prev)) return prev;
+          const next = { ...prev };
+          delete next[effectId];
+          return next;
+        });
+      };
       try {
         const res = await generateCustomScriptCode(
           pdfId,
           currentPage.page_number,
           { prompt, previousCode, history },
-          (delta) => {
-            setCustomScriptStreamingCode((prev) => ({ ...prev, [effectId]: (prev[effectId] ?? '') + delta }));
+          {
+            onPlanDelta: (delta) => {
+              setCustomScriptStreamingPlan((prev) => ({ ...prev, [effectId]: (prev[effectId] ?? '') + delta }));
+            },
+            onPlanDone: (plan) => {
+              clearStreamingPlan();
+              if (!plan.trim()) return;
+              setAnimationDraft((prev) => {
+                const base = prev ?? defaultAnimationSpec();
+                return {
+                  ...base,
+                  effects: base.effects.map((e) =>
+                    e.id === effectId
+                      ? {
+                          ...e,
+                          conversation: appendConversationMessages(e.conversation, {
+                            role: 'assistant',
+                            content: `${t('play.animation.customScriptPlanLabel')}\n${plan}`,
+                          }),
+                        }
+                      : e,
+                  ),
+                };
+              });
+            },
+            onDelta: (delta) => {
+              setCustomScriptStreamingCode((prev) => ({ ...prev, [effectId]: (prev[effectId] ?? '') + delta }));
+            },
           },
         );
         setAnimationDraft((prev) => {
@@ -233,6 +277,7 @@ export function usePageAnimation({
               : err instanceof ApiError
                 ? err.message
                 : t('play.animation.customScriptError');
+        clearStreamingPlan();
         setAnimationDraft((prev) => {
           const base = prev ?? defaultAnimationSpec();
           return {
@@ -269,6 +314,7 @@ export function usePageAnimation({
     customScriptBusy,
     customScriptBusyEffectId,
     customScriptStreamingCode,
+    customScriptStreamingPlan,
     handleSendCustomScriptMessage,
   };
 }

@@ -1,6 +1,10 @@
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { streamChatText } from './openai';
-import { MAX_CUSTOM_SCRIPT_OUTPUT_TOKENS, MAX_CUSTOM_SCRIPT_PROMPT_LENGTH } from './pageAnimation';
+import {
+  MAX_CUSTOM_SCRIPT_OUTPUT_TOKENS,
+  MAX_CUSTOM_SCRIPT_PLAN_OUTPUT_TOKENS,
+  MAX_CUSTOM_SCRIPT_PROMPT_LENGTH,
+} from './pageAnimation';
 import type { ConversationMessage } from './pageAnimation';
 
 /**
@@ -56,9 +60,29 @@ export function findCustomScriptContractIssue(code: string): string | null {
   return null;
 }
 
+/**
+ * System prompt for step 1 of the two-step generation flow: convert the
+ * user's free-text description into a numbered implementation step list,
+ * shown to the user before any code is written and later referenced as
+ * inline comments by `buildCustomScriptSystemPrompt`'s code generator.
+ */
+function buildCustomScriptPlanSystemPrompt(): string {
+  return [
+    '你是一位前端動畫工程師，負責將使用者對「自訂腳本動畫」的描述，轉換成一份詳細的實作步驟清單；之後會依此清單撰寫 JavaScript 程式碼，並在程式碼中以註解標示每個步驟，方便使用者對照、手動調整。',
+    '',
+    '請輸出純文字的條列步驟，每行一個步驟，格式為「數字. 步驟描述」（例如：「1. 在畫面中央建立一個半徑 2 的藍色圓形」）。',
+    '每個步驟請具體描述要建立或操作的視覺元素（形狀、文字、座標、顏色等），以及隨動畫進度（0~1，對應 api.onFrame 的 t/api.duration）產生的視覺變化。',
+    '步驟順序請依實作順序排列（例如先建立元素，再描述其動畫變化），數量依描述複雜度自行決定，通常 3~8 步。',
+    '若使用者提供「目前程式碼」或「先前對話」，代表使用者想在現有結果基礎上調整：請只列出「需要新增或修改」的步驟，不必重複描述既有且不變的部分。',
+    '只輸出步驟清單本身，不要輸出程式碼、JSON、標題或其他說明文字。',
+  ].join('\n');
+}
+
 function buildCustomScriptSystemPrompt(): string {
   return [
     '你是一位前端動畫工程師，負責依使用者描述產生一段「自訂腳本動畫」的 JavaScript 原始碼，用於投影片播放時疊加顯示。',
+    '',
+    '你會收到一份「實作步驟」清單（已依使用者提示詞整理為條列步驟）。請依照清單中的步驟撰寫程式碼，並在程式碼中對應位置加上單行註解標示步驟（例如 `// 步驟 1：...`），讓使用者之後可以對照步驟自行調整程式碼；註解可使用步驟原文或精簡摘要，但需清楚對應到該步驟，不需要逐字照抄。',
     '',
     '執行環境（請務必遵守）：',
     '- 你產生的程式碼會被注入到一個沒有 allow-same-origin 的 sandboxed <iframe> 中執行，無法存取上層頁面、cookie、localStorage 或任何網路資源。',
@@ -87,13 +111,21 @@ function buildCustomScriptSystemPrompt(): string {
   ].join('\n');
 }
 
-function buildCustomScriptUserPrompt(params: { prompt: string; previousCode?: string; pageText?: string }): string {
+function buildCustomScriptUserPrompt(params: {
+  prompt: string;
+  previousCode?: string;
+  pageText?: string;
+  plan?: string;
+}): string {
   const parts: string[] = [];
   if (params.pageText?.trim()) {
     parts.push('【投影片頁面文字（OCR 擷取，僅供參考主題與內容）】', params.pageText.trim(), '');
   }
   if (params.previousCode?.trim()) {
     parts.push('【目前程式碼（請在此基礎上依新提示詞調整）】', params.previousCode.trim(), '');
+  }
+  if (params.plan?.trim()) {
+    parts.push('【實作步驟】', params.plan.trim(), '');
   }
   parts.push('【使用者提示詞】', params.prompt.trim());
   return parts.join('\n');
@@ -118,12 +150,52 @@ function toChatCompletionMessage(message: ConversationMessage): ChatCompletionMe
 }
 
 /**
- * Asks the configured LLM to generate (or revise) the JavaScript source for
- * a `custom-script` animation effect from a free-text prompt, streaming the
- * raw output as it's generated via `onDelta`. `history` carries prior chat
- * turns (without their generated code) so the LLM has context for
- * progressive, multi-round edits. Callers should run `findUnsafeScriptPattern`
- * and `findCustomScriptContractIssue` on the resolved `code` before
+ * Step 1 of the two-step generation flow: asks the configured LLM to turn the
+ * user's free-text prompt into a numbered implementation step list, streaming
+ * the raw output as it's generated via `onDelta`. The resolved `plan` is shown
+ * to the user and then passed to `generateCustomScriptCodeStream` so the
+ * generated code's comments can reference each step. `history` carries prior
+ * chat turns so the plan can describe just the incremental change on
+ * multi-round edits.
+ */
+export async function generateCustomScriptPlanStream(
+  params: {
+    prompt: string;
+    previousCode?: string;
+    pageText?: string;
+    history?: ConversationMessage[];
+    label: string;
+  },
+  onDelta: (delta: string) => void,
+): Promise<{ plan: string; finishReason: string | null }> {
+  const userText = buildCustomScriptUserPrompt({
+    prompt: params.prompt.slice(0, MAX_CUSTOM_SCRIPT_PROMPT_LENGTH),
+    previousCode: params.previousCode,
+    pageText: params.pageText,
+  });
+  const result = await streamChatText({
+    label: params.label,
+    maxTokens: MAX_CUSTOM_SCRIPT_PLAN_OUTPUT_TOKENS,
+    temperature: 0.4,
+    messages: [
+      { role: 'system', content: buildCustomScriptPlanSystemPrompt() },
+      ...(params.history ?? []).map(toChatCompletionMessage),
+      { role: 'user', content: userText },
+    ],
+    onDelta,
+  });
+  return { plan: stripCodeFences(result.text), finishReason: result.finishReason };
+}
+
+/**
+ * Step 2 of the two-step generation flow: asks the configured LLM to generate
+ * (or revise) the JavaScript source for a `custom-script` animation effect,
+ * following the `plan` produced by `generateCustomScriptPlanStream` and
+ * annotating each step as a comment in the output. Streams the raw output as
+ * it's generated via `onDelta`. `history` carries prior chat turns (without
+ * their generated code) so the LLM has context for progressive, multi-round
+ * edits. Callers should run `findUnsafeScriptPattern` and
+ * `findCustomScriptContractIssue` on the resolved `code` before
  * storing/rendering it.
  */
 export async function generateCustomScriptCodeStream(
@@ -131,6 +203,7 @@ export async function generateCustomScriptCodeStream(
     prompt: string;
     previousCode?: string;
     pageText?: string;
+    plan?: string;
     history?: ConversationMessage[];
     label: string;
   },
@@ -140,6 +213,7 @@ export async function generateCustomScriptCodeStream(
     prompt: params.prompt.slice(0, MAX_CUSTOM_SCRIPT_PROMPT_LENGTH),
     previousCode: params.previousCode,
     pageText: params.pageText,
+    plan: params.plan,
   });
   const result = await streamChatText({
     label: params.label,

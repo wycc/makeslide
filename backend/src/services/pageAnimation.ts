@@ -101,10 +101,12 @@ export const MAX_CUSTOM_SCRIPT_CODE_LENGTH = 24000;
 export const MAX_CUSTOM_SCRIPT_PROMPT_LENGTH = 300;
 /** Max number of messages kept in a `custom-script` effect's AI chat `conversation`. */
 export const MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES = 40;
-/** Max length (chars) for a single `conversation` message's `content`. */
-export const MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH = 500;
+/** Max length (chars) for a single `conversation` message's `content`. Large enough to hold a generated step plan. */
+export const MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH = 2000;
 /** Max output tokens requested from the LLM when generating `custom-script` code (streaming). */
 export const MAX_CUSTOM_SCRIPT_OUTPUT_TOKENS = 24000;
+/** Max output tokens requested from the LLM when generating the `custom-script` implementation step plan (streaming). */
+export const MAX_CUSTOM_SCRIPT_PLAN_OUTPUT_TOKENS = 1200;
 
 // Whitelisted numeric params per effect type; unknown keys are stripped, not rejected,
 // so future spec versions can add params without breaking older backends.

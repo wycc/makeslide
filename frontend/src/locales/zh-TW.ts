@@ -331,6 +331,8 @@ export const zhTW = {
   'play.animation.customScriptChatEmpty': '尚未開始對話，輸入訊息讓 AI 產生動畫',
   'play.animation.customScriptChatSend': '送出',
   'play.animation.customScriptGenerateBusy': 'AI 產生中…',
+  'play.animation.customScriptPlanBusy': 'AI 規劃實作步驟中…',
+  'play.animation.customScriptPlanLabel': '📋 實作步驟',
   'play.animation.customScriptEmpty': '尚未產生動畫程式碼，請在左側輸入訊息開始對話',
   'play.animation.customScriptDone': 'AI 已產生自訂動畫，請預覽後儲存',
   'play.animation.customScriptError': 'AI 產生自訂動畫失敗，請稍後再試',

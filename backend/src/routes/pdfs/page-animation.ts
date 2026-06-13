@@ -19,7 +19,12 @@ import {
 } from '../../services/pageAnimation';
 import type { AnimationSpec } from '../../services/pageAnimation';
 import { generateAiFocusEffects } from '../../services/animationAutoFocus';
-import { findCustomScriptContractIssue, findUnsafeScriptPattern, generateCustomScriptCodeStream } from '../../services/animationCustomScript';
+import {
+  findCustomScriptContractIssue,
+  findUnsafeScriptPattern,
+  generateCustomScriptCodeStream,
+  generateCustomScriptPlanStream,
+} from '../../services/animationCustomScript';
 import type { SlideRenderType } from '../../types';
 import { PageParamSchema, errorResponse, nowIso } from './shared';
 
@@ -203,11 +208,15 @@ export async function registerPageAnimationRoutes(app: FastifyInstance): Promise
       .send(errorResponse('METHOD_NOT_ALLOWED', 'Use POST with a JSON body: { prompt, previousCode?, history? }'));
   });
 
-  // AI 自訂腳本動畫：依使用者提示詞（與選填的目前程式碼）由 LLM 產生一段在 sandboxed iframe
-  // 中執行的 JavaScript，供「custom-script」效果使用。不會寫入儲存的 spec，僅回傳程式碼供
-  // 前端合併進編輯中的 draft 效果。
+  // AI 自訂腳本動畫：分兩階段由 LLM 處理使用者提示詞（與選填的目前程式碼/對話歷史）：
+  // 1. 先將提示詞轉換成一份條列實作步驟（plan），供使用者於對話框中確認。
+  // 2. 再依此步驟清單產生一段在 sandboxed iframe 中執行的 JavaScript（供「custom-script」
+  //    效果使用），並在程式碼中以註解標示每個步驟，方便使用者手動調整。
+  // 不會寫入儲存的 spec，僅回傳步驟與程式碼供前端合併進編輯中的 draft 效果。
   //
   // 回應格式為 SSE（text/event-stream），讓前端可在產生過程中即時顯示輸出：
+  // - event: plan-delta — { text: string }，每次收到一段新產生的步驟清單片段
+  // - event: plan-done  — { plan: string }，步驟清單產生完成（顯示於對話框）
   // - event: delta — { text: string }，每次收到一段新產生的程式碼片段
   // - event: done  — { code: string }，產生完成且通過安全/契約檢查後的最終程式碼
   // - event: error — { code: string, message: string }，發生錯誤時送出，串流隨即結束
@@ -241,11 +250,25 @@ export async function registerPageAnimationRoutes(app: FastifyInstance): Promise
     };
 
     try {
+      const planResult = await generateCustomScriptPlanStream(
+        {
+          prompt: parsedBody.data.prompt,
+          previousCode: parsedBody.data.previousCode,
+          history: parsedBody.data.history,
+          pageText,
+          label: `animation-custom-script-plan-ai page/${id}/${n}`,
+        },
+        (delta) => sendEvent('plan-delta', { text: delta }),
+      );
+      const plan = planResult.plan;
+      sendEvent('plan-done', { plan });
+
       const result = await generateCustomScriptCodeStream(
         {
           prompt: parsedBody.data.prompt,
           previousCode: parsedBody.data.previousCode,
           history: parsedBody.data.history,
+          plan,
           pageText,
           label: `animation-custom-script-ai page/${id}/${n}`,
         },

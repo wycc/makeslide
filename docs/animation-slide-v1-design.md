@@ -256,10 +256,12 @@ easing 白名單：`none`、`power1.in`、`power1.out`、`power1.inOut`、`power
 // effect.conversation?: ConversationMessage[]  — 與 AI 的多輪對話紀錄，同時用於：
 //                           (1) 編輯器中的對話框顯示；(2) 作為下一輪請求的 history 送給 LLM，
 //                           讓 LLM 能參考先前對話內容做漸進式調整。
-//   每則 { role: 'user' | 'assistant'; content: string }，content 上限 500 字
-//   = MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH；陣列上限 40 筆
-//   = MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES（超過時捨棄最舊的訊息）。
-//   assistant 訊息為本地產生的「完成」/錯誤提示文字（已 i18n 本地化），不含程式碼本身。
+//   每則 { role: 'user' | 'assistant'; content: string }，content 上限 2000 字
+//   = MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH（提高自 500，以容納完整步驟清單）；
+//   陣列上限 40 筆 = MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES（超過時捨棄最舊的訊息）。
+//   assistant 訊息分兩類：(1) LLM 產生的「實作步驟」清單（見下方兩階段流程），
+//   附加 `play.animation.customScriptPlanLabel` 前綴；(2) 本地產生的「完成」/
+//   錯誤提示文字（已 i18n 本地化），不含程式碼本身。
 ```
 
 **沙箱與安全模型**
@@ -306,10 +308,14 @@ easing 白名單：`none`、`power1.in`、`power1.out`、`power1.inOut`、`power
 - 實際播放時，`useGsapSlideTimeline.ts` 新增一個 effect：每當 `currentTime`/`isPlaying`/`spec`/`pageKey` 變化，對每個 `custom-script` 效果的 iframe `contentWindow` 送出 `{ type: 'sync', t: max(0, currentTime - effect.start), playing: isPlaying }`。
 - `EffectOverlay`（`SlideRenderer.tsx`）渲染方式與其他 `OVERLAY_EFFECT_TYPES` 相同（`data-effect-id`、位置/大小取自 `getFocusEffectParams`），內容是一個 `<iframe sandbox="allow-scripts" srcDoc={buildCustomScriptSandboxDoc(effect.code, customScriptDurationSeconds(effect))} />`。**差異**：custom-script 不套用 §5.1 的淡入效果——`buildGsapTimeline.ts` 在 `effect.start` 以 `tl.set(overlay, { autoAlpha: 1 }, effect.start)` 直接顯示（無 0→1 過渡），讓自訂動畫從一開始即完全可見、由其內部腳本自行控制畫面呈現；若設定 `exitDuration`，仍依 §5.3 在 `start + duration + exitDuration` 淡出。
 
-**AI 產生/迭代（多輪對話）**
+**AI 產生/迭代（多輪對話，兩階段：先規劃步驟、再產生程式碼）**
 
-- `POST /api/pdfs/:id/pages/:n/animation/custom-script`（見 §8）：帶入 `{ prompt, previousCode?, history? }`，後端讀取本頁 OCR 文字作為主題參考，組成 `messages = [system, ...history.map(toChatCompletionMessage), { role: 'user', content: userPrompt }]` 請 LLM 以**串流**（`stream: true`，上限 `MAX_CUSTOM_SCRIPT_OUTPUT_TOKENS = 24000` tokens）產生原始 JavaScript 程式碼（非 JSON 包裝，必要時去除 LLM 誤加的 ```` ``` ```` 圍欄）；`history`（即 `effect.conversation`，每則 `{ role, content }`，上限 40 筆、每則 500 字，見 `ConversationMessageSchema`/`CustomScriptAiBodySchema`）讓 LLM 取得先前對話脈絡，`previousCode` 則仍以目前 `effect.code` 帶入提示詞文字中供 LLM 在此基礎上調整。回應為 SSE（`text/event-stream`），包含多個 `event: delta`（`{ text }`，逐段輸出片段）後接一個 `event: done`（`{ code }`，完整、已通過檢查的最終程式碼）或 `event: error`（`{ code, message }`）。通過 `findUnsafeScriptPattern`/`findCustomScriptContractIssue`/長度檢查後才送出 `done`，**不會**寫入已儲存的 spec。
-- 編輯器（§7.5）以 `generateCustomScriptCode`（`frontend/src/lib/api/pdfs.ts`）消費此 SSE 串流：送出訊息時先以 `appendConversationMessages` 將使用者訊息樂觀加入 `effect.conversation`，並帶入目前 `effect.code`（作為 `previousCode`）與 `effect.conversation`（作為 `history`）；每個 `delta` 即時累積顯示於程式碼編輯器（`usePageAnimation.ts` 的 `customScriptStreamingCode`，依 effect id 索引），`done` 時寫入該效果的 `code` 並於 `conversation` 追加一則完成訊息（`play.animation.customScriptDone`），`error` 則於 `conversation` 追加對應錯誤訊息並設定 `animationError`（`UNSAFE_SCRIPT`/`INVALID_SCRIPT_CONTRACT` 對應專屬訊息，其餘為通用錯誤）。使用者可持續在對話框輸入新訊息（例如「改成藍色」）迭代調整，直到滿意為止；最終仍需按「儲存動畫」才會持久化（含 `conversation`）。
+- `POST /api/pdfs/:id/pages/:n/animation/custom-script`（見 §8）：帶入 `{ prompt, previousCode?, history? }`，後端讀取本頁 OCR 文字作為主題參考，分兩階段呼叫 LLM（皆以**串流**回應）：
+  1. **規劃步驟**：以 `generateCustomScriptPlanStream`（`backend/src/services/animationCustomScript.ts`）組成 `messages = [planSystemPrompt, ...history.map(toChatCompletionMessage), { role: 'user', content: userPrompt }]`（`userPrompt` 含 `previousCode`/頁面文字但不含 `plan`），請 LLM 以 `stream: true`（上限 `MAX_CUSTOM_SCRIPT_PLAN_OUTPUT_TOKENS = 1200` tokens）輸出條列式「實作步驟」純文字（每行「數字. 步驟描述」，若有 `previousCode`/`history` 則只列出需新增/修改的步驟）。逐段以 `event: plan-delta`（`{ text }`）送出，完成後以 `event: plan-done`（`{ plan }`）送出完整步驟清單。
+  2. **產生程式碼**：以 `generateCustomScriptCodeStream` 組成 `messages = [codeSystemPrompt, ...history.map(toChatCompletionMessage), { role: 'user', content: userPrompt }]`（`userPrompt` 這次另外帶上步驟 1 的 `plan`，置於 `【實作步驟】` 區段），請 LLM 以 `stream: true`（上限 `MAX_CUSTOM_SCRIPT_OUTPUT_TOKENS = 24000` tokens）產生原始 JavaScript 程式碼（非 JSON 包裝，必要時去除 LLM 誤加的 ```` ``` ```` 圍欄）；`codeSystemPrompt` 要求 LLM 依步驟清單撰寫程式碼，並在對應位置以單行註解標示步驟（例如 `// 步驟 1：...`），方便使用者對照步驟手動調整。逐段以 `event: delta`（`{ text }`）送出，完成後以 `event: done`（`{ code }`，完整、已通過檢查的最終程式碼）送出。
+
+  `history`（即 `effect.conversation`，每則 `{ role, content }`，上限 40 筆、每則 2000 字，見 `ConversationMessageSchema`/`CustomScriptAiBodySchema`）讓兩階段 LLM 呼叫皆能取得先前對話脈絡，`previousCode` 則以目前 `effect.code` 帶入提示詞文字中供 LLM 在此基礎上調整。任一階段失敗時送出 `event: error`（`{ code, message }`）並結束串流；步驟 2 的結果需通過 `findUnsafeScriptPattern`/`findCustomScriptContractIssue`/長度檢查後才送出 `done`。整個流程**不會**寫入已儲存的 spec。SSE 事件順序固定為：一或多個 `plan-delta` → 一個 `plan-done` → 一或多個 `delta` → 一個 `done`（或任一階段改為 `error` 並結束）。
+- 編輯器（§7.5）以 `generateCustomScriptCode`（`frontend/src/lib/api/pdfs.ts`）消費此 SSE 串流：送出訊息時先以 `appendConversationMessages` 將使用者訊息樂觀加入 `effect.conversation`，並帶入目前 `effect.code`（作為 `previousCode`）與 `effect.conversation`（作為 `history`）；呼叫時傳入 `{ onPlanDelta, onPlanDone, onDelta }` 回呼。`plan-delta` 即時累積顯示於對話框中的「規劃中」泡泡（`usePageAnimation.ts` 的 `customScriptStreamingPlan`，依 effect id 索引；空字串時顯示 `play.animation.customScriptPlanBusy`）；`plan-done` 時將完整步驟清單（加上 `play.animation.customScriptPlanLabel` 前綴）以 assistant 訊息加入 `conversation` 並清除該串流暫存。接著 `delta` 即時累積顯示於程式碼編輯器（`customScriptStreamingCode`，依 effect id 索引），此時對話框改顯示一般忙碌泡泡（`play.animation.customScriptGenerateBusy`）；`done` 時寫入該效果的 `code`（其中含步驟註解）並於 `conversation` 追加一則完成訊息（`play.animation.customScriptDone`），`error` 則於 `conversation` 追加對應錯誤訊息並設定 `animationError`（`UNSAFE_SCRIPT`/`INVALID_SCRIPT_CONTRACT` 對應專屬訊息，其餘為通用錯誤；此時步驟串流暫存亦會清除）。使用者可持續在對話框輸入新訊息（例如「改成藍色」）迭代調整，直到滿意為止；最終仍需按「儲存動畫」才會持久化（含 `conversation`）。
 
 **v1 範圍與後續**
 
@@ -467,9 +473,9 @@ Props：`renderType`、`src`（由呼叫端算好，含 displayedImageSrc 防閃
 
 效果類型為 `custom-script` 時，效果列下方額外顯示一個區塊（§5.4 的編輯器入口）：
 
-- **對話框**：可捲動的訊息清單，顯示 `effect.conversation`——使用者訊息靠右（紫色系泡泡）、AI 完成/錯誤訊息靠左（灰色系泡泡）；無訊息時顯示提示文字（`play.animation.customScriptChatEmpty`）。產生中於清單底部額外顯示忙碌泡泡（`play.animation.customScriptGenerateBusy`），並自動捲動到最新訊息。
+- **對話框**：可捲動的訊息清單，顯示 `effect.conversation`——使用者訊息靠右（紫色系泡泡）、AI 訊息（含實作步驟、完成、錯誤）靠左（灰色系泡泡）；無訊息時顯示提示文字（`play.animation.customScriptChatEmpty`）。產生中於清單底部額外顯示忙碌泡泡：第一階段（規劃步驟）即時顯示 `customScriptStreamingPlan` 累積的串流文字（尚未收到內容時顯示 `play.animation.customScriptPlanBusy`）；第二階段（產生程式碼）顯示一般忙碌泡泡（`play.animation.customScriptGenerateBusy`）。並自動捲動到最新訊息。
 - **輸入框**（多行文字，上限 300 字 = `MAX_CUSTOM_SCRIPT_PROMPT_LENGTH`，placeholder 為 `play.animation.customScriptChatInputPlaceholder`）＋「送出」按鈕（`play.animation.customScriptChatSend`，產生中顯示 `customScriptGenerateBusy`）；輸入為空、產生中或效果停用時停用送出。按 Enter 送出、Shift+Enter 換行。
-- 送出後呼叫 `handleSendCustomScriptMessage(effectId, message)`（`usePageAnimation.ts`）：先以 `appendConversationMessages` 將使用者訊息樂觀加入 `effect.conversation` 並清空輸入框，再呼叫 `POST /api/pdfs/:id/pages/:n/animation/custom-script`（`generateCustomScriptCode`，`frontend/src/lib/api/pdfs.ts`），帶入 `{ prompt: message, previousCode: effect.code, history: effect.conversation }`，以 SSE 串流消費回應：產生中，JavaScript 原始碼編輯器即時顯示陸續抵達的 `delta` 內容（`customScriptStreamingCode`，唯讀），讓使用者看到逐步輸出的過程；`done` 時將完整 `code` 寫回該效果並於 `conversation` 追加完成訊息（`play.animation.customScriptDone`）後清除串流暫存，編輯器恢復可編輯。失敗則於 `conversation` 追加錯誤訊息並於 UI 顯示錯誤（`animationError`）——`error` 事件的 `UNSAFE_SCRIPT`/`INVALID_SCRIPT_CONTRACT` 對應專屬訊息（`play.animation.customScriptUnsafe`/`customScriptContractError`），其餘（含網路錯誤、`SCRIPT_TOO_LONG`、空輸出、串流中斷無 `done`）顯示 `customScriptError` 或後端訊息；此時串流暫存內容會保留在編輯器中，方便使用者對照錯誤訊息。
+- 送出後呼叫 `handleSendCustomScriptMessage(effectId, message)`（`usePageAnimation.ts`）：先以 `appendConversationMessages` 將使用者訊息樂觀加入 `effect.conversation` 並清空輸入框，再呼叫 `POST /api/pdfs/:id/pages/:n/animation/custom-script`（`generateCustomScriptCode`，`frontend/src/lib/api/pdfs.ts`），帶入 `{ prompt: message, previousCode: effect.code, history: effect.conversation }`，並傳入 `{ onPlanDelta, onPlanDone, onDelta }` 回呼以 SSE 串流消費回應：第一階段 `plan-delta` 累積顯示於對話框的規劃中泡泡（`customScriptStreamingPlan`），`plan-done` 時將完整「實作步驟」清單（加上 `play.animation.customScriptPlanLabel` 前綴）以 assistant 訊息加入 `conversation` 並清除該串流暫存；第二階段 `delta` 即時顯示於 JavaScript 原始碼編輯器（`customScriptStreamingCode`，唯讀），讓使用者看到逐步輸出的程式碼（含對應步驟的單行註解），`done` 時將完整 `code` 寫回該效果並於 `conversation` 追加完成訊息（`play.animation.customScriptDone`）後清除串流暫存，編輯器恢復可編輯。失敗則於 `conversation` 追加錯誤訊息並於 UI 顯示錯誤（`animationError`），同時清除任何尚未完成的 `customScriptStreamingPlan` 暫存——`error` 事件的 `UNSAFE_SCRIPT`/`INVALID_SCRIPT_CONTRACT` 對應專屬訊息（`play.animation.customScriptUnsafe`/`customScriptContractError`），其餘（含網路錯誤、`SCRIPT_TOO_LONG`、空輸出、串流中斷無 `done`）顯示 `customScriptError` 或後端訊息；`customScriptStreamingCode` 內容會保留在編輯器中，方便使用者對照錯誤訊息。
 - `effect.code` 尚未產生時顯示提示文字（`play.animation.customScriptEmpty`）；已產生時，下方即時顯示 `CustomScriptPreview`——一個 sandboxed `<iframe>`，以 `requestAnimationFrame` 持續送出 `{ type: 'sync', t, playing: true }`（`t` 在 `0 ~ previewLoopSeconds(effect)` 之間迴圈，`previewLoopSeconds = clamp(customScriptDurationSeconds(effect), 2, 20)`），讓使用者在反覆對話調整時立即看到迴圈播放的結果，無需先儲存或進入播放模式。預覽傳給 sandbox 的 `api.duration` 即為 `previewLoopSeconds(effect)`，與實際播放時的 `customScriptDurationSeconds(effect)` 採同一公式（僅預覽端額外夾在 2~20 秒之間），確保預覽中看到的「一輪」進度與實際播放一致。
 - 效果類型為 `custom-script` 時亦適用 §7（效果列）中對 `OVERLAY_EFFECT_TYPES` 共用的「焦點位置與大小（%）」與「顯示後自動消失」控制項。
 - 與其他效果一樣，調整完成後需按「儲存動畫」才會持久化；`code`/`conversation` 皆隨 spec 一併儲存，重新進入編輯器可繼續對話迭代。舊版以 `prompt`+`code` 儲存的 spec 仍可載入並繼續以 `code` 作為基礎迭代，僅 `conversation` 從空白開始。
@@ -481,7 +487,7 @@ GET  /api/pdfs/:id/pages/:n/animation              → { page_number, render_typ
 PUT  /api/pdfs/:id/pages/:n/animation              → 驗證、寫 JSON、更新 render_type/animation_spec_path
 GET  /api/pdfs/:id/pages/:n/animation/spec         → 純 spec JSON，Cache-Control: no-store
 POST /api/pdfs/:id/pages/:n/animation/auto-focus-ai → { effects }（AI 產生，不寫入已儲存 spec，見 §7.4）
-POST /api/pdfs/:id/pages/:n/animation/custom-script → SSE（text/event-stream）：event: delta {text} *、event: done {code} 或 event: error {code, message}（AI 產生/迭代自訂腳本，不寫入已儲存 spec，見 §5.4/§7.5；UNSAFE_SCRIPT/INVALID_SCRIPT_CONTRACT/SCRIPT_TOO_LONG/INTERNAL_ERROR 為可能的錯誤 code）
+POST /api/pdfs/:id/pages/:n/animation/custom-script → SSE（text/event-stream），兩階段：event: plan-delta {text} * → event: plan-done {plan} → event: delta {text} * → event: done {code}；任一階段失敗則改送 event: error {code, message} 並結束（AI 產生/迭代自訂腳本，不寫入已儲存 spec，見 §5.4/§7.5；UNSAFE_SCRIPT/INVALID_SCRIPT_CONTRACT/SCRIPT_TOO_LONG/INTERNAL_ERROR 為可能的錯誤 code）
 ```
 
 PUT 規則：`spec.enabled === true` → `render_type='gsap-image'`；`false` → `render_type='static-image'`（JSON 保留以便再次啟用）。驗證失敗回 `400 INVALID_ANIMATION_SPEC`。
@@ -527,6 +533,7 @@ detail API 的 page 物件增加 `render_type` 與 `animation_spec_url`。
 V1 的「使用提示詞生成動畫」以 `custom-script` 效果交付，重點是安全、可迭代、可播放同步，而非真實資料集或模型推論：
 
 - 使用者在動畫 Tab 新增 `custom-script` 效果，於對話框輸入訊息後呼叫 `POST /api/pdfs/:id/pages/:n/animation/custom-script` 產生 JavaScript（連同 `effect.conversation` 作為 `history` 一併送出）；回傳結果只寫入前端 draft，必須再按「儲存動畫」才會持久化到 `<page_uid>.animation.json`。
+- 產生程式碼前，後端先請 LLM 將提示詞轉換成一份條列「實作步驟」（`plan-delta`/`plan-done`），即時顯示於對話框；再依此步驟清單產生程式碼，並要求 LLM 在程式碼對應位置以單行註解標示每個步驟（例如 `// 步驟 1：...`），方便使用者對照步驟手動調整。
 - 產生的程式碼必須符合 `window.renderAnimation(root, api)` 與 `api.onFrame(callback)` 契約；後端會拒絕明顯缺少契約的輸出，前端 sandbox 也會在缺少 `renderAnimation` 時顯示錯誤訊息。
 - 程式碼在 `<iframe sandbox="allow-scripts">` 中執行，不含 `allow-same-origin`，並且後端會額外拒絕 `fetch`、`XMLHttpRequest`、`WebSocket`、`import`、`require`、`eval`、`new Function`、storage、cookie、parent/top/frameElement 等高風險 API。
 - 播放時 host 端以音訊 currentTime 為主時鐘，對每個 `custom-script` iframe 送出 `{ type: 'sync', t, playing }`；`t` 是相對該 effect 起始時間的秒數，支援 seek、暫停、重播與和其他 GSAP/overlay 效果一起播放。

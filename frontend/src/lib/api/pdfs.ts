@@ -128,11 +128,23 @@ export async function generateAiFocusEffects(
 
 export interface GenerateCustomScriptCodeResponse {
   code: string;
+  plan: string;
+}
+
+export interface GenerateCustomScriptCodeCallbacks {
+  /** A chunk of the implementation step plan, streamed before code generation begins. */
+  onPlanDelta?: (delta: string) => void;
+  /** The final implementation step plan, shown to the user before code generation begins. */
+  onPlanDone?: (plan: string) => void;
+  /** A chunk of generated code, streamed as it's produced. */
+  onDelta?: (delta: string) => void;
 }
 
 /**
  * Asks the backend's LLM to generate (or revise) the JavaScript source for a
- * `custom-script` effect. The backend responds with an SSE stream:
+ * `custom-script` effect, in two steps. The backend responds with an SSE stream:
+ * - `event: plan-delta` — `{ text }`, a chunk of the implementation step plan; reported via `onPlanDelta`.
+ * - `event: plan-done`  — `{ plan }`, the final step plan, shown to the user before code generation begins; reported via `onPlanDone`.
  * - `event: delta` — `{ text }`, a chunk of generated code; reported via `onDelta` as it arrives.
  * - `event: done`  — `{ code }`, the final, validated code.
  * - `event: error` — `{ code, message }`, thrown as an `ApiError`.
@@ -141,7 +153,7 @@ export async function generateCustomScriptCode(
   id: string,
   pageNumber: number,
   body: { prompt: string; previousCode?: string; history?: ChatMessage[] },
-  onDelta?: (delta: string) => void,
+  callbacks?: GenerateCustomScriptCodeCallbacks,
 ): Promise<GenerateCustomScriptCodeResponse> {
   const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/animation/custom-script`, {
     method: 'POST',
@@ -155,6 +167,7 @@ export async function generateCustomScriptCode(
   const decoder = new TextDecoder();
   let buffer = '';
   let code: string | null = null;
+  let plan = '';
 
   const handleEvent = (block: string): void => {
     let event = 'message';
@@ -165,9 +178,18 @@ export async function generateCustomScriptCode(
     }
     if (!data) return;
     const parsed = JSON.parse(data) as Record<string, unknown>;
-    if (event === 'delta') {
+    if (event === 'plan-delta') {
       const text = parsed.text;
-      if (typeof text === 'string' && text) onDelta?.(text);
+      if (typeof text === 'string' && text) callbacks?.onPlanDelta?.(text);
+    } else if (event === 'plan-done') {
+      const donePlan = parsed.plan;
+      if (typeof donePlan === 'string') {
+        plan = donePlan;
+        callbacks?.onPlanDone?.(donePlan);
+      }
+    } else if (event === 'delta') {
+      const text = parsed.text;
+      if (typeof text === 'string' && text) callbacks?.onDelta?.(text);
     } else if (event === 'done') {
       const doneCode = parsed.code;
       if (typeof doneCode === 'string') code = doneCode;
@@ -199,7 +221,7 @@ export async function generateCustomScriptCode(
   if (code === null) {
     throw new ApiError('Stream ended without a result', 'INTERNAL_ERROR', resp.status);
   }
-  return { code };
+  return { code, plan };
 }
 
 export type ShareAccessMode = 'read_only' | 'editable';

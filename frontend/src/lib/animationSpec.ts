@@ -48,7 +48,7 @@ export const MAX_CUSTOM_SCRIPT_PROMPT_LENGTH = 300;
 /** Max number of messages kept in a `custom-script` effect's AI chat `conversation`, matching the backend's `MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES`. */
 export const MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES = 40;
 /** Max length (chars) for a single `conversation` message's `content`, matching the backend's `MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH`. */
-export const MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH = 500;
+export const MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH = 2000;
 
 /** Default `exitDuration` (seconds) suggested when a user first enables auto-hide for an overlay effect. */
 export const DEFAULT_EXIT_DURATION_SECONDS = 2;

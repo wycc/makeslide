@@ -838,6 +838,46 @@ function streamingChatClient(
   };
 }
 
+/**
+ * Builds an OpenAI client stub like `streamingChatClient`, but returns
+ * `planText` for the step-1 (plan) system prompt and `codeText` for the
+ * step-2 (code) system prompt — distinguished by whether the system prompt
+ * mentions `window.renderAnimation` (only the code prompt does). `onCall` is
+ * invoked with each call's `messages`, in call order.
+ */
+function twoPhaseStreamingChatClient(
+  planText: string,
+  codeText: string,
+  onCall?: (messages: Array<{ role: string; content: unknown }>) => void,
+) {
+  return {
+    chat: {
+      completions: {
+        create: async (body: unknown) => {
+          const { messages } = body as { messages: Array<{ role: string; content: unknown }> };
+          onCall?.(messages);
+          const isCodeStep = String(messages[0]?.content ?? '').includes('window.renderAnimation');
+          const text = isCodeStep ? codeText : planText;
+          const chunkSize = Math.max(1, Math.ceil(text.length / 3));
+          const pieces: string[] = [];
+          for (let i = 0; i < text.length; i += chunkSize) pieces.push(text.slice(i, i + chunkSize));
+          return {
+            [Symbol.asyncIterator]: async function* () {
+              for (const piece of pieces) {
+                yield { choices: [{ delta: { content: piece }, finish_reason: null }] };
+              }
+              yield {
+                choices: [{ delta: {}, finish_reason: 'stop' }],
+                usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+              };
+            },
+          };
+        },
+      },
+    },
+  };
+}
+
 /** Parses an SSE response body (`event: x\ndata: {...}\n\n` blocks) into `{ event, data }` entries. */
 function parseSseEvents(payload: string): Array<{ event: string; data: unknown }> {
   return payload
@@ -917,6 +957,84 @@ test('POST animation/custom-script streams AI-generated code via SSE and ends wi
   }
 });
 
+test('POST animation/custom-script streams an implementation plan (plan-delta/plan-done) before the code, and the plan is fed into the code prompt', async () => {
+  seedAnimationPdf(PDF_ID, 1);
+  const planText = '1. 建立一個藍色圓形\n2. 隨動畫進度放大圓形';
+  const generatedCode = [
+    'window.renderAnimation = function (root, api) {',
+    '  // 步驟 1：建立一個藍色圓形',
+    '  // 步驟 2：隨動畫進度放大圓形',
+    '  api.onFrame(function () {});',
+    '};',
+  ].join('\n');
+  const calls: Array<Array<{ role: string; content: unknown }>> = [];
+  setOpenAIClientForTest(twoPhaseStreamingChatClient(planText, generatedCode, (messages) => calls.push(messages)) as never);
+
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${PDF_ID}/pages/1/animation/custom-script`,
+      headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+      payload: { prompt: '畫一個會放大的藍色圓形' },
+    });
+    assert.equal(resp.statusCode, 200);
+    const events = parseSseEvents(resp.payload);
+
+    // plan-delta(s) → plan-done → delta(s) → done, in that order
+    const planDeltaIdx = events.findIndex((e) => e.event === 'plan-delta');
+    const planDoneIdx = events.findIndex((e) => e.event === 'plan-done');
+    const deltaIdx = events.findIndex((e) => e.event === 'delta');
+    assert.ok(planDeltaIdx === 0, 'expected the first event to be plan-delta');
+    assert.ok(planDeltaIdx < planDoneIdx && planDoneIdx < deltaIdx);
+    assert.equal(events[events.length - 1]?.event, 'done');
+
+    const planDeltaText = events
+      .filter((e) => e.event === 'plan-delta')
+      .map((e) => (e.data as { text: string }).text)
+      .join('');
+    assert.equal(planDeltaText, planText);
+    assert.deepEqual(events[planDoneIdx]?.data, { plan: planText });
+
+    const doneEvent = events.find((e) => e.event === 'done');
+    assert.deepEqual(doneEvent?.data, { code: generatedCode });
+
+    // step 2 (code) receives step 1's plan as part of its user prompt
+    assert.equal(calls.length, 2);
+    const codeUserMessage = calls[1]?.find((m) => m.role === 'user');
+    assert.match(String(codeUserMessage?.content), /【實作步驟】/);
+    assert.match(String(codeUserMessage?.content), /建立一個藍色圓形/);
+  } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+  }
+});
+
+test('POST animation/custom-script sends an INTERNAL_ERROR event and stops if the plan step fails', async () => {
+  seedAnimationPdf(PDF_ID, 1);
+  setOpenAIClientForTest({
+    chat: { completions: { create: async () => { throw new Error('boom'); } } },
+  } as never);
+
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${PDF_ID}/pages/1/animation/custom-script`,
+      headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+      payload: { prompt: '畫一個圓形' },
+    });
+    assert.equal(resp.statusCode, 200);
+    const events = parseSseEvents(resp.payload);
+    assert.equal(events.length, 1);
+    assert.equal(events[0]?.event, 'error');
+    assert.equal((events[0]?.data as { code: string }).code, 'INTERNAL_ERROR');
+  } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+  }
+});
+
 /** Builds a Gemini `streamGenerateContent?alt=sse` response body: `data: {...}\n\n` blocks, each carrying one `candidates[0].content.parts[0].text` chunk. */
 function geminiSseStream(textPieces: string[]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
@@ -979,8 +1097,9 @@ test('POST animation/custom-script streams Gemini-generated code incrementally w
     const doneEvent = events.find((e) => e.event === 'done');
     assert.deepEqual(doneEvent?.data, { code: generatedCode });
 
-    assert.equal(fetchCalls.length, 1);
-    assert.match(fetchCalls[0] ?? '', /streamGenerateContent\?alt=sse/);
+    // one streamGenerateContent call for the plan step, one for the code step
+    assert.equal(fetchCalls.length, 2);
+    for (const url of fetchCalls) assert.match(url, /streamGenerateContent\?alt=sse/);
   } finally {
     globalThis.fetch = prevFetch;
     setRuntimeAiSettings('account-1', {

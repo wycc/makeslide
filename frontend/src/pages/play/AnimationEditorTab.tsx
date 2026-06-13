@@ -109,6 +109,7 @@ export function AnimationEditorTab() {
     customScriptBusy,
     customScriptBusyEffectId,
     customScriptStreamingCode,
+    customScriptStreamingPlan,
     handleSendCustomScriptMessage,
   } = usePlayPageContext();
   const { t } = useI18n();
@@ -128,6 +129,10 @@ export function AnimationEditorTab() {
     : '';
   const customScriptConversation = customScriptDialogEffect?.conversation ?? [];
   const customScriptIsBusy = customScriptBusyEffectId === customScriptDialogEffectId;
+  // 第一階段（實作步驟）串流中的文字；步驟產生完成後會從這裡移除並併入 customScriptConversation。
+  const customScriptPlanStreaming = customScriptDialogEffect
+    ? customScriptStreamingPlan[customScriptDialogEffect.id]
+    : undefined;
 
   // 開啟對話框（或切換效果）時清空尚未送出的訊息。
   useEffect(() => {
@@ -527,9 +532,15 @@ export function AnimationEditorTab() {
                         </div>
                       ))}
                       {customScriptIsBusy && (
-                        <div className="mr-auto max-w-[85%] rounded-lg bg-slate-800 px-3 py-2 text-sm text-slate-400">
-                          {t('play.animation.customScriptGenerateBusy')}
-                        </div>
+                        customScriptPlanStreaming !== undefined ? (
+                          <div className="mr-auto max-w-[85%] whitespace-pre-wrap rounded-lg bg-slate-800 px-3 py-2 text-sm text-slate-200">
+                            {customScriptPlanStreaming || t('play.animation.customScriptPlanBusy')}
+                          </div>
+                        ) : (
+                          <div className="mr-auto max-w-[85%] rounded-lg bg-slate-800 px-3 py-2 text-sm text-slate-400">
+                            {t('play.animation.customScriptGenerateBusy')}
+                          </div>
+                        )
                       )}
                     </>
                   )}
