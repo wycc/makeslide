@@ -76,6 +76,7 @@ test('timing event schema exposes standardized values and SLA targets', () => {
     'source_prepare',
     'render_pages',
     'extract_text',
+    'extract_figures',
     'split_text',
     'generate_scripts',
     'synthesize_audio',

@@ -38,6 +38,7 @@ import { renderPages } from './steps/renderPages';
 import { renderTextPagesWithLlm } from './steps/renderTextPagesWithLlm';
 import { splitTextWithLlm } from './steps/splitTextWithLlm';
 import { extractText } from './steps/extractText';
+import { extractPdfFigures } from './steps/extractPdfFigures';
 import { generateScript } from './steps/generateScript';
 import { generateTitle } from './steps/generateTitle';
 import {
@@ -790,6 +791,24 @@ async function runPipeline(pdfId: string): Promise<void> {
         textResult.push({ pageNumber: n, empty, textPath: tp });
       }
       logger.info({ pdfId, pageCount }, 'Pipeline: reuse extracted text (resume)');
+    }
+
+    // -------- Step 2.1: extract figures (charts/images) from PDF --------
+    // Only meaningful for genuine PDF uploads (not text/YouTube imports, which
+    // have no source.pdf). Non-fatal: failures are logged and skipped so they
+    // never block script/audio generation.
+    if ((row.source_type ?? 'pdf') === 'pdf' && !fs.existsSync(sourceTextPath(pdfId))) {
+      const figuresStage = startStage(run, 'extract_figures', { pageCount });
+      try {
+        const { figureCount } = await extractPdfFigures(pdfId, pageCount);
+        finishStage(figuresStage, 'succeeded', { figureCount });
+      } catch (err) {
+        logger.warn({ pdfId, err }, 'Pipeline: extract_figures failed (non-fatal)');
+        finishStage(figuresStage, 'failed', undefined, {
+          code: (err as { code?: string } | null)?.code ?? null,
+          message: (err as Error | null)?.message ?? String(err),
+        });
+      }
     }
 
     // -------- Step 2.5: PDF full-text re-split (Third Batch) --------
