@@ -10,6 +10,7 @@ import { logger } from '../logger';
 import { getOpenAIClient } from '../services/openai';
 import { accountIdFromOwnerSub, runWithAccountId } from '../services/accountContext';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../services/imagePromptTemplates';
+import { buildFigureReferenceNotes, figureImageAbsPath, getFigureReferencesForPage } from '../services/pdfFigures';
 import { loadPromptTemplate, renderPromptTemplate } from '../services/promptTemplates';
 import {
   pageAudioPath,
@@ -1255,10 +1256,12 @@ async function runRegenerateImages(
       }
     }
 
+    const figureRefs = getFigureReferencesForPage(pdfId, p.page_number);
     const basePrompt = buildImagePrompt({
       stylePrompt: deckStylePrompt,
       pageText,
       pageScript,
+      figureNotes: buildFigureReferenceNotes(figureRefs),
       userAdjustmentPrompt: `Current user adjustment request:\n${prompt}`,
     });
     const editPrompt = renderPromptTemplate(
@@ -1269,19 +1272,28 @@ async function runRegenerateImages(
     const currentImagePath = pageImagePath(pdfId, p.page_uid);
     const currentImageBuffer = await fs.promises.readFile(currentImagePath);
     const currentImageForEdit = await toFile(currentImageBuffer, `page-${p.page_number}.jpg`, { type: 'image/jpeg' });
+    const figureRefFiles = await Promise.all(
+      figureRefs.map((figure, index) =>
+        fs.promises
+          .readFile(figureImageAbsPath(pdfId, figure))
+          .then((buf) => toFile(buf, `figure-ref-${index + 1}.png`, { type: 'image/png' })),
+      ),
+    );
+    const editImage: Parameters<typeof client.images.edit>[0]['image'] =
+      figureRefFiles.length > 0 ? [currentImageForEdit, ...figureRefFiles] : currentImageForEdit;
 
     const artifactHandle = startArtifact({
       run: timingRun,
       pageNumber: p.page_number,
       artifact: 'image',
       reason: 'regenerate',
-      metadata: { job_id: state.job_id, precision: 'inline' },
+      metadata: { job_id: state.job_id, precision: 'inline', figureReferenceCount: figureRefs.length },
     });
     const generated = await withExponentialBackoffRetry(
       () =>
         client.images.edit({
           model: config.openaiImageModel,
-          image: currentImageForEdit,
+          image: editImage,
           prompt: editPrompt,
           size: '1536x1024',
           quality: 'low',

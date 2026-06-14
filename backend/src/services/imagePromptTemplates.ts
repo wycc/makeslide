@@ -143,6 +143,7 @@ export function buildImagePrompt(params: {
   pageScript?: string | null;
   userAdjustmentPrompt?: string | null;
   slideLabel?: string | null;
+  figureNotes?: string | null;
   textBody?: string | null;
 }): string {
   const lines: string[] = [...IMAGE_PROMPT_GENERAL_RULES];
@@ -164,6 +165,9 @@ export function buildImagePrompt(params: {
   }
   if (params.pageScript !== undefined) {
     lines.push(`頁面逐字稿（參考）：\n${(params.pageScript ?? '').trim() || '(無)'}`);
+  }
+  if (params.figureNotes?.trim()) {
+    lines.push(params.figureNotes.trim());
   }
   if (params.textBody?.trim()) {
     lines.push(params.textBody.trim());
