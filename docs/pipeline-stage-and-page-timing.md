@@ -204,6 +204,7 @@
 | `source_prepare` | 來源檔寫入、字幕擷取或文字匯入前處理 | 部分無對應。 |
 | `render_pages` | PDF 或文字來源轉成頁面圖片 | `rendering`。 |
 | `extract_text` | PDF 抽文字或讀取每頁文字 | `extracting_text`、`text_extracted`。 |
+| `extract_figures` | PDF 內嵌圖表萃取（非文字/YouTube 匯入），失敗不中斷 pipeline | 無明確 progress。 |
 | `split_text` | 文字/YouTube 來源切頁或大綱轉頁 | 部分無對應。 |
 | `generate_scripts` | 逐頁講稿生成 | `scripting`、`script_ready`。 |
 | `synthesize_audio` | 逐頁語音合成 | `synthesizing`。 |
@@ -283,6 +284,7 @@ const SLA_TARGETS_MS = {
     queue_wait: 30_000,
     render_pages: 120_000,
     extract_text: 120_000,
+    extract_figures: 120_000,
     generate_scripts: 300_000,
     synthesize_audio: 300_000,
     generate_title: 60_000,

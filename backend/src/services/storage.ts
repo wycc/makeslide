@@ -71,6 +71,18 @@ export function videoPath(pdfId: string): string {
   return path.join(pdfDir(pdfId), 'video.mp4');
 }
 
+export function figuresDir(pdfId: string): string {
+  return path.join(pdfDir(pdfId), 'figures');
+}
+
+export function figureManifestPath(pdfId: string): string {
+  return path.join(pdfDir(pdfId), 'figures.json');
+}
+
+export function figureFilePath(pdfId: string, filename: string): string {
+  return path.join(figuresDir(pdfId), filename);
+}
+
 export function youtubeCaptionsRawPath(pdfId: string): string {
   return path.join(pdfDir(pdfId), 'captions.raw.json');
 }
