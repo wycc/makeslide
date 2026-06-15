@@ -5,6 +5,7 @@ const STEP_LABELS: Record<RegenStepName, string> = {
   script: '逐字稿',
   audio: '語音',
   image: '圖檔',
+  animation: '動畫',
 };
 
 export function RegenerateProgress({ job }: { job: RegenJobState | null }) {

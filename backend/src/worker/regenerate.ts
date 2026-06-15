@@ -13,6 +13,7 @@ import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../services/imagePromp
 import { buildFigureReferenceNotes, figureImageAbsPath, getFigureReferencesForPage } from '../services/pdfFigures';
 import { loadPromptTemplate, renderPromptTemplate } from '../services/promptTemplates';
 import {
+  pageAnimationSpecPath,
   pageAudioPath,
   pageImagePath,
   pageScriptPath,
@@ -21,10 +22,13 @@ import {
   safeJoinPdfPath,
   writeMetadata,
 } from '../services/storage';
-import type { PageStatus, PdfRow } from '../types';
+import type { PageStatus, PdfRow, PipelineStage, SlideRenderType } from '../types';
 import { generateScript } from './steps/generateScript';
 import { commitPresentationFile } from '../services/presentationGit';
 import { readScriptsForTts, synthesizeAudio } from './steps/synthesizeAudio';
+import { generateRuleBasedFocusEffects } from '../services/animationAutoFocus';
+import { renderTypeForSpec, type AnimationSpec } from '../services/pageAnimation';
+import { splitScriptIntoSentences } from '../services/textSentences';
 import {
   finishArtifact,
   finishRun,
@@ -53,7 +57,7 @@ import {
  *   audio_duration_seconds）也會一併快照，rollback 時寫回。
  */
 
-export type RegenStepName = 'script' | 'audio' | 'image';
+export type RegenStepName = 'script' | 'audio' | 'image' | 'animation';
 
 export type RegenStepStatus =
   | 'pending'
@@ -110,6 +114,7 @@ export interface RegenerateOptions {
   scripts?: { prompt?: string | null; script_max_chars_per_page?: number | null } | null;
   audio?: { voice?: string | null; speed?: number | null } | null;
   images?: { prompt: string } | null;
+  animations?: Record<string, never> | null;
   page_numbers?: number[] | null;
 }
 
@@ -278,9 +283,12 @@ interface SnapshotPageEntry {
   db_script_path: string | null;
   db_audio_path: string | null;
   db_audio_duration_seconds: number | null;
+  db_render_type: SlideRenderType;
+  db_animation_spec_path: string | null;
   image?: SnapshotAssetEntry;
   script?: SnapshotAssetEntry;
   audio?: SnapshotAssetEntry;
+  animation?: SnapshotAssetEntry;
 }
 
 interface SnapshotManifest {
@@ -312,7 +320,9 @@ function snapshotBackupFilePath(
 ): string {
   const padded = String(pageNumber).padStart(pagePadFor(pageCount), '0');
   const ext =
-    assetType === 'image' ? '.png' : assetType === 'script' ? '.script.txt' : '.m4a';
+    assetType === 'image' ? '.png' :
+    assetType === 'script' ? '.script.txt' :
+    assetType === 'animation' ? '.animation.json' : '.m4a';
   return path.join(snapshotPagesDirOf(pdfId), `${padded}${ext}`);
 }
 
@@ -323,6 +333,7 @@ function targetFilePath(
 ): string {
   if (assetType === 'image') return pageImagePath(pdfId, pageUid);
   if (assetType === 'script') return pageScriptPath(pdfId, pageUid);
+  if (assetType === 'animation') return pageAnimationSpecPath(pdfId, pageUid);
   return pageAudioPath(pdfId, pageUid);
 }
 
@@ -343,7 +354,7 @@ async function createSnapshot(
 
   const pageRows = db
     .prepare(
-      `SELECT page_number, page_uid, status, image_path, script_path, audio_path, audio_duration_seconds
+      `SELECT page_number, page_uid, status, image_path, script_path, audio_path, audio_duration_seconds, render_type, animation_spec_path
          FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
     )
     .all(pdfId) as Array<{
@@ -354,6 +365,8 @@ async function createSnapshot(
     script_path: string | null;
     audio_path: string | null;
     audio_duration_seconds: number | null;
+    render_type: SlideRenderType;
+    animation_spec_path: string | null;
   }>;
 
   const entries: SnapshotPageEntry[] = [];
@@ -366,6 +379,8 @@ async function createSnapshot(
       db_script_path: row.script_path,
       db_audio_path: row.audio_path,
       db_audio_duration_seconds: row.audio_duration_seconds,
+      db_render_type: row.render_type,
+      db_animation_spec_path: row.animation_spec_path,
     };
     for (const assetType of assetTypes) {
       const src = targetFilePath(pdfId, row.page_uid, assetType);
@@ -479,6 +494,8 @@ export async function rollbackRegenerate(pdfId: string): Promise<{
             script_path = ?,
             audio_path = ?,
             audio_duration_seconds = ?,
+            render_type = ?,
+            animation_spec_path = ?,
             error_message = NULL,
             updated_at = ?
       WHERE pdf_id = ? AND page_number = ?`,
@@ -491,6 +508,8 @@ export async function rollbackRegenerate(pdfId: string): Promise<{
         entry.db_script_path,
         entry.db_audio_path,
         entry.db_audio_duration_seconds,
+        entry.db_render_type,
+        entry.db_animation_spec_path,
         updatedAt,
         pdfId,
         entry.page_number,
@@ -642,6 +661,7 @@ export function startRegenerateJob(
   if (options.images) stepNames.push('image');
   if (options.scripts) stepNames.push('script');
   if (options.audio) stepNames.push('audio');
+  if (options.animations) stepNames.push('animation');
   if (stepNames.length === 0) {
     const err = new Error('NO_STEPS_SELECTED');
     (err as Error & { code?: string }).code = 'NO_STEPS_SELECTED';
@@ -686,6 +706,19 @@ export function startRegenerateJob(
     logger.error({ err, pdfId }, 'regenerate job runner rejected');
   });
   return state;
+}
+
+function timingStageForStep(stepName: RegenStepName): PipelineStage {
+  switch (stepName) {
+    case 'script':
+      return 'generate_scripts';
+    case 'audio':
+      return 'synthesize_audio';
+    case 'animation':
+      return 'generate_animations';
+    case 'image':
+      return 'render_pages';
+  }
 }
 
 async function runJob(
@@ -752,7 +785,7 @@ async function runJob(
       try {
         const timingStage = startStage(
           timingRun,
-          step.name === 'script' ? 'generate_scripts' : step.name === 'audio' ? 'synthesize_audio' : 'render_pages',
+          timingStageForStep(step.name),
           { job_id: state.job_id, regenerate: true },
         );
         const pageNumbers = options.page_numbers?.length ? options.page_numbers : null;
@@ -762,6 +795,8 @@ async function runJob(
           await runRegenerateAudio(state, step, options.audio ?? {}, shouldAbort, timingRun, pageNumbers);
         } else if (step.name === 'image') {
           await runRegenerateImages(state, step, options.images!, shouldAbort, timingRun, pageNumbers);
+        } else if (step.name === 'animation') {
+          await runRegenerateAnimations(state, step, shouldAbort, pageNumbers);
         }
         finishStage(timingStage, 'succeeded', { completed: step.completed, total: step.total });
         step.status = 'completed';
@@ -783,7 +818,7 @@ async function runJob(
         finishStage(
           startStage(
             timingRun,
-            step.name === 'script' ? 'generate_scripts' : step.name === 'audio' ? 'synthesize_audio' : 'render_pages',
+            timingStageForStep(step.name),
             { job_id: state.job_id, regenerate: true, failed_before_stage_handle: true },
           ),
           'failed',
@@ -1352,6 +1387,71 @@ async function runRegenerateImages(
     logger.warn(
       { err, pdfId },
       'regenerate images: failed to sync metadata.json (non-fatal)',
+    );
+  }
+}
+
+/**
+ * 為每一頁產生一組動畫效果：依逐字稿句子數量產生對應的 `highlight-box` 焦點動畫
+ * （規則式，與「動畫編輯」分頁的「一次性產生」按鈕邏輯相同），逐句以
+ * `startTrigger: { type: 'transcript-line', line }` 同步播放時間。會整份覆寫
+ * 該頁原有的動畫規格。
+ */
+async function runRegenerateAnimations(
+  state: RegenJobState,
+  step: RegenStepProgress,
+  shouldAbort: () => boolean,
+  pageNumbers: number[] | null = null,
+): Promise<void> {
+  const pdfId = state.pdf_id;
+  const pdfRow = getPdfRowStrict(pdfId);
+  const pageCount = pdfRow.page_count ?? 0;
+  if (pageCount <= 0) throw new Error('page_count 不可用');
+
+  const allPageRows = db
+    .prepare(
+      `SELECT page_number, page_uid, script_path FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
+    )
+    .all(pdfId) as Array<{ page_number: number; page_uid: string; script_path: string | null }>;
+  const pageRows = pageNumbers ? allPageRows.filter((p) => pageNumbers.includes(p.page_number)) : allPageRows;
+  step.total = pageRows.length;
+
+  const updatedAt = nowIso();
+  for (const p of pageRows) {
+    if (shouldAbort()) {
+      throw makeCancelledError();
+    }
+    let script = '';
+    if (p.script_path) {
+      try {
+        script = await fs.promises.readFile(safeJoinPdfPath(pdfId, p.script_path), 'utf8');
+      } catch {
+        script = '';
+      }
+    }
+    const sentences = splitScriptIntoSentences(script);
+    const effects = generateRuleBasedFocusEffects(sentences.length);
+    const spec: AnimationSpec = { version: 1, enabled: effects.length > 0, effects };
+    const renderType = renderTypeForSpec(spec);
+    const relSpecPath = path.posix.join('pages', `${p.page_uid}.animation.json`);
+    await fs.promises.writeFile(pageAnimationSpecPath(pdfId, p.page_uid), `${JSON.stringify(spec, null, 2)}\n`, 'utf8');
+    db.prepare(
+      `UPDATE pages SET render_type = ?, animation_spec_path = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`,
+    ).run(renderType, relSpecPath, updatedAt, pdfId, p.page_number);
+    markPageProgress(state, p.page_number, step.completed + 1, step);
+  }
+
+  db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(updatedAt, pdfId);
+  try {
+    const meta = await readMetadata(pdfId);
+    if (meta) {
+      meta.updated_at = updatedAt;
+      await writeMetadata(pdfId, meta);
+    }
+  } catch (err) {
+    logger.warn(
+      { err, pdfId },
+      'regenerate animations: failed to sync metadata.json (non-fatal)',
     );
   }
 }

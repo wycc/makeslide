@@ -11,7 +11,7 @@ import {
 } from '../../lib/api';
 import type { PdfDetail, RegenJobState } from '../../types';
 
-export type RegenOptions = { image: boolean; script: boolean; audio: boolean };
+export type RegenOptions = { image: boolean; script: boolean; audio: boolean; animation: boolean };
 
 interface UseRegenerationParams {
   pdfId: string | undefined;
@@ -86,6 +86,7 @@ export function useRegeneration({
     image: true,
     script: false,
     audio: false,
+    animation: false,
   });
   const [regenJob, setRegenJob] = useState<RegenJobState | null>(null);
   const [regenSelectedPages, setRegenSelectedPages] = useState<Set<number>>(new Set());
@@ -97,7 +98,7 @@ export function useRegeneration({
   const preRegenPageIdxRef = useRef<number | null>(null);
   const autoJumpedJobIdRef = useRef<string | null>(null);
 
-  const regenAnySelected = regenOptions.image || regenOptions.script || regenOptions.audio;
+  const regenAnySelected = regenOptions.image || regenOptions.script || regenOptions.audio || regenOptions.animation;
   const regenJobRunning =
     regenJob?.status === 'running' ||
     regenJob?.status === 'pending' ||
@@ -255,6 +256,7 @@ export function useRegeneration({
               ].join('\n\n'),
             }
           : null,
+        animations: regenOptions.animation ? {} : null,
         page_numbers: selectedPageNumbers,
       });
       autoJumpedJobIdRef.current = null;

@@ -302,7 +302,7 @@ export interface PageChatResponse {
   answer: string;
 }
 
-export type RegenStepName = 'script' | 'audio' | 'image';
+export type RegenStepName = 'script' | 'audio' | 'image' | 'animation';
 
 export type RegenStepStatus =
   | 'pending'
