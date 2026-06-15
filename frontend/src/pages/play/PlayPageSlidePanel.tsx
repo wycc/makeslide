@@ -1,6 +1,7 @@
 import DrawingCanvas from '../../components/DrawingCanvas';
 import { SlideRenderer } from '../../components/slide/SlideRenderer';
 import { AnimationEditorTab } from './AnimationEditorTab';
+import { FigureAssetsTab } from './FigureAssetsTab';
 import { formatTime, formatDurationMs } from './formatters';
 import { PageTimingChips } from './PageTimingChips';
 import { fetchPageGenerationPrompts } from '../../lib/api';
@@ -550,6 +551,13 @@ export function PlayPageSlidePanel() {
             </button>
             <button
               type="button"
+              onClick={() => setEditTab('figures')}
+              className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'figures' ? 'bg-slate-800 text-sky-200' : 'text-slate-400'}`}
+            >
+              📊 {t('play.figures.tab')}
+            </button>
+            <button
+              type="button"
               onClick={() => setEditTab('system')}
               className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'system' ? 'bg-slate-800 text-amber-200' : 'text-slate-400'}`}
             >
@@ -649,6 +657,8 @@ export function PlayPageSlidePanel() {
             </>
           ) : editTab === 'animation' ? (
             <AnimationEditorTab />
+          ) : editTab === 'figures' ? (
+            <FigureAssetsTab />
           ) : editTab === 'source' ? (
             <>
               <h2 className="mb-2 text-sm font-semibold text-slate-300">📚 來源管理</h2>

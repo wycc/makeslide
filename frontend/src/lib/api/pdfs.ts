@@ -2,6 +2,7 @@ import type {
   ChatHistoryResponse,
   ChatMessage,
   PageChatResponse,
+  PageFiguresResponse,
   PagePoll,
   PdfDetail,
   PdfListItem,
@@ -105,6 +106,40 @@ export async function savePageAnimation(
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as SavePageAnimationResponse;
+}
+
+/** Lists the figures extracted from this slide's source PDF page(s), for the figure-asset browser/picker. */
+export async function fetchPageFigures(
+  id: string,
+  pageNumber: number,
+  shareToken?: string,
+): Promise<PageFiguresResponse> {
+  const token = shareToken?.trim();
+  const suffix = token ? `?share=${encodeURIComponent(token)}` : '';
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/figures${suffix}`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as PageFiguresResponse;
+}
+
+export interface SaveFigureSelectionResponse {
+  page_number: number;
+  excluded: string[];
+  updated_at: string;
+}
+
+/** Saves which extracted figure ids are excluded from use as image-generation reference for this slide. */
+export async function savePageFigureSelection(
+  id: string,
+  pageNumber: number,
+  excluded: string[],
+): Promise<SaveFigureSelectionResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/figures/selection`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ excluded }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as SaveFigureSelectionResponse;
 }
 
 export interface GenerateAiFocusEffectsResponse {

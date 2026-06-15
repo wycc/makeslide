@@ -10,7 +10,7 @@ import { logger } from '../logger';
 import { getOpenAIClient } from '../services/openai';
 import { accountIdFromOwnerSub, runWithAccountId } from '../services/accountContext';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../services/imagePromptTemplates';
-import { buildFigureReferenceNotes, figureImageAbsPath, getFigureReferencesForPage } from '../services/pdfFigures';
+import { buildFigureReferenceNotes, figureImageAbsPath, getFigureReferencesForPage, loadFigureSelection } from '../services/pdfFigures';
 import { loadPromptTemplate, renderPromptTemplate } from '../services/promptTemplates';
 import {
   pageAnimationSpecPath,
@@ -1291,7 +1291,8 @@ async function runRegenerateImages(
       }
     }
 
-    const figureRefs = getFigureReferencesForPage(pdfId, p.page_number);
+    const figureExcludeIds = new Set(loadFigureSelection(pdfId, p.page_uid).excluded);
+    const figureRefs = getFigureReferencesForPage(pdfId, p.page_number, undefined, figureExcludeIds);
     const basePrompt = buildImagePrompt({
       stylePrompt: deckStylePrompt,
       pageText,

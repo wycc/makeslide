@@ -7,6 +7,7 @@ import { db } from '../src/db';
 import { config } from '../src/config';
 import { setSystemAuthSettings } from '../src/services/aiSettings';
 import { setOpenAIClientForTest } from '../src/services/openai';
+import { saveFigureSelection } from '../src/services/pdfFigures';
 
 setSystemAuthSettings({ googleAuthEnabled: false });
 
@@ -100,6 +101,60 @@ test('POST /pages/:n/regenerate-image attaches extracted figure as reference ima
     assert.equal((image as unknown[]).length, 2);
     assert.match(prompt, /本頁對應的原始 PDF 內含以下圖表/);
     assert.match(prompt, /參考圖表 1：Figure 1: 營收成長趨勢/);
+  } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+    cleanup(pdfId);
+  }
+});
+
+test('POST /pages/:n/regenerate-image omits a figure the user excluded via the figure-asset browser', async () => {
+  const pdfId = 'test-figure-ref-excluded-01';
+  cleanup(pdfId);
+  const t = nowIso();
+  db.prepare(
+    `INSERT INTO pdfs (id,title,original_filename,status,page_count,progress_step,progress_current,progress_total,error_message,user_prompt,require_script_confirmation,tts_voice,tts_speed,script_max_chars_per_page,created_at,updated_at)
+     VALUES (?,?,?,'ready',1,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,NULL,?,?)`,
+  ).run(pdfId, 't', 't.pdf', t, t);
+
+  const pdfDir = path.join(config.storageRoot, pdfId);
+  const pagesDir = path.join(pdfDir, 'pages');
+  fs.mkdirSync(pagesDir, { recursive: true });
+  const pageUid = 'figexcluid1';
+  db.prepare(
+    `INSERT INTO pages (pdf_id,page_number,page_uid,image_path,text_path,script_path,audio_path,audio_duration_seconds,status,error_message,created_at,updated_at)
+     VALUES (?,1,?,?,?,?,NULL,NULL,'audio_ready',NULL,?,?)`,
+  ).run(pdfId, pageUid, `pages/${pageUid}.jpg`, `pages/${pageUid}.text.txt`, `pages/${pageUid}.script.txt`, t, t);
+  fs.writeFileSync(path.join(pagesDir, `${pageUid}.jpg`), Buffer.from([0xff, 0xd8, 0xff]));
+  fs.writeFileSync(path.join(pagesDir, `${pageUid}.text.txt`), '本頁說明營收成長', 'utf8');
+  fs.writeFileSync(path.join(pagesDir, `${pageUid}.script.txt`), '營收成長逐字稿', 'utf8');
+  seedFigureManifest(pdfId);
+  saveFigureSelection(pdfId, pageUid, { excluded: ['p1-img1'] });
+
+  const calls: Array<{ image: unknown; prompt: string }> = [];
+  setOpenAIClientForTest({
+    images: {
+      edit: async (body: { image: unknown; prompt: string }) => {
+        calls.push({ image: body.image, prompt: body.prompt });
+        return { data: [{ b64_json: ONE_PIXEL_PNG_B64 }] };
+      },
+    },
+  } as never);
+
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${pdfId}/pages/1/regenerate-image`,
+      payload: { prompt: '改成更活潑的風格' },
+    });
+    assert.equal(resp.statusCode, 200);
+    assert.equal(calls.length, 1);
+    const { image, prompt } = calls[0]!;
+    // The excluded figure leaves no reference images attached, so `image` is the bare page image (not an array).
+    assert.ok(!Array.isArray(image));
+    assert.doesNotMatch(prompt, /本頁對應的原始 PDF 內含以下圖表/);
+    assert.doesNotMatch(prompt, /參考圖表 1：Figure 1: 營收成長趨勢/);
   } finally {
     setOpenAIClientForTest(null);
     await app.close();

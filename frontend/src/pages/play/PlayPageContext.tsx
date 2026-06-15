@@ -18,7 +18,7 @@ import type { DrawingCanvasHandle, DrawingData, DrawingStroke } from '../../comp
 
 // ── Inline alias types ────────────────────────────────────────────────────────
 type HostMode = 'solo' | 'dual';
-type EditTab = 'script' | 'prompt' | 'animation' | 'source' | 'system';
+type EditTab = 'script' | 'prompt' | 'animation' | 'figures' | 'source' | 'system';
 type ActiveTab = 'play' | 'qa';
 type SyncRole = 'master' | 'follower';
 type FullscreenLayout = 'image' | 'split' | 'edit';

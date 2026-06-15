@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { figureManifestPath, pdfDir, splitFigureMapPath } from './storage';
+import { figureManifestPath, figureSelectionPath, pdfDir, splitFigureMapPath } from './storage';
 import type { FigureEntry, FigureManifest } from '../worker/steps/extractPdfFigures';
 
 /** Loads `storage/<pdfId>/figures.json`, or `null` if it doesn't exist (not a PDF import, or extraction hasn't run yet). */
@@ -25,6 +25,17 @@ export function figureImageAbsPath(pdfId: string, figure: FigureEntry): string {
   return path.join(pdfDir(pdfId), figure.imagePath);
 }
 
+/** Finds a single figure by its stable id, searching across all pages of the manifest. Returns `null` if not found / no manifest. */
+export function findFigureById(pdfId: string, figureId: string): FigureEntry | null {
+  const manifest = loadFigureManifest(pdfId);
+  if (!manifest) return null;
+  for (const page of manifest.pages) {
+    const found = page.figures.find((figure) => figure.id === figureId);
+    if (found) return found;
+  }
+  return null;
+}
+
 /** Cap on how many extracted figures are attached as reference images per image-generation request. */
 const MAX_FIGURE_REFERENCES_PER_PAGE = 2;
 
@@ -39,10 +50,18 @@ function capFiguresByArea(figures: FigureEntry[], max: number): FigureEntry[] {
 /**
  * Returns the figures for `pageNumber` that should be attached as reference
  * images when (re)generating that page's slide image, largest-area first and
- * capped to `MAX_FIGURE_REFERENCES_PER_PAGE`.
+ * capped to `MAX_FIGURE_REFERENCES_PER_PAGE`. Figures whose id is in
+ * `excludeIds` (user-deselected via the figure-asset browser) are dropped
+ * before capping, so excluding a large figure can surface the next-largest one.
  */
-export function getFigureReferencesForPage(pdfId: string, pageNumber: number, max = MAX_FIGURE_REFERENCES_PER_PAGE): FigureEntry[] {
-  return capFiguresByArea(getPageFigures(pdfId, pageNumber), max);
+export function getFigureReferencesForPage(
+  pdfId: string,
+  pageNumber: number,
+  max = MAX_FIGURE_REFERENCES_PER_PAGE,
+  excludeIds?: ReadonlySet<string>,
+): FigureEntry[] {
+  const figures = getPageFigures(pdfId, pageNumber).filter((figure) => !excludeIds?.has(figure.id));
+  return capFiguresByArea(figures, max);
 }
 
 /**
@@ -50,17 +69,43 @@ export function getFigureReferencesForPage(pdfId: string, pageNumber: number, ma
  * original PDF pages (deduped by figure id), for use when an AI-split
  * document-mode slide's content is drawn from more than one source page.
  */
-export function getFigureReferencesForPages(pdfId: string, pageNumbers: number[], max = MAX_FIGURE_REFERENCES_PER_PAGE): FigureEntry[] {
+export function getFigureReferencesForPages(
+  pdfId: string,
+  pageNumbers: number[],
+  max = MAX_FIGURE_REFERENCES_PER_PAGE,
+  excludeIds?: ReadonlySet<string>,
+): FigureEntry[] {
   const seen = new Set<string>();
   const all: FigureEntry[] = [];
   for (const pageNumber of pageNumbers) {
     for (const figure of getPageFigures(pdfId, pageNumber)) {
-      if (seen.has(figure.id)) continue;
+      if (seen.has(figure.id) || excludeIds?.has(figure.id)) continue;
       seen.add(figure.id);
       all.push(figure);
     }
   }
   return capFiguresByArea(all, max);
+}
+
+/** Per-page record of which extracted figure ids the user excluded from use as image-generation references. */
+export interface FigureSelection {
+  excluded: string[];
+}
+
+/** Loads `pages/<pageUid>.figure-selection.json`, or `{ excluded: [] }` if it doesn't exist. */
+export function loadFigureSelection(pdfId: string, pageUid: string): FigureSelection {
+  try {
+    const raw = fs.readFileSync(figureSelectionPath(pdfId, pageUid), 'utf8');
+    const parsed = JSON.parse(raw) as Partial<FigureSelection>;
+    return { excluded: Array.isArray(parsed.excluded) ? parsed.excluded.filter((id) => typeof id === 'string') : [] };
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { excluded: [] };
+    throw err;
+  }
+}
+
+export function saveFigureSelection(pdfId: string, pageUid: string, selection: FigureSelection): void {
+  fs.writeFileSync(figureSelectionPath(pdfId, pageUid), JSON.stringify(selection), 'utf8');
 }
 
 /**

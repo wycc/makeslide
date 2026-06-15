@@ -13,7 +13,7 @@ import { callChatJSON } from '../../services/openai';
 import { getOpenAIClient } from '../../services/openai';
 import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
-import { buildFigureReferenceNotes, figureImageAbsPath, getFigureReferencesForPage } from '../../services/pdfFigures';
+import { buildFigureReferenceNotes, figureImageAbsPath, getFigureReferencesForPage, loadFigureSelection } from '../../services/pdfFigures';
 import { loadPromptTemplate, renderPromptTemplate } from '../../services/promptTemplates';
 import { safeJoinPdfPath } from '../../services/storage';
 import { synthesizeAudio } from '../../worker/steps/synthesizeAudio';
@@ -648,7 +648,8 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       const currentImageBuffer = await fs.promises.readFile(currentImagePath);
       const currentImageForEdit = await toFile(currentImageBuffer, `page-${n}.jpg`, { type: 'image/jpeg' });
 
-      const figureRefs = getFigureReferencesForPage(id, n);
+      const figureExcludeIds = new Set(loadFigureSelection(id, pageRow.page_uid).excluded);
+      const figureRefs = getFigureReferencesForPage(id, n, undefined, figureExcludeIds);
       const figureRefFiles = await Promise.all(
         figureRefs.map((figure, index) =>
           fs.promises

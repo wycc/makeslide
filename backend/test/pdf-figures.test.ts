@@ -7,14 +7,17 @@ import { extractPdfFigures } from '../src/worker/steps/extractPdfFigures';
 import {
   buildFigureReferenceNotes,
   figureImageAbsPath,
+  findFigureById,
   getFigureReferencesForPage,
   getFigureReferencesForPages,
   getPageFigures,
   loadFigureManifest,
+  loadFigureSelection,
   loadSplitPageFigureMap,
+  saveFigureSelection,
   saveSplitPageFigureMap,
 } from '../src/services/pdfFigures';
-import { splitFigureMapPath } from '../src/services/storage';
+import { figureSelectionPath, splitFigureMapPath } from '../src/services/storage';
 import type { FigureEntry } from '../src/worker/steps/extractPdfFigures';
 
 // Real production PDF checked into storage/ (gitignored), used as a fixture
@@ -225,5 +228,107 @@ test('loadSplitPageFigureMap / saveSplitPageFigureMap persist the AI-split-page 
     assert.deepEqual(loadSplitPageFigureMap(PDF_ID), map);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('findFigureById finds a figure across pages by id, or returns null', () => {
+  const SYNTH_PDF_ID = 'pdf-figures-synth-find-01';
+  const synthDir = path.join(config.storageRoot, SYNTH_PDF_ID);
+  fs.mkdirSync(synthDir, { recursive: true });
+  const figure = (id: string): FigureEntry => ({
+    id,
+    imagePath: `figures/${id}.png`,
+    width: 100,
+    height: 100,
+    bbox: { xPct: 0, yPct: 0, widthPct: 0.5, heightPct: 0.5 },
+    caption: null,
+    context: null,
+  });
+  try {
+    fs.writeFileSync(
+      path.join(synthDir, 'figures.json'),
+      JSON.stringify({
+        pdfId: SYNTH_PDF_ID,
+        generatedAt: new Date().toISOString(),
+        pages: [
+          { pageNumber: 1, figures: [figure('p1-a')] },
+          { pageNumber: 2, figures: [figure('p2-b')] },
+        ],
+      }),
+      'utf8',
+    );
+
+    assert.equal(findFigureById(SYNTH_PDF_ID, 'p2-b')?.id, 'p2-b');
+    assert.equal(findFigureById(SYNTH_PDF_ID, 'does-not-exist'), null);
+    assert.equal(findFigureById('does-not-exist-pdf', 'p1-a'), null);
+  } finally {
+    fs.rmSync(synthDir, { recursive: true, force: true });
+  }
+});
+
+test('getFigureReferencesForPage / getFigureReferencesForPages drop excluded figure ids before capping', () => {
+  const SYNTH_PDF_ID = 'pdf-figures-synth-exclude-01';
+  const synthDir = path.join(config.storageRoot, SYNTH_PDF_ID);
+  fs.mkdirSync(synthDir, { recursive: true });
+  const figure = (id: string, areaPct: number): FigureEntry => ({
+    id,
+    imagePath: `figures/${id}.png`,
+    width: 100,
+    height: 100,
+    bbox: { xPct: 0, yPct: 0, widthPct: areaPct, heightPct: 1 },
+    caption: null,
+    context: null,
+  });
+  try {
+    fs.writeFileSync(
+      path.join(synthDir, 'figures.json'),
+      JSON.stringify({
+        pdfId: SYNTH_PDF_ID,
+        generatedAt: new Date().toISOString(),
+        pages: [
+          { pageNumber: 1, figures: [figure('small', 0.1), figure('large', 0.6), figure('medium', 0.3)] },
+          { pageNumber: 2, figures: [figure('other', 0.9)] },
+        ],
+      }),
+      'utf8',
+    );
+
+    // Excluding the largest figure leaves the remaining two within the cap (no resort needed).
+    const refs = getFigureReferencesForPage(SYNTH_PDF_ID, 1, 2, new Set(['large']));
+    assert.deepEqual(refs.map((f) => f.id).sort(), ['medium', 'small']);
+
+    // Excluding down to just one figure when max=1 keeps the largest of the remaining.
+    const capped = getFigureReferencesForPage(SYNTH_PDF_ID, 1, 1, new Set(['large']));
+    assert.deepEqual(capped.map((f) => f.id), ['medium']);
+
+    // Excluding everything yields an empty list.
+    assert.deepEqual(getFigureReferencesForPage(SYNTH_PDF_ID, 1, 2, new Set(['large', 'medium', 'small'])), []);
+
+    // getFigureReferencesForPages also drops excluded ids (including duplicates across pages).
+    const all = getFigureReferencesForPages(SYNTH_PDF_ID, [1, 2], 5, new Set(['large']));
+    assert.deepEqual(all.map((f) => f.id).sort(), ['medium', 'other', 'small']);
+  } finally {
+    fs.rmSync(synthDir, { recursive: true, force: true });
+  }
+});
+
+test('loadFigureSelection / saveFigureSelection persist per-page figure exclusions', () => {
+  const PDF_ID = 'pdf-figures-selection-01';
+  const PAGE_UID = 'selectuid1';
+  const dir = path.join(config.storageRoot, PDF_ID, 'pages');
+  fs.mkdirSync(dir, { recursive: true });
+  try {
+    // Defaults to an empty exclusion list when no file exists yet.
+    assert.deepEqual(loadFigureSelection(PDF_ID, PAGE_UID), { excluded: [] });
+
+    saveFigureSelection(PDF_ID, PAGE_UID, { excluded: ['p1-img1', 'p1-img2'] });
+    assert.ok(fs.existsSync(figureSelectionPath(PDF_ID, PAGE_UID)));
+    assert.deepEqual(loadFigureSelection(PDF_ID, PAGE_UID), { excluded: ['p1-img1', 'p1-img2'] });
+
+    // Corrupted/invalid file falls back to an empty list rather than throwing.
+    fs.writeFileSync(figureSelectionPath(PDF_ID, PAGE_UID), JSON.stringify({ excluded: ['ok', 42, null] }), 'utf8');
+    assert.deepEqual(loadFigureSelection(PDF_ID, PAGE_UID), { excluded: ['ok'] });
+  } finally {
+    fs.rmSync(path.join(config.storageRoot, PDF_ID), { recursive: true, force: true });
   }
 });

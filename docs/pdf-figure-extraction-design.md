@@ -300,7 +300,7 @@ export function buildFigureReferenceNotes(figures: FigureEntry[]): string | null
 
 - ~~偵測純向量繪圖區域（無 raster image，但該頁有大量繪圖類 operator 集中於特定區域）。~~
   → V2 已於第 12 節完成。
-- 前端提供圖表素材瀏覽 / 挑選介面。
+- ~~前端提供圖表素材瀏覽 / 挑選介面。~~ → 已於第 13 節完成。
 
 ## 10. 整合至投影片圖片（重新）生成（已完成）
 
@@ -722,3 +722,79 @@ V2 在比對 caption 前，先對該頁所有圖表候選（向量群 + raster i
   差異：page 7／page 9 的兩個子圖各自輸出獨立的 `FigureEntry`（各自一張裁切
   PNG），但共用同一個 caption 比對結果（透過 §12.4 的群組化），符合
   `getFigureReferencesForPage` 的使用情境（取面積最大的 1-2 張作為參考圖）。
+
+## 13. 前端圖表素材瀏覽 / 挑選介面（已完成）
+
+### 13.1 目標
+
+讓使用者在編輯每一張投影片時，可以看到該頁（或其對應的原始 PDF 頁面，document
+模式下透過 split-figure-map 對應多頁）所偵測到的所有圖表素材，並可逐一
+排除某張圖表，使其不再被「AI 重新生成圖片」流程當作參考圖（第 10 節）。
+
+### 13.2 後端
+
+- 新增 `backend/src/routes/pdfs/figures.ts`（`registerFigureRoutes`，於
+  `routes/pdfs/index.ts` 註冊）：
+  - `GET /api/pdfs/:id/pages/:n/figures`：回傳 `{ page_number, source_pdf_pages,
+    figures: [{ id, caption, context, bbox, source, image_url, excluded }] }`。
+    `source_pdf_pages` 透過 `loadSplitPageFigureMap` 解析（document 模式下一張
+    投影片可能對應多個原始 PDF 頁），並用 `collectFigures` 依 id 去重彙整。
+    `excluded` 來自 `loadFigureSelection(pdfId, page_uid)`。
+  - `PUT /api/pdfs/:id/pages/:n/figures/selection`：body 為
+    `{ excluded: string[] }`（最多 50 筆、自動去重），寫入
+    `pages/<page_uid>.figure-selection.json`，回傳
+    `{ page_number, excluded, updated_at }`。
+  - `GET /api/pdfs/:id/figures/:figureId/image`：以 `findFigureById` 找出該
+    figure 所屬的 PNG 並 `streamFile`；找不到 manifest 條目或檔案不存在皆回
+    `404 FIGURE_NOT_FOUND`。
+  - 找不到對應頁面（`page_number` 超出範圍）時，GET / PUT 皆回
+    `404 PAGE_NOT_FOUND`。
+- `backend/src/services/pdfFigures.ts` 新增：
+  - `findFigureById(pdfId, figureId): FigureEntry | null` — 跨頁尋找單一 figure。
+  - `FigureSelection = { excluded: string[] }` 與
+    `loadFigureSelection(pdfId, pageUid)` / `saveFigureSelection(pdfId, pageUid,
+    selection)` — 持久化每頁的圖表排除清單，檔案不存在或內容損毀時回傳
+    `{ excluded: [] }`（不丟例外）。
+  - `getFigureReferencesForPage` / `getFigureReferencesForPages` 新增第三個參數
+    `excludeIds?: ReadonlySet<string>`：在 `capFiguresByArea` 之前先過濾掉被
+    排除的 figure id，因此使用者排除的圖表不會出現在「AI 重新生成圖片」的參考圖
+    中（第 10 節的兩處呼叫點已改為傳入
+    `loadFigureSelection(pdfId, pageUid).excluded` 的 Set）。
+- `backend/src/services/storage.ts` 新增 `figureSelectionPath(pdfId, pageUid)` →
+  `pages/<page_uid>.figure-selection.json`，延續既有「每頁一個 JSON、以
+  page_uid 命名」的慣例。
+
+### 13.3 前端
+
+- 新增 `frontend/src/pages/play/FigureAssetsTab.tsx`：在投影片編輯面板的分頁列
+  （`PlayPageSlidePanel.tsx`）新增「📊 圖表素材」分頁（`figures`，sky 色），
+  進入該分頁時呼叫 `fetchPageFigures(pdfId, pageNumber, shareToken)` 載入圖表
+  清單，以縮圖網格呈現每張圖表的 `caption`/`context`、來源標籤
+  （`source === 'vector'` → 「向量圖」，否則「內嵌圖片」）與一個核取方塊
+  （勾選=作為圖片參考，取消勾選=排除）。切換核取方塊會立即呼叫
+  `savePageFigureSelection(pdfId, pageNumber, excludedIds)`，失敗時還原 UI 並顯示
+  錯誤訊息。
+- `frontend/src/lib/api/pdfs.ts` 新增 `fetchPageFigures` /
+  `savePageFigureSelection`；`frontend/src/types.ts` 新增 `PageFigure` /
+  `PageFiguresResponse` 型別；`useScriptEditor.ts` 的 `EditTab` union 加入
+  `'figures'`。
+- 新增 i18n 字串 `play.figures.*`（`zh-TW.ts` / `en.ts`），涵蓋分頁標題、說明
+  文字、載入/錯誤/空清單狀態、圖表來源標籤等。
+
+### 13.4 測試
+
+- `backend/test/pdf-figures.test.ts` 新增：
+  - `findFigureById` 跨頁查找與查無結果案例。
+  - `getFigureReferencesForPage` / `getFigureReferencesForPages` 在排除指定
+    figure id 後才進行依面積排序與裁切的案例。
+  - `loadFigureSelection` / `saveFigureSelection` 的讀寫往返與損毀檔案的
+    fallback 案例。
+- 新增 `backend/test/figure-assets.test.ts`：端對端驗證
+  `GET /pages/:n/figures`（含 split-figure-map 彙整多頁）、
+  `PUT /pages/:n/figures/selection`、`GET /figures/:figureId/image`，以及
+  未知頁面/圖表的 404 行為。
+- `backend/test/figure-reference-image-generation.test.ts` 新增：使用者透過
+  `saveFigureSelection` 排除唯一一張圖表後，`POST /pages/:n/regenerate-image`
+  不再附帶任何參考圖（`image` 維持單一頁面圖、prompt 不含圖表參考段落）。
+- `npx tsc --noEmit`（backend、frontend）皆需通過；
+  `npm run build`（frontend）需通過。

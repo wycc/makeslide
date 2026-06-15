@@ -67,6 +67,11 @@ export function pageAnimationSpecPath(pdfId: string, pageUid: string): string {
   return path.join(pagesDir(pdfId), `${pageUid}.animation.json`);
 }
 
+/** Per-page record of which extracted figures the user has excluded from use as image-generation reference. */
+export function figureSelectionPath(pdfId: string, pageUid: string): string {
+  return path.join(pagesDir(pdfId), `${pageUid}.figure-selection.json`);
+}
+
 export function videoPath(pdfId: string): string {
   return path.join(pdfDir(pdfId), 'video.mp4');
 }

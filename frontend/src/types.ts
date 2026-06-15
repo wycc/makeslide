@@ -158,6 +158,24 @@ export interface SlideAnimationSpec {
   hints?: Record<string, string>;
 }
 
+/** A figure (chart/image) extracted from the slide's source PDF page(s), for the figure-asset browser/picker. */
+export interface PageFigure {
+  id: string;
+  caption: string | null;
+  context: string | null;
+  bbox: { xPct: number; yPct: number; widthPct: number; heightPct: number };
+  source: 'raster' | 'vector';
+  image_url: string;
+  /** Whether the user has excluded this figure from use as an image-generation reference. */
+  excluded: boolean;
+}
+
+export interface PageFiguresResponse {
+  page_number: number;
+  source_pdf_pages: number[];
+  figures: PageFigure[];
+}
+
 export interface PdfDetailPage {
   page_number: number;
   image_url: string | null;
