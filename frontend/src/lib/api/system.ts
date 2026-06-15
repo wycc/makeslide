@@ -1,4 +1,5 @@
 import { parseErrorBody } from './common';
+import type { SlaSettingsResponse, SlaTargetKind } from '../../types';
 
 export type AppLanguage = 'zh-TW' | 'en';
 
@@ -213,4 +214,20 @@ export async function getObservabilityMetrics(): Promise<ObservabilityMetrics> {
   const resp = await fetch('api/system/observability');
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as ObservabilityMetrics;
+}
+
+export async function getSlaSettings(): Promise<SlaSettingsResponse> {
+  const resp = await fetch('api/system/sla-settings');
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as SlaSettingsResponse;
+}
+
+export async function updateSlaTargetOverride(kind: SlaTargetKind, name: string, targetMs: number | null): Promise<SlaSettingsResponse> {
+  const resp = await fetch('api/system/sla-settings', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ kind, name, target_ms: targetMs }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as SlaSettingsResponse;
 }

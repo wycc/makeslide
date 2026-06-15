@@ -562,6 +562,40 @@ export interface SlowArtifactsResponse {
 
 前端在「系統資料」分頁切換時呼叫 `fetchPdfSlowArtifacts(pdfId)`（[`frontend/src/lib/api/pdfs.ts`](../frontend/src/lib/api/pdfs.ts)），於「🐢 最慢素材排行」區塊以表格列出第 N 頁／素材類型（圖片／文字／講稿／語音）／狀態／耗時／SLA，協助找出最慢的頁面與素材，呼應 §9.3 提到的「最慢的前幾個 page artifact，例如『第 5 頁語音 75s』」需求。
 
+### 8.7 SLA target 設定 API（已實作，v1 範圍：全域 override）
+
+`GET` / `PUT /api/system/sla-settings`：兩者皆為 admin-only（`isAdminAccount(currentAccountId())`，否則回 403 `ADMIN_REQUIRED`）。
+
+- `GET`：回傳目前所有 stage／artifact 的 SLA target 設定，包含預設值（`SLA_TARGETS_MS`）、DB override（`pipeline_sla_overrides` 表，若無則為 `null`）與目前生效值（override 優先，否則為預設值）。
+- `PUT`：body 為 `{ kind: 'stage' | 'artifact', name: string, target_ms: number | null }`。
+  - `name` 必須是 `TIMING_EVENT_VALUES.stages` 或 `TIMING_EVENT_VALUES.artifacts` 中的合法值，否則回 400。
+  - `target_ms` 為整數且須落在 `SLA_TARGET_BOUNDS_MS`（1,000 ~ 3,600,000，即 1 秒至 1 小時）內，否則回 400。
+  - `target_ms === null` 會刪除該 override，回復為預設值。
+  - 成功後回傳與 `GET` 相同格式的最新設定。
+
+```ts
+export type SlaTargetKind = 'stage' | 'artifact';
+
+export interface SlaTargetSetting {
+  kind: SlaTargetKind;
+  name: string;
+  default_ms: number;
+  override_ms: number | null;
+  effective_ms: number;
+  updated_at: string | null;
+}
+
+export interface SlaSettingsResponse {
+  bounds: { min_ms: number; max_ms: number };
+  stages: SlaTargetSetting[];
+  artifacts: SlaTargetSetting[];
+}
+```
+
+`startStage` / `finishStage` / `startArtifact` / `finishArtifact`（[`backend/src/services/timing.ts`](../backend/src/services/timing.ts)）改用 `getEffectiveSlaTargets()` 取得目前生效的 target（合併 DB override 與 `SLA_TARGETS_MS` 預設值），寫入 `sla_target_ms`，因此 override 套用後，**新建立的 timing event** 即會採用新的 SLA target（已存在的 event 維持原本記錄的 `sla_target_ms`）。
+
+前端「設定」頁（[`frontend/src/pages/SettingsPage.tsx`](../frontend/src/pages/SettingsPage.tsx)）admin 專屬區塊「Pipeline SLA 設定」可分別列出所有 stage／artifact 的預設值、目前生效值與覆寫值（秒），並可逐項套用或清除覆寫；此為全域設定，套用後對所有 PDF／provider/model/source_type 一致生效，依 provider/model/source_type 區分目標值留待後續擴充（見 §13）。
+
 ## 9. 前端顯示策略
 
 ### 9.1 每頁顯示
@@ -682,7 +716,7 @@ flowchart TD
 ## 13. 後續可擴充方向
 
 - ~~新增 run history API，讓使用者查看每次 regenerate/resume 的完整歷程~~（已新增 `GET /api/pdfs/:id/runs`，回傳該 PDF 所有 `pipeline_runs`（依 `started_at` 由新到舊排序，預設上限 20、可用 `limit` 查詢參數調整，上限 100）及每個 run 對應的 `pipeline_stage_summaries`（依§5.2 的 stage 順序排序），詳見 §8.5；前端於「系統資料」分頁新增「執行歷程」區塊，可展開查看各 run 的階段耗時與 SLA；分支 `feature/pipeline-run-history-20260616`）。
-- 將 SLA target 移到設定檔或 DB，支援不同 provider/model/source_type。
+- ~~將 SLA target 移到設定檔或 DB，支援不同 provider/model/source_type~~（v1 範圍：已新增 `pipeline_sla_overrides` 表與 `GET`/`PUT /api/system/sla-settings`（admin-only），可針對每個 stage／artifact 設定全域 SLA target override（套用於所有 PDF/provider/model/source_type），詳見 §8.7；前端「設定」頁新增「Pipeline SLA 設定」區塊；分支 `feature/pipeline-sla-settings-20260616`）。依 provider/model/source_type 區分目標值（多維度矩陣）留待後續擴充。
 - 將 timing event 與 token/成本統計關聯，支援成本儀表。
 - ~~建立 slow artifact ranking，協助找出最慢頁面與最慢階段~~（已新增 `GET /api/pdfs/:id/slow-artifacts`，回傳該 PDF 的 `page_artifact_timings` 依 `duration_ms` 由大到小排序的前幾筆（預設 5、可用 `limit` 調整，上限 20），詳見 §8.6；前端於「系統資料」分頁新增「🐢 最慢素材排行」表格；分支 `feature/pipeline-slow-artifact-ranking-20260616`）。
 - 若導入分散式 queue，可把 `run_id` 作為 trace correlation id，串接 worker logs。

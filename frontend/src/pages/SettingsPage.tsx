@@ -3,13 +3,16 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   ApiError,
   getAuthStatus,
+  getSlaSettings,
   getSystemAiSettings,
   logoutAuth,
   transferAdminAccount,
+  updateSlaTargetOverride,
   updateSystemAiSettings,
   type AuthStatus,
   type SystemAiSettings,
 } from '../lib/api';
+import type { SlaSettingsResponse, SlaTargetKind, SlaTargetSetting } from '../types';
 import {
   CONTENT_LANGUAGE_STORAGE_KEY,
   PLAYBACK_SPEED_STORAGE_KEY,
@@ -65,6 +68,10 @@ export default function SettingsPage() {
   const [githubRepoUrl, setGithubRepoUrl] = useState('');
   const [githubToken, setGithubToken] = useState('');
   const [cguAirEnabled, setCguAirEnabled] = useState(false);
+  const [slaSettings, setSlaSettings] = useState<SlaSettingsResponse | null>(null);
+  const [slaOverrideInputs, setSlaOverrideInputs] = useState<Record<string, string>>({});
+  const [slaLoading, setSlaLoading] = useState(false);
+  const [slaBusyKey, setSlaBusyKey] = useState<string | null>(null);
 
   const CGU_AIR_BASE_URL = 'https://air.cgu.edu.tw/cgullmapi/v1';
 
@@ -259,6 +266,109 @@ export default function SettingsPage() {
       setAdminTransferBusy(false);
     }
   }, [adminTransferAccountId, t]);
+
+  const applySlaSettingsResponse = useCallback((result: SlaSettingsResponse) => {
+    setSlaSettings(result);
+    const inputs: Record<string, string> = {};
+    for (const item of [...result.stages, ...result.artifacts]) {
+      inputs[`${item.kind}:${item.name}`] = item.override_ms != null ? String(item.override_ms / 1000) : '';
+    }
+    setSlaOverrideInputs(inputs);
+  }, []);
+
+  const loadSlaSettings = useCallback(async () => {
+    setSlaLoading(true);
+    try {
+      applySlaSettingsResponse(await getSlaSettings());
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : t('settings.slaLoadError'));
+    } finally {
+      setSlaLoading(false);
+    }
+  }, [applySlaSettingsResponse, t]);
+
+  useEffect(() => {
+    if (isAdmin) {
+      void loadSlaSettings();
+    }
+  }, [isAdmin, loadSlaSettings]);
+
+  const onSlaOverrideSave = useCallback(async (kind: SlaTargetKind, name: string, targetMs: number | null) => {
+    const key = `${kind}:${name}`;
+    setErr(null);
+    setMsg(null);
+    setSlaBusyKey(key);
+    try {
+      applySlaSettingsResponse(await updateSlaTargetOverride(kind, name, targetMs));
+      setMsg(t('settings.slaSaved'));
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : t('settings.slaSaveError'));
+    } finally {
+      setSlaBusyKey(null);
+    }
+  }, [applySlaSettingsResponse, t]);
+
+  const onSlaOverrideApply = useCallback((item: SlaTargetSetting) => {
+    const key = `${item.kind}:${item.name}`;
+    const raw = (slaOverrideInputs[key] ?? '').trim();
+    if (raw === '') {
+      void onSlaOverrideSave(item.kind, item.name, null);
+      return;
+    }
+    const seconds = Number(raw);
+    if (!Number.isFinite(seconds)) {
+      setErr(t('settings.slaInvalidValue'));
+      return;
+    }
+    void onSlaOverrideSave(item.kind, item.name, Math.round(seconds * 1000));
+  }, [onSlaOverrideSave, slaOverrideInputs, t]);
+
+  const renderSlaRow = (item: SlaTargetSetting) => {
+    const key = `${item.kind}:${item.name}`;
+    const busy = slaBusyKey === key;
+    return (
+      <tr key={key}>
+        <td className="whitespace-nowrap px-3 py-2 font-mono text-slate-200">{item.name}</td>
+        <td className="whitespace-nowrap px-3 py-2 text-slate-400">{item.default_ms / 1000}</td>
+        <td className="whitespace-nowrap px-3 py-2 text-slate-200">{item.effective_ms / 1000}</td>
+        <td className="whitespace-nowrap px-3 py-2">
+          <input
+            type="number"
+            min={slaSettings ? slaSettings.bounds.min_ms / 1000 : undefined}
+            max={slaSettings ? slaSettings.bounds.max_ms / 1000 : undefined}
+            step="any"
+            value={slaOverrideInputs[key] ?? ''}
+            onChange={(e) => setSlaOverrideInputs((prev) => ({ ...prev, [key]: e.target.value }))}
+            placeholder={String(item.default_ms / 1000)}
+            className="w-24 rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
+          />
+        </td>
+        <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-500">
+          {item.updated_at ? new Date(item.updated_at).toLocaleString() : '-'}
+        </td>
+        <td className="whitespace-nowrap px-3 py-2">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => onSlaOverrideApply(item)}
+              disabled={busy}
+              className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+            >
+              {t('settings.slaApply')}
+            </button>
+            <button
+              type="button"
+              onClick={() => void onSlaOverrideSave(item.kind, item.name, null)}
+              disabled={busy || item.override_ms == null}
+              className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+            >
+              {t('settings.slaClear')}
+            </button>
+          </div>
+        </td>
+      </tr>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -495,6 +605,58 @@ export default function SettingsPage() {
               </label>
             </div>
           </div>
+
+          {isAdmin ? (
+            <div className="mb-6 rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+              <h2 className="mb-1 text-base font-semibold text-slate-100">{t('settings.slaSettings')}</h2>
+              <p className="mb-3 text-sm text-slate-400">{t('settings.slaSettingsHint')}</p>
+              {slaLoading ? (
+                <p className="text-sm text-slate-400">{t('settings.loading')}</p>
+              ) : slaSettings ? (
+                <>
+                  <p className="mb-3 text-xs text-slate-500">
+                    {t('settings.slaBoundsHint')}：{slaSettings.bounds.min_ms / 1000} - {slaSettings.bounds.max_ms / 1000} {t('settings.slaSecondsUnit')}
+                  </p>
+                  <h3 className="mb-1 text-sm font-semibold text-slate-200">{t('settings.slaStages')}</h3>
+                  <div className="mb-4 overflow-x-auto rounded-md border border-slate-800">
+                    <table className="min-w-full divide-y divide-slate-800 text-left text-xs">
+                      <thead className="bg-slate-900/70 text-slate-400">
+                        <tr>
+                          <th className="px-3 py-2">{t('settings.slaColName')}</th>
+                          <th className="px-3 py-2">{t('settings.slaColDefault')}</th>
+                          <th className="px-3 py-2">{t('settings.slaColEffective')}</th>
+                          <th className="px-3 py-2">{t('settings.slaColOverride')}</th>
+                          <th className="px-3 py-2">{t('settings.slaColUpdatedAt')}</th>
+                          <th className="px-3 py-2">{t('settings.slaColAction')}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800 bg-slate-950/40">
+                        {slaSettings.stages.map(renderSlaRow)}
+                      </tbody>
+                    </table>
+                  </div>
+                  <h3 className="mb-1 text-sm font-semibold text-slate-200">{t('settings.slaArtifacts')}</h3>
+                  <div className="overflow-x-auto rounded-md border border-slate-800">
+                    <table className="min-w-full divide-y divide-slate-800 text-left text-xs">
+                      <thead className="bg-slate-900/70 text-slate-400">
+                        <tr>
+                          <th className="px-3 py-2">{t('settings.slaColName')}</th>
+                          <th className="px-3 py-2">{t('settings.slaColDefault')}</th>
+                          <th className="px-3 py-2">{t('settings.slaColEffective')}</th>
+                          <th className="px-3 py-2">{t('settings.slaColOverride')}</th>
+                          <th className="px-3 py-2">{t('settings.slaColUpdatedAt')}</th>
+                          <th className="px-3 py-2">{t('settings.slaColAction')}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800 bg-slate-950/40">
+                        {slaSettings.artifacts.map(renderSlaRow)}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : null}
+            </div>
+          ) : null}
 
           <label className="mb-2 block text-sm text-slate-300">OPENAI_API_KEY</label>
           <input

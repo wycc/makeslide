@@ -87,6 +87,73 @@ export const SLA_TARGETS_MS = {
   } satisfies Record<PageArtifact, number>,
 };
 
+export type SlaTargetKind = 'stage' | 'artifact';
+
+// v1 範圍：全域 SLA target override（admin 可調整每個 stage/artifact 的目標毫秒數）。
+// 依 provider/model/source_type 區分目標值留待後續擴充。
+export const SLA_TARGET_BOUNDS_MS = {
+  min: 1_000,
+  max: 3_600_000,
+};
+
+interface SlaTargetOverrideRow {
+  kind: SlaTargetKind;
+  name: string;
+  target_ms: number;
+}
+
+export function getSlaTargetOverrides(): {
+  stages: Partial<Record<PipelineStage, number>>;
+  artifacts: Partial<Record<PageArtifact, number>>;
+} {
+  const rows = db.prepare(`SELECT kind, name, target_ms FROM pipeline_sla_overrides`).all() as SlaTargetOverrideRow[];
+  const stages: Partial<Record<PipelineStage, number>> = {};
+  const artifacts: Partial<Record<PageArtifact, number>> = {};
+  for (const row of rows) {
+    if (row.kind === 'stage' && (TIMING_EVENT_VALUES.stages as readonly string[]).includes(row.name)) {
+      stages[row.name as PipelineStage] = row.target_ms;
+    } else if (row.kind === 'artifact' && (TIMING_EVENT_VALUES.artifacts as readonly string[]).includes(row.name)) {
+      artifacts[row.name as PageArtifact] = row.target_ms;
+    }
+  }
+  return { stages, artifacts };
+}
+
+export function getEffectiveSlaTargets(): { stages: Record<PipelineStage, number>; artifacts: Record<PageArtifact, number> } {
+  const overrides = getSlaTargetOverrides();
+  const stages = { ...SLA_TARGETS_MS.stages } as Record<PipelineStage, number>;
+  for (const [name, value] of Object.entries(overrides.stages)) {
+    if (value != null) stages[name as PipelineStage] = value;
+  }
+  const artifacts = { ...SLA_TARGETS_MS.artifacts } as Record<PageArtifact, number>;
+  for (const [name, value] of Object.entries(overrides.artifacts)) {
+    if (value != null) artifacts[name as PageArtifact] = value;
+  }
+  return { stages, artifacts };
+}
+
+// targetMs === null 會移除 override，回復為 SLA_TARGETS_MS 的預設值。
+export function setSlaTargetOverride(kind: SlaTargetKind, name: string, targetMs: number | null): void {
+  if (kind === 'stage') {
+    assertAllowedValue('stage', name as PipelineStage, TIMING_EVENT_VALUES.stages);
+  } else {
+    assertAllowedValue('artifact', name as PageArtifact, TIMING_EVENT_VALUES.artifacts);
+  }
+  if (targetMs == null) {
+    db.prepare(`DELETE FROM pipeline_sla_overrides WHERE kind = ? AND name = ?`).run(kind, name);
+    return;
+  }
+  if (!Number.isInteger(targetMs) || targetMs < SLA_TARGET_BOUNDS_MS.min || targetMs > SLA_TARGET_BOUNDS_MS.max) {
+    throw new Error(`Invalid SLA target_ms: ${targetMs} (must be an integer between ${SLA_TARGET_BOUNDS_MS.min} and ${SLA_TARGET_BOUNDS_MS.max})`);
+  }
+  const now = nowIso();
+  db.prepare(
+    `INSERT INTO pipeline_sla_overrides (kind, name, target_ms, updated_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(kind, name) DO UPDATE SET target_ms = excluded.target_ms, updated_at = excluded.updated_at`,
+  ).run(kind, name, targetMs, now);
+}
+
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -250,7 +317,7 @@ export function startStage(ctx: TimingRunContext | null, stage: PipelineStage, m
       `INSERT INTO pipeline_stage_summaries (run_id, pdf_id, stage, attempt, status, started_at, ended_at, duration_ms, sla_target_ms, sla_status, error_code, error_message, updated_at)
        VALUES (?, ?, ?, ?, 'running', ?, NULL, NULL, ?, 'unknown', NULL, NULL, ?)
        ON CONFLICT(run_id, stage) DO UPDATE SET attempt = excluded.attempt, status = 'running', started_at = excluded.started_at, ended_at = NULL, duration_ms = NULL, sla_target_ms = excluded.sla_target_ms, sla_status = 'unknown', error_code = NULL, error_message = NULL, updated_at = excluded.updated_at`,
-    ).run(ctx.runId, ctx.pdfId, stage, attempt, startedAt, SLA_TARGETS_MS.stages[stage] ?? null, startedAt);
+    ).run(ctx.runId, ctx.pdfId, stage, attempt, startedAt, getEffectiveSlaTargets().stages[stage] ?? null, startedAt);
     return { runId: ctx.runId, pdfId: ctx.pdfId, stage, attempt, startedAt };
   } catch (err) {
     logger.warn({ err, runId: ctx.runId, stage }, 'timing: startStage failed');
@@ -264,7 +331,7 @@ export function finishStage(handle: TimingStageHandle | null, status: Exclude<Ti
     assertAllowedValue('event_status', status, TIMING_EVENT_VALUES.eventStatuses);
     const endedAt = nowIso();
     const durationMs = durationFrom(handle.startedAt, endedAt);
-    const target = SLA_TARGETS_MS.stages[handle.stage] ?? null;
+    const target = getEffectiveSlaTargets().stages[handle.stage] ?? null;
     const slaStatus = status === 'succeeded' || status === 'failed' ? evaluateSla(durationMs, target) : 'unknown';
     db.prepare(
       `INSERT INTO pipeline_stage_events (run_id, pdf_id, stage, event_type, attempt, occurred_at, duration_ms, sla_status, error_code, error_message, metadata_json)
@@ -301,7 +368,7 @@ export function startArtifact(params: {
       `INSERT INTO page_artifact_timings (pdf_id, page_number, artifact, run_id, attempt, reason, status, started_at, ended_at, duration_ms, sla_target_ms, sla_status, output_path, error_code, error_message, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, 'running', ?, NULL, NULL, ?, 'unknown', NULL, NULL, NULL, ?)
        ON CONFLICT(pdf_id, page_number, artifact) DO UPDATE SET run_id = excluded.run_id, attempt = excluded.attempt, reason = excluded.reason, status = 'running', started_at = excluded.started_at, ended_at = NULL, duration_ms = NULL, sla_target_ms = excluded.sla_target_ms, sla_status = 'unknown', output_path = NULL, error_code = NULL, error_message = NULL, updated_at = excluded.updated_at`,
-    ).run(params.run.pdfId, params.pageNumber, params.artifact, params.run.runId, attempt, params.reason, startedAt, SLA_TARGETS_MS.artifacts[params.artifact] ?? null, startedAt);
+    ).run(params.run.pdfId, params.pageNumber, params.artifact, params.run.runId, attempt, params.reason, startedAt, getEffectiveSlaTargets().artifacts[params.artifact] ?? null, startedAt);
     return { runId: params.run.runId, pdfId: params.run.pdfId, pageNumber: params.pageNumber, artifact: params.artifact, attempt, reason: params.reason, startedAt };
   } catch (err) {
     const code = (err as { code?: string } | null | undefined)?.code;
@@ -324,7 +391,7 @@ export function finishArtifact(handle: TimingArtifactHandle | null, status: Excl
     const endedAt = opts.endedAt ?? nowIso();
     const startedAt = opts.startedAt ?? handle.startedAt;
     const durationMs = opts.durationMs ?? durationFrom(startedAt, endedAt);
-    const target = SLA_TARGETS_MS.artifacts[handle.artifact] ?? null;
+    const target = getEffectiveSlaTargets().artifacts[handle.artifact] ?? null;
     const slaStatus = status === 'succeeded' || status === 'failed' ? evaluateSla(durationMs, target) : 'unknown';
     db.prepare(
       `INSERT INTO page_artifact_events (run_id, pdf_id, page_number, artifact, event_type, attempt, reason, occurred_at, duration_ms, sla_status, output_path, error_code, error_message, metadata_json)

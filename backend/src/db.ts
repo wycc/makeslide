@@ -491,6 +491,14 @@ function migrate(): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_page_drawings_pdf ON page_drawings(pdf_id);
+
+    CREATE TABLE IF NOT EXISTS pipeline_sla_overrides (
+      kind TEXT NOT NULL CHECK (kind IN ('stage', 'artifact')),
+      name TEXT NOT NULL,
+      target_ms INTEGER NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (kind, name)
+    );
   `);
 
   logger.info({ dbPath: config.dbPath }, 'Database migrations applied');
