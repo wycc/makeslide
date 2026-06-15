@@ -1,12 +1,64 @@
+import { useEffect, useState } from 'react';
 import DrawingCanvas from '../../components/DrawingCanvas';
 import { SlideRenderer } from '../../components/slide/SlideRenderer';
 import { AnimationEditorTab } from './AnimationEditorTab';
 import { FigureAssetsTab } from './FigureAssetsTab';
 import { formatTime, formatDurationMs } from './formatters';
 import { PageTimingChips } from './PageTimingChips';
-import { fetchPageGenerationPrompts, figureImageUrl } from '../../lib/api';
+import { ApiError, fetchPageGenerationPrompts, fetchPdfRunHistory, figureImageUrl } from '../../lib/api';
 import { SHOW_SUBTITLE_STORAGE_KEY, INTERACTIVE_MODE_STORAGE_KEY, useI18n } from '../../i18n';
 import { usePlayPageContext } from './PlayPageContext';
+import type { PipelineRunStatus, PipelineRunSummary, PipelineRunType, PipelineStage, TimingEventStatus } from '../../types';
+
+const RUN_TYPE_LABELS: Record<PipelineRunType, string> = {
+  initial: '初次產生',
+  retry: '重試',
+  resume: '接續處理',
+  regenerate_batch: '批次重生',
+  regenerate_page: '單頁重生',
+  regenerate_artifact: '單一素材重生',
+  generate_video: '生成影片',
+};
+
+const RUN_STATUS_LABELS: Record<PipelineRunStatus, string> = {
+  running: '執行中',
+  succeeded: '成功',
+  failed: '失敗',
+  canceled: '已取消',
+  partial: '部分完成',
+};
+
+const RUN_STATUS_COLORS: Record<PipelineRunStatus, string> = {
+  running: 'text-amber-300',
+  succeeded: 'text-emerald-300',
+  failed: 'text-rose-300',
+  canceled: 'text-slate-400',
+  partial: 'text-amber-300',
+};
+
+const STAGE_LABELS: Record<PipelineStage, string> = {
+  queue_wait: '排隊等待',
+  source_prepare: '來源準備',
+  render_pages: '頁面渲染',
+  extract_text: '文字擷取',
+  extract_figures: '圖表擷取',
+  split_text: '文字分段',
+  generate_scripts: '逐字稿生成',
+  synthesize_audio: '語音合成',
+  generate_animations: '動畫生成',
+  generate_title: '標題生成',
+  generate_video: '影片生成',
+  finalize: '收尾處理',
+};
+
+const STAGE_STATUS_LABELS: Record<TimingEventStatus, string> = {
+  running: '執行中',
+  succeeded: '成功',
+  failed: '失敗',
+  skipped: '已跳過',
+  canceled: '已取消',
+  unknown: '未知',
+};
 
 export function PlayPageSlidePanel() {
   const {
@@ -80,6 +132,35 @@ export function PlayPageSlidePanel() {
   const { t } = useI18n();
 
   const progressRatio = duration > 0 ? Math.min(1, currentTime / duration) * 1000 : 0;
+
+  const [runHistory, setRunHistory] = useState<PipelineRunSummary[]>([]);
+  const [runHistoryLoading, setRunHistoryLoading] = useState(false);
+  const [runHistoryError, setRunHistoryError] = useState<string | null>(null);
+  const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
+
+  // 切到「系統資料」分頁時載入此 PDF 的執行歷程（pipeline_runs/pipeline_stage_summaries）。
+  useEffect(() => {
+    if (editTab !== 'system' || !pdfId) return;
+    let cancelled = false;
+    setRunHistoryLoading(true);
+    setRunHistoryError(null);
+    fetchPdfRunHistory(pdfId)
+      .then((res) => {
+        if (cancelled) return;
+        setRunHistory(res.runs);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setRunHistory([]);
+        setRunHistoryError(err instanceof ApiError ? err.message : '載入執行歷程失敗');
+      })
+      .finally(() => {
+        if (!cancelled) setRunHistoryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [editTab, pdfId]);
 
   return (
     <div
@@ -877,6 +958,78 @@ export function PlayPageSlidePanel() {
                 </table>
               </div>
               {currentPage?.timings ? <div className="mt-3"><PageTimingChips page={currentPage} /></div> : null}
+              <div className="mt-3 rounded-md border border-slate-800 bg-slate-900/50 p-3">
+                <h3 className="mb-2 text-sm font-semibold text-slate-300">🗂 執行歷程</h3>
+                {runHistoryLoading ? (
+                  <p className="text-xs text-slate-500">載入中…</p>
+                ) : runHistoryError ? (
+                  <p className="text-xs text-rose-300">{runHistoryError}</p>
+                ) : runHistory.length === 0 ? (
+                  <p className="text-xs text-slate-500">尚無執行紀錄</p>
+                ) : (
+                  <div className="space-y-2">
+                    {runHistory.map((run) => {
+                      const isExpanded = expandedRunId === run.id;
+                      return (
+                        <div key={run.id} className="rounded border border-slate-700">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedRunId(isExpanded ? null : run.id)}
+                            className="flex w-full items-center justify-between gap-2 px-2 py-1.5 text-left text-xs"
+                          >
+                            <span className="flex flex-col">
+                              <span className="font-medium text-slate-200">
+                                {RUN_TYPE_LABELS[run.run_type] ?? run.run_type} · 第 {run.attempt} 次
+                              </span>
+                              <span className="font-mono text-slate-500">
+                                {new Date(run.started_at).toLocaleString('zh-TW', { dateStyle: 'short', timeStyle: 'medium' })}
+                              </span>
+                            </span>
+                            <span className="flex items-center gap-2 text-slate-400">
+                              <span className={RUN_STATUS_COLORS[run.status]}>{RUN_STATUS_LABELS[run.status] ?? run.status}</span>
+                              <span className="font-mono">{run.status === 'running' ? '執行中' : formatDurationMs(run.duration_ms)}</span>
+                              <span>{isExpanded ? '▲' : '▼'}</span>
+                            </span>
+                          </button>
+                          {isExpanded && (
+                            <div className="border-t border-slate-700 px-2 py-2">
+                              {run.error_message && (
+                                <p className="mb-2 text-xs text-rose-300">
+                                  {run.error_code ? `[${run.error_code}] ` : ''}{run.error_message}
+                                </p>
+                              )}
+                              <table className="min-w-full divide-y divide-slate-800 text-left text-xs">
+                                <thead className="text-slate-500">
+                                  <tr>
+                                    <th className="px-2 py-1">階段</th>
+                                    <th className="px-2 py-1">狀態</th>
+                                    <th className="px-2 py-1">耗時</th>
+                                    <th className="px-2 py-1">SLA</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-800">
+                                  {run.stages.map((stage) => (
+                                    <tr key={stage.stage}>
+                                      <td className="px-2 py-1 text-slate-200">{STAGE_LABELS[stage.stage] ?? stage.stage}</td>
+                                      <td className="px-2 py-1 text-slate-300">{STAGE_STATUS_LABELS[stage.status] ?? stage.status}</td>
+                                      <td className="px-2 py-1 font-mono text-slate-200">
+                                        {stage.status === 'running' ? '執行中' : formatDurationMs(stage.duration_ms)}
+                                      </td>
+                                      <td className="px-2 py-1 text-slate-400">
+                                        {stage.sla_status}{stage.sla_target_ms != null ? ` / ${formatDurationMs(stage.sla_target_ms)}` : ''}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </>
           )}
         </div>

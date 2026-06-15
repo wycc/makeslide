@@ -16,6 +16,7 @@ import { registerDrawingsRoutes } from './drawings';
 import { registerVersioningRoutes } from './versioning';
 import { registerPageAnimationRoutes } from './page-animation';
 import { registerFigureRoutes } from './figures';
+import { registerRunHistoryRoutes } from './runs';
 
 export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerUploadRoutes(app);
@@ -35,4 +36,5 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerVersioningRoutes(app);
   await registerPageAnimationRoutes(app);
   await registerFigureRoutes(app);
+  await registerRunHistoryRoutes(app);
 }

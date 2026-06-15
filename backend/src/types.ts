@@ -57,6 +57,40 @@ export interface PdfDetailPageTimings {
   audio: PdfDetailPageTimingItem | null;
 }
 
+export interface PipelineRunStageSummary {
+  stage: PipelineStage;
+  status: TimingEventStatus;
+  attempt: number;
+  started_at: string | null;
+  ended_at: string | null;
+  duration_ms: number | null;
+  sla_target_ms: number | null;
+  sla_status: TimingSlaStatus;
+  error_code: string | null;
+  error_message: string | null;
+}
+
+export interface PipelineRunSummary {
+  id: string;
+  run_type: PipelineRunType;
+  parent_run_id: string | null;
+  triggered_by: string;
+  status: PipelineRunStatus;
+  attempt: number;
+  started_at: string;
+  ended_at: string | null;
+  duration_ms: number | null;
+  sla_status: TimingSlaStatus;
+  error_code: string | null;
+  error_message: string | null;
+  metadata: Record<string, unknown> | null;
+  stages: PipelineRunStageSummary[];
+}
+
+export interface PipelineRunsResponse {
+  runs: PipelineRunSummary[];
+}
+
 export interface PdfRow {
   id: string;
   title: string | null;

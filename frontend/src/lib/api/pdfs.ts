@@ -6,6 +6,7 @@ import type {
   PagePoll,
   PdfDetail,
   PdfListItem,
+  PipelineRunsResponse,
   QuizAttempt,
   QuizAttemptsResponse,
   QuizQuestion,
@@ -43,6 +44,21 @@ export async function fetchPdfDetail(id: string, shareToken?: string): Promise<P
     throw await parseErrorBody(resp);
   }
   return (await resp.json()) as PdfDetail;
+}
+
+/** Pipeline run history (initial/regenerate/resume/...) for this PDF, for the "系統資料" tab's run history section. */
+export async function fetchPdfRunHistory(id: string, shareToken?: string, limit?: number): Promise<PipelineRunsResponse> {
+  const token = shareToken?.trim();
+  const params = new URLSearchParams();
+  if (token) params.set('share', token);
+  if (limit) params.set('limit', String(limit));
+  const query = params.toString();
+  const suffix = query ? `?${query}` : '';
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/runs${suffix}`);
+  if (!resp.ok) {
+    throw await parseErrorBody(resp);
+  }
+  return (await resp.json()) as PipelineRunsResponse;
 }
 
 export async function addPdfTextSource(
