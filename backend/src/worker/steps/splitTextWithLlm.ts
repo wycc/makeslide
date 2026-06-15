@@ -35,9 +35,10 @@ const OutlineSchema = z.object({
 
 /**
  * 全文大綱上限：超過此字數的全文會先截取再送 LLM。
- * 與 YouTube outline 的 16 000 字上限一致。
+ * 128 000 字可涵蓋絕大多數 PDF 全文（含 [[PDF_PAGE_N]] 標記），
+ * 對 256K context window 的模型仍留有充足的系統提示詞與輸出空間。
  */
-const OUTLINE_MAX_INPUT_CHARS = 16_000;
+const OUTLINE_MAX_INPUT_CHARS = 128_000;
 
 /**
  * 當原文長度 ≥ 此門檻時，啟用「先產生大綱 → 再按 Slide 標記切分」的
