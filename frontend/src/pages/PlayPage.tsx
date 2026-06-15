@@ -910,6 +910,13 @@ export default function PlayPage() {
     }
   }, [canUseDrawingTools, drawingMode]);
 
+  // 進入手寫模式時自動暫停播放，避免講者繪圖時投影片自動切換或動畫繼續播放。
+  useEffect(() => {
+    if (drawingMode) {
+      audioRef.current?.pause();
+    }
+  }, [drawingMode]);
+
   const handleSyncEnabledChange = useCallback(
     (checked: boolean) => {
       if (!pdfId) return;
