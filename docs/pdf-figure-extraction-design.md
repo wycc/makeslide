@@ -279,6 +279,7 @@ export function buildFigureReferenceNotes(figures: FigureEntry[]): string | null
 ## 9. 未來工作
 
 - 偵測純向量繪圖區域（無 raster image，但該頁有大量繪圖類 operator 集中於特定區域）。
+  → V2 設計見第 12 節。
 - 前端提供圖表素材瀏覽 / 挑選介面。
 
 ## 10. 整合至投影片圖片（重新）生成（已完成）
@@ -490,3 +491,149 @@ const figureRefFiles = await Promise.all(
   `images.edit` / `images.generate`，驗證 `sourcePdfPages` 對應到 `figures.json`
   時會呼叫 `images.edit` 並帶上圖表參考圖 + 圖說 prompt；無對應圖表時維持呼叫
   `images.generate`。
+
+## 12. 向量圖形萃取（V2 設計，待實作）
+
+### 12.1 問題分析：`hRUVHXrNqW`（37 頁論文 `2605.29548v2.pdf`）Figure 1-9 全數抽取失敗
+
+以實際匯入的 `storage/hRUVHXrNqW`（與 §11.4 提到的 `myGMS0ahnF` 為同一份論文）檢查
+`figures.json`，目前僅在第 4、7、8、26、30、32、33、34、37 頁有萃取結果，對應論文中
+Figure 10/13/17/22/23（皆有 caption），但論文正文最先出現、最重要的 **Figure 1～9
+全部不在 manifest 中或抽到不相關的內容**：
+
+| Figure | PDF 頁碼 | 目前結果 | 問題 |
+| --- | --- | --- | --- |
+| 1 | 2 | `figures: []` | 整頁是 6 個子圖的向量折線/散佈圖，無任何 raster image |
+| 2 | 4 | 1 張 `p4-img_p3_1.png`（806×713 漸層三角形），`caption: null` | 真正的 (a)(b) 折線圖是向量繪製；抽到的這張在頁面渲染結果中完全不可見，疑似被向量內容蓋住的 colormap 殘留 raster，與圖 2 內容無關 |
+| 3 | 5 | `figures: []` | 純向量單圖 |
+| 4 | 6 | `figures: []` | 多子圖向量圖 |
+| 5/6 | 7 | 1 張 `p7-img_p6_1.png`（折線圖＋"N Examples/N Batch" 圖例），`caption: null` | 抓到的可能是其中一個子面板（資料點多被 matplotlib rasterize），但配不到任何 caption |
+| 7 | 8 | 2 張 PCA 散佈圖，`caption: null` | 看起來確實是「Representational Evidence」的子面板，但同樣配不到 caption |
+| 8/9 | 9 | `figures: []` | 純向量圖 |
+
+**根因**：matplotlib 對折線圖、長條圖等資料點較少的圖表，PDF backend 預設輸出向量路徑
+（`re`/`m`/`l`/`c` 等 path 構造 operator + `f`/`S`/`B` 填色/筆畫/兩者皆有 operator）；
+只有資料點極多（如 PCA/embedding 散佈圖，數百~數千個點）才會被 matplotlib 自動 rasterize
+成內嵌 image XObject。`extractPdfFigures()`（第 5 節）只追蹤
+`OPS.paintImageXObject`，完全不處理向量繪圖 operator，因此純向量圖（Figure 1/3/4/8/9）
+該頁 `figures` 永遠是空陣列；混合圖（Figure 2/5/6/7）只抓到被 rasterize 的散佈圖子面板，
+折線/長條圖子面板仍會漏掉。
+
+**次要問題（caption 比對）**：即使抓到 raster 子面板（page 4/7/8），三者的 `caption`
+皆為 `null`。`CAPTION_MAX_DISTANCE_PT = 40`pt 對「整頁單圖＋下方緊接 caption」（如
+Figure 10）很準，但多面板圖的 caption 通常位於整組面板最下方，距離單個小面板的 bbox
+經常超過 40pt。
+
+### 12.2 V2 目標
+
+1. 偵測「密集向量繪圖區域」的 bounding box，補上純向量圖表（Figure 1/3/4/8/9 這類）。
+2. 將同一個 Figure 的多個子面板（向量 + 既有 raster）群組化，群組共用同一個
+   `caption`/`context`。
+3. 為向量區域產生 PNG：因為沒有像素資料可直接讀，改用 poppler 整頁 render 後依 bbox
+   裁切。
+4. 過濾掉像 `p4-img_p3_1.png` 這種「被後繪製的向量內容完全遮蓋、實際不可見」的 raster
+   殘留影像。
+
+### 12.3 向量區域偵測演算法
+
+在 `extractPdfFigures()` 既有的 CTM 追蹤迴圈（§5.1）中，除了現有的
+`OPS.paintImageXObject` 分支，新增對繪圖類 operator 的 bbox 累積：
+
+- `OPS.constructPath`（`argsArray[i]` 內含 op 碼陣列與座標陣列，需確認 pdf.js
+  legacy build 實際的參數結構）：將每個 path 的座標點透過目前 CTM 轉換到 PDF 使用者
+  座標系，累積進一個「path bbox 列表」。
+- 文字（`OPS.showText` / `OPS.showSpacedText`）**不**計入 path bbox 列表——避免把
+  軸標籤/標題文字單獨判定成一張圖；但文字行的 y 座標（已由 §5.4 的
+  `collectTextLentent` / `getTextContent()` 取得）仍用於後續的 caption 比對與群組
+  邊界判斷。
+
+聚類（clustering）：
+
+1. 對 path bbox 列表做簡單的 union-find：若兩個 bbox 各往四周擴張 `pad`（例如
+   5pt）後仍有重疊，則合併為同一群。
+2. 每一群最終的合併 bbox 需滿足：
+   - 群內 path 數量 `>= VECTOR_FIGURE_MIN_PATHS`（初始建議 20，避免把表格框線、
+     底線等少量路徑誤判為圖）。
+   - 套用既有 `FIGURE_MIN_AREA_PCT` / `FIGURE_MAX_AREA_PCT` 面積過濾（§5.2）。
+3. 與既有 raster image 候選的 bbox 有顯著重疊（例如 IoU > 0.5）的向量群，視為
+   同一個候選並合併 bbox（避免重複輸出同一塊區域）。
+
+### 12.4 多面板群組化與 caption 比對
+
+論文中常見「一個 Figure 由多個並排/堆疊的子面板組成，caption 置於整組下方」的版面。
+V2 在比對 caption 前，先對該頁所有圖表候選（向量群 + raster image）做幾何群組化：
+
+1. 依 bbox 的 y 範圍是否重疊，將候選分成「列」（同一列代表水平並排的子面板）。
+2. 同一列內，依 x 座標排序；若相鄰候選的水平間距小於某門檻（例如該列平均寬度的
+   20%），視為同一組的子面板。
+3. 對每一組，取其所有子面板 bbox 的聯集作為「群組 bbox」，用既有 `findCaption()`
+   （§5.4）在群組 bbox 上下方找 caption——因聯集 bbox 比單個面板大，`CAPTION_MAX_DISTANCE_PT`
+   命中率會大幅提升。
+4. 找到的 `caption`/`context` 套用到該組內所有子面板的 `FigureEntry`。
+
+**Anchor 校正**：幾何群組化可能誤判（例如同一頁有兩個不同 Figure 但水平相鄰）。
+建議反向驗證：先用 `CAPTION_RE` 找出該頁所有 caption 行及其 `Figure N` 編號，再以
+每個 caption 的 x 範圍與群組 x 範圍是否重疊作為交叉檢查，避免把 caption 配給錯誤
+的群組。
+
+### 12.5 影像輸出：poppler 整頁 render + 裁切
+
+§3.1 提到 pdf.js 的 `page.render()` 在含 `paintImageXObject` 的頁面會丟出
+"Image or Canvas expected"，但向量圖表往往與 raster 子面板同頁（如 page 4/7/8），
+無法簡單繞過。改用既有 `backend/src/worker/poppler.ts` 已使用的 `pdftoppm`
+（poppler CLI，與 pdf.js + node-canvas 是不同的渲染路徑，不受此 bug 影響）：
+
+- 對 `hRUVHXrNqW/source.pdf` 第 2、4-9 頁（皆含 raster image）以
+  `pdftoppm -png -r 150 -f <n> -l <n>` 整頁 render，全部成功，驗證可行。
+- 每頁僅需 render 一次（快取整頁 PNG），供該頁所有向量候選共用裁切來源。
+- 依候選 bbox 的百分比座標換算成整頁 PNG 的像素座標，用
+  `sharp(fullPagePng).extract({ left, top, width, height }).png().toFile(...)`
+  輸出，檔名建議 `p<pageNumber>-vec<index>.png`（與既有
+  `p<pageNumber>-img_p<x>_<y>.png` 命名區分，`FigureEntry` 可選擇新增
+  `source?: 'raster' | 'vector'` 欄位輔助除錯）。
+
+### 12.6 過濾「被遮蓋」的 raster 殘留影像
+
+對 §5 既有流程找到的每個 `paintImageXObject` 候選，額外檢查：是否存在「在 operator
+list 中順序更晚（即繪製在其之上）、面積更大的向量群組，且其 bbox 覆蓋率
+（交集面積 / 該 raster bbox 面積）> `OCCLUDED_RASTER_THRESHOLD`（建議 0.9）」。
+若是，視為不可見的背景殘留（例如 `p4-img_p3_1.png` 這類 colormap 取樣背景），
+從輸出中排除——理由是 PDF content stream 依序繪製，後繪製者覆蓋前者。
+
+### 12.7 預期效果（以 `hRUVHXrNqW` 為例）
+
+- Figure 1（page 2）：6 子圖向量群組 → 1 個 Figure 條目（或依群組化粒度拆成多個），
+  caption 比對到「Figure 1: Learning a part of the distribution re-...」。
+- Figure 2（page 4）：向量 (a)(b) 兩子圖群組化為一組並比對到「Figure 2」；
+  `p4-img_p3_1.png` 因 12.6 被排除。
+- Figure 3（page 5）：1 個向量區域，比對到「Figure 3」。
+- Figure 4（page 6）：多子圖向量群組，比對到「Figure 4」（與「Figure 6」需靠
+  12.4 的 anchor 校正區分）。
+- Figure 5/6（page 7）：向量子圖 + 既有 `p7-img_p6_1.png` 合併為群組，caption 比對
+  成功並能分辨屬於 Figure 5 或 Figure 6。
+- Figure 7（page 8）：既有 2 張 raster 子圖 + 可能存在的向量子圖群組化後，
+  caption 比對到「Figure 7」。
+- Figure 8/9（page 9）：向量群組，分別比對到「Figure 8」「Figure 9」。
+
+### 12.8 風險與待確認事項
+
+- `OPS.constructPath` 在 pdf.js legacy build 的 `argsArray` 實際結構需要先用真實
+  PDF dump 確認（操作碼陣列 + 座標陣列的對應方式）。
+- `VECTOR_FIGURE_MIN_PATHS`、聚類 `pad`、群組化的水平間距門檻等參數需以多份真實 PDF
+  （`hRUVHXrNqW`、`jBaLIg8vMa`、`myGMS0ahnF`）反覆調參，不同論文/排版差異可能很大。
+- 每頁新增一次 poppler 整頁 render：37 頁 PDF 在 `extract_figures` 階段會新增
+  ~37 次整頁 render，需評估對既有 120 秒 SLA（`SLA_TARGETS_MS.stages.extract_figures`）
+  的影響，必要時可僅對「該頁有 caption 但 12.1~12.4 仍找不到對應圖」的頁面才觸發
+  render（lazy）。
+- 12.4 的幾何群組化＋anchor 校正屬於 heuristic，無法保證 100% 正確；應在
+  `FigureEntry` 保留足夠資訊（bbox、來源 operator 統計）方便日後人工/自動複查。
+
+### 12.9 建議實作順序
+
+1. 先寫一個獨立腳本（不進 pipeline）對 `hRUVHXrNqW/source.pdf` 做向量區域偵測 +
+   裁切，人工檢視輸出圖片是否對應 Figure 1-9，反覆調整 12.8 提到的參數。
+2. 參數穩定後整合進 `extractPdfFigures()`：新增向量候選偵測（12.3）、群組化與
+   caption 比對（12.4）、poppler 裁切（12.5）、遮蓋過濾（12.6）。
+3. 新增/擴充 `backend/test/pdf-figures.test.ts`，以 `hRUVHXrNqW`（或既有
+   `jBaLIg8vMa`/`myGMS0ahnF`）fixture 驗證 Figure 1-9 皆能被抽出且 caption 正確。
+4. 完成後將本節標題改為「（已完成）」，並回頭更新 §2.2 / §9 對應的未來工作項目。
