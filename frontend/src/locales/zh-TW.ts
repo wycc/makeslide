@@ -353,7 +353,7 @@ export const zhTW = {
   'play.animation.autoGenerateFocusConfirm': '將依目前逐字稿為每一句產生一個紅框焦點動畫，並覆蓋目前所有效果設定，是否繼續？',
   'play.animation.autoGenerateFocusAi': '🤖 AI 自動產生焦點動畫',
   'play.animation.autoGenerateFocusAiBusy': 'AI 產生中…',
-  'play.animation.autoGenerateFocusAiConfirm': '將由 AI 依目前逐字稿與動畫指引，決定每句是否顯示焦點方框或文字摘要及其位置、大小與消失時間，並覆蓋目前所有效果設定，是否繼續？',
+  'play.animation.autoGenerateFocusAiConfirm': '將由 AI 依目前逐字稿與動畫指引，決定每句是否顯示焦點方框、圖形、條列清單或文字摘要及其位置、大小與消失時間，並覆蓋目前所有效果設定，是否繼續？',
   'play.animation.autoGenerateFocusAiDone': 'AI 已產生焦點動畫，請檢查後儲存',
   'play.animation.autoGenerateFocusAiError': 'AI 產生焦點動畫失敗，請稍後再試',
   'play.animation.hints': '逐字稿動畫指引',

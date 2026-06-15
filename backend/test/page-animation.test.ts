@@ -9,6 +9,7 @@ import { config } from '../src/config';
 import { getRuntimeAiSettings, setRuntimeAiSettings, setSystemAuthSettings } from '../src/services/aiSettings';
 import { setOpenAIClientForTest } from '../src/services/openai';
 import {
+  ANIMATION_SHAPE_KINDS,
   MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES,
   MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH,
   MAX_STEP_LIST_ITEMS,
@@ -765,6 +766,95 @@ test('mapAutoFocusResponseToEffects text-callout output passes validateAnimation
   assert.equal(result.ok, true);
 });
 
+test('mapAutoFocusResponseToEffects maps shape items with the given shape kind', () => {
+  const effects = mapAutoFocusResponseToEffects(
+    {
+      effects: [
+        { line: 0, show: true, type: 'shape', shape: 'arrow', xPct: 40, yPct: 35, widthPct: 15, heightPct: 15, exitDuration: 2 },
+        { line: 1, show: true, type: 'shape' },
+      ],
+    },
+    2,
+  );
+  assert.equal(effects.length, 2);
+  assert.equal(effects[0].type, 'shape');
+  assert.equal(effects[0].shape, 'arrow');
+  assert.equal(effects[0].exitDuration, 2);
+  assert.equal(effects[1].type, 'shape');
+  assert.equal(effects[1].shape, undefined);
+});
+
+test('mapAutoFocusResponseToEffects shape output passes validateAnimationSpec', () => {
+  for (const shape of ANIMATION_SHAPE_KINDS) {
+    const effects = mapAutoFocusResponseToEffects(
+      { effects: [{ line: 0, show: true, type: 'shape', shape, xPct: 10, yPct: 10, widthPct: 30, heightPct: 30 }] },
+      1,
+    );
+    const result = validateAnimationSpec({ version: 1, enabled: true, effects });
+    assert.equal(result.ok, true);
+  }
+});
+
+test('mapAutoFocusResponseToEffects maps step-list items, dropping blanks and capping count/length', () => {
+  const longItem = 'A'.repeat(MAX_STEP_LIST_ITEM_LENGTH + 20);
+  const tooMany = Array.from({ length: MAX_STEP_LIST_ITEMS + 3 }, (_, i) => `步驟 ${i + 1}`);
+  const effects = mapAutoFocusResponseToEffects(
+    {
+      effects: [
+        {
+          line: 0,
+          show: true,
+          type: 'step-list',
+          items: ['  第一步  ', '', '   ', longItem],
+          xPct: 55,
+          yPct: 60,
+          widthPct: 35,
+          heightPct: 30,
+          exitDuration: 4,
+        },
+        { line: 1, show: true, type: 'step-list', items: tooMany },
+      ],
+    },
+    2,
+  );
+  assert.equal(effects.length, 2);
+  assert.equal(effects[0].type, 'step-list');
+  assert.deepEqual(effects[0].items, ['第一步', longItem.slice(0, MAX_STEP_LIST_ITEM_LENGTH)]);
+  assert.equal(effects[0].exitDuration, 4);
+  assert.equal(effects[1].type, 'step-list');
+  assert.equal(effects[1].items?.length, MAX_STEP_LIST_ITEMS);
+});
+
+test('mapAutoFocusResponseToEffects falls back step-list without usable items to highlight-box', () => {
+  const effects = mapAutoFocusResponseToEffects(
+    {
+      effects: [
+        { line: 0, show: true, type: 'step-list' },
+        { line: 1, show: true, type: 'step-list', items: ['   ', ''] },
+      ],
+    },
+    2,
+  );
+  assert.equal(effects.length, 2);
+  assert.equal(effects[0].type, 'highlight-box');
+  assert.equal(effects[0].items, undefined);
+  assert.equal(effects[1].type, 'highlight-box');
+  assert.equal(effects[1].items, undefined);
+});
+
+test('mapAutoFocusResponseToEffects step-list output passes validateAnimationSpec', () => {
+  const effects = mapAutoFocusResponseToEffects(
+    {
+      effects: [
+        { line: 0, show: true, type: 'step-list', items: ['第一步', '第二步', '第三步'], xPct: 55, yPct: 60, widthPct: 35, heightPct: 30 },
+      ],
+    },
+    1,
+  );
+  const result = validateAnimationSpec({ version: 1, enabled: true, effects });
+  assert.equal(result.ok, true);
+});
+
 // ── POST animation/auto-focus-ai ────────────────────────────────────────────────
 
 test('POST animation/auto-focus-ai returns AI-generated effects mapped from sentences', async () => {
@@ -866,6 +956,76 @@ test('POST animation/auto-focus-ai returns a text-callout effect with caption te
     assert.equal(body.effects[0].type, 'text-callout');
     assert.equal(body.effects[0].text, '營收成長 35%');
     assert.deepEqual(body.effects[0].params, { xPct: 8, yPct: 78, widthPct: 40, heightPct: 14 });
+
+    const validated = validateAnimationSpec({ version: 1, enabled: true, effects: body.effects });
+    assert.equal(validated.ok, true);
+  } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+  }
+});
+
+test('POST animation/auto-focus-ai returns shape and step-list effects', async () => {
+  seedAnimationPdf(PDF_ID, 1);
+  fs.writeFileSync(path.join(config.storageRoot, PDF_ID, 'pages', 'animuid1.text.txt'), '操作步驟說明\n請依箭頭指示完成三個步驟', 'utf8');
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  effects: [
+                    {
+                      line: 0,
+                      show: true,
+                      type: 'shape',
+                      shape: 'arrow',
+                      xPct: 40,
+                      yPct: 35,
+                      widthPct: 15,
+                      heightPct: 15,
+                      exitDuration: 2,
+                    },
+                    {
+                      line: 1,
+                      show: true,
+                      type: 'step-list',
+                      items: ['第一步：開啟設定', '第二步：選擇選項', '第三步：儲存'],
+                      xPct: 55,
+                      yPct: 55,
+                      widthPct: 35,
+                      heightPct: 30,
+                      exitDuration: 4,
+                    },
+                  ],
+                }),
+              },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+        }),
+      },
+    },
+  } as never);
+
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${PDF_ID}/pages/1/animation/auto-focus-ai`,
+      headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+      payload: { sentences: ['請看這個箭頭指向的按鈕。', '依照清單上的三個步驟操作。'] },
+    });
+    assert.equal(resp.statusCode, 200);
+    const body = resp.json() as { effects: Array<Record<string, unknown>> };
+    assert.equal(body.effects.length, 2);
+    assert.equal(body.effects[0].type, 'shape');
+    assert.equal(body.effects[0].shape, 'arrow');
+    assert.equal(body.effects[1].type, 'step-list');
+    assert.deepEqual(body.effects[1].items, ['第一步：開啟設定', '第二步：選擇選項', '第三步：儲存']);
 
     const validated = validateAnimationSpec({ version: 1, enabled: true, effects: body.effects });
     assert.equal(validated.ok, true);
