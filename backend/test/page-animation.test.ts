@@ -10,8 +10,10 @@ import { getRuntimeAiSettings, setRuntimeAiSettings, setSystemAuthSettings } fro
 import { setOpenAIClientForTest } from '../src/services/openai';
 import {
   ANIMATION_SHAPE_KINDS,
+  MAX_CUSTOM_SCRIPT_CODE_LENGTH,
   MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES,
   MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH,
+  MAX_CUSTOM_SCRIPT_PROMPT_LENGTH,
   MAX_FORMULA_LENGTH,
   MAX_OVERLAY_IMAGE_FIGURE_ID_LENGTH,
   MAX_STEP_LIST_ITEMS,
@@ -20,7 +22,7 @@ import {
   defaultAnimationSpec,
   validateAnimationSpec,
 } from '../src/services/pageAnimation';
-import { mapAutoFocusResponseToEffects } from '../src/services/animationAutoFocus';
+import { fillCustomScriptEffectsCode, mapAutoFocusResponseToEffects } from '../src/services/animationAutoFocus';
 import { findCustomScriptContractIssue, findUnsafeScriptPattern } from '../src/services/animationCustomScript';
 
 const PDF_ID = 'test-page-animation-01';
@@ -967,6 +969,186 @@ test('mapAutoFocusResponseToEffects step-list output passes validateAnimationSpe
   assert.equal(result.ok, true);
 });
 
+test('mapAutoFocusResponseToEffects maps custom-script items, truncating scriptPrompt and clamping scriptDurationSeconds', () => {
+  const longPrompt = 'A'.repeat(MAX_CUSTOM_SCRIPT_PROMPT_LENGTH + 20);
+  const effects = mapAutoFocusResponseToEffects(
+    {
+      effects: [
+        {
+          line: 0,
+          show: true,
+          type: 'custom-script',
+          scriptPrompt: longPrompt,
+          scriptDurationSeconds: 100,
+          xPct: 50,
+          yPct: 50,
+          widthPct: 40,
+          heightPct: 40,
+          exitDuration: 2,
+        },
+      ],
+    },
+    1,
+  );
+  assert.equal(effects.length, 1);
+  assert.equal(effects[0].type, 'custom-script');
+  assert.equal(effects[0].prompt?.length, MAX_CUSTOM_SCRIPT_PROMPT_LENGTH);
+  assert.equal(effects[0].duration, 20);
+  assert.equal(effects[0].code, undefined);
+  assert.equal(effects[0].exitDuration, 2);
+});
+
+test('mapAutoFocusResponseToEffects defaults custom-script duration to 6s when scriptDurationSeconds is omitted', () => {
+  const effects = mapAutoFocusResponseToEffects(
+    { effects: [{ line: 0, show: true, type: 'custom-script', scriptPrompt: '畫一個會成長的長條圖' }] },
+    1,
+  );
+  assert.equal(effects.length, 1);
+  assert.equal(effects[0].type, 'custom-script');
+  assert.equal(effects[0].prompt, '畫一個會成長的長條圖');
+  assert.equal(effects[0].duration, 6);
+});
+
+test('mapAutoFocusResponseToEffects falls back custom-script without scriptPrompt to highlight-box', () => {
+  const effects = mapAutoFocusResponseToEffects(
+    {
+      effects: [
+        { line: 0, show: true, type: 'custom-script' },
+        { line: 1, show: true, type: 'custom-script', scriptPrompt: '   ' },
+      ],
+    },
+    2,
+  );
+  assert.equal(effects.length, 2);
+  assert.equal(effects[0].type, 'highlight-box');
+  assert.equal(effects[0].prompt, undefined);
+  assert.equal(effects[0].duration, 1.2);
+  assert.equal(effects[1].type, 'highlight-box');
+  assert.equal(effects[1].prompt, undefined);
+  assert.equal(effects[1].duration, 1.2);
+});
+
+test('mapAutoFocusResponseToEffects caps custom-script effects at one per page, falling back extras to highlight-box', () => {
+  const effects = mapAutoFocusResponseToEffects(
+    {
+      effects: [
+        { line: 0, show: true, type: 'custom-script', scriptPrompt: '畫一個座標平面，顯示一個點沿曲線移動' },
+        { line: 1, show: true, type: 'custom-script', scriptPrompt: '畫一個長條圖，顯示數值逐漸增加' },
+      ],
+    },
+    2,
+  );
+  assert.equal(effects.length, 2);
+  assert.equal(effects[0].type, 'custom-script');
+  assert.equal(effects[0].prompt, '畫一個座標平面，顯示一個點沿曲線移動');
+  assert.equal(effects[1].type, 'highlight-box');
+  assert.equal(effects[1].prompt, undefined);
+});
+
+test('mapAutoFocusResponseToEffects custom-script output (with prompt, no code) passes validateAnimationSpec', () => {
+  const effects = mapAutoFocusResponseToEffects(
+    {
+      effects: [
+        {
+          line: 0,
+          show: true,
+          type: 'custom-script',
+          scriptPrompt: '畫一個座標平面，顯示一個點沿曲線移動',
+          xPct: 50,
+          yPct: 50,
+          widthPct: 40,
+          heightPct: 40,
+        },
+      ],
+    },
+    1,
+  );
+  const result = validateAnimationSpec({ version: 1, enabled: true, effects });
+  assert.equal(result.ok, true);
+});
+
+// ── fillCustomScriptEffectsCode ─────────────────────────────────────────────────
+
+test('fillCustomScriptEffectsCode fills in code for a custom-script effect generated from its prompt', async () => {
+  const generatedCode =
+    'window.renderAnimation = function (root, api) { api.onFrame(function (frame) { root.style.opacity = String(Math.min(1, frame.t)); }); };';
+  let capturedMessages: Array<{ role: string; content: unknown }> | undefined;
+  setOpenAIClientForTest(streamingChatClient(generatedCode, (messages) => { capturedMessages = messages; }) as never);
+  try {
+    const effects = mapAutoFocusResponseToEffects(
+      { effects: [{ line: 0, show: true, type: 'custom-script', scriptPrompt: '畫一個會旋轉的圓形' }] },
+      1,
+    );
+    const filled = await fillCustomScriptEffectsCode(effects, { pageText: '頁面標題：銷售趨勢', label: 'test' });
+    assert.equal(filled.length, 1);
+    assert.equal(filled[0].type, 'custom-script');
+    assert.equal(filled[0].code, generatedCode);
+    assert.equal(filled[0].prompt, '畫一個會旋轉的圓形');
+
+    const userMessage = capturedMessages?.find((m) => m.role === 'user');
+    assert.match(String(userMessage?.content), /畫一個會旋轉的圓形/);
+
+    const validated = validateAnimationSpec({ version: 1, enabled: true, effects: filled });
+    assert.equal(validated.ok, true);
+  } finally {
+    setOpenAIClientForTest(null);
+  }
+});
+
+test('fillCustomScriptEffectsCode falls back to highlight-box when generated code is unsafe', async () => {
+  setOpenAIClientForTest(streamingChatClient('fetch("https://evil.example").then(function () {});') as never);
+  try {
+    const effects = mapAutoFocusResponseToEffects(
+      { effects: [{ line: 0, show: true, type: 'custom-script', scriptPrompt: '畫一個會旋轉的圓形' }] },
+      1,
+    );
+    const filled = await fillCustomScriptEffectsCode(effects, { pageText: '頁面標題', label: 'test' });
+    assert.equal(filled.length, 1);
+    assert.equal(filled[0].type, 'highlight-box');
+    assert.equal(filled[0].code, undefined);
+    assert.equal(filled[0].prompt, undefined);
+    assert.equal(filled[0].duration, 1.2);
+  } finally {
+    setOpenAIClientForTest(null);
+  }
+});
+
+test('fillCustomScriptEffectsCode falls back to highlight-box when generated code misses the render contract', async () => {
+  setOpenAIClientForTest(streamingChatClient('var canvas = document.createElement("canvas");') as never);
+  try {
+    const effects = mapAutoFocusResponseToEffects(
+      { effects: [{ line: 0, show: true, type: 'custom-script', scriptPrompt: '畫一個會旋轉的圓形' }] },
+      1,
+    );
+    const filled = await fillCustomScriptEffectsCode(effects, { pageText: '頁面標題', label: 'test' });
+    assert.equal(filled.length, 1);
+    assert.equal(filled[0].type, 'highlight-box');
+    assert.equal(filled[0].code, undefined);
+    assert.equal(filled[0].prompt, undefined);
+  } finally {
+    setOpenAIClientForTest(null);
+  }
+});
+
+test('fillCustomScriptEffectsCode leaves non-custom-script effects untouched without calling the LLM', async () => {
+  let called = false;
+  setOpenAIClientForTest({
+    chat: { completions: { create: async () => { called = true; throw new Error('should not be called'); } } },
+  } as never);
+  try {
+    const effects = mapAutoFocusResponseToEffects(
+      { effects: [{ line: 0, show: true, type: 'highlight-box', xPct: 10, yPct: 10, widthPct: 30, heightPct: 30 }] },
+      1,
+    );
+    const filled = await fillCustomScriptEffectsCode(effects, { pageText: '頁面標題', label: 'test' });
+    assert.equal(filled.length, 1);
+    assert.equal(filled[0].type, 'highlight-box');
+    assert.equal(called, false);
+  } finally {
+    setOpenAIClientForTest(null);
+  }
+});
+
 // ── POST animation/auto-focus-ai ────────────────────────────────────────────────
 
 test('POST animation/auto-focus-ai returns AI-generated effects mapped from sentences', async () => {
@@ -1138,6 +1320,142 @@ test('POST animation/auto-focus-ai returns shape and step-list effects', async (
     assert.equal(body.effects[0].shape, 'arrow');
     assert.equal(body.effects[1].type, 'step-list');
     assert.deepEqual(body.effects[1].items, ['第一步：開啟設定', '第二步：選擇選項', '第三步：儲存']);
+
+    const validated = validateAnimationSpec({ version: 1, enabled: true, effects: body.effects });
+    assert.equal(validated.ok, true);
+  } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+  }
+});
+
+/**
+ * Builds an OpenAI client stub for `/auto-focus-ai`'s combined flow: the main
+ * (non-streaming) `callChatJSON` call returns `jsonResponse`, and any
+ * follow-up streaming call (from `fillCustomScriptEffectsCode`'s
+ * `generateCustomScriptCodeStream`) streams `generatedCode` — distinguished
+ * by the `stream` flag on the request body.
+ */
+function autoFocusCustomScriptClient(jsonResponse: unknown, generatedCode: string) {
+  return {
+    chat: {
+      completions: {
+        create: async (body: unknown) => {
+          const { stream } = body as { stream?: boolean };
+          if (stream) {
+            const chunkSize = Math.max(1, Math.ceil(generatedCode.length / 3));
+            const pieces: string[] = [];
+            for (let i = 0; i < generatedCode.length; i += chunkSize) pieces.push(generatedCode.slice(i, i + chunkSize));
+            return {
+              [Symbol.asyncIterator]: async function* () {
+                for (const piece of pieces) {
+                  yield { choices: [{ delta: { content: piece }, finish_reason: null }] };
+                }
+                yield {
+                  choices: [{ delta: {}, finish_reason: 'stop' }],
+                  usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+                };
+              },
+            };
+          }
+          return {
+            choices: [{ message: { content: JSON.stringify(jsonResponse) }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+          };
+        },
+      },
+    },
+  };
+}
+
+test('POST animation/auto-focus-ai returns a custom-script effect with AI-generated code', async () => {
+  seedAnimationPdf(PDF_ID, 1);
+  fs.writeFileSync(path.join(config.storageRoot, PDF_ID, 'pages', 'animuid1.text.txt'), '頁面標題\n數值從 10 成長到 100', 'utf8');
+  const generatedCode =
+    'window.renderAnimation = function (root, api) { api.onFrame(function (frame) { root.style.opacity = String(Math.min(1, frame.t)); }); };';
+  setOpenAIClientForTest(
+    autoFocusCustomScriptClient(
+      {
+        effects: [
+          {
+            line: 0,
+            show: true,
+            type: 'custom-script',
+            scriptPrompt: '畫一個座標平面，顯示一個點沿曲線從左下移動到右上，代表數值隨時間成長',
+            scriptDurationSeconds: 8,
+            xPct: 50,
+            yPct: 50,
+            widthPct: 40,
+            heightPct: 40,
+            exitDuration: 2,
+          },
+        ],
+      },
+      generatedCode,
+    ) as never,
+  );
+
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${PDF_ID}/pages/1/animation/auto-focus-ai`,
+      headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+      payload: { sentences: ['數值從 10 成長到 100。'] },
+    });
+    assert.equal(resp.statusCode, 200);
+    const body = resp.json() as { effects: Array<Record<string, unknown>> };
+    assert.equal(body.effects.length, 1);
+    assert.equal(body.effects[0].type, 'custom-script');
+    assert.equal(body.effects[0].code, generatedCode);
+    assert.equal(body.effects[0].prompt, '畫一個座標平面，顯示一個點沿曲線從左下移動到右上，代表數值隨時間成長');
+    assert.equal(body.effects[0].duration, 8);
+
+    const validated = validateAnimationSpec({ version: 1, enabled: true, effects: body.effects });
+    assert.equal(validated.ok, true);
+  } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+  }
+});
+
+test('POST animation/auto-focus-ai falls back a custom-script effect to highlight-box when generated code is unsafe', async () => {
+  seedAnimationPdf(PDF_ID, 1);
+  fs.writeFileSync(path.join(config.storageRoot, PDF_ID, 'pages', 'animuid1.text.txt'), '頁面標題\n數值從 10 成長到 100', 'utf8');
+  setOpenAIClientForTest(
+    autoFocusCustomScriptClient(
+      {
+        effects: [
+          {
+            line: 0,
+            show: true,
+            type: 'custom-script',
+            scriptPrompt: '畫一個座標平面，顯示一個點沿曲線從左下移動到右上，代表數值隨時間成長',
+            xPct: 50,
+            yPct: 50,
+            widthPct: 40,
+            heightPct: 40,
+          },
+        ],
+      },
+      'fetch("https://evil.example").then(function () {});',
+    ) as never,
+  );
+
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${PDF_ID}/pages/1/animation/auto-focus-ai`,
+      headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+      payload: { sentences: ['數值從 10 成長到 100。'] },
+    });
+    assert.equal(resp.statusCode, 200);
+    const body = resp.json() as { effects: Array<Record<string, unknown>> };
+    assert.equal(body.effects.length, 1);
+    assert.equal(body.effects[0].type, 'highlight-box');
+    assert.equal(body.effects[0].code, undefined);
+    assert.equal(body.effects[0].prompt, undefined);
 
     const validated = validateAnimationSpec({ version: 1, enabled: true, effects: body.effects });
     assert.equal(validated.ok, true);
