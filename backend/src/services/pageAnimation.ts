@@ -14,6 +14,7 @@ export const ANIMATION_EFFECT_TYPES = [
   'pointer',
   'text-callout',
   'shape',
+  'step-list',
   'custom-script',
 ] as const;
 
@@ -50,10 +51,16 @@ export interface AnimationEffect {
   /** SVG primitive drawn by `shape` effects (ignored by other effect types). Defaults to `'circle'` when omitted. */
   shape?: AnimationShapeKind;
   /**
+   * Bullet items for `step-list` effects (ignored by other effect types).
+   * Each item is revealed in sequence (staggered fade-in) over `duration`.
+   * Up to `MAX_STEP_LIST_ITEMS` items, each up to `MAX_STEP_LIST_ITEM_LENGTH` chars.
+   */
+  items?: string[];
+  /**
    * Seconds to remain visible after the fade-in completes before
    * automatically fading back out (same `duration`/`ease` as the fade-in).
    * Only meaningful for overlay effect types (`highlight-box`, `spotlight`,
-   * `pointer`, `text-callout`, `shape`, `custom-script`); ignored by transform effects.
+   * `pointer`, `text-callout`, `shape`, `step-list`, `custom-script`); ignored by transform effects.
    */
   exitDuration?: number;
   /**
@@ -102,6 +109,10 @@ const MAX_DURATION_SECONDS = 600;
 const MAX_TRANSCRIPT_LINE = 999;
 const MAX_START_OFFSET_SECONDS = 60;
 export const MAX_TEXT_CALLOUT_LENGTH = 80;
+/** Max number of bullet items in a `step-list` effect's `items`. */
+export const MAX_STEP_LIST_ITEMS = 6;
+/** Max length (chars) for a single `step-list` item. */
+export const MAX_STEP_LIST_ITEM_LENGTH = 60;
 export const MAX_HINTS = 50;
 export const MAX_HINT_LENGTH = 200;
 /** Max length (chars) for a `custom-script` effect's generated JavaScript `code`. */
@@ -132,6 +143,7 @@ const ALLOWED_PARAM_KEYS: Record<AnimationEffectType, readonly string[]> = {
   'pointer': ['xPct', 'yPct'],
   'text-callout': ['xPct', 'yPct', 'widthPct', 'heightPct'],
   'shape': ['xPct', 'yPct', 'widthPct', 'heightPct'],
+  'step-list': ['xPct', 'yPct', 'widthPct', 'heightPct'],
   'custom-script': ['xPct', 'yPct', 'widthPct', 'heightPct'],
 };
 
@@ -157,6 +169,7 @@ const EffectSchema = z.object({
   startTrigger: StartTriggerSchema.optional(),
   text: z.string().max(MAX_TEXT_CALLOUT_LENGTH).optional(),
   shape: z.enum(ANIMATION_SHAPE_KINDS).optional(),
+  items: z.array(z.string().max(MAX_STEP_LIST_ITEM_LENGTH)).max(MAX_STEP_LIST_ITEMS).optional(),
   exitDuration: z.number().min(0).max(MAX_DURATION_SECONDS).optional(),
   code: z.string().max(MAX_CUSTOM_SCRIPT_CODE_LENGTH).optional(),
   prompt: z.string().max(MAX_CUSTOM_SCRIPT_PROMPT_LENGTH).optional(),
@@ -215,6 +228,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.startTrigger ? { startTrigger: effect.startTrigger } : {}),
       ...(effect.text !== undefined ? { text: effect.text } : {}),
       ...(effect.shape !== undefined ? { shape: effect.shape } : {}),
+      ...(effect.items !== undefined ? { items: effect.items } : {}),
       ...(effect.exitDuration !== undefined ? { exitDuration: effect.exitDuration } : {}),
       ...(effect.code !== undefined ? { code: effect.code } : {}),
       ...(effect.prompt !== undefined ? { prompt: effect.prompt } : {}),

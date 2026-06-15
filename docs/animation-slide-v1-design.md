@@ -41,6 +41,9 @@
 >
 > 擴充註記（2026-06-16，SVG 圖元效果）：
 > - 新增 `shape` 效果類型：與 `highlight-box`/`spotlight`/`text-callout` 同為 overlay 疊加層（`OVERLAY_EFFECT_TYPES`），新增 `effect.shape?: 'circle' | 'rect' | 'ellipse' | 'arrow'`（預設 `'circle'`）決定渲染的 SVG 圖元種類，位置/大小沿用 §5.1 的 `xPct`/`yPct`/`widthPct`/`heightPct`（預設 30/30/40/40），固定使用玫瑰色（`#f43f5e`）描邊、可選 `exitDuration` 自動淡出（§5.3）。動畫編輯器新增「圖形種類」下拉選單與「圓圈圈選重點」範本。為 §12 V2「SVG 圖元」之 v1 落地（僅基本幾何圖元，不含可調色彩/線寬與互動編輯）。詳見 §5.5、§6.6、§7、§12。
+>
+> 擴充註記（2026-06-16，逐步條列效果）：
+> - 新增 `step-list` 效果類型：與 `highlight-box`/`spotlight`/`text-callout`/`shape` 同為 overlay 疊加層（`OVERLAY_EFFECT_TYPES`），新增 `effect.items?: string[]`（最多 `MAX_STEP_LIST_ITEMS` = 6 條、每條最長 `MAX_STEP_LIST_ITEM_LENGTH` = 60 字）作為條列項目，位置/大小沿用 §5.1 的 `xPct`/`yPct`/`widthPct`/`heightPct`（預設 30/30/40/40）。容器在 `effect.start` 立即可見，各條列項目以 `effect.duration` 為總長度逐一交錯淡入，可選填 `exitDuration` 整體淡出（§5.3）。動畫編輯器新增多行文字輸入（每行一條，最多 6 行）與「條列要點」範本。為 §12 V2「逐步條列」之 v1 落地（僅純文字、固定樣式，不含巢狀清單/編號/AI 生成）。詳見 §5.6、§6.6、§7、§12。
 
 ---
 
@@ -182,6 +185,7 @@ interface AnimationSpec {
 | spotlight | 於指定區域外淡入半透明黑色遮罩，聚焦該區域 | opacity: 0 → 1 |
 | text-callout | 於指定區域淡入一個文字說明框 | opacity: 0 → 1，文字內容見 `effect.text` |
 | shape | 於指定區域淡入一個 SVG 圖元（圓形/方框/橢圓/箭頭） | opacity: 0 → 1，圖元種類見 `effect.shape`，詳見 §5.5 |
+| step-list | 於指定區域顯示一個條列方框，項目逐一交錯淡入 | 容器 opacity: 0 → 1（立即可見），各項目逐一交錯淡入，項目內容見 `effect.items`，詳見 §5.6 |
 | custom-script | 於指定區域立即顯示一個由 AI 依提示詞產生的自訂 JavaScript 動畫（sandboxed iframe），不套用淡入 | opacity: 直接設為 1（無淡入過渡），程式碼見 `effect.code`，詳見 §5.4 |
 
 easing 白名單：`none`、`power1.in`、`power1.out`、`power1.inOut`、`power2.inOut`。
@@ -243,7 +247,7 @@ easing 白名單：`none`、`power1.in`、`power1.out`、`power1.inOut`、`power
 
 第二段動畫的語意依效果類型分為兩種（見 `frontend/src/lib/animationSpec.ts` 的 `OVERLAY_EFFECT_TYPES`/`TRANSFORM_EFFECT_TYPES`）：
 
-- **`highlight-box`/`spotlight`/`pointer`/`text-callout`/`shape`/`custom-script`（`OVERLAY_EFFECT_TYPES`）**：「自動消失」——以 `autoAlpha: 1 → 0` 淡出整個 overlay。渲染：`buildGsapTimeline.ts` 於既有 `fromTo(overlay, {autoAlpha:0}, {autoAlpha:1, ...})` 之後，若 `effect.exitDuration !== undefined`，再加一個 `to(overlay, {autoAlpha:0, ...}, start+duration+exitDuration)`。
+- **`highlight-box`/`spotlight`/`pointer`/`text-callout`/`shape`/`step-list`/`custom-script`（`OVERLAY_EFFECT_TYPES`）**：「自動消失」——以 `autoAlpha: 1 → 0` 淡出整個 overlay。渲染：`buildGsapTimeline.ts` 於既有 `fromTo(overlay, {autoAlpha:0}, {autoAlpha:1, ...})` 之後，若 `effect.exitDuration !== undefined`，再加一個 `to(overlay, {autoAlpha:0, ...}, start+duration+exitDuration)`（`step-list` 的進場動畫機制不同，見 §5.6，但 `exitDuration` 淡出仍套用同一個整體 `autoAlpha` 機制）。
 - **`fade-in`/`zoom-*`/`pan-*`（`TRANSFORM_EFFECT_TYPES`）**：「自動恢復原狀」——將整頁 `stage` 動畫回進場前的狀態（進場 tween 的反向，相同 `duration`/`ease`）。渲染：`buildGsapTimeline.ts` 於既有 `fromTo(stage, from, {...to, ...})` 之後，若 `effect.exitDuration !== undefined`，再加一個 `to(stage, {...from, ...}, start+duration+exitDuration)`（`from`/`to` 即進場 tween 的起訖值，例如 `fade-in` 為 `{autoAlpha:0}`/`{autoAlpha:1}`、`pan-left` 為 `{xPercent:d}`/`{xPercent:-d}`）。
 
 ### 5.4 自訂腳本動畫（custom-script）
@@ -357,6 +361,28 @@ easing 白名單：`none`、`power1.in`、`power1.out`、`power1.inOut`、`power
 - 驗證規則：`shape` 為選填 enum（`circle`/`rect`/`ellipse`/`arrow`，`ANIMATION_SHAPE_KINDS`，定義於 `backend/src/services/pageAnimation.ts`，前端常數同步於 `frontend/src/lib/animationSpec.ts`）；未提供時前端 `getShapeKind()` 回退為 `'circle'`。
 - **v1 範圍**：固定描邊顏色與線寬，不提供顏色/線寬等樣式自訂；圖元種類固定為四種基本幾何形狀，不含任意路徑/自由繪製。後續擴充見 §12。
 
+### 5.6 逐步條列效果（step-list）
+
+`step-list` 是 §12 V2「逐步條列」的 v1 實作：與 `highlight-box`/`spotlight`/`text-callout`/`shape` 共用同一套 overlay 疊加層機制（§6.6），額外新增 `effect.items` 欄位作為條列項目清單。
+
+```ts
+// effect.params 同 §5.1（位置與大小，0~100 百分比，未提供時套用預設值 30/30/40/40）
+{
+  xPct?: number;
+  yPct?: number;
+  widthPct?: number;
+  heightPct?: number;
+}
+// effect.items：條列項目（純文字陣列），最多 MAX_STEP_LIST_ITEMS（6）條，每條最長 MAX_STEP_LIST_ITEM_LENGTH（60）字
+string[]
+```
+
+- 渲染為一個深色半透明圓角矩形（與 `text-callout` 同色），內含一個 `<ul>`/`<li>` 條列清單，依序顯示 `effect.items`（前端會先 `trim()` 並過濾掉空白項目）。
+- 動畫時機：容器本身在 `effect.start` 立即以 `tl.set(overlay, {autoAlpha:1}, effect.start)` 變為可見（不做整體淡入）；各 `<li>` 項目再各自以 `{autoAlpha:0, x:-8} → {autoAlpha:1, x:0}` 交錯淡入（`tl.fromTo(items, ..., {..., stagger}, effect.start)`），其中 `stagger = effect.duration / items.length`，故所有項目播放完畢的總時長恰為 `effect.duration`。
+- 可選填 `exitDuration`：與其他 `OVERLAY_EFFECT_TYPES` 相同機制，淡出時以整個 overlay 的 `autoAlpha: 1 → 0` 淡出（見 §5.3）。
+- 驗證規則：`items` 為選填字串陣列，長度上限 `MAX_STEP_LIST_ITEMS`（6），每個字串長度上限 `MAX_STEP_LIST_ITEM_LENGTH`（60 字）；皆定義於 `backend/src/services/pageAnimation.ts`，前端常數同步於 `frontend/src/lib/animationSpec.ts`。為避免編輯器多行輸入框的中間編輯狀態（例如刪除整行文字）觸發驗證錯誤，`items` 與其元素皆未設定 `.min(1)` 下限——空陣列或空字串元素皆視為合法，渲染時由前端過濾。
+- **v1 範圍**：條列項目僅支援純文字、固定樣式（不含巢狀清單、編號、圖示等自訂）；AI 自動產生條列內容留待後續版本（見 §12）。
+
 ## 6. 前端架構
 
 ### 6.1 新增檔案
@@ -394,10 +420,10 @@ Props：`renderType`、`src`（由呼叫端算好，含 displayedImageSrc 防閃
 
 ### 6.6 效果 overlay（EffectOverlay）
 
-`highlight-box`/`spotlight`/`text-callout`/`shape`/`custom-script` 效果（`OVERLAY_EFFECT_TYPES`，定義於 `frontend/src/lib/animationSpec.ts`）以額外的疊加 `<div>`（`shape` 為 `<svg>`，`custom-script` 為 `<iframe>`）實作，渲染於 animated stage 內（`img` 與 `children` 之後）：
+`highlight-box`/`spotlight`/`text-callout`/`shape`/`step-list`/`custom-script` 效果（`OVERLAY_EFFECT_TYPES`，定義於 `frontend/src/lib/animationSpec.ts`）以額外的疊加 `<div>`（`shape` 為 `<svg>`，`custom-script` 為 `<iframe>`）實作，渲染於 animated stage 內（`img` 與 `children` 之後）：
 
-- `SlideRenderer.tsx` 對 `spec.effects` 中屬於 `OVERLAY_EFFECT_TYPES` 的每個效果，渲染一個帶 `data-effect-id={effect.id}` 的元素（`EffectOverlay`），初始 `opacity: 0`、`position: absolute`、`pointer-events: none`，位置/大小取自 `getFocusEffectParams(effect)`（`xPct`/`yPct`/`widthPct`/`heightPct`，含預設值）；`text-callout` 額外以 `effect.text` 作為文字內容，`shape` 渲染為 `viewBox="0 0 100 100"` 的 `<svg>`，依 `getShapeKind(effect)` 繪出對應圖元（詳見 §5.5），`custom-script` 則為 `<iframe sandbox="allow-scripts" srcDoc={buildCustomScriptSandboxDoc(effect.code)} />`（詳見 §5.4）。
-- `buildGsapTimeline.ts` 透過 `stage.querySelector('[data-effect-id="..."]')` 找到對應 overlay，對其 `autoAlpha` 做 `fromTo(0 → 1)`（與 `fade-in` 相同手法，但作用對象是 overlay 而非整個 stage）。
+- `SlideRenderer.tsx` 對 `spec.effects` 中屬於 `OVERLAY_EFFECT_TYPES` 的每個效果，渲染一個帶 `data-effect-id={effect.id}` 的元素（`EffectOverlay`），初始 `opacity: 0`、`position: absolute`、`pointer-events: none`，位置/大小取自 `getFocusEffectParams(effect)`（`xPct`/`yPct`/`widthPct`/`heightPct`，含預設值）；`text-callout` 額外以 `effect.text` 作為文字內容，`shape` 渲染為 `viewBox="0 0 100 100"` 的 `<svg>`，依 `getShapeKind(effect)` 繪出對應圖元（詳見 §5.5），`step-list` 渲染為一個深色圓角矩形內含 `<ul>`/`<li>` 條列清單（依 `effect.items`，過濾空白項目後逐項顯示，詳見 §5.6），`custom-script` 則為 `<iframe sandbox="allow-scripts" srcDoc={buildCustomScriptSandboxDoc(effect.code)} />`（詳見 §5.4）。
+- `buildGsapTimeline.ts` 透過 `stage.querySelector('[data-effect-id="..."]')` 找到對應 overlay，對其 `autoAlpha` 做 `fromTo(0 → 1)`（與 `fade-in` 相同手法，但作用對象是 overlay 而非整個 stage）；`step-list` 另有逐項交錯淡入機制，詳見 §5.6。
 - overlay 是 `stage` 的子元素，因此會跟著 `stage` 的 pan/zoom transform 一起移動縮放，位置（百分比座標）相對於投影片內容維持不變。
 - static 分支（無動畫）不渲染 overlay。
 
@@ -559,7 +585,7 @@ detail API 的 page 物件增加 `render_type` 與 `animation_spec_url`。
 ## 12. 後續擴充方向
 
 - V1.1：~~drawing mode 自動暫停~~（已於 `PlayPage.tsx` 新增 `useEffect`，當 `drawingMode` 變為 `true` 時自動呼叫 `audioRef.current?.pause()`，避免講者繪圖時投影片自動切換或動畫繼續播放；分支 `feature/drawing-mode-auto-pause-20260615`）、~~preset 快速套用~~（已於動畫編輯器「新增效果」按鈕旁新增「套用範本」下拉選單，選擇後依範本預設值新增一個效果，例如「標題淡入」、「鏡頭推進強調」、「向左移動鏡頭」、「紅框圈選重點」、「聚光燈聚焦」、「左下角文字說明」、「指標標示」，涵蓋常用 type/duration/ease/exitDuration/params 組合，新增後仍可自行調整；分支 `feature/animation-effect-presets-20260615`）、~~raw JSON 檢視~~（已於動畫編輯器新增「原始 JSON」分頁，以唯讀 `<textarea>` 顯示 `JSON.stringify(draft, null, 2)` 並提供「複製 JSON」按鈕；分支 `feature/animation-effects-raw-json-view-20260615`）、~~效果排序~~（已於動畫編輯器效果卡片新增「上移／下移」按鈕，調整 `AnimationSpec.effects` 陣列順序，同時決定重疊 overlay 效果的疊加層次；分支 `feature/animation-effects-reorder-20260615`）、~~跨頁複製~~（已於動畫編輯器新增「複製本頁效果」／「貼上效果」按鈕：複製結果存於不隨頁面切換清空的本地狀態，貼上時為每個效果產生新的 `id` 並附加到目前頁面的效果清單，上限為 `MAX_SLIDE_ANIMATION_EFFECTS`；分支 `feature/animation-effects-cross-page-copy-20260615`）、~~為 `fade-in`/`zoom-*`/`pan-*` 等整頁 transform 效果提供對稱的「消失（恢復原狀）」可選機制（見 §5.3）~~（已將 `exitDuration` 擴展至 `TRANSFORM_EFFECT_TYPES`：設定後 `buildGsapTimeline.ts` 會在 `start+duration+exitDuration` 時間點新增一個將 `stage` 動畫回進場前狀態的 `to()` tween（進場 tween 的反向，相同 `duration`/`ease`），動畫編輯器的「顯示後自動消失」控制項同步顯示於 transform 效果並改用「完成後自動恢復原狀」文案；分支 `feature/animation-transform-exit-revert-20260615`）。
-- V2：overlay image（小圖疊加內容）、物件 target、公式、逐步條列；依 `AnimationSpec.hints` 與逐字稿內容由 LLM 生成動畫 JSON——焦點方框（`highlight-box`/`spotlight`）的時機與位置已於 §7.4 落地，~~`text-callout`（含 AI 生成文案）的 AI 生成~~（已將 `auto-focus-ai` 的 `AUTO_FOCUS_AI_EFFECT_TYPES` 擴充為 `highlight-box`/`spotlight`/`text-callout`，LLM 可為適合以精簡摘要強化重點的句子選擇淡入一段 AI 生成文案（`text`，上限 `MAX_TEXT_CALLOUT_LENGTH` = 80 字），缺少有效文字時退回 `highlight-box`；分支 `feature/animation-auto-focus-ai-text-callout-20260615`）；~~SVG 圖元~~（已新增 `shape` 效果類型，提供 `circle`/`rect`/`ellipse`/`arrow` 四種基本 SVG 圖元 overlay，位置/大小與淡入淡出機制沿用 `highlight-box`/`text-callout`，固定玫瑰色描邊、不提供樣式自訂；分支 `feature/animation-svg-shape-effect-20260616`）；`custom-script` 等其他效果類型的 AI 生成、overlay image、物件 target、公式、逐步條列仍待後續。
+- V2：overlay image（小圖疊加內容）、物件 target、公式、逐步條列；依 `AnimationSpec.hints` 與逐字稿內容由 LLM 生成動畫 JSON——焦點方框（`highlight-box`/`spotlight`）的時機與位置已於 §7.4 落地，~~`text-callout`（含 AI 生成文案）的 AI 生成~~（已將 `auto-focus-ai` 的 `AUTO_FOCUS_AI_EFFECT_TYPES` 擴充為 `highlight-box`/`spotlight`/`text-callout`，LLM 可為適合以精簡摘要強化重點的句子選擇淡入一段 AI 生成文案（`text`，上限 `MAX_TEXT_CALLOUT_LENGTH` = 80 字），缺少有效文字時退回 `highlight-box`；分支 `feature/animation-auto-focus-ai-text-callout-20260615`）；~~SVG 圖元~~（已新增 `shape` 效果類型，提供 `circle`/`rect`/`ellipse`/`arrow` 四種基本 SVG 圖元 overlay，位置/大小與淡入淡出機制沿用 `highlight-box`/`text-callout`，固定玫瑰色描邊、不提供樣式自訂；分支 `feature/animation-svg-shape-effect-20260616`）；~~逐步條列~~（已新增 `step-list` 效果類型，提供條列文字 overlay，容器立即可見、各項目以 `effect.duration` 為總長度逐一交錯淡入，位置/大小與整體淡出機制沿用 `highlight-box`/`text-callout`；分支 `feature/animation-step-list-effect-20260616`）；`custom-script` 等其他效果類型的 AI 生成、overlay image、物件 target、公式仍待後續。
 - V2.x：`custom-script`（§5.4）的資料集/模型推論管線——例如載入 MNIST 並以 ResNet50 產生 embedding、PCA 降維至二維後動態顯示分類過程——需要後端提供資料集存取與模型推論服務（sandbox 本身禁止網路存取，無法在前端直接載入外部資料）；v1 僅提供通用 sandboxed 自訂腳本框架與 AI 生成/迭代迴圈，不含此類資料管線。
 - V2.x：`window.Manim`（manim 風格輔助函式庫，§5.4）的擴充——`Axes`/`NumberPlane`（座標軸、格線、`coordsToPoint`）、`MathTex`/`Tex`（需離線 vendored KaTeX 字型，避免 sandbox 網路存取限制）、`transform` 的真正路徑變形（path morphing，而非目前僅線性插值共有屬性）、3D 場景；v1 僅提供 2D SVG mobject（`circle`/`square`/`rectangle`/`line`/`arrow`/`dot`/`polygon`/`text`）與 `Create`/`Write`/`FadeIn`/`FadeOut`/`Transform`/`Shift`/`Rotate`/`Scale`/`GrowFromCenter` 等基本動畫手法。
 - V3：視覺化時間軸、關鍵影格、3D renderer、動畫 MP4 匯出。

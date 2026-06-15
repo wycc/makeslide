@@ -6,6 +6,8 @@ import {
   MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES,
   MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH,
   MAX_SLIDE_ANIMATION_EFFECTS,
+  MAX_STEP_LIST_ITEMS,
+  MAX_STEP_LIST_ITEM_LENGTH,
   OVERLAY_EFFECT_TYPES,
   SLIDE_ANIMATION_EFFECT_TYPES,
   animationTimelineDurationSeconds,
@@ -330,4 +332,21 @@ test("getShapeKind defaults to 'circle' when unset, and reads the effect's shape
   for (const kind of ANIMATION_SHAPE_KINDS) {
     assert.equal(getShapeKind({ ...base, shape: kind }), kind);
   }
+});
+
+test("SLIDE_ANIMATION_EFFECT_TYPES and OVERLAY_EFFECT_TYPES include 'step-list'", () => {
+  assert.ok(SLIDE_ANIMATION_EFFECT_TYPES.includes("step-list"));
+  assert.ok(OVERLAY_EFFECT_TYPES.includes("step-list"));
+});
+
+test("getFocusEffectParams defaults step-list to the 30/30/40/40 focus box", () => {
+  const effect = {
+    id: "e1", target: "slide" as const, type: "step-list" as const, ease: "none" as const, start: 0, duration: 1,
+  };
+  assert.deepEqual(getFocusEffectParams(effect), { xPct: 30, yPct: 30, widthPct: 40, heightPct: 40 });
+});
+
+test("MAX_STEP_LIST_ITEMS and MAX_STEP_LIST_ITEM_LENGTH match the backend limits", () => {
+  assert.equal(MAX_STEP_LIST_ITEMS, 6);
+  assert.equal(MAX_STEP_LIST_ITEM_LENGTH, 60);
 });
