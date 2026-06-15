@@ -252,15 +252,15 @@ if (sourceType === 'pdf' && !isTextImport) {
 export function loadFigureManifest(pdfId: string): FigureManifest | null;
 export function getPageFigures(pdfId: string, pageNumber: number): FigureEntry[];
 export function figureImagePath(pdfId: string, figure: FigureEntry): string; // 絕對路徑
+export function getFigureReferencesForPage(pdfId: string, pageNumber: number, max?: number): FigureEntry[];
+export function buildFigureReferenceNotes(figures: FigureEntry[]): string | null;
 ```
 
 並在 `storage.ts` 新增對應的路徑 helper：`figuresDir(pdfId)`、`figureManifestPath(pdfId)`、
 `figureFilePath(pdfId, filename)`。
 
-未來的圖片生成步驟（如 `renderTextPagesWithLlm.ts` / `imagePromptTemplates.ts`）可呼叫
-`getPageFigures()`，將對應頁面的圖表圖片與圖說/上下文一併附加到生成 prompt 中
-（作法可參考 `animationAutoFocus.ts` 已有的「將圖片轉成 data URL 附加到 LLM 請求」模式）。
-本次 V1 僅建立素材與讀取 API，實際串接留待後續功能規劃。
+`getFigureReferencesForPage` / `buildFigureReferenceNotes` 是給「投影片圖片重新生成」流程使用的
+整合 API，詳見第 10 節。
 
 ## 8. 測試計畫
 
@@ -277,7 +277,53 @@ export function figureImagePath(pdfId: string, figure: FigureEntry): string; // 
 
 ## 9. 未來工作
 
-- 將 `figures.json` 中的圖表自動對應到大綱投影片（例如依頁碼或語意比對），並注入
-  `buildImagePrompt`，讓 LLM 生成投影片圖片時可參考原始圖表與圖說。
 - 偵測純向量繪圖區域（無 raster image，但該頁有大量繪圖類 operator 集中於特定區域）。
 - 前端提供圖表素材瀏覽 / 挑選介面。
+
+## 10. 整合至投影片圖片（重新）生成（已完成）
+
+由於一般 PDF 匯入的「投影片圖片」就是 PDF 原始頁面的 render（`renderPages`，與
+`extract_figures` 一樣以 1..pageCount 的 PDF 頁碼為索引，兩者天然 1:1 對應），第一次產生
+投影片時並不會呼叫 LLM 重新畫圖，圖表本來就已經包含在頁面截圖中。
+
+真正會呼叫 `buildImagePrompt` + `images.edit` 重新生成投影片圖片的是「AI 重新生成圖片」
+流程，且其 `page_number` 即為原始 PDF 頁碼，因此可以直接用
+`getFigureReferencesForPage(pdfId, pageNumber)` 取得該頁的圖表：
+
+- `backend/src/routes/pdfs/page-operations.ts`
+  （`POST /api/pdfs/:id/pages/:n/regenerate-image`，單頁、依提示詞重新生成候選圖）
+- `backend/src/worker/regenerate.ts` 的 `runRegenerateImages`
+  （`POST /api/pdfs/:id/regenerate` 的 `images` 步驟，批次重新生成多頁）
+
+兩處皆在組 prompt 與呼叫 `images.edit` 前加入：
+
+```ts
+const figureRefs = getFigureReferencesForPage(pdfId, pageNumber); // 面積最大的最多 2 張
+const basePrompt = buildImagePrompt({
+  // ...原有參數
+  figureNotes: buildFigureReferenceNotes(figureRefs),
+});
+const figureRefFiles = await Promise.all(
+  figureRefs.map((figure, i) =>
+    fs.promises.readFile(figureImageAbsPath(pdfId, figure))
+      .then((buf) => toFile(buf, `figure-ref-${i + 1}.png`, { type: 'image/png' })),
+  ),
+);
+const editImage = figureRefFiles.length > 0
+  ? [currentImageForEdit, ...figureRefFiles]
+  : currentImageForEdit; // images.edit 支援多圖陣列（沿用 inpaint-image 已驗證的模式）
+```
+
+- `buildImagePrompt` 新增 `figureNotes?: string | null` 參數，插在「頁面逐字稿」之後、
+  `textBody` 之前。`buildFigureReferenceNotes` 會列出每張參考圖的 `caption`/`context`，
+  並提示 LLM 「盡量保留這些圖表的關鍵資訊、數據或趨勢，不需要逐一複製其外觀」。
+- 沒有 `figures.json`（非 PDF 匯入）或該頁無圖表時，`figureRefs` 為空陣列，
+  `editImage` 維持原本單圖、`figureNotes` 為 `null`（不插入新段落）——行為與整合前完全相同。
+- `runRegenerateImages` 另在 `startArtifact` 的 metadata 加入 `figureReferenceCount`，
+  方便之後從時間紀錄觀察圖表參考的命中率。
+- 測試：`backend/test/image-prompt-templates.test.ts`、
+  `backend/test/pdf-figures.test.ts`（新增 `getFigureReferencesForPage` /
+  `buildFigureReferenceNotes` 案例）、
+  `backend/test/figure-reference-image-generation.test.ts`（端對端驗證
+  `/regenerate-image` 與 `/regenerate` 的 `images` 步驟皆會把圖表當作參考圖傳給
+  `images.edit`，且 prompt 含圖說文字）。

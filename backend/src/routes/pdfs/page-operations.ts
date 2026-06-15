@@ -13,6 +13,7 @@ import { callChatJSON } from '../../services/openai';
 import { getOpenAIClient } from '../../services/openai';
 import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
+import { buildFigureReferenceNotes, figureImageAbsPath, getFigureReferencesForPage } from '../../services/pdfFigures';
 import { loadPromptTemplate, renderPromptTemplate } from '../../services/promptTemplates';
 import { safeJoinPdfPath } from '../../services/storage';
 import { synthesizeAudio } from '../../worker/steps/synthesizeAudio';
@@ -647,10 +648,22 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       const currentImageBuffer = await fs.promises.readFile(currentImagePath);
       const currentImageForEdit = await toFile(currentImageBuffer, `page-${n}.jpg`, { type: 'image/jpeg' });
 
+      const figureRefs = getFigureReferencesForPage(id, n);
+      const figureRefFiles = await Promise.all(
+        figureRefs.map((figure, index) =>
+          fs.promises
+            .readFile(figureImageAbsPath(id, figure))
+            .then((buf) => toFile(buf, `figure-ref-${index + 1}.png`, { type: 'image/png' })),
+        ),
+      );
+      const editImage: Parameters<typeof client.images.edit>[0]['image'] =
+        figureRefFiles.length > 0 ? [currentImageForEdit, ...figureRefFiles] : currentImageForEdit;
+
       const basePrompt = buildImagePrompt({
         stylePrompt: IMAGE_PROMPT_TEMPLATES[0]?.prompt_en,
         pageText,
         pageScript,
+        figureNotes: buildFigureReferenceNotes(figureRefs),
         userAdjustmentPrompt: [
           historyPrompt ? `Conversation history for iterative image editing:\n${historyPrompt}` : '',
           `Current user adjustment request:\n${prompt}`,
@@ -664,7 +677,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
 
       const edited = await client.images.edit({
         model: config.openaiImageModel,
-        image: currentImageForEdit,
+        image: editImage,
         prompt: editPrompt,
         size: '1536x1024',
       });

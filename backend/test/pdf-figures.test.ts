@@ -4,7 +4,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '../src/config';
 import { extractPdfFigures } from '../src/worker/steps/extractPdfFigures';
-import { figureImageAbsPath, getPageFigures, loadFigureManifest } from '../src/services/pdfFigures';
+import {
+  buildFigureReferenceNotes,
+  figureImageAbsPath,
+  getFigureReferencesForPage,
+  getPageFigures,
+  loadFigureManifest,
+} from '../src/services/pdfFigures';
+import type { FigureEntry } from '../src/worker/steps/extractPdfFigures';
 
 // Real production PDF checked into storage/ (gitignored), used as a fixture
 // because it contains an embedded matplotlib chart with a "Figure 10" caption
@@ -42,6 +49,13 @@ test('extractPdfFigures extracts figures + captions from a real PDF', async (t) 
     assert.ok(areaPct > 5, `expected figure area > 5%, got ${areaPct}`);
     assert.ok(fs.existsSync(figureImageAbsPath(PDF_ID, fig)), 'extracted PNG should exist on disk');
 
+    // getFigureReferencesForPage exposes the same figure for the regenerate-image flow.
+    const refs = getFigureReferencesForPage(PDF_ID, 26);
+    assert.deepEqual(refs, page26);
+    const notes = buildFigureReferenceNotes(refs);
+    assert.match(notes ?? '', /Figure 10/);
+    assert.match(notes ?? '', /參考圖表 1/);
+
     // Pages with no embedded images should have no figures.
     assert.deepEqual(getPageFigures(PDF_ID, 2), []);
     assert.deepEqual(getPageFigures(PDF_ID, 3), []);
@@ -60,4 +74,59 @@ test('extractPdfFigures extracts figures + captions from a real PDF', async (t) 
 test('loadFigureManifest / getPageFigures return null/[] when no manifest exists', () => {
   assert.equal(loadFigureManifest('does-not-exist'), null);
   assert.deepEqual(getPageFigures('does-not-exist', 1), []);
+});
+
+test('getFigureReferencesForPage caps at `max`, keeping the largest figures first', () => {
+  const SYNTH_PDF_ID = 'pdf-figures-synth-01';
+  const synthDir = path.join(config.storageRoot, SYNTH_PDF_ID);
+  fs.mkdirSync(synthDir, { recursive: true });
+  const figure = (id: string, areaPct: number): FigureEntry => ({
+    id,
+    imagePath: `figures/${id}.png`,
+    width: 100,
+    height: 100,
+    bbox: { xPct: 0, yPct: 0, widthPct: areaPct, heightPct: 1 },
+    caption: null,
+    context: null,
+  });
+  try {
+    fs.writeFileSync(
+      path.join(synthDir, 'figures.json'),
+      JSON.stringify({
+        pdfId: SYNTH_PDF_ID,
+        generatedAt: new Date().toISOString(),
+        pages: [
+          { pageNumber: 1, figures: [figure('small', 0.1), figure('large', 0.6), figure('medium', 0.3)] },
+        ],
+      }),
+      'utf8',
+    );
+
+    const refs = getFigureReferencesForPage(SYNTH_PDF_ID, 1, 2);
+    assert.deepEqual(refs.map((f) => f.id), ['large', 'medium']);
+
+    // No cap needed when figure count is within `max`.
+    assert.equal(getFigureReferencesForPage(SYNTH_PDF_ID, 1, 5).length, 3);
+  } finally {
+    fs.rmSync(synthDir, { recursive: true, force: true });
+  }
+});
+
+test('buildFigureReferenceNotes formats captions and falls back when missing', () => {
+  assert.equal(buildFigureReferenceNotes([]), null);
+
+  const withCaption: FigureEntry = {
+    id: 'p1-img1',
+    imagePath: 'figures/p1-img1.png',
+    width: 100,
+    height: 100,
+    bbox: { xPct: 0, yPct: 0, widthPct: 0.5, heightPct: 0.5 },
+    caption: 'Figure 1: revenue growth',
+    context: 'Figure 1: revenue growth across regions',
+  };
+  const withoutCaption: FigureEntry = { ...withCaption, id: 'p1-img2', caption: null, context: null };
+
+  const notes = buildFigureReferenceNotes([withCaption, withoutCaption]);
+  assert.match(notes ?? '', /參考圖表 1：Figure 1: revenue growth/);
+  assert.match(notes ?? '', /參考圖表 2：\(無圖說文字\)/);
 });
