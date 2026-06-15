@@ -876,6 +876,7 @@ export interface StartRegenerateOptions {
   scripts?: { prompt?: string; script_max_chars_per_page?: number } | null;
   audio?: { voice?: string; speed?: number } | null;
   images?: { prompt: string } | null;
+  animations?: Record<string, never> | null;
   page_numbers?: number[] | null;
 }
 
@@ -904,6 +905,9 @@ export async function startRegenerateJob(
   }
   if (options.images) {
     body.images = { prompt: options.images.prompt };
+  }
+  if (options.animations) {
+    body.animations = {};
   }
   if (options.page_numbers?.length) {
     body.page_numbers = options.page_numbers;

@@ -23,7 +23,7 @@ type ActiveTab = 'play' | 'qa';
 type SyncRole = 'master' | 'follower';
 type FullscreenLayout = 'image' | 'split' | 'edit';
 type DrawingTool = 'pen' | 'cursor' | 'eraser';
-type RegenOptions = { image: boolean; script: boolean; audio: boolean };
+type RegenOptions = { image: boolean; script: boolean; audio: boolean; animation: boolean };
 type ImageEditRegion = { x: number; y: number; w: number; h: number } | null;
 
 // ── Full context interface ────────────────────────────────────────────────────

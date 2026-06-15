@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { ChatCompletionContentPart } from 'openai/resources/chat/completions';
 import { callChatJSON } from './openai';
 import type { AnimationEffect, AnimationEffectType } from './pageAnimation';
+import { MAX_SLIDE_ANIMATION_EFFECTS } from './pageAnimation';
 
 /** Effect types this generator may choose; matches `FOCUS_EFFECT_TYPES` on the frontend. */
 const AUTO_FOCUS_AI_EFFECT_TYPES = ['highlight-box', 'spotlight'] as const;
@@ -162,4 +163,29 @@ export async function generateAiFocusEffects(params: {
     ],
   });
   return mapAutoFocusResponseToEffects(result.data, limit);
+}
+
+/** Effect type and fade duration used by `generateRuleBasedFocusEffects`, matching the frontend's `generateFocusEffectsFromTranscript`. */
+const RULE_BASED_FOCUS_EFFECT_TYPE: AnimationEffectType = 'highlight-box';
+const RULE_BASED_FOCUS_DURATION_SECONDS = 1.2;
+
+/**
+ * Generates one `highlight-box` focus effect per transcript sentence, each
+ * synced via `startTrigger: { type: 'transcript-line', line }` so it fades in
+ * when that sentence starts playing. Mirrors the frontend's
+ * `generateFocusEffectsFromTranscript` (rule-based, no LLM call), capped at
+ * `MAX_SLIDE_ANIMATION_EFFECTS`. Used by the "regenerate" batch job's
+ * animation step.
+ */
+export function generateRuleBasedFocusEffects(sentenceCount: number): AnimationEffect[] {
+  const count = Math.min(Math.max(0, sentenceCount), MAX_SLIDE_ANIMATION_EFFECTS);
+  return Array.from({ length: count }, (_, line) => ({
+    id: `rule-focus-${line}-${crypto.randomUUID()}`,
+    target: 'slide',
+    type: RULE_BASED_FOCUS_EFFECT_TYPE,
+    start: 0,
+    duration: RULE_BASED_FOCUS_DURATION_SECONDS,
+    ease: 'power1.out',
+    startTrigger: { type: 'transcript-line', line },
+  }));
 }

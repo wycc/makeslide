@@ -5,6 +5,7 @@ interface RegenOptions {
   image: boolean;
   script: boolean;
   audio: boolean;
+  animation: boolean;
 }
 
 interface RegenAllDialogProps {
@@ -59,7 +60,7 @@ export function RegenAllDialog({
       <div className="w-full max-w-xl rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl">
         <h3 className="mb-3 text-sm font-semibold text-slate-200">選擇重生項目</h3>
         <p className="mb-3 text-xs text-slate-400">
-          可多選；執行順序固定為 <span className="font-semibold text-slate-200">圖檔 → 逐字稿 → 語音</span>。
+          可多選；執行順序固定為 <span className="font-semibold text-slate-200">圖檔 → 逐字稿 → 語音 → 動畫</span>。
         </p>
         <div className="mb-3 rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-3 py-2 text-xs text-fuchsia-200">
           {regenSelectedPages.size > 0
@@ -100,7 +101,22 @@ export function RegenAllDialog({
             />
             <span>語音</span>
           </label>
+          <label className="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-200">
+            <input
+              type="checkbox"
+              className="accent-fuchsia-500"
+              checked={regenOptions.animation}
+              onChange={(e) => onRegenOptionsChange((prev) => ({ ...prev, animation: e.target.checked }))}
+              disabled={disabled}
+            />
+            <span>動畫</span>
+          </label>
         </div>
+        {regenOptions.animation ? (
+          <p className="mb-2 rounded-md border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-200">
+            將依每頁逐字稿的句子數量，自動產生對應的「醒目方框」焦點動畫（與動畫編輯分頁的「一次性產生」效果相同），並覆寫該頁原有的動畫設定。
+          </p>
+        ) : null}
         {regenOptions.script || regenOptions.audio ? (
           <div className="mb-3 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2">
             <div className="flex items-center justify-between gap-2">

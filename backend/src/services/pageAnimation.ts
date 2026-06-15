@@ -89,7 +89,8 @@ export interface AnimationSpec {
   hints?: Record<string, string>;
 }
 
-const MAX_EFFECTS = 20;
+export const MAX_SLIDE_ANIMATION_EFFECTS = 20;
+const MAX_EFFECTS = MAX_SLIDE_ANIMATION_EFFECTS;
 const MAX_DURATION_SECONDS = 600;
 const MAX_TRANSCRIPT_LINE = 999;
 const MAX_START_OFFSET_SECONDS = 60;
