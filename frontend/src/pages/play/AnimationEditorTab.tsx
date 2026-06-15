@@ -440,9 +440,13 @@ export function AnimationEditorTab() {
               )}
               {OVERLAY_EFFECT_TYPES.includes(effect.type) && effect.type !== 'custom-script' && (
                 <div className="flex flex-col gap-1 text-xs text-slate-400">
-                  {t('play.animation.focusPosition')}
+                  {t(effect.type === 'pointer' ? 'play.animation.pointerPosition' : 'play.animation.focusPosition')}
                   <div className="flex gap-1">
-                    {(Object.keys(FOCUS_PARAM_LABELS) as Array<keyof typeof FOCUS_PARAM_LABELS>).map((key) => (
+                    {(
+                      effect.type === 'pointer'
+                        ? (['xPct', 'yPct'] as const)
+                        : (Object.keys(FOCUS_PARAM_LABELS) as Array<keyof typeof FOCUS_PARAM_LABELS>)
+                    ).map((key) => (
                       <label key={key} className="flex flex-col items-center gap-0.5 text-[11px] text-slate-500">
                         {t(FOCUS_PARAM_LABELS[key])}
                         <input

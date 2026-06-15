@@ -11,6 +11,7 @@ export const ANIMATION_EFFECT_TYPES = [
   'pan-down',
   'highlight-box',
   'spotlight',
+  'pointer',
   'text-callout',
   'custom-script',
 ] as const;
@@ -45,7 +46,7 @@ export interface AnimationEffect {
    * Seconds to remain visible after the fade-in completes before
    * automatically fading back out (same `duration`/`ease` as the fade-in).
    * Only meaningful for overlay effect types (`highlight-box`, `spotlight`,
-   * `text-callout`, `custom-script`); ignored by transform effects.
+   * `pointer`, `text-callout`, `custom-script`); ignored by transform effects.
    */
   exitDuration?: number;
   /**
@@ -120,6 +121,7 @@ const ALLOWED_PARAM_KEYS: Record<AnimationEffectType, readonly string[]> = {
   'pan-down': ['distancePct'],
   'highlight-box': ['xPct', 'yPct', 'widthPct', 'heightPct'],
   'spotlight': ['xPct', 'yPct', 'widthPct', 'heightPct'],
+  'pointer': ['xPct', 'yPct'],
   'text-callout': ['xPct', 'yPct', 'widthPct', 'heightPct'],
   'custom-script': ['xPct', 'yPct', 'widthPct', 'heightPct'],
 };

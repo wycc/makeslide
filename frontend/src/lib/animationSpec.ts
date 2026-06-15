@@ -19,6 +19,7 @@ export const SLIDE_ANIMATION_EFFECT_TYPES: readonly SlideAnimationEffectType[] =
   'pan-down',
   'highlight-box',
   'spotlight',
+  'pointer',
   'text-callout',
   'custom-script',
 ];
@@ -29,6 +30,7 @@ export const FOCUS_EFFECT_TYPES: readonly SlideAnimationEffectType[] = ['highlig
 /** Effect types rendered as a positioned overlay element inside the animated stage (vs. a transform on the whole slide). */
 export const OVERLAY_EFFECT_TYPES: readonly SlideAnimationEffectType[] = [
   ...FOCUS_EFFECT_TYPES,
+  'pointer',
   'text-callout',
   'custom-script',
 ];
@@ -65,9 +67,17 @@ const DEFAULT_FOCUS_PARAMS: FocusEffectParams = { xPct: 30, yPct: 30, widthPct: 
 /** custom-script 的編輯器未提供位置/大小欄位，預設鋪滿整張投影片（(0,0) ~ (100,100)），讓自訂動畫可使用全部畫面。 */
 const DEFAULT_CUSTOM_SCRIPT_PARAMS: FocusEffectParams = { xPct: 0, yPct: 0, widthPct: 100, heightPct: 100 };
 
-/** Reads an overlay effect's position/size (focus or text-callout), filling in defaults for unset params. */
+/** pointer 只需要 (xPct, yPct) 一個定位點，widthPct/heightPct 不會被渲染使用，預設置於投影片中央。 */
+const DEFAULT_POINTER_PARAMS: FocusEffectParams = { xPct: 50, yPct: 50, widthPct: 0, heightPct: 0 };
+
+/** Reads an overlay effect's position/size (focus, pointer or text-callout), filling in defaults for unset params. */
 export function getFocusEffectParams(effect: SlideAnimationEffect): FocusEffectParams {
-  const defaults = effect.type === 'custom-script' ? DEFAULT_CUSTOM_SCRIPT_PARAMS : DEFAULT_FOCUS_PARAMS;
+  const defaults =
+    effect.type === 'custom-script'
+      ? DEFAULT_CUSTOM_SCRIPT_PARAMS
+      : effect.type === 'pointer'
+        ? DEFAULT_POINTER_PARAMS
+        : DEFAULT_FOCUS_PARAMS;
   return {
     xPct: effect.params?.xPct ?? defaults.xPct,
     yPct: effect.params?.yPct ?? defaults.yPct,

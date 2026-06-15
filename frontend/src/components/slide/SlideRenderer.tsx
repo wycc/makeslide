@@ -47,6 +47,26 @@ function EffectOverlay({ effect }: { effect: SlideAnimationEffect }) {
       />
     );
   }
+  if (effect.type === 'pointer') {
+    return (
+      <div
+        data-effect-id={effect.id}
+        style={{
+          position: 'absolute',
+          left: `${xPct}%`,
+          top: `${yPct}%`,
+          width: '2.25rem',
+          height: '2.25rem',
+          transform: 'translate(-50%, -50%)',
+          opacity: 0,
+          pointerEvents: 'none',
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(244,63,94,0.95) 0%, rgba(244,63,94,0.45) 55%, transparent 80%)',
+          boxShadow: '0 0 12px 2px rgba(244,63,94,0.8)',
+        }}
+      />
+    );
+  }
   if (effect.type === 'text-callout') {
     return (
       <div
