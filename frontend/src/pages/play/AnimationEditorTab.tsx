@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import katex from 'katex';
 import { useI18n } from '../../i18n';
 import type { TranslationKey } from '../../i18n';
 import type { PageFigure, SlideAnimationEffect, SlideAnimationEffectType, SlideAnimationEase, SlideAnimationShapeKind } from '../../types';
@@ -8,6 +9,7 @@ import {
   DEFAULT_EXIT_DURATION_SECONDS,
   MAX_CUSTOM_SCRIPT_CODE_LENGTH,
   MAX_CUSTOM_SCRIPT_PROMPT_LENGTH,
+  MAX_FORMULA_LENGTH,
   MAX_HINT_LENGTH,
   MAX_SLIDE_ANIMATION_EFFECTS,
   MAX_STEP_LIST_ITEMS,
@@ -195,6 +197,17 @@ const EFFECT_PRESETS: readonly EffectPreset[] = [
       ease: 'power1.out',
       exitDuration: DEFAULT_EXIT_DURATION_SECONDS,
       params: { xPct: 55, yPct: 55, widthPct: 35, heightPct: 35 },
+    }),
+  },
+  {
+    id: 'formula-insert',
+    labelKey: 'play.animation.preset.formula',
+    apply: () => ({
+      type: 'formula',
+      duration: 1,
+      ease: 'power1.out',
+      exitDuration: DEFAULT_EXIT_DURATION_SECONDS,
+      params: { xPct: 30, yPct: 40, widthPct: 40, heightPct: 20 },
     }),
   },
 ];
@@ -845,6 +858,28 @@ export function AnimationEditorTab() {
                     )}
                   </div>
                 </div>
+              )}
+              {effect.type === 'formula' && (
+                <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  {t('play.animation.formulaContent')}
+                  <input
+                    type="text"
+                    maxLength={MAX_FORMULA_LENGTH}
+                    value={effect.formula ?? ''}
+                    disabled={disabled}
+                    placeholder={t('play.animation.formulaContentPlaceholder')}
+                    onChange={(e) => updateEffect(effect.id, { formula: e.target.value })}
+                    className="w-48 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                  />
+                  {effect.formula && (
+                    <div
+                      className="w-48 overflow-x-auto rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-slate-100"
+                      dangerouslySetInnerHTML={{
+                        __html: katex.renderToString(effect.formula, { throwOnError: false, displayMode: true }),
+                      }}
+                    />
+                  )}
+                </label>
               )}
               {OVERLAY_EFFECT_TYPES.includes(effect.type) && effect.type !== 'custom-script' && (
                 <div className="flex flex-col gap-1 text-xs text-slate-400">
