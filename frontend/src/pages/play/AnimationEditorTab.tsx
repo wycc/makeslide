@@ -76,9 +76,15 @@ const EASE_LABELS = {
   'power2.inOut': 'play.animation.ease.power2InOut',
 } as const satisfies Record<SlideAnimationEase, TranslationKey>;
 
+function generateEffectId(): string {
+  return typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `effect-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 function newEffect(): SlideAnimationEffect {
   return {
-    id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `effect-${Date.now()}`,
+    id: generateEffectId(),
     target: 'slide',
     type: 'fade-in',
     start: 0,
@@ -121,6 +127,8 @@ export function AnimationEditorTab() {
   const [selectedEffectIds, setSelectedEffectIds] = useState<Set<string>>(new Set());
   const [notebookTab, setNotebookTab] = useState<'effects' | 'hints' | 'json'>('effects');
   const [jsonCopied, setJsonCopied] = useState(false);
+  // 跨頁複製用的暫存區：不隨頁面切換清空，讓使用者可在切換到其他頁面後貼上。
+  const [copiedEffects, setCopiedEffects] = useState<SlideAnimationEffect[] | null>(null);
 
   const draft = animationDraft ?? defaultAnimationSpec();
   const disabled = isReadOnlyProcessing || animationBusy || !currentPage;
@@ -221,6 +229,27 @@ export function AnimationEditorTab() {
     setSelectedEffectIds(new Set());
   };
 
+  /** 將本頁所有效果複製到暫存區，供切換至其他頁面後貼上（跨頁複製）。 */
+  const handleCopyPageEffects = () => {
+    if (draft.effects.length === 0) return;
+    setCopiedEffects(structuredClone(draft.effects));
+  };
+
+  /**
+   * 將暫存區中的效果加入本頁效果清單：每個效果都產生新的 `id`，避免與本頁既有效果或
+   * 來源頁面的效果衝突；超過 `MAX_SLIDE_ANIMATION_EFFECTS` 上限的部分會被忽略。
+   */
+  const handlePastePageEffects = () => {
+    if (!copiedEffects || copiedEffects.length === 0) return;
+    setAnimationDraft((prev) => {
+      const base = prev ?? defaultAnimationSpec();
+      const room = MAX_SLIDE_ANIMATION_EFFECTS - base.effects.length;
+      if (room <= 0) return base;
+      const pasted = copiedEffects.slice(0, room).map((effect) => ({ ...effect, id: generateEffectId() }));
+      return { ...base, effects: [...base.effects, ...pasted] };
+    });
+  };
+
   const updateHint = (line: number, text: string) => {
     setAnimationDraft((prev) => {
       const base = prev ?? defaultAnimationSpec();
@@ -276,6 +305,26 @@ export function AnimationEditorTab() {
             className="rounded-md border border-cyan-400/50 bg-cyan-500/10 px-3 py-1.5 text-sm text-cyan-200 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {t('play.animation.mergeSelected')} ({selectedEffectIds.size})
+          </button>
+        )}
+        <button
+          type="button"
+          disabled={disabled || draft.effects.length === 0}
+          title={t('play.animation.copyPageEffectsHint')}
+          onClick={handleCopyPageEffects}
+          className="rounded-md border border-slate-600 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {t('play.animation.copyPageEffects')}
+        </button>
+        {copiedEffects && copiedEffects.length > 0 && (
+          <button
+            type="button"
+            disabled={disabled || draft.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS}
+            title={t('play.animation.pastePageEffectsHint')}
+            onClick={handlePastePageEffects}
+            className="rounded-md border border-emerald-500/50 bg-emerald-500/10 px-3 py-1.5 text-sm text-emerald-200 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {t('play.animation.pastePageEffects')} ({copiedEffects.length})
           </button>
         )}
         <button
