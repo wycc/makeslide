@@ -522,7 +522,7 @@ detail API 的 page 物件增加 `render_type` 與 `animation_spec_url`。
 
 ## 12. 後續擴充方向
 
-- V1.1：drawing mode 自動暫停、preset 快速套用、raw JSON 檢視、~~效果排序~~（已於動畫編輯器效果卡片新增「上移／下移」按鈕，調整 `AnimationSpec.effects` 陣列順序，同時決定重疊 overlay 效果的疊加層次；分支 `feature/animation-effects-reorder-20260615`）、跨頁複製、為 `fade-in`/`zoom-*`/`pan-*` 等整頁 transform 效果提供對稱的「消失（恢復原狀）」可選機制（見 §5.3）。
+- V1.1：~~drawing mode 自動暫停~~（已於 `PlayPage.tsx` 新增 `useEffect`，當 `drawingMode` 變為 `true` 時自動呼叫 `audioRef.current?.pause()`，避免講者繪圖時投影片自動切換或動畫繼續播放；分支 `feature/drawing-mode-auto-pause-20260615`）、preset 快速套用、raw JSON 檢視、~~效果排序~~（已於動畫編輯器效果卡片新增「上移／下移」按鈕，調整 `AnimationSpec.effects` 陣列順序，同時決定重疊 overlay 效果的疊加層次；分支 `feature/animation-effects-reorder-20260615`）、跨頁複製、為 `fade-in`/`zoom-*`/`pan-*` 等整頁 transform 效果提供對稱的「消失（恢復原狀）」可選機制（見 §5.3）。
 - V2：overlay image（小圖疊加內容）、SVG 圖元、物件 target、公式、逐步條列；依 `AnimationSpec.hints` 與逐字稿內容由 LLM 生成動畫 JSON——焦點方框（`highlight-box`/`spotlight`）的時機與位置已於 §7.4 落地，`text-callout`（含 AI 生成文案）與其他效果類型的 AI 生成仍待後續。
 - V2.x：`custom-script`（§5.4）的資料集/模型推論管線——例如載入 MNIST 並以 ResNet50 產生 embedding、PCA 降維至二維後動態顯示分類過程——需要後端提供資料集存取與模型推論服務（sandbox 本身禁止網路存取，無法在前端直接載入外部資料）；v1 僅提供通用 sandboxed 自訂腳本框架與 AI 生成/迭代迴圈，不含此類資料管線。
 - V2.x：`window.Manim`（manim 風格輔助函式庫，§5.4）的擴充——`Axes`/`NumberPlane`（座標軸、格線、`coordsToPoint`）、`MathTex`/`Tex`（需離線 vendored KaTeX 字型，避免 sandbox 網路存取限制）、`transform` 的真正路徑變形（path morphing，而非目前僅線性插值共有屬性）、3D 場景；v1 僅提供 2D SVG mobject（`circle`/`square`/`rectangle`/`line`/`arrow`/`dot`/`polygon`/`text`）與 `Create`/`Write`/`FadeIn`/`FadeOut`/`Transform`/`Shift`/`Rotate`/`Scale`/`GrowFromCenter` 等基本動畫手法。
