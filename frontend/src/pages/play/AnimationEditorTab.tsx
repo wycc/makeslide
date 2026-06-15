@@ -119,7 +119,8 @@ export function AnimationEditorTab() {
   const [customScriptChatInput, setCustomScriptChatInput] = useState('');
   const customScriptChatScrollRef = useRef<HTMLDivElement>(null);
   const [selectedEffectIds, setSelectedEffectIds] = useState<Set<string>>(new Set());
-  const [notebookTab, setNotebookTab] = useState<'effects' | 'hints'>('effects');
+  const [notebookTab, setNotebookTab] = useState<'effects' | 'hints' | 'json'>('effects');
+  const [jsonCopied, setJsonCopied] = useState(false);
 
   const draft = animationDraft ?? defaultAnimationSpec();
   const disabled = isReadOnlyProcessing || animationBusy || !currentPage;
@@ -322,6 +323,13 @@ export function AnimationEditorTab() {
         >
           {t('play.animation.hints')}
           {pageSentences.length > 0 ? ` (${Object.keys(draft.hints ?? {}).length}/${pageSentences.length})` : ''}
+        </button>
+        <button
+          type="button"
+          onClick={() => setNotebookTab('json')}
+          className={`flex-1 px-3 py-1.5 text-sm ${notebookTab === 'json' ? 'bg-slate-800 text-fuchsia-200' : 'text-slate-400'}`}
+        >
+          {t('play.animation.rawJson')}
         </button>
       </div>
 
@@ -654,7 +662,7 @@ export function AnimationEditorTab() {
           })
         )}
         </>
-      ) : (
+      ) : notebookTab === 'hints' ? (
         <>
         <div className="text-[11px] text-slate-500">{t('play.animation.hintsDescription')}</div>
         {pageSentences.length === 0 ? (
@@ -682,6 +690,32 @@ export function AnimationEditorTab() {
             </div>
           ))
         )}
+        </>
+      ) : (
+        <>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="text-[11px] text-slate-500">{t('play.animation.rawJsonDescription')}</div>
+          <button
+            type="button"
+            onClick={() => {
+              void navigator.clipboard.writeText(JSON.stringify(draft, null, 2)).then(() => {
+                setJsonCopied(true);
+                setTimeout(() => setJsonCopied(false), 1500);
+              });
+            }}
+            className="shrink-0 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
+          >
+            {jsonCopied ? t('play.animation.copyJsonDone') : t('play.animation.copyJson')}
+          </button>
+        </div>
+        <textarea
+          readOnly
+          value={JSON.stringify(draft, null, 2)}
+          onFocus={(e) => e.currentTarget.select()}
+          rows={20}
+          spellCheck={false}
+          className="w-full resize-y rounded-md border border-slate-800 bg-slate-950 px-2 py-2 font-mono text-xs leading-relaxed text-slate-300"
+        />
         </>
       )}
       </div>
