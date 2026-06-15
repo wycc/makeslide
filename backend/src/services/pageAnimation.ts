@@ -15,6 +15,7 @@ export const ANIMATION_EFFECT_TYPES = [
   'text-callout',
   'shape',
   'step-list',
+  'overlay-image',
   'custom-script',
 ] as const;
 
@@ -57,10 +58,17 @@ export interface AnimationEffect {
    */
   items?: string[];
   /**
+   * Id of a figure extracted from the slide's source PDF (see
+   * `GET /api/pdfs/:id/pages/:n/figures`), shown as a positioned image
+   * overlay by `overlay-image` effects (ignored by other effect types).
+   * Up to `MAX_OVERLAY_IMAGE_FIGURE_ID_LENGTH` chars.
+   */
+  figureId?: string;
+  /**
    * Seconds to remain visible after the fade-in completes before
    * automatically fading back out (same `duration`/`ease` as the fade-in).
    * Only meaningful for overlay effect types (`highlight-box`, `spotlight`,
-   * `pointer`, `text-callout`, `shape`, `step-list`, `custom-script`); ignored by transform effects.
+   * `pointer`, `text-callout`, `shape`, `step-list`, `overlay-image`, `custom-script`); ignored by transform effects.
    */
   exitDuration?: number;
   /**
@@ -113,6 +121,8 @@ export const MAX_TEXT_CALLOUT_LENGTH = 80;
 export const MAX_STEP_LIST_ITEMS = 6;
 /** Max length (chars) for a single `step-list` item. */
 export const MAX_STEP_LIST_ITEM_LENGTH = 60;
+/** Max length (chars) for an `overlay-image` effect's `figureId`, matching `FigureImageParamSchema`'s `figureId`. */
+export const MAX_OVERLAY_IMAGE_FIGURE_ID_LENGTH = 200;
 export const MAX_HINTS = 50;
 export const MAX_HINT_LENGTH = 200;
 /** Max length (chars) for a `custom-script` effect's generated JavaScript `code`. */
@@ -144,6 +154,7 @@ const ALLOWED_PARAM_KEYS: Record<AnimationEffectType, readonly string[]> = {
   'text-callout': ['xPct', 'yPct', 'widthPct', 'heightPct'],
   'shape': ['xPct', 'yPct', 'widthPct', 'heightPct'],
   'step-list': ['xPct', 'yPct', 'widthPct', 'heightPct'],
+  'overlay-image': ['xPct', 'yPct', 'widthPct', 'heightPct'],
   'custom-script': ['xPct', 'yPct', 'widthPct', 'heightPct'],
 };
 
@@ -170,6 +181,7 @@ const EffectSchema = z.object({
   text: z.string().max(MAX_TEXT_CALLOUT_LENGTH).optional(),
   shape: z.enum(ANIMATION_SHAPE_KINDS).optional(),
   items: z.array(z.string().max(MAX_STEP_LIST_ITEM_LENGTH)).max(MAX_STEP_LIST_ITEMS).optional(),
+  figureId: z.string().min(1).max(MAX_OVERLAY_IMAGE_FIGURE_ID_LENGTH).optional(),
   exitDuration: z.number().min(0).max(MAX_DURATION_SECONDS).optional(),
   code: z.string().max(MAX_CUSTOM_SCRIPT_CODE_LENGTH).optional(),
   prompt: z.string().max(MAX_CUSTOM_SCRIPT_PROMPT_LENGTH).optional(),
@@ -229,6 +241,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.text !== undefined ? { text: effect.text } : {}),
       ...(effect.shape !== undefined ? { shape: effect.shape } : {}),
       ...(effect.items !== undefined ? { items: effect.items } : {}),
+      ...(effect.figureId !== undefined ? { figureId: effect.figureId } : {}),
       ...(effect.exitDuration !== undefined ? { exitDuration: effect.exitDuration } : {}),
       ...(effect.code !== undefined ? { code: effect.code } : {}),
       ...(effect.prompt !== undefined ? { prompt: effect.prompt } : {}),

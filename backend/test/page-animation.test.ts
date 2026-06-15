@@ -12,6 +12,7 @@ import {
   ANIMATION_SHAPE_KINDS,
   MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES,
   MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH,
+  MAX_OVERLAY_IMAGE_FIGURE_ID_LENGTH,
   MAX_STEP_LIST_ITEMS,
   MAX_STEP_LIST_ITEM_LENGTH,
   MAX_TEXT_CALLOUT_LENGTH,
@@ -332,6 +333,63 @@ test('validateAnimationSpec strips unknown params from step-list effects', () =>
   assert.equal(result.ok, true);
   if (result.ok) {
     assert.deepEqual(result.spec.effects[0].params, { xPct: 8 });
+  }
+});
+
+test('validateAnimationSpec accepts an overlay-image effect with a figureId and overlay params', () => {
+  const result = validateAnimationSpec(
+    validSpec([
+      fadeIn({
+        id: 'effect-1',
+        type: 'overlay-image',
+        figureId: 'fig-1',
+        params: { xPct: 55, yPct: 55, widthPct: 35, heightPct: 35 },
+      }),
+    ]),
+  );
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.spec.effects[0].figureId, 'fig-1');
+    assert.deepEqual(result.spec.effects[0].params, { xPct: 55, yPct: 55, widthPct: 35, heightPct: 35 });
+  }
+});
+
+test('validateAnimationSpec accepts an overlay-image effect without a figureId (not yet configured)', () => {
+  const result = validateAnimationSpec(validSpec([fadeIn({ id: 'effect-1', type: 'overlay-image' })]));
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.spec.effects[0].figureId, undefined);
+  }
+});
+
+test('validateAnimationSpec rejects an overlay-image effect with an empty figureId', () => {
+  assert.equal(validateAnimationSpec(validSpec([fadeIn({ type: 'overlay-image', figureId: '' })])).ok, false);
+});
+
+test('validateAnimationSpec rejects an overlay-image figureId exceeding MAX_OVERLAY_IMAGE_FIGURE_ID_LENGTH', () => {
+  assert.equal(
+    validateAnimationSpec(
+      validSpec([fadeIn({ type: 'overlay-image', figureId: 'x'.repeat(MAX_OVERLAY_IMAGE_FIGURE_ID_LENGTH) })]),
+    ).ok,
+    true,
+  );
+  assert.equal(
+    validateAnimationSpec(
+      validSpec([fadeIn({ type: 'overlay-image', figureId: 'x'.repeat(MAX_OVERLAY_IMAGE_FIGURE_ID_LENGTH + 1) })]),
+    ).ok,
+    false,
+  );
+});
+
+test('validateAnimationSpec strips unknown params from overlay-image effects', () => {
+  const result = validateAnimationSpec(
+    validSpec([
+      fadeIn({ type: 'overlay-image', figureId: 'fig-1', params: { xPct: 10, distancePct: 5, evil: 'alert(1)' } }),
+    ]),
+  );
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.deepEqual(result.spec.effects[0].params, { xPct: 10 });
   }
 });
 

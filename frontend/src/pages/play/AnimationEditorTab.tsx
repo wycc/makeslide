@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../../i18n';
 import type { TranslationKey } from '../../i18n';
-import type { SlideAnimationEffect, SlideAnimationEffectType, SlideAnimationEase, SlideAnimationShapeKind } from '../../types';
+import type { PageFigure, SlideAnimationEffect, SlideAnimationEffectType, SlideAnimationEase, SlideAnimationShapeKind } from '../../types';
+import { fetchPageFigures, figureImageUrl } from '../../lib/api';
 import {
   ANIMATION_SHAPE_KINDS,
   DEFAULT_EXIT_DURATION_SECONDS,
@@ -185,6 +186,17 @@ const EFFECT_PRESETS: readonly EffectPreset[] = [
       params: { xPct: 8, yPct: 18, widthPct: 44, heightPct: 40 },
     }),
   },
+  {
+    id: 'overlay-image-figure',
+    labelKey: 'play.animation.preset.overlayImage',
+    apply: () => ({
+      type: 'overlay-image',
+      duration: 0.8,
+      ease: 'power1.out',
+      exitDuration: DEFAULT_EXIT_DURATION_SECONDS,
+      params: { xPct: 55, yPct: 55, widthPct: 35, heightPct: 35 },
+    }),
+  },
 ];
 
 /** 句子文字過長時，於下拉選單中截斷顯示。 */
@@ -194,7 +206,10 @@ function truncateSentence(text: string, maxLen = 18): string {
 
 export function AnimationEditorTab() {
   const {
+    pdfId,
     currentPage,
+    currentShareToken,
+    withShareToken,
     animationDraft, setAnimationDraft,
     animationBusy,
     animationError,
@@ -223,6 +238,27 @@ export function AnimationEditorTab() {
   const [jsonCopied, setJsonCopied] = useState(false);
   // 跨頁複製用的暫存區：不隨頁面切換清空，讓使用者可在切換到其他頁面後貼上。
   const [copiedEffects, setCopiedEffects] = useState<SlideAnimationEffect[] | null>(null);
+  // overlay-image 效果的圖片選擇器：本頁可用的已擷取圖片清單。
+  const [pageFigures, setPageFigures] = useState<PageFigure[] | null>(null);
+
+  const pageNumber = currentPage?.page_number;
+  useEffect(() => {
+    if (!pdfId || !pageNumber) {
+      setPageFigures(null);
+      return;
+    }
+    let cancelled = false;
+    fetchPageFigures(pdfId, pageNumber, currentShareToken)
+      .then((res) => {
+        if (!cancelled) setPageFigures(res.figures);
+      })
+      .catch(() => {
+        if (!cancelled) setPageFigures(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pdfId, pageNumber, currentShareToken]);
 
   const draft = animationDraft ?? defaultAnimationSpec();
   const disabled = isReadOnlyProcessing || animationBusy || !currentPage;
@@ -770,6 +806,45 @@ export function AnimationEditorTab() {
                     className="w-48 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
                   />
                 </label>
+              )}
+              {effect.type === 'overlay-image' && (
+                <div className="flex flex-col gap-1 text-xs text-slate-400">
+                  {t('play.animation.overlayImageFigure')}
+                  <div className="flex items-center gap-2">
+                    {pageFigures === null ? (
+                      <span className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-500">
+                        {t('play.animation.overlayImageLoading')}
+                      </span>
+                    ) : pageFigures.length === 0 ? (
+                      <span className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-500">
+                        {t('play.animation.overlayImageNoFigures')}
+                      </span>
+                    ) : (
+                      <>
+                        <select
+                          value={effect.figureId ?? ''}
+                          disabled={disabled}
+                          onChange={(e) => updateEffect(effect.id, { figureId: e.target.value || undefined })}
+                          className="max-w-[12rem] rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                        >
+                          <option value="">{t('play.animation.overlayImageSelectFigure')}</option>
+                          {pageFigures.map((figure, idx) => (
+                            <option key={figure.id} value={figure.id}>
+                              {idx + 1}. {figure.caption ? truncateSentence(figure.caption, 20) : figure.id}
+                            </option>
+                          ))}
+                        </select>
+                        {effect.figureId && pdfId && (
+                          <img
+                            src={withShareToken(figureImageUrl(pdfId, effect.figureId)) ?? figureImageUrl(pdfId, effect.figureId)}
+                            alt=""
+                            className="h-10 w-14 rounded border border-slate-700 bg-slate-950 object-contain"
+                          />
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
               )}
               {OVERLAY_EFFECT_TYPES.includes(effect.type) && effect.type !== 'custom-script' && (
                 <div className="flex flex-col gap-1 text-xs text-slate-400">

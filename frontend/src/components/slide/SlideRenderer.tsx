@@ -12,7 +12,14 @@ import {
 import { useGsapSlideTimeline } from './useGsapSlideTimeline';
 
 /** 套用 highlight-box / spotlight / text-callout 效果的疊加層，由 buildGsapTimeline 透過 data-effect-id 抓取並控制淡入。 */
-function EffectOverlay({ effect }: { effect: SlideAnimationEffect }) {
+function EffectOverlay({
+  effect,
+  resolveFigureImageUrl,
+}: {
+  effect: SlideAnimationEffect;
+  /** 將 `overlay-image` 效果的 `figureId` 解析為可顯示的圖片網址；未提供時 `overlay-image` 不會渲染。 */
+  resolveFigureImageUrl?: (figureId: string) => string;
+}) {
   const { xPct, yPct, widthPct, heightPct } = getFocusEffectParams(effect);
   const position: CSSProperties = {
     position: 'absolute',
@@ -149,6 +156,19 @@ function EffectOverlay({ effect }: { effect: SlideAnimationEffect }) {
       </div>
     );
   }
+  if (effect.type === 'overlay-image') {
+    const url = effect.figureId ? resolveFigureImageUrl?.(effect.figureId) : undefined;
+    if (!url) return null;
+    return (
+      <img
+        data-effect-id={effect.id}
+        src={url}
+        alt=""
+        draggable={false}
+        style={{ ...position, objectFit: 'contain' }}
+      />
+    );
+  }
   if (effect.type === 'custom-script') {
     return (
       <iframe
@@ -173,6 +193,8 @@ export interface SlideRendererProps {
   currentTime: number;
   isPlaying: boolean;
   playbackRate: number;
+  /** 將 `overlay-image` 效果的 `figureId` 解析為可顯示的圖片網址；未提供時 `overlay-image` 不會渲染。 */
+  resolveFigureImageUrl?: (figureId: string) => string;
   onAnimationError?: () => void;
   wrapperClassName?: string;
   wrapperStyle?: CSSProperties;
@@ -196,6 +218,7 @@ export function SlideRenderer({
   currentTime,
   isPlaying,
   playbackRate,
+  resolveFigureImageUrl,
   onAnimationError,
   wrapperClassName,
   wrapperStyle,
@@ -252,7 +275,7 @@ export function SlideRenderer({
         {spec?.effects
           .filter((effect) => OVERLAY_EFFECT_TYPES.includes(effect.type))
           .map((effect) => (
-            <EffectOverlay key={effect.id} effect={effect} />
+            <EffectOverlay key={effect.id} effect={effect} resolveFigureImageUrl={resolveFigureImageUrl} />
           ))}
       </div>
       {overlay}

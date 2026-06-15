@@ -74,6 +74,7 @@ export function buildGsapTimeline(stage: HTMLElement, spec: SlideAnimationSpec):
       case 'pointer':
       case 'text-callout':
       case 'shape':
+      case 'overlay-image':
       case 'custom-script': {
         const overlay = stage.querySelector<HTMLElement>(`[data-effect-id="${effect.id}"]`);
         if (overlay) {
