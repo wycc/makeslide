@@ -3,6 +3,7 @@ import type {
   SlideAnimationEase,
   SlideAnimationEffect,
   SlideAnimationEffectType,
+  SlideAnimationShapeKind,
   SlideAnimationSpec,
   SlideAnimationStartTrigger,
 } from '../types';
@@ -21,6 +22,7 @@ export const SLIDE_ANIMATION_EFFECT_TYPES: readonly SlideAnimationEffectType[] =
   'spotlight',
   'pointer',
   'text-callout',
+  'shape',
   'custom-script',
 ];
 
@@ -32,8 +34,20 @@ export const OVERLAY_EFFECT_TYPES: readonly SlideAnimationEffectType[] = [
   ...FOCUS_EFFECT_TYPES,
   'pointer',
   'text-callout',
+  'shape',
   'custom-script',
 ];
+
+/** SVG primitive shapes drawable by `shape` effects (design doc §12 V2 "SVG 圖元"), matching the backend's `ANIMATION_SHAPE_KINDS`. */
+export const ANIMATION_SHAPE_KINDS: readonly SlideAnimationShapeKind[] = ['circle', 'rect', 'ellipse', 'arrow'];
+
+/** Default `shape` kind when a `shape` effect doesn't specify one. */
+export const DEFAULT_SHAPE_KIND: SlideAnimationShapeKind = 'circle';
+
+/** Reads a `shape` effect's SVG primitive, falling back to `DEFAULT_SHAPE_KIND`. */
+export function getShapeKind(effect: SlideAnimationEffect): SlideAnimationShapeKind {
+  return effect.shape ?? DEFAULT_SHAPE_KIND;
+}
 
 /**
  * Whole-slide transform effect types. On these types, `exitDuration` plays the

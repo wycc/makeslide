@@ -232,6 +232,48 @@ test('validateAnimationSpec rejects a text-callout effect whose text exceeds the
   );
 });
 
+test('validateAnimationSpec accepts a shape effect with each shape kind and overlay params', () => {
+  for (const shape of ['circle', 'rect', 'ellipse', 'arrow'] as const) {
+    const result = validateAnimationSpec(
+      validSpec([
+        fadeIn({
+          id: 'effect-1',
+          type: 'shape',
+          shape,
+          params: { xPct: 10, yPct: 20, widthPct: 30, heightPct: 40 },
+        }),
+      ]),
+    );
+    assert.equal(result.ok, true);
+    if (result.ok) {
+      assert.equal(result.spec.effects[0].shape, shape);
+      assert.deepEqual(result.spec.effects[0].params, { xPct: 10, yPct: 20, widthPct: 30, heightPct: 40 });
+    }
+  }
+});
+
+test('validateAnimationSpec rejects a shape effect with an invalid shape kind', () => {
+  assert.equal(validateAnimationSpec(validSpec([fadeIn({ type: 'shape', shape: 'triangle' })])).ok, false);
+});
+
+test('validateAnimationSpec accepts a shape effect without an explicit shape (defaults applied by frontend)', () => {
+  const result = validateAnimationSpec(validSpec([fadeIn({ id: 'effect-1', type: 'shape' })]));
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.spec.effects[0].shape, undefined);
+  }
+});
+
+test('validateAnimationSpec strips unknown params from shape effects', () => {
+  const result = validateAnimationSpec(
+    validSpec([fadeIn({ type: 'shape', shape: 'circle', params: { xPct: 10, distancePct: 5, evil: 'alert(1)' } })]),
+  );
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.deepEqual(result.spec.effects[0].params, { xPct: 10 });
+  }
+});
+
 test('validateAnimationSpec accepts and preserves an exitDuration on an overlay effect', () => {
   const result = validateAnimationSpec(
     validSpec([fadeIn({ id: 'effect-1', type: 'highlight-box', exitDuration: 2.5 })]),
