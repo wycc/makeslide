@@ -273,6 +273,7 @@ export const en = {
   'play.animation.noEffects': 'No effects added yet',
   'play.animation.addEffect': '+ Add effect',
   'play.animation.effectType': 'Effect',
+  'play.animation.seekToMidpoint': 'Seek to effect midpoint',
   'play.animation.start': 'Start (s)',
   'play.animation.startMode': 'Start trigger',
   'play.animation.startMode.time': 'By seconds',

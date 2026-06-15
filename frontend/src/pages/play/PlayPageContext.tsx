@@ -78,6 +78,7 @@ export interface PlayPageContextValue {
   goNext: () => void;
   handleEnded: () => void;
   handleSeek: (ev: ChangeEvent<HTMLInputElement>) => void;
+  handleSeekToTime: (seconds: number) => void;
   scheduleAudioReload: (token: number, audioUrl: string, pageNumber?: number) => void;
   clearAudioRetryTimer: () => void;
   reloadDetail: () => Promise<void>;

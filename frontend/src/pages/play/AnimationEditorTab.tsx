@@ -105,6 +105,7 @@ export function AnimationEditorTab() {
     pageSentences,
     sentenceTimeline,
     currentTime,
+    handleSeekToTime,
     aiFocusBusy,
     handleGenerateAiFocusEffects,
     customScriptBusy,
@@ -215,6 +216,16 @@ export function AnimationEditorTab() {
               }`}
             >
               <div className="flex flex-wrap items-end gap-2">
+              <button
+                type="button"
+                disabled={disabled}
+                title={t('play.animation.seekToMidpoint')}
+                aria-label={t('play.animation.seekToMidpoint')}
+                onClick={() => handleSeekToTime(effectStart + effect.duration / 2)}
+                className="rounded-md border border-slate-700 px-2 py-1.5 text-sm text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                ⏱
+              </button>
               <label className="flex flex-col gap-1 text-xs text-slate-400">
                 {t('play.animation.effectType')}
                 <select
