@@ -118,6 +118,20 @@ export interface PipelineRunsResponse {
   runs: PipelineRunSummary[];
 }
 
+export interface SlowArtifactSummary {
+  page_number: number;
+  artifact: PageArtifact;
+  status: TimingEventStatus;
+  duration_ms: number | null;
+  sla_target_ms: number | null;
+  sla_status: TimingSlaStatus;
+  updated_at: string;
+}
+
+export interface SlowArtifactsResponse {
+  artifacts: SlowArtifactSummary[];
+}
+
 export interface PdfListItem {
   id: string;
   title: string | null;

@@ -8,6 +8,7 @@ import type {
   PdfListItem,
   PipelineRunsResponse,
   QuizAttempt,
+  SlowArtifactsResponse,
   QuizAttemptsResponse,
   QuizQuestion,
   QuizSet,
@@ -59,6 +60,21 @@ export async function fetchPdfRunHistory(id: string, shareToken?: string, limit?
     throw await parseErrorBody(resp);
   }
   return (await resp.json()) as PipelineRunsResponse;
+}
+
+/** Slowest page artifacts (image/text/script/audio) ranked by duration_ms, for the "系統資料" tab's slow artifact ranking section. */
+export async function fetchPdfSlowArtifacts(id: string, shareToken?: string, limit?: number): Promise<SlowArtifactsResponse> {
+  const token = shareToken?.trim();
+  const params = new URLSearchParams();
+  if (token) params.set('share', token);
+  if (limit) params.set('limit', String(limit));
+  const query = params.toString();
+  const suffix = query ? `?${query}` : '';
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/slow-artifacts${suffix}`);
+  if (!resp.ok) {
+    throw await parseErrorBody(resp);
+  }
+  return (await resp.json()) as SlowArtifactsResponse;
 }
 
 export async function addPdfTextSource(

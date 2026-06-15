@@ -5,10 +5,10 @@ import { AnimationEditorTab } from './AnimationEditorTab';
 import { FigureAssetsTab } from './FigureAssetsTab';
 import { formatTime, formatDurationMs } from './formatters';
 import { PageTimingChips } from './PageTimingChips';
-import { ApiError, fetchPageGenerationPrompts, fetchPdfRunHistory, figureImageUrl } from '../../lib/api';
+import { ApiError, fetchPageGenerationPrompts, fetchPdfRunHistory, fetchPdfSlowArtifacts, figureImageUrl } from '../../lib/api';
 import { SHOW_SUBTITLE_STORAGE_KEY, INTERACTIVE_MODE_STORAGE_KEY, useI18n } from '../../i18n';
 import { usePlayPageContext } from './PlayPageContext';
-import type { PipelineRunStatus, PipelineRunSummary, PipelineRunType, PipelineStage, TimingEventStatus } from '../../types';
+import type { PageArtifact, PipelineRunStatus, PipelineRunSummary, PipelineRunType, PipelineStage, SlowArtifactSummary, TimingEventStatus } from '../../types';
 
 const RUN_TYPE_LABELS: Record<PipelineRunType, string> = {
   initial: '初次產生',
@@ -58,6 +58,13 @@ const STAGE_STATUS_LABELS: Record<TimingEventStatus, string> = {
   skipped: '已跳過',
   canceled: '已取消',
   unknown: '未知',
+};
+
+const PAGE_ARTIFACT_LABELS: Record<PageArtifact, string> = {
+  image: '圖片',
+  text: '文字',
+  script: '講稿',
+  audio: '語音',
 };
 
 export function PlayPageSlidePanel() {
@@ -138,6 +145,10 @@ export function PlayPageSlidePanel() {
   const [runHistoryError, setRunHistoryError] = useState<string | null>(null);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
 
+  const [slowArtifacts, setSlowArtifacts] = useState<SlowArtifactSummary[]>([]);
+  const [slowArtifactsLoading, setSlowArtifactsLoading] = useState(false);
+  const [slowArtifactsError, setSlowArtifactsError] = useState<string | null>(null);
+
   // 切到「系統資料」分頁時載入此 PDF 的執行歷程（pipeline_runs/pipeline_stage_summaries）。
   useEffect(() => {
     if (editTab !== 'system' || !pdfId) return;
@@ -156,6 +167,30 @@ export function PlayPageSlidePanel() {
       })
       .finally(() => {
         if (!cancelled) setRunHistoryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [editTab, pdfId]);
+
+  // 切到「系統資料」分頁時載入此 PDF 最慢的素材排行（page_artifact_timings）。
+  useEffect(() => {
+    if (editTab !== 'system' || !pdfId) return;
+    let cancelled = false;
+    setSlowArtifactsLoading(true);
+    setSlowArtifactsError(null);
+    fetchPdfSlowArtifacts(pdfId)
+      .then((res) => {
+        if (cancelled) return;
+        setSlowArtifacts(res.artifacts);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setSlowArtifacts([]);
+        setSlowArtifactsError(err instanceof ApiError ? err.message : '載入最慢素材排行失敗');
+      })
+      .finally(() => {
+        if (!cancelled) setSlowArtifactsLoading(false);
       });
     return () => {
       cancelled = true;
@@ -1027,6 +1062,43 @@ export function PlayPageSlidePanel() {
                         </div>
                       );
                     })}
+                  </div>
+                )}
+              </div>
+              <div className="mt-3 rounded-md border border-slate-800 bg-slate-900/50 p-3">
+                <h3 className="mb-2 text-sm font-semibold text-slate-300">🐢 最慢素材排行</h3>
+                {slowArtifactsLoading ? (
+                  <p className="text-xs text-slate-500">載入中…</p>
+                ) : slowArtifactsError ? (
+                  <p className="text-xs text-rose-300">{slowArtifactsError}</p>
+                ) : slowArtifacts.length === 0 ? (
+                  <p className="text-xs text-slate-500">尚無素材耗時紀錄</p>
+                ) : (
+                  <div className="overflow-x-auto rounded-md border border-slate-800">
+                    <table className="min-w-full divide-y divide-slate-800 text-left text-xs">
+                      <thead className="bg-slate-900/70 text-slate-400">
+                        <tr>
+                          <th className="px-3 py-2">頁碼</th>
+                          <th className="px-3 py-2">素材</th>
+                          <th className="px-3 py-2">狀態</th>
+                          <th className="px-3 py-2">耗時</th>
+                          <th className="px-3 py-2">SLA</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800 bg-slate-950/40">
+                        {slowArtifacts.map((item) => (
+                          <tr key={`${item.page_number}-${item.artifact}`}>
+                            <td className="whitespace-nowrap px-3 py-2 text-slate-200">第 {item.page_number} 頁</td>
+                            <td className="whitespace-nowrap px-3 py-2 text-slate-200">{PAGE_ARTIFACT_LABELS[item.artifact] ?? item.artifact}</td>
+                            <td className="whitespace-nowrap px-3 py-2 text-slate-300">{STAGE_STATUS_LABELS[item.status] ?? item.status}</td>
+                            <td className="whitespace-nowrap px-3 py-2 font-mono text-slate-200">{formatDurationMs(item.duration_ms)}</td>
+                            <td className="whitespace-nowrap px-3 py-2 text-slate-400">
+                              {item.sla_status}{item.sla_target_ms != null ? ` / ${formatDurationMs(item.sla_target_ms)}` : ''}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </div>

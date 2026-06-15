@@ -536,6 +536,32 @@ export interface PipelineRunsResponse {
 
 前端在「系統資料」分頁切換時呼叫 `fetchPdfRunHistory(pdfId)`（[`frontend/src/lib/api/pdfs.ts`](../frontend/src/lib/api/pdfs.ts)），於「執行歷程」區塊列出每個 run（類型、第 N 次、開始時間、狀態、總耗時），可展開查看各 stage 的狀態／耗時／SLA 與失敗訊息。
 
+### 8.6 Slow artifact ranking API（已實作）
+
+`GET /api/pdfs/:id/slow-artifacts`：
+
+- 與 8.5 相同的輕量存在性檢查（`SELECT id FROM pdfs WHERE id = ?`，不存在回 404 `PDF_NOT_FOUND`），不做 `canReadPdf`／擁有權檢查。
+- query 參數 `limit`（可選，整數 1~20，預設 5）：限制回傳的素材數量。
+- 從 `page_artifact_timings` 取出該 PDF 所有 `duration_ms IS NOT NULL` 的紀錄（每個 `(page_number, artifact)` 只保留最新一筆），依 `duration_ms` 由大到小排序（相同耗時時以 `page_number` 由小到大為 tie-break），回傳前 `limit` 筆。
+
+```ts
+export interface SlowArtifactSummary {
+  page_number: number;
+  artifact: PageArtifact;
+  status: TimingEventStatus;
+  duration_ms: number | null;
+  sla_target_ms: number | null;
+  sla_status: TimingSlaStatus;
+  updated_at: string;
+}
+
+export interface SlowArtifactsResponse {
+  artifacts: SlowArtifactSummary[];
+}
+```
+
+前端在「系統資料」分頁切換時呼叫 `fetchPdfSlowArtifacts(pdfId)`（[`frontend/src/lib/api/pdfs.ts`](../frontend/src/lib/api/pdfs.ts)），於「🐢 最慢素材排行」區塊以表格列出第 N 頁／素材類型（圖片／文字／講稿／語音）／狀態／耗時／SLA，協助找出最慢的頁面與素材，呼應 §9.3 提到的「最慢的前幾個 page artifact，例如『第 5 頁語音 75s』」需求。
+
 ## 9. 前端顯示策略
 
 ### 9.1 每頁顯示
@@ -658,5 +684,5 @@ flowchart TD
 - ~~新增 run history API，讓使用者查看每次 regenerate/resume 的完整歷程~~（已新增 `GET /api/pdfs/:id/runs`，回傳該 PDF 所有 `pipeline_runs`（依 `started_at` 由新到舊排序，預設上限 20、可用 `limit` 查詢參數調整，上限 100）及每個 run 對應的 `pipeline_stage_summaries`（依§5.2 的 stage 順序排序），詳見 §8.5；前端於「系統資料」分頁新增「執行歷程」區塊，可展開查看各 run 的階段耗時與 SLA；分支 `feature/pipeline-run-history-20260616`）。
 - 將 SLA target 移到設定檔或 DB，支援不同 provider/model/source_type。
 - 將 timing event 與 token/成本統計關聯，支援成本儀表。
-- 建立 slow artifact ranking，協助找出最慢頁面與最慢階段。
+- ~~建立 slow artifact ranking，協助找出最慢頁面與最慢階段~~（已新增 `GET /api/pdfs/:id/slow-artifacts`，回傳該 PDF 的 `page_artifact_timings` 依 `duration_ms` 由大到小排序的前幾筆（預設 5、可用 `limit` 調整，上限 20），詳見 §8.6；前端於「系統資料」分頁新增「🐢 最慢素材排行」表格；分支 `feature/pipeline-slow-artifact-ranking-20260616`）。
 - 若導入分散式 queue，可把 `run_id` 作為 trace correlation id，串接 worker logs。
