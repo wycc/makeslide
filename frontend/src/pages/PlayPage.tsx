@@ -822,6 +822,18 @@ export default function PlayPage() {
     [duration, syncEnabled, syncRole, clearPendingPageExtend],
   );
 
+  /** 將播放時間軸移到指定秒數（夾在 [0, duration] 內），供動畫編輯器點擊效果時跳轉預覽用。 */
+  const handleSeekToTime = useCallback(
+    (seconds: number) => {
+      if (syncEnabled && syncRole !== 'master') return;
+      const audio = audioRef.current;
+      if (!audio || !Number.isFinite(duration) || duration <= 0) return;
+      clearPendingPageExtend();
+      audio.currentTime = Math.max(0, Math.min(seconds, duration));
+    },
+    [duration, syncEnabled, syncRole, clearPendingPageExtend],
+  );
+
   // 換頁或卸載時，取消尚未觸發的延長切頁計時器，避免在已離開的頁面上執行切頁。
   useEffect(() => {
     return () => clearPendingPageExtend();
@@ -1840,7 +1852,7 @@ export default function PlayPage() {
     isExtendingAnimation,
     slideAnimationPlaying: isPlaying || isExtendingAnimation,
     // playback actions
-    playPause, goPrev, goNext, handleEnded, handleSeek, scheduleAudioReload, clearAudioRetryTimer, reloadDetail,
+    playPause, goPrev, goNext, handleEnded, handleSeek, handleSeekToTime, scheduleAudioReload, clearAudioRetryTimer, reloadDetail,
     // slide nav
     audioError, ...slideState,
     showAddPagesModal, setShowAddPagesModal, draggingPage, setDraggingPage,

@@ -273,6 +273,7 @@ export const zhTW = {
   'play.animation.noEffects': '尚未新增任何效果',
   'play.animation.addEffect': '＋ 新增效果',
   'play.animation.effectType': '效果',
+  'play.animation.seekToMidpoint': '跳至效果中點',
   'play.animation.start': '起始（秒）',
   'play.animation.startMode': '起始時間方式',
   'play.animation.startMode.time': '依秒數',
