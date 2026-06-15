@@ -104,6 +104,7 @@ export function AnimationEditorTab() {
     isReadOnlyProcessing,
     pageSentences,
     sentenceTimeline,
+    currentTime,
     aiFocusBusy,
     handleGenerateAiFocusEffects,
     customScriptBusy,
@@ -200,10 +201,18 @@ export function AnimationEditorTab() {
         </div>
       ) : (
         <div className="mb-2 space-y-2">
-          {draft.effects.map((effect) => (
+          {draft.effects.map((effect) => {
+            const effectStart = effect.startTrigger
+              ? resolveStartTriggerSeconds(effect.startTrigger, sentenceTimeline) ?? effect.start
+              : effect.start;
+            const effectEnd = effectStart + effect.duration + (effect.exitDuration ?? 0);
+            const isActive = currentTime >= effectStart && currentTime <= effectEnd;
+            return (
             <div
               key={effect.id}
-              className="flex flex-col gap-2 rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2"
+              className={`flex flex-col gap-2 rounded-md border px-3 py-2 transition-colors ${
+                isActive ? 'border-fuchsia-400 bg-fuchsia-500/15' : 'border-slate-800 bg-slate-900/50'
+              }`}
             >
               <div className="flex flex-wrap items-end gap-2">
               <label className="flex flex-col gap-1 text-xs text-slate-400">
@@ -452,7 +461,8 @@ export function AnimationEditorTab() {
               </button>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
