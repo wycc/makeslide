@@ -35,6 +35,22 @@ export const OVERLAY_EFFECT_TYPES: readonly SlideAnimationEffectType[] = [
   'custom-script',
 ];
 
+/**
+ * Whole-slide transform effect types. On these types, `exitDuration` plays the
+ * entrance tween in reverse (same `duration`/`ease`) to restore the slide to
+ * its pre-effect state, instead of the auto-hide behaviour used by
+ * `OVERLAY_EFFECT_TYPES` (see `buildGsapTimeline`).
+ */
+export const TRANSFORM_EFFECT_TYPES: readonly SlideAnimationEffectType[] = [
+  'fade-in',
+  'zoom-in',
+  'zoom-out',
+  'pan-left',
+  'pan-right',
+  'pan-up',
+  'pan-down',
+];
+
 /** Max length (chars) for a `text-callout` effect's `text`, matching the backend's `MAX_TEXT_CALLOUT_LENGTH`. */
 export const MAX_TEXT_CALLOUT_LENGTH = 80;
 
@@ -52,7 +68,7 @@ export const MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES = 40;
 /** Max length (chars) for a single `conversation` message's `content`, matching the backend's `MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH`. */
 export const MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH = 2000;
 
-/** Default `exitDuration` (seconds) suggested when a user first enables auto-hide for an overlay effect. */
+/** Default `exitDuration` (seconds) suggested when a user first enables auto-hide (overlay effects) or auto-revert (transform effects). */
 export const DEFAULT_EXIT_DURATION_SECONDS = 2;
 
 export interface FocusEffectParams {

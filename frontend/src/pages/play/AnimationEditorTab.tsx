@@ -12,6 +12,7 @@ import {
   OVERLAY_EFFECT_TYPES,
   SLIDE_ANIMATION_EASES,
   SLIDE_ANIMATION_EFFECT_TYPES,
+  TRANSFORM_EFFECT_TYPES,
   buildCustomScriptSandboxDoc,
   customScriptDurationSeconds,
   defaultAnimationSpec,
@@ -741,9 +742,13 @@ export function AnimationEditorTab() {
                   </div>
                 </div>
               )}
-              {OVERLAY_EFFECT_TYPES.includes(effect.type) && (
+              {(OVERLAY_EFFECT_TYPES.includes(effect.type) || TRANSFORM_EFFECT_TYPES.includes(effect.type)) && (
                 <label className="flex flex-col gap-1 text-xs text-slate-400">
-                  {t('play.animation.exitDuration')}
+                  {t(
+                    OVERLAY_EFFECT_TYPES.includes(effect.type)
+                      ? 'play.animation.exitDuration'
+                      : 'play.animation.exitDuration.transform',
+                  )}
                   <div className="flex items-center gap-1">
                     <input
                       type="checkbox"
