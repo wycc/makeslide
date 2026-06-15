@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { callChatJSON, type TokenUsage } from '../../services/openai';
 import { logger } from '../../logger';
+import { containsPdfPageMarkers, stripPdfPageMarkers } from '../../services/pdfPageMarkers';
 
 const SplitSchema = z.object({
   pages: z
@@ -23,6 +24,9 @@ const OutlineSchema = z.object({
       z.object({
         title: z.string().min(1),
         bullets: z.array(z.string().min(1)).min(2).max(6),
+        // Only populated when the input text contains [[PDF_PAGE_N]] markers:
+        // which original PDF page(s) this slide's content is drawn from.
+        source_pages: z.array(z.number().int().positive()).max(10).optional(),
       }),
     )
     .min(3)
@@ -50,11 +54,17 @@ const OUTLINE_THRESHOLD_CHARS = 800;
  */
 async function buildOutlineFromFullText(
   fullText: string,
-): Promise<{ outlineText: string; usage: TokenUsage } | null> {
+): Promise<{
+  outlineText: string;
+  usage: TokenUsage;
+  /** One entry per non-empty slide in `outlineText`, in the same order. */
+  slides: Array<{ title: string; bullets: string[]; sourcePdfPages?: number[] }>;
+} | null> {
   const input =
     fullText.length > OUTLINE_MAX_INPUT_CHARS
       ? fullText.slice(0, OUTLINE_MAX_INPUT_CHARS)
       : fullText;
+  const hasPageMarkers = containsPdfPageMarkers(input);
 
   const system = [
     '你是簡報大綱助理。',
@@ -63,6 +73,13 @@ async function buildOutlineFromFullText(
     '大綱需有邏輯順序（背景 → 方法/機制 → 結果/結論），必要時可重排內容。',
     '每頁需有一個標題與 2~6 點重點，放在 bullets 陣列之中。',
     '每一頁大綱重點要精簡、可讀、避免逐字轉錄。',
+    ...(hasPageMarkers
+      ? [
+          '原文中包含形如 [[PDF_PAGE_N]] 的標記，代表後續內容出自原始 PDF 第 N 頁。',
+          '請針對每張投影片，於 source_pages 陣列中列出其內容主要參考自哪些原始頁碼（整數，可有多個）。',
+          '絕對不要把 [[PDF_PAGE_N]] 標記文字寫入 title 或 bullets 之中。',
+        ]
+      : []),
     '務必輸出結構化 JSON，不要輸出 markdown。',
   ].join('\n');
 
@@ -98,12 +115,18 @@ async function buildOutlineFromFullText(
 
     // 轉成 Slide 標記格式
     const lines: string[] = [];
-    r.data.slides.forEach((s, idx) => {
+    const slides: Array<{ title: string; bullets: string[]; sourcePdfPages?: number[] }> = [];
+    r.data.slides.forEach((s) => {
       const bullets = s.bullets
         .map((t) => t.trim())
         .filter((t) => t.length > 0);
       if (bullets.length === 0) return;
-      lines.push(`Slide ${idx + 1}: ${s.title.trim()}`);
+      const title = s.title.trim();
+      const sourcePdfPages = s.source_pages?.length
+        ? Array.from(new Set(s.source_pages)).sort((a, b) => a - b)
+        : undefined;
+      slides.push({ title, bullets, sourcePdfPages });
+      lines.push(`Slide ${slides.length}: ${title}`);
       for (const b of bullets) lines.push(`- ${b}`);
       lines.push('');
     });
@@ -114,7 +137,7 @@ async function buildOutlineFromFullText(
       return null;
     }
 
-    return { outlineText: rendered, usage: r.usage };
+    return { outlineText: rendered, usage: r.usage, slides };
   } catch (err) {
     logger.warn(
       { error: err instanceof Error ? err.message : String(err) },
@@ -125,7 +148,7 @@ async function buildOutlineFromFullText(
 }
 
 export interface SplitTextWithLlmResult {
-  pages: Array<{ pageNumber: number; content: string; slideLabel?: string }>;
+  pages: Array<{ pageNumber: number; content: string; slideLabel?: string; sourcePdfPages?: number[] }>;
   usage: TokenUsage;
 }
 
@@ -282,7 +305,7 @@ async function splitChunkRobust(chunk: string): Promise<SplitTextWithLlmResult> 
   }
 }
 
-export async function splitTextWithLlm(rawText: string): Promise<SplitTextWithLlmResult> {
+async function splitTextWithLlmCore(rawText: string): Promise<SplitTextWithLlmResult> {
   const text = rawText.trim();
   if (!text) {
     return {
@@ -332,7 +355,10 @@ export async function splitTextWithLlm(rawText: string): Promise<SplitTextWithLl
           'Text split strategy: outline-first succeeded',
         );
         return {
-          pages: outlinePages,
+          pages: outlinePages.map((p, idx) => ({
+            ...p,
+            sourcePdfPages: outlineResult.slides[idx]?.sourcePdfPages,
+          })),
           usage: outlineResult.usage,
         };
       }
@@ -377,4 +403,19 @@ export async function splitTextWithLlm(rawText: string): Promise<SplitTextWithLl
       usage,
     };
   }
+}
+
+/**
+ * Splits raw source text into slide pages. `rawText` may contain
+ * `[[PDF_PAGE_N]]` markers (see `pdfPageMarkers`) for document-mode PDF
+ * imports - any markers that leak into the final page content (e.g. via the
+ * slide-marker-direct or chunked fallback strategies, which copy from the
+ * input) are stripped before returning.
+ */
+export async function splitTextWithLlm(rawText: string): Promise<SplitTextWithLlmResult> {
+  const result = await splitTextWithLlmCore(rawText);
+  return {
+    ...result,
+    pages: result.pages.map((p) => ({ ...p, content: stripPdfPageMarkers(p.content) })),
+  };
 }

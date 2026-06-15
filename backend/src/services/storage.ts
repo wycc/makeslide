@@ -79,6 +79,11 @@ export function figureManifestPath(pdfId: string): string {
   return path.join(pdfDir(pdfId), 'figures.json');
 }
 
+/** Maps AI-split slide page numbers to their source PDF page number(s) (document-mode imports). */
+export function splitFigureMapPath(pdfId: string): string {
+  return path.join(pdfDir(pdfId), 'split-figure-map.json');
+}
+
 export function figureFilePath(pdfId: string, filename: string): string {
   return path.join(figuresDir(pdfId), filename);
 }

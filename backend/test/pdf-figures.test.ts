@@ -8,9 +8,13 @@ import {
   buildFigureReferenceNotes,
   figureImageAbsPath,
   getFigureReferencesForPage,
+  getFigureReferencesForPages,
   getPageFigures,
   loadFigureManifest,
+  loadSplitPageFigureMap,
+  saveSplitPageFigureMap,
 } from '../src/services/pdfFigures';
+import { splitFigureMapPath } from '../src/services/storage';
 import type { FigureEntry } from '../src/worker/steps/extractPdfFigures';
 
 // Real production PDF checked into storage/ (gitignored), used as a fixture
@@ -129,4 +133,62 @@ test('buildFigureReferenceNotes formats captions and falls back when missing', (
   const notes = buildFigureReferenceNotes([withCaption, withoutCaption]);
   assert.match(notes ?? '', /參考圖表 1：Figure 1: revenue growth/);
   assert.match(notes ?? '', /參考圖表 2：\(無圖說文字\)/);
+});
+
+test('getFigureReferencesForPages aggregates and dedupes figures across multiple pages, capped by area', () => {
+  const SYNTH_PDF_ID = 'pdf-figures-synth-pages-01';
+  const synthDir = path.join(config.storageRoot, SYNTH_PDF_ID);
+  fs.mkdirSync(synthDir, { recursive: true });
+  const figure = (id: string, areaPct: number): FigureEntry => ({
+    id,
+    imagePath: `figures/${id}.png`,
+    width: 100,
+    height: 100,
+    bbox: { xPct: 0, yPct: 0, widthPct: areaPct, heightPct: 1 },
+    caption: null,
+    context: null,
+  });
+  try {
+    fs.writeFileSync(
+      path.join(synthDir, 'figures.json'),
+      JSON.stringify({
+        pdfId: SYNTH_PDF_ID,
+        generatedAt: new Date().toISOString(),
+        pages: [
+          { pageNumber: 1, figures: [figure('shared', 0.2), figure('small', 0.1)] },
+          { pageNumber: 2, figures: [figure('shared', 0.2), figure('large', 0.6)] },
+        ],
+      }),
+      'utf8',
+    );
+
+    // Figure 'shared' appears on both pages but is only counted once.
+    const all = getFigureReferencesForPages(SYNTH_PDF_ID, [1, 2], 5);
+    assert.deepEqual(all.map((f) => f.id).sort(), ['large', 'shared', 'small']);
+
+    // Capped by area: keep the two largest across both pages.
+    const capped = getFigureReferencesForPages(SYNTH_PDF_ID, [1, 2], 2);
+    assert.deepEqual(capped.map((f) => f.id), ['large', 'shared']);
+
+    // Empty when no figures exist on the given pages.
+    assert.deepEqual(getFigureReferencesForPages(SYNTH_PDF_ID, [3, 4]), []);
+  } finally {
+    fs.rmSync(synthDir, { recursive: true, force: true });
+  }
+});
+
+test('loadSplitPageFigureMap / saveSplitPageFigureMap persist the AI-split-page -> source-PDF-page mapping', () => {
+  const PDF_ID = 'pdf-figures-split-map-01';
+  const dir = path.join(config.storageRoot, PDF_ID);
+  fs.mkdirSync(dir, { recursive: true });
+  try {
+    assert.equal(loadSplitPageFigureMap(PDF_ID), null);
+
+    const map = { 1: [1], 2: [2, 3] };
+    saveSplitPageFigureMap(PDF_ID, map);
+    assert.ok(fs.existsSync(splitFigureMapPath(PDF_ID)));
+    assert.deepEqual(loadSplitPageFigureMap(PDF_ID), map);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

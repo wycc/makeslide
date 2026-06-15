@@ -37,7 +37,8 @@
 ### 2.2 V1 不處理（留待未來）
 
 - 純向量繪圖（沒有內嵌 raster image 的圖表，例如直接用線段/路徑畫出的圖）的偵測與輸出。
-- 自動將圖表對應到大綱投影片、自動注入到 `buildImagePrompt`。
+- ~~自動將圖表對應到大綱投影片、自動注入到 `buildImagePrompt`。~~ → 一般文件模式
+  （`pdf_import_mode === 'document'`）已於第 11 節完成；其餘匯入模式維持原樣（第 10 節）。
 - 圖片內文字的 OCR。
 - 跨頁圖表的合併、圖說跨頁比對。
 - 前端瀏覽 / 挑選圖表素材的 UI。
@@ -327,3 +328,165 @@ const editImage = figureRefFiles.length > 0
   `backend/test/figure-reference-image-generation.test.ts`（端對端驗證
   `/regenerate-image` 與 `/regenerate` 的 `images` 步驟皆會把圖表當作參考圖傳給
   `images.edit`，且 prompt 含圖說文字）。
+
+## 11. 一般文件模式（`pdf_import_mode === 'document'`）整合（已完成）
+
+### 11.1 問題背景
+
+「一般文件」匯入模式會先用 `extractPdfTextPages` 取得 PDF 逐頁文字，再交給
+`splitTextWithLlm` 做 AI 重新分頁（大綱優先策略），最後對每一張 AI 分頁呼叫
+`renderTextPagesWithLlm` 用 LLM 直接生成投影片圖片（`images.generate`），完全不會
+render 原始 PDF 頁面截圖。
+
+在第 10 節完成之前，這條路徑：
+
+1. 完全跳過 `extract_figures`（`pipeline.ts` 的條件式只在
+   `!fs.existsSync(sourceTextPath(pdfId))` 時執行）。
+2. 即使跑了 `extract_figures`，AI 重新分頁後的「投影片頁碼」與原始 PDF 頁碼也不是
+   1:1 對應，無法直接用 `getFigureReferencesForPage(pdfId, pageNumber)` 取圖。
+
+因此一般文件 PDF 中的圖表、圖片完全沒有機會被保留到最終投影片中。
+
+### 11.2 `[[PDF_PAGE_N]]` 頁碼標記
+
+新增 `backend/src/services/pdfPageMarkers.ts`：
+
+```ts
+export function formatPdfPageMarker(pageNumber: number): string; // -> "[[PDF_PAGE_N]]"
+export function containsPdfPageMarkers(text: string): boolean;
+export function stripPdfPageMarkers(text: string): string;
+export function buildTextWithPdfPageMarkers(pageTexts: string[]): string;
+```
+
+`backend/src/worker/poppler.ts` 新增 `extractPdfTextPages(pdfPath): Promise<string[]>`
+（逐頁文字陣列；`extractPdfText` 改為呼叫它後 `join('\n')`，行為不變）。
+
+一般文件模式上傳時（`backend/src/routes/pdfs/upload.ts`），改用
+`extractPdfTextPages` 取得逐頁文字，並透過 `buildTextWithPdfPageMarkers` 寫入
+`source.txt`：
+
+```
+[[PDF_PAGE_1]]
+...第 1 頁文字...
+
+[[PDF_PAGE_2]]
+...第 2 頁文字...
+```
+
+`pdf_sources.content_text`（給其他流程使用的全文）仍是不含標記的純文字（各頁
+trim + 去除 NUL byte 後 `join('\n')`，與既有行為一致）。
+
+### 11.3 大綱 LLM 回報 `source_pages`
+
+`splitTextWithLlm.ts` 的 `OutlineSchema` 新增可選欄位：
+
+```ts
+slides: z.array(z.object({
+  title: z.string().min(1),
+  bullets: z.array(z.string().min(1)).min(2).max(6),
+  source_pages: z.array(z.number().int().positive()).max(10).optional(),
+})).min(3).max(20),
+```
+
+當輸入文字含 `[[PDF_PAGE_N]]` 標記時（`containsPdfPageMarkers`），system prompt
+額外要求 LLM 針對每張投影片回報 `source_pages`（該投影片內容主要參考自哪些原始 PDF
+頁碼），並明確禁止把標記文字寫進 `title` / `bullets`。
+
+「大綱優先策略」（`OUTLINE_THRESHOLD_CHARS = 800` 字以上的文件）將
+`outlineResult.slides[idx].sourcePdfPages`（去重、排序）依索引對應到
+`splitBySlideMarkers(outlineText)` 產生的每一張 AI 分頁，寫入
+`SplitTextWithLlmResult.pages[i].sourcePdfPages`。
+
+其餘策略（Strategy 1：原文已含 `Slide N:` 標記；Strategy 3：chunk fallback）不產生
+`sourcePdfPages`（維持 `undefined`）——圖表注入對這兩種情況是 no-op，屬於可接受的
+best-effort 降級。
+
+對外的 `splitTextWithLlm()`（包一層 `splitTextWithLlmCore`）會將所有分頁
+`content` 中殘留的 `[[PDF_PAGE_N]]` 標記透過 `stripPdfPageMarkers` 移除，確保標記
+不會出現在最終投影片文字中。
+
+### 11.4 提前執行 `extract_figures` + `split-figure-map.json`
+
+`pipeline.ts` 的 Step 1（一般文件 / TXT 匯入分支）在呼叫 `splitTextWithLlm` 之前，
+若該 pdf 有 `source.pdf`（`source_type === 'pdf'` 且為一般文件模式），先呼叫
+
+```ts
+runExtractFiguresStage(run, pdfId, pageCount); // 包一層 startStage/finishStage，失敗不中斷
+```
+
+`extractPdfFigures` 本身已是 idempotent（檢查 `figures.json` 是否存在），所以即使
+Step 2.1 之後又跑一次也只是直接回傳既有 manifest。
+
+AI 分頁完成後，`pages[i].sourcePdfPages`（若有）會被收集成
+
+```ts
+type SplitPageFigureMap = Record<number /* 投影片頁碼 */, number[] /* 來源 PDF 頁碼 */>;
+```
+
+並透過新增的 `saveSplitPageFigureMap(pdfId, map)` 寫入
+`storage/<pdfId>/split-figure-map.json`（對應的路徑 helper：
+`splitFigureMapPath(pdfId)`，定義於 `storage.ts`）。
+
+這個 sidecar 檔案的存在理由：pipeline 可能會 resume —— 若 `existingPages.length > 0`
+（該次分頁已經做過），pipeline 不會重新呼叫 `splitTextWithLlm`，只會從磁碟上既有的
+`pages/*.text.txt` 重建頁面物件，此時記憶體中原本的 `sourcePdfPages` 早已遺失，必須
+從 `split-figure-map.json` 讀回（`loadSplitPageFigureMap`）並重新附加到每個重建的
+頁面物件上。
+
+### 11.5 `renderTextPagesWithLlm`：依 `sourcePdfPages` 注入圖表參考圖
+
+`backend/src/services/pdfFigures.ts` 新增：
+
+```ts
+export function getFigureReferencesForPages(
+  pdfId: string,
+  pageNumbers: number[],
+  max?: number, // 預設 MAX_FIGURE_REFERENCES_PER_PAGE = 2
+): FigureEntry[];
+```
+
+聚合多個原始 PDF 頁碼的圖表（依 `id` 去重），再用既有的 `capFiguresByArea` 依面積
+取前 `max` 張——`getFigureReferencesForPage`（第 10 節）也改為呼叫
+`capFiguresByArea` 共用同一份邏輯。
+
+`RenderTextPagesWithLlmOptions.pages[i]` 新增可選欄位 `sourcePdfPages?: number[]`。
+每一頁開始生成圖片前：
+
+```ts
+const figureRefs = p.sourcePdfPages?.length
+  ? getFigureReferencesForPages(opts.pdfId, p.sourcePdfPages)
+  : [];
+const figureNotes = buildFigureReferenceNotes(figureRefs);
+// ...buildImagePrompt({ ..., figureNotes })
+
+const figureRefFiles = await Promise.all(
+  figureRefs.map((figure, i) =>
+    fs.promises.readFile(figureImageAbsPath(opts.pdfId, figure))
+      .then((buf) => toFile(buf, `figure-ref-${i + 1}.png`, { type: 'image/png' })),
+  ),
+);
+```
+
+生成圖片時依 `figureRefFiles` 是否為空二選一：
+
+- 有參考圖：呼叫 `client.images.edit({ image: figureRefFiles, prompt, ... })`
+  （單張時傳單一檔案，多張時傳陣列——與第 10 節 `images.edit` 的用法一致）。
+- 無參考圖（多數匯入模式 / 該分頁無對應圖表）：沿用原本的
+  `client.images.generate({...})`，行為與整合前完全相同。
+
+成功時的 `onPage` metadata 加入 `figureReferenceCount: figureRefs.length`，與
+`runRegenerateImages`（第 10 節）一致，方便觀察命中率。
+
+### 11.6 測試
+
+- `backend/test/pdf-page-markers.test.ts`：`pdfPageMarkers.ts` 各函式的單元測試
+  （格式化、偵測、移除標記、round-trip）。
+- `backend/test/split-text-with-llm.test.ts`：模擬 `chat.completions.create`，驗證
+  含 `[[PDF_PAGE_N]]` 標記的輸入會讓大綱優先策略回傳對應的 `sourcePdfPages`，且最終
+  `content` 不含殘留標記；無標記輸入則 `sourcePdfPages` 為 `undefined`。
+- `backend/test/pdf-figures.test.ts`：新增 `getFigureReferencesForPages`（跨頁聚合 /
+  去重 / 依面積取前 N）與 `loadSplitPageFigureMap` / `saveSplitPageFigureMap` 的案例。
+- `backend/test/render-text-pages-figure-injection.test.ts`：模擬
+  `images.edit` / `images.generate`，驗證 `sourcePdfPages` 對應到 `figures.json`
+  時會呼叫 `images.edit` 並帶上圖表參考圖 + 圖說 prompt；無對應圖表時維持呼叫
+  `images.generate`。

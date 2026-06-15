@@ -18,7 +18,8 @@ import {
 } from '../../services/storage';
 import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { callChatJSON } from '../../services/openai';
-import { extractPdfText } from '../../worker/poppler';
+import { extractPdfText, extractPdfTextPages } from '../../worker/poppler';
+import { buildTextWithPdfPageMarkers } from '../../services/pdfPageMarkers';
 import { enqueuePdfProcessing } from '../../worker/pipeline';
 import { generateVideo } from '../../worker/steps/generateVideo';
 import type { ApiError, PageRow, PdfListItem, PdfMetadata, PdfMetadataPage, PdfRow, PdfStatus } from '../../types';
@@ -403,13 +404,21 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       let sourceContentText = '';
       if (isPdf) {
         await writeSourcePdf(pdfId, buffer);
-        sourceContentText = await extractPdfText(sourcePdfPath(pdfId));
         if (pdfImportMode === 'document') {
-          const extractedText = sourceContentText;
-          if (!extractedText) {
+          // Keep per-page boundaries so source.txt can carry [[PDF_PAGE_N]]
+          // markers - the AI pagination step uses them to report which
+          // original PDF page(s) each generated slide is derived from, which
+          // later lets the pipeline attach the matching extracted figures.
+          const pageTexts = (await extractPdfTextPages(sourcePdfPath(pdfId))).map((t) =>
+            t.replace(/\0/g, '').trim(),
+          );
+          sourceContentText = pageTexts.join('\n').trim();
+          if (!sourceContentText) {
             throw new Error('PDF 文件模式無法抽取可分頁文字');
           }
-          await writeSourceText(pdfId, extractedText);
+          await writeSourceText(pdfId, buildTextWithPdfPageMarkers(pageTexts));
+        } else {
+          sourceContentText = await extractPdfText(sourcePdfPath(pdfId));
         }
       } else {
         sourceContentText = buffer.toString('utf8');
