@@ -3,6 +3,7 @@ import type { TouchEvent } from 'react';
 import DrawingCanvas from '../../components/DrawingCanvas';
 import { SlideRenderer } from '../../components/slide/SlideRenderer';
 import { useI18n } from '../../i18n';
+import { figureImageUrl } from '../../lib/api';
 import { usePlayPageContext } from './PlayPageContext';
 
 /** 觸發換頁所需的最小水平滑動距離（px）。 */
@@ -42,6 +43,7 @@ export function PlayPageFullscreen() {
     detail,
     displayedImageSrc,
     withImageBust,
+    withShareToken,
     drawingMode, setDrawingMode,
     drawingTool, setDrawingTool,
     drawingColor, setDrawingColor,
@@ -160,6 +162,11 @@ export function PlayPageFullscreen() {
                   currentTime={currentTime}
                   isPlaying={slideAnimationPlaying}
                   playbackRate={playbackRate}
+                  resolveFigureImageUrl={
+                    pdfId
+                      ? (figureId) => withShareToken(figureImageUrl(pdfId, figureId)) ?? figureImageUrl(pdfId, figureId)
+                      : undefined
+                  }
                   onAnimationError={() => setAnimationWarning(t('play.animation.runtimeWarning'))}
                   wrapperClassName="relative"
                   wrapperStyle={{ lineHeight: 0 }}
@@ -308,6 +315,11 @@ export function PlayPageFullscreen() {
           currentTime={currentTime}
           isPlaying={slideAnimationPlaying}
           playbackRate={playbackRate}
+          resolveFigureImageUrl={
+            pdfId
+              ? (figureId) => withShareToken(figureImageUrl(pdfId, figureId)) ?? figureImageUrl(pdfId, figureId)
+              : undefined
+          }
           onAnimationError={() => setAnimationWarning(t('play.animation.runtimeWarning'))}
           wrapperClassName="relative"
           wrapperStyle={{ lineHeight: 0 }}

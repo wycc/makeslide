@@ -101,6 +101,7 @@ export type SlideAnimationEffectType =
   | 'text-callout'
   | 'shape'
   | 'step-list'
+  | 'overlay-image'
   | 'custom-script';
 
 export type SlideAnimationEase = 'none' | 'power1.in' | 'power1.out' | 'power1.inOut' | 'power2.inOut';
@@ -138,10 +139,17 @@ export interface SlideAnimationEffect {
    */
   items?: string[];
   /**
+   * Id of a figure extracted from the slide's source PDF (see
+   * `fetchPageFigures`), shown as a positioned image overlay by
+   * `overlay-image` effects (ignored by other effect types). Up to
+   * `MAX_OVERLAY_IMAGE_FIGURE_ID_LENGTH` chars.
+   */
+  figureId?: string;
+  /**
    * Seconds to remain in the "entered" state after the entrance animation
    * completes before automatically reversing back to the original state
    * (same `duration`/`ease`, played in reverse). For overlay effect types
-   * (`highlight-box`, `spotlight`, `pointer`, `text-callout`, `shape`, `step-list`, `custom-script`)
+   * (`highlight-box`, `spotlight`, `pointer`, `text-callout`, `shape`, `step-list`, `overlay-image`, `custom-script`)
    * this fades the overlay back out; for whole-slide transform effect types
    * (`fade-in`, `zoom-in`, `zoom-out`, `pan-left`, `pan-right`, `pan-up`,
    * `pan-down`) this animates the slide back to its pre-effect state.

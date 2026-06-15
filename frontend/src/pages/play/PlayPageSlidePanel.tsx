@@ -4,7 +4,7 @@ import { AnimationEditorTab } from './AnimationEditorTab';
 import { FigureAssetsTab } from './FigureAssetsTab';
 import { formatTime, formatDurationMs } from './formatters';
 import { PageTimingChips } from './PageTimingChips';
-import { fetchPageGenerationPrompts } from '../../lib/api';
+import { fetchPageGenerationPrompts, figureImageUrl } from '../../lib/api';
 import { SHOW_SUBTITLE_STORAGE_KEY, INTERACTIVE_MODE_STORAGE_KEY, useI18n } from '../../i18n';
 import { usePlayPageContext } from './PlayPageContext';
 
@@ -138,6 +138,11 @@ export function PlayPageSlidePanel() {
               currentTime={currentTime}
               isPlaying={slideAnimationPlaying}
               playbackRate={playbackRate}
+              resolveFigureImageUrl={
+                pdfId
+                  ? (figureId) => withShareToken(figureImageUrl(pdfId, figureId)) ?? figureImageUrl(pdfId, figureId)
+                  : undefined
+              }
               onAnimationError={() => setAnimationWarning(t('play.animation.runtimeWarning'))}
               wrapperClassName="relative inline-block rounded-lg"
               wrapperStyle={{ lineHeight: 0, maxHeight: transcriptFocusMode ? '10rem' : `${slideImageMaxHeightVh}vh` }}

@@ -108,6 +108,11 @@ export async function savePageAnimation(
   return (await resp.json()) as SavePageAnimationResponse;
 }
 
+/** Relative URL for an extracted figure's image, as used by `PageFigure.image_url` and `overlay-image` effects (`effect.figureId`). */
+export function figureImageUrl(pdfId: string, figureId: string): string {
+  return `api/pdfs/${encodeURIComponent(pdfId)}/figures/${encodeURIComponent(figureId)}/image`;
+}
+
 /** Lists the figures extracted from this slide's source PDF page(s), for the figure-asset browser/picker. */
 export async function fetchPageFigures(
   id: string,

@@ -5,6 +5,7 @@ import {
   DEFAULT_SHAPE_KIND,
   MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES,
   MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH,
+  MAX_OVERLAY_IMAGE_FIGURE_ID_LENGTH,
   MAX_SLIDE_ANIMATION_EFFECTS,
   MAX_STEP_LIST_ITEMS,
   MAX_STEP_LIST_ITEM_LENGTH,
@@ -349,4 +350,20 @@ test("getFocusEffectParams defaults step-list to the 30/30/40/40 focus box", () 
 test("MAX_STEP_LIST_ITEMS and MAX_STEP_LIST_ITEM_LENGTH match the backend limits", () => {
   assert.equal(MAX_STEP_LIST_ITEMS, 6);
   assert.equal(MAX_STEP_LIST_ITEM_LENGTH, 60);
+});
+
+test("SLIDE_ANIMATION_EFFECT_TYPES and OVERLAY_EFFECT_TYPES include 'overlay-image'", () => {
+  assert.ok(SLIDE_ANIMATION_EFFECT_TYPES.includes("overlay-image"));
+  assert.ok(OVERLAY_EFFECT_TYPES.includes("overlay-image"));
+});
+
+test("getFocusEffectParams defaults overlay-image to the 30/30/40/40 focus box", () => {
+  const effect = {
+    id: "e1", target: "slide" as const, type: "overlay-image" as const, ease: "none" as const, start: 0, duration: 1,
+  };
+  assert.deepEqual(getFocusEffectParams(effect), { xPct: 30, yPct: 30, widthPct: 40, heightPct: 40 });
+});
+
+test("MAX_OVERLAY_IMAGE_FIGURE_ID_LENGTH matches the backend limit", () => {
+  assert.equal(MAX_OVERLAY_IMAGE_FIGURE_ID_LENGTH, 200);
 });
