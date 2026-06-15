@@ -104,6 +104,7 @@ function buildCustomScriptSystemPrompt(): string {
     '  - `Manim.rate.linear/smooth/thereAndBack/rushInto/rushFrom(t)`：manim 標準 rate function，輸入 0~1 進度，輸出調整後的 0~1 進度，可用於讓動畫的速度曲線更接近 manim。',
     '  - `Manim.animate.create/write/fadeIn/fadeOut/grow/shift/rotate/scale/transform(mobject, ...)`：manim 風格動畫，依目前進度（0~1）直接設定 mobject 的視覺狀態，可在每次 `onFrame` 重複呼叫；`create` 為描邊繪製效果、`write` 為文字逐字顯示、`transform(from, to, progress)` 在兩個同類型 mobject 間漸變並交叉淡化。',
     '  - `Manim.lerp(a, b, t)` / `Manim.lerpColor(hex1, hex2, t)`：數值/顏色線性插值。',
+    '  - `Manim.coordinateSystems.axes(svg, opts)` / `Manim.coordinateSystems.numberPlane(svg, opts)`：建立座標平面（對應 manim 的 `Axes`/`NumberPlane`），回傳 `{ el, kind, svg, coordsToPoint }`；`numberPlane` 額外繪製整面格線，`axes` 只畫兩軸與刻度。`opts` 可含 `xRange`/`yRange`（`[min, max, step?]`，預設 `[-7,7,1]`/`[-4,4,1]`，`step` 預設 1，決定格線/刻度間距）、`xLength`/`yLength`（座標系統佔用的場景寬高，預設 14/8）、`color`（軸線/刻度色，預設白）、`gridColor`（`numberPlane` 格線色，預設灰）。回傳值的 `coordsToPoint(x, y)` 會將資料座標線性映射到場景座標（可直接作為 `Manim.shapes.*` 的 `x`/`y`），原點對應 `(0,0)`。整個回傳值可像其他 mobject 一樣傳入 `Manim.animate.*`（`create`/`write` 會退化為 `fadeIn`）。',
     '',
     '若使用者提供「目前程式碼」，代表使用者想在現有結果的基礎上依新的提示詞調整，請盡量延續其結構並套用變更，而不是整段重寫（除非使用者明確要求重做)。',
     '',

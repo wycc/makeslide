@@ -146,6 +146,47 @@ test("Manim.animate.shift translates by progress fraction of the displacement, f
   assert.equal(m.el.getAttribute("transform"), "translate(1 -2)");
 });
 
+test("Manim.coordinateSystems.axes draws axes+ticks and maps coordsToPoint to the scene", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const axes = Manim.coordinateSystems.axes(svg, { xRange: [-5, 5, 1], yRange: [-3, 3, 1] });
+  assert.equal(axes.kind, "axes");
+  assert.equal(svg.children.includes(axes.el), true);
+  // x-axis + y-axis + 11 x-ticks + 7 y-ticks, no grid lines
+  assert.equal(axes.el.children.length, 2 + 11 + 7);
+  // coordsToPoint returns plain objects from the vm sandbox realm, so compare
+  // fields individually instead of via assert.deepEqual (cross-realm prototypes).
+  const origin = axes.coordsToPoint(0, 0);
+  assert.equal(origin.x, 0);
+  assert.equal(origin.y, 0);
+  const max = axes.coordsToPoint(5, 3);
+  assert.equal(max.x, 7);
+  assert.equal(max.y, 4);
+  const min = axes.coordsToPoint(-5, -3);
+  assert.equal(min.x, -7);
+  assert.equal(min.y, -4);
+});
+
+test("Manim.coordinateSystems.numberPlane adds grid lines on top of axes", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const axes = Manim.coordinateSystems.axes(svg, { xRange: [-5, 5, 1], yRange: [-3, 3, 1] });
+  const plane = Manim.coordinateSystems.numberPlane(svg, { xRange: [-5, 5, 1], yRange: [-3, 3, 1] });
+  assert.equal(plane.kind, "numberPlane");
+  // grid adds 11 vertical + 7 horizontal lines before the axes/ticks
+  assert.equal(plane.el.children.length, axes.el.children.length + 11 + 7);
+});
+
+test("Manim.animate.fadeIn/create on axes mobjects fades by progress", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const axes = Manim.coordinateSystems.axes(svg, {});
+  Manim.animate.create(axes, 0.4);
+  assert.equal(axes.el.style.opacity, "0.4");
+  Manim.animate.fadeOut(axes, 0.4);
+  assert.equal(axes.el.style.opacity, "0.6");
+});
+
 test("Manim.animate.transform cross-fades opacity and interpolates matching attributes", () => {
   const Manim = loadManim();
   const svg = createFakeElement("svg");

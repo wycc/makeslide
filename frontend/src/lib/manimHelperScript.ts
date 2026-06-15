@@ -3,8 +3,9 @@
  * `buildCustomScriptSandboxDoc`) before user/AI code runs. Defines a small
  * `window.Manim` helper library so "manim 式" animations can use manim's
  * coordinate system (origin at center, +y up, x in [-7, 7], y in [-4, 4]),
- * color palette, standard rate functions, and signature
- * Create/Write/FadeIn/FadeOut/Transform-style motions without the real
+ * color palette, standard rate functions, signature
+ * Create/Write/FadeIn/FadeOut/Transform-style motions, and `Axes`/`NumberPlane`
+ * coordinate-plane mobjects (with `coordsToPoint`) without the real
  * Python manim library (which the sandbox cannot load over the network).
  *
  * Kept as plain ES5 source text (no TypeScript/build step) so it can be
@@ -163,13 +164,82 @@ export const MANIM_HELPER_SCRIPT = `
       return mobject(svg, el, 'text');
     },
   };
+  function buildAxisRange(range, fallback) {
+    range = range || fallback;
+    return {
+      min: range[0],
+      max: range[1],
+      step: range[2] != null ? range[2] : 1,
+    };
+  }
+  function coordinateSystem(svg, opts, withGrid) {
+    opts = opts || {};
+    var xr = buildAxisRange(opts.xRange, [-7, 7, 1]);
+    var yr = buildAxisRange(opts.yRange, [-4, 4, 1]);
+    var xLength = opts.xLength != null ? opts.xLength : W;
+    var yLength = opts.yLength != null ? opts.yLength : H;
+    var color = opts.color || colors.WHITE;
+    var gridColor = opts.gridColor || colors.GREY;
+    var strokeWidth = opts.strokeWidth != null ? opts.strokeWidth : 0.025;
+    var tickSize = opts.tickSize != null ? opts.tickSize : 0.1;
+    function coordsToPoint(x, y) {
+      return {
+        x: (x - xr.min) / (xr.max - xr.min) * xLength - xLength / 2,
+        y: (y - yr.min) / (yr.max - yr.min) * yLength - yLength / 2,
+      };
+    }
+    var g = document.createElementNS(SVG_NS, 'g');
+    function addLine(x1, y1, x2, y2, strokeColor, sw) {
+      var el = document.createElementNS(SVG_NS, 'line');
+      el.setAttribute('x1', String(x1));
+      el.setAttribute('y1', String(toSvgY(y1)));
+      el.setAttribute('x2', String(x2));
+      el.setAttribute('y2', String(toSvgY(y2)));
+      el.setAttribute('stroke', strokeColor);
+      el.setAttribute('stroke-width', String(sw));
+      g.appendChild(el);
+      return el;
+    }
+    var origin = coordsToPoint(0, 0);
+    if (withGrid) {
+      for (var gx = xr.min; gx <= xr.max + 1e-9; gx += xr.step) {
+        var gpx = coordsToPoint(gx, 0).x;
+        addLine(gpx, -yLength / 2, gpx, yLength / 2, gridColor, strokeWidth * 0.6);
+      }
+      for (var gy = yr.min; gy <= yr.max + 1e-9; gy += yr.step) {
+        var gpy = coordsToPoint(0, gy).y;
+        addLine(-xLength / 2, gpy, xLength / 2, gpy, gridColor, strokeWidth * 0.6);
+      }
+    }
+    addLine(-xLength / 2, origin.y, xLength / 2, origin.y, color, strokeWidth);
+    addLine(origin.x, -yLength / 2, origin.x, yLength / 2, color, strokeWidth);
+    for (var tx = xr.min; tx <= xr.max + 1e-9; tx += xr.step) {
+      var tpx = coordsToPoint(tx, 0).x;
+      addLine(tpx, origin.y - tickSize, tpx, origin.y + tickSize, color, strokeWidth);
+    }
+    for (var ty = yr.min; ty <= yr.max + 1e-9; ty += yr.step) {
+      var tpy = coordsToPoint(0, ty).y;
+      addLine(origin.x - tickSize, tpy, origin.x + tickSize, tpy, color, strokeWidth);
+    }
+    svg.appendChild(g);
+    return {
+      el: g,
+      kind: withGrid ? 'numberPlane' : 'axes',
+      svg: svg,
+      coordsToPoint: coordsToPoint,
+    };
+  }
+  var coordinateSystems = {
+    axes: function (svg, opts) { return coordinateSystem(svg, opts, false); },
+    numberPlane: function (svg, opts) { return coordinateSystem(svg, opts, true); },
+  };
   function getLength(el) {
     try { return el.getTotalLength(); } catch (e) { return 0; }
   }
   var animate = {
     create: function (m, progress) {
       var p = clamp01(progress);
-      if (m.kind === 'text' || m.kind === 'dot' || m.kind === 'arrow') {
+      if (m.kind === 'text' || m.kind === 'dot' || m.kind === 'arrow' || m.kind === 'axes' || m.kind === 'numberPlane') {
         m.el.style.opacity = String(p);
         return;
       }
@@ -247,6 +317,7 @@ export const MANIM_HELPER_SCRIPT = `
     lerpColor: lerpColor,
     createSvg: createSvg,
     shapes: shapes,
+    coordinateSystems: coordinateSystems,
     animate: animate,
   };
 })();
