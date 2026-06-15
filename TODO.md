@@ -1064,6 +1064,14 @@
 - 內容: 完成 TODO 第 901 項「依 `docs/pdf-figure-extraction-design.md` §12 的 V2 設計，實作向量圖形萃取，讓 `hRUVHXrNqW`（`2605.29548v2.pdf`）的 Figure 1-9 等純向量/混合圖表能被正確抽取並配對到 caption」。於既有 CTM 追蹤迴圈中新增向量路徑偵測：對 `OPS.constructPath` 累積 bbox（排除文字 operator），以 union-find 聚類（`VECTOR_FIGURE_MIN_PATHS=20`、`VECTOR_CLUSTER_PAD_PT=5`），再依 bbox 列/相鄰關係（`GROUP_X_GAP_RATIO=0.2`）將多面板圖分組；放寬 `CAPTION_RE` 為 `/(Fig(?:ure)?\.?|Table|圖表?|表)\s*\.?\s*\d+\s*[:：]/i`，使「(a) (b)Figure 2: ...」這類與子圖標記同行的 caption 也能比對成功。影像輸出改用 pdf.js（非原規劃的 poppler `pdftoppm`）：修正 `backend/src/worker/poppler.ts` 的 `NodeCanvasFactory`（`create`/`reset`/`destroy` 皆透過 `canvas` 套件的 `createCanvas()`，解決 pdf.js 內建 Node canvas factory 用 `@napi-rs/canvas` 與本專案 `canvas`（node-canvas）不相容造成的 "Image or Canvas expected" 錯誤），新增 `renderPageToPng()` 整頁渲染後以 `cropPagePng()` 依 bbox 裁切向量群組並輸出 `p<pageNumber>-vec<index>.png`，新增 `FigureEntry.source?: 'raster'|'vector'`。新增 raster/vector 合併規則（IoU>0.5 或 containment>0.9）與兩階段被遮蓋 raster 過濾（bbox overlap>0.5 篩選候選，再以 `computeOcclusionDiff()` 像素差異>60 確認）。驗證結果：`hRUVHXrNqW`（37 頁）總計正確抽取 23 張圖（Figure 1-23 全部配對到正確 caption），其中 Figure 1-9（page 2/4-9）皆為 `source: 'vector'`，原本誤判為圖 2 的殘留 raster `p4-img_p3_1.png` 已被遮蓋過濾排除；37 頁整頁渲染僅耗時約 11 秒，遠低於 120 秒 SLA。已知限制：page 7/9 的群組裁切因 4 個與整體 bbox 完全相同的外框/背景矩形路徑而有多餘留白（內容與 caption 仍正確），詳見設計文件 §12.10。擴充 `backend/test/pdf-figures.test.ts`（新增 Figure 1-9 共 7 項 vector 斷言＋figureCount=23 全文件斷言），`npx tsc --noEmit` 通過，全量測試結果與既有基準一致（18 項既有失敗皆與本變更無關，無新增失敗）。同步更新設計文件 `docs/pdf-figure-extraction-design.md` §2.2/§3.1/§9/§12（含新增 §12.10「已知限制」）為「已完成」。已 commit 至分支 `feature/vector-figure-extraction-v2-20260615`（commit 74531d3）。
 
 # 2026-6-15
-[ ] 在 PlayPage 中，把目前播放中的動畫，根據時現時間將目前播放中的效果背景用高亮度。
+[x] 在 PlayPage 中，把目前播放中的動畫，根據時現時間將目前播放中的效果背景用高亮度。（完成於分支: feature/animation-active-effect-highlight-20260615）
 [ ] 點擊動畫效果時，把時間軸移到效果有效時間一半的地方。
-[ ] 使用 CTRL click 時，把效果改成己選擇的狀態，被選擇的效果都加上一個『合併』的按鍵，按下按鍵就把所有的效果都合併成一個單一效果。起始時間是就早的效果，而長度則調整成
+[ ] 使用 CTRL click 時，把效果改成己選擇的狀態，被選擇的效果都加上一個『合併』的按鍵，按下按鍵就把所有的效果都合併成一個單一效果。起始時間是就早的效果，而長度則調整成所有效果最晚的時間。
+[ ] 加上一個設定指標效果，只是把指標移到指定的位置。
+[ ] 在重生中加上一個動畫的項目，把每一頁都加上動畫效果。
+
+# 工作記錄
+
+- 時間: 2026-06-15 16:05:00 +0800
+- 分支: feature/animation-active-effect-highlight-20260615
+- 內容: 完成「在 PlayPage 中，把目前播放中的動畫，根據時現時間將目前播放中的效果背景用高亮度」。於 `frontend/src/pages/play/AnimationEditorTab.tsx` 的效果列表中，對每個 `SlideAnimationEffect` 計算其有效時間範圍：若有 `startTrigger` 則以 `resolveStartTriggerSeconds()` 解析出的秒數作為起點（無法解析時退回 `effect.start`），結束時間為「起點 + duration + (exitDuration ?? 0)」（涵蓋 overlay 效果的自動淡出時間）；當 `currentTime`（取自 `PlayPageContext`，由 `<audio onTimeUpdate>` 即時更新）落在此範圍內時，該效果項目的容器改用 `border-fuchsia-400 bg-fuchsia-500/15` 高亮樣式取代預設的 `border-slate-800 bg-slate-900/50`，並加上 `transition-colors` 讓切換更平滑；其餘欄位（效果類型、起始模式、時長、ease 等）行為不變。驗證：`npx tsc --noEmit`（frontend）與 `npm run build`（frontend, vite build）皆通過。已 commit 至分支 `feature/animation-active-effect-highlight-20260615`（commit 3a2c97a）。
