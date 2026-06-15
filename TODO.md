@@ -1069,7 +1069,7 @@
 [x] 使用 CTRL click 時，把效果改成己選擇的狀態，被選擇的效果都加上一個『合併』的按鍵，按下按鍵就把所有的效果都合併成一個單一效果。起始時間是就早的效果，而長度則調整成所有效果最晚的時間。（完成於分支: feature/animation-effect-multi-select-merge-20260615）
 [x] 加上一個設定指標效果，只是把指標移到指定的位置。（完成於分支: feature/animation-pointer-effect-20260615）
 [x] 在重生中加上一個動畫的項目，把每一頁都加上動畫效果。（完成於分支: feature/regenerate-add-animations-20260615）
-[ ] 把效果清單和逐字稿效果指引放在一個 notebook 界面中，並加上捲動軸
+[x] 把效果清單和逐字稿效果指引放在一個 notebook 界面中，並加上捲動軸（完成於分支: feature/animation-effects-hints-notebook-20260615）
 [x] 效果 merge 時，原來是依逐字稿就還是用逐字稿，不要轉成秒數（完成於分支: feature/animation-merge-keep-transcript-trigger-20260615）
 
 # 工作記錄
@@ -1097,3 +1097,7 @@
 - 時間: 2026-06-15 20:05:00 +0800
 - 分支: feature/animation-merge-keep-transcript-trigger-20260615
 - 內容: 完成「效果 merge 時，原來是依逐字稿就還是用逐字稿，不要轉成秒數」。`frontend/src/pages/play/AnimationEditorTab.tsx` 的 `handleMergeSelectedEffects()` 原本合併後一律將 `startTrigger` 設為 `undefined`（改用絕對秒數 `start: minStart`），導致原本依逐字稿句子觸發（`startTrigger: { type: 'transcript-line', line, offsetSeconds? }`）的效果合併後失去與逐字稿的同步。修正為：合併結果以 `{ ...earliest, start: minStart, duration: maxEnd - minStart }` 建立，移除原本覆寫 `startTrigger: undefined` 的那一行，讓「起始時間最早」的效果（`earliest`）原有的 `startTrigger`（若有）透過 `...earliest` 自然保留；`start` 仍更新為目前解析出的秒數（`minStart`），作為轉錄被編輯導致 `resolveStartTriggerSeconds()` 解析失敗時的備援值。若 `earliest` 本來就是絕對秒數（無 `startTrigger`），行為不變。同步更新函式上方的說明註解。驗證：`npx tsc --noEmit`（frontend）通過；`npm run build`（frontend, vite build）通過；`frontend/src/lib/animationSpec.test.ts` 28/28 通過。已 commit 至分支 `feature/animation-merge-keep-transcript-trigger-20260615`（commit 2bdcbaa）。
+
+- 時間: 2026-06-15 20:20:00 +0800
+- 分支: feature/animation-effects-hints-notebook-20260615
+- 內容: 完成「把效果清單和逐字稿效果指引放在一個 notebook 界面中，並加上捲動軸」。重構 `frontend/src/pages/play/AnimationEditorTab.tsx`：新增 `notebookTab` 狀態（`'effects' | 'hints'`，預設 `'effects'`），在「啟用動畫」勾選框下方新增一個分頁列（樣式沿用 `PlayPageSlidePanel.tsx` 既有的 編輯分頁 tab-bar 樣式：`flex overflow-hidden rounded-md border ...`，啟用時 `bg-slate-800 text-fuchsia-200`），左側分頁為「{效果清單}（{effects.length}）」、右側為「{逐字稿動畫指引}」並在有逐字稿時附上「{已填寫提示數}/{句數}」。原本「效果清單」（含多選合併提示 `multiSelectHint`、`noEffects` 空狀態、`draft.effects.map(...)` 的逐項編輯卡片）與「逐字稿動畫指引」（`hintsDescription` 說明＋`pageSentences.map(...)` 的逐句提示輸入框，原本只在 `pageSentences.length > 0` 時整段顯示）兩段內容，合併進同一個 `max-h-[60vh] overflow-y-auto` 的捲動容器中，依 `notebookTab` 顯示對應內容；逐字稿提示分頁在無逐字稿時改顯示既有的 `noTranscript` 訊息（取代原本整段隱藏）。原本夾在兩段中間的「新增效果／合併已選效果／自動產生逐字稿焦點動畫／AI 自動產生焦點動畫」工具列移至分頁列上方、捲動容器外，維持兩個分頁切換時都能操作；`customScriptDialogEffect` 的彈出對話框（fixed overlay）位置與行為不變。內部各效果卡片與提示輸入框的 JSX 與互動邏輯（`updateEffect`、`updateHint`、`handleMergeSelectedEffects`、`handleSeekToTime`、`selectedEffectIds` 多選等）皆未改動，僅調整外層容器結構與顯示條件。驗證：`npx tsc --noEmit`（frontend）通過；`npm run build`（frontend, vite build）通過；`frontend/src/lib/animationSpec.test.ts` 28/28 通過。已 commit 至分支 `feature/animation-effects-hints-notebook-20260615`（commit fda4d82）。
