@@ -28,6 +28,14 @@ test('fetchPdfRunHistory should call /runs and return the parsed response', asyn
         error_message: null,
         metadata: null,
         stages: [],
+        llm_usage: {
+          requests: 0,
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0,
+          total_latency_ms: 0,
+          estimated_cost_usd: null,
+        },
       },
     ],
   };

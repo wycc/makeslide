@@ -13,6 +13,7 @@ import { logger } from '../logger';
 import { callGeminiJson, callGeminiTextStream } from './gemini';
 import { getRuntimeAiSettings } from './aiSettings';
 import { currentAccountId, sanitizeAccountId } from './accountContext';
+import { LLM_REQUEST_LOG_FILE, currentLlmUsageContext } from './llmUsage';
 
 interface AccountOpenAiState {
   client: OpenAI | null;
@@ -36,7 +37,6 @@ function getAccountState(accountId: string): AccountOpenAiState {
 
 // 僅供測試使用：強制所有帳號回傳同一顆 stub client。
 let testClientOverride: OpenAI | null | undefined;
-const LLM_REQUEST_LOG_FILE = path.join(process.cwd(), 'backend', 'data', 'llm-requests.log.jsonl');
 
 function extractImageFileName(url: string): string {
   if (!url) return 'unknown-image';
@@ -76,12 +76,21 @@ function sanitizeMessagesForLog(messages: ChatCompletionMessageParam[]): unknown
   });
 }
 
+/** 取得目前情境的 pdf_id/run_id（若有），供 log 寫入時附帶 pipeline run 關聯資訊。 */
+function llmLogContextFields(): { pdf_id?: string; run_id?: string } {
+  const ctx = currentLlmUsageContext();
+  const fields: { pdf_id?: string; run_id?: string } = {};
+  if (ctx?.pdfId) fields.pdf_id = ctx.pdfId;
+  if (ctx?.runId) fields.run_id = ctx.runId;
+  return fields;
+}
+
 async function appendLlmRequestLog(entry: unknown): Promise<void> {
   try {
     await fs.promises.mkdir(path.dirname(LLM_REQUEST_LOG_FILE), { recursive: true });
     await fs.promises.appendFile(
       LLM_REQUEST_LOG_FILE,
-      `${JSON.stringify(entry)}\n`,
+      `${JSON.stringify({ ...llmLogContextFields(), ...((entry as object) ?? {}) })}\n`,
       'utf8',
     );
   } catch (err) {
@@ -97,7 +106,7 @@ async function appendLlmResponseLog(entry: unknown): Promise<void> {
     await fs.promises.mkdir(path.dirname(LLM_REQUEST_LOG_FILE), { recursive: true });
     await fs.promises.appendFile(
       LLM_REQUEST_LOG_FILE,
-      `${JSON.stringify({ kind: 'response', ...((entry as object) ?? {}) })}\n`,
+      `${JSON.stringify({ kind: 'response', ...llmLogContextFields(), ...((entry as object) ?? {}) })}\n`,
       'utf8',
     );
   } catch (err) {

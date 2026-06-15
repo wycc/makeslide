@@ -3,7 +3,7 @@ import DrawingCanvas from '../../components/DrawingCanvas';
 import { SlideRenderer } from '../../components/slide/SlideRenderer';
 import { AnimationEditorTab } from './AnimationEditorTab';
 import { FigureAssetsTab } from './FigureAssetsTab';
-import { formatTime, formatDurationMs } from './formatters';
+import { formatTime, formatDurationMs, formatTokenCount, formatCostUsd } from './formatters';
 import { PageTimingChips } from './PageTimingChips';
 import { ApiError, fetchPageGenerationPrompts, fetchPdfRunHistory, fetchPdfSlowArtifacts, figureImageUrl } from '../../lib/api';
 import { SHOW_SUBTITLE_STORAGE_KEY, INTERACTIVE_MODE_STORAGE_KEY, useI18n } from '../../i18n';
@@ -1057,6 +1057,11 @@ export function PlayPageSlidePanel() {
                                   ))}
                                 </tbody>
                               </table>
+                              {run.llm_usage.requests > 0 && (
+                                <p className="mt-2 font-mono text-xs text-slate-400">
+                                  💬 LLM：{run.llm_usage.requests} 次請求 · {formatTokenCount(run.llm_usage.total_tokens)} tokens · 預估費用 {formatCostUsd(run.llm_usage.estimated_cost_usd)}
+                                </p>
+                              )}
                             </div>
                           )}
                         </div>

@@ -1,10 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import fs from 'node:fs';
-import path from 'node:path';
-import readline from 'node:readline';
 import { db } from '../../db';
-
-const LLM_REQUEST_LOG_FILE = path.join(process.cwd(), 'backend', 'data', 'llm-requests.log.jsonl');
+import { summarizeLlmUsage } from '../../services/llmUsage';
 
 interface CountRow {
   count: number;
@@ -19,20 +15,6 @@ interface StatusCountRow {
   count: number;
 }
 
-interface LlmUsageSummary {
-  requests: number;
-  prompt_tokens: number;
-  completion_tokens: number;
-  total_tokens: number;
-  total_latency_ms: number;
-  estimated_cost_usd: number | null;
-}
-
-const MODEL_PRICE_PER_1M_TOKENS: Record<string, { input: number; output: number }> = {
-  'gpt-4o-mini': { input: 0.15, output: 0.6 },
-  'gpt-4o': { input: 2.5, output: 10 },
-};
-
 function pct(part: number, total: number): number {
   return total > 0 ? Math.round((part / total) * 1000) / 10 : 0;
 }
@@ -45,60 +27,6 @@ function readCount(sql: string, params: unknown[] = []): number {
 function readOptionalCount(sql: string): number | null {
   const row = db.prepare(sql).get() as OptionalCountRow | undefined;
   return row?.count ?? null;
-}
-
-async function summarizeLlmUsage(): Promise<LlmUsageSummary> {
-  const summary: LlmUsageSummary = {
-    requests: 0,
-    prompt_tokens: 0,
-    completion_tokens: 0,
-    total_tokens: 0,
-    total_latency_ms: 0,
-    estimated_cost_usd: null,
-  };
-
-  if (!fs.existsSync(LLM_REQUEST_LOG_FILE)) return summary;
-
-  const stream = fs.createReadStream(LLM_REQUEST_LOG_FILE, { encoding: 'utf8' });
-  const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
-  let estimatedCost = 0;
-  let hasPrice = false;
-
-  for await (const line of rl) {
-    if (!line.trim()) continue;
-    try {
-      const event = JSON.parse(line) as {
-        type?: string;
-        model?: string;
-        latencyMs?: number;
-        usage?: {
-          prompt_tokens?: number;
-          completion_tokens?: number;
-          total_tokens?: number;
-        };
-      };
-      if (event.type !== 'response' || !event.usage) continue;
-      const promptTokens = Number(event.usage.prompt_tokens ?? 0);
-      const completionTokens = Number(event.usage.completion_tokens ?? 0);
-      summary.requests += 1;
-      summary.prompt_tokens += promptTokens;
-      summary.completion_tokens += completionTokens;
-      summary.total_tokens += Number(event.usage.total_tokens ?? promptTokens + completionTokens);
-      summary.total_latency_ms += Number(event.latencyMs ?? 0);
-
-      const price = event.model ? MODEL_PRICE_PER_1M_TOKENS[event.model] : undefined;
-      if (price) {
-        hasPrice = true;
-        estimatedCost += (promptTokens / 1_000_000) * price.input;
-        estimatedCost += (completionTokens / 1_000_000) * price.output;
-      }
-    } catch {
-      // Ignore malformed historical log lines.
-    }
-  }
-
-  summary.estimated_cost_usd = hasPrice ? Math.round(estimatedCost * 1_000_000) / 1_000_000 : null;
-  return summary;
 }
 
 export async function registerObservabilityRoutes(app: FastifyInstance): Promise<void> {
