@@ -302,6 +302,7 @@ export const en = {
   'play.animation.noTranscript': 'No transcript for this page',
   'play.animation.duration': 'Duration (s)',
   'play.animation.exitDuration': 'Auto-hide after',
+  'play.animation.exitDuration.transform': 'Auto-revert after',
   'play.animation.ease': 'Speed curve',
   'play.animation.ease.none': 'No speed change',
   'play.animation.ease.power1In': 'Slow start',

@@ -7,6 +7,40 @@ function panDistance(effect: SlideAnimationEffect): number {
 }
 
 /**
+ * `from`/`to` GSAP vars for a whole-slide transform effect's entrance tween
+ * (`from` is also the "reverted" state used when `exitDuration` is set).
+ * Returns `null` for non-transform effect types (overlay effects).
+ */
+function transformFromTo(effect: SlideAnimationEffect): { from: Record<string, number>; to: Record<string, number> } | null {
+  switch (effect.type) {
+    case 'fade-in':
+      return { from: { autoAlpha: 0 }, to: { autoAlpha: 1 } };
+    case 'zoom-in':
+      return { from: { scale: effect.params?.fromScale ?? 1 }, to: { scale: effect.params?.toScale ?? 1.08 } };
+    case 'zoom-out':
+      return { from: { scale: effect.params?.fromScale ?? 1.08 }, to: { scale: effect.params?.toScale ?? 1 } };
+    case 'pan-left': {
+      const d = panDistance(effect);
+      return { from: { xPercent: d }, to: { xPercent: -d } };
+    }
+    case 'pan-right': {
+      const d = panDistance(effect);
+      return { from: { xPercent: -d }, to: { xPercent: d } };
+    }
+    case 'pan-up': {
+      const d = panDistance(effect);
+      return { from: { yPercent: d }, to: { yPercent: -d } };
+    }
+    case 'pan-down': {
+      const d = panDistance(effect);
+      return { from: { yPercent: -d }, to: { yPercent: d } };
+    }
+    default:
+      return null;
+  }
+}
+
+/**
  * Builds a paused GSAP timeline from a whitelisted-preset spec. Only the
  * effect types/eases the backend validator accepts are handled here; the
  * spec never carries raw GSAP vars.
@@ -24,46 +58,17 @@ export function buildGsapTimeline(stage: HTMLElement, spec: SlideAnimationSpec):
 
   for (const effect of spec.effects) {
     const common = { duration: effect.duration, ease: effect.ease };
+    const transform = transformFromTo(effect);
+    if (transform) {
+      const { from, to } = transform;
+      tl.fromTo(stage, from, { ...to, ...common }, effect.start);
+      if (effect.exitDuration !== undefined) {
+        // 對稱的「消失（恢復原狀）」：以相同的 duration/ease 動畫回到進場前的狀態。
+        tl.to(stage, { ...from, ...common }, effect.start + effect.duration + effect.exitDuration);
+      }
+      continue;
+    }
     switch (effect.type) {
-      case 'fade-in':
-        tl.fromTo(stage, { autoAlpha: 0 }, { autoAlpha: 1, ...common }, effect.start);
-        break;
-      case 'zoom-in':
-        tl.fromTo(
-          stage,
-          { scale: effect.params?.fromScale ?? 1 },
-          { scale: effect.params?.toScale ?? 1.08, ...common },
-          effect.start,
-        );
-        break;
-      case 'zoom-out':
-        tl.fromTo(
-          stage,
-          { scale: effect.params?.fromScale ?? 1.08 },
-          { scale: effect.params?.toScale ?? 1, ...common },
-          effect.start,
-        );
-        break;
-      case 'pan-left': {
-        const d = panDistance(effect);
-        tl.fromTo(stage, { xPercent: d }, { xPercent: -d, ...common }, effect.start);
-        break;
-      }
-      case 'pan-right': {
-        const d = panDistance(effect);
-        tl.fromTo(stage, { xPercent: -d }, { xPercent: d, ...common }, effect.start);
-        break;
-      }
-      case 'pan-up': {
-        const d = panDistance(effect);
-        tl.fromTo(stage, { yPercent: d }, { yPercent: -d, ...common }, effect.start);
-        break;
-      }
-      case 'pan-down': {
-        const d = panDistance(effect);
-        tl.fromTo(stage, { yPercent: -d }, { yPercent: d, ...common }, effect.start);
-        break;
-      }
       case 'highlight-box':
       case 'spotlight':
       case 'pointer':

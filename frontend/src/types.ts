@@ -125,10 +125,13 @@ export interface SlideAnimationEffect {
   /** Caption text for `text-callout` effects (ignored by other effect types). */
   text?: string;
   /**
-   * Seconds to remain visible after the fade-in completes before
-   * automatically fading back out (same `duration`/`ease` as the fade-in).
-   * Only meaningful for overlay effect types (`highlight-box`, `spotlight`,
-   * `pointer`, `text-callout`, `custom-script`); ignored by transform effects.
+   * Seconds to remain in the "entered" state after the entrance animation
+   * completes before automatically reversing back to the original state
+   * (same `duration`/`ease`, played in reverse). For overlay effect types
+   * (`highlight-box`, `spotlight`, `pointer`, `text-callout`, `custom-script`)
+   * this fades the overlay back out; for whole-slide transform effect types
+   * (`fade-in`, `zoom-in`, `zoom-out`, `pan-left`, `pan-right`, `pan-up`,
+   * `pan-down`) this animates the slide back to its pre-effect state.
    */
   exitDuration?: number;
   /**
