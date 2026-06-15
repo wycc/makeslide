@@ -11,6 +11,7 @@ import {
   pageTextPath,
   pdfDir,
   readMetadata,
+  sourcePdfPath,
   sourceTextPath,
   writeSourceText,
   youtubeCaptionsNormalizedPath,
@@ -23,6 +24,7 @@ import { fetchYoutubeCaptions } from '../services/youtubeCaptions';
 import { callChatJSON } from '../services/openai';
 import { getRuntimeAiSettings } from '../services/aiSettings';
 import { accountIdFromOwnerSub, runWithAccountId } from '../services/accountContext';
+import { loadSplitPageFigureMap, saveSplitPageFigureMap } from '../services/pdfFigures';
 import type {
   PageRow,
   PageStatus,
@@ -39,6 +41,7 @@ import { renderTextPagesWithLlm } from './steps/renderTextPagesWithLlm';
 import { splitTextWithLlm } from './steps/splitTextWithLlm';
 import { extractText } from './steps/extractText';
 import { extractPdfFigures } from './steps/extractPdfFigures';
+import { getPdfPageCount } from './poppler';
 import { generateScript } from './steps/generateScript';
 import { generateTitle } from './steps/generateTitle';
 import {
@@ -55,10 +58,31 @@ import {
   startRun,
   startStage,
   type TimingArtifactHandle,
+  type TimingRunContext,
 } from '../services/timing';
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+/**
+ * Runs `extract_figures` for `pdfId`, recording a pipeline stage. Non-fatal:
+ * failures are logged and the stage is marked `failed` so they never block
+ * the rest of the pipeline. Idempotent via `extractPdfFigures`'s own
+ * `figures.json` existence check.
+ */
+async function runExtractFiguresStage(run: TimingRunContext | null, pdfId: string, pageCount: number): Promise<void> {
+  const figuresStage = startStage(run, 'extract_figures', { pageCount });
+  try {
+    const { figureCount } = await extractPdfFigures(pdfId, pageCount);
+    finishStage(figuresStage, 'succeeded', { figureCount });
+  } catch (err) {
+    logger.warn({ pdfId, err }, 'Pipeline: extract_figures failed (non-fatal)');
+    finishStage(figuresStage, 'failed', undefined, {
+      code: (err as { code?: string } | null)?.code ?? null,
+      message: (err as Error | null)?.message ?? String(err),
+    });
+  }
 }
 
 const YoutubeOutlineSchema = z.object({
@@ -528,9 +552,18 @@ async function runPipeline(pdfId: string): Promise<void> {
       const textImageHandles = new Map<number, TimingArtifactHandle | null>();
       const r = isTextImport
         ? await (async () => {
+            // Document-mode PDFs (source.pdf + source.txt) extract figures here,
+            // before the initial LLM image generation below, so figureNotes /
+            // reference images can be attached to matching slides.
+            if ((row.source_type ?? 'pdf') === 'pdf' && fs.existsSync(sourcePdfPath(pdfId))) {
+              const figurePageCount = await getPdfPageCount(sourcePdfPath(pdfId));
+              await runExtractFiguresStage(run, pdfId, figurePageCount);
+            }
+
             const existingPages = listPageRows(pdfId);
             if (existingPages.length > 0) {
               logger.info({ pdfId, pages: existingPages.length }, 'Pipeline: use existing split pages');
+              const figureMap = loadSplitPageFigureMap(pdfId);
               const pages = existingPages.map((p) => {
                 const textContent = fs.readFileSync(path.join(pdfDir(pdfId), p.text_path!), 'utf8');
                 const lines = textContent.split('\n');
@@ -541,6 +574,7 @@ async function runPipeline(pdfId: string): Promise<void> {
                   pageUid: p.page_uid,
                   content: textContent,
                   slideLabel: title || undefined,
+                  sourcePdfPages: figureMap?.[p.page_number],
                 };
               });
               setProgress(pdfId, 'rendering', 0, pages.length);
@@ -597,6 +631,7 @@ async function runPipeline(pdfId: string): Promise<void> {
               await fs.promises.mkdir(pagesDir, { recursive: true });
             }
             const splitPageUids = new Map<number, string>();
+            const figureMap: Record<number, number[]> = {};
             for (const page of split.pages) {
               const pageText = page.content;
               const pageUid = nanoid(10);
@@ -608,6 +643,12 @@ async function runPipeline(pdfId: string): Promise<void> {
                 status: 'pending',
                 text_path: toRelative(pdfId, textPath),
               });
+              if (page.sourcePdfPages?.length) {
+                figureMap[page.pageNumber] = page.sourcePdfPages;
+              }
+            }
+            if (Object.keys(figureMap).length > 0) {
+              saveSplitPageFigureMap(pdfId, figureMap);
             }
             await persistMetadata(pdfId);
 
@@ -797,18 +838,11 @@ async function runPipeline(pdfId: string): Promise<void> {
     // Only meaningful for genuine PDF uploads (not text/YouTube imports, which
     // have no source.pdf). Non-fatal: failures are logged and skipped so they
     // never block script/audio generation.
+    // Document-mode PDFs (source.txt present) run this earlier, in Step 1,
+    // before their initial LLM image generation - see runExtractFiguresStage
+    // call inside the isTextImport branch above.
     if ((row.source_type ?? 'pdf') === 'pdf' && !fs.existsSync(sourceTextPath(pdfId))) {
-      const figuresStage = startStage(run, 'extract_figures', { pageCount });
-      try {
-        const { figureCount } = await extractPdfFigures(pdfId, pageCount);
-        finishStage(figuresStage, 'succeeded', { figureCount });
-      } catch (err) {
-        logger.warn({ pdfId, err }, 'Pipeline: extract_figures failed (non-fatal)');
-        finishStage(figuresStage, 'failed', undefined, {
-          code: (err as { code?: string } | null)?.code ?? null,
-          message: (err as Error | null)?.message ?? String(err),
-        });
-      }
+      await runExtractFiguresStage(run, pdfId, pageCount);
     }
 
     // -------- Step 2.5: PDF full-text re-split (Third Batch) --------

@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { toFile } from 'openai';
 import { coverImagePath, pageImagePath, pageTextPath, pagesDir, pdfDir, sourcePdfPath } from '../../services/storage';
 import { commitPresentationFiles } from '../../services/presentationGit';
 import { generateCoverThumbnail, generatePageThumbnail, ensurePageThumbnail } from '../../services/thumbnails';
@@ -7,11 +8,19 @@ import { getOpenAIClient } from '../../services/openai';
 import { logger } from '../../logger';
 import { config } from '../../config';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
+import { buildFigureReferenceNotes, figureImageAbsPath, getFigureReferencesForPages } from '../../services/pdfFigures';
 import { db, savePageGenerationPrompt } from '../../db';
 
 export interface RenderTextPagesWithLlmOptions {
   pdfId: string;
-  pages: Array<{ pageNumber: number; pageUid: string; content: string; slideLabel?: string }>;
+  pages: Array<{
+    pageNumber: number;
+    pageUid: string;
+    content: string;
+    slideLabel?: string;
+    /** Original PDF page number(s) this slide's content is drawn from (document-mode imports). */
+    sourcePdfPages?: number[];
+  }>;
   /** Override total page count for path naming (used when rendering a subset of pages). Defaults to pages.length. */
   totalPageCount?: number;
   onPage?: (pageNumber: number, imagePath: string, info: RenderTextPageTimingInfo) => void;
@@ -210,9 +219,15 @@ export async function renderTextPagesWithLlm(
       'Text image generation: page start',
     );
 
+    const figureRefs = p.sourcePdfPages?.length
+      ? getFigureReferencesForPages(opts.pdfId, p.sourcePdfPages)
+      : [];
+    const figureNotes = buildFigureReferenceNotes(figureRefs);
+
     const prompt = buildImagePrompt({
       stylePrompt: deckStylePrompt,
       slideLabel: p.slideLabel ?? null,
+      figureNotes,
       textBody: [
         '請優先遵守「生圖風格模板」指定的視覺語彙（配色、光影、材質、構圖語氣、插畫/資訊圖特徵）。',
         '將內容做視覺化摘要，不要逐字抄錄；保留少量必要文字即可。',
@@ -227,6 +242,14 @@ export async function renderTextPagesWithLlm(
 
     savePageGenerationPrompt(opts.pdfId, p.pageNumber, 'image', promptWithSourceHint, config.openaiImageModel);
 
+    const figureRefFiles = await Promise.all(
+      figureRefs.map((figure, index) =>
+        fs.promises
+          .readFile(figureImageAbsPath(opts.pdfId, figure))
+          .then((buf) => toFile(buf, `figure-ref-${index + 1}.png`, { type: 'image/png' })),
+      ),
+    );
+
     let image;
     let finalAttempt = 0;
     let lastErrorInfo: RenderTextPageErrorInfo | null = null;
@@ -234,14 +257,24 @@ export async function renderTextPagesWithLlm(
     for (let attempt = 1; attempt <= IMAGE_GENERATION_MAX_ATTEMPTS; attempt++) {
       finalAttempt = attempt;
       try {
-        const imagePayload: Record<string, unknown> = {
-          model: config.openaiImageModel,
-          prompt: promptWithSourceHint,
-          size: '1536x1024',
-          quality: config.openaiImageQuality,
-        };
-        console.log(imagePayload);
-        image = await client.images.generate(imagePayload as never, { timeout: timeoutMs });
+        if (figureRefFiles.length > 0) {
+          image = await client.images.edit({
+            model: config.openaiImageModel,
+            image: figureRefFiles.length === 1 ? figureRefFiles[0]! : figureRefFiles,
+            prompt: promptWithSourceHint,
+            size: '1536x1024',
+            quality: config.openaiImageQuality,
+          } as never, { timeout: timeoutMs });
+        } else {
+          const imagePayload: Record<string, unknown> = {
+            model: config.openaiImageModel,
+            prompt: promptWithSourceHint,
+            size: '1536x1024',
+            quality: config.openaiImageQuality,
+          };
+          console.log(imagePayload);
+          image = await client.images.generate(imagePayload as never, { timeout: timeoutMs });
+        }
         break;
       } catch (err) {
         const errorInfo = extractErrorInfo(err);
@@ -428,6 +461,7 @@ export async function renderTextPagesWithLlm(
         maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS,
         quality: config.openaiImageQuality,
         sourcePdfAttached: !!sourcePdfDataUrl,
+        figureReferenceCount: figureRefs.length,
       },
     });
   }
