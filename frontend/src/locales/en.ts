@@ -342,7 +342,7 @@ export const en = {
   'play.animation.autoGenerateFocusConfirm': 'This will generate one highlight-box focus effect per transcript sentence and replace all current effects. Continue?',
   'play.animation.autoGenerateFocusAi': '🤖 AI auto-generate focus',
   'play.animation.autoGenerateFocusAiBusy': 'AI is generating…',
-  'play.animation.autoGenerateFocusAiConfirm': 'AI will decide, per transcript sentence, whether to show a focus box and its position, size, and auto-hide timing — replacing all current effects. Continue?',
+  'play.animation.autoGenerateFocusAiConfirm': 'AI will decide, per transcript sentence, whether to show a focus box or a text callout and its position, size, and auto-hide timing — replacing all current effects. Continue?',
   'play.animation.autoGenerateFocusAiDone': 'AI generated focus effects — review and save',
   'play.animation.autoGenerateFocusAiError': 'AI focus generation failed, please try again later',
   'play.animation.hints': 'Transcript animation hints',
