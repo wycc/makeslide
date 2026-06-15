@@ -18,8 +18,11 @@ import { splitFigureMapPath } from '../src/services/storage';
 import type { FigureEntry } from '../src/worker/steps/extractPdfFigures';
 
 // Real production PDF checked into storage/ (gitignored), used as a fixture
-// because it contains an embedded matplotlib chart with a "Figure 10" caption
-// on page 26 - good coverage for bbox + caption matching against real data.
+// because it contains both an embedded raster chart with a "Figure 10" caption
+// on page 26 and pure-vector figures (Figure 1-9, on pages 2 and 4-9, including
+// multi-panel figures split into two clusters on pages 7 and 9) - good coverage
+// for V2 vector clustering, multi-panel grouping, and caption matching against
+// real data.
 const PDF_ID = 'jBaLIg8vMa';
 const PAGE_COUNT = 37;
 const PDF_DIR = path.join(config.storageRoot, PDF_ID);
@@ -60,8 +63,40 @@ test('extractPdfFigures extracts figures + captions from a real PDF', async (t) 
     assert.match(notes ?? '', /Figure 10/);
     assert.match(notes ?? '', /參考圖表 1/);
 
-    // Pages with no embedded images should have no figures.
-    assert.deepEqual(getPageFigures(PDF_ID, 2), []);
+    // V2: pure-vector figures (Figure 1-9) are detected via constructPath clustering,
+    // grouped per multi-panel figure, full-page-rendered + cropped, and matched to
+    // their "Figure N:" caption even when it shares a content-stream line with
+    // trailing axis labels or sub-panel markers (e.g. "(a) (b)Figure 2: ...").
+    assert.equal(figureCount, 23, 'expected exactly 23 figures across the document');
+
+    const page2 = getPageFigures(PDF_ID, 2);
+    assert.equal(page2.length, 1);
+    assert.equal(page2[0]!.source, 'vector');
+    assert.match(page2[0]!.caption ?? '', /Figure 1:/);
+    assert.ok(fs.existsSync(figureImageAbsPath(PDF_ID, page2[0]!)));
+
+    // Pages 4-9: single-panel figures (Figure 2-4, 7) and multi-panel figures split
+    // into two clusters each (Figure 5+6 on page 7, Figure 8+9 on page 9).
+    const expectedVectorCaptions: Record<number, RegExp[]> = {
+      4: [/Figure 2:/],
+      5: [/Figure 3:/],
+      6: [/Figure 4:/],
+      7: [/Figure 6:/, /Figure 5:/],
+      8: [/Figure 7:/],
+      9: [/Figure 9:/, /Figure 8:/],
+    };
+    for (const [pageNumStr, captionPatterns] of Object.entries(expectedVectorCaptions)) {
+      const pageNum = Number(pageNumStr);
+      const figs = getPageFigures(PDF_ID, pageNum);
+      assert.equal(figs.length, captionPatterns.length, `page ${pageNum} figure count`);
+      figs.forEach((fig, i) => {
+        assert.equal(fig.source, 'vector', `page ${pageNum} figure ${i} source`);
+        assert.match(fig.caption ?? '', captionPatterns[i]!, `page ${pageNum} figure ${i} caption`);
+        assert.ok(fs.existsSync(figureImageAbsPath(PDF_ID, fig)), `page ${pageNum} figure ${i} PNG should exist`);
+      });
+    }
+
+    // Page 3 has no qualifying vector clusters or embedded images.
     assert.deepEqual(getPageFigures(PDF_ID, 3), []);
 
     // Page 1 only has small logo-sized images (< 1% of page area) - filtered out.
