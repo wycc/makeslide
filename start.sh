@@ -313,12 +313,43 @@ find_pids_on_port() {
   printf '%s\n' "$pids" | sort -u | grep -v '^$' || true
 }
 
+collect_child_pids() {
+  local parent="$1"
+  local children=""
+  local child=""
+
+  if command -v pgrep >/dev/null 2>&1; then
+    children="$(pgrep -P "$parent" 2>/dev/null || true)"
+    while IFS= read -r child; do
+      [[ -n "$child" ]] || continue
+      printf '%s\n' "$child"
+      collect_child_pids "$child"
+    done <<< "$children"
+  fi
+}
+
+terminate_process_tree() {
+  local root_pid="$1"
+  local signal="${2:-TERM}"
+  local tree_pids=""
+
+  [[ -n "$root_pid" ]] || return 0
+
+  tree_pids="$(collect_child_pids "$root_pid" | tac 2>/dev/null || collect_child_pids "$root_pid")"
+  while IFS= read -r pid; do
+    [[ -n "$pid" ]] || continue
+    kill -"$signal" "$pid" 2>/dev/null || true
+  done <<< "$tree_pids"
+
+  kill -"$signal" "$root_pid" 2>/dev/null || true
+}
+
 PIDS_ON_PORT="$(find_pids_on_port "$PORT")"
 if [[ -n "$PIDS_ON_PORT" ]]; then
   log_warn "Port $PORT 已被下列程序佔用，將終止以釋放：$(tr '\n' ' ' <<< "$PIDS_ON_PORT")"
   while IFS= read -r pid; do
     [[ -n "$pid" ]] || continue
-    kill -TERM "$pid" 2>/dev/null || true
+    terminate_process_tree "$pid" TERM
   done <<< "$PIDS_ON_PORT"
 
   for _ in 1 2 3 4 5; do
@@ -332,7 +363,7 @@ if [[ -n "$PIDS_ON_PORT" ]]; then
     log_warn "程序仍未結束，強制終止：$(tr '\n' ' ' <<< "$PIDS_ON_PORT")"
     while IFS= read -r pid; do
       [[ -n "$pid" ]] || continue
-      kill -KILL "$pid" 2>/dev/null || true
+      terminate_process_tree "$pid" KILL
     done <<< "$PIDS_ON_PORT"
   fi
 else
@@ -352,16 +383,16 @@ cleanup() {
   local code=$?
   if [[ -n "$CHILD_PID" ]] && kill -0 "$CHILD_PID" 2>/dev/null; then
     log_warn "收到中斷訊號，正在終結子程序 (pid=$CHILD_PID)…"
-    # 先送 TERM，給 concurrently / vite / tsx 機會收尾
-    kill -TERM "$CHILD_PID" 2>/dev/null || true
+    # 先送 TERM 給整棵子程序樹，避免 npm/tsx/vite/backend 留下 orphan process 佔住 port
+    terminate_process_tree "$CHILD_PID" TERM
     # 最多等 5 秒
     for _ in 1 2 3 4 5; do
       kill -0 "$CHILD_PID" 2>/dev/null || break
       sleep 1
     done
-    # 仍存活則強制終結整個 process group
+    # 仍存活則強制終結整棵子程序樹
     if kill -0 "$CHILD_PID" 2>/dev/null; then
-      kill -KILL -"$CHILD_PID" 2>/dev/null || kill -KILL "$CHILD_PID" 2>/dev/null || true
+      terminate_process_tree "$CHILD_PID" KILL
     fi
   fi
   exit "$code"
@@ -394,16 +425,16 @@ case "$MODE" in
       cleanup() {
         local code=$?
         if [[ -n "${WATCH_PID:-}" ]] && kill -0 "$WATCH_PID" 2>/dev/null; then
-          kill -TERM "$WATCH_PID" 2>/dev/null || true
+          terminate_process_tree "$WATCH_PID" TERM
         fi
         if [[ -n "$CHILD_PID" ]] && kill -0 "$CHILD_PID" 2>/dev/null; then
-          kill -TERM "$CHILD_PID" 2>/dev/null || true
+          terminate_process_tree "$CHILD_PID" TERM
           for _ in 1 2 3 4 5; do
             kill -0 "$CHILD_PID" 2>/dev/null || break
             sleep 1
           done
           if kill -0 "$CHILD_PID" 2>/dev/null; then
-            kill -KILL -"$CHILD_PID" 2>/dev/null || kill -KILL "$CHILD_PID" 2>/dev/null || true
+            terminate_process_tree "$CHILD_PID" KILL
           fi
         fi
         exit "$code"

@@ -320,7 +320,17 @@ export async function startServer(): Promise<number> {
   rescanTimer.unref();
 
   const app = await buildApp();
-  await app.listen({ port: config.port, host: "0.0.0.0" });
+  app.addHook("onClose", async () => {
+    clearInterval(rescanTimer);
+  });
+  installShutdownHandlers(app);
+  try {
+    await app.listen({ port: config.port, host: "0.0.0.0" });
+  } catch (err) {
+    clearInterval(rescanTimer);
+    await app.close().catch(() => undefined);
+    throw err;
+  }
   logger.info(
     {
       protocol: config.httpsKeyPath && config.httpsCertPath ? "https" : "http",
@@ -331,6 +341,28 @@ export async function startServer(): Promise<number> {
     "Backend server listening",
   );
   return config.port;
+}
+
+function installShutdownHandlers(app: Awaited<ReturnType<typeof buildApp>>): void {
+  if (process.env.NODE_ENV === "test") return;
+
+  let shuttingDown = false;
+  const shutdown = async (signal: NodeJS.Signals) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    logger.info({ signal }, "Shutdown signal received; closing backend server");
+    try {
+      await app.close();
+      logger.info("Backend server closed");
+      process.exit(0);
+    } catch (err) {
+      logger.error({ err }, "Failed to close backend server cleanly");
+      process.exit(1);
+    }
+  };
+
+  process.once("SIGINT", shutdown);
+  process.once("SIGTERM", shutdown);
 }
 
 async function main(): Promise<void> {
