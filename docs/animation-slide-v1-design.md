@@ -47,6 +47,9 @@
 >
 > 擴充註記（2026-06-16，AI 自動產生 shape/step-list）：
 > - `auto-focus-ai`（§7.4）的 `AUTO_FOCUS_AI_EFFECT_TYPES` 擴充為 `highlight-box`/`spotlight`/`text-callout`/`shape`/`step-list`：LLM 可為適合用圖形標示位置的句子選擇 `shape`（並指定 `shape: 'circle'|'rect'|'ellipse'|'arrow'`），或為描述多個步驟/要點的句子選擇 `step-list`（並提供 `items: string[]`，上限 `MAX_STEP_LIST_ITEMS` = 6 項、每項上限 `MAX_STEP_LIST_ITEM_LENGTH` = 60 字）；若選擇 `step-list` 卻沒有任何有效項目，後端會退回為 `highlight-box`（與 `text-callout` 缺少文字時相同的退回邏輯）。為 §12 V2「`custom-script` 等其他效果類型的 AI 生成」中 `shape`/`step-list` 部分之落地。詳見 §7.4、§12。
+>
+> 擴充註記（2026-06-16，重新生成全部動畫改用 AI 自動產生）：
+> - 「重新生成全部」（`POST /api/pdfs/:id/regenerate`，動畫步驟 `runRegenerateAnimations`）原本依逐字稿句子數量產生固定的 `highlight-box` 焦點動畫（規則式 `generateRuleBasedFocusEffects`，已移除），現改為逐頁讀取頁面 OCR 文字、頁面截圖與既有 `hints`，呼叫與 §7.4「🤖 AI 自動產生焦點動畫」相同的 `generateAiFocusEffects`，由 LLM 逐句決定效果類型（`highlight-box`/`spotlight`/`text-callout`/`shape`/`step-list`）、位置與消失時間，並保留原有 `hints` 供下次重生時參考。頁面截圖載入邏輯抽出為共用函式 `loadFocusAiPageImageDataUrl`（`backend/src/services/animationAutoFocus.ts`），供 §7.4 路由與本批次管線共用。「重新生成全部」對話框（`RegenAllDialog.tsx`）的說明文字同步更新，並提醒頁數較多時所需時間與 AI 費用會隨之增加。詳見 §7.4、§8。
 
 ---
 
@@ -535,6 +538,7 @@ Props：`renderType`、`src`（由呼叫端算好，含 displayedImageSrc 防閃
 - 產生後仍是一般 `draft.effects`，可於效果清單中個別調整（包含 `text-callout` 的文案內容、`shape` 的圖形種類、`step-list` 的條列項目），並需按「儲存動畫」才會持久化。
 - v1 範圍：產生 `highlight-box`/`spotlight`/`text-callout`/`shape`/`step-list` 五種效果；overlay image、物件 target、公式、`custom-script` 等其他效果類型的 AI 生成留待後續版本（見 §12）。
 - 圖片輸入：提示詞會說明「若附帶投影片頁面圖片，請參考圖片中的實際版面決定座標」，讓 `xPct`/`yPct`/`widthPct`/`heightPct` 更貼近畫面實際內容；圖片僅在 `LLM_PROVIDER=openai`（預設）時實際送出——Gemini 路徑（`callGeminiJson`/`normalizeMessages`）目前會將非文字內容部分一律替換為 `'[image]'` 占位字串，與 `generateScript` 的既有限制相同，留待後續一併處理。
+- `generateAiFocusEffects` 與本節的頁面截圖載入邏輯（`loadFocusAiPageImageDataUrl`）亦由「重新生成全部」的動畫批次步驟共用，詳見該章節的擴充註記（2026-06-16，重新生成全部動畫改用 AI 自動產生）。
 
 ### 7.5 AI 自訂腳本動畫（custom-script）
 
