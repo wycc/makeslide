@@ -93,6 +93,73 @@ function newEffect(): SlideAnimationEffect {
   };
 }
 
+/** 一組常用動畫效果的快速套用範本：提供比 `newEffect()` 更貼近實際使用情境的預設值。 */
+interface EffectPreset {
+  id: string;
+  labelKey: TranslationKey;
+  apply: () => Partial<SlideAnimationEffect>;
+}
+
+const EFFECT_PRESETS: readonly EffectPreset[] = [
+  {
+    id: 'title-fade-in',
+    labelKey: 'play.animation.preset.titleFadeIn',
+    apply: () => ({ type: 'fade-in', duration: 1.2, ease: 'power1.out' }),
+  },
+  {
+    id: 'zoom-in-emphasis',
+    labelKey: 'play.animation.preset.zoomInEmphasis',
+    apply: () => ({ type: 'zoom-in', duration: 2, ease: 'power1.inOut' }),
+  },
+  {
+    id: 'pan-left-reveal',
+    labelKey: 'play.animation.preset.panLeftReveal',
+    apply: () => ({ type: 'pan-left', duration: 2.5, ease: 'power1.inOut' }),
+  },
+  {
+    id: 'highlight-callout',
+    labelKey: 'play.animation.preset.highlightCallout',
+    apply: () => ({
+      type: 'highlight-box',
+      duration: 0.8,
+      ease: 'power1.out',
+      exitDuration: DEFAULT_EXIT_DURATION_SECONDS,
+    }),
+  },
+  {
+    id: 'spotlight-focus',
+    labelKey: 'play.animation.preset.spotlightFocus',
+    apply: () => ({
+      type: 'spotlight',
+      duration: 0.8,
+      ease: 'power1.out',
+      exitDuration: DEFAULT_EXIT_DURATION_SECONDS,
+      params: { xPct: 20, yPct: 20, widthPct: 60, heightPct: 60 },
+    }),
+  },
+  {
+    id: 'text-callout-note',
+    labelKey: 'play.animation.preset.textCalloutNote',
+    apply: () => ({
+      type: 'text-callout',
+      duration: 1.5,
+      ease: 'power1.out',
+      exitDuration: DEFAULT_EXIT_DURATION_SECONDS,
+      params: { xPct: 8, yPct: 78, widthPct: 40, heightPct: 14 },
+    }),
+  },
+  {
+    id: 'pointer-mark',
+    labelKey: 'play.animation.preset.pointerMark',
+    apply: () => ({
+      type: 'pointer',
+      duration: 1,
+      ease: 'power1.out',
+      exitDuration: DEFAULT_EXIT_DURATION_SECONDS,
+    }),
+  },
+];
+
 /** 句子文字過長時，於下拉選單中截斷顯示。 */
 function truncateSentence(text: string, maxLen = 18): string {
   return text.length > maxLen ? `${text.slice(0, maxLen)}…` : text;
@@ -250,6 +317,17 @@ export function AnimationEditorTab() {
     });
   };
 
+  /** 依選定的範本新增一個效果，套用範本中預先調整好的型別／長度／速度變化等常用設定。 */
+  const handleApplyPreset = (presetId: string) => {
+    const preset = EFFECT_PRESETS.find((p) => p.id === presetId);
+    if (!preset) return;
+    setAnimationDraft((prev) => {
+      const base = prev ?? defaultAnimationSpec();
+      if (base.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS) return base;
+      return { ...base, effects: [...base.effects, { ...newEffect(), ...preset.apply() }] };
+    });
+  };
+
   const updateHint = (line: number, text: string) => {
     setAnimationDraft((prev) => {
       const base = prev ?? defaultAnimationSpec();
@@ -297,6 +375,24 @@ export function AnimationEditorTab() {
         >
           {t('play.animation.addEffect')}
         </button>
+        <select
+          disabled={disabled || draft.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS}
+          title={t('play.animation.presetApplyHint')}
+          defaultValue=""
+          onChange={(e) => {
+            const presetId = e.target.value;
+            if (presetId) handleApplyPreset(presetId);
+            e.target.value = '';
+          }}
+          className="rounded-md border border-slate-600 bg-slate-900 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <option value="">{t('play.animation.presetApply')}</option>
+          {EFFECT_PRESETS.map((preset) => (
+            <option key={preset.id} value={preset.id}>
+              {t(preset.labelKey)}
+            </option>
+          ))}
+        </select>
         {selectedEffectIds.size >= 2 && (
           <button
             type="button"
