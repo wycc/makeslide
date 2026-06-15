@@ -60,6 +60,7 @@ import {
   type TimingArtifactHandle,
   type TimingRunContext,
 } from '../services/timing';
+import { setLlmUsageContext } from '../services/llmUsage';
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -438,6 +439,7 @@ async function runPipeline(pdfId: string): Promise<void> {
     triggeredBy: runType === 'resume' ? 'startup_recovery' : 'system',
     metadata: { resumeFrom: row.progress_step ?? 'start', source_type: row.source_type ?? 'pdf' },
   });
+  if (run) setLlmUsageContext({ pdfId, runId: run.runId });
 
   logger.info(
     { pdfId, resumeFrom: row.progress_step ?? 'start' },

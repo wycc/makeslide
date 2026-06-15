@@ -70,6 +70,15 @@ export interface PipelineRunStageSummary {
   error_message: string | null;
 }
 
+export interface LlmUsageSummary {
+  requests: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  total_latency_ms: number;
+  estimated_cost_usd: number | null;
+}
+
 export interface PipelineRunSummary {
   id: string;
   run_type: PipelineRunType;
@@ -85,6 +94,7 @@ export interface PipelineRunSummary {
   error_message: string | null;
   metadata: Record<string, unknown> | null;
   stages: PipelineRunStageSummary[];
+  llm_usage: LlmUsageSummary;
 }
 
 export interface PipelineRunsResponse {

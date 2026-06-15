@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
+import { emptyLlmUsageSummary, summarizeLlmUsageByRunIds } from '../../services/llmUsage';
 import { TIMING_EVENT_VALUES } from '../../services/timing';
 import type {
   PipelineRunStageSummary,
@@ -107,6 +108,7 @@ export async function registerRunHistoryRoutes(app: FastifyInstance): Promise<vo
            FROM pipeline_runs WHERE pdf_id = ? ORDER BY started_at DESC, id DESC LIMIT ?`,
       )
       .all(id, limit) as PipelineRunRow[];
+    const llmUsageByRun = await summarizeLlmUsageByRunIds(runRows.map((row) => row.id));
     const runs: PipelineRunSummary[] = runRows.map((row) => ({
       id: row.id,
       run_type: row.run_type,
@@ -122,6 +124,7 @@ export async function registerRunHistoryRoutes(app: FastifyInstance): Promise<vo
       error_message: row.error_message,
       metadata: parseMetadata(row.metadata_json),
       stages: loadStageSummaries(row.id),
+      llm_usage: llmUsageByRun.get(row.id) ?? emptyLlmUsageSummary(),
     }));
     return reply.code(200).send({ runs });
   });

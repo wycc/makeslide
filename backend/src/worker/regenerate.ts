@@ -9,6 +9,7 @@ import { db } from '../db';
 import { logger } from '../logger';
 import { getOpenAIClient } from '../services/openai';
 import { accountIdFromOwnerSub, runWithAccountId } from '../services/accountContext';
+import { setLlmUsageContext } from '../services/llmUsage';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../services/imagePromptTemplates';
 import { buildFigureReferenceNotes, figureImageAbsPath, getFigureReferencesForPage, loadFigureSelection } from '../services/pdfFigures';
 import { loadPromptTemplate, renderPromptTemplate } from '../services/promptTemplates';
@@ -757,6 +758,7 @@ async function runJob(
     metadata: { job_id: state.job_id, steps: stepNames },
   });
   state.timing_run_id = timingRun?.runId ?? null;
+  if (timingRun) setLlmUsageContext({ pdfId: state.pdf_id, runId: timingRun.runId });
   setStateUpdated(state);
   logger.info(
     {

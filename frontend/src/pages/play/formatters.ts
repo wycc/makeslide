@@ -22,3 +22,16 @@ export function formatTime(seconds: number): string {
   const s = total % 60;
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
+
+export function formatTokenCount(tokens: number): string {
+  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(2)}M`;
+  if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}K`;
+  return `${tokens}`;
+}
+
+export function formatCostUsd(cost: number | null): string {
+  if (cost == null) return '未知';
+  if (cost === 0) return '$0';
+  if (cost < 0.01) return '<$0.01';
+  return `$${cost.toFixed(2)}`;
+}

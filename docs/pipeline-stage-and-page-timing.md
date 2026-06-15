@@ -596,6 +596,32 @@ export interface SlaSettingsResponse {
 
 前端「設定」頁（[`frontend/src/pages/SettingsPage.tsx`](../frontend/src/pages/SettingsPage.tsx)）admin 專屬區塊「Pipeline SLA 設定」可分別列出所有 stage／artifact 的預設值、目前生效值與覆寫值（秒），並可逐項套用或清除覆寫；此為全域設定，套用後對所有 PDF／provider/model/source_type 一致生效，依 provider/model/source_type 區分目標值留待後續擴充（見 §13）。
 
+### 8.8 LLM 用量／成本與 timing event 關聯（已實作，v1 範圍：run 層級）
+
+- 新增 [`backend/src/services/llmUsage.ts`](../backend/src/services/llmUsage.ts)，集中管理 `LLM_REQUEST_LOG_FILE`、`MODEL_PRICE_PER_1M_TOKENS` 與用量彙總邏輯（原本分散在 `observability.ts`／`openai.ts`）。同時修正 `summarizeLlmUsage()` 原本檢查 `event.type === 'response'`、但 log 實際寫入欄位是 `kind` 的不一致問題（改為檢查 `event.kind === 'response'`），修正前 `/api/system/observability` 的 `llm_usage` 一直回傳全 0。
+- 新增以 `AsyncLocalStorage`（`enterWith`）為基礎的 LLM 呼叫情境 `setLlmUsageContext`/`currentLlmUsageContext`：`pipeline.ts`／`regenerate.ts` 在 `startRun()` 之後呼叫 `setLlmUsageContext({ pdfId, runId })`，之後該 pipeline run（含其觸發的所有非同步 `callChatJSON`/`streamChatText` 呼叫）寫入 `llm-requests.log.jsonl` 的每筆 response log 會自動帶上 `pdf_id`/`run_id` 欄位。
+- `GET /api/pdfs/:id/runs`（§8.5）每個 run 新增 `llm_usage` 欄位，由 `summarizeLlmUsageByRunIds()` 單次掃描 log 檔、依 `run_id` 分組計算；沒有對應 log 紀錄的 run（例如此功能上線前的舊 run）回傳全 0／`estimated_cost_usd: null`，而非缺漏欄位。
+
+```ts
+export interface LlmUsageSummary {
+  requests: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  total_latency_ms: number;
+  estimated_cost_usd: number | null;
+}
+```
+
+前端「執行歷程」展開後，若該 run 的 `llm_usage.requests > 0`，顯示「💬 LLM：N 次請求 · X tokens · 預估費用 $Y」（[`frontend/src/pages/play/PlayPageSlidePanel.tsx`](../frontend/src/pages/play/PlayPageSlidePanel.tsx)）。
+
+**v1 範圍限制**（留待後續擴充，見 §13）：
+
+- 僅關聯到 run 層級（`pdf_id`/`run_id`），尚未細分到 stage／artifact 層級。
+- `MODEL_PRICE_PER_1M_TOKENS` 僅有 `gpt-4o-mini`/`gpt-4o` 兩個價格；其他模型的請求仍計入 token 數，但 `estimated_cost_usd` 為 `null`。
+- `callChatJSON`/`streamChatText` 在 `llmProvider === 'gemini'` 時走 `gemini.ts`，目前未寫入 `llm-requests.log.jsonl`，因此 Gemini 請求不會出現在此用量統計中。
+- `addPagesFromPrompt.ts` 等沒有對應 `pipeline_runs`/`run_id` 的流程，其 LLM 呼叫不會被關聯（沒有 timing run 可關聯）。
+
 ## 9. 前端顯示策略
 
 ### 9.1 每頁顯示
@@ -717,6 +743,6 @@ flowchart TD
 
 - ~~新增 run history API，讓使用者查看每次 regenerate/resume 的完整歷程~~（已新增 `GET /api/pdfs/:id/runs`，回傳該 PDF 所有 `pipeline_runs`（依 `started_at` 由新到舊排序，預設上限 20、可用 `limit` 查詢參數調整，上限 100）及每個 run 對應的 `pipeline_stage_summaries`（依§5.2 的 stage 順序排序），詳見 §8.5；前端於「系統資料」分頁新增「執行歷程」區塊，可展開查看各 run 的階段耗時與 SLA；分支 `feature/pipeline-run-history-20260616`）。
 - ~~將 SLA target 移到設定檔或 DB，支援不同 provider/model/source_type~~（v1 範圍：已新增 `pipeline_sla_overrides` 表與 `GET`/`PUT /api/system/sla-settings`（admin-only），可針對每個 stage／artifact 設定全域 SLA target override（套用於所有 PDF/provider/model/source_type），詳見 §8.7；前端「設定」頁新增「Pipeline SLA 設定」區塊；分支 `feature/pipeline-sla-settings-20260616`）。依 provider/model/source_type 區分目標值（多維度矩陣）留待後續擴充。
-- 將 timing event 與 token/成本統計關聯，支援成本儀表。
+- ~~將 timing event 與 token/成本統計關聯，支援成本儀表~~（v1 範圍：新增 `services/llmUsage.ts` 集中管理 LLM 用量 log 與彙總，並修正 `summarizeLlmUsage()` 的 `kind`/`type` 欄位不一致 bug；以 `AsyncLocalStorage` 在 `startRun()` 後關聯 `pdf_id`/`run_id`，`GET /api/pdfs/:id/runs` 每個 run 新增 `llm_usage`（requests/tokens/預估費用），前端「執行歷程」展開後顯示；詳見 §8.8；分支 `feature/pipeline-llm-cost-tracking-20260616`）。stage/artifact 層級細分、Gemini 用量記錄、更多模型計價留待後續擴充。
 - ~~建立 slow artifact ranking，協助找出最慢頁面與最慢階段~~（已新增 `GET /api/pdfs/:id/slow-artifacts`，回傳該 PDF 的 `page_artifact_timings` 依 `duration_ms` 由大到小排序的前幾筆（預設 5、可用 `limit` 調整，上限 20），詳見 §8.6；前端於「系統資料」分頁新增「🐢 最慢素材排行」表格；分支 `feature/pipeline-slow-artifact-ranking-20260616`）。
 - 若導入分散式 queue，可把 `run_id` 作為 trace correlation id，串接 worker logs。
