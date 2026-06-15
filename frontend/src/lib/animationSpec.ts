@@ -25,6 +25,7 @@ export const SLIDE_ANIMATION_EFFECT_TYPES: readonly SlideAnimationEffectType[] =
   'shape',
   'step-list',
   'overlay-image',
+  'formula',
   'custom-script',
 ];
 
@@ -39,6 +40,7 @@ export const OVERLAY_EFFECT_TYPES: readonly SlideAnimationEffectType[] = [
   'shape',
   'step-list',
   'overlay-image',
+  'formula',
   'custom-script',
 ];
 
@@ -79,6 +81,9 @@ export const MAX_STEP_LIST_ITEM_LENGTH = 60;
 
 /** Max length (chars) for an `overlay-image` effect's `figureId`, matching the backend's `MAX_OVERLAY_IMAGE_FIGURE_ID_LENGTH`. */
 export const MAX_OVERLAY_IMAGE_FIGURE_ID_LENGTH = 200;
+
+/** Max length (chars) for a `formula` effect's LaTeX source, matching the backend's `MAX_FORMULA_LENGTH`. */
+export const MAX_FORMULA_LENGTH = 200;
 
 /** Max number of per-sentence animation hints, matching the backend's `MAX_HINTS`. */
 export const MAX_HINTS = 50;

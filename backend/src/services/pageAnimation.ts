@@ -16,6 +16,7 @@ export const ANIMATION_EFFECT_TYPES = [
   'shape',
   'step-list',
   'overlay-image',
+  'formula',
   'custom-script',
 ] as const;
 
@@ -65,10 +66,15 @@ export interface AnimationEffect {
    */
   figureId?: string;
   /**
+   * LaTeX source rendered as a math formula by `formula` effects (ignored by
+   * other effect types), via KaTeX. Up to `MAX_FORMULA_LENGTH` chars.
+   */
+  formula?: string;
+  /**
    * Seconds to remain visible after the fade-in completes before
    * automatically fading back out (same `duration`/`ease` as the fade-in).
    * Only meaningful for overlay effect types (`highlight-box`, `spotlight`,
-   * `pointer`, `text-callout`, `shape`, `step-list`, `overlay-image`, `custom-script`); ignored by transform effects.
+   * `pointer`, `text-callout`, `shape`, `step-list`, `overlay-image`, `formula`, `custom-script`); ignored by transform effects.
    */
   exitDuration?: number;
   /**
@@ -123,6 +129,8 @@ export const MAX_STEP_LIST_ITEMS = 6;
 export const MAX_STEP_LIST_ITEM_LENGTH = 60;
 /** Max length (chars) for an `overlay-image` effect's `figureId`, matching `FigureImageParamSchema`'s `figureId`. */
 export const MAX_OVERLAY_IMAGE_FIGURE_ID_LENGTH = 200;
+/** Max length (chars) for a `formula` effect's LaTeX source. */
+export const MAX_FORMULA_LENGTH = 200;
 export const MAX_HINTS = 50;
 export const MAX_HINT_LENGTH = 200;
 /** Max length (chars) for a `custom-script` effect's generated JavaScript `code`. */
@@ -155,6 +163,7 @@ const ALLOWED_PARAM_KEYS: Record<AnimationEffectType, readonly string[]> = {
   'shape': ['xPct', 'yPct', 'widthPct', 'heightPct'],
   'step-list': ['xPct', 'yPct', 'widthPct', 'heightPct'],
   'overlay-image': ['xPct', 'yPct', 'widthPct', 'heightPct'],
+  'formula': ['xPct', 'yPct', 'widthPct', 'heightPct'],
   'custom-script': ['xPct', 'yPct', 'widthPct', 'heightPct'],
 };
 
@@ -182,6 +191,7 @@ const EffectSchema = z.object({
   shape: z.enum(ANIMATION_SHAPE_KINDS).optional(),
   items: z.array(z.string().max(MAX_STEP_LIST_ITEM_LENGTH)).max(MAX_STEP_LIST_ITEMS).optional(),
   figureId: z.string().min(1).max(MAX_OVERLAY_IMAGE_FIGURE_ID_LENGTH).optional(),
+  formula: z.string().min(1).max(MAX_FORMULA_LENGTH).optional(),
   exitDuration: z.number().min(0).max(MAX_DURATION_SECONDS).optional(),
   code: z.string().max(MAX_CUSTOM_SCRIPT_CODE_LENGTH).optional(),
   prompt: z.string().max(MAX_CUSTOM_SCRIPT_PROMPT_LENGTH).optional(),
@@ -242,6 +252,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.shape !== undefined ? { shape: effect.shape } : {}),
       ...(effect.items !== undefined ? { items: effect.items } : {}),
       ...(effect.figureId !== undefined ? { figureId: effect.figureId } : {}),
+      ...(effect.formula !== undefined ? { formula: effect.formula } : {}),
       ...(effect.exitDuration !== undefined ? { exitDuration: effect.exitDuration } : {}),
       ...(effect.code !== undefined ? { code: effect.code } : {}),
       ...(effect.prompt !== undefined ? { prompt: effect.prompt } : {}),

@@ -102,6 +102,7 @@ export type SlideAnimationEffectType =
   | 'shape'
   | 'step-list'
   | 'overlay-image'
+  | 'formula'
   | 'custom-script';
 
 export type SlideAnimationEase = 'none' | 'power1.in' | 'power1.out' | 'power1.inOut' | 'power2.inOut';
@@ -146,10 +147,15 @@ export interface SlideAnimationEffect {
    */
   figureId?: string;
   /**
+   * LaTeX source rendered as a math formula by `formula` effects (ignored by
+   * other effect types), via KaTeX. Up to `MAX_FORMULA_LENGTH` chars.
+   */
+  formula?: string;
+  /**
    * Seconds to remain in the "entered" state after the entrance animation
    * completes before automatically reversing back to the original state
    * (same `duration`/`ease`, played in reverse). For overlay effect types
-   * (`highlight-box`, `spotlight`, `pointer`, `text-callout`, `shape`, `step-list`, `overlay-image`, `custom-script`)
+   * (`highlight-box`, `spotlight`, `pointer`, `text-callout`, `shape`, `step-list`, `overlay-image`, `formula`, `custom-script`)
    * this fades the overlay back out; for whole-slide transform effect types
    * (`fade-in`, `zoom-in`, `zoom-out`, `pan-left`, `pan-right`, `pan-up`,
    * `pan-down`) this animates the slide back to its pre-effect state.

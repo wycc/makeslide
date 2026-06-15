@@ -12,6 +12,7 @@ import {
   ANIMATION_SHAPE_KINDS,
   MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES,
   MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH,
+  MAX_FORMULA_LENGTH,
   MAX_OVERLAY_IMAGE_FIGURE_ID_LENGTH,
   MAX_STEP_LIST_ITEMS,
   MAX_STEP_LIST_ITEM_LENGTH,
@@ -385,6 +386,59 @@ test('validateAnimationSpec strips unknown params from overlay-image effects', (
   const result = validateAnimationSpec(
     validSpec([
       fadeIn({ type: 'overlay-image', figureId: 'fig-1', params: { xPct: 10, distancePct: 5, evil: 'alert(1)' } }),
+    ]),
+  );
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.deepEqual(result.spec.effects[0].params, { xPct: 10 });
+  }
+});
+
+test('validateAnimationSpec accepts a formula effect with a formula and overlay params', () => {
+  const result = validateAnimationSpec(
+    validSpec([
+      fadeIn({
+        id: 'effect-1',
+        type: 'formula',
+        formula: 'E = mc^2',
+        params: { xPct: 30, yPct: 40, widthPct: 40, heightPct: 20 },
+      }),
+    ]),
+  );
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.spec.effects[0].formula, 'E = mc^2');
+    assert.deepEqual(result.spec.effects[0].params, { xPct: 30, yPct: 40, widthPct: 40, heightPct: 20 });
+  }
+});
+
+test('validateAnimationSpec accepts a formula effect without a formula (not yet configured)', () => {
+  const result = validateAnimationSpec(validSpec([fadeIn({ id: 'effect-1', type: 'formula' })]));
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.spec.effects[0].formula, undefined);
+  }
+});
+
+test('validateAnimationSpec rejects a formula effect with an empty formula', () => {
+  assert.equal(validateAnimationSpec(validSpec([fadeIn({ type: 'formula', formula: '' })])).ok, false);
+});
+
+test('validateAnimationSpec rejects a formula exceeding MAX_FORMULA_LENGTH', () => {
+  assert.equal(
+    validateAnimationSpec(validSpec([fadeIn({ type: 'formula', formula: 'x'.repeat(MAX_FORMULA_LENGTH) })])).ok,
+    true,
+  );
+  assert.equal(
+    validateAnimationSpec(validSpec([fadeIn({ type: 'formula', formula: 'x'.repeat(MAX_FORMULA_LENGTH + 1) })])).ok,
+    false,
+  );
+});
+
+test('validateAnimationSpec strips unknown params from formula effects', () => {
+  const result = validateAnimationSpec(
+    validSpec([
+      fadeIn({ type: 'formula', formula: 'E = mc^2', params: { xPct: 10, distancePct: 5, evil: 'alert(1)' } }),
     ]),
   );
   assert.equal(result.ok, true);

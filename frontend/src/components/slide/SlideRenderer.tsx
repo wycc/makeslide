@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import type { CSSProperties, ImgHTMLAttributes, ReactNode, Ref } from 'react';
+import katex from 'katex';
 import type { SlideAnimationEffect, SlideAnimationSpec, SlideRenderType } from '../../types';
 import {
   OVERLAY_EFFECT_TYPES,
@@ -166,6 +167,26 @@ function EffectOverlay({
         alt=""
         draggable={false}
         style={{ ...position, objectFit: 'contain' }}
+      />
+    );
+  }
+  if (effect.type === 'formula') {
+    const html = katex.renderToString(effect.formula ?? '', { throwOnError: false, displayMode: true });
+    return (
+      <div
+        data-effect-id={effect.id}
+        style={{
+          ...position,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '0.5em 0.75em',
+          borderRadius: '8px',
+          background: 'rgba(15, 23, 42, 0.85)',
+          color: '#f8fafc',
+          overflow: 'hidden',
+        }}
+        dangerouslySetInnerHTML={{ __html: html }}
       />
     );
   }

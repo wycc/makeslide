@@ -5,6 +5,7 @@ import {
   DEFAULT_SHAPE_KIND,
   MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES,
   MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH,
+  MAX_FORMULA_LENGTH,
   MAX_OVERLAY_IMAGE_FIGURE_ID_LENGTH,
   MAX_SLIDE_ANIMATION_EFFECTS,
   MAX_STEP_LIST_ITEMS,
@@ -366,4 +367,20 @@ test("getFocusEffectParams defaults overlay-image to the 30/30/40/40 focus box",
 
 test("MAX_OVERLAY_IMAGE_FIGURE_ID_LENGTH matches the backend limit", () => {
   assert.equal(MAX_OVERLAY_IMAGE_FIGURE_ID_LENGTH, 200);
+});
+
+test("SLIDE_ANIMATION_EFFECT_TYPES and OVERLAY_EFFECT_TYPES include 'formula'", () => {
+  assert.ok(SLIDE_ANIMATION_EFFECT_TYPES.includes("formula"));
+  assert.ok(OVERLAY_EFFECT_TYPES.includes("formula"));
+});
+
+test("getFocusEffectParams defaults formula to the 30/30/40/40 focus box", () => {
+  const effect = {
+    id: "e1", target: "slide" as const, type: "formula" as const, ease: "none" as const, start: 0, duration: 1,
+  };
+  assert.deepEqual(getFocusEffectParams(effect), { xPct: 30, yPct: 30, widthPct: 40, heightPct: 40 });
+});
+
+test("MAX_FORMULA_LENGTH matches the backend limit", () => {
+  assert.equal(MAX_FORMULA_LENGTH, 200);
 });
