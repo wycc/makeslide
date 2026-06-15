@@ -1071,6 +1071,7 @@
 [x] 在重生中加上一個動畫的項目，把每一頁都加上動畫效果。（完成於分支: feature/regenerate-add-animations-20260615）
 [x] 把效果清單和逐字稿效果指引放在一個 notebook 界面中，並加上捲動軸（完成於分支: feature/animation-effects-hints-notebook-20260615）
 [x] 效果 merge 時，原來是依逐字稿就還是用逐字稿，不要轉成秒數（完成於分支: feature/animation-merge-keep-transcript-trigger-20260615）
+[x] 重新確認 master TODO.md 無未完成項目並更新工作記錄（完成於分支: feature/todo-no-pending-recheck-20260615-2030）
 
 # 工作記錄
 
@@ -1101,3 +1102,7 @@
 - 時間: 2026-06-15 20:20:00 +0800
 - 分支: feature/animation-effects-hints-notebook-20260615
 - 內容: 完成「把效果清單和逐字稿效果指引放在一個 notebook 界面中，並加上捲動軸」。重構 `frontend/src/pages/play/AnimationEditorTab.tsx`：新增 `notebookTab` 狀態（`'effects' | 'hints'`，預設 `'effects'`），在「啟用動畫」勾選框下方新增一個分頁列（樣式沿用 `PlayPageSlidePanel.tsx` 既有的 編輯分頁 tab-bar 樣式：`flex overflow-hidden rounded-md border ...`，啟用時 `bg-slate-800 text-fuchsia-200`），左側分頁為「{效果清單}（{effects.length}）」、右側為「{逐字稿動畫指引}」並在有逐字稿時附上「{已填寫提示數}/{句數}」。原本「效果清單」（含多選合併提示 `multiSelectHint`、`noEffects` 空狀態、`draft.effects.map(...)` 的逐項編輯卡片）與「逐字稿動畫指引」（`hintsDescription` 說明＋`pageSentences.map(...)` 的逐句提示輸入框，原本只在 `pageSentences.length > 0` 時整段顯示）兩段內容，合併進同一個 `max-h-[60vh] overflow-y-auto` 的捲動容器中，依 `notebookTab` 顯示對應內容；逐字稿提示分頁在無逐字稿時改顯示既有的 `noTranscript` 訊息（取代原本整段隱藏）。原本夾在兩段中間的「新增效果／合併已選效果／自動產生逐字稿焦點動畫／AI 自動產生焦點動畫」工具列移至分頁列上方、捲動容器外，維持兩個分頁切換時都能操作；`customScriptDialogEffect` 的彈出對話框（fixed overlay）位置與行為不變。內部各效果卡片與提示輸入框的 JSX 與互動邏輯（`updateEffect`、`updateHint`、`handleMergeSelectedEffects`、`handleSeekToTime`、`selectedEffectIds` 多選等）皆未改動，僅調整外層容器結構與顯示條件。驗證：`npx tsc --noEmit`（frontend）通過；`npm run build`（frontend, vite build）通過；`frontend/src/lib/animationSpec.test.ts` 28/28 通過。已 commit 至分支 `feature/animation-effects-hints-notebook-20260615`（commit fda4d82）。
+
+- 時間: 2026-06-15 20:30:00 +0800
+- 分支: feature/todo-no-pending-recheck-20260615-2030
+- 內容: 重新確認 master 中 TODO.md 未發現行首未完成核取項目（`^[ ]`），working tree 亦無未提交變更；本輪實際待辦清單（FirstBatch、New Batch、New TODO、新的功能、2026-6-1、2026-6-10、2026-6-11、2026-6-12、新功能(每一個功能使用一個 branch)、2026-6-15 等所有區段）皆已全數標記為 `[x]` 完成。本次以獨立分支保存複查記錄 `docs/todo-rechecks/2026-06-15-2030.md`，並回到 master 更新工作記錄。
