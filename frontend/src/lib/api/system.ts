@@ -62,6 +62,7 @@ export interface SystemAiSettings {
   admin_account_ids?: string[];
   github_repo_url?: string;
   github_token?: string;
+  auto_generate_animation?: boolean;
 }
 
 export interface UpdateSystemAiSettingsPayload {
@@ -91,6 +92,7 @@ export interface UpdateSystemAiSettingsPayload {
   google_redirect_uri?: string;
   github_repo_url?: string;
   github_token?: string;
+  auto_generate_animation?: boolean;
 }
 
 export async function getOpenAIKeyStatus(): Promise<OpenAIKeyStatusResponse> {

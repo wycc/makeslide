@@ -68,6 +68,7 @@ export default function SettingsPage() {
   const [githubRepoUrl, setGithubRepoUrl] = useState('');
   const [githubToken, setGithubToken] = useState('');
   const [cguAirEnabled, setCguAirEnabled] = useState(false);
+  const [autoGenerateAnimation, setAutoGenerateAnimation] = useState(false);
   const [slaSettings, setSlaSettings] = useState<SlaSettingsResponse | null>(null);
   const [slaOverrideInputs, setSlaOverrideInputs] = useState<Record<string, string>>({});
   const [slaLoading, setSlaLoading] = useState(false);
@@ -114,6 +115,7 @@ export default function SettingsPage() {
       setGithubRepoUrl(s.github_repo_url ?? '');
       setGithubToken(s.github_token ?? '');
       setCguAirEnabled(s.openai_base_url === CGU_AIR_BASE_URL);
+      setAutoGenerateAnimation(Boolean(s.auto_generate_animation));
       const cachedUserCode = window.localStorage.getItem(LOCAL_USER_CODE_KEY)?.trim() ?? '';
       setUserCode((auth?.authenticated ? s.user_code : cachedUserCode) ?? '');
       if (s.has_openai_key || s.has_gemini_key) {
@@ -197,6 +199,7 @@ export default function SettingsPage() {
           : {}),
         github_repo_url: githubRepoUrl.trim(),
         github_token: githubToken.trim(),
+        auto_generate_animation: autoGenerateAnimation,
       });
       storeLanguageSettings(uiLanguage, contentLanguage);
       window.localStorage.setItem(PLAYBACK_SPEED_STORAGE_KEY, String(playbackSpeed));
@@ -245,6 +248,7 @@ export default function SettingsPage() {
     githubRepoUrl,
     githubToken,
     cguAirEnabled,
+    autoGenerateAnimation,
     CGU_AIR_BASE_URL,
     t,
   ]);
@@ -508,6 +512,17 @@ export default function SettingsPage() {
                 <option value="openai">OpenAI</option>
                 <option value="gemini">Gemini</option>
               </select>
+            </label>
+            <label className="block text-sm text-slate-300 sm:col-span-2">
+              <span className="inline-flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={autoGenerateAnimation}
+                  onChange={(e) => setAutoGenerateAnimation(e.target.checked)}
+                />
+                {t('settings.autoGenerateAnimation')}
+              </span>
+              <span className="mt-1 block text-xs text-slate-500">{t('settings.autoGenerateAnimationHint')}</span>
             </label>
             {isAdmin ? (
               <>

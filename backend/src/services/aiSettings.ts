@@ -33,6 +33,7 @@ export interface PerAccountAiSettings {
   contentLanguage: AppLanguage;
   githubRepoUrl: string;
   githubToken: string;
+  autoGenerateAnimation: boolean;
 }
 
 /**
@@ -144,6 +145,7 @@ function basePerAccountSettings(): PerAccountAiSettings {
     contentLanguage: process.env.CONTENT_LANGUAGE === 'en' ? 'en' : 'zh-TW',
     githubRepoUrl: process.env.GITHUB_REPO_URL?.trim() || '',
     githubToken: process.env.GITHUB_TOKEN?.trim() || '',
+    autoGenerateAnimation: asBoolean(process.env.AUTO_GENERATE_ANIMATION) ?? false,
   };
 }
 
@@ -172,6 +174,7 @@ function loadPerAccountOverrides(accountId: string): Partial<PerAccountAiSetting
     contentLanguage: asLanguage(values.CONTENT_LANGUAGE),
     githubRepoUrl: values.GITHUB_REPO_URL,
     githubToken: values.GITHUB_TOKEN,
+    autoGenerateAnimation: asBoolean(values.AUTO_GENERATE_ANIMATION),
   });
 }
 
@@ -210,6 +213,7 @@ const PER_ACCOUNT_ENV_PAIRS: Array<[string, keyof PerAccountAiSettings]> = [
   ['CONTENT_LANGUAGE', 'contentLanguage'],
   ['GITHUB_REPO_URL', 'githubRepoUrl'],
   ['GITHUB_TOKEN', 'githubToken'],
+  ['AUTO_GENERATE_ANIMATION', 'autoGenerateAnimation'],
 ];
 
 // ---------------------------------------------------------------------------

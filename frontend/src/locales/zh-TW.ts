@@ -39,6 +39,8 @@ export const zhTW = {
   'settings.githubSync': 'GitHub 同步',
   'settings.githubSyncHint': '設定 GitHub repository 與存取 token 後，即可將每一份簡報同步（push）到 GitHub。在另一台電腦上填入相同的 repository 與個人 token，也能把該機器上的簡報同步過去。',
   'settings.cguAirEnabled': '使用長庚大學 CGU Air API（將 baseURL 改為 https://air.cgu.edu.tw/cgullmapi/v1）',
+  'settings.autoGenerateAnimation': '產生語音時自動產生焦點動畫',
+  'settings.autoGenerateAnimationHint': '啟用後，每次產生簡報語音完成時，會自動以 AI 為對應頁面產生焦點動畫（與「動畫編輯」分頁的「AI 自動產生焦點動畫」相同），並覆寫該頁原有的動畫效果。',
   'settings.geminiSpeaker1': 'Gemini Speaker 1 人設（選填）',
   'settings.geminiSpeaker2': 'Gemini Speaker 2 人設（選填）',
   'settings.geminiSpeaker1Placeholder': '例如：沉穩、專業、男聲主持',

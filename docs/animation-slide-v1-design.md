@@ -560,7 +560,7 @@ Props：`renderType`、`src`（由呼叫端算好，含 displayedImageSrc 防閃
 - 點擊後會以產生結果**取代**目前的 `draft.effects`，並將 `enabled` 設為 `true`；若目前已有效果設定，會先以 `window.confirm` 確認是否覆蓋。
 - 本頁尚無逐字稿（`pageSentences.length === 0`）時按鈕停用，提示文字沿用「本頁尚無逐字稿」（`play.animation.noTranscript`）。
 - 產生後每個效果仍可於效果清單中個別調整類型、起始時間、長度、緩動與焦點位置/大小，與手動新增的效果一致。
-- 本功能僅在編輯器內提供「一次性產生」的手動操作；TODO 第 720 項所述「打開功能後，產生語音時自動產生」的常駐設定與後端管線整合留待後續項目（見 §12）。
+- 本功能僅在編輯器內提供「一次性產生」的手動操作；~~TODO 第 720 項所述「打開功能後，產生語音時自動產生」的常駐設定與後端管線整合留待後續項目（見 §12）~~（已實作：在「AI 設定」頁面新增「產生語音時自動產生焦點動畫」開關（`auto_generate_animation` 帳號層級設定，`AUTO_GENERATE_ANIMATION` 環境變數，預設關閉），啟用後每次主管線完成語音合成時自動呼叫 `generateAnimationForPage`（與「重新產生動畫」邏輯共用）為每頁產生焦點動畫並覆寫原有效果，以 `generate_animations` 計時 stage 追蹤；v1 範圍：整頁覆寫（不增量合併）、單頁失敗為非致命（記錄繼續）、不提供選頁或分組設定；分支 `feature/animation-auto-generate-on-audio-20260616`）。
 
 ### 7.3 逐字稿動畫指引
 
