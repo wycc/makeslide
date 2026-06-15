@@ -169,7 +169,11 @@ export function AnimationEditorTab() {
     });
   };
 
-  /** 將已選擇的效果合併成一個：起點取最早的起始時間，長度延伸至最晚的結束時間，其餘設定沿用最早的效果。 */
+  /**
+   * 將已選擇的效果合併成一個：起點取最早的起始時間，長度延伸至最晚的結束時間，其餘設定沿用最早的效果。
+   * 若最早的效果原本是依逐字稿句子觸發（`startTrigger`），合併後維持該觸發設定，不轉換為絕對秒數；
+   * `start` 仍更新為目前解析出的秒數，作為轉錄被編輯導致無法解析時的備援值。
+   */
   const handleMergeSelectedEffects = () => {
     setAnimationDraft((prev) => {
       const base = prev ?? defaultAnimationSpec();
@@ -187,7 +191,6 @@ export function AnimationEditorTab() {
       const merged: SlideAnimationEffect = {
         ...earliest,
         start: minStart,
-        startTrigger: undefined,
         duration: maxEnd - minStart,
       };
       const selectedIds = new Set(selected.map((e) => e.id));
