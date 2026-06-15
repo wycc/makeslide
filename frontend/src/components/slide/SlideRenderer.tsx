@@ -123,6 +123,32 @@ function EffectOverlay({ effect }: { effect: SlideAnimationEffect }) {
       </svg>
     );
   }
+  if (effect.type === 'step-list') {
+    const items = (effect.items ?? []).map((item) => item.trim()).filter((item) => item.length > 0);
+    return (
+      <div
+        data-effect-id={effect.id}
+        style={{
+          ...position,
+          display: 'flex',
+          alignItems: 'center',
+          padding: '0.5em 0.75em',
+          borderRadius: '8px',
+          background: 'rgba(15, 23, 42, 0.85)',
+          color: '#f8fafc',
+          overflow: 'hidden',
+        }}
+      >
+        <ul style={{ margin: 0, paddingLeft: '1.25em', listStyle: 'disc', fontSize: '1.1rem', fontWeight: 600, lineHeight: 1.5 }}>
+          {items.map((item, index) => (
+            <li key={index} style={{ wordBreak: 'break-word' }}>
+              {item}
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
   if (effect.type === 'custom-script') {
     return (
       <iframe

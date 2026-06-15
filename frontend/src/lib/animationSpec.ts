@@ -23,6 +23,7 @@ export const SLIDE_ANIMATION_EFFECT_TYPES: readonly SlideAnimationEffectType[] =
   'pointer',
   'text-callout',
   'shape',
+  'step-list',
   'custom-script',
 ];
 
@@ -35,6 +36,7 @@ export const OVERLAY_EFFECT_TYPES: readonly SlideAnimationEffectType[] = [
   'pointer',
   'text-callout',
   'shape',
+  'step-list',
   'custom-script',
 ];
 
@@ -67,6 +69,11 @@ export const TRANSFORM_EFFECT_TYPES: readonly SlideAnimationEffectType[] = [
 
 /** Max length (chars) for a `text-callout` effect's `text`, matching the backend's `MAX_TEXT_CALLOUT_LENGTH`. */
 export const MAX_TEXT_CALLOUT_LENGTH = 80;
+
+/** Max number of bullet items in a `step-list` effect's `items`, matching the backend's `MAX_STEP_LIST_ITEMS`. */
+export const MAX_STEP_LIST_ITEMS = 6;
+/** Max length (chars) for a single `step-list` item, matching the backend's `MAX_STEP_LIST_ITEM_LENGTH`. */
+export const MAX_STEP_LIST_ITEM_LENGTH = 60;
 
 /** Max number of per-sentence animation hints, matching the backend's `MAX_HINTS`. */
 export const MAX_HINTS = 50;

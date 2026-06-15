@@ -9,6 +9,8 @@ import {
   MAX_CUSTOM_SCRIPT_PROMPT_LENGTH,
   MAX_HINT_LENGTH,
   MAX_SLIDE_ANIMATION_EFFECTS,
+  MAX_STEP_LIST_ITEMS,
+  MAX_STEP_LIST_ITEM_LENGTH,
   MAX_TEXT_CALLOUT_LENGTH,
   OVERLAY_EFFECT_TYPES,
   SLIDE_ANIMATION_EASES,
@@ -170,6 +172,17 @@ const EFFECT_PRESETS: readonly EffectPreset[] = [
       duration: 0.8,
       ease: 'power1.out',
       exitDuration: DEFAULT_EXIT_DURATION_SECONDS,
+    }),
+  },
+  {
+    id: 'step-list-points',
+    labelKey: 'play.animation.preset.stepList',
+    apply: () => ({
+      type: 'step-list',
+      duration: 2,
+      ease: 'power1.out',
+      exitDuration: DEFAULT_EXIT_DURATION_SECONDS,
+      params: { xPct: 8, yPct: 18, widthPct: 44, heightPct: 40 },
     }),
   },
 ];
@@ -737,6 +750,25 @@ export function AnimationEditorTab() {
                       </option>
                     ))}
                   </select>
+                </label>
+              )}
+              {effect.type === 'step-list' && (
+                <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  {t('play.animation.stepListItems')}
+                  <textarea
+                    rows={3}
+                    value={(effect.items ?? []).join('\n')}
+                    disabled={disabled}
+                    placeholder={t('play.animation.stepListItemsPlaceholder')}
+                    onChange={(e) => {
+                      const lines = e.target.value
+                        .split('\n')
+                        .slice(0, MAX_STEP_LIST_ITEMS)
+                        .map((line) => line.slice(0, MAX_STEP_LIST_ITEM_LENGTH));
+                      updateEffect(effect.id, { items: lines.some((line) => line.trim().length > 0) ? lines : undefined });
+                    }}
+                    className="w-48 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                  />
                 </label>
               )}
               {OVERLAY_EFFECT_TYPES.includes(effect.type) && effect.type !== 'custom-script' && (

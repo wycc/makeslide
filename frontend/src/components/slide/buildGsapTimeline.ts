@@ -89,6 +89,27 @@ export function buildGsapTimeline(stage: HTMLElement, spec: SlideAnimationSpec):
         }
         break;
       }
+      case 'step-list': {
+        const overlay = stage.querySelector<HTMLElement>(`[data-effect-id="${effect.id}"]`);
+        if (overlay) {
+          // 容器本身立即可見；每個項目各自做交錯淡入，總長度為 effect.duration。
+          tl.set(overlay, { autoAlpha: 1 }, effect.start);
+          const items = overlay.querySelectorAll<HTMLElement>('li');
+          if (items.length > 0) {
+            const stagger = effect.duration / items.length;
+            tl.fromTo(
+              items,
+              { autoAlpha: 0, x: -8 },
+              { autoAlpha: 1, x: 0, duration: stagger, ease: effect.ease, stagger },
+              effect.start,
+            );
+          }
+          if (effect.exitDuration !== undefined) {
+            tl.to(overlay, { autoAlpha: 0, ...common }, effect.start + effect.duration + effect.exitDuration);
+          }
+        }
+        break;
+      }
     }
   }
 

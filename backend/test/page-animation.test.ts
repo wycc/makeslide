@@ -11,6 +11,8 @@ import { setOpenAIClientForTest } from '../src/services/openai';
 import {
   MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES,
   MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH,
+  MAX_STEP_LIST_ITEMS,
+  MAX_STEP_LIST_ITEM_LENGTH,
   MAX_TEXT_CALLOUT_LENGTH,
   defaultAnimationSpec,
   validateAnimationSpec,
@@ -271,6 +273,64 @@ test('validateAnimationSpec strips unknown params from shape effects', () => {
   assert.equal(result.ok, true);
   if (result.ok) {
     assert.deepEqual(result.spec.effects[0].params, { xPct: 10 });
+  }
+});
+
+test('validateAnimationSpec accepts a step-list effect with items and overlay params', () => {
+  const result = validateAnimationSpec(
+    validSpec([
+      fadeIn({
+        id: 'effect-1',
+        type: 'step-list',
+        items: ['第一步：開啟檔案', '第二步：點選工具', '第三步：完成'],
+        params: { xPct: 8, yPct: 18, widthPct: 44, heightPct: 40 },
+      }),
+    ]),
+  );
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.deepEqual(result.spec.effects[0].items, ['第一步：開啟檔案', '第二步：點選工具', '第三步：完成']);
+    assert.deepEqual(result.spec.effects[0].params, { xPct: 8, yPct: 18, widthPct: 44, heightPct: 40 });
+  }
+});
+
+test('validateAnimationSpec accepts a step-list effect without items (frontend applies empty default)', () => {
+  const result = validateAnimationSpec(validSpec([fadeIn({ id: 'effect-1', type: 'step-list' })]));
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.spec.effects[0].items, undefined);
+  }
+});
+
+test('validateAnimationSpec rejects a step-list effect with more than MAX_STEP_LIST_ITEMS items', () => {
+  const items = Array.from({ length: MAX_STEP_LIST_ITEMS }, (_, i) => `item ${i}`);
+  assert.equal(validateAnimationSpec(validSpec([fadeIn({ type: 'step-list', items })])).ok, true);
+  assert.equal(
+    validateAnimationSpec(validSpec([fadeIn({ type: 'step-list', items: [...items, 'one too many'] })])).ok,
+    false,
+  );
+});
+
+test('validateAnimationSpec rejects a step-list item exceeding MAX_STEP_LIST_ITEM_LENGTH', () => {
+  assert.equal(
+    validateAnimationSpec(validSpec([fadeIn({ type: 'step-list', items: ['x'.repeat(MAX_STEP_LIST_ITEM_LENGTH) ] })])).ok,
+    true,
+  );
+  assert.equal(
+    validateAnimationSpec(
+      validSpec([fadeIn({ type: 'step-list', items: ['x'.repeat(MAX_STEP_LIST_ITEM_LENGTH + 1)] })]),
+    ).ok,
+    false,
+  );
+});
+
+test('validateAnimationSpec strips unknown params from step-list effects', () => {
+  const result = validateAnimationSpec(
+    validSpec([fadeIn({ type: 'step-list', params: { xPct: 8, distancePct: 5, evil: 'alert(1)' } })]),
+  );
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.deepEqual(result.spec.effects[0].params, { xPct: 8 });
   }
 });
 
