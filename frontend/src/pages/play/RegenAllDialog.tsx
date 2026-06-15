@@ -114,7 +114,7 @@ export function RegenAllDialog({
         </div>
         {regenOptions.animation ? (
           <p className="mb-2 rounded-md border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-200">
-            將依每頁逐字稿的句子數量，自動產生對應的「醒目方框」焦點動畫（與動畫編輯分頁的「一次性產生」效果相同），並覆寫該頁原有的動畫設定。
+            將依每頁逐字稿與頁面截圖，逐頁呼叫 AI 自動產生焦點動畫（與動畫編輯分頁的「🤖 AI 自動產生焦點動畫」相同邏輯），並覆寫該頁原有的動畫設定；頁數較多時所需時間與 AI 費用會隨之增加。
           </p>
         ) : null}
         {regenOptions.script || regenOptions.audio ? (

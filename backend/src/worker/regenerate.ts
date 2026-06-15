@@ -26,8 +26,8 @@ import type { PageStatus, PdfRow, PipelineStage, SlideRenderType } from '../type
 import { generateScript } from './steps/generateScript';
 import { commitPresentationFile } from '../services/presentationGit';
 import { readScriptsForTts, synthesizeAudio } from './steps/synthesizeAudio';
-import { generateRuleBasedFocusEffects } from '../services/animationAutoFocus';
-import { renderTypeForSpec, type AnimationSpec } from '../services/pageAnimation';
+import { generateAiFocusEffects, loadFocusAiPageImageDataUrl } from '../services/animationAutoFocus';
+import { defaultAnimationSpec, parseStoredAnimationSpec, renderTypeForSpec, type AnimationSpec } from '../services/pageAnimation';
 import { splitScriptIntoSentences } from '../services/textSentences';
 import {
   finishArtifact,
@@ -1392,11 +1392,22 @@ async function runRegenerateImages(
   }
 }
 
+/** Reads and validates a page's stored animation spec, falling back to the default (empty) spec if missing/corrupted. */
+async function readExistingAnimationSpec(pdfId: string, pageUid: string): Promise<AnimationSpec> {
+  try {
+    const raw = await fs.promises.readFile(pageAnimationSpecPath(pdfId, pageUid), 'utf8');
+    return parseStoredAnimationSpec(raw);
+  } catch {
+    return defaultAnimationSpec();
+  }
+}
+
 /**
- * 為每一頁產生一組動畫效果：依逐字稿句子數量產生對應的 `highlight-box` 焦點動畫
- * （規則式，與「動畫編輯」分頁的「一次性產生」按鈕邏輯相同），逐句以
- * `startTrigger: { type: 'transcript-line', line }` 同步播放時間。會整份覆寫
- * 該頁原有的動畫規格。
+ * 為每一頁產生一組動畫效果：依目前逐字稿、頁面文字與頁面截圖，呼叫 LLM 逐句決定
+ * 是否顯示焦點方框、圖形、條列清單或文字摘要及其位置、大小與消失時間（與「動畫
+ * 編輯」分頁的「🤖 AI 自動產生焦點動畫」按鈕邏輯相同），逐句以
+ * `startTrigger: { type: 'transcript-line', line }` 同步播放時間。沿用該頁原有的
+ * `hints`（逐字稿動畫指引）作為產生時的參考，並整份覆寫該頁原有的動畫效果。
  */
 async function runRegenerateAnimations(
   state: RegenJobState,
@@ -1411,9 +1422,15 @@ async function runRegenerateAnimations(
 
   const allPageRows = db
     .prepare(
-      `SELECT page_number, page_uid, script_path FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
+      `SELECT page_number, page_uid, script_path, text_path, image_path FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
     )
-    .all(pdfId) as Array<{ page_number: number; page_uid: string; script_path: string | null }>;
+    .all(pdfId) as Array<{
+    page_number: number;
+    page_uid: string;
+    script_path: string | null;
+    text_path: string | null;
+    image_path: string | null;
+  }>;
   const pageRows = pageNumbers ? allPageRows.filter((p) => pageNumbers.includes(p.page_number)) : allPageRows;
   step.total = pageRows.length;
 
@@ -1430,9 +1447,35 @@ async function runRegenerateAnimations(
         script = '';
       }
     }
+    let pageText = '';
+    if (p.text_path) {
+      try {
+        pageText = await fs.promises.readFile(safeJoinPdfPath(pdfId, p.text_path), 'utf8');
+      } catch {
+        pageText = '';
+      }
+    }
     const sentences = splitScriptIntoSentences(script);
-    const effects = generateRuleBasedFocusEffects(sentences.length);
-    const spec: AnimationSpec = { version: 1, enabled: effects.length > 0, effects };
+    const existingSpec = await readExistingAnimationSpec(pdfId, p.page_uid);
+    const imageAbsPath = p.image_path ? safeJoinPdfPath(pdfId, p.image_path) : pageImagePath(pdfId, p.page_uid);
+    const imageDataUrl = await loadFocusAiPageImageDataUrl(imageAbsPath, {
+      pdfId,
+      pageUid: p.page_uid,
+      pageNumber: p.page_number,
+    });
+    const effects = await generateAiFocusEffects({
+      pageText,
+      sentences,
+      hints: existingSpec.hints,
+      imageDataUrl,
+      label: `regenerate-animations page/${pdfId}/${p.page_number}`,
+    });
+    const spec: AnimationSpec = {
+      version: 1,
+      enabled: effects.length > 0,
+      effects,
+      ...(existingSpec.hints ? { hints: existingSpec.hints } : {}),
+    };
     const renderType = renderTypeForSpec(spec);
     const relSpecPath = path.posix.join('pages', `${p.page_uid}.animation.json`);
     await fs.promises.writeFile(pageAnimationSpecPath(pdfId, p.page_uid), `${JSON.stringify(spec, null, 2)}\n`, 'utf8');

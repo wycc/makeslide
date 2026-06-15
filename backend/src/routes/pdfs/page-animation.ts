@@ -1,9 +1,6 @@
 import fs from 'node:fs';
 import type { FastifyInstance } from 'fastify';
-import sharp from 'sharp';
 import { z } from 'zod';
-import { config } from '../../config';
-import { logger } from '../../logger';
 import { db } from '../../db';
 import { pageAnimationSpecPath, pageImagePath, safeJoinPdfPath } from '../../services/storage';
 import {
@@ -18,7 +15,7 @@ import {
   validateAnimationSpec,
 } from '../../services/pageAnimation';
 import type { AnimationSpec } from '../../services/pageAnimation';
-import { generateAiFocusEffects } from '../../services/animationAutoFocus';
+import { generateAiFocusEffects, loadFocusAiPageImageDataUrl } from '../../services/animationAutoFocus';
 import {
   findCustomScriptContractIssue,
   findUnsafeScriptPattern,
@@ -58,26 +55,13 @@ function getAnimationPageRow(id: string, n: number): AnimationPageRow | undefine
 }
 
 /**
- * Loads the page's rendered image, downsized to `openaiScriptImageMaxWidth`,
- * as a `data:image/jpeg;base64,...` URL for vision input. Returns `null`
- * (and logs a warning) if the image is missing or fails to decode, so the
- * caller can fall back to text-only reasoning.
+ * Loads the page's rendered image as a `data:image/jpeg;base64,...` URL for
+ * vision input, falling back to `null` (text-only) if it is missing or fails
+ * to decode. See `loadFocusAiPageImageDataUrl`.
  */
 async function loadAnimationPageImageDataUrl(id: string, row: AnimationPageRow): Promise<string | null> {
   const absPath = row.image_path ? safeJoinPdfPath(id, row.image_path) : pageImagePath(id, row.page_uid);
-  try {
-    const buf = await sharp(absPath)
-      .resize({ width: config.openaiScriptImageMaxWidth, withoutEnlargement: true, fit: 'inside' })
-      .jpeg({ quality: 82, mozjpeg: true })
-      .toBuffer();
-    return `data:image/jpeg;base64,${buf.toString('base64')}`;
-  } catch (err) {
-    logger.warn(
-      { pdfId: id, pageUid: row.page_uid, imagePath: absPath, error: err instanceof Error ? err.message : String(err) },
-      'animation/auto-focus-ai: failed to load page image, falling back to text-only',
-    );
-    return null;
-  }
+  return loadFocusAiPageImageDataUrl(absPath, { pdfId: id, pageUid: row.page_uid });
 }
 
 function readStoredSpec(id: string, pageUid: string): AnimationSpec {

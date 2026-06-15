@@ -1,11 +1,13 @@
 import crypto from 'node:crypto';
+import sharp from 'sharp';
 import { z } from 'zod';
 import type { ChatCompletionContentPart } from 'openai/resources/chat/completions';
+import { config } from '../config';
+import { logger } from '../logger';
 import { callChatJSON } from './openai';
 import type { AnimationEffect, AnimationEffectType } from './pageAnimation';
 import {
   ANIMATION_SHAPE_KINDS,
-  MAX_SLIDE_ANIMATION_EFFECTS,
   MAX_STEP_LIST_ITEMS,
   MAX_STEP_LIST_ITEM_LENGTH,
   MAX_TEXT_CALLOUT_LENGTH,
@@ -227,27 +229,27 @@ export async function generateAiFocusEffects(params: {
   return mapAutoFocusResponseToEffects(result.data, limit);
 }
 
-/** Effect type and fade duration used by `generateRuleBasedFocusEffects`, matching the frontend's `generateFocusEffectsFromTranscript`. */
-const RULE_BASED_FOCUS_EFFECT_TYPE: AnimationEffectType = 'highlight-box';
-const RULE_BASED_FOCUS_DURATION_SECONDS = 1.2;
-
 /**
- * Generates one `highlight-box` focus effect per transcript sentence, each
- * synced via `startTrigger: { type: 'transcript-line', line }` so it fades in
- * when that sentence starts playing. Mirrors the frontend's
- * `generateFocusEffectsFromTranscript` (rule-based, no LLM call), capped at
- * `MAX_SLIDE_ANIMATION_EFFECTS`. Used by the "regenerate" batch job's
- * animation step.
+ * Loads an image file, downsized to `openaiScriptImageMaxWidth`, as a
+ * `data:image/jpeg;base64,...` URL for the `imageDataUrl` vision input of
+ * `generateAiFocusEffects`. Returns `null` (and logs a warning) if the image
+ * is missing or fails to decode, so the caller can fall back to text-only.
  */
-export function generateRuleBasedFocusEffects(sentenceCount: number): AnimationEffect[] {
-  const count = Math.min(Math.max(0, sentenceCount), MAX_SLIDE_ANIMATION_EFFECTS);
-  return Array.from({ length: count }, (_, line) => ({
-    id: `rule-focus-${line}-${crypto.randomUUID()}`,
-    target: 'slide',
-    type: RULE_BASED_FOCUS_EFFECT_TYPE,
-    start: 0,
-    duration: RULE_BASED_FOCUS_DURATION_SECONDS,
-    ease: 'power1.out',
-    startTrigger: { type: 'transcript-line', line },
-  }));
+export async function loadFocusAiPageImageDataUrl(
+  absImagePath: string,
+  logContext: Record<string, unknown>,
+): Promise<string | null> {
+  try {
+    const buf = await sharp(absImagePath)
+      .resize({ width: config.openaiScriptImageMaxWidth, withoutEnlargement: true, fit: 'inside' })
+      .jpeg({ quality: 82, mozjpeg: true })
+      .toBuffer();
+    return `data:image/jpeg;base64,${buf.toString('base64')}`;
+  } catch (err) {
+    logger.warn(
+      { ...logContext, imagePath: absImagePath, error: err instanceof Error ? err.message : String(err) },
+      'animationAutoFocus: failed to load page image, falling back to text-only',
+    );
+    return null;
+  }
 }
