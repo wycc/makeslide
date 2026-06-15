@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../../i18n';
 import type { TranslationKey } from '../../i18n';
-import type { SlideAnimationEffect, SlideAnimationEffectType, SlideAnimationEase } from '../../types';
+import type { SlideAnimationEffect, SlideAnimationEffectType, SlideAnimationEase, SlideAnimationShapeKind } from '../../types';
 import {
+  ANIMATION_SHAPE_KINDS,
   DEFAULT_EXIT_DURATION_SECONDS,
   MAX_CUSTOM_SCRIPT_CODE_LENGTH,
   MAX_CUSTOM_SCRIPT_PROMPT_LENGTH,
@@ -18,6 +19,7 @@ import {
   defaultAnimationSpec,
   generateFocusEffectsFromTranscript,
   getFocusEffectParams,
+  getShapeKind,
   resolveStartTriggerSeconds,
 } from '../../lib/animationSpec';
 import { usePlayPageContext } from './PlayPageContext';
@@ -155,6 +157,17 @@ const EFFECT_PRESETS: readonly EffectPreset[] = [
     apply: () => ({
       type: 'pointer',
       duration: 1,
+      ease: 'power1.out',
+      exitDuration: DEFAULT_EXIT_DURATION_SECONDS,
+    }),
+  },
+  {
+    id: 'shape-circle',
+    labelKey: 'play.animation.preset.shapeCircle',
+    apply: () => ({
+      type: 'shape',
+      shape: 'circle',
+      duration: 0.8,
       ease: 'power1.out',
       exitDuration: DEFAULT_EXIT_DURATION_SECONDS,
     }),
@@ -707,6 +720,23 @@ export function AnimationEditorTab() {
                     onChange={(e) => updateEffect(effect.id, { text: e.target.value })}
                     className="w-40 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
                   />
+                </label>
+              )}
+              {effect.type === 'shape' && (
+                <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  {t('play.animation.shapeKind')}
+                  <select
+                    value={getShapeKind(effect)}
+                    disabled={disabled}
+                    onChange={(e) => updateEffect(effect.id, { shape: e.target.value as SlideAnimationShapeKind })}
+                    className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                  >
+                    {ANIMATION_SHAPE_KINDS.map((kind) => (
+                      <option key={kind} value={kind}>
+                        {t(`play.animation.shapeKind.${kind}` as TranslationKey)}
+                      </option>
+                    ))}
+                  </select>
                 </label>
               )}
               {OVERLAY_EFFECT_TYPES.includes(effect.type) && effect.type !== 'custom-script' && (

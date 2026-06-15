@@ -6,6 +6,7 @@ import {
   buildCustomScriptSandboxDoc,
   customScriptDurationSeconds,
   getFocusEffectParams,
+  getShapeKind,
   hasPlayableAnimation,
 } from '../../lib/animationSpec';
 import { useGsapSlideTimeline } from './useGsapSlideTimeline';
@@ -89,6 +90,37 @@ function EffectOverlay({ effect }: { effect: SlideAnimationEffect }) {
       >
         {effect.text}
       </div>
+    );
+  }
+  if (effect.type === 'shape') {
+    const shapeKind = getShapeKind(effect);
+    const stroke = '#f43f5e';
+    const markerId = `shape-arrowhead-${effect.id}`;
+    let preserveAspectRatio = 'none';
+    let shapeContent: ReactNode;
+    if (shapeKind === 'circle') {
+      preserveAspectRatio = 'xMidYMid meet';
+      shapeContent = <circle cx="50" cy="50" r="46" fill="none" stroke={stroke} strokeWidth="5" />;
+    } else if (shapeKind === 'ellipse') {
+      shapeContent = <ellipse cx="50" cy="50" rx="46" ry="46" fill="none" stroke={stroke} strokeWidth="5" />;
+    } else if (shapeKind === 'arrow') {
+      shapeContent = (
+        <>
+          <defs>
+            <marker id={markerId} markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+              <path d="M0,0 L8,4 L0,8 Z" fill={stroke} />
+            </marker>
+          </defs>
+          <line x1="8" y1="92" x2="88" y2="8" stroke={stroke} strokeWidth="6" markerEnd={`url(#${markerId})`} />
+        </>
+      );
+    } else {
+      shapeContent = <rect x="4" y="4" width="92" height="92" rx="6" fill="none" stroke={stroke} strokeWidth="5" />;
+    }
+    return (
+      <svg data-effect-id={effect.id} viewBox="0 0 100 100" preserveAspectRatio={preserveAspectRatio} style={{ ...position, overflow: 'visible' }}>
+        {shapeContent}
+      </svg>
     );
   }
   if (effect.type === 'custom-script') {

@@ -13,13 +13,18 @@ export const ANIMATION_EFFECT_TYPES = [
   'spotlight',
   'pointer',
   'text-callout',
+  'shape',
   'custom-script',
 ] as const;
 
 export const ANIMATION_EASES = ['none', 'power1.in', 'power1.out', 'power1.inOut', 'power2.inOut'] as const;
 
+/** SVG primitive shapes drawable by `shape` effects (design doc §12 V2 "SVG 圖元"). */
+export const ANIMATION_SHAPE_KINDS = ['circle', 'rect', 'ellipse', 'arrow'] as const;
+
 export type AnimationEffectType = (typeof ANIMATION_EFFECT_TYPES)[number];
 export type AnimationEase = (typeof ANIMATION_EASES)[number];
+export type AnimationShapeKind = (typeof ANIMATION_SHAPE_KINDS)[number];
 
 /** Ties an effect's start time to a transcript sentence instead of a fixed offset. */
 export interface AnimationStartTrigger {
@@ -42,11 +47,13 @@ export interface AnimationEffect {
   startTrigger?: AnimationStartTrigger;
   /** Caption text for `text-callout` effects (ignored by other effect types). */
   text?: string;
+  /** SVG primitive drawn by `shape` effects (ignored by other effect types). Defaults to `'circle'` when omitted. */
+  shape?: AnimationShapeKind;
   /**
    * Seconds to remain visible after the fade-in completes before
    * automatically fading back out (same `duration`/`ease` as the fade-in).
    * Only meaningful for overlay effect types (`highlight-box`, `spotlight`,
-   * `pointer`, `text-callout`, `custom-script`); ignored by transform effects.
+   * `pointer`, `text-callout`, `shape`, `custom-script`); ignored by transform effects.
    */
   exitDuration?: number;
   /**
@@ -124,6 +131,7 @@ const ALLOWED_PARAM_KEYS: Record<AnimationEffectType, readonly string[]> = {
   'spotlight': ['xPct', 'yPct', 'widthPct', 'heightPct'],
   'pointer': ['xPct', 'yPct'],
   'text-callout': ['xPct', 'yPct', 'widthPct', 'heightPct'],
+  'shape': ['xPct', 'yPct', 'widthPct', 'heightPct'],
   'custom-script': ['xPct', 'yPct', 'widthPct', 'heightPct'],
 };
 
@@ -148,6 +156,7 @@ const EffectSchema = z.object({
   params: z.record(z.unknown()).optional(),
   startTrigger: StartTriggerSchema.optional(),
   text: z.string().max(MAX_TEXT_CALLOUT_LENGTH).optional(),
+  shape: z.enum(ANIMATION_SHAPE_KINDS).optional(),
   exitDuration: z.number().min(0).max(MAX_DURATION_SECONDS).optional(),
   code: z.string().max(MAX_CUSTOM_SCRIPT_CODE_LENGTH).optional(),
   prompt: z.string().max(MAX_CUSTOM_SCRIPT_PROMPT_LENGTH).optional(),
@@ -205,6 +214,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(params ? { params } : {}),
       ...(effect.startTrigger ? { startTrigger: effect.startTrigger } : {}),
       ...(effect.text !== undefined ? { text: effect.text } : {}),
+      ...(effect.shape !== undefined ? { shape: effect.shape } : {}),
       ...(effect.exitDuration !== undefined ? { exitDuration: effect.exitDuration } : {}),
       ...(effect.code !== undefined ? { code: effect.code } : {}),
       ...(effect.prompt !== undefined ? { prompt: effect.prompt } : {}),

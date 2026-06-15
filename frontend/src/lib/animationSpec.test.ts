@@ -1,9 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  ANIMATION_SHAPE_KINDS,
+  DEFAULT_SHAPE_KIND,
   MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES,
   MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH,
   MAX_SLIDE_ANIMATION_EFFECTS,
+  OVERLAY_EFFECT_TYPES,
+  SLIDE_ANIMATION_EFFECT_TYPES,
   animationTimelineDurationSeconds,
   appendConversationMessages,
   buildCustomScriptSandboxDoc,
@@ -11,6 +15,7 @@ import {
   customScriptDurationSeconds,
   generateFocusEffectsFromTranscript,
   getFocusEffectParams,
+  getShapeKind,
   resolveAnimationSpec,
   resolveStartTriggerSeconds,
 } from "./animationSpec";
@@ -304,4 +309,25 @@ test("resolveAnimationSpec resolves custom-script transcript startTrigger", () =
   const resolvedEffect = resolved.effects[0];
   assert.ok(resolvedEffect);
   assert.equal(resolvedEffect.start, 2.5);
+});
+
+test("SLIDE_ANIMATION_EFFECT_TYPES and OVERLAY_EFFECT_TYPES include 'shape'", () => {
+  assert.ok(SLIDE_ANIMATION_EFFECT_TYPES.includes("shape"));
+  assert.ok(OVERLAY_EFFECT_TYPES.includes("shape"));
+});
+
+test("getFocusEffectParams defaults shape to the 30/30/40/40 focus box", () => {
+  const effect = {
+    id: "e1", target: "slide" as const, type: "shape" as const, ease: "none" as const, start: 0, duration: 1,
+  };
+  assert.deepEqual(getFocusEffectParams(effect), { xPct: 30, yPct: 30, widthPct: 40, heightPct: 40 });
+});
+
+test("getShapeKind defaults to 'circle' when unset, and reads the effect's shape otherwise", () => {
+  const base = { id: "e1", target: "slide" as const, type: "shape" as const, ease: "none" as const, start: 0, duration: 1 };
+  assert.equal(getShapeKind(base), DEFAULT_SHAPE_KIND);
+  assert.equal(DEFAULT_SHAPE_KIND, "circle");
+  for (const kind of ANIMATION_SHAPE_KINDS) {
+    assert.equal(getShapeKind({ ...base, shape: kind }), kind);
+  }
 });
