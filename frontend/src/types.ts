@@ -97,6 +97,7 @@ export type SlideAnimationEffectType =
   | 'pan-down'
   | 'highlight-box'
   | 'spotlight'
+  | 'pointer'
   | 'text-callout'
   | 'custom-script';
 
@@ -127,7 +128,7 @@ export interface SlideAnimationEffect {
    * Seconds to remain visible after the fade-in completes before
    * automatically fading back out (same `duration`/`ease` as the fade-in).
    * Only meaningful for overlay effect types (`highlight-box`, `spotlight`,
-   * `text-callout`, `custom-script`); ignored by transform effects.
+   * `pointer`, `text-callout`, `custom-script`); ignored by transform effects.
    */
   exitDuration?: number;
   /**
