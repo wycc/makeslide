@@ -276,6 +276,8 @@ export const en = {
   'play.animation.mergeSelected': 'Merge selected',
   'play.animation.effectType': 'Effect',
   'play.animation.seekToMidpoint': 'Seek to effect midpoint',
+  'play.animation.moveUp': 'Move up (raise stacking order)',
+  'play.animation.moveDown': 'Move down (lower stacking order)',
   'play.animation.start': 'Start (s)',
   'play.animation.startMode': 'Start trigger',
   'play.animation.startMode.time': 'By seconds',

@@ -276,6 +276,8 @@ export const zhTW = {
   'play.animation.mergeSelected': '合併已選效果',
   'play.animation.effectType': '效果',
   'play.animation.seekToMidpoint': '跳至效果中點',
+  'play.animation.moveUp': '上移效果（提高疊加順序）',
+  'play.animation.moveDown': '下移效果（降低疊加順序）',
   'play.animation.start': '起始（秒）',
   'play.animation.startMode': '起始時間方式',
   'play.animation.startMode.time': '依秒數',
