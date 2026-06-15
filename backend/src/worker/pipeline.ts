@@ -48,6 +48,7 @@ import {
   readScriptsForTts,
   synthesizeAudio,
 } from './steps/synthesizeAudio';
+import { generateAnimationForPage, type AnimationGenerationPageRow } from './regenerate';
 import { getProcessingQueue } from './queue';
 import {
   finishArtifact,
@@ -64,6 +65,36 @@ import { setLlmUsageContext } from '../services/llmUsage';
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+/**
+ * 若目前帳號已啟用「產生語音時自動產生焦點動畫」設定，為剛完成語音合成的頁面
+ * 各自呼叫 {@link generateAnimationForPage}，整份覆寫該頁的動畫效果。單頁失敗
+ * 為非致命錯誤（記錄並標記 stage 為 failed），不影響管線其餘流程或 PDF 的
+ * `ready` 狀態。
+ */
+export async function maybeAutoGenerateAnimations(run: TimingRunContext | null, pdfId: string, pageNumbers: number[]): Promise<void> {
+  if (pageNumbers.length === 0) return;
+  if (!getRuntimeAiSettings().autoGenerateAnimation) return;
+
+  const stage = startStage(run, 'generate_animations', { pages: pageNumbers.length });
+  const placeholders = pageNumbers.map(() => '?').join(',');
+  const pageRows = db
+    .prepare(
+      `SELECT page_number, page_uid, script_path, text_path, image_path FROM pages WHERE pdf_id = ? AND page_number IN (${placeholders}) ORDER BY page_number ASC`,
+    )
+    .all(pdfId, ...pageNumbers) as AnimationGenerationPageRow[];
+
+  let failed = 0;
+  for (const p of pageRows) {
+    try {
+      await generateAnimationForPage(pdfId, p, `pipeline auto-generate-animations page/${pdfId}/${p.page_number}`);
+    } catch (err) {
+      failed += 1;
+      logger.error({ err, pdfId, pageNumber: p.page_number }, 'Pipeline: auto-generate animation failed for page (non-fatal)');
+    }
+  }
+  finishStage(stage, failed > 0 ? 'failed' : 'succeeded', { generated: pageRows.length - failed, skipped: failed });
 }
 
 /**
@@ -1292,6 +1323,9 @@ async function runPipeline(pdfId: string): Promise<void> {
     );
     const failedAudioPages = ttsResult.pages.filter((p) => p.skipped).length;
     finishStage(audioStage, failedAudioPages > 0 ? 'failed' : 'succeeded', { generated: ttsResult.pages.filter((p) => !p.skipped).length, skipped: failedAudioPages });
+
+    await maybeAutoGenerateAnimations(run, pdfId, ttsResult.pages.filter((p) => !p.skipped).map((p) => p.pageNumber));
+
     const finalizeStage = startStage(run, 'finalize');
     finishStage(finalizeStage, 'succeeded');
     finishRun(run, 'succeeded');

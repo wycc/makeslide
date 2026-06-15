@@ -1404,12 +1404,76 @@ async function readExistingAnimationSpec(pdfId: string, pageUid: string): Promis
   }
 }
 
+export interface AnimationGenerationPageRow {
+  page_number: number;
+  page_uid: string;
+  script_path: string | null;
+  text_path: string | null;
+  image_path: string | null;
+}
+
 /**
- * 為每一頁產生一組動畫效果：依目前逐字稿、頁面文字與頁面截圖，呼叫 LLM 逐句決定
+ * 為單一頁面產生一組動畫效果：依目前逐字稿、頁面文字與頁面截圖，呼叫 LLM 逐句決定
  * 是否顯示焦點方框、圖形、條列清單或文字摘要及其位置、大小與消失時間（與「動畫
  * 編輯」分頁的「🤖 AI 自動產生焦點動畫」按鈕邏輯相同），逐句以
  * `startTrigger: { type: 'transcript-line', line }` 同步播放時間。沿用該頁原有的
- * `hints`（逐字稿動畫指引）作為產生時的參考，並整份覆寫該頁原有的動畫效果。
+ * `hints`（逐字稿動畫指引）作為產生時的參考，並整份覆寫該頁原有的動畫效果，寫回
+ * `.animation.json` 與 `pages` 資料表（`render_type`、`animation_spec_path`）。
+ * 供「重新產生動畫」工作與管線「產生語音時自動產生」共用。
+ */
+export async function generateAnimationForPage(
+  pdfId: string,
+  page: AnimationGenerationPageRow,
+  label: string,
+): Promise<void> {
+  let script = '';
+  if (page.script_path) {
+    try {
+      script = await fs.promises.readFile(safeJoinPdfPath(pdfId, page.script_path), 'utf8');
+    } catch {
+      script = '';
+    }
+  }
+  let pageText = '';
+  if (page.text_path) {
+    try {
+      pageText = await fs.promises.readFile(safeJoinPdfPath(pdfId, page.text_path), 'utf8');
+    } catch {
+      pageText = '';
+    }
+  }
+  const sentences = splitScriptIntoSentences(script);
+  const existingSpec = await readExistingAnimationSpec(pdfId, page.page_uid);
+  const imageAbsPath = page.image_path ? safeJoinPdfPath(pdfId, page.image_path) : pageImagePath(pdfId, page.page_uid);
+  const imageDataUrl = await loadFocusAiPageImageDataUrl(imageAbsPath, {
+    pdfId,
+    pageUid: page.page_uid,
+    pageNumber: page.page_number,
+  });
+  const effects = await generateAiFocusEffects({
+    pageText,
+    sentences,
+    hints: existingSpec.hints,
+    imageDataUrl,
+    label,
+  });
+  const spec: AnimationSpec = {
+    version: 1,
+    enabled: effects.length > 0,
+    effects,
+    ...(existingSpec.hints ? { hints: existingSpec.hints } : {}),
+  };
+  const renderType = renderTypeForSpec(spec);
+  const relSpecPath = path.posix.join('pages', `${page.page_uid}.animation.json`);
+  await fs.promises.writeFile(pageAnimationSpecPath(pdfId, page.page_uid), `${JSON.stringify(spec, null, 2)}\n`, 'utf8');
+  db.prepare(
+    `UPDATE pages SET render_type = ?, animation_spec_path = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`,
+  ).run(renderType, relSpecPath, nowIso(), pdfId, page.page_number);
+}
+
+/**
+ * 為一批頁面（依 `pageNumbers`，或省略時為全部頁面）呼叫 {@link generateAnimationForPage}，
+ * 並更新整體進度。
  */
 async function runRegenerateAnimations(
   state: RegenJobState,
@@ -1426,67 +1490,19 @@ async function runRegenerateAnimations(
     .prepare(
       `SELECT page_number, page_uid, script_path, text_path, image_path FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
     )
-    .all(pdfId) as Array<{
-    page_number: number;
-    page_uid: string;
-    script_path: string | null;
-    text_path: string | null;
-    image_path: string | null;
-  }>;
+    .all(pdfId) as AnimationGenerationPageRow[];
   const pageRows = pageNumbers ? allPageRows.filter((p) => pageNumbers.includes(p.page_number)) : allPageRows;
   step.total = pageRows.length;
 
-  const updatedAt = nowIso();
   for (const p of pageRows) {
     if (shouldAbort()) {
       throw makeCancelledError();
     }
-    let script = '';
-    if (p.script_path) {
-      try {
-        script = await fs.promises.readFile(safeJoinPdfPath(pdfId, p.script_path), 'utf8');
-      } catch {
-        script = '';
-      }
-    }
-    let pageText = '';
-    if (p.text_path) {
-      try {
-        pageText = await fs.promises.readFile(safeJoinPdfPath(pdfId, p.text_path), 'utf8');
-      } catch {
-        pageText = '';
-      }
-    }
-    const sentences = splitScriptIntoSentences(script);
-    const existingSpec = await readExistingAnimationSpec(pdfId, p.page_uid);
-    const imageAbsPath = p.image_path ? safeJoinPdfPath(pdfId, p.image_path) : pageImagePath(pdfId, p.page_uid);
-    const imageDataUrl = await loadFocusAiPageImageDataUrl(imageAbsPath, {
-      pdfId,
-      pageUid: p.page_uid,
-      pageNumber: p.page_number,
-    });
-    const effects = await generateAiFocusEffects({
-      pageText,
-      sentences,
-      hints: existingSpec.hints,
-      imageDataUrl,
-      label: `regenerate-animations page/${pdfId}/${p.page_number}`,
-    });
-    const spec: AnimationSpec = {
-      version: 1,
-      enabled: effects.length > 0,
-      effects,
-      ...(existingSpec.hints ? { hints: existingSpec.hints } : {}),
-    };
-    const renderType = renderTypeForSpec(spec);
-    const relSpecPath = path.posix.join('pages', `${p.page_uid}.animation.json`);
-    await fs.promises.writeFile(pageAnimationSpecPath(pdfId, p.page_uid), `${JSON.stringify(spec, null, 2)}\n`, 'utf8');
-    db.prepare(
-      `UPDATE pages SET render_type = ?, animation_spec_path = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`,
-    ).run(renderType, relSpecPath, updatedAt, pdfId, p.page_number);
+    await generateAnimationForPage(pdfId, p, `regenerate-animations page/${pdfId}/${p.page_number}`);
     markPageProgress(state, p.page_number, step.completed + 1, step);
   }
 
+  const updatedAt = nowIso();
   db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(updatedAt, pdfId);
   try {
     const meta = await readMetadata(pdfId);

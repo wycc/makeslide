@@ -39,6 +39,8 @@ export const en = {
   'settings.githubSync': 'GitHub Sync',
   'settings.githubSyncHint': 'Configure a GitHub repository and access token to push each presentation to GitHub. On another machine, enter the same repository with your personal token to sync presentations from that machine too.',
   'settings.cguAirEnabled': 'Use CGU Air API — Chang Gung University (sets baseURL to https://air.cgu.edu.tw/cgullmapi/v1)',
+  'settings.autoGenerateAnimation': 'Auto-generate focus animations when audio is generated',
+  'settings.autoGenerateAnimationHint': 'When enabled, every time presentation audio finishes generating, AI focus animations are automatically generated for the corresponding pages (same as the "AI auto-generate focus animations" button on the Animation tab), overwriting each page\'s existing animation effects.',
   'settings.geminiSpeaker1': 'Gemini Speaker 1 persona (optional)',
   'settings.geminiSpeaker2': 'Gemini Speaker 2 persona (optional)',
   'settings.geminiSpeaker1Placeholder': 'For example: calm, professional, male host',

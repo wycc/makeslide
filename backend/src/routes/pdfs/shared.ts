@@ -329,6 +329,7 @@ export const UpdateSystemAiSettingsBodySchema = z.object({
   google_redirect_uri: z.string().optional(),
   github_repo_url: z.string().optional(),
   github_token: z.string().optional(),
+  auto_generate_animation: z.boolean().optional(),
 });
 
 export { RegenerateBatchBodySchema };
