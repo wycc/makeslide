@@ -36,7 +36,8 @@
 
 ### 2.2 V1 不處理（留待未來）
 
-- 純向量繪圖（沒有內嵌 raster image 的圖表，例如直接用線段/路徑畫出的圖）的偵測與輸出。
+- ~~純向量繪圖（沒有內嵌 raster image 的圖表，例如直接用線段/路徑畫出的圖）的偵測與輸出。~~
+  → V2 已於第 12 節完成。
 - ~~自動將圖表對應到大綱投影片、自動注入到 `buildImagePrompt`。~~ → 一般文件模式
   （`pdf_import_mode === 'document'`）已於第 11 節完成；其餘匯入模式維持原樣（第 10 節）。
 - 圖片內文字的 OCR。
@@ -59,6 +60,25 @@
 的頁面皆會觸發此錯誤；不含圖片的頁面（第 2、3 頁）則渲染正常。這代表現有
 `renderPdfPages()` 在含內嵌圖片的頁面上本身就有缺陷 —— 但這是既有 bug，超出本功能範圍，
 因此本設計刻意避免依賴整頁渲染。
+
+**V2 更新（已解決）**：上述 `TypeError: Image or Canvas expected` 問題已在 V2
+（第 12 節）修正，根因有兩個：
+
+1. pdf.js 在 Node 18+ 環境會優先用全域的 `createImageBitmap` / `ImageDecoder`
+   解碼內嵌影像，其輸出物件與 `canvas`（node-canvas）的 `ctx.drawImage()` 不相容。
+2. pdf.js 內建的 Node canvas factory 是用 `@napi-rs/canvas` 建立中介 canvas，
+   與本專案 `canvasContext` 所用的 `canvas`（node-canvas）是不同的原生模組，
+   兩者的 canvas/image 物件互不相容。
+
+修正方式（`backend/src/worker/poppler.ts`）：模組載入時 `delete
+globalThis.createImageBitmap` / `delete globalThis.ImageDecoder` 強制走相容解碼
+路徑；新增 `NodeCanvasFactory`（`create`/`reset`/`destroy` 皆透過 `canvas` 套件的
+`createCanvas()`），呼叫 `getDocument()` 時傳入 `CanvasFactory: NodeCanvasFactory`，
+確保 pdf.js 內部所有中介 canvas 與 `canvasContext` 同源。修正後 `page.render()`
+在含 `paintImageXObject` 的頁面上可正常輸出，第 12.5 節「整頁 render + 裁切」
+因此改用 pdf.js 本身（而非原規劃的 poppler `pdftoppm`），詳見第 12.5 節。
+V1 的 raster 影像萃取（§3.2，直接讀取 `page.objs.get()` 的像素資料）不受影響、
+維持不變。
 
 ### 3.2 方案 B：直接讀取影像物件的原始像素資料（採用）
 
@@ -278,8 +298,8 @@ export function buildFigureReferenceNotes(figures: FigureEntry[]): string | null
 
 ## 9. 未來工作
 
-- 偵測純向量繪圖區域（無 raster image，但該頁有大量繪圖類 operator 集中於特定區域）。
-  → V2 設計見第 12 節。
+- ~~偵測純向量繪圖區域（無 raster image，但該頁有大量繪圖類 operator 集中於特定區域）。~~
+  → V2 已於第 12 節完成。
 - 前端提供圖表素材瀏覽 / 挑選介面。
 
 ## 10. 整合至投影片圖片（重新）生成（已完成）
@@ -492,7 +512,7 @@ const figureRefFiles = await Promise.all(
   時會呼叫 `images.edit` 並帶上圖表參考圖 + 圖說 prompt；無對應圖表時維持呼叫
   `images.generate`。
 
-## 12. 向量圖形萃取（V2 設計，待實作）
+## 12. 向量圖形萃取（V2，已完成）
 
 ### 12.1 問題分析：`hRUVHXrNqW`（37 頁論文 `2605.29548v2.pdf`）Figure 1-9 全數抽取失敗
 
@@ -576,64 +596,129 @@ V2 在比對 caption 前，先對該頁所有圖表候選（向量群 + raster i
 每個 caption 的 x 範圍與群組 x 範圍是否重疊作為交叉檢查，避免把 caption 配給錯誤
 的群組。
 
-### 12.5 影像輸出：poppler 整頁 render + 裁切
+### 12.5 影像輸出：整頁 render + 裁切（已改用 pdf.js + NodeCanvasFactory）
 
 §3.1 提到 pdf.js 的 `page.render()` 在含 `paintImageXObject` 的頁面會丟出
-"Image or Canvas expected"，但向量圖表往往與 raster 子面板同頁（如 page 4/7/8），
-無法簡單繞過。改用既有 `backend/src/worker/poppler.ts` 已使用的 `pdftoppm`
-（poppler CLI，與 pdf.js + node-canvas 是不同的渲染路徑，不受此 bug 影響）：
+"Image or Canvas expected"，原規劃因此改用 poppler `pdftoppm` 整頁 render。實作時
+改採 §3.1「V2 更新」所述的 `NodeCanvasFactory` 修正——直接讓 pdf.js
+`page.render()` 在含內嵌影像的頁面上也能正常輸出，省去額外的 poppler 子行程：
 
-- 對 `hRUVHXrNqW/source.pdf` 第 2、4-9 頁（皆含 raster image）以
-  `pdftoppm -png -r 150 -f <n> -l <n>` 整頁 render，全部成功，驗證可行。
-- 每頁僅需 render 一次（快取整頁 PNG），供該頁所有向量候選共用裁切來源。
-- 依候選 bbox 的百分比座標換算成整頁 PNG 的像素座標，用
-  `sharp(fullPagePng).extract({ left, top, width, height }).png().toFile(...)`
-  輸出，檔名建議 `p<pageNumber>-vec<index>.png`（與既有
-  `p<pageNumber>-img_p<x>_<y>.png` 命名區分，`FigureEntry` 可選擇新增
-  `source?: 'raster' | 'vector'` 欄位輔助除錯）。
+- `renderPageToPng(page, FIGURE_RENDER_DPI)`（`FIGURE_RENDER_DPI = 150`）用
+  `page.getViewport({ scale })` + `createCanvas()` + `page.render()` 產生整頁 PNG。
+- 每頁僅 render 一次（`pagePngPromise` 快取），供該頁所有向量裁切與 §12.6 的
+  遮蔽像素比對共用。
+- 依候選 bbox 的百分比座標（`toPctBBox`）換算成整頁 PNG 的像素座標，用
+  `sharp(fullPagePng).extract({ left, top, width, height }).png().toBuffer()`
+  輸出，檔名為 `p<pageNumber>-vec<index>.png`（與既有
+  `p<pageNumber>-img_p<x>_<y>.png` 命名區分），`FigureEntry` 新增
+  `source?: 'raster' | 'vector'` 欄位輔助除錯。
 
-### 12.6 過濾「被遮蓋」的 raster 殘留影像
+### 12.6 過濾「被遮蓋」的 raster 殘留影像（pixel-diff，已改用）
 
-對 §5 既有流程找到的每個 `paintImageXObject` 候選，額外檢查：是否存在「在 operator
-list 中順序更晚（即繪製在其之上）、面積更大的向量群組，且其 bbox 覆蓋率
-（交集面積 / 該 raster bbox 面積）> `OCCLUDED_RASTER_THRESHOLD`（建議 0.9）」。
-若是，視為不可見的背景殘留（例如 `p4-img_p3_1.png` 這類 colormap 取樣背景），
-從輸出中排除——理由是 PDF content stream 依序繪製，後繪製者覆蓋前者。
+原規劃僅以「後繪製、面積更大的向量群組 bbox 覆蓋率 > 0.9」判斷是否遮蓋，實作後發現
+單純比較 bbox 覆蓋率容易誤判（向量群組常因 §12.3 提到的大型背景/邊框路徑而 bbox
+遠大於實際可見內容）。改為兩階段判斷：
 
-### 12.7 預期效果（以 `hRUVHXrNqW` 為例）
+1. **候選篩選**：對每個 raster 候選 `r`，尋找是否存在 `opIndex` 更大（後繪製）、
+   bbox 交集面積 / `r` 面積 > `OCCLUDED_RASTER_OVERLAP_THRESHOLD`（0.5）的其他候選
+   （raster 或 vector 皆可）。沒有則直接保留 `r`，不做後續像素比對。
+2. **像素比對**：若有候選遮蓋者，才呼叫 §12.5 的 `getPagePng()` 取得整頁渲染結果，
+   將 `r` 自身的解碼像素（`resolveRasterImage`）resize 成與整頁渲染裁切相同尺寸，
+   計算兩者逐 pixel 的平均 per-channel 差異（`computeOcclusionDiff`，0-255 範圍）。
+   若平均差異 > `OCCLUDED_RASTER_DIFF_THRESHOLD`（60），代表 `r` 自身像素與「最終
+   實際畫面」明顯不同，視為被完全蓋住的不可見殘留（例如 `p4-img_p3_1.png` 這類
+   colormap 取樣背景），從輸出中排除。
 
-- Figure 1（page 2）：6 子圖向量群組 → 1 個 Figure 條目（或依群組化粒度拆成多個），
-  caption 比對到「Figure 1: Learning a part of the distribution re-...」。
-- Figure 2（page 4）：向量 (a)(b) 兩子圖群組化為一組並比對到「Figure 2」；
-  `p4-img_p3_1.png` 因 12.6 被排除。
-- Figure 3（page 5）：1 個向量區域，比對到「Figure 3」。
-- Figure 4（page 6）：多子圖向量群組，比對到「Figure 4」（與「Figure 6」需靠
-  12.4 的 anchor 校正區分）。
-- Figure 5/6（page 7）：向量子圖 + 既有 `p7-img_p6_1.png` 合併為群組，caption 比對
-  成功並能分辨屬於 Figure 5 或 Figure 6。
-- Figure 7（page 8）：既有 2 張 raster 子圖 + 可能存在的向量子圖群組化後，
-  caption 比對到「Figure 7」。
-- Figure 8/9（page 9）：向量群組，分別比對到「Figure 8」「Figure 9」。
+此方式同時保留了「raster 確實仍可見、只是恰好被一個 bbox 較大的向量群組包圍」
+的情況（diff 低 → 不排除），與原規劃單純看 bbox 覆蓋率相比更準確。
 
-### 12.8 風險與待確認事項
+### 12.7 預期效果（以 `hRUVHXrNqW` 為例，已驗證）
 
-- `OPS.constructPath` 在 pdf.js legacy build 的 `argsArray` 實際結構需要先用真實
-  PDF dump 確認（操作碼陣列 + 座標陣列的對應方式）。
-- `VECTOR_FIGURE_MIN_PATHS`、聚類 `pad`、群組化的水平間距門檻等參數需以多份真實 PDF
-  （`hRUVHXrNqW`、`jBaLIg8vMa`、`myGMS0ahnF`）反覆調參，不同論文/排版差異可能很大。
-- 每頁新增一次 poppler 整頁 render：37 頁 PDF 在 `extract_figures` 階段會新增
-  ~37 次整頁 render，需評估對既有 120 秒 SLA（`SLA_TARGETS_MS.stages.extract_figures`）
-  的影響，必要時可僅對「該頁有 caption 但 12.1~12.4 仍找不到對應圖」的頁面才觸發
-  render（lazy）。
-- 12.4 的幾何群組化＋anchor 校正屬於 heuristic，無法保證 100% 正確；應在
-  `FigureEntry` 保留足夠資訊（bbox、來源 operator 統計）方便日後人工/自動複查。
+- Figure 1（page 2）：向量群組 `p2-vec1` → caption 比對到
+  「Figure 1: Learning a part of the distribution re-...」。
+- Figure 2（page 4）：向量 (a)(b) 兩子圖群組化為 `p4-vec1`，比對到「Figure 2」；
+  `p4-img_p3_1.png` 因 §12.6 的 pixel-diff 判定為被覆蓋的殘留，已從輸出排除。
+- Figure 3（page 5）：1 個向量區域 `p5-vec1`，比對到「Figure 3」。
+- Figure 4（page 6）：多子圖向量群組 `p6-vec1`，比對到「Figure 4」。
+- Figure 5/6（page 7）：與預期略有不同——並未與既有 raster 合併成單一群組，而是
+  各自形成獨立的向量群組 `p7-vec1`（比對到「Figure 6」）與 `p7-vec2`（比對到
+  「Figure 5」）；§12.4 的群組化＋caption 比對仍正確地分辨出兩者分屬不同 Figure。
+- Figure 7（page 8）：單一向量群組 `p8-vec1`（含原本的 2 張 raster 子圖，因
+  §12.3 的 containment 合併規則併入同一群組），比對到「Figure 7」。
+- Figure 8/9（page 9）：與 page 7 同樣形成兩個獨立向量群組
+  `p9-vec1`（比對到「Figure 9」）與 `p9-vec2`（比對到「Figure 8」）。
 
-### 12.9 建議實作順序
+完整結果（`figureCount = 23`，Figure 1-23 全數正確比對到 caption，詳見 §12.10）：
 
-1. 先寫一個獨立腳本（不進 pipeline）對 `hRUVHXrNqW/source.pdf` 做向量區域偵測 +
-   裁切，人工檢視輸出圖片是否對應 Figure 1-9，反覆調整 12.8 提到的參數。
-2. 參數穩定後整合進 `extractPdfFigures()`：新增向量候選偵測（12.3）、群組化與
-   caption 比對（12.4）、poppler 裁切（12.5）、遮蓋過濾（12.6）。
-3. 新增/擴充 `backend/test/pdf-figures.test.ts`，以 `hRUVHXrNqW`（或既有
-   `jBaLIg8vMa`/`myGMS0ahnF`）fixture 驗證 Figure 1-9 皆能被抽出且 caption 正確。
-4. 完成後將本節標題改為「（已完成）」，並回頭更新 §2.2 / §9 對應的未來工作項目。
+| Figure | 頁碼 | id | source |
+| --- | --- | --- | --- |
+| 1 | 2 | `p2-vec1` | vector |
+| 2 | 4 | `p4-vec1` | vector |
+| 3 | 5 | `p5-vec1` | vector |
+| 4 | 6 | `p6-vec1` | vector |
+| 5 | 7 | `p7-vec2` | vector |
+| 6 | 7 | `p7-vec1` | vector |
+| 7 | 8 | `p8-vec1` | vector |
+| 8 | 9 | `p9-vec2` | vector |
+| 9 | 9 | `p9-vec1` | vector |
+| 10 | 26 | `p26-img_p25_1` | raster |
+| 11 | 28 | `p28-vec1` | vector |
+| 12 | 29 | `p29-vec1` | vector |
+| 13 | 30 | `p30-vec1` | vector |
+| 14 | 30 | `p30-vec2` | vector |
+| 15 | 31 | `p31-vec1` | vector |
+| 16 | 32 | `p32-vec1` | vector |
+| 17 | 33 | `p33-vec1` | vector |
+| 18 | 34 | `p34-vec1` | vector |
+| 19 | 34 | `p34-vec2` | vector |
+| 20 | 35 | `p35-vec1` | vector |
+| 21 | 36 | `p36-vec1` | vector |
+| 22 | 37 | `p37-img_p36_1` | raster |
+| 23 | 37 | `p37-img_p36_2` | raster |
+
+### 12.8 風險與待確認事項（已確認）
+
+- ~~`OPS.constructPath` 在 pdf.js legacy build 的 `argsArray` 實際結構需要先用真實
+  PDF dump 確認~~ → 已確認：`args[2]` 是 pdf.js 預先算好的 `[x0, y0, x1, y1]`
+  （部分曲線路徑為 `[Infinity, Infinity, -Infinity, -Infinity]`），此時改用
+  `args[1]`（座標陣列）自行算 min/max（`pathBBoxFromArgs`）。
+- `VECTOR_FIGURE_MIN_PATHS=20`、`VECTOR_CLUSTER_PAD_PT=5pt`、
+  `GROUP_X_GAP_RATIO=0.2` 以 `hRUVHXrNqW`/`jBaLIg8vMa`（同一份 PDF）調參，
+  在 37 頁範圍內（含單面板、多面板、與既有 raster 混合等情境）皆得到正確結果；
+  其他論文排版差異仍可能需要微調，未來若發現新 fixture 結果不佳，應優先檢視
+  這三個常數。
+- ~~每頁新增一次 poppler 整頁 render~~ → 改用 §12.5 的 pdf.js
+  `page.render()`（`NodeCanvasFactory`），且每頁僅在「該頁確實有向量/遮蔽候選」
+  時才 lazy render 一次（`pagePngPromise`），37 頁 fixture 全流程耗時約 11 秒，
+  遠低於 120 秒的 `extract_figures` SLA。
+- 12.4 的幾何群組化＋caption 比對屬於 heuristic，無法保證 100% 正確；`FigureEntry`
+  已保留 `source` 欄位（`raster`/`vector`）輔助日後複查；37 頁 fixture 中
+  23 個 Figure 的 caption 經人工比對皆正確。
+
+### 12.9 實作順序（已完成）
+
+1. ~~先寫一個獨立腳本（不進 pipeline）對 `hRUVHXrNqW/source.pdf` 做向量區域偵測 +
+   裁切，人工檢視輸出圖片是否對應 Figure 1-9，反覆調整 12.8 提到的參數。~~ 已完成
+   （`/tmp/figcheck/` 下的診斷腳本，未納入 repo）。
+2. ~~參數穩定後整合進 `extractPdfFigures()`：新增向量候選偵測（12.3）、群組化與
+   caption 比對（12.4）、裁切（12.5）、遮蓋過濾（12.6）。~~ 已完成。
+3. ~~新增/擴充 `backend/test/pdf-figures.test.ts`，以 `jBaLIg8vMa` fixture 驗證
+   Figure 1-9 皆能被抽出且 caption 正確。~~ 已完成，並一併驗證 Figure 10-23
+   （`figureCount === 23`）。
+4. 已將本節標題改為「（已完成）」，並更新 §2.2 / §3.1 / §9 對應項目。
+
+### 12.10 已知限制
+
+- **多面板向量群組的裁切留白偏大**：`p7-vec1`（Figure 6）與 `p9-vec1`（Figure 9）
+  的裁切結果內容正確完整，但因聚類時納入了與整個 cluster bbox 完全相同、面積
+  遠大於實際可見圖表（約 32%、24% 頁面面積）的「背景/邊框」`constructPath`
+  路徑（4 個座標相同的大矩形），裁切範圍因而比視覺上的圖表本體大上不少
+  （周圍留白較多）。圖表內容、caption 比對皆正確，僅影響裁切的緊湊程度，
+  判定為可接受的 V2 限制。未來若要優化，可考慮在 §12.3 收集 path bbox 時，
+  排除「與其他多個路徑共享完全相同 bbox、且面積超過頁面一定比例」的路徑——但
+  需注意避免誤傷如 `p32-vec1`（94.4% × 54.7% 頁面面積）這類本身就很大的合法
+  多面板圖表，故本輪未處理。
+- §12.2 第 1 點「將同一個 Figure 的多個子面板群組化為單一條目」與實作結果略有
+  差異：page 7／page 9 的兩個子圖各自輸出獨立的 `FigureEntry`（各自一張裁切
+  PNG），但共用同一個 caption 比對結果（透過 §12.4 的群組化），符合
+  `getFigureReferencesForPage` 的使用情境（取面積最大的 1-2 張作為參考圖）。
