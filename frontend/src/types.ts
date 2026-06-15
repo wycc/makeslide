@@ -132,6 +132,23 @@ export interface SlowArtifactsResponse {
   artifacts: SlowArtifactSummary[];
 }
 
+export type SlaTargetKind = 'stage' | 'artifact';
+
+export interface SlaTargetSetting {
+  kind: SlaTargetKind;
+  name: string;
+  default_ms: number;
+  override_ms: number | null;
+  effective_ms: number;
+  updated_at: string | null;
+}
+
+export interface SlaSettingsResponse {
+  bounds: { min_ms: number; max_ms: number };
+  stages: SlaTargetSetting[];
+  artifacts: SlaTargetSetting[];
+}
+
 export interface PdfListItem {
   id: string;
   title: string | null;

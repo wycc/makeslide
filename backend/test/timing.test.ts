@@ -2,7 +2,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildApp } from '../src/server';
 import { db } from '../src/db';
-import { evaluateSla, finishArtifact, finishRun, finishStage, getTimingEventSchema, startArtifact, startRun, startStage, TIMING_EVENT_SCHEMA_VERSION } from '../src/services/timing';
+import {
+  evaluateSla,
+  finishArtifact,
+  finishRun,
+  finishStage,
+  getEffectiveSlaTargets,
+  getTimingEventSchema,
+  setSlaTargetOverride,
+  SLA_TARGETS_MS,
+  startArtifact,
+  startRun,
+  startStage,
+  TIMING_EVENT_SCHEMA_VERSION,
+} from '../src/services/timing';
 import { setOpenAIClientForTest } from '../src/services/openai';
 import { renderTextPagesWithLlm } from '../src/worker/steps/renderTextPagesWithLlm';
 
@@ -123,6 +136,79 @@ test('SLA evaluation returns met, warning, breached, and unknown thresholds', ()
   assert.equal(evaluateSla(151, 100), 'breached');
   assert.equal(evaluateSla(null, 100), 'unknown');
   assert.equal(evaluateSla(100, 0), 'unknown');
+});
+
+function clearSlaOverride(kind: 'stage' | 'artifact', name: string): void {
+  db.prepare(`DELETE FROM pipeline_sla_overrides WHERE kind = ? AND name = ?`).run(kind, name);
+}
+
+test('getEffectiveSlaTargets merges DB overrides with SLA_TARGETS_MS defaults', () => {
+  clearSlaOverride('stage', 'render_pages');
+  clearSlaOverride('artifact', 'image');
+  try {
+    assert.equal(getEffectiveSlaTargets().stages.render_pages, SLA_TARGETS_MS.stages.render_pages);
+    assert.equal(getEffectiveSlaTargets().artifacts.image, SLA_TARGETS_MS.artifacts.image);
+
+    setSlaTargetOverride('stage', 'render_pages', 90_000);
+    setSlaTargetOverride('artifact', 'image', 15_000);
+    assert.equal(getEffectiveSlaTargets().stages.render_pages, 90_000);
+    assert.equal(getEffectiveSlaTargets().artifacts.image, 15_000);
+    // 未設定 override 的項目維持預設值
+    assert.equal(getEffectiveSlaTargets().stages.finalize, SLA_TARGETS_MS.stages.finalize);
+
+    // target_ms = null 移除 override，回復預設值
+    setSlaTargetOverride('stage', 'render_pages', null);
+    assert.equal(getEffectiveSlaTargets().stages.render_pages, SLA_TARGETS_MS.stages.render_pages);
+  } finally {
+    clearSlaOverride('stage', 'render_pages');
+    clearSlaOverride('artifact', 'image');
+  }
+});
+
+test('setSlaTargetOverride rejects unknown names and out-of-range values', () => {
+  assert.throws(() => setSlaTargetOverride('stage', 'not_a_stage', 1_000));
+  assert.throws(() => setSlaTargetOverride('artifact', 'not_an_artifact', 1_000));
+  assert.throws(() => setSlaTargetOverride('artifact', 'image', 999));
+  assert.throws(() => setSlaTargetOverride('artifact', 'image', 3_600_001));
+  assert.throws(() => setSlaTargetOverride('artifact', 'image', 1.5));
+});
+
+test('startStage/finishStage and startArtifact/finishArtifact use the effective (overridden) SLA target', () => {
+  seedPdf();
+  clearSlaOverride('stage', 'render_pages');
+  clearSlaOverride('artifact', 'image');
+  try {
+    setSlaTargetOverride('stage', 'render_pages', 5_000);
+    setSlaTargetOverride('artifact', 'image', 2_000);
+
+    const run = startRun({ pdfId: PDF_ID, runType: 'initial', triggeredBy: 'system' });
+    const stage = startStage(run, 'render_pages');
+    const startedStageRow = db
+      .prepare(`SELECT sla_target_ms FROM pipeline_stage_summaries WHERE run_id = ? AND stage = 'render_pages'`)
+      .get(run!.runId) as { sla_target_ms: number };
+    assert.equal(startedStageRow.sla_target_ms, 5_000);
+
+    finishStage(stage, 'succeeded');
+    const finishedStageRow = db
+      .prepare(`SELECT sla_target_ms FROM pipeline_stage_summaries WHERE run_id = ? AND stage = 'render_pages'`)
+      .get(run!.runId) as { sla_target_ms: number };
+    assert.equal(finishedStageRow.sla_target_ms, 5_000);
+
+    const artifact = startArtifact({ run, pageNumber: 1, artifact: 'image', reason: 'initial' });
+    const startedArtifactRow = db
+      .prepare(`SELECT sla_target_ms FROM page_artifact_timings WHERE pdf_id = ? AND page_number = 1 AND artifact = 'image'`)
+      .get(PDF_ID) as { sla_target_ms: number };
+    assert.equal(startedArtifactRow.sla_target_ms, 2_000);
+
+    finishArtifact(artifact, 'succeeded', { outputPath: 'pages/001.png', durationMs: 1 });
+    const finishedArtifactRow = db
+      .prepare(`SELECT sla_target_ms FROM page_artifact_timings WHERE pdf_id = ? AND page_number = 1 AND artifact = 'image'`)
+      .get(PDF_ID) as { sla_target_ms: number };
+    assert.equal(finishedArtifactRow.sla_target_ms, 2_000);
+  } finally {
+    clearSlaOverride('stage', 'render_pages');
+    clearSlaOverride('artifact', 'image');
+  }
 });
 
 test('TXT image timing can use render-step duration instead of callback duration', () => {
