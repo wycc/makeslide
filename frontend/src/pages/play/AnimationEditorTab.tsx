@@ -119,6 +119,7 @@ export function AnimationEditorTab() {
   const [customScriptChatInput, setCustomScriptChatInput] = useState('');
   const customScriptChatScrollRef = useRef<HTMLDivElement>(null);
   const [selectedEffectIds, setSelectedEffectIds] = useState<Set<string>>(new Set());
+  const [notebookTab, setNotebookTab] = useState<'effects' | 'hints'>('effects');
 
   const draft = animationDraft ?? defaultAnimationSpec();
   const disabled = isReadOnlyProcessing || animationBusy || !currentPage;
@@ -236,17 +237,91 @@ export function AnimationEditorTab() {
         {t('play.animation.enabled')}
       </label>
 
-      <div className="mb-2 text-xs font-semibold text-slate-400">{t('play.animation.effectList')}</div>
-      {draft.effects.length > 1 && (
-        <div className="mb-2 text-[11px] text-slate-500">{t('play.animation.multiSelectHint')}</div>
-      )}
-      {draft.effects.length === 0 ? (
-        <div className="mb-2 rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-500">
-          {t('play.animation.noEffects')}
-        </div>
-      ) : (
-        <div className="mb-2 space-y-2">
-          {draft.effects.map((effect) => {
+      <div className="mb-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={disabled || draft.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS}
+          title={draft.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS ? t('play.animation.maxEffects') : undefined}
+          onClick={() =>
+            setAnimationDraft((prev) => {
+              const base = prev ?? defaultAnimationSpec();
+              return { ...base, effects: [...base.effects, newEffect()] };
+            })
+          }
+          className="rounded-md border border-slate-600 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {t('play.animation.addEffect')}
+        </button>
+        {selectedEffectIds.size >= 2 && (
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={handleMergeSelectedEffects}
+            className="rounded-md border border-cyan-400/50 bg-cyan-500/10 px-3 py-1.5 text-sm text-cyan-200 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {t('play.animation.mergeSelected')} ({selectedEffectIds.size})
+          </button>
+        )}
+        <button
+          type="button"
+          disabled={disabled || pageSentences.length === 0}
+          title={pageSentences.length === 0 ? t('play.animation.noTranscript') : undefined}
+          onClick={() => {
+            if (draft.effects.length > 0 && !window.confirm(t('play.animation.autoGenerateFocusConfirm'))) return;
+            setAnimationDraft((prev) => ({
+              ...(prev ?? defaultAnimationSpec()),
+              enabled: true,
+              effects: generateFocusEffectsFromTranscript(pageSentences.length),
+            }));
+          }}
+          className="rounded-md border border-cyan-500/50 bg-cyan-500/10 px-3 py-1.5 text-sm text-cyan-200 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {t('play.animation.autoGenerateFocus')}
+        </button>
+        <button
+          type="button"
+          disabled={disabled || pageSentences.length === 0 || aiFocusBusy}
+          title={pageSentences.length === 0 ? t('play.animation.noTranscript') : undefined}
+          onClick={() => {
+            if (draft.effects.length > 0 && !window.confirm(t('play.animation.autoGenerateFocusAiConfirm'))) return;
+            void handleGenerateAiFocusEffects(pageSentences, draft.hints);
+          }}
+          className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/10 px-3 py-1.5 text-sm text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {aiFocusBusy ? t('play.animation.autoGenerateFocusAiBusy') : t('play.animation.autoGenerateFocusAi')}
+        </button>
+      </div>
+
+      <div className="mb-2 flex overflow-hidden rounded-md border border-slate-700 bg-slate-900/60">
+        <button
+          type="button"
+          onClick={() => setNotebookTab('effects')}
+          className={`flex-1 px-3 py-1.5 text-sm ${notebookTab === 'effects' ? 'bg-slate-800 text-fuchsia-200' : 'text-slate-400'}`}
+        >
+          {t('play.animation.effectList')} ({draft.effects.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setNotebookTab('hints')}
+          className={`flex-1 px-3 py-1.5 text-sm ${notebookTab === 'hints' ? 'bg-slate-800 text-fuchsia-200' : 'text-slate-400'}`}
+        >
+          {t('play.animation.hints')}
+          {pageSentences.length > 0 ? ` (${Object.keys(draft.hints ?? {}).length}/${pageSentences.length})` : ''}
+        </button>
+      </div>
+
+      <div className="mb-3 max-h-[60vh] space-y-2 overflow-y-auto rounded-md border border-slate-800 bg-slate-950/30 p-2">
+      {notebookTab === 'effects' ? (
+        <>
+        {draft.effects.length > 1 && (
+          <div className="text-[11px] text-slate-500">{t('play.animation.multiSelectHint')}</div>
+        )}
+        {draft.effects.length === 0 ? (
+          <div className="rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-500">
+            {t('play.animation.noEffects')}
+          </div>
+        ) : (
+          draft.effects.map((effect) => {
             const effectStart = effect.startTrigger
               ? resolveStartTriggerSeconds(effect.startTrigger, sentenceTimeline) ?? effect.start
               : effect.start;
@@ -537,9 +612,40 @@ export function AnimationEditorTab() {
               </div>
             </div>
             );
-          })}
-        </div>
+          })
+        )}
+        </>
+      ) : (
+        <>
+        <div className="text-[11px] text-slate-500">{t('play.animation.hintsDescription')}</div>
+        {pageSentences.length === 0 ? (
+          <div className="rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-500">
+            {t('play.animation.noTranscript')}
+          </div>
+        ) : (
+          pageSentences.map((sentence, idx) => (
+            <div
+              key={idx}
+              className="flex flex-wrap items-start gap-2 rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2"
+            >
+              <div className="min-w-[8rem] flex-1 basis-64 text-xs text-slate-300">
+                {idx + 1}. {sentence}
+              </div>
+              <input
+                type="text"
+                maxLength={MAX_HINT_LENGTH}
+                value={draft.hints?.[String(idx)] ?? ''}
+                disabled={disabled}
+                placeholder={t('play.animation.hintsPlaceholder')}
+                onChange={(e) => updateHint(idx, e.target.value)}
+                className="min-w-[12rem] flex-1 basis-64 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+              />
+            </div>
+          ))
+        )}
+        </>
       )}
+      </div>
 
       {customScriptDialogEffect && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
@@ -658,89 +764,6 @@ export function AnimationEditorTab() {
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      <div className="mb-3 flex flex-wrap gap-2">
-        <button
-          type="button"
-          disabled={disabled || draft.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS}
-          title={draft.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS ? t('play.animation.maxEffects') : undefined}
-          onClick={() =>
-            setAnimationDraft((prev) => {
-              const base = prev ?? defaultAnimationSpec();
-              return { ...base, effects: [...base.effects, newEffect()] };
-            })
-          }
-          className="rounded-md border border-slate-600 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {t('play.animation.addEffect')}
-        </button>
-        {selectedEffectIds.size >= 2 && (
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={handleMergeSelectedEffects}
-            className="rounded-md border border-cyan-400/50 bg-cyan-500/10 px-3 py-1.5 text-sm text-cyan-200 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {t('play.animation.mergeSelected')} ({selectedEffectIds.size})
-          </button>
-        )}
-        <button
-          type="button"
-          disabled={disabled || pageSentences.length === 0}
-          title={pageSentences.length === 0 ? t('play.animation.noTranscript') : undefined}
-          onClick={() => {
-            if (draft.effects.length > 0 && !window.confirm(t('play.animation.autoGenerateFocusConfirm'))) return;
-            setAnimationDraft((prev) => ({
-              ...(prev ?? defaultAnimationSpec()),
-              enabled: true,
-              effects: generateFocusEffectsFromTranscript(pageSentences.length),
-            }));
-          }}
-          className="rounded-md border border-cyan-500/50 bg-cyan-500/10 px-3 py-1.5 text-sm text-cyan-200 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {t('play.animation.autoGenerateFocus')}
-        </button>
-        <button
-          type="button"
-          disabled={disabled || pageSentences.length === 0 || aiFocusBusy}
-          title={pageSentences.length === 0 ? t('play.animation.noTranscript') : undefined}
-          onClick={() => {
-            if (draft.effects.length > 0 && !window.confirm(t('play.animation.autoGenerateFocusAiConfirm'))) return;
-            void handleGenerateAiFocusEffects(pageSentences, draft.hints);
-          }}
-          className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/10 px-3 py-1.5 text-sm text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {aiFocusBusy ? t('play.animation.autoGenerateFocusAiBusy') : t('play.animation.autoGenerateFocusAi')}
-        </button>
-      </div>
-
-      {pageSentences.length > 0 && (
-        <div className="mb-3">
-          <div className="mb-1 text-xs font-semibold text-slate-400">{t('play.animation.hints')}</div>
-          <div className="mb-2 text-[11px] text-slate-500">{t('play.animation.hintsDescription')}</div>
-          <div className="space-y-2">
-            {pageSentences.map((sentence, idx) => (
-              <div
-                key={idx}
-                className="flex flex-wrap items-start gap-2 rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2"
-              >
-                <div className="min-w-[8rem] flex-1 basis-64 text-xs text-slate-300">
-                  {idx + 1}. {sentence}
-                </div>
-                <input
-                  type="text"
-                  maxLength={MAX_HINT_LENGTH}
-                  value={draft.hints?.[String(idx)] ?? ''}
-                  disabled={disabled}
-                  placeholder={t('play.animation.hintsPlaceholder')}
-                  onChange={(e) => updateHint(idx, e.target.value)}
-                  className="min-w-[12rem] flex-1 basis-64 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
-                />
-              </div>
-            ))}
           </div>
         </div>
       )}
