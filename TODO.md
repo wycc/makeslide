@@ -1066,7 +1066,7 @@
 # 2026-6-15
 [x] 在 PlayPage 中，把目前播放中的動畫，根據時現時間將目前播放中的效果背景用高亮度。（完成於分支: feature/animation-active-effect-highlight-20260615）
 [x] 點擊動畫效果時，把時間軸移到效果有效時間一半的地方。（完成於分支: feature/animation-effect-seek-midpoint-20260615）
-[ ] 使用 CTRL click 時，把效果改成己選擇的狀態，被選擇的效果都加上一個『合併』的按鍵，按下按鍵就把所有的效果都合併成一個單一效果。起始時間是就早的效果，而長度則調整成所有效果最晚的時間。
+[x] 使用 CTRL click 時，把效果改成己選擇的狀態，被選擇的效果都加上一個『合併』的按鍵，按下按鍵就把所有的效果都合併成一個單一效果。起始時間是就早的效果，而長度則調整成所有效果最晚的時間。（完成於分支: feature/animation-effect-multi-select-merge-20260615）
 [ ] 加上一個設定指標效果，只是把指標移到指定的位置。
 [ ] 在重生中加上一個動畫的項目，把每一頁都加上動畫效果。
 [ ] 把效果清單和逐字稿效果指引放在一個 notebook 界面中，並加上捲動軸
@@ -1080,3 +1080,7 @@
 - 時間: 2026-06-15 17:10:00 +0800
 - 分支: feature/animation-effect-seek-midpoint-20260615
 - 內容: 完成「點擊動畫效果時，把時間軸移到效果有效時間一半的地方」。於 `frontend/src/pages/PlayPage.tsx` 新增 `handleSeekToTime(seconds)`：與既有 `handleSeek` 共用 sync master 守衛與 `duration` 有效性檢查，將 `audioRef.current.currentTime` 設為 `Math.max(0, Math.min(seconds, duration))` 並清除延長播放計時器，並透過 `PlayPageContextValue` 匯出（`frontend/src/pages/play/PlayPageContext.tsx` 新增對應型別）。`frontend/src/pages/play/AnimationEditorTab.tsx` 每個效果列前新增「⏱」按鈕（`play.animation.seekToMidpoint`，已補上 `en.ts`/`zh-TW.ts` 翻譯鍵），點擊時呼叫 `handleSeekToTime(effectStart + effect.duration / 2)`，其中 `effectStart` 沿用上一項目（高亮顯示）已計算的「依 startTrigger 解析後的起始秒數」，因此對「依逐字稿句子」起始的效果也能正確跳轉。驗證：`npx tsc --noEmit`（frontend）與 `npm run build`（frontend, vite build）皆通過。已 commit 至分支 `feature/animation-effect-seek-midpoint-20260615`（commit d02fc65）。
+
+- 時間: 2026-06-15 18:05:00 +0800
+- 分支: feature/animation-effect-multi-select-merge-20260615
+- 內容: 完成「使用 CTRL click 時，把效果改成己選擇的狀態，被選擇的效果都加上一個『合併』的按鍵，按下按鍵就把所有的效果都合併成一個單一效果。起始時間是就早的效果，而長度則調整成所有效果最晚的時間」。於 `frontend/src/pages/play/AnimationEditorTab.tsx` 新增 `selectedEffectIds`（`Set<string>`）狀態：在每個效果列的容器 `<div>` 上加上 `onClick`，當 `e.ctrlKey || e.metaKey` 時切換該效果 ID 的選取狀態，並以 `ring-2 ring-cyan-400` 疊加在既有的「目前播放中」(`isActive`，fuchsia) 高亮樣式上，兩者可同時顯示；效果清單上方新增提示文字 `play.animation.multiSelectHint` 說明 Ctrl/⌘+click 多選與合併操作。選取數 ≥2 時，於新增效果按鈕旁顯示「合併已選效果 (N)」按鈕（`play.animation.mergeSelected`），點擊後執行 `handleMergeSelectedEffects()`：對所有選中效果，依 `effect.startTrigger`（透過 `resolveStartTriggerSeconds()` 解析，失敗時退回 `effect.start`）計算各自的有效 `start`/`end`（`end = start + duration`），取 `minStart = Math.min(...starts)` 與 `maxEnd = Math.max(...ends)`；以「起始時間最早」的效果為基準，將其 `start` 設為 `minStart`、`duration` 設為 `maxEnd - minStart`、並清除 `startTrigger`（改為絕對秒數），其餘設定（效果類型、ease、text、params、exitDuration、code 等）保留基準效果原值不變；其餘被選中的效果從 `draft.effects` 中移除，合併完成後清空 `selectedEffectIds`。刪除效果按鈕同步將該效果 ID 從 `selectedEffectIds` 移除；切換頁面（`currentPage?.page_number` 改變）時以 `useEffect` 清空選取狀態，避免跨頁合併。新增 i18n 翻譯鍵 `play.animation.multiSelectHint`、`play.animation.mergeSelected`（`en.ts`/`zh-TW.ts`）。驗證：`npx tsc --noEmit`（frontend）與 `npm run build`（frontend, vite build）皆通過。已 commit 至分支 `feature/animation-effect-multi-select-merge-20260615`（commit 524aba0）。
