@@ -118,6 +118,7 @@ export function AnimationEditorTab() {
   const [customScriptDialogEffectId, setCustomScriptDialogEffectId] = useState<string | null>(null);
   const [customScriptChatInput, setCustomScriptChatInput] = useState('');
   const customScriptChatScrollRef = useRef<HTMLDivElement>(null);
+  const [selectedEffectIds, setSelectedEffectIds] = useState<Set<string>>(new Set());
 
   const draft = animationDraft ?? defaultAnimationSpec();
   const disabled = isReadOnlyProcessing || animationBusy || !currentPage;
@@ -147,6 +148,11 @@ export function AnimationEditorTab() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [customScriptConversation.length, customScriptIsBusy]);
 
+  // 切換頁面時清空已選擇的效果，避免跨頁合併。
+  useEffect(() => {
+    setSelectedEffectIds(new Set());
+  }, [currentPage?.page_number]);
+
   const sendCustomScriptChatMessage = () => {
     if (!customScriptDialogEffect || disabled || customScriptBusy || !customScriptChatInput.trim()) return;
     void handleSendCustomScriptMessage(customScriptDialogEffect.id, customScriptChatInput);
@@ -161,6 +167,38 @@ export function AnimationEditorTab() {
         effects: base.effects.map((e) => (e.id === id ? { ...e, ...patch } : e)),
       };
     });
+  };
+
+  /** 將已選擇的效果合併成一個：起點取最早的起始時間，長度延伸至最晚的結束時間，其餘設定沿用最早的效果。 */
+  const handleMergeSelectedEffects = () => {
+    setAnimationDraft((prev) => {
+      const base = prev ?? defaultAnimationSpec();
+      const selected = base.effects.filter((e) => selectedEffectIds.has(e.id));
+      if (selected.length < 2) return base;
+      const ranges = selected.map((effect) => {
+        const start = effect.startTrigger
+          ? resolveStartTriggerSeconds(effect.startTrigger, sentenceTimeline) ?? effect.start
+          : effect.start;
+        return { effect, start, end: start + effect.duration };
+      });
+      const minStart = Math.min(...ranges.map((r) => r.start));
+      const maxEnd = Math.max(...ranges.map((r) => r.end));
+      const earliest = ranges.reduce((a, b) => (b.start < a.start ? b : a)).effect;
+      const merged: SlideAnimationEffect = {
+        ...earliest,
+        start: minStart,
+        startTrigger: undefined,
+        duration: maxEnd - minStart,
+      };
+      const selectedIds = new Set(selected.map((e) => e.id));
+      return {
+        ...base,
+        effects: base.effects
+          .filter((e) => !selectedIds.has(e.id) || e.id === earliest.id)
+          .map((e) => (e.id === earliest.id ? merged : e)),
+      };
+    });
+    setSelectedEffectIds(new Set());
   };
 
   const updateHint = (line: number, text: string) => {
@@ -196,6 +234,9 @@ export function AnimationEditorTab() {
       </label>
 
       <div className="mb-2 text-xs font-semibold text-slate-400">{t('play.animation.effectList')}</div>
+      {draft.effects.length > 1 && (
+        <div className="mb-2 text-[11px] text-slate-500">{t('play.animation.multiSelectHint')}</div>
+      )}
       {draft.effects.length === 0 ? (
         <div className="mb-2 rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-500">
           {t('play.animation.noEffects')}
@@ -208,12 +249,22 @@ export function AnimationEditorTab() {
               : effect.start;
             const effectEnd = effectStart + effect.duration + (effect.exitDuration ?? 0);
             const isActive = currentTime >= effectStart && currentTime <= effectEnd;
+            const isSelected = selectedEffectIds.has(effect.id);
             return (
             <div
               key={effect.id}
+              onClick={(e) => {
+                if (!e.ctrlKey && !e.metaKey) return;
+                setSelectedEffectIds((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(effect.id)) next.delete(effect.id);
+                  else next.add(effect.id);
+                  return next;
+                });
+              }}
               className={`flex flex-col gap-2 rounded-md border px-3 py-2 transition-colors ${
                 isActive ? 'border-fuchsia-400 bg-fuchsia-500/15' : 'border-slate-800 bg-slate-900/50'
-              }`}
+              } ${isSelected ? 'ring-2 ring-cyan-400' : ''}`}
             >
               <div className="flex flex-wrap items-end gap-2">
               <button
@@ -460,12 +511,18 @@ export function AnimationEditorTab() {
               <button
                 type="button"
                 disabled={disabled}
-                onClick={() =>
+                onClick={() => {
                   setAnimationDraft((prev) => {
                     const base = prev ?? defaultAnimationSpec();
                     return { ...base, effects: base.effects.filter((e) => e.id !== effect.id) };
-                  })
-                }
+                  });
+                  setSelectedEffectIds((prev) => {
+                    if (!prev.has(effect.id)) return prev;
+                    const next = new Set(prev);
+                    next.delete(effect.id);
+                    return next;
+                  });
+                }}
                 className="ml-auto rounded-md border border-rose-600/50 bg-rose-600/15 px-2 py-1 text-xs text-rose-300 hover:bg-rose-600/25 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {t('play.animation.delete')}
@@ -613,6 +670,16 @@ export function AnimationEditorTab() {
         >
           {t('play.animation.addEffect')}
         </button>
+        {selectedEffectIds.size >= 2 && (
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={handleMergeSelectedEffects}
+            className="rounded-md border border-cyan-400/50 bg-cyan-500/10 px-3 py-1.5 text-sm text-cyan-200 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {t('play.animation.mergeSelected')} ({selectedEffectIds.size})
+          </button>
+        )}
         <button
           type="button"
           disabled={disabled || pageSentences.length === 0}
