@@ -490,6 +490,52 @@ export interface PdfDetailLatestRun {
 - [`rowToDetail()`](../backend/src/routes/pdfs/shared.ts:383) 可新增第三個參數 `timingsByPage`，避免它自行查 DB，讓資料存取集中在 route handler。
 - 舊呼叫點可先傳空 map，以保持漸進式改造。
 
+### 8.5 Run history API（已實作）
+
+`GET /api/pdfs/:id/runs`：
+
+- 僅做輕量存在性檢查（`SELECT id FROM pdfs WHERE id = ?`，不存在回 404 `PDF_NOT_FOUND`），不做 `canReadPdf`／擁有權檢查，與 [`figures.ts`](../backend/src/routes/pdfs/figures.ts)、[`page-animation.ts`](../backend/src/routes/pdfs/page-animation.ts) 的既有路由一致。
+- query 參數 `limit`（可選，整數 1~100，預設 20）：限制回傳的 run 數量。
+- 回應依 `pipeline_runs.started_at` 由新到舊排序（再以 `id` 排序當 tie-break），每個 run 內的 `stages` 依 §5.2 的 12 個 stage 順序排序（與 `started_at` 無關，避免同時啟動的多個 stage 排序不穩定）。
+
+```ts
+export interface PipelineRunStageSummary {
+  stage: PipelineStage;
+  status: TimingEventStatus;
+  attempt: number;
+  started_at: string | null;
+  ended_at: string | null;
+  duration_ms: number | null;
+  sla_target_ms: number | null;
+  sla_status: TimingSlaStatus;
+  error_code: string | null;
+  error_message: string | null;
+}
+
+export interface PipelineRunSummary {
+  id: string;
+  run_type: PipelineRunType;
+  parent_run_id: string | null;
+  triggered_by: string;
+  status: PipelineRunStatus;
+  attempt: number;
+  started_at: string;
+  ended_at: string | null;
+  duration_ms: number | null;
+  sla_status: TimingSlaStatus;
+  error_code: string | null;
+  error_message: string | null;
+  metadata: Record<string, unknown> | null; // 解析自 metadata_json，非物件或解析失敗時為 null
+  stages: PipelineRunStageSummary[];
+}
+
+export interface PipelineRunsResponse {
+  runs: PipelineRunSummary[];
+}
+```
+
+前端在「系統資料」分頁切換時呼叫 `fetchPdfRunHistory(pdfId)`（[`frontend/src/lib/api/pdfs.ts`](../frontend/src/lib/api/pdfs.ts)），於「執行歷程」區塊列出每個 run（類型、第 N 次、開始時間、狀態、總耗時），可展開查看各 stage 的狀態／耗時／SLA 與失敗訊息。
+
 ## 9. 前端顯示策略
 
 ### 9.1 每頁顯示
@@ -609,7 +655,7 @@ flowchart TD
 
 ## 13. 後續可擴充方向
 
-- 新增 run history API，讓使用者查看每次 regenerate/resume 的完整歷程。
+- ~~新增 run history API，讓使用者查看每次 regenerate/resume 的完整歷程~~（已新增 `GET /api/pdfs/:id/runs`，回傳該 PDF 所有 `pipeline_runs`（依 `started_at` 由新到舊排序，預設上限 20、可用 `limit` 查詢參數調整，上限 100）及每個 run 對應的 `pipeline_stage_summaries`（依§5.2 的 stage 順序排序），詳見 §8.5；前端於「系統資料」分頁新增「執行歷程」區塊，可展開查看各 run 的階段耗時與 SLA；分支 `feature/pipeline-run-history-20260616`）。
 - 將 SLA target 移到設定檔或 DB，支援不同 provider/model/source_type。
 - 將 timing event 與 token/成本統計關聯，支援成本儀表。
 - 建立 slow artifact ranking，協助找出最慢頁面與最慢階段。

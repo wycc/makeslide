@@ -59,6 +59,65 @@ export interface PdfDetailPageTimings {
   audio: PdfDetailPageTimingItem | null;
 }
 
+export type PipelineRunType =
+  | 'initial'
+  | 'retry'
+  | 'resume'
+  | 'regenerate_batch'
+  | 'regenerate_page'
+  | 'regenerate_artifact'
+  | 'generate_video';
+
+export type PipelineRunStatus = 'running' | 'succeeded' | 'failed' | 'canceled' | 'partial';
+
+export type PipelineStage =
+  | 'queue_wait'
+  | 'source_prepare'
+  | 'render_pages'
+  | 'extract_text'
+  | 'extract_figures'
+  | 'split_text'
+  | 'generate_scripts'
+  | 'synthesize_audio'
+  | 'generate_animations'
+  | 'generate_title'
+  | 'generate_video'
+  | 'finalize';
+
+export interface PipelineRunStageSummary {
+  stage: PipelineStage;
+  status: TimingEventStatus;
+  attempt: number;
+  started_at: string | null;
+  ended_at: string | null;
+  duration_ms: number | null;
+  sla_target_ms: number | null;
+  sla_status: TimingSlaStatus;
+  error_code: string | null;
+  error_message: string | null;
+}
+
+export interface PipelineRunSummary {
+  id: string;
+  run_type: PipelineRunType;
+  parent_run_id: string | null;
+  triggered_by: string;
+  status: PipelineRunStatus;
+  attempt: number;
+  started_at: string;
+  ended_at: string | null;
+  duration_ms: number | null;
+  sla_status: TimingSlaStatus;
+  error_code: string | null;
+  error_message: string | null;
+  metadata: Record<string, unknown> | null;
+  stages: PipelineRunStageSummary[];
+}
+
+export interface PipelineRunsResponse {
+  runs: PipelineRunSummary[];
+}
+
 export interface PdfListItem {
   id: string;
   title: string | null;
