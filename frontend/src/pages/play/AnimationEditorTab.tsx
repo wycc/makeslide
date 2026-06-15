@@ -170,6 +170,21 @@ export function AnimationEditorTab() {
     });
   };
 
+  /** 調整效果在清單中的順序；順序也決定重疊 overlay 效果的疊加層次（越後面越上層）。 */
+  const moveEffect = (id: string, direction: 'up' | 'down') => {
+    setAnimationDraft((prev) => {
+      const base = prev ?? defaultAnimationSpec();
+      const index = base.effects.findIndex((e) => e.id === id);
+      const targetIndex = direction === 'up' ? index - 1 : index + 1;
+      if (index === -1 || targetIndex < 0 || targetIndex >= base.effects.length) return base;
+      const effects = [...base.effects];
+      const temp = effects[index]!;
+      effects[index] = effects[targetIndex]!;
+      effects[targetIndex] = temp;
+      return { ...base, effects };
+    });
+  };
+
   /**
    * 將已選擇的效果合併成一個：起點取最早的起始時間，長度延伸至最晚的結束時間，其餘設定沿用最早的效果。
    * 若最早的效果原本是依逐字稿句子觸發（`startTrigger`），合併後維持該觸發設定，不轉換為絕對秒數；
@@ -321,7 +336,7 @@ export function AnimationEditorTab() {
             {t('play.animation.noEffects')}
           </div>
         ) : (
-          draft.effects.map((effect) => {
+          draft.effects.map((effect, index) => {
             const effectStart = effect.startTrigger
               ? resolveStartTriggerSeconds(effect.startTrigger, sentenceTimeline) ?? effect.start
               : effect.start;
@@ -345,6 +360,30 @@ export function AnimationEditorTab() {
               } ${isSelected ? 'ring-2 ring-cyan-400' : ''}`}
             >
               <div className="flex flex-wrap items-end gap-2">
+              {draft.effects.length > 1 && (
+                <div className="flex flex-col gap-0.5">
+                  <button
+                    type="button"
+                    disabled={disabled || index === 0}
+                    title={t('play.animation.moveUp')}
+                    aria-label={t('play.animation.moveUp')}
+                    onClick={() => moveEffect(effect.id, 'up')}
+                    className="rounded-md border border-slate-700 px-1.5 py-0.5 text-xs leading-none text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-30"
+                  >
+                    ▲
+                  </button>
+                  <button
+                    type="button"
+                    disabled={disabled || index === draft.effects.length - 1}
+                    title={t('play.animation.moveDown')}
+                    aria-label={t('play.animation.moveDown')}
+                    onClick={() => moveEffect(effect.id, 'down')}
+                    className="rounded-md border border-slate-700 px-1.5 py-0.5 text-xs leading-none text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-30"
+                  >
+                    ▼
+                  </button>
+                </div>
+              )}
               <button
                 type="button"
                 disabled={disabled}
