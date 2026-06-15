@@ -220,21 +220,24 @@ easing 白名單：`none`、`power1.in`、`power1.out`、`power1.inOut`、`power
 - 驗證規則：`text` 為選填字串，最長 80 字（`MAX_TEXT_CALLOUT_LENGTH`，定義於 `backend/src/services/pageAnimation.ts`，前端常數同步於 `frontend/src/lib/animationSpec.ts`）；超過長度回 400 `INVALID_ANIMATION_SPEC`。
 - 圖片內容（「生成一張小圖」）需額外的圖片產生/上傳管線，本次不處理，留待後續項目。
 
-### 5.3 效果自動消失（exitDuration）
+### 5.3 效果自動消失／恢復原狀（exitDuration）
 
-`highlight-box`、`spotlight`、`text-callout`（`OVERLAY_EFFECT_TYPES`）三種 overlay 效果新增選填欄位：
+所有效果類型皆可選填：
 
 ```ts
 // effect.exitDuration?: number  — 秒，0 <= exitDuration <= 600（MAX_DURATION_SECONDS）
 ```
 
-- 未設定（`undefined`）時行為與既有版本相同：淡入後維持顯示，直到換頁或 timeline 結束。
-- 設定後，overlay 會在淡入完成（`start + duration`）後再經過 `exitDuration` 秒，以相同的 `duration`/`ease` 淡出（`autoAlpha: 1 → 0`），對應 timeline 時間點為 `start + duration + exitDuration`。
-- `exitDuration = 0` 代表淡入完成後立即開始淡出（不停留）。
-- 僅適用於 `OVERLAY_EFFECT_TYPES`；`fade-in`/`zoom-*`/`pan-*` 等整頁 transform 效果忽略此欄位（其動畫終態本身即為「結果狀態」，不適用「消失」語意，見 §12）。
+- 未設定（`undefined`）時行為與既有版本相同：進場動畫結束後維持結果狀態，直到換頁或 timeline 結束。
+- 設定後，動畫會在進場完成（`start + duration`）後再經過 `exitDuration` 秒，以相同的 `duration`/`ease` 觸發第二段動畫，對應 timeline 時間點為 `start + duration + exitDuration`。
+- `exitDuration = 0` 代表進場完成後立即開始第二段動畫（不停留）。
 - 驗證規則：`z.number().min(0).max(600).optional()`，定義於 `backend/src/services/pageAnimation.ts` 的 `EffectSchema`；超出範圍回 400 `INVALID_ANIMATION_SPEC`。
-- 渲染：`buildGsapTimeline.ts` 於既有 `fromTo(overlay, {autoAlpha:0}, {autoAlpha:1, ...})` 之後，若 `effect.exitDuration !== undefined`，再加一個 `to(overlay, {autoAlpha:0, ...}, start+duration+exitDuration)`。
 - 編輯器 UI 見 §7。
+
+第二段動畫的語意依效果類型分為兩種（見 `frontend/src/lib/animationSpec.ts` 的 `OVERLAY_EFFECT_TYPES`/`TRANSFORM_EFFECT_TYPES`）：
+
+- **`highlight-box`/`spotlight`/`pointer`/`text-callout`/`custom-script`（`OVERLAY_EFFECT_TYPES`）**：「自動消失」——以 `autoAlpha: 1 → 0` 淡出整個 overlay。渲染：`buildGsapTimeline.ts` 於既有 `fromTo(overlay, {autoAlpha:0}, {autoAlpha:1, ...})` 之後，若 `effect.exitDuration !== undefined`，再加一個 `to(overlay, {autoAlpha:0, ...}, start+duration+exitDuration)`。
+- **`fade-in`/`zoom-*`/`pan-*`（`TRANSFORM_EFFECT_TYPES`）**：「自動恢復原狀」——將整頁 `stage` 動畫回進場前的狀態（進場 tween 的反向，相同 `duration`/`ease`）。渲染：`buildGsapTimeline.ts` 於既有 `fromTo(stage, from, {...to, ...})` 之後，若 `effect.exitDuration !== undefined`，再加一個 `to(stage, {...from, ...}, start+duration+exitDuration)`（`from`/`to` 即進場 tween 的起訖值，例如 `fade-in` 為 `{autoAlpha:0}`/`{autoAlpha:1}`、`pan-left` 為 `{xPercent:d}`/`{xPercent:-d}`）。
 
 ### 5.4 自訂腳本動畫（custom-script）
 
@@ -522,7 +525,7 @@ detail API 的 page 物件增加 `render_type` 與 `animation_spec_url`。
 
 ## 12. 後續擴充方向
 
-- V1.1：~~drawing mode 自動暫停~~（已於 `PlayPage.tsx` 新增 `useEffect`，當 `drawingMode` 變為 `true` 時自動呼叫 `audioRef.current?.pause()`，避免講者繪圖時投影片自動切換或動畫繼續播放；分支 `feature/drawing-mode-auto-pause-20260615`）、~~preset 快速套用~~（已於動畫編輯器「新增效果」按鈕旁新增「套用範本」下拉選單，選擇後依範本預設值新增一個效果，例如「標題淡入」、「鏡頭推進強調」、「向左移動鏡頭」、「紅框圈選重點」、「聚光燈聚焦」、「左下角文字說明」、「指標標示」，涵蓋常用 type/duration/ease/exitDuration/params 組合，新增後仍可自行調整；分支 `feature/animation-effect-presets-20260615`）、~~raw JSON 檢視~~（已於動畫編輯器新增「原始 JSON」分頁，以唯讀 `<textarea>` 顯示 `JSON.stringify(draft, null, 2)` 並提供「複製 JSON」按鈕；分支 `feature/animation-effects-raw-json-view-20260615`）、~~效果排序~~（已於動畫編輯器效果卡片新增「上移／下移」按鈕，調整 `AnimationSpec.effects` 陣列順序，同時決定重疊 overlay 效果的疊加層次；分支 `feature/animation-effects-reorder-20260615`）、~~跨頁複製~~（已於動畫編輯器新增「複製本頁效果」／「貼上效果」按鈕：複製結果存於不隨頁面切換清空的本地狀態，貼上時為每個效果產生新的 `id` 並附加到目前頁面的效果清單，上限為 `MAX_SLIDE_ANIMATION_EFFECTS`；分支 `feature/animation-effects-cross-page-copy-20260615`）、為 `fade-in`/`zoom-*`/`pan-*` 等整頁 transform 效果提供對稱的「消失（恢復原狀）」可選機制（見 §5.3）。
+- V1.1：~~drawing mode 自動暫停~~（已於 `PlayPage.tsx` 新增 `useEffect`，當 `drawingMode` 變為 `true` 時自動呼叫 `audioRef.current?.pause()`，避免講者繪圖時投影片自動切換或動畫繼續播放；分支 `feature/drawing-mode-auto-pause-20260615`）、~~preset 快速套用~~（已於動畫編輯器「新增效果」按鈕旁新增「套用範本」下拉選單，選擇後依範本預設值新增一個效果，例如「標題淡入」、「鏡頭推進強調」、「向左移動鏡頭」、「紅框圈選重點」、「聚光燈聚焦」、「左下角文字說明」、「指標標示」，涵蓋常用 type/duration/ease/exitDuration/params 組合，新增後仍可自行調整；分支 `feature/animation-effect-presets-20260615`）、~~raw JSON 檢視~~（已於動畫編輯器新增「原始 JSON」分頁，以唯讀 `<textarea>` 顯示 `JSON.stringify(draft, null, 2)` 並提供「複製 JSON」按鈕；分支 `feature/animation-effects-raw-json-view-20260615`）、~~效果排序~~（已於動畫編輯器效果卡片新增「上移／下移」按鈕，調整 `AnimationSpec.effects` 陣列順序，同時決定重疊 overlay 效果的疊加層次；分支 `feature/animation-effects-reorder-20260615`）、~~跨頁複製~~（已於動畫編輯器新增「複製本頁效果」／「貼上效果」按鈕：複製結果存於不隨頁面切換清空的本地狀態，貼上時為每個效果產生新的 `id` 並附加到目前頁面的效果清單，上限為 `MAX_SLIDE_ANIMATION_EFFECTS`；分支 `feature/animation-effects-cross-page-copy-20260615`）、~~為 `fade-in`/`zoom-*`/`pan-*` 等整頁 transform 效果提供對稱的「消失（恢復原狀）」可選機制（見 §5.3）~~（已將 `exitDuration` 擴展至 `TRANSFORM_EFFECT_TYPES`：設定後 `buildGsapTimeline.ts` 會在 `start+duration+exitDuration` 時間點新增一個將 `stage` 動畫回進場前狀態的 `to()` tween（進場 tween 的反向，相同 `duration`/`ease`），動畫編輯器的「顯示後自動消失」控制項同步顯示於 transform 效果並改用「完成後自動恢復原狀」文案；分支 `feature/animation-transform-exit-revert-20260615`）。
 - V2：overlay image（小圖疊加內容）、SVG 圖元、物件 target、公式、逐步條列；依 `AnimationSpec.hints` 與逐字稿內容由 LLM 生成動畫 JSON——焦點方框（`highlight-box`/`spotlight`）的時機與位置已於 §7.4 落地，`text-callout`（含 AI 生成文案）與其他效果類型的 AI 生成仍待後續。
 - V2.x：`custom-script`（§5.4）的資料集/模型推論管線——例如載入 MNIST 並以 ResNet50 產生 embedding、PCA 降維至二維後動態顯示分類過程——需要後端提供資料集存取與模型推論服務（sandbox 本身禁止網路存取，無法在前端直接載入外部資料）；v1 僅提供通用 sandboxed 自訂腳本框架與 AI 生成/迭代迴圈，不含此類資料管線。
 - V2.x：`window.Manim`（manim 風格輔助函式庫，§5.4）的擴充——`Axes`/`NumberPlane`（座標軸、格線、`coordsToPoint`）、`MathTex`/`Tex`（需離線 vendored KaTeX 字型，避免 sandbox 網路存取限制）、`transform` 的真正路徑變形（path morphing，而非目前僅線性插值共有屬性）、3D 場景；v1 僅提供 2D SVG mobject（`circle`/`square`/`rectangle`/`line`/`arrow`/`dot`/`polygon`/`text`）與 `Create`/`Write`/`FadeIn`/`FadeOut`/`Transform`/`Shift`/`Rotate`/`Scale`/`GrowFromCenter` 等基本動畫手法。
