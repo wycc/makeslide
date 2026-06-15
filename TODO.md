@@ -1065,13 +1065,18 @@
 
 # 2026-6-15
 [x] 在 PlayPage 中，把目前播放中的動畫，根據時現時間將目前播放中的效果背景用高亮度。（完成於分支: feature/animation-active-effect-highlight-20260615）
-[ ] 點擊動畫效果時，把時間軸移到效果有效時間一半的地方。
+[x] 點擊動畫效果時，把時間軸移到效果有效時間一半的地方。（完成於分支: feature/animation-effect-seek-midpoint-20260615）
 [ ] 使用 CTRL click 時，把效果改成己選擇的狀態，被選擇的效果都加上一個『合併』的按鍵，按下按鍵就把所有的效果都合併成一個單一效果。起始時間是就早的效果，而長度則調整成所有效果最晚的時間。
 [ ] 加上一個設定指標效果，只是把指標移到指定的位置。
 [ ] 在重生中加上一個動畫的項目，把每一頁都加上動畫效果。
+[ ] 把效果清單和逐字稿效果指引放在一個 notebook 界面中，並加上捲動軸
 
 # 工作記錄
 
 - 時間: 2026-06-15 16:05:00 +0800
 - 分支: feature/animation-active-effect-highlight-20260615
 - 內容: 完成「在 PlayPage 中，把目前播放中的動畫，根據時現時間將目前播放中的效果背景用高亮度」。於 `frontend/src/pages/play/AnimationEditorTab.tsx` 的效果列表中，對每個 `SlideAnimationEffect` 計算其有效時間範圍：若有 `startTrigger` 則以 `resolveStartTriggerSeconds()` 解析出的秒數作為起點（無法解析時退回 `effect.start`），結束時間為「起點 + duration + (exitDuration ?? 0)」（涵蓋 overlay 效果的自動淡出時間）；當 `currentTime`（取自 `PlayPageContext`，由 `<audio onTimeUpdate>` 即時更新）落在此範圍內時，該效果項目的容器改用 `border-fuchsia-400 bg-fuchsia-500/15` 高亮樣式取代預設的 `border-slate-800 bg-slate-900/50`，並加上 `transition-colors` 讓切換更平滑；其餘欄位（效果類型、起始模式、時長、ease 等）行為不變。驗證：`npx tsc --noEmit`（frontend）與 `npm run build`（frontend, vite build）皆通過。已 commit 至分支 `feature/animation-active-effect-highlight-20260615`（commit 3a2c97a）。
+
+- 時間: 2026-06-15 17:10:00 +0800
+- 分支: feature/animation-effect-seek-midpoint-20260615
+- 內容: 完成「點擊動畫效果時，把時間軸移到效果有效時間一半的地方」。於 `frontend/src/pages/PlayPage.tsx` 新增 `handleSeekToTime(seconds)`：與既有 `handleSeek` 共用 sync master 守衛與 `duration` 有效性檢查，將 `audioRef.current.currentTime` 設為 `Math.max(0, Math.min(seconds, duration))` 並清除延長播放計時器，並透過 `PlayPageContextValue` 匯出（`frontend/src/pages/play/PlayPageContext.tsx` 新增對應型別）。`frontend/src/pages/play/AnimationEditorTab.tsx` 每個效果列前新增「⏱」按鈕（`play.animation.seekToMidpoint`，已補上 `en.ts`/`zh-TW.ts` 翻譯鍵），點擊時呼叫 `handleSeekToTime(effectStart + effect.duration / 2)`，其中 `effectStart` 沿用上一項目（高亮顯示）已計算的「依 startTrigger 解析後的起始秒數」，因此對「依逐字稿句子」起始的效果也能正確跳轉。驗證：`npx tsc --noEmit`（frontend）與 `npm run build`（frontend, vite build）皆通過。已 commit 至分支 `feature/animation-effect-seek-midpoint-20260615`（commit d02fc65）。
