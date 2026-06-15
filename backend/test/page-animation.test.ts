@@ -11,6 +11,7 @@ import { setOpenAIClientForTest } from '../src/services/openai';
 import {
   MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES,
   MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH,
+  MAX_TEXT_CALLOUT_LENGTH,
   defaultAnimationSpec,
   validateAnimationSpec,
 } from '../src/services/pageAnimation';
@@ -612,6 +613,56 @@ test('mapAutoFocusResponseToEffects output passes validateAnimationSpec', () => 
   assert.equal(result.ok, true);
 });
 
+test('mapAutoFocusResponseToEffects maps text-callout items with text, truncating to MAX_TEXT_CALLOUT_LENGTH', () => {
+  const longText = 'A'.repeat(MAX_TEXT_CALLOUT_LENGTH + 20);
+  const effects = mapAutoFocusResponseToEffects(
+    {
+      effects: [
+        { line: 0, show: true, type: 'text-callout', text: '營收成長 35%', xPct: 8, yPct: 78, widthPct: 40, heightPct: 14, exitDuration: 3 },
+        { line: 1, show: true, type: 'text-callout', text: longText },
+      ],
+    },
+    2,
+  );
+  assert.equal(effects.length, 2);
+  assert.equal(effects[0].type, 'text-callout');
+  assert.equal(effects[0].text, '營收成長 35%');
+  assert.deepEqual(effects[0].params, { xPct: 8, yPct: 78, widthPct: 40, heightPct: 14 });
+  assert.equal(effects[0].exitDuration, 3);
+  assert.equal(effects[1].type, 'text-callout');
+  assert.equal(effects[1].text?.length, MAX_TEXT_CALLOUT_LENGTH);
+});
+
+test('mapAutoFocusResponseToEffects falls back text-callout without text to highlight-box', () => {
+  const effects = mapAutoFocusResponseToEffects(
+    {
+      effects: [
+        { line: 0, show: true, type: 'text-callout' },
+        { line: 1, show: true, type: 'text-callout', text: '   ' },
+      ],
+    },
+    2,
+  );
+  assert.equal(effects.length, 2);
+  assert.equal(effects[0].type, 'highlight-box');
+  assert.equal(effects[0].text, undefined);
+  assert.equal(effects[1].type, 'highlight-box');
+  assert.equal(effects[1].text, undefined);
+});
+
+test('mapAutoFocusResponseToEffects text-callout output passes validateAnimationSpec', () => {
+  const effects = mapAutoFocusResponseToEffects(
+    {
+      effects: [
+        { line: 0, show: true, type: 'text-callout', text: '重點摘要', xPct: 10, yPct: 80, widthPct: 40, heightPct: 12 },
+      ],
+    },
+    1,
+  );
+  const result = validateAnimationSpec({ version: 1, enabled: true, effects });
+  assert.equal(result.ok, true);
+});
+
 // ── POST animation/auto-focus-ai ────────────────────────────────────────────────
 
 test('POST animation/auto-focus-ai returns AI-generated effects mapped from sentences', async () => {
@@ -655,6 +706,64 @@ test('POST animation/auto-focus-ai returns AI-generated effects mapped from sent
     assert.equal(body.effects[0].type, 'highlight-box');
     assert.deepEqual(body.effects[0].params, { xPct: 10, yPct: 15, widthPct: 40, heightPct: 30 });
     assert.equal(body.effects[0].exitDuration, 2);
+
+    const validated = validateAnimationSpec({ version: 1, enabled: true, effects: body.effects });
+    assert.equal(validated.ok, true);
+  } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+  }
+});
+
+test('POST animation/auto-focus-ai returns a text-callout effect with caption text', async () => {
+  seedAnimationPdf(PDF_ID, 1);
+  fs.writeFileSync(path.join(config.storageRoot, PDF_ID, 'pages', 'animuid1.text.txt'), '頁面標題\n圖表顯示營收成長 35%', 'utf8');
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  effects: [
+                    {
+                      line: 0,
+                      show: true,
+                      type: 'text-callout',
+                      text: '營收成長 35%',
+                      xPct: 8,
+                      yPct: 78,
+                      widthPct: 40,
+                      heightPct: 14,
+                      exitDuration: 3,
+                    },
+                  ],
+                }),
+              },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+        }),
+      },
+    },
+  } as never);
+
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${PDF_ID}/pages/1/animation/auto-focus-ai`,
+      headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+      payload: { sentences: ['請看這張圖表，營收成長了 35%。'] },
+    });
+    assert.equal(resp.statusCode, 200);
+    const body = resp.json() as { effects: Array<Record<string, unknown>> };
+    assert.equal(body.effects.length, 1);
+    assert.equal(body.effects[0].type, 'text-callout');
+    assert.equal(body.effects[0].text, '營收成長 35%');
+    assert.deepEqual(body.effects[0].params, { xPct: 8, yPct: 78, widthPct: 40, heightPct: 14 });
 
     const validated = validateAnimationSpec({ version: 1, enabled: true, effects: body.effects });
     assert.equal(validated.ok, true);

@@ -3,10 +3,13 @@ import { z } from 'zod';
 import type { ChatCompletionContentPart } from 'openai/resources/chat/completions';
 import { callChatJSON } from './openai';
 import type { AnimationEffect, AnimationEffectType } from './pageAnimation';
-import { MAX_SLIDE_ANIMATION_EFFECTS } from './pageAnimation';
+import { MAX_SLIDE_ANIMATION_EFFECTS, MAX_TEXT_CALLOUT_LENGTH } from './pageAnimation';
 
-/** Effect types this generator may choose; matches `FOCUS_EFFECT_TYPES` on the frontend. */
-const AUTO_FOCUS_AI_EFFECT_TYPES = ['highlight-box', 'spotlight'] as const;
+/**
+ * Effect types this generator may choose: `FOCUS_EFFECT_TYPES` on the frontend
+ * (`highlight-box`/`spotlight`) plus `text-callout` for short AI-written captions.
+ */
+const AUTO_FOCUS_AI_EFFECT_TYPES = ['highlight-box', 'spotlight', 'text-callout'] as const;
 
 /** Fade-in/out duration applied to every AI-generated effect, matching `generateFocusEffectsFromTranscript`. */
 const AUTO_FOCUS_AI_DURATION_SECONDS = 1.2;
@@ -20,6 +23,8 @@ const AutoFocusItemSchema = z.object({
   line: z.number().int().min(0).max(998),
   show: z.boolean(),
   type: z.enum(AUTO_FOCUS_AI_EFFECT_TYPES).optional(),
+  /** Caption text, only meaningful when `type === 'text-callout'`. */
+  text: z.string().min(1).max(MAX_TEXT_CALLOUT_LENGTH).optional(),
   xPct: z.number().min(0).max(100).optional(),
   yPct: z.number().min(0).max(100).optional(),
   widthPct: z.number().min(1).max(100).optional(),
@@ -41,19 +46,20 @@ function clamp(value: number, min: number, max: number): number {
 function buildAutoFocusSystemPrompt(): string {
   return [
     '你是一位簡報動畫設計助理，負責替投影片的逐字稿規劃「焦點動畫」。',
-    '焦點動畫會在播放到指定句子時，於投影片上淡入一個方框，引導觀眾注意畫面中的特定區域，並可在停留一段時間後自動淡出。',
+    '焦點動畫會在播放到指定句子時，於投影片上淡入一個方框或一段文字說明，引導觀眾注意畫面中的特定區域或重點摘要，並可在停留一段時間後自動淡出。',
     '',
     '你的任務：針對使用者提供的每一句逐字稿（依索引 0 到 N-1），判斷：',
-    '1. show：是否需要在播放到這句時顯示焦點方框。只有當這句明確提到畫面中的具體位置、物件、數據、圖表或重點文字時才顯示；單純的開場、總結、銜接句通常不需要，請避免每句都顯示。',
-    '2. type：highlight-box（醒目方框，框出重點）或 spotlight（聚光燈，方框外區域變暗）。沒有特別理由時優先選 highlight-box。',
-    '3. xPct / yPct / widthPct / heightPct：方框左上角座標與寬高，皆為投影片寬高的百分比（0-100）。請依該句描述的內容，盡量對應到畫面中合理的位置與大小，避免每句都用同一個位置。',
-    '4. exitDuration（選填，秒）：方框淡入完成後要停留多久才自動淡出。如果這句只是短暫提示某個重點，可設定 1-3 秒；如果整句都在說明這個重點，可以設定一個比較長的時間。',
+    '1. show：是否需要在播放到這句時顯示效果。只有當這句明確提到畫面中的具體位置、物件、數據、圖表或重點文字時才顯示；單純的開場、總結、銜接句通常不需要，請避免每句都顯示。',
+    '2. type：highlight-box（醒目方框，框出重點）、spotlight（聚光燈，方框外區域變暗）或 text-callout（淡入一段精簡文字摘要）。沒有特別理由時優先選 highlight-box；若這句的重點適合用一句精簡摘要（例如關鍵數據、結論）強化，可選 text-callout。',
+    '3. xPct / yPct / widthPct / heightPct：方框（或文字框）左上角座標與寬高，皆為投影片寬高的百分比（0-100）。請依該句描述的內容，盡量對應到畫面中合理的位置與大小，避免每句都用同一個位置；text-callout 建議放在畫面空白處（例如下方角落），避免遮住重點內容。',
+    '4. text（僅當 type 為 text-callout 時提供，其他 type 請省略此欄位）：要顯示的文字內容，務必精簡扼要（不超過 80 字），並使用與逐字稿相同的語言。',
+    '5. exitDuration（選填，秒）：效果淡入完成後要停留多久才自動淡出。如果這句只是短暫提示某個重點，可設定 1-3 秒；如果整句都在說明這個重點，可以設定一個比較長的時間。',
     '',
     '若使用者訊息附帶投影片頁面圖片，請參考圖片中的實際版面（文字、圖表、圖片等元素的位置與大小），讓 xPct/yPct/widthPct/heightPct 盡量對應到畫面中真實的區域；若沒有附帶圖片，則依文字描述合理推估。',
     '座標系統：投影片左上角為原點 (0,0)，x 向右增加、y 向下增加，皆為 0-100 的百分比。',
     'show 為 false 時，其他欄位可省略。',
     '',
-    '請只輸出 JSON，格式為：{"effects":[{"line":0,"show":true,"type":"highlight-box","xPct":10,"yPct":20,"widthPct":30,"heightPct":25,"exitDuration":2}, {"line":1,"show":false}, ...]}',
+    '請只輸出 JSON，格式為：{"effects":[{"line":0,"show":true,"type":"highlight-box","xPct":10,"yPct":20,"widthPct":30,"heightPct":25,"exitDuration":2}, {"line":1,"show":true,"type":"text-callout","text":"營收成長 35%","xPct":8,"yPct":78,"widthPct":40,"heightPct":14,"exitDuration":3}, {"line":2,"show":false}, ...]}',
     'effects 陣列必須包含使用者提供的每一個句子索引，且順序與索引需一致。',
   ].join('\n');
 }
@@ -89,6 +95,9 @@ function buildAutoFocusUserPrompt(params: { pageText: string; sentences: string[
  * only entries with `show: true`, clamping positions/sizes/exitDuration to
  * sane ranges, and capping the result at `sentenceLimit` (already <= MAX_EFFECTS).
  * Duplicate `line` entries keep the first occurrence; results are sorted by line.
+ * `type: 'text-callout'` items carry `text` (truncated to `MAX_TEXT_CALLOUT_LENGTH`);
+ * if the AI picked `text-callout` without supplying `text`, the item falls back
+ * to `highlight-box` since an empty caption box is not useful.
  */
 export function mapAutoFocusResponseToEffects(response: AutoFocusAiResponse, sentenceLimit: number): AnimationEffect[] {
   const byLine = new Map<number, AutoFocusAiItem>();
@@ -101,7 +110,17 @@ export function mapAutoFocusResponseToEffects(response: AutoFocusAiResponse, sen
   for (const line of lines) {
     const item = byLine.get(line);
     if (!item || !item.show) continue;
-    const type: AnimationEffectType = item.type ?? 'highlight-box';
+    let type: AnimationEffectType = item.type ?? 'highlight-box';
+    let text: string | undefined;
+    if (type === 'text-callout') {
+      const trimmed = item.text?.trim();
+      if (trimmed) {
+        text = trimmed.slice(0, MAX_TEXT_CALLOUT_LENGTH);
+      } else {
+        // text-callout 沒有文字內容就沒有意義，退回 highlight-box。
+        type = 'highlight-box';
+      }
+    }
     const effect: AnimationEffect = {
       id: `ai-focus-${line}-${crypto.randomUUID()}`,
       target: 'slide',
@@ -117,6 +136,9 @@ export function mapAutoFocusResponseToEffects(response: AutoFocusAiResponse, sen
         heightPct: clamp(item.heightPct ?? 40, 5, 100),
       },
     };
+    if (text !== undefined) {
+      effect.text = text;
+    }
     if (item.exitDuration !== undefined) {
       effect.exitDuration = clamp(item.exitDuration, 0, MAX_EXIT_DURATION_SECONDS);
     }

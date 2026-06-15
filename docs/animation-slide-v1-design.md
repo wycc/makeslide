@@ -35,6 +35,9 @@
 >
 > 擴充註記（2026-06-12，AI 自動產生逐字稿焦點動畫）：
 > - 新增 `POST /api/pdfs/:id/pages/:n/animation/auto-focus-ai`：依本頁逐字稿句子（與選填的逐句動畫指引 `hints`、頁面 OCR 文字）呼叫 LLM（`callChatJSON`，沿用 `LLM_PROVIDER` 設定），由 AI 逐句決定是否顯示 `highlight-box`/`spotlight` 焦點方框，以及其位置（`xPct`/`yPct`/`widthPct`/`heightPct`）與消失時間（`exitDuration`，選填）。動畫編輯器新增「🤖 AI 自動產生焦點動畫」按鈕，與既有「🪄 自動產生逐字稿焦點動畫」（固定規則版）並列。為 TODO「自動產生逐字稿焦點功能要用 AI 選擇要在什麼時顯示在什麼位置」之 v1 範圍，亦是 §12 V2「依 `AnimationSpec.hints` 與逐字稿內容由 LLM 生成動畫 JSON」的初步落地（先涵蓋焦點方框的時機與位置，`text-callout` 與其他效果類型留待後續）。詳見 §7.4、§8。
+>
+> 擴充註記（2026-06-15，AI 自動產生 text-callout 文案）：
+> - `auto-focus-ai`（§7.4）新增 `text-callout` 效果選項：`AUTO_FOCUS_AI_EFFECT_TYPES` 新增 `'text-callout'`，LLM 可為適合以精簡摘要強化重點的句子選擇淡入一段 AI 生成文案（`text`，上限 `MAX_TEXT_CALLOUT_LENGTH` = 80 字，與逐字稿同語言），位置建議放在畫面空白處避免遮住重點；若選擇 `text-callout` 卻未提供有效文字，後端會退回為 `highlight-box`（避免空白文字框）。為 §12 V2「`text-callout`（含 AI 生成文案）的 AI 生成」之落地。詳見 §7.4、§12。
 
 ---
 
@@ -461,15 +464,16 @@ Props：`renderType`、`src`（由呼叫端算好，含 displayedImageSrc 防閃
 
 - 點擊後呼叫 `POST /api/pdfs/:id/pages/:n/animation/auto-focus-ai`（`generateAiFocusEffects`，`frontend/src/lib/api/pdfs.ts`），帶入 `{ sentences: pageSentences, hints: draft.hints }`。
 - 後端（`backend/src/routes/pdfs/page-animation.ts`）讀取本頁 OCR 文字（`text_path`）與本頁渲染圖片（`image_path`，縮小至 `OPENAI_SCRIPT_IMAGE_MAX_WIDTH`、轉 JPEG base64，沿用 `generateScript` 的縮圖設定；讀取失敗則回退為純文字，不中斷）；連同請求中的逐字稿句子、`hints` 一起傳入 `generateAiFocusEffects`（`backend/src/services/animationAutoFocus.ts`）組成提示詞，透過 `callChatJSON`（沿用 `LLM_PROVIDER`/`openaiLlmModel`/`geminiLlmModel` 設定）請 LLM 針對每句（最多 `MAX_SLIDE_ANIMATION_EFFECTS` = 20 句）回傳：
-  - `show`：是否顯示焦點方框。
-  - `type`：`highlight-box` 或 `spotlight`。
-  - `xPct`/`yPct`/`widthPct`/`heightPct`：方框位置與大小（百分比，0-100）。
+  - `show`：是否顯示效果。
+  - `type`：`highlight-box`、`spotlight` 或 `text-callout`（淡入一段 AI 生成的精簡文字摘要，適合用一句重點數據或結論強化畫面）。
+  - `xPct`/`yPct`/`widthPct`/`heightPct`：方框（或文字框）位置與大小（百分比，0-100）；`text-callout` 建議放在畫面空白處，避免遮住重點內容。
+  - `text`（僅當 `type` 為 `text-callout` 時提供）：要顯示的文案，限制在 `MAX_TEXT_CALLOUT_LENGTH`（80）字以內，並使用與逐字稿相同的語言。
   - `exitDuration`（選填，秒，0-30）：淡入完成後停留多久自動淡出。
-- 後端將 `show: true` 的項目轉換為 `AnimationEffect`：`type`/`params`/`exitDuration` 取自 AI 回應（數值會 clamp 到合理範圍），`start = 0`、`duration = 1.2`、`ease = 'power1.out'`、`startTrigger = { type: 'transcript-line', line }`；`show: false` 或重複/超出範圍的 `line` 會被忽略。回應 `{ effects: AnimationEffect[] }`，**不會**寫入已儲存的 spec。
+- 後端將 `show: true` 的項目轉換為 `AnimationEffect`：`type`/`params`/`exitDuration`/`text`（`text-callout` 時）取自 AI 回應（數值與文字長度會 clamp 到合理範圍），`start = 0`、`duration = 1.2`、`ease = 'power1.out'`、`startTrigger = { type: 'transcript-line', line }`；`show: false` 或重複/超出範圍的 `line` 會被忽略。若 AI 選擇 `text-callout` 卻未提供有效（非空白）`text`，該項目會退回為 `highlight-box`（避免產生空白文字框）。回應 `{ effects: AnimationEffect[] }`，**不會**寫入已儲存的 spec。
 - 前端收到 `effects` 後以其**取代**目前的 `draft.effects` 並將 `enabled` 設為 `true`（與 §7.2 相同的覆蓋語意）；若目前已有效果設定，先以 `window.confirm`（`play.animation.autoGenerateFocusAiConfirm`）確認。產生中按鈕顯示忙碌文字（`play.animation.autoGenerateFocusAiBusy`）並停用；完成後顯示提示訊息（`play.animation.autoGenerateFocusAiDone`），失敗則顯示錯誤（`play.animation.autoGenerateFocusAiError`）。
 - 本頁尚無逐字稿時按鈕停用，提示文字沿用「本頁尚無逐字稿」（`play.animation.noTranscript`）。
-- 產生後仍是一般 `draft.effects`，可於效果清單中個別調整，並需按「儲存動畫」才會持久化。
-- v1 範圍：僅產生 `highlight-box`/`spotlight` 焦點效果；`text-callout`（含文字內容）與其他效果類型的 AI 生成留待後續版本（見 §12）。
+- 產生後仍是一般 `draft.effects`，可於效果清單中個別調整（包含 `text-callout` 的文案內容），並需按「儲存動畫」才會持久化。
+- v1 範圍：產生 `highlight-box`/`spotlight`/`text-callout` 三種效果；overlay image、SVG 圖元、物件 target、公式、逐步條列、`custom-script` 等其他效果類型的 AI 生成留待後續版本（見 §12）。
 - 圖片輸入：提示詞會說明「若附帶投影片頁面圖片，請參考圖片中的實際版面決定座標」，讓 `xPct`/`yPct`/`widthPct`/`heightPct` 更貼近畫面實際內容；圖片僅在 `LLM_PROVIDER=openai`（預設）時實際送出——Gemini 路徑（`callGeminiJson`/`normalizeMessages`）目前會將非文字內容部分一律替換為 `'[image]'` 占位字串，與 `generateScript` 的既有限制相同，留待後續一併處理。
 
 ### 7.5 AI 自訂腳本動畫（custom-script）
@@ -526,7 +530,7 @@ detail API 的 page 物件增加 `render_type` 與 `animation_spec_url`。
 ## 12. 後續擴充方向
 
 - V1.1：~~drawing mode 自動暫停~~（已於 `PlayPage.tsx` 新增 `useEffect`，當 `drawingMode` 變為 `true` 時自動呼叫 `audioRef.current?.pause()`，避免講者繪圖時投影片自動切換或動畫繼續播放；分支 `feature/drawing-mode-auto-pause-20260615`）、~~preset 快速套用~~（已於動畫編輯器「新增效果」按鈕旁新增「套用範本」下拉選單，選擇後依範本預設值新增一個效果，例如「標題淡入」、「鏡頭推進強調」、「向左移動鏡頭」、「紅框圈選重點」、「聚光燈聚焦」、「左下角文字說明」、「指標標示」，涵蓋常用 type/duration/ease/exitDuration/params 組合，新增後仍可自行調整；分支 `feature/animation-effect-presets-20260615`）、~~raw JSON 檢視~~（已於動畫編輯器新增「原始 JSON」分頁，以唯讀 `<textarea>` 顯示 `JSON.stringify(draft, null, 2)` 並提供「複製 JSON」按鈕；分支 `feature/animation-effects-raw-json-view-20260615`）、~~效果排序~~（已於動畫編輯器效果卡片新增「上移／下移」按鈕，調整 `AnimationSpec.effects` 陣列順序，同時決定重疊 overlay 效果的疊加層次；分支 `feature/animation-effects-reorder-20260615`）、~~跨頁複製~~（已於動畫編輯器新增「複製本頁效果」／「貼上效果」按鈕：複製結果存於不隨頁面切換清空的本地狀態，貼上時為每個效果產生新的 `id` 並附加到目前頁面的效果清單，上限為 `MAX_SLIDE_ANIMATION_EFFECTS`；分支 `feature/animation-effects-cross-page-copy-20260615`）、~~為 `fade-in`/`zoom-*`/`pan-*` 等整頁 transform 效果提供對稱的「消失（恢復原狀）」可選機制（見 §5.3）~~（已將 `exitDuration` 擴展至 `TRANSFORM_EFFECT_TYPES`：設定後 `buildGsapTimeline.ts` 會在 `start+duration+exitDuration` 時間點新增一個將 `stage` 動畫回進場前狀態的 `to()` tween（進場 tween 的反向，相同 `duration`/`ease`），動畫編輯器的「顯示後自動消失」控制項同步顯示於 transform 效果並改用「完成後自動恢復原狀」文案；分支 `feature/animation-transform-exit-revert-20260615`）。
-- V2：overlay image（小圖疊加內容）、SVG 圖元、物件 target、公式、逐步條列；依 `AnimationSpec.hints` 與逐字稿內容由 LLM 生成動畫 JSON——焦點方框（`highlight-box`/`spotlight`）的時機與位置已於 §7.4 落地，`text-callout`（含 AI 生成文案）與其他效果類型的 AI 生成仍待後續。
+- V2：overlay image（小圖疊加內容）、SVG 圖元、物件 target、公式、逐步條列；依 `AnimationSpec.hints` 與逐字稿內容由 LLM 生成動畫 JSON——焦點方框（`highlight-box`/`spotlight`）的時機與位置已於 §7.4 落地，~~`text-callout`（含 AI 生成文案）的 AI 生成~~（已將 `auto-focus-ai` 的 `AUTO_FOCUS_AI_EFFECT_TYPES` 擴充為 `highlight-box`/`spotlight`/`text-callout`，LLM 可為適合以精簡摘要強化重點的句子選擇淡入一段 AI 生成文案（`text`，上限 `MAX_TEXT_CALLOUT_LENGTH` = 80 字），缺少有效文字時退回 `highlight-box`；分支 `feature/animation-auto-focus-ai-text-callout-20260615`）；`custom-script` 等其他效果類型的 AI 生成仍待後續。
 - V2.x：`custom-script`（§5.4）的資料集/模型推論管線——例如載入 MNIST 並以 ResNet50 產生 embedding、PCA 降維至二維後動態顯示分類過程——需要後端提供資料集存取與模型推論服務（sandbox 本身禁止網路存取，無法在前端直接載入外部資料）；v1 僅提供通用 sandboxed 自訂腳本框架與 AI 生成/迭代迴圈，不含此類資料管線。
 - V2.x：`window.Manim`（manim 風格輔助函式庫，§5.4）的擴充——`Axes`/`NumberPlane`（座標軸、格線、`coordsToPoint`）、`MathTex`/`Tex`（需離線 vendored KaTeX 字型，避免 sandbox 網路存取限制）、`transform` 的真正路徑變形（path morphing，而非目前僅線性插值共有屬性）、3D 場景；v1 僅提供 2D SVG mobject（`circle`/`square`/`rectangle`/`line`/`arrow`/`dot`/`polygon`/`text`）與 `Create`/`Write`/`FadeIn`/`FadeOut`/`Transform`/`Shift`/`Rotate`/`Scale`/`GrowFromCenter` 等基本動畫手法。
 - V3：視覺化時間軸、關鍵影格、3D renderer、動畫 MP4 匯出。
