@@ -173,6 +173,7 @@ function EffectOverlay({
     const bgColor = effect.stepListBgColor ?? '#1e293b';
     const textColor = effect.stepListTextColor ?? '#f1f5f9';
     const slFontSize = `${effect.stepListFontSize ?? 1.1}rem`;
+    const slBr = `${effect.stepListBorderRadius ?? 8}px`;
     return (
       <div
         data-effect-id={effect.id}
@@ -181,7 +182,7 @@ function EffectOverlay({
           display: 'flex',
           alignItems: 'center',
           padding: '0.5em 0.75em',
-          borderRadius: '8px',
+          borderRadius: slBr,
           background: bgColor,
           color: textColor,
           overflow: 'hidden',

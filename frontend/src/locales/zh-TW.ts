@@ -395,6 +395,7 @@ export const zhTW = {
   'play.animation.stepListBgColor': '背景顏色',
   'play.animation.stepListTextColor': '文字顏色',
   'play.animation.stepListFontSize': '字型大小（rem）',
+  'play.animation.stepListBorderRadius': '圓角半徑（px）',
   'play.animation.overlayImageFigure': '插入圖片',
   'play.animation.overlayImageSelectFigure': '請選擇圖片…',
   'play.animation.overlayImageNoFigures': '本頁未偵測到可用圖片',

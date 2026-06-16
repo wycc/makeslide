@@ -1383,6 +1383,22 @@ export function AnimationEditorTab() {
                       <span className="text-slate-500">rem</span>
                     </div>
                   </label>
+                  <label className="flex items-center gap-2 text-xs text-slate-400">
+                    {t('play.animation.stepListBorderRadius')}
+                    <input
+                      type="number"
+                      min={0}
+                      max={32}
+                      step={2}
+                      value={effect.stepListBorderRadius ?? 8}
+                      disabled={disabled}
+                      onChange={(e) =>
+                        updateEffect(effect.id, { stepListBorderRadius: Math.min(32, Math.max(0, Math.round(Number(e.target.value)))) })
+                      }
+                      className="w-16 rounded-md border border-slate-700 bg-slate-900 px-1 py-1 text-sm text-slate-100"
+                    />
+                    <span className="text-slate-500">px</span>
+                  </label>
                 </>
               )}
               {effect.type === 'overlay-image' && (
