@@ -621,3 +621,21 @@ function onFrame(progress, duration) {
 - `EffectSchema` 以 `z.number().int().min(0).max(50)` 驗證
 - `SlideRenderer.tsx` 以 `effect.highlightBorderRadius ?? 8` 作為 `borderRadius` 值
 - 後端新增 `DEFAULT_HIGHLIGHT_BORDER_RADIUS = 8`、`MAX_HIGHLIGHT_BORDER_RADIUS = 50` 常數
+
+## Manim animate.uncreate 路徑消除效果
+
+`window.Manim.animate.uncreate(m, progress)` 現在可以讓 SVG 路徑從頭到尾逐漸消失，是 `animate.create` 的對稱反向效果。
+
+**使用方式：**
+```javascript
+// 自訂腳本範例
+const circ = Manim.shapes.circle(svg, { x: 0, y: 0, radius: 1.5, color: Manim.colors.BLUE });
+// create 繪製 → uncreate 消除
+Manim.animate.create(circ, t);       // 0→1: 從尾到頭繪製
+Manim.animate.uncreate(circ, t);     // 0→1: 從頭到尾消除
+```
+
+**技術說明：**
+- text/dot/arrow/axes/numberPlane：opacity 從 1 線性降至 0
+- 路徑/形狀：`strokeDashoffset` 從 0 增加至路徑總長度，fill-opacity 同步遞減，progress=1 時將 opacity 設為 0
+- 新增 2 個 vm 測試（共 24 項全通過）
