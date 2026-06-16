@@ -377,3 +377,35 @@ test("Manim.animate.flash uses default white colour when no opts", () => {
   Manim.animate.flash(rect, 1);
   assert.equal(rect.el.getAttribute("stroke"), origStroke, "stroke restored after flash completes");
 });
+
+test("Manim.animate.uncreate increases dashoffset at mid-progress and sets opacity=0 at progress=1", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const circ = Manim.shapes.circle(svg, { x: 0, y: 0, radius: 1, color: Manim.colors.BLUE });
+
+  Manim.animate.uncreate(circ, 0.5);
+  const dashoffset05 = parseFloat(circ.el.getAttribute("stroke-dashoffset") as string);
+  assert.ok(dashoffset05 > 0, "stroke-dashoffset should be > 0 at progress=0.5");
+
+  Manim.animate.uncreate(circ, 1);
+  assert.equal(circ.el.style.opacity, "0", "opacity should be 0 at progress=1");
+});
+
+test("Manim.animate.uncreate is the reverse of create (dashoffset decreases for create, increases for uncreate)", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const rect = Manim.shapes.square(svg, { x: 0, y: 0, size: 2, color: Manim.colors.GREEN });
+
+  Manim.animate.create(rect, 0.3);
+  const createOffset = parseFloat(rect.el.getAttribute("stroke-dashoffset") as string);
+
+  // reset attributes
+  rect.el.setAttribute("stroke-dasharray", "0");
+  rect.el.setAttribute("stroke-dashoffset", "0");
+
+  Manim.animate.uncreate(rect, 0.3);
+  const uncreateOffset = parseFloat(rect.el.getAttribute("stroke-dashoffset") as string);
+
+  assert.ok(uncreateOffset > 0, "uncreate dashoffset at 0.3 should be > 0");
+  assert.ok(createOffset > uncreateOffset, "create at 0.3 has large dashoffset (most of path hidden) while uncreate at 0.3 has small dashoffset (path barely started un-drawing)");
+});
