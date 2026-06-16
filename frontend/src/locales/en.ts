@@ -378,6 +378,7 @@ export const en = {
   'play.animation.highlightPulse': 'Pulse glow',
   'play.animation.spotlightColor': 'Mask color',
   'play.animation.spotlightOpacity': 'Opacity',
+  'play.animation.spotlightSoftEdge': 'Soft edge (px)',
   'play.animation.textCalloutBgColor': 'Background color',
   'play.animation.textCalloutTextColor': 'Text color',
   'play.animation.shapeKind': 'Shape kind',

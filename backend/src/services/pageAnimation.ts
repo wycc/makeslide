@@ -116,6 +116,13 @@ export interface AnimationEffect {
    * effect types). Defaults to `DEFAULT_SPOTLIGHT_OPACITY` (0.6).
    */
   spotlightOpacity?: number;
+  /**
+   * Soft-edge blur radius in pixels for `spotlight` effects (ignored by other
+   * effect types). When > 0, a CSS blur filter is applied to the mask, creating
+   * a gradient fade at the spotlight boundary. Defaults to 0 (hard edge).
+   * Clamped to [0, `MAX_SPOTLIGHT_SOFT_EDGE`].
+   */
+  spotlightSoftEdge?: number;
   /** SVG primitive drawn by `shape` effects (ignored by other effect types). Defaults to `'circle'` when omitted. */
   shape?: AnimationShapeKind;
   /**
@@ -302,6 +309,8 @@ export const MAX_TEXT_CALLOUT_BORDER_RADIUS = 32;
 export const DEFAULT_SPOTLIGHT_COLOR = '#000000';
 /** Default mask opacity for `spotlight` effects (0–1). */
 export const DEFAULT_SPOTLIGHT_OPACITY = 0.6;
+/** Maximum soft-edge blur radius (px) for `spotlight` effects. */
+export const MAX_SPOTLIGHT_SOFT_EDGE = 80;
 /** Default background colour for `step-list` effects (slate-900 equivalent). */
 export const DEFAULT_STEP_LIST_BG_COLOR = '#1e293b';
 /** Default text colour for `step-list` effects (slate-100 equivalent). */
@@ -384,6 +393,7 @@ const EffectSchema = z.object({
   textCalloutBorderRadius: z.number().int().min(0).max(MAX_TEXT_CALLOUT_BORDER_RADIUS).optional(),
   spotlightColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   spotlightOpacity: z.number().min(0).max(1).optional(),
+  spotlightSoftEdge: z.number().int().min(0).max(MAX_SPOTLIGHT_SOFT_EDGE).optional(),
   shape: z.enum(ANIMATION_SHAPE_KINDS).optional(),
   color: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   shapeFillColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
@@ -471,6 +481,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.textCalloutBorderRadius !== undefined ? { textCalloutBorderRadius: Math.max(0, Math.min(MAX_TEXT_CALLOUT_BORDER_RADIUS, Math.round(effect.textCalloutBorderRadius))) } : {}),
       ...(effect.spotlightColor !== undefined ? { spotlightColor: effect.spotlightColor } : {}),
       ...(effect.spotlightOpacity !== undefined ? { spotlightOpacity: effect.spotlightOpacity } : {}),
+      ...(effect.spotlightSoftEdge !== undefined ? { spotlightSoftEdge: Math.max(0, Math.min(MAX_SPOTLIGHT_SOFT_EDGE, Math.round(effect.spotlightSoftEdge))) } : {}),
       ...(effect.shape !== undefined ? { shape: effect.shape } : {}),
       ...(effect.color !== undefined ? { color: effect.color } : {}),
       ...(effect.shapeFillColor !== undefined ? { shapeFillColor: effect.shapeFillColor } : {}),
