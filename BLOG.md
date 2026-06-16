@@ -766,3 +766,18 @@ Manim.animate.bounce(circ, t, { height: 50, bounces: 3 });
 - `AnimationEffect` 和 `SlideAnimationEffect` 新增 `pointerShape?: 'arrow' | 'dot'`
 - `EffectSchema` 以 `z.enum(['arrow', 'dot'])` 驗證
 - `SlideRenderer.tsx`：`dot` 時渲染 `<circle cx="12" cy="12" r="10">`，並去除 transform 中的 rotate
+
+## step-list 效果：AI 自動建議背景色與文字色
+
+AI 自動焦點（auto-focus）現在可以根據投影片背景色系，自動為 `step-list` 效果建議適合的背景色和文字色。過去 AI 生成的 step-list 都使用固定的深色背景（`#1e293b`），在淺色投影片上可能對比不足；現在 AI 可以判斷投影片色調並選用對比較好的配色。
+
+**使用方式：**
+使用 AI 自動焦點功能時（需提供投影片圖片供 AI 視覺判斷），AI 會在為逐字稿句子選擇 `step-list` 效果的同時，依投影片背景色系給出配色建議：
+- 淺色系投影片（白色、淡灰等）：AI 會建議深色背景（如深藍 `#1e3a5f`）搭配淺色文字（如近白 `#f0f4ff`）
+- 深色系投影片：AI 沿用預設值，不額外提供顏色欄位
+- 使用者在動畫編輯器中仍可手動覆蓋顏色設定
+
+**技術說明：**
+- `AutoFocusItemSchema`（Zod）新增 `stepListBgColor`/`stepListTextColor`（選填，hex color regex 驗證）
+- `buildAutoFocusSystemPrompt()` 新增 step 6b 說明，指引 AI 依投影片背景色系決定是否提供配色
+- `mapAutoFocusResponseToEffects()` 在 `step-list` 分支中提取並傳遞顏色欄位至 `AnimationEffect`
