@@ -409,3 +409,29 @@ test("Manim.animate.uncreate is the reverse of create (dashoffset decreases for 
   assert.ok(uncreateOffset > 0, "uncreate dashoffset at 0.3 should be > 0");
   assert.ok(createOffset > uncreateOffset, "create at 0.3 has large dashoffset (most of path hidden) while uncreate at 0.3 has small dashoffset (path barely started un-drawing)");
 });
+
+test("Manim.animate.wiggle produces non-zero translateX at mid-progress and clears transform at progress=1", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const circ = Manim.shapes.circle(svg, { x: 0, y: 0, radius: 1, color: Manim.colors.RED });
+
+  Manim.animate.wiggle(circ, 0.25, { amplitude: 10, frequency: 3 });
+  const transform25 = circ.el.getAttribute("transform") as string;
+  assert.ok(transform25 && transform25 !== "" && transform25 !== "translate(0 0)", "transform should be non-zero at progress=0.25");
+
+  Manim.animate.wiggle(circ, 1);
+  const transform1 = circ.el.getAttribute("transform") as string;
+  assert.equal(transform1, "", "transform should be cleared at progress=1");
+});
+
+test("Manim.animate.wiggle uses default amplitude=8 and frequency=3 when no opts", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const rect = Manim.shapes.square(svg, { x: 0, y: 0, size: 2, color: Manim.colors.GREEN });
+
+  Manim.animate.wiggle(rect, 0.1);
+  const transform = rect.el.getAttribute("transform") ?? "";
+  assert.ok(transform && transform.startsWith("translate("), "transform should start with translate(");
+  const tx = parseFloat(transform.replace("translate(", "").split(" ")[0]);
+  assert.ok(Math.abs(tx) <= 8, "translateX should not exceed default amplitude=8");
+});
