@@ -313,6 +313,7 @@ export const zhTW = {
   'play.animation.preset.formula': '插入公式',
   'play.animation.effectType': '效果',
   'play.animation.seekToMidpoint': '跳至效果中點',
+  'play.animation.jumpToEffectStart': '跳至效果起點',
   'play.animation.moveUp': '上移效果（提高疊加順序）',
   'play.animation.moveDown': '下移效果（降低疊加順序）',
   'play.animation.start': '起始（秒）',

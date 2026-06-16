@@ -313,6 +313,7 @@ export const en = {
   'play.animation.preset.formula': 'Insert formula',
   'play.animation.effectType': 'Effect',
   'play.animation.seekToMidpoint': 'Seek to effect midpoint',
+  'play.animation.jumpToEffectStart': 'Jump to effect start',
   'play.animation.moveUp': 'Move up (raise stacking order)',
   'play.animation.moveDown': 'Move down (lower stacking order)',
   'play.animation.start': 'Start (s)',

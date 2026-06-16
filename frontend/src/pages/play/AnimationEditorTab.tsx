@@ -804,6 +804,16 @@ export function AnimationEditorTab() {
               <button
                 type="button"
                 disabled={disabled}
+                title={t('play.animation.jumpToEffectStart')}
+                aria-label={t('play.animation.jumpToEffectStart')}
+                onClick={() => handleSeekToTime(effectStart)}
+                className="rounded-md border border-slate-700 px-2 py-1.5 text-sm text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                ⏮
+              </button>
+              <button
+                type="button"
+                disabled={disabled}
                 title={t('play.animation.seekToMidpoint')}
                 aria-label={t('play.animation.seekToMidpoint')}
                 onClick={() => handleSeekToTime(effectStart + effect.duration / 2)}
