@@ -385,6 +385,7 @@ export const en = {
   'play.animation.stepListItemsPlaceholder': 'Point one\nPoint two\nPoint three',
   'play.animation.stepListBgColor': 'Background color',
   'play.animation.stepListTextColor': 'Text color',
+  'play.animation.stepListFontSize': 'Font size (rem)',
   'play.animation.overlayImageFigure': 'Insert figure',
   'play.animation.overlayImageSelectFigure': 'Select a figure...',
   'play.animation.overlayImageNoFigures': 'No figures detected on this page',
