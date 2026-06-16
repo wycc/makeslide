@@ -1321,7 +1321,7 @@
 
 [x] `shape` 效果填充顏色自訂：目前 `shape` 效果只能設定 `stroke` 顏色與寬度，SVG 圖形的 `fill` 固定為 `'none'`（空心），若需要實心圖形（例如實心圓點、實心方塊當背景標記）只能靠自訂腳本達成；應新增 `shapeFillColor` 欄位（CSS hex，預設 `'none'` 表示無填充），讓使用者可在動畫編輯器中開啟 fill 並選擇顏色，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`（SVG fill 屬性）/`AnimationEditorTab`（在 shape 編輯區增加填充顏色選項）及 i18n。 ✓ 完成於 branch: feature/shape-fill-color-20260617
 
-[ ] Manim `animate.flash(m, progress, opts)` 效果：目前 `manimHelperScript.ts` 的 `animate` 提供 `indicateAround`（縮放+改色），但有時只需要「快速閃爍」而不縮放；應新增 `Manim.animate.flash(m, progress, opts)` 函式，讓元素的 fill/stroke 在 progress 0→0.5 漸變為 `opts.color`（預設 `'#ffffff'`），0.5→1 漸回原色，opacity 則在 0→0.5 升至 `opts.maxOpacity`（預設 `1`）、0.5→1 降回原始值，並新增至少 2 個對應 vm 測試。
+[x] Manim `animate.flash(m, progress, opts)` 效果：目前 `manimHelperScript.ts` 的 `animate` 提供 `indicateAround`（縮放+改色），但有時只需要「快速閃爍」而不縮放；應新增 `Manim.animate.flash(m, progress, opts)` 函式，讓元素的 fill/stroke 在 progress 0→0.5 漸變為 `opts.color`（預設 `'#ffffff'`），0.5→1 漸回原色，opacity 則在 0→0.5 升至 `opts.maxOpacity`（預設 `1`）、0.5→1 降回原始值，並新增至少 2 個對應 vm 測試。 ✓ 完成於 branch: feature/manim-flash-20260617
 
 ## 工作記錄
 
@@ -1380,3 +1380,7 @@
 - 時間: 2026-06-18 00:00:00 +0800
 - 分支: feature/shape-fill-color-20260617
 - 內容: 新增 `shape` 效果填充顏色自訂。後端 `pageAnimation.ts` 新增 `shapeFillColor?: string` 欄位至 `AnimationEffect` 介面，`EffectSchema` 新增 Zod hex color 驗證（重用現有 regex `^#[0-9a-fA-F]{3,8}$`），序列化時一併輸出。前端 `types.ts` 同步新增欄位；`SlideRenderer.tsx` 新增 `const fill = effect.shapeFillColor ?? 'none'`，並將 circle/ellipse/rect 三種形狀的 SVG `fill` 屬性從硬編碼 `"none"` 改為此變數（arrow 形狀不受影響）；`AnimationEditorTab.tsx` 將原本的 `<div className="flex gap-2">` 改為 `<div className="flex flex-col gap-2">` 並新增第二行：一個核取方塊（checked = `shapeFillColor !== undefined`）加上「填充顏色」標籤，勾選後右側顯示顏色選擇器，取消勾選則清除欄位（送出 `undefined`）；中英文 i18n 新增 `play.animation.shapeFillColor` 翻譯鍵。
+
+- 時間: 2026-06-18 01:00:00 +0800
+- 分支: feature/manim-flash-20260617
+- 內容: 新增 Manim `animate.flash` 閃爍效果。在 `manimHelperScript.ts` 的 `animate` 物件中新增 `flash(m, progress, opts)` 函式：使用 0→0.5→1 對稱 phase（與 `indicateAround` 相同策略），progress=0.5 時 fill/stroke 以 `lerpColor` 漸變至 `opts.color`（預設 `'#ffffff'`，白色），opacity 線性插值至 `opts.maxOpacity`（預設 `1`）；progress=1 時完全還原 stroke/fill 和 opacity，並刪除暫存的 `m._flashOrigStroke`、`m._flashOrigFill`、`m._flashOrigOpacity`。新增 2 個 vm 測試：(1) 自訂 color/maxOpacity 時 progress=0.5 顏色偏移、opacity 提升，progress=1 時完全還原；(2) 無 opts 時預設白色，progress=0.5 從 RED 偏移，progress=1 還原（全部 22 項通過）。
