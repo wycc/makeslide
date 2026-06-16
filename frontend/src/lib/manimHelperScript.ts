@@ -4,9 +4,11 @@
  * `window.Manim` helper library so "manim 式" animations can use manim's
  * coordinate system (origin at center, +y up, x in [-7, 7], y in [-4, 4]),
  * color palette, standard rate functions, signature
- * Create/Write/FadeIn/FadeOut/Transform-style motions, and `Axes`/`NumberPlane`
- * coordinate-plane mobjects (with `coordsToPoint`) without the real
- * Python manim library (which the sandbox cannot load over the network).
+ * Create/Write/FadeIn/FadeOut/Transform-style motions, `Axes`/`NumberPlane`
+ * coordinate-plane mobjects (with `coordsToPoint`), and `Manim.tex(latex)`
+ * for MathML math rendering (via postMessage to the host page which holds
+ * the KaTeX library and its fonts) without the real Python manim library
+ * (which the sandbox cannot load over the network).
  *
  * Kept as plain ES5 source text (no TypeScript/build step) so it can be
  * embedded verbatim into the sandboxed iframe's `srcDoc`.
@@ -309,6 +311,31 @@ export const MANIM_HELPER_SCRIPT = `
       }
     },
   };
+  // tex() — sends a renderLatex postMessage to the host page (which runs
+  // KaTeX with its fonts), resolves to a <div> with the rendered MathML.
+  var _texResolvers = {};
+  var _texCounter = 0;
+  window.addEventListener('message', function (ev) {
+    var d = ev.data;
+    if (!d || d.type !== 'latexResult' || !_texResolvers[d.id]) return;
+    var resolve = _texResolvers[d.id];
+    delete _texResolvers[d.id];
+    resolve(d.html || '');
+  });
+  function tex(latex, opts) {
+    return new Promise(function (resolve) {
+      var id = ++_texCounter;
+      _texResolvers[id] = function (html) {
+        var el = document.createElement('div');
+        el.innerHTML = html;
+        el.style.display = 'inline-block';
+        if (opts && opts.color) { el.style.color = String(opts.color); }
+        if (opts && opts.fontSize) { el.style.fontSize = String(opts.fontSize); }
+        resolve(el);
+      };
+      window.parent.postMessage({ type: 'renderLatex', id: id, latex: String(latex) }, '*');
+    });
+  }
   window.Manim = {
     config: { width: W, height: H },
     rate: rate,
@@ -319,6 +346,7 @@ export const MANIM_HELPER_SCRIPT = `
     shapes: shapes,
     coordinateSystems: coordinateSystems,
     animate: animate,
+    tex: tex,
   };
 })();
 `;

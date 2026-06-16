@@ -35,6 +35,7 @@ import { usePageAnimation } from './play/usePageAnimation';
 import { usePromptAndSource } from './play/usePromptAndSource';
 import { useChatAndImageEdit } from './play/useChatAndImageEdit';
 import { usePagePolls } from './play/usePagePolls';
+import katex from 'katex';
 import { resolveConfiguredUserCode } from './play/utils';
 import { VersionHistoryDialog } from './play/VersionHistoryDialog';
 import { ImagePreviewDialog } from './play/ImagePreviewDialog';
@@ -240,6 +241,26 @@ export default function PlayPage() {
     document.addEventListener('visibilitychange', onVisibility);
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, []);
+  // Handle renderLatex postMessage requests from custom-script sandbox iframes.
+  // The sandbox cannot load KaTeX fonts directly (no network access), so it
+  // delegates rendering to the host page via postMessage, which has KaTeX loaded.
+  useEffect(() => {
+    function handleSandboxLatex(ev: MessageEvent) {
+      const data = ev.data;
+      if (!data || data.type !== 'renderLatex' || !ev.source) return;
+      const latex = typeof data.latex === 'string' ? data.latex : '';
+      let html = '';
+      try {
+        html = katex.renderToString(latex, { output: 'mathml', throwOnError: false, displayMode: true });
+      } catch {
+        html = '';
+      }
+      (ev.source as Window).postMessage({ type: 'latexResult', id: data.id, html }, '*');
+    }
+    window.addEventListener('message', handleSandboxLatex);
+    return () => window.removeEventListener('message', handleSandboxLatex);
+  }, []);
+
   const currentAudioTokenRef = useRef(0);
   const audioRetryTimerRef = useRef<number | null>(null);
   // prefetch refs so GC doesn't drop them mid-load
