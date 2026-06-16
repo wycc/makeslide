@@ -234,6 +234,16 @@ export interface SlideAnimationEffect {
   /** SVG primitive drawn by `shape` effects (ignored by other effect types). Defaults to `'circle'` when omitted. */
   shape?: SlideAnimationShapeKind;
   /**
+   * Stroke colour (CSS hex, e.g. `#f43f5e`) for `shape` effects. Defaults to
+   * `'#f43f5e'` when omitted. Ignored by other effect types.
+   */
+  color?: string;
+  /**
+   * Stroke width (SVG user units in a 100×100 viewBox) for `shape` effects.
+   * Defaults to 5 when omitted. Ignored by other effect types.
+   */
+  strokeWidth?: number;
+  /**
    * Bullet items for `step-list` effects (ignored by other effect types).
    * Each item is revealed in sequence (staggered fade-in) over `duration`.
    * Up to `MAX_STEP_LIST_ITEMS` items, each up to `MAX_STEP_LIST_ITEM_LENGTH` chars.

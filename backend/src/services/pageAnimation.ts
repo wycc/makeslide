@@ -53,6 +53,18 @@ export interface AnimationEffect {
   /** SVG primitive drawn by `shape` effects (ignored by other effect types). Defaults to `'circle'` when omitted. */
   shape?: AnimationShapeKind;
   /**
+   * Stroke colour for `shape` effects (ignored by other effect types). Accepts
+   * CSS hex colour strings (e.g. `#f43f5e`) up to `MAX_SHAPE_COLOR_LENGTH`
+   * chars. Defaults to `DEFAULT_SHAPE_STROKE_COLOR` when omitted.
+   */
+  color?: string;
+  /**
+   * Stroke width (in SVG user units, within a 100×100 viewBox) for `shape`
+   * effects (ignored by other effect types). Clamped to [1, `MAX_SHAPE_STROKE_WIDTH`].
+   * Defaults to `DEFAULT_SHAPE_STROKE_WIDTH` when omitted.
+   */
+  strokeWidth?: number;
+  /**
    * Bullet items for `step-list` effects (ignored by other effect types).
    * Each item is revealed in sequence (staggered fade-in) over `duration`.
    * Up to `MAX_STEP_LIST_ITEMS` items, each up to `MAX_STEP_LIST_ITEM_LENGTH` chars.
@@ -133,6 +145,14 @@ export const MAX_OVERLAY_IMAGE_FIGURE_ID_LENGTH = 200;
 export const MAX_FORMULA_LENGTH = 200;
 export const MAX_HINTS = 50;
 export const MAX_HINT_LENGTH = 200;
+/** Default stroke colour for `shape` effects (rose-500). */
+export const DEFAULT_SHAPE_STROKE_COLOR = '#f43f5e';
+/** Default stroke width (SVG user units in a 100×100 viewBox) for `shape` effects. */
+export const DEFAULT_SHAPE_STROKE_WIDTH = 5;
+/** Max length (chars) for a `shape` effect's `color` field. */
+export const MAX_SHAPE_COLOR_LENGTH = 20;
+/** Max stroke width (SVG user units) for `shape` effects. */
+export const MAX_SHAPE_STROKE_WIDTH = 20;
 /** Max length (chars) for a `custom-script` effect's generated JavaScript `code`. */
 export const MAX_CUSTOM_SCRIPT_CODE_LENGTH = 24000;
 /** Max length (chars) for the prompt used to generate a `custom-script` effect's `code`. */
@@ -189,6 +209,8 @@ const EffectSchema = z.object({
   startTrigger: StartTriggerSchema.optional(),
   text: z.string().max(MAX_TEXT_CALLOUT_LENGTH).optional(),
   shape: z.enum(ANIMATION_SHAPE_KINDS).optional(),
+  color: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
+  strokeWidth: z.number().min(1).max(MAX_SHAPE_STROKE_WIDTH).optional(),
   items: z.array(z.string().max(MAX_STEP_LIST_ITEM_LENGTH)).max(MAX_STEP_LIST_ITEMS).optional(),
   figureId: z.string().min(1).max(MAX_OVERLAY_IMAGE_FIGURE_ID_LENGTH).optional(),
   formula: z.string().min(1).max(MAX_FORMULA_LENGTH).optional(),
@@ -250,6 +272,8 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.startTrigger ? { startTrigger: effect.startTrigger } : {}),
       ...(effect.text !== undefined ? { text: effect.text } : {}),
       ...(effect.shape !== undefined ? { shape: effect.shape } : {}),
+      ...(effect.color !== undefined ? { color: effect.color } : {}),
+      ...(effect.strokeWidth !== undefined ? { strokeWidth: Math.max(1, Math.min(MAX_SHAPE_STROKE_WIDTH, Math.round(effect.strokeWidth))) } : {}),
       ...(effect.items !== undefined ? { items: effect.items } : {}),
       ...(effect.figureId !== undefined ? { figureId: effect.figureId } : {}),
       ...(effect.formula !== undefined ? { formula: effect.formula } : {}),
