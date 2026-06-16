@@ -664,3 +664,20 @@ Manim.animate.uncreate(circ, t);     // 0→1: 從頭到尾消除
 - `AnimationEffect` 和 `SlideAnimationEffect` 新增 `formulaBgColor?: string` 和 `formulaTextColor?: string`
 - `EffectSchema` 重用現有 hex color regex 驗證（`^#[0-9a-fA-F]{3,8}$`）
 - `SlideRenderer.tsx` 以動態值取代硬編碼的 `rgba(15, 23, 42, 0.85)`/`#f8fafc`
+
+## Manim animate.wiggle 抖動效果
+
+`window.Manim.animate.wiggle(m, progress, opts)` 讓 SVG 元素左右小幅搖擺，用來吸引觀眾注意特定內容。
+
+**使用方式：**
+```javascript
+const circ = Manim.shapes.circle(svg, { x: 0, y: 0, radius: 1.5, color: Manim.colors.YELLOW });
+Manim.animate.wiggle(circ, t, { amplitude: 12, frequency: 4 });
+// t: 0→1, amplitude: 位移像素(預設8), frequency: 振盪次數(預設3)
+```
+
+**技術說明：**
+- 以 `sin(progress * frequency * 2π) * amplitude * (1 - progress)` 計算 translateX
+- 振幅因子 `(1 - progress)` 讓動畫在結尾自然衰減至靜止
+- progress=1 時清除 transform 屬性，確保無殘留偏移
+- 新增 2 個 vm 測試（共 26 項全通過）

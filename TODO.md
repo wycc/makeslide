@@ -1417,7 +1417,7 @@
 
 ## 2026-06-18 新增項目 Batch 4
 [x] `formula` 效果背景色與文字色自訂：目前 `formula` 效果的背景固定為 `rgba(15, 23, 42, 0.85)`（深藍色半透明），文字固定為 `#f8fafc`（近白色），無法根據投影片配色調整；應新增 `formulaBgColor?: string`（CSS hex，預設 `#0f172a`）和 `formulaTextColor?: string`（CSS hex，預設 `#f8fafc`）欄位，讓使用者在動畫編輯器的 formula 區塊中自訂背景色與文字色，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`/`AnimationEditorTab`（兩個顏色選擇器）及中英文 i18n。 ✓ 完成於 branch: feature/formula-colors-20260618
-[ ] Manim `animate.wiggle(m, progress, opts)` 抖動效果：目前 Manim helper 缺少讓元素左右小幅搖擺以吸引注意的動畫；應新增 `animate.wiggle(m, progress, opts)` 函式，opts 支援 `amplitude`（位移像素，預設 `8`）和 `frequency`（每回合振盪次數，預設 `3`），以 `sin(progress * frequency * 2π) * amplitude` 計算 translateX，並於 progress=1 時清除 transform；新增至少 2 個 vm 測試（一個驗證中間 progress 的 translateX ≠ 0，一個驗證 progress=1 時 transform 被清除）。
+[x] Manim `animate.wiggle(m, progress, opts)` 抖動效果：目前 Manim helper 缺少讓元素左右小幅搖擺以吸引注意的動畫；應新增 `animate.wiggle(m, progress, opts)` 函式，opts 支援 `amplitude`（位移像素，預設 `8`）和 `frequency`（每回合振盪次數，預設 `3`），以 `sin(progress * frequency * 2π) * amplitude` 計算 translateX，並於 progress=1 時清除 transform；新增至少 2 個 vm 測試（一個驗證中間 progress 的 translateX ≠ 0，一個驗證 progress=1 時 transform 被清除）。 ✓ 完成於 branch: feature/manim-wiggle-20260618
 [ ] `highlight-box` 動畫效果—pulse 模式：目前 `highlight-box` 是靜態邊框；應新增 `highlightPulse?: boolean` 選項（預設 `false`），當啟用時，GSAP timeline 在效果顯示期間讓邊框 box-shadow 週期性放大/縮小，形成脈動視覺（可在 GSAP yoyo repeat 或自訂 progress 函式中實現），讓重要內容更加吸睛；在 `AnimationEditorTab` 新增 checkbox 控制，並更新後端驗證/序列化、前端 types.ts，及中英文 i18n。
 [ ] `text-callout` 圓角半徑控制：目前 `text-callout` 效果固定使用 `borderRadius: '8px'`；應新增 `textCalloutBorderRadius` 欄位（px 整數，預設 `8`，範圍 0-32），讓使用者選擇更尖銳或更圓潤的文字框，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`/`AnimationEditorTab`（新增數字輸入框）及中英文 i18n。
 [ ] Manim `animate.spinAround(m, progress, opts)` 旋轉效果：目前 Manim helper 的 `rotate` 是單向旋轉，缺少完整 360° 旋轉（自轉一圈）的效果；應新增 `animate.spinAround(m, progress, opts)` 函式，opts 支援 `turns`（旋轉圈數，預設 `1`）和 `cx`/`cy`（旋轉中心，預設元素中心），以 `progress * turns * 360` 計算旋轉角度，於 progress=1 時清除 transform；新增至少 2 個 vm 測試。
@@ -1425,3 +1425,7 @@
 - 時間: 2026-06-18 07:00:00 +0800
 - 分支: feature/formula-colors-20260618
 - 內容: 新增 `formula` 效果背景色與文字色自訂。後端 `pageAnimation.ts` 在 `AnimationEffect` 介面新增 `formulaBgColor?: string` 和 `formulaTextColor?: string` 欄位，`EffectSchema` 重用 hex color regex 驗證，序列化時一併輸出。前端 `types.ts` 同步新增兩個欄位；`SlideRenderer.tsx` 以 `effect.formulaBgColor ?? '#0f172a'` 和 `effect.formulaTextColor ?? '#f8fafc'` 取代硬編碼的 `rgba(15, 23, 42, 0.85)` 和 `#f8fafc`；`AnimationEditorTab.tsx` 在 formula 字型大小輸入框下方新增 `<div className="flex gap-3 items-end">` 包含兩個顏色選擇器（背景色預設 `#0f172a`，文字色預設 `#f8fafc`）；中英文 i18n 新增 `play.animation.formulaBgColor`/`formulaTextColor` 翻譯鍵。
+
+- 時間: 2026-06-18 08:00:00 +0800
+- 分支: feature/manim-wiggle-20260618
+- 內容: 新增 Manim `animate.wiggle` 抖動效果。在 `manimHelperScript.ts` 的 `animate` 物件中新增 `wiggle(m, progress, opts)` 函式：以 `sin(p * frequency * 2π) * amplitude * (1 - p)` 計算 translateX（振幅因子 `(1 - p)` 讓動畫在結尾自然衰減），opts 支援 `amplitude`（預設 `8`）和 `frequency`（預設 `3`）；progress=1 時清除 transform 屬性。新增 2 個 vm 測試：(1) progress=0.25 時 transform 包含非零 translate；(2) 無 opts 時 translateX 不超過預設 amplitude=8，且 progress=1 時 transform 清除為空字串。全部 26 項通過。
