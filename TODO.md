@@ -1313,6 +1313,16 @@
 
 [x] auto-focus-ai 為 `pointer` 效果建議 `angle`：目前所有 AI 自動產生的 `pointer` 效果都使用預設角度（0 度，指向右下），未根據畫面內容選擇合適方向；應在 `AutoFocusItemSchema` 新增 `angle` 選填欄位（整數，0-359 度），在 system prompt 第 3 點補充 angle 說明（0=右下、90=左下、180=右上、270=左上，依指向目標在畫面中的位置選擇讓箭頭從外側指向目標的角度），在 `mapAutoFocusResponseToEffects` 中傳遞 angle 至 effect，並補充測試。 ✓ 完成於 branch: feature/auto-focus-ai-pointer-angle-20260617
 
+[ ] `pointer` 效果顏色自訂：目前 `pointer` 箭頭固定使用玫瑰紅色（`rgba(244,63,94,0.95)`），無法配合不同風格的投影片；應新增 `pointerColor` 欄位（CSS hex，預設 `#f43f5e`），讓使用者可在動畫編輯器中自訂箭頭顏色，並同步更新後端 `AnimationEffect` 介面、`EffectSchema`（Zod 驗證）、序列化、前端 `types.ts`、`SlideRenderer.tsx`（SVG fill 與 drop-shadow 顏色）、`AnimationEditorTab.tsx`（新增顏色選擇器）及中英文 i18n。
+
+[ ] `pointer` 效果尺寸自訂：目前 pointer 箭頭固定為 `2.5rem × 2.5rem`，在不同解析度與投影片尺寸下可能顯得過大或過小；應新增 `pointerSize` 欄位（CSS rem 值，預設 `2.5`，範圍 1-6，步進 0.5），讓使用者可在動畫編輯器中調整箭頭尺寸，並同步更新後端 `AnimationEffect` 介面、`EffectSchema`、序列化及前端對應檔案。
+
+[ ] `text-callout` 字型大小控制：目前 `text-callout` 效果固定使用 `1.25rem` 字型大小（`SlideRenderer.tsx`），無法配合不同長度的文字或投影片版面；應新增 `textCalloutFontSize` 欄位（CSS rem 值，預設 `1.25`，範圍 0.5-3，步進 0.125），讓使用者在動畫編輯器中自訂文字大小，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`/`AnimationEditorTab`（在 text-callout 編輯區新增數字輸入框）及中英文 i18n。
+
+[ ] `shape` 效果填充顏色自訂：目前 `shape` 效果只能設定 `stroke` 顏色與寬度，SVG 圖形的 `fill` 固定為 `'none'`（空心），若需要實心圖形（例如實心圓點、實心方塊當背景標記）只能靠自訂腳本達成；應新增 `shapeFillColor` 欄位（CSS hex，預設 `'none'` 表示無填充），讓使用者可在動畫編輯器中開啟 fill 並選擇顏色，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`（SVG fill 屬性）/`AnimationEditorTab`（在 shape 編輯區增加填充顏色選項）及 i18n。
+
+[ ] Manim `animate.flash(m, progress, opts)` 效果：目前 `manimHelperScript.ts` 的 `animate` 提供 `indicateAround`（縮放+改色），但有時只需要「快速閃爍」而不縮放；應新增 `Manim.animate.flash(m, progress, opts)` 函式，讓元素的 fill/stroke 在 progress 0→0.5 漸變為 `opts.color`（預設 `'#ffffff'`），0.5→1 漸回原色，opacity 則在 0→0.5 升至 `opts.maxOpacity`（預設 `1`）、0.5→1 降回原始值，並新增至少 2 個對應 vm 測試。
+
 ## 工作記錄
 
 - 時間: 2026-06-17 11:00:00 +0800
