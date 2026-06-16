@@ -83,6 +83,8 @@ function EffectOverlay({
     );
   }
   if (effect.type === 'text-callout') {
+    const tcBg = effect.textCalloutBgColor ?? '#0f172a';
+    const tcText = effect.textCalloutTextColor ?? '#f8fafc';
     return (
       <div
         data-effect-id={effect.id}
@@ -93,8 +95,8 @@ function EffectOverlay({
           justifyContent: 'center',
           padding: '0.5em 0.75em',
           borderRadius: '8px',
-          background: 'rgba(15, 23, 42, 0.85)',
-          color: '#f8fafc',
+          background: tcBg,
+          color: tcText,
           fontSize: '1.25rem',
           fontWeight: 600,
           textAlign: 'center',
