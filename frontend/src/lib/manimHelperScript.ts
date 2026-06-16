@@ -400,6 +400,19 @@ export const MANIM_HELPER_SCRIPT = `
       var scx = cx || 0, scy = toSvgY(cy || 0);
       m.el.setAttribute('transform', 'rotate(' + (angleDeg * p) + ' ' + scx + ' ' + scy + ')');
     },
+    spinAround: function (m, progress, opts) {
+      var p = clamp01(progress);
+      var turns = (opts && opts.turns != null) ? opts.turns : 1;
+      var angleDeg = p * turns * 360;
+      var bbox = m.el.getBBox ? m.el.getBBox() : null;
+      var scx = (opts && opts.cx != null) ? opts.cx : (bbox ? bbox.x + bbox.width / 2 : 0);
+      var scy = (opts && opts.cy != null) ? toSvgY(opts.cy) : (bbox ? bbox.y + bbox.height / 2 : 0);
+      if (p >= 1) {
+        m.el.setAttribute('transform', '');
+        return;
+      }
+      m.el.setAttribute('transform', 'rotate(' + angleDeg + ' ' + scx + ' ' + scy + ')');
+    },
     scale: function (m, factor, progress, cx, cy) {
       var p = clamp01(progress);
       var s = lerp(1, factor, p);
