@@ -167,6 +167,12 @@ export async function buildApp() {
     // 僅保護 API；前端靜態資源與頁面路由不在此攔截。
     if (!normalizedPath.startsWith('/api/')) return;
 
+    // Allow requests authenticated via Bearer token (used by MCP server).
+    if (config.mcpAuthToken) {
+      const authHeader = request.headers.authorization ?? '';
+      if (authHeader === `Bearer ${config.mcpAuthToken}`) return;
+    }
+
     const session = decodeSession(parseCookies(request).makeslide_session);
     if (session) return;
 
