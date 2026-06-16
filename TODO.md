@@ -1299,7 +1299,7 @@
 [x] MCP server 新增腳本讀寫工具：目前 MCP server 的 5 個工具只能管理簡報整體（上傳/生成/狀態），無法讀取或修改個別頁面的 AI 腳本；應新增 `get_page_script`（GET /api/pdfs/:id/pages/:n/script）和 `set_page_script`（PUT /api/pdfs/:id/pages/:n/script，若 API 不存在則需先新增）兩個 MCP 工具，讓 agent 可以在啟動生成前自訂各頁文案。（完成於分支: feature/mcp-page-script-tools-20260617）
 [x] `formula` 效果的字型大小控制：目前 `formula` 效果在 `SlideRenderer` 中以固定字型大小渲染 KaTeX 公式；應新增 `fontSize`（CSS em 值，預設 1.5em，範圍 0.5-4em，步進 0.1）欄位，讓使用者可在動畫編輯器中調整公式大小，並在 `AnimationEffect` 型別與後端 `EffectSchema` 中同步更新。（完成於分支: feature/formula-font-size-20260617）
 [x] `step-list` 效果的背景顏色自訂：目前 `step-list` 效果固定使用半透明深色背景（`bg-slate-900/90`）；應新增 `bgColor`（CSS hex 色碼，預設 `#1e293b`）與 `textColor`（預設 `#f1f5f9`）欄位，讓使用者可在動畫編輯器中自訂條列清單的背景色與文字色，並在 `SlideRenderer`/`AnimationEffect`/`EffectSchema` 中同步更新。（完成於分支: feature/step-list-colors-20260617）
-[ ] Manim path morphing 支援 polygon 形狀：目前 `Manim.animate.transform` 的路徑變形只支援 circle 和 rect/square（各自對應 `getMorphSegs`）；對於 `polygon` 形狀，應計算凸多邊形的 4 個 cardinal 最遠點（top/right/bottom/left），將其轉為 4 段 cubic Bézier，使 polygon↔circle、polygon↔rect 也能進行平滑路徑變形。
+[x] Manim path morphing 支援 polygon 形狀：目前 `Manim.animate.transform` 的路徑變形只支援 circle 和 rect/square（各自對應 `getMorphSegs`）；對於 `polygon` 形狀，應計算凸多邊形的 4 個 cardinal 最遠點（top/right/bottom/left），將其轉為 4 段 cubic Bézier，使 polygon↔circle、polygon↔rect 也能進行平滑路徑變形。（完成於分支: feature/manim-polygon-morphing-20260617）
 
 ## 工作記錄
 
@@ -1318,3 +1318,7 @@
 - 時間: 2026-06-17 14:00:00 +0800
 - 分支: feature/step-list-colors-20260617
 - 內容: 新增 `step-list` 效果的背景與文字顏色自訂。後端 `pageAnimation.ts` 新增 `DEFAULT_STEP_LIST_BG_COLOR`（`#1e293b`）與 `DEFAULT_STEP_LIST_TEXT_COLOR`（`#f1f5f9`）常數，`AnimationEffect` interface 新增 `stepListBgColor`/`stepListTextColor` 欄位，`EffectSchema` 新增 Zod hex color 驗證（最長 20 字元），序列化時一併輸出。前端 `types.ts` 同步新增兩個欄位；`SlideRenderer.tsx` 使用 `stepListBgColor`/`stepListTextColor`（帶預設值）作為容器 `background`/`color` 樣式；`AnimationEditorTab.tsx` 在條列項目 textarea 下方加入兩個 `<input type="color">` 選色器；中英文 i18n 新增 `play.animation.stepListBgColor`/`stepListTextColor` 翻譯鍵。
+
+- 時間: 2026-06-17 15:00:00 +0800
+- 分支: feature/manim-polygon-morphing-20260617
+- 內容: 新增 Manim polygon 路徑變形支援。在 `manimHelperScript.ts` 新增 `parsePolygonPoints(pts)` 輔助函式（將 SVG polygon `points` 屬性字串解析為 `[[x,y],...]`，注意 template literal 內正則需用 `\\s` 而非 `\s` 以避免逸出錯誤）與 `polygonMorphSegs(el)` 函式（計算 4 個 cardinal 最遠點 top/right/bottom/left，並以 KAPPA × half-span 的 axis-aligned 控制點產生 4 段 cubic Bézier，與 `circleMorphSegs`/`rectMorphSegs` 的切線慣例一致）；更新 `getMorphSegs` 加入 `m.kind === 'polygon'` 分支。新增 3 個測試：polygon→circle 跨類型變形、polygon→polygon 同類型變形、polygon→rect 跨類型變形，全部 18 項測試通過。

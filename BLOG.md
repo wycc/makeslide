@@ -305,3 +305,31 @@ MCP_AUTH_TOKEN=your-secret-token-here
 - `SlideRenderer.tsx`：step-list 容器 div 改用 `effect.stepListBgColor ?? '#1e293b'` 和 `effect.stepListTextColor ?? '#f1f5f9'` 作為 CSS 樣式
 - `AnimationEditorTab.tsx`：items textarea 後面加入兩個並排的 `<input type="color">` 選色器
 - i18n：中英文 locale 各新增 `play.animation.stepListBgColor` 和 `play.animation.stepListTextColor` 翻譯鍵
+
+## Manim Polygon 路徑變形（2026-06-17）
+
+### 功能目的
+
+`Manim.animate.transform` 原本只能對 `circle`、`square`、`rectangle` 進行平滑路徑變形（SVG cubic Bézier 插值），`polygon` 形狀（三角形、菱形、五邊形等）遇到跨類型 transform 時只能退回到交叉淡化（cross-fade）效果，視覺上較不連貫。本次讓 polygon 也能和 circle/rect 做到逐格插值路徑的平滑 morphing。
+
+### 技術原理
+
+`polygonMorphSegs(el)` 函式將 SVG `<polygon>` 分解為 4 段 cubic Bézier：
+1. 找出多邊形的 4 個 **cardinal 最遠點**：topmost（min SVG-y）、rightmost（max x）、bottommost（max SVG-y）、leftmost（min x）
+2. 以 4 個極值點為錨點，產生 4 段 Bézier `top→right→bottom→left→top`
+3. 控制點使用 **axis-aligned 切線**，水平方向控制量 `kh = KAPPA × (right.x − left.x) / 2`，垂直方向 `kv = KAPPA × (bottom.y − top.y) / 2`，與 `circleMorphSegs` 和 `rectMorphSegs` 的切線慣例一致，使三種形狀之間的 morphing 都能銜接流暢
+
+這樣，一個正三角形 morphing 成圓形時，三角形會先「膨脹」成橢圓形狀再圓化，而不是直接淡出又淡入。
+
+### 注意事項：template literal 中的正規表示式逸出
+
+在 TypeScript template literal（`` ` `` ）中，`\s` 是無效的逸出序列，會被 JS 引擎靜默忽略反斜線，導致字串中出現字面字元 `s`。因此 `parsePolygonPoints` 解析 `points` 屬性時，正則必須寫成 `/[\\s,]+/`（兩個反斜線）才能讓產生的 JS 字串含有 `/[\s,]+/` 並正確匹配空白字元。
+
+### 測試覆蓋
+
+新增 3 個測試至 `manimHelperScript.test.ts`：
+- `polygon→circle`：三角形變形成圓形，確認 `el.style.display = 'none'`、morphEl 已建立、路徑在 t=0 與 t=1 不同
+- `polygon→polygon`：三角形變形成五邊形（同類型），確認同樣走路徑插值而非交叉淡化
+- `polygon→rect`：菱形（diamond）變形成矩形，確認路徑封閉且兩端不同
+
+全部 18 項測試通過。
