@@ -652,3 +652,15 @@ Manim.animate.uncreate(circ, t);     // 0→1: 從頭到尾消除
 - `EffectSchema` 以 `z.number().min(0).max(1)` 驗證
 - `SlideRenderer.tsx` 將 `effect.shapeOpacity ?? 1` 套用至 SVG 的 `opacity` style
 - 此透明度疊加在 GSAP 的淡入淡出動畫效果之上（不衝突）
+
+## formula 效果背景色與文字色自訂（formulaBgColor / formulaTextColor）
+
+`formula` 效果（KaTeX 數學公式）現在支援自訂背景色和文字色。使用者可以在動畫編輯器中透過顏色選擇器調整公式方塊的背景顏色（預設深藍 `#0f172a`）和文字顏色（預設近白 `#f8fafc`），配合投影片的整體配色。
+
+**使用方式：**
+在動畫編輯器的 `formula` 效果設定中，字型大小輸入框下方有「背景顏色」和「文字顏色」兩個顏色選擇器。
+
+**技術說明：**
+- `AnimationEffect` 和 `SlideAnimationEffect` 新增 `formulaBgColor?: string` 和 `formulaTextColor?: string`
+- `EffectSchema` 重用現有 hex color regex 驗證（`^#[0-9a-fA-F]{3,8}$`）
+- `SlideRenderer.tsx` 以動態值取代硬編碼的 `rgba(15, 23, 42, 0.85)`/`#f8fafc`
