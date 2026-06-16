@@ -167,6 +167,8 @@ export interface AnimationEffect {
    * [`MIN_STEP_LIST_FONT_SIZE_REM`, `MAX_STEP_LIST_FONT_SIZE_REM`].
    */
   stepListFontSize?: number;
+  /** Corner radius in px for `step-list` effects. Defaults to 8. Range 0-32. Ignored by other effect types. */
+  stepListBorderRadius?: number;
   /**
    * Id of a figure extracted from the slide's source PDF (see
    * `GET /api/pdfs/:id/pages/:n/figures`), shown as a positioned image
@@ -328,6 +330,8 @@ export const DEFAULT_STEP_LIST_FONT_SIZE_REM = 1.1;
 export const MIN_STEP_LIST_FONT_SIZE_REM = 0.5;
 /** Maximum font size (rem) for `step-list` effects. */
 export const MAX_STEP_LIST_FONT_SIZE_REM = 2.5;
+/** Maximum corner radius (px) for `step-list` effects. */
+export const MAX_STEP_LIST_BORDER_RADIUS = 32;
 /** Max stroke width (SVG user units) for `shape` effects. */
 export const MAX_SHAPE_STROKE_WIDTH = 20;
 /** Max length (chars) for a `custom-script` effect's generated JavaScript `code`. */
@@ -410,6 +414,7 @@ const EffectSchema = z.object({
   stepListBgColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   stepListTextColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   stepListFontSize: z.number().min(MIN_STEP_LIST_FONT_SIZE_REM).max(MAX_STEP_LIST_FONT_SIZE_REM).optional(),
+  stepListBorderRadius: z.number().int().min(0).max(MAX_STEP_LIST_BORDER_RADIUS).optional(),
   figureId: z.string().min(1).max(MAX_OVERLAY_IMAGE_FIGURE_ID_LENGTH).optional(),
   overlayImageOpacity: z.number().min(0).max(1).optional(),
   formula: z.string().min(1).max(MAX_FORMULA_LENGTH).optional(),
@@ -500,6 +505,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.stepListBgColor !== undefined ? { stepListBgColor: effect.stepListBgColor } : {}),
       ...(effect.stepListTextColor !== undefined ? { stepListTextColor: effect.stepListTextColor } : {}),
       ...(effect.stepListFontSize !== undefined ? { stepListFontSize: Math.max(MIN_STEP_LIST_FONT_SIZE_REM, Math.min(MAX_STEP_LIST_FONT_SIZE_REM, effect.stepListFontSize)) } : {}),
+      ...(effect.stepListBorderRadius !== undefined ? { stepListBorderRadius: Math.max(0, Math.min(MAX_STEP_LIST_BORDER_RADIUS, Math.round(effect.stepListBorderRadius))) } : {}),
       ...(effect.figureId !== undefined ? { figureId: effect.figureId } : {}),
       ...(effect.overlayImageOpacity !== undefined ? { overlayImageOpacity: Math.max(0, Math.min(1, effect.overlayImageOpacity)) } : {}),
       ...(effect.formula !== undefined ? { formula: effect.formula } : {}),

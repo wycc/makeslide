@@ -296,6 +296,8 @@ export interface SlideAnimationEffect {
   stepListTextColor?: string;
   /** Font size in rem for `step-list` effects. Defaults to 1.1. Ignored by other effect types. */
   stepListFontSize?: number;
+  /** Corner radius (px) for `step-list` effects. Defaults to 8. Range 0-32. Ignored by other effect types. */
+  stepListBorderRadius?: number;
   /**
    * Id of a figure extracted from the slide's source PDF (see
    * `fetchPageFigures`), shown as a positioned image overlay by

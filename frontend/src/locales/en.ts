@@ -395,6 +395,7 @@ export const en = {
   'play.animation.stepListBgColor': 'Background color',
   'play.animation.stepListTextColor': 'Text color',
   'play.animation.stepListFontSize': 'Font size (rem)',
+  'play.animation.stepListBorderRadius': 'Corner radius (px)',
   'play.animation.overlayImageFigure': 'Insert figure',
   'play.animation.overlayImageSelectFigure': 'Select a figure...',
   'play.animation.overlayImageNoFigures': 'No figures detected on this page',
