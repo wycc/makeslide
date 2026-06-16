@@ -88,6 +88,12 @@ export interface AnimationEffect {
    */
   formula?: string;
   /**
+   * Font size in em units for `formula` effect rendering. Defaults to
+   * `DEFAULT_FORMULA_FONT_SIZE_EM` (1.5em). Clamped to
+   * [`MIN_FORMULA_FONT_SIZE_EM`, `MAX_FORMULA_FONT_SIZE_EM`].
+   */
+  formulaFontSize?: number;
+  /**
    * Seconds to remain visible after the fade-in completes before
    * automatically fading back out (same `duration`/`ease` as the fade-in).
    * Only meaningful for overlay effect types (`highlight-box`, `spotlight`,
@@ -148,6 +154,12 @@ export const MAX_STEP_LIST_ITEM_LENGTH = 60;
 export const MAX_OVERLAY_IMAGE_FIGURE_ID_LENGTH = 200;
 /** Max length (chars) for a `formula` effect's LaTeX source. */
 export const MAX_FORMULA_LENGTH = 200;
+/** Default font size (em) for `formula` effect rendering via KaTeX. */
+export const DEFAULT_FORMULA_FONT_SIZE_EM = 1.5;
+/** Minimum font size (em) for `formula` effects. */
+export const MIN_FORMULA_FONT_SIZE_EM = 0.5;
+/** Maximum font size (em) for `formula` effects. */
+export const MAX_FORMULA_FONT_SIZE_EM = 4;
 export const MAX_HINTS = 50;
 export const MAX_HINT_LENGTH = 200;
 /** Default stroke colour for `shape` effects (rose-500). */
@@ -220,6 +232,7 @@ const EffectSchema = z.object({
   items: z.array(z.string().max(MAX_STEP_LIST_ITEM_LENGTH)).max(MAX_STEP_LIST_ITEMS).optional(),
   figureId: z.string().min(1).max(MAX_OVERLAY_IMAGE_FIGURE_ID_LENGTH).optional(),
   formula: z.string().min(1).max(MAX_FORMULA_LENGTH).optional(),
+  formulaFontSize: z.number().min(MIN_FORMULA_FONT_SIZE_EM).max(MAX_FORMULA_FONT_SIZE_EM).optional(),
   exitDuration: z.number().min(0).max(MAX_DURATION_SECONDS).optional(),
   code: z.string().max(MAX_CUSTOM_SCRIPT_CODE_LENGTH).optional(),
   prompt: z.string().max(MAX_CUSTOM_SCRIPT_PROMPT_LENGTH).optional(),
@@ -284,6 +297,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.items !== undefined ? { items: effect.items } : {}),
       ...(effect.figureId !== undefined ? { figureId: effect.figureId } : {}),
       ...(effect.formula !== undefined ? { formula: effect.formula } : {}),
+      ...(effect.formulaFontSize !== undefined ? { formulaFontSize: effect.formulaFontSize } : {}),
       ...(effect.exitDuration !== undefined ? { exitDuration: effect.exitDuration } : {}),
       ...(effect.code !== undefined ? { code: effect.code } : {}),
       ...(effect.prompt !== undefined ? { prompt: effect.prompt } : {}),

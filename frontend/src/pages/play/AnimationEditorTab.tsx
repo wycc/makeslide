@@ -1169,26 +1169,45 @@ export function AnimationEditorTab() {
                 </div>
               )}
               {effect.type === 'formula' && (
-                <label className="flex flex-col gap-1 text-xs text-slate-400">
-                  {t('play.animation.formulaContent')}
-                  <input
-                    type="text"
-                    maxLength={MAX_FORMULA_LENGTH}
-                    value={effect.formula ?? ''}
-                    disabled={disabled}
-                    placeholder={t('play.animation.formulaContentPlaceholder')}
-                    onChange={(e) => updateEffect(effect.id, { formula: e.target.value })}
-                    className="w-48 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
-                  />
-                  {effect.formula && (
-                    <div
-                      className="w-48 overflow-x-auto rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-slate-100"
-                      dangerouslySetInnerHTML={{
-                        __html: katex.renderToString(effect.formula, { throwOnError: false, displayMode: true }),
-                      }}
+                <>
+                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    {t('play.animation.formulaContent')}
+                    <input
+                      type="text"
+                      maxLength={MAX_FORMULA_LENGTH}
+                      value={effect.formula ?? ''}
+                      disabled={disabled}
+                      placeholder={t('play.animation.formulaContentPlaceholder')}
+                      onChange={(e) => updateEffect(effect.id, { formula: e.target.value })}
+                      className="w-48 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
                     />
-                  )}
-                </label>
+                    {effect.formula && (
+                      <div
+                        className="w-48 overflow-x-auto rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-slate-100"
+                        style={{ fontSize: `${effect.formulaFontSize ?? 1.5}em` }}
+                        dangerouslySetInnerHTML={{
+                          __html: katex.renderToString(effect.formula, { throwOnError: false, displayMode: true }),
+                        }}
+                      />
+                    )}
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    {t('play.animation.formulaFontSize')}
+                    <input
+                      type="number"
+                      min={0.5}
+                      max={4}
+                      step={0.1}
+                      value={effect.formulaFontSize ?? 1.5}
+                      disabled={disabled}
+                      onChange={(e) => {
+                        const v = parseFloat(e.target.value);
+                        if (!isNaN(v)) updateEffect(effect.id, { formulaFontSize: Math.min(4, Math.max(0.5, v)) });
+                      }}
+                      className="w-20 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                    />
+                  </label>
+                </>
               )}
               {OVERLAY_EFFECT_TYPES.includes(effect.type) && effect.type !== 'custom-script' && (
                 <div className="flex flex-col gap-2 text-xs text-slate-400">

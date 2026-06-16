@@ -177,6 +177,7 @@ function EffectOverlay({
     );
   }
   if (effect.type === 'formula') {
+    const fontSizeEm = effect.formulaFontSize ?? 1.5;
     const html = katex.renderToString(effect.formula ?? '', { throwOnError: false, displayMode: true });
     return (
       <div
@@ -191,6 +192,7 @@ function EffectOverlay({
           background: 'rgba(15, 23, 42, 0.85)',
           color: '#f8fafc',
           overflow: 'hidden',
+          fontSize: `${fontSizeEm}em`,
         }}
         dangerouslySetInnerHTML={{ __html: html }}
       />

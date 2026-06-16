@@ -267,6 +267,11 @@ export interface SlideAnimationEffect {
    */
   formula?: string;
   /**
+   * Font size in em units for `formula` effect rendering. Defaults to 1.5em.
+   * Range: 0.5–4em. Ignored by other effect types.
+   */
+  formulaFontSize?: number;
+  /**
    * Seconds to remain in the "entered" state after the entrance animation
    * completes before automatically reversing back to the original state
    * (same `duration`/`ease`, played in reverse). For overlay effect types

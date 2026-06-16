@@ -367,6 +367,7 @@ export const zhTW = {
   'play.animation.textContentPlaceholder': '輸入要顯示在投影片上的文字',
   'play.animation.formulaContent': '公式內容（LaTeX）',
   'play.animation.formulaContentPlaceholder': '例如：E = mc^2',
+  'play.animation.formulaFontSize': '字型大小（em）',
   'play.animation.shapeKind': '圖形種類',
   'play.animation.shapeKind.circle': '圓形',
   'play.animation.shapeKind.rect': '方框',
