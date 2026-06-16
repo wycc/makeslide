@@ -3,7 +3,7 @@ import katex from 'katex';
 import { useI18n } from '../../i18n';
 import type { TranslationKey } from '../../i18n';
 import type { PageFigure, SlideAnimationEffect, SlideAnimationEffectType, SlideAnimationEase, SlideAnimationShapeKind } from '../../types';
-import { fetchPageFigures, figureImageUrl } from '../../lib/api';
+import { fetchPageFigures, figureImageUrl, savePageAnimation } from '../../lib/api';
 import {
   ANIMATION_SHAPE_KINDS,
   DEFAULT_EXIT_DURATION_SECONDS,
@@ -452,6 +452,7 @@ export function AnimationEditorTab() {
     customScriptStreamingCode,
     customScriptStreamingPlan,
     handleSendCustomScriptMessage,
+    totalPages,
   } = usePlayPageContext();
   const { t } = useI18n();
   const [customScriptDialogEffectId, setCustomScriptDialogEffectId] = useState<string | null>(null);
@@ -462,6 +463,7 @@ export function AnimationEditorTab() {
   const [jsonCopied, setJsonCopied] = useState(false);
   // 跨頁複製用的暫存區：不隨頁面切換清空，讓使用者可在切換到其他頁面後貼上。
   const [copiedEffects, setCopiedEffects] = useState<SlideAnimationEffect[] | null>(null);
+  const [applyingToAll, setApplyingToAll] = useState(false);
   // overlay-image 效果的圖片選擇器：本頁可用的已擷取圖片清單。
   const [pageFigures, setPageFigures] = useState<PageFigure[] | null>(null);
   // 記錄每個 figureId 的原始長寬比（naturalWidth / naturalHeight），在圖片 onLoad 時取得。
@@ -608,6 +610,23 @@ export function AnimationEditorTab() {
     });
   };
 
+  /** 將本頁動畫設定（含 enabled 旗標、所有效果、hints）套用至全部其他頁面。 */
+  const handleApplyToAllPages = async () => {
+    if (!pdfId || !currentPage || totalPages <= 1) return;
+    const otherCount = totalPages - 1;
+    if (!window.confirm(t('play.animation.applyToAllConfirm').replace('{n}', String(otherCount)))) return;
+    setApplyingToAll(true);
+    const spec = draft;
+    try {
+      for (let n = 1; n <= totalPages; n++) {
+        if (n === currentPage.page_number) continue;
+        await savePageAnimation(pdfId, n, spec);
+      }
+    } finally {
+      setApplyingToAll(false);
+    }
+  };
+
   /** 依選定的範本新增一個效果，套用範本中預先調整好的型別／長度／速度變化等常用設定。 */
   const handleApplyPreset = (presetId: string) => {
     const preset = EFFECT_PRESETS.find((p) => p.id === presetId);
@@ -712,6 +731,17 @@ export function AnimationEditorTab() {
             className="rounded-md border border-emerald-500/50 bg-emerald-500/10 px-3 py-1.5 text-sm text-emerald-200 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {t('play.animation.pastePageEffects')} ({copiedEffects.length})
+          </button>
+        )}
+        {totalPages > 1 && (
+          <button
+            type="button"
+            disabled={disabled || applyingToAll}
+            title={t('play.animation.applyToAllPagesHint')}
+            onClick={() => { void handleApplyToAllPages(); }}
+            className="rounded-md border border-sky-500/50 bg-sky-500/10 px-3 py-1.5 text-sm text-sky-200 hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {applyingToAll ? t('play.animation.applyToAllPagesBusy') : t('play.animation.applyToAllPages')}
           </button>
         )}
         <button
