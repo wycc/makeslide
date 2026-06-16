@@ -375,6 +375,7 @@ export const en = {
   'play.animation.highlightBorderWidth': 'Border width (px)',
   'play.animation.highlightBorderRadius': 'Corner radius (px)',
   'play.animation.highlightOuterColor': 'Outer ring color',
+  'play.animation.highlightPulse': 'Pulse glow',
   'play.animation.spotlightColor': 'Mask color',
   'play.animation.spotlightOpacity': 'Opacity',
   'play.animation.textCalloutBgColor': 'Background color',
