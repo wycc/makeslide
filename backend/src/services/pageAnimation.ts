@@ -54,6 +54,11 @@ export interface AnimationEffect {
    */
   angle?: number;
   /**
+   * Arrow colour (CSS hex) for `pointer` effects (ignored by other effect types).
+   * Defaults to `DEFAULT_POINTER_COLOR` (`#f43f5e`).
+   */
+  pointerColor?: string;
+  /**
    * Border colour (CSS hex) for `highlight-box` effects (ignored by other
    * effect types). Defaults to `DEFAULT_HIGHLIGHT_BOX_COLOR` (`#ef4444`).
    */
@@ -203,6 +208,8 @@ export const DEFAULT_SHAPE_STROKE_COLOR = '#f43f5e';
 export const DEFAULT_SHAPE_STROKE_WIDTH = 5;
 /** Max length (chars) for a `shape` effect's `color` field. */
 export const MAX_SHAPE_COLOR_LENGTH = 20;
+/** Default arrow colour for `pointer` effects (rose-500). */
+export const DEFAULT_POINTER_COLOR = '#f43f5e';
 /** Default border colour for `highlight-box` effects (red-500). */
 export const DEFAULT_HIGHLIGHT_BOX_COLOR = '#ef4444';
 /** Default background colour for `text-callout` effects (slate-950). */
@@ -274,6 +281,7 @@ const EffectSchema = z.object({
   params: z.record(z.unknown()).optional(),
   startTrigger: StartTriggerSchema.optional(),
   angle: z.number().finite().optional(),
+  pointerColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   highlightColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   text: z.string().max(MAX_TEXT_CALLOUT_LENGTH).optional(),
   textCalloutBgColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
@@ -346,6 +354,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(params ? { params } : {}),
       ...(effect.startTrigger ? { startTrigger: effect.startTrigger } : {}),
       ...(effect.angle !== undefined ? { angle: effect.angle } : {}),
+      ...(effect.pointerColor !== undefined ? { pointerColor: effect.pointerColor } : {}),
       ...(effect.highlightColor !== undefined ? { highlightColor: effect.highlightColor } : {}),
       ...(effect.text !== undefined ? { text: effect.text } : {}),
       ...(effect.textCalloutBgColor !== undefined ? { textCalloutBgColor: effect.textCalloutBgColor } : {}),

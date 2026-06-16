@@ -234,6 +234,8 @@ export interface SlideAnimationEffect {
    * Defaults to `0` (pointing down-right) when omitted.
    */
   angle?: number;
+  /** Arrow colour (CSS hex) for `pointer` effects. Defaults to `#f43f5e`. Ignored by other effect types. */
+  pointerColor?: string;
   /** Border colour (CSS hex) for `highlight-box` effects. Defaults to `#ef4444`. Ignored by other effect types. */
   highlightColor?: string;
   /** Caption text for `text-callout` effects (ignored by other effect types). */
