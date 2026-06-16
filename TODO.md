@@ -1246,8 +1246,8 @@
 # 2026-06-17 動畫 V2 新增項目
 
 [x] 允許 `shape` 效果自訂顏色與線寬（完成於分支: feature/animation-shape-color-strokewidth-20260617）
-[ ] `step-list` 效果的 AI 自動生成：在 `auto-focus-ai` 中，讓 AI 除了依逐字稿選擇 `step-list` 類型外，也能依逐字稿語境自動產生 `items` 條列文案（與逐字稿同語言），類似 `text-callout` 的 AI 文案生成邏輯。
-[ ] `formula` 效果的 AI 自動生成：在 `auto-focus-ai` 中，讓 AI 依逐字稿內容自動判斷是否適合插入公式，並生成對應的 LaTeX 字串（`formulaLatex`）；若逐字稿包含數學式、物理公式或統計式，AI 選擇 `formula` 類型並提供正確的 LaTeX。（目前僅支援 `formulaLatex` 欄位映射，但 AI 選擇 `formula` 類型的能力已在 `feature/animation-auto-focus-ai-formula-20260616` 實作；此項目為補齊 AI 自動判斷公式內容品質的測試與提示詞優化）
+[x] `step-list` 效果的 AI 自動生成：在 `auto-focus-ai` 中，讓 AI 除了依逐字稿選擇 `step-list` 類型外，也能依逐字稿語境自動產生 `items` 條列文案（與逐字稿同語言），類似 `text-callout` 的 AI 文案生成邏輯。（已確認實作完整：系統提示詞第 6 點要求 AI 生成 items 內容，mapAutoFocusResponseToEffects 正確映射，整合測試已存在）
+[x] `formula` 效果的 AI 自動生成：在 `auto-focus-ai` 中，讓 AI 依逐字稿內容自動判斷是否適合插入公式，並生成對應的 LaTeX 字串（`formulaLatex`）；若逐字稿包含數學式、物理公式或統計式，AI 選擇 `formula` 類型並提供正確的 LaTeX。（目前僅支援 `formulaLatex` 欄位映射，但 AI 選擇 `formula` 類型的能力已在 `feature/animation-auto-focus-ai-formula-20260616` 實作；此項目為補齊 AI 自動判斷公式內容品質的測試與提示詞優化）（完成於分支: feature/animation-auto-focus-ai-formula-quality-20260617）
 [x] 將 `AnimationSpec.hints` 傳入 LLM 動畫生成：目前 `hints`（逐字稿句子的動畫指引）僅儲存在 `AnimationSpec` 並顯示於編輯器，但 `auto-focus-ai` 的 LLM 提示詞還未讀取並傳入 `hints`；應在 `buildAutoFocusUserPrompt()` 中將本頁 `hints` 的內容加入 user prompt，讓 AI 在決定每一句的效果時能參考使用者提供的手動指引。（已確認實作存在於 buildAutoFocusUserPrompt() 與前端 AnimationEditorTab.tsx 的呼叫端）
 [x] 動畫 `custom-script` 的 `Manim.tex` 範例提示詞與測試：新增 `Manim.tex` 到 `custom-script` 對話框的「範例提示詞」下拉選單（例如「用 Manim 在畫面中顯示愛因斯坦公式 E=mc²」），並補充後端測試確認 `Manim.tex` 相關關鍵字不會被 `findUnsafeScriptPattern` 誤判為不安全（`postMessage`/`parent` 由 `Manim.tex` 內部使用，不應被拒絕）。（完成於分支: feature/animation-custom-script-manim-tex-examples-20260617）
 [x] `overlay-image` 效果的縮放比例鎖定選項：目前 `overlay-image` 效果的寬高可自由調整，但使用者無法鎖定圖片的原始長寬比；應新增「鎖定比例」checkbox，勾選後調整寬度時高度自動按原始圖片比例計算（需在前端取得圖片實際尺寸）。（完成於分支: feature/animation-overlay-image-lock-ratio-20260617）
@@ -1280,3 +1280,7 @@
 - 時間: 2026-06-17 10:00:00 +0800
 - 分支: feature/animation-batch-apply-to-pages-20260617
 - 內容: 完成動畫效果批次套用至多頁功能：在 `AnimationEditorTab.tsx` 新增 `handleApplyToAllPages` 函式，確認用戶後將目前頁面的完整 `AnimationSpec`（draft）依序呼叫 `savePageAnimation` API 套用至其他每一頁（跳過當前頁）；新增「套用至全部頁面」按鈕（sky/blue 顏色），顯示條件為 `totalPages > 1`，套用過程中切換為 Busy 文字並停用；從 `usePlayPageContext()` 新增解構 `totalPages`；新增 `applyingToAll` loading state；補充中英文翻譯鍵 `applyToAllPages`/`applyToAllPagesHint`/`applyToAllPagesBusy`/`applyToAllConfirm`（確認對話框含 `{n}` 頁數佔位符）。frontend build 通過。
+
+- 時間: 2026-06-17 10:15:00 +0800
+- 分支: feature/animation-auto-focus-ai-formula-quality-20260617
+- 內容: 確認 item 1249（step-list AI 自動生成）已完整實作（系統提示詞第 6 點、mapAutoFocusResponseToEffects、整合測試均存在），標記為已完成。item 1250（formula AI 自動生成品質補強）：(1) 優化 buildAutoFocusSystemPrompt() 的 type 選擇說明，加入「包括以文字描述的公式（例如 E 等於 mc 平方）」、「單純百分比/日期/簡單計數不算公式應選 text-callout」；(2) 優化 formulaLatex 欄位說明，加入「若逐字稿以文字描述公式請將其轉為對應 LaTeX」及「缺少/空白/無法以標準 LaTeX 表示時請改選 highlight-box」；(3) 新增整合測試 `POST animation/auto-focus-ai returns a formula effect with formulaLatex`（ok 111）；(4) 新增整合測試 `POST animation/auto-focus-ai falls back formula without formulaLatex to highlight-box`（ok 112）。後端 tsc 通過，216 項測試中 2 項新測試（ok 111-112）通過，20 項失敗均為既有失敗基線。

@@ -110,3 +110,25 @@
 - 從 `usePlayPageContext()` 解構 `totalPages`，控制按鈕顯示條件與確認對話框的頁數描述
 - 新增 `applyingToAll` boolean state 作為 loading indicator，套用期間停用按鈕並替換文字
 - 確認訊息使用翻譯鍵 `play.animation.applyToAllConfirm`，含 `{n}` 佔位符動態插入受影響的頁數
+
+## Formula 效果 AI 自動生成品質提升
+
+### 功能目的
+
+`auto-focus-ai` 功能已能讓 AI 選擇 `formula` 類型並生成 LaTeX 公式，但原始提示詞對「哪些情況算公式」及「如何處理口語公式描述」說明不夠明確。本次更新優化系統提示詞，提升 AI 在正確識別並轉換公式方面的準確率，同時補充兩個整合測試確保公式自動生成的流程正確。
+
+### 主要改善
+
+**提示詞優化**：
+- 明確說明「以文字描述的公式」也算公式（例如「E 等於 mc 的平方」→ `E = mc^2`）
+- 新增負面範例：單純百分比（如「成長 35%」）、日期或簡單計數不應選 formula，應選 text-callout
+- `formulaLatex` 欄位說明加入轉換指引：AI 應將口語描述轉為 LaTeX，無法轉換時回退 highlight-box
+
+**新增整合測試**：
+1. `POST auto-focus-ai returns a formula effect with formulaLatex` — 驗證 AI 回傳 `type: 'formula'` + `formulaLatex` 時，效果正確映射為 `formula` 型別並帶有 `formula` 欄位，且通過 `validateAnimationSpec`
+2. `POST auto-focus-ai falls back formula without formulaLatex to highlight-box` — 驗證 AI 回傳 `type: 'formula'` 但沒有提供 `formulaLatex` 時，效果正確退回 `highlight-box`
+
+### 技術細節
+
+- 只修改 `animationAutoFocus.ts` 的 `buildAutoFocusSystemPrompt()` 提示詞，不影響型別定義或資料流
+- 兩個新測試均使用 mock LLM client，不依賴真實 OpenAI 呼叫
