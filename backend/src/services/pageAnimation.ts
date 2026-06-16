@@ -105,6 +105,12 @@ export interface AnimationEffect {
    */
   color?: string;
   /**
+   * Fill colour (CSS hex) for `shape` effects (ignored by other effect types).
+   * When omitted the shape is rendered hollow (`fill="none"`).
+   * Not meaningful for `arrow` shapes.
+   */
+  shapeFillColor?: string;
+  /**
    * Stroke width (in SVG user units, within a 100×100 viewBox) for `shape`
    * effects (ignored by other effect types). Clamped to [1, `MAX_SHAPE_STROKE_WIDTH`].
    * Defaults to `DEFAULT_SHAPE_STROKE_WIDTH` when omitted.
@@ -315,6 +321,7 @@ const EffectSchema = z.object({
   spotlightOpacity: z.number().min(0).max(1).optional(),
   shape: z.enum(ANIMATION_SHAPE_KINDS).optional(),
   color: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
+  shapeFillColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   strokeWidth: z.number().min(1).max(MAX_SHAPE_STROKE_WIDTH).optional(),
   items: z.array(z.string().max(MAX_STEP_LIST_ITEM_LENGTH)).max(MAX_STEP_LIST_ITEMS).optional(),
   stepListBgColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
@@ -390,6 +397,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.spotlightOpacity !== undefined ? { spotlightOpacity: effect.spotlightOpacity } : {}),
       ...(effect.shape !== undefined ? { shape: effect.shape } : {}),
       ...(effect.color !== undefined ? { color: effect.color } : {}),
+      ...(effect.shapeFillColor !== undefined ? { shapeFillColor: effect.shapeFillColor } : {}),
       ...(effect.strokeWidth !== undefined ? { strokeWidth: Math.max(1, Math.min(MAX_SHAPE_STROKE_WIDTH, Math.round(effect.strokeWidth))) } : {}),
       ...(effect.items !== undefined ? { items: effect.items } : {}),
       ...(effect.stepListBgColor !== undefined ? { stepListBgColor: effect.stepListBgColor } : {}),

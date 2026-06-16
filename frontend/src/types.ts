@@ -259,6 +259,8 @@ export interface SlideAnimationEffect {
    * `'#f43f5e'` when omitted. Ignored by other effect types.
    */
   color?: string;
+  /** Fill colour (CSS hex) for `shape` effects. When absent the shape is hollow. Ignored by other effect types. */
+  shapeFillColor?: string;
   /**
    * Stroke width (SVG user units in a 100×100 viewBox) for `shape` effects.
    * Defaults to 5 when omitted. Ignored by other effect types.
