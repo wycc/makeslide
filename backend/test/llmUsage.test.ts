@@ -4,7 +4,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   LLM_REQUEST_LOG_FILE,
+  MODEL_PRICE_PER_1M_TOKENS,
   emptyLlmUsageSummary,
+  appendLlmRequestLog,
+  appendLlmResponseLog,
   summarizeLlmUsage,
   summarizeLlmUsageByRunIds,
 } from '../src/services/llmUsage';
@@ -171,4 +174,36 @@ test('summarizeLlmUsageByRunIds groups usage per run in a single pass', async ()
 
 test('summarizeLlmUsageByRunIds returns an empty map for an empty run id list', async () => {
   assert.equal((await summarizeLlmUsageByRunIds([])).size, 0);
+});
+
+test('MODEL_PRICE_PER_1M_TOKENS includes Gemini model pricing', () => {
+  assert.ok('gemini-2.0-flash' in MODEL_PRICE_PER_1M_TOKENS, 'gemini-2.0-flash should have pricing');
+  assert.ok('gemini-2.0-flash-lite' in MODEL_PRICE_PER_1M_TOKENS, 'gemini-2.0-flash-lite should have pricing');
+  assert.equal(MODEL_PRICE_PER_1M_TOKENS['gemini-2.0-flash']!.input, 0.075);
+  assert.equal(MODEL_PRICE_PER_1M_TOKENS['gemini-2.0-flash']!.output, 0.3);
+});
+
+test('appendLlmRequestLog and appendLlmResponseLog write entries picked up by summarizeLlmUsage', async () => {
+  const existed = fs.existsSync(LLM_REQUEST_LOG_FILE);
+  const backup = existed ? fs.readFileSync(LLM_REQUEST_LOG_FILE, 'utf8') : null;
+  fs.rmSync(LLM_REQUEST_LOG_FILE, { force: true });
+  try {
+    await appendLlmRequestLog({ ts: new Date().toISOString(), provider: 'gemini', model: 'gemini-2.0-flash', label: 'test' });
+    await appendLlmResponseLog({
+      ts: new Date().toISOString(),
+      provider: 'gemini',
+      model: 'gemini-2.0-flash',
+      latencyMs: 500,
+      usage: { prompt_tokens: 1_000_000, completion_tokens: 1_000_000, total_tokens: 2_000_000 },
+    });
+    const summary = await summarizeLlmUsage();
+    assert.equal(summary.requests, 1);
+    assert.equal(summary.total_tokens, 2_000_000);
+    assert.equal(summary.total_latency_ms, 500);
+    // gemini-2.0-flash: 1M * 0.075 input + 1M * 0.3 output = 0.375
+    assert.equal(summary.estimated_cost_usd, 0.375);
+  } finally {
+    if (backup !== null) fs.writeFileSync(LLM_REQUEST_LOG_FILE, backup, 'utf8');
+    else fs.rmSync(LLM_REQUEST_LOG_FILE, { force: true });
+  }
 });

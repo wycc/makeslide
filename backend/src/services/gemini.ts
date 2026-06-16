@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { getRuntimeAiSettings } from './aiSettings';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
+import { appendLlmRequestLog, appendLlmResponseLog } from './llmUsage';
 
 export interface GeminiUsage {
   prompt_tokens: number;
@@ -157,20 +158,32 @@ export async function callGeminiJson<T>(params: {
   schema: z.ZodType<T, z.ZodTypeDef, unknown>;
   maxTokens?: number;
   temperature?: number;
+  label?: string;
 }): Promise<{ data: T; usage: GeminiUsage; rawContent: string }> {
   const apiKey = getGeminiApiKey();
   const { systemInstruction, contents } = buildGeminiContents(params.messages);
+  const maxOutputTokens = params.maxTokens ?? 2048;
+  const temperature = params.temperature ?? 0.6;
   const body: Record<string, unknown> = {
     contents,
     generationConfig: {
-      temperature: params.temperature ?? 0.6,
-      maxOutputTokens: params.maxTokens ?? 2048,
+      temperature,
+      maxOutputTokens,
       responseMimeType: 'application/json',
     },
   };
   if (systemInstruction) {
     body.systemInstruction = systemInstruction;
   }
+  await appendLlmRequestLog({
+    ts: new Date().toISOString(),
+    provider: 'gemini',
+    label: params.label ?? null,
+    model: params.model,
+    maxOutputTokens,
+    temperature,
+  });
+  const startedAt = Date.now();
   const resp = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(params.model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
     {
@@ -181,19 +194,26 @@ export async function callGeminiJson<T>(params: {
   );
   if (!resp.ok) throw new Error(`Gemini request failed: HTTP ${resp.status}`);
   const json = (await resp.json()) as any;
+  const latencyMs = Date.now() - startedAt;
   const text = json?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
   const parsed = params.schema.parse(JSON.parse(text));
   const promptTokens = Number(json?.usageMetadata?.promptTokenCount ?? 0);
   const completionTokens = Number(json?.usageMetadata?.candidatesTokenCount ?? 0);
-  return {
-    data: parsed,
-    rawContent: text,
-    usage: {
-      prompt_tokens: promptTokens,
-      completion_tokens: completionTokens,
-      total_tokens: promptTokens + completionTokens,
-    },
+  const usage: GeminiUsage = {
+    prompt_tokens: promptTokens,
+    completion_tokens: completionTokens,
+    total_tokens: promptTokens + completionTokens,
   };
+  await appendLlmResponseLog({
+    ts: new Date().toISOString(),
+    provider: 'gemini',
+    label: params.label ?? null,
+    model: params.model,
+    latencyMs,
+    usage,
+    raw_content_length: text.length,
+  });
+  return { data: parsed, rawContent: text, usage };
 }
 
 /**
@@ -206,20 +226,33 @@ export async function callGeminiTextStream(params: {
   messages: ChatCompletionMessageParam[];
   maxTokens?: number;
   temperature?: number;
+  label?: string;
   onDelta: (delta: string) => void;
 }): Promise<{ text: string; usage: GeminiUsage }> {
   const apiKey = getGeminiApiKey();
   const { systemInstruction, contents } = buildGeminiContents(params.messages);
+  const maxOutputTokens = params.maxTokens ?? 2048;
+  const temperature = params.temperature ?? 0.6;
   const body: Record<string, unknown> = {
     contents,
     generationConfig: {
-      temperature: params.temperature ?? 0.6,
-      maxOutputTokens: params.maxTokens ?? 2048,
+      temperature,
+      maxOutputTokens,
     },
   };
   if (systemInstruction) {
     body.systemInstruction = systemInstruction;
   }
+  await appendLlmRequestLog({
+    ts: new Date().toISOString(),
+    provider: 'gemini',
+    label: params.label ?? null,
+    model: params.model,
+    maxOutputTokens,
+    temperature,
+    stream: true,
+  });
+  const startedAt = Date.now();
   const resp = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(params.model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`,
     {
@@ -271,6 +304,16 @@ export async function callGeminiTextStream(params: {
   }
   if (buffer.trim()) handleLine(buffer.trim());
 
+  await appendLlmResponseLog({
+    ts: new Date().toISOString(),
+    provider: 'gemini',
+    label: params.label ?? null,
+    model: params.model,
+    latencyMs: Date.now() - startedAt,
+    usage,
+    raw_content_length: text.length,
+    stream: true,
+  });
   return { text, usage };
 }
 

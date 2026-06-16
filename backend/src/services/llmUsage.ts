@@ -3,10 +3,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import type { LlmUsageSummary } from '../types';
+import { logger } from '../logger';
 
 /**
- * JSONL log of every LLM request/response written by `services/openai.ts`.
- * Shared here so both the writer (openai.ts) and the readers
+ * JSONL log of every LLM request/response written by `services/openai.ts`
+ * and `services/gemini.ts`. Shared here so both writers and the readers
  * (observability/run-history routes) agree on the file location and schema.
  */
 export const LLM_REQUEST_LOG_FILE = path.join(process.cwd(), 'backend', 'data', 'llm-requests.log.jsonl');
@@ -14,6 +15,11 @@ export const LLM_REQUEST_LOG_FILE = path.join(process.cwd(), 'backend', 'data', 
 export const MODEL_PRICE_PER_1M_TOKENS: Record<string, { input: number; output: number }> = {
   'gpt-4o-mini': { input: 0.15, output: 0.6 },
   'gpt-4o': { input: 2.5, output: 10 },
+  // Gemini pricing (per 1M tokens, text-only tier as of 2025-06)
+  'gemini-2.0-flash': { input: 0.075, output: 0.3 },
+  'gemini-2.0-flash-lite': { input: 0.0375, output: 0.15 },
+  'gemini-1.5-flash': { input: 0.075, output: 0.3 },
+  'gemini-1.5-pro': { input: 1.25, output: 5.0 },
 };
 
 interface LlmResponseLogEvent {
@@ -49,6 +55,48 @@ export function setLlmUsageContext(ctx: LlmCallContext): void {
 /** 取得目前情境的 LLM 呼叫關聯資訊；情境外回傳 undefined。 */
 export function currentLlmUsageContext(): LlmCallContext | undefined {
   return llmContextStorage.getStore();
+}
+
+function llmLogContextFields(): { pdf_id?: string; run_id?: string } {
+  const ctx = currentLlmUsageContext();
+  const fields: { pdf_id?: string; run_id?: string } = {};
+  if (ctx?.pdfId) fields.pdf_id = ctx.pdfId;
+  if (ctx?.runId) fields.run_id = ctx.runId;
+  return fields;
+}
+
+/** Append a request-kind entry to the LLM JSONL log. Used by openai.ts and gemini.ts. */
+export async function appendLlmRequestLog(entry: object): Promise<void> {
+  try {
+    await fs.promises.mkdir(path.dirname(LLM_REQUEST_LOG_FILE), { recursive: true });
+    await fs.promises.appendFile(
+      LLM_REQUEST_LOG_FILE,
+      `${JSON.stringify({ ...llmLogContextFields(), ...(entry ?? {}) })}\n`,
+      'utf8',
+    );
+  } catch (err) {
+    logger.warn(
+      { error: err instanceof Error ? err.message : String(err) },
+      'Failed to write llm request log file',
+    );
+  }
+}
+
+/** Append a response-kind entry (with `kind: 'response'`) to the LLM JSONL log. */
+export async function appendLlmResponseLog(entry: object): Promise<void> {
+  try {
+    await fs.promises.mkdir(path.dirname(LLM_REQUEST_LOG_FILE), { recursive: true });
+    await fs.promises.appendFile(
+      LLM_REQUEST_LOG_FILE,
+      `${JSON.stringify({ kind: 'response', ...llmLogContextFields(), ...(entry ?? {}) })}\n`,
+      'utf8',
+    );
+  } catch (err) {
+    logger.warn(
+      { error: err instanceof Error ? err.message : String(err) },
+      'Failed to write llm response log file',
+    );
+  }
 }
 
 export function emptyLlmUsageSummary(): LlmUsageSummary {
