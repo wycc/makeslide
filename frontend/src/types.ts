@@ -264,6 +264,8 @@ export interface SlideAnimationEffect {
   spotlightColor?: string;
   /** Mask opacity (0–1) for `spotlight` effects. Defaults to 0.6. Ignored by other effect types. */
   spotlightOpacity?: number;
+  /** Soft-edge blur radius (px) for `spotlight` effects. 0 = hard edge. Ignored by other effect types. */
+  spotlightSoftEdge?: number;
   /** SVG primitive drawn by `shape` effects (ignored by other effect types). Defaults to `'circle'` when omitted. */
   shape?: SlideAnimationShapeKind;
   /**

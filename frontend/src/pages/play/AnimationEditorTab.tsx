@@ -1138,6 +1138,24 @@ export function AnimationEditorTab() {
                       className="w-16 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
                     />
                   </label>
+                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    {t('play.animation.spotlightSoftEdge')}
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min={0}
+                        max={80}
+                        step={4}
+                        value={effect.spotlightSoftEdge ?? 0}
+                        disabled={disabled}
+                        onChange={(e) =>
+                          updateEffect(effect.id, { spotlightSoftEdge: Math.min(80, Math.max(0, Math.round(Number(e.target.value)))) })
+                        }
+                        className="w-16 rounded-md border border-slate-700 bg-slate-900 px-1 py-1 text-sm text-slate-100"
+                      />
+                      <span className="text-slate-500">px</span>
+                    </div>
+                  </label>
                 </div>
               )}
               {effect.type === 'text-callout' && (
