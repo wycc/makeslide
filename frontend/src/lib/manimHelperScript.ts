@@ -529,6 +529,21 @@ export const MANIM_HELPER_SCRIPT = `
       }
       m.el.setAttribute('transform', 'translate(' + tx + ' 0)');
     },
+    bounce: function (m, progress, opts) {
+      var p = clamp01(progress);
+      var height = (opts && opts.height != null) ? opts.height : 30;
+      var bounces = (opts && opts.bounces != null) ? opts.bounces : 2;
+      var ty = 0;
+      if (p < 1) {
+        var phase = (p * bounces) % 1;
+        ty = -Math.abs(Math.sin(phase * Math.PI)) * height * (1 - p * 0.5);
+      }
+      if (p >= 1) {
+        m.el.setAttribute('transform', '');
+        return;
+      }
+      m.el.setAttribute('transform', 'translate(0 ' + ty + ')');
+    },
   };
   // tex() — sends a renderLatex postMessage to the host page (which runs
   // KaTeX with its fonts), resolves to a <div> with the rendered MathML.

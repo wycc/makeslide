@@ -469,3 +469,31 @@ test("Manim.animate.spinAround defaults to 1 turn and produces increasing angle 
   assert.ok(Math.abs(angle25 - 90) < 1, "angle at 0.25 should be ~90 degrees for 1 turn");
   assert.ok(Math.abs(angle75 - 270) < 1, "angle at 0.75 should be ~270 degrees for 1 turn");
 });
+
+test("Manim.animate.bounce produces negative translateY at mid-progress and clears transform at progress=1", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const circ = Manim.shapes.circle(svg, { x: 0, y: 0, radius: 1, color: Manim.colors.GREEN });
+
+  Manim.animate.bounce(circ, 0.25, { height: 40, bounces: 2 });
+  const transform25 = circ.el.getAttribute("transform") ?? "";
+  assert.ok(transform25.startsWith("translate(0 "), "transform should start with translate(0 at mid-progress");
+  const ty25 = parseFloat(transform25.replace("translate(0 ", "").replace(")", ""));
+  assert.ok(ty25 < 0, "translateY should be negative (upward bounce) at mid-progress");
+
+  Manim.animate.bounce(circ, 1, { height: 40, bounces: 2 });
+  const transform1 = circ.el.getAttribute("transform") ?? "";
+  assert.equal(transform1, "", "transform should be cleared at progress=1");
+});
+
+test("Manim.animate.bounce uses default height=30 and bounces=2 when no opts", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const rect = Manim.shapes.square(svg, { x: 0, y: 0, size: 2, color: Manim.colors.YELLOW });
+
+  Manim.animate.bounce(rect, 0.25);
+  const transform = rect.el.getAttribute("transform") ?? "";
+  const ty = parseFloat(transform.replace("translate(0 ", "").replace(")", ""));
+  assert.ok(ty <= 0, "translateY should be <= 0 (upward or at rest)");
+  assert.ok(ty >= -30, "translateY should not exceed default height=30");
+});
