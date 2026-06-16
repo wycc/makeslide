@@ -432,6 +432,34 @@ export const MANIM_HELPER_SCRIPT = `
         });
       }
     },
+    // Manim's Indicate: scale up + flash colour, then scale back + restore colour.
+    // progress 0→0.5: scale 1→scale, colour→flashColor
+    // progress 0.5→1: scale→1, flashColor→original colour
+    indicateAround: function (m, progress, opts) {
+      var p = clamp01(progress);
+      var scale = (opts && opts.scale != null) ? opts.scale : 1.3;
+      var flashColor = (opts && opts.color) ? opts.color : '#f59e0b';
+      var origStroke = m._indicateOrigStroke !== undefined ? m._indicateOrigStroke : m.el.getAttribute('stroke');
+      var origFill   = m._indicateOrigFill   !== undefined ? m._indicateOrigFill   : m.el.getAttribute('fill');
+      if (m._indicateOrigStroke === undefined) { m._indicateOrigStroke = origStroke; }
+      if (m._indicateOrigFill   === undefined) { m._indicateOrigFill   = origFill;   }
+      // phase: 0→0.5 go, 0.5→1 return
+      var phase = p < 0.5 ? (p * 2) : (1 - (p - 0.5) * 2);
+      var s = lerp(1, scale, smooth(phase));
+      m.el.setAttribute('transform', 'scale(' + s + ')');
+      var stroke = origStroke ? lerpColor(origStroke, flashColor, phase) : null;
+      var fill   = (origFill && origFill !== 'none') ? lerpColor(origFill, flashColor, phase) : null;
+      if (stroke) { m.el.setAttribute('stroke', stroke); }
+      if (fill)   { m.el.setAttribute('fill',   fill); }
+      m.el.style.opacity = '1';
+      if (p >= 1) {
+        m.el.setAttribute('transform', 'scale(1)');
+        if (origStroke) { m.el.setAttribute('stroke', origStroke); }
+        if (origFill)   { m.el.setAttribute('fill',   origFill); }
+        delete m._indicateOrigStroke;
+        delete m._indicateOrigFill;
+      }
+    },
   };
   // tex() — sends a renderLatex postMessage to the host page (which runs
   // KaTeX with its fonts), resolves to a <div> with the rendered MathML.

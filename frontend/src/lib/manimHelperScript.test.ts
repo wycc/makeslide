@@ -302,3 +302,41 @@ test("Manim.animate.transform falls back to cross-fade for types without morph s
   assert.equal(lineB.el.style.opacity, "0.5");
   assert.equal(lineA._morphEl, undefined, "no morphEl for unsupported types");
 });
+
+test("Manim.animate.indicateAround scales up+recolours mid-progress and restores at progress=1", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const circ = Manim.shapes.circle(svg, { x: 0, y: 0, radius: 1, color: Manim.colors.BLUE });
+  const origStroke = circ.el.getAttribute("stroke");
+
+  // At progress=0.5 (peak): scale > 1, stroke shifts toward flash colour
+  Manim.animate.indicateAround(circ, 0.5, { scale: 1.5, color: "#ffffff" });
+  const transform05 = circ.el.getAttribute("transform") as string;
+  assert.ok(transform05.startsWith("scale("), "transform should be a scale");
+  const scale05 = parseFloat(transform05.replace("scale(", "").replace(")", ""));
+  assert.ok(scale05 > 1, "scale at progress=0.5 should be > 1");
+  assert.ok(scale05 <= 1.5, "scale at progress=0.5 should be <= max scale");
+  // stroke colour should have shifted from BLUE toward white
+  const stroke05 = circ.el.getAttribute("stroke") as string;
+  assert.notEqual(stroke05, origStroke, "stroke should shift toward flash colour at progress=0.5");
+
+  // At progress=1: scale back to 1, stroke restored to original
+  Manim.animate.indicateAround(circ, 1, { scale: 1.5, color: "#ffffff" });
+  const transform1 = circ.el.getAttribute("transform") as string;
+  assert.equal(transform1, "scale(1)", "transform should be scale(1) at progress=1");
+  const stroke1 = circ.el.getAttribute("stroke") as string;
+  assert.equal(stroke1, origStroke, "stroke should be restored to original at progress=1");
+  assert.equal(circ.el.style.opacity, "1");
+});
+
+test("Manim.animate.indicateAround uses default scale=1.3 and amber flash colour when no opts", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const sq = Manim.shapes.square(svg, { x: 0, y: 0, size: 2, color: Manim.colors.RED });
+
+  Manim.animate.indicateAround(sq, 0.5);
+  const transform = sq.el.getAttribute("transform") as string;
+  const scale = parseFloat(transform.replace("scale(", "").replace(")", ""));
+  // default scale=1.3 so at progress=0.5 (smooth(1)=1), scale should equal 1.3
+  assert.ok(Math.abs(scale - 1.3) < 0.01, `default scale should be ~1.3, got ${scale}`);
+});
