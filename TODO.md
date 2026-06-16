@@ -1301,6 +1301,18 @@
 [x] `step-list` 效果的背景顏色自訂：目前 `step-list` 效果固定使用半透明深色背景（`bg-slate-900/90`）；應新增 `bgColor`（CSS hex 色碼，預設 `#1e293b`）與 `textColor`（預設 `#f1f5f9`）欄位，讓使用者可在動畫編輯器中自訂條列清單的背景色與文字色，並在 `SlideRenderer`/`AnimationEffect`/`EffectSchema` 中同步更新。（完成於分支: feature/step-list-colors-20260617）
 [x] Manim path morphing 支援 polygon 形狀：目前 `Manim.animate.transform` 的路徑變形只支援 circle 和 rect/square（各自對應 `getMorphSegs`）；對於 `polygon` 形狀，應計算凸多邊形的 4 個 cardinal 最遠點（top/right/bottom/left），將其轉為 4 段 cubic Bézier，使 polygon↔circle、polygon↔rect 也能進行平滑路徑變形。（完成於分支: feature/manim-polygon-morphing-20260617）
 
+# 2026-06-17 第二批新增項目
+
+[x] `highlight-box` 效果邊框顏色自訂：目前 `highlight-box` 固定使用紅色邊框（`#ef4444`），無法根據投影片主題調整；應新增 `highlightColor` 欄位（CSS hex，預設 `#ef4444`），讓使用者可在動畫編輯器中自訂邊框顏色，並同步更新 `AnimationEffect` 介面（後端 `pageAnimation.ts`）、`EffectSchema`（Zod 驗證）、序列化、前端 `types.ts`、`SlideRenderer.tsx` 與 `AnimationEditorTab.tsx`（新增顏色選擇器）。（完成於分支: feature/highlight-box-color-20260617）
+
+[ ] `text-callout` 效果背景色與文字色自訂：目前 `text-callout` 固定使用暗色背景（`rgba(15,23,42,0.85)`）與亮白文字（`#f8fafc`），無法配合不同風格投影片；應新增 `textCalloutBgColor`（CSS hex，預設 `#0f172a`）和 `textCalloutTextColor`（CSS hex，預設 `#f8fafc`）欄位，使用者可在動畫編輯器中自訂，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`/`AnimationEditorTab`。
+
+[ ] `spotlight` 效果遮罩顏色與透明度自訂：目前 `spotlight` 固定使用黑色半透明遮罩（`rgba(0,0,0,0.6)`），無法調整；應新增 `spotlightColor`（CSS hex，預設 `#000000`）和 `spotlightOpacity`（0~1 數字，預設 `0.6`）兩個欄位，讓使用者在動畫編輯器中用顏色選擇器與滑桿自訂遮罩色與不透明度，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`/`AnimationEditorTab`。
+
+[ ] Manim `indicateAround` 動畫效果：目前 `manimHelperScript.ts` 的 `animate` 提供 Create/Write/FadeIn/FadeOut/Transform 等動畫；應新增 `Manim.animate.indicateAround(m, progress, opts)` 函式，實作 manim 標誌性的「強調環繞」動畫（progress 0→0.5 縮放放大並改色，0.5→1 回縮並恢復原色），`opts` 可選 `scale`（預設 1.3）和 `color`（預設 `#f59e0b`）；新增對應測試。
+
+[ ] auto-focus-ai 為 `pointer` 效果建議 `angle`：目前所有 AI 自動產生的 `pointer` 效果都使用預設角度（0 度，指向右下），未根據畫面內容選擇合適方向；應在 `AutoFocusItemSchema` 新增 `angle` 選填欄位（整數，0-359 度），在 system prompt 第 3 點補充 angle 說明（0=右下、90=左下、180=右上、270=左上，依指向目標在畫面中的位置選擇讓箭頭從外側指向目標的角度），在 `mapAutoFocusResponseToEffects` 中傳遞 angle 至 effect，並補充測試。
+
 ## 工作記錄
 
 - 時間: 2026-06-17 11:00:00 +0800
@@ -1322,3 +1334,7 @@
 - 時間: 2026-06-17 15:00:00 +0800
 - 分支: feature/manim-polygon-morphing-20260617
 - 內容: 新增 Manim polygon 路徑變形支援。在 `manimHelperScript.ts` 新增 `parsePolygonPoints(pts)` 輔助函式（將 SVG polygon `points` 屬性字串解析為 `[[x,y],...]`，注意 template literal 內正則需用 `\\s` 而非 `\s` 以避免逸出錯誤）與 `polygonMorphSegs(el)` 函式（計算 4 個 cardinal 最遠點 top/right/bottom/left，並以 KAPPA × half-span 的 axis-aligned 控制點產生 4 段 cubic Bézier，與 `circleMorphSegs`/`rectMorphSegs` 的切線慣例一致）；更新 `getMorphSegs` 加入 `m.kind === 'polygon'` 分支。新增 3 個測試：polygon→circle 跨類型變形、polygon→polygon 同類型變形、polygon→rect 跨類型變形，全部 18 項測試通過。
+
+- 時間: 2026-06-17 16:00:00 +0800
+- 分支: feature/highlight-box-color-20260617
+- 內容: 新增 `highlight-box` 效果邊框顏色自訂。後端 `pageAnimation.ts` 新增 `DEFAULT_HIGHLIGHT_BOX_COLOR = '#ef4444'` 常數與 `highlightColor?: string` 欄位，`EffectSchema` 新增 Zod hex color 驗證（重用現有 regex `^#[0-9a-fA-F]{3,8}$`，最長 20 字元），`validateAnimationSpec` 序列化時一併輸出。前端 `types.ts` 同步新增 `highlightColor` 欄位；`SlideRenderer.tsx` 使用 `effect.highlightColor ?? '#ef4444'` 作為邊框色並搭配對應的 box-shadow（`hColor + 'b3'` ≈ 70% 透明度）；`AnimationEditorTab.tsx` 在 `highlight-box` 分支新增顏色選擇器；中英文 i18n 新增 `play.animation.highlightColor` 翻譯鍵。

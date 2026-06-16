@@ -333,3 +333,21 @@ MCP_AUTH_TOKEN=your-secret-token-here
 - `polygon→rect`：菱形（diamond）變形成矩形，確認路徑封閉且兩端不同
 
 全部 18 項測試通過。
+
+## Highlight-Box 效果邊框顏色自訂（2026-06-17）
+
+### 功能目的
+
+`highlight-box` 效果原本固定使用紅色邊框（`#ef4444`），無法搭配不同風格的投影片（例如藍色主題、公司品牌色）。本次新增 `highlightColor` 欄位，讓使用者可在動畫編輯器中自訂邊框顏色。
+
+### 使用方式
+
+在動畫編輯器中，選擇一個 `highlight-box` 效果後，位置/大小欄位旁邊新增了「邊框顏色」顏色選擇器。點擊即可選擇任何顏色；預設值為紅色（`#ef4444`）。顏色選定後，醒目方框的邊框與外發光（box-shadow）都會更新為對應顏色。
+
+### 技術細節
+
+- `pageAnimation.ts`：新增 `DEFAULT_HIGHLIGHT_BOX_COLOR = '#ef4444'` 常數；`AnimationEffect` interface 新增 `highlightColor?: string` 欄位；`EffectSchema` 重用現有 hex color regex（`/^#[0-9a-fA-F]{3,8}$/`，最長 20 字元）；`validateAnimationSpec` 序列化時一併輸出
+- `types.ts`（前端）：同步新增 `highlightColor?: string` 欄位
+- `SlideRenderer.tsx`：`highlight-box` 渲染改用 `effect.highlightColor ?? '#ef4444'`；box-shadow 也使用相同顏色（附加 `b3` 後綴 = ~70% 不透明度的 hex alpha）
+- `AnimationEditorTab.tsx`：`effect.type === 'highlight-box'` 條件下新增 `<input type="color">` 選色器
+- i18n：中英文 locale 各新增 `play.animation.highlightColor` 翻譯鍵
