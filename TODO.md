@@ -1317,7 +1317,7 @@
 
 [x] `pointer` 效果尺寸自訂：目前 pointer 箭頭固定為 `2.5rem × 2.5rem`，在不同解析度與投影片尺寸下可能顯得過大或過小；應新增 `pointerSize` 欄位（CSS rem 值，預設 `2.5`，範圍 1-6，步進 0.5），讓使用者可在動畫編輯器中調整箭頭尺寸，並同步更新後端 `AnimationEffect` 介面、`EffectSchema`、序列化及前端對應檔案。 ✓ 完成於 branch: feature/pointer-size-20260617
 
-[ ] `text-callout` 字型大小控制：目前 `text-callout` 效果固定使用 `1.25rem` 字型大小（`SlideRenderer.tsx`），無法配合不同長度的文字或投影片版面；應新增 `textCalloutFontSize` 欄位（CSS rem 值，預設 `1.25`，範圍 0.5-3，步進 0.125），讓使用者在動畫編輯器中自訂文字大小，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`/`AnimationEditorTab`（在 text-callout 編輯區新增數字輸入框）及中英文 i18n。
+[x] `text-callout` 字型大小控制：目前 `text-callout` 效果固定使用 `1.25rem` 字型大小（`SlideRenderer.tsx`），無法配合不同長度的文字或投影片版面；應新增 `textCalloutFontSize` 欄位（CSS rem 值，預設 `1.25`，範圍 0.5-3，步進 0.125），讓使用者在動畫編輯器中自訂文字大小，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`/`AnimationEditorTab`（在 text-callout 編輯區新增數字輸入框）及中英文 i18n。 ✓ 完成於 branch: feature/text-callout-font-size-20260617
 
 [ ] `shape` 效果填充顏色自訂：目前 `shape` 效果只能設定 `stroke` 顏色與寬度，SVG 圖形的 `fill` 固定為 `'none'`（空心），若需要實心圖形（例如實心圓點、實心方塊當背景標記）只能靠自訂腳本達成；應新增 `shapeFillColor` 欄位（CSS hex，預設 `'none'` 表示無填充），讓使用者可在動畫編輯器中開啟 fill 並選擇顏色，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`（SVG fill 屬性）/`AnimationEditorTab`（在 shape 編輯區增加填充顏色選項）及 i18n。
 
@@ -1372,3 +1372,7 @@
 - 時間: 2026-06-17 22:00:00 +0800
 - 分支: feature/pointer-size-20260617
 - 內容: 新增 `pointer` 效果箭頭尺寸自訂。後端 `pageAnimation.ts` 新增 `DEFAULT_POINTER_SIZE_REM = 2.5`、`MIN_POINTER_SIZE_REM = 1`、`MAX_POINTER_SIZE_REM = 6` 常數，`AnimationEffect` 介面新增 `pointerSize?: number`，`EffectSchema` 新增 `z.number().min(1).max(6)` 驗證，序列化時以 Math.max/min 夾至合法範圍再輸出。前端 `types.ts` 同步新增欄位；`SlideRenderer.tsx` 將 `effect.pointerSize ?? 2.5` 轉換為 `${rem}rem` 字串，套用至 pointer div 的 width/height；`AnimationEditorTab.tsx` 在顏色選擇器後加入數字輸入框（range 1-6, step 0.5）並顯示 rem 單位標籤；中英文 i18n 新增 `play.animation.pointerSize` 翻譯鍵。
+
+- 時間: 2026-06-17 23:00:00 +0800
+- 分支: feature/text-callout-font-size-20260617
+- 內容: 新增 `text-callout` 效果字型大小控制。後端 `pageAnimation.ts` 新增 `DEFAULT_TEXT_CALLOUT_FONT_SIZE_REM = 1.25`、`MIN_TEXT_CALLOUT_FONT_SIZE_REM = 0.5`、`MAX_TEXT_CALLOUT_FONT_SIZE_REM = 3` 常數，`AnimationEffect` 介面新增 `textCalloutFontSize?: number` 欄位，`EffectSchema` 新增 `z.number().min(0.5).max(3)` 驗證，序列化時以 Math.max/min 夾至合法範圍。前端 `types.ts` 同步新增欄位；`SlideRenderer.tsx` 以 `${effect.textCalloutFontSize ?? 1.25}rem` 字串取代硬編碼的 `1.25rem`；`AnimationEditorTab.tsx` 在 text-callout 顏色選擇器下方加入數字輸入框（range 0.5-3, step 0.125），並在右側顯示 rem 單位標籤；中英文 i18n 新增 `play.animation.textCalloutFontSize` 翻譯鍵。
