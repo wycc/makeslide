@@ -350,6 +350,25 @@ export const MANIM_HELPER_SCRIPT = `
       m.el.setAttribute('fill-opacity', String(parseFloat(full) * p));
       m.el.style.opacity = '1';
     },
+    uncreate: function (m, progress) {
+      var p = clamp01(progress);
+      if (m.kind === 'text' || m.kind === 'dot' || m.kind === 'arrow' || m.kind === 'axes' || m.kind === 'numberPlane') {
+        m.el.style.opacity = String(1 - p);
+        return;
+      }
+      var len = getLength(m.el);
+      if (len > 0) {
+        m.el.setAttribute('stroke-dasharray', String(len));
+        m.el.setAttribute('stroke-dashoffset', String(len * p));
+      }
+      var full = m.el.getAttribute('data-fill-opacity');
+      if (full == null) {
+        full = m.el.getAttribute('fill-opacity') || '1';
+        m.el.setAttribute('data-fill-opacity', full);
+      }
+      m.el.setAttribute('fill-opacity', String(parseFloat(full) * (1 - p)));
+      m.el.style.opacity = p >= 1 ? '0' : '1';
+    },
     write: function (m, progress) {
       var p = clamp01(progress);
       if (m.kind === 'text') {
