@@ -1248,12 +1248,12 @@
 [x] 允許 `shape` 效果自訂顏色與線寬（完成於分支: feature/animation-shape-color-strokewidth-20260617）
 [ ] `step-list` 效果的 AI 自動生成：在 `auto-focus-ai` 中，讓 AI 除了依逐字稿選擇 `step-list` 類型外，也能依逐字稿語境自動產生 `items` 條列文案（與逐字稿同語言），類似 `text-callout` 的 AI 文案生成邏輯。
 [ ] `formula` 效果的 AI 自動生成：在 `auto-focus-ai` 中，讓 AI 依逐字稿內容自動判斷是否適合插入公式，並生成對應的 LaTeX 字串（`formulaLatex`）；若逐字稿包含數學式、物理公式或統計式，AI 選擇 `formula` 類型並提供正確的 LaTeX。（目前僅支援 `formulaLatex` 欄位映射，但 AI 選擇 `formula` 類型的能力已在 `feature/animation-auto-focus-ai-formula-20260616` 實作；此項目為補齊 AI 自動判斷公式內容品質的測試與提示詞優化）
-[ ] 將 `AnimationSpec.hints` 傳入 LLM 動畫生成：目前 `hints`（逐字稿句子的動畫指引）僅儲存在 `AnimationSpec` 並顯示於編輯器，但 `auto-focus-ai` 的 LLM 提示詞還未讀取並傳入 `hints`；應在 `buildAutoFocusUserPrompt()` 中將本頁 `hints` 的內容加入 user prompt，讓 AI 在決定每一句的效果時能參考使用者提供的手動指引。
+[x] 將 `AnimationSpec.hints` 傳入 LLM 動畫生成：目前 `hints`（逐字稿句子的動畫指引）僅儲存在 `AnimationSpec` 並顯示於編輯器，但 `auto-focus-ai` 的 LLM 提示詞還未讀取並傳入 `hints`；應在 `buildAutoFocusUserPrompt()` 中將本頁 `hints` 的內容加入 user prompt，讓 AI 在決定每一句的效果時能參考使用者提供的手動指引。（已確認實作存在於 buildAutoFocusUserPrompt() 與前端 AnimationEditorTab.tsx 的呼叫端）
 [ ] 動畫 `custom-script` 的 `Manim.tex` 範例提示詞與測試：新增 `Manim.tex` 到 `custom-script` 對話框的「範例提示詞」下拉選單（例如「用 Manim 在畫面中顯示愛因斯坦公式 E=mc²」），並補充後端測試確認 `Manim.tex` 相關關鍵字不會被 `findUnsafeScriptPattern` 誤判為不安全（`postMessage`/`parent` 由 `Manim.tex` 內部使用，不應被拒絕）。
 [ ] `overlay-image` 效果的縮放比例鎖定選項：目前 `overlay-image` 效果的寬高可自由調整，但使用者無法鎖定圖片的原始長寬比；應新增「鎖定比例」checkbox，勾選後調整寬度時高度自動按原始圖片比例計算（需在前端取得圖片實際尺寸）。
 [ ] 動畫效果批次套用至多頁：新增「套用至全部頁面」或「套用至選取頁面」功能，讓使用者可以把某一頁的動畫設定（或特定效果）一鍵複製到其他頁面；與現有的「複製本頁效果」（只複製到剪貼簿，手動切換頁面後貼上）不同，批次套用可以選擇多頁同時套用。
 [x] `pointer` 效果的方向自訂：目前 `pointer` 效果渲染為固定方向的游標圖示；應新增 `angle`（旋轉角度，度，預設 0）欄位，讓使用者可以在動畫編輯器中調整指標方向（例如向上、向右、斜角指向目標）；在 `SlideRenderer` 的 `pointer` 渲染元件中依 `effect.angle` 旋轉圖示。（完成於分支: feature/animation-pointer-angle-20260617）
-[ ] 動畫效果的播放預覽跳轉：在動畫編輯器的效果卡片上新增「跳至此效果」按鈕，按下後將音訊播放器的 `currentTime` seek 到 `effect.start` 秒，讓使用者可以快速預覽特定效果；需與 `PlayPage` 的音訊控制整合。
+[x] 動畫效果的播放預覽跳轉：在動畫編輯器的效果卡片上新增「跳至此效果」按鈕，按下後將音訊播放器的 `currentTime` seek 到 `effect.start` 秒，讓使用者可以快速預覽特定效果；需與 `PlayPage` 的音訊控制整合。（完成於分支: feature/animation-jump-to-effect-start-20260617）
 [ ] `Manim` 的 `transform` 路徑變形（path morphing）：目前 `Manim.animate.transform(from, to, progress)` 只做屬性線性插值（屬性相同才能 lerp），不支援真正的 SVG 路徑變形（`<path d>` 的形點插值）；應研究以 `flubber.js` 或自行實作的 cubic Bézier 插值達到 circle→square 等基本形狀路徑變形，並更新 `manimHelperScript.ts` 的 `Manim.animate.transform` 方法。
 
 - 時間: 2026-06-17 00:30:00 +0800
@@ -1263,3 +1263,7 @@
 - 時間: 2026-06-17 09:00:00 +0800
 - 分支: feature/animation-pointer-angle-20260617
 - 內容: 完成 `pointer` 效果的方向自訂功能：新增 `angle`（旋轉角度，度，預設 0）欄位至 `AnimationEffect` 類型（前後端皆同步）；將 `SlideRenderer` 的 pointer 渲染從發光圓點改為 SVG 游標箭頭圖示，並依 `effect.angle` 旋轉；在 `AnimationEditorTab` 的指標位置控制區段下方新增角度輸入框（-180 至 180，步進 15），顯示於 pointer 效果卡片中；補充中英文翻譯鍵 `play.animation.pointerAngle`。前後端 build 均通過。
+
+- 時間: 2026-06-17 09:15:00 +0800
+- 分支: feature/animation-jump-to-effect-start-20260617
+- 內容: 完成動畫效果播放預覽跳轉：在每個效果卡片的操作列新增 ⏮ 按鈕（「跳至效果起點」），點擊後將音訊播放器 currentTime seek 到 effectStart 秒，讓使用者可快速預覽特定效果從頭播放的畫面；同時保留原有 ⏱ 跳至中點按鈕；補充中英文翻譯鍵 `play.animation.jumpToEffectStart`；另確認並標記 item 1251（AnimationSpec.hints 傳入 LLM）為已完成（程式碼確認該功能已存在於 buildAutoFocusUserPrompt()）。frontend build 通過。
