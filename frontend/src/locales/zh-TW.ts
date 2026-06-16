@@ -380,6 +380,7 @@ export const zhTW = {
   'play.animation.shapeKind.arrow': '箭頭',
   'play.animation.shapeColor': '描邊顏色',
   'play.animation.shapeStrokeWidth': '線寬',
+  'play.animation.shapeFillColor': '填充顏色',
   'play.animation.stepListItems': '條列項目（每行一項，最多 6 項）',
   'play.animation.stepListItemsPlaceholder': '重點一\n重點二\n重點三',
   'play.animation.stepListBgColor': '背景顏色',

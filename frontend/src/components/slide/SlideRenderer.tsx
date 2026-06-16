@@ -123,14 +123,15 @@ function EffectOverlay({
     const shapeKind = getShapeKind(effect);
     const stroke = effect.color ?? '#f43f5e';
     const sw = effect.strokeWidth ?? 5;
+    const fill = effect.shapeFillColor ?? 'none';
     const markerId = `shape-arrowhead-${effect.id}`;
     let preserveAspectRatio = 'none';
     let shapeContent: ReactNode;
     if (shapeKind === 'circle') {
       preserveAspectRatio = 'xMidYMid meet';
-      shapeContent = <circle cx="50" cy="50" r="46" fill="none" stroke={stroke} strokeWidth={sw} />;
+      shapeContent = <circle cx="50" cy="50" r="46" fill={fill} stroke={stroke} strokeWidth={sw} />;
     } else if (shapeKind === 'ellipse') {
-      shapeContent = <ellipse cx="50" cy="50" rx="46" ry="46" fill="none" stroke={stroke} strokeWidth={sw} />;
+      shapeContent = <ellipse cx="50" cy="50" rx="46" ry="46" fill={fill} stroke={stroke} strokeWidth={sw} />;
     } else if (shapeKind === 'arrow') {
       shapeContent = (
         <>
@@ -143,7 +144,7 @@ function EffectOverlay({
         </>
       );
     } else {
-      shapeContent = <rect x="4" y="4" width="92" height="92" rx="6" fill="none" stroke={stroke} strokeWidth={sw} />;
+      shapeContent = <rect x="4" y="4" width="92" height="92" rx="6" fill={fill} stroke={stroke} strokeWidth={sw} />;
     }
     return (
       <svg data-effect-id={effect.id} viewBox="0 0 100 100" preserveAspectRatio={preserveAspectRatio} style={{ ...position, overflow: 'visible' }}>

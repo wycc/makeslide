@@ -380,6 +380,7 @@ export const en = {
   'play.animation.shapeKind.arrow': 'Arrow',
   'play.animation.shapeColor': 'Stroke color',
   'play.animation.shapeStrokeWidth': 'Stroke width',
+  'play.animation.shapeFillColor': 'Fill color',
   'play.animation.stepListItems': 'List items (one per line, up to 6)',
   'play.animation.stepListItemsPlaceholder': 'Point one\nPoint two\nPoint three',
   'play.animation.stepListBgColor': 'Background color',

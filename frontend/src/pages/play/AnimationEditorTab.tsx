@@ -1141,32 +1141,55 @@ export function AnimationEditorTab() {
                 </label>
               )}
               {effect.type === 'shape' && (
-                <div className="flex gap-2">
-                  <label className="flex flex-col gap-1 text-xs text-slate-400">
-                    {t('play.animation.shapeColor')}
+                <div className="flex flex-col gap-2">
+                  <div className="flex gap-2">
+                    <label className="flex flex-col gap-1 text-xs text-slate-400">
+                      {t('play.animation.shapeColor')}
+                      <input
+                        type="color"
+                        value={effect.color ?? '#f43f5e'}
+                        disabled={disabled}
+                        onChange={(e) => updateEffect(effect.id, { color: e.target.value })}
+                        className="h-8 w-12 cursor-pointer rounded-md border border-slate-700 bg-slate-900 p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1 text-xs text-slate-400">
+                      {t('play.animation.shapeStrokeWidth')}
+                      <input
+                        type="number"
+                        min={1}
+                        max={20}
+                        step={1}
+                        value={effect.strokeWidth ?? 5}
+                        disabled={disabled}
+                        onChange={(e) => {
+                          const v = Math.max(1, Math.min(20, Math.round(Number(e.target.value))));
+                          updateEffect(effect.id, { strokeWidth: Number.isFinite(v) ? v : 5 });
+                        }}
+                        className="w-16 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                      />
+                    </label>
+                  </div>
+                  <label className="flex items-center gap-2 text-xs text-slate-400">
                     <input
-                      type="color"
-                      value={effect.color ?? '#f43f5e'}
+                      type="checkbox"
+                      checked={effect.shapeFillColor !== undefined}
                       disabled={disabled}
-                      onChange={(e) => updateEffect(effect.id, { color: e.target.value })}
-                      className="h-8 w-12 cursor-pointer rounded-md border border-slate-700 bg-slate-900 p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+                      onChange={(e) =>
+                        updateEffect(effect.id, { shapeFillColor: e.target.checked ? (effect.color ?? '#f43f5e') : undefined })
+                      }
+                      className="h-4 w-4 accent-fuchsia-500"
                     />
-                  </label>
-                  <label className="flex flex-col gap-1 text-xs text-slate-400">
-                    {t('play.animation.shapeStrokeWidth')}
-                    <input
-                      type="number"
-                      min={1}
-                      max={20}
-                      step={1}
-                      value={effect.strokeWidth ?? 5}
-                      disabled={disabled}
-                      onChange={(e) => {
-                        const v = Math.max(1, Math.min(20, Math.round(Number(e.target.value))));
-                        updateEffect(effect.id, { strokeWidth: Number.isFinite(v) ? v : 5 });
-                      }}
-                      className="w-16 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
-                    />
+                    {t('play.animation.shapeFillColor')}
+                    {effect.shapeFillColor !== undefined && (
+                      <input
+                        type="color"
+                        value={effect.shapeFillColor}
+                        disabled={disabled}
+                        onChange={(e) => updateEffect(effect.id, { shapeFillColor: e.target.value })}
+                        className="h-8 w-12 cursor-pointer rounded-md border border-slate-700 bg-slate-900 p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+                      />
+                    )}
                   </label>
                 </div>
               )}
