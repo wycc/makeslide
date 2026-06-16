@@ -167,3 +167,58 @@ window.renderAnimation = function(root, api) {
 - **矩形**以相同的 4 個 cardinal 錨點（各邊中點）+ 角落位置的控制點分解為 4 段 Bézier，使每個錨點的切線方向與對應的圓形切線方向相同（水平或垂直），插值時不產生旋轉感
 - 第一次呼叫 `transform` 時，在 `from.svg` 新增共用 `<path>` 元素（`from._morphEl`）並隱藏原始 `from.el` 和 `to.el`；後續呼叫更新 `d` 屬性和顏色插值
 - 不依賴任何外部函式庫（無需 flubber.js），完全以 ES5 純 JavaScript 實作，符合 sandboxed iframe 的限制
+
+## MCP Server — Agent 整合
+
+### 功能目的
+
+新增 MCP（Model Context Protocol）Server，讓 Claude Code 或任何其他 MCP 相容的 AI agent 可以直接透過程式呼叫 makeslide 的 API，不需要打開瀏覽器，即可上傳 PDF、啟動簡報生成流程，並取得最終影片 URL。
+
+### 使用方式
+
+**Step 1：設定 MCP_AUTH_TOKEN**
+
+在 makeslide 的 `.env` 檔中設定一個密鑰：
+```
+MCP_AUTH_TOKEN=your-secret-token-here
+```
+
+**Step 2：在 Claude Code 設定 MCP server**
+
+編輯 `~/.claude/mcp_servers.json`（Claude Code 的 MCP 設定）：
+```json
+{
+  "makeslide": {
+    "command": "npx",
+    "args": ["--prefix", "/path/to/makeslide/backend", "tsx", "src/mcp-server.ts"],
+    "env": {
+      "MAKESLIDE_URL": "http://localhost:3000",
+      "MAKESLIDE_MCP_TOKEN": "your-secret-token-here"
+    }
+  }
+}
+```
+
+**Step 3：在 Claude Code 中使用**
+
+重啟 Claude Code 後，可以這樣要求 Claude 操作 makeslide：
+- 「列出所有簡報」→ `list_presentations`
+- 「上傳 /tmp/slides.pdf 並生成簡報影片」→ `upload_pdf` + `start_generation`
+- 「查詢最新生成進度」→ `get_generation_status`
+
+### 可用工具
+
+| 工具名稱 | 說明 |
+|---------|------|
+| `list_presentations` | 列出所有簡報（ID、標題、狀態） |
+| `get_presentation` | 取得指定簡報的詳細資訊與影片 URL |
+| `upload_pdf` | 從本機路徑上傳 PDF |
+| `start_generation` | 啟動 AI 生成流程（可選指定 stages） |
+| `get_generation_status` | 查詢最新任務狀態與各階段進度 |
+
+### 技術細節
+
+- MCP 傳輸：stdio over newline-delimited JSON（JSON-RPC 2.0），相容 Claude Code 和 Claude Desktop
+- 認證：後端新增 `MCP_AUTH_TOKEN` 設定；server.ts 在 OAuth auth hook 中新增 Bearer token 驗證分支
+- 啟動方式：`npm --prefix backend run mcp-server`（開發用）或 `node backend/dist/mcp-server.js`（生產用）
+- 不依賴 `@modelcontextprotocol/sdk`，以純 TypeScript 手動實作 JSON-RPC 協議

@@ -1255,7 +1255,7 @@
 [x] `pointer` 效果的方向自訂：目前 `pointer` 效果渲染為固定方向的游標圖示；應新增 `angle`（旋轉角度，度，預設 0）欄位，讓使用者可以在動畫編輯器中調整指標方向（例如向上、向右、斜角指向目標）；在 `SlideRenderer` 的 `pointer` 渲染元件中依 `effect.angle` 旋轉圖示。（完成於分支: feature/animation-pointer-angle-20260617）
 [x] 動畫效果的播放預覽跳轉：在動畫編輯器的效果卡片上新增「跳至此效果」按鈕，按下後將音訊播放器的 `currentTime` seek 到 `effect.start` 秒，讓使用者可以快速預覽特定效果；需與 `PlayPage` 的音訊控制整合。（完成於分支: feature/animation-jump-to-effect-start-20260617）
 [x] `Manim` 的 `transform` 路徑變形（path morphing）：目前 `Manim.animate.transform(from, to, progress)` 只做屬性線性插值（屬性相同才能 lerp），不支援真正的 SVG 路徑變形（`<path d>` 的形點插值）；應研究以 `flubber.js` 或自行實作的 cubic Bézier 插值達到 circle→square 等基本形狀路徑變形，並更新 `manimHelperScript.ts` 的 `Manim.animate.transform` 方法。（完成於分支: feature/animation-manim-path-morphing-20260617）
-[ ] 加入 MCP server 的功能，讓 claude code 或其它任何 agent 可以透過 makeslide 生成簡報影片
+[x] 加入 MCP server 的功能，讓 claude code 或其它任何 agent 可以透過 makeslide 生成簡報影片（完成於分支: feature/mcp-server-20260617）
 
 - 時間: 2026-06-17 00:30:00 +0800
 - 分支: feature/animation-shape-color-strokewidth-20260617
@@ -1288,3 +1288,7 @@
 - 時間: 2026-06-17 10:30:00 +0800
 - 分支: feature/animation-manim-path-morphing-20260617
 - 內容: 完成 Manim.animate.transform 的 SVG 路徑變形（path morphing）功能：(1) 新增 KAPPA=0.5523 常數（circle 以 4 段 cubic Bézier 近似用）；(2) `circleMorphSegs(el)` 將 `<circle>` 分解為 4 個 cubic Bézier 段（以 cardinal 方向的 top/right/bottom/left 作為錨點，順時鐘排列）；(3) `rectMorphSegs(el)` 將 `<rect>` 分解為對應的 4 個段（錨點為各邊中點，控制點放在角落以產生軸對齊切線，與 circle 的切線方向一致，讓插值視覺上流暢）；(4) `getMorphSegs(m)` 依 kind 分派，目前支援 circle 與 rect（含 square）；(5) `lerpSegs` 和 `segsToPathD` 完成控制點插值與 SVG `d` 屬性產生；(6) 修改 `animate.transform`：若兩個 mobject 都支援 morphing，第一次呼叫建立共用 `<path>` 元素（`from._morphEl`）並隱藏原始元素，後續呼叫更新 path d 與顏色插值；否則退回原本的交叉淡化+屬性插值。測試：更新 `loadManim()` 的 sandbox stub 新增 `window.addEventListener`/`removeEventListener`/`parent.postMessage`（讓既有測試在有 `tex()` 的新版 script 下不出錯）；更新既有 circle→circle transform 測試（改為驗證 path morphing 行為）；新增 circle→circle morphing 生成 `<path>` 元素的測試；新增 circle→square 跨型態 morphing 測試；新增 line→line 退回交叉淡化的測試。前端 tsc 通過，build 通過，15/15 單元測試通過。
+
+- 時間: 2026-06-17 10:45:00 +0800
+- 分支: feature/mcp-server-20260617
+- 內容: 完成 MCP server 功能，讓 claude code 或其它 MCP 相容的 agent 可透過 makeslide 生成簡報影片。新增：(1) `backend/src/config.ts` 加入 `MCP_AUTH_TOKEN`（選填，設定後允許以 Bearer token 認證，不需 OAuth session cookie）；(2) `backend/src/server.ts` 在 OAuth auth hook 中新增 Bearer token 驗證分支（`Authorization: Bearer <token>` 比對 `config.mcpAuthToken`）；(3) `backend/src/mcp-server.ts` 實作完整的 MCP stdio server（JSON-RPC 2.0 over newline-delimited JSON）：支援 `initialize`/`initialized`/`ping`/`tools/list`/`tools/call` 方法，暴露 5 個工具：`list_presentations`（列出所有簡報）、`get_presentation`（取得詳細資訊含影片 URL）、`upload_pdf`（從本機路徑上傳 PDF）、`start_generation`（啟動生成流程，可選指定 stages）、`get_generation_status`（查詢任務狀態）；透過 `MAKESLIDE_URL`/`MAKESLIDE_MCP_TOKEN` 環境變數設定連接目標；doc comment 包含 Claude Code mcp_servers.json 設定範例；(4) `backend/package.json` 新增 `mcp-server` npm script（`tsx src/mcp-server.ts`）。後端 tsc 通過，build 通過，216 項測試 198 通過（18 項失敗為既有基線，無新增失敗）。
