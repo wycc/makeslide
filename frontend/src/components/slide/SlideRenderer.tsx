@@ -34,13 +34,14 @@ function EffectOverlay({
   if (effect.type === 'highlight-box') {
     const hColor = effect.highlightColor ?? '#ef4444';
     const hBw = effect.highlightBorderWidth ?? 4;
+    const hBr = effect.highlightBorderRadius ?? 8;
     return (
       <div
         data-effect-id={effect.id}
         style={{
           ...position,
           border: `${hBw}px solid ${hColor}`,
-          borderRadius: '8px',
+          borderRadius: `${hBr}px`,
           boxShadow: `0 0 ${hBw * 4}px ${hColor}b3`,
         }}
       />
