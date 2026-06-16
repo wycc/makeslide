@@ -46,7 +46,11 @@ function createFakeElement(tagName: string): FakeElement {
 /** Runs `MANIM_HELPER_SCRIPT` against a minimal DOM stub and returns `window.Manim`. */
 function loadManim(): any {
   const sandbox: any = {
-    window: {},
+    window: {
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      parent: { postMessage: () => {} },
+    },
     document: {
       createElementNS: (_ns: string, tag: string) => createFakeElement(tag),
     },
@@ -187,14 +191,52 @@ test("Manim.animate.fadeIn/create on axes mobjects fades by progress", () => {
   assert.equal(axes.el.style.opacity, "0.6");
 });
 
-test("Manim.animate.transform cross-fades opacity and interpolates matching attributes", () => {
+test("Manim.animate.transform uses path morphing for circle→circle and generates a <path> element", () => {
   const Manim = loadManim();
   const svg = createFakeElement("svg");
   const from = Manim.shapes.circle(svg, { x: 0, y: 0, radius: 1 });
-  const to = Manim.shapes.circle(svg, { x: 0, y: 0, radius: 3 });
+  const to   = Manim.shapes.circle(svg, { x: 0, y: 0, radius: 2 });
   Manim.animate.transform(from, to, 0.5);
-  assert.equal(from.el.style.opacity, "0.5");
-  assert.equal(to.el.style.opacity, "0.5");
-  assert.equal(from.el.getAttribute("r"), "2");
-  assert.equal(to.el.getAttribute("r"), "2");
+  // Both originals are hidden; a new <path> morph element is appended to svg
+  assert.equal(from.el.style.display, "none");
+  assert.equal(to.el.style.display,   "none");
+  assert.ok(from._morphEl, "morphEl should be created");
+  assert.equal(from._morphEl.getAttribute("d")?.startsWith("M"), true, "path d should start with M");
+  // At progress=0, path should look like 'from'; at progress=1, path should look like 'to'
+  Manim.animate.transform(from, to, 0);
+  const d0 = from._morphEl.getAttribute("d") as string;
+  Manim.animate.transform(from, to, 1);
+  const d1 = from._morphEl.getAttribute("d") as string;
+  assert.notEqual(d0, d1, "path 'd' should differ between progress=0 and progress=1");
+});
+
+test("Manim.animate.transform uses path morphing for circle→square (cross-type)", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const circle = Manim.shapes.circle(svg, { x: 0, y: 0, radius: 1, color: Manim.colors.BLUE });
+  const square = Manim.shapes.square(svg, { x: 0, y: 0, size: 2,   color: Manim.colors.RED  });
+  Manim.animate.transform(circle, square, 0.5);
+  assert.equal(circle.el.style.display, "none", "circle should be hidden during morph");
+  assert.equal(square.el.style.display, "none", "square should be hidden during morph");
+  assert.ok(circle._morphEl, "morphEl should be created for cross-type morph");
+  const d = circle._morphEl.getAttribute("d") as string;
+  assert.ok(d.startsWith("M") && d.endsWith("Z"), "path data should be a closed path");
+  // Midpoint path should differ from both endpoints
+  Manim.animate.transform(circle, square, 0);
+  const d0 = circle._morphEl.getAttribute("d") as string;
+  Manim.animate.transform(circle, square, 1);
+  const d1 = circle._morphEl.getAttribute("d") as string;
+  assert.notEqual(d0, d1, "circle (d at t=0) and square (d at t=1) paths should be different");
+});
+
+test("Manim.animate.transform falls back to cross-fade for types without morph support (e.g. line)", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const lineA = Manim.shapes.line(svg, { x1: -1, y1: 0, x2: 1, y2: 0, color: Manim.colors.WHITE });
+  const lineB = Manim.shapes.line(svg, { x1: -2, y1: 0, x2: 2, y2: 0, color: Manim.colors.RED  });
+  Manim.animate.transform(lineA, lineB, 0.5);
+  // line kind has no morph segments → falls back to opacity cross-fade
+  assert.equal(lineA.el.style.opacity, "0.5");
+  assert.equal(lineB.el.style.opacity, "0.5");
+  assert.equal(lineA._morphEl, undefined, "no morphEl for unsupported types");
 });
