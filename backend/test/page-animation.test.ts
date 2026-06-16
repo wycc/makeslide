@@ -1411,6 +1411,109 @@ test('POST animation/auto-focus-ai returns shape and step-list effects', async (
   }
 });
 
+test('POST animation/auto-focus-ai returns a formula effect with formulaLatex', async () => {
+  seedAnimationPdf(PDF_ID, 1);
+  fs.writeFileSync(path.join(config.storageRoot, PDF_ID, 'pages', 'animuid1.text.txt'), '愛因斯坦質能等價公式說明', 'utf8');
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  effects: [
+                    {
+                      line: 0,
+                      show: true,
+                      type: 'formula',
+                      formulaLatex: 'E = mc^2',
+                      xPct: 30,
+                      yPct: 40,
+                      widthPct: 40,
+                      heightPct: 15,
+                      exitDuration: 3,
+                    },
+                  ],
+                }),
+              },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+        }),
+      },
+    },
+  } as never);
+
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${PDF_ID}/pages/1/animation/auto-focus-ai`,
+      headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+      payload: { sentences: ['這就是愛因斯坦著名的質能等價公式，E 等於 mc 的平方。'] },
+    });
+    assert.equal(resp.statusCode, 200);
+    const body = resp.json() as { effects: Array<Record<string, unknown>> };
+    assert.equal(body.effects.length, 1);
+    assert.equal(body.effects[0].type, 'formula');
+    assert.equal(body.effects[0].formula, 'E = mc^2');
+    assert.equal(body.effects[0].exitDuration, 3);
+
+    const validated = validateAnimationSpec({ version: 1, enabled: true, effects: body.effects });
+    assert.equal(validated.ok, true);
+    assert.equal(validated.spec?.effects[0]?.formula, 'E = mc^2');
+  } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+  }
+});
+
+test('POST animation/auto-focus-ai falls back formula without formulaLatex to highlight-box', async () => {
+  seedAnimationPdf(PDF_ID, 1);
+  fs.writeFileSync(path.join(config.storageRoot, PDF_ID, 'pages', 'animuid1.text.txt'), '公式說明頁', 'utf8');
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  effects: [
+                    { line: 0, show: true, type: 'formula', xPct: 30, yPct: 40, widthPct: 40, heightPct: 15 },
+                  ],
+                }),
+              },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+        }),
+      },
+    },
+  } as never);
+
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${PDF_ID}/pages/1/animation/auto-focus-ai`,
+      headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+      payload: { sentences: ['這個公式很重要。'] },
+    });
+    assert.equal(resp.statusCode, 200);
+    const body = resp.json() as { effects: Array<Record<string, unknown>> };
+    assert.equal(body.effects.length, 1);
+    assert.equal(body.effects[0].type, 'highlight-box', 'should fall back to highlight-box without formulaLatex');
+    assert.equal(body.effects[0].formula, undefined);
+  } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+  }
+});
+
 /**
  * Builds an OpenAI client stub for `/auto-focus-ai`'s combined flow: the main
  * (non-streaming) `callChatJSON` call returns `jsonResponse`, and any
