@@ -1514,6 +1514,151 @@ test('POST animation/auto-focus-ai falls back formula without formulaLatex to hi
   }
 });
 
+test('POST animation/auto-focus-ai returns a pointer effect with only xPct and yPct', async () => {
+  seedAnimationPdf(PDF_ID, 1);
+  fs.writeFileSync(path.join(config.storageRoot, PDF_ID, 'pages', 'animuid1.text.txt'), '指標測試頁', 'utf8');
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  effects: [
+                    { line: 0, show: true, type: 'pointer', xPct: 62, yPct: 38, exitDuration: 2 },
+                  ],
+                }),
+              },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+        }),
+      },
+    },
+  } as never);
+
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${PDF_ID}/pages/1/animation/auto-focus-ai`,
+      headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+      payload: { sentences: ['請注意這個數字。'] },
+    });
+    assert.equal(resp.statusCode, 200);
+    const body = resp.json() as { effects: Array<Record<string, unknown>> };
+    assert.equal(body.effects.length, 1);
+    assert.equal(body.effects[0].type, 'pointer');
+    assert.equal(body.effects[0].params && (body.effects[0].params as Record<string, unknown>).xPct, 62);
+    assert.equal(body.effects[0].params && (body.effects[0].params as Record<string, unknown>).yPct, 38);
+    assert.equal(body.effects[0].params && (body.effects[0].params as Record<string, unknown>).widthPct, undefined, 'pointer should not have widthPct');
+    assert.equal(body.effects[0].params && (body.effects[0].params as Record<string, unknown>).heightPct, undefined, 'pointer should not have heightPct');
+    assert.equal(body.effects[0].exitDuration, 2);
+
+    const validated = validateAnimationSpec({ version: 1, enabled: true, effects: body.effects });
+    assert.equal(validated.ok, true);
+    assert.equal(validated.spec?.effects[0]?.type, 'pointer');
+  } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+  }
+});
+
+test('POST animation/auto-focus-ai pointer defaults xPct/yPct to 50 when missing', async () => {
+  seedAnimationPdf(PDF_ID, 1);
+  fs.writeFileSync(path.join(config.storageRoot, PDF_ID, 'pages', 'animuid1.text.txt'), '指標測試頁', 'utf8');
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  effects: [
+                    { line: 0, show: true, type: 'pointer' },
+                  ],
+                }),
+              },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+        }),
+      },
+    },
+  } as never);
+
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${PDF_ID}/pages/1/animation/auto-focus-ai`,
+      headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+      payload: { sentences: ['這裡很重要。'] },
+    });
+    assert.equal(resp.statusCode, 200);
+    const body = resp.json() as { effects: Array<Record<string, unknown>> };
+    assert.equal(body.effects.length, 1);
+    assert.equal(body.effects[0].type, 'pointer');
+    assert.equal(body.effects[0].params && (body.effects[0].params as Record<string, unknown>).xPct, 50);
+    assert.equal(body.effects[0].params && (body.effects[0].params as Record<string, unknown>).yPct, 50);
+  } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+  }
+});
+
+test('POST animation/auto-focus-ai pointer ignores widthPct/heightPct even when AI provides them', async () => {
+  seedAnimationPdf(PDF_ID, 1);
+  fs.writeFileSync(path.join(config.storageRoot, PDF_ID, 'pages', 'animuid1.text.txt'), '指標測試頁', 'utf8');
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  effects: [
+                    { line: 0, show: true, type: 'pointer', xPct: 75, yPct: 25, widthPct: 20, heightPct: 10 },
+                  ],
+                }),
+              },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+        }),
+      },
+    },
+  } as never);
+
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${PDF_ID}/pages/1/animation/auto-focus-ai`,
+      headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+      payload: { sentences: ['注意這個按鈕。'] },
+    });
+    assert.equal(resp.statusCode, 200);
+    const body = resp.json() as { effects: Array<Record<string, unknown>> };
+    assert.equal(body.effects.length, 1);
+    assert.equal(body.effects[0].type, 'pointer');
+    const params = body.effects[0].params as Record<string, unknown>;
+    assert.equal(params.xPct, 75);
+    assert.equal(params.yPct, 25);
+    assert.equal(params.widthPct, undefined, 'pointer params should not include widthPct');
+    assert.equal(params.heightPct, undefined, 'pointer params should not include heightPct');
+  } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+  }
+});
+
 /**
  * Builds an OpenAI client stub for `/auto-focus-ai`'s combined flow: the main
  * (non-streaming) `callChatJSON` call returns `jsonResponse`, and any
