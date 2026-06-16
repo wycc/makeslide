@@ -713,3 +713,13 @@ Manim.animate.spinAround(star, t, { turns: 1, cx: 2, cy: 1 });
 - 以 `progress * turns * 360` 計算累積角度，映射至 SVG `rotate(angle cx cy)` transform
 - progress=1 時清除 transform 屬性，確保無殘留旋轉
 - 新增 2 個 vm 測試（共 28 項全通過）
+
+## formula 效果圓角半徑控制（formulaBorderRadius）
+
+`formula` 效果（KaTeX 公式）現在支援自訂邊框圓角半徑。使用者可以在動畫編輯器中設定 `formulaBorderRadius`（px 整數，預設 `8`，範圍 0-32，步進 2px），讓公式框在尖角到圓潤之間調整，配合投影片的視覺設計語言。
+
+**技術說明：**
+- `AnimationEffect` 和 `SlideAnimationEffect` 新增 `formulaBorderRadius?: number`
+- `EffectSchema` 以 `z.number().int().min(0).max(32)` 驗證
+- `SlideRenderer.tsx` 以 `${effect.formulaBorderRadius ?? 8}px` 取代硬編碼 `'8px'`
+- 後端新增 `DEFAULT_FORMULA_BORDER_RADIUS = 8`、`MAX_FORMULA_BORDER_RADIUS = 32` 常數
