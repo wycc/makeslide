@@ -1327,7 +1327,7 @@
 
 [x] `highlight-box` 邊框寬度控制：目前 `highlight-box` 效果的邊框寬度固定為 4px（`border: '4px solid ${hColor}'`），無法根據投影片重要程度或視覺風格調整粗細；應新增 `highlightBorderWidth` 欄位（px 整數，預設 `4`，範圍 1-12），讓使用者在動畫編輯器中自訂邊框粗細，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`（border 寬度與 box-shadow 寬度同步）/`AnimationEditorTab`（新增數字輸入框）及中英文 i18n。 ✓ 完成於 branch: feature/highlight-border-width-20260618
 
-[ ] `highlight-box` 圓角控制：目前 `highlight-box` 固定使用 `borderRadius: '8px'`，希望讓使用者能選擇更尖銳（0px）或更圓潤（如 24px）的邊框；應新增 `highlightBorderRadius` 欄位（px 整數，預設 `8`，範圍 0-50），讓使用者在動畫編輯器中自訂圓角半徑，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`/`AnimationEditorTab`（新增數字輸入框）及中英文 i18n。
+[x] `highlight-box` 圓角控制：目前 `highlight-box` 固定使用 `borderRadius: '8px'`，希望讓使用者能選擇更尖銳（0px）或更圓潤（如 24px）的邊框；應新增 `highlightBorderRadius` 欄位（px 整數，預設 `8`，範圍 0-50），讓使用者在動畫編輯器中自訂圓角半徑，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`/`AnimationEditorTab`（新增數字輸入框）及中英文 i18n。 ✓ 完成於 branch: feature/highlight-border-radius-20260618
 
 [ ] Manim `animate.uncreate(m, progress)` 效果：目前 `animate.create(m, progress)` 可以讓 SVG 路徑從頭到尾逐漸繪製出來，但沒有對應的反向動畫；應新增 `Manim.animate.uncreate(m, progress)` 函式，讓路徑從尾到頭逐漸消失（`strokeDashoffset` 從 0 增加至總長度，`opacity` 在 progress=1 時設為 `0`），並新增至少 2 個對應 vm 測試（一個驗證中間 dashoffset > 0，一個驗證 progress=1 時 opacity=0）。
 
@@ -1402,3 +1402,7 @@
 - 時間: 2026-06-18 03:00:00 +0800
 - 分支: feature/highlight-border-width-20260618
 - 內容: 新增 `highlight-box` 效果邊框寬度控制。後端 `pageAnimation.ts` 新增 `DEFAULT_HIGHLIGHT_BORDER_WIDTH = 4`、`MAX_HIGHLIGHT_BORDER_WIDTH = 12` 常數，`AnimationEffect` 介面新增 `highlightBorderWidth?: number` 欄位，`EffectSchema` 新增 `z.number().int().min(1).max(12)` 驗證，序列化時以整數夾至合法範圍。前端 `types.ts` 同步新增欄位；`SlideRenderer.tsx` 以 `${hBw}px` 取代硬編碼 `4px`，並讓 box-shadow 光暈半徑等比縮放（`${hBw * 4}px`）；`AnimationEditorTab.tsx` 將原本的單顏色選擇器改為 `<div className="flex gap-3 items-end">` 並加入邊框寬度數字輸入框（range 1-12, step 1）及 px 單位標籤；中英文 i18n 新增 `play.animation.highlightBorderWidth` 翻譯鍵。
+
+- 時間: 2026-06-18 04:00:00 +0800
+- 分支: feature/highlight-border-radius-20260618
+- 內容: 新增 `highlight-box` 效果圓角半徑控制。後端 `pageAnimation.ts` 新增 `DEFAULT_HIGHLIGHT_BORDER_RADIUS = 8`、`MAX_HIGHLIGHT_BORDER_RADIUS = 50` 常數，`AnimationEffect` 介面新增 `highlightBorderRadius?: number` 欄位，`EffectSchema` 新增 `z.number().int().min(0).max(50)` 驗證，序列化時以整數夾至合法範圍。前端 `types.ts` 同步新增欄位；`SlideRenderer.tsx` 以 `${hBr}px` 取代硬編碼 `8px` 的 borderRadius；`AnimationEditorTab.tsx` 在 highlight-box 的邊框顏色+寬度 flex 行中加入第三個數字輸入框（range 0-50, step 2）及 px 單位標籤；中英文 i18n 新增 `play.animation.highlightBorderRadius` 翻譯鍵。

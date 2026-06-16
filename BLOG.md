@@ -608,3 +608,16 @@ function onFrame(progress, duration) {
 - `EffectSchema` 以 `z.number().int().min(1).max(12)` 驗證
 - `SlideRenderer.tsx` border 與 box-shadow 均依 `highlightBorderWidth ?? 4` 動態計算
 - 後端新增 `DEFAULT_HIGHLIGHT_BORDER_WIDTH = 4`、`MAX_HIGHLIGHT_BORDER_WIDTH = 12` 常數
+
+## highlight-box 圓角半徑控制（highlightBorderRadius）
+
+`highlight-box` 效果現在支援自訂邊框圓角半徑。使用者可以在動畫編輯器中設定 `highlightBorderRadius`（px 整數，預設 `8`，範圍 0-50），讓高亮框在尖角矩形到圓潤圓角之間自由調整，配合投影片視覺風格。
+
+**使用方式：**
+在動畫編輯器的 `highlight-box` 效果設定中，調整「圓角半徑（px）」數字輸入框（步進 2px）。
+
+**技術說明：**
+- `AnimationEffect` 和 `SlideAnimationEffect` 新增 `highlightBorderRadius?: number`
+- `EffectSchema` 以 `z.number().int().min(0).max(50)` 驗證
+- `SlideRenderer.tsx` 以 `effect.highlightBorderRadius ?? 8` 作為 `borderRadius` 值
+- 後端新增 `DEFAULT_HIGHLIGHT_BORDER_RADIUS = 8`、`MAX_HIGHLIGHT_BORDER_RADIUS = 50` 常數
