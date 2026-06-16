@@ -969,6 +969,42 @@ test('mapAutoFocusResponseToEffects step-list output passes validateAnimationSpe
   assert.equal(result.ok, true);
 });
 
+test('mapAutoFocusResponseToEffects passes stepListBgColor and stepListTextColor through for step-list', () => {
+  const effects = mapAutoFocusResponseToEffects(
+    {
+      effects: [
+        {
+          line: 0,
+          show: true,
+          type: 'step-list',
+          items: ['項目一', '項目二'],
+          stepListBgColor: '#1e3a5f',
+          stepListTextColor: '#f0f4ff',
+          xPct: 55,
+          yPct: 60,
+          widthPct: 35,
+          heightPct: 30,
+        },
+        {
+          line: 1,
+          show: true,
+          type: 'step-list',
+          items: ['項目甲'],
+        },
+      ],
+    },
+    2,
+  );
+  assert.equal(effects.length, 2);
+  assert.equal(effects[0].type, 'step-list');
+  assert.equal(effects[0].stepListBgColor, '#1e3a5f');
+  assert.equal(effects[0].stepListTextColor, '#f0f4ff');
+  assert.equal(effects[1].stepListBgColor, undefined);
+  assert.equal(effects[1].stepListTextColor, undefined);
+  const result = validateAnimationSpec({ version: 1, enabled: true, effects });
+  assert.equal(result.ok, true);
+});
+
 test('mapAutoFocusResponseToEffects maps custom-script items, truncating scriptPrompt and clamping scriptDurationSeconds', () => {
   const longPrompt = 'A'.repeat(MAX_CUSTOM_SCRIPT_PROMPT_LENGTH + 20);
   const effects = mapAutoFocusResponseToEffects(
