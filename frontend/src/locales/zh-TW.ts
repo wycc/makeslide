@@ -370,6 +370,7 @@ export const zhTW = {
   'play.animation.formulaFontSize': '字型大小（em）',
   'play.animation.highlightColor': '邊框顏色',
   'play.animation.highlightBorderWidth': '邊框寬度（px）',
+  'play.animation.highlightBorderRadius': '圓角半徑（px）',
   'play.animation.spotlightColor': '遮罩顏色',
   'play.animation.spotlightOpacity': '透明度',
   'play.animation.textCalloutBgColor': '背景顏色',

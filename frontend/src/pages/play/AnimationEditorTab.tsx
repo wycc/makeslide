@@ -1055,6 +1055,24 @@ export function AnimationEditorTab() {
                       <span className="text-slate-500">px</span>
                     </div>
                   </label>
+                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    {t('play.animation.highlightBorderRadius')}
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min={0}
+                        max={50}
+                        step={2}
+                        value={effect.highlightBorderRadius ?? 8}
+                        disabled={disabled}
+                        onChange={(e) =>
+                          updateEffect(effect.id, { highlightBorderRadius: Math.min(50, Math.max(0, Math.round(Number(e.target.value)))) })
+                        }
+                        className="w-16 rounded-md border border-slate-700 bg-slate-900 px-1 py-1 text-sm text-slate-100"
+                      />
+                      <span className="text-slate-500">px</span>
+                    </div>
+                  </label>
                 </div>
               )}
               {effect.type === 'spotlight' && (

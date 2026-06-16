@@ -74,6 +74,12 @@ export interface AnimationEffect {
    * Clamped to [1, `MAX_HIGHLIGHT_BORDER_WIDTH`].
    */
   highlightBorderWidth?: number;
+  /**
+   * Border radius (px integer) for `highlight-box` effects (ignored by other
+   * effect types). Defaults to `DEFAULT_HIGHLIGHT_BORDER_RADIUS` (8).
+   * Clamped to [0, `MAX_HIGHLIGHT_BORDER_RADIUS`].
+   */
+  highlightBorderRadius?: number;
   /** Caption text for `text-callout` effects (ignored by other effect types). */
   text?: string;
   /**
@@ -241,6 +247,10 @@ export const MAX_SHAPE_COLOR_LENGTH = 20;
 export const DEFAULT_HIGHLIGHT_BORDER_WIDTH = 4;
 /** Maximum border width (px) for `highlight-box` effects. */
 export const MAX_HIGHLIGHT_BORDER_WIDTH = 12;
+/** Default border radius (px) for `highlight-box` effects. */
+export const DEFAULT_HIGHLIGHT_BORDER_RADIUS = 8;
+/** Maximum border radius (px) for `highlight-box` effects. */
+export const MAX_HIGHLIGHT_BORDER_RADIUS = 50;
 /** Default arrow colour for `pointer` effects (rose-500). */
 export const DEFAULT_POINTER_COLOR = '#f43f5e';
 /** Default arrow size (rem) for `pointer` effects. */
@@ -336,6 +346,7 @@ const EffectSchema = z.object({
   pointerSize: z.number().min(MIN_POINTER_SIZE_REM).max(MAX_POINTER_SIZE_REM).optional(),
   highlightColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   highlightBorderWidth: z.number().int().min(1).max(MAX_HIGHLIGHT_BORDER_WIDTH).optional(),
+  highlightBorderRadius: z.number().int().min(0).max(MAX_HIGHLIGHT_BORDER_RADIUS).optional(),
   text: z.string().max(MAX_TEXT_CALLOUT_LENGTH).optional(),
   textCalloutFontSize: z.number().min(MIN_TEXT_CALLOUT_FONT_SIZE_REM).max(MAX_TEXT_CALLOUT_FONT_SIZE_REM).optional(),
   textCalloutBgColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
@@ -414,6 +425,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.pointerSize !== undefined ? { pointerSize: Math.max(MIN_POINTER_SIZE_REM, Math.min(MAX_POINTER_SIZE_REM, effect.pointerSize)) } : {}),
       ...(effect.highlightColor !== undefined ? { highlightColor: effect.highlightColor } : {}),
       ...(effect.highlightBorderWidth !== undefined ? { highlightBorderWidth: Math.max(1, Math.min(MAX_HIGHLIGHT_BORDER_WIDTH, Math.round(effect.highlightBorderWidth))) } : {}),
+      ...(effect.highlightBorderRadius !== undefined ? { highlightBorderRadius: Math.max(0, Math.min(MAX_HIGHLIGHT_BORDER_RADIUS, Math.round(effect.highlightBorderRadius))) } : {}),
       ...(effect.text !== undefined ? { text: effect.text } : {}),
       ...(effect.textCalloutFontSize !== undefined ? { textCalloutFontSize: Math.max(MIN_TEXT_CALLOUT_FONT_SIZE_REM, Math.min(MAX_TEXT_CALLOUT_FONT_SIZE_REM, effect.textCalloutFontSize)) } : {}),
       ...(effect.textCalloutBgColor !== undefined ? { textCalloutBgColor: effect.textCalloutBgColor } : {}),
