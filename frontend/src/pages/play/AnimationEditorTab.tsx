@@ -1229,6 +1229,19 @@ export function AnimationEditorTab() {
                       />
                     )}
                   </label>
+                  <label className="flex items-center gap-2 text-xs text-slate-400">
+                    {t('play.animation.shapeOpacity')}
+                    <input
+                      type="number"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={effect.shapeOpacity ?? 1}
+                      disabled={disabled}
+                      onChange={(e) => updateEffect(effect.id, { shapeOpacity: Math.max(0, Math.min(1, parseFloat(e.target.value) || 1)) })}
+                      className="w-20 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+                    />
+                  </label>
                 </div>
               )}
               {effect.type === 'step-list' && (

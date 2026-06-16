@@ -265,6 +265,8 @@ export interface SlideAnimationEffect {
   color?: string;
   /** Fill colour (CSS hex) for `shape` effects. When absent the shape is hollow. Ignored by other effect types. */
   shapeFillColor?: string;
+  /** Base opacity (0-1) for `shape` effects. Layered on top of GSAP fade-in/out. Defaults to 1. Ignored by other effect types. */
+  shapeOpacity?: number;
   /**
    * Stroke width (SVG user units in a 100×100 viewBox) for `shape` effects.
    * Defaults to 5 when omitted. Ignored by other effect types.

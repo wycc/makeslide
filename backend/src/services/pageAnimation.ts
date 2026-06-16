@@ -193,6 +193,11 @@ export interface AnimationEffect {
    * prompt can build on prior turns. Ignored by other effect types.
    */
   conversation?: ConversationMessage[];
+  /**
+   * Base opacity (0-1) for `shape` effects (ignored by other effect types).
+   * Layered on top of GSAP fade-in/out. Defaults to `1` (fully opaque).
+   */
+  shapeOpacity?: number;
 }
 
 /** A single turn in a `custom-script` effect's AI chat `conversation`. */
@@ -368,6 +373,7 @@ const EffectSchema = z.object({
   code: z.string().max(MAX_CUSTOM_SCRIPT_CODE_LENGTH).optional(),
   prompt: z.string().max(MAX_CUSTOM_SCRIPT_PROMPT_LENGTH).optional(),
   conversation: z.array(ConversationMessageSchema).max(MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES).optional(),
+  shapeOpacity: z.number().min(0).max(1).optional(),
 });
 
 const HintsSchema = z
@@ -447,6 +453,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.code !== undefined ? { code: effect.code } : {}),
       ...(effect.prompt !== undefined ? { prompt: effect.prompt } : {}),
       ...(effect.conversation !== undefined ? { conversation: effect.conversation } : {}),
+      ...(effect.shapeOpacity !== undefined ? { shapeOpacity: Math.max(0, Math.min(1, effect.shapeOpacity)) } : {}),
     };
   });
   const hints = parsed.data.hints && Object.keys(parsed.data.hints).length > 0 ? parsed.data.hints : undefined;
