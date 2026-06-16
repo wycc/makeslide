@@ -244,6 +244,8 @@ export interface SlideAnimationEffect {
   highlightBorderWidth?: number;
   /** Border radius (px) for `highlight-box` effects. Defaults to 8. Ignored by other effect types. */
   highlightBorderRadius?: number;
+  /** Outer ring colour (CSS hex) for `highlight-box` effects. When set, adds a second outer border for contrast. Ignored by other effect types. */
+  highlightOuterColor?: string;
   /** Caption text for `text-callout` effects (ignored by other effect types). */
   text?: string;
   /** Font size in rem for `text-callout` effects. Defaults to 1.25. Ignored by other effect types. */

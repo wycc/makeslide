@@ -80,6 +80,8 @@ export interface AnimationEffect {
    * Clamped to [0, `MAX_HIGHLIGHT_BORDER_RADIUS`].
    */
   highlightBorderRadius?: number;
+  /** Outer ring colour (CSS hex) for `highlight-box` effects. When set, adds a second outer border for better contrast on any background. Ignored by other effect types. */
+  highlightOuterColor?: string;
   /** Caption text for `text-callout` effects (ignored by other effect types). */
   text?: string;
   /**
@@ -368,6 +370,7 @@ const EffectSchema = z.object({
   highlightColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   highlightBorderWidth: z.number().int().min(1).max(MAX_HIGHLIGHT_BORDER_WIDTH).optional(),
   highlightBorderRadius: z.number().int().min(0).max(MAX_HIGHLIGHT_BORDER_RADIUS).optional(),
+  highlightOuterColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   text: z.string().max(MAX_TEXT_CALLOUT_LENGTH).optional(),
   textCalloutFontSize: z.number().min(MIN_TEXT_CALLOUT_FONT_SIZE_REM).max(MAX_TEXT_CALLOUT_FONT_SIZE_REM).optional(),
   textCalloutBgColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
@@ -452,6 +455,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.highlightColor !== undefined ? { highlightColor: effect.highlightColor } : {}),
       ...(effect.highlightBorderWidth !== undefined ? { highlightBorderWidth: Math.max(1, Math.min(MAX_HIGHLIGHT_BORDER_WIDTH, Math.round(effect.highlightBorderWidth))) } : {}),
       ...(effect.highlightBorderRadius !== undefined ? { highlightBorderRadius: Math.max(0, Math.min(MAX_HIGHLIGHT_BORDER_RADIUS, Math.round(effect.highlightBorderRadius))) } : {}),
+      ...(effect.highlightOuterColor !== undefined ? { highlightOuterColor: effect.highlightOuterColor } : {}),
       ...(effect.text !== undefined ? { text: effect.text } : {}),
       ...(effect.textCalloutFontSize !== undefined ? { textCalloutFontSize: Math.max(MIN_TEXT_CALLOUT_FONT_SIZE_REM, Math.min(MAX_TEXT_CALLOUT_FONT_SIZE_REM, effect.textCalloutFontSize)) } : {}),
       ...(effect.textCalloutBgColor !== undefined ? { textCalloutBgColor: effect.textCalloutBgColor } : {}),
