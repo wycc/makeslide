@@ -1252,10 +1252,14 @@
 [ ] 動畫 `custom-script` 的 `Manim.tex` 範例提示詞與測試：新增 `Manim.tex` 到 `custom-script` 對話框的「範例提示詞」下拉選單（例如「用 Manim 在畫面中顯示愛因斯坦公式 E=mc²」），並補充後端測試確認 `Manim.tex` 相關關鍵字不會被 `findUnsafeScriptPattern` 誤判為不安全（`postMessage`/`parent` 由 `Manim.tex` 內部使用，不應被拒絕）。
 [ ] `overlay-image` 效果的縮放比例鎖定選項：目前 `overlay-image` 效果的寬高可自由調整，但使用者無法鎖定圖片的原始長寬比；應新增「鎖定比例」checkbox，勾選後調整寬度時高度自動按原始圖片比例計算（需在前端取得圖片實際尺寸）。
 [ ] 動畫效果批次套用至多頁：新增「套用至全部頁面」或「套用至選取頁面」功能，讓使用者可以把某一頁的動畫設定（或特定效果）一鍵複製到其他頁面；與現有的「複製本頁效果」（只複製到剪貼簿，手動切換頁面後貼上）不同，批次套用可以選擇多頁同時套用。
-[ ] `pointer` 效果的方向自訂：目前 `pointer` 效果渲染為固定方向的游標圖示；應新增 `angle`（旋轉角度，度，預設 0）欄位，讓使用者可以在動畫編輯器中調整指標方向（例如向上、向右、斜角指向目標）；在 `SlideRenderer` 的 `pointer` 渲染元件中依 `effect.angle` 旋轉圖示。
+[x] `pointer` 效果的方向自訂：目前 `pointer` 效果渲染為固定方向的游標圖示；應新增 `angle`（旋轉角度，度，預設 0）欄位，讓使用者可以在動畫編輯器中調整指標方向（例如向上、向右、斜角指向目標）；在 `SlideRenderer` 的 `pointer` 渲染元件中依 `effect.angle` 旋轉圖示。（完成於分支: feature/animation-pointer-angle-20260617）
 [ ] 動畫效果的播放預覽跳轉：在動畫編輯器的效果卡片上新增「跳至此效果」按鈕，按下後將音訊播放器的 `currentTime` seek 到 `effect.start` 秒，讓使用者可以快速預覽特定效果；需與 `PlayPage` 的音訊控制整合。
 [ ] `Manim` 的 `transform` 路徑變形（path morphing）：目前 `Manim.animate.transform(from, to, progress)` 只做屬性線性插值（屬性相同才能 lerp），不支援真正的 SVG 路徑變形（`<path d>` 的形點插值）；應研究以 `flubber.js` 或自行實作的 cubic Bézier 插值達到 circle→square 等基本形狀路徑變形，並更新 `manimHelperScript.ts` 的 `Manim.animate.transform` 方法。
 
 - 時間: 2026-06-17 00:30:00 +0800
 - 分支: feature/animation-shape-color-strokewidth-20260617
 - 內容: 新增 `shape` 效果的 `color`（CSS hex 描邊顏色，預設 `#f43f5e`）與 `strokeWidth`（SVG 線寬，範圍 1-20，預設 5）欄位：(1) `backend/src/services/pageAnimation.ts` 新增 `color: z.string().max(20).regex(/^#[0-9a-fA-F]{3,8}$/)` 與 `strokeWidth: z.number().min(1).max(20)` 至 `EffectSchema`，新增 `AnimationEffect.color`/`AnimationEffect.strokeWidth` 型別欄位，新增 `DEFAULT_SHAPE_STROKE_COLOR`/`DEFAULT_SHAPE_STROKE_WIDTH`/`MAX_SHAPE_COLOR_LENGTH`/`MAX_SHAPE_STROKE_WIDTH` 常數，`validateAnimationSpec` 通透傳遞這兩個欄位（`strokeWidth` 夾在 1-20 並取整）；(2) `frontend/src/types.ts` 鏡像 `color?`/`strokeWidth?` 欄位至 `SlideAnimationEffect`；(3) `frontend/src/components/slide/SlideRenderer.tsx` 改用 `effect.color ?? '#f43f5e'` 與 `effect.strokeWidth ?? 5` 取代硬編碼值，箭頭 strokeWidth 維持比基底多 1 的比例；(4) `frontend/src/pages/play/AnimationEditorTab.tsx` 在 `shape` 類型的圖形種類選單之後新增顏色選色器（`type="color"` input）與線寬數值輸入框（1-20，整數）；(5) `frontend/src/locales/zh-TW.ts` 與 `en.ts` 補充 `play.animation.shapeColor`/`play.animation.shapeStrokeWidth` 翻譯鍵。驗證：`npm --prefix frontend run build` 通過；`npm --prefix backend run build` 通過；`npx tsx --test backend/test/page-animation.test.ts`，104/104 通過。
+
+- 時間: 2026-06-17 09:00:00 +0800
+- 分支: feature/animation-pointer-angle-20260617
+- 內容: 完成 `pointer` 效果的方向自訂功能：新增 `angle`（旋轉角度，度，預設 0）欄位至 `AnimationEffect` 類型（前後端皆同步）；將 `SlideRenderer` 的 pointer 渲染從發光圓點改為 SVG 游標箭頭圖示，並依 `effect.angle` 旋轉；在 `AnimationEditorTab` 的指標位置控制區段下方新增角度輸入框（-180 至 180，步進 15），顯示於 pointer 效果卡片中；補充中英文翻譯鍵 `play.animation.pointerAngle`。前後端 build 均通過。
