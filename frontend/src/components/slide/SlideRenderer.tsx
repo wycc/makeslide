@@ -65,6 +65,7 @@ function EffectOverlay({
   if (effect.type === 'pointer') {
     const angleDeg = effect.angle ?? 0;
     const pColor = effect.pointerColor ?? '#f43f5e';
+    const pSize = `${effect.pointerSize ?? 2.5}rem`;
     const pR = parseInt(pColor.slice(1, 3), 16);
     const pG = parseInt(pColor.slice(3, 5), 16);
     const pB = parseInt(pColor.slice(5, 7), 16);
@@ -75,8 +76,8 @@ function EffectOverlay({
           position: 'absolute',
           left: `${xPct}%`,
           top: `${yPct}%`,
-          width: '2.5rem',
-          height: '2.5rem',
+          width: pSize,
+          height: pSize,
           transform: `translate(-50%, -50%) rotate(${angleDeg}deg)`,
           opacity: 0,
           pointerEvents: 'none',

@@ -59,6 +59,11 @@ export interface AnimationEffect {
    */
   pointerColor?: string;
   /**
+   * Arrow size in rem units for `pointer` effects (ignored by other effect types).
+   * Defaults to `DEFAULT_POINTER_SIZE_REM` (2.5). Clamped to [1, 6].
+   */
+  pointerSize?: number;
+  /**
    * Border colour (CSS hex) for `highlight-box` effects (ignored by other
    * effect types). Defaults to `DEFAULT_HIGHLIGHT_BOX_COLOR` (`#ef4444`).
    */
@@ -210,6 +215,12 @@ export const DEFAULT_SHAPE_STROKE_WIDTH = 5;
 export const MAX_SHAPE_COLOR_LENGTH = 20;
 /** Default arrow colour for `pointer` effects (rose-500). */
 export const DEFAULT_POINTER_COLOR = '#f43f5e';
+/** Default arrow size (rem) for `pointer` effects. */
+export const DEFAULT_POINTER_SIZE_REM = 2.5;
+/** Minimum arrow size (rem) for `pointer` effects. */
+export const MIN_POINTER_SIZE_REM = 1;
+/** Maximum arrow size (rem) for `pointer` effects. */
+export const MAX_POINTER_SIZE_REM = 6;
 /** Default border colour for `highlight-box` effects (red-500). */
 export const DEFAULT_HIGHLIGHT_BOX_COLOR = '#ef4444';
 /** Default background colour for `text-callout` effects (slate-950). */
@@ -282,6 +293,7 @@ const EffectSchema = z.object({
   startTrigger: StartTriggerSchema.optional(),
   angle: z.number().finite().optional(),
   pointerColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
+  pointerSize: z.number().min(MIN_POINTER_SIZE_REM).max(MAX_POINTER_SIZE_REM).optional(),
   highlightColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   text: z.string().max(MAX_TEXT_CALLOUT_LENGTH).optional(),
   textCalloutBgColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
@@ -355,6 +367,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.startTrigger ? { startTrigger: effect.startTrigger } : {}),
       ...(effect.angle !== undefined ? { angle: effect.angle } : {}),
       ...(effect.pointerColor !== undefined ? { pointerColor: effect.pointerColor } : {}),
+      ...(effect.pointerSize !== undefined ? { pointerSize: Math.max(MIN_POINTER_SIZE_REM, Math.min(MAX_POINTER_SIZE_REM, effect.pointerSize)) } : {}),
       ...(effect.highlightColor !== undefined ? { highlightColor: effect.highlightColor } : {}),
       ...(effect.text !== undefined ? { text: effect.text } : {}),
       ...(effect.textCalloutBgColor !== undefined ? { textCalloutBgColor: effect.textCalloutBgColor } : {}),

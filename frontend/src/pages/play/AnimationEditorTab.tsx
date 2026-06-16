@@ -1388,6 +1388,24 @@ export function AnimationEditorTab() {
                           className="h-8 w-12 cursor-pointer rounded-md border border-slate-700 bg-slate-900 p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
                         />
                       </label>
+                      <label className="flex flex-col gap-1 text-xs text-slate-400">
+                        {t('play.animation.pointerSize')}
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            min={1}
+                            max={6}
+                            step={0.5}
+                            value={effect.pointerSize ?? 2.5}
+                            disabled={disabled}
+                            onChange={(e) =>
+                              updateEffect(effect.id, { pointerSize: Math.min(6, Math.max(1, Number(e.target.value) || 2.5)) })
+                            }
+                            className="w-20 rounded-md border border-slate-700 bg-slate-900 px-1 py-1 text-sm text-slate-100"
+                          />
+                          <span className="text-slate-500">rem</span>
+                        </div>
+                      </label>
                     </>
                   )}
                 </div>
