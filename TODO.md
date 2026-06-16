@@ -1325,7 +1325,7 @@
 
 [x] `step-list` 字型大小控制：目前 `step-list` 效果的條列項目固定使用 `1.1rem` 字型大小（`SlideRenderer.tsx`），無法根據項目數量或投影片版面調整；應新增 `stepListFontSize` 欄位（CSS rem 值，預設 `1.1`，範圍 0.5-2.5，步進 0.1），讓使用者在動畫編輯器中自訂條列文字大小，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`/`AnimationEditorTab`（在 step-list 編輯區新增數字輸入框）及中英文 i18n。 ✓ 完成於 branch: feature/step-list-font-size-20260618
 
-[ ] `highlight-box` 邊框寬度控制：目前 `highlight-box` 效果的邊框寬度固定為 4px（`border: '4px solid ${hColor}'`），無法根據投影片重要程度或視覺風格調整粗細；應新增 `highlightBorderWidth` 欄位（px 整數，預設 `4`，範圍 1-12），讓使用者在動畫編輯器中自訂邊框粗細，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`（border 寬度與 box-shadow 寬度同步）/`AnimationEditorTab`（新增數字輸入框）及中英文 i18n。
+[x] `highlight-box` 邊框寬度控制：目前 `highlight-box` 效果的邊框寬度固定為 4px（`border: '4px solid ${hColor}'`），無法根據投影片重要程度或視覺風格調整粗細；應新增 `highlightBorderWidth` 欄位（px 整數，預設 `4`，範圍 1-12），讓使用者在動畫編輯器中自訂邊框粗細，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`（border 寬度與 box-shadow 寬度同步）/`AnimationEditorTab`（新增數字輸入框）及中英文 i18n。 ✓ 完成於 branch: feature/highlight-border-width-20260618
 
 [ ] `highlight-box` 圓角控制：目前 `highlight-box` 固定使用 `borderRadius: '8px'`，希望讓使用者能選擇更尖銳（0px）或更圓潤（如 24px）的邊框；應新增 `highlightBorderRadius` 欄位（px 整數，預設 `8`，範圍 0-50），讓使用者在動畫編輯器中自訂圓角半徑，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`/`AnimationEditorTab`（新增數字輸入框）及中英文 i18n。
 
@@ -1398,3 +1398,7 @@
 - 時間: 2026-06-18 02:00:00 +0800
 - 分支: feature/step-list-font-size-20260618
 - 內容: 新增 `step-list` 效果字型大小控制。後端 `pageAnimation.ts` 新增 `DEFAULT_STEP_LIST_FONT_SIZE_REM = 1.1`、`MIN_STEP_LIST_FONT_SIZE_REM = 0.5`、`MAX_STEP_LIST_FONT_SIZE_REM = 2.5` 常數，`AnimationEffect` 介面新增 `stepListFontSize?: number` 欄位，`EffectSchema` 新增 `z.number().min(0.5).max(2.5)` 驗證，序列化時以 Math.max/min 夾至合法範圍。前端 `types.ts` 同步新增欄位；`SlideRenderer.tsx` 以 `${effect.stepListFontSize ?? 1.1}rem` 字串取代 `<ul>` 的硬編碼 `1.1rem` fontSize；`AnimationEditorTab.tsx` 在 step-list 顏色選擇器下方加入數字輸入框（range 0.5-2.5, step 0.1）並顯示 rem 單位標籤；中英文 i18n 新增 `play.animation.stepListFontSize` 翻譯鍵。
+
+- 時間: 2026-06-18 03:00:00 +0800
+- 分支: feature/highlight-border-width-20260618
+- 內容: 新增 `highlight-box` 效果邊框寬度控制。後端 `pageAnimation.ts` 新增 `DEFAULT_HIGHLIGHT_BORDER_WIDTH = 4`、`MAX_HIGHLIGHT_BORDER_WIDTH = 12` 常數，`AnimationEffect` 介面新增 `highlightBorderWidth?: number` 欄位，`EffectSchema` 新增 `z.number().int().min(1).max(12)` 驗證，序列化時以整數夾至合法範圍。前端 `types.ts` 同步新增欄位；`SlideRenderer.tsx` 以 `${hBw}px` 取代硬編碼 `4px`，並讓 box-shadow 光暈半徑等比縮放（`${hBw * 4}px`）；`AnimationEditorTab.tsx` 將原本的單顏色選擇器改為 `<div className="flex gap-3 items-end">` 並加入邊框寬度數字輸入框（range 1-12, step 1）及 px 單位標籤；中英文 i18n 新增 `play.animation.highlightBorderWidth` 翻譯鍵。

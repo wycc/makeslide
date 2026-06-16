@@ -588,3 +588,23 @@ function onFrame(progress, duration) {
 - `validateAnimationSpec` 以 Math.max/min 夾至 [0.5, 2.5]
 - `SlideRenderer.tsx` 以 `` `${stepListFontSize ?? 1.1}rem` `` 作為 `<ul>` 的 fontSize
 - 後端新增 `DEFAULT_STEP_LIST_FONT_SIZE_REM = 1.1`、`MIN/MAX` 常數
+
+## Highlight-Box 邊框寬度自訂（2026-06-18）
+
+### 功能目的
+
+`highlight-box` 效果的邊框粗細原本固定為 4px。在小型投影片或次要內容的提示時，4px 可能顯得過粗；在主要重點或大型投影片上，希望邊框更明顯時又太細。本次新增 `highlightBorderWidth` 欄位，讓使用者可自由調整邊框粗細。
+
+### 使用方式
+
+在動畫編輯器的 `highlight-box` 效果設定中，顏色選擇器旁新增「**邊框寬度（px）**」數字輸入框，範圍 1-12px，步進 1。
+
+- 預設 4px（行為與先前相同）
+- 光暈（box-shadow）的模糊半徑會隨邊框寬度等比縮放（`bw × 4 px`）
+
+### 技術細節
+
+- `AnimationEffect` 和 `SlideAnimationEffect` 新增 `highlightBorderWidth?: number`
+- `EffectSchema` 以 `z.number().int().min(1).max(12)` 驗證
+- `SlideRenderer.tsx` border 與 box-shadow 均依 `highlightBorderWidth ?? 4` 動態計算
+- 後端新增 `DEFAULT_HIGHLIGHT_BORDER_WIDTH = 4`、`MAX_HIGHLIGHT_BORDER_WIDTH = 12` 常數
