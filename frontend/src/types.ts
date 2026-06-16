@@ -242,6 +242,8 @@ export interface SlideAnimationEffect {
   highlightColor?: string;
   /** Caption text for `text-callout` effects (ignored by other effect types). */
   text?: string;
+  /** Font size in rem for `text-callout` effects. Defaults to 1.25. Ignored by other effect types. */
+  textCalloutFontSize?: number;
   /** Background colour (CSS hex) for `text-callout` effects. Defaults to `#0f172a`. Ignored by other effect types. */
   textCalloutBgColor?: string;
   /** Text colour (CSS hex) for `text-callout` effects. Defaults to `#f8fafc`. Ignored by other effect types. */
