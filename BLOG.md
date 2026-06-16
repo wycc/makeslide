@@ -261,3 +261,25 @@ MCP_AUTH_TOKEN=your-secret-token-here
 - `detail.ts` 新增 `PUT /api/pdfs/:id/pages/:n/script` route，與 GET route 相鄰
 - `mcp-server.ts` 新增 `apiGetText()`（回傳純文字）和 `apiPut()`（PUT JSON）兩個輔助函式
 - 兩個新工具的 handler 驗證 `id`、`page`（正整數）與 `script` 長度後呼叫對應 API
+
+## Formula 效果字型大小控制（2026-06-17）
+
+### 功能目的
+
+`formula` 效果使用 KaTeX 在投影片上顯示數學公式，但原本固定以約 1×em 的大小渲染，不同大小的投影片或不同複雜度的公式看起來可能太小或太大。本次新增 `formulaFontSize` 欄位，讓使用者可在動畫編輯器中即時調整公式的顯示大小。
+
+### 使用方式
+
+在動畫編輯器中，選擇一個 `formula` 效果後：
+1. 在「公式內容（LaTeX）」欄位下方，新增了「字型大小（em）」輸入框
+2. 預設值為 **1.5em**，可調整範圍為 **0.5 ~ 4em**，步進 0.1
+3. 編輯器中的公式預覽會即時反映字型大小的變化
+4. 儲存後，投影片播放時公式會以指定大小顯示
+
+### 技術細節
+
+- `pageAnimation.ts`：新增 `DEFAULT_FORMULA_FONT_SIZE_EM = 1.5`、`MIN_FORMULA_FONT_SIZE_EM = 0.5`、`MAX_FORMULA_FONT_SIZE_EM = 4` 三個常數；`AnimationEffect` interface 新增 `formulaFontSize?: number` 欄位；`EffectSchema`（Zod）新增 `formulaFontSize: z.number().min(0.5).max(4).optional()`；`validateAnimationSpec` 序列化時納入此欄位
+- `types.ts`（前端）：同步新增 `formulaFontSize?: number` 欄位
+- `SlideRenderer.tsx`：formula 容器 div 加入 `fontSize: \`${formulaFontSize ?? 1.5}em\`` 樣式
+- `AnimationEditorTab.tsx`：在 LaTeX input 下方加入 `<input type="number" min=0.5 max=4 step=0.1>`；預覽 div 也套用 `fontSize` 樣式
+- i18n：中英文 locale 各新增一個翻譯鍵 `play.animation.formulaFontSize`
