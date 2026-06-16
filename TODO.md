@@ -1311,7 +1311,7 @@
 
 [x] Manim `indicateAround` 動畫效果：目前 `manimHelperScript.ts` 的 `animate` 提供 Create/Write/FadeIn/FadeOut/Transform 等動畫；應新增 `Manim.animate.indicateAround(m, progress, opts)` 函式，實作 manim 標誌性的「強調環繞」動畫（progress 0→0.5 縮放放大並改色，0.5→1 回縮並恢復原色），`opts` 可選 `scale`（預設 1.3）和 `color`（預設 `#f59e0b`）；新增對應測試。（完成於分支: feature/manim-indicate-around-20260617）
 
-[ ] auto-focus-ai 為 `pointer` 效果建議 `angle`：目前所有 AI 自動產生的 `pointer` 效果都使用預設角度（0 度，指向右下），未根據畫面內容選擇合適方向；應在 `AutoFocusItemSchema` 新增 `angle` 選填欄位（整數，0-359 度），在 system prompt 第 3 點補充 angle 說明（0=右下、90=左下、180=右上、270=左上，依指向目標在畫面中的位置選擇讓箭頭從外側指向目標的角度），在 `mapAutoFocusResponseToEffects` 中傳遞 angle 至 effect，並補充測試。
+[x] auto-focus-ai 為 `pointer` 效果建議 `angle`：目前所有 AI 自動產生的 `pointer` 效果都使用預設角度（0 度，指向右下），未根據畫面內容選擇合適方向；應在 `AutoFocusItemSchema` 新增 `angle` 選填欄位（整數，0-359 度），在 system prompt 第 3 點補充 angle 說明（0=右下、90=左下、180=右上、270=左上，依指向目標在畫面中的位置選擇讓箭頭從外側指向目標的角度），在 `mapAutoFocusResponseToEffects` 中傳遞 angle 至 effect，並補充測試。 ✓ 完成於 branch: feature/auto-focus-ai-pointer-angle-20260617
 
 ## 工作記錄
 
@@ -1350,3 +1350,7 @@
 - 時間: 2026-06-17 19:00:00 +0800
 - 分支: feature/manim-indicate-around-20260617
 - 內容: 新增 Manim `indicateAround` 動畫效果。在 `manimHelperScript.ts` 的 `animate` 物件中新增 `indicateAround(m, progress, opts)` 函式：使用 0→0.5→1 的對稱 `phase`（phase = 在 0→0.5 是 `p*2`，在 0.5→1 是 `1-(p-0.5)*2`），對 phase 套用 `smooth()` 做插值，縮放從 1 到 `opts.scale`（預設 1.3），同時用 `lerpColor` 從原本的 stroke/fill 漸變至 `opts.color`（預設 `#f59e0b`，琥珀色）；progress=1 時清除 transform 並還原所有屬性，並刪除儲存的 `_indicateOrigStroke`/`_indicateOrigFill`。新增 2 個測試：(1) 自訂 scale/color 時 progress=0.5 縮放大於 1 且顏色偏移，progress=1 時完全還原；(2) 無 opts 時 scale 接近預設值 1.3（全部 20 項通過）。
+
+- 時間: 2026-06-17 20:00:00 +0800
+- 分支: feature/auto-focus-ai-pointer-angle-20260617
+- 內容: 新增 auto-focus-ai `pointer` 效果的 `angle` 角度建議功能。在 `animationAutoFocus.ts` 的 `AutoFocusItemSchema` 新增 `angle: z.number().int().min(0).max(359).optional()` 選填欄位；system prompt 第 3 點補充 angle 說明（0=右下指入、90=左下指入、180=右上指入、270=左上指入，依目標位置在畫面中選擇讓箭頭從外側指向目標的角度）；範例 JSON 的 pointer 效果新增 `"angle":270`；`mapAutoFocusResponseToEffects` 函式在 `type === 'pointer'` 時將 `item.angle` 傳遞至 `effect.angle`。`page-animation.test.ts` 新增兩個單元測試：(1) 有 angle 時正確傳遞並通過 validateAnimationSpec；(2) 無 angle 時 effect.angle 維持 undefined。

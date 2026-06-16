@@ -426,3 +426,31 @@ function onFrame(progress, duration) {
 - `transform="scale(s)"` 直接覆寫 transform attribute（不考慮與其他 transform 組合）
 - 用 `m._indicateOrigStroke` / `m._indicateOrigFill` 在首次呼叫時保存原始顏色，progress=1 時恢復並刪除
 - 新增 2 個 vm 測試確認峰值縮放正確、progress=1 完全復原
+
+## AI 自動聚焦 Pointer 箭頭角度建議（2026-06-17）
+
+### 功能目的
+
+`pointer` 效果會在投影片上顯示一支從畫面外側射入的指示箭頭，引導觀眾目光到 AI 認為重要的位置。過去所有 AI 建議的 pointer 效果都使用預設方向（從左上角向右下刺入，angle=0），不論目標在畫面的哪個位置，這常導致箭頭從奇怪的角度指向目標，甚至和其他效果重疊。
+
+本次讓 AI 在建議 `pointer` 效果時，同時選擇最合適的進入角度。
+
+### 角度說明
+
+`angle` 欄位是箭頭「從畫面外側切入的方向」，以整數度數表示（0-359）：
+
+| angle 值 | 箭頭進入方向 | 適用情境 |
+|----------|------------|---------|
+| 0        | 從左上向右下 | 目標在畫面左上角 |
+| 90       | 從右上向左下 | 目標在畫面右半部 |
+| 180      | 從左下向右上 | 目標在畫面左下角 |
+| 270      | 從右下向左上 | 目標在畫面左半部 |
+
+AI 會根據目標點（xPct, yPct）的畫面位置自動選擇讓箭頭「從外側指入」的最佳角度——例如目標在右半部通常選 90（箭頭從右側進入），目標在左半部通常選 270（箭頭從左側進入）。
+
+### 技術細節
+
+- `AutoFocusItemSchema` 新增 `angle: z.number().int().min(0).max(359).optional()`
+- system prompt 第 3 點補充 angle 說明及 4 個方向示例
+- `mapAutoFocusResponseToEffects` 在 `type === 'pointer'` 時將 `item.angle` 傳遞至 `effect.angle`
+- `page-animation.test.ts` 新增 2 個單元測試：有 angle 時正確傳遞並通過 schema 驗證；無 angle 時 effect.angle 保持 undefined
