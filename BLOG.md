@@ -740,3 +740,15 @@ Manim.animate.bounce(circ, t, { height: 50, bounces: 3 });
 - 以 `|sin(phase * π)|` 產生拋物線弧度，`height * (1 - p * 0.5)` 讓高度隨進度自然衰減
 - progress=1 時清除 transform，確保元素回到原位
 - 新增 2 個 vm 測試（共 30 項全通過）
+
+## highlight-box 雙色邊框（highlightOuterColor）
+
+`highlight-box` 效果現在支援選配外框顏色，讓高亮框在任何投影片背景上都清晰可見。勾選「外框顏色」後，可在主邊框外圍加上一圈 2px 的對比色環（預設白色），形成雙色輪廓效果。
+
+**使用方式：**
+在動畫編輯器的 `highlight-box` 效果設定中，勾選「外框顏色」核取方塊並選擇顏色即可啟用；取消勾選則移除外框。
+
+**技術說明：**
+- `AnimationEffect` 和 `SlideAnimationEffect` 新增 `highlightOuterColor?: string`（選填，未設定時不顯示外框）
+- `SlideRenderer.tsx` 以 `0 0 0 2px ${hOuter}, 0 0 ${hBw*4}px ${hColor}b3` 雙層 box-shadow 實現雙色邊框
+- `AnimationEditorTab.tsx` 以 checkbox 控制開/關，checkbox 啟用後顯示顏色選擇器
