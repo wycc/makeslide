@@ -1441,7 +1441,7 @@
 ## 2026-06-18 新增項目 Batch 5
 [ ] `step-list` 背景色與文字色是否可由 AI 自動生成建議：目前 AI auto-focus 功能（`animationAutoFocus.ts`）生成 `step-list` 效果時不提供 `stepListBgColor`/`stepListTextColor` 欄位，使用者需手動調整；應在 `AUTO_FOCUS_SYSTEM_PROMPT` 的 `step-list` 說明新增建議，讓 AI 在適合深色背景的投影片中可選擇較淺的背景色，並更新 `AutoFocusItemSchema` 允許 `stepListBgColor`/`stepListTextColor` 欄位，`mapAutoFocusResponseToEffects` 中加入對應傳遞邏輯，同時新增 1 個單元測試驗證有顏色時正確傳遞。
 [x] `formula` 效果圓角半徑控制：目前 `formula` 效果固定使用 `borderRadius: '8px'`；應新增 `formulaBorderRadius` 欄位（px 整數，預設 `8`，範圍 0-32），讓使用者在動畫編輯器中自訂公式框圓角，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`/`AnimationEditorTab`（在顏色選擇器區塊加入數字輸入框）及中英文 i18n。 ✓ 完成於 branch: feature/formula-border-radius-20260618
-[ ] `pointer` 效果形狀選項—新增圓點（dot）模式：目前 `pointer` 效果固定使用 SVG 游標箭頭路徑（`<path d="M4 0 ...`）；應新增 `pointerShape?: 'arrow' | 'dot'` 選項（預設 `'arrow'`），當設定為 `'dot'` 時在投影片上渲染一個圓形指示點（`<circle r="50%">`），不使用 angle 旋轉；在 `AnimationEditorTab.tsx` 新增下拉選單（arrow/dot），並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer` 及中英文 i18n。
+[x] `pointer` 效果形狀選項—新增圓點（dot）模式：目前 `pointer` 效果固定使用 SVG 游標箭頭路徑（`<path d="M4 0 ...`）；應新增 `pointerShape?: 'arrow' | 'dot'` 選項（預設 `'arrow'`），當設定為 `'dot'` 時在投影片上渲染一個圓形指示點（`<circle r="50%">`），不使用 angle 旋轉；在 `AnimationEditorTab.tsx` 新增下拉選單（arrow/dot），並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer` 及中英文 i18n。 ✓ 完成於 branch: feature/pointer-shape-20260618
 [x] Manim `animate.bounce(m, progress, opts)` 彈跳效果：應新增 `animate.bounce(m, progress, opts)` 函式，模擬元素向上彈跳再落回原位的拋物線運動；opts 支援 `height`（最高點 SVG 單位，預設 `30`）和 `bounces`（彈跳次數，預設 `2`），以 `sin(progress * π)` 為各彈跳的抛物線弧度，最終 progress=1 時回到原點；新增至少 2 個 vm 測試（一個驗證中間 progress 有 translateY 偏移，一個驗證 progress=1 時 transform 清除）。 ✓ 完成於 branch: feature/manim-bounce-20260618
 [x] `highlight-box` 雙色邊框：目前 `highlight-box` 只有單一顏色邊框；應新增 `highlightOuterColor?: string` 欄位（CSS hex），在原邊框外再套上一個稍大的白色/指定色外框（可用雙層 `box-shadow` 實現，例如 `inset 0 0 0 3px white, 0 0 0 6px ${hColor}`），形成雙色輪廓讓高亮方框在任何投影片背景上都清晰可見；在 `AnimationEditorTab` 新增顏色選擇器，並同步更新後端驗證/序列化、前端 `types.ts`/`SlideRenderer` 及中英文 i18n。 ✓ 完成於 branch: feature/highlight-outer-color-20260618
 
@@ -1456,3 +1456,7 @@
 - 時間: 2026-06-18 13:00:00 +0800
 - 分支: feature/highlight-outer-color-20260618
 - 內容: 新增 `highlight-box` 效果外框顏色（雙色邊框）。後端 `pageAnimation.ts` 在 `AnimationEffect` 介面新增 `highlightOuterColor?: string` 欄位，`EffectSchema` 重用 hex color regex 驗證，序列化時一併輸出。前端 `types.ts` 同步新增欄位；`SlideRenderer.tsx` 當 `highlightOuterColor` 存在時，將 `boxShadow` 改為 `0 0 0 2px ${hOuter}, 0 0 ${hBw*4}px ${hColor}b3`（雙層：外圍 2px 純色環 + 原有光暈）；`AnimationEditorTab.tsx` 在 highlight-box 區段用 Fragment 包覆原有 flex row 與新加的 checkbox（啟用後顯示顏色選擇器，預設 `#ffffff`）；中英文 i18n 新增 `play.animation.highlightOuterColor` 翻譯鍵。
+
+- 時間: 2026-06-18 14:00:00 +0800
+- 分支: feature/pointer-shape-20260618
+- 內容: 新增 `pointer` 效果形狀選項（`pointerShape`）。後端 `pageAnimation.ts` 在 `AnimationEffect` 介面新增 `pointerShape?: 'arrow' | 'dot'` 欄位，`EffectSchema` 新增 `z.enum(['arrow', 'dot'])` 驗證，序列化時一併輸出。前端 `types.ts` 同步新增欄位；`SlideRenderer.tsx` 依 `pointerShape ?? 'arrow'` 判斷：`'dot'` 時渲染 `<circle cx="12" cy="12" r="10">`，`'arrow'` 時渲染原始游標路徑；`dot` 模式不套用 angle 旋轉（transform 中去除 `rotate`）；`AnimationEditorTab.tsx` 在指標區塊最上方新增形狀下拉選單（arrow/dot 兩個選項）；中英文 i18n 新增 `play.animation.pointerShape`/`pointerShape.arrow`/`pointerShape.dot` 翻譯鍵。

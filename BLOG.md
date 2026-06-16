@@ -752,3 +752,17 @@ Manim.animate.bounce(circ, t, { height: 50, bounces: 3 });
 - `AnimationEffect` 和 `SlideAnimationEffect` 新增 `highlightOuterColor?: string`（選填，未設定時不顯示外框）
 - `SlideRenderer.tsx` 以 `0 0 0 2px ${hOuter}, 0 0 ${hBw*4}px ${hColor}b3` 雙層 box-shadow 實現雙色邊框
 - `AnimationEditorTab.tsx` 以 checkbox 控制開/關，checkbox 啟用後顯示顏色選擇器
+
+## pointer 效果形狀選項（pointerShape）
+
+`pointer` 效果現在除了預設的箭頭（cursor）之外，還支援「圓點」模式。使用者可以在動畫編輯器的指標區塊選擇形狀（箭頭/圓點），圓點模式適合在投影片上標記精確位置而不需要方向性指示。
+
+**使用方式：**
+在動畫編輯器的 `pointer` 效果設定中，最上方新增「指標形狀」下拉選單：
+- **箭頭（arrow）**：游標形狀，可旋轉，搭配 `angle` 設定
+- **圓點（dot）**：填滿圓形，不受 `angle` 影響
+
+**技術說明：**
+- `AnimationEffect` 和 `SlideAnimationEffect` 新增 `pointerShape?: 'arrow' | 'dot'`
+- `EffectSchema` 以 `z.enum(['arrow', 'dot'])` 驗證
+- `SlideRenderer.tsx`：`dot` 時渲染 `<circle cx="12" cy="12" r="10">`，並去除 transform 中的 rotate
