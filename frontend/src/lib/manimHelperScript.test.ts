@@ -340,3 +340,40 @@ test("Manim.animate.indicateAround uses default scale=1.3 and amber flash colour
   // default scale=1.3 so at progress=0.5 (smooth(1)=1), scale should equal 1.3
   assert.ok(Math.abs(scale - 1.3) < 0.01, `default scale should be ~1.3, got ${scale}`);
 });
+
+test("Manim.animate.flash recolours mid-progress and restores colours + opacity at progress=1", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const circ = Manim.shapes.circle(svg, { x: 0, y: 0, radius: 1, color: Manim.colors.BLUE });
+  circ.el.style.opacity = "0.8";
+  const origStroke = circ.el.getAttribute("stroke") as string;
+
+  // progress=0.5 (peak): stroke shifts toward white, opacity approaches maxOpacity
+  Manim.animate.flash(circ, 0.5, { color: "#ffffff", maxOpacity: 1 });
+  const stroke05 = circ.el.getAttribute("stroke") as string;
+  assert.notEqual(stroke05, origStroke, "stroke should shift toward flash colour at progress=0.5");
+  const opacity05 = parseFloat(circ.el.style.opacity);
+  assert.ok(opacity05 >= 0.8, "opacity should be >= original at progress=0.5");
+
+  // progress=1: restore original stroke and opacity, no transform change
+  Manim.animate.flash(circ, 1, { color: "#ffffff", maxOpacity: 1 });
+  const stroke1 = circ.el.getAttribute("stroke") as string;
+  assert.equal(stroke1, origStroke, "stroke should be restored to original at progress=1");
+  const opacity1 = parseFloat(circ.el.style.opacity);
+  assert.ok(Math.abs(opacity1 - 0.8) < 0.01, `opacity should be restored to 0.8, got ${opacity1}`);
+});
+
+test("Manim.animate.flash uses default white colour when no opts", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  // Use a non-white stroke so we can detect a colour shift
+  const rect = Manim.shapes.square(svg, { x: 0, y: 0, size: 2, color: Manim.colors.RED });
+  const origStroke = rect.el.getAttribute("stroke") as string;
+
+  Manim.animate.flash(rect, 0.5);
+  const stroke05 = rect.el.getAttribute("stroke") as string;
+  assert.notEqual(stroke05, origStroke, "stroke should shift from RED toward default white at progress=0.5");
+
+  Manim.animate.flash(rect, 1);
+  assert.equal(rect.el.getAttribute("stroke"), origStroke, "stroke restored after flash completes");
+});

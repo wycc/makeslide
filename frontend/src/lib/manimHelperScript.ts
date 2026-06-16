@@ -460,6 +460,32 @@ export const MANIM_HELPER_SCRIPT = `
         delete m._indicateOrigFill;
       }
     },
+    flash: function (m, progress, opts) {
+      var p = clamp01(progress);
+      var flashColor = (opts && opts.color) ? opts.color : '#ffffff';
+      var maxOpacity = (opts && opts.maxOpacity != null) ? opts.maxOpacity : 1;
+      var origStroke = m._flashOrigStroke !== undefined ? m._flashOrigStroke : m.el.getAttribute('stroke');
+      var origFill   = m._flashOrigFill   !== undefined ? m._flashOrigFill   : m.el.getAttribute('fill');
+      var origOpacity = m._flashOrigOpacity !== undefined ? m._flashOrigOpacity : (parseFloat(m.el.style.opacity) || 1);
+      if (m._flashOrigStroke  === undefined) { m._flashOrigStroke  = origStroke; }
+      if (m._flashOrigFill    === undefined) { m._flashOrigFill    = origFill; }
+      if (m._flashOrigOpacity === undefined) { m._flashOrigOpacity = origOpacity; }
+      // phase: 0→0.5 flash, 0.5→1 return
+      var phase = p < 0.5 ? (p * 2) : (1 - (p - 0.5) * 2);
+      var stroke = origStroke ? lerpColor(origStroke, flashColor, phase) : null;
+      var fill   = (origFill && origFill !== 'none') ? lerpColor(origFill, flashColor, phase) : null;
+      if (stroke) { m.el.setAttribute('stroke', stroke); }
+      if (fill)   { m.el.setAttribute('fill',   fill); }
+      m.el.style.opacity = String(lerp(origOpacity, maxOpacity, phase));
+      if (p >= 1) {
+        if (origStroke) { m.el.setAttribute('stroke', origStroke); }
+        if (origFill)   { m.el.setAttribute('fill',   origFill); }
+        m.el.style.opacity = String(origOpacity);
+        delete m._flashOrigStroke;
+        delete m._flashOrigFill;
+        delete m._flashOrigOpacity;
+      }
+    },
   };
   // tex() — sends a renderLatex postMessage to the host page (which runs
   // KaTeX with its fonts), resolves to a <div> with the rendered MathML.
