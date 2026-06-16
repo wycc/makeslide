@@ -1323,7 +1323,7 @@
 
 [x] Manim `animate.flash(m, progress, opts)` 效果：目前 `manimHelperScript.ts` 的 `animate` 提供 `indicateAround`（縮放+改色），但有時只需要「快速閃爍」而不縮放；應新增 `Manim.animate.flash(m, progress, opts)` 函式，讓元素的 fill/stroke 在 progress 0→0.5 漸變為 `opts.color`（預設 `'#ffffff'`），0.5→1 漸回原色，opacity 則在 0→0.5 升至 `opts.maxOpacity`（預設 `1`）、0.5→1 降回原始值，並新增至少 2 個對應 vm 測試。 ✓ 完成於 branch: feature/manim-flash-20260617
 
-[ ] `step-list` 字型大小控制：目前 `step-list` 效果的條列項目固定使用 `1.1rem` 字型大小（`SlideRenderer.tsx`），無法根據項目數量或投影片版面調整；應新增 `stepListFontSize` 欄位（CSS rem 值，預設 `1.1`，範圍 0.5-2.5，步進 0.1），讓使用者在動畫編輯器中自訂條列文字大小，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`/`AnimationEditorTab`（在 step-list 編輯區新增數字輸入框）及中英文 i18n。
+[x] `step-list` 字型大小控制：目前 `step-list` 效果的條列項目固定使用 `1.1rem` 字型大小（`SlideRenderer.tsx`），無法根據項目數量或投影片版面調整；應新增 `stepListFontSize` 欄位（CSS rem 值，預設 `1.1`，範圍 0.5-2.5，步進 0.1），讓使用者在動畫編輯器中自訂條列文字大小，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`/`AnimationEditorTab`（在 step-list 編輯區新增數字輸入框）及中英文 i18n。 ✓ 完成於 branch: feature/step-list-font-size-20260618
 
 [ ] `highlight-box` 邊框寬度控制：目前 `highlight-box` 效果的邊框寬度固定為 4px（`border: '4px solid ${hColor}'`），無法根據投影片重要程度或視覺風格調整粗細；應新增 `highlightBorderWidth` 欄位（px 整數，預設 `4`，範圍 1-12），讓使用者在動畫編輯器中自訂邊框粗細，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`（border 寬度與 box-shadow 寬度同步）/`AnimationEditorTab`（新增數字輸入框）及中英文 i18n。
 
@@ -1394,3 +1394,7 @@
 - 時間: 2026-06-18 01:00:00 +0800
 - 分支: feature/manim-flash-20260617
 - 內容: 新增 Manim `animate.flash` 閃爍效果。在 `manimHelperScript.ts` 的 `animate` 物件中新增 `flash(m, progress, opts)` 函式：使用 0→0.5→1 對稱 phase（與 `indicateAround` 相同策略），progress=0.5 時 fill/stroke 以 `lerpColor` 漸變至 `opts.color`（預設 `'#ffffff'`，白色），opacity 線性插值至 `opts.maxOpacity`（預設 `1`）；progress=1 時完全還原 stroke/fill 和 opacity，並刪除暫存的 `m._flashOrigStroke`、`m._flashOrigFill`、`m._flashOrigOpacity`。新增 2 個 vm 測試：(1) 自訂 color/maxOpacity 時 progress=0.5 顏色偏移、opacity 提升，progress=1 時完全還原；(2) 無 opts 時預設白色，progress=0.5 從 RED 偏移，progress=1 還原（全部 22 項通過）。
+
+- 時間: 2026-06-18 02:00:00 +0800
+- 分支: feature/step-list-font-size-20260618
+- 內容: 新增 `step-list` 效果字型大小控制。後端 `pageAnimation.ts` 新增 `DEFAULT_STEP_LIST_FONT_SIZE_REM = 1.1`、`MIN_STEP_LIST_FONT_SIZE_REM = 0.5`、`MAX_STEP_LIST_FONT_SIZE_REM = 2.5` 常數，`AnimationEffect` 介面新增 `stepListFontSize?: number` 欄位，`EffectSchema` 新增 `z.number().min(0.5).max(2.5)` 驗證，序列化時以 Math.max/min 夾至合法範圍。前端 `types.ts` 同步新增欄位；`SlideRenderer.tsx` 以 `${effect.stepListFontSize ?? 1.1}rem` 字串取代 `<ul>` 的硬編碼 `1.1rem` fontSize；`AnimationEditorTab.tsx` 在 step-list 顏色選擇器下方加入數字輸入框（range 0.5-2.5, step 0.1）並顯示 rem 單位標籤；中英文 i18n 新增 `play.animation.stepListFontSize` 翻譯鍵。

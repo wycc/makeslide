@@ -567,3 +567,24 @@ function onFrame(progress, duration) {
 - `m._flashOrigStroke` / `m._flashOrigFill` / `m._flashOrigOpacity` 在首次呼叫時儲存原始值，progress=1 時刪除
 - 與 `indicateAround` 使用相同的對稱 `phase` 模式，但不修改 `transform`（無縮放）
 - 新增 2 個 vm 測試確認：(1) 自訂顏色+opacity 時中間閃爍、結尾完全還原；(2) 預設白色從 RED 偏移後還原
+
+## Step-List 字型大小自訂（2026-06-18）
+
+### 功能目的
+
+`step-list` 效果（條列清單）的文字大小原本固定為 1.1rem。當項目數量較多時，較小的字型可以讓所有項目都在可視區域內；當項目較少或要強調時，較大字型效果更好。本次新增 `stepListFontSize` 欄位。
+
+### 使用方式
+
+在動畫編輯器的 `step-list` 效果設定中，顏色選擇器下方新增「**字型大小（rem）**」數字輸入框，範圍 0.5-2.5rem，步進 0.1。
+
+- 預設 `1.1rem`（行為與先前相同）
+- 較小值（如 0.8rem）適合 5-6 個項目的密集清單
+- 較大值（如 1.5rem）適合 2-3 個重點項目
+
+### 技術細節
+
+- `AnimationEffect` 和 `SlideAnimationEffect` 新增 `stepListFontSize?: number`
+- `validateAnimationSpec` 以 Math.max/min 夾至 [0.5, 2.5]
+- `SlideRenderer.tsx` 以 `` `${stepListFontSize ?? 1.1}rem` `` 作為 `<ul>` 的 fontSize
+- 後端新增 `DEFAULT_STEP_LIST_FONT_SIZE_REM = 1.1`、`MIN/MAX` 常數
