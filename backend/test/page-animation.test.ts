@@ -1149,6 +1149,37 @@ test('mapAutoFocusResponseToEffects formula output passes validateAnimationSpec'
   assert.equal(result.spec?.effects[0]?.formula, '\\frac{1}{\\sigma\\sqrt{2\\pi}}e^{-\\frac{(x-\\mu)^2}{2\\sigma^2}}');
 });
 
+test('mapAutoFocusResponseToEffects passes angle through for pointer effects', () => {
+  const effects = mapAutoFocusResponseToEffects(
+    {
+      effects: [
+        { line: 0, show: true, type: 'pointer', xPct: 62, yPct: 38, angle: 270 },
+      ],
+    },
+    1,
+  );
+  assert.equal(effects.length, 1);
+  assert.equal(effects[0].type, 'pointer');
+  assert.equal(effects[0].angle, 270);
+  const result = validateAnimationSpec({ version: 1, enabled: true, effects });
+  assert.equal(result.ok, true);
+  assert.equal(result.spec?.effects[0]?.angle, 270);
+});
+
+test('mapAutoFocusResponseToEffects pointer without angle leaves angle undefined', () => {
+  const effects = mapAutoFocusResponseToEffects(
+    {
+      effects: [
+        { line: 0, show: true, type: 'pointer', xPct: 50, yPct: 50 },
+      ],
+    },
+    1,
+  );
+  assert.equal(effects.length, 1);
+  assert.equal(effects[0].type, 'pointer');
+  assert.equal(effects[0].angle, undefined);
+});
+
 // ── fillCustomScriptEffectsCode ─────────────────────────────────────────────────
 
 test('fillCustomScriptEffectsCode fills in code for a custom-script effect generated from its prompt', async () => {
