@@ -681,3 +681,16 @@ Manim.animate.wiggle(circ, t, { amplitude: 12, frequency: 4 });
 - 振幅因子 `(1 - progress)` 讓動畫在結尾自然衰減至靜止
 - progress=1 時清除 transform 屬性，確保無殘留偏移
 - 新增 2 個 vm 測試（共 26 項全通過）
+
+## text-callout 圓角半徑控制（textCalloutBorderRadius）
+
+`text-callout` 效果現在支援自訂邊框圓角半徑。使用者可以在動畫編輯器中設定 `textCalloutBorderRadius`（px 整數，預設 `8`，範圍 0-32，步進 2px），讓文字說明框在尖角到圓潤之間調整，配合投影片的視覺設計語言。
+
+**使用方式：**
+在動畫編輯器的 `text-callout` 效果設定中，字型大小輸入框下方有「圓角半徑（px）」數字輸入框（步進 2px）。
+
+**技術說明：**
+- `AnimationEffect` 和 `SlideAnimationEffect` 新增 `textCalloutBorderRadius?: number`
+- `EffectSchema` 以 `z.number().int().min(0).max(32)` 驗證
+- `SlideRenderer.tsx` 以 `${effect.textCalloutBorderRadius ?? 8}px` 取代硬編碼 `'8px'`
+- 後端新增 `DEFAULT_TEXT_CALLOUT_BORDER_RADIUS = 8`、`MAX_TEXT_CALLOUT_BORDER_RADIUS = 32` 常數
