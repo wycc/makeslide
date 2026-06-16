@@ -351,3 +351,25 @@ MCP_AUTH_TOKEN=your-secret-token-here
 - `SlideRenderer.tsx`：`highlight-box` 渲染改用 `effect.highlightColor ?? '#ef4444'`；box-shadow 也使用相同顏色（附加 `b3` 後綴 = ~70% 不透明度的 hex alpha）
 - `AnimationEditorTab.tsx`：`effect.type === 'highlight-box'` 條件下新增 `<input type="color">` 選色器
 - i18n：中英文 locale 各新增 `play.animation.highlightColor` 翻譯鍵
+
+## Text-Callout 效果顏色自訂（2026-06-17）
+
+### 功能目的
+
+`text-callout` 效果原本固定使用深色背景（`#0f172a`）和白色文字（`#f8fafc`），若投影片是淺色主題或品牌色系，文字框的顏色就會顯得格格不入。本次新增 `textCalloutBgColor` 和 `textCalloutTextColor` 欄位，讓使用者可自由搭配。
+
+### 使用方式
+
+在動畫編輯器中，選擇一個 `text-callout` 效果後，文字內容輸入框下方新增了兩個顏色選擇器：
+- **背景顏色**：預設 `#0f172a`（深藍黑），適合在深色投影片上使用
+- **文字顏色**：預設 `#f8fafc`（接近白色），對比鮮明
+
+兩個顏色選擇器並排顯示，支援瀏覽器原生顏色盤，選完後立即在投影片上預覽。
+
+### 技術細節
+
+- `pageAnimation.ts`：新增兩個預設色常數；`AnimationEffect` interface 新增兩個 optional 欄位；`EffectSchema` 重用既有 hex color regex；序列化時一併輸出
+- `types.ts`（前端）：同步新增兩個欄位
+- `SlideRenderer.tsx`：text-callout 容器改用 `effect.textCalloutBgColor ?? '#0f172a'` 和 `effect.textCalloutTextColor ?? '#f8fafc'` 作為 inline style
+- `AnimationEditorTab.tsx`：text-callout 分支改包 `<>...</>` 並加入兩個 `<input type="color">` 選色器
+- i18n：中英文 locale 各新增 `play.animation.textCalloutBgColor` 和 `play.animation.textCalloutTextColor`

@@ -1305,7 +1305,7 @@
 
 [x] `highlight-box` 效果邊框顏色自訂：目前 `highlight-box` 固定使用紅色邊框（`#ef4444`），無法根據投影片主題調整；應新增 `highlightColor` 欄位（CSS hex，預設 `#ef4444`），讓使用者可在動畫編輯器中自訂邊框顏色，並同步更新 `AnimationEffect` 介面（後端 `pageAnimation.ts`）、`EffectSchema`（Zod 驗證）、序列化、前端 `types.ts`、`SlideRenderer.tsx` 與 `AnimationEditorTab.tsx`（新增顏色選擇器）。（完成於分支: feature/highlight-box-color-20260617）
 
-[ ] `text-callout` 效果背景色與文字色自訂：目前 `text-callout` 固定使用暗色背景（`rgba(15,23,42,0.85)`）與亮白文字（`#f8fafc`），無法配合不同風格投影片；應新增 `textCalloutBgColor`（CSS hex，預設 `#0f172a`）和 `textCalloutTextColor`（CSS hex，預設 `#f8fafc`）欄位，使用者可在動畫編輯器中自訂，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`/`AnimationEditorTab`。
+[x] `text-callout` 效果背景色與文字色自訂：目前 `text-callout` 固定使用暗色背景（`rgba(15,23,42,0.85)`）與亮白文字（`#f8fafc`），無法配合不同風格投影片；應新增 `textCalloutBgColor`（CSS hex，預設 `#0f172a`）和 `textCalloutTextColor`（CSS hex，預設 `#f8fafc`）欄位，使用者可在動畫編輯器中自訂，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`/`AnimationEditorTab`。（完成於分支: feature/text-callout-colors-20260617）
 
 [ ] `spotlight` 效果遮罩顏色與透明度自訂：目前 `spotlight` 固定使用黑色半透明遮罩（`rgba(0,0,0,0.6)`），無法調整；應新增 `spotlightColor`（CSS hex，預設 `#000000`）和 `spotlightOpacity`（0~1 數字，預設 `0.6`）兩個欄位，讓使用者在動畫編輯器中用顏色選擇器與滑桿自訂遮罩色與不透明度，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`/`AnimationEditorTab`。
 
@@ -1338,3 +1338,7 @@
 - 時間: 2026-06-17 16:00:00 +0800
 - 分支: feature/highlight-box-color-20260617
 - 內容: 新增 `highlight-box` 效果邊框顏色自訂。後端 `pageAnimation.ts` 新增 `DEFAULT_HIGHLIGHT_BOX_COLOR = '#ef4444'` 常數與 `highlightColor?: string` 欄位，`EffectSchema` 新增 Zod hex color 驗證（重用現有 regex `^#[0-9a-fA-F]{3,8}$`，最長 20 字元），`validateAnimationSpec` 序列化時一併輸出。前端 `types.ts` 同步新增 `highlightColor` 欄位；`SlideRenderer.tsx` 使用 `effect.highlightColor ?? '#ef4444'` 作為邊框色並搭配對應的 box-shadow（`hColor + 'b3'` ≈ 70% 透明度）；`AnimationEditorTab.tsx` 在 `highlight-box` 分支新增顏色選擇器；中英文 i18n 新增 `play.animation.highlightColor` 翻譯鍵。
+
+- 時間: 2026-06-17 17:00:00 +0800
+- 分支: feature/text-callout-colors-20260617
+- 內容: 新增 `text-callout` 效果的背景色與文字色自訂。後端 `pageAnimation.ts` 新增 `DEFAULT_TEXT_CALLOUT_BG_COLOR`（`#0f172a`）和 `DEFAULT_TEXT_CALLOUT_TEXT_COLOR`（`#f8fafc`）常數，`AnimationEffect` interface 新增 `textCalloutBgColor`/`textCalloutTextColor` 欄位，`EffectSchema` 重用現有 hex color 驗證，序列化時一併輸出。前端 `types.ts` 同步新增兩個欄位；`SlideRenderer.tsx` 使用 `textCalloutBgColor`/`textCalloutTextColor`（帶預設值）作為背景色與文字色；`AnimationEditorTab.tsx` 在 text-callout 編輯區塊將 textarea 包入 `<>...</>` 並加入兩個並排的顏色選擇器；中英文 i18n 新增 `play.animation.textCalloutBgColor`/`textCalloutTextColor` 翻譯鍵。
