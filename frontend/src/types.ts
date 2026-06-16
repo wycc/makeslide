@@ -254,6 +254,10 @@ export interface SlideAnimationEffect {
    * Up to `MAX_STEP_LIST_ITEMS` items, each up to `MAX_STEP_LIST_ITEM_LENGTH` chars.
    */
   items?: string[];
+  /** Background colour (CSS hex) for `step-list` effects. Defaults to `#1e293b`. Ignored by other effect types. */
+  stepListBgColor?: string;
+  /** Text colour (CSS hex) for `step-list` effects. Defaults to `#f1f5f9`. Ignored by other effect types. */
+  stepListTextColor?: string;
   /**
    * Id of a figure extracted from the slide's source PDF (see
    * `fetchPageFigures`), shown as a positioned image overlay by

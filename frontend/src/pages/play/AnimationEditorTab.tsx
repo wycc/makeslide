@@ -1087,23 +1087,47 @@ export function AnimationEditorTab() {
                 </div>
               )}
               {effect.type === 'step-list' && (
-                <label className="flex flex-col gap-1 text-xs text-slate-400">
-                  {t('play.animation.stepListItems')}
-                  <textarea
-                    rows={3}
-                    value={(effect.items ?? []).join('\n')}
-                    disabled={disabled}
-                    placeholder={t('play.animation.stepListItemsPlaceholder')}
-                    onChange={(e) => {
-                      const lines = e.target.value
-                        .split('\n')
-                        .slice(0, MAX_STEP_LIST_ITEMS)
-                        .map((line) => line.slice(0, MAX_STEP_LIST_ITEM_LENGTH));
-                      updateEffect(effect.id, { items: lines.some((line) => line.trim().length > 0) ? lines : undefined });
-                    }}
-                    className="w-48 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
-                  />
-                </label>
+                <>
+                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    {t('play.animation.stepListItems')}
+                    <textarea
+                      rows={3}
+                      value={(effect.items ?? []).join('\n')}
+                      disabled={disabled}
+                      placeholder={t('play.animation.stepListItemsPlaceholder')}
+                      onChange={(e) => {
+                        const lines = e.target.value
+                          .split('\n')
+                          .slice(0, MAX_STEP_LIST_ITEMS)
+                          .map((line) => line.slice(0, MAX_STEP_LIST_ITEM_LENGTH));
+                        updateEffect(effect.id, { items: lines.some((line) => line.trim().length > 0) ? lines : undefined });
+                      }}
+                      className="w-48 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                    />
+                  </label>
+                  <div className="flex gap-3">
+                    <label className="flex flex-col gap-1 text-xs text-slate-400">
+                      {t('play.animation.stepListBgColor')}
+                      <input
+                        type="color"
+                        value={effect.stepListBgColor ?? '#1e293b'}
+                        disabled={disabled}
+                        onChange={(e) => updateEffect(effect.id, { stepListBgColor: e.target.value })}
+                        className="h-8 w-10 cursor-pointer rounded border border-slate-700 bg-slate-900 p-0.5"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1 text-xs text-slate-400">
+                      {t('play.animation.stepListTextColor')}
+                      <input
+                        type="color"
+                        value={effect.stepListTextColor ?? '#f1f5f9'}
+                        disabled={disabled}
+                        onChange={(e) => updateEffect(effect.id, { stepListTextColor: e.target.value })}
+                        className="h-8 w-10 cursor-pointer rounded border border-slate-700 bg-slate-900 p-0.5"
+                      />
+                    </label>
+                  </div>
+                </>
               )}
               {effect.type === 'overlay-image' && (
                 <div className="flex flex-col gap-1 text-xs text-slate-400">
