@@ -1407,6 +1407,28 @@ export function AnimationEditorTab() {
                       className="w-20 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
                     />
                   </label>
+                  <div className="flex gap-3 items-end">
+                    <label className="flex flex-col gap-1 text-xs text-slate-400">
+                      {t('play.animation.formulaBgColor')}
+                      <input
+                        type="color"
+                        value={effect.formulaBgColor ?? '#0f172a'}
+                        disabled={disabled}
+                        onChange={(e) => updateEffect(effect.id, { formulaBgColor: e.target.value })}
+                        className="h-8 w-12 cursor-pointer rounded-md border border-slate-700 bg-slate-900 p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1 text-xs text-slate-400">
+                      {t('play.animation.formulaTextColor')}
+                      <input
+                        type="color"
+                        value={effect.formulaTextColor ?? '#f8fafc'}
+                        disabled={disabled}
+                        onChange={(e) => updateEffect(effect.id, { formulaTextColor: e.target.value })}
+                        className="h-8 w-12 cursor-pointer rounded-md border border-slate-700 bg-slate-900 p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+                      />
+                    </label>
+                  </div>
                 </>
               )}
               {OVERLAY_EFFECT_TYPES.includes(effect.type) && effect.type !== 'custom-script' && (
