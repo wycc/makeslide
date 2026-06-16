@@ -65,3 +65,26 @@
 - `AnimationEditorTab.tsx` 新增 `CUSTOM_SCRIPT_EXAMPLE_PROMPTS` 常數陣列，儲存標籤鍵與提示詞文字
 - 下拉選單使用 `<select value="">` 觸發 `onChange` 後重設回空值，下次可再次選同一項
 - 後端新增測試 `findUnsafeScriptPattern allows Manim.tex call patterns without flagging them`，確認：(1) `await Manim.tex(...)` 呼叫不含 `window.parent` 不被拒絕；(2) `Manim.tex(...).then(...)` 鏈也是安全的；(3) 一般識別字 `parentEl`/`.postMessage` 不被誤判為 `window.parent` 存取
+
+## Overlay-Image 縮放比例鎖定
+
+### 功能目的
+
+在動畫編輯器的 `overlay-image`（插入圖片）效果卡片中，新增 🔒/🔓 比例鎖定按鈕。啟用後，當使用者調整圖片寬度（透過數字輸入框或拖曳 resize handle）時，高度會自動依照圖片的原始長寬比計算，避免圖片被拉伸或壓扁。
+
+### 使用方式
+
+1. 在動畫編輯器中，新增或選擇一個 `overlay-image` 效果。
+2. 在「插入圖片」下拉選單選擇圖片後，旁邊會出現圖片縮圖，以及一個 **🔓**（解鎖）按鈕。
+3. 點擊 🔓 按鈕切換為 **🔒**（鎖定，紫色高亮），此時比例鎖定生效。
+4. 在下方的「焦點位置與大小（%）」區段：
+   - 修改 **W（寬度）** 輸入框，高度會自動依原始圖片比例更新
+   - 拖曳 resize handle 調整寬度時，高度也同步計算
+   - 直接修改高度不受影響（只有寬度觸發比例計算）
+5. 點擊 🔒 可切回 🔓 解除鎖定，恢復自由調整。
+
+### 技術細節
+
+- 使用圖片縮圖的 `onLoad` 事件取得 `naturalWidth`/`naturalHeight`，計算比例後存入 `figureNaturalRatios` state
+- 比例鎖定狀態存於 `lockedAspectEffectIds` (Set)，不儲存至 animation spec JSON（只在 UI 狀態中）
+- 寬度變化攔截在：(1) 數字輸入框的 `onChange` handler；(2) `EffectPositionEditor` 的 `onParamsChange` callback wrapper
