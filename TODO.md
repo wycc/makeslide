@@ -1315,7 +1315,7 @@
 
 [x] `pointer` 效果顏色自訂：目前 `pointer` 箭頭固定使用玫瑰紅色（`rgba(244,63,94,0.95)`），無法配合不同風格的投影片；應新增 `pointerColor` 欄位（CSS hex，預設 `#f43f5e`），讓使用者可在動畫編輯器中自訂箭頭顏色，並同步更新後端 `AnimationEffect` 介面、`EffectSchema`（Zod 驗證）、序列化、前端 `types.ts`、`SlideRenderer.tsx`（SVG fill 與 drop-shadow 顏色）、`AnimationEditorTab.tsx`（新增顏色選擇器）及中英文 i18n。 ✓ 完成於 branch: feature/pointer-color-20260617
 
-[ ] `pointer` 效果尺寸自訂：目前 pointer 箭頭固定為 `2.5rem × 2.5rem`，在不同解析度與投影片尺寸下可能顯得過大或過小；應新增 `pointerSize` 欄位（CSS rem 值，預設 `2.5`，範圍 1-6，步進 0.5），讓使用者可在動畫編輯器中調整箭頭尺寸，並同步更新後端 `AnimationEffect` 介面、`EffectSchema`、序列化及前端對應檔案。
+[x] `pointer` 效果尺寸自訂：目前 pointer 箭頭固定為 `2.5rem × 2.5rem`，在不同解析度與投影片尺寸下可能顯得過大或過小；應新增 `pointerSize` 欄位（CSS rem 值，預設 `2.5`，範圍 1-6，步進 0.5），讓使用者可在動畫編輯器中調整箭頭尺寸，並同步更新後端 `AnimationEffect` 介面、`EffectSchema`、序列化及前端對應檔案。 ✓ 完成於 branch: feature/pointer-size-20260617
 
 [ ] `text-callout` 字型大小控制：目前 `text-callout` 效果固定使用 `1.25rem` 字型大小（`SlideRenderer.tsx`），無法配合不同長度的文字或投影片版面；應新增 `textCalloutFontSize` 欄位（CSS rem 值，預設 `1.25`，範圍 0.5-3，步進 0.125），讓使用者在動畫編輯器中自訂文字大小，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`/`AnimationEditorTab`（在 text-callout 編輯區新增數字輸入框）及中英文 i18n。
 
@@ -1368,3 +1368,7 @@
 - 時間: 2026-06-17 21:00:00 +0800
 - 分支: feature/pointer-color-20260617
 - 內容: 新增 `pointer` 效果箭頭顏色自訂。後端 `pageAnimation.ts` 新增 `DEFAULT_POINTER_COLOR = '#f43f5e'` 常數、`pointerColor?: string` 欄位（`AnimationEffect` 介面），`EffectSchema` 新增 Zod hex color 驗證（重用現有 regex `^#[0-9a-fA-F]{3,8}$`），序列化時一併輸出。前端 `types.ts` 同步新增 `pointerColor` 欄位；`SlideRenderer.tsx` 從 `effect.pointerColor ?? '#f43f5e'` 解析 r/g/b channel 並生成 `rgba()` 字串，套用至 SVG fill 與 drop-shadow filter；`AnimationEditorTab.tsx` 在 pointer 區塊的角度輸入後方（以 `<>...</>` 包覆）加入顏色選擇器；中英文 i18n 新增 `play.animation.pointerColor` 翻譯鍵。
+
+- 時間: 2026-06-17 22:00:00 +0800
+- 分支: feature/pointer-size-20260617
+- 內容: 新增 `pointer` 效果箭頭尺寸自訂。後端 `pageAnimation.ts` 新增 `DEFAULT_POINTER_SIZE_REM = 2.5`、`MIN_POINTER_SIZE_REM = 1`、`MAX_POINTER_SIZE_REM = 6` 常數，`AnimationEffect` 介面新增 `pointerSize?: number`，`EffectSchema` 新增 `z.number().min(1).max(6)` 驗證，序列化時以 Math.max/min 夾至合法範圍再輸出。前端 `types.ts` 同步新增欄位；`SlideRenderer.tsx` 將 `effect.pointerSize ?? 2.5` 轉換為 `${rem}rem` 字串，套用至 pointer div 的 width/height；`AnimationEditorTab.tsx` 在顏色選擇器後加入數字輸入框（range 1-6, step 0.5）並顯示 rem 單位標籤；中英文 i18n 新增 `play.animation.pointerSize` 翻譯鍵。
