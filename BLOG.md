@@ -723,3 +723,20 @@ Manim.animate.spinAround(star, t, { turns: 1, cx: 2, cy: 1 });
 - `EffectSchema` 以 `z.number().int().min(0).max(32)` 驗證
 - `SlideRenderer.tsx` 以 `${effect.formulaBorderRadius ?? 8}px` 取代硬編碼 `'8px'`
 - 後端新增 `DEFAULT_FORMULA_BORDER_RADIUS = 8`、`MAX_FORMULA_BORDER_RADIUS = 32` 常數
+
+## Manim animate.bounce 彈跳效果
+
+`window.Manim.animate.bounce(m, progress, opts)` 讓 SVG 元素向上彈跳再回到原位，模擬拋物線物理運動，使元素在靜止前多次彈跳以吸引注意。
+
+**使用方式：**
+```javascript
+const circ = Manim.shapes.circle(svg, { x: 0, y: 0, radius: 1.5, color: Manim.colors.ORANGE });
+// 彈跳 3 次，最高 50 SVG 單位
+Manim.animate.bounce(circ, t, { height: 50, bounces: 3 });
+```
+
+**技術說明：**
+- opts 支援 `height`（最高點 SVG 單位，預設 `30`）和 `bounces`（彈跳次數，預設 `2`）
+- 以 `|sin(phase * π)|` 產生拋物線弧度，`height * (1 - p * 0.5)` 讓高度隨進度自然衰減
+- progress=1 時清除 transform，確保元素回到原位
+- 新增 2 個 vm 測試（共 30 項全通過）
