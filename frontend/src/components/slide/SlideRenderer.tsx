@@ -139,6 +139,8 @@ function EffectOverlay({
   }
   if (effect.type === 'step-list') {
     const items = (effect.items ?? []).map((item) => item.trim()).filter((item) => item.length > 0);
+    const bgColor = effect.stepListBgColor ?? '#1e293b';
+    const textColor = effect.stepListTextColor ?? '#f1f5f9';
     return (
       <div
         data-effect-id={effect.id}
@@ -148,8 +150,8 @@ function EffectOverlay({
           alignItems: 'center',
           padding: '0.5em 0.75em',
           borderRadius: '8px',
-          background: 'rgba(15, 23, 42, 0.85)',
-          color: '#f8fafc',
+          background: bgColor,
+          color: textColor,
           overflow: 'hidden',
         }}
       >

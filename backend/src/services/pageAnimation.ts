@@ -76,6 +76,16 @@ export interface AnimationEffect {
    */
   items?: string[];
   /**
+   * Background colour (CSS hex) for `step-list` effects (ignored by other
+   * effect types). Defaults to `DEFAULT_STEP_LIST_BG_COLOR` (`#1e293b`).
+   */
+  stepListBgColor?: string;
+  /**
+   * Text colour (CSS hex) for `step-list` effects (ignored by other
+   * effect types). Defaults to `DEFAULT_STEP_LIST_TEXT_COLOR` (`#f1f5f9`).
+   */
+  stepListTextColor?: string;
+  /**
    * Id of a figure extracted from the slide's source PDF (see
    * `GET /api/pdfs/:id/pages/:n/figures`), shown as a positioned image
    * overlay by `overlay-image` effects (ignored by other effect types).
@@ -168,6 +178,10 @@ export const DEFAULT_SHAPE_STROKE_COLOR = '#f43f5e';
 export const DEFAULT_SHAPE_STROKE_WIDTH = 5;
 /** Max length (chars) for a `shape` effect's `color` field. */
 export const MAX_SHAPE_COLOR_LENGTH = 20;
+/** Default background colour for `step-list` effects (slate-900 equivalent). */
+export const DEFAULT_STEP_LIST_BG_COLOR = '#1e293b';
+/** Default text colour for `step-list` effects (slate-100 equivalent). */
+export const DEFAULT_STEP_LIST_TEXT_COLOR = '#f1f5f9';
 /** Max stroke width (SVG user units) for `shape` effects. */
 export const MAX_SHAPE_STROKE_WIDTH = 20;
 /** Max length (chars) for a `custom-script` effect's generated JavaScript `code`. */
@@ -230,6 +244,8 @@ const EffectSchema = z.object({
   color: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   strokeWidth: z.number().min(1).max(MAX_SHAPE_STROKE_WIDTH).optional(),
   items: z.array(z.string().max(MAX_STEP_LIST_ITEM_LENGTH)).max(MAX_STEP_LIST_ITEMS).optional(),
+  stepListBgColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
+  stepListTextColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   figureId: z.string().min(1).max(MAX_OVERLAY_IMAGE_FIGURE_ID_LENGTH).optional(),
   formula: z.string().min(1).max(MAX_FORMULA_LENGTH).optional(),
   formulaFontSize: z.number().min(MIN_FORMULA_FONT_SIZE_EM).max(MAX_FORMULA_FONT_SIZE_EM).optional(),
@@ -295,6 +311,8 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.color !== undefined ? { color: effect.color } : {}),
       ...(effect.strokeWidth !== undefined ? { strokeWidth: Math.max(1, Math.min(MAX_SHAPE_STROKE_WIDTH, Math.round(effect.strokeWidth))) } : {}),
       ...(effect.items !== undefined ? { items: effect.items } : {}),
+      ...(effect.stepListBgColor !== undefined ? { stepListBgColor: effect.stepListBgColor } : {}),
+      ...(effect.stepListTextColor !== undefined ? { stepListTextColor: effect.stepListTextColor } : {}),
       ...(effect.figureId !== undefined ? { figureId: effect.figureId } : {}),
       ...(effect.formula !== undefined ? { formula: effect.formula } : {}),
       ...(effect.formulaFontSize !== undefined ? { formulaFontSize: effect.formulaFontSize } : {}),

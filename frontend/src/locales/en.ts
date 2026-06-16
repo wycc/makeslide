@@ -377,6 +377,8 @@ export const en = {
   'play.animation.shapeStrokeWidth': 'Stroke width',
   'play.animation.stepListItems': 'List items (one per line, up to 6)',
   'play.animation.stepListItemsPlaceholder': 'Point one\nPoint two\nPoint three',
+  'play.animation.stepListBgColor': 'Background color',
+  'play.animation.stepListTextColor': 'Text color',
   'play.animation.overlayImageFigure': 'Insert figure',
   'play.animation.overlayImageSelectFigure': 'Select a figure...',
   'play.animation.overlayImageNoFigures': 'No figures detected on this page',
