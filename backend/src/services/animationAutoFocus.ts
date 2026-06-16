@@ -74,6 +74,11 @@ const AutoFocusItemSchema = z.object({
     .min(CUSTOM_SCRIPT_AI_DURATION_SECONDS.min)
     .max(CUSTOM_SCRIPT_AI_DURATION_SECONDS.max)
     .optional(),
+  /**
+   * Rotation angle in degrees for `pointer` effects (0=points down-right,
+   * 90=down-left, 180=up-right, 270=up-left). Only meaningful for pointer.
+   */
+  angle: z.number().int().min(0).max(359).optional(),
   xPct: z.number().min(0).max(100).optional(),
   yPct: z.number().min(0).max(100).optional(),
   widthPct: z.number().min(1).max(100).optional(),
@@ -100,7 +105,7 @@ function buildAutoFocusSystemPrompt(): string {
     '你的任務：針對使用者提供的每一句逐字稿（依索引 0 到 N-1），判斷：',
     '1. show：是否需要在播放到這句時顯示效果。只有當這句明確提到畫面中的具體位置、物件、數據、圖表或重點文字時才顯示；單純的開場、總結、銜接句通常不需要，請避免每句都顯示。',
     '2. type：highlight-box（醒目方框，框出重點）、spotlight（聚光燈，方框外區域變暗）、text-callout（淡入一段精簡文字摘要）、shape（淡入一個簡單的 SVG 圖形，用於標示位置）、step-list（淡入一個條列步驟/要點清單方框）、pointer（淡入一個指標箭頭，精確指向畫面中一個點）、formula（淡入一個以 LaTeX 渲染的數學公式）或 custom-script（淡入一段自訂的資料視覺化動畫）。沒有特別理由時優先選 highlight-box；若這句的重點適合用一句精簡摘要（例如關鍵數據、結論）強化，可選 text-callout；若這句在描述多個步驟、流程或要點，可選 step-list；若需要用箭頭、圓形等圖形標示位置，可選 shape；若這句強調的是一個精確的點（例如「這個數字」、「這個按鈕」），需要用箭頭直接指向該點，可選 pointer——pointer 與 shape 的差別在於：pointer 指向一個點，shape 框出一個區域；若這句明確提到一個數學公式、統計公式或科學方程式（包括以文字描述的，例如「E 等於 mc 平方」、「常態分布公式」、「費馬最後定理」），且整個公式可用 LaTeX 完整表示，可選 formula——注意：單純的百分比數字（例如「成長 35%」）、日期或簡單計數不算公式，應選 text-callout；若這句描述的內容（例如數值隨時間變化、流程示意、座標關係）適合用一段簡短的動態視覺化呈現，且前述類型都無法表達，可選 custom-script——但這類效果產生成本較高，整頁最多只能有一個，且僅在確實必要時才選用，多數情況下請優先使用其他類型。',
-    '3. xPct / yPct / widthPct / heightPct：方框（或文字框、圖形、清單方框、自訂視覺化）左上角座標與寬高，皆為投影片寬高的百分比（0-100）。請依該句描述的內容，盡量對應到畫面中合理的位置與大小，避免每句都用同一個位置；text-callout、step-list、custom-script 建議放在畫面空白處（例如下方角落），避免遮住重點內容。注意：若 type 為 pointer，只需提供 xPct 和 yPct（指標指向的點座標），不需要 widthPct 和 heightPct。',
+    '3. xPct / yPct / widthPct / heightPct：方框（或文字框、圖形、清單方框、自訂視覺化）左上角座標與寬高，皆為投影片寬高的百分比（0-100）。請依該句描述的內容，盡量對應到畫面中合理的位置與大小，避免每句都用同一個位置；text-callout、step-list、custom-script 建議放在畫面空白處（例如下方角落），避免遮住重點內容。注意：若 type 為 pointer，只需提供 xPct 和 yPct（指標指向的點座標），不需要 widthPct 和 heightPct；另可選擇提供 angle（0-359 整數度數），使箭頭從畫面外側指向目標——0=指向右下（箭頭從左上方向右下刺）、90=指向左下、180=指向右上、270=指向左上，請依目標點在畫面中的位置選擇讓箭頭「從外側指入」的角度，例如目標在畫面右半部通常應選 270（從右上往右下指），目標在畫面左半部通常選 90；不確定時可省略（預設 0）。',
     '4. text（僅當 type 為 text-callout 時提供，其他 type 請省略此欄位）：要顯示的文字內容，務必精簡扼要（不超過 80 字），並使用與逐字稿相同的語言。',
     '5. shape（僅當 type 為 shape 時提供，其他 type 請省略此欄位）：圖形種類，從 circle（圓形）、rect（方框）、ellipse（橢圓）、arrow（箭頭）中選擇，依該句描述的內容選擇最合適的圖形。',
     '6. items（僅當 type 為 step-list 時提供，其他 type 請省略此欄位）：條列項目的文字陣列，每項務必精簡（不超過 60 字），最多 6 項，並使用與逐字稿相同的語言。',
@@ -113,7 +118,7 @@ function buildAutoFocusSystemPrompt(): string {
     '座標系統：投影片左上角為原點 (0,0)，x 向右增加、y 向下增加，皆為 0-100 的百分比。',
     'show 為 false 時，其他欄位可省略。',
     '',
-    '請只輸出 JSON，格式為：{"effects":[{"line":0,"show":true,"type":"highlight-box","xPct":10,"yPct":20,"widthPct":30,"heightPct":25,"exitDuration":2}, {"line":1,"show":true,"type":"text-callout","text":"營收成長 35%","xPct":8,"yPct":78,"widthPct":40,"heightPct":14,"exitDuration":3}, {"line":2,"show":true,"type":"shape","shape":"arrow","xPct":40,"yPct":35,"widthPct":15,"heightPct":15,"exitDuration":2}, {"line":3,"show":true,"type":"step-list","items":["第一步：開啟設定","第二步：選擇選項","第三步：儲存"],"xPct":55,"yPct":55,"widthPct":35,"heightPct":30,"exitDuration":4}, {"line":4,"show":true,"type":"pointer","xPct":62,"yPct":38,"exitDuration":2}, {"line":5,"show":true,"type":"formula","formulaLatex":"E = mc^2","xPct":30,"yPct":40,"widthPct":40,"heightPct":15,"exitDuration":3}, {"line":6,"show":true,"type":"custom-script","scriptPrompt":"畫一個座標平面，顯示一個點沿曲線從左下移動到右上，代表數值隨時間成長","scriptDurationSeconds":6,"xPct":50,"yPct":50,"widthPct":40,"heightPct":40,"exitDuration":2}, {"line":7,"show":false}, ...]}',
+    '請只輸出 JSON，格式為：{"effects":[{"line":0,"show":true,"type":"highlight-box","xPct":10,"yPct":20,"widthPct":30,"heightPct":25,"exitDuration":2}, {"line":1,"show":true,"type":"text-callout","text":"營收成長 35%","xPct":8,"yPct":78,"widthPct":40,"heightPct":14,"exitDuration":3}, {"line":2,"show":true,"type":"shape","shape":"arrow","xPct":40,"yPct":35,"widthPct":15,"heightPct":15,"exitDuration":2}, {"line":3,"show":true,"type":"step-list","items":["第一步：開啟設定","第二步：選擇選項","第三步：儲存"],"xPct":55,"yPct":55,"widthPct":35,"heightPct":30,"exitDuration":4}, {"line":4,"show":true,"type":"pointer","xPct":62,"yPct":38,"angle":270,"exitDuration":2}, {"line":5,"show":true,"type":"formula","formulaLatex":"E = mc^2","xPct":30,"yPct":40,"widthPct":40,"heightPct":15,"exitDuration":3}, {"line":6,"show":true,"type":"custom-script","scriptPrompt":"畫一個座標平面，顯示一個點沿曲線從左下移動到右上，代表數值隨時間成長","scriptDurationSeconds":6,"xPct":50,"yPct":50,"widthPct":40,"heightPct":40,"exitDuration":2}, {"line":7,"show":false}, ...]}',
     'effects 陣列必須包含使用者提供的每一個句子索引，且順序與索引需一致。整份回應最多只能有一個 type 為 custom-script 的項目。',
   ].join('\n');
 }
@@ -273,6 +278,9 @@ export function mapAutoFocusResponseToEffects(response: AutoFocusAiResponse, sen
     }
     if (item.exitDuration !== undefined) {
       effect.exitDuration = clamp(item.exitDuration, 0, MAX_EXIT_DURATION_SECONDS);
+    }
+    if (type === 'pointer' && item.angle !== undefined) {
+      effect.angle = item.angle;
     }
     effects.push(effect);
   }
