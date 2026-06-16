@@ -240,6 +240,8 @@ export interface SlideAnimationEffect {
   pointerSize?: number;
   /** Border colour (CSS hex) for `highlight-box` effects. Defaults to `#ef4444`. Ignored by other effect types. */
   highlightColor?: string;
+  /** Border width (px) for `highlight-box` effects. Defaults to 4. Ignored by other effect types. */
+  highlightBorderWidth?: number;
   /** Caption text for `text-callout` effects (ignored by other effect types). */
   text?: string;
   /** Font size in rem for `text-callout` effects. Defaults to 1.25. Ignored by other effect types. */

@@ -1026,16 +1026,36 @@ export function AnimationEditorTab() {
                 </label>
               )}
               {effect.type === 'highlight-box' && (
-                <label className="flex flex-col gap-1 text-xs text-slate-400">
-                  {t('play.animation.highlightColor')}
-                  <input
-                    type="color"
-                    value={effect.highlightColor ?? '#ef4444'}
-                    disabled={disabled}
-                    onChange={(e) => updateEffect(effect.id, { highlightColor: e.target.value })}
-                    className="h-8 w-12 cursor-pointer rounded-md border border-slate-700 bg-slate-900 p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
-                  />
-                </label>
+                <div className="flex gap-3 items-end">
+                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    {t('play.animation.highlightColor')}
+                    <input
+                      type="color"
+                      value={effect.highlightColor ?? '#ef4444'}
+                      disabled={disabled}
+                      onChange={(e) => updateEffect(effect.id, { highlightColor: e.target.value })}
+                      className="h-8 w-12 cursor-pointer rounded-md border border-slate-700 bg-slate-900 p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    {t('play.animation.highlightBorderWidth')}
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min={1}
+                        max={12}
+                        step={1}
+                        value={effect.highlightBorderWidth ?? 4}
+                        disabled={disabled}
+                        onChange={(e) =>
+                          updateEffect(effect.id, { highlightBorderWidth: Math.min(12, Math.max(1, Math.round(Number(e.target.value) || 4))) })
+                        }
+                        className="w-16 rounded-md border border-slate-700 bg-slate-900 px-1 py-1 text-sm text-slate-100"
+                      />
+                      <span className="text-slate-500">px</span>
+                    </div>
+                  </label>
+                </div>
               )}
               {effect.type === 'spotlight' && (
                 <div className="flex gap-2 items-end">
