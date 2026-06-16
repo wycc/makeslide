@@ -395,3 +395,34 @@ MCP_AUTH_TOKEN=your-secret-token-here
 - `SlideRenderer.tsx`：spotlight 渲染從 `spotlightColor` 解析 r/g/b channel（`parseInt(hex.slice(1,3), 16)` 等），組合成 `rgba(r, g, b, opacity)` 字串套用至 box-shadow
 - `AnimationEditorTab.tsx`：spotlight 分支新增 `<input type="color">` 和 `<input type="number" min=0 max=1 step=0.05>`，並排在 `flex gap-2 items-end` 容器中
 - i18n：中英文 locale 各新增 `play.animation.spotlightColor` 和 `play.animation.spotlightOpacity`
+
+## Manim `indicateAround` 強調動畫（2026-06-17）
+
+### 功能目的
+
+Manim 的 `Indicate` 動畫是最具識別性的效果之一：讓一個圖形瞬間放大並閃爍對比色，然後縮回原本大小，讓觀眾的注意力一眼集中到該物件上。本次在 `window.Manim.animate` 中新增 `indicateAround(m, progress, opts)` 實現這個動畫。
+
+### 使用方式
+
+```javascript
+// 在 custom-script 效果中使用：
+function onFrame(progress, duration) {
+  Manim.animate.indicateAround(myCircle, progress, { scale: 1.4, color: '#f59e0b' });
+}
+```
+
+**opts 參數**（皆為選填）：
+- `scale`：放大倍率，預設 `1.3`（放大 30%）
+- `color`：閃爍顏色，預設 `'#f59e0b'`（琥珀橘）
+
+動畫節奏：
+- progress 0→0.5：物件縮放至 `scale` 倍，stroke/fill 漸變為 flash color
+- progress 0.5→1：縮放縮回 1，顏色漸回原本顏色
+- progress=1：完全還原 transform 和顏色，清除暫存狀態
+
+### 技術細節
+
+- 使用對稱 `phase` 計算（0→0.5 時 `phase=p*2`，0.5→1 時 `phase=1-(p-0.5)*2`），對 phase 套用 `smooth()` 做 eased 插值
+- `transform="scale(s)"` 直接覆寫 transform attribute（不考慮與其他 transform 組合）
+- 用 `m._indicateOrigStroke` / `m._indicateOrigFill` 在首次呼叫時保存原始顏色，progress=1 時恢復並刪除
+- 新增 2 個 vm 測試確認峰值縮放正確、progress=1 完全復原

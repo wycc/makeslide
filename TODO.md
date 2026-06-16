@@ -1309,7 +1309,7 @@
 
 [x] `spotlight` 效果遮罩顏色與透明度自訂：目前 `spotlight` 固定使用黑色半透明遮罩（`rgba(0,0,0,0.6)`），無法調整；應新增 `spotlightColor`（CSS hex，預設 `#000000`）和 `spotlightOpacity`（0~1 數字，預設 `0.6`）兩個欄位，讓使用者在動畫編輯器中用顏色選擇器與滑桿自訂遮罩色與不透明度，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`/`AnimationEditorTab`。（完成於分支: feature/spotlight-color-opacity-20260617）
 
-[ ] Manim `indicateAround` 動畫效果：目前 `manimHelperScript.ts` 的 `animate` 提供 Create/Write/FadeIn/FadeOut/Transform 等動畫；應新增 `Manim.animate.indicateAround(m, progress, opts)` 函式，實作 manim 標誌性的「強調環繞」動畫（progress 0→0.5 縮放放大並改色，0.5→1 回縮並恢復原色），`opts` 可選 `scale`（預設 1.3）和 `color`（預設 `#f59e0b`）；新增對應測試。
+[x] Manim `indicateAround` 動畫效果：目前 `manimHelperScript.ts` 的 `animate` 提供 Create/Write/FadeIn/FadeOut/Transform 等動畫；應新增 `Manim.animate.indicateAround(m, progress, opts)` 函式，實作 manim 標誌性的「強調環繞」動畫（progress 0→0.5 縮放放大並改色，0.5→1 回縮並恢復原色），`opts` 可選 `scale`（預設 1.3）和 `color`（預設 `#f59e0b`）；新增對應測試。（完成於分支: feature/manim-indicate-around-20260617）
 
 [ ] auto-focus-ai 為 `pointer` 效果建議 `angle`：目前所有 AI 自動產生的 `pointer` 效果都使用預設角度（0 度，指向右下），未根據畫面內容選擇合適方向；應在 `AutoFocusItemSchema` 新增 `angle` 選填欄位（整數，0-359 度），在 system prompt 第 3 點補充 angle 說明（0=右下、90=左下、180=右上、270=左上，依指向目標在畫面中的位置選擇讓箭頭從外側指向目標的角度），在 `mapAutoFocusResponseToEffects` 中傳遞 angle 至 effect，並補充測試。
 
@@ -1346,3 +1346,7 @@
 - 時間: 2026-06-17 18:00:00 +0800
 - 分支: feature/spotlight-color-opacity-20260617
 - 內容: 新增 `spotlight` 效果遮罩顏色與透明度自訂。後端 `pageAnimation.ts` 新增 `DEFAULT_SPOTLIGHT_COLOR`（`#000000`）和 `DEFAULT_SPOTLIGHT_OPACITY`（`0.6`）常數，`AnimationEffect` interface 新增 `spotlightColor?: string` 和 `spotlightOpacity?: number` 欄位，`EffectSchema` 對 spotlightColor 重用 hex color regex，spotlightOpacity 使用 `z.number().min(0).max(1)`，序列化時一併輸出。前端 `types.ts` 同步新增兩個欄位；`SlideRenderer.tsx` 將 `spotlightColor` + `spotlightOpacity` 轉換為 `rgba(r,g,b,opacity)` 字串，套用至 box-shadow（先從 hex 解析 r/g/b channel）；`AnimationEditorTab.tsx` 在 spotlight 分支新增顏色選擇器（color input）與透明度數字輸入（step 0.05，onChange 做 Math.min/max 限制）；中英文 i18n 新增 `play.animation.spotlightColor`/`spotlightOpacity` 翻譯鍵。
+
+- 時間: 2026-06-17 19:00:00 +0800
+- 分支: feature/manim-indicate-around-20260617
+- 內容: 新增 Manim `indicateAround` 動畫效果。在 `manimHelperScript.ts` 的 `animate` 物件中新增 `indicateAround(m, progress, opts)` 函式：使用 0→0.5→1 的對稱 `phase`（phase = 在 0→0.5 是 `p*2`，在 0.5→1 是 `1-(p-0.5)*2`），對 phase 套用 `smooth()` 做插值，縮放從 1 到 `opts.scale`（預設 1.3），同時用 `lerpColor` 從原本的 stroke/fill 漸變至 `opts.color`（預設 `#f59e0b`，琥珀色）；progress=1 時清除 transform 並還原所有屬性，並刪除儲存的 `_indicateOrigStroke`/`_indicateOrigFill`。新增 2 個測試：(1) 自訂 scale/color 時 progress=0.5 縮放大於 1 且顏色偏移，progress=1 時完全還原；(2) 無 opts 時 scale 接近預設值 1.3（全部 20 項通過）。
