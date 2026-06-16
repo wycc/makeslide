@@ -373,3 +373,25 @@ MCP_AUTH_TOKEN=your-secret-token-here
 - `SlideRenderer.tsx`：text-callout 容器改用 `effect.textCalloutBgColor ?? '#0f172a'` 和 `effect.textCalloutTextColor ?? '#f8fafc'` 作為 inline style
 - `AnimationEditorTab.tsx`：text-callout 分支改包 `<>...</>` 並加入兩個 `<input type="color">` 選色器
 - i18n：中英文 locale 各新增 `play.animation.textCalloutBgColor` 和 `play.animation.textCalloutTextColor`
+
+## Spotlight 效果遮罩顏色與透明度自訂（2026-06-17）
+
+### 功能目的
+
+`spotlight` 效果原本固定使用黑色遮罩（`rgba(0,0,0,0.6)`）來暗化聚光燈以外的區域，無法搭配不同風格的投影片（例如淺色背景需要較淡的遮罩，或品牌色系需要有色遮罩）。本次新增 `spotlightColor` 和 `spotlightOpacity` 兩個欄位，讓使用者可自由調整。
+
+### 使用方式
+
+在動畫編輯器中，選擇一個 `spotlight` 效果後，位置/大小欄位旁邊新增了：
+- **遮罩顏色**：顏色選擇器，預設黑色（`#000000`）
+- **透明度**：數字輸入框，範圍 0–1，步進 0.05，預設 0.6（代表遮罩蓋住 60% 光線）
+
+兩個控制項並排顯示。調整後立即在投影片上預覽遮罩效果。
+
+### 技術細節
+
+- `pageAnimation.ts`：新增 `DEFAULT_SPOTLIGHT_COLOR = '#000000'` 和 `DEFAULT_SPOTLIGHT_OPACITY = 0.6` 常數；`AnimationEffect` 新增 `spotlightColor?: string` 和 `spotlightOpacity?: number`；`EffectSchema` 分別用 hex color regex 和 `z.number().min(0).max(1)` 驗證；序列化時輸出
+- `types.ts`（前端）：同步新增兩個欄位
+- `SlideRenderer.tsx`：spotlight 渲染從 `spotlightColor` 解析 r/g/b channel（`parseInt(hex.slice(1,3), 16)` 等），組合成 `rgba(r, g, b, opacity)` 字串套用至 box-shadow
+- `AnimationEditorTab.tsx`：spotlight 分支新增 `<input type="color">` 和 `<input type="number" min=0 max=1 step=0.05>`，並排在 `flex gap-2 items-end` 容器中
+- i18n：中英文 locale 各新增 `play.animation.spotlightColor` 和 `play.animation.spotlightOpacity`
