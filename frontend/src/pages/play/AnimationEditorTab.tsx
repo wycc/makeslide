@@ -1025,6 +1025,18 @@ export function AnimationEditorTab() {
                   </select>
                 </label>
               )}
+              {effect.type === 'highlight-box' && (
+                <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  {t('play.animation.highlightColor')}
+                  <input
+                    type="color"
+                    value={effect.highlightColor ?? '#ef4444'}
+                    disabled={disabled}
+                    onChange={(e) => updateEffect(effect.id, { highlightColor: e.target.value })}
+                    className="h-8 w-12 cursor-pointer rounded-md border border-slate-700 bg-slate-900 p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+                  />
+                </label>
+              )}
               {effect.type === 'text-callout' && (
                 <label className="flex flex-col gap-1 text-xs text-slate-400">
                   {t('play.animation.textContent')}

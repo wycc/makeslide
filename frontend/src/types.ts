@@ -234,6 +234,8 @@ export interface SlideAnimationEffect {
    * Defaults to `0` (pointing down-right) when omitted.
    */
   angle?: number;
+  /** Border colour (CSS hex) for `highlight-box` effects. Defaults to `#ef4444`. Ignored by other effect types. */
+  highlightColor?: string;
   /** Caption text for `text-callout` effects (ignored by other effect types). */
   text?: string;
   /** SVG primitive drawn by `shape` effects (ignored by other effect types). Defaults to `'circle'` when omitted. */

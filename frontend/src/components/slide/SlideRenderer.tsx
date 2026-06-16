@@ -32,14 +32,15 @@ function EffectOverlay({
     pointerEvents: 'none',
   };
   if (effect.type === 'highlight-box') {
+    const hColor = effect.highlightColor ?? '#ef4444';
     return (
       <div
         data-effect-id={effect.id}
         style={{
           ...position,
-          border: '4px solid #ef4444',
+          border: `4px solid ${hColor}`,
           borderRadius: '8px',
-          boxShadow: '0 0 16px rgba(239, 68, 68, 0.7)',
+          boxShadow: `0 0 16px ${hColor}b3`,
         }}
       />
     );
