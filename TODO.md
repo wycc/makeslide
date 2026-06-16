@@ -1414,3 +1414,10 @@
 - 時間: 2026-06-18 06:00:00 +0800
 - 分支: feature/shape-opacity-20260618
 - 內容: 新增 `shape` 效果基礎透明度控制。後端 `pageAnimation.ts` 在 `AnimationEffect` 介面新增 `shapeOpacity?: number` 欄位，`EffectSchema` 新增 `z.number().min(0).max(1)` 驗證，序列化時以 Math.max/min 夾至合法範圍。前端 `types.ts` 同步新增欄位；`SlideRenderer.tsx` 以 `effect.shapeOpacity ?? 1` 作為 SVG 的 `opacity` style 屬性（疊加在 GSAP fadeIn/fadeOut 的動態 opacity 之上）；`AnimationEditorTab.tsx` 在 shape 填充顏色下方新增數字輸入框（range 0-1, step 0.05）；中英文 i18n 新增 `play.animation.shapeOpacity` 翻譯鍵。
+
+## 2026-06-18 新增項目 Batch 4
+[ ] `formula` 效果背景色與文字色自訂：目前 `formula` 效果的背景固定為 `rgba(15, 23, 42, 0.85)`（深藍色半透明），文字固定為 `#f8fafc`（近白色），無法根據投影片配色調整；應新增 `formulaBgColor?: string`（CSS hex，預設 `#0f172a`）和 `formulaTextColor?: string`（CSS hex，預設 `#f8fafc`）欄位，讓使用者在動畫編輯器的 formula 區塊中自訂背景色與文字色，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`/`AnimationEditorTab`（兩個顏色選擇器）及中英文 i18n。
+[ ] Manim `animate.wiggle(m, progress, opts)` 抖動效果：目前 Manim helper 缺少讓元素左右小幅搖擺以吸引注意的動畫；應新增 `animate.wiggle(m, progress, opts)` 函式，opts 支援 `amplitude`（位移像素，預設 `8`）和 `frequency`（每回合振盪次數，預設 `3`），以 `sin(progress * frequency * 2π) * amplitude` 計算 translateX，並於 progress=1 時清除 transform；新增至少 2 個 vm 測試（一個驗證中間 progress 的 translateX ≠ 0，一個驗證 progress=1 時 transform 被清除）。
+[ ] `highlight-box` 動畫效果—pulse 模式：目前 `highlight-box` 是靜態邊框；應新增 `highlightPulse?: boolean` 選項（預設 `false`），當啟用時，GSAP timeline 在效果顯示期間讓邊框 box-shadow 週期性放大/縮小，形成脈動視覺（可在 GSAP yoyo repeat 或自訂 progress 函式中實現），讓重要內容更加吸睛；在 `AnimationEditorTab` 新增 checkbox 控制，並更新後端驗證/序列化、前端 types.ts，及中英文 i18n。
+[ ] `text-callout` 圓角半徑控制：目前 `text-callout` 效果固定使用 `borderRadius: '8px'`；應新增 `textCalloutBorderRadius` 欄位（px 整數，預設 `8`，範圍 0-32），讓使用者選擇更尖銳或更圓潤的文字框，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`/`AnimationEditorTab`（新增數字輸入框）及中英文 i18n。
+[ ] Manim `animate.spinAround(m, progress, opts)` 旋轉效果：目前 Manim helper 的 `rotate` 是單向旋轉，缺少完整 360° 旋轉（自轉一圈）的效果；應新增 `animate.spinAround(m, progress, opts)` 函式，opts 支援 `turns`（旋轉圈數，預設 `1`）和 `cx`/`cy`（旋轉中心，預設元素中心），以 `progress * turns * 360` 計算旋轉角度，於 progress=1 時清除 transform；新增至少 2 個 vm 測試。
