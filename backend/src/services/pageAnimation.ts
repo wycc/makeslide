@@ -53,6 +53,11 @@ export interface AnimationEffect {
    * Defaults to `0` (pointing down-right) when omitted. Accepts any finite number.
    */
   angle?: number;
+  /**
+   * Border colour (CSS hex) for `highlight-box` effects (ignored by other
+   * effect types). Defaults to `DEFAULT_HIGHLIGHT_BOX_COLOR` (`#ef4444`).
+   */
+  highlightColor?: string;
   /** Caption text for `text-callout` effects (ignored by other effect types). */
   text?: string;
   /** SVG primitive drawn by `shape` effects (ignored by other effect types). Defaults to `'circle'` when omitted. */
@@ -178,6 +183,8 @@ export const DEFAULT_SHAPE_STROKE_COLOR = '#f43f5e';
 export const DEFAULT_SHAPE_STROKE_WIDTH = 5;
 /** Max length (chars) for a `shape` effect's `color` field. */
 export const MAX_SHAPE_COLOR_LENGTH = 20;
+/** Default border colour for `highlight-box` effects (red-500). */
+export const DEFAULT_HIGHLIGHT_BOX_COLOR = '#ef4444';
 /** Default background colour for `step-list` effects (slate-900 equivalent). */
 export const DEFAULT_STEP_LIST_BG_COLOR = '#1e293b';
 /** Default text colour for `step-list` effects (slate-100 equivalent). */
@@ -239,6 +246,7 @@ const EffectSchema = z.object({
   params: z.record(z.unknown()).optional(),
   startTrigger: StartTriggerSchema.optional(),
   angle: z.number().finite().optional(),
+  highlightColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   text: z.string().max(MAX_TEXT_CALLOUT_LENGTH).optional(),
   shape: z.enum(ANIMATION_SHAPE_KINDS).optional(),
   color: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
@@ -306,6 +314,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(params ? { params } : {}),
       ...(effect.startTrigger ? { startTrigger: effect.startTrigger } : {}),
       ...(effect.angle !== undefined ? { angle: effect.angle } : {}),
+      ...(effect.highlightColor !== undefined ? { highlightColor: effect.highlightColor } : {}),
       ...(effect.text !== undefined ? { text: effect.text } : {}),
       ...(effect.shape !== undefined ? { shape: effect.shape } : {}),
       ...(effect.color !== undefined ? { color: effect.color } : {}),

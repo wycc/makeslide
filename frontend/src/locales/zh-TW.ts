@@ -368,6 +368,7 @@ export const zhTW = {
   'play.animation.formulaContent': '公式內容（LaTeX）',
   'play.animation.formulaContentPlaceholder': '例如：E = mc^2',
   'play.animation.formulaFontSize': '字型大小（em）',
+  'play.animation.highlightColor': '邊框顏色',
   'play.animation.shapeKind': '圖形種類',
   'play.animation.shapeKind.circle': '圓形',
   'play.animation.shapeKind.rect': '方框',
