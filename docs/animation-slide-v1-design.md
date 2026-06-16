@@ -591,7 +591,7 @@ Props：`renderType`、`src`（由呼叫端算好，含 displayedImageSrc 防閃
 - 本頁尚無逐字稿時按鈕停用，提示文字沿用「本頁尚無逐字稿」（`play.animation.noTranscript`）。
 - 產生後仍是一般 `draft.effects`，可於效果清單中個別調整（包含 `text-callout` 的文案內容、`shape` 的圖形種類、`step-list` 的條列項目），並需按「儲存動畫」才會持久化。
 - v1 範圍：產生 `highlight-box`/`spotlight`/`text-callout`/`shape`/`step-list` 五種效果；overlay image、物件 target、公式、`custom-script` 等其他效果類型的 AI 生成留待後續版本（見 §12）。
-- 圖片輸入：提示詞會說明「若附帶投影片頁面圖片，請參考圖片中的實際版面決定座標」，讓 `xPct`/`yPct`/`widthPct`/`heightPct` 更貼近畫面實際內容；圖片僅在 `LLM_PROVIDER=openai`（預設）時實際送出——Gemini 路徑（`callGeminiJson`/`normalizeMessages`）目前會將非文字內容部分一律替換為 `'[image]'` 占位字串，與 `generateScript` 的既有限制相同，留待後續一併處理。
+- 圖片輸入：提示詞會說明「若附帶投影片頁面圖片，請參考圖片中的實際版面決定座標」，讓 `xPct`/`yPct`/`widthPct`/`heightPct` 更貼近畫面實際內容；~~圖片僅在 `LLM_PROVIDER=openai`（預設）時實際送出——Gemini 路徑（`callGeminiJson`/`normalizeMessages`）目前會將非文字內容部分一律替換為 `'[image]'` 占位字串，與 `generateScript` 的既有限制相同，留待後續一併處理~~（已修正：`gemini.ts` 的 `normalizeMessages` 替換為 `buildGeminiContents`，對 `data:image/...;base64,...` 格式的 `image_url` 部分轉換為 Gemini `inlineData` 格式，系統訊息改用 `systemInstruction` 欄位送出，使 Gemini 視覺模型可實際看到投影片截圖；非 data URL 的外部圖片連結仍略過，因 Gemini 伺服器端無法存取外部 HTTP 資源；分支 `feature/gemini-image-support-20260616`）。
 - `generateAiFocusEffects` 與本節的頁面截圖載入邏輯（`loadFocusAiPageImageDataUrl`）亦由「重新生成全部」的動畫批次步驟共用，詳見該章節的擴充註記（2026-06-16，重新生成全部動畫改用 AI 自動產生）。
 
 ### 7.5 AI 自訂腳本動畫（custom-script）
