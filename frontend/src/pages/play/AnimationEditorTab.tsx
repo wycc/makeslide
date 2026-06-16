@@ -1544,6 +1544,18 @@ export function AnimationEditorTab() {
                   {effect.type === 'pointer' && (
                     <>
                       <label className="flex flex-col gap-1 text-xs text-slate-400">
+                        {t('play.animation.pointerShape')}
+                        <select
+                          value={effect.pointerShape ?? 'arrow'}
+                          disabled={disabled}
+                          onChange={(e) => updateEffect(effect.id, { pointerShape: e.target.value as 'arrow' | 'dot' })}
+                          className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          <option value="arrow">{t('play.animation.pointerShape.arrow')}</option>
+                          <option value="dot">{t('play.animation.pointerShape.dot')}</option>
+                        </select>
+                      </label>
+                      <label className="flex flex-col gap-1 text-xs text-slate-400">
                         {t('play.animation.pointerAngle')}
                         <div className="flex items-center gap-1">
                           <input

@@ -238,6 +238,8 @@ export interface SlideAnimationEffect {
   pointerColor?: string;
   /** Arrow size in rem for `pointer` effects. Defaults to 2.5. Ignored by other effect types. */
   pointerSize?: number;
+  /** Shape of the pointer. 'arrow' (default) = cursor SVG; 'dot' = filled circle. Ignored by other effect types. */
+  pointerShape?: 'arrow' | 'dot';
   /** Border colour (CSS hex) for `highlight-box` effects. Defaults to `#ef4444`. Ignored by other effect types. */
   highlightColor?: string;
   /** Border width (px) for `highlight-box` effects. Defaults to 4. Ignored by other effect types. */

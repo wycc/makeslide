@@ -72,9 +72,13 @@ function EffectOverlay({
     const angleDeg = effect.angle ?? 0;
     const pColor = effect.pointerColor ?? '#f43f5e';
     const pSize = `${effect.pointerSize ?? 2.5}rem`;
+    const pShape = effect.pointerShape ?? 'arrow';
     const pR = parseInt(pColor.slice(1, 3), 16);
     const pG = parseInt(pColor.slice(3, 5), 16);
     const pB = parseInt(pColor.slice(5, 7), 16);
+    const svgContent = pShape === 'dot'
+      ? <circle cx="12" cy="12" r="10" fill={`rgba(${pR},${pG},${pB},0.95)`} />
+      : <path d="M4 0 L4 20 L8 16 L11 23 L13 22 L10 15 L15 15 Z" fill={`rgba(${pR},${pG},${pB},0.95)`} />;
     return (
       <div
         data-effect-id={effect.id}
@@ -84,7 +88,7 @@ function EffectOverlay({
           top: `${yPct}%`,
           width: pSize,
           height: pSize,
-          transform: `translate(-50%, -50%) rotate(${angleDeg}deg)`,
+          transform: `translate(-50%, -50%)${pShape === 'arrow' ? ` rotate(${angleDeg}deg)` : ''}`,
           opacity: 0,
           pointerEvents: 'none',
           display: 'flex',
@@ -92,8 +96,8 @@ function EffectOverlay({
           justifyContent: 'center',
         }}
       >
-        <svg viewBox="0 0 24 24" width="100%" height="100%" fill={`rgba(${pR},${pG},${pB},0.95)`} style={{ filter: `drop-shadow(0 0 6px rgba(${pR},${pG},${pB},0.9))` }}>
-          <path d="M4 0 L4 20 L8 16 L11 23 L13 22 L10 15 L15 15 Z" />
+        <svg viewBox="0 0 24 24" width="100%" height="100%" style={{ filter: `drop-shadow(0 0 6px rgba(${pR},${pG},${pB},0.9))` }}>
+          {svgContent}
         </svg>
       </div>
     );
