@@ -400,6 +400,29 @@ const EFFECT_PRESETS: readonly EffectPreset[] = [
   },
 ];
 
+const CUSTOM_SCRIPT_EXAMPLE_PROMPTS: ReadonlyArray<{ labelKey: string; prompt: string }> = [
+  {
+    labelKey: 'play.animation.customScriptExample.manImTex',
+    prompt: '用 Manim 在畫面中央顯示愛因斯坦公式 E=mc²，公式淡入後放大到 1.5 倍再縮回原大小',
+  },
+  {
+    labelKey: 'play.animation.customScriptExample.manimAxes',
+    prompt: '用 Manim 畫一個座標平面，顯示一個點沿 y=x² 拋物線從左移到右，並在點旁標記 (x, x²) 座標',
+  },
+  {
+    labelKey: 'play.animation.customScriptExample.manimCircleToSquare',
+    prompt: '用 Manim 從圓形變形為正方形，搭配顏色由藍變紅',
+  },
+  {
+    labelKey: 'play.animation.customScriptExample.canvasCount',
+    prompt: '畫一個計數器，數字從 0 逐漸增加到 100，用 canvas 顯示大型數字',
+  },
+  {
+    labelKey: 'play.animation.customScriptExample.svgArrow',
+    prompt: '用 SVG 畫一條從左到右延伸的箭頭，邊延伸邊顯示標籤文字「成長 35%」',
+  },
+];
+
 /** 句子文字過長時，於下拉選單中截斷顯示。 */
 function truncateSentence(text: string, maxLen = 18): string {
   return text.length > maxLen ? `${text.slice(0, maxLen)}…` : text;
@@ -1389,6 +1412,24 @@ export function AnimationEditorTab() {
                       )}
                     </>
                   )}
+                </div>
+                <div className="flex flex-col gap-1">
+                  <select
+                    value=""
+                    disabled={disabled || customScriptBusy}
+                    onChange={(e) => {
+                      const prompt = e.target.value;
+                      if (prompt) setCustomScriptChatInput(prompt);
+                    }}
+                    className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-300 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <option value="">{t('play.animation.customScriptExamplePromptsLabel')}</option>
+                    {CUSTOM_SCRIPT_EXAMPLE_PROMPTS.map((ex) => (
+                      <option key={ex.labelKey} value={ex.prompt}>
+                        {t(ex.labelKey as TranslationKey)}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div className="flex items-end gap-2">
                   <textarea

@@ -1671,6 +1671,32 @@ test('findUnsafeScriptPattern flags common member-access variants', () => {
   assert.equal(findUnsafeScriptPattern('self["top"].location'), 'window.top');
 });
 
+test('findUnsafeScriptPattern allows Manim.tex call patterns without flagging them', () => {
+  // Manim.tex() internally uses window.parent.postMessage, but the AI-generated
+  // code only calls Manim.tex() — it doesn't write window.parent directly.
+  const manualTeXUsage = `
+window.renderAnimation = async function (root, api) {
+  const el = await Manim.tex('E = mc^2', { color: 'white', fontSize: '1.5em' });
+  root.appendChild(el);
+  api.onFrame(function ({ t }) {
+    el.style.opacity = Math.min(t / api.duration, 1);
+  });
+};`;
+  assert.equal(findUnsafeScriptPattern(manualTeXUsage), null, 'Manim.tex() call should be safe');
+
+  const thenChain = `
+window.renderAnimation = function (root, api) {
+  Manim.tex('\\\\frac{a}{b}').then(function (el) { root.appendChild(el); });
+  api.onFrame(function () {});
+};`;
+  assert.equal(findUnsafeScriptPattern(thenChain), null, 'Manim.tex().then() chain should be safe');
+
+  // Bare identifiers like "parent" or "postMessage" in variable names / strings
+  // must NOT be flagged — only qualified window.parent / globalThis.parent accesses.
+  assert.equal(findUnsafeScriptPattern('var parentEl = root.parentElement;'), null, '"parent" as identifier should be safe');
+  assert.equal(findUnsafeScriptPattern('el.postMessage = function () {};'), null, 'arbitrary .postMessage property should be safe');
+});
+
 test('findCustomScriptContractIssue validates renderAnimation and onFrame contract', () => {
   assert.equal(findCustomScriptContractIssue('var x = 1;'), 'Generated code must define window.renderAnimation(root, api)');
   assert.equal(
