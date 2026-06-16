@@ -368,6 +368,8 @@ export const en = {
   'play.animation.formulaContent': 'Formula (LaTeX)',
   'play.animation.formulaContentPlaceholder': 'e.g. E = mc^2',
   'play.animation.formulaFontSize': 'Font size (em)',
+  'play.animation.formulaBgColor': 'Background color',
+  'play.animation.formulaTextColor': 'Text color',
   'play.animation.highlightColor': 'Border color',
   'play.animation.highlightBorderWidth': 'Border width (px)',
   'play.animation.highlightBorderRadius': 'Corner radius (px)',

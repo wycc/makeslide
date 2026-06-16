@@ -301,6 +301,10 @@ export interface SlideAnimationEffect {
    * Range: 0.5–4em. Ignored by other effect types.
    */
   formulaFontSize?: number;
+  /** Background colour (CSS hex) for `formula` effects. Defaults to `#0f172a`. */
+  formulaBgColor?: string;
+  /** Text/symbol colour (CSS hex) for `formula` effects. Defaults to `#f8fafc`. */
+  formulaTextColor?: string;
   /**
    * Seconds to remain in the "entered" state after the entrance animation
    * completes before automatically reversing back to the original state

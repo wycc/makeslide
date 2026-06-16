@@ -199,6 +199,8 @@ function EffectOverlay({
   }
   if (effect.type === 'formula') {
     const fontSizeEm = effect.formulaFontSize ?? 1.5;
+    const fBg = effect.formulaBgColor ?? '#0f172a';
+    const fText = effect.formulaTextColor ?? '#f8fafc';
     const html = katex.renderToString(effect.formula ?? '', { throwOnError: false, displayMode: true });
     return (
       <div
@@ -210,8 +212,8 @@ function EffectOverlay({
           justifyContent: 'center',
           padding: '0.5em 0.75em',
           borderRadius: '8px',
-          background: 'rgba(15, 23, 42, 0.85)',
-          color: '#f8fafc',
+          background: fBg,
+          color: fText,
           overflow: 'hidden',
           fontSize: `${fontSizeEm}em`,
         }}

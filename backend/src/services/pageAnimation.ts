@@ -168,6 +168,10 @@ export interface AnimationEffect {
    * [`MIN_FORMULA_FONT_SIZE_EM`, `MAX_FORMULA_FONT_SIZE_EM`].
    */
   formulaFontSize?: number;
+  /** Background colour (CSS hex) for `formula` effects. Defaults to `#0f172a`. Ignored by other effect types. */
+  formulaBgColor?: string;
+  /** Text/symbol colour (CSS hex) for `formula` effects. Defaults to `#f8fafc`. Ignored by other effect types. */
+  formulaTextColor?: string;
   /**
    * Seconds to remain visible after the fade-in completes before
    * automatically fading back out (same `duration`/`ease` as the fade-in).
@@ -369,6 +373,8 @@ const EffectSchema = z.object({
   figureId: z.string().min(1).max(MAX_OVERLAY_IMAGE_FIGURE_ID_LENGTH).optional(),
   formula: z.string().min(1).max(MAX_FORMULA_LENGTH).optional(),
   formulaFontSize: z.number().min(MIN_FORMULA_FONT_SIZE_EM).max(MAX_FORMULA_FONT_SIZE_EM).optional(),
+  formulaBgColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
+  formulaTextColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   exitDuration: z.number().min(0).max(MAX_DURATION_SECONDS).optional(),
   code: z.string().max(MAX_CUSTOM_SCRIPT_CODE_LENGTH).optional(),
   prompt: z.string().max(MAX_CUSTOM_SCRIPT_PROMPT_LENGTH).optional(),
@@ -449,6 +455,8 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.figureId !== undefined ? { figureId: effect.figureId } : {}),
       ...(effect.formula !== undefined ? { formula: effect.formula } : {}),
       ...(effect.formulaFontSize !== undefined ? { formulaFontSize: effect.formulaFontSize } : {}),
+      ...(effect.formulaBgColor !== undefined ? { formulaBgColor: effect.formulaBgColor } : {}),
+      ...(effect.formulaTextColor !== undefined ? { formulaTextColor: effect.formulaTextColor } : {}),
       ...(effect.exitDuration !== undefined ? { exitDuration: effect.exitDuration } : {}),
       ...(effect.code !== undefined ? { code: effect.code } : {}),
       ...(effect.prompt !== undefined ? { prompt: effect.prompt } : {}),
