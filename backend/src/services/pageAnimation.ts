@@ -60,6 +60,16 @@ export interface AnimationEffect {
   highlightColor?: string;
   /** Caption text for `text-callout` effects (ignored by other effect types). */
   text?: string;
+  /**
+   * Background colour (CSS hex) for `text-callout` effects (ignored by other
+   * effect types). Defaults to `DEFAULT_TEXT_CALLOUT_BG_COLOR` (`#0f172a`).
+   */
+  textCalloutBgColor?: string;
+  /**
+   * Text colour (CSS hex) for `text-callout` effects (ignored by other
+   * effect types). Defaults to `DEFAULT_TEXT_CALLOUT_TEXT_COLOR` (`#f8fafc`).
+   */
+  textCalloutTextColor?: string;
   /** SVG primitive drawn by `shape` effects (ignored by other effect types). Defaults to `'circle'` when omitted. */
   shape?: AnimationShapeKind;
   /**
@@ -185,6 +195,10 @@ export const DEFAULT_SHAPE_STROKE_WIDTH = 5;
 export const MAX_SHAPE_COLOR_LENGTH = 20;
 /** Default border colour for `highlight-box` effects (red-500). */
 export const DEFAULT_HIGHLIGHT_BOX_COLOR = '#ef4444';
+/** Default background colour for `text-callout` effects (slate-950). */
+export const DEFAULT_TEXT_CALLOUT_BG_COLOR = '#0f172a';
+/** Default text colour for `text-callout` effects (slate-50). */
+export const DEFAULT_TEXT_CALLOUT_TEXT_COLOR = '#f8fafc';
 /** Default background colour for `step-list` effects (slate-900 equivalent). */
 export const DEFAULT_STEP_LIST_BG_COLOR = '#1e293b';
 /** Default text colour for `step-list` effects (slate-100 equivalent). */
@@ -248,6 +262,8 @@ const EffectSchema = z.object({
   angle: z.number().finite().optional(),
   highlightColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   text: z.string().max(MAX_TEXT_CALLOUT_LENGTH).optional(),
+  textCalloutBgColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
+  textCalloutTextColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   shape: z.enum(ANIMATION_SHAPE_KINDS).optional(),
   color: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   strokeWidth: z.number().min(1).max(MAX_SHAPE_STROKE_WIDTH).optional(),
@@ -316,6 +332,8 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.angle !== undefined ? { angle: effect.angle } : {}),
       ...(effect.highlightColor !== undefined ? { highlightColor: effect.highlightColor } : {}),
       ...(effect.text !== undefined ? { text: effect.text } : {}),
+      ...(effect.textCalloutBgColor !== undefined ? { textCalloutBgColor: effect.textCalloutBgColor } : {}),
+      ...(effect.textCalloutTextColor !== undefined ? { textCalloutTextColor: effect.textCalloutTextColor } : {}),
       ...(effect.shape !== undefined ? { shape: effect.shape } : {}),
       ...(effect.color !== undefined ? { color: effect.color } : {}),
       ...(effect.strokeWidth !== undefined ? { strokeWidth: Math.max(1, Math.min(MAX_SHAPE_STROKE_WIDTH, Math.round(effect.strokeWidth))) } : {}),

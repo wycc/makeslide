@@ -1038,18 +1038,42 @@ export function AnimationEditorTab() {
                 </label>
               )}
               {effect.type === 'text-callout' && (
-                <label className="flex flex-col gap-1 text-xs text-slate-400">
-                  {t('play.animation.textContent')}
-                  <input
-                    type="text"
-                    maxLength={MAX_TEXT_CALLOUT_LENGTH}
-                    value={effect.text ?? ''}
-                    disabled={disabled}
-                    placeholder={t('play.animation.textContentPlaceholder')}
-                    onChange={(e) => updateEffect(effect.id, { text: e.target.value })}
-                    className="w-40 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
-                  />
-                </label>
+                <>
+                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    {t('play.animation.textContent')}
+                    <input
+                      type="text"
+                      maxLength={MAX_TEXT_CALLOUT_LENGTH}
+                      value={effect.text ?? ''}
+                      disabled={disabled}
+                      placeholder={t('play.animation.textContentPlaceholder')}
+                      onChange={(e) => updateEffect(effect.id, { text: e.target.value })}
+                      className="w-40 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                    />
+                  </label>
+                  <div className="flex gap-2">
+                    <label className="flex flex-col gap-1 text-xs text-slate-400">
+                      {t('play.animation.textCalloutBgColor')}
+                      <input
+                        type="color"
+                        value={effect.textCalloutBgColor ?? '#0f172a'}
+                        disabled={disabled}
+                        onChange={(e) => updateEffect(effect.id, { textCalloutBgColor: e.target.value })}
+                        className="h-8 w-12 cursor-pointer rounded-md border border-slate-700 bg-slate-900 p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1 text-xs text-slate-400">
+                      {t('play.animation.textCalloutTextColor')}
+                      <input
+                        type="color"
+                        value={effect.textCalloutTextColor ?? '#f8fafc'}
+                        disabled={disabled}
+                        onChange={(e) => updateEffect(effect.id, { textCalloutTextColor: e.target.value })}
+                        className="h-8 w-12 cursor-pointer rounded-md border border-slate-700 bg-slate-900 p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+                      />
+                    </label>
+                  </div>
+                </>
               )}
               {effect.type === 'shape' && (
                 <label className="flex flex-col gap-1 text-xs text-slate-400">
