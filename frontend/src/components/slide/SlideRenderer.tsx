@@ -126,6 +126,7 @@ function EffectOverlay({
     const stroke = effect.color ?? '#f43f5e';
     const sw = effect.strokeWidth ?? 5;
     const fill = effect.shapeFillColor ?? 'none';
+    const shapeOp = effect.shapeOpacity ?? 1;
     const markerId = `shape-arrowhead-${effect.id}`;
     let preserveAspectRatio = 'none';
     let shapeContent: ReactNode;
@@ -149,7 +150,7 @@ function EffectOverlay({
       shapeContent = <rect x="4" y="4" width="92" height="92" rx="6" fill={fill} stroke={stroke} strokeWidth={sw} />;
     }
     return (
-      <svg data-effect-id={effect.id} viewBox="0 0 100 100" preserveAspectRatio={preserveAspectRatio} style={{ ...position, overflow: 'visible' }}>
+      <svg data-effect-id={effect.id} viewBox="0 0 100 100" preserveAspectRatio={preserveAspectRatio} style={{ ...position, overflow: 'visible', opacity: shapeOp }}>
         {shapeContent}
       </svg>
     );
