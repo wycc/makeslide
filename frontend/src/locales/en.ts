@@ -393,6 +393,7 @@ export const en = {
   'play.animation.focusPosition': 'Focus position & size (%)',
   'play.animation.pointerPosition': 'Pointer position (%)',
   'play.animation.pointerAngle': 'Pointer rotation angle (°)',
+  'play.animation.pointerColor': 'Arrow color',
   'play.animation.focusX': 'X',
   'play.animation.focusY': 'Y',
   'play.animation.focusWidth': 'W',

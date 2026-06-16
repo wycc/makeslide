@@ -64,6 +64,10 @@ function EffectOverlay({
   }
   if (effect.type === 'pointer') {
     const angleDeg = effect.angle ?? 0;
+    const pColor = effect.pointerColor ?? '#f43f5e';
+    const pR = parseInt(pColor.slice(1, 3), 16);
+    const pG = parseInt(pColor.slice(3, 5), 16);
+    const pB = parseInt(pColor.slice(5, 7), 16);
     return (
       <div
         data-effect-id={effect.id}
@@ -81,7 +85,7 @@ function EffectOverlay({
           justifyContent: 'center',
         }}
       >
-        <svg viewBox="0 0 24 24" width="100%" height="100%" fill="rgba(244,63,94,0.95)" style={{ filter: 'drop-shadow(0 0 6px rgba(244,63,94,0.9))' }}>
+        <svg viewBox="0 0 24 24" width="100%" height="100%" fill={`rgba(${pR},${pG},${pB},0.95)`} style={{ filter: `drop-shadow(0 0 6px rgba(${pR},${pG},${pB},0.9))` }}>
           <path d="M4 0 L4 20 L8 16 L11 23 L13 22 L10 15 L15 15 Z" />
         </svg>
       </div>

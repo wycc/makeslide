@@ -1359,24 +1359,36 @@ export function AnimationEditorTab() {
                     ))}
                   </div>
                   {effect.type === 'pointer' && (
-                    <label className="flex flex-col gap-1 text-xs text-slate-400">
-                      {t('play.animation.pointerAngle')}
-                      <div className="flex items-center gap-1">
+                    <>
+                      <label className="flex flex-col gap-1 text-xs text-slate-400">
+                        {t('play.animation.pointerAngle')}
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            min={-180}
+                            max={180}
+                            step={15}
+                            value={effect.angle ?? 0}
+                            disabled={disabled}
+                            onChange={(e) =>
+                              updateEffect(effect.id, { angle: Number(e.target.value) || 0 })
+                            }
+                            className="w-20 rounded-md border border-slate-700 bg-slate-900 px-1 py-1 text-sm text-slate-100"
+                          />
+                          <span className="text-slate-500">°</span>
+                        </div>
+                      </label>
+                      <label className="flex flex-col gap-1 text-xs text-slate-400">
+                        {t('play.animation.pointerColor')}
                         <input
-                          type="number"
-                          min={-180}
-                          max={180}
-                          step={15}
-                          value={effect.angle ?? 0}
+                          type="color"
+                          value={effect.pointerColor ?? '#f43f5e'}
                           disabled={disabled}
-                          onChange={(e) =>
-                            updateEffect(effect.id, { angle: Number(e.target.value) || 0 })
-                          }
-                          className="w-20 rounded-md border border-slate-700 bg-slate-900 px-1 py-1 text-sm text-slate-100"
+                          onChange={(e) => updateEffect(effect.id, { pointerColor: e.target.value })}
+                          className="h-8 w-12 cursor-pointer rounded-md border border-slate-700 bg-slate-900 p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
                         />
-                        <span className="text-slate-500">°</span>
-                      </div>
-                    </label>
+                      </label>
+                    </>
                   )}
                 </div>
               )}

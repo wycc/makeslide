@@ -393,6 +393,7 @@ export const zhTW = {
   'play.animation.focusPosition': '焦點位置與大小（%）',
   'play.animation.pointerPosition': '指標位置（%）',
   'play.animation.pointerAngle': '指標旋轉角度（°）',
+  'play.animation.pointerColor': '箭頭顏色',
   'play.animation.focusX': 'X',
   'play.animation.focusY': 'Y',
   'play.animation.focusWidth': '寬',
