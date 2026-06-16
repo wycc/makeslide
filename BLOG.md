@@ -694,3 +694,22 @@ Manim.animate.wiggle(circ, t, { amplitude: 12, frequency: 4 });
 - `EffectSchema` 以 `z.number().int().min(0).max(32)` 驗證
 - `SlideRenderer.tsx` 以 `${effect.textCalloutBorderRadius ?? 8}px` 取代硬編碼 `'8px'`
 - 後端新增 `DEFAULT_TEXT_CALLOUT_BORDER_RADIUS = 8`、`MAX_TEXT_CALLOUT_BORDER_RADIUS = 32` 常數
+
+## Manim animate.spinAround 完整旋轉效果
+
+`window.Manim.animate.spinAround(m, progress, opts)` 讓 SVG 元素完整自轉一圈或多圈，比 `rotate` 更適合展示旋轉動態或強調元素的圓形對稱性。
+
+**使用方式：**
+```javascript
+const star = Manim.shapes.circle(svg, { x: 0, y: 0, radius: 1.5, color: Manim.colors.YELLOW });
+// 旋轉 2 圈
+Manim.animate.spinAround(star, t, { turns: 2 });
+// 以自訂中心旋轉
+Manim.animate.spinAround(star, t, { turns: 1, cx: 2, cy: 1 });
+```
+
+**技術說明：**
+- opts 支援 `turns`（圈數，預設 `1`）和 `cx`/`cy`（旋轉中心，預設使用 `getBBox()` 計算包圍框中心）
+- 以 `progress * turns * 360` 計算累積角度，映射至 SVG `rotate(angle cx cy)` transform
+- progress=1 時清除 transform 屬性，確保無殘留旋轉
+- 新增 2 個 vm 測試（共 28 項全通過）

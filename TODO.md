@@ -1420,7 +1420,7 @@
 [x] Manim `animate.wiggle(m, progress, opts)` 抖動效果：目前 Manim helper 缺少讓元素左右小幅搖擺以吸引注意的動畫；應新增 `animate.wiggle(m, progress, opts)` 函式，opts 支援 `amplitude`（位移像素，預設 `8`）和 `frequency`（每回合振盪次數，預設 `3`），以 `sin(progress * frequency * 2π) * amplitude` 計算 translateX，並於 progress=1 時清除 transform；新增至少 2 個 vm 測試（一個驗證中間 progress 的 translateX ≠ 0，一個驗證 progress=1 時 transform 被清除）。 ✓ 完成於 branch: feature/manim-wiggle-20260618
 [ ] `highlight-box` 動畫效果—pulse 模式：目前 `highlight-box` 是靜態邊框；應新增 `highlightPulse?: boolean` 選項（預設 `false`），當啟用時，GSAP timeline 在效果顯示期間讓邊框 box-shadow 週期性放大/縮小，形成脈動視覺（可在 GSAP yoyo repeat 或自訂 progress 函式中實現），讓重要內容更加吸睛；在 `AnimationEditorTab` 新增 checkbox 控制，並更新後端驗證/序列化、前端 types.ts，及中英文 i18n。
 [x] `text-callout` 圓角半徑控制：目前 `text-callout` 效果固定使用 `borderRadius: '8px'`；應新增 `textCalloutBorderRadius` 欄位（px 整數，預設 `8`，範圍 0-32），讓使用者選擇更尖銳或更圓潤的文字框，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`/`AnimationEditorTab`（新增數字輸入框）及中英文 i18n。 ✓ 完成於 branch: feature/text-callout-border-radius-20260618
-[ ] Manim `animate.spinAround(m, progress, opts)` 旋轉效果：目前 Manim helper 的 `rotate` 是單向旋轉，缺少完整 360° 旋轉（自轉一圈）的效果；應新增 `animate.spinAround(m, progress, opts)` 函式，opts 支援 `turns`（旋轉圈數，預設 `1`）和 `cx`/`cy`（旋轉中心，預設元素中心），以 `progress * turns * 360` 計算旋轉角度，於 progress=1 時清除 transform；新增至少 2 個 vm 測試。
+[x] Manim `animate.spinAround(m, progress, opts)` 旋轉效果：目前 Manim helper 的 `rotate` 是單向旋轉，缺少完整 360° 旋轉（自轉一圈）的效果；應新增 `animate.spinAround(m, progress, opts)` 函式，opts 支援 `turns`（旋轉圈數，預設 `1`）和 `cx`/`cy`（旋轉中心，預設元素中心），以 `progress * turns * 360` 計算旋轉角度，於 progress=1 時清除 transform；新增至少 2 個 vm 測試。 ✓ 完成於 branch: feature/manim-spin-around-20260618
 
 - 時間: 2026-06-18 07:00:00 +0800
 - 分支: feature/formula-colors-20260618
@@ -1433,3 +1433,7 @@
 - 時間: 2026-06-18 09:00:00 +0800
 - 分支: feature/text-callout-border-radius-20260618
 - 內容: 新增 `text-callout` 效果圓角半徑控制。後端 `pageAnimation.ts` 新增 `DEFAULT_TEXT_CALLOUT_BORDER_RADIUS = 8`、`MAX_TEXT_CALLOUT_BORDER_RADIUS = 32` 常數，`AnimationEffect` 介面新增 `textCalloutBorderRadius?: number` 欄位，`EffectSchema` 新增 `z.number().int().min(0).max(32)` 驗證，序列化時以整數夾至合法範圍。前端 `types.ts` 同步新增欄位；`SlideRenderer.tsx` 以 `${effect.textCalloutBorderRadius ?? 8}px` 取代硬編碼 `'8px'` 的 borderRadius；`AnimationEditorTab.tsx` 在 text-callout 字型大小輸入框下方加入圓角數字輸入框（range 0-32, step 2）及 px 單位標籤；中英文 i18n 新增 `play.animation.textCalloutBorderRadius` 翻譯鍵。
+
+- 時間: 2026-06-18 10:00:00 +0800
+- 分支: feature/manim-spin-around-20260618
+- 內容: 新增 Manim `animate.spinAround` 完整旋轉效果。在 `manimHelperScript.ts` 的 `animate` 物件中，在 `rotate` 函式之後新增 `spinAround(m, progress, opts)` 函式：以 `progress * turns * 360` 計算累積旋轉角度（`turns` 預設 `1`），以 `m.el.getBBox()` 取得元素包圍框計算預設旋轉中心（若瀏覽器不支援 getBBox 則退回 0,0），opts 支援 `cx`/`cy` 覆蓋旋轉中心（cy 以 `toSvgY` 轉換座標系）；progress=1 時清除 transform 屬性。新增 2 個 vm 測試：(1) turns=2 時 progress=0.5 轉角約 360°，progress=1 時 transform 清除；(2) 無 opts（預設 1 圈）時 progress=0.25 約 90°，progress=0.75 約 270°，且角度隨 progress 遞增。全部 28 項通過。
