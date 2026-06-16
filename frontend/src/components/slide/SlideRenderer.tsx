@@ -202,6 +202,7 @@ function EffectOverlay({
     const fontSizeEm = effect.formulaFontSize ?? 1.5;
     const fBg = effect.formulaBgColor ?? '#0f172a';
     const fText = effect.formulaTextColor ?? '#f8fafc';
+    const fBr = `${effect.formulaBorderRadius ?? 8}px`;
     const html = katex.renderToString(effect.formula ?? '', { throwOnError: false, displayMode: true });
     return (
       <div
@@ -212,7 +213,7 @@ function EffectOverlay({
           alignItems: 'center',
           justifyContent: 'center',
           padding: '0.5em 0.75em',
-          borderRadius: '8px',
+          borderRadius: fBr,
           background: fBg,
           color: fText,
           overflow: 'hidden',

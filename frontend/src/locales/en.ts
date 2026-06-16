@@ -370,6 +370,7 @@ export const en = {
   'play.animation.formulaFontSize': 'Font size (em)',
   'play.animation.formulaBgColor': 'Background color',
   'play.animation.formulaTextColor': 'Text color',
+  'play.animation.formulaBorderRadius': 'Corner radius (px)',
   'play.animation.highlightColor': 'Border color',
   'play.animation.highlightBorderWidth': 'Border width (px)',
   'play.animation.highlightBorderRadius': 'Corner radius (px)',

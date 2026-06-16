@@ -174,6 +174,8 @@ export interface AnimationEffect {
   formulaBgColor?: string;
   /** Text/symbol colour (CSS hex) for `formula` effects. Defaults to `#f8fafc`. Ignored by other effect types. */
   formulaTextColor?: string;
+  /** Corner radius (px) for `formula` effects. Defaults to 8. Range 0-32. Ignored by other effect types. */
+  formulaBorderRadius?: number;
   /**
    * Seconds to remain visible after the fade-in completes before
    * automatically fading back out (same `duration`/`ease` as the fade-in).
@@ -246,6 +248,10 @@ export const DEFAULT_FORMULA_FONT_SIZE_EM = 1.5;
 export const MIN_FORMULA_FONT_SIZE_EM = 0.5;
 /** Maximum font size (em) for `formula` effects. */
 export const MAX_FORMULA_FONT_SIZE_EM = 4;
+/** Default corner radius (px) for `formula` effects. */
+export const DEFAULT_FORMULA_BORDER_RADIUS = 8;
+/** Maximum corner radius (px) for `formula` effects. */
+export const MAX_FORMULA_BORDER_RADIUS = 32;
 export const MAX_HINTS = 50;
 export const MAX_HINT_LENGTH = 200;
 /** Default stroke colour for `shape` effects (rose-500). */
@@ -382,6 +388,7 @@ const EffectSchema = z.object({
   formulaFontSize: z.number().min(MIN_FORMULA_FONT_SIZE_EM).max(MAX_FORMULA_FONT_SIZE_EM).optional(),
   formulaBgColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   formulaTextColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
+  formulaBorderRadius: z.number().int().min(0).max(MAX_FORMULA_BORDER_RADIUS).optional(),
   exitDuration: z.number().min(0).max(MAX_DURATION_SECONDS).optional(),
   code: z.string().max(MAX_CUSTOM_SCRIPT_CODE_LENGTH).optional(),
   prompt: z.string().max(MAX_CUSTOM_SCRIPT_PROMPT_LENGTH).optional(),
@@ -465,6 +472,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.formulaFontSize !== undefined ? { formulaFontSize: effect.formulaFontSize } : {}),
       ...(effect.formulaBgColor !== undefined ? { formulaBgColor: effect.formulaBgColor } : {}),
       ...(effect.formulaTextColor !== undefined ? { formulaTextColor: effect.formulaTextColor } : {}),
+      ...(effect.formulaBorderRadius !== undefined ? { formulaBorderRadius: Math.max(0, Math.min(MAX_FORMULA_BORDER_RADIUS, Math.round(effect.formulaBorderRadius))) } : {}),
       ...(effect.exitDuration !== undefined ? { exitDuration: effect.exitDuration } : {}),
       ...(effect.code !== undefined ? { code: effect.code } : {}),
       ...(effect.prompt !== undefined ? { prompt: effect.prompt } : {}),
