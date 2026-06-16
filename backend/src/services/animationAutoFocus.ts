@@ -12,6 +12,7 @@ import {
   MAX_CUSTOM_SCRIPT_CODE_LENGTH,
   MAX_CUSTOM_SCRIPT_PROMPT_LENGTH,
   MAX_FORMULA_LENGTH,
+  MAX_SHAPE_COLOR_LENGTH,
   MAX_STEP_LIST_ITEMS,
   MAX_STEP_LIST_ITEM_LENGTH,
   MAX_TEXT_CALLOUT_LENGTH,
@@ -54,6 +55,10 @@ const AutoFocusItemSchema = z.object({
   shape: z.enum(ANIMATION_SHAPE_KINDS).optional(),
   /** Bullet items to display, only meaningful when `type === 'step-list'`. */
   items: z.array(z.string().min(1).max(MAX_STEP_LIST_ITEM_LENGTH)).max(MAX_STEP_LIST_ITEMS).optional(),
+  /** Background color for the step-list box (CSS hex), only meaningful when `type === 'step-list'`. */
+  stepListBgColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
+  /** Text color for the step-list box (CSS hex), only meaningful when `type === 'step-list'`. */
+  stepListTextColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   /**
    * LaTeX source of a formula to display, only meaningful when
    * `type === 'formula'`; rendered by KaTeX in the overlay.
@@ -109,6 +114,7 @@ function buildAutoFocusSystemPrompt(): string {
     '4. text（僅當 type 為 text-callout 時提供，其他 type 請省略此欄位）：要顯示的文字內容，務必精簡扼要（不超過 80 字），並使用與逐字稿相同的語言。',
     '5. shape（僅當 type 為 shape 時提供，其他 type 請省略此欄位）：圖形種類，從 circle（圓形）、rect（方框）、ellipse（橢圓）、arrow（箭頭）中選擇，依該句描述的內容選擇最合適的圖形。',
     '6. items（僅當 type 為 step-list 時提供，其他 type 請省略此欄位）：條列項目的文字陣列，每項務必精簡（不超過 60 字），最多 6 項，並使用與逐字稿相同的語言。',
+    '6b. stepListBgColor / stepListTextColor（選填，僅當 type 為 step-list 時可提供）：若從投影片圖片可判斷投影片背景為淺色系（例如白色、淡灰、淡黃），請提供對比較好的顏色組合，例如 stepListBgColor: "#1e3a5f"（深藍）、stepListTextColor: "#f0f4ff"（近白）；若投影片背景為深色系，可省略（預設值已適合深色背景）。請使用 CSS hex 格式（如 "#3b82f6"），僅在有明確視覺判斷依據時才提供，無法判斷時一律省略。',
     '7. formulaLatex（僅當 type 為 formula 時提供，其他 type 請省略此欄位）：要顯示的 LaTeX 數學公式（不含 $ 或 $$ 分隔符），例如 E = mc^2 或 \\frac{1}{\\sigma\\sqrt{2\\pi}}e^{-\\frac{(x-\\mu)^2}{2\\sigma^2}} 或 a^2 + b^2 = c^2，不超過 200 字元；若逐字稿以文字描述公式（例如「E 等於 mc 的平方」），請將其轉為對應的 LaTeX（E = mc^2）；缺少、空白或無法以標準 LaTeX 表示時，請改選 highlight-box 而非提供無效的 LaTeX。',
     '8. scriptPrompt（僅當 type 為 custom-script 時提供，其他 type 請省略此欄位）：用一兩句話描述要產生的視覺化內容（例如「畫一個座標平面，顯示一個點沿曲線從左下移動到右上，代表數值隨時間成長」），會交給程式碼產生器轉換成可執行的動畫，請使用與逐字稿相同的語言，不超過 300 字。',
     '9. scriptDurationSeconds（選填，僅當 type 為 custom-script 時提供，其他 type 請省略此欄位）：此視覺化完整播放一輪所需的秒數，建議在 3 到 10 秒之間，讓畫面有足夠時間呈現變化。',
@@ -191,6 +197,8 @@ export function mapAutoFocusResponseToEffects(response: AutoFocusAiResponse, sen
     let text: string | undefined;
     let shape: AnimationEffect['shape'];
     let items: string[] | undefined;
+    let stepListBgColor: string | undefined;
+    let stepListTextColor: string | undefined;
     let formulaStr: string | undefined;
     let scriptPrompt: string | undefined;
     let duration = AUTO_FOCUS_AI_DURATION_SECONDS;
@@ -212,6 +220,8 @@ export function mapAutoFocusResponseToEffects(response: AutoFocusAiResponse, sen
         .map((entry) => entry.slice(0, MAX_STEP_LIST_ITEM_LENGTH));
       if (trimmedItems.length > 0) {
         items = trimmedItems;
+        if (item.stepListBgColor) stepListBgColor = item.stepListBgColor;
+        if (item.stepListTextColor) stepListTextColor = item.stepListTextColor;
       } else {
         // step-list 沒有任何項目就沒有意義，退回 highlight-box。
         type = 'highlight-box';
@@ -269,6 +279,12 @@ export function mapAutoFocusResponseToEffects(response: AutoFocusAiResponse, sen
     }
     if (items !== undefined) {
       effect.items = items;
+    }
+    if (stepListBgColor !== undefined) {
+      effect.stepListBgColor = stepListBgColor;
+    }
+    if (stepListTextColor !== undefined) {
+      effect.stepListTextColor = stepListTextColor;
     }
     if (formulaStr !== undefined) {
       effect.formula = formulaStr;
