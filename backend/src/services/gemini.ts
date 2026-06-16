@@ -81,20 +81,74 @@ function getGeminiApiKey(): string {
   return key;
 }
 
-function normalizeMessages(messages: ChatCompletionMessageParam[]): string {
-  return messages
-    .map((m) => {
-      const role = m.role;
-      const content = m.content;
-      if (typeof content === 'string') return `[${role}] ${content}`;
-      if (Array.isArray(content)) {
-        return `[${role}] ${content
-          .map((c) => (c.type === 'text' ? c.text : '[image]'))
-          .join('\n')}`;
+type GeminiPart = { text: string } | { inlineData: { mimeType: string; data: string } };
+
+interface GeminiContent {
+  role: 'user' | 'model';
+  parts: GeminiPart[];
+}
+
+interface GeminiContents {
+  systemInstruction?: { parts: { text: string }[] };
+  contents: GeminiContent[];
+}
+
+function parseDataUrl(url: string): { mimeType: string; data: string } | null {
+  const match = /^data:([a-zA-Z0-9+/.-]+\/[a-zA-Z0-9+/.-]+);base64,(.+)$/s.exec(url);
+  if (!match) return null;
+  return { mimeType: match[1]!, data: match[2]! };
+}
+
+/**
+ * Converts OpenAI-format messages into the Gemini `contents` + optional
+ * `systemInstruction` structure. System messages become `systemInstruction`;
+ * user/assistant messages map to `user`/`model` roles. `image_url` parts
+ * carrying `data:image/...;base64,...` URLs are converted to `inlineData`
+ * so vision-capable Gemini models receive the actual image bytes.
+ * Non-data-URL image references are dropped (Gemini cannot fetch external HTTP
+ * resources in server-side calls).
+ */
+export function buildGeminiContents(messages: ChatCompletionMessageParam[]): GeminiContents {
+  const systemTexts: string[] = [];
+  const contents: GeminiContent[] = [];
+
+  for (const m of messages) {
+    if (m.role === 'system') {
+      const text = typeof m.content === 'string' ? m.content : '';
+      if (text) systemTexts.push(text);
+      continue;
+    }
+
+    const role: 'user' | 'model' = m.role === 'assistant' ? 'model' : 'user';
+    const parts: GeminiPart[] = [];
+
+    if (typeof m.content === 'string') {
+      parts.push({ text: m.content });
+    } else if (Array.isArray(m.content)) {
+      for (const c of m.content) {
+        if (c.type === 'text') {
+          parts.push({ text: c.text as string });
+        } else if (c.type === 'image_url') {
+          const url = (c as { type: 'image_url'; image_url?: { url?: string } }).image_url?.url ?? '';
+          const parsed = parseDataUrl(url);
+          if (parsed) {
+            parts.push({ inlineData: parsed });
+          }
+          // Non-data URLs are dropped — Gemini cannot fetch external HTTP resources.
+        }
       }
-      return `[${role}]`;
-    })
-    .join('\n\n');
+    }
+
+    if (parts.length > 0) {
+      contents.push({ role, parts });
+    }
+  }
+
+  const result: GeminiContents = { contents };
+  if (systemTexts.length > 0) {
+    result.systemInstruction = { parts: systemTexts.map((text) => ({ text })) };
+  }
+  return result;
 }
 
 export async function callGeminiJson<T>(params: {
@@ -105,15 +159,18 @@ export async function callGeminiJson<T>(params: {
   temperature?: number;
 }): Promise<{ data: T; usage: GeminiUsage; rawContent: string }> {
   const apiKey = getGeminiApiKey();
-  const prompt = normalizeMessages(params.messages);
-  const body = {
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+  const { systemInstruction, contents } = buildGeminiContents(params.messages);
+  const body: Record<string, unknown> = {
+    contents,
     generationConfig: {
       temperature: params.temperature ?? 0.6,
       maxOutputTokens: params.maxTokens ?? 2048,
       responseMimeType: 'application/json',
     },
   };
+  if (systemInstruction) {
+    body.systemInstruction = systemInstruction;
+  }
   const resp = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(params.model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
     {
@@ -152,14 +209,17 @@ export async function callGeminiTextStream(params: {
   onDelta: (delta: string) => void;
 }): Promise<{ text: string; usage: GeminiUsage }> {
   const apiKey = getGeminiApiKey();
-  const prompt = normalizeMessages(params.messages);
-  const body = {
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+  const { systemInstruction, contents } = buildGeminiContents(params.messages);
+  const body: Record<string, unknown> = {
+    contents,
     generationConfig: {
       temperature: params.temperature ?? 0.6,
       maxOutputTokens: params.maxTokens ?? 2048,
     },
   };
+  if (systemInstruction) {
+    body.systemInstruction = systemInstruction;
+  }
   const resp = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(params.model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`,
     {
