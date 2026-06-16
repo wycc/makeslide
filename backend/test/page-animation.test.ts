@@ -1067,6 +1067,88 @@ test('mapAutoFocusResponseToEffects custom-script output (with prompt, no code) 
   assert.equal(result.ok, true);
 });
 
+test('mapAutoFocusResponseToEffects maps formula items, carrying formulaLatex as effect.formula', () => {
+  const effects = mapAutoFocusResponseToEffects(
+    {
+      effects: [
+        {
+          line: 0,
+          show: true,
+          type: 'formula',
+          formulaLatex: 'E = mc^2',
+          xPct: 30,
+          yPct: 40,
+          widthPct: 40,
+          heightPct: 15,
+          exitDuration: 3,
+        },
+      ],
+    },
+    1,
+  );
+  assert.equal(effects.length, 1);
+  assert.equal(effects[0]?.type, 'formula');
+  assert.equal(effects[0]?.formula, 'E = mc^2');
+  assert.equal(effects[0]?.exitDuration, 3);
+});
+
+test('mapAutoFocusResponseToEffects truncates formulaLatex to MAX_FORMULA_LENGTH', () => {
+  const longLatex = 'x'.repeat(MAX_FORMULA_LENGTH + 10);
+  const effects = mapAutoFocusResponseToEffects(
+    {
+      effects: [{ line: 0, show: true, type: 'formula', formulaLatex: longLatex, xPct: 10, yPct: 10, widthPct: 30, heightPct: 10 }],
+    },
+    1,
+  );
+  assert.equal(effects[0]?.type, 'formula');
+  assert.equal(effects[0]?.formula?.length, MAX_FORMULA_LENGTH);
+});
+
+test('mapAutoFocusResponseToEffects falls back formula without formulaLatex to highlight-box', () => {
+  const effects = mapAutoFocusResponseToEffects(
+    {
+      effects: [{ line: 0, show: true, type: 'formula', xPct: 10, yPct: 10, widthPct: 30, heightPct: 10 }],
+    },
+    1,
+  );
+  assert.equal(effects[0]?.type, 'highlight-box');
+  assert.equal(effects[0]?.formula, undefined);
+});
+
+test('mapAutoFocusResponseToEffects falls back formula with empty formulaLatex to highlight-box', () => {
+  const effects = mapAutoFocusResponseToEffects(
+    {
+      effects: [{ line: 0, show: true, type: 'formula', formulaLatex: '   ', xPct: 10, yPct: 10, widthPct: 30, heightPct: 10 }],
+    },
+    1,
+  );
+  assert.equal(effects[0]?.type, 'highlight-box');
+  assert.equal(effects[0]?.formula, undefined);
+});
+
+test('mapAutoFocusResponseToEffects formula output passes validateAnimationSpec', () => {
+  const effects = mapAutoFocusResponseToEffects(
+    {
+      effects: [
+        {
+          line: 0,
+          show: true,
+          type: 'formula',
+          formulaLatex: '\\frac{1}{\\sigma\\sqrt{2\\pi}}e^{-\\frac{(x-\\mu)^2}{2\\sigma^2}}',
+          xPct: 20,
+          yPct: 30,
+          widthPct: 60,
+          heightPct: 20,
+        },
+      ],
+    },
+    1,
+  );
+  const result = validateAnimationSpec({ version: 1, enabled: true, effects });
+  assert.equal(result.ok, true);
+  assert.equal(result.spec?.effects[0]?.formula, '\\frac{1}{\\sigma\\sqrt{2\\pi}}e^{-\\frac{(x-\\mu)^2}{2\\sigma^2}}');
+});
+
 // ── fillCustomScriptEffectsCode ─────────────────────────────────────────────────
 
 test('fillCustomScriptEffectsCode fills in code for a custom-script effect generated from its prompt', async () => {
