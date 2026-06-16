@@ -464,6 +464,10 @@ export function AnimationEditorTab() {
   const [copiedEffects, setCopiedEffects] = useState<SlideAnimationEffect[] | null>(null);
   // overlay-image 效果的圖片選擇器：本頁可用的已擷取圖片清單。
   const [pageFigures, setPageFigures] = useState<PageFigure[] | null>(null);
+  // 記錄每個 figureId 的原始長寬比（naturalWidth / naturalHeight），在圖片 onLoad 時取得。
+  const [figureNaturalRatios, setFigureNaturalRatios] = useState<Record<string, number>>({});
+  // 已啟用比例鎖定的 overlay-image 效果 ID 集合。
+  const [lockedAspectEffectIds, setLockedAspectEffectIds] = useState<Set<string>>(new Set());
 
   const pageNumber = currentPage?.page_number;
   useEffect(() => {
@@ -1099,11 +1103,35 @@ export function AnimationEditorTab() {
                           ))}
                         </select>
                         {effect.figureId && pdfId && (
-                          <img
-                            src={withShareToken(figureImageUrl(pdfId, effect.figureId)) ?? figureImageUrl(pdfId, effect.figureId)}
-                            alt=""
-                            className="h-10 w-14 rounded border border-slate-700 bg-slate-950 object-contain"
-                          />
+                          <>
+                            <img
+                              src={withShareToken(figureImageUrl(pdfId, effect.figureId)) ?? figureImageUrl(pdfId, effect.figureId)}
+                              alt=""
+                              className="h-10 w-14 rounded border border-slate-700 bg-slate-950 object-contain"
+                              onLoad={(e) => {
+                                const img = e.currentTarget;
+                                if (img.naturalWidth && img.naturalHeight) {
+                                  const fid = effect.figureId!;
+                                  setFigureNaturalRatios((prev) => ({ ...prev, [fid]: img.naturalWidth / img.naturalHeight }));
+                                }
+                              }}
+                            />
+                            <button
+                              type="button"
+                              title={t(lockedAspectEffectIds.has(effect.id) ? 'play.animation.unlockAspectRatio' : 'play.animation.lockAspectRatio')}
+                              onClick={() =>
+                                setLockedAspectEffectIds((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(effect.id)) next.delete(effect.id);
+                                  else next.add(effect.id);
+                                  return next;
+                                })
+                              }
+                              className={`rounded-md border px-2 py-1.5 text-sm ${lockedAspectEffectIds.has(effect.id) ? 'border-fuchsia-500/50 bg-fuchsia-500/10 text-fuchsia-300' : 'border-slate-700 text-slate-400 hover:bg-slate-800'}`}
+                            >
+                              {lockedAspectEffectIds.has(effect.id) ? '🔒' : '🔓'}
+                            </button>
+                          </>
                         )}
                       </>
                     )}
@@ -1140,9 +1168,19 @@ export function AnimationEditorTab() {
                       effect={effect}
                       imageUrl={currentPage.image_url}
                       isPointerOnly={effect.type === 'pointer'}
-                      onParamsChange={(params) =>
-                        updateEffect(effect.id, { params: { ...getFocusEffectParams(effect), ...params } })
-                      }
+                      onParamsChange={(params) => {
+                        let next = { ...getFocusEffectParams(effect), ...params };
+                        if (
+                          effect.type === 'overlay-image' &&
+                          effect.figureId &&
+                          lockedAspectEffectIds.has(effect.id) &&
+                          figureNaturalRatios[effect.figureId]
+                        ) {
+                          const ratio = figureNaturalRatios[effect.figureId]!;
+                          next = { ...next, heightPct: Math.round((next.widthPct / ratio) * 10) / 10 };
+                        }
+                        updateEffect(effect.id, { params: next });
+                      }}
                       disabled={disabled}
                     />
                   )}
@@ -1161,14 +1199,21 @@ export function AnimationEditorTab() {
                           step={1}
                           value={getFocusEffectParams(effect)[key]}
                           disabled={disabled}
-                          onChange={(e) =>
-                            updateEffect(effect.id, {
-                              params: {
-                                ...getFocusEffectParams(effect),
-                                [key]: Math.min(100, Math.max(0, Number(e.target.value) || 0)),
-                              },
-                            })
-                          }
+                          onChange={(e) => {
+                            const newVal = Math.min(100, Math.max(0, Number(e.target.value) || 0));
+                            const base = { ...getFocusEffectParams(effect), [key]: newVal };
+                            if (
+                              key === 'widthPct' &&
+                              effect.type === 'overlay-image' &&
+                              effect.figureId &&
+                              lockedAspectEffectIds.has(effect.id) &&
+                              figureNaturalRatios[effect.figureId]
+                            ) {
+                              const ratio = figureNaturalRatios[effect.figureId]!;
+                              base.heightPct = Math.round((newVal / ratio) * 10) / 10;
+                            }
+                            updateEffect(effect.id, { params: base });
+                          }}
                           className="w-14 rounded-md border border-slate-700 bg-slate-900 px-1 py-1 text-sm text-slate-100"
                         />
                       </label>
