@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import katex from 'katex';
 import { useI18n } from '../../i18n';
 import type { TranslationKey } from '../../i18n';
@@ -83,6 +83,194 @@ const EASE_LABELS = {
   'power1.inOut': 'play.animation.ease.power1InOut',
   'power2.inOut': 'play.animation.ease.power2InOut',
 } as const satisfies Record<SlideAnimationEase, TranslationKey>;
+
+/** 拖曳 handle 種類：中央為移動，四邊與四角為縮放。 */
+type DragHandle = 'move' | 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se';
+
+const HANDLE_CURSORS: Record<DragHandle, string> = {
+  move: 'move',
+  n: 'ns-resize', s: 'ns-resize',
+  e: 'ew-resize', w: 'ew-resize',
+  nw: 'nwse-resize', se: 'nwse-resize',
+  ne: 'nesw-resize', sw: 'nesw-resize',
+};
+
+/**
+ * 在投影片縮圖上以拖曳方式直接編輯 overlay 效果的位置與大小。
+ * 非 overlay 效果或 pointer/custom-script 效果僅顯示位置點（pointer）或不顯示。
+ */
+function EffectPositionEditor({
+  effect,
+  imageUrl,
+  isPointerOnly,
+  onParamsChange,
+  disabled,
+}: {
+  effect: SlideAnimationEffect;
+  imageUrl: string;
+  /** pointer 效果只有 x/y，不需要 resize handle。 */
+  isPointerOnly: boolean;
+  onParamsChange: (params: { xPct: number; yPct: number; widthPct: number; heightPct: number }) => void;
+  disabled?: boolean;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{
+    handle: DragHandle;
+    startMouseX: number;
+    startMouseY: number;
+    startXPct: number;
+    startYPct: number;
+    startWidthPct: number;
+    startHeightPct: number;
+  } | null>(null);
+
+  const { xPct, yPct, widthPct, heightPct } = getFocusEffectParams(effect);
+
+  const clamp = useCallback((v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v)), []);
+
+  const onPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>, handle: DragHandle) => {
+    if (disabled) return;
+    e.preventDefault();
+    e.stopPropagation();
+    (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+    dragRef.current = {
+      handle,
+      startMouseX: e.clientX,
+      startMouseY: e.clientY,
+      startXPct: xPct,
+      startYPct: yPct,
+      startWidthPct: widthPct,
+      startHeightPct: heightPct,
+    };
+  }, [disabled, xPct, yPct, widthPct, heightPct]);
+
+  const onPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragRef.current) return;
+    const container = containerRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const dx = ((e.clientX - dragRef.current.startMouseX) / rect.width) * 100;
+    const dy = ((e.clientY - dragRef.current.startMouseY) / rect.height) * 100;
+    const { handle, startXPct, startYPct, startWidthPct, startHeightPct } = dragRef.current;
+
+    let newX = startXPct;
+    let newY = startYPct;
+    let newW = startWidthPct;
+    let newH = startHeightPct;
+
+    if (handle === 'move' || isPointerOnly) {
+      newX = clamp(startXPct + dx, 0, 100);
+      newY = clamp(startYPct + dy, 0, 100);
+    } else {
+      if (handle === 'e' || handle === 'ne' || handle === 'se') newW = clamp(startWidthPct + dx, 2, 100 - startXPct);
+      if (handle === 'w' || handle === 'nw' || handle === 'sw') {
+        const newWidth = clamp(startWidthPct - dx, 2, startXPct + startWidthPct);
+        newX = startXPct + startWidthPct - newWidth;
+        newW = newWidth;
+      }
+      if (handle === 's' || handle === 'se' || handle === 'sw') newH = clamp(startHeightPct + dy, 2, 100 - startYPct);
+      if (handle === 'n' || handle === 'nw' || handle === 'ne') {
+        const newHeight = clamp(startHeightPct - dy, 2, startYPct + startHeightPct);
+        newY = startYPct + startHeightPct - newHeight;
+        newH = newHeight;
+      }
+    }
+
+    onParamsChange({
+      xPct: Math.round(newX * 10) / 10,
+      yPct: Math.round(newY * 10) / 10,
+      widthPct: Math.round(newW * 10) / 10,
+      heightPct: Math.round(newH * 10) / 10,
+    });
+  }, [clamp, isPointerOnly, onParamsChange]);
+
+  const onPointerUp = useCallback(() => {
+    dragRef.current = null;
+  }, []);
+
+  const handleSize = 10;
+  const half = handleSize / 2;
+
+  const edgeHandles: { handle: DragHandle; style: React.CSSProperties }[] = isPointerOnly ? [] : [
+    { handle: 'n',  style: { top: -half, left: '50%', transform: 'translateX(-50%)', width: handleSize, height: handleSize, cursor: HANDLE_CURSORS.n } },
+    { handle: 's',  style: { bottom: -half, left: '50%', transform: 'translateX(-50%)', width: handleSize, height: handleSize, cursor: HANDLE_CURSORS.s } },
+    { handle: 'e',  style: { right: -half, top: '50%', transform: 'translateY(-50%)', width: handleSize, height: handleSize, cursor: HANDLE_CURSORS.e } },
+    { handle: 'w',  style: { left: -half, top: '50%', transform: 'translateY(-50%)', width: handleSize, height: handleSize, cursor: HANDLE_CURSORS.w } },
+    { handle: 'nw', style: { top: -half, left: -half, width: handleSize, height: handleSize, cursor: HANDLE_CURSORS.nw } },
+    { handle: 'ne', style: { top: -half, right: -half, width: handleSize, height: handleSize, cursor: HANDLE_CURSORS.ne } },
+    { handle: 'sw', style: { bottom: -half, left: -half, width: handleSize, height: handleSize, cursor: HANDLE_CURSORS.sw } },
+    { handle: 'se', style: { bottom: -half, right: -half, width: handleSize, height: handleSize, cursor: HANDLE_CURSORS.se } },
+  ];
+
+  return (
+    <div
+      ref={containerRef}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+      style={{ position: 'relative', width: '100%', paddingTop: '56.25%', userSelect: 'none' }}
+      className="overflow-hidden rounded-md border border-slate-700 bg-slate-950"
+    >
+      <img
+        src={imageUrl}
+        alt=""
+        draggable={false}
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block', pointerEvents: 'none' }}
+      />
+      {isPointerOnly ? (
+        // pointer 效果：一個可拖曳的圓點
+        <div
+          onPointerDown={(e) => onPointerDown(e, 'move')}
+          style={{
+            position: 'absolute',
+            left: `${xPct}%`,
+            top: `${yPct}%`,
+            width: 18,
+            height: 18,
+            transform: 'translate(-50%, -50%)',
+            borderRadius: '50%',
+            background: 'rgba(244, 63, 94, 0.85)',
+            border: '2px solid #fff',
+            boxShadow: '0 0 6px 2px rgba(244,63,94,0.6)',
+            cursor: disabled ? 'default' : 'move',
+            touchAction: 'none',
+          }}
+        />
+      ) : (
+        // 一般 overlay 效果：可拖曳移動＋縮放的矩形
+        <div
+          onPointerDown={(e) => onPointerDown(e, 'move')}
+          style={{
+            position: 'absolute',
+            left: `${xPct}%`,
+            top: `${yPct}%`,
+            width: `${widthPct}%`,
+            height: `${heightPct}%`,
+            border: '2px solid #a855f7',
+            background: 'rgba(168, 85, 247, 0.15)',
+            boxSizing: 'border-box',
+            cursor: disabled ? 'default' : HANDLE_CURSORS.move,
+            touchAction: 'none',
+          }}
+        >
+          {edgeHandles.map(({ handle, style }) => (
+            <div
+              key={handle}
+              onPointerDown={(e) => { e.stopPropagation(); onPointerDown(e, handle); }}
+              style={{
+                position: 'absolute',
+                background: '#a855f7',
+                borderRadius: 2,
+                touchAction: 'none',
+                ...style,
+              }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function generateEffectId(): string {
   return typeof crypto !== 'undefined' && crypto.randomUUID
@@ -882,8 +1070,19 @@ export function AnimationEditorTab() {
                 </label>
               )}
               {OVERLAY_EFFECT_TYPES.includes(effect.type) && effect.type !== 'custom-script' && (
-                <div className="flex flex-col gap-1 text-xs text-slate-400">
+                <div className="flex flex-col gap-2 text-xs text-slate-400">
                   {t(effect.type === 'pointer' ? 'play.animation.pointerPosition' : 'play.animation.focusPosition')}
+                  {currentPage?.image_url && (
+                    <EffectPositionEditor
+                      effect={effect}
+                      imageUrl={currentPage.image_url}
+                      isPointerOnly={effect.type === 'pointer'}
+                      onParamsChange={(params) =>
+                        updateEffect(effect.id, { params: { ...getFocusEffectParams(effect), ...params } })
+                      }
+                      disabled={disabled}
+                    />
+                  )}
                   <div className="flex gap-1">
                     {(
                       effect.type === 'pointer'
