@@ -367,6 +367,8 @@ export const en = {
   'play.animation.shapeKind.rect': 'Rectangle',
   'play.animation.shapeKind.ellipse': 'Ellipse',
   'play.animation.shapeKind.arrow': 'Arrow',
+  'play.animation.shapeColor': 'Stroke color',
+  'play.animation.shapeStrokeWidth': 'Stroke width',
   'play.animation.stepListItems': 'List items (one per line, up to 6)',
   'play.animation.stepListItemsPlaceholder': 'Point one\nPoint two\nPoint three',
   'play.animation.overlayImageFigure': 'Insert figure',

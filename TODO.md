@@ -1245,7 +1245,7 @@
 
 # 2026-06-17 動畫 V2 新增項目
 
-[ ] 允許 `shape` 效果自訂顏色與線寬：目前 `shape` 效果固定使用玫瑰色（`#f43f5e`）描邊，應新增 `color`（顏色，支援 hex/named color）與 `strokeWidth`（線寬，px，預設 3）欄位，在動畫編輯器與 `SlideRenderer` 一併支援。
+[x] 允許 `shape` 效果自訂顏色與線寬（完成於分支: feature/animation-shape-color-strokewidth-20260617）
 [ ] `step-list` 效果的 AI 自動生成：在 `auto-focus-ai` 中，讓 AI 除了依逐字稿選擇 `step-list` 類型外，也能依逐字稿語境自動產生 `items` 條列文案（與逐字稿同語言），類似 `text-callout` 的 AI 文案生成邏輯。
 [ ] `formula` 效果的 AI 自動生成：在 `auto-focus-ai` 中，讓 AI 依逐字稿內容自動判斷是否適合插入公式，並生成對應的 LaTeX 字串（`formulaLatex`）；若逐字稿包含數學式、物理公式或統計式，AI 選擇 `formula` 類型並提供正確的 LaTeX。（目前僅支援 `formulaLatex` 欄位映射，但 AI 選擇 `formula` 類型的能力已在 `feature/animation-auto-focus-ai-formula-20260616` 實作；此項目為補齊 AI 自動判斷公式內容品質的測試與提示詞優化）
 [ ] 將 `AnimationSpec.hints` 傳入 LLM 動畫生成：目前 `hints`（逐字稿句子的動畫指引）僅儲存在 `AnimationSpec` 並顯示於編輯器，但 `auto-focus-ai` 的 LLM 提示詞還未讀取並傳入 `hints`；應在 `buildAutoFocusUserPrompt()` 中將本頁 `hints` 的內容加入 user prompt，讓 AI 在決定每一句的效果時能參考使用者提供的手動指引。
@@ -1255,3 +1255,7 @@
 [ ] `pointer` 效果的方向自訂：目前 `pointer` 效果渲染為固定方向的游標圖示；應新增 `angle`（旋轉角度，度，預設 0）欄位，讓使用者可以在動畫編輯器中調整指標方向（例如向上、向右、斜角指向目標）；在 `SlideRenderer` 的 `pointer` 渲染元件中依 `effect.angle` 旋轉圖示。
 [ ] 動畫效果的播放預覽跳轉：在動畫編輯器的效果卡片上新增「跳至此效果」按鈕，按下後將音訊播放器的 `currentTime` seek 到 `effect.start` 秒，讓使用者可以快速預覽特定效果；需與 `PlayPage` 的音訊控制整合。
 [ ] `Manim` 的 `transform` 路徑變形（path morphing）：目前 `Manim.animate.transform(from, to, progress)` 只做屬性線性插值（屬性相同才能 lerp），不支援真正的 SVG 路徑變形（`<path d>` 的形點插值）；應研究以 `flubber.js` 或自行實作的 cubic Bézier 插值達到 circle→square 等基本形狀路徑變形，並更新 `manimHelperScript.ts` 的 `Manim.animate.transform` 方法。
+
+- 時間: 2026-06-17 00:30:00 +0800
+- 分支: feature/animation-shape-color-strokewidth-20260617
+- 內容: 新增 `shape` 效果的 `color`（CSS hex 描邊顏色，預設 `#f43f5e`）與 `strokeWidth`（SVG 線寬，範圍 1-20，預設 5）欄位：(1) `backend/src/services/pageAnimation.ts` 新增 `color: z.string().max(20).regex(/^#[0-9a-fA-F]{3,8}$/)` 與 `strokeWidth: z.number().min(1).max(20)` 至 `EffectSchema`，新增 `AnimationEffect.color`/`AnimationEffect.strokeWidth` 型別欄位，新增 `DEFAULT_SHAPE_STROKE_COLOR`/`DEFAULT_SHAPE_STROKE_WIDTH`/`MAX_SHAPE_COLOR_LENGTH`/`MAX_SHAPE_STROKE_WIDTH` 常數，`validateAnimationSpec` 通透傳遞這兩個欄位（`strokeWidth` 夾在 1-20 並取整）；(2) `frontend/src/types.ts` 鏡像 `color?`/`strokeWidth?` 欄位至 `SlideAnimationEffect`；(3) `frontend/src/components/slide/SlideRenderer.tsx` 改用 `effect.color ?? '#f43f5e'` 與 `effect.strokeWidth ?? 5` 取代硬編碼值，箭頭 strokeWidth 維持比基底多 1 的比例；(4) `frontend/src/pages/play/AnimationEditorTab.tsx` 在 `shape` 類型的圖形種類選單之後新增顏色選色器（`type="color"` input）與線寬數值輸入框（1-20，整數）；(5) `frontend/src/locales/zh-TW.ts` 與 `en.ts` 補充 `play.animation.shapeColor`/`play.animation.shapeStrokeWidth` 翻譯鍵。驗證：`npm --prefix frontend run build` 通過；`npm --prefix backend run build` 通過；`npx tsx --test backend/test/page-animation.test.ts`，104/104 通過。

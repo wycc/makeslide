@@ -989,6 +989,36 @@ export function AnimationEditorTab() {
                   </select>
                 </label>
               )}
+              {effect.type === 'shape' && (
+                <div className="flex gap-2">
+                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    {t('play.animation.shapeColor')}
+                    <input
+                      type="color"
+                      value={effect.color ?? '#f43f5e'}
+                      disabled={disabled}
+                      onChange={(e) => updateEffect(effect.id, { color: e.target.value })}
+                      className="h-8 w-12 cursor-pointer rounded-md border border-slate-700 bg-slate-900 p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    {t('play.animation.shapeStrokeWidth')}
+                    <input
+                      type="number"
+                      min={1}
+                      max={20}
+                      step={1}
+                      value={effect.strokeWidth ?? 5}
+                      disabled={disabled}
+                      onChange={(e) => {
+                        const v = Math.max(1, Math.min(20, Math.round(Number(e.target.value))));
+                        updateEffect(effect.id, { strokeWidth: Number.isFinite(v) ? v : 5 });
+                      }}
+                      className="w-16 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                    />
+                  </label>
+                </div>
+              )}
               {effect.type === 'step-list' && (
                 <label className="flex flex-col gap-1 text-xs text-slate-400">
                   {t('play.animation.stepListItems')}
