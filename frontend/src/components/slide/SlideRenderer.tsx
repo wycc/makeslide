@@ -109,6 +109,8 @@ function EffectOverlay({
     const tcText = effect.textCalloutTextColor ?? '#f8fafc';
     const tcFontSize = `${effect.textCalloutFontSize ?? 1.25}rem`;
     const tcBr = `${effect.textCalloutBorderRadius ?? 8}px`;
+    const tcAlign = effect.textCalloutAlign ?? 'center';
+    const tcJustify = tcAlign === 'left' ? 'flex-start' : tcAlign === 'right' ? 'flex-end' : 'center';
     return (
       <div
         data-effect-id={effect.id}
@@ -116,14 +118,14 @@ function EffectOverlay({
           ...position,
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center',
+          justifyContent: tcJustify,
           padding: '0.5em 0.75em',
           borderRadius: tcBr,
           background: tcBg,
           color: tcText,
           fontSize: tcFontSize,
           fontWeight: 600,
-          textAlign: 'center',
+          textAlign: tcAlign,
           overflow: 'hidden',
           wordBreak: 'break-word',
         }}

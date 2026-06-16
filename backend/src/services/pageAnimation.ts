@@ -106,6 +106,8 @@ export interface AnimationEffect {
   textCalloutTextColor?: string;
   /** Corner radius in px for `text-callout` effects. Defaults to 8. Range 0-32. Ignored by other effect types. */
   textCalloutBorderRadius?: number;
+  /** Text alignment for `text-callout` effects. Defaults to `'center'`. Ignored by other effect types. */
+  textCalloutAlign?: 'left' | 'center' | 'right';
   /**
    * Mask colour (CSS hex) for `spotlight` effects (ignored by other
    * effect types). Defaults to `DEFAULT_SPOTLIGHT_COLOR` (`#000000`).
@@ -396,6 +398,7 @@ const EffectSchema = z.object({
   textCalloutBgColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   textCalloutTextColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   textCalloutBorderRadius: z.number().int().min(0).max(MAX_TEXT_CALLOUT_BORDER_RADIUS).optional(),
+  textCalloutAlign: z.enum(['left', 'center', 'right']).optional(),
   spotlightColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   spotlightOpacity: z.number().min(0).max(1).optional(),
   spotlightSoftEdge: z.number().int().min(0).max(MAX_SPOTLIGHT_SOFT_EDGE).optional(),
@@ -485,6 +488,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.textCalloutBgColor !== undefined ? { textCalloutBgColor: effect.textCalloutBgColor } : {}),
       ...(effect.textCalloutTextColor !== undefined ? { textCalloutTextColor: effect.textCalloutTextColor } : {}),
       ...(effect.textCalloutBorderRadius !== undefined ? { textCalloutBorderRadius: Math.max(0, Math.min(MAX_TEXT_CALLOUT_BORDER_RADIUS, Math.round(effect.textCalloutBorderRadius))) } : {}),
+      ...(effect.textCalloutAlign !== undefined ? { textCalloutAlign: effect.textCalloutAlign } : {}),
       ...(effect.spotlightColor !== undefined ? { spotlightColor: effect.spotlightColor } : {}),
       ...(effect.spotlightOpacity !== undefined ? { spotlightOpacity: effect.spotlightOpacity } : {}),
       ...(effect.spotlightSoftEdge !== undefined ? { spotlightSoftEdge: Math.max(0, Math.min(MAX_SPOTLIGHT_SOFT_EDGE, Math.round(effect.spotlightSoftEdge))) } : {}),
