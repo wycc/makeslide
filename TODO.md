@@ -1331,7 +1331,7 @@
 
 [x] Manim `animate.uncreate(m, progress)` 效果：目前 `animate.create(m, progress)` 可以讓 SVG 路徑從頭到尾逐漸繪製出來，但沒有對應的反向動畫；應新增 `Manim.animate.uncreate(m, progress)` 函式，讓路徑從尾到頭逐漸消失（`strokeDashoffset` 從 0 增加至總長度，`opacity` 在 progress=1 時設為 `0`），並新增至少 2 個對應 vm 測試（一個驗證中間 dashoffset > 0，一個驗證 progress=1 時 opacity=0）。 ✓ 完成於 branch: feature/manim-uncreate-20260618
 
-[ ] `shape` 效果透明度控制：目前 `shape` 效果在動畫播放中始終以完全不透明方式顯示 SVG 圖形（opacity 由 GSAP fadeIn 控制，但靜態時固定為 1）；應新增 `shapeOpacity` 欄位（0-1 浮點數，預設 `1`，步進 0.05），讓使用者可在動畫編輯器中設定形狀本身的基礎透明度（疊加在 GSAP 淡入淡出之上），並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`（SVG opacity 屬性）/`AnimationEditorTab`（新增數字輸入框）及中英文 i18n。
+[x] `shape` 效果透明度控制：目前 `shape` 效果在動畫播放中始終以完全不透明方式顯示 SVG 圖形（opacity 由 GSAP fadeIn 控制，但靜態時固定為 1）；應新增 `shapeOpacity` 欄位（0-1 浮點數，預設 `1`，步進 0.05），讓使用者可在動畫編輯器中設定形狀本身的基礎透明度（疊加在 GSAP 淡入淡出之上），並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`（SVG opacity 屬性）/`AnimationEditorTab`（新增數字輸入框）及中英文 i18n。 ✓ 完成於 branch: feature/shape-opacity-20260618
 
 ## 工作記錄
 
@@ -1410,3 +1410,7 @@
 - 時間: 2026-06-18 05:00:00 +0800
 - 分支: feature/manim-uncreate-20260618
 - 內容: 新增 Manim `animate.uncreate` 效果。在 `manimHelperScript.ts` 的 `animate` 物件中新增 `uncreate(m, progress)` 函式，與 `create` 對稱：text/dot/arrow/axes/numberPlane 類型直接將 `opacity` 設為 `1 - p`；路徑類型將 `strokeDashoffset` 設為 `len * p`（從 0 增加至完整長度），`fill-opacity` 從原始值線性遞減，progress=1 時將 opacity 設為 `'0'`。新增 2 個 vm 測試：(1) 路徑在 progress=0.5 時 dashoffset > 0，progress=1 時 opacity=0；(2) 同樣 progress 下，create 的 dashoffset 比 uncreate 大（create 從尾端開始顯示，uncreate 從頭端開始消除）。全部 24 項測試通過。
+
+- 時間: 2026-06-18 06:00:00 +0800
+- 分支: feature/shape-opacity-20260618
+- 內容: 新增 `shape` 效果基礎透明度控制。後端 `pageAnimation.ts` 在 `AnimationEffect` 介面新增 `shapeOpacity?: number` 欄位，`EffectSchema` 新增 `z.number().min(0).max(1)` 驗證，序列化時以 Math.max/min 夾至合法範圍。前端 `types.ts` 同步新增欄位；`SlideRenderer.tsx` 以 `effect.shapeOpacity ?? 1` 作為 SVG 的 `opacity` style 屬性（疊加在 GSAP fadeIn/fadeOut 的動態 opacity 之上）；`AnimationEditorTab.tsx` 在 shape 填充顏色下方新增數字輸入框（range 0-1, step 0.05）；中英文 i18n 新增 `play.animation.shapeOpacity` 翻譯鍵。

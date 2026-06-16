@@ -639,3 +639,16 @@ Manim.animate.uncreate(circ, t);     // 0→1: 從頭到尾消除
 - text/dot/arrow/axes/numberPlane：opacity 從 1 線性降至 0
 - 路徑/形狀：`strokeDashoffset` 從 0 增加至路徑總長度，fill-opacity 同步遞減，progress=1 時將 opacity 設為 0
 - 新增 2 個 vm 測試（共 24 項全通過）
+
+## shape 效果基礎透明度控制（shapeOpacity）
+
+`shape` 效果現在支援自訂基礎透明度。使用者可以在動畫編輯器中設定 `shapeOpacity`（0-1 浮點數，預設 `1`，步進 0.05），讓圓形/橢圓/矩形/箭頭等 SVG 形狀以半透明方式疊加在投影片上，製造出玻璃質感或柔和提示效果，且透明度獨立於 GSAP 淡入淡出動畫之外。
+
+**使用方式：**
+在動畫編輯器的 `shape` 效果設定中，調整「透明度（0-1）」數字輸入框（步進 0.05）。
+
+**技術說明：**
+- `AnimationEffect` 和 `SlideAnimationEffect` 新增 `shapeOpacity?: number`
+- `EffectSchema` 以 `z.number().min(0).max(1)` 驗證
+- `SlideRenderer.tsx` 將 `effect.shapeOpacity ?? 1` 套用至 SVG 的 `opacity` style
+- 此透明度疊加在 GSAP 的淡入淡出動畫效果之上（不衝突）
