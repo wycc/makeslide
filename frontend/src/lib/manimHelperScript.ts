@@ -505,6 +505,17 @@ export const MANIM_HELPER_SCRIPT = `
         delete m._flashOrigOpacity;
       }
     },
+    wiggle: function (m, progress, opts) {
+      var p = clamp01(progress);
+      var amplitude = (opts && opts.amplitude != null) ? opts.amplitude : 8;
+      var frequency = (opts && opts.frequency != null) ? opts.frequency : 3;
+      var tx = Math.sin(p * frequency * 2 * Math.PI) * amplitude * (1 - p);
+      if (p >= 1) {
+        m.el.setAttribute('transform', '');
+        return;
+      }
+      m.el.setAttribute('transform', 'translate(' + tx + ' 0)');
+    },
   };
   // tex() — sends a renderLatex postMessage to the host page (which runs
   // KaTeX with its fonts), resolves to a <div> with the rendered MathML.
