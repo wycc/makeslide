@@ -248,6 +248,8 @@ export interface SlideAnimationEffect {
   highlightBorderRadius?: number;
   /** Outer ring colour (CSS hex) for `highlight-box` effects. When set, adds a second outer border for contrast. Ignored by other effect types. */
   highlightOuterColor?: string;
+  /** When `true`, the `highlight-box` border glow pulses periodically while visible. Ignored by other effect types. */
+  highlightPulse?: boolean;
   /** Caption text for `text-callout` effects (ignored by other effect types). */
   text?: string;
   /** Font size in rem for `text-callout` effects. Defaults to 1.25. Ignored by other effect types. */

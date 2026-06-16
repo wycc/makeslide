@@ -69,7 +69,33 @@ export function buildGsapTimeline(stage: HTMLElement, spec: SlideAnimationSpec):
       continue;
     }
     switch (effect.type) {
-      case 'highlight-box':
+      case 'highlight-box': {
+        const overlay = stage.querySelector<HTMLElement>(`[data-effect-id="${effect.id}"]`);
+        if (overlay) {
+          tl.fromTo(overlay, { autoAlpha: 0 }, { autoAlpha: 1, ...common }, effect.start);
+          if (effect.highlightPulse) {
+            const hColor = effect.highlightColor ?? '#ef4444';
+            const hBw = effect.highlightBorderWidth ?? 4;
+            const hOuter = effect.highlightOuterColor;
+            const normalShadow = hOuter
+              ? `0 0 0 2px ${hOuter}, 0 0 ${hBw * 4}px ${hColor}b3`
+              : `0 0 ${hBw * 4}px ${hColor}b3`;
+            const pulseShadow = hOuter
+              ? `0 0 0 4px ${hOuter}, 0 0 ${hBw * 10}px ${hColor}`
+              : `0 0 ${hBw * 10}px ${hColor}`;
+            tl.fromTo(
+              overlay,
+              { boxShadow: normalShadow },
+              { boxShadow: pulseShadow, duration: 0.7, ease: 'sine.inOut', yoyo: true, repeat: -1 },
+              effect.start + effect.duration,
+            );
+          }
+          if (effect.exitDuration !== undefined) {
+            tl.to(overlay, { autoAlpha: 0, ...common }, effect.start + effect.duration + effect.exitDuration);
+          }
+        }
+        break;
+      }
       case 'spotlight':
       case 'pointer':
       case 'text-callout':

@@ -1096,6 +1096,18 @@ export function AnimationEditorTab() {
                     />
                   )}
                 </label>
+                <label className="flex items-center gap-2 text-xs text-slate-400">
+                  <input
+                    type="checkbox"
+                    checked={effect.highlightPulse ?? false}
+                    disabled={disabled}
+                    onChange={(e) =>
+                      updateEffect(effect.id, { highlightPulse: e.target.checked || undefined })
+                    }
+                    className="h-4 w-4 accent-fuchsia-500"
+                  />
+                  {t('play.animation.highlightPulse')}
+                </label>
                 </>
               )}
               {effect.type === 'spotlight' && (
