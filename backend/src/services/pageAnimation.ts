@@ -70,6 +70,16 @@ export interface AnimationEffect {
    * effect types). Defaults to `DEFAULT_TEXT_CALLOUT_TEXT_COLOR` (`#f8fafc`).
    */
   textCalloutTextColor?: string;
+  /**
+   * Mask colour (CSS hex) for `spotlight` effects (ignored by other
+   * effect types). Defaults to `DEFAULT_SPOTLIGHT_COLOR` (`#000000`).
+   */
+  spotlightColor?: string;
+  /**
+   * Mask opacity (0–1) for `spotlight` effects (ignored by other
+   * effect types). Defaults to `DEFAULT_SPOTLIGHT_OPACITY` (0.6).
+   */
+  spotlightOpacity?: number;
   /** SVG primitive drawn by `shape` effects (ignored by other effect types). Defaults to `'circle'` when omitted. */
   shape?: AnimationShapeKind;
   /**
@@ -199,6 +209,10 @@ export const DEFAULT_HIGHLIGHT_BOX_COLOR = '#ef4444';
 export const DEFAULT_TEXT_CALLOUT_BG_COLOR = '#0f172a';
 /** Default text colour for `text-callout` effects (slate-50). */
 export const DEFAULT_TEXT_CALLOUT_TEXT_COLOR = '#f8fafc';
+/** Default mask colour for `spotlight` effects (black). */
+export const DEFAULT_SPOTLIGHT_COLOR = '#000000';
+/** Default mask opacity for `spotlight` effects (0–1). */
+export const DEFAULT_SPOTLIGHT_OPACITY = 0.6;
 /** Default background colour for `step-list` effects (slate-900 equivalent). */
 export const DEFAULT_STEP_LIST_BG_COLOR = '#1e293b';
 /** Default text colour for `step-list` effects (slate-100 equivalent). */
@@ -264,6 +278,8 @@ const EffectSchema = z.object({
   text: z.string().max(MAX_TEXT_CALLOUT_LENGTH).optional(),
   textCalloutBgColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   textCalloutTextColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
+  spotlightColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
+  spotlightOpacity: z.number().min(0).max(1).optional(),
   shape: z.enum(ANIMATION_SHAPE_KINDS).optional(),
   color: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   strokeWidth: z.number().min(1).max(MAX_SHAPE_STROKE_WIDTH).optional(),
@@ -334,6 +350,8 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.text !== undefined ? { text: effect.text } : {}),
       ...(effect.textCalloutBgColor !== undefined ? { textCalloutBgColor: effect.textCalloutBgColor } : {}),
       ...(effect.textCalloutTextColor !== undefined ? { textCalloutTextColor: effect.textCalloutTextColor } : {}),
+      ...(effect.spotlightColor !== undefined ? { spotlightColor: effect.spotlightColor } : {}),
+      ...(effect.spotlightOpacity !== undefined ? { spotlightOpacity: effect.spotlightOpacity } : {}),
       ...(effect.shape !== undefined ? { shape: effect.shape } : {}),
       ...(effect.color !== undefined ? { color: effect.color } : {}),
       ...(effect.strokeWidth !== undefined ? { strokeWidth: Math.max(1, Math.min(MAX_SHAPE_STROKE_WIDTH, Math.round(effect.strokeWidth))) } : {}),

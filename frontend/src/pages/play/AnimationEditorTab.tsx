@@ -1037,6 +1037,36 @@ export function AnimationEditorTab() {
                   />
                 </label>
               )}
+              {effect.type === 'spotlight' && (
+                <div className="flex gap-2 items-end">
+                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    {t('play.animation.spotlightColor')}
+                    <input
+                      type="color"
+                      value={effect.spotlightColor ?? '#000000'}
+                      disabled={disabled}
+                      onChange={(e) => updateEffect(effect.id, { spotlightColor: e.target.value })}
+                      className="h-8 w-12 cursor-pointer rounded-md border border-slate-700 bg-slate-900 p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    {t('play.animation.spotlightOpacity')}
+                    <input
+                      type="number"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={effect.spotlightOpacity ?? 0.6}
+                      disabled={disabled}
+                      onChange={(e) => {
+                        const v = parseFloat(e.target.value);
+                        if (!isNaN(v)) updateEffect(effect.id, { spotlightOpacity: Math.min(1, Math.max(0, v)) });
+                      }}
+                      className="w-16 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                    />
+                  </label>
+                </div>
+              )}
               {effect.type === 'text-callout' && (
                 <>
                   <label className="flex flex-col gap-1 text-xs text-slate-400">

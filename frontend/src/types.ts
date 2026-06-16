@@ -242,6 +242,10 @@ export interface SlideAnimationEffect {
   textCalloutBgColor?: string;
   /** Text colour (CSS hex) for `text-callout` effects. Defaults to `#f8fafc`. Ignored by other effect types. */
   textCalloutTextColor?: string;
+  /** Mask colour (CSS hex) for `spotlight` effects. Defaults to `#000000`. Ignored by other effect types. */
+  spotlightColor?: string;
+  /** Mask opacity (0–1) for `spotlight` effects. Defaults to 0.6. Ignored by other effect types. */
+  spotlightOpacity?: number;
   /** SVG primitive drawn by `shape` effects (ignored by other effect types). Defaults to `'circle'` when omitted. */
   shape?: SlideAnimationShapeKind;
   /**
