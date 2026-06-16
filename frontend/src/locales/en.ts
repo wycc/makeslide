@@ -402,6 +402,7 @@ export const en = {
   'play.animation.pointerAngle': 'Pointer rotation angle (°)',
   'play.animation.pointerColor': 'Arrow color',
   'play.animation.textCalloutFontSize': 'Font size (rem)',
+  'play.animation.textCalloutBorderRadius': 'Corner radius (px)',
   'play.animation.pointerSize': 'Arrow size (rem)',
   'play.animation.focusX': 'X',
   'play.animation.focusY': 'Y',

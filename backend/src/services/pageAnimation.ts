@@ -98,6 +98,8 @@ export interface AnimationEffect {
    * effect types). Defaults to `DEFAULT_TEXT_CALLOUT_TEXT_COLOR` (`#f8fafc`).
    */
   textCalloutTextColor?: string;
+  /** Corner radius in px for `text-callout` effects. Defaults to 8. Range 0-32. Ignored by other effect types. */
+  textCalloutBorderRadius?: number;
   /**
    * Mask colour (CSS hex) for `spotlight` effects (ignored by other
    * effect types). Defaults to `DEFAULT_SPOTLIGHT_COLOR` (`#000000`).
@@ -280,6 +282,10 @@ export const MAX_TEXT_CALLOUT_FONT_SIZE_REM = 3;
 export const DEFAULT_TEXT_CALLOUT_BG_COLOR = '#0f172a';
 /** Default text colour for `text-callout` effects (slate-50). */
 export const DEFAULT_TEXT_CALLOUT_TEXT_COLOR = '#f8fafc';
+/** Default corner radius (px) for `text-callout` effects. */
+export const DEFAULT_TEXT_CALLOUT_BORDER_RADIUS = 8;
+/** Maximum corner radius (px) for `text-callout` effects. */
+export const MAX_TEXT_CALLOUT_BORDER_RADIUS = 32;
 /** Default mask colour for `spotlight` effects (black). */
 export const DEFAULT_SPOTLIGHT_COLOR = '#000000';
 /** Default mask opacity for `spotlight` effects (0–1). */
@@ -360,6 +366,7 @@ const EffectSchema = z.object({
   textCalloutFontSize: z.number().min(MIN_TEXT_CALLOUT_FONT_SIZE_REM).max(MAX_TEXT_CALLOUT_FONT_SIZE_REM).optional(),
   textCalloutBgColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   textCalloutTextColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
+  textCalloutBorderRadius: z.number().int().min(0).max(MAX_TEXT_CALLOUT_BORDER_RADIUS).optional(),
   spotlightColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   spotlightOpacity: z.number().min(0).max(1).optional(),
   shape: z.enum(ANIMATION_SHAPE_KINDS).optional(),
@@ -442,6 +449,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.textCalloutFontSize !== undefined ? { textCalloutFontSize: Math.max(MIN_TEXT_CALLOUT_FONT_SIZE_REM, Math.min(MAX_TEXT_CALLOUT_FONT_SIZE_REM, effect.textCalloutFontSize)) } : {}),
       ...(effect.textCalloutBgColor !== undefined ? { textCalloutBgColor: effect.textCalloutBgColor } : {}),
       ...(effect.textCalloutTextColor !== undefined ? { textCalloutTextColor: effect.textCalloutTextColor } : {}),
+      ...(effect.textCalloutBorderRadius !== undefined ? { textCalloutBorderRadius: Math.max(0, Math.min(MAX_TEXT_CALLOUT_BORDER_RADIUS, Math.round(effect.textCalloutBorderRadius))) } : {}),
       ...(effect.spotlightColor !== undefined ? { spotlightColor: effect.spotlightColor } : {}),
       ...(effect.spotlightOpacity !== undefined ? { spotlightOpacity: effect.spotlightOpacity } : {}),
       ...(effect.shape !== undefined ? { shape: effect.shape } : {}),

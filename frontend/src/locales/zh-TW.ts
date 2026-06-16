@@ -402,6 +402,7 @@ export const zhTW = {
   'play.animation.pointerAngle': '指標旋轉角度（°）',
   'play.animation.pointerColor': '箭頭顏色',
   'play.animation.textCalloutFontSize': '字型大小（rem）',
+  'play.animation.textCalloutBorderRadius': '圓角半徑（px）',
   'play.animation.pointerSize': '箭頭大小（rem）',
   'play.animation.focusX': 'X',
   'play.animation.focusY': 'Y',

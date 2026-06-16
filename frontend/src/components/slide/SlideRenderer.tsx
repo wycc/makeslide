@@ -98,6 +98,7 @@ function EffectOverlay({
     const tcBg = effect.textCalloutBgColor ?? '#0f172a';
     const tcText = effect.textCalloutTextColor ?? '#f8fafc';
     const tcFontSize = `${effect.textCalloutFontSize ?? 1.25}rem`;
+    const tcBr = `${effect.textCalloutBorderRadius ?? 8}px`;
     return (
       <div
         data-effect-id={effect.id}
@@ -107,7 +108,7 @@ function EffectOverlay({
           alignItems: 'center',
           justifyContent: 'center',
           padding: '0.5em 0.75em',
-          borderRadius: '8px',
+          borderRadius: tcBr,
           background: tcBg,
           color: tcText,
           fontSize: tcFontSize,
