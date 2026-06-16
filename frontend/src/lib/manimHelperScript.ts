@@ -4,7 +4,8 @@
  * `window.Manim` helper library so "manim 式" animations can use manim's
  * coordinate system (origin at center, +y up, x in [-7, 7], y in [-4, 4]),
  * color palette, standard rate functions, signature
- * Create/Write/FadeIn/FadeOut/Transform-style motions, `Axes`/`NumberPlane`
+ * Create/Write/FadeIn/FadeOut/Transform-style motions (including SVG path
+ * morphing for circle↔square/rect cross-type transforms), `Axes`/`NumberPlane`
  * coordinate-plane mobjects (with `coordsToPoint`), and `Manim.tex(latex)`
  * for MathML math rendering (via postMessage to the host page which holds
  * the KaTeX library and its fonts) without the real Python manim library
@@ -238,6 +239,61 @@ export const MANIM_HELPER_SCRIPT = `
   function getLength(el) {
     try { return el.getTotalLength(); } catch (e) { return 0; }
   }
+  // ── Path morphing helpers ────────────────────────────────────────────────────
+  // Each shape is decomposed into 4 cubic Bézier segments stored as
+  // [sx,sy, c1x,c1y, c2x,c2y, ex,ey].  All coordinates are in SVG space
+  // (y-axis pointing down, already passed through toSvgY where needed).
+  var KAPPA = 0.5523; // circle-as-4-cubic-Béziers approximation constant
+  function circleMorphSegs(el) {
+    var cx = parseFloat(el.getAttribute('cx') || '0');
+    var cy = parseFloat(el.getAttribute('cy') || '0');
+    var r  = parseFloat(el.getAttribute('r')  || '1');
+    var k = KAPPA * r;
+    return [
+      [cx,   cy-r,  cx+k, cy-r,  cx+r, cy-k,  cx+r, cy  ],
+      [cx+r, cy,    cx+r, cy+k,  cx+k, cy+r,  cx,   cy+r],
+      [cx,   cy+r,  cx-k, cy+r,  cx-r, cy+k,  cx-r, cy  ],
+      [cx-r, cy,    cx-r, cy-k,  cx-k, cy-r,  cx,   cy-r],
+    ];
+  }
+  function rectMorphSegs(el) {
+    var rx = parseFloat(el.getAttribute('x')      || '0');
+    var ry = parseFloat(el.getAttribute('y')      || '0');
+    var rw = parseFloat(el.getAttribute('width')  || '2');
+    var rh = parseFloat(el.getAttribute('height') || '2');
+    var ccx = rx + rw / 2, ccy = ry + rh / 2;
+    var hw  = rw / 2,      hh  = rh / 2;
+    // Control points are placed AT the corner so the curve hugs it tightly.
+    // Tangents at each anchor point are axis-aligned, matching the circle's
+    // tangent directions at the same cardinal positions (top/right/bottom/left).
+    return [
+      [ccx,   ccy-hh,  ccx+hw, ccy-hh,  ccx+hw, ccy-hh,  ccx+hw, ccy  ],
+      [ccx+hw, ccy,    ccx+hw, ccy+hh,  ccx+hw, ccy+hh,  ccx,    ccy+hh],
+      [ccx,   ccy+hh,  ccx-hw, ccy+hh,  ccx-hw, ccy+hh,  ccx-hw, ccy  ],
+      [ccx-hw, ccy,    ccx-hw, ccy-hh,  ccx-hw, ccy-hh,  ccx,    ccy-hh],
+    ];
+  }
+  function getMorphSegs(m) {
+    if (m.kind === 'circle') return circleMorphSegs(m.el);
+    if (m.kind === 'rect')   return rectMorphSegs(m.el);
+    return null;
+  }
+  function lerpSegs(segs1, segs2, t) {
+    return segs1.map(function (s, i) {
+      var s2 = segs2[i];
+      return s.map(function (v, j) { return lerp(v, s2[j], t); });
+    });
+  }
+  function segsToPathD(segs) {
+    var d = 'M ' + segs[0][0].toFixed(4) + ',' + segs[0][1].toFixed(4);
+    for (var i = 0; i < segs.length; i++) {
+      var s = segs[i];
+      d += ' C ' + s[2].toFixed(4) + ',' + s[3].toFixed(4) + ' '
+                 + s[4].toFixed(4) + ',' + s[5].toFixed(4) + ' '
+                 + s[6].toFixed(4) + ',' + s[7].toFixed(4);
+    }
+    return d + ' Z';
+  }
   var animate = {
     create: function (m, progress) {
       var p = clamp01(progress);
@@ -297,8 +353,38 @@ export const MANIM_HELPER_SCRIPT = `
     },
     transform: function (from, to, progress) {
       var p = clamp01(progress);
+      var fromSegs = getMorphSegs(from);
+      var toSegs   = getMorphSegs(to);
+      if (fromSegs && toSegs && fromSegs.length === toSegs.length) {
+        // Path morphing: convert both shapes to a shared <path> and interpolate
+        // the control points so circle↔square/rect animates smoothly.
+        if (!from._morphEl) {
+          var mp = document.createElementNS(SVG_NS, 'path');
+          ['stroke', 'stroke-width', 'fill', 'fill-opacity'].forEach(function (attr) {
+            var v = from.el.getAttribute(attr);
+            if (v != null) { mp.setAttribute(attr, v); }
+          });
+          from.svg.appendChild(mp);
+          from._morphEl = mp;
+        }
+        from.el.style.display = 'none';
+        to.el.style.display   = 'none';
+        from._morphEl.style.opacity = '1';
+        var fs = from.el.getAttribute('stroke'), ts = to.el.getAttribute('stroke');
+        if (fs && ts) { from._morphEl.setAttribute('stroke', lerpColor(fs, ts, p)); }
+        var ff = from.el.getAttribute('fill'), tf = to.el.getAttribute('fill');
+        if (ff && tf && ff !== 'none' && tf !== 'none') {
+          from._morphEl.setAttribute('fill', lerpColor(ff, tf, p));
+        }
+        var ffo = parseFloat(from.el.getAttribute('fill-opacity') || '0');
+        var tfo = parseFloat(to.el.getAttribute('fill-opacity')   || '0');
+        from._morphEl.setAttribute('fill-opacity', String(lerp(ffo, tfo, p)));
+        from._morphEl.setAttribute('d', segsToPathD(lerpSegs(fromSegs, toSegs, p)));
+        return;
+      }
+      // Fallback for same-type transforms (attribute lerp) and unsupported cross-type (cross-fade).
       from.el.style.opacity = String(1 - p);
-      to.el.style.opacity = String(p);
+      to.el.style.opacity   = String(p);
       if (from.kind === to.kind) {
         ['cx', 'cy', 'r', 'x', 'y', 'width', 'height', 'x1', 'y1', 'x2', 'y2', 'font-size'].forEach(function (attr) {
           var a = from.el.getAttribute(attr), b = to.el.getAttribute(attr);
