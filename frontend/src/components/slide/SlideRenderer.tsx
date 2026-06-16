@@ -57,6 +57,7 @@ function EffectOverlay({
     );
   }
   if (effect.type === 'pointer') {
+    const angleDeg = effect.angle ?? 0;
     return (
       <div
         data-effect-id={effect.id}
@@ -64,16 +65,20 @@ function EffectOverlay({
           position: 'absolute',
           left: `${xPct}%`,
           top: `${yPct}%`,
-          width: '2.25rem',
-          height: '2.25rem',
-          transform: 'translate(-50%, -50%)',
+          width: '2.5rem',
+          height: '2.5rem',
+          transform: `translate(-50%, -50%) rotate(${angleDeg}deg)`,
           opacity: 0,
           pointerEvents: 'none',
-          borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(244,63,94,0.95) 0%, rgba(244,63,94,0.45) 55%, transparent 80%)',
-          boxShadow: '0 0 12px 2px rgba(244,63,94,0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
         }}
-      />
+      >
+        <svg viewBox="0 0 24 24" width="100%" height="100%" fill="rgba(244,63,94,0.95)" style={{ filter: 'drop-shadow(0 0 6px rgba(244,63,94,0.9))' }}>
+          <path d="M4 0 L4 20 L8 16 L11 23 L13 22 L10 15 L15 15 Z" />
+        </svg>
+      </div>
     );
   }
   if (effect.type === 'text-callout') {

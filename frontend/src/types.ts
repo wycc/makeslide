@@ -229,6 +229,11 @@ export interface SlideAnimationEffect {
   params?: Record<string, number>;
   /** When set, `start` is resolved at runtime from this transcript sentence's playback time. */
   startTrigger?: SlideAnimationStartTrigger;
+  /**
+   * Rotation angle in degrees for `pointer` effects (ignored by other effect types).
+   * Defaults to `0` (pointing down-right) when omitted.
+   */
+  angle?: number;
   /** Caption text for `text-callout` effects (ignored by other effect types). */
   text?: string;
   /** SVG primitive drawn by `shape` effects (ignored by other effect types). Defaults to `'circle'` when omitted. */

@@ -48,6 +48,11 @@ export interface AnimationEffect {
   params?: Record<string, number>;
   /** When set, `start` is resolved at runtime from this transcript sentence's playback time. */
   startTrigger?: AnimationStartTrigger;
+  /**
+   * Rotation angle in degrees for `pointer` effects (ignored by other effect types).
+   * Defaults to `0` (pointing down-right) when omitted. Accepts any finite number.
+   */
+  angle?: number;
   /** Caption text for `text-callout` effects (ignored by other effect types). */
   text?: string;
   /** SVG primitive drawn by `shape` effects (ignored by other effect types). Defaults to `'circle'` when omitted. */
@@ -207,6 +212,7 @@ const EffectSchema = z.object({
   ease: z.enum(ANIMATION_EASES),
   params: z.record(z.unknown()).optional(),
   startTrigger: StartTriggerSchema.optional(),
+  angle: z.number().finite().optional(),
   text: z.string().max(MAX_TEXT_CALLOUT_LENGTH).optional(),
   shape: z.enum(ANIMATION_SHAPE_KINDS).optional(),
   color: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
@@ -270,6 +276,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ease: effect.ease,
       ...(params ? { params } : {}),
       ...(effect.startTrigger ? { startTrigger: effect.startTrigger } : {}),
+      ...(effect.angle !== undefined ? { angle: effect.angle } : {}),
       ...(effect.text !== undefined ? { text: effect.text } : {}),
       ...(effect.shape !== undefined ? { shape: effect.shape } : {}),
       ...(effect.color !== undefined ? { color: effect.color } : {}),

@@ -377,6 +377,7 @@ export const en = {
   'play.animation.overlayImageLoading': 'Loading figures…',
   'play.animation.focusPosition': 'Focus position & size (%)',
   'play.animation.pointerPosition': 'Pointer position (%)',
+  'play.animation.pointerAngle': 'Pointer rotation angle (°)',
   'play.animation.focusX': 'X',
   'play.animation.focusY': 'Y',
   'play.animation.focusWidth': 'W',
