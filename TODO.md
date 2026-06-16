@@ -1323,6 +1323,16 @@
 
 [x] Manim `animate.flash(m, progress, opts)` 效果：目前 `manimHelperScript.ts` 的 `animate` 提供 `indicateAround`（縮放+改色），但有時只需要「快速閃爍」而不縮放；應新增 `Manim.animate.flash(m, progress, opts)` 函式，讓元素的 fill/stroke 在 progress 0→0.5 漸變為 `opts.color`（預設 `'#ffffff'`），0.5→1 漸回原色，opacity 則在 0→0.5 升至 `opts.maxOpacity`（預設 `1`）、0.5→1 降回原始值，並新增至少 2 個對應 vm 測試。 ✓ 完成於 branch: feature/manim-flash-20260617
 
+[ ] `step-list` 字型大小控制：目前 `step-list` 效果的條列項目固定使用 `1.1rem` 字型大小（`SlideRenderer.tsx`），無法根據項目數量或投影片版面調整；應新增 `stepListFontSize` 欄位（CSS rem 值，預設 `1.1`，範圍 0.5-2.5，步進 0.1），讓使用者在動畫編輯器中自訂條列文字大小，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`/`AnimationEditorTab`（在 step-list 編輯區新增數字輸入框）及中英文 i18n。
+
+[ ] `highlight-box` 邊框寬度控制：目前 `highlight-box` 效果的邊框寬度固定為 4px（`border: '4px solid ${hColor}'`），無法根據投影片重要程度或視覺風格調整粗細；應新增 `highlightBorderWidth` 欄位（px 整數，預設 `4`，範圍 1-12），讓使用者在動畫編輯器中自訂邊框粗細，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`（border 寬度與 box-shadow 寬度同步）/`AnimationEditorTab`（新增數字輸入框）及中英文 i18n。
+
+[ ] `highlight-box` 圓角控制：目前 `highlight-box` 固定使用 `borderRadius: '8px'`，希望讓使用者能選擇更尖銳（0px）或更圓潤（如 24px）的邊框；應新增 `highlightBorderRadius` 欄位（px 整數，預設 `8`，範圍 0-50），讓使用者在動畫編輯器中自訂圓角半徑，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`/`AnimationEditorTab`（新增數字輸入框）及中英文 i18n。
+
+[ ] Manim `animate.uncreate(m, progress)` 效果：目前 `animate.create(m, progress)` 可以讓 SVG 路徑從頭到尾逐漸繪製出來，但沒有對應的反向動畫；應新增 `Manim.animate.uncreate(m, progress)` 函式，讓路徑從尾到頭逐漸消失（`strokeDashoffset` 從 0 增加至總長度，`opacity` 在 progress=1 時設為 `0`），並新增至少 2 個對應 vm 測試（一個驗證中間 dashoffset > 0，一個驗證 progress=1 時 opacity=0）。
+
+[ ] `shape` 效果透明度控制：目前 `shape` 效果在動畫播放中始終以完全不透明方式顯示 SVG 圖形（opacity 由 GSAP fadeIn 控制，但靜態時固定為 1）；應新增 `shapeOpacity` 欄位（0-1 浮點數，預設 `1`，步進 0.05），讓使用者可在動畫編輯器中設定形狀本身的基礎透明度（疊加在 GSAP 淡入淡出之上），並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`（SVG opacity 屬性）/`AnimationEditorTab`（新增數字輸入框）及中英文 i18n。
+
 ## 工作記錄
 
 - 時間: 2026-06-17 11:00:00 +0800
