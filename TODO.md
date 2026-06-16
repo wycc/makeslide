@@ -1313,7 +1313,7 @@
 
 [x] auto-focus-ai 為 `pointer` 效果建議 `angle`：目前所有 AI 自動產生的 `pointer` 效果都使用預設角度（0 度，指向右下），未根據畫面內容選擇合適方向；應在 `AutoFocusItemSchema` 新增 `angle` 選填欄位（整數，0-359 度），在 system prompt 第 3 點補充 angle 說明（0=右下、90=左下、180=右上、270=左上，依指向目標在畫面中的位置選擇讓箭頭從外側指向目標的角度），在 `mapAutoFocusResponseToEffects` 中傳遞 angle 至 effect，並補充測試。 ✓ 完成於 branch: feature/auto-focus-ai-pointer-angle-20260617
 
-[ ] `pointer` 效果顏色自訂：目前 `pointer` 箭頭固定使用玫瑰紅色（`rgba(244,63,94,0.95)`），無法配合不同風格的投影片；應新增 `pointerColor` 欄位（CSS hex，預設 `#f43f5e`），讓使用者可在動畫編輯器中自訂箭頭顏色，並同步更新後端 `AnimationEffect` 介面、`EffectSchema`（Zod 驗證）、序列化、前端 `types.ts`、`SlideRenderer.tsx`（SVG fill 與 drop-shadow 顏色）、`AnimationEditorTab.tsx`（新增顏色選擇器）及中英文 i18n。
+[x] `pointer` 效果顏色自訂：目前 `pointer` 箭頭固定使用玫瑰紅色（`rgba(244,63,94,0.95)`），無法配合不同風格的投影片；應新增 `pointerColor` 欄位（CSS hex，預設 `#f43f5e`），讓使用者可在動畫編輯器中自訂箭頭顏色，並同步更新後端 `AnimationEffect` 介面、`EffectSchema`（Zod 驗證）、序列化、前端 `types.ts`、`SlideRenderer.tsx`（SVG fill 與 drop-shadow 顏色）、`AnimationEditorTab.tsx`（新增顏色選擇器）及中英文 i18n。 ✓ 完成於 branch: feature/pointer-color-20260617
 
 [ ] `pointer` 效果尺寸自訂：目前 pointer 箭頭固定為 `2.5rem × 2.5rem`，在不同解析度與投影片尺寸下可能顯得過大或過小；應新增 `pointerSize` 欄位（CSS rem 值，預設 `2.5`，範圍 1-6，步進 0.5），讓使用者可在動畫編輯器中調整箭頭尺寸，並同步更新後端 `AnimationEffect` 介面、`EffectSchema`、序列化及前端對應檔案。
 
@@ -1364,3 +1364,7 @@
 - 時間: 2026-06-17 20:00:00 +0800
 - 分支: feature/auto-focus-ai-pointer-angle-20260617
 - 內容: 新增 auto-focus-ai `pointer` 效果的 `angle` 角度建議功能。在 `animationAutoFocus.ts` 的 `AutoFocusItemSchema` 新增 `angle: z.number().int().min(0).max(359).optional()` 選填欄位；system prompt 第 3 點補充 angle 說明（0=右下指入、90=左下指入、180=右上指入、270=左上指入，依目標位置在畫面中選擇讓箭頭從外側指向目標的角度）；範例 JSON 的 pointer 效果新增 `"angle":270`；`mapAutoFocusResponseToEffects` 函式在 `type === 'pointer'` 時將 `item.angle` 傳遞至 `effect.angle`。`page-animation.test.ts` 新增兩個單元測試：(1) 有 angle 時正確傳遞並通過 validateAnimationSpec；(2) 無 angle 時 effect.angle 維持 undefined。
+
+- 時間: 2026-06-17 21:00:00 +0800
+- 分支: feature/pointer-color-20260617
+- 內容: 新增 `pointer` 效果箭頭顏色自訂。後端 `pageAnimation.ts` 新增 `DEFAULT_POINTER_COLOR = '#f43f5e'` 常數、`pointerColor?: string` 欄位（`AnimationEffect` 介面），`EffectSchema` 新增 Zod hex color 驗證（重用現有 regex `^#[0-9a-fA-F]{3,8}$`），序列化時一併輸出。前端 `types.ts` 同步新增 `pointerColor` 欄位；`SlideRenderer.tsx` 從 `effect.pointerColor ?? '#f43f5e'` 解析 r/g/b channel 並生成 `rgba()` 字串，套用至 SVG fill 與 drop-shadow filter；`AnimationEditorTab.tsx` 在 pointer 區塊的角度輸入後方（以 `<>...</>` 包覆）加入顏色選擇器；中英文 i18n 新增 `play.animation.pointerColor` 翻譯鍵。
