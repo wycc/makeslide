@@ -1251,7 +1251,7 @@
 [x] 將 `AnimationSpec.hints` 傳入 LLM 動畫生成：目前 `hints`（逐字稿句子的動畫指引）僅儲存在 `AnimationSpec` 並顯示於編輯器，但 `auto-focus-ai` 的 LLM 提示詞還未讀取並傳入 `hints`；應在 `buildAutoFocusUserPrompt()` 中將本頁 `hints` 的內容加入 user prompt，讓 AI 在決定每一句的效果時能參考使用者提供的手動指引。（已確認實作存在於 buildAutoFocusUserPrompt() 與前端 AnimationEditorTab.tsx 的呼叫端）
 [x] 動畫 `custom-script` 的 `Manim.tex` 範例提示詞與測試：新增 `Manim.tex` 到 `custom-script` 對話框的「範例提示詞」下拉選單（例如「用 Manim 在畫面中顯示愛因斯坦公式 E=mc²」），並補充後端測試確認 `Manim.tex` 相關關鍵字不會被 `findUnsafeScriptPattern` 誤判為不安全（`postMessage`/`parent` 由 `Manim.tex` 內部使用，不應被拒絕）。（完成於分支: feature/animation-custom-script-manim-tex-examples-20260617）
 [x] `overlay-image` 效果的縮放比例鎖定選項：目前 `overlay-image` 效果的寬高可自由調整，但使用者無法鎖定圖片的原始長寬比；應新增「鎖定比例」checkbox，勾選後調整寬度時高度自動按原始圖片比例計算（需在前端取得圖片實際尺寸）。（完成於分支: feature/animation-overlay-image-lock-ratio-20260617）
-[ ] 動畫效果批次套用至多頁：新增「套用至全部頁面」或「套用至選取頁面」功能，讓使用者可以把某一頁的動畫設定（或特定效果）一鍵複製到其他頁面；與現有的「複製本頁效果」（只複製到剪貼簿，手動切換頁面後貼上）不同，批次套用可以選擇多頁同時套用。
+[x] 動畫效果批次套用至多頁：新增「套用至全部頁面」或「套用至選取頁面」功能，讓使用者可以把某一頁的動畫設定（或特定效果）一鍵複製到其他頁面；與現有的「複製本頁效果」（只複製到剪貼簿，手動切換頁面後貼上）不同，批次套用可以選擇多頁同時套用。（完成於分支: feature/animation-batch-apply-to-pages-20260617）
 [x] `pointer` 效果的方向自訂：目前 `pointer` 效果渲染為固定方向的游標圖示；應新增 `angle`（旋轉角度，度，預設 0）欄位，讓使用者可以在動畫編輯器中調整指標方向（例如向上、向右、斜角指向目標）；在 `SlideRenderer` 的 `pointer` 渲染元件中依 `effect.angle` 旋轉圖示。（完成於分支: feature/animation-pointer-angle-20260617）
 [x] 動畫效果的播放預覽跳轉：在動畫編輯器的效果卡片上新增「跳至此效果」按鈕，按下後將音訊播放器的 `currentTime` seek 到 `effect.start` 秒，讓使用者可以快速預覽特定效果；需與 `PlayPage` 的音訊控制整合。（完成於分支: feature/animation-jump-to-effect-start-20260617）
 [ ] `Manim` 的 `transform` 路徑變形（path morphing）：目前 `Manim.animate.transform(from, to, progress)` 只做屬性線性插值（屬性相同才能 lerp），不支援真正的 SVG 路徑變形（`<path d>` 的形點插值）；應研究以 `flubber.js` 或自行實作的 cubic Bézier 插值達到 circle→square 等基本形狀路徑變形，並更新 `manimHelperScript.ts` 的 `Manim.animate.transform` 方法。
@@ -1276,3 +1276,7 @@
 - 時間: 2026-06-17 09:45:00 +0800
 - 分支: feature/animation-overlay-image-lock-ratio-20260617
 - 內容: 完成 overlay-image 效果的縮放比例鎖定功能：(1) 新增 `figureNaturalRatios` 狀態（Record<figureId, ratio>），在圖片縮圖 onLoad 時捕捉 naturalWidth/naturalHeight 比例；(2) 新增 `lockedAspectEffectIds` 狀態（Set），追蹤已鎖定比例的效果；(3) 在圖片縮圖旁新增 🔒/🔓 按鈕切換鎖定狀態，鎖定時顯示紫色高亮；(4) 當鎖定且 widthPct 改變時（數字輸入框或拖曳 resize handle），自動計算並更新 heightPct = widthPct / ratio；補充中英文翻譯鍵 `lockAspectRatio`/`unlockAspectRatio`。frontend build 通過。
+
+- 時間: 2026-06-17 10:00:00 +0800
+- 分支: feature/animation-batch-apply-to-pages-20260617
+- 內容: 完成動畫效果批次套用至多頁功能：在 `AnimationEditorTab.tsx` 新增 `handleApplyToAllPages` 函式，確認用戶後將目前頁面的完整 `AnimationSpec`（draft）依序呼叫 `savePageAnimation` API 套用至其他每一頁（跳過當前頁）；新增「套用至全部頁面」按鈕（sky/blue 顏色），顯示條件為 `totalPages > 1`，套用過程中切換為 Busy 文字並停用；從 `usePlayPageContext()` 新增解構 `totalPages`；新增 `applyingToAll` loading state；補充中英文翻譯鍵 `applyToAllPages`/`applyToAllPagesHint`/`applyToAllPagesBusy`/`applyToAllConfirm`（確認對話框含 `{n}` 頁數佔位符）。frontend build 通過。
