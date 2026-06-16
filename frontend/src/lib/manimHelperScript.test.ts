@@ -435,3 +435,37 @@ test("Manim.animate.wiggle uses default amplitude=8 and frequency=3 when no opts
   const tx = parseFloat(transform.replace("translate(", "").split(" ")[0]);
   assert.ok(Math.abs(tx) <= 8, "translateX should not exceed default amplitude=8");
 });
+
+test("Manim.animate.spinAround produces non-zero rotation at mid-progress and clears transform at progress=1", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const circ = Manim.shapes.circle(svg, { x: 0, y: 0, radius: 2, color: Manim.colors.BLUE });
+
+  Manim.animate.spinAround(circ, 0.5, { turns: 2 });
+  const transform05 = circ.el.getAttribute("transform") ?? "";
+  assert.ok(transform05.startsWith("rotate("), "transform should start with rotate( at mid-progress");
+  const angle05 = parseFloat(transform05.replace("rotate(", "").split(" ")[0]);
+  assert.ok(angle05 > 0 && angle05 < 720, "angle at progress=0.5 with turns=2 should be 360");
+
+  Manim.animate.spinAround(circ, 1, { turns: 2 });
+  const transform1 = circ.el.getAttribute("transform") ?? "";
+  assert.equal(transform1, "", "transform should be cleared at progress=1");
+});
+
+test("Manim.animate.spinAround defaults to 1 turn and produces increasing angle with progress", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const rect = Manim.shapes.square(svg, { x: 0, y: 0, size: 2, color: Manim.colors.RED });
+
+  Manim.animate.spinAround(rect, 0.25);
+  const transform25 = rect.el.getAttribute("transform") ?? "";
+  const angle25 = parseFloat(transform25.replace("rotate(", "").split(" ")[0]);
+
+  Manim.animate.spinAround(rect, 0.75);
+  const transform75 = rect.el.getAttribute("transform") ?? "";
+  const angle75 = parseFloat(transform75.replace("rotate(", "").split(" ")[0]);
+
+  assert.ok(angle25 < angle75, "angle should increase with progress");
+  assert.ok(Math.abs(angle25 - 90) < 1, "angle at 0.25 should be ~90 degrees for 1 turn");
+  assert.ok(Math.abs(angle75 - 270) < 1, "angle at 0.75 should be ~270 degrees for 1 turn");
+});
