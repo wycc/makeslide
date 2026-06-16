@@ -1226,6 +1226,19 @@ export function AnimationEditorTab() {
                     />
                     <span className="text-slate-500">px</span>
                   </label>
+                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    {t('play.animation.textCalloutAlign')}
+                    <select
+                      value={effect.textCalloutAlign ?? 'center'}
+                      disabled={disabled}
+                      onChange={(e) => updateEffect(effect.id, { textCalloutAlign: e.target.value as 'left' | 'center' | 'right' })}
+                      className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                    >
+                      <option value="left">{t('play.animation.textCalloutAlign.left')}</option>
+                      <option value="center">{t('play.animation.textCalloutAlign.center')}</option>
+                      <option value="right">{t('play.animation.textCalloutAlign.right')}</option>
+                    </select>
+                  </label>
                 </>
               )}
               {effect.type === 'shape' && (
