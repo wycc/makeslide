@@ -133,6 +133,12 @@ export interface AnimationEffect {
    */
   stepListTextColor?: string;
   /**
+   * Font size in rem for `step-list` effects (ignored by other effect types).
+   * Defaults to `DEFAULT_STEP_LIST_FONT_SIZE_REM` (1.1). Clamped to
+   * [`MIN_STEP_LIST_FONT_SIZE_REM`, `MAX_STEP_LIST_FONT_SIZE_REM`].
+   */
+  stepListFontSize?: number;
+  /**
    * Id of a figure extracted from the slide's source PDF (see
    * `GET /api/pdfs/:id/pages/:n/figures`), shown as a positioned image
    * overlay by `overlay-image` effects (ignored by other effect types).
@@ -253,6 +259,12 @@ export const DEFAULT_SPOTLIGHT_OPACITY = 0.6;
 export const DEFAULT_STEP_LIST_BG_COLOR = '#1e293b';
 /** Default text colour for `step-list` effects (slate-100 equivalent). */
 export const DEFAULT_STEP_LIST_TEXT_COLOR = '#f1f5f9';
+/** Default font size (rem) for `step-list` effects. */
+export const DEFAULT_STEP_LIST_FONT_SIZE_REM = 1.1;
+/** Minimum font size (rem) for `step-list` effects. */
+export const MIN_STEP_LIST_FONT_SIZE_REM = 0.5;
+/** Maximum font size (rem) for `step-list` effects. */
+export const MAX_STEP_LIST_FONT_SIZE_REM = 2.5;
 /** Max stroke width (SVG user units) for `shape` effects. */
 export const MAX_SHAPE_STROKE_WIDTH = 20;
 /** Max length (chars) for a `custom-script` effect's generated JavaScript `code`. */
@@ -326,6 +338,7 @@ const EffectSchema = z.object({
   items: z.array(z.string().max(MAX_STEP_LIST_ITEM_LENGTH)).max(MAX_STEP_LIST_ITEMS).optional(),
   stepListBgColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   stepListTextColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
+  stepListFontSize: z.number().min(MIN_STEP_LIST_FONT_SIZE_REM).max(MAX_STEP_LIST_FONT_SIZE_REM).optional(),
   figureId: z.string().min(1).max(MAX_OVERLAY_IMAGE_FIGURE_ID_LENGTH).optional(),
   formula: z.string().min(1).max(MAX_FORMULA_LENGTH).optional(),
   formulaFontSize: z.number().min(MIN_FORMULA_FONT_SIZE_EM).max(MAX_FORMULA_FONT_SIZE_EM).optional(),
@@ -402,6 +415,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.items !== undefined ? { items: effect.items } : {}),
       ...(effect.stepListBgColor !== undefined ? { stepListBgColor: effect.stepListBgColor } : {}),
       ...(effect.stepListTextColor !== undefined ? { stepListTextColor: effect.stepListTextColor } : {}),
+      ...(effect.stepListFontSize !== undefined ? { stepListFontSize: Math.max(MIN_STEP_LIST_FONT_SIZE_REM, Math.min(MAX_STEP_LIST_FONT_SIZE_REM, effect.stepListFontSize)) } : {}),
       ...(effect.figureId !== undefined ? { figureId: effect.figureId } : {}),
       ...(effect.formula !== undefined ? { formula: effect.formula } : {}),
       ...(effect.formulaFontSize !== undefined ? { formulaFontSize: effect.formulaFontSize } : {}),

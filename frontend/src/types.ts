@@ -276,6 +276,8 @@ export interface SlideAnimationEffect {
   stepListBgColor?: string;
   /** Text colour (CSS hex) for `step-list` effects. Defaults to `#f1f5f9`. Ignored by other effect types. */
   stepListTextColor?: string;
+  /** Font size in rem for `step-list` effects. Defaults to 1.1. Ignored by other effect types. */
+  stepListFontSize?: number;
   /**
    * Id of a figure extracted from the slide's source PDF (see
    * `fetchPageFigures`), shown as a positioned image overlay by

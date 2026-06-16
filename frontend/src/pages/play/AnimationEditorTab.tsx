@@ -1234,6 +1234,24 @@ export function AnimationEditorTab() {
                       />
                     </label>
                   </div>
+                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    {t('play.animation.stepListFontSize')}
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min={0.5}
+                        max={2.5}
+                        step={0.1}
+                        value={effect.stepListFontSize ?? 1.1}
+                        disabled={disabled}
+                        onChange={(e) =>
+                          updateEffect(effect.id, { stepListFontSize: Math.min(2.5, Math.max(0.5, Number(e.target.value) || 1.1)) })
+                        }
+                        className="w-20 rounded-md border border-slate-700 bg-slate-900 px-1 py-1 text-sm text-slate-100"
+                      />
+                      <span className="text-slate-500">rem</span>
+                    </div>
+                  </label>
                 </>
               )}
               {effect.type === 'overlay-image' && (

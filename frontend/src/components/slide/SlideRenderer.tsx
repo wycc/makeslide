@@ -156,6 +156,7 @@ function EffectOverlay({
     const items = (effect.items ?? []).map((item) => item.trim()).filter((item) => item.length > 0);
     const bgColor = effect.stepListBgColor ?? '#1e293b';
     const textColor = effect.stepListTextColor ?? '#f1f5f9';
+    const slFontSize = `${effect.stepListFontSize ?? 1.1}rem`;
     return (
       <div
         data-effect-id={effect.id}
@@ -170,7 +171,7 @@ function EffectOverlay({
           overflow: 'hidden',
         }}
       >
-        <ul style={{ margin: 0, paddingLeft: '1.25em', listStyle: 'disc', fontSize: '1.1rem', fontWeight: 600, lineHeight: 1.5 }}>
+        <ul style={{ margin: 0, paddingLeft: '1.25em', listStyle: 'disc', fontSize: slFontSize, fontWeight: 600, lineHeight: 1.5 }}>
           {items.map((item, index) => (
             <li key={index} style={{ wordBreak: 'break-word' }}>
               {item}
