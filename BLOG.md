@@ -283,3 +283,25 @@ MCP_AUTH_TOKEN=your-secret-token-here
 - `SlideRenderer.tsx`：formula 容器 div 加入 `fontSize: \`${formulaFontSize ?? 1.5}em\`` 樣式
 - `AnimationEditorTab.tsx`：在 LaTeX input 下方加入 `<input type="number" min=0.5 max=4 step=0.1>`；預覽 div 也套用 `fontSize` 樣式
 - i18n：中英文 locale 各新增一個翻譯鍵 `play.animation.formulaFontSize`
+
+## Step-List 效果顏色自訂（2026-06-17）
+
+### 功能目的
+
+`step-list` 效果原本固定使用深色半透明背景（`#0f172a` 約 85% 不透明度）與淺色文字，無法搭配不同風格的投影片。本次新增 `stepListBgColor` 和 `stepListTextColor` 兩個欄位，讓使用者可在動畫編輯器中用顏色選擇器自訂背景色與文字色。
+
+### 使用方式
+
+在動畫編輯器中，選擇一個 `step-list` 效果後，條列項目輸入框下方新增了兩個顏色選擇器：
+- **背景顏色**：預設 `#1e293b`（深藍灰），可改為任何 CSS hex 色碼
+- **文字顏色**：預設 `#f1f5f9`（亮白），可搭配背景自訂對比色
+
+顏色選擇器為 `<input type="color">`，支援所有現代瀏覽器的原生顏色選色盤。
+
+### 技術細節
+
+- `pageAnimation.ts`：新增 `DEFAULT_STEP_LIST_BG_COLOR = '#1e293b'` 與 `DEFAULT_STEP_LIST_TEXT_COLOR = '#f1f5f9'` 常數；`AnimationEffect` interface 新增兩個 optional 欄位；`EffectSchema` 重用 hex color regex（`/^#[0-9a-fA-F]{3,8}$/`，最長 20 字元）驗證；`validateAnimationSpec` 序列化時一併輸出
+- `types.ts`（前端）：同步新增兩個欄位
+- `SlideRenderer.tsx`：step-list 容器 div 改用 `effect.stepListBgColor ?? '#1e293b'` 和 `effect.stepListTextColor ?? '#f1f5f9'` 作為 CSS 樣式
+- `AnimationEditorTab.tsx`：items textarea 後面加入兩個並排的 `<input type="color">` 選色器
+- i18n：中英文 locale 各新增 `play.animation.stepListBgColor` 和 `play.animation.stepListTextColor` 翻譯鍵
