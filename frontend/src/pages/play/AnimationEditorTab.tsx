@@ -1443,6 +1443,20 @@ export function AnimationEditorTab() {
                       />
                     </label>
                   </div>
+                  <label className="flex items-center gap-2 text-xs text-slate-400">
+                    {t('play.animation.formulaBorderRadius')}
+                    <input
+                      type="number"
+                      min={0}
+                      max={32}
+                      step={2}
+                      value={effect.formulaBorderRadius ?? 8}
+                      disabled={disabled}
+                      onChange={(e) => updateEffect(effect.id, { formulaBorderRadius: Math.max(0, Math.min(32, Math.round(Number(e.target.value) || 8))) })}
+                      className="w-20 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+                    />
+                    <span className="text-slate-500">px</span>
+                  </label>
                 </>
               )}
               {OVERLAY_EFFECT_TYPES.includes(effect.type) && effect.type !== 'custom-script' && (

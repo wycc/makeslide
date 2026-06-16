@@ -307,6 +307,8 @@ export interface SlideAnimationEffect {
   formulaBgColor?: string;
   /** Text/symbol colour (CSS hex) for `formula` effects. Defaults to `#f8fafc`. */
   formulaTextColor?: string;
+  /** Corner radius (px) for `formula` effects. Defaults to 8. Range 0-32. */
+  formulaBorderRadius?: number;
   /**
    * Seconds to remain in the "entered" state after the entrance animation
    * completes before automatically reversing back to the original state
