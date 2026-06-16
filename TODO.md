@@ -1471,7 +1471,7 @@
 
 ## 2026-06-17 新增項目 Batch 6
 [x] `spotlight` 效果柔邊模糊（softEdge）：目前 `spotlight` 的聚光燈邊緣是硬邊（box-shadow 直接截斷）；應新增 `spotlightSoftEdge?: number`（px，預設 `0`，範圍 0–80），在 `SlideRenderer.tsx` 中以 CSS `filter: blur(${spotlightSoftEdge}px)` 套用於遮罩層，讓聚光燈邊緣漸層淡出，產生更自然的舞台聚光燈效果；並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`AnimationEditorTab`（數字輸入框 0-80, step 4）及中英文 i18n。 ✓ 完成於 branch: feature/spotlight-soft-edge-20260617
-[ ] `overlay-image` 效果透明度控制：目前 `overlay-image` 的圖片固定為完全不透明；應新增 `overlayImageOpacity?: number`（0–1，預設 `1`），讓使用者可以半透明疊加圖片（例如浮水印效果），並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`（`opacity` style）/`AnimationEditorTab`（數字輸入框 0-1, step 0.05）及中英文 i18n。
+[x] `overlay-image` 效果透明度控制：目前 `overlay-image` 的圖片固定為完全不透明；應新增 `overlayImageOpacity?: number`（0–1，預設 `1`），讓使用者可以半透明疊加圖片（例如浮水印效果），並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`（`opacity` style）/`AnimationEditorTab`（數字輸入框 0-1, step 0.05）及中英文 i18n。 ✓ 完成於 branch: feature/overlay-image-opacity-20260617
 [ ] `text-callout` 文字對齊方式：目前 `text-callout` 固定使用 `textAlign: 'center'`；應新增 `textCalloutAlign?: 'left' | 'center' | 'right'`（預設 `'center'`），讓使用者在動畫編輯器中選擇文字對齊方式，方便內容較長的標注文字排版；並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`/`AnimationEditorTab`（select 下拉選單）及中英文 i18n。
 [ ] `step-list` 效果圓角半徑控制：目前 `step-list` 效果的容器固定使用 `borderRadius: '8px'`；應新增 `stepListBorderRadius?: number`（px 整數，預設 `8`，範圍 0–32），讓使用者自訂條列清單方框的圓角，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`/`AnimationEditorTab`（數字輸入框 0-32, step 2）及中英文 i18n。
 [ ] Manim `animate.typewrite(m, progress, opts)` 逐字打字效果：應新增 `animate.typewrite(m, progress, opts)` 函式，模擬逐字顯示文字的打字機效果；對 `kind === 'text'` 的元素，以 `progress` 控制可見字元數量（透過裁切 textContent 或修改 innerHTML），opts 支援 `reverse`（布林，從後往前消除，預設 `false`）；新增至少 2 個 vm 測試（一個驗證中間 progress 時文字長度小於完整長度，一個驗證 progress=1 時文字恢復完整）。
@@ -1480,3 +1480,7 @@
 - 時間: 2026-06-17 07:00:00 +0800
 - 分支: feature/spotlight-soft-edge-20260617
 - 內容: 新增 `spotlight` 效果柔邊模糊控制。後端 `pageAnimation.ts` 新增 `MAX_SPOTLIGHT_SOFT_EDGE = 80` 常數，`AnimationEffect` 介面新增 `spotlightSoftEdge?: number` 欄位，`EffectSchema` 新增 `z.number().int().min(0).max(80)` 驗證，序列化時以整數夾至合法範圍。前端 `types.ts` 同步新增欄位；`SlideRenderer.tsx` 當 `spotlightSoftEdge > 0` 時在遮罩 div 的 style 中加入 `filter: blur(${spSoft}px)`（使用條件展開 `...(spSoft > 0 ? { filter: ... } : {})`）；`AnimationEditorTab.tsx` 在 spotlight 的透明度輸入框後新增柔邊數字輸入框（range 0-80, step 4）及 px 標籤；中英文 i18n 新增 `play.animation.spotlightSoftEdge` 翻譯鍵。後端/前端 TypeScript 均通過。
+
+- 時間: 2026-06-17 07:10:00 +0800
+- 分支: feature/overlay-image-opacity-20260617
+- 內容: 新增 `overlay-image` 效果透明度控制。後端 `pageAnimation.ts` 在 `AnimationEffect` 介面新增 `overlayImageOpacity?: number` 欄位，`EffectSchema` 新增 `z.number().min(0).max(1)` 驗證，序列化時以 Math.max/min 夾至合法範圍。前端 `types.ts` 同步新增欄位；`SlideRenderer.tsx` 在 `overlay-image` 的 `<img>` style 中加入 `opacity: imgOpacity`（預設 1）；`AnimationEditorTab.tsx` 在圖片選擇器下方新增透明度數字輸入框（range 0-1, step 0.05）；中英文 i18n 新增 `play.animation.overlayImageOpacity` 翻譯鍵。後端/前端 TypeScript 均通過。
