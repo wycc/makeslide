@@ -301,6 +301,8 @@ export interface SlideAnimationEffect {
    * `MAX_OVERLAY_IMAGE_FIGURE_ID_LENGTH` chars.
    */
   figureId?: string;
+  /** Opacity (0–1) for `overlay-image` effects. Defaults to 1. Ignored by other effect types. */
+  overlayImageOpacity?: number;
   /**
    * LaTeX source rendered as a math formula by `formula` effects (ignored by
    * other effect types), via KaTeX. Up to `MAX_FORMULA_LENGTH` chars.

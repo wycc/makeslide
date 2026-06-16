@@ -399,6 +399,7 @@ export const zhTW = {
   'play.animation.overlayImageSelectFigure': '請選擇圖片…',
   'play.animation.overlayImageNoFigures': '本頁未偵測到可用圖片',
   'play.animation.overlayImageLoading': '載入圖片中…',
+  'play.animation.overlayImageOpacity': '透明度（0-1）',
   'play.animation.lockAspectRatio': '鎖定長寬比（調整寬度時自動計算高度）',
   'play.animation.unlockAspectRatio': '解除長寬比鎖定',
   'play.animation.focusPosition': '焦點位置與大小（%）',

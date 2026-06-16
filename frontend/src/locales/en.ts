@@ -399,6 +399,7 @@ export const en = {
   'play.animation.overlayImageSelectFigure': 'Select a figure...',
   'play.animation.overlayImageNoFigures': 'No figures detected on this page',
   'play.animation.overlayImageLoading': 'Loading figures…',
+  'play.animation.overlayImageOpacity': 'Opacity (0-1)',
   'play.animation.lockAspectRatio': 'Lock aspect ratio (auto-calculate height when width changes)',
   'play.animation.unlockAspectRatio': 'Unlock aspect ratio',
   'play.animation.focusPosition': 'Focus position & size (%)',

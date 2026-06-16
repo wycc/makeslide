@@ -173,6 +173,11 @@ export interface AnimationEffect {
    */
   figureId?: string;
   /**
+   * Opacity (0–1) for `overlay-image` effects (ignored by other effect types).
+   * Defaults to 1 (fully opaque). Values below 1 create semi-transparent image overlays.
+   */
+  overlayImageOpacity?: number;
+  /**
    * LaTeX source rendered as a math formula by `formula` effects (ignored by
    * other effect types), via KaTeX. Up to `MAX_FORMULA_LENGTH` chars.
    */
@@ -403,6 +408,7 @@ const EffectSchema = z.object({
   stepListTextColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   stepListFontSize: z.number().min(MIN_STEP_LIST_FONT_SIZE_REM).max(MAX_STEP_LIST_FONT_SIZE_REM).optional(),
   figureId: z.string().min(1).max(MAX_OVERLAY_IMAGE_FIGURE_ID_LENGTH).optional(),
+  overlayImageOpacity: z.number().min(0).max(1).optional(),
   formula: z.string().min(1).max(MAX_FORMULA_LENGTH).optional(),
   formulaFontSize: z.number().min(MIN_FORMULA_FONT_SIZE_EM).max(MAX_FORMULA_FONT_SIZE_EM).optional(),
   formulaBgColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
@@ -491,6 +497,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.stepListTextColor !== undefined ? { stepListTextColor: effect.stepListTextColor } : {}),
       ...(effect.stepListFontSize !== undefined ? { stepListFontSize: Math.max(MIN_STEP_LIST_FONT_SIZE_REM, Math.min(MAX_STEP_LIST_FONT_SIZE_REM, effect.stepListFontSize)) } : {}),
       ...(effect.figureId !== undefined ? { figureId: effect.figureId } : {}),
+      ...(effect.overlayImageOpacity !== undefined ? { overlayImageOpacity: Math.max(0, Math.min(1, effect.overlayImageOpacity)) } : {}),
       ...(effect.formula !== undefined ? { formula: effect.formula } : {}),
       ...(effect.formulaFontSize !== undefined ? { formulaFontSize: effect.formulaFontSize } : {}),
       ...(effect.formulaBgColor !== undefined ? { formulaBgColor: effect.formulaBgColor } : {}),
