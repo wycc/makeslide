@@ -1135,6 +1135,51 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     return streamFile(reply, abs, 'text/plain; charset=utf-8', 'private, max-age=60');
   });
 
+  // PUT /api/pdfs/:id/pages/:n/script
+  app.put('/api/pdfs/:id/pages/:n/script', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const { id, n } = parsed.data;
+    const bodyParsed = z.object({ script: z.string().max(4096) }).safeParse(request.body ?? {});
+    if (!bodyParsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', bodyParsed.error.issues[0]?.message ?? 'Invalid body'));
+    }
+    const script = bodyParsed.data.script;
+    const pageRow = db
+      .prepare(`SELECT script_path, page_uid FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .get(id, n) as { script_path: string | null; page_uid: string } | undefined;
+    if (!pageRow) {
+      return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+    }
+    let scriptPath = pageRow.script_path;
+    if (!scriptPath) {
+      // Create script file path using page_uid if not yet assigned.
+      scriptPath = `pages/${pageRow.page_uid}.script.txt`;
+    }
+    let abs: string;
+    try {
+      abs = safeJoinPdfPath(id, scriptPath);
+    } catch (err) {
+      request.log.warn({ err, id, n }, 'Path traversal blocked');
+      return reply.code(400).send(errorResponse('INVALID_PATH', 'Invalid stored path'));
+    }
+    await fs.promises.mkdir(path.dirname(abs), { recursive: true });
+    await fs.promises.writeFile(abs, script, 'utf8');
+    const now = nowIso();
+    db.prepare(`UPDATE pages SET script_path = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`).run(scriptPath, now, id, n);
+    db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(now, id);
+    try {
+      const meta = await readMetadata(id);
+      if (meta) {
+        meta.updated_at = now;
+        await writeMetadata(id, meta);
+      }
+    } catch { /* non-fatal */ }
+    return reply.code(200).send({ id, page_number: n, script });
+  });
+
   // GET /api/pdfs/:id/pages/:n/audio (supports HTTP Range for <audio> seeking)
   app.get('/api/pdfs/:id/pages/:n/audio', async (request, reply) => {
     const parsed = PageParamSchema.safeParse(request.params);

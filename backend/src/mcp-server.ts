@@ -53,6 +53,22 @@ async function apiGet(path: string): Promise<unknown> {
   return res.json();
 }
 
+async function apiGetText(path: string): Promise<string> {
+  const res = await fetch(`${BASE_URL}${path}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`GET ${path} → ${res.status} ${await res.text()}`);
+  return res.text();
+}
+
+async function apiPut(path: string, body: unknown): Promise<unknown> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`PUT ${path} → ${res.status} ${await res.text()}`);
+  return res.json();
+}
+
 async function apiPost(path: string, body?: unknown): Promise<unknown> {
   const res = await fetch(`${BASE_URL}${path}`, {
     method: 'POST',
@@ -142,6 +158,31 @@ const TOOLS = [
       required: ['id'],
     },
   },
+  {
+    name: 'get_page_script',
+    description: '讀取簡報某一頁的 AI 生成腳本（逐字稿）。在啟動生成前可用此工具確認或提取已有的腳本內容。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+      },
+      required: ['id', 'page'],
+    },
+  },
+  {
+    name: 'set_page_script',
+    description: '覆寫簡報某一頁的腳本（逐字稿），最長 4096 字元。可在啟動 AI 生成前用此工具自訂各頁文案，之後再呼叫 start_generation 僅重新生成語音（stages: ["audio"]）。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+        script: { type: 'string', description: '腳本內容，最長 4096 字元' },
+      },
+      required: ['id', 'page', 'script'],
+    },
+  },
 ];
 
 // ── Tool handlers ──────────────────────────────────────────────────────────────
@@ -196,6 +237,26 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
     const steps = (data.steps as Array<{ name: string; status: string }> | undefined) ?? [];
     const summary = steps.map((s) => `  ${s.name}: ${s.status}`).join('\n') || '  （無步驟資訊）';
     return `狀態：${status}\n階段進度：\n${summary}\n\n詳細資訊：\n${JSON.stringify(data, null, 2)}`;
+  }
+
+  if (name === 'get_page_script') {
+    const id = String(args.id ?? '');
+    const page = Number(args.page ?? 0);
+    if (!id) throw new Error('缺少 id 參數');
+    if (!Number.isInteger(page) || page < 1) throw new Error('page 必須是正整數');
+    const text = await apiGetText(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/script`);
+    return text || '（此頁腳本為空）';
+  }
+
+  if (name === 'set_page_script') {
+    const id = String(args.id ?? '');
+    const page = Number(args.page ?? 0);
+    const script = String(args.script ?? '');
+    if (!id) throw new Error('缺少 id 參數');
+    if (!Number.isInteger(page) || page < 1) throw new Error('page 必須是正整數');
+    if (script.length > 4096) throw new Error('script 不可超過 4096 字元');
+    await apiPut(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/script`, { script });
+    return `第 ${page} 頁腳本已更新（${script.length} 字元）。`;
   }
 
   throw new Error(`未知工具：${name}`);
