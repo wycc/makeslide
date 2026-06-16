@@ -169,6 +169,9 @@ const EnvSchema = z.object({
   HTTPS_KEY_PATH: z.string().optional().default(''),
   HTTPS_CERT_PATH: z.string().optional().default(''),
   NB_PREFIX: z.string().optional().default(''),
+  // MCP server: if set, requests with Authorization: Bearer <token> matching
+  // this value are granted owner-level access without OAuth session.
+  MCP_AUTH_TOKEN: z.string().optional().default(''),
 });
 
 const parsed = EnvSchema.safeParse(process.env);
@@ -241,6 +244,7 @@ export const config = {
   httpsKeyPath: env.HTTPS_KEY_PATH.trim(),
   httpsCertPath: env.HTTPS_CERT_PATH.trim(),
   nbPrefix: normalizeNbPrefix(env.NB_PREFIX),
+  mcpAuthToken: env.MCP_AUTH_TOKEN.trim(),
 } as const;
 
 export type AppConfig = typeof config;
