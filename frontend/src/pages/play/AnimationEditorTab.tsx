@@ -1433,6 +1433,22 @@ export function AnimationEditorTab() {
                       </>
                     )}
                   </div>
+                  <label className="flex flex-col gap-1 text-xs text-slate-400 mt-1">
+                    {t('play.animation.overlayImageOpacity')}
+                    <input
+                      type="number"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={effect.overlayImageOpacity ?? 1}
+                      disabled={disabled}
+                      onChange={(e) => {
+                        const v = parseFloat(e.target.value);
+                        if (!isNaN(v)) updateEffect(effect.id, { overlayImageOpacity: Math.min(1, Math.max(0, v)) });
+                      }}
+                      className="w-16 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                    />
+                  </label>
                 </div>
               )}
               {effect.type === 'formula' && (

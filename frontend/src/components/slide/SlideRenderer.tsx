@@ -198,13 +198,14 @@ function EffectOverlay({
   if (effect.type === 'overlay-image') {
     const url = effect.figureId ? resolveFigureImageUrl?.(effect.figureId) : undefined;
     if (!url) return null;
+    const imgOpacity = effect.overlayImageOpacity ?? 1;
     return (
       <img
         data-effect-id={effect.id}
         src={url}
         alt=""
         draggable={false}
-        style={{ ...position, objectFit: 'contain' }}
+        style={{ ...position, objectFit: 'contain', opacity: imgOpacity }}
       />
     );
   }
