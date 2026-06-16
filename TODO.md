@@ -1292,3 +1292,11 @@
 - 時間: 2026-06-17 10:45:00 +0800
 - 分支: feature/mcp-server-20260617
 - 內容: 完成 MCP server 功能，讓 claude code 或其它 MCP 相容的 agent 可透過 makeslide 生成簡報影片。新增：(1) `backend/src/config.ts` 加入 `MCP_AUTH_TOKEN`（選填，設定後允許以 Bearer token 認證，不需 OAuth session cookie）；(2) `backend/src/server.ts` 在 OAuth auth hook 中新增 Bearer token 驗證分支（`Authorization: Bearer <token>` 比對 `config.mcpAuthToken`）；(3) `backend/src/mcp-server.ts` 實作完整的 MCP stdio server（JSON-RPC 2.0 over newline-delimited JSON）：支援 `initialize`/`initialized`/`ping`/`tools/list`/`tools/call` 方法，暴露 5 個工具：`list_presentations`（列出所有簡報）、`get_presentation`（取得詳細資訊含影片 URL）、`upload_pdf`（從本機路徑上傳 PDF）、`start_generation`（啟動生成流程，可選指定 stages）、`get_generation_status`（查詢任務狀態）；透過 `MAKESLIDE_URL`/`MAKESLIDE_MCP_TOKEN` 環境變數設定連接目標；doc comment 包含 Claude Code mcp_servers.json 設定範例；(4) `backend/package.json` 新增 `mcp-server` npm script（`tsx src/mcp-server.ts`）。後端 tsc 通過，build 通過，216 項測試 198 通過（18 項失敗為既有基線，無新增失敗）。
+
+# 2026-06-17 系統分析後新增項目
+
+[ ] 將 `pointer` 效果加入 `auto-focus-ai` 可選類型：目前 `pointer` 效果已可在動畫編輯器中手動建立，但 `auto-focus-ai` 的 `AUTO_FOCUS_AI_EFFECT_TYPES` 尚未包含 `pointer`，導致 AI 無法自動選擇「精準指向某個點」的 pointer 效果；應將 `pointer` 加入可選類型列表，並更新系統提示詞說明 pointer 只需要 xPct/yPct（不需 widthPct/heightPct），同時在 `mapAutoFocusResponseToEffects` 中讓 pointer 只設定 xPct/yPct；補充對應測試。（此功能已在 feature/animation-auto-focus-ai-pointer-20260616 分支完整實作，但尚未合併至 master）
+[ ] MCP server 新增腳本讀寫工具：目前 MCP server 的 5 個工具只能管理簡報整體（上傳/生成/狀態），無法讀取或修改個別頁面的 AI 腳本；應新增 `get_page_script`（GET /api/pdfs/:id/pages/:n/script）和 `set_page_script`（PUT /api/pdfs/:id/pages/:n/script，若 API 不存在則需先新增）兩個 MCP 工具，讓 agent 可以在啟動生成前自訂各頁文案。
+[ ] `formula` 效果的字型大小控制：目前 `formula` 效果在 `SlideRenderer` 中以固定字型大小渲染 KaTeX 公式；應新增 `fontSize`（CSS em 值，預設 1.5em，範圍 0.5-4em，步進 0.1）欄位，讓使用者可在動畫編輯器中調整公式大小，並在 `AnimationEffect` 型別與後端 `EffectSchema` 中同步更新。
+[ ] `step-list` 效果的背景顏色自訂：目前 `step-list` 效果固定使用半透明深色背景（`bg-slate-900/90`）；應新增 `bgColor`（CSS hex 色碼，預設 `#1e293b`）與 `textColor`（預設 `#f1f5f9`）欄位，讓使用者可在動畫編輯器中自訂條列清單的背景色與文字色，並在 `SlideRenderer`/`AnimationEffect`/`EffectSchema` 中同步更新。
+[ ] Manim path morphing 支援 polygon 形狀：目前 `Manim.animate.transform` 的路徑變形只支援 circle 和 rect/square（各自對應 `getMorphSegs`）；對於 `polygon` 形狀，應計算凸多邊形的 4 個 cardinal 最遠點（top/right/bottom/left），將其轉為 4 段 cubic Bézier，使 polygon↔circle、polygon↔rect 也能進行平滑路徑變形。
