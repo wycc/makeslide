@@ -222,3 +222,42 @@ MCP_AUTH_TOKEN=your-secret-token-here
 - 認證：後端新增 `MCP_AUTH_TOKEN` 設定；server.ts 在 OAuth auth hook 中新增 Bearer token 驗證分支
 - 啟動方式：`npm --prefix backend run mcp-server`（開發用）或 `node backend/dist/mcp-server.js`（生產用）
 - 不依賴 `@modelcontextprotocol/sdk`，以純 TypeScript 手動實作 JSON-RPC 協議
+
+## MCP Server 腳本讀寫工具（2026-06-17）
+
+### 功能目的
+
+原有 MCP server 的 5 個工具只能管理簡報整體（上傳、啟動生成、查詢狀態），無法讀取或修改個別頁面的 AI 腳本。本次新增 `get_page_script` 和 `set_page_script` 兩個工具，讓 agent（如 Claude Code）可在啟動 AI 生成前先自訂各頁的逐字稿文案，再只重新生成語音部分，省去重跑 LLM 腳本生成的時間與費用。
+
+### 新增的 REST API
+
+`PUT /api/pdfs/:id/pages/:page/script`
+- 接受 `{ script: string }` body（最長 4096 字元）
+- 將腳本寫入對應的 `.script.txt` 檔案；若該頁尚無 `script_path` 記錄，會從 `page_uid` 自動派生路徑並存入 DB
+- 回傳 `{ id, page_number, script }`
+
+搭配既有的 `GET /api/pdfs/:id/pages/:page/script`，完整支援腳本的讀取與覆寫。
+
+### 新增的 MCP 工具
+
+| 工具名 | 說明 |
+|--------|------|
+| `get_page_script` | 讀取指定頁的逐字稿腳本，回傳純文字內容 |
+| `set_page_script` | 覆寫指定頁的腳本（最長 4096 字元），成功後回傳確認訊息 |
+
+### 典型使用流程
+
+```
+1. list_presentations          → 取得簡報 ID
+2. get_presentation            → 確認頁數與各頁狀態
+3. get_page_script id=X page=1 → 讀取第 1 頁現有腳本
+4. set_page_script id=X page=1 script="..." → 自訂第 1 頁文案
+5. start_generation id=X stages=["audio"]  → 只重新合成語音
+6. get_generation_status id=X              → 輪詢進度
+```
+
+### 技術細節
+
+- `detail.ts` 新增 `PUT /api/pdfs/:id/pages/:n/script` route，與 GET route 相鄰
+- `mcp-server.ts` 新增 `apiGetText()`（回傳純文字）和 `apiPut()`（PUT JSON）兩個輔助函式
+- 兩個新工具的 handler 驗證 `id`、`page`（正整數）與 `script` 長度後呼叫對應 API

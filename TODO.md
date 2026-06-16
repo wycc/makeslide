@@ -1296,7 +1296,7 @@
 # 2026-06-17 系統分析後新增項目
 
 [x] 將 `pointer` 效果加入 `auto-focus-ai` 可選類型：目前 `pointer` 效果已可在動畫編輯器中手動建立，但 `auto-focus-ai` 的 `AUTO_FOCUS_AI_EFFECT_TYPES` 尚未包含 `pointer`，導致 AI 無法自動選擇「精準指向某個點」的 pointer 效果；應將 `pointer` 加入可選類型列表，並更新系統提示詞說明 pointer 只需要 xPct/yPct（不需 widthPct/heightPct），同時在 `mapAutoFocusResponseToEffects` 中讓 pointer 只設定 xPct/yPct；補充對應測試。（完成於分支: feature/auto-focus-ai-pointer-20260617）
-[ ] MCP server 新增腳本讀寫工具：目前 MCP server 的 5 個工具只能管理簡報整體（上傳/生成/狀態），無法讀取或修改個別頁面的 AI 腳本；應新增 `get_page_script`（GET /api/pdfs/:id/pages/:n/script）和 `set_page_script`（PUT /api/pdfs/:id/pages/:n/script，若 API 不存在則需先新增）兩個 MCP 工具，讓 agent 可以在啟動生成前自訂各頁文案。
+[x] MCP server 新增腳本讀寫工具：目前 MCP server 的 5 個工具只能管理簡報整體（上傳/生成/狀態），無法讀取或修改個別頁面的 AI 腳本；應新增 `get_page_script`（GET /api/pdfs/:id/pages/:n/script）和 `set_page_script`（PUT /api/pdfs/:id/pages/:n/script，若 API 不存在則需先新增）兩個 MCP 工具，讓 agent 可以在啟動生成前自訂各頁文案。（完成於分支: feature/mcp-page-script-tools-20260617）
 [ ] `formula` 效果的字型大小控制：目前 `formula` 效果在 `SlideRenderer` 中以固定字型大小渲染 KaTeX 公式；應新增 `fontSize`（CSS em 值，預設 1.5em，範圍 0.5-4em，步進 0.1）欄位，讓使用者可在動畫編輯器中調整公式大小，並在 `AnimationEffect` 型別與後端 `EffectSchema` 中同步更新。
 [ ] `step-list` 效果的背景顏色自訂：目前 `step-list` 效果固定使用半透明深色背景（`bg-slate-900/90`）；應新增 `bgColor`（CSS hex 色碼，預設 `#1e293b`）與 `textColor`（預設 `#f1f5f9`）欄位，讓使用者可在動畫編輯器中自訂條列清單的背景色與文字色，並在 `SlideRenderer`/`AnimationEffect`/`EffectSchema` 中同步更新。
 [ ] Manim path morphing 支援 polygon 形狀：目前 `Manim.animate.transform` 的路徑變形只支援 circle 和 rect/square（各自對應 `getMorphSegs`）；對於 `polygon` 形狀，應計算凸多邊形的 4 個 cardinal 最遠點（top/right/bottom/left），將其轉為 4 段 cubic Bézier，使 polygon↔circle、polygon↔rect 也能進行平滑路徑變形。
@@ -1306,3 +1306,7 @@
 - 時間: 2026-06-17 11:00:00 +0800
 - 分支: feature/auto-focus-ai-pointer-20260617
 - 內容: 將 `pointer` 效果加入 `auto-focus-ai` 可選類型。在 `AUTO_FOCUS_AI_EFFECT_TYPES` 加入 `'pointer'`；更新 system prompt（第 2 點補充 pointer 的使用時機與 pointer vs shape 的差異說明，第 3 點說明 pointer 只需 xPct/yPct）；在 JSON 範例加入 pointer 示例；修改 `mapAutoFocusResponseToEffects` 使 pointer 的 params 只包含 xPct/yPct（不含 widthPct/heightPct），預設 50/50。新增 3 個整合測試（正常回傳 xPct/yPct、缺少座標時使用預設值、AI 提供 widthPct/heightPct 時 pointer 仍忽略）。
+
+- 時間: 2026-06-17 12:00:00 +0800
+- 分支: feature/mcp-page-script-tools-20260617
+- 內容: MCP server 新增腳本讀寫工具。在 `detail.ts` 新增 `PUT /api/pdfs/:id/pages/:n/script` REST 端點（接受 `{ script: string }` body，最長 4096 字元，更新 DB 並寫入檔案，若頁面尚無 script_path 則從 page_uid 自動派生路徑）。在 `mcp-server.ts` 新增 `apiGetText`/`apiPut` 輔助函式及兩個 MCP 工具：`get_page_script`（讀取指定頁腳本）、`set_page_script`（覆寫指定頁腳本），讓 agent 可在啟動 AI 生成前自訂各頁文案，再搭配 `start_generation`（stages: ["audio"]）重新生成語音。
