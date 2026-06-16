@@ -132,3 +132,38 @@
 
 - 只修改 `animationAutoFocus.ts` 的 `buildAutoFocusSystemPrompt()` 提示詞，不影響型別定義或資料流
 - 兩個新測試均使用 mock LLM client，不依賴真實 OpenAI 呼叫
+
+## Manim.animate.transform 路徑變形（Path Morphing）
+
+### 功能目的
+
+原本的 `Manim.animate.transform(from, to, progress)` 只對相同類型的形狀（例如 circle→circle）做屬性線性插值（半徑、位置等），對不同類型（例如 circle→square）則只做不自然的交叉淡化。這次更新實作了真正的 SVG 路徑變形：兩個形狀都被轉換為 4 段 cubic Bézier 路徑，然後對控制點進行逐點插值，讓圓形平滑地變形為正方形。
+
+### 使用方式
+
+```javascript
+// 在 custom-script 中使用，進度從 0 到 1
+var circle = Manim.shapes.circle(svg, { x: 0, y: 0, radius: 1.5, color: Manim.colors.BLUE });
+var square = Manim.shapes.square(svg, { x: 0, y: 0, size: 3, color: Manim.colors.RED });
+
+window.renderAnimation = function(root, api) {
+  // 播放時 api.onFrame 每幀呼叫，frame.t 為 0→1 進度
+  api.onFrame(function(frame) {
+    Manim.animate.transform(circle, square, frame.t);
+  });
+};
+```
+
+**支援的跨型態變形**：
+- `circle` ↔ `square`
+- `circle` ↔ `rectangle`
+
+**自動退回交叉淡化**（不支援 path morphing 的組合）：
+- `line`、`arrow`、`text`、`dot`、`polygon` 等仍使用原本的交叉淡化 + 屬性插值
+
+### 技術細節
+
+- **圓形**以 κ=0.5523 分解為 4 段 cubic Bézier（KAPPA 近似法），從正上方（top）順時鐘排列錨點（top → right → bottom → left → top）
+- **矩形**以相同的 4 個 cardinal 錨點（各邊中點）+ 角落位置的控制點分解為 4 段 Bézier，使每個錨點的切線方向與對應的圓形切線方向相同（水平或垂直），插值時不產生旋轉感
+- 第一次呼叫 `transform` 時，在 `from.svg` 新增共用 `<path>` 元素（`from._morphEl`）並隱藏原始 `from.el` 和 `to.el`；後續呼叫更新 `d` 屬性和顏色插值
+- 不依賴任何外部函式庫（無需 flubber.js），完全以 ES5 純 JavaScript 實作，符合 sandboxed iframe 的限制

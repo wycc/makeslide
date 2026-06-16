@@ -1254,7 +1254,7 @@
 [x] 動畫效果批次套用至多頁：新增「套用至全部頁面」或「套用至選取頁面」功能，讓使用者可以把某一頁的動畫設定（或特定效果）一鍵複製到其他頁面；與現有的「複製本頁效果」（只複製到剪貼簿，手動切換頁面後貼上）不同，批次套用可以選擇多頁同時套用。（完成於分支: feature/animation-batch-apply-to-pages-20260617）
 [x] `pointer` 效果的方向自訂：目前 `pointer` 效果渲染為固定方向的游標圖示；應新增 `angle`（旋轉角度，度，預設 0）欄位，讓使用者可以在動畫編輯器中調整指標方向（例如向上、向右、斜角指向目標）；在 `SlideRenderer` 的 `pointer` 渲染元件中依 `effect.angle` 旋轉圖示。（完成於分支: feature/animation-pointer-angle-20260617）
 [x] 動畫效果的播放預覽跳轉：在動畫編輯器的效果卡片上新增「跳至此效果」按鈕，按下後將音訊播放器的 `currentTime` seek 到 `effect.start` 秒，讓使用者可以快速預覽特定效果；需與 `PlayPage` 的音訊控制整合。（完成於分支: feature/animation-jump-to-effect-start-20260617）
-[ ] `Manim` 的 `transform` 路徑變形（path morphing）：目前 `Manim.animate.transform(from, to, progress)` 只做屬性線性插值（屬性相同才能 lerp），不支援真正的 SVG 路徑變形（`<path d>` 的形點插值）；應研究以 `flubber.js` 或自行實作的 cubic Bézier 插值達到 circle→square 等基本形狀路徑變形，並更新 `manimHelperScript.ts` 的 `Manim.animate.transform` 方法。
+[x] `Manim` 的 `transform` 路徑變形（path morphing）：目前 `Manim.animate.transform(from, to, progress)` 只做屬性線性插值（屬性相同才能 lerp），不支援真正的 SVG 路徑變形（`<path d>` 的形點插值）；應研究以 `flubber.js` 或自行實作的 cubic Bézier 插值達到 circle→square 等基本形狀路徑變形，並更新 `manimHelperScript.ts` 的 `Manim.animate.transform` 方法。（完成於分支: feature/animation-manim-path-morphing-20260617）
 [ ] 加入 MCP server 的功能，讓 claude code 或其它任何 agent 可以透過 makeslide 生成簡報影片
 
 - 時間: 2026-06-17 00:30:00 +0800
@@ -1284,3 +1284,7 @@
 - 時間: 2026-06-17 10:15:00 +0800
 - 分支: feature/animation-auto-focus-ai-formula-quality-20260617
 - 內容: 確認 item 1249（step-list AI 自動生成）已完整實作（系統提示詞第 6 點、mapAutoFocusResponseToEffects、整合測試均存在），標記為已完成。item 1250（formula AI 自動生成品質補強）：(1) 優化 buildAutoFocusSystemPrompt() 的 type 選擇說明，加入「包括以文字描述的公式（例如 E 等於 mc 平方）」、「單純百分比/日期/簡單計數不算公式應選 text-callout」；(2) 優化 formulaLatex 欄位說明，加入「若逐字稿以文字描述公式請將其轉為對應 LaTeX」及「缺少/空白/無法以標準 LaTeX 表示時請改選 highlight-box」；(3) 新增整合測試 `POST animation/auto-focus-ai returns a formula effect with formulaLatex`（ok 111）；(4) 新增整合測試 `POST animation/auto-focus-ai falls back formula without formulaLatex to highlight-box`（ok 112）。後端 tsc 通過，216 項測試中 2 項新測試（ok 111-112）通過，20 項失敗均為既有失敗基線。
+
+- 時間: 2026-06-17 10:30:00 +0800
+- 分支: feature/animation-manim-path-morphing-20260617
+- 內容: 完成 Manim.animate.transform 的 SVG 路徑變形（path morphing）功能：(1) 新增 KAPPA=0.5523 常數（circle 以 4 段 cubic Bézier 近似用）；(2) `circleMorphSegs(el)` 將 `<circle>` 分解為 4 個 cubic Bézier 段（以 cardinal 方向的 top/right/bottom/left 作為錨點，順時鐘排列）；(3) `rectMorphSegs(el)` 將 `<rect>` 分解為對應的 4 個段（錨點為各邊中點，控制點放在角落以產生軸對齊切線，與 circle 的切線方向一致，讓插值視覺上流暢）；(4) `getMorphSegs(m)` 依 kind 分派，目前支援 circle 與 rect（含 square）；(5) `lerpSegs` 和 `segsToPathD` 完成控制點插值與 SVG `d` 屬性產生；(6) 修改 `animate.transform`：若兩個 mobject 都支援 morphing，第一次呼叫建立共用 `<path>` 元素（`from._morphEl`）並隱藏原始元素，後續呼叫更新 path d 與顏色插值；否則退回原本的交叉淡化+屬性插值。測試：更新 `loadManim()` 的 sandbox stub 新增 `window.addEventListener`/`removeEventListener`/`parent.postMessage`（讓既有測試在有 `tex()` 的新版 script 下不出錯）；更新既有 circle→circle transform 測試（改為驗證 path morphing 行為）；新增 circle→circle morphing 生成 `<path>` 元素的測試；新增 circle→square 跨型態 morphing 測試；新增 line→line 退回交叉淡化的測試。前端 tsc 通過，build 通過，15/15 單元測試通過。
