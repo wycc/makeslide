@@ -273,9 +273,45 @@ export const MANIM_HELPER_SCRIPT = `
       [ccx-hw, ccy,    ccx-hw, ccy-hh,  ccx-hw, ccy-hh,  ccx,    ccy-hh],
     ];
   }
+  function parsePolygonPoints(pts) {
+    var raw = (pts || '').trim().split(/[\\s,]+/);
+    var result = [];
+    for (var i = 0; i + 1 < raw.length; i += 2) {
+      var px = parseFloat(raw[i]);
+      var py = parseFloat(raw[i + 1]);
+      if (!isNaN(px) && !isNaN(py)) result.push([px, py]);
+    }
+    return result;
+  }
+  // Decomposes a convex SVG polygon into 4 cubic Bézier segments anchored at
+  // the 4 cardinal extremal vertices (topmost/rightmost/bottommost/leftmost).
+  // Control points use axis-aligned tangents scaled by KAPPA × half-span,
+  // matching the tangent convention of circleMorphSegs and rectMorphSegs so
+  // the path morphs smoothly when cross-type transforming with circle or rect.
+  function polygonMorphSegs(el) {
+    var pts = parsePolygonPoints(el.getAttribute('points') || '');
+    if (pts.length < 3) return null;
+    var ti = 0, ri = 0, bi = 0, li = 0;
+    for (var i = 1; i < pts.length; i++) {
+      if (pts[i][1] < pts[ti][1]) ti = i;  // min SVG-y = topmost
+      if (pts[i][0] > pts[ri][0]) ri = i;  // max x = rightmost
+      if (pts[i][1] > pts[bi][1]) bi = i;  // max SVG-y = bottommost
+      if (pts[i][0] < pts[li][0]) li = i;  // min x = leftmost
+    }
+    var t = pts[ti], r = pts[ri], b = pts[bi], l = pts[li];
+    var kh = KAPPA * (r[0] - l[0]) / 2;  // horizontal control offset
+    var kv = KAPPA * (b[1] - t[1]) / 2;  // vertical control offset
+    return [
+      [t[0], t[1],  t[0]+kh, t[1],       r[0], r[1]-kv,  r[0], r[1]],  // top → right
+      [r[0], r[1],  r[0], r[1]+kv,        b[0]+kh, b[1],  b[0], b[1]],  // right → bottom
+      [b[0], b[1],  b[0]-kh, b[1],        l[0], l[1]+kv,  l[0], l[1]],  // bottom → left
+      [l[0], l[1],  l[0], l[1]-kv,        t[0]-kh, t[1],  t[0], t[1]],  // left → top
+    ];
+  }
   function getMorphSegs(m) {
-    if (m.kind === 'circle') return circleMorphSegs(m.el);
-    if (m.kind === 'rect')   return rectMorphSegs(m.el);
+    if (m.kind === 'circle')  return circleMorphSegs(m.el);
+    if (m.kind === 'rect')    return rectMorphSegs(m.el);
+    if (m.kind === 'polygon') return polygonMorphSegs(m.el);
     return null;
   }
   function lerpSegs(segs1, segs2, t) {

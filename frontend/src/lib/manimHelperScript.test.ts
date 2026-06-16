@@ -229,6 +229,68 @@ test("Manim.animate.transform uses path morphing for circle→square (cross-type
   assert.notEqual(d0, d1, "circle (d at t=0) and square (d at t=1) paths should be different");
 });
 
+test("Manim.animate.transform uses path morphing for polygon→circle (cross-type)", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  // Equilateral-ish triangle (SVG coords): top=(0,-2), right=(2,1), left=(-2,1)
+  const tri = Manim.shapes.polygon(svg, {
+    points: [[0, 2], [2, -1], [-2, -1]],  // math coords: top=(0,2), etc.
+    color: Manim.colors.YELLOW,
+  });
+  const circle = Manim.shapes.circle(svg, { x: 0, y: 0, radius: 1.5, color: Manim.colors.BLUE });
+  Manim.animate.transform(tri, circle, 0.5);
+  assert.equal(tri.el.style.display, "none", "polygon should be hidden during morph");
+  assert.equal(circle.el.style.display, "none", "circle should be hidden during morph");
+  assert.ok(tri._morphEl, "morphEl should be created for polygon→circle cross-type morph");
+  const d = tri._morphEl.getAttribute("d") as string;
+  assert.ok(d.startsWith("M") && d.endsWith("Z"), "morphed path should be closed (M...Z)");
+  // Check d changes between t=0 (polygon) and t=1 (circle)
+  Manim.animate.transform(tri, circle, 0);
+  const d0 = tri._morphEl.getAttribute("d") as string;
+  Manim.animate.transform(tri, circle, 1);
+  const d1 = tri._morphEl.getAttribute("d") as string;
+  assert.notEqual(d0, d1, "path should differ between progress=0 and progress=1");
+});
+
+test("Manim.animate.transform uses path morphing for polygon→polygon (same kind)", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const tri = Manim.shapes.polygon(svg, { points: [[0, 2], [2, -1], [-2, -1]] });
+  const pent = Manim.shapes.polygon(svg, {
+    points: [[0, 2], [1.9, 0.6], [1.2, -1.6], [-1.2, -1.6], [-1.9, 0.6]],
+  });
+  Manim.animate.transform(tri, pent, 0.5);
+  assert.ok(tri._morphEl, "morphEl created for polygon→polygon morph");
+  const d = tri._morphEl.getAttribute("d") as string;
+  assert.ok(d.startsWith("M") && d.endsWith("Z"), "morphed path is a closed path");
+  Manim.animate.transform(tri, pent, 0);
+  const d0 = tri._morphEl.getAttribute("d") as string;
+  Manim.animate.transform(tri, pent, 1);
+  const d1 = tri._morphEl.getAttribute("d") as string;
+  assert.notEqual(d0, d1, "polygon paths should differ at t=0 and t=1");
+});
+
+test("Manim.animate.transform uses path morphing for polygon→rect (cross-type)", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const diamond = Manim.shapes.polygon(svg, {
+    points: [[0, 2], [2, 0], [0, -2], [-2, 0]],  // diamond in math coords
+    color: Manim.colors.GREEN,
+  });
+  const rect = Manim.shapes.rectangle(svg, { x: 0, y: 0, width: 3, height: 2, color: Manim.colors.RED });
+  Manim.animate.transform(diamond, rect, 0.5);
+  assert.equal(diamond.el.style.display, "none", "polygon hidden during morph");
+  assert.equal(rect.el.style.display, "none", "rect hidden during morph");
+  assert.ok(diamond._morphEl, "morphEl created for polygon→rect");
+  const d = diamond._morphEl.getAttribute("d") as string;
+  assert.ok(d.startsWith("M") && d.endsWith("Z"), "path is closed");
+  Manim.animate.transform(diamond, rect, 0);
+  const d0 = diamond._morphEl.getAttribute("d") as string;
+  Manim.animate.transform(diamond, rect, 1);
+  const d1 = diamond._morphEl.getAttribute("d") as string;
+  assert.notEqual(d0, d1, "diamond (t=0) and rect (t=1) paths should differ");
+});
+
 test("Manim.animate.transform falls back to cross-fade for types without morph support (e.g. line)", () => {
   const Manim = loadManim();
   const svg = createFakeElement("svg");
