@@ -254,6 +254,8 @@ export interface SlideAnimationEffect {
   highlightPulse?: boolean;
   /** Semi-transparent fill colour (CSS hex with optional alpha) for `highlight-box` effects. Default `'transparent'`. */
   highlightFillColor?: string;
+  /** Border style for `highlight-box` effects. Defaults to `'solid'`. Ignored by other effect types. */
+  highlightBorderStyle?: 'solid' | 'dashed' | 'dotted';
   /** Caption text for `text-callout` effects (ignored by other effect types). */
   text?: string;
   /** Font size in rem for `text-callout` effects. Defaults to 1.25. Ignored by other effect types. */

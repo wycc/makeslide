@@ -90,6 +90,8 @@ export interface AnimationEffect {
   highlightPulse?: boolean;
   /** Semi-transparent fill colour (CSS hex with optional alpha) for `highlight-box` effects. Default `'transparent'`. Ignored by other effect types. */
   highlightFillColor?: string;
+  /** Border style for `highlight-box` effects. Defaults to `'solid'`. Ignored by other effect types. */
+  highlightBorderStyle?: 'solid' | 'dashed' | 'dotted';
   /** Caption text for `text-callout` effects (ignored by other effect types). */
   text?: string;
   /**
@@ -419,6 +421,7 @@ const EffectSchema = z.object({
   highlightOuterColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   highlightPulse: z.boolean().optional(),
   highlightFillColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
+  highlightBorderStyle: z.enum(['solid', 'dashed', 'dotted']).optional(),
   text: z.string().max(MAX_TEXT_CALLOUT_LENGTH).optional(),
   textCalloutFontSize: z.number().min(MIN_TEXT_CALLOUT_FONT_SIZE_REM).max(MAX_TEXT_CALLOUT_FONT_SIZE_REM).optional(),
   textCalloutBgColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
@@ -517,6 +520,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.highlightOuterColor !== undefined ? { highlightOuterColor: effect.highlightOuterColor } : {}),
       ...(effect.highlightPulse !== undefined ? { highlightPulse: effect.highlightPulse } : {}),
       ...(effect.highlightFillColor !== undefined ? { highlightFillColor: effect.highlightFillColor } : {}),
+      ...(effect.highlightBorderStyle !== undefined ? { highlightBorderStyle: effect.highlightBorderStyle } : {}),
       ...(effect.text !== undefined ? { text: effect.text } : {}),
       ...(effect.textCalloutFontSize !== undefined ? { textCalloutFontSize: Math.max(MIN_TEXT_CALLOUT_FONT_SIZE_REM, Math.min(MAX_TEXT_CALLOUT_FONT_SIZE_REM, effect.textCalloutFontSize)) } : {}),
       ...(effect.textCalloutBgColor !== undefined ? { textCalloutBgColor: effect.textCalloutBgColor } : {}),
