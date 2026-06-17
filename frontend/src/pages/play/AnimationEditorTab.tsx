@@ -1662,6 +1662,15 @@ export function AnimationEditorTab() {
                       <span className="text-slate-500">px</span>
                     </div>
                   </label>
+                  <label className="flex items-center gap-2 text-xs text-slate-400">
+                    <input
+                      type="checkbox"
+                      checked={!!effect.overlayImageShadow}
+                      disabled={disabled}
+                      onChange={(e) => updateEffect(effect.id, { overlayImageShadow: e.target.checked || undefined })}
+                    />
+                    {t('play.animation.overlayImageShadow')}
+                  </label>
                 </div>
               )}
               {effect.type === 'formula' && (
@@ -1758,6 +1767,15 @@ export function AnimationEditorTab() {
                         className="h-8 w-full cursor-pointer rounded border border-slate-700 bg-slate-900"
                       />
                     )}
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-slate-400">
+                    <input
+                      type="checkbox"
+                      checked={!!effect.formulaShadow}
+                      disabled={disabled}
+                      onChange={(e) => updateEffect(effect.id, { formulaShadow: e.target.checked || undefined })}
+                    />
+                    {t('play.animation.formulaShadow')}
                   </label>
                 </>
               )}

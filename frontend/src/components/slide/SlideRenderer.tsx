@@ -228,13 +228,14 @@ function EffectOverlay({
     if (!url) return null;
     const imgOpacity = effect.overlayImageOpacity ?? 1;
     const imgBr = effect.overlayImageBorderRadius ? `${effect.overlayImageBorderRadius}px` : undefined;
+    const imgShadow = effect.overlayImageShadow ? '0 4px 20px rgba(0,0,0,0.5)' : undefined;
     return (
       <img
         data-effect-id={effect.id}
         src={url}
         alt=""
         draggable={false}
-        style={{ ...position, objectFit: 'contain', opacity: imgOpacity, ...(imgBr ? { borderRadius: imgBr } : {}) }}
+        style={{ ...position, objectFit: 'contain', opacity: imgOpacity, ...(imgBr ? { borderRadius: imgBr } : {}), ...(imgShadow ? { boxShadow: imgShadow } : {}) }}
       />
     );
   }
@@ -244,6 +245,7 @@ function EffectOverlay({
     const fText = effect.formulaTextColor ?? '#f8fafc';
     const fBr = `${effect.formulaBorderRadius ?? 8}px`;
     const fBorder = effect.formulaBorderColor ? `2px solid ${effect.formulaBorderColor}` : undefined;
+    const fShadow = effect.formulaShadow ? '0 4px 16px rgba(0,0,0,0.4)' : undefined;
     const html = katex.renderToString(effect.formula ?? '', { throwOnError: false, displayMode: true });
     return (
       <div
@@ -260,6 +262,7 @@ function EffectOverlay({
           overflow: 'hidden',
           fontSize: `${fontSizeEm}em`,
           ...(fBorder ? { border: fBorder } : {}),
+          ...(fShadow ? { boxShadow: fShadow } : {}),
         }}
         dangerouslySetInnerHTML={{ __html: html }}
       />

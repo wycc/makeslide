@@ -333,6 +333,8 @@ export interface SlideAnimationEffect {
   overlayImageOpacity?: number;
   /** Corner radius (px) for `overlay-image` effects. Defaults to 0. Range 0–48. Ignored by other effect types. */
   overlayImageBorderRadius?: number;
+  /** When true, adds a drop shadow to the `overlay-image`. Ignored by other effect types. */
+  overlayImageShadow?: boolean;
   /**
    * LaTeX source rendered as a math formula by `formula` effects (ignored by
    * other effect types), via KaTeX. Up to `MAX_FORMULA_LENGTH` chars.
@@ -351,6 +353,8 @@ export interface SlideAnimationEffect {
   formulaBorderRadius?: number;
   /** Border colour (CSS hex) for `formula` effects. When set, adds a 2px solid border. Ignored by other effect types. */
   formulaBorderColor?: string;
+  /** When true, adds a drop shadow to the `formula` box. Ignored by other effect types. */
+  formulaShadow?: boolean;
   /**
    * Seconds to remain in the "entered" state after the entrance animation
    * completes before automatically reversing back to the original state
