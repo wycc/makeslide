@@ -1627,7 +1627,7 @@
 
 [x] `overlay-image` 效果投影選項：新增 `overlayImageShadow?: boolean`（預設 false）；啟用時在 `<img>` 上加上 `boxShadow: '0 4px 20px rgba(0,0,0,0.5)'`；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.boolean().optional()`）/序列化；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 在 `<img>` style 中條件加入 `boxShadow`（與現有 `borderRadius` 並列）；`AnimationEditorTab.tsx` 在 overlay-image 設定區新增勾選框；中英文 i18n 新增 `play.animation.overlayImageShadow`（'Drop shadow'／'投影效果'）。
 
-[ ] `shape` 效果新增 `star` 五角星形狀：在 `ANIMATION_SHAPE_KINDS` 加入 `'star'`；以 SVG `<polygon>` 繪製五角星（計算 5 個外頂點和 5 個內頂點，外半徑 46、內半徑 18，以中心 50,50 計算所有坐標）；支援現有的 fill/stroke/strokeWidth/strokeDasharray 屬性；後端 `ANIMATION_SHAPE_KINDS` const 加入 `'star'`，`EffectSchema` 自動更新；前端 `SlideAnimationShapeKind` 型別加入 `'star'`；`SlideRenderer.tsx` 加入 star 的 polygon 元素；中英文 i18n 新增 `play.animation.shapeKind.star`（'Star'／'五角星'）。
+[x] `shape` 效果新增 `star` 五角星形狀：在 `ANIMATION_SHAPE_KINDS` 加入 `'star'`；以 SVG `<polygon>` 繪製五角星（計算 5 個外頂點和 5 個內頂點，外半徑 46、內半徑 18，以中心 50,50 計算所有坐標）；支援現有的 fill/stroke/strokeWidth/strokeDasharray 屬性；後端 `ANIMATION_SHAPE_KINDS` const 加入 `'star'`，`EffectSchema` 自動更新；前端 `SlideAnimationShapeKind` 型別加入 `'star'`；`SlideRenderer.tsx` 加入 star 的 polygon 元素；中英文 i18n 新增 `play.animation.shapeKind.star`（'Star'／'五角星'）。
 
 [ ] Manim `animate.countUp(m, progress, opts)` 數字遞增效果：新增 `animate.countUp(m, progress, opts)` 函式，讓文字元素顯示從 `from` 線性遞增至 `to` 的整數（用於表達資料統計動畫）；以 `Math.round(lerp(from, to, progress))` 計算當前數值，再用 `m.el.textContent = String(val)` 更新元素文字內容；opts 支援 `from`（起始數字，預設 0）、`to`（目標數字，必填）、`suffix`（字尾字串，例如 `'%'`，預設 `''`）、`prefix`（字首字串，例如 `'$'`，預設 `''`）；新增至少 2 個 vm 測試（驗證 progress=0.5 時數值約為中間值，驗證 progress=1 時數值等於 `to`）。
 
@@ -1648,3 +1648,7 @@
 - 時間: 2026-06-17 16:00:00 +0800
 - 分支: feature/formula-overlay-shadow-20260617
 - 內容: 批次新增兩個投影效果欄位。(1) `formulaShadow?: boolean`：啟用時 formula div 加上 `box-shadow: 0 4px 16px rgba(0,0,0,0.4)`，與 textCalloutShadow 保持相同陰影值。(2) `overlayImageShadow?: boolean`：啟用時 `<img>` 加上 `box-shadow: 0 4px 20px rgba(0,0,0,0.5)`。兩個欄位均更新後端介面/EffectSchema/序列化、前端 types.ts、SlideRenderer.tsx、AnimationEditorTab.tsx（勾選框）、中英文 i18n。前後端 TypeScript 均通過。
+
+- 時間: 2026-06-17 16:15:00 +0800
+- 分支: feature/shape-star-20260617
+- 內容: 新增 `star` 五角星到 `shape` 效果。以 SVG `<polygon>` 繪製，10 個頂點（外半徑 46、內半徑 18、中心 50,50），points 字串：`50,4 60.58,35.44 93.75,35.79 67.12,55.56 77.04,87.21 50,68 22.96,87.21 32.88,55.56 6.25,35.79 39.42,35.44`。strokeLinejoin="round" 讓角點圓滑，支援 fill/stroke/strokeWidth/strokeDasharray。後端 `ANIMATION_SHAPE_KINDS` 加入 `'star'`；前端 `SlideAnimationShapeKind` 型別更新；`AnimationEditorTab.tsx` 的 shapeKind select 自動顯示新選項；中英文 i18n 各新增一個翻譯鍵。前後端 TypeScript 均通過。
