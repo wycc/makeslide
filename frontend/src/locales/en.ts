@@ -423,6 +423,7 @@ export const en = {
   'play.animation.textCalloutMaxWidth': 'Max width (vw)',
   'play.animation.shapeColor': 'Stroke color',
   'play.animation.shapeStrokeWidth': 'Stroke width',
+  'play.animation.shapeGlow': 'Glow effect',
   'play.animation.shapeFillColor': 'Fill color',
   'play.animation.shapeOpacity': 'Opacity (0-1)',
   'play.animation.shapeDashArray': 'Dash pattern',

@@ -1667,7 +1667,7 @@
 
 [x] `shape` 效果新增 `hexagon` 六角形：在 `ANIMATION_SHAPE_KINDS` 加入 `'hexagon'`；以 SVG `<polygon>` 繪製正六角形（6 個等距頂點，半徑 46，以中心 50,50 計算，第一個頂點在正上方即 angle=-90°）；支援現有的 fill/stroke/strokeWidth/strokeDasharray 屬性；後端 `ANIMATION_SHAPE_KINDS` const 加入 `'hexagon'`，`EffectSchema` 自動更新；前端 `SlideAnimationShapeKind` 型別加入 `'hexagon'`；`SlideRenderer.tsx` 加入 hexagon 的 polygon 元素；`AnimationEditorTab.tsx` shapeKind select 自動顯示新選項；中英文 i18n 新增 `play.animation.shapeKind.hexagon`（'Hexagon'／'六角形'）。
 
-[ ] `shape` 效果新增發光選項 `shapeGlow`：新增 `shapeGlow?: boolean`（預設 false）；啟用時在 SVG 的外層容器加上 CSS `filter: drop-shadow(0 0 8px {stroke})` 讓形狀輪廓發光（顏色與描邊色相同）；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.boolean().optional()`）/序列化；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 在 `<svg>` 的 style 中條件加入 `filter: \`drop-shadow(0 0 8px ${stroke})\``；`AnimationEditorTab.tsx` 在 shape 設定區加入勾選框（在 shapeStrokeWidth 後方）；中英文 i18n 新增 `play.animation.shapeGlow`（'Glow effect'／'發光效果'）。
+[x] `shape` 效果新增發光選項 `shapeGlow`：新增 `shapeGlow?: boolean`（預設 false）；啟用時在 SVG 的外層容器加上 CSS `filter: drop-shadow(0 0 8px {stroke})` 讓形狀輪廓發光（顏色與描邊色相同）；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.boolean().optional()`）/序列化；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 在 `<svg>` 的 style 中條件加入 `filter: \`drop-shadow(0 0 8px ${stroke})\``；`AnimationEditorTab.tsx` 在 shape 設定區加入勾選框（在 shapeStrokeWidth 後方）；中英文 i18n 新增 `play.animation.shapeGlow`（'Glow effect'／'發光效果'）。 ✓ 完成於 branch: feature/shape-glow-20260617b
 
 [ ] `step-list` 效果新增高亮指定步驟 `stepListHighlightIndex`：新增 `stepListHighlightIndex?: number`（0-based 整數，預設 undefined 表示不高亮任何項目）；指定後，對應索引的 `<li>` 項目套用 `fontWeight: 800, color: {stepListTextColor}` 並加上左側高亮色條（`border-left: 3px solid {stepListTextColor}`）；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.number().int().min(0).optional()`）/序列化（帶 `Math.max(0, Math.round(...))`）；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 在渲染每個 `<li>` 時判斷 index === stepListHighlightIndex 並套用高亮 style；`AnimationEditorTab.tsx` 加入 number input（min=0, max=step items count - 1）；中英文 i18n 新增 `play.animation.stepListHighlightIndex`（'Highlight step (0-based)'／'高亮步驟（從0起算）'）。
 
@@ -1679,6 +1679,9 @@
 
 [ ] `pointer` 效果新增可見時透明度選項 `pointerOpacity`：目前 pointer 在可見時固定 opacity=1；應新增 `pointerOpacity?: number`（0–1，預設 1）讓指針在可見狀態的不透明度可調整（半透明指針適合不遮擋內容的場景）；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.number().min(0).max(1).optional()`）/序列化（帶 min/max clamp）；前端 `types.ts` 新增欄位；`buildGsapTimeline.ts` 中 pointer 效果的 gsap to() 目標 opacity 改為 `effect.pointerOpacity ?? 1`（目前可能硬編碼為 1）；`AnimationEditorTab.tsx` 加入 range slider 或 number input（min=0.1, max=1, step=0.1）；中英文 i18n 新增 `play.animation.pointerOpacity`（'Opacity'／'透明度'）。
 
+[ ] 將系統設定項重改成左邊是 navigation bar，右邊是同一類別的設定的形式。把所有設定分類放到不同頁中。
+
+
 ---
 
 - 時間: 2026-06-17 17:15:00 +0800
@@ -1688,3 +1691,7 @@
 - 時間: 2026-06-17 17:30:00 +0800
 - 分支: feature/shape-hexagon-20260617
 - 內容: 新增 `hexagon` 六角形到 `shape` 效果。以 SVG `<polygon>` 繪製正六角形，6 個頂點（半徑 46、中心 50,50、頂點從正上方起順時針），points 字串：`50,4 89.84,27 89.84,73 50,96 10.16,73 10.16,27`。strokeLinejoin="round" 讓角點圓滑，支援 fill/stroke/strokeWidth/strokeDasharray。前後端 TypeScript 均通過。
+
+- 時間: 2026-06-17 21:50:00 +0800
+- 分支: feature/shape-glow-20260617b
+- 內容: 新增 `shapeGlow?: boolean` 到 shape 動畫效果。後端 `AnimationEffect`、`EffectSchema` 與序列化流程均保留此布林欄位；前端 `SlideAnimationEffect` 同步新增欄位，`SlideRenderer.tsx` 在 shape SVG 啟用時套用 `filter: drop-shadow(0 0 8px ${stroke})`，讓形狀以描邊色產生發光輪廓；`AnimationEditorTab.tsx` 在 shape 線寬設定後新增「發光效果」勾選框；中英文 i18n 新增 `play.animation.shapeGlow`。前後端 TypeScript 均通過。
