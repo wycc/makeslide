@@ -544,6 +544,22 @@ export const MANIM_HELPER_SCRIPT = `
       }
       m.el.setAttribute('transform', 'translate(0 ' + ty + ')');
     },
+    typewrite: function (m, progress, opts) {
+      var p = clamp01(progress);
+      var reverse = opts && opts.reverse;
+      if (m.kind !== 'text') {
+        m.el.style.opacity = String(p);
+        return;
+      }
+      var full = m.el.getAttribute('data-full-text');
+      if (full == null) {
+        full = m.el.textContent || '';
+        m.el.setAttribute('data-full-text', full);
+      }
+      var count = Math.round(full.length * p);
+      m.el.textContent = reverse ? full.slice(full.length - count) : full.slice(0, count);
+      m.el.style.opacity = '1';
+    },
   };
   // tex() — sends a renderLatex postMessage to the host page (which runs
   // KaTeX with its fonts), resolves to a <div> with the rendered MathML.
