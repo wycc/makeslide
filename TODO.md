@@ -1,4 +1,28 @@
 
+- [x] 播放頁頁首與課堂同步區補齊 i18n：`PlayPageHeader.tsx` 目前仍有大量硬編碼中文，例如「返回」、「更新標題」、「重新生成標題」、「同步模式」、「輸入要問 master 的問題」、「AI 總結回答」、「全螢幕」、「下載講義 PDF」、「同步到 GitHub」、「建立分享連結」等；應改用 `useI18n()` 與 `zh-TW.ts` / `en.ts` 翻譯鍵，保留既有分享、同步模式、影片產生與全螢幕行為，並新增或調整輕量測試/型別檢查確認新增翻譯鍵完整。
+
+- [x] 播放頁側欄投影片管理與來源管理補齊 i18n：`PlayPageSidebar.tsx` 中「投影片管理」、「重生」、「新增多頁」、「已選 N 頁將重生」、「來源管理」、「新增 TXT/PDF 來源」、「目前來源清單」、「生成記錄」與系統資料 label 仍多為硬編碼中文；應分批改成翻譯鍵，避免英文介面在播放頁混用中文，並保留目前 Ctrl/Shift 多選、來源展開、生成 prompt 展開與 audio source 播放行為。
+
+- [x] `RegenAllDialog` 批次重生對話框補齊 i18n 與選取頁摘要 formatter：目前「選擇重生項目」、「僅重生已選取的 N 張投影片」、「圖檔重生提示詞」、「逐字稿重生提示詞」、「提醒：若僅重生逐字稿…」、「再次重生／確認」等文字寫死中文；應抽出選取頁摘要 formatter（含空集合、單頁、多頁排序）並補中英文翻譯，讓重生流程在英文介面可完整操作與測試。
+
+- [x] 動畫 Raw JSON 複製加入 Clipboard fallback 與錯誤狀態：`AnimationEditorTab.tsx` 的「複製 JSON」目前直接呼叫 `navigator.clipboard.writeText()` 且只處理成功，若瀏覽器不支援 Clipboard API、非安全來源或權限被拒，使用者不會知道失敗；應新增 `copyTextToClipboard()` helper，支援 `navigator.clipboard` 失敗時 fallback 到 textarea selection / `document.execCommand('copy')`（可用時），並在 UI 顯示成功/失敗狀態與 i18n 文案，補純函式或 mock 測試。
+
+- [ ] 移除播放頁貼上與拖曳重排的前端偵錯 `console.*`：`PlayPageSidebar.tsx` 與 `PlayPageSlidePanel.tsx` 仍有 `console.info/warn` 直接記錄貼上事件、clipboard item 型別、拖曳頁碼等；應改為移除或集中到 gated debug helper（例如只在開發模式且明確開啟時輸出），避免一般使用者操作投影片、貼圖或重排時污染 console，並保留錯誤情境的使用者可見提示。
+
+- [ ] 來源管理清單新增「複製內容」與「清除展開」小操作：`PlayPageSlidePanel.tsx` 的來源管理目前可展開 TXT/PDF/YouTube 來源內容，但長文字只能手動選取複製，且展開多筆後整理不便；應在每個有 `content_text` 的來源列加入「複製內容」按鈕（使用共用 clipboard helper 與成功/失敗 toast/狀態），並在來源清單標題加入「全部收合」按鈕清空 `expandedSourceId`，不改 API 或資料庫，補 i18n 與可驗證的 helper 測試。
+
+- [x] 重生進度元件補齊 i18n 與英文介面：`RegenerateProgress.tsx` 目前將「重生進度」、「逐字稿／語音／圖檔／動畫」、「等待中／執行中／已完成／失敗」、「預估剩餘」等文案寫死為中文；應改用 `useI18n()` 與 `zh-TW.ts` / `en.ts` 翻譯鍵，保留目前 ETA、完成時間與步驟進度顯示邏輯，並新增輕量 formatter 或元件測試覆蓋 running/completed/failed 狀態文字。
+
+- [x] 圖表素材分頁新增「全部使用／全部排除」批次操作：`FigureAssetsTab.tsx` 目前只能逐張切換 extracted figure 是否作為重生圖片參考，頁面圖表多時很耗時；應在圖表清單上方新增兩個小按鈕，分別將本頁所有 `PageFigure.excluded` 設為 `false` 或 `true`，沿用既有 `savePageFigureSelection(pdfId, pageNumber, excludedIds)` 一次儲存，read-only 模式停用，並在失敗時復原 UI 與顯示既有錯誤文案。
+
+- [x] 課堂測驗編輯器新增「重設作答」按鈕：`QuizBuilderPage.tsx` 的 follower 作答狀態存在 `studentAnswers`，切換測驗或重新練習時目前需逐題取消選項；應在學生作答區或同步測驗控制區新增重設本次作答按鈕，清空 `studentAnswers`、重置提交防重複 ref（避免後續重新提交被擋），並重新回報 `answered_count=0`；此項不需改資料庫，只調整前端狀態與既有進度 API 呼叫。
+
+- [x] 首頁自訂分類管理加入重新命名功能：`HomePage.tsx` 目前可新增與刪除自訂分類，也能把簡報移到分類，但分類名稱打錯時只能新增新分類再逐份搬移；應在分類篩選區或分類管理區新增「重新命名分類」，更新 `customCategories` localStorage，並對目前清單中同分類簡報逐份呼叫既有 `updatePdfCategory()`；完成後同步更新目前篩選值、顯示 toast，並處理部分失敗時重新載入清單。
+
+- [x] 後端移除或降級高噪音 `console.log` 偵錯輸出：掃描 `backend/src/worker/steps/generateScript.ts`、`renderTextPagesWithLlm.ts`、`synthesizeAudio.ts`、`pipeline.ts` 與 `services/openai.ts` 可見多處直接輸出 prompt、payload、raw response 或音訊 segment；應改用既有 `logger.debug/info/warn` 且遮罩 API key、prompt 原文與大型 binary/hex 內容，保留必要 request id / stage / latency，並新增一個小型測試或 lint-friendly helper 確認敏感欄位遮罩規則。
+
+- [x] 上傳 PDF/匯入流程新增取消上傳控制：`uploadPdf()` 已支援 `AbortSignal`，但 `UploadButton.tsx` 的使用者流程尚未提供「取消」按鈕；應在 PDF 上傳進度顯示時建立 `AbortController`，提供取消按鈕中止 XHR、清空進度與 file input，並將 `ABORTED` 顯示為友善訊息而非一般錯誤；此項可只影響前端，不改 API。
+
 - [x] 首頁簡報清單新增排序選項：目前 `HomePage.tsx` 固定以分類分組且分類內用標題排序，近期分類才使用建立時間倒序；應新增「排序方式」select，支援 `title_asc`（現有預設）、`created_desc`、`updated_desc`、`page_count_desc`，將排序偏好存入 localStorage（例如 `makeslide.home.sortMode`），並在一般分類與「最近」分類中一致套用；中英文 i18n 新增 `home.sortBy`、`home.sort.titleAsc/createdDesc/updatedDesc/pageCountDesc`。
 
 - [x] 首頁標題搜尋支援清除按鈕與結果摘要：目前 `HomePage.tsx` 已有 `titleFilter` 並持久化，但輸入後需手動刪除文字且沒有顯示符合筆數；應在搜尋框右側新增「清除」按鈕（有文字時顯示），並在篩選區顯示 `顯示 {shown} / {total} 份簡報`，同時補齊中英文 i18n；此項僅調整前端狀態與 UI，不改 API。
@@ -22,14 +46,32 @@
 [x] `pointer` 效果新增可見時透明度選項 `pointerOpacity`：目前 pointer 在可見時固定 opacity=1；應新增 `pointerOpacity?: number`（0–1，預設 1）讓指針在可見狀態的不透明度可調整（半透明指針適合不遮擋內容的場景）；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.number().min(0).max(1).optional()`）/序列化（帶 min/max clamp）；前端 `types.ts` 新增欄位；`buildGsapTimeline.ts` 中 pointer 效果的 gsap to() 目標 opacity 改為 `effect.pointerOpacity ?? 1`（目前可能硬編碼為 1）；`AnimationEditorTab.tsx` 加入 range slider 或 number input（min=0.1, max=1, step=0.1）；中英文 i18n 新增 `play.animation.pointerOpacity`（'Opacity'／'透明度'）。
 
 [x] 將系統設定項重改成左邊是 navigation bar，右邊是同一類別的設定的形式。把所有設定分類放到不同頁中。
-[ ] 降低 jpeg 的畫質，目前每個檔1.3MB 太大了，請準備一個 749x500 的縮圖。只有在全螢幕才用全圖。
-[ ] 建立分享功能連結時，每一個簡報可以獨立的設定分享成 private, read-only or read-write。當設定成分 read-only/read-write 時，除了使用分享連接外，簡報會自動出現在其它帳號的列表中。
+[x] 降低 jpeg 的畫質，目前每個檔1.3MB 太大了，請準備一個 749x500 的縮圖。只有在全螢幕才用全圖。
+[x] 建立分享功能連結時，每一個簡報可以獨立的設定分享成 private, read-only or read-write。當設定成分 read-only/read-write 時，除了使用分享連接外，簡報會自動出現在其它帳號的列表中。
+[x] 高橋流要求每一頁只能有一二個重點，和目前一般的提示詞有沖突。請修改提示詞讓使用者明確要求高橋流或類似的減少每一頁重點時可以被使用。
+[x] 在產生大網時完全沒有使用者的提示在其中，當使用者使用高橋流時也沒有調整每頁重點的效果。
 
 ---
+
+- 時間: 2026-06-18 06:05:00 +0800
+- 分支: workspace-current
+- 內容: 完成 `RegenAllDialog` 批次重生對話框 i18n 與選取頁摘要 formatter。`RegenAllDialog.tsx` 改用 `useI18n()` 與 `play.regenDialog.*` 翻譯鍵顯示標題、執行順序、圖檔/逐字稿/語音/動畫選項、主持模式、提示詞 label/placeholder、逐字稿提醒、關閉/取消/確認/再次重生等主要文字；`formatters.ts` 新增 `formatRegenSelectedPagesSummary()`，統一處理未選取時重生全部、單頁選取與多頁去重排序摘要，中英文分別使用「、」與 comma separator。同步補齊 `zh-TW.ts` / `en.ts` 文案並在 `formatters.test.ts` 加入空集合、單頁、多頁排序測試，讓英文介面可完整操作批次重生流程。
+
+- 時間: 2026-06-18 06:10:00 +0800
+- 分支: workspace-current
+- 內容: 完成動畫 Raw JSON 複製 fallback 與錯誤狀態。新增 `frontend/src/lib/clipboard.ts` 的 `copyTextToClipboard()` 共用 helper，優先使用 `navigator.clipboard.writeText()`，失敗或不可用時改用隱藏 textarea selection 搭配 `document.execCommand('copy')`；兩條路徑都失敗時回傳可判斷的錯誤結果。`AnimationEditorTab.tsx` 的「複製 JSON」改用 helper，成功時顯示已複製狀態，失敗時顯示中英文 i18n 錯誤提示並保留下方唯讀 textarea 供手動選取複製。同步新增 `clipboard.test.ts` mock 測試覆蓋 Clipboard API 成功、API 失敗後 fallback、全部失敗與 fallback 可用性檢查。
 
 - 時間: 2026-06-17 22:30:00 +0800
 - 分支: workspace-current
 - 內容: 依照 LOOP.md 在 TODO.md 已無未完成項目時重新檢視主要程式區塊。快速檢查首頁清單/分類與搜尋、卡片資訊、PDF/ZIP/YouTube 匯入流程、播放頁進度恢復、本頁產生耗時顯示，以及後端管線進度與設定頁現況後，新增 7 個偏小型且可分次完成的功能改進：(1) 首頁排序選項；(2) 搜尋清除與結果摘要；(3) 卡片總語音長度；(4) ZIP 匯入後開啟提示詞；(5) YouTube 字幕語言快速選項；(6) 清除本簡報播放進度；(7) 本頁耗時總計與異常摘要。
+
+- 時間: 2026-06-18 05:58:00 +0800
+- 分支: workspace-current
+- 內容: 完成播放頁側欄投影片管理、來源管理與系統資料主要 label i18n。`PlayPageSidebar.tsx` 的投影片管理標題、重生/新增/刪除/新增多頁按鈕、縮圖 title/alt、Ctrl/Shift 多選提示、已選頁數摘要與封面設定按鈕改用 `play.sidebar.*` 翻譯鍵；`PlayPageSlidePanel.tsx` 的來源 tab、來源管理、TXT/PDF 來源新增說明、來源清單、未命名/無內容狀態、生成記錄與 prompt stage label 改用 `play.source.*`，系統資料 tab、基本資料 label、素材耗時表、執行歷程、run/stage/status/artifact label 與最慢素材排行改用 `play.system.*` / 既有 artifact 翻譯鍵。同步在 `zh-TW.ts` 與 `en.ts` 補齊中英文文案，保留 Ctrl/Shift 多選、來源展開、生成 prompt 展開與 YouTube audio source 播放行為；已執行 frontend typecheck，並用 grep 掃描目標主要硬編碼中文只剩註解與非本次目標的逐字稿重生文案。
+
+- 時間: 2026-06-18 03:45:00 +0800
+- 分支: workspace-current
+- 內容: 完成每份簡報獨立分享狀態 private/read-only/read-write。後端沿用 `pdfs.visibility` 對應 `private`、`public`（read-only）與 `public_editable`（read-write）；`POST /api/pdfs/:id/share` 建立分享連結時會依選擇同步更新簡報 visibility 並回傳狀態，且只有簡報擁有者可建立分享或改變 visibility；`PATCH /api/pdfs/:id/visibility` 也限制為擁有者操作，避免協作者變更公開範圍。首頁列表既有 `canReadPdf()` 會讓 `public/public_editable` 自動出現在其他帳號清單；寫入 API 沿用 `canEditPdf()`，read-only 不可修改、read-write 可修改。前端分享控制新增 read-only/read-write（列表可見）文案與「設為 private」按鈕，型別補齊 `visibility`，並讓列表入口開啟 read-only 共享簡報時套用唯讀限制。新增後端 API 測試覆蓋分享建立時 visibility 轉換、跨帳號列表可見與 read-only/read-write 編輯權限。
 
 - 時間: 2026-06-17 22:35:00 +0800
 - 分支: workspace-current
@@ -58,6 +100,18 @@
 - 時間: 2026-06-18 03:20:00 +0800
 - 分支: workspace-current
 - 內容: 完成本頁產生耗時區塊總耗時與異常摘要。`PageTimingChips.tsx` 標題列現在會彙總 image/text/script/audio 中狀態為 `succeeded` 且具有限 `duration_ms` 的 artifact，顯示「總計 {duration}」；若任一 artifact 為 `failed` 或 `sla_status === 'breached'`，會額外顯示「{count} 項需注意」小型警示 badge。既有每個 chip 的 tooltip 細節保留不變。`formatters.ts` 新增 `sumCompletedDurationMs()` 並補上 `formatters.test.ts` 覆蓋耗時格式化、無效值與只累計完成項目的規則；同步新增中英文 `play.timing.*` i18n，BLOG.md 補充目的、使用方式與技術細節。
+
+- 時間: 2026-06-18 05:38:00 +0800
+- 分支: workspace-current
+- 內容: 完成後端高噪音偵錯輸出降級與遮罩。新增 `backend/src/services/logSanitizer.ts`，提供 `redactLogObject()`、`redactPromptForLog()`、`redactTextForLog()`，統一遮罩 API key/Bearer token、prompt/input/script/rawContent、data URL/base64/hex/binary Buffer 等敏感或大型內容，只保留 chars/bytes、model、stage、latencyMs、usage、requestId 等可診斷欄位。移除 `generateScript.ts` 的 system prompt `console.log`、`renderTextPagesWithLlm.ts` 的 image payload `console.log`、`synthesizeAudio.ts` 的 segment 明文輸出、`pipeline.ts` 的 YouTube outline 明文輸出，以及 `services/openai.ts` 的 raw response hex/utf8、completion/rawContent/parse error `console.log`，改以 `logger.debug/info/warn` 搭配遮罩摘要。新增 `backend/test/log-sanitizer.test.ts` 驗證 API key、prompt、raw response、大型 base64/hex 不會原文出現在 log 物件中，且保留 latency/requestId 等必要中繼資料。
+
+- 時間: 2026-06-18 05:45:00 +0800
+- 分支: workspace-current
+- 內容: 完成上傳 PDF/匯入流程取消上傳控制。`UploadButton.tsx` 在每次選擇 PDF 並開始上傳時建立新的 `AbortController`，將 `signal` 傳入既有 `uploadPdf()` XHR 流程；上傳進度列旁新增「取消上傳」按鈕，點擊會呼叫 `abort()` 中止 XHR，立即清空進度並重設 file input。`ApiError` code 為 `ABORTED` 時改顯示友善的「已取消上傳」訊息，不再套用一般上傳失敗與 recovery guide。同步補齊中英文 `upload.uploadProgress`、`upload.cancelUpload`、`upload.uploadCanceled` i18n，僅調整前端，不改 API。
+
+- 時間: 2026-06-18 05:55:00 +0800
+- 分支: workspace-current
+- 內容: 完成播放頁頁首與課堂同步區 i18n 補齊。`PlayPageHeader.tsx` 新增 `useI18n()` 並將返回、標題更新/重新生成、頁碼、同步模式、follower 提問、master 問題列表與 AI 總結回答、產生失敗提示、逐字稿確認提示、全螢幕/字幕/編輯模式、圖片比例、語音/風格設定、影片產生/下載、講義 PDF、測驗生成、GitHub 同步、分享權限/建立連結/private，以及重生任務 banner 等硬編碼中文改為翻譯鍵。`zh-TW.ts` 與 `en.ts` 新增對應 `play.header.*`、`play.sync.*`、`play.share.*`、`play.regenBanner.*` 文案，保留既有點擊 handler 與狀態判斷；新增 `frontend/src/i18n.test.ts` 驗證中英文 locale key 完整且頁首/同步關鍵翻譯非空。已執行 frontend typecheck 與 i18n/formatters 輕量測試通過。
 
 - 時間: 2026-06-17 17:15:00 +0800
 - 分支: feature/todo-add-items-20260617d
@@ -91,3 +145,39 @@
 - 時間: 2026-06-17 22:26:00 +0800
 - 分支: workspace-current
 - 內容: 重構系統設定頁為左側分類 navigation bar、右側單一分類內容的版面。分類包含「帳號與偏好」、「AI 與語音」、「同步」、「AI 技能」與 admin 才顯示的「管理員」；保留原有 Google 登入/登出、使用者代碼、語言、播放速度、API Key、模型、TTS speaker/voice、CGU Air、自動產生動畫、GitHub 同步、AI 技能 CRUD/啟停、Google Auth 管理、admin 移交與 Pipeline SLA 設定。新增中英文 i18n 分類名稱/描述與登入狀態文字。frontend TypeScript typecheck 通過。
+
+- 時間: 2026-06-18 03:35:00 +0800
+- 分支: workspace-current
+- 內容: 完成播放頁縮圖模式與全螢幕高解析切換。後端 `thumbnails.ts` 將頁面縮圖改為 749x500 以內、JPEG quality 62、mozjpeg，並保留缺圖時由 `/api/pdfs/:id/pages/:n/thumbnail` 依全圖 lazy fallback 產生；`renderPages.ts` 將 PDF 全圖 JPEG quality 從 82 降到 72 以降低新匯入檔案大小。前端 `PlayPage.tsx` 新增一般播放用 `playbackImageSrc = thumbnail_url ?? image_url` 與全螢幕用 `fullscreenImageSrc = image_url ?? thumbnail_url`，並讓一般模式預載縮圖、全螢幕才載入全圖；`PlayPageSlidePanel.tsx` 與 `PlayPageFullscreen.tsx` 分別使用對應來源，兼容舊資料缺縮圖時 fallback 到全圖。同步更新 BLOG.md 說明目的、使用方式與技術細節；frontend typecheck 通過。
+
+- 時間: 2026-06-18 03:50:00 +0800
+- 分支: workspace-current
+- 內容: 完成高橋流 / 極簡大字投影片提示詞支援。檢查 `backend/prompts` 與 `generateScript.ts` 後，確認一般提示詞中的「充分利用投影片圖像」、「適度展開」、「補足語氣與轉場」與硬性字數下限，可能和每頁只放一兩個重點的高橋流需求衝突；新增 `isMinimalSlideStyleRequested()` 偵測高橋流、Takahashi method/style、每頁一兩個重點、極簡大字、少字等明確使用者提示，並在 OpenAI/Gemini 初稿與整份重寫 prompt 中插入優先規則：每頁只保留 1～2 個核心重點、降低字數、不要為了原目標字數補細節，同時保留 JSON、語氣標記與講者格式。同步更新 OpenAI/Gemini prompt 模板與 user style partial，並新增後端測試覆蓋偵測規則與一般模式不誤判。
+
+- 時間: 2026-06-18 03:55:00 +0800
+- 分支: workspace-current
+- 內容: 完成重生進度元件 i18n 與英文介面。`RegenerateProgress.tsx` 改用 `useI18n()` 取得標題、步驟名稱、任務狀態、步驟狀態、預估剩餘、完成時間與錯誤 fallback 文案；`zh-TW.ts` / `en.ts` 新增 `play.regenerate.*` 翻譯鍵，英文介面可顯示 Regeneration progress、Transcript/Audio/Images/Animations、Pending/Running/Completed/Failed 與 Estimated remaining。`formatters.ts` 新增重生狀態、步驟狀態與本地化 ETA formatter，保留原本進度百分比、ETA 與預計完成時間邏輯；`formatters.test.ts` 補上 running/completed/failed 與 ETA 格式測試。
+
+- 時間: 2026-06-18 04:05:00 +0800
+- 分支: workspace-current
+- 內容: 完成圖表素材分頁「全部使用／全部排除」批次操作。`FigureAssetsTab.tsx` 在圖表清單上方新增兩個小型批次按鈕，分別將目前頁面所有 `PageFigure.excluded` 設為 `false` 或 `true`，並沿用 `savePageFigureSelection(pdfId, pageNumber, excludedIds)` 以一次 PUT 儲存整頁 excluded ids；批次儲存期間會停用按鈕與單張 checkbox，read-only 模式同樣不可操作。若儲存失敗，會復原成操作前的 `figures` UI 狀態，並顯示既有 `play.figures.saveError` 錯誤文案。同步補齊中英文 `play.figures.useAll` / `play.figures.excludeAll` i18n，BLOG.md 新增功能目的與使用方式。
+
+- 時間: 2026-06-18 05:30:00 +0800
+- 分支: workspace-current
+- 內容: 完成課堂測驗 follower「重設作答」功能。`QuizBuilderPage.tsx` 在學生作答區標題列新增重設按鈕，按下後會清空 `studentAnswers`、將 `submittedAttemptRef` 歸零以允許同一個同步測驗 session 後續再次提交，並同步更新 `latestAttemptSnapshotRef` 避免殘留舊答案。重設時沿用既有 `submitSyncQuizProgress()` 立即回報 `answered_count=0`、`submitted=false` 與目前題數，不改資料庫與 API；失敗時顯示同步錯誤並讓下一次進度 effect 可重新回報。同步補齊中英文 `quiz.resetAnswers*` i18n，BLOG.md 新增目的、使用方式與技術細節。
+
+- 時間: 2026-06-18 05:35:00 +0800
+- 分支: workspace-current
+- 內容: 完成首頁自訂分類重新命名功能。`HomePage.tsx` 在每個自訂分類標題旁新增「重新命名類別」按鈕，使用 prompt 輸入新名稱並檢查空白、未變更與名稱重複；成功後更新 `makeslide.home.customCategories` localStorage，並對目前清單中原分類的每份簡報逐一呼叫既有 `updatePdfCategory()`。重新命名會同步更新目前分類篩選值與 localStorage，成功 toast 會顯示更新簡報數；若部分簡報更新失敗，會顯示部分失敗 toast 並重新載入清單以校正畫面狀態。同步補齊中英文 `home.renameCategory*` i18n，BLOG.md 新增目的、使用方式與技術細節。
+
+- 時間: 2026-06-18 03:55:00 +0800
+- 分支: workspace-current
+- 內容: 依照 LOOP.md 在 TODO.md 已無未完成項目時重新檢視主要程式與文件，避免重複既有首頁排序/搜尋、卡片語音長度、ZIP/YouTube 匯入、播放進度、耗時摘要、分享、縮圖與高橋流等已完成項目。檢查 `HomePage.tsx`、`RegenerateProgress.tsx`、`FigureAssetsTab.tsx`、`QuizBuilderPage.tsx`、`UploadButton.tsx`、`frontend/src/lib/api/uploads.ts`、`backend/src/routes/pdfs/sync.ts` 與後端 worker/openai 相關檔案後，新增 6 個偏小型且可驗證的待辦：(1) 重生進度 i18n；(2) 圖表素材全部使用/排除；(3) 課堂測驗重設作答；(4) 首頁自訂分類重新命名；(5) 後端高噪音 console.log 降級與遮罩；(6) 上傳 PDF/匯入流程取消控制。
+
+- 時間: 2026-06-18 05:45:00 +0800
+- 分支: workspace-current
+- 內容: 依照 LOOP.md 在 TODO.md 已無未完成項目時再次重新檢視主要前端/後端與 BLOG 既有功能紀錄，確認目前沒有 `- [ ]` 未完成項目，並避開已完成的首頁排序/搜尋、卡片語音長度、ZIP/YouTube 匯入、播放進度、耗時摘要、分享、縮圖、高橋流、重生進度、圖表批次、測驗重設、分類重新命名、後端 log 遮罩與上傳取消等項目。檢查 `PlayPageHeader.tsx`、`PlayPageSidebar.tsx`、`PlayPageSlidePanel.tsx`、`RegenAllDialog.tsx`、`AnimationEditorTab.tsx`、`ShareDialog.tsx`、`SettingsPage.tsx`、`backend/src/routes/pdfs/sync.ts` 與後端 console 掃描結果後，新增 6 個偏小型且可驗證的待辦：(1) 播放頁頁首與同步區 i18n；(2) 播放頁側欄與來源管理 i18n；(3) 批次重生對話框 i18n 與摘要 formatter；(4) 動畫 Raw JSON 複製 clipboard fallback；(5) 移除/管控播放頁貼上與拖曳偵錯 console；(6) 來源管理複製內容與全部收合小操作。
+
+- 時間: 2026-06-18 07:50:00 +0800
+- 分支: feature/outline-user-prompt-takahashi-20260618
+- 內容: 完成「產生大綱時帶入使用者提示詞，並在高橋流時調整每頁重點數」。`backend/src/worker/steps/splitTextWithLlm.ts` 的 `buildOutlineFromFullText()`（兩階段全文大綱流程）與 `splitChunkWithLlm()`（chunk fallback 流程）皆新增 `userPrompt` 參數，並將使用者補充指示原文插入 system/user prompt 中，讓大綱規劃實際納入使用者提示（先前完全未傳入，等同被忽略）；同時重用既有 `isMinimalSlideStyleRequested()`（沿用上一項高橋流逐字稿規則的偵測函式）判斷是否為高橋流 / 極簡大字風格，偵測到時將大綱 bullets 由預設 2~6 點降為 1~2 點，`OutlineSchema` 的 `bullets` 下限同步由 `min(2)` 放寬為 `min(1)` 以允許單一重點通過驗證；`splitTextWithLlmCore()`、`splitChunkRobust()` 與匯出的 `splitTextWithLlm()` 皆轉發此參數。`backend/src/worker/pipeline.ts` 兩處呼叫端改傳入 `row.user_prompt`。新增 2 個後端測試覆蓋 userPrompt 文字確實送入 LLM user message，以及高橋流偵測時 system prompt 出現對應規則且單一重點 bullets 通過 schema 驗證；backend typecheck 與既有測試套件通過（既有 18 項失敗為環境相關的既存失敗，與本次變更無關，已確認 stash 前後失敗清單一致）。
