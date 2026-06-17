@@ -410,6 +410,41 @@ test("Manim.animate.uncreate is the reverse of create (dashoffset decreases for 
   assert.ok(createOffset > uncreateOffset, "create at 0.3 has large dashoffset (most of path hidden) while uncreate at 0.3 has small dashoffset (path barely started un-drawing)");
 });
 
+function parseTranslateX(transform: string): number {
+  const m = transform.match(/translateX\(([^p]+)px\)/);
+  return m ? parseFloat(m[1]) : 0;
+}
+
+test("Manim.animate.shake gives zero translateX offset at progress=0 and progress=1", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const circ = Manim.shapes.circle(svg, { x: 0, y: 0, radius: 1, color: Manim.colors.BLUE });
+
+  Manim.animate.shake(circ, 0);
+  const offset0 = parseTranslateX(circ.el.style.transform);
+  assert.ok(Math.abs(offset0) < 0.01, `progress=0 should give ~0 translateX, got ${offset0}`);
+
+  Manim.animate.shake(circ, 1);
+  const offset1 = parseTranslateX(circ.el.style.transform);
+  assert.ok(Math.abs(offset1) < 0.01, `progress=1 should give ~0 translateX, got ${offset1}`);
+});
+
+test("Manim.animate.shake gives non-zero translateX at intermediate progress and respects amplitude/cycles opts", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const circ = Manim.shapes.circle(svg, { x: 0, y: 0, radius: 1, color: Manim.colors.RED });
+
+  // With default cycles=4, at progress=0.125: sin(0.125 * π * 4) = sin(π/2) = 1 → offset = amplitude(8)
+  Manim.animate.shake(circ, 0.125);
+  const offsetMid = parseTranslateX(circ.el.style.transform);
+  assert.ok(Math.abs(offsetMid) > 1, `intermediate progress should give non-zero offset, got ${offsetMid}`);
+
+  // Custom amplitude=20, cycles=2: at progress=0.25: sin(0.25 * π * 2) = sin(π/2) = 1 → offset = 20
+  Manim.animate.shake(circ, 0.25, { amplitude: 20, cycles: 2 });
+  const offsetCustom = parseTranslateX(circ.el.style.transform);
+  assert.ok(Math.abs(offsetCustom - 20) < 0.01, `custom amplitude=20 at peak should give ~20, got ${offsetCustom}`);
+});
+
 test("Manim.animate.wiggle produces non-zero translateX at mid-progress and clears transform at progress=1", () => {
   const Manim = loadManim();
   const svg = createFakeElement("svg");

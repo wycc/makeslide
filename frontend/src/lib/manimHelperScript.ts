@@ -560,6 +560,13 @@ export const MANIM_HELPER_SCRIPT = `
       m.el.textContent = reverse ? full.slice(full.length - count) : full.slice(0, count);
       m.el.style.opacity = '1';
     },
+    shake: function (m, progress, opts) {
+      var p = clamp01(progress);
+      var amplitude = (opts && typeof opts.amplitude === 'number') ? opts.amplitude : 8;
+      var cycles = (opts && typeof opts.cycles === 'number') ? opts.cycles : 4;
+      var offset = Math.sin(p * Math.PI * cycles) * amplitude;
+      m.el.style.transform = 'translateX(' + offset + 'px)';
+    },
   };
   // tex() — sends a renderLatex postMessage to the host page (which runs
   // KaTeX with its fonts), resolves to a <div> with the rendered MathML.
