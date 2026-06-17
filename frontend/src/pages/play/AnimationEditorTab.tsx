@@ -1108,6 +1108,30 @@ export function AnimationEditorTab() {
                   />
                   {t('play.animation.highlightPulse')}
                 </label>
+                <label className="flex items-center gap-2 text-xs text-slate-400">
+                  <input
+                    type="checkbox"
+                    checked={effect.highlightFillColor !== undefined}
+                    disabled={disabled}
+                    onChange={(e) =>
+                      updateEffect(effect.id, { highlightFillColor: e.target.checked ? '#ef444430' : undefined })
+                    }
+                    className="h-4 w-4 accent-fuchsia-500"
+                  />
+                  {t('play.animation.highlightFillColor')}
+                  {effect.highlightFillColor !== undefined && (
+                    <input
+                      type="color"
+                      value={effect.highlightFillColor.slice(0, 7)}
+                      disabled={disabled}
+                      onChange={(e) => {
+                        const alpha = effect.highlightFillColor?.slice(7) ?? '30';
+                        updateEffect(effect.id, { highlightFillColor: `${e.target.value}${alpha}` });
+                      }}
+                      className="h-8 w-12 cursor-pointer rounded-md border border-slate-700 bg-slate-900 p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+                    />
+                  )}
+                </label>
                 </>
               )}
               {effect.type === 'spotlight' && (

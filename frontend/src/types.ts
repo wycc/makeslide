@@ -250,6 +250,8 @@ export interface SlideAnimationEffect {
   highlightOuterColor?: string;
   /** When `true`, the `highlight-box` border glow pulses periodically while visible. Ignored by other effect types. */
   highlightPulse?: boolean;
+  /** Semi-transparent fill colour (CSS hex with optional alpha) for `highlight-box` effects. Default `'transparent'`. */
+  highlightFillColor?: string;
   /** Caption text for `text-callout` effects (ignored by other effect types). */
   text?: string;
   /** Font size in rem for `text-callout` effects. Defaults to 1.25. Ignored by other effect types. */
@@ -279,6 +281,8 @@ export interface SlideAnimationEffect {
   shapeFillColor?: string;
   /** Base opacity (0-1) for `shape` effects. Layered on top of GSAP fade-in/out. Defaults to 1. Ignored by other effect types. */
   shapeOpacity?: number;
+  /** SVG stroke-dasharray value for `shape` effects. Empty string = solid. Format: space-separated numbers e.g. '8 4'. Ignored by other effect types. */
+  shapeDashArray?: string;
   /**
    * Stroke width (SVG user units in a 100×100 viewBox) for `shape` effects.
    * Defaults to 5 when omitted. Ignored by other effect types.

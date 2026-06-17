@@ -86,6 +86,8 @@ export interface AnimationEffect {
   highlightOuterColor?: string;
   /** When `true`, the `highlight-box` border glow pulses periodically while visible. Ignored by other effect types. */
   highlightPulse?: boolean;
+  /** Semi-transparent fill colour (CSS hex with optional alpha) for `highlight-box` effects. Default `'transparent'`. Ignored by other effect types. */
+  highlightFillColor?: string;
   /** Caption text for `text-callout` effects (ignored by other effect types). */
   text?: string;
   /**
@@ -228,6 +230,12 @@ export interface AnimationEffect {
    * Layered on top of GSAP fade-in/out. Defaults to `1` (fully opaque).
    */
   shapeOpacity?: number;
+  /**
+   * SVG stroke-dasharray value for `shape` effects (ignored by other effect types).
+   * Empty string (default) = solid stroke. Format: space-separated numbers, e.g. `'8 4'`.
+   * Max `MAX_SHAPE_DASH_ARRAY_LENGTH` chars.
+   */
+  shapeDashArray?: string;
 }
 
 /** A single turn in a `custom-script` effect's AI chat `conversation`. */
@@ -334,6 +342,8 @@ export const MAX_STEP_LIST_FONT_SIZE_REM = 2.5;
 export const MAX_STEP_LIST_BORDER_RADIUS = 32;
 /** Max stroke width (SVG user units) for `shape` effects. */
 export const MAX_SHAPE_STROKE_WIDTH = 20;
+/** Max length (chars) for `shapeDashArray` field of `shape` effects. */
+export const MAX_SHAPE_DASH_ARRAY_LENGTH = 20;
 /** Max length (chars) for a `custom-script` effect's generated JavaScript `code`. */
 export const MAX_CUSTOM_SCRIPT_CODE_LENGTH = 24000;
 /** Max length (chars) for the prompt used to generate a `custom-script` effect's `code`. */
@@ -397,6 +407,7 @@ const EffectSchema = z.object({
   highlightBorderRadius: z.number().int().min(0).max(MAX_HIGHLIGHT_BORDER_RADIUS).optional(),
   highlightOuterColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   highlightPulse: z.boolean().optional(),
+  highlightFillColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   text: z.string().max(MAX_TEXT_CALLOUT_LENGTH).optional(),
   textCalloutFontSize: z.number().min(MIN_TEXT_CALLOUT_FONT_SIZE_REM).max(MAX_TEXT_CALLOUT_FONT_SIZE_REM).optional(),
   textCalloutBgColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
@@ -427,6 +438,7 @@ const EffectSchema = z.object({
   prompt: z.string().max(MAX_CUSTOM_SCRIPT_PROMPT_LENGTH).optional(),
   conversation: z.array(ConversationMessageSchema).max(MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES).optional(),
   shapeOpacity: z.number().min(0).max(1).optional(),
+  shapeDashArray: z.string().max(MAX_SHAPE_DASH_ARRAY_LENGTH).regex(/^[\d. ]*$/).optional(),
 });
 
 const HintsSchema = z
@@ -488,6 +500,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.highlightBorderRadius !== undefined ? { highlightBorderRadius: Math.max(0, Math.min(MAX_HIGHLIGHT_BORDER_RADIUS, Math.round(effect.highlightBorderRadius))) } : {}),
       ...(effect.highlightOuterColor !== undefined ? { highlightOuterColor: effect.highlightOuterColor } : {}),
       ...(effect.highlightPulse !== undefined ? { highlightPulse: effect.highlightPulse } : {}),
+      ...(effect.highlightFillColor !== undefined ? { highlightFillColor: effect.highlightFillColor } : {}),
       ...(effect.text !== undefined ? { text: effect.text } : {}),
       ...(effect.textCalloutFontSize !== undefined ? { textCalloutFontSize: Math.max(MIN_TEXT_CALLOUT_FONT_SIZE_REM, Math.min(MAX_TEXT_CALLOUT_FONT_SIZE_REM, effect.textCalloutFontSize)) } : {}),
       ...(effect.textCalloutBgColor !== undefined ? { textCalloutBgColor: effect.textCalloutBgColor } : {}),
@@ -518,6 +531,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.prompt !== undefined ? { prompt: effect.prompt } : {}),
       ...(effect.conversation !== undefined ? { conversation: effect.conversation } : {}),
       ...(effect.shapeOpacity !== undefined ? { shapeOpacity: Math.max(0, Math.min(1, effect.shapeOpacity)) } : {}),
+      ...(effect.shapeDashArray !== undefined ? { shapeDashArray: effect.shapeDashArray } : {}),
     };
   });
   const hints = parsed.data.hints && Object.keys(parsed.data.hints).length > 0 ? parsed.data.hints : undefined;

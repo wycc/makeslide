@@ -391,6 +391,7 @@ export const zhTW = {
   'play.animation.highlightBorderRadius': '圓角半徑（px）',
   'play.animation.highlightOuterColor': '外框顏色',
   'play.animation.highlightPulse': '脈動光暈',
+  'play.animation.highlightFillColor': '填充顏色',
   'play.animation.spotlightColor': '遮罩顏色',
   'play.animation.spotlightOpacity': '透明度',
   'play.animation.spotlightSoftEdge': '柔邊模糊（px）',
