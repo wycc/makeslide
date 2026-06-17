@@ -5,12 +5,18 @@ import {
   getAuthStatus,
   getSlaSettings,
   getSystemAiSettings,
+  listSkills,
+  createSkill,
+  updateSkill,
+  deleteSkill,
+  toggleBuiltInSkill,
   logoutAuth,
   transferAdminAccount,
   updateSlaTargetOverride,
   updateSystemAiSettings,
   type AuthStatus,
   type SystemAiSettings,
+  type Skill,
 } from '../lib/api';
 import type { SlaSettingsResponse, SlaTargetKind, SlaTargetSetting } from '../types';
 import {
@@ -73,6 +79,13 @@ export default function SettingsPage() {
   const [slaOverrideInputs, setSlaOverrideInputs] = useState<Record<string, string>>({});
   const [slaLoading, setSlaLoading] = useState(false);
   const [slaBusyKey, setSlaBusyKey] = useState<string | null>(null);
+
+  const [skills, setSkills] = useState<Skill[]>([]);
+  const [skillsLoading, setSkillsLoading] = useState(false);
+  const [newSkillName, setNewSkillName] = useState('');
+  const [newSkillPrompt, setNewSkillPrompt] = useState('');
+  const [newSkillApplyTo, setNewSkillApplyTo] = useState<'script' | 'all'>('script');
+  const [addingSkill, setAddingSkill] = useState(false);
 
   const CGU_AIR_BASE_URL = 'https://air.cgu.edu.tw/cgullmapi/v1';
 
@@ -145,6 +158,8 @@ export default function SettingsPage() {
 
   useEffect(() => {
     void loadStatus();
+    setSkillsLoading(true);
+    listSkills().then(setSkills).catch(() => {}).finally(() => setSkillsLoading(false));
   }, [loadStatus]);
 
   const onSave = useCallback(async () => {
@@ -802,6 +817,121 @@ export default function SettingsPage() {
             >
               {saving ? t('settings.saving') : t('settings.save')}
             </button>
+          </div>
+        </div>
+
+        {/* Skills Section */}
+        <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+          <h2 className="text-sm font-semibold text-slate-200">{t('settings.skills')}</h2>
+          <p className="text-xs text-slate-400">{t('settings.skillsDesc')}</p>
+          {skillsLoading ? (
+            <div className="text-xs text-slate-500">{t('settings.loading')}</div>
+          ) : (
+            <div className="space-y-2">
+              {skills.map((skill) => (
+                <div
+                  key={skill.id}
+                  className="flex items-start gap-3 rounded-lg border border-slate-800 bg-slate-950/60 p-3"
+                >
+                  <input
+                    type="checkbox"
+                    checked={skill.enabled}
+                    onChange={() => {
+                      if (skill.isBuiltIn) {
+                        void toggleBuiltInSkill(skill.id).then((res) => {
+                          setSkills((prev) => prev.map((s) => s.id === skill.id ? { ...s, enabled: res.enabled } : s));
+                        });
+                      } else {
+                        void updateSkill(skill.id, { enabled: !skill.enabled }).then((updated) => {
+                          setSkills((prev) => prev.map((s) => s.id === skill.id ? updated : s));
+                        });
+                      }
+                    }}
+                    className="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-800 accent-indigo-500"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-slate-200">
+                        {skill.isBuiltIn ? (t('settings.skillLangZh') === 'zh-TW' ? skill.nameZh ?? skill.name : skill.name) : skill.name}
+                      </span>
+                      {skill.isBuiltIn && (
+                        <span className="rounded bg-slate-800 px-1.5 py-0.5 text-xs text-slate-400">{t('settings.skillBuiltIn')}</span>
+                      )}
+                      <span className="rounded bg-slate-800 px-1.5 py-0.5 text-xs text-slate-400">{skill.applyTo}</span>
+                    </div>
+                    {skill.isBuiltIn && skill.descriptionZh && (
+                      <p className="mt-1 text-xs text-slate-500">{skill.descriptionZh}</p>
+                    )}
+                    {!skill.isBuiltIn && (
+                      <p className="mt-1 text-xs text-slate-500 line-clamp-2">{skill.prompt}</p>
+                    )}
+                  </div>
+                  {!skill.isBuiltIn && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void deleteSkill(skill.id).then(() => {
+                          setSkills((prev) => prev.filter((s) => s.id !== skill.id));
+                        });
+                      }}
+                      className="shrink-0 text-xs text-red-400 hover:text-red-300"
+                    >
+                      {t('settings.delete')}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="space-y-2 rounded-lg border border-slate-700 bg-slate-950/40 p-3">
+            <h3 className="text-xs font-medium text-slate-300">{t('settings.addSkill')}</h3>
+            <input
+              type="text"
+              value={newSkillName}
+              onChange={(e) => setNewSkillName(e.target.value)}
+              placeholder={t('settings.skillNamePlaceholder')}
+              maxLength={80}
+              className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-200"
+            />
+            <textarea
+              value={newSkillPrompt}
+              onChange={(e) => setNewSkillPrompt(e.target.value)}
+              placeholder={t('settings.skillPromptPlaceholder')}
+              rows={3}
+              maxLength={2000}
+              className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-200"
+            />
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-1.5 text-xs text-slate-400">
+                {t('settings.skillApplyTo')}
+                <select
+                  value={newSkillApplyTo}
+                  onChange={(e) => setNewSkillApplyTo(e.target.value as 'script' | 'all')}
+                  className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200"
+                >
+                  <option value="script">{t('settings.skillApplyToScript')}</option>
+                  <option value="all">{t('settings.skillApplyToAll')}</option>
+                </select>
+              </label>
+              <button
+                type="button"
+                disabled={addingSkill || !newSkillName.trim() || !newSkillPrompt.trim()}
+                onClick={() => {
+                  setAddingSkill(true);
+                  void createSkill({ name: newSkillName.trim(), prompt: newSkillPrompt.trim(), applyTo: newSkillApplyTo })
+                    .then((skill) => {
+                      setSkills((prev) => [...prev, skill]);
+                      setNewSkillName('');
+                      setNewSkillPrompt('');
+                    })
+                    .finally(() => setAddingSkill(false));
+                }}
+                className="ml-auto rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 hover:bg-indigo-500"
+              >
+                {addingSkill ? t('settings.saving') : t('settings.addSkillBtn')}
+              </button>
+            </div>
           </div>
         </div>
       </main>

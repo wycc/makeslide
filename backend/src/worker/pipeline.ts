@@ -23,7 +23,7 @@ import {
 import { fetchYoutubeCaptions } from '../services/youtubeCaptions';
 import { callChatJSON } from '../services/openai';
 import { getRuntimeAiSettings } from '../services/aiSettings';
-import { accountIdFromOwnerSub, runWithAccountId } from '../services/accountContext';
+import { accountIdFromOwnerSub, currentAccountId, runWithAccountId } from '../services/accountContext';
 import { loadSplitPageFigureMap, saveSplitPageFigureMap } from '../services/pdfFigures';
 import type {
   PageRow,
@@ -44,6 +44,7 @@ import { extractPdfFigures } from './steps/extractPdfFigures';
 import { getPdfPageCount } from './poppler';
 import { generateScript } from './steps/generateScript';
 import { generateTitle } from './steps/generateTitle';
+import { getEnabledSkillPrompts } from '../services/skills';
 import {
   readScriptsForTts,
   synthesizeAudio,
@@ -1097,11 +1098,16 @@ async function runPipeline(pdfId: string): Promise<void> {
 
     const scriptMaxCharsPerPage = rowWithPrompt?.script_max_chars_per_page ?? null;
 
+    const skillPrompts = getEnabledSkillPrompts(currentAccountId(), 'script');
+    const effectiveUserPrompt = skillPrompts.length > 0
+      ? [userPrompt?.trim() ?? '', ...skillPrompts].filter(Boolean).join('\n\n')
+      : userPrompt;
+
     const scriptResult = await generateScript({
       pdfId,
       pageCount,
       pages: pagesForScript,
-      userPrompt,
+      userPrompt: effectiveUserPrompt,
       maxCharsPerPage: scriptMaxCharsPerPage,
       onPage: (pageNumber, done, info) => {
         const h = scriptHandles.get(pageNumber) ?? startArtifact({ run, pageNumber, artifact: 'script', reason: runType === 'resume' ? 'resume' : 'initial', metadata: { precision: info ? 'step_timing' : 'callback_completion' } });
