@@ -915,3 +915,29 @@ Manim.animate.typewrite(label, progress, { reverse: true });
 - 內建技能的啟用狀態存於 `enabledBuiltIns` 陣列，自訂技能存於 `userSkills` 陣列
 - 生成逐字稿前，pipeline 讀取所有已啟用、`applyTo: 'script' | 'all'` 的技能，將其 prompt 合併至 `userPrompt`
 - REST API：`GET /api/skills`、`POST /api/skills`、`PATCH /api/skills/:id`、`DELETE /api/skills/:id`、`POST /api/skills/:id/toggle`
+
+## Manim 搖晃效果（shake）
+
+自訂動畫腳本現在支援 `Manim.animate.shake(m, progress, opts)` 水平搖晃效果，適合用於強調重點、警示錯誤、或引導注意力。
+
+**使用方式：**
+```javascript
+// 基本用法（幅度 8px，4 個週期）
+Manim.animate.shake(myShape, progress);
+
+// 自訂選項
+Manim.animate.shake(myShape, progress, {
+  amplitude: 15,  // 最大水平偏移量（px，預設 8）
+  cycles: 2,      // 搖晃週期數（預設 4）
+});
+```
+
+**動畫特性：**
+- `progress=0`：元素靜止於原位（translateX = 0）
+- 中間 progress：依正弦波左右搖晃，幅度最大可達 amplitude px
+- `progress=1`：元素自動回到原位（整數 cycles 使 sin 值精確為 0）
+
+**技術說明：**
+- 位移公式：`Math.sin(progress * Math.PI * cycles) * amplitude`
+- 整數 cycles 確保端點（progress=0 和 1）的 sin 值恰好為 0，無需額外 envelope
+- 2 個 vm 單元測試覆蓋端點零偏移及中間非零偏移驗證
