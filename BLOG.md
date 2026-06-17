@@ -965,3 +965,15 @@ Manim.animate.shake(myShape, progress, {
 - `shapeRectRadius?: number` — SVG rx 屬性值，整數，預設 6（與原有硬編碼值相同）
 - 只在 shape kind 為 `rect` 時顯示輸入框
 - 後端 EffectSchema 以 `z.number().int().min(0).max(24)` 驗證
+
+## spotlight 效果矩形形狀選項
+
+`spotlight` 聚光燈效果現在支援矩形模式，讓使用者能以矩形框（而非圓形）聚焦在投影片的特定區域，更適合框選表格、程式碼區塊或文字段落。
+
+**使用方式：**
+在動畫編輯器的 spotlight 設定中，選擇「形狀」為「矩形」後，聚光燈將改以矩形呈現。選擇矩形後可額外設定「圓角半徑」（0–32px），預設為 8px 的輕微圓角。
+
+**技術說明：**
+- `spotlightShape?: 'circle' | 'rect'` — 預設 `'circle'` 維持現有圓形行為
+- `spotlightBorderRadius?: number` — 僅在 rect 模式下有效，控制 `border-radius` CSS 屬性
+- SlideRenderer 依 spotlightShape 動態決定 borderRadius（circle = '50%'，rect = `{value}px`）
