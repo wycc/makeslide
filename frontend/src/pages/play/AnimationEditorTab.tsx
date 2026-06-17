@@ -82,6 +82,8 @@ const EASE_LABELS = {
   'power1.out': 'play.animation.ease.power1Out',
   'power1.inOut': 'play.animation.ease.power1InOut',
   'power2.inOut': 'play.animation.ease.power2InOut',
+  'elastic.out': 'play.animation.ease.elasticOut',
+  'back.out': 'play.animation.ease.backOut',
 } as const satisfies Record<SlideAnimationEase, TranslationKey>;
 
 /** 拖曳 handle 種類：中央為移動，四邊與四角為縮放。 */

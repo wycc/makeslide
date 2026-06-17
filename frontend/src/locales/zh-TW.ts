@@ -353,6 +353,8 @@ export const zhTW = {
   'play.animation.ease.power1Out': '平順停下',
   'play.animation.ease.power1InOut': '慢進慢出',
   'play.animation.ease.power2InOut': '柔和慢進慢出',
+  'play.animation.ease.elasticOut': '彈性回彈',
+  'play.animation.ease.backOut': '超出後回彈',
   'play.animation.delete': '刪除',
   'play.animation.save': '儲存動畫',
   'play.animation.previewFromStart': '從頭預覽',

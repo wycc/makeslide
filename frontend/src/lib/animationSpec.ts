@@ -167,6 +167,8 @@ export const SLIDE_ANIMATION_EASES: readonly SlideAnimationEase[] = [
   'power1.out',
   'power1.inOut',
   'power2.inOut',
+  'elastic.out',
+  'back.out',
 ];
 
 export const MAX_SLIDE_ANIMATION_EFFECTS = 20;

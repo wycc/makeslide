@@ -205,7 +205,7 @@ export type SlideAnimationEffectType =
   | 'formula'
   | 'custom-script';
 
-export type SlideAnimationEase = 'none' | 'power1.in' | 'power1.out' | 'power1.inOut' | 'power2.inOut';
+export type SlideAnimationEase = 'none' | 'power1.in' | 'power1.out' | 'power1.inOut' | 'power2.inOut' | 'elastic.out' | 'back.out';
 
 /** SVG primitive shapes drawable by `shape` effects (design doc §12 V2 "SVG 圖元"). */
 export type SlideAnimationShapeKind = 'circle' | 'rect' | 'ellipse' | 'arrow' | 'line' | 'triangle';
