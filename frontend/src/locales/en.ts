@@ -399,6 +399,7 @@ export const en = {
   'play.animation.highlightOuterColor': 'Outer ring color',
   'play.animation.highlightPulse': 'Pulse glow',
   'play.animation.highlightFillColor': 'Fill color',
+  'play.animation.highlightShadow': 'Drop shadow',
   'play.animation.spotlightColor': 'Mask color',
   'play.animation.spotlightOpacity': 'Opacity',
   'play.animation.spotlightSoftEdge': 'Soft edge (px)',

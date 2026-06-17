@@ -92,6 +92,8 @@ export interface AnimationEffect {
   highlightFillColor?: string;
   /** Border style for `highlight-box` effects. Defaults to `'solid'`. Ignored by other effect types. */
   highlightBorderStyle?: 'solid' | 'dashed' | 'dotted';
+  /** When true, adds a drop shadow to the `highlight-box` overlay. Ignored by other effect types. */
+  highlightShadow?: boolean;
   /** Caption text for `text-callout` effects (ignored by other effect types). */
   text?: string;
   /**
@@ -432,6 +434,7 @@ const EffectSchema = z.object({
   highlightPulse: z.boolean().optional(),
   highlightFillColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   highlightBorderStyle: z.enum(['solid', 'dashed', 'dotted']).optional(),
+  highlightShadow: z.boolean().optional(),
   text: z.string().max(MAX_TEXT_CALLOUT_LENGTH).optional(),
   textCalloutFontSize: z.number().min(MIN_TEXT_CALLOUT_FONT_SIZE_REM).max(MAX_TEXT_CALLOUT_FONT_SIZE_REM).optional(),
   textCalloutBgColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
@@ -536,6 +539,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.highlightPulse !== undefined ? { highlightPulse: effect.highlightPulse } : {}),
       ...(effect.highlightFillColor !== undefined ? { highlightFillColor: effect.highlightFillColor } : {}),
       ...(effect.highlightBorderStyle !== undefined ? { highlightBorderStyle: effect.highlightBorderStyle } : {}),
+      ...(effect.highlightShadow !== undefined ? { highlightShadow: effect.highlightShadow } : {}),
       ...(effect.text !== undefined ? { text: effect.text } : {}),
       ...(effect.textCalloutFontSize !== undefined ? { textCalloutFontSize: Math.max(MIN_TEXT_CALLOUT_FONT_SIZE_REM, Math.min(MAX_TEXT_CALLOUT_FONT_SIZE_REM, effect.textCalloutFontSize)) } : {}),
       ...(effect.textCalloutBgColor !== undefined ? { textCalloutBgColor: effect.textCalloutBgColor } : {}),
