@@ -417,6 +417,7 @@ export const zhTW = {
   'play.animation.shapeKind.arrow': '箭頭',
   'play.animation.shapeKind.line': '直線',
   'play.animation.shapeKind.triangle': '三角形',
+  'play.animation.shapeKind.star': '五角星',
   'play.animation.textCalloutShadow': '投影效果',
   'play.animation.shapeColor': '描邊顏色',
   'play.animation.shapeStrokeWidth': '線寬',

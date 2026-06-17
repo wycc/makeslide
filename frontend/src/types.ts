@@ -208,7 +208,7 @@ export type SlideAnimationEffectType =
 export type SlideAnimationEase = 'none' | 'power1.in' | 'power1.out' | 'power1.inOut' | 'power2.inOut' | 'elastic.out' | 'back.out';
 
 /** SVG primitive shapes drawable by `shape` effects (design doc §12 V2 "SVG 圖元"). */
-export type SlideAnimationShapeKind = 'circle' | 'rect' | 'ellipse' | 'arrow' | 'line' | 'triangle';
+export type SlideAnimationShapeKind = 'circle' | 'rect' | 'ellipse' | 'arrow' | 'line' | 'triangle' | 'star';
 
 /** Ties an effect's start time to a transcript sentence instead of a fixed offset. */
 export interface SlideAnimationStartTrigger {
