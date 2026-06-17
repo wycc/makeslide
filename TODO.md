@@ -1629,7 +1629,7 @@
 
 [x] `shape` 效果新增 `star` 五角星形狀：在 `ANIMATION_SHAPE_KINDS` 加入 `'star'`；以 SVG `<polygon>` 繪製五角星（計算 5 個外頂點和 5 個內頂點，外半徑 46、內半徑 18，以中心 50,50 計算所有坐標）；支援現有的 fill/stroke/strokeWidth/strokeDasharray 屬性；後端 `ANIMATION_SHAPE_KINDS` const 加入 `'star'`，`EffectSchema` 自動更新；前端 `SlideAnimationShapeKind` 型別加入 `'star'`；`SlideRenderer.tsx` 加入 star 的 polygon 元素；中英文 i18n 新增 `play.animation.shapeKind.star`（'Star'／'五角星'）。
 
-[ ] Manim `animate.countUp(m, progress, opts)` 數字遞增效果：新增 `animate.countUp(m, progress, opts)` 函式，讓文字元素顯示從 `from` 線性遞增至 `to` 的整數（用於表達資料統計動畫）；以 `Math.round(lerp(from, to, progress))` 計算當前數值，再用 `m.el.textContent = String(val)` 更新元素文字內容；opts 支援 `from`（起始數字，預設 0）、`to`（目標數字，必填）、`suffix`（字尾字串，例如 `'%'`，預設 `''`）、`prefix`（字首字串，例如 `'$'`，預設 `''`）；新增至少 2 個 vm 測試（驗證 progress=0.5 時數值約為中間值，驗證 progress=1 時數值等於 `to`）。
+[x] Manim `animate.countUp(m, progress, opts)` 數字遞增效果：新增 `animate.countUp(m, progress, opts)` 函式，讓文字元素顯示從 `from` 線性遞增至 `to` 的整數（用於表達資料統計動畫）；以 `Math.round(lerp(from, to, progress))` 計算當前數值，再用 `m.el.textContent = String(val)` 更新元素文字內容；opts 支援 `from`（起始數字，預設 0）、`to`（目標數字，必填）、`suffix`（字尾字串，例如 `'%'`，預設 `''`）、`prefix`（字首字串，例如 `'$'`，預設 `''`）；新增至少 2 個 vm 測試（驗證 progress=0.5 時數值約為中間值，驗證 progress=1 時數值等於 `to`）。
 
 [ ] Manim `animate.zoomIn(m, progress, opts)` 縮放進場效果：新增 `animate.zoomIn(m, progress, opts)` 函式，讓元素從縮小狀態（`startScale`，預設 0.1）等比放大至正常大小（scale=1）；progress 0 時 scale=`startScale`，progress 1 時清除 transform；以元素中心（SVG 用 getBBox 求 cx/cy；HTML 用 `offsetWidth/2, offsetHeight/2`）為縮放基準；設 `m.el.style.opacity = String(progress)` 同時淡入；progress≥1 時清除 transform 和 opacity 殘留；opts 支援 `startScale`（初始縮放比，預設 0.1）；新增至少 2 個 vm 測試（中間 scale 介於 startScale 和 1 之間，progress=1 時 transform 清除）。
 
@@ -1652,3 +1652,7 @@
 - 時間: 2026-06-17 16:15:00 +0800
 - 分支: feature/shape-star-20260617
 - 內容: 新增 `star` 五角星到 `shape` 效果。以 SVG `<polygon>` 繪製，10 個頂點（外半徑 46、內半徑 18、中心 50,50），points 字串：`50,4 60.58,35.44 93.75,35.79 67.12,55.56 77.04,87.21 50,68 22.96,87.21 32.88,55.56 6.25,35.79 39.42,35.44`。strokeLinejoin="round" 讓角點圓滑，支援 fill/stroke/strokeWidth/strokeDasharray。後端 `ANIMATION_SHAPE_KINDS` 加入 `'star'`；前端 `SlideAnimationShapeKind` 型別更新；`AnimationEditorTab.tsx` 的 shapeKind select 自動顯示新選項；中英文 i18n 各新增一個翻譯鍵。前後端 TypeScript 均通過。
+
+- 時間: 2026-06-17 16:30:00 +0800
+- 分支: feature/manim-countup-20260617
+- 內容: 新增 `animate.countUp(m, progress, opts)` 函式到 manimHelperScript。以 `Math.round(lerp(from, to, progress))` 計算整數值，再用 `m.el.textContent` 更新文字元素。opts 支援 `from`（預設 0）、`to`（目標值）、`prefix`（字首，如 `'$'`）和 `suffix`（字尾，如 `'%'`）。新增 2 個 vm 測試（progress=0.5 驗證近中間值、progress=1 驗證含 prefix/suffix 的完整格式），測試總數從 42 增至 44，全數通過。
