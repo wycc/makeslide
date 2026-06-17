@@ -1147,6 +1147,16 @@ export function AnimationEditorTab() {
                     />
                   )}
                 </label>
+                <label className="flex items-center gap-2 text-xs text-slate-400">
+                  <input
+                    type="checkbox"
+                    checked={!!effect.highlightShadow}
+                    disabled={disabled}
+                    onChange={(e) => updateEffect(effect.id, { highlightShadow: e.target.checked || undefined })}
+                    className="h-4 w-4 accent-fuchsia-500"
+                  />
+                  {t('play.animation.highlightShadow')}
+                </label>
                 </>
               )}
               {effect.type === 'spotlight' && (

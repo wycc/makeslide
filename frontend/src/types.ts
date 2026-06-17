@@ -256,6 +256,8 @@ export interface SlideAnimationEffect {
   highlightFillColor?: string;
   /** Border style for `highlight-box` effects. Defaults to `'solid'`. Ignored by other effect types. */
   highlightBorderStyle?: 'solid' | 'dashed' | 'dotted';
+  /** When true, adds a drop shadow to the `highlight-box` overlay. Ignored by other effect types. */
+  highlightShadow?: boolean;
   /** Caption text for `text-callout` effects (ignored by other effect types). */
   text?: string;
   /** Font size in rem for `text-callout` effects. Defaults to 1.25. Ignored by other effect types. */

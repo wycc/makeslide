@@ -38,9 +38,10 @@ function EffectOverlay({
     const hOuter = effect.highlightOuterColor;
     const hFill = effect.highlightFillColor ?? 'transparent';
     const hStyle = effect.highlightBorderStyle ?? 'solid';
+    const hDropShadow = effect.highlightShadow ? ', 0 0 20px rgba(0,0,0,0.5)' : '';
     const boxShadow = hOuter
-      ? `0 0 0 2px ${hOuter}, 0 0 ${hBw * 4}px ${hColor}b3`
-      : `0 0 ${hBw * 4}px ${hColor}b3`;
+      ? `0 0 0 2px ${hOuter}, 0 0 ${hBw * 4}px ${hColor}b3${hDropShadow}`
+      : `0 0 ${hBw * 4}px ${hColor}b3${hDropShadow}`;
     return (
       <div
         data-effect-id={effect.id}
