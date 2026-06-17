@@ -1057,6 +1057,19 @@ export function AnimationEditorTab() {
                     </div>
                   </label>
                   <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    {t('play.animation.highlightBorderStyle')}
+                    <select
+                      value={effect.highlightBorderStyle ?? 'solid'}
+                      disabled={disabled}
+                      onChange={(e) => updateEffect(effect.id, { highlightBorderStyle: e.target.value as 'solid' | 'dashed' | 'dotted' })}
+                      className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                    >
+                      <option value="solid">{t('play.animation.highlightBorderStyle.solid')}</option>
+                      <option value="dashed">{t('play.animation.highlightBorderStyle.dashed')}</option>
+                      <option value="dotted">{t('play.animation.highlightBorderStyle.dotted')}</option>
+                    </select>
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs text-slate-400">
                     {t('play.animation.highlightBorderRadius')}
                     <div className="flex items-center gap-1">
                       <input

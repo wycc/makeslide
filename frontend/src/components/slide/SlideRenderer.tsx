@@ -37,6 +37,7 @@ function EffectOverlay({
     const hBr = effect.highlightBorderRadius ?? 8;
     const hOuter = effect.highlightOuterColor;
     const hFill = effect.highlightFillColor ?? 'transparent';
+    const hStyle = effect.highlightBorderStyle ?? 'solid';
     const boxShadow = hOuter
       ? `0 0 0 2px ${hOuter}, 0 0 ${hBw * 4}px ${hColor}b3`
       : `0 0 ${hBw * 4}px ${hColor}b3`;
@@ -45,7 +46,7 @@ function EffectOverlay({
         data-effect-id={effect.id}
         style={{
           ...position,
-          border: `${hBw}px solid ${hColor}`,
+          border: `${hBw}px ${hStyle} ${hColor}`,
           borderRadius: `${hBr}px`,
           boxShadow,
           backgroundColor: hFill,
