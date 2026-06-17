@@ -390,6 +390,7 @@ export const zhTW = {
   'play.animation.shapeStrokeWidth': '線寬',
   'play.animation.shapeFillColor': '填充顏色',
   'play.animation.shapeOpacity': '透明度（0-1）',
+  'play.animation.shapeDashArray': '描邊虛線樣式',
   'play.animation.stepListItems': '條列項目（每行一項，最多 6 項）',
   'play.animation.stepListItemsPlaceholder': '重點一\n重點二\n重點三',
   'play.animation.stepListBgColor': '背景顏色',
