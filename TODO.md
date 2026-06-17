@@ -1476,8 +1476,8 @@
 [x] `step-list` 效果圓角半徑控制：目前 `step-list` 效果的容器固定使用 `borderRadius: '8px'`；應新增 `stepListBorderRadius?: number`（px 整數，預設 `8`，範圍 0–32），讓使用者自訂條列清單方框的圓角，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`/`AnimationEditorTab`（數字輸入框 0-32, step 2）及中英文 i18n。 ✓ 完成於 branch: feature/step-list-border-radius-20260617
 [x] Manim `animate.typewrite(m, progress, opts)` 逐字打字效果：應新增 `animate.typewrite(m, progress, opts)` 函式，模擬逐字顯示文字的打字機效果；對 `kind === 'text'` 的元素，以 `progress` 控制可見字元數量（透過裁切 textContent 或修改 innerHTML），opts 支援 `reverse`（布林，從後往前消除，預設 `false`）；新增至少 2 個 vm 測試（一個驗證中間 progress 時文字長度小於完整長度，一個驗證 progress=1 時文字恢復完整）。 ✓ 完成於 branch: feature/manim-typewrite-20260617
 [x] `shape` 效果描邊虛線樣式：目前 `shape` 效果的描邊固定為實線；應新增 `shapeDashArray?: string`（CSS stroke-dasharray 值，例如 `'8 4'`，預設為空字串即實線），讓使用者在動畫編輯器中輸入虛線規格（例如 `'8 4'` = 8px 實線 + 4px 空隙），並同步更新後端 `AnimationEffect`/`EffectSchema`（最長 20 字元，僅允許數字和空白）/序列化、前端 `types.ts`/`SlideRenderer`（SVG `strokeDasharray` 屬性）/`AnimationEditorTab`（文字輸入框）及中英文 i18n。 ✓ 完成於 branch: feature/shape-dash-array-20260617
-[ ] 加入 skill 的功能，讓使用者可以加入自定義的 skill 在各式的 AI 呼叫上。
-[ ] add some pre-built skill which is useful to generate outlines, pictures,scripts or animations.
+[x] 加入 skill 的功能，讓使用者可以加入自定義的 skill 在各式的 AI 呼叫上。 ✓ 完成於 branch: feature/user-skills-20260617
+[x] add some pre-built skill which is useful to generate outlines, pictures,scripts or animations. ✓ 完成於 branch: feature/user-skills-20260617
 
 - 時間: 2026-06-17 07:00:00 +0800
 - 分支: feature/spotlight-soft-edge-20260617
@@ -1502,3 +1502,7 @@
 - 時間: 2026-06-17 08:00:00 +0800
 - 分支: feature/shape-dash-array-20260617
 - 內容: 新增 `shape` 效果描邊虛線樣式控制。後端 `pageAnimation.ts` 新增 `MAX_SHAPE_DASH_ARRAY_LENGTH = 20` 常數，`AnimationEffect` 介面新增 `shapeDashArray?: string` 欄位，`EffectSchema` 新增 `z.string().max(20).regex(/^[\d. ]*$/)` 驗證，序列化時一併輸出。前端 `types.ts` 同步新增欄位；`SlideRenderer.tsx` 以 `const sda = effect.shapeDashArray?.trim() || undefined` 取出 dash 值，並在 `<circle>`、`<ellipse>`、`<line>`、`<rect>` 四種 SVG 元素上加入 `strokeDasharray={sda}` 屬性；`AnimationEditorTab.tsx` 在透明度輸入框後新增文字輸入框（最長 20 字元，自動過濾非數字/空白字元），placeholder 為 `e.g. 8 4`；中英文 i18n 新增 `play.animation.shapeDashArray`（'Dash pattern'／'描邊虛線樣式'）翻譯鍵。前端 TypeScript 通過。
+
+- 時間: 2026-06-17 09:00:00 +0800
+- 分支: feature/user-skills-20260617
+- 內容: 新增 AI 技能（Skill）系統，讓使用者可在設定頁管理自訂提示指令並注入逐字稿生成流程。後端新增 `backend/src/services/skills.ts`（技能 CRUD、內建技能定義、啟用狀態存於 `accounts/<id>/skills.json`）、`backend/src/routes/pdfs/skills.ts`（REST API：GET/POST/PATCH/DELETE /api/skills、POST /api/skills/:id/toggle），並在 `pipeline.ts` 的逐字稿生成步驟前讀取已啟用技能並合併至 `userPrompt`。前端新增 `frontend/src/lib/api/skills.ts` API 客戶端，並在設定頁底部加入技能管理區塊（啟用/停用切換、刪除自訂技能、新增表單含名稱/指令/套用範圍）。內建技能（TODO 項目 2）包含：教學風格、學術嚴謹、故事敘述、精簡摘要，皆有中英文名稱與說明。前後端 TypeScript 均通過。

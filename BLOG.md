@@ -891,3 +891,27 @@ Manim.animate.typewrite(label, progress, { reverse: true });
 - `EffectSchema` 以 `z.string().max(20).regex(/^[\d. ]*$/)` 驗證
 - `SlideRenderer.tsx` 在 `<circle>`、`<ellipse>`、`<line>`、`<rect>` SVG 元素上加入 `strokeDasharray` 屬性
 - 空字串或 undefined 時不套用 `strokeDasharray`（維持實線）
+
+## AI 技能系統（Skills）
+
+使用者現在可以在設定頁中管理「AI 技能」——預先定義的提示指令，在 AI 生成逐字稿時自動注入，讓生成結果符合特定的風格或語氣需求，無需每次手動輸入指示。
+
+**使用方式：**
+在設定頁底部的「AI 技能」區塊中：
+1. **啟用內建技能**：勾選任一內建技能（教學風格、學術嚴謹、故事敘述、精簡摘要），下次生成逐字稿時就會自動套用對應指令。
+2. **新增自訂技能**：填寫技能名稱與指令內容，選擇套用範圍（逐字稿生成 或 所有 AI 呼叫），按「新增技能」即可儲存。
+3. **刪除自訂技能**：點擊技能列表中的「刪除」按鈕移除。
+
+**內建技能清單：**
+| 技能 | 用途 |
+|------|------|
+| 教學風格 | 使用親切比喻，適合一般聽眾 |
+| 學術嚴謹 | 精確術語、結構性論述，適合學術場合 |
+| 故事敘述 | 以情境故事帶入，增加投入感 |
+| 精簡摘要 | 只講最核心重點，省略細節 |
+
+**技術說明：**
+- 技能資料存於 `accounts/<accountId>/skills.json`（每帳號獨立）
+- 內建技能的啟用狀態存於 `enabledBuiltIns` 陣列，自訂技能存於 `userSkills` 陣列
+- 生成逐字稿前，pipeline 讀取所有已啟用、`applyTo: 'script' | 'all'` 的技能，將其 prompt 合併至 `userPrompt`
+- REST API：`GET /api/skills`、`POST /api/skills`、`PATCH /api/skills/:id`、`DELETE /api/skills/:id`、`POST /api/skills/:id/toggle`
