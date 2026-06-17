@@ -1575,7 +1575,7 @@
 
 [x] `shape` 效果新增 `line` 和 `triangle` 形狀：目前 `ANIMATION_SHAPE_KINDS` 只有 `circle`、`rect`、`ellipse`、`arrow`；應新增 `'line'`（對角直線，從左下到右上）和 `'triangle'`（等邊三角形多邊形，以 SVG `<polygon>` 繪製）兩種形狀；後端 `ANIMATION_SHAPE_KINDS` const array 加入兩種值，`EffectSchema` 的 `shape` enum 自動更新；前端 `types.ts` 同步更新 `SlideAnimationShapeKind`；`SlideRenderer.tsx` 加入對應的 SVG 元素（line: `<line x1="8" y1="92" x2="92" y2="8" stroke=... strokeWidth=...>`；triangle: `<polygon points="50,4 96,92 4,92" fill=... stroke=... strokeWidth=...>`）；`AnimationEditorTab.tsx` 的 shapeKind select 自動因 `ANIMATION_SHAPE_KINDS` 更新而呈現新選項；中英文 i18n 新增 `play.animation.shapeKind.line` 及 `play.animation.shapeKind.triangle` 翻譯鍵。
 
-[ ] `ANIMATION_EASES` 新增 `elastic.out` 和 `back.out` ease 選項：目前只有 5 種 power ease；應新增 `'elastic.out'`（彈性回彈，進場後像彈簧震盪）和 `'back.out'`（超出後回彈，適合強調性進場）；後端 `ANIMATION_EASES` const array 加入兩值；`EffectSchema` 的 `ease` enum 自動更新；前端 `types.ts` 同步更新 `SlideAnimationEase`；`AnimationEditorTab.tsx` 的 ease select 自動顯示新選項；`buildGsapTimeline.ts` 不需修改（直接傳 ease 字串給 GSAP，GSAP 原生支援 elastic.out 和 back.out）；中英文 i18n 新增對應翻譯鍵（`play.animation.ease.elastic.out`、`play.animation.ease.back.out`）。
+[x] `ANIMATION_EASES` 新增 `elastic.out` 和 `back.out` ease 選項：目前只有 5 種 power ease；應新增 `'elastic.out'`（彈性回彈，進場後像彈簧震盪）和 `'back.out'`（超出後回彈，適合強調性進場）；後端 `ANIMATION_EASES` const array 加入兩值；`EffectSchema` 的 `ease` enum 自動更新；前端 `types.ts` 同步更新 `SlideAnimationEase`；`AnimationEditorTab.tsx` 的 ease select 自動顯示新選項；`buildGsapTimeline.ts` 不需修改（直接傳 ease 字串給 GSAP，GSAP 原生支援 elastic.out 和 back.out）；中英文 i18n 新增對應翻譯鍵（`play.animation.ease.elastic.out`、`play.animation.ease.back.out`）。
 
 [ ] `text-callout` 效果陰影選項：應新增 `textCalloutShadow?: boolean`（預設 false），啟用時在 `text-callout` div 加上 `box-shadow: 0 4px 16px rgba(0,0,0,0.4)` 讓方框更立體；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.boolean().optional()`）/序列化；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 條件加入 `boxShadow` style；`AnimationEditorTab.tsx` 在 textCalloutBorderColor 下方加入勾選框；中英文 i18n 新增翻譯鍵 `play.animation.textCalloutShadow`（'Drop shadow'／'投影效果'）。
 
@@ -1596,3 +1596,7 @@
 - 時間: 2026-06-17 13:45:00 +0800
 - 分支: feature/shape-line-triangle-20260617
 - 內容: 新增兩種 shape 效果形狀。(1) `line`：對角直線，SVG `<line x1="8" y1="92" x2="92" y2="8">` 加上 strokeLinecap="round"，支援 stroke/strokeWidth/strokeDasharray 屬性。(2) `triangle`：等邊三角形，SVG `<polygon points="50,4 96,92 4,92">` 加上 strokeLinejoin="round"，支援 fill/stroke/strokeWidth/strokeDasharray 屬性。後端 `ANIMATION_SHAPE_KINDS` 加入兩值，前端 `SlideAnimationShapeKind` 型別同步更新，中英文 i18n 各新增一個翻譯鍵。TypeScript 前後端均通過。
+
+- 時間: 2026-06-17 14:00:00 +0800
+- 分支: feature/animation-eases-elastic-back-20260617
+- 內容: 新增兩種 GSAP ease 選項。`elastic.out`（彈性回彈，GSAP 原生）和 `back.out`（超出後穩定，GSAP 原生）。更新後端 `ANIMATION_EASES` const、前端 `SlideAnimationEase` 型別、`SLIDE_ANIMATION_EASES` 陣列、`AnimationEditorTab.tsx` 中的 `EASE_LABELS` 對照表，以及中英文 i18n 翻譯鍵（`elasticOut` / `backOut` 命名遵循現有 camelCase 慣例）。`buildGsapTimeline.ts` 無需修改，GSAP 原生支援這兩個字串。前後端 TypeScript 均通過。
