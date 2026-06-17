@@ -276,6 +276,8 @@ export interface SlideAnimationEffect {
   textCalloutShadow?: boolean;
   /** Maximum width in vw for `text-callout` effects. Range 10–80. Ignored by other effect types. */
   textCalloutMaxWidth?: number;
+  /** Padding preset for `text-callout` effects. Defaults to `'md'`. Ignored by other effect types. */
+  textCalloutPadding?: 'sm' | 'md' | 'lg';
   /** Mask colour (CSS hex) for `spotlight` effects. Defaults to `#000000`. Ignored by other effect types. */
   spotlightColor?: string;
   /** Mask opacity (0–1) for `spotlight` effects. Defaults to 0.6. Ignored by other effect types. */

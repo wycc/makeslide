@@ -122,6 +122,8 @@ export interface AnimationEffect {
   textCalloutShadow?: boolean;
   /** Maximum width in vw for `text-callout` effects. Range 10–80. When set, long text wraps instead of overflowing. Ignored by other effect types. */
   textCalloutMaxWidth?: number;
+  /** Padding preset for `text-callout` effects. Defaults to `'md'`. Ignored by other effect types. */
+  textCalloutPadding?: 'sm' | 'md' | 'lg';
   /**
    * Mask colour (CSS hex) for `spotlight` effects (ignored by other
    * effect types). Defaults to `DEFAULT_SPOTLIGHT_COLOR` (`#000000`).
@@ -454,6 +456,7 @@ const EffectSchema = z.object({
   textCalloutBorderColor: z.string().max(9).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   textCalloutShadow: z.boolean().optional(),
   textCalloutMaxWidth: z.number().int().min(10).max(80).optional(),
+  textCalloutPadding: z.enum(['sm', 'md', 'lg']).optional(),
   spotlightColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   spotlightOpacity: z.number().min(0).max(1).optional(),
   spotlightSoftEdge: z.number().int().min(0).max(MAX_SPOTLIGHT_SOFT_EDGE).optional(),
@@ -564,6 +567,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.textCalloutBorderColor !== undefined ? { textCalloutBorderColor: effect.textCalloutBorderColor } : {}),
       ...(effect.textCalloutShadow !== undefined ? { textCalloutShadow: effect.textCalloutShadow } : {}),
       ...(effect.textCalloutMaxWidth !== undefined ? { textCalloutMaxWidth: Math.max(10, Math.min(80, Math.round(effect.textCalloutMaxWidth))) } : {}),
+      ...(effect.textCalloutPadding !== undefined ? { textCalloutPadding: effect.textCalloutPadding } : {}),
       ...(effect.spotlightColor !== undefined ? { spotlightColor: effect.spotlightColor } : {}),
       ...(effect.spotlightOpacity !== undefined ? { spotlightOpacity: effect.spotlightOpacity } : {}),
       ...(effect.spotlightSoftEdge !== undefined ? { spotlightSoftEdge: Math.max(0, Math.min(MAX_SPOTLIGHT_SOFT_EDGE, Math.round(effect.spotlightSoftEdge))) } : {}),

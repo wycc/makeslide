@@ -1672,7 +1672,7 @@
 [x] `step-list` 效果新增高亮指定步驟 `stepListHighlightIndex`：新增 `stepListHighlightIndex?: number`（0-based 整數，預設 undefined 表示不高亮任何項目）；指定後，對應索引的 `<li>` 項目套用 `fontWeight: 800, color: {stepListTextColor}` 並加上左側高亮色條（`border-left: 3px solid {stepListTextColor}`）；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.number().int().min(0).optional()`）/序列化（帶 `Math.max(0, Math.round(...))`）；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 在渲染每個 `<li>` 時判斷 index === stepListHighlightIndex 並套用高亮 style；`AnimationEditorTab.tsx` 加入 number input（min=0, max=step items count - 1）；中英文 i18n 新增 `play.animation.stepListHighlightIndex`（'Highlight step (0-based)'／'高亮步驟（從0起算）'）。
     - 2026-06-17 工作記錄：已完成後端 schema/序列化、前端型別、渲染高亮樣式、動畫編輯器 number input、中英文 i18n，並於 BLOG.md 新增功能說明；驗證通過 backend/frontend typecheck。
 
-[ ] `text-callout` 效果新增內距選項 `textCalloutPadding`：目前固定使用 `'0.5em 0.75em'`；應新增 `textCalloutPadding?: 'sm' | 'md' | 'lg'`（預設 `'md'`），對應 `sm='0.25em 0.5em'`、`md='0.5em 0.75em'`（現有預設）、`lg='0.75em 1.25em'`；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.enum(['sm','md','lg']).optional()`）/序列化；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 以 padding map 取代硬編碼字串；`AnimationEditorTab.tsx` 在 text-callout 設定區加入 select 選擇器；中英文 i18n 新增翻譯鍵（`play.animation.textCalloutPadding`、`play.animation.textCalloutPadding.sm/md/lg`）。
+[x] `text-callout` 效果新增內距選項 `textCalloutPadding`：目前固定使用 `'0.5em 0.75em'`；應新增 `textCalloutPadding?: 'sm' | 'md' | 'lg'`（預設 `'md'`），對應 `sm='0.25em 0.5em'`、`md='0.5em 0.75em'`（現有預設）、`lg='0.75em 1.25em'`；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.enum(['sm','md','lg']).optional()`）/序列化；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 以 padding map 取代硬編碼字串；`AnimationEditorTab.tsx` 在 text-callout 設定區加入 select 選擇器；中英文 i18n 新增翻譯鍵（`play.animation.textCalloutPadding`、`play.animation.textCalloutPadding.sm/md/lg`）。
 
 [ ] Manim `animate.blink(m, progress, opts)` 閃爍效果：新增 `animate.blink(m, progress, opts)` 函式，讓元素 opacity 以週期性 on/off 閃爍；以 `Math.floor(progress * cycles * 2) % 2 === 0 ? 1 : 0` 計算每個時間點的 opacity（偶數半週期亮、奇數半週期暗）；opts 支援 `cycles`（閃爍次數，預設 3）和 `minOpacity`（暗相位最小 opacity，預設 0）；progress=1 時恢復 opacity=1 並清除殘留；新增至少 2 個 vm 測試（驗證 progress=0.5 時 opacity 符合閃爍規律，驗證 progress=1 時 opacity='1'）。
 
@@ -1696,3 +1696,8 @@
 - 時間: 2026-06-17 21:50:00 +0800
 - 分支: feature/shape-glow-20260617b
 - 內容: 新增 `shapeGlow?: boolean` 到 shape 動畫效果。後端 `AnimationEffect`、`EffectSchema` 與序列化流程均保留此布林欄位；前端 `SlideAnimationEffect` 同步新增欄位，`SlideRenderer.tsx` 在 shape SVG 啟用時套用 `filter: drop-shadow(0 0 8px ${stroke})`，讓形狀以描邊色產生發光輪廓；`AnimationEditorTab.tsx` 在 shape 線寬設定後新增「發光效果」勾選框；中英文 i18n 新增 `play.animation.shapeGlow`。前後端 TypeScript 均通過。
+
+
+- 時間: 2026-06-17 22:05:00 +0800
+- 分支: feature/text-callout-padding-20260617
+- 內容: 新增 `textCalloutPadding?: 'sm' | 'md' | 'lg'` 到 `text-callout` 效果。後端 `AnimationEffect`、`EffectSchema` 與 `validateAnimationSpec()` 序列化均支援此欄位；前端 `SlideAnimationEffect` 同步新增欄位，`SlideRenderer.tsx` 以 padding map 套用 `sm=0.25em 0.5em`、`md=0.5em 0.75em`、`lg=0.75em 1.25em`，未設定時維持既有 `md` 外觀；`AnimationEditorTab.tsx` 新增內距 select；中英文 i18n 與 BLOG.md 功能說明同步更新。前後端 TypeScript 均通過。

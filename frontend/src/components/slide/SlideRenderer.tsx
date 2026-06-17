@@ -12,6 +12,12 @@ import {
 } from '../../lib/animationSpec';
 import { useGsapSlideTimeline } from './useGsapSlideTimeline';
 
+const TEXT_CALLOUT_PADDING: Record<NonNullable<SlideAnimationEffect['textCalloutPadding']>, string> = {
+  sm: '0.25em 0.5em',
+  md: '0.5em 0.75em',
+  lg: '0.75em 1.25em',
+};
+
 /** 套用 highlight-box / spotlight / text-callout 效果的疊加層，由 buildGsapTimeline 透過 data-effect-id 抓取並控制淡入。 */
 function EffectOverlay({
   effect,
@@ -127,6 +133,7 @@ function EffectOverlay({
     const tcBorder = effect.textCalloutBorderColor ? `2px solid ${effect.textCalloutBorderColor}` : undefined;
     const tcShadow = effect.textCalloutShadow ? '0 4px 16px rgba(0,0,0,0.4)' : undefined;
     const tcMaxW = effect.textCalloutMaxWidth ? `${effect.textCalloutMaxWidth}vw` : undefined;
+    const tcPadding = TEXT_CALLOUT_PADDING[effect.textCalloutPadding ?? 'md'];
     return (
       <div
         data-effect-id={effect.id}
@@ -135,7 +142,7 @@ function EffectOverlay({
           display: 'flex',
           alignItems: 'center',
           justifyContent: tcJustify,
-          padding: '0.5em 0.75em',
+          padding: tcPadding,
           borderRadius: tcBr,
           background: tcBg,
           color: tcText,

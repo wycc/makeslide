@@ -1316,6 +1316,19 @@ export function AnimationEditorTab() {
                     </select>
                   </label>
                   <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    {t('play.animation.textCalloutPadding')}
+                    <select
+                      value={effect.textCalloutPadding ?? 'md'}
+                      disabled={disabled}
+                      onChange={(e) => updateEffect(effect.id, { textCalloutPadding: e.target.value as 'sm' | 'md' | 'lg' })}
+                      className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                    >
+                      <option value="sm">{t('play.animation.textCalloutPadding.sm')}</option>
+                      <option value="md">{t('play.animation.textCalloutPadding.md')}</option>
+                      <option value="lg">{t('play.animation.textCalloutPadding.lg')}</option>
+                    </select>
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs text-slate-400">
                     <span className="flex items-center gap-2">
                       <input
                         type="checkbox"

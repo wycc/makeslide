@@ -1,5 +1,26 @@
 # MakeSlide 功能說明
 
+## Text-callout 內距選項
+
+### 功能目的
+
+`text-callout` 動畫效果現在可以在小、中、大三種內距之間切換，讓同一段提示文字能依投影片版面調整視覺密度。較小內距適合狹窄標籤或角落註記；預設中等內距維持既有外觀；較大內距則適合用於重點提示、結論摘要或需要更高視覺份量的 callout。
+
+### 使用方式
+
+1. 在播放頁的動畫編輯器中新增或選擇一個 `text-callout` 效果。
+2. 在文字、顏色、字型大小與對齊設定附近找到「**內距**」（英文介面為 **Padding**）下拉選單。
+3. 選擇 `Small` / `小` 時使用 `0.25em 0.5em`，適合精簡標籤；選擇 `Medium` / `中（預設）` 時使用既有 `0.5em 0.75em`；選擇 `Large` / `大` 時使用 `0.75em 1.25em`，適合醒目提示框。
+4. 未設定舊資料會自動以 `md` 行為顯示，因此既有動畫規格不需要手動遷移。
+
+### 技術細節
+
+- 後端 `AnimationEffect` 新增 `textCalloutPadding?: 'sm' | 'md' | 'lg'`，並在 `EffectSchema` 以 `z.enum(['sm', 'md', 'lg']).optional()` 驗證。
+- `validateAnimationSpec()` 序列化時保留合法的 `textCalloutPadding` 值，未設定時仍維持省略並由前端使用預設 `md`。
+- 前端 `SlideAnimationEffect` 同步新增 `textCalloutPadding` 欄位。
+- `SlideRenderer.tsx` 新增 padding map，將 `sm`、`md`、`lg` 映射到對應 CSS padding，取代原本硬編碼的 `0.5em 0.75em`。
+- `AnimationEditorTab.tsx` 在 `text-callout` 設定區加入 select 選擇器，並補上中英文 i18n 翻譯鍵。
+
 ## Step-list 指定步驟高亮
 
 ### 功能目的
