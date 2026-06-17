@@ -69,6 +69,91 @@ test('splitTextWithLlm outline-first path reports sourcePdfPages from [[PDF_PAGE
   }
 });
 
+test('splitTextWithLlm forwards userPrompt content into the outline LLM call', async () => {
+  const text = pad('一般文字內容，沒有任何頁碼標記，純粹是長篇敘述。', 900);
+
+  const calls: Array<{ messages: Array<{ role: string; content: string }> }> = [];
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async (body: { messages: Array<{ role: string; content: string }> }) => {
+          calls.push({ messages: body.messages });
+          return {
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    slides: [
+                      { title: '第一段', bullets: ['重點一', '重點二'] },
+                      { title: '第二段', bullets: ['重點一', '重點二'] },
+                      { title: '第三段', bullets: ['重點一', '重點二'] },
+                    ],
+                  }),
+                },
+                finish_reason: 'stop',
+              },
+            ],
+            usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+          };
+        },
+      },
+    },
+  } as never);
+
+  try {
+    await splitTextWithLlm(text, '請特別強調給高中生看的舉例方式');
+    assert.equal(calls.length, 1);
+    const userMessage = calls[0]!.messages.find((m) => m.role === 'user')?.content ?? '';
+    assert.match(userMessage, /請特別強調給高中生看的舉例方式/);
+  } finally {
+    setOpenAIClientForTest(null);
+  }
+});
+
+test('splitTextWithLlm relaxes outline bullet count to 1~2 when Takahashi-style userPrompt is detected', async () => {
+  const text = pad('一般文字內容，沒有任何頁碼標記，純粹是長篇敘述。', 900);
+
+  const calls: Array<{ messages: Array<{ role: string; content: string }> }> = [];
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async (body: { messages: Array<{ role: string; content: string }> }) => {
+          calls.push({ messages: body.messages });
+          return {
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    slides: [
+                      { title: '第一段', bullets: ['唯一重點'] },
+                      { title: '第二段', bullets: ['唯一重點'] },
+                      { title: '第三段', bullets: ['唯一重點'] },
+                    ],
+                  }),
+                },
+                finish_reason: 'stop',
+              },
+            ],
+            usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+          };
+        },
+      },
+    },
+  } as never);
+
+  try {
+    const result = await splitTextWithLlm(text, '請用高橋流風格製作這份簡報');
+    assert.equal(calls.length, 1);
+    const systemMessage = calls[0]!.messages.find((m) => m.role === 'system')?.content ?? '';
+    assert.match(systemMessage, /高橋流/);
+    assert.equal(result.pages.length, 3);
+    // A single-bullet slide must pass schema validation (min relaxed from 2 to 1).
+    assert.match(result.pages[0]!.content, /唯一重點/);
+  } finally {
+    setOpenAIClientForTest(null);
+  }
+});
+
 test('splitTextWithLlm outline-first path leaves sourcePdfPages undefined when input has no markers', async () => {
   const text = pad('一般文字內容，沒有任何頁碼標記，純粹是長篇敘述。', 900);
   assert.equal(containsPdfPageMarkers(text), false);

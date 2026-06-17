@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { callChatJSON, type TokenUsage } from '../../services/openai';
 import { logger } from '../../logger';
 import { containsPdfPageMarkers, stripPdfPageMarkers } from '../../services/pdfPageMarkers';
+import { isMinimalSlideStyleRequested } from './generateScript';
 
 const SplitSchema = z.object({
   pages: z
@@ -23,7 +24,9 @@ const OutlineSchema = z.object({
     .array(
       z.object({
         title: z.string().min(1),
-        bullets: z.array(z.string().min(1)).min(2).max(6),
+        // Lower bound relaxed to 1 so Takahashi-style / minimal requests
+        // (see isMinimalSlideStyleRequested) can produce a single bullet.
+        bullets: z.array(z.string().min(1)).min(1).max(6),
         // Only populated when the input text contains [[PDF_PAGE_N]] markers:
         // which original PDF page(s) this slide's content is drawn from.
         source_pages: z.array(z.number().int().positive()).max(10).optional(),
@@ -55,6 +58,7 @@ const OUTLINE_THRESHOLD_CHARS = 800;
  */
 async function buildOutlineFromFullText(
   fullText: string,
+  userPrompt?: string | null,
 ): Promise<{
   outlineText: string;
   usage: TokenUsage;
@@ -66,14 +70,23 @@ async function buildOutlineFromFullText(
       ? fullText.slice(0, OUTLINE_MAX_INPUT_CHARS)
       : fullText;
   const hasPageMarkers = containsPdfPageMarkers(input);
+  const minimalRequested = isMinimalSlideStyleRequested(userPrompt);
 
   const system = [
     '你是簡報大綱助理。',
     '請根據以下全文內容，整理成一份投影片大綱。',
     '務必先通讀全文、理解整體脈絡，再規劃大綱結構。',
     '大綱需有邏輯順序（背景 → 方法/機制 → 結果/結論），必要時可重排內容。',
-    '每頁需有一個標題與 2~6 點重點，放在 bullets 陣列之中。',
+    minimalRequested
+      ? '每頁僅放 1～2 個最核心的重點，放在 bullets 陣列之中；務必精簡，省略次要細節、案例與背景說明。'
+      : '每頁需有一個標題與 2~6 點重點，放在 bullets 陣列之中。',
     '每一頁大綱重點要精簡、可讀、避免逐字轉錄。',
+    ...(minimalRequested
+      ? [
+          '【高橋流 / 極簡大字模式優先規則】使用者已明確要求高橋流、Takahashi method/style、每頁只放一兩個重點、極簡大字投影片或類似低資訊密度風格，此規則優先於「儘量涵蓋全文重要內容」的一般要求。',
+          '必要時可合併多個小節成同一張投影片重點，只保留最關鍵的訊息。',
+        ]
+      : []),
     ...(hasPageMarkers
       ? [
           '原文中包含形如 [[PDF_PAGE_N]] 的標記，代表後續內容出自原始 PDF 第 N 頁。',
@@ -86,8 +99,11 @@ async function buildOutlineFromFullText(
 
   const user = [
     '請根據以下全文產生投影片大綱。',
-    '需儘量涵蓋全文重要內容，但要去蕪存菁。',
-    '每頁需有標題與 2~6 點重點。',
+    minimalRequested
+      ? '使用者已要求高橋流 / 極簡大字風格：請優先濃縮資訊，每頁只列 1～2 點重點，不必涵蓋全文所有細節。'
+      : '需儘量涵蓋全文重要內容，但要去蕪存菁。',
+    minimalRequested ? '每頁僅需標題與 1～2 點重點。' : '每頁需有標題與 2~6 點重點。',
+    ...(userPrompt?.trim() ? ['', '使用者對本次簡報的補充指示（請納入大綱規劃考量）：', userPrompt.trim()] : []),
     '',
     '全文內容如下：',
     input,
@@ -236,22 +252,28 @@ function chunkText(text: string, chunkSize: number = LLM_CHUNK_CHARS): string[] 
   return chunks.filter((c) => c.length > 0);
 }
 
-async function splitChunkWithLlm(chunk: string): Promise<SplitTextWithLlmResult> {
+async function splitChunkWithLlm(chunk: string, userPrompt?: string | null): Promise<SplitTextWithLlmResult> {
+  const minimalRequested = isMinimalSlideStyleRequested(userPrompt);
   const system = [
     '你是「簡報大綱生成助理」，不是逐字切頁器。',
     '請先理解全文重點，再重組成可講解的投影片大綱頁。',
-    '每頁應包含：一句標題 + 3~5 個重點短句（可用條列或短段）。',
+    minimalRequested
+      ? '每頁應包含：一句標題 + 1~2 個最核心重點短句；務必精簡，省略次要細節（使用者已要求高橋流 / 極簡大字風格，此規則優先於一般展開要求）。'
+      : '每頁應包含：一句標題 + 3~5 個重點短句（可用條列或短段）。',
     '禁止逐字抄錄原文、禁止只做機械切段。',
     '內容要去蕪存菁，保留關鍵名詞、關鍵數字、因果與流程。',
-    '每頁約 90~220 字，以「可口語講解」為主。',
+    minimalRequested
+      ? '每頁約 20~60 字，以「極簡、可口語講解」為主，不要為了展開而補細節。'
+      : '每頁約 90~220 字，以「可口語講解」為主。',
     '只回傳 JSON：{"pages":[{"page_number":1,"content":"..."}]}',
   ].join('\n');
 
   const user = [
     '請把以下全文改寫成簡報大綱頁。',
     '輸出頁面要有邏輯順序（背景 → 方法/機制 → 結果/結論），必要時可重排內容。',
-    '每頁 content 建議格式：',
+    minimalRequested ? '每頁 content 建議格式（僅 1～2 點重點）：' : '每頁 content 建議格式：',
     '標題：...\\n- 重點 1\\n- 重點 2\\n- 重點 3',
+    ...(userPrompt?.trim() ? ['', '使用者對本次簡報的補充指示（請納入規劃考量）：', userPrompt.trim()] : []),
     '',
     chunk,
   ].join('\n');
@@ -272,9 +294,9 @@ async function splitChunkWithLlm(chunk: string): Promise<SplitTextWithLlmResult>
   return { pages, usage: result.usage };
 }
 
-async function splitChunkRobust(chunk: string): Promise<SplitTextWithLlmResult> {
+async function splitChunkRobust(chunk: string, userPrompt?: string | null): Promise<SplitTextWithLlmResult> {
   try {
-    return await splitChunkWithLlm(chunk);
+    return await splitChunkWithLlm(chunk, userPrompt);
   } catch {
     // If one chunk still fails (e.g. empty JSON), bisect and retry recursively.
     if (chunk.length < 500) {
@@ -290,8 +312,8 @@ async function splitChunkRobust(chunk: string): Promise<SplitTextWithLlmResult> 
     const mid = Math.floor(chunk.length / 2);
     const left = chunk.slice(0, mid).trim();
     const right = chunk.slice(mid).trim();
-    const a = await splitChunkRobust(left);
-    const b = await splitChunkRobust(right);
+    const a = await splitChunkRobust(left, userPrompt);
+    const b = await splitChunkRobust(right, userPrompt);
     return {
       pages: [
         ...a.pages,
@@ -306,7 +328,7 @@ async function splitChunkRobust(chunk: string): Promise<SplitTextWithLlmResult> 
   }
 }
 
-async function splitTextWithLlmCore(rawText: string): Promise<SplitTextWithLlmResult> {
+async function splitTextWithLlmCore(rawText: string, userPrompt?: string | null): Promise<SplitTextWithLlmResult> {
   const text = rawText.trim();
   if (!text) {
     return {
@@ -343,7 +365,7 @@ async function splitTextWithLlmCore(rawText: string): Promise<SplitTextWithLlmRe
       },
       'Text split strategy: attempting outline-first approach',
     );
-    const outlineResult = await buildOutlineFromFullText(text);
+    const outlineResult = await buildOutlineFromFullText(text, userPrompt);
     if (outlineResult) {
       const outlinePages = splitBySlideMarkers(outlineResult.outlineText);
       if (outlinePages.length > 0) {
@@ -383,7 +405,7 @@ async function splitTextWithLlmCore(rawText: string): Promise<SplitTextWithLlmRe
       'Text split strategy: llm-chunked (fallback)',
     );
     for (const chunk of chunks) {
-      const part = await splitChunkRobust(chunk);
+      const part = await splitChunkRobust(chunk, userPrompt);
       usage = {
         prompt_tokens: usage.prompt_tokens + part.usage.prompt_tokens,
         completion_tokens: usage.completion_tokens + part.usage.completion_tokens,
@@ -412,9 +434,17 @@ async function splitTextWithLlmCore(rawText: string): Promise<SplitTextWithLlmRe
  * imports - any markers that leak into the final page content (e.g. via the
  * slide-marker-direct or chunked fallback strategies, which copy from the
  * input) are stripped before returning.
+ *
+ * `userPrompt` is the deck's user-supplied prompt (e.g. from `pdfs.user_prompt`).
+ * It is forwarded into the outline-generation LLM calls so the user's intent
+ * actually informs the outline, and `isMinimalSlideStyleRequested()` is used
+ * to detect Takahashi-style / minimal requests and trim bullets per slide.
  */
-export async function splitTextWithLlm(rawText: string): Promise<SplitTextWithLlmResult> {
-  const result = await splitTextWithLlmCore(rawText);
+export async function splitTextWithLlm(
+  rawText: string,
+  userPrompt?: string | null,
+): Promise<SplitTextWithLlmResult> {
+  const result = await splitTextWithLlmCore(rawText, userPrompt);
   return {
     ...result,
     pages: result.pages.map((p) => ({ ...p, content: stripPdfPageMarkers(p.content) })),
