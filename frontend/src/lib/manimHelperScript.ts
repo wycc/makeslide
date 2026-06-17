@@ -567,6 +567,40 @@ export const MANIM_HELPER_SCRIPT = `
       var offset = Math.sin(p * Math.PI * cycles) * amplitude;
       m.el.style.transform = 'translateX(' + offset + 'px)';
     },
+    pulse: function (m, progress, opts) {
+      var p = clamp01(progress);
+      var maxScale = (opts && opts.maxScale != null) ? opts.maxScale : 1.2;
+      var t = rate.thereAndBack(p);
+      var s = lerp(1, maxScale, t);
+      if (m.el.getBBox) {
+        var bbox = m.el.getBBox();
+        var cx = (opts && opts.cx != null) ? opts.cx : (bbox.x + bbox.width / 2);
+        var cy = (opts && opts.cy != null) ? opts.cy : (bbox.y + bbox.height / 2);
+        if (p <= 0 || p >= 1) {
+          m.el.removeAttribute('transform');
+        } else {
+          m.el.setAttribute('transform', 'translate(' + cx + ' ' + cy + ') scale(' + s + ') translate(' + (-cx) + ' ' + (-cy) + ')');
+        }
+      } else {
+        if (p <= 0 || p >= 1) {
+          m.el.style.transform = '';
+        } else {
+          m.el.style.transform = 'scale(' + s + ')';
+        }
+      }
+    },
+    drawBorderThenFill: function (m, progress) {
+      var p = clamp01(progress);
+      var len = getLength(m.el);
+      m.el.setAttribute('stroke-dasharray', String(len));
+      if (p <= 0.5) {
+        m.el.setAttribute('stroke-dashoffset', String(len * (1 - p * 2)));
+        m.el.setAttribute('fill-opacity', '0');
+      } else {
+        m.el.setAttribute('stroke-dashoffset', '0');
+        m.el.setAttribute('fill-opacity', String((p - 0.5) * 2));
+      }
+    },
   };
   // tex() — sends a renderLatex postMessage to the host page (which runs
   // KaTeX with its fonts), resolves to a <div> with the rendered MathML.
