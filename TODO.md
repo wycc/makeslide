@@ -1542,3 +1542,17 @@
 - 時間: 2026-06-17 11:40:00 +0800
 - 分支: feature/shape-rect-radius-20260617
 - 內容: 新增 `shape` 效果的 rect 圓角半徑客製化。後端 `pageAnimation.ts` 在 `AnimationEffect` 介面新增 `shapeRectRadius?: number` 欄位，`EffectSchema` 新增 `z.number().int().min(0).max(24)` 驗證，序列化時以 `Math.max(0, Math.min(24, Math.round(...)))` 夾緊後輸出。前端 `types.ts` 同步新增欄位；`SlideRenderer.tsx` 將 `rect` SVG 元素的 `rx="6"` 硬編碼改為 `rx={effect.shapeRectRadius ?? 6}`，保持既有預設值不變；`AnimationEditorTab.tsx` 在 shapeDashArray 輸入框後新增數字輸入框（min=0, max=24, step=2），並以 `(effect.shape ?? 'circle') === 'rect'` 條件控制只在 rect 類型顯示；中英文 i18n 新增 `play.animation.shapeRectRadius`（'Corner radius'／'圓角半徑'）翻譯鍵。前後端 TypeScript 均通過。
+
+[ ] `spotlight` 效果矩形形狀選項：目前 `spotlight` 效果固定使用圓形聚光燈（`borderRadius: '50%'`）；應新增 `spotlightShape?: 'circle' | 'rect'`（預設 `'circle'`）欄位，`'rect'` 模式移除 borderRadius 50% 改用 `spotlightBorderRadius?: number`（0–32px，預設 8）呈現矩形聚光燈；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.enum(['circle','rect'])`，`z.number().int().min(0).max(32)`）/序列化；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 依 `spotlightShape` 條件設定 `borderRadius`；`AnimationEditorTab.tsx` 在 spotlight 設定區塊加入 shape 選擇器（circle/rect），選 rect 時額外顯示 borderRadius 數字輸入框；中英文 i18n 新增翻譯鍵。
+
+[ ] `highlight-box` 效果虛線邊框樣式：目前 `highlight-box` 的邊框固定為實線；應新增 `highlightBorderStyle?: 'solid' | 'dashed' | 'dotted'`（預設 `'solid'`），允許使用者選擇虛線或點線邊框；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.enum(['solid','dashed','dotted'])`）/序列化；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 在 `highlight-box` 的 `border` style 中以 `highlightBorderStyle ?? 'solid'` 取代硬編碼 `'solid'`；`AnimationEditorTab.tsx` 在 highlightBorderWidth 輸入框旁加入邊框樣式選擇器（select，選項 solid/dashed/dotted）；中英文 i18n 新增翻譯鍵。
+
+[ ] `step-list` 效果邊框顏色：目前 `step-list` 方框沒有外框；應新增 `stepListBorderColor?: string`（CSS hex，選填）欄位，設定後在方框加上 `border: 2px solid {color}` 樣式；後端同步更新 `AnimationEffect`/`EffectSchema`（色碼 regex 驗證）/序列化；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 條件加入 `border` style；`AnimationEditorTab.tsx` 在 stepListBorderRadius 下方加入帶勾選框的顏色選擇器；中英文 i18n 新增翻譯鍵。
+
+[ ] `formula` 效果邊框顏色：目前 `formula` 方框沒有外框；應新增 `formulaBorderColor?: string`（CSS hex，選填）欄位，設定後在方框加上 `border: 2px solid {color}` 樣式；後端同步更新 `AnimationEffect`/`EffectSchema`（色碼 regex 驗證）/序列化；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 條件加入 `border` style；`AnimationEditorTab.tsx` 在 formulaBorderRadius 下方加入帶勾選框的顏色選擇器；中英文 i18n 新增翻譯鍵。
+
+[ ] `overlay-image` 效果圓角半徑：目前圖片疊加層無法設定圓角；應新增 `overlayImageBorderRadius?: number`（px，整數，預設 0，範圍 0–48），讓疊加圖片可呈現圓角或圓形效果；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.number().int().min(0).max(48)`）/序列化；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 在 `<img>` style 加入 `borderRadius: \`${effect.overlayImageBorderRadius ?? 0}px\``；`AnimationEditorTab.tsx` 在 overlayImageOpacity 下方加入數字輸入框（range 0-48, step 4）；中英文 i18n 新增翻譯鍵。
+
+[ ] Manim `animate.pulse(m, progress, opts)` 脈衝縮放效果：應新增 `animate.pulse(m, progress, opts)` 函式，讓元素以「放大→縮回」的脈衝方式強調自身（適合配合 indicateAround 使用）；以 `thereAndBack` rate 函數使 progress 0 和 1 都回到 scale=1，中間 progress 放大至 `maxScale`；對 SVG 元素使用 `transform="scale(v)"` 屬性（cx/cy 指定縮放中心，預設 50% of viewBox），對 HTML 元素則設定 `m.el.style.transform`；opts 支援 `maxScale`（預設 1.2）、`cx`/`cy`（SVG 縮放原點）；新增至少 2 個 vm 測試（一個驗證中間 progress 的 scale 大於 1，一個驗證 progress=0 和 progress=1 的 scale 為 1）。
+
+[ ] Manim `animate.drawBorderThenFill(m, progress, opts)` 描邊後填充效果：應新增 `animate.drawBorderThenFill(m, progress, opts)` 函式，分兩階段呈現：progress 0–0.5 期間以 stroke-dashoffset 動畫描繪輪廓（等同 `create`，但僅執行前半段），progress 0.5–1 期間以 fill-opacity 從 0→1 逐步填入內部（對 `<text>` 元素則改為 opacity 0→1）；progress=0 時輪廓和填充皆不可見，progress=1 時完全顯示；新增至少 2 個 vm 測試（一個驗證 progress=0.25 時有描邊效果且 fill-opacity=0，一個驗證 progress=1 時 fill-opacity 為非零值）。
