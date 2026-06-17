@@ -953,3 +953,15 @@ Manim.animate.shake(myShape, progress, {
 - `textCalloutBorderColor?: string` — CSS hex 格式，後端以 regex 驗證（3–8 位 hex）
 - SlideRenderer 條件性加入 `border: 2px solid {color}` style，未設定時不影響既有樣式
 - AnimationEditorTab 以勾選框控制啟用/停用，預設顏色為白色（`#ffffff`）
+
+## shape 效果 rect 圓角半徑自訂
+
+矩形（rect）shape 效果現在支援自訂圓角半徑，讓動畫中的方框更靈活地配合設計風格——可以設為完全直角，也可以設為更大的圓角。
+
+**使用方式：**
+在動畫編輯器選擇 shape 效果且 shape 類型為「矩形」時，可看到「圓角半徑」數字輸入框（範圍 0–24 SVG 單位，步進 2）。
+
+**技術說明：**
+- `shapeRectRadius?: number` — SVG rx 屬性值，整數，預設 6（與原有硬編碼值相同）
+- 只在 shape kind 為 `rect` 時顯示輸入框
+- 後端 EffectSchema 以 `z.number().int().min(0).max(24)` 驗證
