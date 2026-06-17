@@ -407,6 +407,7 @@ export const en = {
   'play.animation.shapeFillColor': 'Fill color',
   'play.animation.shapeOpacity': 'Opacity (0-1)',
   'play.animation.shapeDashArray': 'Dash pattern',
+  'play.animation.shapeRectRadius': 'Corner radius',
   'play.animation.stepListItems': 'List items (one per line, up to 6)',
   'play.animation.stepListItemsPlaceholder': 'Point one\nPoint two\nPoint three',
   'play.animation.stepListBgColor': 'Background color',

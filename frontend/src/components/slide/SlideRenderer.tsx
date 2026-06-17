@@ -165,7 +165,7 @@ function EffectOverlay({
         </>
       );
     } else {
-      shapeContent = <rect x="4" y="4" width="92" height="92" rx="6" fill={fill} stroke={stroke} strokeWidth={sw} strokeDasharray={sda} />;
+      shapeContent = <rect x="4" y="4" width="92" height="92" rx={effect.shapeRectRadius ?? 6} fill={fill} stroke={stroke} strokeWidth={sw} strokeDasharray={sda} />;
     }
     return (
       <svg data-effect-id={effect.id} viewBox="0 0 100 100" preserveAspectRatio={preserveAspectRatio} style={{ ...position, overflow: 'visible', opacity: shapeOp }}>
