@@ -301,6 +301,8 @@ export interface SlideAnimationEffect {
   shapeDashArray?: string;
   /** Corner radius (SVG rx units) for `rect` shape effects. Defaults to 6. Range 0–24. Ignored by other shape kinds and effect types. */
   shapeRectRadius?: number;
+  /** When true, applies a stroke-colour glow to `shape` effects. Ignored by other effect types. */
+  shapeGlow?: boolean;
   /**
    * Stroke width (SVG user units in a 100×100 viewBox) for `shape` effects.
    * Defaults to 5 when omitted. Ignored by other effect types.

@@ -266,6 +266,8 @@ export interface AnimationEffect {
   shapeDashArray?: string;
   /** Corner radius (SVG rx units) for `rect` shapes within `shape` effects. Defaults to 6. Range 0–24. Ignored by other shape kinds and effect types. */
   shapeRectRadius?: number;
+  /** When true, applies a stroke-colour glow to `shape` effects via CSS drop-shadow. Ignored by other effect types. */
+  shapeGlow?: boolean;
 }
 
 /** A single turn in a `custom-script` effect's AI chat `conversation`. */
@@ -484,6 +486,7 @@ const EffectSchema = z.object({
   shapeOpacity: z.number().min(0).max(1).optional(),
   shapeDashArray: z.string().max(MAX_SHAPE_DASH_ARRAY_LENGTH).regex(/^[\d. ]*$/).optional(),
   shapeRectRadius: z.number().int().min(0).max(24).optional(),
+  shapeGlow: z.boolean().optional(),
 });
 
 const HintsSchema = z
@@ -592,6 +595,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.shapeOpacity !== undefined ? { shapeOpacity: Math.max(0, Math.min(1, effect.shapeOpacity)) } : {}),
       ...(effect.shapeDashArray !== undefined ? { shapeDashArray: effect.shapeDashArray } : {}),
       ...(effect.shapeRectRadius !== undefined ? { shapeRectRadius: Math.max(0, Math.min(24, Math.round(effect.shapeRectRadius))) } : {}),
+      ...(effect.shapeGlow !== undefined ? { shapeGlow: effect.shapeGlow } : {}),
     };
   });
   const hints = parsed.data.hints && Object.keys(parsed.data.hints).length > 0 ? parsed.data.hints : undefined;

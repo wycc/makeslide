@@ -160,6 +160,7 @@ function EffectOverlay({
     const fill = effect.shapeFillColor ?? 'none';
     const shapeOp = effect.shapeOpacity ?? 1;
     const sda = effect.shapeDashArray && effect.shapeDashArray.trim() ? effect.shapeDashArray.trim() : undefined;
+    const shapeFilter = effect.shapeGlow ? `drop-shadow(0 0 8px ${stroke})` : undefined;
     const markerId = `shape-arrowhead-${effect.id}`;
     let preserveAspectRatio = 'none';
     let shapeContent: ReactNode;
@@ -191,7 +192,12 @@ function EffectOverlay({
       shapeContent = <rect x="4" y="4" width="92" height="92" rx={effect.shapeRectRadius ?? 6} fill={fill} stroke={stroke} strokeWidth={sw} strokeDasharray={sda} />;
     }
     return (
-      <svg data-effect-id={effect.id} viewBox="0 0 100 100" preserveAspectRatio={preserveAspectRatio} style={{ ...position, overflow: 'visible', opacity: shapeOp }}>
+      <svg
+        data-effect-id={effect.id}
+        viewBox="0 0 100 100"
+        preserveAspectRatio={preserveAspectRatio}
+        style={{ ...position, overflow: 'visible', opacity: shapeOp, ...(shapeFilter ? { filter: shapeFilter } : {}) }}
+      >
         {shapeContent}
       </svg>
     );

@@ -1,5 +1,26 @@
 # MakeSlide 功能說明
 
+## Shape 發光效果
+
+### 功能目的
+
+`shape` 動畫效果現在可以開啟發光輪廓，讓圓形、矩形、線段、箭頭、三角形、五角星與六角形等 SVG 圖元在投影片背景上更醒目。這個功能適合用於強調關鍵區域、標示流程重點，或在深色背景上建立霓虹式視覺提示。
+
+### 使用方式
+
+1. 在播放頁的動畫編輯器中新增或選擇一個 `shape` 效果。
+2. 在 shape 設定區調整「描邊顏色」與「線寬」。
+3. 勾選「**發光效果**」（英文介面為 **Glow effect**）。
+4. 播放投影片時，shape 外層 SVG 會使用描邊顏色產生 `drop-shadow` 發光輪廓；若修改描邊顏色，發光顏色也會同步改變。
+
+### 技術細節
+
+- 後端 `AnimationEffect` 新增 `shapeGlow?: boolean`，並在 `EffectSchema` 以 `z.boolean().optional()` 驗證。
+- `validateAnimationSpec()` 序列化時保留 `shapeGlow`，確保儲存在 animation spec JSON 後仍可正確還原。
+- 前端 `SlideAnimationEffect` 同步新增 `shapeGlow?: boolean`。
+- `SlideRenderer.tsx` 在 `shape` SVG 的 style 中條件加入 `filter: drop-shadow(0 0 8px ${stroke})`，以目前描邊色作為光暈顏色。
+- `AnimationEditorTab.tsx` 在 shape 設定區加入勾選框，並新增中英文翻譯鍵 `play.animation.shapeGlow`。
+
 ## Pointer 效果方向自訂
 
 ### 功能目的

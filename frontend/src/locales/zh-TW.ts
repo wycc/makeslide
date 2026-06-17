@@ -423,6 +423,7 @@ export const zhTW = {
   'play.animation.textCalloutMaxWidth': '最大寬度（vw）',
   'play.animation.shapeColor': '描邊顏色',
   'play.animation.shapeStrokeWidth': '線寬',
+  'play.animation.shapeGlow': '發光效果',
   'play.animation.shapeFillColor': '填充顏色',
   'play.animation.shapeOpacity': '透明度（0-1）',
   'play.animation.shapeDashArray': '描邊虛線樣式',

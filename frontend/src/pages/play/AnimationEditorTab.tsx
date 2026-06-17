@@ -1416,6 +1416,16 @@ export function AnimationEditorTab() {
                   <label className="flex items-center gap-2 text-xs text-slate-400">
                     <input
                       type="checkbox"
+                      checked={effect.shapeGlow ?? false}
+                      disabled={disabled}
+                      onChange={(e) => updateEffect(effect.id, { shapeGlow: e.target.checked || undefined })}
+                      className="h-4 w-4 accent-fuchsia-500"
+                    />
+                    {t('play.animation.shapeGlow')}
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-slate-400">
+                    <input
+                      type="checkbox"
                       checked={effect.shapeFillColor !== undefined}
                       disabled={disabled}
                       onChange={(e) =>
