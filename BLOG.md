@@ -878,3 +878,16 @@ Manim.animate.typewrite(label, progress, { reverse: true });
 **技術說明：**
 - 以 `data-full-text` 屬性快取原始 textContent，確保任何 progress 值下都能正確還原
 - 共新增 2 個 vm 測試（正向與反向各一），全部 32 個 manimHelperScript 測試通過
+
+## shape 效果描邊虛線樣式
+
+`shape` 動畫效果（圓形、橢圓、矩形、箭頭）的描邊現在支援虛線樣式，可在動畫編輯器中輸入 SVG `stroke-dasharray` 值（例如 `8 4`）來設定虛線間距。
+
+**使用方式：**
+在動畫編輯器的 `shape` 效果設定中，透明度輸入框後方新增「描邊虛線樣式」文字輸入框。輸入格式為數字加空白（例如 `8 4` = 8px 實線 + 4px 空隙，`4 2 1 2` = 點線段）；留空則維持實線。
+
+**技術說明：**
+- `AnimationEffect` 和 `SlideAnimationEffect` 新增 `shapeDashArray?: string`（最長 20 字元，僅允許數字與空白）
+- `EffectSchema` 以 `z.string().max(20).regex(/^[\d. ]*$/)` 驗證
+- `SlideRenderer.tsx` 在 `<circle>`、`<ellipse>`、`<line>`、`<rect>` SVG 元素上加入 `strokeDasharray` 屬性
+- 空字串或 undefined 時不套用 `strokeDasharray`（維持實線）
