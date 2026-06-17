@@ -647,3 +647,25 @@ test("Manim.animate.colorShift: stroke equals toColor at progress=1", () => {
   const stroke = circ.el.getAttribute('stroke') as string;
   assert.equal(stroke.toLowerCase(), '#ff0000', `progress=1: stroke should equal toColor #ff0000, got ${stroke}`);
 });
+
+test("Manim.animate.fadeInFromDirection: mid-progress has opacity < 1 and non-zero transform", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const circ = Manim.shapes.circle(svg, { x: 0, y: 0, radius: 1, color: Manim.colors.BLUE });
+
+  Manim.animate.fadeInFromDirection(circ, 0.5, { direction: 'left', distance: 40 });
+  const opacity = parseFloat(circ.el.style.opacity);
+  assert.ok(opacity > 0 && opacity < 1, `opacity at progress=0.5 should be between 0 and 1, got ${opacity}`);
+  assert.ok(circ.el.style.transform.includes('translate'), `transform should contain translate at progress=0.5, got ${circ.el.style.transform}`);
+});
+
+test("Manim.animate.fadeInFromDirection: progress=1 gives opacity=1 and clears transform", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const circ = Manim.shapes.circle(svg, { x: 0, y: 0, radius: 1, color: Manim.colors.RED });
+
+  Manim.animate.fadeInFromDirection(circ, 0.3, { direction: 'right', distance: 60 });
+  Manim.animate.fadeInFromDirection(circ, 1, { direction: 'right', distance: 60 });
+  assert.equal(circ.el.style.opacity, '1', `opacity at progress=1 should be '1', got ${circ.el.style.opacity}`);
+  assert.equal(circ.el.style.transform, '', `transform at progress=1 should be empty, got ${circ.el.style.transform}`);
+});
