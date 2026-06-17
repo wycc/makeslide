@@ -415,6 +415,7 @@ export const en = {
   'play.animation.shapeKind.arrow': 'Arrow',
   'play.animation.shapeKind.line': 'Line',
   'play.animation.shapeKind.triangle': 'Triangle',
+  'play.animation.textCalloutShadow': 'Drop shadow',
   'play.animation.shapeColor': 'Stroke color',
   'play.animation.shapeStrokeWidth': 'Stroke width',
   'play.animation.shapeFillColor': 'Fill color',
