@@ -113,6 +113,7 @@ function EffectOverlay({
     const tcBr = `${effect.textCalloutBorderRadius ?? 8}px`;
     const tcAlign = effect.textCalloutAlign ?? 'center';
     const tcJustify = tcAlign === 'left' ? 'flex-start' : tcAlign === 'right' ? 'flex-end' : 'center';
+    const tcBorder = effect.textCalloutBorderColor ? `2px solid ${effect.textCalloutBorderColor}` : undefined;
     return (
       <div
         data-effect-id={effect.id}
@@ -130,6 +131,7 @@ function EffectOverlay({
           textAlign: tcAlign,
           overflow: 'hidden',
           wordBreak: 'break-word',
+          ...(tcBorder ? { border: tcBorder } : {}),
         }}
       >
         {effect.text}

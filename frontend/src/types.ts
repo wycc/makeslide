@@ -266,6 +266,8 @@ export interface SlideAnimationEffect {
   textCalloutBorderRadius?: number;
   /** Text alignment for `text-callout` effects. Defaults to `'center'`. Ignored by other effect types. */
   textCalloutAlign?: 'left' | 'center' | 'right';
+  /** Border colour (CSS hex) for `text-callout` effects. When set, adds a 2px solid border. Ignored by other effect types. */
+  textCalloutBorderColor?: string;
   /** Mask colour (CSS hex) for `spotlight` effects. Defaults to `#000000`. Ignored by other effect types. */
   spotlightColor?: string;
   /** Mask opacity (0–1) for `spotlight` effects. Defaults to 0.6. Ignored by other effect types. */

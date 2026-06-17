@@ -1263,6 +1263,26 @@ export function AnimationEditorTab() {
                       <option value="right">{t('play.animation.textCalloutAlign.right')}</option>
                     </select>
                   </label>
+                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    <span className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={!!effect.textCalloutBorderColor}
+                        disabled={disabled}
+                        onChange={(e) => updateEffect(effect.id, { textCalloutBorderColor: e.target.checked ? '#ffffff' : undefined })}
+                      />
+                      {t('play.animation.textCalloutBorderColor')}
+                    </span>
+                    {effect.textCalloutBorderColor && (
+                      <input
+                        type="color"
+                        value={effect.textCalloutBorderColor}
+                        disabled={disabled}
+                        onChange={(e) => updateEffect(effect.id, { textCalloutBorderColor: e.target.value })}
+                        className="h-8 w-full cursor-pointer rounded border border-slate-700 bg-slate-900"
+                      />
+                    )}
+                  </label>
                 </>
               )}
               {effect.type === 'shape' && (

@@ -433,6 +433,7 @@ export const en = {
   'play.animation.textCalloutAlign.left': 'Left',
   'play.animation.textCalloutAlign.center': 'Center',
   'play.animation.textCalloutAlign.right': 'Right',
+  'play.animation.textCalloutBorderColor': 'Border color',
   'play.animation.pointerSize': 'Arrow size (rem)',
   'play.animation.pointerPulse': 'Pulse animation',
   'play.animation.focusX': 'X',
