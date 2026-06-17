@@ -203,6 +203,8 @@ export interface AnimationEffect {
   overlayImageOpacity?: number;
   /** Corner radius (px) for `overlay-image` effects. Defaults to 0. Range 0–48. Ignored by other effect types. */
   overlayImageBorderRadius?: number;
+  /** When true, adds a drop shadow to the `overlay-image`. Ignored by other effect types. */
+  overlayImageShadow?: boolean;
   /**
    * LaTeX source rendered as a math formula by `formula` effects (ignored by
    * other effect types), via KaTeX. Up to `MAX_FORMULA_LENGTH` chars.
@@ -222,6 +224,8 @@ export interface AnimationEffect {
   formulaBorderRadius?: number;
   /** Border colour (CSS hex) for `formula` effects. When set, adds a 2px solid border. Ignored by other effect types. */
   formulaBorderColor?: string;
+  /** When true, adds a drop shadow to the `formula` box. Ignored by other effect types. */
+  formulaShadow?: boolean;
   /**
    * Seconds to remain visible after the fade-in completes before
    * automatically fading back out (same `duration`/`ease` as the fade-in).
@@ -462,12 +466,14 @@ const EffectSchema = z.object({
   figureId: z.string().min(1).max(MAX_OVERLAY_IMAGE_FIGURE_ID_LENGTH).optional(),
   overlayImageOpacity: z.number().min(0).max(1).optional(),
   overlayImageBorderRadius: z.number().int().min(0).max(48).optional(),
+  overlayImageShadow: z.boolean().optional(),
   formula: z.string().min(1).max(MAX_FORMULA_LENGTH).optional(),
   formulaFontSize: z.number().min(MIN_FORMULA_FONT_SIZE_EM).max(MAX_FORMULA_FONT_SIZE_EM).optional(),
   formulaBgColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   formulaTextColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   formulaBorderRadius: z.number().int().min(0).max(MAX_FORMULA_BORDER_RADIUS).optional(),
   formulaBorderColor: z.string().max(9).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
+  formulaShadow: z.boolean().optional(),
   exitDuration: z.number().min(0).max(MAX_DURATION_SECONDS).optional(),
   code: z.string().max(MAX_CUSTOM_SCRIPT_CODE_LENGTH).optional(),
   prompt: z.string().max(MAX_CUSTOM_SCRIPT_PROMPT_LENGTH).optional(),
@@ -567,12 +573,14 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.figureId !== undefined ? { figureId: effect.figureId } : {}),
       ...(effect.overlayImageOpacity !== undefined ? { overlayImageOpacity: Math.max(0, Math.min(1, effect.overlayImageOpacity)) } : {}),
       ...(effect.overlayImageBorderRadius !== undefined ? { overlayImageBorderRadius: Math.max(0, Math.min(48, Math.round(effect.overlayImageBorderRadius))) } : {}),
+      ...(effect.overlayImageShadow !== undefined ? { overlayImageShadow: effect.overlayImageShadow } : {}),
       ...(effect.formula !== undefined ? { formula: effect.formula } : {}),
       ...(effect.formulaFontSize !== undefined ? { formulaFontSize: effect.formulaFontSize } : {}),
       ...(effect.formulaBgColor !== undefined ? { formulaBgColor: effect.formulaBgColor } : {}),
       ...(effect.formulaTextColor !== undefined ? { formulaTextColor: effect.formulaTextColor } : {}),
       ...(effect.formulaBorderRadius !== undefined ? { formulaBorderRadius: Math.max(0, Math.min(MAX_FORMULA_BORDER_RADIUS, Math.round(effect.formulaBorderRadius))) } : {}),
       ...(effect.formulaBorderColor !== undefined ? { formulaBorderColor: effect.formulaBorderColor } : {}),
+      ...(effect.formulaShadow !== undefined ? { formulaShadow: effect.formulaShadow } : {}),
       ...(effect.exitDuration !== undefined ? { exitDuration: effect.exitDuration } : {}),
       ...(effect.code !== undefined ? { code: effect.code } : {}),
       ...(effect.prompt !== undefined ? { prompt: effect.prompt } : {}),
