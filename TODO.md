@@ -1573,7 +1573,7 @@
 - 分支: feature/manim-pulse-drawborderthnfill-20260617
 - 內容: 新增兩個 Manim animate 函式。(1) `animate.pulse(m, progress, opts)`：以 `thereAndBack` rate 函數（smooth 的往返版本）計算縮放值，progress 0 和 1 時都回到 scale=1，中間達到 `maxScale`（預設 1.2）。對有 `getBBox` 方法的 SVG 元素使用 `setAttribute('transform', ...)` 以 cx/cy 為縮放中心；對 HTML 元素使用 `m.el.style.transform = 'scale(...)'`；在端點清除 transform 防止殘留狀態。(2) `animate.drawBorderThenFill(m, progress)`：兩階段效果，前半段（0-0.5）以 stroke-dashoffset 描繪輪廓（speed x2 的 create），同時 fill-opacity=0；後半段（0.5-1）dashoffset=0，fill-opacity 從 0 線性增至 1。各新增 2 個 vm 單元測試，38 個測試全數通過。
 
-[ ] `shape` 效果新增 `line` 和 `triangle` 形狀：目前 `ANIMATION_SHAPE_KINDS` 只有 `circle`、`rect`、`ellipse`、`arrow`；應新增 `'line'`（對角直線，從左下到右上）和 `'triangle'`（等邊三角形多邊形，以 SVG `<polygon>` 繪製）兩種形狀；後端 `ANIMATION_SHAPE_KINDS` const array 加入兩種值，`EffectSchema` 的 `shape` enum 自動更新；前端 `types.ts` 同步更新 `SlideAnimationShapeKind`；`SlideRenderer.tsx` 加入對應的 SVG 元素（line: `<line x1="8" y1="92" x2="92" y2="8" stroke=... strokeWidth=...>`；triangle: `<polygon points="50,4 96,92 4,92" fill=... stroke=... strokeWidth=...>`）；`AnimationEditorTab.tsx` 的 shapeKind select 自動因 `ANIMATION_SHAPE_KINDS` 更新而呈現新選項；中英文 i18n 新增 `play.animation.shapeKind.line` 及 `play.animation.shapeKind.triangle` 翻譯鍵。
+[x] `shape` 效果新增 `line` 和 `triangle` 形狀：目前 `ANIMATION_SHAPE_KINDS` 只有 `circle`、`rect`、`ellipse`、`arrow`；應新增 `'line'`（對角直線，從左下到右上）和 `'triangle'`（等邊三角形多邊形，以 SVG `<polygon>` 繪製）兩種形狀；後端 `ANIMATION_SHAPE_KINDS` const array 加入兩種值，`EffectSchema` 的 `shape` enum 自動更新；前端 `types.ts` 同步更新 `SlideAnimationShapeKind`；`SlideRenderer.tsx` 加入對應的 SVG 元素（line: `<line x1="8" y1="92" x2="92" y2="8" stroke=... strokeWidth=...>`；triangle: `<polygon points="50,4 96,92 4,92" fill=... stroke=... strokeWidth=...>`）；`AnimationEditorTab.tsx` 的 shapeKind select 自動因 `ANIMATION_SHAPE_KINDS` 更新而呈現新選項；中英文 i18n 新增 `play.animation.shapeKind.line` 及 `play.animation.shapeKind.triangle` 翻譯鍵。
 
 [ ] `ANIMATION_EASES` 新增 `elastic.out` 和 `back.out` ease 選項：目前只有 5 種 power ease；應新增 `'elastic.out'`（彈性回彈，進場後像彈簧震盪）和 `'back.out'`（超出後回彈，適合強調性進場）；後端 `ANIMATION_EASES` const array 加入兩值；`EffectSchema` 的 `ease` enum 自動更新；前端 `types.ts` 同步更新 `SlideAnimationEase`；`AnimationEditorTab.tsx` 的 ease select 自動顯示新選項；`buildGsapTimeline.ts` 不需修改（直接傳 ease 字串給 GSAP，GSAP 原生支援 elastic.out 和 back.out）；中英文 i18n 新增對應翻譯鍵（`play.animation.ease.elastic.out`、`play.animation.ease.back.out`）。
 
@@ -1592,3 +1592,7 @@
 - 時間: 2026-06-17 13:30:00 +0800
 - 分支: feature/todo-add-items-20260617b
 - 內容: 分析現有系統後，新增 7 個待辦項目：(1) shape 效果新增 line/triangle 形狀；(2) ANIMATION_EASES 新增 elastic.out/back.out；(3) text-callout 陰影選項；(4) step-list bullet 樣式選項；(5) pointer 效果新增 cross 十字準心；(6) Manim animate.colorShift 顏色漸變函式；(7) Manim animate.fadeInFromDirection 方向滑入函式。
+
+- 時間: 2026-06-17 13:45:00 +0800
+- 分支: feature/shape-line-triangle-20260617
+- 內容: 新增兩種 shape 效果形狀。(1) `line`：對角直線，SVG `<line x1="8" y1="92" x2="92" y2="8">` 加上 strokeLinecap="round"，支援 stroke/strokeWidth/strokeDasharray 屬性。(2) `triangle`：等邊三角形，SVG `<polygon points="50,4 96,92 4,92">` 加上 strokeLinejoin="round"，支援 fill/stroke/strokeWidth/strokeDasharray 屬性。後端 `ANIMATION_SHAPE_KINDS` 加入兩值，前端 `SlideAnimationShapeKind` 型別同步更新，中英文 i18n 各新增一個翻譯鍵。TypeScript 前後端均通過。
