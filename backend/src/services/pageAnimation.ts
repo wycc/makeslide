@@ -131,6 +131,10 @@ export interface AnimationEffect {
    * Clamped to [0, `MAX_SPOTLIGHT_SOFT_EDGE`].
    */
   spotlightSoftEdge?: number;
+  /** Shape of the `spotlight` mask. `'circle'` (default) renders an elliptic cutout; `'rect'` renders a rectangular cutout. Ignored by other effect types. */
+  spotlightShape?: 'circle' | 'rect';
+  /** Corner radius (px) for `rect`-shaped `spotlight` effects. Defaults to 8. Range 0–32. Ignored when `spotlightShape` is `'circle'`. */
+  spotlightBorderRadius?: number;
   /** SVG primitive drawn by `shape` effects (ignored by other effect types). Defaults to `'circle'` when omitted. */
   shape?: AnimationShapeKind;
   /**
@@ -425,6 +429,8 @@ const EffectSchema = z.object({
   spotlightColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   spotlightOpacity: z.number().min(0).max(1).optional(),
   spotlightSoftEdge: z.number().int().min(0).max(MAX_SPOTLIGHT_SOFT_EDGE).optional(),
+  spotlightShape: z.enum(['circle', 'rect']).optional(),
+  spotlightBorderRadius: z.number().int().min(0).max(32).optional(),
   shape: z.enum(ANIMATION_SHAPE_KINDS).optional(),
   color: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   shapeFillColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
@@ -521,6 +527,8 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.spotlightColor !== undefined ? { spotlightColor: effect.spotlightColor } : {}),
       ...(effect.spotlightOpacity !== undefined ? { spotlightOpacity: effect.spotlightOpacity } : {}),
       ...(effect.spotlightSoftEdge !== undefined ? { spotlightSoftEdge: Math.max(0, Math.min(MAX_SPOTLIGHT_SOFT_EDGE, Math.round(effect.spotlightSoftEdge))) } : {}),
+      ...(effect.spotlightShape !== undefined ? { spotlightShape: effect.spotlightShape } : {}),
+      ...(effect.spotlightBorderRadius !== undefined ? { spotlightBorderRadius: Math.max(0, Math.min(32, Math.round(effect.spotlightBorderRadius))) } : {}),
       ...(effect.shape !== undefined ? { shape: effect.shape } : {}),
       ...(effect.color !== undefined ? { color: effect.color } : {}),
       ...(effect.shapeFillColor !== undefined ? { shapeFillColor: effect.shapeFillColor } : {}),

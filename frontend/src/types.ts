@@ -274,6 +274,10 @@ export interface SlideAnimationEffect {
   spotlightOpacity?: number;
   /** Soft-edge blur radius (px) for `spotlight` effects. 0 = hard edge. Ignored by other effect types. */
   spotlightSoftEdge?: number;
+  /** Shape of the `spotlight` mask. `'circle'` (default) = elliptic; `'rect'` = rectangular. Ignored by other effect types. */
+  spotlightShape?: 'circle' | 'rect';
+  /** Corner radius (px) for rect-shaped `spotlight` effects. Defaults to 8. Range 0–32. Ignored by other effect types. */
+  spotlightBorderRadius?: number;
   /** SVG primitive drawn by `shape` effects (ignored by other effect types). Defaults to `'circle'` when omitted. */
   shape?: SlideAnimationShapeKind;
   /**
