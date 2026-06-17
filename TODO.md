@@ -1623,9 +1623,9 @@
 
 [x] `highlight-box` 效果投影選項：新增 `highlightShadow?: boolean`（預設 false）；啟用時在 `highlight-box` div 加上 `box-shadow: 0 0 20px rgba(0,0,0,0.5)` 讓高亮框更突出；後端同步更新 `AnimationEffect`（介面）/`EffectSchema`（`z.boolean().optional()`）/序列化；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 條件加入 `boxShadow` style（加在現有 border 相關 style 後）；`AnimationEditorTab.tsx` 在 highlight-box 設定區新增勾選框；中英文 i18n 新增 `play.animation.highlightShadow`（'Drop shadow'／'投影效果'）。
 
-[ ] `formula` 效果投影選項：新增 `formulaShadow?: boolean`（預設 false）；啟用時在 `formula` div 加上 `box-shadow: 0 4px 16px rgba(0,0,0,0.4)` 讓公式框更立體（與 `textCalloutShadow` 使用相同陰影值以保持一致性）；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.boolean().optional()`）/序列化；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 條件加入 `boxShadow` style；`AnimationEditorTab.tsx` 在 formulaBorderColor 下方加入勾選框；中英文 i18n 新增 `play.animation.formulaShadow`（'Drop shadow'／'投影效果'）。
+[x] `formula` 效果投影選項：新增 `formulaShadow?: boolean`（預設 false）；啟用時在 `formula` div 加上 `box-shadow: 0 4px 16px rgba(0,0,0,0.4)` 讓公式框更立體（與 `textCalloutShadow` 使用相同陰影值以保持一致性）；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.boolean().optional()`）/序列化；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 條件加入 `boxShadow` style；`AnimationEditorTab.tsx` 在 formulaBorderColor 下方加入勾選框；中英文 i18n 新增 `play.animation.formulaShadow`（'Drop shadow'／'投影效果'）。
 
-[ ] `overlay-image` 效果投影選項：新增 `overlayImageShadow?: boolean`（預設 false）；啟用時在 `<img>` 上加上 `boxShadow: '0 4px 20px rgba(0,0,0,0.5)'`；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.boolean().optional()`）/序列化；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 在 `<img>` style 中條件加入 `boxShadow`（與現有 `borderRadius` 並列）；`AnimationEditorTab.tsx` 在 overlay-image 設定區新增勾選框；中英文 i18n 新增 `play.animation.overlayImageShadow`（'Drop shadow'／'投影效果'）。
+[x] `overlay-image` 效果投影選項：新增 `overlayImageShadow?: boolean`（預設 false）；啟用時在 `<img>` 上加上 `boxShadow: '0 4px 20px rgba(0,0,0,0.5)'`；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.boolean().optional()`）/序列化；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 在 `<img>` style 中條件加入 `boxShadow`（與現有 `borderRadius` 並列）；`AnimationEditorTab.tsx` 在 overlay-image 設定區新增勾選框；中英文 i18n 新增 `play.animation.overlayImageShadow`（'Drop shadow'／'投影效果'）。
 
 [ ] `shape` 效果新增 `star` 五角星形狀：在 `ANIMATION_SHAPE_KINDS` 加入 `'star'`；以 SVG `<polygon>` 繪製五角星（計算 5 個外頂點和 5 個內頂點，外半徑 46、內半徑 18，以中心 50,50 計算所有坐標）；支援現有的 fill/stroke/strokeWidth/strokeDasharray 屬性；後端 `ANIMATION_SHAPE_KINDS` const 加入 `'star'`，`EffectSchema` 自動更新；前端 `SlideAnimationShapeKind` 型別加入 `'star'`；`SlideRenderer.tsx` 加入 star 的 polygon 元素；中英文 i18n 新增 `play.animation.shapeKind.star`（'Star'／'五角星'）。
 
@@ -1644,3 +1644,7 @@
 - 時間: 2026-06-17 15:45:00 +0800
 - 分支: feature/highlight-box-shadow-20260617
 - 內容: 新增 `highlightShadow?: boolean` 欄位到 `highlight-box` 效果。啟用時將 `, 0 0 20px rgba(0,0,0,0.5)` 附加到現有的 boxShadow 字串後，讓高亮框額外投下暗色環境陰影。後端 `AnimationEffect`（介面）、`EffectSchema`（`z.boolean()`）、序列化均更新；前端 `SlideAnimationEffect` 型別、`SlideRenderer.tsx`（boxShadow 字串拼接）、`AnimationEditorTab.tsx`（在 highlightFillColor 後新增勾選框）、中英文 i18n 均同步更新。前後端 TypeScript 均通過。
+
+- 時間: 2026-06-17 16:00:00 +0800
+- 分支: feature/formula-overlay-shadow-20260617
+- 內容: 批次新增兩個投影效果欄位。(1) `formulaShadow?: boolean`：啟用時 formula div 加上 `box-shadow: 0 4px 16px rgba(0,0,0,0.4)`，與 textCalloutShadow 保持相同陰影值。(2) `overlayImageShadow?: boolean`：啟用時 `<img>` 加上 `box-shadow: 0 4px 20px rgba(0,0,0,0.5)`。兩個欄位均更新後端介面/EffectSchema/序列化、前端 types.ts、SlideRenderer.tsx、AnimationEditorTab.tsx（勾選框）、中英文 i18n。前後端 TypeScript 均通過。
