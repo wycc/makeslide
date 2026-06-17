@@ -65,6 +65,8 @@ export interface AnimationEffect {
   pointerSize?: number;
   /** Shape of the pointer for `pointer` effects. `'arrow'` (default) renders a cursor SVG; `'dot'` renders a filled circle. Ignored by other effect types. */
   pointerShape?: 'arrow' | 'dot';
+  /** When `true`, the pointer pulses with a scale yoyo animation while visible. Dot shape pulses 1→1.3→1; arrow shape pulses 1→1.15→1. Ignored by other effect types. */
+  pointerPulse?: boolean;
   /**
    * Border colour (CSS hex) for `highlight-box` effects (ignored by other
    * effect types). Defaults to `DEFAULT_HIGHLIGHT_BOX_COLOR` (`#ef4444`).
@@ -402,6 +404,7 @@ const EffectSchema = z.object({
   pointerColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   pointerSize: z.number().min(MIN_POINTER_SIZE_REM).max(MAX_POINTER_SIZE_REM).optional(),
   pointerShape: z.enum(['arrow', 'dot']).optional(),
+  pointerPulse: z.boolean().optional(),
   highlightColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   highlightBorderWidth: z.number().int().min(1).max(MAX_HIGHLIGHT_BORDER_WIDTH).optional(),
   highlightBorderRadius: z.number().int().min(0).max(MAX_HIGHLIGHT_BORDER_RADIUS).optional(),
@@ -495,6 +498,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.pointerColor !== undefined ? { pointerColor: effect.pointerColor } : {}),
       ...(effect.pointerSize !== undefined ? { pointerSize: Math.max(MIN_POINTER_SIZE_REM, Math.min(MAX_POINTER_SIZE_REM, effect.pointerSize)) } : {}),
       ...(effect.pointerShape !== undefined ? { pointerShape: effect.pointerShape } : {}),
+      ...(effect.pointerPulse !== undefined ? { pointerPulse: effect.pointerPulse } : {}),
       ...(effect.highlightColor !== undefined ? { highlightColor: effect.highlightColor } : {}),
       ...(effect.highlightBorderWidth !== undefined ? { highlightBorderWidth: Math.max(1, Math.min(MAX_HIGHLIGHT_BORDER_WIDTH, Math.round(effect.highlightBorderWidth))) } : {}),
       ...(effect.highlightBorderRadius !== undefined ? { highlightBorderRadius: Math.max(0, Math.min(MAX_HIGHLIGHT_BORDER_RADIUS, Math.round(effect.highlightBorderRadius))) } : {}),

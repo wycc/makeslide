@@ -1715,6 +1715,18 @@ export function AnimationEditorTab() {
                           <span className="text-slate-500">rem</span>
                         </div>
                       </label>
+                      <label className="flex items-center gap-2 text-xs text-slate-400">
+                        <input
+                          type="checkbox"
+                          checked={effect.pointerPulse ?? false}
+                          disabled={disabled}
+                          onChange={(e) =>
+                            updateEffect(effect.id, { pointerPulse: e.target.checked || undefined })
+                          }
+                          className="h-4 w-4 accent-fuchsia-500"
+                        />
+                        {t('play.animation.pointerPulse')}
+                      </label>
                     </>
                   )}
                 </div>

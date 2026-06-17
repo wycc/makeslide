@@ -96,8 +96,27 @@ export function buildGsapTimeline(stage: HTMLElement, spec: SlideAnimationSpec):
         }
         break;
       }
+      case 'pointer': {
+        const overlay = stage.querySelector<HTMLElement>(`[data-effect-id="${effect.id}"]`);
+        if (overlay) {
+          tl.fromTo(overlay, { autoAlpha: 0 }, { autoAlpha: 1, ...common }, effect.start);
+          if (effect.pointerPulse) {
+            const isDot = (effect.pointerShape ?? 'arrow') === 'dot';
+            const pulseScale = isDot ? 1.3 : 1.15;
+            tl.fromTo(
+              overlay,
+              { scale: 1, transformOrigin: '50% 50%' },
+              { scale: pulseScale, duration: 0.6, ease: 'sine.inOut', yoyo: true, repeat: -1 },
+              effect.start + effect.duration,
+            );
+          }
+          if (effect.exitDuration !== undefined) {
+            tl.to(overlay, { autoAlpha: 0, scale: 1, ...common }, effect.start + effect.duration + effect.exitDuration);
+          }
+        }
+        break;
+      }
       case 'spotlight':
-      case 'pointer':
       case 'text-callout':
       case 'shape':
       case 'overlay-image':
