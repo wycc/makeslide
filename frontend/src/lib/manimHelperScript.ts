@@ -589,6 +589,21 @@ export const MANIM_HELPER_SCRIPT = `
         }
       }
     },
+    colorShift: function (m, progress, opts) {
+      var p = clamp01(progress);
+      var attr = (opts && opts.attr) || 'stroke';
+      var toColor = opts && opts.to ? String(opts.to) : '#ffffff';
+      var fromColor = opts && opts.from ? String(opts.from)
+        : (m.el.getAttribute('stroke') || '#000000');
+      var color = lerpColor(fromColor, toColor, p);
+      if (attr === 'stroke' || attr === 'both') {
+        m.el.setAttribute('stroke', color);
+        if (m.el.tagName === 'text') { m.el.setAttribute('fill', color); }
+      }
+      if (attr === 'fill' || attr === 'both') {
+        m.el.setAttribute('fill', color);
+      }
+    },
     drawBorderThenFill: function (m, progress) {
       var p = clamp01(progress);
       var len = getLength(m.el);
