@@ -239,7 +239,7 @@ export interface SlideAnimationEffect {
   /** Arrow size in rem for `pointer` effects. Defaults to 2.5. Ignored by other effect types. */
   pointerSize?: number;
   /** Shape of the pointer. 'arrow' (default) = cursor SVG; 'dot' = filled circle. Ignored by other effect types. */
-  pointerShape?: 'arrow' | 'dot';
+  pointerShape?: 'arrow' | 'dot' | 'cross';
   /** When `true`, the pointer pulses with a scale yoyo animation while visible. Ignored by other effect types. */
   pointerPulse?: boolean;
   /** Border colour (CSS hex) for `highlight-box` effects. Defaults to `#ef4444`. Ignored by other effect types. */
