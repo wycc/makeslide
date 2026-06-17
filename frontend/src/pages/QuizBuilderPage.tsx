@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useI18n } from '../i18n';
 import {
   ApiError,
   fetchPdfDetail,
@@ -88,6 +89,7 @@ function calcQuestionScore(question: QuizQuestion, selected: number[], questionS
 export default function QuizBuilderPage() {
   const { id: pdfId } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { t } = useI18n();
   const [detail, setDetail] = useState<PdfDetail | null>(null);
   const [savedQuizzes, setSavedQuizzes] = useState<QuizSet[]>([]);
   const [selectedQuizId, setSelectedQuizId] = useState<number | null>(null);
@@ -103,6 +105,7 @@ export default function QuizBuilderPage() {
   const [syncQuizShowAnswers, setSyncQuizShowAnswers] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [studentAnswers, setStudentAnswers] = useState<Record<string, number[]>>({});
+  const [resetStudentAnswersBusy, setResetStudentAnswersBusy] = useState(false);
   const [showEditorAnswers, setShowEditorAnswers] = useState(false);
   const [syncQuizProgress, setSyncQuizProgress] = useState<SyncQuizProgress[]>([]);
   const [historyQuizId, setHistoryQuizId] = useState<number | null>(null);
@@ -350,6 +353,38 @@ export default function QuizBuilderPage() {
     });
   };
 
+  const handleResetStudentAnswers = useCallback(async () => {
+    if (!pdfId || !activeQuiz) return;
+    const clientId = syncClientIdRef.current;
+    if (!clientId) return;
+    const totalQuestions = activeQuiz.questions.length;
+    setResetStudentAnswersBusy(true);
+    setStudentAnswers({});
+    submittedAttemptRef.current = null;
+    if (latestAttemptSnapshotRef.current?.quizId === activeQuiz.id) {
+      latestAttemptSnapshotRef.current = {
+        ...latestAttemptSnapshotRef.current,
+        answers: {},
+      };
+    }
+    lastReportedProgressRef.current = { quizId: activeQuiz.id, answeredCount: 0, submitted: false };
+    try {
+      await submitSyncQuizProgress(pdfId, clientId, {
+        quiz_id: activeQuiz.id,
+        answered_count: 0,
+        total_questions: totalQuestions,
+        submitted: false,
+      });
+      setSyncError(null);
+      setMessage(t('quiz.resetAnswersDone'));
+    } catch (err) {
+      lastReportedProgressRef.current = null;
+      setSyncError(err instanceof ApiError ? err.message : t('quiz.resetAnswersFailed'));
+    } finally {
+      setResetStudentAnswersBusy(false);
+    }
+  }, [activeQuiz, pdfId, t]);
+
   const sendQuizSyncState = useCallback(
     async (quizId: number, showAnswers: boolean) => {
       if (!pdfId || !syncClientIdRef.current) return;
@@ -498,11 +533,23 @@ export default function QuizBuilderPage() {
           </div>
         );
       })() : null}
-      <div className="mb-4">
-        <h2 className="text-lg font-semibold text-fuchsia-50">測驗進行中：{quiz.title}</h2>
-        <p className="mt-1 text-sm text-fuchsia-100/80">
-          {syncQuizShowAnswers ? '測驗已結束，以下顯示正確答案與解析。' : '請作答；測驗結束前不會顯示正確答案。'}
-        </p>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-fuchsia-50">測驗進行中：{quiz.title}</h2>
+          <p className="mt-1 text-sm text-fuchsia-100/80">
+            {syncQuizShowAnswers ? '測驗已結束，以下顯示正確答案與解析。' : '請作答；測驗結束前不會顯示正確答案。'}
+          </p>
+          {syncError ? <p className="mt-2 text-xs text-rose-300">{syncError}</p> : null}
+        </div>
+        <button
+          type="button"
+          onClick={() => void handleResetStudentAnswers()}
+          disabled={resetStudentAnswersBusy}
+          className="shrink-0 rounded-md border border-cyan-400/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-100 hover:bg-cyan-500/25 disabled:opacity-50"
+          title={t('quiz.resetAnswersHint')}
+        >
+          {resetStudentAnswersBusy ? t('quiz.resetAnswersBusy') : t('quiz.resetAnswers')}
+        </button>
       </div>
       <div className="space-y-4">
         {quiz.questions.map((q, qIdx) => {

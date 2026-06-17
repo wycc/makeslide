@@ -133,6 +133,7 @@ export default function HomePage() {
   const [isImportingZip, setIsImportingZip] = useState(false);
   const [zipImportProgress, setZipImportProgress] = useState(0);
   const zipImportInputRef = useRef<HTMLInputElement | null>(null);
+  const [renamingCategory, setRenamingCategory] = useState<string | null>(null);
 
   const itemCategories = items.reduce<string[]>((categories, pdf) => {
     const category = pdf.category?.trim() || DEFAULT_CATEGORY;
@@ -435,6 +436,72 @@ export default function HomePage() {
     [items, showToast],
   );
 
+  const handleRenameCategory = useCallback(
+    async (category: string) => {
+      if (category === DEFAULT_CATEGORY || category === RECENT_CATEGORY) return;
+      const input = window.prompt(t('home.renameCategoryPrompt').replace('{category}', category), category);
+      const nextCategory = input?.trim() || '';
+      if (!nextCategory || nextCategory === category) return;
+      if (allCategories.includes(nextCategory)) {
+        showToast(t('home.categoryAlreadyExists').replace('{category}', nextCategory));
+        return;
+      }
+
+      const affectedItems = items.filter((pdf) => (pdf.category?.trim() || DEFAULT_CATEGORY) === category);
+      setRenamingCategory(category);
+      try {
+        const nextCustomCategories = Array.from(
+          new Set([
+            ...customCategories.map((value) => (value === category ? nextCategory : value)),
+            nextCategory,
+          ]),
+        ).sort((a, b) => a.localeCompare(b, 'zh-Hant', { numeric: true, sensitivity: 'base' }));
+        persistCustomCategories(nextCustomCategories);
+
+        const results = await Promise.allSettled(
+          affectedItems.map((pdf) => updatePdfCategory(pdf.id, nextCategory)),
+        );
+        const updatedItems = results.flatMap((result) => (result.status === 'fulfilled' ? [result.value] : []));
+        const failedCount = results.filter((result) => result.status === 'rejected').length;
+
+        setItems((prev) => prev.map((pdf) => {
+          const updated = updatedItems.find((item) => item.id === pdf.id);
+          if (updated) return { ...pdf, category: updated.category };
+          return pdf;
+        }));
+        setCategoryFilter((prev) => {
+          if (prev !== category) return prev;
+          window.localStorage.setItem(CATEGORY_FILTER_STORAGE_KEY, nextCategory);
+          return nextCategory;
+        });
+
+        if (failedCount > 0) {
+          showToast(
+            t('home.categoryRenamePartialFailed')
+              .replace('{category}', nextCategory)
+              .replace('{failed}', String(failedCount)),
+          );
+          await load({ silent: true });
+          return;
+        }
+
+        showToast(
+          t('home.categoryRenamed')
+            .replace('{from}', category)
+            .replace('{to}', nextCategory)
+            .replace('{count}', String(affectedItems.length)),
+        );
+      } catch (err) {
+        const msg = err instanceof ApiError ? err.message : t('home.renameCategoryFailed');
+        showToast(`${t('home.renameCategoryFailed')}：${msg}`);
+        await load({ silent: true });
+      } finally {
+        setRenamingCategory(null);
+      }
+    },
+    [RECENT_CATEGORY, allCategories, customCategories, items, load, persistCustomCategories, showToast, t],
+  );
+
   useEffect(() => {
     const openPromptId = searchParams.get('openPrompt')?.trim();
     if (!openPromptId) return;
@@ -495,7 +562,12 @@ export default function HomePage() {
 
   const handleCardClick = useCallback(
     (pdf: PdfListItem) => {
+      const readOnlyShared = pdf.visibility === 'public';
       if (pdf.status === 'awaiting_prompt') {
+        if (readOnlyShared) {
+          navigate(`/play/${pdf.id}`);
+          return;
+        }
         openPromptFor(pdf);
         return;
       }
@@ -738,13 +810,23 @@ export default function HomePage() {
                     {t('home.slideCount').replace('{count}', String(group.items.length))}
                   </span>
                   {group.category !== DEFAULT_CATEGORY && group.category !== RECENT_CATEGORY && (
-                    <button
-                      type="button"
-                      onClick={() => void handleDeleteCategory(group.category)}
-                      className="rounded-md border border-rose-500/40 px-2 py-1 text-xs text-rose-300 transition hover:bg-rose-500/10"
-                    >
-                      {t('home.deleteCategory')}
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => void handleRenameCategory(group.category)}
+                        disabled={renamingCategory === group.category}
+                        className="rounded-md border border-indigo-500/40 px-2 py-1 text-xs text-indigo-200 transition hover:bg-indigo-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {renamingCategory === group.category ? t('home.renamingCategory') : t('home.renameCategory')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDeleteCategory(group.category)}
+                        className="rounded-md border border-rose-500/40 px-2 py-1 text-xs text-rose-300 transition hover:bg-rose-500/10"
+                      >
+                        {t('home.deleteCategory')}
+                      </button>
+                    </>
                   )}
                 </div>
                 <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">

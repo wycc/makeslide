@@ -63,6 +63,7 @@ import {
   type TimingRunContext,
 } from '../services/timing';
 import { setLlmUsageContext } from '../services/llmUsage';
+import { redactTextForLog } from '../services/logSanitizer';
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -176,11 +177,10 @@ async function buildYoutubeOutlineAsSlideText(params: {
     {
       videoId,
       language: language ?? 'unknown',
-      outlineJsonPretty: JSON.stringify(r.data, null, 2),
+      slideCount: r.data.slides.length,
     },
-    'YouTube outline LLM JSON (pretty)',
+    'YouTube outline LLM JSON parsed',
   );
-  console.log(r.data);
   const lines: string[] = [];
   r.data.slides.forEach((s, idx) => {
     const normalizedBullets = (s.bullets ?? s.key_points ?? [])
@@ -192,7 +192,10 @@ async function buildYoutubeOutlineAsSlideText(params: {
     lines.push('');
   });
   const rendered = lines.join('\n').trim();
-  console.log(rendered);
+  logger.debug(
+    { videoId, language: language ?? 'unknown', stage: 'youtube_outline', outline: redactTextForLog(rendered), chars: rendered.length },
+    'YouTube outline rendered as slide text',
+  );
   if (rendered) return rendered;
 
   const fallbackPoints = trimmed

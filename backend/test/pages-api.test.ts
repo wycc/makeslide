@@ -7,10 +7,16 @@ import { db } from '../src/db';
 import { config } from '../src/config';
 import { normalizeErrorCode } from '../src/errors';
 import { setSystemAuthSettings } from '../src/services/aiSettings';
+import crypto from 'node:crypto';
 
 const PDF_ID = 'test-pages-api-01';
-const SESSION_COOKIE =
-  'eyJwcm92aWRlciI6Imdvb2dsZSIsInN1YiI6ImFjY291bnQtMSIsImVtYWlsIjoiYWNjb3VudC0xQGV4YW1wbGUuY29tIn0.mDkylBa8ZqLOib7FEOYl6YtwwODNJwieo4kUfAIIimw';
+function testSessionCookie(sub = 'account-1'): string {
+  const payload = Buffer.from(JSON.stringify({ provider: 'google', sub, email: `${sub}@example.com` }), 'utf8').toString('base64url');
+  const signature = crypto.createHmac('sha256', config.authSessionSecret).update(payload).digest('base64url');
+  return `${payload}.${signature}`;
+}
+
+const SESSION_COOKIE = testSessionCookie('account-1');
 
 setSystemAuthSettings({ googleAuthEnabled: false });
 
@@ -97,6 +103,69 @@ test('GET /api/pdfs should not list presentations without an owner account', asy
     items.filter((item) => item.id.startsWith('list-')).map((item) => item.id).sort(),
     ['list-owned-01', 'list-public-01'],
   );
+
+  await app.close();
+});
+
+test('POST /api/pdfs/:id/share should publish with per-presentation read-only/read-write visibility', async () => {
+  seedListPdf('share-visibility-readonly-01', 'share ro', 'account-1', 'private');
+  seedListPdf('share-visibility-editable-01', 'share rw', 'account-1', 'private');
+
+  const app = await buildApp();
+  const headers = { cookie: `makeslide_session=${encodeURIComponent(SESSION_COOKIE)}` };
+  const roResp = await app.inject({
+    method: 'POST',
+    url: '/api/pdfs/share-visibility-readonly-01/share',
+    headers,
+    payload: { access: 'read_only' },
+  });
+  assert.equal(roResp.statusCode, 200);
+  assert.equal((roResp.json() as { visibility: string }).visibility, 'public');
+
+  const rwResp = await app.inject({
+    method: 'POST',
+    url: '/api/pdfs/share-visibility-editable-01/share',
+    headers,
+    payload: { access: 'editable' },
+  });
+  assert.equal(rwResp.statusCode, 200);
+  assert.equal((rwResp.json() as { visibility: string }).visibility, 'public_editable');
+
+  const rows = db
+    .prepare(`SELECT id, visibility FROM pdfs WHERE id IN (?, ?) ORDER BY id ASC`)
+    .all('share-visibility-editable-01', 'share-visibility-readonly-01') as Array<{ id: string; visibility: string }>;
+  assert.deepEqual(rows.map((row) => row.visibility).sort(), ['public', 'public_editable']);
+
+  await app.close();
+});
+
+test('read-only shared presentations appear in other accounts list but reject edits', async () => {
+  seedListPdf('share-list-private-01', 'private', 'account-2', 'private');
+  seedListPdf('share-list-ro-01', 'read only shared', 'account-2', 'public');
+  seedListPdf('share-list-rw-01', 'read write shared', 'account-2', 'public_editable');
+
+  const app = await buildApp();
+  const headers = { cookie: `makeslide_session=${encodeURIComponent(SESSION_COOKIE)}` };
+  const listResp = await app.inject({ method: 'GET', url: '/api/pdfs', headers });
+  assert.equal(listResp.statusCode, 200);
+  const ids = (listResp.json() as Array<{ id: string }>).map((item) => item.id).filter((id) => id.startsWith('share-list-')).sort();
+  assert.deepEqual(ids, ['share-list-ro-01', 'share-list-rw-01']);
+
+  const roEditResp = await app.inject({
+    method: 'PATCH',
+    url: '/api/pdfs/share-list-ro-01/title',
+    headers,
+    payload: { title: 'blocked' },
+  });
+  assert.equal(roEditResp.statusCode, 403);
+
+  const rwEditResp = await app.inject({
+    method: 'PATCH',
+    url: '/api/pdfs/share-list-rw-01/title',
+    headers,
+    payload: { title: 'allowed' },
+  });
+  assert.equal(rwEditResp.statusCode, 200);
 
   await app.close();
 });

@@ -37,6 +37,7 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
   const { t } = useI18n();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const uploadAbortControllerRef = useRef<AbortController | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0); // 0..100
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +69,14 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
     navigate('/import-text');
   };
 
+  const handleCancelUpload = () => {
+    uploadAbortControllerRef.current?.abort();
+    setProgress(0);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   const handleChange = async (ev: React.ChangeEvent<HTMLInputElement>) => {
     const file = ev.target.files?.[0];
     // Reset the input so the same file can be selected again later
@@ -84,10 +93,14 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
     setIsUploading(true);
     setProgress(0);
     setError(null);
+    setRecoveryGuide([]);
+    const abortController = new AbortController();
+    uploadAbortControllerRef.current = abortController;
     try {
       const resp = await uploadPdf(file, {
         pdfImportMode,
         hostMode,
+        signal: abortController.signal,
         onProgress: (loaded, total) => {
           if (total > 0) {
             setProgress(Math.round((loaded / total) * 100));
@@ -97,6 +110,11 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
       onUploaded(resp);
     } catch (err) {
       if (err instanceof ApiError) {
+        if (err.code === 'ABORTED') {
+          setError(t('upload.uploadCanceled'));
+          setRecoveryGuide([]);
+          return;
+        }
         const h = mapApiErrorToHumanMessage(err);
         setError(t('upload.uploadFailedDetail').replace('{title}', h.title).replace('{message}', h.message).replace('{nextStep}', h.nextStep));
         setRecoveryGuide(buildRecoveryGuide(err, t));
@@ -109,8 +127,14 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
         setRecoveryGuide(buildRecoveryGuide(err, t));
       }
     } finally {
+      if (uploadAbortControllerRef.current === abortController) {
+        uploadAbortControllerRef.current = null;
+      }
       setIsUploading(false);
       setProgress(0);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -252,11 +276,20 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
         />
 
         {isUploading && (
-          <div className="h-2 w-40 overflow-hidden rounded-full bg-slate-700">
-            <div
-              className="h-full bg-indigo-400 transition-all"
-              style={{ width: `${progress}%` }}
-            />
+          <div className="col-span-2 flex w-full items-center gap-2 sm:col-span-1 sm:w-auto">
+            <div className="h-2 w-40 overflow-hidden rounded-full bg-slate-700" aria-label={t('upload.uploadProgress')}>
+              <div
+                className="h-full bg-indigo-400 transition-all"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={handleCancelUpload}
+              className="rounded-md border border-rose-400/60 px-3 py-1 text-xs font-medium text-rose-100 transition hover:bg-rose-500/10"
+            >
+              {t('upload.cancelUpload')}
+            </button>
           </div>
         )}
       </div>

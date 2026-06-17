@@ -4,6 +4,7 @@ import { useI18n } from '../../i18n';
 import type { TranslationKey } from '../../i18n';
 import type { PageFigure, SlideAnimationEffect, SlideAnimationEffectType, SlideAnimationEase, SlideAnimationShapeKind } from '../../types';
 import { fetchPageFigures, figureImageUrl, savePageAnimation } from '../../lib/api';
+import { copyTextToClipboard } from '../../lib/clipboard';
 import {
   ANIMATION_SHAPE_KINDS,
   DEFAULT_EXIT_DURATION_SECONDS,
@@ -462,7 +463,8 @@ export function AnimationEditorTab() {
   const customScriptChatScrollRef = useRef<HTMLDivElement>(null);
   const [selectedEffectIds, setSelectedEffectIds] = useState<Set<string>>(new Set());
   const [notebookTab, setNotebookTab] = useState<'effects' | 'hints' | 'json'>('effects');
-  const [jsonCopied, setJsonCopied] = useState(false);
+  const [jsonCopyStatus, setJsonCopyStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const jsonCopyTimerRef = useRef<number | null>(null);
   // 跨頁複製用的暫存區：不隨頁面切換清空，讓使用者可在切換到其他頁面後貼上。
   const [copiedEffects, setCopiedEffects] = useState<SlideAnimationEffect[] | null>(null);
   const [applyingToAll, setApplyingToAll] = useState(false);
@@ -513,6 +515,12 @@ export function AnimationEditorTab() {
   useEffect(() => {
     setCustomScriptChatInput('');
   }, [customScriptDialogEffectId]);
+
+  useEffect(() => {
+    return () => {
+      if (jsonCopyTimerRef.current !== null) window.clearTimeout(jsonCopyTimerRef.current);
+    };
+  }, []);
 
   // 對話內容增加或產生中狀態改變時，自動捲動到最新訊息。
   useEffect(() => {
@@ -652,6 +660,20 @@ export function AnimationEditorTab() {
       }
       return { ...base, hints: Object.keys(hints).length > 0 ? hints : undefined };
     });
+  };
+
+  const showJsonCopyStatus = (status: 'success' | 'error') => {
+    if (jsonCopyTimerRef.current !== null) window.clearTimeout(jsonCopyTimerRef.current);
+    setJsonCopyStatus(status);
+    jsonCopyTimerRef.current = window.setTimeout(() => {
+      setJsonCopyStatus('idle');
+      jsonCopyTimerRef.current = null;
+    }, status === 'success' ? 1500 : 3000);
+  };
+
+  const handleCopyRawJson = async () => {
+    const result = await copyTextToClipboard(JSON.stringify(draft, null, 2));
+    showJsonCopyStatus(result.ok ? 'success' : 'error');
   };
 
   return (
@@ -2117,20 +2139,27 @@ export function AnimationEditorTab() {
         </>
       ) : (
         <>
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <div className="text-[11px] text-slate-500">{t('play.animation.rawJsonDescription')}</div>
-          <button
-            type="button"
-            onClick={() => {
-              void navigator.clipboard.writeText(JSON.stringify(draft, null, 2)).then(() => {
-                setJsonCopied(true);
-                setTimeout(() => setJsonCopied(false), 1500);
-              });
-            }}
-            className="shrink-0 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
-          >
-            {jsonCopied ? t('play.animation.copyJsonDone') : t('play.animation.copyJson')}
-          </button>
+        <div className="mb-2 flex flex-col gap-1">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-[11px] text-slate-500">{t('play.animation.rawJsonDescription')}</div>
+            <button
+              type="button"
+              onClick={() => { void handleCopyRawJson(); }}
+              className="shrink-0 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
+            >
+              {jsonCopyStatus === 'success' ? t('play.animation.copyJsonDone') : t('play.animation.copyJson')}
+            </button>
+          </div>
+          {jsonCopyStatus !== 'idle' && (
+            <div
+              role="status"
+              className={`text-[11px] ${jsonCopyStatus === 'success' ? 'text-emerald-300' : 'text-rose-300'}`}
+            >
+              {jsonCopyStatus === 'success'
+                ? t('play.animation.copyJsonDone')
+                : t('play.animation.copyJsonError')}
+            </div>
+          )}
         </div>
         <textarea
           readOnly

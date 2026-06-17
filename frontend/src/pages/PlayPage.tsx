@@ -435,7 +435,7 @@ export default function PlayPage() {
         : { strokes: [] })
     : undefined;
   const totalPages = deckPages.length;
-  const shareIsReadOnly = detail?.share_mode === 'read_only';
+  const shareIsReadOnly = detail?.share_mode === 'read_only' || (!currentShareToken && detail?.visibility === 'public');
   const isReadOnlyProcessing =
     (detail != null &&
       detail.status !== 'ready' &&
@@ -484,10 +484,17 @@ export default function PlayPage() {
     [currentShareToken],
   );
 
-  const targetImageSrc = useMemo(() => {
-    if (!currentPage?.image_url) return null;
-    return withImageBust(currentPage.image_url) ?? currentPage.image_url;
-  }, [currentPage?.image_url, withImageBust]);
+  const playbackImageSrc = useMemo(() => {
+    const url = currentPage?.thumbnail_url ?? currentPage?.image_url ?? null;
+    return withImageBust(url) ?? url;
+  }, [currentPage?.image_url, currentPage?.thumbnail_url, withImageBust]);
+
+  const fullscreenImageSrc = useMemo(() => {
+    const url = currentPage?.image_url ?? currentPage?.thumbnail_url ?? null;
+    return withImageBust(url) ?? url;
+  }, [currentPage?.image_url, currentPage?.thumbnail_url, withImageBust]);
+
+  const targetImageSrc = imageOnlyFullscreen ? fullscreenImageSrc : playbackImageSrc;
 
   useEffect(() => {
     if (!targetImageSrc) {
@@ -673,17 +680,19 @@ export default function PlayPage() {
     // 再進行圖片/音訊預抓，避免初始網路壅塞影響 follower 進場。
     timer = window.setTimeout(() => {
       // 目前頁：先預熱，避免切入頁面時首播卡住
-      if (current?.image_url) {
+      if (current?.thumbnail_url || current?.image_url) {
         const img = new Image();
-        img.src = withImageBust(current.image_url) ?? current.image_url;
+        const currentImageUrl = current.thumbnail_url ?? current.image_url;
+        img.src = withImageBust(currentImageUrl) ?? currentImageUrl ?? '';
         prefetchedImageRef.current = img;
       } else {
         prefetchedImageRef.current = null;
       }
       // 下一頁：提前預載，提升自動切頁銜接
-      if (next?.image_url) {
+      if (next?.thumbnail_url || next?.image_url) {
         const img = new Image();
-        img.src = withImageBust(next.image_url) ?? next.image_url;
+        const nextImageUrl = next.thumbnail_url ?? next.image_url;
+        img.src = withImageBust(nextImageUrl) ?? nextImageUrl ?? '';
         prefetchedImageNextRef.current = img;
       } else {
         prefetchedImageNextRef.current = null;
@@ -1985,7 +1994,7 @@ export default function PlayPage() {
     drawingLineWidth, setDrawingLineWidth, remoteDrawingData, pushLocalDrawingChange, flushLocalDrawingPush,
     // computed
     isReadOnlyProcessing, readOnlyReason, shareIsReadOnly, imageBustKey,
-    withImageBust, withShareToken, targetImageSrc,
+    withImageBust, withShareToken, targetImageSrc, playbackImageSrc, fullscreenImageSrc,
     sourceItems, hasScriptChanges, syncQuestionBusy, openVersionHistory,
     pageSentences, currentSentence, activeSentenceIdx, sentenceTimeline,
     // refs

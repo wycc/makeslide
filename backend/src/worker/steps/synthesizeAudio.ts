@@ -13,6 +13,7 @@ import { synthesizeGeminiSpeech } from '../../services/gemini';
 import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { pageAudioPath, pageScriptPath } from '../../services/storage';
 import { db, savePageGenerationPrompt } from '../../db';
+import { redactTextForLog } from '../../services/logSanitizer';
 
 function runCommand(command: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -289,13 +290,15 @@ async function synthesizeOnePage(params: {
     try {
       const buffers: Buffer[] = [];
       for (const seg of segments) {
-        console.log({ seg });
-        logger.info(
+        logger.debug(
           {
             pdfId,
             pageNumber,
             instruction: seg.instruction,
-            text: seg.text,
+            text: redactTextForLog(seg.text),
+            chars: seg.text.length,
+            voice: seg.voice,
+            provider,
           },
           'synthesizeAudio: tts segment request',
         );

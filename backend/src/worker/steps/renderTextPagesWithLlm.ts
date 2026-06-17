@@ -10,6 +10,7 @@ import { config } from '../../config';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
 import { buildFigureReferenceNotes, figureImageAbsPath, getFigureReferencesForPages } from '../../services/pdfFigures';
 import { db, savePageGenerationPrompt } from '../../db';
+import { redactLogObject } from '../../services/logSanitizer';
 
 export interface RenderTextPagesWithLlmOptions {
   pdfId: string;
@@ -272,7 +273,17 @@ export async function renderTextPagesWithLlm(
             size: '1536x1024',
             quality: config.openaiImageQuality,
           };
-          console.log(imagePayload);
+          logger.debug(
+            redactLogObject({
+              pdfId: opts.pdfId,
+              pageNumber: p.pageNumber,
+              stage: 'text_image_generation',
+              requestPayload: imagePayload,
+              promptLength: promptWithSourceHint.length,
+              timeoutMs,
+            }),
+            'Text image generation: OpenAI image request prepared',
+          );
           image = await client.images.generate(imagePayload as never, { timeout: timeoutMs });
         }
         break;

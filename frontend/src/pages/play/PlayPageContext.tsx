@@ -306,6 +306,7 @@ export interface PlayPageContextValue {
   shareBusy: boolean;
   playQrCodeUrl: string | null;
   handleCreateShareLink: () => void;
+  handleMakeSharePrivate: () => void;
   handleShowPlayQrCode: () => void;
 
   // ─── GitHub sync ────────────────────────────────────────────────────────────
@@ -403,6 +404,8 @@ export interface PlayPageContextValue {
   withImageBust: (url: string | null | undefined) => string | null;
   withShareToken: (url: string | null | undefined) => string | null;
   targetImageSrc: string | null;
+  playbackImageSrc: string | null;
+  fullscreenImageSrc: string | null;
   sourceItems: PdfSourceItem[];
   hasScriptChanges: boolean;
   syncQuestionBusy: boolean;

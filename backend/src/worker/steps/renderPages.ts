@@ -14,6 +14,7 @@ import { renderPdfPages } from '../poppler';
 import { generateCoverThumbnail, generatePageThumbnail } from '../../services/thumbnails';
 
 const COVER_WIDTH_PX = 400;
+const PAGE_JPEG_QUALITY = 72;
 
 export interface RenderResult {
   pageCount: number;
@@ -59,7 +60,7 @@ export async function renderPages(pdfId: string): Promise<RenderResult> {
     const pageUid = nanoid(10);
     const jpgOut = pageImagePath(pdfId, pageUid);
     await sharp(pages[i])
-      .jpeg({ quality: 82, mozjpeg: true })
+      .jpeg({ quality: PAGE_JPEG_QUALITY, mozjpeg: true })
       .toFile(jpgOut);
     await generatePageThumbnail(pdfId, pageUid, jpgOut);
     pagePaths.push(jpgOut);

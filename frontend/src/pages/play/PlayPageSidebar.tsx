@@ -67,7 +67,7 @@ export function PlayPageSidebar() {
       <section className={`rounded-lg border border-slate-800 bg-slate-900/40 ${qaPanelExpanded ? 'md:hidden' : ''}`}>
         <div className="border-b border-slate-800 px-4 py-3">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-slate-300">🧩 投影片管理</h2>
+            <h2 className="text-sm font-semibold text-slate-300">🧩 {t('play.sidebar.slideManagement')}</h2>
             <div className="flex gap-2">
               <button
                 type="button"
@@ -88,13 +88,13 @@ export function PlayPageSidebar() {
                 }}
                 disabled={isReadOnlyProcessing}
                 className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-2 py-1 text-xs text-fuchsia-200 hover:bg-fuchsia-500/25 disabled:cursor-not-allowed disabled:opacity-40"
-                title="重生（可選逐字稿/語音/圖檔）"
+                title={t('play.sidebar.regenerateTitle')}
               >
                 {regenJobRunning
-                  ? '重生中…'
+                  ? t('play.sidebar.regenerating')
                   : regenAllBusy
-                    ? '啟動中…'
-                    : '重生'}
+                    ? t('play.sidebar.starting')
+                    : t('play.sidebar.regenerate')}
               </button>
               <button
                 type="button"
@@ -102,16 +102,16 @@ export function PlayPageSidebar() {
                 disabled={isReadOnlyProcessing || slideBusy || !currentPage}
                 className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-2 py-1 text-xs text-emerald-200 disabled:opacity-40"
               >
-                新增
+                {t('play.sidebar.add')}
               </button>
               <button
                 type="button"
                 onClick={() => setShowAddPagesModal(true)}
                 disabled={isReadOnlyProcessing || slideBusy}
                 className="rounded-md border border-indigo-500/50 bg-indigo-500/15 px-2 py-1 text-xs text-indigo-200 disabled:opacity-40"
-                title="根據提示詞新增多頁投影片"
+                title={t('play.sidebar.addMultipleTitle')}
               >
-                新增多頁
+                {t('play.sidebar.addMultiple')}
               </button>
               <button
                 type="button"
@@ -119,7 +119,7 @@ export function PlayPageSidebar() {
                 disabled={isReadOnlyProcessing || slideBusy || !currentPage || totalPages <= 1}
                 className="rounded-md border border-rose-500/50 bg-rose-500/15 px-2 py-1 text-xs text-rose-200 disabled:opacity-40"
               >
-                刪除
+                {t('play.sidebar.delete')}
               </button>
             </div>
           </div>
@@ -217,7 +217,9 @@ export function PlayPageSidebar() {
                     ? 'border-cyan-400'
                     : 'border-slate-700'
               } ${draggingPage === p.page_number ? 'opacity-50' : ''}`}
-              title={`第 ${p.page_number} 頁${regenSelectedPages.has(p.page_number) ? '（已選取重生）' : ''}`}
+              title={t('play.sidebar.thumbnailTitle')
+                .replace('{page}', String(p.page_number))
+                .replace('{selected}', regenSelectedPages.has(p.page_number) ? t('play.sidebar.thumbnailSelectedSuffix') : '')}
             >
               <button
                 type="button"
@@ -241,7 +243,7 @@ export function PlayPageSidebar() {
                 }}
                 onClick={(e) => e.stopPropagation()}
                 className="absolute right-0 top-0 z-10 rounded-bl bg-slate-900/80 px-1.5 py-0.5 text-[10px] text-slate-200 cursor-grab active:cursor-grabbing"
-                title="拖曳此把手可重排"
+                title={t('play.sidebar.dragToReorder')}
               >
                 ↕
               </button>
@@ -253,7 +255,7 @@ export function PlayPageSidebar() {
                 return thumbSrc && shouldLoadThumb ? (
                 <img
                   src={withImageBust(thumbSrc) ?? thumbSrc}
-                  alt={`第 ${p.page_number} 頁縮圖`}
+                  alt={t('play.sidebar.thumbnailAlt').replace('{page}', String(p.page_number))}
                   className="h-14 w-full object-cover"
                   onLoad={() => {
                     setThumbLoadUntilIdx((prev) => {
@@ -280,7 +282,7 @@ export function PlayPageSidebar() {
                 />
                 ) : (
                 <div className="flex h-14 w-full items-center justify-center bg-slate-800 text-[10px] text-slate-400">
-                  {thumbSrc ? '載入中…' : '無圖片'}
+                  {thumbSrc ? t('play.sidebar.loading') : t('play.sidebar.noImage')}
                 </div>
                 );
               })()}
@@ -295,19 +297,19 @@ export function PlayPageSidebar() {
         {regenSelectedPages.size > 0 ? (
           <div className="flex items-center justify-between gap-2 border-t border-fuchsia-500/30 bg-fuchsia-500/10 px-3 py-1.5">
             <span className="text-xs text-fuchsia-300">
-              已選 {regenSelectedPages.size} 頁將重生（Ctrl/Shift 點選）
+              {t('play.sidebar.selectedRegenerate').replace('{count}', String(regenSelectedPages.size))}
             </span>
             <button
               type="button"
               onClick={() => setRegenSelectedPages(new Set())}
               className="text-xs text-fuchsia-400 hover:text-fuchsia-200"
             >
-              清除
+              {t('play.sidebar.clear')}
             </button>
           </div>
         ) : (
           <div className="border-t border-slate-800/50 px-3 py-1">
-            <p className="text-[10px] text-slate-600">Ctrl/Shift 點選縮圖可選取特定頁面重生</p>
+            <p className="text-[10px] text-slate-600">{t('play.sidebar.multiSelectHint')}</p>
           </div>
         )}
         <div className="border-t border-slate-800 px-3 py-2">
@@ -316,9 +318,9 @@ export function PlayPageSidebar() {
             onClick={() => void handleUpdateCoverFromCurrentPage()}
             disabled={slideBusy || !currentPage?.image_url}
             className="w-full rounded-md border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-xs text-amber-200 hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-40"
-            title="將首頁列表封面更新為目前選取頁面的圖片"
+            title={t('play.sidebar.setCoverTitle')}
           >
-            將目前頁設為封面
+            {t('play.sidebar.setCover')}
           </button>
         </div>
       </section>

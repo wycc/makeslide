@@ -297,6 +297,7 @@ export async function generateCustomScriptCode(
 }
 
 export type ShareAccessMode = 'read_only' | 'editable';
+export type PdfVisibilityMode = 'private' | 'public' | 'public_editable';
 
 export interface ShareInfoResponse {
   token: string;
@@ -308,6 +309,7 @@ export interface ShareInfoResponse {
 
 export interface CreateShareResponse extends ShareInfoResponse {
   share_url: string;
+  visibility?: PdfVisibilityMode;
 }
 
 export async function resolveShareToken(token: string): Promise<ShareInfoResponse> {
@@ -322,12 +324,30 @@ export async function createPdfShare(id: string, access: ShareAccessMode): Promi
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/share`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ access }),
+    body: JSON.stringify({ access, visibility: access === 'editable' ? 'public_editable' : 'public' }),
   });
   if (!resp.ok) {
     throw await parseErrorBody(resp);
   }
   return (await resp.json()) as CreateShareResponse;
+}
+
+export interface UpdatePdfVisibilityResponse {
+  id: string;
+  visibility: PdfVisibilityMode;
+  updated_at: string;
+}
+
+export async function updatePdfVisibility(id: string, visibility: PdfVisibilityMode): Promise<UpdatePdfVisibilityResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/visibility`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ visibility }),
+  });
+  if (!resp.ok) {
+    throw await parseErrorBody(resp);
+  }
+  return (await resp.json()) as UpdatePdfVisibilityResponse;
 }
 
 export interface CreateYoutubeTaskResponse {

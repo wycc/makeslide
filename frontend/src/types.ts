@@ -172,6 +172,8 @@ export interface PdfListItem {
   user_prompt: string | null;
   require_script_confirmation: boolean;
   category: string;
+  owner_sub?: string | null;
+  visibility?: 'private' | 'public' | 'public_editable';
   tts_provider?: 'openai' | 'gemini';
   tts_voice?: string | null;
   tts_speed?: number | null;
@@ -448,6 +450,8 @@ export interface PdfDetail {
   user_prompt: string | null;
   require_script_confirmation: boolean;
   category: string;
+  owner_sub?: string | null;
+  visibility?: 'private' | 'public' | 'public_editable';
   tts_provider?: 'openai' | 'gemini';
   tts_voice?: string | null;
   tts_speed?: number | null;

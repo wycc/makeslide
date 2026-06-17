@@ -42,6 +42,7 @@ export function PlayPageFullscreen() {
     currentPage, currentIdx, totalPages,
     detail,
     displayedImageSrc,
+    fullscreenImageSrc,
     withImageBust,
     withShareToken,
     drawingMode, setDrawingMode,
@@ -154,7 +155,7 @@ export function PlayPageFullscreen() {
         <div className="flex h-full w-full items-stretch">
           <div className="flex h-full w-1/2 shrink-0 flex-col p-2">
             <div className="flex min-h-0 flex-1 items-center justify-center">
-              {currentPage?.image_url || displayedImageSrc ? (
+              {currentPage?.image_url || currentPage?.thumbnail_url || displayedImageSrc ? (
                 <SlideRenderer
                   renderType={currentPage?.render_type}
                   spec={currentAnimationSpec}
@@ -170,7 +171,7 @@ export function PlayPageFullscreen() {
                   onAnimationError={() => setAnimationWarning(t('play.animation.runtimeWarning'))}
                   wrapperClassName="relative"
                   wrapperStyle={{ lineHeight: 0 }}
-                  src={displayedImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
+                  src={displayedImageSrc ?? fullscreenImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
                   alt={`第 ${currentPage?.page_number ?? ''} 頁`}
                   imgClassName="max-h-full max-w-full object-contain"
                   imgRef={fullscreenImageRef}
@@ -307,7 +308,7 @@ export function PlayPageFullscreen() {
             </div>
           )}
         </div>
-      ) : currentPage?.image_url || displayedImageSrc ? (
+      ) : currentPage?.image_url || currentPage?.thumbnail_url || displayedImageSrc ? (
         <SlideRenderer
           renderType={currentPage?.render_type}
           spec={currentAnimationSpec}
@@ -323,7 +324,7 @@ export function PlayPageFullscreen() {
           onAnimationError={() => setAnimationWarning(t('play.animation.runtimeWarning'))}
           wrapperClassName="relative"
           wrapperStyle={{ lineHeight: 0 }}
-          src={displayedImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
+          src={displayedImageSrc ?? fullscreenImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
           alt={`第 ${currentPage?.page_number ?? ''} 頁`}
           imgClassName="max-h-screen max-w-screen object-contain"
           imgRef={fullscreenImageRef}

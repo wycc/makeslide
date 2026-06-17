@@ -11,6 +11,7 @@ export function FigureAssetsTab() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [savingBatch, setSavingBatch] = useState(false);
 
   const pageNumber = currentPage?.page_number;
 
@@ -38,7 +39,7 @@ export function FigureAssetsTab() {
   }, [pdfId, pageNumber, currentShareToken, t]);
 
   const toggleExcluded = async (figure: PageFigure) => {
-    if (!pdfId || !pageNumber || !figures) return;
+    if (!pdfId || !pageNumber || !figures || isReadOnlyProcessing || savingBatch) return;
     const previous = figures;
     const updated = figures.map((f) => (f.id === figure.id ? { ...f, excluded: !f.excluded } : f));
     setFigures(updated);
@@ -54,6 +55,23 @@ export function FigureAssetsTab() {
     }
   };
 
+  const saveAllFigures = async (excluded: boolean) => {
+    if (!pdfId || !pageNumber || !figures || isReadOnlyProcessing || savingBatch || savingId) return;
+    const previous = figures;
+    const updated = figures.map((figure) => ({ ...figure, excluded }));
+    setFigures(updated);
+    setSavingBatch(true);
+    setError(null);
+    try {
+      await savePageFigureSelection(pdfId, pageNumber, updated.filter((figure) => figure.excluded).map((figure) => figure.id));
+    } catch {
+      setFigures(previous);
+      setError(t('play.figures.saveError'));
+    } finally {
+      setSavingBatch(false);
+    }
+  };
+
   return (
     <>
       <h2 className="mb-2 text-sm font-semibold text-slate-300">
@@ -62,45 +80,68 @@ export function FigureAssetsTab() {
       <p className="mb-3 text-xs text-slate-400">{t('play.figures.description')}</p>
       {loading ? (
         <p className="text-sm text-slate-400">{t('play.figures.loading')}</p>
-      ) : error ? (
-        <p className="text-sm text-rose-300">{error}</p>
       ) : !figures || figures.length === 0 ? (
-        <p className="text-sm text-slate-500">{t('play.figures.empty')}</p>
+        error ? (
+          <p className="text-sm text-rose-300">{error}</p>
+        ) : (
+          <p className="text-sm text-slate-500">{t('play.figures.empty')}</p>
+        )
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {figures.map((figure) => (
-            <div
-              key={figure.id}
-              className={`rounded-md border p-2 ${
-                figure.excluded ? 'border-slate-800 bg-slate-900/30 opacity-60' : 'border-slate-700 bg-slate-900/60'
-              }`}
+        <>
+          {error ? <p className="mb-3 text-sm text-rose-300">{error}</p> : null}
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="rounded border border-sky-700/70 px-2 py-1 text-xs font-medium text-sky-200 transition hover:border-sky-500 hover:bg-sky-950/60 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={isReadOnlyProcessing || savingBatch || Boolean(savingId)}
+              onClick={() => void saveAllFigures(false)}
             >
-              <img
-                src={withShareToken(figure.image_url) ?? figure.image_url}
-                alt={figure.caption ?? figure.id}
-                className="mb-2 max-h-40 w-full rounded border border-slate-800 bg-slate-950 object-contain"
-              />
-              <p className="mb-1 line-clamp-3 text-xs text-slate-300">
-                {figure.caption ?? figure.context ?? t('play.figures.noCaption')}
-              </p>
-              <div className="mb-2 flex items-center gap-1">
-                <span className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-400">
-                  {figure.source === 'vector' ? t('play.figures.sourceVector') : t('play.figures.sourceRaster')}
-                </span>
-              </div>
-              <label className="flex items-center gap-2 text-xs text-slate-400">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 accent-sky-500"
-                  checked={!figure.excluded}
-                  disabled={isReadOnlyProcessing || savingId === figure.id}
-                  onChange={() => void toggleExcluded(figure)}
+              {t('play.figures.useAll')}
+            </button>
+            <button
+              type="button"
+              className="rounded border border-slate-700 px-2 py-1 text-xs font-medium text-slate-300 transition hover:border-slate-500 hover:bg-slate-800/70 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={isReadOnlyProcessing || savingBatch || Boolean(savingId)}
+              onClick={() => void saveAllFigures(true)}
+            >
+              {t('play.figures.excludeAll')}
+            </button>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {figures.map((figure) => (
+              <div
+                key={figure.id}
+                className={`rounded-md border p-2 ${
+                  figure.excluded ? 'border-slate-800 bg-slate-900/30 opacity-60' : 'border-slate-700 bg-slate-900/60'
+                }`}
+              >
+                <img
+                  src={withShareToken(figure.image_url) ?? figure.image_url}
+                  alt={figure.caption ?? figure.id}
+                  className="mb-2 max-h-40 w-full rounded border border-slate-800 bg-slate-950 object-contain"
                 />
-                {t('play.figures.useAsReference')}
-              </label>
-            </div>
-          ))}
-        </div>
+                <p className="mb-1 line-clamp-3 text-xs text-slate-300">
+                  {figure.caption ?? figure.context ?? t('play.figures.noCaption')}
+                </p>
+                <div className="mb-2 flex items-center gap-1">
+                  <span className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-400">
+                    {figure.source === 'vector' ? t('play.figures.sourceVector') : t('play.figures.sourceRaster')}
+                  </span>
+                </div>
+                <label className="flex items-center gap-2 text-xs text-slate-400">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-sky-500"
+                    checked={!figure.excluded}
+                    disabled={isReadOnlyProcessing || savingBatch || savingId === figure.id}
+                    onChange={() => void toggleExcluded(figure)}
+                  />
+                  {t('play.figures.useAsReference')}
+                </label>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </>
   );

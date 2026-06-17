@@ -1,5 +1,7 @@
 import { RegenerateProgress } from './RegenerateProgress';
 import type { RegenJobState } from '../../types';
+import { useI18n } from '../../i18n';
+import { formatRegenSelectedPagesSummary } from './formatters';
 
 interface RegenOptions {
   image: boolean;
@@ -53,23 +55,35 @@ export function RegenAllDialog({
   onClose,
   onConfirm,
 }: RegenAllDialogProps) {
+  const { t } = useI18n();
   const disabled = isReadOnlyProcessing || regenAllBusy;
+  const selectedPagesSummary = formatRegenSelectedPagesSummary({
+    deckPagesCount,
+    selectedPages: regenSelectedPages,
+    t,
+  });
+  const executionOrder = [
+    t('play.regenDialog.optionImage'),
+    t('play.regenDialog.optionScript'),
+    t('play.regenDialog.optionAudio'),
+    t('play.regenDialog.optionAnimation'),
+  ].join(t('play.regenDialog.executionOrderSeparator'));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
       <div className="w-full max-w-xl rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl">
-        <h3 className="mb-3 text-sm font-semibold text-slate-200">選擇重生項目</h3>
+        <h3 className="mb-3 text-sm font-semibold text-slate-200">{t('play.regenDialog.title')}</h3>
         <p className="mb-3 text-xs text-slate-400">
-          可多選；執行順序固定為 <span className="font-semibold text-slate-200">圖檔 → 逐字稿 → 語音 → 動畫</span>。
+          {t('play.regenDialog.descriptionPrefix')}{' '}
+          <span className="font-semibold text-slate-200">{executionOrder}</span>
+          {t('play.regenDialog.descriptionSuffix')}
         </p>
         <div className="mb-3 rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-3 py-2 text-xs text-fuchsia-200">
-          {regenSelectedPages.size > 0
-            ? `僅重生已選取的 ${regenSelectedPages.size} 張投影片（第 ${Array.from(regenSelectedPages).sort((a, b) => a - b).join('、') } 頁）`
-            : `重生全部 ${deckPagesCount} 張投影片`}
+          {selectedPagesSummary}
         </div>
         <div className="mb-3 space-y-2">
           <div className="rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100">
-            已套用整份圖片風格設定（可於上方「🖼️ 風格」調整）。
+            {t('play.regenDialog.imageStyleApplied')}
           </div>
           <label className="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-200">
             <input
@@ -79,7 +93,7 @@ export function RegenAllDialog({
               onChange={(e) => onRegenOptionsChange((prev) => ({ ...prev, image: e.target.checked }))}
               disabled={disabled}
             />
-            <span>圖檔</span>
+            <span>{t('play.regenDialog.optionImage')}</span>
           </label>
           <label className="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-200">
             <input
@@ -89,7 +103,7 @@ export function RegenAllDialog({
               onChange={(e) => onRegenOptionsChange((prev) => ({ ...prev, script: e.target.checked }))}
               disabled={disabled}
             />
-            <span>逐字稿</span>
+            <span>{t('play.regenDialog.optionScript')}</span>
           </label>
           <label className="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-200">
             <input
@@ -99,7 +113,7 @@ export function RegenAllDialog({
               onChange={(e) => onRegenOptionsChange((prev) => ({ ...prev, audio: e.target.checked }))}
               disabled={disabled}
             />
-            <span>語音</span>
+            <span>{t('play.regenDialog.optionAudio')}</span>
           </label>
           <label className="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-200">
             <input
@@ -109,22 +123,22 @@ export function RegenAllDialog({
               onChange={(e) => onRegenOptionsChange((prev) => ({ ...prev, animation: e.target.checked }))}
               disabled={disabled}
             />
-            <span>動畫</span>
+            <span>{t('play.regenDialog.optionAnimation')}</span>
           </label>
         </div>
         {regenOptions.animation ? (
           <p className="mb-2 rounded-md border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-200">
-            將依每頁逐字稿與頁面截圖，逐頁呼叫 AI 自動產生焦點動畫（與動畫編輯分頁的「🤖 AI 自動產生焦點動畫」相同邏輯），並覆寫該頁原有的動畫設定；頁數較多時所需時間與 AI 費用會隨之增加。
+            {t('play.regenDialog.animationNotice')}
           </p>
         ) : null}
         {regenOptions.script || regenOptions.audio ? (
           <div className="mb-3 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs text-slate-300">主持模式</span>
+              <span className="text-xs text-slate-300">{t('play.regenDialog.hostMode')}</span>
               <div className="flex overflow-hidden rounded border border-slate-700">
                 {([
-                  ['solo', '單人旁白'],
-                  ['dual', '雙人對談'],
+                  ['solo', t('play.regenDialog.hostModeSolo')],
+                  ['dual', t('play.regenDialog.hostModeDual')],
                 ] as const).map(([mode, label]) => (
                   <button
                     key={mode}
@@ -144,36 +158,36 @@ export function RegenAllDialog({
               </div>
             </div>
             <p className="mt-1 text-xs text-slate-500">
-              重生逐字稿／語音時套用此主持模式；雙人對談會使用 Speaker 1／2 人設與聲音設定。
+              {t('play.regenDialog.hostModeHint')}
             </p>
           </div>
         ) : null}
         {regenOptions.image ? (
           <div className="mb-2">
-            <label className="mb-1 block text-xs text-slate-400">圖檔重生提示詞</label>
+            <label className="mb-1 block text-xs text-slate-400">{t('play.regenDialog.imagePromptLabel')}</label>
             <textarea
               value={regenAllPrompt}
               onChange={(e) => onRegenAllPromptChange(e.target.value)}
               rows={4}
               className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-fuchsia-500/40 placeholder:text-slate-500 focus:ring"
-              placeholder="輸入整份風格調整提示詞..."
+              placeholder={t('play.regenDialog.imagePromptPlaceholder')}
               disabled={disabled}
             />
           </div>
         ) : null}
         {regenOptions.script ? (
           <div className="mb-2">
-            <label className="mb-1 block text-xs text-slate-400">逐字稿重生提示詞</label>
+            <label className="mb-1 block text-xs text-slate-400">{t('play.regenDialog.scriptPromptLabel')}</label>
             <textarea
               value={regenScriptPrompt}
               onChange={(e) => onRegenScriptPromptChange(e.target.value)}
               rows={3}
               className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-fuchsia-500/40 placeholder:text-slate-500 focus:ring"
-              placeholder="例如：請以更精煉、口語、易懂的方式重寫，並保留每頁核心重點"
+              placeholder={t('play.regenDialog.scriptPromptPlaceholder')}
               disabled={disabled}
             />
             <div className="mt-2">
-              <label className="mb-1 block text-xs text-slate-400">逐字稿每頁最大長度</label>
+              <label className="mb-1 block text-xs text-slate-400">{t('play.regenDialog.scriptMaxCharsLabel')}</label>
               <input
                 type="number"
                 min={80}
@@ -194,7 +208,7 @@ export function RegenAllDialog({
         ) : null}
         {regenOptions.script && regenOptions.audio ? null : regenOptions.script ? (
           <p className="mb-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-            提醒：若僅重生逐字稿，原有語音可能與新的逐字稿不相符，建議同時勾選「語音」。
+            {t('play.regenDialog.scriptOnlyWarning')}
           </p>
         ) : null}
         <RegenerateProgress job={regenJob} />
@@ -218,16 +232,24 @@ export function RegenAllDialog({
             disabled={regenAllBusy}
             className="rounded border border-slate-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-40"
           >
-            {regenJobRunning ? '關閉（背景繼續）' : regenJob ? '關閉' : '取消'}
+            {regenJobRunning
+              ? t('play.regenDialog.closeInBackground')
+              : regenJob
+                ? t('play.regenDialog.close')
+                : t('play.regenDialog.cancel')}
           </button>
           <button
             type="button"
             onClick={onConfirm}
             disabled={isReadOnlyProcessing || regenAllBusy || !regenAnySelected}
             className="rounded border border-fuchsia-500/50 bg-fuchsia-500/15 px-3 py-1.5 text-sm text-fuchsia-200 disabled:cursor-not-allowed disabled:opacity-40"
-            title={!regenAnySelected ? '請至少選擇一個項目' : ''}
+            title={!regenAnySelected ? t('play.regenDialog.selectAtLeastOne') : ''}
           >
-            {regenAllBusy ? '重生中…' : regenJob?.status === 'completed' ? '再次重生' : '確認'}
+            {regenAllBusy
+              ? t('play.regenDialog.regenerating')
+              : regenJob?.status === 'completed'
+                ? t('play.regenDialog.regenerateAgain')
+                : t('play.regenDialog.confirm')}
           </button>
         </div>
       </div>

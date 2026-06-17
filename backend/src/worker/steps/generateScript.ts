@@ -11,6 +11,7 @@ import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { loadPromptTemplate, renderPromptTemplate } from '../../services/promptTemplates';
 import { pageScriptPath, pdfDir } from '../../services/storage';
 import { commitPresentationFile } from '../../services/presentationGit';
+import { redactPromptForLog } from '../../services/logSanitizer';
 
 export interface ScriptPageResult {
   pageNumber: number;
@@ -122,6 +123,61 @@ function clipText(text: string, max: number = MAX_TEXT_CHARS_PER_PAGE): string {
 export function scriptCharBounds(targetChars: number): { min: number; max: number } {
   const t = Math.max(1, Math.round(targetChars));
   return { min: Math.round(t * 0.8), max: Math.round(t * 1.2) };
+}
+
+const MINIMAL_SLIDE_STYLE_PATTERNS = [
+  /高橋流/u,
+  /takahashi\s*(method|style)?/iu,
+  /每[一1]頁(?:只|僅|最多|不要超過)?(?:放|講|有|保留)?[一1二2兩\-~～到至]{1,4}個重點/u,
+  /(?:只|僅|最多|不要超過)[一1二2兩]\s*個重點/u,
+  /(?:一|1)\s*(?:頁|張).*?(?:一|1|二|2|兩)\s*個重點/u,
+  /極簡(?:大字|投影片|簡報|風格)?/u,
+  /大字(?:投影片|簡報|風格)/u,
+  /少字(?:投影片|簡報|風格)?/u,
+  /文字(?:越少越好|極少|很少)/u,
+  /minimal(?:ist)?\s+(?:big\s+type|large\s+text|slides?|presentation)/iu,
+  /big\s+(?:type|font|text)\s+(?:slides?|presentation)/iu,
+  /one\s+or\s+two\s+(?:key\s+)?points?\s+per\s+slide/iu,
+];
+
+export function isMinimalSlideStyleRequested(userPrompt: string | null | undefined): boolean {
+  if (!userPrompt) return false;
+  const normalized = userPrompt
+    .normalize('NFKC')
+    .replace(/[，。！？、；：,.!?;:()（）\[\]【】]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!normalized) return false;
+  return MINIMAL_SLIDE_STYLE_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
+function minimalSlideStyleInstruction(requested: boolean): string {
+  if (!requested) return '';
+  return [
+    '【高橋流 / 極簡大字模式優先規則】使用者已明確要求高橋流、Takahashi method/style、每頁只放一兩個重點、極簡大字投影片或類似低資訊密度風格。',
+    '當此要求與一般「充分利用圖像、把內容講清楚、適度展開、補足語氣與轉場」規則衝突時，請優先遵守極簡需求：每頁只挑 1～2 個最核心重點，省略次要細節、案例、延伸背景與逐項解釋。',
+    '逐字稿應明顯更短、更直接、停頓更清楚；若原始頁面文字很多，也不要把每個條列都講完，只保留最能代表該頁訊息的一句或兩句。仍需維持 JSON 格式、語氣標記、講者標籤與基本可朗讀性。',
+  ].join('\n');
+}
+
+function scriptCharLimitInstruction(targetChars: number, requestedMinimal: boolean): string {
+  const bounds = scriptCharBounds(targetChars);
+  if (requestedMinimal) {
+    const softMin = Math.max(40, Math.round(targetChars * 0.25));
+    const preferredMax = Math.max(softMin + 20, Math.round(targetChars * 0.65));
+    return `【字數限制】一般模式每頁逐字稿會落在 ${bounds.min}～${bounds.max} 字之間（目標約 ${targetChars} 字）；但本次使用者明確要求高橋流 / 極簡大字模式，請優先降低文字量，建議每頁約 ${softMin}～${preferredMax} 字、最多仍不可超過 ${bounds.max} 字。不要為了達到原目標字數而補細節或灌水。`;
+  }
+  return `【字數限制】每頁逐字稿長度必須控制在 ${bounds.min}～${bounds.max} 字之間（目標約 ${targetChars} 字）：內容多時請優先濃縮、只挑核心重點講，不可超過 ${bounds.max} 字上限；內容少時可適度展開，但不要灌水。`;
+}
+
+function deckRewriteCharLimitInstruction(targetChars: number, requestedMinimal: boolean): string {
+  const bounds = scriptCharBounds(targetChars);
+  if (requestedMinimal) {
+    const softMin = Math.max(40, Math.round(targetChars * 0.25));
+    const preferredMax = Math.max(softMin + 20, Math.round(targetChars * 0.65));
+    return `【字數限制】一般模式每頁逐字稿會控制在 ${bounds.min}～${bounds.max} 字之間；但本次使用者明確要求高橋流 / 極簡大字模式，重排時請優先刪減到每頁 1～2 個核心重點，建議約 ${softMin}～${preferredMax} 字、最多仍不可超過 ${bounds.max} 字。此時不要強制補到 ${bounds.min} 字下限，也不要為了連貫性補回次要細節。`;
+  }
+  return `【字數限制】每頁逐字稿長度必須控制在 ${bounds.min}～${bounds.max} 字之間（目標和原稿越接近越好）：內容多時優先濃縮挑重點，不可超過 ${bounds.max} 字上限；內容偏少時可適度展開、補足語氣與轉場，不要大幅刪減原意，也不可低於 ${bounds.min} 字下限。`;
 }
 
 /**
@@ -284,8 +340,10 @@ function buildSystemPrompt(
   const languageInstruction = contentLanguage === 'en'
     ? '【輸出語言】請用英文產生逐字稿、旁白與所有可朗讀內容；即使使用者提示或投影片文字是中文，也要翻譯並自然改寫成英文。'
     : '【輸出語言】請用繁體中文產生逐字稿、旁白與所有可朗讀內容；即使使用者提示或投影片文字是英文，也要翻譯並自然改寫成繁體中文。';
+  const minimalRequested = isMinimalSlideStyleRequested(userPrompt);
   const bounds = scriptCharBounds(targetChars);
-  const charLimitInstruction = `【字數限制】每頁逐字稿長度必須控制在 ${bounds.min}～${bounds.max} 字之間（目標約 ${targetChars} 字）：內容多時請優先濃縮、只挑核心重點講，不可超過 ${bounds.max} 字上限；內容少時可適度展開，但不要灌水。`;
+  const charLimitInstruction = scriptCharLimitInstruction(targetChars, minimalRequested);
+  const minimalInstruction = minimalSlideStyleInstruction(minimalRequested);
   if (ttsProvider === 'gemini') {
     const isDual = hostMode === 'dual';
     const fallback = isDual
@@ -296,6 +354,10 @@ function buildSystemPrompt(
       fallback,
     );
     const base = [template, '', languageInstruction, '', charLimitInstruction];
+    if (minimalInstruction) {
+      base.push('');
+      base.push(minimalInstruction);
+    }
     const sanitized = sanitiseUserPrompt(userPrompt);
     // 人設僅在雙人模式下加入；單人模式不附加任何 Speaker 人設。
     if (isDual) {
@@ -352,6 +414,7 @@ function buildSystemPrompt(
     ),
     '',
     languageInstruction,
+    ...(minimalInstruction ? ['', minimalInstruction] : []),
   ];
 
   // 人設僅在雙人模式下加入；單人模式不附加任何 Speaker 人設。
@@ -446,7 +509,9 @@ function buildDeckRewriteSystemPrompt(
   hostMode: 'solo' | 'dual' = 'solo',
 ): string {
   const runtime = getRuntimeAiSettings();
-  const bounds = scriptCharBounds(targetChars);
+  const minimalRequested = isMinimalSlideStyleRequested(userPrompt);
+  const rewriteCharLimitInstruction = deckRewriteCharLimitInstruction(targetChars, minimalRequested);
+  const minimalInstruction = minimalSlideStyleInstruction(minimalRequested);
   if (runtime.ttsProvider === 'gemini') {
     const isDual = hostMode === 'dual';
     const base = [
@@ -457,8 +522,12 @@ function buildDeckRewriteSystemPrompt(
           : '你是一位繁體中文簡報旁白總編輯。只輸出 JSON：{"pages":[{"page_number":1,"script":"..."}, ...]}。',
       ),
       '',
-      `【字數限制】每頁逐字稿長度必須控制在 ${bounds.min}～${bounds.max} 字之間（目標和原稿越接近越好）：內容多時優先濃縮挑重點，不可超過 ${bounds.max} 字上限；內容偏少時可適度展開、補足語氣與轉場，不要大幅刪減原意，也不可低於 ${bounds.min} 字下限。`,
+      rewriteCharLimitInstruction,
     ];
+    if (minimalInstruction) {
+      base.push('');
+      base.push(minimalInstruction);
+    }
     const sanitized = sanitiseUserPrompt(userPrompt);
     if (isDual) {
       const speaker1 = runtime.geminiTtsSpeaker1?.trim();
@@ -495,12 +564,16 @@ function buildDeckRewriteSystemPrompt(
       '規則：',
       '1. 必須輸出 JSON：{"pages":[{"page_number":1,"script":"..."}, ...]}，不要其他欄位。',
       '2. pages 的數量與 page_number 必須和輸入完全一致，不可增刪頁。',
-      `3. 每頁字數必須控制在 ${bounds.min}～${bounds.max} 字之間（目標和原稿越接近越好）：內容多時優先濃縮挑重點，**不可超過 ${bounds.max} 字上限**；內容偏少時可適度展開、補足語氣與轉場，不要大幅刪減原意，**也不可低於 ${bounds.min} 字下限**。`,
+      `3. ${rewriteCharLimitInstruction}`,
       '4. 可以調整句子銜接與語氣，但不要憑空捏造與投影片無關的新事實。',
       '5. 每頁腳本仍要可獨立朗讀，並在頁與頁之間有連續性。',
       '6. 避免使用「這一頁／本頁／此頁／本張」等單頁指稱，讓整份節目聽感更連續。',
       '7. 每一段都要使用「語氣分段標記 + 講者標籤」格式：[[ 語氣描述 ]]Speaker 1: 對白文字 或 [[ 語氣描述 ]]Speaker 2: 對白文字；每頁至少 4 段，並以 Speaker 1、Speaker 2 交替輪流呈現一問一答的對話，避免同一位講者連續出現兩段以上。',
     ];
+    if (minimalInstruction) {
+      base.push('');
+      base.push(minimalInstruction);
+    }
     const speaker1 = runtime.openaiTtsSpeaker1?.trim();
     const speaker2 = runtime.openaiTtsSpeaker2?.trim();
     if (speaker1 || speaker2) {
@@ -538,11 +611,15 @@ function buildDeckRewriteSystemPrompt(
     '規則：',
     '1. 必須輸出 JSON：{"pages":[{"page_number":1,"script":"..."}, ...]}，不要其他欄位。',
     '2. pages 的數量與 page_number 必須和輸入完全一致，不可增刪頁。',
-    `3. 每頁字數必須控制在 ${bounds.min}～${bounds.max} 字之間（目標和原稿越接近越好）：內容多時優先濃縮挑重點，**不可超過 ${bounds.max} 字上限**；內容偏少時可適度展開、補足語氣與轉場，不要大幅刪減原意，**也不可低於 ${bounds.min} 字下限**。`,
+    `3. ${rewriteCharLimitInstruction}`,
     '4. 可以調整句子銜接與語氣，但不要憑空捏造與投影片無關的新事實。',
     '5. 每頁腳本仍要可獨立朗讀，並在頁與頁之間有連續性。',
     '6. 避免使用「這一頁／本頁／此頁／本張」等單頁指稱，讓整份旁白聽感更連續。',
   ];
+  if (minimalInstruction) {
+    base.push('');
+    base.push(minimalInstruction);
+  }
   const sanitized = sanitiseUserPrompt(userPrompt);
   if (sanitized) {
     base.push('');
@@ -646,10 +723,13 @@ export async function generateScript(
     runtime.openaiTtsSpeaker1,
     runtime.openaiTtsSpeaker2,
   );
-  console.log('System prompt for script generation:\n', system);
+  logger.debug(
+    { pdfId, stage: 'generate_scripts', systemPrompt: redactPromptForLog(system) },
+    'generateScript: system prompt prepared',
+  );
   if (userPrompt && userPrompt.trim()) {
     logger.info(
-      { pdfId, promptPreview: userPrompt.trim().slice(0, 80) },
+      { pdfId, userPrompt: redactPromptForLog(userPrompt.trim()) },
       'generateScript: applying user style prompt',
     );
   }

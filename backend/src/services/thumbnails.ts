@@ -3,14 +3,25 @@ import path from 'node:path';
 import sharp from 'sharp';
 import { coverImagePath, coverThumbnailPath, pageThumbnailPath } from './storage';
 
-export const PAGE_THUMBNAIL_WIDTH_PX = 360;
+export const PAGE_THUMBNAIL_WIDTH_PX = 749;
+export const PAGE_THUMBNAIL_HEIGHT_PX = 500;
+export const PAGE_THUMBNAIL_JPEG_QUALITY = 62;
 export const COVER_THUMBNAIL_WIDTH_PX = 320;
 
-async function writeJpegThumbnail(sourcePath: string, thumbnailPath: string, width: number): Promise<string> {
+async function writeJpegThumbnail(
+  sourcePath: string,
+  thumbnailPath: string,
+  options: { width: number; height?: number; quality?: number },
+): Promise<string> {
   await fs.promises.mkdir(path.dirname(thumbnailPath), { recursive: true });
   await sharp(sourcePath)
-    .resize({ width, withoutEnlargement: true })
-    .jpeg({ quality: 72, mozjpeg: true })
+    .resize({
+      width: options.width,
+      height: options.height,
+      fit: 'inside',
+      withoutEnlargement: true,
+    })
+    .jpeg({ quality: options.quality ?? 72, mozjpeg: true })
     .toFile(thumbnailPath);
   return thumbnailPath;
 }
@@ -20,11 +31,15 @@ export async function generatePageThumbnail(
   pageUid: string,
   sourcePath: string,
 ): Promise<string> {
-  return writeJpegThumbnail(sourcePath, pageThumbnailPath(pdfId, pageUid), PAGE_THUMBNAIL_WIDTH_PX);
+  return writeJpegThumbnail(sourcePath, pageThumbnailPath(pdfId, pageUid), {
+    width: PAGE_THUMBNAIL_WIDTH_PX,
+    height: PAGE_THUMBNAIL_HEIGHT_PX,
+    quality: PAGE_THUMBNAIL_JPEG_QUALITY,
+  });
 }
 
 export async function generateCoverThumbnail(pdfId: string, sourcePath = coverImagePath(pdfId)): Promise<string> {
-  return writeJpegThumbnail(sourcePath, coverThumbnailPath(pdfId), COVER_THUMBNAIL_WIDTH_PX);
+  return writeJpegThumbnail(sourcePath, coverThumbnailPath(pdfId), { width: COVER_THUMBNAIL_WIDTH_PX });
 }
 
 export async function ensurePageThumbnail(

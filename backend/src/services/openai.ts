@@ -12,6 +12,7 @@ import { callGeminiJson, callGeminiTextStream } from './gemini';
 import { getRuntimeAiSettings } from './aiSettings';
 import { currentAccountId, sanitizeAccountId } from './accountContext';
 import { appendLlmRequestLog, appendLlmResponseLog } from './llmUsage';
+import { redactLogObject, redactTextForLog } from './logSanitizer';
 
 interface AccountOpenAiState {
   client: OpenAI | null;
@@ -74,6 +75,34 @@ function sanitizeMessagesForLog(messages: ChatCompletionMessageParam[]): unknown
   });
 }
 
+function summarizeMessagesForRuntimeLog(messages: ChatCompletionMessageParam[]): unknown[] {
+  return messages.map((m) => {
+    const msg = m as { role?: unknown; content?: unknown };
+    const role = typeof msg.role === 'string' ? msg.role : 'unknown';
+    if (typeof msg.content === 'string') {
+      return { role, content: redactTextForLog(msg.content) };
+    }
+    if (!Array.isArray(msg.content)) return { role, contentType: typeof msg.content };
+    return {
+      role,
+      content: msg.content.map((part) => {
+        const p = part as { type?: unknown; text?: unknown; image_url?: { url?: string; detail?: unknown } };
+        if (p.type === 'text') return { type: 'text', text: redactTextForLog(typeof p.text === 'string' ? p.text : '') };
+        if (p.type === 'image_url') {
+          return {
+            type: 'image_url',
+            image_url: {
+              file: extractImageFileName(p.image_url?.url ?? ''),
+              detail: p.image_url?.detail ?? 'auto',
+            },
+          };
+        }
+        return { type: typeof p.type === 'string' ? p.type : 'unknown' };
+      }),
+    };
+  });
+}
+
 /** 取得目前情境的 pdf_id/run_id（若有），供 log 寫入時附帶 pipeline run 關聯資訊。 */
 
 /**
@@ -103,17 +132,26 @@ export function getOpenAIClient(accountId: string = currentAccountId()): OpenAI 
 
     const respHeaders: Record<string, string> = {};
     resp.headers.forEach((v, k) => { respHeaders[k] = v; });
-    console.log(`[OpenAI raw response] status=${resp.status} url=${url.toString()}`);
-    console.log(`[OpenAI raw headers] ${JSON.stringify(respHeaders)}`);
-    console.log(`[OpenAI raw hex] ${buf.toString('hex')}`);
-    console.log(`[OpenAI raw utf8] ${buf.toString('utf8')}`);
+    logger.debug(
+      redactLogObject({
+        status: resp.status,
+        url: url.toString(),
+        headers: respHeaders,
+        bytes: buf.byteLength,
+        bodyPreview: buf.toString('utf8', 0, Math.min(buf.byteLength, 256)),
+      }),
+      'OpenAI raw response received',
+    );
 
     // Auto-fix: if server sent brotli without Content-Encoding header, decompress manually
     const contentEncoding = resp.headers.get('content-encoding') ?? '';
     if (contentEncoding.includes('br') || (!contentEncoding && buf[0] === 0x1b)) {
       try {
         const decompressed = await brotliDecompressAsync(buf);
-        console.log(`[OpenAI brotli decompressed] ${decompressed.toString('utf8')}`);
+        logger.debug(
+          redactLogObject({ bytes: decompressed.byteLength, bodyPreview: decompressed.toString('utf8', 0, Math.min(decompressed.byteLength, 256)) }),
+          'OpenAI brotli response decompressed',
+        );
         const fixedHeaders = new Headers(resp.headers);
         fixedHeaders.delete('content-encoding');
         fixedHeaders.delete('content-length');
@@ -123,7 +161,7 @@ export function getOpenAIClient(accountId: string = currentAccountId()): OpenAI 
           headers: fixedHeaders,
         });
       } catch (e) {
-        console.log(`[OpenAI brotli decompress failed] ${String(e)}`);
+        logger.warn({ error: e instanceof Error ? e.message : String(e) }, 'OpenAI brotli decompress failed');
       }
     }
 
@@ -326,10 +364,19 @@ export async function callChatJSON<T>(
       completion_tokens: completion.usage?.completion_tokens ?? 0,
       total_tokens: completion.usage?.total_tokens ?? 0,
     };
-    console.log(JSON.stringify(sanitizeMessagesForLog(params.messages)));
-    console.log('---------------');
-    console.log(JSON.stringify(completion));
-    console.log({ rawContent, usage, latencyMs });
+    logger.debug(
+      {
+        label: params.label,
+        model,
+        attempt,
+        latencyMs,
+        usage,
+        finishReason,
+        requestMessages: summarizeMessagesForRuntimeLog(params.messages),
+        rawContent: redactTextForLog(rawContent),
+      },
+      'OpenAI chat JSON response received',
+    );
     await appendLlmResponseLog({
       ts: new Date().toISOString(),
       label: params.label ?? null,
@@ -361,8 +408,6 @@ export async function callChatJSON<T>(
     }
 
     try {
-      console.log(rawContent);
-
       const parsed = JSON.parse(rawContent) as unknown;
       const validated = params.schema.parse(parsed);
       logger.debug(
@@ -378,7 +423,6 @@ export async function callChatJSON<T>(
       return { data: validated, usage, latencyMs, rawContent };
     } catch (err) {
       lastErr = err;
-      console.log(err);
       logger.warn(
         {
           label: params.label,
@@ -386,7 +430,7 @@ export async function callChatJSON<T>(
           attempt,
           latencyMs,
           usage,
-          rawPreview: rawContent.slice(0, 200),
+          rawContent: redactTextForLog(rawContent),
           error: err instanceof Error ? err.message : String(err),
         },
         attempt < maxAttempts

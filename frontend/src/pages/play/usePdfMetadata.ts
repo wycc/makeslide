@@ -5,6 +5,7 @@ import {
   createPdfShare,
   regeneratePdfTitle,
   syncPresentationToGitHub,
+  updatePdfVisibility,
   updatePdfScriptSettings,
   updatePdfTitle,
   updatePdfTtsSettings,
@@ -68,6 +69,7 @@ export interface PdfMetadataState {
   handleRegenerateTitle: () => void;
   handleSaveTtsSettings: () => void;
   handleCreateShareLink: () => void;
+  handleMakeSharePrivate: () => void;
   handleShowPlayQrCode: () => void;
   handleSyncToGithub: () => void;
 }
@@ -189,6 +191,7 @@ export function usePdfMetadata({
       const res = await createPdfShare(pdfId, shareAccess);
       const absoluteUrl = `${window.location.origin}${res.share_url}`;
       setShareUrl(absoluteUrl);
+      setDetail((prev) => prev ? { ...prev, visibility: res.visibility ?? (shareAccess === 'editable' ? 'public_editable' : 'public'), updated_at: res.updated_at } : prev);
       setShareDialogOpen(true);
       try {
         await navigator.clipboard.writeText(absoluteUrl);
@@ -206,12 +209,30 @@ export function usePdfMetadata({
     }
   }, [pdfId, shareAccess]);
 
+  const handleMakeSharePrivate = useCallback(async () => {
+    if (!pdfId || isReadOnlyProcessing) return;
+    setShareBusy(true);
+    setShareMessage(null);
+    setShareError(null);
+    try {
+      const res = await updatePdfVisibility(pdfId, 'private');
+      setDetail((prev) => prev ? { ...prev, visibility: res.visibility, updated_at: res.updated_at } : prev);
+      setShareUrl('');
+      setShareMessage('已將此簡報設為 private；其他帳號將不會在列表中看到它。');
+    } catch (err) {
+      setShareError(err instanceof ApiError ? err.message : '設定 private 失敗');
+    } finally {
+      setShareBusy(false);
+    }
+  }, [pdfId, isReadOnlyProcessing, setDetail]);
+
   const handleShowPlayQrCode = useCallback(async () => {
     if (!pdfId) return;
     try {
       const res = await createPdfShare(pdfId, shareAccess);
       const absoluteUrl = `${window.location.origin}${res.share_url}`;
       setShareUrl(absoluteUrl);
+      setDetail((prev) => prev ? { ...prev, visibility: res.visibility ?? (shareAccess === 'editable' ? 'public_editable' : 'public'), updated_at: res.updated_at } : prev);
       const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=520x520&data=${encodeURIComponent(absoluteUrl)}`;
       setPlayQrCodeUrl(qrSrc);
       setShareMessage(`已產生分享 QR Code（${shareAccess === 'editable' ? '可編輯' : '唯讀'}）`);
@@ -275,6 +296,7 @@ export function usePdfMetadata({
     handleRegenerateTitle,
     handleSaveTtsSettings,
     handleCreateShareLink,
+    handleMakeSharePrivate,
     handleShowPlayQrCode,
     handleSyncToGithub,
   };

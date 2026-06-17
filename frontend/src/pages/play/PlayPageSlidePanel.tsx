@@ -6,26 +6,26 @@ import { FigureAssetsTab } from './FigureAssetsTab';
 import { formatTime, formatDurationMs, formatTokenCount, formatCostUsd } from './formatters';
 import { PageTimingChips } from './PageTimingChips';
 import { ApiError, fetchPageGenerationPrompts, fetchPdfRunHistory, fetchPdfSlowArtifacts, figureImageUrl } from '../../lib/api';
-import { SHOW_SUBTITLE_STORAGE_KEY, INTERACTIVE_MODE_STORAGE_KEY, useI18n } from '../../i18n';
+import { SHOW_SUBTITLE_STORAGE_KEY, INTERACTIVE_MODE_STORAGE_KEY, useI18n, type TranslationKey } from '../../i18n';
 import { usePlayPageContext } from './PlayPageContext';
 import type { PageArtifact, PipelineRunStatus, PipelineRunSummary, PipelineRunType, PipelineStage, SlowArtifactSummary, TimingEventStatus } from '../../types';
 
-const RUN_TYPE_LABELS: Record<PipelineRunType, string> = {
-  initial: '初次產生',
-  retry: '重試',
-  resume: '接續處理',
-  regenerate_batch: '批次重生',
-  regenerate_page: '單頁重生',
-  regenerate_artifact: '單一素材重生',
-  generate_video: '生成影片',
+const RUN_TYPE_LABEL_KEYS: Record<PipelineRunType, TranslationKey> = {
+  initial: 'play.system.runType.initial',
+  retry: 'play.system.runType.retry',
+  resume: 'play.system.runType.resume',
+  regenerate_batch: 'play.system.runType.regenerateBatch',
+  regenerate_page: 'play.system.runType.regeneratePage',
+  regenerate_artifact: 'play.system.runType.regenerateArtifact',
+  generate_video: 'play.system.runType.generateVideo',
 };
 
-const RUN_STATUS_LABELS: Record<PipelineRunStatus, string> = {
-  running: '執行中',
-  succeeded: '成功',
-  failed: '失敗',
-  canceled: '已取消',
-  partial: '部分完成',
+const RUN_STATUS_LABEL_KEYS: Record<PipelineRunStatus, TranslationKey> = {
+  running: 'play.system.status.running',
+  succeeded: 'play.system.status.succeeded',
+  failed: 'play.system.status.failed',
+  canceled: 'play.system.status.canceled',
+  partial: 'play.system.status.partial',
 };
 
 const RUN_STATUS_COLORS: Record<PipelineRunStatus, string> = {
@@ -36,35 +36,35 @@ const RUN_STATUS_COLORS: Record<PipelineRunStatus, string> = {
   partial: 'text-amber-300',
 };
 
-const STAGE_LABELS: Record<PipelineStage, string> = {
-  queue_wait: '排隊等待',
-  source_prepare: '來源準備',
-  render_pages: '頁面渲染',
-  extract_text: '文字擷取',
-  extract_figures: '圖表擷取',
-  split_text: '文字分段',
-  generate_scripts: '逐字稿生成',
-  synthesize_audio: '語音合成',
-  generate_animations: '動畫生成',
-  generate_title: '標題生成',
-  generate_video: '影片生成',
-  finalize: '收尾處理',
+const STAGE_LABEL_KEYS: Record<PipelineStage, TranslationKey> = {
+  queue_wait: 'play.system.stage.queueWait',
+  source_prepare: 'play.system.stage.sourcePrepare',
+  render_pages: 'play.system.stage.renderPages',
+  extract_text: 'play.system.stage.extractText',
+  extract_figures: 'play.system.stage.extractFigures',
+  split_text: 'play.system.stage.splitText',
+  generate_scripts: 'play.system.stage.generateScripts',
+  synthesize_audio: 'play.system.stage.synthesizeAudio',
+  generate_animations: 'play.system.stage.generateAnimations',
+  generate_title: 'play.system.stage.generateTitle',
+  generate_video: 'play.system.stage.generateVideo',
+  finalize: 'play.system.stage.finalize',
 };
 
-const STAGE_STATUS_LABELS: Record<TimingEventStatus, string> = {
-  running: '執行中',
-  succeeded: '成功',
-  failed: '失敗',
-  skipped: '已跳過',
-  canceled: '已取消',
-  unknown: '未知',
+const STAGE_STATUS_LABEL_KEYS: Record<TimingEventStatus, TranslationKey> = {
+  running: 'play.system.status.running',
+  succeeded: 'play.system.status.succeeded',
+  failed: 'play.system.status.failed',
+  skipped: 'play.system.status.skipped',
+  canceled: 'play.system.status.canceled',
+  unknown: 'play.system.status.unknown',
 };
 
-const PAGE_ARTIFACT_LABELS: Record<PageArtifact, string> = {
-  image: '圖片',
-  text: '文字',
-  script: '講稿',
-  audio: '語音',
+const PAGE_ARTIFACT_LABEL_KEYS: Record<PageArtifact, TranslationKey> = {
+  image: 'play.timing.artifact.image',
+  text: 'play.timing.artifact.text',
+  script: 'play.timing.artifact.script',
+  audio: 'play.timing.artifact.audio',
 };
 
 export function PlayPageSlidePanel() {
@@ -73,6 +73,7 @@ export function PlayPageSlidePanel() {
     currentPage, currentIdx, totalPages,
     detail,
     displayedImageSrc,
+    playbackImageSrc,
     isPlaying, playPause,
     slideAnimationPlaying,
     currentTime, duration,
@@ -138,6 +139,7 @@ export function PlayPageSlidePanel() {
   } = usePlayPageContext();
 
   const { t } = useI18n();
+  const pageLabel = (page: number | string) => t('play.source.pageLabel').replace('{page}', String(page));
 
   const progressRatio = duration > 0 ? Math.min(1, currentTime / duration) * 1000 : 0;
 
@@ -164,7 +166,7 @@ export function PlayPageSlidePanel() {
       .catch((err) => {
         if (cancelled) return;
         setRunHistory([]);
-        setRunHistoryError(err instanceof ApiError ? err.message : '載入執行歷程失敗');
+        setRunHistoryError(err instanceof ApiError ? err.message : t('play.system.runHistoryLoadError'));
       })
       .finally(() => {
         if (!cancelled) setRunHistoryLoading(false);
@@ -172,7 +174,7 @@ export function PlayPageSlidePanel() {
     return () => {
       cancelled = true;
     };
-  }, [editTab, pdfId]);
+  }, [editTab, pdfId, t]);
 
   // 切到「系統資料」分頁時載入此 PDF 最慢的素材排行（page_artifact_timings）。
   useEffect(() => {
@@ -188,7 +190,7 @@ export function PlayPageSlidePanel() {
       .catch((err) => {
         if (cancelled) return;
         setSlowArtifacts([]);
-        setSlowArtifactsError(err instanceof ApiError ? err.message : '載入最慢素材排行失敗');
+        setSlowArtifactsError(err instanceof ApiError ? err.message : t('play.system.slowArtifactsLoadError'));
       })
       .finally(() => {
         if (!cancelled) setSlowArtifactsLoading(false);
@@ -196,7 +198,7 @@ export function PlayPageSlidePanel() {
     return () => {
       cancelled = true;
     };
-  }, [editTab, pdfId]);
+  }, [editTab, pdfId, t]);
 
   return (
     <div
@@ -247,7 +249,7 @@ export function PlayPageSlidePanel() {
               />
               {!transcriptFocusMode && shareUrl ? <p className="max-w-[85vw] break-all text-center text-xs text-slate-300">{shareUrl}</p> : null}
             </div>
-          ) : currentPage?.image_url || displayedImageSrc ? (
+          ) : currentPage?.image_url || currentPage?.thumbnail_url || displayedImageSrc ? (
             <SlideRenderer
               renderType={currentPage?.render_type}
               spec={currentAnimationSpec}
@@ -263,7 +265,7 @@ export function PlayPageSlidePanel() {
               onAnimationError={() => setAnimationWarning(t('play.animation.runtimeWarning'))}
               wrapperClassName="relative inline-block rounded-lg"
               wrapperStyle={{ lineHeight: 0, maxHeight: transcriptFocusMode ? '10rem' : `${slideImageMaxHeightVh}vh` }}
-              src={displayedImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
+              src={displayedImageSrc ?? playbackImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
               alt={`第 ${currentPage?.page_number ?? ''} 頁`}
               imgClassName="block h-auto w-auto rounded-lg border border-slate-800 shadow-xl"
               imgStyle={{
@@ -701,7 +703,7 @@ export function PlayPageSlidePanel() {
               onClick={() => setEditTab('system')}
               className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'system' ? 'bg-slate-800 text-amber-200' : 'text-slate-400'}`}
             >
-              🧾 系統資料
+              🧾 {t('play.system.tab')}
             </button>
             <button
               type="button"
@@ -717,7 +719,7 @@ export function PlayPageSlidePanel() {
               }}
               className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'source' ? 'bg-slate-800 text-violet-200' : 'text-slate-400'}`}
             >
-              📚 來源
+              📚 {t('play.source.tab')}
             </button>
             <button
               type="button"
@@ -801,21 +803,21 @@ export function PlayPageSlidePanel() {
             <FigureAssetsTab />
           ) : editTab === 'source' ? (
             <>
-              <h2 className="mb-2 text-sm font-semibold text-slate-300">📚 來源管理</h2>
+              <h2 className="mb-2 text-sm font-semibold text-slate-300">📚 {t('play.source.managementTitle')}</h2>
               <div className="space-y-3">
                 <div className="rounded-md border border-slate-800 bg-slate-900/50 p-3">
-                  <p className="mb-2 text-xs text-slate-400">新增 TXT 來源（會在生成逐字稿時一起送出）</p>
+                  <p className="mb-2 text-xs text-slate-400">{t('play.source.addTxtDescription')}</p>
                   <input
                     value={sourceTextName}
                     onChange={(e) => setSourceTextName(e.target.value)}
-                    placeholder="來源名稱（選填）"
+                    placeholder={t('play.source.namePlaceholder')}
                     className="mb-2 w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100"
                   />
                   <textarea
                     value={sourceTextContent}
                     onChange={(e) => setSourceTextContent(e.target.value)}
                     rows={5}
-                    placeholder="貼上來源文字內容"
+                    placeholder={t('play.source.contentPlaceholder')}
                     className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100"
                   />
                   <div className="mt-2 flex justify-end">
@@ -825,13 +827,13 @@ export function PlayPageSlidePanel() {
                       disabled={sourceBusy || isReadOnlyProcessing}
                       className="rounded-md border border-violet-500/50 bg-violet-500/15 px-3 py-1.5 text-sm text-violet-200 disabled:opacity-40"
                     >
-                      新增 TXT 來源
+                      {t('play.source.addTxt')}
                     </button>
                   </div>
                 </div>
 
                 <div className="rounded-md border border-slate-800 bg-slate-900/50 p-3">
-                  <p className="mb-2 text-xs text-slate-400">新增 PDF 來源（會擷取文字並在生成逐字稿時一起送出）</p>
+                  <p className="mb-2 text-xs text-slate-400">{t('play.source.addPdfDescription')}</p>
                   <input
                     ref={sourcePdfInputRef}
                     type="file"
@@ -849,7 +851,7 @@ export function PlayPageSlidePanel() {
                     disabled={sourceBusy || isReadOnlyProcessing}
                     className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-200 disabled:opacity-40"
                   >
-                    上傳 PDF 來源
+                    {t('play.source.uploadPdf')}
                   </button>
                 </div>
 
@@ -857,10 +859,10 @@ export function PlayPageSlidePanel() {
                 {sourceMsg ? <p className="text-xs text-emerald-300">{sourceMsg}</p> : null}
 
                 <div className="rounded-md border border-slate-800 bg-slate-900/50 p-3">
-                  <p className="mb-2 text-xs text-slate-400">目前來源清單（{sourceItems.length}）</p>
+                  <p className="mb-2 text-xs text-slate-400">{t('play.source.currentList').replace('{count}', String(sourceItems.length))}</p>
                   <div className="max-h-72 space-y-2 overflow-y-auto">
                     {sourceItems.length === 0 ? (
-                      <p className="text-xs text-slate-500">尚未新增額外來源</p>
+                      <p className="text-xs text-slate-500">{t('play.source.emptyList')}</p>
                     ) : sourceItems.map((s) => {
                       const isExpanded = expandedSourceId === s.id;
                       const hasContent = s.content_text.trim().length > 0;
@@ -868,7 +870,7 @@ export function PlayPageSlidePanel() {
                         const audioSrc = withShareToken(`api/pdfs/${s.pdf_id}/source-audio`) ?? `api/pdfs/${s.pdf_id}/source-audio`;
                         return (
                           <div key={s.id} className="rounded border border-slate-700 px-2 py-1.5">
-                            <p className="text-xs text-slate-300">[{s.source_kind}] {s.source_name ?? '未命名來源'}</p>
+                            <p className="text-xs text-slate-300">[{s.source_kind}] {s.source_name ?? t('play.source.untitled')}</p>
                             <audio controls preload="none" className="mt-1 w-full" src={audioSrc} />
                             {hasContent && <p className="mt-1 text-xs text-slate-500">{s.content_text}</p>}
                           </div>
@@ -882,11 +884,11 @@ export function PlayPageSlidePanel() {
                             disabled={!hasContent}
                             className="flex w-full items-center justify-between gap-2 text-left disabled:cursor-default"
                           >
-                            <p className="text-xs text-slate-300">[{s.source_kind}] {s.source_name ?? '未命名來源'}</p>
+                            <p className="text-xs text-slate-300">[{s.source_kind}] {s.source_name ?? t('play.source.untitled')}</p>
                             {hasContent ? <span className="text-xs text-slate-400">{isExpanded ? '▲' : '▼'}</span> : null}
                           </button>
                           {!hasContent ? (
-                            <p className="mt-1 text-xs text-slate-500">尚無內容</p>
+                            <p className="mt-1 text-xs text-slate-500">{t('play.source.noContent')}</p>
                           ) : isExpanded ? (
                             <pre className="mt-1 max-h-64 overflow-y-auto whitespace-pre-wrap break-all text-xs text-slate-400">{s.content_text}</pre>
                           ) : (
@@ -900,19 +902,19 @@ export function PlayPageSlidePanel() {
 
                 <div className="rounded-md border border-slate-800 bg-slate-900/50 p-3">
                   <p className="mb-2 text-xs text-slate-400">
-                    🔍 第 {currentPage?.page_number ?? '-'} 頁 生成記錄
+                    🔍 {t('play.source.generationRecords').replace('{page}', String(currentPage?.page_number ?? '-'))}
                   </p>
                   {genPromptsLoading ? (
-                    <p className="text-xs text-slate-500">載入中…</p>
+                    <p className="text-xs text-slate-500">{t('play.source.loading')}</p>
                   ) : genPrompts.length === 0 ? (
-                    <p className="text-xs text-slate-500">尚無生成記錄（重新生成後才會出現）</p>
+                    <p className="text-xs text-slate-500">{t('play.source.noGenerationRecords')}</p>
                   ) : (
                     <div className="space-y-2">
                       {genPrompts.map((gp) => {
                         const stageLabel =
-                          gp.stage === 'image' ? '🖼 圖片生成提示' :
-                          gp.stage === 'script' ? '📝 逐字稿生成提示' :
-                          gp.stage === 'audio' ? '🔊 語音合成參數' : gp.stage;
+                          gp.stage === 'image' ? `🖼 ${t('play.source.promptStage.image')}` :
+                          gp.stage === 'script' ? `📝 ${t('play.source.promptStage.script')}` :
+                          gp.stage === 'audio' ? `🔊 ${t('play.source.promptStage.audio')}` : gp.stage;
                         const isExpanded = expandedGenPrompt === gp.stage;
                         return (
                           <div key={gp.stage} className="rounded border border-slate-700">
@@ -942,7 +944,7 @@ export function PlayPageSlidePanel() {
             </>
           ) : (
             <>
-              <h2 className="mb-2 text-sm font-semibold text-slate-300">🧾 系統資料（第 {currentPage?.page_number ?? '-'} 頁）</h2>
+              <h2 className="mb-2 text-sm font-semibold text-slate-300">🧾 {t('play.system.title').replace('{page}', String(currentPage?.page_number ?? '-'))}</h2>
               <div className="rounded-md border border-slate-800 bg-slate-900/50 p-3 text-xs text-slate-300">
                 <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <div>
@@ -950,15 +952,15 @@ export function PlayPageSlidePanel() {
                     <dd className="break-all font-mono text-slate-200">{detail?.id}</dd>
                   </div>
                   <div>
-                    <dt className="text-slate-500">狀態</dt>
+                    <dt className="text-slate-500">{t('play.system.statusLabel')}</dt>
                     <dd className="text-slate-200">{detail?.status}</dd>
                   </div>
                   <div>
-                    <dt className="text-slate-500">原始檔名</dt>
+                    <dt className="text-slate-500">{t('play.system.originalFilename')}</dt>
                     <dd className="break-all text-slate-200">{detail?.original_filename}</dd>
                   </div>
                   <div>
-                    <dt className="text-slate-500">頁數</dt>
+                    <dt className="text-slate-500">{t('play.system.pageCount')}</dt>
                     <dd className="text-slate-200">{detail?.page_count ?? totalPages}</dd>
                   </div>
                   <div>
@@ -966,15 +968,15 @@ export function PlayPageSlidePanel() {
                     <dd className="text-slate-200">{detail?.tts_provider ?? 'openai'} / {detail?.tts_voice ?? '-'} / {detail?.tts_speed ?? '-'}</dd>
                   </div>
                   <div>
-                    <dt className="text-slate-500">目前頁狀態</dt>
+                    <dt className="text-slate-500">{t('play.system.currentPageStatus')}</dt>
                     <dd className="text-slate-200">{currentPage?.status ?? '-'}</dd>
                   </div>
                   <div>
-                    <dt className="text-slate-500">建立時間</dt>
+                    <dt className="text-slate-500">{t('play.system.createdAt')}</dt>
                     <dd className="font-mono text-slate-200">{detail?.created_at}</dd>
                   </div>
                   <div>
-                    <dt className="text-slate-500">更新時間</dt>
+                    <dt className="text-slate-500">{t('play.system.updatedAt')}</dt>
                     <dd className="font-mono text-slate-200">{detail?.updated_at}</dd>
                   </div>
                 </dl>
@@ -983,25 +985,25 @@ export function PlayPageSlidePanel() {
                 <table className="min-w-full divide-y divide-slate-800 text-left text-xs">
                   <thead className="bg-slate-900/70 text-slate-400">
                     <tr>
-                      <th className="px-3 py-2">步驟</th>
-                      <th className="px-3 py-2">狀態</th>
-                      <th className="px-3 py-2">耗時</th>
+                      <th className="px-3 py-2">{t('play.system.step')}</th>
+                      <th className="px-3 py-2">{t('play.system.statusLabel')}</th>
+                      <th className="px-3 py-2">{t('play.system.duration')}</th>
                       <th className="px-3 py-2">SLA</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800 bg-slate-950/40">
                     {([
-                      ['image', '圖片'],
-                      ['text', '文字'],
-                      ['script', '講稿'],
-                      ['audio', '語音'],
+                      ['image', t(PAGE_ARTIFACT_LABEL_KEYS.image)],
+                      ['text', t(PAGE_ARTIFACT_LABEL_KEYS.text)],
+                      ['script', t(PAGE_ARTIFACT_LABEL_KEYS.script)],
+                      ['audio', t(PAGE_ARTIFACT_LABEL_KEYS.audio)],
                     ] as const).map(([key, label]) => {
                       const timing = currentPage?.timings?.[key] ?? null;
                       return (
                         <tr key={key}>
                           <td className="whitespace-nowrap px-3 py-2 text-slate-200">{label}</td>
-                          <td className="whitespace-nowrap px-3 py-2 text-slate-300">{timing?.status ?? '尚無紀錄'}</td>
-                          <td className="whitespace-nowrap px-3 py-2 font-mono text-slate-200">{timing?.status === 'running' ? '產生中' : formatDurationMs(timing?.duration_ms)}</td>
+                          <td className="whitespace-nowrap px-3 py-2 text-slate-300">{timing?.status ? t(STAGE_STATUS_LABEL_KEYS[timing.status]) : t('play.system.noRecord')}</td>
+                          <td className="whitespace-nowrap px-3 py-2 font-mono text-slate-200">{timing?.status === 'running' ? t('play.system.generating') : formatDurationMs(timing?.duration_ms)}</td>
                           <td className="whitespace-nowrap px-3 py-2 text-slate-400">
                             {timing ? `${timing.sla_status}${timing.sla_target_ms != null ? ` / ${formatDurationMs(timing.sla_target_ms)}` : ''}` : '-'}
                           </td>
@@ -1013,13 +1015,13 @@ export function PlayPageSlidePanel() {
               </div>
               {currentPage?.timings ? <div className="mt-3"><PageTimingChips page={currentPage} /></div> : null}
               <div className="mt-3 rounded-md border border-slate-800 bg-slate-900/50 p-3">
-                <h3 className="mb-2 text-sm font-semibold text-slate-300">🗂 執行歷程</h3>
+                <h3 className="mb-2 text-sm font-semibold text-slate-300">🗂 {t('play.system.runHistory')}</h3>
                 {runHistoryLoading ? (
-                  <p className="text-xs text-slate-500">載入中…</p>
+                  <p className="text-xs text-slate-500">{t('play.source.loading')}</p>
                 ) : runHistoryError ? (
                   <p className="text-xs text-rose-300">{runHistoryError}</p>
                 ) : runHistory.length === 0 ? (
-                  <p className="text-xs text-slate-500">尚無執行紀錄</p>
+                  <p className="text-xs text-slate-500">{t('play.system.noRunHistory')}</p>
                 ) : (
                   <div className="space-y-2">
                     {runHistory.map((run) => {
@@ -1033,15 +1035,15 @@ export function PlayPageSlidePanel() {
                           >
                             <span className="flex flex-col">
                               <span className="font-medium text-slate-200">
-                                {RUN_TYPE_LABELS[run.run_type] ?? run.run_type} · 第 {run.attempt} 次
+                                {(RUN_TYPE_LABEL_KEYS[run.run_type] ? t(RUN_TYPE_LABEL_KEYS[run.run_type]) : run.run_type)} · {t('play.system.attempt').replace('{attempt}', String(run.attempt))}
                               </span>
                               <span className="font-mono text-slate-500">
                                 {new Date(run.started_at).toLocaleString('zh-TW', { dateStyle: 'short', timeStyle: 'medium' })}
                               </span>
                             </span>
                             <span className="flex items-center gap-2 text-slate-400">
-                              <span className={RUN_STATUS_COLORS[run.status]}>{RUN_STATUS_LABELS[run.status] ?? run.status}</span>
-                              <span className="font-mono">{run.status === 'running' ? '執行中' : formatDurationMs(run.duration_ms)}</span>
+                              <span className={RUN_STATUS_COLORS[run.status]}>{RUN_STATUS_LABEL_KEYS[run.status] ? t(RUN_STATUS_LABEL_KEYS[run.status]) : run.status}</span>
+                              <span className="font-mono">{run.status === 'running' ? t('play.system.status.running') : formatDurationMs(run.duration_ms)}</span>
                               <span>{isExpanded ? '▲' : '▼'}</span>
                             </span>
                           </button>
@@ -1055,19 +1057,19 @@ export function PlayPageSlidePanel() {
                               <table className="min-w-full divide-y divide-slate-800 text-left text-xs">
                                 <thead className="text-slate-500">
                                   <tr>
-                                    <th className="px-2 py-1">階段</th>
-                                    <th className="px-2 py-1">狀態</th>
-                                    <th className="px-2 py-1">耗時</th>
+                                    <th className="px-2 py-1">{t('play.system.stage')}</th>
+                                    <th className="px-2 py-1">{t('play.system.statusLabel')}</th>
+                                    <th className="px-2 py-1">{t('play.system.duration')}</th>
                                     <th className="px-2 py-1">SLA</th>
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-800">
                                   {run.stages.map((stage) => (
                                     <tr key={stage.stage}>
-                                      <td className="px-2 py-1 text-slate-200">{STAGE_LABELS[stage.stage] ?? stage.stage}</td>
-                                      <td className="px-2 py-1 text-slate-300">{STAGE_STATUS_LABELS[stage.status] ?? stage.status}</td>
+                                      <td className="px-2 py-1 text-slate-200">{STAGE_LABEL_KEYS[stage.stage] ? t(STAGE_LABEL_KEYS[stage.stage]) : stage.stage}</td>
+                                      <td className="px-2 py-1 text-slate-300">{STAGE_STATUS_LABEL_KEYS[stage.status] ? t(STAGE_STATUS_LABEL_KEYS[stage.status]) : stage.status}</td>
                                       <td className="px-2 py-1 font-mono text-slate-200">
-                                        {stage.status === 'running' ? '執行中' : formatDurationMs(stage.duration_ms)}
+                                        {stage.status === 'running' ? t('play.system.status.running') : formatDurationMs(stage.duration_ms)}
                                       </td>
                                       <td className="px-2 py-1 text-slate-400">
                                         {stage.sla_status}{stage.sla_target_ms != null ? ` / ${formatDurationMs(stage.sla_target_ms)}` : ''}
@@ -1078,7 +1080,10 @@ export function PlayPageSlidePanel() {
                               </table>
                               {run.llm_usage.requests > 0 && (
                                 <p className="mt-2 font-mono text-xs text-slate-400">
-                                  💬 LLM：{run.llm_usage.requests} 次請求 · {formatTokenCount(run.llm_usage.total_tokens)} tokens · 預估費用 {formatCostUsd(run.llm_usage.estimated_cost_usd)}
+                                  {t('play.system.llmUsage')
+                                    .replace('{requests}', String(run.llm_usage.requests))
+                                    .replace('{tokens}', formatTokenCount(run.llm_usage.total_tokens))
+                                    .replace('{cost}', formatCostUsd(run.llm_usage.estimated_cost_usd))}
                                 </p>
                               )}
                             </div>
@@ -1090,31 +1095,31 @@ export function PlayPageSlidePanel() {
                 )}
               </div>
               <div className="mt-3 rounded-md border border-slate-800 bg-slate-900/50 p-3">
-                <h3 className="mb-2 text-sm font-semibold text-slate-300">🐢 最慢素材排行</h3>
+                <h3 className="mb-2 text-sm font-semibold text-slate-300">🐢 {t('play.system.slowArtifacts')}</h3>
                 {slowArtifactsLoading ? (
-                  <p className="text-xs text-slate-500">載入中…</p>
+                  <p className="text-xs text-slate-500">{t('play.source.loading')}</p>
                 ) : slowArtifactsError ? (
                   <p className="text-xs text-rose-300">{slowArtifactsError}</p>
                 ) : slowArtifacts.length === 0 ? (
-                  <p className="text-xs text-slate-500">尚無素材耗時紀錄</p>
+                  <p className="text-xs text-slate-500">{t('play.system.noSlowArtifacts')}</p>
                 ) : (
                   <div className="overflow-x-auto rounded-md border border-slate-800">
                     <table className="min-w-full divide-y divide-slate-800 text-left text-xs">
                       <thead className="bg-slate-900/70 text-slate-400">
                         <tr>
-                          <th className="px-3 py-2">頁碼</th>
-                          <th className="px-3 py-2">素材</th>
-                          <th className="px-3 py-2">狀態</th>
-                          <th className="px-3 py-2">耗時</th>
+                          <th className="px-3 py-2">{t('play.system.pageNumber')}</th>
+                          <th className="px-3 py-2">{t('play.system.artifact')}</th>
+                          <th className="px-3 py-2">{t('play.system.statusLabel')}</th>
+                          <th className="px-3 py-2">{t('play.system.duration')}</th>
                           <th className="px-3 py-2">SLA</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800 bg-slate-950/40">
                         {slowArtifacts.map((item) => (
                           <tr key={`${item.page_number}-${item.artifact}`}>
-                            <td className="whitespace-nowrap px-3 py-2 text-slate-200">第 {item.page_number} 頁</td>
-                            <td className="whitespace-nowrap px-3 py-2 text-slate-200">{PAGE_ARTIFACT_LABELS[item.artifact] ?? item.artifact}</td>
-                            <td className="whitespace-nowrap px-3 py-2 text-slate-300">{STAGE_STATUS_LABELS[item.status] ?? item.status}</td>
+                            <td className="whitespace-nowrap px-3 py-2 text-slate-200">{pageLabel(item.page_number)}</td>
+                            <td className="whitespace-nowrap px-3 py-2 text-slate-200">{PAGE_ARTIFACT_LABEL_KEYS[item.artifact] ? t(PAGE_ARTIFACT_LABEL_KEYS[item.artifact]) : item.artifact}</td>
+                            <td className="whitespace-nowrap px-3 py-2 text-slate-300">{STAGE_STATUS_LABEL_KEYS[item.status] ? t(STAGE_STATUS_LABEL_KEYS[item.status]) : item.status}</td>
                             <td className="whitespace-nowrap px-3 py-2 font-mono text-slate-200">{formatDurationMs(item.duration_ms)}</td>
                             <td className="whitespace-nowrap px-3 py-2 text-slate-400">
                               {item.sla_status}{item.sla_target_ms != null ? ` / ${formatDurationMs(item.sla_target_ms)}` : ''}

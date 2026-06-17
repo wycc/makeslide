@@ -89,6 +89,11 @@ function canReadPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibil
   return row.visibility === 'public' || row.visibility === 'public_editable';
 }
 
+function hasOwnerOrLegacyAccess(sub: string | null, row: Pick<PdfRow, 'owner_sub'>): boolean {
+  if (!row.owner_sub) return true;
+  return Boolean(sub && row.owner_sub === sub);
+}
+
 function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
   if (!row.owner_sub) return true;
   if (sub && row.owner_sub === sub) return true;
@@ -101,7 +106,12 @@ const ShareTokenParamSchema = z.object({
 
 const CreatePdfShareBodySchema = z.object({
   access: z.enum(['read_only', 'editable']),
+  visibility: z.enum(['private', 'public', 'public_editable']).optional(),
 });
+
+function accessToVisibility(access: 'read_only' | 'editable'): 'public' | 'public_editable' {
+  return access === 'editable' ? 'public_editable' : 'public';
+}
 
 function generateShareToken(): string {
   return crypto.randomBytes(18).toString('base64url');
@@ -386,10 +396,29 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
         .send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
     }
     const row = db
-      .prepare(`SELECT id FROM pdfs WHERE id = ?`)
-      .get(parsed.data.id) as { id: string } | undefined;
+      .prepare(`SELECT id, owner_sub, visibility FROM pdfs WHERE id = ?`)
+      .get(parsed.data.id) as Pick<PdfRow, 'id' | 'owner_sub' | 'visibility'> | undefined;
     if (!row) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
+    }
+    if (!hasOwnerOrLegacyAccess(sessionSub(request), row)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '只有簡報擁有者可以建立分享連結'));
+    }
+
+    const visibility = body.data.visibility ?? accessToVisibility(body.data.access);
+    const now = nowIso();
+    if (row.visibility !== visibility) {
+      db.prepare(`UPDATE pdfs SET visibility = ?, updated_at = ? WHERE id = ?`).run(visibility, now, parsed.data.id);
+      try {
+        const metadata = await readMetadata(parsed.data.id);
+        if (metadata) {
+          metadata.visibility = visibility;
+          metadata.updated_at = now;
+          await writeMetadata(parsed.data.id, metadata);
+        }
+      } catch (err) {
+        request.log.warn({ err, id: parsed.data.id }, 'Failed to update metadata visibility while creating share');
+      }
     }
 
     const existing = db
@@ -414,13 +443,13 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
         token: existing.token,
         pdf_id: existing.pdf_id,
         access: existing.access,
+        visibility,
         share_url: `${config.nbPrefix || ''}/#/play/${encodeURIComponent(existing.pdf_id)}?share=${encodeURIComponent(existing.token)}`,
         created_at: existing.created_at,
         updated_at: existing.updated_at,
       });
     }
 
-    const now = nowIso();
     const token = generateShareToken();
     db.prepare(
       `INSERT INTO pdf_shares (token, pdf_id, access, created_at, updated_at)
@@ -431,6 +460,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       token,
       pdf_id: parsed.data.id,
       access: body.data.access,
+      visibility,
       share_url: `${config.nbPrefix || ''}/#/play/${encodeURIComponent(parsed.data.id)}?share=${encodeURIComponent(token)}`,
       created_at: now,
       updated_at: now,
@@ -523,8 +553,8 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     if (!row) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     }
-    if (!canEditPdf(sessionSub(request), row)) {
-      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
+    if (!hasOwnerOrLegacyAccess(sessionSub(request), row)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '只有簡報擁有者可以變更分享狀態'));
     }
 
     const pageCount =
