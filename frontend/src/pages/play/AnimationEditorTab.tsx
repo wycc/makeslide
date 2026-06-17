@@ -1513,6 +1513,26 @@ export function AnimationEditorTab() {
                     />
                     <span className="text-slate-500">px</span>
                   </label>
+                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    <span className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={!!effect.stepListBorderColor}
+                        disabled={disabled}
+                        onChange={(e) => updateEffect(effect.id, { stepListBorderColor: e.target.checked ? '#ffffff' : undefined })}
+                      />
+                      {t('play.animation.stepListBorderColor')}
+                    </span>
+                    {effect.stepListBorderColor && (
+                      <input
+                        type="color"
+                        value={effect.stepListBorderColor}
+                        disabled={disabled}
+                        onChange={(e) => updateEffect(effect.id, { stepListBorderColor: e.target.value })}
+                        className="h-8 w-full cursor-pointer rounded border border-slate-700 bg-slate-900"
+                      />
+                    )}
+                  </label>
                 </>
               )}
               {effect.type === 'overlay-image' && (
@@ -1592,6 +1612,22 @@ export function AnimationEditorTab() {
                       className="w-16 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
                     />
                   </label>
+                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    {t('play.animation.overlayImageBorderRadius')}
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min={0}
+                        max={48}
+                        step={4}
+                        value={effect.overlayImageBorderRadius ?? 0}
+                        disabled={disabled}
+                        onChange={(e) => updateEffect(effect.id, { overlayImageBorderRadius: Math.max(0, Math.min(48, Math.round(Number(e.target.value) || 0))) })}
+                        className="w-16 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                      />
+                      <span className="text-slate-500">px</span>
+                    </div>
+                  </label>
                 </div>
               )}
               {effect.type === 'formula' && (
@@ -1668,6 +1704,26 @@ export function AnimationEditorTab() {
                       className="w-20 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
                     />
                     <span className="text-slate-500">px</span>
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    <span className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={!!effect.formulaBorderColor}
+                        disabled={disabled}
+                        onChange={(e) => updateEffect(effect.id, { formulaBorderColor: e.target.checked ? '#ffffff' : undefined })}
+                      />
+                      {t('play.animation.formulaBorderColor')}
+                    </span>
+                    {effect.formulaBorderColor && (
+                      <input
+                        type="color"
+                        value={effect.formulaBorderColor}
+                        disabled={disabled}
+                        onChange={(e) => updateEffect(effect.id, { formulaBorderColor: e.target.value })}
+                        className="h-8 w-full cursor-pointer rounded border border-slate-700 bg-slate-900"
+                      />
+                    )}
                   </label>
                 </>
               )}

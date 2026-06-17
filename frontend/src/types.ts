@@ -314,6 +314,8 @@ export interface SlideAnimationEffect {
   stepListFontSize?: number;
   /** Corner radius (px) for `step-list` effects. Defaults to 8. Range 0-32. Ignored by other effect types. */
   stepListBorderRadius?: number;
+  /** Border colour (CSS hex) for `step-list` effects. When set, adds a 2px solid border. Ignored by other effect types. */
+  stepListBorderColor?: string;
   /**
    * Id of a figure extracted from the slide's source PDF (see
    * `fetchPageFigures`), shown as a positioned image overlay by
@@ -323,6 +325,8 @@ export interface SlideAnimationEffect {
   figureId?: string;
   /** Opacity (0–1) for `overlay-image` effects. Defaults to 1. Ignored by other effect types. */
   overlayImageOpacity?: number;
+  /** Corner radius (px) for `overlay-image` effects. Defaults to 0. Range 0–48. Ignored by other effect types. */
+  overlayImageBorderRadius?: number;
   /**
    * LaTeX source rendered as a math formula by `formula` effects (ignored by
    * other effect types), via KaTeX. Up to `MAX_FORMULA_LENGTH` chars.
@@ -339,6 +343,8 @@ export interface SlideAnimationEffect {
   formulaTextColor?: string;
   /** Corner radius (px) for `formula` effects. Defaults to 8. Range 0-32. */
   formulaBorderRadius?: number;
+  /** Border colour (CSS hex) for `formula` effects. When set, adds a 2px solid border. Ignored by other effect types. */
+  formulaBorderColor?: string;
   /**
    * Seconds to remain in the "entered" state after the entrance animation
    * completes before automatically reversing back to the original state

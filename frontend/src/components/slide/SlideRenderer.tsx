@@ -182,6 +182,7 @@ function EffectOverlay({
     const textColor = effect.stepListTextColor ?? '#f1f5f9';
     const slFontSize = `${effect.stepListFontSize ?? 1.1}rem`;
     const slBr = `${effect.stepListBorderRadius ?? 8}px`;
+    const slBorder = effect.stepListBorderColor ? `2px solid ${effect.stepListBorderColor}` : undefined;
     return (
       <div
         data-effect-id={effect.id}
@@ -194,6 +195,7 @@ function EffectOverlay({
           background: bgColor,
           color: textColor,
           overflow: 'hidden',
+          ...(slBorder ? { border: slBorder } : {}),
         }}
       >
         <ul style={{ margin: 0, paddingLeft: '1.25em', listStyle: 'disc', fontSize: slFontSize, fontWeight: 600, lineHeight: 1.5 }}>
@@ -210,13 +212,14 @@ function EffectOverlay({
     const url = effect.figureId ? resolveFigureImageUrl?.(effect.figureId) : undefined;
     if (!url) return null;
     const imgOpacity = effect.overlayImageOpacity ?? 1;
+    const imgBr = effect.overlayImageBorderRadius ? `${effect.overlayImageBorderRadius}px` : undefined;
     return (
       <img
         data-effect-id={effect.id}
         src={url}
         alt=""
         draggable={false}
-        style={{ ...position, objectFit: 'contain', opacity: imgOpacity }}
+        style={{ ...position, objectFit: 'contain', opacity: imgOpacity, ...(imgBr ? { borderRadius: imgBr } : {}) }}
       />
     );
   }
@@ -225,6 +228,7 @@ function EffectOverlay({
     const fBg = effect.formulaBgColor ?? '#0f172a';
     const fText = effect.formulaTextColor ?? '#f8fafc';
     const fBr = `${effect.formulaBorderRadius ?? 8}px`;
+    const fBorder = effect.formulaBorderColor ? `2px solid ${effect.formulaBorderColor}` : undefined;
     const html = katex.renderToString(effect.formula ?? '', { throwOnError: false, displayMode: true });
     return (
       <div
@@ -240,6 +244,7 @@ function EffectOverlay({
           color: fText,
           overflow: 'hidden',
           fontSize: `${fontSizeEm}em`,
+          ...(fBorder ? { border: fBorder } : {}),
         }}
         dangerouslySetInnerHTML={{ __html: html }}
       />
