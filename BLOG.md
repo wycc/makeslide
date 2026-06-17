@@ -941,3 +941,15 @@ Manim.animate.shake(myShape, progress, {
 - 位移公式：`Math.sin(progress * Math.PI * cycles) * amplitude`
 - 整數 cycles 確保端點（progress=0 和 1）的 sin 值恰好為 0，無需額外 envelope
 - 2 個 vm 單元測試覆蓋端點零偏移及中間非零偏移驗證
+
+## text-callout 效果邊框顏色
+
+`text-callout` 效果現在支援自訂外框顏色，讓標注方框能更清晰地從投影片背景中突出，或配合視覺設計主題。
+
+**使用方式：**
+在動畫編輯器的 text-callout 設定中，勾選「邊框顏色」後選擇顏色，即可為標注框加上 2px 實線外框。不勾選時維持原有無外框的外觀。
+
+**技術說明：**
+- `textCalloutBorderColor?: string` — CSS hex 格式，後端以 regex 驗證（3–8 位 hex）
+- SlideRenderer 條件性加入 `border: 2px solid {color}` style，未設定時不影響既有樣式
+- AnimationEditorTab 以勾選框控制啟用/停用，預設顏色為白色（`#ffffff`）
