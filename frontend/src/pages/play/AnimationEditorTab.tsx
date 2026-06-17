@@ -1322,6 +1322,21 @@ export function AnimationEditorTab() {
                       className="w-20 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
                     />
                   </label>
+                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    {t('play.animation.shapeDashArray')}
+                    <input
+                      type="text"
+                      maxLength={20}
+                      value={effect.shapeDashArray ?? ''}
+                      disabled={disabled}
+                      placeholder="e.g. 8 4"
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/[^\d. ]/g, '').slice(0, 20);
+                        updateEffect(effect.id, { shapeDashArray: val || undefined });
+                      }}
+                      className="w-32 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+                    />
+                  </label>
                 </div>
               )}
               {effect.type === 'step-list' && (

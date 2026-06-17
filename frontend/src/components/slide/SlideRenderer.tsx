@@ -140,14 +140,15 @@ function EffectOverlay({
     const sw = effect.strokeWidth ?? 5;
     const fill = effect.shapeFillColor ?? 'none';
     const shapeOp = effect.shapeOpacity ?? 1;
+    const sda = effect.shapeDashArray && effect.shapeDashArray.trim() ? effect.shapeDashArray.trim() : undefined;
     const markerId = `shape-arrowhead-${effect.id}`;
     let preserveAspectRatio = 'none';
     let shapeContent: ReactNode;
     if (shapeKind === 'circle') {
       preserveAspectRatio = 'xMidYMid meet';
-      shapeContent = <circle cx="50" cy="50" r="46" fill={fill} stroke={stroke} strokeWidth={sw} />;
+      shapeContent = <circle cx="50" cy="50" r="46" fill={fill} stroke={stroke} strokeWidth={sw} strokeDasharray={sda} />;
     } else if (shapeKind === 'ellipse') {
-      shapeContent = <ellipse cx="50" cy="50" rx="46" ry="46" fill={fill} stroke={stroke} strokeWidth={sw} />;
+      shapeContent = <ellipse cx="50" cy="50" rx="46" ry="46" fill={fill} stroke={stroke} strokeWidth={sw} strokeDasharray={sda} />;
     } else if (shapeKind === 'arrow') {
       shapeContent = (
         <>
@@ -156,11 +157,11 @@ function EffectOverlay({
               <path d="M0,0 L8,4 L0,8 Z" fill={stroke} />
             </marker>
           </defs>
-          <line x1="8" y1="92" x2="88" y2="8" stroke={stroke} strokeWidth={sw + 1} markerEnd={`url(#${markerId})`} />
+          <line x1="8" y1="92" x2="88" y2="8" stroke={stroke} strokeWidth={sw + 1} strokeDasharray={sda} markerEnd={`url(#${markerId})`} />
         </>
       );
     } else {
-      shapeContent = <rect x="4" y="4" width="92" height="92" rx="6" fill={fill} stroke={stroke} strokeWidth={sw} />;
+      shapeContent = <rect x="4" y="4" width="92" height="92" rx="6" fill={fill} stroke={stroke} strokeWidth={sw} strokeDasharray={sda} />;
     }
     return (
       <svg data-effect-id={effect.id} viewBox="0 0 100 100" preserveAspectRatio={preserveAspectRatio} style={{ ...position, overflow: 'visible', opacity: shapeOp }}>
