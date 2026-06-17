@@ -1544,6 +1544,19 @@ export function AnimationEditorTab() {
                       />
                     )}
                   </label>
+                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    {t('play.animation.stepListBulletStyle')}
+                    <select
+                      value={effect.stepListBulletStyle ?? 'disc'}
+                      disabled={disabled}
+                      onChange={(e) => updateEffect(effect.id, { stepListBulletStyle: e.target.value as 'disc' | 'decimal' | 'none' })}
+                      className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                    >
+                      <option value="disc">{t('play.animation.stepListBulletStyle.disc')}</option>
+                      <option value="decimal">{t('play.animation.stepListBulletStyle.decimal')}</option>
+                      <option value="none">{t('play.animation.stepListBulletStyle.none')}</option>
+                    </select>
+                  </label>
                 </>
               )}
               {effect.type === 'overlay-image' && (

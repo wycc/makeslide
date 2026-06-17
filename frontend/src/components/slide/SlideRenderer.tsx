@@ -189,6 +189,7 @@ function EffectOverlay({
     const slFontSize = `${effect.stepListFontSize ?? 1.1}rem`;
     const slBr = `${effect.stepListBorderRadius ?? 8}px`;
     const slBorder = effect.stepListBorderColor ? `2px solid ${effect.stepListBorderColor}` : undefined;
+    const slBullet = effect.stepListBulletStyle ?? 'disc';
     return (
       <div
         data-effect-id={effect.id}
@@ -204,7 +205,7 @@ function EffectOverlay({
           ...(slBorder ? { border: slBorder } : {}),
         }}
       >
-        <ul style={{ margin: 0, paddingLeft: '1.25em', listStyle: 'disc', fontSize: slFontSize, fontWeight: 600, lineHeight: 1.5 }}>
+        <ul style={{ margin: 0, paddingLeft: slBullet === 'none' ? 0 : '1.25em', listStyle: slBullet, fontSize: slFontSize, fontWeight: 600, lineHeight: 1.5 }}>
           {items.map((item, index) => (
             <li key={index} style={{ wordBreak: 'break-word' }}>
               {item}

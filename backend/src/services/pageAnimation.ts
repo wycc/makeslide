@@ -185,6 +185,8 @@ export interface AnimationEffect {
   stepListBorderRadius?: number;
   /** Border colour (CSS hex) for `step-list` effects. When set, adds a 2px solid border. Ignored by other effect types. */
   stepListBorderColor?: string;
+  /** List bullet/numbering style for `step-list` effects. Defaults to `'disc'`. Ignored by other effect types. */
+  stepListBulletStyle?: 'disc' | 'decimal' | 'none';
   /**
    * Id of a figure extracted from the slide's source PDF (see
    * `GET /api/pdfs/:id/pages/:n/figures`), shown as a positioned image
@@ -453,6 +455,7 @@ const EffectSchema = z.object({
   stepListFontSize: z.number().min(MIN_STEP_LIST_FONT_SIZE_REM).max(MAX_STEP_LIST_FONT_SIZE_REM).optional(),
   stepListBorderRadius: z.number().int().min(0).max(MAX_STEP_LIST_BORDER_RADIUS).optional(),
   stepListBorderColor: z.string().max(9).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
+  stepListBulletStyle: z.enum(['disc', 'decimal', 'none']).optional(),
   figureId: z.string().min(1).max(MAX_OVERLAY_IMAGE_FIGURE_ID_LENGTH).optional(),
   overlayImageOpacity: z.number().min(0).max(1).optional(),
   overlayImageBorderRadius: z.number().int().min(0).max(48).optional(),
@@ -556,6 +559,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.stepListFontSize !== undefined ? { stepListFontSize: Math.max(MIN_STEP_LIST_FONT_SIZE_REM, Math.min(MAX_STEP_LIST_FONT_SIZE_REM, effect.stepListFontSize)) } : {}),
       ...(effect.stepListBorderRadius !== undefined ? { stepListBorderRadius: Math.max(0, Math.min(MAX_STEP_LIST_BORDER_RADIUS, Math.round(effect.stepListBorderRadius))) } : {}),
       ...(effect.stepListBorderColor !== undefined ? { stepListBorderColor: effect.stepListBorderColor } : {}),
+      ...(effect.stepListBulletStyle !== undefined ? { stepListBulletStyle: effect.stepListBulletStyle } : {}),
       ...(effect.figureId !== undefined ? { figureId: effect.figureId } : {}),
       ...(effect.overlayImageOpacity !== undefined ? { overlayImageOpacity: Math.max(0, Math.min(1, effect.overlayImageOpacity)) } : {}),
       ...(effect.overlayImageBorderRadius !== undefined ? { overlayImageBorderRadius: Math.max(0, Math.min(48, Math.round(effect.overlayImageBorderRadius))) } : {}),
