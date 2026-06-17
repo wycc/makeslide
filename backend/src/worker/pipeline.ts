@@ -660,7 +660,7 @@ async function runPipeline(pdfId: string): Promise<void> {
 
             const raw = await fs.promises.readFile(sourceTextPath(pdfId), 'utf8');
             const splitStage = startStage(run, 'split_text', { source_type: 'text' });
-            const split = await splitTextWithLlm(raw);
+            const split = await splitTextWithLlm(raw, row.user_prompt);
             finishStage(splitStage, 'succeeded', { pages: split.pages.length });
 
             const pagesDir = path.join(pdfDir(pdfId), 'pages');
@@ -908,7 +908,7 @@ async function runPipeline(pdfId: string): Promise<void> {
         .trim();
 
       const splitStage = startStage(run, 'split_text', { source_type: 'pdf_fulltext' });
-      const split = await splitTextWithLlm(fullText);
+      const split = await splitTextWithLlm(fullText, row.user_prompt);
       finishStage(splitStage, 'succeeded', {
         source_type: 'pdf_fulltext',
         source_pages: pageCount,
