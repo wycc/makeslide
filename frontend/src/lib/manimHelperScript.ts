@@ -41,6 +41,18 @@ export const MANIM_HELPER_SCRIPT = `
     var s = Math.round(n).toString(16);
     return s.length < 2 ? '0' + s : s;
   }
+  function normalizeSvgFontSize(fontSize) {
+    if (fontSize == null) return 0.45;
+    if (typeof fontSize === 'number') {
+      if (!isFinite(fontSize) || fontSize <= 0) return 0.45;
+      // Manim's SVG scene is only 8 units tall. LLMs often pass pixel-like
+      // values such as 18/24/32; using those directly as SVG user units makes
+      // labels cover the entire slide. Treat large numeric values as pixels
+      // for a 600px-high slide and convert them back into scene units.
+      return fontSize > 4 ? fontSize * H / 600 : fontSize;
+    }
+    return fontSize;
+  }
   function lerpColor(c1, c2, t) {
     var a = hexToRgb(c1), b = hexToRgb(c2), p = clamp01(t);
     return '#' + toHex2(lerp(a.r, b.r, p)) + toHex2(lerp(a.g, b.g, p)) + toHex2(lerp(a.b, b.b, p));
@@ -159,7 +171,7 @@ export const MANIM_HELPER_SCRIPT = `
       var el = document.createElementNS(SVG_NS, 'text');
       el.setAttribute('x', String(opts.x || 0));
       el.setAttribute('y', String(toSvgY(opts.y || 0)));
-      el.setAttribute('font-size', String(opts.fontSize != null ? opts.fontSize : 0.6));
+      el.setAttribute('font-size', String(normalizeSvgFontSize(opts.fontSize)));
       el.setAttribute('fill', opts.color || colors.WHITE);
       el.setAttribute('text-anchor', 'middle');
       el.setAttribute('dominant-baseline', 'central');

@@ -99,7 +99,7 @@ function buildCustomScriptSystemPrompt(): string {
     '若使用者要求「manim 風格」的動畫（例如幾何圖形繪製、座標平面、向量、Create/Write/Transform/FadeIn 等手法、深色背景＋粉彩色塊配色），可使用全域 `window.Manim` 輔助函式庫（在你的程式碼執行前已載入，不需自行定義）：',
     '  - 座標系：以 `root` 中心為原點，x 約在 -7~7、y 約在 -4~4，+y 朝上（與 SVG 相反，函式庫已處理轉換）。',
     '  - `Manim.createSvg(root)`：在 `root` 中建立填滿版面的 `<svg>` 並回傳，後續形狀皆加入此 svg。',
-    '  - `Manim.shapes.circle/square/rectangle/line/arrow/dot/polygon/text(svg, opts)`：建立形狀並回傳 mobject（`{ el, kind, svg }`）；`opts` 可含 `x`/`y`（中心座標）、`radius`/`size`/`width`/`height`/`points`（`[[x,y],...]`，限 polygon）/`text`，以及 `color`（邊框/線條/文字色）、`fill`、`fillOpacity`、`strokeWidth`、`fontSize`。',
+    '  - `Manim.shapes.circle/square/rectangle/line/arrow/dot/polygon/text(svg, opts)`：建立形狀並回傳 mobject（`{ el, kind, svg }`）；`opts` 可含 `x`/`y`（中心座標）、`radius`/`size`/`width`/`height`/`points`（`[[x,y],...]`，限 polygon）/`text`，以及 `color`（邊框/線條/文字色）、`fill`、`fillOpacity`、`strokeWidth`、`fontSize`。重要：Manim SVG 場景高度只有 8 個座標單位，`text` 的 `fontSize` 請使用場景單位（建議 0.25~0.8，預設 0.45），不要使用 18、24、32 這類像素大小，否則文字會巨大到遮住整張投影片。',
     '  - `Manim.colors`：manim 慣用色票，含 `WHITE`/`BLACK`/`GREY`/`BLUE`/`GREEN`/`RED`/`YELLOW`/`PURPLE`/`ORANGE`/`PINK`/`TEAL`。',
     '  - `Manim.rate.linear/smooth/thereAndBack/rushInto/rushFrom(t)`：manim 標準 rate function，輸入 0~1 進度，輸出調整後的 0~1 進度，可用於讓動畫的速度曲線更接近 manim。',
     '  - `Manim.animate.create/write/fadeIn/fadeOut/grow/shift/rotate/scale/transform(mobject, ...)`：manim 風格動畫，依目前進度（0~1）直接設定 mobject 的視覺狀態，可在每次 `onFrame` 重複呼叫；`create` 為描邊繪製效果、`write` 為文字逐字顯示、`transform(from, to, progress)` 在兩個同類型 mobject 間漸變並交叉淡化。',

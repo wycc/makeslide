@@ -109,6 +109,17 @@ test("Manim.shapes.text sets centered text attributes", () => {
   assert.equal(m.el.getAttribute("cy"), null);
 });
 
+test("Manim.shapes.text treats large numeric fontSize values as pixels", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const defaultText = Manim.shapes.text(svg, { text: "default" });
+  const pixelLike = Manim.shapes.text(svg, { text: "px", fontSize: 24 });
+  const sceneUnits = Manim.shapes.text(svg, { text: "scene", fontSize: 0.8 });
+  assert.equal(defaultText.el.getAttribute("font-size"), "0.45");
+  assert.equal(pixelLike.el.getAttribute("font-size"), "0.32");
+  assert.equal(sceneUnits.el.getAttribute("font-size"), "0.8");
+});
+
 test("Manim.animate.fadeIn/fadeOut set opacity from progress", () => {
   const Manim = loadManim();
   const svg = createFakeElement("svg");
