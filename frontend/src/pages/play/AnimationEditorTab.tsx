@@ -1381,6 +1381,21 @@ export function AnimationEditorTab() {
                       className="w-32 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
                     />
                   </label>
+                  {(effect.shape ?? 'circle') === 'rect' && (
+                    <label className="flex flex-col gap-1 text-xs text-slate-400">
+                      {t('play.animation.shapeRectRadius')}
+                      <input
+                        type="number"
+                        min={0}
+                        max={24}
+                        step={2}
+                        value={effect.shapeRectRadius ?? 6}
+                        disabled={disabled}
+                        onChange={(e) => updateEffect(effect.id, { shapeRectRadius: Math.max(0, Math.min(24, Math.round(Number(e.target.value) || 0))) })}
+                        className="w-20 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+                      />
+                    </label>
+                  )}
                 </div>
               )}
               {effect.type === 'step-list' && (

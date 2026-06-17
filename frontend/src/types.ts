@@ -287,6 +287,8 @@ export interface SlideAnimationEffect {
   shapeOpacity?: number;
   /** SVG stroke-dasharray value for `shape` effects. Empty string = solid. Format: space-separated numbers e.g. '8 4'. Ignored by other effect types. */
   shapeDashArray?: string;
+  /** Corner radius (SVG rx units) for `rect` shape effects. Defaults to 6. Range 0–24. Ignored by other shape kinds and effect types. */
+  shapeRectRadius?: number;
   /**
    * Stroke width (SVG user units in a 100×100 viewBox) for `shape` effects.
    * Defaults to 5 when omitted. Ignored by other effect types.
