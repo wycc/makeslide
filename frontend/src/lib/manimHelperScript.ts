@@ -589,6 +589,15 @@ export const MANIM_HELPER_SCRIPT = `
         }
       }
     },
+    countUp: function (m, progress, opts) {
+      var p = clamp01(progress);
+      var from = (opts && opts.from != null) ? Number(opts.from) : 0;
+      var to = (opts && opts.to != null) ? Number(opts.to) : 0;
+      var prefix = (opts && opts.prefix) ? String(opts.prefix) : '';
+      var suffix = (opts && opts.suffix) ? String(opts.suffix) : '';
+      var val = Math.round(lerp(from, to, p));
+      m.el.textContent = prefix + String(val) + suffix;
+    },
     fadeInFromDirection: function (m, progress, opts) {
       var p = clamp01(progress);
       var direction = (opts && opts.direction) || 'left';
