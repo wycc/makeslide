@@ -8,7 +8,8 @@ import { config } from '../config';
 import { db } from '../db';
 import { logger } from '../logger';
 import { getOpenAIClient } from '../services/openai';
-import { accountIdFromOwnerSub, runWithAccountId } from '../services/accountContext';
+import { accountIdFromOwnerSub, currentAccountId, runWithAccountId } from '../services/accountContext';
+import { getEnabledSkillPrompts } from '../services/skills';
 import { setLlmUsageContext } from '../services/llmUsage';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../services/imagePromptTemplates';
 import { buildFigureReferenceNotes, figureImageAbsPath, getFigureReferencesForPage, loadFigureSelection } from '../services/pdfFigures';
@@ -1019,7 +1020,11 @@ async function runRegenerateScripts(
     });
   }
 
-  const userPrompt = (opts.prompt ?? pdfRow.user_prompt ?? '').toString().trim() || null;
+  const baseUserPrompt = (opts.prompt ?? pdfRow.user_prompt ?? '').toString().trim() || null;
+  const skillPrompts = getEnabledSkillPrompts(currentAccountId(), 'script');
+  const userPrompt = skillPrompts.length > 0
+    ? [baseUserPrompt ?? '', ...skillPrompts].filter(Boolean).join('\n\n')
+    : baseUserPrompt;
   const scriptMaxCharsPerPage =
     typeof opts.script_max_chars_per_page === 'number'
       ? opts.script_max_chars_per_page
