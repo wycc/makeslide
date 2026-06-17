@@ -977,3 +977,39 @@ Manim.animate.shake(myShape, progress, {
 - `spotlightShape?: 'circle' | 'rect'` — 預設 `'circle'` 維持現有圓形行為
 - `spotlightBorderRadius?: number` — 僅在 rect 模式下有效，控制 `border-radius` CSS 屬性
 - SlideRenderer 依 spotlightShape 動態決定 borderRadius（circle = '50%'，rect = `{value}px`）
+
+## 動畫效果新增邊框與圓角選項
+
+多個動畫效果現在支援更細緻的外觀客製化：
+
+**highlight-box 虛線邊框（`highlightBorderStyle`）**
+可選擇 `solid`（實線，預設）、`dashed`（虛線）或 `dotted`（點線）邊框樣式，在設定中的「邊框寬度」旁新增下拉選單。
+
+**step-list 邊框顏色（`stepListBorderColor`）**
+勾選後為清單方框加上 2px 實線外框，配合背景色使方框更為突出。
+
+**formula 邊框顏色（`formulaBorderColor`）**
+同上，為數學公式方框加上外框，可與數學符號形成對比。
+
+**overlay-image 圓角半徑（`overlayImageBorderRadius`，0–48px）**
+讓圖片疊加層顯示為圓角甚至圓形（設為高值時），可創造頭像風格的裁切效果。
+
+---
+
+## Manim animate.pulse() 脈衝縮放
+
+`animate.pulse(m, progress, opts)` 使元素以「放大→縮回」脈衝方式強調：
+
+- progress 0 和 1 時回到原始尺寸（transform 清除）
+- 中間 progress 放大至 `maxScale`（預設 1.2）
+- 使用 `thereAndBack` rate 函數（內建平滑的往返曲線）
+- opts 支援 `maxScale`（縮放倍數）和 `cx`/`cy`（縮放中心，SVG 座標）
+
+## Manim animate.drawBorderThenFill() 描邊後填充
+
+`animate.drawBorderThenFill(m, progress)` 以兩階段呈現元素：
+
+1. **描邊階段**（progress 0–0.5）：以 stroke-dashoffset 動畫描繪輪廓，fill-opacity 固定為 0
+2. **填充階段**（progress 0.5–1）：輪廓已完整，fill-opacity 從 0 線性增加到 1
+
+適合用在「強調繪製過程」的場景，例如幾何圖形的逐步展示。

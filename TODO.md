@@ -1553,9 +1553,9 @@
 
 [x] `overlay-image` 效果圓角半徑：目前圖片疊加層無法設定圓角；應新增 `overlayImageBorderRadius?: number`（px，整數，預設 0，範圍 0–48），讓疊加圖片可呈現圓角或圓形效果；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.number().int().min(0).max(48)`）/序列化；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 在 `<img>` style 加入 `borderRadius: \`${effect.overlayImageBorderRadius ?? 0}px\``；`AnimationEditorTab.tsx` 在 overlayImageOpacity 下方加入數字輸入框（range 0-48, step 4）；中英文 i18n 新增翻譯鍵。 ✓ 完成於 branch: feature/effect-border-radius-color-20260617
 
-[ ] Manim `animate.pulse(m, progress, opts)` 脈衝縮放效果：應新增 `animate.pulse(m, progress, opts)` 函式，讓元素以「放大→縮回」的脈衝方式強調自身（適合配合 indicateAround 使用）；以 `thereAndBack` rate 函數使 progress 0 和 1 都回到 scale=1，中間 progress 放大至 `maxScale`；對 SVG 元素使用 `transform="scale(v)"` 屬性（cx/cy 指定縮放中心，預設 50% of viewBox），對 HTML 元素則設定 `m.el.style.transform`；opts 支援 `maxScale`（預設 1.2）、`cx`/`cy`（SVG 縮放原點）；新增至少 2 個 vm 測試（一個驗證中間 progress 的 scale 大於 1，一個驗證 progress=0 和 progress=1 的 scale 為 1）。
+[x] Manim `animate.pulse(m, progress, opts)` 脈衝縮放效果：應新增 `animate.pulse(m, progress, opts)` 函式，讓元素以「放大→縮回」的脈衝方式強調自身（適合配合 indicateAround 使用）；以 `thereAndBack` rate 函數使 progress 0 和 1 都回到 scale=1，中間 progress 放大至 `maxScale`；對 SVG 元素使用 `transform="scale(v)"` 屬性（cx/cy 指定縮放中心，預設 50% of viewBox），對 HTML 元素則設定 `m.el.style.transform`；opts 支援 `maxScale`（預設 1.2）、`cx`/`cy`（SVG 縮放原點）；新增至少 2 個 vm 測試（一個驗證中間 progress 的 scale 大於 1，一個驗證 progress=0 和 progress=1 的 scale 為 1）。 ✓ 完成於 branch: feature/manim-pulse-drawborderthnfill-20260617
 
-[ ] Manim `animate.drawBorderThenFill(m, progress, opts)` 描邊後填充效果：應新增 `animate.drawBorderThenFill(m, progress, opts)` 函式，分兩階段呈現：progress 0–0.5 期間以 stroke-dashoffset 動畫描繪輪廓（等同 `create`，但僅執行前半段），progress 0.5–1 期間以 fill-opacity 從 0→1 逐步填入內部（對 `<text>` 元素則改為 opacity 0→1）；progress=0 時輪廓和填充皆不可見，progress=1 時完全顯示；新增至少 2 個 vm 測試（一個驗證 progress=0.25 時有描邊效果且 fill-opacity=0，一個驗證 progress=1 時 fill-opacity 為非零值）。
+[x] Manim `animate.drawBorderThenFill(m, progress, opts)` 描邊後填充效果：應新增 `animate.drawBorderThenFill(m, progress, opts)` 函式，分兩階段呈現：progress 0–0.5 期間以 stroke-dashoffset 動畫描繪輪廓（等同 `create`，但僅執行前半段），progress 0.5–1 期間以 fill-opacity 從 0→1 逐步填入內部（對 `<text>` 元素則改為 opacity 0→1）；progress=0 時輪廓和填充皆不可見，progress=1 時完全顯示；新增至少 2 個 vm 測試（一個驗證 progress=0.25 時有描邊效果且 fill-opacity=0，一個驗證 progress=1 時 fill-opacity 為非零值）。 ✓ 完成於 branch: feature/manim-pulse-drawborderthnfill-20260617
 
 - 時間: 2026-06-17 12:00:00 +0800
 - 分支: feature/spotlight-shape-rect-20260617
@@ -1568,3 +1568,7 @@
 - 時間: 2026-06-17 12:45:00 +0800
 - 分支: feature/effect-border-radius-color-20260617
 - 內容: 批次新增三個效果的邊框/圓角客製化欄位。(1) `step-list` 新增 `stepListBorderColor?: string`，設定後加上 `2px solid {color}` 外框，UI 以勾選框＋顏色選擇器控制。(2) `formula` 新增 `formulaBorderColor?: string`，同上設計。(3) `overlay-image` 新增 `overlayImageBorderRadius?: number`（0–48px，step 4），`SlideRenderer.tsx` 的 `<img>` 加入 `borderRadius` style，UI 以數字輸入框控制。後端三個欄位各自加入 `EffectSchema` 驗證及序列化；前端 `types.ts`、`SlideRenderer.tsx`、`AnimationEditorTab.tsx`、中英文 i18n 均同步更新。前後端 TypeScript 均通過。
+
+- 時間: 2026-06-17 13:15:00 +0800
+- 分支: feature/manim-pulse-drawborderthnfill-20260617
+- 內容: 新增兩個 Manim animate 函式。(1) `animate.pulse(m, progress, opts)`：以 `thereAndBack` rate 函數（smooth 的往返版本）計算縮放值，progress 0 和 1 時都回到 scale=1，中間達到 `maxScale`（預設 1.2）。對有 `getBBox` 方法的 SVG 元素使用 `setAttribute('transform', ...)` 以 cx/cy 為縮放中心；對 HTML 元素使用 `m.el.style.transform = 'scale(...)'`；在端點清除 transform 防止殘留狀態。(2) `animate.drawBorderThenFill(m, progress)`：兩階段效果，前半段（0-0.5）以 stroke-dashoffset 描繪輪廓（speed x2 的 create），同時 fill-opacity=0；後半段（0.5-1）dashoffset=0，fill-opacity 從 0 線性增至 1。各新增 2 個 vm 單元測試，38 個測試全數通過。
