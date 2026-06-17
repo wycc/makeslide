@@ -1572,3 +1572,23 @@
 - 時間: 2026-06-17 13:15:00 +0800
 - 分支: feature/manim-pulse-drawborderthnfill-20260617
 - 內容: 新增兩個 Manim animate 函式。(1) `animate.pulse(m, progress, opts)`：以 `thereAndBack` rate 函數（smooth 的往返版本）計算縮放值，progress 0 和 1 時都回到 scale=1，中間達到 `maxScale`（預設 1.2）。對有 `getBBox` 方法的 SVG 元素使用 `setAttribute('transform', ...)` 以 cx/cy 為縮放中心；對 HTML 元素使用 `m.el.style.transform = 'scale(...)'`；在端點清除 transform 防止殘留狀態。(2) `animate.drawBorderThenFill(m, progress)`：兩階段效果，前半段（0-0.5）以 stroke-dashoffset 描繪輪廓（speed x2 的 create），同時 fill-opacity=0；後半段（0.5-1）dashoffset=0，fill-opacity 從 0 線性增至 1。各新增 2 個 vm 單元測試，38 個測試全數通過。
+
+[ ] `shape` 效果新增 `line` 和 `triangle` 形狀：目前 `ANIMATION_SHAPE_KINDS` 只有 `circle`、`rect`、`ellipse`、`arrow`；應新增 `'line'`（對角直線，從左下到右上）和 `'triangle'`（等邊三角形多邊形，以 SVG `<polygon>` 繪製）兩種形狀；後端 `ANIMATION_SHAPE_KINDS` const array 加入兩種值，`EffectSchema` 的 `shape` enum 自動更新；前端 `types.ts` 同步更新 `SlideAnimationShapeKind`；`SlideRenderer.tsx` 加入對應的 SVG 元素（line: `<line x1="8" y1="92" x2="92" y2="8" stroke=... strokeWidth=...>`；triangle: `<polygon points="50,4 96,92 4,92" fill=... stroke=... strokeWidth=...>`）；`AnimationEditorTab.tsx` 的 shapeKind select 自動因 `ANIMATION_SHAPE_KINDS` 更新而呈現新選項；中英文 i18n 新增 `play.animation.shapeKind.line` 及 `play.animation.shapeKind.triangle` 翻譯鍵。
+
+[ ] `ANIMATION_EASES` 新增 `elastic.out` 和 `back.out` ease 選項：目前只有 5 種 power ease；應新增 `'elastic.out'`（彈性回彈，進場後像彈簧震盪）和 `'back.out'`（超出後回彈，適合強調性進場）；後端 `ANIMATION_EASES` const array 加入兩值；`EffectSchema` 的 `ease` enum 自動更新；前端 `types.ts` 同步更新 `SlideAnimationEase`；`AnimationEditorTab.tsx` 的 ease select 自動顯示新選項；`buildGsapTimeline.ts` 不需修改（直接傳 ease 字串給 GSAP，GSAP 原生支援 elastic.out 和 back.out）；中英文 i18n 新增對應翻譯鍵（`play.animation.ease.elastic.out`、`play.animation.ease.back.out`）。
+
+[ ] `text-callout` 效果陰影選項：應新增 `textCalloutShadow?: boolean`（預設 false），啟用時在 `text-callout` div 加上 `box-shadow: 0 4px 16px rgba(0,0,0,0.4)` 讓方框更立體；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.boolean().optional()`）/序列化；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 條件加入 `boxShadow` style；`AnimationEditorTab.tsx` 在 textCalloutBorderColor 下方加入勾選框；中英文 i18n 新增翻譯鍵 `play.animation.textCalloutShadow`（'Drop shadow'／'投影效果'）。
+
+[ ] `step-list` 效果 bullet 樣式選項：目前 `step-list` 固定使用 `listStyle: 'disc'`；應新增 `stepListBulletStyle?: 'disc' | 'decimal' | 'none'`（預設 `'disc'`）允許使用者切換 bullet 樣式：`disc`（黑點）、`decimal`（數字編號）、`none`（無 bullet）；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.enum(['disc','decimal','none'])`）/序列化；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 以 `effect.stepListBulletStyle ?? 'disc'` 取代硬編碼 `'disc'`；`AnimationEditorTab.tsx` 在 step-list 設定區加入 select 選擇器；中英文 i18n 新增翻譯鍵。
+
+[ ] `pointer` 效果新增 `cross` 十字準心形狀：目前 `pointerShape` 只有 `'arrow'` 和 `'dot'`；應新增 `'cross'`（兩條交叉線，類似瞄準鏡十字準心，以 SVG `<line>` 繪製水平和垂直兩條線）；後端同步更新 `EffectSchema` 的 `pointerShape` enum（`z.enum(['arrow','dot','cross'])`）；前端 `types.ts` 更新 `pointerShape` 型別（`'arrow' | 'dot' | 'cross'`）；`SlideRenderer.tsx` 加入 cross 的 SVG 內容（水平線 + 垂直線，無旋轉）；`AnimationEditorTab.tsx` 的 pointerShape select 加入 `cross` 選項；中英文 i18n 新增 `play.animation.pointerShape.cross` 翻譯鍵。
+
+[ ] Manim `animate.colorShift(m, progress, opts)` 顏色漸變效果：應新增 `animate.colorShift(m, progress, opts)` 函式，讓元素的 `stroke` 和/或 `fill` 顏色在兩個顏色之間做線性插值；progress 0 = `fromColor`，progress 1 = `toColor`；使用內建的 `lerpColor` 輔助函式；opts 支援 `from`（起始 hex 色碼，預設讀取元素現有 stroke）、`to`（目標 hex 色碼，必填）、`attr`（`'stroke'`|`'fill'`|`'both'`，預設 `'stroke'`）；對 `<text>` 元素的 fill 同步更新；新增至少 2 個 vm 測試（一個驗證中間 progress 的顏色介於 from 和 to 之間，一個驗證 progress=1 時顏色等於 toColor）。
+
+[ ] Manim `animate.fadeInFromDirection(m, progress, opts)` 方向滑入效果：應新增 `animate.fadeInFromDirection(m, progress, opts)` 函式，讓元素從指定方向滑入並淡入（類似 GSAP pan 效果，但用於自訂腳本的 HTML/SVG 元素）；以 `progress` 控制位移和 opacity：0 時 opacity=0 且位移最大，1 時 opacity=1 且位移=0；position 使用 CSS `transform: translate(dx, dy)` + `opacity`；opts 支援 `direction`（`'left'`|`'right'`|`'up'`|`'down'`，預設 `'left'`）和 `distance`（位移像素，預設 40）；progress=1 時清除 transform（回到原始位置）；新增至少 2 個 vm 測試（一個驗證中間 progress opacity 和 transform 均非預設值，一個驗證 progress=1 opacity=1 且 transform 已清除）。
+
+---
+
+- 時間: 2026-06-17 13:30:00 +0800
+- 分支: feature/todo-add-items-20260617b
+- 內容: 分析現有系統後，新增 7 個待辦項目：(1) shape 效果新增 line/triangle 形狀；(2) ANIMATION_EASES 新增 elastic.out/back.out；(3) text-callout 陰影選項；(4) step-list bullet 樣式選項；(5) pointer 效果新增 cross 十字準心；(6) Manim animate.colorShift 顏色漸變函式；(7) Manim animate.fadeInFromDirection 方向滑入函式。
