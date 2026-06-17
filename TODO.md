@@ -1579,7 +1579,7 @@
 
 [x] `text-callout` 效果陰影選項：應新增 `textCalloutShadow?: boolean`（預設 false），啟用時在 `text-callout` div 加上 `box-shadow: 0 4px 16px rgba(0,0,0,0.4)` 讓方框更立體；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.boolean().optional()`）/序列化；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 條件加入 `boxShadow` style；`AnimationEditorTab.tsx` 在 textCalloutBorderColor 下方加入勾選框；中英文 i18n 新增翻譯鍵 `play.animation.textCalloutShadow`（'Drop shadow'／'投影效果'）。
 
-[ ] `step-list` 效果 bullet 樣式選項：目前 `step-list` 固定使用 `listStyle: 'disc'`；應新增 `stepListBulletStyle?: 'disc' | 'decimal' | 'none'`（預設 `'disc'`）允許使用者切換 bullet 樣式：`disc`（黑點）、`decimal`（數字編號）、`none`（無 bullet）；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.enum(['disc','decimal','none'])`）/序列化；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 以 `effect.stepListBulletStyle ?? 'disc'` 取代硬編碼 `'disc'`；`AnimationEditorTab.tsx` 在 step-list 設定區加入 select 選擇器；中英文 i18n 新增翻譯鍵。
+[x] `step-list` 效果 bullet 樣式選項：目前 `step-list` 固定使用 `listStyle: 'disc'`；應新增 `stepListBulletStyle?: 'disc' | 'decimal' | 'none'`（預設 `'disc'`）允許使用者切換 bullet 樣式：`disc`（黑點）、`decimal`（數字編號）、`none`（無 bullet）；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.enum(['disc','decimal','none'])`）/序列化；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 以 `effect.stepListBulletStyle ?? 'disc'` 取代硬編碼 `'disc'`；`AnimationEditorTab.tsx` 在 step-list 設定區加入 select 選擇器；中英文 i18n 新增翻譯鍵。
 
 [ ] `pointer` 效果新增 `cross` 十字準心形狀：目前 `pointerShape` 只有 `'arrow'` 和 `'dot'`；應新增 `'cross'`（兩條交叉線，類似瞄準鏡十字準心，以 SVG `<line>` 繪製水平和垂直兩條線）；後端同步更新 `EffectSchema` 的 `pointerShape` enum（`z.enum(['arrow','dot','cross'])`）；前端 `types.ts` 更新 `pointerShape` 型別（`'arrow' | 'dot' | 'cross'`）；`SlideRenderer.tsx` 加入 cross 的 SVG 內容（水平線 + 垂直線，無旋轉）；`AnimationEditorTab.tsx` 的 pointerShape select 加入 `cross` 選項；中英文 i18n 新增 `play.animation.pointerShape.cross` 翻譯鍵。
 
@@ -1604,3 +1604,7 @@
 - 時間: 2026-06-17 14:15:00 +0800
 - 分支: feature/text-callout-shadow-20260617
 - 內容: 新增 `textCalloutShadow?: boolean` 欄位到 `text-callout` 效果。啟用時在 callout div 加上 `box-shadow: 0 4px 16px rgba(0,0,0,0.4)` 投影效果。後端 `AnimationEffect`（介面欄位）、`EffectSchema`（`z.boolean().optional()`）、序列化均更新；前端 `SlideAnimationEffect` 型別、`SlideRenderer.tsx`（條件加入 `boxShadow` style）、`AnimationEditorTab.tsx`（在 textCalloutBorderColor 下方新增勾選框）、中英文 i18n（`play.animation.textCalloutShadow`）均同步更新。前後端 TypeScript 均通過。
+
+- 時間: 2026-06-17 14:30:00 +0800
+- 分支: feature/step-list-bullet-style-20260617
+- 內容: 新增 `stepListBulletStyle?: 'disc' | 'decimal' | 'none'` 欄位到 `step-list` 效果。`disc` 為黑點（預設）、`decimal` 為數字編號、`none` 為無 marker（同時移除 paddingLeft）。後端 `AnimationEffect`（介面）、`EffectSchema`（`z.enum`）、序列化均更新；前端 `types.ts`、`SlideRenderer.tsx`（`slBullet` 變數取代硬編碼 `'disc'`）、`AnimationEditorTab.tsx`（在 stepListBorderColor 下方新增 select 選擇器，含三個 option）、中英文 i18n（各 4 個翻譯鍵）均同步更新。前後端 TypeScript 均通過。
