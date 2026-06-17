@@ -1,5 +1,28 @@
 # MakeSlide 功能說明
 
+## Step-list 指定步驟高亮
+
+### 功能目的
+
+`step-list` 動畫效果現在可以指定一個 0-based 的步驟索引作為高亮項目，讓簡報播放時在多個條列重點中清楚標示目前要強調的步驟。此功能適合用於流程教學、操作步驟、解題推導或逐步說明，讓觀眾更容易聚焦在當下討論的項目。
+
+### 使用方式
+
+1. 在播放頁的動畫編輯器中新增或選擇一個 `step-list` 效果。
+2. 於「條列項目」中輸入每行一個步驟或重點。
+3. 在「**高亮步驟（從0起算）**」（英文介面為 **Highlight step (0-based)**）輸入要高亮的項目索引，例如輸入 `0` 代表第一個項目、輸入 `2` 代表第三個項目。
+4. 清空輸入框即可取消高亮；若沒有條列項目，輸入框會停用。
+5. 播放投影片時，被指定的 `<li>` 會加粗、使用 `stepListTextColor` 作為文字色，並在左側顯示同色的 3px 高亮色條。
+
+### 技術細節
+
+- 後端 `AnimationEffect` 新增 `stepListHighlightIndex?: number`，並在 `EffectSchema` 以 `z.number().int().min(0).optional()` 驗證。
+- `validateAnimationSpec()` 序列化時以 `Math.max(0, Math.round(...))` 正規化高亮索引。
+- 前端 `SlideAnimationEffect` 同步新增 `stepListHighlightIndex?: number`。
+- `SlideRenderer.tsx` 在渲染 `step-list` 的 `<li>` 時，比對 `index === stepListHighlightIndex` 並套用 `fontWeight: 800`、`color: stepListTextColor`、`borderLeft: 3px solid stepListTextColor`。
+- `AnimationEditorTab.tsx` 在 `step-list` 設定區新增可清空的 number input，範圍為 `0` 到目前有效項目數量減一。
+- 新增中英文翻譯鍵 `play.animation.stepListHighlightIndex`。
+
 ## Shape 發光效果
 
 ### 功能目的

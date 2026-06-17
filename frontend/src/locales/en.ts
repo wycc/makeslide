@@ -439,6 +439,7 @@ export const en = {
   'play.animation.stepListBulletStyle.disc': 'Bullet (•)',
   'play.animation.stepListBulletStyle.decimal': 'Numbered (1.)',
   'play.animation.stepListBulletStyle.none': 'None',
+  'play.animation.stepListHighlightIndex': 'Highlight step (0-based)',
   'play.animation.overlayImageFigure': 'Insert figure',
   'play.animation.overlayImageSelectFigure': 'Select a figure...',
   'play.animation.overlayImageNoFigures': 'No figures detected on this page',

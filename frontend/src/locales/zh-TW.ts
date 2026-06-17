@@ -439,6 +439,7 @@ export const zhTW = {
   'play.animation.stepListBulletStyle.disc': '黑點（•）',
   'play.animation.stepListBulletStyle.decimal': '數字（1.）',
   'play.animation.stepListBulletStyle.none': '無',
+  'play.animation.stepListHighlightIndex': '高亮步驟（從0起算）',
   'play.animation.overlayImageFigure': '插入圖片',
   'play.animation.overlayImageSelectFigure': '請選擇圖片…',
   'play.animation.overlayImageNoFigures': '本頁未偵測到可用圖片',

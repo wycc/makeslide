@@ -210,6 +210,7 @@ function EffectOverlay({
     const slBr = `${effect.stepListBorderRadius ?? 8}px`;
     const slBorder = effect.stepListBorderColor ? `2px solid ${effect.stepListBorderColor}` : undefined;
     const slBullet = effect.stepListBulletStyle ?? 'disc';
+    const highlightIndex = effect.stepListHighlightIndex;
     return (
       <div
         data-effect-id={effect.id}
@@ -226,11 +227,27 @@ function EffectOverlay({
         }}
       >
         <ul style={{ margin: 0, paddingLeft: slBullet === 'none' ? 0 : '1.25em', listStyle: slBullet, fontSize: slFontSize, fontWeight: 600, lineHeight: 1.5 }}>
-          {items.map((item, index) => (
-            <li key={index} style={{ wordBreak: 'break-word' }}>
-              {item}
-            </li>
-          ))}
+          {items.map((item, index) => {
+            const isHighlighted = index === highlightIndex;
+            return (
+              <li
+                key={index}
+                style={{
+                  wordBreak: 'break-word',
+                  ...(isHighlighted
+                    ? {
+                      borderLeft: `3px solid ${textColor}`,
+                      color: textColor,
+                      fontWeight: 800,
+                      paddingLeft: '0.5em',
+                    }
+                    : {}),
+                }}
+              >
+                {item}
+              </li>
+            );
+          })}
         </ul>
       </div>
     );

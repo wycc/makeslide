@@ -1491,6 +1491,11 @@ export function AnimationEditorTab() {
               )}
               {effect.type === 'step-list' && (
                 <>
+                  {(() => {
+                    const stepListItemCount = (effect.items ?? []).filter((item) => item.trim().length > 0).length;
+                    const stepListHighlightMax = Math.max(0, stepListItemCount - 1);
+                    return (
+                      <>
                   <label className="flex flex-col gap-1 text-xs text-slate-400">
                     {t('play.animation.stepListItems')}
                     <textarea
@@ -1597,6 +1602,30 @@ export function AnimationEditorTab() {
                       <option value="none">{t('play.animation.stepListBulletStyle.none')}</option>
                     </select>
                   </label>
+                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    {t('play.animation.stepListHighlightIndex')}
+                    <input
+                      type="number"
+                      min={0}
+                      max={stepListHighlightMax}
+                      step={1}
+                      value={effect.stepListHighlightIndex ?? ''}
+                      disabled={disabled || stepListItemCount === 0}
+                      placeholder="-"
+                      onChange={(e) => {
+                        if (e.target.value === '') {
+                          updateEffect(effect.id, { stepListHighlightIndex: undefined });
+                          return;
+                        }
+                        const next = Math.min(stepListHighlightMax, Math.max(0, Math.round(Number(e.target.value) || 0)));
+                        updateEffect(effect.id, { stepListHighlightIndex: next });
+                      }}
+                      className="w-24 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                    />
+                  </label>
+                      </>
+                    );
+                  })()}
                 </>
               )}
               {effect.type === 'overlay-image' && (

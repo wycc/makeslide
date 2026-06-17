@@ -326,6 +326,8 @@ export interface SlideAnimationEffect {
   stepListBorderColor?: string;
   /** List bullet/numbering style for `step-list` effects. Defaults to `'disc'`. Ignored by other effect types. */
   stepListBulletStyle?: 'disc' | 'decimal' | 'none';
+  /** 0-based item index to highlight in `step-list` effects. Omitted means no highlighted item. Ignored by other effect types. */
+  stepListHighlightIndex?: number;
   /**
    * Id of a figure extracted from the slide's source PDF (see
    * `fetchPageFigures`), shown as a positioned image overlay by
