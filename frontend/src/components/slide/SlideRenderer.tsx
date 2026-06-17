@@ -167,6 +167,10 @@ function EffectOverlay({
           <line x1="8" y1="92" x2="88" y2="8" stroke={stroke} strokeWidth={sw + 1} strokeDasharray={sda} markerEnd={`url(#${markerId})`} />
         </>
       );
+    } else if (shapeKind === 'line') {
+      shapeContent = <line x1="8" y1="92" x2="92" y2="8" stroke={stroke} strokeWidth={sw} strokeDasharray={sda} strokeLinecap="round" />;
+    } else if (shapeKind === 'triangle') {
+      shapeContent = <polygon points="50,4 96,92 4,92" fill={fill} stroke={stroke} strokeWidth={sw} strokeDasharray={sda} strokeLinejoin="round" />;
     } else {
       shapeContent = <rect x="4" y="4" width="92" height="92" rx={effect.shapeRectRadius ?? 6} fill={fill} stroke={stroke} strokeWidth={sw} strokeDasharray={sda} />;
     }

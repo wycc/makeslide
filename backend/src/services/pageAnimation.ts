@@ -23,7 +23,7 @@ export const ANIMATION_EFFECT_TYPES = [
 export const ANIMATION_EASES = ['none', 'power1.in', 'power1.out', 'power1.inOut', 'power2.inOut'] as const;
 
 /** SVG primitive shapes drawable by `shape` effects (design doc §12 V2 "SVG 圖元"). */
-export const ANIMATION_SHAPE_KINDS = ['circle', 'rect', 'ellipse', 'arrow'] as const;
+export const ANIMATION_SHAPE_KINDS = ['circle', 'rect', 'ellipse', 'arrow', 'line', 'triangle'] as const;
 
 export type AnimationEffectType = (typeof ANIMATION_EFFECT_TYPES)[number];
 export type AnimationEase = (typeof ANIMATION_EASES)[number];

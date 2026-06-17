@@ -411,6 +411,8 @@ export const zhTW = {
   'play.animation.shapeKind.rect': '方框',
   'play.animation.shapeKind.ellipse': '橢圓',
   'play.animation.shapeKind.arrow': '箭頭',
+  'play.animation.shapeKind.line': '直線',
+  'play.animation.shapeKind.triangle': '三角形',
   'play.animation.shapeColor': '描邊顏色',
   'play.animation.shapeStrokeWidth': '線寬',
   'play.animation.shapeFillColor': '填充顏色',
