@@ -1585,7 +1585,7 @@
 
 [x] Manim `animate.colorShift(m, progress, opts)` 顏色漸變效果：應新增 `animate.colorShift(m, progress, opts)` 函式，讓元素的 `stroke` 和/或 `fill` 顏色在兩個顏色之間做線性插值；progress 0 = `fromColor`，progress 1 = `toColor`；使用內建的 `lerpColor` 輔助函式；opts 支援 `from`（起始 hex 色碼，預設讀取元素現有 stroke）、`to`（目標 hex 色碼，必填）、`attr`（`'stroke'`|`'fill'`|`'both'`，預設 `'stroke'`）；對 `<text>` 元素的 fill 同步更新；新增至少 2 個 vm 測試（一個驗證中間 progress 的顏色介於 from 和 to 之間，一個驗證 progress=1 時顏色等於 toColor）。
 
-[ ] Manim `animate.fadeInFromDirection(m, progress, opts)` 方向滑入效果：應新增 `animate.fadeInFromDirection(m, progress, opts)` 函式，讓元素從指定方向滑入並淡入（類似 GSAP pan 效果，但用於自訂腳本的 HTML/SVG 元素）；以 `progress` 控制位移和 opacity：0 時 opacity=0 且位移最大，1 時 opacity=1 且位移=0；position 使用 CSS `transform: translate(dx, dy)` + `opacity`；opts 支援 `direction`（`'left'`|`'right'`|`'up'`|`'down'`，預設 `'left'`）和 `distance`（位移像素，預設 40）；progress=1 時清除 transform（回到原始位置）；新增至少 2 個 vm 測試（一個驗證中間 progress opacity 和 transform 均非預設值，一個驗證 progress=1 opacity=1 且 transform 已清除）。
+[x] Manim `animate.fadeInFromDirection(m, progress, opts)` 方向滑入效果：應新增 `animate.fadeInFromDirection(m, progress, opts)` 函式，讓元素從指定方向滑入並淡入（類似 GSAP pan 效果，但用於自訂腳本的 HTML/SVG 元素）；以 `progress` 控制位移和 opacity：0 時 opacity=0 且位移最大，1 時 opacity=1 且位移=0；position 使用 CSS `transform: translate(dx, dy)` + `opacity`；opts 支援 `direction`（`'left'`|`'right'`|`'up'`|`'down'`，預設 `'left'`）和 `distance`（位移像素，預設 40）；progress=1 時清除 transform（回到原始位置）；新增至少 2 個 vm 測試（一個驗證中間 progress opacity 和 transform 均非預設值，一個驗證 progress=1 opacity=1 且 transform 已清除）。
 
 ---
 
@@ -1616,3 +1616,7 @@
 - 時間: 2026-06-17 15:00:00 +0800
 - 分支: feature/manim-colorshift-20260617
 - 內容: 新增 `animate.colorShift(m, progress, opts)` 函式到 manimHelperScript。使用既有的 `lerpColor` 輔助函式對元素的 stroke/fill 做線性插值：opts.from（預設讀取元素現有 stroke）→ opts.to（目標色），opts.attr 可選 `'stroke'`/`'fill'`/`'both'`（預設 `'stroke'`）。對 SVG `<text>` 元素的 stroke 模式也同步更新 fill，讓文字顏色正確改變。新增 2 個 vm 測試（progress=0.5 的 channel 值介於 0~255、progress=1 時 stroke 等於 toColor），測試總數從 38 增至 40，全數通過。
+
+- 時間: 2026-06-17 15:15:00 +0800
+- 分支: feature/manim-fadeindirection-20260617
+- 內容: 新增 `animate.fadeInFromDirection(m, progress, opts)` 函式到 manimHelperScript。元素從指定方向滑入並同時淡入：progress=0 時 opacity=0 且位移最大（`distance` 像素，預設 40），progress=1 時 opacity=1 且 transform 清除。opts 支援 `direction`（`'left'`/`'right'`/`'up'`/`'down'`，預設 `'left'`）和 `distance`（像素）。使用 CSS `transform: translate(dx,dy)` 計算位移；progress≥1 時明確清除 transform 防止殘留。新增 2 個 vm 測試（progress=0.5 驗證 opacity<1 且含 translate、progress=1 驗證 opacity='1' 且 transform=''），測試總數從 40 增至 42，全數通過。
