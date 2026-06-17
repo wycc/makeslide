@@ -1474,8 +1474,10 @@
 [x] `overlay-image` 效果透明度控制：目前 `overlay-image` 的圖片固定為完全不透明；應新增 `overlayImageOpacity?: number`（0–1，預設 `1`），讓使用者可以半透明疊加圖片（例如浮水印效果），並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`（`opacity` style）/`AnimationEditorTab`（數字輸入框 0-1, step 0.05）及中英文 i18n。 ✓ 完成於 branch: feature/overlay-image-opacity-20260617
 [x] `text-callout` 文字對齊方式：目前 `text-callout` 固定使用 `textAlign: 'center'`；應新增 `textCalloutAlign?: 'left' | 'center' | 'right'`（預設 `'center'`），讓使用者在動畫編輯器中選擇文字對齊方式，方便內容較長的標注文字排版；並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`/`AnimationEditorTab`（select 下拉選單）及中英文 i18n。 ✓ 完成於 branch: feature/text-callout-align-20260617
 [x] `step-list` 效果圓角半徑控制：目前 `step-list` 效果的容器固定使用 `borderRadius: '8px'`；應新增 `stepListBorderRadius?: number`（px 整數，預設 `8`，範圍 0–32），讓使用者自訂條列清單方框的圓角，並同步更新後端 `AnimationEffect`/`EffectSchema`/序列化、前端 `types.ts`/`SlideRenderer`/`AnimationEditorTab`（數字輸入框 0-32, step 2）及中英文 i18n。 ✓ 完成於 branch: feature/step-list-border-radius-20260617
-[ ] Manim `animate.typewrite(m, progress, opts)` 逐字打字效果：應新增 `animate.typewrite(m, progress, opts)` 函式，模擬逐字顯示文字的打字機效果；對 `kind === 'text'` 的元素，以 `progress` 控制可見字元數量（透過裁切 textContent 或修改 innerHTML），opts 支援 `reverse`（布林，從後往前消除，預設 `false`）；新增至少 2 個 vm 測試（一個驗證中間 progress 時文字長度小於完整長度，一個驗證 progress=1 時文字恢復完整）。
+[x] Manim `animate.typewrite(m, progress, opts)` 逐字打字效果：應新增 `animate.typewrite(m, progress, opts)` 函式，模擬逐字顯示文字的打字機效果；對 `kind === 'text'` 的元素，以 `progress` 控制可見字元數量（透過裁切 textContent 或修改 innerHTML），opts 支援 `reverse`（布林，從後往前消除，預設 `false`）；新增至少 2 個 vm 測試（一個驗證中間 progress 時文字長度小於完整長度，一個驗證 progress=1 時文字恢復完整）。 ✓ 完成於 branch: feature/manim-typewrite-20260617
 [ ] `shape` 效果描邊虛線樣式：目前 `shape` 效果的描邊固定為實線；應新增 `shapeDashArray?: string`（CSS stroke-dasharray 值，例如 `'8 4'`，預設為空字串即實線），讓使用者在動畫編輯器中輸入虛線規格（例如 `'8 4'` = 8px 實線 + 4px 空隙），並同步更新後端 `AnimationEffect`/`EffectSchema`（最長 20 字元，僅允許數字和空白）/序列化、前端 `types.ts`/`SlideRenderer`（SVG `strokeDasharray` 屬性）/`AnimationEditorTab`（文字輸入框）及中英文 i18n。
+[ ] 加入 skill 的功能，讓使用者可以加入自定義的 skill 在各式的 AI 呼叫上。
+[ ] add some pre-built skill which is useful to generate outlines, pictures,scripts or animations.
 
 - 時間: 2026-06-17 07:00:00 +0800
 - 分支: feature/spotlight-soft-edge-20260617
@@ -1492,3 +1494,7 @@
 - 時間: 2026-06-17 07:30:00 +0800
 - 分支: feature/step-list-border-radius-20260617
 - 內容: 新增 `step-list` 效果圓角半徑控制。後端 `pageAnimation.ts` 新增 `MAX_STEP_LIST_BORDER_RADIUS = 32` 常數，`AnimationEffect` 介面新增 `stepListBorderRadius?: number` 欄位，`EffectSchema` 新增 `z.number().int().min(0).max(32)` 驗證，序列化時以整數夾至合法範圍。前端 `types.ts` 同步新增欄位；`SlideRenderer.tsx` 以 `${effect.stepListBorderRadius ?? 8}px` 取代硬編碼 `'8px'` 的 borderRadius；`AnimationEditorTab.tsx` 在字型大小輸入框後新增圓角數字輸入框（range 0-32, step 2）及 px 單位標籤；中英文 i18n 新增 `play.animation.stepListBorderRadius` 翻譯鍵。後端/前端 TypeScript 均通過。
+
+- 時間: 2026-06-17 07:40:00 +0800
+- 分支: feature/manim-typewrite-20260617
+- 內容: 新增 Manim `animate.typewrite` 逐字打字效果。在 `manimHelperScript.ts` 的 `animate` 物件末尾新增 `typewrite(m, progress, opts)` 函式：對 `kind === 'text'` 元素，將 `textContent` 的可見字元數設為 `Math.round(fullLength * p)`，並以 `data-full-text` 屬性快取原始文字；opts 支援 `reverse`（預設 `false`），`reverse: true` 時從字串尾端顯示（`full.slice(len - count)`），`reverse: false` 時從頭端顯示（`full.slice(0, count)`）；非 text 元素退回為 opacity 淡入；progress=1 時兩種模式都還原完整文字。新增 2 個 vm 測試：(1) progress=0.5 時 textContent 長度介於 0 和全長之間，progress=1 時等於原始文字；(2) reverse 模式下 progress=0.4 時顯示尾部子字串且長度小於全長，progress=1 時還原全文。全部 32 項通過。
