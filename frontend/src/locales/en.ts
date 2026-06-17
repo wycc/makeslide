@@ -419,6 +419,7 @@ export const en = {
   'play.animation.shapeKind.triangle': 'Triangle',
   'play.animation.shapeKind.star': 'Star',
   'play.animation.textCalloutShadow': 'Drop shadow',
+  'play.animation.textCalloutMaxWidth': 'Max width (vw)',
   'play.animation.shapeColor': 'Stroke color',
   'play.animation.shapeStrokeWidth': 'Stroke width',
   'play.animation.shapeFillColor': 'Fill color',

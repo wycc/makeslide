@@ -274,6 +274,8 @@ export interface SlideAnimationEffect {
   textCalloutBorderColor?: string;
   /** When true, adds a drop shadow to the `text-callout` box. Ignored by other effect types. */
   textCalloutShadow?: boolean;
+  /** Maximum width in vw for `text-callout` effects. Range 10–80. Ignored by other effect types. */
+  textCalloutMaxWidth?: number;
   /** Mask colour (CSS hex) for `spotlight` effects. Defaults to `#000000`. Ignored by other effect types. */
   spotlightColor?: string;
   /** Mask opacity (0–1) for `spotlight` effects. Defaults to 0.6. Ignored by other effect types. */

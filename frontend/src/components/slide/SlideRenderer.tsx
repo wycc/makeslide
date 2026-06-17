@@ -126,6 +126,7 @@ function EffectOverlay({
     const tcJustify = tcAlign === 'left' ? 'flex-start' : tcAlign === 'right' ? 'flex-end' : 'center';
     const tcBorder = effect.textCalloutBorderColor ? `2px solid ${effect.textCalloutBorderColor}` : undefined;
     const tcShadow = effect.textCalloutShadow ? '0 4px 16px rgba(0,0,0,0.4)' : undefined;
+    const tcMaxW = effect.textCalloutMaxWidth ? `${effect.textCalloutMaxWidth}vw` : undefined;
     return (
       <div
         data-effect-id={effect.id}
@@ -145,6 +146,7 @@ function EffectOverlay({
           wordBreak: 'break-word',
           ...(tcBorder ? { border: tcBorder } : {}),
           ...(tcShadow ? { boxShadow: tcShadow } : {}),
+          ...(tcMaxW ? { maxWidth: tcMaxW } : {}),
         }}
       >
         {effect.text}
