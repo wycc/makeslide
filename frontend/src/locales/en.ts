@@ -418,6 +418,7 @@ export const en = {
   'play.animation.shapeKind.line': 'Line',
   'play.animation.shapeKind.triangle': 'Triangle',
   'play.animation.shapeKind.star': 'Star',
+  'play.animation.shapeKind.hexagon': 'Hexagon',
   'play.animation.textCalloutShadow': 'Drop shadow',
   'play.animation.textCalloutMaxWidth': 'Max width (vw)',
   'play.animation.shapeColor': 'Stroke color',

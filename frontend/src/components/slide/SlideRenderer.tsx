@@ -185,6 +185,8 @@ function EffectOverlay({
       shapeContent = <polygon points="50,4 96,92 4,92" fill={fill} stroke={stroke} strokeWidth={sw} strokeDasharray={sda} strokeLinejoin="round" />;
     } else if (shapeKind === 'star') {
       shapeContent = <polygon points="50,4 60.58,35.44 93.75,35.79 67.12,55.56 77.04,87.21 50,68 22.96,87.21 32.88,55.56 6.25,35.79 39.42,35.44" fill={fill} stroke={stroke} strokeWidth={sw} strokeDasharray={sda} strokeLinejoin="round" />;
+    } else if (shapeKind === 'hexagon') {
+      shapeContent = <polygon points="50,4 89.84,27 89.84,73 50,96 10.16,73 10.16,27" fill={fill} stroke={stroke} strokeWidth={sw} strokeDasharray={sda} strokeLinejoin="round" />;
     } else {
       shapeContent = <rect x="4" y="4" width="92" height="92" rx={effect.shapeRectRadius ?? 6} fill={fill} stroke={stroke} strokeWidth={sw} strokeDasharray={sda} />;
     }
