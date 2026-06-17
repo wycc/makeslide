@@ -563,3 +563,65 @@ test("Manim.animate.typewrite with reverse=true erases from end, restoring full 
   const full = label.el.textContent ?? "";
   assert.equal(full, "ABCDE", "full text should be restored at progress=1");
 });
+
+test("Manim.animate.pulse gives scale=1 at progress=0 and progress=1 (no transform set)", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const circ = Manim.shapes.circle(svg, { x: 0, y: 0, radius: 1, color: Manim.colors.BLUE });
+
+  Manim.animate.pulse(circ, 0);
+  assert.equal(circ.el.style.transform, "", `progress=0 should clear transform (scale=1)`);
+
+  Manim.animate.pulse(circ, 1);
+  assert.equal(circ.el.style.transform, "", `progress=1 should clear transform (scale=1)`);
+});
+
+test("Manim.animate.pulse gives scale > 1 at mid progress and respects maxScale", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const circ = Manim.shapes.circle(svg, { x: 0, y: 0, radius: 1, color: Manim.colors.GREEN });
+
+  // Default maxScale=1.2 — at progress=0.5 thereAndBack reaches peak (1.0) so scale = 1.2
+  Manim.animate.pulse(circ, 0.5);
+  const tr = circ.el.style.transform;
+  const scaleMatch = tr.match(/scale\(([^)]+)\)/);
+  const scale = scaleMatch && scaleMatch[1] ? parseFloat(scaleMatch[1]) : 1;
+  assert.ok(scale > 1, `mid-progress scale should be > 1, got ${scale}`);
+
+  // Custom maxScale=2.0: at progress=0.5 scale should be 2.0
+  Manim.animate.pulse(circ, 0.5, { maxScale: 2.0 });
+  const tr2 = circ.el.style.transform;
+  const sm2 = tr2.match(/scale\(([^)]+)\)/);
+  const scale2 = sm2 && sm2[1] ? parseFloat(sm2[1]) : 1;
+  assert.ok(Math.abs(scale2 - 2.0) < 0.01, `maxScale=2.0 at peak should give ~2.0, got ${scale2}`);
+});
+
+test("Manim.animate.drawBorderThenFill: dashoffset shrinks during phase 1 and fill-opacity grows during phase 2", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const circ = Manim.shapes.circle(svg, { x: 0, y: 0, radius: 1, color: Manim.colors.BLUE });
+
+  // Phase 1 (progress=0.25): border being drawn, fill-opacity=0
+  Manim.animate.drawBorderThenFill(circ, 0.25);
+  const dashoffset025 = parseFloat(circ.el.getAttribute("stroke-dashoffset") as string);
+  assert.ok(dashoffset025 > 0, `phase1: stroke-dashoffset should be > 0 at progress=0.25, got ${dashoffset025}`);
+  assert.equal(circ.el.getAttribute("fill-opacity"), "0", `phase1: fill-opacity should be 0 at progress=0.25`);
+
+  // Phase 2 (progress=0.75): border fully drawn, fill-opacity growing
+  Manim.animate.drawBorderThenFill(circ, 0.75);
+  const dashoffset075 = parseFloat(circ.el.getAttribute("stroke-dashoffset") as string);
+  assert.equal(dashoffset075, 0, `phase2: stroke-dashoffset should be 0 at progress=0.75`);
+  const fillOpacity075 = parseFloat(circ.el.getAttribute("fill-opacity") as string);
+  assert.ok(fillOpacity075 > 0 && fillOpacity075 < 1, `phase2: fill-opacity should be between 0 and 1 at progress=0.75, got ${fillOpacity075}`);
+});
+
+test("Manim.animate.drawBorderThenFill: fill-opacity=1 at progress=1 and dashoffset=0", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const rect = Manim.shapes.square(svg, { x: 0, y: 0, size: 2, color: Manim.colors.RED });
+
+  Manim.animate.drawBorderThenFill(rect, 1);
+  assert.equal(rect.el.getAttribute("stroke-dashoffset"), "0", `progress=1: dashoffset should be 0`);
+  const fillOpacity = parseFloat(rect.el.getAttribute("fill-opacity") as string);
+  assert.ok(fillOpacity > 0, `progress=1: fill-opacity should be > 0, got ${fillOpacity}`);
+});
