@@ -669,3 +669,22 @@ test("Manim.animate.fadeInFromDirection: progress=1 gives opacity=1 and clears t
   assert.equal(circ.el.style.opacity, '1', `opacity at progress=1 should be '1', got ${circ.el.style.opacity}`);
   assert.equal(circ.el.style.transform, '', `transform at progress=1 should be empty, got ${circ.el.style.transform}`);
 });
+
+test("Manim.animate.countUp: progress=0.5 shows value near midpoint", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const txt = Manim.shapes.text(svg, { x: 0, y: 0, text: '0' });
+
+  Manim.animate.countUp(txt, 0.5, { from: 0, to: 100 });
+  const val = parseInt(txt.el.textContent as string, 10);
+  assert.ok(val >= 45 && val <= 55, `countUp at progress=0.5 should be near 50, got ${val}`);
+});
+
+test("Manim.animate.countUp: progress=1 shows toValue with prefix and suffix", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const txt = Manim.shapes.text(svg, { x: 0, y: 0, text: '0' });
+
+  Manim.animate.countUp(txt, 1, { from: 0, to: 42, prefix: '$', suffix: 'k' });
+  assert.equal(txt.el.textContent, '$42k', `countUp at progress=1 should be '$42k', got ${txt.el.textContent}`);
+});
