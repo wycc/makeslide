@@ -434,6 +434,7 @@ export const en = {
   'play.animation.textCalloutAlign.center': 'Center',
   'play.animation.textCalloutAlign.right': 'Right',
   'play.animation.pointerSize': 'Arrow size (rem)',
+  'play.animation.pointerPulse': 'Pulse animation',
   'play.animation.focusX': 'X',
   'play.animation.focusY': 'Y',
   'play.animation.focusWidth': 'W',

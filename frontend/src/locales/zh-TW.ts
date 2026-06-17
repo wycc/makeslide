@@ -434,6 +434,7 @@ export const zhTW = {
   'play.animation.textCalloutAlign.center': '置中',
   'play.animation.textCalloutAlign.right': '靠右',
   'play.animation.pointerSize': '箭頭大小（rem）',
+  'play.animation.pointerPulse': '脈動動畫',
   'play.animation.focusX': 'X',
   'play.animation.focusY': 'Y',
   'play.animation.focusWidth': '寬',
