@@ -1665,7 +1665,7 @@
 - 分支: feature/text-callout-maxwidth-20260617
 - 內容: 新增 `textCalloutMaxWidth?: number`（vw，範圍 10–80）欄位到 `text-callout` 效果。啟用時 `text-callout` div 加上 `maxWidth: '${n}vw'`，讓長文字自動換行而不溢出螢幕。UI 為 number input（min=10, max=80, step=5），留空代表不設限制（undefined）。後端 `AnimationEffect`（介面）、`EffectSchema`（`z.number().int().min(10).max(80)`）、序列化（含 clamp）均更新；前端 `SlideAnimationEffect` 型別、`SlideRenderer.tsx`（`tcMaxW` 變數條件加 maxWidth）、`AnimationEditorTab.tsx`（在 textCalloutShadow 下方新增 number input + vw 單位標籤）、中英文 i18n 均同步更新。前後端 TypeScript 均通過。
 
-[ ] `shape` 效果新增 `hexagon` 六角形：在 `ANIMATION_SHAPE_KINDS` 加入 `'hexagon'`；以 SVG `<polygon>` 繪製正六角形（6 個等距頂點，半徑 46，以中心 50,50 計算，第一個頂點在正上方即 angle=-90°）；支援現有的 fill/stroke/strokeWidth/strokeDasharray 屬性；後端 `ANIMATION_SHAPE_KINDS` const 加入 `'hexagon'`，`EffectSchema` 自動更新；前端 `SlideAnimationShapeKind` 型別加入 `'hexagon'`；`SlideRenderer.tsx` 加入 hexagon 的 polygon 元素；`AnimationEditorTab.tsx` shapeKind select 自動顯示新選項；中英文 i18n 新增 `play.animation.shapeKind.hexagon`（'Hexagon'／'六角形'）。
+[x] `shape` 效果新增 `hexagon` 六角形：在 `ANIMATION_SHAPE_KINDS` 加入 `'hexagon'`；以 SVG `<polygon>` 繪製正六角形（6 個等距頂點，半徑 46，以中心 50,50 計算，第一個頂點在正上方即 angle=-90°）；支援現有的 fill/stroke/strokeWidth/strokeDasharray 屬性；後端 `ANIMATION_SHAPE_KINDS` const 加入 `'hexagon'`，`EffectSchema` 自動更新；前端 `SlideAnimationShapeKind` 型別加入 `'hexagon'`；`SlideRenderer.tsx` 加入 hexagon 的 polygon 元素；`AnimationEditorTab.tsx` shapeKind select 自動顯示新選項；中英文 i18n 新增 `play.animation.shapeKind.hexagon`（'Hexagon'／'六角形'）。
 
 [ ] `shape` 效果新增發光選項 `shapeGlow`：新增 `shapeGlow?: boolean`（預設 false）；啟用時在 SVG 的外層容器加上 CSS `filter: drop-shadow(0 0 8px {stroke})` 讓形狀輪廓發光（顏色與描邊色相同）；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.boolean().optional()`）/序列化；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 在 `<svg>` 的 style 中條件加入 `filter: \`drop-shadow(0 0 8px ${stroke})\``；`AnimationEditorTab.tsx` 在 shape 設定區加入勾選框（在 shapeStrokeWidth 後方）；中英文 i18n 新增 `play.animation.shapeGlow`（'Glow effect'／'發光效果'）。
 
@@ -1684,3 +1684,7 @@
 - 時間: 2026-06-17 17:15:00 +0800
 - 分支: feature/todo-add-items-20260617d
 - 內容: 分析現有系統後，新增 7 個待辦項目：(1) shape 效果新增 hexagon 六角形；(2) shape 效果新增 shapeGlow 發光選項；(3) step-list 高亮指定步驟；(4) text-callout 內距選項；(5) Manim animate.blink 閃爍效果；(6) Manim animate.colorCycle 顏色循環效果；(7) pointer 效果可見時透明度選項。
+
+- 時間: 2026-06-17 17:30:00 +0800
+- 分支: feature/shape-hexagon-20260617
+- 內容: 新增 `hexagon` 六角形到 `shape` 效果。以 SVG `<polygon>` 繪製正六角形，6 個頂點（半徑 46、中心 50,50、頂點從正上方起順時針），points 字串：`50,4 89.84,27 89.84,73 50,96 10.16,73 10.16,27`。strokeLinejoin="round" 讓角點圓滑，支援 fill/stroke/strokeWidth/strokeDasharray。前後端 TypeScript 均通過。
