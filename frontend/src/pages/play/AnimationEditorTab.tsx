@@ -1325,6 +1325,15 @@ export function AnimationEditorTab() {
                       />
                     )}
                   </label>
+                  <label className="flex items-center gap-2 text-xs text-slate-400">
+                    <input
+                      type="checkbox"
+                      checked={!!effect.textCalloutShadow}
+                      disabled={disabled}
+                      onChange={(e) => updateEffect(effect.id, { textCalloutShadow: e.target.checked || undefined })}
+                    />
+                    {t('play.animation.textCalloutShadow')}
+                  </label>
                 </>
               )}
               {effect.type === 'shape' && (

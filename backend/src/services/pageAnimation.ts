@@ -116,6 +116,8 @@ export interface AnimationEffect {
   textCalloutAlign?: 'left' | 'center' | 'right';
   /** Border colour (CSS hex) for `text-callout` effects. When set, adds a 2px solid border around the callout box. Ignored by other effect types. */
   textCalloutBorderColor?: string;
+  /** When true, adds a drop shadow to the `text-callout` box. Ignored by other effect types. */
+  textCalloutShadow?: boolean;
   /**
    * Mask colour (CSS hex) for `spotlight` effects (ignored by other
    * effect types). Defaults to `DEFAULT_SPOTLIGHT_COLOR` (`#000000`).
@@ -435,6 +437,7 @@ const EffectSchema = z.object({
   textCalloutBorderRadius: z.number().int().min(0).max(MAX_TEXT_CALLOUT_BORDER_RADIUS).optional(),
   textCalloutAlign: z.enum(['left', 'center', 'right']).optional(),
   textCalloutBorderColor: z.string().max(9).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
+  textCalloutShadow: z.boolean().optional(),
   spotlightColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   spotlightOpacity: z.number().min(0).max(1).optional(),
   spotlightSoftEdge: z.number().int().min(0).max(MAX_SPOTLIGHT_SOFT_EDGE).optional(),
@@ -537,6 +540,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.textCalloutBorderRadius !== undefined ? { textCalloutBorderRadius: Math.max(0, Math.min(MAX_TEXT_CALLOUT_BORDER_RADIUS, Math.round(effect.textCalloutBorderRadius))) } : {}),
       ...(effect.textCalloutAlign !== undefined ? { textCalloutAlign: effect.textCalloutAlign } : {}),
       ...(effect.textCalloutBorderColor !== undefined ? { textCalloutBorderColor: effect.textCalloutBorderColor } : {}),
+      ...(effect.textCalloutShadow !== undefined ? { textCalloutShadow: effect.textCalloutShadow } : {}),
       ...(effect.spotlightColor !== undefined ? { spotlightColor: effect.spotlightColor } : {}),
       ...(effect.spotlightOpacity !== undefined ? { spotlightOpacity: effect.spotlightOpacity } : {}),
       ...(effect.spotlightSoftEdge !== undefined ? { spotlightSoftEdge: Math.max(0, Math.min(MAX_SPOTLIGHT_SOFT_EDGE, Math.round(effect.spotlightSoftEdge))) } : {}),
