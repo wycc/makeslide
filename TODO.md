@@ -1664,3 +1664,23 @@
 - 時間: 2026-06-17 17:00:00 +0800
 - 分支: feature/text-callout-maxwidth-20260617
 - 內容: 新增 `textCalloutMaxWidth?: number`（vw，範圍 10–80）欄位到 `text-callout` 效果。啟用時 `text-callout` div 加上 `maxWidth: '${n}vw'`，讓長文字自動換行而不溢出螢幕。UI 為 number input（min=10, max=80, step=5），留空代表不設限制（undefined）。後端 `AnimationEffect`（介面）、`EffectSchema`（`z.number().int().min(10).max(80)`）、序列化（含 clamp）均更新；前端 `SlideAnimationEffect` 型別、`SlideRenderer.tsx`（`tcMaxW` 變數條件加 maxWidth）、`AnimationEditorTab.tsx`（在 textCalloutShadow 下方新增 number input + vw 單位標籤）、中英文 i18n 均同步更新。前後端 TypeScript 均通過。
+
+[ ] `shape` 效果新增 `hexagon` 六角形：在 `ANIMATION_SHAPE_KINDS` 加入 `'hexagon'`；以 SVG `<polygon>` 繪製正六角形（6 個等距頂點，半徑 46，以中心 50,50 計算，第一個頂點在正上方即 angle=-90°）；支援現有的 fill/stroke/strokeWidth/strokeDasharray 屬性；後端 `ANIMATION_SHAPE_KINDS` const 加入 `'hexagon'`，`EffectSchema` 自動更新；前端 `SlideAnimationShapeKind` 型別加入 `'hexagon'`；`SlideRenderer.tsx` 加入 hexagon 的 polygon 元素；`AnimationEditorTab.tsx` shapeKind select 自動顯示新選項；中英文 i18n 新增 `play.animation.shapeKind.hexagon`（'Hexagon'／'六角形'）。
+
+[ ] `shape` 效果新增發光選項 `shapeGlow`：新增 `shapeGlow?: boolean`（預設 false）；啟用時在 SVG 的外層容器加上 CSS `filter: drop-shadow(0 0 8px {stroke})` 讓形狀輪廓發光（顏色與描邊色相同）；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.boolean().optional()`）/序列化；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 在 `<svg>` 的 style 中條件加入 `filter: \`drop-shadow(0 0 8px ${stroke})\``；`AnimationEditorTab.tsx` 在 shape 設定區加入勾選框（在 shapeStrokeWidth 後方）；中英文 i18n 新增 `play.animation.shapeGlow`（'Glow effect'／'發光效果'）。
+
+[ ] `step-list` 效果新增高亮指定步驟 `stepListHighlightIndex`：新增 `stepListHighlightIndex?: number`（0-based 整數，預設 undefined 表示不高亮任何項目）；指定後，對應索引的 `<li>` 項目套用 `fontWeight: 800, color: {stepListTextColor}` 並加上左側高亮色條（`border-left: 3px solid {stepListTextColor}`）；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.number().int().min(0).optional()`）/序列化（帶 `Math.max(0, Math.round(...))`）；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 在渲染每個 `<li>` 時判斷 index === stepListHighlightIndex 並套用高亮 style；`AnimationEditorTab.tsx` 加入 number input（min=0, max=step items count - 1）；中英文 i18n 新增 `play.animation.stepListHighlightIndex`（'Highlight step (0-based)'／'高亮步驟（從0起算）'）。
+
+[ ] `text-callout` 效果新增內距選項 `textCalloutPadding`：目前固定使用 `'0.5em 0.75em'`；應新增 `textCalloutPadding?: 'sm' | 'md' | 'lg'`（預設 `'md'`），對應 `sm='0.25em 0.5em'`、`md='0.5em 0.75em'`（現有預設）、`lg='0.75em 1.25em'`；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.enum(['sm','md','lg']).optional()`）/序列化；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 以 padding map 取代硬編碼字串；`AnimationEditorTab.tsx` 在 text-callout 設定區加入 select 選擇器；中英文 i18n 新增翻譯鍵（`play.animation.textCalloutPadding`、`play.animation.textCalloutPadding.sm/md/lg`）。
+
+[ ] Manim `animate.blink(m, progress, opts)` 閃爍效果：新增 `animate.blink(m, progress, opts)` 函式，讓元素 opacity 以週期性 on/off 閃爍；以 `Math.floor(progress * cycles * 2) % 2 === 0 ? 1 : 0` 計算每個時間點的 opacity（偶數半週期亮、奇數半週期暗）；opts 支援 `cycles`（閃爍次數，預設 3）和 `minOpacity`（暗相位最小 opacity，預設 0）；progress=1 時恢復 opacity=1 並清除殘留；新增至少 2 個 vm 測試（驗證 progress=0.5 時 opacity 符合閃爍規律，驗證 progress=1 時 opacity='1'）。
+
+[ ] Manim `animate.colorCycle(m, progress, opts)` 顏色循環效果：新增 `animate.colorCycle(m, progress, opts)` 函式，讓元素的 stroke 在多個顏色之間循環變化（如 ROYGBIV 彩虹效果）；opts 支援 `colors`（hex 色碼陣列，必填，至少 2 色）和 `attr`（`'stroke'`|`'fill'`|`'both'`，預設 `'stroke'`）；以 `progress * (colors.length - 1)` 計算當前位置，用 `lerpColor` 在相鄰兩色插值；progress=1 時設為最後一色；新增至少 2 個 vm 測試（驗證中間 progress 顏色在兩色之間、驗證 progress=1 等於最後一色）。
+
+[ ] `pointer` 效果新增可見時透明度選項 `pointerOpacity`：目前 pointer 在可見時固定 opacity=1；應新增 `pointerOpacity?: number`（0–1，預設 1）讓指針在可見狀態的不透明度可調整（半透明指針適合不遮擋內容的場景）；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.number().min(0).max(1).optional()`）/序列化（帶 min/max clamp）；前端 `types.ts` 新增欄位；`buildGsapTimeline.ts` 中 pointer 效果的 gsap to() 目標 opacity 改為 `effect.pointerOpacity ?? 1`（目前可能硬編碼為 1）；`AnimationEditorTab.tsx` 加入 range slider 或 number input（min=0.1, max=1, step=0.1）；中英文 i18n 新增 `play.animation.pointerOpacity`（'Opacity'／'透明度'）。
+
+---
+
+- 時間: 2026-06-17 17:15:00 +0800
+- 分支: feature/todo-add-items-20260617d
+- 內容: 分析現有系統後，新增 7 個待辦項目：(1) shape 效果新增 hexagon 六角形；(2) shape 效果新增 shapeGlow 發光選項；(3) step-list 高亮指定步驟；(4) text-callout 內距選項；(5) Manim animate.blink 閃爍效果；(6) Manim animate.colorCycle 顏色循環效果；(7) pointer 效果可見時透明度選項。
