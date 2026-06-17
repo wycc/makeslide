@@ -419,6 +419,7 @@ export const zhTW = {
   'play.animation.shapeKind.triangle': '三角形',
   'play.animation.shapeKind.star': '五角星',
   'play.animation.textCalloutShadow': '投影效果',
+  'play.animation.textCalloutMaxWidth': '最大寬度（vw）',
   'play.animation.shapeColor': '描邊顏色',
   'play.animation.shapeStrokeWidth': '線寬',
   'play.animation.shapeFillColor': '填充顏色',

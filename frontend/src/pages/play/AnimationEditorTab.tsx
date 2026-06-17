@@ -1344,6 +1344,26 @@ export function AnimationEditorTab() {
                     />
                     {t('play.animation.textCalloutShadow')}
                   </label>
+                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    {t('play.animation.textCalloutMaxWidth')}
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min={10}
+                        max={80}
+                        step={5}
+                        value={effect.textCalloutMaxWidth ?? ''}
+                        placeholder="—"
+                        disabled={disabled}
+                        onChange={(e) => {
+                          const v = e.target.value === '' ? undefined : Math.max(10, Math.min(80, Math.round(Number(e.target.value))));
+                          updateEffect(effect.id, { textCalloutMaxWidth: v });
+                        }}
+                        className="w-16 rounded-md border border-slate-700 bg-slate-900 px-1 py-1 text-sm text-slate-100 placeholder-slate-600"
+                      />
+                      <span className="text-slate-500">vw</span>
+                    </div>
+                  </label>
                 </>
               )}
               {effect.type === 'shape' && (
