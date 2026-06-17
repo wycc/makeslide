@@ -1577,7 +1577,7 @@
 
 [x] `ANIMATION_EASES` 新增 `elastic.out` 和 `back.out` ease 選項：目前只有 5 種 power ease；應新增 `'elastic.out'`（彈性回彈，進場後像彈簧震盪）和 `'back.out'`（超出後回彈，適合強調性進場）；後端 `ANIMATION_EASES` const array 加入兩值；`EffectSchema` 的 `ease` enum 自動更新；前端 `types.ts` 同步更新 `SlideAnimationEase`；`AnimationEditorTab.tsx` 的 ease select 自動顯示新選項；`buildGsapTimeline.ts` 不需修改（直接傳 ease 字串給 GSAP，GSAP 原生支援 elastic.out 和 back.out）；中英文 i18n 新增對應翻譯鍵（`play.animation.ease.elastic.out`、`play.animation.ease.back.out`）。
 
-[ ] `text-callout` 效果陰影選項：應新增 `textCalloutShadow?: boolean`（預設 false），啟用時在 `text-callout` div 加上 `box-shadow: 0 4px 16px rgba(0,0,0,0.4)` 讓方框更立體；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.boolean().optional()`）/序列化；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 條件加入 `boxShadow` style；`AnimationEditorTab.tsx` 在 textCalloutBorderColor 下方加入勾選框；中英文 i18n 新增翻譯鍵 `play.animation.textCalloutShadow`（'Drop shadow'／'投影效果'）。
+[x] `text-callout` 效果陰影選項：應新增 `textCalloutShadow?: boolean`（預設 false），啟用時在 `text-callout` div 加上 `box-shadow: 0 4px 16px rgba(0,0,0,0.4)` 讓方框更立體；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.boolean().optional()`）/序列化；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 條件加入 `boxShadow` style；`AnimationEditorTab.tsx` 在 textCalloutBorderColor 下方加入勾選框；中英文 i18n 新增翻譯鍵 `play.animation.textCalloutShadow`（'Drop shadow'／'投影效果'）。
 
 [ ] `step-list` 效果 bullet 樣式選項：目前 `step-list` 固定使用 `listStyle: 'disc'`；應新增 `stepListBulletStyle?: 'disc' | 'decimal' | 'none'`（預設 `'disc'`）允許使用者切換 bullet 樣式：`disc`（黑點）、`decimal`（數字編號）、`none`（無 bullet）；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.enum(['disc','decimal','none'])`）/序列化；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 以 `effect.stepListBulletStyle ?? 'disc'` 取代硬編碼 `'disc'`；`AnimationEditorTab.tsx` 在 step-list 設定區加入 select 選擇器；中英文 i18n 新增翻譯鍵。
 
@@ -1600,3 +1600,7 @@
 - 時間: 2026-06-17 14:00:00 +0800
 - 分支: feature/animation-eases-elastic-back-20260617
 - 內容: 新增兩種 GSAP ease 選項。`elastic.out`（彈性回彈，GSAP 原生）和 `back.out`（超出後穩定，GSAP 原生）。更新後端 `ANIMATION_EASES` const、前端 `SlideAnimationEase` 型別、`SLIDE_ANIMATION_EASES` 陣列、`AnimationEditorTab.tsx` 中的 `EASE_LABELS` 對照表，以及中英文 i18n 翻譯鍵（`elasticOut` / `backOut` 命名遵循現有 camelCase 慣例）。`buildGsapTimeline.ts` 無需修改，GSAP 原生支援這兩個字串。前後端 TypeScript 均通過。
+
+- 時間: 2026-06-17 14:15:00 +0800
+- 分支: feature/text-callout-shadow-20260617
+- 內容: 新增 `textCalloutShadow?: boolean` 欄位到 `text-callout` 效果。啟用時在 callout div 加上 `box-shadow: 0 4px 16px rgba(0,0,0,0.4)` 投影效果。後端 `AnimationEffect`（介面欄位）、`EffectSchema`（`z.boolean().optional()`）、序列化均更新；前端 `SlideAnimationEffect` 型別、`SlideRenderer.tsx`（條件加入 `boxShadow` style）、`AnimationEditorTab.tsx`（在 textCalloutBorderColor 下方新增勾選框）、中英文 i18n（`play.animation.textCalloutShadow`）均同步更新。前後端 TypeScript 均通過。
