@@ -418,6 +418,7 @@ export const zhTW = {
   'play.animation.shapeKind.line': '直線',
   'play.animation.shapeKind.triangle': '三角形',
   'play.animation.shapeKind.star': '五角星',
+  'play.animation.shapeKind.hexagon': '六角形',
   'play.animation.textCalloutShadow': '投影效果',
   'play.animation.textCalloutMaxWidth': '最大寬度（vw）',
   'play.animation.shapeColor': '描邊顏色',
