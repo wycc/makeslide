@@ -1,5 +1,302 @@
 # MakeSlide 功能說明
 
+## 本頁產生耗時總計與異常摘要
+
+### 功能目的
+
+播放頁的「本頁產生耗時」區塊原本只分別顯示圖片、文字、講稿與語音四個 artifact 的處理耗時。新版在標題列加入總耗時與異常摘要，讓使用者不必逐一查看 chip，就能快速知道本頁已完成產物累計花了多久，以及是否有任何失敗或超過 SLA 的項目需要優先檢查。這對排查單頁生成過慢、確認重產後是否恢復正常，以及快速瀏覽大量頁面的 pipeline 健康狀態都更直覺。
+
+### 使用方式
+
+1. 進入任一簡報播放頁並選取要檢查的頁面。
+2. 在播放區附近查看「本頁產生耗時」區塊。
+3. 標題列會顯示「總計 {duration}」（英文介面為 **Total {duration}**）：
+   - 只累計狀態為 `succeeded` 且具有效 `duration_ms` 的 artifact。
+   - 尚無任何完成耗時時會顯示既有的「尚無紀錄」。
+4. 若圖片、文字、講稿或語音任一項目失敗，或 SLA 狀態為 `breached`，標題列會額外顯示「{count} 項需注意」（英文介面為 **{count} need attention**）。
+5. 每個 artifact chip 仍維持原本互動方式；滑鼠停留在 chip 上可看到既有 tooltip 詳細資訊，包括狀態、耗時、原因、SLA、開始/結束時間、run id 與錯誤訊息。
+
+### 技術細節
+
+- `PageTimingChips.tsx` 先把 image/text/script/audio 四個 timing 取出為同一份 `timingItems`，標題列與 chip 列共用同一組資料，避免總計與個別 chip 使用不同來源。
+- 新增 `sumCompletedDurationMs()` formatter：只接受 `status === 'succeeded'` 且 `duration_ms` 為有限數字的項目，並回傳總毫秒數；若沒有任何可累計的完成耗時則回傳 `null`，交由 `formatDurationMs()` 顯示「尚無紀錄」。
+- 異常摘要以 `status === 'failed'` 或 `sla_status === 'breached'` 判斷，計算符合條件的 artifact 數量後才顯示 amber badge；一般 warning SLA 仍保留在個別 chip 顏色與 tooltip 中，不升級為標題列警示。
+- Tooltip 仍使用既有 `timingTitle()`，不刪減任何細節；新版只在標題列增加摘要資訊。
+- `zh-TW.ts` 與 `en.ts` 新增 `play.timing.title`、`play.timing.total`、`play.timing.attentionSummary` 與四個 artifact label，讓標題、總計、警示摘要與 chip 標籤都能依 UI 語言切換。
+- 新增 `frontend/src/pages/play/formatters.test.ts`，覆蓋毫秒/秒格式化、缺漏/無效值，以及總計只累加已完成 artifact 的規則。
+
+## 播放頁清除本簡報播放進度
+
+### 功能目的
+
+播放頁會自動把每份簡報的目前頁碼與播放秒數儲存在瀏覽器 localStorage，例如 `makeslide.playback.progress.{pdfId}`，下次開啟同一份簡報時可自動回到上次觀看位置。這對長簡報很方便，但在重新上課、示範給其他人、錄製影片或測試分享連結時，使用者常需要從第一頁開頭重新開始。新版在播放設定中新增「清除本簡報播放進度」按鈕，讓使用者不用開發者工具就能清除該份簡報的本機播放記錄。
+
+### 使用方式
+
+1. 進入任一簡報的播放頁。
+2. 在播放區下方的「播放設定」卡片點選「⚙️ 設定」展開設定內容。
+3. 找到「播放進度」區塊，點選「清除本簡報播放進度」。
+4. 系統會立即：
+   - 移除本機 localStorage 中該簡報的 `makeslide.playback.progress.{pdfId}` 記錄。
+   - 停止目前播放並取消動畫延長播放計時。
+   - 將頁面切回第一頁。
+   - 將目前播放時間與音訊元素時間重設為 `0`。
+   - 顯示「播放進度已清除，已回到第一頁開頭。」狀態訊息。
+5. 重新整理或下次開啟同一簡報時，因為本機進度已清除，播放頁會從第一頁開頭開始。
+6. 使用分享唯讀連結開啟簡報時也能使用此功能；它只清除目前瀏覽器的本機播放進度，不會修改簡報內容或伺服器資料。
+
+### 技術細節
+
+- `PlayPage.tsx` 原本已有 `playbackProgressStorageKey = makeslide.playback.progress.{pdfId}`，並用 effect 自動恢復 `page_number` 與 `current_time`；新版沿用同一個 key 進行精準刪除。
+- 新增 `handleClearPlaybackProgress()`：會先取消 `persistProgressTimerRef` 中尚未寫回 localStorage 的延遲儲存，避免清除後又被舊 timer 寫回。
+- 清除流程會同步重設 `resumePositionRef`、`currentIdx`、`currentTime`、`finished`、`classroomAwaitingNext` 與 audio element 的 `currentTime`，並暫停播放，讓畫面與實際音訊狀態一致。
+- 若正在播放動畫長度超過語音長度的延長段落，會呼叫既有 `clearPendingPageExtend()`，避免清除後仍由延長計時器自動切頁。
+- `PlayPageSlidePanel.tsx` 將控制放在播放設定區塊中，不使用 `isReadOnlyProcessing` 停用，因此分享唯讀模式仍可操作本機進度。
+- `zh-TW.ts` 與 `en.ts` 新增 `play.playbackProgress.title`、`play.playbackProgress.description`、`play.playbackProgress.clear`、`play.playbackProgress.cleared`，確保中英文 UI 與狀態訊息一致。
+
+## YouTube 匯入字幕語言快速選項
+
+### 功能目的
+
+YouTube 匯入面板現在在字幕語言輸入框旁新增常用語言快速選項，讓使用者不必每次手動輸入 `zh-TW`、`en` 或 `ja` 等語言代碼，也能用「自動」交由系統依影片可用字幕選擇。這對經常匯入中文、英文、日文教學影片，或不確定影片字幕語言代碼時特別有幫助，可降低輸入錯誤與重複操作成本。
+
+### 使用方式
+
+1. 在首頁點選「YouTube 匯入」展開匯入面板。
+2. 貼上 YouTube URL 後，可直接手動輸入字幕語言，也可點選字幕欄位旁的快速按鈕：`zh-TW`、`en`、`ja` 或「自動」。
+3. 點選任一快速按鈕後，字幕語言輸入框會立即填入對應值；目前選中的快速按鈕會以高亮狀態顯示。
+4. 選擇 `zh-TW`、`en` 或 `ja` 時，建立 YouTube 任務會送出該語言代碼，後端會優先抓取對應字幕。
+5. 選擇「自動」時，輸入框會顯示 `auto`，但送出任務時會轉成未指定語言，讓既有 YouTube 匯入流程自動選擇可用字幕。
+
+### 技術細節
+
+- `UploadButton.tsx` 保留既有 `youtubeLang` state 與文字輸入框，僅在旁邊新增快速按鈕列，避免改變原有手動輸入能力。
+- 快速選項集中在 `YOUTUBE_SUBTITLE_LANGUAGE_OPTIONS`，目前順序為 `zh-TW`、`en`、`ja`、`auto`。
+- 新增 `normalizeYoutubeSubtitleLanguageForSubmit()`，送出前會先 trim；空字串或大小寫不敏感的 `auto` 會回傳 `undefined`，其餘語言代碼維持原值送入既有 `createYoutubeTask()`。
+- `zh-TW.ts` 與 `en.ts` 新增字幕語言 label、快速選項 aria label 與自動選擇文案，確保中英文介面與輔助工具都有清楚說明。
+- 目前前端沒有 React 元件互動測試依賴，因此新增可由現有 Node/tsx 測試架構執行的純函式測試，覆蓋快速選項清單順序、明確語言代碼保留，以及 `auto`/空白轉為未指定語言的提交規則。
+
+## ZIP 匯入成功後自動開啟提示詞視窗
+
+### 功能目的
+
+ZIP 匯入流程現在會在匯入成功後立即開啟提示詞視窗，讓使用者能像一般 PDF 上傳一樣，直接補充生成風格、語氣、重點方向或空白使用預設風格後開始處理。過去 ZIP 匯入完成後只會把簡報加入首頁清單並顯示 toast，使用者還需要再點一次卡片才會進入提示詞流程；新版移除這個額外步驟，特別適合匯入備份檔或從其他環境轉移簡報後立刻重新產生內容。
+
+### 使用方式
+
+1. 在首頁點選「匯入 ZIP」並選擇先前匯出的簡報 ZIP 檔。
+2. 匯入進度完成後，首頁仍會顯示匯入成功 toast，並把新簡報加入清單最前方。
+3. 系統會自動開啟提示詞視窗；可在文字框中輸入希望 AI 生成逐字稿時採用的風格或補充需求。
+4. 若 ZIP 檔本身已包含 `user_prompt`，提示詞視窗會自動帶入該內容，使用者可直接沿用、微調或清空。
+5. 送出提示詞後，既有處理流程會照常呼叫開始處理 API；此功能不改變後端匯入格式或處理 API。
+
+### 技術細節
+
+- `HomePage.tsx` 的 ZIP 匯入 handler 在 `importPdfZip(file)` 成功回傳 `imported` 後，除了原本的 `setItems((prev) => [imported, ...prev])` 與匯入成功 toast，現在也會呼叫既有 `openPromptFor(imported)`。
+- `openPromptFor()` 已支援 `PdfListItem | UploadResponse`，並會在物件含有字串型 `user_prompt` 時將其作為 `PromptModal` 的 `initialValue`，因此 ZIP 匯入檔若保留提示詞資料可直接沿用。
+- 為了讓 ZIP 匯入 handler 可呼叫 `openPromptFor()`，函式宣告位置提前到 `handleImportZipChange()` 前方；行為本身與 PDF 上傳、卡片點擊開啟提示詞視窗共用同一套狀態。
+- 此更新只調整前端流程，不修改 `importPdfZip()` API、後端匯入端點或提示詞送出 API。
+
+## PDF 卡片總語音長度顯示
+
+### 功能目的
+
+首頁 PDF 卡片現在會在資訊列顯示該簡報已產生音訊的總長度，讓使用者不必進入播放頁就能快速判斷一份簡報大約需要播放多久。這對整理多份課程、比較不同版本簡報長短，或在上課/錄影前挑選合適長度的素材特別有幫助。
+
+### 使用方式
+
+1. 回到首頁簡報清單後，卡片標題下方的資訊列會維持顯示建立時間與頁數。
+2. 若後端清單資料提供 `total_audio_duration_seconds`，同一列會額外顯示「語音 {duration}」（英文介面為 **Audio {duration}**）。
+3. 時間格式會依長度自動切換：
+   - 一小時內使用 `M:SS`，例如 `12:34`。
+   - 一小時以上使用 `H:MM:SS`，例如 `1:02:03`。
+   - 低於一分鐘也會顯示分鐘欄位，例如 `0:07`。
+4. 若簡報尚未產生音訊、資料為 `null` / `undefined`，或欄位不存在，卡片不會顯示語音長度，避免誤導使用者。
+
+### 技術細節
+
+- `PdfListItem` 既有 `total_audio_duration_seconds?: number | null` 欄位直接由 `PdfCard.tsx` 使用，不需調整 API 型別。
+- 新增共用 `formatAudioDuration()` formatter，先排除 `null`、`undefined`、非有限數字與負數，再以 `Math.floor()` 轉成整秒，避免小數秒造成畫面跳動。
+- `PdfCard.tsx` 將原本左右對齊的資訊列改成可換行的 flex layout，讓建立時間、頁數與語音長度在窄卡片上仍能自然排列。
+- `zh-TW.ts` 與 `en.ts` 新增 `card.totalAudioDuration` 與 `card.totalAudioDurationLabel`，分別提供顯示文字與 title/輔助說明。
+- 新增 formatter 測試覆蓋秒數、分鐘、小時、`null`、`undefined` 與無效輸入，確保顯示規則穩定。
+
+## 首頁標題搜尋清除與結果摘要
+
+### 功能目的
+
+首頁標題搜尋現在支援快速清除按鈕與結果摘要，讓使用者在簡報數量增加後更容易掌握目前清單狀態。過去輸入標題關鍵字後必須手動刪除文字才能回到完整清單，也無法直接知道目前搜尋命中幾份簡報；新版會在搜尋框有文字時顯示「清除」按鈕，並在篩選區顯示目前實際顯示數量與同一分類範圍內的總數。
+
+### 使用方式
+
+1. 進入首頁後，只要已有簡報，篩選區會顯示「標題篩選」輸入框。
+2. 輸入關鍵字後，清單會依目前分類或「最近的簡報」範圍套用標題搜尋。
+3. 搜尋框右側會在有文字時顯示「清除」（英文介面為 **Clear**）按鈕；點擊後會立即清空搜尋文字並恢復該分類範圍內的完整清單。
+4. 篩選區下方會顯示「顯示 {shown} / {total} 份簡報」（英文介面為 **Showing {shown} / {total} presentations**）：
+   - `shown` 代表目前套用標題搜尋後實際顯示的簡報數量。
+   - `total` 代表在目前類別或「最近的簡報」視圖下、尚未套用標題搜尋前的簡報總數。
+5. 既有標題搜尋持久化行為維持不變；搜尋文字與清除後的空字串都會同步寫入 localStorage。
+
+### 技術細節
+
+- `HomePage.tsx` 沿用既有 `titleFilter` 與 `updateTitleFilter()`，清除按鈕直接呼叫 `updateTitleFilter('')`，因此畫面狀態與 `makeslide.home.titleFilter` localStorage 會一致更新。
+- 結果摘要以 `filteredItems.length` 作為 `shown`，以 `categoryFilteredItems.length` 作為 `total`。這表示摘要會尊重既有分類選擇：單一分類時只計算該分類；「全部類別」與「最近的簡報」則以目前頁面原本語意使用所有簡報作為 title filter 前基準。
+- 搜尋框改為相對定位容器，輸入欄保留右側 padding 給清除按鈕，避免按鈕覆蓋輸入文字。
+- 摘要使用 `aria-live="polite"`，讓輔助工具可在搜尋結果數量變化時以非干擾方式更新。
+- `zh-TW.ts` 與 `en.ts` 新增 `home.clearTitleFilter`、`home.resultSummary`，確保中英文介面都有完整文案。
+
+## 首頁簡報清單排序選項
+
+### 功能目的
+
+首頁簡報清單現在新增「排序方式」下拉選單，讓使用者可以依照目前整理簡報的情境切換排序，而不再只能在一般分類中使用標題排序、在「最近的簡報」中固定使用建立時間倒序。這對簡報數量變多後特別有幫助：想快速找最新匯入內容時可依建立時間排序；想回到最近編輯的工作可依更新時間排序；想找大型課程或長份簡報時可依頁數排序；需要穩定瀏覽時則可維持預設標題 A-Z。
+
+### 使用方式
+
+1. 進入首頁後，只要已有簡報，篩選區會顯示「排序方式」（英文介面為 **Sort by**）下拉選單。
+2. 可選擇以下模式：
+   - 「標題 A-Z」／**Title A-Z**：依標題由小到大排列，也是既有預設行為。
+   - 「建立時間新到舊」／**Newest created**：新建立或新匯入的簡報排在前面。
+   - 「更新時間新到舊」／**Recently updated**：最近被更新的簡報排在前面。
+   - 「頁數多到少」／**Most pages**：頁數較多的簡報排在前面。
+3. 排序偏好會自動儲存在瀏覽器 localStorage 的 `makeslide.home.sortMode`，重新整理或下次開啟首頁時會延續上次選擇。
+4. 無論目前選擇「全部類別」、單一分類或「最近的簡報」，清單內的簡報都會套用同一個排序方式；「最近的簡報」不再強制固定為建立時間倒序。
+
+### 技術細節
+
+- `HomePage.tsx` 新增 `SortMode` union type，支援 `title_asc`、`created_desc`、`updated_desc`、`page_count_desc` 四種模式。
+- 新增 `SORT_MODE_STORAGE_KEY = 'makeslide.home.sortMode'`，以 `readStoredSortMode()` 讀取並驗證 localStorage 內容；未知值會回退到 `title_asc`，避免舊資料或手動修改造成錯誤狀態。
+- 排序邏輯集中在 `getComparatorForSortMode()` 與 `sortItems()`，並在主要比較結果相同時以標題排序作為 tie-breaker，讓列表更穩定。
+- 一般分類群組與「最近的簡報」群組都改用 `sortItems(filteredItems)` 或 `sortItems(group.items)`，確保標題搜尋與分類篩選後仍一致套用目前排序模式。
+- `zh-TW.ts` 與 `en.ts` 新增 `home.sortBy`、`home.sort.titleAsc`、`home.sort.createdDesc`、`home.sort.updatedDesc`、`home.sort.pageCountDesc`，讓中英文介面都有完整文案。
+
+## 系統設定分類導覽頁
+
+### 功能目的
+
+系統設定頁現在改成左側分類 navigation bar、右側顯示目前分類設定內容的版面。過去所有設定集中在同一個長頁面中，API Key、語言、GitHub、AI 技能與管理員設定混在一起；新版將設定依用途拆成不同分類，降低尋找成本，也避免使用者在調整單一類型設定時被不相關欄位干擾。
+
+### 使用方式
+
+1. 進入「設定」頁後，左側會顯示設定分類導覽；小螢幕時導覽列會以橫向可捲動方式呈現。
+2. 點選「帳號與偏好」可調整 Google 登入/登出、使用者代碼、介面語言、產生結果語言與播放速度。
+3. 點選「AI 與語音」可設定 LLM/TTS 供應商、OpenAI/Gemini API Key、模型名稱、CGU Air API、自動產生焦點動畫，以及 Gemini/OpenAI 雙 speaker 人設與 voice。
+4. 點選「同步」可設定 GitHub repository URL 與 token，用於簡報同步。
+5. 點選「AI 技能」可啟用/停用內建技能、編輯或刪除自訂技能，並新增要注入 AI 呼叫的自訂指令。
+6. 若目前帳號具備 admin 權限，會額外看到「管理員」分類，可設定 Google Auth、移交 admin 權限，以及調整 Pipeline SLA stage/artifact 目標時間。
+7. 各分類右側只顯示該分類內容；儲存按鈕保留原本行為，仍會一次保存對應的系統 AI/使用者/同步/admin 設定，不影響既有設定功能。
+
+### 技術細節
+
+- `SettingsPage.tsx` 新增 `SettingsCategory` 與 `activeCategory` 狀態，以 `settingsCategories` 描述所有分類的 id、顯示名稱、描述與 admin-only 條件。
+- 左側 navigation bar 只列出目前使用者可見分類；非 admin 使用者不會看到 admin 分類，若權限狀態改變且目前停在 admin 分類，會自動切回「帳號與偏好」。
+- 原本設定項完整保留並重新分組：帳號/語言/播放速度、AI provider/API/model/TTS、自動動畫、GitHub 同步、AI 技能、Google Auth/admin transfer/SLA。
+- `zh-TW.ts` 與 `en.ts` 同步新增分類導覽與登入狀態 i18n key，確保中英文介面都有一致文案。
+- 已執行 frontend TypeScript typecheck，確認重構後型別正確。
+
+## Pointer 透明度選項
+
+### 功能目的
+
+`pointer` 動畫效果現在支援 `pointerOpacity` 可見狀態透明度設定，讓指標不再只能以完全不透明的方式顯示。當投影片中有密集文字、圖表數據或需要指向但不想遮住內容的區域時，可以將指標調成半透明，例如 `0.5` 或 `0.7`，在保留視覺引導效果的同時降低遮擋感。
+
+### 使用方式
+
+1. 在播放頁的動畫編輯器中新增或選擇一個 `pointer` 效果。
+2. 在指標形狀、角度、顏色與大小設定附近找到「**透明度**」（英文介面為 **Opacity**）。
+3. 使用滑桿或數字輸入調整透明度，介面建議範圍為 `0.1` 到 `1`，步進為 `0.1`。
+4. 設為 `1` 時維持既有完全不透明外觀；設為較低數值時，指標淡入後會停留在對應透明度，直到消失動畫開始。
+5. 舊有動畫規格沒有 `pointerOpacity` 時會自動使用預設 `1`，不需要手動遷移。
+
+### 技術細節
+
+- 後端 `AnimationEffect` 新增 `pointerOpacity?: number`，並在 `EffectSchema` 使用 `z.number().min(0).max(1).optional()` 驗證。
+- `validateAnimationSpec()` 序列化時會保留合法的 `pointerOpacity`，並以 `Math.max(0, Math.min(1, value))` 做 min/max clamp。
+- 前端 `SlideAnimationEffect` 同步新增 `pointerOpacity` 欄位。
+- `buildGsapTimeline.ts` 的 pointer 淡入動畫由固定 `autoAlpha: 1` 改為 `autoAlpha: effect.pointerOpacity ?? 1`，因此可見狀態會使用使用者指定的不透明度。
+- `AnimationEditorTab.tsx` 在 pointer 設定區加入 range slider 與 number input，讓使用者可直接調整透明度；中英文 i18n 新增 `play.animation.pointerOpacity`。
+
+## Manim animate.colorCycle 顏色循環效果
+
+### 功能目的
+
+Manim helper 現在新增 `animate.colorCycle(m, progress, opts)`，讓 custom-script 動畫可以在多個 hex 顏色之間連續插值，適合製作 ROYGBIV 彩虹描邊、流程狀態色變化、重點圖形循環上色，或讓某個 SVG 元素在播放期間以更柔和的方式吸引注意。
+
+### 使用方式
+
+在 `custom-script` 中建立 Manim mobject 後，於 `api.onFrame()` 依目前動畫進度呼叫 `Manim.animate.colorCycle()`：
+
+```javascript
+var svg = Manim.createSvg(root);
+var ring = Manim.shapes.circle(svg, {
+  x: 0,
+  y: 0,
+  radius: 1.2,
+  color: '#ff0000',
+  strokeWidth: 0.08,
+});
+
+api.onFrame(function(frame) {
+  Manim.animate.colorCycle(ring, frame.t, {
+    colors: ['#ff0000', '#ff7f00', '#ffff00', '#00ff00', '#0000ff', '#4b0082', '#9400d3'],
+    attr: 'stroke',
+  });
+});
+```
+
+- `colors`：必填 hex 色碼陣列，至少需要 2 色；若未提供或少於 2 色，函式會安全 no-op，不改動元素顏色。
+- `attr`：指定要套用的 SVG 屬性，可為 `stroke`、`fill` 或 `both`，預設為 `stroke`。若指定 `both`，描邊與填色會同步更新；文字元素在更新 stroke 時也會同步更新 fill，維持文字可見。
+- `progress` 會先限制在 `0..1`，再以 `progress * (colors.length - 1)` 計算位於哪兩個相鄰顏色之間，並使用 `lerpColor()` 做 RGB 線性插值。
+- `progress = 1` 時會直接落在最後一個色碼，確保動畫結束時不會因浮點或索引邊界停在倒數第二段。
+
+### 技術細節
+
+- `animate.colorCycle()` 加入既有 Manim helper 的 `animate` 物件，沿用同檔案的 `clamp01()`、`lerpColor()` 與 SVG 屬性更新風格。
+- 當 `opts.colors` 不存在或長度小於 2 時直接 `return`，避免錯誤輸入造成 sandbox 腳本中斷。
+- `attr` 若不是合法值會回退到預設 `stroke`，降低 AI 或使用者產生腳本時的輸入風險。
+- 新增 VM 測試驗證 `progress=0.25` 且三色陣列時會落在第一、第二色中間，以及 `progress=1` 搭配 `attr: 'both'` 時 stroke/fill 都等於最後一色。
+
+## Manim animate.blink 閃爍效果
+
+### 功能目的
+
+Manim helper 現在新增 `animate.blink(m, progress, opts)`，讓 custom-script 動畫可以用週期性的亮暗切換快速吸引觀眾注意。相較於一般淡入淡出，blink 更適合用在短暫提示、警示狀態、目前步驟標記、互動操作重點，或需要在複雜圖形中讓某個元素「閃一下」的場景。
+
+### 使用方式
+
+在 `custom-script` 中建立 Manim mobject 後，於 `api.onFrame()` 以目前動畫進度呼叫 `Manim.animate.blink()`：
+
+```javascript
+var svg = Manim.createSvg(root);
+var marker = Manim.shapes.circle(svg, {
+  x: 0,
+  y: 0,
+  radius: 0.35,
+  color: Manim.colors.YELLOW,
+  fill: Manim.colors.YELLOW,
+  fillOpacity: 1,
+});
+
+api.onFrame(function(frame) {
+  Manim.animate.blink(marker, frame.t, {
+    cycles: 3,
+    minOpacity: 0.15,
+  });
+});
+```
+
+- `cycles`：閃爍次數，預設為 `3`。每個 cycle 分成亮、暗兩個半週期。
+- `minOpacity`：暗相位的不透明度，預設為 `0`。若希望暗相位仍保留淡淡可見，可設定如 `0.15` 或 `0.25`。
+- `progress` 到達 `1` 時，元素會自動恢復 `opacity = '1'`，避免動畫結束後停留在透明狀態。
+
+### 技術細節
+
+- `animate.blink()` 使用 `clamp01(progress)` 將進度限制在 `0..1`。
+- 亮暗切換遵循 `Math.floor(progress * cycles * 2) % 2 === 0 ? 1 : 0`：偶數半週期為亮相位，奇數半週期為暗相位。
+- 暗相位不直接固定為 `0`，而是套用 `opts.minOpacity ?? 0`，讓腳本可選擇完全消失或半透明閃爍。
+- 當 `progress >= 1` 時直接設定 `m.el.style.opacity = '1'` 並結束，確保沒有殘留透明度。
+- 新增 VM 測試覆蓋 `progress=0.5` 的半週期規律，以及 `progress=1` 的 opacity 還原行為。
+
 ## Text-callout 內距選項
 
 ### 功能目的

@@ -397,6 +397,17 @@ export const MANIM_HELPER_SCRIPT = `
     },
     fadeIn: function (m, progress) { m.el.style.opacity = String(clamp01(progress)); },
     fadeOut: function (m, progress) { m.el.style.opacity = String(1 - clamp01(progress)); },
+    blink: function (m, progress, opts) {
+      var p = clamp01(progress);
+      var cycles = (opts && opts.cycles != null) ? opts.cycles : 3;
+      var minOpacity = (opts && opts.minOpacity != null) ? opts.minOpacity : 0;
+      if (p >= 1) {
+        m.el.style.opacity = '1';
+        return;
+      }
+      var visible = Math.floor(p * cycles * 2) % 2 === 0 ? 1 : 0;
+      m.el.style.opacity = String(visible ? 1 : minOpacity);
+    },
     grow: function (m, progress, cx, cy) {
       var p = clamp01(progress);
       var scx = cx || 0, scy = toSvgY(cy || 0);
@@ -654,6 +665,24 @@ export const MANIM_HELPER_SCRIPT = `
       var fromColor = opts && opts.from ? String(opts.from)
         : (m.el.getAttribute('stroke') || '#000000');
       var color = lerpColor(fromColor, toColor, p);
+      if (attr === 'stroke' || attr === 'both') {
+        m.el.setAttribute('stroke', color);
+        if (m.el.tagName === 'text') { m.el.setAttribute('fill', color); }
+      }
+      if (attr === 'fill' || attr === 'both') {
+        m.el.setAttribute('fill', color);
+      }
+    },
+    colorCycle: function (m, progress, opts) {
+      var p = clamp01(progress);
+      var cycleColors = opts && opts.colors;
+      if (!cycleColors || cycleColors.length < 2) { return; }
+      var attr = (opts && opts.attr) || 'stroke';
+      if (attr !== 'stroke' && attr !== 'fill' && attr !== 'both') { attr = 'stroke'; }
+      var pos = p * (cycleColors.length - 1);
+      var idx = p >= 1 ? cycleColors.length - 2 : Math.floor(pos);
+      var localT = p >= 1 ? 1 : (pos - idx);
+      var color = lerpColor(String(cycleColors[idx]), String(cycleColors[idx + 1]), localT);
       if (attr === 'stroke' || attr === 'both') {
         m.el.setAttribute('stroke', color);
         if (m.el.tagName === 'text') { m.el.setAttribute('fill', color); }

@@ -33,10 +33,13 @@ import {
 } from '../i18n';
 import { GEMINI_TTS_VOICES, OPENAI_TTS_VOICES, geminiVoiceLabel, openaiVoiceLabel } from '../lib/ttsVoices';
 
+type SettingsCategory = 'account' | 'ai' | 'sync' | 'skills' | 'admin';
+
 export default function SettingsPage() { 
   const LOCAL_USER_CODE_KEY = 'makeslide.user_code';
   const navigate = useNavigate();
   const { t } = useI18n();
+  const [activeCategory, setActiveCategory] = useState<SettingsCategory>('account');
   const [openaiApiKey, setOpenaiApiKey] = useState('');
   const [geminiApiKey, setGeminiApiKey] = useState('');
   const [llmProvider, setLlmProvider] = useState<'openai' | 'gemini'>('openai');
@@ -372,20 +375,10 @@ export default function SettingsPage() {
         </td>
         <td className="whitespace-nowrap px-3 py-2">
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => onSlaOverrideApply(item)}
-              disabled={busy}
-              className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:bg-slate-800 disabled:opacity-50"
-            >
+            <button type="button" onClick={() => onSlaOverrideApply(item)} disabled={busy} className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:bg-slate-800 disabled:opacity-50">
               {t('settings.slaApply')}
             </button>
-            <button
-              type="button"
-              onClick={() => void onSlaOverrideSave(item.kind, item.name, null)}
-              disabled={busy || item.override_ms == null}
-              className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:bg-slate-800 disabled:opacity-50"
-            >
+            <button type="button" onClick={() => void onSlaOverrideSave(item.kind, item.name, null)} disabled={busy || item.override_ms == null} className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:bg-slate-800 disabled:opacity-50">
               {t('settings.slaClear')}
             </button>
           </div>
@@ -394,10 +387,27 @@ export default function SettingsPage() {
     );
   };
 
+  const settingsCategories: Array<{ id: SettingsCategory; label: string; description: string; adminOnly?: boolean }> = [
+    { id: 'account', label: t('settings.nav.account'), description: t('settings.nav.accountDesc') },
+    { id: 'ai', label: t('settings.nav.ai'), description: t('settings.nav.aiDesc') },
+    { id: 'sync', label: t('settings.nav.sync'), description: t('settings.nav.syncDesc') },
+    { id: 'skills', label: t('settings.nav.skills'), description: t('settings.nav.skillsDesc') },
+    { id: 'admin', label: t('settings.nav.admin'), description: t('settings.nav.adminDesc'), adminOnly: true },
+  ];
+
+  const visibleSettingsCategories = settingsCategories.filter((category) => !category.adminOnly || isAdmin);
+  const activeCategoryInfo = (visibleSettingsCategories.find((category) => category.id === activeCategory) ?? settingsCategories[0])!;
+
+  useEffect(() => {
+    if (!isAdmin && activeCategory === 'admin') {
+      setActiveCategory('account');
+    }
+  }, [activeCategory, isAdmin]);
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <header className="border-b border-slate-800 bg-slate-900/40 backdrop-blur">
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-4">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
           <h1 className="text-lg font-semibold">{t('settings.title')}</h1>
           <div className="flex items-center gap-3 text-sm">
             <Link className="text-slate-300 hover:text-white" to="/system">
@@ -409,8 +419,8 @@ export default function SettingsPage() {
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-3xl px-4 py-6">
-        {loading ? <p className="text-sm text-slate-400">{t('settings.loading')}</p> : null}
+      <main className="mx-auto max-w-6xl px-4 py-6">
+        {loading ? <p className="mb-3 text-sm text-slate-400">{t('settings.loading')}</p> : null}
         {err ? (
           <div className="mb-3 rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
             {err}
@@ -421,591 +431,234 @@ export default function SettingsPage() {
             {msg}
           </div>
         ) : null}
-        {authStatus?.google_enabled || authStatus?.authenticated ? (
-          <div className="mb-4 rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-base font-semibold text-slate-100">{t('settings.googleAccount')}</h2>
-                {authStatus?.authenticated && authStatus.user ? (
-                  <p className="mt-1 text-sm text-slate-300">
-                    已登入：{authStatus.user.name ? `${authStatus.user.name}（${authStatus.user.email}）` : authStatus.user.email}
-                  </p>
-                ) : (
-                  <p className="mt-1 text-sm text-slate-400">{t('settings.googleLoginHint')}</p>
-                )}
-              </div>
-              {authStatus?.authenticated ? (
-                <button
-                  type="button"
-                  onClick={() => void onLogout()}
-                  className="rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800"
-                >
-                  {t('settings.logout')}
-                </button>
-              ) : (
-                <a
-                  href="api/auth/google/start"
-                  className="rounded-md bg-slate-100 px-4 py-2 text-center text-sm font-medium text-slate-900 hover:bg-white"
-                >
-                  {t('settings.googleLogin')}
-                </a>
-              )}
+
+        <div className="grid gap-5 lg:grid-cols-[16rem_minmax(0,1fr)]">
+          <aside className="rounded-xl border border-slate-800 bg-slate-900/40 p-3 lg:sticky lg:top-4 lg:self-start">
+            <div className="mb-3 px-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              {t('settings.navTitle')}
             </div>
-          </div>
-        ) : null}
-        <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-          <div className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-xs text-slate-400">
-            <div>{t('settings.currentAccount')}<span className="font-mono text-slate-200">{accountId}</span></div>
-          </div>
+            <nav className="flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible" aria-label={t('settings.navTitle')}>
+              {visibleSettingsCategories.map((category) => {
+                const active = category.id === activeCategoryInfo.id;
+                return (
+                  <button
+                    key={category.id}
+                    type="button"
+                    onClick={() => setActiveCategory(category.id)}
+                    className={`min-w-44 rounded-lg px-3 py-2 text-left transition lg:min-w-0 ${active ? 'border border-indigo-400/60 bg-indigo-500/15 text-white' : 'border border-transparent text-slate-300 hover:border-slate-700 hover:bg-slate-800/70 hover:text-white'}`}
+                    aria-current={active ? 'page' : undefined}
+                  >
+                    <span className="block text-sm font-medium">{category.label}</span>
+                    <span className="mt-1 block text-xs text-slate-500">{category.description}</span>
+                  </button>
+                );
+              })}
+            </nav>
+          </aside>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <label className="block text-sm text-slate-300 sm:col-span-2">
-              {t('settings.userCode')}
-              <input
-                value={userCode}
-                onChange={(e) => setUserCode(e.target.value)}
-                className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                placeholder={t('settings.userCodePlaceholder')}
-                maxLength={128}
-              />
-              <span className="mt-1 block text-xs text-slate-500">
-                {authStatus?.authenticated
-                  ? t('settings.userCodeAccount')
-                  : t('settings.userCodeLocal')}
-              </span>
-            </label>
-            <label className="block text-sm text-slate-300">
-              {t('settings.uiLanguage')}
-              <select
-                value={uiLanguage}
-                onChange={(e) => setUiLanguage(e.target.value as AppLanguage)}
-                className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-              >
-                {LANGUAGE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.nativeLabel}</option>
-                ))}
-              </select>
-            </label>
-            <label className="block text-sm text-slate-300">
-              {t('settings.contentLanguage')}
-              <select
-                value={contentLanguage}
-                onChange={(e) => setContentLanguage(e.target.value as AppLanguage)}
-                className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-              >
-                {LANGUAGE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.nativeLabel}</option>
-                ))}
-              </select>
-              <span className="mt-1 block text-xs text-slate-500">{t('settings.contentLanguageHint')}</span>
-            </label>
-            <label className="block text-sm text-slate-300">
-              {t('settings.playbackSpeed')}
-              <select
-                value={String(playbackSpeed)}
-                onChange={(e) => setPlaybackSpeed(Number(e.target.value))}
-                className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-              >
-                {[0.5, 0.75, 1, 1.25, 1.5, 2].map((speed) => (
-                  <option key={speed} value={String(speed)}>{speed}x</option>
-                ))}
-              </select>
-            </label>
-            <label className="block text-sm text-slate-300">
-              {t('settings.llmProvider')}
-              <select
-                value={llmProvider}
-                onChange={(e) => setLlmProvider(e.target.value as 'openai' | 'gemini')}
-                className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-              >
-                <option value="openai">OpenAI</option>
-                <option value="gemini">Gemini</option>
-              </select>
-            </label>
-            <label className="block text-sm text-slate-300">
-              {t('settings.ttsProvider')}
-              <select
-                value={ttsProvider}
-                onChange={(e) => setTtsProvider(e.target.value as 'openai' | 'gemini')}
-                className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-              >
-                <option value="openai">OpenAI</option>
-                <option value="gemini">Gemini</option>
-              </select>
-            </label>
-            <label className="block text-sm text-slate-300 sm:col-span-2">
-              <span className="inline-flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={autoGenerateAnimation}
-                  onChange={(e) => setAutoGenerateAnimation(e.target.checked)}
-                />
-                {t('settings.autoGenerateAnimation')}
-              </span>
-              <span className="mt-1 block text-xs text-slate-500">{t('settings.autoGenerateAnimationHint')}</span>
-            </label>
-            {isAdmin ? (
-              <>
-                <label className="block text-sm text-slate-300 sm:col-span-2">
-                  <span className="inline-flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={googleAuthEnabled}
-                      onChange={(e) => setGoogleAuthEnabled(e.target.checked)}
-                    />
-                    {t('settings.googleAuthEnabled')}
-                  </span>
-                </label>
-                {googleAuthEnabled ? (
-                  <>
-                    <label className="block text-sm text-slate-300 sm:col-span-2">
-                      GOOGLE_CLIENT_ID
-                      <input
-                        value={googleClientId}
-                        onChange={(e) => setGoogleClientId(e.target.value)}
-                        className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                        placeholder="xxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com"
-                      />
-                    </label>
-                    <label className="block text-sm text-slate-300 sm:col-span-2">
-                      GOOGLE_CLIENT_SECRET
-                      <input
-                        type="password"
-                        value={googleClientSecret}
-                        onChange={(e) => setGoogleClientSecret(e.target.value)}
-                        className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                        placeholder="GOCSPX-..."
-                      />
-                    </label>
-                    <label className="block text-sm text-slate-300 sm:col-span-2">
-                      GOOGLE_REDIRECT_URI
-                      <input
-                        value={googleRedirectUri}
-                        onChange={(e) => setGoogleRedirectUri(e.target.value)}
-                        className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                        placeholder="https://your-domain.example/api/auth/google/callback"
-                      />
-                    </label>
-                  </>
-                ) : null}
-                <div className="sm:col-span-2 rounded-lg border border-slate-800 bg-slate-950/60 p-3">
-                  <div className="mb-2 text-sm font-medium text-slate-200">{t('settings.adminTransfer')}</div>
-                  <div className="mb-2 text-xs text-slate-500">
-                    {t('settings.currentAdmins')}
-                    <span className="font-mono text-slate-300">{adminAccountIds.join(', ') || accountId}</span>
-                  </div>
-                  <div className="flex flex-col gap-2 sm:flex-row">
-                    <input
-                      value={adminTransferAccountId}
-                      onChange={(e) => setAdminTransferAccountId(e.target.value)}
-                      className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                      placeholder={t('settings.adminTransferPlaceholder')}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => void onTransferAdmin()}
-                      disabled={adminTransferBusy || !adminTransferAccountId.trim()}
-                      className="rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-50"
-                    >
-                      {adminTransferBusy ? t('settings.saving') : t('settings.adminTransferButton')}
-                    </button>
-                  </div>
-                </div>
-              </>
-            ) : null}
-          </div>
-
-          <div className="mb-6 rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-            <h2 className="mb-1 text-base font-semibold text-slate-100">{t('settings.githubSync')}</h2>
-            <p className="mb-3 text-sm text-slate-400">{t('settings.githubSyncHint')}</p>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className="block text-sm text-slate-300 sm:col-span-2">
-                GITHUB_REPO_URL
-                <input
-                  value={githubRepoUrl}
-                  onChange={(e) => setGithubRepoUrl(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                  placeholder="https://github.com/your-name/your-repo.git"
-                />
-              </label>
-              <label className="block text-sm text-slate-300 sm:col-span-2">
-                GITHUB_TOKEN
-                <input
-                  type="password"
-                  value={githubToken}
-                  onChange={(e) => setGithubToken(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                  placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                />
-              </label>
+          <section className="min-w-0 space-y-4">
+            <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+              <h2 className="text-base font-semibold text-slate-100">{activeCategoryInfo.label}</h2>
+              <p className="mt-1 text-sm text-slate-400">{activeCategoryInfo.description}</p>
             </div>
-          </div>
 
-          {isAdmin ? (
-            <div className="mb-6 rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-              <h2 className="mb-1 text-base font-semibold text-slate-100">{t('settings.slaSettings')}</h2>
-              <p className="mb-3 text-sm text-slate-400">{t('settings.slaSettingsHint')}</p>
-              {slaLoading ? (
-                <p className="text-sm text-slate-400">{t('settings.loading')}</p>
-              ) : slaSettings ? (
-                <>
-                  <p className="mb-3 text-xs text-slate-500">
-                    {t('settings.slaBoundsHint')}：{slaSettings.bounds.min_ms / 1000} - {slaSettings.bounds.max_ms / 1000} {t('settings.slaSecondsUnit')}
-                  </p>
-                  <h3 className="mb-1 text-sm font-semibold text-slate-200">{t('settings.slaStages')}</h3>
-                  <div className="mb-4 overflow-x-auto rounded-md border border-slate-800">
-                    <table className="min-w-full divide-y divide-slate-800 text-left text-xs">
-                      <thead className="bg-slate-900/70 text-slate-400">
-                        <tr>
-                          <th className="px-3 py-2">{t('settings.slaColName')}</th>
-                          <th className="px-3 py-2">{t('settings.slaColDefault')}</th>
-                          <th className="px-3 py-2">{t('settings.slaColEffective')}</th>
-                          <th className="px-3 py-2">{t('settings.slaColOverride')}</th>
-                          <th className="px-3 py-2">{t('settings.slaColUpdatedAt')}</th>
-                          <th className="px-3 py-2">{t('settings.slaColAction')}</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800 bg-slate-950/40">
-                        {slaSettings.stages.map(renderSlaRow)}
-                      </tbody>
-                    </table>
-                  </div>
-                  <h3 className="mb-1 text-sm font-semibold text-slate-200">{t('settings.slaArtifacts')}</h3>
-                  <div className="overflow-x-auto rounded-md border border-slate-800">
-                    <table className="min-w-full divide-y divide-slate-800 text-left text-xs">
-                      <thead className="bg-slate-900/70 text-slate-400">
-                        <tr>
-                          <th className="px-3 py-2">{t('settings.slaColName')}</th>
-                          <th className="px-3 py-2">{t('settings.slaColDefault')}</th>
-                          <th className="px-3 py-2">{t('settings.slaColEffective')}</th>
-                          <th className="px-3 py-2">{t('settings.slaColOverride')}</th>
-                          <th className="px-3 py-2">{t('settings.slaColUpdatedAt')}</th>
-                          <th className="px-3 py-2">{t('settings.slaColAction')}</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800 bg-slate-950/40">
-                        {slaSettings.artifacts.map(renderSlaRow)}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              ) : null}
-            </div>
-          ) : null}
-
-          <label className="mb-2 block text-sm text-slate-300">OPENAI_API_KEY</label>
-          <input
-            type="password"
-            value={openaiApiKey}
-            onChange={(e) => setOpenaiApiKey(e.target.value)}
-            className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none ring-0 focus:border-slate-500"
-            placeholder="sk-..."
-          />
-
-          <label className="mt-2 block text-sm text-slate-300">
-            <span className="inline-flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={cguAirEnabled}
-                onChange={(e) => setCguAirEnabled(e.target.checked)}
-              />
-              {t('settings.cguAirEnabled')}
-            </span>
-          </label>
-
-          <label className="mb-2 block text-sm text-slate-300">GEMINI_API_KEY</label>
-          <input
-            type="password"
-            value={geminiApiKey}
-            onChange={(e) => setGeminiApiKey(e.target.value)}
-            className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none ring-0 focus:border-slate-500"
-            placeholder="AIza..."
-          />
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <label className="block text-sm text-slate-300">
-              OpenAI LLM Model
-              <input value={openaiLlmModel} onChange={(e) => setOpenaiLlmModel(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
-            </label>
-            <label className="block text-sm text-slate-300">
-              Gemini LLM Model
-              <input value={geminiLlmModel} onChange={(e) => setGeminiLlmModel(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
-            </label>
-            <label className="block text-sm text-slate-300">
-              OpenAI TTS Model
-              <input value={openaiTtsModel} onChange={(e) => setOpenaiTtsModel(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
-            </label>
-            <label className="block text-sm text-slate-300">
-              Gemini TTS Model
-              <input value={geminiTtsModel} onChange={(e) => setGeminiTtsModel(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
-            </label>
-            <label className="block text-sm text-slate-300">
-              {t('settings.geminiSpeaker1')}
-              <input value={geminiTtsSpeaker1} onChange={(e) => setGeminiTtsSpeaker1(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder={t('settings.geminiSpeaker1Placeholder')} />
-            </label>
-            <label className="block text-sm text-slate-300">
-              {t('settings.geminiSpeaker1Voice')}
-              <select
-                value={geminiTtsSpeaker1Voice}
-                onChange={(e) => setGeminiTtsSpeaker1Voice(e.target.value)}
-                className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-              >
-                <option value="">{t('settings.geminiSpeakerVoiceInherit')}</option>
-                {GEMINI_TTS_VOICES.map((v) => (
-                  <option key={v} value={v}>
-                    {geminiVoiceLabel(v)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block text-sm text-slate-300">
-              {t('settings.geminiSpeaker2')}
-              <input value={geminiTtsSpeaker2} onChange={(e) => setGeminiTtsSpeaker2(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder={t('settings.geminiSpeaker2Placeholder')} />
-            </label>
-            <label className="block text-sm text-slate-300">
-              {t('settings.geminiSpeaker2Voice')}
-              <select
-                value={geminiTtsSpeaker2Voice}
-                onChange={(e) => setGeminiTtsSpeaker2Voice(e.target.value)}
-                className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-              >
-                <option value="">{t('settings.geminiSpeakerVoiceInherit')}</option>
-                {GEMINI_TTS_VOICES.map((v) => (
-                  <option key={v} value={v}>
-                    {geminiVoiceLabel(v)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block text-sm text-slate-300">
-              {t('settings.openaiSpeaker1')}
-              <input value={openaiTtsSpeaker1} onChange={(e) => setOpenaiTtsSpeaker1(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder={t('settings.openaiSpeaker1Placeholder')} />
-            </label>
-            <label className="block text-sm text-slate-300">
-              {t('settings.openaiSpeaker1Voice')}
-              <select
-                value={openaiTtsSpeaker1Voice}
-                onChange={(e) => setOpenaiTtsSpeaker1Voice(e.target.value)}
-                className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-              >
-                <option value="">{t('settings.openaiSpeakerVoiceInherit')}</option>
-                {OPENAI_TTS_VOICES.map((v) => (
-                  <option key={v} value={v}>{openaiVoiceLabel(v)}</option>
-                ))}
-              </select>
-            </label>
-            <label className="block text-sm text-slate-300">
-              {t('settings.openaiSpeaker2')}
-              <input value={openaiTtsSpeaker2} onChange={(e) => setOpenaiTtsSpeaker2(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder={t('settings.openaiSpeaker2Placeholder')} />
-            </label>
-            <label className="block text-sm text-slate-300">
-              {t('settings.openaiSpeaker2Voice')}
-              <select
-                value={openaiTtsSpeaker2Voice}
-                onChange={(e) => setOpenaiTtsSpeaker2Voice(e.target.value)}
-                className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-              >
-                <option value="">{t('settings.openaiSpeakerVoiceInherit')}</option>
-                {OPENAI_TTS_VOICES.map((v) => (
-                  <option key={v} value={v}>{openaiVoiceLabel(v)}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          <div className="mt-3 flex justify-end">
-            <button
-              type="button"
-              onClick={() => void onSave()}
-              disabled={saving}
-              className="rounded-md bg-slate-100 px-4 py-2 text-sm font-medium text-slate-900 disabled:opacity-50"
-            >
-              {saving ? t('settings.saving') : t('settings.save')}
-            </button>
-          </div>
-        </div>
-
-        {/* Skills Section */}
-        <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-          <h2 className="text-sm font-semibold text-slate-200">{t('settings.skills')}</h2>
-          <p className="text-xs text-slate-400">{t('settings.skillsDesc')}</p>
-          {skillsLoading ? (
-            <div className="text-xs text-slate-500">{t('settings.loading')}</div>
-          ) : (
-            <div className="space-y-2">
-              {skills.map((skill) => (
-                <div
-                  key={skill.id}
-                  className="rounded-lg border border-slate-800 bg-slate-950/60 p-3"
-                >
-                  {editingSkillId === skill.id ? (
-                    <div className="space-y-2">
-                      <input
-                        type="text"
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        maxLength={80}
-                        className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-200"
-                      />
-                      <textarea
-                        value={editPrompt}
-                        onChange={(e) => setEditPrompt(e.target.value)}
-                        rows={3}
-                        maxLength={2000}
-                        className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-200"
-                      />
-                      <div className="flex items-center gap-2">
-                        <select
-                          value={editApplyTo}
-                          onChange={(e) => setEditApplyTo(e.target.value as 'script' | 'all')}
-                          className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200"
-                        >
-                          <option value="script">{t('settings.skillApplyToScript')}</option>
-                          <option value="all">{t('settings.skillApplyToAll')}</option>
-                        </select>
-                        <button
-                          type="button"
-                          disabled={savingSkillId === skill.id || !editName.trim() || !editPrompt.trim()}
-                          onClick={() => {
-                            setSavingSkillId(skill.id);
-                            void updateSkill(skill.id, { name: editName.trim(), prompt: editPrompt.trim(), applyTo: editApplyTo })
-                              .then((updated) => {
-                                setSkills((prev) => prev.map((s) => s.id === skill.id ? updated : s));
-                                setEditingSkillId(null);
-                              })
-                              .finally(() => setSavingSkillId(null));
-                          }}
-                          className="ml-auto rounded bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white disabled:opacity-50 hover:bg-indigo-500"
-                        >
-                          {savingSkillId === skill.id ? t('settings.saving') : t('settings.skillSave')}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setEditingSkillId(null)}
-                          className="rounded border border-slate-700 px-2.5 py-1 text-xs text-slate-400 hover:text-slate-200"
-                        >
-                          {t('settings.skillCancel')}
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-start gap-3">
-                      <input
-                        type="checkbox"
-                        checked={skill.enabled}
-                        onChange={() => {
-                          if (skill.isBuiltIn) {
-                            void toggleBuiltInSkill(skill.id).then((res) => {
-                              setSkills((prev) => prev.map((s) => s.id === skill.id ? { ...s, enabled: res.enabled } : s));
-                            });
-                          } else {
-                            void updateSkill(skill.id, { enabled: !skill.enabled }).then((updated) => {
-                              setSkills((prev) => prev.map((s) => s.id === skill.id ? updated : s));
-                            });
-                          }
-                        }}
-                        className="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-800 accent-indigo-500"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-slate-200">
-                            {skill.isBuiltIn ? (t('settings.skillLangZh') === 'zh-TW' ? skill.nameZh ?? skill.name : skill.name) : skill.name}
-                          </span>
-                          {skill.isBuiltIn && (
-                            <span className="rounded bg-slate-800 px-1.5 py-0.5 text-xs text-slate-400">{t('settings.skillBuiltIn')}</span>
-                          )}
-                          <span className="rounded bg-slate-800 px-1.5 py-0.5 text-xs text-slate-400">{skill.applyTo}</span>
-                        </div>
-                        {skill.isBuiltIn && skill.descriptionZh && (
-                          <p className="mt-1 text-xs text-slate-500">{skill.descriptionZh}</p>
-                        )}
-                        {!skill.isBuiltIn && (
-                          <p className="mt-1 text-xs text-slate-500 line-clamp-2">{skill.prompt}</p>
+            {activeCategoryInfo.id === 'account' ? (
+              <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+                {authStatus?.google_enabled || authStatus?.authenticated ? (
+                  <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <h3 className="text-base font-semibold text-slate-100">{t('settings.googleAccount')}</h3>
+                        {authStatus?.authenticated && authStatus.user ? (
+                          <p className="mt-1 text-sm text-slate-300">
+                            {t('settings.signedInAs')}{authStatus.user.name ? `${authStatus.user.name}（${authStatus.user.email}）` : authStatus.user.email}
+                          </p>
+                        ) : (
+                          <p className="mt-1 text-sm text-slate-400">{t('settings.googleLoginHint')}</p>
                         )}
                       </div>
-                      {!skill.isBuiltIn && (
-                        <div className="flex shrink-0 gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingSkillId(skill.id);
-                              setEditName(skill.name);
-                              setEditPrompt(skill.prompt);
-                              setEditApplyTo(skill.applyTo);
-                            }}
-                            className="text-xs text-slate-400 hover:text-slate-200"
-                          >
-                            {t('settings.skillEdit')}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              void deleteSkill(skill.id).then(() => {
-                                setSkills((prev) => prev.filter((s) => s.id !== skill.id));
-                              });
-                            }}
-                            className="text-xs text-red-400 hover:text-red-300"
-                          >
-                            {t('settings.delete')}
-                          </button>
-                        </div>
+                      {authStatus?.authenticated ? (
+                        <button type="button" onClick={() => void onLogout()} className="rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800">
+                          {t('settings.logout')}
+                        </button>
+                      ) : (
+                        <a href="api/auth/google/start" className="rounded-md bg-slate-100 px-4 py-2 text-center text-sm font-medium text-slate-900 hover:bg-white">
+                          {t('settings.googleLogin')}
+                        </a>
                       )}
                     </div>
-                  )}
+                  </div>
+                ) : null}
+                <div className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-xs text-slate-400">
+                  <div>{t('settings.currentAccount')}<span className="font-mono text-slate-200">{accountId}</span></div>
                 </div>
-              ))}
-            </div>
-          )}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label className="block text-sm text-slate-300 sm:col-span-2">
+                    {t('settings.userCode')}
+                    <input value={userCode} onChange={(e) => setUserCode(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder={t('settings.userCodePlaceholder')} maxLength={128} />
+                    <span className="mt-1 block text-xs text-slate-500">{authStatus?.authenticated ? t('settings.userCodeAccount') : t('settings.userCodeLocal')}</span>
+                  </label>
+                  <label className="block text-sm text-slate-300">
+                    {t('settings.uiLanguage')}
+                    <select value={uiLanguage} onChange={(e) => setUiLanguage(e.target.value as AppLanguage)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm">
+                      {LANGUAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.nativeLabel}</option>)}
+                    </select>
+                  </label>
+                  <label className="block text-sm text-slate-300">
+                    {t('settings.contentLanguage')}
+                    <select value={contentLanguage} onChange={(e) => setContentLanguage(e.target.value as AppLanguage)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm">
+                      {LANGUAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.nativeLabel}</option>)}
+                    </select>
+                    <span className="mt-1 block text-xs text-slate-500">{t('settings.contentLanguageHint')}</span>
+                  </label>
+                  <label className="block text-sm text-slate-300">
+                    {t('settings.playbackSpeed')}
+                    <select value={String(playbackSpeed)} onChange={(e) => setPlaybackSpeed(Number(e.target.value))} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm">
+                      {[0.5, 0.75, 1, 1.25, 1.5, 2].map((speed) => <option key={speed} value={String(speed)}>{speed}x</option>)}
+                    </select>
+                  </label>
+                </div>
+                <div className="flex justify-end">
+                  <button type="button" onClick={() => void onSave()} disabled={saving} className="rounded-md bg-slate-100 px-4 py-2 text-sm font-medium text-slate-900 disabled:opacity-50">
+                    {saving ? t('settings.saving') : t('settings.save')}
+                  </button>
+                </div>
+              </div>
+            ) : null}
 
-          <div className="space-y-2 rounded-lg border border-slate-700 bg-slate-950/40 p-3">
-            <h3 className="text-xs font-medium text-slate-300">{t('settings.addSkill')}</h3>
-            <input
-              type="text"
-              value={newSkillName}
-              onChange={(e) => setNewSkillName(e.target.value)}
-              placeholder={t('settings.skillNamePlaceholder')}
-              maxLength={80}
-              className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-200"
-            />
-            <textarea
-              value={newSkillPrompt}
-              onChange={(e) => setNewSkillPrompt(e.target.value)}
-              placeholder={t('settings.skillPromptPlaceholder')}
-              rows={3}
-              maxLength={2000}
-              className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-200"
-            />
-            <div className="flex items-center gap-3">
-              <label className="flex items-center gap-1.5 text-xs text-slate-400">
-                {t('settings.skillApplyTo')}
-                <select
-                  value={newSkillApplyTo}
-                  onChange={(e) => setNewSkillApplyTo(e.target.value as 'script' | 'all')}
-                  className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200"
-                >
-                  <option value="script">{t('settings.skillApplyToScript')}</option>
-                  <option value="all">{t('settings.skillApplyToAll')}</option>
-                </select>
-              </label>
-              <button
-                type="button"
-                disabled={addingSkill || !newSkillName.trim() || !newSkillPrompt.trim()}
-                onClick={() => {
-                  setAddingSkill(true);
-                  void createSkill({ name: newSkillName.trim(), prompt: newSkillPrompt.trim(), applyTo: newSkillApplyTo })
-                    .then((skill) => {
-                      setSkills((prev) => [...prev, skill]);
-                      setNewSkillName('');
-                      setNewSkillPrompt('');
-                    })
-                    .finally(() => setAddingSkill(false));
-                }}
-                className="ml-auto rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 hover:bg-indigo-500"
-              >
-                {addingSkill ? t('settings.saving') : t('settings.addSkillBtn')}
-              </button>
-            </div>
-          </div>
+            {activeCategoryInfo.id === 'ai' ? (
+              <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label className="block text-sm text-slate-300">
+                    {t('settings.llmProvider')}
+                    <select value={llmProvider} onChange={(e) => setLlmProvider(e.target.value as 'openai' | 'gemini')} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm">
+                      <option value="openai">OpenAI</option>
+                      <option value="gemini">Gemini</option>
+                    </select>
+                  </label>
+                  <label className="block text-sm text-slate-300">
+                    {t('settings.ttsProvider')}
+                    <select value={ttsProvider} onChange={(e) => setTtsProvider(e.target.value as 'openai' | 'gemini')} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm">
+                      <option value="openai">OpenAI</option>
+                      <option value="gemini">Gemini</option>
+                    </select>
+                  </label>
+                  <label className="block text-sm text-slate-300 sm:col-span-2">
+                    <span className="inline-flex items-center gap-2">
+                      <input type="checkbox" checked={autoGenerateAnimation} onChange={(e) => setAutoGenerateAnimation(e.target.checked)} />
+                      {t('settings.autoGenerateAnimation')}
+                    </span>
+                    <span className="mt-1 block text-xs text-slate-500">{t('settings.autoGenerateAnimationHint')}</span>
+                  </label>
+                  <label className="block text-sm text-slate-300 sm:col-span-2">
+                    OPENAI_API_KEY
+                    <input type="password" value={openaiApiKey} onChange={(e) => setOpenaiApiKey(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none ring-0 focus:border-slate-500" placeholder="sk-..." />
+                  </label>
+                  <label className="block text-sm text-slate-300 sm:col-span-2">
+                    <span className="inline-flex items-center gap-2">
+                      <input type="checkbox" checked={cguAirEnabled} onChange={(e) => setCguAirEnabled(e.target.checked)} />
+                      {t('settings.cguAirEnabled')}
+                    </span>
+                  </label>
+                  <label className="block text-sm text-slate-300 sm:col-span-2">
+                    GEMINI_API_KEY
+                    <input type="password" value={geminiApiKey} onChange={(e) => setGeminiApiKey(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none ring-0 focus:border-slate-500" placeholder="AIza..." />
+                  </label>
+                  <label className="block text-sm text-slate-300">OpenAI LLM Model<input value={openaiLlmModel} onChange={(e) => setOpenaiLlmModel(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" /></label>
+                  <label className="block text-sm text-slate-300">Gemini LLM Model<input value={geminiLlmModel} onChange={(e) => setGeminiLlmModel(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" /></label>
+                  <label className="block text-sm text-slate-300">OpenAI TTS Model<input value={openaiTtsModel} onChange={(e) => setOpenaiTtsModel(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" /></label>
+                  <label className="block text-sm text-slate-300">Gemini TTS Model<input value={geminiTtsModel} onChange={(e) => setGeminiTtsModel(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" /></label>
+                  <label className="block text-sm text-slate-300">{t('settings.geminiSpeaker1')}<input value={geminiTtsSpeaker1} onChange={(e) => setGeminiTtsSpeaker1(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder={t('settings.geminiSpeaker1Placeholder')} /></label>
+                  <label className="block text-sm text-slate-300">{t('settings.geminiSpeaker1Voice')}<select value={geminiTtsSpeaker1Voice} onChange={(e) => setGeminiTtsSpeaker1Voice(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"><option value="">{t('settings.geminiSpeakerVoiceInherit')}</option>{GEMINI_TTS_VOICES.map((v) => <option key={v} value={v}>{geminiVoiceLabel(v)}</option>)}</select></label>
+                  <label className="block text-sm text-slate-300">{t('settings.geminiSpeaker2')}<input value={geminiTtsSpeaker2} onChange={(e) => setGeminiTtsSpeaker2(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder={t('settings.geminiSpeaker2Placeholder')} /></label>
+                  <label className="block text-sm text-slate-300">{t('settings.geminiSpeaker2Voice')}<select value={geminiTtsSpeaker2Voice} onChange={(e) => setGeminiTtsSpeaker2Voice(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"><option value="">{t('settings.geminiSpeakerVoiceInherit')}</option>{GEMINI_TTS_VOICES.map((v) => <option key={v} value={v}>{geminiVoiceLabel(v)}</option>)}</select></label>
+                  <label className="block text-sm text-slate-300">{t('settings.openaiSpeaker1')}<input value={openaiTtsSpeaker1} onChange={(e) => setOpenaiTtsSpeaker1(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder={t('settings.openaiSpeaker1Placeholder')} /></label>
+                  <label className="block text-sm text-slate-300">{t('settings.openaiSpeaker1Voice')}<select value={openaiTtsSpeaker1Voice} onChange={(e) => setOpenaiTtsSpeaker1Voice(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"><option value="">{t('settings.openaiSpeakerVoiceInherit')}</option>{OPENAI_TTS_VOICES.map((v) => <option key={v} value={v}>{openaiVoiceLabel(v)}</option>)}</select></label>
+                  <label className="block text-sm text-slate-300">{t('settings.openaiSpeaker2')}<input value={openaiTtsSpeaker2} onChange={(e) => setOpenaiTtsSpeaker2(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder={t('settings.openaiSpeaker2Placeholder')} /></label>
+                  <label className="block text-sm text-slate-300">{t('settings.openaiSpeaker2Voice')}<select value={openaiTtsSpeaker2Voice} onChange={(e) => setOpenaiTtsSpeaker2Voice(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"><option value="">{t('settings.openaiSpeakerVoiceInherit')}</option>{OPENAI_TTS_VOICES.map((v) => <option key={v} value={v}>{openaiVoiceLabel(v)}</option>)}</select></label>
+                </div>
+                <div className="flex justify-end"><button type="button" onClick={() => void onSave()} disabled={saving} className="rounded-md bg-slate-100 px-4 py-2 text-sm font-medium text-slate-900 disabled:opacity-50">{saving ? t('settings.saving') : t('settings.save')}</button></div>
+              </div>
+            ) : null}
+
+            {activeCategoryInfo.id === 'sync' ? (
+              <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+                <div>
+                  <h2 className="mb-1 text-base font-semibold text-slate-100">{t('settings.githubSync')}</h2>
+                  <p className="mb-3 text-sm text-slate-400">{t('settings.githubSyncHint')}</p>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="block text-sm text-slate-300 sm:col-span-2">GITHUB_REPO_URL<input value={githubRepoUrl} onChange={(e) => setGithubRepoUrl(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder="https://github.com/your-name/your-repo.git" /></label>
+                  <label className="block text-sm text-slate-300 sm:col-span-2">GITHUB_TOKEN<input type="password" value={githubToken} onChange={(e) => setGithubToken(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" /></label>
+                </div>
+                <div className="flex justify-end"><button type="button" onClick={() => void onSave()} disabled={saving} className="rounded-md bg-slate-100 px-4 py-2 text-sm font-medium text-slate-900 disabled:opacity-50">{saving ? t('settings.saving') : t('settings.save')}</button></div>
+              </div>
+            ) : null}
+
+            {activeCategoryInfo.id === 'admin' && isAdmin ? (
+              <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label className="block text-sm text-slate-300 sm:col-span-2"><span className="inline-flex items-center gap-2"><input type="checkbox" checked={googleAuthEnabled} onChange={(e) => setGoogleAuthEnabled(e.target.checked)} />{t('settings.googleAuthEnabled')}</span></label>
+                  {googleAuthEnabled ? <>
+                    <label className="block text-sm text-slate-300 sm:col-span-2">GOOGLE_CLIENT_ID<input value={googleClientId} onChange={(e) => setGoogleClientId(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder="xxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com" /></label>
+                    <label className="block text-sm text-slate-300 sm:col-span-2">GOOGLE_CLIENT_SECRET<input type="password" value={googleClientSecret} onChange={(e) => setGoogleClientSecret(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder="GOCSPX-..." /></label>
+                    <label className="block text-sm text-slate-300 sm:col-span-2">GOOGLE_REDIRECT_URI<input value={googleRedirectUri} onChange={(e) => setGoogleRedirectUri(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder="https://your-domain.example/api/auth/google/callback" /></label>
+                  </> : null}
+                  <div className="sm:col-span-2 rounded-lg border border-slate-800 bg-slate-950/60 p-3">
+                    <div className="mb-2 text-sm font-medium text-slate-200">{t('settings.adminTransfer')}</div>
+                    <div className="mb-2 text-xs text-slate-500">{t('settings.currentAdmins')}<span className="font-mono text-slate-300">{adminAccountIds.join(', ') || accountId}</span></div>
+                    <div className="flex flex-col gap-2 sm:flex-row"><input value={adminTransferAccountId} onChange={(e) => setAdminTransferAccountId(e.target.value)} className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder={t('settings.adminTransferPlaceholder')} /><button type="button" onClick={() => void onTransferAdmin()} disabled={adminTransferBusy || !adminTransferAccountId.trim()} className="rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-50">{adminTransferBusy ? t('settings.saving') : t('settings.adminTransferButton')}</button></div>
+                  </div>
+                </div>
+                <div className="flex justify-end"><button type="button" onClick={() => void onSave()} disabled={saving} className="rounded-md bg-slate-100 px-4 py-2 text-sm font-medium text-slate-900 disabled:opacity-50">{saving ? t('settings.saving') : t('settings.save')}</button></div>
+                <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+                  <h2 className="mb-1 text-base font-semibold text-slate-100">{t('settings.slaSettings')}</h2>
+                  <p className="mb-3 text-sm text-slate-400">{t('settings.slaSettingsHint')}</p>
+                  {slaLoading ? <p className="text-sm text-slate-400">{t('settings.loading')}</p> : slaSettings ? <>
+                    <p className="mb-3 text-xs text-slate-500">{t('settings.slaBoundsHint')}：{slaSettings.bounds.min_ms / 1000} - {slaSettings.bounds.max_ms / 1000} {t('settings.slaSecondsUnit')}</p>
+                    <h3 className="mb-1 text-sm font-semibold text-slate-200">{t('settings.slaStages')}</h3>
+                    <div className="mb-4 overflow-x-auto rounded-md border border-slate-800"><table className="min-w-full divide-y divide-slate-800 text-left text-xs"><thead className="bg-slate-900/70 text-slate-400"><tr><th className="px-3 py-2">{t('settings.slaColName')}</th><th className="px-3 py-2">{t('settings.slaColDefault')}</th><th className="px-3 py-2">{t('settings.slaColEffective')}</th><th className="px-3 py-2">{t('settings.slaColOverride')}</th><th className="px-3 py-2">{t('settings.slaColUpdatedAt')}</th><th className="px-3 py-2">{t('settings.slaColAction')}</th></tr></thead><tbody className="divide-y divide-slate-800 bg-slate-950/40">{slaSettings.stages.map(renderSlaRow)}</tbody></table></div>
+                    <h3 className="mb-1 text-sm font-semibold text-slate-200">{t('settings.slaArtifacts')}</h3>
+                    <div className="overflow-x-auto rounded-md border border-slate-800"><table className="min-w-full divide-y divide-slate-800 text-left text-xs"><thead className="bg-slate-900/70 text-slate-400"><tr><th className="px-3 py-2">{t('settings.slaColName')}</th><th className="px-3 py-2">{t('settings.slaColDefault')}</th><th className="px-3 py-2">{t('settings.slaColEffective')}</th><th className="px-3 py-2">{t('settings.slaColOverride')}</th><th className="px-3 py-2">{t('settings.slaColUpdatedAt')}</th><th className="px-3 py-2">{t('settings.slaColAction')}</th></tr></thead><tbody className="divide-y divide-slate-800 bg-slate-950/40">{slaSettings.artifacts.map(renderSlaRow)}</tbody></table></div>
+                  </> : null}
+                </div>
+              </div>
+            ) : null}
+
+            {activeCategoryInfo.id === 'skills' ? (
+              <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+                <h2 className="text-sm font-semibold text-slate-200">{t('settings.skills')}</h2>
+                <p className="text-xs text-slate-400">{t('settings.skillsDesc')}</p>
+                {skillsLoading ? <div className="text-xs text-slate-500">{t('settings.loading')}</div> : (
+                  <div className="space-y-2">
+                    {skills.map((skill) => (
+                      <div key={skill.id} className="rounded-lg border border-slate-800 bg-slate-950/60 p-3">
+                        {editingSkillId === skill.id ? (
+                          <div className="space-y-2">
+                            <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} maxLength={80} className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-200" />
+                            <textarea value={editPrompt} onChange={(e) => setEditPrompt(e.target.value)} rows={3} maxLength={2000} className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-200" />
+                            <div className="flex items-center gap-2"><select value={editApplyTo} onChange={(e) => setEditApplyTo(e.target.value as 'script' | 'all')} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200"><option value="script">{t('settings.skillApplyToScript')}</option><option value="all">{t('settings.skillApplyToAll')}</option></select><button type="button" disabled={savingSkillId === skill.id || !editName.trim() || !editPrompt.trim()} onClick={() => { setSavingSkillId(skill.id); void updateSkill(skill.id, { name: editName.trim(), prompt: editPrompt.trim(), applyTo: editApplyTo }).then((updated) => { setSkills((prev) => prev.map((s) => s.id === skill.id ? updated : s)); setEditingSkillId(null); }).finally(() => setSavingSkillId(null)); }} className="ml-auto rounded bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white disabled:opacity-50 hover:bg-indigo-500">{savingSkillId === skill.id ? t('settings.saving') : t('settings.skillSave')}</button><button type="button" onClick={() => setEditingSkillId(null)} className="rounded border border-slate-700 px-2.5 py-1 text-xs text-slate-400 hover:text-slate-200">{t('settings.skillCancel')}</button></div>
+                          </div>
+                        ) : (
+                          <div className="flex items-start gap-3">
+                            <input type="checkbox" checked={skill.enabled} onChange={() => { if (skill.isBuiltIn) { void toggleBuiltInSkill(skill.id).then((res) => { setSkills((prev) => prev.map((s) => s.id === skill.id ? { ...s, enabled: res.enabled } : s)); }); } else { void updateSkill(skill.id, { enabled: !skill.enabled }).then((updated) => { setSkills((prev) => prev.map((s) => s.id === skill.id ? updated : s)); }); } }} className="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-800 accent-indigo-500" />
+                            <div className="min-w-0 flex-1"><div className="flex items-center gap-2"><span className="text-sm font-medium text-slate-200">{skill.isBuiltIn ? (t('settings.skillLangZh') === 'zh-TW' ? skill.nameZh ?? skill.name : skill.name) : skill.name}</span>{skill.isBuiltIn && <span className="rounded bg-slate-800 px-1.5 py-0.5 text-xs text-slate-400">{t('settings.skillBuiltIn')}</span>}<span className="rounded bg-slate-800 px-1.5 py-0.5 text-xs text-slate-400">{skill.applyTo}</span></div>{skill.isBuiltIn && skill.descriptionZh && <p className="mt-1 text-xs text-slate-500">{skill.descriptionZh}</p>}{!skill.isBuiltIn && <p className="mt-1 text-xs text-slate-500 line-clamp-2">{skill.prompt}</p>}</div>
+                            {!skill.isBuiltIn && <div className="flex shrink-0 gap-2"><button type="button" onClick={() => { setEditingSkillId(skill.id); setEditName(skill.name); setEditPrompt(skill.prompt); setEditApplyTo(skill.applyTo); }} className="text-xs text-slate-400 hover:text-slate-200">{t('settings.skillEdit')}</button><button type="button" onClick={() => { void deleteSkill(skill.id).then(() => { setSkills((prev) => prev.filter((s) => s.id !== skill.id)); }); }} className="text-xs text-red-400 hover:text-red-300">{t('settings.delete')}</button></div>}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="space-y-2 rounded-lg border border-slate-700 bg-slate-950/40 p-3">
+                  <h3 className="text-xs font-medium text-slate-300">{t('settings.addSkill')}</h3>
+                  <input type="text" value={newSkillName} onChange={(e) => setNewSkillName(e.target.value)} placeholder={t('settings.skillNamePlaceholder')} maxLength={80} className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-200" />
+                  <textarea value={newSkillPrompt} onChange={(e) => setNewSkillPrompt(e.target.value)} placeholder={t('settings.skillPromptPlaceholder')} rows={3} maxLength={2000} className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-200" />
+                  <div className="flex items-center gap-3"><label className="flex items-center gap-1.5 text-xs text-slate-400">{t('settings.skillApplyTo')}<select value={newSkillApplyTo} onChange={(e) => setNewSkillApplyTo(e.target.value as 'script' | 'all')} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200"><option value="script">{t('settings.skillApplyToScript')}</option><option value="all">{t('settings.skillApplyToAll')}</option></select></label><button type="button" disabled={addingSkill || !newSkillName.trim() || !newSkillPrompt.trim()} onClick={() => { setAddingSkill(true); void createSkill({ name: newSkillName.trim(), prompt: newSkillPrompt.trim(), applyTo: newSkillApplyTo }).then((skill) => { setSkills((prev) => [...prev, skill]); setNewSkillName(''); setNewSkillPrompt(''); }).finally(() => setAddingSkill(false)); }} className="ml-auto rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 hover:bg-indigo-500">{addingSkill ? t('settings.saving') : t('settings.addSkillBtn')}</button></div>
+                </div>
+              </div>
+            ) : null}
+          </section>
         </div>
       </main>
     </div>

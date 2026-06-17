@@ -56,6 +56,7 @@ import {
   getStoredPlaybackSpeed,
   getStoredShowSubtitle,
   getStoredInteractiveMode,
+  useI18n,
 } from '../i18n';
 
 
@@ -125,6 +126,7 @@ export default function PlayPage() {
   const { id: pdfId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { t } = useI18n();
 
   const [detail, setDetail] = useState<PdfDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -155,6 +157,7 @@ export default function PlayPage() {
   const [playbackRate, setPlaybackRate] = useState<number>(() => getStoredPlaybackSpeed());
   const [showSubtitle, setShowSubtitle] = useState<boolean>(() => getStoredShowSubtitle());
   const [playbackSettingsOpen, setPlaybackSettingsOpen] = useState(false);
+  const [playbackStatusMessage, setPlaybackStatusMessage] = useState<string | null>(null);
   const [followerAudioUnlocked, setFollowerAudioUnlocked] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncFollowerQuestionInput, setSyncFollowerQuestionInput] = useState('');
@@ -272,6 +275,8 @@ export default function PlayPage() {
   const resumePositionRef = useRef<number | null>(null);
   const hasRestoredProgressRef = useRef(false);
   const persistProgressTimerRef = useRef<number | null>(null);
+  const suppressNextProgressPersistRef = useRef(false);
+  const playbackStatusTimerRef = useRef<number | null>(null);
   const cursorPushRafRef = useRef<number | null>(null);
   const pendingCursorRef = useRef<{ x: number; y: number } | null>(null);
   const drawingPushTimerRef = useRef<number | null>(null);
@@ -324,6 +329,17 @@ export default function PlayPage() {
       pendingPageExtendTimerRef.current = null;
     }
     setIsExtendingAnimation(false);
+  }, []);
+
+  const showPlaybackStatusMessage = useCallback((message: string) => {
+    setPlaybackStatusMessage(message);
+    if (playbackStatusTimerRef.current != null) {
+      window.clearTimeout(playbackStatusTimerRef.current);
+    }
+    playbackStatusTimerRef.current = window.setTimeout(() => {
+      setPlaybackStatusMessage(null);
+      playbackStatusTimerRef.current = null;
+    }, 2500);
   }, []);
 
   const scheduleAudioReload = useCallback(
@@ -513,6 +529,10 @@ export default function PlayPage() {
 
   useEffect(() => {
     if (!pdfId || !playbackProgressStorageKey || deckPages.length === 0 || !currentPage) return;
+    if (suppressNextProgressPersistRef.current) {
+      suppressNextProgressPersistRef.current = false;
+      return;
+    }
     if (persistProgressTimerRef.current != null) {
       window.clearTimeout(persistProgressTimerRef.current);
     }
@@ -615,6 +635,10 @@ export default function PlayPage() {
   useEffect(
     () => () => {
       clearAudioRetryTimer();
+      if (playbackStatusTimerRef.current != null) {
+        window.clearTimeout(playbackStatusTimerRef.current);
+        playbackStatusTimerRef.current = null;
+      }
       void releaseWakeLock();
     },
     [clearAudioRetryTimer, releaseWakeLock],
@@ -854,6 +878,35 @@ export default function PlayPage() {
     },
     [duration, syncEnabled, syncRole, clearPendingPageExtend],
   );
+
+  const handleClearPlaybackProgress = useCallback(() => {
+    if (!playbackProgressStorageKey) return;
+    if (persistProgressTimerRef.current != null) {
+      window.clearTimeout(persistProgressTimerRef.current);
+      persistProgressTimerRef.current = null;
+    }
+    try {
+      window.localStorage.removeItem(playbackProgressStorageKey);
+    } catch {
+      // ignore storage security errors; the visible playback state is still reset
+    }
+    suppressNextProgressPersistRef.current = true;
+    resumePositionRef.current = null;
+    hasRestoredProgressRef.current = true;
+    clearPendingPageExtend();
+    setPlayQrCodeUrl(null);
+    setClassroomAwaitingNext(false);
+    setFinished(false);
+    setIsPlaying(false);
+    setCurrentIdx(0);
+    setCurrentTime(0);
+    const audio = audioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+    showPlaybackStatusMessage(t('play.playbackProgress.cleared'));
+  }, [clearPendingPageExtend, playbackProgressStorageKey, showPlaybackStatusMessage, t]);
 
   // 換頁或卸載時，取消尚未觸發的延長切頁計時器，避免在已離開的頁面上執行切頁。
   useEffect(() => {
@@ -1865,7 +1918,7 @@ export default function PlayPage() {
 
 
   // ─── Context value ─────────────────────────────────────────────────────────
-  const _ctxValue = {
+    const _ctxValue = {
     // routing
     pdfId, currentShareToken, isLockedFullscreen,
     // deck data
@@ -1874,13 +1927,15 @@ export default function PlayPage() {
     isPlaying, setIsPlaying, currentTime, setCurrentTime, duration, setDuration,
     finished, setFinished, audioMuted, setAudioMuted, effectiveAudioMuted,
     playbackRate, setPlaybackRate, showSubtitle, setShowSubtitle,
-    playbackSettingsOpen, setPlaybackSettingsOpen, followerAudioUnlocked, setFollowerAudioUnlocked,
+    playbackSettingsOpen, setPlaybackSettingsOpen, playbackStatusMessage,
+    followerAudioUnlocked, setFollowerAudioUnlocked,
     scripts, setScripts, displayedImageSrc, setDisplayedImageSrc,
     // 動畫長度超過語音長度時，語音已結束但動畫仍需繼續播放至完成
     isExtendingAnimation,
     slideAnimationPlaying: isPlaying || isExtendingAnimation,
     // playback actions
-    playPause, goPrev, goNext, handleEnded, handleSeek, handleSeekToTime, scheduleAudioReload, clearAudioRetryTimer, reloadDetail,
+    playPause, goPrev, goNext, handleEnded, handleSeek, handleSeekToTime,
+    handleClearPlaybackProgress, scheduleAudioReload, clearAudioRetryTimer, reloadDetail,
     // slide nav
     audioError, ...slideState,
     showAddPagesModal, setShowAddPagesModal, draggingPage, setDraggingPage,

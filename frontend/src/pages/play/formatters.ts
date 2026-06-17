@@ -4,6 +4,16 @@ export function formatDurationMs(ms: number | null | undefined): string {
   return `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)}s`;
 }
 
+export function sumCompletedDurationMs(items: Array<{ status: string; duration_ms: number | null | undefined } | null | undefined>): number | null {
+  const total = items.reduce((sum, item) => {
+    if (item?.status !== 'succeeded') return sum;
+    const duration = item.duration_ms;
+    if (duration == null || !Number.isFinite(duration)) return sum;
+    return sum + duration;
+  }, 0);
+  return total > 0 ? total : null;
+}
+
 export function formatEta(seconds: number | null | undefined): string | null {
   if (seconds == null || !Number.isFinite(seconds) || seconds <= 0) return null;
   if (seconds < 60) return `約 ${Math.ceil(seconds)} 秒`;

@@ -1,5 +1,6 @@
 import type { PdfDetailPage, PdfDetailPageTimingItem } from '../../types';
-import { formatDurationMs } from './formatters';
+import { useI18n } from '../../i18n';
+import { formatDurationMs, sumCompletedDurationMs } from './formatters';
 
 function timingChipClass(timing: PdfDetailPageTimingItem | null): string {
   if (!timing) return 'border-slate-700 bg-slate-800/50 text-slate-400';
@@ -26,16 +27,30 @@ function timingTitle(label: string, timing: PdfDetailPageTimingItem | null): str
 }
 
 export function PageTimingChips({ page }: { page: PdfDetailPage | null | undefined }) {
+  const { t } = useI18n();
   const timings = page?.timings ?? null;
   const items: Array<[keyof NonNullable<PdfDetailPage['timings']>, string]> = [
-    ['image', '圖片'],
-    ['text', '文字'],
-    ['script', '講稿'],
-    ['audio', '語音'],
+    ['image', t('play.timing.artifact.image')],
+    ['text', t('play.timing.artifact.text')],
+    ['script', t('play.timing.artifact.script')],
+    ['audio', t('play.timing.artifact.audio')],
   ];
+  const timingItems = items.map(([key]) => timings?.[key] ?? null);
+  const totalDurationMs = sumCompletedDurationMs(timingItems);
+  const attentionCount = timingItems.filter((timing) => timing?.status === 'failed' || timing?.sla_status === 'breached').length;
   return (
     <div className="mb-3 rounded-md border border-slate-800 bg-slate-900/40 px-3 py-2">
-      <div className="mb-1 text-xs font-medium text-slate-400">本頁產生耗時</div>
+      <div className="mb-1 flex flex-wrap items-center gap-2 text-xs font-medium text-slate-400">
+        <span>{t('play.timing.title')}</span>
+        <span className="rounded-full border border-slate-700 bg-slate-800/70 px-2 py-0.5 text-slate-300">
+          {t('play.timing.total').replace('{duration}', formatDurationMs(totalDurationMs))}
+        </span>
+        {attentionCount > 0 ? (
+          <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-amber-200">
+            {t('play.timing.attentionSummary').replace('{count}', String(attentionCount))}
+          </span>
+        ) : null}
+      </div>
       <div className="flex flex-wrap gap-2">
         {items.map(([key, label]) => {
           const timing = timings?.[key] ?? null;

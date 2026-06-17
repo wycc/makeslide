@@ -130,6 +130,26 @@ test("Manim.animate.fadeIn/fadeOut set opacity from progress", () => {
   assert.equal(m.el.style.opacity, "0.7");
 });
 
+test("Manim.animate.blink at progress=0.5 follows the on/off half-cycle rule", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const m = Manim.shapes.dot(svg, { x: 0, y: 0 });
+
+  Manim.animate.blink(m, 0.5, { cycles: 2, minOpacity: 0.25 });
+  const expected = Math.floor(0.5 * 2 * 2) % 2 === 0 ? "1" : "0.25";
+  assert.equal(m.el.style.opacity, expected);
+});
+
+test("Manim.animate.blink restores opacity to '1' at progress=1", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const m = Manim.shapes.dot(svg, { x: 0, y: 0 });
+
+  Manim.animate.blink(m, 0.75, { cycles: 3, minOpacity: 0.1 });
+  Manim.animate.blink(m, 1, { cycles: 3, minOpacity: 0.1 });
+  assert.equal(m.el.style.opacity, "1");
+});
+
 test("Manim.animate.create draws a shape's outline via stroke-dasharray/dashoffset", () => {
   const Manim = loadManim();
   const svg = createFakeElement("svg");
@@ -657,6 +677,26 @@ test("Manim.animate.colorShift: stroke equals toColor at progress=1", () => {
   Manim.animate.colorShift(circ, 1, { from: '#000000', to: '#ff0000', attr: 'stroke' });
   const stroke = circ.el.getAttribute('stroke') as string;
   assert.equal(stroke.toLowerCase(), '#ff0000', `progress=1: stroke should equal toColor #ff0000, got ${stroke}`);
+});
+
+test("Manim.animate.colorCycle interpolates an intermediate progress between adjacent colours", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const circ = Manim.shapes.circle(svg, { x: 0, y: 0, radius: 1, color: '#000000' });
+
+  Manim.animate.colorCycle(circ, 0.25, { colors: ['#000000', '#ffffff', '#ff0000'], attr: 'stroke' });
+  const stroke = circ.el.getAttribute('stroke') as string;
+  assert.equal(stroke.toLowerCase(), '#808080', `progress=0.25 should be halfway between black and white, got ${stroke}`);
+});
+
+test("Manim.animate.colorCycle sets progress=1 to the final colour", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const circ = Manim.shapes.circle(svg, { x: 0, y: 0, radius: 1, color: '#000000', fill: '#000000', fillOpacity: 1 });
+
+  Manim.animate.colorCycle(circ, 1, { colors: ['#000000', '#00ff00', '#ff0000'], attr: 'both' });
+  assert.equal((circ.el.getAttribute('stroke') as string).toLowerCase(), '#ff0000', `progress=1 stroke should equal final colour`);
+  assert.equal((circ.el.getAttribute('fill') as string).toLowerCase(), '#ff0000', `progress=1 fill should equal final colour`);
 });
 
 test("Manim.animate.fadeInFromDirection: mid-progress has opacity < 1 and non-zero transform", () => {

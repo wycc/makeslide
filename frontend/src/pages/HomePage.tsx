@@ -29,6 +29,11 @@ const ADD_CATEGORY_OPTION_VALUE = '__add_category__';
 const CATEGORY_FILTER_STORAGE_KEY = 'makeslide.home.categoryFilter';
 const CUSTOM_CATEGORIES_STORAGE_KEY = 'makeslide.home.customCategories';
 const TITLE_FILTER_STORAGE_KEY = 'makeslide.home.titleFilter';
+const SORT_MODE_STORAGE_KEY = 'makeslide.home.sortMode';
+
+type SortMode = 'title_asc' | 'created_desc' | 'updated_desc' | 'page_count_desc';
+
+const SORT_MODES: SortMode[] = ['title_asc', 'created_desc', 'updated_desc', 'page_count_desc'];
 
 const compareByTitle = (a: PdfListItem, b: PdfListItem) => {
   const titleA = a.title?.trim() || a.id;
@@ -40,6 +45,32 @@ const compareByCreatedAtDesc = (a: PdfListItem, b: PdfListItem) => {
   const timeA = Date.parse(a.created_at);
   const timeB = Date.parse(b.created_at);
   return (Number.isNaN(timeB) ? 0 : timeB) - (Number.isNaN(timeA) ? 0 : timeA);
+};
+
+const compareByUpdatedAtDesc = (a: PdfListItem, b: PdfListItem) => {
+  const timeA = Date.parse(a.updated_at);
+  const timeB = Date.parse(b.updated_at);
+  return (Number.isNaN(timeB) ? 0 : timeB) - (Number.isNaN(timeA) ? 0 : timeA);
+};
+
+const compareByPageCountDesc = (a: PdfListItem, b: PdfListItem) => {
+  const countA = a.page_count ?? 0;
+  const countB = b.page_count ?? 0;
+  return countB - countA;
+};
+
+const getComparatorForSortMode = (sortMode: SortMode) => {
+  switch (sortMode) {
+    case 'created_desc':
+      return compareByCreatedAtDesc;
+    case 'updated_desc':
+      return compareByUpdatedAtDesc;
+    case 'page_count_desc':
+      return compareByPageCountDesc;
+    case 'title_asc':
+    default:
+      return compareByTitle;
+  }
 };
 
 interface PromptTarget {
@@ -76,6 +107,12 @@ const readStoredTitleFilter = () => {
   return window.localStorage.getItem(TITLE_FILTER_STORAGE_KEY) || '';
 };
 
+const readStoredSortMode = (): SortMode => {
+  if (typeof window === 'undefined') return 'title_asc';
+  const stored = window.localStorage.getItem(SORT_MODE_STORAGE_KEY);
+  return SORT_MODES.includes(stored as SortMode) ? (stored as SortMode) : 'title_asc';
+};
+
 export default function HomePage() {
   const { t } = useI18n();
   const RECENT_CATEGORY = t('home.recentCategory');
@@ -91,6 +128,7 @@ export default function HomePage() {
   const [categoryFilter, setCategoryFilter] = useState<string>(readStoredCategoryFilter);
   const [customCategories, setCustomCategories] = useState<string[]>(readStoredCustomCategories);
   const [titleFilter, setTitleFilter] = useState<string>(readStoredTitleFilter);
+  const [sortMode, setSortMode] = useState<SortMode>(readStoredSortMode);
   const [continuingPdfId, setContinuingPdfId] = useState<string | null>(null);
   const [isImportingZip, setIsImportingZip] = useState(false);
   const [zipImportProgress, setZipImportProgress] = useState(0);
@@ -113,8 +151,15 @@ export default function HomePage() {
       return title.includes(normalizedTitleFilter);
     })
     : categoryFilteredItems;
+  const visibleSummary = t('home.resultSummary')
+    .replace('{shown}', String(filteredItems.length))
+    .replace('{total}', String(categoryFilteredItems.length));
+  const sortItems = useCallback((list: PdfListItem[]) => [...list].sort((a, b) => {
+    const primary = getComparatorForSortMode(sortMode)(a, b);
+    return primary === 0 ? compareByTitle(a, b) : primary;
+  }), [sortMode]);
   const categoryGroups = categoryFilter === '__recent__'
-    ? [{ category: RECENT_CATEGORY, items: [...items].sort(compareByCreatedAtDesc) }]
+    ? [{ category: RECENT_CATEGORY, items: sortItems(filteredItems) }]
     : filteredItems.reduce<Array<{ category: string; items: PdfListItem[] }>>((groups, pdf) => {
       const category = pdf.category?.trim() || DEFAULT_CATEGORY;
       const group = groups.find((g) => g.category === category);
@@ -125,7 +170,7 @@ export default function HomePage() {
       }
       return groups;
     }, [])
-      .map((group) => ({ ...group, items: [...group.items].sort(compareByTitle) }))
+      .map((group) => ({ ...group, items: sortItems(group.items) }))
       .sort((a, b) => a.category.localeCompare(b.category, 'zh-Hant', { numeric: true, sensitivity: 'base' }));
 
   const showToast = useCallback((message: string) => {
@@ -144,6 +189,11 @@ export default function HomePage() {
   const updateTitleFilter = useCallback((nextFilter: string) => {
     setTitleFilter(nextFilter);
     window.localStorage.setItem(TITLE_FILTER_STORAGE_KEY, nextFilter);
+  }, []);
+
+  const updateSortMode = useCallback((nextSortMode: SortMode) => {
+    setSortMode(nextSortMode);
+    window.localStorage.setItem(SORT_MODE_STORAGE_KEY, nextSortMode);
   }, []);
 
   const persistCustomCategories = useCallback((next: string[]) => {
@@ -302,6 +352,25 @@ export default function HomePage() {
     zipImportInputRef.current?.click();
   }, []);
 
+  const openPromptFor = useCallback((pdf: PdfListItem | UploadResponse) => {
+    const title = 'title' in pdf ? pdf.title : null;
+    const initial =
+      'user_prompt' in pdf && typeof pdf.user_prompt === 'string'
+        ? pdf.user_prompt
+        : '';
+    setPromptTarget({
+      id: pdf.id,
+      title,
+      initialValue: initial,
+      ttsProvider:
+        'tts_provider' in pdf && pdf.tts_provider
+          ? pdf.tts_provider
+          : DEFAULT_PROMPT_TTS_PROVIDER,
+      pageCount: 'page_count' in pdf ? pdf.page_count : null,
+      hasSourceText: 'has_source_text' in pdf ? Boolean(pdf.has_source_text) : false,
+    });
+  }, []);
+
   const handleImportZipChange = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
@@ -316,6 +385,7 @@ export default function HomePage() {
           },
         });
         setItems((prev) => [imported, ...prev]);
+        openPromptFor(imported);
         showToast(t('home.imported'));
       } catch (err) {
         const msg = err instanceof ApiError ? err.message : t('home.importFailed');
@@ -325,7 +395,7 @@ export default function HomePage() {
         setZipImportProgress(0);
       }
     },
-    [showToast, t],
+    [openPromptFor, showToast, t],
   );
 
   const handleDeleteCategory = useCallback(
@@ -364,25 +434,6 @@ export default function HomePage() {
     },
     [items, showToast],
   );
-
-  const openPromptFor = useCallback((pdf: PdfListItem | UploadResponse) => {
-    const title = 'title' in pdf ? pdf.title : null;
-    const initial =
-      'user_prompt' in pdf && typeof pdf.user_prompt === 'string'
-        ? pdf.user_prompt
-        : '';
-    setPromptTarget({
-      id: pdf.id,
-      title,
-      initialValue: initial,
-      ttsProvider:
-        'tts_provider' in pdf && pdf.tts_provider
-          ? pdf.tts_provider
-          : DEFAULT_PROMPT_TTS_PROVIDER,
-      pageCount: 'page_count' in pdf ? pdf.page_count : null,
-      hasSourceText: 'has_source_text' in pdf ? Boolean(pdf.has_source_text) : false,
-    });
-  }, []);
 
   useEffect(() => {
     const openPromptId = searchParams.get('openPrompt')?.trim();
@@ -617,15 +668,43 @@ export default function HomePage() {
               </label>
               <label className="flex flex-col gap-2 text-sm text-slate-300 sm:w-80">
                 {t('home.filterByTitle')}
-                <input
-                  type="text"
-                  value={titleFilter}
-                  onChange={(ev) => updateTitleFilter(ev.target.value)}
-                  placeholder={t('home.filterByTitlePlaceholder')}
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={titleFilter}
+                    onChange={(ev) => updateTitleFilter(ev.target.value)}
+                    placeholder={t('home.filterByTitlePlaceholder')}
+                    className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 pr-16 text-sm text-slate-100 outline-none transition hover:border-slate-500 focus:border-indigo-400"
+                  />
+                  {titleFilter.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => updateTitleFilter('')}
+                      className="absolute right-1 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-xs text-slate-400 transition hover:bg-slate-800 hover:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                      aria-label={t('home.clearTitleFilter')}
+                    >
+                      {t('home.clearTitleFilter')}
+                    </button>
+                  )}
+                </div>
+              </label>
+              <label className="flex flex-col gap-2 text-sm text-slate-300 sm:w-64">
+                {t('home.sortBy')}
+                <select
+                  value={sortMode}
+                  onChange={(ev) => updateSortMode(ev.target.value as SortMode)}
                   className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition hover:border-slate-500 focus:border-indigo-400"
-                />
+                >
+                  <option value="title_asc">{t('home.sort.titleAsc')}</option>
+                  <option value="created_desc">{t('home.sort.createdDesc')}</option>
+                  <option value="updated_desc">{t('home.sort.updatedDesc')}</option>
+                  <option value="page_count_desc">{t('home.sort.pageCountDesc')}</option>
+                </select>
               </label>
             </div>
+            <p className="mt-3 text-xs text-slate-400" aria-live="polite">
+              {visibleSummary}
+            </p>
             {/* custom category management UI removed; category creation is only via dropdown option */}
           </section>
         )}

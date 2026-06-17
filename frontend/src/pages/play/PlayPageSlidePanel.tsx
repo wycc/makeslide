@@ -80,6 +80,7 @@ export function PlayPageSlidePanel() {
     playbackRate, setPlaybackRate,
     showSubtitle, setShowSubtitle,
     playbackSettingsOpen, setPlaybackSettingsOpen,
+    playbackStatusMessage, handleClearPlaybackProgress,
     audioMuted, setAudioMuted,
     effectiveAudioMuted,
     followerAudioUnlocked, setFollowerAudioUnlocked,
@@ -521,6 +522,11 @@ export function PlayPageSlidePanel() {
         </div>
         {playbackSettingsOpen ? (
           <div className="mt-3 space-y-2 border-t border-slate-800 pt-3">
+            {playbackStatusMessage ? (
+              <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100" role="status">
+                {playbackStatusMessage}
+              </div>
+            ) : null}
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-950/70 px-3 py-2">
               <div>
                 <span className="font-semibold text-slate-200">音訊</span>
@@ -570,6 +576,19 @@ export function PlayPageSlidePanel() {
                 />
                 {showSubtitle ? 'ON' : 'OFF'}
               </label>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-950/70 px-3 py-2">
+              <div>
+                <span className="font-semibold text-slate-200">{t('play.playbackProgress.title')}</span>
+                <span className="ml-2 text-slate-400">{t('play.playbackProgress.description')}</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleClearPlaybackProgress}
+                className="rounded-full border border-rose-500/50 bg-rose-500/10 px-3 py-1 text-xs font-medium text-rose-100 hover:bg-rose-500/20"
+              >
+                {t('play.playbackProgress.clear')}
+              </button>
             </div>
             {syncEnabled && syncRole === 'master' ? (
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-cyan-100">

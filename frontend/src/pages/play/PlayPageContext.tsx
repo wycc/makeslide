@@ -65,6 +65,7 @@ export interface PlayPageContextValue {
   setShowSubtitle: Dispatch<SetStateAction<boolean>>;
   playbackSettingsOpen: boolean;
   setPlaybackSettingsOpen: Dispatch<SetStateAction<boolean>>;
+  playbackStatusMessage: string | null;
   followerAudioUnlocked: boolean;
   setFollowerAudioUnlocked: Dispatch<SetStateAction<boolean>>;
   scripts: Record<number, string>;
@@ -79,6 +80,7 @@ export interface PlayPageContextValue {
   handleEnded: () => void;
   handleSeek: (ev: ChangeEvent<HTMLInputElement>) => void;
   handleSeekToTime: (seconds: number) => void;
+  handleClearPlaybackProgress: () => void;
   scheduleAudioReload: (token: number, audioUrl: string, pageNumber?: number) => void;
   clearAudioRetryTimer: () => void;
   reloadDetail: () => Promise<void>;

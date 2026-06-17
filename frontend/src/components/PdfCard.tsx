@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { PdfListItem } from '../types';
 import StatusBadge from './StatusBadge';
 import { useI18n } from '../i18n';
+import { formatAudioDuration } from '../lib/audioDuration';
 
 const PROGRESS_LABEL_KEYS: Record<string, Parameters<ReturnType<typeof useI18n>['t']>[0]> = {
   rendering: 'progress.rendering',
@@ -75,6 +76,7 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExpo
       ? `api/pdfs/${encodeURIComponent(pdf.id)}/pages/${encodeURIComponent(String(pdf.progress_current))}/thumbnail?t=${encodeURIComponent(String(pdf.progress_current))}`
       : null;
   const coverSrc = livePagePreviewUrl ?? pdf.cover_thumbnail_url ?? pdf.cover_url;
+  const totalAudioDuration = formatAudioDuration(pdf.total_audio_duration_seconds);
 
   const handleDelete = async (ev: React.MouseEvent) => {
     ev.stopPropagation();
@@ -238,9 +240,16 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExpo
             <option value="__new__">{t('card.addCategory')}</option>
           </select>
         </label>
-        <div className="flex items-center justify-between text-xs text-slate-400">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400">
           <span>{formatDate(pdf.created_at)}</span>
-          <span>{pdf.page_count != null ? t('card.pageCount').replace('{count}', String(pdf.page_count)) : ''}</span>
+          {pdf.page_count != null && (
+            <span>{t('card.pageCount').replace('{count}', String(pdf.page_count))}</span>
+          )}
+          {totalAudioDuration && (
+            <span title={t('card.totalAudioDurationLabel')}>
+              {t('card.totalAudioDuration').replace('{duration}', totalAudioDuration)}
+            </span>
+          )}
         </div>
 
         {pdf.status === 'awaiting_prompt' && (

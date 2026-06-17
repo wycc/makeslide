@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../i18n';
 import { ApiError, createYoutubeTask, mapApiErrorToHumanMessage, uploadPdf } from '../lib/api';
+import { normalizeYoutubeSubtitleLanguageForSubmit, YOUTUBE_SUBTITLE_LANGUAGE_OPTIONS } from '../lib/youtubeLanguage';
 import type { UploadResponse } from '../types';
 
 type T = ReturnType<typeof useI18n>['t'];
@@ -124,7 +125,7 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
     setRecoveryGuide([]);
     setIsSubmittingYoutube(true);
     try {
-      const resp = await createYoutubeTask(url, youtubeLang.trim() || undefined, hostMode);
+      const resp = await createYoutubeTask(url, normalizeYoutubeSubtitleLanguageForSubmit(youtubeLang), hostMode);
       onUploaded({
         id: resp.id,
         status: 'uploaded',
@@ -270,14 +271,35 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
             className="min-w-[260px] flex-1 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-400"
             disabled={isSubmittingYoutube || isUploading}
           />
-          <input
-            type="text"
-            value={youtubeLang}
-            onChange={(e) => setYoutubeLang(e.target.value)}
-            placeholder={t('upload.subtitleLanguagePlaceholder')}
-            className="w-44 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-400"
-            disabled={isSubmittingYoutube || isUploading}
-          />
+          <div className="flex min-w-[260px] flex-wrap items-center gap-2">
+            <input
+              type="text"
+              value={youtubeLang}
+              onChange={(e) => setYoutubeLang(e.target.value)}
+              placeholder={t('upload.subtitleLanguagePlaceholder')}
+              aria-label={t('upload.subtitleLanguageLabel')}
+              className="w-44 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-400"
+              disabled={isSubmittingYoutube || isUploading}
+            />
+            <div className="flex flex-wrap items-center gap-1" aria-label={t('upload.subtitleLanguageQuickSelect')}>
+              {YOUTUBE_SUBTITLE_LANGUAGE_OPTIONS.map((lang) => (
+                <button
+                  key={lang}
+                  type="button"
+                  onClick={() => setYoutubeLang(lang)}
+                  disabled={isSubmittingYoutube || isUploading}
+                  aria-pressed={youtubeLang.trim().toLowerCase() === lang.toLowerCase()}
+                  className={`rounded-md border px-2 py-1 text-xs transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                    youtubeLang.trim().toLowerCase() === lang.toLowerCase()
+                      ? 'border-cyan-400 bg-cyan-500/20 text-cyan-100'
+                      : 'border-slate-600 bg-slate-800 text-slate-200 hover:bg-slate-700'
+                  }`}
+                >
+                  {lang === 'auto' ? t('upload.subtitleLanguageAuto') : lang}
+                </button>
+              ))}
+            </div>
+          </div>
           <button
             type="button"
             onClick={handleSubmitYoutube}

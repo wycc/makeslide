@@ -1971,6 +1971,35 @@ export function AnimationEditorTab() {
                           <span className="text-slate-500">rem</span>
                         </div>
                       </label>
+                      <label className="flex flex-col gap-1 text-xs text-slate-400">
+                        {t('play.animation.pointerOpacity')}
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="range"
+                            min={0.1}
+                            max={1}
+                            step={0.1}
+                            value={effect.pointerOpacity ?? 1}
+                            disabled={disabled}
+                            onChange={(e) =>
+                              updateEffect(effect.id, { pointerOpacity: Math.min(1, Math.max(0, Number(e.target.value) || 1)) })
+                            }
+                            className="w-28 accent-fuchsia-500 disabled:cursor-not-allowed disabled:opacity-40"
+                          />
+                          <input
+                            type="number"
+                            min={0.1}
+                            max={1}
+                            step={0.1}
+                            value={effect.pointerOpacity ?? 1}
+                            disabled={disabled}
+                            onChange={(e) =>
+                              updateEffect(effect.id, { pointerOpacity: Math.min(1, Math.max(0, Number(e.target.value) || 1)) })
+                            }
+                            className="w-16 rounded-md border border-slate-700 bg-slate-900 px-1 py-1 text-sm text-slate-100 disabled:opacity-40"
+                          />
+                        </div>
+                      </label>
                       <label className="flex items-center gap-2 text-xs text-slate-400">
                         <input
                           type="checkbox"

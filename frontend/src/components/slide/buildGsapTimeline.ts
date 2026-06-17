@@ -99,7 +99,7 @@ export function buildGsapTimeline(stage: HTMLElement, spec: SlideAnimationSpec):
       case 'pointer': {
         const overlay = stage.querySelector<HTMLElement>(`[data-effect-id="${effect.id}"]`);
         if (overlay) {
-          tl.fromTo(overlay, { autoAlpha: 0 }, { autoAlpha: 1, ...common }, effect.start);
+          tl.fromTo(overlay, { autoAlpha: 0 }, { autoAlpha: effect.pointerOpacity ?? 1, ...common }, effect.start);
           if (effect.pointerPulse) {
             const isDot = (effect.pointerShape ?? 'arrow') === 'dot';
             const pulseScale = isDot ? 1.3 : 1.15;

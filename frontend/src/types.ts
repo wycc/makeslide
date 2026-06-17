@@ -242,6 +242,8 @@ export interface SlideAnimationEffect {
   pointerShape?: 'arrow' | 'dot' | 'cross';
   /** When `true`, the pointer pulses with a scale yoyo animation while visible. Ignored by other effect types. */
   pointerPulse?: boolean;
+  /** Visible-state opacity (0–1) for `pointer` effects. Defaults to 1. Ignored by other effect types. */
+  pointerOpacity?: number;
   /** Border colour (CSS hex) for `highlight-box` effects. Defaults to `#ef4444`. Ignored by other effect types. */
   highlightColor?: string;
   /** Border width (px) for `highlight-box` effects. Defaults to 4. Ignored by other effect types. */
