@@ -411,6 +411,8 @@ export const en = {
   'play.animation.shapeKind.rect': 'Rectangle',
   'play.animation.shapeKind.ellipse': 'Ellipse',
   'play.animation.shapeKind.arrow': 'Arrow',
+  'play.animation.shapeKind.line': 'Line',
+  'play.animation.shapeKind.triangle': 'Triangle',
   'play.animation.shapeColor': 'Stroke color',
   'play.animation.shapeStrokeWidth': 'Stroke width',
   'play.animation.shapeFillColor': 'Fill color',
