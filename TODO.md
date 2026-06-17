@@ -1633,7 +1633,7 @@
 
 [x] Manim `animate.zoomIn(m, progress, opts)` 縮放進場效果：新增 `animate.zoomIn(m, progress, opts)` 函式，讓元素從縮小狀態（`startScale`，預設 0.1）等比放大至正常大小（scale=1）；progress 0 時 scale=`startScale`，progress 1 時清除 transform；以元素中心（SVG 用 getBBox 求 cx/cy；HTML 用 `offsetWidth/2, offsetHeight/2`）為縮放基準；設 `m.el.style.opacity = String(progress)` 同時淡入；progress≥1 時清除 transform 和 opacity 殘留；opts 支援 `startScale`（初始縮放比，預設 0.1）；新增至少 2 個 vm 測試（中間 scale 介於 startScale 和 1 之間，progress=1 時 transform 清除）。
 
-[ ] `text-callout` 效果新增最大寬度選項 `textCalloutMaxWidth`：目前文字框寬度完全由滑鼠拖曳的 `width`/`height` 決定；應新增 `textCalloutMaxWidth?: number`（單位 vw，整數，範圍 10–80，預設 undefined 表示不限制）；啟用時在 `text-callout` div 加上 `maxWidth: \`${textCalloutMaxWidth}vw\``，讓長文字自動換行而不超出螢幕；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.number().int().min(10).max(80).optional()`）/序列化（帶 `Math.max(10, Math.min(80, Math.round(...)))` clamp）；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 條件加入 `maxWidth` style；`AnimationEditorTab.tsx` 在 text-callout 設定區加入 number input（min=10, max=80, step=5）；中英文 i18n 新增翻譯鍵 `play.animation.textCalloutMaxWidth`（'Max width (vw)'／'最大寬度（vw）'）。
+[x] `text-callout` 效果新增最大寬度選項 `textCalloutMaxWidth`：目前文字框寬度完全由滑鼠拖曳的 `width`/`height` 決定；應新增 `textCalloutMaxWidth?: number`（單位 vw，整數，範圍 10–80，預設 undefined 表示不限制）；啟用時在 `text-callout` div 加上 `maxWidth: \`${textCalloutMaxWidth}vw\``，讓長文字自動換行而不超出螢幕；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.number().int().min(10).max(80).optional()`）/序列化（帶 `Math.max(10, Math.min(80, Math.round(...)))` clamp）；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 條件加入 `maxWidth` style；`AnimationEditorTab.tsx` 在 text-callout 設定區加入 number input（min=10, max=80, step=5）；中英文 i18n 新增翻譯鍵 `play.animation.textCalloutMaxWidth`（'Max width (vw)'／'最大寬度（vw）'）。
 
 ---
 
@@ -1660,3 +1660,7 @@
 - 時間: 2026-06-17 16:45:00 +0800
 - 分支: feature/manim-zoomin-20260617
 - 內容: 新增 `animate.zoomIn(m, progress, opts)` 函式到 manimHelperScript。元素從 startScale（預設 0.1）等比放大至 1，同時 opacity 從 0 增至 1（progress 直接作為 opacity）。SVG 元素使用 `getBBox()` 找中心並以 `setAttribute('transform', 'translate(cx cy) scale(s) translate(-cx -cy)')` 設定縮放；HTML 元素使用 `style.transform`。progress≥1 時清除 transform 和 opacity 殘留。opts 支援 `startScale`。新增 2 個 vm 測試（46 個全數通過）；第一個測試同時讀取 `style.transform` 和 `getAttribute('transform')` 以相容 vm 環境中 getBBox 不存在的情況。
+
+- 時間: 2026-06-17 17:00:00 +0800
+- 分支: feature/text-callout-maxwidth-20260617
+- 內容: 新增 `textCalloutMaxWidth?: number`（vw，範圍 10–80）欄位到 `text-callout` 效果。啟用時 `text-callout` div 加上 `maxWidth: '${n}vw'`，讓長文字自動換行而不溢出螢幕。UI 為 number input（min=10, max=80, step=5），留空代表不設限制（undefined）。後端 `AnimationEffect`（介面）、`EffectSchema`（`z.number().int().min(10).max(80)`）、序列化（含 clamp）均更新；前端 `SlideAnimationEffect` 型別、`SlideRenderer.tsx`（`tcMaxW` 變數條件加 maxWidth）、`AnimationEditorTab.tsx`（在 textCalloutShadow 下方新增 number input + vw 單位標籤）、中英文 i18n 均同步更新。前後端 TypeScript 均通過。
