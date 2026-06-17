@@ -1620,3 +1620,23 @@
 - 時間: 2026-06-17 15:15:00 +0800
 - 分支: feature/manim-fadeindirection-20260617
 - 內容: 新增 `animate.fadeInFromDirection(m, progress, opts)` 函式到 manimHelperScript。元素從指定方向滑入並同時淡入：progress=0 時 opacity=0 且位移最大（`distance` 像素，預設 40），progress=1 時 opacity=1 且 transform 清除。opts 支援 `direction`（`'left'`/`'right'`/`'up'`/`'down'`，預設 `'left'`）和 `distance`（像素）。使用 CSS `transform: translate(dx,dy)` 計算位移；progress≥1 時明確清除 transform 防止殘留。新增 2 個 vm 測試（progress=0.5 驗證 opacity<1 且含 translate、progress=1 驗證 opacity='1' 且 transform=''），測試總數從 40 增至 42，全數通過。
+
+[ ] `highlight-box` 效果投影選項：新增 `highlightShadow?: boolean`（預設 false）；啟用時在 `highlight-box` div 加上 `box-shadow: 0 0 20px rgba(0,0,0,0.5)` 讓高亮框更突出；後端同步更新 `AnimationEffect`（介面）/`EffectSchema`（`z.boolean().optional()`）/序列化；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 條件加入 `boxShadow` style（加在現有 border 相關 style 後）；`AnimationEditorTab.tsx` 在 highlight-box 設定區新增勾選框；中英文 i18n 新增 `play.animation.highlightShadow`（'Drop shadow'／'投影效果'）。
+
+[ ] `formula` 效果投影選項：新增 `formulaShadow?: boolean`（預設 false）；啟用時在 `formula` div 加上 `box-shadow: 0 4px 16px rgba(0,0,0,0.4)` 讓公式框更立體（與 `textCalloutShadow` 使用相同陰影值以保持一致性）；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.boolean().optional()`）/序列化；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 條件加入 `boxShadow` style；`AnimationEditorTab.tsx` 在 formulaBorderColor 下方加入勾選框；中英文 i18n 新增 `play.animation.formulaShadow`（'Drop shadow'／'投影效果'）。
+
+[ ] `overlay-image` 效果投影選項：新增 `overlayImageShadow?: boolean`（預設 false）；啟用時在 `<img>` 上加上 `boxShadow: '0 4px 20px rgba(0,0,0,0.5)'`；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.boolean().optional()`）/序列化；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 在 `<img>` style 中條件加入 `boxShadow`（與現有 `borderRadius` 並列）；`AnimationEditorTab.tsx` 在 overlay-image 設定區新增勾選框；中英文 i18n 新增 `play.animation.overlayImageShadow`（'Drop shadow'／'投影效果'）。
+
+[ ] `shape` 效果新增 `star` 五角星形狀：在 `ANIMATION_SHAPE_KINDS` 加入 `'star'`；以 SVG `<polygon>` 繪製五角星（計算 5 個外頂點和 5 個內頂點，外半徑 46、內半徑 18，以中心 50,50 計算所有坐標）；支援現有的 fill/stroke/strokeWidth/strokeDasharray 屬性；後端 `ANIMATION_SHAPE_KINDS` const 加入 `'star'`，`EffectSchema` 自動更新；前端 `SlideAnimationShapeKind` 型別加入 `'star'`；`SlideRenderer.tsx` 加入 star 的 polygon 元素；中英文 i18n 新增 `play.animation.shapeKind.star`（'Star'／'五角星'）。
+
+[ ] Manim `animate.countUp(m, progress, opts)` 數字遞增效果：新增 `animate.countUp(m, progress, opts)` 函式，讓文字元素顯示從 `from` 線性遞增至 `to` 的整數（用於表達資料統計動畫）；以 `Math.round(lerp(from, to, progress))` 計算當前數值，再用 `m.el.textContent = String(val)` 更新元素文字內容；opts 支援 `from`（起始數字，預設 0）、`to`（目標數字，必填）、`suffix`（字尾字串，例如 `'%'`，預設 `''`）、`prefix`（字首字串，例如 `'$'`，預設 `''`）；新增至少 2 個 vm 測試（驗證 progress=0.5 時數值約為中間值，驗證 progress=1 時數值等於 `to`）。
+
+[ ] Manim `animate.zoomIn(m, progress, opts)` 縮放進場效果：新增 `animate.zoomIn(m, progress, opts)` 函式，讓元素從縮小狀態（`startScale`，預設 0.1）等比放大至正常大小（scale=1）；progress 0 時 scale=`startScale`，progress 1 時清除 transform；以元素中心（SVG 用 getBBox 求 cx/cy；HTML 用 `offsetWidth/2, offsetHeight/2`）為縮放基準；設 `m.el.style.opacity = String(progress)` 同時淡入；progress≥1 時清除 transform 和 opacity 殘留；opts 支援 `startScale`（初始縮放比，預設 0.1）；新增至少 2 個 vm 測試（中間 scale 介於 startScale 和 1 之間，progress=1 時 transform 清除）。
+
+[ ] `text-callout` 效果新增最大寬度選項 `textCalloutMaxWidth`：目前文字框寬度完全由滑鼠拖曳的 `width`/`height` 決定；應新增 `textCalloutMaxWidth?: number`（單位 vw，整數，範圍 10–80，預設 undefined 表示不限制）；啟用時在 `text-callout` div 加上 `maxWidth: \`${textCalloutMaxWidth}vw\``，讓長文字自動換行而不超出螢幕；後端同步更新 `AnimationEffect`/`EffectSchema`（`z.number().int().min(10).max(80).optional()`）/序列化（帶 `Math.max(10, Math.min(80, Math.round(...)))` clamp）；前端 `types.ts` 新增欄位；`SlideRenderer.tsx` 條件加入 `maxWidth` style；`AnimationEditorTab.tsx` 在 text-callout 設定區加入 number input（min=10, max=80, step=5）；中英文 i18n 新增翻譯鍵 `play.animation.textCalloutMaxWidth`（'Max width (vw)'／'最大寬度（vw）'）。
+
+---
+
+- 時間: 2026-06-17 15:30:00 +0800
+- 分支: feature/todo-add-items-20260617c
+- 內容: 分析現有系統後，新增 7 個待辦項目：(1) highlight-box 投影選項；(2) formula 投影選項；(3) overlay-image 投影選項；(4) shape 效果新增 star 五角星；(5) Manim animate.countUp 數字遞增；(6) Manim animate.zoomIn 縮放進場；(7) text-callout 最大寬度選項。
