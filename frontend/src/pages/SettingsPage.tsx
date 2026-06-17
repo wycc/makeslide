@@ -86,6 +86,11 @@ export default function SettingsPage() {
   const [newSkillPrompt, setNewSkillPrompt] = useState('');
   const [newSkillApplyTo, setNewSkillApplyTo] = useState<'script' | 'all'>('script');
   const [addingSkill, setAddingSkill] = useState(false);
+  const [editingSkillId, setEditingSkillId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editPrompt, setEditPrompt] = useState('');
+  const [editApplyTo, setEditApplyTo] = useState<'script' | 'all'>('script');
+  const [savingSkillId, setSavingSkillId] = useState<string | null>(null);
 
   const CGU_AIR_BASE_URL = 'https://air.cgu.edu.tw/cgullmapi/v1';
 
@@ -831,53 +836,121 @@ export default function SettingsPage() {
               {skills.map((skill) => (
                 <div
                   key={skill.id}
-                  className="flex items-start gap-3 rounded-lg border border-slate-800 bg-slate-950/60 p-3"
+                  className="rounded-lg border border-slate-800 bg-slate-950/60 p-3"
                 >
-                  <input
-                    type="checkbox"
-                    checked={skill.enabled}
-                    onChange={() => {
-                      if (skill.isBuiltIn) {
-                        void toggleBuiltInSkill(skill.id).then((res) => {
-                          setSkills((prev) => prev.map((s) => s.id === skill.id ? { ...s, enabled: res.enabled } : s));
-                        });
-                      } else {
-                        void updateSkill(skill.id, { enabled: !skill.enabled }).then((updated) => {
-                          setSkills((prev) => prev.map((s) => s.id === skill.id ? updated : s));
-                        });
-                      }
-                    }}
-                    className="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-800 accent-indigo-500"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-slate-200">
-                        {skill.isBuiltIn ? (t('settings.skillLangZh') === 'zh-TW' ? skill.nameZh ?? skill.name : skill.name) : skill.name}
-                      </span>
-                      {skill.isBuiltIn && (
-                        <span className="rounded bg-slate-800 px-1.5 py-0.5 text-xs text-slate-400">{t('settings.skillBuiltIn')}</span>
-                      )}
-                      <span className="rounded bg-slate-800 px-1.5 py-0.5 text-xs text-slate-400">{skill.applyTo}</span>
+                  {editingSkillId === skill.id ? (
+                    <div className="space-y-2">
+                      <input
+                        type="text"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        maxLength={80}
+                        className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-200"
+                      />
+                      <textarea
+                        value={editPrompt}
+                        onChange={(e) => setEditPrompt(e.target.value)}
+                        rows={3}
+                        maxLength={2000}
+                        className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-200"
+                      />
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={editApplyTo}
+                          onChange={(e) => setEditApplyTo(e.target.value as 'script' | 'all')}
+                          className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200"
+                        >
+                          <option value="script">{t('settings.skillApplyToScript')}</option>
+                          <option value="all">{t('settings.skillApplyToAll')}</option>
+                        </select>
+                        <button
+                          type="button"
+                          disabled={savingSkillId === skill.id || !editName.trim() || !editPrompt.trim()}
+                          onClick={() => {
+                            setSavingSkillId(skill.id);
+                            void updateSkill(skill.id, { name: editName.trim(), prompt: editPrompt.trim(), applyTo: editApplyTo })
+                              .then((updated) => {
+                                setSkills((prev) => prev.map((s) => s.id === skill.id ? updated : s));
+                                setEditingSkillId(null);
+                              })
+                              .finally(() => setSavingSkillId(null));
+                          }}
+                          className="ml-auto rounded bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white disabled:opacity-50 hover:bg-indigo-500"
+                        >
+                          {savingSkillId === skill.id ? t('settings.saving') : t('settings.skillSave')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingSkillId(null)}
+                          className="rounded border border-slate-700 px-2.5 py-1 text-xs text-slate-400 hover:text-slate-200"
+                        >
+                          {t('settings.skillCancel')}
+                        </button>
+                      </div>
                     </div>
-                    {skill.isBuiltIn && skill.descriptionZh && (
-                      <p className="mt-1 text-xs text-slate-500">{skill.descriptionZh}</p>
-                    )}
-                    {!skill.isBuiltIn && (
-                      <p className="mt-1 text-xs text-slate-500 line-clamp-2">{skill.prompt}</p>
-                    )}
-                  </div>
-                  {!skill.isBuiltIn && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void deleteSkill(skill.id).then(() => {
-                          setSkills((prev) => prev.filter((s) => s.id !== skill.id));
-                        });
-                      }}
-                      className="shrink-0 text-xs text-red-400 hover:text-red-300"
-                    >
-                      {t('settings.delete')}
-                    </button>
+                  ) : (
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={skill.enabled}
+                        onChange={() => {
+                          if (skill.isBuiltIn) {
+                            void toggleBuiltInSkill(skill.id).then((res) => {
+                              setSkills((prev) => prev.map((s) => s.id === skill.id ? { ...s, enabled: res.enabled } : s));
+                            });
+                          } else {
+                            void updateSkill(skill.id, { enabled: !skill.enabled }).then((updated) => {
+                              setSkills((prev) => prev.map((s) => s.id === skill.id ? updated : s));
+                            });
+                          }
+                        }}
+                        className="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-800 accent-indigo-500"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-slate-200">
+                            {skill.isBuiltIn ? (t('settings.skillLangZh') === 'zh-TW' ? skill.nameZh ?? skill.name : skill.name) : skill.name}
+                          </span>
+                          {skill.isBuiltIn && (
+                            <span className="rounded bg-slate-800 px-1.5 py-0.5 text-xs text-slate-400">{t('settings.skillBuiltIn')}</span>
+                          )}
+                          <span className="rounded bg-slate-800 px-1.5 py-0.5 text-xs text-slate-400">{skill.applyTo}</span>
+                        </div>
+                        {skill.isBuiltIn && skill.descriptionZh && (
+                          <p className="mt-1 text-xs text-slate-500">{skill.descriptionZh}</p>
+                        )}
+                        {!skill.isBuiltIn && (
+                          <p className="mt-1 text-xs text-slate-500 line-clamp-2">{skill.prompt}</p>
+                        )}
+                      </div>
+                      {!skill.isBuiltIn && (
+                        <div className="flex shrink-0 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingSkillId(skill.id);
+                              setEditName(skill.name);
+                              setEditPrompt(skill.prompt);
+                              setEditApplyTo(skill.applyTo);
+                            }}
+                            className="text-xs text-slate-400 hover:text-slate-200"
+                          >
+                            {t('settings.skillEdit')}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void deleteSkill(skill.id).then(() => {
+                                setSkills((prev) => prev.filter((s) => s.id !== skill.id));
+                              });
+                            }}
+                            className="text-xs text-red-400 hover:text-red-300"
+                          >
+                            {t('settings.delete')}
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               ))}
