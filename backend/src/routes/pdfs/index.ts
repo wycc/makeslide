@@ -19,6 +19,7 @@ import { registerFigureRoutes } from './figures';
 import { registerRunHistoryRoutes } from './runs';
 import { registerSlowArtifactRoutes } from './slow-artifacts';
 import { registerSlaSettingsRoutes } from './sla-settings';
+import { registerSkillRoutes } from './skills';
 
 export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerUploadRoutes(app);
@@ -41,4 +42,5 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerRunHistoryRoutes(app);
   await registerSlowArtifactRoutes(app);
   await registerSlaSettingsRoutes(app);
+  await registerSkillRoutes(app);
 }
