@@ -497,3 +497,34 @@ test("Manim.animate.bounce uses default height=30 and bounces=2 when no opts", (
   assert.ok(ty <= 0, "translateY should be <= 0 (upward or at rest)");
   assert.ok(ty >= -30, "translateY should not exceed default height=30");
 });
+
+test("Manim.animate.typewrite shows partial text at mid-progress and full text at progress=1", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const label = Manim.shapes.text(svg, { x: 0, y: 0, text: "Hello World", size: 14, color: "#ffffff" });
+
+  Manim.animate.typewrite(label, 0.5);
+  const mid = label.el.textContent ?? "";
+  assert.ok(mid.length > 0, "textContent should be non-empty at mid-progress");
+  assert.ok(mid.length < "Hello World".length, "textContent should be shorter than full text at mid-progress");
+
+  Manim.animate.typewrite(label, 1);
+  const full = label.el.textContent ?? "";
+  assert.equal(full, "Hello World", "textContent should equal full text at progress=1");
+});
+
+test("Manim.animate.typewrite with reverse=true erases from end, restoring full text at progress=1", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const label = Manim.shapes.text(svg, { x: 0, y: 0, text: "ABCDE", size: 14, color: "#ffffff" });
+
+  Manim.animate.typewrite(label, 0.4, { reverse: true });
+  const mid = label.el.textContent ?? "";
+  assert.ok(mid.length > 0, "textContent should be non-empty at progress=0.4 with reverse");
+  assert.ok("ABCDE".endsWith(mid), "reversed typewrite should show tail of the string");
+  assert.ok(mid.length < "ABCDE".length, "should show fewer chars than full text");
+
+  Manim.animate.typewrite(label, 1, { reverse: true });
+  const full = label.el.textContent ?? "";
+  assert.equal(full, "ABCDE", "full text should be restored at progress=1");
+});
