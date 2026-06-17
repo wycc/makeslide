@@ -412,7 +412,7 @@ test("Manim.animate.uncreate is the reverse of create (dashoffset decreases for 
 
 function parseTranslateX(transform: string): number {
   const m = transform.match(/translateX\(([^p]+)px\)/);
-  return m ? parseFloat(m[1]) : 0;
+  return m && m[1] ? parseFloat(m[1]) : 0;
 }
 
 test("Manim.animate.shake gives zero translateX offset at progress=0 and progress=1", () => {
