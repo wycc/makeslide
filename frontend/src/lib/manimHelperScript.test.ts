@@ -625,3 +625,25 @@ test("Manim.animate.drawBorderThenFill: fill-opacity=1 at progress=1 and dashoff
   const fillOpacity = parseFloat(rect.el.getAttribute("fill-opacity") as string);
   assert.ok(fillOpacity > 0, `progress=1: fill-opacity should be > 0, got ${fillOpacity}`);
 });
+
+test("Manim.animate.colorShift: stroke at progress=0.5 is between from and to", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const circ = Manim.shapes.circle(svg, { x: 0, y: 0, radius: 1, color: '#000000' });
+
+  Manim.animate.colorShift(circ, 0.5, { from: '#000000', to: '#ffffff', attr: 'stroke' });
+  const stroke = circ.el.getAttribute('stroke') as string;
+  // Each channel should be ~128 at mid-progress
+  const r = parseInt(stroke.slice(1, 3), 16);
+  assert.ok(r > 0 && r < 255, `mid-progress stroke red channel should be between 0 and 255, got ${r}`);
+});
+
+test("Manim.animate.colorShift: stroke equals toColor at progress=1", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const circ = Manim.shapes.circle(svg, { x: 0, y: 0, radius: 1, color: '#000000' });
+
+  Manim.animate.colorShift(circ, 1, { from: '#000000', to: '#ff0000', attr: 'stroke' });
+  const stroke = circ.el.getAttribute('stroke') as string;
+  assert.equal(stroke.toLowerCase(), '#ff0000', `progress=1: stroke should equal toColor #ff0000, got ${stroke}`);
+});
