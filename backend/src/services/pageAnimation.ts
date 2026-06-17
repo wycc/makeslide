@@ -64,7 +64,7 @@ export interface AnimationEffect {
    */
   pointerSize?: number;
   /** Shape of the pointer for `pointer` effects. `'arrow'` (default) renders a cursor SVG; `'dot'` renders a filled circle. Ignored by other effect types. */
-  pointerShape?: 'arrow' | 'dot';
+  pointerShape?: 'arrow' | 'dot' | 'cross';
   /** When `true`, the pointer pulses with a scale yoyo animation while visible. Dot shape pulses 1→1.3→1; arrow shape pulses 1→1.15→1. Ignored by other effect types. */
   pointerPulse?: boolean;
   /**
@@ -423,7 +423,7 @@ const EffectSchema = z.object({
   angle: z.number().finite().optional(),
   pointerColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   pointerSize: z.number().min(MIN_POINTER_SIZE_REM).max(MAX_POINTER_SIZE_REM).optional(),
-  pointerShape: z.enum(['arrow', 'dot']).optional(),
+  pointerShape: z.enum(['arrow', 'dot', 'cross']).optional(),
   pointerPulse: z.boolean().optional(),
   highlightColor: z.string().max(MAX_SHAPE_COLOR_LENGTH).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   highlightBorderWidth: z.number().int().min(1).max(MAX_HIGHLIGHT_BORDER_WIDTH).optional(),

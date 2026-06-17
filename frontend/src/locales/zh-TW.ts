@@ -446,6 +446,7 @@ export const zhTW = {
   'play.animation.pointerShape': '指標形狀',
   'play.animation.pointerShape.arrow': '箭頭',
   'play.animation.pointerShape.dot': '圓點',
+  'play.animation.pointerShape.cross': '十字準心',
   'play.animation.pointerAngle': '指標旋轉角度（°）',
   'play.animation.pointerColor': '箭頭顏色',
   'play.animation.textCalloutFontSize': '字型大小（rem）',

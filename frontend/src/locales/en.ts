@@ -446,6 +446,7 @@ export const en = {
   'play.animation.pointerShape': 'Pointer shape',
   'play.animation.pointerShape.arrow': 'Arrow',
   'play.animation.pointerShape.dot': 'Dot',
+  'play.animation.pointerShape.cross': 'Crosshair',
   'play.animation.pointerAngle': 'Pointer rotation angle (°)',
   'play.animation.pointerColor': 'Arrow color',
   'play.animation.textCalloutFontSize': 'Font size (rem)',

@@ -85,7 +85,14 @@ function EffectOverlay({
     const pB = parseInt(pColor.slice(5, 7), 16);
     const svgContent = pShape === 'dot'
       ? <circle cx="12" cy="12" r="10" fill={`rgba(${pR},${pG},${pB},0.95)`} />
-      : <path d="M4 0 L4 20 L8 16 L11 23 L13 22 L10 15 L15 15 Z" fill={`rgba(${pR},${pG},${pB},0.95)`} />;
+      : pShape === 'cross'
+        ? (
+          <>
+            <line x1="2" y1="12" x2="22" y2="12" stroke={`rgba(${pR},${pG},${pB},0.95)`} strokeWidth="2.5" strokeLinecap="round" />
+            <line x1="12" y1="2" x2="12" y2="22" stroke={`rgba(${pR},${pG},${pB},0.95)`} strokeWidth="2.5" strokeLinecap="round" />
+          </>
+        )
+        : <path d="M4 0 L4 20 L8 16 L11 23 L13 22 L10 15 L15 15 Z" fill={`rgba(${pR},${pG},${pB},0.95)`} />;
     return (
       <div
         data-effect-id={effect.id}
