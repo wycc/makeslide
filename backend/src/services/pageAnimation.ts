@@ -20,7 +20,7 @@ export const ANIMATION_EFFECT_TYPES = [
   'custom-script',
 ] as const;
 
-export const ANIMATION_EASES = ['none', 'power1.in', 'power1.out', 'power1.inOut', 'power2.inOut'] as const;
+export const ANIMATION_EASES = ['none', 'power1.in', 'power1.out', 'power1.inOut', 'power2.inOut', 'elastic.out', 'back.out'] as const;
 
 /** SVG primitive shapes drawable by `shape` effects (design doc §12 V2 "SVG 圖元"). */
 export const ANIMATION_SHAPE_KINDS = ['circle', 'rect', 'ellipse', 'arrow', 'line', 'triangle'] as const;

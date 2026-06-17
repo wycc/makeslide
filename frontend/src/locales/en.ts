@@ -353,6 +353,8 @@ export const en = {
   'play.animation.ease.power1Out': 'Smooth stop',
   'play.animation.ease.power1InOut': 'Slow start & stop',
   'play.animation.ease.power2InOut': 'Gentle slow start & stop',
+  'play.animation.ease.elasticOut': 'Elastic bounce',
+  'play.animation.ease.backOut': 'Overshoot & settle',
   'play.animation.delete': 'Delete',
   'play.animation.save': 'Save animation',
   'play.animation.previewFromStart': 'Preview from start',
