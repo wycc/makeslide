@@ -688,3 +688,27 @@ test("Manim.animate.countUp: progress=1 shows toValue with prefix and suffix", (
   Manim.animate.countUp(txt, 1, { from: 0, to: 42, prefix: '$', suffix: 'k' });
   assert.equal(txt.el.textContent, '$42k', `countUp at progress=1 should be '$42k', got ${txt.el.textContent}`);
 });
+
+test("Manim.animate.zoomIn: mid-progress scale is between startScale and 1", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const circ = Manim.shapes.circle(svg, { x: 0, y: 0, radius: 1, color: Manim.colors.BLUE });
+
+  Manim.animate.zoomIn(circ, 0.5, { startScale: 0.1 });
+  // In vm (no getBBox), zoomIn falls back to style.transform
+  const tr = circ.el.style.transform || circ.el.getAttribute('transform') || '';
+  const scaleMatch = tr.match(/scale\(([^)]+)\)/);
+  const s = scaleMatch && scaleMatch[1] ? parseFloat(scaleMatch[1]) : 0;
+  assert.ok(s > 0.1 && s < 1, `zoomIn at progress=0.5 scale should be between 0.1 and 1, got ${s}`);
+});
+
+test("Manim.animate.zoomIn: progress=1 clears transform and opacity", () => {
+  const Manim = loadManim();
+  const svg = createFakeElement("svg");
+  const circ = Manim.shapes.circle(svg, { x: 0, y: 0, radius: 1, color: Manim.colors.RED });
+
+  Manim.animate.zoomIn(circ, 0.5);
+  Manim.animate.zoomIn(circ, 1);
+  assert.equal(circ.el.style.transform, '', `progress=1: style.transform should be empty`);
+  assert.equal(circ.el.style.opacity, '', `progress=1: style.opacity should be empty`);
+});

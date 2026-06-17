@@ -589,6 +589,25 @@ export const MANIM_HELPER_SCRIPT = `
         }
       }
     },
+    zoomIn: function (m, progress, opts) {
+      var p = clamp01(progress);
+      var startScale = (opts && opts.startScale != null) ? Number(opts.startScale) : 0.1;
+      var s = lerp(startScale, 1, p);
+      if (p >= 1) {
+        m.el.style.transform = '';
+        m.el.style.opacity = '';
+      } else {
+        m.el.style.opacity = String(p);
+        if (m.el.getBBox) {
+          var bb = m.el.getBBox();
+          var cx = bb.x + bb.width / 2;
+          var cy = bb.y + bb.height / 2;
+          m.el.setAttribute('transform', 'translate(' + cx + ' ' + cy + ') scale(' + s + ') translate(' + (-cx) + ' ' + (-cy) + ')');
+        } else {
+          m.el.style.transform = 'scale(' + s + ')';
+        }
+      }
+    },
     countUp: function (m, progress, opts) {
       var p = clamp01(progress);
       var from = (opts && opts.from != null) ? Number(opts.from) : 0;
