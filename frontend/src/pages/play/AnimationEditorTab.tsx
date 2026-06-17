@@ -1180,6 +1180,33 @@ export function AnimationEditorTab() {
                       <span className="text-slate-500">px</span>
                     </div>
                   </label>
+                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    {t('play.animation.spotlightShape')}
+                    <select
+                      value={effect.spotlightShape ?? 'circle'}
+                      disabled={disabled}
+                      onChange={(e) => updateEffect(effect.id, { spotlightShape: e.target.value as 'circle' | 'rect' })}
+                      className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                    >
+                      <option value="circle">{t('play.animation.spotlightShape.circle')}</option>
+                      <option value="rect">{t('play.animation.spotlightShape.rect')}</option>
+                    </select>
+                  </label>
+                  {(effect.spotlightShape ?? 'circle') === 'rect' && (
+                    <label className="flex flex-col gap-1 text-xs text-slate-400">
+                      {t('play.animation.spotlightBorderRadius')}
+                      <input
+                        type="number"
+                        min={0}
+                        max={32}
+                        step={4}
+                        value={effect.spotlightBorderRadius ?? 8}
+                        disabled={disabled}
+                        onChange={(e) => updateEffect(effect.id, { spotlightBorderRadius: Math.max(0, Math.min(32, Math.round(Number(e.target.value) || 0))) })}
+                        className="w-20 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+                      />
+                    </label>
+                  )}
                 </div>
               )}
               {effect.type === 'text-callout' && (

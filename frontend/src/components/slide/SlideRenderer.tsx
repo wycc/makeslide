@@ -57,6 +57,8 @@ function EffectOverlay({
     const spColor = effect.spotlightColor ?? '#000000';
     const spOpacity = effect.spotlightOpacity ?? 0.6;
     const spSoft = effect.spotlightSoftEdge ?? 0;
+    const spShape = effect.spotlightShape ?? 'circle';
+    const spBr = spShape === 'rect' ? `${effect.spotlightBorderRadius ?? 8}px` : '50%';
     const spR = parseInt(spColor.slice(1, 3), 16);
     const spG = parseInt(spColor.slice(3, 5), 16);
     const spB = parseInt(spColor.slice(5, 7), 16);
@@ -65,7 +67,7 @@ function EffectOverlay({
         data-effect-id={effect.id}
         style={{
           ...position,
-          borderRadius: '50%',
+          borderRadius: spBr,
           boxShadow: `0 0 0 9999px rgba(${spR}, ${spG}, ${spB}, ${spOpacity})`,
           ...(spSoft > 0 ? { filter: `blur(${spSoft}px)` } : {}),
         }}
