@@ -1,5 +1,403 @@
 # MakeSlide 功能說明
 
+## 動畫 Raw JSON 複製 fallback 與錯誤狀態
+
+### 功能目的
+
+播放頁的動畫編輯器提供「原始 JSON」分頁，方便進階使用者備份、除錯或將單頁動畫設定貼到 issue / 文件中討論。過去「複製 JSON」按鈕直接呼叫瀏覽器的 Clipboard API，只在 `navigator.clipboard.writeText()` 成功時把按鈕文字改成「已複製」。若使用者在非 HTTPS / 非 localhost 的非安全來源、瀏覽器不支援 Clipboard API、權限被拒，或嵌入環境限制剪貼簿權限時，複製會靜默失敗，畫面也不會告知下一步該怎麼做。
+
+新版新增共用 `copyTextToClipboard()` helper，讓 Raw JSON 複製流程先嘗試標準 Clipboard API；若失敗或不可用，會自動建立隱藏 textarea、選取文字並透過 `document.execCommand('copy')` 嘗試舊式 fallback。若兩種方式都失敗，UI 會顯示本地化錯誤狀態，提醒使用者可直接選取下方唯讀 JSON textarea 手動複製。
+
+### 使用方式
+
+1. 進入任一簡報播放頁，切到動畫編輯區。
+2. 在動畫 notebook 中切換到「原始 JSON / Raw JSON」分頁。
+3. 按「複製 JSON / Copy JSON」：
+   - 支援 Clipboard API 且權限允許時，會直接複製完整動畫 JSON。
+   - Clipboard API 不可用或被拒時，系統會自動嘗試 textarea selection / `execCommand('copy')` fallback。
+   - 成功時會顯示「已複製 / Copied」。
+   - 若瀏覽器也阻擋 fallback，會顯示「複製失敗，請手動選取下方 JSON 後複製。」或英文等效提示。
+4. 下方 Raw JSON textarea 維持唯讀，取得焦點時仍會自動全選，方便在所有自動複製路徑失敗時手動按系統複製快捷鍵。
+
+### 技術細節
+
+- `frontend/src/lib/clipboard.ts` 新增 `copyTextToClipboard()`，回傳 `{ ok, method, error }` 結果，讓呼叫端能明確區分成功、fallback 成功與失敗。
+- helper 優先使用 `navigator.clipboard.writeText()`；catch 後不直接失敗，而是繼續走 textarea fallback。
+- `copyTextWithExecCommand()` 會在文件中暫時插入隱藏且唯讀的 textarea，設定 `value`、呼叫 `focus()` / `select()` / `setSelectionRange()`，再執行 `document.execCommand('copy')`，最後一定移除暫存節點。
+- `AnimationEditorTab.tsx` 將原本的 `jsonCopied` boolean 改為 `jsonCopyStatus`，支援 `idle`、`success`、`error` 三態，並用 timer 自動復原狀態；元件卸載時會清除 timer，避免 setState 殘留。
+- `zh-TW.ts` 與 `en.ts` 新增 `play.animation.copyJsonError`，讓失敗提示跟隨 UI 語言顯示。
+- `frontend/src/lib/clipboard.test.ts` 使用 Node 內建 test runner 與 mock document/navigator 覆蓋 Clipboard API 成功、Clipboard API 拒絕後 fallback 成功、兩路徑都失敗，以及 fallback 不可用的純函式情境。
+
+## 批次重生對話框 i18n 與選取頁摘要
+
+### 功能目的
+
+批次重生是播放頁調整簡報時的重要入口，使用者可一次選擇重生圖片、逐字稿、語音或動畫，也可先在側欄挑選特定頁面後只重生這些頁。過去 `RegenAllDialog.tsx` 內的「選擇重生項目」、「僅重生已選取的 N 張投影片」、「圖檔重生提示詞」、「逐字稿重生提示詞」、「提醒：若僅重生逐字稿…」、「再次重生／確認」等文字直接寫成中文，英文介面會在最關鍵的重生流程中混入中文，讓非中文使用者難以判斷按鈕與提示意義。
+
+新版將批次重生對話框主要使用者可見文字改為 `play.regenDialog.*` 翻譯鍵，並把選取頁摘要抽成共用 formatter。這讓對話框會跟隨設定頁的界面語言切換為繁體中文或英文，同時保留既有重生選項、主持模式、提示詞輸入、進度顯示與背景繼續執行行為。
+
+### 使用方式
+
+1. 進入「設定」頁，將「界面文字語言」切換為「繁體中文」或「English」。
+2. 回到任一簡報播放頁，在右側投影片管理區可直接按「重生 / Regenerate」重生全部頁面，或先用 Ctrl/Shift 點選縮圖後只重生選取頁面。
+3. 開啟批次重生對話框後，頁面摘要會依選取狀態顯示：
+   - 未選取頁面：顯示重生全部投影片。
+   - 單頁選取：顯示只重生該頁。
+   - 多頁選取：自動去重並依頁碼由小到大排序顯示。
+4. 勾選要重生的項目，例如圖片、逐字稿、語音或動畫；若選擇逐字稿或語音，可選擇單人旁白或雙人對談主持模式。
+5. 需要時填寫圖片重生提示詞或逐字稿重生提示詞，再按「確認 / Confirm」。重生完成後同一按鈕會顯示「再次重生 / Regenerate again」。
+
+### 技術細節
+
+- `RegenAllDialog.tsx` 引入 `useI18n()`，將對話框標題、說明、重生選項、主持模式、提示詞欄位、警告提示與按鈕文字改為 `play.regenDialog.*` 翻譯鍵。
+- `formatters.ts` 新增 `formatRegenSelectedPagesSummary()`，輸入 deck 總頁數、選取頁集合與翻譯函式後，統一回傳本地化摘要。
+- formatter 會將選取頁轉為 `Set` 去重、過濾非有限數字並排序，避免側欄選取順序影響摘要文字。
+- `zh-TW.ts` 與 `en.ts` 新增完整中英文翻譯；中文多頁頁碼使用「、」，英文使用 comma separator。
+- `formatters.test.ts` 新增空集合、單頁、多頁排序與去重測試，確保摘要規則可在不啟動 React UI 的情況下驗證。
+- 這次未改 `onConfirm`、`onRegenOptionsChange`、`onHostModeChange` 或 `RegenerateProgress` 的資料流，只替換文字來源並抽出可測 formatter。
+
+## 播放頁側欄、來源管理與系統資料 i18n 補齊
+
+### 功能目的
+
+播放頁除了頁首以外，右側投影片管理與下方來源/系統資料分頁也是製作簡報時最常使用的控制區。過去「投影片管理」、「重生」、「新增多頁」、「已選 N 頁將重生」、「來源管理」、「新增 TXT/PDF 來源」、「目前來源清單」、「生成記錄」與系統資料中的狀態、耗時、執行歷程等 label 多數直接寫在元件內。當使用者把界面語言切到 English 時，播放頁仍會在同一畫面混用大量中文，尤其是來源管理和系統資料表格，容易讓英文使用者誤以為功能尚未完整支援。
+
+新版將這些主要使用者可見文字改為中英文翻譯鍵，讓播放頁側欄、來源管理與系統資料能跟隨全站界面語言切換。這次只調整文字來源，不改資料流與互動事件，因此既有 Ctrl/Shift 投影片多選、縮圖拖曳、來源內容展開、生成 prompt 展開、YouTube audio source 播放、執行歷程展開與最慢素材排行顯示都維持原本操作方式。
+
+### 使用方式
+
+1. 進入「設定」頁，在「界面文字語言」選擇「繁體中文」或「English」。
+2. 回到任一簡報播放頁，右側「問答」欄上方的投影片管理區會依語言顯示：
+   - 投影片管理標題。
+   - 重生、啟動中、重生中、新增、刪除、新增多頁。
+   - Ctrl/Shift 多選提示、已選頁數摘要、清除選取。
+   - 縮圖 title/alt、拖曳重排提示、設定目前頁為封面。
+3. 在播放頁下方切到「來源 / Sources」分頁，可以用目前 UI 語言操作：
+   - 新增 TXT 來源與上傳 PDF 來源。
+   - 填寫來源名稱、貼上來源文字內容。
+   - 查看目前來源清單、未命名來源、無內容狀態。
+   - 展開/收合來源內容；YouTube audio source 仍會顯示可播放的 audio controls。
+   - 查看本頁生成記錄，展開圖片生成提示、逐字稿生成提示或語音合成參數。
+4. 切到「系統資料 / System data」分頁，可以用目前 UI 語言查看：
+   - PDF ID、狀態、原始檔名、頁數、TTS、目前頁狀態、建立時間與更新時間。
+   - 圖片、文字、講稿、語音的狀態、耗時與 SLA。
+   - 執行歷程的 run type、attempt、狀態、階段、耗時與 LLM 用量。
+   - 最慢素材排行的頁碼、素材、狀態、耗時與 SLA。
+
+### 技術細節
+
+- `PlayPageSidebar.tsx` 既有 `useI18n()` 現在用於 `play.sidebar.*` 翻譯鍵，涵蓋投影片管理標題、按鈕、縮圖 title/alt、載入/無圖片、選取摘要、多選提示與封面設定。
+- `PlayPageSlidePanel.tsx` 將來源管理相關文案抽到 `play.source.*`，包含來源 tab、管理標題、TXT/PDF 新增說明、placeholder、來源清單、空狀態、生成記錄與 prompt stage label。
+- `PlayPageSlidePanel.tsx` 將系統資料相關 label 抽到 `play.system.*`，並把 run type、run status、pipeline stage、stage status 改成 `TranslationKey` 對應表，再透過 `t()` 顯示。
+- 素材名稱重用既有 `play.timing.artifact.*` 翻譯鍵，避免 image/text/script/audio 在不同區塊出現不一致文案。
+- 這次未改 `setRegenSelectedPages()`、`setExpandedSourceId()`、`setExpandedGenPrompt()`、`withShareToken()` 或 `<audio controls>` 的行為，只替換文字與 label 來源。
+- `zh-TW.ts` 與 `en.ts` 新增相同 key，讓 `TranslationKey` 型別在 typecheck 時確認中英文 locale 都有對應文案。
+- 已執行 frontend typecheck，並用 grep 掃描 `PlayPageSidebar.tsx` 與 `PlayPageSlidePanel.tsx` 中本次目標的主要硬編碼中文；結果只剩註解與非本次 TODO 目標的逐字稿重生文案。
+
+## 播放頁頁首與課堂同步區 i18n 補齊
+
+### 功能目的
+
+播放頁頁首是使用者進入簡報後最常操作的區域，包含返回首頁、更新或重新生成標題、切換同步模式、follower 向 master 提問、master 顯示問題與觸發 AI 總結回答、全螢幕播放、影片產生、講義 PDF 下載、GitHub 同步與分享連結管理。過去這些文字多數直接寫在 `PlayPageHeader.tsx` 中，即使使用者把界面語言切到 English，頁首和同步區仍會混用中文，導致英文介面不完整，也讓後續維護翻譯時不容易確認是否漏鍵。
+
+新版將頁首和課堂同步區的主要使用者可見文字改為 `useI18n()` 讀取 `zh-TW.ts` / `en.ts` 翻譯鍵。這讓播放頁的核心控制列能跟隨全站 UI 語言切換，同時保留既有分享、同步模式、影片產生、全螢幕與重生任務 banner 行為。
+
+### 使用方式
+
+1. 進入「設定」頁，在「界面文字語言」選擇「繁體中文」或「English」。
+2. 回到任一簡報播放頁，頁首會依目前 UI 語言顯示：
+   - 返回、頁碼、標題更新與重新生成按鈕。
+   - 同步模式切換、follower 問題輸入框、送出問題按鈕。
+   - master 端的 follower 問題數、顯示最新問題、AI 總結回答按鈕。
+   - 全螢幕圖片/字幕/編輯模式、語音設定、圖片風格、影片產生與下載。
+   - 講義 PDF、GitHub 同步、分享連結權限與 private 控制。
+3. 切換語言後不需重新產生簡報；既有播放資料、分享權限、同步角色、影片 URL 與全螢幕 layout 狀態都維持原本流程。
+4. 若課堂中使用同步模式，英文介面的 follower 會看到英文問題 placeholder 與送出按鈕，master 會看到英文的問題摘要與 AI 回答控制；中文介面則維持原本繁體中文語意。
+
+### 技術細節
+
+- `PlayPageHeader.tsx` 引入 `useI18n()`，把原本硬編碼中文替換為 `play.header.*`、`play.sync.*`、`play.share.*`、`play.regenBanner.*` 翻譯鍵。
+- 動態文字仍保留原本資料來源與行為：頁碼以 `{current}` / `{total}` 置換，follower 問題數以 `{count}` 置換，頁面失敗與重生目前頁使用 `{page}` 置換。
+- 分享權限 select 仍使用既有 `ShareAccessMode` 值 `read_only` / `editable`，只替換 option label；建立分享連結、設為 private、同步 GitHub、影片產生、全螢幕 layout 切換等 handler 未改變。
+- 同步模式區塊仍沿用既有 `syncRole`、`syncFollowerQuestions`、`handleSubmitFollowerQuestion()`、`handleToggleDisplayedQuestion()` 與 `handleAiAnswerFollowerQuestions()`；只將 placeholder、按鈕與狀態文字改為翻譯鍵。
+- `zh-TW.ts` 與 `en.ts` 新增完整中英文文案，讓 `TranslationKey` 型別可在編譯期檢查新增 key 是否存在。
+- 新增 `frontend/src/i18n.test.ts`，檢查英文與繁體中文 locale dictionary key 完全一致，並確認播放頁頁首與同步區的關鍵翻譯鍵在兩種語言中都存在且非空。
+
+## 2026-06-18 TODO 再次重新檢視與新增方向
+
+### 檢視目的
+
+本次依照 `LOOP.md` 的規則，在 `TODO.md` 已沒有未完成項目時，再次檢查目前主要前端、後端與既有 `BLOG.md` 功能紀錄，補上一批偏小型、可分次完成、容易驗證，且對使用者有直接價值的改進。檢查時特別避開近期已完成的首頁排序/搜尋、卡片語音長度、ZIP 匯入提示詞、YouTube 字幕快速選項、播放進度清除、耗時摘要、分享權限、縮圖模式、高橋流提示詞、重生進度 i18n、圖表素材批次、測驗重設、分類重新命名、後端 log 遮罩與上傳取消控制，避免重複既有 TODO 或 BLOG 項目。
+
+### 新增待辦方向
+
+- **播放頁英文介面完整度**：`PlayPageHeader.tsx`、`PlayPageSidebar.tsx` 與 `RegenAllDialog.tsx` 仍有許多硬編碼中文，新增三個可分批完成的 i18n 待辦，優先處理頁首/同步區、側欄/來源管理、批次重生對話框。
+- **複製操作可靠性**：`AnimationEditorTab.tsx` 的 Raw JSON 複製只處理 Clipboard API 成功路徑，新增 clipboard fallback 與失敗狀態待辦，讓非安全來源或權限受限環境也有可理解的回饋。
+- **前端 console 降噪**：播放頁貼上圖片與拖曳重排仍有 `console.info/warn` 偵錯輸出，新增待辦要求移除或改成明確 gated debug helper，降低一般操作時的 console 噪音。
+- **來源管理小型效率改進**：來源清單可展開內容但缺少快速複製與收合控制，新增「複製內容」與「全部收合」待辦，不需改 API 或資料庫即可提升整理與引用來源文字的效率。
+
+### 檢查依據
+
+- 文件：`LOOP.md`、`TODO.md`、`BLOG.md`。
+- 主要前端：`PlayPageHeader.tsx`、`PlayPageSidebar.tsx`、`PlayPageSlidePanel.tsx`、`RegenAllDialog.tsx`、`AnimationEditorTab.tsx`、`ShareDialog.tsx`、`SettingsPage.tsx`。
+- 主要後端：`backend/src/routes/pdfs/sync.ts`、`backend/src/routes/pdfs/handout.ts`，以及 `backend/src` 內 `console.*` 掃描結果。
+
+## PDF 上傳取消控制
+
+### 功能目的
+
+大型 PDF 或網路較慢時，使用者開始上傳後過去只能等待 XHR 結束，若選錯檔案、發現匯入模式選錯，或只是想暫停操作，缺少明確的中止入口。雖然底層 `uploadPdf()` 已支援 `AbortSignal` 並會在 XHR abort 時回傳 `ABORTED`，但上層 `UploadButton.tsx` 尚未建立 `AbortController`，因此使用者流程無法真正取消上傳。
+
+新版在 PDF 上傳進度顯示期間新增「取消上傳 / Cancel upload」按鈕。每次選擇 PDF 並開始上傳時，前端會建立新的 `AbortController` 並把 `signal` 傳給既有 `uploadPdf()`；點擊取消會中止目前 XHR、清空進度條與 file input。當錯誤碼是 `ABORTED` 時，畫面會顯示「已取消上傳。你可以重新選擇 PDF 再試一次。」這類友善訊息，而不是一般的「上傳失敗」錯誤與疑難排解清單。
+
+### 使用方式
+
+1. 在首頁點擊「上傳 PDF」，選擇「簡報逐頁處理」或「一般文件 AI 分頁」，再選取 PDF 檔案。
+2. 上傳開始後，按鈕文字會顯示目前百分比，旁邊會出現進度條與「取消上傳」按鈕。
+3. 如果選錯檔案、想改匯入模式，或不想繼續等待，點擊「取消上傳」。
+4. 系統會立即要求瀏覽器中止 XHR，上傳進度會歸零，隱藏檔案輸入欄位也會重設，因此可以再次選擇同一個 PDF 或改選其他 PDF。
+5. 取消後若要重新上傳，直接再次點擊「上傳 PDF」並重新選檔即可；取消動作不會新增簡報，也不會呼叫額外 API。
+
+### 技術細節
+
+- `UploadButton.tsx` 新增 `uploadAbortControllerRef`，每次 `handleChange()` 開始 PDF 上傳時建立 `new AbortController()`，並將 `abortController.signal` 傳給 `uploadPdf(file, opts)`。
+- 進度列旁新增取消按鈕，`handleCancelUpload()` 會呼叫目前 controller 的 `abort()`，並同步 `setProgress(0)` 與清空 `fileInputRef.current.value`。
+- `finally` 區塊只在 ref 仍指向本次 controller 時清除 ref，避免未來若流程擴充為可重入時誤清掉新上傳控制器；同時維持既有上傳完成/失敗後重設 `isUploading` 與進度的行為。
+- `ApiError` code 為 `ABORTED` 時改走專用分支，使用 `upload.uploadCanceled` i18n 文字並清空 `recoveryGuide`，避免將使用者主動取消誤判為網路或後端錯誤。
+- `zh-TW.ts` 與 `en.ts` 新增 `upload.uploadProgress`、`upload.cancelUpload`、`upload.uploadCanceled`，補齊中文與英文介面文字。
+
+## 後端 LLM / TTS 偵錯記錄遮罩與降噪
+
+### 功能目的
+
+後端在產生逐字稿、文字匯入生圖、YouTube 大綱、OpenAI Chat JSON 與 TTS 語音合成時，過去有多處直接使用 `console.log` 印出 system prompt、image payload、raw response、rawContent、hex/binary 內容或音訊 segment 文字。這些資訊在除錯時有幫助，但也可能包含 API key、Bearer token、使用者 prompt、投影片原文、逐字稿、字幕、base64 圖片或音訊 buffer；在正式環境中會造成 log 過大、難以搜尋，也增加敏感資料外洩風險。
+
+新版改為集中使用 `logger.debug/info/warn` 並透過後端遮罩 helper 產生可診斷但不洩漏內容的摘要。預設保留 `pdfId`、`pageNumber`、`stage`、`model`、`latencyMs`、`usage`、`promptLength`、`bytes`、`chars`、`requestId` 等欄位，讓維運仍能追蹤哪個階段慢、哪次請求失敗、token 用量與 response shape；但 prompt 原文、script/text/input、API key、raw response、大型 binary/base64/hex 只會以 `[redacted]`、`[redacted-large-content]` 或 `{ redacted: true, chars/bytes }` 摘要呈現。
+
+### 使用方式
+
+1. 一般使用者不需要調整任何設定；後端產生簡報、YouTube 匯入、TTS 與 OpenAI/Gemini LLM 流程會自動使用遮罩後的 logger 輸出。
+2. 開發者若需要追查 LLM 或 TTS 問題，請查看後端 logger 的 `debug` / `info` / `warn` 訊息：
+   - `generateScript: system prompt prepared` 只顯示 system prompt 字數摘要，不顯示完整 prompt。
+   - `Text image generation: OpenAI image request prepared` 顯示模型、尺寸、品質、timeout 與 promptLength，不輸出 image prompt 原文。
+   - `synthesizeAudio: tts segment request` 顯示 segment 字數、voice、provider 與語氣標記，不輸出逐字稿段落全文。
+   - `OpenAI raw response received` 顯示 status、headers、bytes 與短 body preview，且會遮罩 API key、Bearer token、data URL、hex/base64 大內容。
+3. 若新增任何後端 LLM、TTS、圖片或外部 API 偵錯記錄，應優先使用 `redactLogObject()` 包裝整個 log metadata，或使用 `redactPromptForLog()` / `redactTextForLog()` 處理 prompt、script、caption、rawContent 等文字欄位。
+4. 若真的需要完整 prompt 或 response 進行離線分析，請使用既有資料庫/檔案中的專用 prompt 保存與 LLM usage log 流程，避免把原文直接寫到一般應用 log。
+
+### 技術細節
+
+- 新增 `backend/src/services/logSanitizer.ts`，集中定義敏感 key 規則與內容規則：`apiKey`、`authorization`、`token`、`secret`、`prompt`、`input`、`text`、`script`、`payload`、`rawContent`、`b64_json`、`base64`、`hex`、`audio`、`buffer`、`dataUrl`、`url` 等欄位會遮罩或摘要化。
+- `redactLogObject()` 會遞迴處理物件與陣列，對 Buffer / Uint8Array / ArrayBuffer 只保留 bytes 與型別；對大型 base64、data URL、長 hex 字串改為 `[redacted-large-content]`；對 API key 與 Bearer token 改為 `[redacted]`。
+- `redactPromptForLog()` 與 `redactTextForLog()` 會回傳 `{ redacted: true, chars, preview? }`。短文字可保留極短 preview 供分辨 segment，較長 prompt/script 則只保留字數，避免原文進入 log。
+- `generateScript.ts`、`renderTextPagesWithLlm.ts`、`synthesizeAudio.ts`、`pipeline.ts` 與 `backend/src/services/openai.ts` 已移除目標高噪音 `console.log`，改為 `logger.debug/info/warn` 且套用遮罩摘要。
+- `backend/test/log-sanitizer.test.ts` 覆蓋 API key、prompt 原文、raw response、大型 base64/hex 內容不出現在序列化 log 中，同時確認 `latencyMs` 與 `requestId` 等必要診斷欄位仍保留。
+
+## 首頁自訂分類重新命名
+
+### 功能目的
+
+首頁原本已能新增自訂分類、刪除分類，也能在每張簡報卡片上把簡報移到不同分類；但如果分類名稱打錯，使用者只能新增一個正確名稱的新分類，再逐份把簡報搬過去，最後刪除舊分類。簡報數量一多時，這個流程耗時且容易漏搬。
+
+新版在首頁每個自訂分類標題旁加入「重新命名類別 / Rename category」按鈕。重新命名會同時更新本機 `customCategories` localStorage 與目前清單中屬於該分類的簡報資料，讓分類名稱修正變成一次操作即可完成。
+
+### 使用方式
+
+1. 在首頁以「顯示類別」選擇特定分類，或在全部類別視圖中找到要更名的自訂分類區塊。
+2. 在分類標題旁點擊「重新命名類別」。`general` 與「最近的簡報」不是自訂分類，不會顯示重新命名按鈕。
+3. 在彈出的輸入框中填入新的分類名稱並確認。
+4. 若新名稱空白、和原名稱相同，系統不會做任何變更；若新名稱已存在，會顯示分類已存在的 toast。
+5. 成功後，首頁會把目前清單中所有原分類簡報更新到新分類，並顯示「已將 A 重新命名為 B，並更新 N 份簡報」的 toast。
+6. 如果使用者目前正在篩選被重新命名的分類，篩選值會自動切到新分類名稱，不需要手動重新選擇。
+7. 若只有部分簡報更新失敗，系統會顯示部分失敗 toast，並重新載入首頁清單，避免畫面和後端資料不一致。
+
+### 技術細節
+
+- `HomePage.tsx` 新增 `renamingCategory` 狀態與 `handleRenameCategory()`，重新命名期間停用該分類按鈕並顯示「重新命名中…」。
+- 新分類名稱會先檢查空白、未變更與 `allCategories` 重複，避免建立同名分類。
+- `persistCustomCategories()` 會將舊分類替換成新分類，並確保新名稱被寫入 `makeslide.home.customCategories`；若舊分類原本只來自簡報資料而不在 localStorage，也會把新名稱加入自訂分類清單。
+- 目前清單中同分類簡報會逐一呼叫既有 `updatePdfCategory(pdf.id, nextCategory)`，不新增後端 API，也不改資料庫 schema。
+- 重新命名成功時會樂觀更新 `items` 內已成功回傳的簡報分類；如果目前 `categoryFilter` 是舊分類，會同步更新 `makeslide.home.categoryFilter` 為新分類。
+- 批次更新使用 `Promise.allSettled()` 辨識部分失敗；只要有任一簡報更新失敗，就顯示部分失敗訊息並呼叫 `load({ silent: true })` 重新載入清單。
+- `zh-TW.ts` 與 `en.ts` 新增 `home.renameCategory`、`home.renamingCategory`、`home.renameCategoryPrompt`、`home.categoryRenamed`、`home.categoryRenamePartialFailed`、`home.renameCategoryFailed`，補齊中英文介面與 toast 文案。
+
+## 課堂測驗重設作答
+
+### 功能目的
+
+課堂同步測驗的 follower 作答狀態保存在前端 `QuizBuilderPage.tsx` 的 `studentAnswers`。過去學生如果想重新練習同一份測驗，或老師在課堂示範時切換測驗後又回到同一份測驗，已選過的選項需要逐題手動取消；若測驗已經提交過，前端的提交防重複 ref 也可能讓同一個同步 session 的後續重新提交被擋下。
+
+新版在學生作答區加入「重設作答 / Reset answers」按鈕，讓 follower 可以一鍵清空本次作答、重置提交防重複狀態，並立即向既有同步進度 API 回報 `answered_count=0`。此功能只調整前端狀態與既有進度回報流程，不修改資料庫 schema，也不新增後端 API。
+
+### 使用方式
+
+1. 老師以 master 身分在測驗列表按下「開始測驗」，follower 會進入學生作答區。
+2. follower 作答時，如果想重新練習或清除本次所有選項，點擊作答區右上角的「重設作答」按鈕。
+3. 系統會立即清空目前所有題目的選項，畫面上 radio / checkbox 會回到未選狀態。
+4. master 端「測驗中的學員」進度會透過既有同步進度 API 更新為 `0 / 題數`，不需要重新整理頁面。
+5. 若之後老師顯示答案或結束測驗，因為提交防重複 ref 已重置，follower 重新作答後仍可再次提交本次答案，不會被舊的 session 提交記錄擋住。
+6. 若回報重設進度失敗，學生作答畫面會顯示同步錯誤訊息；下一次答案狀態變動仍可重新觸發既有進度回報。
+
+### 技術細節
+
+- `QuizBuilderPage.tsx` 新增 `resetStudentAnswersBusy` 狀態與 `handleResetStudentAnswers()`，避免重設進度回報期間重複點擊。
+- `handleResetStudentAnswers()` 會執行三個前端狀態重置：`setStudentAnswers({})` 清空作答、`submittedAttemptRef.current = null` 解除同一 session 防重複提交、更新 `latestAttemptSnapshotRef.current.answers = {}` 避免後續提交仍帶到舊答案快照。
+- 重設後立即呼叫既有 `submitSyncQuizProgress(pdfId, clientId, payload)`，payload 使用目前 active quiz id、`answered_count: 0`、`total_questions: activeQuiz.questions.length`、`submitted: false`。
+- 成功回報時同步更新 `lastReportedProgressRef.current` 為 0 題，避免 debounce 進度 effect 立刻送出重複請求；失敗時將該 ref 清為 `null`，讓後續狀態變動可以重新回報。
+- `zh-TW.ts` 與 `en.ts` 新增 `quiz.resetAnswers`、`quiz.resetAnswersBusy`、`quiz.resetAnswersHint`、`quiz.resetAnswersDone`、`quiz.resetAnswersFailed`，讓中英文介面都有一致的按鈕、提示與錯誤文案。
+
+## 圖表素材全部使用／全部排除批次操作
+
+### 功能目的
+
+播放頁的「圖表素材」分頁會列出目前投影片對應 PDF 頁面中偵測到的 extracted figures，並以 `PageFigure.excluded` 控制每張圖是否要作為「重新生成圖片」時的參考素材。原本使用者只能逐張勾選或取消勾選；當一頁含有大量小圖、公式、截圖或圖表時，若想先全部納入再排除少數項目，或先全部排除再挑少數關鍵圖，會需要大量重複點擊。
+
+新版在圖表清單上方加入「全部使用」與「全部排除」兩個小按鈕，讓使用者可以一鍵套用本頁所有圖表的參考狀態。這項功能不改變後端資料模型，也不新增 API，而是沿用既有的整頁選擇儲存流程一次寫回，降低操作時間並維持和逐張切換相同的儲存語意。
+
+### 使用方式
+
+1. 進入播放頁，切換到「圖表素材」分頁。
+2. 若目前頁面有偵測到圖表，清單上方會出現兩個批次按鈕：
+   - `全部使用` / `Use all`：將本頁所有圖表設為可作為圖片重生參考，也就是把所有 `PageFigure.excluded` 設為 `false`。
+   - `全部排除` / `Exclude all`：將本頁所有圖表排除在圖片重生參考之外，也就是把所有 `PageFigure.excluded` 設為 `true`。
+3. 點擊任一批次按鈕後，畫面會立即反映新的勾選狀態，並透過既有 `savePageFigureSelection(pdfId, pageNumber, excludedIds)` 一次儲存整頁 excluded ids。
+4. 批次儲存期間，批次按鈕與單張圖表 checkbox 會暫時停用，避免同時送出多個互相覆蓋的選擇。
+5. 若儲存失敗，畫面會復原到按下批次按鈕前的狀態，並顯示既有「儲存圖表選擇失敗，請稍後再試」/ `Failed to save figure selection, please try again` 文案。
+6. 在 read-only 分享或唯讀處理模式下，批次按鈕會停用，避免唯讀使用者修改圖表參考設定。
+
+### 技術細節
+
+- `FigureAssetsTab.tsx` 新增 `savingBatch` 狀態，批次儲存期間停用批次按鈕與每張圖表的 checkbox。
+- `saveAllFigures(excluded)` 會先保留前一份 `figures`，再樂觀更新整頁圖表狀態；成功時沿用更新後狀態，失敗時 `setFigures(previous)` 復原 UI。
+- 批次儲存仍使用 `savePageFigureSelection(pdfId, pageNumber, excludedIds)`，其中 `excludedIds` 由更新後所有 `excluded === true` 的圖表 id 組成，因此「全部使用」會送出空陣列，「全部排除」會送出本頁所有圖表 id。
+- `zh-TW.ts` 與 `en.ts` 新增 `play.figures.useAll`、`play.figures.excludeAll`，沿用元件既有 `useI18n()`，讓中英文介面都顯示本地化按鈕文字。
+- 錯誤處理沿用既有 `play.figures.saveError` 文案；當已有圖表資料時錯誤會顯示在清單上方，同時保留復原後的圖表清單供使用者確認。
+
+## 重生進度元件 i18n 與英文介面
+
+### 功能目的
+
+播放頁的批次重生進度元件原本把「重生進度」、「逐字稿／語音／圖檔／動畫」、「等待中／執行中／已完成／失敗」、「預估剩餘」等文案直接寫在 `RegenerateProgress.tsx` 中。當使用者把界面語言切換成英文時，其他播放頁功能會跟著翻譯，但重生進度仍顯示中文，讓英文介面使用者不容易理解目前正在重產哪個步驟、是否完成或失敗，以及 ETA 代表什麼。
+
+新版將重生進度所有 UI 文案接入既有 i18n 系統，讓播放頁在 `zh-TW` 與 `en` 之間切換時，重生進度卡片也會同步顯示對應語言，同時保留原本的進度百分比、步驟順序、預估剩餘時間與預計完成時間。
+
+### 使用方式
+
+1. 在設定頁將「界面文字語言」切換為繁體中文或 English。
+2. 回到播放頁，使用「重生全部」或相關重產操作啟動批次重生任務。
+3. 重生進度卡片會依目前界面語言顯示：
+   - 中文：`重生進度`、`逐字稿`、`語音`、`圖檔`、`動畫`、`等待中`、`執行中`、`已完成`、`失敗`、`預估剩餘`。
+   - 英文：`Regeneration progress`、`Transcript`、`Audio`、`Images`、`Animations`、`Pending`、`Running`、`Completed`、`Failed`、`Estimated remaining`。
+4. 每個步驟仍維持原本顯示邏輯：待處理顯示等待中、失敗顯示錯誤訊息、執行或完成顯示 `{completed}/{total} ({ratio}%)`，目前步驟會額外顯示 ETA。
+5. 若後端回傳 `estimated_completion_at`，卡片會在 ETA 後方顯示預計完成時間；若仍無 ETA，會顯示本地化的「計算中 / calculating」。
+
+### 技術細節
+
+- `RegenerateProgress.tsx` 改用 `useI18n()` 取得 `t()`，並以 `STEP_LABEL_KEYS` 將 `script`、`audio`、`image`、`animation` 對應到 `play.regenerate.step.*` 翻譯鍵。
+- `zh-TW.ts` 與 `en.ts` 新增 `play.regenerate.*` 翻譯鍵，涵蓋任務狀態、步驟狀態、步驟計數、ETA、完成時間、錯誤 fallback 與進行中 suffix。
+- `formatters.ts` 新增 `formatRegenerateJobStatus()`、`formatRegenerateStepStatus()`、`formatRegenerateEtaSummary()` 與 `formatRegenerateEta()`，讓狀態字串與 ETA 文案可用純函式測試，並避免元件內堆疊多層條件字串。
+- `formatRegenerateEta()` 保留原本秒、分秒、小時分鐘的計算規則，只把單位與「約 / about」交給翻譯鍵處理。
+- `formatters.test.ts` 新增 running/completed/failed 狀態文字與 ETA 格式測試，確保後續調整翻譯或狀態支援時不會回歸成硬編碼中文。
+
+## 2026-06-18 TODO 重新檢視與新增方向
+
+### 檢視目的
+
+本次依照 `LOOP.md` 的規則，在 `TODO.md` 已沒有未完成項目時，重新檢查目前主要前端、後端與既有功能紀錄，補上一批可分次完成、範圍偏小、容易驗證且對使用者有直接價值的改進項目。檢查時特別避開近期已完成的首頁排序/搜尋、卡片語音長度、ZIP 匯入提示詞、YouTube 字幕快速選項、播放進度清除、耗時摘要、縮圖模式、分享權限與高橋流提示詞支援等項目，避免重複排程。
+
+### 新增待辦方向
+
+- **介面國際化與一致性**：`RegenerateProgress.tsx` 仍有中文硬編碼，新增待辦要求補齊中英文 i18n，讓英文介面使用者在重生頁面時也能理解狀態。
+- **批次操作減少重複點擊**：`FigureAssetsTab.tsx` 目前逐張切換圖表參考素材，新增「全部使用／全部排除」待辦，讓圖表很多的頁面可快速整理。
+- **課堂互動可重練**：`QuizBuilderPage.tsx` 的學生作答狀態可在前端清空，新增「重設作答」待辦，方便同一份測驗重練或課堂示範。
+- **首頁整理能力補強**：首頁已有分類新增/刪除與簡報搬移，但缺少重新命名分類，新增待辦讓分類名稱修正不必手動搬移每份簡報。
+- **後端可觀測與隱私風險降低**：後端 worker 與 OpenAI service 仍有多處 `console.log` 直接輸出 prompt/payload/raw response，新增待辦要求改為遮罩後的 logger 輸出。
+- **長時間上傳可中止**：`uploadPdf()` 已有 `AbortSignal` 能力，新增待辦把取消上傳按鈕補到 `UploadButton.tsx`，改善大型 PDF 上傳或選錯檔案時的體驗。
+
+### 檢查依據
+
+- 文件：`TODO.md`、`BLOG.md`、`LOOP.md`。
+- 主要前端：`HomePage.tsx`、`RegenerateProgress.tsx`、`FigureAssetsTab.tsx`、`QuizBuilderPage.tsx`、`UploadButton.tsx`、`frontend/src/lib/api/uploads.ts`。
+- 主要後端：`backend/src/routes/pdfs/sync.ts`，以及後端 worker / OpenAI 呼叫流程中仍存在直接 `console.log` 的檔案。
+
+## 高橋流 / 極簡大字投影片提示詞支援
+
+### 功能目的
+
+MakeSlide 的講稿生成預設會盡量讀懂投影片圖像、銜接前後頁、把內容講清楚，並在內容不足時適度補足語氣與轉場。這對一般教學簡報很有幫助，但若使用者想製作高橋流（Takahashi method/style）或類似「每頁只放一兩個重點、極簡大字、少字強節奏」的投影片，原本的一般規則可能會把太多條列、圖表細節或背景補充重新塞回逐字稿，造成每頁資訊量過高。
+
+新版在提示詞組裝時加入明確的極簡風格偵測與優先規則：只要使用者 prompt 明確提到高橋流、Takahashi method/style、每頁只放一兩個重點、極簡大字投影片、少字等類似需求，系統會優先降低每頁重點數與文字量，避免一般模式的「完整講解」規則覆蓋掉使用者指定風格。沒有這類明確要求時，仍維持原本一般模式品質。
+
+### 使用方式
+
+1. 匯入 PDF、文字、YouTube 或新增簡報後，在開始處理前的提示詞欄位輸入風格需求。
+2. 若要啟用高橋流 / 極簡模式，可使用例如：
+   - `請用高橋流，每一頁只放一兩個重點，字要大。`
+   - `Use Takahashi style. One or two key points per slide.`
+   - `做成極簡大字投影片，文字越少越好。`
+   - `每頁最多兩個重點，不要逐條解釋所有細節。`
+3. 產生逐字稿時，系統會只挑每頁 1～2 個最核心重點，省略次要條列、案例、背景補充與逐項解釋。
+4. 若原始投影片或文字內容很多，模型仍會讀取內容以判斷核心訊息，但不會把所有細節都講出來。
+5. 若想回到一般教學模式，只要不要在使用者 prompt 中要求高橋流、極簡大字、每頁一兩個重點或少字風格即可；一般模式仍會完整濃縮並清楚講解投影片。
+
+### 技術細節
+
+- `generateScript.ts` 新增 `isMinimalSlideStyleRequested()`，以正規表示式偵測 `高橋流`、`Takahashi method/style`、`每頁只放一兩個重點`、`極簡大字`、`少字`、`one or two key points per slide`、`big type slides` 等中英文提示。
+- 初稿 prompt 組裝新增高橋流 / 極簡大字模式優先規則；當偵測命中時，明確要求模型在與「充分利用圖像」、「適度展開」、「補足轉場」等一般規則衝突時，優先遵守低資訊密度風格。
+- 字數限制提示在極簡模式下改為「建議更短、最多仍不可超過一般上限」，並明確要求不要為了達到原本目標字數而補細節或灌水。
+- 整份逐字稿重寫 pass 也同步加入極簡規則，避免初稿已變短後，又被重寫流程補回次要細節或強制補到原本字數下限。
+- OpenAI 與 Gemini 的單人 / 雙人 prompt 模板，以及 user style partial 都補上相同語意，確保不同 TTS provider 與 host mode 都能遵守使用者指定的極簡風格。
+- 新增 `minimal-slide-style.test.ts`，覆蓋高橋流、Takahashi style、極簡大字、每頁最多兩個重點等命中案例，以及一般教學詳細提示不誤判的案例。
+
+## 每份簡報獨立分享狀態與跨帳號列表可見性
+
+### 功能目的
+
+分享功能現在以「每一份簡報」為單位管理公開狀態，而不是只產生一條可存取連結。每份簡報都可維持 `private`，或在建立分享連結時切換為 `read-only` / `read-write`。當簡報被設為 `read-only` 或 `read-write` 後，除了既有分享連結仍可使用之外，其他已登入帳號也會在首頁列表看到這份簡報，方便團隊、課堂助教或共用工作站直接從清單開啟，不必每次重新貼連結。
+
+### 使用方式
+
+1. 進入要分享的簡報播放頁。
+2. 在頁首分享控制選擇：
+   - `read-only（列表可見）`：其他帳號會在首頁列表看到簡報，可瀏覽與播放，但不能修改標題、分類、投影片、逐字稿、動畫或重新產生內容。
+   - `read-write（列表可見）`：其他帳號會在首頁列表看到簡報，且可依現有編輯 API 修改內容；AI 相關處理仍會使用該簡報擁有者帳號的設定與金鑰。
+3. 點選「建立分享連結」後，系統會建立或重用同一模式的分享 token，複製分享 URL，並同步把簡報狀態更新為 `public`（read-only）或 `public_editable`（read-write）。
+4. 若要停止跨帳號列表曝光，點選「設為 private」即可把該簡報改回 private；其他帳號之後不會在首頁列表看到它，也無法直接用一般列表入口開啟。
+5. 透過分享連結開啟時仍保留連結本身的權限語意；透過首頁列表開啟 read-only 簡報時，播放頁會自動進入唯讀狀態，避免誤觸修改流程。
+
+### 技術細節
+
+- 後端沿用 `pdfs.visibility` 作為每份簡報分享狀態來源：`private` 對應私有、`public` 對應 read-only、`public_editable` 對應 read-write。
+- `POST /api/pdfs/:id/share` 現在只允許簡報擁有者（或舊資料無擁有者情境）建立分享連結；建立 read-only 連結時會同步設定 `visibility = 'public'`，建立 editable 連結時會同步設定 `visibility = 'public_editable'`，並回傳目前 visibility 供前端更新狀態。
+- `PATCH /api/pdfs/:id/visibility` 改成只有擁有者可變更分享狀態，避免 read-write 協作者把擁有者的簡報改回 private 或改變公開範圍。
+- `GET /api/pdfs` 既有 `canReadPdf()` 過濾會把 `public` 與 `public_editable` 納入其他帳號可讀清單，因此建立分享連結後會自動出現在其他帳號首頁，不需要新增額外關聯表。
+- `canEditPdf()` 仍將 `public` 視為不可編輯、`public_editable` 視為可編輯；標題、分類、頁面、新增來源、重產與動畫等既有寫入 API 會沿用此限制。
+- 前端 `PdfListItem` / `PdfDetail` 型別補上 `owner_sub` 與 `visibility`，首頁點擊 read-only 共享且仍處於 awaiting prompt 的簡報時不會開啟提示詞編輯流程，而是直接進播放頁。
+- 播放頁在沒有 share token 但 `detail.visibility === 'public'` 時，會套用與唯讀分享連結相同的 `shareIsReadOnly`/`isReadOnlyProcessing` 限制，確保列表入口與分享連結入口的修改權限一致。
+
+## 播放頁縮圖模式與全螢幕高解析切換
+
+### 功能目的
+
+過去播放頁在一般播放、預覽與全螢幕都直接載入每頁完整 JPEG；當 PDF 頁面解析度較高時，單頁可能約 1.3MB，導致一般播放頁初次載入、切頁預抓與側欄預覽都佔用較多頻寬與記憶體。新版改為產生較適合播放區尺寸的 749x500 縮圖，並降低 PDF 頁面 JPEG 輸出品質；一般播放與預載優先使用縮圖，只有進入全螢幕時才切換回原全圖，讓日常瀏覽更快，同時保留投影或全螢幕授課時需要的清晰度。
+
+### 使用方式
+
+1. 新匯入或重新產生的 PDF 頁面會自動建立 `pages/<page_uid>.thumb.jpg`，尺寸限制為 749x500 以內並維持原比例。
+2. 在播放頁的一般模式下，主要投影片區會優先載入 `thumbnail_url`，切頁預載也會先抓縮圖，降低初次播放與連續切頁的流量。
+3. 點選播放頁的全螢幕或投影模式後，畫面會改用原本的 `image_url` 全圖，以保留大螢幕顯示品質。
+4. 若開啟的是舊資料、同步資料或匯入資料而尚未存在縮圖，後端 `/api/pdfs/:id/pages/:n/thumbnail` 會在第一次請求時嘗試補產生；前端也會在 `thumbnail_url` 不存在時自動 fallback 到 `image_url`，因此既有簡報仍可正常播放。
+5. 重新替換圖片、重新生成圖片、還原圖片版本或文字/LLM 圖片生成流程都會同步重建縮圖，確保一般播放看到最新內容。
+
+### 技術細節
+
+- 後端 `thumbnails.ts` 將頁面縮圖尺寸從原本小型側欄縮圖調整為 `PAGE_THUMBNAIL_WIDTH_PX = 749`、`PAGE_THUMBNAIL_HEIGHT_PX = 500`，以 `fit: 'inside'` 維持比例並避免放大來源圖。
+- 頁面縮圖 JPEG 品質改為 `62` 並啟用 `mozjpeg`，目標是讓一般播放使用的圖片明顯小於完整頁面 JPEG。
+- PDF 頁面渲染流程 `renderPages.ts` 的完整頁面 JPEG 品質從 `82` 降為 `72`，降低新匯入 PDF 的全圖大小；全螢幕仍使用這份全圖。
+- `PlayPage.tsx` 新增 `playbackImageSrc` 與 `fullscreenImageSrc`：一般播放優先 `thumbnail_url ?? image_url`，全螢幕優先 `image_url ?? thumbnail_url`。
+- `PlayPageSlidePanel.tsx` 改用 `playbackImageSrc` 顯示一般播放投影片；`PlayPageFullscreen.tsx` 改用 `fullscreenImageSrc`，確保全螢幕才載入全圖。
+- `PlayPageContext.tsx` 將兩種圖片來源提供給子元件，避免各元件自行重複判斷，並保留 `targetImageSrc` 作為目前模式的預載目標。
+
 ## 本頁產生耗時總計與異常摘要
 
 ### 功能目的
