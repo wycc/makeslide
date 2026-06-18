@@ -66,7 +66,7 @@
 
 - [x] `VersionHistoryDialog.tsx` 補齊 i18n：目前完全沒有使用 `useI18n()`，「圖片」/「逐字稿」版本歷史標題、「（第 N 頁）」、「載入中…」、「尚無版本記錄」、「點選左側版本以預覽」、「關閉」、「還原中…」、「還原至此版本」皆為硬編碼中文；應改用 `useI18n()` 與新增 `play.versionHistory.*` 翻譯鍵，日期格式維持現有 locale-aware 邏輯。
 
-- [ ] `ShareDialog.tsx` 複製連結按鈕加上 Clipboard fallback：目前直接呼叫 `navigator.clipboard.writeText()`，若瀏覽器不支援 Clipboard API、非安全來源或權限被拒，使用者不會知道複製失敗；應改用既有 `frontend/src/lib/clipboard.ts` 的 `copyTextToClipboard()` helper（先試 Clipboard API、失敗再 fallback 到 textarea/`execCommand`），並在 UI 顯示成功/失敗狀態與 i18n 錯誤提示，失敗時保留可手動選取複製的連結文字。
+- [x] `ShareDialog.tsx` 複製連結按鈕加上 Clipboard fallback：目前直接呼叫 `navigator.clipboard.writeText()`，若瀏覽器不支援 Clipboard API、非安全來源或權限被拒，使用者不會知道複製失敗；應改用既有 `frontend/src/lib/clipboard.ts` 的 `copyTextToClipboard()` helper（先試 Clipboard API、失敗再 fallback 到 textarea/`execCommand`），並在 UI 顯示成功/失敗狀態與 i18n 錯誤提示，失敗時保留可手動選取複製的連結文字。
 
 ---
 
@@ -246,3 +246,7 @@
 - 時間: 2026-06-19 00:55:00 +0800
 - 分支: feature/version-history-dialog-i18n-20260619
 - 內容: 完成「VersionHistoryDialog.tsx 補齊 i18n」。`VersionHistoryDialog.tsx` 新增 `useI18n()`，標題依 `versionHistoryType` 改用 `play.versionHistory.titleImage`/`titleScript`（不再用字串拼接「{圖片|逐字稿}版本歷史」，避免不同語言詞序問題），頁碼後綴改用 `play.versionHistory.pageSuffix` 並以 `.replace('{page}', ...)` 帶入頁碼；「載入中…」、「尚無版本記錄」、「點選左側版本以預覽」、圖片 `alt` 文字、「關閉」、「還原中…」、「還原至此版本」全部改用對應翻譯鍵。`zh-TW.ts`/`en.ts` 新增 10 個 `play.versionHistory.*` 翻譯鍵，並在 `frontend/src/i18n.test.ts` 新增測試驗證皆存在且非空字串。維持 TODO 要求：版本清單日期格式（`new Date(entry.date).toLocaleString('zh-TW', ...)`）保持現有 locale-aware 邏輯不變，不隨界面語言切換。frontend typecheck 通過，既有與新增前端測試（`tsx --test`，128 項）全數通過。
+
+- 時間: 2026-06-19 01:05:00 +0800
+- 分支: feature/share-dialog-clipboard-fallback-20260619
+- 內容: 完成「ShareDialog.tsx 複製連結按鈕加上 Clipboard fallback」。「複製連結」按鈕改用既有 `frontend/src/lib/clipboard.ts` 的 `copyTextToClipboard()` helper 取代直接呼叫 `navigator.clipboard.writeText()`，先試 Clipboard API、失敗時自動 fallback 到 textarea selection + `document.execCommand('copy')`；新增本地 `copyStatus` 狀態，成功時按鈕文字短暫變成「已複製」，失敗時在連結 textarea 下方顯示 i18n 錯誤提示，並保留原本唯讀 textarea 取得焦點即全選的行為供使用者手動複製。發現這個對話框先前完全沒有接上 i18n（與本輪已完成的 TtsDialog/ImageStyleDialog/VersionHistoryDialog 一樣），順帶把標題、說明、複製/關閉按鈕全部改用新增的 `play.shareDialog.*` 翻譯鍵（`title`、`description`、`copyLink`、`copied`、`copyFailed`、`close`）。維持 `onCopySuccess`/`onCopyError` 既有 props 介面不變，呼叫端（`PlayPageDialogs.tsx`）不需修改。`zh-TW.ts`/`en.ts` 補齊對應翻譯，並在 `frontend/src/i18n.test.ts` 新增測試驗證皆存在且非空字串。frontend typecheck 通過，既有與新增前端測試（`tsx --test`，129 項）全數通過。**至此 TODO.md 中所有待辦項目皆已完成，依 LOOP.md 規則下一輪將重新分析程式碼並新增新的待辦項目。**
