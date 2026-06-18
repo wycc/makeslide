@@ -43,6 +43,10 @@ export async function isGithubSyncDirty(pdfId: string, syncedCommit: string): Pr
 const GIT_USER_NAME = 'makeslide';
 const GIT_USER_EMAIL = 'makeslide@local';
 
+// Guards against a stuck git invocation (lock file contention, a hanging
+// hook, a slow/unreachable remote) hanging the calling sync flow forever.
+export const GIT_COMMAND_TIMEOUT_MS = 30_000;
+
 // Track everything in the presentation directory — pages/* (images, audio,
 // scripts, thumbnails, ...), cover.jpg/cover.thumb.jpg and metadata.json —
 // so that syncing a presentation to another machine fully restores it.
@@ -50,9 +54,10 @@ const GIT_USER_EMAIL = 'makeslide@local';
 // and older repos created under a previous, broader ignore list get reset.
 const GITIGNORE_CONTENT = '';
 
-function gitOpts(dir: string) {
+export function gitOpts(dir: string) {
   return {
     cwd: dir,
+    timeout: GIT_COMMAND_TIMEOUT_MS,
     env: {
       ...process.env,
       GIT_AUTHOR_NAME: GIT_USER_NAME,

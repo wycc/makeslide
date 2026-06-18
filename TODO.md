@@ -102,7 +102,7 @@
 
 - [ ] `generateVideo.ts` 合成影片前補上圖片/音訊檔案存在性檢查：`backend/src/worker/steps/generateVideo.ts` 的主迴圈（約 40-58 行）直接把 `pageImagePath()`/`pageAudioPath()` 的結果傳給 ffmpeg（`runCommand(FFMPEG, [...])`），沒有先用 `fs.existsSync()` 確認檔案存在；若某頁的音訊因 TTS 步驟失敗但資料庫狀態未即時反映，ffmpeg 會用底層的「No such file or directory」報錯讓整段影片生成失敗，使用者只會看到不易理解的 ffmpeg 錯誤。應在呼叫 ffmpeg 前檢查兩個檔案是否存在，缺檔時記錄清楚的錯誤訊息並跳過該頁（或讓整體任務以更明確的 error_message 失敗），範圍可只處理這個檢查點。
 
-- [ ] `presentationGit.ts` 的 `git()` 執行補上逾時保護：`backend/src/services/presentationGit.ts` 第 65-68 行的 `git(dir, args)` 直接呼叫 `promisify(execFile)('git', args, gitOpts(dir))`，`gitOpts()` 回傳的選項中沒有 `timeout`；若 GitHub 同步過程中 git 指令因網路、lock 檔或 hook 卡住，會無限期掛起，連帶讓呼叫端（同步流程）一直等待。應在 `gitOpts()` 中加入可配置的 `timeout`（例如 30000ms）並在逾時時拋出清楚的錯誤訊息，補上對應的服務測試或至少手動驗證逾時路徑的錯誤訊息格式。
+- [x] `presentationGit.ts` 的 `git()` 執行補上逾時保護：`backend/src/services/presentationGit.ts` 第 65-68 行的 `git(dir, args)` 直接呼叫 `promisify(execFile)('git', args, gitOpts(dir))`，`gitOpts()` 回傳的選項中沒有 `timeout`；若 GitHub 同步過程中 git 指令因網路、lock 檔或 hook 卡住，會無限期掛起，連帶讓呼叫端（同步流程）一直等待。應在 `gitOpts()` 中加入可配置的 `timeout`（例如 30000ms）並在逾時時拋出清楚的錯誤訊息，補上對應的服務測試或至少手動驗證逾時路徑的錯誤訊息格式。
 
 - [ ] `gemini.ts` 的 TTS 回應解析補上中間層診斷紀錄：`backend/src/services/gemini.ts` 第 393-397 行從 `json?.candidates?.[0]?.content?.parts?.find(...)?.inlineData` 一路用 optional chaining 取出 base64 音訊，任何一層缺漏都只會在最後丟出單一的「Gemini TTS returned empty audio」，沒有記錄是哪一層造成的（例如 `candidates` 是空陣列、或 `parts` 裡找不到 `inlineData`）。應在解析失敗時用 `logger.warn` 記錄實際收到的回應結構摘要（避免記錄完整 base64/敏感內容，可參考既有 `logSanitizer.ts` 的遮罩慣例），讓未來 Gemini API 格式變動時能快速定位問題。
 
@@ -380,3 +380,7 @@
 - 時間: 2026-06-19 09:40:00 +0800
 - 分支: feature/extract-pdf-figures-manifest-parse-20260619
 - 內容: 完成 `extractPdfFigures.ts` 讀取既有 manifest 時的例外處理。新增 `readExistingManifest(pdfId, manifestPath)`：檔案不存在時回傳 `null`；讀取後 `JSON.parse()` 失敗（檔案損毀、空白或截斷）時改為記錄 `logger.warn` 並回傳 `null`，而不是讓未分類的 `SyntaxError` 往外丟出。`extractPdfFigures()` 主流程改用此 helper，`existing` 為 `null` 時會自然走入既有的「manifest 不存在」重新產生流程，行為與設計保持一致。新增 `backend/test/extract-pdf-figures.test.ts` 4 個測試，覆蓋檔案不存在、合法 manifest 正常解析、損毀 JSON、空白檔案四種情境，均驗證回傳 `null`／正確物件而不拋出例外。已執行 typecheck（前後端皆通過）與 `npm test`（324 個測試，306 通過，18 個失敗皆為既有環境性基準，無新增回歸）。
+
+- 時間: 2026-06-19 10:05:00 +0800
+- 分支: feature/presentation-git-timeout-20260619
+- 內容: 完成 `presentationGit.ts` 的 git 指令逾時保護。新增 `GIT_COMMAND_TIMEOUT_MS = 30_000` 常數，並在 `gitOpts(dir)` 回傳值中加入 `timeout: GIT_COMMAND_TIMEOUT_MS`；由於檔案內所有 `execFile('git', ...)` 呼叫（包含 `git()` helper 與 `ensurePresentationRepo`/`commitAllPendingChanges`/`commitPresentationFile(s)`/`pullAndMergeFromGitHub`/`pushPresentationToGitHub`/`getPresentationFileAtCommit`/`restorePresentationFile` 等十餘處）都統一使用 `gitOpts(dir)` 作為選項，這一處修改即可讓所有 git 子行程在卡住（lock 檔、hook 掛起、遠端無回應）時於 30 秒後被強制終止，而不是無限期掛起整個同步流程；各呼叫端原本就有 try/catch 將逾時視為一般失敗（non-fatal warning 或往外拋出 502），行為與既有錯誤處理路徑一致。為了讓修改可被測試，將 `gitOpts` 與 `GIT_COMMAND_TIMEOUT_MS` 改為具名匯出。新增 `backend/test/presentation-git-timeout.test.ts` 2 個測試：驗證 `gitOpts()` 回傳值包含正確的 `cwd`/`timeout`/git 作者環境變數；並用一個會 `sleep 5` 的假 `git` 執行檔搭配覆寫過的 100ms 短逾時，實際驗證子行程在逾時後確實被 kill（`err.killed === true`）而不是無限等待，驗證測試本身執行僅需約 100ms。已執行 typecheck（前後端皆通過）與 `npm test`（326 個測試，18 個失敗逐一核對皆為既有環境性基準，無新增回歸）。
