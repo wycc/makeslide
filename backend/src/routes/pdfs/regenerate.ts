@@ -1,6 +1,26 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { db } from '../../db';
+import { decodeSession, parseCookies } from '../auth';
+import type { PdfRow } from '../../types';
 import { rollbackRegenerate, getRegenerateJob, requestCancelRegenerateJob, startRegenerateJob } from '../../worker/regenerate';
 import { IdParamSchema, RegenerateBatchBodySchema, errorResponse } from './shared';
+
+function sessionSub(request: FastifyRequest): string | null {
+  const session = decodeSession(parseCookies(request).makeslide_session);
+  return session?.sub ?? null;
+}
+
+function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
+  if (!row.owner_sub) return true;
+  if (sub && row.owner_sub === sub) return true;
+  return row.visibility === 'public_editable';
+}
+
+function getPdfPermissionRow(id: string): Pick<PdfRow, 'owner_sub' | 'visibility'> | undefined {
+  return db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
+    | Pick<PdfRow, 'owner_sub' | 'visibility'>
+    | undefined;
+}
 
 export async function registerRegenerateRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/pdfs/:id/regenerate', async (request, reply) => {
@@ -11,6 +31,13 @@ export async function registerRegenerateRoutes(app: FastifyInstance): Promise<vo
     const parsedBody = RegenerateBatchBodySchema.safeParse(request.body ?? {});
     if (!parsedBody.success) {
       return reply.code(400).send(errorResponse('INVALID_REQUEST', parsedBody.error.issues[0]?.message ?? 'Invalid body'));
+    }
+    const pdfRow = getPdfPermissionRow(parsedParams.data.id);
+    if (!pdfRow) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsedParams.data.id} not found`));
+    }
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限重新生成此簡報'));
     }
     try {
       const state = await startRegenerateJob(parsedParams.data.id, {
@@ -49,6 +76,13 @@ export async function registerRegenerateRoutes(app: FastifyInstance): Promise<vo
     if (!parsedParams.success) {
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
     }
+    const pdfRow = getPdfPermissionRow(parsedParams.data.id);
+    if (!pdfRow) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsedParams.data.id} not found`));
+    }
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限取消此簡報的重新生成'));
+    }
     try {
       const state = requestCancelRegenerateJob(parsedParams.data.id);
       if (!state) return reply.code(404).send(errorResponse('REGENERATE_JOB_NOT_FOUND', 'Regenerate job not found'));
@@ -70,6 +104,13 @@ export async function registerRegenerateRoutes(app: FastifyInstance): Promise<vo
     const parsedParams = IdParamSchema.safeParse(request.params);
     if (!parsedParams.success) {
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const pdfRow = getPdfPermissionRow(parsedParams.data.id);
+    if (!pdfRow) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsedParams.data.id} not found`));
+    }
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限回滾此簡報'));
     }
     try {
       const result = await rollbackRegenerate(parsedParams.data.id);

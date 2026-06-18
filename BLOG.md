@@ -2057,3 +2057,23 @@ Manim.animate.shake(myShape, progress, {
 - `backend/src/routes/pdfs/delete.ts` 新增與其他寫入路由一致的本地 `sessionSub()` + `canEditPdf(owner_sub, visibility)`。
 - 查詢 PDF 是否存在的 SELECT 補上 `owner_sub`、`visibility` 欄位，在執行 `DELETE FROM pdfs` 與 `removePdfDir()`（清除儲存目錄）之前先做權限檢查，確保權限不足時完全不會執行任何刪除動作。
 - 新增 `backend/test/delete-permission.test.ts` 4 個測試，覆蓋非擁有者對 `public`/`private` 簡報應得 403（且簡報確實未被刪除）、擁有者與 `public_editable` 協作者應能正常刪除。
+
+## 重生（regenerate）API 補上編輯權限檢查
+
+### 功能目的
+
+播放頁「重生全部」會啟動整份簡報的批次重新生成（逐字稿/語音/圖片/動畫），背後是 `POST /api/pdfs/:id/regenerate`、取消用的 `POST /api/pdfs/:id/regenerate/cancel`，以及回滾到重生前快照的 `POST /api/pdfs/:id/regenerate/rollback`。這三個 API 過去完全沒有檢查請求者是否擁有編輯權限，任何已登入帳號都能在唯讀分享或別人的私有簡報上觸發整份重新生成（消耗大量 LLM/TTS 額度）、取消別人正在執行的重生工作，或把簡報內容回滾到舊版本，屬於與先前已修復的 GitHub 同步、動畫/畫板、測驗、頁面操作、簡報刪除等同一類權限缺口。
+
+新版讓這三個重生相關 API 遵循與其他簡報寫入動作一致的權限規則。
+
+### 使用方式
+
+1. 一般擁有者或取得 read-write 分享/`public_editable` 簡報的使用者操作不受影響，仍可正常啟動整份重生、取消進行中的重生工作，或回滾到重生前的快照。
+2. 唯讀分享或公開唯讀簡報的瀏覽者，前端本來就已經停用這些動作；即使有人略過前端直接呼叫對應 API，後端也會回傳 `403 FORBIDDEN`，不會真的啟動重生任務、取消他人工作或回滾內容。
+3. 查詢重生進度（`GET /api/pdfs/:id/regenerate/status`）維持公開讀取，不受影響。
+
+### 技術細節
+
+- `backend/src/routes/pdfs/regenerate.ts` 新增與其他寫入路由一致的本地 `sessionSub()` + `canEditPdf(owner_sub, visibility)` + `getPdfPermissionRow()`。
+- 三個寫入路由（`regenerate`、`regenerate/cancel`、`regenerate/rollback`）先前完全沒有查詢 pdf 權限資訊，這次新增獨立查詢；權限檢查都放在呼叫 `startRegenerateJob()`/`requestCancelRegenerateJob()`/`rollbackRegenerate()` 之前執行，確保無權限請求不會觸發任何 worker 端動作或消耗 LLM/TTS 額度。
+- 新增 `backend/test/regenerate-permission.test.ts` 6 個測試，覆蓋三個路由對非擁有者的唯讀分享簡報應得 403（且確實未建立重生任務）、擁有者與 `public_editable` 協作者應能成功啟動重生、`cancel`/`rollback` 對未知簡報應得 `404 PDF_NOT_FOUND` 而非 403。

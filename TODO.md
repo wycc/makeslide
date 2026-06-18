@@ -70,7 +70,7 @@
 
 - [x] 後端 `DELETE /api/pdfs/:id` 補上編輯權限檢查：`backend/src/routes/pdfs/delete.ts` 整個刪除路由目前只檢查 PDF 是否存在，完全沒有 `canEditPdf()` 或擁有權限檢查——任何已登入帳號只要知道 PDF id 就能刪除別人的簡報（含資料庫紀錄與儲存目錄），是目前已知權限缺口中最嚴重的一個；應補上與 `detail.ts`/`page-operations.ts` 一致的 `sessionSub()` + `canEditPdf(owner_sub, visibility)` 檢查，沒有編輯權限時回傳 `403 FORBIDDEN`，並新增後端測試覆蓋非擁有者應被拒絕、擁有者與 `public_editable` 協作者應可正常刪除。
 
-- [ ] 後端重生路由補上編輯權限檢查：`backend/src/routes/pdfs/regenerate.ts` 的 `POST /api/pdfs/:id/regenerate`、`POST /api/pdfs/:id/regenerate/cancel`、`POST /api/pdfs/:id/regenerate/rollback` 完全沒有檢查請求者是否有編輯權限，任何登入帳號可在唯讀分享簡報上觸發整份重新生成（耗費大量 LLM/TTS 額度）、取消他人的重生工作或回滾到舊版本；應補上 `canEditPdf()` 檢查並回傳 `403`，並新增後端測試覆蓋。
+- [x] 後端重生路由補上編輯權限檢查：`backend/src/routes/pdfs/regenerate.ts` 的 `POST /api/pdfs/:id/regenerate`、`POST /api/pdfs/:id/regenerate/cancel`、`POST /api/pdfs/:id/regenerate/rollback` 完全沒有檢查請求者是否有編輯權限，任何登入帳號可在唯讀分享簡報上觸發整份重新生成（耗費大量 LLM/TTS 額度）、取消他人的重生工作或回滾到舊版本；應補上 `canEditPdf()` 檢查並回傳 `403`，並新增後端測試覆蓋。
 
 - [ ] 後端「依提示詞新增頁面」路由補上編輯權限檢查：`backend/src/routes/pdfs/add-pages.ts` 的 `POST /api/pdfs/:id/add-pages-from-prompt`、`POST /api/pdfs/:id/add-pages-from-prompt/cancel`、`POST /api/pdfs/:id/add-pages-outline-chat` 完全沒有檢查編輯權限，任何登入帳號可在唯讀分享簡報上觸發 AI 新增頁面或取消他人的任務；應補上 `canEditPdf()` 檢查並回傳 `403`，並新增後端測試覆蓋。
 
@@ -268,3 +268,7 @@
 - 時間: 2026-06-19 01:25:00 +0800
 - 分支: feature/delete-pdf-edit-permission-20260619
 - 內容: 完成「後端 DELETE /api/pdfs/:id 補上編輯權限檢查」，修復目前已知權限缺口中最嚴重的一項。`backend/src/routes/pdfs/delete.ts` 新增與其他寫入路由一致的本地 `sessionSub()`/`canEditPdf()`；查詢 PDF 是否存在的 SELECT 補上 `owner_sub`、`visibility` 欄位，在執行 `DELETE FROM pdfs` 與 `removePdfDir()` 之前先檢查編輯權限，沒有編輯權限時回傳 `403 FORBIDDEN` 並完全不觸碰資料庫或檔案系統。新增 `backend/test/delete-permission.test.ts` 4 個測試，覆蓋非擁有者對 `public`（唯讀）/`private` 簡報的刪除請求應得 403、簡報不會被實際刪除、擁有者與 `public_editable` 協作者應能正常刪除。確認既有 `pages-api.test.ts` 的兩個 DELETE 測試（刪除成功會清掉相關 pipeline/timing 紀錄、刪除不存在的簡報回 404）因為使用未設定 `owner_sub` 的舊資料 seed helper（視為合法情境，`canEditPdf()` 對空 `owner_sub` 一律允許）而不受影響，仍維持通過。backend typecheck 通過，完整測試套件 268 項中 18 項失敗為既有環境相關既存失敗（與本次變更前一致，4 項新增測試全數通過）。
+
+- 時間: 2026-06-19 01:30:00 +0800
+- 分支: feature/regenerate-edit-permission-20260619
+- 內容: 完成「後端重生路由補上編輯權限檢查」。`backend/src/routes/pdfs/regenerate.ts` 新增與其他寫入路由一致的本地 `sessionSub()`/`canEditPdf()`/`getPdfPermissionRow()`，在 `POST /api/pdfs/:id/regenerate`（啟動整份重生）、`POST /api/pdfs/:id/regenerate/cancel`（取消重生）、`POST /api/pdfs/:id/regenerate/rollback`（回滾到重生前快照）三個路由補上權限檢查，沒有編輯權限時回傳 `403 FORBIDDEN`；這三個路由先前完全沒有查詢 pdf 權限，新增獨立的 `getPdfPermissionRow()` 呼叫，且在呼叫對應 worker 函式（`startRegenerateJob`/`requestCancelRegenerateJob`/`rollbackRegenerate`）之前先做權限檢查，避免無權限請求白白觸發昂貴的 LLM/TTS 重生任務。`GET /api/pdfs/:id/regenerate/status`（讀取重生進度）維持公開讀取。新增 `backend/test/regenerate-permission.test.ts` 6 個測試，覆蓋 `regenerate`/`cancel`/`rollback` 對非擁有者唯讀分享簡報應得 403（且確實未建立重生任務）、擁有者與 `public_editable` 協作者應能成功啟動重生（回 202）、`cancel`/`rollback` 對未知簡報應得 404 `PDF_NOT_FOUND` 而非 403。backend typecheck 通過，完整測試套件 274 項中 18 項失敗為既有環境相關既存失敗（與本次變更前一致，新增 6 項測試全數通過）。
