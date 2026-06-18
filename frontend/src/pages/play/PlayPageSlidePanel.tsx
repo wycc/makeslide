@@ -7,6 +7,7 @@ import { formatTime, formatDurationMs, formatTokenCount, formatCostUsd } from '.
 import { PageTimingChips } from './PageTimingChips';
 import { ApiError, fetchPageGenerationPrompts, fetchPdfRunHistory, fetchPdfSlowArtifacts, figureImageUrl } from '../../lib/api';
 import { SHOW_SUBTITLE_STORAGE_KEY, INTERACTIVE_MODE_STORAGE_KEY, useI18n, type TranslationKey } from '../../i18n';
+import { debugLog, debugWarn } from '../../lib/debugLog';
 import { usePlayPageContext } from './PlayPageContext';
 import type { PageArtifact, PipelineRunStatus, PipelineRunSummary, PipelineRunType, PipelineStage, SlowArtifactSummary, TimingEventStatus } from '../../types';
 
@@ -221,8 +222,7 @@ export function PlayPageSlidePanel() {
           if (f && currentPage) void handleReplaceImageFile(f, currentPage.page_number);
         }}
         onPaste={(e) => {
-          // eslint-disable-next-line no-console
-          console.info('[paste][slide-panel] event fired', {
+          debugLog('[paste][slide-panel] event fired', {
             itemCount: e.clipboardData.items.length,
             items: Array.from(e.clipboardData.items).map((it) => ({ kind: it.kind, type: it.type })),
           });
@@ -231,8 +231,7 @@ export function PlayPageSlidePanel() {
             .map((it) => (it.kind === 'file' ? it.getAsFile() : null))
             .find((f): f is File => !!f);
           if (!file) {
-            // eslint-disable-next-line no-console
-            console.warn('[paste][slide-panel] no file found');
+            debugWarn('[paste][slide-panel] no file found');
           }
           if (file && currentPage) void handleReplaceImageFile(file, currentPage.page_number);
         }}

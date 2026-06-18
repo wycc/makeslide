@@ -1773,3 +1773,27 @@ Manim.animate.shake(myShape, progress, {
 2. **填充階段**（progress 0.5–1）：輪廓已完整，fill-opacity 從 0 線性增加到 1
 
 適合用在「強調繪製過程」的場景，例如幾何圖形的逐步展示。
+
+## 播放頁貼上與拖曳重排偵錯訊息靜音
+
+### 功能目的
+
+播放頁的縮圖管理同時支援貼上圖片（取代目前頁或目標頁圖片）與用滑鼠拖曳縮圖重新排序頁面。開發階段為了確認瀏覽器貼上事件、clipboard item 型別與拖曳起止頁碼是否正確觸發，`PlayPageSidebar.tsx`、`PlayPageSlidePanel.tsx` 與 `PlayPage.tsx` 都直接呼叫 `console.info` / `console.warn` 印出這些細節。這些訊息對一般使用者沒有意義，卻會在每次貼圖、拖曳排序時固定出現在瀏覽器主控台，干擾正常除錯與一般操作體感。
+
+新版把這些偵錯輸出集中到一個預設靜音、可明確開啟的 helper，讓一般使用者操作時 console 保持乾淨，開發者仍可在需要時手動開啟相同的訊息。
+
+### 使用方式
+
+1. 一般使用者不需要做任何事：操作播放頁的貼上圖片、拖曳重排投影片時，瀏覽器主控台不會再出現 `[paste][...]` 或 `[reorder][...]` 偵錯訊息。
+2. 開發者若需要重新查看這些訊息，於瀏覽器主控台執行 `localStorage.setItem('makeslide.debug', '1')` 後重新整理頁面即可恢復輸出；要關閉時執行 `localStorage.removeItem('makeslide.debug')`。
+3. 貼上找不到圖片檔案、或拖曳排序資料不完整等情境仍會在程式內被忽略處理（例如不觸發替換/搬移），不影響既有使用者可見的錯誤提示與互動行為。
+
+### 技術細節
+
+- 新增 `frontend/src/lib/debugLog.ts`，提供 `debugLog()` / `debugWarn()`：兩者都先檢查 `localStorage.getItem('makeslide.debug') === '1'`，未開啟時直接是 no-op，讀取 `localStorage` 失敗時也安全降級為不輸出。
+- `PlayPageSidebar.tsx` 的縮圖拖曳 `onDropCapture`、貼上 `onPaste`、拖曳按鈕 `onDragStart` / `onDragEnd` 共 5 處 `console.info/warn` 全部改用 `debugLog` / `debugWarn`。
+- `PlayPageSlidePanel.tsx` 的投影片區 `onPaste`（事件詳情與無檔案警告）改用同一組 helper。
+- `PlayPage.tsx` 的全域 `window.addEventListener('paste', ...)` 偵錯輸出（事件觸發、clipboard items、無圖片警告、接受圖片摘要）一併改用 helper，維持與側欄/投影片區一致的靜音行為。
+- 所有改動處原本的 `// eslint-disable-next-line no-console` 註解一併移除，因為呼叫已不再直接使用 `console.*`。
+- 與貼上/拖曳無關的既有偵錯輸出（例如 `PlayPage.tsx` 中的 `[sync][poll]`、`[tts][regenerate-audio]` 等同步與語音除錯訊息）不在本次調整範圍內，維持原狀。
+- 已執行 frontend `tsc --noEmit` typecheck 確認型別正確。

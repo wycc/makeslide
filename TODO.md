@@ -7,7 +7,7 @@
 
 - [x] 動畫 Raw JSON 複製加入 Clipboard fallback 與錯誤狀態：`AnimationEditorTab.tsx` 的「複製 JSON」目前直接呼叫 `navigator.clipboard.writeText()` 且只處理成功，若瀏覽器不支援 Clipboard API、非安全來源或權限被拒，使用者不會知道失敗；應新增 `copyTextToClipboard()` helper，支援 `navigator.clipboard` 失敗時 fallback 到 textarea selection / `document.execCommand('copy')`（可用時），並在 UI 顯示成功/失敗狀態與 i18n 文案，補純函式或 mock 測試。
 
-- [ ] 移除播放頁貼上與拖曳重排的前端偵錯 `console.*`：`PlayPageSidebar.tsx` 與 `PlayPageSlidePanel.tsx` 仍有 `console.info/warn` 直接記錄貼上事件、clipboard item 型別、拖曳頁碼等；應改為移除或集中到 gated debug helper（例如只在開發模式且明確開啟時輸出），避免一般使用者操作投影片、貼圖或重排時污染 console，並保留錯誤情境的使用者可見提示。
+- [x] 移除播放頁貼上與拖曳重排的前端偵錯 `console.*`：`PlayPageSidebar.tsx` 與 `PlayPageSlidePanel.tsx` 仍有 `console.info/warn` 直接記錄貼上事件、clipboard item 型別、拖曳頁碼等；應改為移除或集中到 gated debug helper（例如只在開發模式且明確開啟時輸出），避免一般使用者操作投影片、貼圖或重排時污染 console，並保留錯誤情境的使用者可見提示。
 
 - [ ] 來源管理清單新增「複製內容」與「清除展開」小操作：`PlayPageSlidePanel.tsx` 的來源管理目前可展開 TXT/PDF/YouTube 來源內容，但長文字只能手動選取複製，且展開多筆後整理不便；應在每個有 `content_text` 的來源列加入「複製內容」按鈕（使用共用 clipboard helper 與成功/失敗 toast/狀態），並在來源清單標題加入「全部收合」按鈕清空 `expandedSourceId`，不改 API 或資料庫，補 i18n 與可驗證的 helper 測試。
 
@@ -184,3 +184,7 @@
 - 時間: 2026-06-18 07:50:00 +0800
 - 分支: feature/outline-user-prompt-takahashi-20260618
 - 內容: 完成「產生大綱時帶入使用者提示詞，並在高橋流時調整每頁重點數」。`backend/src/worker/steps/splitTextWithLlm.ts` 的 `buildOutlineFromFullText()`（兩階段全文大綱流程）與 `splitChunkWithLlm()`（chunk fallback 流程）皆新增 `userPrompt` 參數，並將使用者補充指示原文插入 system/user prompt 中，讓大綱規劃實際納入使用者提示（先前完全未傳入，等同被忽略）；同時重用既有 `isMinimalSlideStyleRequested()`（沿用上一項高橋流逐字稿規則的偵測函式）判斷是否為高橋流 / 極簡大字風格，偵測到時將大綱 bullets 由預設 2~6 點降為 1~2 點，`OutlineSchema` 的 `bullets` 下限同步由 `min(2)` 放寬為 `min(1)` 以允許單一重點通過驗證；`splitTextWithLlmCore()`、`splitChunkRobust()` 與匯出的 `splitTextWithLlm()` 皆轉發此參數。`backend/src/worker/pipeline.ts` 兩處呼叫端改傳入 `row.user_prompt`。新增 2 個後端測試覆蓋 userPrompt 文字確實送入 LLM user message，以及高橋流偵測時 system prompt 出現對應規則且單一重點 bullets 通過 schema 驗證；backend typecheck 與既有測試套件通過（既有 18 項失敗為環境相關的既存失敗，與本次變更無關，已確認 stash 前後失敗清單一致）。
+
+- 時間: 2026-06-18 08:05:00 +0800
+- 分支: feature/remove-playpage-debug-console-20260618
+- 內容: 完成移除播放頁貼上與拖曳重排的前端偵錯 `console.*`。新增 `frontend/src/lib/debugLog.ts`，提供 `debugLog()` / `debugWarn()`，只有在瀏覽器 `localStorage` 明確設定 `makeslide.debug = '1'` 時才會輸出，預設一律靜音；`PlayPageSidebar.tsx`（拖曳重排 drop-capture/dragstart/dragend、縮圖區貼上事件與無檔案警告）、`PlayPageSlidePanel.tsx`（投影片區貼上事件與無檔案警告）與 `PlayPage.tsx`（全域貼上事件、clipboard item 型別、無圖片警告、接受圖片摘要）的直接 `console.info/warn` 呼叫全部改用這兩個 helper，並移除對應 `eslint-disable-next-line no-console` 註解；一般使用者操作投影片、貼圖或拖曳重排時 console 不再被污染，需要除錯時開發者可在瀏覽器主控台執行 `localStorage.setItem('makeslide.debug','1')` 重新啟用。frontend typecheck 通過；與貼上/拖曳無關的既有 sync/tts 偵錯 `console.*`（如 `[sync][poll]`、`[tts][regenerate-audio]`）不在本次範圍內，維持原狀。
