@@ -78,6 +78,16 @@
 
 - [x] 後端圖表參考選取與投票/測驗題路由補上編輯權限檢查：`backend/src/routes/pdfs/figures.ts` 的 `PUT /api/pdfs/:id/pages/:n/figures/selection`，以及 `backend/src/routes/pdfs/detail.ts` 的 `POST /api/pdfs/:id/pages/:n/polls`（建立投票）、`DELETE /api/pdfs/:id/polls/:pollId`（刪除投票）、`POST /api/pdfs/:id/polls/:pollId/reset-votes`（清空投票結果）皆完全沒有檢查編輯權限；應補上 `canEditPdf()` 檢查並回傳 `403`。`POST /api/pdfs/:id/polls/:pollId/votes`（學生投票提交）維持現狀不需此限制，與測驗 attempts 提交相同道理，followers 需要在沒有編輯權限的情況下投票。
 
+- [ ] `PlayPageSlidePanel.tsx` 播放控制列與播放設定面板補齊 i18n：雖然此檔案已使用 `useI18n()`，但播放控制按鈕的 `aria-label`/`title`（「上一頁」、「下一頁」、「語音載入失敗，點擊重試」、「此頁無語音」、「顯示分享 QR Code」、「進度條」等，約在 438–510 行）、播放完成提示（「播放完成」、「本頁播放完畢…」）與「播放設定」面板內容（本機靜音狀態、音訊/播放速度/字幕控制標籤、課堂模式與互動模式的說明文字與切換按鈕，約在 510–680 行）仍是硬編碼中文；應補上對應 `play.slidePanel.*` 翻譯鍵，保留既有播放/換頁/靜音/課堂模式互動邏輯不變。
+
+- [ ] `PlayPageSlidePanel.tsx` 逐字稿編輯與提示詞編輯區塊補齊 i18n：「📝 逐字稿」分頁標題、版本歷史按鈕、textarea placeholder（「請輸入本頁逐字稿...」/「請輸入這份簡報的風格提示詞...」）、「儲存後會僅重生此頁語音」/「更新後將影響後續以提示詞為基礎的生成」提示文字，以及「儲存並重生語音」按鈕（約在 693–810 行）仍是硬編碼中文；應補上對應 `play.slidePanel.transcript.*`/`play.slidePanel.prompt.*` 翻譯鍵，保留既有編輯/儲存/重生語音行為不變。
+
+- [ ] `PlayPageFullscreen.tsx` 全螢幕播放模式補齊 i18n：全螢幕播放的上一頁/下一頁/播放/暫停按鈕 `title`/`aria-label`（約 145、216–244 行）、「（本頁尚無字幕）」、全螢幕內建逐字稿編輯區標題「📝 編輯逐字稿（第 N 頁）」與 textarea placeholder（約 274–293 行），以及繪圖工具列的顏色/筆寬選項標籤（紅色/藍色/黑色/黃色/綠色/白色、細/中/粗，約 15–26 行）仍是硬編碼中文；應補上對應 `play.fullscreen.*` 翻譯鍵，保留既有手勢換頁、繪圖工具與逐字稿編輯行為不變。
+
+- [ ] `QuizBuilderPage.tsx` 補齊 i18n（範圍較大，建議拆成獨立 PR）：此頁已使用 `useI18n()`，但測驗建立/編輯表單、AI 生成測驗對話框、學生作答區與教師端「測驗中的學員」面板仍有大量硬編碼中文文字、按鈕與提示訊息（grep 約 70 餘處）；應分批補上對應翻譯鍵，讓英文介面使用者可完整操作課堂測驗功能，保留既有測驗 CRUD、AI 生成、同步測驗作答與重設作答行為不變。
+
+- [ ] 後端 Google OAuth callback 補上回應格式錯誤處理：`backend/src/routes/auth.ts` 的 `/api/auth/google/callback` 路由在檢查 `tokenResp.ok`/`userResp.ok` 後直接呼叫 `TokenResponseSchema.parse(await tokenResp.json())`（176 行）與 `GoogleUserInfoSchema.parse(await userResp.json())`（183 行），若 Google 回應格式不符 schema 會直接丟出未捕捉的 ZodError；目前雖然會被 `server.ts` 的全域 `setErrorHandler` 接住變成通用 `500 INTERNAL_ERROR`（不會讓伺服器當掉），但錯誤訊息對使用者不友善且不易追查；應在這兩個 `.parse()` 呼叫外包 try/catch，捕捉時記錄詳細錯誤並回傳更明確的 `502`（例如 `GOOGLE_TOKEN_PARSE_FAILED`/`GOOGLE_USERINFO_PARSE_FAILED`）。
+
 ---
 
 - 時間: 2026-06-18 06:05:00 +0800
@@ -284,3 +294,7 @@
 - 時間: 2026-06-19 02:05:00 +0800
 - 分支: feature/figures-polls-edit-permission-20260619
 - 內容: 完成「後端圖表參考選取與投票路由補上編輯權限檢查」，這是本輪權限缺口系列的最後一項。`backend/src/routes/pdfs/figures.ts` 新增與其他寫入路由一致的本地 `sessionSub()`/`canEditPdf()`/`getPdfPermissionRow()`，在 `PUT /api/pdfs/:id/pages/:n/figures/selection` 補上權限檢查；兩個 GET 路由（圖表清單、圖片串流）維持公開。`backend/src/routes/pdfs/detail.ts` 已有本地 `canEditPdf()`/`sessionSub()` helper（沿用既有），在 `POST /api/pdfs/:id/pages/:n/polls`（建立投票）、`DELETE /api/pdfs/:id/polls/:pollId`（刪除投票）、`POST /api/pdfs/:id/polls/:pollId/reset-votes`（清空投票結果）補上權限檢查；`POST /api/pdfs/:id/polls/:pollId/votes`（學生投票提交）維持不受限制，與測驗 attempts 提交同理。修復過程中發現既有 `backend/test/figure-assets.test.ts` 使用的硬編碼 session cookie 簽章是用舊版 `AUTH_SESSION_SECRET` 產生、與目前環境密鑰不符（與先前修復 `page-animation.test.ts` 時發現的同一類問題），先前因為這個路由完全不驗證 session 而沒被發現，加上權限檢查後導致 2 個既有測試失敗；已改用與其他測試檔案一致的 `testSessionCookie()` 動態簽章方式修正。新增 `backend/test/figures-polls-permission.test.ts` 7 個測試，覆蓋圖表選取與投票建立/刪除/清空對非擁有者唯讀分享簡報應得 403（且資料確實未被修改）、擁有者與 `public_editable` 協作者應可正常操作、投票提交不受權限限制仍可成功送出。backend typecheck 通過，完整測試套件 292 項中 18 項失敗為既有環境相關既存失敗（與本次變更前一致，新增與修正的測試全數通過）。**至此本輪 LOOP 發現的所有後端寫入路由編輯權限缺口（github-sync、page-animation/drawings、quizzes、page-operations、delete、regenerate、add-pages、versioning、figures/polls）皆已修復完畢，TODO.md 再次清空。**
+
+- 時間: 2026-06-19 02:20:00 +0800
+- 分支: master
+- 內容: 依照 LOOP.md 在 TODO.md 已無未完成項目時重新檢視主要程式區塊。本輪剛完成整套後端寫入路由編輯權限缺口修復（github-sync、page-animation/drawings、quizzes、page-operations、delete、regenerate、add-pages、versioning、figures/polls），確認 `backend/src/routes/pdfs/` 目錄下的權限缺口已掃描完畢，故改往其他方向檢查：(1) `backend/src/routes/auth.ts` 等 pdfs 以外的路由檔案；(2) `backend/src/worker/steps/extractText.ts` 等檔案的錯誤處理（檢查後確認 `runPipeline()` 在 458/1341 行已有外層 try/catch 會把任何子步驟錯誤包成 `status: 'failed'` 並記錄 `error_message`，因此原先懷疑的「會讓整個文字擷取步驟當掉」並不成立，影響遠比表面看起來小，但 Google OAuth callback 的 `.parse()` 仍值得補上更明確的錯誤處理，已記錄為較低優先的待辦）；(3) 用 grep 找尚未完成 i18n 的前端檔案，確認 `PlayPageSlidePanel.tsx`（雖然已用 `useI18n()`，但播放控制列/設定面板與逐字稿/提示詞編輯區仍有大量硬編碼中文）、`PlayPageFullscreen.tsx`（全螢幕播放模式的按鈕、繪圖工具列與內建逐字稿編輯區）、`QuizBuilderPage.tsx`（grep 約 70 餘處硬編碼中文，範圍明顯較大）皆有明確缺口。新增 5 個待辦項目：(1)(2) `PlayPageSlidePanel.tsx` 拆成播放控制/設定面板與逐字稿/提示詞編輯兩個獨立 i18n 項目；(3) `PlayPageFullscreen.tsx` 全螢幕模式 i18n；(4) `QuizBuilderPage.tsx` i18n（標註範圍較大建議獨立 PR）；(5) Google OAuth callback 的 Zod parse 錯誤處理（已驗證目前由全域 error handler 接住不會當機，純粹是錯誤訊息友善度與可追查性的小優化，優先度較低）。
