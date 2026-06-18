@@ -98,6 +98,20 @@
 
 - [x] `generateTitle.ts` 補上單元測試：`backend/src/worker/steps/generateTitle.ts` 目前完全沒有對應的測試檔案（`backend/test/` 下無任何檔案引用 `generateTitle`），但內含多個可獨立測試的純函式：`clipCorpus()`（裁切語料長度）、`sanitiseUserPrompt()`（清理使用者提示詞）、`buildSystem()`/`buildUser()`（依內容語言組裝 system/user prompt）；應新增 `backend/test/generate-title.test.ts`，至少覆蓋這些純函式的邊界情況（空字串、超長語料、不同 `contentLanguage`），並可選擇性地用既有 `setOpenAIClientForTest()` mock 模式為主要 `generateTitle()` 函式加上 1-2 個整合測試。
 
+- [ ] `extractPdfFigures.ts` 讀取既有 manifest 時補上例外處理：`backend/src/worker/steps/extractPdfFigures.ts` 第 815 行的 `extractPdfFigures()` 在 `figures.json` 已存在時直接 `JSON.parse(await fs.promises.readFile(manifestPath, 'utf8'))`，沒有 try/catch；若該檔案因先前流程中斷而寫入不完整或損毀，會直接拋出未分類的 `SyntaxError` 並讓整個步驟失敗，而不是判斷成「manifest 不存在，重新產生」。應在解析失敗時記錄 warning 並改走後續的重新產生流程（與 `if (fs.existsSync(manifestPath))` 分支外的邏輯一致），補上對應測試覆蓋損毀 JSON 的情境。
+
+- [ ] `generateVideo.ts` 合成影片前補上圖片/音訊檔案存在性檢查：`backend/src/worker/steps/generateVideo.ts` 的主迴圈（約 40-58 行）直接把 `pageImagePath()`/`pageAudioPath()` 的結果傳給 ffmpeg（`runCommand(FFMPEG, [...])`），沒有先用 `fs.existsSync()` 確認檔案存在；若某頁的音訊因 TTS 步驟失敗但資料庫狀態未即時反映，ffmpeg 會用底層的「No such file or directory」報錯讓整段影片生成失敗，使用者只會看到不易理解的 ffmpeg 錯誤。應在呼叫 ffmpeg 前檢查兩個檔案是否存在，缺檔時記錄清楚的錯誤訊息並跳過該頁（或讓整體任務以更明確的 error_message 失敗），範圍可只處理這個檢查點。
+
+- [ ] `presentationGit.ts` 的 `git()` 執行補上逾時保護：`backend/src/services/presentationGit.ts` 第 65-68 行的 `git(dir, args)` 直接呼叫 `promisify(execFile)('git', args, gitOpts(dir))`，`gitOpts()` 回傳的選項中沒有 `timeout`；若 GitHub 同步過程中 git 指令因網路、lock 檔或 hook 卡住，會無限期掛起，連帶讓呼叫端（同步流程）一直等待。應在 `gitOpts()` 中加入可配置的 `timeout`（例如 30000ms）並在逾時時拋出清楚的錯誤訊息，補上對應的服務測試或至少手動驗證逾時路徑的錯誤訊息格式。
+
+- [ ] `gemini.ts` 的 TTS 回應解析補上中間層診斷紀錄：`backend/src/services/gemini.ts` 第 393-397 行從 `json?.candidates?.[0]?.content?.parts?.find(...)?.inlineData` 一路用 optional chaining 取出 base64 音訊，任何一層缺漏都只會在最後丟出單一的「Gemini TTS returned empty audio」，沒有記錄是哪一層造成的（例如 `candidates` 是空陣列、或 `parts` 裡找不到 `inlineData`）。應在解析失敗時用 `logger.warn` 記錄實際收到的回應結構摘要（避免記錄完整 base64/敏感內容，可參考既有 `logSanitizer.ts` 的遮罩慣例），讓未來 Gemini API 格式變動時能快速定位問題。
+
+- [ ] `promptTemplates.ts` 補上單元測試：`backend/src/services/promptTemplates.ts` 完全沒有對應測試檔案，但內含兩個容易測試的純函式：`loadPromptTemplate(relPath, fallback)`（檔案不存在或讀取後為空白時回退到 fallback，否則回傳 trim 後內容）與 `renderPromptTemplate(template, vars)`（用正規表示式 `\{\{\s*([a-zA-Z0-9_]+)\s*\}\}` 取代模板變數，找不到對應 key 時補空字串）。應新增 `backend/test/prompt-templates.test.ts`，覆蓋檔案不存在/空白內容回退、多個變數替換、找不到對應 key 時補空字串、巢狀或重複變數名稱等邊界情況。
+
+- [ ] `synthesizeAudio.ts` 補上純函式單元測試：`backend/src/worker/steps/synthesizeAudio.ts` 目前完全沒有對應測試檔案（`backend/test/` 下無任何檔案引用），但內含多個模組私有的純函式：`parseWavPcmChunk()`（解析 WAV PCM chunk 標頭）、`buildWavPcm16()`（將原始 PCM 包成 WAV 容器）、`isRetryableTtsError()`（判斷 TTS 錯誤是否可重試）、`extractTtsErrorMessage()`（從不同錯誤型態取出可讀訊息）、`splitByToneMarkers()`（依語氣標記切分逐字稿片段）、`splitSpeakerPrefix()`（解析雙人對談的講者前綴）。應將這些函式改為具名匯出（如 `generateTitle.ts` 的做法），新增 `backend/test/synthesize-audio.test.ts` 覆蓋各函式的正常與邊界輸入，不需要動到實際呼叫 TTS API 的整合邏輯。
+
+- [ ] 前端 `subtitles.ts` 補上單元測試：`frontend/src/lib/subtitles.ts` 完全沒有對應測試檔案，但內含兩個驅動播放頁字幕高亮與動畫觸發時機的純函式：`splitScriptIntoSentences(script)`（去除語氣標記後依中英文句末符號切分句子）與 `buildSentenceTimeline(sentences, duration)`（依中英文字元、數字權重估算每句朗讀秒數與停頓秒數，再依整頁音訊長度等比例縮放出每句的 start/end 時間）。應新增 `frontend/src/lib/subtitles.test.ts`，覆蓋空字串/純語氣標記、單句與多句切分、不同字元類型混合的時間軸估算，以及 `duration<=0` 或 `sentences.length===0` 的邊界回傳空陣列情況。
+
 ---
 
 - 時間: 2026-06-18 06:05:00 +0800
@@ -358,3 +372,7 @@
 ---- 計數重設 ----
 - 時間: 2026-06-19 09:00:00 +0800
 - 說明: 依使用者指示，因先前累積已完成項目（53 個 `[x]`，63 筆工作記錄）已超過 LOOP.md 第 4 條「完成 20 個項目後停止做新項目」的門檻，且當時 TODO.md 已無未完成項目；使用者選擇「重設計數後繼續」。LOOP.md 已同步更新計數規則：之後只計算本標記之後新完成的項目數，達 20 個時再次停止並徵詢使用者。此標記之前的所有歷史項目與工作記錄保留作為紀錄，不再計入新一輪的 20 項上限。
+
+- 時間: 2026-06-19 09:15:00 +0800
+- 分支: workspace-current
+- 內容: 依照 LOOP.md，在 TODO.md 已無未完成項目時重新進行唯讀分析，新增 7 個已驗證的新待辦項目（計數已於本批次前重設）。分析方向涵蓋：(1) 後端 worker steps / services 的例外處理與邊界情況；(2) 比對 `backend/test/` 與 `backend/src/worker/steps/`、`backend/src/services/` 找出完全沒有對應測試的檔案；(3) 前端 `src/lib/` 同樣比對測試覆蓋缺口。逐一讀取程式碼確認後採用：(a) `extractPdfFigures.ts` 815 行讀取既有 manifest 時 `JSON.parse()` 無 try/catch；(b) `generateVideo.ts` 合成影片前未檢查圖片/音訊檔案是否存在；(c) `presentationGit.ts` 的 `git()` 執行未設定 timeout；(d) `gemini.ts` TTS 回應解析多層 optional chaining 缺乏中間診斷紀錄；(e) `promptTemplates.ts` 完全無測試但含兩個純函式；(f) `synthesizeAudio.ts` 完全無測試但含多個可獨立測試的純函式（WAV 解析/組裝、錯誤分類、語氣標記與講者前綴切分）；(g) 前端 `subtitles.ts` 完全無測試但含字幕切句與時間軸估算兩個純函式。排除的假線索：`synthesizeAudio.ts` 的 `readScriptsForTts()` 經確認已正確區分 `ENOENT`（補空字串）與其他錯誤（rethrow），並非缺口；`extractText.ts` 頁數不符時僅 `logger.warn` 並 fallback 為 `min(numPages, pageCount)`，影響面與先前已排除的 `extractText.ts` try/catch 缺口同屬低價值/低風險，不列入；`upload.ts` 的 `generateSlideTextFromPrompt()` 已有完整的 try/catch 與 502 錯誤回應，並非「模糊錯誤訊息」；`ImportTextPage.tsx` 的聊天功能已有完整的 ApiError/Error 分類錯誤處理與 recovery guide，不構成新缺口。
