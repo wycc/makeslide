@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { toFile } from 'openai';
 import type { ChatCompletionContentPart } from 'openai/resources/chat/completions';
 import fs from 'node:fs';
@@ -8,6 +8,7 @@ import { z } from 'zod';
 import sharp from 'sharp';
 import { db, savePageGenerationPrompt } from '../../db';
 import { config } from '../../config';
+import { decodeSession, parseCookies } from '../auth';
 import type { PageRow, PdfRow } from '../../types';
 import { callChatJSON } from '../../services/openai';
 import { getOpenAIClient } from '../../services/openai';
@@ -47,6 +48,23 @@ import { commitPresentationFile } from '../../services/presentationGit';
 const RewriteScriptResponseSchema = z.object({
   script: z.string().min(1).max(4096),
 });
+
+function sessionSub(request: FastifyRequest): string | null {
+  const session = decodeSession(parseCookies(request).makeslide_session);
+  return session?.sub ?? null;
+}
+
+function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
+  if (!row.owner_sub) return true;
+  if (sub && row.owner_sub === sub) return true;
+  return row.visibility === 'public_editable';
+}
+
+function getPdfPermissionRow(id: string): Pick<PdfRow, 'owner_sub' | 'visibility'> | undefined {
+  return db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
+    | Pick<PdfRow, 'owner_sub' | 'visibility'>
+    | undefined;
+}
 
 const EDIT_SLIDE_IMAGE_PROMPT_FALLBACK = [
   'You are editing an existing presentation slide image provided as the input image.',
@@ -274,6 +292,9 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     const { id } = parsedParams.data;
     const row = db.prepare(`SELECT * FROM pdfs WHERE id = ?`).get(id) as PdfRow | undefined;
     if (!row) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), row)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
+    }
     if (row.status !== 'ready' || !row.page_count || row.page_count <= 0) {
       return reply.code(409).send(errorResponse('INVALID_STATE', 'Only ready deck can add slide'));
     }
@@ -369,10 +390,15 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     const { id } = parsedParams.data;
     const { from_page_number: from, to_page_number: to } = parsedBody.data;
     const pdfRow = db
-      .prepare(`SELECT page_count, user_prompt, script_max_chars_per_page FROM pdfs WHERE id = ?`)
-      .get(id) as { page_count: number | null; user_prompt: string | null; script_max_chars_per_page: number | null } | undefined;
+      .prepare(`SELECT page_count, user_prompt, script_max_chars_per_page, owner_sub, visibility FROM pdfs WHERE id = ?`)
+      .get(id) as
+      | { page_count: number | null; user_prompt: string | null; script_max_chars_per_page: number | null; owner_sub: string | null; visibility: PdfRow['visibility'] }
+      | undefined;
     if (!pdfRow?.page_count) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
     }
     const pageCount = pdfRow.page_count;
     if (from < 1 || from > pageCount || to < 1 || to > pageCount) {
@@ -460,6 +486,9 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     const { id, n } = parsed.data;
     const row = db.prepare(`SELECT * FROM pdfs WHERE id = ?`).get(id) as PdfRow | undefined;
     if (!row) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), row)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
+    }
     if (row.status !== 'ready' || !row.page_count || row.page_count <= 0) {
       return reply.code(409).send(errorResponse('INVALID_STATE', 'Only ready deck can delete slide'));
     }
@@ -546,8 +575,13 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       .get(id, n) as { pdf_id: string; page_number: number; page_uid: string } | undefined;
     if (!pageRow) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
 
-    const row = db.prepare(`SELECT page_count FROM pdfs WHERE id = ?`).get(id) as { page_count: number | null } | undefined;
+    const row = db.prepare(`SELECT page_count, owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
+      | { page_count: number | null; owner_sub: string | null; visibility: PdfRow['visibility'] }
+      | undefined;
     if (!row?.page_count) return reply.code(409).send(errorResponse('INVALID_STATE', 'PDF page_count not ready'));
+    if (!canEditPdf(sessionSub(request), row)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
+    }
 
     const file = await request.file();
     if (!file) return reply.code(400).send(errorResponse('NO_FILE', 'No file field found'));
@@ -610,9 +644,14 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       .join('\n');
 
     const pdfRow = db
-      .prepare(`SELECT page_count, user_prompt, script_max_chars_per_page FROM pdfs WHERE id = ?`)
-      .get(id) as { page_count: number | null; user_prompt: string | null; script_max_chars_per_page: number | null } | undefined;
+      .prepare(`SELECT page_count, user_prompt, script_max_chars_per_page, owner_sub, visibility FROM pdfs WHERE id = ?`)
+      .get(id) as
+      | { page_count: number | null; user_prompt: string | null; script_max_chars_per_page: number | null; owner_sub: string | null; visibility: PdfRow['visibility'] }
+      | undefined;
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
+    }
     if (!pdfRow.page_count || n > pdfRow.page_count) {
       return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
     }
@@ -720,9 +759,12 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     const { id, n } = parsed.data;
 
     const pdfRow = db
-      .prepare(`SELECT page_count FROM pdfs WHERE id = ?`)
-      .get(id) as { page_count: number | null } | undefined;
+      .prepare(`SELECT page_count, owner_sub, visibility FROM pdfs WHERE id = ?`)
+      .get(id) as { page_count: number | null; owner_sub: string | null; visibility: PdfRow['visibility'] } | undefined;
     if (!pdfRow?.page_count) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
+    }
 
     const pageRow = db
       .prepare(`SELECT image_path, page_uid FROM pages WHERE pdf_id = ? AND page_number = ?`)
@@ -847,9 +889,14 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     const { id, n } = parsedParams.data;
     const body = parsedBody.data;
     const pdfRow = db
-      .prepare(`SELECT page_count, user_prompt, script_max_chars_per_page FROM pdfs WHERE id = ?`)
-      .get(id) as { page_count: number | null; user_prompt: string | null; script_max_chars_per_page: number | null } | undefined;
+      .prepare(`SELECT page_count, user_prompt, script_max_chars_per_page, owner_sub, visibility FROM pdfs WHERE id = ?`)
+      .get(id) as
+      | { page_count: number | null; user_prompt: string | null; script_max_chars_per_page: number | null; owner_sub: string | null; visibility: PdfRow['visibility'] }
+      | undefined;
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
+    }
     if (!pdfRow.page_count || n > pdfRow.page_count) {
       return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
     }
@@ -951,9 +998,14 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
 
     const { id, n } = parsedParams.data;
     const pdfRow = db
-      .prepare(`SELECT page_count, tts_voice, tts_speed FROM pdfs WHERE id = ?`)
-      .get(id) as { page_count: number | null; tts_voice: string | null; tts_speed: number | null } | undefined;
+      .prepare(`SELECT page_count, tts_voice, tts_speed, owner_sub, visibility FROM pdfs WHERE id = ?`)
+      .get(id) as
+      | { page_count: number | null; tts_voice: string | null; tts_speed: number | null; owner_sub: string | null; visibility: PdfRow['visibility'] }
+      | undefined;
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
+    }
     if (!pdfRow.page_count || n > pdfRow.page_count) {
       return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
     }
@@ -1066,6 +1118,11 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
     }
     const { id, n } = parsedParams.data;
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
+    }
     const info = db
       .prepare(`UPDATE pages SET chat_history_json = NULL, updated_at = ? WHERE pdf_id = ? AND page_number = ?`)
       .run(nowIso(), id, n);
@@ -1084,6 +1141,11 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     }
 
     const { id, n } = parsedParams.data;
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
+    }
     const pageRow = db
       .prepare(`SELECT text_path, script_path, chat_history_json FROM pages WHERE pdf_id = ? AND page_number = ?`)
       .get(id, n) as { text_path: string | null; script_path: string | null; chat_history_json: string | null } | undefined;
