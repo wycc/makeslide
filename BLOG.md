@@ -2160,3 +2160,25 @@ Manim.animate.shake(myShape, progress, {
 - 標題「播放設定」特別新增獨立的 `play.slidePanel.playbackSettingsTitle` 鍵，而非沿用既有的 `play.header.settings`（值為「設定」），因為兩者中文原文不同（「播放設定」vs「設定」），沿用會造成譯文錯誤。
 - 純文字替換，未調整任何播放、換頁、靜音、課堂模式、互動模式相關的狀態管理或互動邏輯。
 - `frontend/src/i18n.test.ts` 新增測試驗證全部 49 個新翻譯鍵在中英文 locale 中都存在且為非空字串。
+
+## 播放頁逐字稿編輯與提示詞編輯區塊補齊 i18n
+
+### 功能目的
+
+播放頁下方分頁面板的「逐字稿」與「提示詞」分頁，是編輯單頁逐字稿、重生語音，以及調整整份簡報風格提示詞的主要入口。延續前一項補齊播放控制列與播放設定面板 i18n 的工作，這次處理同一檔案中緊鄰的逐字稿/提示詞編輯區，包含分頁標題、聚焦模式切換按鈕、textarea placeholder 與儲存按鈕等仍殘留的硬編碼中文。
+
+新版讓這個區塊的所有文字都跟隨全站界面語言設定顯示對應語言。
+
+### 使用方式
+
+1. 進入「設定」頁，將「界面文字語言」切換為「繁體中文」或「English」。
+2. 回到任一簡報播放頁，下方分頁列的「📝 逐字稿」「🪄 提示詞」分頁標題、右上角放大/還原播放器版面按鈕的提示文字，都會依目前界面語言顯示。
+3. 切到「逐字稿」分頁：標題（含頁碼）、查看版本歷史按鈕、textarea placeholder、「儲存後會僅重生此頁語音」提示與「儲存並重生語音」/「重生中…」按鈕皆依語言顯示。
+4. 切到「提示詞」分頁：標題（含頁碼）、textarea placeholder、「更新後將影響後續以提示詞為基礎的生成」提示與「儲存提示詞」/「儲存中…」按鈕皆依語言顯示。
+
+### 技術細節
+
+- `PlayPageSlidePanel.tsx` 新增 16 個翻譯鍵：`play.slidePanel.transcriptTab`、`promptTab`、`focusModeRestore`、`focusModeEnlarge`，以及 `play.slidePanel.transcript.*`（`heading`、`viewHistory`、`versionButton`、`placeholder`、`saveHint`、`regenerating`、`saveAndRegenerate`）與 `play.slidePanel.prompt.*`（`heading`、`placeholder`、`updateHint`、`saving`、`save`）。
+- 標題鍵（`transcript.heading`、`prompt.heading`）使用 `{page}` 佔位符搭配 `.replace()` 帶入目前頁碼，沿用本檔案其他動態文字慣例。
+- 純文字替換，未調整逐字稿編輯、提示詞編輯、儲存並重生語音、聚焦模式切換等任何行為或狀態管理。
+- `frontend/src/i18n.test.ts` 新增測試驗證上述 16 個翻譯鍵在中英文 locale 中都存在且為非空字串。

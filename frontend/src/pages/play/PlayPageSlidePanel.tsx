@@ -690,14 +690,14 @@ export function PlayPageSlidePanel() {
               onClick={() => setEditTab('script')}
               className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'script' ? 'bg-slate-800 text-emerald-200' : 'text-slate-400'}`}
             >
-              📝 逐字稿
+              {t('play.slidePanel.transcriptTab')}
             </button>
             <button
               type="button"
               onClick={() => setEditTab('prompt')}
               className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'prompt' ? 'bg-slate-800 text-cyan-200' : 'text-slate-400'}`}
             >
-              🪄 提示詞
+              {t('play.slidePanel.promptTab')}
             </button>
             <button
               type="button"
@@ -743,7 +743,7 @@ export function PlayPageSlidePanel() {
                 transcriptFocusMode ? 'bg-emerald-500/15 text-emerald-200' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
               }`}
               aria-pressed={transcriptFocusMode}
-              title={transcriptFocusMode ? '還原播放器版面' : '縮小播放器，放大逐字稿編輯區'}
+              title={transcriptFocusMode ? t('play.slidePanel.focusModeRestore') : t('play.slidePanel.focusModeEnlarge')}
             >
               {transcriptFocusMode ? '↙' : '↗'}
             </button>
@@ -753,16 +753,16 @@ export function PlayPageSlidePanel() {
             <>
               <div className="mb-2 flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-slate-300">
-                  📝 逐字稿（第 {currentPage?.page_number ?? '-'} 頁）
+                  {t('play.slidePanel.transcript.heading').replace('{page}', String(currentPage?.page_number ?? '-'))}
                 </h2>
                 <button
                   type="button"
                   onClick={() => currentPage && void openVersionHistory('script', currentPage.page_number)}
                   disabled={!currentPage}
-                  title="查看此頁逐字稿的歷史版本"
+                  title={t('play.slidePanel.transcript.viewHistory')}
                   className="rounded-md border border-slate-600 px-2 py-1 text-xs text-slate-400 hover:bg-slate-800 hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  🕘 版本
+                  {t('play.slidePanel.transcript.versionButton')}
                 </button>
               </div>
               <textarea
@@ -771,11 +771,11 @@ export function PlayPageSlidePanel() {
                 disabled={isReadOnlyProcessing}
                 rows={transcriptFocusMode ? 18 : 6}
                 className={`w-full rounded-md border border-slate-700 bg-slate-900/70 p-3 text-sm leading-relaxed text-slate-100 outline-none ring-emerald-500/40 placeholder:text-slate-500 focus:ring ${transcriptFocusMode ? 'min-h-[55vh] flex-1' : ''}`}
-                placeholder="請輸入本頁逐字稿..."
+                placeholder={t('play.slidePanel.transcript.placeholder')}
               />
               <div className="mt-2 flex items-center justify-between gap-3">
                 <div className="text-xs text-slate-400">
-                  {editorError ? <span className="text-rose-300">{editorError}</span> : '儲存後會僅重生此頁語音'}
+                  {editorError ? <span className="text-rose-300">{editorError}</span> : t('play.slidePanel.transcript.saveHint')}
                 </div>
                 <button
                   type="button"
@@ -783,24 +783,24 @@ export function PlayPageSlidePanel() {
                   disabled={isReadOnlyProcessing || editorBusy || !hasScriptChanges}
                   className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-3 py-1.5 text-sm text-emerald-200 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  {editorBusy ? '重生中…' : '儲存並重生語音'}
+                  {editorBusy ? t('play.slidePanel.transcript.regenerating') : t('play.slidePanel.transcript.saveAndRegenerate')}
                 </button>
               </div>
             </>
           ) : editTab === 'prompt' ? (
             <>
-              <h2 className="mb-2 text-sm font-semibold text-slate-300">🪄 提示詞（第 {currentPage?.page_number ?? '-'} 頁）</h2>
+              <h2 className="mb-2 text-sm font-semibold text-slate-300">{t('play.slidePanel.prompt.heading').replace('{page}', String(currentPage?.page_number ?? '-'))}</h2>
               <textarea
                 value={promptInput}
                 onChange={(e) => setPromptInput(e.target.value)}
                 disabled={isReadOnlyProcessing}
                 rows={6}
                 className="w-full rounded-md border border-slate-700 bg-slate-900/70 p-3 text-sm leading-relaxed text-slate-100 outline-none ring-cyan-500/40 placeholder:text-slate-500 focus:ring"
-                placeholder="請輸入這份簡報的風格提示詞..."
+                placeholder={t('play.slidePanel.prompt.placeholder')}
               />
               <div className="mt-2 flex items-center justify-between gap-3">
                 <div className="text-xs text-slate-400">
-                  {promptMsg ? <span className="text-slate-300">{promptMsg}</span> : '更新後將影響後續以提示詞為基礎的生成'}
+                  {promptMsg ? <span className="text-slate-300">{promptMsg}</span> : t('play.slidePanel.prompt.updateHint')}
                 </div>
                 <button
                   type="button"
@@ -808,7 +808,7 @@ export function PlayPageSlidePanel() {
                   disabled={isReadOnlyProcessing || promptBusy}
                   className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  {promptBusy ? '儲存中…' : '儲存提示詞'}
+                  {promptBusy ? t('play.slidePanel.prompt.saving') : t('play.slidePanel.prompt.save')}
                 </button>
               </div>
             </>

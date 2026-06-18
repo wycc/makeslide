@@ -194,3 +194,31 @@ test('PlayPageSlidePanel playback control/settings locale keys are complete', ()
     assert.notEqual(en[key].trim(), '');
   }
 });
+
+test('PlayPageSlidePanel transcript/prompt editor locale keys are complete', () => {
+  const requiredKeys = [
+    'play.slidePanel.transcriptTab',
+    'play.slidePanel.promptTab',
+    'play.slidePanel.focusModeRestore',
+    'play.slidePanel.focusModeEnlarge',
+    'play.slidePanel.transcript.heading',
+    'play.slidePanel.transcript.viewHistory',
+    'play.slidePanel.transcript.versionButton',
+    'play.slidePanel.transcript.placeholder',
+    'play.slidePanel.transcript.saveHint',
+    'play.slidePanel.transcript.regenerating',
+    'play.slidePanel.transcript.saveAndRegenerate',
+    'play.slidePanel.prompt.heading',
+    'play.slidePanel.prompt.placeholder',
+    'play.slidePanel.prompt.updateHint',
+    'play.slidePanel.prompt.saving',
+    'play.slidePanel.prompt.save',
+  ] as const;
+
+  for (const key of requiredKeys) {
+    assert.equal(typeof zhTW[key], 'string');
+    assert.equal(typeof en[key], 'string');
+    assert.notEqual(zhTW[key].trim(), '');
+    assert.notEqual(en[key].trim(), '');
+  }
+});
