@@ -78,7 +78,7 @@
 
 - [x] 後端圖表參考選取與投票/測驗題路由補上編輯權限檢查：`backend/src/routes/pdfs/figures.ts` 的 `PUT /api/pdfs/:id/pages/:n/figures/selection`，以及 `backend/src/routes/pdfs/detail.ts` 的 `POST /api/pdfs/:id/pages/:n/polls`（建立投票）、`DELETE /api/pdfs/:id/polls/:pollId`（刪除投票）、`POST /api/pdfs/:id/polls/:pollId/reset-votes`（清空投票結果）皆完全沒有檢查編輯權限；應補上 `canEditPdf()` 檢查並回傳 `403`。`POST /api/pdfs/:id/polls/:pollId/votes`（學生投票提交）維持現狀不需此限制，與測驗 attempts 提交相同道理，followers 需要在沒有編輯權限的情況下投票。
 
-- [ ] `PlayPageSlidePanel.tsx` 播放控制列與播放設定面板補齊 i18n：雖然此檔案已使用 `useI18n()`，但播放控制按鈕的 `aria-label`/`title`（「上一頁」、「下一頁」、「語音載入失敗，點擊重試」、「此頁無語音」、「顯示分享 QR Code」、「進度條」等，約在 438–510 行）、播放完成提示（「播放完成」、「本頁播放完畢…」）與「播放設定」面板內容（本機靜音狀態、音訊/播放速度/字幕控制標籤、課堂模式與互動模式的說明文字與切換按鈕，約在 510–680 行）仍是硬編碼中文；應補上對應 `play.slidePanel.*` 翻譯鍵，保留既有播放/換頁/靜音/課堂模式互動邏輯不變。
+- [x] `PlayPageSlidePanel.tsx` 播放控制列與播放設定面板補齊 i18n：雖然此檔案已使用 `useI18n()`，但播放控制按鈕的 `aria-label`/`title`（「上一頁」、「下一頁」、「語音載入失敗，點擊重試」、「此頁無語音」、「顯示分享 QR Code」、「進度條」等，約在 438–510 行）、播放完成提示（「播放完成」、「本頁播放完畢…」）與「播放設定」面板內容（本機靜音狀態、音訊/播放速度/字幕控制標籤、課堂模式與互動模式的說明文字與切換按鈕，約在 510–680 行）仍是硬編碼中文；應補上對應 `play.slidePanel.*` 翻譯鍵，保留既有播放/換頁/靜音/課堂模式互動邏輯不變。
 
 - [ ] `PlayPageSlidePanel.tsx` 逐字稿編輯與提示詞編輯區塊補齊 i18n：「📝 逐字稿」分頁標題、版本歷史按鈕、textarea placeholder（「請輸入本頁逐字稿...」/「請輸入這份簡報的風格提示詞...」）、「儲存後會僅重生此頁語音」/「更新後將影響後續以提示詞為基礎的生成」提示文字，以及「儲存並重生語音」按鈕（約在 693–810 行）仍是硬編碼中文；應補上對應 `play.slidePanel.transcript.*`/`play.slidePanel.prompt.*` 翻譯鍵，保留既有編輯/儲存/重生語音行為不變。
 
@@ -298,3 +298,7 @@
 - 時間: 2026-06-19 02:20:00 +0800
 - 分支: master
 - 內容: 依照 LOOP.md 在 TODO.md 已無未完成項目時重新檢視主要程式區塊。本輪剛完成整套後端寫入路由編輯權限缺口修復（github-sync、page-animation/drawings、quizzes、page-operations、delete、regenerate、add-pages、versioning、figures/polls），確認 `backend/src/routes/pdfs/` 目錄下的權限缺口已掃描完畢，故改往其他方向檢查：(1) `backend/src/routes/auth.ts` 等 pdfs 以外的路由檔案；(2) `backend/src/worker/steps/extractText.ts` 等檔案的錯誤處理（檢查後確認 `runPipeline()` 在 458/1341 行已有外層 try/catch 會把任何子步驟錯誤包成 `status: 'failed'` 並記錄 `error_message`，因此原先懷疑的「會讓整個文字擷取步驟當掉」並不成立，影響遠比表面看起來小，但 Google OAuth callback 的 `.parse()` 仍值得補上更明確的錯誤處理，已記錄為較低優先的待辦）；(3) 用 grep 找尚未完成 i18n 的前端檔案，確認 `PlayPageSlidePanel.tsx`（雖然已用 `useI18n()`，但播放控制列/設定面板與逐字稿/提示詞編輯區仍有大量硬編碼中文）、`PlayPageFullscreen.tsx`（全螢幕播放模式的按鈕、繪圖工具列與內建逐字稿編輯區）、`QuizBuilderPage.tsx`（grep 約 70 餘處硬編碼中文，範圍明顯較大）皆有明確缺口。新增 5 個待辦項目：(1)(2) `PlayPageSlidePanel.tsx` 拆成播放控制/設定面板與逐字稿/提示詞編輯兩個獨立 i18n 項目；(3) `PlayPageFullscreen.tsx` 全螢幕模式 i18n；(4) `QuizBuilderPage.tsx` i18n（標註範圍較大建議獨立 PR）；(5) Google OAuth callback 的 Zod parse 錯誤處理（已驗證目前由全域 error handler 接住不會當機，純粹是錯誤訊息友善度與可追查性的小優化，優先度較低）。
+
+- 時間: 2026-06-19 02:35:00 +0800
+- 分支: feature/slidepanel-controls-i18n-20260619
+- 內容: 完成「PlayPageSlidePanel.tsx 播放控制列與播放設定面板補齊 i18n」。將播放區圖片 alt 文字、QR Code alt、版本歷史按鈕、頁面生成失敗/等待確認/生成中提示、播放完成與課堂模式等待提示、上一頁/下一頁/播放/暫停/語音重試/無語音/分享 QR/進度條等按鈕的 `aria-label`/`title`，以及「播放設定」面板內所有內容（本機靜音狀態 badge 與切換、播放速度、字幕、播放進度清除、學生端音訊控制、上課模式、互動模式的標籤/說明/切換按鈕）全部改用新增的 `play.slidePanel.*` 翻譯鍵（共 49 個）。標題文字刻意拆成獨立的 `play.slidePanel.playbackSettingsTitle`（「播放設定」）而非沿用既有 `play.header.settings`（「設定」），因為兩者中文原文不同，避免誤用造成譯文錯誤。`zh-TW.ts`/`en.ts` 同步新增對應翻譯，並在 `frontend/src/i18n.test.ts` 新增測試驗證全部 49 個鍵在中英文皆存在且非空字串。保留既有播放/換頁/靜音/課堂模式/互動模式互動邏輯與狀態管理完全不變，純粹替換文字來源。frontend typecheck 通過，既有與新增前端測試（`tsx --test`，129 項）全數通過。

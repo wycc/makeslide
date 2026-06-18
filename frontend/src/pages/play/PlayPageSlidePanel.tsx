@@ -258,7 +258,7 @@ export function PlayPageSlidePanel() {
             <div className="flex flex-col items-center gap-3 rounded-lg border border-slate-700 bg-slate-900/80 p-4 shadow-xl">
               <img
                 src={playQrCodeUrl}
-                alt="分享連結 QR Code"
+                alt={t('play.slidePanel.shareQrAlt')}
                 className="w-auto rounded-md border border-slate-700 bg-white p-2"
                 style={{ maxHeight: transcriptFocusMode ? '8rem' : `${slideImageMaxHeightVh}vh` }}
               />
@@ -281,23 +281,23 @@ export function PlayPageSlidePanel() {
               wrapperClassName="relative inline-block rounded-lg"
               wrapperStyle={{ lineHeight: 0, maxHeight: transcriptFocusMode ? '10rem' : `${slideImageMaxHeightVh}vh` }}
               src={displayedImageSrc ?? playbackImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
-              alt={`第 ${currentPage?.page_number ?? ''} 頁`}
+              alt={t('play.slidePanel.pageImageAlt').replace('{page}', String(currentPage?.page_number ?? ''))}
               imgClassName="block h-auto w-auto rounded-lg border border-slate-800 shadow-xl"
               imgStyle={{
                 maxHeight: transcriptFocusMode ? '10rem' : `${slideImageMaxHeightVh}vh`,
                 cursor: imageEditSelectMode ? 'crosshair' : (drawingMode && drawingTool !== 'cursor') ? 'default' : 'pointer',
               }}
               onImgClick={() => { if (!imageEditSelectMode && (!drawingMode || drawingTool === 'cursor')) playPause(); }}
-              imgProps={{ role: 'button', tabIndex: -1, 'aria-label': isPlaying ? '暫停語音播放' : '繼續語音播放' }}
+              imgProps={{ role: 'button', tabIndex: -1, 'aria-label': isPlaying ? t('play.slidePanel.pauseAudioOverlay') : t('play.slidePanel.resumeAudioOverlay') }}
               overlay={
                 <button
                   type="button"
                   onClick={() => currentPage && void openVersionHistory('image', currentPage.page_number)}
                   disabled={!currentPage}
-                  title="查看此頁圖片的歷史版本"
+                  title={t('play.slidePanel.viewImageHistory')}
                   className="absolute right-2 top-2 z-20 rounded-md border border-slate-600 bg-slate-900/80 px-2 py-1 text-xs text-slate-300 backdrop-blur hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  🖼 版本
+                  {t('play.slidePanel.versionButton')}
                 </button>
               }
             >
@@ -395,10 +395,10 @@ export function PlayPageSlidePanel() {
               style={{ height: transcriptFocusMode ? '10rem' : `${slideImageMaxHeightVh}vh` }}
             >
               {currentPage?.status === 'failed'
-                    ? `本頁產生失敗${currentPage.error_message ? `：${currentPage.error_message}` : ''}`
+                    ? `${t('play.slidePanel.pageGenerationFailed')}${currentPage.error_message ? `：${currentPage.error_message}` : ''}`
                     : detail?.status === 'awaiting_script_confirmation'
-                      ? '等待確認分頁結果（確認後將開始產生圖片）'
-                      : '圖片產生中…'}
+                      ? t('play.slidePanel.awaitingSplitConfirmation')
+                      : t('play.slidePanel.imageGenerating')}
             </div>
           )}
           {animationWarning ? (
@@ -421,12 +421,12 @@ export function PlayPageSlidePanel() {
         <div className={transcriptFocusMode ? 'flex flex-col gap-2 px-3 py-3' : 'flex flex-col gap-3 px-4 py-4'}>
       {finished && (
         <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
-          播放完成
+          {t('play.slidePanel.finished')}
         </div>
       )}
       {classroomMode && classroomAwaitingNext && !finished && (
         <div className="rounded-md border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-sm text-amber-100">
-          本頁播放完畢，停留在目前頁。按空白鍵進入下一頁並播放。
+          {t('play.slidePanel.classroomAwaitingNextMessage')}
         </div>
       )}
       <div className={`flex items-center gap-3 ${transcriptFocusMode ? 'flex-wrap' : ''}`}>
@@ -435,8 +435,8 @@ export function PlayPageSlidePanel() {
           onClick={goPrev}
           disabled={currentIdx === 0}
           className="rounded-full border border-slate-700 px-3 py-2 text-sm disabled:opacity-30 hover:bg-slate-800"
-          aria-label="上一頁"
-          title="上一頁 (←)"
+          aria-label={t('play.slidePanel.prevPage')}
+          title={`${t('play.slidePanel.prevPage')} (←)`}
         >
           ⏮
         </button>
@@ -445,7 +445,7 @@ export function PlayPageSlidePanel() {
             type="button"
             onClick={handleRetry}
             className="rounded-full border border-rose-500/50 bg-rose-500/15 px-4 py-2 text-sm text-rose-300 hover:bg-rose-500/25"
-            aria-label="語音載入失敗，點擊重試"
+            aria-label={t('play.slidePanel.audioRetry')}
             title={audioError}
           >
             ▶︎
@@ -455,8 +455,8 @@ export function PlayPageSlidePanel() {
             type="button"
             disabled
             className="rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm opacity-30 cursor-not-allowed"
-            aria-label="此頁無語音"
-            title="此頁無語音"
+            aria-label={t('play.slidePanel.noAudio')}
+            title={t('play.slidePanel.noAudio')}
           >
             ▶︎
           </button>
@@ -465,8 +465,8 @@ export function PlayPageSlidePanel() {
             type="button"
             onClick={playPause}
             className="rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm hover:bg-slate-700"
-            aria-label={classroomMode && classroomAwaitingNext ? '下一頁並播放' : isPlaying ? '暫停' : '播放'}
-            title={classroomMode && classroomAwaitingNext ? '下一頁並播放 (Space)' : isPlaying ? '暫停 (Space)' : '播放 (Space)'}
+            aria-label={classroomMode && classroomAwaitingNext ? t('play.slidePanel.nextAndPlay') : isPlaying ? t('play.slidePanel.pause') : t('play.slidePanel.play')}
+            title={`${classroomMode && classroomAwaitingNext ? t('play.slidePanel.nextAndPlay') : isPlaying ? t('play.slidePanel.pause') : t('play.slidePanel.play')} (Space)`}
           >
             {classroomMode && classroomAwaitingNext ? '⏭▶︎' : isPlaying ? '⏸' : '▶︎'}
           </button>
@@ -476,8 +476,8 @@ export function PlayPageSlidePanel() {
           onClick={goNext}
           disabled={currentIdx >= totalPages - 1}
           className="rounded-full border border-slate-700 px-3 py-2 text-sm disabled:opacity-30 hover:bg-slate-800"
-          aria-label="下一頁"
-          title="下一頁 (→)"
+          aria-label={t('play.slidePanel.nextPage')}
+          title={`${t('play.slidePanel.nextPage')} (→)`}
         >
           ⏭
         </button>
@@ -486,8 +486,8 @@ export function PlayPageSlidePanel() {
           onClick={() => void handleShowPlayQrCode()}
           disabled={!pdfId}
           className="rounded-full border border-violet-500/50 bg-violet-500/15 px-3 py-2 text-sm text-violet-200 hover:bg-violet-500/25 disabled:opacity-40"
-          aria-label="顯示分享 QR Code"
-          title="產生分享 QR Code"
+          aria-label={t('play.slidePanel.shareQrAriaLabel')}
+          title={t('play.slidePanel.shareQrTitle')}
         >
           ▦
         </button>
@@ -498,7 +498,7 @@ export function PlayPageSlidePanel() {
           value={progressRatio}
           onChange={handleSeek}
           className="order-2 min-w-0 flex-[1_1_calc(100%-5.75rem)] accent-emerald-500 sm:order-none sm:flex-1"
-          aria-label="進度條"
+          aria-label={t('play.slidePanel.progressBarAriaLabel')}
         />
         <div className="order-3 w-[5.25rem] shrink-0 whitespace-nowrap text-right font-mono text-[11px] text-slate-300 sm:order-none sm:w-24 sm:text-xs">
           {formatTime(Math.min(currentTime, duration))} / {formatTime(duration)}
@@ -507,25 +507,25 @@ export function PlayPageSlidePanel() {
       <div className={transcriptFocusMode ? 'hidden' : 'rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300'}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-semibold text-slate-200">播放設定</span>
+            <span className="font-semibold text-slate-200">{t('play.slidePanel.playbackSettingsTitle')}</span>
             <span className={`rounded-full border px-2 py-0.5 ${effectiveAudioMuted ? 'border-amber-400/50 bg-amber-400/10 text-amber-100' : 'border-emerald-400/40 bg-emerald-400/10 text-emerald-100'}`}>
-              {effectiveAudioMuted ? '本機靜音' : '本機有聲'}
+              {effectiveAudioMuted ? t('play.slidePanel.localMuted') : t('play.slidePanel.localUnmuted')}
             </span>
             <span className={`rounded-full border px-2 py-0.5 ${classroomMode ? 'border-amber-400/50 bg-amber-400/10 text-amber-100' : 'border-slate-700 bg-slate-950 text-slate-400'}`}>
-              {classroomMode ? '上課模式' : '連續播放'}
+              {classroomMode ? t('play.slidePanel.classroomModeBadge') : t('play.slidePanel.continuousPlaybackBadge')}
             </span>
             {interactiveMode ? (
               <span className="rounded-full border border-cyan-400/50 bg-cyan-400/10 px-2 py-0.5 text-cyan-100">
-                互動模式
+                {t('play.slidePanel.interactiveModeBadge')}
               </span>
             ) : null}
             {syncEnabled && syncRole === 'master' ? (
               <span className="rounded-full border border-cyan-400/40 bg-cyan-400/10 px-2 py-0.5 text-cyan-100">
-                學生端音訊：{followerAudioUnlocked ? '可自行播放' : '強制靜音'}
+                {t('play.slidePanel.followerAudioStatusLabel')}{followerAudioUnlocked ? t('play.slidePanel.followerAudioUnlockedShort') : t('play.slidePanel.followerAudioLockedShort')}
               </span>
             ) : null}
             {syncEnabled && syncRole === 'follower' && !followerAudioUnlocked ? (
-              <span className="rounded-full border border-cyan-400/40 bg-cyan-400/10 px-2 py-0.5 text-cyan-100">老師端強制靜音</span>
+              <span className="rounded-full border border-cyan-400/40 bg-cyan-400/10 px-2 py-0.5 text-cyan-100">{t('play.slidePanel.teacherForcedMute')}</span>
             ) : null}
           </div>
           <button
@@ -534,7 +534,7 @@ export function PlayPageSlidePanel() {
             className="rounded-full border border-slate-700 bg-slate-950 px-3 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
             aria-expanded={playbackSettingsOpen}
           >
-            ⚙️ 設定
+            {t('play.slidePanel.settingsToggle')}
           </button>
         </div>
         {playbackSettingsOpen ? (
@@ -546,13 +546,13 @@ export function PlayPageSlidePanel() {
             ) : null}
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-950/70 px-3 py-2">
               <div>
-                <span className="font-semibold text-slate-200">音訊</span>
+                <span className="font-semibold text-slate-200">{t('play.slidePanel.audioSectionTitle')}</span>
                 <span className="ml-2 text-slate-400">
                   {syncEnabled && syncRole === 'follower' && !followerAudioUnlocked
-                    ? '老師端已強制學生端靜音。'
+                    ? t('play.slidePanel.audioStatusTeacherForced')
                     : effectiveAudioMuted
-                      ? '目前本機靜音。'
-                      : '目前本機可播放聲音。'}
+                      ? t('play.slidePanel.audioStatusMutedLocal')
+                      : t('play.slidePanel.audioStatusUnmutedLocal')}
                 </span>
               </div>
               <label className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-medium text-slate-300 hover:bg-slate-800">
@@ -566,19 +566,19 @@ export function PlayPageSlidePanel() {
                   }}
                   className="accent-cyan-500"
                 />
-                本機靜音
+                {t('play.slidePanel.localMuted')}
               </label>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-950/70 px-3 py-2">
-              <div><span className="font-semibold text-slate-200">播放速度</span></div>
+              <div><span className="font-semibold text-slate-200">{t('play.slidePanel.playbackSpeedTitle')}</span></div>
               <select value={String(playbackRate)} onChange={(e)=>setPlaybackRate(Number(e.target.value))} className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200">
                 {[0.5,0.75,1,1.25,1.5,2].map((speed)=><option key={speed} value={String(speed)}>{speed}x</option>)}
               </select>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-950/70 px-3 py-2">
               <div>
-                <span className="font-semibold text-slate-200">字幕</span>
-                <span className="ml-2 text-slate-400">切換是否顯示目前句子字幕。</span>
+                <span className="font-semibold text-slate-200">{t('play.slidePanel.subtitleTitle')}</span>
+                <span className="ml-2 text-slate-400">{t('play.slidePanel.subtitleDescription')}</span>
               </div>
               <label className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-medium text-slate-300 hover:bg-slate-800">
                 <input
@@ -610,11 +610,11 @@ export function PlayPageSlidePanel() {
             {syncEnabled && syncRole === 'master' ? (
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-cyan-100">
                 <div>
-                  <span className="font-semibold">學生端音訊控制</span>
+                  <span className="font-semibold">{t('play.slidePanel.studentAudioControlTitle')}</span>
                   <span className="ml-2 text-cyan-200/80">
                     {followerAudioUnlocked
-                      ? '已解鎖，學生可自行取消靜音播放。'
-                      : '已鎖定，所有 follower 會被強制靜音。'}
+                      ? t('play.slidePanel.studentAudioUnlocked')
+                      : t('play.slidePanel.studentAudioLocked')}
                   </span>
                 </div>
                 <button
@@ -623,15 +623,15 @@ export function PlayPageSlidePanel() {
                   className="rounded-full border border-cyan-300/50 bg-cyan-950/40 px-3 py-1 text-xs font-medium text-cyan-100 hover:bg-cyan-900/60"
                   aria-pressed={followerAudioUnlocked}
                 >
-                  {followerAudioUnlocked ? '強制所有學生靜音' : '解鎖學生自行播放'}
+                  {followerAudioUnlocked ? t('play.slidePanel.forceAllMuted') : t('play.slidePanel.unlockStudentPlayback')}
                 </button>
               </div>
             ) : null}
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-950/70 px-3 py-2">
               <div>
-                <span className="font-semibold text-slate-200">上課模式</span>
+                <span className="font-semibold text-slate-200">{t('play.slidePanel.classroomModeBadge')}</span>
                 <span className="ml-2 text-slate-400">
-                  {classroomMode ? '每頁播放完會停在目前頁，按空白鍵才進入下一頁。' : '關閉時會自動連續播放下一頁。'}
+                  {classroomMode ? t('play.slidePanel.classroomModeOnDesc') : t('play.slidePanel.classroomModeOffDesc')}
                 </span>
               </div>
               <button
@@ -644,16 +644,16 @@ export function PlayPageSlidePanel() {
                 }`}
                 aria-pressed={classroomMode}
               >
-                {classroomMode ? '已開啟' : '開啟'}
+                {classroomMode ? t('play.slidePanel.toggleOn') : t('play.slidePanel.toggleOff')}
               </button>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-950/70 px-3 py-2">
               <div>
-                <span className="font-semibold text-slate-200">互動模式</span>
+                <span className="font-semibold text-slate-200">{t('play.slidePanel.interactiveModeBadge')}</span>
                 <span className="ml-2 text-slate-400">
                   {interactiveMode
-                    ? '每頁播放完會停在目前頁並自動啟動 Realtime Poll。'
-                    : '關閉時播放結束不會自動開始投票。'}
+                    ? t('play.slidePanel.interactiveModeOnDesc')
+                    : t('play.slidePanel.interactiveModeOffDesc')}
                 </span>
               </div>
               <button
@@ -672,7 +672,7 @@ export function PlayPageSlidePanel() {
                 }`}
                 aria-pressed={interactiveMode}
               >
-                {interactiveMode ? '已開啟' : '開啟'}
+                {interactiveMode ? t('play.slidePanel.toggleOn') : t('play.slidePanel.toggleOff')}
               </button>
             </div>
           </div>
