@@ -61,7 +61,7 @@ async function collectCorpus(
  */
 const MAX_CORPUS_CHARS = 6000;
 
-function clipCorpus(corpus: string): string {
+export function clipCorpus(corpus: string): string {
   const t = corpus.trim();
   if (t.length <= MAX_CORPUS_CHARS) return t;
   // Take the first ~70% + last ~30% to capture both intro and conclusion.
@@ -72,7 +72,7 @@ function clipCorpus(corpus: string): string {
 
 const MAX_USER_PROMPT_CHARS_IN_SYSTEM = 2000;
 
-function sanitiseUserPrompt(raw: string | null | undefined): string {
+export function sanitiseUserPrompt(raw: string | null | undefined): string {
   if (!raw) return '';
   const trimmed = raw.trim();
   if (!trimmed) return '';
@@ -81,7 +81,7 @@ function sanitiseUserPrompt(raw: string | null | undefined): string {
     : trimmed;
 }
 
-function buildSystem(userPrompt: string | null | undefined, contentLanguage: AppLanguage): string {
+export function buildSystem(userPrompt: string | null | undefined, contentLanguage: AppLanguage): string {
   const base = contentLanguage === 'en'
     ? [
         'You are a senior English editor who creates concise, compelling titles for slide decks.',
@@ -115,7 +115,7 @@ function buildSystem(userPrompt: string | null | undefined, contentLanguage: App
   return base.join('\n');
 }
 
-function buildUser(corpus: string, contentLanguage: AppLanguage): string {
+export function buildUser(corpus: string, contentLanguage: AppLanguage): string {
   if (contentLanguage === 'en') {
     return [
       'Below are transcript / source excerpts from each page of a slide deck:',

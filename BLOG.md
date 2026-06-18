@@ -2343,3 +2343,26 @@ Manim.animate.shake(myShape, progress, {
 - `HomePage.tsx` 新增 `home.importingZip`、`home.importZipProgressAriaLabel` 翻譯鍵，沿用既有 `home.*` 命名慣例。
 - `zh-TW.ts`/`en.ts` 同步新增 3 個翻譯鍵，`frontend/src/i18n.test.ts` 新增測試驗證皆存在且非空字串。
 - 純文字替換，未調整套用模板或 ZIP 匯入進度顯示的任何行為。
+
+## `generateTitle.ts` 補上單元測試
+
+### 功能目的
+
+`backend/src/worker/steps/generateTitle.ts` 負責在 pipeline 完成後依逐字稿或頁面文字，請 LLM 為整份簡報命名，是少數會直接影響使用者最先看到的內容（簡報標題）的步驟，但過去完全沒有對應的測試檔案。這個檔案內含多個容易獨立測試的純函式：裁切過長語料的 `clipCorpus()`、清理使用者風格提示詞的 `sanitiseUserPrompt()`，以及依內容語言組裝 system/user prompt 的 `buildSystem()`/`buildUser()`，加上測試覆蓋可大幅降低未來調整命名規則或語料長度限制時的回歸風險。
+
+### 使用方式
+
+此變更純粹是補上測試，不影響任何使用者可見行為或 API：
+
+1. 標題生成的規則、語料裁切邏輯與中英文系統提示詞維持原樣。
+2. 開發者修改命名規則、字數限制或語言提示詞時，可透過新增的測試立即看到是否破壞既有行為。
+
+### 技術細節
+
+- `clipCorpus()`、`sanitiseUserPrompt()`、`buildSystem()`、`buildUser()` 由模組私有函式改為具名匯出，方便測試直接呼叫；對外仍只透過 `generateTitle()`/`GenerateTitleResult`/`GenerateTitleOptions` 呼叫，行為未變。
+- 新增 `backend/test/generate-title.test.ts` 15 個測試：
+  - `clipCorpus`：短語料原樣保留（僅 trim）、超過 6000 字裁切並保留頭尾插入「中段略」標記、剛好等於上限不裁切。
+  - `sanitiseUserPrompt`：`null`/`undefined`/純空白回傳空字串、短提示詞僅 trim、超過 2000 字截斷並附加「已截斷」標記。
+  - `buildSystem`：英文/繁中規則互斥（英文版不含中文規則文字，反之亦然）、提供使用者提示詞時才附加對應風格區塊。
+  - `buildUser`：語料原文確實嵌入，且依語言使用對應的指示文字。
+  - `generateTitle()` 整合測試（用既有 `setOpenAIClientForTest()` mock）：優先使用逐字稿並回傳 `source: 'script'`、無逐字稿時 fallback 到頁面文字並回傳 `source: 'text'`、完全沒有內容時拋出錯誤、模型回傳的標題經過標點清理後過短時拋出錯誤。

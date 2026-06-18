@@ -96,7 +96,7 @@
 
 - [x] 前端剩餘零星硬編碼中文收尾：`frontend/src/components/PromptModal.tsx` 的「套用模板」按鈕（約 263 行）與 `frontend/src/pages/HomePage.tsx` 的 ZIP 匯入進度文字「ZIP 匯入中…」與 `aria-label="ZIP 匯入進度"`（約 669、680 行）兩個檔案雖然已大量使用 `useI18n()`，但各還殘留 1-2 處硬編碼中文；應補上對應翻譯鍵（可沿用各檔案現有的 key 命名慣例），保留既有套用模板與 ZIP 匯入進度顯示行為不變，範圍很小可一次處理完。
 
-- [ ] `generateTitle.ts` 補上單元測試：`backend/src/worker/steps/generateTitle.ts` 目前完全沒有對應的測試檔案（`backend/test/` 下無任何檔案引用 `generateTitle`），但內含多個可獨立測試的純函式：`clipCorpus()`（裁切語料長度）、`sanitiseUserPrompt()`（清理使用者提示詞）、`buildSystem()`/`buildUser()`（依內容語言組裝 system/user prompt）；應新增 `backend/test/generate-title.test.ts`，至少覆蓋這些純函式的邊界情況（空字串、超長語料、不同 `contentLanguage`），並可選擇性地用既有 `setOpenAIClientForTest()` mock 模式為主要 `generateTitle()` 函式加上 1-2 個整合測試。
+- [x] `generateTitle.ts` 補上單元測試：`backend/src/worker/steps/generateTitle.ts` 目前完全沒有對應的測試檔案（`backend/test/` 下無任何檔案引用 `generateTitle`），但內含多個可獨立測試的純函式：`clipCorpus()`（裁切語料長度）、`sanitiseUserPrompt()`（清理使用者提示詞）、`buildSystem()`/`buildUser()`（依內容語言組裝 system/user prompt）；應新增 `backend/test/generate-title.test.ts`，至少覆蓋這些純函式的邊界情況（空字串、超長語料、不同 `contentLanguage`），並可選擇性地用既有 `setOpenAIClientForTest()` mock 模式為主要 `generateTitle()` 函式加上 1-2 個整合測試。
 
 ---
 
@@ -350,3 +350,7 @@
 - 時間: 2026-06-19 04:45:00 +0800
 - 分支: feature/loose-end-i18n-cleanup-20260619
 - 內容: 完成「前端剩餘零星硬編碼中文收尾」。`frontend/src/components/PromptModal.tsx` 的「套用模板」按鈕改用新增的 `promptModal.applyTemplate` 翻譯鍵（沿用既有 `promptModal.*` 命名慣例）；`frontend/src/pages/HomePage.tsx` 的 ZIP 匯入進度文字「ZIP 匯入中…」與 `aria-label="ZIP 匯入進度"` 改用新增的 `home.importingZip`/`home.importZipProgressAriaLabel`（沿用既有 `home.*` 命名慣例）。`zh-TW.ts`/`en.ts` 同步新增 3 個翻譯鍵，並在 `frontend/src/i18n.test.ts` 新增測試驗證皆存在且非空字串。用 grep 確認兩個檔案皆已無殘留硬編碼中文。保留既有套用模板與 ZIP 匯入進度顯示行為不變。frontend typecheck 通過，全部前端測試（`tsx --test`，135 項）通過。
+
+- 時間: 2026-06-19 04:55:00 +0800
+- 分支: feature/generate-title-tests-20260619
+- 內容: 完成「generateTitle.ts 補上單元測試」，這是本輪 LOOP 待辦清單的最後一項。`backend/src/worker/steps/generateTitle.ts` 將原本模組私有的 `clipCorpus()`、`sanitiseUserPrompt()`、`buildSystem()`、`buildUser()` 四個純函式改為具名匯出，方便獨立測試（不影響原本只有 `generateTitle()`/`GenerateTitleResult`/`GenerateTitleOptions` 對外的呼叫方式）。新增 `backend/test/generate-title.test.ts` 15 個測試：`clipCorpus` 覆蓋短語料不變/超長語料保留頭尾並插入「中段略」標記/剛好等於上限不裁切；`sanitiseUserPrompt` 覆蓋 null/undefined/空白回傳空字串、短提示詞僅 trim、超長提示詞截斷並加「已截斷」標記；`buildSystem` 覆蓋中英文規則互斥、有/無使用者提示詞時是否附加對應區塊；`buildUser` 覆蓋語料原文嵌入與中英文指示文字；並用既有 `setOpenAIClientForTest()` mock 模式為 `generateTitle()` 加上 4 個整合測試，覆蓋優先使用逐字稿且回傳 `source: 'script'`、無逐字稿時 fallback 到頁面文字且回傳 `source: 'text'`、完全沒有內容時應拋出錯誤、模型回傳的標題經過標點清理後過短應拋出錯誤。backend typecheck 通過，完整測試套件 320 項中 18 項失敗為既有環境相關既存失敗（與本次變更前一致，新增 15 項測試全數通過）。**至此本輪 LOOP 發現的所有待辦項目（含 9 個寫入路由權限缺口、3 個讀取/管理員權限缺口、多項播放頁與課堂測驗 i18n、Google OAuth 錯誤處理、零星 i18n 收尾、單元測試補強）皆已完成，TODO.md 再次清空。**
