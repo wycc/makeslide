@@ -54,6 +54,20 @@
 [x] read-only 模式時，不能做同步到 github 的動作
 [x] read-only 模式時，設定/風格/分享等按鍵應該 disable
 
+- [ ] 後端動畫與畫板路由補上編輯權限檢查：`backend/src/routes/pdfs/page-animation.ts` 的 `PUT /api/pdfs/:id/pages/:n/animation`、`POST .../animation/auto-focus-ai`、`POST .../animation/custom-script`，以及 `backend/src/routes/pdfs/drawings.ts` 的 `PUT`/`DELETE /api/pdfs/:id/pages/:n/drawing`，目前完全沒有檢查請求者是否有編輯權限（不像 `detail.ts` 多數寫入路由都有 `canEditPdf()`），任何已登入帳號只要知道 PDF id 就能修改唯讀分享簡報的動畫或畫板內容；應在每個寫入路由補上與 `detail.ts`/`admin.ts` 一致的 `sessionSub()` + `canEditPdf(owner_sub, visibility)` 檢查，沒有編輯權限時回傳 `403 FORBIDDEN`，並補上對應後端測試（可參考剛完成的 `backend/test/github-sync.test.ts`）。
+
+- [ ] 後端測驗寫入路由補上編輯權限檢查：`backend/src/routes/pdfs/quizzes.ts` 的 `POST /api/pdfs/:id/quizzes/generate`、`POST /api/pdfs/:id/quizzes`、`PUT /api/pdfs/:id/quizzes/:quizId` 目前沒有檢查請求者是否有編輯權限，任何登入帳號可在唯讀分享簡報上產生或修改測驗題目；應補上 `canEditPdf()` 檢查並回傳 `403`。`POST /api/pdfs/:id/quizzes/:quizId/attempts`（學生作答提交）維持現狀不需此限制，因為課堂測驗的 follower 本來就需要在沒有編輯權限的情況下提交答案。
+
+- [ ] 後端頁面操作路由補上編輯權限檢查：`backend/src/routes/pdfs/page-operations.ts` 的 `POST /api/pdfs/:id/pages`（新增頁）、`POST .../pages/move`（移動頁）、`DELETE .../pages/:n`（刪除頁）、`POST .../pages/:n/replace-image`、`POST .../pages/:n/regenerate-image`、`POST .../pages/:n/inpaint-image`、`POST .../pages/:n/rewrite-script`、`POST .../pages/:n/regenerate-audio`、`POST .../pages/:n/chat`、`DELETE .../pages/:n/chat-history` 等寫入路由目前都沒有檢查編輯權限；應逐一補上 `canEditPdf()` 檢查，這是目前後端權限缺口中影響範圍最大的一批路由，建議拆成獨立 PR 並補上至少 2-3 個關鍵路由（新增頁、刪除頁、重生圖片）的權限測試。
+
+- [ ] `TtsDialog.tsx` 補齊 i18n：目前完全沒有使用 `useI18n()`，標題「生成設定」、「聲音」、「主持模式」、「單人旁白」/「雙人對談」、「速度」、「逐字稿每頁上限字數」、「系統預設」、「儲存中…」、「儲存設定」與雙人對談說明文字皆為硬編碼中文；應改用 `useI18n()` 與新增 `play.ttsDialog.*` 翻譯鍵，讓英文介面使用者也能完整操作語音設定對話框。
+
+- [ ] `ImageStyleDialog.tsx` 補齊 i18n：目前完全沒有使用 `useI18n()`，標題「整份簡報圖片風格設定」、說明段落、「套用模板」、「關閉」、「儲存設定」按鈕與 textarea placeholder 皆為硬編碼中文；應改用 `useI18n()` 與新增 `play.imageStyleDialog.*` 翻譯鍵。
+
+- [ ] `VersionHistoryDialog.tsx` 補齊 i18n：目前完全沒有使用 `useI18n()`，「圖片」/「逐字稿」版本歷史標題、「（第 N 頁）」、「載入中…」、「尚無版本記錄」、「點選左側版本以預覽」、「關閉」、「還原中…」、「還原至此版本」皆為硬編碼中文；應改用 `useI18n()` 與新增 `play.versionHistory.*` 翻譯鍵，日期格式維持現有 locale-aware 邏輯。
+
+- [ ] `ShareDialog.tsx` 複製連結按鈕加上 Clipboard fallback：目前直接呼叫 `navigator.clipboard.writeText()`，若瀏覽器不支援 Clipboard API、非安全來源或權限被拒，使用者不會知道複製失敗；應改用既有 `frontend/src/lib/clipboard.ts` 的 `copyTextToClipboard()` helper（先試 Clipboard API、失敗再 fallback 到 textarea/`execCommand`），並在 UI 顯示成功/失敗狀態與 i18n 錯誤提示，失敗時保留可手動選取複製的連結文字。
+
 ---
 
 - 時間: 2026-06-18 06:05:00 +0800
@@ -204,3 +218,7 @@
 - 時間: 2026-06-18 09:05:00 +0800
 - 分支: feature/readonly-disable-settings-style-share-20260618
 - 內容: 完成「read-only 模式時，設定/風格/分享等按鍵應該 disable」。檢查 `PlayPageHeader.tsx` 後確認「⚙️ 設定」（語音/TTS 設定，`setTtsDialogOpen`）與「🖼️ 風格」（圖片風格設定，`openImageStyleDialog`）兩個按鈕本來就已經有 `disabled={isReadOnlyProcessing}`，不需修改；但分享區塊的三個控制項缺少這個檢查：分享存取模式 `<select>`（`shareAccess`，僅切換 UI 選擇但容易誤導使用者）、「建立分享連結」按鈕（呼叫 `handleCreateShareLink()` 會建立分享並把 `visibility` 改成 `public`/`public_editable`）、「設為 private」按鈕（呼叫 `handleMakeSharePrivate()`）都只檢查 `shareBusy`、沒有檢查 `isReadOnlyProcessing`。修正：三個控制項的 `disabled` 都加上 `|| isReadOnlyProcessing`（select 直接用 `disabled={isReadOnlyProcessing}`），並補上對應 `disabled:cursor-not-allowed disabled:opacity-40` 樣式；`usePdfMetadata.ts` 的 `handleCreateShareLink()` 補上 `isReadOnlyProcessing` 早期 return（`handleMakeSharePrivate()` 先前已有此防呆，僅 UI 未反映）。後端 `POST /api/pdfs/:id/share`（`hasOwnerOrLegacyAccess`）與 `PATCH /api/pdfs/:id/visibility`（`canEditPdf`）確認已有擁有權限檢查，不需額外修改。frontend typecheck 與既有/新增前端測試（`tsx --test`，125 項）均通過。
+
+- 時間: 2026-06-18 09:20:00 +0800
+- 分支: master
+- 內容: 依照 LOOP.md 在 TODO.md 已無未完成項目時重新檢視主要程式區塊，避開近期已完成的 i18n 系列、console 清理、來源管理複製/收合、首頁排序預設與 GitHub 同步/分享權限等項目。重點檢查播放頁尚未補齊 i18n 的對話框元件（`TtsDialog.tsx`、`ImageStyleDialog.tsx`、`VersionHistoryDialog.tsx` 皆完全沒有 `useI18n()`）、`ShareDialog.tsx` 的剪貼簿複製邏輯（尚未使用既有 `copyTextToClipboard()` helper），以及修完 `github-sync` 權限漏洞後比對其他後端寫入路由是否有相同問題；發現 `page-animation.ts`、`drawings.ts`、`quizzes.ts`、`page-operations.ts` 的多個寫入路由完全沒有 `canEditPdf()` 編輯權限檢查，任何已登入帳號可在唯讀分享簡報上修改動畫、畫板、測驗或頁面內容，屬於範圍較大的既有安全缺口；新增 7 個待辦項目：(1) 動畫與畫板路由權限檢查；(2) 測驗寫入路由權限檢查；(3) 頁面操作路由權限檢查（影響範圍最大，建議獨立 PR）；(4) TtsDialog i18n；(5) ImageStyleDialog i18n；(6) VersionHistoryDialog i18n；(7) ShareDialog clipboard fallback。
