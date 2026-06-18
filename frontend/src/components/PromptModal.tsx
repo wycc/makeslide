@@ -260,7 +260,7 @@ export default function PromptModal({
                 disabled={submitting}
                 className="rounded border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:opacity-60"
               >
-                套用模板
+                {t('promptModal.applyTemplate')}
               </button>
             </div>
           </div>
