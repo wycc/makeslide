@@ -2284,3 +2284,24 @@ Manim.animate.shake(myShape, progress, {
 - 標題鍵（`transcript.heading`、`prompt.heading`）使用 `{page}` 佔位符搭配 `.replace()` 帶入目前頁碼，沿用本檔案其他動態文字慣例。
 - 純文字替換，未調整逐字稿編輯、提示詞編輯、儲存並重生語音、聚焦模式切換等任何行為或狀態管理。
 - `frontend/src/i18n.test.ts` 新增測試驗證上述 16 個翻譯鍵在中英文 locale 中都存在且為非空字串。
+
+## 修復「系統資料」執行歷程與素材耗時排行完全沒有讀取權限檢查的安全缺口
+
+### 功能目的
+
+播放頁「系統資料」分頁顯示的 pipeline 執行歷程（`GET /api/pdfs/:id/runs`）與最慢素材排行（`GET /api/pdfs/:id/slow-artifacts`）過去只檢查 PDF 是否存在，完全沒有檢查請求者是否有權限讀取這份簡報——任何已登入、甚至未登入的人只要知道簡報 id，就能看到別人私有簡報的完整執行歷程（含錯誤訊息、LLM 用量）與每頁素材的耗時細節。這與主要的 `GET /api/pdfs/:id` 詳細資料 API（已有 `shareAccess OR canReadPdf()` 讀取權限檢查）明顯不一致，是另一類權限缺口。
+
+新版讓這兩個 API 遵循與 `detail.ts` 主要讀取 API 一致的權限規則。
+
+### 使用方式
+
+1. 簡報擁有者、取得有效分享連結（唯讀或可編輯）的使用者，以及 `public`/`public_editable` 簡報的任何登入使用者，瀏覽「系統資料」分頁時不受影響，仍可正常看到執行歷程與素材耗時排行。
+2. 非擁有者對私有簡報直接呼叫這兩個 API（無分享 token、無編輯權限）時，後端會回傳 `403 FORBIDDEN`，不會洩漏任何執行歷程或耗時資料。
+
+### 技術細節
+
+- `backend/src/routes/pdfs/runs.ts` 與 `backend/src/routes/pdfs/slow-artifacts.ts` 各自新增與 `detail.ts` 一致的本地 `sessionSub()`、`canReadPdf()`、`getShareToken()`、`hasShareAccess()`。
+- 查詢 PDF 是否存在的 SELECT 補上 `owner_sub`、`visibility` 欄位，在回傳資料前先檢查 `hasShareAccess(request, id) || canReadPdf(sessionSub(request), pdf)`。
+- `canReadPdf()` 沿用既有規則：`owner_sub` 為空（孤兒資料）一律拒絕、請求者為擁有者本人允許、`visibility` 為 `public` 或 `public_editable` 允許。
+- `hasShareAccess()` 從 request header 或 query string 取出分享 token，查詢 `pdf_shares` 表確認 token 對應此簡報的有效分享紀錄。
+- 新增 `backend/test/runs-slowartifacts-permission.test.ts` 8 個測試，覆蓋兩個路由對非擁有者私有簡報應得 403、擁有者可正常讀取、`public_editable` 任何人可讀取、攜帶有效分享 token（無 session）也可正常讀取。
