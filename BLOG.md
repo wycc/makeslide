@@ -1926,3 +1926,25 @@ Manim.animate.shake(myShape, progress, {
 - `POST /quizzes`（新增測驗）過去完全沒有檢查 PDF 是否存在，這次一併補上 `404 PDF_NOT_FOUND`，並在寫入前檢查編輯權限。
 - `PUT /quizzes/:quizId`（更新測驗）同樣在更新前檢查編輯權限，避免唯讀使用者覆寫既有測驗題目。
 - 新增 `backend/test/quizzes.test.ts` 6 個測試，覆蓋 generate/create/update 對非擁有者的唯讀分享簡報應得 403、create 對未知簡報應得 404、擁有者與 `public_editable` 協作者應可正常操作、attempts 提交不受權限限制仍可成功送出。
+
+## 頁面操作 API 全面補上編輯權限檢查
+
+### 功能目的
+
+播放頁的投影片編輯功能——新增頁、移動頁、刪除頁、替換圖片、AI 重生圖片（含 inpaint 局部重繪）、改寫逐字稿、重生語音、頁面內容對話與清空對話記錄——這些寫入 API 過去全部沒有檢查請求者是否擁有編輯這份簡報的權限，是目前後端權限缺口中影響範圍最大的一批路由，與先前已修復的 GitHub 同步、動畫/畫板、測驗權限缺口屬於同一類問題，但涉及的路由數量明顯更多。
+
+新版讓這 10 個寫入路由全部遵循與其他簡報寫入動作一致的權限規則，同時保留讀取候選圖與對話記錄的公開性，因為唯讀瀏覽者仍需要正常瀏覽既有內容。
+
+### 使用方式
+
+1. 一般擁有者或取得 read-write 分享/`public_editable` 簡報的使用者操作不受影響，仍可正常新增/移動/刪除投影片、替換或重生圖片、改寫逐字稿、重生語音，以及使用頁面內容對話功能。
+2. 唯讀分享或公開唯讀簡報的瀏覽者，前端本來就已經停用這些編輯動作；現在即使有人略過前端直接呼叫對應 API，後端也會回傳 `403 FORBIDDEN`，不會真的修改投影片內容、消耗 AI 額度或寫入對話記錄。
+3. 讀取既有候選圖（`GET /pages/:n/image-candidates/:candidateId`）與頁面對話記錄（`GET /pages/:n/chat-history`）維持公開讀取，不受影響。
+
+### 技術細節
+
+- `backend/src/routes/pdfs/page-operations.ts` 新增與其他寫入路由一致的本地 `sessionSub()` + `canEditPdf(owner_sub, visibility)` + `getPdfPermissionRow()`。
+- 補上權限檢查的 10 個路由：`POST /pages`（新增頁）、`POST /pages/move`（移動頁）、`DELETE /pages/:n`（刪除頁）、`POST /pages/:n/replace-image`、`POST /pages/:n/regenerate-image`、`POST /pages/:n/inpaint-image`、`POST /pages/:n/rewrite-script`、`POST /pages/:n/regenerate-audio`、`DELETE /pages/:n/chat-history`、`POST /pages/:n/chat`。
+- 多數路由本來就會查詢 pdf row 取得 `page_count`、`user_prompt` 等其他用途的欄位，這次盡量延伸既有 SELECT 補上 `owner_sub`/`visibility`，避免新增重複查詢；`chat-history` 的 DELETE 與 `chat` 的 POST 過去完全沒有查詢 pdf 權限，新增獨立的 `getPdfPermissionRow()` 查詢。
+- 涉及 AI 呼叫的路由（`regenerate-image`、`inpaint-image`、`rewrite-script`、`regenerate-audio`、`chat`）權限檢查都放在呼叫 OpenAI/TTS 之前，避免無權限的請求白白消耗 LLM 或 TTS 額度。
+- 新增 `backend/test/page-operations-permission.test.ts` 15 個測試：全部 10 個寫入路由對非擁有者的唯讀分享簡報應得 403（`replace-image`/`inpaint-image` 用最小 multipart payload 測試，因為權限檢查發生在解析檔案內容之前，不需要真正的圖片資料）；新增頁/移動頁/刪除頁/清空對話記錄對擁有者應正常成功；`public_editable` 協作者應能通過權限檢查。
