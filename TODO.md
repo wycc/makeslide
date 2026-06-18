@@ -98,7 +98,7 @@
 
 - [x] `generateTitle.ts` 補上單元測試：`backend/src/worker/steps/generateTitle.ts` 目前完全沒有對應的測試檔案（`backend/test/` 下無任何檔案引用 `generateTitle`），但內含多個可獨立測試的純函式：`clipCorpus()`（裁切語料長度）、`sanitiseUserPrompt()`（清理使用者提示詞）、`buildSystem()`/`buildUser()`（依內容語言組裝 system/user prompt）；應新增 `backend/test/generate-title.test.ts`，至少覆蓋這些純函式的邊界情況（空字串、超長語料、不同 `contentLanguage`），並可選擇性地用既有 `setOpenAIClientForTest()` mock 模式為主要 `generateTitle()` 函式加上 1-2 個整合測試。
 
-- [ ] `extractPdfFigures.ts` 讀取既有 manifest 時補上例外處理：`backend/src/worker/steps/extractPdfFigures.ts` 第 815 行的 `extractPdfFigures()` 在 `figures.json` 已存在時直接 `JSON.parse(await fs.promises.readFile(manifestPath, 'utf8'))`，沒有 try/catch；若該檔案因先前流程中斷而寫入不完整或損毀，會直接拋出未分類的 `SyntaxError` 並讓整個步驟失敗，而不是判斷成「manifest 不存在，重新產生」。應在解析失敗時記錄 warning 並改走後續的重新產生流程（與 `if (fs.existsSync(manifestPath))` 分支外的邏輯一致），補上對應測試覆蓋損毀 JSON 的情境。
+- [x] `extractPdfFigures.ts` 讀取既有 manifest 時補上例外處理：`backend/src/worker/steps/extractPdfFigures.ts` 第 815 行的 `extractPdfFigures()` 在 `figures.json` 已存在時直接 `JSON.parse(await fs.promises.readFile(manifestPath, 'utf8'))`，沒有 try/catch；若該檔案因先前流程中斷而寫入不完整或損毀，會直接拋出未分類的 `SyntaxError` 並讓整個步驟失敗，而不是判斷成「manifest 不存在，重新產生」。應在解析失敗時記錄 warning 並改走後續的重新產生流程（與 `if (fs.existsSync(manifestPath))` 分支外的邏輯一致），補上對應測試覆蓋損毀 JSON 的情境。
 
 - [ ] `generateVideo.ts` 合成影片前補上圖片/音訊檔案存在性檢查：`backend/src/worker/steps/generateVideo.ts` 的主迴圈（約 40-58 行）直接把 `pageImagePath()`/`pageAudioPath()` 的結果傳給 ffmpeg（`runCommand(FFMPEG, [...])`），沒有先用 `fs.existsSync()` 確認檔案存在；若某頁的音訊因 TTS 步驟失敗但資料庫狀態未即時反映，ffmpeg 會用底層的「No such file or directory」報錯讓整段影片生成失敗，使用者只會看到不易理解的 ffmpeg 錯誤。應在呼叫 ffmpeg 前檢查兩個檔案是否存在，缺檔時記錄清楚的錯誤訊息並跳過該頁（或讓整體任務以更明確的 error_message 失敗），範圍可只處理這個檢查點。
 
@@ -376,3 +376,7 @@
 - 時間: 2026-06-19 09:15:00 +0800
 - 分支: workspace-current
 - 內容: 依照 LOOP.md，在 TODO.md 已無未完成項目時重新進行唯讀分析，新增 7 個已驗證的新待辦項目（計數已於本批次前重設）。分析方向涵蓋：(1) 後端 worker steps / services 的例外處理與邊界情況；(2) 比對 `backend/test/` 與 `backend/src/worker/steps/`、`backend/src/services/` 找出完全沒有對應測試的檔案；(3) 前端 `src/lib/` 同樣比對測試覆蓋缺口。逐一讀取程式碼確認後採用：(a) `extractPdfFigures.ts` 815 行讀取既有 manifest 時 `JSON.parse()` 無 try/catch；(b) `generateVideo.ts` 合成影片前未檢查圖片/音訊檔案是否存在；(c) `presentationGit.ts` 的 `git()` 執行未設定 timeout；(d) `gemini.ts` TTS 回應解析多層 optional chaining 缺乏中間診斷紀錄；(e) `promptTemplates.ts` 完全無測試但含兩個純函式；(f) `synthesizeAudio.ts` 完全無測試但含多個可獨立測試的純函式（WAV 解析/組裝、錯誤分類、語氣標記與講者前綴切分）；(g) 前端 `subtitles.ts` 完全無測試但含字幕切句與時間軸估算兩個純函式。排除的假線索：`synthesizeAudio.ts` 的 `readScriptsForTts()` 經確認已正確區分 `ENOENT`（補空字串）與其他錯誤（rethrow），並非缺口；`extractText.ts` 頁數不符時僅 `logger.warn` 並 fallback 為 `min(numPages, pageCount)`，影響面與先前已排除的 `extractText.ts` try/catch 缺口同屬低價值/低風險，不列入；`upload.ts` 的 `generateSlideTextFromPrompt()` 已有完整的 try/catch 與 502 錯誤回應，並非「模糊錯誤訊息」；`ImportTextPage.tsx` 的聊天功能已有完整的 ApiError/Error 分類錯誤處理與 recovery guide，不構成新缺口。
+
+- 時間: 2026-06-19 09:40:00 +0800
+- 分支: feature/extract-pdf-figures-manifest-parse-20260619
+- 內容: 完成 `extractPdfFigures.ts` 讀取既有 manifest 時的例外處理。新增 `readExistingManifest(pdfId, manifestPath)`：檔案不存在時回傳 `null`；讀取後 `JSON.parse()` 失敗（檔案損毀、空白或截斷）時改為記錄 `logger.warn` 並回傳 `null`，而不是讓未分類的 `SyntaxError` 往外丟出。`extractPdfFigures()` 主流程改用此 helper，`existing` 為 `null` 時會自然走入既有的「manifest 不存在」重新產生流程，行為與設計保持一致。新增 `backend/test/extract-pdf-figures.test.ts` 4 個測試，覆蓋檔案不存在、合法 manifest 正常解析、損毀 JSON、空白檔案四種情境，均驗證回傳 `null`／正確物件而不拋出例外。已執行 typecheck（前後端皆通過）與 `npm test`（324 個測試，306 通過，18 個失敗皆為既有環境性基準，無新增回歸）。
