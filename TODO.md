@@ -108,7 +108,7 @@
 
 - [x] `promptTemplates.ts` 補上單元測試：`backend/src/services/promptTemplates.ts` 完全沒有對應測試檔案，但內含兩個容易測試的純函式：`loadPromptTemplate(relPath, fallback)`（檔案不存在或讀取後為空白時回退到 fallback，否則回傳 trim 後內容）與 `renderPromptTemplate(template, vars)`（用正規表示式 `\{\{\s*([a-zA-Z0-9_]+)\s*\}\}` 取代模板變數，找不到對應 key 時補空字串）。應新增 `backend/test/prompt-templates.test.ts`，覆蓋檔案不存在/空白內容回退、多個變數替換、找不到對應 key 時補空字串、巢狀或重複變數名稱等邊界情況。
 
-- [ ] `synthesizeAudio.ts` 補上純函式單元測試：`backend/src/worker/steps/synthesizeAudio.ts` 目前完全沒有對應測試檔案（`backend/test/` 下無任何檔案引用），但內含多個模組私有的純函式：`parseWavPcmChunk()`（解析 WAV PCM chunk 標頭）、`buildWavPcm16()`（將原始 PCM 包成 WAV 容器）、`isRetryableTtsError()`（判斷 TTS 錯誤是否可重試）、`extractTtsErrorMessage()`（從不同錯誤型態取出可讀訊息）、`splitByToneMarkers()`（依語氣標記切分逐字稿片段）、`splitSpeakerPrefix()`（解析雙人對談的講者前綴）。應將這些函式改為具名匯出（如 `generateTitle.ts` 的做法），新增 `backend/test/synthesize-audio.test.ts` 覆蓋各函式的正常與邊界輸入，不需要動到實際呼叫 TTS API 的整合邏輯。
+- [x] `synthesizeAudio.ts` 補上純函式單元測試：`backend/src/worker/steps/synthesizeAudio.ts` 目前完全沒有對應測試檔案（`backend/test/` 下無任何檔案引用），但內含多個模組私有的純函式：`parseWavPcmChunk()`（解析 WAV PCM chunk 標頭）、`buildWavPcm16()`（將原始 PCM 包成 WAV 容器）、`isRetryableTtsError()`（判斷 TTS 錯誤是否可重試）、`extractTtsErrorMessage()`（從不同錯誤型態取出可讀訊息）、`splitByToneMarkers()`（依語氣標記切分逐字稿片段）、`splitSpeakerPrefix()`（解析雙人對談的講者前綴）。應將這些函式改為具名匯出（如 `generateTitle.ts` 的做法），新增 `backend/test/synthesize-audio.test.ts` 覆蓋各函式的正常與邊界輸入，不需要動到實際呼叫 TTS API 的整合邏輯。
 
 - [ ] 前端 `subtitles.ts` 補上單元測試：`frontend/src/lib/subtitles.ts` 完全沒有對應測試檔案，但內含兩個驅動播放頁字幕高亮與動畫觸發時機的純函式：`splitScriptIntoSentences(script)`（去除語氣標記後依中英文句末符號切分句子）與 `buildSentenceTimeline(sentences, duration)`（依中英文字元、數字權重估算每句朗讀秒數與停頓秒數，再依整頁音訊長度等比例縮放出每句的 start/end 時間）。應新增 `frontend/src/lib/subtitles.test.ts`，覆蓋空字串/純語氣標記、單句與多句切分、不同字元類型混合的時間軸估算，以及 `duration<=0` 或 `sentences.length===0` 的邊界回傳空陣列情況。
 
@@ -396,3 +396,7 @@
 - 時間: 2026-06-19 11:15:00 +0800
 - 分支: feature/prompt-templates-tests-20260619
 - 內容: 完成 `promptTemplates.ts` 單元測試補強。新增 `backend/test/prompt-templates.test.ts` 10 個測試，未修改任何來源邏輯：`loadPromptTemplate()` 覆蓋檔案不存在、檔案為空白字元、檔案完全空白、檔案有內容時回傳 trim 後文字四種情境（用暫時建立在 `config.repoRoot` 下的 `.tmp-prompt-templates-test/` fixture 目錄測試，每個測試結束後在 finally 清除，不留殘留檔案）；`renderPromptTemplate()` 覆蓋單一變數替換、多個不同變數替換、重複變數名稱替換一致、找不到對應 key 時補空字串、`{{ name }}` 含前後空白仍能比對、完全沒有 placeholder 時原文不變共 6 種情境。已執行 typecheck（前後端皆通過）與 `npm test`（345 個測試，20 個失敗逐一核對為 18 項既有環境性基準＋1 項已知測試順序相關 flaky `summarizeLlmUsage`，無新增回歸）。
+
+- 時間: 2026-06-19 11:35:00 +0800
+- 分支: feature/synthesize-audio-tests-20260619
+- 內容: 完成 `synthesizeAudio.ts` 純函式單元測試補強。將六個模組私有函式改為具名匯出（與 `generateTitle.ts` 的做法一致，僅加 `export` 關鍵字，無邏輯變更）：`parseWavPcmChunk()`、`buildWavPcm16()`、`isRetryableTtsError()`、`extractTtsErrorMessage()`、`splitByToneMarkers()`、`splitSpeakerPrefix()`。新增 `backend/test/synthesize-audio.test.ts` 20 個測試：WAV 編解碼互轉與標頭欄位正確性、過短/缺少 RIFF·WAVE 魔數時回傳 `null`；TTS 錯誤可重試判斷（408/429/5xx 為可重試、一般 4xx 不可重試、timeout/connection 相關 name/type/message 視為可重試、非物件或無法識別錯誤回傳 `false`）；錯誤訊息組裝（status+code、status+type、純 message、非物件輸入）；語氣標記切分（無標記時整段視為「平穩敘述」、多個標記正確切分並追蹤目前語氣、空白輸入回傳空陣列、重複呼叫因模組層級 regex 狀態重置正常不互相干擾）；講者前綴解析（半形/全形冒號、大小寫不敏感、無前綴時原文不變）。完全不需要呼叫真實 TTS API。已執行 typecheck（前後端皆通過）與 `npm test`（365 個測試，18 個失敗皆為既有環境性基準，無新增回歸）。

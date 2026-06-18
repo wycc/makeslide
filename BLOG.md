@@ -2461,3 +2461,23 @@ Gemini TTS 語音合成的回應結構是好幾層巢狀的（`candidates[0].con
 - 新增 `backend/test/prompt-templates.test.ts`，共 10 個測試：
   - `loadPromptTemplate()`：檔案不存在時回退到 fallback、檔案內容為純空白字元時回退、檔案完全空白時回退、檔案有內容時回傳 trim 後的文字。測試用暫時建立在 `config.repoRoot` 下的 `.tmp-prompt-templates-test/` fixture 目錄寫入測試檔案，每個測試結束後在 `finally` 區塊用 `fs.rmSync(..., { recursive: true, force: true })` 清除，不留殘留檔案。
   - `renderPromptTemplate()`：單一變數替換、多個不同變數替換、同一變數重複出現時替換一致、找不到對應 key 時補空字串（而非保留原始 `{{key}}` 字串）、`{{ name }}`（含前後空白）仍能正確比對、完全沒有 placeholder 的文字保持原樣不變。
+
+## `synthesizeAudio.ts` 補上純函式單元測試
+
+### 功能目的
+
+語音合成步驟（`synthesizeAudio.ts`）內含多個與外部 TTS API 呼叫無關的純函式：WAV 格式編解碼、TTS 錯誤是否可重試的判斷、可讀錯誤訊息組裝、語氣標記切分、雙人對談講者前綴解析。這些函式的邏輯各自獨立且容易出錯（例如 WAV 標頭欄位寫錯位移、重試判斷條件遺漏某個 HTTP 狀態碼），過去完全沒有測試覆蓋。這次補上完整單元測試，讓未來調整重試邏輯、錯誤訊息格式或語氣標記語法時能立即發現破壞性變更，且完全不需要呼叫真實的 TTS API 或建立暫存音訊檔案。
+
+### 使用方式
+
+此變更純粹是補上測試，不影響任何程式邏輯或對外行為（六個函式只新增 `export` 關鍵字，函式內容完全未變）。
+
+### 技術細節
+
+- 將 `parseWavPcmChunk()`、`buildWavPcm16()`、`isRetryableTtsError()`、`extractTtsErrorMessage()`、`splitByToneMarkers()`、`splitSpeakerPrefix()` 改為具名匯出，沿用本輪 LOOP 多次使用的「匯出既有純函式以便測試」慣例（與 `generateTitle.ts` 相同做法）。
+- 新增 `backend/test/synthesize-audio.test.ts`，共 20 個測試：
+  - `buildWavPcm16`/`parseWavPcmChunk`：互轉 round-trip、標頭欄位（RIFF/WAVE 魔數、channels、sample rate、bits per sample、data chunk size）正確性、緩衝區過短或缺少魔數時 `parseWavPcmChunk` 回傳 `null`。
+  - `isRetryableTtsError`：HTTP 408/429/5xx 視為可重試，一般 4xx 不可重試；`name`/`type`/`message` 含 timeout 或 connection 關鍵字視為可重試；非物件、`null`、或無法識別的錯誤回傳 `false`。
+  - `extractTtsErrorMessage`：依序嘗試 `status+code`、`status+type`、純 `message`、非物件輸入（直接字串化）四種組合的輸出格式。
+  - `splitByToneMarkers`：無標記時整段歸入預設「平穩敘述」、多個 `[[語氣]]` 標記正確切分並各自追蹤目前語氣、空白輸入回傳空陣列、重複呼叫時不互相干擾（驗證模組層級共用 regex 的 `lastIndex` 重置邏輯正確）。
+  - `splitSpeakerPrefix`：半形/全形冒號的 `Speaker 1:`/`Speaker 2：` 前綴解析、大小寫不敏感、沒有前綴時原文不變。
