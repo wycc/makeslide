@@ -68,6 +68,16 @@
 
 - [x] `ShareDialog.tsx` 複製連結按鈕加上 Clipboard fallback：目前直接呼叫 `navigator.clipboard.writeText()`，若瀏覽器不支援 Clipboard API、非安全來源或權限被拒，使用者不會知道複製失敗；應改用既有 `frontend/src/lib/clipboard.ts` 的 `copyTextToClipboard()` helper（先試 Clipboard API、失敗再 fallback 到 textarea/`execCommand`），並在 UI 顯示成功/失敗狀態與 i18n 錯誤提示，失敗時保留可手動選取複製的連結文字。
 
+- [ ] 後端 `DELETE /api/pdfs/:id` 補上編輯權限檢查：`backend/src/routes/pdfs/delete.ts` 整個刪除路由目前只檢查 PDF 是否存在，完全沒有 `canEditPdf()` 或擁有權限檢查——任何已登入帳號只要知道 PDF id 就能刪除別人的簡報（含資料庫紀錄與儲存目錄），是目前已知權限缺口中最嚴重的一個；應補上與 `detail.ts`/`page-operations.ts` 一致的 `sessionSub()` + `canEditPdf(owner_sub, visibility)` 檢查，沒有編輯權限時回傳 `403 FORBIDDEN`，並新增後端測試覆蓋非擁有者應被拒絕、擁有者與 `public_editable` 協作者應可正常刪除。
+
+- [ ] 後端重生路由補上編輯權限檢查：`backend/src/routes/pdfs/regenerate.ts` 的 `POST /api/pdfs/:id/regenerate`、`POST /api/pdfs/:id/regenerate/cancel`、`POST /api/pdfs/:id/regenerate/rollback` 完全沒有檢查請求者是否有編輯權限，任何登入帳號可在唯讀分享簡報上觸發整份重新生成（耗費大量 LLM/TTS 額度）、取消他人的重生工作或回滾到舊版本；應補上 `canEditPdf()` 檢查並回傳 `403`，並新增後端測試覆蓋。
+
+- [ ] 後端「依提示詞新增頁面」路由補上編輯權限檢查：`backend/src/routes/pdfs/add-pages.ts` 的 `POST /api/pdfs/:id/add-pages-from-prompt`、`POST /api/pdfs/:id/add-pages-from-prompt/cancel`、`POST /api/pdfs/:id/add-pages-outline-chat` 完全沒有檢查編輯權限，任何登入帳號可在唯讀分享簡報上觸發 AI 新增頁面或取消他人的任務；應補上 `canEditPdf()` 檢查並回傳 `403`，並新增後端測試覆蓋。
+
+- [ ] 後端版本還原路由補上編輯權限檢查：`backend/src/routes/pdfs/versioning.ts` 的 `POST /api/pdfs/:id/pages/:n/image/restore/:hash`、`POST /api/pdfs/:id/pages/:n/script/restore/:hash` 完全沒有檢查編輯權限，任何登入帳號可在唯讀分享簡報上把圖片或逐字稿還原成任意歷史版本；應補上 `canEditPdf()` 檢查並回傳 `403`（讀取版本清單/預覽的 GET 路由維持公開），並新增後端測試覆蓋。
+
+- [ ] 後端圖表參考選取與投票/測驗題路由補上編輯權限檢查：`backend/src/routes/pdfs/figures.ts` 的 `PUT /api/pdfs/:id/pages/:n/figures/selection`，以及 `backend/src/routes/pdfs/detail.ts` 的 `POST /api/pdfs/:id/pages/:n/polls`（建立投票）、`DELETE /api/pdfs/:id/polls/:pollId`（刪除投票）、`POST /api/pdfs/:id/polls/:pollId/reset-votes`（清空投票結果）皆完全沒有檢查編輯權限；應補上 `canEditPdf()` 檢查並回傳 `403`。`POST /api/pdfs/:id/polls/:pollId/votes`（學生投票提交）維持現狀不需此限制，與測驗 attempts 提交相同道理，followers 需要在沒有編輯權限的情況下投票。
+
 ---
 
 - 時間: 2026-06-18 06:05:00 +0800
@@ -250,3 +260,7 @@
 - 時間: 2026-06-19 01:05:00 +0800
 - 分支: feature/share-dialog-clipboard-fallback-20260619
 - 內容: 完成「ShareDialog.tsx 複製連結按鈕加上 Clipboard fallback」。「複製連結」按鈕改用既有 `frontend/src/lib/clipboard.ts` 的 `copyTextToClipboard()` helper 取代直接呼叫 `navigator.clipboard.writeText()`，先試 Clipboard API、失敗時自動 fallback 到 textarea selection + `document.execCommand('copy')`；新增本地 `copyStatus` 狀態，成功時按鈕文字短暫變成「已複製」，失敗時在連結 textarea 下方顯示 i18n 錯誤提示，並保留原本唯讀 textarea 取得焦點即全選的行為供使用者手動複製。發現這個對話框先前完全沒有接上 i18n（與本輪已完成的 TtsDialog/ImageStyleDialog/VersionHistoryDialog 一樣），順帶把標題、說明、複製/關閉按鈕全部改用新增的 `play.shareDialog.*` 翻譯鍵（`title`、`description`、`copyLink`、`copied`、`copyFailed`、`close`）。維持 `onCopySuccess`/`onCopyError` 既有 props 介面不變，呼叫端（`PlayPageDialogs.tsx`）不需修改。`zh-TW.ts`/`en.ts` 補齊對應翻譯，並在 `frontend/src/i18n.test.ts` 新增測試驗證皆存在且非空字串。frontend typecheck 通過，既有與新增前端測試（`tsx --test`，129 項）全數通過。**至此 TODO.md 中所有待辦項目皆已完成，依 LOOP.md 規則下一輪將重新分析程式碼並新增新的待辦項目。**
+
+- 時間: 2026-06-19 01:15:00 +0800
+- 分支: master
+- 內容: 依照 LOOP.md 在 TODO.md 已無未完成項目時重新檢視主要程式區塊，避開近期已完成的 i18n 系列、clipboard fallback 系列與已修復的 github-sync/page-animation/drawings/quizzes/page-operations 權限缺口。延續上一輪「比對其他後端寫入路由是否有相同權限缺口」的方向，逐一檢查 `backend/src/routes/pdfs/` 目錄下尚未檢查過的檔案（`delete.ts`、`regenerate.ts`、`add-pages.ts`、`versioning.ts`、`figures.ts`，以及 `detail.ts` 的投票相關路由），確認以下路由完全沒有 `canEditPdf()`/`owner_sub` 權限檢查（已用 grep 逐一驗證 `canEditPdf`/`owner_sub` 字串不存在於對應檔案）：`DELETE /api/pdfs/:id`（整份簡報刪除，最嚴重）、`POST /api/pdfs/:id/regenerate`/`regenerate/cancel`/`regenerate/rollback`、`POST /api/pdfs/:id/add-pages-from-prompt`/`add-pages-from-prompt/cancel`/`add-pages-outline-chat`、`POST /api/pdfs/:id/pages/:n/image/restore/:hash`/`script/restore/:hash`、`PUT /api/pdfs/:id/pages/:n/figures/selection`、`POST /api/pdfs/:id/pages/:n/polls`、`DELETE /api/pdfs/:id/polls/:pollId`、`POST /api/pdfs/:id/polls/:pollId/reset-votes`。另外排除了兩個一開始看起來可疑但實際已有防護的誤判項目：`PdfCard.tsx` 刪除簡報前其實已有 `window.confirm()`（line 84）、`useSlideManagement.ts` 的 `handleDeleteCurrentSlide()` 也已有 `window.confirm()`（line 66），因此未列入待辦。新增 5 個待辦項目，依嚴重程度排序：(1) `delete.ts` 整份簡報刪除權限檢查；(2) `regenerate.ts` 重生/取消/回滾權限檢查；(3) `add-pages.ts` AI 新增頁面權限檢查；(4) `versioning.ts` 版本還原權限檢查；(5) `figures.ts` 圖表選取與 `detail.ts` 投票建立/刪除/清空權限檢查（投票提交本身維持公開，與測驗 attempts 同理）。
