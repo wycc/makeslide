@@ -49,3 +49,28 @@ test('source management copy/collapse locale keys are complete', () => {
     assert.notEqual(en[key].trim(), '');
   }
 });
+
+test('TtsDialog locale keys are complete', () => {
+  const requiredKeys = [
+    'play.ttsDialog.title',
+    'play.ttsDialog.voice',
+    'play.ttsDialog.hostMode',
+    'play.ttsDialog.hostModeSolo',
+    'play.ttsDialog.hostModeDual',
+    'play.ttsDialog.hostModeHint',
+    'play.ttsDialog.speed',
+    'play.ttsDialog.scriptMaxChars',
+    'play.ttsDialog.scriptMaxCharsHint',
+    'play.ttsDialog.scriptMaxCharsPlaceholder',
+    'play.ttsDialog.close',
+    'play.ttsDialog.saving',
+    'play.ttsDialog.save',
+  ] as const;
+
+  for (const key of requiredKeys) {
+    assert.equal(typeof zhTW[key], 'string');
+    assert.equal(typeof en[key], 'string');
+    assert.notEqual(zhTW[key].trim(), '');
+    assert.notEqual(en[key].trim(), '');
+  }
+});
