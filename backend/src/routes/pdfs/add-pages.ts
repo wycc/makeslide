@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
   getAddPagesJob,
@@ -12,6 +12,25 @@ import { db } from '../../db';
 import path from 'node:path';
 import fs from 'node:fs';
 import { pdfDir } from '../../services/storage';
+import { decodeSession, parseCookies } from '../auth';
+import type { PdfRow } from '../../types';
+
+function sessionSub(request: FastifyRequest): string | null {
+  const session = decodeSession(parseCookies(request).makeslide_session);
+  return session?.sub ?? null;
+}
+
+function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
+  if (!row.owner_sub) return true;
+  if (sub && row.owner_sub === sub) return true;
+  return row.visibility === 'public_editable';
+}
+
+function getPdfPermissionRow(id: string): Pick<PdfRow, 'owner_sub' | 'visibility'> | undefined {
+  return db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
+    | Pick<PdfRow, 'owner_sub' | 'visibility'>
+    | undefined;
+}
 
 const AddPagesFromPromptBodySchema = z.object({
   prompt: z.string().trim().max(2000).default(''),
@@ -56,6 +75,14 @@ export async function registerAddPagesRoutes(app: FastifyInstance): Promise<void
       return reply
         .code(400)
         .send(errorResponse('INVALID_REQUEST', 'prompt 至少需要 5 個字，或提供 outline_text'));
+    }
+
+    const pdfRow = getPdfPermissionRow(parsedParams.data.id);
+    if (!pdfRow) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsedParams.data.id} not found`));
+    }
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限為此簡報新增頁面'));
     }
 
     try {
@@ -106,6 +133,13 @@ export async function registerAddPagesRoutes(app: FastifyInstance): Promise<void
     if (!parsedParams.success) {
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
     }
+    const pdfRow = getPdfPermissionRow(parsedParams.data.id);
+    if (!pdfRow) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsedParams.data.id} not found`));
+    }
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限取消此簡報的新增頁面任務'));
+    }
     const cancelled = abortAddPagesJob(parsedParams.data.id);
     if (!cancelled) {
       return reply
@@ -129,10 +163,13 @@ export async function registerAddPagesRoutes(app: FastifyInstance): Promise<void
 
     const { id } = parsedParams.data;
     const pdfRow = db
-      .prepare(`SELECT page_count FROM pdfs WHERE id = ?`)
-      .get(id) as { page_count: number | null } | undefined;
+      .prepare(`SELECT page_count, owner_sub, visibility FROM pdfs WHERE id = ?`)
+      .get(id) as { page_count: number | null; owner_sub: string | null; visibility: PdfRow['visibility'] } | undefined;
     if (!pdfRow) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限為此簡報產生大綱'));
     }
 
     const pageCount = pdfRow.page_count ?? 0;

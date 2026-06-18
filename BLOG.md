@@ -2077,3 +2077,24 @@ Manim.animate.shake(myShape, progress, {
 - `backend/src/routes/pdfs/regenerate.ts` 新增與其他寫入路由一致的本地 `sessionSub()` + `canEditPdf(owner_sub, visibility)` + `getPdfPermissionRow()`。
 - 三個寫入路由（`regenerate`、`regenerate/cancel`、`regenerate/rollback`）先前完全沒有查詢 pdf 權限資訊，這次新增獨立查詢；權限檢查都放在呼叫 `startRegenerateJob()`/`requestCancelRegenerateJob()`/`rollbackRegenerate()` 之前執行，確保無權限請求不會觸發任何 worker 端動作或消耗 LLM/TTS 額度。
 - 新增 `backend/test/regenerate-permission.test.ts` 6 個測試，覆蓋三個路由對非擁有者的唯讀分享簡報應得 403（且確實未建立重生任務）、擁有者與 `public_editable` 協作者應能成功啟動重生、`cancel`/`rollback` 對未知簡報應得 `404 PDF_NOT_FOUND` 而非 403。
+
+## 「依提示詞新增頁面」API 補上編輯權限檢查
+
+### 功能目的
+
+播放頁可用 AI 依使用者提示詞或大綱對話自動新增投影片，背後是 `POST /api/pdfs/:id/add-pages-from-prompt`（啟動新增頁面任務）、`POST /api/pdfs/:id/add-pages-from-prompt/cancel`（取消任務）與 `POST /api/pdfs/:id/add-pages-outline-chat`（大綱討論對話）。這三個 API 過去完全沒有檢查請求者是否擁有編輯權限，任何已登入帳號都能在唯讀分享或別人的私有簡報上觸發 AI 新增頁面（消耗 LLM 額度）、取消別人的任務，或進行大綱對話，與先前已修復的 GitHub 同步、動畫/畫板、測驗、頁面操作、簡報刪除、重生等同一類權限缺口。
+
+新版讓這三個 API 遵循與其他簡報寫入動作一致的權限規則。
+
+### 使用方式
+
+1. 一般擁有者或取得 read-write 分享/`public_editable` 簡報的使用者操作不受影響，仍可正常使用 AI 新增頁面、取消進行中的任務，或進行大綱對話。
+2. 唯讀分享或公開唯讀簡報的瀏覽者，前端本來就已經停用這些動作；即使有人略過前端直接呼叫對應 API，後端也會回傳 `403 FORBIDDEN`，不會真的啟動任務、取消他人工作或消耗 LLM 額度。
+3. 查詢新增頁面進度（`GET /api/pdfs/:id/add-pages-from-prompt/status`）維持公開讀取，不受影響。
+
+### 技術細節
+
+- `backend/src/routes/pdfs/add-pages.ts` 新增與其他寫入路由一致的本地 `sessionSub()` + `canEditPdf(owner_sub, visibility)` + `getPdfPermissionRow()`。
+- `add-pages-from-prompt` 與 `add-pages-from-prompt/cancel` 先前完全沒有查詢任何 pdf 權限資訊，這次新增獨立查詢；`add-pages-outline-chat` 延伸既有的 `page_count` 查詢補上 `owner_sub`/`visibility`。
+- 三個路由的權限檢查都放在呼叫實際 worker 邏輯（`startAddPagesFromPrompt()`、`abortAddPagesJob()`、`continueAddPagesOutlineChat()`）之前，避免無權限請求消耗 LLM 額度。
+- 新增 `backend/test/add-pages-permission.test.ts` 6 個測試，覆蓋三個路由對非擁有者的唯讀分享簡報應得 403、擁有者與 `public_editable` 協作者應能成功啟動任務、`cancel` 對未知簡報應得 `404 PDF_NOT_FOUND` 而非 403。過程中也發現後端 `PDF_ID_RE` 限制簡報 id 長度為 8–32 字元，調整了測試中過長的 id 以符合參數驗證。
