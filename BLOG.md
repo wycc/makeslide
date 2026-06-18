@@ -1863,3 +1863,22 @@ Manim.animate.shake(myShape, progress, {
 - 前端 `PlayPageHeader.tsx` 的「同步到 GitHub」按鈕 `disabled` 改為 `githubSyncBusy || isReadOnlyProcessing`，並在唯讀時把按鈕 `title` 換成新增的 `play.header.githubSyncReadOnly`（中英文皆已新增翻譯）。
 - `usePdfMetadata.ts` 的 `handleSyncToGithub()` 同步加上 `isReadOnlyProcessing` 的早期 return，確保即便繞過按鈕本身的 disabled 屬性呼叫這個 handler，也不會送出請求。
 - 新增 `backend/test/github-sync.test.ts`，覆蓋非擁有者對 `public`/`private` 簡報請求應得 403、擁有者與 `public_editable` 協作者應通過權限檢查（測試環境未設定 GitHub repo，因此驗證它們會落在 `GITHUB_NOT_CONFIGURED` 400 而非 403，藉此證明沒有被權限擋下）。
+
+## read-only 模式統一停用設定/風格/分享按鍵
+
+### 功能目的
+
+播放頁的「⚙️ 設定」（語音/TTS 設定）與「🖼️ 風格」（圖片風格設定）按鈕已經會在唯讀模式下停用，但分享區塊的三個控制項——分享存取模式（唯讀/可編輯）下拉選單、「建立分享連結」按鈕、「設為 private」按鈕——只檢查是否正在送出請求（`shareBusy`），沒有檢查唯讀狀態。這代表透過唯讀分享連結或瀏覽公開唯讀簡報的人，理論上仍能在 UI 上嘗試切換分享模式或建立新的分享連結，即使背後的 handler 部分已經有防呆，畫面上看不出按鍵其實不該被觸發。
+
+新版讓播放頁所有設定/風格/分享相關的按鍵在唯讀模式下都呈現一致的停用樣式，避免使用者誤以為可以操作。
+
+### 使用方式
+
+1. 一般擁有者或取得可編輯權限的使用者操作不受影響，仍可正常開啟語音設定、圖片風格設定，以及切換分享模式、建立分享連結或設為 private。
+2. 透過唯讀分享連結開啟，或簡報仍在處理中尚未 ready 時，頁首的「設定」「風格」按鈕（先前已是如此）以及分享存取模式下拉選單、「建立分享連結」「設為 private」按鈕都會顯示為停用樣式，無法點擊或選擇。
+
+### 技術細節
+
+- `PlayPageHeader.tsx` 的分享存取模式 `<select>` 新增 `disabled={isReadOnlyProcessing}`；「建立分享連結」與「設為 private」按鈕的 `disabled` 從只看 `shareBusy` 改為 `shareBusy || isReadOnlyProcessing`，三者皆補上 `disabled:cursor-not-allowed disabled:opacity-40` 樣式，與其他唯讀停用按鈕一致。
+- `usePdfMetadata.ts` 的 `handleCreateShareLink()` 補上 `isReadOnlyProcessing` 早期 return（`handleMakeSharePrivate()` 先前已有此防呆，這次只是讓 UI 跟著反映），避免即使繞過按鈕點擊直接呼叫 handler 也會送出請求。
+- 確認後端 `POST /api/pdfs/:id/share`（`hasOwnerOrLegacyAccess`）與 `PATCH /api/pdfs/:id/visibility`（`canEditPdf`）已有擁有權限檢查，這次調整純粹是讓前端 UI 狀態與既有後端限制一致，不需修改後端。

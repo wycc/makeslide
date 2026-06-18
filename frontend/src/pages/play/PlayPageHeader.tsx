@@ -368,7 +368,8 @@ export function PlayPageHeader() {
               <select
                 value={shareAccess}
                 onChange={(e) => setShareAccess((e.target.value as ShareAccessMode) || 'read_only')}
-                className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200"
+                disabled={isReadOnlyProcessing}
+                className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <option value="read_only">{t('play.share.readOnlyVisible')}</option>
                 <option value="editable">{t('play.share.readWriteVisible')}</option>
@@ -376,16 +377,16 @@ export function PlayPageHeader() {
               <button
                 type="button"
                 onClick={() => void handleCreateShareLink()}
-                disabled={shareBusy}
-                className="rounded-md border border-violet-500/50 bg-violet-500/15 px-3 py-1.5 text-xs text-violet-200 hover:bg-violet-500/25 disabled:opacity-40"
+                disabled={shareBusy || isReadOnlyProcessing}
+                className="rounded-md border border-violet-500/50 bg-violet-500/15 px-3 py-1.5 text-xs text-violet-200 hover:bg-violet-500/25 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {shareBusy ? t('play.share.creating') : `▦ ${t('play.share.createLink')}`}
               </button>
               <button
                 type="button"
                 onClick={() => void handleMakeSharePrivate()}
-                disabled={shareBusy}
-                className="rounded-md border border-slate-600 bg-slate-800/70 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-700 disabled:opacity-40"
+                disabled={shareBusy || isReadOnlyProcessing}
+                className="rounded-md border border-slate-600 bg-slate-800/70 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
                 title={t('play.share.makePrivateTitle')}
               >
                 {t('play.share.makePrivate')}
