@@ -433,3 +433,18 @@ test('QuizBuilderPage locale keys are complete', () => {
     assert.notEqual(en[key].trim(), '');
   }
 });
+
+test('PromptModal and HomePage loose-end locale keys are complete', () => {
+  const requiredKeys = [
+    'promptModal.applyTemplate',
+    'home.importingZip',
+    'home.importZipProgressAriaLabel',
+  ] as const;
+
+  for (const key of requiredKeys) {
+    assert.equal(typeof zhTW[key], 'string');
+    assert.equal(typeof en[key], 'string');
+    assert.notEqual(zhTW[key].trim(), '');
+    assert.notEqual(en[key].trim(), '');
+  }
+});

@@ -94,7 +94,7 @@
 
 - [x] 後端 `/api/system/observability` 補上管理員權限檢查：`backend/src/routes/pdfs/observability.ts` 的 `GET /api/system/observability` 回傳整個系統的彙總統計（總簡報數、pipeline 成功/失敗率、各階段/素材狀態分布、跨所有使用者的 LLM 用量與平均延遲），目前完全沒有權限檢查；對照 `backend/src/routes/pdfs/sla-settings.ts` 的 `GET`/`PUT /api/system/sla-settings` 都有 `isAdminAccount(currentAccountId())` 檢查，這個系統級觀測 API 明顯也應該限制為管理員才能存取，否則任何登入帳號都能看到其他使用者的彙總用量與系統負載狀況；應補上 `isAdminAccount()` 檢查，無權限時回傳 `403`，並新增後端測試覆蓋非管理員應得 403、管理員應可正常取得統計資料。
 
-- [ ] 前端剩餘零星硬編碼中文收尾：`frontend/src/components/PromptModal.tsx` 的「套用模板」按鈕（約 263 行）與 `frontend/src/pages/HomePage.tsx` 的 ZIP 匯入進度文字「ZIP 匯入中…」與 `aria-label="ZIP 匯入進度"`（約 669、680 行）兩個檔案雖然已大量使用 `useI18n()`，但各還殘留 1-2 處硬編碼中文；應補上對應翻譯鍵（可沿用各檔案現有的 key 命名慣例），保留既有套用模板與 ZIP 匯入進度顯示行為不變，範圍很小可一次處理完。
+- [x] 前端剩餘零星硬編碼中文收尾：`frontend/src/components/PromptModal.tsx` 的「套用模板」按鈕（約 263 行）與 `frontend/src/pages/HomePage.tsx` 的 ZIP 匯入進度文字「ZIP 匯入中…」與 `aria-label="ZIP 匯入進度"`（約 669、680 行）兩個檔案雖然已大量使用 `useI18n()`，但各還殘留 1-2 處硬編碼中文；應補上對應翻譯鍵（可沿用各檔案現有的 key 命名慣例），保留既有套用模板與 ZIP 匯入進度顯示行為不變，範圍很小可一次處理完。
 
 - [ ] `generateTitle.ts` 補上單元測試：`backend/src/worker/steps/generateTitle.ts` 目前完全沒有對應的測試檔案（`backend/test/` 下無任何檔案引用 `generateTitle`），但內含多個可獨立測試的純函式：`clipCorpus()`（裁切語料長度）、`sanitiseUserPrompt()`（清理使用者提示詞）、`buildSystem()`/`buildUser()`（依內容語言組裝 system/user prompt）；應新增 `backend/test/generate-title.test.ts`，至少覆蓋這些純函式的邊界情況（空字串、超長語料、不同 `contentLanguage`），並可選擇性地用既有 `setOpenAIClientForTest()` mock 模式為主要 `generateTitle()` 函式加上 1-2 個整合測試。
 
@@ -346,3 +346,7 @@
 - 時間: 2026-06-19 04:35:00 +0800
 - 分支: feature/observability-admin-permission-20260619
 - 內容: 完成「後端 /api/system/observability 補上管理員權限檢查」。`backend/src/routes/pdfs/observability.ts` 的 `GET /api/system/observability` 在組裝任何彙總統計之前，新增與 `sla-settings.ts` 一致的 `isAdminAccount(currentAccountId())` 檢查，沒有管理員權限時回傳 `403 ADMIN_REQUIRED`，未登入或非管理員都無法再看到跨使用者的簡報總數、pipeline 成功/失敗率、各階段/素材狀態分布與 LLM 用量統計。新增 `backend/test/observability.test.ts` 3 個測試（沿用 `sla-settings.test.ts` 的 session cookie 簽章與 `setSystemAuthSettings({ adminAccountIds })` 寫法），覆蓋非管理員應得 403、未登入（無 session cookie）應得 403、管理員應能正常取得包含 `pdfs`/`pipeline_runs`/`stages`/`artifacts`/`llm_usage` 的完整統計資料。backend typecheck 通過，完整測試套件 305 項中 18 項失敗為既有環境相關既存失敗（與本次變更前一致，新增 3 項測試全數通過）。
+
+- 時間: 2026-06-19 04:45:00 +0800
+- 分支: feature/loose-end-i18n-cleanup-20260619
+- 內容: 完成「前端剩餘零星硬編碼中文收尾」。`frontend/src/components/PromptModal.tsx` 的「套用模板」按鈕改用新增的 `promptModal.applyTemplate` 翻譯鍵（沿用既有 `promptModal.*` 命名慣例）；`frontend/src/pages/HomePage.tsx` 的 ZIP 匯入進度文字「ZIP 匯入中…」與 `aria-label="ZIP 匯入進度"` 改用新增的 `home.importingZip`/`home.importZipProgressAriaLabel`（沿用既有 `home.*` 命名慣例）。`zh-TW.ts`/`en.ts` 同步新增 3 個翻譯鍵，並在 `frontend/src/i18n.test.ts` 新增測試驗證皆存在且非空字串。用 grep 確認兩個檔案皆已無殘留硬編碼中文。保留既有套用模板與 ZIP 匯入進度顯示行為不變。frontend typecheck 通過，全部前端測試（`tsx --test`，135 項）通過。

@@ -2324,3 +2324,22 @@ Manim.animate.shake(myShape, progress, {
 - `backend/src/routes/pdfs/observability.ts` 在組裝任何統計資料之前，新增與 `sla-settings.ts` 一致的 `isAdminAccount(currentAccountId())` 檢查，沒有權限時回傳 `403 ADMIN_REQUIRED`。
 - `currentAccountId()` 透過既有的 AsyncLocalStorage 帳號情境取得目前請求者帳號，不需要額外傳入 `request` 物件，與 `sla-settings.ts` 的寫法完全一致。
 - 新增 `backend/test/observability.test.ts` 3 個測試，覆蓋非管理員應得 403、未登入應得 403、管理員應能正常取得包含 `pdfs`/`pipeline_runs`/`stages`/`artifacts`/`llm_usage` 的完整統計資料。
+
+## 零星硬編碼中文收尾：PromptModal 套用模板按鈕與首頁 ZIP 匯入進度
+
+### 功能目的
+
+`PromptModal.tsx`（上傳/匯入後的生成風格提示詞對話框）與 `HomePage.tsx` 兩個檔案先前已經大量接上 i18n，但各還殘留一兩處遺漏：`PromptModal.tsx` 的「套用模板」按鈕，以及 `HomePage.tsx` 在 ZIP 匯入時顯示的進度文字與螢幕報讀器 `aria-label`。這次把這些殘留的硬編碼中文一次清掉，讓兩個檔案完全跟隨界面語言設定。
+
+### 使用方式
+
+1. 進入「設定」頁，將「界面文字語言」切換為「繁體中文」或「English」。
+2. 上傳 PDF 或匯入文字後開啟生成風格提示詞對話框，套用常用範本旁的「套用模板 / Apply template」按鈕會依目前語言顯示。
+3. 在首頁匯入 ZIP 簡報時，匯入中顯示的「ZIP 匯入中… / Importing ZIP…」進度文字與進度條的 `aria-label` 都會依目前語言顯示。
+
+### 技術細節
+
+- `PromptModal.tsx` 新增 `promptModal.applyTemplate` 翻譯鍵，沿用檔案既有 `promptModal.*` 命名慣例。
+- `HomePage.tsx` 新增 `home.importingZip`、`home.importZipProgressAriaLabel` 翻譯鍵，沿用既有 `home.*` 命名慣例。
+- `zh-TW.ts`/`en.ts` 同步新增 3 個翻譯鍵，`frontend/src/i18n.test.ts` 新增測試驗證皆存在且非空字串。
+- 純文字替換，未調整套用模板或 ZIP 匯入進度顯示的任何行為。

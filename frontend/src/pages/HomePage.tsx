@@ -666,7 +666,7 @@ export default function HomePage() {
             {isImportingZip && (
               <div className="w-full max-w-sm rounded-lg border border-indigo-400/40 bg-indigo-500/10 p-2">
                 <div className="mb-1 flex items-center justify-between text-xs text-indigo-100">
-                  <span>ZIP 匯入中…</span>
+                  <span>{t('home.importingZip')}</span>
                   <span>{zipImportProgress}%</span>
                 </div>
                 <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
@@ -677,7 +677,7 @@ export default function HomePage() {
                     aria-valuemin={0}
                     aria-valuemax={100}
                     aria-valuenow={zipImportProgress}
-                    aria-label="ZIP 匯入進度"
+                    aria-label={t('home.importZipProgressAriaLabel')}
                   />
                 </div>
               </div>
