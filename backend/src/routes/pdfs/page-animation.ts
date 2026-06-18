@@ -1,7 +1,9 @@
 import fs from 'node:fs';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
+import { decodeSession, parseCookies } from '../auth';
+import type { PdfRow } from '../../types';
 import { pageAnimationSpecPath, pageImagePath, safeJoinPdfPath } from '../../services/storage';
 import {
   ConversationMessageSchema,
@@ -52,6 +54,23 @@ function getAnimationPageRow(id: string, n: number): AnimationPageRow | undefine
   return db
     .prepare(`SELECT page_uid, render_type, animation_spec_path, text_path, image_path FROM pages WHERE pdf_id = ? AND page_number = ?`)
     .get(id, n) as AnimationPageRow | undefined;
+}
+
+function sessionSub(request: FastifyRequest): string | null {
+  const session = decodeSession(parseCookies(request).makeslide_session);
+  return session?.sub ?? null;
+}
+
+function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
+  if (!row.owner_sub) return true;
+  if (sub && row.owner_sub === sub) return true;
+  return row.visibility === 'public_editable';
+}
+
+function getPdfPermissionRow(id: string): Pick<PdfRow, 'owner_sub' | 'visibility'> | undefined {
+  return db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
+    | Pick<PdfRow, 'owner_sub' | 'visibility'>
+    | undefined;
 }
 
 /**
@@ -109,6 +128,10 @@ export async function registerPageAnimationRoutes(app: FastifyInstance): Promise
     if (!row) {
       return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', 'Page not found'));
     }
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow || !canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的動畫'));
+    }
     const validated = validateAnimationSpec(parsedBody.data.spec);
     if (!validated.ok) {
       return reply.code(400).send(errorResponse('INVALID_ANIMATION_SPEC', validated.message));
@@ -159,6 +182,10 @@ export async function registerPageAnimationRoutes(app: FastifyInstance): Promise
     const row = getAnimationPageRow(id, n);
     if (!row) {
       return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', 'Page not found'));
+    }
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow || !canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的動畫'));
     }
     if (parsedBody.data.sentences.length === 0) {
       return reply.code(200).send({ effects: [] });
@@ -217,6 +244,10 @@ export async function registerPageAnimationRoutes(app: FastifyInstance): Promise
     const row = getAnimationPageRow(id, n);
     if (!row) {
       return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', 'Page not found'));
+    }
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow || !canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的動畫'));
     }
     const pageText = row.text_path
       ? await fs.promises.readFile(safeJoinPdfPath(id, row.text_path), 'utf8').catch(() => '')

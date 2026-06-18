@@ -24,10 +24,15 @@ import {
 } from '../src/services/pageAnimation';
 import { fillCustomScriptEffectsCode, mapAutoFocusResponseToEffects } from '../src/services/animationAutoFocus';
 import { findCustomScriptContractIssue, findUnsafeScriptPattern } from '../src/services/animationCustomScript';
+import crypto from 'node:crypto';
 
 const PDF_ID = 'test-page-animation-01';
-const SESSION_COOKIE =
-  'eyJwcm92aWRlciI6Imdvb2dsZSIsInN1YiI6ImFjY291bnQtMSIsImVtYWlsIjoiYWNjb3VudC0xQGV4YW1wbGUuY29tIn0.mDkylBa8ZqLOib7FEOYl6YtwwODNJwieo4kUfAIIimw';
+function testSessionCookie(sub = 'account-1'): string {
+  const payload = Buffer.from(JSON.stringify({ provider: 'google', sub, email: `${sub}@example.com` }), 'utf8').toString('base64url');
+  const signature = crypto.createHmac('sha256', config.authSessionSecret).update(payload).digest('base64url');
+  return `${payload}.${signature}`;
+}
+const SESSION_COOKIE = testSessionCookie('account-1');
 const AUTH_HEADERS = { cookie: `makeslide_session=${encodeURIComponent(SESSION_COOKIE)}` };
 
 setSystemAuthSettings({ googleAuthEnabled: false });
@@ -745,6 +750,56 @@ test('PUT animation rejects an invalid spec without touching the page row', asyn
     .get(PDF_ID) as { render_type: string; animation_spec_path: string | null };
   assert.equal(row.render_type, 'static-image');
   assert.equal(row.animation_spec_path, null);
+  await app.close();
+});
+
+test('PUT animation rejects a non-owner request on a read-only shared presentation', async () => {
+  seedAnimationPdf(PDF_ID, 1);
+  const app = await buildApp();
+  const otherAccountHeaders = { cookie: `makeslide_session=${encodeURIComponent(testSessionCookie('account-2'))}`, 'content-type': 'application/json' };
+  const resp = await app.inject({
+    method: 'PUT',
+    url: `/api/pdfs/${PDF_ID}/pages/1/animation`,
+    headers: otherAccountHeaders,
+    payload: { spec: validSpec([fadeIn()]) },
+  });
+  assert.equal(resp.statusCode, 403);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+  const row = db
+    .prepare(`SELECT render_type, animation_spec_path FROM pages WHERE pdf_id = ? AND page_number = 1`)
+    .get(PDF_ID) as { render_type: string; animation_spec_path: string | null };
+  assert.equal(row.render_type, 'static-image');
+  assert.equal(row.animation_spec_path, null);
+  await app.close();
+});
+
+test('POST animation/auto-focus-ai rejects a non-owner request on a read-only shared presentation', async () => {
+  seedAnimationPdf(PDF_ID, 1);
+  const app = await buildApp();
+  const otherAccountHeaders = { cookie: `makeslide_session=${encodeURIComponent(testSessionCookie('account-2'))}`, 'content-type': 'application/json' };
+  const resp = await app.inject({
+    method: 'POST',
+    url: `/api/pdfs/${PDF_ID}/pages/1/animation/auto-focus-ai`,
+    headers: otherAccountHeaders,
+    payload: { sentences: ['hello'] },
+  });
+  assert.equal(resp.statusCode, 403);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+  await app.close();
+});
+
+test('POST animation/custom-script rejects a non-owner request on a read-only shared presentation', async () => {
+  seedAnimationPdf(PDF_ID, 1);
+  const app = await buildApp();
+  const otherAccountHeaders = { cookie: `makeslide_session=${encodeURIComponent(testSessionCookie('account-2'))}`, 'content-type': 'application/json' };
+  const resp = await app.inject({
+    method: 'POST',
+    url: `/api/pdfs/${PDF_ID}/pages/1/animation/custom-script`,
+    headers: otherAccountHeaders,
+    payload: { prompt: 'make it spin' },
+  });
+  assert.equal(resp.statusCode, 403);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
   await app.close();
 });
 

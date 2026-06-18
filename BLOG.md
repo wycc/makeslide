@@ -1882,3 +1882,25 @@ Manim.animate.shake(myShape, progress, {
 - `PlayPageHeader.tsx` 的分享存取模式 `<select>` 新增 `disabled={isReadOnlyProcessing}`；「建立分享連結」與「設為 private」按鈕的 `disabled` 從只看 `shareBusy` 改為 `shareBusy || isReadOnlyProcessing`，三者皆補上 `disabled:cursor-not-allowed disabled:opacity-40` 樣式，與其他唯讀停用按鈕一致。
 - `usePdfMetadata.ts` 的 `handleCreateShareLink()` 補上 `isReadOnlyProcessing` 早期 return（`handleMakeSharePrivate()` 先前已有此防呆，這次只是讓 UI 跟著反映），避免即使繞過按鈕點擊直接呼叫 handler 也會送出請求。
 - 確認後端 `POST /api/pdfs/:id/share`（`hasOwnerOrLegacyAccess`）與 `PATCH /api/pdfs/:id/visibility`（`canEditPdf`）已有擁有權限檢查，這次調整純粹是讓前端 UI 狀態與既有後端限制一致，不需修改後端。
+
+## 動畫與畫板 API 補上編輯權限檢查
+
+### 功能目的
+
+播放頁的動畫編輯（每頁特效設定、AI 自動產生焦點動畫、AI 自訂腳本動畫）與畫板（手寫標註）功能，後端 API 過去完全沒有檢查請求者是否擁有編輯這份簡報的權限——只要知道 PDF id，任何已登入帳號都能修改別人唯讀分享或公開簡報的動畫設定與畫板內容，這與 `detail.ts` 中大多數寫入路由都有的 `canEditPdf()` 檢查不一致，也與前一輪修復的 GitHub 同步權限缺口屬於同一類問題。
+
+新版讓動畫與畫板的寫入 API 都遵循與其他簡報寫入動作一致的權限規則：唯讀使用者無法透過直接呼叫 API 修改這些內容。
+
+### 使用方式
+
+1. 一般擁有者或取得 read-write 分享/`public_editable` 簡報的使用者操作不受影響，仍可正常編輯動畫效果、使用 AI 產生焦點動畫或自訂腳本動畫，以及繪製/清除畫板標註。
+2. 透過唯讀分享連結或瀏覽公開唯讀簡報的使用者，前端本來就已經停用動畫編輯與畫板工具，現在即使有人略過前端直接呼叫 API（例如 `PUT /api/pdfs/:id/pages/:n/animation`、`POST /api/pdfs/:id/pages/:n/animation/auto-focus-ai`、`POST /api/pdfs/:id/pages/:n/animation/custom-script`、`PUT`/`DELETE /api/pdfs/:id/pages/:n/drawing`），後端也會回傳 `403 FORBIDDEN`，不會真的寫入或產生內容。
+3. 讀取目前動畫設定（`GET /animation`、`GET /animation/spec`）與畫板內容（`GET /drawing`）維持公開讀取，因為播放頁仍需要在唯讀模式下正常顯示既有動畫與畫板內容。
+
+### 技術細節
+
+- `backend/src/routes/pdfs/page-animation.ts` 與 `backend/src/routes/pdfs/drawings.ts` 都新增與 `detail.ts`/`admin.ts` 一致的本地 `sessionSub()` + `canEditPdf(owner_sub, visibility)`，沿用「`owner_sub` 為空視為允許、請求者等於擁有者允許、`visibility === 'public_editable'` 允許，其餘拒絕」的規則。
+- 動畫路由的 `custom-script` 端點會用 `reply.hijack()` 切換成 SSE 串流回應；權限檢查特別放在 `hijack()` 之前執行，確保權限不足時收到的是一般 JSON `403` 而不是進入串流後才報錯。
+- 畫板路由的 `PUT`/`DELETE` 過去完全沒有檢查 PDF 是否存在，這次順帶補上 `404 PDF_NOT_FOUND`，避免對不存在的簡報寫入孤兒 `page_drawings` 列。
+- 修復過程中發現 `backend/test/page-animation.test.ts` 既有的硬編碼 session cookie 簽章是用舊版 `AUTH_SESSION_SECRET` 產生的，與目前環境的密鑰不符；先前因為這些路由完全不驗證 session 而沒被測試發現，加上權限檢查後該測試檔案大量失敗。改用與 `pages-api.test.ts`/`github-sync.test.ts` 一致、即時用目前 `config.authSessionSecret` 簽章的 `testSessionCookie()` 動態產生 cookie 解決，避免測試環境密鑰漂移造成的脆弱性。
+- 新增 3 個權限測試到 `page-animation.test.ts`，並新增 `backend/test/drawings.test.ts` 6 個測試，覆蓋公開讀取、非擁有者在 `public`/`private` 簡報應得 403、擁有者與 `public_editable` 協作者應可寫入、未知簡報應得 404。
