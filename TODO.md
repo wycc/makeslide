@@ -50,7 +50,7 @@
 [x] 建立分享功能連結時，每一個簡報可以獨立的設定分享成 private, read-only or read-write。當設定成分 read-only/read-write 時，除了使用分享連接外，簡報會自動出現在其它帳號的列表中。
 [x] 高橋流要求每一頁只能有一二個重點，和目前一般的提示詞有沖突。請修改提示詞讓使用者明確要求高橋流或類似的減少每一頁重點時可以被使用。
 [x] 在產生大網時完全沒有使用者的提示在其中，當使用者使用高橋流時也沒有調整每頁重點的效果。
-[ ] 類別是最近的簡報時，預設使用建立時間新到舊的排序方式
+[x] 類別是最近的簡報時，預設使用建立時間新到舊的排序方式
 [ ] read-only 模式時，不能做同步到 github 的動作
 [ ] read-only 模式時，設定/風格/分享等按鍵應該 disable
 
@@ -192,3 +192,7 @@
 - 時間: 2026-06-18 08:20:00 +0800
 - 分支: feature/source-copy-collapse-20260618
 - 內容: 完成來源管理清單「複製內容」與「清除展開」小操作。`PlayPageSlidePanel.tsx` 在每個有 `content_text` 的來源列（包含一般 TXT/PDF 來源與 YouTube audio 來源）加入「複製內容」按鈕，使用既有共用 `copyTextToClipboard()` helper（先試 Clipboard API、失敗再 fallback 到 textarea/`execCommand`），並用 `sourceCopyStatus` 狀態顯示「已複製」或失敗提示，2 秒後自動還原按鈕文字；來源清單標題旁新增「全部收合」按鈕，僅在 `expandedSourceId !== null` 時顯示，點擊會呼叫既有 `setExpandedSourceId(null)` 一次清空展開狀態。未新增或修改任何 API、資料庫欄位。新增 `play.source.copyContent`、`play.source.copyContentSuccess`、`play.source.copyContentFailed`、`play.source.collapseAll` 中英文翻譯鍵，並在 `i18n.test.ts` 新增測試驗證這些鍵在兩種語言中存在且非空字串；確認本機可用 `tsx --test` 執行前端 `*.test.ts`（`npm test` 目前只跑 backend），執行後全部 122 項既有與新增前端測試通過，frontend typecheck 亦通過。
+
+- 時間: 2026-06-18 08:35:00 +0800
+- 分支: feature/recent-category-default-sort-20260618
+- 內容: 完成「『最近的簡報』類別預設使用建立時間新到舊排序」。`HomePage.tsx` 將原本單一固定 `'title_asc'` 的初始排序預設改為依目前類別動態決定：新增 `getDefaultSortModeForCategory(categoryFilter)`，當 `categoryFilter === '__recent__'` 時回傳 `'created_desc'`，其餘類別維持 `'title_asc'`；`readStoredSortMode()` 改回傳 `SortMode | null`（沒有有效本機儲存值時回傳 `null`），並新增 `explicitSortMode` state 取代先前的 `sortMode` state，實際套用的 `sortMode = explicitSortMode ?? getDefaultSortModeForCategory(categoryFilter)`。使用者一旦透過排序下拉選單明確選擇過排序方式（`updateSortMode()`），該選擇會持續寫入 `makeslide.home.sortMode` 並套用到所有類別，維持先前「排序選項」功能讓使用者選擇後在所有類別一致套用的設計；只有在使用者從未手動選擇過排序方式時，切到「最近的簡報」才會自動預設顯示建立時間新到舊，切回其他類別則回到標題 A-Z 預設。新增 `frontend/src/pages/HomePage.sort.test.ts` 以 `tsx --test` 驗證 `getDefaultSortModeForCategory()` 在 `__recent__` 回傳 `created_desc`、在 `__all__`/一般分類/自訂分類回傳 `title_asc`；frontend typecheck 與既有/新增前端測試（`tsx --test`）均通過。
