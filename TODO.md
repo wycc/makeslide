@@ -112,6 +112,16 @@
 
 - [x] 前端 `subtitles.ts` 補上單元測試：`frontend/src/lib/subtitles.ts` 完全沒有對應測試檔案，但內含兩個驅動播放頁字幕高亮與動畫觸發時機的純函式：`splitScriptIntoSentences(script)`（去除語氣標記後依中英文句末符號切分句子）與 `buildSentenceTimeline(sentences, duration)`（依中英文字元、數字權重估算每句朗讀秒數與停頓秒數，再依整頁音訊長度等比例縮放出每句的 start/end 時間）。應新增 `frontend/src/lib/subtitles.test.ts`，覆蓋空字串/純語氣標記、單句與多句切分、不同字元類型混合的時間軸估算，以及 `duration<=0` 或 `sentences.length===0` 的邊界回傳空陣列情況。
 
+- [ ] `accountContext.ts` 補上單元測試：`backend/src/services/accountContext.ts` 提供多帳號隔離的核心邏輯（`sanitizeAccountId()` 把帳號代碼消毒成檔名安全字串、`accountIdFromOwnerSub()`、`runWithAccountId()`/`currentAccountId()` 透過 `AsyncLocalStorage` 傳遞目前帳號情境），目前完全沒有對應測試檔案。應新增 `backend/test/account-context.test.ts`，覆蓋 `sanitizeAccountId()` 對 `null`/`undefined`/空字串/特殊符號/開頭點號的處理（皆應回退到 `DEFAULT_ACCOUNT_ID` 或正確消毒）、`runWithAccountId()` 內呼叫 `currentAccountId()` 能拿到設定的帳號代碼、巢狀或情境外呼叫 `currentAccountId()` 回傳 `DEFAULT_ACCOUNT_ID`、以及兩個並行的 `runWithAccountId()` 呼叫（透過 `Promise.all` 模擬並行請求）不會互相污染彼此的帳號情境。
+
+- [ ] 後端測驗管理補上刪除端點（含前端刪除按鈕）：`backend/src/routes/pdfs/quizzes.ts` 有 `GET`/`POST /quizzes/generate`/`POST /quizzes`/`PUT /quizzes/:quizId` 但沒有 `DELETE /api/pdfs/:id/quizzes/:quizId`，相較之下投票功能在 `detail.ts` 有對應的 `DELETE /api/pdfs/:id/polls/:pollId`（840 行）。前端 `QuizBuilderPage.tsx` 的已儲存測驗清單（620 行附近）每筆都有「開始」「顯示答案」「結束」「歷史記錄」按鈕，但沒有刪除按鈕，且 `frontend/src/lib/api/pdfs.ts` 也沒有對應的 `deleteQuizSet()`，使用者建立測驗後若想清理舊測驗集完全無法做到。應補上後端 DELETE 路由（檢查與 `PUT` 相同的編輯權限，刪除該 `quiz_id` 的 quiz_sets 紀錄與其關聯的 quiz_attempts，回傳 204），並在前端新增 `deleteQuizSet()` API 呼叫與清單項目的刪除按鈕（含確認對話框），補上對應的後端權限測試。
+
+- [ ] `CreditExhaustedDialog.tsx` 補齊 i18n：此元件完全沒有使用 `useI18n()`，「建議處理方式」「錯誤碼：...（HTTP ...）」「前往設定」「我知道了」四處文字皆為硬編碼中文，是目前 `frontend/src/components/` 下唯一還沒有走 i18n 的對話框元件（用 `grep` 比對整個 components 目錄確認，`DrawingCanvas.tsx` 雖然也沒有 `useI18n()` 但裡面的中文都只是程式碼註解，不是使用者可見文字）。應改用 `useI18n()` 並新增對應翻譯鍵，保留既有額度用盡事件監聽與導向設定頁行為不變。
+
+- [ ] `SystemDataPage.tsx` 補齊 i18n：此頁面（系統管理員可觀測性儀表板，對應已加上 `isAdminAccount()` 權限檢查的 `/api/system/observability`）完全沒有使用 `useI18n()`，是 `frontend/src/pages/` 下目前唯一還沒有走 i18n 的頁面（用 `grep` 比對整個 pages 目錄確認），包含標題「系統可觀測性儀表」、「重新整理」「AI 設定」「返回首頁」、各區塊標題（簡報處理狀態／Pipeline 執行狀態／LLM 使用量與估算成本／Stage 狀態分布等）與超過 15 個 `MetricCard` label（總簡報數、成功率、失敗率、處理中、總 Run 數等）皆為硬編碼中文。應改用 `useI18n()` 並新增對應翻譯鍵，數字/時間格式化函式（`formatInt`/`formatDuration`/`formatCost`）可暫不處理語言切換，僅補齊文字標籤。
+
+- [ ] 前端 `ttsVoices.ts` 補上單元測試：`frontend/src/lib/ttsVoices.ts` 完全沒有對應測試檔案，但內含兩個純函式 `geminiVoiceLabel(voice)`/`openaiVoiceLabel(voice)`（依 `GEMINI_TTS_VOICE_GENDER`/`OPENAI_TTS_VOICE_GENDER` 對照表把聲音名稱標註成「voice（男）」/「voice（女）」，找不到對照時原樣回傳），以及兩份聲音清單與性別對照表。應新增 `frontend/src/lib/ttsVoices.test.ts`，覆蓋已知聲音正確標註性別、未知聲音原樣回傳、`OPENAI_TTS_VOICES`/`GEMINI_TTS_VOICES` 陣列中每個聲音都能在對應的性別對照表中找到（避免日後新增聲音忘記同步更新對照表，註解已說明 `GEMINI_TTS_VOICES` 需與後端 `services/gemini.ts` 的 `GEMINI_VOICES` 同步，這項測試可至少保證前端內部兩份資料不會互相脫節）。
+
 ---
 
 - 時間: 2026-06-18 06:05:00 +0800
@@ -404,3 +414,7 @@
 - 時間: 2026-06-19 11:55:00 +0800
 - 分支: feature/subtitles-tests-20260619
 - 內容: 完成前端 `subtitles.ts` 單元測試補強，這是本輪 LOOP 待辦清單的最後一項，未修改任何來源邏輯。新增 `frontend/src/lib/subtitles.test.ts` 15 個測試：`splitScriptIntoSentences()` 覆蓋空白輸入、純語氣標記輸入、單句/多句中英文切分、語氣標記與正文交錯時的去除、以及驗證該函式的切分正規表示式只把全形「。！？；」與半形「!?;」視為句末終止符，半形 ASCII 句號「.」不會觸發切分（因此一段含句號但沒有其他終止符的文字會維持整段不被拆開，這是寫測試過程中實際執行驗證才確認的真實行為，並非原本假設）；`buildSentenceTimeline()` 覆蓋 `duration<=0`、`duration` 為 `NaN`/`Infinity`、`sentences` 為空陣列三種邊界回傳空陣列、單句佔滿整段時長、多句切分後區段首尾相接且總長度精確等於 `duration`、較長中文句子分配到的時長確實大於短句、混合中英文數字字元時仍能正常運作且區段落在 `[0, duration]` 範圍內。已執行前端 typecheck（前後端皆通過）、完整前端測試（150 個測試全數通過）與後端測試（365 個測試，18 個失敗皆為既有環境性基準，無新增回歸，本次未改動任何後端程式碼）。**至此本輪 LOOP 發現的所有候選待辦項目（共 7 項：`extractPdfFigures.ts` 例外處理、`presentationGit.ts` 逾時保護、`generateVideo.ts` 檔案存在性檢查、`gemini.ts` 診斷紀錄、`promptTemplates.ts`/`synthesizeAudio.ts`/`subtitles.ts` 測試補強）皆已完成，TODO.md 再次清空。**
+
+- 時間: 2026-06-19 12:10:00 +0800
+- 分支: workspace-current
+- 內容: 依照 LOOP.md，在 TODO.md 已無未完成項目時重新進行唯讀分析，新增 5 個已驗證的新待辦項目。分析方向涵蓋：(1) 比對 `backend/src/services/`、`frontend/src/lib/` 與對應 `test/` 目錄找出完全沒有測試的檔案；(2) 用 `grep` 比對 `frontend/src/components/` 與 `frontend/src/pages/` 下所有檔案是否使用 `useI18n()`，找出殘留硬編碼中文的元件/頁面；(3) 比對 `quizzes.ts`/`detail.ts` 等路由群組的 CRUD 完整性，找出 API 不對稱之處。逐一讀取程式碼確認後採用：(a) `accountContext.ts` 完全無測試但是多帳號隔離的核心邏輯；(b) `quizzes.ts` 缺少 `DELETE` 端點且前端清單也沒有刪除按鈕（對照 `polls` 有完整 CRUD）；(c) `CreditExhaustedDialog.tsx` 是 components 目錄下唯一沒有 `useI18n()` 的對話框；(d) `SystemDataPage.tsx` 是 pages 目錄下唯一沒有 `useI18n()` 的頁面；(e) 前端 `ttsVoices.ts` 完全無測試但含兩個標籤純函式與需要保持同步的性別對照表。排除的假線索：`youtubeCaptions.ts` 雖然完全無測試，但內部函式（`resolvePython`/`runYtDlp`/`ensureYtDlpBinary`/`fetchByYtDlp`/`transcribeByStt`）幾乎都涉及子行程、檔案下載與網路呼叫，需要大量 mocking 才能測試，唯一的純函式 `normalizeLineText()` 又過於單薄，不符合本輪「小型、易驗證」的待辦項目門檻，故不列入；`renderTextPages.ts` 讀取 `source.txt` 與 `renderPages.ts` 清理舊檔的 `fs.unlinkSync()` 皆缺乏例外處理，但因 `runPipeline()` 既有的外層 try/catch 已會把任何步驟失敗妥善標記為 `status: 'failed'`，影響範圍與先前已排除的 `extractText.ts` 頁數不符問題相同（僅讓錯誤訊息略不精確，非當機風險），延續先前判斷不列入；`frontend/src/components/DrawingCanvas.tsx` 沒有 `useI18n()` 但檔案內中文皆為程式碼註解而非使用者可見文字，確認後排除。
