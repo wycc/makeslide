@@ -30,7 +30,7 @@ function runCommand(command: string, args: string[]): Promise<void> {
   });
 }
 
-function parseWavPcmChunk(buf: Buffer): { sampleRate: number; channels: number; bitsPerSample: number; data: Buffer } | null {
+export function parseWavPcmChunk(buf: Buffer): { sampleRate: number; channels: number; bitsPerSample: number; data: Buffer } | null {
   if (buf.length < 44) return null;
   if (buf.toString('ascii', 0, 4) !== 'RIFF' || buf.toString('ascii', 8, 12) !== 'WAVE') return null;
   const channels = buf.readUInt16LE(22);
@@ -51,7 +51,7 @@ function parseWavPcmChunk(buf: Buffer): { sampleRate: number; channels: number; 
   return null;
 }
 
-function buildWavPcm16(pcm: Buffer, sampleRate: number, channels: number): Buffer {
+export function buildWavPcm16(pcm: Buffer, sampleRate: number, channels: number): Buffer {
   const bitsPerSample = 16;
   const byteRate = sampleRate * channels * (bitsPerSample / 8);
   const blockAlign = channels * (bitsPerSample / 8);
@@ -144,7 +144,7 @@ async function readAudioDuration(filePath: string): Promise<number | null> {
   }
 }
 
-function isRetryableTtsError(err: unknown): boolean {
+export function isRetryableTtsError(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false;
   const e = err as { name?: string; message?: string; type?: string; status?: number };
   const name = (e.name ?? '').toLowerCase();
@@ -170,7 +170,7 @@ function sleep(ms: number): Promise<void> {
  * the HTTP status / error code when available so the reason shown in the
  * console and UI is actionable (e.g. "401 invalid_api_key: Incorrect API key").
  */
-function extractTtsErrorMessage(err: unknown): string {
+export function extractTtsErrorMessage(err: unknown): string {
   if (!err || typeof err !== 'object') return String(err);
   const e = err as { status?: unknown; code?: unknown; type?: unknown; message?: unknown };
   const status = typeof e.status === 'number' ? e.status : null;
@@ -183,7 +183,7 @@ function extractTtsErrorMessage(err: unknown): string {
   return prefix ? `${prefix}: ${message}` : message;
 }
 
-function splitByToneMarkers(script: string): Array<{ instruction: string; text: string }> {
+export function splitByToneMarkers(script: string): Array<{ instruction: string; text: string }> {
   const out: Array<{ instruction: string; text: string }> = [];
   let currentInstruction = '平穩敘述';
   let lastIdx = 0;
@@ -208,7 +208,7 @@ function splitByToneMarkers(script: string): Array<{ instruction: string; text: 
  * (OpenAI dual mode) so it isn't read aloud, and report which speaker the
  * segment belongs to so the caller can pick a per-speaker voice.
  */
-function splitSpeakerPrefix(text: string): { speaker: '1' | '2' | null; text: string } {
+export function splitSpeakerPrefix(text: string): { speaker: '1' | '2' | null; text: string } {
   const m = SPEAKER_PREFIX_RE.exec(text);
   if (!m) return { speaker: null, text };
   return { speaker: m[1] as '1' | '2', text: text.slice(m[0].length).trim() };
