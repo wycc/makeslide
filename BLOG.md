@@ -2445,3 +2445,19 @@ Gemini TTS 語音合成的回應結構是好幾層巢狀的（`candidates[0].con
 - 新增具名匯出函式 `summarizeTtsResponseForLog(json: unknown): Record<string, unknown>`：逐層判斷 `candidates` 是否為陣列及其長度、`content` 是否存在、`parts` 是否為陣列及其長度，並把每個 part 分類為 `'inlineData' | 'text' | 'unknown'`，連同第一個候選結果的 `finishReason` 一起組成摘要物件，再透過既有 `logSanitizer.ts` 的 `redactLogObject()` 包裝，確保不會把任何長字串（萬一未來欄位變動意外帶有 base64/敏感內容）原文寫進日誌。
 - `synthesizeGeminiSpeech()` 在判定 `inlineData.data` 缺失（`!b64 || typeof b64 !== 'string'`）時，先呼叫 `logger.warn({ response: summarizeTtsResponseForLog(json) }, 'Gemini TTS: failed to locate inlineData audio in response')`，再拋出原有的錯誤，呼叫端的錯誤處理（重試、warning、fallback）完全不受影響。
 - 新增 `backend/test/gemini-tts-diagnostics.test.ts`：4 個測試直接驗證 `summarizeTtsResponseForLog()` 對完整合法回應、空 `candidates`、只有 `text` 的 parts、完全缺少 `candidates` 四種情境的摘要內容是否正確；3 個測試沿用專案既有的 `globalThis.fetch` mock 慣例（`auth-google-callback.test.ts` 的同一套手法），對 `synthesizeGeminiSpeech()` 做端到端驗證，覆蓋兩種失敗情境與一種成功情境。
+
+## `promptTemplates.ts` 補上單元測試
+
+### 功能目的
+
+`backend/src/services/promptTemplates.ts` 提供兩個小工具：`loadPromptTemplate()` 讀取外部提示詞範本檔案（檔案不存在或內容空白時回退到內建預設文字）與 `renderPromptTemplate()`（用 `{{變數名}}` 語法替換模板中的變數）。這兩個函式被多處 LLM 提示詞組裝邏輯使用，但過去完全沒有測試覆蓋，調整正規表示式或回退邏輯時若有疏漏不會被任何測試攔截。這次補上完整的單元測試，讓未來修改這兩個函式時能立即知道是否破壞既有行為。
+
+### 使用方式
+
+此變更純粹是補上測試，不影響任何程式邏輯或對外行為。
+
+### 技術細節
+
+- 新增 `backend/test/prompt-templates.test.ts`，共 10 個測試：
+  - `loadPromptTemplate()`：檔案不存在時回退到 fallback、檔案內容為純空白字元時回退、檔案完全空白時回退、檔案有內容時回傳 trim 後的文字。測試用暫時建立在 `config.repoRoot` 下的 `.tmp-prompt-templates-test/` fixture 目錄寫入測試檔案，每個測試結束後在 `finally` 區塊用 `fs.rmSync(..., { recursive: true, force: true })` 清除，不留殘留檔案。
+  - `renderPromptTemplate()`：單一變數替換、多個不同變數替換、同一變數重複出現時替換一致、找不到對應 key 時補空字串（而非保留原始 `{{key}}` 字串）、`{{ name }}`（含前後空白）仍能正確比對、完全沒有 placeholder 的文字保持原樣不變。

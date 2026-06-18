@@ -106,7 +106,7 @@
 
 - [x] `gemini.ts` 的 TTS 回應解析補上中間層診斷紀錄：`backend/src/services/gemini.ts` 第 393-397 行從 `json?.candidates?.[0]?.content?.parts?.find(...)?.inlineData` 一路用 optional chaining 取出 base64 音訊，任何一層缺漏都只會在最後丟出單一的「Gemini TTS returned empty audio」，沒有記錄是哪一層造成的（例如 `candidates` 是空陣列、或 `parts` 裡找不到 `inlineData`）。應在解析失敗時用 `logger.warn` 記錄實際收到的回應結構摘要（避免記錄完整 base64/敏感內容，可參考既有 `logSanitizer.ts` 的遮罩慣例），讓未來 Gemini API 格式變動時能快速定位問題。
 
-- [ ] `promptTemplates.ts` 補上單元測試：`backend/src/services/promptTemplates.ts` 完全沒有對應測試檔案，但內含兩個容易測試的純函式：`loadPromptTemplate(relPath, fallback)`（檔案不存在或讀取後為空白時回退到 fallback，否則回傳 trim 後內容）與 `renderPromptTemplate(template, vars)`（用正規表示式 `\{\{\s*([a-zA-Z0-9_]+)\s*\}\}` 取代模板變數，找不到對應 key 時補空字串）。應新增 `backend/test/prompt-templates.test.ts`，覆蓋檔案不存在/空白內容回退、多個變數替換、找不到對應 key 時補空字串、巢狀或重複變數名稱等邊界情況。
+- [x] `promptTemplates.ts` 補上單元測試：`backend/src/services/promptTemplates.ts` 完全沒有對應測試檔案，但內含兩個容易測試的純函式：`loadPromptTemplate(relPath, fallback)`（檔案不存在或讀取後為空白時回退到 fallback，否則回傳 trim 後內容）與 `renderPromptTemplate(template, vars)`（用正規表示式 `\{\{\s*([a-zA-Z0-9_]+)\s*\}\}` 取代模板變數，找不到對應 key 時補空字串）。應新增 `backend/test/prompt-templates.test.ts`，覆蓋檔案不存在/空白內容回退、多個變數替換、找不到對應 key 時補空字串、巢狀或重複變數名稱等邊界情況。
 
 - [ ] `synthesizeAudio.ts` 補上純函式單元測試：`backend/src/worker/steps/synthesizeAudio.ts` 目前完全沒有對應測試檔案（`backend/test/` 下無任何檔案引用），但內含多個模組私有的純函式：`parseWavPcmChunk()`（解析 WAV PCM chunk 標頭）、`buildWavPcm16()`（將原始 PCM 包成 WAV 容器）、`isRetryableTtsError()`（判斷 TTS 錯誤是否可重試）、`extractTtsErrorMessage()`（從不同錯誤型態取出可讀訊息）、`splitByToneMarkers()`（依語氣標記切分逐字稿片段）、`splitSpeakerPrefix()`（解析雙人對談的講者前綴）。應將這些函式改為具名匯出（如 `generateTitle.ts` 的做法），新增 `backend/test/synthesize-audio.test.ts` 覆蓋各函式的正常與邊界輸入，不需要動到實際呼叫 TTS API 的整合邏輯。
 
@@ -392,3 +392,7 @@
 - 時間: 2026-06-19 10:55:00 +0800
 - 分支: feature/gemini-tts-diagnostics-20260619
 - 內容: 完成 `gemini.ts` TTS 回應解析的中間層診斷紀錄。新增具名匯出函式 `summarizeTtsResponseForLog(json)`，逐層檢查 `candidates`/`content`/`parts` 是否存在與其數量，並把每個 part 分類為 `inlineData`/`text`/`unknown`，連同 `finishReason` 一起透過既有 `logSanitizer.ts` 的 `redactLogObject()` 包裝後回傳，確保不會把原始 base64/敏感內容寫進日誌。`synthesizeGeminiSpeech()` 在找不到 `inlineData.data` 時，先呼叫 `logger.warn({ response: summarizeTtsResponseForLog(json) }, ...)` 記錄這份摘要，再拋出原有的 `Gemini TTS returned empty audio` 錯誤，行為對呼叫端完全不變，只是多了診斷紀錄。新增 `backend/test/gemini-tts-diagnostics.test.ts` 7 個測試：4 個直接測試 `summarizeTtsResponseForLog()` 對「完整合法回應」、「candidates 為空陣列」、「parts 只有 text 沒有 inlineData」、「完全缺少 candidates 欄位」四種情境的摘要是否正確；3 個用既有專案的 `globalThis.fetch` mock 慣例（沿用 `auth-google-callback.test.ts` 的模式）對 `synthesizeGeminiSpeech()` 做端到端驗證，分別覆蓋「沒有 candidates」、「parts 沒有 inlineData」會拋出既有錯誤訊息，以及「合法 inlineData 回應」能正確回傳音訊位元組。已執行 typecheck（前後端皆通過）與 `npm test`（335 個測試，18 個失敗逐一核對皆為既有環境性基準，無新增回歸）。
+
+- 時間: 2026-06-19 11:15:00 +0800
+- 分支: feature/prompt-templates-tests-20260619
+- 內容: 完成 `promptTemplates.ts` 單元測試補強。新增 `backend/test/prompt-templates.test.ts` 10 個測試，未修改任何來源邏輯：`loadPromptTemplate()` 覆蓋檔案不存在、檔案為空白字元、檔案完全空白、檔案有內容時回傳 trim 後文字四種情境（用暫時建立在 `config.repoRoot` 下的 `.tmp-prompt-templates-test/` fixture 目錄測試，每個測試結束後在 finally 清除，不留殘留檔案）；`renderPromptTemplate()` 覆蓋單一變數替換、多個不同變數替換、重複變數名稱替換一致、找不到對應 key 時補空字串、`{{ name }}` 含前後空白仍能比對、完全沒有 placeholder 時原文不變共 6 種情境。已執行 typecheck（前後端皆通過）與 `npm test`（345 個測試，20 個失敗逐一核對為 18 項既有環境性基準＋1 項已知測試順序相關 flaky `summarizeLlmUsage`，無新增回歸）。
