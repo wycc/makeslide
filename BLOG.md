@@ -2387,3 +2387,22 @@ PDF 圖表抽取步驟（`extractPdfFigures()`）是一個冪等（idempotent）
   - 存在時用 try/catch 包覆 `JSON.parse(await fs.promises.readFile(manifestPath, 'utf8'))`，解析失敗時呼叫 `logger.warn({ pdfId, manifestPath, err }, ...)` 並回傳 `null`，讓呼叫端自然落入既有「manifest 不存在」分支重新產生。
 - `extractPdfFigures()` 主流程改用 `const existing = await readExistingManifest(pdfId, manifestPath); if (existing) { ... }`，取代原本直接內嵌的 `JSON.parse`，行為等價但多了一層防護。
 - 新增 `backend/test/extract-pdf-figures.test.ts`，涵蓋四種情境：manifest 檔案不存在、合法 manifest 正常解析回傳、JSON 語法損毀、檔案內容為空白字串，皆驗證函式回傳 `null` 或正確物件而不向外拋出例外。
+
+## `presentationGit.ts` git 子行程逾時保護
+
+### 功能目的
+
+每份簡報的儲存目錄都是一個獨立的本機 git repo，用來追蹤頁面圖片、逐字稿、音訊等內容的歷史版本，也是「同步到 GitHub」功能的基礎。所有對這個 repo 的操作（commit、push、pull/merge、查詢歷史、還原版本）最終都會呼叫系統的 `git` 執行檔。原本的設定完全沒有設定逾時：若某次 git 呼叫因為 lock 檔被其他行程占用、pre-commit/post-commit hook 卡住、或推送到 GitHub 時網路逾時／遠端無回應，子行程會無限期掛起，連帶讓呼叫端（例如「同步到 GitHub」的 API 請求、或背景的版本提交）一直卡住，使用者只會看到請求永遠轉圈圈，沒有任何錯誤訊息或恢復機會。這次修正讓所有 git 操作都有明確的逾時上限，卡住的子行程會被自動終止，讓既有的錯誤處理（大多數呼叫端本來就有 try/catch + `logger.warn` 或回傳明確錯誤碼）能正常接手，而不是讓整個流程永遠掛著。
+
+### 使用方式
+
+此變更對一般使用者完全透明：
+
+1. 正常情況下（git 指令在合理時間內完成）行為與過去完全相同。
+2. 若某次 git 操作異常卡住超過 30 秒，子行程會被強制終止，呼叫端會收到逾時錯誤，依各自既有的錯誤處理邏輯繼續（例如「同步到 GitHub」會回報同步失敗，版本提交失敗則記錄 warning 並讓主流程繼續），不再無限期卡住。
+
+### 技術細節
+
+- 新增模組層級常數 `GIT_COMMAND_TIMEOUT_MS = 30_000`（30 秒），並在 `gitOpts(dir)` 回傳的選項物件中加入 `timeout: GIT_COMMAND_TIMEOUT_MS`。
+- `backend/src/services/presentationGit.ts` 內所有 `execFile('git', ...)` 呼叫（`git()` helper、`ensurePresentationRepo`、`refreshGitignore`、`commitAllPendingChanges`、`commitPresentationFile(s)`、`showStagedBlob`、`resolveTextConflict`、`resolveBinaryConflict`、`pullAndMergeFromGitHub`、`pushPresentationToGitHub`、`getPresentationFileAtCommit`、`restorePresentationFile`）都統一透過 `gitOpts(dir)` 取得選項，因此這一處修改即可讓全部呼叫點同時生效，不需要逐一修改每個呼叫點。
+- 為了讓修改可被驗證，將 `gitOpts` 與 `GIT_COMMAND_TIMEOUT_MS` 改為具名匯出。新增 `backend/test/presentation-git-timeout.test.ts`：一個測試驗證 `gitOpts()` 的回傳形狀（`cwd`/`timeout`/git 作者與提交者環境變數）；另一個測試用會 `sleep 5` 的假 `git` 執行檔（暫時加進 `PATH`）搭配覆寫成 100ms 的短逾時，實際驗證子行程逾時後確實被終止（`err.killed === true`），證明逾時機制真的有效，而不只是設定了選項卻沒有實際效果。
