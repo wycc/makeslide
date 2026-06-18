@@ -2426,3 +2426,22 @@ PDF 圖表抽取步驟（`extractPdfFigures()`）是一個冪等（idempotent）
 - 在 `generateVideo()` 的主迴圈中，呼叫 ffmpeg 之前先用 `fs.existsSync(image) || !fs.existsSync(audio)` 檢查兩個輸入檔案是否存在；缺檔時呼叫 `logger.warn({ pdfId, pageNumber, image, audio }, 'generateVideo: skipping page with missing image or audio artifact')` 並 `continue`，不會加入 `segmentPaths`。
 - 既有的 `if (segmentPaths.length === 0) throw new Error('No video segments generated')` 邏輯維持不變，當所有頁面都被跳過時會自然觸發這個明確的錯誤。
 - 新增 `backend/test/generate-video.test.ts`，覆蓋「所有頁面素材皆缺失」與「沒有頁面可渲染」兩種情境；前者驗證新的存在性檢查確實會跳過缺檔頁面並最終丟出可讀的錯誤，且整個測試過程中完全不需要呼叫真正的 ffmpeg 執行檔。
+
+## `gemini.ts` TTS 回應解析補上中間層診斷紀錄
+
+### 功能目的
+
+Gemini TTS 語音合成的回應結構是好幾層巢狀的（`candidates[0].content.parts[].inlineData.data`），原本的程式碼用一整串 optional chaining 直接取出最終的 base64 音訊資料，任何一層缺漏（例如 Gemini 因安全政策擋掉內容而回傳空 `candidates`、或回應格式日後變動）都只會在最後得到同一句「Gemini TTS returned empty audio」，無法從錯誤訊息本身判斷究竟是哪一層出了問題。這次修正在解析失敗時額外記錄一份「回應結構摘要」到日誌，讓未來排查 TTS 失敗時能直接從日誌看出是哪一層缺漏，而不必重現問題或臨時加 log 重新部署才能診斷。
+
+### 使用方式
+
+此變更對一般使用者完全透明，不影響任何 API 行為：
+
+1. 正常情況下（Gemini 回傳合法的 `inlineData` 音訊）行為與過去完全相同。
+2. 若 Gemini 回應缺少預期欄位導致語音合成失敗，伺服器日誌會多一筆 `Gemini TTS: failed to locate inlineData audio in response` 的 warning，內含 `hasCandidates`/`candidatesCount`/`hasContent`/`hasParts`/`partsCount`/`partKinds`/`finishReason` 等診斷欄位，幫助快速定位是哪一層出問題（例如 `candidatesCount: 0` 代表 Gemini 完全沒有回傳候選結果，`partKinds: ["text"]` 代表回應只有文字、沒有任何音訊片段）。原本拋出的 `Gemini TTS returned empty audio` 錯誤訊息保持不變。
+
+### 技術細節
+
+- 新增具名匯出函式 `summarizeTtsResponseForLog(json: unknown): Record<string, unknown>`：逐層判斷 `candidates` 是否為陣列及其長度、`content` 是否存在、`parts` 是否為陣列及其長度，並把每個 part 分類為 `'inlineData' | 'text' | 'unknown'`，連同第一個候選結果的 `finishReason` 一起組成摘要物件，再透過既有 `logSanitizer.ts` 的 `redactLogObject()` 包裝，確保不會把任何長字串（萬一未來欄位變動意外帶有 base64/敏感內容）原文寫進日誌。
+- `synthesizeGeminiSpeech()` 在判定 `inlineData.data` 缺失（`!b64 || typeof b64 !== 'string'`）時，先呼叫 `logger.warn({ response: summarizeTtsResponseForLog(json) }, 'Gemini TTS: failed to locate inlineData audio in response')`，再拋出原有的錯誤，呼叫端的錯誤處理（重試、warning、fallback）完全不受影響。
+- 新增 `backend/test/gemini-tts-diagnostics.test.ts`：4 個測試直接驗證 `summarizeTtsResponseForLog()` 對完整合法回應、空 `candidates`、只有 `text` 的 parts、完全缺少 `candidates` 四種情境的摘要內容是否正確；3 個測試沿用專案既有的 `globalThis.fetch` mock 慣例（`auth-google-callback.test.ts` 的同一套手法），對 `synthesizeGeminiSpeech()` 做端到端驗證，覆蓋兩種失敗情境與一種成功情境。
