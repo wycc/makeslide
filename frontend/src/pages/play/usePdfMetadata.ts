@@ -183,7 +183,7 @@ export function usePdfMetadata({
   }, [pdfId, ttsVoice, ttsSpeed, scriptMaxCharsPerPage, hostMode, isReadOnlyProcessing, setDetail]);
 
   const handleCreateShareLink = useCallback(async () => {
-    if (!pdfId) return;
+    if (!pdfId || isReadOnlyProcessing) return;
     setShareBusy(true);
     setShareMessage(null);
     setShareError(null);
@@ -207,7 +207,7 @@ export function usePdfMetadata({
     } finally {
       setShareBusy(false);
     }
-  }, [pdfId, shareAccess]);
+  }, [pdfId, shareAccess, isReadOnlyProcessing]);
 
   const handleMakeSharePrivate = useCallback(async () => {
     if (!pdfId || isReadOnlyProcessing) return;

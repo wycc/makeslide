@@ -52,7 +52,7 @@
 [x] 在產生大網時完全沒有使用者的提示在其中，當使用者使用高橋流時也沒有調整每頁重點的效果。
 [x] 類別是最近的簡報時，預設使用建立時間新到舊的排序方式
 [x] read-only 模式時，不能做同步到 github 的動作
-[ ] read-only 模式時，設定/風格/分享等按鍵應該 disable
+[x] read-only 模式時，設定/風格/分享等按鍵應該 disable
 
 ---
 
@@ -200,3 +200,7 @@
 - 時間: 2026-06-18 08:50:00 +0800
 - 分支: feature/readonly-block-github-sync-20260618
 - 內容: 完成「read-only 模式時不能做同步到 GitHub 的動作」。後端 `backend/src/routes/pdfs/admin.ts` 的 `POST /api/pdfs/:id/github-sync` 原本只檢查 PDF 是否存在與 GitHub 是否設定，沒有任何擁有權限檢查；新增與 `detail.ts` 一致的 `sessionSub()` / `canEditPdf()`（私有簡報需擁有者本人、`public`(read-only) 一律禁止、`public_editable` 允許任何登入帳號），查詢 row 時補上 `owner_sub`、`visibility`，沒有編輯權限時回傳 `403 FORBIDDEN`，權限檢查在「GitHub 是否設定」檢查之前執行。前端 `PlayPageHeader.tsx` 的「同步到 GitHub」按鈕加上 `disabled={... || isReadOnlyProcessing}`，並在唯讀時把 `title` 改成新增的 `play.header.githubSyncReadOnly` 提示；`usePdfMetadata.ts` 的 `handleSyncToGithub()` 也加上 `isReadOnlyProcessing` 早期 return，避免透過鍵盤/程式呼叫繞過 UI disable。新增 `backend/test/github-sync.test.ts` 4 個測試，覆蓋非擁有者對 `public`/`private` 簡報請求同步應得 403、擁有者與 `public_editable` 協作者應能通過權限檢查（測試環境未設定 GitHub repo，因此後續會落在 `GITHUB_NOT_CONFIGURED` 400，用以證明沒有被權限擋下）。backend/frontend typecheck 通過；backend 測試套件 234 項中 18 項失敗為既有環境相關既存失敗（與本次變更前一致，4 項新增測試與既有 github-sync 無關測試均通過）。
+
+- 時間: 2026-06-18 09:05:00 +0800
+- 分支: feature/readonly-disable-settings-style-share-20260618
+- 內容: 完成「read-only 模式時，設定/風格/分享等按鍵應該 disable」。檢查 `PlayPageHeader.tsx` 後確認「⚙️ 設定」（語音/TTS 設定，`setTtsDialogOpen`）與「🖼️ 風格」（圖片風格設定，`openImageStyleDialog`）兩個按鈕本來就已經有 `disabled={isReadOnlyProcessing}`，不需修改；但分享區塊的三個控制項缺少這個檢查：分享存取模式 `<select>`（`shareAccess`，僅切換 UI 選擇但容易誤導使用者）、「建立分享連結」按鈕（呼叫 `handleCreateShareLink()` 會建立分享並把 `visibility` 改成 `public`/`public_editable`）、「設為 private」按鈕（呼叫 `handleMakeSharePrivate()`）都只檢查 `shareBusy`、沒有檢查 `isReadOnlyProcessing`。修正：三個控制項的 `disabled` 都加上 `|| isReadOnlyProcessing`（select 直接用 `disabled={isReadOnlyProcessing}`），並補上對應 `disabled:cursor-not-allowed disabled:opacity-40` 樣式；`usePdfMetadata.ts` 的 `handleCreateShareLink()` 補上 `isReadOnlyProcessing` 早期 return（`handleMakeSharePrivate()` 先前已有此防呆，僅 UI 未反映）。後端 `POST /api/pdfs/:id/share`（`hasOwnerOrLegacyAccess`）與 `PATCH /api/pdfs/:id/visibility`（`canEditPdf`）確認已有擁有權限檢查，不需額外修改。frontend typecheck 與既有/新增前端測試（`tsx --test`，125 項）均通過。
