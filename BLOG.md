@@ -2406,3 +2406,23 @@ PDF 圖表抽取步驟（`extractPdfFigures()`）是一個冪等（idempotent）
 - 新增模組層級常數 `GIT_COMMAND_TIMEOUT_MS = 30_000`（30 秒），並在 `gitOpts(dir)` 回傳的選項物件中加入 `timeout: GIT_COMMAND_TIMEOUT_MS`。
 - `backend/src/services/presentationGit.ts` 內所有 `execFile('git', ...)` 呼叫（`git()` helper、`ensurePresentationRepo`、`refreshGitignore`、`commitAllPendingChanges`、`commitPresentationFile(s)`、`showStagedBlob`、`resolveTextConflict`、`resolveBinaryConflict`、`pullAndMergeFromGitHub`、`pushPresentationToGitHub`、`getPresentationFileAtCommit`、`restorePresentationFile`）都統一透過 `gitOpts(dir)` 取得選項，因此這一處修改即可讓全部呼叫點同時生效，不需要逐一修改每個呼叫點。
 - 為了讓修改可被驗證，將 `gitOpts` 與 `GIT_COMMAND_TIMEOUT_MS` 改為具名匯出。新增 `backend/test/presentation-git-timeout.test.ts`：一個測試驗證 `gitOpts()` 的回傳形狀（`cwd`/`timeout`/git 作者與提交者環境變數）；另一個測試用會 `sleep 5` 的假 `git` 執行檔（暫時加進 `PATH`）搭配覆寫成 100ms 的短逾時，實際驗證子行程逾時後確實被終止（`err.killed === true`），證明逾時機制真的有效，而不只是設定了選項卻沒有實際效果。
+
+## `generateVideo.ts` 合成影片前補上圖片/音訊檔案存在性檢查
+
+### 功能目的
+
+「下載影片」功能會把每一頁的圖片與語音合成出一段 mp4 片段，再串接成整份簡報的影片。原本的實作直接把每頁的圖片/音訊路徑交給 ffmpeg，完全沒有先確認檔案是否真的存在於磁碟上。如果某一頁的語音因為 TTS 步驟失敗、或資料庫狀態還沒即時反映實際檔案狀態，ffmpeg 就會直接因為找不到輸入檔而失敗，使用者只會看到一段難以理解的底層錯誤訊息，且整份影片的生成會直接中止，即使其他頁面的素材都齊全。這次修正讓系統在合成每一頁之前先確認素材存在，缺檔的頁面會被跳過並記錄清楚的警告，不影響其他頁面正常合成。
+
+### 使用方式
+
+此變更對一般使用者完全透明：
+
+1. 所有頁面素材齊全時，行為與過去完全相同，產出包含全部頁面的完整影片。
+2. 若某幾頁的圖片或音訊缺失，這些頁面會被跳過（不出現在最終影片中），其餘頁面仍正常合成；伺服器日誌會記錄是哪一頁、哪個檔案缺失。
+3. 若所有頁面都缺少素材，系統會回報明確的「沒有可用的影片片段」錯誤，而不是讓使用者看到底層 ffmpeg 的錯誤輸出。
+
+### 技術細節
+
+- 在 `generateVideo()` 的主迴圈中，呼叫 ffmpeg 之前先用 `fs.existsSync(image) || !fs.existsSync(audio)` 檢查兩個輸入檔案是否存在；缺檔時呼叫 `logger.warn({ pdfId, pageNumber, image, audio }, 'generateVideo: skipping page with missing image or audio artifact')` 並 `continue`，不會加入 `segmentPaths`。
+- 既有的 `if (segmentPaths.length === 0) throw new Error('No video segments generated')` 邏輯維持不變，當所有頁面都被跳過時會自然觸發這個明確的錯誤。
+- 新增 `backend/test/generate-video.test.ts`，覆蓋「所有頁面素材皆缺失」與「沒有頁面可渲染」兩種情境；前者驗證新的存在性檢查確實會跳過缺檔頁面並最終丟出可讀的錯誤，且整個測試過程中完全不需要呼叫真正的 ffmpeg 執行檔。

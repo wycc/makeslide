@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import ffmpegStatic from 'ffmpeg-static';
 import { db } from '../../db';
+import { logger } from '../../logger';
 import { pageAudioPath, pageImagePath, videoPath } from '../../services/storage';
 import { runCommand } from '../poppler';
 
@@ -45,6 +46,13 @@ export async function generateVideo(
       if (!uid) continue;
       const image = pageImagePath(pdfId, uid);
       const audio = pageAudioPath(pdfId, uid);
+      if (!fs.existsSync(image) || !fs.existsSync(audio)) {
+        logger.warn(
+          { pdfId, pageNumber, image, audio },
+          'generateVideo: skipping page with missing image or audio artifact',
+        );
+        continue;
+      }
       const segment = path.join(segmentsDir, `${String(i + 1).padStart(4, '0')}.mp4`);
 
       await runCommand(FFMPEG, [
