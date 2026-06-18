@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { config } from '../config';
 import { ensureAdminAccount, getSystemAuthSettings, isAdminAccount } from '../services/aiSettings';
+import { logger } from '../logger';
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -31,6 +32,9 @@ const GoogleUserInfoSchema = z.object({
   name: z.string().optional(),
   picture: z.string().url().optional(),
 });
+
+type TokenResponse = z.infer<typeof TokenResponseSchema>;
+type GoogleUserInfo = z.infer<typeof GoogleUserInfoSchema>;
 
 function base64UrlEncode(input: Buffer | string): string {
   const raw = Buffer.isBuffer(input) ? input : Buffer.from(input, 'utf8');
@@ -97,6 +101,48 @@ function redirectUri(request: FastifyRequest): string {
     return `${authBaseUrl(request)}${config.googleRedirectUri}`;
   }
   return config.googleRedirectUri;
+}
+
+function zodIssuesForLog(err: unknown): unknown {
+  if (err instanceof z.ZodError) {
+    return err.issues.map((issue) => ({
+      path: issue.path.join('.'),
+      code: issue.code,
+      message: issue.message,
+    }));
+  }
+  return err instanceof Error ? err.message : String(err);
+}
+
+async function parseJsonResponse(resp: Response, context: string): Promise<unknown> {
+  try {
+    return await resp.json();
+  } catch (err) {
+    logger.warn({ context, error: err instanceof Error ? err.message : String(err) }, 'Google OAuth: invalid JSON response');
+    throw err;
+  }
+}
+
+async function parseGoogleTokenResponse(resp: Response): Promise<TokenResponse | null> {
+  let body: unknown;
+  try {
+    body = await parseJsonResponse(resp, 'token');
+    return TokenResponseSchema.parse(body);
+  } catch (err) {
+    logger.warn({ issues: zodIssuesForLog(err) }, 'Google OAuth: token response schema parse failed');
+    return null;
+  }
+}
+
+async function parseGoogleUserInfoResponse(resp: Response): Promise<GoogleUserInfo | null> {
+  let body: unknown;
+  try {
+    body = await parseJsonResponse(resp, 'userinfo');
+    return GoogleUserInfoSchema.parse(body);
+  } catch (err) {
+    logger.warn({ issues: zodIssuesForLog(err) }, 'Google OAuth: userinfo response schema parse failed');
+    return null;
+  }
 }
 
 export async function authRoutes(app: FastifyInstance) {
@@ -173,14 +219,20 @@ export async function authRoutes(app: FastifyInstance) {
     if (!tokenResp.ok) {
       return reply.code(502).send({ error: { code: 'GOOGLE_TOKEN_EXCHANGE_FAILED', message: 'Google token 交換失敗' } });
     }
-    const token = TokenResponseSchema.parse(await tokenResp.json());
+    const token = await parseGoogleTokenResponse(tokenResp);
+    if (!token) {
+      return reply.code(502).send({ error: { code: 'GOOGLE_TOKEN_PARSE_FAILED', message: 'Google token 回應格式錯誤' } });
+    }
     const userResp = await fetch(GOOGLE_USERINFO_URL, {
       headers: { authorization: `Bearer ${token.access_token}` },
     });
     if (!userResp.ok) {
       return reply.code(502).send({ error: { code: 'GOOGLE_USERINFO_FAILED', message: 'Google 帳號資訊讀取失敗' } });
     }
-    const user = GoogleUserInfoSchema.parse(await userResp.json());
+    const user = await parseGoogleUserInfoResponse(userResp);
+    if (!user) {
+      return reply.code(502).send({ error: { code: 'GOOGLE_USERINFO_PARSE_FAILED', message: 'Google 帳號資訊回應格式錯誤' } });
+    }
     await ensureAdminAccount(user.sub);
     setCookie(reply, SESSION_COOKIE, encodeSession({ provider: 'google', ...user }), 30 * 24 * 60 * 60);
     return reply.redirect(`${config.nbPrefix || ''}/#/settings`);

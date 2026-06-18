@@ -1,5 +1,83 @@
 # MakeSlide 功能說明
 
+## 課堂測驗頁 i18n 補齊
+
+### 功能目的
+
+課堂測驗頁整合了 AI 產生題目、手動編輯題目、儲存測驗、同步啟動測驗、follower 作答、顯示答案、作答進度與歷史紀錄，是課堂互動流程中重要的一頁。過去 `QuizBuilderPage.tsx` 雖然已經引入 `useI18n()`，但頁面主要文字仍多數硬編碼為中文，例如「自動測驗生成」、「已儲存測驗」、「開始測驗」、「顯示答案」、「測驗中的學員」、「測驗歷史紀錄」、「測驗名稱」、「給 AI 的指令」、「請 AI 產生/修改問題列表」、「單選 / 多選」等。英文介面使用者進入測驗頁時會看到大量中文，無法完整操作課堂測驗功能。
+
+新版將測驗頁主要使用者可見文字抽成 `quiz.*` 翻譯鍵，讓測驗建立、編輯、同步測驗、學生作答與歷史紀錄都能跟隨 UI 語言切換。此修改只替換文字來源與預設文字，不改測驗 CRUD、AI 生成、同步狀態、重設作答或作答紀錄資料流。
+
+### 使用方式
+
+1. 進入「設定」頁，將「界面文字語言」切換為「繁體中文」或「English」。
+2. 回到任一簡報播放頁，進入自動測驗生成頁。
+3. master 端可用目前語言操作：新增測驗、輸入測驗名稱、撰寫給 AI 的指令、請 AI 產生/修改題目、儲存測驗、開始測驗、顯示答案、結束測驗與查看歷史紀錄。
+4. follower 端進入同步測驗時，作答提示、總分、題目分數、正確答案、解析與重設作答按鈕會使用目前 UI 語言顯示。
+5. 測驗歷史紀錄中，匿名學員、分數、未計分、查看作答、收合、正確答案與已選但錯誤等狀態文字也會跟隨語言切換。
+
+### 技術細節
+
+- `QuizBuilderPage.tsx` 新增共用 `formatMessage()`，用 `{title}`、`{index}`、`{score}`、`{count}`、`{time}` 等 placeholder 處理動態文字。
+- 頁面初始化的預設測驗標題與預設 AI prompt 改由 `quiz.defaultTitle` / `quiz.defaultPrompt` 取得，避免英文 UI 一開始就出現中文預設值。
+- 同步測驗錯誤與成功訊息改用 `quiz.masterOnly*`、`quiz.*Done`、`quiz.*Failed` 等翻譯鍵，保留既有 `ApiError` 原文優先顯示邏輯。
+- 學生作答區、教師端學員進度、測驗歷史紀錄與編輯表單的 label、placeholder、button、tooltip 都改用 `quiz.*` 翻譯鍵。
+- `zh-TW.ts` 與 `en.ts` 新增 78 個測驗頁翻譯鍵，`frontend/src/i18n.test.ts` 新增 `QuizBuilderPage locale keys are complete` 測試，確保中英文鍵同步存在且非空。
+- 已用 grep 確認 `QuizBuilderPage.tsx` 不再含硬編碼中文，並執行 frontend typecheck 與 `i18n.test.ts` 通過。
+
+## Google OAuth callback 回應格式錯誤處理
+
+### 功能目的
+
+Google 登入 callback 需要先向 Google 交換 token，再用 access token 讀取使用者資訊。過去後端在 `tokenResp.ok` / `userResp.ok` 為成功後，直接把回傳 JSON 丟給 Zod schema `.parse()`。若 Google 或中間代理回傳格式異常，例如 token JSON 缺少 `access_token`、userinfo JSON 缺少有效 email，錯誤會變成未捕捉的 ZodError，最後由全域錯誤處理器回傳通用 `500 INTERNAL_ERROR`。雖然伺服器不會因此當掉，但使用者只會看到不明確的內部錯誤，維運時也不容易判斷是 token 交換格式錯誤還是 userinfo 格式錯誤。
+
+新版在 callback 內明確捕捉 Google token 與 userinfo 的 JSON/schema 解析錯誤，並回傳可追查的 `502` 錯誤碼：`GOOGLE_TOKEN_PARSE_FAILED` 或 `GOOGLE_USERINFO_PARSE_FAILED`。這讓登入故障能被更快定位，也避免把第三方回應格式問題誤歸類為 MakeSlide 內部錯誤。
+
+### 使用方式
+
+此功能不改變一般使用者的 Google 登入流程：
+
+1. 使用者仍從設定頁或登入入口點選 Google 登入。
+2. Google 授權成功且回應格式正常時，流程照常建立 session 並回到設定頁。
+3. 若 Google token 回應格式異常，後端會回傳 `502 GOOGLE_TOKEN_PARSE_FAILED`。
+4. 若 Google 帳號資訊回應格式異常，後端會回傳 `502 GOOGLE_USERINFO_PARSE_FAILED`。
+5. 管理者可從後端 log 的 Zod issue path/code/message 判斷缺少或格式錯誤的欄位，而不會在 log 中看到 token 或完整個資 payload。
+
+### 技術細節
+
+- `backend/src/routes/auth.ts` 新增 `parseJsonResponse()`、`parseGoogleTokenResponse()` 與 `parseGoogleUserInfoResponse()`，把第三方 JSON 解析與 schema 驗證集中處理。
+- schema 驗證失敗時使用 `logger.warn()` 記錄精簡後的 Zod issues：欄位 path、Zod code 與 message；不記錄 `access_token`、完整 Google userinfo body 或其他敏感原文。
+- token schema 解析失敗會回傳 `502` 與 `GOOGLE_TOKEN_PARSE_FAILED`；userinfo schema 解析失敗會回傳 `502` 與 `GOOGLE_USERINFO_PARSE_FAILED`。
+- 既有 `GOOGLE_TOKEN_EXCHANGE_FAILED` 與 `GOOGLE_USERINFO_FAILED` 仍分別處理 HTTP status 非 2xx 的情境；本次只補強 2xx 但 body 格式不符合預期的分支。
+- 新增 `backend/test/auth-google-callback.test.ts`，用 mock `globalThis.fetch` 覆蓋 token 缺少 `access_token` 與 userinfo 缺少 `email` 的情境，確認不再落入通用 `500 INTERNAL_ERROR`。
+- 已執行 backend typecheck 與新增測試，確認錯誤碼與型別皆通過。
+
+## 全螢幕播放模式 i18n 補齊
+
+### 功能目的
+
+全螢幕播放模式是課堂展示與現場講解時最常使用的畫面，包含圖片/字幕/逐字稿編輯三種 layout、上一頁/下一頁/播放/暫停控制、內建逐字稿編輯、手寫繪圖工具、學生端提問與 Realtime Poll 控制。過去這些文字仍有不少直接寫在 `PlayPageFullscreen.tsx` 中，例如「上一頁」、「下一頁」、「（本頁尚無字幕）」、「📝 編輯逐字稿（第 N 頁）」、繪圖顏色與筆寬標籤，以及同步提問/投票面板文字。英文介面進入全螢幕後仍會混入中文，影響非中文使用者在上課或分享情境下操作。
+
+新版將全螢幕模式主要使用者可見文字改為 `play.fullscreen.*` 翻譯鍵，並重用已完成的 `play.slidePanel.*` 播放控制與逐字稿翻譯鍵。使用者切換 UI 語言後，全螢幕控制、字幕空狀態、逐字稿編輯提示、手寫工具與課堂互動面板都會跟隨語言切換。
+
+### 使用方式
+
+1. 進入「設定」頁，在「界面文字語言」選擇「繁體中文」或「English」。
+2. 回到任一簡報播放頁，按「全螢幕 / Fullscreen」。
+3. 在全螢幕右上角切換「圖片 / Image」、「字幕 / Subtitles」、「編輯 / Edit」layout，按鈕與 tooltip 會依目前 UI 語言顯示。
+4. 在編輯 layout 中可用本地化的上一頁、下一頁、播放/暫停按鈕操作，也可直接編輯本頁逐字稿並儲存重生語音。
+5. 開啟手寫模式時，筆、游標、橡皮擦、清除、關閉、顏色與筆寬 label 會以目前語言顯示；原本的手勢換頁、點擊播放切換與繪圖行為維持不變。
+6. 若使用課堂同步模式，follower 的全螢幕提問面板與 master 的 Realtime Poll 控制面板也會顯示對應語言。
+
+### 技術細節
+
+- `PlayPageFullscreen.tsx` 將原本硬編碼的全螢幕播放控制、字幕空狀態、逐字稿編輯、繪圖工具列、layout 切換、離開全螢幕、同步提問與投票控制文字改為 `useI18n()`。
+- 新增 `FULLSCREEN_LAYOUTS`、`DRAWING_COLORS` 與 `DRAWING_WIDTHS` 的翻譯 key 對應，避免在常數中保留中文 label。
+- 動態文字使用簡單 `{page}` / `{count}` / `{layout}` placeholder 置換，讓頁碼、字數與票數摘要能用同一組中英文翻譯鍵產生。
+- 頁面生成狀態、圖片 alt、上一頁/下一頁/播放/暫停與逐字稿儲存文案重用 `play.slidePanel.*`，維持一般播放面板與全螢幕模式的一致用語。
+- `zh-TW.ts` 與 `en.ts` 新增 45 個 `play.fullscreen.*` 翻譯鍵，`frontend/src/i18n.test.ts` 新增完整性測試，確保中英文鍵同步存在且非空。
+- 已執行 frontend typecheck 與 `i18n.test.ts`，確認型別與翻譯鍵完整性皆通過。
+
 ## 動畫 Raw JSON 複製 fallback 與錯誤狀態
 
 ### 功能目的
