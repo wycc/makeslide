@@ -62,7 +62,7 @@
 
 - [x] `TtsDialog.tsx` 補齊 i18n：目前完全沒有使用 `useI18n()`，標題「生成設定」、「聲音」、「主持模式」、「單人旁白」/「雙人對談」、「速度」、「逐字稿每頁上限字數」、「系統預設」、「儲存中…」、「儲存設定」與雙人對談說明文字皆為硬編碼中文；應改用 `useI18n()` 與新增 `play.ttsDialog.*` 翻譯鍵，讓英文介面使用者也能完整操作語音設定對話框。
 
-- [ ] `ImageStyleDialog.tsx` 補齊 i18n：目前完全沒有使用 `useI18n()`，標題「整份簡報圖片風格設定」、說明段落、「套用模板」、「關閉」、「儲存設定」按鈕與 textarea placeholder 皆為硬編碼中文；應改用 `useI18n()` 與新增 `play.imageStyleDialog.*` 翻譯鍵。
+- [x] `ImageStyleDialog.tsx` 補齊 i18n：目前完全沒有使用 `useI18n()`，標題「整份簡報圖片風格設定」、說明段落、「套用模板」、「關閉」、「儲存設定」按鈕與 textarea placeholder 皆為硬編碼中文；應改用 `useI18n()` 與新增 `play.imageStyleDialog.*` 翻譯鍵。
 
 - [ ] `VersionHistoryDialog.tsx` 補齊 i18n：目前完全沒有使用 `useI18n()`，「圖片」/「逐字稿」版本歷史標題、「（第 N 頁）」、「載入中…」、「尚無版本記錄」、「點選左側版本以預覽」、「關閉」、「還原中…」、「還原至此版本」皆為硬編碼中文；應改用 `useI18n()` 與新增 `play.versionHistory.*` 翻譯鍵，日期格式維持現有 locale-aware 邏輯。
 
@@ -238,3 +238,7 @@
 - 時間: 2026-06-19 00:30:00 +0800
 - 分支: feature/tts-dialog-i18n-20260619
 - 內容: 完成「TtsDialog.tsx 補齊 i18n」。`TtsDialog.tsx` 新增 `useI18n()`，將標題「生成設定」、「聲音」、「主持模式」、「單人旁白」/「雙人對談」按鈕、雙人對談說明文字、「速度」、「逐字稿每頁上限字數」、「（留空使用系統預設）」、placeholder「系統預設」、「關閉」、「儲存中…」、「儲存設定」全部改用新增的 `play.ttsDialog.*` 翻譯鍵；`zh-TW.ts`/`en.ts` 補齊對應 13 個翻譯鍵，並在 `frontend/src/i18n.test.ts` 新增測試驗證這些鍵在中英文皆存在且非空字串。保留既有 `isReadOnlyProcessing`/`ttsBusy` 唯讀停用邏輯、聲音清單渲染與速度滑桿行為不變。frontend typecheck 通過，既有與新增前端測試（`tsx --test`，126 項）全數通過。
+
+- 時間: 2026-06-19 00:40:00 +0800
+- 分支: feature/image-style-dialog-i18n-20260619
+- 內容: 完成「ImageStyleDialog.tsx 補齊 i18n」。`ImageStyleDialog.tsx` 新增 `useI18n()`，將標題「整份簡報圖片風格設定」、說明段落、「套用模板」按鈕、textarea placeholder、「關閉」與「儲存設定」按鈕全部改用新增的 `play.imageStyleDialog.*` 翻譯鍵（`title`、`description`、`applyTemplate`、`promptPlaceholder`、`close`、`save`）；`zh-TW.ts`/`en.ts` 補齊對應翻譯，並在 `frontend/src/i18n.test.ts` 新增測試驗證這些鍵在中英文皆存在且非空字串。順手把模板下拉選單 `.map((t) => ...)` 的參數從 `t` 改名為 `template`，避免與 `useI18n()` 取出的 `t()` 翻譯函式同名造成閱讀混淆（不影響行為）。保留既有 `isReadOnlyProcessing` 唯讀停用邏輯與模板套用/儲存行為不變。frontend typecheck 通過，既有與新增前端測試（`tsx --test`，127 項）全數通過。
