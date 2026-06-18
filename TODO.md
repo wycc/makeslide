@@ -82,11 +82,13 @@
 
 - [x] `PlayPageSlidePanel.tsx` 逐字稿編輯與提示詞編輯區塊補齊 i18n：「📝 逐字稿」分頁標題、版本歷史按鈕、textarea placeholder（「請輸入本頁逐字稿...」/「請輸入這份簡報的風格提示詞...」）、「儲存後會僅重生此頁語音」/「更新後將影響後續以提示詞為基礎的生成」提示文字，以及「儲存並重生語音」按鈕（約在 693–810 行）仍是硬編碼中文；應補上對應 `play.slidePanel.transcript.*`/`play.slidePanel.prompt.*` 翻譯鍵，保留既有編輯/儲存/重生語音行為不變。
 
-- [ ] `PlayPageFullscreen.tsx` 全螢幕播放模式補齊 i18n：全螢幕播放的上一頁/下一頁/播放/暫停按鈕 `title`/`aria-label`（約 145、216–244 行）、「（本頁尚無字幕）」、全螢幕內建逐字稿編輯區標題「📝 編輯逐字稿（第 N 頁）」與 textarea placeholder（約 274–293 行），以及繪圖工具列的顏色/筆寬選項標籤（紅色/藍色/黑色/黃色/綠色/白色、細/中/粗，約 15–26 行）仍是硬編碼中文；應補上對應 `play.fullscreen.*` 翻譯鍵，保留既有手勢換頁、繪圖工具與逐字稿編輯行為不變。
+- [x] `PlayPageFullscreen.tsx` 全螢幕播放模式補齊 i18n：全螢幕播放的上一頁/下一頁/播放/暫停按鈕 `title`/`aria-label`（約 145、216–244 行）、「（本頁尚無字幕）」、全螢幕內建逐字稿編輯區標題「📝 編輯逐字稿（第 N 頁）」與 textarea placeholder（約 274–293 行），以及繪圖工具列的顏色/筆寬選項標籤（紅色/藍色/黑色/黃色/綠色/白色、細/中/粗，約 15–26 行）仍是硬編碼中文；應補上對應 `play.fullscreen.*` 翻譯鍵，保留既有手勢換頁、繪圖工具與逐字稿編輯行為不變。
 
-- [ ] `QuizBuilderPage.tsx` 補齊 i18n（範圍較大，建議拆成獨立 PR）：此頁已使用 `useI18n()`，但測驗建立/編輯表單、AI 生成測驗對話框、學生作答區與教師端「測驗中的學員」面板仍有大量硬編碼中文文字、按鈕與提示訊息（grep 約 70 餘處）；應分批補上對應翻譯鍵，讓英文介面使用者可完整操作課堂測驗功能，保留既有測驗 CRUD、AI 生成、同步測驗作答與重設作答行為不變。
+- [x] `QuizBuilderPage.tsx` 補齊 i18n（範圍較大，建議拆成獨立 PR）：此頁已使用 `useI18n()`，但測驗建立/編輯表單、AI 生成測驗對話框、學生作答區與教師端「測驗中的學員」面板仍有大量硬編碼中文文字、按鈕與提示訊息（grep 約 70 餘處）；應分批補上對應翻譯鍵，讓英文介面使用者可完整操作課堂測驗功能，保留既有測驗 CRUD、AI 生成、同步測驗作答與重設作答行為不變。
 
-- [ ] 後端 Google OAuth callback 補上回應格式錯誤處理：`backend/src/routes/auth.ts` 的 `/api/auth/google/callback` 路由在檢查 `tokenResp.ok`/`userResp.ok` 後直接呼叫 `TokenResponseSchema.parse(await tokenResp.json())`（176 行）與 `GoogleUserInfoSchema.parse(await userResp.json())`（183 行），若 Google 回應格式不符 schema 會直接丟出未捕捉的 ZodError；目前雖然會被 `server.ts` 的全域 `setErrorHandler` 接住變成通用 `500 INTERNAL_ERROR`（不會讓伺服器當掉），但錯誤訊息對使用者不友善且不易追查；應在這兩個 `.parse()` 呼叫外包 try/catch，捕捉時記錄詳細錯誤並回傳更明確的 `502`（例如 `GOOGLE_TOKEN_PARSE_FAILED`/`GOOGLE_USERINFO_PARSE_FAILED`）。
+- [x] 後端 Google OAuth callback 補上回應格式錯誤處理：`backend/src/routes/auth.ts` 的 `/api/auth/google/callback` 路由在檢查 `tokenResp.ok`/`userResp.ok` 後直接呼叫 `TokenResponseSchema.parse(await tokenResp.json())`（176 行）與 `GoogleUserInfoSchema.parse(await userResp.json())`（183 行），若 Google 回應格式不符 schema 會直接丟出未捕捉的 ZodError；目前雖然會被 `server.ts` 的全域 `setErrorHandler` 接住變成通用 `500 INTERNAL_ERROR`（不會讓伺服器當掉），但錯誤訊息對使用者不友善且不易追查；應在這兩個 `.parse()` 呼叫外包 try/catch，捕捉時記錄詳細錯誤並回傳更明確的 `502`（例如 `GOOGLE_TOKEN_PARSE_FAILED`/`GOOGLE_USERINFO_PARSE_FAILED`）。
+
+- [x] `AddPagesFromPromptModal.tsx`（新增多頁對話框）補齊 i18n（額外發現，原 TODO 未列出）：對話框標題、手動/AI 大綱模式選擇、手動輸入說明與範例、AI 對話 placeholder、生成步驟與進度標籤、頁面預覽、取消/完成/失敗狀態與錯誤 fallback 皆為硬編碼中文；應改用 `play.addPages.*` 翻譯鍵，保留既有 AI 大綱對話、插入頁碼、輪詢進度、取消任務與完成回呼行為不變。
 
 ---
 
@@ -306,3 +308,21 @@
 - 時間: 2026-06-19 02:50:00 +0800
 - 分支: feature/slidepanel-transcript-prompt-i18n-20260619
 - 內容: 完成「PlayPageSlidePanel.tsx 逐字稿編輯與提示詞編輯區塊補齊 i18n」。將分頁標題「📝 逐字稿」/「🪄 提示詞」、逐字稿放大模式切換按鈕的 `title`（還原播放器版面/縮小播放器放大逐字稿編輯區）、逐字稿與提示詞區塊標題（含動態頁碼）、版本歷史按鈕與 `title`、兩個 textarea 的 placeholder、儲存提示文字（「儲存後會僅重生此頁語音」/「更新後將影響後續以提示詞為基礎的生成」）與儲存按鈕（「重生中…」/「儲存並重生語音」/「儲存中…」/「儲存提示詞」）全部改用新增的 16 個 `play.slidePanel.*`/`play.slidePanel.transcript.*`/`play.slidePanel.prompt.*` 翻譯鍵。`zh-TW.ts`/`en.ts` 同步新增對應翻譯（含頁碼用 `{page}` 佔位符的標題鍵），並在 `frontend/src/i18n.test.ts` 新增測試驗證全部 16 個鍵在中英文皆存在且非空字串。保留既有逐字稿編輯、提示詞編輯、儲存並重生語音、聚焦模式切換行為完全不變。frontend typecheck 通過，既有與新增前端測試（`tsx --test`，131 項）全數通過。
+
+- 時間: 2026-06-19 03:15:00 +0800
+- 分支: workspace-current
+- 內容: 完成「PlayPageFullscreen.tsx 全螢幕播放模式補齊 i18n」。`PlayPageFullscreen.tsx` 已使用既有 `useI18n()` 將全螢幕容器播放/暫停 aria label、暫停 overlay sr-only、圖片 alt、頁面生成狀態、編輯模式上一頁/下一頁/播放/暫停按鈕、無字幕提示、全螢幕逐字稿編輯標題/placeholder/儲存提示/重生按鈕、繪圖工具列筆/游標/橡皮擦/清除/關閉、顏色與筆寬 label、全螢幕 layout 切換、離開全螢幕、follower 提問對話框、master Realtime Poll 控制面板、等待下一頁與投票票數摘要全部改用翻譯鍵。`zh-TW.ts`/`en.ts` 新增 45 個 `play.fullscreen.*` 翻譯鍵，並在 `frontend/src/i18n.test.ts` 新增測試驗證中英文鍵完整且非空；同時重用既有 `play.slidePanel.*` 翻譯鍵避免播放控制與逐字稿提示重複。保留既有手勢換頁、點擊播放切換、繪圖工具、逐字稿編輯、同步提問與投票互動行為不變。已執行 frontend typecheck 與 `i18n.test.ts` 通過。
+
+- 時間: 2026-06-19 03:20:00 +0800
+- 分支: workspace-current
+- 內容: 完成「後端 Google OAuth callback 補上回應格式錯誤處理」。`backend/src/routes/auth.ts` 新增 `parseGoogleTokenResponse()` 與 `parseGoogleUserInfoResponse()`，將原本直接 `TokenResponseSchema.parse(await tokenResp.json())` / `GoogleUserInfoSchema.parse(await userResp.json())` 的流程改成先捕捉 JSON parse 與 Zod schema parse 錯誤；解析失敗時以 `logger.warn()` 記錄精簡後的 Zod issues（path/code/message，不記錄 token 或個資原文），並分別回傳 `502 GOOGLE_TOKEN_PARSE_FAILED` 或 `502 GOOGLE_USERINFO_PARSE_FAILED`，避免落入全域 `500 INTERNAL_ERROR`。新增 `backend/test/auth-google-callback.test.ts` 2 個測試，mock `fetch` 覆蓋 token 回應缺少 `access_token` 與 userinfo 回應缺少 `email` 時都回傳明確 502 錯誤碼。backend typecheck 與新增測試通過。
+
+- 時間: 2026-06-19 03:25:00 +0800
+- 分支: workspace-current
+- 內容: 完成「QuizBuilderPage.tsx 補齊 i18n」。`QuizBuilderPage.tsx` 將測驗預設標題/AI prompt、載入/同步/產生/儲存錯誤、master-only 提示、開始測驗/顯示答案/結束測驗成功訊息、學生作答區標題/總分/作答提示/正確答案/得分/解析、頁首、已儲存測驗清單、同步角色、開始/顯示答案/結束/歷史紀錄按鈕與 tooltip、教師端「測驗中的學員」進度、測驗歷史紀錄、表單 label、AI 產生/儲存/新增問題/顯示答案與解析、題型/題目/分數/選項/解析 placeholder 等主要使用者可見文字改用 `quiz.*` 翻譯鍵。`zh-TW.ts`/`en.ts` 新增 78 個 quiz 翻譯鍵，並在 `frontend/src/i18n.test.ts` 新增完整性測試；用 grep 確認 `QuizBuilderPage.tsx` 不再有硬編碼中文。保留既有測驗 CRUD、AI 生成、同步測驗、follower 作答、重設作答與歷史紀錄行為不變。frontend typecheck 與 `i18n.test.ts` 通過。
+
+- 時間: 2026-06-19 03:30:00 +0800
+- 分支: workspace-current
+- 內容: 完成「AddPagesFromPromptModal.tsx（新增多頁對話框）補齊 i18n」，屬於本輪檢查 QuizBuilderPage.tsx 相關功能時額外發現、原 TODO.md 未列出的項目。`AddPagesFromPromptModal.tsx` 新增 `useI18n()`，將標題、手動/AI 大綱模式選擇、手動輸入大綱說明與範例、textarea placeholder、AI 對話提示與角色 label、AI 思考狀態、目前大綱預覽、生成步驟標籤（`STEP_LABELS` 改為 `STEP_LABEL_KEYS`，未知 step id 仍 fallback 回原字串避免空白顯示）、生成中頁面預覽、取消/完成/失敗狀態與錯誤 fallback 全部改用新增的 52 個 `play.addPages.*` 翻譯鍵；新增本地 `formatMessage()` 處理 `{page}`/`{count}`/`{total}`/`{error}` 等動態 placeholder。`zh-TW.ts`/`en.ts` 同步新增翻譯，`i18n.test.ts` 新增 `AddPagesFromPromptModal locale keys are complete` 測試。用 grep 確認檔案內已無硬編碼中文。保留既有 AI 大綱對話、插入頁碼、輪詢進度、取消任務與完成後回呼行為不變。frontend typecheck 與全部前端測試（`tsx --test`，134 項）通過。
+
+備註：本次（`PlayPageFullscreen.tsx`、Google OAuth callback、`QuizBuilderPage.tsx`、`AddPagesFromPromptModal.tsx`）四項工作因連續對話被中斷而由前一輪自動接續完成，程式碼直接提交於 master（commit `d18e04a`、`5f22b4c`），未依慣例建立獨立 feature 分支再合併；已逐一驗證程式碼內容、grep 確認無殘留硬編碼中文、執行 frontend/backend typecheck 與完整測試套件皆通過後，於本次回合補上 TODO.md 勾選與工作記錄。**至此 TODO.md 中所有待辦項目皆已完成，下一輪將重新分析程式碼並新增新的待辦項目。**

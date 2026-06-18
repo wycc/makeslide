@@ -223,6 +223,70 @@ test('PlayPageSlidePanel transcript/prompt editor locale keys are complete', () 
   }
 });
 
+test('AddPagesFromPromptModal locale keys are complete', () => {
+  const requiredKeys = [
+    'play.addPages.title',
+    'play.addPages.close',
+    'play.addPages.cancel',
+    'play.addPages.back',
+    'play.addPages.backToEdit',
+    'play.addPages.previewOutline',
+    'play.addPages.startGeneration',
+    'play.addPages.starting',
+    'play.addPages.done',
+    'play.addPages.modeSelectDescription',
+    'play.addPages.manualModeTitle',
+    'play.addPages.manualModeDescription',
+    'play.addPages.aiModeTitle',
+    'play.addPages.aiModeDescription',
+    'play.addPages.manualInstructionsPrefix',
+    'play.addPages.manualInstructionsSuffix',
+    'play.addPages.manualExampleTitle1',
+    'play.addPages.manualExampleBullet1',
+    'play.addPages.manualExampleBullet2',
+    'play.addPages.manualExampleTitle2',
+    'play.addPages.manualExampleBullet3',
+    'play.addPages.manualExampleBullet4',
+    'play.addPages.manualPlaceholder',
+    'play.addPages.aiInstructions',
+    'play.addPages.chatRoleUser',
+    'play.addPages.chatRoleAi',
+    'play.addPages.aiThinking',
+    'play.addPages.outlinePreview',
+    'play.addPages.aiPlaceholder',
+    'play.addPages.send',
+    'play.addPages.reviewDescription',
+    'play.addPages.cancelling',
+    'play.addPages.processing',
+    'play.addPages.generatingPreview',
+    'play.addPages.pageAlt',
+    'play.addPages.pageBadge',
+    'play.addPages.scriptGenerating',
+    'play.addPages.success',
+    'play.addPages.cancelled',
+    'play.addPages.failed',
+    'play.addPages.unknownError',
+    'play.addPages.cancelingButton',
+    'play.addPages.abortGeneration',
+    'play.addPages.step.generatingOutline',
+    'play.addPages.step.renderingImages',
+    'play.addPages.step.generatingScripts',
+    'play.addPages.step.synthesizingAudio',
+    'play.addPages.error.addFailed',
+    'play.addPages.error.aiFailed',
+    'play.addPages.error.outlineRequired',
+    'play.addPages.error.outlineEmpty',
+    'play.addPages.error.startFailed',
+  ] as const;
+
+  for (const key of requiredKeys) {
+    assert.equal(typeof zhTW[key], 'string');
+    assert.equal(typeof en[key], 'string');
+    assert.notEqual(zhTW[key].trim(), '');
+    assert.notEqual(en[key].trim(), '');
+  }
+});
+
 test('PlayPageFullscreen locale keys are complete', () => {
   const requiredKeys = [
     'play.fullscreen.audioPaused',

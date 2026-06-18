@@ -1,5 +1,29 @@
 # MakeSlide 功能說明
 
+## 從大綱新增多頁對話框 i18n 補齊
+
+### 功能目的
+
+「新增多頁」對話框讓使用者可用手動大綱或 AI 對話產生大綱，再把多個新頁面插入既有簡報。過去 `AddPagesFromPromptModal.tsx` 的標題、模式選擇、手動輸入說明、AI 對話 placeholder、生成進度、取消/完成狀態與錯誤 fallback 都直接寫成中文；英文介面使用者開啟這個重要的增頁流程時，仍會看到大量中文文案。
+
+新版將對話框主要使用者可見文字改為 `play.addPages.*` 翻譯鍵，讓手動大綱、AI 生成大綱、預覽、生成中頁面預覽、成功/取消/失敗狀態都能跟隨 UI 語言切換。此修改只替換文字來源與 fallback 錯誤訊息，不改既有 AI 大綱對話、插入頁碼、輪詢進度、取消任務或完成後回呼行為。
+
+### 使用方式
+
+1. 進入「設定」頁，將「界面文字語言」切換為「繁體中文」或「English」。
+2. 回到任一簡報播放頁，在投影片管理區按「新增多頁 / Add multiple pages」。
+3. 選擇「手動輸入大綱 / Enter outline manually」時，格式說明、範例大綱與 textarea placeholder 會使用目前語言顯示。
+4. 選擇「AI 生成大綱 / Generate outline with AI」時，對話提示、角色 label、AI 思考狀態與目前大綱預覽會使用目前語言顯示。
+5. 預覽並開始生成後，步驟進度、頁面預覽 label、逐字稿生成中、取消、完成與失敗訊息也會跟隨語言切換。
+
+### 技術細節
+
+- `AddPagesFromPromptModal.tsx` 引入 `useI18n()`，將硬編碼中文替換成 `play.addPages.*` 翻譯鍵。
+- 生成步驟 label 由原本的 `STEP_LABELS` 字串表改為 `STEP_LABEL_KEYS`，以後端 step id 對應翻譯鍵；未知 step id 仍保留原字串 fallback，避免新後端 step 造成空白顯示。
+- 新增本地 `formatMessage()` 處理 `{page}`、`{count}`、`{total}`、`{error}` 等簡單 placeholder，避免動態頁碼與錯誤訊息硬編碼在 JSX 中。
+- `zh-TW.ts` 與 `en.ts` 新增 52 個 `play.addPages.*` 翻譯鍵，涵蓋模式選擇、說明、範例、對話、預覽、進度、狀態與錯誤 fallback。
+- `i18n.test.ts` 新增 `AddPagesFromPromptModal locale keys are complete` 測試，確保中英文鍵同步存在且非空。
+
 ## 課堂測驗頁 i18n 補齊
 
 ### 功能目的
