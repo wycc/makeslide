@@ -6,6 +6,7 @@ import { FigureAssetsTab } from './FigureAssetsTab';
 import { formatTime, formatDurationMs, formatTokenCount, formatCostUsd } from './formatters';
 import { PageTimingChips } from './PageTimingChips';
 import { ApiError, fetchPageGenerationPrompts, fetchPdfRunHistory, fetchPdfSlowArtifacts, figureImageUrl } from '../../lib/api';
+import { copyTextToClipboard } from '../../lib/clipboard';
 import { SHOW_SUBTITLE_STORAGE_KEY, INTERACTIVE_MODE_STORAGE_KEY, useI18n, type TranslationKey } from '../../i18n';
 import { debugLog, debugWarn } from '../../lib/debugLog';
 import { usePlayPageContext } from './PlayPageContext';
@@ -141,6 +142,21 @@ export function PlayPageSlidePanel() {
 
   const { t } = useI18n();
   const pageLabel = (page: number | string) => t('play.source.pageLabel').replace('{page}', String(page));
+  const [sourceCopyStatus, setSourceCopyStatus] = useState<Record<number, 'success' | 'error'>>({});
+
+  const handleCopySourceContent = (sourceId: number, content: string) => {
+    void copyTextToClipboard(content).then((result) => {
+      setSourceCopyStatus((prev) => ({ ...prev, [sourceId]: result.ok ? 'success' : 'error' }));
+      setTimeout(() => {
+        setSourceCopyStatus((prev) => {
+          if (prev[sourceId] === undefined) return prev;
+          const next = { ...prev };
+          delete next[sourceId];
+          return next;
+        });
+      }, 2000);
+    });
+  };
 
   const progressRatio = duration > 0 ? Math.min(1, currentTime / duration) * 1000 : 0;
 
@@ -858,34 +874,67 @@ export function PlayPageSlidePanel() {
                 {sourceMsg ? <p className="text-xs text-emerald-300">{sourceMsg}</p> : null}
 
                 <div className="rounded-md border border-slate-800 bg-slate-900/50 p-3">
-                  <p className="mb-2 text-xs text-slate-400">{t('play.source.currentList').replace('{count}', String(sourceItems.length))}</p>
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-xs text-slate-400">{t('play.source.currentList').replace('{count}', String(sourceItems.length))}</p>
+                    {expandedSourceId !== null ? (
+                      <button
+                        type="button"
+                        onClick={() => setExpandedSourceId(null)}
+                        className="rounded border border-slate-700 px-1.5 py-0.5 text-[11px] text-slate-300 hover:border-slate-500"
+                      >
+                        {t('play.source.collapseAll')}
+                      </button>
+                    ) : null}
+                  </div>
                   <div className="max-h-72 space-y-2 overflow-y-auto">
                     {sourceItems.length === 0 ? (
                       <p className="text-xs text-slate-500">{t('play.source.emptyList')}</p>
                     ) : sourceItems.map((s) => {
                       const isExpanded = expandedSourceId === s.id;
                       const hasContent = s.content_text.trim().length > 0;
+                      const copyStatus = sourceCopyStatus[s.id];
+                      const copyButton = hasContent ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleCopySourceContent(s.id, s.content_text);
+                          }}
+                          className="shrink-0 rounded border border-slate-700 px-1.5 py-0.5 text-[11px] text-slate-300 hover:border-slate-500"
+                        >
+                          {copyStatus === 'success'
+                            ? t('play.source.copyContentSuccess')
+                            : t('play.source.copyContent')}
+                        </button>
+                      ) : null;
                       if (s.source_kind === 'youtube_audio') {
                         const audioSrc = withShareToken(`api/pdfs/${s.pdf_id}/source-audio`) ?? `api/pdfs/${s.pdf_id}/source-audio`;
                         return (
                           <div key={s.id} className="rounded border border-slate-700 px-2 py-1.5">
-                            <p className="text-xs text-slate-300">[{s.source_kind}] {s.source_name ?? t('play.source.untitled')}</p>
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-xs text-slate-300">[{s.source_kind}] {s.source_name ?? t('play.source.untitled')}</p>
+                              {copyButton}
+                            </div>
                             <audio controls preload="none" className="mt-1 w-full" src={audioSrc} />
                             {hasContent && <p className="mt-1 text-xs text-slate-500">{s.content_text}</p>}
+                            {copyStatus === 'error' ? <p className="mt-1 text-[11px] text-rose-300">{t('play.source.copyContentFailed')}</p> : null}
                           </div>
                         );
                       }
                       return (
                         <div key={s.id} className="rounded border border-slate-700 px-2 py-1.5">
-                          <button
-                            type="button"
-                            onClick={() => hasContent && setExpandedSourceId(isExpanded ? null : s.id)}
-                            disabled={!hasContent}
-                            className="flex w-full items-center justify-between gap-2 text-left disabled:cursor-default"
-                          >
-                            <p className="text-xs text-slate-300">[{s.source_kind}] {s.source_name ?? t('play.source.untitled')}</p>
-                            {hasContent ? <span className="text-xs text-slate-400">{isExpanded ? '▲' : '▼'}</span> : null}
-                          </button>
+                          <div className="flex items-center justify-between gap-2">
+                            <button
+                              type="button"
+                              onClick={() => hasContent && setExpandedSourceId(isExpanded ? null : s.id)}
+                              disabled={!hasContent}
+                              className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left disabled:cursor-default"
+                            >
+                              <p className="text-xs text-slate-300">[{s.source_kind}] {s.source_name ?? t('play.source.untitled')}</p>
+                              {hasContent ? <span className="text-xs text-slate-400">{isExpanded ? '▲' : '▼'}</span> : null}
+                            </button>
+                            {copyButton}
+                          </div>
                           {!hasContent ? (
                             <p className="mt-1 text-xs text-slate-500">{t('play.source.noContent')}</p>
                           ) : isExpanded ? (
@@ -893,6 +942,7 @@ export function PlayPageSlidePanel() {
                           ) : (
                             <p className="mt-1 line-clamp-2 text-xs text-slate-400">{s.content_text}</p>
                           )}
+                          {copyStatus === 'error' ? <p className="mt-1 text-[11px] text-rose-300">{t('play.source.copyContentFailed')}</p> : null}
                         </div>
                       );
                     })}
