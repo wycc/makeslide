@@ -132,3 +132,65 @@ test('ShareDialog locale keys are complete', () => {
     assert.notEqual(en[key].trim(), '');
   }
 });
+
+test('PlayPageSlidePanel playback control/settings locale keys are complete', () => {
+  const requiredKeys = [
+    'play.slidePanel.playbackSettingsTitle',
+    'play.slidePanel.shareQrAlt',
+    'play.slidePanel.pauseAudioOverlay',
+    'play.slidePanel.resumeAudioOverlay',
+    'play.slidePanel.viewImageHistory',
+    'play.slidePanel.versionButton',
+    'play.slidePanel.pageImageAlt',
+    'play.slidePanel.pageGenerationFailed',
+    'play.slidePanel.awaitingSplitConfirmation',
+    'play.slidePanel.imageGenerating',
+    'play.slidePanel.finished',
+    'play.slidePanel.classroomAwaitingNextMessage',
+    'play.slidePanel.prevPage',
+    'play.slidePanel.nextPage',
+    'play.slidePanel.audioRetry',
+    'play.slidePanel.noAudio',
+    'play.slidePanel.nextAndPlay',
+    'play.slidePanel.pause',
+    'play.slidePanel.play',
+    'play.slidePanel.shareQrAriaLabel',
+    'play.slidePanel.shareQrTitle',
+    'play.slidePanel.progressBarAriaLabel',
+    'play.slidePanel.settingsToggle',
+    'play.slidePanel.localMuted',
+    'play.slidePanel.localUnmuted',
+    'play.slidePanel.classroomModeBadge',
+    'play.slidePanel.continuousPlaybackBadge',
+    'play.slidePanel.interactiveModeBadge',
+    'play.slidePanel.followerAudioStatusLabel',
+    'play.slidePanel.followerAudioUnlockedShort',
+    'play.slidePanel.followerAudioLockedShort',
+    'play.slidePanel.teacherForcedMute',
+    'play.slidePanel.audioSectionTitle',
+    'play.slidePanel.audioStatusTeacherForced',
+    'play.slidePanel.audioStatusMutedLocal',
+    'play.slidePanel.audioStatusUnmutedLocal',
+    'play.slidePanel.playbackSpeedTitle',
+    'play.slidePanel.subtitleTitle',
+    'play.slidePanel.subtitleDescription',
+    'play.slidePanel.studentAudioControlTitle',
+    'play.slidePanel.studentAudioUnlocked',
+    'play.slidePanel.studentAudioLocked',
+    'play.slidePanel.forceAllMuted',
+    'play.slidePanel.unlockStudentPlayback',
+    'play.slidePanel.classroomModeOnDesc',
+    'play.slidePanel.classroomModeOffDesc',
+    'play.slidePanel.toggleOn',
+    'play.slidePanel.toggleOff',
+    'play.slidePanel.interactiveModeOnDesc',
+    'play.slidePanel.interactiveModeOffDesc',
+  ] as const;
+
+  for (const key of requiredKeys) {
+    assert.equal(typeof zhTW[key], 'string');
+    assert.equal(typeof en[key], 'string');
+    assert.notEqual(zhTW[key].trim(), '');
+    assert.notEqual(en[key].trim(), '');
+  }
+});
