@@ -72,7 +72,7 @@
 
 - [x] 後端重生路由補上編輯權限檢查：`backend/src/routes/pdfs/regenerate.ts` 的 `POST /api/pdfs/:id/regenerate`、`POST /api/pdfs/:id/regenerate/cancel`、`POST /api/pdfs/:id/regenerate/rollback` 完全沒有檢查請求者是否有編輯權限，任何登入帳號可在唯讀分享簡報上觸發整份重新生成（耗費大量 LLM/TTS 額度）、取消他人的重生工作或回滾到舊版本；應補上 `canEditPdf()` 檢查並回傳 `403`，並新增後端測試覆蓋。
 
-- [ ] 後端「依提示詞新增頁面」路由補上編輯權限檢查：`backend/src/routes/pdfs/add-pages.ts` 的 `POST /api/pdfs/:id/add-pages-from-prompt`、`POST /api/pdfs/:id/add-pages-from-prompt/cancel`、`POST /api/pdfs/:id/add-pages-outline-chat` 完全沒有檢查編輯權限，任何登入帳號可在唯讀分享簡報上觸發 AI 新增頁面或取消他人的任務；應補上 `canEditPdf()` 檢查並回傳 `403`，並新增後端測試覆蓋。
+- [x] 後端「依提示詞新增頁面」路由補上編輯權限檢查：`backend/src/routes/pdfs/add-pages.ts` 的 `POST /api/pdfs/:id/add-pages-from-prompt`、`POST /api/pdfs/:id/add-pages-from-prompt/cancel`、`POST /api/pdfs/:id/add-pages-outline-chat` 完全沒有檢查編輯權限，任何登入帳號可在唯讀分享簡報上觸發 AI 新增頁面或取消他人的任務；應補上 `canEditPdf()` 檢查並回傳 `403`，並新增後端測試覆蓋。
 
 - [ ] 後端版本還原路由補上編輯權限檢查：`backend/src/routes/pdfs/versioning.ts` 的 `POST /api/pdfs/:id/pages/:n/image/restore/:hash`、`POST /api/pdfs/:id/pages/:n/script/restore/:hash` 完全沒有檢查編輯權限，任何登入帳號可在唯讀分享簡報上把圖片或逐字稿還原成任意歷史版本；應補上 `canEditPdf()` 檢查並回傳 `403`（讀取版本清單/預覽的 GET 路由維持公開），並新增後端測試覆蓋。
 
@@ -272,3 +272,7 @@
 - 時間: 2026-06-19 01:30:00 +0800
 - 分支: feature/regenerate-edit-permission-20260619
 - 內容: 完成「後端重生路由補上編輯權限檢查」。`backend/src/routes/pdfs/regenerate.ts` 新增與其他寫入路由一致的本地 `sessionSub()`/`canEditPdf()`/`getPdfPermissionRow()`，在 `POST /api/pdfs/:id/regenerate`（啟動整份重生）、`POST /api/pdfs/:id/regenerate/cancel`（取消重生）、`POST /api/pdfs/:id/regenerate/rollback`（回滾到重生前快照）三個路由補上權限檢查，沒有編輯權限時回傳 `403 FORBIDDEN`；這三個路由先前完全沒有查詢 pdf 權限，新增獨立的 `getPdfPermissionRow()` 呼叫，且在呼叫對應 worker 函式（`startRegenerateJob`/`requestCancelRegenerateJob`/`rollbackRegenerate`）之前先做權限檢查，避免無權限請求白白觸發昂貴的 LLM/TTS 重生任務。`GET /api/pdfs/:id/regenerate/status`（讀取重生進度）維持公開讀取。新增 `backend/test/regenerate-permission.test.ts` 6 個測試，覆蓋 `regenerate`/`cancel`/`rollback` 對非擁有者唯讀分享簡報應得 403（且確實未建立重生任務）、擁有者與 `public_editable` 協作者應能成功啟動重生（回 202）、`cancel`/`rollback` 對未知簡報應得 404 `PDF_NOT_FOUND` 而非 403。backend typecheck 通過，完整測試套件 274 項中 18 項失敗為既有環境相關既存失敗（與本次變更前一致，新增 6 項測試全數通過）。
+
+- 時間: 2026-06-19 01:40:00 +0800
+- 分支: feature/add-pages-edit-permission-20260619
+- 內容: 完成「後端『依提示詞新增頁面』路由補上編輯權限檢查」。`backend/src/routes/pdfs/add-pages.ts` 新增與其他寫入路由一致的本地 `sessionSub()`/`canEditPdf()`/`getPdfPermissionRow()`，在 `POST /api/pdfs/:id/add-pages-from-prompt`（啟動 AI 新增頁面任務，先前完全沒有查詢 pdf 權限）、`POST /api/pdfs/:id/add-pages-from-prompt/cancel`（取消任務，先前完全沒有查詢任何 pdf 資訊）、`POST /api/pdfs/:id/add-pages-outline-chat`（大綱對話，延伸既有 `page_count` 查詢補上 `owner_sub`/`visibility`）三個路由補上權限檢查，沒有編輯權限時回傳 `403 FORBIDDEN`，且都放在呼叫實際 worker 邏輯（`startAddPagesFromPrompt`/`abortAddPagesJob`/`continueAddPagesOutlineChat`）之前，避免無權限請求消耗 LLM 額度。`GET /api/pdfs/:id/add-pages-from-prompt/status`（讀取任務進度）維持公開讀取。新增 `backend/test/add-pages-permission.test.ts` 6 個測試，覆蓋三個路由對非擁有者唯讀分享簡報應得 403、擁有者與 `public_editable` 協作者應能成功啟動任務（回 202）、`cancel` 對未知簡報應得 404 `PDF_NOT_FOUND` 而非 403；過程中發現 `backend/src/routes/pdfs/shared.ts` 的 `PDF_ID_RE` 限制 id 長度為 8–32 字元，測試用的 pdf id 需控制在此範圍內才能通過參數驗證（已修正測試中過長的 id）。backend typecheck 通過，完整測試套件 280 項中 18 項失敗為既有環境相關既存失敗（與本次變更前一致，新增 6 項測試全數通過）。
