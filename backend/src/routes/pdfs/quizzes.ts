@@ -1,11 +1,30 @@
 import fs from 'node:fs/promises';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
 import { logger } from '../../logger';
+import { decodeSession, parseCookies } from '../auth';
 import { callChatJSON } from '../../services/openai';
 import { pageScriptPath, pageTextPath } from '../../services/storage';
+import type { PdfRow } from '../../types';
 import { errorResponse, IdParamSchema } from './shared';
+
+function sessionSub(request: FastifyRequest): string | null {
+  const session = decodeSession(parseCookies(request).makeslide_session);
+  return session?.sub ?? null;
+}
+
+function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
+  if (!row.owner_sub) return true;
+  if (sub && row.owner_sub === sub) return true;
+  return row.visibility === 'public_editable';
+}
+
+function getPdfPermissionRow(id: string): Pick<PdfRow, 'owner_sub' | 'visibility'> | undefined {
+  return db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
+    | Pick<PdfRow, 'owner_sub' | 'visibility'>
+    | undefined;
+}
 
 const QuizOptionSchema = z.object({ text: z.string().trim().min(1).max(300) });
 const QuizQuestionSchema = z.object({
@@ -180,8 +199,13 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid pdf id'));
     const body = GenerateQuizBodySchema.safeParse(request.body ?? {});
     if (!body.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
-    const pdf = db.prepare(`SELECT id, title, page_count FROM pdfs WHERE id = ?`).get(parsed.data.id) as { id: string; title: string | null; page_count: number | null } | undefined;
+    const pdf = db.prepare(`SELECT id, title, page_count, owner_sub, visibility FROM pdfs WHERE id = ?`).get(parsed.data.id) as
+      | { id: string; title: string | null; page_count: number | null; owner_sub: string | null; visibility: PdfRow['visibility'] }
+      | undefined;
     if (!pdf) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
+    if (!canEditPdf(sessionSub(request), pdf)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限為此簡報產生測驗'));
+    }
     const context = await readPageContext(parsed.data.id, pdf.page_count);
     const result = await callChatJSON({
       label: `quiz-generate ${parsed.data.id}`,
@@ -201,6 +225,11 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid pdf id'));
     const body = SaveQuizBodySchema.safeParse(request.body ?? {});
     if (!body.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
+    const pdfRow = getPdfPermissionRow(parsed.data.id);
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限為此簡報新增測驗'));
+    }
     const now = nowIso();
     const result = db.prepare(`INSERT INTO quiz_sets (pdf_id, title, prompt, questions_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`).run(parsed.data.id, body.data.title, body.data.prompt, JSON.stringify(normalizeQuestions(body.data.questions)), now, now);
     const row = db.prepare(`SELECT id, pdf_id, title, prompt, questions_json, created_at, updated_at FROM quiz_sets WHERE id = ?`).get(result.lastInsertRowid) as QuizSetRow;
@@ -212,6 +241,11 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid quiz parameters'));
     const body = SaveQuizBodySchema.safeParse(request.body ?? {});
     if (!body.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
+    const pdfRow = getPdfPermissionRow(parsed.data.id);
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的測驗'));
+    }
     const now = nowIso();
     const result = db.prepare(`UPDATE quiz_sets SET title = ?, prompt = ?, questions_json = ?, updated_at = ? WHERE id = ? AND pdf_id = ?`).run(body.data.title, body.data.prompt, JSON.stringify(normalizeQuestions(body.data.questions)), now, parsed.data.quizId, parsed.data.id);
     if (result.changes === 0) return reply.code(404).send(errorResponse('QUIZ_NOT_FOUND', `Quiz ${parsed.data.quizId} not found`));

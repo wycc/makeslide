@@ -1904,3 +1904,25 @@ Manim.animate.shake(myShape, progress, {
 - 畫板路由的 `PUT`/`DELETE` 過去完全沒有檢查 PDF 是否存在，這次順帶補上 `404 PDF_NOT_FOUND`，避免對不存在的簡報寫入孤兒 `page_drawings` 列。
 - 修復過程中發現 `backend/test/page-animation.test.ts` 既有的硬編碼 session cookie 簽章是用舊版 `AUTH_SESSION_SECRET` 產生的，與目前環境的密鑰不符；先前因為這些路由完全不驗證 session 而沒被測試發現，加上權限檢查後該測試檔案大量失敗。改用與 `pages-api.test.ts`/`github-sync.test.ts` 一致、即時用目前 `config.authSessionSecret` 簽章的 `testSessionCookie()` 動態產生 cookie 解決，避免測試環境密鑰漂移造成的脆弱性。
 - 新增 3 個權限測試到 `page-animation.test.ts`，並新增 `backend/test/drawings.test.ts` 6 個測試，覆蓋公開讀取、非擁有者在 `public`/`private` 簡報應得 403、擁有者與 `public_editable` 協作者應可寫入、未知簡報應得 404。
+
+## 測驗寫入路由補上編輯權限檢查
+
+### 功能目的
+
+課堂測驗的產生、新增與更新 API 過去完全沒有檢查請求者是否擁有編輯這份簡報的權限，任何已登入帳號只要知道 PDF id，就能在別人唯讀分享或公開的簡報上產生新測驗、新增測驗或修改既有測驗題目，與動畫/畫板、GitHub 同步等已修復的權限缺口屬於同一類問題。
+
+新版讓測驗的寫入 API 遵循與其他簡報寫入動作一致的權限規則，同時保留測驗本身「給學生作答」的公開性質：列出測驗與提交作答仍維持公開，因為唯讀瀏覽者與課堂同步測驗的 follower 本來就需要能看到題目並送出答案。
+
+### 使用方式
+
+1. 一般擁有者或取得 read-write 分享/`public_editable` 簡報的使用者操作不受影響，仍可正常使用「測驗生成」頁面以 AI 產生測驗、新增測驗或編輯既有測驗題目。
+2. 唯讀分享或公開唯讀簡報的瀏覽者，前端「測驗生成」連結本來就已停用，現在即使有人略過前端直接呼叫 `POST /api/pdfs/:id/quizzes/generate`、`POST /api/pdfs/:id/quizzes`、`PUT /api/pdfs/:id/quizzes/:quizId`，後端也會回傳 `403 FORBIDDEN`，不會真的產生或修改測驗內容。
+3. 學生（follower）在課堂同步測驗中提交答案（`POST /api/pdfs/:id/quizzes/:quizId/attempts`）與一般瀏覽測驗清單（`GET /api/pdfs/:id/quizzes`）完全不受影響，不需要編輯權限即可正常使用。
+
+### 技術細節
+
+- `backend/src/routes/pdfs/quizzes.ts` 新增與其他寫入路由一致的本地 `sessionSub()` + `canEditPdf(owner_sub, visibility)`。
+- `POST /quizzes/generate` 延伸既有的 PDF 查詢補上 `owner_sub`/`visibility` 欄位，在呼叫 LLM 產生題目之前先做權限檢查，避免無權限的請求白白消耗 LLM 額度。
+- `POST /quizzes`（新增測驗）過去完全沒有檢查 PDF 是否存在，這次一併補上 `404 PDF_NOT_FOUND`，並在寫入前檢查編輯權限。
+- `PUT /quizzes/:quizId`（更新測驗）同樣在更新前檢查編輯權限，避免唯讀使用者覆寫既有測驗題目。
+- 新增 `backend/test/quizzes.test.ts` 6 個測試，覆蓋 generate/create/update 對非擁有者的唯讀分享簡報應得 403、create 對未知簡報應得 404、擁有者與 `public_editable` 協作者應可正常操作、attempts 提交不受權限限制仍可成功送出。
