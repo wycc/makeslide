@@ -92,3 +92,25 @@ test('ImageStyleDialog locale keys are complete', () => {
     assert.notEqual(en[key].trim(), '');
   }
 });
+
+test('VersionHistoryDialog locale keys are complete', () => {
+  const requiredKeys = [
+    'play.versionHistory.titleImage',
+    'play.versionHistory.titleScript',
+    'play.versionHistory.pageSuffix',
+    'play.versionHistory.loading',
+    'play.versionHistory.empty',
+    'play.versionHistory.selectPrompt',
+    'play.versionHistory.imageAlt',
+    'play.versionHistory.close',
+    'play.versionHistory.restoring',
+    'play.versionHistory.restore',
+  ] as const;
+
+  for (const key of requiredKeys) {
+    assert.equal(typeof zhTW[key], 'string');
+    assert.equal(typeof en[key], 'string');
+    assert.notEqual(zhTW[key].trim(), '');
+    assert.notEqual(en[key].trim(), '');
+  }
+});
