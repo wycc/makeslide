@@ -1,5 +1,7 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { db } from '../../db';
+import { decodeSession, parseCookies } from '../auth';
+import type { PdfRow } from '../../types';
 import { safeJoinPdfPath } from '../../services/storage';
 import {
   getPresentationFileHistory,
@@ -20,6 +22,23 @@ function getPageArtifactPaths(
     .prepare(`SELECT page_uid, image_path, script_path FROM pages WHERE pdf_id = ? AND page_number = ?`)
     .get(pdfId, pageNumber) as
     | { page_uid: string; image_path: string | null; script_path: string | null }
+    | undefined;
+}
+
+function sessionSub(request: FastifyRequest): string | null {
+  const session = decodeSession(parseCookies(request).makeslide_session);
+  return session?.sub ?? null;
+}
+
+function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
+  if (!row.owner_sub) return true;
+  if (sub && row.owner_sub === sub) return true;
+  return row.visibility === 'public_editable';
+}
+
+function getPdfPermissionRow(id: string): Pick<PdfRow, 'owner_sub' | 'visibility'> | undefined {
+  return db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
+    | Pick<PdfRow, 'owner_sub' | 'visibility'>
     | undefined;
 }
 
@@ -101,6 +120,11 @@ export async function registerVersioningRoutes(app: FastifyInstance): Promise<vo
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid params'));
     }
     const { id, n } = parsed.data;
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限還原此簡報的圖片版本'));
+    }
     const page = getPageArtifactPaths(id, n);
     if (!page?.image_path) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
 
@@ -149,6 +173,11 @@ export async function registerVersioningRoutes(app: FastifyInstance): Promise<vo
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid params'));
     }
     const { id, n } = parsed.data;
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限還原此簡報的逐字稿版本'));
+    }
     const page = getPageArtifactPaths(id, n);
     if (!page?.script_path) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
 

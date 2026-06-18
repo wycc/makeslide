@@ -2098,3 +2098,23 @@ Manim.animate.shake(myShape, progress, {
 - `add-pages-from-prompt` 與 `add-pages-from-prompt/cancel` 先前完全沒有查詢任何 pdf 權限資訊，這次新增獨立查詢；`add-pages-outline-chat` 延伸既有的 `page_count` 查詢補上 `owner_sub`/`visibility`。
 - 三個路由的權限檢查都放在呼叫實際 worker 邏輯（`startAddPagesFromPrompt()`、`abortAddPagesJob()`、`continueAddPagesOutlineChat()`）之前，避免無權限請求消耗 LLM 額度。
 - 新增 `backend/test/add-pages-permission.test.ts` 6 個測試，覆蓋三個路由對非擁有者的唯讀分享簡報應得 403、擁有者與 `public_editable` 協作者應能成功啟動任務、`cancel` 對未知簡報應得 `404 PDF_NOT_FOUND` 而非 403。過程中也發現後端 `PDF_ID_RE` 限制簡報 id 長度為 8–32 字元，調整了測試中過長的 id 以符合參數驗證。
+
+## 版本還原 API 補上編輯權限檢查
+
+### 功能目的
+
+播放頁的版本歷史對話框可以把某一頁的圖片或逐字稿還原成任意歷史版本，背後是 `POST /api/pdfs/:id/pages/:n/image/restore/:hash` 與 `POST /api/pdfs/:id/pages/:n/script/restore/:hash`。這兩個 API 過去完全沒有檢查請求者是否擁有編輯權限，任何已登入帳號都能在唯讀分享或別人的私有簡報上把圖片、逐字稿覆寫回任意舊版本，與先前已修復的 GitHub 同步、動畫/畫板、測驗、頁面操作、簡報刪除、重生、AI 新增頁面等同一類權限缺口。
+
+新版讓兩個還原 API 遵循與其他簡報寫入動作一致的權限規則，讀取版本歷史與預覽舊版本內容則維持公開。
+
+### 使用方式
+
+1. 一般擁有者或取得 read-write 分享/`public_editable` 簡報的使用者操作不受影響，仍可在版本歷史對話框正常還原圖片或逐字稿到指定版本。
+2. 唯讀分享或公開唯讀簡報的瀏覽者，前端本來就已經停用還原按鈕；即使有人略過前端直接呼叫對應 API，後端也會回傳 `403 FORBIDDEN`，不會真的覆寫任何內容。
+3. 查看版本清單（`GET .../image/history`、`.../script/history`）與預覽指定版本內容（`GET .../image/versions/:hash`、`.../script/versions/:hash`）維持公開讀取，不受影響。
+
+### 技術細節
+
+- `backend/src/routes/pdfs/versioning.ts` 新增與其他寫入路由一致的本地 `sessionSub()` + `canEditPdf(owner_sub, visibility)` + `getPdfPermissionRow()`。
+- 兩個還原路由的權限檢查都放在呼叫 `restorePresentationFile()` 之前執行，確保權限不足時完全不會修改任何檔案或 git 紀錄。
+- 新增 `backend/test/versioning-permission.test.ts` 5 個測試：非擁有者對唯讀分享/私有簡報的還原請求應得 403、對未知簡報應得 `404 PDF_NOT_FOUND`；擁有者與 `public_editable` 協作者通過權限檢查的驗證方式是讓對應頁面的 `image_path`/`script_path` 為 `NULL`，使請求在通過權限檢查後落到 `404 PAGE_NOT_FOUND` 分支（與權限檢查的 403 明顯不同），藉此確認沒有被權限擋下，同時避免需要建置真實 git 歷史 fixture 才能驗證還原服務本身的行為。
