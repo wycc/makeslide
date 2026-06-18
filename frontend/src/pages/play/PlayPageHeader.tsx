@@ -357,9 +357,9 @@ export function PlayPageHeader() {
           <button
             type="button"
             onClick={() => void handleSyncToGithub()}
-            disabled={githubSyncBusy}
+            disabled={githubSyncBusy || isReadOnlyProcessing}
             className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-3 py-1.5 text-sm text-emerald-200 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40"
-            title={t('play.header.githubSyncTitle')}
+            title={isReadOnlyProcessing ? t('play.header.githubSyncReadOnly') : t('play.header.githubSyncTitle')}
           >
             {githubSyncBusy ? t('play.header.syncing') : `⤴ ${t('play.header.syncToGithub')}`}
           </button>

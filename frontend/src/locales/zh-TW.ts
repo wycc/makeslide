@@ -365,6 +365,7 @@ export const zhTW = {
   'play.header.downloadHandoutPdf': '下載講義 PDF',
   'play.header.quizGeneration': '測驗生成',
   'play.header.githubSyncTitle': '將此簡報同步到設定中的 GitHub repository',
+  'play.header.githubSyncReadOnly': '唯讀模式下無法同步到 GitHub',
   'play.header.syncing': '同步中…',
   'play.header.syncToGithub': '同步到 GitHub',
   'play.sync.mode': '同步模式',

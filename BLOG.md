@@ -1841,3 +1841,25 @@ Manim.animate.shake(myShape, progress, {
 - `readStoredSortMode()` 改為回傳 `SortMode | null`，本機沒有有效儲存值時回傳 `null`，藉此和「使用者尚未手動選擇」的狀態區分開來。
 - 元件內部用 `explicitSortMode`（持久化的使用者明確選擇，可能是 `null`）取代先前直接持久化的 `sortMode`；實際套用的 `sortMode = explicitSortMode ?? getDefaultSortModeForCategory(categoryFilter)`，因此沒有明確選擇時會隨目前類別動態變化，一旦使用者透過下拉選單選擇過，就會固定套用該選擇並寫入 `makeslide.home.sortMode`。
 - 新增 `frontend/src/pages/HomePage.sort.test.ts`，以 Node 內建 test runner（透過 `tsx --test` 執行）驗證 `getDefaultSortModeForCategory()` 在「最近的簡報」與一般/全部/自訂分類下的預設值正確。
+
+## read-only 模式禁止同步到 GitHub
+
+### 功能目的
+
+播放頁的「同步到 GitHub」會把目前簡報內容推送到設定中的 GitHub repository，屬於會改變外部狀態的寫入動作。過去這個按鈕只受「同步中」狀態鎖定，唯讀分享連結或公開只讀（`visibility: 'public'`）的瀏覽者也能點擊並觸發推送；後端 `POST /api/pdfs/:id/github-sync` 同樣完全沒有檢查請求者是否擁有編輯權限，只檢查簡報是否存在與 GitHub 是否設定。
+
+新版讓「同步到 GitHub」遵循與其他寫入動作一致的權限規則：唯讀使用者（無論是處理中的暫時唯讀，還是分享/公開的唯讀模式）在前端會看到按鈕被停用，後端也會在權限不足時直接拒絕請求，不依賴前端 UI 作為唯一防線。
+
+### 使用方式
+
+1. 一般擁有者或取得 read-write 分享連結／`public_editable` 簡報的使用者操作不受影響，仍可正常點擊「同步到 GitHub」。
+2. 透過 read-only 分享連結開啟，或簡報目前仍在處理中（尚未 ready）時，「同步到 GitHub」按鈕會顯示為停用狀態，滑鼠停留會看到「唯讀模式下無法同步到 GitHub」提示，不會發出請求。
+3. 若有人略過前端限制直接呼叫 API（例如用其他工具直接打 `POST /api/pdfs/:id/github-sync`），後端會依簡報的 `owner_sub` 與 `visibility` 判斷：非擁有者對 `private` 或 `public`（read-only）簡報的請求一律回傳 `403 FORBIDDEN`；擁有者本人或 `public_editable` 簡報的任何登入使用者仍可通過權限檢查繼續走原本的同步流程。
+
+### 技術細節
+
+- `backend/src/routes/pdfs/admin.ts` 新增與 `detail.ts` 一致的本地 `sessionSub()` / `canEditPdf()`：`owner_sub` 為空（舊資料）視為允許、請求者 sub 等於 `owner_sub` 允許、`visibility === 'public_editable'` 允許，其餘（包含 `private` 非擁有者與 `public` 唯讀）一律拒絕。
+- `github-sync` 路由查詢 PDF 時補上 `owner_sub`、`visibility` 欄位，並在「GitHub 是否已設定 repo」檢查之前先做權限檢查，沒有編輯權限時回傳 `403 FORBIDDEN`，不會洩漏是否已設定 GitHub repo 的資訊給無權限的請求者。
+- 前端 `PlayPageHeader.tsx` 的「同步到 GitHub」按鈕 `disabled` 改為 `githubSyncBusy || isReadOnlyProcessing`，並在唯讀時把按鈕 `title` 換成新增的 `play.header.githubSyncReadOnly`（中英文皆已新增翻譯）。
+- `usePdfMetadata.ts` 的 `handleSyncToGithub()` 同步加上 `isReadOnlyProcessing` 的早期 return，確保即便繞過按鈕本身的 disabled 屬性呼叫這個 handler，也不會送出請求。
+- 新增 `backend/test/github-sync.test.ts`，覆蓋非擁有者對 `public`/`private` 簡報請求應得 403、擁有者與 `public_editable` 協作者應通過權限檢查（測試環境未設定 GitHub repo，因此驗證它們會落在 `GITHUB_NOT_CONFIGURED` 400 而非 403，藉此證明沒有被權限擋下）。

@@ -243,7 +243,7 @@ export function usePdfMetadata({
   }, [pdfId, shareAccess]);
 
   const handleSyncToGithub = useCallback(async () => {
-    if (!pdfId) return;
+    if (!pdfId || isReadOnlyProcessing) return;
     setGithubSyncBusy(true);
     setGithubSyncError(null);
     setGithubSyncMessage(null);
@@ -255,7 +255,7 @@ export function usePdfMetadata({
     } finally {
       setGithubSyncBusy(false);
     }
-  }, [pdfId]);
+  }, [pdfId, isReadOnlyProcessing]);
 
   return {
     titleInput,

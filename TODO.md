@@ -51,7 +51,7 @@
 [x] 高橋流要求每一頁只能有一二個重點，和目前一般的提示詞有沖突。請修改提示詞讓使用者明確要求高橋流或類似的減少每一頁重點時可以被使用。
 [x] 在產生大網時完全沒有使用者的提示在其中，當使用者使用高橋流時也沒有調整每頁重點的效果。
 [x] 類別是最近的簡報時，預設使用建立時間新到舊的排序方式
-[ ] read-only 模式時，不能做同步到 github 的動作
+[x] read-only 模式時，不能做同步到 github 的動作
 [ ] read-only 模式時，設定/風格/分享等按鍵應該 disable
 
 ---
@@ -196,3 +196,7 @@
 - 時間: 2026-06-18 08:35:00 +0800
 - 分支: feature/recent-category-default-sort-20260618
 - 內容: 完成「『最近的簡報』類別預設使用建立時間新到舊排序」。`HomePage.tsx` 將原本單一固定 `'title_asc'` 的初始排序預設改為依目前類別動態決定：新增 `getDefaultSortModeForCategory(categoryFilter)`，當 `categoryFilter === '__recent__'` 時回傳 `'created_desc'`，其餘類別維持 `'title_asc'`；`readStoredSortMode()` 改回傳 `SortMode | null`（沒有有效本機儲存值時回傳 `null`），並新增 `explicitSortMode` state 取代先前的 `sortMode` state，實際套用的 `sortMode = explicitSortMode ?? getDefaultSortModeForCategory(categoryFilter)`。使用者一旦透過排序下拉選單明確選擇過排序方式（`updateSortMode()`），該選擇會持續寫入 `makeslide.home.sortMode` 並套用到所有類別，維持先前「排序選項」功能讓使用者選擇後在所有類別一致套用的設計；只有在使用者從未手動選擇過排序方式時，切到「最近的簡報」才會自動預設顯示建立時間新到舊，切回其他類別則回到標題 A-Z 預設。新增 `frontend/src/pages/HomePage.sort.test.ts` 以 `tsx --test` 驗證 `getDefaultSortModeForCategory()` 在 `__recent__` 回傳 `created_desc`、在 `__all__`/一般分類/自訂分類回傳 `title_asc`；frontend typecheck 與既有/新增前端測試（`tsx --test`）均通過。
+
+- 時間: 2026-06-18 08:50:00 +0800
+- 分支: feature/readonly-block-github-sync-20260618
+- 內容: 完成「read-only 模式時不能做同步到 GitHub 的動作」。後端 `backend/src/routes/pdfs/admin.ts` 的 `POST /api/pdfs/:id/github-sync` 原本只檢查 PDF 是否存在與 GitHub 是否設定，沒有任何擁有權限檢查；新增與 `detail.ts` 一致的 `sessionSub()` / `canEditPdf()`（私有簡報需擁有者本人、`public`(read-only) 一律禁止、`public_editable` 允許任何登入帳號），查詢 row 時補上 `owner_sub`、`visibility`，沒有編輯權限時回傳 `403 FORBIDDEN`，權限檢查在「GitHub 是否設定」檢查之前執行。前端 `PlayPageHeader.tsx` 的「同步到 GitHub」按鈕加上 `disabled={... || isReadOnlyProcessing}`，並在唯讀時把 `title` 改成新增的 `play.header.githubSyncReadOnly` 提示；`usePdfMetadata.ts` 的 `handleSyncToGithub()` 也加上 `isReadOnlyProcessing` 早期 return，避免透過鍵盤/程式呼叫繞過 UI disable。新增 `backend/test/github-sync.test.ts` 4 個測試，覆蓋非擁有者對 `public`/`private` 簡報請求同步應得 403、擁有者與 `public_editable` 協作者應能通過權限檢查（測試環境未設定 GitHub repo，因此後續會落在 `GITHUB_NOT_CONFIGURED` 400，用以證明沒有被權限擋下）。backend/frontend typecheck 通過；backend 測試套件 234 項中 18 項失敗為既有環境相關既存失敗（與本次變更前一致，4 項新增測試與既有 github-sync 無關測試均通過）。
