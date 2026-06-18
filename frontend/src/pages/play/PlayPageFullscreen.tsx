@@ -3,6 +3,7 @@ import type { TouchEvent } from 'react';
 import DrawingCanvas from '../../components/DrawingCanvas';
 import { SlideRenderer } from '../../components/slide/SlideRenderer';
 import { useI18n } from '../../i18n';
+import type { TranslationKey } from '../../i18n';
 import { figureImageUrl } from '../../lib/api';
 import { usePlayPageContext } from './PlayPageContext';
 
@@ -12,18 +13,24 @@ const SWIPE_THRESHOLD_PX = 50;
 const SWIPE_VERTICAL_TOLERANCE_PX = 80;
 
 const DRAWING_COLORS = [
-  { value: '#ef4444', label: '紅色' },
-  { value: '#3b82f6', label: '藍色' },
-  { value: '#1e293b', label: '黑色' },
-  { value: '#fbbf24', label: '黃色' },
-  { value: '#22c55e', label: '綠色' },
-  { value: '#f8fafc', label: '白色' },
+  { value: '#ef4444', labelKey: 'play.fullscreen.drawing.color.red' },
+  { value: '#3b82f6', labelKey: 'play.fullscreen.drawing.color.blue' },
+  { value: '#1e293b', labelKey: 'play.fullscreen.drawing.color.black' },
+  { value: '#fbbf24', labelKey: 'play.fullscreen.drawing.color.yellow' },
+  { value: '#22c55e', labelKey: 'play.fullscreen.drawing.color.green' },
+  { value: '#f8fafc', labelKey: 'play.fullscreen.drawing.color.white' },
 ] as const;
 
 const DRAWING_WIDTHS = [
-  { value: 3, label: '細' },
-  { value: 6, label: '中' },
-  { value: 12, label: '粗' },
+  { value: 3, labelKey: 'play.fullscreen.drawing.width.thin' },
+  { value: 6, labelKey: 'play.fullscreen.drawing.width.medium' },
+  { value: 12, labelKey: 'play.fullscreen.drawing.width.thick' },
+] as const;
+
+const FULLSCREEN_LAYOUTS = [
+  { mode: 'image', labelKey: 'play.fullscreen.layout.image' },
+  { mode: 'split', labelKey: 'play.fullscreen.layout.split' },
+  { mode: 'edit', labelKey: 'play.fullscreen.layout.edit' },
 ] as const;
 
 export function PlayPageFullscreen() {
@@ -94,6 +101,26 @@ export function PlayPageFullscreen() {
     : null;
   const syncOverlayText = syncAiAnswer?.answer || syncDisplayedQuestion?.question || '';
   const syncOverlayIsAiAnswer = Boolean(syncAiAnswer?.answer);
+  const pageNumberLabel = currentPage?.page_number ? String(currentPage.page_number) : '-';
+
+  const formatMessage = (key: TranslationKey, replacements: Record<string, string | number>) => {
+    let message = t(key);
+    for (const [name, value] of Object.entries(replacements)) {
+      message = message.replaceAll(`{${name}}`, String(value));
+    }
+    return message;
+  };
+
+  const formatPageStatusMessage = () => {
+    if (currentPage?.status === 'failed') {
+      const message = currentPage.error_message ? `：${currentPage.error_message}` : '';
+      return `${t('play.slidePanel.pageGenerationFailed')}${message}`;
+    }
+    if (detail?.status === 'awaiting_script_confirmation') {
+      return t('play.slidePanel.awaitingSplitConfirmation');
+    }
+    return t('play.slidePanel.imageGenerating');
+  };
 
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const swipeHandledRef = useRef(false);
@@ -142,11 +169,11 @@ export function PlayPageFullscreen() {
       onTouchEnd={handleTouchEnd}
       role="button"
       tabIndex={-1}
-      aria-label={isPlaying ? '暫停語音播放' : '繼續語音播放'}
+      aria-label={isPlaying ? t('play.slidePanel.pauseAudioOverlay') : t('play.slidePanel.resumeAudioOverlay')}
     >
       {!isPlaying ? (
         <div className="pointer-events-none absolute left-4 top-4 flex h-12 w-12 items-center justify-center rounded-full border border-white/35 bg-black/55 text-white shadow-lg backdrop-blur-sm">
-          <span className="sr-only">語音已暫停</span>
+          <span className="sr-only">{t('play.fullscreen.audioPaused')}</span>
           <span className="h-6 w-2 rounded-sm bg-current" aria-hidden="true" />
           <span className="ml-2 h-6 w-2 rounded-sm bg-current" aria-hidden="true" />
         </div>
@@ -172,7 +199,7 @@ export function PlayPageFullscreen() {
                   wrapperClassName="relative"
                   wrapperStyle={{ lineHeight: 0 }}
                   src={displayedImageSrc ?? fullscreenImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
-                  alt={`第 ${currentPage?.page_number ?? ''} 頁`}
+                  alt={formatMessage('play.slidePanel.pageImageAlt', { page: pageNumberLabel })}
                   imgClassName="max-h-full max-w-full object-contain"
                   imgRef={fullscreenImageRef}
                 >
@@ -192,11 +219,7 @@ export function PlayPageFullscreen() {
                 </SlideRenderer>
               ) : (
                 <div className="text-slate-300">
-                  {currentPage?.status === 'failed'
-                    ? `本頁產生失敗${currentPage.error_message ? `：${currentPage.error_message}` : ''}`
-                    : detail?.status === 'awaiting_script_confirmation'
-                      ? '等待確認分頁結果（確認後將開始產生圖片）'
-                      : '圖片產生中…'}
+                  {formatPageStatusMessage()}
                 </div>
               )}
             </div>
@@ -213,10 +236,10 @@ export function PlayPageFullscreen() {
                   }}
                   disabled={currentIdx === 0}
                   className="rounded-md border border-slate-600 bg-slate-900/70 px-4 py-2 text-sm text-slate-100 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
-                  title="上一頁"
-                  aria-label="上一頁"
+                  title={t('play.slidePanel.prevPage')}
+                  aria-label={t('play.slidePanel.prevPage')}
                 >
-                  ◀ 上一頁
+                  ◀ {t('play.slidePanel.prevPage')}
                 </button>
                 <button
                   type="button"
@@ -225,10 +248,10 @@ export function PlayPageFullscreen() {
                     playPause();
                   }}
                   className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-5 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-500/25"
-                  title={isPlaying ? '暫停' : '播放'}
-                  aria-label={isPlaying ? '暫停' : '播放'}
+                  title={isPlaying ? t('play.slidePanel.pause') : t('play.slidePanel.play')}
+                  aria-label={isPlaying ? t('play.slidePanel.pause') : t('play.slidePanel.play')}
                 >
-                  {isPlaying ? '⏸ 暫停' : '▶ 播放'}
+                  {isPlaying ? `⏸ ${t('play.slidePanel.pause')}` : `▶ ${t('play.slidePanel.play')}`}
                 </button>
                 <button
                   type="button"
@@ -238,10 +261,10 @@ export function PlayPageFullscreen() {
                   }}
                   disabled={currentIdx >= totalPages - 1}
                   className="rounded-md border border-slate-600 bg-slate-900/70 px-4 py-2 text-sm text-slate-100 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
-                  title="下一頁"
-                  aria-label="下一頁"
+                  title={t('play.slidePanel.nextPage')}
+                  aria-label={t('play.slidePanel.nextPage')}
                 >
-                  下一頁 ▶
+                  {t('play.slidePanel.nextPage')} ▶
                 </button>
                 <span className="ml-1 text-sm tabular-nums text-slate-400">
                   {currentIdx + 1}/{totalPages}
@@ -271,7 +294,7 @@ export function PlayPageFullscreen() {
                   })}
                 </div>
               ) : (
-                <div className="flex h-full items-center justify-center text-slate-500">（本頁尚無字幕）</div>
+                <div className="flex h-full items-center justify-center text-slate-500">{t('play.fullscreen.noSubtitle')}</div>
               )}
             </div>
           ) : (
@@ -283,18 +306,18 @@ export function PlayPageFullscreen() {
               onTouchEnd={(e) => e.stopPropagation()}
             >
               <h2 className="mb-3 shrink-0 text-base font-semibold text-slate-200 md:text-lg">
-                📝 編輯逐字稿（第 {currentPage?.page_number ?? '-'} 頁）
+                {formatMessage('play.fullscreen.editTranscriptHeading', { page: pageNumberLabel })}
               </h2>
               <textarea
                 value={editingScript}
                 onChange={(e) => setEditingScript(e.target.value)}
                 disabled={isReadOnlyProcessing}
                 className="w-full flex-1 cursor-text resize-none rounded-md border border-slate-700 bg-slate-900/70 p-4 text-base leading-relaxed text-slate-100 outline-none ring-emerald-500/40 placeholder:text-slate-500 focus:ring md:text-lg"
-                placeholder="請輸入本頁逐字稿..."
+                placeholder={t('play.slidePanel.transcript.placeholder')}
               />
               <div className="mt-3 flex shrink-0 items-center justify-between gap-3">
                 <div className="text-xs text-slate-400">
-                  {editorError ? <span className="text-rose-300">{editorError}</span> : '儲存後會僅重生此頁語音'}
+                  {editorError ? <span className="text-rose-300">{editorError}</span> : t('play.slidePanel.transcript.saveHint')}
                 </div>
                 <button
                   type="button"
@@ -302,7 +325,7 @@ export function PlayPageFullscreen() {
                   disabled={isReadOnlyProcessing || editorBusy || !hasScriptChanges}
                   className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-4 py-2 text-sm text-emerald-200 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  {editorBusy ? '重生中…' : '儲存並重生語音'}
+                  {editorBusy ? t('play.slidePanel.transcript.regenerating') : t('play.slidePanel.transcript.saveAndRegenerate')}
                 </button>
               </div>
             </div>
@@ -325,7 +348,7 @@ export function PlayPageFullscreen() {
           wrapperClassName="relative"
           wrapperStyle={{ lineHeight: 0 }}
           src={displayedImageSrc ?? fullscreenImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
-          alt={`第 ${currentPage?.page_number ?? ''} 頁`}
+          alt={formatMessage('play.slidePanel.pageImageAlt', { page: pageNumberLabel })}
           imgClassName="max-h-screen max-w-screen object-contain"
           imgRef={fullscreenImageRef}
         >
@@ -345,11 +368,7 @@ export function PlayPageFullscreen() {
         </SlideRenderer>
       ) : (
         <div className="text-slate-300">
-          {currentPage?.status === 'failed'
-                    ? `本頁產生失敗${currentPage.error_message ? `：${currentPage.error_message}` : ''}`
-                    : detail?.status === 'awaiting_script_confirmation'
-                      ? '等待確認分頁結果（確認後將開始產生圖片）'
-                      : '圖片產生中…'}
+          {formatPageStatusMessage()}
         </div>
       )}
       {/* Drawing toolbar inside fullscreen */}
@@ -360,38 +379,38 @@ export function PlayPageFullscreen() {
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center gap-1">
-            <button type="button" title="筆" aria-label="筆模式"
+            <button type="button" title={t('play.fullscreen.drawing.pen')} aria-label={t('play.fullscreen.drawing.penMode')}
               className={`flex h-7 w-7 items-center justify-center rounded border text-sm ${drawingTool === 'pen' ? 'border-slate-300 bg-slate-700 text-white' : 'border-slate-600 text-slate-400 hover:bg-slate-800'}`}
               onClick={() => setDrawingTool('pen')}>✏️</button>
-            <button type="button" title="游標" aria-label="游標模式"
+            <button type="button" title={t('play.fullscreen.drawing.cursor')} aria-label={t('play.fullscreen.drawing.cursorMode')}
               className={`flex h-7 w-7 items-center justify-center rounded border text-sm ${drawingTool === 'cursor' ? 'border-slate-300 bg-slate-700 text-white' : 'border-slate-600 text-slate-400 hover:bg-slate-800'}`}
               onClick={() => setDrawingTool('cursor')}>🖱️</button>
-            <button type="button" title="橡皮擦" aria-label="橡皮擦模式"
+            <button type="button" title={t('play.fullscreen.drawing.eraser')} aria-label={t('play.fullscreen.drawing.eraserMode')}
               className={`flex h-7 w-7 items-center justify-center rounded border text-sm ${drawingTool === 'eraser' ? 'border-slate-300 bg-slate-700 text-white' : 'border-slate-600 text-slate-400 hover:bg-slate-800'}`}
               onClick={() => setDrawingTool('eraser')}>⬜</button>
-            <button type="button" title="清除本頁所有手寫" aria-label="清除"
+            <button type="button" title={t('play.fullscreen.drawing.clearAll')} aria-label={t('play.fullscreen.drawing.clear')}
               className="flex h-7 w-7 items-center justify-center rounded border border-rose-600/50 bg-rose-600/20 text-sm text-rose-300 hover:bg-rose-600/30"
               onClick={() => getActiveDrawingCanvas()?.clearAll()}>🗑️</button>
-            <button type="button" title="關閉手寫（W）" aria-label="關閉"
+            <button type="button" title={t('play.fullscreen.drawing.closeWithShortcut')} aria-label={t('play.fullscreen.drawing.close')}
               className="flex h-7 w-7 items-center justify-center rounded border border-slate-600 text-xs text-slate-400 hover:bg-slate-800"
               onClick={() => { setDrawingMode(false); setDrawingTool('pen'); }}>✕</button>
           </div>
           {drawingTool !== 'cursor' && (
             <div className="flex flex-wrap gap-1">
-              {DRAWING_COLORS.map(({ value, label }) => (
-                <button key={value} type="button" title={label}
+              {DRAWING_COLORS.map(({ value, labelKey }) => (
+                <button key={value} type="button" title={t(labelKey)}
                   className={`h-5 w-5 rounded-full border-2 transition-transform ${drawingColor === value ? 'scale-110 border-white' : 'border-transparent hover:border-slate-400'}`}
                   style={{ background: value }}
-                  onClick={() => setDrawingColor(value)} aria-label={label} />
+                  onClick={() => setDrawingColor(value)} aria-label={t(labelKey)} />
               ))}
             </div>
           )}
           {drawingTool !== 'cursor' && (
             <div className="flex gap-1">
-              {DRAWING_WIDTHS.map(({ value, label }) => (
-                <button key={value} type="button" title={label}
+              {DRAWING_WIDTHS.map(({ value, labelKey }) => (
+                <button key={value} type="button" title={t(labelKey)}
                   className={`flex h-7 w-7 items-center justify-center rounded border ${drawingLineWidth === value ? 'border-slate-300 bg-slate-700' : 'border-slate-600 hover:bg-slate-800'}`}
-                  onClick={() => setDrawingLineWidth(value)} aria-label={label}>
+                  onClick={() => setDrawingLineWidth(value)} aria-label={t(labelKey)}>
                   <span className="block rounded-full" style={{ width: `${Math.min(value * 2, 14)}px`, height: `${Math.min(value * 2, 14)}px`, background: drawingTool === 'eraser' ? '#94a3b8' : drawingColor }} />
                 </button>
               ))}
@@ -401,11 +420,7 @@ export function PlayPageFullscreen() {
       )}
       <div className="absolute right-4 top-4 flex items-center gap-2">
         <div className="flex items-center overflow-hidden rounded-md border border-slate-500 bg-slate-900/70 text-sm">
-          {([
-            ['image', '圖片'],
-            ['split', '字幕'],
-            ['edit', '編輯'],
-          ] as const).map(([mode, label]) => (
+          {FULLSCREEN_LAYOUTS.map(({ mode, labelKey }) => (
             isLockedFullscreen && mode === 'edit' ? null : (
             <button
               key={mode}
@@ -420,9 +435,9 @@ export function PlayPageFullscreen() {
                   ? 'bg-cyan-500/25 font-medium text-cyan-100'
                   : 'text-slate-200 hover:bg-slate-800'
               }`}
-              title={`全螢幕${label}版面`}
+              title={formatMessage('play.fullscreen.layout.title', { layout: t(labelKey) })}
             >
-              {label}
+              {t(labelKey)}
             </button>
             )
           ))}
@@ -436,7 +451,7 @@ export function PlayPageFullscreen() {
             }}
             className="rounded-md border border-slate-500 bg-slate-900/70 px-3 py-1.5 text-sm text-slate-100"
           >
-            離開全螢幕
+            {t('play.fullscreen.exit')}
           </button>
         ) : null}
       </div>
@@ -493,7 +508,7 @@ export function PlayPageFullscreen() {
           }}
           className="absolute left-4 top-4 rounded-md border border-cyan-400/60 bg-cyan-500/20 px-3 py-1.5 text-sm font-medium text-cyan-50 shadow-lg hover:bg-cyan-500/30"
         >
-          提問
+          {t('play.fullscreen.askQuestion')}
         </button>
       ) : null}
       {syncEnabled && syncRole === 'follower' && fullscreenQuestionDialogOpen ? (
@@ -504,15 +519,15 @@ export function PlayPageFullscreen() {
           <div className="w-full max-w-lg rounded-xl border border-cyan-400/40 bg-slate-950 p-4 text-slate-100 shadow-2xl">
             <div className="mb-3 flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-base font-semibold text-cyan-100">向老師提問</h2>
-                <p className="mt-1 text-xs text-slate-400">問題會送到 master 端，由老師決定是否顯示在畫面上。</p>
+                <h2 className="text-base font-semibold text-cyan-100">{t('play.fullscreen.questionDialogTitle')}</h2>
+                <p className="mt-1 text-xs text-slate-400">{t('play.fullscreen.questionDialogDescription')}</p>
               </div>
               <button
                 type="button"
                 onClick={() => setFullscreenQuestionDialogOpen(false)}
                 className="shrink-0 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
               >
-                關閉
+                {t('play.fullscreen.close')}
               </button>
             </div>
             <textarea
@@ -527,18 +542,20 @@ export function PlayPageFullscreen() {
               maxLength={500}
               rows={4}
               autoFocus
-              placeholder="輸入想問老師的問題…"
+              placeholder={t('play.fullscreen.questionPlaceholder')}
               className="w-full resize-none rounded-lg border border-cyan-500/40 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-500 focus:border-cyan-300"
             />
             <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="text-xs text-slate-500">{syncQuestionInput.length}/500，可按 Ctrl/⌘ + Enter 送出</div>
+              <div className="text-xs text-slate-500">
+                {formatMessage('play.fullscreen.questionCountHint', { count: syncQuestionInput.length })}
+              </div>
               <button
                 type="button"
                 onClick={() => void handleSubmitFollowerQuestion()}
                 disabled={syncQuestionBusy || !syncQuestionInput.trim()}
                 className="rounded-md border border-cyan-400/60 bg-cyan-500/20 px-4 py-2 text-sm font-medium text-cyan-50 hover:bg-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {syncQuestionBusy ? '送出中…' : '送出問題'}
+                {syncQuestionBusy ? t('play.fullscreen.submittingQuestion') : t('play.fullscreen.submitQuestion')}
               </button>
             </div>
           </div>
@@ -552,15 +569,15 @@ export function PlayPageFullscreen() {
           <div className="w-full max-w-md rounded-xl border border-cyan-400/40 bg-slate-950/95 p-4 text-slate-100 shadow-2xl">
             <div className="mb-3 flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-base font-semibold text-cyan-100">Realtime Poll 控制</h2>
-                <p className="mt-1 text-xs text-slate-400">按 P 開關面板，Esc 關閉。</p>
+                <h2 className="text-base font-semibold text-cyan-100">{t('play.fullscreen.pollControlTitle')}</h2>
+                <p className="mt-1 text-xs text-slate-400">{t('play.fullscreen.pollControlDescription')}</p>
               </div>
               <button
                 type="button"
                 onClick={() => setFullscreenPollControlOpen(false)}
                 className="shrink-0 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
               >
-                關閉
+                {t('play.fullscreen.close')}
               </button>
             </div>
 
@@ -571,7 +588,7 @@ export function PlayPageFullscreen() {
                 disabled={pollStarted}
                 className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-3 py-1.5 text-xs text-emerald-100 disabled:opacity-40"
               >
-                開始投票
+                {t('play.fullscreen.startPoll')}
               </button>
               <button
                 type="button"
@@ -579,7 +596,7 @@ export function PlayPageFullscreen() {
                 disabled={!pollStarted}
                 className="rounded-md border border-rose-500/50 bg-rose-500/15 px-3 py-1.5 text-xs text-rose-100 disabled:opacity-40"
               >
-                結束投票
+                {t('play.fullscreen.stopPoll')}
               </button>
               <button
                 type="button"
@@ -587,14 +604,14 @@ export function PlayPageFullscreen() {
                 disabled={!pollStarted}
                 className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-xs text-cyan-100 disabled:opacity-40"
               >
-                {syncPollShowResults ? '隱藏結果' : '顯示結果'}
+                {syncPollShowResults ? t('play.fullscreen.hidePollResults') : t('play.fullscreen.showPollResults')}
               </button>
             </div>
 
             <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
               {pagePolls.length === 0 ? (
                 <div className="rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1.5 text-xs text-slate-500">
-                  目前頁尚無投票題目
+                  {t('play.fullscreen.noPolls')}
                 </div>
               ) : (
                 pagePolls.map((poll) => (
@@ -619,7 +636,7 @@ export function PlayPageFullscreen() {
       {(classroomMode && classroomAwaitingNext) ? (
         <div className="pointer-events-none absolute bottom-4 left-1/2 w-[min(92vw,1000px)] -translate-x-1/2 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
           <div className="mx-auto rounded-md bg-cyan-950/90 px-4 py-3 text-center text-base font-medium leading-relaxed text-cyan-50 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] md:text-lg">
-            <p className="whitespace-pre-wrap">等待下一頁…</p>
+            <p className="whitespace-pre-wrap">{t('play.fullscreen.waitingNextPage')}</p>
           </div>
         </div>
       ) : activePollQuestion ? (
@@ -650,7 +667,7 @@ export function PlayPageFullscreen() {
                     <span className="whitespace-pre-wrap">{option.text}</span>
                     {syncPollShowResults ? (
                       <span className="mt-2 block text-xs text-cyan-100/90">
-                        {option.votes} 票
+                        {formatMessage('play.fullscreen.pollVotes', { count: option.votes })}
                         {activePoll.total_votes > 0
                           ? ` · ${Math.round((option.votes / activePoll.total_votes) * 100)}%`
                           : ' · 0%'}
@@ -661,7 +678,9 @@ export function PlayPageFullscreen() {
               </div>
             ) : null}
             {syncPollShowResults ? (
-              <p className="mt-3 text-xs text-cyan-100/90">目前總票數：{activePoll?.total_votes ?? 0}</p>
+              <p className="mt-3 text-xs text-cyan-100/90">
+                {formatMessage('play.fullscreen.pollTotalVotes', { count: activePoll?.total_votes ?? 0 })}
+              </p>
             ) : null}
           </div>
         </div>
