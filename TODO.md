@@ -64,7 +64,7 @@
 
 - [x] `ImageStyleDialog.tsx` 補齊 i18n：目前完全沒有使用 `useI18n()`，標題「整份簡報圖片風格設定」、說明段落、「套用模板」、「關閉」、「儲存設定」按鈕與 textarea placeholder 皆為硬編碼中文；應改用 `useI18n()` 與新增 `play.imageStyleDialog.*` 翻譯鍵。
 
-- [ ] `VersionHistoryDialog.tsx` 補齊 i18n：目前完全沒有使用 `useI18n()`，「圖片」/「逐字稿」版本歷史標題、「（第 N 頁）」、「載入中…」、「尚無版本記錄」、「點選左側版本以預覽」、「關閉」、「還原中…」、「還原至此版本」皆為硬編碼中文；應改用 `useI18n()` 與新增 `play.versionHistory.*` 翻譯鍵，日期格式維持現有 locale-aware 邏輯。
+- [x] `VersionHistoryDialog.tsx` 補齊 i18n：目前完全沒有使用 `useI18n()`，「圖片」/「逐字稿」版本歷史標題、「（第 N 頁）」、「載入中…」、「尚無版本記錄」、「點選左側版本以預覽」、「關閉」、「還原中…」、「還原至此版本」皆為硬編碼中文；應改用 `useI18n()` 與新增 `play.versionHistory.*` 翻譯鍵，日期格式維持現有 locale-aware 邏輯。
 
 - [ ] `ShareDialog.tsx` 複製連結按鈕加上 Clipboard fallback：目前直接呼叫 `navigator.clipboard.writeText()`，若瀏覽器不支援 Clipboard API、非安全來源或權限被拒，使用者不會知道複製失敗；應改用既有 `frontend/src/lib/clipboard.ts` 的 `copyTextToClipboard()` helper（先試 Clipboard API、失敗再 fallback 到 textarea/`execCommand`），並在 UI 顯示成功/失敗狀態與 i18n 錯誤提示，失敗時保留可手動選取複製的連結文字。
 
@@ -242,3 +242,7 @@
 - 時間: 2026-06-19 00:40:00 +0800
 - 分支: feature/image-style-dialog-i18n-20260619
 - 內容: 完成「ImageStyleDialog.tsx 補齊 i18n」。`ImageStyleDialog.tsx` 新增 `useI18n()`，將標題「整份簡報圖片風格設定」、說明段落、「套用模板」按鈕、textarea placeholder、「關閉」與「儲存設定」按鈕全部改用新增的 `play.imageStyleDialog.*` 翻譯鍵（`title`、`description`、`applyTemplate`、`promptPlaceholder`、`close`、`save`）；`zh-TW.ts`/`en.ts` 補齊對應翻譯，並在 `frontend/src/i18n.test.ts` 新增測試驗證這些鍵在中英文皆存在且非空字串。順手把模板下拉選單 `.map((t) => ...)` 的參數從 `t` 改名為 `template`，避免與 `useI18n()` 取出的 `t()` 翻譯函式同名造成閱讀混淆（不影響行為）。保留既有 `isReadOnlyProcessing` 唯讀停用邏輯與模板套用/儲存行為不變。frontend typecheck 通過，既有與新增前端測試（`tsx --test`，127 項）全數通過。
+
+- 時間: 2026-06-19 00:55:00 +0800
+- 分支: feature/version-history-dialog-i18n-20260619
+- 內容: 完成「VersionHistoryDialog.tsx 補齊 i18n」。`VersionHistoryDialog.tsx` 新增 `useI18n()`，標題依 `versionHistoryType` 改用 `play.versionHistory.titleImage`/`titleScript`（不再用字串拼接「{圖片|逐字稿}版本歷史」，避免不同語言詞序問題），頁碼後綴改用 `play.versionHistory.pageSuffix` 並以 `.replace('{page}', ...)` 帶入頁碼；「載入中…」、「尚無版本記錄」、「點選左側版本以預覽」、圖片 `alt` 文字、「關閉」、「還原中…」、「還原至此版本」全部改用對應翻譯鍵。`zh-TW.ts`/`en.ts` 新增 10 個 `play.versionHistory.*` 翻譯鍵，並在 `frontend/src/i18n.test.ts` 新增測試驗證皆存在且非空字串。維持 TODO 要求：版本清單日期格式（`new Date(entry.date).toLocaleString('zh-TW', ...)`）保持現有 locale-aware 邏輯不變，不隨界面語言切換。frontend typecheck 通過，既有與新增前端測試（`tsx --test`，128 項）全數通過。

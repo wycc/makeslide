@@ -1991,3 +1991,24 @@ Manim.animate.shake(myShape, progress, {
 - 模板下拉選單的 `.map()` 參數從 `t` 改名為 `template`，避免與 `useI18n()` 取出的 `t()` 翻譯函式同名造成閱讀混淆；純粹改名，不影響行為。
 - 既有 `isReadOnlyProcessing` 停用邏輯、模板套用（`onApplyTemplate`）與儲存（`onSave`）行為皆未變更。
 - `frontend/src/i18n.test.ts` 新增測試驗證上述 6 個翻譯鍵在中英文 locale 中都存在且為非空字串。
+
+## VersionHistoryDialog 版本歷史對話框補齊 i18n
+
+### 功能目的
+
+播放頁的圖片與逐字稿版本歷史對話框（`VersionHistoryDialog.tsx`）讓使用者瀏覽每次重生留下的歷史版本、預覽並還原到指定版本。這個對話框過去完全沒有接上 i18n 系統，標題、清單狀態文字、預覽提示與按鈕都直接寫成中文。
+
+新版讓 `VersionHistoryDialog.tsx` 跟隨全站界面語言設定顯示對應語言文字。
+
+### 使用方式
+
+1. 進入「設定」頁，將「界面文字語言」切換為「繁體中文」或「English」。
+2. 回到任一簡報播放頁開啟圖片或逐字稿版本歷史，標題（圖片/逐字稿版本歷史＋頁碼）、左側清單的「載入中…」/「尚無版本記錄」、右側預覽區的「點選左側版本以預覽」、圖片替代文字、底部「關閉」與「還原中…」/「還原至此版本」都會依目前界面語言顯示。
+3. 版本清單每筆記錄旁顯示的日期時間維持原有格式（固定以 `zh-TW` locale 顯示），不隨界面語言切換，與 TODO 待辦明確要求一致。
+
+### 技術細節
+
+- `VersionHistoryDialog.tsx` 新增 `useI18n()`；標題不再用字串拼接「{圖片|逐字稿}版本歷史」，改為依 `versionHistoryType` 選擇 `play.versionHistory.titleImage` 或 `titleScript` 完整句子，避免不同語言詞序問題；頁碼後綴改用 `play.versionHistory.pageSuffix` 搭配 `.replace('{page}', ...)`。
+- `zh-TW.ts` 與 `en.ts` 新增 10 個 `play.versionHistory.*` 翻譯鍵：`titleImage`、`titleScript`、`pageSuffix`、`loading`、`empty`、`selectPrompt`、`imageAlt`、`close`、`restoring`、`restore`。
+- 版本清單的 `new Date(entry.date).toLocaleString('zh-TW', { dateStyle: 'short', timeStyle: 'short' })` 維持不變，刻意不隨界面語言切換。
+- `frontend/src/i18n.test.ts` 新增測試驗證上述 10 個翻譯鍵在中英文 locale 中都存在且為非空字串。
