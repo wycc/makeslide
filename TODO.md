@@ -354,3 +354,7 @@
 - 時間: 2026-06-19 04:55:00 +0800
 - 分支: feature/generate-title-tests-20260619
 - 內容: 完成「generateTitle.ts 補上單元測試」，這是本輪 LOOP 待辦清單的最後一項。`backend/src/worker/steps/generateTitle.ts` 將原本模組私有的 `clipCorpus()`、`sanitiseUserPrompt()`、`buildSystem()`、`buildUser()` 四個純函式改為具名匯出，方便獨立測試（不影響原本只有 `generateTitle()`/`GenerateTitleResult`/`GenerateTitleOptions` 對外的呼叫方式）。新增 `backend/test/generate-title.test.ts` 15 個測試：`clipCorpus` 覆蓋短語料不變/超長語料保留頭尾並插入「中段略」標記/剛好等於上限不裁切；`sanitiseUserPrompt` 覆蓋 null/undefined/空白回傳空字串、短提示詞僅 trim、超長提示詞截斷並加「已截斷」標記；`buildSystem` 覆蓋中英文規則互斥、有/無使用者提示詞時是否附加對應區塊；`buildUser` 覆蓋語料原文嵌入與中英文指示文字；並用既有 `setOpenAIClientForTest()` mock 模式為 `generateTitle()` 加上 4 個整合測試，覆蓋優先使用逐字稿且回傳 `source: 'script'`、無逐字稿時 fallback 到頁面文字且回傳 `source: 'text'`、完全沒有內容時應拋出錯誤、模型回傳的標題經過標點清理後過短應拋出錯誤。backend typecheck 通過，完整測試套件 320 項中 18 項失敗為既有環境相關既存失敗（與本次變更前一致，新增 15 項測試全數通過）。**至此本輪 LOOP 發現的所有待辦項目（含 9 個寫入路由權限缺口、3 個讀取/管理員權限缺口、多項播放頁與課堂測驗 i18n、Google OAuth 錯誤處理、零星 i18n 收尾、單元測試補強）皆已完成，TODO.md 再次清空。**
+
+---- 計數重設 ----
+- 時間: 2026-06-19 09:00:00 +0800
+- 說明: 依使用者指示，因先前累積已完成項目（53 個 `[x]`，63 筆工作記錄）已超過 LOOP.md 第 4 條「完成 20 個項目後停止做新項目」的門檻，且當時 TODO.md 已無未完成項目；使用者選擇「重設計數後繼續」。LOOP.md 已同步更新計數規則：之後只計算本標記之後新完成的項目數，達 20 個時再次停止並徵詢使用者。此標記之前的所有歷史項目與工作記錄保留作為紀錄，不再計入新一輪的 20 項上限。
