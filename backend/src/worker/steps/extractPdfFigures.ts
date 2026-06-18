@@ -115,6 +115,23 @@ export interface ExtractPdfFiguresResult {
   figureCount: number;
 }
 
+/**
+ * Reads a previously-generated manifest, returning `null` (instead of
+ * throwing) when the file is missing or its contents are not valid JSON, so
+ * a corrupted manifest (e.g. left over from an interrupted write) triggers
+ * regeneration rather than failing the whole step.
+ */
+export async function readExistingManifest(pdfId: string, manifestPath: string): Promise<FigureManifest | null> {
+  if (!fs.existsSync(manifestPath)) return null;
+  try {
+    const raw = await fs.promises.readFile(manifestPath, 'utf8');
+    return JSON.parse(raw) as FigureManifest;
+  } catch (err) {
+    logger.warn({ pdfId, manifestPath, err }, 'extractPdfFigures: failed to parse existing manifest, regenerating');
+    return null;
+  }
+}
+
 // Filters out decorative icons/logos (too small) and full-page background
 // scans (too large) while keeping real figures/charts/tables.
 const FIGURE_MIN_AREA_PCT = 1;
@@ -811,8 +828,8 @@ async function extractFiguresForPage(
  */
 export async function extractPdfFigures(pdfId: string, pageCount: number): Promise<ExtractPdfFiguresResult> {
   const manifestPath = figureManifestPath(pdfId);
-  if (fs.existsSync(manifestPath)) {
-    const existing = JSON.parse(await fs.promises.readFile(manifestPath, 'utf8')) as FigureManifest;
+  const existing = await readExistingManifest(pdfId, manifestPath);
+  if (existing) {
     const figureCount = existing.pages.reduce((sum, p) => sum + p.figures.length, 0);
     return { manifest: existing, figureCount };
   }

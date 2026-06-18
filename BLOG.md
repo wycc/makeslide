@@ -2366,3 +2366,24 @@ Manim.animate.shake(myShape, progress, {
   - `buildSystem`：英文/繁中規則互斥（英文版不含中文規則文字，反之亦然）、提供使用者提示詞時才附加對應風格區塊。
   - `buildUser`：語料原文確實嵌入，且依語言使用對應的指示文字。
   - `generateTitle()` 整合測試（用既有 `setOpenAIClientForTest()` mock）：優先使用逐字稿並回傳 `source: 'script'`、無逐字稿時 fallback 到頁面文字並回傳 `source: 'text'`、完全沒有內容時拋出錯誤、模型回傳的標題經過標點清理後過短時拋出錯誤。
+
+## `extractPdfFigures.ts` 讀取既有 manifest 補上例外處理
+
+### 功能目的
+
+PDF 圖表抽取步驟（`extractPdfFigures()`）是一個冪等（idempotent）操作：若 `storage/<pdfId>/figures.json` 已存在，會直接讀取並回傳，避免重複跑一次昂貴的 pdf.js 解析與圖片裁切。但原本的讀取邏輯直接呼叫 `JSON.parse()` 而沒有任何例外處理——若該檔案因 pipeline 中途被中斷（例如伺服器重啟、磁碟空間不足）而寫入到一半，或內容被意外清空，`JSON.parse()` 會丟出未分類的 `SyntaxError`，讓整個圖表抽取步驟直接失敗，而使用者唯一能看到的只是一個語法錯誤訊息，無法理解真正原因。這次修正讓系統在這種情況下能自我修復：偵測到 manifest 損毀時改為記錄一筆 warning 並重新產生，而不是讓整份簡報的圖表抽取流程卡死。
+
+### 使用方式
+
+此變更對一般使用者完全透明，不影響任何 API 或前端行為：
+
+1. manifest 正常存在且內容合法時，行為與過去完全相同——直接讀取回傳，不重新計算。
+2. manifest 不存在、或內容無法解析為合法 JSON 時，系統會記錄一筆 `extractPdfFigures: failed to parse existing manifest, regenerating` 的 warning 日誌，並自動重新執行完整的圖表抽取流程，產生新的 `figures.json`。
+
+### 技術細節
+
+- 新增具名匯出函式 `readExistingManifest(pdfId: string, manifestPath: string): Promise<FigureManifest | null>`，封裝原本內嵌在 `extractPdfFigures()` 裡的讀取/解析邏輯：
+  - 用 `fs.existsSync(manifestPath)` 檢查檔案是否存在，不存在時直接回傳 `null`。
+  - 存在時用 try/catch 包覆 `JSON.parse(await fs.promises.readFile(manifestPath, 'utf8'))`，解析失敗時呼叫 `logger.warn({ pdfId, manifestPath, err }, ...)` 並回傳 `null`，讓呼叫端自然落入既有「manifest 不存在」分支重新產生。
+- `extractPdfFigures()` 主流程改用 `const existing = await readExistingManifest(pdfId, manifestPath); if (existing) { ... }`，取代原本直接內嵌的 `JSON.parse`，行為等價但多了一層防護。
+- 新增 `backend/test/extract-pdf-figures.test.ts`，涵蓋四種情境：manifest 檔案不存在、合法 manifest 正常解析回傳、JSON 語法損毀、檔案內容為空白字串，皆驗證函式回傳 `null` 或正確物件而不向外拋出例外。
