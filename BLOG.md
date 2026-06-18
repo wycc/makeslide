@@ -1820,3 +1820,24 @@ Manim.animate.shake(myShape, progress, {
 - 「全部收合」只呼叫既有 `setExpandedSourceId(null)`，沒有新增展開狀態的資料結構；按鈕本身只在 `expandedSourceId !== null` 時渲染。
 - `zh-TW.ts` / `en.ts` 新增 `play.source.copyContent`、`play.source.copyContentSuccess`、`play.source.copyContentFailed`、`play.source.collapseAll`，並在 `frontend/src/i18n.test.ts` 新增測試確認中英文都有對應非空字串。
 - 此功能未新增或修改任何後端 API 或資料庫欄位，純前端 UI 與狀態調整。
+
+## 「最近的簡報」預設改回建立時間新到舊
+
+### 功能目的
+
+首頁的「排序方式」選單上線後，所有類別（包含「最近的簡報」）共用同一個排序偏好，這讓排序行為在切換類別時保持一致，但也讓「最近的簡報」這個原本用來快速查看新內容的視圖，在使用者從未手動調整過排序時，預設顯示成標題 A-Z，反而要多一個步驟才能看到最新匯入的簡報。
+
+新版讓「排序方式」在使用者尚未手動選擇過時，依目前所在的類別給出更貼近使用情境的預設值：一般分類與「全部類別」維持標題 A-Z，而「最近的簡報」預設改為建立時間新到舊；使用者一旦手動選擇任何排序方式，該選擇仍會照舊套用到所有類別並記住，行為與既有「排序選項」功能一致。
+
+### 使用方式
+
+1. 第一次（或尚未手動調整排序方式）進入首頁時，「全部類別」與一般分類預設仍是「標題 A-Z」。
+2. 切換到「最近的簡報」時，若還沒有手動選過排序方式，「排序方式」下拉選單會自動顯示並套用「建立時間新到舊」，最新匯入或建立的簡報會排在前面。
+3. 若使用者在任何類別手動改選排序方式（例如選擇「更新時間新到舊」），這個選擇會被記住並套用到包括「最近的簡報」在內的所有類別，直到使用者再次手動調整。
+
+### 技術細節
+
+- `HomePage.tsx` 新增 `getDefaultSortModeForCategory(categoryFilter)`：`categoryFilter === '__recent__'` 時回傳 `'created_desc'`，其餘情況回傳 `'title_asc'`。
+- `readStoredSortMode()` 改為回傳 `SortMode | null`，本機沒有有效儲存值時回傳 `null`，藉此和「使用者尚未手動選擇」的狀態區分開來。
+- 元件內部用 `explicitSortMode`（持久化的使用者明確選擇，可能是 `null`）取代先前直接持久化的 `sortMode`；實際套用的 `sortMode = explicitSortMode ?? getDefaultSortModeForCategory(categoryFilter)`，因此沒有明確選擇時會隨目前類別動態變化，一旦使用者透過下拉選單選擇過，就會固定套用該選擇並寫入 `makeslide.home.sortMode`。
+- 新增 `frontend/src/pages/HomePage.sort.test.ts`，以 Node 內建 test runner（透過 `tsx --test` 執行）驗證 `getDefaultSortModeForCategory()` 在「最近的簡報」與一般/全部/自訂分類下的預設值正確。

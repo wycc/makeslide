@@ -107,11 +107,14 @@ const readStoredTitleFilter = () => {
   return window.localStorage.getItem(TITLE_FILTER_STORAGE_KEY) || '';
 };
 
-const readStoredSortMode = (): SortMode => {
-  if (typeof window === 'undefined') return 'title_asc';
+const readStoredSortMode = (): SortMode | null => {
+  if (typeof window === 'undefined') return null;
   const stored = window.localStorage.getItem(SORT_MODE_STORAGE_KEY);
-  return SORT_MODES.includes(stored as SortMode) ? (stored as SortMode) : 'title_asc';
+  return SORT_MODES.includes(stored as SortMode) ? (stored as SortMode) : null;
 };
+
+export const getDefaultSortModeForCategory = (categoryFilter: string): SortMode =>
+  categoryFilter === '__recent__' ? 'created_desc' : 'title_asc';
 
 export default function HomePage() {
   const { t } = useI18n();
@@ -128,7 +131,7 @@ export default function HomePage() {
   const [categoryFilter, setCategoryFilter] = useState<string>(readStoredCategoryFilter);
   const [customCategories, setCustomCategories] = useState<string[]>(readStoredCustomCategories);
   const [titleFilter, setTitleFilter] = useState<string>(readStoredTitleFilter);
-  const [sortMode, setSortMode] = useState<SortMode>(readStoredSortMode);
+  const [explicitSortMode, setExplicitSortMode] = useState<SortMode | null>(readStoredSortMode);
   const [continuingPdfId, setContinuingPdfId] = useState<string | null>(null);
   const [isImportingZip, setIsImportingZip] = useState(false);
   const [zipImportProgress, setZipImportProgress] = useState(0);
@@ -155,6 +158,7 @@ export default function HomePage() {
   const visibleSummary = t('home.resultSummary')
     .replace('{shown}', String(filteredItems.length))
     .replace('{total}', String(categoryFilteredItems.length));
+  const sortMode = explicitSortMode ?? getDefaultSortModeForCategory(categoryFilter);
   const sortItems = useCallback((list: PdfListItem[]) => [...list].sort((a, b) => {
     const primary = getComparatorForSortMode(sortMode)(a, b);
     return primary === 0 ? compareByTitle(a, b) : primary;
@@ -193,7 +197,7 @@ export default function HomePage() {
   }, []);
 
   const updateSortMode = useCallback((nextSortMode: SortMode) => {
-    setSortMode(nextSortMode);
+    setExplicitSortMode(nextSortMode);
     window.localStorage.setItem(SORT_MODE_STORAGE_KEY, nextSortMode);
   }, []);
 
