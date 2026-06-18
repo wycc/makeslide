@@ -2305,3 +2305,22 @@ Manim.animate.shake(myShape, progress, {
 - `canReadPdf()` 沿用既有規則：`owner_sub` 為空（孤兒資料）一律拒絕、請求者為擁有者本人允許、`visibility` 為 `public` 或 `public_editable` 允許。
 - `hasShareAccess()` 從 request header 或 query string 取出分享 token，查詢 `pdf_shares` 表確認 token 對應此簡報的有效分享紀錄。
 - 新增 `backend/test/runs-slowartifacts-permission.test.ts` 8 個測試，覆蓋兩個路由對非擁有者私有簡報應得 403、擁有者可正常讀取、`public_editable` 任何人可讀取、攜帶有效分享 token（無 session）也可正常讀取。
+
+## 修復系統觀測 API 完全沒有管理員權限檢查的安全缺口
+
+### 功能目的
+
+`GET /api/system/observability` 回傳整個系統的彙總統計：總簡報數、pipeline 成功/失敗率、各階段與素材狀態分布，以及跨所有使用者的 LLM 用量與平均延遲。這個 API 過去完全沒有任何權限檢查，任何已登入帳號（甚至包含一般非管理員使用者）都能看到其他使用者的彙總用量與系統負載狀況。這與功能相近的 `GET`/`PUT /api/system/sla-settings`（同樣是系統級設定，已有 `isAdminAccount()` 檢查）明顯不一致。
+
+新版讓這個系統觀測 API 與 SLA 設定 API 一樣限制為管理員才能存取。
+
+### 使用方式
+
+1. 管理員帳號登入後，仍可正常在系統儀表板看到完整的彙總統計。
+2. 非管理員帳號（包含未登入的請求）呼叫這個 API 會收到 `403 ADMIN_REQUIRED`，不會再看到任何跨使用者的彙總資料。
+
+### 技術細節
+
+- `backend/src/routes/pdfs/observability.ts` 在組裝任何統計資料之前，新增與 `sla-settings.ts` 一致的 `isAdminAccount(currentAccountId())` 檢查，沒有權限時回傳 `403 ADMIN_REQUIRED`。
+- `currentAccountId()` 透過既有的 AsyncLocalStorage 帳號情境取得目前請求者帳號，不需要額外傳入 `request` 物件，與 `sla-settings.ts` 的寫法完全一致。
+- 新增 `backend/test/observability.test.ts` 3 個測試，覆蓋非管理員應得 403、未登入應得 403、管理員應能正常取得包含 `pdfs`/`pipeline_runs`/`stages`/`artifacts`/`llm_usage` 的完整統計資料。

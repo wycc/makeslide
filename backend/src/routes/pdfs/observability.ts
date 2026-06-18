@@ -1,6 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { db } from '../../db';
+import { currentAccountId } from '../../services/accountContext';
+import { isAdminAccount } from '../../services/aiSettings';
 import { summarizeLlmUsage } from '../../services/llmUsage';
+import { errorResponse } from './shared';
 
 interface CountRow {
   count: number;
@@ -31,6 +34,9 @@ function readOptionalCount(sql: string): number | null {
 
 export async function registerObservabilityRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/system/observability', async (_request, reply) => {
+    if (!isAdminAccount(currentAccountId())) {
+      return reply.code(403).send(errorResponse('ADMIN_REQUIRED', '只有 admin 可以查看系統觀測資料'));
+    }
     const totalPdfs = readCount(`SELECT COUNT(*) AS count FROM pdfs`);
     const completedPdfs = readCount(`SELECT COUNT(*) AS count FROM pdfs WHERE status = 'ready'`);
     const failedPdfs = readCount(`SELECT COUNT(*) AS count FROM pdfs WHERE status = 'failed'`);
