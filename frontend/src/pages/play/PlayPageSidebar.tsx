@@ -1,4 +1,5 @@
 import { useI18n } from '../../i18n';
+import { debugLog, debugWarn } from '../../lib/debugLog';
 import { usePlayPageContext } from './PlayPageContext';
 
 const IMAGE_MSG_PREFIX = '[image] ';
@@ -142,15 +143,13 @@ export function PlayPageSidebar() {
             const fromPage = Number(fromText);
             const targetEl = (e.target as HTMLElement | null)?.closest('[data-page-number]') as HTMLElement | null;
             const toPage = Number(targetEl?.dataset.pageNumber || '');
-            // eslint-disable-next-line no-console
-            console.info('[reorder][drop-capture]', { fromText, fromPage, toPage, hasTarget: !!targetEl });
+            debugLog('[reorder][drop-capture]', { fromText, fromPage, toPage, hasTarget: !!targetEl });
             if (Number.isFinite(fromPage) && fromPage > 0 && Number.isFinite(toPage) && toPage > 0 && fromPage !== toPage) {
               void handleMoveSlide(fromPage, toPage);
             }
           }}
           onPaste={(e) => {
-            // eslint-disable-next-line no-console
-            console.info('[paste][thumb-grid] event fired', {
+            debugLog('[paste][thumb-grid] event fired', {
               itemCount: e.clipboardData.items.length,
               items: Array.from(e.clipboardData.items).map((it) => ({ kind: it.kind, type: it.type })),
             });
@@ -159,8 +158,7 @@ export function PlayPageSidebar() {
               .map((it) => (it.kind === 'file' ? it.getAsFile() : null))
               .find((f): f is File => !!f);
             if (!file) {
-              // eslint-disable-next-line no-console
-              console.warn('[paste][thumb-grid] no file found');
+              debugWarn('[paste][thumb-grid] no file found');
             }
             if (file) void handleReplaceImageFile(file);
           }}
@@ -233,13 +231,11 @@ export function PlayPageSidebar() {
                   e.dataTransfer.setData('application/x-page-number', String(p.page_number));
                   e.dataTransfer.setData('text/plain', String(p.page_number));
                   e.dataTransfer.effectAllowed = 'move';
-                  // eslint-disable-next-line no-console
-                  console.info('[reorder][dragstart]', { page: p.page_number });
+                  debugLog('[reorder][dragstart]', { page: p.page_number });
                 }}
                 onDragEnd={() => {
                   setDraggingPage(null);
-                  // eslint-disable-next-line no-console
-                  console.info('[reorder][dragend]', { page: p.page_number });
+                  debugLog('[reorder][dragend]', { page: p.page_number });
                 }}
                 onClick={(e) => e.stopPropagation()}
                 className="absolute right-0 top-0 z-10 rounded-bl bg-slate-900/80 px-1.5 py-0.5 text-[10px] text-slate-200 cursor-grab active:cursor-grabbing"

@@ -22,6 +22,7 @@ import {
   type ShareAccessMode,
 } from '../lib/api';
 import { animationTimelineDurationSeconds, resolveAnimationSpec } from '../lib/animationSpec';
+import { debugLog, debugWarn } from '../lib/debugLog';
 import { splitScriptIntoSentences, buildSentenceTimeline } from '../lib/subtitles';
 import { type DrawingCanvasHandle, type DrawingData, type DrawingStroke } from '../components/DrawingCanvas';
 import { useVersionHistory } from './play/useVersionHistory';
@@ -1822,9 +1823,7 @@ export default function PlayPage() {
     };
 
     const onPasteGlobal = (e: ClipboardEvent) => {
-      // debug: verify global paste event reachability
-      // eslint-disable-next-line no-console
-      console.info('[paste][global] event fired', {
+      debugLog('[paste][global] event fired', {
         hasClipboard: !!e.clipboardData,
         itemCount: e.clipboardData?.items?.length ?? 0,
       });
@@ -1840,19 +1839,16 @@ export default function PlayPage() {
       }
 
       const items = Array.from(e.clipboardData?.items ?? []);
-      // eslint-disable-next-line no-console
-      console.info('[paste][global] items', items.map((it) => ({ kind: it.kind, type: it.type })));
+      debugLog('[paste][global] items', items.map((it) => ({ kind: it.kind, type: it.type })));
       void (async () => {
         const fileFromItems = await extractImageFileFromClipboard(e);
         if (!fileFromItems) {
-          // eslint-disable-next-line no-console
-          console.warn('[paste][global] no image file found in clipboard items');
+          debugWarn('[paste][global] no image file found in clipboard items');
           return;
         }
 
         e.preventDefault();
-        // eslint-disable-next-line no-console
-        console.info('[paste][global] image accepted', {
+        debugLog('[paste][global] image accepted', {
           name: fileFromItems.name,
           type: fileFromItems.type,
           size: fileFromItems.size,
