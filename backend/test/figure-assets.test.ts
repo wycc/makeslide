@@ -7,11 +7,16 @@ import { db } from '../src/db';
 import { config } from '../src/config';
 import { setSystemAuthSettings } from '../src/services/aiSettings';
 import { saveSplitPageFigureMap } from '../src/services/pdfFigures';
+import crypto from 'node:crypto';
 
 setSystemAuthSettings({ googleAuthEnabled: false });
 
-const SESSION_COOKIE =
-  'eyJwcm92aWRlciI6Imdvb2dsZSIsInN1YiI6ImFjY291bnQtMSIsImVtYWlsIjoiYWNjb3VudC0xQGV4YW1wbGUuY29tIn0.mDkylBa8ZqLOib7FEOYl6YtwwODNJwieo4kUfAIIimw';
+function testSessionCookie(sub = 'account-1'): string {
+  const payload = Buffer.from(JSON.stringify({ provider: 'google', sub, email: `${sub}@example.com` }), 'utf8').toString('base64url');
+  const signature = crypto.createHmac('sha256', config.authSessionSecret).update(payload).digest('base64url');
+  return `${payload}.${signature}`;
+}
+const SESSION_COOKIE = testSessionCookie('account-1');
 const AUTH_HEADERS = { cookie: `makeslide_session=${encodeURIComponent(SESSION_COOKIE)}` };
 
 function nowIso(): string {

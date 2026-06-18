@@ -772,6 +772,9 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     const body = CreatePollBodySchema.safeParse(request.body ?? {});
     if (!body.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
     const { id, n } = parsed.data;
+    const pdf = db.prepare(`SELECT id, owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as Pick<PdfRow, 'id' | 'owner_sub' | 'visibility'> | undefined;
+    if (!pdf) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), pdf)) return reply.code(403).send(errorResponse('FORBIDDEN', 'No edit permission'));
     const page = db.prepare(`SELECT pdf_id FROM pages WHERE pdf_id = ? AND page_number = ?`).get(id, n);
     if (!page) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
     const now = nowIso();
@@ -838,6 +841,9 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     const parsed = PollParamSchema.safeParse(request.params);
     if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or poll id'));
     const { id, pollId } = parsed.data;
+    const pdf = db.prepare(`SELECT id, owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as Pick<PdfRow, 'id' | 'owner_sub' | 'visibility'> | undefined;
+    if (!pdf) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), pdf)) return reply.code(403).send(errorResponse('FORBIDDEN', 'No edit permission'));
     const row = db.prepare(`SELECT id FROM page_polls WHERE id = ? AND pdf_id = ?`).get(pollId, id) as { id: number } | undefined;
     if (!row) return reply.code(404).send(errorResponse('POLL_NOT_FOUND', `Poll ${pollId} not found`));
     db.prepare(`DELETE FROM page_polls WHERE id = ? AND pdf_id = ?`).run(pollId, id);
@@ -871,6 +877,9 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     const parsed = PollParamSchema.safeParse(request.params);
     if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or poll id'));
     const { id, pollId } = parsed.data;
+    const pdf = db.prepare(`SELECT id, owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as Pick<PdfRow, 'id' | 'owner_sub' | 'visibility'> | undefined;
+    if (!pdf) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), pdf)) return reply.code(403).send(errorResponse('FORBIDDEN', 'No edit permission'));
     const row = db
       .prepare(`SELECT id, pdf_id, page_number, question, options_json, is_active, show_results, created_at, updated_at FROM page_polls WHERE id = ? AND pdf_id = ?`)
       .get(pollId, id) as PagePollRow | undefined;

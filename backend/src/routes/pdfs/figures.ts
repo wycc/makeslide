@@ -1,7 +1,9 @@
 import fs from 'node:fs';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
+import { decodeSession, parseCookies } from '../auth';
+import type { PdfRow } from '../../types';
 import {
   figureImageAbsPath,
   findFigureById,
@@ -12,6 +14,23 @@ import {
 } from '../../services/pdfFigures';
 import type { FigureEntry } from '../../worker/steps/extractPdfFigures';
 import { IdParamSchema, PageParamSchema, errorResponse, nowIso, streamFile } from './shared';
+
+function sessionSub(request: FastifyRequest): string | null {
+  const session = decodeSession(parseCookies(request).makeslide_session);
+  return session?.sub ?? null;
+}
+
+function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
+  if (!row.owner_sub) return true;
+  if (sub && row.owner_sub === sub) return true;
+  return row.visibility === 'public_editable';
+}
+
+function getPdfPermissionRow(id: string): Pick<PdfRow, 'owner_sub' | 'visibility'> | undefined {
+  return db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
+    | Pick<PdfRow, 'owner_sub' | 'visibility'>
+    | undefined;
+}
 
 const MAX_EXCLUDED_FIGURES = 50;
 
@@ -95,6 +114,13 @@ export async function registerFigureRoutes(app: FastifyInstance): Promise<void> 
       return reply.code(400).send(errorResponse('INVALID_REQUEST', parsedBody.error.issues[0]?.message ?? 'Invalid body'));
     }
     const { id, n } = parsed.data;
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的圖表選取'));
+    }
     const row = getFigurePageRow(id, n);
     if (!row) {
       return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', 'Page not found'));
