@@ -90,6 +90,14 @@
 
 - [x] `AddPagesFromPromptModal.tsx`（新增多頁對話框）補齊 i18n（額外發現，原 TODO 未列出）：對話框標題、手動/AI 大綱模式選擇、手動輸入說明與範例、AI 對話 placeholder、生成步驟與進度標籤、頁面預覽、取消/完成/失敗狀態與錯誤 fallback 皆為硬編碼中文；應改用 `play.addPages.*` 翻譯鍵，保留既有 AI 大綱對話、插入頁碼、輪詢進度、取消任務與完成回呼行為不變。
 
+- [ ] 後端 `runs.ts`/`slow-artifacts.ts` 補上讀取權限檢查：`backend/src/routes/pdfs/runs.ts` 的 `GET /api/pdfs/:id/runs`（pipeline 執行歷程）與 `backend/src/routes/pdfs/slow-artifacts.ts` 的 `GET /api/pdfs/:id/slow-artifacts`（最慢素材排行，皆為「系統資料」分頁資料來源）目前只檢查 PDF 是否存在，完全沒有讀取權限檢查；不像 `detail.ts` 的 `GET /api/pdfs/:id` 會用 `shareAccess（分享 token）OR canReadPdf(sub, row)` 判斷讀取權限，任何已登入（甚至未登入）的人只要知道 PDF id 就能看到別人私有簡報的執行歷程、錯誤訊息與素材耗時細節；應補上與 `detail.ts` 一致的讀取權限檢查（分享 token 或 `canReadPdf()`），無權限時回傳 `403 FORBIDDEN`，並新增後端測試覆蓋非擁有者對 private/唯讀分享簡報應得 403、擁有者與分享連結讀取應正常回應。
+
+- [ ] 後端 `/api/system/observability` 補上管理員權限檢查：`backend/src/routes/pdfs/observability.ts` 的 `GET /api/system/observability` 回傳整個系統的彙總統計（總簡報數、pipeline 成功/失敗率、各階段/素材狀態分布、跨所有使用者的 LLM 用量與平均延遲），目前完全沒有權限檢查；對照 `backend/src/routes/pdfs/sla-settings.ts` 的 `GET`/`PUT /api/system/sla-settings` 都有 `isAdminAccount(currentAccountId())` 檢查，這個系統級觀測 API 明顯也應該限制為管理員才能存取，否則任何登入帳號都能看到其他使用者的彙總用量與系統負載狀況；應補上 `isAdminAccount()` 檢查，無權限時回傳 `403`，並新增後端測試覆蓋非管理員應得 403、管理員應可正常取得統計資料。
+
+- [ ] 前端剩餘零星硬編碼中文收尾：`frontend/src/components/PromptModal.tsx` 的「套用模板」按鈕（約 263 行）與 `frontend/src/pages/HomePage.tsx` 的 ZIP 匯入進度文字「ZIP 匯入中…」與 `aria-label="ZIP 匯入進度"`（約 669、680 行）兩個檔案雖然已大量使用 `useI18n()`，但各還殘留 1-2 處硬編碼中文；應補上對應翻譯鍵（可沿用各檔案現有的 key 命名慣例），保留既有套用模板與 ZIP 匯入進度顯示行為不變，範圍很小可一次處理完。
+
+- [ ] `generateTitle.ts` 補上單元測試：`backend/src/worker/steps/generateTitle.ts` 目前完全沒有對應的測試檔案（`backend/test/` 下無任何檔案引用 `generateTitle`），但內含多個可獨立測試的純函式：`clipCorpus()`（裁切語料長度）、`sanitiseUserPrompt()`（清理使用者提示詞）、`buildSystem()`/`buildUser()`（依內容語言組裝 system/user prompt）；應新增 `backend/test/generate-title.test.ts`，至少覆蓋這些純函式的邊界情況（空字串、超長語料、不同 `contentLanguage`），並可選擇性地用既有 `setOpenAIClientForTest()` mock 模式為主要 `generateTitle()` 函式加上 1-2 個整合測試。
+
 ---
 
 - 時間: 2026-06-18 06:05:00 +0800
@@ -326,3 +334,7 @@
 - 內容: 完成「AddPagesFromPromptModal.tsx（新增多頁對話框）補齊 i18n」，屬於本輪檢查 QuizBuilderPage.tsx 相關功能時額外發現、原 TODO.md 未列出的項目。`AddPagesFromPromptModal.tsx` 新增 `useI18n()`，將標題、手動/AI 大綱模式選擇、手動輸入大綱說明與範例、textarea placeholder、AI 對話提示與角色 label、AI 思考狀態、目前大綱預覽、生成步驟標籤（`STEP_LABELS` 改為 `STEP_LABEL_KEYS`，未知 step id 仍 fallback 回原字串避免空白顯示）、生成中頁面預覽、取消/完成/失敗狀態與錯誤 fallback 全部改用新增的 52 個 `play.addPages.*` 翻譯鍵；新增本地 `formatMessage()` 處理 `{page}`/`{count}`/`{total}`/`{error}` 等動態 placeholder。`zh-TW.ts`/`en.ts` 同步新增翻譯，`i18n.test.ts` 新增 `AddPagesFromPromptModal locale keys are complete` 測試。用 grep 確認檔案內已無硬編碼中文。保留既有 AI 大綱對話、插入頁碼、輪詢進度、取消任務與完成後回呼行為不變。frontend typecheck 與全部前端測試（`tsx --test`，134 項）通過。
 
 備註：本次（`PlayPageFullscreen.tsx`、Google OAuth callback、`QuizBuilderPage.tsx`、`AddPagesFromPromptModal.tsx`）四項工作因連續對話被中斷而由前一輪自動接續完成，程式碼直接提交於 master（commit `d18e04a`、`5f22b4c`），未依慣例建立獨立 feature 分支再合併；已逐一驗證程式碼內容、grep 確認無殘留硬編碼中文、執行 frontend/backend typecheck 與完整測試套件皆通過後，於本次回合補上 TODO.md 勾選與工作記錄。**至此 TODO.md 中所有待辦項目皆已完成，下一輪將重新分析程式碼並新增新的待辦項目。**
+
+- 時間: 2026-06-19 03:45:00 +0800
+- 分支: master
+- 內容: 依照 LOOP.md 在 TODO.md 已無未完成項目時重新檢視主要程式區塊，避開已耗盡的方向（`backend/src/routes/pdfs/` 全部寫入路由權限檢查、播放頁系列元件 i18n、clipboard fallback、Google OAuth 錯誤處理）。改往新方向檢查：(1) 用 grep 確認 `backend/src/routes/pdfs/runs.ts` 與 `slow-artifacts.ts` 的 `GET` 路由完全沒有 `canReadPdf`/`shareAccess` 等讀取權限檢查（對照 `detail.ts` 的 `GET /api/pdfs/:id` 已有 `shareAccess OR canReadPdf()` 模式），任何人知道 PDF id 就能讀到別人私有簡報的執行歷程與素材耗時細節；(2) 確認 `backend/src/routes/pdfs/observability.ts` 的 `GET /api/system/observability`（系統級彙總統計，含跨使用者 LLM 用量）完全沒有權限檢查，對照 `sla-settings.ts` 同樣是系統級端點卻已有 `isAdminAccount()` 檢查；(3) 用 grep 掃描先前已大量 i18n 化的檔案（`SettingsPage.tsx`、`UploadButton.tsx`、`PromptModal.tsx`、`DrawingCanvas.tsx`、`HomePage.tsx`、`PdfCard.tsx`），確認多數已完成，只有 `PromptModal.tsx`「套用模板」按鈕與 `HomePage.tsx` ZIP 匯入進度文字仍殘留 1-2 處硬編碼中文（`DrawingCanvas.tsx`/`PdfCard.tsx`/`SlideRenderer.tsx` 殘留的中文字串確認皆為程式註解，非使用者可見文字，未列入待辦）；(4) 比對 `backend/src/worker/steps/` 與 `backend/test/` 確認 `extractText.ts`、`generateTitle.ts`、`generateVideo.ts`、`synthesizeAudio.ts` 完全沒有對應測試檔案，選擇範圍最小且多為純函式的 `generateTitle.ts`（191 行）作為待辦項目。新增 4 個待辦項目：(1) `runs.ts`/`slow-artifacts.ts` 讀取權限檢查；(2) `observability.ts` 管理員權限檢查；(3) `PromptModal.tsx`/`HomePage.tsx` 零星 i18n 收尾；(4) `generateTitle.ts` 單元測試。
