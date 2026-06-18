@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { getRuntimeAiSettings } from './aiSettings';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { appendLlmRequestLog, appendLlmResponseLog } from './llmUsage';
+import { logger } from '../logger';
+import { redactLogObject } from './logSanitizer';
 
 export interface GeminiUsage {
   prompt_tokens: number;
@@ -74,6 +76,36 @@ function parseMimeRateAndChannels(mimeType: string): { sampleRate: number; chann
   const sampleRate = rateMatch ? Number(rateMatch[1]) : 24000;
   const channels = channelsMatch ? Number(channelsMatch[1]) : 1;
   return { sampleRate, channels };
+}
+
+/**
+ * Summarizes the shape of a Gemini TTS response for diagnostic logging when
+ * the expected `candidates[0].content.parts[].inlineData.data` path can't be
+ * resolved. Reports which level was missing/empty instead of raw content, so
+ * future Gemini API response-shape changes can be diagnosed from logs alone.
+ */
+export function summarizeTtsResponseForLog(json: unknown): Record<string, unknown> {
+  const candidates = (json as { candidates?: unknown })?.candidates;
+  const firstCandidate = Array.isArray(candidates) ? (candidates[0] as Record<string, unknown> | undefined) : undefined;
+  const content = firstCandidate?.content as Record<string, unknown> | undefined;
+  const parts = content?.parts;
+  const partKinds = Array.isArray(parts)
+    ? parts.map((p: unknown) => {
+        const part = p as Record<string, unknown> | undefined;
+        if (part && typeof part === 'object' && 'inlineData' in part) return 'inlineData';
+        if (part && typeof part === 'object' && 'text' in part) return 'text';
+        return 'unknown';
+      })
+    : [];
+  return redactLogObject({
+    hasCandidates: Array.isArray(candidates),
+    candidatesCount: Array.isArray(candidates) ? candidates.length : 0,
+    hasContent: content != null,
+    hasParts: Array.isArray(parts),
+    partsCount: Array.isArray(parts) ? parts.length : 0,
+    partKinds,
+    finishReason: (firstCandidate?.finishReason as string | undefined) ?? null,
+  });
 }
 
 function getGeminiApiKey(): string {
@@ -394,7 +426,10 @@ export async function synthesizeGeminiSpeech(params: {
   const inline = json?.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData?.data)?.inlineData;
   const b64 = inline?.data;
   const mimeType = String(inline?.mimeType ?? '').toLowerCase();
-  if (!b64 || typeof b64 !== 'string') throw new Error('Gemini TTS returned empty audio');
+  if (!b64 || typeof b64 !== 'string') {
+    logger.warn({ response: summarizeTtsResponseForLog(json) }, 'Gemini TTS: failed to locate inlineData audio in response');
+    throw new Error('Gemini TTS returned empty audio');
+  }
   const raw = Buffer.from(b64, 'base64');
 
   // Gemini may return raw PCM (e.g. audio/L16) rather than MP3/WAV.
