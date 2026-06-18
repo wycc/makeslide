@@ -60,7 +60,7 @@
 
 - [x] 後端頁面操作路由補上編輯權限檢查：`backend/src/routes/pdfs/page-operations.ts` 的 `POST /api/pdfs/:id/pages`（新增頁）、`POST .../pages/move`（移動頁）、`DELETE .../pages/:n`（刪除頁）、`POST .../pages/:n/replace-image`、`POST .../pages/:n/regenerate-image`、`POST .../pages/:n/inpaint-image`、`POST .../pages/:n/rewrite-script`、`POST .../pages/:n/regenerate-audio`、`POST .../pages/:n/chat`、`DELETE .../pages/:n/chat-history` 等寫入路由目前都沒有檢查編輯權限；應逐一補上 `canEditPdf()` 檢查，這是目前後端權限缺口中影響範圍最大的一批路由，建議拆成獨立 PR 並補上至少 2-3 個關鍵路由（新增頁、刪除頁、重生圖片）的權限測試。
 
-- [ ] `TtsDialog.tsx` 補齊 i18n：目前完全沒有使用 `useI18n()`，標題「生成設定」、「聲音」、「主持模式」、「單人旁白」/「雙人對談」、「速度」、「逐字稿每頁上限字數」、「系統預設」、「儲存中…」、「儲存設定」與雙人對談說明文字皆為硬編碼中文；應改用 `useI18n()` 與新增 `play.ttsDialog.*` 翻譯鍵，讓英文介面使用者也能完整操作語音設定對話框。
+- [x] `TtsDialog.tsx` 補齊 i18n：目前完全沒有使用 `useI18n()`，標題「生成設定」、「聲音」、「主持模式」、「單人旁白」/「雙人對談」、「速度」、「逐字稿每頁上限字數」、「系統預設」、「儲存中…」、「儲存設定」與雙人對談說明文字皆為硬編碼中文；應改用 `useI18n()` 與新增 `play.ttsDialog.*` 翻譯鍵，讓英文介面使用者也能完整操作語音設定對話框。
 
 - [ ] `ImageStyleDialog.tsx` 補齊 i18n：目前完全沒有使用 `useI18n()`，標題「整份簡報圖片風格設定」、說明段落、「套用模板」、「關閉」、「儲存設定」按鈕與 textarea placeholder 皆為硬編碼中文；應改用 `useI18n()` 與新增 `play.imageStyleDialog.*` 翻譯鍵。
 
@@ -234,3 +234,7 @@
 - 時間: 2026-06-19 00:15:00 +0800
 - 分支: feature/page-operations-edit-permission-20260618
 - 內容: 完成「後端頁面操作路由補上編輯權限檢查」。`backend/src/routes/pdfs/page-operations.ts` 新增與其他寫入路由一致的本地 `sessionSub()`/`canEditPdf()`/`getPdfPermissionRow()`，並在全部 10 個寫入路由補上權限檢查（沒有編輯權限時回傳 `403 FORBIDDEN`）：`POST /pages`（新增頁）、`POST /pages/move`（移動頁）、`DELETE /pages/:n`（刪除頁）、`POST /pages/:n/replace-image`、`POST /pages/:n/regenerate-image`、`POST /pages/:n/inpaint-image`、`POST /pages/:n/rewrite-script`、`POST /pages/:n/regenerate-audio`、`DELETE /pages/:n/chat-history`、`POST /pages/:n/chat`；多數路由已經有查詢 pdf row 供其他用途，因此盡量延伸既有 SELECT 補上 `owner_sub`/`visibility` 欄位以避免重複查詢，其餘兩個（`chat-history` DELETE、`chat` POST）原本完全沒有查詢 pdf 權限，新增 `getPdfPermissionRow()` 呼叫。`GET /pages/:n/image-candidates/:candidateId` 與 `GET /pages/:n/chat-history` 維持公開讀取，因為唯讀瀏覽者仍需要看到既有候選圖與對話記錄。新增 `backend/test/page-operations-permission.test.ts` 15 個測試，覆蓋全部 10 個寫入路由對非擁有者唯讀分享簡報應得 403（含 `replace-image`/`inpaint-image` 用最小 multipart payload 測試，因為權限檢查發生在解析檔案內容之前）、新增頁/移動頁/刪除頁/清空對話記錄對擁有者應正常成功、`public_editable` 協作者應能通過權限檢查。backend typecheck 通過，完整測試套件 264 項中 18 項失敗為既有環境相關既存失敗（與本次變更前一致，新增的 15 項測試與既有 page-operations 相關測試皆通過，包含確認既有失敗的具體錯誤內容皆為檔名/狀態碼斷言不符而非新增的 403，證實與本次權限變更無關）。本項完成後 TODO.md 中所有「後端寫入路由補上編輯權限檢查」相關待辦皆已處理完畢（github-sync、page-animation/drawings、quizzes、page-operations）。
+
+- 時間: 2026-06-19 00:30:00 +0800
+- 分支: feature/tts-dialog-i18n-20260619
+- 內容: 完成「TtsDialog.tsx 補齊 i18n」。`TtsDialog.tsx` 新增 `useI18n()`，將標題「生成設定」、「聲音」、「主持模式」、「單人旁白」/「雙人對談」按鈕、雙人對談說明文字、「速度」、「逐字稿每頁上限字數」、「（留空使用系統預設）」、placeholder「系統預設」、「關閉」、「儲存中…」、「儲存設定」全部改用新增的 `play.ttsDialog.*` 翻譯鍵；`zh-TW.ts`/`en.ts` 補齊對應 13 個翻譯鍵，並在 `frontend/src/i18n.test.ts` 新增測試驗證這些鍵在中英文皆存在且非空字串。保留既有 `isReadOnlyProcessing`/`ttsBusy` 唯讀停用邏輯、聲音清單渲染與速度滑桿行為不變。frontend typecheck 通過，既有與新增前端測試（`tsx --test`，126 項）全數通過。

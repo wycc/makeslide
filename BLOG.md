@@ -1948,3 +1948,24 @@ Manim.animate.shake(myShape, progress, {
 - 多數路由本來就會查詢 pdf row 取得 `page_count`、`user_prompt` 等其他用途的欄位，這次盡量延伸既有 SELECT 補上 `owner_sub`/`visibility`，避免新增重複查詢；`chat-history` 的 DELETE 與 `chat` 的 POST 過去完全沒有查詢 pdf 權限，新增獨立的 `getPdfPermissionRow()` 查詢。
 - 涉及 AI 呼叫的路由（`regenerate-image`、`inpaint-image`、`rewrite-script`、`regenerate-audio`、`chat`）權限檢查都放在呼叫 OpenAI/TTS 之前，避免無權限的請求白白消耗 LLM 或 TTS 額度。
 - 新增 `backend/test/page-operations-permission.test.ts` 15 個測試：全部 10 個寫入路由對非擁有者的唯讀分享簡報應得 403（`replace-image`/`inpaint-image` 用最小 multipart payload 測試，因為權限檢查發生在解析檔案內容之前，不需要真正的圖片資料）；新增頁/移動頁/刪除頁/清空對話記錄對擁有者應正常成功；`public_editable` 協作者應能通過權限檢查。
+
+## TtsDialog 語音/生成設定對話框補齊 i18n
+
+### 功能目的
+
+播放頁頁首「⚙️ 設定」按鈕開啟的語音與生成設定對話框（`TtsDialog.tsx`）負責調整 TTS 聲音、主持模式（單人旁白／雙人對談）、語速與逐字稿每頁上限字數，是調整簡報生成參數的主要入口之一。過去這個對話框完全沒有接上 i18n 系統，標題、各欄位標籤、提示文字與按鈕文字都直接寫成中文；即使使用者已把界面語言切換成 English，這個對話框仍會顯示中文，和已完成 i18n 的其他播放頁元件不一致。
+
+新版讓 `TtsDialog.tsx` 跟隨全站界面語言設定顯示對應語言文字。
+
+### 使用方式
+
+1. 進入「設定」頁，將「界面文字語言」切換為「繁體中文」或「English」。
+2. 回到任一簡報播放頁，點擊頁首「設定 / Settings」按鈕開啟語音設定對話框，所有文字（標題、聲音、主持模式、單人旁白／雙人對談、雙人對談說明、速度、逐字稿每頁上限字數、留空使用系統預設提示、placeholder、關閉、儲存中／儲存設定）都會依目前界面語言顯示。
+3. 唯讀模式下對話框仍會依既有 `isReadOnlyProcessing` 邏輯停用各項控制，行為不受本次調整影響。
+
+### 技術細節
+
+- `TtsDialog.tsx` 新增 `useI18n()`，將所有先前硬編碼中文文字改為 `t('play.ttsDialog.*')` 翻譯鍵呼叫。
+- `zh-TW.ts` 與 `en.ts` 新增 13 個 `play.ttsDialog.*` 翻譯鍵：`title`、`voice`、`hostMode`、`hostModeSolo`、`hostModeDual`、`hostModeHint`、`speed`、`scriptMaxChars`、`scriptMaxCharsHint`、`scriptMaxCharsPlaceholder`、`close`、`saving`、`save`。
+- 既有的 `isReadOnlyProcessing`/`ttsBusy` 停用邏輯、聲音清單渲染（`geminiVoiceLabel`/`openaiVoiceLabel`）、速度滑桿與逐字稿字數輸入驗證皆未變更，純粹替換文字來源。
+- `frontend/src/i18n.test.ts` 新增測試驗證上述 13 個翻譯鍵在中英文 locale 中都存在且為非空字串。
