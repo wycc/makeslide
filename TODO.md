@@ -110,7 +110,7 @@
 
 - [x] `synthesizeAudio.ts` 補上純函式單元測試：`backend/src/worker/steps/synthesizeAudio.ts` 目前完全沒有對應測試檔案（`backend/test/` 下無任何檔案引用），但內含多個模組私有的純函式：`parseWavPcmChunk()`（解析 WAV PCM chunk 標頭）、`buildWavPcm16()`（將原始 PCM 包成 WAV 容器）、`isRetryableTtsError()`（判斷 TTS 錯誤是否可重試）、`extractTtsErrorMessage()`（從不同錯誤型態取出可讀訊息）、`splitByToneMarkers()`（依語氣標記切分逐字稿片段）、`splitSpeakerPrefix()`（解析雙人對談的講者前綴）。應將這些函式改為具名匯出（如 `generateTitle.ts` 的做法），新增 `backend/test/synthesize-audio.test.ts` 覆蓋各函式的正常與邊界輸入，不需要動到實際呼叫 TTS API 的整合邏輯。
 
-- [ ] 前端 `subtitles.ts` 補上單元測試：`frontend/src/lib/subtitles.ts` 完全沒有對應測試檔案，但內含兩個驅動播放頁字幕高亮與動畫觸發時機的純函式：`splitScriptIntoSentences(script)`（去除語氣標記後依中英文句末符號切分句子）與 `buildSentenceTimeline(sentences, duration)`（依中英文字元、數字權重估算每句朗讀秒數與停頓秒數，再依整頁音訊長度等比例縮放出每句的 start/end 時間）。應新增 `frontend/src/lib/subtitles.test.ts`，覆蓋空字串/純語氣標記、單句與多句切分、不同字元類型混合的時間軸估算，以及 `duration<=0` 或 `sentences.length===0` 的邊界回傳空陣列情況。
+- [x] 前端 `subtitles.ts` 補上單元測試：`frontend/src/lib/subtitles.ts` 完全沒有對應測試檔案，但內含兩個驅動播放頁字幕高亮與動畫觸發時機的純函式：`splitScriptIntoSentences(script)`（去除語氣標記後依中英文句末符號切分句子）與 `buildSentenceTimeline(sentences, duration)`（依中英文字元、數字權重估算每句朗讀秒數與停頓秒數，再依整頁音訊長度等比例縮放出每句的 start/end 時間）。應新增 `frontend/src/lib/subtitles.test.ts`，覆蓋空字串/純語氣標記、單句與多句切分、不同字元類型混合的時間軸估算，以及 `duration<=0` 或 `sentences.length===0` 的邊界回傳空陣列情況。
 
 ---
 
@@ -400,3 +400,7 @@
 - 時間: 2026-06-19 11:35:00 +0800
 - 分支: feature/synthesize-audio-tests-20260619
 - 內容: 完成 `synthesizeAudio.ts` 純函式單元測試補強。將六個模組私有函式改為具名匯出（與 `generateTitle.ts` 的做法一致，僅加 `export` 關鍵字，無邏輯變更）：`parseWavPcmChunk()`、`buildWavPcm16()`、`isRetryableTtsError()`、`extractTtsErrorMessage()`、`splitByToneMarkers()`、`splitSpeakerPrefix()`。新增 `backend/test/synthesize-audio.test.ts` 20 個測試：WAV 編解碼互轉與標頭欄位正確性、過短/缺少 RIFF·WAVE 魔數時回傳 `null`；TTS 錯誤可重試判斷（408/429/5xx 為可重試、一般 4xx 不可重試、timeout/connection 相關 name/type/message 視為可重試、非物件或無法識別錯誤回傳 `false`）；錯誤訊息組裝（status+code、status+type、純 message、非物件輸入）；語氣標記切分（無標記時整段視為「平穩敘述」、多個標記正確切分並追蹤目前語氣、空白輸入回傳空陣列、重複呼叫因模組層級 regex 狀態重置正常不互相干擾）；講者前綴解析（半形/全形冒號、大小寫不敏感、無前綴時原文不變）。完全不需要呼叫真實 TTS API。已執行 typecheck（前後端皆通過）與 `npm test`（365 個測試，18 個失敗皆為既有環境性基準，無新增回歸）。
+
+- 時間: 2026-06-19 11:55:00 +0800
+- 分支: feature/subtitles-tests-20260619
+- 內容: 完成前端 `subtitles.ts` 單元測試補強，這是本輪 LOOP 待辦清單的最後一項，未修改任何來源邏輯。新增 `frontend/src/lib/subtitles.test.ts` 15 個測試：`splitScriptIntoSentences()` 覆蓋空白輸入、純語氣標記輸入、單句/多句中英文切分、語氣標記與正文交錯時的去除、以及驗證該函式的切分正規表示式只把全形「。！？；」與半形「!?;」視為句末終止符，半形 ASCII 句號「.」不會觸發切分（因此一段含句號但沒有其他終止符的文字會維持整段不被拆開，這是寫測試過程中實際執行驗證才確認的真實行為，並非原本假設）；`buildSentenceTimeline()` 覆蓋 `duration<=0`、`duration` 為 `NaN`/`Infinity`、`sentences` 為空陣列三種邊界回傳空陣列、單句佔滿整段時長、多句切分後區段首尾相接且總長度精確等於 `duration`、較長中文句子分配到的時長確實大於短句、混合中英文數字字元時仍能正常運作且區段落在 `[0, duration]` 範圍內。已執行前端 typecheck（前後端皆通過）、完整前端測試（150 個測試全數通過）與後端測試（365 個測試，18 個失敗皆為既有環境性基準，無新增回歸，本次未改動任何後端程式碼）。**至此本輪 LOOP 發現的所有候選待辦項目（共 7 項：`extractPdfFigures.ts` 例外處理、`presentationGit.ts` 逾時保護、`generateVideo.ts` 檔案存在性檢查、`gemini.ts` 診斷紀錄、`promptTemplates.ts`/`synthesizeAudio.ts`/`subtitles.ts` 測試補強）皆已完成，TODO.md 再次清空。**
