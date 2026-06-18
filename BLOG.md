@@ -2012,3 +2012,29 @@ Manim.animate.shake(myShape, progress, {
 - `zh-TW.ts` 與 `en.ts` 新增 10 個 `play.versionHistory.*` 翻譯鍵：`titleImage`、`titleScript`、`pageSuffix`、`loading`、`empty`、`selectPrompt`、`imageAlt`、`close`、`restoring`、`restore`。
 - 版本清單的 `new Date(entry.date).toLocaleString('zh-TW', { dateStyle: 'short', timeStyle: 'short' })` 維持不變，刻意不隨界面語言切換。
 - `frontend/src/i18n.test.ts` 新增測試驗證上述 10 個翻譯鍵在中英文 locale 中都存在且為非空字串。
+
+## ShareDialog 補上 Clipboard fallback 與 i18n
+
+### 功能目的
+
+播放頁建立分享連結後彈出的對話框（`ShareDialog.tsx`）讓使用者複製分享 URL。過去「複製連結」按鈕直接呼叫 `navigator.clipboard.writeText()`，若瀏覽器不支援 Clipboard API、處於非安全來源，或使用者拒絕剪貼簿權限，複製會靜默失敗，而原本的失敗訊息（`onCopyError` 觸發的 `shareError` 狀態）顯示在頁首，被這個對話框的全螢幕背景遮住，使用者很可能完全看不到失敗提示。這個對話框過去也完全沒有接上 i18n，標題、說明與按鈕都是硬編碼中文。
+
+新版讓「複製連結」改用既有共用 Clipboard helper，並把成功/失敗狀態直接顯示在對話框內，同時補齊 i18n。
+
+### 使用方式
+
+1. 在播放頁建立分享連結後，對話框會顯示分享 URL 與「複製連結」按鈕。
+2. 點擊「複製連結」：
+   - 支援 Clipboard API 且權限允許時會直接複製，按鈕文字短暫變成「已複製 / Copied」。
+   - Clipboard API 不可用或被拒時，會自動嘗試 textarea selection + `execCommand('copy')` fallback。
+   - 兩種方式都失敗時，對話框內會直接顯示「複製失敗，請手動選取上方連結後複製。」/ 對應英文提示，不再需要關閉對話框才能看到。
+3. 上方唯讀 textarea 取得焦點時仍會自動全選，方便在自動複製失敗時手動選取複製。
+4. 進入「設定」頁切換「界面文字語言」後，這個對話框的標題、說明與按鈕文字會跟著切換為繁體中文或 English。
+
+### 技術細節
+
+- `ShareDialog.tsx` 的「複製連結」改用 `frontend/src/lib/clipboard.ts` 的 `copyTextToClipboard()`，取代直接呼叫 `navigator.clipboard.writeText()`。
+- 新增本地 `copyStatus: 'idle' | 'success' | 'error'` 狀態：成功時按鈕文字短暫顯示「已複製」，失敗時在 textarea 下方顯示 i18n 錯誤訊息。
+- 仍維持呼叫既有 `onCopySuccess`/`onCopyError` props（不變更元件介面），因此 `PlayPageDialogs.tsx` 呼叫端不需修改；父層 `shareMessage`/`shareError` 狀態繼續用於對話框關閉後的訊息延續。
+- 新增 `useI18n()` 與 6 個 `play.shareDialog.*` 翻譯鍵：`title`、`description`、`copyLink`、`copied`、`copyFailed`、`close`，`zh-TW.ts`/`en.ts` 同步補上。
+- `frontend/src/i18n.test.ts` 新增測試驗證上述 6 個翻譯鍵在中英文 locale 中都存在且為非空字串。

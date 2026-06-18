@@ -114,3 +114,21 @@ test('VersionHistoryDialog locale keys are complete', () => {
     assert.notEqual(en[key].trim(), '');
   }
 });
+
+test('ShareDialog locale keys are complete', () => {
+  const requiredKeys = [
+    'play.shareDialog.title',
+    'play.shareDialog.description',
+    'play.shareDialog.copyLink',
+    'play.shareDialog.copied',
+    'play.shareDialog.copyFailed',
+    'play.shareDialog.close',
+  ] as const;
+
+  for (const key of requiredKeys) {
+    assert.equal(typeof zhTW[key], 'string');
+    assert.equal(typeof en[key], 'string');
+    assert.notEqual(zhTW[key].trim(), '');
+    assert.notEqual(en[key].trim(), '');
+  }
+});
