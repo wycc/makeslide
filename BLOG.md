@@ -2118,3 +2118,24 @@ Manim.animate.shake(myShape, progress, {
 - `backend/src/routes/pdfs/versioning.ts` 新增與其他寫入路由一致的本地 `sessionSub()` + `canEditPdf(owner_sub, visibility)` + `getPdfPermissionRow()`。
 - 兩個還原路由的權限檢查都放在呼叫 `restorePresentationFile()` 之前執行，確保權限不足時完全不會修改任何檔案或 git 紀錄。
 - 新增 `backend/test/versioning-permission.test.ts` 5 個測試：非擁有者對唯讀分享/私有簡報的還原請求應得 403、對未知簡報應得 `404 PDF_NOT_FOUND`；擁有者與 `public_editable` 協作者通過權限檢查的驗證方式是讓對應頁面的 `image_path`/`script_path` 為 `NULL`，使請求在通過權限檢查後落到 `404 PAGE_NOT_FOUND` 分支（與權限檢查的 403 明顯不同），藉此確認沒有被權限擋下，同時避免需要建置真實 git 歷史 fixture 才能驗證還原服務本身的行為。
+
+## 圖表參考選取與課堂投票路由補上編輯權限檢查
+
+### 功能目的
+
+播放頁可調整每頁要作為圖片重生參考的圖表（`PUT /api/pdfs/:id/pages/:n/figures/selection`），以及課堂同步測驗/投票功能可建立投票（`POST /api/pdfs/:id/pages/:n/polls`）、刪除投票（`DELETE /api/pdfs/:id/polls/:pollId`）、清空投票結果（`POST /api/pdfs/:id/polls/:pollId/reset-votes`）。這幾個寫入 API 過去完全沒有檢查請求者是否擁有編輯權限，與本輪已修復的 GitHub 同步、動畫/畫板、測驗、頁面操作、簡報刪除、重生、AI 新增頁面、版本還原等同一類權限缺口。這是本輪發現的最後一批同類缺口。
+
+新版讓這幾個 API 遵循與其他簡報寫入動作一致的權限規則，學生投票提交本身維持公開（與測驗作答提交同理）。
+
+### 使用方式
+
+1. 一般擁有者或取得 read-write 分享/`public_editable` 簡報的使用者操作不受影響，仍可正常調整圖表參考選取、建立/刪除投票或清空投票結果。
+2. 唯讀分享或公開唯讀簡報的瀏覽者，即使略過前端直接呼叫對應 API，後端也會回傳 `403 FORBIDDEN`，不會真的修改圖表選取或投票內容。
+3. 學生（follower）在課堂同步投票中提交答案（`POST /api/pdfs/:id/polls/:pollId/votes`）完全不受影響，不需要編輯權限即可正常投票；查看圖表清單與圖表圖片也維持公開讀取。
+
+### 技術細節
+
+- `backend/src/routes/pdfs/figures.ts` 新增與其他寫入路由一致的本地 `sessionSub()` + `canEditPdf(owner_sub, visibility)` + `getPdfPermissionRow()`，套用在 `PUT /figures/selection`。
+- `backend/src/routes/pdfs/detail.ts` 沿用既有的本地 `canEditPdf()`/`sessionSub()`（該檔案其他寫入路由已使用），套用在投票建立/刪除/清空三個路由。
+- 修復過程中發現既有 `backend/test/figure-assets.test.ts` 的硬編碼 session cookie 簽章使用舊版 `AUTH_SESSION_SECRET` 產生、與目前環境密鑰不符，先前因為這個路由完全不驗證 session 而未被發現；改用與其他測試檔案一致、即時用目前 `config.authSessionSecret` 簽章的 `testSessionCookie()` 動態產生方式修正。
+- 新增 `backend/test/figures-polls-permission.test.ts` 7 個測試，覆蓋圖表選取與投票建立/刪除/清空對非擁有者唯讀分享簡報應得 403（且資料確實未被修改）、擁有者與 `public_editable` 協作者應可正常操作、投票提交不受權限限制仍可成功送出。
