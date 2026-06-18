@@ -1969,3 +1969,25 @@ Manim.animate.shake(myShape, progress, {
 - `zh-TW.ts` 與 `en.ts` 新增 13 個 `play.ttsDialog.*` 翻譯鍵：`title`、`voice`、`hostMode`、`hostModeSolo`、`hostModeDual`、`hostModeHint`、`speed`、`scriptMaxChars`、`scriptMaxCharsHint`、`scriptMaxCharsPlaceholder`、`close`、`saving`、`save`。
 - 既有的 `isReadOnlyProcessing`/`ttsBusy` 停用邏輯、聲音清單渲染（`geminiVoiceLabel`/`openaiVoiceLabel`）、速度滑桿與逐字稿字數輸入驗證皆未變更，純粹替換文字來源。
 - `frontend/src/i18n.test.ts` 新增測試驗證上述 13 個翻譯鍵在中英文 locale 中都存在且為非空字串。
+
+## ImageStyleDialog 圖片風格設定對話框補齊 i18n
+
+### 功能目的
+
+播放頁頁首「🖼️ 風格」按鈕開啟的圖片風格設定對話框（`ImageStyleDialog.tsx`）讓使用者套用風格模板或自行填寫整份簡報重生圖片時要使用的風格提示詞。這個對話框過去完全沒有接上 i18n 系統，標題、說明、按鈕與輸入框 placeholder 都直接寫成中文，和已完成 i18n 的「設定」對話框等其他播放頁元件不一致。
+
+新版讓 `ImageStyleDialog.tsx` 跟隨全站界面語言設定顯示對應語言文字。
+
+### 使用方式
+
+1. 進入「設定」頁，將「界面文字語言」切換為「繁體中文」或「English」。
+2. 回到任一簡報播放頁，點擊頁首「風格 / Style」按鈕開啟圖片風格設定對話框，標題、說明段落、「套用模板」按鈕、提示詞輸入框 placeholder、「關閉」與「儲存設定」按鈕都會依目前界面語言顯示。
+3. 唯讀模式下對話框仍會依既有 `isReadOnlyProcessing` 邏輯停用模板套用與儲存，行為不受本次調整影響。
+
+### 技術細節
+
+- `ImageStyleDialog.tsx` 新增 `useI18n()`，將所有先前硬編碼中文文字改為 `t('play.imageStyleDialog.*')` 翻譯鍵呼叫。
+- `zh-TW.ts` 與 `en.ts` 新增 6 個 `play.imageStyleDialog.*` 翻譯鍵：`title`、`description`、`applyTemplate`、`promptPlaceholder`、`close`、`save`。
+- 模板下拉選單的 `.map()` 參數從 `t` 改名為 `template`，避免與 `useI18n()` 取出的 `t()` 翻譯函式同名造成閱讀混淆；純粹改名，不影響行為。
+- 既有 `isReadOnlyProcessing` 停用邏輯、模板套用（`onApplyTemplate`）與儲存（`onSave`）行為皆未變更。
+- `frontend/src/i18n.test.ts` 新增測試驗證上述 6 個翻譯鍵在中英文 locale 中都存在且為非空字串。

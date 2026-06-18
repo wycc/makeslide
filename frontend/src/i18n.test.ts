@@ -74,3 +74,21 @@ test('TtsDialog locale keys are complete', () => {
     assert.notEqual(en[key].trim(), '');
   }
 });
+
+test('ImageStyleDialog locale keys are complete', () => {
+  const requiredKeys = [
+    'play.imageStyleDialog.title',
+    'play.imageStyleDialog.description',
+    'play.imageStyleDialog.applyTemplate',
+    'play.imageStyleDialog.promptPlaceholder',
+    'play.imageStyleDialog.close',
+    'play.imageStyleDialog.save',
+  ] as const;
+
+  for (const key of requiredKeys) {
+    assert.equal(typeof zhTW[key], 'string');
+    assert.equal(typeof en[key], 'string');
+    assert.notEqual(zhTW[key].trim(), '');
+    assert.notEqual(en[key].trim(), '');
+  }
+});
