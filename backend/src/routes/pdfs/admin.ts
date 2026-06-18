@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
   getAccountSettingsLocation,
@@ -13,8 +13,21 @@ import { setOpenAIApiKeyRuntime, setOpenAIBaseUrlRuntime } from '../../services/
 import { currentAccountId } from '../../services/accountContext';
 import { IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
 import { pushPresentationToGitHub } from '../../services/presentationGit';
+import { decodeSession, parseCookies } from '../auth';
 import { db } from '../../db';
+import type { PdfRow } from '../../types';
 import { IdParamSchema, UpdateSystemAiSettingsBodySchema, errorResponse } from './shared';
+
+function sessionSub(request: FastifyRequest): string | null {
+  const session = decodeSession(parseCookies(request).makeslide_session);
+  return session?.sub ?? null;
+}
+
+function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
+  if (!row.owner_sub) return true;
+  if (sub && row.owner_sub === sub) return true;
+  return row.visibility === 'public_editable';
+}
 
 const TransferAdminBodySchema = z.object({
   account_id: z.string().trim().min(1).max(256),
@@ -172,8 +185,13 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id'));
     }
     const { id } = parsed.data;
-    const row = db.prepare(`SELECT id FROM pdfs WHERE id = ?`).get(id) as { id: string } | undefined;
+    const row = db.prepare(`SELECT id, owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
+      | Pick<PdfRow, 'id' | 'owner_sub' | 'visibility'>
+      | undefined;
     if (!row) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), row)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限同步此簡報到 GitHub'));
+    }
 
     const runtime = getRuntimeAiSettings();
     const repoUrl = runtime.githubRepoUrl.trim();

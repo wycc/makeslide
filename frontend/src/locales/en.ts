@@ -365,6 +365,7 @@ export const en = {
   'play.header.downloadHandoutPdf': 'Download handout PDF',
   'play.header.quizGeneration': 'Generate quiz',
   'play.header.githubSyncTitle': 'Sync this presentation to the configured GitHub repository',
+  'play.header.githubSyncReadOnly': 'Cannot sync to GitHub in read-only mode',
   'play.header.syncing': 'Syncing…',
   'play.header.syncToGithub': 'Sync to GitHub',
   'play.sync.mode': 'Sync mode',
