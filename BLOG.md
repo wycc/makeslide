@@ -2038,3 +2038,22 @@ Manim.animate.shake(myShape, progress, {
 - 仍維持呼叫既有 `onCopySuccess`/`onCopyError` props（不變更元件介面），因此 `PlayPageDialogs.tsx` 呼叫端不需修改；父層 `shareMessage`/`shareError` 狀態繼續用於對話框關閉後的訊息延續。
 - 新增 `useI18n()` 與 6 個 `play.shareDialog.*` 翻譯鍵：`title`、`description`、`copyLink`、`copied`、`copyFailed`、`close`，`zh-TW.ts`/`en.ts` 同步補上。
 - `frontend/src/i18n.test.ts` 新增測試驗證上述 6 個翻譯鍵在中英文 locale 中都存在且為非空字串。
+
+## 修復簡報刪除 API 完全缺少權限檢查的安全缺口
+
+### 功能目的
+
+`DELETE /api/pdfs/:id`（首頁刪除簡報所呼叫的 API）過去只檢查簡報是否存在，完全沒有檢查請求者是否擁有這份簡報的編輯權限——任何已登入帳號只要知道簡報 id，就能刪除別人的簡報，包含資料庫紀錄與儲存目錄中的所有檔案，且這個動作無法復原。這是目前已知後端權限缺口中影響最嚴重的一項，與先前已修復的 GitHub 同步、動畫/畫板、測驗、頁面操作等權限缺口屬於同一類問題，但這次是完整刪除而非部分修改。
+
+新版讓刪除 API 遵循與其他簡報寫入動作一致的權限規則。
+
+### 使用方式
+
+1. 一般擁有者或取得 read-write 分享/`public_editable` 簡報的使用者操作不受影響，仍可在首頁正常刪除自己的簡報（前端 `PdfCard.tsx` 原本就有 `window.confirm()` 二次確認，這次調整不影響該流程）。
+2. 非擁有者對唯讀分享（`public`）或私有（`private`）簡報的刪除請求，後端會回傳 `403 FORBIDDEN`，簡報資料與檔案完全不會被觸碰。
+
+### 技術細節
+
+- `backend/src/routes/pdfs/delete.ts` 新增與其他寫入路由一致的本地 `sessionSub()` + `canEditPdf(owner_sub, visibility)`。
+- 查詢 PDF 是否存在的 SELECT 補上 `owner_sub`、`visibility` 欄位，在執行 `DELETE FROM pdfs` 與 `removePdfDir()`（清除儲存目錄）之前先做權限檢查，確保權限不足時完全不會執行任何刪除動作。
+- 新增 `backend/test/delete-permission.test.ts` 4 個測試，覆蓋非擁有者對 `public`/`private` 簡報應得 403（且簡報確實未被刪除）、擁有者與 `public_editable` 協作者應能正常刪除。
