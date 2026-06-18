@@ -1797,3 +1797,26 @@ Manim.animate.shake(myShape, progress, {
 - 所有改動處原本的 `// eslint-disable-next-line no-console` 註解一併移除，因為呼叫已不再直接使用 `console.*`。
 - 與貼上/拖曳無關的既有偵錯輸出（例如 `PlayPage.tsx` 中的 `[sync][poll]`、`[tts][regenerate-audio]` 等同步與語音除錯訊息）不在本次調整範圍內，維持原狀。
 - 已執行 frontend `tsc --noEmit` typecheck 確認型別正確。
+
+## 來源管理「複製內容」與「全部收合」
+
+### 功能目的
+
+播放頁的來源管理可以展開查看 TXT、PDF 與 YouTube 來源的完整文字內容，方便確認生成逐字稿時實際送出了哪些補充資料。過去只能用滑鼠在展開的內容區手動選取再複製，內容較長或想貼到其他地方核對時很不方便；展開多筆來源後，畫面也只能逐筆點擊收合，沒有一次清空所有展開狀態的方式。
+
+新版在每個有內容的來源列加入「複製內容」按鈕，並在來源清單標題旁加入「全部收合」按鈕，讓整理與複製來源內容更快速。
+
+### 使用方式
+
+1. 進入播放頁，切到「來源 / Sources」分頁，在「來源管理」區塊查看目前來源清單。
+2. 任何已有內容的來源列（TXT、PDF 擷取文字，或有逐字稿的 YouTube 來源）右側會出現「複製內容 / Copy content」按鈕，點擊會把該筆來源完整文字複製到剪貼簿；複製成功時按鈕文字會短暫變成「已複製 / Copied」，2 秒後自動還原。
+3. 若瀏覽器拒絕或不支援剪貼簿存取，畫面會在該筆來源下方顯示「複製失敗，請手動選取內容後複製。」/ 對應英文提示，使用者仍可照舊手動選取文字複製。
+4. 當任一筆來源處於展開狀態時，清單標題旁會出現「全部收合 / Collapse all」按鈕，點擊後會一次把所有展開內容收合回摘要列，沒有展開項目時此按鈕不會顯示。
+
+### 技術細節
+
+- `PlayPageSlidePanel.tsx` 重用既有 `frontend/src/lib/clipboard.ts` 的 `copyTextToClipboard()`，不新增剪貼簿邏輯；新增本地狀態 `sourceCopyStatus: Record<number, 'success' | 'error'>` 記錄每筆來源目前的複製結果，並用 `setTimeout` 在 2 秒後自動清除該筆狀態。
+- 複製按鈕在一般 TXT/PDF 來源列與 YouTube audio 來源列都會渲染（只要 `content_text` 非空字串），並以 `e.stopPropagation()` 避免點擊複製按鈕時誤觸發展開/收合來源內容的點擊事件。
+- 「全部收合」只呼叫既有 `setExpandedSourceId(null)`，沒有新增展開狀態的資料結構；按鈕本身只在 `expandedSourceId !== null` 時渲染。
+- `zh-TW.ts` / `en.ts` 新增 `play.source.copyContent`、`play.source.copyContentSuccess`、`play.source.copyContentFailed`、`play.source.collapseAll`，並在 `frontend/src/i18n.test.ts` 新增測試確認中英文都有對應非空字串。
+- 此功能未新增或修改任何後端 API 或資料庫欄位，純前端 UI 與狀態調整。

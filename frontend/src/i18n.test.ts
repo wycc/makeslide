@@ -33,3 +33,19 @@ test('play page header and sync locale keys are complete', () => {
     assert.notEqual(en[key].trim(), '');
   }
 });
+
+test('source management copy/collapse locale keys are complete', () => {
+  const requiredKeys = [
+    'play.source.copyContent',
+    'play.source.copyContentSuccess',
+    'play.source.copyContentFailed',
+    'play.source.collapseAll',
+  ] as const;
+
+  for (const key of requiredKeys) {
+    assert.equal(typeof zhTW[key], 'string');
+    assert.equal(typeof en[key], 'string');
+    assert.notEqual(zhTW[key].trim(), '');
+    assert.notEqual(en[key].trim(), '');
+  }
+});

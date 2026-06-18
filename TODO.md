@@ -9,7 +9,7 @@
 
 - [x] 移除播放頁貼上與拖曳重排的前端偵錯 `console.*`：`PlayPageSidebar.tsx` 與 `PlayPageSlidePanel.tsx` 仍有 `console.info/warn` 直接記錄貼上事件、clipboard item 型別、拖曳頁碼等；應改為移除或集中到 gated debug helper（例如只在開發模式且明確開啟時輸出），避免一般使用者操作投影片、貼圖或重排時污染 console，並保留錯誤情境的使用者可見提示。
 
-- [ ] 來源管理清單新增「複製內容」與「清除展開」小操作：`PlayPageSlidePanel.tsx` 的來源管理目前可展開 TXT/PDF/YouTube 來源內容，但長文字只能手動選取複製，且展開多筆後整理不便；應在每個有 `content_text` 的來源列加入「複製內容」按鈕（使用共用 clipboard helper 與成功/失敗 toast/狀態），並在來源清單標題加入「全部收合」按鈕清空 `expandedSourceId`，不改 API 或資料庫，補 i18n 與可驗證的 helper 測試。
+- [x] 來源管理清單新增「複製內容」與「清除展開」小操作：`PlayPageSlidePanel.tsx` 的來源管理目前可展開 TXT/PDF/YouTube 來源內容，但長文字只能手動選取複製，且展開多筆後整理不便；應在每個有 `content_text` 的來源列加入「複製內容」按鈕（使用共用 clipboard helper 與成功/失敗 toast/狀態），並在來源清單標題加入「全部收合」按鈕清空 `expandedSourceId`，不改 API 或資料庫，補 i18n 與可驗證的 helper 測試。
 
 - [x] 重生進度元件補齊 i18n 與英文介面：`RegenerateProgress.tsx` 目前將「重生進度」、「逐字稿／語音／圖檔／動畫」、「等待中／執行中／已完成／失敗」、「預估剩餘」等文案寫死為中文；應改用 `useI18n()` 與 `zh-TW.ts` / `en.ts` 翻譯鍵，保留目前 ETA、完成時間與步驟進度顯示邏輯，並新增輕量 formatter 或元件測試覆蓋 running/completed/failed 狀態文字。
 
@@ -188,3 +188,7 @@
 - 時間: 2026-06-18 08:05:00 +0800
 - 分支: feature/remove-playpage-debug-console-20260618
 - 內容: 完成移除播放頁貼上與拖曳重排的前端偵錯 `console.*`。新增 `frontend/src/lib/debugLog.ts`，提供 `debugLog()` / `debugWarn()`，只有在瀏覽器 `localStorage` 明確設定 `makeslide.debug = '1'` 時才會輸出，預設一律靜音；`PlayPageSidebar.tsx`（拖曳重排 drop-capture/dragstart/dragend、縮圖區貼上事件與無檔案警告）、`PlayPageSlidePanel.tsx`（投影片區貼上事件與無檔案警告）與 `PlayPage.tsx`（全域貼上事件、clipboard item 型別、無圖片警告、接受圖片摘要）的直接 `console.info/warn` 呼叫全部改用這兩個 helper，並移除對應 `eslint-disable-next-line no-console` 註解；一般使用者操作投影片、貼圖或拖曳重排時 console 不再被污染，需要除錯時開發者可在瀏覽器主控台執行 `localStorage.setItem('makeslide.debug','1')` 重新啟用。frontend typecheck 通過；與貼上/拖曳無關的既有 sync/tts 偵錯 `console.*`（如 `[sync][poll]`、`[tts][regenerate-audio]`）不在本次範圍內，維持原狀。
+
+- 時間: 2026-06-18 08:20:00 +0800
+- 分支: feature/source-copy-collapse-20260618
+- 內容: 完成來源管理清單「複製內容」與「清除展開」小操作。`PlayPageSlidePanel.tsx` 在每個有 `content_text` 的來源列（包含一般 TXT/PDF 來源與 YouTube audio 來源）加入「複製內容」按鈕，使用既有共用 `copyTextToClipboard()` helper（先試 Clipboard API、失敗再 fallback 到 textarea/`execCommand`），並用 `sourceCopyStatus` 狀態顯示「已複製」或失敗提示，2 秒後自動還原按鈕文字；來源清單標題旁新增「全部收合」按鈕，僅在 `expandedSourceId !== null` 時顯示，點擊會呼叫既有 `setExpandedSourceId(null)` 一次清空展開狀態。未新增或修改任何 API、資料庫欄位。新增 `play.source.copyContent`、`play.source.copyContentSuccess`、`play.source.copyContentFailed`、`play.source.collapseAll` 中英文翻譯鍵，並在 `i18n.test.ts` 新增測試驗證這些鍵在兩種語言中存在且非空字串；確認本機可用 `tsx --test` 執行前端 `*.test.ts`（`npm test` 目前只跑 backend），執行後全部 122 項既有與新增前端測試通過，frontend typecheck 亦通過。
