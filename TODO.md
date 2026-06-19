@@ -132,9 +132,11 @@
 
 - [x] `thumbnails.ts` 補上單元測試：`backend/src/services/thumbnails.ts` 完全沒有對應測試檔案，但內含 `generatePageThumbnail()`/`generateCoverThumbnail()`（用 `sharp` 等比例縮放並輸出 JPEG）與 `ensurePageThumbnail()`/`ensureCoverThumbnail()`（縮圖已存在時直接回傳路徑、來源圖不存在時回傳 `null`、否則才呼叫對應的 generate 函式產生）兩組邏輯完全決定性、不涉及網路或子行程的函式。應新增 `backend/test/thumbnails.test.ts`，用 `sharp` 在測試中產生一張小型來源 PNG/JPEG 寫入暫存目錄，覆蓋：縮圖產生後實際存在且寬高不超過設定的上限（`PAGE_THUMBNAIL_WIDTH_PX`/`HEIGHT_PX`、`COVER_THUMBNAIL_WIDTH_PX`）、`ensurePageThumbnail()`/`ensureCoverThumbnail()` 在縮圖已存在時不重新產生（idempotent skip）、來源圖不存在時回傳 `null` 而不拋出例外。工作記錄（2026-06-19）：已新增 `backend/test/thumbnails.test.ts`，使用 `sharp` 在測試暫存目錄產生小型 PNG/JPEG 來源圖，直接覆蓋 `generatePageThumbnail()` / `generateCoverThumbnail()` 的輸出檔存在與尺寸上限、`ensurePageThumbnail()` / `ensureCoverThumbnail()` 在已存在縮圖時以 sentinel 內容與 mtime 驗證不重產、來源圖不存在時回傳 `null` 且不建立縮圖。檢查 `backend/src/services/thumbnails.ts` 後確認必要常數與四個目標函式已具名匯出，因此未改動縮圖服務既有品質、尺寸與 lazy 產生行為。已執行 backend typecheck 與 `backend/test/thumbnails.test.ts`，5 個測試全部通過。
 
-- [ ] `handoutPdf.ts` 補上純函式單元測試：`backend/src/services/handoutPdf.ts` 完全沒有對應測試檔案，但內含四個模組私有的純函式：`escapePdfText()`（轉義 PDF 字串中的反斜線與括號）、`sanitizePdfText()`（把 `
+- [x] `handoutPdf.ts` 補上純函式單元測試：`backend/src/services/handoutPdf.ts` 完全沒有對應測試檔案，但內含四個模組私有的純函式：`escapePdfText()`（轉義 PDF 字串中的反斜線與括號）、`sanitizePdfText()`（把 `
 ` 正規化為 `
 ` 並移除控制字元）、`wrapText()`（依最大字元數換行，優先在空白處截斷，支援多位元組字元計數）、`toUtf16BeHex()`（把文字轉成帶 BOM 的 UTF-16BE 十六進位字串，用於 PDF 內嵌 CJK 文字）。應將這四個函式改為具名匯出（沿用 `generateTitle.ts`/`synthesizeAudio.ts` 的既有做法，不改動邏輯），新增 `backend/test/handout-pdf.test.ts` 覆蓋各函式的正常輸入、特殊字元（括號、反斜線、控制字元）、超長文字換行與中英文混合內容的編碼正確性，不需要呼叫實際產生 PDF 位元組的 `buildHandoutPdf()`（其依賴 `sharp` 讀取真實圖片檔案，超出此項範圍）。
+
+  工作記錄（2026-06-19）：已將 `backend/src/services/handoutPdf.ts` 的 `escapePdfText()`、`sanitizePdfText()`、`wrapText()`、`toUtf16BeHex()` 改為具名匯出，僅供純函式測試引用，未改動 PDF 生成邏輯、版面參數、圖片正規化或文字繪製流程。新增 `backend/test/handout-pdf.test.ts`，覆蓋 PDF 文字反斜線/括號轉義、CRLF 正規化與控制字元替換、短字串不換行、空白優先換行、無空白長字串切分、中英文混合 code point 計數，以及 ASCII/CJK 字串轉帶 BOM 的 UTF-16BE hex。已執行 backend typecheck 與 `backend/test/handout-pdf.test.ts`，8 個測試全部通過。
 
 ---
 
