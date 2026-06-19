@@ -122,3 +122,69 @@ test('POST /add-pages-outline-chat rejects a non-owner request on a read-only sh
   assert.equal(resp.statusCode, 403);
   await app.close();
 });
+
+// --- GET /add-pages-from-prompt/status: read-permission gate ---
+// No job is ever actually started by these tests, so a request that passes the permission
+// check deterministically falls through to the existing ADD_PAGES_JOB_NOT_FOUND branch (a
+// different error than the permission check's 403/404), proving the gate itself works
+// without needing a real in-memory job fixture.
+
+function seedShareToken(pdfId: string, token: string, access: 'read_only' | 'editable' = 'read_only'): void {
+  const t = nowIso();
+  db.prepare(`DELETE FROM pdf_shares WHERE pdf_id = ? OR token = ?`).run(pdfId, token);
+  db.prepare(`INSERT INTO pdf_shares (pdf_id, token, access, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`).run(pdfId, token, access, t, t);
+}
+
+test('GET /add-pages-from-prompt/status rejects a non-owner request on a private presentation', async () => {
+  seedAddPagesPdf('addpages-status-priv-01', 'private');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'GET', url: '/api/pdfs/addpages-status-priv-01/add-pages-from-prompt/status', headers: OTHER_HEADERS_NO_BODY });
+  assert.equal(resp.statusCode, 403);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+  await app.close();
+});
+
+test('GET /add-pages-from-prompt/status rejects an unauthenticated request on a private presentation', async () => {
+  seedAddPagesPdf('addpages-status-anon-01', 'private');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'GET', url: '/api/pdfs/addpages-status-anon-01/add-pages-from-prompt/status' });
+  assert.equal(resp.statusCode, 403);
+  await app.close();
+});
+
+test('GET /add-pages-from-prompt/status returns 404 for a non-existent PDF', async () => {
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'GET', url: '/api/pdfs/addpages-status-missing/add-pages-from-prompt/status', headers: OWNER_HEADERS_NO_BODY });
+  assert.equal(resp.statusCode, 404);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'PDF_NOT_FOUND');
+  await app.close();
+});
+
+test('GET /add-pages-from-prompt/status lets the owner past the permission check', async () => {
+  seedAddPagesPdf('addpages-status-own-01', 'private');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'GET', url: '/api/pdfs/addpages-status-own-01/add-pages-from-prompt/status', headers: OWNER_HEADERS_NO_BODY });
+  assert.equal(resp.statusCode, 404);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'ADD_PAGES_JOB_NOT_FOUND');
+  await app.close();
+});
+
+test('GET /add-pages-from-prompt/status lets anyone on a public presentation past the permission check', async () => {
+  seedAddPagesPdf('addpages-status-pub-01', 'public');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'GET', url: '/api/pdfs/addpages-status-pub-01/add-pages-from-prompt/status', headers: OTHER_HEADERS_NO_BODY });
+  assert.equal(resp.statusCode, 404);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'ADD_PAGES_JOB_NOT_FOUND');
+  await app.close();
+});
+
+test('GET /add-pages-from-prompt/status lets a valid read-only share token without a session past the permission check', async () => {
+  seedAddPagesPdf('addpages-status-shr-01', 'private');
+  const token = 'addpages-status-share-token-01';
+  seedShareToken('addpages-status-shr-01', token, 'read_only');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'GET', url: `/api/pdfs/addpages-status-shr-01/add-pages-from-prompt/status?share=${token}` });
+  assert.equal(resp.statusCode, 404);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'ADD_PAGES_JOB_NOT_FOUND');
+  await app.close();
+});
