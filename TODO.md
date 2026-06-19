@@ -142,6 +142,14 @@
 
   工作記錄（2026-06-19）：已將 `backend/src/services/handoutPdf.ts` 的 `escapePdfText()`、`sanitizePdfText()`、`wrapText()`、`toUtf16BeHex()` 改為具名匯出，僅供純函式測試引用，未改動 PDF 生成邏輯、版面參數、圖片正規化或文字繪製流程。新增 `backend/test/handout-pdf.test.ts`，覆蓋 PDF 文字反斜線/括號轉義、CRLF 正規化與控制字元替換、短字串不換行、空白優先換行、無空白長字串切分、中英文混合 code point 計數，以及 ASCII/CJK 字串轉帶 BOM 的 UTF-16BE hex。已執行 backend typecheck 與 `backend/test/handout-pdf.test.ts`，8 個測試全部通過。
 
+- [ ] `figures.ts`/`drawings.ts`/`page-animation.ts` 的 GET 端點補上讀取權限檢查：`backend/src/routes/pdfs/figures.ts` 的 `GET /api/pdfs/:id/pages/:n/figures`（圖表清單）與 `GET /api/pdfs/:id/figures/:figureId/image`（圖表圖片串流）、`backend/src/routes/pdfs/drawings.ts` 的 `GET /api/pdfs/:id/pages/:n/drawing`（畫板資料）、`backend/src/routes/pdfs/page-animation.ts` 的 `GET /api/pdfs/:id/pages/:n/animation`、`GET .../animation/spec`、`GET .../animation/custom-script` 共六個讀取端點，都只檢查 PDF/頁面是否存在，完全沒有比照 `detail.ts` 的 `GET /api/pdfs/:id`（用 `hasShareAccess()` 或 `canReadPdf()` 判斷）做讀取權限檢查；這些檔案內也都只定義了 `canEditPdf()`（給寫入路由用），沒有 `canReadPdf()`/`getShareToken()`/`hasShareAccess()`。任何已登入（甚至看程式碼推斷可能未登入也可）的人只要知道 PDF id 與頁碼，就能看到別人私有簡報的圖表、畫板手寫內容與動畫設定。應在三個檔案各自補上與 `runs.ts`/`slow-artifacts.ts` 一致的本地 `canReadPdf()`/`getShareToken()`/`hasShareAccess()` helper，在這六個 GET 端點補上「分享 token 或 `canReadPdf()`」的讀取權限檢查，無權限回傳 `403 FORBIDDEN`，並新增測試覆蓋非擁有者對 private 簡報應得 403、擁有者與分享連結讀取應正常回應。
+
+- [ ] `quizzes.ts` 的 GET 端點補上讀取權限檢查（涉及學生資料外洩，優先處理）：`backend/src/routes/pdfs/quizzes.ts` 的 `GET /api/pdfs/:id/quizzes`（測驗題目與正確答案清單）與 `GET /api/pdfs/:id/quizzes/:quizId/attempts`（學生作答紀錄，含 session/client id、作答內容與分數）皆完全沒有讀取權限檢查，只檢查資源是否存在；此檔案同樣只定義了 `canEditPdf()`，沒有 `canReadPdf()`。任何知道 PDF id 的人都能看到別人簡報的測驗正確答案，以及該堂課所有學生的作答記錄與分數——後者涉及學生個資，風險高於一般內容外洩。應補上與 `detail.ts`/`runs.ts` 一致的讀取權限檢查（分享 token 或 `canReadPdf()`），無權限回傳 `403`，並新增測試覆蓋非擁有者對 private/唯讀分享簡報應得 403、擁有者讀取應正常回應。
+
+- [ ] `animationCustomScript.ts` 補上單元測試：`backend/src/services/animationCustomScript.ts` 完全沒有對應測試檔案，但內含兩個安全防護用的純函式：`findUnsafeScriptPattern(code)`（掃描 16 種不安全模式如 `fetch`/`eval`/`localStorage`/`document.cookie`/`window.parent` 等，找到第一個命中的標籤）與 `findCustomScriptContractIssue(code)`（驗證 LLM 產生的自訂動畫腳本是否定義 `window.renderAnimation` 並呼叫 `api.onFrame()`），兩者都是 LLM 產生的自訂 JS 動畫程式碼在儲存/執行前的最後一道防禦檢查。應新增 `backend/test/animation-custom-script.test.ts`，逐一驗證 16 種不安全模式（含其變形寫法，如 `window['parent']`、`document['cookie']`）皆能被偵測、合法安全的程式碼回傳 `null`、以及合約檢查對缺少 `renderAnimation`/`onFrame` 呼叫的程式碼能正確回報對應的錯誤訊息。
+
+- [ ] 系統設定頁 SLA override 輸入加上前端範圍驗證：`frontend/src/pages/SettingsPage.tsx` 的 `onSlaOverrideApply()`（約 338-351 行）目前只檢查輸入是否為合法數字（`Number.isFinite(seconds)`），沒有檢查是否落在後端 `SLA_TARGET_BOUNDS_MS`（1000~3600000 毫秒）範圍內；而這個範圍其實已經包含在 `getSlaSettings()` 回傳的 `slaSettings.bounds`（`min_ms`/`max_ms`）裡，前端已經拿到資料卻沒有使用，導致使用者輸入超出範圍的數值時要等後端回傳 400 才能看到錯誤，且訊息可能是技術性的 Zod 驗證文字。應在 `onSlaOverrideApply()` 用 `slaSettings?.bounds` 對換算後的毫秒數做範圍檢查，超出範圍時直接用既有 `settings.slaInvalidValue` 風格的訊息提示使用者，不送出請求。
+
 ---
 
 - 時間: 2026-06-18 06:05:00 +0800
@@ -474,3 +482,7 @@
 ---- 計數重設 ----
 - 時間: 2026-06-19 16:00:00 +0800
 - 說明: 依使用者指示，因自上次計數重設以來累計完成項目數（73 個 `[x]` − 重設時的 53 個 = 20 個）剛好達到 LOOP.md 第 4 條「完成 20 個項目後停止做新項目」的門檻；使用者選擇「重設計數後繼續」。計數規則維持不變：只計算本標記之後新完成的項目數，達 20 個時再次停止並徵詢使用者。此標記之前的所有歷史項目與工作記錄保留作為紀錄，不再計入新一輪的 20 項上限。另記錄一項過程澄清：先前誤判 BLOG.md 缺少多筆文件章節（openai-api-key 驗證、skills/thumbnails/handoutPdf 測試、圖片預覽對話框與播放頁分享/側欄 i18n、prompt token 上限調整），經完整檢查後確認章節皆存在，只是接續流程把新章節插入在檔案最上方而非附加在最後，純屬格式差異、非內容缺漏，不需補寫。
+
+- 時間: 2026-06-19 16:15:00 +0800
+- 分支: workspace-current
+- 內容: 依照 LOOP.md，在 TODO.md 已無未完成項目時重新進行唯讀分析，新增 4 個已驗證的新待辦項目（計數已於本批次前重設）。分析方向涵蓋：(1) 比對 `backend/src/services/` 與 `test/` 目錄找出完全沒有測試的檔案；(2) 系統性檢查所有路由檔案的 GET 端點是否都比照 `detail.ts`/`runs.ts`/`slow-artifacts.ts` 的慣例補上讀取權限檢查。第二個方向有重大發現：逐一檢查 `figures.ts`、`drawings.ts`、`page-animation.ts`、`quizzes.ts` 後確認這四個檔案的全部 GET 端點（圖表清單/圖片、畫板資料、動畫設定/spec/自訂腳本、測驗題目與學生作答記錄，共 8 個端點）都只定義了 `canEditPdf()` 給寫入路由用，完全沒有讀取權限檢查，是先前權限修復系列遺漏的一批；其中 `quizzes.ts` 的學生作答記錄端點涉及學生個資外洩，風險較高，已標記優先處理。其餘採用：`animationCustomScript.ts` 的 `findUnsafeScriptPattern()`/`findCustomScriptContractIssue()` 是安全防護用純函式但零測試覆蓋；`SettingsPage.tsx` 的 SLA override 輸入已從後端拿到 `bounds` 範圍卻沒有用來做前端驗證。排除的假線索：agent 最初回報 `logSanitizer.ts`/`textSentences.ts`/`timing.ts`/`pdfPageMarkers.ts` 完全無測試，但逐一用 `ls test/` 核對後發現這四個檔案其實都已有對應測試檔案（`log-sanitizer.test.ts`/`textSentences.test.ts`/`timing.test.ts`/`pdf-page-markers.test.ts`），是過時或誤判，已排除；`llmUsage.ts` 的 `MODEL_PRICE_PER_1M_TOKENS` 定價表雖然標註的日期確實已過時，但修正這個需要當前真實世界的官方定價資料，無法僅靠讀程式碼驗證或猜測填入（且目前預設模型 `gpt-4o-mini`/`gemini-2.0-flash` 都已有定價項目，不影響預設安裝的成本估算），不適合作為一般程式碼修復待辦事項，已排除。
