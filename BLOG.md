@@ -2518,3 +2518,22 @@ Gemini TTS 語音合成的回應結構是好幾層巢狀的（`candidates[0].con
 - `QuizBuilderPage.tsx` 新增 `handleDeleteQuiz()`：呼叫 `window.confirm()`（沿用 `HomePage.tsx` 刪除分類時的確認對話框慣例）取得使用者確認後呼叫 API，成功後從 `savedQuizzes` 移除該筆並視情況重置編輯表單；新增 `deletingQuizId` 狀態在請求進行中暫時停用該按鈕，避免重複點擊。
 - 新增中英文 `quiz.confirmDelete`（含 `{title}` 佔位符）、`quiz.deleteDone`、`quiz.deleteFailed`、`quiz.deleteQuizTitle` 翻譯鍵；按鈕文字沿用既有的 `quiz.delete` 鍵（原本用於編輯器內刪除單一題目，文案同樣是「刪除」/"Delete"，可直接複用）。
 - `backend/test/quizzes.test.ts` 新增測試覆蓋：非擁有者刪除得到 403 且資料未被刪除、擁有者刪除成功後 `quiz_sets` 與其 `quiz_attempts` 皆消失、刪除不存在的 quiz id 或 pdf id 不匹配時得到 404。
+
+## `SystemDataPage.tsx` 補齊 i18n
+
+### 功能目的
+
+`SystemDataPage.tsx` 是系統管理員專用的可觀測性儀表板（對應已加上 `isAdminAccount()` 權限檢查的 `/api/system/observability`），顯示全站簡報處理成功/失敗率、Pipeline 執行統計、LLM 用量與估算成本、Stage/Artifact 狀態分布等彙總資訊。這個頁面過去是 `frontend/src/pages/` 下唯一完全沒有走 `useI18n()` 的頁面，標題、按鈕、區塊標題與超過 15 個指標卡片的 label/hint 全是硬編碼中文，使用英文介面的管理員會在這個頁面突然看到整頁中文。
+
+### 使用方式
+
+此變更純粹是補齊翻譯，不影響任何資料邏輯或版面：
+
+1. 切換到英文介面後，這個頁面的標題、導覽連結、三個統計區塊標題與所有指標卡片文字皆會顯示英文。
+2. 依原始待辦範圍的決定，`formatInt`/`formatDuration`/`formatCost` 三個數字/時間格式化函式維持原樣（例如耗時的「秒」單位與成本未知時的「模型價格未知」仍為固定中文），Stage/Artifact 清單中的狀態值（如 `succeeded`/`failed`，後端回傳的原始狀態字串）也維持原樣顯示，這兩者刻意不在本次範圍內處理。
+
+### 技術細節
+
+- 新增 `useI18n()` 與本地 `formatMessage()` 佔位符替換 helper（沿用 `QuizBuilderPage.tsx`/`HomePage.tsx` 既有的 `{name}` 替換慣例），將原本的字串樣板（如 `` `${formatInt(metrics.pdfs.completed)} 份完成` ``）改為 `formatMessage('systemData.completedHint', { count: formatInt(metrics.pdfs.completed) })` 的形式。
+- 新增 32 個 `systemData.*` 翻譯鍵，涵蓋頁首標題/副標/按鈕/連結、資料產生時間、三個統計區塊（簡報處理狀態／Pipeline 執行狀態／LLM 使用量與估算成本）下所有指標 label 與 hint、Stage/Artifact 狀態分布標題與無資料提示；「返回首頁」連結直接複用既有的 `settings.backHome` 鍵（與 `SettingsPage.tsx` 共用同一份翻譯），不重複建立。
+- 新增 `frontend/src/i18n.test.ts` 的「SystemDataPage locale keys are complete」測試區塊，驗證所有新增的 32 個 key 在中英文字典中皆存在且非空字串。
