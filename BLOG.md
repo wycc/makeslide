@@ -1,5 +1,29 @@
 # MakeSlide 功能說明
 
+## 圖表／畫板／動畫設定補上讀取權限檢查
+
+### 功能目的
+
+簡報的圖表素材、手寫畫板與逐句動畫設定，過去都各自存放在獨立的路由檔案（`figures.ts`、`drawings.ts`、`page-animation.ts`）。這些檔案的寫入端點（儲存圖表選取、畫板、動畫 spec）都有比照 `detail.ts` 補上 `canEditPdf()` 編輯權限檢查，但對應的**讀取**端點（列出圖表、抓圖表圖片、讀畫板內容、讀動畫設定/spec）卻完全沒有檢查請求者是否有權限看這份簡報——只檢查 PDF 或頁面是否存在。這代表任何人只要知道私有簡報的 id 與頁碼，就能直接看到別人簡報裡的圖表、手寫標註與動畫安排，是一個讀取權限缺口。
+
+### 修復內容
+
+在 `figures.ts`、`drawings.ts`、`page-animation.ts` 三個檔案各自補上與 `runs.ts`/`slow-artifacts.ts`/`quizzes.ts` 一致的本地 `canReadPdf()`、`getShareToken()`、`hasShareAccess()` helper，並套用到五個讀取端點：
+
+- `GET /api/pdfs/:id/pages/:n/figures`（圖表清單）
+- `GET /api/pdfs/:id/figures/:figureId/image`（圖表圖片串流）
+- `GET /api/pdfs/:id/pages/:n/drawing`（畫板資料）
+- `GET /api/pdfs/:id/pages/:n/animation`（動畫設定）
+- `GET /api/pdfs/:id/pages/:n/animation/spec`（動畫 spec，給播放器即時讀取）
+
+判斷規則與既有的 `detail.ts`/`runs.ts` 相同：擁有者一律可讀；`public`/`public_editable` 簡報任何人可讀；私有簡報則需要帶有效的分享 token（`x-makeslide-share-token` header 或 `?share=` query）。不符合條件回傳 `403 FORBIDDEN`，PDF 不存在回傳 `404 PDF_NOT_FOUND`。`GET .../animation/custom-script` 經確認只是固定回傳「請改用 POST」的 405 診斷訊息、不讀取任何 PDF 專屬資料，刻意排除在此次修改範圍外。
+
+### 技術重點
+
+- 三個檔案的權限檢查順序固定為「PDF 是否存在 → 讀取權限 → 頁面/資源是否存在」，與既有寫入路由的 `canEditPdf()` 檢查順序一致，避免用 404/403 的差異洩漏額外資訊。
+- 新增/擴充 `backend/test/drawings.test.ts`、`backend/test/figure-assets.test.ts`、`backend/test/page-animation.test.ts`，覆蓋非擁有者對 private 簡報應得 403、未登入應得 403、擁有者/`public`/`public_editable`/分享 token 讀取應正常回應、不存在的 PDF id 應得 404。
+- 已執行 backend typecheck（通過）與完整 `npm --workspace backend test`（421 個測試，18 個失敗皆為既有環境性基準，無新增回歸）。
+
 ## 播放頁暫停播放效果
 
 ### 功能目的
