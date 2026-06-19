@@ -320,6 +320,30 @@ export function insertEffectAfterFirstStartingEffect(
 }
 
 /**
+ * Inserts a newly created effect immediately after the effect that is active at
+ * `currentTime`. If no effect covers the current playback time, falls back to
+ * appending at the end to preserve the editor's existing behaviour.
+ */
+export function insertEffectAfterPlaybackEffect(
+  effects: readonly SlideAnimationEffect[],
+  effect: SlideAnimationEffect,
+  currentTime: number,
+  resolveEffectStartSeconds: (effect: SlideAnimationEffect) => number = (item) => item.start,
+): SlideAnimationEffect[] {
+  if (!Number.isFinite(currentTime)) return [...effects, effect];
+  let insertIndex = -1;
+  for (let index = 0; index < effects.length; index += 1) {
+    const item = effects[index];
+    if (!item) continue;
+    const start = resolveEffectStartSeconds(item);
+    const end = start + item.duration + (item.exitDuration ?? 0);
+    if (currentTime >= start && currentTime <= end) insertIndex = index;
+  }
+  if (insertIndex === -1) return [...effects, effect];
+  return [...effects.slice(0, insertIndex + 1), effect, ...effects.slice(insertIndex + 1)];
+}
+
+/**
  * Builds the HTML document for a `custom-script` effect's sandboxed
  * `<iframe sandbox="allow-scripts">` (no `allow-same-origin`, so it has an
  * opaque origin and cannot reach the parent page, cookies or storage).
