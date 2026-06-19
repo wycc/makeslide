@@ -1,4 +1,6 @@
 
+- [x] 播放頁動畫逐字稿觸發時機防護：`PlayPage.tsx` 在換頁後會先把 audio duration 重設為 0，導致 `buildSentenceTimeline()` 暫時回傳空陣列；過去此時仍會呼叫 `resolveAnimationSpec()` 並建立 GSAP timeline，讓含 `startTrigger` 的 AI 動畫效果退回 JSON 字面 `start=0`，造成整頁動畫與 `step-list` 深色容器在 t=0 誤播。已在 `PlayPage.tsx` 解析 `currentAnimationSpec` 前加入 `hasTranscriptStartTrigger()` / `shouldWaitForTranscriptTimeline` 防護：當 `sentenceTimeline` 尚空且動畫效果依賴逐字稿 `startTrigger` 時，暫時傳入 `null`，待音檔 metadata 載入、duration 更新並重算逐字稿時間軸後才建立/播放動畫 timeline；未使用 `startTrigger` 的動畫不受影響。驗證：`npm run typecheck --workspace frontend` 通過。
+
 - [x] `PlayPageDialogs.tsx` 分享複製結果訊息補齊 i18n：播放頁分享對話框的複製成功/失敗 callback 仍在 `PlayPageDialogs.tsx` 寫死「已複製分享連結」與「瀏覽器不允許自動複製，請手動複製。」；已改用 `useI18n()` 與 `play.shareDialog.copySuccessMessage` / `play.shareDialog.copyErrorMessage` 翻譯鍵，並補齊中英文 locale 與 ShareDialog i18n key 完整性測試。保留 `ShareDialog.tsx` 的 Clipboard fallback、複製成功/失敗 callback、訊息顯示與錯誤清除行為不變。驗證：`npm run typecheck`（frontend）與 `node --test --import tsx ./src/i18n.test.ts` 通過。
 
 - [x] `ImagePreviewDialog.tsx` 補齊 i18n：圖片生成完成後的預覽對話框仍有使用者可見中文硬編碼（標題「圖片產生結果預覽」、圖片 alt「生成結果預覽」、按鈕「關閉預覽」、「套用取代原圖」），且尚未使用 `useI18n()`；已改用 `play.imagePreviewDialog.*` 翻譯鍵並補中英文 locale 與 i18n key 完整性測試，保留圖片預覽、關閉與套用取代原圖既有行為不變。驗證：`npm run typecheck`（frontend）與 `node --test --import tsx ./src/i18n.test.ts` 通過。
