@@ -448,3 +448,48 @@ test('PromptModal and HomePage loose-end locale keys are complete', () => {
     assert.notEqual(en[key].trim(), '');
   }
 });
+
+test('SystemDataPage locale keys are complete', () => {
+  const requiredKeys = [
+    'systemData.title',
+    'systemData.subtitle',
+    'systemData.refresh',
+    'systemData.aiSettingsLink',
+    'systemData.loading',
+    'systemData.loadFailed',
+    'systemData.generatedAt',
+    'systemData.pdfSectionTitle',
+    'systemData.totalPdfs',
+    'systemData.successRate',
+    'systemData.completedHint',
+    'systemData.failureRate',
+    'systemData.failedHint',
+    'systemData.processing',
+    'systemData.pipelineSectionTitle',
+    'systemData.totalRuns',
+    'systemData.runSuccessRate',
+    'systemData.runSucceededHint',
+    'systemData.runFailureRate',
+    'systemData.runFailedHint',
+    'systemData.averageDuration',
+    'systemData.runningHint',
+    'systemData.llmSectionTitle',
+    'systemData.llmResponses',
+    'systemData.totalTokens',
+    'systemData.tokensHint',
+    'systemData.averageLatency',
+    'systemData.estimatedCost',
+    'systemData.costHint',
+    'systemData.stageDistribution',
+    'systemData.noStageData',
+    'systemData.artifactDistribution',
+    'systemData.noArtifactData',
+  ] as const;
+
+  for (const key of requiredKeys) {
+    assert.equal(typeof zhTW[key], 'string');
+    assert.equal(typeof en[key], 'string');
+    assert.notEqual(zhTW[key].trim(), '');
+    assert.notEqual(en[key].trim(), '');
+  }
+});
