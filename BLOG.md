@@ -1,5 +1,28 @@
 # MakeSlide 功能說明
 
+## 縮圖服務單元測試補強
+
+### 功能目的
+
+播放頁、首頁卡片與封面預覽都依賴後端縮圖服務把頁面圖與封面圖轉成較小的 JPEG。這段邏輯雖然不呼叫網路或子行程，但同時負責尺寸上限、JPEG 輸出、縮圖快取命中時跳過重產，以及來源圖遺失時安全回傳 `null`。若未來調整儲存路徑或縮圖參數時不小心破壞 lazy 產生行為，可能造成頁面載入變慢、既有縮圖被覆寫，或缺圖情境變成未預期例外。
+
+新版補上 `thumbnails.ts` 的服務層單元測試，讓頁面縮圖與封面縮圖的主要契約都有回歸保障。這次只新增測試，並確認目標函式與尺寸常數已具名匯出；不改變既有縮圖輸出品質、尺寸設定或快取命中時直接回傳的行為。
+
+### 使用方式與影響
+
+1. 一般使用者不需要改變操作方式：首頁卡片、播放頁縮圖與封面縮圖仍會在需要時 lazy 產生。
+2. 若縮圖檔案已存在，`ensurePageThumbnail()` / `ensureCoverThumbnail()` 仍會直接回傳既有路徑，不重新讀取來源圖或覆寫縮圖。
+3. 若來源圖片不存在，ensure 系列函式仍會回傳 `null`，讓呼叫端能使用既有 fallback，而不是讓請求因例外中斷。
+4. 開發者可執行 `npm run typecheck` 與 `node --test --import tsx ./test/thumbnails.test.ts` 驗證縮圖服務契約。
+
+### 技術細節
+
+- 新增 `backend/test/thumbnails.test.ts`，使用 Node 內建 test runner 與 `sharp` 在測試暫存目錄建立小型 PNG/JPEG 來源圖，不依賴外部圖片素材。
+- `generatePageThumbnail()` 測試會產生大於上限的 PNG 來源圖，確認輸出檔存在，且寬高不超過 `PAGE_THUMBNAIL_WIDTH_PX` / `PAGE_THUMBNAIL_HEIGHT_PX`。
+- `generateCoverThumbnail()` 測試會產生 JPEG 來源圖，確認輸出檔存在，且寬度不超過 `COVER_THUMBNAIL_WIDTH_PX`。
+- ensure 系列測試先在目標縮圖路徑寫入 sentinel 文字檔，再呼叫 `ensurePageThumbnail()` / `ensureCoverThumbnail()`；透過回傳路徑、檔案內容與 `mtimeMs` 確認快取命中時沒有重產或覆寫。
+- 缺來源測試覆蓋頁面與封面兩種路徑，確認來源圖不存在時回傳 `null` 且不建立縮圖檔。
+
 ## 前端提示詞生成上限提高到 128K
 
 ### 功能目的
