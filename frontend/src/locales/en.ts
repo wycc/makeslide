@@ -119,6 +119,7 @@ export const en = {
   'home.deleteCategoryFailed': 'Failed to delete category',
   'home.promptSubmitted': 'Prompt submitted, generation started',
   'home.defaultStyleStarted': 'Default style selected, generation started',
+  'home.alreadyProcessing': 'This presentation is already processing or finished; no need to submit again',
   'home.logoutSuccess': 'Signed out of Google account',
   'home.logoutFailed': 'Sign out failed',
   'home.retryQueued': 'Re-queued for processing',

@@ -9,6 +9,7 @@ import {
   fetchPdfs,
   getAuthStatus,
   importPdfZip,
+  isAlreadyProcessingConflict,
   logoutAuth,
   retryFailedPdf,
   startProcessing,
@@ -540,9 +541,24 @@ export default function HomePage() {
       },
     ) => {
       if (!promptTarget) return;
-      await startProcessing(promptTarget.id, prompt, requireScriptConfirmation, opts);
+      try {
+        await startProcessing(promptTarget.id, prompt, requireScriptConfirmation, opts);
+        showToast(prompt ? t('home.promptSubmitted') : t('home.defaultStyleStarted'));
+      } catch (err) {
+        // A slow/dropped first request can leave the client retrying after the backend
+        // already moved the PDF past 'uploaded' (e.g. into 'processing' or 'ready'); the
+        // resubmit then hits this 409 even though the original request already succeeded.
+        // Treat it as a benign no-op instead of a failure so the user isn't stuck retrying
+        // a prompt that was already applied.
+        if (isAlreadyProcessingConflict(err)) {
+          setPromptTarget(null);
+          showToast(t('home.alreadyProcessing'));
+          void load({ silent: true });
+          return;
+        }
+        throw err;
+      }
       setPromptTarget(null);
-      showToast(prompt ? t('home.promptSubmitted') : t('home.defaultStyleStarted'));
       void load({ silent: true });
     },
     [promptTarget, showToast, load],

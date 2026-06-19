@@ -553,3 +553,7 @@
 - 分支: feature/image-migration-logger
 - 內容: 完成「後端舊 PNG 轉 JPG 啟動遷移完成訊息改用 logger」。`backend/src/services/imageMigration.ts` 新增既有 `logger` 匯入，將啟動遷移成功轉換後的直接 `console.info()` 改為 `logger.info({ convertedCover, convertedPages }, '[image-migration] converted legacy PNG images to JPG')`，並移除 no-console 註解。逐檔錯誤忽略、DB `image_path` 更新與啟動遷移流程維持不變。已執行 backend typecheck 通過；grep 確認 `imageMigration.ts` 不再有直接 `console.info`。
 
+
+[x] 在 PDF 匯入按下開始生成時，時有時會出現 PDF 己經被加進的錯誤。此時其實簡報己經產生了，但不知為什麼還是得到這個錯誤。
+
+工作記錄（2026-06-19）：根因是 `backend/src/routes/pdfs/upload.ts` 的 `POST /api/pdfs/:id/start`：當 PDF 狀態已不是 `awaiting_prompt`/`uploaded`/`failed`（也就是已經開始處理或已完成）時會回傳 `409 INVALID_STATE`，訊息為「PDF {id} 已經在處理或已完成 (status=...)，無法重新提交提示詞」。當第一次提交因網路不穩、逾時等原因讓前端沒收到成功回應（但伺服器其實已經受理並開始處理），使用者或瀏覽器重試送出同一份提示詞時，就會打到這個檢查，得到「已經被加進/已存在」這類令人困惑的錯誤——而簡報其實已經在處理或已完成。已在 `frontend/src/lib/api/common.ts` 新增 `isAlreadyProcessingConflict(err)`（與既有 `isCreditExhaustedError()` 同風格），辨識「409 + INVALID_STATE」這個特定衝突；`frontend/src/pages/HomePage.tsx` 的 `handlePromptSubmit()` 改為 `try/catch` 呼叫 `startProcessing()`，遇到此衝突時視為良性的無操作（關閉提示詞視窗、重新整理清單、顯示新的 `home.alreadyProcessing` 提示文字），不再讓使用者卡在一個其實已經成功過的提交上。新增中英文 `home.alreadyProcessing` 翻譯鍵；新增 `frontend/src/lib/api/common.test.ts` 4 個測試覆蓋 `isAlreadyProcessingConflict()` 對狀態碼/錯誤碼/非 ApiError 輸入的判斷。已執行 frontend typecheck（通過）與完整前端測試（194 個全數通過，含新增 4 個測試與既有 i18n key 完整性測試）。

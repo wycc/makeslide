@@ -64,6 +64,17 @@ export function isCreditExhaustedError(err: unknown): err is ApiError {
   return err instanceof ApiError && CREDIT_EXHAUSTED_ERROR_CODES.has(err.code);
 }
 
+/**
+ * True for the 409 `INVALID_STATE` conflict `POST /api/pdfs/:id/start` returns once a PDF
+ * has moved past `awaiting_prompt`/`uploaded`/`failed`. A dropped/slow first request that the
+ * client retries can hit this even though the original request already succeeded, so callers
+ * should treat it as a benign no-op (the PDF is already processing or done) rather than a
+ * failure that should be shown to the user as an error to retry.
+ */
+export function isAlreadyProcessingConflict(err: unknown): err is ApiError {
+  return err instanceof ApiError && err.status === 409 && err.code === 'INVALID_STATE';
+}
+
 export function notifyCreditExhausted(err: ApiError): void {
   if (typeof window === 'undefined' || !isCreditExhaustedError(err)) return;
   const human = mapApiErrorToHumanMessage(err);
