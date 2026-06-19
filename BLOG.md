@@ -1,5 +1,25 @@
 # MakeSlide 功能說明
 
+## 修正提交提示詞時偶發的「已經被加進」錯誤
+
+### 功能目的
+
+使用者回報：在 PDF 匯入後按下「開始生成」（提交風格提示詞）時，偶爾會跳出錯誤，但實際上簡報已經開始處理或已經完成了。
+
+### 根因
+
+`POST /api/pdfs/:id/start` 在 PDF 狀態已經不是 `awaiting_prompt`/`uploaded`/`failed`（代表已經在處理中或已完成）時，會回傳 `409 INVALID_STATE`，訊息是「PDF {id} 已經在處理或已完成 (status=...)，無法重新提交提示詞」。當第一次提交因為網路不穩、逾時等原因，前端沒有收到成功回應（但伺服器其實已經受理並開始處理），使用者或瀏覽器重試送出同一份提示詞時，就會打到這個檢查，跳出這個令人困惑的錯誤——而簡報其實已經在處理或已完成，不需要也不應該被當作失敗處理。
+
+### 修復內容
+
+在 `frontend/src/lib/api/common.ts` 新增 `isAlreadyProcessingConflict(err)`（與既有的 `isCreditExhaustedError()` 同風格），辨識「409 + `INVALID_STATE`」這個特定衝突。`frontend/src/pages/HomePage.tsx` 的 `handlePromptSubmit()` 改為對 `startProcessing()` 包一層 `try/catch`：遇到此衝突時視為良性的無操作——關閉提示詞視窗、重新整理列表、顯示新的「此簡報已經在處理或已完成，不需要再次提交」提示，而不是讓使用者卡在一個其實已經成功過的提交上、反覆重試。
+
+### 技術重點
+
+- 新增中英文 `home.alreadyProcessing` 翻譯鍵。
+- 新增 `frontend/src/lib/api/common.test.ts`，覆蓋 `isAlreadyProcessingConflict()` 對「正確的 409+INVALID_STATE」「同錯誤碼但狀態碼不同」「同狀態碼但錯誤碼不同」「非 `ApiError` 輸入」四種情境的判斷。
+- 已執行 frontend typecheck（通過）與完整前端測試（194 個全數通過）。
+
 ## 舊 PNG 轉 JPG 啟動遷移訊息改用 logger
 
 ### 功能目的
