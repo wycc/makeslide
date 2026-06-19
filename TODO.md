@@ -523,3 +523,9 @@
 - 分支: feature/playpage-gated-debug-logs
 - 內容: 完成「播放頁同步與 TTS 偵錯 console 輸出改為 gated debug helper」。`frontend/src/pages/PlayPage.tsx` 中同步輪詢與同步套用診斷（`[sync][master->state] push`、`[sync][poll] start/state/stop`、`[sync][follower] apply-remote`）已改用 `debugLog()`；TTS 重生與 audio element 可恢復診斷（`[tts][regenerate-audio] api success/verify audio response/verification failed/failed`、`[tts][audio-element] auto retry load/load failed`）已改用 `debugLog()`/`debugWarn()`，只會在 `localStorage.makeslide.debug='1'` 時輸出。原本的 TTS 驗證失敗、重生失敗與音訊載入失敗皆已有 UI 錯誤提示或自動重試流程，因此改為 gated warn；原生全螢幕進出失敗也屬瀏覽器 API 可恢復診斷，改為 gated warn。未保留任何無條件 `console.error`，播放、同步、TTS 重生與使用者可見錯誤提示行為不變。已執行 `npm run typecheck` 通過；`grep -nE "console\.(info|warn|error)|\[(sync|tts)\]" frontend/src/pages/PlayPage.tsx` 確認同步/TTS 訊息皆走 `debugLog()`/`debugWarn()`，且無直接 `console.info/warn/error`。
 
+- [ ] 重生任務狀態恢復失敗的 console.warn 改為 gated debug helper：`frontend/src/pages/play/useRegeneration.ts` 在頁面載入時呼叫 `fetchRegenerateStatus(pdfId)` 恢復批次重生任務，404 會忽略，但其他錯誤目前直接 `console.warn('Failed to fetch regenerate status on load', err)`。這個錯誤通常是載入時的背景狀態恢復失敗，UI 後續仍可正常操作重生流程，不應在一般使用者 console 中無條件輸出；應改用既有 `frontend/src/lib/debugLog.ts` 的 `debugWarn()`，保留 404 忽略與後續行為不變，並移除 `eslint-disable-next-line no-console`。
+
+- 時間: 2026-06-19 22:22:00 +0800
+- 分支: master
+- 內容: 依照 LOOP.md，在 TODO.md 已無未完成項目時重新掃描直接 `console.*` 使用情況。排除 `debugLog.ts` helper 本身、後端 script 與啟動環境錯誤後，發現 `frontend/src/pages/play/useRegeneration.ts` 載入頁面時恢復重生任務狀態的背景請求失敗會直接 `console.warn`。此情境已明確把 404 視為可忽略，其他錯誤也只是背景恢復失敗，使用者仍可手動操作重生，因此應和播放頁同步/TTS 診斷一致改為 gated debug warning。新增 1 個小型待辦，範圍限定為改用 `debugWarn()` 並保留既有行為。
+
