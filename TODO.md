@@ -533,3 +533,9 @@
 - 分支: feature/gated-regeneration-status-debug-warn
 - 內容: 完成「重生任務狀態恢復失敗的 console.warn 改為 gated debug helper」。`frontend/src/pages/play/useRegeneration.ts` 匯入 `debugWarn()`，並將頁面載入時恢復重生任務狀態的非 404 背景錯誤由直接 `console.warn` 改為 gated debug warning；404 仍維持忽略，背景恢復失敗也不影響後續手動重生操作。同步移除該處 `eslint-disable-next-line no-console`。已執行 frontend typecheck 通過；grep 確認 `useRegeneration.ts` 不再包含直接 `console.warn` 或該處 no-console disable。
 
+- [ ] 投影片 GSAP 動畫 timeline 建立失敗的 console.error 改為 gated debug helper：`frontend/src/components/slide/useGsapSlideTimeline.ts` 在 `buildGsapTimeline(stage, spec)` 失敗時會直接 `console.error('[slide-animation] failed to build timeline, falling back to static image', err)`，然後清理 timeline、設定 `animationFailed=true` 並呼叫 `onErrorRef.current?.()` fallback 成靜態圖片。這類錯誤已有 UI fallback 與上層錯誤處理，不應在一般使用者 console 中無條件輸出；應改用既有 `frontend/src/lib/debugLog.ts` 的 `debugWarn()` 或等價 gated helper，保留 fallback、清理、`onError` 行為不變，並移除 `eslint-disable-next-line no-console`。
+
+- 時間: 2026-06-19 22:27:00 +0800
+- 分支: master
+- 內容: 依照 LOOP.md，在 TODO.md 已無未完成項目時繼續檢查剩餘直接 `console.*`。排除 debug helper 本身、後端 script、啟動環境錯誤與圖片遷移一次性訊息後，讀取 `frontend/src/components/slide/useGsapSlideTimeline.ts` 確認其在 GSAP timeline 建立失敗時會無條件 `console.error`，但同一段程式已經會 fallback 為靜態圖片並呼叫 `onError`，屬於可恢復的動畫渲染診斷。為維持一般使用者 console 乾淨並保留開發除錯能力，新增 1 個小型待辦，範圍限定為改用 gated debug warning，保留既有 fallback 與錯誤回報行為。
+
