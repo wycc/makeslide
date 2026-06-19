@@ -464,3 +464,7 @@
 - 時間: 2026-06-19 15:25:00 +0800
 - 分支: feature/figure-ref-resilient-read-20260619
 - 內容: 完成圖形參考檔案讀取對缺檔的容錯處理。在 `backend/src/services/pdfFigures.ts` 新增共用函式 `loadFigureReferenceFiles(pdfId, figures)`：用 `Promise.all()` 並行讀取每個圖表的圖片檔案並包裝成 OpenAI 可用的 `File`，單一圖表讀取失敗（檔案遺失、權限問題等）時改為 `logger.warn` 記錄並跳過該圖表，而不是讓整批拋出例外；回傳值同時包含過濾後的 `figures`（成功載入的子集）與對應的 `files`，確保後續 `buildFigureReferenceNotes()` 產生的圖說文字一律只描述真正附加成功的圖表，不會出現「文字提到圖表但圖片其實沒附上」的不一致。`backend/src/worker/steps/renderTextPagesWithLlm.ts` 與 `backend/src/routes/pdfs/page-operations.ts`（inpaint-image 路由）兩處原本完全相同的 `Promise.all()` 讀取邏輯都改用這個共用 helper，並調整呼叫順序使 `figureNotes` 在資源實際載入完成後才產生。`backend/test/pdf-figures.test.ts` 新增 3 個測試：部分圖表檔案缺失時應跳過該圖表而不拋出例外、空輸入時回傳空結果、所有檔案都存在時應全數成功載入。已執行 typecheck（前後端皆通過）、針對性重跑 `figure-reference-image-generation.test.ts`/`render-text-pages-figure-injection.test.ts`（5 個既有整合測試全數通過，確認重構未破壞既有行為）與完整 `npm test`（384 個測試，反覆執行確認 18 個失敗皆為既有環境性基準，無新增回歸）。
+
+- 時間: 2026-06-19 11:30:00 +0800
+- 分支: feature/play-sidebar-poll-qa-i18n-20260619
+- 內容: 完成 `PlayPageSidebar.tsx` 投票控制區與本頁 QA 面板 i18n 補齊。將 Realtime Poll 狀態文字、設定/開始/結束/顯示結果/隱藏結果按鈕、投票問題與選項 placeholder、建立投票按鈕、空狀態、票數、同步顯示題目、清除結果與刪除題目等文案改用 `play.sidebar.poll.*`；將本頁問答標題、放大/還原、清除訊息、空對話、角色 label、圖片預覽 title/alt、參考圖、選區狀態、textarea placeholder、選取區域、修改圖片、修改逐字稿與詢問按鈕改用 `play.sidebar.qa.*`。新增 45 個中英文翻譯鍵與 `PlayPageSidebar poll and QA locale keys are complete` 測試，確認兩種語言鍵皆存在且非空；用 grep 確認目標檔案剩餘中文僅為程式註解。保留投票開始/結束、同步全螢幕顯示、投票提交、QA 對話、貼上參考圖、選區、圖片修改與逐字稿修改行為不變。已執行 frontend `npm run typecheck` 與 `node --test --import tsx ./src/i18n.test.ts`，皆通過。
