@@ -3,6 +3,7 @@ import path from 'node:path';
 import sharp from 'sharp';
 import { db } from '../db';
 import { config } from '../config';
+import { logger } from '../logger';
 
 async function convertPngToJpgIfNeeded(pngPath: string, jpgPath: string): Promise<boolean> {
   if (!fs.existsSync(pngPath) || fs.existsSync(jpgPath)) return false;
@@ -53,8 +54,6 @@ export async function migrateLegacyPngToJpgOnStartup(): Promise<void> {
   }
 
   if (convertedCover > 0 || convertedPages > 0) {
-    // eslint-disable-next-line no-console
-    console.info(`[image-migration] converted covers=${convertedCover}, pages=${convertedPages}`);
+    logger.info({ convertedCover, convertedPages }, '[image-migration] converted legacy PNG images to JPG');
   }
 }
-
