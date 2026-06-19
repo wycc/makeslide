@@ -2570,3 +2570,19 @@ Gemini TTS 語音合成的回應結構是好幾層巢狀的（`candidates[0].con
   - `sanitizeAccountId()`：`null`/`undefined`/空字串/純空白皆回退至 `DEFAULT_ACCOUNT_ID`；已是檔名安全字串時原樣保留；前後空白會被 trim；`@`/`/`/`\`/空格等特殊符號會被替換成底線；開頭連續點號會被移除（避免類似隱藏檔或路徑跳脫的命名）；整串只有點號時回退至 `DEFAULT_ACCOUNT_ID`。
   - `accountIdFromOwnerSub()`：驗證其行為與 `sanitizeAccountId()` 一致（直接委派）。
   - `runWithAccountId()`/`currentAccountId()`：情境外回傳 `DEFAULT_ACCOUNT_ID`；情境內回傳消毒後的帳號代碼；情境結束後正確還原為 `DEFAULT_ACCOUNT_ID`；巢狀呼叫時內層結束後外層情境正確還原；非同步函式內 `await` 之後情境依然正確傳遞（驗證 `AsyncLocalStorage` 跨微任務邊界的傳遞行為，這正是多個並行請求能各自拿到正確帳號設定的關鍵機制）；最後用 `Promise.all` 模擬兩個並行請求各自帶不同延遲呼叫 `runWithAccountId()`，驗證全程互不污染彼此的帳號情境。
+
+## 前端 `ttsVoices.ts` 補上單元測試
+
+### 功能目的
+
+`frontend/src/lib/ttsVoices.ts` 維護 OpenAI 與 Gemini 兩套 TTS 聲音清單，以及把聲音名稱標註成「voice（男）」/「voice（女）」的 `geminiVoiceLabel()`/`openaiVoiceLabel()`，用於語音設定選單讓使用者更容易挑選對比聲線。這個檔案過去完全沒有測試，而檔案內的註解明確提到 `GEMINI_TTS_VOICES` 需要與後端 `services/gemini.ts` 的 `GEMINI_VOICES` 保持同步——這類「兩份清單需要手動同步」的設計特別容易在日後新增/移除聲音時出現遺漏（例如清單裡新增了一個聲音，卻忘記同時更新性別對照表），這次補上測試除了覆蓋標籤函式本身，也加入資料完整性檢查防止這類遺漏。
+
+### 使用方式
+
+此變更純粹是補上測試，不影響任何程式邏輯或對外行為。
+
+### 技術細節
+
+- 新增 `frontend/src/lib/ttsVoices.test.ts`，共 10 個測試：
+  - `geminiVoiceLabel()`/`openaiVoiceLabel()`：各覆蓋已知男聲標註「（男）」、已知女聲標註「（女）」、找不到對照表項目時原樣回傳聲音名稱三種情境。
+  - 資料完整性（雙向比對）：驗證 `GEMINI_TTS_VOICES`/`OPENAI_TTS_VOICES` 陣列中每個聲音都能在對應的 `GEMINI_TTS_VOICE_GENDER`/`OPENAI_TTS_VOICE_GENDER` 對照表中找到 M/F 項目；同時反向驗證對照表裡沒有清單之外的多餘項目。這兩個方向的檢查合在一起，能在日後修改聲音清單卻忘記同步更新對照表時被測試立即攔截，而不是等到使用者在介面上看到沒有性別標註（或標註了一個已經移除的聲音）才發現。
