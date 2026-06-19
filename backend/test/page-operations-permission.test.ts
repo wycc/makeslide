@@ -214,6 +214,67 @@ test('GET /pages/:n/chat-history allows a valid read-only share token without a 
   await app.close();
 });
 
+// --- GET /pages/:n/image-candidates/:candidateId: read-permission gate ---
+// The candidate file is never actually created by these tests, so a request that passes
+// the permission check deterministically falls through to the existing PAGE_NOT_FOUND
+// branch (a different error than the permission check's 403/404), proving the gate itself
+// works without needing a real generated candidate image fixture.
+const CANDIDATE_ID = 'cand01';
+
+test('GET /pages/:n/image-candidates/:candidateId rejects a non-owner request on a private presentation', async () => {
+  seedPageOpsPdf('pageops-imgcand-priv-01', 'private');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'GET', url: `/api/pdfs/pageops-imgcand-priv-01/pages/1/image-candidates/${CANDIDATE_ID}`, headers: OTHER_HEADERS });
+  assert.equal(resp.statusCode, 403);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+  await app.close();
+});
+
+test('GET /pages/:n/image-candidates/:candidateId rejects an unauthenticated request on a private presentation', async () => {
+  seedPageOpsPdf('pageops-imgcand-anon-01', 'private');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'GET', url: `/api/pdfs/pageops-imgcand-anon-01/pages/1/image-candidates/${CANDIDATE_ID}` });
+  assert.equal(resp.statusCode, 403);
+  await app.close();
+});
+
+test('GET /pages/:n/image-candidates/:candidateId returns 404 for a non-existent PDF', async () => {
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'GET', url: `/api/pdfs/pageops-imgcand-missing/pages/1/image-candidates/${CANDIDATE_ID}`, headers: OWNER_HEADERS });
+  assert.equal(resp.statusCode, 404);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'PDF_NOT_FOUND');
+  await app.close();
+});
+
+test('GET /pages/:n/image-candidates/:candidateId lets the owner past the permission check', async () => {
+  seedPageOpsPdf('pageops-imgcand-own-01', 'private');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'GET', url: `/api/pdfs/pageops-imgcand-own-01/pages/1/image-candidates/${CANDIDATE_ID}`, headers: OWNER_HEADERS });
+  assert.equal(resp.statusCode, 404);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'PAGE_NOT_FOUND');
+  await app.close();
+});
+
+test('GET /pages/:n/image-candidates/:candidateId lets anyone on a public presentation past the permission check', async () => {
+  seedPageOpsPdf('pageops-imgcand-pub-01', 'public');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'GET', url: `/api/pdfs/pageops-imgcand-pub-01/pages/1/image-candidates/${CANDIDATE_ID}`, headers: OTHER_HEADERS });
+  assert.equal(resp.statusCode, 404);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'PAGE_NOT_FOUND');
+  await app.close();
+});
+
+test('GET /pages/:n/image-candidates/:candidateId lets a valid read-only share token without a session past the permission check', async () => {
+  seedPageOpsPdf('pageops-imgcand-shr-01', 'private');
+  const token = 'pageops-imgcand-share-token-01';
+  seedShareToken('pageops-imgcand-shr-01', token, 'read_only');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'GET', url: `/api/pdfs/pageops-imgcand-shr-01/pages/1/image-candidates/${CANDIDATE_ID}?share=${token}` });
+  assert.equal(resp.statusCode, 404);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'PAGE_NOT_FOUND');
+  await app.close();
+});
+
 test('POST /pages/:n/chat rejects a non-owner request on a read-only shared presentation', async () => {
   seedPageOpsPdf('pageops-chat-01', 'public');
   await expectForbidden('POST', '/api/pdfs/pageops-chat-01/pages/1/chat', OTHER_HEADERS, { question: 'what is this slide about?' });
