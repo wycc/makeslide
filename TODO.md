@@ -577,5 +577,11 @@
 - [ ] `add-pages.ts` 的 `GET .../add-pages-from-prompt/status` 補上讀取權限檢查：`backend/src/routes/pdfs/add-pages.ts` 的 `GET /api/pdfs/:id/add-pages-from-prompt/status` 只用記憶體中的 job map 查詢，完全沒有檢查 PDF 讀取權限；回應的 `AddPagesJobState.pageResults[].scriptPreview` 含有新增頁面生成出來的逐字稿預覽文字，屬於私有內容洩漏。應補上讀取權限檢查，找不到 job 或無權限時的錯誤代碼與既有的 `ADD_PAGES_JOB_NOT_FOUND`/`403` 慣例保持一致。
 
 
-[ ] 逐字稿中不要大段使用 slowly 這樣效果不好。slowly 應該只在強調幾個單字的重要性時使用。
+[x] 逐字稿中不要大段使用 slowly 這樣效果不好。slowly 應該只在強調幾個單字的重要性時使用。
+
+工作記錄（2026-06-20）：根因確認在 `backend/src/worker/steps/synthesizeAudio.ts` 的 `splitByToneMarkers()`：`[slowly]` 等語氣標籤會套用到「下一個標籤出現之前的所有文字」，所以只要 LLM 把 `[slowly]` 放在一段話開頭、之後很久才出現下一個標籤，整段甚至整頁逐字稿都會被拖慢朗讀，聽起來不自然。修法是在 prompt 層補上明確規則，而非改動程式邏輯（既有的標籤套用機制本身是合理設計，問題在於 LLM 沒被告知要主動收尾）。在 `backend/prompts/generate-script-gemini.md`、`generate-script-gemini-solo.md`、`rewrite-script-gemini.md`、`rewrite-script-gemini-solo.md` 四份提示詞檔案（涵蓋單人/雙人、初次生成/逐字稿改寫）的「語氣標籤規則」區塊，在既有的「頻率限制」之後新增一條「`[slowly]` 使用範圍」規則，明確告知標籤會套用到下一個標籤前的所有文字，因此只能用在少數幾個關鍵字詞前後並盡快用下一個標籤收尾，不可涵蓋一整段或大量句子。純文字提示詞調整，未變更任何程式邏輯或 schema，已執行 backend typecheck 確認無影響。分支：`fix/script-slowly-tag-overuse-20260620`。
 [ ] 全螢幕的動畫編輯器應該和圖片/字幕/編輯一樣的方式顯示。把螢幕分成左右二邊顯示。新增效果按鍵改成在目前位置新增效果，並確認會新增在目前位置。另外應該把效果自動捲動目前使用的效果。
+[ ] 文字說明動畫顯示的時間要和逐字稿配合，目前多半都太短了。
+[ ] 有些頁的紅框位置不準，在全螢幕打開動畫編輯時，讓我們可以直接移動全螢幕上的紅框，而不是用縮圖上的。
+[ ] 全螢幕的動畫編輯器加上一個新增暫停播放提示的按鍵，方便我們新增暫停效果。
+
