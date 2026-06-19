@@ -585,7 +585,9 @@
 工作記錄（2026-06-20）：原本全螢幕動畫編輯器是用獨立按鈕切換的浮動 `<aside>` 覆蓋面板（`animationEditorOpen` state），跟圖片/字幕/編輯版面用 `fullscreenLayout` 左右分割顯示的方式不一致。已在 `PlayPageContext.tsx`/`PlayPage.tsx` 把 `FullscreenLayout` 型別新增 `'animation'`，`PlayPageFullscreen.tsx` 將動畫編輯面板改為這個新版面模式：左半邊顯示投影片（與 split/edit 共用同一個畫板/SlideRenderer 區塊），右半邊改為 `<AnimationEditorTab mode="fullscreen">`；移除舊的浮動按鈕與 `<aside>` 覆蓋層，改由版面切換分頁列直接選擇「動畫」分頁。鎖定全螢幕（分享連結唯讀模式）時隱藏「動畫」分頁，與既有「編輯」分頁的規則一致；原生全螢幕 API 判斷與 `getActiveDrawingCanvas()` 也一併納入 `'animation'` 模式。確認「新增效果按鍵在目前位置新增」其實已由先前的 `insertEffectAfterPlaybackEffect()` 實作完成，不需額外修改。新增功能：在 `AnimationEditorTab.tsx` 加入 `effectRowRefs` 與 `activeEffectId` 計算，當播放進度進入某個效果的時間範圍時，自動把該效果的列表項目 `scrollIntoView()` 捲動到可見範圍，不必手動往下找。已執行 frontend typecheck（通過）與完整前端測試（194 個全數通過）；**本次為純 UI 版面調整與行為變更，沒有寫單元測試（無新增可獨立測試的純函式），也沒有在瀏覽器中實際操作驗證**——只用 typecheck 與既有測試套件確認沒有破壞既有行為，建議實際操作時留意驗證。
 [ ] 文字說明動畫顯示的時間要和逐字稿配合，目前多半都太短了。
 [ ] 有些頁的紅框位置不準，在全螢幕打開動畫編輯時，讓我們可以直接移動全螢幕上的紅框，而不是用縮圖上的。
-[ ] 全螢幕的動畫編輯器加上一個新增暫停播放提示的按鍵，方便我們新增暫停效果。
+[x] 全螢幕的動畫編輯器加上一個新增暫停播放提示的按鍵，方便我們新增暫停效果。
+
+工作記錄（2026-06-20）：根因是 `AnimationEditorTab.tsx` 的「套用範本」下拉選單（內含 `pause-playback` 範本）用 `{!compact && (...)}` 包住，而 `compact = mode === 'fullscreen'`，所以全螢幕模式下這個下拉選單完全不會顯示，只剩下會新增「空白預設效果」的「新增效果」按鈕，使用者得先新增再手動改型別、填文字才能變成暫停提示，很不方便。已在「新增效果」按鈕旁加一個只在 `compact` 模式顯示的專用按鈕，直接呼叫既有的 `handleApplyPreset('pause-playback')`，一鍵套用暫停播放範本（與一般模式下拉選單選「暫停播放提示」效果完全相同）。已執行 frontend typecheck（通過）與完整前端測試（194 個全數通過）；**純 UI 改動，沒有新增可獨立測試的純函式，也沒有在瀏覽器中實際操作驗證**。分支：`feature/fullscreen-animation-pause-button-20260620`，已 merge 回 master。
 
 ---- 計數重設 ----
 - 時間: 2026-06-20
