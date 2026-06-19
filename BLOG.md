@@ -1,5 +1,30 @@
 # MakeSlide 功能說明
 
+
+## 私有簡報圖表、畫板與動畫讀取權限修復
+
+### 功能目的
+
+MakeSlide 的播放頁會讀取多種衍生素材：圖表素材清單與圖檔、手寫畫板 JSON、以及每頁動畫設定。這些素材雖然不是原始 PDF 本身，仍可能包含簡報內容、講者註記、教學重點與自訂動畫腳本。過去部分 GET 端點只確認 PDF/page/figure 是否存在，沒有套用簡報讀取權限，知道 PDF id 與頁碼的人可能讀到 private 簡報的衍生素材。
+
+新版補齊 `figures.ts`、`drawings.ts`、`page-animation.ts` 的讀取權限檢查，讓這些素材與簡報詳情、執行歷程、慢素材排行採用相同規則：擁有者可讀、public/public_editable 可讀、有效分享 token 可讀，其他讀取 private 簡報的請求會回傳 403。
+
+### 使用方式與影響
+
+1. 使用者不需要改變操作方式；播放頁、圖表素材瀏覽、畫板與動畫編輯在有權限時維持原有行為。
+2. private 簡報的圖表清單、圖表圖片、畫板資料、動畫摘要、動畫 spec 與 custom-script GET 診斷端點都不再對非擁有者開放。
+3. 分享連結仍可正常讀取上述素材；端點接受既有的 `?share=<token>` 或 `x-makeslide-share-token` header。
+4. 寫入路由沒有放寬：圖表選取、畫板儲存/刪除、動畫儲存與 AI 產生相關 POST/PUT/DELETE 仍沿用既有 `canEditPdf()`，read-only 分享不會因此取得編輯權。
+
+### 技術細節
+
+- `backend/src/routes/pdfs/figures.ts` 新增本地 `canReadPdf()`、`getShareToken()`、`hasShareAccess()`，並讓 `GET /api/pdfs/:id/pages/:n/figures` 先檢查 PDF 與 page 存在後再做讀取授權；`GET /api/pdfs/:id/figures/:figureId/image` 也會先確認 PDF 與 figure manifest entry 存在，再檢查權限與檔案是否存在。
+- `backend/src/routes/pdfs/drawings.ts` 的 `GET /api/pdfs/:id/pages/:n/drawing` 現在會先確認 PDF 與 page 存在；有讀取權但尚未建立畫板時仍回 `{ drawing_json: null }`，維持前端既有空畫板體驗。
+- `backend/src/routes/pdfs/page-animation.ts` 的 `GET /animation`、`GET /animation/spec` 與 `GET /animation/custom-script` 均補上 PDF/page 存在檢查與讀取授權；custom-script GET 在授權成功後仍回 405 diagnostic，提醒實際產生必須使用 POST。
+- 新增/調整後端測試覆蓋 figures、drawings、page-animation 三組路由的 private 非擁有者 403、擁有者可讀與分享 token 可讀情境。
+- 驗證結果：`npm run typecheck --workspace backend` 通過；直接執行 `./scripts/with-node-env.sh ./node_modules/.bin/tsx --test backend/test/figure-assets.test.ts backend/test/drawings.test.ts backend/test/page-animation.test.ts` 時本次新增/相關權限測試通過，但同檔既有 `validateAnimationSpec rejects a shape effect with an invalid shape kind` 目前失敗（實際接受 invalid shape kind），與本次讀取權限修復無關。
+
+
 ## 播放頁暫停播放效果
 
 ### 功能目的
