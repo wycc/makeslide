@@ -1,5 +1,20 @@
 # MakeSlide 功能說明
 
+## inpaint 候選圖片補上讀取權限檢查
+
+### 功能目的
+
+播放頁的「修圖」功能會用 AI inpaint 產生候選圖片供使用者挑選，這些候選圖存成 `pages/NNN.candidate.<candidateId>.jpg` 檔案，透過 `GET /api/pdfs/:id/pages/:n/image-candidates/:candidateId` 讀取。這個端點原本只檢查頁碼是否在簡報範圍內，完全沒有檢查請求者是否有權限看這份簡報。雖然需要知道隨機產生的 `candidateId` 才能猜到正確網址，但這只是降低被亂猜中的機率，不是真正的存取控制——只要 `candidateId` 從其他地方外流（例如瀏覽器紀錄、分享截圖網址等），任何人都能直接讀到別人簡報正在編輯中的候選圖片內容。
+
+### 修復內容
+
+補上與這個檔案其他讀取端點一致的 `canReadPdf()`/`getShareToken()`/`hasShareAccess()` 檢查，放在頁碼範圍檢查之前。判斷規則不變：擁有者一律可讀；`public`/`public_editable` 簡報任何人可讀；私有簡報則需要帶有效的分享 token。不符合條件回傳 `403 FORBIDDEN`，PDF 不存在回傳 `404 PDF_NOT_FOUND`。
+
+### 技術重點
+
+- 新增 6 個測試覆蓋非擁有者/未登入對 private 簡報應得 403、不存在的 PDF id 應得 404、擁有者/`public`/分享 token 讀取應能通過權限檢查；測試中候選圖片檔案刻意不實際產生，讓請求確定性地落在既有的 `PAGE_NOT_FOUND` 分支，驗證權限層本身的行為。
+- 已執行 backend typecheck（通過）；完整測試套件確認失敗清單皆為既有測試順序相關 flaky，與本次改動無關。
+
 ## 修正逐字稿語氣標籤 `[slowly]` 被過度套用到整段文字
 
 ### 功能目的
