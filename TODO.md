@@ -470,3 +470,7 @@
 - 時間: 2026-06-19 11:30:00 +0800
 - 分支: feature/play-sidebar-poll-qa-i18n-20260619
 - 內容: 完成 `PlayPageSidebar.tsx` 投票控制區與本頁 QA 面板 i18n 補齊。將 Realtime Poll 狀態文字、設定/開始/結束/顯示結果/隱藏結果按鈕、投票問題與選項 placeholder、建立投票按鈕、空狀態、票數、同步顯示題目、清除結果與刪除題目等文案改用 `play.sidebar.poll.*`；將本頁問答標題、放大/還原、清除訊息、空對話、角色 label、圖片預覽 title/alt、參考圖、選區狀態、textarea placeholder、選取區域、修改圖片、修改逐字稿與詢問按鈕改用 `play.sidebar.qa.*`。新增 45 個中英文翻譯鍵與 `PlayPageSidebar poll and QA locale keys are complete` 測試，確認兩種語言鍵皆存在且非空；用 grep 確認目標檔案剩餘中文僅為程式註解。保留投票開始/結束、同步全螢幕顯示、投票提交、QA 對話、貼上參考圖、選區、圖片修改與逐字稿修改行為不變。已執行 frontend `npm run typecheck` 與 `node --test --import tsx ./src/i18n.test.ts`，皆通過。
+
+---- 計數重設 ----
+- 時間: 2026-06-19 16:00:00 +0800
+- 說明: 依使用者指示，因自上次計數重設以來累計完成項目數（73 個 `[x]` − 重設時的 53 個 = 20 個）剛好達到 LOOP.md 第 4 條「完成 20 個項目後停止做新項目」的門檻；使用者選擇「重設計數後繼續」。計數規則維持不變：只計算本標記之後新完成的項目數，達 20 個時再次停止並徵詢使用者。此標記之前的所有歷史項目與工作記錄保留作為紀錄，不再計入新一輪的 20 項上限。另記錄一項過程澄清：先前誤判 BLOG.md 缺少多筆文件章節（openai-api-key 驗證、skills/thumbnails/handoutPdf 測試、圖片預覽對話框與播放頁分享/側欄 i18n、prompt token 上限調整），經完整檢查後確認章節皆存在，只是接續流程把新章節插入在檔案最上方而非附加在最後，純屬格式差異、非內容缺漏，不需補寫。
