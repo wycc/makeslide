@@ -93,6 +93,22 @@ test('ImageStyleDialog locale keys are complete', () => {
   }
 });
 
+test('ImagePreviewDialog locale keys are complete', () => {
+  const requiredKeys = [
+    'play.imagePreviewDialog.title',
+    'play.imagePreviewDialog.imageAlt',
+    'play.imagePreviewDialog.close',
+    'play.imagePreviewDialog.applyReplace',
+  ] as const;
+
+  for (const key of requiredKeys) {
+    assert.equal(typeof zhTW[key], 'string');
+    assert.equal(typeof en[key], 'string');
+    assert.notEqual(zhTW[key].trim(), '');
+    assert.notEqual(en[key].trim(), '');
+  }
+});
+
 test('VersionHistoryDialog locale keys are complete', () => {
   const requiredKeys = [
     'play.versionHistory.titleImage',

@@ -1,4 +1,6 @@
 
+- [x] `ImagePreviewDialog.tsx` 補齊 i18n：圖片生成完成後的預覽對話框仍有使用者可見中文硬編碼（標題「圖片產生結果預覽」、圖片 alt「生成結果預覽」、按鈕「關閉預覽」、「套用取代原圖」），且尚未使用 `useI18n()`；已改用 `play.imagePreviewDialog.*` 翻譯鍵並補中英文 locale 與 i18n key 完整性測試，保留圖片預覽、關閉與套用取代原圖既有行為不變。驗證：`npm run typecheck`（frontend）與 `node --test --import tsx ./src/i18n.test.ts` 通過。
+
 - [x] 播放頁頁首與課堂同步區補齊 i18n：`PlayPageHeader.tsx` 目前仍有大量硬編碼中文，例如「返回」、「更新標題」、「重新生成標題」、「同步模式」、「輸入要問 master 的問題」、「AI 總結回答」、「全螢幕」、「下載講義 PDF」、「同步到 GitHub」、「建立分享連結」等；應改用 `useI18n()` 與 `zh-TW.ts` / `en.ts` 翻譯鍵，保留既有分享、同步模式、影片產生與全螢幕行為，並新增或調整輕量測試/型別檢查確認新增翻譯鍵完整。
 
 - [x] 播放頁側欄投影片管理與來源管理補齊 i18n：`PlayPageSidebar.tsx` 中「投影片管理」、「重生」、「新增多頁」、「已選 N 頁將重生」、「來源管理」、「新增 TXT/PDF 來源」、「目前來源清單」、「生成記錄」與系統資料 label 仍多為硬編碼中文；應分批改成翻譯鍵，避免英文介面在播放頁混用中文，並保留目前 Ctrl/Shift 多選、來源展開、生成 prompt 展開與 audio source 播放行為。
