@@ -62,6 +62,16 @@ function seedAnimationPdf(pdfId: string, pageCount: number): void {
   }
 }
 
+function setAnimationPdfVisibility(pdfId: string, visibility: 'private' | 'public' | 'public_editable'): void {
+  db.prepare(`UPDATE pdfs SET visibility = ? WHERE id = ?`).run(visibility, pdfId);
+}
+
+function seedShareToken(pdfId: string, token: string, access: 'read_only' | 'editable' = 'read_only'): void {
+  const t = nowIso();
+  db.prepare(`DELETE FROM pdf_shares WHERE pdf_id = ? AND token = ?`).run(pdfId, token);
+  db.prepare(`INSERT INTO pdf_shares (pdf_id, token, access, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`).run(pdfId, token, access, t, t);
+}
+
 function validSpec(effects: unknown[] = []): Record<string, unknown> {
   return { version: 1, enabled: true, effects };
 }
@@ -666,6 +676,34 @@ test('GET animation returns default spec when no file exists', async () => {
   assert.equal(body.render_type, 'static-image');
   assert.deepEqual(body.spec, defaultAnimationSpec());
   await app.close();
+});
+
+test('GET animation endpoints reject non-owner private reads, but allow owner and share token', async () => {
+  seedAnimationPdf(PDF_ID, 1);
+  setAnimationPdfVisibility(PDF_ID, 'private');
+  const token = 'animation-share-token-01';
+  seedShareToken(PDF_ID, token, 'read_only');
+  const app = await buildApp();
+  const otherAccountHeaders = { cookie: `makeslide_session=${encodeURIComponent(testSessionCookie('account-2'))}` };
+  try {
+    for (const url of [
+      `/api/pdfs/${PDF_ID}/pages/1/animation`,
+      `/api/pdfs/${PDF_ID}/pages/1/animation/spec`,
+      `/api/pdfs/${PDF_ID}/pages/1/animation/custom-script`,
+    ]) {
+      const forbidden = await app.inject({ method: 'GET', url, headers: otherAccountHeaders });
+      assert.equal(forbidden.statusCode, 403);
+      assert.equal((forbidden.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+
+      const owner = await app.inject({ method: 'GET', url, headers: AUTH_HEADERS });
+      assert.equal(owner.statusCode, url.endsWith('/custom-script') ? 405 : 200);
+
+      const shared = await app.inject({ method: 'GET', url: `${url}?share=${token}` });
+      assert.equal(shared.statusCode, url.endsWith('/custom-script') ? 405 : 200);
+    }
+  } finally {
+    await app.close();
+  }
 });
 
 test('PUT animation with enabled spec writes file and flips render_type', async () => {
