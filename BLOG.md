@@ -2553,3 +2553,20 @@ Gemini TTS 語音合成的回應結構是好幾層巢狀的（`candidates[0].con
 - 新增 `useI18n()`，將四處固定文字改為 `creditExhausted.suggestedNextStep`/`creditExhausted.errorCode`/`creditExhausted.goToSettings`/`creditExhausted.gotIt` 翻譯鍵。
 - `creditExhausted.errorCode` 鍵的值含 `{code}`/`{status}` 兩個佔位符（如「錯誤碼：{code}（HTTP {status}）」），元件內直接用 `.replaceAll('{code}', detail.code).replaceAll('{status}', String(detail.status))` 代入；因為這個元件只有一處需要佔位符替換，沒有另外抽出像 `QuizBuilderPage.tsx`/`SystemDataPage.tsx` 那樣的共用 `formatMessage()` helper。
 - 新增 `frontend/src/i18n.test.ts` 的「CreditExhaustedDialog locale keys are complete」測試區塊，驗證 4 個新 key 在中英文字典中皆存在且非空字串。
+
+## `accountContext.ts` 補上單元測試
+
+### 功能目的
+
+`backend/src/services/accountContext.ts` 是多帳號隔離設計的核心：每個請求/背景工作都在「目前帳號」的 `AsyncLocalStorage` 情境中執行，AI 設定（API key、模型、語音…）依此情境讀寫，避免不同使用者的設定互相污染。這個檔案過去完全沒有測試，而它的正確性直接影響多帳號資料隔離是否可靠——如果 `sanitizeAccountId()` 的消毒邏輯有缺陷，或 `AsyncLocalStorage` 情境在並行請求下意外洩漏，後果會是使用者看到別人的 API 設定或用量資料，因此特別值得補上測試。
+
+### 使用方式
+
+此變更純粹是補上測試，不影響任何程式邏輯或對外行為。
+
+### 技術細節
+
+- 新增 `backend/test/account-context.test.ts`，共 14 個測試：
+  - `sanitizeAccountId()`：`null`/`undefined`/空字串/純空白皆回退至 `DEFAULT_ACCOUNT_ID`；已是檔名安全字串時原樣保留；前後空白會被 trim；`@`/`/`/`\`/空格等特殊符號會被替換成底線；開頭連續點號會被移除（避免類似隱藏檔或路徑跳脫的命名）；整串只有點號時回退至 `DEFAULT_ACCOUNT_ID`。
+  - `accountIdFromOwnerSub()`：驗證其行為與 `sanitizeAccountId()` 一致（直接委派）。
+  - `runWithAccountId()`/`currentAccountId()`：情境外回傳 `DEFAULT_ACCOUNT_ID`；情境內回傳消毒後的帳號代碼；情境結束後正確還原為 `DEFAULT_ACCOUNT_ID`；巢狀呼叫時內層結束後外層情境正確還原；非同步函式內 `await` 之後情境依然正確傳遞（驗證 `AsyncLocalStorage` 跨微任務邊界的傳遞行為，這正是多個並行請求能各自拿到正確帳號設定的關鍵機制）；最後用 `Promise.all` 模擬兩個並行請求各自帶不同延遲呼叫 `runWithAccountId()`，驗證全程互不污染彼此的帳號情境。
