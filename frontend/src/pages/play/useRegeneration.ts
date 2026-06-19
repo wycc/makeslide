@@ -9,6 +9,7 @@ import {
   startRegenerateJob,
   updatePdfScriptSettings,
 } from '../../lib/api';
+import { debugWarn } from '../../lib/debugLog';
 import type { PdfDetail, RegenJobState } from '../../types';
 
 export type RegenOptions = { image: boolean; script: boolean; audio: boolean; animation: boolean };
@@ -128,8 +129,7 @@ export function useRegeneration({
       } catch (err) {
         // 404 代表沒有重生任務，忽略即可
         if (!(err instanceof ApiError && err.status === 404)) {
-          // eslint-disable-next-line no-console
-          console.warn('Failed to fetch regenerate status on load', err);
+          debugWarn('Failed to fetch regenerate status on load', err);
         }
       }
     };

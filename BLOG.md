@@ -1,5 +1,21 @@
 # MakeSlide 功能說明
 
+## 重生任務背景恢復警告改為 gated debug
+
+### 功能目的
+
+播放頁載入時會嘗試恢復既有的批次重生任務狀態。若沒有任務，後端回傳 404 會被忽略；若遇到其他背景恢復錯誤，使用者仍可繼續操作頁面並手動啟動或查看重生流程。這類背景診斷不應在一般使用者 console 中無條件輸出，因此改為 gated debug warning。
+
+### 使用方式
+
+一般使用者不需要任何設定；載入播放頁時若背景恢復重生任務狀態失敗，console 不會再出現 warning，頁面操作維持不變。開發者若需要追蹤此流程，可設定 `localStorage.setItem('makeslide.debug', '1')` 後重新載入頁面查看 debug warning。
+
+### 技術重點
+
+- `useRegeneration.ts` 匯入既有 `debugWarn()` helper，取代直接 `console.warn`。
+- 404 無任務情境仍維持忽略；非 404 錯誤只在 debug 開啟時輸出。
+- 移除該處 `eslint-disable-next-line no-console`，並以 typecheck 與 grep 驗證沒有殘留直接 console warning。
+
 ## 播放頁同步與 TTS 偵錯輸出改為 gated debug
 
 ### 功能目的
