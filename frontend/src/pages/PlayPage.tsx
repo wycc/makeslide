@@ -194,8 +194,8 @@ export default function PlayPage() {
   const syncClientIdRef = useRef<string>('');
   const applyingRemoteSyncRef = useRef(false);
   const [imageOnlyFullscreen, setImageOnlyFullscreen] = useState(false);
-  // 全螢幕版面：'image' = 純圖片（字幕單行疊在下方）；'split' = 左圖右整頁字幕；'edit' = 左圖右逐字稿編輯。
-  const [fullscreenLayout, setFullscreenLayout] = useState<'image' | 'split' | 'edit'>('image');
+  // 全螢幕版面：'image' = 純圖片（字幕單行疊在下方）；'split' = 左圖右整頁字幕；'edit' = 左圖右逐字稿編輯；'animation' = 左圖右動畫效果編輯。
+  const [fullscreenLayout, setFullscreenLayout] = useState<'image' | 'split' | 'edit' | 'animation'>('image');
   const fullscreenContainerRef = useRef<HTMLDivElement>(null);
   const activeSentenceRef = useRef<HTMLParagraphElement>(null);
   const [slideImageScale, setSlideImageScale] = useState(1);
@@ -214,7 +214,7 @@ export default function PlayPage() {
   const drawingCanvasMainRef = useRef<DrawingCanvasHandle>(null);
   const getActiveDrawingCanvas = useCallback((): DrawingCanvasHandle | null => {
     if (imageOnlyFullscreen) {
-      return fullscreenLayout === 'split' || fullscreenLayout === 'edit'
+      return fullscreenLayout === 'split' || fullscreenLayout === 'edit' || fullscreenLayout === 'animation'
         ? drawingCanvasSplitRef.current
         : drawingCanvasFullscreenRef.current;
     }
@@ -1456,13 +1456,13 @@ export default function PlayPage() {
   }, [playPause, goPrev, goNext, navigate, imageOnlyFullscreen, isLockedFullscreen, syncEnabled, syncRole, canUseDrawingTools, handleAiAnswerFollowerQuestions, fullscreenPollControlOpen, drawingMode]);
 
   // ---- Fullscreen API integration ----
-  // 編輯版面、以及透過分享連結鎖定的全螢幕都不進入瀏覽器原生全螢幕：
+  // 編輯版面、動畫編輯版面，以及透過分享連結鎖定的全螢幕都不進入瀏覽器原生全螢幕：
   // 原生全螢幕的 ESC 退出行為無法被 JS 攔截，會導致使用者按 ESC 就整個跳出全螢幕
-  // （編輯逐字稿時可能誤按、分享連結模式下則完全不允許離開全螢幕）。
+  // （編輯逐字稿/動畫效果時可能誤按、分享連結模式下則完全不允許離開全螢幕）。
   // 改用純 CSS 覆蓋層即可避免觸發瀏覽器原生 ESC 行為，由自訂鍵盤處理邏輯接管。
   useEffect(() => {
     const isAlreadyFullscreen = Boolean(getAnyFullscreenElement());
-    const useNativeFullscreen = fullscreenLayout !== 'edit' && !isLockedFullscreen;
+    const useNativeFullscreen = fullscreenLayout !== 'edit' && fullscreenLayout !== 'animation' && !isLockedFullscreen;
     if (imageOnlyFullscreen && useNativeFullscreen && fullscreenContainerRef.current) {
       if (!isAlreadyFullscreen) {
         requestAnyFullscreen(fullscreenContainerRef.current).catch((err) => {
@@ -1479,7 +1479,7 @@ export default function PlayPage() {
   useEffect(() => {
     const handleFullscreenChange = () => {
       const isFullscreen = Boolean(getAnyFullscreenElement());
-      if (!isFullscreen && imageOnlyFullscreen && fullscreenLayout !== 'edit' && !isLockedFullscreen) {
+      if (!isFullscreen && imageOnlyFullscreen && fullscreenLayout !== 'edit' && fullscreenLayout !== 'animation' && !isLockedFullscreen) {
         setImageOnlyFullscreen(false);
       }
     };
@@ -1540,7 +1540,7 @@ export default function PlayPage() {
   useEffect(() => {
     if (!shouldAutoFullscreen && !isLockedFullscreen) return;
     setImageOnlyFullscreen(true);
-    if (isLockedFullscreen && fullscreenLayout === 'edit') setFullscreenLayout('image');
+    if (isLockedFullscreen && (fullscreenLayout === 'edit' || fullscreenLayout === 'animation')) setFullscreenLayout('image');
   }, [shouldAutoFullscreen, isLockedFullscreen, fullscreenLayout]);
 
   // ─── Custom hooks ────────────────────────────────────────────────────────────

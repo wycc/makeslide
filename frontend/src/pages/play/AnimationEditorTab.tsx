@@ -477,6 +477,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
   const [customScriptChatInput, setCustomScriptChatInput] = useState('');
   const customScriptChatScrollRef = useRef<HTMLDivElement>(null);
   const [selectedEffectIds, setSelectedEffectIds] = useState<Set<string>>(new Set());
+  const effectRowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const [notebookTab, setNotebookTab] = useState<'effects' | 'hints' | 'json'>('effects');
   const [jsonCopyStatus, setJsonCopyStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const jsonCopyTimerRef = useRef<number | null>(null);
@@ -512,6 +513,21 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
 
   const draft = animationDraft ?? defaultAnimationSpec();
   const disabled = isReadOnlyProcessing || animationBusy || !currentPage;
+  // 目前播放時間對應到哪個效果，用來在效果清單自動捲動到該效果，讓使用者不必手動往下找。
+  const activeEffectId = useMemo(() => {
+    const active = draft.effects.find((effect) => {
+      const effectStart = effect.startTrigger
+        ? resolveStartTriggerSeconds(effect.startTrigger, sentenceTimeline) ?? effect.start
+        : effect.start;
+      const effectEnd = effectStart + effect.duration + (effect.exitDuration ?? 0);
+      return currentTime >= effectStart && currentTime <= effectEnd;
+    });
+    return active?.id ?? null;
+  }, [draft.effects, currentTime, sentenceTimeline]);
+  useEffect(() => {
+    if (!activeEffectId) return;
+    effectRowRefs.current.get(activeEffectId)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [activeEffectId]);
   const customScriptDialogEffect = useMemo(
     () => draft.effects.find((effect) => effect.id === customScriptDialogEffectId && effect.type === 'custom-script') ?? null,
     [draft.effects, customScriptDialogEffectId],
@@ -882,6 +898,10 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
             return (
             <div
               key={effect.id}
+              ref={(el) => {
+                if (el) effectRowRefs.current.set(effect.id, el);
+                else effectRowRefs.current.delete(effect.id);
+              }}
               onClick={(e) => {
                 if (!e.ctrlKey && !e.metaKey) return;
                 setSelectedEffectIds((prev) => {
