@@ -253,6 +253,19 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
     return reply.send(rowToQuiz(row));
   });
 
+  app.delete('/api/pdfs/:id/quizzes/:quizId', async (request, reply) => {
+    const parsed = QuizParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid quiz parameters'));
+    const pdfRow = getPdfPermissionRow(parsed.data.id);
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限刪除此簡報的測驗'));
+    }
+    const result = db.prepare(`DELETE FROM quiz_sets WHERE id = ? AND pdf_id = ?`).run(parsed.data.quizId, parsed.data.id);
+    if (result.changes === 0) return reply.code(404).send(errorResponse('QUIZ_NOT_FOUND', `Quiz ${parsed.data.quizId} not found`));
+    return reply.code(204).send();
+  });
+
   app.post('/api/pdfs/:id/quizzes/:quizId/attempts', async (request, reply) => {
     const parsed = QuizParamSchema.safeParse(request.params);
     if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid quiz parameters'));

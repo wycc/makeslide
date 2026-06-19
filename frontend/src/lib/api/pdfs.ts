@@ -791,6 +791,13 @@ export async function saveQuizSet(
   return (await resp.json()) as QuizSet;
 }
 
+export async function deleteQuizSet(id: string, quizId: number): Promise<void> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/quizzes/${encodeURIComponent(String(quizId))}`, {
+    method: 'DELETE',
+  });
+  if (!resp.ok && resp.status !== 204) throw await parseErrorBody(resp);
+}
+
 export interface UpdatePdfCoverFromPageResponse {
   id: string;
   page_number: number;

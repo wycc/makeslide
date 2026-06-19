@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useI18n } from '../i18n';
 import {
   ApiError,
+  deleteQuizSet,
   fetchPdfDetail,
   fetchPlaybackSyncState,
   fetchQuizAttempts,
@@ -111,6 +112,7 @@ export default function QuizBuilderPage() {
   const [syncQuizSessionId, setSyncQuizSessionId] = useState<string | null>(null);
   const [syncQuizShowAnswers, setSyncQuizShowAnswers] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [deletingQuizId, setDeletingQuizId] = useState<number | null>(null);
   const [studentAnswers, setStudentAnswers] = useState<Record<string, number[]>>({});
   const [resetStudentAnswersBusy, setResetStudentAnswersBusy] = useState(false);
   const [showEditorAnswers, setShowEditorAnswers] = useState(false);
@@ -526,6 +528,31 @@ export default function QuizBuilderPage() {
     }
   };
 
+  const handleDeleteQuiz = useCallback(
+    async (quiz: QuizSet) => {
+      if (!pdfId) return;
+      const ok = window.confirm(formatMessage('quiz.confirmDelete', { title: quiz.title }));
+      if (!ok) return;
+      setDeletingQuizId(quiz.id);
+      setError(null);
+      try {
+        await deleteQuizSet(pdfId, quiz.id);
+        setSavedQuizzes((prev) => prev.filter((q) => q.id !== quiz.id));
+        if (selectedQuizId === quiz.id) {
+          setSelectedQuizId(null);
+          setTitle(t('quiz.defaultTitle'));
+          setQuestions([emptyQuestion(0)]);
+        }
+        setMessage(t('quiz.deleteDone'));
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : t('quiz.deleteFailed'));
+      } finally {
+        setDeletingQuizId(null);
+      }
+    },
+    [pdfId, selectedQuizId, t, formatMessage],
+  );
+
   const renderQuizTakingView = (quiz: QuizSet) => (
     <div className="rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/10 p-4">
       {syncQuizShowAnswers ? (() => {
@@ -663,6 +690,17 @@ export default function QuizBuilderPage() {
                   >
                     {t('quiz.history')}
                   </button>
+                  {syncRole === 'master' ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleDeleteQuiz(quiz)}
+                      disabled={deletingQuizId === quiz.id}
+                      className="rounded border border-rose-500/50 bg-rose-500/15 px-2 py-1 text-xs text-rose-100 disabled:opacity-40"
+                      title={t('quiz.deleteQuizTitle')}
+                    >
+                      {t('quiz.delete')}
+                    </button>
+                  ) : null}
                 </div>
               </div>
             ))}
