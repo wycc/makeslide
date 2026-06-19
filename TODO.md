@@ -583,7 +583,9 @@
 [x] 全螢幕的動畫編輯器應該和圖片/字幕/編輯一樣的方式顯示。把螢幕分成左右二邊顯示。新增效果按鍵改成在目前位置新增效果，並確認會新增在目前位置。另外應該把效果自動捲動目前使用的效果。
 
 工作記錄（2026-06-20）：原本全螢幕動畫編輯器是用獨立按鈕切換的浮動 `<aside>` 覆蓋面板（`animationEditorOpen` state），跟圖片/字幕/編輯版面用 `fullscreenLayout` 左右分割顯示的方式不一致。已在 `PlayPageContext.tsx`/`PlayPage.tsx` 把 `FullscreenLayout` 型別新增 `'animation'`，`PlayPageFullscreen.tsx` 將動畫編輯面板改為這個新版面模式：左半邊顯示投影片（與 split/edit 共用同一個畫板/SlideRenderer 區塊），右半邊改為 `<AnimationEditorTab mode="fullscreen">`；移除舊的浮動按鈕與 `<aside>` 覆蓋層，改由版面切換分頁列直接選擇「動畫」分頁。鎖定全螢幕（分享連結唯讀模式）時隱藏「動畫」分頁，與既有「編輯」分頁的規則一致；原生全螢幕 API 判斷與 `getActiveDrawingCanvas()` 也一併納入 `'animation'` 模式。確認「新增效果按鍵在目前位置新增」其實已由先前的 `insertEffectAfterPlaybackEffect()` 實作完成，不需額外修改。新增功能：在 `AnimationEditorTab.tsx` 加入 `effectRowRefs` 與 `activeEffectId` 計算，當播放進度進入某個效果的時間範圍時，自動把該效果的列表項目 `scrollIntoView()` 捲動到可見範圍，不必手動往下找。已執行 frontend typecheck（通過）與完整前端測試（194 個全數通過）；**本次為純 UI 版面調整與行為變更，沒有寫單元測試（無新增可獨立測試的純函式），也沒有在瀏覽器中實際操作驗證**——只用 typecheck 與既有測試套件確認沒有破壞既有行為，建議實際操作時留意驗證。
-[ ] 文字說明動畫顯示的時間要和逐字稿配合，目前多半都太短了。
+[x] 文字說明動畫顯示的時間要和逐字稿配合，目前多半都太短了。
+
+工作記錄（2026-06-20）：根因是 `backend/src/services/animationAutoFocus.ts` 產生效果時，`exitDuration`（淡入完成後要停留多久才淡出）是由 LLM 單純看這句逐字稿的「文字內容」自行決定（提示詞給的指引只是「短暫提示可設 1-3 秒，整句都在說明可以設長一點」），LLM 並不知道這句話實際上要唸幾秒，常常猜得太短，導致旁白還在解釋這句話、效果卻已經先淡出消失。修法選在前端 `resolveAnimationSpec()`（`frontend/src/lib/animationSpec.ts`）：這裡本來就會用 `sentenceTimeline`（依實際音檔長度估算的逐句起訖時間）把效果的 `start` 換算成正確秒數，現在額外比較「效果停留到淡出完成的時間」與「該句旁白實際結束的時間」，取較長者覆寫 `exitDuration`，確保效果至少維持顯示到旁白唸完這句話才消失；只會「延長」不會「縮短」——如果作者原本設定的 `exitDuration` 已經比這句話還長，維持原值不變。沒有設定 `exitDuration` 的效果（例如不會自動淡出的效果）也維持不變。新增 3 個測試覆蓋：延長太短的 `exitDuration`、保留已經足夠長的 `exitDuration`、`exitDuration` 未設定時不受影響。已執行 frontend typecheck（通過）與完整前端測試（197 個全數通過，含新增 3 個測試）。分支：`fix/animation-exit-duration-matches-sentence-20260620`，已 merge 回 master。
 [ ] 有些頁的紅框位置不準，在全螢幕打開動畫編輯時，讓我們可以直接移動全螢幕上的紅框，而不是用縮圖上的。
 [x] 全螢幕的動畫編輯器加上一個新增暫停播放提示的按鍵，方便我們新增暫停效果。
 
