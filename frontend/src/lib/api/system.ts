@@ -2,6 +2,8 @@ import { parseErrorBody } from './common';
 import type { SlaSettingsResponse, SlaTargetKind } from '../../types';
 
 export type AppLanguage = 'zh-TW' | 'en';
+export type LlmProvider = 'openai' | 'gemini' | 'cgu-air' | 'openrouter';
+export type TtsProvider = 'openai' | 'gemini';
 
 export interface ImagePromptTemplate {
   key: string;
@@ -35,12 +37,20 @@ export interface SystemAiSettings {
   openai_api_key?: string;
   openai_base_url?: string;
   gemini_api_key?: string;
+  cgu_air_api_key?: string;
+  cgu_air_base_url?: string;
+  openrouter_api_key?: string;
+  openrouter_base_url?: string;
   has_openai_key: boolean;
   has_gemini_key: boolean;
-  llm_provider: 'openai' | 'gemini';
-  tts_provider: 'openai' | 'gemini';
+  has_cgu_air_key?: boolean;
+  has_openrouter_key?: boolean;
+  llm_provider: LlmProvider;
+  tts_provider: TtsProvider;
   openai_llm_model: string;
   gemini_llm_model: string;
+  cgu_air_llm_model?: string;
+  openrouter_llm_model?: string;
   openai_tts_model: string;
   gemini_tts_model: string;
   gemini_tts_speaker1?: string;
@@ -69,10 +79,16 @@ export interface UpdateSystemAiSettingsPayload {
   openai_api_key?: string;
   openai_base_url?: string;
   gemini_api_key?: string;
-  llm_provider?: 'openai' | 'gemini';
-  tts_provider?: 'openai' | 'gemini';
+  cgu_air_api_key?: string;
+  cgu_air_base_url?: string;
+  openrouter_api_key?: string;
+  openrouter_base_url?: string;
+  llm_provider?: LlmProvider;
+  tts_provider?: TtsProvider;
   openai_llm_model?: string;
   gemini_llm_model?: string;
+  cgu_air_llm_model?: string;
+  openrouter_llm_model?: string;
   openai_tts_model?: string;
   gemini_tts_model?: string;
   gemini_tts_speaker1?: string;

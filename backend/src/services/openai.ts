@@ -9,10 +9,12 @@ import { z } from 'zod';
 import { config } from '../config';
 import { logger } from '../logger';
 import { callGeminiJson, callGeminiTextStream } from './gemini';
-import { getRuntimeAiSettings } from './aiSettings';
+import { getRuntimeAiSettings, type LlmProvider } from './aiSettings';
 import { currentAccountId, sanitizeAccountId } from './accountContext';
 import { appendLlmRequestLog, appendLlmResponseLog } from './llmUsage';
 import { redactLogObject, redactTextForLog } from './logSanitizer';
+
+type OpenAiCompatibleProvider = Exclude<LlmProvider, 'gemini'>;
 
 interface AccountOpenAiState {
   client: OpenAI | null;
@@ -24,8 +26,8 @@ interface AccountOpenAiState {
 // API key 時意外影響到使用者 B 正在進行中或稍後才執行的請求。
 const accountStates = new Map<string, AccountOpenAiState>();
 
-function getAccountState(accountId: string): AccountOpenAiState {
-  const safeAccountId = sanitizeAccountId(accountId);
+function getAccountState(accountId: string, provider: OpenAiCompatibleProvider = 'openai'): AccountOpenAiState {
+  const safeAccountId = `${sanitizeAccountId(accountId)}:${provider}`;
   let state = accountStates.get(safeAccountId);
   if (!state) {
     state = { client: null, apiKeyOverride: null, baseUrlOverride: null };
@@ -110,20 +112,18 @@ function summarizeMessagesForRuntimeLog(messages: ChatCompletionMessageParam[]):
  * missing so the server can still start (and serve M2 endpoints) when the
  * operator has not configured M3 yet.
  */
-export function getOpenAIClient(accountId: string = currentAccountId()): OpenAI {
+export function getOpenAIClient(accountId: string = currentAccountId(), provider: OpenAiCompatibleProvider = 'openai'): OpenAI {
   if (testClientOverride !== undefined) return testClientOverride as OpenAI;
 
-  const state = getAccountState(accountId);
+  const state = getAccountState(accountId, provider);
   if (state.client) return state.client;
 
   const settings = getRuntimeAiSettings(accountId);
-  const apiKey = (state.apiKeyOverride ?? settings.openaiApiKey ?? '').trim();
+  const apiKey = (state.apiKeyOverride ?? providerApiKey(settings, provider) ?? '').trim();
   if (!apiKey) {
-    throw new Error(
-      'OPENAI_API_KEY is not set — cannot call OpenAI. Update your .env and restart.',
-    );
+    throw new Error(`${providerEnvPrefix(provider)}_API_KEY is not set — cannot call ${providerLabel(provider)}. Update settings and retry.`);
   }
-  const baseURL = (state.baseUrlOverride ?? settings.openaiBaseUrl ?? '').trim() || undefined;
+  const baseURL = (state.baseUrlOverride ?? providerBaseUrl(settings, provider) ?? '').trim() || undefined;
 
   const debugFetch: typeof globalThis.fetch = async (url, init) => {
     const resp = await globalThis.fetch(url as Parameters<typeof globalThis.fetch>[0], init);
@@ -178,7 +178,8 @@ export function getOpenAIClient(accountId: string = currentAccountId()): OpenAI 
   logger.info(
     {
       accountId: sanitizeAccountId(accountId),
-      model: config.openaiLlmModel,
+      provider,
+      model: providerModel(settings, provider),
       baseURL: baseURL ?? '(default)',
       timeoutMs: config.openaiRequestTimeoutMs,
       maxRetries: config.openaiMaxRetries,
@@ -190,19 +191,49 @@ export function getOpenAIClient(accountId: string = currentAccountId()): OpenAI 
 }
 
 export function setOpenAIApiKeyRuntime(accountId: string, apiKey: string): void {
-  const state = getAccountState(accountId);
+  const state = getAccountState(accountId, 'openai');
   state.apiKeyOverride = apiKey.trim();
   state.client = null;
 }
 
 export function setOpenAIBaseUrlRuntime(accountId: string, baseUrl: string): void {
-  const state = getAccountState(accountId);
+  const state = getAccountState(accountId, 'openai');
   state.baseUrlOverride = baseUrl.trim() || null;
   state.client = null;
 }
 
 export function setOpenAIClientForTest(client: OpenAI | null): void {
   testClientOverride = client;
+}
+
+function providerApiKey(settings: ReturnType<typeof getRuntimeAiSettings>, provider: OpenAiCompatibleProvider): string {
+  if (provider === 'cgu-air') return settings.cguAirApiKey;
+  if (provider === 'openrouter') return settings.openrouterApiKey;
+  return settings.openaiApiKey;
+}
+
+function providerBaseUrl(settings: ReturnType<typeof getRuntimeAiSettings>, provider: OpenAiCompatibleProvider): string {
+  if (provider === 'cgu-air') return settings.cguAirBaseUrl;
+  if (provider === 'openrouter') return settings.openrouterBaseUrl;
+  return settings.openaiBaseUrl;
+}
+
+function providerModel(settings: ReturnType<typeof getRuntimeAiSettings>, provider: OpenAiCompatibleProvider): string {
+  if (provider === 'cgu-air') return settings.cguAirLlmModel;
+  if (provider === 'openrouter') return settings.openrouterLlmModel;
+  return settings.openaiLlmModel;
+}
+
+function providerEnvPrefix(provider: OpenAiCompatibleProvider): string {
+  if (provider === 'cgu-air') return 'CGU_AIR';
+  if (provider === 'openrouter') return 'OPENROUTER';
+  return 'OPENAI';
+}
+
+function providerLabel(provider: OpenAiCompatibleProvider): string {
+  if (provider === 'cgu-air') return 'CGU Air';
+  if (provider === 'openrouter') return 'OpenRouter';
+  return 'OpenAI';
 }
 
 export async function transcribeAudioBuffer(
@@ -292,8 +323,9 @@ export async function callChatJSON<T>(
       rawContent: result.rawContent,
     };
   }
-  const client = getOpenAIClient();
-  const model = params.model ?? runtime.openaiLlmModel;
+  const provider = runtime.llmProvider as OpenAiCompatibleProvider;
+  const client = getOpenAIClient(currentAccountId(), provider);
+  const model = params.model ?? providerModel(runtime, provider);
   const maxAttempts = 2; // parse/validate retries (on top of SDK retries)
   let lastErr: unknown;
 
@@ -493,8 +525,9 @@ export async function streamChatText(params: ChatTextStreamParams): Promise<Chat
     };
   }
 
-  const client = getOpenAIClient();
-  const model = params.model ?? runtime.openaiLlmModel;
+  const provider = runtime.llmProvider as OpenAiCompatibleProvider;
+  const client = getOpenAIClient(currentAccountId(), provider);
+  const model = params.model ?? providerModel(runtime, provider);
   const maxTokens = Math.max(params.maxTokens ?? 4000, 1);
   const temperature = params.temperature ?? 0.6;
   const useTemperature = supportsTemperature(model);
