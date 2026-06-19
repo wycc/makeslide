@@ -1,5 +1,25 @@
 # MakeSlide 功能說明
 
+## 修正逐字稿語氣標籤 `[slowly]` 被過度套用到整段文字
+
+### 功能目的
+
+使用者回報：逐字稿朗讀時，常常一大段文字都被用緩慢的語速念出來，效果不好；`[slowly]` 這個語氣標籤應該只用在強調少數幾個關鍵字詞時，而不是整段話。
+
+### 根因
+
+負責把逐字稿切成不同語氣片段的 `backend/src/worker/steps/synthesizeAudio.ts` 的 `splitByToneMarkers()`，邏輯是「每個語氣標籤套用到下一個標籤出現之前的所有文字」。這個機制本身是合理的設計，但 LLM 在生成逐字稿時，如果把 `[slowly]` 放在一段話的開頭、之後很久才用下一個標籤接手，那麼這整段（甚至整頁）逐字稿都會被當成「慢速」處理，朗讀起來自然不自然。
+
+### 修復內容
+
+不更動 `splitByToneMarkers()` 的程式邏輯，而是在負責生成/改寫逐字稿的四份提示詞檔案——`backend/prompts/generate-script-gemini.md`、`generate-script-gemini-solo.md`、`rewrite-script-gemini.md`、`rewrite-script-gemini-solo.md`（涵蓋單人/雙主持人、初次生成/逐字稿改寫四種組合）——的「語氣標籤規則」區塊，新增一條明確規則：告知 LLM `[slowly]` 會套用到下一個標籤出現前的所有文字，因此只能用在少數幾個關鍵字詞前後，加上後要盡快用下一個標籤（換回 `[seriously]` 或其他語氣）收尾，不可以讓它涵蓋一整段或大量句子。
+
+### 技術重點
+
+- 純提示詞文字調整，未變更任何程式邏輯、schema 或型別。
+- 目前 OpenAI TTS 的提示詞（`generate-script-openai*.md`/`rewrite-script-openai.md`）並未使用這套語氣標籤機制，不受影響，只有 Gemini 的四份提示詞需要修正。
+- 已執行 backend typecheck 確認無影響。
+
 ## AI 修圖／改逐字稿對話紀錄補上讀取權限檢查
 
 ### 功能目的
