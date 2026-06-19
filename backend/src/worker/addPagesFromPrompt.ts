@@ -193,7 +193,7 @@ async function generateOutlineForNewPages(params: {
       },
     ],
     schema: AddPagesSlideSchema,
-    maxTokens: 4000,
+    maxTokens: 128000,
     temperature: 0.5,
     label: 'add-pages-from-prompt',
   });
@@ -249,7 +249,7 @@ export async function continueAddPagesOutlineChat(params: {
       },
     ],
     schema: AddPagesOutlineChatSchema,
-    maxTokens: 4000,
+    maxTokens: 128000,
     temperature: 0.5,
     label: 'add-pages-outline-chat',
   });

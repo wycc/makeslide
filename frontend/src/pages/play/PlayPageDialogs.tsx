@@ -4,8 +4,10 @@ import { TtsDialog } from './TtsDialog';
 import { ImageStyleDialog } from './ImageStyleDialog';
 import { RegenAllDialog } from './RegenAllDialog';
 import { ShareDialog } from './ShareDialog';
+import { useI18n } from '../../i18n';
 
 export function PlayPageDialogs() {
+  const { t } = useI18n();
   const {
     isReadOnlyProcessing,
     // TTS
@@ -104,10 +106,10 @@ export function PlayPageDialogs() {
         <ShareDialog
           shareUrl={shareUrl}
           onCopySuccess={() => {
-            setShareMessage('已複製分享連結');
+            setShareMessage(t('play.shareDialog.copySuccessMessage'));
             setShareError(null);
           }}
-          onCopyError={() => setShareError('瀏覽器不允許自動複製，請手動複製。')}
+          onCopyError={() => setShareError(t('play.shareDialog.copyErrorMessage'))}
           onClose={() => setShareDialogOpen(false)}
         />
       ) : null}

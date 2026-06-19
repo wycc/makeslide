@@ -409,6 +409,8 @@ export const zhTW = {
   'play.shareDialog.copyLink': '複製連結',
   'play.shareDialog.copied': '已複製',
   'play.shareDialog.copyFailed': '複製失敗，請手動選取上方連結後複製。',
+  'play.shareDialog.copySuccessMessage': '已複製分享連結',
+  'play.shareDialog.copyErrorMessage': '瀏覽器不允許自動複製，請手動複製。',
   'play.shareDialog.close': '關閉',
   'play.sync.mode': '同步模式',
   'play.sync.questionPlaceholder': '輸入要問 master 的問題',

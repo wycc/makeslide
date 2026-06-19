@@ -409,6 +409,8 @@ export const en = {
   'play.shareDialog.copyLink': 'Copy link',
   'play.shareDialog.copied': 'Copied',
   'play.shareDialog.copyFailed': 'Copy failed, please select the link above and copy it manually.',
+  'play.shareDialog.copySuccessMessage': 'Share link copied',
+  'play.shareDialog.copyErrorMessage': 'Your browser blocked automatic copying. Please copy the link manually.',
   'play.shareDialog.close': 'Close',
   'play.sync.mode': 'Sync mode',
   'play.sync.questionPlaceholder': 'Enter a question for the master',
