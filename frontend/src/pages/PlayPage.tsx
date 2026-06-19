@@ -371,8 +371,7 @@ export default function PlayPage() {
       audioRetryTimerRef.current = window.setTimeout(() => {
         if (token !== currentAudioTokenRef.current) return;
         const retryUrl = `${audioUrl}${audioUrl.includes('?') ? '&' : '?'}retry=${Date.now()}`;
-        // eslint-disable-next-line no-console
-        console.warn('[tts][audio-element] auto retry load', {
+        debugWarn('[tts][audio-element] auto retry load', {
           pageNumber,
           retryUrl,
         });
@@ -1105,8 +1104,7 @@ export default function PlayPage() {
     if (applyingRemoteSyncRef.current) return;
     const pageNumber = Math.max(1, currentIdx + 1);
     const time = Number.isFinite(currentTime) ? Math.max(0, currentTime) : 0;
-    // eslint-disable-next-line no-console
-    console.info('[sync][master->state] push', {
+    debugLog('[sync][master->state] push', {
       pdfId,
       clientId: syncClientIdRef.current,
       syncRole,
@@ -1192,8 +1190,7 @@ export default function PlayPage() {
   // 不會減少複雜度；以 reducer 或狀態機重寫才是正確長期方向。
   useEffect(() => {
     if (!syncEnabled || !pdfId || !syncClientIdRef.current) return;
-    // eslint-disable-next-line no-console
-    console.info('[sync][poll] start', {
+    debugLog('[sync][poll] start', {
       pdfId,
       clientId: syncClientIdRef.current,
       localRole: syncRole,
@@ -1205,8 +1202,7 @@ export default function PlayPage() {
       void (async () => {
         try {
           const state = await fetchPlaybackSyncState(pdfId, syncClientIdRef.current);
-          // eslint-disable-next-line no-console
-          console.info('[sync][poll] state', {
+          debugLog('[sync][poll] state', {
             pdfId,
             clientId: syncClientIdRef.current,
             localRole: syncRole,
@@ -1276,8 +1272,7 @@ export default function PlayPage() {
           if (state.role === 'master') return;
           applyingRemoteSyncRef.current = true;
           const targetIdx = Math.max(0, state.page_number - 1);
-          // eslint-disable-next-line no-console
-          console.info('[sync][follower] apply-remote', {
+          debugLog('[sync][follower] apply-remote', {
             pdfId,
             clientId: syncClientIdRef.current,
             targetIdx,
@@ -1306,8 +1301,7 @@ export default function PlayPage() {
       })();
     }, pollInterval);
     return () => {
-      // eslint-disable-next-line no-console
-      console.info('[sync][poll] stop', {
+      debugLog('[sync][poll] stop', {
         pdfId,
         clientId: syncClientIdRef.current,
         localRole: syncRole,
@@ -1472,12 +1466,12 @@ export default function PlayPage() {
     if (imageOnlyFullscreen && useNativeFullscreen && fullscreenContainerRef.current) {
       if (!isAlreadyFullscreen) {
         requestAnyFullscreen(fullscreenContainerRef.current).catch((err) => {
-          console.error('Failed to enter fullscreen:', err);
+          debugWarn('Failed to enter fullscreen:', err);
         });
       }
     } else if ((!imageOnlyFullscreen || !useNativeFullscreen) && isAlreadyFullscreen) {
       exitAnyFullscreen().catch((err) => {
-        console.error('Failed to exit fullscreen:', err);
+        debugWarn('Failed to exit fullscreen:', err);
       });
     }
   }, [imageOnlyFullscreen, fullscreenLayout, isLockedFullscreen]);
@@ -1762,8 +1756,7 @@ export default function PlayPage() {
     setAudioError(null);
     try {
       const res = await regeneratePageAudio(pdfId, currentPage.page_number, nextScript);
-      // eslint-disable-next-line no-console
-      console.info('[tts][regenerate-audio] api success', {
+      debugLog('[tts][regenerate-audio] api success', {
         pdfId,
         pageNumber: currentPage.page_number,
         audioUrl: res.audio_url,
@@ -1782,8 +1775,7 @@ export default function PlayPage() {
         const contentLength = contentLengthHeader ? Number(contentLengthHeader) : NaN;
         const verifyBlob = verifyResp.ok ? await verifyResp.blob() : null;
         const blobSize = verifyBlob?.size ?? 0;
-        // eslint-disable-next-line no-console
-        console.info('[tts][regenerate-audio] verify audio response', {
+        debugLog('[tts][regenerate-audio] verify audio response', {
           status: verifyResp.status,
           ok: verifyResp.ok,
           contentType,
@@ -1798,8 +1790,7 @@ export default function PlayPage() {
           throw new Error('Audio file is empty (0 bytes)');
         }
       } catch (verifyErr) {
-        // eslint-disable-next-line no-console
-        console.error('[tts][regenerate-audio] verification failed', {
+        debugWarn('[tts][regenerate-audio] verification failed', {
           pdfId,
           pageNumber: currentPage.page_number,
           error: verifyErr,
@@ -1833,8 +1824,7 @@ export default function PlayPage() {
         void audio.play().catch(() => setIsPlaying(false));
       }
     } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('[tts][regenerate-audio] failed', {
+      debugWarn('[tts][regenerate-audio] failed', {
         pdfId,
         pageNumber: currentPage?.page_number,
         error: err,
@@ -2148,8 +2138,7 @@ export default function PlayPage() {
         onPause={() => setIsPlaying(false)}
         onEnded={handleEnded}
         onError={() => {
-          // eslint-disable-next-line no-console
-          console.error('[tts][audio-element] load failed', {
+          debugWarn('[tts][audio-element] load failed', {
             pageNumber: currentPage?.page_number,
             src: audioRef.current?.src,
           });

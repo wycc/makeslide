@@ -1,5 +1,22 @@
 # MakeSlide 功能說明
 
+## 播放頁同步與 TTS 偵錯輸出改為 gated debug
+
+### 功能目的
+
+播放頁在同步輪詢、同步狀態推送、TTS 重生與音訊載入重試期間會產生大量內部診斷訊息。這些訊息對開發除錯有幫助，但一般使用者播放、上課或重生語音時不應在瀏覽器 console 看到大量 `[sync]` / `[tts]` log。現在這些診斷訊息統一改走既有 gated debug helper，只有開發者明確開啟 `localStorage.makeslide.debug = '1'` 時才輸出。
+
+### 使用方式
+
+一般使用者不需要做任何設定，播放頁同步、投票同步、TTS 重生與音訊載入重試仍維持原本行為，但 console 會保持乾淨。若開發者需要追蹤同步或 TTS 流程，可在瀏覽器 console 執行 `localStorage.setItem('makeslide.debug', '1')` 後重新操作，即可看到相關診斷訊息；除錯完成後移除此設定即可關閉。
+
+### 技術重點
+
+- `PlayPage.tsx` 中 `[sync][master->state]`、`[sync][poll]`、`[sync][follower]` 診斷輸出改用 `debugLog()`。
+- TTS 重生、音訊驗證與 audio element 自動重試/載入失敗診斷改用 `debugLog()` / `debugWarn()`。
+- TTS 驗證失敗、重生失敗與音訊載入失敗原本已有 UI 錯誤提示或自動重試流程，因此不再無條件呼叫 `console.error`。
+- frontend typecheck 通過，並以 grep 確認 `PlayPage.tsx` 不再有直接 `console.info/warn/error`。
+
 ## 系統設定 SLA override 前端範圍驗證
 
 ### 功能目的
