@@ -33,6 +33,10 @@ const TransferAdminBodySchema = z.object({
   account_id: z.string().trim().min(1).max(256),
 });
 
+const UpdateOpenAiApiKeyBodySchema = z.object({
+  api_key: z.string().optional(),
+});
+
 const SYSTEM_AUTH_SETTING_KEYS = [
   'google_auth_enabled',
   'google_client_id',
@@ -100,8 +104,11 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.patch('/api/system/openai-api-key', async (request, reply) => {
-    const body = request.body as { api_key?: string };
-    const apiKey = (body?.api_key ?? '').trim();
+    const parsed = UpdateOpenAiApiKeyBodySchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', parsed.error.issues[0]?.message ?? 'Invalid body'));
+    }
+    const apiKey = (parsed.data.api_key ?? '').trim();
     const accountId = currentAccountId();
     setOpenAIApiKeyRuntime(accountId, apiKey);
     setRuntimeAiSettings(accountId, { openaiApiKey: apiKey });

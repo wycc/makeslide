@@ -1,5 +1,27 @@
 # MakeSlide 功能說明
 
+## OpenAI API Key 設定請求驗證
+
+### 功能目的
+
+系統設定頁可透過 `PATCH /api/system/openai-api-key` 更新目前帳號的 OpenAI API Key。過去這個端點直接把 request body 斷言為 `{ api_key?: string }` 後呼叫 `.trim()`，若用戶端或第三方整合誤送 `{"api_key": 123}` 這類非字串值，後端會在 trim 時拋出未預期例外並回傳 500。
+
+新版在進入設定更新前先用 Zod 驗證請求體，`api_key` 必須是字串或省略。格式錯誤會回傳 400 `INVALID_REQUEST`，讓用戶端能明確修正輸入，也避免把可預期的輸入錯誤記成伺服器內部錯誤。
+
+### 使用方式
+
+1. 一般使用者仍可在「設定」頁輸入 OpenAI API Key 並儲存。
+2. 輸入合法字串時，後端會 trim 前後空白並保存；回應會包含 `has_key` 表示目前是否有有效 key。
+3. 送出空字串、純空白字串或省略 `api_key` 時，語意維持為清除既有 OpenAI API Key。
+4. 若 API client 送出非字串 `api_key` 或非物件 body，後端會回傳 400 `INVALID_REQUEST`，不再產生 500。
+
+### 技術細節
+
+- `backend/src/routes/pdfs/admin.ts` 新增 `UpdateOpenAiApiKeyBodySchema = z.object({ api_key: z.string().optional() })`，並在 `PATCH /api/system/openai-api-key` 使用 `safeParse(request.body ?? {})`。
+- 驗證失敗時沿用既有 `errorResponse('INVALID_REQUEST', ...)` 格式回傳 400，與相鄰的 `PATCH /api/system/ai-settings` 行為保持一致。
+- 通過驗證後才對 `parsed.data.api_key` 做 `.trim()`，避免非字串值觸發 `TypeError`。
+- 新增 `backend/test/admin-openai-api-key.test.ts`，覆蓋合法字串保存、缺省清除、空白字串清除、非字串 `api_key` 400，以及非物件 body 400。
+
 ## 從提示詞產生大綱支援 128K 長提示詞
 
 ### 功能目的
