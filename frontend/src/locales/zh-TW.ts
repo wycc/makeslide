@@ -119,6 +119,7 @@ export const zhTW = {
   'home.deleteCategoryFailed': '刪除類別失敗',
   'home.promptSubmitted': '已送出提示詞，開始生成',
   'home.defaultStyleStarted': '使用預設風格，開始生成',
+  'home.alreadyProcessing': '此簡報已經在處理或已完成，不需要再次提交',
   'home.logoutSuccess': '已登出 Google 帳號',
   'home.logoutFailed': '登出失敗',
   'home.retryQueued': '已重新排入處理佇列',
