@@ -761,6 +761,17 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
         >
           {t('play.animation.addEffect')}
         </button>
+        {compact && (
+          <button
+            type="button"
+            disabled={disabled || draft.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS}
+            title={draft.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS ? t('play.animation.maxEffects') : undefined}
+            onClick={() => handleApplyPreset('pause-playback')}
+            className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/10 px-3 py-1.5 text-sm text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            ⏸ {t('play.animation.preset.pausePlayback')}
+          </button>
+        )}
         {!compact && (
           <select
             disabled={disabled || draft.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS}
