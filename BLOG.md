@@ -2537,3 +2537,19 @@ Gemini TTS 語音合成的回應結構是好幾層巢狀的（`candidates[0].con
 - 新增 `useI18n()` 與本地 `formatMessage()` 佔位符替換 helper（沿用 `QuizBuilderPage.tsx`/`HomePage.tsx` 既有的 `{name}` 替換慣例），將原本的字串樣板（如 `` `${formatInt(metrics.pdfs.completed)} 份完成` ``）改為 `formatMessage('systemData.completedHint', { count: formatInt(metrics.pdfs.completed) })` 的形式。
 - 新增 32 個 `systemData.*` 翻譯鍵，涵蓋頁首標題/副標/按鈕/連結、資料產生時間、三個統計區塊（簡報處理狀態／Pipeline 執行狀態／LLM 使用量與估算成本）下所有指標 label 與 hint、Stage/Artifact 狀態分布標題與無資料提示；「返回首頁」連結直接複用既有的 `settings.backHome` 鍵（與 `SettingsPage.tsx` 共用同一份翻譯），不重複建立。
 - 新增 `frontend/src/i18n.test.ts` 的「SystemDataPage locale keys are complete」測試區塊，驗證所有新增的 32 個 key 在中英文字典中皆存在且非空字串。
+
+## `CreditExhaustedDialog.tsx` 補齊 i18n
+
+### 功能目的
+
+當 LLM/TTS 額度耗盡導致 API 呼叫失敗時，前端會在全域層級監聽 `CREDIT_EXHAUSTED_EVENT` 事件並彈出 `CreditExhaustedDialog` 提示使用者。這個對話框過去完全沒有走 `useI18n()`，是 `frontend/src/components/` 下唯一還沒有國際化的對話框元件，「建議處理方式」「錯誤碼」「前往設定」「我知道了」四處文字都是硬編碼中文，英文介面使用者遇到額度耗盡時會突然看到一段中文提示。
+
+### 使用方式
+
+此變更純粹是補齊翻譯，不影響事件監聽、彈出/關閉狀態或導向設定頁的行為：切換到英文介面後，額度耗盡對話框的固定文字（標題旁的「建議處理方式」段落標籤、錯誤碼說明、「前往設定」連結與「我知道了」按鈕）會顯示英文；對話框標題與訊息本身（`detail.title`/`detail.message`/`detail.nextStep`）原本就是由後端錯誤訊息對應產生，不在此次調整範圍內。
+
+### 技術細節
+
+- 新增 `useI18n()`，將四處固定文字改為 `creditExhausted.suggestedNextStep`/`creditExhausted.errorCode`/`creditExhausted.goToSettings`/`creditExhausted.gotIt` 翻譯鍵。
+- `creditExhausted.errorCode` 鍵的值含 `{code}`/`{status}` 兩個佔位符（如「錯誤碼：{code}（HTTP {status}）」），元件內直接用 `.replaceAll('{code}', detail.code).replaceAll('{status}', String(detail.status))` 代入；因為這個元件只有一處需要佔位符替換，沒有另外抽出像 `QuizBuilderPage.tsx`/`SystemDataPage.tsx` 那樣的共用 `formatMessage()` helper。
+- 新增 `frontend/src/i18n.test.ts` 的「CreditExhaustedDialog locale keys are complete」測試區塊，驗證 4 個新 key 在中英文字典中皆存在且非空字串。

@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
+import { useI18n } from '../i18n';
 import {
   CREDIT_EXHAUSTED_EVENT,
   type CreditExhaustedEventDetail,
 } from '../lib/api';
 
 export default function CreditExhaustedDialog() {
+  const { t } = useI18n();
   const [detail, setDetail] = useState<CreditExhaustedEventDetail | null>(null);
 
   useEffect(() => {
@@ -39,12 +41,12 @@ export default function CreditExhaustedDialog() {
         </div>
 
         <div className="rounded-lg border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm text-slate-200">
-          <p className="font-medium text-slate-100">建議處理方式</p>
+          <p className="font-medium text-slate-100">{t('creditExhausted.suggestedNextStep')}</p>
           <p className="mt-1 text-slate-300">{detail.nextStep}</p>
         </div>
 
         <p className="mt-3 text-xs text-slate-500">
-          錯誤碼：{detail.code}（HTTP {detail.status}）
+          {t('creditExhausted.errorCode').replaceAll('{code}', detail.code).replaceAll('{status}', String(detail.status))}
         </p>
 
         <div className="mt-5 flex justify-end gap-2">
@@ -53,14 +55,14 @@ export default function CreditExhaustedDialog() {
             className="rounded-md border border-slate-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
             onClick={() => setDetail(null)}
           >
-            前往設定
+            {t('creditExhausted.goToSettings')}
           </a>
           <button
             type="button"
             onClick={() => setDetail(null)}
             className="rounded-md bg-amber-300 px-3 py-1.5 text-sm font-medium text-slate-950 hover:bg-amber-200"
           >
-            我知道了
+            {t('creditExhausted.gotIt')}
           </button>
         </div>
       </div>

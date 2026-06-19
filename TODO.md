@@ -116,11 +116,13 @@
 
 - [x] 後端測驗管理補上刪除端點（含前端刪除按鈕）：`backend/src/routes/pdfs/quizzes.ts` 有 `GET`/`POST /quizzes/generate`/`POST /quizzes`/`PUT /quizzes/:quizId` 但沒有 `DELETE /api/pdfs/:id/quizzes/:quizId`，相較之下投票功能在 `detail.ts` 有對應的 `DELETE /api/pdfs/:id/polls/:pollId`（840 行）。前端 `QuizBuilderPage.tsx` 的已儲存測驗清單（620 行附近）每筆都有「開始」「顯示答案」「結束」「歷史記錄」按鈕，但沒有刪除按鈕，且 `frontend/src/lib/api/pdfs.ts` 也沒有對應的 `deleteQuizSet()`，使用者建立測驗後若想清理舊測驗集完全無法做到。應補上後端 DELETE 路由（檢查與 `PUT` 相同的編輯權限，刪除該 `quiz_id` 的 quiz_sets 紀錄與其關聯的 quiz_attempts，回傳 204），並在前端新增 `deleteQuizSet()` API 呼叫與清單項目的刪除按鈕（含確認對話框），補上對應的後端權限測試。
 
-- [ ] `CreditExhaustedDialog.tsx` 補齊 i18n：此元件完全沒有使用 `useI18n()`，「建議處理方式」「錯誤碼：...（HTTP ...）」「前往設定」「我知道了」四處文字皆為硬編碼中文，是目前 `frontend/src/components/` 下唯一還沒有走 i18n 的對話框元件（用 `grep` 比對整個 components 目錄確認，`DrawingCanvas.tsx` 雖然也沒有 `useI18n()` 但裡面的中文都只是程式碼註解，不是使用者可見文字）。應改用 `useI18n()` 並新增對應翻譯鍵，保留既有額度用盡事件監聽與導向設定頁行為不變。
+- [x] `CreditExhaustedDialog.tsx` 補齊 i18n：此元件完全沒有使用 `useI18n()`，「建議處理方式」「錯誤碼：...（HTTP ...）」「前往設定」「我知道了」四處文字皆為硬編碼中文，是目前 `frontend/src/components/` 下唯一還沒有走 i18n 的對話框元件（用 `grep` 比對整個 components 目錄確認，`DrawingCanvas.tsx` 雖然也沒有 `useI18n()` 但裡面的中文都只是程式碼註解，不是使用者可見文字）。應改用 `useI18n()` 並新增對應翻譯鍵，保留既有額度用盡事件監聽與導向設定頁行為不變。
 
 - [x] `SystemDataPage.tsx` 補齊 i18n：此頁面（系統管理員可觀測性儀表板，對應已加上 `isAdminAccount()` 權限檢查的 `/api/system/observability`）完全沒有使用 `useI18n()`，是 `frontend/src/pages/` 下目前唯一還沒有走 i18n 的頁面（用 `grep` 比對整個 pages 目錄確認），包含標題「系統可觀測性儀表」、「重新整理」「AI 設定」「返回首頁」、各區塊標題（簡報處理狀態／Pipeline 執行狀態／LLM 使用量與估算成本／Stage 狀態分布等）與超過 15 個 `MetricCard` label（總簡報數、成功率、失敗率、處理中、總 Run 數等）皆為硬編碼中文。應改用 `useI18n()` 並新增對應翻譯鍵，數字/時間格式化函式（`formatInt`/`formatDuration`/`formatCost`）可暫不處理語言切換，僅補齊文字標籤。
 
 - [ ] 前端 `ttsVoices.ts` 補上單元測試：`frontend/src/lib/ttsVoices.ts` 完全沒有對應測試檔案，但內含兩個純函式 `geminiVoiceLabel(voice)`/`openaiVoiceLabel(voice)`（依 `GEMINI_TTS_VOICE_GENDER`/`OPENAI_TTS_VOICE_GENDER` 對照表把聲音名稱標註成「voice（男）」/「voice（女）」，找不到對照時原樣回傳），以及兩份聲音清單與性別對照表。應新增 `frontend/src/lib/ttsVoices.test.ts`，覆蓋已知聲音正確標註性別、未知聲音原樣回傳、`OPENAI_TTS_VOICES`/`GEMINI_TTS_VOICES` 陣列中每個聲音都能在對應的性別對照表中找到（避免日後新增聲音忘記同步更新對照表，註解已說明 `GEMINI_TTS_VOICES` 需與後端 `services/gemini.ts` 的 `GEMINI_VOICES` 同步，這項測試可至少保證前端內部兩份資料不會互相脫節）。
+
+[ ] 從提示詞產生大綱目前只限 4000 字，把它提高到 128K。
 
 ---
 
@@ -426,3 +428,7 @@
 - 時間: 2026-06-19 13:35:00 +0800
 - 分支: feature/system-data-page-i18n-20260619
 - 內容: 完成 `SystemDataPage.tsx`（系統管理員可觀測性儀表板）的 i18n 補齊。新增 `useI18n()` 與本地 `formatMessage()` 佔位符替換 helper（沿用 `QuizBuilderPage.tsx`/`HomePage.tsx` 既有慣例），將頁首標題/副標、重新整理按鈕、AI 設定與返回首頁連結（後者直接複用既有的 `settings.backHome` 鍵，不重複建立）、資料產生時間、簡報處理狀態／Pipeline 執行狀態／LLM 使用量與估算成本三個區塊標題與全部 `MetricCard` label/hint、Stage／Artifact 狀態分布標題與無資料提示，全部改用新增的 `systemData.*` 翻譯鍵（共 32 個），中英文同步補齊。依 TODO 項目原本的範圍備註，`formatInt`/`formatDuration`/`formatCost` 三個數字/時間格式化函式維持原樣不處理語言切換（`formatDuration` 的「秒」與 `formatCost` 的「模型價格未知」仍為固定中文，這是刻意保留的範圍邊界，非遺漏），表格列中的 `item.status`（後端回傳的英文狀態字串如 succeeded/failed）也維持原樣顯示，不在此項範圍內新增狀態翻譯對照。新增 `frontend/src/i18n.test.ts` 的「SystemDataPage locale keys are complete」測試區塊驗證 32 個新 key 中英文皆存在且非空。已執行 typecheck（前後端皆通過）、前端完整測試（151 個全數通過，含新增的 i18n 測試）與後端 `npm test`（367 個測試，本次未改動任何後端程式碼，18 個失敗皆為既有環境性基準＋1 個測試順序相關的已知 flaky 項目，無新增回歸）。
+
+- 時間: 2026-06-19 13:55:00 +0800
+- 分支: feature/credit-exhausted-dialog-i18n-20260619
+- 內容: 完成 `CreditExhaustedDialog.tsx` 的 i18n 補齊。新增 `useI18n()`，將「建議處理方式」「錯誤碼：{code}（HTTP {status}）」「前往設定」「我知道了」四處硬編碼中文改為 `creditExhausted.suggestedNextStep`/`creditExhausted.errorCode`/`creditExhausted.goToSettings`/`creditExhausted.gotIt` 翻譯鍵，其中 `errorCode` 鍵含 `{code}`/`{status}` 兩個佔位符，元件內以 `.replaceAll()` 直接代入（此元件原本沒有 `formatMessage` helper，字串替換僅一處，未額外抽出共用函式）。保留既有 `CREDIT_EXHAUSTED_EVENT` 事件監聽、彈出/關閉狀態與導向 `/settings` 連結行為不變。新增 `frontend/src/i18n.test.ts` 的「CreditExhaustedDialog locale keys are complete」測試區塊驗證 4 個新 key 中英文皆存在且非空。已執行 typecheck（前後端皆通過）與前端完整測試（152 個全數通過，含新增測試）；本次未改動任何後端程式碼。
