@@ -1,5 +1,27 @@
 # MakeSlide 功能說明
 
+## 圖片預覽對話框 i18n 補齊
+
+### 功能目的
+
+播放頁在重新生成單頁圖片後，會開啟圖片預覽對話框讓使用者確認結果，再決定關閉或套用並取代原圖。過去這個對話框的標題、圖片替代文字與兩個操作按鈕仍直接寫死繁體中文，導致介面語言切到英文時，圖片預覽流程仍混用中文。
+
+新版將 `ImagePreviewDialog.tsx` 改為使用 `useI18n()` 取得翻譯文字，並新增 `play.imagePreviewDialog.*` 中英文鍵。這次只替換使用者可見文字來源，不改變預覽圖片、關閉對話框、唯讀/處理中停用套用按鈕，或套用取代原圖的既有行為。
+
+### 使用方式與影響
+
+1. 使用者操作方式維持不變：重新生成圖片後仍會看到預覽對話框，可按「關閉預覽」放棄，或按「套用取代原圖」套用結果。
+2. 當界面文字語言為繁體中文時，對話框顯示原本的中文文案。
+3. 當界面文字語言為英文時，標題、圖片 alt、關閉與套用按鈕會改顯示英文。
+4. 圖片預覽與按鈕事件仍沿用原 props：`imagePreviewUrl` 控制預覽來源、`onClose` 關閉、`onApply` 套用，`isReadOnlyProcessing` 仍只影響套用按鈕停用狀態。
+
+### 技術細節
+
+- `frontend/src/pages/play/ImagePreviewDialog.tsx` 新增 `useI18n()`，用 `t('play.imagePreviewDialog.title')`、`t('play.imagePreviewDialog.imageAlt')`、`t('play.imagePreviewDialog.close')`、`t('play.imagePreviewDialog.applyReplace')` 取代原本四處硬編碼中文。
+- `frontend/src/locales/zh-TW.ts` 與 `frontend/src/locales/en.ts` 新增相同翻譯鍵，維持 `TranslationKey` 由繁中 locale 推導的型別檢查模式。
+- `frontend/src/i18n.test.ts` 新增 `ImagePreviewDialog locale keys are complete` 測試，確認四個鍵在中英文 locale 中皆存在且非空字串。
+- 已執行 frontend typecheck 與 i18n 測試，確保新增鍵不破壞既有字典 key 對齊與 TypeScript 型別。
+
 ## 講義 PDF 純函式單元測試補強
 
 ### 功能目的
