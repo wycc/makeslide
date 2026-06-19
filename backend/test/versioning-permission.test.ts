@@ -128,3 +128,90 @@ test('POST .../image/restore/:hash lets a read-write collaborator on a public_ed
   assert.equal((resp.json() as { error: { code: string } }).error.code, 'PAGE_NOT_FOUND');
   await app.close();
 });
+
+// --- GET history/version endpoints: read-permission gate ---
+
+function seedShareToken(pdfId: string, token: string, access: 'read_only' | 'editable' = 'read_only'): void {
+  const t = nowIso();
+  db.prepare(`DELETE FROM pdf_shares WHERE pdf_id = ?`).run(pdfId);
+  db.prepare(`INSERT INTO pdf_shares (pdf_id, token, access, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`).run(pdfId, token, access, t, t);
+}
+
+/**
+ * Each route is exercised against a freshly seeded PDF. For the "should be let through"
+ * cases, `image_path`/`script_path` is nulled out so the route deterministically hits the
+ * existing `PAGE_NOT_FOUND` branch right after the permission check, without needing a real
+ * git history fixture for `getPresentationFileHistory()`/`getPresentationFileAtCommit()`.
+ */
+const GET_ROUTES = [
+  { name: 'image history', path: (id: string) => `/api/pdfs/${id}/pages/1/image/history`, nullPath: 'image_path' },
+  { name: 'script history', path: (id: string) => `/api/pdfs/${id}/pages/1/script/history`, nullPath: 'script_path' },
+  { name: 'script version content', path: (id: string) => `/api/pdfs/${id}/pages/1/script/versions/${FAKE_HASH}`, nullPath: 'script_path' },
+  { name: 'image version content', path: (id: string) => `/api/pdfs/${id}/pages/1/image/versions/${FAKE_HASH}`, nullPath: 'image_path' },
+] as const;
+
+let getRouteCounter = 0;
+
+for (const route of GET_ROUTES) {
+  test(`GET ${route.name} rejects a non-owner request on a private presentation`, async () => {
+    const pdfId = `verperm-get-priv-${getRouteCounter++}`;
+    seedVersioningPdf(pdfId, 'private');
+    const app = await buildApp();
+    const resp = await app.inject({ method: 'GET', url: route.path(pdfId), headers: OTHER_HEADERS });
+    assert.equal(resp.statusCode, 403);
+    assert.equal((resp.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+    await app.close();
+  });
+
+  test(`GET ${route.name} rejects an unauthenticated request on a private presentation`, async () => {
+    const pdfId = `verperm-get-anon-${getRouteCounter++}`;
+    seedVersioningPdf(pdfId, 'private');
+    const app = await buildApp();
+    const resp = await app.inject({ method: 'GET', url: route.path(pdfId) });
+    assert.equal(resp.statusCode, 403);
+    await app.close();
+  });
+
+  test(`GET ${route.name} returns 404 for a non-existent PDF`, async () => {
+    const app = await buildApp();
+    const resp = await app.inject({ method: 'GET', url: route.path('verperm-get-missing'), headers: OWNER_HEADERS });
+    assert.equal(resp.statusCode, 404);
+    assert.equal((resp.json() as { error: { code: string } }).error.code, 'PDF_NOT_FOUND');
+    await app.close();
+  });
+
+  test(`GET ${route.name} lets the owner past the permission check`, async () => {
+    const pdfId = `verperm-get-own-${getRouteCounter++}`;
+    seedVersioningPdf(pdfId, 'private');
+    db.prepare(`UPDATE pages SET ${route.nullPath} = NULL WHERE pdf_id = ? AND page_number = 1`).run(pdfId);
+    const app = await buildApp();
+    const resp = await app.inject({ method: 'GET', url: route.path(pdfId), headers: OWNER_HEADERS });
+    assert.equal(resp.statusCode, 404);
+    assert.equal((resp.json() as { error: { code: string } }).error.code, 'PAGE_NOT_FOUND');
+    await app.close();
+  });
+
+  test(`GET ${route.name} lets anyone on a public presentation past the permission check`, async () => {
+    const pdfId = `verperm-get-pub-${getRouteCounter++}`;
+    seedVersioningPdf(pdfId, 'public');
+    db.prepare(`UPDATE pages SET ${route.nullPath} = NULL WHERE pdf_id = ? AND page_number = 1`).run(pdfId);
+    const app = await buildApp();
+    const resp = await app.inject({ method: 'GET', url: route.path(pdfId), headers: OTHER_HEADERS });
+    assert.equal(resp.statusCode, 404);
+    assert.equal((resp.json() as { error: { code: string } }).error.code, 'PAGE_NOT_FOUND');
+    await app.close();
+  });
+
+  test(`GET ${route.name} lets a valid read-only share token without a session past the permission check`, async () => {
+    const pdfId = `verperm-get-share-${getRouteCounter++}`;
+    seedVersioningPdf(pdfId, 'private');
+    db.prepare(`UPDATE pages SET ${route.nullPath} = NULL WHERE pdf_id = ? AND page_number = 1`).run(pdfId);
+    const token = `verperm-token-${getRouteCounter++}`;
+    seedShareToken(pdfId, token, 'read_only');
+    const app = await buildApp();
+    const resp = await app.inject({ method: 'GET', url: `${route.path(pdfId)}?share=${token}` });
+    assert.equal(resp.statusCode, 404);
+    assert.equal((resp.json() as { error: { code: string } }).error.code, 'PAGE_NOT_FOUND');
+    await app.close();
+  });
+}
