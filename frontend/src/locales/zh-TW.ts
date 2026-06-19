@@ -1104,4 +1104,8 @@ export const zhTW = {
   'systemData.noStageData': '尚無 stage timing 資料。',
   'systemData.artifactDistribution': '頁面 Artifact 狀態分布',
   'systemData.noArtifactData': '尚無頁面 artifact timing 資料。',
+  'creditExhausted.suggestedNextStep': '建議處理方式',
+  'creditExhausted.errorCode': '錯誤碼：{code}（HTTP {status}）',
+  'creditExhausted.goToSettings': '前往設定',
+  'creditExhausted.gotIt': '我知道了',
 } as const;

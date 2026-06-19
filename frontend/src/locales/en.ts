@@ -1104,4 +1104,8 @@ export const en = {
   'systemData.noStageData': 'No stage timing data yet.',
   'systemData.artifactDistribution': 'Page artifact status distribution',
   'systemData.noArtifactData': 'No page artifact timing data yet.',
+  'creditExhausted.suggestedNextStep': 'Suggested next step',
+  'creditExhausted.errorCode': 'Error code: {code} (HTTP {status})',
+  'creditExhausted.goToSettings': 'Go to settings',
+  'creditExhausted.gotIt': 'Got it',
 } as const;

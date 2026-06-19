@@ -493,3 +493,19 @@ test('SystemDataPage locale keys are complete', () => {
     assert.notEqual(en[key].trim(), '');
   }
 });
+
+test('CreditExhaustedDialog locale keys are complete', () => {
+  const requiredKeys = [
+    'creditExhausted.suggestedNextStep',
+    'creditExhausted.errorCode',
+    'creditExhausted.goToSettings',
+    'creditExhausted.gotIt',
+  ] as const;
+
+  for (const key of requiredKeys) {
+    assert.equal(typeof zhTW[key], 'string');
+    assert.equal(typeof en[key], 'string');
+    assert.notEqual(zhTW[key].trim(), '');
+    assert.notEqual(en[key].trim(), '');
+  }
+});
