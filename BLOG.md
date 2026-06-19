@@ -1,5 +1,28 @@
 # MakeSlide 功能說明
 
+## 技能服務單元測試補強
+
+### 功能目的
+
+使用者可在設定中建立自訂「技能」，讓逐字稿生成時套用特定講述風格；後端 `skills.ts` 同時負責內建技能、使用者技能 CRUD、內建技能啟用狀態與依用途篩選 prompt。這些邏輯會把資料寫入每個帳號各自的 `skills.json`，因此最重要的風險是 enabled 狀態、刪除/修改回傳值或帳號隔離行為在後續調整中被破壞。
+
+新版補上後端服務層單元測試，讓技能清單合併、CRUD、內建切換與 prompt 過濾規則都有明確回歸保障，並使用測試專用帳號清理資料，避免測試污染開發者真實技能設定。
+
+### 測試覆蓋
+
+1. `listSkills()` 會回傳所有內建技能加上使用者技能，且內建技能 `enabled` 依帳號的 `enabledBuiltIns` 正確標示。
+2. `createUserSkill()` / `updateUserSkill()` / `deleteUserSkill()` 覆蓋新增、trim 後保存、保留 `id`/`createdAt`、修改 enabled/applyTo、刪除後持久化為空清單。
+3. 修改不存在 id 回傳 `null`，刪除不存在 id 回傳 `false`，且不會額外建立 `skills.json`。
+4. `toggleBuiltInSkill()` 可在同一帳號中切換內建技能啟用/停用，切換不存在 id 回傳 `null`。
+5. `getEnabledSkillPrompts()` 依 `applyTo` 正確篩選：查詢 `script` 時包含 `script` 與 `all`，查詢 `all` 時只包含 `all`，並排除 disabled 技能。
+
+### 技術細節
+
+- 新增 `backend/test/skills.test.ts`，直接測試 `backend/src/services/skills.ts` 匯出的服務函式，不需啟動 Fastify 或呼叫外部服務。
+- 測試使用帳號 id `skills-service-test-20260619`，資料位置沿用 `getAccountSettingsLocation()` 的 `accounts/<accountId>/skills.json`；每個測試 `beforeEach` / `afterEach` 都遞迴刪除該帳號目錄，確保互相隔離且不碰真實帳號。
+- 針對持久化行為直接讀取測試帳號的 `skills.json`，確認 CRUD 與內建啟用清單確實寫入預期 JSON 結構。
+- 已執行 backend typecheck 與 `backend/test/skills.test.ts`，5 個測試全部通過。
+
 ## OpenAI API Key 設定請求驗證
 
 ### 功能目的
