@@ -156,6 +156,64 @@ test('DELETE /pages/:n/chat-history allows the owner to clear chat history', asy
   await app.close();
 });
 
+function seedShareToken(pdfId: string, token: string, access: 'read_only' | 'editable' = 'read_only'): void {
+  const t = nowIso();
+  db.prepare(`DELETE FROM pdf_shares WHERE pdf_id = ? OR token = ?`).run(pdfId, token);
+  db.prepare(`INSERT INTO pdf_shares (pdf_id, token, access, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`).run(pdfId, token, access, t, t);
+}
+
+test('GET /pages/:n/chat-history rejects a non-owner request on a private presentation', async () => {
+  seedPageOpsPdf('pageops-chat-history-get-priv-01', 'private');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'GET', url: '/api/pdfs/pageops-chat-history-get-priv-01/pages/1/chat-history', headers: OTHER_HEADERS });
+  assert.equal(resp.statusCode, 403);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+  await app.close();
+});
+
+test('GET /pages/:n/chat-history rejects an unauthenticated request on a private presentation', async () => {
+  seedPageOpsPdf('pageops-chat-history-get-anon-01', 'private');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'GET', url: '/api/pdfs/pageops-chat-history-get-anon-01/pages/1/chat-history' });
+  assert.equal(resp.statusCode, 403);
+  await app.close();
+});
+
+test('GET /pages/:n/chat-history returns 404 for a non-existent PDF', async () => {
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'GET', url: '/api/pdfs/pageops-chat-history-get-missing/pages/1/chat-history', headers: OWNER_HEADERS });
+  assert.equal(resp.statusCode, 404);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'PDF_NOT_FOUND');
+  await app.close();
+});
+
+test('GET /pages/:n/chat-history allows the owner to read chat history', async () => {
+  seedPageOpsPdf('pageops-chat-history-get-own-01', 'private');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'GET', url: '/api/pdfs/pageops-chat-history-get-own-01/pages/1/chat-history', headers: OWNER_HEADERS });
+  assert.equal(resp.statusCode, 200);
+  assert.deepEqual((resp.json() as { history: unknown[] }).history, []);
+  await app.close();
+});
+
+test('GET /pages/:n/chat-history allows anyone on a public presentation', async () => {
+  seedPageOpsPdf('pageops-chat-history-get-pub-01', 'public');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'GET', url: '/api/pdfs/pageops-chat-history-get-pub-01/pages/1/chat-history', headers: OTHER_HEADERS });
+  assert.equal(resp.statusCode, 200);
+  await app.close();
+});
+
+test('GET /pages/:n/chat-history allows a valid read-only share token without a session', async () => {
+  seedPageOpsPdf('pageops-chat-history-get-shr-01', 'private');
+  const token = 'pageops-chat-history-share-token-01';
+  seedShareToken('pageops-chat-history-get-shr-01', token, 'read_only');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'GET', url: `/api/pdfs/pageops-chat-history-get-shr-01/pages/1/chat-history?share=${token}` });
+  assert.equal(resp.statusCode, 200);
+  await app.close();
+});
+
 test('POST /pages/:n/chat rejects a non-owner request on a read-only shared presentation', async () => {
   seedPageOpsPdf('pageops-chat-01', 'public');
   await expectForbidden('POST', '/api/pdfs/pageops-chat-01/pages/1/chat', OTHER_HEADERS, { question: 'what is this slide about?' });
