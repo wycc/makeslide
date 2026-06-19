@@ -77,6 +77,7 @@ export const en = {
   'settings.slaSaveError': 'Failed to update SLA setting',
   'settings.slaLoadError': 'Failed to load SLA settings',
   'settings.slaInvalidValue': 'Please enter a valid number of seconds, or leave empty to revert to the default',
+  'settings.slaOutOfRange': 'Enter an SLA target between {min} and {max} seconds, or leave empty to revert to the default',
   'settings.skills': 'AI Skills',
   'settings.skillsDesc': 'Skills are custom instructions injected into AI calls (e.g. script generation). Enable built-in skills or create your own.',
   'settings.skillBuiltIn': 'built-in',

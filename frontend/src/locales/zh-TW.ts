@@ -77,6 +77,7 @@ export const zhTW = {
   'settings.slaSaveError': '更新 SLA 設定失敗',
   'settings.slaLoadError': '載入 SLA 設定失敗',
   'settings.slaInvalidValue': '請輸入有效的數字（秒），或留空以恢復預設值',
+  'settings.slaOutOfRange': '請輸入 {min} 到 {max} 秒之間的 SLA 目標，或留空以恢復預設值',
   'settings.skills': 'AI 技能',
   'settings.skillsDesc': '技能是自訂指令，會在 AI 呼叫（例如逐字稿生成）時自動注入。可啟用內建技能或建立自訂技能。',
   'settings.skillBuiltIn': '內建',
