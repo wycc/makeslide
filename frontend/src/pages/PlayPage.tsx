@@ -1945,7 +1945,7 @@ export default function PlayPage() {
     playbackRate, setPlaybackRate, showSubtitle, setShowSubtitle,
     playbackSettingsOpen, setPlaybackSettingsOpen, playbackStatusMessage,
     followerAudioUnlocked, setFollowerAudioUnlocked,
-    scripts, setScripts, displayedImageSrc, setDisplayedImageSrc,
+    scripts, setScripts, displayedImageSrc,
     // 動畫長度超過語音長度時，語音已結束但動畫仍需繼續播放至完成
     isExtendingAnimation,
     slideAnimationPlaying: isPlaying || isExtendingAnimation,

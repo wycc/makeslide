@@ -1,29 +1,32 @@
 # MakeSlide 功能說明
 
-## 播放頁逐字稿動畫等待音檔時間軸就緒
+## 播放頁動畫與圖片改為同頁就緒後才顯示
 
 ### 功能目的
 
-播放頁的動畫效果可以透過 `startTrigger` 綁定逐字稿句子，讓提示框、重點清單、圖形或自訂動畫跟著旁白句子出現。換頁時，`PlayPage.tsx` 會先把音檔 duration 重設為 0，等新音檔 metadata 載入後才取得正確長度；在這個短暫空窗中，逐字稿句子時間軸 `sentenceTimeline` 仍是空陣列。
+播放頁的動畫效果可以透過 `startTrigger` 綁定逐字稿句子，讓提示框、重點清單、圖形或自訂動畫跟著旁白句子出現。換頁時，`PlayPage.tsx` 會先切到新頁資料，但音檔 metadata 與圖片載入是非同步完成；在這個短暫空窗中，頁面可能同時存在「新頁逐字稿」、「上一頁 duration」或「上一頁圖片」。
 
-過去若此時先解析並建立動畫時間軸，`resolveAnimationSpec()` 找不到 `startTrigger` 對應的句子時間，就會保留 JSON 內的字面 `start`。AI 產生的效果預設常是 `start=0`，因此整頁動畫與多個 `step-list` 深色容器可能在 t=0 同時啟動，造成看起來像靜態底圖外多了一層黑框或疊加層誤播。
+先前已阻擋 `sentenceTimeline` 空陣列時建立逐字稿動畫，但使用者仍回報在不同頁來回切換、特別是全螢幕時偶發黑框。根因是第一個 render 仍可能用「新頁逐字稿 + 上一頁 duration」算出非空時間軸，或用上一頁 `displayedImageSrc` 搭配新頁動畫 overlay。全螢幕偏向載入高解析原圖，比一般播放面板的縮圖更慢，因此錯配視窗更容易被看見。
 
-新版在播放頁建立/播放 `currentAnimationSpec` 前先檢查：如果目前動畫效果中有任何一項依賴 `startTrigger`，但 `sentenceTimeline` 尚未產生，就暫時不建立動畫 timeline；等音檔 metadata 載入、duration 更新並正確算出逐字稿時間軸後，再解析 `startTrigger` 並播放動畫。
+新版把播放頁圖片、音訊 duration 與動畫 spec 都綁定到目前頁：新頁圖片尚未準備好時，不再保留上一頁圖片給 renderer 使用；含 `startTrigger` 的動畫也必須等目前頁 audio metadata 載入、duration 確認屬於目前頁，並建立目前頁逐字稿時間軸後才解析。
 
 ### 使用方式與效果
 
-1. 使用者不需要調整操作方式；正常進入播放頁或切換投影片即可。
-2. 依逐字稿句子觸發的動畫會等待音檔長度可用後才開始建立 timeline，避免因 duration 暫時為 0 而在 t=0 誤播。
-3. 沒有使用 `startTrigger`、只使用固定秒數 `start` 的動畫維持原本行為，仍可在音檔 metadata 載入前以固定時間點預覽或播放。
-4. 此修復只處理播放頁建立動畫 spec 的時機，不改 GSAP 渲染邏輯、不改 `buildGsapTimeline.ts`，也不影響靜態底圖本身。
+1. 使用者不需要調整操作方式；正常進入播放頁、快速切換頁面或進入全螢幕即可套用新防護。
+2. 新頁圖片尚未載入完成時，播放面板與全螢幕不再把上一頁圖片拿來搭配新頁動畫 overlay，避免短暫黑框或錯頁疊層。
+3. 依逐字稿句子觸發的動畫會等待目前頁音檔 metadata 與目前頁 sentence timeline 就緒後才建立，避免使用上一頁 duration 產生錯誤時序。
+4. 沒有使用 `startTrigger`、只使用固定秒數 `start` 的動畫不需要等待音檔 metadata，但仍會等目前頁圖片就緒，確保動畫與底圖同頁。
+5. 此修復只調整播放頁資產就緒與 spec 解析條件，不改 GSAP 渲染邏輯，也未修改 `buildGsapTimeline.ts`。
 
 ### 技術細節
 
-- `frontend/src/pages/PlayPage.tsx` 新增 `hasTranscriptStartTrigger()`，用來判斷目前 `SlideAnimationSpec` 是否含有任何 `effect.startTrigger`。
-- `PlayPage.tsx` 在 `resolveAnimationSpec(rawAnimationSpec, sentenceTimeline)` 前新增 `shouldWaitForTranscriptTimeline`：條件是 `sentenceTimeline.length === 0` 且動畫 spec 依賴逐字稿觸發。
-- 若需要等待逐字稿時間軸，`currentAnimationSpec` 暫時回傳 `null`，讓 `SlideRenderer` / `useGsapSlideTimeline` 不建立可播放動畫 timeline；待 `onLoadedMetadata` 更新 duration 後，`buildSentenceTimeline()` 產生非空時間軸，下一次 memo 會解析出正確的 `start` 秒數。
-- `animationTimelineDurationSeconds(currentAnimationSpec)` 會在等待期間得到 0，避免頁面結束延長邏輯使用錯誤的 t=0 動畫長度；時間軸就緒後再恢復以解析後 spec 計算動畫總長。
-- 已執行 `npm run typecheck --workspace frontend`，確認前端型別檢查通過。
+- `frontend/src/pages/PlayPage.tsx` 新增 `LoadedSlideImageState`，以 `{ pageNumber, src }` 記錄已載入圖片；`displayedImageSrc` 改為 derived value，只有 `pageNumber` 與 `src` 同時符合目前頁的 `targetImageSrc` 時才回傳，否則為 `null`。
+- `PlayPage.tsx` 新增 `durationPageNumber`，`onLoadedMetadata` 只在 metadata 事件抵達時把 duration 與當下頁碼一起記錄；換頁時會將 `duration` 重設為 0 並清空 `durationPageNumber`。
+- `sentenceTimeline` 改用 `sentenceTimelineDuration` 建立：只有 `durationPageNumber === currentPage.page_number` 且 duration 有效時才使用真實 duration，避免新頁逐字稿與上一頁 duration 組合出錯頁時間軸。
+- `frontend/src/pages/play/playbackReadiness.ts` 新增可測 helper `shouldResolvePageAnimationSpec()`，統一判斷：圖片必須屬於目前頁；含 `startTrigger` 的動畫還必須等目前頁 audio metadata 與非空 sentence timeline 就緒。
+- `currentAnimationSpec` 只有在 `shouldResolvePageAnimationSpec()` 回傳 true 時才呼叫 `resolveAnimationSpec()`；等待期間維持 `null`，讓 `SlideRenderer` / `useGsapSlideTimeline` 不建立錯頁動畫 timeline。
+- `frontend/src/pages/play/playbackReadiness.test.ts` 覆蓋 transcript-triggered animation 等待目前頁 audio metadata、圖片未就緒時阻擋所有動畫、以及無 `startTrigger` 動畫不需等待音檔 metadata 的情境。
+- 已執行 `npm --workspace frontend run typecheck`，以及 `node --import tsx --test frontend/src/pages/play/playbackReadiness.test.ts frontend/src/lib/animationSpec.test.ts frontend/src/lib/subtitles.test.ts`，共 59 個測試通過。
 
 ## 大綱對話訊息支援 128K 長內容
 
