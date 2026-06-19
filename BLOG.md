@@ -2832,3 +2832,24 @@ Gemini TTS 語音合成的回應結構是好幾層巢狀的（`candidates[0].con
 - 在 `backend/src/services/pdfFigures.ts` 新增 `loadFigureReferenceFiles(pdfId, figures)`：對每個圖表並行嘗試讀取圖片檔案並透過 OpenAI SDK 的 `toFile()` 包裝成可上傳的檔案物件；單個讀取失敗時記錄 `logger.warn({ pdfId, figureId, imagePath, err }, ...)` 並回傳 `null`，最終過濾掉失敗項目。回傳值是 `{ figures, files }` 這一對陣列（順序對齊、長度相同），讓呼叫端可以直接用過濾後的 `figures` 子集去產生圖說文字（`buildFigureReferenceNotes()`），確保文字說明與實際附加的圖片永遠一致。
 - `backend/src/worker/steps/renderTextPagesWithLlm.ts` 與 `backend/src/routes/pdfs/page-operations.ts`（`inpaint-image` 路由）兩處原本完全重複的 `Promise.all()` 讀取邏輯，都改成呼叫這個共用 helper；同時調整了呼叫順序，讓 `buildFigureReferenceNotes()` 在圖表實際載入完成（並過濾掉失敗項目）之後才執行，而不是在讀取之前就用未過濾的清單產生文字。
 - 新增 `backend/test/pdf-figures.test.ts` 的 3 個測試，覆蓋「部分圖表檔案缺失仍能完成並跳過該圖表」「空輸入直接回傳空結果」「全部檔案存在時應全數成功載入」三種情境；並針對性重跑既有的 `figure-reference-image-generation.test.ts`/`render-text-pages-figure-injection.test.ts` 整合測試，確認這次重構沒有改變既有正常路徑的行為。
+
+## 修復課堂測驗讀取端點完全沒有權限檢查的安全缺口
+
+### 功能目的
+
+課堂測驗功能（`backend/src/routes/pdfs/quizzes.ts`）讓教師可以為簡報建立測驗題目，並在課堂中讓學生作答。先前的權限修復系列已經針對測驗的「新增」「修改」「刪除」端點補上編輯權限檢查，但這次重新檢視發現「讀取」端點完全被遺漏：`GET /api/pdfs/:id/quizzes`（取得測驗題目與正確答案）與 `GET /api/pdfs/:id/quizzes/:quizId/attempts`（取得學生作答紀錄，包含 session/client id、作答內容與分數）都只檢查資源是否存在，沒有檢查請求者是否有權限讀取——任何已登入帳號只要知道 PDF id，就能看到別人簡報的測驗正確答案，以及該堂課所有學生的作答記錄與分數。後者涉及學生個人資料外洩，風險明顯高於一般內容外洩，這次優先修復。
+
+### 使用方式
+
+此變更對一般使用者完全透明：
+
+1. 簡報擁有者、簡報設為 `public`/`public_editable` 的讀者、以及持有有效分享連結（share token）的人，仍可正常讀取測驗題目與作答記錄。
+2. 非擁有者對 `private` 簡報的讀取請求會收到 `403 FORBIDDEN`，不再能看到別人的測驗內容與學生個資。
+3. 學生提交作答（`POST .../attempts`）的行為不受影響，維持原本不需要編輯權限即可送出答案的設計（與課堂投票提交同理）。
+
+### 技術細節
+
+- 在 `backend/src/routes/pdfs/quizzes.ts` 新增與 `runs.ts`/`slow-artifacts.ts` 一致的本地 `canReadPdf()`（擁有者或 `public`/`public_editable` 才能讀）、`ShareTokenParamSchema`/`getShareToken()`（從 `x-makeslide-share-token` header 或 `?share=` query 取得分享 token）、`hasShareAccess()`（查 `pdf_shares` 表驗證 token）。
+- `GET /api/pdfs/:id/quizzes`：PDF 不存在回 `404 PDF_NOT_FOUND`；沒有分享存取且 `canReadPdf()` 為否則回 `403 FORBIDDEN`。
+- `GET /api/pdfs/:id/quizzes/:quizId/attempts`：在原本「quiz 是否存在」的檢查之前，先補上同樣的 PDF 層級讀取權限檢查。
+- 新增 6 個測試覆蓋兩個端點對私有簡報非擁有者的 403、未知 PDF id 的 404、`GET /quizzes` 對擁有者／公開讀者／分享 token 持有者皆正常回應、`GET /quizzes/:quizId/attempts` 擁有者能正確讀到學生作答記錄。過程中也修正了一個測試本身的瑕疵：新測試一開始重複使用了其他測試已用過的 `session_id`/`client_id` 字面值，因資料表對這兩欄設有全域唯一約束，導致提交被誤判為更新舊紀錄而非新建，改用測試專屬的唯一值後修正。
