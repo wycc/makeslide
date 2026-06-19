@@ -19,7 +19,9 @@ import {
   customScriptDurationSeconds,
   generateFocusEffectsFromTranscript,
   getFocusEffectParams,
+  getDuePausePlaybackEffect,
   getShapeKind,
+  insertEffectAfterFirstStartingEffect,
   resolveAnimationSpec,
   resolveStartTriggerSeconds,
 } from "./animationSpec";
@@ -43,6 +45,26 @@ test("generateFocusEffectsFromTranscript caps at MAX_SLIDE_ANIMATION_EFFECTS", (
 
 test("generateFocusEffectsFromTranscript returns empty array for no sentences", () => {
   assert.deepEqual(generateFocusEffectsFromTranscript(0), []);
+});
+
+test("pause-playback is a known overlay effect type", () => {
+  assert.ok(SLIDE_ANIMATION_EFFECT_TYPES.includes("pause-playback"));
+  assert.ok(OVERLAY_EFFECT_TYPES.includes("pause-playback"));
+});
+
+test("getDuePausePlaybackEffect returns an unconsumed pause cue crossed by playback", () => {
+  const effect = { id: "pause-1", target: "slide" as const, type: "pause-playback" as const, start: 3, duration: 0.4, ease: "power1.out" as const };
+  const spec = { version: 1 as const, enabled: true, effects: [effect] };
+  assert.equal(getDuePausePlaybackEffect(spec, 2.9, 3.1, new Set())?.id, "pause-1");
+  assert.equal(getDuePausePlaybackEffect(spec, 2.9, 3.1, new Set(["pause-1"])), null);
+  assert.equal(getDuePausePlaybackEffect(spec, 3.1, 3.2, new Set()), null);
+});
+
+test("insertEffectAfterFirstStartingEffect inserts after the first starting effect", () => {
+  const start = { id: "start", target: "slide" as const, type: "fade-in" as const, start: 0, duration: 1, ease: "none" as const };
+  const later = { id: "later", target: "slide" as const, type: "zoom-in" as const, start: 5, duration: 1, ease: "none" as const };
+  const pause = { id: "pause", target: "slide" as const, type: "pause-playback" as const, start: 2, duration: 0.4, ease: "none" as const };
+  assert.deepEqual(insertEffectAfterFirstStartingEffect([start, later], pause).map((effect) => effect.id), ["start", "pause", "later"]);
 });
 
 test("buildCustomScriptSandboxDoc embeds the code as base64 and defines #root", () => {

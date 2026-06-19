@@ -3,6 +3,7 @@ import type { CSSProperties, ImgHTMLAttributes, ReactNode, Ref } from 'react';
 import katex from 'katex';
 import type { SlideAnimationEffect, SlideAnimationSpec, SlideRenderType } from '../../types';
 import {
+  DEFAULT_PAUSE_PLAYBACK_TEXT,
   OVERLAY_EFFECT_TYPES,
   buildCustomScriptSandboxDoc,
   customScriptDurationSeconds,
@@ -302,6 +303,33 @@ function EffectOverlay({
         }}
         dangerouslySetInnerHTML={{ __html: html }}
       />
+    );
+  }
+  if (effect.type === 'pause-playback') {
+    return (
+      <div
+        data-effect-id={effect.id}
+        style={{
+          ...position,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '0.75em 1em',
+          borderRadius: 14,
+          border: '2px solid rgba(125, 211, 252, 0.75)',
+          background: 'rgba(15, 23, 42, 0.88)',
+          color: '#e0f2fe',
+          fontSize: 'clamp(1rem, 3vw, 2.25rem)',
+          fontWeight: 800,
+          textAlign: 'center',
+          lineHeight: 1.35,
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+          boxShadow: '0 12px 40px rgba(0,0,0,0.55), 0 0 28px rgba(56,189,248,0.35)',
+        }}
+      >
+        {effect.text?.trim() || DEFAULT_PAUSE_PLAYBACK_TEXT}
+      </div>
     );
   }
   if (effect.type === 'custom-script') {

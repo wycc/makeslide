@@ -427,6 +427,25 @@ test('validateAnimationSpec accepts a formula effect without a formula (not yet 
   }
 });
 
+test('validateAnimationSpec accepts a pause-playback effect with text and overlay params', () => {
+  const result = validateAnimationSpec(
+    validSpec([
+      fadeIn({
+        id: 'effect-1',
+        type: 'pause-playback',
+        text: '停下來補充說明',
+        params: { xPct: 18, yPct: 34, widthPct: 64, heightPct: 24, distancePct: 99 },
+      }),
+    ]),
+  );
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.spec.effects[0].type, 'pause-playback');
+    assert.equal(result.spec.effects[0].text, '停下來補充說明');
+    assert.deepEqual(result.spec.effects[0].params, { xPct: 18, yPct: 34, widthPct: 64, heightPct: 24 });
+  }
+});
+
 test('validateAnimationSpec rejects a formula effect with an empty formula', () => {
   assert.equal(validateAnimationSpec(validSpec([fadeIn({ type: 'formula', formula: '' })])).ok, false);
 });

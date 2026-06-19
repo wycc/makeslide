@@ -136,6 +136,16 @@ export function buildGsapTimeline(stage: HTMLElement, spec: SlideAnimationSpec):
         }
         break;
       }
+      case 'pause-playback': {
+        const overlay = stage.querySelector<HTMLElement>(`[data-effect-id="${effect.id}"]`);
+        if (overlay) {
+          tl.fromTo(overlay, { autoAlpha: 0, scale: 0.96 }, { autoAlpha: 1, scale: 1, ...common }, effect.start);
+          if (effect.exitDuration !== undefined) {
+            tl.to(overlay, { autoAlpha: 0, scale: 0.98, ...common }, effect.start + effect.duration + effect.exitDuration);
+          }
+        }
+        break;
+      }
       case 'step-list': {
         const overlay = stage.querySelector<HTMLElement>(`[data-effect-id="${effect.id}"]`);
         if (overlay) {

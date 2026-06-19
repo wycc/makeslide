@@ -26,6 +26,7 @@ export const SLIDE_ANIMATION_EFFECT_TYPES: readonly SlideAnimationEffectType[] =
   'step-list',
   'overlay-image',
   'formula',
+  'pause-playback',
   'custom-script',
 ];
 
@@ -41,6 +42,7 @@ export const OVERLAY_EFFECT_TYPES: readonly SlideAnimationEffectType[] = [
   'step-list',
   'overlay-image',
   'formula',
+  'pause-playback',
   'custom-script',
 ];
 
@@ -71,8 +73,10 @@ export const TRANSFORM_EFFECT_TYPES: readonly SlideAnimationEffectType[] = [
   'pan-down',
 ];
 
-/** Max length (chars) for a `text-callout` effect's `text`, matching the backend's `MAX_TEXT_CALLOUT_LENGTH`. */
+/** Max length (chars) for a `text-callout` or `pause-playback` effect's `text`, matching the backend's `MAX_TEXT_CALLOUT_LENGTH`. */
 export const MAX_TEXT_CALLOUT_LENGTH = 80;
+
+export const DEFAULT_PAUSE_PLAYBACK_TEXT = '暫停：請按播放鍵繼續';
 
 /** Max number of bullet items in a `step-list` effect's `items`, matching the backend's `MAX_STEP_LIST_ITEMS`. */
 export const MAX_STEP_LIST_ITEMS = 6;
@@ -290,6 +294,29 @@ export function animationTimelineDurationSeconds(spec: SlideAnimationSpec | null
     const end = effect.start + effect.duration + (effect.exitDuration ?? 0);
     return Number.isFinite(end) && end > max ? end : max;
   }, 0);
+}
+
+export function getDuePausePlaybackEffect(
+  spec: SlideAnimationSpec | null | undefined,
+  previousTime: number,
+  currentTime: number,
+  consumedEffectIds: ReadonlySet<string>,
+): SlideAnimationEffect | null {
+  if (!spec?.enabled || currentTime < previousTime) return null;
+  for (const effect of spec.effects) {
+    if (effect.type !== 'pause-playback' || consumedEffectIds.has(effect.id)) continue;
+    if (effect.start > previousTime && effect.start <= currentTime) return effect;
+  }
+  return null;
+}
+
+export function insertEffectAfterFirstStartingEffect(
+  effects: readonly SlideAnimationEffect[],
+  effect: SlideAnimationEffect,
+): SlideAnimationEffect[] {
+  const insertIndex = effects.findIndex((item) => item.start === 0 || item.startTrigger !== undefined);
+  if (insertIndex === -1) return [effect, ...effects];
+  return [...effects.slice(0, insertIndex + 1), effect, ...effects.slice(insertIndex + 1)];
 }
 
 /**

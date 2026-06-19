@@ -1,5 +1,30 @@
 # MakeSlide 功能說明
 
+## 播放頁暫停播放效果
+
+### 功能目的
+
+簡報播放時，講者常需要在某個時間點停下來補充說明、回答問題，或讓觀眾消化重點。過去播放頁的動畫效果多半是視覺提示：淡入、縮放、重點框、文字 callout、公式或自訂動畫；它們不會改變播放流程。新版新增 `pause-playback` 效果，讓效果本身成為「流程控制提示」：畫面顯示一段文字，同時自動暫停目前影片/音訊播放，直到使用者按播放鍵才繼續。
+
+### 使用方式
+
+1. 在播放頁動畫分頁可從「套用範本」選擇「暫停播放提示」，效果會顯示預設文字「暫停：請按播放鍵繼續」，可再編輯提示文字、開始時間與位置大小。
+2. 播放到該效果的開始時間時，系統會顯示提示 overlay 並暫停目前播放；再次按播放鍵後，播放會從暫停位置繼續。
+3. 全螢幕播放時可用快捷鍵插入：先按 `a` 進入插入效果序列，再按 `p` 插入暫停播放效果。
+4. 快捷鍵插入的效果會放在動畫效果清單中「第一個開始的效果」後方，讓它符合既有動畫清單的疊層與編輯模型；若沒有開始效果，則插入到清單最前面。
+5. `p` 原本在全螢幕 master 模式可開啟投票控制；只有在剛按過 `a` 的插入序列中，`p` 才會改為插入暫停效果。
+
+### 技術重點
+
+- 前端型別與常數新增 `pause-playback`：`frontend/src/types.ts` 的 `SlideAnimationEffectType`、`frontend/src/lib/animationSpec.ts` 的 `SLIDE_ANIMATION_EFFECT_TYPES` / `OVERLAY_EFFECT_TYPES` 都納入新效果。
+- 後端 schema 同步更新：`backend/src/services/pageAnimation.ts` 的 `ANIMATION_EFFECT_TYPES`、`EffectSchema` 與 `ALLOWED_PARAM_KEYS` 接受 `pause-playback`，並沿用 `text` 與 overlay position params 驗證。
+- `frontend/src/components/slide/SlideRenderer.tsx` 新增暫停提示 overlay，使用深色半透明卡片、cyan 邊框與可換行文字；`frontend/src/components/slide/buildGsapTimeline.ts` 讓它以淡入/縮放方式出現。
+- `frontend/src/pages/PlayPage.tsx` 以 `getDuePausePlaybackEffect()` 偵測播放時間是否跨過尚未消費的暫停效果起點，命中時呼叫 `audio.pause()`；每頁會重設已消費效果集合，避免同一效果在同頁重複觸發。
+- `frontend/src/pages/play/AnimationEditorTab.tsx` 新增範本與文字編輯欄位，插入邏輯使用 `insertEffectAfterFirstStartingEffect()` 將暫停效果放在第一個開始效果之後。
+- 已補前端純函式測試：確認 `pause-playback` 屬於 overlay effect、播放時間跨過起點時會找出待觸發效果、以及插入位置符合第一個開始效果後方。
+- 已補後端 schema 測試：確認 `pause-playback` 可保存提示文字與 overlay params，未知 params 會被濾除。
+- 驗證結果：`node --test --import tsx frontend/src/lib/animationSpec.test.ts` 通過（43 tests），`npm run typecheck` 通過。後端單檔測試在目前環境因 `better-sqlite3` native module 與 Node.js v26 ABI 不相容而無法啟動，錯誤為 `NODE_MODULE_VERSION 127` vs `147`。
+
 ## 播放頁動畫與圖片改為同頁就緒後才顯示
 
 ### 功能目的
