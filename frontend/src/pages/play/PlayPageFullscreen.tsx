@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
 import type { TouchEvent } from 'react';
 import DrawingCanvas from '../../components/DrawingCanvas';
 import { SlideRenderer } from '../../components/slide/SlideRenderer';
@@ -32,6 +32,7 @@ const FULLSCREEN_LAYOUTS = [
   { mode: 'image', labelKey: 'play.fullscreen.layout.image' },
   { mode: 'split', labelKey: 'play.fullscreen.layout.split' },
   { mode: 'edit', labelKey: 'play.fullscreen.layout.edit' },
+  { mode: 'animation', labelKey: 'play.fullscreen.layout.animation' },
 ] as const;
 
 export function PlayPageFullscreen() {
@@ -96,7 +97,6 @@ export function PlayPageFullscreen() {
   } = usePlayPageContext();
 
   const { t } = useI18n();
-  const [animationEditorOpen, setAnimationEditorOpen] = useState(false);
 
   const syncDisplayedQuestion = syncDisplayedQuestionId
     ? syncFollowerQuestions.find((q) => q.id === syncDisplayedQuestionId) ?? null
@@ -180,7 +180,7 @@ export function PlayPageFullscreen() {
           <span className="ml-2 h-6 w-2 rounded-sm bg-current" aria-hidden="true" />
         </div>
       ) : null}
-      {fullscreenLayout === 'split' || fullscreenLayout === 'edit' ? (
+      {fullscreenLayout === 'split' || fullscreenLayout === 'edit' || fullscreenLayout === 'animation' ? (
         <div className="flex h-full w-full items-stretch">
           <div className="flex h-full w-1/2 shrink-0 flex-col p-2">
             <div className="flex min-h-0 flex-1 items-center justify-center">
@@ -298,6 +298,20 @@ export function PlayPageFullscreen() {
               ) : (
                 <div className="flex h-full items-center justify-center text-slate-500">{t('play.fullscreen.noSubtitle')}</div>
               )}
+            </div>
+          ) : fullscreenLayout === 'animation' ? (
+            // 全螢幕動畫編輯：右側為動畫效果編輯面板，跟字幕/編輯版面一樣切成左右兩半顯示。
+            <div
+              className="flex h-full w-1/2 cursor-default flex-col overflow-y-auto px-6 py-10 md:px-10 md:py-12"
+              onClick={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+              onTouchEnd={(e) => e.stopPropagation()}
+            >
+              <h2 className="mb-1 shrink-0 text-base font-semibold text-slate-200 md:text-lg">
+                {t('play.fullscreen.animation.heading')}
+              </h2>
+              <p className="mb-3 shrink-0 text-xs text-slate-400">{t('play.fullscreen.animation.description')}</p>
+              <AnimationEditorTab mode="fullscreen" />
             </div>
           ) : (
             // 全螢幕編輯：右側為可編輯的逐字稿。stopPropagation 避免點擊/觸控時觸發播放切換或滑動換頁。
@@ -421,25 +435,9 @@ export function PlayPageFullscreen() {
         </div>
       )}
       <div className="absolute right-4 top-4 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            setAnimationEditorOpen((prev) => !prev);
-          }}
-          aria-pressed={animationEditorOpen}
-          className={`rounded-md border px-3 py-1.5 text-sm ${
-            animationEditorOpen
-              ? 'border-fuchsia-300/70 bg-fuchsia-500/25 font-medium text-fuchsia-50'
-              : 'border-slate-500 bg-slate-900/70 text-slate-100 hover:bg-slate-800'
-          }`}
-          title={animationEditorOpen ? t('play.fullscreen.animation.close') : t('play.fullscreen.animation.open')}
-        >
-          🎞 {t('play.fullscreen.animation.button')}
-        </button>
         <div className="flex items-center overflow-hidden rounded-md border border-slate-500 bg-slate-900/70 text-sm">
           {FULLSCREEN_LAYOUTS.map(({ mode, labelKey }) => (
-            isLockedFullscreen && mode === 'edit' ? null : (
+            isLockedFullscreen && (mode === 'edit' || mode === 'animation') ? null : (
             <button
               key={mode}
               type="button"
@@ -473,29 +471,6 @@ export function PlayPageFullscreen() {
           </button>
         ) : null}
       </div>
-      {animationEditorOpen ? (
-        <aside
-          className="absolute right-4 top-16 z-[115] max-h-[calc(100vh-5rem)] w-[min(92vw,34rem)] cursor-default overflow-y-auto rounded-xl border border-fuchsia-400/35 bg-slate-950/95 p-4 text-slate-100 shadow-2xl backdrop-blur-md"
-          onClick={(e) => e.stopPropagation()}
-          onTouchStart={(e) => e.stopPropagation()}
-          onTouchEnd={(e) => e.stopPropagation()}
-        >
-          <div className="mb-3 flex items-start justify-between gap-3">
-            <div>
-              <h2 className="text-base font-semibold text-fuchsia-100">{t('play.fullscreen.animation.heading')}</h2>
-              <p className="mt-1 text-xs text-slate-400">{t('play.fullscreen.animation.description')}</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setAnimationEditorOpen(false)}
-              className="shrink-0 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
-            >
-              {t('play.fullscreen.close')}
-            </button>
-          </div>
-          <AnimationEditorTab mode="fullscreen" />
-        </aside>
-      ) : null}
       {syncOverlayText ? (
         <div
           className={`pointer-events-none absolute left-1/2 w-[min(94vw,1100px)] -translate-x-1/2 px-3 ${
