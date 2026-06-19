@@ -34,6 +34,7 @@ import {
   useI18n,
 } from '../i18n';
 import { GEMINI_TTS_VOICES, OPENAI_TTS_VOICES, geminiVoiceLabel, openaiVoiceLabel } from '../lib/ttsVoices';
+import { formatSlaOverrideRangeMessage, validateSlaOverrideSecondsInput } from '../lib/slaOverrideValidation';
 
 type SettingsCategory = 'account' | 'ai' | 'sync' | 'skills' | 'admin';
 
@@ -372,18 +373,17 @@ export default function SettingsPage() {
 
   const onSlaOverrideApply = useCallback((item: SlaTargetSetting) => {
     const key = `${item.kind}:${item.name}`;
-    const raw = (slaOverrideInputs[key] ?? '').trim();
-    if (raw === '') {
-      void onSlaOverrideSave(item.kind, item.name, null);
+    const validation = validateSlaOverrideSecondsInput(slaOverrideInputs[key] ?? '', slaSettings?.bounds);
+    if (!validation.ok) {
+      setErr(
+        validation.reason === 'out-of-range'
+          ? formatSlaOverrideRangeMessage(t('settings.slaOutOfRange'), validation.minSeconds ?? 0, validation.maxSeconds ?? 0)
+          : t('settings.slaInvalidValue'),
+      );
       return;
     }
-    const seconds = Number(raw);
-    if (!Number.isFinite(seconds)) {
-      setErr(t('settings.slaInvalidValue'));
-      return;
-    }
-    void onSlaOverrideSave(item.kind, item.name, Math.round(seconds * 1000));
-  }, [onSlaOverrideSave, slaOverrideInputs, t]);
+    void onSlaOverrideSave(item.kind, item.name, validation.targetMs);
+  }, [onSlaOverrideSave, slaOverrideInputs, slaSettings, t]);
 
   const renderSlaRow = (item: SlaTargetSetting) => {
     const key = `${item.kind}:${item.name}`;

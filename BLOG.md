@@ -1,5 +1,22 @@
 # MakeSlide 功能說明
 
+## 系統設定 SLA override 前端範圍驗證
+
+### 功能目的
+
+管理員可在系統設定中調整 pipeline 各階段的 SLA override 秒數。後端本來已限制可接受範圍，但前端過去只檢查輸入是否為數字，超出範圍時必須等送出後由後端回傳錯誤，訊息也較偏技術性。現在前端會使用後端回傳的 bounds 先行驗證，讓管理員在送出前就看到清楚的可接受秒數範圍。
+
+### 使用方式
+
+在系統設定的 Pipeline SLA 設定中輸入 override 秒數時，若數值低於最小值或高於最大值，畫面會直接顯示範圍錯誤並阻止送出；輸入空白仍代表清除該 override。合法範圍內的數值會照常送出並由後端保存。
+
+### 技術重點
+
+- `SettingsPage.tsx` 在 `onSlaOverrideApply()` 中使用 `slaSettings.bounds.min_ms/max_ms` 對秒數輸入換算後的毫秒值做前端驗證。
+- 新增 `slaOverrideValidation.ts` 純函式，集中處理空白、有限數字、bounds 範圍與錯誤訊息格式，方便測試與重用。
+- 新增 `settings.slaOutOfRange` 中英文 i18n，錯誤訊息會顯示可接受秒數範圍。
+- 新增 helper 測試並執行 frontend typecheck 與 i18n/API SLA 相關測試，確認沒有新增回歸。
+
 ## 移除全螢幕 `a` 鍵新增效果快捷鍵
 
 ### 功能目的
