@@ -46,7 +46,11 @@ const PromptChatBodySchema = z.object({
     .array(
       z.object({
         role: z.enum(['user', 'assistant']),
-        content: z.string().trim().min(1).max(4000),
+        content: z
+          .string()
+          .trim()
+          .min(1, 'message content 至少需要 1 個字')
+          .max(MAX_PROMPT_TO_OUTLINE_CHARS, `message content 不可超過 ${MAX_PROMPT_TO_OUTLINE_CHARS} 字`),
       }),
     )
     .min(1)

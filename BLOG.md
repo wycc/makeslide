@@ -1,5 +1,27 @@
 # MakeSlide 功能說明
 
+## 大綱對話訊息支援 128K 長內容
+
+### 功能目的
+
+「新增多頁」與提示詞大綱流程中的 AI 對話端點 `POST /api/prompt-chat` 會接收多輪 `messages[].content`，讓使用者把既有大綱、長篇素材或前一輪整理結果交給助理延續。雖然單次提示詞轉大綱 `POST /api/prompt-text` 已放寬到 128K（131072 字），但對話訊息 schema 仍保留舊的 4000 字上限，造成多輪大綱對話在貼上長素材時仍被 400 擋下。
+
+新版把 `POST /api/prompt-chat` 的每則對話內容上限對齊同一個 128K 契約。使用者可在 AI 大綱對話中貼上超過 4000 字但未超過 131072 字的長篇需求；若單則訊息超過 128K，後端仍會回傳清楚的 400 驗證錯誤，避免過大請求進入 LLM 流程。
+
+### 使用方式與影響
+
+1. 在支援 AI 大綱對話的流程中輸入或貼上長篇課程素材、會議紀錄、研究摘要或既有大綱。
+2. 單則對話訊息現在可超過 4000 字，最多接受 131072 字，與 `POST /api/prompt-text` 的提示詞上限一致。
+3. 若單則 `messages[].content` 超過 131072 字，後端會回傳 400 `INVALID_REQUEST`，訊息包含 `message content 不可超過 131072 字`。
+4. 此修改只放寬大綱對話輸入驗證，不改 `assistant_message`、`outline_text` 的 LLM 回應 schema，也不改其他頁面聊天或圖片重生 prompt 的限制。
+
+### 技術細節
+
+- `backend/src/routes/pdfs/upload.ts` 的 `PromptChatBodySchema.messages[].content` 改用既有 `MAX_PROMPT_TO_OUTLINE_CHARS = 128 * 1024`，移除殘留的 `.max(4000)`。
+- `messages[].content` 的 `.max()` 補上明確錯誤訊息 `message content 不可超過 131072 字`，`.min()` 也補上 `message content 至少需要 1 個字`，讓 API 驗證錯誤更可讀。
+- `backend/test/prompt-text-limit.test.ts` 新增 `POST /api/prompt-chat` 測試：5000+ 字訊息會通過並呼叫 OpenAI stub 回傳大綱；128K+1 字訊息會在 schema 驗證階段回 400 `INVALID_REQUEST`。
+- 後端測試沿用 `MAX_PROMPT_TO_OUTLINE_CHARS` 匯出常數，避免測試與實作各自寫死 131072。
+
 ## 分享複製狀態訊息 i18n 補齊
 
 ### 功能目的
