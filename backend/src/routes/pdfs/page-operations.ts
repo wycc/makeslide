@@ -880,8 +880,14 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     }
 
     const { id, n } = parsedPage.data;
-    const pdfRow = db.prepare(`SELECT page_count FROM pdfs WHERE id = ?`).get(id) as { page_count: number | null } | undefined;
-    if (!pdfRow?.page_count || n > pdfRow.page_count) {
+    const pdfRow = db.prepare(`SELECT owner_sub, visibility, page_count FROM pdfs WHERE id = ?`).get(id) as
+      | { owner_sub: string | null; visibility: PdfRow['visibility']; page_count: number | null }
+      | undefined;
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!hasShareAccess(request, id) && !canReadPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的候選圖片'));
+    }
+    if (!pdfRow.page_count || n > pdfRow.page_count) {
       return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
     }
 
