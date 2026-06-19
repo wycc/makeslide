@@ -18,15 +18,15 @@ const TEXT_SIZE = 11;
 const TEXT_LEADING = 15;
 const MAX_TEXT_LINES = 8;
 
-function escapePdfText(input: string): string {
+export function escapePdfText(input: string): string {
   return input.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
 }
 
-function sanitizePdfText(input: string): string {
+export function sanitizePdfText(input: string): string {
   return input.replace(/\r\n/g, '\n').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, ' ');
 }
 
-function wrapText(input: string, maxChars: number): string[] {
+export function wrapText(input: string, maxChars: number): string[] {
   const lines: string[] = [];
   for (const paragraph of sanitizePdfText(input).split(/\n+/)) {
     let remaining = paragraph.trim();
@@ -45,7 +45,7 @@ function wrapText(input: string, maxChars: number): string[] {
   return lines;
 }
 
-function toUtf16BeHex(text: string): string {
+export function toUtf16BeHex(text: string): string {
   const utf16le = Buffer.from(text, 'utf16le');
   const out = Buffer.alloc(utf16le.length + 2);
   // BOM FEFF

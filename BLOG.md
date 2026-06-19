@@ -1,5 +1,29 @@
 # MakeSlide 功能說明
 
+## 講義 PDF 純函式單元測試補強
+
+### 功能目的
+
+講義 PDF 產生流程會把每頁截圖與逐字稿組成可下載的 PDF，其中有一組純文字處理 helper 負責 PDF 字串轉義、逐字稿清理、逐行換行，以及把中英文文字轉成 PDF 內嵌 CJK 字型可使用的 UTF-16BE hex。這些 helper 雖然不依賴圖片或外部服務，卻直接影響講義中的標題、逐字稿內容與中文顯示；若日後調整時不小心改壞，可能導致括號/反斜線破壞 PDF 語法、控制字元殘留、長逐字稿換行異常，或中文文字無法正確編碼。
+
+新版補上 `handoutPdf.ts` 的純函式單元測試，將文字處理契約固定下來。此次只把既有 helper 改為具名匯出供測試引用，並新增測試；不呼叫 `buildHandoutPdf()`，也不改變講義 PDF 的頁面尺寸、版面、圖片處理、字型設定或實際輸出格式。
+
+### 使用方式與影響
+
+1. 一般使用者不需要改變操作方式：講義 PDF 下載與既有逐字稿排版流程維持不變。
+2. 開發者調整講義 PDF 文字處理時，可先執行 `npm run typecheck` 與 `node --test --import tsx ./test/handout-pdf.test.ts` 確認純函式契約沒有回歸。
+3. 測試不需要真實投影片圖片 fixture，因此能快速驗證文字處理邏輯，而不引入 `sharp` 讀圖或 PDF 位元組快照的脆弱依賴。
+4. `buildHandoutPdf()` 仍沿用既有 `wrapText()` 與 `toUtf16BeHex()` 輸出流程，測試只提高回歸保障，不改講義視覺結果。
+
+### 技術細節
+
+- `backend/src/services/handoutPdf.ts` 將 `escapePdfText()`、`sanitizePdfText()`、`wrapText()`、`toUtf16BeHex()` 改為具名匯出，函式內容維持原樣。
+- 新增 `backend/test/handout-pdf.test.ts`，直接引用上述 helper；測試範圍刻意停在純函式層，不建立圖片、不呼叫 PDF 建構流程。
+- `escapePdfText()` 測試覆蓋一般文字、反斜線路徑與左右括號，確保 PDF literal string 需要的字元會被 escape。
+- `sanitizePdfText()` 測試覆蓋 CRLF 轉 LF、控制字元替換成空白，並確認 tab、中文、英文與數字等可列印內容保留。
+- `wrapText()` 測試覆蓋短字串單行、優先在空白處截斷、無空白長字串依最大字元數切分，以及中英文混合內容以 code point 計數。
+- `toUtf16BeHex()` 測試固定 ASCII `AB` 應輸出 `FEFF00410042`、CJK `中文` 應輸出 `FEFF4E2D6587`，同時確認 BOM 與 UTF-16BE byte order 正確。
+
 ## 縮圖服務單元測試補強
 
 ### 功能目的
