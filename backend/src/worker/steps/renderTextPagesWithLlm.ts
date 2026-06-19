@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { toFile } from 'openai';
 import { coverImagePath, pageImagePath, pageTextPath, pagesDir, pdfDir, sourcePdfPath } from '../../services/storage';
 import { commitPresentationFiles } from '../../services/presentationGit';
 import { generateCoverThumbnail, generatePageThumbnail, ensurePageThumbnail } from '../../services/thumbnails';
@@ -8,7 +7,7 @@ import { getOpenAIClient } from '../../services/openai';
 import { logger } from '../../logger';
 import { config } from '../../config';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
-import { buildFigureReferenceNotes, figureImageAbsPath, getFigureReferencesForPages } from '../../services/pdfFigures';
+import { buildFigureReferenceNotes, getFigureReferencesForPages, loadFigureReferenceFiles } from '../../services/pdfFigures';
 import { db, savePageGenerationPrompt } from '../../db';
 import { redactLogObject } from '../../services/logSanitizer';
 
@@ -220,9 +219,10 @@ export async function renderTextPagesWithLlm(
       'Text image generation: page start',
     );
 
-    const figureRefs = p.sourcePdfPages?.length
+    const rawFigureRefs = p.sourcePdfPages?.length
       ? getFigureReferencesForPages(opts.pdfId, p.sourcePdfPages)
       : [];
+    const { figures: figureRefs, files: figureRefFiles } = await loadFigureReferenceFiles(opts.pdfId, rawFigureRefs);
     const figureNotes = buildFigureReferenceNotes(figureRefs);
 
     const prompt = buildImagePrompt({
@@ -242,14 +242,6 @@ export async function renderTextPagesWithLlm(
       : prompt;
 
     savePageGenerationPrompt(opts.pdfId, p.pageNumber, 'image', promptWithSourceHint, config.openaiImageModel);
-
-    const figureRefFiles = await Promise.all(
-      figureRefs.map((figure, index) =>
-        fs.promises
-          .readFile(figureImageAbsPath(opts.pdfId, figure))
-          .then((buf) => toFile(buf, `figure-ref-${index + 1}.png`, { type: 'image/png' })),
-      ),
-    );
 
     let image;
     let finalAttempt = 0;

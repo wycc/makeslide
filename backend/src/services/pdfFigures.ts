@@ -1,5 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { toFile } from 'openai';
+import { logger } from '../logger';
 import { figureManifestPath, figureSelectionPath, pdfDir, splitFigureMapPath } from './storage';
 import type { FigureEntry, FigureManifest } from '../worker/steps/extractPdfFigures';
 
@@ -23,6 +25,40 @@ export function getPageFigures(pdfId: string, pageNumber: number): FigureEntry[]
 /** Resolves a figure's `imagePath` to an absolute path on disk. */
 export function figureImageAbsPath(pdfId: string, figure: FigureEntry): string {
   return path.join(pdfDir(pdfId), figure.imagePath);
+}
+
+/**
+ * Reads each figure's image file and wraps it as an uploadable `File` for an
+ * OpenAI image-generation request. A figure whose image file is missing or
+ * unreadable (e.g. removed by a later cleanup pass while `figures.json`
+ * still references it) is skipped with a warning instead of failing the
+ * whole batch — figure references are a "nice to have" visual aid, not a
+ * hard requirement for generating the slide. Returns the subset of `figures`
+ * that were actually loaded alongside their files, in matching order, so
+ * callers can build caption notes from the same set that was attached.
+ */
+export async function loadFigureReferenceFiles(
+  pdfId: string,
+  figures: FigureEntry[],
+): Promise<{ figures: FigureEntry[]; files: Awaited<ReturnType<typeof toFile>>[] }> {
+  const loaded = await Promise.all(
+    figures.map(async (figure, index) => {
+      const imagePath = figureImageAbsPath(pdfId, figure);
+      try {
+        const buf = await fs.promises.readFile(imagePath);
+        const file = await toFile(buf, `figure-ref-${index + 1}.png`, { type: 'image/png' });
+        return { figure, file };
+      } catch (err) {
+        logger.warn(
+          { pdfId, figureId: figure.id, imagePath, err: err instanceof Error ? err.message : String(err) },
+          'pdfFigures: failed to load figure reference image, skipping',
+        );
+        return null;
+      }
+    }),
+  );
+  const present = loaded.filter((entry): entry is { figure: FigureEntry; file: Awaited<ReturnType<typeof toFile>> } => entry !== null);
+  return { figures: present.map((entry) => entry.figure), files: present.map((entry) => entry.file) };
 }
 
 /** Finds a single figure by its stable id, searching across all pages of the manifest. Returns `null` if not found / no manifest. */

@@ -12,6 +12,7 @@ import {
   getFigureReferencesForPages,
   getPageFigures,
   loadFigureManifest,
+  loadFigureReferenceFiles,
   loadFigureSelection,
   loadSplitPageFigureMap,
   saveFigureSelection,
@@ -330,5 +331,74 @@ test('loadFigureSelection / saveFigureSelection persist per-page figure exclusio
     assert.deepEqual(loadFigureSelection(PDF_ID, PAGE_UID), { excluded: ['ok'] });
   } finally {
     fs.rmSync(path.join(config.storageRoot, PDF_ID), { recursive: true, force: true });
+  }
+});
+
+test('loadFigureReferenceFiles skips a figure whose image file is missing, without throwing', async () => {
+  const SYNTH_PDF_ID = 'pdf-figures-synth-resilient-01';
+  const synthDir = path.join(config.storageRoot, SYNTH_PDF_ID);
+  const figuresDir = path.join(synthDir, 'figures');
+  fs.mkdirSync(figuresDir, { recursive: true });
+  const figure = (id: string): FigureEntry => ({
+    id,
+    imagePath: `figures/${id}.png`,
+    width: 1,
+    height: 1,
+    bbox: { xPct: 0, yPct: 0, widthPct: 0.5, heightPct: 0.5 },
+    caption: `Figure ${id}`,
+    context: null,
+  });
+  // A 1x1 transparent PNG, just enough bytes for the file to exist and be readable.
+  const tinyPng = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYIA=',
+    'base64',
+  );
+  try {
+    fs.writeFileSync(path.join(figuresDir, 'present.png'), tinyPng);
+    // Deliberately do not write a file for "missing" — its manifest entry
+    // exists but the image was removed/never written.
+
+    const { figures, files } = await loadFigureReferenceFiles(SYNTH_PDF_ID, [figure('present'), figure('missing')]);
+
+    assert.deepEqual(figures.map((f) => f.id), ['present']);
+    assert.equal(files.length, 1);
+  } finally {
+    fs.rmSync(synthDir, { recursive: true, force: true });
+  }
+});
+
+test('loadFigureReferenceFiles returns an empty result for an empty input without touching the filesystem', async () => {
+  const { figures, files } = await loadFigureReferenceFiles('pdf-figures-synth-resilient-empty', []);
+  assert.deepEqual(figures, []);
+  assert.deepEqual(files, []);
+});
+
+test('loadFigureReferenceFiles loads every figure when all image files are present', async () => {
+  const SYNTH_PDF_ID = 'pdf-figures-synth-resilient-all-present-01';
+  const synthDir = path.join(config.storageRoot, SYNTH_PDF_ID);
+  const figuresDir = path.join(synthDir, 'figures');
+  fs.mkdirSync(figuresDir, { recursive: true });
+  const tinyPng = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYIA=',
+    'base64',
+  );
+  const figure = (id: string): FigureEntry => ({
+    id,
+    imagePath: `figures/${id}.png`,
+    width: 1,
+    height: 1,
+    bbox: { xPct: 0, yPct: 0, widthPct: 0.5, heightPct: 0.5 },
+    caption: null,
+    context: null,
+  });
+  try {
+    fs.writeFileSync(path.join(figuresDir, 'a.png'), tinyPng);
+    fs.writeFileSync(path.join(figuresDir, 'b.png'), tinyPng);
+
+    const { figures, files } = await loadFigureReferenceFiles(SYNTH_PDF_ID, [figure('a'), figure('b')]);
+    assert.deepEqual(figures.map((f) => f.id), ['a', 'b']);
+    assert.equal(files.length, 2);
+  } finally {
+    fs.rmSync(synthDir, { recursive: true, force: true });
   }
 });

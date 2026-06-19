@@ -2586,3 +2586,22 @@ Gemini TTS 語音合成的回應結構是好幾層巢狀的（`candidates[0].con
 - 新增 `frontend/src/lib/ttsVoices.test.ts`，共 10 個測試：
   - `geminiVoiceLabel()`/`openaiVoiceLabel()`：各覆蓋已知男聲標註「（男）」、已知女聲標註「（女）」、找不到對照表項目時原樣回傳聲音名稱三種情境。
   - 資料完整性（雙向比對）：驗證 `GEMINI_TTS_VOICES`/`OPENAI_TTS_VOICES` 陣列中每個聲音都能在對應的 `GEMINI_TTS_VOICE_GENDER`/`OPENAI_TTS_VOICE_GENDER` 對照表中找到 M/F 項目；同時反向驗證對照表裡沒有清單之外的多餘項目。這兩個方向的檢查合在一起，能在日後修改聲音清單卻忘記同步更新對照表時被測試立即攔截，而不是等到使用者在介面上看到沒有性別標註（或標註了一個已經移除的聲音）才發現。
+
+## 圖形參考檔案讀取補上對缺檔的容錯
+
+### 功能目的
+
+當簡報是從 PDF 匯入、且某頁內容對應到原始 PDF 中含有圖表的頁面時，系統會把抽取出來的圖表圖片作為額外的「參考圖片」附加到 AI 生成投影片圖片的請求中，幫助 AI 在重新繪製投影片時保留圖表的關鍵資訊。這個「圖表參考」機制原本只是錦上添花的加分功能，但原始實作用 `Promise.all()` 並行讀取所有圖表圖片檔案，只要其中任何一個檔案在 `figures.json` manifest 仍記錄著、但實際磁碟上已經遺失或無法讀取（例如被某次清理流程誤刪），整批讀取就會直接拋出例外，導致原本該頁的圖片生成或編輯整個失敗——即使其他圖表都正常、即使沒有圖表參考也完全可以生成圖片。這次修正讓系統改為盡力而為：缺檔的圖表會被跳過並記錄警告，其餘圖表正常附加，不再讓一個壞掉的參考檔案擋下整頁的圖片生成。
+
+### 使用方式
+
+此變更對一般使用者完全透明：
+
+1. 所有圖表檔案都存在時，行為與過去完全相同。
+2. 若某個圖表的圖片檔案缺失，系統會跳過該圖表（不附加為參考圖片、也不在文字說明中提到它），其餘圖表正常運作，整頁圖片仍能正常生成或編輯；伺服器日誌會記錄是哪個簡報、哪個圖表 id、哪個檔案路徑缺失。
+
+### 技術細節
+
+- 在 `backend/src/services/pdfFigures.ts` 新增 `loadFigureReferenceFiles(pdfId, figures)`：對每個圖表並行嘗試讀取圖片檔案並透過 OpenAI SDK 的 `toFile()` 包裝成可上傳的檔案物件；單個讀取失敗時記錄 `logger.warn({ pdfId, figureId, imagePath, err }, ...)` 並回傳 `null`，最終過濾掉失敗項目。回傳值是 `{ figures, files }` 這一對陣列（順序對齊、長度相同），讓呼叫端可以直接用過濾後的 `figures` 子集去產生圖說文字（`buildFigureReferenceNotes()`），確保文字說明與實際附加的圖片永遠一致。
+- `backend/src/worker/steps/renderTextPagesWithLlm.ts` 與 `backend/src/routes/pdfs/page-operations.ts`（`inpaint-image` 路由）兩處原本完全重複的 `Promise.all()` 讀取邏輯，都改成呼叫這個共用 helper；同時調整了呼叫順序，讓 `buildFigureReferenceNotes()` 在圖表實際載入完成（並過濾掉失敗項目）之後才執行，而不是在讀取之前就用未過濾的清單產生文字。
+- 新增 `backend/test/pdf-figures.test.ts` 的 3 個測試，覆蓋「部分圖表檔案缺失仍能完成並跳過該圖表」「空輸入直接回傳空結果」「全部檔案存在時應全數成功載入」三種情境；並針對性重跑既有的 `figure-reference-image-generation.test.ts`/`render-text-pages-figure-injection.test.ts` 整合測試，確認這次重構沒有改變既有正常路徑的行為。
