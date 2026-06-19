@@ -52,6 +52,7 @@ import type {
   SyncAiAnswer,
   SyncFollowerQuestion,
   PdfSourceItem,
+  SlideAnimationSpec,
 } from '../types';
 import {
   getStoredPlaybackSpeed,
@@ -71,6 +72,10 @@ const SYNC_CURSOR_PUSH_INTERVAL_FULLSCREEN_MS = 24;
 // 動畫延長播放期間，定期推進 currentTime 的間隔；與音訊 timeupdate 的常見頻率（~4 次/秒）相近，
 // 讓 custom-script 效果的 sandboxed iframe 在延長期間仍能持續收到 `sync` 訊息更新動畫畫面。
 const PAGE_EXTEND_TICK_MS = 250;
+
+function hasTranscriptStartTrigger(spec: SlideAnimationSpec | null | undefined): boolean {
+  return Boolean(spec?.effects.some((effect) => effect.startTrigger));
+}
 
 interface WakeLockSentinelLike {
   released: boolean;
@@ -1645,9 +1650,15 @@ export default function PlayPage() {
       : animationState.animationSavedSpec;
   // 將綁定逐字稿句子的效果，依目前句子時間表換算為實際的 start 秒數；
   // 若沒有任何效果使用 startTrigger，則回傳原物件參照，避免 GSAP timeline 不必要的重建。
+  // 換頁後 audio duration 會短暫重置為 0；若此時先用空 sentenceTimeline 解析，
+  // startTrigger 會退回效果 JSON 的字面 start（AI 預設多為 0），造成逐字稿動畫在 t=0 誤播。
+  const shouldWaitForTranscriptTimeline = useMemo(
+    () => sentenceTimeline.length === 0 && hasTranscriptStartTrigger(rawAnimationSpec),
+    [rawAnimationSpec, sentenceTimeline.length],
+  );
   const currentAnimationSpec = useMemo(
-    () => resolveAnimationSpec(rawAnimationSpec, sentenceTimeline),
-    [rawAnimationSpec, sentenceTimeline],
+    () => (shouldWaitForTranscriptTimeline ? null : resolveAnimationSpec(rawAnimationSpec, sentenceTimeline)),
+    [rawAnimationSpec, sentenceTimeline, shouldWaitForTranscriptTimeline],
   );
   // 動畫總長：若超過語音長度，handleEnded 會延後切頁直到動畫播完。
   const animationDurationSeconds = useMemo(
