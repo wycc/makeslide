@@ -138,6 +138,8 @@ test('ShareDialog locale keys are complete', () => {
     'play.shareDialog.copyLink',
     'play.shareDialog.copied',
     'play.shareDialog.copyFailed',
+    'play.shareDialog.copySuccessMessage',
+    'play.shareDialog.copyErrorMessage',
     'play.shareDialog.close',
   ] as const;
 

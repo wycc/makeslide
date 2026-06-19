@@ -1,5 +1,27 @@
 # MakeSlide 功能說明
 
+## 分享複製狀態訊息 i18n 補齊
+
+### 功能目的
+
+播放頁的分享對話框已能透過 `ShareDialog.tsx` 顯示中英文標題、說明、複製按鈕與 fallback 失敗提示，但外層 `PlayPageDialogs.tsx` 在處理複製 callback 時仍直接寫死兩段繁體中文狀態訊息：成功時的「已複製分享連結」與瀏覽器阻擋自動複製時的「瀏覽器不允許自動複製，請手動複製。」。這會讓英文介面在分享連結複製完成或失敗時仍混入中文 toast/message。
+
+新版將這兩段 callback 狀態訊息改成 `play.shareDialog.copySuccessMessage` 與 `play.shareDialog.copyErrorMessage` 翻譯鍵，讓分享對話框內部 UI 與外層狀態訊息都跟隨使用者目前的介面語言。此修改只替換文字來源，不改變分享對話框開關、Clipboard fallback、複製成功/失敗 callback、訊息顯示或錯誤清除行為。
+
+### 使用方式與影響
+
+1. 使用者建立分享連結並按「複製連結」後，若複製成功，播放頁狀態訊息會依目前介面語言顯示「已複製分享連結」或 `Share link copied`。
+2. 若瀏覽器權限、安全來源或 Clipboard API 限制造成自動複製失敗，原本的手動複製流程維持不變；錯誤訊息會依語言顯示對應文案。
+3. `ShareDialog.tsx` 內的複製按鈕狀態、`copyTextToClipboard()` fallback 與可手動選取的 URL textarea 都維持既有行為。
+4. 成功 callback 仍會清除分享錯誤，失敗 callback 仍只設定分享錯誤，不額外改動對話框開關或分享 URL 狀態。
+
+### 技術細節
+
+- `frontend/src/pages/play/PlayPageDialogs.tsx` 引入 `useI18n()`，在 `onCopySuccess` / `onCopyError` callback 中以 `t('play.shareDialog.copySuccessMessage')` 與 `t('play.shareDialog.copyErrorMessage')` 取代硬編碼中文。
+- `frontend/src/locales/zh-TW.ts` 與 `frontend/src/locales/en.ts` 新增兩個專用翻譯鍵，避免沿用 `ShareDialog.tsx` 內部按鈕狀態 `copied` 或內嵌錯誤提示 `copyFailed` 時語意不精準。
+- `frontend/src/i18n.test.ts` 的 `ShareDialog locale keys are complete` 測試納入新增鍵，確保繁體中文與英文文案都存在且非空。
+- 本輪聚焦 `PlayPageDialogs.tsx` 的分享複製成功/失敗訊息，未擴大修改 `PlayPage.tsx` 或其他播放頁大型檔案。
+
 ## 播放頁側欄投票與 QA 面板 i18n 補齊
 
 ### 功能目的
