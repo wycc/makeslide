@@ -1,5 +1,21 @@
 # MakeSlide 功能說明
 
+## GSAP 動畫 timeline 建立失敗改為 gated debug
+
+### 功能目的
+
+投影片動畫使用 GSAP 建立播放 timeline。若某個動畫設定造成 timeline 建立失敗，播放頁會自動清理並 fallback 成靜態圖片，避免投影片無法顯示。這類錯誤已有 fallback 與上層錯誤處理，對一般使用者不需要無條件輸出到 console；現在改為 gated debug warning，保留開發者除錯能力並讓一般播放 console 更乾淨。
+
+### 使用方式
+
+一般使用者不需任何操作。動畫 timeline 建立失敗時，投影片仍會 fallback 成靜態圖片。開發者若要追蹤詳細錯誤，可在瀏覽器設定 `localStorage.setItem('makeslide.debug', '1')` 後重現問題，即可看到 debug warning。
+
+### 技術重點
+
+- `useGsapSlideTimeline.ts` 使用既有 `debugWarn()` 取代直接 `console.error`。
+- 保留既有 timeline 清理、`animationFailed` 狀態、`onError` callback 與靜態圖片 fallback 流程。
+- 移除不再需要的 no-console eslint 註解，並以 typecheck 與 grep 驗證沒有殘留直接 `console.error`。
+
 ## 重生任務背景恢復警告改為 gated debug
 
 ### 功能目的

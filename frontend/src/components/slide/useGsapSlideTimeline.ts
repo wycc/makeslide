@@ -3,6 +3,7 @@ import type { RefObject } from 'react';
 import { gsap } from 'gsap';
 import type { SlideAnimationSpec } from '../../types';
 import { hasPlayableAnimation } from '../../lib/animationSpec';
+import { debugWarn } from '../../lib/debugLog';
 import { buildGsapTimeline } from './buildGsapTimeline';
 
 // The audio element only fires timeupdate ~4 times/sec, so the timeline is
@@ -61,8 +62,7 @@ export function useGsapSlideTimeline({
       tl.seek(Math.min(currentTimeRef.current, tl.duration()), false);
       if (isPlayingRef.current) tl.play();
     } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('[slide-animation] failed to build timeline, falling back to static image', err);
+      debugWarn('[slide-animation] failed to build timeline, falling back to static image', err);
       try {
         tl?.kill();
         gsap.set(stage, { clearProps: 'all' });
