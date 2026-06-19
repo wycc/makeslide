@@ -9,6 +9,10 @@ const SaveDrawingBodySchema = z.object({
   drawing_json: z.string().max(2_000_000),
 });
 
+const ShareTokenParamSchema = z.object({
+  token: z.string().regex(/^[A-Za-z0-9_-]{12,128}$/, 'Invalid share token'),
+});
+
 function sessionSub(request: FastifyRequest): string | null {
   const session = decodeSession(parseCookies(request).makeslide_session);
   return session?.sub ?? null;
@@ -18,6 +22,31 @@ function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibil
   if (!row.owner_sub) return true;
   if (sub && row.owner_sub === sub) return true;
   return row.visibility === 'public_editable';
+}
+
+function canReadPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
+  if (!row.owner_sub) return false;
+  if (sub && row.owner_sub === sub) return true;
+  return row.visibility === 'public' || row.visibility === 'public_editable';
+}
+
+function getShareToken(request: FastifyRequest): string | null {
+  const rawHeader = request.headers['x-makeslide-share-token'];
+  const headerValue = Array.isArray(rawHeader) ? rawHeader[0] : rawHeader;
+  if (typeof headerValue === 'string' && headerValue.trim()) return headerValue.trim();
+  const query = request.query as Record<string, unknown> | undefined;
+  const rawQuery = query?.share;
+  const queryValue = Array.isArray(rawQuery) ? rawQuery[0] : rawQuery;
+  return typeof queryValue === 'string' && queryValue.trim() ? queryValue.trim() : null;
+}
+
+function hasShareAccess(request: FastifyRequest, pdfId: string): boolean {
+  const token = getShareToken(request);
+  if (!token || !ShareTokenParamSchema.safeParse({ token }).success) return false;
+  const row = db.prepare(`SELECT access FROM pdf_shares WHERE token = ? AND pdf_id = ?`).get(token, pdfId) as
+    | { access: 'read_only' | 'editable' }
+    | undefined;
+  return Boolean(row);
 }
 
 function getPdfPermissionRow(id: string): Pick<PdfRow, 'owner_sub' | 'visibility'> | undefined {
@@ -33,6 +62,19 @@ export async function registerDrawingsRoutes(app: FastifyInstance): Promise<void
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
     }
     const { id, n } = parsed.data;
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    const pageRow = db.prepare(`SELECT page_uid FROM pages WHERE pdf_id = ? AND page_number = ?`).get(id, n) as
+      | { page_uid: string }
+      | undefined;
+    if (!pageRow) {
+      return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', 'Page not found'));
+    }
+    if (!hasShareAccess(request, id) && !canReadPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的畫板'));
+    }
     const row = db
       .prepare(`SELECT drawing_json, updated_at FROM page_drawings WHERE pdf_id = ? AND page_number = ?`)
       .get(id, n) as { drawing_json: string; updated_at: string } | undefined;

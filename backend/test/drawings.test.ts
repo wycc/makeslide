@@ -23,15 +23,26 @@ function nowIso(): string {
 
 function seedDrawingPdf(pdfId: string, visibility: 'private' | 'public' | 'public_editable' = 'public'): void {
   const t = nowIso();
+  db.prepare(`DELETE FROM pdf_shares WHERE pdf_id = ?`).run(pdfId);
+  db.prepare(`DELETE FROM pages WHERE pdf_id = ?`).run(pdfId);
   db.prepare(`DELETE FROM page_drawings WHERE pdf_id = ?`).run(pdfId);
   db.prepare(`DELETE FROM pdfs WHERE id = ?`).run(pdfId);
   db.prepare(
     `INSERT INTO pdfs (id,title,original_filename,status,page_count,progress_step,progress_current,progress_total,error_message,user_prompt,require_script_confirmation,owner_sub,visibility,tts_voice,tts_speed,script_max_chars_per_page,created_at,updated_at)
      VALUES (?,?,?,'ready',1,NULL,NULL,NULL,NULL,NULL,0,'account-1',?,NULL,NULL,NULL,?,?)`,
   ).run(pdfId, 't', `${pdfId}.pdf`, visibility, t, t);
+  db.prepare(
+    `INSERT INTO pages (pdf_id,page_number,page_uid,image_path,text_path,script_path,audio_path,audio_duration_seconds,status,error_message,created_at,updated_at)
+     VALUES (?,?,?,?,?,?,NULL,NULL,'audio_ready',NULL,?,?)`,
+  ).run(pdfId, 1, `${pdfId}-uid1`, `pages/${pdfId}-uid1.jpg`, `pages/${pdfId}-uid1.text.txt`, `pages/${pdfId}-uid1.script.txt`, t, t);
 }
 
-test('GET drawing has no permission gate and returns null for a missing drawing', async () => {
+function seedShareToken(pdfId: string, token: string, access: 'read_only' | 'editable' = 'read_only'): void {
+  const t = nowIso();
+  db.prepare(`INSERT INTO pdf_shares (pdf_id, token, access, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`).run(pdfId, token, access, t, t);
+}
+
+test('GET drawing returns null for an authorized missing drawing', async () => {
   seedDrawingPdf('drawing-get-01', 'public');
   const app = await buildApp();
   const resp = await app.inject({
@@ -41,6 +52,31 @@ test('GET drawing has no permission gate and returns null for a missing drawing'
   });
   assert.equal(resp.statusCode, 200);
   assert.equal((resp.json() as { drawing_json: string | null }).drawing_json, null);
+  await app.close();
+});
+
+test('GET drawing rejects non-owner private reads, but allows owner and share token', async () => {
+  const pdfId = 'drawing-get-permission-01';
+  const token = 'drawing-share-token-01';
+  seedDrawingPdf(pdfId, 'private');
+  seedShareToken(pdfId, token, 'read_only');
+  db.prepare(`INSERT OR REPLACE INTO page_drawings (pdf_id, page_number, drawing_json, updated_at) VALUES (?, 1, ?, ?)`).run(
+    pdfId,
+    '{"strokes":["private"]}',
+    nowIso(),
+  );
+  const app = await buildApp();
+  const forbidden = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}/pages/1/drawing`, headers: OTHER_HEADERS });
+  assert.equal(forbidden.statusCode, 403);
+  assert.equal((forbidden.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+
+  const owner = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}/pages/1/drawing`, headers: OWNER_HEADERS });
+  assert.equal(owner.statusCode, 200);
+  assert.equal((owner.json() as { drawing_json: string | null }).drawing_json, '{"strokes":["private"]}');
+
+  const shared = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}/pages/1/drawing?share=${token}` });
+  assert.equal(shared.statusCode, 200);
+  assert.equal((shared.json() as { drawing_json: string | null }).drawing_json, '{"strokes":["private"]}');
   await app.close();
 });
 

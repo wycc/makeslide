@@ -18,20 +18,22 @@ function testSessionCookie(sub = 'account-1'): string {
 }
 const SESSION_COOKIE = testSessionCookie('account-1');
 const AUTH_HEADERS = { cookie: `makeslide_session=${encodeURIComponent(SESSION_COOKIE)}` };
+const OTHER_HEADERS = { cookie: `makeslide_session=${encodeURIComponent(testSessionCookie('account-2'))}` };
 
 function nowIso(): string {
   return new Date().toISOString();
 }
 
 /** Seeds a PDF with `pageCount` ready pages and a `figures.json` manifest covering pages 1-2. */
-function seedFigurePdf(pdfId: string, pageCount: number): void {
+function seedFigurePdf(pdfId: string, pageCount: number, visibility: 'private' | 'public' | 'public_editable' = 'public'): void {
   const t = nowIso();
+  db.prepare(`DELETE FROM pdf_shares WHERE pdf_id = ?`).run(pdfId);
   db.prepare(`DELETE FROM pages WHERE pdf_id = ?`).run(pdfId);
   db.prepare(`DELETE FROM pdfs WHERE id = ?`).run(pdfId);
   db.prepare(
     `INSERT INTO pdfs (id,title,original_filename,status,page_count,progress_step,progress_current,progress_total,error_message,user_prompt,require_script_confirmation,owner_sub,visibility,tts_voice,tts_speed,script_max_chars_per_page,created_at,updated_at)
-     VALUES (?,?,?,'ready',?,NULL,NULL,NULL,NULL,NULL,0,'account-1','public',NULL,NULL,NULL,?,?)`,
-  ).run(pdfId, 't', 't.pdf', pageCount, t, t);
+     VALUES (?,?,?,'ready',?,NULL,NULL,NULL,NULL,NULL,0,'account-1',?,NULL,NULL,NULL,?,?)`,
+  ).run(pdfId, 't', 't.pdf', pageCount, visibility, t, t);
 
   const pdfDir = path.join(config.storageRoot, pdfId);
   const pagesDir = path.join(pdfDir, 'pages');
@@ -102,9 +104,15 @@ function seedFigurePdf(pdfId: string, pageCount: number): void {
 }
 
 function cleanup(pdfId: string): void {
+  db.prepare(`DELETE FROM pdf_shares WHERE pdf_id = ?`).run(pdfId);
   db.prepare(`DELETE FROM pages WHERE pdf_id = ?`).run(pdfId);
   db.prepare(`DELETE FROM pdfs WHERE id = ?`).run(pdfId);
   fs.rmSync(path.join(config.storageRoot, pdfId), { recursive: true, force: true });
+}
+
+function seedShareToken(pdfId: string, token: string, access: 'read_only' | 'editable' = 'read_only'): void {
+  const t = nowIso();
+  db.prepare(`INSERT INTO pdf_shares (pdf_id, token, access, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`).run(pdfId, token, access, t, t);
 }
 
 test('GET /pages/:n/figures lists extracted figures with image URLs and exclusion state', async () => {
@@ -273,6 +281,47 @@ test('GET /figures/:figureId/image streams the figure PNG, and 404s for unknown 
     });
     assert.equal(missingFile.statusCode, 404);
     assert.equal((missingFile.json() as { error: { code: string } }).error.code, 'FIGURE_NOT_FOUND');
+  } finally {
+    await app.close();
+    cleanup(pdfId);
+  }
+});
+
+test('GET figure assets reject non-owner private reads, but allow owner and share token', async () => {
+  const pdfId = 'fig-read-perm-01';
+  const token = 'figure-share-token-01';
+  cleanup(pdfId);
+  seedFigurePdf(pdfId, 1, 'private');
+  seedShareToken(pdfId, token, 'read_only');
+  const app = await buildApp();
+  try {
+    const forbiddenList = await app.inject({
+      method: 'GET',
+      url: `/api/pdfs/${pdfId}/pages/1/figures`,
+      headers: OTHER_HEADERS,
+    });
+    assert.equal(forbiddenList.statusCode, 403);
+    assert.equal((forbiddenList.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+
+    const ownerList = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}/pages/1/figures`, headers: AUTH_HEADERS });
+    assert.equal(ownerList.statusCode, 200);
+
+    const shareList = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}/pages/1/figures?share=${token}` });
+    assert.equal(shareList.statusCode, 200);
+
+    const forbiddenImage = await app.inject({
+      method: 'GET',
+      url: `/api/pdfs/${pdfId}/figures/p1-large/image`,
+      headers: OTHER_HEADERS,
+    });
+    assert.equal(forbiddenImage.statusCode, 403);
+    assert.equal((forbiddenImage.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+
+    const ownerImage = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}/figures/p1-large/image`, headers: AUTH_HEADERS });
+    assert.equal(ownerImage.statusCode, 200);
+
+    const shareImage = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}/figures/p1-large/image?share=${token}` });
+    assert.equal(shareImage.statusCode, 200);
   } finally {
     await app.close();
     cleanup(pdfId);
