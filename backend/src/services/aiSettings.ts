@@ -3,8 +3,11 @@ import path from 'node:path';
 import { config } from '../config';
 import { DEFAULT_ACCOUNT_ID, currentAccountId, sanitizeAccountId } from './accountContext';
 
-export type AiProvider = 'openai' | 'gemini';
+export type LlmProvider = 'openai' | 'gemini' | 'cgu-air' | 'openrouter';
+export type TtsProvider = 'openai' | 'gemini';
+export type AiProvider = LlmProvider;
 export type AppLanguage = 'zh-TW' | 'en';
+export const CGU_AIR_DEFAULT_BASE_URL = 'https://air.cgu.edu.tw/cgullmapi/v1';
 
 /**
  * 帳號層級設定：每個使用者（以 Google sub 區分）各自擁有一份，存放在
@@ -14,10 +17,16 @@ export interface PerAccountAiSettings {
   openaiApiKey: string;
   openaiBaseUrl: string;
   geminiApiKey: string;
-  llmProvider: AiProvider;
-  ttsProvider: AiProvider;
+  cguAirApiKey: string;
+  cguAirBaseUrl: string;
+  openrouterApiKey: string;
+  openrouterBaseUrl: string;
+  llmProvider: LlmProvider;
+  ttsProvider: TtsProvider;
   openaiLlmModel: string;
   geminiLlmModel: string;
+  cguAirLlmModel: string;
+  openrouterLlmModel: string;
   openaiTtsModel: string;
   geminiTtsModel: string;
   geminiTtsSpeaker1: string;
@@ -87,8 +96,12 @@ function readEnvFile(accountId: string): Record<string, string> {
   return parseEnvContent(fs.readFileSync(envPath, 'utf8'));
 }
 
-function asProvider(value: string | undefined): AiProvider | undefined {
-  return value === 'gemini' ? 'gemini' : value === 'openai' ? 'openai' : undefined;
+function asLlmProvider(value: string | undefined): LlmProvider | undefined {
+  return value === 'gemini' || value === 'openai' || value === 'cgu-air' || value === 'openrouter' ? value : undefined;
+}
+
+function asTtsProvider(value: string | undefined): TtsProvider | undefined {
+  return value === 'gemini' || value === 'openai' ? value : undefined;
 }
 
 function asLanguage(value: string | undefined): AppLanguage | undefined {
@@ -126,10 +139,16 @@ function basePerAccountSettings(): PerAccountAiSettings {
     openaiApiKey: config.openaiApiKey,
     openaiBaseUrl: process.env.OPENAI_BASE_URL?.trim() || '',
     geminiApiKey: config.geminiApiKey,
+    cguAirApiKey: config.cguAirApiKey,
+    cguAirBaseUrl: config.cguAirBaseUrl || CGU_AIR_DEFAULT_BASE_URL,
+    openrouterApiKey: config.openrouterApiKey,
+    openrouterBaseUrl: config.openrouterBaseUrl || 'https://openrouter.ai/api/v1',
     llmProvider: config.llmProvider,
     ttsProvider: config.ttsProvider,
     openaiLlmModel: config.openaiLlmModel,
     geminiLlmModel: config.geminiLlmModel,
+    cguAirLlmModel: config.cguAirLlmModel,
+    openrouterLlmModel: config.openrouterLlmModel,
     openaiTtsModel: config.openaiTtsModel,
     geminiTtsModel: config.geminiTtsModel,
     geminiTtsSpeaker1: process.env.GEMINI_TTS_SPEAKER1?.trim() || '',
@@ -155,10 +174,16 @@ function loadPerAccountOverrides(accountId: string): Partial<PerAccountAiSetting
     openaiApiKey: values.OPENAI_API_KEY,
     openaiBaseUrl: values.OPENAI_BASE_URL,
     geminiApiKey: values.GEMINI_API_KEY,
-    llmProvider: asProvider(values.LLM_PROVIDER),
-    ttsProvider: asProvider(values.TTS_PROVIDER),
+    cguAirApiKey: values.CGU_AIR_API_KEY,
+    cguAirBaseUrl: values.CGU_AIR_BASE_URL,
+    openrouterApiKey: values.OPENROUTER_API_KEY,
+    openrouterBaseUrl: values.OPENROUTER_BASE_URL,
+    llmProvider: asLlmProvider(values.LLM_PROVIDER),
+    ttsProvider: asTtsProvider(values.TTS_PROVIDER),
     openaiLlmModel: values.OPENAI_LLM_MODEL,
     geminiLlmModel: values.GEMINI_LLM_MODEL,
+    cguAirLlmModel: values.CGU_AIR_LLM_MODEL,
+    openrouterLlmModel: values.OPENROUTER_LLM_MODEL,
     openaiTtsModel: values.OPENAI_TTS_MODEL,
     geminiTtsModel: values.GEMINI_TTS_MODEL,
     geminiTtsSpeaker1: values.GEMINI_TTS_SPEAKER1,
@@ -186,6 +211,12 @@ function loadPerAccountSettings(accountId: string): PerAccountAiSettings {
   const cached = perAccountCache.get(safeAccountId);
   if (cached) return cached;
   const merged: PerAccountAiSettings = { ...basePerAccountSettings(), ...loadPerAccountOverrides(safeAccountId) };
+  if (merged.openaiBaseUrl.trim() === CGU_AIR_DEFAULT_BASE_URL) {
+    if (!merged.cguAirApiKey.trim()) merged.cguAirApiKey = merged.openaiApiKey;
+    if (!merged.cguAirBaseUrl.trim()) merged.cguAirBaseUrl = merged.openaiBaseUrl;
+    if (!merged.cguAirLlmModel.trim()) merged.cguAirLlmModel = merged.openaiLlmModel;
+    if (merged.llmProvider === 'openai') merged.llmProvider = 'cgu-air';
+  }
   perAccountCache.set(safeAccountId, merged);
   return merged;
 }
@@ -194,10 +225,16 @@ const PER_ACCOUNT_ENV_PAIRS: Array<[string, keyof PerAccountAiSettings]> = [
   ['OPENAI_API_KEY', 'openaiApiKey'],
   ['OPENAI_BASE_URL', 'openaiBaseUrl'],
   ['GEMINI_API_KEY', 'geminiApiKey'],
+  ['CGU_AIR_API_KEY', 'cguAirApiKey'],
+  ['CGU_AIR_BASE_URL', 'cguAirBaseUrl'],
+  ['OPENROUTER_API_KEY', 'openrouterApiKey'],
+  ['OPENROUTER_BASE_URL', 'openrouterBaseUrl'],
   ['LLM_PROVIDER', 'llmProvider'],
   ['TTS_PROVIDER', 'ttsProvider'],
   ['OPENAI_LLM_MODEL', 'openaiLlmModel'],
   ['GEMINI_LLM_MODEL', 'geminiLlmModel'],
+  ['CGU_AIR_LLM_MODEL', 'cguAirLlmModel'],
+  ['OPENROUTER_LLM_MODEL', 'openrouterLlmModel'],
   ['OPENAI_TTS_MODEL', 'openaiTtsModel'],
   ['GEMINI_TTS_MODEL', 'geminiTtsModel'],
   ['GEMINI_TTS_SPEAKER1', 'geminiTtsSpeaker1'],
@@ -363,7 +400,7 @@ function splitSettingsUpdate(next: Partial<RuntimeAiSettings>): {
 async function writeEnvOverrides<K extends string>(
   accountId: string,
   pairs: Array<[string, K]>,
-  next: Partial<Record<K, string | boolean | string[] | AiProvider | AppLanguage | undefined>>,
+  next: Partial<Record<K, string | boolean | string[] | LlmProvider | TtsProvider | AppLanguage | undefined>>,
 ): Promise<void> {
   const { accountDir, envPath } = getAccountSettingsLocation(accountId);
   let content = '';

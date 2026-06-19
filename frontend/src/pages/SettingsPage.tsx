@@ -15,7 +15,9 @@ import {
   updateSlaTargetOverride,
   updateSystemAiSettings,
   type AuthStatus,
+  type LlmProvider,
   type SystemAiSettings,
+  type TtsProvider,
   type Skill,
 } from '../lib/api';
 import type { SlaSettingsResponse, SlaTargetKind, SlaTargetSetting } from '../types';
@@ -42,13 +44,19 @@ export default function SettingsPage() {
   const [activeCategory, setActiveCategory] = useState<SettingsCategory>('account');
   const [openaiApiKey, setOpenaiApiKey] = useState('');
   const [geminiApiKey, setGeminiApiKey] = useState('');
-  const [llmProvider, setLlmProvider] = useState<'openai' | 'gemini'>('openai');
-  const [ttsProvider, setTtsProvider] = useState<'openai' | 'gemini'>('openai');
+  const [cguAirApiKey, setCguAirApiKey] = useState('');
+  const [cguAirBaseUrl, setCguAirBaseUrl] = useState('https://air.cgu.edu.tw/cgullmapi/v1');
+  const [openrouterApiKey, setOpenrouterApiKey] = useState('');
+  const [openrouterBaseUrl, setOpenrouterBaseUrl] = useState('https://openrouter.ai/api/v1');
+  const [llmProvider, setLlmProvider] = useState<LlmProvider>('openai');
+  const [ttsProvider, setTtsProvider] = useState<TtsProvider>('openai');
   const [uiLanguage, setUiLanguage] = useState<AppLanguage>(() => getStoredUiLanguage());
   const [contentLanguage, setContentLanguage] = useState<AppLanguage>(() => getStoredContentLanguage());
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(() => getStoredPlaybackSpeed());
   const [openaiLlmModel, setOpenaiLlmModel] = useState('gpt-4o-mini');
   const [geminiLlmModel, setGeminiLlmModel] = useState('gemini-2.0-flash');
+  const [cguAirLlmModel, setCguAirLlmModel] = useState('gpt-4o-mini');
+  const [openrouterLlmModel, setOpenrouterLlmModel] = useState('openai/gpt-4o-mini');
   const [openaiTtsModel, setOpenaiTtsModel] = useState('gpt-4o-mini-tts');
   const [geminiTtsModel, setGeminiTtsModel] = useState('gemini-2.5-flash-preview-tts');
   const [geminiTtsSpeaker1, setGeminiTtsSpeaker1] = useState('');
@@ -76,7 +84,6 @@ export default function SettingsPage() {
   const [adminTransferBusy, setAdminTransferBusy] = useState(false);
   const [githubRepoUrl, setGithubRepoUrl] = useState('');
   const [githubToken, setGithubToken] = useState('');
-  const [cguAirEnabled, setCguAirEnabled] = useState(false);
   const [autoGenerateAnimation, setAutoGenerateAnimation] = useState(false);
   const [slaSettings, setSlaSettings] = useState<SlaSettingsResponse | null>(null);
   const [slaOverrideInputs, setSlaOverrideInputs] = useState<Record<string, string>>({});
@@ -95,7 +102,8 @@ export default function SettingsPage() {
   const [editApplyTo, setEditApplyTo] = useState<'script' | 'all'>('script');
   const [savingSkillId, setSavingSkillId] = useState<string | null>(null);
 
-  const CGU_AIR_BASE_URL = 'https://air.cgu.edu.tw/cgullmapi/v1';
+  const DEFAULT_CGU_AIR_BASE_URL = 'https://air.cgu.edu.tw/cgullmapi/v1';
+  const DEFAULT_OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 
   const loadStatus = useCallback(async () => {
     setLoading(true);
@@ -106,10 +114,16 @@ export default function SettingsPage() {
       setSettingsIsAdmin(Boolean(s.is_admin));
       setOpenaiApiKey(s.openai_api_key ?? '');
       setGeminiApiKey(s.gemini_api_key ?? '');
+      setCguAirApiKey(s.cgu_air_api_key ?? '');
+      setCguAirBaseUrl(s.cgu_air_base_url ?? DEFAULT_CGU_AIR_BASE_URL);
+      setOpenrouterApiKey(s.openrouter_api_key ?? '');
+      setOpenrouterBaseUrl(s.openrouter_base_url ?? DEFAULT_OPENROUTER_BASE_URL);
       setLlmProvider(s.llm_provider);
       setTtsProvider(s.tts_provider);
       setOpenaiLlmModel(s.openai_llm_model);
       setGeminiLlmModel(s.gemini_llm_model);
+      setCguAirLlmModel(s.cgu_air_llm_model ?? 'gpt-4o-mini');
+      setOpenrouterLlmModel(s.openrouter_llm_model ?? 'openai/gpt-4o-mini');
       setOpenaiTtsModel(s.openai_tts_model);
       setGeminiTtsModel(s.gemini_tts_model);
       setGeminiTtsSpeaker1(s.gemini_tts_speaker1 ?? '');
@@ -135,7 +149,6 @@ export default function SettingsPage() {
       setAdminAccountIds(s.admin_account_ids ?? []);
       setGithubRepoUrl(s.github_repo_url ?? '');
       setGithubToken(s.github_token ?? '');
-      setCguAirEnabled(s.openai_base_url === CGU_AIR_BASE_URL);
       setAutoGenerateAnimation(Boolean(s.auto_generate_animation));
       const cachedUserCode = window.localStorage.getItem(LOCAL_USER_CODE_KEY)?.trim() ?? '';
       setUserCode((auth?.authenticated ? s.user_code : cachedUserCode) ?? '');
@@ -181,6 +194,14 @@ export default function SettingsPage() {
       setErr(t('settings.geminiKeyRequiredForLlm'));
       return;
     }
+    if (llmProvider === 'cgu-air' && !cguAirApiKey.trim()) {
+      setErr(t('settings.cguAirKeyRequiredForLlm'));
+      return;
+    }
+    if (llmProvider === 'openrouter' && !openrouterApiKey.trim()) {
+      setErr(t('settings.openrouterKeyRequiredForLlm'));
+      return;
+    }
     if (ttsProvider === 'openai' && !openaiApiKey.trim()) {
       setErr(t('settings.openaiKeyRequiredForTts'));
       return;
@@ -193,12 +214,18 @@ export default function SettingsPage() {
     try {
       await updateSystemAiSettings({
         openai_api_key: openaiApiKey.trim() || undefined,
-        openai_base_url: cguAirEnabled ? CGU_AIR_BASE_URL : '',
+        openai_base_url: '',
         gemini_api_key: geminiApiKey.trim() || undefined,
+        cgu_air_api_key: cguAirApiKey.trim() || undefined,
+        cgu_air_base_url: cguAirBaseUrl.trim() || DEFAULT_CGU_AIR_BASE_URL,
+        openrouter_api_key: openrouterApiKey.trim() || undefined,
+        openrouter_base_url: openrouterBaseUrl.trim() || DEFAULT_OPENROUTER_BASE_URL,
         llm_provider: llmProvider,
         tts_provider: ttsProvider,
         openai_llm_model: openaiLlmModel.trim(),
         gemini_llm_model: geminiLlmModel.trim(),
+        cgu_air_llm_model: cguAirLlmModel.trim(),
+        openrouter_llm_model: openrouterLlmModel.trim(),
         openai_tts_model: openaiTtsModel.trim(),
         gemini_tts_model: geminiTtsModel.trim(),
         gemini_tts_speaker1: geminiTtsSpeaker1.trim(),
@@ -234,6 +261,8 @@ export default function SettingsPage() {
       setMsg(t('settings.saved'));
       setOpenaiApiKey('');
       setGeminiApiKey('');
+      setCguAirApiKey('');
+      setOpenrouterApiKey('');
       window.setTimeout(() => navigate('/'), 300);
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : t('settings.saveError'));
@@ -243,6 +272,12 @@ export default function SettingsPage() {
   }, [
     geminiApiKey,
     geminiLlmModel,
+    cguAirApiKey,
+    cguAirBaseUrl,
+    cguAirLlmModel,
+    openrouterApiKey,
+    openrouterBaseUrl,
+    openrouterLlmModel,
     geminiTtsModel,
     geminiTtsSpeaker1,
     geminiTtsSpeaker2,
@@ -270,9 +305,9 @@ export default function SettingsPage() {
     isAdmin,
     githubRepoUrl,
     githubToken,
-    cguAirEnabled,
     autoGenerateAnimation,
-    CGU_AIR_BASE_URL,
+    DEFAULT_CGU_AIR_BASE_URL,
+    DEFAULT_OPENROUTER_BASE_URL,
     t,
   ]);
 
@@ -531,14 +566,16 @@ export default function SettingsPage() {
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <label className="block text-sm text-slate-300">
                     {t('settings.llmProvider')}
-                    <select value={llmProvider} onChange={(e) => setLlmProvider(e.target.value as 'openai' | 'gemini')} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm">
+                    <select value={llmProvider} onChange={(e) => setLlmProvider(e.target.value as LlmProvider)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm">
                       <option value="openai">OpenAI</option>
                       <option value="gemini">Gemini</option>
+                      <option value="cgu-air">CGU Air</option>
+                      <option value="openrouter">OpenRouter</option>
                     </select>
                   </label>
                   <label className="block text-sm text-slate-300">
                     {t('settings.ttsProvider')}
-                    <select value={ttsProvider} onChange={(e) => setTtsProvider(e.target.value as 'openai' | 'gemini')} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm">
+                    <select value={ttsProvider} onChange={(e) => setTtsProvider(e.target.value as TtsProvider)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm">
                       <option value="openai">OpenAI</option>
                       <option value="gemini">Gemini</option>
                     </select>
@@ -555,17 +592,17 @@ export default function SettingsPage() {
                     <input type="password" value={openaiApiKey} onChange={(e) => setOpenaiApiKey(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none ring-0 focus:border-slate-500" placeholder="sk-..." />
                   </label>
                   <label className="block text-sm text-slate-300 sm:col-span-2">
-                    <span className="inline-flex items-center gap-2">
-                      <input type="checkbox" checked={cguAirEnabled} onChange={(e) => setCguAirEnabled(e.target.checked)} />
-                      {t('settings.cguAirEnabled')}
-                    </span>
-                  </label>
-                  <label className="block text-sm text-slate-300 sm:col-span-2">
                     GEMINI_API_KEY
                     <input type="password" value={geminiApiKey} onChange={(e) => setGeminiApiKey(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none ring-0 focus:border-slate-500" placeholder="AIza..." />
                   </label>
+                  <label className="block text-sm text-slate-300 sm:col-span-2">CGU_AIR_API_KEY<input type="password" value={cguAirApiKey} onChange={(e) => setCguAirApiKey(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none ring-0 focus:border-slate-500" placeholder="cgusk-..." /></label>
+                  <label className="block text-sm text-slate-300 sm:col-span-2">CGU_AIR_BASE_URL<input value={cguAirBaseUrl} onChange={(e) => setCguAirBaseUrl(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder={DEFAULT_CGU_AIR_BASE_URL} /></label>
+                  <label className="block text-sm text-slate-300 sm:col-span-2">OPENROUTER_API_KEY<input type="password" value={openrouterApiKey} onChange={(e) => setOpenrouterApiKey(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none ring-0 focus:border-slate-500" placeholder="sk-or-..." /></label>
+                  <label className="block text-sm text-slate-300 sm:col-span-2">OPENROUTER_BASE_URL<input value={openrouterBaseUrl} onChange={(e) => setOpenrouterBaseUrl(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder={DEFAULT_OPENROUTER_BASE_URL} /></label>
                   <label className="block text-sm text-slate-300">OpenAI LLM Model<input value={openaiLlmModel} onChange={(e) => setOpenaiLlmModel(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" /></label>
                   <label className="block text-sm text-slate-300">Gemini LLM Model<input value={geminiLlmModel} onChange={(e) => setGeminiLlmModel(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" /></label>
+                  <label className="block text-sm text-slate-300">CGU Air LLM Model<input value={cguAirLlmModel} onChange={(e) => setCguAirLlmModel(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" /></label>
+                  <label className="block text-sm text-slate-300">OpenRouter LLM Model<input value={openrouterLlmModel} onChange={(e) => setOpenrouterLlmModel(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" /></label>
                   <label className="block text-sm text-slate-300">OpenAI TTS Model<input value={openaiTtsModel} onChange={(e) => setOpenaiTtsModel(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" /></label>
                   <label className="block text-sm text-slate-300">Gemini TTS Model<input value={geminiTtsModel} onChange={(e) => setGeminiTtsModel(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" /></label>
                   <label className="block text-sm text-slate-300">{t('settings.geminiSpeaker1')}<input value={geminiTtsSpeaker1} onChange={(e) => setGeminiTtsSpeaker1(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder={t('settings.geminiSpeaker1Placeholder')} /></label>

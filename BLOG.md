@@ -1,6 +1,36 @@
 # MakeSlide 功能說明
 
+## 分離 OpenAI、CGU Air 與 OpenRouter AI 供應商設定
 
+### 功能目的
+
+過去系統以 OpenAI-compatible endpoint 共用同一組 OpenAI 設定來連接 OpenAI 或 CGU Air，管理者需要用同一個 API key/base URL 欄位切換不同供應商。這種做法容易讓 OpenAI 與校內 CGU Air 的金鑰互相覆蓋，也無法在模型選擇時清楚指定 OpenRouter。現在 AI 設定頁可直接選擇 OpenAI、CGU Air、OpenRouter 或 Gemini，並針對每個 OpenAI-compatible 供應商保存各自的 key、base URL 與 LLM model。
+
+### 使用方式
+
+管理者進入系統設定的 AI 設定區後，可在 LLM provider 下拉選單選擇 OpenAI、CGU Air、OpenRouter 或 Gemini。選擇 OpenAI、CGU Air 或 OpenRouter 時，頁面會顯示該供應商自己的 API key、base URL 與模型欄位；輸入後按下儲存即可。之後產生大綱、逐字稿、圖片提示詞或其他 LLM 流程會依目前 provider 自動使用對應金鑰與 endpoint，不需要再手動覆寫 OpenAI base URL 來切換 CGU Air。
+
+### 技術重點
+
+- `backend/src/services/aiSettings.ts` 新增 `llm_provider` 與 CGU Air/OpenRouter 專屬設定欄位，並保留舊設定相容邏輯：若既有 `OPENAI_BASE_URL` 是 CGU Air 預設網址，會自動遷移成 CGU Air provider 設定。
+- `backend/src/services/openai.ts` 依目前 provider 建立 OpenAI-compatible client；OpenAI、CGU Air、OpenRouter 各自讀取自己的 API key/base URL/model，Gemini 維持原路徑。
+- `frontend/src/pages/SettingsPage.tsx` 與 `frontend/src/lib/api/system.ts` 同步新增 provider 型別與設定欄位，AI 設定頁會依 provider 顯示對應表單。
+- 新增後端測試覆蓋 OpenAI/CGU Air/OpenRouter 設定分離保存、has-key 狀態與不合法 provider 驗證；backend/frontend typecheck 與指定測試皆通過。
+
+## 自訂腳本動畫安全防護補上單元測試
+
+### 功能目的
+
+播放頁的「自訂腳本動畫」效果允許使用者用自然語言描述，由 LLM 產生一段 JavaScript 程式碼，注入到 sandboxed `<iframe>` 中執行。瀏覽器層級的 sandbox（沒有 `allow-same-origin`）已經能擋掉大部分跨來源風險，但 `backend/src/services/animationCustomScript.ts` 另外做了一層「縱深防禦」：在程式碼被儲存或渲染前，先用 `findUnsafeScriptPattern()` 掃描是否出現 `fetch`/`eval`/`localStorage`/`document.cookie`/`window.parent` 等危險 API，並用 `findCustomScriptContractIssue()` 確認程式碼有定義 `window.renderAnimation` 並呼叫 `api.onFrame()`，否則直接拒絕。這兩個函式是整個自訂腳本動畫功能最後一道防線，過去完全沒有測試覆蓋。
+
+### 修復內容
+
+新增 `backend/test/animation-custom-script.test.ts`，把 `UNSAFE_PATTERNS` 陣列中每一種模式都個別驗證一次，包含同一個 API 的多種變形寫法（例如 `window.parent`/`window["parent"]`/`globalThis['parent']`、`document.cookie`/`document["cookie"]`）與大小寫不敏感；也驗證多個危險模式同時出現時，回傳的是第一個命中的標籤，以及完全合法的程式碼會回傳 `null`。合約檢查則覆蓋合法程式碼、`window["renderAnimation"]` 的 bracket 寫法、缺少 `renderAnimation` 定義、缺少 `api.onFrame()` 呼叫，以及兩者都缺時優先回報哪一個錯誤訊息。
+
+### 技術重點
+
+- 未修改 `animationCustomScript.ts` 任何邏輯，純粹補測試，降低未來修改 `UNSAFE_PATTERNS` 或合約檢查時不小心破壞既有防護的風險。
+- 已執行 backend typecheck（通過）與完整 `npm --workspace backend test`（429 個測試，18 個失敗皆為既有環境性基準，無新增回歸；新增 8 個測試全數通過）。
 
 ## 全螢幕暫停播放效果快捷鍵修正
 

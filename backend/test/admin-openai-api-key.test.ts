@@ -120,3 +120,61 @@ test('PATCH /api/system/openai-api-key rejects a non-object body with 400', asyn
     cleanupAccountDir();
   }
 });
+
+test('PATCH /api/system/ai-settings stores separate OpenAI, CGU Air, and OpenRouter settings', async () => {
+  cleanupAccountDir();
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'PATCH',
+      url: '/api/system/ai-settings',
+      headers: HEADERS_JSON,
+      payload: {
+        openai_api_key: 'sk-openai',
+        openai_llm_model: 'gpt-4o-mini',
+        cgu_air_api_key: 'sk-cgu-air',
+        cgu_air_base_url: 'https://air.cgu.edu.tw/cgullmapi/v1',
+        cgu_air_llm_model: 'cgu-gpt-4o-mini',
+        openrouter_api_key: 'sk-or-test',
+        openrouter_base_url: 'https://openrouter.ai/api/v1',
+        openrouter_llm_model: 'openai/gpt-4o-mini',
+        llm_provider: 'openrouter',
+      },
+    });
+    assert.equal(resp.statusCode, 200);
+    const body = resp.json() as Record<string, unknown>;
+    assert.equal(body.openai_api_key, 'sk-openai');
+    assert.equal(body.cgu_air_api_key, 'sk-cgu-air');
+    assert.equal(body.openrouter_api_key, 'sk-or-test');
+    assert.equal(body.llm_provider, 'openrouter');
+    assert.equal(body.openrouter_llm_model, 'openai/gpt-4o-mini');
+
+    const envPath = path.join(ACCOUNT_DIR, 'settings.env');
+    const content = fs.readFileSync(envPath, 'utf8');
+    assert.match(content, /^OPENAI_API_KEY=sk-openai$/m);
+    assert.match(content, /^CGU_AIR_API_KEY=sk-cgu-air$/m);
+    assert.match(content, /^OPENROUTER_API_KEY=sk-or-test$/m);
+    assert.match(content, /^LLM_PROVIDER=openrouter$/m);
+  } finally {
+    await app.close();
+    cleanupAccountDir();
+  }
+});
+
+test('PATCH /api/system/ai-settings rejects unsupported LLM provider', async () => {
+  cleanupAccountDir();
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'PATCH',
+      url: '/api/system/ai-settings',
+      headers: HEADERS_JSON,
+      payload: { llm_provider: 'not-a-provider' },
+    });
+    assert.equal(resp.statusCode, 400);
+    assert.equal((resp.json() as { error: { code: string } }).error.code, 'INVALID_REQUEST');
+  } finally {
+    await app.close();
+    cleanupAccountDir();
+  }
+});
