@@ -177,6 +177,80 @@ test('PUT /quizzes/:quizId rejects a non-owner request and allows the owner', as
   await app.close();
 });
 
+test('DELETE /quizzes/:quizId rejects a non-owner request, then allows the owner to delete it (cascading attempts)', async () => {
+  seedQuizPdf('quiz-delete-01', 'public');
+  const app = await buildApp();
+  const createResp = await app.inject({
+    method: 'POST',
+    url: '/api/pdfs/quiz-delete-01/quizzes',
+    headers: OWNER_HEADERS,
+    payload: validQuizPayload(),
+  });
+  assert.equal(createResp.statusCode, 201);
+  const quizId = (createResp.json() as { id: number }).id;
+
+  const attemptResp = await app.inject({
+    method: 'POST',
+    url: `/api/pdfs/quiz-delete-01/quizzes/${quizId}/attempts`,
+    headers: OTHER_HEADERS,
+    payload: { client_id: 'client-1', session_id: 'session-1', answers: { q1: [1] } },
+  });
+  assert.equal(attemptResp.statusCode, 201);
+
+  const forbidden = await app.inject({
+    method: 'DELETE',
+    url: `/api/pdfs/quiz-delete-01/quizzes/${quizId}`,
+    headers: OTHER_HEADERS,
+  });
+  assert.equal(forbidden.statusCode, 403);
+  assert.equal((forbidden.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+  const stillThere = db.prepare(`SELECT id FROM quiz_sets WHERE id = ?`).get(quizId);
+  assert.ok(stillThere);
+
+  const allowed = await app.inject({
+    method: 'DELETE',
+    url: `/api/pdfs/quiz-delete-01/quizzes/${quizId}`,
+    headers: OWNER_HEADERS,
+  });
+  assert.equal(allowed.statusCode, 204);
+  const gone = db.prepare(`SELECT id FROM quiz_sets WHERE id = ?`).get(quizId);
+  assert.equal(gone, undefined);
+  const attemptsGone = db.prepare(`SELECT COUNT(*) as c FROM quiz_attempts WHERE quiz_id = ?`).get(quizId) as { c: number };
+  assert.equal(attemptsGone.c, 0);
+
+  await app.close();
+});
+
+test('DELETE /quizzes/:quizId returns 404 for an unknown quiz id or a mismatched pdf id', async () => {
+  seedQuizPdf('quiz-delete-missing-01', 'public');
+  const app = await buildApp();
+  const createResp = await app.inject({
+    method: 'POST',
+    url: '/api/pdfs/quiz-delete-missing-01/quizzes',
+    headers: OWNER_HEADERS,
+    payload: validQuizPayload(),
+  });
+  const quizId = (createResp.json() as { id: number }).id;
+
+  const wrongQuizId = await app.inject({
+    method: 'DELETE',
+    url: '/api/pdfs/quiz-delete-missing-01/quizzes/999999',
+    headers: OWNER_HEADERS,
+  });
+  assert.equal(wrongQuizId.statusCode, 404);
+  assert.equal((wrongQuizId.json() as { error: { code: string } }).error.code, 'QUIZ_NOT_FOUND');
+
+  seedQuizPdf('quiz-delete-other-pdf-01', 'public');
+  const crossPdf = await app.inject({
+    method: 'DELETE',
+    url: `/api/pdfs/quiz-delete-other-pdf-01/quizzes/${quizId}`,
+    headers: OWNER_HEADERS,
+  });
+  assert.equal(crossPdf.statusCode, 404);
+
+  await app.close();
+});
+
 test('POST /quizzes/:quizId/attempts is not gated by edit permission so followers can submit answers', async () => {
   seedQuizPdf('quiz-attempt-01', 'public');
   const app = await buildApp();

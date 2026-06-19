@@ -2497,3 +2497,24 @@ Gemini TTS 語音合成的回應結構是好幾層巢狀的（`candidates[0].con
 - 新增 `frontend/src/lib/subtitles.test.ts`，共 15 個測試：
   - `splitScriptIntoSentences()`：空白輸入、純語氣標記輸入（`[[興奮地]]` 之類）回傳空陣列；中文/英文多句依終止符正確切分；語氣標記與正文交錯時標記被正確去除；額外驗證 ASCII 句號「.」不算終止符，因此一段只有句號、沒有其他終止符的文字會維持整段不被拆開。
   - `buildSentenceTimeline()`：`duration` 為 0、負數、`NaN`、`Infinity`，或 `sentences` 為空陣列時皆回傳空陣列；單句時整段時長分配給該句；多句切分後每個區段的 `start` 等於前一段的 `end`（區段首尾相接、無重疊無空隙），且最後一段的 `end` 精確等於 `duration`；較長的中文句子分配到的時長確實大於短句（驗證字元權重估算邏輯生效）；混合中英文與數字字元時所有區段仍落在 `[0, duration]` 範圍內。
+
+## 後端測驗管理補上刪除端點與前端刪除按鈕
+
+### 功能目的
+
+教師可以為簡報建立多份課堂測驗（透過 AI 產生或手動編輯），但過去只能新增、編輯與練習，沒有任何方式可以刪除不再需要的舊測驗——對照投票功能（page polls）早已支援刪除，測驗管理的 CRUD 並不完整。隨著教師反覆嘗試不同版本的測驗題目，已儲存的測驗清單只會越來越長，無法清理。這次補上刪除功能，讓教師可以隨時整理測驗清單。
+
+### 使用方式
+
+1. 在課堂測驗編輯頁的「已儲存測驗」清單中，每一筆測驗除了原有的「開始」「顯示答案」「結束」「歷史記錄」按鈕外，新增「刪除」按鈕（僅同步教學模式下的 master 角色可見，與「新增測驗」按鈕的顯示條件一致）。
+2. 點擊「刪除」會先彈出確認對話框，顯示該測驗的標題並提醒此操作無法復原、會連同所有學生的作答紀錄一併刪除。
+3. 確認後測驗會立即從清單移除；若刪除的正是目前編輯表單中開啟的那份測驗，編輯表單會自動重置為一份新測驗的初始狀態。
+
+### 技術細節
+
+- 後端 `backend/src/routes/pdfs/quizzes.ts` 新增 `DELETE /api/pdfs/:id/quizzes/:quizId`，沿用與 `PUT /api/pdfs/:id/quizzes/:quizId` 相同的 `canEditPdf()` 編輯權限檢查（非擁有者且非 `public_editable` 協作者回傳 `403`），找不到對應 quiz 時回傳 `404 QUIZ_NOT_FOUND`，成功時回傳 `204 No Content`（與 `detail.ts` 的 `DELETE /api/pdfs/:id/polls/:pollId` 風格一致）。
+- 資料庫的 `quiz_attempts` 表已對 `quiz_id` 設定 `FOREIGN KEY ... ON DELETE CASCADE`，且 `db.pragma('foreign_keys = ON')` 已啟用外鍵約束，因此刪除 `quiz_sets` 紀錄時，所有關聯的學生作答紀錄會由 SQLite 自動連帶刪除，路由邏輯不需要額外手動清理 `quiz_attempts`。
+- 前端 `frontend/src/lib/api/pdfs.ts` 新增 `deleteQuizSet(id, quizId)`，沿用既有 `deletePagePoll()` 的 204/錯誤處理慣例。
+- `QuizBuilderPage.tsx` 新增 `handleDeleteQuiz()`：呼叫 `window.confirm()`（沿用 `HomePage.tsx` 刪除分類時的確認對話框慣例）取得使用者確認後呼叫 API，成功後從 `savedQuizzes` 移除該筆並視情況重置編輯表單；新增 `deletingQuizId` 狀態在請求進行中暫時停用該按鈕，避免重複點擊。
+- 新增中英文 `quiz.confirmDelete`（含 `{title}` 佔位符）、`quiz.deleteDone`、`quiz.deleteFailed`、`quiz.deleteQuizTitle` 翻譯鍵；按鈕文字沿用既有的 `quiz.delete` 鍵（原本用於編輯器內刪除單一題目，文案同樣是「刪除」/"Delete"，可直接複用）。
+- `backend/test/quizzes.test.ts` 新增測試覆蓋：非擁有者刪除得到 403 且資料未被刪除、擁有者刪除成功後 `quiz_sets` 與其 `quiz_attempts` 皆消失、刪除不存在的 quiz id 或 pdf id 不匹配時得到 404。
