@@ -369,6 +369,82 @@ test("resolveAnimationSpec resolves custom-script transcript startTrigger", () =
   assert.equal(resolvedEffect.start, 2.5);
 });
 
+test("resolveAnimationSpec extends a too-short exitDuration so the effect lasts until the sentence ends", () => {
+  const spec = {
+    version: 1 as const,
+    enabled: true,
+    effects: [
+      {
+        id: "e1",
+        target: "slide" as const,
+        type: "text-callout" as const,
+        start: 0,
+        duration: 1.2,
+        ease: "none" as const,
+        exitDuration: 2,
+        startTrigger: { type: "transcript-line" as const, line: 0 },
+      },
+    ],
+  };
+  // Sentence spans 0~10s, but the AI only picked a 2s exitDuration; the effect's start (0)
+  // + duration (1.2) + original exitDuration (2) = 3.2s, well before the sentence ends at 10s.
+  const resolved = resolveAnimationSpec(spec, [{ text: "a long sentence", start: 0, end: 10 }]);
+  assert.ok(resolved);
+  const effect = resolved.effects[0];
+  assert.ok(effect);
+  // exitDuration should be bumped up to (10 - 0 - 1.2) = 8.8 so the effect stays visible
+  // until the sentence finishes narrating.
+  assert.equal(effect.exitDuration, 8.8);
+});
+
+test("resolveAnimationSpec never shortens an exitDuration that's already longer than the sentence", () => {
+  const spec = {
+    version: 1 as const,
+    enabled: true,
+    effects: [
+      {
+        id: "e1",
+        target: "slide" as const,
+        type: "text-callout" as const,
+        start: 0,
+        duration: 1,
+        ease: "none" as const,
+        exitDuration: 5,
+        startTrigger: { type: "transcript-line" as const, line: 0 },
+      },
+    ],
+  };
+  // Sentence only spans 0~2s, far shorter than the author's chosen 5s exitDuration.
+  const resolved = resolveAnimationSpec(spec, [{ text: "short", start: 0, end: 2 }]);
+  assert.ok(resolved);
+  const effect = resolved.effects[0];
+  assert.ok(effect);
+  assert.equal(effect.exitDuration, 5);
+});
+
+test("resolveAnimationSpec leaves exitDuration untouched when it is not set", () => {
+  const spec = {
+    version: 1 as const,
+    enabled: true,
+    effects: [
+      {
+        id: "e1",
+        target: "slide" as const,
+        type: "highlight-box" as const,
+        start: 0,
+        duration: 1,
+        ease: "none" as const,
+        startTrigger: { type: "transcript-line" as const, line: 0 },
+      },
+    ],
+  };
+  const resolved = resolveAnimationSpec(spec, [{ text: "a", start: 0, end: 10 }]);
+  assert.ok(resolved);
+  const effect = resolved.effects[0];
+  assert.ok(effect);
+  assert.equal(effect.exitDuration, undefined);
+});
+
 test("SLIDE_ANIMATION_EFFECT_TYPES and OVERLAY_EFFECT_TYPES include 'shape'", () => {
   assert.ok(SLIDE_ANIMATION_EFFECT_TYPES.includes("shape"));
   assert.ok(OVERLAY_EFFECT_TYPES.includes("shape"));
