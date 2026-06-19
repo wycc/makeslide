@@ -543,3 +543,9 @@
 - 分支: feature/gate-gsap-timeline-build-warning
 - 內容: 完成「投影片 GSAP 動畫 timeline 建立失敗的 console.error 改為 gated debug helper」。`frontend/src/components/slide/useGsapSlideTimeline.ts` 匯入 `debugWarn()`，並將 `buildGsapTimeline(stage, spec)` 失敗時的直接 `console.error` 改為 gated debug warning；同步移除該處 `eslint-disable-next-line no-console`。原本的 `tl?.kill()`、`gsap.set(stage, { clearProps: 'all' })`、`timelineRef.current = null`、`setAnimationFailed(true)`、`onErrorRef.current?.()` 與 fallback 靜態圖片流程維持不變。已執行 frontend typecheck 通過；grep 確認目標檔不再有直接 `console.error`。
 
+- [ ] 後端舊 PNG 轉 JPG 啟動遷移完成訊息改用 logger：`backend/src/services/imageMigration.ts` 的 `migrateLegacyPngToJpgOnStartup()` 在成功轉換 cover/page 圖檔後直接 `console.info('[image-migration] converted ...')`，且用 `eslint-disable-next-line no-console` 放行。這是後端啟動流程的一般資訊訊息，應改用既有 `backend/src/logger.ts` 的 `logger.info()`，讓輸出格式、等級與其他服務 log 一致，並移除 no-console 註解；保留逐檔錯誤忽略、DB image_path 更新與啟動遷移行為不變。
+
+- 時間: 2026-06-19 22:32:00 +0800
+- 分支: master
+- 內容: 依照 LOOP.md，在 TODO.md 已無未完成項目時繼續檢查剩餘直接 `console.*`。排除前端 debug helper 本身、後端 CLI script 與 `config.ts` 環境變數啟動錯誤後，讀取 `backend/src/services/imageMigration.ts` 確認啟動時舊 PNG 轉 JPG 遷移成功會直接 `console.info`。此訊息屬後端服務資訊 log，應使用專案既有 `logger.info()` 以維持格式與等級一致。新增 1 個小型待辦，範圍限定為將此啟動遷移訊息改用 logger，保留遷移邏輯不變。
+
