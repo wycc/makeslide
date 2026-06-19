@@ -58,6 +58,11 @@ export function PlayPageSidebar() {
   } = usePlayPageContext();
 
   const { t } = useI18n();
+  const formatMessage = (key: Parameters<typeof t>[0], values: Record<string, string | number>) =>
+    Object.entries(values).reduce(
+      (message, [name, value]) => message.replaceAll(`{${name}}`, String(value)),
+      t(key),
+    );
 
   return (
     <aside
@@ -326,7 +331,9 @@ export function PlayPageSidebar() {
           <div className="min-w-0">
             <h2 className="truncate text-sm font-semibold text-slate-300">📊 Realtime Poll</h2>
             <p className="text-[11px] text-slate-500">
-              {pollStarted ? `第 ${currentPage?.page_number ?? '-'} 頁投票中` : '尚未開始，不顯示結果'}
+              {pollStarted
+                ? formatMessage('play.sidebar.poll.activePage', { page: currentPage?.page_number ?? '-' })
+                : t('play.sidebar.poll.notStarted')}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -335,7 +342,7 @@ export function PlayPageSidebar() {
               onClick={() => setPollSettingsOpen((v) => !v)}
               className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
             >
-              {pollSettingsOpen ? '收合設定' : '設定'}
+              {pollSettingsOpen ? t('play.sidebar.poll.collapseSettings') : t('play.sidebar.poll.settings')}
             </button>
             {pollStarted ? (
               <button
@@ -343,7 +350,7 @@ export function PlayPageSidebar() {
                 onClick={handleStopPoll}
                 className="rounded-md border border-rose-500/50 bg-rose-500/10 px-2 py-1 text-xs text-rose-200 hover:bg-rose-500/20"
               >
-                結束
+                {t('play.sidebar.poll.stop')}
               </button>
             ) : (
               <button
@@ -352,7 +359,7 @@ export function PlayPageSidebar() {
                 disabled={!currentPage}
                 className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-2 py-1 text-xs text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                開始
+                {t('play.sidebar.poll.start')}
               </button>
             )}
             {syncEnabled && syncRole === 'master' && pollStarted ? (
@@ -361,7 +368,7 @@ export function PlayPageSidebar() {
                 onClick={() => setSyncPollShowResults((v) => !v)}
                 className="rounded-md border border-emerald-500/50 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-200 hover:bg-emerald-500/20"
               >
-                {syncPollShowResults ? '隱藏結果' : '顯示結果'}
+                {syncPollShowResults ? t('play.sidebar.poll.hideResults') : t('play.sidebar.poll.showResults')}
               </button>
             ) : null}
           </div>
@@ -374,14 +381,14 @@ export function PlayPageSidebar() {
                   value={pollQuestion}
                   onChange={(e) => setPollQuestion(e.target.value)}
                   maxLength={300}
-                  placeholder="輸入投票問題"
+                  placeholder={t('play.sidebar.poll.questionPlaceholder')}
                   className="mb-2 w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 outline-none ring-cyan-500/40 placeholder:text-slate-500 focus:ring"
                 />
                 <textarea
                   value={pollOptionsText}
                   onChange={(e) => setPollOptionsText(e.target.value)}
                   rows={2}
-                  placeholder="每行一個答案選項"
+                  placeholder={t('play.sidebar.poll.optionsPlaceholder')}
                   className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 outline-none ring-cyan-500/40 placeholder:text-slate-500 focus:ring"
                 />
                 <button
@@ -390,7 +397,7 @@ export function PlayPageSidebar() {
                   disabled={pollBusy || !currentPage}
                   className="mt-2 w-full rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-xs text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  {pollBusy ? '處理中…' : '建立並開始本頁投票'}
+                  {pollBusy ? t('play.sidebar.poll.processing') : t('play.sidebar.poll.createAndStart')}
                 </button>
               </div>
             )}
@@ -400,7 +407,7 @@ export function PlayPageSidebar() {
               <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
                 {pagePolls.length === 0 ? (
                   <div className="rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1.5 text-xs text-slate-500">
-                    {pollStarted ? '已開始輪詢，本頁尚無投票。' : '本頁尚無已建立的投票問題。'}
+                    {pollStarted ? t('play.sidebar.poll.emptyStarted') : t('play.sidebar.poll.empty')}
                   </div>
                 ) : (
                   pagePolls.map((poll) => (
@@ -408,7 +415,7 @@ export function PlayPageSidebar() {
                       <div className="mb-1 flex items-start justify-between gap-2">
                         <h3 className="text-xs font-medium text-slate-200">{poll.question}</h3>
                         <span className="shrink-0 rounded-full border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-400">
-                          {poll.total_votes} 票
+                          {formatMessage('play.sidebar.poll.voteCount', { count: poll.total_votes })}
                         </span>
                       </div>
                       {syncEnabled && syncRole === 'master' ? (
@@ -422,7 +429,9 @@ export function PlayPageSidebar() {
                                 : 'border-cyan-500/50 bg-cyan-500/15 text-cyan-200 hover:bg-cyan-500/25'
                             }`}
                           >
-                            {syncDisplayedPollId === poll.id ? '目前顯示題目' : '顯示這題到全螢幕'}
+                            {syncDisplayedPollId === poll.id
+                              ? t('play.sidebar.poll.currentlyDisplayed')
+                              : t('play.sidebar.poll.showOnFullscreen')}
                           </button>
                           <button
                             type="button"
@@ -430,7 +439,7 @@ export function PlayPageSidebar() {
                             disabled={pollBusy || poll.total_votes === 0}
                             className="rounded border border-amber-500/50 bg-amber-500/15 px-2 py-1 text-[11px] text-amber-200 hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                           >
-                            清除結果
+                            {t('play.sidebar.poll.clearResults')}
                           </button>
                           <button
                             type="button"
@@ -438,7 +447,7 @@ export function PlayPageSidebar() {
                             disabled={pollBusy}
                             className="rounded border border-rose-500/50 bg-rose-500/15 px-2 py-1 text-[11px] text-rose-200 hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                           >
-                            刪除題目
+                            {t('play.sidebar.poll.deleteQuestion')}
                           </button>
                         </div>
                       ) : null}
@@ -478,16 +487,16 @@ export function PlayPageSidebar() {
       <div className="border-b border-slate-800 px-4 py-3">
       <div className="mb-2 flex items-center justify-between gap-2">
         <h2 className="min-w-0 truncate text-sm font-semibold text-slate-300">
-          💬 本頁問答（含本頁圖片與文字上下文）
+          💬 {t('play.sidebar.qa.title')}
         </h2>
         <button
           type="button"
           onClick={() => setQaPanelExpanded((v) => !v)}
           className="hidden shrink-0 rounded-md border border-cyan-500/50 bg-cyan-500/10 px-2 py-1 text-xs text-cyan-200 hover:bg-cyan-500/20 md:inline-flex"
           aria-pressed={qaPanelExpanded}
-          title={qaPanelExpanded ? '還原右側欄內容' : '讓問答佔滿右側欄'}
+          title={qaPanelExpanded ? t('play.sidebar.qa.restoreSidebarTitle') : t('play.sidebar.qa.expandSidebarTitle')}
         >
-          {qaPanelExpanded ? '還原' : '放大'}
+          {qaPanelExpanded ? t('play.sidebar.qa.restore') : t('play.sidebar.qa.expand')}
         </button>
       </div>
       <div className="flex justify-end">
@@ -497,17 +506,17 @@ export function PlayPageSidebar() {
           disabled={isReadOnlyProcessing || chatBusy || chatHistory.length === 0}
           className="rounded-md border border-rose-500/50 bg-rose-500/15 px-2 py-1 text-xs text-rose-200 hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          清除全部訊息
+          {t('play.sidebar.qa.clearAllMessages')}
         </button>
       </div>
       </div>
       <div className="flex-1 space-y-2 overflow-y-auto p-3 text-sm">
         {chatHistory.length === 0 ? (
-          <div className="text-slate-500">尚無對話，請輸入問題。</div>
+          <div className="text-slate-500">{t('play.sidebar.qa.emptyChat')}</div>
         ) : (
           chatHistory.map((m, idx) => (
             <div key={idx} className={m.role === 'user' ? 'text-slate-100' : 'text-emerald-200'}>
-              <span className="mr-2 text-xs uppercase opacity-70">{m.role === 'user' ? '你' : '助教'}</span>
+              <span className="mr-2 text-xs uppercase opacity-70">{m.role === 'user' ? t('play.sidebar.qa.roleUser') : t('play.sidebar.qa.roleAssistant')}</span>
               {m.role === 'assistant' && m.content.startsWith(IMAGE_MSG_PREFIX) ? (
                 <button
                   type="button"
@@ -519,9 +528,9 @@ export function PlayPageSidebar() {
                     setImagePreviewOpen(true);
                   }}
                   className="inline-block overflow-hidden rounded-md border border-cyan-500/40 hover:border-cyan-300"
-                  title="點擊放大預覽"
+                  title={t('play.sidebar.qa.previewImageTitle')}
                 >
-                  <img src={m.content.slice(IMAGE_MSG_PREFIX.length).trim()} alt="生成圖片結果" className="max-h-36 w-auto" />
+                  <img src={m.content.slice(IMAGE_MSG_PREFIX.length).trim()} alt={t('play.sidebar.qa.generatedImageAlt')} className="max-h-36 w-auto" />
                 </button>
               ) : (
                 <span className="whitespace-pre-wrap">{m.content}</span>
@@ -538,28 +547,28 @@ export function PlayPageSidebar() {
               <div className="relative inline-block shrink-0">
                 <img
                   src={chatPastedImageUrl}
-                  alt="參考圖"
+                  alt={t('play.sidebar.qa.referenceImageAlt')}
                   className="max-h-16 w-auto rounded border border-slate-600 object-contain"
                 />
                 <button
                   type="button"
                   onClick={clearChatPastedImage}
                   className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-slate-900 text-[10px] text-slate-200 hover:bg-rose-600"
-                  title="移除參考圖"
+                  title={t('play.sidebar.qa.removeReferenceImage')}
                 >✕</button>
               </div>
-              <p className="text-xs text-slate-400">參考圖（貼上的圖片）</p>
+              <p className="text-xs text-slate-400">{t('play.sidebar.qa.referenceImageLabel')}</p>
             </div>
           )}
           {/* Region selection status */}
           {imageEditRegion && (
             <div className="flex items-center gap-2 text-xs text-cyan-400">
-              <span>已標示修改區域</span>
+              <span>{t('play.sidebar.qa.regionSelected')}</span>
               <button
                 type="button"
                 onClick={clearImageEditRegion}
                 className="text-slate-400 hover:text-rose-400"
-              >✕ 清除</button>
+              >{t('play.sidebar.qa.clearRegion')}</button>
             </div>
           )}
           <textarea
@@ -585,7 +594,7 @@ export function PlayPageSidebar() {
             }}
             rows={3}
             disabled={isReadOnlyProcessing}
-            placeholder={isReadOnlyProcessing ? '處理中為唯讀模式，問答與修改功能暫停' : '可輸入修改指示或問題（Shift+Enter 換行；可貼上參考圖）'}
+            placeholder={isReadOnlyProcessing ? t('play.sidebar.qa.readOnlyPlaceholder') : t('play.sidebar.qa.inputPlaceholder')}
             className="flex-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-emerald-500/40 placeholder:text-slate-500 focus:ring"
           />
           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -605,9 +614,9 @@ export function PlayPageSidebar() {
                     ? 'border-cyan-400/70 bg-cyan-500/25 text-cyan-100'
                     : 'border-slate-600 bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
                 }`}
-                title="在左側投影片圖片上拖曳選取要修改的區域"
+                title={t('play.sidebar.qa.selectRegionTitle')}
               >
-                {imageEditSelectMode ? '取消選區' : '選取區域'}
+                {imageEditSelectMode ? t('play.sidebar.qa.cancelRegionSelection') : t('play.sidebar.qa.selectRegion')}
               </button>
             )}
             {/* Inpaint or regenerate */}
@@ -618,7 +627,7 @@ export function PlayPageSidebar() {
                 disabled={isReadOnlyProcessing || chatInpaintBusy || !currentPage}
                 className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {chatInpaintBusy ? '修改中…' : '修改圖片'}
+                {chatInpaintBusy ? t('play.sidebar.qa.editing') : t('play.sidebar.qa.editImage')}
               </button>
             ) : (
               <button
@@ -627,7 +636,7 @@ export function PlayPageSidebar() {
                 disabled={isReadOnlyProcessing || slideBusy || !currentPage}
                 className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                修改圖片
+                {t('play.sidebar.qa.editImage')}
               </button>
             )}
             <button
@@ -636,7 +645,7 @@ export function PlayPageSidebar() {
               disabled={isReadOnlyProcessing || rewriteBusy || !hasChatInput}
               className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-3 py-2 text-sm text-fuchsia-200 hover:bg-fuchsia-500/25 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {rewriteBusy ? '修改中…' : '修改逐字稿'}
+              {rewriteBusy ? t('play.sidebar.qa.editing') : t('play.sidebar.qa.editTranscript')}
             </button>
             <button
               type="button"
@@ -644,7 +653,7 @@ export function PlayPageSidebar() {
               disabled={isReadOnlyProcessing || chatBusy || !hasChatInput}
               className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {chatBusy ? '詢問中…' : '詢問'}
+              {chatBusy ? t('play.sidebar.qa.asking') : t('play.sidebar.qa.ask')}
             </button>
           </div>
         </div>

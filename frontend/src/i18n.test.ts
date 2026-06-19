@@ -239,6 +239,63 @@ test('PlayPageSlidePanel transcript/prompt editor locale keys are complete', () 
   }
 });
 
+test('PlayPageSidebar poll and QA locale keys are complete', () => {
+  const requiredKeys = [
+    'play.sidebar.poll.activePage',
+    'play.sidebar.poll.notStarted',
+    'play.sidebar.poll.collapseSettings',
+    'play.sidebar.poll.settings',
+    'play.sidebar.poll.stop',
+    'play.sidebar.poll.start',
+    'play.sidebar.poll.hideResults',
+    'play.sidebar.poll.showResults',
+    'play.sidebar.poll.questionPlaceholder',
+    'play.sidebar.poll.optionsPlaceholder',
+    'play.sidebar.poll.processing',
+    'play.sidebar.poll.createAndStart',
+    'play.sidebar.poll.emptyStarted',
+    'play.sidebar.poll.empty',
+    'play.sidebar.poll.voteCount',
+    'play.sidebar.poll.currentlyDisplayed',
+    'play.sidebar.poll.showOnFullscreen',
+    'play.sidebar.poll.clearResults',
+    'play.sidebar.poll.deleteQuestion',
+    'play.sidebar.qa.title',
+    'play.sidebar.qa.restoreSidebarTitle',
+    'play.sidebar.qa.expandSidebarTitle',
+    'play.sidebar.qa.restore',
+    'play.sidebar.qa.expand',
+    'play.sidebar.qa.clearAllMessages',
+    'play.sidebar.qa.emptyChat',
+    'play.sidebar.qa.roleUser',
+    'play.sidebar.qa.roleAssistant',
+    'play.sidebar.qa.previewImageTitle',
+    'play.sidebar.qa.generatedImageAlt',
+    'play.sidebar.qa.referenceImageAlt',
+    'play.sidebar.qa.removeReferenceImage',
+    'play.sidebar.qa.referenceImageLabel',
+    'play.sidebar.qa.regionSelected',
+    'play.sidebar.qa.clearRegion',
+    'play.sidebar.qa.readOnlyPlaceholder',
+    'play.sidebar.qa.inputPlaceholder',
+    'play.sidebar.qa.selectRegionTitle',
+    'play.sidebar.qa.cancelRegionSelection',
+    'play.sidebar.qa.selectRegion',
+    'play.sidebar.qa.editing',
+    'play.sidebar.qa.editImage',
+    'play.sidebar.qa.editTranscript',
+    'play.sidebar.qa.asking',
+    'play.sidebar.qa.ask',
+  ] as const;
+
+  for (const key of requiredKeys) {
+    assert.equal(typeof zhTW[key], 'string');
+    assert.equal(typeof en[key], 'string');
+    assert.notEqual(zhTW[key].trim(), '');
+    assert.notEqual(en[key].trim(), '');
+  }
+});
+
 test('AddPagesFromPromptModal locale keys are complete', () => {
   const requiredKeys = [
     'play.addPages.title',

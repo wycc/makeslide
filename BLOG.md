@@ -1,5 +1,29 @@
 # MakeSlide 功能說明
 
+## 播放頁側欄投票與 QA 面板 i18n 補齊
+
+### 功能目的
+
+播放頁右側欄包含 Realtime Poll 與本頁問答兩個高度互動區塊：老師可建立本頁投票、開始/結束投票、控制全螢幕顯示題目與結果；使用者也可在本頁問答區輸入問題、貼上參考圖、圈選圖片區域並要求修改圖片或逐字稿。過去 `PlayPageSidebar.tsx` 雖然已使用 `useI18n()`，但這兩個區塊仍有大量使用者可見中文硬編碼，英文介面在操作投票與 QA 時會混用中文。
+
+新版將投票控制與 QA 面板文案改為 `play.sidebar.poll.*` 與 `play.sidebar.qa.*` 翻譯鍵，讓繁體中文與英文介面都能完整顯示對應語言。此修改只替換文字來源，不改投票、同步顯示、問答、貼圖、選區、圖片修改或逐字稿修改的既有行為。
+
+### 使用方式與影響
+
+1. 在「設定」頁切換界面文字語言後，播放頁側欄的 Realtime Poll 狀態、設定按鈕、開始/結束、顯示/隱藏結果、投票建立表單與投票題操作會跟隨語言切換。
+2. 本頁問答區的標題、放大/還原、清除全部訊息、空對話提示、角色 label、圖片預覽與參考圖文字，以及修改圖片/逐字稿/詢問按鈕也會跟隨語言切換。
+3. 動態文字使用 `{page}` / `{count}` 佔位符，例如「第 N 頁投票中」與「N 票」，避免在元件內用字串拼接固定中文語序。
+4. QA textarea 在處理中唯讀模式與一般模式使用不同 placeholder，仍維持原本唯讀停用與送出行為。
+
+### 技術細節
+
+- `frontend/src/pages/play/PlayPageSidebar.tsx` 新增本地 `formatMessage()`，統一處理簡單 placeholder 替換。
+- Realtime Poll 區塊新增並使用 `play.sidebar.poll.*` 翻譯鍵，涵蓋狀態列、控制按鈕、表單 placeholder、空狀態、票數與題目操作按鈕。
+- QA 區塊新增並使用 `play.sidebar.qa.*` 翻譯鍵，涵蓋標題、面板展開、清除、空對話、角色、圖片 alt/title、參考圖、選區狀態、textarea placeholder 與動作按鈕。
+- `frontend/src/locales/zh-TW.ts` 與 `frontend/src/locales/en.ts` 新增 45 個中英文翻譯鍵，並維持兩份 locale 字典 key 完全對齊。
+- `frontend/src/i18n.test.ts` 新增 `PlayPageSidebar poll and QA locale keys are complete` 測試，確認新增中英文鍵皆存在且非空。
+- 已執行 frontend typecheck 與 i18n 測試，並用 grep 確認 `PlayPageSidebar.tsx` 剩餘中文僅為程式註解。
+
 ## 圖片預覽對話框 i18n 補齊
 
 ### 功能目的
