@@ -499,7 +499,7 @@
 
 - [x] 將 OpenAI 和 CGU air 的鍵值分開，再加上一個 OpenRouter 的支援：已將 OpenAI、CGU Air、OpenRouter 的 API key、base URL 與 LLM model 分開保存，後端新增 provider 驗證與相容舊 CGU Air 設定的遷移邏輯；AI 設定頁可直接選擇 OpenAI、CGU Air、OpenRouter 或 Gemini，並依 provider 顯示對應設定欄位。新增後端測試覆蓋分離保存與不合法 provider 驗證。驗證：`npm run typecheck --workspace backend`、`npm run typecheck --workspace frontend`、`./scripts/with-node-env.sh npx tsx --test backend/test/admin-openai-api-key.test.ts` 通過。分支：`feature/separate-ai-providers`。
 - [x] 全螢幕新增動畫編輯器與目前播放效果後插入：已在全螢幕右上方新增動畫按鈕，按下後於右側顯示全螢幕動畫編輯面板；`AnimationEditorTab.tsx` 重構為一般模式與全螢幕模式共用效果列表/設定區，一般模式保留完整工具列與預覽/儲存，全螢幕模式聚焦新增效果按鈕與必要編輯。新增 `insertEffectAfterPlaybackEffect()`，新增效果會插入目前播放效果之後，沒有對應播放效果時 fallback 為追加到最後。驗證：`npm run typecheck` 通過；`frontend/src/lib/animationSpec.test.ts` 臨時編譯後以 `node --test` 執行 46 tests 通過。分支：`feature/fullscreen-animation-editor`。
-- [ ] 將原有 a 鍵新增效果移除
+- [x] 將原有 a 鍵新增效果移除：已移除全螢幕播放時按 `a` 自動插入 pause-playback 效果的邏輯與專用 helper，保留非全螢幕同步 master 的 `a` 鍵 AI 回答追隨者問題、空白鍵播放/下一頁、左右鍵翻頁、`p` 投票控制、`w` 手寫與 Escape 離開/關閉等既有快捷鍵；盤點 i18n/提示文案未發現需移除的 `a` 鍵新增效果提示。驗證：`npm run typecheck --workspace frontend` 通過；`../scripts/with-node-env.sh npx tsx --test src/lib/animationSpec.test.ts` 46 tests 通過；grep 確認已無 `insertPausePlaybackEffectRef`/`generateInsertedPauseEffectId` 與全螢幕 `a` 新增效果邏輯。分支：`feature/remove-fullscreen-a-add-effect`。
 
 - 時間: 2026-06-19 19:55:00 +0800
 - 分支: feature/separate-ai-providers

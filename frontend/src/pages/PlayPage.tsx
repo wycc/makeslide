@@ -22,11 +22,8 @@ import {
   type ShareAccessMode,
 } from '../lib/api';
 import {
-  DEFAULT_PAUSE_PLAYBACK_TEXT,
   animationTimelineDurationSeconds,
-  defaultAnimationSpec,
   getDuePausePlaybackEffect,
-  insertEffectAfterFirstStartingEffect,
   resolveAnimationSpec,
 } from '../lib/animationSpec';
 import { debugLog, debugWarn } from '../lib/debugLog';
@@ -80,12 +77,6 @@ const SYNC_CURSOR_PUSH_INTERVAL_FULLSCREEN_MS = 24;
 // 動畫延長播放期間，定期推進 currentTime 的間隔；與音訊 timeupdate 的常見頻率（~4 次/秒）相近，
 // 讓 custom-script 效果的 sandboxed iframe 在延長期間仍能持續收到 `sync` 訊息更新動畫畫面。
 const PAGE_EXTEND_TICK_MS = 250;
-
-function generateInsertedPauseEffectId(): string {
-  return typeof crypto !== 'undefined' && crypto.randomUUID
-    ? crypto.randomUUID()
-    : `pause-playback-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
 
 function hasTranscriptStartTrigger(spec: SlideAnimationSpec | null | undefined): boolean {
   return Boolean(spec?.effects.some((effect) => effect.startTrigger));
@@ -239,7 +230,6 @@ export default function PlayPage() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const previousPlaybackTimeRef = useRef(0);
   const consumedPausePlaybackEffectIdsRef = useRef<Set<string>>(new Set());
-  const insertPausePlaybackEffectRef = useRef<() => void>(() => {});
   const playbackRateRef = useRef<number>(playbackRate);
   useEffect(() => {
     playbackRateRef.current = playbackRate;
@@ -1428,10 +1418,7 @@ export default function PlayPage() {
         goNext();
       } else if (ev.key.toLowerCase() === 'a') {
         const isFullscreen = Boolean(getAnyFullscreenElement()) || imageOnlyFullscreen;
-        if (isFullscreen) {
-          ev.preventDefault();
-          insertPausePlaybackEffectRef.current();
-        } else if (syncEnabled && syncRole === 'master') {
+        if (!isFullscreen && syncEnabled && syncRole === 'master') {
           ev.preventDefault();
           void handleAiAnswerFollowerQuestions();
         }
@@ -1736,26 +1723,6 @@ export default function PlayPage() {
     animationDurationSecondsRef.current = animationDurationSeconds;
   }, [animationDurationSeconds]);
   const { handleSaveAnimation } = animationState;
-  useEffect(() => {
-    insertPausePlaybackEffectRef.current = () => {
-      if (isReadOnlyProcessing || animationState.animationBusy || !currentPage) return;
-      animationState.setAnimationDraft((prev) => {
-        const base = prev ?? defaultAnimationSpec();
-        if (base.effects.length >= 20) return base;
-        const effect = {
-          id: generateInsertedPauseEffectId(),
-          target: 'slide' as const,
-          type: 'pause-playback' as const,
-          start: Math.max(0, currentTime),
-          duration: 0.4,
-          ease: 'power1.out' as const,
-          text: DEFAULT_PAUSE_PLAYBACK_TEXT,
-          params: { xPct: 18, yPct: 34, widthPct: 64, heightPct: 24 },
-        };
-        return { ...base, enabled: true, effects: insertEffectAfterFirstStartingEffect(base.effects, effect) };
-      });
-    };
-  }, [animationState, currentPage, currentTime, isReadOnlyProcessing]);
   // 從頭預覽：先儲存（確保重整後一致），再把音訊歸零播放；timeline 由 currentTime 漂移校正自動跳回 0
   const handlePreviewAnimation = useCallback(() => {
     void (async () => {

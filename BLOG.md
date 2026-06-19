@@ -1,5 +1,21 @@
 # MakeSlide 功能說明
 
+## 移除全螢幕 `a` 鍵新增效果快捷鍵
+
+### 功能目的
+
+全螢幕播放已新增右側動畫編輯器，可直接用明確的「動畫」按鈕新增與調整效果；原本按下 `a` 鍵自動插入 `pause-playback` 效果的隱藏快捷鍵容易和課堂同步模式的 `a` 鍵 AI 回答功能混淆，也不利於使用者理解目前操作。移除此快捷鍵後，新增動畫效果統一改由可見的動畫編輯器操作，降低誤觸風險。
+
+### 使用方式
+
+全螢幕播放時不再使用 `a` 鍵新增 pause-playback 效果。若要新增暫停播放或其他動畫效果，請點擊右上角「動畫」按鈕開啟全螢幕動畫編輯器，再用新增效果按鈕加入。非全螢幕同步 master 模式下，`a` 鍵仍保留原本的 AI 回答追隨者問題功能；空白鍵播放/下一頁、方向鍵翻頁、`p` 投票控制、`w` 手寫與 Escape 離開/關閉等既有快捷鍵維持不變。
+
+### 技術重點
+
+- `PlayPage.tsx` 移除 `insertPausePlaybackEffectRef`、`generateInsertedPauseEffectId()` 與全螢幕 `a` 鍵插入 `pause-playback` 的鍵盤事件分支。
+- 移除不再需要的 `DEFAULT_PAUSE_PLAYBACK_TEXT`、`defaultAnimationSpec()`、`insertEffectAfterFirstStartingEffect()` import，避免殘留死碼。
+- grep 驗證已無 `insertPausePlaybackEffectRef` / `generateInsertedPauseEffectId`；frontend typecheck 與動畫 spec 測試皆通過。
+
 ## 全螢幕動畫編輯器與目前播放效果後插入
 
 ### 功能目的
