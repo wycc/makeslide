@@ -1,10 +1,11 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import type { TouchEvent } from 'react';
 import DrawingCanvas from '../../components/DrawingCanvas';
 import { SlideRenderer } from '../../components/slide/SlideRenderer';
 import { useI18n } from '../../i18n';
 import type { TranslationKey } from '../../i18n';
 import { figureImageUrl } from '../../lib/api';
+import { AnimationEditorTab } from './AnimationEditorTab';
 import { usePlayPageContext } from './PlayPageContext';
 
 /** 觸發換頁所需的最小水平滑動距離（px）。 */
@@ -95,6 +96,7 @@ export function PlayPageFullscreen() {
   } = usePlayPageContext();
 
   const { t } = useI18n();
+  const [animationEditorOpen, setAnimationEditorOpen] = useState(false);
 
   const syncDisplayedQuestion = syncDisplayedQuestionId
     ? syncFollowerQuestions.find((q) => q.id === syncDisplayedQuestionId) ?? null
@@ -419,6 +421,22 @@ export function PlayPageFullscreen() {
         </div>
       )}
       <div className="absolute right-4 top-4 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setAnimationEditorOpen((prev) => !prev);
+          }}
+          aria-pressed={animationEditorOpen}
+          className={`rounded-md border px-3 py-1.5 text-sm ${
+            animationEditorOpen
+              ? 'border-fuchsia-300/70 bg-fuchsia-500/25 font-medium text-fuchsia-50'
+              : 'border-slate-500 bg-slate-900/70 text-slate-100 hover:bg-slate-800'
+          }`}
+          title={animationEditorOpen ? t('play.fullscreen.animation.close') : t('play.fullscreen.animation.open')}
+        >
+          🎞 {t('play.fullscreen.animation.button')}
+        </button>
         <div className="flex items-center overflow-hidden rounded-md border border-slate-500 bg-slate-900/70 text-sm">
           {FULLSCREEN_LAYOUTS.map(({ mode, labelKey }) => (
             isLockedFullscreen && mode === 'edit' ? null : (
@@ -455,6 +473,29 @@ export function PlayPageFullscreen() {
           </button>
         ) : null}
       </div>
+      {animationEditorOpen ? (
+        <aside
+          className="absolute right-4 top-16 z-[115] max-h-[calc(100vh-5rem)] w-[min(92vw,34rem)] cursor-default overflow-y-auto rounded-xl border border-fuchsia-400/35 bg-slate-950/95 p-4 text-slate-100 shadow-2xl backdrop-blur-md"
+          onClick={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+          onTouchEnd={(e) => e.stopPropagation()}
+        >
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold text-fuchsia-100">{t('play.fullscreen.animation.heading')}</h2>
+              <p className="mt-1 text-xs text-slate-400">{t('play.fullscreen.animation.description')}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setAnimationEditorOpen(false)}
+              className="shrink-0 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
+            >
+              {t('play.fullscreen.close')}
+            </button>
+          </div>
+          <AnimationEditorTab mode="fullscreen" />
+        </aside>
+      ) : null}
       {syncOverlayText ? (
         <div
           className={`pointer-events-none absolute left-1/2 w-[min(94vw,1100px)] -translate-x-1/2 px-3 ${

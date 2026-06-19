@@ -27,7 +27,7 @@ import {
   generateFocusEffectsFromTranscript,
   getFocusEffectParams,
   getShapeKind,
-  insertEffectAfterFirstStartingEffect,
+  insertEffectAfterPlaybackEffect,
   resolveStartTriggerSeconds,
 } from '../../lib/animationSpec';
 import { usePlayPageContext } from './PlayPageContext';
@@ -444,7 +444,9 @@ function truncateSentence(text: string, maxLen = 18): string {
   return text.length > maxLen ? `${text.slice(0, maxLen)}…` : text;
 }
 
-export function AnimationEditorTab() {
+type AnimationEditorTabMode = 'full' | 'fullscreen';
+
+export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTabMode } = {}) {
   const {
     pdfId,
     currentPage,
@@ -489,6 +491,7 @@ export function AnimationEditorTab() {
   const [lockedAspectEffectIds, setLockedAspectEffectIds] = useState<Set<string>>(new Set());
 
   const pageNumber = currentPage?.page_number;
+  const compact = mode === 'fullscreen';
   useEffect(() => {
     if (!pdfId || !pageNumber) {
       setPageFigures(null);
@@ -660,9 +663,28 @@ export function AnimationEditorTab() {
       const effect = { ...newEffect(), ...preset.apply() };
       return {
         ...base,
-        effects: effect.type === 'pause-playback'
-          ? insertEffectAfterFirstStartingEffect(base.effects, effect)
-          : [...base.effects, effect],
+        effects: insertEffectAfterPlaybackEffect(
+          base.effects,
+          effect,
+          currentTime,
+          (item) => (item.startTrigger ? resolveStartTriggerSeconds(item.startTrigger, sentenceTimeline) ?? item.start : item.start),
+        ),
+      };
+    });
+  };
+
+  const handleAddEffect = () => {
+    setAnimationDraft((prev) => {
+      const base = prev ?? defaultAnimationSpec();
+      if (base.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS) return base;
+      return {
+        ...base,
+        effects: insertEffectAfterPlaybackEffect(
+          base.effects,
+          newEffect(),
+          currentTime,
+          (item) => (item.startTrigger ? resolveStartTriggerSeconds(item.startTrigger, sentenceTimeline) ?? item.start : item.start),
+        ),
       };
     });
   };
@@ -700,7 +722,7 @@ export function AnimationEditorTab() {
       <h2 className="mb-2 text-sm font-semibold text-slate-300">
         🎞 {t('play.animation.title')}（第 {currentPage?.page_number ?? '-'} 頁）
       </h2>
-      <label className="mb-3 flex items-center gap-2 text-sm text-slate-200">
+      {!compact && <label className="mb-3 flex items-center gap-2 text-sm text-slate-200">
         <input
           type="checkbox"
           checked={draft.enabled}
@@ -711,42 +733,39 @@ export function AnimationEditorTab() {
           className="h-4 w-4 accent-fuchsia-500"
         />
         {t('play.animation.enabled')}
-      </label>
+      </label>}
 
       <div className="mb-3 flex flex-wrap gap-2">
         <button
           type="button"
           disabled={disabled || draft.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS}
           title={draft.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS ? t('play.animation.maxEffects') : undefined}
-          onClick={() =>
-            setAnimationDraft((prev) => {
-              const base = prev ?? defaultAnimationSpec();
-              return { ...base, effects: [...base.effects, newEffect()] };
-            })
-          }
+          onClick={handleAddEffect}
           className="rounded-md border border-slate-600 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {t('play.animation.addEffect')}
         </button>
-        <select
-          disabled={disabled || draft.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS}
-          title={t('play.animation.presetApplyHint')}
-          defaultValue=""
-          onChange={(e) => {
-            const presetId = e.target.value;
-            if (presetId) handleApplyPreset(presetId);
-            e.target.value = '';
-          }}
-          className="rounded-md border border-slate-600 bg-slate-900 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <option value="">{t('play.animation.presetApply')}</option>
-          {EFFECT_PRESETS.map((preset) => (
-            <option key={preset.id} value={preset.id}>
-              {t(preset.labelKey)}
-            </option>
-          ))}
-        </select>
-        {selectedEffectIds.size >= 2 && (
+        {!compact && (
+          <select
+            disabled={disabled || draft.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS}
+            title={t('play.animation.presetApplyHint')}
+            defaultValue=""
+            onChange={(e) => {
+              const presetId = e.target.value;
+              if (presetId) handleApplyPreset(presetId);
+              e.target.value = '';
+            }}
+            className="rounded-md border border-slate-600 bg-slate-900 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <option value="">{t('play.animation.presetApply')}</option>
+            {EFFECT_PRESETS.map((preset) => (
+              <option key={preset.id} value={preset.id}>
+                {t(preset.labelKey)}
+              </option>
+            ))}
+          </select>
+        )}
+        {!compact && selectedEffectIds.size >= 2 && (
           <button
             type="button"
             disabled={disabled}
@@ -756,7 +775,7 @@ export function AnimationEditorTab() {
             {t('play.animation.mergeSelected')} ({selectedEffectIds.size})
           </button>
         )}
-        <button
+        {!compact && <button
           type="button"
           disabled={disabled || draft.effects.length === 0}
           title={t('play.animation.copyPageEffectsHint')}
@@ -764,8 +783,8 @@ export function AnimationEditorTab() {
           className="rounded-md border border-slate-600 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {t('play.animation.copyPageEffects')}
-        </button>
-        {copiedEffects && copiedEffects.length > 0 && (
+        </button>}
+        {!compact && copiedEffects && copiedEffects.length > 0 && (
           <button
             type="button"
             disabled={disabled || draft.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS}
@@ -776,7 +795,7 @@ export function AnimationEditorTab() {
             {t('play.animation.pastePageEffects')} ({copiedEffects.length})
           </button>
         )}
-        {totalPages > 1 && (
+        {!compact && totalPages > 1 && (
           <button
             type="button"
             disabled={disabled || applyingToAll}
@@ -787,7 +806,7 @@ export function AnimationEditorTab() {
             {applyingToAll ? t('play.animation.applyToAllPagesBusy') : t('play.animation.applyToAllPages')}
           </button>
         )}
-        <button
+        {!compact && <button
           type="button"
           disabled={disabled || pageSentences.length === 0}
           title={pageSentences.length === 0 ? t('play.animation.noTranscript') : undefined}
@@ -802,8 +821,8 @@ export function AnimationEditorTab() {
           className="rounded-md border border-cyan-500/50 bg-cyan-500/10 px-3 py-1.5 text-sm text-cyan-200 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {t('play.animation.autoGenerateFocus')}
-        </button>
-        <button
+        </button>}
+        {!compact && <button
           type="button"
           disabled={disabled || pageSentences.length === 0 || aiFocusBusy}
           title={pageSentences.length === 0 ? t('play.animation.noTranscript') : undefined}
@@ -814,10 +833,10 @@ export function AnimationEditorTab() {
           className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/10 px-3 py-1.5 text-sm text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {aiFocusBusy ? t('play.animation.autoGenerateFocusAiBusy') : t('play.animation.autoGenerateFocusAi')}
-        </button>
+        </button>}
       </div>
 
-      <div className="mb-2 flex overflow-hidden rounded-md border border-slate-700 bg-slate-900/60">
+      {!compact && <div className="mb-2 flex overflow-hidden rounded-md border border-slate-700 bg-slate-900/60">
         <button
           type="button"
           onClick={() => setNotebookTab('effects')}
@@ -840,10 +859,10 @@ export function AnimationEditorTab() {
         >
           {t('play.animation.rawJson')}
         </button>
-      </div>
+      </div>}
 
-      <div className="mb-3 max-h-[60vh] space-y-2 overflow-y-auto rounded-md border border-slate-800 bg-slate-950/30 p-2">
-      {notebookTab === 'effects' ? (
+      <div className={`${compact ? 'max-h-[calc(100vh-12rem)]' : 'max-h-[60vh]'} mb-3 space-y-2 overflow-y-auto rounded-md border border-slate-800 bg-slate-950/30 p-2`}>
+      {compact || notebookTab === 'effects' ? (
         <>
         {draft.effects.length > 1 && (
           <div className="text-[11px] text-slate-500">{t('play.animation.multiSelectHint')}</div>

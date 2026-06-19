@@ -22,6 +22,7 @@ import {
   getDuePausePlaybackEffect,
   getShapeKind,
   insertEffectAfterFirstStartingEffect,
+  insertEffectAfterPlaybackEffect,
   resolveAnimationSpec,
   resolveStartTriggerSeconds,
 } from "./animationSpec";
@@ -65,6 +66,37 @@ test("insertEffectAfterFirstStartingEffect inserts after the first starting effe
   const later = { id: "later", target: "slide" as const, type: "zoom-in" as const, start: 5, duration: 1, ease: "none" as const };
   const pause = { id: "pause", target: "slide" as const, type: "pause-playback" as const, start: 2, duration: 0.4, ease: "none" as const };
   assert.deepEqual(insertEffectAfterFirstStartingEffect([start, later], pause).map((effect) => effect.id), ["start", "pause", "later"]);
+});
+
+test("insertEffectAfterPlaybackEffect inserts after the currently active effect", () => {
+  const first = { id: "first", target: "slide" as const, type: "fade-in" as const, start: 0, duration: 1, ease: "none" as const };
+  const active = { id: "active", target: "slide" as const, type: "zoom-in" as const, start: 4, duration: 2, ease: "none" as const };
+  const later = { id: "later", target: "slide" as const, type: "pan-left" as const, start: 9, duration: 1, ease: "none" as const };
+  const inserted = { id: "inserted", target: "slide" as const, type: "highlight-box" as const, start: 5, duration: 1, ease: "none" as const };
+  assert.deepEqual(insertEffectAfterPlaybackEffect([first, active, later], inserted, 4.5).map((effect) => effect.id), ["first", "active", "inserted", "later"]);
+});
+
+test("insertEffectAfterPlaybackEffect falls back to appending when no effect is active", () => {
+  const first = { id: "first", target: "slide" as const, type: "fade-in" as const, start: 0, duration: 1, ease: "none" as const };
+  const inserted = { id: "inserted", target: "slide" as const, type: "highlight-box" as const, start: 5, duration: 1, ease: "none" as const };
+  assert.deepEqual(insertEffectAfterPlaybackEffect([first], inserted, 3).map((effect) => effect.id), ["first", "inserted"]);
+});
+
+test("insertEffectAfterPlaybackEffect can use resolved playback starts", () => {
+  const triggered = {
+    id: "triggered", target: "slide" as const, type: "highlight-box" as const,
+    start: 0, duration: 1, ease: "none" as const,
+    startTrigger: { type: "transcript-line" as const, line: 1 },
+  };
+  const early = { id: "early", target: "slide" as const, type: "fade-in" as const, start: 0, duration: 1, ease: "none" as const };
+  const inserted = { id: "inserted", target: "slide" as const, type: "zoom-in" as const, start: 8, duration: 1, ease: "none" as const };
+  const result = insertEffectAfterPlaybackEffect(
+    [early, triggered],
+    inserted,
+    8.5,
+    (effect) => (effect.id === "triggered" ? 8 : effect.start),
+  );
+  assert.deepEqual(result.map((effect) => effect.id), ["early", "triggered", "inserted"]);
 });
 
 test("buildCustomScriptSandboxDoc embeds the code as base64 and defines #root", () => {
