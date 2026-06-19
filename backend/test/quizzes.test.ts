@@ -25,11 +25,17 @@ function nowIso(): string {
 function seedQuizPdf(pdfId: string, visibility: 'private' | 'public' | 'public_editable' = 'public'): void {
   const t = nowIso();
   db.prepare(`DELETE FROM quiz_sets WHERE pdf_id = ?`).run(pdfId);
+  db.prepare(`DELETE FROM pdf_shares WHERE pdf_id = ?`).run(pdfId);
   db.prepare(`DELETE FROM pdfs WHERE id = ?`).run(pdfId);
   db.prepare(
     `INSERT INTO pdfs (id,title,original_filename,status,page_count,progress_step,progress_current,progress_total,error_message,user_prompt,require_script_confirmation,owner_sub,visibility,tts_voice,tts_speed,script_max_chars_per_page,created_at,updated_at)
      VALUES (?,?,?,'ready',1,NULL,NULL,NULL,NULL,NULL,0,'account-1',?,NULL,NULL,NULL,?,?)`,
   ).run(pdfId, 't', `${pdfId}.pdf`, visibility, t, t);
+}
+
+function seedShareToken(pdfId: string, token: string, access: 'read_only' | 'editable' = 'read_only'): void {
+  const t = nowIso();
+  db.prepare(`INSERT INTO pdf_shares (pdf_id, token, access, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`).run(pdfId, token, access, t, t);
 }
 
 function validQuizPayload() {
@@ -270,5 +276,129 @@ test('POST /quizzes/:quizId/attempts is not gated by edit permission so follower
   });
   assert.equal(resp.statusCode, 201);
 
+  await app.close();
+});
+
+test('GET /quizzes rejects a non-owner request on a private presentation', async () => {
+  seedQuizPdf('quiz-read-priv-01', 'private');
+  const app = await buildApp();
+  const resp = await app.inject({
+    method: 'GET',
+    url: '/api/pdfs/quiz-read-priv-01/quizzes',
+    headers: OTHER_HEADERS,
+  });
+  assert.equal(resp.statusCode, 403);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+  await app.close();
+});
+
+test('GET /quizzes returns 404 for an unknown pdf id', async () => {
+  const app = await buildApp();
+  const resp = await app.inject({
+    method: 'GET',
+    url: '/api/pdfs/quiz-read-missing-01/quizzes',
+    headers: OWNER_HEADERS,
+  });
+  assert.equal(resp.statusCode, 404);
+  await app.close();
+});
+
+test('GET /quizzes allows the owner, a reader on a public presentation, and a share-token holder', async () => {
+  seedQuizPdf('quiz-read-owner-01', 'private');
+  const app = await buildApp();
+  try {
+    const ownerResp = await app.inject({
+      method: 'GET',
+      url: '/api/pdfs/quiz-read-owner-01/quizzes',
+      headers: OWNER_HEADERS,
+    });
+    assert.equal(ownerResp.statusCode, 200);
+
+    seedQuizPdf('quiz-read-public-01', 'public');
+    const publicResp = await app.inject({
+      method: 'GET',
+      url: '/api/pdfs/quiz-read-public-01/quizzes',
+      headers: OTHER_HEADERS,
+    });
+    assert.equal(publicResp.statusCode, 200);
+
+    seedQuizPdf('quiz-read-shared-01', 'private');
+    seedShareToken('quiz-read-shared-01', 'share-token-quiz-read-01');
+    const sharedResp = await app.inject({
+      method: 'GET',
+      url: '/api/pdfs/quiz-read-shared-01/quizzes?share=share-token-quiz-read-01',
+      headers: OTHER_HEADERS,
+    });
+    assert.equal(sharedResp.statusCode, 200);
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /quizzes/:quizId/attempts rejects a non-owner request on a private presentation', async () => {
+  seedQuizPdf('quiz-attempts-read-priv-01', 'private');
+  const app = await buildApp();
+  try {
+    const createResp = await app.inject({
+      method: 'POST',
+      url: '/api/pdfs/quiz-attempts-read-priv-01/quizzes',
+      headers: OWNER_HEADERS,
+      payload: validQuizPayload(),
+    });
+    const quizId = (createResp.json() as { id: number }).id;
+
+    const resp = await app.inject({
+      method: 'GET',
+      url: `/api/pdfs/quiz-attempts-read-priv-01/quizzes/${quizId}/attempts`,
+      headers: OTHER_HEADERS,
+    });
+    assert.equal(resp.statusCode, 403);
+    assert.equal((resp.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /quizzes/:quizId/attempts allows the owner to read student attempt records', async () => {
+  seedQuizPdf('quiz-attempts-read-owner-01', 'private');
+  const app = await buildApp();
+  try {
+    const createResp = await app.inject({
+      method: 'POST',
+      url: '/api/pdfs/quiz-attempts-read-owner-01/quizzes',
+      headers: OWNER_HEADERS,
+      payload: validQuizPayload(),
+    });
+    const quizId = (createResp.json() as { id: number }).id;
+
+    await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/quiz-attempts-read-owner-01/quizzes/${quizId}/attempts`,
+      headers: OTHER_HEADERS,
+      payload: { client_id: 'client-attempts-read-owner-01', session_id: 'session-attempts-read-owner-01', answers: { q1: [1] } },
+    });
+
+    const resp = await app.inject({
+      method: 'GET',
+      url: `/api/pdfs/quiz-attempts-read-owner-01/quizzes/${quizId}/attempts`,
+      headers: OWNER_HEADERS,
+    });
+    assert.equal(resp.statusCode, 200);
+    const body = resp.json() as { sessions: Array<{ session_id: string }> };
+    assert.equal(body.sessions.length, 1);
+    assert.equal(body.sessions[0]?.session_id, 'session-attempts-read-owner-01');
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /quizzes/:quizId/attempts returns 404 for an unknown pdf id', async () => {
+  const app = await buildApp();
+  const resp = await app.inject({
+    method: 'GET',
+    url: '/api/pdfs/quiz-attempts-missing-pdf-01/quizzes/1/attempts',
+    headers: OWNER_HEADERS,
+  });
+  assert.equal(resp.statusCode, 404);
   await app.close();
 });
