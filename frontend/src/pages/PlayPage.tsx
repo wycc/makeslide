@@ -239,7 +239,6 @@ export default function PlayPage() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const previousPlaybackTimeRef = useRef(0);
   const consumedPausePlaybackEffectIdsRef = useRef<Set<string>>(new Set());
-  const fullscreenEffectSequenceActiveRef = useRef(false);
   const insertPausePlaybackEffectRef = useRef<() => void>(() => {});
   const playbackRateRef = useRef<number>(playbackRate);
   useEffect(() => {
@@ -1431,21 +1430,14 @@ export default function PlayPage() {
         const isFullscreen = Boolean(getAnyFullscreenElement()) || imageOnlyFullscreen;
         if (isFullscreen) {
           ev.preventDefault();
-          fullscreenEffectSequenceActiveRef.current = true;
-          window.setTimeout(() => {
-            fullscreenEffectSequenceActiveRef.current = false;
-          }, 2500);
+          insertPausePlaybackEffectRef.current();
         } else if (syncEnabled && syncRole === 'master') {
           ev.preventDefault();
           void handleAiAnswerFollowerQuestions();
         }
       } else if (ev.code === 'KeyP' || ev.key.toLowerCase() === 'p') {
         const isFullscreen = Boolean(getAnyFullscreenElement()) || imageOnlyFullscreen;
-        if (isFullscreen && fullscreenEffectSequenceActiveRef.current) {
-          ev.preventDefault();
-          fullscreenEffectSequenceActiveRef.current = false;
-          insertPausePlaybackEffectRef.current();
-        } else if (isFullscreen && syncRole === 'master') {
+        if (isFullscreen && syncRole === 'master') {
           ev.preventDefault();
           setFullscreenPollControlOpen((open) => !open);
         }
