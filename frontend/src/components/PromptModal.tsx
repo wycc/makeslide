@@ -8,6 +8,10 @@ import {
 } from '../lib/ttsVoices';
 import { getImagePromptTemplates, type ImagePromptTemplate } from '../lib/api';
 import { useI18n, type TranslationKey } from '../i18n';
+import {
+  MAX_PROMPT_TO_OUTLINE_CHARS,
+  PROMPT_TO_OUTLINE_TEXTAREA_MAX_CHARS,
+} from '../lib/promptLimits';
 
 export interface PromptPreset {
   key: string;
@@ -42,7 +46,7 @@ const PRESETS: PromptPreset[] = [
   },
 ];
 
-const MAX_PROMPT_CHARS = 2000;
+const MAX_PROMPT_CHARS = MAX_PROMPT_TO_OUTLINE_CHARS;
 
 interface PromptModalProps {
   /** Display title for the modal header (usually the PDF filename). */
@@ -223,7 +227,7 @@ export default function PromptModal({
             onChange={(ev) => setValue(ev.target.value)}
             disabled={submitting}
             rows={4}
-            maxLength={MAX_PROMPT_CHARS + 50}
+            maxLength={PROMPT_TO_OUTLINE_TEXTAREA_MAX_CHARS}
             placeholder={t('promptModal.promptPlaceholder')}
             className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:opacity-60"
           />
