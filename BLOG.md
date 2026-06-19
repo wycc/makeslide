@@ -1,5 +1,27 @@
 # MakeSlide 功能說明
 
+## 圖片／逐字稿版本歷史補上讀取權限檢查
+
+### 功能目的
+
+簡報每一頁的圖片與逐字稿都有版本歷史（透過底層 git 倉儲），讓使用者可以回顧並還原到先前的版本。負責這個功能的 `backend/src/routes/pdfs/versioning.ts` 裡，「還原到指定版本」的 POST 端點都正確檢查了編輯權限，但「列出歷史」與「讀取指定版本內容」的 4 個 GET 端點原本完全沒有檢查請求者是否有權限看這份簡報——只檢查頁面與版本是否存在。這代表任何人只要知道私有簡報的 id 與頁碼，就能直接讀到別人簡報每一頁逐字稿的完整修改歷史，以及歷史版本的投影片圖片內容。
+
+### 修復內容
+
+在 `versioning.ts` 補上與 `figures.ts`/`drawings.ts`/`page-animation.ts`/`quizzes.ts` 一致的本地 `canReadPdf()`、`getShareToken()`、`hasShareAccess()` helper，套用到四個讀取端點：
+
+- `GET /api/pdfs/:id/pages/:n/image/history`（圖片版本歷史清單）
+- `GET /api/pdfs/:id/pages/:n/script/history`（逐字稿版本歷史清單）
+- `GET /api/pdfs/:id/pages/:n/script/versions/:hash`（指定版本的逐字稿內容）
+- `GET /api/pdfs/:id/pages/:n/image/versions/:hash`（指定版本的投影片圖片）
+
+判斷規則與既有的 `detail.ts`/`runs.ts` 相同：擁有者一律可讀；`public`/`public_editable` 簡報任何人可讀；私有簡報則需要帶有效的分享 token。不符合條件回傳 `403 FORBIDDEN`，PDF 不存在回傳 `404 PDF_NOT_FOUND`。
+
+### 技術重點
+
+- 擴充既有 `backend/test/versioning-permission.test.ts`，以參數化方式對四個路由各新增非擁有者/未登入應得 403、不存在的 PDF id 應得 404、擁有者/`public`/分享 token 讀取應能通過權限檢查共 29 個測試；成功路徑測試刻意清空 `image_path`/`script_path`，讓請求確定性地落在既有的 `PAGE_NOT_FOUND` 分支，避免需要真實的 git 版本歷史 fixture。
+- 已執行 backend typecheck（通過）；完整測試套件連跑三次確認失敗清單皆為既有測試順序相關 flaky（與 uploads/page-operations/regenerate 有關），與本次改動無關。
+
 ## 修正提交提示詞時偶發的「已經被加進」錯誤
 
 ### 功能目的
