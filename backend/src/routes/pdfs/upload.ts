@@ -31,8 +31,14 @@ function ownerSubFromRequest(request: FastifyRequest): string | null {
   return session?.sub ?? null;
 }
 
+export const MAX_PROMPT_TO_OUTLINE_CHARS = 128 * 1024;
+
 const PromptTextBodySchema = z.object({
-  prompt: z.string().trim().min(10, 'prompt 至少需要 10 個字').max(4000, 'prompt 不可超過 4000 字'),
+  prompt: z
+    .string()
+    .trim()
+    .min(10, 'prompt 至少需要 10 個字')
+    .max(MAX_PROMPT_TO_OUTLINE_CHARS, `prompt 不可超過 ${MAX_PROMPT_TO_OUTLINE_CHARS} 字`),
 });
 
 const PromptChatBodySchema = z.object({
