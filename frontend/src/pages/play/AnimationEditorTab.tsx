@@ -7,6 +7,7 @@ import { fetchPageFigures, figureImageUrl, savePageAnimation } from '../../lib/a
 import { copyTextToClipboard } from '../../lib/clipboard';
 import {
   ANIMATION_SHAPE_KINDS,
+  DEFAULT_PAUSE_PLAYBACK_TEXT,
   DEFAULT_EXIT_DURATION_SECONDS,
   MAX_CUSTOM_SCRIPT_CODE_LENGTH,
   MAX_CUSTOM_SCRIPT_PROMPT_LENGTH,
@@ -26,6 +27,7 @@ import {
   generateFocusEffectsFromTranscript,
   getFocusEffectParams,
   getShapeKind,
+  insertEffectAfterFirstStartingEffect,
   resolveStartTriggerSeconds,
 } from '../../lib/animationSpec';
 import { usePlayPageContext } from './PlayPageContext';
@@ -401,6 +403,17 @@ const EFFECT_PRESETS: readonly EffectPreset[] = [
       params: { xPct: 30, yPct: 40, widthPct: 40, heightPct: 20 },
     }),
   },
+  {
+    id: 'pause-playback',
+    labelKey: 'play.animation.preset.pausePlayback',
+    apply: () => ({
+      type: 'pause-playback',
+      duration: 0.4,
+      ease: 'power1.out',
+      text: DEFAULT_PAUSE_PLAYBACK_TEXT,
+      params: { xPct: 18, yPct: 34, widthPct: 64, heightPct: 24 },
+    }),
+  },
 ];
 
 const CUSTOM_SCRIPT_EXAMPLE_PROMPTS: ReadonlyArray<{ labelKey: string; prompt: string }> = [
@@ -644,7 +657,13 @@ export function AnimationEditorTab() {
     setAnimationDraft((prev) => {
       const base = prev ?? defaultAnimationSpec();
       if (base.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS) return base;
-      return { ...base, effects: [...base.effects, { ...newEffect(), ...preset.apply() }] };
+      const effect = { ...newEffect(), ...preset.apply() };
+      return {
+        ...base,
+        effects: effect.type === 'pause-playback'
+          ? insertEffectAfterFirstStartingEffect(base.effects, effect)
+          : [...base.effects, effect],
+      };
     });
   };
 
@@ -1400,6 +1419,23 @@ export function AnimationEditorTab() {
                     </div>
                   </label>
                 </>
+              )}
+              {effect.type === 'pause-playback' && (
+                <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  {t('play.animation.pausePlaybackText')}
+                  <input
+                    type="text"
+                    maxLength={MAX_TEXT_CALLOUT_LENGTH}
+                    value={effect.text ?? ''}
+                    disabled={disabled}
+                    placeholder={DEFAULT_PAUSE_PLAYBACK_TEXT}
+                    onChange={(e) => updateEffect(effect.id, { text: e.target.value })}
+                    className="w-64 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                  />
+                  <span className="text-[11px] text-cyan-200/80">
+                    {t('play.animation.pausePlaybackHelp')}
+                  </span>
+                </label>
               )}
               {effect.type === 'shape' && (
                 <label className="flex flex-col gap-1 text-xs text-slate-400">

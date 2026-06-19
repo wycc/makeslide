@@ -17,6 +17,7 @@ export const ANIMATION_EFFECT_TYPES = [
   'step-list',
   'overlay-image',
   'formula',
+  'pause-playback',
   'custom-script',
 ] as const;
 
@@ -96,7 +97,7 @@ export interface AnimationEffect {
   highlightBorderStyle?: 'solid' | 'dashed' | 'dotted';
   /** When true, adds a drop shadow to the `highlight-box` overlay. Ignored by other effect types. */
   highlightShadow?: boolean;
-  /** Caption text for `text-callout` effects (ignored by other effect types). */
+  /** Caption text for `text-callout` and `pause-playback` effects (ignored by other effect types). */
   text?: string;
   /**
    * Font size in rem for `text-callout` effects (ignored by other effect types).
@@ -238,7 +239,7 @@ export interface AnimationEffect {
    * Seconds to remain visible after the fade-in completes before
    * automatically fading back out (same `duration`/`ease` as the fade-in).
    * Only meaningful for overlay effect types (`highlight-box`, `spotlight`,
-   * `pointer`, `text-callout`, `shape`, `step-list`, `overlay-image`, `formula`, `custom-script`); ignored by transform effects.
+   * `pointer`, `text-callout`, `shape`, `step-list`, `overlay-image`, `formula`, `pause-playback`, `custom-script`); ignored by transform effects.
    */
   exitDuration?: number;
   /**
@@ -413,6 +414,7 @@ const ALLOWED_PARAM_KEYS: Record<AnimationEffectType, readonly string[]> = {
   'step-list': ['xPct', 'yPct', 'widthPct', 'heightPct'],
   'overlay-image': ['xPct', 'yPct', 'widthPct', 'heightPct'],
   'formula': ['xPct', 'yPct', 'widthPct', 'heightPct'],
+  'pause-playback': ['xPct', 'yPct', 'widthPct', 'heightPct'],
   'custom-script': ['xPct', 'yPct', 'widthPct', 'heightPct'],
 };
 
