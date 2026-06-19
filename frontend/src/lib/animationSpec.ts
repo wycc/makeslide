@@ -225,6 +225,13 @@ export function hasPlayableAnimation(spec: SlideAnimationSpec | null | undefined
  * `startTrigger`, or whose referenced line is out of range (e.g. the
  * transcript was edited), keep their literal `start` value unchanged.
  *
+ * Also extends `exitDuration` (when set) so the effect stays fully visible
+ * at least until its referenced sentence finishes narrating — the AI/author
+ * picks `exitDuration` from the sentence's text alone without knowing its
+ * actual spoken length, so short exit durations on long sentences would
+ * otherwise make the effect disappear mid-explanation. Never shortens an
+ * `exitDuration` that's already longer than the sentence.
+ *
  * Returns the original `spec` reference when nothing needs resolving, so
  * callers can safely use the result as a memoization/effect dependency
  * without triggering unnecessary GSAP timeline rebuilds.
@@ -253,9 +260,15 @@ export function resolveAnimationSpec(
     ...spec,
     effects: spec.effects.map((effect) => {
       if (!effect.startTrigger) return effect;
+      const target = sentenceTimeline[effect.startTrigger.line];
       const resolved = resolveStartTriggerSeconds(effect.startTrigger, sentenceTimeline);
-      if (resolved === undefined) return effect;
-      return { ...effect, start: resolved };
+      if (resolved === undefined || !target) return effect;
+      const next = { ...effect, start: resolved };
+      if (next.exitDuration !== undefined) {
+        const minExitDuration = Math.max(0, target.end - resolved - next.duration);
+        next.exitDuration = Math.max(next.exitDuration, minExitDuration);
+      }
+      return next;
     }),
   };
 }
