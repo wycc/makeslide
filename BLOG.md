@@ -1,5 +1,21 @@
 # MakeSlide 功能說明
 
+## 舊 PNG 轉 JPG 啟動遷移訊息改用 logger
+
+### 功能目的
+
+後端啟動時會嘗試把舊版儲存格式中的 PNG 封面與頁面圖轉成 JPG，降低檔案大小並配合目前圖片路徑格式。完成轉換後的摘要訊息屬於一般服務資訊 log，應與其他後端訊息一樣走統一 logger，而不是直接使用 `console.info`。
+
+### 使用方式
+
+此變更不影響使用者操作。系統啟動時若有舊 PNG 被轉換，後端日誌會以標準 logger 格式記錄轉換的 cover/page 數量；沒有轉換時仍不輸出額外訊息。
+
+### 技術重點
+
+- `imageMigration.ts` 匯入既有 `logger`，將完成訊息改為 structured `logger.info({ convertedCover, convertedPages }, ...)`。
+- 保留逐檔轉換錯誤忽略、資料庫 `image_path` 更新與啟動遷移流程不變。
+- 移除 no-console 註解，並以 backend typecheck 與 grep 驗證沒有殘留直接 `console.info`。
+
 ## GSAP 動畫 timeline 建立失敗改為 gated debug
 
 ### 功能目的
