@@ -46,6 +46,7 @@ import { PlayPageFullscreen } from './play/PlayPageFullscreen';
 import { PlayPageHeader } from './play/PlayPageHeader';
 import { PlayPageSlidePanel } from './play/PlayPageSlidePanel';
 import { PlayPageSidebar } from './play/PlayPageSidebar';
+import { shouldResolvePageAnimationSpec } from './play/playbackReadiness';
 import type {
   PdfDetail,
   PdfDetailPage,
@@ -75,6 +76,11 @@ const PAGE_EXTEND_TICK_MS = 250;
 
 function hasTranscriptStartTrigger(spec: SlideAnimationSpec | null | undefined): boolean {
   return Boolean(spec?.effects.some((effect) => effect.startTrigger));
+}
+
+interface LoadedSlideImageState {
+  pageNumber: number;
+  src: string;
 }
 
 interface WakeLockSentinelLike {
@@ -137,10 +143,11 @@ export default function PlayPage() {
   const [detail, setDetail] = useState<PdfDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [currentIdx, setCurrentIdx] = useState(0);
-  const [displayedImageSrc, setDisplayedImageSrc] = useState<string | null>(null);
+  const [loadedSlideImage, setLoadedSlideImage] = useState<LoadedSlideImageState | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [durationPageNumber, setDurationPageNumber] = useState<number | null>(null);
   const [scripts, setScripts] = useState<Record<number, string>>({});
   const [audioError, setAudioError] = useState<string | null>(null);
   const [finished, setFinished] = useState(false);
@@ -501,14 +508,20 @@ export default function PlayPage() {
   }, [currentPage?.image_url, currentPage?.thumbnail_url, withImageBust]);
 
   const targetImageSrc = imageOnlyFullscreen ? fullscreenImageSrc : playbackImageSrc;
+  const targetImagePageNumber = currentPage?.page_number ?? null;
+  const displayedImageSrc =
+    loadedSlideImage && loadedSlideImage.pageNumber === targetImagePageNumber && loadedSlideImage.src === targetImageSrc
+      ? loadedSlideImage.src
+      : null;
+  const imageReadyForCurrentPage = !targetImageSrc || Boolean(displayedImageSrc);
 
   useEffect(() => {
-    if (!targetImageSrc) {
-      setDisplayedImageSrc(null);
+    if (!targetImageSrc || targetImagePageNumber == null) {
+      setLoadedSlideImage(null);
       return;
     }
     const img = new Image();
-    const settle = () => setDisplayedImageSrc(targetImageSrc);
+    const settle = () => setLoadedSlideImage({ pageNumber: targetImagePageNumber, src: targetImageSrc });
     img.onload = settle;
     img.onerror = settle;
     img.src = targetImageSrc;
@@ -516,7 +529,7 @@ export default function PlayPage() {
       img.onload = null;
       img.onerror = null;
     };
-  }, [targetImageSrc]);
+  }, [targetImagePageNumber, targetImageSrc]);
 
   useEffect(() => {
     if (!pdfId || !playbackProgressStorageKey || deckPages.length === 0) return;
@@ -638,6 +651,7 @@ export default function PlayPage() {
     audio.playbackRate = playbackRateRef.current;
     setCurrentTime(0);
     setDuration(0);
+    setDurationPageNumber(null);
     setAudioError(null);
     if (isPlaying) {
       void audio.play().catch(() => scheduleAudioReload(token, audioUrl, pageNumber));
@@ -1488,9 +1502,15 @@ export default function PlayPage() {
   );
 
   // 各句估計的播放起訖時間；不隨 currentTime 變動，避免動畫 timeline 頻繁重建。
+  const audioMetadataReadyForCurrentPage =
+    currentPage != null
+    && durationPageNumber === currentPage.page_number
+    && Number.isFinite(duration)
+    && duration > 0;
+  const sentenceTimelineDuration = audioMetadataReadyForCurrentPage ? duration : 0;
   const sentenceTimeline = useMemo(
-    () => buildSentenceTimeline(pageSentences, duration),
-    [pageSentences, duration],
+    () => buildSentenceTimeline(pageSentences, sentenceTimelineDuration),
+    [pageSentences, sentenceTimelineDuration],
   );
 
   // 目前正在播放（朗讀）的句子索引；-1 代表本頁無字幕。
@@ -1652,13 +1672,18 @@ export default function PlayPage() {
   // 若沒有任何效果使用 startTrigger，則回傳原物件參照，避免 GSAP timeline 不必要的重建。
   // 換頁後 audio duration 會短暫重置為 0；若此時先用空 sentenceTimeline 解析，
   // startTrigger 會退回效果 JSON 的字面 start（AI 預設多為 0），造成逐字稿動畫在 t=0 誤播。
-  const shouldWaitForTranscriptTimeline = useMemo(
-    () => sentenceTimeline.length === 0 && hasTranscriptStartTrigger(rawAnimationSpec),
-    [rawAnimationSpec, sentenceTimeline.length],
+  const animationSpecReadyForCurrentPage = useMemo(
+    () => shouldResolvePageAnimationSpec({
+      hasTranscriptStartTrigger: hasTranscriptStartTrigger(rawAnimationSpec),
+      imageReadyForCurrentPage,
+      audioMetadataReadyForCurrentPage,
+      sentenceTimelineLength: sentenceTimeline.length,
+    }),
+    [audioMetadataReadyForCurrentPage, imageReadyForCurrentPage, rawAnimationSpec, sentenceTimeline.length],
   );
   const currentAnimationSpec = useMemo(
-    () => (shouldWaitForTranscriptTimeline ? null : resolveAnimationSpec(rawAnimationSpec, sentenceTimeline)),
-    [rawAnimationSpec, sentenceTimeline, shouldWaitForTranscriptTimeline],
+    () => (animationSpecReadyForCurrentPage ? resolveAnimationSpec(rawAnimationSpec, sentenceTimeline) : null),
+    [animationSpecReadyForCurrentPage, rawAnimationSpec, sentenceTimeline],
   );
   // 動畫總長：若超過語音長度，handleEnded 會延後切頁直到動畫播完。
   const animationDurationSeconds = useMemo(
@@ -1774,6 +1799,7 @@ export default function PlayPage() {
         audio.load();
         setCurrentTime(0);
         setDuration(0);
+        setDurationPageNumber(null);
         setFinished(false);
         void audio.play().catch(() => setIsPlaying(false));
       }
@@ -1945,7 +1971,7 @@ export default function PlayPage() {
     playbackRate, setPlaybackRate, showSubtitle, setShowSubtitle,
     playbackSettingsOpen, setPlaybackSettingsOpen, playbackStatusMessage,
     followerAudioUnlocked, setFollowerAudioUnlocked,
-    scripts, setScripts, displayedImageSrc, setDisplayedImageSrc,
+    scripts, setScripts, displayedImageSrc,
     // 動畫長度超過語音長度時，語音已結束但動畫仍需繼續播放至完成
     isExtendingAnimation,
     slideAnimationPlaying: isPlaying || isExtendingAnimation,
@@ -2061,7 +2087,10 @@ export default function PlayPage() {
         ref={audioRef}
         preload="auto"
         muted={effectiveAudioMuted}
-        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
+        onLoadedMetadata={(e) => {
+          setDuration(e.currentTarget.duration || 0);
+          setDurationPageNumber(currentPage?.page_number ?? null);
+        }}
         onCanPlay={() => {
           if (resumePositionRef.current != null && audioRef.current) {
             const maxSeek = Number.isFinite(audioRef.current.duration)

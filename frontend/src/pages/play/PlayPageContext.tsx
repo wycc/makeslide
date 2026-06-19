@@ -71,7 +71,6 @@ export interface PlayPageContextValue {
   scripts: Record<number, string>;
   setScripts: Dispatch<SetStateAction<Record<number, string>>>;
   displayedImageSrc: string | null;
-  setDisplayedImageSrc: Dispatch<SetStateAction<string | null>>;
 
   // ─── Playback actions ───────────────────────────────────────────────────────
   playPause: () => void;
