@@ -124,6 +124,18 @@
 
 [ ] 從提示詞產生大綱目前只限 4000 字，把它提高到 128K。
 
+- [ ] 圖形參考檔案讀取補上對缺檔的容錯：`backend/src/worker/steps/renderTextPagesWithLlm.ts` 第 246-252 行與 `backend/src/routes/pdfs/page-operations.ts`（inpaint-image 路由）第 692-698 行都用完全相同的寫法以 `Promise.all(figureRefs.map((figure, index) => fs.promises.readFile(figureImageAbsPath(...)).then(...)))` 讀取圖表參考圖片，但 `figureRefs` 是直接從 `figures.json` manifest 取得（`getFigureReferencesForPages()`/`getFigureReferencesForPage()`），沒有對照磁碟上的檔案是否仍存在；只要其中一個圖表檔案遺失或被清理過，整個 `Promise.all()` 就會拋出例外，讓本應只是「加分」的圖表參考功能直接擋掉整頁的圖片重新生成。應在 `backend/src/services/pdfFigures.ts` 新增一個共用的 resilient 讀取 helper（對單個讀取失敗時記錄 `logger.warn` 並跳過該圖表，而不是讓整批失敗），讓兩個呼叫點都改用這個 helper，並補上覆蓋「部分圖表檔案缺失仍能完成」情境的測試。
+
+- [ ] `PATCH /api/system/openai-api-key` 補上請求體驗證：`backend/src/routes/pdfs/admin.ts` 第 102-110 行的這個路由直接用 `const body = request.body as { api_key?: string };` 型別斷言取得請求體，沒有經過 Zod 驗證，與緊鄰的 `PATCH /api/system/ai-settings`（用 `UpdateSystemAiSettingsBodySchema.safeParse()` 驗證）做法不一致。若請求送出 `{"api_key": 123}`（數字而非字串），`(body?.api_key ?? '').trim()` 會因為 123 是 truthy 值不會被 `??` 取代，對數字呼叫 `.trim()` 會直接拋出 `TypeError` 並讓請求以未預期的 500 結束。應補上 `z.object({ api_key: z.string().optional() })` 之類的簡單 schema 並用 `safeParse()` 驗證，驗證失敗回傳 400，並新增測試覆蓋非字串 `api_key` 應得 400 而非 500。
+
+- [ ] `skills.ts` 補上單元測試：`backend/src/services/skills.ts` 提供使用者自訂「技能」（簡報風格修飾語，可套用於逐字稿生成）的完整 CRUD 邏輯（`listSkills()`、`getEnabledSkillPrompts()`、`createUserSkill()`、`updateUserSkill()`、`deleteUserSkill()`、`toggleBuiltInSkill()`），透過 `getAccountSettingsLocation()` 把資料存成每個帳號各自的 `skills.json`，邏輯單純、無網路呼叫、行為完全決定性，但目前完全沒有對應測試檔案。應新增 `backend/test/skills.test.ts`，用一個測試專用的帳號 id 覆蓋：`listSkills()` 回傳內建技能（含正確 enabled 狀態）與使用者技能的合併結果、`createUserSkill()`/`updateUserSkill()`/`deleteUserSkill()` 的新增/修改/刪除（含修改不存在 id 回傳 `null`、刪除不存在 id 回傳 `false`）、`toggleBuiltInSkill()` 切換內建技能啟用狀態（含切換不存在的 id 回傳 `null`）、`getEnabledSkillPrompts()` 依 `applyTo`（`'script'`/`'all'`）正確過濾。
+
+- [ ] `thumbnails.ts` 補上單元測試：`backend/src/services/thumbnails.ts` 完全沒有對應測試檔案，但內含 `generatePageThumbnail()`/`generateCoverThumbnail()`（用 `sharp` 等比例縮放並輸出 JPEG）與 `ensurePageThumbnail()`/`ensureCoverThumbnail()`（縮圖已存在時直接回傳路徑、來源圖不存在時回傳 `null`、否則才呼叫對應的 generate 函式產生）兩組邏輯完全決定性、不涉及網路或子行程的函式。應新增 `backend/test/thumbnails.test.ts`，用 `sharp` 在測試中產生一張小型來源 PNG/JPEG 寫入暫存目錄，覆蓋：縮圖產生後實際存在且寬高不超過設定的上限（`PAGE_THUMBNAIL_WIDTH_PX`/`HEIGHT_PX`、`COVER_THUMBNAIL_WIDTH_PX`）、`ensurePageThumbnail()`/`ensureCoverThumbnail()` 在縮圖已存在時不重新產生（idempotent skip）、來源圖不存在時回傳 `null` 而不拋出例外。
+
+- [ ] `handoutPdf.ts` 補上純函式單元測試：`backend/src/services/handoutPdf.ts` 完全沒有對應測試檔案，但內含四個模組私有的純函式：`escapePdfText()`（轉義 PDF 字串中的反斜線與括號）、`sanitizePdfText()`（把 `
+` 正規化為 `
+` 並移除控制字元）、`wrapText()`（依最大字元數換行，優先在空白處截斷，支援多位元組字元計數）、`toUtf16BeHex()`（把文字轉成帶 BOM 的 UTF-16BE 十六進位字串，用於 PDF 內嵌 CJK 文字）。應將這四個函式改為具名匯出（沿用 `generateTitle.ts`/`synthesizeAudio.ts` 的既有做法，不改動邏輯），新增 `backend/test/handout-pdf.test.ts` 覆蓋各函式的正常輸入、特殊字元（括號、反斜線、控制字元）、超長文字換行與中英文混合內容的編碼正確性，不需要呼叫實際產生 PDF 位元組的 `buildHandoutPdf()`（其依賴 `sharp` 讀取真實圖片檔案，超出此項範圍）。
+
 ---
 
 - 時間: 2026-06-18 06:05:00 +0800
@@ -440,3 +452,7 @@
 - 時間: 2026-06-19 14:35:00 +0800
 - 分支: feature/tts-voices-tests-20260619
 - 內容: 完成前端 `ttsVoices.ts` 單元測試補強，這是本輪 LOOP 待辦清單的最後一項，未修改任何來源邏輯。新增 `frontend/src/lib/ttsVoices.test.ts` 10 個測試：`geminiVoiceLabel()`/`openaiVoiceLabel()` 各覆蓋已知男聲、已知女聲正確標註性別、未知聲音原樣回傳三種情境；另外 4 個資料完整性測試確保 `OPENAI_TTS_VOICES`/`GEMINI_TTS_VOICES` 陣列中每個聲音都能在對應的性別對照表找到（正向）、以及對照表裡也沒有清單之外的多餘項目（反向），雙向比對可在日後新增/移除聲音卻忘記同步更新對照表時被測試攔截。已執行 typecheck（前後端皆通過）、前端完整測試（162 個全數通過，含新增測試）與後端 `npm test`（381 個測試，本次未改動任何後端程式碼，18 個失敗皆為既有環境性基準，無新增回歸）。**至此本輪 LOOP 發現的所有候選待辦項目（共 9 項：`extractPdfFigures.ts`/`presentationGit.ts`/`generateVideo.ts`/`gemini.ts` 的錯誤處理或診斷改善、後端測驗刪除端點、`promptTemplates.ts`/`synthesizeAudio.ts`/`subtitles.ts`/`accountContext.ts`/`ttsVoices.ts` 測試補強、`CreditExhaustedDialog.tsx`/`SystemDataPage.tsx` 的 i18n 補齊）皆已完成，TODO.md 再次清空，計數重設後累計完成 14 項，距離 20 項上限尚有餘裕。**
+
+- 時間: 2026-06-19 15:00:00 +0800
+- 分支: workspace-current
+- 內容: 依照 LOOP.md，在 TODO.md 已無未完成項目時重新進行唯讀分析，新增 5 個已驗證的新待辦項目（計數重設後累計完成 14 項，距 20 項上限尚有餘裕）。分析方向涵蓋：(1) 比對 `backend/src/services/`、`backend/src/worker/steps/` 與 `test/` 目錄找出完全沒有測試的檔案，並逐一確認其邏輯是否足夠決定性適合單元測試（排除 youtubeCaptions.ts 等大量依賴子行程/網路的檔案）；(2) 檢查圖表參考相關的檔案讀取與管理路由是否有未捕捉的例外或請求體驗證缺口。逐一讀取程式碼確認後採用：(a) `renderTextPagesWithLlm.ts` 與 `page-operations.ts` 的 inpaint-image 路由用完全相同的 `Promise.all()` 寫法讀取圖表參考圖片，缺檔時會讓整頁失敗；(b) `admin.ts` 的 `PATCH /api/system/openai-api-key` 沒有 Zod 驗證，與緊鄰的 `PATCH /api/system/ai-settings` 不一致，非字串 `api_key` 會在 `.trim()` 時拋出未預期例外；(c) `skills.ts`、(d) `thumbnails.ts`、(e) `handoutPdf.ts`（純函式部分）皆完全無測試但邏輯決定性足夠。排除的假線索：`handoutPdf.ts` 的 `readTextIfExists()` 第 138 行 `return fs.promises.readFile(...)` 雖然少了 `await` 關鍵字，但這是合法且常見的 async 函式寫法——async 函式回傳 Promise 時會自動展開，呼叫端拿到的仍是正確展開後的字串值，並非缺陷，已確認排除；`splitTextWithLlm.ts` 的 `buildOutlineFromFullText()` 已有完整的 try/catch 包覆整個 LLM 呼叫並記錄警告訊息後優雅 fallback，並非缺乏錯誤處理；`animationAutoFocus.ts` 的 `stepListBgColor`/`stepListTextColor` 在指派前已經過 Zod schema 的 hex 格式正規表示式驗證（`/^#[0-9a-fA-F]{3,8}$/`），不存在「無效顏色值滲透」的情境，原建議的二次驗證屬不必要的重複檢查。
