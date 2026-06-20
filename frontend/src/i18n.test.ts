@@ -169,6 +169,31 @@ test('share creation clipboard status locale keys are complete', () => {
   }
 });
 
+test('usePdfMetadata status message locale keys are complete', () => {
+  const requiredKeys = [
+    'play.metadata.titleRequired',
+    'play.metadata.titleUpdated',
+    'play.metadata.titleUpdateFailed',
+    'play.metadata.titleRegenerated',
+    'play.metadata.titleRegenerateFailed',
+    'play.metadata.ttsSettingsSaved',
+    'play.metadata.ttsSettingsSaveFailed',
+    'play.share.makePrivateSuccess',
+    'play.share.makePrivateFailed',
+    'play.share.qrCodeCreated',
+    'play.share.qrCodeCreateFailed',
+    'play.githubSync.success',
+    'play.githubSync.failed',
+  ] as const;
+
+  for (const key of requiredKeys) {
+    assert.equal(typeof zhTW[key], 'string');
+    assert.equal(typeof en[key], 'string');
+    assert.notEqual(zhTW[key].trim(), '');
+    assert.notEqual(en[key].trim(), '');
+  }
+});
+
 test('PlayPageSlidePanel playback control/settings locale keys are complete', () => {
   const requiredKeys = [
     'play.slidePanel.playbackSettingsTitle',

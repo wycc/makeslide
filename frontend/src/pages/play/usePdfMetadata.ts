@@ -118,7 +118,7 @@ export function usePdfMetadata({
     if (!pdfId) return;
     const nextTitle = titleInput.trim();
     if (!nextTitle) {
-      setTitleMsg('標題不可為空');
+      setTitleMsg(t('play.metadata.titleRequired'));
       return;
     }
     setTitleBusy(true);
@@ -128,13 +128,13 @@ export function usePdfMetadata({
       setDetail((prev) =>
         prev ? { ...prev, title: res.title, updated_at: res.updated_at } : prev,
       );
-      setTitleMsg('標題已更新');
+      setTitleMsg(t('play.metadata.titleUpdated'));
     } catch (err) {
-      setTitleMsg(err instanceof ApiError ? err.message : '更新標題失敗');
+      setTitleMsg(err instanceof ApiError ? err.message : t('play.metadata.titleUpdateFailed'));
     } finally {
       setTitleBusy(false);
     }
-  }, [pdfId, titleInput, isReadOnlyProcessing, setDetail]);
+  }, [pdfId, titleInput, isReadOnlyProcessing, setDetail, t]);
 
   const handleRegenerateTitle = useCallback(async () => {
     if (isReadOnlyProcessing) return;
@@ -147,13 +147,13 @@ export function usePdfMetadata({
       setDetail((prev) =>
         prev ? { ...prev, title: res.title, updated_at: res.updated_at } : prev,
       );
-      setTitleMsg('標題已重新生成');
+      setTitleMsg(t('play.metadata.titleRegenerated'));
     } catch (err) {
-      setTitleMsg(err instanceof ApiError ? err.message : '重新生成標題失敗');
+      setTitleMsg(err instanceof ApiError ? err.message : t('play.metadata.titleRegenerateFailed'));
     } finally {
       setTitleBusy(false);
     }
-  }, [pdfId, isReadOnlyProcessing, setDetail]);
+  }, [pdfId, isReadOnlyProcessing, setDetail, t]);
 
   const handleSaveTtsSettings = useCallback(async () => {
     if (isReadOnlyProcessing) return;
@@ -177,13 +177,13 @@ export function usePdfMetadata({
             }
           : prev,
       );
-      setTtsMsg('設定已儲存（主持模式變更需重新產生逐字稿才會套用）');
+      setTtsMsg(t('play.metadata.ttsSettingsSaved'));
     } catch (err) {
-      setTtsMsg(err instanceof ApiError ? err.message : '儲存設定失敗');
+      setTtsMsg(err instanceof ApiError ? err.message : t('play.metadata.ttsSettingsSaveFailed'));
     } finally {
       setTtsBusy(false);
     }
-  }, [pdfId, ttsVoice, ttsSpeed, scriptMaxCharsPerPage, hostMode, isReadOnlyProcessing, setDetail]);
+  }, [pdfId, ttsVoice, ttsSpeed, scriptMaxCharsPerPage, hostMode, isReadOnlyProcessing, setDetail, t]);
 
   const handleCreateShareLink = useCallback(async () => {
     if (!pdfId || isReadOnlyProcessing) return;
@@ -224,13 +224,13 @@ export function usePdfMetadata({
       const res = await updatePdfVisibility(pdfId, 'private');
       setDetail((prev) => prev ? { ...prev, visibility: res.visibility, updated_at: res.updated_at } : prev);
       setShareUrl('');
-      setShareMessage('已將此簡報設為 private；其他帳號將不會在列表中看到它。');
+      setShareMessage(t('play.share.makePrivateSuccess'));
     } catch (err) {
-      setShareError(err instanceof ApiError ? err.message : '設定 private 失敗');
+      setShareError(err instanceof ApiError ? err.message : t('play.share.makePrivateFailed'));
     } finally {
       setShareBusy(false);
     }
-  }, [pdfId, isReadOnlyProcessing, setDetail]);
+  }, [pdfId, isReadOnlyProcessing, setDetail, t]);
 
   const handleShowPlayQrCode = useCallback(async () => {
     if (!pdfId) return;
@@ -241,12 +241,17 @@ export function usePdfMetadata({
       setDetail((prev) => prev ? { ...prev, visibility: res.visibility ?? (shareAccess === 'editable' ? 'public_editable' : 'public'), updated_at: res.updated_at } : prev);
       const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=520x520&data=${encodeURIComponent(absoluteUrl)}`;
       setPlayQrCodeUrl(qrSrc);
-      setShareMessage(`已產生分享 QR Code（${shareAccess === 'editable' ? '可編輯' : '唯讀'}）`);
+      setShareMessage(
+        t('play.share.qrCodeCreated').replace(
+          '{access}',
+          shareAccess === 'editable' ? t('play.share.accessEditable') : t('play.share.accessReadOnly'),
+        ),
+      );
       setShareError(null);
     } catch (err) {
-      setShareError(err instanceof ApiError ? err.message : '建立分享 QR Code 失敗');
+      setShareError(err instanceof ApiError ? err.message : t('play.share.qrCodeCreateFailed'));
     }
-  }, [pdfId, shareAccess]);
+  }, [pdfId, shareAccess, setDetail, t]);
 
   const handleSyncToGithub = useCallback(async () => {
     if (!pdfId || isReadOnlyProcessing) return;
@@ -255,13 +260,13 @@ export function usePdfMetadata({
     setGithubSyncMessage(null);
     try {
       await syncPresentationToGitHub(pdfId);
-      setGithubSyncMessage('已同步到 GitHub');
+      setGithubSyncMessage(t('play.githubSync.success'));
     } catch (err) {
-      setGithubSyncError(err instanceof ApiError ? err.message : '同步到 GitHub 失敗');
+      setGithubSyncError(err instanceof ApiError ? err.message : t('play.githubSync.failed'));
     } finally {
       setGithubSyncBusy(false);
     }
-  }, [pdfId, isReadOnlyProcessing]);
+  }, [pdfId, isReadOnlyProcessing, t]);
 
   return {
     titleInput,
