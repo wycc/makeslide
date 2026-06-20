@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import DrawingCanvas from '../../components/DrawingCanvas';
 import { SlideRenderer } from '../../components/slide/SlideRenderer';
 import { AnimationEditorTab } from './AnimationEditorTab';
@@ -143,11 +143,29 @@ export function PlayPageSlidePanel() {
   const { t } = useI18n();
   const pageLabel = (page: number | string) => t('play.source.pageLabel').replace('{page}', String(page));
   const [sourceCopyStatus, setSourceCopyStatus] = useState<Record<number, 'success' | 'error'>>({});
+  const sourceCopyStatusTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+  const sourceCopyStatusMountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      sourceCopyStatusMountedRef.current = false;
+      sourceCopyStatusTimersRef.current.forEach((timerId) => clearTimeout(timerId));
+      sourceCopyStatusTimersRef.current.clear();
+    };
+  }, []);
 
   const handleCopySourceContent = (sourceId: number, content: string) => {
+    const previousTimerId = sourceCopyStatusTimersRef.current.get(sourceId);
+    if (previousTimerId) {
+      clearTimeout(previousTimerId);
+      sourceCopyStatusTimersRef.current.delete(sourceId);
+    }
     void copyTextToClipboard(content).then((result) => {
+      if (!sourceCopyStatusMountedRef.current) return;
       setSourceCopyStatus((prev) => ({ ...prev, [sourceId]: result.ok ? 'success' : 'error' }));
-      setTimeout(() => {
+      const timerId = setTimeout(() => {
+        if (!sourceCopyStatusMountedRef.current) return;
+        sourceCopyStatusTimersRef.current.delete(sourceId);
         setSourceCopyStatus((prev) => {
           if (prev[sourceId] === undefined) return prev;
           const next = { ...prev };
@@ -155,6 +173,7 @@ export function PlayPageSlidePanel() {
           return next;
         });
       }, 2000);
+      sourceCopyStatusTimersRef.current.set(sourceId, timerId);
     });
   };
 
