@@ -119,6 +119,9 @@ export interface PlayPageContextValue {
   currentAnimationSpec: SlideAnimationSpec | null;
   animationDraft: SlideAnimationSpec | null;
   setAnimationDraft: Dispatch<SetStateAction<SlideAnimationSpec | null>>;
+  /** Effect whose position box should be draggable directly on the fullscreen slide image (not just the small thumbnail in the editor panel). `null` when none is selected for positioning. */
+  positioningEffectId: string | null;
+  setPositioningEffectId: Dispatch<SetStateAction<string | null>>;
   animationBusy: boolean;
   animationError: string | null;
   animationMessage: string | null;
