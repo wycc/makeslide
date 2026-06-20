@@ -5,7 +5,8 @@ import { db } from '../db';
 import { config } from '../config';
 import { logger } from '../logger';
 
-async function convertPngToJpgIfNeeded(pngPath: string, jpgPath: string): Promise<boolean> {
+/** Exported for unit testing; not part of the module's public startup API. */
+export async function convertPngToJpgIfNeeded(pngPath: string, jpgPath: string): Promise<boolean> {
   if (!fs.existsSync(pngPath) || fs.existsSync(jpgPath)) return false;
   await sharp(pngPath).jpeg({ quality: 82, mozjpeg: true }).toFile(jpgPath);
   return true;
