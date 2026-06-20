@@ -1,8 +1,21 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
+import { decodeSession, parseCookies } from '../auth';
+import type { PdfRow } from '../../types';
 import { errorResponse, IdParamSchema, nowIso } from './shared';
 import { callChatJSON } from '../../services/openai';
+
+function sessionSub(request: FastifyRequest): string | null {
+  const session = decodeSession(parseCookies(request).makeslide_session);
+  return session?.sub ?? null;
+}
+
+function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
+  if (!row.owner_sub) return true;
+  if (sub && row.owner_sub === sub) return true;
+  return row.visibility === 'public_editable';
+}
 
 type SyncRole = 'master' | 'follower';
 
@@ -104,6 +117,12 @@ interface SyncSessionRow {
 function ensurePdfExists(id: string): boolean {
   const row = db.prepare(`SELECT id FROM pdfs WHERE id = ?`).get(id) as { id: string } | undefined;
   return Boolean(row);
+}
+
+function getPdfPermissionRow(id: string): Pick<PdfRow, 'owner_sub' | 'visibility'> | undefined {
+  return db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
+    | Pick<PdfRow, 'owner_sub' | 'visibility'>
+    | undefined;
 }
 
 function nowMs(): number {
@@ -401,8 +420,15 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid sync join request'));
     }
     const { id } = parsedParams.data;
-    if (!ensurePdfExists(id)) {
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    // 直接（非分享連結）加入同步等於取得 master（主控）角色，所以門檻比照其他編輯類端點用
+    // canEditPdf()，而非單純的讀取權限——一般唯讀訪客不該能搶先取得直播同步的主控權，
+    // 只有擁有者/協作者可以；分享連結的訪客一律走下方有驗證 token 的 /sync/share-join。
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限加入此簡報的同步階段'));
     }
     const { client_id: clientId, user_code: userCode } = parsedBody.data;
     const session = getSession(id);
