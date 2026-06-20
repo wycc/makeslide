@@ -772,6 +772,13 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     const parsed = PageParamSchema.safeParse(request.params);
     if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
     const { id, n } = parsed.data;
+    const pdfRow = db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
+      | Pick<PdfRow, 'owner_sub' | 'visibility'>
+      | undefined;
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!shareAccessForPdf(request, id) && !canReadPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的投票'));
+    }
     const page = db.prepare(`SELECT pdf_id FROM pages WHERE pdf_id = ? AND page_number = ?`).get(id, n);
     if (!page) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
     const rows = db
@@ -968,9 +975,14 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     if (!parsed.success) {
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
     }
-    const exists = db.prepare(`SELECT id FROM pdfs WHERE id = ?`).get(parsed.data.id) as { id: string } | undefined;
-    if (!exists) {
+    const pdfRow = db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(parsed.data.id) as
+      | Pick<PdfRow, 'owner_sub' | 'visibility'>
+      | undefined;
+    if (!pdfRow) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', 'PDF not found'));
+    }
+    if (!shareAccessForPdf(request, parsed.data.id) && !canReadPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的封面'));
     }
     const cover = coverImagePath(parsed.data.id);
     const legacyCoverPng = path.join(config.storageRoot, parsed.data.id, 'cover.png');
@@ -997,9 +1009,14 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     if (!parsed.success) {
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
     }
-    const exists = db.prepare(`SELECT id FROM pdfs WHERE id = ?`).get(parsed.data.id) as { id: string } | undefined;
-    if (!exists) {
+    const pdfRow = db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(parsed.data.id) as
+      | Pick<PdfRow, 'owner_sub' | 'visibility'>
+      | undefined;
+    if (!pdfRow) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', 'PDF not found'));
+    }
+    if (!shareAccessForPdf(request, parsed.data.id) && !canReadPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的封面縮圖'));
     }
     const cover = coverImagePath(parsed.data.id);
     const legacyCoverPng = path.join(config.storageRoot, parsed.data.id, 'cover.png');
@@ -1019,9 +1036,14 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
     }
     const { id } = parsed.data;
-    const row = db.prepare(`SELECT id FROM pdfs WHERE id = ?`).get(id) as { id: string } | undefined;
+    const row = db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
+      | Pick<PdfRow, 'owner_sub' | 'visibility'>
+      | undefined;
     if (!row) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    if (!shareAccessForPdf(request, id) && !canReadPdf(sessionSub(request), row)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的影片'));
     }
     const abs = videoPath(id);
     try {
@@ -1039,9 +1061,14 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
     }
     const { id } = parsed.data;
-    const row = db.prepare(`SELECT id FROM pdfs WHERE id = ?`).get(id) as { id: string } | undefined;
+    const row = db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
+      | Pick<PdfRow, 'owner_sub' | 'visibility'>
+      | undefined;
     if (!row) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    if (!shareAccessForPdf(request, id) && !canReadPdf(sessionSub(request), row)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的大綱'));
     }
     const abs = youtubeOutlinePath(id);
     try {
@@ -1315,6 +1342,15 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
     }
     const { id } = parsed.data;
+    const pdfRow = db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
+      | Pick<PdfRow, 'owner_sub' | 'visibility'>
+      | undefined;
+    if (!pdfRow) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    if (!shareAccessForPdf(request, id) && !canReadPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的來源音訊'));
+    }
     const abs = youtubeSourceAudioPath(id);
     if (!fs.existsSync(abs)) {
       return reply.code(404).send(errorResponse('SOURCE_AUDIO_NOT_FOUND', 'Source audio not found'));
