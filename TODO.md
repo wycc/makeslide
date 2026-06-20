@@ -752,6 +752,8 @@
 
 - [x] `PlayPageSlidePanel.tsx` 複製來源內容狀態 timer 清理（已完成）：`handleCopySourceContent()` 原本在複製來源內容後直接 `setTimeout()` 2 秒清除 `sourceCopyStatus`，但沒有保存 timer id，也沒有在元件卸載時清掉；若使用者複製後立刻離開播放頁，延遲 callback 仍可能在卸載後呼叫 `setSourceCopyStatus()`，且同一來源快速重複複製會留下多個舊 timer 競爭清除狀態。本次修正新增每來源一個 timer map，重新複製同一來源時會先 `clearTimeout()` 舊 timer 並刪除紀錄，再排新的 2 秒清除；元件卸載時清除所有尚未觸發的 timer，並用 mounted ref 避免非同步複製完成後對已卸載元件更新狀態。既有的 `copyTextToClipboard()` 行為、成功/失敗狀態與 i18n 顯示皆維持不變。已執行 `npm run typecheck`（frontend，通過）與完整前端測試 `node --import tsx --test $(find src -name "*.test.ts" | sort)`（198 個測試全數通過）。曾嘗試從根目錄用 `npm test -- --runInBand frontend/src/lib/clipboard.test.ts` 跑相關測試，但根目錄 `test` script 實際會轉去 backend workspace 並執行整套 backend 測試，出現既有的 18 個環境性/基準失敗，與本次前端變更無關；另直接 `node --test src/lib/clipboard.test.ts` 因未載入 tsx/TypeScript extensionless import 解析而失敗，後續已改用前端既有可用的 `node --import tsx --test ...` 完整測試指令驗證。分支：`fix/play-source-copy-status-timers`，已 merge 回 master。
 
+- [x] 播放頁建立分享連結流程補齊 clipboard fallback 與 i18n（已完成）：`frontend/src/pages/play/usePdfMetadata.ts` 的 `handleCreateShareLink()` 原本在建立分享連結後直接呼叫 `navigator.clipboard.writeText()`，沒有走既有共用 `copyTextToClipboard()` fallback，且成功、需手動複製、建立失敗訊息仍硬編碼中文。本次改為使用 `copyTextToClipboard()`，保留建立分享後自動開啟分享對話框、設定 `shareUrl` 與更新可見度行為；成功/失敗/手動複製提示與 read-only/editable 顯示改用 `useI18n()` 翻譯鍵，補齊 `frontend/src/locales/zh-TW.ts`、`frontend/src/locales/en.ts` 與 `frontend/src/i18n.test.ts` 的新增 key 覆蓋。已執行 frontend typecheck（通過）與完整前端測試 `node --import tsx --test $(find src -name "*.test.ts" | sort)`（199 個測試全數通過）。分支：`fix/share-link-clipboard-i18n`，已 merge 回 master。
+
 [x] 更改強迫設 KEY 的流程，先跳一個對話框問是否是設定 API key。對話框中提供完整說明不設定 KEY 的話需要 LLM 的功能都無法使用。且更改 UI 在執行無法使用的功能都需跳出需先設定 API Key 的提示。（已完成）
   - 時間: 2026-06-20
   - 分支: `feature/api-key-optional-prompt`
