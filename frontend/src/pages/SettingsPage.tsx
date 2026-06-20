@@ -36,6 +36,7 @@ import {
 } from '../i18n';
 import { GEMINI_TTS_VOICES, OPENAI_TTS_VOICES, geminiVoiceLabel, openaiVoiceLabel } from '../lib/ttsVoices';
 import { formatSlaOverrideRangeMessage, validateSlaOverrideSecondsInput } from '../lib/slaOverrideValidation';
+import { copyTextToClipboard } from '../lib/clipboard';
 
 type SettingsCategory = 'account' | 'ai' | 'sync' | 'skills' | 'admin';
 
@@ -354,10 +355,10 @@ export default function SettingsPage() {
 
   const onCopyGeneratedMcpToken = useCallback(async () => {
     if (!generatedMcpAuthToken) return;
-    try {
-      await navigator.clipboard.writeText(generatedMcpAuthToken);
+    const result = await copyTextToClipboard(generatedMcpAuthToken);
+    if (result.ok) {
       setMsg(t('settings.mcpTokenCopied'));
-    } catch {
+    } else {
       setErr(t('settings.mcpTokenCopyError'));
     }
   }, [generatedMcpAuthToken, t]);
