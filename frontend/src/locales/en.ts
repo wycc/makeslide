@@ -834,6 +834,8 @@ export const en = {
   'play.animation.unlockAspectRatio': 'Unlock aspect ratio',
   'play.animation.focusPosition': 'Focus position & size (%)',
   'play.animation.pointerPosition': 'Pointer position (%)',
+  'play.animation.positionOnFullscreen': '🎯 Drag on slide',
+  'play.animation.positionOnFullscreenActive': '🎯 Dragging (click to stop)',
   'play.animation.pointerShape': 'Pointer shape',
   'play.animation.pointerShape.arrow': 'Arrow',
   'play.animation.pointerShape.dot': 'Dot',

@@ -471,6 +471,8 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
     customScriptStreamingPlan,
     handleSendCustomScriptMessage,
     totalPages,
+    positioningEffectId,
+    setPositioningEffectId,
   } = usePlayPageContext();
   const { t } = useI18n();
   const [customScriptDialogEffectId, setCustomScriptDialogEffectId] = useState<string | null>(null);
@@ -1961,7 +1963,25 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
               )}
               {OVERLAY_EFFECT_TYPES.includes(effect.type) && effect.type !== 'custom-script' && (
                 <div className="flex flex-col gap-2 text-xs text-slate-400">
-                  {t(effect.type === 'pointer' ? 'play.animation.pointerPosition' : 'play.animation.focusPosition')}
+                  <div className="flex items-center justify-between gap-2">
+                    <span>{t(effect.type === 'pointer' ? 'play.animation.pointerPosition' : 'play.animation.focusPosition')}</span>
+                    {compact && (
+                      <button
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => setPositioningEffectId((prev) => (prev === effect.id ? null : effect.id))}
+                        className={`rounded-md border px-2 py-1 text-[11px] ${
+                          positioningEffectId === effect.id
+                            ? 'border-fuchsia-400 bg-fuchsia-500/25 font-medium text-fuchsia-100'
+                            : 'border-slate-600 text-slate-300 hover:bg-slate-800'
+                        }`}
+                      >
+                        {positioningEffectId === effect.id
+                          ? t('play.animation.positionOnFullscreenActive')
+                          : t('play.animation.positionOnFullscreen')}
+                      </button>
+                    )}
+                  </div>
                   {currentPage?.image_url && (
                     <EffectPositionEditor
                       effect={effect}
@@ -2183,6 +2203,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                     next.delete(effect.id);
                     return next;
                   });
+                  setPositioningEffectId((prev) => (prev === effect.id ? null : prev));
                 }}
                 className="ml-auto rounded-md border border-rose-600/50 bg-rose-600/15 px-2 py-1 text-xs text-rose-300 hover:bg-rose-600/25 disabled:cursor-not-allowed disabled:opacity-40"
               >

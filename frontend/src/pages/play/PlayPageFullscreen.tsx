@@ -1,12 +1,87 @@
-import { useRef } from 'react';
-import type { TouchEvent } from 'react';
+import { useCallback, useRef } from 'react';
+import type { PointerEvent as ReactPointerEvent, RefObject, TouchEvent } from 'react';
 import DrawingCanvas from '../../components/DrawingCanvas';
 import { SlideRenderer } from '../../components/slide/SlideRenderer';
 import { useI18n } from '../../i18n';
 import type { TranslationKey } from '../../i18n';
 import { figureImageUrl } from '../../lib/api';
+import { getFocusEffectParams, OVERLAY_EFFECT_TYPES } from '../../lib/animationSpec';
+import type { SlideAnimationEffect } from '../../types';
 import { AnimationEditorTab } from './AnimationEditorTab';
 import { usePlayPageContext } from './PlayPageContext';
+
+/**
+ * Draggable box rendered directly on top of the actual fullscreen slide image (as a
+ * `SlideRenderer` child, so it shares the same percentage-based coordinate space as every
+ * other overlay effect) for whichever effect the user picked via "🎯 在投影片上拖曳" in the
+ * fullscreen animation editor. Move-only (no resize handles) — the small thumbnail in the
+ * editor panel still supports full move + resize for fine-tuning size.
+ */
+function FullscreenEffectPositionOverlay({
+  effect,
+  imageRef,
+  onParamsChange,
+}: {
+  effect: SlideAnimationEffect;
+  imageRef: RefObject<HTMLImageElement>;
+  onParamsChange: (params: { xPct: number; yPct: number; widthPct: number; heightPct: number }) => void;
+}) {
+  const dragRef = useRef<{ startMouseX: number; startMouseY: number; startXPct: number; startYPct: number } | null>(null);
+  const isPointerOnly = effect.type === 'pointer';
+  const { xPct, yPct, widthPct, heightPct } = getFocusEffectParams(effect);
+
+  const onPointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+    dragRef.current = { startMouseX: e.clientX, startMouseY: e.clientY, startXPct: xPct, startYPct: yPct };
+  }, [xPct, yPct]);
+
+  const onPointerMove = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!dragRef.current) return;
+    const rect = imageRef.current?.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return;
+    const dx = ((e.clientX - dragRef.current.startMouseX) / rect.width) * 100;
+    const dy = ((e.clientY - dragRef.current.startMouseY) / rect.height) * 100;
+    const maxX = isPointerOnly ? 100 : Math.max(0, 100 - widthPct);
+    const maxY = isPointerOnly ? 100 : Math.max(0, 100 - heightPct);
+    const newX = Math.min(maxX, Math.max(0, dragRef.current.startXPct + dx));
+    const newY = Math.min(maxY, Math.max(0, dragRef.current.startYPct + dy));
+    onParamsChange({
+      xPct: Math.round(newX * 10) / 10,
+      yPct: Math.round(newY * 10) / 10,
+      widthPct,
+      heightPct,
+    });
+  }, [imageRef, isPointerOnly, widthPct, heightPct, onParamsChange]);
+
+  const onPointerUp = useCallback(() => {
+    dragRef.current = null;
+  }, []);
+
+  return (
+    <div
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+      onClick={(e) => e.stopPropagation()}
+      style={
+        isPointerOnly
+          ? {
+            position: 'absolute', left: `${xPct}%`, top: `${yPct}%`, width: 22, height: 22,
+            transform: 'translate(-50%, -50%)', borderRadius: '50%', background: 'rgba(244, 63, 94, 0.85)',
+            border: '2px solid #fff', boxShadow: '0 0 8px 3px rgba(244,63,94,0.7)', cursor: 'move', touchAction: 'none', zIndex: 20,
+          }
+          : {
+            position: 'absolute', left: `${xPct}%`, top: `${yPct}%`, width: `${widthPct}%`, height: `${heightPct}%`,
+            border: '3px solid #a855f7', background: 'rgba(168, 85, 247, 0.12)', boxSizing: 'border-box',
+            boxShadow: '0 0 0 9999px rgba(0,0,0,0.15)', cursor: 'move', touchAction: 'none', zIndex: 20,
+          }
+      }
+    />
+  );
+}
 
 /** 觸發換頁所需的最小水平滑動距離（px）。 */
 const SWIPE_THRESHOLD_PX = 50;
@@ -44,6 +119,8 @@ export function PlayPageFullscreen() {
     getActiveDrawingCanvas,
     setImageOnlyFullscreen,
     fullscreenLayout, setFullscreenLayout,
+    animationDraft, setAnimationDraft,
+    positioningEffectId,
     isPlaying,
     slideAnimationPlaying,
     playPause,
@@ -104,6 +181,24 @@ export function PlayPageFullscreen() {
   const syncOverlayText = syncAiAnswer?.answer || syncDisplayedQuestion?.question || '';
   const syncOverlayIsAiAnswer = Boolean(syncAiAnswer?.answer);
   const pageNumberLabel = currentPage?.page_number ? String(currentPage.page_number) : '-';
+
+  // 動畫版面下，使用者選擇要直接在投影片上拖曳定位的效果（透過 AnimationEditorTab 的「🎯 在投影片上拖曳」按鈕）。
+  const positioningEffect =
+    fullscreenLayout === 'animation' && positioningEffectId
+      ? animationDraft?.effects.find(
+        (effect) => effect.id === positioningEffectId && OVERLAY_EFFECT_TYPES.includes(effect.type) && effect.type !== 'custom-script',
+      ) ?? null
+      : null;
+  const handlePositioningEffectParamsChange = useCallback((params: { xPct: number; yPct: number; widthPct: number; heightPct: number }) => {
+    if (!positioningEffectId) return;
+    setAnimationDraft((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        effects: prev.effects.map((effect) => (effect.id === positioningEffectId ? { ...effect, params } : effect)),
+      };
+    });
+  }, [positioningEffectId, setAnimationDraft]);
 
   const formatMessage = (key: TranslationKey, replacements: Record<string, string | number>) => {
     let message = t(key);
@@ -216,6 +311,13 @@ export function PlayPageFullscreen() {
                       eraser={drawingTool === 'eraser'}
                       remoteData={isSyncFollower ? remoteDrawingData : undefined}
                       onLocalChange={pushLocalDrawingChange}
+                    />
+                  )}
+                  {positioningEffect && (
+                    <FullscreenEffectPositionOverlay
+                      effect={positioningEffect}
+                      imageRef={fullscreenImageRef}
+                      onParamsChange={handlePositioningEffectParamsChange}
                     />
                   )}
                 </SlideRenderer>

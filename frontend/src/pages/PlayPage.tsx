@@ -196,6 +196,8 @@ export default function PlayPage() {
   const [imageOnlyFullscreen, setImageOnlyFullscreen] = useState(false);
   // 全螢幕版面：'image' = 純圖片（字幕單行疊在下方）；'split' = 左圖右整頁字幕；'edit' = 左圖右逐字稿編輯；'animation' = 左圖右動畫效果編輯。
   const [fullscreenLayout, setFullscreenLayout] = useState<'image' | 'split' | 'edit' | 'animation'>('image');
+  // 動畫編輯時，使用者選擇要直接在全螢幕投影片上拖曳定位的效果 id（null 表示尚未選擇）。
+  const [positioningEffectId, setPositioningEffectId] = useState<string | null>(null);
   const fullscreenContainerRef = useRef<HTMLDivElement>(null);
   const activeSentenceRef = useRef<HTMLParagraphElement>(null);
   const [slideImageScale, setSlideImageScale] = useState(1);
@@ -1691,6 +1693,7 @@ export default function PlayPage() {
   useEffect(() => {
     previousPlaybackTimeRef.current = currentTime;
     consumedPausePlaybackEffectIdsRef.current = new Set();
+    setPositioningEffectId(null);
   }, [currentPage?.page_number]);
   useEffect(() => {
     if (!isPlaying) {
@@ -2039,6 +2042,7 @@ export default function PlayPage() {
     handleToggleDisplayedQuestion, handleAiAnswerFollowerQuestions,
     // fullscreen / layout
     imageOnlyFullscreen, setImageOnlyFullscreen, fullscreenLayout, setFullscreenLayout,
+    positioningEffectId, setPositioningEffectId,
     slideImageScale, setSlideImageScale, slideImageMaxHeightVh, activeTab, setActiveTab,
     qaPanelExpanded, setQaPanelExpanded,
     // drawing

@@ -834,6 +834,8 @@ export const zhTW = {
   'play.animation.unlockAspectRatio': '解除長寬比鎖定',
   'play.animation.focusPosition': '焦點位置與大小（%）',
   'play.animation.pointerPosition': '指標位置（%）',
+  'play.animation.positionOnFullscreen': '🎯 在投影片上拖曳',
+  'play.animation.positionOnFullscreenActive': '🎯 拖曳中（再按一次關閉）',
   'play.animation.pointerShape': '指標形狀',
   'play.animation.pointerShape.arrow': '箭頭',
   'play.animation.pointerShape.dot': '圓點',
