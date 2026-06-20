@@ -1,5 +1,30 @@
 # MakeSlide 功能說明
 
+## 頁面提示詞／逐字稿端點補上權限檢查（並發現更大範圍的缺口）
+
+### 功能目的
+
+系統性檢查 `backend/src/routes/pdfs/detail.ts`（負責簡報主要內容讀寫的核心檔案）的所有讀取端點時，發現一個影響範圍很大的問題：除了主要的 `GET /api/pdfs/:id` 之外，這個檔案裡將近 15 個其他端點完全沒有檢查請求者是否有權限看（或改）這份簡報，只檢查資源本身是否存在。其中兩個還是**寫入**端點——`PATCH /pages/:n/prompt`（更新頁面提示詞）與 `PUT /pages/:n/script`（更新逐字稿）——代表任何人只要知道 PDF id 與頁碼，就能直接覆寫別人簡報的內容，不只是讀取外洩。
+
+### 本次修復內容
+
+優先處理風險最高、牽涉「提示詞」文字內容的三個端點：
+
+- `GET`/`PATCH /api/pdfs/:id/pages/:n/prompt`（頁面提示詞）
+- `PUT /api/pdfs/:id/pages/:n/script`（逐字稿，寫入端點）
+- `GET /api/pdfs/:id/pages/:n/generation-prompts`（AI 生成時實際送出的完整提示詞紀錄）
+
+補上與這個檔案 `GET /api/pdfs/:id` 完全一致的 `canReadPdf()`/`canEditPdf()`/`shareAccessForPdf()` 檢查。
+
+### 還沒處理的部分
+
+另外還有 11 個讀取端點同樣完全沒有權限檢查，涵蓋投影片圖片、縮圖、逐字稿全文、語音檔案、封面圖、影片、YouTube 大綱與來源音訊、頁面投票清單——也就是簡報最核心的實際內容。因為數量多、影響範圍大，這次只先記錄成 TODO.md 待辦項目（建議拆成 2-3 個較小的 PR 處理），沒有在同一輪一次改完。
+
+### 技術重點
+
+- 新增 `backend/test/detail-permission.test.ts` 11 個測試，覆蓋非擁有者對 private/唯讀分享簡報應得 403（特別驗證了 `PUT /script` 被拒絕時，檔案內容確實完全沒被改動）、擁有者與分享 token 讀取應正常回應、不存在的 PDF id 應得 404。
+- 已執行 backend typecheck（通過）與完整測試套件（484 個測試，18 個失敗皆為既有環境性基準，無新增回歸）。
+
 ## 全螢幕動畫編輯：直接在實際投影片上拖曳效果位置
 
 ### 功能目的
