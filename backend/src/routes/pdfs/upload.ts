@@ -31,6 +31,18 @@ function ownerSubFromRequest(request: FastifyRequest): string | null {
   return session?.sub ?? null;
 }
 
+function canReadPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
+  if (!row.owner_sub) return false;
+  if (sub && row.owner_sub === sub) return true;
+  return row.visibility === 'public' || row.visibility === 'public_editable';
+}
+
+function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
+  if (!row.owner_sub) return true;
+  if (sub && row.owner_sub === sub) return true;
+  return row.visibility === 'public_editable';
+}
+
 export const MAX_PROMPT_TO_OUTLINE_CHARS = 128 * 1024;
 
 const PromptTextBodySchema = z.object({
@@ -763,7 +775,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       .prepare(
         `SELECT id, title, original_filename, status, page_count, progress_step,
                 progress_current, progress_total,
-                error_message, user_prompt, require_script_confirmation, created_at, updated_at
+                error_message, user_prompt, require_script_confirmation, owner_sub, visibility, created_at, updated_at
            FROM pdfs WHERE id = ?`,
       )
       .get(id) as PdfRow | undefined;
@@ -771,6 +783,9 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       return reply
         .code(404)
         .send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    if (!canEditPdf(ownerSubFromRequest(request), row)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限確認此簡報的逐字稿'));
     }
     if (row.status !== 'awaiting_script_confirmation') {
       return reply
@@ -822,7 +837,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         `SELECT id, title, original_filename, status, page_count, progress_step,
                 progress_current, progress_total,
                 error_message, user_prompt, require_script_confirmation,
-                category, tts_voice, tts_speed, script_max_chars_per_page,
+                category, tts_voice, tts_speed, script_max_chars_per_page, owner_sub, visibility,
                 created_at, updated_at
            FROM pdfs WHERE id = ?`,
       )
@@ -831,6 +846,9 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       return reply
         .code(404)
         .send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    if (!canEditPdf(ownerSubFromRequest(request), row)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限重試此簡報'));
     }
     if (row.status !== 'failed') {
       return reply
@@ -884,13 +902,16 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         `SELECT id, title, original_filename, status, page_count, progress_step,
                 progress_current, progress_total,
                 error_message, user_prompt, require_script_confirmation,
-                tts_voice, tts_speed, script_max_chars_per_page,
+                tts_voice, tts_speed, script_max_chars_per_page, owner_sub, visibility,
                 created_at, updated_at
            FROM pdfs WHERE id = ?`,
       )
       .get(id) as PdfRow | undefined;
     if (!pdfRow) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    if (!canEditPdf(ownerSubFromRequest(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限為此簡報產生影片'));
     }
     if (!pdfRow.page_count || pdfRow.page_count <= 0) {
       return reply.code(400).send(errorResponse('INVALID_STATE', 'PDF page_count is not ready'));
@@ -995,7 +1016,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         `SELECT id, title, original_filename, status, page_count, progress_step,
                 progress_current, progress_total,
                 error_message, user_prompt, require_script_confirmation,
-                tts_voice, tts_speed, script_max_chars_per_page,
+                tts_voice, tts_speed, script_max_chars_per_page, owner_sub, visibility,
                 created_at, updated_at
            FROM pdfs WHERE id = ?`,
       )
@@ -1005,11 +1026,14 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         .code(404)
         .send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     }
+    const ownerSub = ownerSubFromRequest(request);
+    if (!canReadPdf(ownerSub, source)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限複製此簡報'));
+    }
 
     const newId = nanoid(PDF_ID_SIZE);
     const now = nowIso();
     const newTitle = `副本-${source.title ?? source.original_filename ?? source.id}`;
-    const ownerSub = ownerSubFromRequest(request);
 
     try {
       const srcDir = path.join(config.storageRoot, id);
