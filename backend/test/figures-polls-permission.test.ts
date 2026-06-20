@@ -189,3 +189,29 @@ test('POST /polls/:pollId/votes is not gated by edit permission so followers can
   assert.equal(resp.statusCode, 200);
   await app.close();
 });
+
+test('POST /polls/:pollId/votes still requires at least read access to a private presentation', async () => {
+  seedPermPdf('fpperm-pollvote-readperm-01', 'private');
+  const pollId = insertPoll('fpperm-pollvote-readperm-01');
+  const app = await buildApp();
+  try {
+    const noAccess = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/fpperm-pollvote-readperm-01/polls/${pollId}/votes`,
+      headers: OTHER_HEADERS,
+      payload: { voter_id: 'voter-1', option_index: 0 },
+    });
+    assert.equal(noAccess.statusCode, 403);
+    assert.equal((noAccess.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+
+    const ownerVote = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/fpperm-pollvote-readperm-01/polls/${pollId}/votes`,
+      headers: OWNER_HEADERS,
+      payload: { voter_id: 'voter-1', option_index: 0 },
+    });
+    assert.equal(ownerVote.statusCode, 200);
+  } finally {
+    await app.close();
+  }
+});

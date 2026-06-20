@@ -877,6 +877,13 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     const body = VotePollBodySchema.safeParse(request.body ?? {});
     if (!body.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
     const { id, pollId } = parsed.data;
+    const pdfRow = db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
+      | Pick<PdfRow, 'owner_sub' | 'visibility'>
+      | undefined;
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!shareAccessForPdf(request, id) && !canReadPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限對此簡報的投票進行投票'));
+    }
     const row = db
       .prepare(`SELECT id, pdf_id, page_number, question, options_json, is_active, show_results, created_at, updated_at FROM page_polls WHERE id = ? AND pdf_id = ?`)
       .get(pollId, id) as PagePollRow | undefined;
