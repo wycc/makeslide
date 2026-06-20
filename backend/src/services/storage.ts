@@ -8,8 +8,21 @@ export function ensureStorageRoot(): void {
   fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
 }
 
+/**
+ * Resolves a PDF's storage directory, refusing to return anything outside
+ * `storageRoot`. Without this guard, a `pdfId` of `'..'` (or `'../../etc'`)
+ * makes `path.join` walk back up past `storageRoot` — observed in practice as
+ * stray `git init`/`git commit` calls (from `ensurePresentationRepo()`)
+ * landing directly in this repository's own history when `pdfDir('..')`
+ * resolved to the project root itself.
+ */
 export function pdfDir(pdfId: string): string {
-  return path.join(config.storageRoot, pdfId);
+  const joined = path.join(config.storageRoot, pdfId);
+  const normalizedRoot = path.resolve(config.storageRoot) + path.sep;
+  if (!(joined + path.sep).startsWith(normalizedRoot)) {
+    throw new Error(`Refusing to resolve pdfDir outside storageRoot for pdfId: ${pdfId}`);
+  }
+  return joined;
 }
 
 export function pagesDir(pdfId: string): string {
