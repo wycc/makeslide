@@ -617,6 +617,18 @@ export default function SettingsPage() {
                     {saving ? t('settings.saving') : t('settings.save')}
                   </button>
                 </div>
+                <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3">
+                  <div className="mb-1 text-sm font-medium text-slate-200">{t('settings.mcpTokenTitle')}</div>
+                  <p className="mb-3 text-xs text-slate-500">{t('settings.mcpTokenHint')}</p>
+                  <div className="mb-3 text-xs text-slate-400">{hasMcpAuthToken ? t('settings.mcpTokenConfigured') : t('settings.mcpTokenNotConfigured')}</div>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <button type="button" onClick={() => void onGenerateMcpAuthToken()} disabled={mcpTokenBusy} className="rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-50">
+                      {mcpTokenBusy ? t('settings.saving') : t('settings.mcpTokenGenerateButton')}
+                    </button>
+                    {generatedMcpAuthToken ? <button type="button" onClick={() => void onCopyGeneratedMcpToken()} className="rounded-md bg-slate-100 px-4 py-2 text-sm font-medium text-slate-900 hover:bg-white">{t('settings.mcpTokenCopyButton')}</button> : null}
+                  </div>
+                  {generatedMcpAuthToken ? <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-3"><div className="mb-1 text-xs font-medium text-amber-100">{t('settings.mcpTokenOneTimeNotice')}</div><code className="block break-all rounded bg-slate-950 px-2 py-1 font-mono text-xs text-slate-100">{generatedMcpAuthToken}</code></div> : null}
+                </div>
               </div>
             ) : null}
 
@@ -721,18 +733,6 @@ export default function SettingsPage() {
                     <button type="button" onClick={() => void onDeleteAccount()} disabled={adminDeleteBusy || !adminDeleteAccountId.trim() || adminDeleteConfirm.trim() !== adminDeleteAccountId.trim()} className="mt-3 rounded-md bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-500 disabled:opacity-50">
                       {adminDeleteBusy ? t('settings.accountDeleting') : t('settings.accountDeleteButton')}
                     </button>
-                  </div>
-                  <div className="sm:col-span-2 rounded-lg border border-slate-800 bg-slate-950/60 p-3">
-                    <div className="mb-1 text-sm font-medium text-slate-200">{t('settings.mcpTokenTitle')}</div>
-                    <p className="mb-3 text-xs text-slate-500">{t('settings.mcpTokenHint')}</p>
-                    <div className="mb-3 text-xs text-slate-400">{hasMcpAuthToken ? t('settings.mcpTokenConfigured') : t('settings.mcpTokenNotConfigured')}</div>
-                    <div className="flex flex-col gap-2 sm:flex-row">
-                      <button type="button" onClick={() => void onGenerateMcpAuthToken()} disabled={mcpTokenBusy} className="rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-50">
-                        {mcpTokenBusy ? t('settings.saving') : t('settings.mcpTokenGenerateButton')}
-                      </button>
-                      {generatedMcpAuthToken ? <button type="button" onClick={() => void onCopyGeneratedMcpToken()} className="rounded-md bg-slate-100 px-4 py-2 text-sm font-medium text-slate-900 hover:bg-white">{t('settings.mcpTokenCopyButton')}</button> : null}
-                    </div>
-                    {generatedMcpAuthToken ? <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-3"><div className="mb-1 text-xs font-medium text-amber-100">{t('settings.mcpTokenOneTimeNotice')}</div><code className="block break-all rounded bg-slate-950 px-2 py-1 font-mono text-xs text-slate-100">{generatedMcpAuthToken}</code></div> : null}
                   </div>
                 </div>
                 <div className="flex justify-end"><button type="button" onClick={() => void onSave()} disabled={saving} className="rounded-md bg-slate-100 px-4 py-2 text-sm font-medium text-slate-900 disabled:opacity-50">{saving ? t('settings.saving') : t('settings.save')}</button></div>

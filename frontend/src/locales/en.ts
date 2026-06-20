@@ -63,7 +63,7 @@ export const en = {
   'settings.accountDeleteError': 'Failed to delete account',
   'settings.accountDeleteConfirmMismatch': 'The confirmation field must exactly match the account id',
   'settings.mcpTokenTitle': 'MCP auth token',
-  'settings.mcpTokenHint': 'Generate a new MCP Bearer token and save it to system settings. Existing tokens are never displayed; the new token is shown only once after generation, so copy it immediately and store it as MAKESLIDE_MCP_TOKEN in your MCP client.',
+  'settings.mcpTokenHint': 'Generate an MCP Bearer token tied to your own account, so your MCP client acts as you. Existing tokens are never displayed; the new token is shown only once after generation, so copy it immediately and store it as MAKESLIDE_MCP_TOKEN in your MCP client.',
   'settings.mcpTokenConfigured': 'An MCP auth token is currently configured.',
   'settings.mcpTokenNotConfigured': 'No MCP auth token is currently configured.',
   'settings.mcpTokenGenerateButton': 'Generate MCP auth token',
