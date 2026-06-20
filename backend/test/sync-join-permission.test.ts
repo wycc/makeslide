@@ -81,3 +81,72 @@ test('POST /sync/join returns 404 for a non-existent PDF', async () => {
   assert.equal((resp.json() as { error: { code: string } }).error.code, 'PDF_NOT_FOUND');
   await app.close();
 });
+
+function syncStatePayload(clientId: string) {
+  return { client_id: clientId, page_number: 1, is_playing: true, current_time: 0 };
+}
+
+test('POST /sync/state rejects a request with no edit access from claiming master when no master is active', async () => {
+  // Without ever calling /sync/join, a request with zero read/edit access to a private
+  // presentation must not be able to claim the master role just by hitting /sync/state directly
+  // during the window where no master is currently active.
+  seedSyncPdf('syncstate-priv-noaccess-01', 'private');
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: '/api/pdfs/syncstate-priv-noaccess-01/sync/state',
+      headers: OTHER_HEADERS,
+      payload: syncStatePayload('attacker-1'),
+    });
+    assert.equal(resp.statusCode, 403);
+    assert.equal((resp.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+  } finally {
+    await app.close();
+  }
+});
+
+test('POST /sync/state allows the owner to claim master directly without calling /sync/join first', async () => {
+  seedSyncPdf('syncstate-priv-owner-01', 'private');
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: '/api/pdfs/syncstate-priv-owner-01/sync/state',
+      headers: OWNER_HEADERS,
+      payload: syncStatePayload('owner-client-1'),
+    });
+    assert.equal(resp.statusCode, 200);
+    assert.equal((resp.json() as { role: string }).role, 'master');
+  } finally {
+    await app.close();
+  }
+});
+
+test('POST /sync/state still requires the existing master\'s client_id once a master is already active', async () => {
+  // Once a legitimate master is active, a second client without edit access still correctly
+  // gets SYNC_NOT_MASTER (not FORBIDDEN) — confirming this fix only closes the "no master yet"
+  // window and doesn't change the existing master-mismatch behavior.
+  seedSyncPdf('syncstate-pub-existing-master-01', 'public_editable');
+  const app = await buildApp();
+  try {
+    const claim = await app.inject({
+      method: 'POST',
+      url: '/api/pdfs/syncstate-pub-existing-master-01/sync/state',
+      headers: OWNER_HEADERS,
+      payload: syncStatePayload('owner-client-1'),
+    });
+    assert.equal(claim.statusCode, 200);
+
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/pdfs/syncstate-pub-existing-master-01/sync/state',
+      headers: OTHER_HEADERS,
+      payload: syncStatePayload('other-client-1'),
+    });
+    assert.equal(second.statusCode, 403);
+    assert.equal((second.json() as { error: { code: string } }).error.code, 'SYNC_NOT_MASTER');
+  } finally {
+    await app.close();
+  }
+});
