@@ -14,6 +14,7 @@ import { accountIdFromOwnerSub, runWithAccountId } from "./services/accountConte
 import { db } from "./db";
 import { ensureStorageRoot } from "./services/storage";
 import { cacheControlForStaticAsset } from "./staticCache";
+import { isApiKeyMissingError } from "./services/apiKeyErrors";
 
 /**
  * 解析這個請求應該在哪個帳號的情境中執行：
@@ -242,6 +243,14 @@ export async function buildApp() {
   app.setErrorHandler((err, request, reply) => {
     request.log.error({ err }, "Unhandled error");
     const anyErr = err as unknown as { code?: string; statusCode?: number };
+    if (isApiKeyMissingError(err)) {
+      return reply.code(400).send({
+        error: {
+          code: "API_KEY_MISSING",
+          message: err.message,
+        },
+      });
+    }
     if (
       anyErr.code === "FST_REQ_FILE_TOO_LARGE" ||
       anyErr.code === "FST_FILES_LIMIT"

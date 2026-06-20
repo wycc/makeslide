@@ -28,6 +28,12 @@ export async function getImagePromptTemplates(): Promise<ImagePromptTemplatesRes
 
 export interface OpenAIKeyStatusResponse {
   has_key: boolean;
+  has_openai_key?: boolean;
+  has_gemini_key?: boolean;
+  has_cgu_air_key?: boolean;
+  has_openrouter_key?: boolean;
+  llm_provider?: LlmProvider;
+  tts_provider?: TtsProvider;
 }
 
 export interface SystemAiSettings {

@@ -739,3 +739,8 @@
 
 - 時間: 2026-06-20
 - 內容: 依照 LOOP.md，在 TODO.md 已無未完成項目時重新進行唯讀分析。先做完整性驗證：確認沒有其他地方用原始 SQL 直接過濾 `owner_sub IS NULL`（唯一一處在 `backend/src/scripts/assignPresentationsToAccount.ts`，是一次性把無擁有者簡報指派帳號的管理腳本，與本次修復的執行期權限判斷無關，非缺口）；重跑與本次 `canReadPdf` 修復相關的全部 10 個既有專屬權限測試檔案（`figures-polls-permission`/`add-pages-permission`/`page-operations-permission`/`versioning-permission`/`runs-slowartifacts-permission`/`detail-permission`/`figures-drawings-animation-read-permission`/`sync-join-permission`/`upload-pipeline-control-permission`/`quizzes`），共 194 個測試全數通過，確認修復沒有遺漏的副作用。接著深入檢查一個原本懷疑的方向：`POST /api/pdfs/:id/share` 建立分享連結時會把簡報的 `visibility` 永久改成 `public`/`public_editable`，而撤銷分享 token（透過離開同步教室時的 `revokePdfShares()`）完全不會把 `visibility` 改回去——一開始懷疑這是「分享一次後就回不去」的隱性安全缺口，但追查前端後發現 `usePdfMetadata.ts` 的 `handleMakeSharePrivate()` 已經提供明確的「設為 private」按鈕，這是刻意設計：可見度是使用者透過分享對話框直接控制的獨立設定，跟「離開同步教室」這個完全不同概念的生命週期事件刻意不綁在一起（離開教室只是讓舊連結失效，不代表使用者想把錄好的內容收回private），確認非缺口。另外也親自驗證了先前子代理回報、信心程度較低的 `PdfCard.tsx` 進度條邊界疑慮：`progressPct`/文字顯示兩處都已經有 `progressTotal > 0` 的條件守衛，`progressTotal` 為 0 時完全不會顯示任何進度資訊，非缺口。本輪在多個方向都沒有找到通過驗證的新項目，誠實記錄如上。
+
+[x] 更改強迫設 KEY 的流程，先跳一個對話框問是否是設定 API key。對話框中提供完整說明不設定 KEY 的話需要 LLM 的功能都無法使用。且更改 UI 在執行無法使用的功能都需跳出需先設定 API Key 的提示。（已完成）
+  - 時間: 2026-06-20
+  - 分支: `feature/api-key-optional-prompt`
+  - 工作記錄: 已移除前端啟動時缺少金鑰就強制導向設定頁的流程，改為在目前頁面顯示 API key 說明對話框，讓使用者可選擇前往 AI 設定或暫時略過。新增全域 `API_KEY_MISSING` 事件與 `ApiKeyRequiredDialog`，後端在缺少 OpenAI/Gemini/CGU Air/OpenRouter 金鑰時回傳標準 `API_KEY_MISSING` 錯誤，前端所有走共用 API 錯誤解析的 LLM 功能都會跳出「需先設定 API key」提示。對話框已補齊中英文 i18n，並清楚列出不設定 key 時無法使用的產生、改寫、問答、語音/轉錄/自動動畫等 LLM 功能。已執行 frontend typecheck 與 backend typecheck，皆通過。

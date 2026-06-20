@@ -13,6 +13,7 @@ import { getRuntimeAiSettings, type LlmProvider } from './aiSettings';
 import { currentAccountId, sanitizeAccountId } from './accountContext';
 import { appendLlmRequestLog, appendLlmResponseLog } from './llmUsage';
 import { redactLogObject, redactTextForLog } from './logSanitizer';
+import { ApiKeyMissingError } from './apiKeyErrors';
 
 type OpenAiCompatibleProvider = Exclude<LlmProvider, 'gemini'>;
 
@@ -121,7 +122,7 @@ export function getOpenAIClient(accountId: string = currentAccountId(), provider
   const settings = getRuntimeAiSettings(accountId);
   const apiKey = (state.apiKeyOverride ?? providerApiKey(settings, provider) ?? '').trim();
   if (!apiKey) {
-    throw new Error(`${providerEnvPrefix(provider)}_API_KEY is not set — cannot call ${providerLabel(provider)}. Update settings and retry.`);
+    throw new ApiKeyMissingError(providerLabel(provider), `${providerEnvPrefix(provider)}_API_KEY is not set — cannot call ${providerLabel(provider)}. Update settings and retry.`);
   }
   const baseURL = (state.baseUrlOverride ?? providerBaseUrl(settings, provider) ?? '').trim() || undefined;
 

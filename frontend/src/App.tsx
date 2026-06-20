@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 import { getAuthStatus, getOpenAIKeyStatus } from './lib/api';
 import { useLocation, useNavigate } from 'react-router-dom';
 import CreditExhaustedDialog from './components/CreditExhaustedDialog';
+import ApiKeyRequiredDialog, { shouldShowApiKeyOnboardingPrompt } from './components/ApiKeyRequiredDialog';
 
 const PUBLIC_AUTH_PATHS = new Set(['/settings']);
 
@@ -19,6 +20,7 @@ function hasShareToken(search: string): boolean {
 
 export default function App() {
   const [checked, setChecked] = useState(false);
+  const [apiKeyOnboardingOpen, setApiKeyOnboardingOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -36,8 +38,8 @@ export default function App() {
 
         const status = await getOpenAIKeyStatus();
         if (!alive) return;
-        if (!status.has_key && location.pathname !== '/settings' && !sharedAccess) {
-          navigate('/settings', { replace: true });
+        if (!status.has_key && !sharedAccess) {
+          setApiKeyOnboardingOpen(shouldShowApiKeyOnboardingPrompt(status.has_key));
         }
       } finally {
         if (alive) setChecked(true);
@@ -75,6 +77,7 @@ export default function App() {
         />
       </Routes>
       <CreditExhaustedDialog />
+      <ApiKeyRequiredDialog onboardingOpen={apiKeyOnboardingOpen} onOnboardingClose={() => setApiKeyOnboardingOpen(false)} />
     </>
   );
 }

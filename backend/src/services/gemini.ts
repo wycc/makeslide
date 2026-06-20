@@ -5,6 +5,7 @@ import { appendLlmRequestLog, appendLlmResponseLog } from './llmUsage';
 import { logger } from '../logger';
 import { redactLogObject } from './logSanitizer';
 import { config } from '../config';
+import { ApiKeyMissingError } from './apiKeyErrors';
 
 /** Same request-deadline budget used for OpenAI calls (services/openai.ts); applied here so a hung Gemini API connection can't block a request/job forever. */
 function geminiRequestTimeoutSignal(): AbortSignal {
@@ -116,7 +117,7 @@ export function summarizeTtsResponseForLog(json: unknown): Record<string, unknow
 
 function getGeminiApiKey(): string {
   const key = (getRuntimeAiSettings().geminiApiKey ?? '').trim();
-  if (!key) throw new Error('GEMINI_API_KEY is not set — cannot call Gemini');
+  if (!key) throw new ApiKeyMissingError('Gemini', 'GEMINI_API_KEY is not set — cannot call Gemini');
   return key;
 }
 

@@ -51,6 +51,7 @@ export const CREDIT_EXHAUSTED_ERROR_CODES = new Set([
 ]);
 
 export const CREDIT_EXHAUSTED_EVENT = 'makeslide:credit-exhausted';
+export const API_KEY_REQUIRED_EVENT = 'makeslide:api-key-required';
 
 export interface CreditExhaustedEventDetail {
   title: string;
@@ -60,8 +61,17 @@ export interface CreditExhaustedEventDetail {
   status: number;
 }
 
+export interface ApiKeyRequiredEventDetail {
+  code: string;
+  status: number;
+}
+
 export function isCreditExhaustedError(err: unknown): err is ApiError {
   return err instanceof ApiError && CREDIT_EXHAUSTED_ERROR_CODES.has(err.code);
+}
+
+export function isApiKeyMissingError(err: unknown): err is ApiError {
+  return err instanceof ApiError && err.code === 'API_KEY_MISSING';
 }
 
 /**
@@ -81,6 +91,16 @@ export function notifyCreditExhausted(err: ApiError): void {
   window.dispatchEvent(new CustomEvent<CreditExhaustedEventDetail>(CREDIT_EXHAUSTED_EVENT, {
     detail: {
       ...human,
+      code: err.code,
+      status: err.status,
+    },
+  }));
+}
+
+export function notifyApiKeyRequired(err: ApiError): void {
+  if (typeof window === 'undefined' || !isApiKeyMissingError(err)) return;
+  window.dispatchEvent(new CustomEvent<ApiKeyRequiredEventDetail>(API_KEY_REQUIRED_EVENT, {
+    detail: {
       code: err.code,
       status: err.status,
     },
@@ -134,6 +154,7 @@ export async function parseErrorBody(resp: Response): Promise<ApiError> {
   if (isApiErrorBody(body)) {
     const err = new ApiError(body.error.message, body.error.code, resp.status);
     notifyCreditExhausted(err);
+    notifyApiKeyRequired(err);
     return err;
   }
   const err = new ApiError(`HTTP ${resp.status}`, 'HTTP_ERROR', resp.status);

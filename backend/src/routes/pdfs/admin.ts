@@ -116,7 +116,24 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/api/system/openai-key-status', async (_request, reply) => {
     const runtime = getRuntimeAiSettings();
-    return reply.code(200).send({ has_key: runtime.openaiApiKey.trim().length > 0 });
+    const hasOpenAiKey = runtime.openaiApiKey.trim().length > 0;
+    const hasGeminiKey = runtime.geminiApiKey.trim().length > 0;
+    const hasCguAirKey = runtime.cguAirApiKey.trim().length > 0;
+    const hasOpenrouterKey = runtime.openrouterApiKey.trim().length > 0;
+    const hasSelectedLlmKey =
+      (runtime.llmProvider === 'openai' && hasOpenAiKey)
+      || (runtime.llmProvider === 'gemini' && hasGeminiKey)
+      || (runtime.llmProvider === 'cgu-air' && hasCguAirKey)
+      || (runtime.llmProvider === 'openrouter' && hasOpenrouterKey);
+    return reply.code(200).send({
+      has_key: hasSelectedLlmKey,
+      has_openai_key: hasOpenAiKey,
+      has_gemini_key: hasGeminiKey,
+      has_cgu_air_key: hasCguAirKey,
+      has_openrouter_key: hasOpenrouterKey,
+      llm_provider: runtime.llmProvider,
+      tts_provider: runtime.ttsProvider,
+    });
   });
 
   app.patch('/api/system/openai-api-key', async (request, reply) => {
