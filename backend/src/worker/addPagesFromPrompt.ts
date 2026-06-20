@@ -64,6 +64,38 @@ export function abortAddPagesJob(pdfId: string): boolean {
   return true;
 }
 
+/**
+ * Startup crash-recovery: unlike `regenerate.ts` (which persists job state to a DB table and
+ * lazily marks stale jobs `failed` on next read), this job's progress lives only in the
+ * in-memory `jobs` map above, and the parent PDF's `status` is never touched while it runs
+ * (only `page_count`). If the server restarts mid-job, the in-memory job state is simply gone
+ * (the status endpoint will 404), but any `pages` rows already inserted for the new pages are
+ * left stuck at whatever non-terminal status they had — forever, since nothing will ever
+ * resume them.
+ *
+ * The main pipeline only ever sets `pdfs.status = 'ready'` once every one of its pages has
+ * reached `audio_ready` (see pipeline.ts), so a `ready` PDF with a page below `audio_ready`
+ * can only be this kind of orphan. Mark those pages `failed` with a clear message so the user
+ * sees an explicit error instead of an indefinitely blank/loading slide, and can use the
+ * existing per-page regenerate-image/rewrite-script/regenerate-audio actions to fix it.
+ */
+export function recoverOrphanedAddPagesPages(): number {
+  const result = db
+    .prepare(
+      `UPDATE pages
+          SET status = 'failed',
+              error_message = COALESCE(error_message, '新增頁面流程因伺服器重啟而中斷，請手動重新生成此頁的圖片／逐字稿／語音'),
+              updated_at = ?
+        WHERE status NOT IN ('audio_ready', 'failed')
+          AND pdf_id IN (SELECT id FROM pdfs WHERE status = 'ready')`,
+    )
+    .run(nowIso());
+  if (result.changes > 0) {
+    logger.warn({ count: result.changes }, 'add-pages-from-prompt: recovered orphaned pages stuck after a server restart');
+  }
+  return result.changes;
+}
+
 const AddPagesSlideSchema = z.object({
   slides: z
     .array(
