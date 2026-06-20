@@ -301,7 +301,8 @@ interface EffectPreset {
   apply: () => Partial<SlideAnimationEffect>;
 }
 
-const EFFECT_PRESETS: readonly EffectPreset[] = [
+/** Exported for unit testing; not part of this component's public API. */
+export const EFFECT_PRESETS: readonly EffectPreset[] = [
   {
     id: 'title-fade-in',
     labelKey: 'play.animation.preset.titleFadeIn',
@@ -410,6 +411,7 @@ const EFFECT_PRESETS: readonly EffectPreset[] = [
       type: 'pause-playback',
       duration: 0.4,
       ease: 'power1.out',
+      exitDuration: DEFAULT_EXIT_DURATION_SECONDS,
       text: DEFAULT_PAUSE_PLAYBACK_TEXT,
       params: { xPct: 18, yPct: 34, widthPct: 64, heightPct: 24 },
     }),
