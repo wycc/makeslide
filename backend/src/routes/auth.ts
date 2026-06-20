@@ -76,15 +76,20 @@ export function parseCookies(request: FastifyRequest): Record<string, string> {
   );
 }
 
+/** Production always runs behind TLS (see Dockerfile); dev/test typically runs on plain http://localhost where Secure would break login. */
+function secureCookieSuffix(): string {
+  return process.env.NODE_ENV === 'production' ? '; Secure' : '';
+}
+
 function setCookie(reply: FastifyReply, name: string, value: string, maxAgeSeconds: number): void {
   reply.header(
     'set-cookie',
-    `${name}=${encodeURIComponent(value)}; Path=/; Max-Age=${maxAgeSeconds}; HttpOnly; SameSite=Lax`,
+    `${name}=${encodeURIComponent(value)}; Path=/; Max-Age=${maxAgeSeconds}; HttpOnly; SameSite=Lax${secureCookieSuffix()}`,
   );
 }
 
 function clearCookie(reply: FastifyReply, name: string): void {
-  reply.header('set-cookie', `${name}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`);
+  reply.header('set-cookie', `${name}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax${secureCookieSuffix()}`);
 }
 
 function authBaseUrl(request: FastifyRequest): string {
