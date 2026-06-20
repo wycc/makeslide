@@ -1,5 +1,21 @@
 # MakeSlide 功能說明
 
+## 新增 MCP 整合使用手冊，並修正 token 複製按鈕的相容性
+
+### 功能目的
+
+makeslide 內建的 MCP 伺服器讓 Claude Code 等工具可以直接操作簡報生成流程，但這個功能（包含剛上線的「在設定頁產生 MCP auth token」介面）一直沒有對應的使用文件，使用者不容易知道什麼情況下需要設定、要怎麼設定 client、又有哪些工具可以用。順便檢視這個剛上線的功能時，也發現「複製 token」按鈕沒有用到專案裡其他複製按鈕都會用的共用機制，在某些瀏覽器情境下可能複製失敗卻沒有自動退路。
+
+### 修復內容
+
+新增完整的中英雙語使用手冊，說明何時需要 token、如何產生/輪替、如何設定 MCP client，以及目前所有可用工具的說明與範例。同時讓「複製 token」按鈕改用跟其他複製按鈕一致的共用邏輯，在瀏覽器不支援新版複製 API 時能自動退回舊版做法，提升相容性。
+
+### 技術重點
+
+- 新增 `docs/mcp-guide.md`。
+- `frontend/src/pages/SettingsPage.tsx` 的複製按鈕改用 `copyTextToClipboard()` 共用 helper。
+- 已執行 frontend typecheck 與完整前端測試套件（162 個測試全數通過）。
+
 ## CGU Air / OpenRouter 金鑰輪替後，立即生效而不需要重啟伺服器
 
 ### 功能目的
