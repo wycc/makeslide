@@ -5,9 +5,12 @@ import {
   extractTtsErrorMessage,
   isRetryableTtsError,
   parseWavPcmChunk,
+  runCommand,
   splitByToneMarkers,
   splitSpeakerPrefix,
 } from '../src/worker/steps/synthesizeAudio';
+
+const NODE = process.execPath;
 
 // ── buildWavPcm16 / parseWavPcmChunk ─────────────────────────────────────
 
@@ -135,4 +138,31 @@ test('splitSpeakerPrefix is case-insensitive', () => {
 
 test('splitSpeakerPrefix returns the original text unchanged when there is no speaker prefix', () => {
   assert.deepEqual(splitSpeakerPrefix('No prefix here'), { speaker: null, text: 'No prefix here' });
+});
+
+// ── runCommand ────────────────────────────────────────────────────────────
+
+test('runCommand resolves when the process exits 0', async () => {
+  await assert.doesNotReject(() => runCommand(NODE, ['-e', 'process.exit(0)']));
+});
+
+test('runCommand rejects with the exit code and stderr when the process fails', async () => {
+  await assert.rejects(
+    () => runCommand(NODE, ['-e', 'process.stderr.write("boom"); process.exit(2)']),
+    /exited with code 2: boom/,
+  );
+});
+
+test('runCommand without a timeoutMs does not kill a slow-but-finishing process early', async () => {
+  await assert.doesNotReject(() => runCommand(NODE, ['-e', 'setTimeout(() => process.exit(0), 50)']));
+});
+
+test('runCommand kills a process that exceeds timeoutMs and rejects with a "timed out" message', async () => {
+  const start = Date.now();
+  // Sleeps far longer than the timeout below; if the kill didn't work this test would hang for 30s.
+  await assert.rejects(
+    () => runCommand(NODE, ['-e', 'setTimeout(() => {}, 30000)'], 100),
+    /timed out after 100ms and was killed/,
+  );
+  assert.ok(Date.now() - start < 5000, 'expected the timed-out process to be killed promptly');
 });

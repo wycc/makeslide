@@ -3,6 +3,9 @@ import { spawn } from 'node:child_process';
 import ffmpegStatic from 'ffmpeg-static';
 
 const FFMPEG = ffmpegStatic ?? 'ffmpeg';
+// One page's spoken-audio transcode (typically tens of seconds to a few minutes of speech);
+// 3 minutes is a generous safety margin over normal runtime.
+const AUDIO_TRANSCODE_TIMEOUT_MS = 3 * 60_000;
 import PQueue from 'p-queue';
 import { parseFile } from 'music-metadata';
 import { APIError } from 'openai';
@@ -15,17 +18,41 @@ import { pageAudioPath, pageScriptPath } from '../../services/storage';
 import { db, savePageGenerationPrompt } from '../../db';
 import { redactTextForLog } from '../../services/logSanitizer';
 
-function runCommand(command: string, args: string[]): Promise<void> {
+/**
+ * `timeoutMs`, if given, kills the process (SIGTERM) and rejects with a distinct "timed out"
+ * message instead of waiting forever — this step runs once per page in the main pipeline, so
+ * with `PROCESS_CONCURRENCY` defaulting to 2, a single stuck ffmpeg call here is enough to stall
+ * the entire processing queue (same class of issue already fixed for yt-dlp/ffmpeg in
+ * youtubeCaptions.ts and for generateVideo.ts's ffmpeg calls).
+ */
+/** Exported for unit testing; not part of this module's public synthesis API. */
+export function runCommand(command: string, args: string[], timeoutMs?: number): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
     let stderr = '';
+    let timedOut = false;
+    const timer = timeoutMs
+      ? setTimeout(() => {
+          timedOut = true;
+          child.kill('SIGTERM');
+        }, timeoutMs)
+      : null;
     child.stderr.on('data', (d) => {
       stderr += d.toString();
     });
-    child.on('error', reject);
+    child.on('error', (err) => {
+      if (timer) clearTimeout(timer);
+      reject(err);
+    });
     child.on('close', (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`${command} exited with code ${code}: ${stderr.trim()}`));
+      if (timer) clearTimeout(timer);
+      if (timedOut) {
+        reject(new Error(`${command} timed out after ${timeoutMs}ms and was killed`));
+      } else if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`${command} exited with code ${code}: ${stderr.trim()}`));
+      }
     });
   });
 }
@@ -351,18 +378,11 @@ async function synthesizeOnePage(params: {
         : `${targetPath}.tmp.mp3`;
       await fs.promises.writeFile(tmpInputPath, buffer);
       try {
-        await runCommand(FFMPEG, [
-          '-y',
-          '-i',
-          tmpInputPath,
-          '-c:a',
-          'aac',
-          '-b:a',
-          '128k',
-          '-movflags',
-          '+faststart',
-          targetPath,
-        ]);
+        await runCommand(
+          FFMPEG,
+          ['-y', '-i', tmpInputPath, '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', targetPath],
+          AUDIO_TRANSCODE_TIMEOUT_MS,
+        );
       } finally {
         await fs.promises.rm(tmpInputPath, { force: true });
       }
