@@ -797,3 +797,8 @@
   - 時間: 2026-06-21
   - 分支: `fix/pause-playback-wait-for-line-end`
   - 工作記錄: 使用者針對上一項修正再回報：暫停動作應該在「指定的行播完後」才執行，而不是在那一行剛開始播放時。追查發現上一輪的修正（等待 `effect.start + effect.duration`）只考慮了提示框自己的淡入動畫長度（通常只有 0.4 秒），完全沒有對應到使用者實際在意的「這一句逐字稿講完」這個更長的時間範圍——如果效果擺在一句話的開頭，0.4 秒後就會暫停，等於那句話幾乎還沒講完就被打斷。新增 `pausePlaybackTriggerSeconds(effect, sentenceTimeline)`：先用 `effect.start` 找出落在哪一句逐字稿的時間範圍（`sentenceTimeline` 由既有的 `buildSentenceTimeline()` 提供），若找到就用該句的結束時間（`sentence.end`）與「淡入動畫播完時間」（`effect.start + effect.duration`）取較大值；找不到對應句子時（沒有逐字稿時間軸、或效果剛好落在兩句之間的靜音空隙）才退回只等淡入動畫播完。`getDuePausePlaybackEffect()`/`effectIdsToReleaseOnSeekBack()` 都新增可選的 `sentenceTimeline` 參數並改用這個函式判斷觸發/釋放時機，`PlayPage.tsx` 在兩處呼叫都補上既有的 `sentenceTimeline`（原本就已經算好、用於 `resolveAnimationSpec()` 的同一份資料，沒有新增計算成本）。新增 4 個測試：等到整句講完才觸發、沒有逐字稿時退回淡入時間、句子很短時仍至少等到淡入動畫播完（兩者取較大值）、`getDuePausePlaybackEffect()` 在有逐字稿時間軸時確實採用句子結束時間而非單純淡入時間。已執行 frontend typecheck（通過）與完整前端測試 `node --test $(find src -name "*.test.ts" | sort)`（209 個測試全數通過）。
+
+---- 計數重設 ----
+
+- 時間: 2026-06-21
+- 說明: 上一次達到 20 項上限時，使用者選擇「先停在這裡」；之後使用者兩度直接回報「暫停播放提示」的具體問題並指示修復，這兩項視為使用者直接指示的修復、不計入自動尋找新項目的計數。使用者再次明確透過 `AskUserQuestion` 選擇「重設計數後繼續」，確認要繼續自動尋找/執行新項目。計數規則維持不變：只計算本標記之後新完成的項目數，達 20 個時再次停止並徵詢使用者。
