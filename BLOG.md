@@ -3989,3 +3989,22 @@ Gemini TTS 語音合成的回應結構是好幾層巢狀的（`candidates[0].con
 - `frontend/src/lib/animationSpec.ts` 的 `getDuePausePlaybackEffect()` 把觸發條件從「播放時間跨過 `effect.start`」改成「跨過 `effect.start + effect.duration`」，正好對齊提示框淡入動畫實際播完的時間點。
 - 新增 `effectIdsToReleaseOnSeekBack(spec, newCurrentTime)`：回傳所有結束時間點（`start + duration`）仍在新時間點之後的暫停提示效果 id。`PlayPage.tsx` 偵測到播放時間倒退時（新的 `currentTime` 小於前一次記錄的時間），呼叫這個函式並把回傳的 id 從追蹤「已觸發過」的集合中移除，讓使用者倒退重播時這些效果可以再次正常觸發。
 - 更新既有單元測試反映新的觸發時機語意，並為 `effectIdsToReleaseOnSeekBack` 新增測試，覆蓋部分釋放、全部釋放與停用/空輸入等邊界情況。
+
+## 「暫停播放提示」改成等整句逐字稿講完才暫停
+
+### 功能目的
+
+上一篇修正讓暫停播放提示等自己的淡入動畫（通常只有 0.4 秒）播完才暫停，但使用者實際在意的是「這一句旁白講完」，不是「提示框淡入動畫播完」——如果提示框擺在一句話剛開始的位置，0.4 秒後就暫停，等於那句話幾乎還沒講完就被打斷，使用者根本聽不到完整內容。這次改成真正對齊逐字稿的句子邊界：暫停會等到效果所在的那一整句旁白播完才執行。
+
+### 使用方式
+
+此變更對一般使用者完全透明：
+
+1. 播放到「暫停播放提示」效果時，會先聽完該效果所在的整句旁白（如果有逐字稿時間軸的話），才真正暫停播放。
+2. 如果簡報沒有逐字稿時間軸、或效果剛好落在兩句話之間的靜音空檔，行為退回成上一篇的規則：等提示框自己的淡入動畫播完就暫停。
+
+### 技術細節
+
+- 新增 `pausePlaybackTriggerSeconds(effect, sentenceTimeline)`：用效果的 `start` 時間找出落在哪一句逐字稿的時間範圍內，若找到就用該句結束時間與「淡入動畫播完時間」（`start + duration`）兩者取較大值，確保即使句子很短也不會比淡入動畫更早暫停；找不到對應句子時退回只看淡入動畫時間。
+- `getDuePausePlaybackEffect()`/`effectIdsToReleaseOnSeekBack()` 都新增可選的 `sentenceTimeline` 參數並改用這個函式判斷時機；`PlayPage.tsx` 在兩處呼叫都傳入既有的 `sentenceTimeline`（本來就已經算好供其他用途使用的同一份資料，不需要額外計算）。
+- 新增 4 個測試覆蓋：等整句講完才觸發、無逐字稿時退回淡入時間、句子很短時仍取較大值、`getDuePausePlaybackEffect()` 在有逐字稿時確實採用句子結束時間。
