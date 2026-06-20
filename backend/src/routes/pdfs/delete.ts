@@ -2,6 +2,8 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { db } from '../../db';
 import { decodeSession, parseCookies } from '../auth';
 import { removePdfDir } from '../../services/storage';
+import { clearRegenerateJob } from '../../worker/regenerate';
+import { clearAddPagesJob } from '../../worker/addPagesFromPrompt';
 import type { PdfRow } from '../../types';
 import { errorResponse, IdParamSchema } from './shared';
 
@@ -36,6 +38,8 @@ export async function registerDeleteRoutes(app: FastifyInstance): Promise<void> 
 
     db.prepare(`DELETE FROM pdfs WHERE id = ?`).run(id);
     await removePdfDir(id);
+    clearRegenerateJob(id);
+    clearAddPagesJob(id);
 
     return reply.code(204).send();
   });

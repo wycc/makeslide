@@ -57,6 +57,11 @@ export function getAddPagesJob(pdfId: string): AddPagesJobState | undefined {
   return jobs.get(pdfId);
 }
 
+/** Call when a PDF is deleted so its in-memory job state doesn't leak forever. */
+export function clearAddPagesJob(pdfId: string): void {
+  jobs.delete(pdfId);
+}
+
 export function abortAddPagesJob(pdfId: string): boolean {
   const job = jobs.get(pdfId);
   if (!job || (job.status !== 'pending' && job.status !== 'running')) return false;

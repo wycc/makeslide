@@ -21,6 +21,8 @@ import type { PdfRow } from '../../types';
 import { IdParamSchema, UpdateSystemAiSettingsBodySchema, errorResponse } from './shared';
 import { DEFAULT_ACCOUNT_ID, sanitizeAccountId } from '../../services/accountContext';
 import { removePdfDir } from '../../services/storage';
+import { clearRegenerateJob } from '../../worker/regenerate';
+import { clearAddPagesJob } from '../../worker/addPagesFromPrompt';
 
 function sessionSub(request: FastifyRequest): string | null {
   const session = decodeSession(parseCookies(request).makeslide_session);
@@ -133,6 +135,8 @@ async function deleteAccountData(targetAccountId: string): Promise<{ deleted_pdf
 
   for (const id of pdfIds) {
     await removePdfDir(id);
+    clearRegenerateJob(id);
+    clearAddPagesJob(id);
   }
   await removeAccountDir(targetAccountId);
 

@@ -122,6 +122,11 @@ export interface RegenerateOptions {
 
 const jobs = new Map<string, RegenJobState>();
 
+/** Call when a PDF is deleted so its in-memory job state doesn't leak forever. */
+export function clearRegenerateJob(pdfId: string): void {
+  jobs.delete(pdfId);
+}
+
 const EDIT_SLIDE_IMAGE_PROMPT_FALLBACK = [
   'You are editing an existing presentation slide image provided as the input image.',
   'Use the uploaded image as the strict visual source of truth.',
