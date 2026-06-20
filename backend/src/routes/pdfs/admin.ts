@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import crypto from 'node:crypto';
 import { z } from 'zod';
 import {
   getAccountSettingsLocation,
@@ -43,6 +44,10 @@ const SYSTEM_AUTH_SETTING_KEYS = [
   'google_client_secret',
   'google_redirect_uri',
 ] as const;
+
+export function generateMcpAuthToken(): string {
+  return crypto.randomBytes(32).toString('base64url');
+}
 
 function hasSystemAuthSettingsUpdate(data: Record<string, unknown>): boolean {
   return SYSTEM_AUTH_SETTING_KEYS.some((key) => data[key] !== undefined);
@@ -96,6 +101,7 @@ function aiSettingsResponse(accountId: string, isAdmin: boolean) {
     response.google_client_secret = runtime.googleClientSecret;
     response.google_redirect_uri = runtime.googleRedirectUri;
     response.admin_account_ids = getAdminAccountIds();
+    response.has_mcp_auth_token = runtime.mcpAuthToken.trim().length > 0;
   }
   return response;
 }
@@ -200,6 +206,17 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       const message = err instanceof Error ? err.message : String(err);
       return reply.code(400).send(errorResponse('INVALID_ADMIN_ACCOUNT', message));
     }
+  });
+
+  app.post('/api/system/mcp-auth-token', async (_request, reply) => {
+    const accountId = currentAccountId();
+    if (!isAdminAccount(accountId)) {
+      return reply.code(403).send(errorResponse('ADMIN_REQUIRED', '只有 admin 可以產生 MCP auth token'));
+    }
+    const token = generateMcpAuthToken();
+    setRuntimeAiSettings(accountId, { mcpAuthToken: token });
+    await persistEnvSettings(accountId, { mcpAuthToken: token });
+    return reply.code(200).send({ ok: true, token, has_mcp_auth_token: true });
   });
 
   app.post('/api/pdfs/:id/github-sync', async (request, reply) => {

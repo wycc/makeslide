@@ -1,5 +1,30 @@
 # MakeSlide 功能說明
 
+## 設定頁可以安全產生 MCP auth token
+
+### 功能目的
+
+MakeSlide 的 MCP server 需要搭配 bearer token 才能在啟用 Google 登入時讓自動化工具安全存取 API。過去 token 主要仰賴部署者手動編輯環境變數 `MCP_AUTH_TOKEN`，不熟悉部署檔案位置的使用者很難自行建立或輪替，而且若把既有 token 放進設定頁長期明文顯示，也會增加外洩風險。
+
+這次新增管理員專用的一鍵產生功能，讓系統管理者可以直接在設定頁產生新的 MCP auth token，並立即保存到系統層級設定中。新 token 只會在產生後顯示一次，方便立即複製到 MCP client 的 `MAKESLIDE_MCP_TOKEN`，之後設定頁只顯示是否已設定，不會把既有 token 明文取回或長期展示。
+
+### 使用方式
+
+1. 以 admin 帳號登入 MakeSlide。
+2. 進入「設定」→「管理員」。
+3. 在「MCP auth token」區塊按下「產生 MCP auth token」。
+4. 產生後立即複製畫面上的一次性 token，設定到 MCP client 的 `MAKESLIDE_MCP_TOKEN`。
+5. 後端會把 token 寫入系統設定檔，既有 MCP bearer token 驗證行為維持不變；新的 token 會立刻用於後續 API 驗證。
+
+### 技術重點
+
+- 後端新增 `POST /api/system/mcp-auth-token` admin-only API，使用 Node `crypto.randomBytes(32).toString('base64url')` 產生 256-bit 隨機 token。
+- MCP token 納入系統層級設定與 runtime cache，保存到 `accounts/default/settings.env` 的 `MCP_AUTH_TOKEN`，並讓 `server.ts` 的 bearer token 驗證讀取 runtime 設定，避免產生後必須重啟服務才生效。
+- `GET /api/system/ai-settings` 對 admin 只回傳 `has_mcp_auth_token`，不回傳既有 token 明文。
+- 前端設定頁新增一次性顯示與複製按鈕，並補齊中英文 locale。
+- 分支：`feature/settings-generate-mcp-token`，完成後 merge 回 `master`。
+- 驗證：`npm run typecheck --workspace backend`、`./scripts/with-node-env.sh npx tsx --test backend/test/mcp-token-auth.test.ts`、`npm run typecheck --workspace frontend`、`./scripts/with-node-env.sh npx tsx --test frontend/src/i18n.test.ts` 皆通過。
+
 ## 語音轉檔步驟補上逾時保護，這是主管線每一頁都會經過的關鍵路徑
 
 ### 功能目的

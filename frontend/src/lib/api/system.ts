@@ -70,6 +70,7 @@ export interface SystemAiSettings {
   google_client_secret?: string;
   google_redirect_uri?: string;
   admin_account_ids?: string[];
+  has_mcp_auth_token?: boolean;
   github_repo_url?: string;
   github_token?: string;
   auto_generate_animation?: boolean;
@@ -143,6 +144,18 @@ export async function transferAdminAccount(accountId: string): Promise<{ ok: boo
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as { ok: boolean; admin_account_ids: string[] };
+}
+
+export interface GenerateMcpAuthTokenResponse {
+  ok: boolean;
+  token: string;
+  has_mcp_auth_token: boolean;
+}
+
+export async function generateMcpAuthToken(): Promise<GenerateMcpAuthTokenResponse> {
+  const resp = await fetch('api/system/mcp-auth-token', { method: 'POST' });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as GenerateMcpAuthTokenResponse;
 }
 
 export async function setOpenAIApiKey(apiKey: string): Promise<{ ok: boolean; has_key: boolean }> {
