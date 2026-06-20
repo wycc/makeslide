@@ -24,6 +24,7 @@ import {
   getShapeKind,
   insertEffectAfterFirstStartingEffect,
   insertEffectAfterPlaybackEffect,
+  pausePlaybackTriggerSeconds,
   resolveAnimationSpec,
   resolveStartTriggerSeconds,
 } from "./animationSpec";
@@ -76,6 +77,39 @@ test("effectIdsToReleaseOnSeekBack releases pause cues at or after the new seek 
   assert.deepEqual(effectIdsToReleaseOnSeekBack(spec, 0), ["early", "late"]);
   assert.deepEqual(effectIdsToReleaseOnSeekBack(null, 0), []);
   assert.deepEqual(effectIdsToReleaseOnSeekBack({ ...spec, enabled: false }, 0), []);
+});
+
+test("pausePlaybackTriggerSeconds waits for the whole containing transcript sentence to finish", () => {
+  const effect = { id: "pause-1", target: "slide" as const, type: "pause-playback" as const, start: 3, duration: 0.4, ease: "power1.out" as const };
+  // The effect starts mid-sentence (sentence spans 2 - 6.5): it must wait for the
+  // sentence to finish (6.5), not just its own short 0.4s entrance tween (3.4).
+  const sentenceTimeline = [{ text: "s0", start: 0, end: 2 }, { text: "s1", start: 2, end: 6.5 }];
+  assert.equal(pausePlaybackTriggerSeconds(effect, sentenceTimeline), 6.5);
+});
+
+test("pausePlaybackTriggerSeconds falls back to start + duration when no sentence contains the effect", () => {
+  const effect = { id: "pause-1", target: "slide" as const, type: "pause-playback" as const, start: 3, duration: 0.4, ease: "power1.out" as const };
+  assert.equal(pausePlaybackTriggerSeconds(effect, []), 3.4);
+  // The effect sits in the silent gap between two sentences (2 - 3.5), so neither sentence's
+  // [start, end) range contains it -> fallback to start + duration.
+  const sentenceTimeline = [{ text: "s0", start: 0, end: 2 }, { text: "s1", start: 3.5, end: 5 }];
+  assert.equal(pausePlaybackTriggerSeconds(effect, sentenceTimeline), 3.4);
+});
+
+test("pausePlaybackTriggerSeconds never returns earlier than the entrance tween even for a very short sentence", () => {
+  const effect = { id: "pause-1", target: "slide" as const, type: "pause-playback" as const, start: 3, duration: 1.5, ease: "power1.out" as const };
+  // Sentence ends at 3.2, well before the 1.5s entrance tween finishes (4.5) -> use the later one.
+  const sentenceTimeline = [{ text: "s0", start: 2.9, end: 3.2 }];
+  assert.equal(pausePlaybackTriggerSeconds(effect, sentenceTimeline), 4.5);
+});
+
+test("getDuePausePlaybackEffect uses the sentence-aware trigger point when a sentence timeline is given", () => {
+  const effect = { id: "pause-1", target: "slide" as const, type: "pause-playback" as const, start: 3, duration: 0.4, ease: "power1.out" as const };
+  const spec = { version: 1 as const, enabled: true, effects: [effect] };
+  const sentenceTimeline = [{ text: "s0", start: 2, end: 6.5 }];
+  // Without a sentence timeline it would already be due by 3.5; with one, it must wait for 6.5.
+  assert.equal(getDuePausePlaybackEffect(spec, 3.3, 3.5, new Set(), sentenceTimeline), null);
+  assert.equal(getDuePausePlaybackEffect(spec, 6.4, 6.6, new Set(), sentenceTimeline)?.id, "pause-1");
 });
 
 test("insertEffectAfterFirstStartingEffect inserts after the first starting effect", () => {

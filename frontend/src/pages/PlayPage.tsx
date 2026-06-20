@@ -1700,7 +1700,7 @@ export default function PlayPage() {
     if (currentTime < previousPlaybackTimeRef.current) {
       // 使用者倒退（拖曳進度條、跳到指定時間）：把落在新時間點之後的暫停提示
       // 重新標記為未消費，避免重播到該處時被誤判為「已經按過播放鍵」而跳過暫停。
-      for (const id of effectIdsToReleaseOnSeekBack(currentAnimationSpec, currentTime)) {
+      for (const id of effectIdsToReleaseOnSeekBack(currentAnimationSpec, currentTime, sentenceTimeline)) {
         consumedPausePlaybackEffectIdsRef.current.delete(id);
       }
     }
@@ -1713,12 +1713,13 @@ export default function PlayPage() {
       previousPlaybackTimeRef.current,
       currentTime,
       consumedPausePlaybackEffectIdsRef.current,
+      sentenceTimeline,
     );
     previousPlaybackTimeRef.current = currentTime;
     if (!dueEffect) return;
     consumedPausePlaybackEffectIdsRef.current.add(dueEffect.id);
     audioRef.current?.pause();
-  }, [currentAnimationSpec, currentPage?.page_number, currentTime, isPlaying]);
+  }, [currentAnimationSpec, currentPage?.page_number, currentTime, isPlaying, sentenceTimeline]);
   // 動畫總長：若超過語音長度，handleEnded 會延後切頁直到動畫播完。
   const animationDurationSeconds = useMemo(
     () => animationTimelineDurationSeconds(currentAnimationSpec),

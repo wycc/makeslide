@@ -309,18 +309,33 @@ export function animationTimelineDurationSeconds(spec: SlideAnimationSpec | null
   }, 0);
 }
 
+/**
+ * 暫停提示實際應該暫停播放的時間點：等提示框淡入動畫（`effect.duration`）播完，
+ * 而且——如果這個效果落在某一句逐字稿的時間範圍內——還要等那一整句講完，而不是
+ * 講到一半就把播放凍結住，讓使用者聽完那句話的完整內容才看到暫停提示。
+ * 找不到對應句子時（例如沒有逐字稿時間軸、或效果落在句子之間的空隙），回退成
+ * 只等淡入動畫播完。
+ */
+export function pausePlaybackTriggerSeconds(
+  effect: SlideAnimationEffect,
+  sentenceTimeline: readonly { start: number; end: number }[] = [],
+): number {
+  const minimumAfterFadeIn = effect.start + effect.duration;
+  const containingSentence = sentenceTimeline.find((s) => effect.start >= s.start && effect.start < s.end);
+  return containingSentence ? Math.max(minimumAfterFadeIn, containingSentence.end) : minimumAfterFadeIn;
+}
+
 export function getDuePausePlaybackEffect(
   spec: SlideAnimationSpec | null | undefined,
   previousTime: number,
   currentTime: number,
   consumedEffectIds: ReadonlySet<string>,
+  sentenceTimeline: readonly { start: number; end: number }[] = [],
 ): SlideAnimationEffect | null {
   if (!spec?.enabled || currentTime < previousTime) return null;
   for (const effect of spec.effects) {
     if (effect.type !== 'pause-playback' || consumedEffectIds.has(effect.id)) continue;
-    // 等提示框的淡入動畫（effect.duration）播完才暫停，而不是一進入 effect.start
-    // 就立刻凍結畫面，讓使用者先看到完整顯示的提示框，而不是淡入中途的畫面。
-    const pauseAt = effect.start + effect.duration;
+    const pauseAt = pausePlaybackTriggerSeconds(effect, sentenceTimeline);
     if (pauseAt > previousTime && pauseAt <= currentTime) return effect;
   }
   return null;
@@ -334,10 +349,11 @@ export function getDuePausePlaybackEffect(
 export function effectIdsToReleaseOnSeekBack(
   spec: SlideAnimationSpec | null | undefined,
   newCurrentTime: number,
+  sentenceTimeline: readonly { start: number; end: number }[] = [],
 ): string[] {
   if (!spec?.enabled) return [];
   return spec.effects
-    .filter((effect) => effect.type === 'pause-playback' && effect.start + effect.duration >= newCurrentTime)
+    .filter((effect) => effect.type === 'pause-playback' && pausePlaybackTriggerSeconds(effect, sentenceTimeline) >= newCurrentTime)
     .map((effect) => effect.id);
 }
 
