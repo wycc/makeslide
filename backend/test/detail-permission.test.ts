@@ -177,3 +177,76 @@ test('GET /pages/:n/generation-prompts returns 404 for a non-existent PDF', asyn
   assert.equal((resp.json() as { error: { code: string } }).error.code, 'PDF_NOT_FOUND');
   await app.close();
 });
+
+// --- GET /pages/:n/image, /thumbnail, /text, /script, /audio: read-permission gate ---
+// The seeded page's image/audio files are never written to disk, so a request that passes
+// the permission check deterministically falls through to the existing
+// PAGE_IMAGE_NOT_FOUND/PAGE_AUDIO_NOT_FOUND branch (a different error than the permission
+// check's 403/404), proving the gate itself works without needing real media fixtures.
+const PAGE_CONTENT_ROUTES = [
+  { name: 'image', path: (id: string) => `/api/pdfs/${id}/pages/1/image` },
+  { name: 'thumbnail', path: (id: string) => `/api/pdfs/${id}/pages/1/thumbnail` },
+  { name: 'text', path: (id: string) => `/api/pdfs/${id}/pages/1/text` },
+  { name: 'script', path: (id: string) => `/api/pdfs/${id}/pages/1/script` },
+  { name: 'audio', path: (id: string) => `/api/pdfs/${id}/pages/1/audio` },
+] as const;
+
+let pageContentCounter = 0;
+
+for (const route of PAGE_CONTENT_ROUTES) {
+  test(`GET ${route.name} rejects a non-owner request on a private presentation`, async () => {
+    const pdfId = `detperm-content-priv-${pageContentCounter++}`;
+    seedDetailPdf(pdfId, 'private');
+    const app = await buildApp();
+    const resp = await app.inject({ method: 'GET', url: route.path(pdfId), headers: OTHER_HEADERS });
+    assert.equal(resp.statusCode, 403);
+    assert.equal((resp.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+    await app.close();
+  });
+
+  test(`GET ${route.name} rejects an unauthenticated request on a private presentation`, async () => {
+    const pdfId = `detperm-content-anon-${pageContentCounter++}`;
+    seedDetailPdf(pdfId, 'private');
+    const app = await buildApp();
+    const resp = await app.inject({ method: 'GET', url: route.path(pdfId) });
+    assert.equal(resp.statusCode, 403);
+    await app.close();
+  });
+
+  test(`GET ${route.name} returns 404 for a non-existent PDF`, async () => {
+    const app = await buildApp();
+    const resp = await app.inject({ method: 'GET', url: route.path('detperm-content-missing'), headers: OWNER_HEADERS });
+    assert.equal(resp.statusCode, 404);
+    assert.equal((resp.json() as { error: { code: string } }).error.code, 'PDF_NOT_FOUND');
+    await app.close();
+  });
+
+  test(`GET ${route.name} lets the owner past the permission check`, async () => {
+    const pdfId = `detperm-content-own-${pageContentCounter++}`;
+    seedDetailPdf(pdfId, 'private');
+    const app = await buildApp();
+    const resp = await app.inject({ method: 'GET', url: route.path(pdfId), headers: OWNER_HEADERS });
+    assert.notEqual(resp.statusCode, 403);
+    await app.close();
+  });
+
+  test(`GET ${route.name} lets anyone on a public presentation past the permission check`, async () => {
+    const pdfId = `detperm-content-pub-${pageContentCounter++}`;
+    seedDetailPdf(pdfId, 'public');
+    const app = await buildApp();
+    const resp = await app.inject({ method: 'GET', url: route.path(pdfId), headers: OTHER_HEADERS });
+    assert.notEqual(resp.statusCode, 403);
+    await app.close();
+  });
+
+  test(`GET ${route.name} lets a valid read-only share token without a session past the permission check`, async () => {
+    const pdfId = `detperm-content-shr-${pageContentCounter++}`;
+    seedDetailPdf(pdfId, 'private');
+    const token = `detperm-content-token-${pageContentCounter++}`;
+    seedShareToken(pdfId, token, 'read_only');
+    const app = await buildApp();
+    const resp = await app.inject({ method: 'GET', url: `${route.path(pdfId)}?share=${token}` });
+    assert.notEqual(resp.statusCode, 403);
+    await app.close();
+  });
+}
