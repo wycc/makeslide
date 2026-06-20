@@ -63,6 +63,7 @@ const QuizQuestionSchema = z.object({
   options: z.array(QuizOptionSchema).min(2).max(8),
   answer_indices: z.array(z.number().int().min(0).max(7)).min(1).max(8),
   explanation: z.string().trim().max(1200).optional().default(''),
+  score: z.number().min(0).max(1000).nullable().optional(),
 });
 const GeneratedQuizQuestionSchema = QuizQuestionSchema.extend({
   id: z.string().trim().min(1).max(80).optional(),
@@ -200,6 +201,60 @@ async function readPageContext(pdfId: string, pageCount: number | null): Promise
   return chunks.join('\n\n---\n\n').slice(0, 60000);
 }
 
+type ScorableQuestion = z.infer<typeof QuizQuestionSchema>;
+
+/** Mirrors frontend/src/pages/QuizBuilderPage.tsx normalizeQuestionScores(): unscored questions split the remaining points of a 100-point pool evenly. */
+function normalizeQuestionScores(questions: ScorableQuestion[]): number[] {
+  if (questions.length === 0) return [];
+  const TOTAL = 100;
+  const explicit = questions.map((q) => (typeof q.score === 'number' && Number.isFinite(q.score) && q.score >= 0 ? q.score : null));
+  const assigned = explicit.reduce<number>((acc, v) => acc + (v ?? 0), 0);
+  const emptyIndices = explicit.map((v, i) => (v == null ? i : -1)).filter((i) => i >= 0);
+  const remaining = Math.max(0, TOTAL - assigned);
+  const even = emptyIndices.length > 0 ? remaining / emptyIndices.length : 0;
+  return explicit.map((v) => (v == null ? (emptyIndices.length > 0 ? even : 0) : v));
+}
+
+function isCorrectAnswer(answerIndices: number[], selected: number[]): boolean {
+  const a = Array.from(new Set(answerIndices)).sort((x, y) => x - y);
+  const b = Array.from(new Set(selected)).sort((x, y) => x - y);
+  if (a.length !== b.length) return false;
+  return a.every((v, i) => v === b[i]);
+}
+
+/** Mirrors frontend/src/pages/QuizBuilderPage.tsx calcQuestionScore(): single = all-or-nothing, multiple = per-option partial credit. */
+function calcQuestionScore(question: ScorableQuestion, selected: number[], questionScore: number): number {
+  if (question.type === 'single') {
+    return isCorrectAnswer(question.answer_indices, selected) ? questionScore : 0;
+  }
+  const optionCount = question.options.length;
+  if (optionCount <= 0) return 0;
+  const perOption = questionScore / optionCount;
+  const selectedSet = new Set(selected);
+  let earned = 0;
+  for (let idx = 0; idx < optionCount; idx += 1) {
+    const shouldSelect = question.answer_indices.includes(idx);
+    const didSelect = selectedSet.has(idx);
+    if (shouldSelect === didSelect) earned += perOption;
+  }
+  return earned;
+}
+
+/** Authoritative server-side scoring for a quiz attempt; never trust a client-submitted score. */
+function computeAttemptScore(questionsJson: string, answers: Record<string, number[]>): number {
+  let parsedQuestions: unknown = [];
+  try {
+    parsedQuestions = JSON.parse(questionsJson);
+  } catch {
+    parsedQuestions = [];
+  }
+  const result = QuizQuestionsSchema.safeParse(parsedQuestions);
+  const questions = result.success ? result.data : [];
+  const scoreTable = normalizeQuestionScores(questions);
+  const total = questions.reduce((acc, q, idx) => acc + calcQuestionScore(q, answers[q.id] ?? [], scoreTable[idx] ?? 0), 0);
+  return Math.round(total * 100) / 100;
+}
+
 function normalizeQuestions(input: unknown) {
   const parsed = GeneratedQuizQuestionsSchema.parse(input);
   return parsed.map((q, idx) => {
@@ -305,11 +360,14 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid quiz parameters'));
     const body = SubmitQuizAttemptBodySchema.safeParse(request.body ?? {});
     if (!body.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
-    const quiz = db.prepare(`SELECT id FROM quiz_sets WHERE id = ? AND pdf_id = ?`).get(parsed.data.quizId, parsed.data.id) as { id: number } | undefined;
+    const quiz = db.prepare(`SELECT id, questions_json FROM quiz_sets WHERE id = ? AND pdf_id = ?`).get(parsed.data.quizId, parsed.data.id) as
+      | { id: number; questions_json: string }
+      | undefined;
     if (!quiz) return reply.code(404).send(errorResponse('QUIZ_NOT_FOUND', `Quiz ${parsed.data.quizId} not found`));
     const now = nowIso();
     const code = body.data.code?.trim() || null;
-    const score = typeof body.data.score === 'number' ? body.data.score : null;
+    // Score is always recomputed server-side from the quiz's answer key; a client-submitted score is never trusted.
+    const score = computeAttemptScore(quiz.questions_json, body.data.answers);
     const answersJson = JSON.stringify(body.data.answers);
     db.prepare(
       `INSERT INTO quiz_attempts (pdf_id, quiz_id, session_id, client_id, code, answers_json, score, submitted_at, created_at, updated_at)

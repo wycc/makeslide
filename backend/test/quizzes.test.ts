@@ -402,3 +402,115 @@ test('GET /quizzes/:quizId/attempts returns 404 for an unknown pdf id', async ()
   assert.equal(resp.statusCode, 404);
   await app.close();
 });
+
+test('POST /quizzes/:quizId/attempts ignores a client-claimed score and recomputes it from the answer key', async () => {
+  seedQuizPdf('quiz-score-trust-01', 'public');
+  const app = await buildApp();
+  try {
+    const createResp = await app.inject({
+      method: 'POST',
+      url: '/api/pdfs/quiz-score-trust-01/quizzes',
+      headers: OWNER_HEADERS,
+      payload: validQuizPayload(), // single question, correct answer is index 1, no custom score => worth 100
+    });
+    const quizId = (createResp.json() as { id: number }).id;
+
+    const correctButClaimsZero = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/quiz-score-trust-01/quizzes/${quizId}/attempts`,
+      headers: OTHER_HEADERS,
+      payload: { client_id: 'client-correct', session_id: 'session-correct', answers: { q1: [1] }, score: 0 },
+    });
+    assert.equal(correctButClaimsZero.statusCode, 201);
+    assert.equal((correctButClaimsZero.json() as { score: number }).score, 100);
+
+    const wrongButClaimsFull = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/quiz-score-trust-01/quizzes/${quizId}/attempts`,
+      headers: OTHER_HEADERS,
+      payload: { client_id: 'client-wrong', session_id: 'session-wrong', answers: { q1: [0] }, score: 1000 },
+    });
+    assert.equal(wrongButClaimsFull.statusCode, 201);
+    assert.equal((wrongButClaimsFull.json() as { score: number }).score, 0);
+
+    const dbRow = db.prepare(`SELECT score FROM quiz_attempts WHERE client_id = ?`).get('client-wrong') as { score: number };
+    assert.equal(dbRow.score, 0);
+  } finally {
+    await app.close();
+  }
+});
+
+test('POST /quizzes/:quizId/attempts computes per-option partial credit for a multiple-choice question server-side', async () => {
+  seedQuizPdf('quiz-score-partial-01', 'public');
+  const app = await buildApp();
+  try {
+    const createResp = await app.inject({
+      method: 'POST',
+      url: '/api/pdfs/quiz-score-partial-01/quizzes',
+      headers: OWNER_HEADERS,
+      payload: {
+        title: '測驗',
+        prompt: '',
+        questions: [
+          {
+            id: 'm1',
+            type: 'multiple',
+            question: '選出偶數',
+            options: [{ text: '1' }, { text: '2' }, { text: '3' }, { text: '4' }],
+            answer_indices: [1, 3],
+            explanation: '',
+            score: 100,
+          },
+        ],
+      },
+    });
+    const quizId = (createResp.json() as { id: number }).id;
+
+    // Selects only option 1 (correct) but misses option 3 and doesn't over-select: idx0 match, idx1 match, idx2 match, idx3 mismatch => 3/4 * 100 = 75
+    const partial = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/quiz-score-partial-01/quizzes/${quizId}/attempts`,
+      headers: OTHER_HEADERS,
+      payload: { client_id: 'client-partial', session_id: 'session-partial', answers: { m1: [1] }, score: 100 },
+    });
+    assert.equal(partial.statusCode, 201);
+    assert.equal((partial.json() as { score: number }).score, 75);
+  } finally {
+    await app.close();
+  }
+});
+
+test('PUT /quizzes/:quizId persists a custom per-question score that GET /quizzes returns unchanged', async () => {
+  seedQuizPdf('quiz-score-persist-01', 'public');
+  const app = await buildApp();
+  try {
+    const createResp = await app.inject({
+      method: 'POST',
+      url: '/api/pdfs/quiz-score-persist-01/quizzes',
+      headers: OWNER_HEADERS,
+      payload: {
+        title: '測驗',
+        prompt: '',
+        questions: [
+          { id: 'q1', type: 'single', question: 'Q1', options: [{ text: 'A' }, { text: 'B' }], answer_indices: [0], explanation: '', score: 30 },
+          { id: 'q2', type: 'single', question: 'Q2', options: [{ text: 'A' }, { text: 'B' }], answer_indices: [0], explanation: '' },
+        ],
+      },
+    });
+    assert.equal(createResp.statusCode, 201);
+    const created = createResp.json() as { id: number; questions: Array<{ id: string; score: number | null }> };
+    assert.equal(created.questions.find((q) => q.id === 'q1')?.score, 30);
+
+    const getResp = await app.inject({
+      method: 'GET',
+      url: '/api/pdfs/quiz-score-persist-01/quizzes',
+      headers: OWNER_HEADERS,
+    });
+    const body = getResp.json() as { quizzes: Array<{ id: number; questions: Array<{ id: string; score: number | null }> }> };
+    const quiz = body.quizzes.find((q) => q.id === created.id);
+    assert.equal(quiz?.questions.find((q) => q.id === 'q1')?.score, 30);
+    assert.equal(quiz?.questions.find((q) => q.id === 'q2')?.score ?? null, null);
+  } finally {
+    await app.close();
+  }
+});
