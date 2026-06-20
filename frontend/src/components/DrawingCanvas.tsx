@@ -217,9 +217,16 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
 
     const scheduleSave = useCallback(() => {
       if (saveTimerRef.current !== null) clearTimeout(saveTimerRef.current);
+      // Snapshot the array reference now, not at fire time: a page switch reassigns
+      // strokesRef.current to a brand-new array (see the page-load effect above), so this
+      // snapshot keeps pointing at the current page's strokes even if the user has already
+      // navigated away by the time this timer fires — otherwise the debounced save would
+      // silently write the *new* page's (or not-yet-loaded, empty) strokes under the old
+      // page's id, losing whatever the user just drew.
+      const pendingStrokes = strokesRef.current;
       saveTimerRef.current = setTimeout(() => {
         saveTimerRef.current = null;
-        void saveDrawingToServer(pdfId, pageNumber, { strokes: strokesRef.current });
+        void saveDrawingToServer(pdfId, pageNumber, { strokes: pendingStrokes });
       }, SAVE_DEBOUNCE_MS);
     }, [pdfId, pageNumber]);
 
