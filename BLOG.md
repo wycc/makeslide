@@ -3967,3 +3967,25 @@ Gemini TTS 語音合成的回應結構是好幾層巢狀的（`candidates[0].con
 - `backend/src/routes/pdfs/sync.ts` 新增 `clearSyncSession(pdfId)`，是對內部 `sessions` Map 的 `.delete(pdfId)` 包裝，與前一輪新增的 `clearRegenerateJob()`/`clearAddPagesJob()` 是同一種寫法。
 - `backend/src/routes/pdfs/delete.ts`/`backend/src/routes/pdfs/admin.ts` 兩處既有的 PDF 刪除流程都補上這個呼叫，三個清理函式並列呼叫。
 - 新增測試到既有的 `backend/test/delete-pdf-job-cleanup.test.ts`，透過真實的「加入同步」API 建立一個 session，驗證刪除簡報後這個記憶體狀態確實被清除。
+
+## 修正「暫停播放提示」的暫停時機與倒退重播問題
+
+### 功能目的
+
+延續上一篇「暫停播放提示」的修復，這次處理使用者實際使用後回報的兩個進一步問題：
+
+1. 提示框應該等自己的進場動畫（淡入）播完才真正暫停，而不是一進入觸發時間點就立刻凍結畫面——原本的行為會讓使用者看到提示框卡在淡入到一半、還沒完全顯示的狀態。
+2. 在同一頁裡，如果使用者用進度條或時間跳轉倒退到較早的時間點再往前播放，已經觸發過的暫停提示會被永久跳過、不會再次暫停，即使使用者明確是想重新看一次這段內容。
+
+### 使用方式
+
+此變更對一般使用者完全透明：
+
+1. 播放到「暫停播放提示」效果時，會先看到提示框完整淡入顯示完畢，才真正暫停播放（而不是卡在淡入過程中）。
+2. 在同一頁倒退到較早時間點（拖曳進度條或點擊跳轉）後再往前播放，原本已經觸發過的暫停提示會重新生效，不會被誤判為「已經處理過」而跳過。
+
+### 技術細節
+
+- `frontend/src/lib/animationSpec.ts` 的 `getDuePausePlaybackEffect()` 把觸發條件從「播放時間跨過 `effect.start`」改成「跨過 `effect.start + effect.duration`」，正好對齊提示框淡入動畫實際播完的時間點。
+- 新增 `effectIdsToReleaseOnSeekBack(spec, newCurrentTime)`：回傳所有結束時間點（`start + duration`）仍在新時間點之後的暫停提示效果 id。`PlayPage.tsx` 偵測到播放時間倒退時（新的 `currentTime` 小於前一次記錄的時間），呼叫這個函式並把回傳的 id 從追蹤「已觸發過」的集合中移除，讓使用者倒退重播時這些效果可以再次正常觸發。
+- 更新既有單元測試反映新的觸發時機語意，並為 `effectIdsToReleaseOnSeekBack` 新增測試，覆蓋部分釋放、全部釋放與停用/空輸入等邊界情況。

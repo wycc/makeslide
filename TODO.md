@@ -787,3 +787,8 @@
 
 - 時間: 2026-06-21
 - 說明: 使用者針對上方達到 20 項上限一事做出決定：選擇「先停在這裡」，本輪 LOOP 循環到此暫停，不重設計數、不調整門檻，也不繼續新增或執行新項目，等待使用者之後再指示。
+
+[x] 動畫效果-暫停播放提示：補充修正兩個額外回報的問題（已完成，延續上方同名項目）
+  - 時間: 2026-06-21
+  - 分支: `fix/pause-playback-timing-and-seek-back`
+  - 工作記錄: 使用者針對先前已標記完成的「暫停播放提示」項目，回報兩個延伸問題：(1) 應該讓提示框的進場動畫播完才暫停，而不是一進入 `effect.start` 就立刻凍結畫面；(2) 同一頁如果使用者倒退（拖曳進度條跳回較早的時間點）再往前播放，已經觸發過的暫停提示會被永久跳過，不會再次暫停。逐一追查並修正：(1) `frontend/src/lib/animationSpec.ts` 的 `getDuePausePlaybackEffect()` 原本是播放時間跨過 `effect.start` 就視為觸發，改成跨過 `effect.start + effect.duration`（即提示框淡入動畫播完的時間點）才觸發，讓使用者先看到完整顯示的提示框再實際暫停。(2) 追查發現 `PlayPage.tsx` 用 `consumedPausePlaybackEffectIdsRef` 這個 Set 記錄「已觸發過」的效果 id，避免同一次播放重複觸發，但這個 Set 只在換頁（`currentPage?.page_number` 改變）時才會重置，使用者在同一頁透過進度條／跳轉時間倒退，並不會清除已消費的紀錄，導致重播到該處時被誤判為「已經按過播放鍵」而跳過暫停。新增 `effectIdsToReleaseOnSeekBack(spec, newCurrentTime)`，回傳所有 `start + duration >= newCurrentTime` 的暫停提示效果 id；`PlayPage.tsx` 偵測到 `currentTime` 比 `previousPlaybackTimeRef.current` 倒退時，呼叫這個函式並把回傳的 id 從 `consumedPausePlaybackEffectIdsRef` 移除，讓使用者重播到該時間點時仍會正常暫停。更新既有測試 `getDuePausePlaybackEffect returns an unconsumed pause cue crossed by playback` 的觸發時間點假設（改名為反映新語意），並新增 `effectIdsToReleaseOnSeekBack` 的 4 個測試案例（部分釋放、全部釋放、`null` spec、`enabled: false` 皆回傳空陣列）。已執行 frontend typecheck（通過）與完整前端測試 `node --test $(find src -name "*.test.ts" | sort)`（205 個測試全數通過）。
