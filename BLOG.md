@@ -3951,3 +3951,19 @@ Gemini TTS 語音合成的回應結構是好幾層巢狀的（`candidates[0].con
 - 追查確認「暫停」本身的機制原本就是對的：偵測到效果觸發時呼叫 `audioRef.current?.pause()`，會經由 `<audio>` 的 `onPause` 把 `isPlaying` 設為 `false`，再透過 `useGsapSlideTimeline.ts` 讓 GSAP 動畫時間軸跟著一起暫停，兩者沒有脫節。
 - 真正的缺陷在淡出排程：`buildGsapTimeline.ts` 只有在效果有設定 `exitDuration` 時才會排入淡出動畫，但 `AnimationEditorTab.tsx` 的快速範本陣列 `EFFECT_PRESETS` 裡，「暫停播放提示」是全部 9 個 overlay 類範本中唯一沒有設定 `exitDuration` 的一個。補上與其他範本一致的預設淡出秒數後，使用者按下播放鍵讓時間軸恢復前進，原本排定好的淡出動畫就會自然執行，不需要新增任何額外的清除邏輯。
 - 把 `EFFECT_PRESETS` 改為 export，新增 `frontend/src/pages/play/AnimationEditorTab.test.ts`：一個通用測試巡覽所有 overlay 類範本確認都設有淡出秒數（之後若再新增範本忘記設定，測試會自動攔截），另一個專門針對「暫停播放提示」範本的斷言。
+
+## PDF 刪除時補上記憶體同步 session 清理
+
+### 功能目的
+
+延續前一輪「PDF 刪除時補上記憶體任務狀態清理」的同一個方向，這次找到第三個同樣模式的缺口：課堂直接互動同步功能（教師端可以把自己設為「主控」，讓所有學生端即時跟隨播放進度、畫筆筆劃、測驗作答進度等）也是用一個以簡報 id 為 key 的記憶體內 `Map` 追蹤每份簡報目前的同步狀態。刪除簡報時，這個記憶體狀態同樣完全沒有被清理，而且這次的物件比前兩次修的「重生」「新增頁面」任務狀態更複雜（裡面還內嵌了好幾個巢狀的 `Map`，記錄學生代號、跟隨者權限、線上學生清單、測驗作答進度等），同一類洩漏但累積起來可能更明顯。
+
+### 使用方式
+
+此變更對一般使用者完全透明，不影響任何功能行為，純粹是伺服器內部資源管理的修正。
+
+### 技術細節
+
+- `backend/src/routes/pdfs/sync.ts` 新增 `clearSyncSession(pdfId)`，是對內部 `sessions` Map 的 `.delete(pdfId)` 包裝，與前一輪新增的 `clearRegenerateJob()`/`clearAddPagesJob()` 是同一種寫法。
+- `backend/src/routes/pdfs/delete.ts`/`backend/src/routes/pdfs/admin.ts` 兩處既有的 PDF 刪除流程都補上這個呼叫，三個清理函式並列呼叫。
+- 新增測試到既有的 `backend/test/delete-pdf-job-cleanup.test.ts`，透過真實的「加入同步」API 建立一個 session，驗證刪除簡報後這個記憶體狀態確實被清除。
