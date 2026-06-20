@@ -279,6 +279,7 @@ export async function startServer(): Promise<number> {
   const { checkPoppler } = await import("./worker/poppler");
   const { getProcessingQueue } = await import("./worker/queue");
   const { rescanPendingOnStartup } = await import("./worker/pipeline");
+  const { recoverOrphanedAddPagesPages } = await import("./worker/addPagesFromPrompt");
 
   ensureStorageRoot();
   await migrateLegacyPngToJpgOnStartup();
@@ -316,6 +317,7 @@ export async function startServer(): Promise<number> {
   // Initialise queue + crash-recovery rescan
   getProcessingQueue();
   rescanPendingOnStartup();
+  recoverOrphanedAddPagesPages();
   const rescanTimer = setInterval(() => {
     try {
       rescanPendingOnStartup();
