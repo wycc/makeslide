@@ -4,6 +4,7 @@ import { decodeSession, parseCookies } from '../auth';
 import { removePdfDir } from '../../services/storage';
 import { clearRegenerateJob } from '../../worker/regenerate';
 import { clearAddPagesJob } from '../../worker/addPagesFromPrompt';
+import { clearSyncSession } from './sync';
 import type { PdfRow } from '../../types';
 import { errorResponse, IdParamSchema } from './shared';
 
@@ -40,6 +41,7 @@ export async function registerDeleteRoutes(app: FastifyInstance): Promise<void> 
     await removePdfDir(id);
     clearRegenerateJob(id);
     clearAddPagesJob(id);
+    clearSyncSession(id);
 
     return reply.code(204).send();
   });

@@ -9,6 +9,7 @@ import { config } from '../src/config';
 import { setSystemAuthSettings } from '../src/services/aiSettings';
 import { getRegenerateJob } from '../src/worker/regenerate';
 import { getAddPagesJob } from '../src/worker/addPagesFromPrompt';
+import { hasInMemorySyncSession } from '../src/routes/pdfs/sync';
 
 function testSessionCookie(sub = 'account-1'): string {
   const payload = Buffer.from(JSON.stringify({ provider: 'google', sub, email: `${sub}@example.com` }), 'utf8').toString('base64url');
@@ -109,6 +110,29 @@ test('DELETE /api/pdfs/:id clears the in-memory add-pages-from-prompt job state 
     assert.equal(delResp.statusCode, 204);
 
     assert.equal(getAddPagesJob(pdfId), undefined, 'job state must not leak after the PDF is deleted');
+  } finally {
+    await app.close();
+  }
+});
+
+test('DELETE /api/pdfs/:id clears the in-memory sync session state for that PDF', async () => {
+  const pdfId = 'delete-cleanup-sync-01';
+  seedReadyPdf(pdfId);
+  const app = await buildApp();
+  try {
+    const joinResp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${pdfId}/sync/join`,
+      headers: OWNER_HEADERS,
+      payload: { client_id: 'c1' },
+    });
+    assert.equal(joinResp.statusCode, 200);
+    assert.ok(hasInMemorySyncSession(pdfId), 'expected a sync session to be tracked right after joining it');
+
+    const delResp = await app.inject({ method: 'DELETE', url: `/api/pdfs/${pdfId}`, headers: OWNER_HEADERS });
+    assert.equal(delResp.statusCode, 204);
+
+    assert.equal(hasInMemorySyncSession(pdfId), false, 'sync session state must not leak after the PDF is deleted');
   } finally {
     await app.close();
   }
