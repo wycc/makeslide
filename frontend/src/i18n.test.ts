@@ -11,6 +11,29 @@ test('English and Traditional Chinese locale dictionaries expose the same keys',
   assert.deepEqual(enKeys, zhKeys);
 });
 
+test('admin account deletion locale keys are complete', () => {
+  const requiredKeys = [
+    'settings.accountDeleteTitle',
+    'settings.accountDeleteHint',
+    'settings.accountDeleteTarget',
+    'settings.accountDeletePlaceholder',
+    'settings.accountDeleteConfirmLabel',
+    'settings.accountDeleteConfirmPlaceholder',
+    'settings.accountDeleteButton',
+    'settings.accountDeleting',
+    'settings.accountDeleted',
+    'settings.accountDeleteError',
+    'settings.accountDeleteConfirmMismatch',
+  ] as const;
+
+  for (const key of requiredKeys) {
+    assert.equal(typeof zhTW[key], 'string');
+    assert.equal(typeof en[key], 'string');
+    assert.notEqual(zhTW[key].trim(), '');
+    assert.notEqual(en[key].trim(), '');
+  }
+});
+
 test('play page header and sync locale keys are complete', () => {
   const requiredKeys = [
     'play.header.back',

@@ -152,6 +152,22 @@ export async function transferAdminAccount(accountId: string): Promise<{ ok: boo
   return (await resp.json()) as { ok: boolean; admin_account_ids: string[] };
 }
 
+export interface DeleteAccountResponse {
+  ok: boolean;
+  account_id: string;
+  deleted_pdf_count: number;
+  deleted_pdfs: string[];
+  account_deleted: boolean;
+}
+
+export async function deleteAccount(accountId: string): Promise<DeleteAccountResponse> {
+  const resp = await fetch(`api/system/accounts/${encodeURIComponent(accountId)}`, {
+    method: 'DELETE',
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as DeleteAccountResponse;
+}
+
 export interface GenerateMcpAuthTokenResponse {
   ok: boolean;
   token: string;

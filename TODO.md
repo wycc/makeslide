@@ -761,4 +761,7 @@
   - 分支: `feature/api-key-optional-prompt`
   - 工作記錄: 已移除前端啟動時缺少金鑰就強制導向設定頁的流程，改為在目前頁面顯示 API key 說明對話框，讓使用者可選擇前往 AI 設定或暫時略過。新增全域 `API_KEY_MISSING` 事件與 `ApiKeyRequiredDialog`，後端在缺少 OpenAI/Gemini/CGU Air/OpenRouter 金鑰時回傳標準 `API_KEY_MISSING` 錯誤，前端所有走共用 API 錯誤解析的 LLM 功能都會跳出「需先設定 API key」提示。對話框已補齊中英文 i18n，並清楚列出不設定 key 時無法使用的產生、改寫、問答、語音/轉錄/自動動畫等 LLM 功能。已執行 frontend typecheck 與 backend typecheck，皆通過。
 
-[ ] 增加刪除帳號的功能，將指定帳號和其中的簡報都刪除。
+[x] 增加刪除帳號的功能，將指定帳號和其中的簡報都刪除。（已完成）
+  - 時間: 2026-06-20
+  - 分支: `feature/admin-delete-account`
+  - 工作記錄: 已盤點現有模型：帳號以 Google `sub` / `owner_sub` 透過 `sanitizeAccountId()` 對應到 `accounts/<account>/settings.env` 等設定目錄；簡報主資料在 `pdfs.owner_sub`，磁碟資料位於 storage root 下的 `<pdfId>/`，多數關聯表透過 SQLite foreign key cascade 跟隨 `pdfs` 刪除。新增 admin-only `DELETE /api/system/accounts/:account_id`，沿用 `currentAccountId()` + `isAdminAccount()` 權限慣例；刪除指定帳號的所有 `pdfs` 紀錄、逐一呼叫既有 `removePdfDir()` 清掉簡報磁碟目錄，並移除 `accounts/<account>/` 設定目錄。安全限制：拒絕刪除 `default`、目前登入的 admin 自己，以及任何 admin 帳號。前端設定頁管理員區新增「刪除帳號與簡報」危險操作 UI，需輸入 account id 並再次輸入相同值確認，提示會刪除該帳號設定與所有簡報；補齊中英文 i18n。新增 `backend/test/admin-delete-account.test.ts` 覆蓋非 admin 被拒、admin 可刪除帳號及 owned PDFs/磁碟/設定、危險帳號被拒、無簡報/無設定目錄帳號的明確 idempotent 回應；`frontend/src/i18n.test.ts` 補 admin 刪除帳號 key 測試。已執行 backend typecheck、frontend typecheck、admin-delete-account 後端專屬測試（4 個通過）、frontend i18n 測試（21 個通過）。曾誤用 `npm test -- admin-delete-account.test.ts` 觸發完整 backend 測試套件，仍出現既有 18 個基準失敗，與本次變更無關；另直接使用 Node v26 執行 `tsx` 時遇到 `better-sqlite3` native module 版本不符，後續改用 `.nvmrc` 指定 Node 22.12.0 驗證通過。

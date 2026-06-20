@@ -10,6 +10,7 @@ import {
   createSkill,
   updateSkill,
   deleteSkill,
+  deleteAccount,
   toggleBuiltInSkill,
   logoutAuth,
   transferAdminAccount,
@@ -85,6 +86,9 @@ export default function SettingsPage() {
   const [adminAccountIds, setAdminAccountIds] = useState<string[]>([]);
   const [adminTransferAccountId, setAdminTransferAccountId] = useState('');
   const [adminTransferBusy, setAdminTransferBusy] = useState(false);
+  const [adminDeleteAccountId, setAdminDeleteAccountId] = useState('');
+  const [adminDeleteConfirm, setAdminDeleteConfirm] = useState('');
+  const [adminDeleteBusy, setAdminDeleteBusy] = useState(false);
   const [hasMcpAuthToken, setHasMcpAuthToken] = useState(false);
   const [generatedMcpAuthToken, setGeneratedMcpAuthToken] = useState('');
   const [mcpTokenBusy, setMcpTokenBusy] = useState(false);
@@ -336,6 +340,28 @@ export default function SettingsPage() {
       setAdminTransferBusy(false);
     }
   }, [adminTransferAccountId, t]);
+
+  const onDeleteAccount = useCallback(async () => {
+    const target = adminDeleteAccountId.trim();
+    if (!target) return;
+    if (adminDeleteConfirm.trim() !== target) {
+      setErr(t('settings.accountDeleteConfirmMismatch'));
+      return;
+    }
+    setErr(null);
+    setMsg(null);
+    setAdminDeleteBusy(true);
+    try {
+      const result = await deleteAccount(target);
+      setAdminDeleteAccountId('');
+      setAdminDeleteConfirm('');
+      setMsg(t('settings.accountDeleted').replace('{account}', result.account_id).replace('{count}', String(result.deleted_pdf_count)));
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : t('settings.accountDeleteError'));
+    } finally {
+      setAdminDeleteBusy(false);
+    }
+  }, [adminDeleteAccountId, adminDeleteConfirm, t]);
 
   const onGenerateMcpAuthToken = useCallback(async () => {
     setErr(null);
@@ -678,6 +704,23 @@ export default function SettingsPage() {
                     <div className="mb-2 text-sm font-medium text-slate-200">{t('settings.adminTransfer')}</div>
                     <div className="mb-2 text-xs text-slate-500">{t('settings.currentAdmins')}<span className="font-mono text-slate-300">{adminAccountIds.join(', ') || accountId}</span></div>
                     <div className="flex flex-col gap-2 sm:flex-row"><input value={adminTransferAccountId} onChange={(e) => setAdminTransferAccountId(e.target.value)} className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder={t('settings.adminTransferPlaceholder')} /><button type="button" onClick={() => void onTransferAdmin()} disabled={adminTransferBusy || !adminTransferAccountId.trim()} className="rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-50">{adminTransferBusy ? t('settings.saving') : t('settings.adminTransferButton')}</button></div>
+                  </div>
+                  <div className="sm:col-span-2 rounded-lg border border-rose-500/30 bg-rose-950/20 p-3">
+                    <div className="mb-1 text-sm font-medium text-rose-100">{t('settings.accountDeleteTitle')}</div>
+                    <p className="mb-3 text-xs text-rose-200/80">{t('settings.accountDeleteHint')}</p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <label className="block text-xs text-slate-300">
+                        {t('settings.accountDeleteTarget')}
+                        <input value={adminDeleteAccountId} onChange={(e) => setAdminDeleteAccountId(e.target.value)} className="mt-1 w-full rounded-md border border-rose-500/40 bg-slate-950 px-3 py-2 text-sm" placeholder={t('settings.accountDeletePlaceholder')} />
+                      </label>
+                      <label className="block text-xs text-slate-300">
+                        {t('settings.accountDeleteConfirmLabel')}
+                        <input value={adminDeleteConfirm} onChange={(e) => setAdminDeleteConfirm(e.target.value)} className="mt-1 w-full rounded-md border border-rose-500/40 bg-slate-950 px-3 py-2 text-sm" placeholder={adminDeleteAccountId.trim() || t('settings.accountDeleteConfirmPlaceholder')} />
+                      </label>
+                    </div>
+                    <button type="button" onClick={() => void onDeleteAccount()} disabled={adminDeleteBusy || !adminDeleteAccountId.trim() || adminDeleteConfirm.trim() !== adminDeleteAccountId.trim()} className="mt-3 rounded-md bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-500 disabled:opacity-50">
+                      {adminDeleteBusy ? t('settings.accountDeleting') : t('settings.accountDeleteButton')}
+                    </button>
                   </div>
                   <div className="sm:col-span-2 rounded-lg border border-slate-800 bg-slate-950/60 p-3">
                     <div className="mb-1 text-sm font-medium text-slate-200">{t('settings.mcpTokenTitle')}</div>
