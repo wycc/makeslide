@@ -11,6 +11,18 @@ const GOOGLE_USERINFO_URL = 'https://openidconnect.googleapis.com/v1/userinfo';
 export const SESSION_COOKIE = 'makeslide_session';
 const OAUTH_STATE_COOKIE = 'makeslide_oauth_state';
 const GOOGLE_OAUTH_CLIENT_ID_SUFFIX = '.apps.googleusercontent.com';
+/** Foreground login request — kept short so a hung connection to Google fails fast instead of leaving the user's callback request stuck. */
+const GOOGLE_OAUTH_FETCH_TIMEOUT_MS = 15_000;
+
+/** Wraps fetch() with a deadline so a hung connection to Google can't leave the OAuth callback request stuck forever; network/abort errors resolve to `null` instead of throwing, mirroring how a non-ok HTTP response is already handled by callers. */
+async function fetchGoogleOAuth(url: string, init: RequestInit, context: string): Promise<Response | null> {
+  try {
+    return await fetch(url, { ...init, signal: AbortSignal.timeout(GOOGLE_OAUTH_FETCH_TIMEOUT_MS) });
+  } catch (err) {
+    logger.warn({ context, error: err instanceof Error ? err.message : String(err) }, 'Google OAuth: request failed or timed out');
+    return null;
+  }
+}
 
 export interface GoogleAccountSession {
   provider: 'google';
@@ -210,28 +222,34 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: { code: 'INVALID_OAUTH_STATE', message: 'Google 登入驗證失敗' } });
     }
 
-    const tokenResp = await fetch(GOOGLE_TOKEN_URL, {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        code: query.data.code,
-        client_id: runtime.googleClientId,
-        client_secret: runtime.googleClientSecret,
-        redirect_uri: redirectUri(request),
-        grant_type: 'authorization_code',
-      }),
-    });
-    if (!tokenResp.ok) {
+    const tokenResp = await fetchGoogleOAuth(
+      GOOGLE_TOKEN_URL,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          code: query.data.code,
+          client_id: runtime.googleClientId,
+          client_secret: runtime.googleClientSecret,
+          redirect_uri: redirectUri(request),
+          grant_type: 'authorization_code',
+        }),
+      },
+      'token',
+    );
+    if (!tokenResp || !tokenResp.ok) {
       return reply.code(502).send({ error: { code: 'GOOGLE_TOKEN_EXCHANGE_FAILED', message: 'Google token 交換失敗' } });
     }
     const token = await parseGoogleTokenResponse(tokenResp);
     if (!token) {
       return reply.code(502).send({ error: { code: 'GOOGLE_TOKEN_PARSE_FAILED', message: 'Google token 回應格式錯誤' } });
     }
-    const userResp = await fetch(GOOGLE_USERINFO_URL, {
-      headers: { authorization: `Bearer ${token.access_token}` },
-    });
-    if (!userResp.ok) {
+    const userResp = await fetchGoogleOAuth(
+      GOOGLE_USERINFO_URL,
+      { headers: { authorization: `Bearer ${token.access_token}` } },
+      'userinfo',
+    );
+    if (!userResp || !userResp.ok) {
       return reply.code(502).send({ error: { code: 'GOOGLE_USERINFO_FAILED', message: 'Google 帳號資訊讀取失敗' } });
     }
     const user = await parseGoogleUserInfoResponse(userResp);
