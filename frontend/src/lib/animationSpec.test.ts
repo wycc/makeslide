@@ -17,6 +17,7 @@ import {
   buildCustomScriptSandboxDoc,
   cloneAnimationSpec,
   customScriptDurationSeconds,
+  effectIdsToReleaseOnSeekBack,
   generateFocusEffectsFromTranscript,
   getFocusEffectParams,
   getDuePausePlaybackEffect,
@@ -53,12 +54,28 @@ test("pause-playback is a known overlay effect type", () => {
   assert.ok(OVERLAY_EFFECT_TYPES.includes("pause-playback"));
 });
 
-test("getDuePausePlaybackEffect returns an unconsumed pause cue crossed by playback", () => {
+test("getDuePausePlaybackEffect waits until the entrance tween (start + duration) finishes before pausing", () => {
   const effect = { id: "pause-1", target: "slide" as const, type: "pause-playback" as const, start: 3, duration: 0.4, ease: "power1.out" as const };
   const spec = { version: 1 as const, enabled: true, effects: [effect] };
-  assert.equal(getDuePausePlaybackEffect(spec, 2.9, 3.1, new Set())?.id, "pause-1");
-  assert.equal(getDuePausePlaybackEffect(spec, 2.9, 3.1, new Set(["pause-1"])), null);
-  assert.equal(getDuePausePlaybackEffect(spec, 3.1, 3.2, new Set()), null);
+  // start=3, duration=0.4 -> the cue should only fire once playback crosses 3.4, not 3 itself,
+  // so the overlay's fade-in has fully played out before the audio/timeline actually pauses.
+  assert.equal(getDuePausePlaybackEffect(spec, 2.9, 3.1, new Set()), null);
+  assert.equal(getDuePausePlaybackEffect(spec, 3.3, 3.5, new Set())?.id, "pause-1");
+  assert.equal(getDuePausePlaybackEffect(spec, 3.3, 3.5, new Set(["pause-1"])), null);
+  assert.equal(getDuePausePlaybackEffect(spec, 3.5, 3.6, new Set()), null);
+});
+
+test("effectIdsToReleaseOnSeekBack releases pause cues at or after the new seek position", () => {
+  const early = { id: "early", target: "slide" as const, type: "pause-playback" as const, start: 1, duration: 0.4, ease: "power1.out" as const };
+  const late = { id: "late", target: "slide" as const, type: "pause-playback" as const, start: 5, duration: 0.4, ease: "power1.out" as const };
+  const spec = { version: 1 as const, enabled: true, effects: [early, late] };
+  // Seeking back to 2: "early" (ends at 1.4) is behind the new position and stays consumed;
+  // "late" (ends at 5.4) is still ahead and must be released so it can fire again.
+  assert.deepEqual(effectIdsToReleaseOnSeekBack(spec, 2), ["late"]);
+  // Seeking back to 0 releases both, since both are now ahead of the new position.
+  assert.deepEqual(effectIdsToReleaseOnSeekBack(spec, 0), ["early", "late"]);
+  assert.deepEqual(effectIdsToReleaseOnSeekBack(null, 0), []);
+  assert.deepEqual(effectIdsToReleaseOnSeekBack({ ...spec, enabled: false }, 0), []);
 });
 
 test("insertEffectAfterFirstStartingEffect inserts after the first starting effect", () => {
