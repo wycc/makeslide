@@ -1,5 +1,22 @@
 # MakeSlide 功能說明
 
+## PDF 圖表參考跨頁聚合減少重複讀檔
+
+### 功能目的
+
+文件模式匯入時，一張 AI 分割後的投影片可能同時對應多個原始 PDF 頁面。後端在為這類投影片準備圖表參考圖片時，過去會針對每個來源頁碼各自讀取並解析一次同一份 `figures.json`，造成不必要的同步檔案 I/O 與 JSON 解析成本。
+
+### 修復內容
+
+現在跨頁圖表聚合會先在迴圈外載入一次 `figures.json`，之後用已載入的 manifest 取得各來源頁面的圖表。既有的去重、依圖表面積排序、數量上限，以及使用者排除圖表的規則都維持不變。
+
+### 技術重點
+
+- `backend/src/services/pdfFigures.ts` 抽出內部 `figuresForPage()` helper，讓單頁與跨頁流程共用同一份「從 manifest 取頁面圖表並套用排除」邏輯。
+- `getPageFigures()` 對外行為維持不變；`getFigureReferencesForPages()` 改為每次呼叫只讀取一次 manifest。
+- `backend/test/pdf-figures.test.ts` 新增讀檔計數驗證，確認多頁聚合不再依頁數重複讀取 `figures.json`，並保留去重、排序、排除規則測試覆蓋。
+- 已執行 backend typecheck 與相關測試通過；完整 backend 測試仍只出現既有基準失敗，未新增本次變更相關回歸。
+
 ## ZIP 匯入解壓縮加入子行程逾時保護
 
 ### 功能目的

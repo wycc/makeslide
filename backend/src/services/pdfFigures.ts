@@ -19,7 +19,14 @@ export function loadFigureManifest(pdfId: string): FigureManifest | null {
 /** Returns the figures extracted for a given page, or `[]` if none / no manifest. */
 export function getPageFigures(pdfId: string, pageNumber: number): FigureEntry[] {
   const manifest = loadFigureManifest(pdfId);
-  return manifest?.pages.find((p) => p.pageNumber === pageNumber)?.figures ?? [];
+  return figuresForPage(manifest, pageNumber);
+}
+
+/** Finds the figures for `pageNumber` in an already-loaded manifest, applying optional exclusions. */
+function figuresForPage(manifest: FigureManifest | null, pageNumber: number, excludeIds?: ReadonlySet<string>): FigureEntry[] {
+  const figures = manifest?.pages.find((p) => p.pageNumber === pageNumber)?.figures ?? [];
+  if (!excludeIds || excludeIds.size === 0) return figures;
+  return figures.filter((figure) => !excludeIds.has(figure.id));
 }
 
 /** Resolves a figure's `imagePath` to an absolute path on disk. */
@@ -96,7 +103,8 @@ export function getFigureReferencesForPage(
   max = MAX_FIGURE_REFERENCES_PER_PAGE,
   excludeIds?: ReadonlySet<string>,
 ): FigureEntry[] {
-  const figures = getPageFigures(pdfId, pageNumber).filter((figure) => !excludeIds?.has(figure.id));
+  const manifest = loadFigureManifest(pdfId);
+  const figures = figuresForPage(manifest, pageNumber, excludeIds);
   return capFiguresByArea(figures, max);
 }
 
@@ -111,11 +119,12 @@ export function getFigureReferencesForPages(
   max = MAX_FIGURE_REFERENCES_PER_PAGE,
   excludeIds?: ReadonlySet<string>,
 ): FigureEntry[] {
+  const manifest = loadFigureManifest(pdfId);
   const seen = new Set<string>();
   const all: FigureEntry[] = [];
   for (const pageNumber of pageNumbers) {
-    for (const figure of getPageFigures(pdfId, pageNumber)) {
-      if (seen.has(figure.id) || excludeIds?.has(figure.id)) continue;
+    for (const figure of figuresForPage(manifest, pageNumber, excludeIds)) {
+      if (seen.has(figure.id)) continue;
       seen.add(figure.id);
       all.push(figure);
     }
