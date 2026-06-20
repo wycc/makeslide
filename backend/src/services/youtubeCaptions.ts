@@ -59,6 +59,62 @@ async function canRun(python: string, bin: string): Promise<boolean> {
   });
 }
 
+// Captions-only yt-dlp runs (--skip-download) are small and fast; the full audio
+// download in transcribeByStt() needs more headroom for long videos.
+const YT_DLP_CAPTIONS_TIMEOUT_MS = 2 * 60_000;
+const YT_DLP_AUDIO_TIMEOUT_MS = 10 * 60_000;
+const FFMPEG_TIMEOUT_MS = 2 * 60_000;
+
+interface SpawnCaptureResult {
+  code: number | null;
+  signal: NodeJS.Signals | null;
+  timedOut: boolean;
+  stdout: string;
+  stderr: string;
+  spawnError: Error | null;
+}
+
+/**
+ * Runs `command`, capturing stdout/stderr, and kills it (SIGTERM) if it hasn't exited within
+ * `timeoutMs`. `spawn()` has no native timeout option (unlike `execFile`, see
+ * presentationGit.ts's `gitOpts()`), so without this a hung yt-dlp/ffmpeg process — a network
+ * stall, a YouTube anti-bot challenge that never resolves — blocks forever; with
+ * `PROCESS_CONCURRENCY` defaulting to 2, just one or two stuck YouTube imports is enough to
+ * starve the entire processing queue, including unrelated PDF uploads.
+ */
+/** Exported for unit testing; not part of this module's public extraction API. */
+export function spawnWithTimeout(
+  command: string,
+  args: string[],
+  options: Parameters<typeof spawn>[2],
+  timeoutMs: number,
+): Promise<SpawnCaptureResult> {
+  return new Promise((resolve) => {
+    const p = spawn(command, args, options);
+    let stdout = '';
+    let stderr = '';
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      p.kill('SIGTERM');
+    }, timeoutMs);
+    p.stdout?.on('data', (buf) => {
+      stdout += String(buf);
+    });
+    p.stderr?.on('data', (buf) => {
+      stderr += String(buf);
+    });
+    p.on('close', (code, signal) => {
+      clearTimeout(timer);
+      resolve({ code, signal, timedOut, stdout, stderr, spawnError: null });
+    });
+    p.on('error', (err) => {
+      clearTimeout(timer);
+      resolve({ code: null, signal: null, timedOut, stdout, stderr, spawnError: err });
+    });
+  });
+}
+
 // Run yt-dlp through the resolved Python interpreter and resolve to true on exit
 // code 0. stdout/stderr are captured and logged (truncated) for diagnostics.
 async function runYtDlp(
@@ -66,60 +122,56 @@ async function runYtDlp(
   ytDlpBin: string,
   cmdArgs: string[],
   videoId: string,
+  timeoutMs: number,
 ): Promise<boolean> {
-  return await new Promise<boolean>((resolve) => {
-    // Recent yt-dlp needs a JavaScript runtime to solve YouTube's player
-    // challenges; without one extraction fails with "This video is not
-    // available". Point it at the same Node binary running this backend.
-    const spawnArgs = [ytDlpBin, '--js-runtimes', `node:${process.execPath}`, ...cmdArgs];
-    const cmdline = `${python} ${spawnArgs.map((a) => (/\s/.test(a) ? JSON.stringify(a) : a)).join(' ')}`;
-    logger.info({ videoId, command: cmdline }, 'yt-dlp spawn');
+  // Recent yt-dlp needs a JavaScript runtime to solve YouTube's player
+  // challenges; without one extraction fails with "This video is not
+  // available". Point it at the same Node binary running this backend.
+  const spawnArgs = [ytDlpBin, '--js-runtimes', `node:${process.execPath}`, ...cmdArgs];
+  const cmdline = `${python} ${spawnArgs.map((a) => (/\s/.test(a) ? JSON.stringify(a) : a)).join(' ')}`;
+  logger.info({ videoId, command: cmdline }, 'yt-dlp spawn');
 
-    const p = spawn(python, spawnArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
-    let stdout = '';
-    let stderr = '';
-    p.stdout?.on('data', (buf) => {
-      stdout += String(buf);
-    });
-    p.stderr?.on('data', (buf) => {
-      stderr += String(buf);
-    });
-
-    p.on('close', (code, signal) => {
-      const outShort = stdout.length > 4000 ? `${stdout.slice(0, 4000)}\n...[truncated]` : stdout;
-      const errShort = stderr.length > 4000 ? `${stderr.slice(0, 4000)}\n...[truncated]` : stderr;
-      logger.info(
-        { videoId, exitCode: code, signal, stdout: outShort, stderr: errShort },
-        'yt-dlp finished',
-      );
-      resolve(code === 0);
-    });
-    p.on('error', (err) => {
-      logger.error({ err, videoId, command: cmdline }, 'yt-dlp spawn error');
-      resolve(false);
-    });
-  });
+  const { code, signal, timedOut, stdout, stderr, spawnError } = await spawnWithTimeout(
+    python,
+    spawnArgs,
+    { stdio: ['ignore', 'pipe', 'pipe'] },
+    timeoutMs,
+  );
+  if (spawnError) {
+    logger.error({ err: spawnError, videoId, command: cmdline }, 'yt-dlp spawn error');
+    return false;
+  }
+  const outShort = stdout.length > 4000 ? `${stdout.slice(0, 4000)}\n...[truncated]` : stdout;
+  const errShort = stderr.length > 4000 ? `${stderr.slice(0, 4000)}\n...[truncated]` : stderr;
+  if (timedOut) {
+    logger.error({ videoId, timeoutMs }, 'yt-dlp timed out and was killed');
+  }
+  logger.info(
+    { videoId, exitCode: code, signal, timedOut, stdout: outShort, stderr: errShort },
+    'yt-dlp finished',
+  );
+  return code === 0 && !timedOut;
 }
 
 async function runFfmpeg(args: string[], videoId: string): Promise<boolean> {
-  return await new Promise<boolean>((resolve) => {
-    const p = spawn(FFMPEG, args, { stdio: ['ignore', 'ignore', 'pipe'] });
-    let stderr = '';
-    p.stderr?.on('data', (buf) => {
-      stderr += String(buf);
-    });
-    p.on('close', (code) => {
-      if (code !== 0) {
-        const errShort = stderr.length > 2000 ? `${stderr.slice(0, 2000)}\n...[truncated]` : stderr;
-        logger.warn({ videoId, exitCode: code, stderr: errShort }, 'ffmpeg finished with error');
-      }
-      resolve(code === 0);
-    });
-    p.on('error', (err) => {
-      logger.error({ err, videoId }, 'ffmpeg spawn error');
-      resolve(false);
-    });
-  });
+  const { code, timedOut, stderr, spawnError } = await spawnWithTimeout(
+    FFMPEG,
+    args,
+    { stdio: ['ignore', 'ignore', 'pipe'] },
+    FFMPEG_TIMEOUT_MS,
+  );
+  if (spawnError) {
+    logger.error({ err: spawnError, videoId }, 'ffmpeg spawn error');
+    return false;
+  }
+  if (timedOut) {
+    logger.error({ videoId, timeoutMs: FFMPEG_TIMEOUT_MS }, 'ffmpeg timed out and was killed');
+  }
+  if (code !== 0) {
+    const errShort = stderr.length > 2000 ? `${stderr.slice(0, 2000)}\n...[truncated]` : stderr;
+    logger.warn({ videoId, exitCode: code, timedOut, stderr: errShort }, 'ffmpeg finished with error');
+  }
+  return code === 0 && !timedOut;
 }
 
 async function downloadFile(url: string, dest: string): Promise<void> {
@@ -204,7 +256,7 @@ async function fetchByYtDlp(videoId: string, language?: string | null): Promise<
       url,
     ];
 
-    const ok = await runYtDlp(python, ytDlpBin, args, videoId);
+    const ok = await runYtDlp(python, ytDlpBin, args, videoId, YT_DLP_CAPTIONS_TIMEOUT_MS);
     if (!ok) continue;
 
     const files = await fs.promises.readdir(tmpDir);
@@ -282,6 +334,7 @@ async function transcribeByStt(
         url,
       ],
       videoId,
+      YT_DLP_AUDIO_TIMEOUT_MS,
     );
     if (!downloaded) return null;
 
