@@ -250,3 +250,76 @@ for (const route of PAGE_CONTENT_ROUTES) {
     await app.close();
   });
 }
+
+// --- GET /cover, /cover/thumbnail, /video, /outline, /source-audio, /pages/:n/polls: read-permission gate ---
+// None of these media/source files are ever written to disk by the seed helper, so a request
+// that passes the permission check deterministically falls through to the existing
+// COVER_NOT_READY/VIDEO_NOT_FOUND/OUTLINE_NOT_FOUND/SOURCE_AUDIO_NOT_FOUND 404 branch.
+const MEDIA_ROUTES = [
+  { name: 'cover', path: (id: string) => `/api/pdfs/${id}/cover` },
+  { name: 'cover thumbnail', path: (id: string) => `/api/pdfs/${id}/cover/thumbnail` },
+  { name: 'video', path: (id: string) => `/api/pdfs/${id}/video` },
+  { name: 'outline', path: (id: string) => `/api/pdfs/${id}/outline` },
+  { name: 'source-audio', path: (id: string) => `/api/pdfs/${id}/source-audio` },
+  { name: 'page polls', path: (id: string) => `/api/pdfs/${id}/pages/1/polls` },
+] as const;
+
+let mediaRouteCounter = 0;
+
+for (const route of MEDIA_ROUTES) {
+  test(`GET ${route.name} rejects a non-owner request on a private presentation`, async () => {
+    const pdfId = `detperm-media-priv-${mediaRouteCounter++}`;
+    seedDetailPdf(pdfId, 'private');
+    const app = await buildApp();
+    const resp = await app.inject({ method: 'GET', url: route.path(pdfId), headers: OTHER_HEADERS });
+    assert.equal(resp.statusCode, 403);
+    assert.equal((resp.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+    await app.close();
+  });
+
+  test(`GET ${route.name} rejects an unauthenticated request on a private presentation`, async () => {
+    const pdfId = `detperm-media-anon-${mediaRouteCounter++}`;
+    seedDetailPdf(pdfId, 'private');
+    const app = await buildApp();
+    const resp = await app.inject({ method: 'GET', url: route.path(pdfId) });
+    assert.equal(resp.statusCode, 403);
+    await app.close();
+  });
+
+  test(`GET ${route.name} returns 404 for a non-existent PDF`, async () => {
+    const app = await buildApp();
+    const resp = await app.inject({ method: 'GET', url: route.path('detperm-media-missing'), headers: OWNER_HEADERS });
+    assert.equal(resp.statusCode, 404);
+    assert.equal((resp.json() as { error: { code: string } }).error.code, 'PDF_NOT_FOUND');
+    await app.close();
+  });
+
+  test(`GET ${route.name} lets the owner past the permission check`, async () => {
+    const pdfId = `detperm-media-own-${mediaRouteCounter++}`;
+    seedDetailPdf(pdfId, 'private');
+    const app = await buildApp();
+    const resp = await app.inject({ method: 'GET', url: route.path(pdfId), headers: OWNER_HEADERS });
+    assert.notEqual(resp.statusCode, 403);
+    await app.close();
+  });
+
+  test(`GET ${route.name} lets anyone on a public presentation past the permission check`, async () => {
+    const pdfId = `detperm-media-pub-${mediaRouteCounter++}`;
+    seedDetailPdf(pdfId, 'public');
+    const app = await buildApp();
+    const resp = await app.inject({ method: 'GET', url: route.path(pdfId), headers: OTHER_HEADERS });
+    assert.notEqual(resp.statusCode, 403);
+    await app.close();
+  });
+
+  test(`GET ${route.name} lets a valid read-only share token without a session past the permission check`, async () => {
+    const pdfId = `detperm-media-shr-${mediaRouteCounter++}`;
+    seedDetailPdf(pdfId, 'private');
+    const token = `detperm-media-token-${mediaRouteCounter++}`;
+    seedShareToken(pdfId, token, 'read_only');
+    const app = await buildApp();
+    const resp = await app.inject({ method: 'GET', url: `${route.path(pdfId)}?share=${token}` });
+    assert.notEqual(resp.statusCode, 403);
+    await app.close();
+  });
+}
