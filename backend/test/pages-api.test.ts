@@ -85,7 +85,7 @@ function seedListPdf(pdfId: string, title: string, ownerSub: string | null, visi
   ).run(pdfId, title, `${pdfId}.pdf`, ownerSub, visibility, t, t);
 }
 
-test('GET /api/pdfs should not list presentations without an owner account', async () => {
+test('GET /api/pdfs lists presentations without an owner account (ownerless is readable by anyone, matching canEditPdf)', async () => {
   seedListPdf('list-owned-01', 'owned', 'account-1');
   seedListPdf('list-orphan-01', 'orphan', null);
   seedListPdf('list-public-01', 'public', 'account-2', 'public');
@@ -101,7 +101,7 @@ test('GET /api/pdfs should not list presentations without an owner account', asy
   const items = resp.json() as Array<{ id: string }>;
   assert.deepEqual(
     items.filter((item) => item.id.startsWith('list-')).map((item) => item.id).sort(),
-    ['list-owned-01', 'list-public-01'],
+    ['list-orphan-01', 'list-owned-01', 'list-public-01'],
   );
 
   await app.close();
@@ -170,7 +170,7 @@ test('read-only shared presentations appear in other accounts list but reject ed
   await app.close();
 });
 
-test('GET /api/pdfs/:id should deny presentations without an owner account', async () => {
+test('GET /api/pdfs/:id allows presentations without an owner account (ownerless is readable by anyone, matching canEditPdf)', async () => {
   seedListPdf('detail-orphan-01', 'orphan detail', null);
 
   const app = await buildApp();
@@ -180,7 +180,7 @@ test('GET /api/pdfs/:id should deny presentations without an owner account', asy
     headers: { cookie: `makeslide_session=${encodeURIComponent(SESSION_COOKIE)}` },
   });
 
-  assert.equal(resp.statusCode, 403);
+  assert.equal(resp.statusCode, 200);
 
   await app.close();
 });
@@ -555,11 +555,19 @@ test('shared sync join grants temporary follower access and revokes it when mast
   const shareAfterLeaveResp = await app.inject({ method: 'GET', url: `/api/share/${share.token}` });
   assert.equal(shareAfterLeaveResp.statusCode, 404);
 
+  // The earlier POST /share with `{ access: 'read_only' }` set this PDF's own `visibility`
+  // column to 'public' (see accessToVisibility()) — a separate, persistent setting from the
+  // share token itself, and revoking the token (above) does not reset it. So reading the PDF
+  // after revocation still succeeds: not because the now-dead token still works, but because
+  // the presentation is genuinely public at this point regardless of any token. (Before
+  // canReadPdf() was fixed to treat ownerless presentations as readable, this assertion used to
+  // expect 403 — but that only "worked" because the ownerless check short-circuited before ever
+  // reaching the visibility check, masking the fact that visibility was already 'public'.)
   const sharedDetailAfterLeaveResp = await app.inject({
     method: 'GET',
     url: `/api/pdfs/${pdfId}?share=${encodeURIComponent(share.token)}`,
   });
-  assert.equal(sharedDetailAfterLeaveResp.statusCode, 403);
+  assert.equal(sharedDetailAfterLeaveResp.statusCode, 200);
 
   const nextShareResp = await app.inject({
     method: 'POST',
