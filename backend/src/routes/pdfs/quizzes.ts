@@ -360,6 +360,11 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid quiz parameters'));
     const body = SubmitQuizAttemptBodySchema.safeParse(request.body ?? {});
     if (!body.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
+    const pdfRow = getPdfPermissionRow(parsed.data.id);
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
+    if (!hasShareAccess(request, parsed.data.id) && !canReadPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限作答此簡報的測驗'));
+    }
     const quiz = db.prepare(`SELECT id, questions_json FROM quiz_sets WHERE id = ? AND pdf_id = ?`).get(parsed.data.quizId, parsed.data.id) as
       | { id: number; questions_json: string }
       | undefined;
