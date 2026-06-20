@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import { z } from 'zod';
 import {
   getAccountSettingsLocation,
@@ -18,6 +19,8 @@ import { decodeSession, parseCookies } from '../auth';
 import { db } from '../../db';
 import type { PdfRow } from '../../types';
 import { IdParamSchema, UpdateSystemAiSettingsBodySchema, errorResponse } from './shared';
+import { DEFAULT_ACCOUNT_ID, sanitizeAccountId } from '../../services/accountContext';
+import { removePdfDir } from '../../services/storage';
 
 function sessionSub(request: FastifyRequest): string | null {
   const session = decodeSession(parseCookies(request).makeslide_session);
@@ -31,6 +34,10 @@ function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibil
 }
 
 const TransferAdminBodySchema = z.object({
+  account_id: z.string().trim().min(1).max(256),
+});
+
+const DeleteAccountBodySchema = z.object({
   account_id: z.string().trim().min(1).max(256),
 });
 
@@ -104,6 +111,32 @@ function aiSettingsResponse(accountId: string, isAdmin: boolean) {
     response.has_mcp_auth_token = runtime.mcpAuthToken.trim().length > 0;
   }
   return response;
+}
+
+async function removeAccountDir(accountId: string): Promise<void> {
+  const location = getAccountSettingsLocation(accountId);
+  if (location.accountId !== accountId) {
+    throw new Error('Refusing to remove a mismatched account directory');
+  }
+  await fs.promises.rm(location.accountDir, { recursive: true, force: true });
+}
+
+async function deleteAccountData(targetAccountId: string): Promise<{ deleted_pdfs: string[]; deleted_pdf_count: number; account_deleted: boolean }> {
+  const rows = db.prepare(`SELECT id FROM pdfs WHERE owner_sub = ? ORDER BY created_at ASC`).all(targetAccountId) as Array<{ id: string }>;
+  const pdfIds = rows.map((row) => row.id);
+  const tx = db.transaction((ids: string[]) => {
+    for (const id of ids) {
+      db.prepare(`DELETE FROM pdfs WHERE id = ?`).run(id);
+    }
+  });
+  tx(pdfIds);
+
+  for (const id of pdfIds) {
+    await removePdfDir(id);
+  }
+  await removeAccountDir(targetAccountId);
+
+  return { deleted_pdfs: pdfIds, deleted_pdf_count: pdfIds.length, account_deleted: true };
 }
 
 export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
@@ -232,6 +265,31 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       const message = err instanceof Error ? err.message : String(err);
       return reply.code(400).send(errorResponse('INVALID_ADMIN_ACCOUNT', message));
     }
+  });
+
+  app.delete('/api/system/accounts/:account_id', async (request, reply) => {
+    const accountId = currentAccountId();
+    if (!isAdminAccount(accountId)) {
+      return reply.code(403).send(errorResponse('ADMIN_REQUIRED', '只有 admin 可以刪除帳號'));
+    }
+    const parsed = DeleteAccountBodySchema.safeParse(request.params ?? {});
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', parsed.error.issues[0]?.message ?? 'Invalid account id'));
+    }
+
+    const targetAccountId = sanitizeAccountId(parsed.data.account_id);
+    if (targetAccountId === DEFAULT_ACCOUNT_ID) {
+      return reply.code(400).send(errorResponse('DANGEROUS_ACCOUNT', '不能刪除 default 帳號'));
+    }
+    if (targetAccountId === accountId) {
+      return reply.code(400).send(errorResponse('DANGEROUS_ACCOUNT', '不能刪除目前登入的 admin 帳號'));
+    }
+    if (isAdminAccount(targetAccountId)) {
+      return reply.code(400).send(errorResponse('DANGEROUS_ACCOUNT', '不能刪除 admin 帳號；請先移交或移除 admin 權限'));
+    }
+
+    const result = await deleteAccountData(targetAccountId);
+    return reply.code(200).send({ ok: true, account_id: targetAccountId, ...result });
   });
 
   app.post('/api/system/mcp-auth-token', async (_request, reply) => {
