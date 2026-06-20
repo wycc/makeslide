@@ -49,6 +49,12 @@ const RewriteScriptResponseSchema = z.object({
   script: z.string().min(1).max(4096),
 });
 
+/** Mirrors regenerate.ts's imageTimeoutMs selection so every images.generate/edit call site uses the same budget instead of falling back to the client's longer global default. */
+function imageEditTimeoutMs(): number {
+  const quality = config.openaiImageQuality;
+  return quality === 'high' || quality === 'medium' ? config.openaiImageTimeoutMsHighQuality : config.openaiImageTimeoutMs;
+}
+
 function sessionSub(request: FastifyRequest): string | null {
   const session = decodeSession(parseCookies(request).makeslide_session);
   return session?.sub ?? null;
@@ -738,12 +744,15 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         { base_prompt: basePrompt },
       );
 
-      const edited = await client.images.edit({
-        model: config.openaiImageModel,
-        image: editImage,
-        prompt: editPrompt,
-        size: '1536x1024',
-      });
+      const edited = await client.images.edit(
+        {
+          model: config.openaiImageModel,
+          image: editImage,
+          prompt: editPrompt,
+          size: '1536x1024',
+        },
+        { timeout: imageEditTimeoutMs() },
+      );
       const b64 = edited.data?.[0]?.b64_json;
       if (!b64) throw new Error('OpenAI image edit returned empty result');
       const newBuf = Buffer.from(b64, 'base64');
@@ -838,13 +847,16 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
           ? [slideFile, await toFile(slideResizedBuffer, `slide-ref-${n}.png`, { type: 'image/png' })]
           : slideFile;
 
-      const edited = await client.images.edit({
-        model: 'gpt-image-2',
-        image: images,
-        prompt: prompt.trim(),
-        size: '1536x1024',
-        ...(maskFile ? { mask: maskFile } : {}),
-      });
+      const edited = await client.images.edit(
+        {
+          model: 'gpt-image-2',
+          image: images,
+          prompt: prompt.trim(),
+          size: '1536x1024',
+          ...(maskFile ? { mask: maskFile } : {}),
+        },
+        { timeout: imageEditTimeoutMs() },
+      );
       const b64 = (edited as { data?: Array<{ b64_json?: string }> }).data?.[0]?.b64_json;
       if (!b64) throw new Error('OpenAI image edit returned empty result');
 
