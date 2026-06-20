@@ -1,5 +1,22 @@
 # MakeSlide 功能說明
 
+## API key 改為柔性提醒，不再一進站就強制跳設定頁
+
+### 功能目的
+
+過去系統只要偵測到沒有 API key，就會直接把使用者導到設定頁。這對首次使用者不夠友善：有些人只是想先瀏覽、管理或播放既有簡報，並不一定要馬上使用 LLM 功能。新的流程改成先顯示清楚的說明對話框，讓使用者知道「不設定 key 仍可使用非 AI 功能，但所有需要 LLM 的功能都不能執行」，再由使用者自行決定要現在設定或稍後再說。
+
+### 使用方式
+
+第一次開啟 MakeSlide 且尚未設定目前 LLM 供應商的 API key 時，系統會跳出提示對話框。按「前往 AI 設定」會進入設定頁填寫 OpenAI、Gemini、CGU Air 或 OpenRouter 的 key；按「暫時不設定」則留在目前頁面，之後仍可瀏覽或播放既有簡報。若稍後操作需要 LLM 的功能，例如從提示詞產生簡報、補頁、測驗、改寫逐字稿、AI 問答、AI 動畫腳本、語音或轉錄流程，系統會再次跳出「此功能需要先設定 API key」提示。
+
+### 技術重點
+
+- `frontend/src/App.tsx` 不再於缺少 key 時強制 `navigate('/settings')`，改為顯示可略過的 onboarding 對話框。
+- 新增 `frontend/src/components/ApiKeyRequiredDialog.tsx` 作為全域 API key 提示 UI，並由 `frontend/src/lib/api/common.ts` 在收到 `API_KEY_MISSING` 時派發事件觸發。
+- `backend/src/services/openai.ts`、`backend/src/services/gemini.ts` 與 `backend/src/server.ts` 會把缺少供應商 key 的錯誤標準化成 `API_KEY_MISSING`，讓前端能一致顯示設定提示。
+- 已補齊 `frontend/src/locales/zh-TW.ts` 與 `frontend/src/locales/en.ts` 的中英文說明文字，並執行 frontend/backend typecheck 通過。
+
 ## MCP 使用手冊更新，反映權限修復後的最新行為
 
 ### 功能目的
