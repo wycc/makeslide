@@ -4,6 +4,7 @@ import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { config } from "./config";
 import { logger } from "./logger";
@@ -52,6 +53,14 @@ function ensureWorkspaceRuntimePaths(): void {
   } catch {
     // ignore mkdir failure
   }
+}
+
+/** Constant-time string equality (avoids a JS `===` timing side-channel for secret comparisons like the MCP bearer token). Exported for unit testing. */
+export function timingSafeStringEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, 'utf8');
+  const bufB = Buffer.from(b, 'utf8');
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
 }
 
 function isApiAuthExemptPath(pathname: string): boolean {
@@ -170,7 +179,7 @@ export async function buildApp() {
     // Allow requests authenticated via Bearer token (used by MCP server).
     if (config.mcpAuthToken) {
       const authHeader = request.headers.authorization ?? '';
-      if (authHeader === `Bearer ${config.mcpAuthToken}`) return;
+      if (timingSafeStringEqual(authHeader, `Bearer ${config.mcpAuthToken}`)) return;
     }
 
     const session = decodeSession(parseCookies(request).makeslide_session);
