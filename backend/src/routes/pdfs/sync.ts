@@ -490,7 +490,8 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid sync state request'));
     }
     const { id } = parsedParams.data;
-    if (!ensurePdfExists(id)) {
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     }
     const {
@@ -511,6 +512,11 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     const session = getSession(id);
     touchClient(session, clientId);
     if (!session.masterClientId || session.masterExpiresAt <= nowMs()) {
+      // 取得主控權與 /sync/join 走相同的編輯權限門檻：不能讓完全沒有編輯權限的請求，
+      // 繞過 /sync/join 直接呼叫這個端點取得主控權（例如目前剛好沒有 master 的空窗期）。
+      if (!canEditPdf(sessionSub(request), pdfRow)) {
+        return reply.code(403).send(errorResponse('FORBIDDEN', '無權限取得此簡報同步階段的主控權'));
+      }
       session.masterClientId = clientId;
     }
     if (session.masterClientId !== clientId) {
