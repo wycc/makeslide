@@ -20,11 +20,34 @@ function canReadPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibil
   return row.visibility === 'public' || row.visibility === 'public_editable';
 }
 
-function runZipCommand(cwd: string, outputZipPath: string): Promise<void> {
+const ZIP_EXPORT_TIMEOUT_MS = 2 * 60_000;
+
+/** Exported for unit testing; not part of the public export routes API. */
+export function runZipCommand(
+  cwd: string,
+  outputZipPath: string,
+  options: { command?: string; timeoutMs?: number } = {},
+): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn('zip', ['-r', '-q', outputZipPath, '.'], { cwd, stdio: 'ignore' });
-    child.on('error', (err) => reject(err));
+    const command = options.command ?? 'zip';
+    const timeoutMs = options.timeoutMs ?? ZIP_EXPORT_TIMEOUT_MS;
+    const child = spawn(command, ['-r', '-q', outputZipPath, '.'], { cwd, stdio: 'ignore' });
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill('SIGTERM');
+    }, timeoutMs);
+
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
     child.on('close', (code) => {
+      clearTimeout(timer);
+      if (timedOut) {
+        reject(new Error(`zip command timed out after ${timeoutMs} ms`));
+        return;
+      }
       if (code === 0) {
         resolve();
         return;
