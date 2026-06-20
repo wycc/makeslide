@@ -707,6 +707,13 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
     }
     const { id, n } = parsed.data;
+    const pdfRow = db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
+      | Pick<PdfRow, 'owner_sub' | 'visibility'>
+      | undefined;
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!shareAccessForPdf(request, id) && !canReadPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的頁面提示詞'));
+    }
     const row = db
       .prepare(`SELECT text_path, updated_at FROM pages WHERE pdf_id = ? AND page_number = ?`)
       .get(id, n) as { text_path: string | null; updated_at: string } | undefined;
@@ -735,6 +742,13 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
         .send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
     }
     const { id, n } = parsed.data;
+    const pdfRow = db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
+      | Pick<PdfRow, 'owner_sub' | 'visibility'>
+      | undefined;
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的頁面提示詞'));
+    }
     const row = db
       .prepare(`SELECT text_path FROM pages WHERE pdf_id = ? AND page_number = ?`)
       .get(id, n) as { text_path: string | null } | undefined;
@@ -1186,6 +1200,13 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       return reply.code(400).send(errorResponse('INVALID_REQUEST', bodyParsed.error.issues[0]?.message ?? 'Invalid body'));
     }
     const script = bodyParsed.data.script;
+    const pdfRow = db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
+      | Pick<PdfRow, 'owner_sub' | 'visibility'>
+      | undefined;
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的逐字稿'));
+    }
     const pageRow = db
       .prepare(`SELECT script_path, page_uid FROM pages WHERE pdf_id = ? AND page_number = ?`)
       .get(id, n) as { script_path: string | null; page_uid: string } | undefined;
@@ -1272,6 +1293,13 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
     }
     const { id, n } = parsed.data;
+    const pdfRow = db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
+      | Pick<PdfRow, 'owner_sub' | 'visibility'>
+      | undefined;
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!shareAccessForPdf(request, id) && !canReadPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的生成提示詞紀錄'));
+    }
     const prompts = getPageGenerationPrompts(id, n);
     return reply.code(200).send(prompts);
   });
