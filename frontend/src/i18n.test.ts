@@ -584,3 +584,26 @@ test('CreditExhaustedDialog locale keys are complete', () => {
     assert.notEqual(en[key].trim(), '');
   }
 });
+
+test('SettingsPage MCP auth token locale keys are complete', () => {
+  const requiredKeys = [
+    'settings.mcpTokenTitle',
+    'settings.mcpTokenHint',
+    'settings.mcpTokenConfigured',
+    'settings.mcpTokenNotConfigured',
+    'settings.mcpTokenGenerateButton',
+    'settings.mcpTokenCopyButton',
+    'settings.mcpTokenGenerated',
+    'settings.mcpTokenGenerateError',
+    'settings.mcpTokenCopied',
+    'settings.mcpTokenCopyError',
+    'settings.mcpTokenOneTimeNotice',
+  ] as const;
+
+  for (const key of requiredKeys) {
+    assert.equal(typeof zhTW[key], 'string');
+    assert.equal(typeof en[key], 'string');
+    assert.notEqual(zhTW[key].trim(), '');
+    assert.notEqual(en[key].trim(), '');
+  }
+});
