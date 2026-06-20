@@ -67,11 +67,16 @@ export function useVersionHistory({ pdfId, reloadDetail }: UseVersionHistoryPara
     if (!pdfId || versionHistoryPage == null) return;
     setVersionPreviewHash(hash);
     if (versionHistoryType === 'script') {
+      setVersionError(null);
       try {
         const text = await fetchScriptVersion(pdfId, versionHistoryPage, hash);
         setVersionPreviewScript(text);
-      } catch {
+      } catch (err) {
+        // 清空 versionPreviewHash 讓畫面退回「請選擇版本」提示，搭配上方錯誤訊息，
+        // 而不是讓使用者卡在永遠顯示「載入中」、卻其實已經失敗的畫面。
         setVersionPreviewScript(null);
+        setVersionPreviewHash(null);
+        setVersionError(err instanceof ApiError ? err.message : '無法載入此版本的逐字稿內容');
       }
     } else {
       setVersionPreviewScript(null);
