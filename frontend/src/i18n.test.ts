@@ -151,6 +151,24 @@ test('ShareDialog locale keys are complete', () => {
   }
 });
 
+test('share creation clipboard status locale keys are complete', () => {
+  const requiredKeys = [
+    'play.share.accessEditable',
+    'play.share.accessReadOnly',
+    'play.share.createAndCopySuccess',
+    'play.share.createdWithUrl',
+    'play.share.copyBlockedManual',
+    'play.share.createFailed',
+  ] as const;
+
+  for (const key of requiredKeys) {
+    assert.equal(typeof zhTW[key], 'string');
+    assert.equal(typeof en[key], 'string');
+    assert.notEqual(zhTW[key].trim(), '');
+    assert.notEqual(en[key].trim(), '');
+  }
+});
+
 test('PlayPageSlidePanel playback control/settings locale keys are complete', () => {
   const requiredKeys = [
     'play.slidePanel.playbackSettingsTitle',

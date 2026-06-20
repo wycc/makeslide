@@ -16,6 +16,8 @@ import {
   TTS_VOICES_BY_PROVIDER,
   type TtsProvider,
 } from '../../lib/ttsVoices';
+import { useI18n } from '../../i18n';
+import { copyTextToClipboard } from '../../lib/clipboard';
 import type { PdfDetail } from '../../types';
 
 interface UsePdfMetadataParams {
@@ -80,6 +82,7 @@ export function usePdfMetadata({
   detail,
   setDetail,
 }: UsePdfMetadataParams): PdfMetadataState {
+  const { t } = useI18n();
   const [titleInput, setTitleInput] = useState('');
   const [titleBusy, setTitleBusy] = useState(false);
   const [titleMsg, setTitleMsg] = useState<string | null>(null);
@@ -193,21 +196,24 @@ export function usePdfMetadata({
       setShareUrl(absoluteUrl);
       setDetail((prev) => prev ? { ...prev, visibility: res.visibility ?? (shareAccess === 'editable' ? 'public_editable' : 'public'), updated_at: res.updated_at } : prev);
       setShareDialogOpen(true);
-      try {
-        await navigator.clipboard.writeText(absoluteUrl);
+      const copyResult = await copyTextToClipboard(absoluteUrl);
+      if (copyResult.ok) {
         setShareMessage(
-          `已建立並複製分享連結（${shareAccess === 'editable' ? '可編輯' : '唯讀'}）`,
+          t('play.share.createAndCopySuccess').replace(
+            '{access}',
+            shareAccess === 'editable' ? t('play.share.accessEditable') : t('play.share.accessReadOnly'),
+          ),
         );
-      } catch {
-        setShareMessage(`分享連結已建立：${absoluteUrl}`);
-        setShareError('已建立分享連結，但瀏覽器不允許自動複製，請手動複製上述連結。');
+      } else {
+        setShareMessage(t('play.share.createdWithUrl').replace('{url}', absoluteUrl));
+        setShareError(t('play.share.copyBlockedManual'));
       }
     } catch (err) {
-      setShareError(err instanceof ApiError ? err.message : '建立分享連結失敗');
+      setShareError(err instanceof ApiError ? err.message : t('play.share.createFailed'));
     } finally {
       setShareBusy(false);
     }
-  }, [pdfId, shareAccess, isReadOnlyProcessing]);
+  }, [pdfId, shareAccess, isReadOnlyProcessing, setDetail, t]);
 
   const handleMakeSharePrivate = useCallback(async () => {
     if (!pdfId || isReadOnlyProcessing) return;

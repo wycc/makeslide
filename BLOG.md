@@ -1,5 +1,22 @@
 # MakeSlide 功能說明
 
+## 建立分享連結改用 clipboard fallback 與多語系提示
+
+### 功能目的
+
+播放頁建立分享連結後會自動開啟分享對話框並嘗試複製連結。過去這段流程直接呼叫瀏覽器 Clipboard API，若瀏覽器或權限環境不允許，沒有套用專案既有的備援複製機制；同時成功與失敗訊息仍是硬編碼中文，未跟隨介面語言設定。
+
+### 修復內容
+
+現在建立分享連結後會走共用 `copyTextToClipboard()` helper，先嘗試 Clipboard API，失敗時再使用既有 fallback。無論是否能自動複製，都會照常設定分享 URL 並開啟分享對話框；若仍無法自動複製，訊息會引導使用者手動複製對話框中的連結。
+
+### 技術重點
+
+- `frontend/src/pages/play/usePdfMetadata.ts` 的 `handleCreateShareLink()` 改用 `copyTextToClipboard()`，不再直接呼叫 `navigator.clipboard.writeText()`。
+- 分享建立成功、需手動複製與建立失敗訊息改用 `useI18n()` 翻譯鍵，並補上 read-only/editable 模式文字。
+- `frontend/src/locales/zh-TW.ts`、`frontend/src/locales/en.ts` 與 `frontend/src/i18n.test.ts` 補齊新增 key 與測試覆蓋。
+- 已執行 frontend typecheck 與完整前端測試套件（199 個測試）通過。
+
 ## PDF 圖表參考跨頁聚合減少重複讀檔
 
 ### 功能目的
