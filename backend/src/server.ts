@@ -8,8 +8,8 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { config } from "./config";
 import { logger } from "./logger";
-import { decodeSession, parseCookies, SESSION_COOKIE } from "./routes/auth";
-import { getSystemAuthSettings } from "./services/aiSettings";
+import { decodeSession, encodeSession, parseCookies, SESSION_COOKIE } from "./routes/auth";
+import { findAccountIdByMcpAuthToken, getSystemAuthSettings } from "./services/aiSettings";
 import { accountIdFromOwnerSub, runWithAccountId } from "./services/accountContext";
 import { db } from "./db";
 import { ensureStorageRoot } from "./services/storage";
@@ -150,6 +150,26 @@ export async function buildApp() {
     });
   }
 
+  // MCP 請求帶 Authorization: Bearer <token>，沒有瀏覽器 session cookie。每個帳號
+  // 各自有自己的 MCP auth token；比對到屬於哪個帳號後，合成一份等同於該帳號正常
+  // 登入時會拿到的 session cookie 並接到請求的 cookie header 上——這樣下游所有
+  // 既有的 sessionSub()/canReadPdf()/canEditPdf() 邏輯（散落在各個路由檔案裡，各自
+  // 從 cookie 解析 session）完全不需要修改，就會自然把這個請求當成該帳號本人發出。
+  // 必須放在最前面，搶在下面解析「目前帳號」與驗證登入狀態的 hook 之前執行。
+  app.addHook('onRequest', (request, _reply, done) => {
+    const authHeader = request.headers.authorization ?? '';
+    const bearerMatch = /^Bearer\s+(.+)$/.exec(authHeader);
+    if (bearerMatch && !parseCookies(request)[SESSION_COOKIE]) {
+      const accountId = findAccountIdByMcpAuthToken(bearerMatch[1] ?? '');
+      if (accountId) {
+        const session = { provider: 'google' as const, sub: accountId, email: `${accountId}@mcp.local` };
+        const cookieValue = `${SESSION_COOKIE}=${encodeURIComponent(encodeSession(session))}`;
+        request.headers.cookie = request.headers.cookie ? `${request.headers.cookie}; ${cookieValue}` : cookieValue;
+      }
+    }
+    done();
+  });
+
   // 多帳號設計：在進入路由與其餘 hook 之前，先依請求解析出「目前帳號」並
   // 建立 AsyncLocalStorage 情境。之後整條請求鏈（含 getRuntimeAiSettings()／
   // getOpenAIClient() 等呼叫，無論在路由處理常式或更深的服務層）都會自動
@@ -177,12 +197,8 @@ export async function buildApp() {
     // 僅保護 API；前端靜態資源與頁面路由不在此攔截。
     if (!normalizedPath.startsWith('/api/')) return;
 
-    // Allow requests authenticated via Bearer token (used by MCP server).
-    if (runtime.mcpAuthToken) {
-      const authHeader = request.headers.authorization ?? '';
-      if (timingSafeStringEqual(authHeader, `Bearer ${runtime.mcpAuthToken}`)) return;
-    }
-
+    // 上面的 hook 若已經把 MCP bearer token 解析成某個帳號的合成 session cookie，
+    // 這裡就會自然命中下面的 session 檢查，不需要再額外處理 Authorization header。
     const session = decodeSession(parseCookies(request).makeslide_session);
     if (session) return;
 

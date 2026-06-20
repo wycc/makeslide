@@ -68,7 +68,7 @@ function signPayload(payload: string): string {
     .digest('base64url');
 }
 
-function encodeSession(session: GoogleAccountSession): string {
+export function encodeSession(session: GoogleAccountSession): string {
   const payload = base64UrlEncode(JSON.stringify(session));
   return `${payload}.${signPayload(payload)}`;
 }

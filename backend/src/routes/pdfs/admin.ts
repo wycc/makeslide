@@ -104,6 +104,7 @@ function aiSettingsResponse(accountId: string, isAdmin: boolean) {
     github_repo_url: runtime.githubRepoUrl,
     github_token: runtime.githubToken,
     auto_generate_animation: runtime.autoGenerateAnimation,
+    has_mcp_auth_token: runtime.mcpAuthToken.trim().length > 0,
   };
   if (isAdmin) {
     response.google_auth_enabled = runtime.googleAuthEnabled;
@@ -111,7 +112,6 @@ function aiSettingsResponse(accountId: string, isAdmin: boolean) {
     response.google_client_secret = runtime.googleClientSecret;
     response.google_redirect_uri = runtime.googleRedirectUri;
     response.admin_account_ids = getAdminAccountIds();
-    response.has_mcp_auth_token = runtime.mcpAuthToken.trim().length > 0;
   }
   return response;
 }
@@ -298,11 +298,11 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(200).send({ ok: true, account_id: targetAccountId, ...result });
   });
 
+  // 每個帳號各自一份 MCP auth token，任何登入的帳號都能產生/輪替自己的 token，
+  // 不需要 admin 權限——這是個人用來讓自己的 MCP client 以自己的帳號身分操作的
+  // 憑證，跟系統層級設定（Google 登入、admin 名單）是不同性質的東西。
   app.post('/api/system/mcp-auth-token', async (_request, reply) => {
     const accountId = currentAccountId();
-    if (!isAdminAccount(accountId)) {
-      return reply.code(403).send(errorResponse('ADMIN_REQUIRED', '只有 admin 可以產生 MCP auth token'));
-    }
     const token = generateMcpAuthToken();
     setRuntimeAiSettings(accountId, { mcpAuthToken: token });
     await persistEnvSettings(accountId, { mcpAuthToken: token });

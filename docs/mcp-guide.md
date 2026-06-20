@@ -7,18 +7,22 @@ makeslide ships a built-in MCP (Model Context Protocol) server so Claude Code or
 ## 何時需要這個功能 / When you need this
 
 * 如果你的 makeslide 後端**沒有**啟用 Google 登入（`GOOGLE_AUTH_ENABLED` 未開啟），所有 API 本來就是開放的，MCP client 不需要任何 token 就能連線；可以跳過下面「產生 auth token」這一步。
-* 如果你的後端**已經**啟用 Google 登入，所有 `/api/` 路由都會要求登入 session，MCP client 沒有瀏覽器、也沒有 session cookie，這時就需要一個 bearer token 來通過驗證——這就是下面要設定的 MCP auth token。
+* 如果你的後端**已經**啟用 Google 登入，所有 `/api/` 路由都會要求登入 session，MCP client 沒有瀏覽器、也沒有 session cookie，這時就需要一個 bearer token 來通過驗證，並讓 MCP 請求被視為「你自己」這個帳號——這就是下面要設定的 MCP auth token。
 
 * If your makeslide backend does **not** have Google login enabled (`GOOGLE_AUTH_ENABLED` is off), every API route is already open and an MCP client can connect with no token at all — skip the "generate an auth token" step below.
-* If Google login **is** enabled, every `/api/` route requires a logged-in session. An MCP client has no browser and no session cookie, so it needs a bearer token to get past that check — that's what the MCP auth token below is for.
+* If Google login **is** enabled, every `/api/` route requires a logged-in session. An MCP client has no browser and no session cookie, so it needs a bearer token to get past that check and be recognized as you specifically — that's what the MCP auth token below is for.
 
 ## 步驟一：產生 MCP auth token（僅在啟用 Google 登入時需要）/ Step 1: Generate an MCP auth token (only needed with Google login enabled)
 
-1. 以系統管理員（admin）帳號登入 makeslide。 / Sign in to makeslide with an admin account.
-2. 前往「設定」頁，找到「MCP auth token」區塊。 / Go to the Settings page and find the "MCP auth token" section.
+每個帳號各自擁有一份自己的 MCP auth token；不需要管理員（admin）權限，任何登入的帳號都可以產生自己的 token。用這個 token 連線的 MCP client，會被視為「這個帳號本人」在操作——可以完整讀寫這個帳號自己擁有的所有簡報，就跟用瀏覽器登入這個帳號的效果一樣；但對於別人擁有的簡報，仍然依照那份簡報的可見度設定決定能不能讀寫（見下方「已知限制」）。
+
+Each account has its own MCP auth token; no admin permission is needed — any logged-in account can generate its own. An MCP client connecting with this token is treated as that specific account — it gets full read/write access to every presentation that account owns, exactly as if that account had logged in through a browser. For presentations owned by someone else, access still depends on that presentation's visibility setting (see "Known limitation" below).
+
+1. 用你自己的帳號登入 makeslide（不需要是 admin）。 / Sign in to makeslide with your own account (admin is not required).
+2. 前往「設定」頁的「帳號」分類，找到「MCP auth token」區塊。 / Go to the Settings page, "Account" category, and find the "MCP auth token" section.
 3. 按下「產生 MCP auth token」。 / Click "Generate MCP auth token".
 4. 新 token 只會在這次顯示**一次**，畫面上會出現一次性提示框與「複製 token」按鈕，請立即複製保存；離開頁面或重新整理之後就不會再顯示明文，只會看到「目前已設定 MCP auth token」的狀態文字。 / The new token is shown **once**, in a one-time notice box with a "Copy token" button — copy it immediately. After you leave or reload the page, the raw value is gone for good; you'll only see a status line saying a token is configured.
-5. 如果之後需要輪替（例如懷疑外洩），重新按一次「產生 MCP auth token」即可：新 token 會立即取代舊的，舊 token 立刻失效，不需要重啟伺服器。 / To rotate the token later (e.g. if it may have leaked), just click "Generate MCP auth token" again — the new token replaces the old one immediately and the old one stops working right away, no server restart needed.
+5. 如果之後需要輪替（例如懷疑外洩），重新按一次「產生 MCP auth token」即可：新 token 會立即取代你這個帳號的舊 token，舊 token 立刻失效，不需要重啟伺服器。 / To rotate the token later (e.g. if it may have leaked), just click "Generate MCP auth token" again — the new token replaces your account's old one immediately and the old one stops working right away, no server restart needed.
 
 ## 步驟二：設定 MCP client / Step 2: Configure your MCP client
 
@@ -71,21 +75,21 @@ makeslide ships a built-in MCP (Model Context Protocol) server so Claude Code or
 
 ## 已知限制 / Known limitation
 
-MCP 請求沒有對應任何登入帳號（沒有瀏覽器 session）。`upload_pdf` 建立的簡報因此會是「無擁有者」狀態，這種簡報的全部 7 個工具（讀取與寫入類）都能正常操作。
+MCP 請求會被視為 token 所屬的那個帳號本人，因此 `upload_pdf` 建立的簡報直接屬於這個帳號，這個帳號的全部 7 個工具（讀取與寫入類）都能正常操作，跟用瀏覽器登入這個帳號的效果完全一樣。
 
-但如果想用 MCP 管理**既有、已經有正常擁有者**的簡報（例如先用瀏覽器上傳，之後想用 MCP 接著處理），情況會依該簡報的可見度設定而不同：
+但如果想用 MCP 管理**別人帳號擁有**的簡報，情況會依該簡報的可見度設定而不同：
 
-* 私人（`private`）：讀取類與寫入類工具都會被擋下（403），因為 MCP 請求沒有對應任何帳號身分。
+* 私人（`private`）：讀取類與寫入類工具都會被擋下（403），因為這份簡報不屬於 token 所屬的帳號。
 * 公開（`public`）：讀取類工具可以正常使用，但寫入類工具仍會被擋下。
 * 任何人可編輯（`public_editable`）：全部 7 個工具都能正常操作。
 
-實務上的解法：在設定頁把該簡報的可見度改成「任何人可編輯」（`public_editable`），MCP 才能完整讀寫這份簡報。 / The practical workaround: change that presentation's visibility setting to "anyone can edit" (`public_editable`) in Settings, so MCP can fully read and write it.
+實務上的解法：如果想用 MCP 完整讀寫某份簡報，最簡單的方式是用該簡報擁有者的帳號產生 MCP auth token；或者請擁有者在設定頁把該簡報的可見度改成「任何人可編輯」（`public_editable`）。 / The practical workaround: the simplest way to fully read/write a specific presentation via MCP is to generate the MCP auth token from that presentation's owning account; alternatively, ask the owner to change that presentation's visibility to "anyone can edit" (`public_editable`) in Settings.
 
-MCP requests don't carry any login account (no browser session). A presentation created via `upload_pdf` therefore ends up "ownerless," and all 7 tools (read and write) work normally on it.
+MCP requests are treated as the specific account that owns the bearer token, so a presentation created via `upload_pdf` belongs to that account directly, and all 7 tools (read and write) work normally on it — exactly as if that account had logged in through a browser.
 
-If you want to use MCP to manage an **existing** presentation that already has a normal owner (e.g. uploaded earlier through the browser), behavior depends on that presentation's visibility:
+If you want to use MCP to manage a presentation **owned by a different account**, behavior depends on that presentation's visibility:
 
-* Private: both read and write tools are rejected (403), since the MCP request carries no account identity.
+* Private: both read and write tools are rejected (403), since the presentation doesn't belong to the token's account.
 * Public: read tools work, but write tools are still rejected.
 * Public editable: all 7 tools work normally.
 
@@ -96,15 +100,15 @@ If you want to use MCP to manage an **existing** presentation that already has a
 1. upload_pdf({ file_path: "/Users/me/Desktop/report.pdf" })
 2. start_generation({ id: "<剛建立的簡報 id>" })
 3. get_generation_status({ id: "..." })  ← 重複呼叫直到 status 變成 done
-4. list_presentations() / get_presentation({ id: "..." })  ← 確認生成結果，這份簡報是
-   無擁有者狀態，全部工具都能正常操作
+4. list_presentations() / get_presentation({ id: "..." })  ← 確認生成結果，這份簡報
+   屬於 MCP token 所屬的帳號，全部工具都能正常操作
 
 Me: Upload /Users/me/Desktop/report.pdf and start generation
 1. upload_pdf({ file_path: "/Users/me/Desktop/report.pdf" })
 2. start_generation({ id: "<the new presentation id>" })
 3. get_generation_status({ id: "..." })  ← call repeatedly until status is "done"
 4. list_presentations() / get_presentation({ id: "..." })  ← check the result; this
-   presentation is ownerless, so every tool works normally on it
+   presentation belongs to the MCP token's account, so every tool works normally on it
 ```
 
 ## 疑難排解 / Troubleshooting
@@ -113,4 +117,4 @@ Me: Upload /Users/me/Desktop/report.pdf and start generation
 * **連線不到後端 / Cannot reach the backend**：確認 `MAKESLIDE_URL` 指向的後端正在執行，且 MCP client 所在的機器能存取那個網址（同機器用 `localhost`，不同機器要換成對外可連的網址）。 / **Cannot reach the backend**: make sure the backend at `MAKESLIDE_URL` is actually running and reachable from the machine running the MCP client (use `localhost` on the same machine, or a reachable address otherwise).
 * **`upload_pdf` 找不到檔案 / `upload_pdf` says the file is missing**：`file_path` 必須是 MCP client（執行 `mcp-server.ts` 那個行程）所在機器上的絕對路徑，不是你聊天視窗所在的機器路徑。 / `file_path` must be an absolute path on the machine running the MCP server process, not on whatever machine you're chatting from.
 * **token 外洩了怎麼辦 / What if the token leaks**：回到設定頁重新按一次「產生 MCP auth token」，舊 token 會立刻失效，不需要重啟伺服器。 / Go back to Settings and click "Generate MCP auth token" again — the old token stops working immediately, no restart required.
-* **工具呼叫對某份既有簡報回傳 403，但對其他簡報正常 / A tool call returns 403 for one existing presentation but works fine on others**：這是上方「已知限制」的情況，不是設定錯誤——那份簡報目前的可見度不允許 MCP（無帳號身分）讀取或寫入；把該簡報設成 `public_editable` 即可解決。 / This is the "Known limitation" above, not a misconfiguration — that presentation's current visibility doesn't allow MCP (which has no account identity) to read or write it; set it to `public_editable` to resolve it.
+* **工具呼叫對某份既有簡報回傳 403，但對其他簡報正常 / A tool call returns 403 for one existing presentation but works fine on others**：這是上方「已知限制」的情況，不是設定錯誤——那份簡報屬於別的帳號，且目前的可見度不允許 token 所屬的帳號讀取或寫入；換成該簡報擁有者的 token，或請擁有者把該簡報設成 `public_editable` 即可解決。 / This is the "Known limitation" above, not a misconfiguration — that presentation belongs to a different account, and its current visibility doesn't allow the token's account to read or write it; use that presentation owner's token instead, or ask them to set it to `public_editable`.

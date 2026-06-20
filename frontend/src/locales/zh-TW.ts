@@ -63,7 +63,7 @@ export const zhTW = {
   'settings.accountDeleteError': '刪除帳號失敗',
   'settings.accountDeleteConfirmMismatch': '確認欄位必須與 account id 完全相同',
   'settings.mcpTokenTitle': 'MCP auth token',
-  'settings.mcpTokenHint': '產生新的 MCP Bearer token 並保存到系統設定。既有 token 不會在畫面中顯示；新 token 只會在產生後顯示一次，請立即複製並存放於 MCP client 的 MAKESLIDE_MCP_TOKEN。',
+  'settings.mcpTokenHint': '產生屬於你自己這個帳號的 MCP Bearer token，讓 MCP client 以你的帳號身分操作簡報。既有 token 不會在畫面中顯示；新 token 只會在產生後顯示一次，請立即複製並存放於 MCP client 的 MAKESLIDE_MCP_TOKEN。',
   'settings.mcpTokenConfigured': '目前已設定 MCP auth token。',
   'settings.mcpTokenNotConfigured': '目前尚未設定 MCP auth token。',
   'settings.mcpTokenGenerateButton': '產生 MCP auth token',

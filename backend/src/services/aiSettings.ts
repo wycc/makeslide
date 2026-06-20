@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '../config';
@@ -43,6 +44,8 @@ export interface PerAccountAiSettings {
   githubRepoUrl: string;
   githubToken: string;
   autoGenerateAnimation: boolean;
+  /** Bearer token this account's MCP server config should send; lets MCP requests authenticate as this specific account instead of anonymously. */
+  mcpAuthToken: string;
 }
 
 /**
@@ -56,7 +59,6 @@ export interface SystemAuthSettings {
   googleClientSecret: string;
   googleRedirectUri: string;
   adminAccountIds: string[];
-  mcpAuthToken: string;
 }
 
 export interface RuntimeAiSettings extends PerAccountAiSettings, SystemAuthSettings {}
@@ -75,6 +77,15 @@ export function getAccountSettingsLocation(accountId: string = DEFAULT_ACCOUNT_I
     accountDir,
     envPath: path.join(accountDir, 'settings.env'),
   };
+}
+
+/** Every account that has ever had a settings.env written (including DEFAULT_ACCOUNT_ID). */
+export function listAllAccountIds(): string[] {
+  const accountsRoot = path.join(config.repoRoot, 'accounts');
+  if (!fs.existsSync(accountsRoot)) return [];
+  return fs.readdirSync(accountsRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
 }
 
 function parseEnvContent(content: string): Record<string, string> {
@@ -166,6 +177,10 @@ function basePerAccountSettings(): PerAccountAiSettings {
     githubRepoUrl: process.env.GITHUB_REPO_URL?.trim() || '',
     githubToken: process.env.GITHUB_TOKEN?.trim() || '',
     autoGenerateAnimation: asBoolean(process.env.AUTO_GENERATE_ANIMATION) ?? false,
+    // No env-level default: a shared default would make every account's token
+    // identical, breaking findAccountIdByMcpAuthToken()'s ability to tell accounts
+    // apart. Each account must explicitly generate its own.
+    mcpAuthToken: '',
   };
 }
 
@@ -201,6 +216,7 @@ function loadPerAccountOverrides(accountId: string): Partial<PerAccountAiSetting
     githubRepoUrl: values.GITHUB_REPO_URL,
     githubToken: values.GITHUB_TOKEN,
     autoGenerateAnimation: asBoolean(values.AUTO_GENERATE_ANIMATION),
+    mcpAuthToken: values.MCP_AUTH_TOKEN,
   });
 }
 
@@ -252,7 +268,30 @@ const PER_ACCOUNT_ENV_PAIRS: Array<[string, keyof PerAccountAiSettings]> = [
   ['GITHUB_REPO_URL', 'githubRepoUrl'],
   ['GITHUB_TOKEN', 'githubToken'],
   ['AUTO_GENERATE_ANIMATION', 'autoGenerateAnimation'],
+  ['MCP_AUTH_TOKEN', 'mcpAuthToken'],
 ];
+
+/** Constant-time string equality (avoids a JS `===` timing side-channel comparing MCP tokens). */
+function timingSafeStringEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, 'utf8');
+  const bufB = Buffer.from(b, 'utf8');
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+/**
+ * Resolves which account a bearer token belongs to, so an MCP request can be treated as that
+ * specific account instead of anonymously. Each account's token is checked individually with a
+ * constant-time comparison; scans every account since tokens are no longer a single shared secret.
+ */
+export function findAccountIdByMcpAuthToken(token: string): string | null {
+  if (!token) return null;
+  for (const accountId of listAllAccountIds()) {
+    const candidate = loadPerAccountSettings(accountId).mcpAuthToken;
+    if (candidate && timingSafeStringEqual(candidate, token)) return accountId;
+  }
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // 系統層級設定（Google 登入）：全服務只有一份，固定存在 DEFAULT_ACCOUNT_ID 下
@@ -265,7 +304,6 @@ function baseSystemAuthSettings(): SystemAuthSettings {
     googleClientSecret: config.googleClientSecret,
     googleRedirectUri: config.googleRedirectUri,
     adminAccountIds: parseAdminAccountIds(process.env.ADMIN_ACCOUNT_IDS) ?? [],
-    mcpAuthToken: config.mcpAuthToken,
   };
 }
 
@@ -277,7 +315,6 @@ function loadSystemAuthOverrides(): Partial<SystemAuthSettings> {
     googleClientSecret: values.GOOGLE_CLIENT_SECRET,
     googleRedirectUri: values.GOOGLE_REDIRECT_URI,
     adminAccountIds: parseAdminAccountIds(values.ADMIN_ACCOUNT_IDS),
-    mcpAuthToken: values.MCP_AUTH_TOKEN,
   });
 }
 
@@ -295,7 +332,6 @@ const SYSTEM_ENV_PAIRS: Array<[string, keyof SystemAuthSettings]> = [
   ['GOOGLE_CLIENT_SECRET', 'googleClientSecret'],
   ['GOOGLE_REDIRECT_URI', 'googleRedirectUri'],
   ['ADMIN_ACCOUNT_IDS', 'adminAccountIds'],
-  ['MCP_AUTH_TOKEN', 'mcpAuthToken'],
 ];
 
 export function getSystemAuthSettings(): SystemAuthSettings {
@@ -387,7 +423,6 @@ function splitSettingsUpdate(next: Partial<RuntimeAiSettings>): {
     'googleClientSecret',
     'googleRedirectUri',
     'adminAccountIds',
-    'mcpAuthToken',
   ];
   const systemPart: Partial<SystemAuthSettings> = {};
   const accountPart: Partial<PerAccountAiSettings> = {};
