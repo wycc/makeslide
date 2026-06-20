@@ -174,7 +174,7 @@ test('buildFigureReferenceNotes formats captions and falls back when missing', (
   assert.match(notes ?? '', /參考圖表 2：\(無圖說文字\)/);
 });
 
-test('getFigureReferencesForPages aggregates and dedupes figures across multiple pages, capped by area', () => {
+test('getFigureReferencesForPages aggregates and dedupes figures across multiple pages, capped by area', (t) => {
   const SYNTH_PDF_ID = 'pdf-figures-synth-pages-01';
   const synthDir = path.join(config.storageRoot, SYNTH_PDF_ID);
   fs.mkdirSync(synthDir, { recursive: true });
@@ -201,16 +201,28 @@ test('getFigureReferencesForPages aggregates and dedupes figures across multiple
       'utf8',
     );
 
+    let manifestReadCount = 0;
+    const originalReadFileSync = fs.readFileSync;
+    t.mock.method(fs, 'readFileSync', ((filePath: fs.PathOrFileDescriptor, ...args: unknown[]) => {
+      if (filePath === path.join(synthDir, 'figures.json')) manifestReadCount += 1;
+      return Reflect.apply(originalReadFileSync, fs, [filePath, ...args]) as ReturnType<typeof fs.readFileSync>;
+    }) as typeof fs.readFileSync);
+
     // Figure 'shared' appears on both pages but is only counted once.
     const all = getFigureReferencesForPages(SYNTH_PDF_ID, [1, 2], 5);
     assert.deepEqual(all.map((f) => f.id).sort(), ['large', 'shared', 'small']);
+    assert.equal(manifestReadCount, 1, 'multi-page aggregation should read figures.json once');
 
     // Capped by area: keep the two largest across both pages.
+    manifestReadCount = 0;
     const capped = getFigureReferencesForPages(SYNTH_PDF_ID, [1, 2], 2);
     assert.deepEqual(capped.map((f) => f.id), ['large', 'shared']);
+    assert.equal(manifestReadCount, 1, 'capped multi-page aggregation should read figures.json once');
 
     // Empty when no figures exist on the given pages.
+    manifestReadCount = 0;
     assert.deepEqual(getFigureReferencesForPages(SYNTH_PDF_ID, [3, 4]), []);
+    assert.equal(manifestReadCount, 1, 'empty multi-page aggregation should read figures.json once');
   } finally {
     fs.rmSync(synthDir, { recursive: true, force: true });
   }
