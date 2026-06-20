@@ -10,7 +10,7 @@ import {
   setRuntimeAiSettings,
   transferAdminAccount,
 } from '../../services/aiSettings';
-import { setOpenAIApiKeyRuntime, setOpenAIBaseUrlRuntime } from '../../services/openai';
+import { invalidateOpenAIClientCache, setOpenAIApiKeyRuntime, setOpenAIBaseUrlRuntime } from '../../services/openai';
 import { currentAccountId } from '../../services/accountContext';
 import { IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
 import { pushPresentationToGitHub } from '../../services/presentationGit';
@@ -185,6 +185,15 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
     };
     if (typeof next.openaiApiKey === 'string') setOpenAIApiKeyRuntime(accountId, next.openaiApiKey);
     if (typeof next.openaiBaseUrl === 'string') setOpenAIBaseUrlRuntime(accountId, next.openaiBaseUrl);
+    // cgu-air/openrouter have no override layer of their own (unlike openai above) — their
+    // cached client must be invalidated explicitly or a previously-cached client keeps using
+    // the old key/baseURL until the server restarts.
+    if (typeof next.cguAirApiKey === 'string' || typeof next.cguAirBaseUrl === 'string') {
+      invalidateOpenAIClientCache(accountId, 'cgu-air');
+    }
+    if (typeof next.openrouterApiKey === 'string' || typeof next.openrouterBaseUrl === 'string') {
+      invalidateOpenAIClientCache(accountId, 'openrouter');
+    }
     setRuntimeAiSettings(accountId, next);
     await persistEnvSettings(accountId, next);
     return reply.code(200).send(aiSettingsResponse(accountId, accountIsAdmin));
