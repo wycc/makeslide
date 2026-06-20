@@ -4,6 +4,12 @@ import type { ChatCompletionMessageParam } from 'openai/resources/chat/completio
 import { appendLlmRequestLog, appendLlmResponseLog } from './llmUsage';
 import { logger } from '../logger';
 import { redactLogObject } from './logSanitizer';
+import { config } from '../config';
+
+/** Same request-deadline budget used for OpenAI calls (services/openai.ts); applied here so a hung Gemini API connection can't block a request/job forever. */
+function geminiRequestTimeoutSignal(): AbortSignal {
+  return AbortSignal.timeout(config.openaiRequestTimeoutMs);
+}
 
 export interface GeminiUsage {
   prompt_tokens: number;
@@ -222,6 +228,7 @@ export async function callGeminiJson<T>(params: {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
+      signal: geminiRequestTimeoutSignal(),
     },
   );
   if (!resp.ok) throw new Error(`Gemini request failed: HTTP ${resp.status}`);
@@ -291,6 +298,7 @@ export async function callGeminiTextStream(params: {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
+      signal: geminiRequestTimeoutSignal(),
     },
   );
   if (!resp.ok) throw new Error(`Gemini request failed: HTTP ${resp.status}`);
@@ -414,6 +422,7 @@ export async function synthesizeGeminiSpeech(params: {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
+      signal: geminiRequestTimeoutSignal(),
     },
   );
   if (!resp.ok) {
