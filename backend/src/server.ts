@@ -246,10 +246,18 @@ export async function buildApp() {
     }
     const status =
       anyErr.statusCode && anyErr.statusCode >= 400 ? anyErr.statusCode : 500;
+    // An unexpected (uncaught) error's raw message can leak server internals — absolute file
+    // paths from an ENOENT, db column/table names, etc. The full error is already logged above
+    // for diagnosis; in production, only known error codes (status !== 500, handled explicitly
+    // by the route) get their message echoed back to the client.
+    const message =
+      status === 500 && process.env.NODE_ENV === "production"
+        ? "系統發生未預期的錯誤，請稍後再試"
+        : err.message || "Internal error";
     return reply.code(status).send({
       error: {
         code: status === 500 ? "INTERNAL_ERROR" : "REQUEST_ERROR",
-        message: err.message || "Internal error",
+        message,
       },
     });
   });
