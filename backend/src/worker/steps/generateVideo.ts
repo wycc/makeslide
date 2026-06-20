@@ -2,12 +2,30 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import ffmpegStatic from 'ffmpeg-static';
+import sharp from 'sharp';
 import { db } from '../../db';
 import { logger } from '../../logger';
 import { pageAudioPath, pageImagePath, videoPath } from '../../services/storage';
 import { runCommand } from '../poppler';
 
 const FFMPEG = ffmpegStatic ?? 'ffmpeg';
+
+/** Rounds up to the nearest even number, never below 2 (libx264 requires even width/height). */
+export function evenCeil(n: number): number {
+  return Math.max(2, Math.ceil(n / 2) * 2);
+}
+
+/**
+ * Scales an input frame down (never up) to fit within `width`x`height` preserving aspect ratio,
+ * then letterboxes/pillarboxes it to exactly that size. Every page segment uses the same target
+ * size (derived from the first usable page) so the final `-c copy` concat produces a single
+ * consistent video instead of one with mismatched per-segment resolutions — source pages can
+ * legitimately differ in pixel dimensions (e.g. a source PDF mixing portrait and landscape
+ * slides), since each page's image is rendered independently at the PDF's own page size.
+ */
+export function buildScaleAndPadFilter(width: number, height: number): string {
+  return `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2`;
+}
 
 // poppler.ts's runCommand() supports a timeoutMs option (kills the process with SIGKILL and
 // rejects instead of hanging forever), but it only takes effect if a caller passes it — without
@@ -46,6 +64,8 @@ export async function generateVideo(
 
   try {
     const segmentPaths: string[] = [];
+    let targetWidth: number | null = null;
+    let targetHeight: number | null = null;
     for (let i = 0; i < pageNumbers.length; i++) {
       const pageNumber = pageNumbers[i];
       if (!pageNumber) continue;
@@ -60,6 +80,11 @@ export async function generateVideo(
         );
         continue;
       }
+      if (targetWidth == null || targetHeight == null) {
+        const meta = await sharp(image).metadata();
+        targetWidth = evenCeil(meta.width || 1);
+        targetHeight = evenCeil(meta.height || 1);
+      }
       const segment = path.join(segmentsDir, `${String(i + 1).padStart(4, '0')}.mp4`);
 
       await runCommand(
@@ -73,7 +98,7 @@ export async function generateVideo(
           '-i',
           audio,
           '-vf',
-          'pad=ceil(iw/2)*2:ceil(ih/2)*2',
+          buildScaleAndPadFilter(targetWidth, targetHeight),
           '-c:v',
           'libx264',
           '-tune',
