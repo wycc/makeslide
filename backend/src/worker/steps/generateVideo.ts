@@ -9,6 +9,13 @@ import { runCommand } from '../poppler';
 
 const FFMPEG = ffmpegStatic ?? 'ffmpeg';
 
+// poppler.ts's runCommand() supports a timeoutMs option (kills the process with SIGKILL and
+// rejects instead of hanging forever), but it only takes effect if a caller passes it — without
+// these, a single page whose ffmpeg encode gets stuck (e.g. on a malformed image) blocks the
+// whole video-generation job indefinitely.
+const SEGMENT_FFMPEG_TIMEOUT_MS = 5 * 60_000;
+const CONCAT_FFMPEG_TIMEOUT_MS = 5 * 60_000;
+
 export interface GenerateVideoInput {
   pdfId: string;
   pageCount: number;
@@ -55,31 +62,35 @@ export async function generateVideo(
       }
       const segment = path.join(segmentsDir, `${String(i + 1).padStart(4, '0')}.mp4`);
 
-      await runCommand(FFMPEG, [
-        '-y',
-        '-loop',
-        '1',
-        '-i',
-        image,
-        '-i',
-        audio,
-        '-vf',
-        'pad=ceil(iw/2)*2:ceil(ih/2)*2',
-        '-c:v',
-        'libx264',
-        '-tune',
-        'stillimage',
-        '-c:a',
-        'aac',
-        '-b:a',
-        '192k',
-        '-pix_fmt',
-        'yuv420p',
-        '-shortest',
-        '-movflags',
-        '+faststart',
-        segment,
-      ]);
+      await runCommand(
+        FFMPEG,
+        [
+          '-y',
+          '-loop',
+          '1',
+          '-i',
+          image,
+          '-i',
+          audio,
+          '-vf',
+          'pad=ceil(iw/2)*2:ceil(ih/2)*2',
+          '-c:v',
+          'libx264',
+          '-tune',
+          'stillimage',
+          '-c:a',
+          'aac',
+          '-b:a',
+          '192k',
+          '-pix_fmt',
+          'yuv420p',
+          '-shortest',
+          '-movflags',
+          '+faststart',
+          segment,
+        ],
+        { timeoutMs: SEGMENT_FFMPEG_TIMEOUT_MS },
+      );
 
       segmentPaths.push(segment);
       await onProgress?.(segmentPaths.length, pageNumbers.length);
@@ -95,18 +106,11 @@ export async function generateVideo(
     await fs.promises.writeFile(concatFile, concatContent + '\n', 'utf8');
 
     const output = videoPath(pdfId);
-    await runCommand(FFMPEG, [
-      '-y',
-      '-f',
-      'concat',
-      '-safe',
-      '0',
-      '-i',
-      concatFile,
-      '-c',
-      'copy',
-      output,
-    ]);
+    await runCommand(
+      FFMPEG,
+      ['-y', '-f', 'concat', '-safe', '0', '-i', concatFile, '-c', 'copy', output],
+      { timeoutMs: CONCAT_FFMPEG_TIMEOUT_MS },
+    );
 
     return { outputPath: output };
   } finally {
