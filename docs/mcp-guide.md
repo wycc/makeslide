@@ -69,6 +69,20 @@ makeslide ships a built-in MCP (Model Context Protocol) server so Claude Code or
 | `get_page_script` | 讀取某一頁目前的逐字稿內容。 / Read a page's current script (narration text). |
 | `set_page_script` | 覆寫某一頁的逐字稿（最長 4096 字元），通常搭配只重新生成語音（`start_generation` 的 `stages: ["audio"]`）一起使用。 / Overwrite a page's script (max 4096 characters), typically paired with regenerating only the audio stage (`stages: ["audio"]` on `start_generation`). |
 
+## 已知限制 / Known limitation
+
+`upload_pdf` 建立的簡報沒有對應任何登入帳號（因為 MCP 請求沒有瀏覽器 session），這份簡報會以「無擁有者」的狀態存在。依目前的權限設計，無擁有者簡報可以用**寫入類**工具操作（`start_generation`、`set_page_script`），但**讀取類**工具（`list_presentations`、`get_presentation`、`get_page_script`）會把它當作沒有人能讀取，因此：
+
+* 用 MCP 上傳並生成完成的簡報，之後再呼叫 `list_presentations` 看不到它、呼叫 `get_presentation`/`get_page_script` 會收到 403 錯誤——即使是同一個 MCP session 剛做完的。
+* 如果想用 MCP 管理**既有、已經有正常擁有者**的簡報（例如先用瀏覽器上傳，之後想用 MCP 重新生成），寫入類工具也一樣會被擋下，因為 MCP 請求沒有對應任何帳號身分。
+
+實務上的解法：在設定頁把該簡報的「分享/可見度」設定改成「任何人可編輯」（`public_editable`）之後，所有 7 個工具（包含讀取類）才能正常操作這份簡報。 / The practical workaround: change that presentation's visibility setting to "anyone can edit" (`public_editable`) in the Settings/sharing UI — once it's `public_editable`, all 7 tools (including the read-only ones) can operate on it normally.
+
+If you upload through `upload_pdf`, the resulting presentation has no associated login account (an MCP request has no browser session), so it ends up "ownerless." Under the current permission design, an ownerless presentation can be operated on with **write** tools (`start_generation`, `set_page_script`), but the **read** tools (`list_presentations`, `get_presentation`, `get_page_script`) treat it as readable by nobody, so:
+
+* A presentation you just uploaded and generated via MCP won't show up in `list_presentations`, and `get_presentation`/`get_page_script` will return a 403 — even from the same MCP session that just created it.
+* If you want to use MCP to manage an **existing** presentation that already has a normal owner (e.g. uploaded earlier through the browser), the write tools will also be rejected, since the MCP request doesn't carry any account identity.
+
 ## 範例對話流程 / Example workflow
 
 ```
@@ -76,11 +90,18 @@ makeslide ships a built-in MCP (Model Context Protocol) server so Claude Code or
 1. upload_pdf({ file_path: "/Users/me/Desktop/report.pdf" })
 2. start_generation({ id: "<剛建立的簡報 id>" })
 3. get_generation_status({ id: "..." })  ← 重複呼叫直到 status 變成 done
+   （這個流程只用到寫入類工具與不檢查權限的進度查詢，所以全程可行；
+    若接下來想用 list_presentations/get_presentation 查看這份簡報，
+    請先參考上方「已知限制」把它設成 public_editable）
 
 Me: Upload /Users/me/Desktop/report.pdf and start generation
 1. upload_pdf({ file_path: "/Users/me/Desktop/report.pdf" })
 2. start_generation({ id: "<the new presentation id>" })
 3. get_generation_status({ id: "..." })  ← call repeatedly until status is "done"
+   (this sequence only uses write tools and the permission-free status check,
+    so it works end to end; if you then want to use list_presentations/
+    get_presentation on this presentation, see "Known limitation" above
+    and mark it public_editable first)
 ```
 
 ## 疑難排解 / Troubleshooting
@@ -89,3 +110,4 @@ Me: Upload /Users/me/Desktop/report.pdf and start generation
 * **連線不到後端 / Cannot reach the backend**：確認 `MAKESLIDE_URL` 指向的後端正在執行，且 MCP client 所在的機器能存取那個網址（同機器用 `localhost`，不同機器要換成對外可連的網址）。 / **Cannot reach the backend**: make sure the backend at `MAKESLIDE_URL` is actually running and reachable from the machine running the MCP client (use `localhost` on the same machine, or a reachable address otherwise).
 * **`upload_pdf` 找不到檔案 / `upload_pdf` says the file is missing**：`file_path` 必須是 MCP client（執行 `mcp-server.ts` 那個行程）所在機器上的絕對路徑，不是你聊天視窗所在的機器路徑。 / `file_path` must be an absolute path on the machine running the MCP server process, not on whatever machine you're chatting from.
 * **token 外洩了怎麼辦 / What if the token leaks**：回到設定頁重新按一次「產生 MCP auth token」，舊 token 會立刻失效，不需要重啟伺服器。 / Go back to Settings and click "Generate MCP auth token" again — the old token stops working immediately, no restart required.
+* **`get_presentation`/`list_presentations`/`get_page_script` 回傳 403 或看不到剛建立的簡報 / `get_presentation`/`list_presentations`/`get_page_script` return 403 or can't see a presentation you just created**：這是上方「已知限制」的情況，不是設定錯誤；把該簡報設成 `public_editable` 即可解決。 / This is the "Known limitation" above, not a misconfiguration — set that presentation to `public_editable` to resolve it.
