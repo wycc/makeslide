@@ -99,6 +99,16 @@ const sessions = new Map<string, SyncSessionState>();
 const MASTER_TTL_MS = 10 * 60 * 1000;
 const CLIENT_TTL_MS = 30_000;
 
+/** Call when a PDF is deleted so its in-memory sync session state doesn't leak forever. */
+export function clearSyncSession(pdfId: string): void {
+  sessions.delete(pdfId);
+}
+
+/** Exported for unit testing; not part of the public sync routes API. */
+export function hasInMemorySyncSession(pdfId: string): boolean {
+  return sessions.has(pdfId);
+}
+
 interface SyncSessionRow {
   pdf_id: string;
   master_client_id: string | null;

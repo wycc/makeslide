@@ -23,6 +23,7 @@ import { DEFAULT_ACCOUNT_ID, sanitizeAccountId } from '../../services/accountCon
 import { removePdfDir } from '../../services/storage';
 import { clearRegenerateJob } from '../../worker/regenerate';
 import { clearAddPagesJob } from '../../worker/addPagesFromPrompt';
+import { clearSyncSession } from './sync';
 
 function sessionSub(request: FastifyRequest): string | null {
   const session = decodeSession(parseCookies(request).makeslide_session);
@@ -137,6 +138,7 @@ async function deleteAccountData(targetAccountId: string): Promise<{ deleted_pdf
     await removePdfDir(id);
     clearRegenerateJob(id);
     clearAddPagesJob(id);
+    clearSyncSession(id);
   }
   await removeAccountDir(targetAccountId);
 
