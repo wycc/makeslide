@@ -5,7 +5,8 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { buildApp } from '../src/server';
 import { config } from '../src/config';
-import { setSystemAuthSettings } from '../src/services/aiSettings';
+import { setSystemAuthSettings, setRuntimeAiSettings } from '../src/services/aiSettings';
+import { getOpenAIClient, invalidateOpenAIClientCache } from '../src/services/openai';
 
 function testSessionCookie(sub = 'account-1'): string {
   const payload = Buffer.from(JSON.stringify({ provider: 'google', sub, email: `${sub}@example.com` }), 'utf8').toString('base64url');
@@ -173,6 +174,45 @@ test('PATCH /api/system/ai-settings rejects unsupported LLM provider', async () 
     });
     assert.equal(resp.statusCode, 400);
     assert.equal((resp.json() as { error: { code: string } }).error.code, 'INVALID_REQUEST');
+  } finally {
+    await app.close();
+    cleanupAccountDir();
+  }
+});
+
+test('invalidateOpenAIClientCache forces getOpenAIClient to rebuild instead of reusing a stale client', () => {
+  const accountId = 'cache-invalidation-test-01';
+  setRuntimeAiSettings(accountId, { cguAirApiKey: 'sk-cgu-air-old', cguAirBaseUrl: 'https://old.example.test' });
+  const first = getOpenAIClient(accountId, 'cgu-air');
+  const second = getOpenAIClient(accountId, 'cgu-air');
+  assert.equal(first, second, 'expected the same cached client across calls before any invalidation');
+
+  setRuntimeAiSettings(accountId, { cguAirApiKey: 'sk-cgu-air-new', cguAirBaseUrl: 'https://new.example.test' });
+  invalidateOpenAIClientCache(accountId, 'cgu-air');
+  const third = getOpenAIClient(accountId, 'cgu-air');
+  assert.notEqual(third, first, 'expected a freshly built client after invalidateOpenAIClientCache');
+});
+
+test('PATCH /api/system/ai-settings invalidates the cached CGU Air and OpenRouter clients so updated keys take effect', async () => {
+  cleanupAccountDir();
+  setRuntimeAiSettings(ACCOUNT_SUB, { cguAirApiKey: 'sk-cgu-air-old', openrouterApiKey: 'sk-or-old' });
+  const staleCguAirClient = getOpenAIClient(ACCOUNT_SUB, 'cgu-air');
+  const staleOpenrouterClient = getOpenAIClient(ACCOUNT_SUB, 'openrouter');
+
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'PATCH',
+      url: '/api/system/ai-settings',
+      headers: HEADERS_JSON,
+      payload: { cgu_air_api_key: 'sk-cgu-air-rotated', openrouter_api_key: 'sk-or-rotated' },
+    });
+    assert.equal(resp.statusCode, 200);
+
+    const freshCguAirClient = getOpenAIClient(ACCOUNT_SUB, 'cgu-air');
+    const freshOpenrouterClient = getOpenAIClient(ACCOUNT_SUB, 'openrouter');
+    assert.notEqual(freshCguAirClient, staleCguAirClient, 'expected a rebuilt CGU Air client after the key was rotated');
+    assert.notEqual(freshOpenrouterClient, staleOpenrouterClient, 'expected a rebuilt OpenRouter client after the key was rotated');
   } finally {
     await app.close();
     cleanupAccountDir();

@@ -202,6 +202,18 @@ export function setOpenAIBaseUrlRuntime(accountId: string, baseUrl: string): voi
   state.client = null;
 }
 
+/**
+ * Forces the next getOpenAIClient() call for this account/provider to build a fresh client.
+ * Unlike 'openai' (which has its own apiKeyOverride/baseUrlOverride setters above that also
+ * clear the cache), 'cgu-air' and 'openrouter' read their key/baseURL straight from
+ * getRuntimeAiSettings() with no override layer — admin.ts should call this whenever it updates
+ * either provider's settings, otherwise an account that already cached a client keeps using the
+ * old credentials until the server restarts.
+ */
+export function invalidateOpenAIClientCache(accountId: string, provider: OpenAiCompatibleProvider): void {
+  getAccountState(accountId, provider).client = null;
+}
+
 export function setOpenAIClientForTest(client: OpenAI | null): void {
   testClientOverride = client;
 }
