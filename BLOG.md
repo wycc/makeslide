@@ -1,5 +1,22 @@
 # MakeSlide 功能說明
 
+## 播放頁 metadata 狀態訊息補齊多語系
+
+### 功能目的
+
+播放頁的標題更新、TTS 生成設定、設為 private、分享 QR Code 與 GitHub 同步等操作都會顯示成功或失敗狀態。這些文字過去仍有部分硬編碼中文，即使使用者把介面切成英文，也不會跟著切換。
+
+### 修復內容
+
+現在上述 `usePdfMetadata()` 狀態訊息都改用 i18n 翻譯鍵；分享 QR Code 的 read-only/editable 顯示也重用既有分享 access mode 翻譯，讓建立分享連結與產生 QR Code 的用語一致。
+
+### 技術重點
+
+- `frontend/src/pages/play/usePdfMetadata.ts` 的標題、TTS、private、QR Code 與 GitHub 同步狀態訊息改用 `useI18n()`。
+- `frontend/src/locales/zh-TW.ts` 與 `frontend/src/locales/en.ts` 補齊中英文 key。
+- `frontend/src/i18n.test.ts` 新增 `usePdfMetadata` 狀態訊息 key 覆蓋。
+- 已執行 frontend typecheck 與完整前端測試套件（200 個測試）通過。
+
 ## 建立分享連結改用 clipboard fallback 與多語系提示
 
 ### 功能目的

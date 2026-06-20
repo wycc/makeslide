@@ -754,7 +754,11 @@
 
 - [x] 播放頁建立分享連結流程補齊 clipboard fallback 與 i18n（已完成）：`frontend/src/pages/play/usePdfMetadata.ts` 的 `handleCreateShareLink()` 原本在建立分享連結後直接呼叫 `navigator.clipboard.writeText()`，沒有走既有共用 `copyTextToClipboard()` fallback，且成功、需手動複製、建立失敗訊息仍硬編碼中文。本次改為使用 `copyTextToClipboard()`，保留建立分享後自動開啟分享對話框、設定 `shareUrl` 與更新可見度行為；成功/失敗/手動複製提示與 read-only/editable 顯示改用 `useI18n()` 翻譯鍵，補齊 `frontend/src/locales/zh-TW.ts`、`frontend/src/locales/en.ts` 與 `frontend/src/i18n.test.ts` 的新增 key 覆蓋。已執行 frontend typecheck（通過）與完整前端測試 `node --import tsx --test $(find src -name "*.test.ts" | sort)`（199 個測試全數通過）。分支：`fix/share-link-clipboard-i18n`，已 merge 回 master。
 
+- [x] 播放頁 PDF metadata 狀態訊息補齊 i18n（已完成）：延續 `usePdfMetadata()` 已引入 `useI18n()` 的方向，將標題儲存/重生、TTS 設定儲存、設為 private、分享 QR Code 產生，以及 GitHub 同步的使用者可見成功/失敗訊息全數改用翻譯鍵；QR Code 訊息重用既有 read-only/editable access mode key，保留第 110 行中文註解不變。補齊 `frontend/src/locales/zh-TW.ts`、`frontend/src/locales/en.ts` 與 `frontend/src/i18n.test.ts` 專屬 key 覆蓋。已執行 frontend typecheck（通過）與完整前端測試 `node --import tsx --test $(find src -name "*.test.ts" | sort)`（200 個測試全數通過）。分支：`i18n-use-pdf-metadata-messages`，已 merge 回 master。
+
 [x] 更改強迫設 KEY 的流程，先跳一個對話框問是否是設定 API key。對話框中提供完整說明不設定 KEY 的話需要 LLM 的功能都無法使用。且更改 UI 在執行無法使用的功能都需跳出需先設定 API Key 的提示。（已完成）
   - 時間: 2026-06-20
   - 分支: `feature/api-key-optional-prompt`
   - 工作記錄: 已移除前端啟動時缺少金鑰就強制導向設定頁的流程，改為在目前頁面顯示 API key 說明對話框，讓使用者可選擇前往 AI 設定或暫時略過。新增全域 `API_KEY_MISSING` 事件與 `ApiKeyRequiredDialog`，後端在缺少 OpenAI/Gemini/CGU Air/OpenRouter 金鑰時回傳標準 `API_KEY_MISSING` 錯誤，前端所有走共用 API 錯誤解析的 LLM 功能都會跳出「需先設定 API key」提示。對話框已補齊中英文 i18n，並清楚列出不設定 key 時無法使用的產生、改寫、問答、語音/轉錄/自動動畫等 LLM 功能。已執行 frontend typecheck 與 backend typecheck，皆通過。
+
+[ ] 增加刪除帳號的功能，將指定帳號和其中的簡報都刪除。
