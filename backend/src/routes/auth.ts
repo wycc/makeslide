@@ -48,6 +48,14 @@ const GoogleUserInfoSchema = z.object({
 type TokenResponse = z.infer<typeof TokenResponseSchema>;
 type GoogleUserInfo = z.infer<typeof GoogleUserInfoSchema>;
 
+/** Constant-time string equality (avoids a JS `===`/`!==` timing side-channel for secret comparisons — session signatures, OAuth state). Exported for unit testing. */
+export function timingSafeStringEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, 'utf8');
+  const bufB = Buffer.from(b, 'utf8');
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
 function base64UrlEncode(input: Buffer | string): string {
   const raw = Buffer.isBuffer(input) ? input : Buffer.from(input, 'utf8');
   return raw.toString('base64url');
@@ -68,7 +76,7 @@ function encodeSession(session: GoogleAccountSession): string {
 export function decodeSession(value: string | undefined): GoogleAccountSession | null {
   if (!value) return null;
   const [payload, signature] = value.split('.');
-  if (!payload || !signature || signPayload(payload) !== signature) return null;
+  if (!payload || !signature || !timingSafeStringEqual(signPayload(payload), signature)) return null;
   try {
     const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as unknown;
     return GoogleUserInfoSchema.extend({ provider: z.literal('google') }).parse(parsed);
@@ -218,7 +226,7 @@ export async function authRoutes(app: FastifyInstance) {
     const query = z.object({ code: z.string(), state: z.string() }).safeParse(request.query);
     const expectedState = parseCookies(request)[OAUTH_STATE_COOKIE];
     clearCookie(reply, OAUTH_STATE_COOKIE);
-    if (!query.success || !expectedState || query.data.state !== expectedState) {
+    if (!query.success || !expectedState || !timingSafeStringEqual(query.data.state, expectedState)) {
       return reply.code(400).send({ error: { code: 'INVALID_OAUTH_STATE', message: 'Google 登入驗證失敗' } });
     }
 
