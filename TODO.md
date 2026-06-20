@@ -1,4 +1,6 @@
 
+- [x] 播放頁文字說明效果支援自動換行：修正 `text-callout`、`step-list`、`pause-playback` 等疊加文字在深色膠囊狀或框狀標籤內文字過長時可能溢出或被截斷的問題。已新增共用 overlay 文字換行樣式，套用 `whiteSpace: 'pre-wrap'`、`overflowWrap: 'anywhere'`、`wordBreak: 'break-word'`、`minWidth: 0`，讓中英文長句、無空白長字串與保留換行的說明文字都能在容器內自然換行。分支 `fix/wrap-play-slide-description-text` 已合併回 `master`。驗證：`node --test --import tsx frontend/src/components/slide/SlideRenderer.test.ts` 通過；`npm --workspace frontend run typecheck` 通過。
+
 - [x] 設定頁新增「產生 MCP auth token」功能：建立 `feature/settings-generate-mcp-token` 分支，將 MCP bearer token 從只讀取啟動時 `MCP_AUTH_TOKEN` 的行為擴充為系統層級設定，可由 admin 在設定頁一鍵產生 32 bytes cryptographically secure random token（base64url 43 字元），後端保存到 `accounts/default/settings.env` 並立即更新 runtime 驗證；UI 只顯示新產生的一次性 token 與複製按鈕，不回傳/長期顯示既有 token 明文，並補齊中英文 i18n 與後端 API 測試。驗證：`npm run typecheck --workspace backend`、`./scripts/with-node-env.sh npx tsx --test backend/test/mcp-token-auth.test.ts`、`npm run typecheck --workspace frontend`、`./scripts/with-node-env.sh npx tsx --test frontend/src/i18n.test.ts` 通過；曾誤用全後端測試 pattern 指令觸發既有環境/資料狀態相關失敗，改以目標測試完成驗證。
 
 - [x] 修正全螢幕 `a` 快捷鍵插入暫停播放效果：先前全螢幕需先按 `a` 再按 `p` 才會呼叫 `insertPausePlaybackEffectRef`，與 master 投票快捷鍵衝突且造成使用者以為 `a` 無效；已改為全螢幕按下 `a` 時直接在目前播放時間新增 `pause-playback` 效果，`p` 在全螢幕 master 模式只保留投票控制開關，不再參與暫停效果插入序列。驗證：`npm --workspace frontend run typecheck` 通過。

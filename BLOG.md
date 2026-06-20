@@ -1,5 +1,22 @@
 # MakeSlide 功能說明
 
+## 播放頁文字說明效果自動換行
+
+### 功能目的
+
+播放投影片時，`text-callout`、`step-list`、`pause-playback` 等文字說明效果常用在深色膠囊狀或框狀標籤中，提醒觀眾注意重點或提示講者暫停。當說明文字較長、包含中英文混合內容，或是一段沒有空白的長字串時，過去可能超出標籤寬度、被截斷，影響播放畫面的可讀性。
+
+### 使用方式
+
+使用者不需要額外設定。只要在動畫效果中輸入較長的說明文字，播放頁與全螢幕播放的文字 overlay 會自動在容器內換行；原本手動輸入的換行也會保留，適合用來呈現多行提示、步驟說明或講者暫停提示。
+
+### 技術重點
+
+- 新增共用 overlay 文字換行樣式，統一處理 `whiteSpace: 'pre-wrap'`、`overflowWrap: 'anywhere'`、`wordBreak: 'break-word'` 與 `minWidth: 0`。
+- `SlideRenderer` 將上述樣式套用到 `text-callout`、`step-list` 與 `pause-playback` 的文字容器，避免各效果各自漏掉換行設定。
+- 新增 `SlideRenderer.test.ts` 驗證共用換行樣式契約，避免後續重構時不小心移除長文字保護。
+- 已執行 `node --test --import tsx frontend/src/components/slide/SlideRenderer.test.ts` 與 `npm --workspace frontend run typecheck` 通過。
+
 ## 管理員刪除帳號與其簡報
 
 ### 功能目的
