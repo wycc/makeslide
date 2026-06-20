@@ -1,5 +1,21 @@
 # MakeSlide 功能說明
 
+## 登入與 OAuth state cookie 在正式環境補上 Secure 屬性
+
+### 功能目的
+
+系統性檢查常見的前後端安全弱點類別（`dangerouslySetInnerHTML`、SQL injection、動態程式碼執行）時，前三項確認都已是安全用法或已知且有防護的既有功能，但檢查 cookie 安全屬性時發現登入用的 `makeslide_session`（30 天有效期）與 OAuth 流程用的 `makeslide_oauth_state` 這兩個 cookie 都只設定了 `HttpOnly`/`SameSite=Lax`，完全沒有 `Secure` 屬性。正式環境（`Dockerfile` 設定 `NODE_ENV=production`）一定跑在 HTTPS 之後，缺少 `Secure` 屬性代表這個帶有完整登入身分的 cookie，理論上仍可能在未來任何純 HTTP 連線情境下被送出，是一個可以低成本補上的縱深防禦缺口。
+
+### 修復內容
+
+在 `setCookie()`/`clearCookie()` 共用的 cookie 組裝邏輯裡，依據 `NODE_ENV` 是否為 `production` 決定要不要附加 `; Secure`；本機與測試環境通常跑在沒有 TLS 的 `http://localhost`，維持原樣不受影響，避免登入功能在開發環境失效。
+
+### 技術重點
+
+- `backend/src/routes/auth.ts` 新增 `secureCookieSuffix()`，`setCookie()`/`clearCookie()` 統一套用。
+- 新增 `backend/test/auth-cookie-secure.test.ts` 4 個測試，驗證生產環境下 `Set-Cookie` 含 `Secure`、非生產環境不含，且既有 `HttpOnly`/`SameSite=Lax` 屬性不受影響。
+- 已執行 backend typecheck 與完整測試套件（594 個測試，18 個失敗皆為既有環境性基準，無新增回歸）。
+
 ## 測驗作答分數改由伺服器端權威計算，並修復逐題配分無法持久化的問題
 
 ### 功能目的
