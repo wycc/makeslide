@@ -32,7 +32,7 @@ function ownerSubFromRequest(request: FastifyRequest): string | null {
 }
 
 function canReadPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
-  if (!row.owner_sub) return false;
+  if (!row.owner_sub) return true;
   if (sub && row.owner_sub === sub) return true;
   return row.visibility === 'public' || row.visibility === 'public_editable';
 }
