@@ -2371,6 +2371,76 @@ test('POST animation/custom-script sends an INTERNAL_ERROR event and stops if th
   }
 });
 
+test('POST animation/custom-script stops writing SSE events and does not throw once the client disconnects mid-stream', async () => {
+  seedAnimationPdf(PDF_ID, 1);
+  const planText = '1. 建立一個藍色圓形';
+  const codeText = [
+    'window.renderAnimation = function (root, api) {',
+    '  api.onFrame(function () {});',
+    '};',
+  ].join('\n');
+  let capturedRequestRaw: { emit: (event: string) => void } | null = null;
+  const client = twoPhaseStreamingChatClient(planText, codeText, (messages) => {
+    // Fires right as the second (code) LLM call starts — i.e. after plan-done was already
+    // written, but before any code delta/done event would be.
+    const isCodeStep = String(messages[0]?.content ?? '').includes('window.renderAnimation');
+    if (isCodeStep) capturedRequestRaw?.emit('close');
+  });
+  setOpenAIClientForTest(client as never);
+
+  const app = await buildApp();
+  app.addHook('onRequest', async (request) => {
+    if (request.url.endsWith('/animation/custom-script')) {
+      capturedRequestRaw = request.raw as unknown as { emit: (event: string) => void };
+    }
+  });
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${PDF_ID}/pages/1/animation/custom-script`,
+      headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+      payload: { prompt: '畫一個會放大的藍色圓形' },
+    });
+    // The handler must finish normally (not crash / hang) even though it kept "writing" after
+    // the simulated disconnect — those writes should just have been silently skipped.
+    assert.equal(resp.statusCode, 200);
+    const events = parseSseEvents(resp.payload);
+    assert.ok(events.some((e) => e.event === 'plan-done'), 'expected the plan phase to have been written before the disconnect');
+    assert.ok(!events.some((e) => e.event === 'done' || e.event === 'delta'), 'expected no code-phase events after the disconnect');
+  } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+  }
+});
+
+test('POST animation/custom-script logs (instead of throwing) if the response stream itself errors after hijack', async () => {
+  seedAnimationPdf(PDF_ID, 1);
+  setOpenAIClientForTest(streamingChatClient('window.renderAnimation = function (root, api) { api.onFrame(function () {}); };') as never);
+
+  const app = await buildApp();
+  let capturedReplyRaw: { emit: (event: string, err: Error) => void } | null = null;
+  app.addHook('onRequest', async (request, reply) => {
+    if (request.url.endsWith('/animation/custom-script')) {
+      capturedReplyRaw = reply.raw as unknown as { emit: (event: string, err: Error) => void };
+    }
+  });
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${PDF_ID}/pages/1/animation/custom-script`,
+      headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
+      payload: { prompt: '畫一個圓形' },
+    });
+    assert.equal(resp.statusCode, 200);
+    // Emitting 'error' on the now-finished raw response must not throw synchronously or leave
+    // an unhandled rejection — the route's own listener should have absorbed it.
+    assert.doesNotThrow(() => capturedReplyRaw?.emit('error', new Error('simulated write after disconnect')));
+  } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+  }
+});
+
 /** Builds a Gemini `streamGenerateContent?alt=sse` response body: `data: {...}\n\n` blocks, each carrying one `candidates[0].content.parts[0].text` chunk. */
 function geminiSseStream(textPieces: string[]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();

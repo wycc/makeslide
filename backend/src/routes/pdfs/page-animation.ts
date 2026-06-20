@@ -319,7 +319,19 @@ export async function registerPageAnimationRoutes(app: FastifyInstance): Promise
       'Connection': 'keep-alive',
       'X-Accel-Buffering': 'no',
     });
+    // Writing to a response stream after the client has disconnected can emit an unhandled
+    // 'error' event (Node has no default listener for that); track disconnects via `request.raw`
+    // 'close' so sendEvent() stops writing, and listen on `reply.raw` so any write that still
+    // races past that check is logged instead of propagating as an unhandled error.
+    let clientDisconnected = false;
+    request.raw.on('close', () => {
+      clientDisconnected = true;
+    });
+    reply.raw.on('error', (err) => {
+      request.log.warn({ err, pdfId: id, pageNumber: n }, 'animation custom-script SSE: response stream error (client likely disconnected)');
+    });
     const sendEvent = (event: string, data: unknown): void => {
+      if (clientDisconnected) return;
       reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
 
