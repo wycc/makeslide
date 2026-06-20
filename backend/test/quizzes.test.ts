@@ -279,6 +279,39 @@ test('POST /quizzes/:quizId/attempts is not gated by edit permission so follower
   await app.close();
 });
 
+test('POST /quizzes/:quizId/attempts still requires at least read access to a private presentation', async () => {
+  seedQuizPdf('quiz-attempt-readperm-01', 'private');
+  const app = await buildApp();
+  try {
+    const createResp = await app.inject({
+      method: 'POST',
+      url: '/api/pdfs/quiz-attempt-readperm-01/quizzes',
+      headers: OWNER_HEADERS,
+      payload: validQuizPayload(),
+    });
+    const quizId = (createResp.json() as { id: number }).id;
+
+    const noAccess = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/quiz-attempt-readperm-01/quizzes/${quizId}/attempts`,
+      headers: OTHER_HEADERS,
+      payload: { client_id: 'client-1', session_id: 'session-1', answers: { q1: [1] } },
+    });
+    assert.equal(noAccess.statusCode, 403);
+    assert.equal((noAccess.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+
+    const ownerSubmit = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/quiz-attempt-readperm-01/quizzes/${quizId}/attempts`,
+      headers: OWNER_HEADERS,
+      payload: { client_id: 'client-2', session_id: 'session-2', answers: { q1: [1] } },
+    });
+    assert.equal(ownerSubmit.statusCode, 201);
+  } finally {
+    await app.close();
+  }
+});
+
 test('GET /quizzes rejects a non-owner request on a private presentation', async () => {
   seedQuizPdf('quiz-read-priv-01', 'private');
   const app = await buildApp();
@@ -360,7 +393,10 @@ test('GET /quizzes/:quizId/attempts rejects a non-owner request on a private pre
 });
 
 test('GET /quizzes/:quizId/attempts allows the owner to read student attempt records', async () => {
-  seedQuizPdf('quiz-attempts-read-owner-01', 'private');
+  // public (not private): the attempt below is submitted by OTHER_HEADERS, which now requires
+  // at least read access to the presentation, matching real classroom usage where students
+  // access a publicly shared quiz rather than the owner's own private session.
+  seedQuizPdf('quiz-attempts-read-owner-01', 'public');
   const app = await buildApp();
   try {
     const createResp = await app.inject({
