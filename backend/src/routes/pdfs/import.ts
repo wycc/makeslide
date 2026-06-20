@@ -3,7 +3,6 @@ import fs from 'node:fs';
 import { pipeline } from 'node:stream/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
 import { nanoid } from 'nanoid';
 import { config } from '../../config';
 import { db } from '../../db';
@@ -11,24 +10,11 @@ import { createPdfDir } from '../../services/storage';
 import type { PdfMetadata, PdfRow } from '../../types';
 import { decodeSession, parseCookies } from '../auth';
 import { DEFAULT_PDF_CATEGORY, errorResponse, nowIso, rowToListItem } from './shared';
+import { runUnzipCommand } from './unzip';
 
 function ownerSubFromRequest(request: FastifyRequest): string | null {
   const session = decodeSession(parseCookies(request).makeslide_session);
   return session?.sub ?? null;
-}
-
-function runUnzipCommand(zipPath: string, outputDir: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = spawn('unzip', ['-q', zipPath, '-d', outputDir], { stdio: 'ignore' });
-    child.on('error', (err) => reject(err));
-    child.on('close', (code) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-      reject(new Error(`unzip command failed with code ${code ?? -1}`));
-    });
-  });
 }
 
 export async function registerImportRoutes(app: FastifyInstance): Promise<void> {

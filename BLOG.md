@@ -1,5 +1,22 @@
 # MakeSlide 功能說明
 
+## ZIP 匯入解壓縮加入子行程逾時保護
+
+### 功能目的
+
+後端匯入 ZIP 簡報時會呼叫本機 `unzip` 子行程解壓使用者上傳的檔案。過去如果遇到損毀、特殊 ZIP，或執行環境讓 `unzip` 卡住，HTTP 匯入請求可能無限期等待，持續佔用後端資源。
+
+### 修復內容
+
+現在 ZIP 匯入的 `unzip` 子行程有明確的 2 分鐘逾時上限；逾時時後端會主動送出 `SIGTERM` 結束子行程，並在 log 中留下可辨識的 `unzip command timed out` 錯誤。對使用者端的既有匯入 API 行為與錯誤回應維持不變，仍會回報一般的匯入失敗，避免破壞前端相容性。
+
+### 技術重點
+
+- 新增 `backend/src/routes/pdfs/unzip.ts` 封裝 `runUnzipCommand()`，集中管理 `unzip` timeout/kill 與 timer 清理。
+- `backend/src/routes/pdfs/import.ts` 維持原本匯入流程，只改為呼叫具逾時保護的 helper。
+- 新增 `backend/test/import-unzip-timeout.test.ts`，用可注入的 fake Node command 驗證 timeout 路徑，不依賴真的卡住 `unzip`。
+- 已執行 backend typecheck 與相關測試通過；完整 backend 測試仍只出現既有基準失敗，未新增本次變更相關回歸。
+
 ## 播放頁來源內容複製狀態清理更穩定
 
 ### 功能目的
