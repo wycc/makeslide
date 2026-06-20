@@ -18,7 +18,7 @@ export interface RenderTextPagesResult {
   pagePaths: string[];
 }
 
-function escapeXml(input: string): string {
+export function escapeXml(input: string): string {
   return input
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -27,7 +27,7 @@ function escapeXml(input: string): string {
     .replace(/'/g, '&apos;');
 }
 
-function splitLines(raw: string): string[] {
+export function splitLines(raw: string): string[] {
   const normalized = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   const sourceLines = normalized.split('\n');
   const out: string[] = [];
@@ -44,7 +44,7 @@ function splitLines(raw: string): string[] {
   return out.length > 0 ? out : [''];
 }
 
-function toPages(lines: string[]): string[] {
+export function toPages(lines: string[]): string[] {
   const pages: string[] = [];
   for (let i = 0; i < lines.length; i += LINES_PER_PAGE) {
     pages.push(lines.slice(i, i + LINES_PER_PAGE).join('\n'));
