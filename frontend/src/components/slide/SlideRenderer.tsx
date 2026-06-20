@@ -12,6 +12,7 @@ import {
   hasPlayableAnimation,
 } from '../../lib/animationSpec';
 import { useGsapSlideTimeline } from './useGsapSlideTimeline';
+import { WRAPPING_OVERLAY_TEXT_STYLE } from './overlayTextStyle';
 
 const TEXT_CALLOUT_PADDING: Record<NonNullable<SlideAnimationEffect['textCalloutPadding']>, string> = {
   sm: '0.25em 0.5em',
@@ -151,7 +152,7 @@ function EffectOverlay({
           fontWeight: 600,
           textAlign: tcAlign,
           overflow: 'hidden',
-          wordBreak: 'break-word',
+          ...WRAPPING_OVERLAY_TEXT_STYLE,
           ...(tcBorder ? { border: tcBorder } : {}),
           ...(tcShadow ? { boxShadow: tcShadow } : {}),
           ...(tcMaxW ? { maxWidth: tcMaxW } : {}),
@@ -231,16 +232,18 @@ function EffectOverlay({
           background: bgColor,
           color: textColor,
           overflow: 'hidden',
+          ...WRAPPING_OVERLAY_TEXT_STYLE,
           ...(slBorder ? { border: slBorder } : {}),
         }}
       >
-        <ul style={{ margin: 0, paddingLeft: slBullet === 'none' ? 0 : '1.25em', listStyle: slBullet, fontSize: slFontSize, fontWeight: 600, lineHeight: 1.5 }}>
+        <ul style={{ margin: 0, paddingLeft: slBullet === 'none' ? 0 : '1.25em', listStyle: slBullet, fontSize: slFontSize, fontWeight: 600, lineHeight: 1.5, minWidth: 0 }}>
           {items.map((item, index) => {
             const isHighlighted = index === highlightIndex;
             return (
               <li
                 key={index}
                 style={{
+                  overflowWrap: 'anywhere',
                   wordBreak: 'break-word',
                   ...(isHighlighted
                     ? {
@@ -322,9 +325,7 @@ function EffectOverlay({
           fontSize: 'clamp(1rem, 3vw, 2.25rem)',
           fontWeight: 800,
           textAlign: 'center',
-          lineHeight: 1.35,
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word',
+          ...WRAPPING_OVERLAY_TEXT_STYLE,
           boxShadow: '0 12px 40px rgba(0,0,0,0.55), 0 0 28px rgba(56,189,248,0.35)',
         }}
       >
