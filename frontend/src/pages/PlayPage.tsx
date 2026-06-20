@@ -23,6 +23,7 @@ import {
 } from '../lib/api';
 import {
   animationTimelineDurationSeconds,
+  effectIdsToReleaseOnSeekBack,
   getDuePausePlaybackEffect,
   resolveAnimationSpec,
 } from '../lib/animationSpec';
@@ -1696,6 +1697,13 @@ export default function PlayPage() {
     setPositioningEffectId(null);
   }, [currentPage?.page_number]);
   useEffect(() => {
+    if (currentTime < previousPlaybackTimeRef.current) {
+      // 使用者倒退（拖曳進度條、跳到指定時間）：把落在新時間點之後的暫停提示
+      // 重新標記為未消費，避免重播到該處時被誤判為「已經按過播放鍵」而跳過暫停。
+      for (const id of effectIdsToReleaseOnSeekBack(currentAnimationSpec, currentTime)) {
+        consumedPausePlaybackEffectIdsRef.current.delete(id);
+      }
+    }
     if (!isPlaying) {
       previousPlaybackTimeRef.current = currentTime;
       return;

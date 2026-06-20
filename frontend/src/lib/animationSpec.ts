@@ -318,9 +318,27 @@ export function getDuePausePlaybackEffect(
   if (!spec?.enabled || currentTime < previousTime) return null;
   for (const effect of spec.effects) {
     if (effect.type !== 'pause-playback' || consumedEffectIds.has(effect.id)) continue;
-    if (effect.start > previousTime && effect.start <= currentTime) return effect;
+    // 等提示框的淡入動畫（effect.duration）播完才暫停，而不是一進入 effect.start
+    // 就立刻凍結畫面，讓使用者先看到完整顯示的提示框，而不是淡入中途的畫面。
+    const pauseAt = effect.start + effect.duration;
+    if (pauseAt > previousTime && pauseAt <= currentTime) return effect;
   }
   return null;
+}
+
+/**
+ * 播放時間往回跳（拖曳進度條、跳到指定時間）時，把落在新時間點之後的暫停提示
+ * 重新標記為「未消費」，讓使用者重播到該時間點時仍會觸發暫停，而不是因為先前
+ * 已經消費過就被永遠跳過。
+ */
+export function effectIdsToReleaseOnSeekBack(
+  spec: SlideAnimationSpec | null | undefined,
+  newCurrentTime: number,
+): string[] {
+  if (!spec?.enabled) return [];
+  return spec.effects
+    .filter((effect) => effect.type === 'pause-playback' && effect.start + effect.duration >= newCurrentTime)
+    .map((effect) => effect.id);
 }
 
 export function insertEffectAfterFirstStartingEffect(
