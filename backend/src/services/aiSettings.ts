@@ -56,6 +56,7 @@ export interface SystemAuthSettings {
   googleClientSecret: string;
   googleRedirectUri: string;
   adminAccountIds: string[];
+  mcpAuthToken: string;
 }
 
 export interface RuntimeAiSettings extends PerAccountAiSettings, SystemAuthSettings {}
@@ -264,6 +265,7 @@ function baseSystemAuthSettings(): SystemAuthSettings {
     googleClientSecret: config.googleClientSecret,
     googleRedirectUri: config.googleRedirectUri,
     adminAccountIds: parseAdminAccountIds(process.env.ADMIN_ACCOUNT_IDS) ?? [],
+    mcpAuthToken: config.mcpAuthToken,
   };
 }
 
@@ -275,6 +277,7 @@ function loadSystemAuthOverrides(): Partial<SystemAuthSettings> {
     googleClientSecret: values.GOOGLE_CLIENT_SECRET,
     googleRedirectUri: values.GOOGLE_REDIRECT_URI,
     adminAccountIds: parseAdminAccountIds(values.ADMIN_ACCOUNT_IDS),
+    mcpAuthToken: values.MCP_AUTH_TOKEN,
   });
 }
 
@@ -292,6 +295,7 @@ const SYSTEM_ENV_PAIRS: Array<[string, keyof SystemAuthSettings]> = [
   ['GOOGLE_CLIENT_SECRET', 'googleClientSecret'],
   ['GOOGLE_REDIRECT_URI', 'googleRedirectUri'],
   ['ADMIN_ACCOUNT_IDS', 'adminAccountIds'],
+  ['MCP_AUTH_TOKEN', 'mcpAuthToken'],
 ];
 
 export function getSystemAuthSettings(): SystemAuthSettings {
@@ -383,6 +387,7 @@ function splitSettingsUpdate(next: Partial<RuntimeAiSettings>): {
     'googleClientSecret',
     'googleRedirectUri',
     'adminAccountIds',
+    'mcpAuthToken',
   ];
   const systemPart: Partial<SystemAuthSettings> = {};
   const accountPart: Partial<PerAccountAiSettings> = {};

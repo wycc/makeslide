@@ -5,6 +5,7 @@ import {
   getAuthStatus,
   getSlaSettings,
   getSystemAiSettings,
+  generateMcpAuthToken,
   listSkills,
   createSkill,
   updateSkill,
@@ -83,6 +84,9 @@ export default function SettingsPage() {
   const [adminAccountIds, setAdminAccountIds] = useState<string[]>([]);
   const [adminTransferAccountId, setAdminTransferAccountId] = useState('');
   const [adminTransferBusy, setAdminTransferBusy] = useState(false);
+  const [hasMcpAuthToken, setHasMcpAuthToken] = useState(false);
+  const [generatedMcpAuthToken, setGeneratedMcpAuthToken] = useState('');
+  const [mcpTokenBusy, setMcpTokenBusy] = useState(false);
   const [githubRepoUrl, setGithubRepoUrl] = useState('');
   const [githubToken, setGithubToken] = useState('');
   const [autoGenerateAnimation, setAutoGenerateAnimation] = useState(false);
@@ -148,6 +152,8 @@ export default function SettingsPage() {
       setGoogleClientSecret(s.google_client_secret ?? '');
       setGoogleRedirectUri(s.google_redirect_uri ?? '');
       setAdminAccountIds(s.admin_account_ids ?? []);
+      setHasMcpAuthToken(Boolean(s.has_mcp_auth_token));
+      setGeneratedMcpAuthToken('');
       setGithubRepoUrl(s.github_repo_url ?? '');
       setGithubToken(s.github_token ?? '');
       setAutoGenerateAnimation(Boolean(s.auto_generate_animation));
@@ -329,6 +335,32 @@ export default function SettingsPage() {
       setAdminTransferBusy(false);
     }
   }, [adminTransferAccountId, t]);
+
+  const onGenerateMcpAuthToken = useCallback(async () => {
+    setErr(null);
+    setMsg(null);
+    setMcpTokenBusy(true);
+    try {
+      const result = await generateMcpAuthToken();
+      setHasMcpAuthToken(result.has_mcp_auth_token);
+      setGeneratedMcpAuthToken(result.token);
+      setMsg(t('settings.mcpTokenGenerated'));
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : t('settings.mcpTokenGenerateError'));
+    } finally {
+      setMcpTokenBusy(false);
+    }
+  }, [t]);
+
+  const onCopyGeneratedMcpToken = useCallback(async () => {
+    if (!generatedMcpAuthToken) return;
+    try {
+      await navigator.clipboard.writeText(generatedMcpAuthToken);
+      setMsg(t('settings.mcpTokenCopied'));
+    } catch {
+      setErr(t('settings.mcpTokenCopyError'));
+    }
+  }, [generatedMcpAuthToken, t]);
 
   const applySlaSettingsResponse = useCallback((result: SlaSettingsResponse) => {
     setSlaSettings(result);
@@ -645,6 +677,18 @@ export default function SettingsPage() {
                     <div className="mb-2 text-sm font-medium text-slate-200">{t('settings.adminTransfer')}</div>
                     <div className="mb-2 text-xs text-slate-500">{t('settings.currentAdmins')}<span className="font-mono text-slate-300">{adminAccountIds.join(', ') || accountId}</span></div>
                     <div className="flex flex-col gap-2 sm:flex-row"><input value={adminTransferAccountId} onChange={(e) => setAdminTransferAccountId(e.target.value)} className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder={t('settings.adminTransferPlaceholder')} /><button type="button" onClick={() => void onTransferAdmin()} disabled={adminTransferBusy || !adminTransferAccountId.trim()} className="rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-50">{adminTransferBusy ? t('settings.saving') : t('settings.adminTransferButton')}</button></div>
+                  </div>
+                  <div className="sm:col-span-2 rounded-lg border border-slate-800 bg-slate-950/60 p-3">
+                    <div className="mb-1 text-sm font-medium text-slate-200">{t('settings.mcpTokenTitle')}</div>
+                    <p className="mb-3 text-xs text-slate-500">{t('settings.mcpTokenHint')}</p>
+                    <div className="mb-3 text-xs text-slate-400">{hasMcpAuthToken ? t('settings.mcpTokenConfigured') : t('settings.mcpTokenNotConfigured')}</div>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <button type="button" onClick={() => void onGenerateMcpAuthToken()} disabled={mcpTokenBusy} className="rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-50">
+                        {mcpTokenBusy ? t('settings.saving') : t('settings.mcpTokenGenerateButton')}
+                      </button>
+                      {generatedMcpAuthToken ? <button type="button" onClick={() => void onCopyGeneratedMcpToken()} className="rounded-md bg-slate-100 px-4 py-2 text-sm font-medium text-slate-900 hover:bg-white">{t('settings.mcpTokenCopyButton')}</button> : null}
+                    </div>
+                    {generatedMcpAuthToken ? <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-3"><div className="mb-1 text-xs font-medium text-amber-100">{t('settings.mcpTokenOneTimeNotice')}</div><code className="block break-all rounded bg-slate-950 px-2 py-1 font-mono text-xs text-slate-100">{generatedMcpAuthToken}</code></div> : null}
                   </div>
                 </div>
                 <div className="flex justify-end"><button type="button" onClick={() => void onSave()} disabled={saving} className="rounded-md bg-slate-100 px-4 py-2 text-sm font-medium text-slate-900 disabled:opacity-50">{saving ? t('settings.saving') : t('settings.save')}</button></div>

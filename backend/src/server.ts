@@ -177,9 +177,9 @@ export async function buildApp() {
     if (!normalizedPath.startsWith('/api/')) return;
 
     // Allow requests authenticated via Bearer token (used by MCP server).
-    if (config.mcpAuthToken) {
+    if (runtime.mcpAuthToken) {
       const authHeader = request.headers.authorization ?? '';
-      if (timingSafeStringEqual(authHeader, `Bearer ${config.mcpAuthToken}`)) return;
+      if (timingSafeStringEqual(authHeader, `Bearer ${runtime.mcpAuthToken}`)) return;
     }
 
     const session = decodeSession(parseCookies(request).makeslide_session);
