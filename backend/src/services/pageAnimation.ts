@@ -18,6 +18,7 @@ export const ANIMATION_EFFECT_TYPES = [
   'overlay-image',
   'formula',
   'pause-playback',
+  'realtime-poll',
   'custom-script',
 ] as const;
 
@@ -97,7 +98,7 @@ export interface AnimationEffect {
   highlightBorderStyle?: 'solid' | 'dashed' | 'dotted';
   /** When true, adds a drop shadow to the `highlight-box` overlay. Ignored by other effect types. */
   highlightShadow?: boolean;
-  /** Caption text for `text-callout` and `pause-playback` effects (ignored by other effect types). */
+  /** Caption text for `text-callout`, `pause-playback` and `realtime-poll` effects (ignored by other effect types). */
   text?: string;
   /**
    * Font size in rem for `text-callout` effects (ignored by other effect types).
@@ -236,10 +237,17 @@ export interface AnimationEffect {
   /** When true, adds a drop shadow to the `formula` box. Ignored by other effect types. */
   formulaShadow?: boolean;
   /**
+   * Id of a `PagePoll` (see `GET /api/pdfs/:id/pages/:n/polls`) already defined
+   * for this page, shown by `realtime-poll` effects (ignored by other effect
+   * types). The frontend resolves the poll's question/options at playback
+   * time; this field only stores which poll to display.
+   */
+  pollId?: number;
+  /**
    * Seconds to remain visible after the fade-in completes before
    * automatically fading back out (same `duration`/`ease` as the fade-in).
    * Only meaningful for overlay effect types (`highlight-box`, `spotlight`,
-   * `pointer`, `text-callout`, `shape`, `step-list`, `overlay-image`, `formula`, `pause-playback`, `custom-script`); ignored by transform effects.
+   * `pointer`, `text-callout`, `shape`, `step-list`, `overlay-image`, `formula`, `pause-playback`, `realtime-poll`, `custom-script`); ignored by transform effects.
    */
   exitDuration?: number;
   /**
@@ -415,6 +423,7 @@ const ALLOWED_PARAM_KEYS: Record<AnimationEffectType, readonly string[]> = {
   'overlay-image': ['xPct', 'yPct', 'widthPct', 'heightPct'],
   'formula': ['xPct', 'yPct', 'widthPct', 'heightPct'],
   'pause-playback': ['xPct', 'yPct', 'widthPct', 'heightPct'],
+  'realtime-poll': ['xPct', 'yPct', 'widthPct', 'heightPct'],
   'custom-script': ['xPct', 'yPct', 'widthPct', 'heightPct'],
 };
 
@@ -490,6 +499,7 @@ const EffectSchema = z.object({
   formulaBorderRadius: z.number().int().min(0).max(MAX_FORMULA_BORDER_RADIUS).optional(),
   formulaBorderColor: z.string().max(9).regex(/^#[0-9a-fA-F]{3,8}$/).optional(),
   formulaShadow: z.boolean().optional(),
+  pollId: z.number().int().positive().optional(),
   exitDuration: z.number().min(0).max(MAX_DURATION_SECONDS).optional(),
   code: z.string().max(MAX_CUSTOM_SCRIPT_CODE_LENGTH).optional(),
   prompt: z.string().max(MAX_CUSTOM_SCRIPT_PROMPT_LENGTH).optional(),
@@ -602,6 +612,7 @@ export function validateAnimationSpec(input: unknown): ValidateAnimationSpecResu
       ...(effect.formulaBorderRadius !== undefined ? { formulaBorderRadius: Math.max(0, Math.min(MAX_FORMULA_BORDER_RADIUS, Math.round(effect.formulaBorderRadius))) } : {}),
       ...(effect.formulaBorderColor !== undefined ? { formulaBorderColor: effect.formulaBorderColor } : {}),
       ...(effect.formulaShadow !== undefined ? { formulaShadow: effect.formulaShadow } : {}),
+      ...(effect.pollId !== undefined ? { pollId: effect.pollId } : {}),
       ...(effect.exitDuration !== undefined ? { exitDuration: effect.exitDuration } : {}),
       ...(effect.code !== undefined ? { code: effect.code } : {}),
       ...(effect.prompt !== undefined ? { prompt: effect.prompt } : {}),

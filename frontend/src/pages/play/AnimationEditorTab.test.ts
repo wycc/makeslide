@@ -24,3 +24,12 @@ test('pause-playback preset specifically sets a default exitDuration', () => {
   assert.equal(applied.type, 'pause-playback');
   assert.notEqual(applied.exitDuration, undefined, 'pause-playback overlay must fade out after the user resumes playback');
 });
+
+test('realtime-poll preset specifically sets a default exitDuration and no poll selected yet', () => {
+  const preset = EFFECT_PRESETS.find((p) => p.id === 'realtime-poll');
+  assert.ok(preset, 'expected a realtime-poll preset to exist');
+  const applied = preset!.apply();
+  assert.equal(applied.type, 'realtime-poll');
+  assert.notEqual(applied.exitDuration, undefined, 'realtime-poll overlay must fade out once the poll mode is entered');
+  assert.equal(applied.pollId, undefined, 'pollId should be left for the user to pick from this page\'s polls');
+});

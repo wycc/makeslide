@@ -456,6 +456,40 @@ test('validateAnimationSpec accepts a pause-playback effect with text and overla
   }
 });
 
+test('validateAnimationSpec accepts a realtime-poll effect with pollId, text and overlay params', () => {
+  const result = validateAnimationSpec(
+    validSpec([
+      fadeIn({
+        id: 'effect-1',
+        type: 'realtime-poll',
+        text: '📊 即時問答時間',
+        pollId: 42,
+        params: { xPct: 18, yPct: 34, widthPct: 64, heightPct: 24, distancePct: 99 },
+      }),
+    ]),
+  );
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.spec.effects[0].type, 'realtime-poll');
+    assert.equal(result.spec.effects[0].text, '📊 即時問答時間');
+    assert.equal(result.spec.effects[0].pollId, 42);
+    assert.deepEqual(result.spec.effects[0].params, { xPct: 18, yPct: 34, widthPct: 64, heightPct: 24 });
+  }
+});
+
+test('validateAnimationSpec accepts a realtime-poll effect without a pollId (not yet configured)', () => {
+  const result = validateAnimationSpec(validSpec([fadeIn({ id: 'effect-1', type: 'realtime-poll' })]));
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.spec.effects[0].pollId, undefined);
+  }
+});
+
+test('validateAnimationSpec rejects a realtime-poll effect with a non-positive pollId', () => {
+  const result = validateAnimationSpec(validSpec([fadeIn({ id: 'effect-1', type: 'realtime-poll', pollId: 0 })]));
+  assert.equal(result.ok, false);
+});
+
 test('validateAnimationSpec rejects a formula effect with an empty formula', () => {
   assert.equal(validateAnimationSpec(validSpec([fadeIn({ type: 'formula', formula: '' })])).ok, false);
 });

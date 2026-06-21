@@ -206,6 +206,7 @@ export type SlideAnimationEffectType =
   | 'overlay-image'
   | 'formula'
   | 'pause-playback'
+  | 'realtime-poll'
   | 'custom-script';
 
 export type SlideAnimationEase = 'none' | 'power1.in' | 'power1.out' | 'power1.inOut' | 'power2.inOut' | 'elastic.out' | 'back.out';
@@ -263,7 +264,7 @@ export interface SlideAnimationEffect {
   highlightBorderStyle?: 'solid' | 'dashed' | 'dotted';
   /** When true, adds a drop shadow to the `highlight-box` overlay. Ignored by other effect types. */
   highlightShadow?: boolean;
-  /** Caption text for `text-callout` and `pause-playback` effects (ignored by other effect types). */
+  /** Caption text for `text-callout`, `pause-playback` and `realtime-poll` effects (ignored by other effect types). */
   text?: string;
   /** Font size in rem for `text-callout` effects. Defaults to 1.25. Ignored by other effect types. */
   textCalloutFontSize?: number;
@@ -369,10 +370,15 @@ export interface SlideAnimationEffect {
   /** When true, adds a drop shadow to the `formula` box. Ignored by other effect types. */
   formulaShadow?: boolean;
   /**
+   * Id of a `PagePoll` already defined for this page (see `fetchPagePolls`),
+   * shown by `realtime-poll` effects (ignored by other effect types).
+   */
+  pollId?: number;
+  /**
    * Seconds to remain in the "entered" state after the entrance animation
    * completes before automatically reversing back to the original state
    * (same `duration`/`ease`, played in reverse). For overlay effect types
-   * (`highlight-box`, `spotlight`, `pointer`, `text-callout`, `shape`, `step-list`, `overlay-image`, `formula`, `pause-playback`, `custom-script`)
+   * (`highlight-box`, `spotlight`, `pointer`, `text-callout`, `shape`, `step-list`, `overlay-image`, `formula`, `pause-playback`, `realtime-poll`, `custom-script`)
    * this fades the overlay back out; for whole-slide transform effect types
    * (`fade-in`, `zoom-in`, `zoom-out`, `pan-left`, `pan-right`, `pan-up`,
    * `pan-down`) this animates the slide back to its pre-effect state.

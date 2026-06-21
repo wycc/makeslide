@@ -2,12 +2,13 @@ import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import katex from 'katex';
 import { useI18n } from '../../i18n';
 import type { TranslationKey } from '../../i18n';
-import type { PageFigure, SlideAnimationEffect, SlideAnimationEffectType, SlideAnimationEase, SlideAnimationShapeKind } from '../../types';
-import { fetchPageFigures, figureImageUrl, savePageAnimation } from '../../lib/api';
+import type { PageFigure, PagePoll, SlideAnimationEffect, SlideAnimationEffectType, SlideAnimationEase, SlideAnimationShapeKind } from '../../types';
+import { fetchPageFigures, fetchPagePolls, figureImageUrl, savePageAnimation } from '../../lib/api';
 import { copyTextToClipboard } from '../../lib/clipboard';
 import {
   ANIMATION_SHAPE_KINDS,
   DEFAULT_PAUSE_PLAYBACK_TEXT,
+  DEFAULT_REALTIME_POLL_TEXT,
   DEFAULT_EXIT_DURATION_SECONDS,
   MAX_CUSTOM_SCRIPT_CODE_LENGTH,
   MAX_CUSTOM_SCRIPT_PROMPT_LENGTH,
@@ -416,6 +417,18 @@ export const EFFECT_PRESETS: readonly EffectPreset[] = [
       params: { xPct: 18, yPct: 34, widthPct: 64, heightPct: 24 },
     }),
   },
+  {
+    id: 'realtime-poll',
+    labelKey: 'play.animation.preset.realtimePoll',
+    apply: () => ({
+      type: 'realtime-poll',
+      duration: 0.4,
+      ease: 'power1.out',
+      exitDuration: DEFAULT_EXIT_DURATION_SECONDS,
+      text: DEFAULT_REALTIME_POLL_TEXT,
+      params: { xPct: 18, yPct: 34, widthPct: 64, heightPct: 24 },
+    }),
+  },
 ];
 
 const CUSTOM_SCRIPT_EXAMPLE_PROMPTS: ReadonlyArray<{ labelKey: string; prompt: string }> = [
@@ -496,6 +509,8 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
   const [figureNaturalRatios, setFigureNaturalRatios] = useState<Record<string, number>>({});
   // 已啟用比例鎖定的 overlay-image 效果 ID 集合。
   const [lockedAspectEffectIds, setLockedAspectEffectIds] = useState<Set<string>>(new Set());
+  // realtime-poll 效果的 poll 選擇器：本頁已定義的 Realtime Poll 清單。
+  const [pagePolls, setPagePolls] = useState<PagePoll[] | null>(null);
 
   const pageNumber = currentPage?.page_number;
   const compact = mode === 'fullscreen';
@@ -516,6 +531,23 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
       cancelled = true;
     };
   }, [pdfId, pageNumber, currentShareToken]);
+  useEffect(() => {
+    if (!pdfId || !pageNumber) {
+      setPagePolls(null);
+      return;
+    }
+    let cancelled = false;
+    fetchPagePolls(pdfId, pageNumber)
+      .then((polls) => {
+        if (!cancelled) setPagePolls(polls);
+      })
+      .catch(() => {
+        if (!cancelled) setPagePolls(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pdfId, pageNumber]);
 
   const draft = animationDraft ?? defaultAnimationSpec();
   const disabled = isReadOnlyProcessing || animationBusy || !currentPage;
@@ -821,6 +853,17 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
             className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/10 px-3 py-1.5 text-sm text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-40"
           >
             ⏸ {t('play.animation.preset.pausePlayback')}
+          </button>
+        )}
+        {compact && (
+          <button
+            type="button"
+            disabled={disabled || draft.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS}
+            title={draft.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS ? t('play.animation.maxEffects') : undefined}
+            onClick={() => handleApplyPreset('realtime-poll')}
+            className="rounded-md border border-purple-500/50 bg-purple-500/10 px-3 py-1.5 text-sm text-purple-200 hover:bg-purple-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            📊 {t('play.animation.preset.realtimePoll')}
           </button>
         )}
         {!compact && (
@@ -1537,6 +1580,51 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                     {t('play.animation.pausePlaybackHelp')}
                   </span>
                 </label>
+              )}
+              {effect.type === 'realtime-poll' && (
+                <>
+                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    {t('play.animation.realtimePollText')}
+                    <input
+                      type="text"
+                      maxLength={MAX_TEXT_CALLOUT_LENGTH}
+                      value={effect.text ?? ''}
+                      disabled={disabled}
+                      placeholder={DEFAULT_REALTIME_POLL_TEXT}
+                      onChange={(e) => updateEffect(effect.id, { text: e.target.value })}
+                      className="w-64 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                    />
+                    <span className="text-[11px] text-purple-200/80">
+                      {t('play.animation.realtimePollHelp')}
+                    </span>
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    {t('play.animation.realtimePollPoll')}
+                    {pagePolls === null ? (
+                      <span className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-500">
+                        {t('play.animation.realtimePollLoadingPolls')}
+                      </span>
+                    ) : pagePolls.length === 0 ? (
+                      <span className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-500">
+                        {t('play.animation.realtimePollNoPolls')}
+                      </span>
+                    ) : (
+                      <select
+                        value={effect.pollId ?? ''}
+                        disabled={disabled}
+                        onChange={(e) => updateEffect(effect.id, { pollId: e.target.value ? Number(e.target.value) : undefined })}
+                        className="max-w-[16rem] rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                      >
+                        <option value="">{t('play.animation.realtimePollSelectPoll')}</option>
+                        {pagePolls.map((poll) => (
+                          <option key={poll.id} value={poll.id}>
+                            {truncateSentence(poll.question, 30)}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </label>
+                </>
               )}
               {effect.type === 'shape' && (
                 <label className="flex flex-col gap-1 text-xs text-slate-400">

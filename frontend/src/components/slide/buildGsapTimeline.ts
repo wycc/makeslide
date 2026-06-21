@@ -136,7 +136,8 @@ export function buildGsapTimeline(stage: HTMLElement, spec: SlideAnimationSpec):
         }
         break;
       }
-      case 'pause-playback': {
+      case 'pause-playback':
+      case 'realtime-poll': {
         const overlay = stage.querySelector<HTMLElement>(`[data-effect-id="${effect.id}"]`);
         if (overlay) {
           tl.fromTo(overlay, { autoAlpha: 0, scale: 0.96 }, { autoAlpha: 1, scale: 1, ...common }, effect.start);

@@ -27,6 +27,7 @@ export const SLIDE_ANIMATION_EFFECT_TYPES: readonly SlideAnimationEffectType[] =
   'overlay-image',
   'formula',
   'pause-playback',
+  'realtime-poll',
   'custom-script',
 ];
 
@@ -43,6 +44,7 @@ export const OVERLAY_EFFECT_TYPES: readonly SlideAnimationEffectType[] = [
   'overlay-image',
   'formula',
   'pause-playback',
+  'realtime-poll',
   'custom-script',
 ];
 
@@ -77,6 +79,11 @@ export const TRANSFORM_EFFECT_TYPES: readonly SlideAnimationEffectType[] = [
 export const MAX_TEXT_CALLOUT_LENGTH = 80;
 
 export const DEFAULT_PAUSE_PLAYBACK_TEXT = '暫停：請按播放鍵繼續';
+
+export const DEFAULT_REALTIME_POLL_TEXT = '📊 即時問答時間';
+
+/** Effect types that, when their start time is reached, pause playback (see `getDuePausePlaybackEffect`). */
+const PAUSING_EFFECT_TYPES: readonly SlideAnimationEffectType[] = ['pause-playback', 'realtime-poll'];
 
 /** Max number of bullet items in a `step-list` effect's `items`, matching the backend's `MAX_STEP_LIST_ITEMS`. */
 export const MAX_STEP_LIST_ITEMS = 6;
@@ -334,7 +341,7 @@ export function getDuePausePlaybackEffect(
 ): SlideAnimationEffect | null {
   if (!spec?.enabled || currentTime < previousTime) return null;
   for (const effect of spec.effects) {
-    if (effect.type !== 'pause-playback' || consumedEffectIds.has(effect.id)) continue;
+    if (!PAUSING_EFFECT_TYPES.includes(effect.type) || consumedEffectIds.has(effect.id)) continue;
     const pauseAt = pausePlaybackTriggerSeconds(effect, sentenceTimeline);
     if (pauseAt > previousTime && pauseAt <= currentTime) return effect;
   }
@@ -353,7 +360,7 @@ export function effectIdsToReleaseOnSeekBack(
 ): string[] {
   if (!spec?.enabled) return [];
   return spec.effects
-    .filter((effect) => effect.type === 'pause-playback' && pausePlaybackTriggerSeconds(effect, sentenceTimeline) >= newCurrentTime)
+    .filter((effect) => PAUSING_EFFECT_TYPES.includes(effect.type) && pausePlaybackTriggerSeconds(effect, sentenceTimeline) >= newCurrentTime)
     .map((effect) => effect.id);
 }
 
