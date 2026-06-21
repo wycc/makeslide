@@ -4,6 +4,7 @@ import katex from 'katex';
 import type { SlideAnimationEffect, SlideAnimationSpec, SlideRenderType } from '../../types';
 import {
   DEFAULT_PAUSE_PLAYBACK_TEXT,
+  DEFAULT_REALTIME_POLL_TEXT,
   OVERLAY_EFFECT_TYPES,
   buildCustomScriptSandboxDoc,
   customScriptDurationSeconds,
@@ -330,6 +331,31 @@ function EffectOverlay({
         }}
       >
         {effect.text?.trim() || DEFAULT_PAUSE_PLAYBACK_TEXT}
+      </div>
+    );
+  }
+  if (effect.type === 'realtime-poll') {
+    return (
+      <div
+        data-effect-id={effect.id}
+        style={{
+          ...position,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '0.75em 1em',
+          borderRadius: 14,
+          border: '2px solid rgba(232, 121, 249, 0.75)',
+          background: 'rgba(15, 23, 42, 0.88)',
+          color: '#fdf4ff',
+          fontSize: 'clamp(1rem, 3vw, 2.25rem)',
+          fontWeight: 800,
+          textAlign: 'center',
+          ...WRAPPING_OVERLAY_TEXT_STYLE,
+          boxShadow: '0 12px 40px rgba(0,0,0,0.55), 0 0 28px rgba(217,70,239,0.35)',
+        }}
+      >
+        {effect.text?.trim() || DEFAULT_REALTIME_POLL_TEXT}
       </div>
     );
   }

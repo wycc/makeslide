@@ -234,6 +234,9 @@ export default function PlayPage() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const previousPlaybackTimeRef = useRef(0);
   const consumedPausePlaybackEffectIdsRef = useRef<Set<string>>(new Set());
+  // 記錄目前的暫停是不是由 realtime-poll 動畫效果觸發；只有這種情況下，master 按下
+  // 「結束投票」才需要額外恢復播放（一般手動開始的投票結束後不應該自動繼續播放）。
+  const pausedForRealtimePollEffectRef = useRef(false);
   const playbackRateRef = useRef<number>(playbackRate);
   useEffect(() => {
     playbackRateRef.current = playbackRate;
@@ -1720,6 +1723,7 @@ export default function PlayPage() {
   useEffect(() => {
     previousPlaybackTimeRef.current = currentTime;
     consumedPausePlaybackEffectIdsRef.current = new Set();
+    pausedForRealtimePollEffectRef.current = false;
     setPositioningEffectId(null);
   }, [currentPage?.page_number]);
   useEffect(() => {
@@ -1745,7 +1749,27 @@ export default function PlayPage() {
     if (!dueEffect) return;
     consumedPausePlaybackEffectIdsRef.current.add(dueEffect.id);
     audioRef.current?.pause();
-  }, [currentAnimationSpec, currentPage?.page_number, currentTime, isPlaying, sentenceTimeline]);
+    if (dueEffect.type === 'realtime-poll' && (!syncEnabled || syncRole === 'master')) {
+      // 進入即時問答模式只由 master（或未開同步的單機預覽）執行；follower 完全依賴
+      // master 廣播的 realtime_poll_started/active_quiz_id，避免 follower 端的
+      // pollStarted 卡在 true 卻永遠等不到清除（因為 follower 看不到「結束投票」按鈕）。
+      pausedForRealtimePollEffectRef.current = true;
+      pollState.setPollStarted(true);
+      pollState.setPollError(null);
+      setSyncDisplayedPollId(dueEffect.pollId ?? null);
+      setFullscreenPollControlOpen(true);
+    }
+  }, [
+    currentAnimationSpec,
+    currentPage?.page_number,
+    currentTime,
+    isPlaying,
+    sentenceTimeline,
+    syncEnabled,
+    syncRole,
+    pollState.setPollStarted,
+    pollState.setPollError,
+  ]);
   // 動畫總長：若超過語音長度，handleEnded 會延後切頁直到動畫播完。
   const animationDurationSeconds = useMemo(
     () => animationTimelineDurationSeconds(currentAnimationSpec),
@@ -2002,6 +2026,18 @@ export default function PlayPage() {
 
   const hasScriptChanges = scriptEditorState.editingScript !== (currentPage ? (scripts[currentPage.page_number] ?? '') : '');
 
+  // 一般手動開始的投票結束後不會自動繼續播放；只有由 realtime-poll 動畫效果觸發暫停的
+  // 這次問答，master 按下「結束投票」才需要額外恢復播放（回到觸發時所在的那一頁繼續講）。
+  const handleStopPollAndResumeIfPausedByEffect = useCallback(() => {
+    const shouldResume = pausedForRealtimePollEffectRef.current;
+    pausedForRealtimePollEffectRef.current = false;
+    pollState.handleStopPoll();
+    if (shouldResume) {
+      setFinished(false);
+      void audioRef.current?.play().catch(() => setIsPlaying(false));
+    }
+  }, [pollState.handleStopPoll]);
+
   const activePoll =
     (pollState.pollStarted || (syncEnabled && syncRole === 'follower' && syncRealtimePollStarted)) && pollState.pagePolls.length > 0
       ? (
@@ -2060,6 +2096,7 @@ export default function PlayPage() {
     ...regenState,
     // poll (from usePagePolls)
     ...pollState,
+    handleStopPoll: handleStopPollAndResumeIfPausedByEffect,
     activePoll, activePollQuestion,
     syncDisplayedPollId, setSyncDisplayedPollId,
     syncRealtimePollStarted, syncPollShowResults, setSyncPollShowResults,

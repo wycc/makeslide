@@ -565,3 +565,30 @@ test("getFocusEffectParams defaults formula to the 30/30/40/40 focus box", () =>
 test("MAX_FORMULA_LENGTH matches the backend limit", () => {
   assert.equal(MAX_FORMULA_LENGTH, 200);
 });
+
+test("realtime-poll is a known overlay effect type", () => {
+  assert.ok(SLIDE_ANIMATION_EFFECT_TYPES.includes("realtime-poll"));
+  assert.ok(OVERLAY_EFFECT_TYPES.includes("realtime-poll"));
+});
+
+test("getFocusEffectParams defaults realtime-poll to the 30/30/40/40 focus box", () => {
+  const effect = {
+    id: "e1", target: "slide" as const, type: "realtime-poll" as const, ease: "none" as const, start: 0, duration: 1,
+  };
+  assert.deepEqual(getFocusEffectParams(effect), { xPct: 30, yPct: 30, widthPct: 40, heightPct: 40 });
+});
+
+test("getDuePausePlaybackEffect also fires for realtime-poll effects (both pause playback the same way)", () => {
+  const effect = { id: "poll-1", target: "slide" as const, type: "realtime-poll" as const, start: 3, duration: 0.4, ease: "power1.out" as const, pollId: 7 };
+  const spec = { version: 1 as const, enabled: true, effects: [effect] };
+  const due = getDuePausePlaybackEffect(spec, 3.3, 3.5, new Set());
+  assert.equal(due?.id, "poll-1");
+  assert.equal(due?.pollId, 7);
+  assert.equal(getDuePausePlaybackEffect(spec, 3.3, 3.5, new Set(["poll-1"])), null);
+});
+
+test("effectIdsToReleaseOnSeekBack also releases realtime-poll cues", () => {
+  const poll = { id: "poll-1", target: "slide" as const, type: "realtime-poll" as const, start: 5, duration: 0.4, ease: "power1.out" as const };
+  const spec = { version: 1 as const, enabled: true, effects: [poll] };
+  assert.deepEqual(effectIdsToReleaseOnSeekBack(spec, 2), ["poll-1"]);
+});
