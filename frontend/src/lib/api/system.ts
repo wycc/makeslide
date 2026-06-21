@@ -171,6 +171,17 @@ export async function deleteAccount(accountId: string): Promise<DeleteAccountRes
   return (await resp.json()) as DeleteAccountResponse;
 }
 
+/** Deletes the caller's own account (and every presentation it owns); the backend also clears the session cookie. */
+export async function deleteMyAccount(): Promise<DeleteAccountResponse> {
+  const resp = await fetch('api/system/account', {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ confirm: true }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as DeleteAccountResponse;
+}
+
 export interface GenerateMcpAuthTokenResponse {
   ok: boolean;
   token: string;
