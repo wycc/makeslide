@@ -200,6 +200,8 @@ export interface PdfListItem {
   require_split_confirmation: boolean;
   category: string;
   owner_sub?: string | null;
+  /** Best-effort human-readable name (or email) for `owner_sub`, from the `accounts` table; null when the owner has never logged in since this field existed. Only set on list items, not on `PdfDetail`. */
+  owner_name?: string | null;
   visibility?: 'private' | 'public' | 'public_editable';
   tts_provider?: 'openai' | 'gemini';
   tts_voice?: string | null;

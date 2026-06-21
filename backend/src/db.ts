@@ -499,6 +499,17 @@ function migrate(): void {
       updated_at TEXT NOT NULL,
       PRIMARY KEY (kind, name)
     );
+
+    -- 登入時的 Google 帳號基本資料（sub/email/name/picture），讓「其他人擁有的簡報」
+    -- 列表可以顯示一個人類可讀的擁有者名稱，而不是只有 owner_sub 這個 Google sub id。
+    CREATE TABLE IF NOT EXISTS accounts (
+      sub TEXT PRIMARY KEY,
+      email TEXT NOT NULL,
+      name TEXT,
+      picture TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   logger.info({ dbPath: config.dbPath }, 'Database migrations applied');

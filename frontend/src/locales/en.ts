@@ -228,6 +228,8 @@ export const en = {
   'card.confirmDelete': 'Delete "{title}"? This action cannot be undone.',
   'card.enterNewCategory': 'Enter a new category name',
   'card.untitled': '(Untitled)',
+  'card.ownerLabel': 'Owner: {name}',
+  'card.ownerUnknown': 'Another user',
   'card.category': 'Category',
   'card.cannotChangeCategoryWhileProcessing': 'Category changes are paused while generating',
   'card.addCategory': '+ Add category…',

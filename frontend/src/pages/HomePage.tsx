@@ -862,6 +862,7 @@ export default function HomePage() {
                       onContinue={handleContinueGeneration}
                       continuing={continuingPdfId === pdf.id}
                       onClick={handleCardClick}
+                      currentUserSub={authStatus?.user?.sub ?? null}
                     />
                   ))}
                 </div>
