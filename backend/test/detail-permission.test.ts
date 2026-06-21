@@ -323,3 +323,44 @@ for (const route of MEDIA_ROUTES) {
     await app.close();
   });
 }
+
+// --- GET /pages/:n/subtitle-timeline ---
+
+test('GET /pages/:n/subtitle-timeline rejects a non-owner request on a private presentation', async () => {
+  seedDetailPdf('detperm-timeline-priv-01', 'private');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'GET', url: '/api/pdfs/detperm-timeline-priv-01/pages/1/subtitle-timeline', headers: OTHER_HEADERS });
+  assert.equal(resp.statusCode, 403);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+  await app.close();
+});
+
+test('GET /pages/:n/subtitle-timeline returns 404 for an unknown PDF', async () => {
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'GET', url: '/api/pdfs/detperm-timeline-missing/pages/1/subtitle-timeline', headers: OWNER_HEADERS });
+  assert.equal(resp.statusCode, 404);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'PDF_NOT_FOUND');
+  await app.close();
+});
+
+test('GET /pages/:n/subtitle-timeline returns { timeline: null } when no Whisper timeline has been generated', async () => {
+  seedDetailPdf('detperm-timeline-absent-01', 'private');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'GET', url: '/api/pdfs/detperm-timeline-absent-01/pages/1/subtitle-timeline', headers: OWNER_HEADERS });
+  assert.equal(resp.statusCode, 200);
+  assert.deepEqual(resp.json(), { timeline: null });
+  await app.close();
+});
+
+test('GET /pages/:n/subtitle-timeline returns the persisted timeline when one exists', async () => {
+  const pdfId = 'detperm-timeline-present-01';
+  seedDetailPdf(pdfId, 'private');
+  const uid = 'detperm1';
+  const timeline = [{ text: '大家好', start: 0, end: 1.2 }, { text: '今天來介紹一下', start: 1.2, end: 3 }];
+  fs.writeFileSync(path.join(config.storageRoot, pdfId, 'pages', `${uid}.timeline.json`), JSON.stringify(timeline), 'utf8');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}/pages/1/subtitle-timeline`, headers: OWNER_HEADERS });
+  assert.equal(resp.statusCode, 200);
+  assert.deepEqual(resp.json(), { timeline });
+  await app.close();
+});

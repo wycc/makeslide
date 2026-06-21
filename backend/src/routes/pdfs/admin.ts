@@ -105,6 +105,7 @@ function aiSettingsResponse(accountId: string, isAdmin: boolean) {
     github_token: runtime.githubToken,
     auto_generate_animation: runtime.autoGenerateAnimation,
     has_mcp_auth_token: runtime.mcpAuthToken.trim().length > 0,
+    subtitle_sync_mode: runtime.subtitleSyncMode,
   };
   if (isAdmin) {
     response.google_auth_enabled = runtime.googleAuthEnabled;
@@ -238,6 +239,7 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       githubRepoUrl: data.github_repo_url,
       githubToken: data.github_token,
       autoGenerateAnimation: data.auto_generate_animation,
+      subtitleSyncMode: data.subtitle_sync_mode,
     };
     if (typeof next.openaiApiKey === 'string') setOpenAIApiKeyRuntime(accountId, next.openaiApiKey);
     if (typeof next.openaiBaseUrl === 'string') setOpenAIBaseUrlRuntime(accountId, next.openaiBaseUrl);

@@ -8,6 +8,15 @@ export type LlmProvider = 'openai' | 'gemini' | 'cgu-air' | 'openrouter';
 export type TtsProvider = 'openai' | 'gemini';
 export type AiProvider = LlmProvider;
 export type AppLanguage = 'zh-TW' | 'en';
+/**
+ * How a presentation's subtitle/animation playback timing is derived for each page:
+ * - 'estimate': character-count heuristic scaled to the page's audio duration (fast, free, the
+ *   long-standing default — see frontend/src/lib/subtitles.ts's buildSentenceTimeline()).
+ * - 'whisper': transcribes the actual synthesized audio with Whisper's word-level timestamps and
+ *   aligns sentences to them (services/subtitleAlignment.ts) — more accurate, but costs an extra
+ *   OpenAI Whisper call (and therefore requires an OpenAI API key) per page synthesized.
+ */
+export type SubtitleSyncMode = 'estimate' | 'whisper';
 export const CGU_AIR_DEFAULT_BASE_URL = 'https://air.cgu.edu.tw/cgullmapi/v1';
 
 /**
@@ -46,6 +55,7 @@ export interface PerAccountAiSettings {
   autoGenerateAnimation: boolean;
   /** Bearer token this account's MCP server config should send; lets MCP requests authenticate as this specific account instead of anonymously. */
   mcpAuthToken: string;
+  subtitleSyncMode: SubtitleSyncMode;
 }
 
 /**
@@ -120,6 +130,10 @@ function asLanguage(value: string | undefined): AppLanguage | undefined {
   return value === 'en' ? 'en' : value === 'zh-TW' ? 'zh-TW' : undefined;
 }
 
+function asSubtitleSyncMode(value: string | undefined): SubtitleSyncMode | undefined {
+  return value === 'whisper' ? 'whisper' : value === 'estimate' ? 'estimate' : undefined;
+}
+
 function asBoolean(value: string | undefined): boolean | undefined {
   return value === 'true' ? true : value === 'false' ? false : undefined;
 }
@@ -181,6 +195,7 @@ function basePerAccountSettings(): PerAccountAiSettings {
     // identical, breaking findAccountIdByMcpAuthToken()'s ability to tell accounts
     // apart. Each account must explicitly generate its own.
     mcpAuthToken: '',
+    subtitleSyncMode: asSubtitleSyncMode(process.env.SUBTITLE_SYNC_MODE) ?? 'estimate',
   };
 }
 
@@ -217,6 +232,7 @@ function loadPerAccountOverrides(accountId: string): Partial<PerAccountAiSetting
     githubToken: values.GITHUB_TOKEN,
     autoGenerateAnimation: asBoolean(values.AUTO_GENERATE_ANIMATION),
     mcpAuthToken: values.MCP_AUTH_TOKEN,
+    subtitleSyncMode: asSubtitleSyncMode(values.SUBTITLE_SYNC_MODE),
   });
 }
 
@@ -269,6 +285,7 @@ const PER_ACCOUNT_ENV_PAIRS: Array<[string, keyof PerAccountAiSettings]> = [
   ['GITHUB_TOKEN', 'githubToken'],
   ['AUTO_GENERATE_ANIMATION', 'autoGenerateAnimation'],
   ['MCP_AUTH_TOKEN', 'mcpAuthToken'],
+  ['SUBTITLE_SYNC_MODE', 'subtitleSyncMode'],
 ];
 
 /** Constant-time string equality (avoids a JS `===` timing side-channel comparing MCP tokens). */

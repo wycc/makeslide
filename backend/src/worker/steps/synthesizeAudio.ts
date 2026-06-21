@@ -11,10 +11,11 @@ import { parseFile } from 'music-metadata';
 import { APIError } from 'openai';
 import { config } from '../../config';
 import { logger } from '../../logger';
-import { getOpenAIClient } from '../../services/openai';
+import { getOpenAIClient, transcribeAudioBufferWithWordTimestamps } from '../../services/openai';
 import { synthesizeGeminiSpeech } from '../../services/gemini';
 import { getRuntimeAiSettings } from '../../services/aiSettings';
-import { pageAudioPath, pageScriptPath } from '../../services/storage';
+import { pageAudioPath, pageScriptPath, pageTimelinePath } from '../../services/storage';
+import { alignSentencesToWordTimestamps, splitScriptIntoSentences } from '../../services/subtitleAlignment';
 import { db, savePageGenerationPrompt } from '../../db';
 import { redactTextForLog } from '../../services/logSanitizer';
 
@@ -241,6 +242,37 @@ export function splitSpeakerPrefix(text: string): { speaker: '1' | '2' | null; t
   return { speaker: m[1] as '1' | '2', text: text.slice(m[0].length).trim() };
 }
 
+/**
+ * Builds and persists a Whisper-aligned subtitle timeline for one page, used by the
+ * "subtitleSyncMode === 'whisper'" precision mode. Never throws — a transcription failure (e.g.
+ * no OpenAI key configured even though TTS itself uses Gemini, a transient API error) just means
+ * no timeline file gets written, and the frontend transparently falls back to its own
+ * character-count estimate for that page, exactly as it already does when this mode is off.
+ */
+async function writeWhisperTimelineIfEnabled(params: {
+  pdfId: string;
+  pageNumber: number;
+  pageUid: string;
+  script: string;
+  audioPath: string;
+}): Promise<void> {
+  const { pdfId, pageNumber, pageUid, script, audioPath } = params;
+  const sentences = splitScriptIntoSentences(script);
+  if (sentences.length === 0) return;
+  try {
+    const audioBuffer = await fs.promises.readFile(audioPath);
+    const words = await transcribeAudioBufferWithWordTimestamps(audioBuffer, `${pageUid}.m4a`, 'audio/mp4');
+    if (words.length === 0) return;
+    const timeline = alignSentencesToWordTimestamps(sentences, words);
+    await fs.promises.writeFile(pageTimelinePath(pdfId, pageUid), JSON.stringify(timeline), 'utf8');
+  } catch (err) {
+    logger.warn(
+      { err, pdfId, pageNumber },
+      'synthesizeAudio: failed to build Whisper subtitle timeline, falling back to estimate',
+    );
+  }
+}
+
 async function synthesizeOnePage(params: {
   pdfId: string;
   pageNumber: number;
@@ -389,6 +421,15 @@ async function synthesizeOnePage(params: {
 
       const latencyMs = Date.now() - startedAt;
       const duration = await readAudioDuration(targetPath);
+
+      if (runtime.subtitleSyncMode === 'whisper') {
+        await writeWhisperTimelineIfEnabled({ pdfId, pageNumber, pageUid, script, audioPath: targetPath });
+      } else {
+        // Audio just got regenerated under 'estimate' mode — remove any timeline left over from
+        // a previous generation made while 'whisper' mode was on, so the frontend doesn't keep
+        // serving stale alignment for narration that's no longer there.
+        await fs.promises.rm(pageTimelinePath(pdfId, pageUid), { force: true });
+      }
 
       logger.info(
         {

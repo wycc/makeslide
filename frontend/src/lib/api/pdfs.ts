@@ -23,6 +23,7 @@ import type {
   SlideAnimationSpec,
   SlideRenderType,
 } from '../../types';
+import type { SentenceTimelineItem } from '../subtitles';
 import { ApiError, isApiErrorBody, parseErrorBody } from './common';
 
 export async function fetchPdfs(): Promise<PdfListItem[]> {
@@ -1464,6 +1465,20 @@ export async function fetchScriptVersion(id: string, pageNumber: number, hash: s
   );
   if (!resp.ok) throw await parseErrorBody(resp);
   return resp.text();
+}
+
+/**
+ * Real per-sentence subtitle timing, present only when this page's audio was synthesized while
+ * the "subtitleSyncMode: whisper" precision setting was on; null otherwise (the caller falls
+ * back to buildSentenceTimeline()'s character-count estimate in that case).
+ */
+export async function fetchPageSubtitleTimeline(id: string, pageNumber: number): Promise<SentenceTimelineItem[] | null> {
+  const resp = await fetch(
+    `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/subtitle-timeline`,
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  const body = (await resp.json()) as { timeline: SentenceTimelineItem[] | null };
+  return body.timeline;
 }
 
 export interface RestoreImageResponse {
