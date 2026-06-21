@@ -1210,6 +1210,7 @@ export const zhTW = {
   'quiz.questionPlaceholder': '輸入題目',
   'quiz.scoreLabel': '本題分數（留空則自動分配）',
   'quiz.scorePlaceholder': '例如 20',
+  'quiz.scoreSumExceeded': '已設定分數的題目加總為 {sum} 分，超過測驗滿分 100 分，請調整各題分數後再儲存',
   'quiz.optionPlaceholder': '選項 {index}',
   'quiz.explanationPlaceholder': '解析',
   'language.zhTW': '繁體中文',

@@ -52,15 +52,24 @@ function emptyQuestion(index: number): QuizQuestion {
   };
 }
 
+const QUIZ_TOTAL_SCORE = 100;
+
 function normalizeQuestionScores(questions: QuizQuestion[]): number[] {
   if (questions.length === 0) return [];
-  const TOTAL = 100;
+  const TOTAL = QUIZ_TOTAL_SCORE;
   const explicit = questions.map((q) => (typeof q.score === 'number' && Number.isFinite(q.score) && q.score >= 0 ? q.score : null));
   const assigned = explicit.reduce<number>((acc, v) => acc + (v ?? 0), 0);
   const emptyIndices = explicit.map((v, i) => (v == null ? i : -1)).filter((i) => i >= 0);
   const remaining = Math.max(0, TOTAL - assigned);
   const even = emptyIndices.length > 0 ? remaining / emptyIndices.length : 0;
   return explicit.map((v) => (v == null ? (emptyIndices.length > 0 ? even : 0) : v));
+}
+
+// Sum of only the explicitly-set per-question scores (mirrors backend explicitScoreSum() in
+// backend/src/routes/pdfs/quizzes.ts). Used to warn the teacher in the editor, before the save
+// request reaches the server-side cap, that a fully-correct attempt could exceed the 100-point total.
+function explicitScoreSum(questions: QuizQuestion[]): number {
+  return questions.reduce((acc, q) => acc + (typeof q.score === 'number' && Number.isFinite(q.score) && q.score >= 0 ? q.score : 0), 0);
 }
 
 function isCorrectAnswer(question: QuizQuestion, selected: number[]): boolean {
@@ -158,9 +167,18 @@ export default function QuizBuilderPage() {
     };
   }, [pdfId]);
 
+  const scoreSumExceeded = useMemo(() => {
+    const sum = explicitScoreSum(questions);
+    return sum > QUIZ_TOTAL_SCORE ? sum : null;
+  }, [questions]);
+
   const canSave = useMemo(
-    () => title.trim() && questions.length > 0 && questions.every((q) => q.question.trim() && q.options.filter((o) => o.text.trim()).length >= 2),
-    [questions, title],
+    () =>
+      Boolean(title.trim()) &&
+      questions.length > 0 &&
+      questions.every((q) => q.question.trim() && q.options.filter((o) => o.text.trim()).length >= 2) &&
+      scoreSumExceeded == null,
+    [questions, scoreSumExceeded, title],
   );
 
   const activeQuiz = useMemo(
@@ -845,6 +863,9 @@ export default function QuizBuilderPage() {
                 {showEditorAnswers ? t('quiz.hideEditorAnswers') : t('quiz.showEditorAnswers')}
               </button>
             </div>
+            {scoreSumExceeded != null ? (
+              <p className="mt-2 text-sm text-rose-300">{formatMessage('quiz.scoreSumExceeded', { sum: scoreSumExceeded })}</p>
+            ) : null}
             {message ? <p className="mt-2 text-sm text-emerald-300">{message}</p> : null}
             {error ? <p className="mt-2 text-sm text-rose-300">{error}</p> : null}
           </div>

@@ -550,3 +550,96 @@ test('PUT /quizzes/:quizId persists a custom per-question score that GET /quizze
     await app.close();
   }
 });
+
+test('POST /quizzes rejects explicit per-question scores that sum to more than 100', async () => {
+  seedQuizPdf('quiz-score-cap-create-01', 'public');
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: '/api/pdfs/quiz-score-cap-create-01/quizzes',
+      headers: OWNER_HEADERS,
+      payload: {
+        title: '測驗',
+        prompt: '',
+        questions: [
+          { id: 'q1', type: 'single', question: 'Q1', options: [{ text: 'A' }, { text: 'B' }], answer_indices: [0], explanation: '', score: 80 },
+          { id: 'q2', type: 'single', question: 'Q2', options: [{ text: 'A' }, { text: 'B' }], answer_indices: [0], explanation: '', score: 80 },
+        ],
+      },
+    });
+    assert.equal(resp.statusCode, 400);
+    assert.equal((resp.json() as { error: { code: string } }).error.code, 'INVALID_REQUEST');
+    const count = db.prepare(`SELECT COUNT(*) AS n FROM quiz_sets WHERE pdf_id = ?`).get('quiz-score-cap-create-01') as { n: number };
+    assert.equal(count.n, 0, 'rejected quiz must not be persisted');
+  } finally {
+    await app.close();
+  }
+});
+
+test('PUT /quizzes/:quizId rejects explicit per-question scores that sum to more than 100 and leaves the stored quiz unchanged', async () => {
+  seedQuizPdf('quiz-score-cap-update-01', 'public');
+  const app = await buildApp();
+  try {
+    const createResp = await app.inject({
+      method: 'POST',
+      url: '/api/pdfs/quiz-score-cap-update-01/quizzes',
+      headers: OWNER_HEADERS,
+      payload: validQuizPayload(),
+    });
+    const quizId = (createResp.json() as { id: number }).id;
+
+    const updateResp = await app.inject({
+      method: 'PUT',
+      url: `/api/pdfs/quiz-score-cap-update-01/quizzes/${quizId}`,
+      headers: OWNER_HEADERS,
+      payload: {
+        title: '測驗',
+        prompt: '',
+        questions: [
+          { id: 'q1', type: 'single', question: 'Q1', options: [{ text: 'A' }, { text: 'B' }], answer_indices: [0], explanation: '', score: 60 },
+          { id: 'q2', type: 'single', question: 'Q2', options: [{ text: 'A' }, { text: 'B' }], answer_indices: [0], explanation: '', score: 60 },
+        ],
+      },
+    });
+    assert.equal(updateResp.statusCode, 400);
+
+    const row = db.prepare(`SELECT questions_json FROM quiz_sets WHERE id = ?`).get(quizId) as { questions_json: string };
+    const storedQuestions = JSON.parse(row.questions_json) as Array<{ id: string }>;
+    assert.equal(storedQuestions.length, 1, 'original single-question quiz must remain untouched');
+    assert.equal(storedQuestions[0]?.id, 'q1');
+  } finally {
+    await app.close();
+  }
+});
+
+test('POST /quizzes/:quizId/attempts never awards more than 100 points even if a stored quiz predates the score-sum cap', async () => {
+  // A quiz_sets row can carry per-question scores summing above 100 if it was written before the
+  // SaveQuizBodySchema sum validation existed (or edited directly in the database). Bypass the
+  // (now-enforced) POST/PUT validation by inserting the row directly to simulate that legacy state,
+  // then confirm computeAttemptScore() still clamps the awarded total to 100.
+  seedQuizPdf('quiz-score-cap-legacy-01', 'public');
+  const t = nowIso();
+  const legacyQuestions = [
+    { id: 'q1', type: 'single', question: 'Q1', options: [{ text: 'A' }, { text: 'B' }], answer_indices: [0], explanation: '', score: 80 },
+    { id: 'q2', type: 'single', question: 'Q2', options: [{ text: 'A' }, { text: 'B' }], answer_indices: [0], explanation: '', score: 80 },
+  ];
+  const insertResult = db
+    .prepare(`INSERT INTO quiz_sets (pdf_id, title, prompt, questions_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`)
+    .run('quiz-score-cap-legacy-01', '測驗', '', JSON.stringify(legacyQuestions), t, t);
+  const quizId = insertResult.lastInsertRowid as number;
+
+  const app = await buildApp();
+  try {
+    const attemptResp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/quiz-score-cap-legacy-01/quizzes/${quizId}/attempts`,
+      headers: OTHER_HEADERS,
+      payload: { client_id: 'client-legacy-allcorrect', session_id: 'session-legacy', answers: { q1: [0], q2: [0] } },
+    });
+    assert.equal(attemptResp.statusCode, 201);
+    assert.equal((attemptResp.json() as { score: number }).score, 100, 'awarded score must be clamped to the 100-point total');
+  } finally {
+    await app.close();
+  }
+});

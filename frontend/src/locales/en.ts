@@ -1210,6 +1210,7 @@ export const en = {
   'quiz.questionPlaceholder': 'Enter question',
   'quiz.scoreLabel': 'Question score (leave empty to distribute automatically)',
   'quiz.scorePlaceholder': 'e.g. 20',
+  'quiz.scoreSumExceeded': 'Questions with an explicit score add up to {sum} points, above the 100-point total. Please adjust the scores before saving.',
   'quiz.optionPlaceholder': 'Option {index}',
   'quiz.explanationPlaceholder': 'Explanation',
   'language.zhTW': '繁體中文',

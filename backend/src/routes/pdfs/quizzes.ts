@@ -77,11 +77,32 @@ const QuizQuestionsSchema = z.array(QuizQuestionSchema).min(1).max(50);
 const ExistingQuizQuestionsSchema = z.array(QuizQuestionSchema).max(50);
 const GeneratedQuizQuestionsSchema = z.array(GeneratedQuizQuestionSchema).min(1).max(50);
 
-const SaveQuizBodySchema = z.object({
-  title: z.string().trim().min(1).max(200),
-  prompt: z.string().trim().max(4000).default(''),
-  questions: QuizQuestionsSchema,
-});
+// Mirrors frontend/src/pages/QuizBuilderPage.tsx's explicit-score sum check: questions with an explicit
+// score must not add up to more than the 100-point pool, otherwise computeAttemptScore() below could
+// hand out a total score above the "X / 100" total the UI promises (e.g. two questions explicitly set
+// to 80 points each would let a fully-correct attempt score 160/100).
+const QUIZ_TOTAL_SCORE = 100;
+const QUIZ_SCORE_SUM_EPSILON = 1e-6;
+function explicitScoreSum(questions: Array<{ score?: number | null }>): number {
+  return questions.reduce((acc, q) => acc + (typeof q.score === 'number' && Number.isFinite(q.score) && q.score >= 0 ? q.score : 0), 0);
+}
+
+const SaveQuizBodySchema = z
+  .object({
+    title: z.string().trim().min(1).max(200),
+    prompt: z.string().trim().max(4000).default(''),
+    questions: QuizQuestionsSchema,
+  })
+  .superRefine((body, ctx) => {
+    const sum = explicitScoreSum(body.questions);
+    if (sum > QUIZ_TOTAL_SCORE + QUIZ_SCORE_SUM_EPSILON) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['questions'],
+        message: `題目自訂分數加總為 ${sum}，超過測驗滿分 ${QUIZ_TOTAL_SCORE} 分，請調整各題分數`,
+      });
+    }
+  });
 
 const GenerateQuizBodySchema = z.object({
   prompt: z.string().trim().min(1).max(4000),
@@ -252,7 +273,12 @@ function computeAttemptScore(questionsJson: string, answers: Record<string, numb
   const questions = result.success ? result.data : [];
   const scoreTable = normalizeQuestionScores(questions);
   const total = questions.reduce((acc, q, idx) => acc + calcQuestionScore(q, answers[q.id] ?? [], scoreTable[idx] ?? 0), 0);
-  return Math.round(total * 100) / 100;
+  // Defensive clamp: SaveQuizBodySchema now rejects explicit per-question scores summing above
+  // QUIZ_TOTAL_SCORE at write time, but quiz_sets rows saved before that validation existed (or
+  // edited directly) could still carry a stale questions_json whose scores add up to more than
+  // 100. Clamp here too so a fully-correct attempt can never be awarded more than the 100-point
+  // total the UI advertises ("X / 100"), regardless of how the underlying row was created.
+  return Math.min(QUIZ_TOTAL_SCORE, Math.round(total * 100) / 100);
 }
 
 function normalizeQuestions(input: unknown) {
