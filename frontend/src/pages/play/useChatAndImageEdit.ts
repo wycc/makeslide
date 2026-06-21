@@ -141,6 +141,11 @@ export function useChatAndImageEdit({
     if (!pdfId || !currentPage) return;
     const question = chatInput.trim();
     if (!question) return;
+    // 記住送出當下的頁碼：聊天屬於長時間的非同步呼叫，若使用者在等待回覆時切到別的頁面，
+    // 換頁的效果（上方）會先把 chatHistory 換成新頁面的紀錄，這裡的回覆若不檢查頁碼就直接
+    // append，會把舊頁面問題的回答誤植到新頁面的對話顯示裡（伺服器端的紀錄不受影響，純粹是
+    // 前端畫面顯示錯了對話串）。
+    const pageNumberAtSend = currentPage.page_number;
     const nextHistory = [...chatHistory, { role: 'user' as const, content: question }];
     setChatHistory(nextHistory);
     setChatInput('');
@@ -149,12 +154,14 @@ export function useChatAndImageEdit({
     try {
       const res = await chatWithPageContext(
         pdfId,
-        currentPage.page_number,
+        pageNumberAtSend,
         question,
         limitChatHistoryForRequest(chatHistory),
       );
+      if (currentPageNumberRef.current !== pageNumberAtSend) return;
       setChatHistory((prev) => [...prev, { role: 'assistant', content: res.answer }]);
     } catch (err) {
+      if (currentPageNumberRef.current !== pageNumberAtSend) return;
       setChatError(err instanceof ApiError ? err.message : '對話失敗');
     } finally {
       setChatBusy(false);
@@ -179,6 +186,7 @@ export function useChatAndImageEdit({
 
   const handleInpaintImage = useCallback(async () => {
     if (isReadOnlyProcessing || !pdfId || !currentPage) return;
+    const pageNumberAtSend = currentPage.page_number;
     const prompt = chatInput.trim() || '根據指示修改投影片圖片';
 
     // Generate mask PNG at 1536×1024 (same as the slide image size used by the API)
@@ -219,11 +227,12 @@ export function useChatAndImageEdit({
     try {
       const res = await inpaintImage(
         pdfId,
-        currentPage.page_number,
+        pageNumberAtSend,
         maskFile,
         chatPastedImage,
         prompt,
       );
+      if (currentPageNumberRef.current !== pageNumberAtSend) return;
       const preview = `${res.image_url}?t=${encodeURIComponent(res.updated_at)}`;
       setChatHistory((prev) => [
         ...prev,
@@ -233,6 +242,7 @@ export function useChatAndImageEdit({
       clearImageEditRegion();
       setImageEditSelectMode(false);
     } catch (err) {
+      if (currentPageNumberRef.current !== pageNumberAtSend) return;
       setChatHistory(chatHistory);
       setChatInpaintError(err instanceof ApiError ? err.message : '修改圖片失敗');
     } finally {
@@ -253,6 +263,7 @@ export function useChatAndImageEdit({
   const handleRegenerateImageWithPrompt = useCallback(async () => {
     if (isReadOnlyProcessing) return;
     if (!pdfId || !currentPage) return;
+    const pageNumberAtSend = currentPage.page_number;
     const trimmed = chatInput.trim() || '保留版型，讓文字更清晰、重點更聚焦';
     const merged = [
       `整份圖片風格（固定套用）：\n${deckImageStylePrompt.trim() || '(無)'}`,
@@ -268,16 +279,18 @@ export function useChatAndImageEdit({
       setChatHistory(nextHistory);
       const res = await regenerateSlideImage(
         pdfId,
-        currentPage.page_number,
+        pageNumberAtSend,
         merged,
         limitChatHistoryForRequest(chatHistory),
       );
+      if (currentPageNumberRef.current !== pageNumberAtSend) return;
       const preview = `${res.image_url}${res.image_url.includes('?') ? '&' : '?'}t=${encodeURIComponent(res.updated_at)}`;
       setChatHistory((prev) => [
         ...prev,
         { role: 'assistant', content: `${IMAGE_MSG_PREFIX}${preview}` },
       ]);
     } catch (err) {
+      if (currentPageNumberRef.current !== pageNumberAtSend) return;
       setChatHistory(chatHistory);
       setSlideError(err instanceof ApiError ? err.message : '修改圖片失敗');
     } finally {
