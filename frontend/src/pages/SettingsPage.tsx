@@ -11,6 +11,7 @@ import {
   updateSkill,
   deleteSkill,
   deleteAccount,
+  deleteMyAccount,
   toggleBuiltInSkill,
   logoutAuth,
   transferAdminAccount,
@@ -90,6 +91,8 @@ export default function SettingsPage() {
   const [adminDeleteAccountId, setAdminDeleteAccountId] = useState('');
   const [adminDeleteConfirm, setAdminDeleteConfirm] = useState('');
   const [adminDeleteBusy, setAdminDeleteBusy] = useState(false);
+  const [selfDeleteConfirm, setSelfDeleteConfirm] = useState('');
+  const [selfDeleteBusy, setSelfDeleteBusy] = useState(false);
   const [hasMcpAuthToken, setHasMcpAuthToken] = useState(false);
   const [generatedMcpAuthToken, setGeneratedMcpAuthToken] = useState('');
   const [mcpTokenBusy, setMcpTokenBusy] = useState(false);
@@ -368,6 +371,26 @@ export default function SettingsPage() {
     }
   }, [adminDeleteAccountId, adminDeleteConfirm, t]);
 
+  const onDeleteMyAccount = useCallback(async () => {
+    if (selfDeleteConfirm.trim() !== accountId) {
+      setErr(t('settings.selfDeleteConfirmMismatch'));
+      return;
+    }
+    setErr(null);
+    setMsg(null);
+    setSelfDeleteBusy(true);
+    try {
+      const result = await deleteMyAccount();
+      setSelfDeleteConfirm('');
+      setMsg(t('settings.selfDeleted').replace('{count}', String(result.deleted_pdf_count)));
+      await loadStatus();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : t('settings.selfDeleteError'));
+    } finally {
+      setSelfDeleteBusy(false);
+    }
+  }, [selfDeleteConfirm, accountId, t, loadStatus]);
+
   const onGenerateMcpAuthToken = useCallback(async () => {
     setErr(null);
     setMsg(null);
@@ -634,6 +657,35 @@ export default function SettingsPage() {
                   </div>
                   {generatedMcpAuthToken ? <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-3"><div className="mb-1 text-xs font-medium text-amber-100">{t('settings.mcpTokenOneTimeNotice')}</div><code className="block break-all rounded bg-slate-950 px-2 py-1 font-mono text-xs text-slate-100">{generatedMcpAuthToken}</code></div> : null}
                 </div>
+                {authStatus?.authenticated ? (
+                  <div className="rounded-lg border border-rose-500/30 bg-rose-950/20 p-3">
+                    <div className="mb-1 text-sm font-medium text-rose-100">{t('settings.selfDeleteTitle')}</div>
+                    <p className="mb-3 text-xs text-rose-200/80">{t('settings.selfDeleteHint')}</p>
+                    {isAdmin ? (
+                      <p className="text-xs text-amber-200">{t('settings.selfDeleteAdminBlocked')}</p>
+                    ) : (
+                      <>
+                        <label className="block text-xs text-slate-300">
+                          {t('settings.selfDeleteConfirmLabel')}
+                          <input
+                            value={selfDeleteConfirm}
+                            onChange={(e) => setSelfDeleteConfirm(e.target.value)}
+                            className="mt-1 w-full rounded-md border border-rose-500/40 bg-slate-950 px-3 py-2 text-sm"
+                            placeholder={accountId}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => void onDeleteMyAccount()}
+                          disabled={selfDeleteBusy || selfDeleteConfirm.trim() !== accountId}
+                          className="mt-3 rounded-md bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-500 disabled:opacity-50"
+                        >
+                          {selfDeleteBusy ? t('settings.accountDeleting') : t('settings.selfDeleteButton')}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                ) : null}
               </div>
             ) : null}
 

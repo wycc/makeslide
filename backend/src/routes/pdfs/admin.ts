@@ -15,7 +15,7 @@ import { invalidateOpenAIClientCache, setOpenAIApiKeyRuntime, setOpenAIBaseUrlRu
 import { currentAccountId } from '../../services/accountContext';
 import { IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
 import { pushPresentationToGitHub } from '../../services/presentationGit';
-import { decodeSession, parseCookies } from '../auth';
+import { SESSION_COOKIE, clearCookie, decodeSession, parseCookies } from '../auth';
 import { db } from '../../db';
 import type { PdfRow } from '../../types';
 import { IdParamSchema, UpdateSystemAiSettingsBodySchema, errorResponse } from './shared';
@@ -42,6 +42,10 @@ const TransferAdminBodySchema = z.object({
 
 const DeleteAccountBodySchema = z.object({
   account_id: z.string().trim().min(1).max(256),
+});
+
+const DeleteSelfAccountBodySchema = z.object({
+  confirm: z.literal(true),
 });
 
 const UpdateOpenAiApiKeyBodySchema = z.object({
@@ -298,6 +302,26 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
 
     const result = await deleteAccountData(targetAccountId);
     return reply.code(200).send({ ok: true, account_id: targetAccountId, ...result });
+  });
+
+  // 自助刪除：任何登入的非 admin、非 default 帳號都能刪除自己的帳號與其擁有的所有簡報，
+  // 不需要 admin 權限——目標永遠是「目前登入的帳號」本身，沒有指定其他帳號的風險。
+  app.delete('/api/system/account', async (request, reply) => {
+    const parsed = DeleteSelfAccountBodySchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', parsed.error.issues[0]?.message ?? 'Invalid body'));
+    }
+    const accountId = currentAccountId();
+    if (accountId === DEFAULT_ACCOUNT_ID) {
+      return reply.code(400).send(errorResponse('DANGEROUS_ACCOUNT', '尚未登入或為預設帳號，無法刪除'));
+    }
+    if (isAdminAccount(accountId)) {
+      return reply.code(400).send(errorResponse('DANGEROUS_ACCOUNT', '目前是 admin 帳號，無法刪除；請先在「系統管理」移交 admin 權限'));
+    }
+
+    const result = await deleteAccountData(accountId);
+    clearCookie(reply, SESSION_COOKIE);
+    return reply.code(200).send({ ok: true, account_id: accountId, ...result });
   });
 
   // 每個帳號各自一份 MCP auth token，任何登入的帳號都能產生/輪替自己的 token，

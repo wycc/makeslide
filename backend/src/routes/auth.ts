@@ -108,7 +108,7 @@ function setCookie(reply: FastifyReply, name: string, value: string, maxAgeSecon
   );
 }
 
-function clearCookie(reply: FastifyReply, name: string): void {
+export function clearCookie(reply: FastifyReply, name: string): void {
   reply.header('set-cookie', `${name}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax${secureCookieSuffix()}`);
 }
 
