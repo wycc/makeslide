@@ -818,6 +818,20 @@ export default function PlayPage() {
     setSyncDisplayedPollId,
   });
 
+  // 一般手動開始的投票結束後不會自動繼續播放；只有由 realtime-poll 動畫效果觸發暫停的
+  // 這次問答，master 按下「結束投票」才需要額外恢復播放（回到觸發時所在的那一頁繼續講）。
+  // 必須宣告在後面任何 early return（!pdfId/loadError/!detail/totalPages===0）之前，
+  // 否則這個 hook 在走到早退路徑的那次 render 不會被呼叫，違反 Hooks 規則（React #310）。
+  const handleStopPollAndResumeIfPausedByEffect = useCallback(() => {
+    const shouldResume = pausedForRealtimePollEffectRef.current;
+    pausedForRealtimePollEffectRef.current = false;
+    pollState.handleStopPoll();
+    if (shouldResume) {
+      setFinished(false);
+      void audioRef.current?.play().catch(() => setIsPlaying(false));
+    }
+  }, [pollState.handleStopPoll]);
+
   // ─── handleEnded (stays in PlayPage) ───────────────────────────────────────
   // 跨領域協調：同時觸及 pollState（usePage Polls）、playback state（isPlaying/currentIdx/finished）
   // 以及 classroomMode/interactiveMode 全域開關，三個領域在同一個回呼中依序決策，
@@ -2025,18 +2039,6 @@ export default function PlayPage() {
   }
 
   const hasScriptChanges = scriptEditorState.editingScript !== (currentPage ? (scripts[currentPage.page_number] ?? '') : '');
-
-  // 一般手動開始的投票結束後不會自動繼續播放；只有由 realtime-poll 動畫效果觸發暫停的
-  // 這次問答，master 按下「結束投票」才需要額外恢復播放（回到觸發時所在的那一頁繼續講）。
-  const handleStopPollAndResumeIfPausedByEffect = useCallback(() => {
-    const shouldResume = pausedForRealtimePollEffectRef.current;
-    pausedForRealtimePollEffectRef.current = false;
-    pollState.handleStopPoll();
-    if (shouldResume) {
-      setFinished(false);
-      void audioRef.current?.play().catch(() => setIsPlaying(false));
-    }
-  }, [pollState.handleStopPoll]);
 
   const activePoll =
     (pollState.pollStarted || (syncEnabled && syncRole === 'follower' && syncRealtimePollStarted)) && pollState.pagePolls.length > 0
