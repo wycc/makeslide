@@ -11,7 +11,7 @@ import type {
   SyncAiAnswer,
   SyncFollowerQuestion,
 } from '../../types';
-import type { ImagePromptTemplate, PageGenerationPrompt, ShareAccessMode } from '../../lib/api';
+import type { ImagePromptTemplate, PageGenerationPrompt, PageWatchProgressStats, ShareAccessMode } from '../../lib/api';
 import type { TtsProvider } from '../../lib/ttsVoices';
 import type { SentenceTimelineItem } from '../../lib/subtitles';
 import type { DrawingCanvasHandle, DrawingData, DrawingStroke } from '../../components/DrawingCanvas';
@@ -42,6 +42,8 @@ export interface PlayPageContextValue {
   setCurrentIdx: Dispatch<SetStateAction<number>>;
   totalPages: number;
   loadError: string | null;
+  /** 僅 owner 可見的每頁觀看進度聚合統計，依 `page_number` 查找；無資料或非 owner 時為空 Map。 */
+  watchProgressByPage: Map<number, PageWatchProgressStats>;
 
   // ─── Playback ───────────────────────────────────────────────────────────────
   isPlaying: boolean;

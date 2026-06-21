@@ -1,5 +1,6 @@
 import { useI18n } from '../../i18n';
 import { debugLog, debugWarn } from '../../lib/debugLog';
+import { calculateWatchProgressPercent, formatWatchProgressBadgeCount } from '../../lib/watchProgress';
 import { usePlayPageContext } from './PlayPageContext';
 
 const IMAGE_MSG_PREFIX = '[image] ';
@@ -11,6 +12,7 @@ export function PlayPageSidebar() {
     isReadOnlyProcessing,
     detail,
     currentPage, currentIdx, deckPages, totalPages,
+    watchProgressByPage,
     slideBusy, slideError,
     regenJobRunning, regenAllBusy,
     setRegenAllMsg,
@@ -292,6 +294,31 @@ export function PlayPageSidebar() {
                   {t('play.animation.badge')}
                 </span>
               ) : null}
+              {(() => {
+                if (!detail?.is_owner) return null;
+                const stats = watchProgressByPage.get(p.page_number);
+                if (!stats || stats.total_viewers <= 0) return null;
+                const badgeText = formatWatchProgressBadgeCount(stats);
+                if (badgeText == null) return null;
+                const percent = calculateWatchProgressPercent(stats);
+                const avgListenedPercent = stats.avg_listened_ratio != null
+                  ? Math.round(stats.avg_listened_ratio * 100)
+                  : null;
+                const tooltip = formatMessage('play.sidebar.watchProgress.tooltip', {
+                  total: stats.total_viewers,
+                  completed: stats.completed_viewers,
+                  percent: percent ?? 0,
+                  avgListenedPercent: avgListenedPercent ?? 0,
+                });
+                return (
+                  <span
+                    className="absolute bottom-0 right-0 z-10 rounded-tl bg-emerald-600/80 px-1 text-[9px] text-white"
+                    title={tooltip}
+                  >
+                    {formatMessage('play.sidebar.watchProgress.badge', { count: badgeText })}
+                  </span>
+                );
+              })()}
             </div>
           ))}
         </div>

@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { evaluateWatchCompletion } from './watchProgress';
+import {
+  evaluateWatchCompletion,
+  calculateWatchProgressPercent,
+  formatWatchProgressBadgeCount,
+} from './watchProgress';
 
 test('evaluateWatchCompletion returns false when there is no audio (durationMs is null)', () => {
   const result = evaluateWatchCompletion({
@@ -61,4 +65,50 @@ test('evaluateWatchCompletion treats the 0.85/0.15 thresholds as inclusive bound
     durationMs: 10000,
   });
   assert.equal(atListenedBoundary, true);
+});
+
+test('calculateWatchProgressPercent returns null when there are no viewers', () => {
+  const result = calculateWatchProgressPercent({
+    total_viewers: 0,
+    completed_viewers: 0,
+    avg_listened_ratio: null,
+  });
+  assert.equal(result, null);
+});
+
+test('calculateWatchProgressPercent rounds to the nearest integer percentage', () => {
+  const result = calculateWatchProgressPercent({
+    total_viewers: 3,
+    completed_viewers: 1,
+    avg_listened_ratio: 0.5,
+  });
+  // 1/3 = 33.33...% rounds to 33
+  assert.equal(result, 33);
+});
+
+test('calculateWatchProgressPercent returns 100 when every viewer completed the page', () => {
+  const result = calculateWatchProgressPercent({
+    total_viewers: 4,
+    completed_viewers: 4,
+    avg_listened_ratio: 1,
+  });
+  assert.equal(result, 100);
+});
+
+test('formatWatchProgressBadgeCount returns null when there are no viewers', () => {
+  const result = formatWatchProgressBadgeCount({
+    total_viewers: 0,
+    completed_viewers: 0,
+    avg_listened_ratio: null,
+  });
+  assert.equal(result, null);
+});
+
+test('formatWatchProgressBadgeCount formats as "completed/total"', () => {
+  const result = formatWatchProgressBadgeCount({
+    total_viewers: 5,
+    completed_viewers: 3,
+    avg_listened_ratio: 0.72,
+  });
+  assert.equal(result, '3/5');
 });
