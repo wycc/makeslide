@@ -460,7 +460,11 @@ export default function PlayPage() {
         : { strokes: [] })
     : undefined;
   const totalPages = deckPages.length;
-  const shareIsReadOnly = detail?.share_mode === 'read_only' || (!currentShareToken && detail?.visibility === 'public');
+  // owner（含沒有 owner 的舊資料）永遠可讀寫；分享連結的唯讀限制只套用在其他訪客身上，
+  // 避免 owner 自己設定唯讀分享後，用自己的帳號開啟簡報時也被鎖成唯讀。
+  const shareIsReadOnly =
+    !detail?.is_owner &&
+    (detail?.share_mode === 'read_only' || (!currentShareToken && detail?.visibility === 'public'));
   const isReadOnlyProcessing =
     (detail != null &&
       detail.status !== 'ready' &&
