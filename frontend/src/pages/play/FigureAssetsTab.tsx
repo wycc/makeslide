@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '../../i18n';
 import { fetchPageFigures, savePageFigureSelection } from '../../lib/api';
+import { createSequentialQueue } from '../../lib/saveQueue';
 import type { PageFigure } from '../../types';
 import { usePlayPageContext } from './PlayPageContext';
 
@@ -14,6 +15,17 @@ export function FigureAssetsTab() {
   const [savingBatch, setSavingBatch] = useState(false);
 
   const pageNumber = currentPage?.page_number;
+
+  // 同一頁面的兩次儲存呼叫各自帶著「當下完整的排除清單」，若連續切換兩個圖表的勾選狀態，
+  // 較早送出但較慢回應的請求可能在較晚送出但較快回應的請求之後才落地，悄悄把後一次操作蓋掉；
+  // 用 `createSequentialQueue` 把同一頁的儲存呼叫排成依序執行，確保送出順序＝落地順序。
+  const saveQueueRef = useRef(createSequentialQueue<string[]>(async () => undefined));
+  useEffect(() => {
+    saveQueueRef.current = createSequentialQueue<string[]>(async (excludedIds) => {
+      if (!pdfId || !pageNumber) return;
+      await savePageFigureSelection(pdfId, pageNumber, excludedIds);
+    });
+  }, [pdfId, pageNumber]);
 
   useEffect(() => {
     if (!pdfId || !pageNumber) {
@@ -46,7 +58,7 @@ export function FigureAssetsTab() {
     setSavingId(figure.id);
     setError(null);
     try {
-      await savePageFigureSelection(pdfId, pageNumber, updated.filter((f) => f.excluded).map((f) => f.id));
+      await saveQueueRef.current(updated.filter((f) => f.excluded).map((f) => f.id));
     } catch {
       setFigures(previous);
       setError(t('play.figures.saveError'));
@@ -63,7 +75,7 @@ export function FigureAssetsTab() {
     setSavingBatch(true);
     setError(null);
     try {
-      await savePageFigureSelection(pdfId, pageNumber, updated.filter((figure) => figure.excluded).map((figure) => figure.id));
+      await saveQueueRef.current(updated.filter((figure) => figure.excluded).map((figure) => figure.id));
     } catch {
       setFigures(previous);
       setError(t('play.figures.saveError'));
