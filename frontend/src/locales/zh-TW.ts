@@ -764,7 +764,7 @@ export const zhTW = {
   'play.animation.preset.stepList': '逐步條列說明',
   'play.animation.preset.overlayImage': '插入頁面圖片',
   'play.animation.preset.formula': '插入公式',
-  'play.animation.preset.pausePlayback': '暫停播放提示',
+  'play.animation.preset.pausePlayback': '新增暫停效果',
   'play.animation.effectType': '效果',
   'play.animation.seekToMidpoint': '跳至效果中點',
   'play.animation.jumpToEffectStart': '跳至效果起點',

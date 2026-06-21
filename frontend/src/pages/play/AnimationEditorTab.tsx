@@ -481,6 +481,8 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
   const [customScriptChatInput, setCustomScriptChatInput] = useState('');
   const customScriptChatScrollRef = useRef<HTMLDivElement>(null);
   const [selectedEffectIds, setSelectedEffectIds] = useState<Set<string>>(new Set());
+  // 新增效果後待捲動／聚焦到的效果 ID（例如「新增暫停效果」按鈕新增的項目）。
+  const [pendingFocusEffectId, setPendingFocusEffectId] = useState<string | null>(null);
   const effectRowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const [notebookTab, setNotebookTab] = useState<'effects' | 'hints' | 'json'>('effects');
   const [jsonCopyStatus, setJsonCopyStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -532,6 +534,11 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
     if (!activeEffectId) return;
     effectRowRefs.current.get(activeEffectId)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [activeEffectId]);
+  useEffect(() => {
+    if (!pendingFocusEffectId) return;
+    effectRowRefs.current.get(pendingFocusEffectId)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    setPendingFocusEffectId(null);
+  }, [pendingFocusEffectId]);
   const customScriptDialogEffect = useMemo(
     () => draft.effects.find((effect) => effect.id === customScriptDialogEffectId && effect.type === 'custom-script') ?? null,
     [draft.effects, customScriptDialogEffectId],
@@ -693,6 +700,46 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
     });
   };
 
+  /**
+   * 新增一個「暫停播放」效果：啟動時間／對應逐字稿句子沿用目前播放時間所在的效果
+   * （即效果清單中標示為 active 的那一個），讓暫停提示與該效果同步出現，而不是
+   * 另外取目前播放秒數當作獨立起點。找不到對應的 active 效果時，回退成原本依
+   * 目前播放時間插入的行為。新增後會捲動效果清單聚焦到這個新效果上。
+   */
+  const handleAddPauseEffect = () => {
+    const preset = EFFECT_PRESETS.find((p) => p.id === 'pause-playback');
+    if (!preset) return;
+    if (draft.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS) return;
+    const activeEffect = draft.effects.find((effect) => effect.id === activeEffectId) ?? null;
+    const effect: SlideAnimationEffect = {
+      ...newEffect(),
+      ...preset.apply(),
+      ...(activeEffect
+        ? {
+            start: activeEffect.start,
+            startTrigger: activeEffect.startTrigger ? { ...activeEffect.startTrigger } : undefined,
+          }
+        : {}),
+    };
+    setAnimationDraft((prev) => {
+      const base = prev ?? defaultAnimationSpec();
+      if (base.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS) return base;
+      const activeIndex = activeEffect ? base.effects.findIndex((item) => item.id === activeEffect.id) : -1;
+      const effects =
+        activeIndex === -1
+          ? insertEffectAfterPlaybackEffect(
+              base.effects,
+              effect,
+              currentTime,
+              (item) => (item.startTrigger ? resolveStartTriggerSeconds(item.startTrigger, sentenceTimeline) ?? item.start : item.start),
+            )
+          : [...base.effects.slice(0, activeIndex + 1), effect, ...base.effects.slice(activeIndex + 1)];
+      return { ...base, effects };
+    });
+    setSelectedEffectIds(new Set([effect.id]));
+    setPendingFocusEffectId(effect.id);
+  };
+
   const handleAddEffect = () => {
     setAnimationDraft((prev) => {
       const base = prev ?? defaultAnimationSpec();
@@ -770,7 +817,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
             type="button"
             disabled={disabled || draft.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS}
             title={draft.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS ? t('play.animation.maxEffects') : undefined}
-            onClick={() => handleApplyPreset('pause-playback')}
+            onClick={handleAddPauseEffect}
             className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/10 px-3 py-1.5 text-sm text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-40"
           >
             ⏸ {t('play.animation.preset.pausePlayback')}

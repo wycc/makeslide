@@ -764,7 +764,7 @@ export const en = {
   'play.animation.preset.stepList': 'Step-by-step list',
   'play.animation.preset.overlayImage': 'Insert page figure',
   'play.animation.preset.formula': 'Insert formula',
-  'play.animation.preset.pausePlayback': 'Pause playback cue',
+  'play.animation.preset.pausePlayback': 'Add pause effect',
   'play.animation.effectType': 'Effect',
   'play.animation.seekToMidpoint': 'Seek to effect midpoint',
   'play.animation.jumpToEffectStart': 'Jump to effect start',
