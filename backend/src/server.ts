@@ -351,10 +351,17 @@ export async function startServer(): Promise<number> {
   );
 
   const popplerCheck = await checkPoppler();
-  logger.info(
-    { versionOutput: popplerCheck.versionOutput.trim().split("\n")[0] },
-    "PDF renderer ready",
-  );
+  if (!popplerCheck.pdftoppm || !popplerCheck.pdfinfo) {
+    logger.warn(
+      { popplerCheck },
+      "poppler-utils (pdftoppm/pdfinfo) not found — PDF page rendering will fail until it's installed (see README)",
+    );
+  } else {
+    logger.info(
+      { versionOutput: popplerCheck.versionOutput.trim().split("\n")[0] },
+      "PDF renderer ready",
+    );
+  }
 
   // Initialise queue + crash-recovery rescan
   getProcessingQueue();

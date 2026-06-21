@@ -27,7 +27,7 @@ export interface RenderResult {
 
 /**
  * Render every page of a PDF to `storage/<pdfId>/pages/<page_uid>.jpg` using
- * pdfjs-dist + canvas, then produce a cover thumbnail from page 1.
+ * the `pdftoppm` (Poppler) binary, then produce a cover thumbnail from page 1.
  */
 export async function renderPages(pdfId: string): Promise<RenderResult> {
   const source = sourcePdfPath(pdfId);
