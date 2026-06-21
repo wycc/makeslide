@@ -755,6 +755,53 @@ export async function resetPagePollVotes(id: string, pollId: number): Promise<Pa
   return (await resp.json()) as PagePoll;
 }
 
+export interface ReportWatchProgressInput {
+  viewer_id: string;
+  listened_ms: number;
+  tab_hidden_ms: number;
+  duration_ms: number | null;
+  completed: boolean;
+}
+
+export interface WatchProgressReport {
+  pdf_id: string;
+  page_number: number;
+  viewer_id: string;
+  listened_ms: number;
+  tab_hidden_ms: number;
+  duration_ms: number | null;
+  completed: boolean;
+  updated_at: string;
+}
+
+export async function reportWatchProgress(
+  id: string,
+  pageNumber: number,
+  input: ReportWatchProgressInput,
+): Promise<WatchProgressReport> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/watch-progress`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as WatchProgressReport;
+}
+
+export interface PageWatchProgressStats {
+  page_number: number;
+  total_viewers: number;
+  completed_viewers: number;
+  avg_listened_ratio: number | null;
+}
+
+export async function fetchWatchProgress(id: string): Promise<PageWatchProgressStats[]> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/watch-progress`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  const data = (await resp.json()) as { pages?: PageWatchProgressStats[] };
+  return Array.isArray(data.pages) ? data.pages : [];
+}
+
 export async function fetchQuizSets(id: string): Promise<QuizSet[]> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/quizzes`);
   if (!resp.ok) throw await parseErrorBody(resp);
