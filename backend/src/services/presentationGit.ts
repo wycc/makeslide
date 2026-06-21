@@ -306,7 +306,8 @@ async function resolveBinaryConflict(
  * every other (binary) file by keeping whichever side last touched the path
  * more recently.
  */
-async function pullAndMergeFromGitHub(pdfId: string, dir: string, authenticatedUrl: string): Promise<void> {
+/** Exported for unit testing; not part of this module's public push/pull API. */
+export async function pullAndMergeFromGitHub(pdfId: string, dir: string, authenticatedUrl: string): Promise<void> {
   const remoteRef = `refs/remotes/github-sync/${pdfId}`;
   try {
     await execFile('git', ['fetch', authenticatedUrl, `refs/heads/${pdfId}:${remoteRef}`], gitOpts(dir));
@@ -336,7 +337,14 @@ async function pullAndMergeFromGitHub(pdfId: string, dir: string, authenticatedU
     } else {
       await resolveBinaryConflict(pdfId, dir, relPath, remoteRef);
     }
-    await execFile('git', ['add', '--', relPath], gitOpts(dir));
+    // resolveBinaryConflict()'s delete/modify fallback already removes the path via `git rm`,
+    // which stages the deletion itself — `git add` on a path that no longer exists on disk
+    // fails with "pathspec did not match any files" and would abort this whole loop (and the
+    // merge commit below never runs), instead of leaving the deletion gracefully resolved as
+    // intended. Only re-stage when the resolver actually left a file on disk to add.
+    if (fs.existsSync(path.join(dir, relPath))) {
+      await execFile('git', ['add', '--', relPath], gitOpts(dir));
+    }
   }
 
   try {
