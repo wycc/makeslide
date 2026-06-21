@@ -85,7 +85,7 @@ function seedListPdf(pdfId: string, title: string, ownerSub: string | null, visi
   ).run(pdfId, title, `${pdfId}.pdf`, ownerSub, visibility, t, t);
 }
 
-test('GET /api/pdfs lists presentations without an owner account (ownerless is readable by anyone, matching canEditPdf)', async () => {
+test('GET /api/pdfs omits ownerless presentations from the list, but still lists owned/public ones', async () => {
   seedListPdf('list-owned-01', 'owned', 'account-1');
   seedListPdf('list-orphan-01', 'orphan', null);
   seedListPdf('list-public-01', 'public', 'account-2', 'public');
@@ -99,9 +99,12 @@ test('GET /api/pdfs lists presentations without an owner account (ownerless is r
 
   assert.equal(resp.statusCode, 200);
   const items = resp.json() as Array<{ id: string }>;
+  // 'list-orphan-01' has no owner_sub — still readable via GET /api/pdfs/:id (see the
+  // "allows presentations without an owner account" test below), but deliberately left
+  // out of the homepage list (see the ownerless-pdf hiding feature).
   assert.deepEqual(
     items.filter((item) => item.id.startsWith('list-')).map((item) => item.id).sort(),
-    ['list-orphan-01', 'list-owned-01', 'list-public-01'],
+    ['list-owned-01', 'list-public-01'],
   );
 
   await app.close();
