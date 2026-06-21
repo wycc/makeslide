@@ -1,9 +1,17 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { createCanvas, DOMMatrix as NodeCanvasDOMMatrix, ImageData as NodeCanvasImageData } from 'canvas';
+import { config } from '../config';
 
+// The page-to-JPEG pipeline (renderPdfPages(), below) shells out to the real `pdftoppm`
+// binary — see its own comment for why. pdf.js + NodeCanvasFactory is still used for
+// extractPdfFigures.ts's vector-figure cropping (needs pdf.js's operator list) and for
+// extractPdfTextPages()/getPdfPageCount() (text/page-count don't need canvas rendering at
+// all), so the Node/canvas-library compatibility patches below remain necessary for those.
+//
 // pdfjs-dist uses createImageBitmap and ImageDecoder (both available in Node.js 18+
 // and Electron) to produce ImageBitmap / ImageDecoderFrame objects for embedded images.
 // node-canvas's ctx.drawImage() does not accept these types → "Image or Canvas expected".
@@ -185,15 +193,34 @@ async function openPdf(pdfPath: string): Promise<PdfjsDoc> {
 // Public API
 // ---------------------------------------------------------------------------
 
+function resolveBin(name: string): string {
+  if (config.popplerBinPath) return path.join(config.popplerBinPath, name);
+  return name;
+}
+
+export function pdftoppmBin(): string { return resolveBin('pdftoppm'); }
+export function pdfinfoBin(): string { return resolveBin('pdfinfo'); }
+/** @deprecated text extraction goes through pdfjs-dist's getTextContent(), not pdftotext. */
+export function pdftotextBin(): string { return resolveBin('pdftotext'); }
+
 export interface PopplerCheck {
   pdftoppm: boolean;
   pdfinfo: boolean;
   versionOutput: string;
 }
 
-/** pdfjs-dist is always available — no external binary needed. */
+/** renderPdfPages() shells out to the real `pdftoppm` binary, so it must actually be on PATH (or POPPLER_BIN_PATH). */
 export async function checkPoppler(): Promise<PopplerCheck> {
-  return { pdftoppm: true, pdfinfo: true, versionOutput: 'pdfjs-dist (built-in, no poppler required)' };
+  const check: PopplerCheck = { pdftoppm: false, pdfinfo: false, versionOutput: '' };
+  // pdftoppm/pdfinfo -v write to stderr and exit 0 on most builds, non-zero on some;
+  // "no error spawning" (i.e. the binary was found) is treated as success either way.
+  const r1 = await runCommand(pdftoppmBin(), ['-v'], { timeoutMs: 5000 }).catch((err) => ({ stdout: '', stderr: String(err) }));
+  check.pdftoppm = !/ENOENT/.test(r1.stderr);
+  check.versionOutput += r1.stderr || r1.stdout;
+  const r2 = await runCommand(pdfinfoBin(), ['-v'], { timeoutMs: 5000 }).catch((err) => ({ stdout: '', stderr: String(err) }));
+  check.pdfinfo = !/ENOENT/.test(r2.stderr);
+  check.versionOutput += `\n${r2.stderr || r2.stdout}`;
+  return check;
 }
 
 export async function getPdfPageCount(pdfPath: string): Promise<number> {
@@ -240,43 +267,48 @@ export interface RenderPdfPagesResult {
   pages: Buffer[];
 }
 
+const RENDER_PDFTOPPM_TIMEOUT_MS = 5 * 60_000;
+
+/**
+ * Renders every page to a PNG via the real `pdftoppm` (Poppler) binary, not pdf.js.
+ *
+ * Some PDFs — notably ones exported from PowerPoint/WPS with embedded CID TrueType font
+ * subsets — defeat pdf.js's glyph-to-character mapping: `getTextContent()` (and so
+ * extractPdfTextPages() below) returns the correct text, but `page.render()` paints nothing
+ * for those glyphs (`fontChar` resolves to an empty string inside pdf.js's font code), so the
+ * rendered slide image is missing all of its text while vector art/raster images render fine.
+ * Poppler renders the same PDF correctly. This used to render via pdf.js + NodeCanvasFactory
+ * (avoiding the `pdftoppm` system-binary dependency, friendlier to Electron packaging — see
+ * docs/pdf-figure-extraction-design.md §12.5), but missing text in the visible slide image is
+ * worse than depending on a binary the Docker image already installs (see Dockerfile).
+ */
 export async function renderPdfPages(
   pdfPath: string,
   dpi: number,
 ): Promise<RenderPdfPagesResult> {
-  const doc = await openPdf(pdfPath);
-  const pageCount = doc.numPages;
-  const pages: Buffer[] = [];
-  const scale = dpi / 72;
+  const pageCount = await getPdfPageCount(pdfPath);
+  if (pageCount <= 0) return { pageCount, pages: [] };
 
+  const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'makeslide-render-pdf-'));
   try {
-    for (let i = 1; i <= pageCount; i++) {
-      const page = await doc.getPage(i);
-      try {
-        const viewport = page.getViewport({ scale });
-        const w = Math.ceil(viewport.width);
-        const h = Math.ceil(viewport.height);
-        const cnv = createCanvas(w, h);
-        const ctx = cnv.getContext('2d');
-        await page.render({ canvasContext: ctx, viewport }).promise;
-        pages.push(cnv.toBuffer('image/png'));
-      } finally {
-        page.cleanup?.();
-      }
+    const prefix = path.join(tmpDir, 'page');
+    await runCommand(pdftoppmBin(), ['-png', '-r', String(dpi), pdfPath, prefix], {
+      timeoutMs: RENDER_PDFTOPPM_TIMEOUT_MS,
+    });
+    const entries = await fs.promises.readdir(tmpDir);
+    const numbered = entries
+      .map((name) => {
+        const match = /^page-(\d+)\.png$/.exec(name);
+        return match ? { name, n: Number(match[1]) } : null;
+      })
+      .filter((entry): entry is { name: string; n: number } => entry !== null)
+      .sort((a, b) => a.n - b.n);
+    if (numbered.length !== pageCount) {
+      throw new Error(`pdftoppm rendered ${numbered.length} pages but pdf.js reported ${pageCount}`);
     }
+    const pages = await Promise.all(numbered.map((entry) => fs.promises.readFile(path.join(tmpDir, entry.name))));
+    return { pageCount, pages };
   } finally {
-    await doc.destroy().catch(() => undefined);
+    await fs.promises.rm(tmpDir, { recursive: true, force: true });
   }
-
-  return { pageCount, pages };
 }
-
-// ---------------------------------------------------------------------------
-// Deprecated stubs — kept so existing import paths compile without change
-// ---------------------------------------------------------------------------
-/** @deprecated use renderPdfPages() */
-export function pdftoppmBin(): string { return 'pdftoppm'; }
-/** @deprecated */
-export function pdfinfoBin(): string { return 'pdfinfo'; }
-/** @deprecated */
-export function pdftotextBin(): string { return 'pdftotext'; }
