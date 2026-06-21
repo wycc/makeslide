@@ -18,6 +18,9 @@ interface UseSlideManagementParams {
   isReadOnlyProcessing: boolean;
   reloadDetail: () => Promise<void>;
   setCurrentIdx: Dispatch<SetStateAction<number>>;
+  // 新增/刪除/搬移頁面都會讓既有頁碼重新編號，批次重生的頁碼選取集合（純粹存 page_number）
+  // 若不清空，會在重新編號後悄悄指向不同的頁面，讓使用者誤以為自己選的頁面不變、實際卻重生了別的頁。
+  setRegenSelectedPages: Dispatch<SetStateAction<Set<number>>>;
 }
 
 export interface SlideManagementState {
@@ -40,6 +43,7 @@ export function useSlideManagement({
   isReadOnlyProcessing,
   reloadDetail,
   setCurrentIdx,
+  setRegenSelectedPages,
 }: UseSlideManagementParams): SlideManagementState {
   const [slideBusy, setSlideBusy] = useState(false);
   const [slideError, setSlideError] = useState<string | null>(null);
@@ -53,12 +57,13 @@ export function useSlideManagement({
       const res = await addSlide(pdfId, currentPage.page_number);
       await reloadDetail();
       setCurrentIdx(res.page_number - 1);
+      setRegenSelectedPages(new Set());
     } catch (err) {
       setSlideError(err instanceof ApiError ? err.message : '新增投影片失敗');
     } finally {
       setSlideBusy(false);
     }
-  }, [pdfId, currentPage, isReadOnlyProcessing, reloadDetail, setCurrentIdx]);
+  }, [pdfId, currentPage, isReadOnlyProcessing, reloadDetail, setCurrentIdx, setRegenSelectedPages]);
 
   const handleDeleteCurrentSlide = useCallback(async () => {
     if (isReadOnlyProcessing) return;
@@ -72,12 +77,13 @@ export function useSlideManagement({
       await deleteSlide(pdfId, currentPage.page_number);
       await reloadDetail();
       setCurrentIdx(Math.max(0, Math.min(idxBeforeDelete, totalBeforeDelete - 2)));
+      setRegenSelectedPages(new Set());
     } catch (err) {
       setSlideError(err instanceof ApiError ? err.message : '刪除投影片失敗');
     } finally {
       setSlideBusy(false);
     }
-  }, [pdfId, currentPage, currentIdx, totalPages, isReadOnlyProcessing, reloadDetail, setCurrentIdx]);
+  }, [pdfId, currentPage, currentIdx, totalPages, isReadOnlyProcessing, reloadDetail, setCurrentIdx, setRegenSelectedPages]);
 
   const handleMoveSlide = useCallback(
     async (fromPageNumber: number, toPageNumber: number) => {
@@ -89,13 +95,14 @@ export function useSlideManagement({
         await moveSlide(pdfId, fromPageNumber, toPageNumber);
         await reloadDetail();
         setCurrentIdx(Math.max(0, toPageNumber - 1));
+        setRegenSelectedPages(new Set());
       } catch (err) {
         setSlideError(err instanceof ApiError ? err.message : '調整頁面順序失敗');
       } finally {
         setSlideBusy(false);
       }
     },
-    [pdfId, reloadDetail, isReadOnlyProcessing, setCurrentIdx],
+    [pdfId, reloadDetail, isReadOnlyProcessing, setCurrentIdx, setRegenSelectedPages],
   );
 
   const handleReplaceImageFile = useCallback(

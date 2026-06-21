@@ -1643,6 +1643,7 @@ export default function PlayPage() {
     isReadOnlyProcessing,
     reloadDetail,
     setCurrentIdx,
+    setRegenSelectedPages: regenState.setRegenSelectedPages,
   });
   const { slideBusy, setSlideBusy, setSlideError, handleReplaceImageFile } = slideState;
 
