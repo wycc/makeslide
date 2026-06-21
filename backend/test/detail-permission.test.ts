@@ -364,3 +364,54 @@ test('GET /pages/:n/subtitle-timeline returns the persisted timeline when one ex
   assert.deepEqual(resp.json(), { timeline });
   await app.close();
 });
+
+// --- GET /api/pdfs/:id is_owner flag ---
+// The frontend treats the owner as always read-write, even when the PDF's own
+// visibility/share link marks it read-only for everyone else; that decision
+// hinges entirely on this `is_owner` flag in the detail response.
+
+test('GET /api/pdfs/:id marks the owner as is_owner=true even when the presentation is publicly read-only shared', async () => {
+  const pdfId = 'detperm-isowner-pub-own-01';
+  seedDetailPdf(pdfId, 'public');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}`, headers: OWNER_HEADERS });
+  assert.equal(resp.statusCode, 200);
+  assert.equal((resp.json() as { is_owner?: boolean }).is_owner, true);
+  await app.close();
+});
+
+test('GET /api/pdfs/:id marks a non-owner viewer as is_owner=false on a public presentation', async () => {
+  const pdfId = 'detperm-isowner-pub-other-01';
+  seedDetailPdf(pdfId, 'public');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}`, headers: OTHER_HEADERS });
+  assert.equal(resp.statusCode, 200);
+  assert.equal((resp.json() as { is_owner?: boolean }).is_owner, false);
+  await app.close();
+});
+
+test('GET /api/pdfs/:id marks the owner as is_owner=true even when opened through a read-only share link', async () => {
+  const pdfId = 'detperm-isowner-share-own-01';
+  seedDetailPdf(pdfId, 'private');
+  const token = 'detperm-isowner-share-token-01';
+  seedShareToken(pdfId, token, 'read_only');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}?share=${token}`, headers: OWNER_HEADERS });
+  assert.equal(resp.statusCode, 200);
+  const body = resp.json() as { is_owner?: boolean; share_mode?: string };
+  assert.equal(body.is_owner, true);
+  assert.equal(body.share_mode, 'read_only');
+  await app.close();
+});
+
+test('GET /api/pdfs/:id marks an anonymous read-only share visitor as is_owner=false', async () => {
+  const pdfId = 'detperm-isowner-share-anon-01';
+  seedDetailPdf(pdfId, 'private');
+  const token = 'detperm-isowner-share-token-02';
+  seedShareToken(pdfId, token, 'read_only');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}?share=${token}` });
+  assert.equal(resp.statusCode, 200);
+  assert.equal((resp.json() as { is_owner?: boolean }).is_owner, false);
+  await app.close();
+});

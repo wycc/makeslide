@@ -281,6 +281,13 @@ export interface PdfDetail {
   created_at: string;
   updated_at: string;
   share_mode?: 'read_only' | 'editable';
+  /**
+   * Whether the requester is this PDF's owner (or the PDF has no owner, i.e.
+   * legacy/anonymous data). Lets the frontend always treat the owner as
+   * read-write, even when `visibility`/`share_mode` mark the PDF read-only
+   * for a public read-only share link.
+   */
+  is_owner?: boolean;
   video_url?: string | null;
   pages: PdfDetailPage[];
   sources?: PdfSourceItem[];

@@ -272,14 +272,18 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       updated_at: s.updated_at,
     }));
     const shareMode = shareAccess ?? getShareMode(request);
+    // 分享連結的唯讀/可編輯模式只限制其他訪客；owner（或沒有 owner 的舊資料）
+    // 永遠視為可讀寫，前端用這個旗標避免把自己設定的唯讀分享套用到自己身上。
+    const isOwner = hasOwnerOrLegacyAccess(sub, row);
     if (shareMode) {
       return reply.send({
         ...detail,
         sources: sourceItems,
         share_mode: shareMode,
+        is_owner: isOwner,
       });
     }
-    return reply.send({ ...detail, sources: sourceItems });
+    return reply.send({ ...detail, sources: sourceItems, is_owner: isOwner });
   });
 
   app.post('/api/pdfs/:id/sources/txt', async (request, reply) => {

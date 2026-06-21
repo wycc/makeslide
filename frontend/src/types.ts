@@ -467,6 +467,12 @@ export interface PdfDetail {
   image_style_prompt?: string | null;
   total_audio_duration_seconds?: number | null;
   share_mode?: 'read_only' | 'editable';
+  /**
+   * Whether the requester is this PDF's owner (or the PDF has no owner, i.e.
+   * legacy/anonymous data). The owner is always read-write regardless of
+   * `visibility`/`share_mode`, which only restrict other visitors.
+   */
+  is_owner?: boolean;
   has_source_text?: boolean;
   created_at: string;
   updated_at: string;
