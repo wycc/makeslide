@@ -182,7 +182,12 @@ export async function commitPresentationFiles(
   try {
     await ensurePresentationRepo(pdfId);
     await execFile('git', ['add', '--', ...relPaths], gitOpts(dir));
-    const status = await git(dir, ['status', '--porcelain']);
+    // Scoped to relPaths (matching commitPresentationFile's check) rather than the whole repo:
+    // an unrelated dirty file elsewhere in the working tree would otherwise make this look like
+    // there's something to commit, leading to a commit attempt scoped to relPaths that fails
+    // ("nothing to commit") and logs a spurious warning even though these specific paths are
+    // genuinely unchanged.
+    const status = await git(dir, ['status', '--porcelain', '--', ...relPaths]);
     if (!status) return;
     await execFile('git', ['commit', '-m', message, '--', ...relPaths], gitOpts(dir));
   } catch (err) {
