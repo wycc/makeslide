@@ -999,6 +999,8 @@ export const zhTW = {
   'play.sidebar.thumbnailSelectedSuffix': '（已選取重生）',
   'play.sidebar.dragToReorder': '拖曳此把手可重排',
   'play.sidebar.thumbnailAlt': '第 {page} 頁縮圖',
+  'play.sidebar.watchProgress.badge': '{count} 完成',
+  'play.sidebar.watchProgress.tooltip': '{total} 人觀看，{completed} 人完整聽完（{percent}%），平均聽取比例 {avgListenedPercent}%',
   'play.sidebar.loading': '載入中…',
   'play.sidebar.noImage': '無圖片',
   'play.sidebar.selectedRegenerate': '已選 {count} 頁將重生（Ctrl/Shift 點選）',

@@ -11,6 +11,7 @@ import {
   answerSyncFollowerQuestionsWithAi,
   fetchPageSubtitleTimeline,
   fetchPdfDetail,
+  fetchWatchProgress,
   resolveShareToken,
   fetchPlaybackSyncState,
   joinSharedPlaybackSync,
@@ -20,6 +21,7 @@ import {
   submitSyncFollowerQuestion,
   toggleSyncDisplayedQuestion,
   updatePlaybackSyncState,
+  type PageWatchProgressStats,
   type ShareAccessMode,
 } from '../lib/api';
 import {
@@ -149,6 +151,7 @@ export default function PlayPage() {
 
   const [detail, setDetail] = useState<PdfDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [watchProgressStats, setWatchProgressStats] = useState<PageWatchProgressStats[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [loadedSlideImage, setLoadedSlideImage] = useState<LoadedSlideImageState | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -1565,6 +1568,34 @@ export default function PlayPage() {
     durationMs: audioMetadataReadyForCurrentPage ? Math.round(duration * 1000) : null,
   });
 
+  // 讀取（非送出）每頁觀看進度聚合統計，供側邊欄縮圖徽章顯示；只有 owner 看得到，
+  // 詳情載入完成後只抓一次（不 polling，使用者可重新整理頁面取得最新數字）。
+  // 與上面 useWatchProgress（送出本機觀看數據）是相反方向的資料流，刻意分開不混在一起。
+  useEffect(() => {
+    if (!pdfId || !detail?.is_owner) {
+      setWatchProgressStats([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const stats = await fetchWatchProgress(pdfId);
+        if (!cancelled) setWatchProgressStats(stats);
+      } catch (err) {
+        // 次要的背景輔助統計資訊，載入失敗不應干擾正常播放，靜默處理。
+        debugWarn('[watch-progress] failed to load stats', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pdfId, detail?.is_owner]);
+
+  const watchProgressByPage = useMemo(
+    () => new Map(watchProgressStats.map((stat) => [stat.page_number, stat])),
+    [watchProgressStats],
+  );
+
   const sentenceTimeline = useMemo(() => {
     // 只在句數對得上時才採用真實時間軸：逐字稿如果在產生 Whisper 時間軸之後被編輯過，
     // 句數會跟目前的 pageSentences 不一致，這時改用估算值才不會讓索引對不齊。
@@ -2073,6 +2104,7 @@ export default function PlayPage() {
     pdfId, currentShareToken, isLockedFullscreen,
     // deck data
     detail, setDetail, deckPages, currentPage, currentIdx, setCurrentIdx, totalPages, loadError,
+    watchProgressByPage,
     // playback
     isPlaying, setIsPlaying, currentTime, setCurrentTime, duration, setDuration,
     finished, setFinished, audioMuted, setAudioMuted, effectiveAudioMuted,

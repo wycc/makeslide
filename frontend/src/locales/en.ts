@@ -999,6 +999,8 @@ export const en = {
   'play.sidebar.thumbnailSelectedSuffix': ' (selected for regeneration)',
   'play.sidebar.dragToReorder': 'Drag this handle to reorder',
   'play.sidebar.thumbnailAlt': 'Page {page} thumbnail',
+  'play.sidebar.watchProgress.badge': '{count} done',
+  'play.sidebar.watchProgress.tooltip': '{total} viewer(s), {completed} fully listened ({percent}%), average listened ratio {avgListenedPercent}%',
   'play.sidebar.loading': 'Loading…',
   'play.sidebar.noImage': 'No image',
   'play.sidebar.selectedRegenerate': '{count} selected page(s) will regenerate (Ctrl/Shift click)',

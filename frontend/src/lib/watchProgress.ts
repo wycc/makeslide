@@ -30,3 +30,26 @@ export function evaluateWatchCompletion({
   if (tabHiddenMs > durationMs * MAX_TAB_HIDDEN_RATIO) return false;
   return true;
 }
+
+// ── Sidebar watch-progress badge helpers ──────────────────────────────────────
+//
+// 純函式，供側邊欄縮圖徽章（只有 owner 看得到的每頁觀看完成率）使用，輸入為後端
+// `GET /api/pdfs/:id/watch-progress` 回傳的單頁聚合統計（見
+// `frontend/src/lib/api/pdfs.ts` 的 `PageWatchProgressStats`）。
+export interface PageWatchProgressSummary {
+  total_viewers: number;
+  completed_viewers: number;
+  avg_listened_ratio: number | null;
+}
+
+/** 完成率（0-100 的整數百分比）。`total_viewers <= 0` 時回傳 null，代表沒有足夠資料可顯示。 */
+export function calculateWatchProgressPercent(stats: PageWatchProgressSummary): number | null {
+  if (stats.total_viewers <= 0) return null;
+  return Math.round((stats.completed_viewers / stats.total_viewers) * 100);
+}
+
+/** 縮圖徽章用的精簡顯示文字（例如 `3/5`）。回傳 null 代表沒有足夠資料可顯示徽章。 */
+export function formatWatchProgressBadgeCount(stats: PageWatchProgressSummary): string | null {
+  if (stats.total_viewers <= 0) return null;
+  return `${stats.completed_viewers}/${stats.total_viewers}`;
+}
