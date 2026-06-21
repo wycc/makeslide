@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { db, getPageGenerationPrompts } from '../../db';
 import { config } from '../../config';
 import type { PageRow, PdfListItem, PdfRow, PdfSourceItem } from '../../types';
-import { coverImagePath, readMetadata, safeJoinPdfPath, videoPath, writeMetadata, youtubeOutlinePath, youtubeSourceAudioPath } from '../../services/storage';
+import { coverImagePath, pageTimelinePath, readMetadata, safeJoinPdfPath, videoPath, writeMetadata, youtubeOutlinePath, youtubeSourceAudioPath } from '../../services/storage';
 import { isGithubSyncDirty } from '../../services/presentationGit';
 import { decodeSession, parseCookies } from '../auth';
 import { ensureCoverThumbnail, ensurePageThumbnail, generateCoverThumbnail } from '../../services/thumbnails';
@@ -1248,6 +1248,46 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       return reply.code(404).send(errorResponse('PAGE_SCRIPT_NOT_FOUND', 'Page script file missing'));
     }
     return streamFile(reply, abs, 'text/plain; charset=utf-8', 'private, max-age=60');
+  });
+
+  // GET /api/pdfs/:id/pages/:n/subtitle-timeline
+  // Only present when this account generated the page's audio with subtitleSyncMode 'whisper';
+  // absent (timeline: null) whenever the page was synthesized in (or hasn't been re-synthesized
+  // since switching away from) Whisper mode — the frontend transparently falls back to its own
+  // character-count estimate in that case, so this 404-as-null path is the expected common case.
+  app.get('/api/pdfs/:id/pages/:n/subtitle-timeline', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const { id, n } = parsed.data;
+    const pdfRow = db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
+      | Pick<PdfRow, 'owner_sub' | 'visibility'>
+      | undefined;
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!shareAccessForPdf(request, id) && !canReadPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的字幕時間軸'));
+    }
+    const pageRow = db
+      .prepare(`SELECT page_uid FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .get(id, n) as Pick<PageRow, 'page_uid'> | undefined;
+    if (!pageRow) {
+      return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+    }
+    // page_uid is generated internally (nanoid) and never user-supplied, so pageTimelinePath()
+    // can be used directly here — unlike the script route above, there's no DB-stored relative
+    // path to defend against.
+    const abs = pageTimelinePath(id, pageRow.page_uid);
+    if (!fs.existsSync(abs)) {
+      return reply.code(200).send({ timeline: null });
+    }
+    try {
+      const raw = await fs.promises.readFile(abs, 'utf8');
+      return reply.code(200).send({ timeline: JSON.parse(raw) });
+    } catch (err) {
+      request.log.warn({ err, id, n }, 'Failed to read subtitle timeline file');
+      return reply.code(200).send({ timeline: null });
+    }
   });
 
   // PUT /api/pdfs/:id/pages/:n/script

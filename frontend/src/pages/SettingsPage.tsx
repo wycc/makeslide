@@ -18,6 +18,7 @@ import {
   updateSystemAiSettings,
   type AuthStatus,
   type LlmProvider,
+  type SubtitleSyncMode,
   type SystemAiSettings,
   type TtsProvider,
   type Skill,
@@ -95,6 +96,7 @@ export default function SettingsPage() {
   const [githubRepoUrl, setGithubRepoUrl] = useState('');
   const [githubToken, setGithubToken] = useState('');
   const [autoGenerateAnimation, setAutoGenerateAnimation] = useState(false);
+  const [subtitleSyncMode, setSubtitleSyncMode] = useState<SubtitleSyncMode>('estimate');
   const [slaSettings, setSlaSettings] = useState<SlaSettingsResponse | null>(null);
   const [slaOverrideInputs, setSlaOverrideInputs] = useState<Record<string, string>>({});
   const [slaLoading, setSlaLoading] = useState(false);
@@ -162,6 +164,7 @@ export default function SettingsPage() {
       setGithubRepoUrl(s.github_repo_url ?? '');
       setGithubToken(s.github_token ?? '');
       setAutoGenerateAnimation(Boolean(s.auto_generate_animation));
+      setSubtitleSyncMode(s.subtitle_sync_mode ?? 'estimate');
       const cachedUserCode = window.localStorage.getItem(LOCAL_USER_CODE_KEY)?.trim() ?? '';
       setUserCode((auth?.authenticated ? s.user_code : cachedUserCode) ?? '');
       if (s.has_openai_key || s.has_gemini_key) {
@@ -262,6 +265,7 @@ export default function SettingsPage() {
         github_repo_url: githubRepoUrl.trim(),
         github_token: githubToken.trim(),
         auto_generate_animation: autoGenerateAnimation,
+        subtitle_sync_mode: subtitleSyncMode,
       });
       storeLanguageSettings(uiLanguage, contentLanguage);
       window.localStorage.setItem(PLAYBACK_SPEED_STORAGE_KEY, String(playbackSpeed));
@@ -318,6 +322,7 @@ export default function SettingsPage() {
     githubRepoUrl,
     githubToken,
     autoGenerateAnimation,
+    subtitleSyncMode,
     DEFAULT_CGU_AIR_BASE_URL,
     DEFAULT_OPENROUTER_BASE_URL,
     t,
@@ -657,6 +662,16 @@ export default function SettingsPage() {
                       {t('settings.autoGenerateAnimation')}
                     </span>
                     <span className="mt-1 block text-xs text-slate-500">{t('settings.autoGenerateAnimationHint')}</span>
+                  </label>
+                  <label className="block text-sm text-slate-300 sm:col-span-2">
+                    {t('settings.subtitleSyncMode')}
+                    <select value={subtitleSyncMode} onChange={(e) => setSubtitleSyncMode(e.target.value as SubtitleSyncMode)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm">
+                      <option value="estimate">{t('settings.subtitleSyncModeEstimate')}</option>
+                      <option value="whisper">{t('settings.subtitleSyncModeWhisper')}</option>
+                    </select>
+                    <span className="mt-1 block text-xs text-slate-500">
+                      {subtitleSyncMode === 'whisper' ? t('settings.subtitleSyncModeWhisperHint') : t('settings.subtitleSyncModeEstimateHint')}
+                    </span>
                   </label>
                   <label className="block text-sm text-slate-300 sm:col-span-2">
                     OPENAI_API_KEY

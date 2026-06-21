@@ -268,6 +268,41 @@ export async function transcribeAudioBuffer(
   return transcription.text.trim();
 }
 
+export interface TranscribedWordTimestamp {
+  word: string;
+  start: number;
+  end: number;
+}
+
+/**
+ * Transcribes audio with Whisper's per-word timestamps (`response_format: 'verbose_json'`,
+ * `timestamp_granularities: ['word']`), used by the "Whisper 精準對齊" subtitle sync mode to
+ * ground each sentence's playback time in what was actually spoken instead of a character-count
+ * estimate. Costs more latency than the plain-text transcription above (word timestamps aren't
+ * free), so this is only called when that mode is explicitly enabled.
+ */
+export async function transcribeAudioBufferWithWordTimestamps(
+  audio: Buffer,
+  filename: string,
+  mimeType: string,
+): Promise<TranscribedWordTimestamp[]> {
+  const client = getOpenAIClient();
+  const file = await toFile(audio, filename, { type: mimeType });
+  const startedAt = Date.now();
+  const transcription = await client.audio.transcriptions.create({
+    file,
+    model: 'whisper-1',
+    response_format: 'verbose_json',
+    timestamp_granularities: ['word'],
+  });
+  const words = transcription.words ?? [];
+  logger.info(
+    { filename, mimeType, bytes: audio.length, words: words.length, latencyMs: Date.now() - startedAt },
+    'OpenAI audio transcription (word timestamps) completed',
+  );
+  return words.map((w) => ({ word: w.word, start: w.start, end: w.end }));
+}
+
 export interface TokenUsage {
   prompt_tokens: number;
   completion_tokens: number;

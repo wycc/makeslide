@@ -80,6 +80,11 @@ export function pageAnimationSpecPath(pdfId: string, pageUid: string): string {
   return path.join(pagesDir(pdfId), `${pageUid}.animation.json`);
 }
 
+/** Whisper-aligned per-sentence subtitle timeline (only written when subtitleSyncMode is 'whisper'). */
+export function pageTimelinePath(pdfId: string, pageUid: string): string {
+  return path.join(pagesDir(pdfId), `${pageUid}.timeline.json`);
+}
+
 /** Per-page record of which extracted figures the user has excluded from use as image-generation reference. */
 export function figureSelectionPath(pdfId: string, pageUid: string): string {
   return path.join(pagesDir(pdfId), `${pageUid}.figure-selection.json`);

@@ -9,6 +9,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   ApiError,
   answerSyncFollowerQuestionsWithAi,
+  fetchPageSubtitleTimeline,
   fetchPdfDetail,
   resolveShareToken,
   fetchPlaybackSyncState,
@@ -28,7 +29,7 @@ import {
   resolveAnimationSpec,
 } from '../lib/animationSpec';
 import { debugLog, debugWarn } from '../lib/debugLog';
-import { splitScriptIntoSentences, buildSentenceTimeline } from '../lib/subtitles';
+import { splitScriptIntoSentences, buildSentenceTimeline, type SentenceTimelineItem } from '../lib/subtitles';
 import { type DrawingCanvasHandle, type DrawingData, type DrawingStroke } from '../components/DrawingCanvas';
 import { useVersionHistory } from './play/useVersionHistory';
 import { useRegeneration } from './play/useRegeneration';
@@ -1507,6 +1508,26 @@ export default function PlayPage() {
     [currentScript],
   );
 
+  // 若這份簡報的語音是用「Whisper 精準對齊」模式產生的，後端會留下一份依真實語音時間
+  // 對齊出來的逐句時間軸；換頁時重新抓取，抓到之前先清空，避免短暫顯示前一頁的時間軸。
+  const [realSentenceTimeline, setRealSentenceTimeline] = useState<SentenceTimelineItem[] | null>(null);
+  useEffect(() => {
+    setRealSentenceTimeline(null);
+    if (!pdfId || currentPage == null) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const timeline = await fetchPageSubtitleTimeline(pdfId, currentPage.page_number);
+        if (!cancelled) setRealSentenceTimeline(timeline);
+      } catch {
+        if (!cancelled) setRealSentenceTimeline(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pdfId, currentPage?.page_number]);
+
   // 各句估計的播放起訖時間；不隨 currentTime 變動，避免動畫 timeline 頻繁重建。
   const audioMetadataReadyForCurrentPage =
     currentPage != null
@@ -1514,10 +1535,14 @@ export default function PlayPage() {
     && Number.isFinite(duration)
     && duration > 0;
   const sentenceTimelineDuration = audioMetadataReadyForCurrentPage ? duration : 0;
-  const sentenceTimeline = useMemo(
-    () => buildSentenceTimeline(pageSentences, sentenceTimelineDuration),
-    [pageSentences, sentenceTimelineDuration],
-  );
+  const sentenceTimeline = useMemo(() => {
+    // 只在句數對得上時才採用真實時間軸：逐字稿如果在產生 Whisper 時間軸之後被編輯過，
+    // 句數會跟目前的 pageSentences 不一致，這時改用估算值才不會讓索引對不齊。
+    if (realSentenceTimeline && realSentenceTimeline.length === pageSentences.length) {
+      return realSentenceTimeline;
+    }
+    return buildSentenceTimeline(pageSentences, sentenceTimelineDuration);
+  }, [realSentenceTimeline, pageSentences, sentenceTimelineDuration]);
 
   // 目前正在播放（朗讀）的句子索引；-1 代表本頁無字幕。
   const activeSentenceIdx = useMemo(() => {

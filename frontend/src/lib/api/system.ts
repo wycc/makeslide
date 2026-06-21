@@ -4,6 +4,7 @@ import type { SlaSettingsResponse, SlaTargetKind } from '../../types';
 export type AppLanguage = 'zh-TW' | 'en';
 export type LlmProvider = 'openai' | 'gemini' | 'cgu-air' | 'openrouter';
 export type TtsProvider = 'openai' | 'gemini';
+export type SubtitleSyncMode = 'estimate' | 'whisper';
 
 export interface ImagePromptTemplate {
   key: string;
@@ -80,6 +81,7 @@ export interface SystemAiSettings {
   github_repo_url?: string;
   github_token?: string;
   auto_generate_animation?: boolean;
+  subtitle_sync_mode?: SubtitleSyncMode;
 }
 
 export interface UpdateSystemAiSettingsPayload {
@@ -116,6 +118,7 @@ export interface UpdateSystemAiSettingsPayload {
   github_repo_url?: string;
   github_token?: string;
   auto_generate_animation?: boolean;
+  subtitle_sync_mode?: SubtitleSyncMode;
 }
 
 export async function getOpenAIKeyStatus(): Promise<OpenAIKeyStatusResponse> {
