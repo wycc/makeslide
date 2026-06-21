@@ -304,6 +304,21 @@ function migrate(): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_pdf_sources_pdf_created ON pdf_sources(pdf_id, created_at ASC);
+
+    CREATE TABLE IF NOT EXISTS page_watch_progress (
+      pdf_id TEXT NOT NULL,
+      page_number INTEGER NOT NULL,
+      viewer_id TEXT NOT NULL,
+      listened_ms INTEGER NOT NULL DEFAULT 0,
+      tab_hidden_ms INTEGER NOT NULL DEFAULT 0,
+      duration_ms INTEGER,
+      completed INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (pdf_id, page_number, viewer_id),
+      FOREIGN KEY (pdf_id) REFERENCES pdfs(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_page_watch_progress_pdf_page ON page_watch_progress(pdf_id, page_number);
   `);
 
   normalizeLifecycleStatuses();

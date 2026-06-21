@@ -42,6 +42,7 @@ import { usePageAnimation } from './play/usePageAnimation';
 import { usePromptAndSource } from './play/usePromptAndSource';
 import { useChatAndImageEdit } from './play/useChatAndImageEdit';
 import { usePagePolls } from './play/usePagePolls';
+import { useWatchProgress } from './play/useWatchProgress';
 import katex from 'katex';
 import { resolveConfiguredUserCode } from './play/utils';
 import { VersionHistoryDialog } from './play/VersionHistoryDialog';
@@ -1556,6 +1557,14 @@ export default function PlayPage() {
     && Number.isFinite(duration)
     && duration > 0;
   const sentenceTimelineDuration = audioMetadataReadyForCurrentPage ? duration : 0;
+
+  useWatchProgress({
+    pdfId,
+    pageNumber: currentPage?.page_number,
+    audioRef,
+    durationMs: audioMetadataReadyForCurrentPage ? Math.round(duration * 1000) : null,
+  });
+
   const sentenceTimeline = useMemo(() => {
     // 只在句數對得上時才採用真實時間軸：逐字稿如果在產生 Whisper 時間軸之後被編輯過，
     // 句數會跟目前的 pageSentences 不一致，這時改用估算值才不會讓索引對不齊。
