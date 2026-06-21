@@ -1067,6 +1067,21 @@ export async function fetchPlaybackSyncState(id: string, clientId?: string): Pro
   return (await resp.json()) as SyncStateResponse;
 }
 
+// PlayPage 對同一個 (pdfId, clientId) 會從三個獨立來源平行呼叫 updatePlaybackSyncState()：
+// 換頁/播放狀態變化的 effect、節流後的繪圖推送、節流後的游標推送。瀏覽器與網路都不保證
+// 這些並行請求送達伺服器的順序與呼叫順序一致，沒有序號的話，較晚呼叫但較早到達的請求會先套用，
+// 較早呼叫但較晚到達的請求接著無條件覆蓋過去，導致 follower 端看到的頁碼/秒數/繪圖內容悄悄
+// 跳回較舊的狀態。這裡用一個依 (pdfId, clientId) 各自累計的單調序號，讓伺服器可以判斷並忽略
+// 過期到達的請求；序號只要求嚴格遞增、不要求連續。
+const syncStateSeqCounters = new Map<string, number>();
+
+function nextSyncStateSeq(id: string, clientId: string): number {
+  const key = `${id}:${clientId}`;
+  const next = (syncStateSeqCounters.get(key) ?? 0) + 1;
+  syncStateSeqCounters.set(key, next);
+  return next;
+}
+
 export async function updatePlaybackSyncState(
   id: string,
   clientId: string,
@@ -1085,10 +1100,11 @@ export async function updatePlaybackSyncState(
     drawing_json?: string | null;
   },
 ): Promise<{ ok: boolean; role: 'master'; updated_at: string }> {
+  const seq = nextSyncStateSeq(id, clientId);
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/sync/state`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ client_id: clientId, ...payload }),
+    body: JSON.stringify({ client_id: clientId, ...payload, seq }),
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as { ok: boolean; role: 'master'; updated_at: string };

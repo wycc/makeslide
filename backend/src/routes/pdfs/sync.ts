@@ -46,6 +46,16 @@ interface SyncSessionState {
   cursorY: number | null;
   drawingPageNumber: number | null;
   drawingJson: string | null;
+  /**
+   * 目前 master 端已套用的最高 seq（由前端在每次呼叫 `updatePlaybackSyncState()` 時遞增送出）。
+   * PlayPage 對同一個 client 會從三個獨立來源（換頁/播放狀態 effect、節流後的繪圖推送、節流後的
+   * 游標推送）平行送出這個請求，瀏覽器/網路不保證送達伺服器的順序與送出順序一致；沒有這個欄位時，
+   * 較晚送出但較早到達的請求會先套用，較早送出但較晚到達的請求接著無條件覆蓋過去，導致 follower
+   * 端看到頁碼/播放秒數/繪圖內容悄悄「跳回」較舊的狀態。帶 seq 的請求若 seq 小於目前已套用的值，
+   * 直接整批忽略（視為過期更新），不寫入任何欄位；未帶 seq 的呼叫者（例如未升級的舊前端或測試）
+   * 維持原有「後到先贏」行為，不受影響。
+   */
+  lastUpdateSeq: number;
 }
 
 const ShareTokenParamSchema = z.string().regex(/^[A-Za-z0-9_-]{12,128}$/, 'Invalid share token');
@@ -178,9 +188,22 @@ function clearPersistedMasterIfExpired(row: SyncSessionRow): SyncSessionRow {
   return row;
 }
 
+/**
+ * Hand the master role to a (possibly new) client. Resets `lastUpdateSeq` so that a
+ * fresh master's own seq counter (which always starts from a small number on its end)
+ * isn't immediately treated as stale leftover state from whichever previous master last
+ * held the role.
+ */
+function claimMaster(session: SyncSessionState, clientId: string): void {
+  session.masterClientId = clientId;
+  session.masterExpiresAt = nowMs() + MASTER_TTL_MS;
+  session.lastUpdateSeq = 0;
+}
+
 function resetSyncMode(session: SyncSessionState): void {
   session.masterClientId = null;
   session.masterExpiresAt = 0;
+  session.lastUpdateSeq = 0;
   session.isPlaying = false;
   session.currentTime = 0;
   session.followerAudioUnlocked = false;
@@ -355,6 +378,7 @@ function getSession(pdfId: string): SyncSessionState {
     cursorY: null,
     drawingPageNumber: null,
     drawingJson: null,
+    lastUpdateSeq: 0,
   };
   sessions.set(pdfId, created);
   return created;
@@ -420,6 +444,8 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     cursor_y: z.number().min(0).max(1).nullable().optional(),
     drawing_page_number: z.number().int().min(1).nullable().optional(),
     drawing_json: z.string().max(2_000_000).nullable().optional(),
+    // Monotonically increasing per-client push counter; see SyncSessionState.lastUpdateSeq.
+    seq: z.number().int().min(0).optional(),
   });
   const StateQuerySchema = z.object({ client_id: z.string().trim().min(1).max(128).optional() });
 
@@ -445,8 +471,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     touchClient(session, clientId);
     if (userCode) session.userCodes.set(clientId, userCode);
     if (!session.masterClientId || session.masterExpiresAt <= nowMs()) {
-      session.masterClientId = clientId;
-      session.masterExpiresAt = nowMs() + MASTER_TTL_MS;
+      claimMaster(session, clientId);
       session.updatedAt = nowIso();
       upsertPersistedSession(session);
     } else if (session.masterClientId !== clientId) {
@@ -508,6 +533,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       cursor_y: cursorY,
       drawing_page_number: drawingPageNumber,
       drawing_json: drawingJson,
+      seq,
     } = parsedBody.data;
     const session = getSession(id);
     touchClient(session, clientId);
@@ -517,11 +543,18 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       if (!canEditPdf(sessionSub(request), pdfRow)) {
         return reply.code(403).send(errorResponse('FORBIDDEN', '無權限取得此簡報同步階段的主控權'));
       }
-      session.masterClientId = clientId;
+      claimMaster(session, clientId);
     }
     if (session.masterClientId !== clientId) {
       return reply.code(403).send(errorResponse('SYNC_NOT_MASTER', 'Only master can update sync state'));
     }
+    // 同一個 master client 的三個並行推送來源（換頁/播放 effect、節流後的繪圖推送、節流後的
+    // 游標推送）送出的請求，網路到達順序不保證與送出順序一致；帶 seq 的請求若比目前已套用的
+    // 更舊，整批忽略，避免較新的狀態被較晚到達、但實際更舊的請求悄悄覆蓋回去。
+    if (typeof seq === 'number' && seq < session.lastUpdateSeq) {
+      return reply.send({ ok: true, role: 'master', updated_at: session.updatedAt });
+    }
+    if (typeof seq === 'number') session.lastUpdateSeq = seq;
     session.masterExpiresAt = nowMs() + MASTER_TTL_MS;
     session.pageNumber = pageNumber;
     session.isPlaying = isPlaying;
