@@ -94,7 +94,14 @@ type PdfjsDoc = {
 };
 
 type PdfjsApi = {
-  getDocument: (args: { data: Uint8Array; useSystemFonts?: boolean; CanvasFactory?: unknown }) => {
+  getDocument: (args: {
+    data: Uint8Array;
+    useSystemFonts?: boolean;
+    CanvasFactory?: unknown;
+    standardFontDataUrl?: string;
+    cMapUrl?: string;
+    cMapPacked?: boolean;
+  }) => {
     promise: Promise<PdfjsDoc>;
   };
 };
@@ -114,6 +121,19 @@ function loadPdfjs(): PdfjsApi {
   _pdfjs = api;
   return api;
 }
+
+// pdfjs-dist's Node `StandardFontDataFactory`/`CMapReaderFactory` read font/CMap data via
+// `fs.readFile(`${baseUrl}${filename}`)` (see display/node_utils.js) — without an explicit
+// base directory, `baseUrl` stays null and every lookup throws "Ensure that the
+// `standardFontDataUrl` API parameter is provided.", silently swallowed deep inside pdf.js's
+// font-loading code. The practical effect: any text using a *non-embedded* standard font (e.g.
+// Calibri/Arial text PowerPoint didn't bother to embed, or SmartArt/timeline label text) — or,
+// for CID-keyed embedded CJK fonts, text needing a predefined CMap — renders as nothing, while
+// vector paths, raster images and text in *embedded* fonts with simple encodings render fine.
+// Both directories ship inside the pdfjs-dist package itself, so point at them directly.
+const PDFJS_PACKAGE_DIR = path.dirname(_require.resolve('pdfjs-dist/package.json'));
+const STANDARD_FONT_DATA_URL = path.join(PDFJS_PACKAGE_DIR, 'standard_fonts') + path.sep;
+const CMAP_URL = path.join(PDFJS_PACKAGE_DIR, 'cmaps') + path.sep;
 
 // ---------------------------------------------------------------------------
 // NodeCanvasFactory — pdf.js's built-in Node canvas factory creates canvases via
@@ -151,7 +171,14 @@ export class NodeCanvasFactory {
 
 async function openPdf(pdfPath: string): Promise<PdfjsDoc> {
   const data = await fs.promises.readFile(pdfPath);
-  return loadPdfjs().getDocument({ data: new Uint8Array(data), useSystemFonts: true, CanvasFactory: NodeCanvasFactory }).promise;
+  return loadPdfjs().getDocument({
+    data: new Uint8Array(data),
+    useSystemFonts: true,
+    CanvasFactory: NodeCanvasFactory,
+    standardFontDataUrl: STANDARD_FONT_DATA_URL,
+    cMapUrl: CMAP_URL,
+    cMapPacked: true,
+  }).promise;
 }
 
 // ---------------------------------------------------------------------------
