@@ -10,6 +10,7 @@ import { config } from '../../config';
 import type { PageRow, PdfListItem, PdfRow, PdfSourceItem } from '../../types';
 import { coverImagePath, pageTimelinePath, readMetadata, safeJoinPdfPath, videoPath, writeMetadata, youtubeOutlinePath, youtubeSourceAudioPath } from '../../services/storage';
 import { isGithubSyncDirty } from '../../services/presentationGit';
+import { getAccountDisplayNames } from '../../services/accountProfiles';
 import { decodeSession, parseCookies } from '../auth';
 import { ensureCoverThumbnail, ensurePageThumbnail, generateCoverThumbnail } from '../../services/thumbnails';
 import {
@@ -195,16 +196,18 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
            ORDER BY created_at DESC`,
       )
       .all() as PdfRow[];
+    // 沒有 owner 的舊資料不在列表中顯示（仍可透過直接連結存取，canReadPdf() 對它們的權限不變）。
+    const readableRows = rows.filter((row) => row.owner_sub != null && canReadPdf(sub, row));
+    const ownerNames = getAccountDisplayNames(readableRows.map((row) => row.owner_sub));
     const items: PdfListItem[] = await Promise.all(
-      rows
-        .filter((row) => canReadPdf(sub, row))
-        .map(async (row) => {
-          const item = rowToListItem(row);
-          if (row.github_synced_commit) {
-            item.github_sync_dirty = await isGithubSyncDirty(row.id, row.github_synced_commit);
-          }
-          return item;
-        }),
+      readableRows.map(async (row) => {
+        const item = rowToListItem(row);
+        item.owner_name = row.owner_sub ? ownerNames.get(row.owner_sub) ?? null : null;
+        if (row.github_synced_commit) {
+          item.github_sync_dirty = await isGithubSyncDirty(row.id, row.github_synced_commit);
+        }
+        return item;
+      }),
     );
     return reply.send(items);
   });

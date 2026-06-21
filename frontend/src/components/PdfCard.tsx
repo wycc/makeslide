@@ -23,6 +23,8 @@ interface PdfCardProps {
   onContinue?: (pdf: PdfListItem) => Promise<void> | void;
   continuing?: boolean;
   onClick?: (pdf: PdfListItem) => void;
+  /** The logged-in viewer's own sub, so cards for other people's presentations can show the owner's name. */
+  currentUserSub?: string | null;
 }
 
 function GitHubMarkIcon({ className }: { className?: string }) {
@@ -49,7 +51,7 @@ function formatDate(iso: string): string {
   }
 }
 
-export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExport, onCategoryChange, onContinue, continuing = false, onClick }: PdfCardProps) {
+export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExport, onCategoryChange, onContinue, continuing = false, onClick, currentUserSub }: PdfCardProps) {
   const { t } = useI18n();
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDuplicating, setIsDuplicating] = useState(false);
@@ -225,6 +227,11 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExpo
         <h3 className="line-clamp-2 text-sm font-semibold text-slate-100" title={pdf.title ?? ''}>
           {pdf.title ?? t('card.untitled')}
         </h3>
+        {pdf.owner_sub && pdf.owner_sub !== currentUserSub && (
+          <span className="truncate text-[11px] text-indigo-300" title={pdf.owner_name ?? undefined}>
+            {t('card.ownerLabel').replace('{name}', pdf.owner_name?.trim() || t('card.ownerUnknown'))}
+          </span>
+        )}
         <label className="flex flex-col gap-1 text-[11px] text-slate-400" onClick={(ev) => ev.stopPropagation()}>
           {t('card.category')}
           <select

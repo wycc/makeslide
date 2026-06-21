@@ -173,6 +173,8 @@ export interface PdfListItem {
   require_script_confirmation: boolean;
   category: string;
   owner_sub?: string | null;
+  /** Best-effort human-readable name (or email) for `owner_sub`; null when the owner has never logged in since this field existed. */
+  owner_name?: string | null;
   visibility?: 'private' | 'public' | 'public_editable';
   tts_provider?: 'openai' | 'gemini';
   tts_voice?: string | null;

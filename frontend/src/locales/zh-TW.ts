@@ -228,6 +228,8 @@ export const zhTW = {
   'card.confirmDelete': '確定刪除「{title}」？此動作無法復原。',
   'card.enterNewCategory': '請輸入新類別名稱',
   'card.untitled': '（未命名）',
+  'card.ownerLabel': '擁有者：{name}',
+  'card.ownerUnknown': '其他使用者',
   'card.category': '類別',
   'card.cannotChangeCategoryWhileProcessing': '產生過程中暫停更改類別',
   'card.addCategory': '＋新增類別…',

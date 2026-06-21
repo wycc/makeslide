@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { config } from '../config';
 import { ensureAdminAccount, getSystemAuthSettings, isAdminAccount } from '../services/aiSettings';
+import { upsertAccountProfile } from '../services/accountProfiles';
 import { logger } from '../logger';
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -265,6 +266,7 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.code(502).send({ error: { code: 'GOOGLE_USERINFO_PARSE_FAILED', message: 'Google 帳號資訊回應格式錯誤' } });
     }
     await ensureAdminAccount(user.sub);
+    upsertAccountProfile(user);
     setCookie(reply, SESSION_COOKIE, encodeSession({ provider: 'google', ...user }), 30 * 24 * 60 * 60);
     return reply.redirect(`${config.nbPrefix || ''}/#/settings`);
   });
