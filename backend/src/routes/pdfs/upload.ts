@@ -856,12 +856,23 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         .send(errorResponse('INVALID_STATE', `PDF ${id} is not failed`));
     }
 
+    // NOTE: progress_step is intentionally preserved (not reset to NULL).
+    // The pipeline (`runPipeline` in worker/pipeline.ts) uses progress_step
+    // to decide which stages can be skipped on resume (e.g. 'script_ready'
+    // means rendering + text extraction + script generation already
+    // succeeded). Clearing it here used to force every retry back to step 1
+    // (render_pages), which re-renders all page images with brand-new
+    // page_uid values via nanoid() — silently orphaning the already-generated
+    // script/audio files (idempotent-skip lookups key off page_uid) and
+    // forcing a full, costly LLM re-generation of every page's script even
+    // when the failure was an unrelated, late-stage TTS error. Only
+    // progress_current/progress_total (the displayed counters) are reset;
+    // they get repopulated as soon as the pipeline resumes.
     const updatedAt = nowIso();
     db.prepare(
       `UPDATE pdfs
           SET status = 'uploaded',
               error_message = NULL,
-              progress_step = NULL,
               progress_current = NULL,
               progress_total = NULL,
               updated_at = ?
@@ -873,7 +884,6 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       if (meta) {
         meta.status = 'uploaded';
         meta.error_message = null;
-        meta.progress_step = null;
         meta.progress_current = null;
         meta.progress_total = null;
         meta.updated_at = updatedAt;
