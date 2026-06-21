@@ -152,11 +152,16 @@ export function usePageAnimation({
   const handleGenerateAiFocusEffects = useCallback(
     async (sentences: string[], hints?: Record<string, string>): Promise<boolean> => {
       if (!pdfId || !currentPage || sentences.length === 0) return false;
+      // 記住送出當下的頁面 key：這是一個耗時的 LLM 呼叫，若使用者在等待期間切到別的頁面，
+      // pageKey 變化會讓上方的效果（第 90-97 行）把 animationDraft 重置成新頁面的內容；
+      // 這裡若不比對就直接 setAnimationDraft，會用舊頁面產生的效果蓋掉新頁面當下的草稿。
+      const requestKey = pageKey;
       setAiFocusBusy(true);
       setAnimationError(null);
       setAnimationMessage(null);
       try {
         const res = await generateAiFocusEffects(pdfId, currentPage.page_number, { sentences, hints });
+        if (pageKeyRef.current !== requestKey) return false;
         setAnimationDraft((prev) => ({
           ...(prev ?? defaultAnimationSpec()),
           enabled: true,
@@ -165,13 +170,14 @@ export function usePageAnimation({
         setAnimationMessage(t('play.animation.autoGenerateFocusAiDone'));
         return true;
       } catch (err) {
+        if (pageKeyRef.current !== requestKey) return false;
         setAnimationError(err instanceof ApiError ? err.message : t('play.animation.autoGenerateFocusAiError'));
         return false;
       } finally {
         setAiFocusBusy(false);
       }
     },
-    [pdfId, currentPage, t],
+    [pdfId, currentPage, pageKey, t],
   );
 
   const handleSendCustomScriptMessage = useCallback(
@@ -182,6 +188,10 @@ export function usePageAnimation({
       if (!effect) return false;
       const previousCode = effect.code;
       const history = effect.conversation ?? [];
+      // 同一個道理：草稿本身的更新是依 effectId 比對，換到別頁後不會誤改到別頁的效果，
+      // 但 animationError/animationMessage 是整個 hook 共用、不分頁的通用訊息狀態，
+      // 若不比對 pageKey 就直接寫入，舊頁面這次呼叫的結果/錯誤訊息會被誤顯示在新頁面上。
+      const requestKey = pageKey;
       setCustomScriptBusy(true);
       setCustomScriptBusyEffectId(effectId);
       setAnimationError(null);
@@ -266,7 +276,7 @@ export function usePageAnimation({
           delete next[effectId];
           return next;
         });
-        setAnimationMessage(t('play.animation.customScriptDone'));
+        if (pageKeyRef.current === requestKey) setAnimationMessage(t('play.animation.customScriptDone'));
         return true;
       } catch (err) {
         const message =
@@ -289,14 +299,14 @@ export function usePageAnimation({
             ),
           };
         });
-        setAnimationError(message);
+        if (pageKeyRef.current === requestKey) setAnimationError(message);
         return false;
       } finally {
         setCustomScriptBusy(false);
         setCustomScriptBusyEffectId(null);
       }
     },
-    [pdfId, currentPage, animationDraft, t],
+    [pdfId, currentPage, animationDraft, pageKey, t],
   );
 
   return {
