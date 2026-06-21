@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { ApiError, rewritePageScript } from '../../lib/api';
 import type { ChatMessage, PdfDetailPage } from '../../types';
@@ -62,8 +62,11 @@ export function useScriptEditor({
   const [editTab, setEditTab] = useState<'script' | 'prompt' | 'animation' | 'figures' | 'source' | 'system'>('script');
   const [transcriptFocusMode, setTranscriptFocusMode] = useState(false);
 
-  // 換頁時重置編輯器內容
+  // 換頁時重置編輯器內容；同時記住目前頁碼供下方非同步改寫呼叫比對，
+  // 避免使用者在等待改寫結果時切到別的頁面，遲到的結果把新頁面的編輯器內容/對話串蓋掉。
+  const currentPageNumberRef = useRef<number | null>(null);
   useEffect(() => {
+    currentPageNumberRef.current = currentPage?.page_number ?? null;
     setEditingScript(currentScript);
     setEditorError(null);
   }, [currentPage?.page_number, currentScript]);
@@ -71,6 +74,7 @@ export function useScriptEditor({
   const handleRewriteScript = useCallback(async () => {
     if (isReadOnlyProcessing) return;
     if (!pdfId || !currentPage) return;
+    const pageNumberAtSend = currentPage.page_number;
     const prompt = chatInput.trim();
     const sourceScript = editingScript.trim();
     setRewriteBusy(true);
@@ -81,7 +85,7 @@ export function useScriptEditor({
     try {
       const res = await rewritePageScript(
         pdfId,
-        currentPage.page_number,
+        pageNumberAtSend,
         prompt,
         sourceScript,
         {
@@ -97,9 +101,11 @@ export function useScriptEditor({
         },
         limitChatHistoryForRequest(chatHistory),
       );
+      if (currentPageNumberRef.current !== pageNumberAtSend) return;
       setEditingScript(res.script);
       setChatHistory((prev) => [...prev, { role: 'assistant', content: res.script }]);
     } catch (err) {
+      if (currentPageNumberRef.current !== pageNumberAtSend) return;
       setChatHistory(chatHistory);
       setRewriteError(err instanceof ApiError ? err.message : '逐字稿改寫失敗');
     } finally {
