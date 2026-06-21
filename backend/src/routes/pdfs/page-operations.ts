@@ -1227,7 +1227,20 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         ],
       });
       const answer = result.data.answer.trim();
-      const nextHistory = [...requestHistory, { role: 'user' as const, content: parsedBody.data.question }, { role: 'assistant' as const, content: answer }].slice(-20);
+      // Re-read chat_history_json right before writing back, instead of appending onto the
+      // `requestHistory` snapshot captured before the (potentially slow) callChatJSON await
+      // above. If two requests for the same page run concurrently (e.g. two browser tabs, or a
+      // classroom sync session where multiple viewers can each ask their own question), both
+      // start from the same pre-await snapshot; without this re-read, whichever request's
+      // UPDATE lands last would blindly overwrite the row using its own stale snapshot,
+      // silently discarding the other request's question+answer that was already committed by
+      // then. Appending onto a freshly read row instead preserves both requests' messages
+      // regardless of which LLM call finishes first.
+      const latestPageRow = db
+        .prepare(`SELECT chat_history_json FROM pages WHERE pdf_id = ? AND page_number = ?`)
+        .get(id, n) as { chat_history_json: string | null } | undefined;
+      const latestHistory = latestPageRow ? parseChatHistory(latestPageRow.chat_history_json) : requestHistory;
+      const nextHistory = [...latestHistory, { role: 'user' as const, content: parsedBody.data.question }, { role: 'assistant' as const, content: answer }].slice(-20);
       db.prepare(`UPDATE pages SET chat_history_json = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`).run(
         JSON.stringify(nextHistory),
         nowIso(),
