@@ -148,6 +148,7 @@ export function PlayPageSidebar() {
     setImagePreviewUrl,
     setImagePreviewPageNumber,
     setImagePreviewOpen,
+    bookmarks, toggleBookmark,
   } = usePlayPageContext();
 
   const { t } = useI18n();
@@ -609,6 +610,41 @@ export function PlayPageSidebar() {
             )}
           </div>
         )}
+      </section>
+
+      <section className={`rounded-lg border border-slate-800 bg-slate-900/40 ${qaPanelExpanded ? 'md:hidden' : ''}`}>
+        <div className="border-b border-slate-800 px-4 py-3">
+          <h2 className="text-sm font-semibold text-slate-300">{t('play.sidebar.bookmarksTitle')}</h2>
+        </div>
+        <div className="px-4 py-3">
+          {bookmarks.length === 0 ? (
+            <p className="text-xs text-slate-500">{t('play.sidebar.bookmarksEmpty')}</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {bookmarks.map((pageNum) => (
+                <button
+                  key={pageNum}
+                  type="button"
+                  onClick={() => setCurrentIdx(pageNum - 1)}
+                  className="flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs text-amber-200 hover:bg-amber-500/20"
+                  title={t('play.sidebar.bookmarkRemove')}
+                >
+                  <span>🔖 第 {pageNum} 頁</span>
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => { e.stopPropagation(); toggleBookmark(pageNum); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); toggleBookmark(pageNum); } }}
+                    className="ml-0.5 text-amber-400/60 hover:text-amber-300"
+                    aria-label={t('play.sidebar.bookmarkRemove')}
+                  >
+                    ×
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </section>
 
       <PageAskPanel />
