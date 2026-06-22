@@ -332,6 +332,13 @@ export interface PlayPageContextValue {
   tagsMsg: string | null;
   handleSaveTags: () => void;
 
+  // ─── Description ────────────────────────────────────────────────────────────
+  descriptionInput: string;
+  setDescriptionInput: Dispatch<SetStateAction<string>>;
+  descriptionBusy: boolean;
+  descriptionMsg: string | null;
+  handleSaveDescription: () => void;
+
   // ─── GitHub sync ────────────────────────────────────────────────────────────
   githubSyncBusy: boolean;
   githubSyncMessage: string | null;

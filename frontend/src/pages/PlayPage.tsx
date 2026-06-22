@@ -458,6 +458,7 @@ export default function PlayPage() {
         setVideoUrl(detailWithShare.video_url ?? null);
         setTitleInput(detailWithShare.title ?? detailWithShare.original_filename);
         setTagsInput(detailWithShare.tags ?? '');
+        setDescriptionInput(detailWithShare.description ?? '');
         // page prompts are managed per page in local state
         setTtsVoice(d.tts_voice?.trim() || 'alloy');
         setTtsSpeed(d.tts_speed ?? getStoredTtsSpeed());
@@ -1748,6 +1749,7 @@ export default function PlayPage() {
   const {
     setTitleInput,
     setTagsInput,
+    setDescriptionInput,
     setTtsVoice,
     setTtsSpeed,
     setScriptMaxCharsPerPage,
