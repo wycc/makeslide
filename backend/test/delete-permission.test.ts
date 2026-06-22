@@ -70,3 +70,17 @@ test('DELETE /api/pdfs/:id allows a read-write collaborator on a public_editable
   assert.equal(resp.statusCode, 204);
   await app.close();
 });
+
+test('DELETE /api/pdfs/:id rejects a fully anonymous request (no session cookie) on a public_editable presentation', async () => {
+  seedDeletePdf('delete-perm-editable-anon-01', 'public_editable');
+  const app = await buildApp();
+  // No `headers` at all: a visitor who never logged in and holds no share token,
+  // just knows the pdf id. `public_editable` is meant to let signed-in collaborators
+  // edit content, not let anonymous requests destroy the whole presentation.
+  const resp = await app.inject({ method: 'DELETE', url: '/api/pdfs/delete-perm-editable-anon-01' });
+  assert.equal(resp.statusCode, 403);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+  const row = db.prepare(`SELECT id FROM pdfs WHERE id = ?`).get('delete-perm-editable-anon-01');
+  assert.notEqual(row, undefined);
+  await app.close();
+});

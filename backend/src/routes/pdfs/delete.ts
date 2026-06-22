@@ -16,7 +16,15 @@ function sessionSub(request: FastifyRequest): string | null {
 function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
   if (!row.owner_sub) return true;
   if (sub && row.owner_sub === sub) return true;
-  return row.visibility === 'public_editable';
+  // Deleting a presentation is destructive and irreversible (DB row + all files on
+  // disk are gone for good), unlike the content-editing endpoints that share this same
+  // helper name in other route files. A `public_editable` presentation is meant to let
+  // signed-in collaborators who are not the owner make changes — it was never meant to
+  // let a fully anonymous request (no session cookie at all, sub === null) destroy the
+  // whole presentation just because someone once turned on an editable share link.
+  // Require at least an authenticated session before falling back to the
+  // public_editable visibility check.
+  return Boolean(sub) && row.visibility === 'public_editable';
 }
 
 export async function registerDeleteRoutes(app: FastifyInstance): Promise<void> {
