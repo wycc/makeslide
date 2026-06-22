@@ -127,6 +127,10 @@ export function youtubeSourceAudioPath(pdfId: string): string {
   return path.join(pdfDir(pdfId), 'source-audio.mp3');
 }
 
+export function artifactCacheDir(pdfId: string): string {
+  return path.join(pdfDir(pdfId), 'artifact_cache');
+}
+
 export function createPdfDir(pdfId: string): string {
   const dir = pdfDir(pdfId);
   fs.mkdirSync(dir, { recursive: true });

@@ -91,6 +91,10 @@ export default function SettingsPage() {
   const [adminDeleteAccountId, setAdminDeleteAccountId] = useState('');
   const [adminDeleteConfirm, setAdminDeleteConfirm] = useState('');
   const [adminDeleteBusy, setAdminDeleteBusy] = useState(false);
+  const [thumbnailCacheBusy, setThumbnailCacheBusy] = useState(false);
+  const [thumbnailCacheMsg, setThumbnailCacheMsg] = useState<string | null>(null);
+  const [artifactCacheBusy, setArtifactCacheBusy] = useState(false);
+  const [artifactCacheMsg, setArtifactCacheMsg] = useState<string | null>(null);
   const [selfDeleteConfirm, setSelfDeleteConfirm] = useState('');
   const [selfDeleteBusy, setSelfDeleteBusy] = useState(false);
   const [hasMcpAuthToken, setHasMcpAuthToken] = useState(false);
@@ -352,6 +356,38 @@ export default function SettingsPage() {
       setAdminTransferBusy(false);
     }
   }, [adminTransferAccountId, t]);
+
+  const onClearThumbnailCache = useCallback(async () => {
+    setThumbnailCacheBusy(true);
+    setThumbnailCacheMsg(null);
+    try {
+      const resp = await fetch('api/system/thumbnail-cache', { method: 'DELETE' });
+      if (!resp.ok) { setThumbnailCacheMsg(t('settings.clearThumbnailCacheButton')); return; }
+      const data = (await resp.json()) as { files_deleted: number; bytes_freed: number };
+      const kb = Math.round(data.bytes_freed / 1024);
+      setThumbnailCacheMsg(t('settings.clearThumbnailCacheDone').replace('{files}', String(data.files_deleted)).replace('{kb}', String(kb)));
+    } catch {
+      setThumbnailCacheMsg(null);
+    } finally {
+      setThumbnailCacheBusy(false);
+    }
+  }, [t]);
+
+  const onClearArtifactCache = useCallback(async () => {
+    setArtifactCacheBusy(true);
+    setArtifactCacheMsg(null);
+    try {
+      const resp = await fetch('api/admin/cache', { method: 'DELETE' });
+      if (!resp.ok) { setArtifactCacheMsg(t('settings.clearArtifactCacheButton')); return; }
+      const data = (await resp.json()) as { dirs_cleared: number; bytes_freed: number };
+      const kb = Math.round(data.bytes_freed / 1024);
+      setArtifactCacheMsg(t('settings.clearArtifactCacheDone').replace('{dirs}', String(data.dirs_cleared)).replace('{kb}', String(kb)));
+    } catch {
+      setArtifactCacheMsg(null);
+    } finally {
+      setArtifactCacheBusy(false);
+    }
+  }, [t]);
 
   const onDeleteAccount = useCallback(async () => {
     const target = adminDeleteAccountId.trim();
@@ -820,6 +856,36 @@ export default function SettingsPage() {
                   </div>
                 </div>
                 <div className="flex justify-end"><button type="button" onClick={() => void onSave()} disabled={saving} className="rounded-md bg-slate-100 px-4 py-2 text-sm font-medium text-slate-900 disabled:opacity-50">{saving ? t('settings.saving') : t('settings.save')}</button></div>
+                <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3">
+                  <div className="mb-1 text-sm font-medium text-slate-200">{t('settings.clearThumbnailCache')}</div>
+                  <p className="mb-2 text-xs text-slate-400">{t('settings.clearThumbnailCacheHint')}</p>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => void onClearThumbnailCache()}
+                      disabled={thumbnailCacheBusy}
+                      className="rounded-md border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-sm text-amber-200 hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {thumbnailCacheBusy ? t('settings.clearThumbnailCacheClearing') : t('settings.clearThumbnailCacheButton')}
+                    </button>
+                    {thumbnailCacheMsg ? <span className="text-xs text-emerald-300">{thumbnailCacheMsg}</span> : null}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3">
+                  <div className="mb-1 text-sm font-medium text-slate-200">{t('settings.clearArtifactCache')}</div>
+                  <p className="mb-2 text-xs text-slate-400">{t('settings.clearArtifactCacheHint')}</p>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => void onClearArtifactCache()}
+                      disabled={artifactCacheBusy}
+                      className="rounded-md border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-sm text-amber-200 hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {artifactCacheBusy ? t('settings.clearArtifactCacheClearing') : t('settings.clearArtifactCacheButton')}
+                    </button>
+                    {artifactCacheMsg ? <span className="text-xs text-emerald-300">{artifactCacheMsg}</span> : null}
+                  </div>
+                </div>
                 <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
                   <h2 className="mb-1 text-base font-semibold text-slate-100">{t('settings.slaSettings')}</h2>
                   <p className="mb-3 text-sm text-slate-400">{t('settings.slaSettingsHint')}</p>
