@@ -122,7 +122,8 @@
 - [ ] 播放頁底部分頁進度條：在投影片顯示區底部加入一條細色進度條，以 `currentPage / totalPages` 比例填色；純前端改動，利用既有 `currentIdx`/`totalPages` 數值，不需後端修改。
 - [ ] 全份逐字稿批次匯出 TXT：新增 `GET /api/pdfs/:id/scripts.txt` 後端端點，依頁碼順序串接所有頁面的 `script_path` 或 `text_path` 內容，回傳純文字檔案；前端在播放頁 header 匯出區新增「下載逐字稿 TXT」按鈕；補後端測試驗證 200 / content-type / 404 / 403。
 - [ ] 測驗作答時限（Countdown Timer）：在 `quiz_sets` 資料表新增可選欄位 `time_limit_seconds INTEGER`；測驗建立/編輯頁加入「作答時限（秒）」輸入框；播放頁學生作答時若有時限，顯示倒數計時器，時間到自動提交；後端 API 傳遞時限欄位。
-- [ ] 課後報告列印樣式：在 `PostClassReportPanel` 加入「列印 / 儲存為 PDF」按鈕，呼叫 `window.print()`；為面板加入 `@media print` CSS（隱藏側邊欄、全寬、黑白友善色調）；純前端改動，無需後端修改。
+- [x] 課後報告列印樣式：在 `PostClassReportPanel` 加入「列印 / 儲存為 PDF」按鈕，呼叫 `window.print()`；為面板加入 `@media print` CSS（隱藏側邊欄、全寬、黑白友善色調）；純前端改動，無需後端修改。
+  - 修改說明（2026-06-22）：在 header 的按鈕列加入琥珀色「列印 / 儲存 PDF」按鈕（`window.print()`）；以 `data-no-print="true"` 包裹所有操作按鈕使其列印時隱藏；在 JSX 中插入 `<style>` 含 `@media print` 規則：覆蓋 `fixed` 定位為 `static`、強制白底、調整文字顏色為可讀深色、各 `section` 加 `break-inside: avoid`；外層 div 改 id `pcr-print-root` 作為 scope。分支 `feat/report-print-style`，已 merge 回 master。
 - [ ] 播放頁語速偏好持久化：將 `ttsSpeed`（播放語速）儲存至 `localStorage`（key：`makeslide.ttsSpeed`），下次開啟播放頁時自動套用已記憶的語速；在 `usePdfMetadata` hook 中新增讀取/寫入邏輯；純前端改動。
 - [ ] 首頁依音頻時長排序：在首頁排序下拉選單新增「最長課程優先」與「最短課程優先」兩個選項，以 `pdf.audio_duration_seconds`（現有欄位）排序；若音頻時長為 null 則排到最後；純前端改動，補對應 `en`/`zh-TW` i18n 鍵值。
 - [ ] AI 自動草稿頁面投票題目：新增 `POST /api/pdfs/:id/pages/:n/generate-poll` 後端端點，讀取頁面逐字稿/文字，呼叫 LLM 生成一道 2–4 選項的投票題目（JSON 格式：`{ question, options }`），回傳給前端；播放頁 sidebar 投票分頁加入「AI 草稿投票題」按鈕，讓教師確認後一鍵建立投票；補後端測試驗證 200 / 404 / 403。
@@ -154,3 +155,4 @@
 | 2026-06-22 | 播放頁底部分頁進度條：`PlayPageSlidePanel` 投影片與控制列之間插入 emerald `h-1` 進度條，依 `currentIdx/totalPages` 填色，附 ARIA 屬性；純前端 | master（直接 commit b198d46） |
 | 2026-06-22 | 測驗限時模式：`quiz_sets.time_limit_seconds` 欄位（migration）、後端 Zod 驗證、前端編輯器輸入框、倒數計時器 useEffect（10 秒內變紅）、i18n 鍵值 | feat/quiz-time-limit-v2（已 merge） |
 | 2026-06-22 | 簡報標籤與首頁篩選：`pdfs.tags` 欄位 migration、PATCH 端點、PdfCard 內嵌編輯 UI（鉛筆按鈕 + 輸入框）、首頁 chip 篩選列；4 個後端測試通過 | master（直接 commit 359d1a4） |
+| 2026-06-22 | 課後報告列印樣式：`PostClassReportPanel` 新增琥珀色「列印 / 儲存 PDF」按鈕（`window.print()`）、`data-no-print` 隱藏操作按鈕、`@media print` 白底/黑字/固定定位轉靜態 CSS | feat/report-print-style（已 merge） |
