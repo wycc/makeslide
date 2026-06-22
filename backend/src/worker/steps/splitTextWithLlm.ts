@@ -50,9 +50,11 @@ const OUTLINE_MAX_INPUT_CHARS = 128_000;
 const OUTLINE_THRESHOLD_CHARS = 800;
 
 /**
- * 把全文送 LLM，產生一份結構化的簡報大綱（標題 + 重點），
- * 再轉成 `Slide N: 標題\n- 重點1\n- 重點2` 的純文字格式，
- * 讓下游 `splitBySlideMarkers()` 可以直接解析。
+ * 把全文送 LLM，產生一份結構化的簡報大綱（標題 + 重點）。回傳的 `slides`
+ * 陣列已經是可以直接拿來建構分頁結果的結構化資料（每項自帶渲染好的
+ * `content`/`slideLabel`），呼叫端不需要、也不應該再把 `outlineText`
+ * 丟回 `splitBySlideMarkers()` 重新解析一次（見下方 `slides` 欄位的說明）。
+ * `outlineText` 僅保留作為人類可讀的除錯/記錄用途。
  *
  * 回傳 `null` 表示 LLM 呼叫失敗，呼叫端應 fallback 到舊的 chunk 流程。
  */
@@ -62,8 +64,19 @@ async function buildOutlineFromFullText(
 ): Promise<{
   outlineText: string;
   usage: TokenUsage;
-  /** One entry per non-empty slide in `outlineText`, in the same order. */
-  slides: Array<{ title: string; bullets: string[]; sourcePdfPages?: number[] }>;
+  /**
+   * One entry per non-empty slide, in the same order as rendered into
+   * `outlineText`. Each entry carries its own rendered `content` block
+   * (`Slide N: title\n- bullet...`) and `slideLabel` so callers never need
+   * to re-parse `outlineText` via `splitBySlideMarkers()` — re-parsing is
+   * unsafe because a bullet can itself contain an embedded newline whose
+   * first line incidentally matches the `Slide N:` marker pattern (e.g. a
+   * bullet quoting example text like "Slide 5: ..."), which would make
+   * `splitBySlideMarkers()` produce more pages than `slides.length` and
+   * silently misalign every page's `sourcePdfPages` (and shift page
+   * numbering) from that point onward.
+   */
+  slides: Array<{ title: string; bullets: string[]; sourcePdfPages?: number[]; slideLabel: string; content: string }>;
 } | null> {
   const input =
     fullText.length > OUTLINE_MAX_INPUT_CHARS
@@ -132,7 +145,7 @@ async function buildOutlineFromFullText(
 
     // 轉成 Slide 標記格式
     const lines: string[] = [];
-    const slides: Array<{ title: string; bullets: string[]; sourcePdfPages?: number[] }> = [];
+    const slides: Array<{ title: string; bullets: string[]; sourcePdfPages?: number[]; slideLabel: string; content: string }> = [];
     r.data.slides.forEach((s) => {
       const bullets = s.bullets
         .map((t) => t.trim())
@@ -142,10 +155,12 @@ async function buildOutlineFromFullText(
       const sourcePdfPages = s.source_pages?.length
         ? Array.from(new Set(s.source_pages)).sort((a, b) => a - b)
         : undefined;
-      slides.push({ title, bullets, sourcePdfPages });
-      lines.push(`Slide ${slides.length}: ${title}`);
-      for (const b of bullets) lines.push(`- ${b}`);
-      lines.push('');
+      const slideNumber = slides.length + 1;
+      const slideLabel = `Slide ${slideNumber}`;
+      const contentLines = [`${slideLabel}: ${title}`, ...bullets.map((b) => `- ${b}`)];
+      const content = contentLines.join('\n').trim();
+      slides.push({ title, bullets, sourcePdfPages, slideLabel, content });
+      lines.push(...contentLines, '');
     });
     const rendered = lines.join('\n').trim();
 
@@ -367,7 +382,15 @@ async function splitTextWithLlmCore(rawText: string, userPrompt?: string | null)
     );
     const outlineResult = await buildOutlineFromFullText(text, userPrompt);
     if (outlineResult) {
-      const outlinePages = splitBySlideMarkers(outlineResult.outlineText);
+      // Build pages directly from the structured `slides` array rather than
+      // re-parsing `outlineResult.outlineText` via `splitBySlideMarkers()`.
+      // Re-parsing the rendered text is unsafe: a bullet can contain an
+      // embedded newline whose first line happens to match the `Slide N:`
+      // marker pattern, which would make the parser discover more "pages"
+      // than `slides.length` and misalign every subsequent page's
+      // `sourcePdfPages` / numbering (see `buildOutlineFromFullText` doc
+      // comment for a concrete reproduction).
+      const outlinePages = outlineResult.slides;
       if (outlinePages.length > 0) {
         logger.info(
           {
@@ -379,14 +402,16 @@ async function splitTextWithLlmCore(rawText: string, userPrompt?: string | null)
         );
         return {
           pages: outlinePages.map((p, idx) => ({
-            ...p,
-            sourcePdfPages: outlineResult.slides[idx]?.sourcePdfPages,
+            pageNumber: idx + 1,
+            content: p.content,
+            slideLabel: p.slideLabel,
+            sourcePdfPages: p.sourcePdfPages,
           })),
           usage: outlineResult.usage,
         };
       }
       logger.warn(
-        'Text split: outline produced but splitBySlideMarkers found no slides, falling back to chunk split',
+        'Text split: outline produced but no slides survived bullet filtering, falling back to chunk split',
       );
     }
     // outlineResult === null → LLM 失敗，fallback 到 chunk 流程
