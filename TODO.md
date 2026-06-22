@@ -272,4 +272,36 @@
   - 修改說明（2026-06-23）：`selectedIds` Set state；`toggleSelected` callback；`handleBatchDelete` 依序呼叫 `deletePdf`；list 模式每行左側 checkbox；grid 模式相對定位 checkbox（hover 顯示）；篩選列新增玫瑰色「刪除已選（N）」按鈕；i18n `home.batchDeleteDone/batchDeletePartial/batchDeleteBtn`。分支 `feat/batch-delete-home`，已 merge 回 master。
 - [x] 播放頁字幕文字大小調整：播放設定對話框中新增字幕大小選項（小/中/大），以 Tailwind class 套用至字幕渲染區塊；存至 localStorage（key: `makeslide.subtitleSize`）；補 i18n。
   - 修改說明（2026-06-23）：`SubtitleSize` 型別（`'sm'|'md'|'lg'`）、`SUBTITLE_SIZE_STORAGE_KEY`、`getStoredSubtitleSize()`；`PlayPage.tsx` 加 state；`PlayPageContext.tsx` 補介面；`PlayPageSlidePanel.tsx` 三段 Tailwind class + S/M/L 按鈕群組。commit `28fff18`，已 merge 回 master。
-- [ ] 測驗題目答題解析：`questions_json` 的每題 JSON 加入可選 `explanation?: string` 欄位；`QuizBuilderPage` 加入解析輸入框；答題結果頁面答錯時顯示解析文字；純前端資料結構延伸，不需 DB migration。
+- [x] 測驗題目答題解析：`questions_json` 的每題 JSON 加入可選 `explanation?: string` 欄位；`QuizBuilderPage` 加入解析輸入框；答題結果頁面答錯時顯示解析文字；純前端資料結構延伸，不需 DB migration。
+  - 確認說明（2026-06-23）：`QuizQuestion` 介面已有 `explanation: string` 欄位（frontend/src/types.ts）；`QuizBuilderPage.tsx` 已有 `<textarea>` 解析輸入框；答案揭曉後（`syncQuizShowAnswers`）顯示解析（lines 679、899）；屬既有功能確認，無需額外開發。
+
+## 工作記錄（第六輪）
+
+| 日期 | 工作摘要 | 分支 |
+|------|---------|------|
+| 2026-06-23 | PDF 備註/說明欄位：DB migration、PATCH 端點、types、shared.ts、前端 textarea 備註區、4 個後端測試 | feat/pdf-description（已 merge） |
+| 2026-06-23 | shared.ts 補上 description 欄位（rowToListItem/rowToDetail） | master（直接 commit a6869cb） |
+| 2026-06-23 | 首頁多選批次刪除：selectedIds Set state、toggleSelected、handleBatchDelete、list checkbox、grid wrapper checkbox、玫瑰色批次刪除按鈕；i18n batchDeleteBtn/Done/Partial | feat/batch-delete-home（已 merge） |
+| 2026-06-23 | 播放頁字幕文字大小調整：SubtitleSize 型別、SUBTITLE_SIZE_STORAGE_KEY、PlayPageSlidePanel S/M/L 按鈕；i18n | feat/subtitle-size（commit 28fff18，已 merge） |
+| 2026-06-23 | 測驗題目答題解析（確認）：QuizQuestion.explanation 欄位、QuizBuilderPage textarea、答案揭曉後顯示解析 | 既有功能確認 |
+
+---- 計數重設 ----
+
+## 掃描摘要（2026-06-23 第七輪）
+
+- 第六輪 6 個項目全數完成（含 2 項既有功能確認）。
+- 首頁現有搜尋框只搜尋本地已載入的 PDF；全域後端搜尋已有但缺少 fuzzy/拼音模糊匹配。
+- 播放頁目前無「自動播放下一頁」選項，音檔播完需手動切頁。
+- 測驗編輯器目前無法重新排序題目，只能刪除後重建。
+- 課後報告缺少「發送個別反饋給學生」功能（e-mail 或站內訊息）。
+- PDF 缺少「複製簡報」後自動重新命名為「XXX（副本）」的邏輯。
+- 首頁缺少「一次匯出所有簡報（ZIP）」的批次匯出功能。
+- 播放頁每次進入都重新整理所有頁面資料，可考慮加入 Service Worker 快取靜態資源。
+
+## 新增可執行項目（第七輪）
+
+- [ ] 播放頁自動播放下一頁：音檔播完自動切換到下一頁並播放；在播放控制列加入「自動播放」toggle（預設關閉），存至 localStorage（key: `makeslide.autoAdvance`）；補 i18n `play.controls.autoAdvance`。
+- [ ] 測驗題目拖曳重排：在 `QuizBuilderPage` 題目列表加入拖曳排序（利用 HTML5 drag-and-drop 或 `@dnd-kit/core`），拖放後更新 `questions` 陣列順序並同步到 `quiz_set.questions_json`；補 i18n `quiz.dragToReorder`。
+- [ ] 複製簡報自動加「（副本）」：`handleDuplicate` 建立副本後，若後端回傳的標題與原始標題相同，自動在 `PATCH /api/pdfs/:id/title` 追加「（副本）」後綴；後端 `POST /api/pdfs/:id/duplicate` 也可直接回傳帶後綴的標題；純邏輯改動。
+- [ ] 播放頁逐頁備註：新增 `page_notes TEXT DEFAULT ''` 欄位至 `pages` 表（migration），播放頁側邊欄每頁顯示備註文字區（`<textarea>`），失焦時自動儲存（`PATCH /api/pdfs/:id/pages/:n/note`）；補後端測試。
+- [ ] 首頁批次匯出所有 ZIP：在首頁工具列加入「匯出所有（ZIP）」按鈕，呼叫 `POST /api/export/batch`（後端）打包所有使用者的簡報 ZIP，進度以輪詢或 SSE 回報；限制擁有者存取；補後端測試 200 / 403。
