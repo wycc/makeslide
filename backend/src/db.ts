@@ -544,6 +544,11 @@ function migrate(): void {
     logger.info('Added column quiz_sets.time_limit_seconds');
   }
 
+  if (!columnExists('pdfs', 'tags')) {
+    db.exec(`ALTER TABLE pdfs ADD COLUMN tags TEXT NOT NULL DEFAULT ''`);
+    logger.info('Added column pdfs.tags');
+  }
+
   logger.info({ dbPath: config.dbPath }, 'Database migrations applied');
 }
 

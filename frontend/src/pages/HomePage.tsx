@@ -14,6 +14,7 @@ import {
   retryFailedPdf,
   startProcessing,
   updatePdfCategory,
+  updatePdfTags,
   type AuthStatus,
 } from '../lib/api';
 import type { PdfListItem, UploadResponse } from '../types';
@@ -136,6 +137,7 @@ export default function HomePage() {
   const [customCategories, setCustomCategories] = useState<string[]>(readStoredCustomCategories);
   const [titleFilter, setTitleFilter] = useState<string>(readStoredTitleFilter);
   const [explicitSortMode, setExplicitSortMode] = useState<SortMode | null>(readStoredSortMode);
+  const [tagFilter, setTagFilter] = useState<string>('');
   const [continuingPdfId, setContinuingPdfId] = useState<string | null>(null);
   const [isImportingZip, setIsImportingZip] = useState(false);
   const [zipImportProgress, setZipImportProgress] = useState(0);
@@ -152,13 +154,22 @@ export default function HomePage() {
   const categoryFilteredItems = categoryFilter === '__all__' || categoryFilter === '__recent__'
     ? items
     : items.filter((pdf) => (pdf.category?.trim() || DEFAULT_CATEGORY) === categoryFilter);
+  const allTags = Array.from(new Set(
+    items.flatMap((pdf) => (pdf.tags ?? '').split(',').map((t) => t.trim()).filter(Boolean))
+  )).sort((a, b) => a.localeCompare(b, 'zh-Hant', { sensitivity: 'base' }));
+
   const normalizedTitleFilter = titleFilter.trim().toLocaleLowerCase();
+  const tagFilteredItems = tagFilter
+    ? categoryFilteredItems.filter((pdf) =>
+        (pdf.tags ?? '').split(',').map((tag) => tag.trim()).includes(tagFilter)
+      )
+    : categoryFilteredItems;
   const filteredItems = normalizedTitleFilter
-    ? categoryFilteredItems.filter((pdf) => {
+    ? tagFilteredItems.filter((pdf) => {
       const title = (pdf.title?.trim() || '').toLocaleLowerCase();
       return title.includes(normalizedTitleFilter);
     })
-    : categoryFilteredItems;
+    : tagFilteredItems;
   const visibleSummary = t('home.resultSummary')
     .replace('{shown}', String(filteredItems.length))
     .replace('{total}', String(categoryFilteredItems.length));
@@ -355,6 +366,14 @@ export default function HomePage() {
       }
     },
     [showToast],
+  );
+
+  const handleTagsEdit = useCallback(
+    async (id: string, tags: string) => {
+      const result = await updatePdfTags(id, tags);
+      setItems((prev) => prev.map((p) => (p.id === id ? { ...p, tags: result.tags } : p)));
+    },
+    [],
   );
 
   const handleImportZipClick = useCallback(() => {
@@ -808,6 +827,27 @@ export default function HomePage() {
             <p className="mt-3 text-xs text-slate-400" aria-live="polite">
               {visibleSummary}
             </p>
+            {allTags.length > 0 && (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTagFilter('')}
+                  className={`rounded-full border px-3 py-0.5 text-xs transition ${tagFilter === '' ? 'border-indigo-400 bg-indigo-500/20 text-indigo-200' : 'border-slate-600 bg-slate-800 text-slate-300 hover:border-slate-500'}`}
+                >
+                  {t('home.tagAll')}
+                </button>
+                {allTags.map((tag) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => setTagFilter(tagFilter === tag ? '' : tag)}
+                    className={`rounded-full border px-3 py-0.5 text-xs transition ${tagFilter === tag ? 'border-indigo-400 bg-indigo-500/20 text-indigo-200' : 'border-slate-600 bg-slate-800 text-slate-300 hover:border-slate-500'}`}
+                  >
+                    {tag}
+                  </button>
+                ))}
+              </div>
+            )}
             {/* custom category management UI removed; category creation is only via dropdown option */}
           </section>
         )}
@@ -870,6 +910,7 @@ export default function HomePage() {
                       onDuplicate={handleDuplicate}
                       onExport={handleExport}
                       onCategoryChange={handleCategoryChange}
+                      onTagsEdit={authStatus?.user?.sub === pdf.owner_sub ? handleTagsEdit : undefined}
                       onContinue={handleContinueGeneration}
                       continuing={continuingPdfId === pdf.id}
                       onClick={handleCardClick}

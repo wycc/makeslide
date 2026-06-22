@@ -185,6 +185,7 @@ export interface PdfListItem {
   has_source_text?: boolean;
   github_sync_dirty?: boolean;
   github_synced_at?: string | null;
+  tags?: string;
   created_at: string;
   updated_at: string;
 }
@@ -478,6 +479,7 @@ export interface PdfDetail {
   /** Whether the requester has an authenticated session (logged in). False for anonymous visitors. */
   is_authenticated?: boolean;
   has_source_text?: boolean;
+  tags?: string;
   created_at: string;
   updated_at: string;
   video_url?: string | null;

@@ -20,6 +20,7 @@ interface PdfCardProps {
   onDuplicate: (id: string) => Promise<void> | void;
   onExport: (id: string) => Promise<void> | void;
   onCategoryChange: (id: string, category: string) => Promise<void> | void;
+  onTagsEdit?: (id: string, tags: string) => Promise<void> | void;
   onContinue?: (pdf: PdfListItem) => Promise<void> | void;
   continuing?: boolean;
   onClick?: (pdf: PdfListItem) => void;
@@ -51,12 +52,15 @@ function formatDate(iso: string): string {
   }
 }
 
-export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExport, onCategoryChange, onContinue, continuing = false, onClick, currentUserSub }: PdfCardProps) {
+export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExport, onCategoryChange, onTagsEdit, onContinue, continuing = false, onClick, currentUserSub }: PdfCardProps) {
   const { t } = useI18n();
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDuplicating, setIsDuplicating] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isChangingCategory, setIsChangingCategory] = useState(false);
+  const [isEditingTags, setIsEditingTags] = useState(false);
+  const [tagInput, setTagInput] = useState('');
+  const [isSavingTags, setIsSavingTags] = useState(false);
   // `uploaded` / `processing` 都允許刪除；
   // `isProcessing` 僅用於限制「複製」與「改類別」這類非刪除操作。
   const isProcessing = pdf.status === 'processing';
@@ -142,6 +146,29 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExpo
     } finally {
       setIsExporting(false);
     }
+  };
+
+  const handleEditTagsClick = (ev: React.MouseEvent) => {
+    ev.stopPropagation();
+    setTagInput(pdf.tags ?? '');
+    setIsEditingTags(true);
+  };
+
+  const handleSaveTags = async (ev: React.MouseEvent) => {
+    ev.stopPropagation();
+    if (!onTagsEdit || isSavingTags) return;
+    setIsSavingTags(true);
+    try {
+      await onTagsEdit(pdf.id, tagInput);
+      setIsEditingTags(false);
+    } finally {
+      setIsSavingTags(false);
+    }
+  };
+
+  const handleCancelEditTags = (ev: React.MouseEvent) => {
+    ev.stopPropagation();
+    setIsEditingTags(false);
   };
 
   return (
@@ -258,6 +285,53 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExpo
             </span>
           )}
         </div>
+        {isEditingTags ? (
+          <div className="flex flex-col gap-1.5" onClick={(e) => e.stopPropagation()}>
+            <input
+              type="text"
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              placeholder={t('card.tagsPlaceholder')}
+              className="w-full rounded border border-slate-600 bg-slate-800 px-2 py-1 text-xs text-slate-100 outline-none focus:border-indigo-400"
+              autoFocus
+            />
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                onClick={handleSaveTags}
+                disabled={isSavingTags}
+                className="rounded bg-indigo-600 px-2 py-0.5 text-[11px] text-white transition hover:bg-indigo-500 disabled:opacity-50"
+              >
+                {isSavingTags ? '…' : t('card.saveTags')}
+              </button>
+              <button
+                type="button"
+                onClick={handleCancelEditTags}
+                className="rounded border border-slate-600 px-2 py-0.5 text-[11px] text-slate-300 transition hover:bg-slate-700"
+              >
+                {t('card.cancelEditTags')}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-1">
+            {(pdf.tags ?? '').split(',').map((tag) => tag.trim()).filter(Boolean).map((tag) => (
+              <span key={tag} className="rounded-full border border-indigo-500/40 bg-indigo-500/15 px-2 py-0.5 text-[11px] text-indigo-300">
+                {tag}
+              </span>
+            ))}
+            {onTagsEdit && (
+              <button
+                type="button"
+                onClick={handleEditTagsClick}
+                title={t('card.editTags')}
+                className="rounded-full border border-slate-600 px-2 py-0.5 text-[11px] text-slate-400 transition hover:border-slate-400 hover:text-slate-200"
+              >
+                {(pdf.tags ?? '').trim() ? '✎' : `+ ${t('card.editTags')}`}
+              </button>
+            )}
+          </div>
+        )}
 
         {pdf.status === 'awaiting_prompt' && (
           <p className="rounded-md border border-sky-500/40 bg-sky-500/10 px-2 py-1 text-xs text-sky-200">

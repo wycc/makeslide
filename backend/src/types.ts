@@ -160,6 +160,7 @@ export interface PdfRow {
   source_caption_language?: string | null;
   github_synced_commit?: string | null;
   github_synced_at?: string | null;
+  tags?: string;
   created_at: string;
   updated_at: string;
 }
@@ -216,6 +217,7 @@ export interface PdfListItem {
   source_caption_language?: string | null;
   github_sync_dirty?: boolean;
   github_synced_at?: string | null;
+  tags?: string;
   created_at: string;
   updated_at: string;
 }
@@ -280,6 +282,7 @@ export interface PdfDetail {
   source_video_id?: string | null;
   source_caption_language?: string | null;
   outline_url?: string | null;
+  tags?: string;
   created_at: string;
   updated_at: string;
   share_mode?: 'read_only' | 'editable';
