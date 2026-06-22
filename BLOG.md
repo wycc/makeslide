@@ -1,5 +1,80 @@
 # MakeSlide 功能說明
 
+## 課後學習報告後端摘要 API
+
+### 功能目的
+
+MakeSlide 已經分散收集多種課堂互動資料：測驗作答、每頁即時投票、同步播放時學生提問，以及每頁語音觀看進度。這次新增課後學習報告摘要 API，把這些資料彙總成同一份班級層級統計，作為後續播放頁「課後報告」畫面的資料基礎。
+
+這個 API 的目標不是回傳每位學生的個資化明細，而是提供教師快速判斷整體學習狀況的指標：總參與人數、測驗平均分數、投票參與率、課堂提問數，以及每頁完成率。教師可以用它找出需要複習的題目、互動不足的投票、提問熱點與觀看完成率較低的頁面。
+
+### API 使用方式
+
+新增只讀端點：
+
+```http
+GET /api/pdfs/:id/report/summary
+```
+
+權限規則：
+
+1. 簡報擁有者可以讀取。
+2. `public_editable` 簡報的已登入協作者可以讀取。
+3. 一般 `public` 唯讀訪客、其他帳號讀取私有簡報、匿名訪客與分享連結訪客都不能讀取，避免把整班互動統計暴露給學生或外部觀看者。
+4. 不存在的簡報會回傳 `404`。
+
+回應範例：
+
+```json
+{
+  "pdf_id": "abc123def4",
+  "participant_count": 5,
+  "quiz": {
+    "attempt_count": 2,
+    "participant_count": 2,
+    "average_score": 70
+  },
+  "polls": {
+    "poll_count": 2,
+    "vote_count": 3,
+    "participant_count": 2,
+    "participation_rate": 0.3
+  },
+  "questions": {
+    "count": 1,
+    "participant_count": 1
+  },
+  "watch_progress": {
+    "pages": [
+      {
+        "page_number": 1,
+        "total_viewers": 2,
+        "completed_viewers": 1,
+        "completion_rate": 0.5,
+        "avg_listened_ratio": 0.75
+      }
+    ]
+  },
+  "generated_at": "2026-06-22T09:58:21.000Z"
+}
+```
+
+### 技術重點
+
+- 新增 `backend/src/routes/pdfs/report.ts`，集中處理 `GET /api/pdfs/:id/report/summary` 聚合查詢與權限檢查。
+- 在 `backend/src/routes/pdfs/index.ts` 註冊報告路由，沿用現有 PDF route 群組。
+- 從 `quiz_attempts` 統計作答次數、作答人數與平均分數。
+- 從 `page_polls` / `page_poll_votes` 統計投票題數、投票數、投票人數與投票參與率。參與率以「投票數 /（投票題數 × 全班參與人數）」計算，方便衡量整體互動覆蓋度。
+- 從 `page_watch_progress` 與 `pages` 左連接產生每頁完成率，沒有觀看紀錄的頁面也會回傳 `completion_rate: 0`，讓前端可以完整呈現全簡報頁面列表。
+- 從同步播放模組匯出只讀 snapshot helper，讓報告 API 能納入目前記憶體中的 follower questions，而不直接暴露或修改同步 session 狀態。
+- `participant_count` 會合併 quiz client、poll voter、watch viewer 與 question client 的不重複 ID，提供班級層級參與人數估算。
+
+### 驗證結果
+
+- 已執行後端型別檢查：`/home/cluster/.nvm/versions/node/v22.12.0/bin/npm run typecheck`，通過。
+- 已執行新增單元測試：`/home/cluster/.nvm/versions/node/v22.12.0/bin/node ../node_modules/tsx/dist/cli.mjs --test ./test/report-summary.test.ts`，2 個測試全部通過。
+- 測試涵蓋完整聚合案例、同步提問納入報告、每頁觀看完成率、沒有觀看紀錄頁面的 fallback、私有/公開/可編輯權限差異，以及缺少簡報時的 `404`。
+
 ## 掃描系統並新增可執行 TODO 項目
 
 ### 分析目的
