@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { RegenerateProgress } from './RegenerateProgress';
 import type { ShareAccessMode } from '../../lib/api';
+import { fetchSyncAttendees } from '../../lib/api';
 import { useI18n } from '../../i18n';
 import { usePlayPageContext } from './PlayPageContext';
 import { copyTextToClipboard } from '../../lib/clipboard';
@@ -153,6 +154,24 @@ export function PlayPageHeader() {
 
   const [copyScriptStatus, setCopyScriptStatus] = useState<'idle' | 'ok' | 'fail'>('idle');
   const [coursePackageBusy, setCoursePackageBusy] = useState(false);
+
+  const [attendeeCount, setAttendeeCount] = useState<number | null>(null);
+  const attendeePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    if (!syncEnabled || syncRole !== 'master' || !pdfId) {
+      setAttendeeCount(null);
+      if (attendeePollRef.current != null) clearInterval(attendeePollRef.current);
+      return;
+    }
+    const fetchCount = () => {
+      void fetchSyncAttendees(pdfId).then((list) => setAttendeeCount(list.length)).catch(() => {});
+    };
+    fetchCount();
+    attendeePollRef.current = setInterval(fetchCount, 30_000);
+    return () => {
+      if (attendeePollRef.current != null) clearInterval(attendeePollRef.current);
+    };
+  }, [syncEnabled, syncRole, pdfId]);
   const handleDownloadCoursePackage = async () => {
     if (!pdfId || coursePackageBusy) return;
     setCoursePackageBusy(true);
@@ -222,6 +241,11 @@ export function PlayPageHeader() {
             />
             {t('play.sync.mode')}
             {syncEnabled ? `(${syncRole === 'master' ? 'master' : 'follower'})` : ''}
+            {syncEnabled && syncRole === 'master' && attendeeCount != null && (
+              <span className="ml-1 rounded-full bg-indigo-500/30 px-1.5 py-0.5 text-[10px] text-indigo-200">
+                {attendeeCount}
+              </span>
+            )}
           </label>
         </div>
         {syncError ? <div className="mt-1 text-xs text-rose-300">{syncError}</div> : null}
