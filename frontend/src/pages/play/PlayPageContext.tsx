@@ -438,6 +438,17 @@ export interface PlayPageContextValue {
   // ─── Wake lock ──────────────────────────────────────────────────────────────
   acquireWakeLock: () => void;
   releaseWakeLock: () => void;
+
+  // ─── AI 導師：問這一頁 ──────────────────────────────────────────────────────
+  canAskPage: boolean;
+  pageAskInput: string;
+  setPageAskInput: (v: string) => void;
+  pageAskAnswer: string | null;
+  pageAskBusy: boolean;
+  pageAskError: string | null;
+  setPageAskError: (v: string | null) => void;
+  handleAskPage: () => Promise<void>;
+  clearPageAsk: () => void;
 }
 
 // ── Context instance + hook ───────────────────────────────────────────────────

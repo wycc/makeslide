@@ -304,6 +304,14 @@ const PageChatResponseSchema = z.object({
   answer: z.string().min(1).max(4000),
 });
 
+const AskPageBodySchema = z.object({
+  question: z.string().trim().min(1, '問題不可為空').max(500, '問題不可超過 500 字'),
+});
+
+const AskPageResponseSchema = z.object({
+  answer: z.string().min(1).max(2000),
+});
+
 function parseChatHistory(json: string | null): Array<z.infer<typeof ChatMessageSchema>> {
   if (!json) return [];
   try {
@@ -1263,6 +1271,61 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     } catch (err) {
       request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to chat with page context');
       return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to chat with page context'));
+    }
+  });
+
+  // AI 導師：針對目前頁面的單次問答，回答中標示引用來源。
+  // 需登入（sub !== null）；public 或有效分享連結亦可存取。匿名分享連結禁止。
+  app.post('/api/pdfs/:id/pages/:n/ask', async (request, reply) => {
+    const parsedParams = PageParamSchema.safeParse(request.params);
+    const parsedBody = AskPageBodySchema.safeParse(request.body ?? {});
+    if (!parsedParams.success || !parsedBody.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', parsedBody.error?.issues[0]?.message ?? 'Invalid request'));
+    }
+    const { id, n } = parsedParams.data;
+    const sub = sessionSub(request);
+    if (!sub) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '請先登入才能使用 AI 導師問答'));
+    }
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canReadPdf(sub, pdfRow) && !hasShareAccess(request, id)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限查閱此簡報'));
+    }
+    const pageRow = db
+      .prepare(`SELECT text_path, script_path FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .get(id, n) as { text_path: string | null; script_path: string | null } | undefined;
+    if (!pageRow) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+    const pdfTitleRow = db.prepare(`SELECT title FROM pdfs WHERE id = ?`).get(id) as { title?: string | null } | undefined;
+    try {
+      const pageText = pageRow.text_path ? await fs.promises.readFile(safeJoinPdfPath(id, pageRow.text_path), 'utf8').catch(() => '') : '';
+      const pageScript = pageRow.script_path ? await fs.promises.readFile(safeJoinPdfPath(id, pageRow.script_path), 'utf8').catch(() => '') : '';
+      const result = await callChatJSON({
+        label: `ask-page ${id}/${n}`,
+        schema: AskPageResponseSchema,
+        maxTokens: 1200,
+        temperature: 0.3,
+        messages: [
+          {
+            role: 'system',
+            content: '你是繁體中文課堂 AI 導師。請只輸出 JSON：{"answer":"..."}。依據提供的頁面文字與逐字稿回答學生問題，並在回答中以括號標示引用來源，例如「（來自逐字稿）」或「（來自頁面文字）」。若頁面無相關內容，請誠實說明。回答請精簡扼要。',
+          },
+          {
+            role: 'user',
+            content: [
+              `簡報標題：${pdfTitleRow?.title?.trim() || '（未命名）'}`,
+              `頁碼：${n}`,
+              `頁面文字：${pageText.trim() || '（無）'}`,
+              `頁面逐字稿：${pageScript.trim() || '（無）'}`,
+              `學生問題：${parsedBody.data.question}`,
+            ].join('\n\n'),
+          },
+        ],
+      });
+      return reply.code(200).send({ answer: result.data.answer.trim() });
+    } catch (err) {
+      request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to answer page ask question');
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to answer question'));
     }
   });
 }

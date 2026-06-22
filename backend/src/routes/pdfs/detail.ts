@@ -298,9 +298,10 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
         sources: sourceItems,
         share_mode: shareMode,
         is_owner: isOwner,
+        is_authenticated: Boolean(sub),
       });
     }
-    return reply.send({ ...detail, sources: sourceItems, is_owner: isOwner });
+    return reply.send({ ...detail, sources: sourceItems, is_owner: isOwner, is_authenticated: Boolean(sub) });
   });
 
   app.post('/api/pdfs/:id/sources/txt', async (request, reply) => {

@@ -2,6 +2,7 @@ import { useI18n } from '../../i18n';
 import { debugLog, debugWarn } from '../../lib/debugLog';
 import { calculateWatchProgressPercent, formatWatchProgressBadgeCount } from '../../lib/watchProgress';
 import { usePlayPageContext } from './PlayPageContext';
+import { PageAskPanel } from './PageAskPanel';
 
 const IMAGE_MSG_PREFIX = '[image] ';
 
@@ -509,6 +510,8 @@ export function PlayPageSidebar() {
           </div>
         )}
       </section>
+
+      <PageAskPanel />
 
       <section className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-lg border border-slate-800 bg-slate-900/40">
       <div className="border-b border-slate-800 px-4 py-3">
