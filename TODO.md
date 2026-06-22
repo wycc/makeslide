@@ -384,3 +384,23 @@
 | 2026-06-23 | 播放頁學生提問「複製全部」：CopyAllQuestionsButton 子元件，彙整 syncFollowerQuestions 為 Markdown，clipboard + 2秒 flash；i18n copyAllQuestions/Done/Fail | feat/copy-all-questions（已 merge） |
 | 2026-06-23 | 播放頁同步學生人數徽章：attendeeCount state + attendeePollRef，useEffect 每 30 秒輪詢 fetchSyncAttendees，indigo badge 顯示人數 | feat/sync-attendee-badge（已 merge） |
 | 2026-06-23 | 首頁卡片快速複製分享連結：PdfCard 公開 PDF hover 顯示 🔗 按鈕，createPdfShare 取得 share_url 後複製；i18n copyShareLink/Done/Fail | feat/pdfcard-copy-share-link（已 merge） |
+
+---- 計數重設 ----
+
+## 掃描摘要（2026-06-23 第十輪）
+
+- 第九輪 5 個項目全數完成。
+- `page_watch_progress` 表只有 UPSERT，無 DELETE/reset 端點，教師無法清除觀看進度以重新統計。
+- 播放頁匯出區已有 PPTX/SRT/VTT/TXT，但無法直接下載單頁投影片圖片。
+- `drawings.ts` 後端已有頁面畫筆資料，但前端播放頁尚未有覆蓋繪圖工具（相對複雜），可先補 GET/PUT 測試。
+- 後端 `quiz_sets` 已可關聯 `pdf_id`，但尚無「複製測驗到另一份簡報」的功能。
+- 首頁多選批次刪除後，沒有批次修改分類的功能，管理大量教材仍需逐一操作。
+- 播放頁投影片「自動播放倒數」（即將進入下一頁的倒數）能提升教學節奏感，但目前無 UI 顯示。
+
+## 新增可執行項目（第十輪）
+
+- [ ] 觀看進度重置：新增 `DELETE /api/pdfs/:id/watch-progress` 後端端點（限擁有者），清除該簡報所有 `page_watch_progress` 紀錄；前端在課後報告面板或播放頁設定區加入「重置觀看進度」按鈕（含確認提示）；補後端測試 200 / 403 / 404。
+- [ ] 播放頁下載本頁圖片：在播放頁 header 匯出區加入「下載本頁圖片」`<a download>` 連結，指向 `currentPage.image_path` 對應的後端圖片路徑；純前端改動，補 i18n `play.header.downloadCurrentImage`。
+- [ ] 首頁批次修改分類：首頁多選模式下，除「刪除已選」外加入「移動到分類」下拉選單（列出現有分類），選擇後批次呼叫 `PATCH /api/pdfs/:id/category`；補 i18n `home.batchMoveToCategory/batchMoveDone`。
+- [ ] 播放頁自動播放倒數 UI：`autoAdvance` 開啟時，音訊播完前 3 秒在投影片右下角顯示倒數圓圈（3→2→1），純前端 CSS animation；補 i18n `play.slidePanel.autoAdvanceCountdown`。
+- [ ] 測驗複製到另一份簡報：在測驗列表頁（`QuizBuilderPage`）每個測驗旁加入「複製到…」按鈕，呼叫後端新增 `POST /api/pdfs/:id/quiz-sets/:qid/copy-to/:targetId` 端點（複製 `questions_json` 與標題到目標簡報）；前端顯示目標簡報下拉清單；補後端測試。
