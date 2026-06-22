@@ -194,7 +194,8 @@ export default function HomePage() {
   const filteredItems = normalizedTitleFilter
     ? favFilteredItems.filter((pdf) => {
       const title = (pdf.title?.trim() || '').toLocaleLowerCase();
-      return title.includes(normalizedTitleFilter);
+      const tags = (pdf.tags ?? '').toLocaleLowerCase();
+      return title.includes(normalizedTitleFilter) || tags.includes(normalizedTitleFilter);
     })
     : favFilteredItems;
   const visibleSummary = t('home.resultSummary')
