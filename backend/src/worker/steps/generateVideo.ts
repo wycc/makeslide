@@ -45,6 +45,16 @@ export interface GenerateVideoResult {
   outputPath: string;
 }
 
+// Two concurrent generateVideo() calls for the SAME pdfId both run ffmpeg processes that
+// independently `-y` (overwrite) the exact same output path (videoPath(pdfId)) at the end of
+// their pipeline. Verified with real ffmpeg binaries: when two ffmpeg processes race to write
+// the same output file path concurrently, the result is not simply "last writer wins" — it can
+// be a genuinely corrupted file (interleaved writes producing invalid NAL units that fail to
+// decode). This in-memory lock makes a second concurrent call for a pdfId already in progress
+// fail fast with a recognizable error instead of racing on disk I/O. Calls for different pdfIds
+// are unaffected and run fully in parallel as before.
+const inFlightPdfIds = new Set<string>();
+
 export async function generateVideo(
   input: GenerateVideoInput,
 ): Promise<GenerateVideoResult> {
@@ -52,6 +62,24 @@ export async function generateVideo(
   if (pageNumbers.length === 0) {
     throw new Error('No pages available for video rendering');
   }
+  if (inFlightPdfIds.has(pdfId)) {
+    const err = new Error('VIDEO_GENERATION_ALREADY_RUNNING');
+    (err as Error & { code?: string }).code = 'VIDEO_GENERATION_ALREADY_RUNNING';
+    throw err;
+  }
+  inFlightPdfIds.add(pdfId);
+  try {
+    return await generateVideoLocked(pdfId, pageNumbers, onProgress);
+  } finally {
+    inFlightPdfIds.delete(pdfId);
+  }
+}
+
+async function generateVideoLocked(
+  pdfId: string,
+  pageNumbers: number[],
+  onProgress: GenerateVideoInput['onProgress'],
+): Promise<GenerateVideoResult> {
   const pageUidRows = db
     .prepare(`SELECT page_number, page_uid FROM pages WHERE pdf_id = ?`)
     .all(pdfId) as Array<{ page_number: number; page_uid: string }>;

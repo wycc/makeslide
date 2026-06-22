@@ -930,6 +930,18 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
     if (!pdfRow.page_count || pdfRow.page_count <= 0) {
       return reply.code(400).send(errorResponse('INVALID_STATE', 'PDF page_count is not ready'));
     }
+    // A concurrent /generate-video request for this same pdf is already running. Refuse to
+    // start a second one here, before touching progress_step/progress_current/progress_total at
+    // all — without this check, this second request would immediately overwrite those columns
+    // with its own (possibly different) page count, visibly corrupting the in-progress request's
+    // progress display, and its ffmpeg process would race the first one's ffmpeg process to write
+    // the exact same output video file path (verified with real ffmpeg binaries to be able to
+    // produce a genuinely corrupted, undecodable video file, not just "last writer wins").
+    if (pdfRow.progress_step === 'rendering_video') {
+      return reply
+        .code(409)
+        .send(errorResponse('INVALID_STATE', 'Video generation is already running for this PDF'));
+    }
 
     const pageRows = db
       .prepare(
@@ -1003,6 +1015,18 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         updated_at: updatedAt,
       });
     } catch (err) {
+      // Narrow race window: another request for the same pdf could have slipped past the
+      // progress_step check above and already taken the in-worker lock by the time this request
+      // reached generateVideo(). In that case the failure belongs entirely to THIS request, not
+      // to the one that's actually running — clearing progress_step/_current/_total here would
+      // wipe out the legitimately in-progress request's progress display. Leave the DB row alone
+      // and just report the conflict.
+      const code = err instanceof Error ? (err as Error & { code?: string }).code : undefined;
+      if (code === 'VIDEO_GENERATION_ALREADY_RUNNING') {
+        return reply
+          .code(409)
+          .send(errorResponse('INVALID_STATE', 'Video generation is already running for this PDF'));
+      }
       db.prepare(
         `UPDATE pdfs
             SET progress_step = NULL,
