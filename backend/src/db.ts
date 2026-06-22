@@ -570,6 +570,11 @@ function migrate(): void {
     logger.info('Added column pdfs.last_played_at');
   }
 
+  if (!columnExists('pdfs', 'description')) {
+    db.exec(`ALTER TABLE pdfs ADD COLUMN description TEXT NOT NULL DEFAULT ''`);
+    logger.info('Added column pdfs.description');
+  }
+
   logger.info({ dbPath: config.dbPath }, 'Database migrations applied');
 }
 

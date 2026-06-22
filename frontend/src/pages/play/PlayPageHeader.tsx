@@ -71,6 +71,7 @@ export function PlayPageHeader() {
     titleInput, setTitleInput,
     titleBusy, titleMsg,
     tagsInput, setTagsInput, tagsBusy, tagsMsg, handleSaveTags,
+    descriptionInput, setDescriptionInput, descriptionBusy, descriptionMsg, handleSaveDescription,
     videoError,
     shareMessage, shareError,
     githubSyncMessage, githubSyncError,
@@ -329,24 +330,45 @@ export function PlayPageHeader() {
       ) : null}
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-2 px-4 pb-3 md:flex-row md:items-center md:justify-between md:gap-3">
         {!isReadOnlyProcessing ? (
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              value={tagsInput}
-              onChange={(e) => setTagsInput(e.target.value)}
-              placeholder={t('play.metadata.tagsLabel')}
-              className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100"
-              maxLength={500}
-            />
-            <button
-              type="button"
-              onClick={() => void handleSaveTags()}
-              disabled={tagsBusy}
-              className="shrink-0 whitespace-nowrap rounded-md border border-indigo-500/50 bg-indigo-500/15 px-2 py-1 text-[11px] text-indigo-200 disabled:opacity-40"
-            >
-              {tagsBusy ? '…' : t('play.header.saveTags')}
-            </button>
-            {tagsMsg ? <span className="text-xs text-emerald-300">{tagsMsg}</span> : null}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={tagsInput}
+                onChange={(e) => setTagsInput(e.target.value)}
+                placeholder={t('play.metadata.tagsLabel')}
+                className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100"
+                maxLength={500}
+              />
+              <button
+                type="button"
+                onClick={() => void handleSaveTags()}
+                disabled={tagsBusy}
+                className="shrink-0 whitespace-nowrap rounded-md border border-indigo-500/50 bg-indigo-500/15 px-2 py-1 text-[11px] text-indigo-200 disabled:opacity-40"
+              >
+                {tagsBusy ? '…' : t('play.header.saveTags')}
+              </button>
+              {tagsMsg ? <span className="text-xs text-emerald-300">{tagsMsg}</span> : null}
+            </div>
+            <div className="flex items-start gap-2">
+              <textarea
+                value={descriptionInput}
+                onChange={(e) => setDescriptionInput(e.target.value)}
+                placeholder={t('play.metadata.descriptionPlaceholder')}
+                rows={2}
+                className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100 resize-none"
+                maxLength={2000}
+              />
+              <button
+                type="button"
+                onClick={() => void handleSaveDescription()}
+                disabled={descriptionBusy}
+                className="shrink-0 whitespace-nowrap rounded-md border border-indigo-500/50 bg-indigo-500/15 px-2 py-1 text-[11px] text-indigo-200 disabled:opacity-40"
+              >
+                {descriptionBusy ? '…' : t('play.metadata.descriptionLabel')}
+              </button>
+              {descriptionMsg ? <span className="text-xs text-emerald-300">{descriptionMsg}</span> : null}
+            </div>
           </div>
         ) : null}
         <div className="space-y-1 text-xs text-slate-400">

@@ -10,6 +10,7 @@ import {
   updatePdfTitle,
   updatePdfTtsSettings,
   updatePdfTags,
+  updatePdfDescription,
   type ShareAccessMode,
 } from '../../lib/api';
 import {
@@ -75,6 +76,11 @@ export interface PdfMetadataState {
   setTagsInput: Dispatch<SetStateAction<string>>;
   tagsBusy: boolean;
   tagsMsg: string | null;
+  // description
+  descriptionInput: string;
+  setDescriptionInput: Dispatch<SetStateAction<string>>;
+  descriptionBusy: boolean;
+  descriptionMsg: string | null;
   // handlers
   handleSaveTitle: () => void;
   handleRegenerateTitle: () => void;
@@ -84,6 +90,7 @@ export interface PdfMetadataState {
   handleShowPlayQrCode: () => void;
   handleSyncToGithub: () => void;
   handleSaveTags: () => void;
+  handleSaveDescription: () => void;
 }
 
 export function usePdfMetadata({
@@ -118,6 +125,9 @@ export function usePdfMetadata({
   const [tagsInput, setTagsInput] = useState('');
   const [tagsBusy, setTagsBusy] = useState(false);
   const [tagsMsg, setTagsMsg] = useState<string | null>(null);
+  const [descriptionInput, setDescriptionInput] = useState('');
+  const [descriptionBusy, setDescriptionBusy] = useState(false);
+  const [descriptionMsg, setDescriptionMsg] = useState<string | null>(null);
 
   const ttsProvider: TtsProvider = detail?.tts_provider === 'gemini' ? 'gemini' : 'openai';
   const availableTtsVoices = TTS_VOICES_BY_PROVIDER[ttsProvider];
@@ -166,6 +176,22 @@ export function usePdfMetadata({
       setTagsBusy(false);
     }
   }, [pdfId, tagsInput, isReadOnlyProcessing, setDetail, t]);
+
+  const handleSaveDescription = useCallback(async () => {
+    if (isReadOnlyProcessing) return;
+    if (!pdfId) return;
+    setDescriptionBusy(true);
+    setDescriptionMsg(null);
+    try {
+      const res = await updatePdfDescription(pdfId, descriptionInput);
+      setDetail((prev) => prev ? { ...prev, description: res.description, updated_at: res.updated_at } : prev);
+      setDescriptionMsg(t('play.metadata.descriptionSaved'));
+    } catch (err) {
+      setDescriptionMsg(err instanceof ApiError ? err.message : t('play.metadata.descriptionSaveFailed'));
+    } finally {
+      setDescriptionBusy(false);
+    }
+  }, [pdfId, descriptionInput, isReadOnlyProcessing, setDetail, t]);
 
   const handleRegenerateTitle = useCallback(async () => {
     if (isReadOnlyProcessing) return;
@@ -343,6 +369,10 @@ export function usePdfMetadata({
     setTagsInput,
     tagsBusy,
     tagsMsg,
+    descriptionInput,
+    setDescriptionInput,
+    descriptionBusy,
+    descriptionMsg,
     handleSaveTitle,
     handleRegenerateTitle,
     handleSaveTtsSettings,
@@ -351,5 +381,6 @@ export function usePdfMetadata({
     handleShowPlayQrCode,
     handleSyncToGithub,
     handleSaveTags,
+    handleSaveDescription,
   };
 }
