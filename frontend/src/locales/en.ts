@@ -1319,6 +1319,7 @@ export const en = {
   'quiz.showEditorAnswers': 'Show answers and explanations',
   'quiz.questionHeading': 'Question {index}',
   'quiz.delete': 'Delete',
+  'quiz.dragToReorder': 'Drag to reorder',
   'quiz.singleChoice': 'Single choice',
   'quiz.multipleChoice': 'Multiple choice',
   'quiz.questionPlaceholder': 'Enter question',

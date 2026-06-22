@@ -133,6 +133,7 @@ export default function QuizBuilderPage() {
   const [historyBusy, setHistoryBusy] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [viewingAttemptId, setViewingAttemptId] = useState<number | null>(null);
+  const [draggingQIdx, setDraggingQIdx] = useState<number | null>(null);
   const syncClientIdRef = useRef('');
   const lastReportedProgressRef = useRef<{ quizId: number; answeredCount: number; submitted: boolean } | null>(null);
   const submittedAttemptRef = useRef<string | null>(null);
@@ -953,9 +954,30 @@ export default function QuizBuilderPage() {
             {error ? <p className="mt-2 text-sm text-rose-300">{error}</p> : null}
           </div>
           {questions.map((q, qIdx) => (
-            <div key={q.id} className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+            <div
+              key={q.id}
+              draggable
+              onDragStart={() => setDraggingQIdx(qIdx)}
+              onDragEnd={() => setDraggingQIdx(null)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={() => {
+                if (draggingQIdx === null || draggingQIdx === qIdx) return;
+                setQuestions((prev) => {
+                  const next = [...prev];
+                  const moved = next.splice(draggingQIdx, 1)[0];
+                  if (!moved) return prev;
+                  next.splice(qIdx, 0, moved);
+                  return next;
+                });
+                setDraggingQIdx(null);
+              }}
+              className={`rounded-xl border border-slate-800 bg-slate-900/70 p-4 ${draggingQIdx === qIdx ? 'opacity-50' : ''}`}
+            >
               <div className="flex items-center justify-between gap-2">
-                <h3 className="font-semibold text-slate-100">{formatMessage('quiz.questionHeading', { index: qIdx + 1 })}</h3>
+                <div className="flex items-center gap-2">
+                  <span className="cursor-grab text-slate-500 hover:text-slate-300" title={t('quiz.dragToReorder')}>⠿</span>
+                  <h3 className="font-semibold text-slate-100">{formatMessage('quiz.questionHeading', { index: qIdx + 1 })}</h3>
+                </div>
                 <button type="button" onClick={() => setQuestions((prev) => prev.filter((_, i) => i !== qIdx))} className="text-sm text-rose-300 hover:text-rose-200">{t('quiz.delete')}</button>
               </div>
               <select value={q.type} onChange={(e) => updateQuestion(qIdx, { type: e.target.value as QuizQuestionType, answer_indices: [0] })} className="mt-3 rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-sm">
