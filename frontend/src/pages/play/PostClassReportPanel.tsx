@@ -244,6 +244,34 @@ export function PostClassReportPanel({ pdfId, summary, loading, error, onClose, 
                   <div className="mt-3 rounded-lg border border-dashed border-slate-700 p-3 text-sm text-slate-400">尚無觀看紀錄。學生觀看後，這裡會列出完成率最低的頁面。</div>
                 )}
               </section>
+
+              {summary.watch_progress.pages.length > 0 ? (
+                <section className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                  <h3 className="mb-1 font-semibold text-slate-100">全頁完成率熱力圖</h3>
+                  <p className="mb-3 text-xs text-slate-500">每格代表一頁，顏色越深代表完成率越高。</p>
+                  <div className="flex flex-wrap gap-1">
+                    {summary.watch_progress.pages.map((page) => {
+                      const rate = page.completion_rate;
+                      const bg = rate >= 0.8 ? 'bg-emerald-500' : rate >= 0.6 ? 'bg-emerald-400/70' : rate >= 0.4 ? 'bg-amber-400/60' : rate >= 0.2 ? 'bg-rose-400/60' : 'bg-rose-600/80';
+                      return (
+                        <div
+                          key={page.page_number}
+                          className={`flex h-8 w-8 items-center justify-center rounded text-[10px] font-medium text-white/90 ${bg}`}
+                          title={`第 ${page.page_number} 頁：完成率 ${Math.round(rate * 100)}%（${page.completed_viewers}/${page.total_viewers}）`}
+                        >
+                          {page.page_number}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-2 flex items-center gap-3 text-[10px] text-slate-500">
+                    <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded bg-rose-600/80" />0–20%</span>
+                    <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded bg-amber-400/60" />40–60%</span>
+                    <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded bg-emerald-400/70" />60–80%</span>
+                    <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded bg-emerald-500" />80%+</span>
+                  </div>
+                </section>
+              ) : null}
             </div>
 
             {Array.isArray(summary.quiz.question_stats) && summary.quiz.question_stats.length > 0 ? (
