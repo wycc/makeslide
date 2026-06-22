@@ -142,3 +142,79 @@ test('POST /duplicate returns 404 for a non-existent PDF', async () => {
   assert.equal((resp.json() as { error: { code: string } }).error.code, 'PDF_NOT_FOUND');
   await app.close();
 });
+
+// --- POST /start ---
+
+test('POST /start rejects a non-owner request on a private presentation', async () => {
+  seedPdf('uppc-start-priv-01', 'private', 'awaiting_prompt');
+  const app = await buildApp();
+  const resp = await app.inject({
+    method: 'POST',
+    url: '/api/pdfs/uppc-start-priv-01/start',
+    headers: OTHER_HEADERS,
+    payload: { prompt: 'attempted hijack' },
+  });
+  assert.equal(resp.statusCode, 403);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+  const row = db.prepare(`SELECT user_prompt, status FROM pdfs WHERE id = ?`).get('uppc-start-priv-01') as { user_prompt: string | null; status: string };
+  assert.equal(row.user_prompt, null);
+  assert.equal(row.status, 'awaiting_prompt');
+  await app.close();
+});
+
+test('POST /start rejects an unauthenticated request on a private presentation', async () => {
+  seedPdf('uppc-start-anon-01', 'private', 'awaiting_prompt');
+  const app = await buildApp();
+  const resp = await app.inject({
+    method: 'POST',
+    url: '/api/pdfs/uppc-start-anon-01/start',
+    payload: { prompt: 'attempted hijack' },
+  });
+  assert.equal(resp.statusCode, 403);
+  await app.close();
+});
+
+test('POST /start rejects a non-owner request on a read-only shared presentation', async () => {
+  seedPdf('uppc-start-ro-01', 'public', 'awaiting_prompt');
+  const app = await buildApp();
+  const resp = await app.inject({
+    method: 'POST',
+    url: '/api/pdfs/uppc-start-ro-01/start',
+    headers: OTHER_HEADERS,
+    payload: { prompt: 'attempted hijack' },
+  });
+  assert.equal(resp.statusCode, 403);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+  await app.close();
+});
+
+test('POST /start allows the owner', async () => {
+  seedPdf('uppc-start-own-01', 'private', 'awaiting_prompt');
+  const app = await buildApp();
+  const resp = await app.inject({
+    method: 'POST',
+    url: '/api/pdfs/uppc-start-own-01/start',
+    headers: OWNER_HEADERS,
+    payload: { prompt: 'legit prompt' },
+  });
+  assert.equal(resp.statusCode, 202);
+  // Don't assert on `status` here: the pipeline is enqueued synchronously and may
+  // already have advanced it past 'uploaded' (e.g. to 'processing' or 'failed' once
+  // it discovers there is no real source.pdf in this test) by the time we check.
+  const row = db.prepare(`SELECT user_prompt FROM pdfs WHERE id = ?`).get('uppc-start-own-01') as { user_prompt: string | null };
+  assert.equal(row.user_prompt, 'legit prompt');
+  await app.close();
+});
+
+test('POST /start allows anyone to submit a prompt on a public_editable presentation', async () => {
+  seedPdf('uppc-start-pe-01', 'public_editable', 'awaiting_prompt');
+  const app = await buildApp();
+  const resp = await app.inject({
+    method: 'POST',
+    url: '/api/pdfs/uppc-start-pe-01/start',
+    headers: OTHER_HEADERS,
+    payload: { prompt: 'collaborative edit' },
+  });
+  assert.equal(resp.statusCode, 202);
+  await app.close();
+});

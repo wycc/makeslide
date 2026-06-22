@@ -655,6 +655,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
                 progress_current, progress_total,
                 error_message, user_prompt, require_script_confirmation,
                 tts_voice, tts_speed, script_max_chars_per_page, image_style_prompt,
+                owner_sub, visibility,
                 created_at, updated_at
            FROM pdfs WHERE id = ?`,
       )
@@ -663,6 +664,9 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       return reply
         .code(404)
         .send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    if (!canEditPdf(ownerSubFromRequest(request), row)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限提交此簡報的提示詞'));
     }
     if (
       row.status !== 'awaiting_prompt' &&
