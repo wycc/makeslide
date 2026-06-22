@@ -355,6 +355,33 @@ export function PostClassReportPanel({ pdfId, summary, loading, error, onClose, 
               ) : null}
             </section>
 
+            {students.length > 0 ? (() => {
+              const allAttempts = students
+                .flatMap((s) => s.attempts.map((a) => ({ ...a, client_id: s.client_id })))
+                .sort((a, b) => new Date(a.submitted_at).getTime() - new Date(b.submitted_at).getTime());
+              return (
+                <section className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                  <h3 className="mb-1 font-semibold text-slate-100">作答時間軸</h3>
+                  <p className="mb-3 text-xs text-slate-500">所有學生提交記錄，依時間先後排序。</p>
+                  <ol className="relative border-l border-slate-700 pl-4 space-y-3">
+                    {allAttempts.map((a) => (
+                      <li key={a.attempt_id} className="relative">
+                        <span className="absolute -left-[1.3125rem] top-1.5 h-2.5 w-2.5 rounded-full border border-slate-600 bg-slate-900" />
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          <span className="text-slate-400">{new Date(a.submitted_at).toLocaleString()}</span>
+                          <span className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-slate-300">{a.client_id.slice(0, 8)}</span>
+                          <span className="text-slate-400">{a.quiz_title || `測驗 #${a.quiz_id}`}</span>
+                          <span className={`rounded px-1.5 py-0.5 font-medium ${a.score != null && a.score >= 70 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}`}>
+                            {a.score != null ? `${Math.round(a.score)} 分` : '未計分'}
+                          </span>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                </section>
+              );
+            })() : null}
+
             <section className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
