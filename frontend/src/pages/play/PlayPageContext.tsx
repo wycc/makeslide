@@ -61,6 +61,8 @@ export interface PlayPageContextValue {
   audioMuted: boolean;
   setAudioMuted: Dispatch<SetStateAction<boolean>>;
   effectiveAudioMuted: boolean;
+  audioVolume: number;
+  setAudioVolume: Dispatch<SetStateAction<number>>;
   playbackRate: number;
   setPlaybackRate: Dispatch<SetStateAction<number>>;
   showSubtitle: boolean;

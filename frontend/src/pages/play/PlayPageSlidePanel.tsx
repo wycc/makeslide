@@ -87,6 +87,7 @@ export function PlayPageSlidePanel() {
     playbackStatusMessage, handleClearPlaybackProgress,
     audioMuted, setAudioMuted,
     effectiveAudioMuted,
+    audioVolume, setAudioVolume,
     followerAudioUnlocked, setFollowerAudioUnlocked,
     audioError,
     handleSeek, goPrev, goNext,
@@ -567,6 +568,19 @@ export function PlayPageSlidePanel() {
         />
         <div className="order-3 w-[5.25rem] shrink-0 whitespace-nowrap text-right font-mono text-[11px] text-slate-300 sm:order-none sm:w-24 sm:text-xs">
           {formatTime(Math.min(currentTime, duration))} / {formatTime(duration)}
+        </div>
+        <div className="order-4 flex items-center gap-1 sm:order-none" title={t('play.controls.volume')}>
+          <span className="text-[11px] text-slate-400">{audioVolume === 0 ? '🔇' : audioVolume < 0.5 ? '🔉' : '🔊'}</span>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.05}
+            value={audioVolume}
+            onChange={(e) => setAudioVolume(parseFloat(e.target.value))}
+            className="w-16 accent-emerald-500"
+            aria-label={t('play.controls.volume')}
+          />
         </div>
       </div>
       <div className={transcriptFocusMode ? 'hidden' : 'rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300'}>

@@ -189,6 +189,11 @@ export default function PlayPage() {
   const [syncEnabled, setSyncEnabled] = useState(false);
   const [syncRole, setSyncRole] = useState<'master' | 'follower'>('follower');
   const [audioMuted, setAudioMuted] = useState(false);
+  const [audioVolume, setAudioVolume] = useState<number>(() => {
+    const stored = window.localStorage.getItem('makeslide.audioVolume');
+    const v = stored !== null ? parseFloat(stored) : 1;
+    return Number.isFinite(v) && v >= 0 && v <= 1 ? v : 1;
+  });
   const [playbackRate, setPlaybackRate] = useState<number>(() => getStoredPlaybackSpeed());
   const [showSubtitle, setShowSubtitle] = useState<boolean>(() => getStoredShowSubtitle());
   const [playbackSettingsOpen, setPlaybackSettingsOpen] = useState(false);
@@ -261,6 +266,11 @@ export default function PlayPage() {
     audio.playbackRate = playbackRate;
     window.localStorage.setItem('makeslide.playback_speed', String(playbackRate));
   }, [playbackRate]);
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (audio) audio.volume = audioVolume;
+    window.localStorage.setItem('makeslide.audioVolume', String(audioVolume));
+  }, [audioVolume]);
   // 動畫長度若超過語音長度，handleEnded 會延後切頁，等動畫播完再切換；
   // 用 ref 暫存最新的動畫總長，避免 handleEnded 的宣告順序受 currentAnimationSpec TDZ 影響。
   const animationDurationSecondsRef = useRef(0);
@@ -2173,6 +2183,7 @@ export default function PlayPage() {
     // playback
     isPlaying, setIsPlaying, currentTime, setCurrentTime, duration, setDuration,
     finished, setFinished, audioMuted, setAudioMuted, effectiveAudioMuted,
+    audioVolume, setAudioVolume,
     playbackRate, setPlaybackRate, showSubtitle, setShowSubtitle,
     playbackSettingsOpen, setPlaybackSettingsOpen, playbackStatusMessage,
     followerAudioUnlocked, setFollowerAudioUnlocked,
