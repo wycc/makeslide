@@ -113,6 +113,8 @@ export default function QuizBuilderPage() {
   const [title, setTitle] = useState(() => t('quiz.defaultTitle'));
   const [prompt, setPrompt] = useState(() => t('quiz.defaultPrompt'));
   const [questions, setQuestions] = useState<QuizQuestion[]>([emptyQuestion(0)]);
+  const [timeLimitSeconds, setTimeLimitSeconds] = useState(0);
+  const [quizCountdown, setQuizCountdown] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -157,6 +159,7 @@ export default function QuizBuilderPage() {
           setTitle(nextQuizzes[0].title);
           setPrompt(nextQuizzes[0].prompt);
           setQuestions(nextQuizzes[0].questions);
+          setTimeLimitSeconds(nextQuizzes[0].time_limit_seconds ?? 0);
         }
       } catch (err) {
         if (alive) setError(err instanceof ApiError ? err.message : t('quiz.loadFailed'));
@@ -254,6 +257,35 @@ export default function QuizBuilderPage() {
     if (syncRole !== 'follower' || !syncQuizShowAnswers) return;
     submitFollowerAttempt();
   }, [syncRole, syncQuizShowAnswers, submitFollowerAttempt]);
+
+  useEffect(() => {
+    if (quizCountdown === 0 && isFollowerTesting && !syncQuizShowAnswers) {
+      submitFollowerAttempt();
+    }
+  }, [quizCountdown, isFollowerTesting, syncQuizShowAnswers, submitFollowerAttempt]);
+
+  useEffect(() => {
+    if (syncRole !== 'follower' || !activeQuiz || syncQuizShowAnswers) {
+      setQuizCountdown(null);
+      return;
+    }
+    const limit = activeQuiz.time_limit_seconds ?? 0;
+    if (limit <= 0) {
+      setQuizCountdown(null);
+      return;
+    }
+    setQuizCountdown(limit);
+    const interval = window.setInterval(() => {
+      setQuizCountdown((prev) => {
+        if (prev === null || prev <= 1) {
+          window.clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [syncRole, activeQuiz, syncQuizShowAnswers]);
 
   useEffect(() => {
     const previous = previousActiveQuizIdRef.current;
@@ -535,7 +567,7 @@ export default function QuizBuilderPage() {
     setBusy(true);
     setError(null);
     try {
-      const saved = await saveQuizSet(pdfId, { title, prompt, questions, quizId: selectedQuizId });
+      const saved = await saveQuizSet(pdfId, { title, prompt, questions, quizId: selectedQuizId, time_limit_seconds: timeLimitSeconds });
       setSelectedQuizId(saved.id);
       setSavedQuizzes((prev) => [saved, ...prev.filter((q) => q.id !== saved.id)]);
       setMessage(t('quiz.saveDone'));
@@ -585,6 +617,13 @@ export default function QuizBuilderPage() {
           </div>
         );
       })() : null}
+      {quizCountdown !== null && !syncQuizShowAnswers ? (
+        <div className={`mb-3 flex items-center gap-2 rounded border px-3 py-2 text-sm font-mono ${quizCountdown <= 10 ? 'border-rose-500/60 bg-rose-500/20 text-rose-200' : 'border-amber-400/40 bg-amber-500/10 text-amber-100'}`}>
+          {t('quiz.countdownPrefix') ? <span>{t('quiz.countdownPrefix')}</span> : null}
+          <span className="tabular-nums">{Math.floor(quizCountdown / 60).toString().padStart(2, '0')}:{(quizCountdown % 60).toString().padStart(2, '0')}</span>
+          <span>{t('quiz.countdownSuffix')}</span>
+        </div>
+      ) : null}
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-fuchsia-50">{formatMessage('quiz.inProgressTitle', { title: quiz.title })}</h2>
@@ -700,7 +739,7 @@ export default function QuizBuilderPage() {
             {savedQuizzes.length === 0 ? <p className="text-xs text-slate-500">{t('quiz.noSavedQuizzes')}</p> : null}
             {savedQuizzes.map((quiz) => (
               <div key={quiz.id} className={`rounded-md border px-3 py-2 text-sm ${selectedQuizId === quiz.id ? 'border-cyan-500 bg-cyan-500/10 text-cyan-100' : 'border-slate-700 text-slate-300'}`}>
-                <button type="button" onClick={() => { setSelectedQuizId(quiz.id); setTitle(quiz.title); setPrompt(quiz.prompt); setQuestions(quiz.questions); }} className="block w-full text-left hover:text-white">
+                <button type="button" onClick={() => { setSelectedQuizId(quiz.id); setTitle(quiz.title); setPrompt(quiz.prompt); setQuestions(quiz.questions); setTimeLimitSeconds(quiz.time_limit_seconds ?? 0); }} className="block w-full text-left hover:text-white">
                   <span className="block font-medium">{quiz.title}</span>
                   <span className="text-xs text-slate-500">{formatMessage('quiz.questionCount', { count: quiz.questions.length })}</span>
                 </button>
@@ -882,6 +921,19 @@ export default function QuizBuilderPage() {
             <input value={title} onChange={(e) => setTitle(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
             <label className="mt-3 block text-sm text-slate-300">{t('quiz.promptLabel')}</label>
             <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={4} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+            <label className="mt-3 block text-sm text-slate-300">{t('quiz.timeLimitLabel')}</label>
+            <div className="mt-1 flex items-center gap-2">
+              <input
+                type="number"
+                min={0}
+                max={3600}
+                step={30}
+                value={timeLimitSeconds}
+                onChange={(e) => setTimeLimitSeconds(Math.max(0, Math.min(3600, Number(e.target.value))))}
+                className="w-28 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              />
+              <span className="text-xs text-slate-400">{timeLimitSeconds === 0 ? t('quiz.timeLimitNone') : t('quiz.timeLimitUnit')}</span>
+            </div>
             <div className="mt-3 flex flex-wrap gap-2">
               <button type="button" onClick={() => void handleGenerate()} disabled={busy || !prompt.trim()} className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-4 py-2 text-sm text-fuchsia-100 hover:bg-fuchsia-500/25 disabled:opacity-50">{busy ? t('quiz.busy') : t('quiz.generate')}</button>
               <button type="button" onClick={() => void handleSave()} disabled={busy || !canSave} className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-4 py-2 text-sm text-emerald-100 hover:bg-emerald-500/25 disabled:opacity-50">{t('quiz.save')}</button>

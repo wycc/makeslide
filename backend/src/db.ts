@@ -539,6 +539,11 @@ function migrate(): void {
     );
   `);
 
+  if (!columnExists('quiz_sets', 'time_limit_seconds')) {
+    db.exec(`ALTER TABLE quiz_sets ADD COLUMN time_limit_seconds INTEGER NOT NULL DEFAULT 0`);
+    logger.info('Added column quiz_sets.time_limit_seconds');
+  }
+
   logger.info({ dbPath: config.dbPath }, 'Database migrations applied');
 }
 
