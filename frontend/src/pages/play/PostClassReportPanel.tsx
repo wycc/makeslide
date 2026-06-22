@@ -8,6 +8,7 @@ import {
 } from './reportSummary';
 
 interface PostClassReportPanelProps {
+  pdfId: string;
   summary: PdfReportSummary | null;
   loading: boolean;
   error: string | null;
@@ -25,7 +26,7 @@ function SummaryCard({ label, value, hint }: { label: string; value: string; hin
   );
 }
 
-export function PostClassReportPanel({ summary, loading, error, onClose, onReload }: PostClassReportPanelProps) {
+export function PostClassReportPanel({ pdfId, summary, loading, error, onClose, onReload }: PostClassReportPanelProps) {
   const hardestQuestions = getHardestQuestions(summary);
   const divergentPollPages = getMostDivergentPollPages(summary);
   const lowestCompletionPages = getLowestCompletionPages(summary);
@@ -42,6 +43,13 @@ export function PostClassReportPanel({ summary, loading, error, onClose, onReloa
             <button type="button" onClick={onReload} disabled={loading} className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-100 hover:bg-cyan-500/25 disabled:opacity-50">
               {loading ? '更新中…' : '重新整理'}
             </button>
+            <a
+              href={`api/pdfs/${encodeURIComponent(pdfId)}/quiz-results.csv`}
+              download
+              className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-3 py-1.5 text-sm text-emerald-100 hover:bg-emerald-500/25"
+            >
+              匯出 CSV
+            </a>
             <button type="button" onClick={onClose} className="rounded-md border border-slate-600 bg-slate-800 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-700">
               關閉
             </button>

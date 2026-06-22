@@ -2269,6 +2269,7 @@ export default function PlayPage() {
 
       {postClassReportOpen && canViewPostClassReport ? (
         <PostClassReportPanel
+          pdfId={pdfId ?? ''}
           summary={postClassReportSummary}
           loading={postClassReportLoading}
           error={postClassReportError}
