@@ -22,6 +22,23 @@ function canReadPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibil
 
 const ZIP_EXPORT_TIMEOUT_MS = 2 * 60_000;
 
+/**
+ * Builds an RFC 6266-compliant Content-Disposition header value for a filename that may
+ * contain non-ASCII characters (e.g. a Traditional Chinese presentation title).
+ *
+ * `filename="..."` alone is NOT percent-decoded by browsers/HTTP clients — it's taken
+ * literally. Wrapping a UTF-8 string in encodeURIComponent() and putting it in `filename="..."`
+ * (the previous behaviour here) therefore produces a literal "%E4%B8%AD...zip" filename on
+ * download instead of the intended CJK title. The fix follows RFC 5987/6266: an ASCII-only
+ * `filename=` fallback for clients that don't understand the extended syntax, plus a
+ * `filename*=UTF-8''<percent-encoded>` parameter that modern browsers prefer and decode correctly.
+ */
+export function buildContentDisposition(filename: string): string {
+  const asciiFallback = filename.replace(/[^\x20-\x7E]/g, '_').replace(/"/g, "'");
+  const encoded = encodeURIComponent(filename).replace(/['()]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  return `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encoded}`;
+}
+
 /** Exported for unit testing; not part of the public export routes API. */
 export function runZipCommand(
   cwd: string,
@@ -94,7 +111,7 @@ export async function registerExportRoutes(app: FastifyInstance): Promise<void> 
       reply.header('content-type', 'application/zip');
       reply.header('content-length', String(zipBuffer.byteLength));
       reply.header('cache-control', 'no-store');
-      reply.header('content-disposition', `attachment; filename="${encodeURIComponent(zipFileName)}"`);
+      reply.header('content-disposition', buildContentDisposition(zipFileName));
       return reply.send(zipBuffer);
     } catch {
       return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to export zip'));
