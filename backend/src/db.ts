@@ -6,8 +6,20 @@ import { config } from './config';
 import { logger } from './logger';
 import { PDF_STATUSES, PAGE_STATUSES } from './statusMachine';
 
-// Ensure DB directory exists
-//fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
+// Ensure the DB directory exists before opening it. This module is reached via a
+// static `import { db } from './db'` in server.ts, which (per the ES module spec)
+// is resolved and executed before any of server.ts's own top-level code — including
+// the `ensureWorkspaceRuntimePaths()` call inside `startServer()` that this codebase
+// previously relied on to create the directory first. That ordering assumption never
+// actually held (the static import always wins the race), so on a fresh checkout/volume
+// where `data/` doesn't exist yet, `new Database(config.dbPath)` below throws an
+// uncaught "Cannot open database because the directory does not exist" error before
+// `startServer()`'s try/catch (in main()) ever gets a chance to run — crashing the
+// process before any logging happens. Production Docker deployments only avoided this
+// because the container CMD happens to `mkdir -p` the data dir before invoking node at
+// all (see Dockerfile), masking the bug. Restoring this self-contained mkdir removes the
+// dependency on that external ordering entirely.
+fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
 
 export const db = new Database(config.dbPath);
 db.pragma('journal_mode = WAL');
