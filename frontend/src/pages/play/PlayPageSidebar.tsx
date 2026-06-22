@@ -32,7 +32,7 @@ export function PlayPageSidebar() {
     setCurrentIdx,
     pagePolls, pollQuestion, setPollQuestion,
     pollOptionsText, setPollOptionsText,
-    pollBusy, pollError, pollVotes,
+    pollBusy, aiPollBusy, pollError, pollVotes,
     pollSettingsOpen, setPollSettingsOpen,
     pollStarted,
     syncEnabled, syncRole,
@@ -40,7 +40,7 @@ export function PlayPageSidebar() {
     syncPollShowResults, setSyncPollShowResults,
     handleStartPoll, handleStopPoll,
     handleVotePoll, handleResetPollVotes,
-    handleDeletePoll, handleCreatePoll,
+    handleDeletePoll, handleCreatePoll, handleGeneratePollDraft,
     handleSelectDisplayedPoll,
     chatHistory,
     chatInput, setChatInput,
@@ -406,6 +406,14 @@ export function PlayPageSidebar() {
           <div className="space-y-2 border-t border-slate-800 p-2">
             {pollSettingsOpen && (
               <div className="rounded-md border border-slate-800 bg-slate-950/50 p-2">
+                <button
+                  type="button"
+                  onClick={() => void handleGeneratePollDraft()}
+                  disabled={aiPollBusy || !currentPage}
+                  className="mb-2 w-full rounded-md border border-violet-500/50 bg-violet-500/10 px-2 py-1 text-xs text-violet-300 hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {aiPollBusy ? t('play.sidebar.poll.aiDraftGenerating') : t('play.sidebar.poll.aiDraft')}
+                </button>
                 <input
                   value={pollQuestion}
                   onChange={(e) => setPollQuestion(e.target.value)}

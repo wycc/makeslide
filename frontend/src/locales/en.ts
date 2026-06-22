@@ -1061,6 +1061,8 @@ export const en = {
   'play.sidebar.poll.optionsPlaceholder': 'One answer option per line',
   'play.sidebar.poll.processing': 'Processing…',
   'play.sidebar.poll.createAndStart': 'Create and start poll for this page',
+  'play.sidebar.poll.aiDraft': 'AI Draft Poll Question',
+  'play.sidebar.poll.aiDraftGenerating': 'AI generating…',
   'play.sidebar.poll.emptyStarted': 'Polling has started, but this page has no polls yet.',
   'play.sidebar.poll.empty': 'No poll questions have been created for this page yet.',
   'play.sidebar.poll.voteCount': '{count} votes',

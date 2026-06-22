@@ -1061,6 +1061,8 @@ export const zhTW = {
   'play.sidebar.poll.optionsPlaceholder': '每行一個答案選項',
   'play.sidebar.poll.processing': '處理中…',
   'play.sidebar.poll.createAndStart': '建立並開始本頁投票',
+  'play.sidebar.poll.aiDraft': 'AI 草稿投票題',
+  'play.sidebar.poll.aiDraftGenerating': 'AI 生成中…',
   'play.sidebar.poll.emptyStarted': '已開始輪詢，本頁尚無投票。',
   'play.sidebar.poll.empty': '本頁尚無已建立的投票問題。',
   'play.sidebar.poll.voteCount': '{count} 票',

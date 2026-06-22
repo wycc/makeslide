@@ -5,6 +5,7 @@ import {
   createPagePoll,
   deletePagePoll,
   fetchPagePolls,
+  generatePollDraft,
   resetPagePollVotes,
   updatePlaybackSyncState,
   votePagePoll,
@@ -48,6 +49,7 @@ export interface PagePollsState {
   pollOptionsText: string;
   setPollOptionsText: Dispatch<SetStateAction<string>>;
   pollBusy: boolean;
+  aiPollBusy: boolean;
   pollError: string | null;
   setPollError: Dispatch<SetStateAction<string | null>>;
   pollVotes: Record<number, number>;
@@ -55,6 +57,7 @@ export interface PagePollsState {
   setPollSettingsOpen: Dispatch<SetStateAction<boolean>>;
   pollStarted: boolean;
   setPollStarted: Dispatch<SetStateAction<boolean>>;
+  handleGeneratePollDraft: () => Promise<void>;
   handleCreatePoll: () => Promise<void>;
   handleStartPoll: () => void;
   handleStopPoll: () => void;
@@ -90,6 +93,7 @@ export function usePagePolls({
   const [pollQuestion, setPollQuestion] = useState('');
   const [pollOptionsText, setPollOptionsText] = useState('同意\n不同意');
   const [pollBusy, setPollBusy] = useState(false);
+  const [aiPollBusy, setAiPollBusy] = useState(false);
   const [pollError, setPollError] = useState<string | null>(null);
   const [pollVotes, setPollVotes] = useState<Record<number, number>>({});
   const [pollSettingsOpen, setPollSettingsOpen] = useState(false);
@@ -150,6 +154,22 @@ export function usePagePolls({
       if (timer != null) window.clearTimeout(timer);
     };
   }, [shouldFetchPolls, pdfId, currentPage?.page_number]);
+
+  const handleGeneratePollDraft = useCallback(async () => {
+    if (!pdfId || !currentPage) return;
+    setAiPollBusy(true);
+    setPollError(null);
+    try {
+      const draft = await generatePollDraft(pdfId, currentPage.page_number);
+      setPollQuestion(draft.question);
+      setPollOptionsText(draft.options.join('\n'));
+      setPollSettingsOpen(true);
+    } catch (err) {
+      setPollError(err instanceof ApiError ? err.message : 'AI 草稿生成失敗');
+    } finally {
+      setAiPollBusy(false);
+    }
+  }, [pdfId, currentPage]);
 
   const handleCreatePoll = useCallback(async () => {
     if (!pdfId || !currentPage) return;
@@ -333,6 +353,8 @@ export function usePagePolls({
     setPollSettingsOpen,
     pollStarted,
     setPollStarted,
+    aiPollBusy,
+    handleGeneratePollDraft,
     handleCreatePoll,
     handleStartPoll,
     handleStopPoll,
