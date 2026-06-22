@@ -105,6 +105,7 @@ const SaveQuizBodySchema = z
     title: z.string().trim().min(1).max(200),
     prompt: z.string().trim().max(4000).default(''),
     questions: QuizQuestionsSchema,
+    time_limit_seconds: z.number().int().min(0).max(3600).default(0),
   })
   .superRefine((body, ctx) => {
     const sum = explicitScoreSum(body.questions);
@@ -179,6 +180,7 @@ interface QuizSetRow {
   title: string;
   prompt: string;
   questions_json: string;
+  time_limit_seconds: number;
   created_at: string;
   updated_at: string;
 }
@@ -201,6 +203,7 @@ function rowToQuiz(row: QuizSetRow) {
     title: row.title,
     prompt: row.prompt,
     questions: parsed.success ? parsed.data : [],
+    time_limit_seconds: row.time_limit_seconds ?? 0,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -317,7 +320,7 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的測驗'));
     }
     const rows = db
-      .prepare(`SELECT id, pdf_id, title, prompt, questions_json, created_at, updated_at FROM quiz_sets WHERE pdf_id = ? ORDER BY updated_at DESC`)
+      .prepare(`SELECT id, pdf_id, title, prompt, questions_json, time_limit_seconds, created_at, updated_at FROM quiz_sets WHERE pdf_id = ? ORDER BY updated_at DESC`)
       .all(parsed.data.id) as QuizSetRow[];
     return reply.send({ quizzes: rows.map(rowToQuiz) });
   });
@@ -359,8 +362,8 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限為此簡報新增測驗'));
     }
     const now = nowIso();
-    const result = db.prepare(`INSERT INTO quiz_sets (pdf_id, title, prompt, questions_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`).run(parsed.data.id, body.data.title, body.data.prompt, JSON.stringify(normalizeQuestions(body.data.questions)), now, now);
-    const row = db.prepare(`SELECT id, pdf_id, title, prompt, questions_json, created_at, updated_at FROM quiz_sets WHERE id = ?`).get(result.lastInsertRowid) as QuizSetRow;
+    const result = db.prepare(`INSERT INTO quiz_sets (pdf_id, title, prompt, questions_json, time_limit_seconds, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(parsed.data.id, body.data.title, body.data.prompt, JSON.stringify(normalizeQuestions(body.data.questions)), body.data.time_limit_seconds, now, now);
+    const row = db.prepare(`SELECT id, pdf_id, title, prompt, questions_json, time_limit_seconds, created_at, updated_at FROM quiz_sets WHERE id = ?`).get(result.lastInsertRowid) as QuizSetRow;
     return reply.code(201).send(rowToQuiz(row));
   });
 
@@ -375,9 +378,9 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的測驗'));
     }
     const now = nowIso();
-    const result = db.prepare(`UPDATE quiz_sets SET title = ?, prompt = ?, questions_json = ?, updated_at = ? WHERE id = ? AND pdf_id = ?`).run(body.data.title, body.data.prompt, JSON.stringify(normalizeQuestions(body.data.questions)), now, parsed.data.quizId, parsed.data.id);
+    const result = db.prepare(`UPDATE quiz_sets SET title = ?, prompt = ?, questions_json = ?, time_limit_seconds = ?, updated_at = ? WHERE id = ? AND pdf_id = ?`).run(body.data.title, body.data.prompt, JSON.stringify(normalizeQuestions(body.data.questions)), body.data.time_limit_seconds, now, parsed.data.quizId, parsed.data.id);
     if (result.changes === 0) return reply.code(404).send(errorResponse('QUIZ_NOT_FOUND', `Quiz ${parsed.data.quizId} not found`));
-    const row = db.prepare(`SELECT id, pdf_id, title, prompt, questions_json, created_at, updated_at FROM quiz_sets WHERE id = ?`).get(parsed.data.quizId) as QuizSetRow;
+    const row = db.prepare(`SELECT id, pdf_id, title, prompt, questions_json, time_limit_seconds, created_at, updated_at FROM quiz_sets WHERE id = ?`).get(parsed.data.quizId) as QuizSetRow;
     return reply.send(rowToQuiz(row));
   });
 
