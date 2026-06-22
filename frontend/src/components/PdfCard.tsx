@@ -243,7 +243,7 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExpo
         ) : null}
         {!showProcessingOverlay && (pdf.page_count != null || totalAudioDuration) && (
           <div className="absolute bottom-2 left-2 flex items-center gap-1.5 rounded-md bg-slate-900/70 px-2 py-0.5 text-[11px] text-slate-200 opacity-0 backdrop-blur-sm transition-opacity duration-200 group-hover:opacity-100">
-            {pdf.page_count != null && <span>{pdf.page_count}頁</span>}
+            {pdf.page_count != null && <span>{t('card.pageCount').replace('{count}', String(pdf.page_count))}</span>}
             {totalAudioDuration && <span>{totalAudioDuration}</span>}
           </div>
         )}
