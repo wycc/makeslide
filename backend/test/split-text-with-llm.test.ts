@@ -154,6 +154,71 @@ test('splitTextWithLlm relaxes outline bullet count to 1~2 when Takahashi-style 
   }
 });
 
+test('splitTextWithLlm outline-first path is not confused by a bullet containing an embedded "Slide N:"-looking line', async () => {
+  // Regression test: `buildOutlineFromFullText()` used to render its
+  // structured `slides` result into a flat `Slide N: title\n- bullet...`
+  // text blob and then hand it back to `splitBySlideMarkers()` to re-parse
+  // into pages. That re-parse is unsafe: zod's bullet schema only requires
+  // a non-empty string, so a bullet can legitimately contain an embedded
+  // newline whose first line happens to match the `Slide N:` marker
+  // pattern (e.g. a bullet that quotes example text). When that happened,
+  // the re-parser discovered more "pages" than `slides.length`, which
+  // silently shifted every subsequent page's `sourcePdfPages` (and content)
+  // out of alignment. The fix builds pages directly from the structured
+  // `slides` array instead of re-parsing rendered text.
+  const pages = [
+    pad('第一頁說明簡介，介紹本文主旨。', 300),
+    pad('第二頁舉例說明教學範例，內容引用了示範文字。', 300),
+    pad('第三頁總結結論，回顧重點與展望。', 300),
+  ];
+  const rawText = buildTextWithPdfPageMarkers(pages);
+  assert.ok(rawText.length >= 800, 'fixture text should be long enough to trigger outline-first strategy');
+
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  slides: [
+                    { title: '簡介', bullets: ['本文介紹簡報製作'], source_pages: [1] },
+                    {
+                      title: '教學範例',
+                      bullets: ['範例如下：\nSlide 5: 這是被引用的範例標題\n後面還有更多說明文字'],
+                      source_pages: [2],
+                    },
+                    { title: '結論', bullets: ['總結重點'], source_pages: [3] },
+                  ],
+                }),
+              },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+        }),
+      },
+    },
+  } as never);
+
+  try {
+    const result = await splitTextWithLlm(rawText);
+
+    // Must stay at exactly 3 pages — the embedded "Slide 5:"-looking line
+    // inside the second bullet must NOT be mistaken for a 4th page boundary.
+    assert.equal(result.pages.length, 3);
+    assert.deepEqual(result.pages.map((p) => p.sourcePdfPages), [[1], [2], [3]]);
+    assert.match(result.pages[0]!.content, /簡介/);
+    assert.match(result.pages[1]!.content, /教學範例/);
+    assert.match(result.pages[1]!.content, /Slide 5/);
+    assert.match(result.pages[2]!.content, /結論/);
+    assert.equal(result.pages.map((p) => p.pageNumber).join(','), '1,2,3');
+  } finally {
+    setOpenAIClientForTest(null);
+  }
+});
+
 test('splitTextWithLlm outline-first path leaves sourcePdfPages undefined when input has no markers', async () => {
   const text = pad('一般文字內容，沒有任何頁碼標記，純粹是長篇敘述。', 900);
   assert.equal(containsPdfPageMarkers(text), false);
