@@ -216,6 +216,8 @@ export default function HomePage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [batchDeleting, setBatchDeleting] = useState(false);
   const [batchMoving, setBatchMoving] = useState(false);
+  const [batchTagInput, setBatchTagInput] = useState('');
+  const [batchTagging, setBatchTagging] = useState(false);
 
   const toggleSelected = useCallback((id: string) => {
     setSelectedIds((prev) => {
@@ -336,6 +338,32 @@ export default function HomePage() {
       showToast(t('home.batchMoveDone').replace('{count}', String(ids.length)).replace('{category}', targetCategory));
     }
   }, [selectedIds, batchMoving, showToast, t]);
+
+  const handleBatchSetTags = useCallback(async (newTag: string) => {
+    const tag = newTag.trim();
+    if (!tag || selectedIds.size === 0 || batchTagging) return;
+    setBatchTagging(true);
+    const ids = [...selectedIds];
+    let failed = 0;
+    for (const id of ids) {
+      const current = items.find((p) => p.id === id);
+      const existingTags = current?.tags ?? '';
+      const tagList = existingTags.split(',').map((s) => s.trim()).filter(Boolean);
+      if (!tagList.includes(tag)) tagList.push(tag);
+      const next = tagList.join(',');
+      try {
+        await updatePdfTags(id, next);
+        setItems((prev) => prev.map((p) => p.id === id ? { ...p, tags: next } : p));
+      } catch { failed++; }
+    }
+    setBatchTagging(false);
+    setBatchTagInput('');
+    if (failed > 0) {
+      showToast(t('home.batchSetTagsFailed').replace('{failed}', String(failed)));
+    } else {
+      showToast(t('home.batchSetTagsDone').replace('{count}', String(ids.length)).replace('{tag}', tag));
+    }
+  }, [selectedIds, batchTagging, items, setItems, showToast, t]);
 
   const updateCategoryFilter = useCallback((nextFilter: string) => {
     setCategoryFilter(nextFilter);
@@ -1115,6 +1143,15 @@ export default function HomePage() {
                       <option key={c} value={c}>{c || t('home.listUncategorized')}</option>
                     ))}
                   </select>
+                  <input
+                    type="text"
+                    value={batchTagInput}
+                    onChange={(e) => setBatchTagInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && batchTagInput.trim()) void handleBatchSetTags(batchTagInput); }}
+                    disabled={batchTagging}
+                    placeholder={batchTagging ? '…' : t('home.batchSetTags')}
+                    className="w-28 rounded-full border border-emerald-500/60 bg-emerald-500/15 px-2 py-0.5 text-xs text-emerald-300 placeholder-emerald-600 transition focus:outline-none focus:ring-1 focus:ring-emerald-400 disabled:opacity-50"
+                  />
                 </>
               )}
             </div>
