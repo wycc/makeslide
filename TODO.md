@@ -399,8 +399,23 @@
 
 ## 新增可執行項目（第十輪）
 
-- [ ] 觀看進度重置：新增 `DELETE /api/pdfs/:id/watch-progress` 後端端點（限擁有者），清除該簡報所有 `page_watch_progress` 紀錄；前端在課後報告面板或播放頁設定區加入「重置觀看進度」按鈕（含確認提示）；補後端測試 200 / 403 / 404。
-- [ ] 播放頁下載本頁圖片：在播放頁 header 匯出區加入「下載本頁圖片」`<a download>` 連結，指向 `currentPage.image_path` 對應的後端圖片路徑；純前端改動，補 i18n `play.header.downloadCurrentImage`。
-- [ ] 首頁批次修改分類：首頁多選模式下，除「刪除已選」外加入「移動到分類」下拉選單（列出現有分類），選擇後批次呼叫 `PATCH /api/pdfs/:id/category`；補 i18n `home.batchMoveToCategory/batchMoveDone`。
-- [ ] 播放頁自動播放倒數 UI：`autoAdvance` 開啟時，音訊播完前 3 秒在投影片右下角顯示倒數圓圈（3→2→1），純前端 CSS animation；補 i18n `play.slidePanel.autoAdvanceCountdown`。
-- [ ] 測驗複製到另一份簡報：在測驗列表頁（`QuizBuilderPage`）每個測驗旁加入「複製到…」按鈕，呼叫後端新增 `POST /api/pdfs/:id/quiz-sets/:qid/copy-to/:targetId` 端點（複製 `questions_json` 與標題到目標簡報）；前端顯示目標簡報下拉清單；補後端測試。
+- [x] 觀看進度重置：新增 `DELETE /api/pdfs/:id/watch-progress` 後端端點（限擁有者），清除該簡報所有 `page_watch_progress` 紀錄；前端在課後報告面板或播放頁設定區加入「重置觀看進度」按鈕（含確認提示）；補後端測試 200 / 403 / 404。
+  - 實作說明（2026-06-23）：`watchProgress.ts` 新增 `DELETE /api/pdfs/:id/watch-progress`（owner-only，回傳 `{ ok, deleted_rows }`），`watch-progress.test.ts` 補 3 個測試（200/403/404）；`resetWatchProgress()` API 函式；`PostClassReportPanel` 新增玫瑰色「重置觀看進度」按鈕（window.confirm + 3 秒 flash）。分支 `feat/watch-progress-reset`，已 merge 回 master。
+- [x] 播放頁下載本頁圖片：在播放頁 header 匯出區加入「下載本頁圖片」`<a download>` 連結，指向 `currentPage.image_path` 對應的後端圖片路徑；純前端改動，補 i18n `play.header.downloadCurrentImage`。
+  - 實作說明（2026-06-23）：`PlayPageHeader` 在匯出區最前加入 `<a download>` 連結（`currentPage.image_url`），`currentPage` 無圖時隱藏；i18n `play.header.downloadCurrentImage`。分支 `feat/watch-progress-reset`（同批），已 merge 回 master。
+- [x] 首頁批次修改分類：首頁多選模式下，除「刪除已選」外加入「移動到分類」下拉選單（列出現有分類），選擇後批次呼叫 `PATCH /api/pdfs/:id/category`；補 i18n `home.batchMoveToCategory/batchMoveDone`。
+  - 實作說明（2026-06-23）：`HomePage.tsx` 新增 `batchMoving` state、`handleBatchMoveCategory` callback（逐一呼叫 `updatePdfCategory`，完成後清空選取）；多選工具列加入 sky 色 `<select>`，列出 `allCategories`（排除 `__recent__`）；i18n `home.batchMoveDone/batchMoveFailed/batchMoveToCategory`。分支 `feat/batch-move-category`，已 merge 回 master。
+- [x] 播放頁自動播放倒數 UI：`autoAdvance` 開啟時，音訊播完前 3 秒在投影片右下角顯示倒數圓圈（3→2→1），純前端 CSS animation；補 i18n `play.slidePanel.autoAdvanceCountdown`。
+  - 實作說明（2026-06-23）：`PlayPageSlidePanel.tsx` 新增 `autoAdvanceCountdown` useMemo（`remaining ≤ 3` 且 `autoAdvance` 開啟時回傳 `Math.ceil(remaining)`）；字幕下方加入 `h-10 w-10` emerald 圓形倒數 badge。分支 `feat/auto-advance-countdown`，已 merge 回 master。
+- [x] 測驗複製到另一份簡報：在測驗列表頁（`QuizBuilderPage`）每個測驗旁加入「複製到…」按鈕，呼叫後端新增 `POST /api/pdfs/:id/quiz-sets/:qid/copy-to/:targetId` 端點（複製 `questions_json` 與標題到目標簡報）；前端顯示目標簡報下拉清單；補後端測試。
+  - 實作說明（2026-06-23）：`quizzes.ts` 新增 `POST .../copy-to/:targetId` 端點（讀取來源 quiz，寫入目標 PDF，201 回傳新 quiz 物件）；3 個後端測試（201/403/404）；前端新增 `copyQuizSetTo()` API 函式，`QuizBuilderPage` 新增 `allPdfs` state（mount 時 fetchPdfs）、`handleCopyQuizTo`、每個 quiz 按鈕列加入 sky 色「複製到…」select；i18n `quiz.copyTo/copyDone/copyFailed`。分支 `feat/quiz-copy-to-pdf`，已 merge 回 master。
+
+## 工作記錄（第十輪）
+
+| 日期 | 工作摘要 | 分支 |
+|------|---------|------|
+| 2026-06-23 | 觀看進度重置：DELETE /watch-progress（owner-only），PostClassReportPanel 重置按鈕，3 個測試通過 | feat/watch-progress-reset（已 merge） |
+| 2026-06-23 | 播放頁下載本頁圖片：PlayPageHeader 匯出區 `<a download>` 連結指向 currentPage.image_url；i18n downloadCurrentImage | feat/watch-progress-reset（已 merge） |
+| 2026-06-23 | 首頁批次修改分類：多選模式加 sky 色 `<select>` 下拉，handleBatchMoveCategory 逐一 PATCH；i18n batchMove* | feat/batch-move-category（已 merge） |
+| 2026-06-23 | 播放頁自動播放倒數 UI：autoAdvanceCountdown useMemo，remaining≤3 時顯示 emerald 圓形倒數 badge | feat/auto-advance-countdown（已 merge） |
+| 2026-06-23 | 測驗複製到另一份簡報：POST copy-to/:targetId 端點，3 個測試；QuizBuilderPage「複製到…」select；i18n quiz.copy* | feat/quiz-copy-to-pdf（已 merge） |
