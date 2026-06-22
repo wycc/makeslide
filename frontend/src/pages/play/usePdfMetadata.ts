@@ -56,6 +56,9 @@ export interface PdfMetadataState {
   setShareError: Dispatch<SetStateAction<string | null>>;
   shareAccess: ShareAccessMode;
   setShareAccess: Dispatch<SetStateAction<ShareAccessMode>>;
+  shareExpiresDays: number | undefined;
+  setShareExpiresDays: Dispatch<SetStateAction<number | undefined>>;
+  shareExpiresAt: string | null;
   shareBusy: boolean;
   shareDialogOpen: boolean;
   setShareDialogOpen: Dispatch<SetStateAction<boolean>>;
@@ -103,6 +106,8 @@ export function usePdfMetadata({
   const [shareMessage, setShareMessage] = useState<string | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareAccess, setShareAccess] = useState<ShareAccessMode>('read_only');
+  const [shareExpiresDays, setShareExpiresDays] = useState<number | undefined>(undefined);
+  const [shareExpiresAt, setShareExpiresAt] = useState<string | null>(null);
   const [shareBusy, setShareBusy] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
@@ -218,9 +223,10 @@ export function usePdfMetadata({
     setShareMessage(null);
     setShareError(null);
     try {
-      const res = await createPdfShare(pdfId, shareAccess);
+      const res = await createPdfShare(pdfId, shareAccess, shareExpiresDays);
       const absoluteUrl = `${window.location.origin}${res.share_url}`;
       setShareUrl(absoluteUrl);
+      setShareExpiresAt(res.expires_at ?? null);
       setDetail((prev) => prev ? { ...prev, visibility: res.visibility ?? (shareAccess === 'editable' ? 'public_editable' : 'public'), updated_at: res.updated_at } : prev);
       setShareDialogOpen(true);
       const copyResult = await copyTextToClipboard(absoluteUrl);
@@ -240,7 +246,7 @@ export function usePdfMetadata({
     } finally {
       setShareBusy(false);
     }
-  }, [pdfId, shareAccess, isReadOnlyProcessing, setDetail, t]);
+  }, [pdfId, shareAccess, shareExpiresDays, isReadOnlyProcessing, setDetail, t]);
 
   const handleMakeSharePrivate = useCallback(async () => {
     if (!pdfId || isReadOnlyProcessing) return;
@@ -320,6 +326,9 @@ export function usePdfMetadata({
     setShareError,
     shareAccess,
     setShareAccess,
+    shareExpiresDays,
+    setShareExpiresDays,
+    shareExpiresAt,
     shareBusy,
     shareDialogOpen,
     setShareDialogOpen,

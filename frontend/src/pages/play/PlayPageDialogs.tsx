@@ -29,7 +29,9 @@ export function PlayPageDialogs() {
     regenAllBusy, regenJobRunning, regenAnySelected,
     handleConfirmRegenerate,
     // Share
-    shareDialogOpen, setShareDialogOpen, shareUrl, setShareMessage, setShareError,
+    shareDialogOpen, setShareDialogOpen, shareUrl, shareExpiresAt,
+    shareExpiresDays, setShareExpiresDays,
+    setShareMessage, setShareError,
     // AddPages
     showAddPagesModal, setShowAddPagesModal, pdfId, currentPage, totalPages,
     reloadDetail, setCurrentIdx,
@@ -105,6 +107,9 @@ export function PlayPageDialogs() {
       {shareDialogOpen ? (
         <ShareDialog
           shareUrl={shareUrl}
+          expiresAt={shareExpiresAt}
+          selectedExpiresDays={shareExpiresDays}
+          onExpiresDaysChange={setShareExpiresDays}
           onCopySuccess={() => {
             setShareMessage(t('play.shareDialog.copySuccessMessage'));
             setShareError(null);

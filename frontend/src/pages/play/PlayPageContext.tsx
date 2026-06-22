@@ -309,6 +309,9 @@ export interface PlayPageContextValue {
   shareUrl: string;
   shareAccess: ShareAccessMode;
   setShareAccess: Dispatch<SetStateAction<ShareAccessMode>>;
+  shareExpiresDays: number | undefined;
+  setShareExpiresDays: Dispatch<SetStateAction<number | undefined>>;
+  shareExpiresAt: string | null;
   shareBusy: boolean;
   playQrCodeUrl: string | null;
   handleCreateShareLink: () => void;

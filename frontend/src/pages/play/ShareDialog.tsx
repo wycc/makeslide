@@ -4,14 +4,24 @@ import { useI18n } from '../../i18n';
 
 interface ShareDialogProps {
   shareUrl: string;
+  expiresAt?: string | null;
+  selectedExpiresDays: number | undefined;
+  onExpiresDaysChange: (days: number | undefined) => void;
   onCopySuccess: () => void;
   onCopyError: () => void;
   onClose: () => void;
 }
 
-export function ShareDialog({ shareUrl, onCopySuccess, onCopyError, onClose }: ShareDialogProps) {
+export function ShareDialog({ shareUrl, expiresAt, selectedExpiresDays, onExpiresDaysChange, onCopySuccess, onCopyError, onClose }: ShareDialogProps) {
   const { t } = useI18n();
   const [copyStatus, setCopyStatus] = useState<'idle' | 'success' | 'error'>('idle');
+
+  const EXPIRY_OPTIONS: Array<{ label: string; value: number | undefined }> = [
+    { label: t('play.shareDialog.expiryNever'), value: undefined },
+    { label: t('play.shareDialog.expiry7days'), value: 7 },
+    { label: t('play.shareDialog.expiry30days'), value: 30 },
+    { label: t('play.shareDialog.expiry90days'), value: 90 },
+  ];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
@@ -24,6 +34,28 @@ export function ShareDialog({ shareUrl, onCopySuccess, onCopyError, onClose }: S
           onFocus={(e) => e.currentTarget.select()}
           className="mt-3 h-24 w-full resize-none rounded-md border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs text-emerald-200 outline-none"
         />
+        <div className="mt-3 flex items-center gap-2">
+          <label className="text-xs text-slate-400">{t('play.shareDialog.expiryLabel')}</label>
+          <select
+            value={selectedExpiresDays ?? ''}
+            onChange={(e) => {
+              const val = e.currentTarget.value;
+              onExpiresDaysChange(val === '' ? undefined : Number(val));
+            }}
+            className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-200"
+          >
+            {EXPIRY_OPTIONS.map((opt) => (
+              <option key={String(opt.value)} value={opt.value ?? ''}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          {expiresAt ? (
+            <span className="text-xs text-amber-300">
+              {t('play.shareDialog.expiresAt').replace('{date}', new Date(expiresAt).toLocaleDateString())}
+            </span>
+          ) : null}
+        </div>
         {copyStatus === 'error' ? <p className="mt-2 text-xs text-rose-300">{t('play.shareDialog.copyFailed')}</p> : null}
         <div className="mt-4 flex items-center justify-end gap-2">
           <button
