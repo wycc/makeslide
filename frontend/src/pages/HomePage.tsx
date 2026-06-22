@@ -35,6 +35,9 @@ const CUSTOM_CATEGORIES_STORAGE_KEY = 'makeslide.home.customCategories';
 const TITLE_FILTER_STORAGE_KEY = 'makeslide.home.titleFilter';
 const SORT_MODE_STORAGE_KEY = 'makeslide.home.sortMode';
 const FAVORITES_STORAGE_KEY = 'makeslide.favorites';
+const VIEW_MODE_STORAGE_KEY = 'makeslide.home.viewMode';
+
+type ViewMode = 'grid' | 'list';
 
 type SortMode = 'title_asc' | 'created_desc' | 'updated_desc' | 'page_count_desc' | 'audio_desc' | 'audio_asc';
 
@@ -162,6 +165,13 @@ export default function HomePage() {
       return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
     } catch { return new Set(); }
   });
+  const [viewMode, setViewMode] = useState<ViewMode>(() =>
+    localStorage.getItem(VIEW_MODE_STORAGE_KEY) === 'list' ? 'list' : 'grid'
+  );
+  const updateViewMode = (mode: ViewMode) => {
+    localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode);
+    setViewMode(mode);
+  };
   const [continuingPdfId, setContinuingPdfId] = useState<string | null>(null);
   const [isImportingZip, setIsImportingZip] = useState(false);
   const [zipImportProgress, setZipImportProgress] = useState(0);
@@ -862,6 +872,26 @@ export default function HomePage() {
                   <option value="audio_asc">{t('home.sort.audioDurationAsc')}</option>
                 </select>
               </label>
+              <div className="flex items-end gap-1">
+                <button
+                  type="button"
+                  onClick={() => updateViewMode('grid')}
+                  className={`rounded p-2 text-sm transition ${viewMode === 'grid' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:bg-slate-800'}`}
+                  title={t('home.viewGrid')}
+                  aria-label={t('home.viewGrid')}
+                >
+                  ⊞
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateViewMode('list')}
+                  className={`rounded p-2 text-sm transition ${viewMode === 'list' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:bg-slate-800'}`}
+                  title={t('home.viewList')}
+                  aria-label={t('home.viewList')}
+                >
+                  ☰
+                </button>
+              </div>
             </div>
             <p className="mt-3 text-xs text-slate-400" aria-live="polite">
               {visibleSummary}
@@ -948,26 +978,51 @@ export default function HomePage() {
                     </>
                   )}
                 </div>
-                <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
-                  {group.items.map((pdf) => (
-                    <PdfCard
-                      key={pdf.id}
-                      pdf={pdf}
-                      categories={allCategories}
-                      onDelete={handleDelete}
-                      onDuplicate={handleDuplicate}
-                      onExport={handleExport}
-                      onCategoryChange={handleCategoryChange}
-                      onTagsEdit={authStatus?.user?.sub === pdf.owner_sub ? handleTagsEdit : undefined}
-                      onContinue={handleContinueGeneration}
-                      continuing={continuingPdfId === pdf.id}
-                      onClick={handleCardClick}
-                      currentUserSub={authStatus?.user?.sub ?? null}
-                      isFavorited={favorites.has(pdf.id)}
-                      onToggleFavorite={handleToggleFavorite}
-                    />
-                  ))}
-                </div>
+                {viewMode === 'list' ? (
+                  <div className="flex flex-col divide-y divide-slate-800 rounded-lg border border-slate-800">
+                    {group.items.map((pdf) => (
+                      <div
+                        key={pdf.id}
+                        className="flex cursor-pointer items-center gap-3 px-4 py-3 transition hover:bg-slate-800/50"
+                        onClick={() => handleCardClick(pdf)}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-slate-100">{pdf.title ?? pdf.id}</p>
+                          <p className="text-xs text-slate-400">{t('home.listPages').replace('{count}', String(pdf.page_count))} · {pdf.category ?? t('home.listUncategorized')}</p>
+                        </div>
+                        <button
+                          type="button"
+                          className="shrink-0 rounded p-1 text-slate-400 transition hover:bg-slate-700 hover:text-rose-400"
+                          onClick={(e) => { e.stopPropagation(); void handleDelete(pdf.id); }}
+                          aria-label={t('card.delete')}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
+                    {group.items.map((pdf) => (
+                      <PdfCard
+                        key={pdf.id}
+                        pdf={pdf}
+                        categories={allCategories}
+                        onDelete={handleDelete}
+                        onDuplicate={handleDuplicate}
+                        onExport={handleExport}
+                        onCategoryChange={handleCategoryChange}
+                        onTagsEdit={authStatus?.user?.sub === pdf.owner_sub ? handleTagsEdit : undefined}
+                        onContinue={handleContinueGeneration}
+                        continuing={continuingPdfId === pdf.id}
+                        onClick={handleCardClick}
+                        currentUserSub={authStatus?.user?.sub ?? null}
+                        isFavorited={favorites.has(pdf.id)}
+                        onToggleFavorite={handleToggleFavorite}
+                      />
+                    ))}
+                  </div>
+                )}
               </section>
             ))}
           </div>
