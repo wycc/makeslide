@@ -1,5 +1,39 @@
 # MakeSlide 功能說明
 
+## AI 導師「問這一頁」MVP
+
+### 功能目的
+
+教學現場，學生在觀看簡報時常有針對當前頁面內容的疑問。過去只有教師（master）在同步課堂中才能觸發 AI 統一回覆全班學生提問。這次補強讓每位**已登入**的學習者，可以在任何時間對目前頁面**個別提問**，由 AI 依據頁面文字與逐字稿給出引用來源的回答，不需要進入同步課堂。
+
+匿名訪客（未登入的分享連結使用者）無法使用此功能，避免資源濫用。
+
+### 使用方式
+
+1. 以登入帳號（擁有者或具讀取權限者）開啟播放頁。
+2. 切換至右側「🎓 問答」分頁（`activeTab = 'qa'`）。
+3. 找到「🎓 AI 導師問這一頁」區塊，在輸入框輸入問題（最多 500 字）。
+4. 按下「提問」或按 Enter（不需 Shift），AI 會依據：
+   - 本頁頁面文字（`text_path`）
+   - 本頁逐字稿（`script_path`）
+   回答問題，並在答案中以括號標示引用來源，例如「（來自逐字稿）」或「（來自頁面文字）」。
+5. 若頁面沒有相關內容，AI 會誠實說明而非捏造答案。
+6. 點「清除」可清空問題與答案，換下一個問題。
+
+未登入時，面板顯示「請先登入才能使用 AI 導師問答」。
+
+### 技術重點
+
+- `backend/src/routes/pdfs/page-operations.ts` 新增 `POST /api/pdfs/:id/pages/:n/ask` 端點，要求 `sub !== null`（登入驗證），並利用既有 `canReadPdf` 與 `hasShareAccess` 進行讀取權限判斷；透過 `callChatJSON` 以頁面文字和逐字稿為上下文呼叫 LLM，系統提示詞指示 AI 標示引用來源。
+- `backend/src/routes/pdfs/detail.ts` 在 PDF 詳情回應中加入 `is_authenticated` 布林欄位（`Boolean(sub)`），讓前端無需額外 API 呼叫即可判斷使用者是否登入。
+- `frontend/src/types.ts` 新增 `PdfDetail.is_authenticated` 欄位型別。
+- `frontend/src/lib/api/pdfs.ts` 新增 `askPageQuestion(id, pageNumber, question, shareToken?)` API 呼叫函式。
+- `frontend/src/pages/play/usePageAsk.ts` 封裝問答 state（input、answer、busy、error）與 `handleAskPage`、`clearPageAsk` handler。
+- `frontend/src/pages/play/PageAskPanel.tsx` 呈現問答介面：未登入時顯示提示訊息；登入後顯示輸入框、提問按鈕與 AI 答案區塊。
+- `frontend/src/pages/play/PlayPageSidebar.tsx` 在 QA 分頁的編輯者 AI 聊天上方插入 `<PageAskPanel />`，讓學習者與教師都能使用。
+
+---
+
 ## 播放頁課後報告 MVP
 
 ### 功能目的
