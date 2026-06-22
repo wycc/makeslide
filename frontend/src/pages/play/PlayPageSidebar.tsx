@@ -1,11 +1,71 @@
+import { useState, useEffect, useRef } from 'react';
 import { useI18n } from '../../i18n';
 import { debugLog, debugWarn } from '../../lib/debugLog';
 import { calculateWatchProgressPercent, formatWatchProgressBadgeCount } from '../../lib/watchProgress';
+import { updatePageNote } from '../../lib/api/pdfs';
 import { usePlayPageContext } from './PlayPageContext';
 import { PageAskPanel } from './PageAskPanel';
 import { QualityCheckPanel } from './QualityCheckPanel';
 
 const IMAGE_MSG_PREFIX = '[image] ';
+
+function PageNoteSection() {
+  const { t } = useI18n();
+  const { currentPage, pdfId, isReadOnlyProcessing } = usePlayPageContext();
+  const [noteText, setNoteText] = useState(currentPage?.page_notes ?? '');
+  const [noteBusy, setNoteBusy] = useState(false);
+  const [noteMsg, setNoteMsg] = useState<string | null>(null);
+  const savingRef = useRef(false);
+
+  useEffect(() => {
+    setNoteText(currentPage?.page_notes ?? '');
+    setNoteMsg(null);
+  }, [currentPage?.page_number]);
+
+  const handleBlur = async () => {
+    if (!pdfId || !currentPage || savingRef.current) return;
+    const trimmed = noteText.trim();
+    if (trimmed === (currentPage.page_notes ?? '')) return;
+    savingRef.current = true;
+    setNoteBusy(true);
+    try {
+      await updatePageNote(pdfId, currentPage.page_number, trimmed);
+      setNoteMsg(t('play.sidebar.noteSaved'));
+      setTimeout(() => setNoteMsg(null), 2000);
+    } catch {
+      setNoteMsg(t('play.sidebar.noteSaveFailed'));
+    } finally {
+      setNoteBusy(false);
+      savingRef.current = false;
+    }
+  };
+
+  if (!currentPage || isReadOnlyProcessing) return null;
+
+  return (
+    <section className="rounded-lg border border-slate-800 bg-slate-900/40">
+      <div className="border-b border-slate-800 px-4 py-2">
+        <h2 className="text-sm font-semibold text-slate-300">📝 {t('play.sidebar.pageNote')}</h2>
+      </div>
+      <div className="p-3">
+        <textarea
+          value={noteText}
+          onChange={(e) => setNoteText(e.target.value)}
+          onBlur={() => void handleBlur()}
+          placeholder={t('play.sidebar.pageNotePlaceholder')}
+          rows={3}
+          maxLength={5000}
+          className="w-full resize-none rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 outline-none focus:border-indigo-400"
+        />
+        {noteBusy ? (
+          <p className="mt-1 text-[11px] text-slate-400">…</p>
+        ) : noteMsg ? (
+          <p className="mt-1 text-[11px] text-emerald-300">{noteMsg}</p>
+        ) : null}
+      </div>
+    </section>
+  );
+}
 
 export function PlayPageSidebar() {
   const {
@@ -355,6 +415,8 @@ export function PlayPageSidebar() {
         </div>
       </section>
 
+      <PageNoteSection />
+
       <section className={`rounded-lg border border-slate-800 bg-slate-900/40 ${qaPanelExpanded ? 'md:hidden' : ''}`}>
         <div className="flex items-center justify-between gap-2 px-3 py-2">
           <div className="min-w-0">
@@ -523,6 +585,8 @@ export function PlayPageSidebar() {
       <PageAskPanel />
 
       <QualityCheckPanel />
+
+      <PageNoteSection />
 
       <section className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-lg border border-slate-800 bg-slate-900/40">
       <div className="border-b border-slate-800 px-4 py-3">

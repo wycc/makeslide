@@ -575,6 +575,11 @@ function migrate(): void {
     logger.info('Added column pdfs.description');
   }
 
+  if (!columnExists('pages', 'page_notes')) {
+    db.exec(`ALTER TABLE pages ADD COLUMN page_notes TEXT NOT NULL DEFAULT ''`);
+    logger.info('Added column pages.page_notes');
+  }
+
   logger.info({ dbPath: config.dbPath }, 'Database migrations applied');
 }
 
