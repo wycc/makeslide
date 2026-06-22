@@ -871,6 +871,38 @@ export async function fetchPdfReportSummary(id: string): Promise<PdfReportSummar
   return (await resp.json()) as PdfReportSummary;
 }
 
+export interface StudentAttemptQuestionResult {
+  question_id: string;
+  question: string;
+  options: string[];
+  selected: number[];
+  correct_indices: number[];
+  is_correct: boolean;
+}
+
+export interface StudentAttempt {
+  attempt_id: number;
+  quiz_id: number;
+  quiz_title: string;
+  score: number | null;
+  submitted_at: string;
+  question_results: StudentAttemptQuestionResult[];
+}
+
+export interface StudentRecord {
+  client_id: string;
+  attempt_count: number;
+  average_score: number | null;
+  attempts: StudentAttempt[];
+}
+
+export async function fetchPdfStudentRecords(id: string): Promise<StudentRecord[]> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/report/students`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  const data = (await resp.json()) as { students?: StudentRecord[] };
+  return Array.isArray(data.students) ? data.students : [];
+}
+
 export async function askPageQuestion(
   id: string,
   pageNumber: number,
