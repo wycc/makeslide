@@ -146,6 +146,14 @@ export function PlayPageHeader() {
                       <span className="ml-2 text-slate-400">{t('play.sync.aiAnswerShortcut')}</span>
                     </div>
                     <div className="flex gap-2">
+                      <Link
+                        to={`/remote/${encodeURIComponent(pdfId ?? '')}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="rounded border border-violet-500/50 bg-violet-500/15 px-2 py-1 text-violet-100"
+                      >
+                        {t('play.header.remoteController')}
+                      </Link>
                       <button
                         type="button"
                         onClick={() => void handleToggleDisplayedQuestion()}
