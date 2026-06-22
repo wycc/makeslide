@@ -619,6 +619,7 @@ export const zhTW = {
   'play.slidePanel.classroomAwaitingNextMessage': '本頁播放完畢，停留在目前頁。按空白鍵進入下一頁並播放。',
   'play.slidePanel.prevPage': '上一頁',
   'play.slidePanel.nextPage': '下一頁',
+  'play.slidePanel.jumpToPage': '點擊輸入頁碼跳轉',
   'play.slidePanel.audioRetry': '語音載入失敗，點擊重試',
   'play.slidePanel.noAudio': '此頁無語音',
   'play.slidePanel.nextAndPlay': '下一頁並播放',
