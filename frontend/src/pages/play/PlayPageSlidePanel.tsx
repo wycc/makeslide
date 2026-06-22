@@ -76,10 +76,11 @@ export function PlayPageSlidePanel() {
     detail,
     displayedImageSrc,
     playbackImageSrc,
-    isPlaying, playPause,
+    isPlaying, setIsPlaying, playPause,
     slideAnimationPlaying,
     currentTime, duration,
-    finished,
+    finished, setFinished,
+    setCurrentIdx,
     playbackRate, setPlaybackRate,
     showSubtitle, setShowSubtitle,
     playbackSettingsOpen, setPlaybackSettingsOpen,
@@ -459,11 +460,35 @@ export function PlayPageSlidePanel() {
       {/* Controls */}
       <section className={transcriptFocusMode ? 'absolute right-4 top-44 z-20 w-64 rounded-lg border border-slate-700 bg-slate-950/95 shadow-2xl md:top-56 md:w-80' : 'border-t border-slate-800 bg-slate-900/50'}>
         <div className={transcriptFocusMode ? 'flex flex-col gap-2 px-3 py-3' : 'flex flex-col gap-3 px-4 py-4'}>
-      {finished && (
-        <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
-          {t('play.slidePanel.finished')}
-        </div>
-      )}
+      {finished && (() => {
+        const handleReplay = () => {
+          setCurrentIdx(0);
+          setIsPlaying(true);
+          setFinished(false);
+        };
+        const handleContinue = () => setFinished(false);
+        return (
+          <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
+            <p className="mb-2">{t('play.slidePanel.finished')}</p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleReplay}
+                className="rounded border border-emerald-400/60 bg-emerald-500/20 px-3 py-1 text-xs text-emerald-100 hover:bg-emerald-500/30"
+              >
+                {t('play.slidePanel.replay')}
+              </button>
+              <button
+                type="button"
+                onClick={handleContinue}
+                className="rounded border border-slate-600 bg-slate-800/60 px-3 py-1 text-xs text-slate-300 hover:bg-slate-700"
+              >
+                {t('play.slidePanel.continueManual')}
+              </button>
+            </div>
+          </div>
+        );
+      })()}
       {classroomMode && classroomAwaitingNext && !finished && (
         <div className="rounded-md border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-sm text-amber-100">
           {t('play.slidePanel.classroomAwaitingNextMessage')}
