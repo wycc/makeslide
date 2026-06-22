@@ -216,7 +216,37 @@ test('GET /api/search - private PDF not visible to non-owner', async () => {
   }
 });
 
-// Test 6: Result format is correct
+// Test 6: Description field match
+test('GET /api/search - finds PDF by description keyword', async () => {
+  const pdfId = 'search-test-desc-01';
+  try {
+    const t = new Date().toISOString();
+    db.prepare(`DELETE FROM pdfs WHERE id = ?`).run(pdfId);
+    db.prepare(
+      `INSERT INTO pdfs (id,title,description,original_filename,status,page_count,owner_sub,visibility,created_at,updated_at)
+       VALUES (?,?,?,'desc-test.pdf','ready',1,'search-owner-1','private',?,?)`,
+    ).run(pdfId, '無關標題', '這份說明文件介紹量子運算概念', t, t);
+
+    const app = await buildApp();
+    try {
+      const resp = await app.inject({
+        method: 'GET',
+        url: '/api/search?q=量子運算',
+        headers: OWNER_HEADERS,
+      });
+      assert.equal(resp.statusCode, 200);
+      const body = resp.json() as { results: Array<{ pdf_id: string; match_type: string }> };
+      const descResult = body.results.find((r) => r.pdf_id === pdfId && r.match_type === 'description');
+      assert.ok(descResult, 'Should find a description match');
+    } finally {
+      await app.close();
+    }
+  } finally {
+    db.prepare(`DELETE FROM pdfs WHERE id = ?`).run(pdfId);
+  }
+});
+
+// Test 7: Result format is correct
 test('GET /api/search - result format is correct', async () => {
   const pdfId = 'search-test-format-01';
   try {

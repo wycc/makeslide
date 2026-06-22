@@ -19,7 +19,7 @@ interface SearchResult {
   pdf_id: string;
   pdf_title: string | null;
   page_number: number | null;
-  match_type: 'title' | 'script' | 'text';
+  match_type: 'title' | 'description' | 'script' | 'text';
   snippet: string;
 }
 
@@ -81,12 +81,12 @@ export async function registerSearchRoutes(app: FastifyInstance): Promise<void> 
     // We fetch more than MAX_READABLE_PDFS upfront to account for permission filtering.
     const allPdfs = db
       .prepare(
-        `SELECT id, title, owner_sub, visibility, created_at
+        `SELECT id, title, description, owner_sub, visibility, created_at
          FROM pdfs
          ORDER BY created_at DESC
          LIMIT ?`,
       )
-      .all(MAX_READABLE_PDFS * 10) as Array<Pick<PdfRow, 'id' | 'title' | 'owner_sub' | 'visibility'> & { created_at: string }>;
+      .all(MAX_READABLE_PDFS * 10) as Array<Pick<PdfRow, 'id' | 'title' | 'owner_sub' | 'visibility'> & { created_at: string; description?: string }>;
 
     const readablePdfs = allPdfs
       .filter((row) => canReadPdf(sub, row))
@@ -106,6 +106,21 @@ export async function registerSearchRoutes(app: FastifyInstance): Promise<void> 
           pdf_title: pdf.title ?? null,
           page_number: null,
           match_type: 'title',
+          snippet,
+        });
+      }
+
+      if (results.length >= limit) break;
+
+      // 1b. Description match
+      const descriptionLower = (pdf.description ?? '').toLowerCase();
+      if (descriptionLower.includes(keyword)) {
+        const snippet = extractSnippet(pdf.description ?? '', q);
+        results.push({
+          pdf_id: pdf.id,
+          pdf_title: pdf.title ?? null,
+          page_number: null,
+          match_type: 'description',
           snippet,
         });
       }
