@@ -70,6 +70,8 @@ export interface PlayPageContextValue {
   setShowSubtitle: Dispatch<SetStateAction<boolean>>;
   subtitleSize: SubtitleSize;
   setSubtitleSize: Dispatch<SetStateAction<SubtitleSize>>;
+  autoAdvance: boolean;
+  setAutoAdvance: Dispatch<SetStateAction<boolean>>;
   playbackSettingsOpen: boolean;
   setPlaybackSettingsOpen: Dispatch<SetStateAction<boolean>>;
   playbackStatusMessage: string | null;

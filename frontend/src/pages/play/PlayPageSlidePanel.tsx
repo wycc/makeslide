@@ -7,7 +7,7 @@ import { formatTime, formatDurationMs, formatTokenCount, formatCostUsd } from '.
 import { PageTimingChips } from './PageTimingChips';
 import { ApiError, fetchPageGenerationPrompts, fetchPdfRunHistory, fetchPdfSlowArtifacts, figureImageUrl, fetchSyncAttendees } from '../../lib/api';
 import { copyTextToClipboard } from '../../lib/clipboard';
-import { SHOW_SUBTITLE_STORAGE_KEY, SUBTITLE_SIZE_STORAGE_KEY, INTERACTIVE_MODE_STORAGE_KEY, useI18n, type TranslationKey, type SubtitleSize } from '../../i18n';
+import { SHOW_SUBTITLE_STORAGE_KEY, SUBTITLE_SIZE_STORAGE_KEY, AUTO_ADVANCE_STORAGE_KEY, INTERACTIVE_MODE_STORAGE_KEY, useI18n, type TranslationKey, type SubtitleSize } from '../../i18n';
 import { debugLog, debugWarn } from '../../lib/debugLog';
 import { usePlayPageContext } from './PlayPageContext';
 import type { PageArtifact, PipelineRunStatus, PipelineRunSummary, PipelineRunType, PipelineStage, SlowArtifactSummary, TimingEventStatus } from '../../types';
@@ -83,6 +83,7 @@ export function PlayPageSlidePanel() {
     setCurrentIdx,
     playbackRate, setPlaybackRate,
     showSubtitle, setShowSubtitle, subtitleSize, setSubtitleSize,
+    autoAdvance, setAutoAdvance,
     playbackSettingsOpen, setPlaybackSettingsOpen,
     playbackStatusMessage, handleClearPlaybackProgress,
     audioMuted, setAudioMuted,
@@ -693,6 +694,22 @@ export function PlayPageSlidePanel() {
                 </div>
               </div>
             )}
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-950/70 px-3 py-2">
+              <span className="font-semibold text-slate-200">{t('play.controls.autoAdvance')}</span>
+              <label className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-medium text-slate-300 hover:bg-slate-800">
+                <input
+                  type="checkbox"
+                  checked={autoAdvance}
+                  onChange={(event) => {
+                    const next = event.target.checked;
+                    setAutoAdvance(next);
+                    window.localStorage.setItem(AUTO_ADVANCE_STORAGE_KEY, next ? '1' : '0');
+                  }}
+                  className="accent-cyan-500"
+                />
+                {autoAdvance ? 'ON' : 'OFF'}
+              </label>
+            </div>
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-950/70 px-3 py-2">
               <div>
                 <span className="font-semibold text-slate-200">{t('play.playbackProgress.title')}</span>
