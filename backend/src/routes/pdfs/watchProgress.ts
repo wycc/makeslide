@@ -143,7 +143,15 @@ export async function registerWatchProgressRoutes(app: FastifyInstance): Promise
             page_number,
             COUNT(*) AS total_viewers,
             SUM(completed) AS completed_viewers,
-            AVG(CASE WHEN duration_ms IS NOT NULL AND duration_ms > 0 THEN CAST(listened_ms AS REAL) / duration_ms ELSE NULL END) AS avg_listened_ratio
+            -- 個別觀眾的比值用 MIN(..., 1.0) 裁切到 100%：listened_ms 是用前端
+            -- setInterval tick 累積「音訊正在播放」的牆鐘時間（見
+            -- frontend/src/pages/play/useWatchProgress.ts），使用者把同一頁語音重播
+            -- 多次（例如聽到一半倒回開頭重聽，或單純把整段重播兩三次）會讓 listened_ms
+            -- 累積超過 duration_ms；若不裁切，單個這樣的觀眾就能把整頁的平均值推到
+            -- 100% 以上（例如重播 3 次可達 300%），讓 owner 端側邊欄縮圖徽章 tooltip
+            -- 顯示不合理的完成度百分比。裁切後語意改為「平均聽取完整度，上限 100%」，
+            -- 不影響 completed_viewers／total_viewers 等其他既有欄位。
+            AVG(CASE WHEN duration_ms IS NOT NULL AND duration_ms > 0 THEN MIN(CAST(listened_ms AS REAL) / duration_ms, 1.0) ELSE NULL END) AS avg_listened_ratio
           FROM page_watch_progress
          WHERE pdf_id = ?
          GROUP BY page_number

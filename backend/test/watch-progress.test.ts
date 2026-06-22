@@ -187,6 +187,52 @@ test('GET /watch-progress rejects a non-owner/editor and returns correct aggrega
   }
 });
 
+test('GET /watch-progress caps each viewer\'s listened ratio at 1.0 so replaying audio cannot push the average above 100%', async () => {
+  seedWatchProgressPdf('wp-cap-ratio-01', 'public');
+  const app = await buildApp();
+  try {
+    // viewer-1 replayed a 10s clip three times in a row: the frontend's tick-based
+    // listened_ms counter (see frontend/src/pages/play/useWatchProgress.ts) has no
+    // cap relative to duration_ms, so listened_ms can legitimately reach 30000ms for
+    // a 10000ms clip. Without capping the per-row ratio before averaging, this single
+    // viewer would push avg_listened_ratio to 3 (300%).
+    await app.inject({
+      method: 'POST',
+      url: '/api/pdfs/wp-cap-ratio-01/pages/1/watch-progress',
+      headers: OTHER_HEADERS,
+      payload: reportPayload({ viewer_id: 'viewer-1', listened_ms: 30000, tab_hidden_ms: 0, duration_ms: 10000, completed: true }),
+    });
+    // viewer-2 listened to exactly half the clip, to also exercise averaging across
+    // a capped row (1.0) and an uncapped row (0.5): expected average is 0.75, not 1.75.
+    await app.inject({
+      method: 'POST',
+      url: '/api/pdfs/wp-cap-ratio-01/pages/1/watch-progress',
+      headers: OTHER_HEADERS,
+      payload: reportPayload({ viewer_id: 'viewer-2', listened_ms: 5000, tab_hidden_ms: 0, duration_ms: 10000, completed: false }),
+    });
+
+    const allowed = await app.inject({
+      method: 'GET',
+      url: '/api/pdfs/wp-cap-ratio-01/watch-progress',
+      headers: OWNER_HEADERS,
+    });
+    assert.equal(allowed.statusCode, 200);
+    const body = allowed.json() as {
+      pages: Array<{ page_number: number; total_viewers: number; avg_listened_ratio: number | null }>;
+    };
+    const page1 = body.pages[0];
+    assert.equal(page1.total_viewers, 2);
+    assert.ok(page1.avg_listened_ratio !== null);
+    assert.ok(
+      (page1.avg_listened_ratio ?? 0) <= 1,
+      `avg_listened_ratio must never exceed 1.0, got ${page1.avg_listened_ratio}`,
+    );
+    assert.ok(Math.abs((page1.avg_listened_ratio ?? 0) - 0.75) < 1e-6);
+  } finally {
+    await app.close();
+  }
+});
+
 test('POST /pages/:n/watch-progress returns 404 for an unknown pdf and 400 for an invalid body', async () => {
   seedWatchProgressPdf('wp-misc-01', 'public');
   const app = await buildApp();
