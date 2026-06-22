@@ -457,10 +457,10 @@
 
 ## 新增可執行項目（第十二輪）
 
-- [ ] 播放頁行動裝置原生分享：在播放頁 header 分享區偵測 `navigator.share`，若支援則顯示「原生分享」按鈕，呼叫 Web Share API 分享簡報標題與分享連結；不支援時靜默隱藏；純前端，補 i18n `play.header.nativeShare`。
-- [ ] 首頁批次設定標籤：多選模式工具列在「移動分類」下拉旁加入「設定標籤」輸入框（Enter 送出），批次呼叫 `PATCH /api/pdfs/:id/tags` 套用到所有已選 PDF；補 i18n `home.batchSetTags/Done/Failed`。
-- [ ] 課後報告全頁完成率熱力圖：在課後報告面板頁面完成率卡片下方加入全頁熱力圖（每頁一格，顏色依完成率深淺），補 i18n `play.report.completionHeatmap`。
-- [ ] 同步問答課後 AI 摘要：在 master 模式的學生提問列表旁加入「AI 摘要所有問題」按鈕，呼叫後端新增的 `POST /api/pdfs/:id/sync/summarize-questions` 端點（彙整所有 follower questions 交給 LLM 產出摘要），回傳 Markdown 摘要；補後端測試 200/403/400（無問題）。
+- [x] 播放頁行動裝置原生分享：在播放頁 header 分享區偵測 `navigator.share`，若支援則顯示「原生分享」按鈕，呼叫 Web Share API 分享簡報標題與分享連結；不支援時靜默隱藏；純前端，補 i18n `play.header.nativeShare`。→ feat/native-share（已 merge）
+- [x] 首頁批次設定標籤：多選模式工具列在「移動分類」下拉旁加入「設定標籤」輸入框（Enter 送出），批次呼叫 `PATCH /api/pdfs/:id/tags` 套用到所有已選 PDF；補 i18n `home.batchSetTags/Done/Failed`。→ feat/batch-set-tags（已 merge）
+- [x] 課後報告全頁完成率熱力圖：在課後報告面板頁面完成率卡片下方加入全頁熱力圖（每頁一格，顏色依完成率深淺），補 i18n `play.report.completionHeatmap`。→ feat/report-completion-heatmap（已 merge）
+- [x] 同步問答課後 AI 摘要：在 master 模式的學生提問列表旁加入「AI 摘要所有問題」按鈕，呼叫後端新增的 `POST /api/pdfs/:id/sync/questions/summarize` 端點，回傳 Markdown 摘要顯示於紫色卡片。→ feat/sync-qa-summary（已 merge）
 - [ ] 播放頁逐字稿關鍵字搜尋：在逐字稿分頁頂部加入搜尋輸入框，即時高亮符合的句子，並以「上一個/下一個」按鈕跳至相符段落；純前端，補 i18n `play.slidePanel.scriptSearch*`。
 
 ## 工作記錄（第十一輪）
@@ -472,3 +472,12 @@
 | 2026-06-23 | 首頁最近搜尋記錄：readRecentSearches/saveRecentSearch helpers；recentSearches + searchFocused state；聚焦空框顯示下拉（含清除按鈕）；i18n search.recent/clearRecent | feat/recent-search-history（已 merge） |
 | 2026-06-23 | 課後報告作答時間軸：PostClassReportPanel 個別學生 section 之後加時間軸（allAttempts flatMap + sort，border-l 連接線，時間戳/client_id/分數 badge） | feat/quiz-submission-timeline（已 merge） |
 | 2026-06-23 | 播放頁頁面書籤：PlayPage bookmarks state + toggleBookmark；PlayPageContext 介面；SlidePanel 左上角 🔖 按鈕（琥珀色高亮）；Sidebar 書籤 section（chip 列 + × 移除 + 跳頁）；i18n bookmark* | feat/page-bookmarks（已 merge） |
+
+## 工作記錄（第十二輪）
+
+| 日期 | 工作摘要 | 分支 |
+|------|---------|------|
+| 2026-06-23 | 播放頁行動裝置原生分享：PlayPageHeader 偵測 navigator.share，支援時顯示「📤 分享」按鈕呼叫 Web Share API；i18n nativeShare | feat/native-share（已 merge） |
+| 2026-06-23 | 首頁批次設定標籤：多選工具列新增 emerald 輸入框（Enter 送出），handleBatchSetTags 用 setItems in-place 更新；i18n batchSetTags/Done/Failed | feat/batch-set-tags（已 merge） |
+| 2026-06-23 | 課後報告全頁完成率熱力圖：PostClassReportPanel 加入 8×8 px 格子熱力圖，四色（emerald/muted/amber/rose）依完成率著色，tooltip 顯示頁碼 | feat/report-completion-heatmap（已 merge） |
+| 2026-06-23 | 同步問答 AI 摘要：`POST /api/pdfs/:id/sync/questions/summarize` 後端端點（master-only，callChatJSON 產出 Markdown 摘要）；前端「AI 摘要所有問題」紫色按鈕 + 摘要卡片；PlayPageContext 新增 handleSummarizeFollowerQuestions/questionSummary/questionSummaryBusy | feat/sync-qa-summary（已 merge） |
