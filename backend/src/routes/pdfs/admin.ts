@@ -20,7 +20,9 @@ import { db } from '../../db';
 import type { PdfRow } from '../../types';
 import { IdParamSchema, UpdateSystemAiSettingsBodySchema, errorResponse } from './shared';
 import { DEFAULT_ACCOUNT_ID, sanitizeAccountId } from '../../services/accountContext';
-import { removePdfDir } from '../../services/storage';
+import { removePdfDir, artifactCacheDir } from '../../services/storage';
+import { config } from '../../config';
+import path from 'node:path';
 import { clearRegenerateJob } from '../../worker/regenerate';
 import { clearAddPagesJob } from '../../worker/addPagesFromPrompt';
 import { clearSyncSession } from './sync';
@@ -366,5 +368,85 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
     }
 
     return reply.code(200).send({ ok: true, id, branch: id, repo_url: repoUrl });
+  });
+
+  app.delete('/api/admin/cache', async (request, reply) => {
+    const sub = sessionSub(request) ?? undefined;
+    if (!isAdminAccount(sub)) {
+      return reply.code(403).send(errorResponse('ADMIN_REQUIRED', '只有 admin 可以清除生成快取'));
+    }
+
+    let dirsCleared = 0;
+    let bytesFreed = 0;
+
+    try {
+      const pdfIds = await fs.promises.readdir(config.storageRoot).catch(() => [] as string[]);
+      for (const pdfId of pdfIds) {
+        const cacheDir = artifactCacheDir(pdfId);
+        const stat = await fs.promises.stat(cacheDir).catch(() => null);
+        if (!stat?.isDirectory()) continue;
+        const entries = await fs.promises.readdir(cacheDir, { withFileTypes: true }).catch(() => []);
+        for (const entry of entries) {
+          const entryPath = path.join(cacheDir, entry.name);
+          const entryStat = await fs.promises.stat(entryPath).catch(() => null);
+          if (entryStat) bytesFreed += entryStat.size;
+        }
+        await fs.promises.rm(cacheDir, { recursive: true, force: true }).catch(() => undefined);
+        dirsCleared++;
+      }
+    } catch (err) {
+      app.log.warn({ err }, 'admin-cache: scan failed');
+      return reply.code(500).send(errorResponse('SCAN_FAILED', 'Failed to scan storage root'));
+    }
+
+    return reply.code(200).send({ ok: true, dirs_cleared: dirsCleared, bytes_freed: bytesFreed });
+  });
+
+  app.delete('/api/system/thumbnail-cache', async (request, reply) => {
+    const sub = sessionSub(request) ?? undefined;
+    if (!isAdminAccount(sub)) {
+      return reply.code(403).send(errorResponse('ADMIN_REQUIRED', '只有 admin 可以清除縮圖快取'));
+    }
+
+    let filesDeleted = 0;
+    let bytesFreed = 0;
+
+    try {
+      const pdfIds = await fs.promises.readdir(config.storageRoot);
+      for (const pdfId of pdfIds) {
+        const dir = path.join(config.storageRoot, pdfId);
+        const stat = await fs.promises.stat(dir).catch(() => null);
+        if (!stat?.isDirectory()) continue;
+
+        const coverThumb = path.join(dir, 'cover.thumb.jpg');
+        const coverStat = await fs.promises.stat(coverThumb).catch(() => null);
+        if (coverStat) {
+          bytesFreed += coverStat.size;
+          await fs.promises.unlink(coverThumb).catch(() => undefined);
+          filesDeleted++;
+        }
+
+        const pagesDir = path.join(dir, 'pages');
+        const pagesDirStat = await fs.promises.stat(pagesDir).catch(() => null);
+        if (pagesDirStat?.isDirectory()) {
+          const pageFiles = await fs.promises.readdir(pagesDir).catch(() => [] as string[]);
+          for (const file of pageFiles) {
+            if (!file.endsWith('.thumb.jpg')) continue;
+            const thumbPath = path.join(pagesDir, file);
+            const thumbStat = await fs.promises.stat(thumbPath).catch(() => null);
+            if (thumbStat) {
+              bytesFreed += thumbStat.size;
+              await fs.promises.unlink(thumbPath).catch(() => undefined);
+              filesDeleted++;
+            }
+          }
+        }
+      }
+    } catch (err) {
+      app.log.warn({ err }, 'thumbnail-cache: scan failed');
+      return reply.code(500).send(errorResponse('SCAN_FAILED', 'Failed to scan storage root'));
+    }
+
+    return reply.code(200).send({ ok: true, files_deleted: filesDeleted, bytes_freed: bytesFreed });
   });
 }
