@@ -1822,3 +1822,19 @@ export async function updateLastPlayed(id: string): Promise<{ id: string; last_p
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as { id: string; last_played_at: string };
 }
+
+export async function startBatchExport(): Promise<{ jobId: string; status: string }> {
+  const resp = await fetch('api/export/batch', { method: 'POST' });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { jobId: string; status: string };
+}
+
+export async function pollBatchExport(jobId: string): Promise<{ jobId: string; status: string; progress: number; total: number; error: string | null }> {
+  const resp = await fetch(`api/export/batch/${encodeURIComponent(jobId)}`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { jobId: string; status: string; progress: number; total: number; error: string | null };
+}
+
+export function batchExportDownloadUrl(jobId: string): string {
+  return `api/export/batch/${encodeURIComponent(jobId)}/download`;
+}

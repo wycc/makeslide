@@ -15,6 +15,9 @@ import {
   startProcessing,
   updatePdfCategory,
   updatePdfTags,
+  startBatchExport,
+  pollBatchExport,
+  batchExportDownloadUrl,
   type AuthStatus,
 } from '../lib/api';
 import type { PdfListItem, UploadResponse } from '../types';
@@ -186,6 +189,10 @@ export default function HomePage() {
   const [isImportingZip, setIsImportingZip] = useState(false);
   const [zipImportProgress, setZipImportProgress] = useState(0);
   const zipImportInputRef = useRef<HTMLInputElement | null>(null);
+  const [batchExportJobId, setBatchExportJobId] = useState<string | null>(null);
+  const [batchExportProgress, setBatchExportProgress] = useState(0);
+  const [batchExportTotal, setBatchExportTotal] = useState(0);
+  const batchExportPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [renamingCategory, setRenamingCategory] = useState<string | null>(null);
 
   const itemCategories = items.reduce<string[]>((categories, pdf) => {
@@ -503,6 +510,54 @@ export default function HomePage() {
     [openPromptFor, showToast, t],
   );
 
+  const handleBatchExportAll = useCallback(async () => {
+    if (batchExportJobId) return;
+    try {
+      const { jobId } = await startBatchExport();
+      setBatchExportJobId(jobId);
+      setBatchExportProgress(0);
+      setBatchExportTotal(0);
+      batchExportPollRef.current = setInterval(() => {
+        void pollBatchExport(jobId).then((res) => {
+          setBatchExportProgress(res.progress);
+          setBatchExportTotal(res.total);
+          if (res.status === 'done') {
+            if (batchExportPollRef.current != null) {
+              clearInterval(batchExportPollRef.current);
+              batchExportPollRef.current = null;
+            }
+            setBatchExportJobId(null);
+            const a = document.createElement('a');
+            a.href = batchExportDownloadUrl(jobId);
+            a.download = 'batch-export.zip';
+            a.rel = 'noopener';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            showToast(t('home.batchExportDone'));
+          } else if (res.status === 'failed') {
+            if (batchExportPollRef.current != null) {
+              clearInterval(batchExportPollRef.current);
+              batchExportPollRef.current = null;
+            }
+            setBatchExportJobId(null);
+            showToast(t('home.batchExportFailed'));
+          }
+        }).catch(() => {
+          if (batchExportPollRef.current != null) {
+            clearInterval(batchExportPollRef.current);
+            batchExportPollRef.current = null;
+          }
+          setBatchExportJobId(null);
+          showToast(t('home.batchExportFailed'));
+        });
+      }, 2000);
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : t('home.batchExportFailed');
+      showToast(`${t('home.batchExportFailed')}：${msg}`);
+    }
+  }, [batchExportJobId, showToast, t]);
+
   const handleDeleteCategory = useCallback(
     async (category: string) => {
       if (category === DEFAULT_CATEGORY) {
@@ -776,6 +831,16 @@ export default function HomePage() {
               className="inline-flex items-center rounded-md border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 hover:text-white"
             >
               {t('home.importZip')}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleBatchExportAll()}
+              disabled={batchExportJobId !== null}
+              className="inline-flex items-center rounded-md border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 hover:text-white disabled:opacity-50"
+            >
+              {batchExportJobId !== null
+                ? t('home.batchExporting').replace('{progress}', String(batchExportProgress)).replace('{total}', String(batchExportTotal))
+                : t('home.batchExportAll')}
             </button>
             <UploadButton onUploaded={handleUploaded} />
             </div>

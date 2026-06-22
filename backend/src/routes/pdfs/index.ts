@@ -32,6 +32,7 @@ import { registerQuizResultsCsvRoutes } from './quiz-results-csv';
 import { registerReportAiSuggestionsRoutes } from './report-ai-suggestions';
 import { registerScriptsTxtRoutes } from './scripts-txt';
 import { registerGeneratePollRoutes } from './generate-poll';
+import { registerBatchExportRoutes } from './batch-export';
 
 export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerUploadRoutes(app);
@@ -67,4 +68,5 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerReportAiSuggestionsRoutes(app);
   await registerScriptsTxtRoutes(app);
   await registerGeneratePollRoutes(app);
+  await registerBatchExportRoutes(app);
 }
