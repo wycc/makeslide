@@ -215,6 +215,8 @@ export const en = {
   'home.filter.favoritesOnly': 'Favorites',
   'home.filterByTitlePlaceholder': 'Enter keywords to search titles',
   'home.clearTitleFilter': 'Clear',
+  'home.search.recent': 'Recent searches',
+  'home.search.clearRecent': 'Clear history',
   'home.search.placeholder': 'Search across all slides (title, transcript, page text)…',
   'home.search.searching': 'Searching…',
   'home.search.noResults': 'No matching results found',

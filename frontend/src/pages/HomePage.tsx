@@ -38,6 +38,8 @@ const CUSTOM_CATEGORIES_STORAGE_KEY = 'makeslide.home.customCategories';
 const TITLE_FILTER_STORAGE_KEY = 'makeslide.home.titleFilter';
 const SORT_MODE_STORAGE_KEY = 'makeslide.home.sortMode';
 const FAVORITES_STORAGE_KEY = 'makeslide.favorites';
+const RECENT_SEARCHES_STORAGE_KEY = 'makeslide.recentSearches';
+const MAX_RECENT_SEARCHES = 5;
 const VIEW_MODE_STORAGE_KEY = 'makeslide.home.viewMode';
 
 type ViewMode = 'grid' | 'list';
@@ -148,6 +150,26 @@ const readStoredTitleFilter = () => {
   return window.localStorage.getItem(TITLE_FILTER_STORAGE_KEY) || '';
 };
 
+const readRecentSearches = (): string[] => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(RECENT_SEARCHES_STORAGE_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? (parsed as string[]).filter((s) => typeof s === 'string').slice(0, MAX_RECENT_SEARCHES) : [];
+  } catch {
+    return [];
+  }
+};
+
+const saveRecentSearch = (term: string): string[] => {
+  const trimmed = term.trim();
+  if (!trimmed) return readRecentSearches();
+  const existing = readRecentSearches().filter((s) => s !== trimmed);
+  const next = [trimmed, ...existing].slice(0, MAX_RECENT_SEARCHES);
+  window.localStorage.setItem(RECENT_SEARCHES_STORAGE_KEY, JSON.stringify(next));
+  return next;
+};
+
 const readStoredSortMode = (): SortMode | null => {
   if (typeof window === 'undefined') return null;
   const stored = window.localStorage.getItem(SORT_MODE_STORAGE_KEY);
@@ -173,6 +195,8 @@ export default function HomePage() {
   const [categoryFilter, setCategoryFilter] = useState<string>(readStoredCategoryFilter);
   const [customCategories, setCustomCategories] = useState<string[]>(readStoredCustomCategories);
   const [titleFilter, setTitleFilter] = useState<string>(readStoredTitleFilter);
+  const [recentSearches, setRecentSearches] = useState<string[]>(readRecentSearches);
+  const [searchFocused, setSearchFocused] = useState(false);
   const [explicitSortMode, setExplicitSortMode] = useState<SortMode | null>(readStoredSortMode);
   const [tagFilter, setTagFilter] = useState<string>('');
   const [favoritesOnly, setFavoritesOnly] = useState(false);
@@ -321,6 +345,12 @@ export default function HomePage() {
   const updateTitleFilter = useCallback((nextFilter: string) => {
     setTitleFilter(nextFilter);
     window.localStorage.setItem(TITLE_FILTER_STORAGE_KEY, nextFilter);
+  }, []);
+
+  const commitSearchTerm = useCallback((term: string) => {
+    if (term.trim()) {
+      setRecentSearches(saveRecentSearch(term));
+    }
   }, []);
 
   const updateSortMode = useCallback((nextSortMode: SortMode) => {
@@ -974,6 +1004,9 @@ export default function HomePage() {
                     type="text"
                     value={titleFilter}
                     onChange={(ev) => updateTitleFilter(ev.target.value)}
+                    onFocus={() => setSearchFocused(true)}
+                    onBlur={() => { commitSearchTerm(titleFilter); setSearchFocused(false); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { commitSearchTerm(titleFilter); (e.target as HTMLInputElement).blur(); } }}
                     placeholder={t('home.filterByTitlePlaceholder')}
                     className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 pr-16 text-sm text-slate-100 outline-none transition hover:border-slate-500 focus:border-indigo-400"
                   />
@@ -986,6 +1019,31 @@ export default function HomePage() {
                     >
                       {t('home.clearTitleFilter')}
                     </button>
+                  )}
+                  {searchFocused && recentSearches.length > 0 && titleFilter.length === 0 && (
+                    <ul className="absolute left-0 top-full z-20 mt-1 w-full rounded-md border border-slate-700 bg-slate-900 py-1 shadow-lg">
+                      <li className="flex items-center justify-between px-3 py-1 text-xs text-slate-500">
+                        <span>{t('home.search.recent')}</span>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => { e.preventDefault(); window.localStorage.removeItem(RECENT_SEARCHES_STORAGE_KEY); setRecentSearches([]); }}
+                          className="text-slate-500 hover:text-slate-300"
+                        >
+                          {t('home.search.clearRecent')}
+                        </button>
+                      </li>
+                      {recentSearches.map((term) => (
+                        <li key={term}>
+                          <button
+                            type="button"
+                            onMouseDown={(e) => { e.preventDefault(); updateTitleFilter(term); setSearchFocused(false); }}
+                            className="w-full px-3 py-1.5 text-left text-sm text-slate-200 hover:bg-slate-800"
+                          >
+                            {term}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
                   )}
                 </div>
               </label>
