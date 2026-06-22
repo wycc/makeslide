@@ -24,6 +24,7 @@ import { registerWatchProgressRoutes } from './watchProgress';
 import { registerReportRoutes } from './report';
 import { registerSubtitleRoutes } from './subtitles';
 import { registerSearchRoutes } from './search';
+import { registerQualityCheckRoutes } from './quality-check';
 
 export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerUploadRoutes(app);
@@ -51,4 +52,5 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerReportRoutes(app);
   await registerSubtitleRoutes(app);
   await registerSearchRoutes(app);
+  await registerQualityCheckRoutes(app);
 }

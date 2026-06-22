@@ -1,34 +1,34 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
 import fs from 'node:fs';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
+import { pageTextPath, pageScriptPath } from '../../services/storage';
 import { decodeSession, parseCookies } from '../auth';
-import { pageScriptPath } from '../../services/storage';
 import type { PdfRow } from '../../types';
-import { errorResponse } from './shared';
 
-const MAX_PDF_RESULTS = 20;
-const MAX_PAGE_RESULTS = 20;
-const MAX_SCAN_PDFS = 50;
-const SNIPPET_RADIUS = 80;
+const MAX_READABLE_PDFS = 100;
+const MAX_PAGE_RESULTS_PER_PDF = 3;
+const SNIPPET_CONTEXT = 60;
 
 const SearchQuerySchema = z.object({
-  q: z.string().trim().min(2, '搜尋詞至少 2 字').max(100, '搜尋詞過長'),
+  q: z.string().min(1, 'q is required').max(100, 'q must be at most 100 characters'),
+  limit: z.coerce.number().int().min(1).max(50).optional().default(20),
 });
 
-interface PdfSearchRow {
-  id: string;
-  title: string | null;
-  page_count: number | null;
-  visibility: string;
-  owner_sub: string | null;
+interface SearchResult {
+  pdf_id: string;
+  pdf_title: string | null;
+  page_number: number | null;
+  match_type: 'title' | 'script' | 'text';
+  snippet: string;
 }
 
-interface PageScanRow {
+interface SearchPageRow {
   pdf_id: string;
   page_number: number;
   page_uid: string;
-  pdf_title: string | null;
+  text_path: string | null;
+  script_path: string | null;
 }
 
 function sessionSub(request: FastifyRequest): string | null {
@@ -42,80 +42,123 @@ function canReadPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibil
   return row.visibility === 'public' || row.visibility === 'public_editable';
 }
 
-function extractSnippet(content: string, query: string): string {
+function extractSnippet(content: string, keyword: string): string {
   const lowerContent = content.toLowerCase();
-  const lowerQuery = query.toLowerCase();
-  const idx = lowerContent.indexOf(lowerQuery);
-  if (idx === -1) return content.slice(0, SNIPPET_RADIUS * 2);
-  const start = Math.max(0, idx - SNIPPET_RADIUS);
-  const end = Math.min(content.length, idx + query.length + SNIPPET_RADIUS);
-  const prefix = start > 0 ? '…' : '';
-  const suffix = end < content.length ? '…' : '';
-  return prefix + content.slice(start, end) + suffix;
+  const lowerKeyword = keyword.toLowerCase();
+  const idx = lowerContent.indexOf(lowerKeyword);
+  if (idx === -1) return '';
+
+  const start = Math.max(0, idx - SNIPPET_CONTEXT);
+  const end = Math.min(content.length, idx + lowerKeyword.length + SNIPPET_CONTEXT);
+
+  let snippet = content.slice(start, end);
+  if (start > 0) snippet = '...' + snippet;
+  if (end < content.length) snippet = snippet + '...';
+  return snippet;
+}
+
+function readFileOrNull(filePath: string): string | null {
+  try {
+    return fs.readFileSync(filePath, 'utf8');
+  } catch {
+    return null;
+  }
 }
 
 export async function registerSearchRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/search', async (request, reply) => {
-    const sub = sessionSub(request);
     const parsed = SearchQuerySchema.safeParse(request.query);
     if (!parsed.success) {
-      return reply.code(400).send(errorResponse('BAD_REQUEST', parsed.error.issues[0]?.message ?? '搜尋參數錯誤'));
+      return reply.code(400).send({ error: { code: 'BAD_REQUEST', message: parsed.error.errors[0]?.message ?? 'Invalid query' } });
     }
-    const { q } = parsed.data;
-    const likePattern = `%${q.replace(/%/g, '\\%').replace(/_/g, '\\_')}%`;
 
-    // --- PDF title search ---
-    const pdfRows = db.prepare(`
-      SELECT id, title, page_count, visibility, owner_sub
-      FROM pdfs
-      WHERE status = 'ready'
-        AND (owner_sub = ? OR visibility IN ('public', 'public_editable'))
-        AND (title LIKE ? ESCAPE '\\')
-      ORDER BY updated_at DESC
-      LIMIT ${MAX_PDF_RESULTS}
-    `).all(sub ?? '__nobody__', likePattern) as PdfSearchRow[];
+    const { q, limit } = parsed.data;
+    const keyword = q.toLowerCase();
 
-    const pdfMatches = pdfRows.map((row) => ({
-      id: row.id,
-      title: row.title,
-      pageCount: row.page_count,
-    }));
+    const sub = sessionSub(request);
 
-    // --- Page script search (owner only, to avoid heavy filesystem scan on public PDFs) ---
-    const pageMatches: Array<{ pdfId: string; pdfTitle: string | null; pageNumber: number; snippet: string }> = [];
+    // Fetch readable PDFs — capped at MAX_READABLE_PDFS, ordered by newest first.
+    // We fetch more than MAX_READABLE_PDFS upfront to account for permission filtering.
+    const allPdfs = db
+      .prepare(
+        `SELECT id, title, owner_sub, visibility, created_at
+         FROM pdfs
+         ORDER BY created_at DESC
+         LIMIT ?`,
+      )
+      .all(MAX_READABLE_PDFS * 10) as Array<Pick<PdfRow, 'id' | 'title' | 'owner_sub' | 'visibility'> & { created_at: string }>;
 
-    if (sub) {
-      const scanRows = db.prepare(`
-        SELECT pg.pdf_id, pg.page_number, pg.page_uid, pf.title AS pdf_title
-        FROM pages pg
-        JOIN pdfs pf ON pf.id = pg.pdf_id
-        WHERE pf.owner_sub = ?
-          AND pf.status = 'ready'
-          AND pg.script_path IS NOT NULL
-        ORDER BY pf.updated_at DESC, pg.page_number ASC
-        LIMIT ${MAX_SCAN_PDFS * 50}
-      `).all(sub) as PageScanRow[];
+    const readablePdfs = allPdfs
+      .filter((row) => canReadPdf(sub, row))
+      .slice(0, MAX_READABLE_PDFS);
 
-      const lowerQuery = q.toLowerCase();
-      for (const row of scanRows) {
-        if (pageMatches.length >= MAX_PAGE_RESULTS) break;
-        const fpath = pageScriptPath(row.pdf_id, row.page_uid);
-        let content: string;
-        try {
-          content = fs.readFileSync(fpath, 'utf8');
-        } catch {
-          continue;
-        }
-        if (!content.toLowerCase().includes(lowerQuery)) continue;
-        pageMatches.push({
-          pdfId: row.pdf_id,
-          pdfTitle: row.pdf_title,
-          pageNumber: row.page_number,
-          snippet: extractSnippet(content, q),
+    const results: SearchResult[] = [];
+
+    for (const pdf of readablePdfs) {
+      if (results.length >= limit) break;
+
+      // 1. Title match
+      const titleLower = (pdf.title ?? '').toLowerCase();
+      if (titleLower.includes(keyword)) {
+        const snippet = extractSnippet(pdf.title ?? '', q);
+        results.push({
+          pdf_id: pdf.id,
+          pdf_title: pdf.title ?? null,
+          page_number: null,
+          match_type: 'title',
+          snippet,
         });
+      }
+
+      if (results.length >= limit) break;
+
+      // 2. Page text / script match
+      const pages = db
+        .prepare(
+          `SELECT pdf_id, page_number, page_uid, text_path, script_path
+           FROM pages
+           WHERE pdf_id = ?
+           ORDER BY page_number ASC`,
+        )
+        .all(pdf.id) as SearchPageRow[];
+
+      let pageResultCount = 0;
+
+      for (const page of pages) {
+        if (results.length >= limit) break;
+        if (pageResultCount >= MAX_PAGE_RESULTS_PER_PDF) break;
+
+        if (page.page_uid) {
+          // Check script file first (逐字稿)
+          const scriptContent = readFileOrNull(pageScriptPath(pdf.id, page.page_uid));
+          if (scriptContent && scriptContent.toLowerCase().includes(keyword)) {
+            results.push({
+              pdf_id: pdf.id,
+              pdf_title: pdf.title ?? null,
+              page_number: page.page_number,
+              match_type: 'script',
+              snippet: extractSnippet(scriptContent, q),
+            });
+            pageResultCount++;
+            continue;
+          }
+
+          // Then check text file (頁面文字)
+          const textContent = readFileOrNull(pageTextPath(pdf.id, page.page_uid));
+          if (textContent && textContent.toLowerCase().includes(keyword)) {
+            results.push({
+              pdf_id: pdf.id,
+              pdf_title: pdf.title ?? null,
+              page_number: page.page_number,
+              match_type: 'text',
+              snippet: extractSnippet(textContent, q),
+            });
+            pageResultCount++;
+          }
+        }
       }
     }
 
-    return reply.code(200).send({ pdfMatches, pageMatches });
+    return reply.send({ query: q, results: results.slice(0, limit) });
   });
 }

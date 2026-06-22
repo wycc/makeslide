@@ -1671,26 +1671,51 @@ export async function restoreScriptVersion(
   return (await resp.json()) as RestoreScriptResponse;
 }
 
-export interface SearchPdfMatch {
-  id: string;
-  title: string | null;
-  pageCount: number | null;
-}
-
-export interface SearchPageMatch {
-  pdfId: string;
-  pdfTitle: string | null;
-  pageNumber: number;
+export interface SearchResultItem {
+  pdf_id: string;
+  pdf_title: string | null;
+  page_number: number | null;
+  match_type: 'title' | 'script' | 'text';
   snippet: string;
 }
 
-export interface SearchResults {
-  pdfMatches: SearchPdfMatch[];
-  pageMatches: SearchPageMatch[];
+export interface SearchResponse {
+  query: string;
+  results: SearchResultItem[];
 }
 
-export async function searchContent(q: string): Promise<SearchResults> {
-  const resp = await fetch(`api/search?q=${encodeURIComponent(q)}`);
+export async function searchPdfs(q: string, limit = 20): Promise<SearchResponse> {
+  const params = new URLSearchParams({ q, limit: String(limit) });
+  const resp = await fetch(`api/search?${params.toString()}`);
   if (!resp.ok) throw await parseErrorBody(resp);
-  return (await resp.json()) as SearchResults;
+  return (await resp.json()) as SearchResponse;
+}
+
+export type QualityIssueCode =
+  | 'missing_image'
+  | 'missing_audio'
+  | 'missing_script'
+  | 'empty_script'
+  | 'short_script'
+  | 'animation_over_limit';
+
+export interface PageQualityIssue {
+  code: QualityIssueCode;
+  detail?: string;
+}
+
+export interface PageQualityResult {
+  pageNumber: number;
+  issues: PageQualityIssue[];
+}
+
+export interface QualityCheckResponse {
+  pages: PageQualityResult[];
+  checkedAt: string;
+}
+
+export async function fetchQualityCheck(id: string): Promise<QualityCheckResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/quality-check`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as QualityCheckResponse;
 }
