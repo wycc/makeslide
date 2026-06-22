@@ -109,6 +109,11 @@ export function hasInMemorySyncSession(pdfId: string): boolean {
   return sessions.has(pdfId);
 }
 
+/** Exported for unit testing; not part of the public sync routes API. */
+export function __getSyncSessionForTest(pdfId: string): SyncSessionState | undefined {
+  return sessions.get(pdfId);
+}
+
 interface SyncSessionRow {
   pdf_id: string;
   master_client_id: string | null;
@@ -190,6 +195,7 @@ function resetSyncMode(session: SyncSessionState): void {
   session.quizShowAnswers = false;
   session.displayedQuestionId = null;
   session.aiAnswer = null;
+  session.followerQuestions = [];
   session.quizProgress.clear();
   session.quizSessionId = null;
   session.followerAccess.clear();
