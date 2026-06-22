@@ -285,6 +285,12 @@
 | 2026-06-23 | 播放頁字幕文字大小調整：SubtitleSize 型別、SUBTITLE_SIZE_STORAGE_KEY、PlayPageSlidePanel S/M/L 按鈕；i18n | feat/subtitle-size（commit 28fff18，已 merge） |
 | 2026-06-23 | 測驗題目答題解析（確認）：QuizQuestion.explanation 欄位、QuizBuilderPage textarea、答案揭曉後顯示解析 | 既有功能確認 |
 
+## 工作記錄（第七輪）
+
+| 日期 | 工作摘要 | 分支 |
+|------|---------|------|
+| 2026-06-23 | 播放頁自動播放下一頁：autoAdvance state + localStorage、PlayPageContext 欄位、PlayPageSlidePanel checkbox、runPageEndedAdvance 守衛；i18n autoAdvance | feat/auto-advance-toggle（已 merge） |
+
 ---- 計數重設 ----
 
 ## 掃描摘要（2026-06-23 第七輪）
@@ -301,7 +307,7 @@
 ## 新增可執行項目（第七輪）
 
 - [x] 播放頁自動播放下一頁：音檔播完自動切換到下一頁並播放；在播放控制列加入「自動播放」toggle（預設關閉），存至 localStorage（key: `makeslide.autoAdvance`）；補 i18n `play.controls.autoAdvance`。
-  - 確認說明（2026-06-23）：`handleEnded` → `runPageEndedAdvance()` 已實作自動換頁（`setCurrentIdx(i+1)` + `setIsPlaying(true)`），非 classroomMode/interactiveMode 下音檔播完即自動切換；屬既有功能，無需額外 toggle。
+  - 實作說明（2026-06-23）：在播放設定面板加入「自動播放下一頁」checkbox（預設 OFF），值存入 `makeslide.autoAdvance`；`runPageEndedAdvance()` 在非 classroomMode 路徑加入 `if (!autoAdvance) return` 守衛，使 toggle 實際生效。分支 `feat/auto-advance-toggle`。
 - [ ] 測驗題目拖曳重排：在 `QuizBuilderPage` 題目列表加入拖曳排序（利用 HTML5 drag-and-drop 或 `@dnd-kit/core`），拖放後更新 `questions` 陣列順序並同步到 `quiz_set.questions_json`；補 i18n `quiz.dragToReorder`。
 - [x] 複製簡報自動加「（副本）」：`handleDuplicate` 建立副本後，若後端回傳的標題與原始標題相同，自動在 `PATCH /api/pdfs/:id/title` 追加「（副本）」後綴；後端 `POST /api/pdfs/:id/duplicate` 也可直接回傳帶後綴的標題；純邏輯改動。
   - 修改說明（2026-06-23）：`backend/src/routes/pdfs/upload.ts` 的複製標題格式由 `副本-{title}` 改為 `{title}（副本）`，與中文慣例一致；後端直接回傳帶後綴的標題，前端無需額外 PATCH 呼叫。分支 `feat/auto-advance`（commit 同批）。

@@ -114,6 +114,15 @@ export function getStoredInteractiveMode(): boolean {
   return raw === '1' || raw.toLowerCase() === 'true';
 }
 
+export const AUTO_ADVANCE_STORAGE_KEY = 'makeslide.autoAdvance';
+
+export function getStoredAutoAdvance(): boolean {
+  if (typeof window === 'undefined') return false;
+  const raw = window.localStorage.getItem(AUTO_ADVANCE_STORAGE_KEY);
+  if (raw == null) return false;
+  return raw === '1' || raw.toLowerCase() === 'true';
+}
+
 export const SUBTITLE_SIZE_STORAGE_KEY = 'makeslide.subtitleSize';
 export type SubtitleSize = 'sm' | 'md' | 'lg';
 

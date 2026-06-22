@@ -75,6 +75,7 @@ import {
   getStoredShowSubtitle,
   getStoredSubtitleSize,
   getStoredInteractiveMode,
+  getStoredAutoAdvance,
   getStoredTtsSpeed,
   useI18n,
   type SubtitleSize,
@@ -199,6 +200,7 @@ export default function PlayPage() {
   const [playbackRate, setPlaybackRate] = useState<number>(() => getStoredPlaybackSpeed());
   const [showSubtitle, setShowSubtitle] = useState<boolean>(() => getStoredShowSubtitle());
   const [subtitleSize, setSubtitleSize] = useState<SubtitleSize>(() => getStoredSubtitleSize());
+  const [autoAdvance, setAutoAdvance] = useState<boolean>(() => getStoredAutoAdvance());
   const [playbackSettingsOpen, setPlaybackSettingsOpen] = useState(false);
   const [playbackStatusMessage, setPlaybackStatusMessage] = useState<string | null>(null);
   const [followerAudioUnlocked, setFollowerAudioUnlocked] = useState(false);
@@ -891,7 +893,8 @@ export default function PlayPage() {
         }
         return;
       } else if (!classroomMode) {
-        // 當頁無投票且非上課模式：直接進入下一頁
+        // 當頁無投票且非上課模式：根據 autoAdvance 決定是否切頁
+        if (!autoAdvance) return;
         if (currentIdx < totalPages - 1) {
           setCurrentIdx((i) => i + 1);
           setIsPlaying(true);
@@ -907,13 +910,14 @@ export default function PlayPage() {
         setClassroomAwaitingNext(true);
         return;
       }
+      if (!autoAdvance) return;
       setCurrentIdx((i) => i + 1);
       setIsPlaying(true);
     } else {
       setClassroomAwaitingNext(false);
       setFinished(true);
     }
-  }, [classroomMode, interactiveMode, pollState.pagePolls.length, currentIdx, totalPages]);
+  }, [autoAdvance, classroomMode, interactiveMode, pollState.pagePolls.length, currentIdx, totalPages]);
 
   const handleEnded = useCallback(() => {
     setIsPlaying(false);
@@ -2190,6 +2194,7 @@ export default function PlayPage() {
     finished, setFinished, audioMuted, setAudioMuted, effectiveAudioMuted,
     audioVolume, setAudioVolume,
     playbackRate, setPlaybackRate, showSubtitle, setShowSubtitle, subtitleSize, setSubtitleSize,
+    autoAdvance, setAutoAdvance,
     playbackSettingsOpen, setPlaybackSettingsOpen, playbackStatusMessage,
     followerAudioUnlocked, setFollowerAudioUnlocked,
     scripts, setScripts, displayedImageSrc,

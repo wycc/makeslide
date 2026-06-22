@@ -618,6 +618,7 @@ export const en = {
   'play.slidePanel.shareQrTitle': 'Generate share QR code',
   'play.slidePanel.progressBarAriaLabel': 'Progress bar',
   'play.controls.volume': 'Volume',
+  'play.controls.autoAdvance': 'Auto-advance to next page',
   'play.slidePanel.settingsToggle': '⚙️ Settings',
   'play.slidePanel.localMuted': 'Muted locally',
   'play.slidePanel.localUnmuted': 'Sound on locally',

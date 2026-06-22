@@ -618,6 +618,7 @@ export const zhTW = {
   'play.slidePanel.shareQrTitle': '產生分享 QR Code',
   'play.slidePanel.progressBarAriaLabel': '進度條',
   'play.controls.volume': '音量',
+  'play.controls.autoAdvance': '自動播放下一頁',
   'play.slidePanel.settingsToggle': '⚙️ 設定',
   'play.slidePanel.localMuted': '本機靜音',
   'play.slidePanel.localUnmuted': '本機有聲',
