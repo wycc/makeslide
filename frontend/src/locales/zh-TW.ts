@@ -1396,6 +1396,7 @@ export const zhTW = {
   'play.header.copyScriptFail': '複製失敗',
   'play.header.downloadCoursePackage': '下載課程包',
   'play.header.coursePackageGenerating': '產生課程包中…',
+  'play.header.timeRemaining': '全簡報剩餘時間',
   'play.header.remoteController': '遠端控制',
   'play.header.keyboardShortcuts': '快捷鍵',
   'play.header.keyboardShortcutsTitle': '鍵盤快捷鍵說明',

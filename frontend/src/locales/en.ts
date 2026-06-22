@@ -1396,6 +1396,7 @@ export const en = {
   'play.header.copyScriptFail': 'Copy failed',
   'play.header.downloadCoursePackage': 'Download Course Package',
   'play.header.coursePackageGenerating': 'Generating course package…',
+  'play.header.timeRemaining': 'Remaining time for full presentation',
   'play.header.remoteController': 'Remote Control',
   'play.header.keyboardShortcuts': 'Shortcuts',
   'play.header.keyboardShortcutsTitle': 'Keyboard Shortcuts',
