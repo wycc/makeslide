@@ -5,6 +5,30 @@ import type { ShareAccessMode } from '../../lib/api';
 import { useI18n } from '../../i18n';
 import { usePlayPageContext } from './PlayPageContext';
 import { copyTextToClipboard } from '../../lib/clipboard';
+import type { SyncFollowerQuestion } from '../../types';
+
+function CopyAllQuestionsButton({ questions }: { questions: SyncFollowerQuestion[] }) {
+  const { t } = useI18n();
+  const [msg, setMsg] = useState<string | null>(null);
+  const handleCopy = () => {
+    const text = questions
+      .map((q) => `[${q.code ?? t('play.sync.anonymous')}] ${q.question}`)
+      .join('\n');
+    void copyTextToClipboard(text).then((ok) => {
+      setMsg(ok ? t('play.header.copyAllQuestionsDone') : t('play.header.copyAllQuestionsFail'));
+      setTimeout(() => setMsg(null), 2000);
+    });
+  };
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="rounded border border-slate-600 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
+    >
+      {msg ?? t('play.header.copyAllQuestions')}
+    </button>
+  );
+}
 
 function ShortcutsButton() {
   const { t } = useI18n();
@@ -280,6 +304,9 @@ export function PlayPageHeader() {
                       </div>
                     ))}
                   </div>
+                  {syncFollowerQuestions.length > 0 && (
+                    <CopyAllQuestionsButton questions={syncFollowerQuestions} />
+                  )}
                 </div>
               )}
             </div>
