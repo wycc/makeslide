@@ -115,6 +115,85 @@ test('POST /regenerate/rollback rejects a non-owner request on a read-only share
   await app.close();
 });
 
+test('GET /regenerate/status rejects a fully anonymous request on a private presentation', async () => {
+  seedRegeneratePdf('regen-perm-status-private-01', 'private');
+  const app = await buildApp();
+  const resp = await app.inject({
+    method: 'GET',
+    url: '/api/pdfs/regen-perm-status-private-01/regenerate/status',
+    // No headers at all: no session cookie, no share token.
+  });
+  assert.equal(resp.statusCode, 403);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+  await app.close();
+});
+
+test('GET /regenerate/status rejects a non-owner request on a private presentation', async () => {
+  seedRegeneratePdf('regen-perm-status-private-02', 'private');
+  const app = await buildApp();
+  const resp = await app.inject({
+    method: 'GET',
+    url: '/api/pdfs/regen-perm-status-private-02/regenerate/status',
+    headers: OTHER_HEADERS_NO_BODY,
+  });
+  assert.equal(resp.statusCode, 403);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+  await app.close();
+});
+
+test('GET /regenerate/status allows the owner to read job status on a private presentation', async () => {
+  seedRegeneratePdf('regen-perm-status-owner-01', 'private');
+  const app = await buildApp();
+  const startResp = await app.inject({
+    method: 'POST',
+    url: '/api/pdfs/regen-perm-status-owner-01/regenerate',
+    headers: OWNER_HEADERS,
+    payload: { scripts: { prompt: 'rewrite brief' } },
+  });
+  assert.equal(startResp.statusCode, 202);
+
+  const resp = await app.inject({
+    method: 'GET',
+    url: '/api/pdfs/regen-perm-status-owner-01/regenerate/status',
+    headers: OWNER_HEADERS_NO_BODY,
+  });
+  assert.equal(resp.statusCode, 200);
+  assert.equal(resp.json().pdf_id, 'regen-perm-status-owner-01');
+  await app.close();
+});
+
+test('GET /regenerate/status allows an anonymous viewer on a public presentation', async () => {
+  seedRegeneratePdf('regen-perm-status-public-01', 'public');
+  const app = await buildApp();
+  const startResp = await app.inject({
+    method: 'POST',
+    url: '/api/pdfs/regen-perm-status-public-01/regenerate',
+    headers: OWNER_HEADERS,
+    payload: { scripts: { prompt: 'rewrite brief' } },
+  });
+  assert.equal(startResp.statusCode, 202);
+
+  const resp = await app.inject({
+    method: 'GET',
+    url: '/api/pdfs/regen-perm-status-public-01/regenerate/status',
+    // No headers: a public presentation's status should still be readable anonymously.
+  });
+  assert.equal(resp.statusCode, 200);
+  assert.equal(resp.json().pdf_id, 'regen-perm-status-public-01');
+  await app.close();
+});
+
+test('GET /regenerate/status returns 404 (not 403) for an unknown presentation even when anonymous', async () => {
+  const app = await buildApp();
+  const resp = await app.inject({
+    method: 'GET',
+    url: '/api/pdfs/regen-perm-status-missing-01/regenerate/status',
+  });
+  assert.equal(resp.statusCode, 404);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'PDF_NOT_FOUND');
+  await app.close();
+});
+
 test('POST /regenerate/cancel and /rollback return 404 (not 403) for an unknown presentation', async () => {
   const app = await buildApp();
   const cancelResp = await app.inject({
