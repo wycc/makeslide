@@ -9,6 +9,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   ApiError,
   answerSyncFollowerQuestionsWithAi,
+  fetchPdfReportSummary,
   fetchPageSubtitleTimeline,
   fetchPdfDetail,
   fetchWatchProgress,
@@ -22,6 +23,7 @@ import {
   toggleSyncDisplayedQuestion,
   updatePlaybackSyncState,
   type PageWatchProgressStats,
+  type PdfReportSummary,
   type ShareAccessMode,
 } from '../lib/api';
 import {
@@ -53,6 +55,7 @@ import { PlayPageCtx } from './play/PlayPageContext';
 import { PlayPageDialogs } from './play/PlayPageDialogs';
 import { PlayPageFullscreen } from './play/PlayPageFullscreen';
 import { PlayPageHeader } from './play/PlayPageHeader';
+import { PostClassReportPanel } from './play/PostClassReportPanel';
 import { PlayPageSlidePanel } from './play/PlayPageSlidePanel';
 import { PlayPageSidebar } from './play/PlayPageSidebar';
 import { shouldResolvePageAnimationSpec } from './play/playbackReadiness';
@@ -152,6 +155,10 @@ export default function PlayPage() {
   const [detail, setDetail] = useState<PdfDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [watchProgressStats, setWatchProgressStats] = useState<PageWatchProgressStats[]>([]);
+  const [postClassReportOpen, setPostClassReportOpen] = useState(false);
+  const [postClassReportSummary, setPostClassReportSummary] = useState<PdfReportSummary | null>(null);
+  const [postClassReportLoading, setPostClassReportLoading] = useState(false);
+  const [postClassReportError, setPostClassReportError] = useState<string | null>(null);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [loadedSlideImage, setLoadedSlideImage] = useState<LoadedSlideImageState | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -469,6 +476,7 @@ export default function PlayPage() {
   const shareIsReadOnly =
     !detail?.is_owner &&
     (detail?.share_mode === 'read_only' || (!currentShareToken && detail?.visibility === 'public'));
+  const canViewPostClassReport = Boolean(detail?.is_owner && !currentShareToken);
   const isReadOnlyProcessing =
     (detail != null &&
       detail.status !== 'ready' &&
@@ -1591,6 +1599,35 @@ export default function PlayPage() {
     };
   }, [pdfId, detail?.is_owner]);
 
+  const loadPostClassReport = useCallback(async () => {
+    if (!pdfId || !canViewPostClassReport) return;
+    setPostClassReportLoading(true);
+    setPostClassReportError(null);
+    try {
+      const summary = await fetchPdfReportSummary(pdfId);
+      setPostClassReportSummary(summary);
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : err instanceof Error ? err.message : '課後報告載入失敗';
+      setPostClassReportError(message || '課後報告載入失敗');
+    } finally {
+      setPostClassReportLoading(false);
+    }
+  }, [pdfId, canViewPostClassReport]);
+
+  const openPostClassReport = useCallback(() => {
+    if (!canViewPostClassReport) return;
+    setPostClassReportOpen(true);
+    void loadPostClassReport();
+  }, [canViewPostClassReport, loadPostClassReport]);
+
+  useEffect(() => {
+    if (!canViewPostClassReport) {
+      setPostClassReportOpen(false);
+      setPostClassReportSummary(null);
+      setPostClassReportError(null);
+    }
+  }, [canViewPostClassReport]);
+
   const watchProgressByPage = useMemo(
     () => new Map(watchProgressStats.map((stat) => [stat.page_number, stat])),
     [watchProgressStats],
@@ -2136,6 +2173,8 @@ export default function PlayPage() {
     handleReplaceImageFile,
     // TTS / audio (from usePdfMetadata + PlayPage)
     ...metaState,
+    canViewPostClassReport,
+    openPostClassReport,
     handleRegenerateAudio,
     // image style (from useImageStyle)
     ...imageStyleState,
@@ -2212,6 +2251,16 @@ export default function PlayPage() {
           onClose={() => setVersionHistoryOpen(false)}
           onPreview={handleVersionPreview}
           onRestore={handleVersionRestore}
+        />
+      ) : null}
+
+      {postClassReportOpen && canViewPostClassReport ? (
+        <PostClassReportPanel
+          summary={postClassReportSummary}
+          loading={postClassReportLoading}
+          error={postClassReportError}
+          onClose={() => setPostClassReportOpen(false)}
+          onReload={() => void loadPostClassReport()}
         />
       ) : null}
 

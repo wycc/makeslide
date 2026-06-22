@@ -312,6 +312,8 @@ export interface PlayPageContextValue {
   handleCreateShareLink: () => void;
   handleMakeSharePrivate: () => void;
   handleShowPlayQrCode: () => void;
+  canViewPostClassReport: boolean;
+  openPostClassReport: () => void;
 
   // ─── GitHub sync ────────────────────────────────────────────────────────────
   githubSyncBusy: boolean;

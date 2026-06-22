@@ -40,6 +40,8 @@ export function PlayPageHeader() {
     shareBusy,
     handleCreateShareLink,
     handleMakeSharePrivate,
+    canViewPostClassReport,
+    openPostClassReport,
     githubSyncBusy, handleSyncToGithub,
     regenJob, regenAllMsg,
     regenJobRunning, regenJobTerminal,
@@ -328,6 +330,15 @@ export function PlayPageHeader() {
           >
             {t('play.header.quizGeneration')}
           </Link>
+          {canViewPostClassReport ? (
+            <button
+              type="button"
+              onClick={() => void openPostClassReport()}
+              className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-3 py-1.5 text-center text-sm text-emerald-100 hover:bg-emerald-500/25"
+            >
+              📊 課後報告
+            </button>
+          ) : null}
           {videoUrl ? (
             <a
               href={videoUrl}
