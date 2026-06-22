@@ -1319,6 +1319,7 @@ export const zhTW = {
   'quiz.showEditorAnswers': '顯示答案與解析',
   'quiz.questionHeading': '第 {index} 題',
   'quiz.delete': '刪除',
+  'quiz.dragToReorder': '拖曳以重新排序',
   'quiz.singleChoice': '單選',
   'quiz.multipleChoice': '多選',
   'quiz.questionPlaceholder': '輸入題目',
