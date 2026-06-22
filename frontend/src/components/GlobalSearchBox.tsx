@@ -5,6 +5,26 @@ import { useI18n } from '../i18n';
 
 const DEBOUNCE_MS = 300;
 
+function highlightText(text: string, query: string): { text: string; isMatch: boolean }[] {
+  const q = query.trim();
+  if (!q) return [{ text, isMatch: false }];
+  const parts: { text: string; isMatch: boolean }[] = [];
+  const lowerText = text.toLowerCase();
+  const lowerQ = q.toLowerCase();
+  let pos = 0;
+  while (pos < text.length) {
+    const idx = lowerText.indexOf(lowerQ, pos);
+    if (idx === -1) {
+      parts.push({ text: text.slice(pos), isMatch: false });
+      break;
+    }
+    if (idx > pos) parts.push({ text: text.slice(pos, idx), isMatch: false });
+    parts.push({ text: text.slice(idx, idx + q.length), isMatch: true });
+    pos = idx + q.length;
+  }
+  return parts;
+}
+
 export default function GlobalSearchBox() {
   const { t } = useI18n();
   const navigate = useNavigate();
@@ -131,7 +151,15 @@ export default function GlobalSearchBox() {
                       )}
                     </div>
                     {result.snippet && (
-                      <p className="line-clamp-2 text-xs text-slate-400">{result.snippet}</p>
+                      <p className="line-clamp-2 text-xs text-slate-400">
+                        {highlightText(result.snippet, query).map((part, i) =>
+                          part.isMatch ? (
+                            <mark key={i} className="rounded-sm bg-yellow-400/25 text-yellow-200 not-italic">{part.text}</mark>
+                          ) : (
+                            <span key={i}>{part.text}</span>
+                          )
+                        )}
+                      </p>
                     )}
                   </button>
                 </li>
