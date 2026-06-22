@@ -211,6 +211,8 @@ export const en = {
   'home.sort.createdDesc': 'Newest created',
   'home.sort.updatedDesc': 'Recently updated',
   'home.sort.pageCountDesc': 'Most pages',
+  'home.sort.audioDurationDesc': 'Longest course first',
+  'home.sort.audioDurationAsc': 'Shortest course first',
   'home.allCategories': 'All categories',
   'home.manageDisplayCategories': 'Manage display categories',
   'home.newCategoryPlaceholder': 'Enter a new category name',
