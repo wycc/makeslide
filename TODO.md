@@ -352,3 +352,20 @@
 | 2026-06-23 | 播放頁備註匯出到剪貼板：PageNoteSection 標題旁加「複製全部備註」按鈕，Markdown 格式化、clipboard helper、i18n | feat/copy-all-notes（已 merge） |
 | 2026-06-23 | 首頁卡片 description 顯示：PdfCard 網格模式標題下 line-clamp-2 說明文字，列表模式追加 description excerpt；title tooltip | feat/pdfcard-description（已 merge） |
 | 2026-06-23 | 播放頁顯示全簡報剩餘時間：useMemo 計算 remainingSeconds（當前頁剩餘 + 後續頁 audio_duration_seconds），時間列加 −MM:SS；i18n timeRemaining | feat/play-time-remaining（已 merge） |
+
+## 掃描摘要（2026-06-23 第九輪）
+
+- 第八輪 5 個項目完成（其中 2 項為既有功能確認）。
+- 全域搜尋 API（`GET /api/search`）已支援 title/text/script 三類比對，但 `description` 欄位（第六輪新增）未納入搜尋，關鍵字比對不完整。
+- 首頁「最近」分類目前以「最近建立」篩選而非「最近播放」，使用者找不到近期播放的教材。
+- 播放頁學生提問列表（master 模式）顯示於 PlayPageHeader，但沒有「複製全部」一鍵匯出供課後記錄。
+- 同步模式下連線學生人數（`fetchSyncAttendees`）目前只在 Settings 分頁展開後才可見，播放控制列無快速徽章顯示。
+- 首頁卡片 hover 時缺乏快速複製分享連結的入口；分享連結需進入播放頁才能取得。
+
+## 新增可執行項目（第九輪）
+
+- [ ] 搜尋 API 補 description 欄位比對：`GET /api/search` 的 title match 邏輯同時比對 `pdfs.description`，若 description 包含關鍵字也回傳 `match_type: 'description'`；`SearchResult` 介面補 `description_snippet` 選填欄位；補後端測試。
+- [ ] 首頁「最近」分類改為依 last_played_at 篩選：`categoryFilter === '__recent__'` 時改篩選 `last_played_at` 不為 null 且在近 14 天內的 PDF，排序改為 `last_played_at` DESC；無播放紀錄時顯示空狀態提示；純前端改動，不改 API。
+- [ ] 播放頁學生提問「複製全部」：PlayPageHeader 的學生提問列表旁加入「複製全部提問」按鈕，以 `## 第 N 頁\nQ: {text}` 格式彙整 `syncFollowerQuestions` 並複製到剪貼板；僅 master 模式可見；補 i18n `play.header.copyAllQuestions/copyAllQuestionsDone`。
+- [ ] 首頁卡片快速複製分享連結：PdfCard hover 時在封面圖右上角顯示「🔗」複製按鈕（visibility 為 public 或 public_editable 時才有意義，先呼叫 `GET /api/pdfs/:id` 取分享 token 並組合 URL 後複製）；補 i18n `card.copyShareLink/copyShareLinkDone/copyShareLinkFail`。
+- [ ] 播放頁同步學生人數徽章：同步模式已啟用（`syncEnabled && syncRole === 'master'`）時，在 PlayPageHeader 的「同步中」按鈕旁顯示已連線學生人數徽章（每 30 秒輪詢 `fetchSyncAttendees`，顯示 count）；不改後端，純前端輪詢。
