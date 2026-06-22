@@ -167,4 +167,17 @@ export async function registerWatchProgressRoutes(app: FastifyInstance): Promise
       })),
     });
   });
+
+  app.delete('/api/pdfs/:id/watch-progress', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid pdf id'));
+    const { id } = parsed.data;
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限重置此簡報的觀看進度'));
+    }
+    const result = db.prepare(`DELETE FROM page_watch_progress WHERE pdf_id = ?`).run(id);
+    return reply.send({ ok: true, deleted_rows: result.changes });
+  });
 }
