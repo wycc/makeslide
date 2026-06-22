@@ -124,6 +124,12 @@ export function __getSyncSessionForTest(pdfId: string): SyncSessionState | undef
   return sessions.get(pdfId);
 }
 
+/** Snapshot current in-memory follower questions for read-only reporting routes. */
+export function getSyncFollowerQuestionsSnapshot(pdfId: string): Array<Pick<SyncFollowerQuestion, 'id' | 'clientId' | 'code' | 'question' | 'createdAt'>> {
+  const session = sessions.get(pdfId);
+  return session ? session.followerQuestions.map((question) => ({ ...question })) : [];
+}
+
 interface SyncSessionRow {
   pdf_id: string;
   master_client_id: string | null;
