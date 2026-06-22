@@ -1306,6 +1306,8 @@ export const zhTW = {
   'play.header.downloadSrt': '下載 SRT 字幕',
   'play.header.downloadVtt': '下載 VTT 字幕',
   'play.header.downloadPptx': '下載 PPTX',
+  'play.header.downloadCoursePackage': '下載課程包',
+  'play.header.coursePackageGenerating': '產生課程包中…',
   'play.header.remoteController': '遠端控制',
   'remote.loading': '載入簡報資料中…',
   'remote.loadError': '無法載入簡報資料，請確認您有權限存取此簡報。',

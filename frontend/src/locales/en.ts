@@ -1306,6 +1306,8 @@ export const en = {
   'play.header.downloadSrt': 'Download SRT subtitles',
   'play.header.downloadVtt': 'Download VTT subtitles',
   'play.header.downloadPptx': 'Download PPTX',
+  'play.header.downloadCoursePackage': 'Download Course Package',
+  'play.header.coursePackageGenerating': 'Generating course package…',
   'play.header.remoteController': 'Remote Control',
   'remote.loading': 'Loading presentation data…',
   'remote.loadError': 'Failed to load presentation. Check that you have permission to access it.',
