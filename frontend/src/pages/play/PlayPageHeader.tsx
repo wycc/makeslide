@@ -23,6 +23,7 @@ export function PlayPageHeader() {
     syncAiAnswer, syncAiAnswerBusy,
     handleSyncEnabledChange,
     handleSubmitFollowerQuestion,
+    handleRaiseHand,
     handleToggleDisplayedQuestion,
     handleAiAnswerFollowerQuestions,
     readOnlyReason, detail,
@@ -160,6 +161,14 @@ export function PlayPageHeader() {
                   >
                     {t('play.sync.submitQuestion')}
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleRaiseHand()}
+                    className="rounded border border-amber-500/50 bg-amber-500/15 px-3 py-1 text-amber-100"
+                    title={t('play.sync.raiseHandTitle')}
+                  >
+                    🖐 {t('play.sync.raiseHand')}
+                  </button>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -202,8 +211,9 @@ export function PlayPageHeader() {
                   ) : null}
                   <div className="max-h-28 space-y-1 overflow-auto">
                     {syncFollowerQuestions.slice(0, 5).map((q) => (
-                      <div key={q.id} className="rounded bg-slate-950/70 px-2 py-1">
-                        <span className="text-cyan-300">{q.code || t('play.sync.anonymous')}：</span>{q.question}
+                      <div key={q.id} className={`rounded px-2 py-1 ${q.question === '🖐' ? 'bg-amber-500/15 border border-amber-500/30' : 'bg-slate-950/70'}`}>
+                        <span className={q.question === '🖐' ? 'text-amber-300' : 'text-cyan-300'}>{q.code || t('play.sync.anonymous')}：</span>
+                        {q.question === '🖐' ? <span className="text-amber-200">🖐 {t('play.sync.raiseHand')}</span> : q.question}
                       </div>
                     ))}
                   </div>

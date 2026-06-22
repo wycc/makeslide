@@ -1378,6 +1378,18 @@ export default function PlayPage() {
     }
   }, [pdfId, syncFollowerQuestionInput, syncQuestionInput]);
 
+  const handleRaiseHand = useCallback(async () => {
+    if (!pdfId || !syncClientIdRef.current) return;
+    try {
+      const userCode = await resolveConfiguredUserCode();
+      const item = await submitSyncFollowerQuestion(pdfId, syncClientIdRef.current, '🖐', userCode || undefined);
+      setSyncFollowerQuestions((prev) => [item, ...prev]);
+      setSyncError(null);
+    } catch (err) {
+      setSyncError(err instanceof ApiError ? err.message : '舉手失敗');
+    }
+  }, [pdfId]);
+
   const handleToggleDisplayedQuestion = useCallback(async () => {
     if (!pdfId || !syncClientIdRef.current) return;
     try {
@@ -2213,7 +2225,7 @@ export default function PlayPage() {
     syncQuestionInput, setSyncQuestionInput, fullscreenQuestionDialogOpen, setFullscreenQuestionDialogOpen,
     fullscreenPollControlOpen, setFullscreenPollControlOpen, remoteCursor, syncDrawingState,
     isSyncFollower, canUseDrawingTools, handleSyncEnabledChange, handleSubmitFollowerQuestion,
-    handleToggleDisplayedQuestion, handleAiAnswerFollowerQuestions,
+    handleRaiseHand, handleToggleDisplayedQuestion, handleAiAnswerFollowerQuestions,
     // fullscreen / layout
     imageOnlyFullscreen, setImageOnlyFullscreen, fullscreenLayout, setFullscreenLayout,
     positioningEffectId, setPositioningEffectId,

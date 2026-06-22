@@ -274,6 +274,8 @@ export interface PlayPageContextValue {
   handleDeleteCurrentSlide: () => void;
   handleMoveSlide: (from: number, to: number) => void;
   handleUpdateCoverFromCurrentPage: () => void;
+  aiPollBusy: boolean;
+  handleGeneratePollDraft: () => void;
   handleDeletePoll: (pollId: number) => void;
   handleCreatePoll: () => void;
   handleStartPoll: () => void;
@@ -380,6 +382,7 @@ export interface PlayPageContextValue {
   canUseDrawingTools: boolean;
   handleSyncEnabledChange: (enabled: boolean) => void;
   handleSubmitFollowerQuestion: () => void;
+  handleRaiseHand: () => void;
   handleToggleDisplayedQuestion: () => void;
   handleAiAnswerFollowerQuestions: () => void;
 
