@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import type { PdfReportQuestionStat, PdfReportSummary } from '../../lib/api';
 import {
   formatReportNumber,
@@ -6,6 +7,31 @@ import {
   getLowestCompletionPages,
   getMostDivergentPollPages,
 } from './reportSummary';
+
+interface StudentQuestionResult {
+  question_id: string;
+  question: string;
+  options: string[];
+  selected: number[];
+  correct_indices: number[];
+  is_correct: boolean;
+}
+
+interface StudentAttempt {
+  attempt_id: number;
+  quiz_id: number;
+  quiz_title: string;
+  score: number | null;
+  submitted_at: string;
+  question_results: StudentQuestionResult[];
+}
+
+interface StudentRecord {
+  client_id: string;
+  attempt_count: number;
+  average_score: number | null;
+  attempts: StudentAttempt[];
+}
 
 interface PostClassReportPanelProps {
   pdfId: string;
@@ -30,6 +56,22 @@ export function PostClassReportPanel({ pdfId, summary, loading, error, onClose, 
   const hardestQuestions = getHardestQuestions(summary);
   const divergentPollPages = getMostDivergentPollPages(summary);
   const lowestCompletionPages = getLowestCompletionPages(summary);
+
+  const [students, setStudents] = useState<StudentRecord[]>([]);
+  const [studentsLoading, setStudentsLoading] = useState(false);
+  const [selectedClientId, setSelectedClientId] = useState('');
+
+  useEffect(() => {
+    if (!summary) return;
+    setStudentsLoading(true);
+    fetch(`api/pdfs/${encodeURIComponent(pdfId)}/report/students`)
+      .then((r) => r.ok ? r.json() as Promise<{ students: StudentRecord[] }> : Promise.reject(r.status))
+      .then((data) => { setStudents(data.students); })
+      .catch(() => { setStudents([]); })
+      .finally(() => { setStudentsLoading(false); });
+  }, [pdfId, summary]);
+
+  const selectedStudent = students.find((s) => s.client_id === selectedClientId) ?? null;
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/80 px-4 py-8 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="post-class-report-title">
       <div className="w-full max-w-5xl rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
@@ -166,6 +208,76 @@ export function PostClassReportPanel({ pdfId, summary, loading, error, onClose, 
                 </div>
               </section>
             ) : null}
+
+            <section className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+              <h3 className="mb-1 font-semibold text-slate-100">個別學生分析</h3>
+              <p className="mb-3 text-xs text-slate-500">依學生篩選，檢視其各題作答詳情。</p>
+              <div className="flex items-center gap-3">
+                <select
+                  value={selectedClientId}
+                  onChange={(e) => setSelectedClientId(e.target.value)}
+                  disabled={studentsLoading || students.length === 0}
+                  className="w-64 rounded-md border border-slate-600 bg-slate-800 px-2 py-1.5 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-500 disabled:opacity-50"
+                >
+                  <option value="">— 選擇學生 —</option>
+                  {students.map((s) => (
+                    <option key={s.client_id} value={s.client_id}>
+                      {s.client_id}（{s.attempt_count} 次作答，平均 {s.average_score != null ? Math.round(s.average_score) : '—'} 分）
+                    </option>
+                  ))}
+                </select>
+                {studentsLoading ? <span className="text-xs text-slate-400">載入中…</span> : null}
+                {!studentsLoading && students.length === 0 ? <span className="text-xs text-slate-500">尚無作答紀錄。</span> : null}
+              </div>
+
+              {selectedStudent ? (
+                <div className="mt-4 space-y-4">
+                  {selectedStudent.attempts.map((attempt) => (
+                    <div key={attempt.attempt_id} className="rounded-lg border border-slate-700 bg-slate-900/60 p-4">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <p className="text-sm font-medium text-slate-200">{attempt.quiz_title || `測驗 #${attempt.quiz_id}`}</p>
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className={`rounded px-2 py-0.5 font-medium ${attempt.score != null && attempt.score >= 70 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}`}>
+                            {attempt.score != null ? `${Math.round(attempt.score)} 分` : '未計分'}
+                          </span>
+                          <span className="text-slate-500">{new Date(attempt.submitted_at).toLocaleString()}</span>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        {attempt.question_results.map((qr, qIdx) => (
+                          <div key={qr.question_id} className={`rounded-md border p-3 text-sm ${qr.is_correct ? 'border-emerald-800/60 bg-emerald-950/30' : 'border-rose-800/60 bg-rose-950/30'}`}>
+                            <div className="flex items-start gap-2">
+                              <span className={`mt-0.5 shrink-0 text-base ${qr.is_correct ? 'text-emerald-400' : 'text-rose-400'}`}>{qr.is_correct ? '✓' : '✗'}</span>
+                              <div className="flex-1">
+                                <p className="text-slate-200"><span className="text-xs text-slate-400">#{qIdx + 1} </span>{qr.question}</p>
+                                <div className="mt-1.5 flex flex-wrap gap-2">
+                                  {qr.options.map((opt, oIdx) => {
+                                    const isSelected = qr.selected.includes(oIdx);
+                                    const isCorrect = qr.correct_indices.includes(oIdx);
+                                    let cls = 'rounded px-2 py-0.5 text-xs ';
+                                    if (isSelected && isCorrect) cls += 'bg-emerald-500/25 text-emerald-300 ring-1 ring-emerald-500/50';
+                                    else if (isSelected) cls += 'bg-rose-500/25 text-rose-300 ring-1 ring-rose-500/50';
+                                    else if (isCorrect) cls += 'bg-emerald-900/40 text-emerald-500';
+                                    else cls += 'bg-slate-800/60 text-slate-400';
+                                    return (
+                                      <span key={oIdx} className={cls}>
+                                        {String.fromCharCode(65 + oIdx)}. {opt}
+                                        {isSelected && !isCorrect ? ' ✗' : ''}
+                                        {isCorrect ? ' ✓' : ''}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </section>
 
             <p className="text-right text-xs text-slate-500">產生時間：{new Date(summary.generated_at).toLocaleString()}</p>
           </div>
