@@ -181,6 +181,18 @@ export function PlayPageSlidePanel() {
   };
 
   const progressRatio = duration > 0 ? Math.min(1, currentTime / duration) * 1000 : 0;
+  const [jumpPageInput, setJumpPageInput] = useState<string>('');
+  const [jumpPageFocused, setJumpPageFocused] = useState(false);
+
+  const handleJumpPageCommit = () => {
+    const n = parseInt(jumpPageInput, 10);
+    if (!isNaN(n)) {
+      const clamped = Math.max(1, Math.min(n, totalPages));
+      setCurrentIdx(clamped - 1);
+    }
+    setJumpPageInput('');
+    setJumpPageFocused(false);
+  };
 
   const autoAdvanceCountdown = useMemo(() => {
     if (!autoAdvance || duration <= 0 || finished) return null;
@@ -528,6 +540,21 @@ export function PlayPageSlidePanel() {
         >
           ⏮
         </button>
+        <span className="flex shrink-0 items-center gap-1 font-mono text-xs text-slate-400" title={t('play.slidePanel.jumpToPage')}>
+          <input
+            type="number"
+            min={1}
+            max={totalPages}
+            value={jumpPageFocused ? jumpPageInput : currentIdx + 1}
+            onFocus={() => { setJumpPageFocused(true); setJumpPageInput(String(currentIdx + 1)); }}
+            onBlur={handleJumpPageCommit}
+            onChange={(e) => setJumpPageInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.currentTarget.blur(); } }}
+            className="w-10 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-center text-slate-200 focus:border-emerald-500 focus:outline-none"
+            aria-label={t('play.slidePanel.jumpToPage')}
+          />
+          <span>/ {totalPages}</span>
+        </span>
         {audioError ? (
           <button
             type="button"
