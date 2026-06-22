@@ -184,6 +184,7 @@ export interface PageRow {
   // without them, so keep them optional at the type level.
   render_type?: SlideRenderType | null;
   animation_spec_path?: string | null;
+  page_notes?: string;
   created_at: string;
   updated_at: string;
 }
@@ -239,6 +240,7 @@ export interface PdfDetailPage {
   status: PageStatus;
   error_message?: string | null;
   timings?: PdfDetailPageTimings | null;
+  page_notes?: string;
 }
 
 export interface PagePollOption {

@@ -1801,6 +1801,16 @@ export async function updatePdfDescription(id: string, description: string): Pro
   return (await resp.json()) as { id: string; description: string; updated_at: string };
 }
 
+export async function updatePageNote(id: string, pageNumber: number, note: string): Promise<{ id: string; page_number: number; page_notes: string; updated_at: string }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/note`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ note }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { id: string; page_number: number; page_notes: string; updated_at: string };
+}
+
 export async function generatePollDraft(id: string, pageNumber: number): Promise<{ question: string; options: string[] }> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/generate-poll`, { method: 'POST' });
   if (!resp.ok) throw await parseErrorBody(resp);

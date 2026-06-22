@@ -598,6 +598,7 @@ export function rowToDetail(row: PdfRow, pages: PageRow[], timingsByPage: PageTi
     status: p.status,
     error_message: p.error_message,
     timings: timingsByPage.get(p.page_number) ?? emptyPageTimings(),
+    page_notes: p.page_notes ?? '',
   }));
   return {
     id: row.id,

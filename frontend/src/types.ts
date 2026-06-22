@@ -447,6 +447,7 @@ export interface PdfDetailPage {
   status: PageStatus;
   error_message?: string | null;
   timings?: PdfDetailPageTimings | null;
+  page_notes?: string;
 }
 
 export interface PdfDetail {

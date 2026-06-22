@@ -276,7 +276,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       .prepare(
         `SELECT pdf_id, page_number, image_path, text_path, script_path,
                 audio_path, audio_duration_seconds, render_type, animation_spec_path,
-                status, error_message, created_at, updated_at
+                page_notes, status, error_message, created_at, updated_at
          FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
       )
       .all(parsed.data.id) as PageRow[];
@@ -903,6 +903,32 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     db.prepare(`UPDATE pages SET updated_at = ? WHERE pdf_id = ? AND page_number = ?`).run(now, id, n);
     db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(now, id);
     return reply.send({ id, page_number: n, page_prompt: prompt || null, updated_at: now });
+  });
+
+  // PATCH /api/pdfs/:id/pages/:n/note
+  app.patch('/api/pdfs/:id/pages/:n/note', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const body = z.object({ note: z.string().max(5000, 'note 不可超過 5000 字元') }).safeParse(request.body ?? {});
+    if (!body.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
+    }
+    const { id, n } = parsed.data;
+    const pdfRow = db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
+      | Pick<PdfRow, 'owner_sub' | 'visibility'>
+      | undefined;
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的頁面備註'));
+    }
+    const page = db.prepare(`SELECT pdf_id FROM pages WHERE pdf_id = ? AND page_number = ?`).get(id, n);
+    if (!page) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+    const now = nowIso();
+    const note = body.data.note;
+    db.prepare(`UPDATE pages SET page_notes = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`).run(note, now, id, n);
+    return reply.send({ id, page_number: n, page_notes: note, updated_at: now });
   });
 
   app.get('/api/pdfs/:id/pages/:n/polls', async (request, reply) => {
