@@ -203,4 +203,23 @@
 | 2026-06-23 | 首頁簡報「我的最愛」：`PdfCard` 圖片右下角 ★/☆ 按鈕（琥珀色高亮）；`HomePage` favorites Set + localStorage；tag filter 上方加「我的最愛」chip；i18n `card.favorite/unfavorite`/`home.filter.favoritesOnly` | feat/homepage-favorites（已 merge） |
 | 2026-06-23 | 播放完成後顯示重播提示：`finished` 覆蓋層加入「重播」（setCurrentIdx(0)+setIsPlaying+setFinished=false）與「繼續手動瀏覽」按鈕；i18n `play.slidePanel.replay`/`continueManual` | feat/playback-completion-overlay（已 merge） |
 | 2026-06-23 | 設定頁「清除所有生成快取」功能：`DELETE /api/admin/cache`（掃描 artifact_cache/ 子目錄、回傳 dirs_cleared/bytes_freed）；`artifactCacheDir()` helper；SettingsPage 琥珀色按鈕；2 個測試通過 | feat/admin-cache-clear（已 merge） |
-| 2026-06-23 | 分享連結有效期設定：`pdf_shares.expires_at` migration；POST 支援 `expires_days`（1-3650）；GET 過期回傳 410；ShareDialog 有效期下拉（永久/7/30/90天）；3 個後端測試通過 | feat/share-link-expiry（已 merge） |
+| 2026-06-23 | 分享連結有效期設定前端 UI：PlayPageHeader 分享面板新增有效期 `<select>`（永久/7天/30天/90天），連接既有 `shareExpiresDays`/`setShareExpiresDays` 狀態；i18n `play.share.expiryLabel/Forever/7days/30days/90days` | feature/share-link-expiry-ui（已 merge） |
+
+## 掃描摘要（2026-06-23 第五輪）
+
+- 第四輪計數目前已完成 14/20 項目（含分享連結有效期設定）。
+- 首頁缺少關鍵字搜尋欄，使用者只能靠分類/標籤篩選，教材多時難以快速找到目標。
+- 課後報告目前只能在頁面上查看，缺少匯出 CSV 供外部分析的功能。
+- 播放頁 sidebar 投票結果只顯示票數文字，缺乏視覺化長條圖。
+- `PdfCard` hover 時未顯示頁數、音頻時長等摘要資訊，使用者需進入播放頁才能得知。
+- 播放頁單頁逐字稿目前無法一鍵複製，需手動選取文字。
+- 首頁搜尋不支援對簡報標籤搜尋，搜尋功能不完整。
+
+## 新增可執行項目（第五輪）
+
+- [ ] 首頁關鍵字搜尋欄：在首頁標題/類別篩選列上方新增搜尋輸入框，以 `includes`（case-insensitive）同時比對 `pdf.title`、`pdf.tags`；搜尋結果即時更新，輸入框右側顯示清除（×）按鈕；純前端改動，補 i18n `home.search.placeholder`/`home.search.clear`。
+- [ ] 課後報告匯出 CSV：新增 `GET /api/pdfs/:id/report/students.csv` 後端端點，依學生 client_id 彙整答題資料（學生識別碼、各題作答、總分、觀看完成率），回傳 `text/csv`；課後報告面板新增「匯出 CSV」按鈕；補後端測試驗證 200 / 403。
+- [ ] 投票選項結果長條圖：在教師端同步面板的投票控制區，各投票選項文字旁以 emerald 色寬度比例長條圖呈現得票比例（`option.vote_count / poll.total_votes * 100%`）；純前端改動，補 i18n `play.sidebar.poll.resultBar`。
+- [ ] PdfCard hover 顯示頁數與時長 badge：`PdfCard` 封面圖片左上角新增半透明 badge，顯示頁數（`total_pages`）和音頻時長（`total_audio_duration_seconds` 格式化為 `m:ss`）；僅在 hover 時以 fade-in 動畫顯示；純前端改動。
+- [ ] 播放頁複製本頁逐字稿：在播放頁 header 匯出區新增「複製本頁逐字稿」按鈕，呼叫 `GET /api/pdfs/:id/pages/:n/script`（已存在）取得逐字稿，再以 clipboard API 複製；顯示複製成功/失敗短暫提示；補 i18n。
+- [ ] 首頁卡片顯示最後播放時間：`pdfs` 表已有 `updated_at`，但缺少「最後播放時間」欄位；新增 `last_played_at TEXT` 欄位（migration），播放頁進入時更新（`PATCH /api/pdfs/:id/last-played`）；首頁 PdfCard 顯示「上次播放：N 天前」文字；補後端測試。
