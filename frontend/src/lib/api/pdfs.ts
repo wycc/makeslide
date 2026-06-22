@@ -803,6 +803,17 @@ export interface PdfReportQuizQuestionSummary {
   wrong_rate: number;
 }
 
+export interface PdfReportQuestionStat {
+  question_id: string;
+  question: string;
+  option_count: number;
+  attempt_count: number;
+  correct_count: number;
+  wrong_count: number;
+  correct_rate: number;
+  option_votes: number[];
+}
+
 export interface PdfReportPollPageSummary {
   page_number: number;
   question?: string;
@@ -826,6 +837,7 @@ export interface PdfReportSummary {
     participant_count: number;
     average_score: number | null;
     hardest_questions?: PdfReportQuizQuestionSummary[];
+    question_stats?: PdfReportQuestionStat[];
   };
   polls: {
     poll_count: number;

@@ -102,7 +102,11 @@ test('GET /api/pdfs/:id/report/summary aggregates quiz, poll, questions and per-
     };
 
     assert.equal(body.participant_count, 5);
-    assert.deepEqual(body.quiz, { attempt_count: 2, participant_count: 2, average_score: 70 });
+    assert.deepEqual(body.quiz.attempt_count, 2);
+    assert.deepEqual(body.quiz.participant_count, 2);
+    assert.deepEqual(body.quiz.average_score, 70);
+    assert.ok(Array.isArray(body.quiz.question_stats), 'question_stats should be an array');
+    assert.ok(Array.isArray(body.quiz.hardest_questions), 'hardest_questions should be an array');
     assert.equal(body.polls.poll_count, 2);
     assert.equal(body.polls.vote_count, 3);
     assert.equal(body.polls.participant_count, 2);
@@ -141,6 +145,90 @@ test('GET /api/pdfs/:id/report/summary is only available to owners or editors', 
 
     const missing = await app.inject({ method: 'GET', url: '/api/pdfs/report-missing-1/report/summary', headers: OWNER_HEADERS });
     assert.equal(missing.statusCode, 404);
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /api/pdfs/:id/report/summary question_stats returns empty array when no attempts', async () => {
+  const pdfId = 'report-qstats-empty';
+  seedReportPdf(pdfId, 'private');
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}/report/summary`, headers: OWNER_HEADERS });
+    assert.equal(resp.statusCode, 200);
+    const body = resp.json() as { quiz: { question_stats: unknown[]; hardest_questions: unknown[] } };
+    assert.deepEqual(body.quiz.question_stats, []);
+    assert.deepEqual(body.quiz.hardest_questions, []);
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /api/pdfs/:id/report/summary question_stats computes correct_rate and option_votes', async () => {
+  const pdfId = 'report-qstats-01';
+  seedReportPdf(pdfId, 'private');
+  const t = nowIso();
+
+  const questions = [
+    { id: 'q1', type: 'single', question: 'What is 1+1?', options: [{ text: '1' }, { text: '2' }, { text: '3' }], answer_indices: [1], explanation: '' },
+    { id: 'q2', type: 'single', question: 'Capital of France?', options: [{ text: 'London' }, { text: 'Paris' }], answer_indices: [1], explanation: '' },
+  ];
+  const quizId = Number(
+    db.prepare(`INSERT INTO quiz_sets (pdf_id, title, prompt, questions_json, created_at, updated_at) VALUES (?, 'Q Stats Quiz', '', ?, ?, ?)`)
+      .run(pdfId, JSON.stringify(questions), t, t).lastInsertRowid,
+  );
+
+  const insertAttempt = db.prepare(
+    `INSERT INTO quiz_attempts (pdf_id, quiz_id, session_id, client_id, code, answers_json, score, submitted_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, NULL, ?, NULL, ?, ?, ?)`,
+  );
+  // student-a answers q1 correctly (idx 1), q2 incorrectly (idx 0)
+  insertAttempt.run(pdfId, quizId, 'ses-1', 'client-a', JSON.stringify({ q1: [1], q2: [0] }), t, t, t);
+  // student-b answers q1 incorrectly (idx 0), q2 correctly (idx 1)
+  insertAttempt.run(pdfId, quizId, 'ses-2', 'client-b', JSON.stringify({ q1: [0], q2: [1] }), t, t, t);
+  // student-c answers both correctly
+  insertAttempt.run(pdfId, quizId, 'ses-3', 'client-c', JSON.stringify({ q1: [1], q2: [1] }), t, t, t);
+
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}/report/summary`, headers: OWNER_HEADERS });
+    assert.equal(resp.statusCode, 200);
+    const body = resp.json() as {
+      quiz: {
+        question_stats: Array<{
+          question_id: string;
+          question: string;
+          attempt_count: number;
+          correct_count: number;
+          wrong_count: number;
+          correct_rate: number;
+          option_votes: number[];
+        }>;
+        hardest_questions: Array<{ question_id: string; wrong_rate: number }>;
+      };
+    };
+
+    assert.equal(body.quiz.question_stats.length, 2);
+    const q1stat = body.quiz.question_stats.find((s) => s.question_id === 'q1');
+    const q2stat = body.quiz.question_stats.find((s) => s.question_id === 'q2');
+    assert.ok(q1stat, 'q1 stat should exist');
+    assert.ok(q2stat, 'q2 stat should exist');
+
+    assert.equal(q1stat.attempt_count, 3);
+    assert.equal(q1stat.correct_count, 2);
+    assert.equal(q1stat.wrong_count, 1);
+    assert.ok(Math.abs(q1stat.correct_rate - 2 / 3) < 0.001, 'q1 correct_rate should be ~0.667');
+    assert.deepEqual(q1stat.option_votes, [1, 2, 0]);
+
+    assert.equal(q2stat.attempt_count, 3);
+    assert.equal(q2stat.correct_count, 2);
+    assert.equal(q2stat.wrong_count, 1);
+    assert.deepEqual(q2stat.option_votes, [1, 2]);
+
+    assert.ok(Array.isArray(body.quiz.hardest_questions), 'hardest_questions should be array');
+    assert.ok(body.quiz.hardest_questions.length > 0, 'hardest_questions should be non-empty');
+    assert.ok(Math.abs(body.quiz.hardest_questions[0].wrong_rate - 1 / 3) < 0.001, 'hardest question wrong_rate should be ~0.333');
   } finally {
     await app.close();
   }
