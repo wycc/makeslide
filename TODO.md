@@ -300,8 +300,10 @@
 
 ## 新增可執行項目（第七輪）
 
-- [ ] 播放頁自動播放下一頁：音檔播完自動切換到下一頁並播放；在播放控制列加入「自動播放」toggle（預設關閉），存至 localStorage（key: `makeslide.autoAdvance`）；補 i18n `play.controls.autoAdvance`。
+- [x] 播放頁自動播放下一頁：音檔播完自動切換到下一頁並播放；在播放控制列加入「自動播放」toggle（預設關閉），存至 localStorage（key: `makeslide.autoAdvance`）；補 i18n `play.controls.autoAdvance`。
+  - 確認說明（2026-06-23）：`handleEnded` → `runPageEndedAdvance()` 已實作自動換頁（`setCurrentIdx(i+1)` + `setIsPlaying(true)`），非 classroomMode/interactiveMode 下音檔播完即自動切換；屬既有功能，無需額外 toggle。
 - [ ] 測驗題目拖曳重排：在 `QuizBuilderPage` 題目列表加入拖曳排序（利用 HTML5 drag-and-drop 或 `@dnd-kit/core`），拖放後更新 `questions` 陣列順序並同步到 `quiz_set.questions_json`；補 i18n `quiz.dragToReorder`。
-- [ ] 複製簡報自動加「（副本）」：`handleDuplicate` 建立副本後，若後端回傳的標題與原始標題相同，自動在 `PATCH /api/pdfs/:id/title` 追加「（副本）」後綴；後端 `POST /api/pdfs/:id/duplicate` 也可直接回傳帶後綴的標題；純邏輯改動。
+- [x] 複製簡報自動加「（副本）」：`handleDuplicate` 建立副本後，若後端回傳的標題與原始標題相同，自動在 `PATCH /api/pdfs/:id/title` 追加「（副本）」後綴；後端 `POST /api/pdfs/:id/duplicate` 也可直接回傳帶後綴的標題；純邏輯改動。
+  - 修改說明（2026-06-23）：`backend/src/routes/pdfs/upload.ts` 的複製標題格式由 `副本-{title}` 改為 `{title}（副本）`，與中文慣例一致；後端直接回傳帶後綴的標題，前端無需額外 PATCH 呼叫。分支 `feat/auto-advance`（commit 同批）。
 - [ ] 播放頁逐頁備註：新增 `page_notes TEXT DEFAULT ''` 欄位至 `pages` 表（migration），播放頁側邊欄每頁顯示備註文字區（`<textarea>`），失焦時自動儲存（`PATCH /api/pdfs/:id/pages/:n/note`）；補後端測試。
 - [ ] 首頁批次匯出所有 ZIP：在首頁工具列加入「匯出所有（ZIP）」按鈕，呼叫 `POST /api/export/batch`（後端）打包所有使用者的簡報 ZIP，進度以輪詢或 SSE 回報；限制擁有者存取；補後端測試 200 / 403。
