@@ -338,8 +338,10 @@
   - 確認說明（2026-06-23）：`QuizBuilderPage.tsx` 已有 `quizCountdown` state、`setInterval` 倒計時、時間到自動呼叫 `submitFollowerAttempt`，UI 以紅/橙色框顯示剩餘分:秒（`quiz.countdownPrefix`）。屬既有功能確認。
 - [x] 播放頁備註匯出到剪貼板：PlayPageSidebar 備註區塊標題旁加入「複製全部備註」按鈕，彙整所有有內容的 page_notes 為 Markdown 格式（`## 第 N 頁\n{note}\n`）複製到剪貼板；純前端，沿用既有 clipboard helper；補 i18n `play.sidebar.copyAllNotes/noNotesToCopy`。
   - 實作說明（2026-06-23）：`PageNoteSection` 頭部加「複製全部備註」按鈕，從 `deckPages` 收集非空 `page_notes`，格式化為 `## 第 N 頁\n{note}` 的 Markdown 後呼叫 `copyTextToClipboard`；結果以 inline 狀態訊息顯示 2 秒；i18n `play.sidebar.copyAllNotes/copyAllNotesDone/copyAllNotesFail/copyAllNotesPagePrefix/noNotesToCopy`。分支 `feat/copy-all-notes`。
-- [ ] 首頁卡片 description tooltip：PdfCard 網格模式在簡報標題下方顯示最多 2 行說明文字（`pdf.description`），列表模式在標題行右側加縮略顯示；有說明時加 title tooltip 顯示完整內容；純前端，不改 API。
-- [ ] 播放頁顯示全簡報剩餘時間：利用已載入的每頁音訊 duration（`audioDurations`），在頁首或底部顯示「剩餘 HH:MM」提示（從目前頁之後的頁加總）；純前端；補 i18n `play.header.timeRemaining`。
+- [x] 首頁卡片 description tooltip：PdfCard 網格模式在簡報標題下方顯示最多 2 行說明文字（`pdf.description`），列表模式在標題行右側加縮略顯示；有說明時加 title tooltip 顯示完整內容；純前端，不改 API。
+  - 實作說明（2026-06-23）：`PdfCard.tsx` 標題下方加 `line-clamp-2` 說明段落（有說明才顯示）；`HomePage.tsx` 列表模式分頁數後加 `— {description}` span（truncate）；兩處均以 `title={pdf.description}` 提供完整 tooltip。分支 `feat/pdfcard-description`。
+- [x] 播放頁顯示全簡報剩餘時間：利用已載入的每頁音訊 duration（`audioDurations`），在頁首或底部顯示「剩餘 HH:MM」提示（從目前頁之後的頁加總）；純前端；補 i18n `play.header.timeRemaining`。
+  - 實作說明（2026-06-23）：`PlayPageSlidePanel.tsx` 以 `useMemo` 計算 `remainingSeconds`（當前頁剩餘 + 後續頁 `audio_duration_seconds` 加總），在時間列顯示 `−MM:SS` 淡灰色文字並加 tooltip；i18n `play.header.timeRemaining`。分支 `feat/play-time-remaining`。
 
 ## 工作記錄（第八輪）
 
@@ -348,3 +350,5 @@
 | 2026-06-23 | 播放頁鍵盤快捷鍵說明面板（確認）：PlayPageHeader.tsx 已有 ShortcutsButton | 既有功能確認 |
 | 2026-06-23 | 課堂測驗倒計時顯示（確認）：QuizBuilderPage.tsx 已有 quizCountdown 倒計時 | 既有功能確認 |
 | 2026-06-23 | 播放頁備註匯出到剪貼板：PageNoteSection 標題旁加「複製全部備註」按鈕，Markdown 格式化、clipboard helper、i18n | feat/copy-all-notes（已 merge） |
+| 2026-06-23 | 首頁卡片 description 顯示：PdfCard 網格模式標題下 line-clamp-2 說明文字，列表模式追加 description excerpt；title tooltip | feat/pdfcard-description（已 merge） |
+| 2026-06-23 | 播放頁顯示全簡報剩餘時間：useMemo 計算 remainingSeconds（當前頁剩餘 + 後續頁 audio_duration_seconds），時間列加 −MM:SS；i18n timeRemaining | feat/play-time-remaining（已 merge） |
