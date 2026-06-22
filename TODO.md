@@ -319,3 +319,32 @@
   - 實作說明（2026-06-23）：db migration、PATCH 端點（owner-only）、GET detail 回傳 page_notes、PlayPageSidebar `PageNoteSection` component（失焦自動儲存）、4 個後端整合測試。分支 `feat/page-notes-impl`。
 - [x] 首頁批次匯出所有 ZIP：在首頁工具列加入「匯出所有（ZIP）」按鈕，呼叫 `POST /api/export/batch`（後端）打包所有使用者的簡報 ZIP，進度以輪詢回報；限制擁有者存取；補後端測試 200 / 403 / 404。
   - 實作說明（2026-06-23）：`backend/src/routes/pdfs/batch-export.ts` 實作 job-queue 模式：`POST /api/export/batch` 建立 job（背景跑），`GET /api/export/batch/:jobId` 回傳進度（progress/total），`GET /api/export/batch/:jobId/download` 下載 ZIP；逐 PDF 呼叫 `runZipCommand` 打包成個別 ZIP，再以 `runZipCommand` 彙整成 `makeslide_all_{date}.zip`；重複標題加 `_N` 後綴避免衝突；前端 `HomePage.tsx` 加入「匯出全部 ZIP」按鈕，每 2 秒輪詢進度，完成後自動下載；4 個後端測試通過。分支 `feat/home-batch-export-zip`。
+
+## 掃描摘要（2026-06-23 第八輪）
+
+- 第七輪 5 個項目全數完成。
+- 播放頁已有鍵盤快捷鍵（Space/左右箭頭/w/a/p/Escape），但沒有說明面板，使用者需靠摸索才知道。
+- `quiz_sets.time_limit_seconds` 欄位已存入 DB，QuizBuilderPage 有設定 UI，但播放頁課堂測驗面板在倒計時走完後不自動提交，也不顯示剩餘時間。
+- PlayPageSidebar 已有每頁備註功能，但備份多頁備註需手動逐頁複製，缺少「匯出全部備註」一鍵功能。
+- PdfCard 已顯示封面圖、頁數、語音時長，但 PDF description 欄位（第六輪新增）未顯示在首頁卡片 tooltip 或列表行。
+- 播放頁自動播放下一頁（第七輪）邏輯已加入，但播放頁底部進度條目前只顯示當前頁碼，缺乏「剩餘 N 分 M 秒」的時間提示。
+- 首頁工具列按鈕累積後較難辨認，可考慮在按鈕上加 title tooltip 說明其功能。
+
+## 新增可執行項目（第八輪）
+
+- [x] 播放頁鍵盤快捷鍵說明面板：按下 `?` 鍵或點選頁首「？」圖示，顯示/隱藏快捷鍵說明 overlay（Space/←/→/w/a/p/Escape 等），純前端；補 i18n `play.keyboard.*`。
+  - 確認說明（2026-06-23）：`PlayPageHeader.tsx` 已有 `ShortcutsButton` 元件，顯示 `?` 按鈕並開啟 modal，包含所有快捷鍵說明；`zh-TW.ts` 已有 `play.shortcuts.*` 與 `play.header.keyboardShortcuts` 鍵值。屬既有功能確認。
+- [x] 課堂測驗倒計時顯示：播放頁開啟課堂測驗（同步模式 `syncQuizOpen`）時，若 `time_limit_seconds > 0` 則顯示剩餘秒數倒計時，時間歸零自動提交（follower）或標示時間到（master）；純前端；補 i18n `quiz.timeRemaining/timesUp`。
+  - 確認說明（2026-06-23）：`QuizBuilderPage.tsx` 已有 `quizCountdown` state、`setInterval` 倒計時、時間到自動呼叫 `submitFollowerAttempt`，UI 以紅/橙色框顯示剩餘分:秒（`quiz.countdownPrefix`）。屬既有功能確認。
+- [x] 播放頁備註匯出到剪貼板：PlayPageSidebar 備註區塊標題旁加入「複製全部備註」按鈕，彙整所有有內容的 page_notes 為 Markdown 格式（`## 第 N 頁\n{note}\n`）複製到剪貼板；純前端，沿用既有 clipboard helper；補 i18n `play.sidebar.copyAllNotes/noNotesToCopy`。
+  - 實作說明（2026-06-23）：`PageNoteSection` 頭部加「複製全部備註」按鈕，從 `deckPages` 收集非空 `page_notes`，格式化為 `## 第 N 頁\n{note}` 的 Markdown 後呼叫 `copyTextToClipboard`；結果以 inline 狀態訊息顯示 2 秒；i18n `play.sidebar.copyAllNotes/copyAllNotesDone/copyAllNotesFail/copyAllNotesPagePrefix/noNotesToCopy`。分支 `feat/copy-all-notes`。
+- [ ] 首頁卡片 description tooltip：PdfCard 網格模式在簡報標題下方顯示最多 2 行說明文字（`pdf.description`），列表模式在標題行右側加縮略顯示；有說明時加 title tooltip 顯示完整內容；純前端，不改 API。
+- [ ] 播放頁顯示全簡報剩餘時間：利用已載入的每頁音訊 duration（`audioDurations`），在頁首或底部顯示「剩餘 HH:MM」提示（從目前頁之後的頁加總）；純前端；補 i18n `play.header.timeRemaining`。
+
+## 工作記錄（第八輪）
+
+| 日期 | 工作摘要 | 分支 |
+|------|---------|------|
+| 2026-06-23 | 播放頁鍵盤快捷鍵說明面板（確認）：PlayPageHeader.tsx 已有 ShortcutsButton | 既有功能確認 |
+| 2026-06-23 | 課堂測驗倒計時顯示（確認）：QuizBuilderPage.tsx 已有 quizCountdown 倒計時 | 既有功能確認 |
+| 2026-06-23 | 播放頁備註匯出到剪貼板：PageNoteSection 標題旁加「複製全部備註」按鈕，Markdown 格式化、clipboard helper、i18n | feat/copy-all-notes（已 merge） |
