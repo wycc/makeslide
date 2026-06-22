@@ -1764,3 +1764,13 @@ export async function fetchQualityCheck(id: string): Promise<QualityCheckRespons
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as QualityCheckResponse;
 }
+
+export async function updatePdfTags(id: string, tags: string): Promise<{ id: string; tags: string; updated_at: string }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/tags`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tags }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { id: string; tags: string; updated_at: string };
+}

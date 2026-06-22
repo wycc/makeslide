@@ -9,6 +9,7 @@ import {
   updatePdfScriptSettings,
   updatePdfTitle,
   updatePdfTtsSettings,
+  updatePdfTags,
   type ShareAccessMode,
 } from '../../lib/api';
 import {
@@ -66,6 +67,11 @@ export interface PdfMetadataState {
   githubSyncBusy: boolean;
   githubSyncMessage: string | null;
   githubSyncError: string | null;
+  // tags
+  tagsInput: string;
+  setTagsInput: Dispatch<SetStateAction<string>>;
+  tagsBusy: boolean;
+  tagsMsg: string | null;
   // handlers
   handleSaveTitle: () => void;
   handleRegenerateTitle: () => void;
@@ -74,6 +80,7 @@ export interface PdfMetadataState {
   handleMakeSharePrivate: () => void;
   handleShowPlayQrCode: () => void;
   handleSyncToGithub: () => void;
+  handleSaveTags: () => void;
 }
 
 export function usePdfMetadata({
@@ -103,6 +110,9 @@ export function usePdfMetadata({
   const [githubSyncBusy, setGithubSyncBusy] = useState(false);
   const [githubSyncMessage, setGithubSyncMessage] = useState<string | null>(null);
   const [githubSyncError, setGithubSyncError] = useState<string | null>(null);
+  const [tagsInput, setTagsInput] = useState('');
+  const [tagsBusy, setTagsBusy] = useState(false);
+  const [tagsMsg, setTagsMsg] = useState<string | null>(null);
 
   const ttsProvider: TtsProvider = detail?.tts_provider === 'gemini' ? 'gemini' : 'openai';
   const availableTtsVoices = TTS_VOICES_BY_PROVIDER[ttsProvider];
@@ -135,6 +145,22 @@ export function usePdfMetadata({
       setTitleBusy(false);
     }
   }, [pdfId, titleInput, isReadOnlyProcessing, setDetail, t]);
+
+  const handleSaveTags = useCallback(async () => {
+    if (isReadOnlyProcessing) return;
+    if (!pdfId) return;
+    setTagsBusy(true);
+    setTagsMsg(null);
+    try {
+      const res = await updatePdfTags(pdfId, tagsInput);
+      setDetail((prev) => prev ? { ...prev, tags: res.tags, updated_at: res.updated_at } : prev);
+      setTagsMsg(t('play.metadata.tagsSaved'));
+    } catch (err) {
+      setTagsMsg(err instanceof ApiError ? err.message : t('play.metadata.tagsSaveFailed'));
+    } finally {
+      setTagsBusy(false);
+    }
+  }, [pdfId, tagsInput, isReadOnlyProcessing, setDetail, t]);
 
   const handleRegenerateTitle = useCallback(async () => {
     if (isReadOnlyProcessing) return;
@@ -303,6 +329,10 @@ export function usePdfMetadata({
     githubSyncBusy,
     githubSyncMessage,
     githubSyncError,
+    tagsInput,
+    setTagsInput,
+    tagsBusy,
+    tagsMsg,
     handleSaveTitle,
     handleRegenerateTitle,
     handleSaveTtsSettings,
@@ -310,5 +340,6 @@ export function usePdfMetadata({
     handleMakeSharePrivate,
     handleShowPlayQrCode,
     handleSyncToGithub,
+    handleSaveTags,
   };
 }

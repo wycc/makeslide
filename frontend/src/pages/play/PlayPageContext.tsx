@@ -315,6 +315,13 @@ export interface PlayPageContextValue {
   canViewPostClassReport: boolean;
   openPostClassReport: () => void;
 
+  // ─── Tags ───────────────────────────────────────────────────────────────────
+  tagsInput: string;
+  setTagsInput: Dispatch<SetStateAction<string>>;
+  tagsBusy: boolean;
+  tagsMsg: string | null;
+  handleSaveTags: () => void;
+
   // ─── GitHub sync ────────────────────────────────────────────────────────────
   githubSyncBusy: boolean;
   githubSyncMessage: string | null;

@@ -423,6 +423,7 @@ export const en = {
   'promptModal.costEstimate.noPageCount': '(Page count unavailable — cannot estimate cost)',
   'play.header.back': 'Back',
   'play.header.updateTitle': 'Update title',
+  'play.header.saveTags': 'Save tags',
   'play.header.savingTitle': 'Saving…',
   'play.header.regenerateTitle': 'Regenerate title',
   'play.header.processing': 'Processing…',

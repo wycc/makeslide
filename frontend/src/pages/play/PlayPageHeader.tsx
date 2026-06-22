@@ -11,6 +11,7 @@ export function PlayPageHeader() {
     currentShareToken,
     titleInput, setTitleInput,
     titleBusy, titleMsg,
+    tagsInput, setTagsInput, tagsBusy, tagsMsg, handleSaveTags,
     videoError,
     shareMessage, shareError,
     githubSyncMessage, githubSyncError,
@@ -255,6 +256,27 @@ export function PlayPageHeader() {
         </div>
       ) : null}
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-2 px-4 pb-3 md:flex-row md:items-center md:justify-between md:gap-3">
+        {!isReadOnlyProcessing ? (
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={tagsInput}
+              onChange={(e) => setTagsInput(e.target.value)}
+              placeholder={t('play.metadata.tagsLabel')}
+              className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100"
+              maxLength={500}
+            />
+            <button
+              type="button"
+              onClick={() => void handleSaveTags()}
+              disabled={tagsBusy}
+              className="shrink-0 whitespace-nowrap rounded-md border border-indigo-500/50 bg-indigo-500/15 px-2 py-1 text-[11px] text-indigo-200 disabled:opacity-40"
+            >
+              {tagsBusy ? '…' : t('play.header.saveTags')}
+            </button>
+            {tagsMsg ? <span className="text-xs text-emerald-300">{tagsMsg}</span> : null}
+          </div>
+        ) : null}
         <div className="space-y-1 text-xs text-slate-400">
           {videoError ? <span className="text-rose-300">{videoError}</span> : null}
           {!videoError && titleMsg ? <span className="text-slate-300">{titleMsg}</span> : null}

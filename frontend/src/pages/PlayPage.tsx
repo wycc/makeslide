@@ -442,6 +442,7 @@ export default function PlayPage() {
         setDetail(detailWithShare);
         setVideoUrl(detailWithShare.video_url ?? null);
         setTitleInput(detailWithShare.title ?? detailWithShare.original_filename);
+        setTagsInput(detailWithShare.tags ?? '');
         // page prompts are managed per page in local state
         setTtsVoice(d.tts_voice?.trim() || 'alloy');
         setTtsSpeed(d.tts_speed ?? 1);
@@ -1717,6 +1718,7 @@ export default function PlayPage() {
   const metaState = usePdfMetadata({ pdfId, isReadOnlyProcessing, detail, setDetail });
   const {
     setTitleInput,
+    setTagsInput,
     setTtsVoice,
     setTtsSpeed,
     setScriptMaxCharsPerPage,
