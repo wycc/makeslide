@@ -364,8 +364,23 @@
 
 ## 新增可執行項目（第九輪）
 
-- [ ] 搜尋 API 補 description 欄位比對：`GET /api/search` 的 title match 邏輯同時比對 `pdfs.description`，若 description 包含關鍵字也回傳 `match_type: 'description'`；`SearchResult` 介面補 `description_snippet` 選填欄位；補後端測試。
-- [ ] 首頁「最近」分類改為依 last_played_at 篩選：`categoryFilter === '__recent__'` 時改篩選 `last_played_at` 不為 null 且在近 14 天內的 PDF，排序改為 `last_played_at` DESC；無播放紀錄時顯示空狀態提示；純前端改動，不改 API。
-- [ ] 播放頁學生提問「複製全部」：PlayPageHeader 的學生提問列表旁加入「複製全部提問」按鈕，以 `## 第 N 頁\nQ: {text}` 格式彙整 `syncFollowerQuestions` 並複製到剪貼板；僅 master 模式可見；補 i18n `play.header.copyAllQuestions/copyAllQuestionsDone`。
-- [ ] 首頁卡片快速複製分享連結：PdfCard hover 時在封面圖右上角顯示「🔗」複製按鈕（visibility 為 public 或 public_editable 時才有意義，先呼叫 `GET /api/pdfs/:id` 取分享 token 並組合 URL 後複製）；補 i18n `card.copyShareLink/copyShareLinkDone/copyShareLinkFail`。
-- [ ] 播放頁同步學生人數徽章：同步模式已啟用（`syncEnabled && syncRole === 'master'`）時，在 PlayPageHeader 的「同步中」按鈕旁顯示已連線學生人數徽章（每 30 秒輪詢 `fetchSyncAttendees`，顯示 count）；不改後端，純前端輪詢。
+- [x] 搜尋 API 補 description 欄位比對：`GET /api/search` 的 title match 邏輯同時比對 `pdfs.description`，若 description 包含關鍵字也回傳 `match_type: 'description'`；`SearchResult` 介面補 `description_snippet` 選填欄位；補後端測試。
+  - 實作說明（2026-06-23）：`search.ts` SELECT 加入 `description` 欄位；`match_type` union 補 `'description'`；description match 區塊接在 title match 之後（含 snippet）；後端測試第 6 個：`finds PDF by description keyword` 通過。分支 `feat/search-description`，已 merge 回 master。
+- [x] 首頁「最近」分類改為依 last_played_at 篩選：`categoryFilter === '__recent__'` 時改篩選 `last_played_at` 不為 null 且在近 14 天內的 PDF，排序改為 `last_played_at` DESC；無播放紀錄時顯示空狀態提示；純前端改動，不改 API。
+  - 實作說明（2026-06-23）：新增 `isRecentlyPlayed()` helper（14 天內）與 `compareByLastPlayedAtDesc()` comparator；`categoryFilteredItems` 的 `__recent__` 改為 `isRecentlyPlayed` 篩選；`categoryGroups` 的 `__recent__` 改為 `compareByLastPlayedAtDesc` 排序。分支 `feat/recent-by-last-played`，已 merge 回 master。
+- [x] 播放頁學生提問「複製全部」：PlayPageHeader 的學生提問列表旁加入「複製全部提問」按鈕，以 `## 第 N 頁\nQ: {text}` 格式彙整 `syncFollowerQuestions` 並複製到剪貼板；僅 master 模式可見；補 i18n `play.header.copyAllQuestions/copyAllQuestionsDone`。
+  - 實作說明（2026-06-23）：`CopyAllQuestionsButton` 子元件使用 `copyTextToClipboard`，彙整非空 `syncFollowerQuestions` 為 Markdown；2 秒 flash 訊息；i18n `play.header.copyAllQuestions/copyAllQuestionsDone/copyAllQuestionsFail`。分支 `feat/copy-all-questions`，已 merge 回 master。
+- [x] 首頁卡片快速複製分享連結：PdfCard hover 時在封面圖右上角顯示「🔗」複製按鈕（visibility 為 public 或 public_editable 時才有意義，先呼叫 `GET /api/pdfs/:id` 取分享 token 並組合 URL 後複製）；補 i18n `card.copyShareLink/copyShareLinkDone/copyShareLinkFail`。
+  - 實作說明（2026-06-23）：`PdfCard.tsx` import `createPdfShare`、`copyTextToClipboard`；新增 `copyShareStatus` state 與 `handleCopyShareLink` handler（呼叫 `createPdfShare(id, 'read_only')` 取得 `share_url`，組合絕對路徑後複製，2 秒 flash）；`visibility === 'public'|'public_editable'` 時在封面左下角顯示 `opacity-0 group-hover:opacity-100` 的 `🔗` 按鈕；i18n `card.copyShareLink/copyShareLinkDone/copyShareLinkFail`。分支 `feat/pdfcard-copy-share-link`，已 merge 回 master。
+- [x] 播放頁同步學生人數徽章：同步模式已啟用（`syncEnabled && syncRole === 'master'`）時，在 PlayPageHeader 的「同步中」按鈕旁顯示已連線學生人數徽章（每 30 秒輪詢 `fetchSyncAttendees`，顯示 count）；不改後端，純前端輪詢。
+  - 實作說明（2026-06-23）：`PlayPageHeader` 新增 `attendeeCount` state + `attendeePollRef`，`useEffect` 在 master 模式下每 30 秒呼叫 `fetchSyncAttendees(pdfId)`，更新 count；同步模式文字旁顯示 `bg-indigo-500/30` rounded badge 顯示人數。分支 `feat/sync-attendee-badge`，已 merge 回 master。
+
+## 工作記錄（第九輪）
+
+| 日期 | 工作摘要 | 分支 |
+|------|---------|------|
+| 2026-06-23 | 搜尋 API 補 description 欄位比對：search.ts SELECT 補 description，match_type union 補 'description'，description match 區塊；後端測試第 6 個通過 | feat/search-description（已 merge） |
+| 2026-06-23 | 首頁「最近」分類改為依 last_played_at 篩選：isRecentlyPlayed()（14 天）、compareByLastPlayedAtDesc()；categoryFilteredItems/__recent__ 改用新 helpers | feat/recent-by-last-played（已 merge） |
+| 2026-06-23 | 播放頁學生提問「複製全部」：CopyAllQuestionsButton 子元件，彙整 syncFollowerQuestions 為 Markdown，clipboard + 2秒 flash；i18n copyAllQuestions/Done/Fail | feat/copy-all-questions（已 merge） |
+| 2026-06-23 | 播放頁同步學生人數徽章：attendeeCount state + attendeePollRef，useEffect 每 30 秒輪詢 fetchSyncAttendees，indigo badge 顯示人數 | feat/sync-attendee-badge（已 merge） |
+| 2026-06-23 | 首頁卡片快速複製分享連結：PdfCard 公開 PDF hover 顯示 🔗 按鈕，createPdfShare 取得 share_url 後複製；i18n copyShareLink/Done/Fail | feat/pdfcard-copy-share-link（已 merge） |
