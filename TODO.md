@@ -217,9 +217,27 @@
 
 ## 新增可執行項目（第五輪）
 
-- [ ] 首頁關鍵字搜尋欄：在首頁標題/類別篩選列上方新增搜尋輸入框，以 `includes`（case-insensitive）同時比對 `pdf.title`、`pdf.tags`；搜尋結果即時更新，輸入框右側顯示清除（×）按鈕；純前端改動，補 i18n `home.search.placeholder`/`home.search.clear`。
-- [ ] 課後報告匯出 CSV：新增 `GET /api/pdfs/:id/report/students.csv` 後端端點，依學生 client_id 彙整答題資料（學生識別碼、各題作答、總分、觀看完成率），回傳 `text/csv`；課後報告面板新增「匯出 CSV」按鈕；補後端測試驗證 200 / 403。
-- [ ] 投票選項結果長條圖：在教師端同步面板的投票控制區，各投票選項文字旁以 emerald 色寬度比例長條圖呈現得票比例（`option.vote_count / poll.total_votes * 100%`）；純前端改動，補 i18n `play.sidebar.poll.resultBar`。
-- [ ] PdfCard hover 顯示頁數與時長 badge：`PdfCard` 封面圖片左上角新增半透明 badge，顯示頁數（`total_pages`）和音頻時長（`total_audio_duration_seconds` 格式化為 `m:ss`）；僅在 hover 時以 fade-in 動畫顯示；純前端改動。
-- [ ] 播放頁複製本頁逐字稿：在播放頁 header 匯出區新增「複製本頁逐字稿」按鈕，呼叫 `GET /api/pdfs/:id/pages/:n/script`（已存在）取得逐字稿，再以 clipboard API 複製；顯示複製成功/失敗短暫提示；補 i18n。
-- [ ] 首頁卡片顯示最後播放時間：`pdfs` 表已有 `updated_at`，但缺少「最後播放時間」欄位；新增 `last_played_at TEXT` 欄位（migration），播放頁進入時更新（`PATCH /api/pdfs/:id/last-played`）；首頁 PdfCard 顯示「上次播放：N 天前」文字；補後端測試。
+- [x] 首頁關鍵字搜尋欄：在首頁標題/類別篩選列上方新增搜尋輸入框，以 `includes`（case-insensitive）同時比對 `pdf.title`、`pdf.tags`；搜尋結果即時更新，輸入框右側顯示清除（×）按鈕；純前端改動，補 i18n `home.search.placeholder`/`home.search.clear`。
+  - 修改說明（2026-06-23）：`HomePage.tsx` 的 `filteredItems` 過濾邏輯擴展，原本只比對 `pdf.title`，現在同時比對 `pdf.tags`（以 `toLocaleLowerCase()` 進行大小寫不敏感比對）；搜尋輸入框與清除按鈕早已存在於 `home.filterByTitle` 標籤下，本次僅補上標籤搜尋能力。直接 commit 至 master（7894963）。
+- [x] 課後報告匯出 CSV：新增 `GET /api/pdfs/:id/report/students.csv` 後端端點，依學生 client_id 彙整答題資料（學生識別碼、各題作答、總分、觀看完成率），回傳 `text/csv`；課後報告面板新增「匯出 CSV」按鈕；補後端測試驗證 200 / 403。
+  - 修改說明（2026-06-23）：`report.ts` 新增 `escapeCsvField()` helper 及 `GET /api/pdfs/:id/report/students.csv` 端點，逐筆 quiz attempt 輸出 CSV（student_id/attempt_id/quiz_title/score/submitted_at/correct_count/total_questions），回傳 `text/csv; charset=utf-8` 並附 Content-Disposition；`PostClassReportPanel.tsx` 在現有「匯出 CSV」旁新增「學生報告 CSV」teal 下載連結；3 個測試通過（200/403/404）。分支 `feat/report-csv-export`，已 merge 回 master。
+- [x] 投票選項結果長條圖：在教師端同步面板的投票控制區，各投票選項文字旁以 emerald 色寬度比例長條圖呈現得票比例（`option.vote_count / poll.total_votes * 100%`）；純前端改動，補 i18n `play.sidebar.poll.resultBar`。
+  - 確認說明（2026-06-23）：`PlayPageSidebar.tsx` 的 `pagePolls.map` 區塊（教師/follower 共用）已有 `ratio` 計算（line 494）並渲染 `h-1` cyan 長條圖（`bg-cyan-400`）；每個選項按鈕底部已顯示得票比例長條。屬既有功能確認。
+- [x] PdfCard hover 顯示頁數與時長 badge：`PdfCard` 封面圖片左上角新增半透明 badge，顯示頁數（`total_pages`）和音頻時長（`total_audio_duration_seconds` 格式化為 `m:ss`）；僅在 hover 時以 fade-in 動畫顯示；純前端改動。
+  - 修改說明（2026-06-23）：`PdfCard.tsx` 封面區域新增 `opacity-0 group-hover:opacity-100 transition-opacity` badge（`bottom-2 left-2`），顯示 `page_count` 與 `totalAudioDuration`（已有 `formatAudioDuration()` 格式化），僅在非處理中狀態且有資料時渲染。分支 `feat/pdfcard-hover-badge`，已 merge 回 master。
+- [x] 播放頁複製本頁逐字稿：在播放頁 header 匯出區新增「複製本頁逐字稿」按鈕，呼叫 `GET /api/pdfs/:id/pages/:n/script`（已存在）取得逐字稿，再以 clipboard API 複製；顯示複製成功/失敗短暫提示；補 i18n。
+  - 修改說明（2026-06-23）：`PlayPageHeader.tsx` import `copyTextToClipboard`；解構補 `scripts`；按鈕 onClick 讀取 `scripts[currentPage.page_number]` 並呼叫 clipboard API；`copyScriptStatus` state（idle/ok/fail）控制按鈕文字，2 秒後重設；i18n `play.header.copyScript`/`copyScriptDone`/`copyScriptFail` 新增。分支 `feat/copy-page-script`，已 merge 回 master。
+- [x] 首頁卡片顯示最後播放時間：`pdfs` 表已有 `updated_at`，但缺少「最後播放時間」欄位；新增 `last_played_at TEXT` 欄位（migration），播放頁進入時更新（`PATCH /api/pdfs/:id/last-played`）；首頁 PdfCard 顯示「上次播放：N 天前」文字；補後端測試。
+  - 修改說明（2026-06-23）：後端 migration、`PATCH /api/pdfs/:id/last-played` 端點與 `updateLastPlayed()` API 函式均已存在；`PlayPage.tsx` import 了但未呼叫（已在 ready 狀態時呼叫）；本次新增 `last_played_at` 至 `PdfListItem` 型別；`PdfCard.tsx` 加入 `formatRelativeTime()` 函式並在 metadata 列顯示「上次播放：N 天前」（`card.lastPlayed`/`lastPlayedLabel` i18n）；3 個後端測試通過（200/403/404）。分支 `feat/last-played-at-tracking`，已 merge 回 master。
+
+⚠️ **已達 20/20 上限**：本輪（第四輪後半）已完成 20 個項目，暫停新增/執行新項目，等待使用者決定是否重設計數或調整門檻。
+
+| 日期 | 工作摘要 | 分支 |
+|------|---------|------|
+| 2026-06-23 | 分享連結有效期設定前端 UI：PlayPageHeader 有效期 `<select>`（永久/7/30/90天）；i18n `play.share.expiry*` | feature/share-link-expiry-ui（已 merge） |
+| 2026-06-23 | 首頁關鍵字搜尋欄補標籤搜尋：`filteredItems` 同時比對 `pdf.tags`（toLocaleLowerCase）；搜尋框既有功能補強 | master（直接 commit 7894963） |
+| 2026-06-23 | 投票選項結果長條圖（確認）：PlayPageSidebar 已有 `ratio` 計算與 `h-1 bg-cyan-400` 長條圖，屬既有功能確認 | master（既有功能） |
+| 2026-06-23 | PdfCard hover 顯示頁數與時長 badge：封面 `bottom-2 left-2` 半透明 badge，`opacity-0 group-hover:opacity-100` | feat/pdfcard-hover-badge（已 merge） |
+| 2026-06-23 | 播放頁複製本頁逐字稿：PlayPageHeader 新增「複製本頁逐字稿」按鈕，讀 `scripts[page_number]`，clipboard API，2秒 flash；i18n `play.header.copyScript*` | feat/copy-page-script（已 merge） |
+| 2026-06-23 | 課後報告匯出 CSV：`GET /api/pdfs/:id/report/students.csv`（text/csv，7欄）；PostClassReportPanel「學生報告 CSV」teal 連結；3 個測試通過 | feat/report-csv-export（已 merge） |
+| 2026-06-23 | 首頁卡片顯示最後播放時間：`last_played_at` 加入 PdfListItem 型別；PdfCard 顯示「上次播放：N 天前」(`formatRelativeTime`)；3 個後端測試通過 | feat/last-played-at-tracking（已 merge） |
