@@ -4,6 +4,7 @@ import { RegenerateProgress } from './RegenerateProgress';
 import type { ShareAccessMode } from '../../lib/api';
 import { useI18n } from '../../i18n';
 import { usePlayPageContext } from './PlayPageContext';
+import { copyTextToClipboard } from '../../lib/clipboard';
 
 function ShortcutsButton() {
   const { t } = useI18n();
@@ -100,6 +101,7 @@ export function PlayPageHeader() {
     shareAccess, setShareAccess,
     shareExpiresDays, setShareExpiresDays,
     shareBusy,
+    scripts,
     handleCreateShareLink,
     handleMakeSharePrivate,
     canViewPostClassReport,
@@ -124,6 +126,7 @@ export function PlayPageHeader() {
     ? t('play.regenBanner.currentPage').replace('{page}', String(regenJob.last_processed_page))
     : '';
 
+  const [copyScriptStatus, setCopyScriptStatus] = useState<'idle' | 'ok' | 'fail'>('idle');
   const [coursePackageBusy, setCoursePackageBusy] = useState(false);
   const handleDownloadCoursePackage = async () => {
     if (!pdfId || coursePackageBusy) return;
@@ -515,6 +518,20 @@ export function PlayPageHeader() {
           >
             {t('play.header.downloadScriptsTxt')}
           </a>
+          <button
+            type="button"
+            disabled={!currentPage || !scripts[currentPage.page_number]}
+            onClick={async () => {
+              const script = currentPage ? (scripts[currentPage.page_number] ?? '') : '';
+              if (!script) return;
+              const result = await copyTextToClipboard(script);
+              setCopyScriptStatus(result.ok ? 'ok' : 'fail');
+              setTimeout(() => setCopyScriptStatus('idle'), 2000);
+            }}
+            className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-100 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {copyScriptStatus === 'ok' ? t('play.header.copyScriptDone') : copyScriptStatus === 'fail' ? t('play.header.copyScriptFail') : t('play.header.copyScript')}
+          </button>
           <button
             type="button"
             onClick={() => void handleDownloadCoursePackage()}
