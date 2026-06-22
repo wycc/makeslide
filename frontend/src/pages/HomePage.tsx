@@ -82,6 +82,20 @@ const compareByAudioDurationAsc = (a: PdfListItem, b: PdfListItem) => {
   return durA - durB;
 };
 
+const compareByLastPlayedAtDesc = (a: PdfListItem, b: PdfListItem) => {
+  const timeA = a.last_played_at ? Date.parse(a.last_played_at) : 0;
+  const timeB = b.last_played_at ? Date.parse(b.last_played_at) : 0;
+  return (Number.isNaN(timeB) ? 0 : timeB) - (Number.isNaN(timeA) ? 0 : timeA);
+};
+
+const RECENT_DAYS = 14;
+const isRecentlyPlayed = (pdf: PdfListItem): boolean => {
+  if (!pdf.last_played_at) return false;
+  const t = Date.parse(pdf.last_played_at);
+  if (Number.isNaN(t)) return false;
+  return Date.now() - t <= RECENT_DAYS * 24 * 60 * 60 * 1000;
+};
+
 const getComparatorForSortMode = (sortMode: SortMode) => {
   switch (sortMode) {
     case 'created_desc':
@@ -202,9 +216,11 @@ export default function HomePage() {
   }, []).sort((a, b) => a.localeCompare(b, 'zh-Hant', { numeric: true, sensitivity: 'base' }));
   const allCategories = Array.from(new Set([...itemCategories, ...customCategories]))
     .sort((a, b) => a.localeCompare(b, 'zh-Hant', { numeric: true, sensitivity: 'base' }));
-  const categoryFilteredItems = categoryFilter === '__all__' || categoryFilter === '__recent__'
+  const categoryFilteredItems = categoryFilter === '__all__'
     ? items
-    : items.filter((pdf) => (pdf.category?.trim() || DEFAULT_CATEGORY) === categoryFilter);
+    : categoryFilter === '__recent__'
+      ? items.filter(isRecentlyPlayed)
+      : items.filter((pdf) => (pdf.category?.trim() || DEFAULT_CATEGORY) === categoryFilter);
   const allTags = Array.from(new Set(
     items.flatMap((pdf) => (pdf.tags ?? '').split(',').map((t) => t.trim()).filter(Boolean))
   )).sort((a, b) => a.localeCompare(b, 'zh-Hant', { sensitivity: 'base' }));
@@ -234,7 +250,7 @@ export default function HomePage() {
     return primary === 0 ? compareByTitle(a, b) : primary;
   }), [sortMode]);
   const categoryGroups = categoryFilter === '__recent__'
-    ? [{ category: RECENT_CATEGORY, items: sortItems(filteredItems) }]
+    ? [{ category: RECENT_CATEGORY, items: [...filteredItems].sort(compareByLastPlayedAtDesc) }]
     : filteredItems.reduce<Array<{ category: string; items: PdfListItem[] }>>((groups, pdf) => {
       const category = pdf.category?.trim() || DEFAULT_CATEGORY;
       const group = groups.find((g) => g.category === category);
