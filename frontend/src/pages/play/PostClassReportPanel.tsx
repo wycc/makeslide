@@ -77,30 +77,67 @@ export function PostClassReportPanel({ pdfId, summary, loading, error, onClose, 
 
   const selectedStudent = students.find((s) => s.client_id === selectedClientId) ?? null;
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/80 px-4 py-8 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="post-class-report-title">
-      <div className="w-full max-w-5xl rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800 pb-4">
-          <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-cyan-300">Post-class report</p>
-            <h2 id="post-class-report-title" className="mt-1 text-xl font-semibold text-slate-100">課後報告</h2>
-            <p className="mt-1 text-sm text-slate-400">彙整測驗、投票、提問與觀看完成率，協助簡報擁有者快速找出課後補強重點。</p>
+    <>
+      <style>{`
+        @media print {
+          #pcr-print-root {
+            position: static !important;
+            overflow: visible !important;
+            background: transparent !important;
+            -webkit-backdrop-filter: none !important;
+            backdrop-filter: none !important;
+            padding: 0 !important;
+            display: block !important;
+          }
+          #pcr-print-root > div {
+            background: white !important;
+            border: none !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+            padding: 1cm !important;
+            max-width: none !important;
+          }
+          [data-no-print] { display: none !important; }
+          section { break-inside: avoid; page-break-inside: avoid; }
+          h2, h3 { color: black !important; }
+          p, span, li, pre { color: #1e293b !important; }
+          .border-slate-700, .border-slate-800 { border-color: #cbd5e1 !important; }
+          .bg-slate-950\\/80, .bg-slate-900, .bg-slate-950\\/60, .bg-slate-900\\/60,
+          .bg-slate-900\\/70, .bg-slate-800 { background-color: white !important; }
+          .text-cyan-300 { color: #0369a1 !important; }
+          .text-amber-300 { color: #92400e !important; }
+          .text-emerald-300, .text-emerald-400 { color: #065f46 !important; }
+          .text-rose-200, .text-rose-300, .text-rose-400 { color: #9f1239 !important; }
+          .text-fuchsia-300 { color: #86198f !important; }
+        }
+      `}</style>
+      <div id="pcr-print-root" className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/80 px-4 py-8 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="post-class-report-title">
+        <div className="w-full max-w-5xl rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800 pb-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-cyan-300">Post-class report</p>
+              <h2 id="post-class-report-title" className="mt-1 text-xl font-semibold text-slate-100">課後報告</h2>
+              <p className="mt-1 text-sm text-slate-400">彙整測驗、投票、提問與觀看完成率，協助簡報擁有者快速找出課後補強重點。</p>
+            </div>
+            <div className="flex items-center gap-2" data-no-print="true">
+              <button type="button" onClick={onReload} disabled={loading} className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-100 hover:bg-cyan-500/25 disabled:opacity-50">
+                {loading ? '更新中…' : '重新整理'}
+              </button>
+              <a
+                href={`api/pdfs/${encodeURIComponent(pdfId)}/quiz-results.csv`}
+                download
+                className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-3 py-1.5 text-sm text-emerald-100 hover:bg-emerald-500/25"
+              >
+                匯出 CSV
+              </a>
+              <button type="button" onClick={() => window.print()} className="rounded-md border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-sm text-amber-100 hover:bg-amber-500/25">
+                列印 / 儲存 PDF
+              </button>
+              <button type="button" onClick={onClose} className="rounded-md border border-slate-600 bg-slate-800 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-700">
+                關閉
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={onReload} disabled={loading} className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-100 hover:bg-cyan-500/25 disabled:opacity-50">
-              {loading ? '更新中…' : '重新整理'}
-            </button>
-            <a
-              href={`api/pdfs/${encodeURIComponent(pdfId)}/quiz-results.csv`}
-              download
-              className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-3 py-1.5 text-sm text-emerald-100 hover:bg-emerald-500/25"
-            >
-              匯出 CSV
-            </a>
-            <button type="button" onClick={onClose} className="rounded-md border border-slate-600 bg-slate-800 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-700">
-              關閉
-            </button>
-          </div>
-        </div>
 
         {error ? (
           <div className="mt-4 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{error}</div>
@@ -317,7 +354,8 @@ export function PostClassReportPanel({ pdfId, summary, loading, error, onClose, 
             <p className="text-right text-xs text-slate-500">產生時間：{new Date(summary.generated_at).toLocaleString()}</p>
           </div>
         ) : null}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
