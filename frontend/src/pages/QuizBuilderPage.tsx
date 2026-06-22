@@ -3,8 +3,10 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useI18n } from '../i18n';
 import {
   ApiError,
+  copyQuizSetTo,
   deleteQuizSet,
   fetchPdfDetail,
+  fetchPdfs,
   fetchPlaybackSyncState,
   fetchQuizAttempts,
   fetchQuizSets,
@@ -19,6 +21,7 @@ import {
 } from '../lib/api';
 import type {
   PdfDetail,
+  PdfListItem,
   QuizAttemptSession,
   QuizQuestion,
   QuizQuestionType,
@@ -109,6 +112,8 @@ export default function QuizBuilderPage() {
   }, [t]);
   const [detail, setDetail] = useState<PdfDetail | null>(null);
   const [savedQuizzes, setSavedQuizzes] = useState<QuizSet[]>([]);
+  const [allPdfs, setAllPdfs] = useState<PdfListItem[]>([]);
+  const [copyingQuizId, setCopyingQuizId] = useState<number | null>(null);
   const [selectedQuizId, setSelectedQuizId] = useState<number | null>(null);
   const [title, setTitle] = useState(() => t('quiz.defaultTitle'));
   const [prompt, setPrompt] = useState(() => t('quiz.defaultPrompt'));
@@ -604,6 +609,25 @@ export default function QuizBuilderPage() {
     [pdfId, selectedQuizId, t, formatMessage],
   );
 
+  useEffect(() => {
+    let cancelled = false;
+    void fetchPdfs().then((list) => { if (!cancelled) setAllPdfs(list); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleCopyQuizTo = useCallback(async (quiz: QuizSet, targetId: string) => {
+    if (!pdfId || copyingQuizId != null) return;
+    setCopyingQuizId(quiz.id);
+    try {
+      await copyQuizSetTo(pdfId, quiz.id, targetId);
+      setMessage(t('quiz.copyDone'));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t('quiz.copyFailed'));
+    } finally {
+      setCopyingQuizId(null);
+    }
+  }, [pdfId, copyingQuizId, t]);
+
   const renderQuizTakingView = (quiz: QuizSet) => (
     <div className="rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/10 p-4">
       {syncQuizShowAnswers ? (() => {
@@ -780,15 +804,30 @@ export default function QuizBuilderPage() {
                     {t('quiz.history')}
                   </button>
                   {syncRole === 'master' ? (
-                    <button
-                      type="button"
-                      onClick={() => void handleDeleteQuiz(quiz)}
-                      disabled={deletingQuizId === quiz.id}
-                      className="rounded border border-rose-500/50 bg-rose-500/15 px-2 py-1 text-xs text-rose-100 disabled:opacity-40"
-                      title={t('quiz.deleteQuizTitle')}
-                    >
-                      {t('quiz.delete')}
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => void handleDeleteQuiz(quiz)}
+                        disabled={deletingQuizId === quiz.id}
+                        className="rounded border border-rose-500/50 bg-rose-500/15 px-2 py-1 text-xs text-rose-100 disabled:opacity-40"
+                        title={t('quiz.deleteQuizTitle')}
+                      >
+                        {t('quiz.delete')}
+                      </button>
+                      {allPdfs.filter((p) => p.id !== pdfId).length > 0 ? (
+                        <select
+                          value=""
+                          disabled={copyingQuizId === quiz.id}
+                          onChange={(e) => { if (e.target.value) void handleCopyQuizTo(quiz, e.target.value); }}
+                          className="rounded border border-sky-500/50 bg-sky-500/15 px-1 py-1 text-xs text-sky-100 disabled:opacity-40"
+                        >
+                          <option value="">{copyingQuizId === quiz.id ? '…' : t('quiz.copyTo')}</option>
+                          {allPdfs.filter((p) => p.id !== pdfId).map((p) => (
+                            <option key={p.id} value={p.id}>{p.title ?? p.id}</option>
+                          ))}
+                        </select>
+                      ) : null}
+                    </>
                   ) : null}
                 </div>
               </div>

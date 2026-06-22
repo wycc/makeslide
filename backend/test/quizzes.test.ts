@@ -657,6 +657,45 @@ test('PUT /quizzes/:quizId rejects explicit per-question scores that sum to more
   }
 });
 
+test('POST /quizzes/:quizId/copy-to/:targetId copies quiz to target PDF (201), 403 without target edit rights, 404 for unknown quiz', async () => {
+  seedQuizPdf('quiz-copy-src-01', 'public');
+  seedQuizPdf('quiz-copy-dst-01', 'public');
+  const t = nowIso();
+  const insertResult = db
+    .prepare(`INSERT INTO quiz_sets (pdf_id, title, prompt, questions_json, time_limit_seconds, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?)`)
+    .run('quiz-copy-src-01', '複製測驗', '', JSON.stringify([{ id: 'q1', type: 'single', question: 'Q?', options: [{ text: 'A' }], answer_indices: [0], explanation: '', score: 100 }]), t, t);
+  const quizId = insertResult.lastInsertRowid as number;
+
+  const app = await buildApp();
+  try {
+    const ok = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/quiz-copy-src-01/quizzes/${quizId}/copy-to/quiz-copy-dst-01`,
+      headers: OWNER_HEADERS,
+    });
+    assert.equal(ok.statusCode, 201);
+    const body = ok.json() as { pdf_id: string; title: string };
+    assert.equal(body.pdf_id, 'quiz-copy-dst-01');
+    assert.equal(body.title, '複製測驗');
+
+    const forbidden = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/quiz-copy-src-01/quizzes/${quizId}/copy-to/quiz-copy-dst-01`,
+      headers: OTHER_HEADERS,
+    });
+    assert.equal(forbidden.statusCode, 403);
+
+    const notFound = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/quiz-copy-src-01/quizzes/99999/copy-to/quiz-copy-dst-01`,
+      headers: OWNER_HEADERS,
+    });
+    assert.equal(notFound.statusCode, 404);
+  } finally {
+    await app.close();
+  }
+});
+
 test('POST /quizzes/:quizId/attempts never awards more than 100 points even if a stored quiz predates the score-sum cap', async () => {
   // A quiz_sets row can carry per-question scores summing above 100 if it was written before the
   // SaveQuizBodySchema sum validation existed (or edited directly in the database). Bypass the
