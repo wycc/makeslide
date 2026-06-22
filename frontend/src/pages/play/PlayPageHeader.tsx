@@ -387,6 +387,13 @@ export function PlayPageHeader() {
           >
             {t('play.header.downloadVtt')}
           </a>
+          <a
+            href={`api/pdfs/${encodeURIComponent(pdfId ?? '')}/slides.pptx`}
+            download
+            className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-center text-sm text-cyan-100 hover:bg-cyan-500/25"
+          >
+            {t('play.header.downloadPptx')}
+          </a>
           <button
             type="button"
             onClick={() => void handleSyncToGithub()}
