@@ -7,6 +7,7 @@ import {
   type TtsProvider,
 } from '../lib/ttsVoices';
 import { getImagePromptTemplates, getSystemAiSettings, type ImagePromptTemplate } from '../lib/api';
+import { listSkills, type Skill } from '../lib/api/skills';
 import { useI18n, type TranslationKey } from '../i18n';
 import {
   MAX_PROMPT_TO_OUTLINE_CHARS,
@@ -100,6 +101,7 @@ export default function PromptModal({
   const [imageStylePrompt, setImageStylePrompt] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [llmModel, setLlmModel] = useState('gpt-4o-mini');
+  const [userSkills, setUserSkills] = useState<Skill[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
@@ -117,6 +119,27 @@ export default function PromptModal({
     })();
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const skills = await listSkills();
+        if (!active) return;
+        setUserSkills(skills.filter((s) => !s.isBuiltIn));
+      } catch { /* non-fatal */ }
+    })();
+    return () => { active = false; };
+  }, []);
+
+  const applySkillTemplate = (skill: Skill) => {
+    if (skill.prompt) setValue(skill.prompt);
+    if (skill.imageStylePrompt) setImageStylePrompt(skill.imageStylePrompt);
+    const voices = availableTtsVoices as readonly string[];
+    if (skill.ttsVoice && voices.includes(skill.ttsVoice)) {
+      setTtsVoice(skill.ttsVoice);
+    }
+  };
 
   // Autofocus the textarea on open.
   useEffect(() => {
@@ -262,6 +285,29 @@ export default function PromptModal({
               {value.length} / {MAX_PROMPT_CHARS}
             </span>
           </div>
+
+          {userSkills.length > 0 && (
+            <div className="mt-3 rounded-lg border border-violet-500/30 bg-violet-500/5 px-3 py-2">
+              <p className="mb-2 text-xs font-medium text-violet-300">{t('promptModal.skillTemplate.title')}</p>
+              <div className="flex flex-wrap gap-2">
+                {userSkills.map((skill) => (
+                  <button
+                    key={skill.id}
+                    type="button"
+                    onClick={() => applySkillTemplate(skill)}
+                    disabled={submitting}
+                    className="rounded border border-violet-500/40 bg-violet-500/10 px-2 py-1 text-xs text-violet-200 hover:bg-violet-500/20 disabled:opacity-60"
+                    title={skill.imageStylePrompt ? t('promptModal.skillTemplate.hasImageStyle') : undefined}
+                  >
+                    {skill.name}
+                    {skill.imageStylePrompt && <span className="ml-1 opacity-60">🎨</span>}
+                    {skill.ttsVoice && <span className="ml-1 opacity-60">🔊</span>}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1.5 text-xs text-violet-200/40">{t('promptModal.skillTemplate.hint')}</p>
+            </div>
+          )}
 
           <div className="mt-3 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2">
             <p className="mb-2 text-xs font-medium text-slate-300">{t('promptModal.presetsSection')}</p>

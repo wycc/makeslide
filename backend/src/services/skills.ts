@@ -25,6 +25,11 @@ export interface UserSkill {
   enabled: boolean;
   createdAt: string;
   isBuiltIn: false;
+  /** Optional teaching template fields — extend this skill into a full generation template. */
+  imageStylePrompt?: string;
+  quizPrompt?: string;
+  ttsProvider?: string;
+  ttsVoice?: string;
 }
 
 export type Skill = (BuiltInSkill & { enabled: boolean }) | UserSkill;
@@ -124,9 +129,11 @@ export function getEnabledSkillPrompts(accountId: string, applyTo: SkillApplyTo)
     .map((s) => s.prompt);
 }
 
+type TemplateFields = Pick<UserSkill, 'imageStylePrompt' | 'quizPrompt' | 'ttsProvider' | 'ttsVoice'>;
+
 export async function createUserSkill(
   accountId: string,
-  input: { name: string; prompt: string; applyTo: SkillApplyTo },
+  input: { name: string; prompt: string; applyTo: SkillApplyTo } & Partial<TemplateFields>,
 ): Promise<UserSkill> {
   const data = readSkillsFile(accountId);
   const skill: UserSkill = {
@@ -137,6 +144,10 @@ export async function createUserSkill(
     enabled: true,
     createdAt: new Date().toISOString(),
     isBuiltIn: false,
+    ...(input.imageStylePrompt ? { imageStylePrompt: input.imageStylePrompt.trim() } : {}),
+    ...(input.quizPrompt ? { quizPrompt: input.quizPrompt.trim() } : {}),
+    ...(input.ttsProvider ? { ttsProvider: input.ttsProvider } : {}),
+    ...(input.ttsVoice ? { ttsVoice: input.ttsVoice } : {}),
   };
   data.userSkills = [...data.userSkills, skill];
   await writeSkillsFile(accountId, data);
@@ -146,7 +157,7 @@ export async function createUserSkill(
 export async function updateUserSkill(
   accountId: string,
   skillId: string,
-  patch: Partial<Pick<UserSkill, 'name' | 'prompt' | 'applyTo' | 'enabled'>>,
+  patch: Partial<Pick<UserSkill, 'name' | 'prompt' | 'applyTo' | 'enabled'> & TemplateFields>,
 ): Promise<UserSkill | null> {
   const data = readSkillsFile(accountId);
   const idx = data.userSkills.findIndex((s) => s.id === skillId);
@@ -160,6 +171,10 @@ export async function updateUserSkill(
     prompt: patch.prompt !== undefined ? patch.prompt.trim() : existing.prompt,
     applyTo: patch.applyTo !== undefined ? patch.applyTo : existing.applyTo,
     enabled: patch.enabled !== undefined ? patch.enabled : existing.enabled,
+    imageStylePrompt: patch.imageStylePrompt !== undefined ? patch.imageStylePrompt.trim() || undefined : existing.imageStylePrompt,
+    quizPrompt: patch.quizPrompt !== undefined ? patch.quizPrompt.trim() || undefined : existing.quizPrompt,
+    ttsProvider: patch.ttsProvider !== undefined ? patch.ttsProvider || undefined : existing.ttsProvider,
+    ttsVoice: patch.ttsVoice !== undefined ? patch.ttsVoice || undefined : existing.ttsVoice,
   };
   data.userSkills[idx] = updated;
   await writeSkillsFile(accountId, data);

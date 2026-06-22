@@ -13,6 +13,11 @@ export interface Skill {
   enabled: boolean;
   isBuiltIn: boolean;
   createdAt?: string;
+  /** Teaching template fields (user skills only) */
+  imageStylePrompt?: string;
+  quizPrompt?: string;
+  ttsProvider?: string;
+  ttsVoice?: string;
 }
 
 export async function listSkills(): Promise<Skill[]> {
