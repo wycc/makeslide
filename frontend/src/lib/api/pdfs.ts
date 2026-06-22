@@ -795,11 +795,67 @@ export interface PageWatchProgressStats {
   avg_listened_ratio: number | null;
 }
 
+export interface PdfReportQuizQuestionSummary {
+  question_id: string;
+  question?: string;
+  attempt_count: number;
+  wrong_count: number;
+  wrong_rate: number;
+}
+
+export interface PdfReportPollPageSummary {
+  page_number: number;
+  question?: string;
+  total_votes: number;
+  divergence_score: number;
+}
+
+export interface PdfReportWatchProgressPageSummary {
+  page_number: number;
+  total_viewers: number;
+  completed_viewers: number;
+  completion_rate: number;
+  avg_listened_ratio: number | null;
+}
+
+export interface PdfReportSummary {
+  pdf_id: string;
+  participant_count: number;
+  quiz: {
+    attempt_count: number;
+    participant_count: number;
+    average_score: number | null;
+    hardest_questions?: PdfReportQuizQuestionSummary[];
+  };
+  polls: {
+    poll_count: number;
+    vote_count: number;
+    participant_count: number;
+    participation_rate: number;
+    most_divergent_pages?: PdfReportPollPageSummary[];
+  };
+  questions: {
+    count: number;
+    participant_count: number;
+  };
+  watch_progress: {
+    pages: PdfReportWatchProgressPageSummary[];
+    lowest_completion_pages?: PdfReportWatchProgressPageSummary[];
+  };
+  generated_at: string;
+}
+
 export async function fetchWatchProgress(id: string): Promise<PageWatchProgressStats[]> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/watch-progress`);
   if (!resp.ok) throw await parseErrorBody(resp);
   const data = (await resp.json()) as { pages?: PageWatchProgressStats[] };
   return Array.isArray(data.pages) ? data.pages : [];
+}
+
+export async function fetchPdfReportSummary(id: string): Promise<PdfReportSummary> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/report/summary`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as PdfReportSummary;
 }
 
 export async function fetchQuizSets(id: string): Promise<QuizSet[]> {

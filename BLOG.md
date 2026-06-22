@@ -1,5 +1,41 @@
 # MakeSlide 功能說明
 
+## 播放頁課後報告 MVP
+
+### 功能目的
+
+課後學習報告後端摘要 API 已經能彙整測驗、投票、提問與觀看進度資料；這次把摘要接到播放頁，讓簡報擁有者不用離開教學內容，就能快速看到課後補強重點。
+
+這個 MVP 的重點是建立教師可用的第一版報告入口：先把已經穩定存在的聚合欄位做成總覽卡片，並用既有每頁觀看完成率找出完成率最低的頁面。對於「最容易答錯的題目」與「投票分歧最高頁面」，前端型別與畫面已預留 `hardest_questions`、`most_divergent_pages` 擴充欄位；在目前後端摘要尚未回傳逐題/逐頁投票細節時，面板會以明確空狀態說明，而不是讓畫面失敗。
+
+### 使用方式
+
+1. 以簡報擁有者身分開啟播放頁。
+2. 在播放頁 header 點選「📊 課後報告」。
+3. 報告面板會呼叫 `GET /api/pdfs/:id/report/summary` 並顯示：
+   - 參與人數。
+   - 測驗平均分數、作答次數與作答者數。
+   - 投票參與率、投票數與投票題數。
+   - 學生提問數與提問者數。
+   - 觀看完成率最低頁面，包含完成率、完成人數 / 觀看人數與平均聽取比例。
+4. 點選「重新整理」可重新抓取後端摘要；點選「關閉」返回播放頁。
+
+權限限制：入口只在 `detail.is_owner` 為真且網址不是分享連結情境時顯示。非擁有者、一般公開訪客與分享連結訪客看不到入口，也不會主動呼叫報告摘要 API。
+
+### 技術重點
+
+- `frontend/src/lib/api/pdfs.ts` 新增 `PdfReportSummary` 與可擴充的逐題/投票分歧型別，並新增 `fetchPdfReportSummary()` 呼叫摘要 API。
+- `frontend/src/pages/PlayPage.tsx` 管理報告面板開關、載入狀態、錯誤狀態與摘要資料；當使用者不再符合 owner / 非分享情境時會自動關閉面板並清掉資料。
+- `frontend/src/pages/play/PlayPageHeader.tsx` 新增「課後報告」入口，透過播放頁 context 接收 `canViewPostClassReport` 與 `openPostClassReport`，確保非擁有者與分享訪客不顯示入口。
+- `frontend/src/pages/play/PostClassReportPanel.tsx` 呈現總覽卡片、三個洞察區塊、載入中、錯誤與空狀態。
+- `frontend/src/pages/play/reportSummary.ts` 抽出排序與格式化純函式，讓 MVP 對現有 API 欄位可用，也能無痛吃進未來後端補上的逐題答錯與投票分歧明細。
+
+### 驗證結果
+
+- 已執行前端型別檢查：`npm --workspace frontend run typecheck`，通過。
+- 已執行報告排序/格式化單元測試與既有 API helper 測試：`node --test --import tsx frontend/src/pages/play/reportSummary.test.ts frontend/src/lib/api.regenerate-pageops.test.ts`，9 個測試全部通過。
+- 驗證範圍涵蓋：觀看完成率最低頁排序、無觀看者頁面排除、未來逐題答錯欄位排序、未來投票分歧欄位排序、百分比格式化，以及前端 API helper 既有行為未回歸。
+
 ## 課後學習報告後端摘要 API
 
 ### 功能目的
