@@ -14,6 +14,7 @@ import {
   fetchPdfDetail,
   fetchWatchProgress,
   resolveShareToken,
+  updateLastPlayed,
   fetchPlaybackSyncState,
   joinSharedPlaybackSync,
   joinPlaybackSync,
@@ -450,7 +451,9 @@ export default function PlayPage() {
         setScriptMaxCharsPerPage(typeof d.script_max_chars_per_page === 'number' ? d.script_max_chars_per_page : null);
         setHostMode(d.host_mode === 'dual' ? 'dual' : 'solo');
         setLoadError(null);
-        if (detailWithShare.status !== 'ready') {
+        if (detailWithShare.status === 'ready') {
+          void updateLastPlayed(pdfId).catch(() => undefined);
+        } else {
           timer = window.setTimeout(load, POLL_INTERVAL_MS);
         }
       } catch (err) {

@@ -218,7 +218,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
                 owner_sub, visibility,
                 total_audio_duration_seconds,
                 github_synced_commit, github_synced_at,
-                tags,
+                tags, last_played_at,
                 created_at, updated_at
            FROM pdfs
            ORDER BY created_at DESC`,
@@ -256,7 +256,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
                 tts_voice, tts_speed, host_mode, script_max_chars_per_page, image_style_prompt,
                 total_audio_duration_seconds,
                 source_type, source_url, source_video_id, source_caption_language,
-                tags,
+                tags, last_played_at,
                 created_at, updated_at
          FROM pdfs WHERE id = ?`,
       )
@@ -742,6 +742,29 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     const tags = body.data.tags.trim();
     db.prepare(`UPDATE pdfs SET tags = ?, updated_at = ? WHERE id = ?`).run(tags, now, id);
     return reply.send({ id, tags, updated_at: now });
+  });
+
+  // PATCH /api/pdfs/:id/last-played
+  app.patch('/api/pdfs/:id/last-played', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const { id } = parsed.data;
+    const row = db
+      .prepare(`SELECT id, owner_sub, visibility FROM pdfs WHERE id = ?`)
+      .get(id) as Pick<PdfRow, 'id' | 'owner_sub' | 'visibility'> | undefined;
+    if (!row) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    const sub = sessionSub(request);
+    const shareAccess = shareAccessForPdf(request, id);
+    if (!shareAccess && !canReadPdf(sub, row)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限存取此簡報'));
+    }
+    const now = nowIso();
+    db.prepare(`UPDATE pdfs SET last_played_at = ? WHERE id = ?`).run(now, id);
+    return reply.send({ id, last_played_at: now });
   });
 
   app.delete('/api/categories/:category', async (request, reply) => {

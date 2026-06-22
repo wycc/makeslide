@@ -565,6 +565,11 @@ function migrate(): void {
     logger.info('Added column pdf_shares.expires_at');
   }
 
+  if (!columnExists('pdfs', 'last_played_at')) {
+    db.exec(`ALTER TABLE pdfs ADD COLUMN last_played_at TEXT`);
+    logger.info('Added column pdfs.last_played_at');
+  }
+
   logger.info({ dbPath: config.dbPath }, 'Database migrations applied');
 }
 

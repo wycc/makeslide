@@ -1796,3 +1796,9 @@ export async function generatePollDraft(id: string, pageNumber: number): Promise
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as { question: string; options: string[] };
 }
+
+export async function updateLastPlayed(id: string): Promise<{ id: string; last_played_at: string }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/last-played`, { method: 'PATCH' });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { id: string; last_played_at: string };
+}
