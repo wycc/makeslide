@@ -111,6 +111,9 @@ export function PlayPageHeader() {
     handleRaiseHand,
     handleToggleDisplayedQuestion,
     handleAiAnswerFollowerQuestions,
+    handleSummarizeFollowerQuestions,
+    questionSummary,
+    questionSummaryBusy,
     readOnlyReason, detail,
     currentPage,
     confirmScriptBusy,
@@ -314,11 +317,24 @@ export function PlayPageHeader() {
                       >
                         {syncAiAnswerBusy ? t('play.sync.aiAnswerBusy') : t('play.sync.aiAnswer')}
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleSummarizeFollowerQuestions()}
+                        disabled={questionSummaryBusy || syncFollowerQuestions.length === 0}
+                        className="rounded border border-violet-500/50 bg-violet-500/15 px-2 py-1 text-violet-100 disabled:opacity-40"
+                      >
+                        {questionSummaryBusy ? t('play.sync.summarizeQuestionsBusy') : t('play.sync.summarizeQuestions')}
+                      </button>
                     </div>
                   </div>
                   {syncAiAnswer ? (
                     <div className="max-h-72 overflow-y-auto rounded border border-cyan-500/30 bg-cyan-500/10 p-3 text-cyan-50 whitespace-pre-wrap">
                       {syncAiAnswer.answer}
+                    </div>
+                  ) : null}
+                  {questionSummary ? (
+                    <div className="max-h-72 overflow-y-auto rounded border border-violet-500/30 bg-violet-500/10 p-3 text-violet-50 whitespace-pre-wrap">
+                      {questionSummary}
                     </div>
                   ) : null}
                   <div className="max-h-28 space-y-1 overflow-auto">

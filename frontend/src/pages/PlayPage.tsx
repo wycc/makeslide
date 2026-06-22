@@ -9,6 +9,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   ApiError,
   answerSyncFollowerQuestionsWithAi,
+  summarizeSyncFollowerQuestions,
   fetchPdfReportSummary,
   fetchPageSubtitleTimeline,
   fetchPdfDetail,
@@ -213,6 +214,8 @@ export default function PlayPage() {
   const [syncPollShowResults, setSyncPollShowResults] = useState(false);
   const [syncDisplayedPollId, setSyncDisplayedPollId] = useState<number | null>(null);
   const [syncAiAnswerBusy, setSyncAiAnswerBusy] = useState(false);
+  const [questionSummary, setQuestionSummary] = useState<string | null>(null);
+  const [questionSummaryBusy, setQuestionSummaryBusy] = useState(false);
   const [syncQuestionInput, setSyncQuestionInput] = useState('');
   const [syncQuestionBusy] = useState(false);
   const [fullscreenQuestionDialogOpen, setFullscreenQuestionDialogOpen] = useState(false);
@@ -1455,6 +1458,20 @@ export default function PlayPage() {
     }
   }, [pdfId, syncAiAnswerBusy]);
 
+  const handleSummarizeFollowerQuestions = useCallback(async () => {
+    if (!pdfId || !syncClientIdRef.current || questionSummaryBusy) return;
+    setQuestionSummaryBusy(true);
+    try {
+      const res = await summarizeSyncFollowerQuestions(pdfId, syncClientIdRef.current);
+      setQuestionSummary(res.summary);
+      setSyncError(null);
+    } catch (err) {
+      setSyncError(err instanceof ApiError ? err.message : 'AI 摘要問題失敗');
+    } finally {
+      setQuestionSummaryBusy(false);
+    }
+  }, [pdfId, questionSummaryBusy]);
+
   // ─── handleRetry (stays in PlayPage) ───────────────────────────────────────
   // 直接讀寫 audioRef.current（src/load/play）、currentAudioTokenRef（防競態 token）、
   // 並呼叫 clearAudioRetryTimer / scheduleAudioReload（同在 PlayPage 的 retry 排程機制）。
@@ -2268,6 +2285,7 @@ export default function PlayPage() {
     fullscreenPollControlOpen, setFullscreenPollControlOpen, remoteCursor, syncDrawingState,
     isSyncFollower, canUseDrawingTools, handleSyncEnabledChange, handleSubmitFollowerQuestion,
     handleRaiseHand, handleToggleDisplayedQuestion, handleAiAnswerFollowerQuestions,
+    handleSummarizeFollowerQuestions, questionSummary, questionSummaryBusy,
     // fullscreen / layout
     imageOnlyFullscreen, setImageOnlyFullscreen, fullscreenLayout, setFullscreenLayout,
     positioningEffectId, setPositioningEffectId,

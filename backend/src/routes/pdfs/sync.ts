@@ -800,6 +800,56 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
+  // POST /api/pdfs/:id/sync/questions/summarize
+  app.post('/api/pdfs/:id/sync/questions/summarize', async (request, reply) => {
+    const parsedParams = IdParamSchema.safeParse(request.params);
+    const parsedBody = MasterQuestionActionBodySchema.safeParse(request.body);
+    if (!parsedParams.success || !parsedBody.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid sync summarize request'));
+    }
+    const { id } = parsedParams.data;
+    const { client_id: clientId } = parsedBody.data;
+    if (!ensurePdfExists(id)) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    const session = getSession(id);
+    if (roleFor(session, clientId) !== 'master') {
+      return reply.code(403).send(errorResponse('SYNC_NOT_MASTER', 'Only master can summarize follower questions'));
+    }
+    const questions = session.followerQuestions.slice(0, 50);
+    if (questions.length === 0) {
+      return reply.code(400).send(errorResponse('NO_FOLLOWER_QUESTIONS', 'No follower questions to summarize'));
+    }
+    const pdfRow = db.prepare(`SELECT title FROM pdfs WHERE id = ?`).get(id) as { title?: string | null } | undefined;
+    try {
+      const SummarizeQuestionsSchema = z.object({ summary: z.string().min(1).max(3000) });
+      const result = await callChatJSON({
+        label: `sync-follower-questions-summarize ${id}`,
+        schema: SummarizeQuestionsSchema,
+        maxTokens: 1500,
+        temperature: 0.3,
+        messages: [
+          {
+            role: 'system',
+            content: '你是繁體中文課堂助教。請只輸出 JSON：{"summary":"..."}。請分析所有學生問題，用 Markdown 格式產生一份條列摘要，歸納主要問題類型與關鍵主題，適合課後回顧用。',
+          },
+          {
+            role: 'user',
+            content: [
+              `簡報標題：${pdfRow?.title?.trim() || '（未命名）'}`,
+              `學生問題（共 ${questions.length} 則）：\n${questions.map((q, idx) => `${idx + 1}. ${q.code ? `[${q.code}] ` : ''}${q.question}`).join('\n')}`,
+              '請歸納問題主題（3-5 個分類），每類列出代表問題，並提供整體學習重點建議。',
+            ].join('\n\n'),
+          },
+        ],
+      });
+      return reply.send({ summary: result.data.summary });
+    } catch (err) {
+      request.log.error({ err, pdfId: id }, 'Failed to summarize follower questions');
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to summarize follower questions'));
+    }
+  });
+
   // GET /api/pdfs/:id/sync/attendees
   app.get('/api/pdfs/:id/sync/attendees', async (request, reply) => {
     const parsed = IdParamSchema.safeParse(request.params);
