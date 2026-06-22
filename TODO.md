@@ -419,3 +419,22 @@
 | 2026-06-23 | 首頁批次修改分類：多選模式加 sky 色 `<select>` 下拉，handleBatchMoveCategory 逐一 PATCH；i18n batchMove* | feat/batch-move-category（已 merge） |
 | 2026-06-23 | 播放頁自動播放倒數 UI：autoAdvanceCountdown useMemo，remaining≤3 時顯示 emerald 圓形倒數 badge | feat/auto-advance-countdown（已 merge） |
 | 2026-06-23 | 測驗複製到另一份簡報：POST copy-to/:targetId 端點，3 個測試；QuizBuilderPage「複製到…」select；i18n quiz.copy* | feat/quiz-copy-to-pdf（已 merge） |
+
+---- 計數重設 ----
+
+## 掃描摘要（2026-06-23 第十一輪）
+
+- 第十輪 5 個項目全數完成。
+- 播放頁逐頁備註目前只有 clipboard 複製按鈕，缺少一鍵下載全部備註為 TXT 的後端端點。
+- 播放頁頁碼顯示（第 N 頁 / 共 M 頁）是靜態文字，不支援直接輸入跳頁，切頁操作麻煩。
+- 首頁搜尋框沒有保留歷史記錄，每次都要重新輸入關鍵字。
+- 課後報告有學生列表，但缺少按時間排序的「作答時間軸」視圖，難以了解學生提交節奏。
+- 播放頁缺少「書籤」功能，教師複習時無法快速跳到標記的頁面。
+
+## 新增可執行項目（第十一輪）
+
+- [ ] 頁面備註匯出 TXT：新增 `GET /api/pdfs/:id/notes.txt` 後端端點，依頁碼串接所有非空 `page_notes`（格式 `=== 第 N 頁 ===\n{note}`），回傳純文字；前端在 header 匯出區加入下載按鈕；補後端測試 200 / 403 / 404 / 空備註。
+- [ ] 播放頁頁碼快速跳轉：將播放頁控制列的頁碼文字（`第 N 頁 / 共 M 頁`）改為可點擊的 `<input number>`，輸入後按 Enter 或失焦跳轉；無效頁碼自動夾限；純前端，補 i18n `play.slidePanel.jumpToPage`。
+- [ ] 首頁最近搜尋記錄：搜尋框聚焦時在下方顯示最近 5 個搜尋關鍵字（存至 `localStorage`，key: `makeslide.recentSearches`）；每次搜尋後更新列表；點選快速填入；純前端，補 i18n `home.search.recent/clearRecent`。
+- [ ] 課後報告作答時間軸：在課後報告面板「個別學生」卡片下方新增「作答時間軸」section，依 `submitted_at` 排序列出所有學生作答紀錄（時間、student_id 前 8 碼、分數 badge）；純前端消費既有 `/report/students` API 回傳資料；補 i18n。
+- [ ] 播放頁頁面書籤：在投影片頁面顯示區加入「🔖」書籤按鈕，點擊將目前頁碼加入 / 移除 `localStorage` 書籤清單（key: `makeslide.bookmarks.{pdfId}`）；側邊欄新增「書籤」分頁，列出書籤頁碼並提供跳頁連結；純前端，補 i18n `play.sidebar.bookmarks*`。
