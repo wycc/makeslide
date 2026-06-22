@@ -125,3 +125,79 @@ test('generateVideo normalizes pages of differing source resolutions to one cons
     fs.rmSync(path.join(config.storageRoot, pdfId), { recursive: true, force: true });
   }
 });
+
+async function seedPageArtifacts(pdfId: string, pageCount: number, durationSeconds: number): Promise<void> {
+  seedPdfWithPages(pdfId, pageCount);
+  const pagesDir = path.join(config.storageRoot, pdfId, 'pages');
+  fs.mkdirSync(pagesDir, { recursive: true });
+  for (let i = 1; i <= pageCount; i++) {
+    const uid = `genvideo${pdfId}${i}`;
+    const image = path.join(pagesDir, `${uid}.jpg`);
+    const audio = path.join(pagesDir, `${uid}.m4a`);
+    await sharp({ create: { width: 640, height: 480, channels: 3, background: { r: 10 * i, g: 0, b: 0 } } }).jpeg().toFile(image);
+    await execFile(FFMPEG, ['-y', '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo', '-t', String(durationSeconds), audio]);
+  }
+}
+
+function cleanupPdf(pdfId: string): void {
+  db.prepare(`DELETE FROM pages WHERE pdf_id = ?`).run(pdfId);
+  db.prepare(`DELETE FROM pdfs WHERE id = ?`).run(pdfId);
+  fs.rmSync(path.join(config.storageRoot, pdfId), { recursive: true, force: true });
+}
+
+test('generateVideo rejects a second concurrent call for the SAME pdfId instead of racing both ffmpeg pipelines on the same output file', async () => {
+  // Reproduced with real ffmpeg binaries outside this test suite: two ffmpeg processes racing to
+  // write the exact same output file path concurrently can produce a genuinely corrupted video
+  // (interleaved writes -> invalid NAL units that fail to decode), not simply "last writer wins".
+  // generateVideo() now guards against this with an in-memory per-pdfId lock: a second concurrent
+  // call for a pdfId that's already rendering must fail fast instead of starting a competing
+  // ffmpeg pipeline against the same output path.
+  const pdfId = 'genvideo-concurrent-lock-01';
+  await seedPageArtifacts(pdfId, 6, 2);
+
+  try {
+    const call1 = generateVideo({ pdfId, pageCount: 6, pageNumbers: [1, 2, 3, 4, 5, 6] });
+    // Give call1 a brief head start so it has definitely taken the lock before call2 is issued —
+    // the lock is acquired synchronously at the very top of generateVideo(), so any amount of
+    // delay after call1's promise is created (even 0ms via a microtask tick) is enough; this
+    // mirrors two real HTTP requests arriving moments apart rather than in the exact same tick.
+    await new Promise((resolve) => setImmediate(resolve));
+    await assert.rejects(
+      () => generateVideo({ pdfId, pageCount: 6, pageNumbers: [1, 2, 3, 4, 5, 6] }),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.equal(err.message, 'VIDEO_GENERATION_ALREADY_RUNNING');
+        assert.equal((err as Error & { code?: string }).code, 'VIDEO_GENERATION_ALREADY_RUNNING');
+        return true;
+      },
+    );
+    const result = await call1;
+    assert.ok(fs.existsSync(result.outputPath));
+
+    // The lock must be released once call1 finishes, so a later call for the same pdfId succeeds
+    // normally rather than being permanently locked out.
+    const result2 = await generateVideo({ pdfId, pageCount: 6, pageNumbers: [1, 2, 3, 4, 5, 6] });
+    assert.ok(fs.existsSync(result2.outputPath));
+  } finally {
+    cleanupPdf(pdfId);
+  }
+});
+
+test('generateVideo lock is scoped per pdfId: concurrent calls for two different pdfs both succeed', async () => {
+  const pdfIdA = 'genvideo-concurrent-lock-a-01';
+  const pdfIdB = 'genvideo-concurrent-lock-b-01';
+  await seedPageArtifacts(pdfIdA, 2, 1);
+  await seedPageArtifacts(pdfIdB, 2, 1);
+
+  try {
+    const [resultA, resultB] = await Promise.all([
+      generateVideo({ pdfId: pdfIdA, pageCount: 2, pageNumbers: [1, 2] }),
+      generateVideo({ pdfId: pdfIdB, pageCount: 2, pageNumbers: [1, 2] }),
+    ]);
+    assert.ok(fs.existsSync(resultA.outputPath));
+    assert.ok(fs.existsSync(resultB.outputPath));
+  } finally {
+    cleanupPdf(pdfIdA);
+    cleanupPdf(pdfIdB);
+  }
+});

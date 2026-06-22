@@ -98,6 +98,34 @@ test('POST /generate-video lets the owner past the permission check', async () =
   await app.close();
 });
 
+test('POST /generate-video rejects a second request while video generation is already running for this pdf, without touching its progress columns', async () => {
+  // Reproduced for real: two concurrent /generate-video requests for the same pdf would each
+  // start their own ffmpeg pipeline writing to the same output video file, which can corrupt the
+  // resulting file (verified with real ffmpeg binaries — interleaved writes produce invalid NAL
+  // units that fail to decode). This test simulates "a generation is already in flight" by
+  // setting progress_step to 'rendering_video' directly (the same value the endpoint itself sets
+  // right before calling the real ffmpeg pipeline) and checks the endpoint refuses to start a
+  // second one and leaves the in-progress request's progress columns untouched.
+  seedPdf('uppc-video-conflict-01', 'private', 'ready');
+  db.prepare(
+    `UPDATE pdfs SET progress_step = 'rendering_video', progress_current = 3, progress_total = 10 WHERE id = ?`,
+  ).run('uppc-video-conflict-01');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'POST', url: '/api/pdfs/uppc-video-conflict-01/generate-video', headers: OWNER_HEADERS });
+  assert.equal(resp.statusCode, 409);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'INVALID_STATE');
+  const row = db.prepare(`SELECT progress_step, progress_current, progress_total FROM pdfs WHERE id = ?`).get('uppc-video-conflict-01') as {
+    progress_step: string | null;
+    progress_current: number | null;
+    progress_total: number | null;
+  };
+  // The rejected request must not have reset or overwritten the in-progress request's columns.
+  assert.equal(row.progress_step, 'rendering_video');
+  assert.equal(row.progress_current, 3);
+  assert.equal(row.progress_total, 10);
+  await app.close();
+});
+
 // --- POST /duplicate ---
 
 test('POST /duplicate rejects a non-owner request on a private presentation', async () => {
