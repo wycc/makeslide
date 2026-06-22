@@ -642,6 +642,37 @@ export default function QuizBuilderPage() {
           );
         })}
       </div>
+      {syncQuizShowAnswers ? (() => {
+        const scoreTable = normalizeQuestionScores(quiz.questions);
+        const wrongQuestions = quiz.questions.filter((q, idx) => {
+          const selected = studentAnswers[q.id] ?? [];
+          return calcQuestionScore(q, selected, scoreTable[idx] ?? 0) === 0;
+        });
+        if (wrongQuestions.length === 0) return null;
+        return (
+          <div className="mt-4 rounded-lg border border-rose-500/30 bg-rose-500/10 p-4">
+            <h3 className="mb-1 text-sm font-semibold text-rose-200">{t('quiz.reviewSection')}</h3>
+            <p className="mb-3 text-xs text-rose-100/70">{t('quiz.reviewHint')}</p>
+            <ul className="space-y-2">
+              {wrongQuestions.map((q) => (
+                <li key={q.id} className="flex items-start justify-between gap-3 rounded border border-rose-500/20 bg-slate-950/50 px-3 py-2">
+                  <span className="text-xs text-slate-200 line-clamp-2">{q.question}</span>
+                  <a
+                    href={pdfId ? `/play/${encodeURIComponent(pdfId)}${typeof q.page_number === 'number' ? `?page=${q.page_number}` : ''}` : '#'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 rounded border border-rose-500/40 bg-rose-500/15 px-2 py-1 text-xs text-rose-200 hover:bg-rose-500/25"
+                  >
+                    {typeof q.page_number === 'number'
+                      ? formatMessage('quiz.reviewPage', { n: q.page_number })
+                      : t('quiz.reviewNoPage')}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })() : null}
     </div>
   );
 
@@ -880,24 +911,48 @@ export default function QuizBuilderPage() {
                 <option value="multiple">{t('quiz.multipleChoice')}</option>
               </select>
               <textarea value={q.question} onChange={(e) => updateQuestion(qIdx, { question: e.target.value })} rows={2} placeholder={t('quiz.questionPlaceholder')} className="mt-3 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
-              <label className="mt-3 block text-xs text-slate-400">{t('quiz.scoreLabel')}</label>
-              <input
-                type="number"
-                min={0}
-                step="0.5"
-                value={typeof q.score === 'number' ? q.score : ''}
-                onChange={(e) => {
-                  const raw = e.target.value.trim();
-                  if (!raw) {
-                    updateQuestion(qIdx, { score: null });
-                    return;
-                  }
-                  const n = Number(raw);
-                  updateQuestion(qIdx, { score: Number.isFinite(n) && n >= 0 ? n : null });
-                }}
-                placeholder={t('quiz.scorePlaceholder')}
-                className="mt-1 w-48 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-              />
+              <div className="mt-3 flex flex-wrap items-end gap-4">
+                <div>
+                  <label className="block text-xs text-slate-400">{t('quiz.scoreLabel')}</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.5"
+                    value={typeof q.score === 'number' ? q.score : ''}
+                    onChange={(e) => {
+                      const raw = e.target.value.trim();
+                      if (!raw) {
+                        updateQuestion(qIdx, { score: null });
+                        return;
+                      }
+                      const n = Number(raw);
+                      updateQuestion(qIdx, { score: Number.isFinite(n) && n >= 0 ? n : null });
+                    }}
+                    placeholder={t('quiz.scorePlaceholder')}
+                    className="mt-1 w-32 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400">{t('quiz.pageNumberLabel')}</label>
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={typeof q.page_number === 'number' ? q.page_number : ''}
+                    onChange={(e) => {
+                      const raw = e.target.value.trim();
+                      if (!raw) {
+                        updateQuestion(qIdx, { page_number: null });
+                        return;
+                      }
+                      const n = Number(raw);
+                      updateQuestion(qIdx, { page_number: Number.isFinite(n) && n >= 1 ? Math.floor(n) : null });
+                    }}
+                    placeholder={t('quiz.pageNumberPlaceholder')}
+                    className="mt-1 w-24 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
               <div className="mt-3 space-y-2">
                 {q.options.map((option, oIdx) => (
                   <div key={oIdx} className="flex items-center gap-2">

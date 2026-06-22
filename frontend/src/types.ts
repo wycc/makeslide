@@ -528,6 +528,7 @@ export interface QuizQuestion {
   answer_indices: number[];
   explanation: string;
   score?: number | null;
+  page_number?: number | null;
 }
 
 export interface QuizSet {
