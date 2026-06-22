@@ -572,6 +572,8 @@ export const en = {
   'play.sync.showLatestQuestion': 'Show latest question',
   'play.sync.aiAnswerBusy': 'AI is answering…',
   'play.sync.aiAnswer': 'AI summary answer (a)',
+  'play.sync.summarizeQuestions': 'AI Summarize All Questions',
+  'play.sync.summarizeQuestionsBusy': 'Summarizing…',
   'play.sync.anonymous': 'Anonymous',
   'play.share.readOnlyVisible': 'read-only (visible in list)',
   'play.share.readWriteVisible': 'read-write (visible in list)',

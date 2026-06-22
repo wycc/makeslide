@@ -402,6 +402,9 @@ export interface PlayPageContextValue {
   handleRaiseHand: () => void;
   handleToggleDisplayedQuestion: () => void;
   handleAiAnswerFollowerQuestions: () => void;
+  handleSummarizeFollowerQuestions: () => Promise<void>;
+  questionSummary: string | null;
+  questionSummaryBusy: boolean;
 
   // ─── Fullscreen / layout ────────────────────────────────────────────────────
   imageOnlyFullscreen: boolean;

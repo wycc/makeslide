@@ -572,6 +572,8 @@ export const zhTW = {
   'play.sync.showLatestQuestion': '顯示最新問題',
   'play.sync.aiAnswerBusy': 'AI 回答中…',
   'play.sync.aiAnswer': 'AI 總結回答 (a)',
+  'play.sync.summarizeQuestions': 'AI 摘要所有問題',
+  'play.sync.summarizeQuestionsBusy': '摘要中…',
   'play.sync.anonymous': '匿名',
   'play.share.readOnlyVisible': 'read-only（列表可見）',
   'play.share.readWriteVisible': 'read-write（列表可見）',

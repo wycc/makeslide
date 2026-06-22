@@ -1377,6 +1377,19 @@ export async function answerSyncFollowerQuestionsWithAi(
   return (await resp.json()) as SyncAiAnswer;
 }
 
+export async function summarizeSyncFollowerQuestions(
+  id: string,
+  clientId: string,
+): Promise<{ summary: string }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/sync/questions/summarize`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ client_id: clientId }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { summary: string };
+}
+
 /**
  * 向後端送出「停止正在執行中的重生任務」請求；實際會在下一個頁面安全檢查點
  * 停止，並讓 status 進入 `cancelling` → `cancelled`。
