@@ -1670,3 +1670,27 @@ export async function restoreScriptVersion(
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as RestoreScriptResponse;
 }
+
+export interface SearchPdfMatch {
+  id: string;
+  title: string | null;
+  pageCount: number | null;
+}
+
+export interface SearchPageMatch {
+  pdfId: string;
+  pdfTitle: string | null;
+  pageNumber: number;
+  snippet: string;
+}
+
+export interface SearchResults {
+  pdfMatches: SearchPdfMatch[];
+  pageMatches: SearchPageMatch[];
+}
+
+export async function searchContent(q: string): Promise<SearchResults> {
+  const resp = await fetch(`api/search?q=${encodeURIComponent(q)}`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as SearchResults;
+}
