@@ -176,7 +176,8 @@
 - [ ] 播放頁鍵盤快捷鍵說明對話框：在播放頁 header 加入「快捷鍵」按鈕（`?` 圖示），開啟說明對話框，列出目前所有可用快捷鍵（← → 換頁、Space 播放/暫停、F 全螢幕、A 插入暫停效果等）；純前端改動，補 i18n。
 - [ ] 首頁簡報「我的最愛」功能：在 `PdfCard` 加入星號按鈕，收藏狀態存至 `localStorage`（key: `makeslide.favorites`）；首頁篩選列新增「我的最愛」分類按鈕；純前端改動，不需後端修改。
 - [ ] 播放完成後顯示重播提示：播放最後一頁音訊結束後，在投影片顯示區覆蓋「播放完成」面板，提供「重播」（跳回第一頁）與「繼續手動瀏覽」兩個按鈕；純前端改動，補 i18n。
-- [ ] Follower 舉手功能：在 follower 播放頁加入「舉手」按鈕，呼叫現有 `POST /api/pdfs/:id/sync/question`（body: `{ question: '🖐' }`）送出舉手信號；master 端 Q&A 面板顯示舉手 icon 而非文字；純前端改動，不改後端 schema。
+- [x] Follower 舉手功能：在 follower 播放頁加入「舉手」按鈕，呼叫現有 `POST /api/pdfs/:id/sync/question`（body: `{ question: '🖐' }`）送出舉手信號；master 端 Q&A 面板顯示舉手 icon 而非文字；純前端改動，不改後端 schema。
+  - 修改說明（2026-06-22）：`PlayPage.tsx` 新增 `handleRaiseHand` callback，直接呼叫 `submitSyncFollowerQuestion(pdfId, clientId, '🖐', userCode)`；`PlayPageContext.tsx` 介面新增 `handleRaiseHand: () => void`；`PlayPageHeader.tsx` follower 區塊加入琥珀色「🖐 舉手」按鈕（不需輸入框，一鍵送出），master 端問題列表中 `q.question === '🖐'` 時改以琥珀色 border 呈現並顯示本地化「舉手」文字；zh-TW/en i18n 新增 `play.sync.raiseHand`/`raiseHandTitle`。純前端改動。分支 `feat/follower-raise-hand`，已 merge 回 master。
 - [ ] 設定頁「清除所有生成快取」功能：新增 `DELETE /api/admin/cache` 後端端點，清除 `data/pdfs/*/` 下所有 `artifact_cache/` 子目錄（保留 images/audio/script 等成品），限 admin；設定頁新增按鈕並顯示釋放空間統計；補後端測試驗證 200 / 403。
 
 | 2026-06-22 | 課後報告 AI 教學建議：`POST /api/pdfs/:id/report/ai-suggestions`，彙整答對率+觀看完成率交給 LLM 生成 Markdown 建議；`PostClassReportPanel` 紫羅蘭色「生成 AI 建議」按鈕；3 個測試通過 | feat/report-ai-suggestions（已 merge） |
@@ -187,3 +188,4 @@
 | 2026-06-22 | 同步場次出席名單：`sync_attendees` 表、`/sync/join` 寫入、GET 端點（owner-only）、教師同步面板可折疊名單 UI；4 個後端測試通過 | master（直接 commit 4d8dd61） |
 | 2026-06-22 | 播放頁語速偏好持久化：`i18n.ts` 新增 `getStoredTtsSpeed`/`setStoredTtsSpeed`（key: `makeslide.ttsSpeed`）；`usePdfMetadata` 初始化從 localStorage 讀取，儲存設定時寫回；`PlayPage` fallback 改用 localStorage 值 | feat/tts-speed-persist（已 merge） |
 | 2026-06-22 | 首頁依音頻時長排序：新增 `audio_desc`/`audio_asc` SortMode，comparator null 容錯；首頁 select 新增兩個 option；i18n 鍵值 `home.sort.audioDurationDesc/audioDurationAsc` | feat/home-audio-duration-sort（已 merge） |
+| 2026-06-22 | Follower 舉手功能：follower header 加入琥珀色「🖐 舉手」按鈕，呼叫 `POST /api/pdfs/:id/sync/questions`（body: `{ question: '🖐' }`）；master 問題列表對 🖐 以琥珀色高亮顯示；i18n `play.sync.raiseHand/raiseHandTitle` | feat/follower-raise-hand（已 merge） |
