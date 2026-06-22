@@ -1071,7 +1071,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
 
     const newId = nanoid(PDF_ID_SIZE);
     const now = nowIso();
-    const newTitle = `副本-${source.title ?? source.original_filename ?? source.id}`;
+    const newTitle = `${source.title ?? source.original_filename ?? source.id}（副本）`;
 
     try {
       const srcDir = path.join(config.storageRoot, id);
