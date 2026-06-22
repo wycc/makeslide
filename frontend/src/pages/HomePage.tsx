@@ -168,7 +168,6 @@ export default function HomePage() {
   const [viewMode, setViewMode] = useState<ViewMode>(() =>
     localStorage.getItem(VIEW_MODE_STORAGE_KEY) === 'list' ? 'list' : 'grid'
   );
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const updateViewMode = (mode: ViewMode) => {
     localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode);
     setViewMode(mode);

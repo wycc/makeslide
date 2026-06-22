@@ -246,6 +246,9 @@
 | 2026-06-23 | 後端 last_played_at 修正：補齊 DB migration、`PATCH /api/pdfs/:id/last-played` 端點、`PdfRow`/`PdfDetail` 型別、`rowToListItem`/`rowToDetail`、`updateLastPlayed()` API 函式、PlayPage.tsx ready 時呼叫 | fix/last-played-backend（已 merge） |
 | 2026-06-23 | 首頁列表/網格視圖切換：HomePage 加入 Grid/List toggle，list 視圖顯示單行緊湊標題+頁數+類別+刪除按鈕；localStorage 持久化；i18n `home.viewGrid`/`home.viewList`/`home.pages`/`home.uncategorized`/`home.delete` | feat/home-view-toggle（已 merge） |
 | 2026-06-23 | 播放頁音量控制滑桿：PlayPageSlidePanel progress bar 旁新增音量 emoji + range input（0~1, step=0.05）；audioVolume state 同步至 audioRef.volume；localStorage 持久化（`makeslide.audioVolume`）；i18n `play.controls.volume` | feat/home-view-toggle（已 merge） |
+| 2026-06-23 | PDF 備註/說明欄位：DB migration `pdfs.description`；`PATCH /api/pdfs/:id/description`；`PlayPageHeader` textarea；4 後端測試 | feat/pdf-description（已 merge） |
+| 2026-06-23 | 首頁多選批次刪除：`selectedIds` Set；grid 及 list 模式 checkbox；篩選列「刪除已選（N）」按鈕；i18n | feat/batch-delete-home（已 merge） |
+| 2026-06-23 | 播放頁字幕文字大小調整：S/M/L 按鈕群組；`SubtitleSize` 型別；localStorage 持久化；Tailwind class 套用 | commit 28fff18（已 merge） |
 
 ## 掃描摘要（2026-06-23 第六輪）
 
@@ -263,7 +266,10 @@
   - 修改說明（2026-06-23）：`HomePage.tsx` 加入 `viewMode` state（grid/list，localStorage `makeslide.homeViewMode`）；list 模式渲染每列一張卡片（標題、頁數、類別、刪除按鈕）；i18n `home.viewGrid`/`home.viewList`/`home.pages`/`home.uncategorized`/`home.delete`。分支 `feat/home-view-toggle`，已 merge 回 master。
 - [x] 播放頁音量控制滑桿：在播放控制列加入音量滑桿（`<input type="range" min=0 max=1 step=0.05>`），對 `<audio>` 元素設定 `volume` 屬性；音量偏好存至 localStorage（key: `makeslide.audioVolume`）；補 i18n `play.controls.volume`。
   - 修改說明（2026-06-23）：`PlayPage.tsx` 加入 `audioVolume` state（init from localStorage）與 useEffect 同步至 `audioRef.volume`；`PlayPageContext.tsx` 介面補 `audioVolume`/`setAudioVolume`；`PlayPageSlidePanel.tsx` progress bar 右側加入音量 emoji（🔇/🔉/🔊）+ `<input type="range">`；i18n `play.controls.volume`。分支 `feat/home-view-toggle`，已 merge 回 master。
-- [ ] PDF 備註/說明欄位：`pdfs` 表新增 `description TEXT DEFAULT ''` 欄位（migration），播放頁 header 中標題下方新增可展開的備註編輯區；新增 `PATCH /api/pdfs/:id/description` 端點；補後端測試驗證 200 / 403。
-- [ ] 首頁多選批次刪除：首頁每張卡片角落加入 checkbox（hover 時出現），選取一或多張後顯示「刪除已選（N）」按鈕，依序呼叫 `DELETE /api/pdfs/:id`；純前端改動（利用現有 delete API）。
-- [ ] 播放頁字幕文字大小調整：播放設定對話框中新增字幕大小選項（小/中/大），以 Tailwind class 套用至字幕渲染區塊；存至 localStorage（key: `makeslide.subtitleSize`）；補 i18n。
+- [x] PDF 備註/說明欄位：`pdfs` 表新增 `description TEXT DEFAULT ''` 欄位（migration），播放頁 header 中標題下方新增可展開的備註編輯區；新增 `PATCH /api/pdfs/:id/description` 端點；補後端測試驗證 200 / 403。
+  - 修改說明（2026-06-23）：DB migration `pdfs.description NOT NULL DEFAULT ''`；`PATCH /api/pdfs/:id/description`（canEditPdf 守衛）；`PdfRow`/`PdfDetail`/前端 `types.ts` 補 `description?`；`api/pdfs.ts` 新增 `updatePdfDescription()`；`usePdfMetadata` 加入 state/handler；`PlayPageHeader` 在標籤欄下方加 `<textarea>` 備註區；i18n；4 個後端測試。分支 `feat/pdf-description`，已 merge 回 master。
+- [x] 首頁多選批次刪除：首頁每張卡片角落加入 checkbox（hover 時出現），選取一或多張後顯示「刪除已選（N）」按鈕，依序呼叫 `DELETE /api/pdfs/:id`；純前端改動（利用現有 delete API）。
+  - 修改說明（2026-06-23）：`selectedIds` Set state；`toggleSelected` callback；`handleBatchDelete` 依序呼叫 `deletePdf`；list 模式每行左側 checkbox；grid 模式相對定位 checkbox（hover 顯示）；篩選列新增玫瑰色「刪除已選（N）」按鈕；i18n `home.batchDeleteDone/batchDeletePartial/batchDeleteBtn`。分支 `feat/batch-delete-home`，已 merge 回 master。
+- [x] 播放頁字幕文字大小調整：播放設定對話框中新增字幕大小選項（小/中/大），以 Tailwind class 套用至字幕渲染區塊；存至 localStorage（key: `makeslide.subtitleSize`）；補 i18n。
+  - 修改說明（2026-06-23）：`SubtitleSize` 型別（`'sm'|'md'|'lg'`）、`SUBTITLE_SIZE_STORAGE_KEY`、`getStoredSubtitleSize()`；`PlayPage.tsx` 加 state；`PlayPageContext.tsx` 補介面；`PlayPageSlidePanel.tsx` 三段 Tailwind class + S/M/L 按鈕群組。commit `28fff18`，已 merge 回 master。
 - [ ] 測驗題目答題解析：`questions_json` 的每題 JSON 加入可選 `explanation?: string` 欄位；`QuizBuilderPage` 加入解析輸入框；答題結果頁面答錯時顯示解析文字；純前端資料結構延伸，不需 DB migration。
