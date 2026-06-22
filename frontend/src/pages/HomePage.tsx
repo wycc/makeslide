@@ -884,6 +884,7 @@ export default function HomePage() {
           initialValue={promptTarget.initialValue}
           ttsProvider={promptTarget.ttsProvider}
           showSplitConfirmation={promptTarget.hasSourceText}
+          pageCount={promptTarget.pageCount}
           onSubmit={handlePromptSubmit}
           onClose={handlePromptClose}
         />

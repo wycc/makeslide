@@ -6,12 +6,13 @@ import {
   openaiVoiceLabel,
   type TtsProvider,
 } from '../lib/ttsVoices';
-import { getImagePromptTemplates, type ImagePromptTemplate } from '../lib/api';
+import { getImagePromptTemplates, getSystemAiSettings, type ImagePromptTemplate } from '../lib/api';
 import { useI18n, type TranslationKey } from '../i18n';
 import {
   MAX_PROMPT_TO_OUTLINE_CHARS,
   PROMPT_TO_OUTLINE_TEXTAREA_MAX_CHARS,
 } from '../lib/promptLimits';
+import { COST_TIERS, estimateGenerationCost, formatUsd } from '../lib/costEstimate';
 
 export interface PromptPreset {
   key: string;
@@ -55,6 +56,8 @@ interface PromptModalProps {
   initialValue?: string;
   ttsProvider?: TtsProvider;
   showSplitConfirmation?: boolean;
+  /** Total page count of the PDF, used for cost estimation. */
+  pageCount?: number | null;
   /** Called when user clicks submit. Should throw on failure to show error. */
   onSubmit: (
     prompt: string,
@@ -77,6 +80,7 @@ export default function PromptModal({
   initialValue = '',
   ttsProvider = 'openai',
   showSplitConfirmation = true,
+  pageCount,
   onSubmit,
   onClose,
 }: PromptModalProps) {
@@ -95,7 +99,24 @@ export default function PromptModal({
   const [selectedImageTemplateKey, setSelectedImageTemplateKey] = useState<string>('');
   const [imageStylePrompt, setImageStylePrompt] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  const [llmModel, setLlmModel] = useState('gpt-4o-mini');
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const s = await getSystemAiSettings();
+        if (!active) return;
+        const model =
+          s.llm_provider === 'gemini' ? s.gemini_llm_model :
+          s.llm_provider === 'openai' ? s.openai_llm_model :
+          s.cgu_air_llm_model ?? s.openrouter_llm_model ?? 'gpt-4o-mini';
+        setLlmModel(model || 'gpt-4o-mini');
+      } catch { /* non-fatal */ }
+    })();
+    return () => { active = false; };
+  }, []);
 
   // Autofocus the textarea on open.
   useEffect(() => {
@@ -396,6 +417,34 @@ export default function PromptModal({
               {error}
             </div>
           )}
+
+          {pageCount != null && pageCount > 0 ? (
+            <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2">
+              <p className="mb-2 text-xs font-medium text-amber-300">{t('promptModal.costEstimate.title')}</p>
+              <div className="grid grid-cols-3 gap-1">
+                {COST_TIERS.map((tier) => {
+                  const est = estimateGenerationCost({ pageCount, charsPerPage: tier.charsPerPage, ttsProvider, llmModel });
+                  return (
+                    <div key={tier.name} className="rounded border border-amber-500/20 bg-amber-500/5 px-2 py-1.5 text-center">
+                      <div className="text-xs font-medium text-amber-200">
+                        {t(`promptModal.costEstimate.tier${tier.name.charAt(0).toUpperCase() + tier.name.slice(1)}` as TranslationKey)}
+                      </div>
+                      <div className="mt-0.5 text-xs text-amber-100/70">
+                        {t(`promptModal.costEstimate.tier${tier.name.charAt(0).toUpperCase() + tier.name.slice(1)}Desc` as TranslationKey)}
+                      </div>
+                      <div className="mt-1 text-sm font-semibold text-amber-100">{formatUsd(est.totalCostUsd)}</div>
+                      <div className="mt-0.5 text-xs text-amber-200/50">
+                        {t('promptModal.costEstimate.llm')} {formatUsd(est.llmCostUsd)} · {t('promptModal.costEstimate.tts')} {formatUsd(est.ttsCostUsd)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="mt-1.5 text-xs text-amber-200/40">{t('promptModal.costEstimate.disclaimer')}</p>
+            </div>
+          ) : pageCount === 0 ? (
+            <p className="mt-3 text-xs text-slate-500">{t('promptModal.costEstimate.noPageCount')}</p>
+          ) : null}
         </div>
 
         <div className="flex flex-col-reverse gap-2 border-t border-slate-800 bg-slate-900/80 px-4 py-2.5 sm:flex-row sm:justify-end">
