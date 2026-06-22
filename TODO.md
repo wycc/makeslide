@@ -179,7 +179,8 @@
   - 修改說明（2026-06-22）：新增 `ShortcutsButton` 子元件（`PlayPageHeader.tsx`），含 `useState` 控制開關；`?` 按鈕開啟覆蓋層對話框，列出 7 個快捷鍵（←/→/Space×2/W/P/A/Esc）以 table 呈現；i18n `play.shortcuts.*` 鍵值新增至 zh-TW/en；純前端。分支 `feat/keyboard-shortcuts-modal`，已 merge 回 master。
 - [x] 首頁簡報「我的最愛」功能：在 `PdfCard` 加入星號按鈕，收藏狀態存至 `localStorage`（key: `makeslide.favorites`）；首頁篩選列新增「我的最愛」分類按鈕；純前端改動，不需後端修改。
   - 修改說明（2026-06-23）：`PdfCardProps` 新增可選 `isFavorited`/`onToggleFavorite`；card 圖片右下角加入 ★/☆ 絕對定位按鈕（琥珀色高亮）；`HomePage` 新增 `favorites`（Set）與 `favoritesOnly` state，`handleToggleFavorite` 讀寫 localStorage，filter chain 新增 `favFilteredItems` 步驟；tag filter 列上方加入「☆ 我的最愛」chip；i18n 鍵值 `card.favorite`/`card.unfavorite`/`home.filter.favoritesOnly`。分支 `feat/homepage-favorites`，已 merge 回 master。
-- [ ] 播放完成後顯示重播提示：播放最後一頁音訊結束後，在投影片顯示區覆蓋「播放完成」面板，提供「重播」（跳回第一頁）與「繼續手動瀏覽」兩個按鈕；純前端改動，補 i18n。
+- [x] 播放完成後顯示重播提示：播放最後一頁音訊結束後，在投影片顯示區覆蓋「播放完成」面板，提供「重播」（跳回第一頁）與「繼續手動瀏覽」兩個按鈕；純前端改動，補 i18n。
+  - 修改說明（2026-06-23）：`PlayPageSlidePanel.tsx` 的 `{finished && (...)}` 區塊改為 IIFE 渲染，新增「重播」（`setCurrentIdx(0)`+`setIsPlaying(true)`+`setFinished(false)`）與「繼續手動瀏覽」（`setFinished(false)`）按鈕；解構補 `setCurrentIdx`/`setIsPlaying`/`setFinished`；i18n `play.slidePanel.replay`/`continueManual` 新增。分支 `feat/playback-completion-overlay`，已 merge 回 master。
 - [x] Follower 舉手功能：在 follower 播放頁加入「舉手」按鈕，呼叫現有 `POST /api/pdfs/:id/sync/question`（body: `{ question: '🖐' }`）送出舉手信號；master 端 Q&A 面板顯示舉手 icon 而非文字；純前端改動，不改後端 schema。
   - 修改說明（2026-06-22）：`PlayPage.tsx` 新增 `handleRaiseHand` callback，直接呼叫 `submitSyncFollowerQuestion(pdfId, clientId, '🖐', userCode)`；`PlayPageContext.tsx` 介面新增 `handleRaiseHand: () => void`；`PlayPageHeader.tsx` follower 區塊加入琥珀色「🖐 舉手」按鈕（不需輸入框，一鍵送出），master 端問題列表中 `q.question === '🖐'` 時改以琥珀色 border 呈現並顯示本地化「舉手」文字；zh-TW/en i18n 新增 `play.sync.raiseHand`/`raiseHandTitle`。純前端改動。分支 `feat/follower-raise-hand`，已 merge 回 master。
 - [ ] 設定頁「清除所有生成快取」功能：新增 `DELETE /api/admin/cache` 後端端點，清除 `data/pdfs/*/` 下所有 `artifact_cache/` 子目錄（保留 images/audio/script 等成品），限 admin；設定頁新增按鈕並顯示釋放空間統計；補後端測試驗證 200 / 403。
@@ -197,3 +198,4 @@
 | 2026-06-22 | Follower 舉手功能：follower header 加入琥珀色「🖐 舉手」按鈕，呼叫 `POST /api/pdfs/:id/sync/questions`（body: `{ question: '🖐' }`）；master 問題列表對 🖐 以琥珀色高亮顯示；i18n `play.sync.raiseHand/raiseHandTitle` | feat/follower-raise-hand（已 merge） |
 | 2026-06-22 | 播放頁鍵盤快捷鍵說明對話框：`ShortcutsButton` 子元件（含 useState），`?` 按鈕開啟覆蓋層，table 列出 7 個快捷鍵（←/→/Space×2/W/P/A/Esc）；i18n `play.shortcuts.*` | feat/keyboard-shortcuts-modal（已 merge） |
 | 2026-06-23 | 首頁簡報「我的最愛」：`PdfCard` 圖片右下角 ★/☆ 按鈕（琥珀色高亮）；`HomePage` favorites Set + localStorage；tag filter 上方加「我的最愛」chip；i18n `card.favorite/unfavorite`/`home.filter.favoritesOnly` | feat/homepage-favorites（已 merge） |
+| 2026-06-23 | 播放完成後顯示重播提示：`finished` 覆蓋層加入「重播」（setCurrentIdx(0)+setIsPlaying+setFinished=false）與「繼續手動瀏覽」按鈕；i18n `play.slidePanel.replay`/`continueManual` | feat/playback-completion-overlay（已 merge） |
