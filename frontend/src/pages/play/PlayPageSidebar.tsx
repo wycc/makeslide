@@ -6,16 +6,37 @@ import { updatePageNote } from '../../lib/api/pdfs';
 import { usePlayPageContext } from './PlayPageContext';
 import { PageAskPanel } from './PageAskPanel';
 import { QualityCheckPanel } from './QualityCheckPanel';
+import { copyTextToClipboard } from '../../lib/clipboard';
 
 const IMAGE_MSG_PREFIX = '[image] ';
 
 function PageNoteSection() {
   const { t } = useI18n();
-  const { currentPage, pdfId, isReadOnlyProcessing } = usePlayPageContext();
+  const { currentPage, deckPages, pdfId, isReadOnlyProcessing } = usePlayPageContext();
   const [noteText, setNoteText] = useState(currentPage?.page_notes ?? '');
   const [noteBusy, setNoteBusy] = useState(false);
   const [noteMsg, setNoteMsg] = useState<string | null>(null);
+  const [copyMsg, setCopyMsg] = useState<string | null>(null);
   const savingRef = useRef(false);
+
+  const handleCopyAllNotes = () => {
+    const lines: string[] = [];
+    for (const page of deckPages) {
+      const note = page.page_notes?.trim();
+      if (note) {
+        lines.push(`## ${t('play.sidebar.copyAllNotesPagePrefix')} ${page.page_number}\n${note}`);
+      }
+    }
+    if (lines.length === 0) {
+      setCopyMsg(t('play.sidebar.noNotesToCopy'));
+      setTimeout(() => setCopyMsg(null), 2000);
+      return;
+    }
+    void copyTextToClipboard(lines.join('\n\n')).then((ok) => {
+      setCopyMsg(ok ? t('play.sidebar.copyAllNotesDone') : t('play.sidebar.copyAllNotesFail'));
+      setTimeout(() => setCopyMsg(null), 2000);
+    });
+  };
 
   useEffect(() => {
     setNoteText(currentPage?.page_notes ?? '');
@@ -44,8 +65,16 @@ function PageNoteSection() {
 
   return (
     <section className="rounded-lg border border-slate-800 bg-slate-900/40">
-      <div className="border-b border-slate-800 px-4 py-2">
+      <div className="flex items-center justify-between gap-2 border-b border-slate-800 px-4 py-2">
         <h2 className="text-sm font-semibold text-slate-300">📝 {t('play.sidebar.pageNote')}</h2>
+        <button
+          type="button"
+          onClick={handleCopyAllNotes}
+          className="rounded border border-slate-700 px-2 py-0.5 text-xs text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+          title={t('play.sidebar.copyAllNotes')}
+        >
+          {copyMsg ?? t('play.sidebar.copyAllNotes')}
+        </button>
       </div>
       <div className="p-3">
         <textarea
