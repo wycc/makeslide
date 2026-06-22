@@ -1,4 +1,4 @@
-import type { PdfReportSummary } from '../../lib/api';
+import type { PdfReportQuestionStat, PdfReportSummary } from '../../lib/api';
 import {
   formatReportNumber,
   formatReportPercent,
@@ -120,6 +120,45 @@ export function PostClassReportPanel({ summary, loading, error, onClose, onReloa
                 )}
               </section>
             </div>
+
+            {Array.isArray(summary.quiz.question_stats) && summary.quiz.question_stats.length > 0 ? (
+              <section className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                <h3 className="mb-1 font-semibold text-slate-100">逐題答對率</h3>
+                <p className="mb-3 text-xs text-slate-500">依據所有提交紀錄計算每道題目的答對人數與選項分佈。</p>
+                <div className="space-y-3">
+                  {(summary.quiz.question_stats as PdfReportQuestionStat[]).map((stat, idx) => (
+                    <div key={stat.question_id} className="rounded-lg border border-slate-700 bg-slate-900/60 p-3">
+                      <div className="mb-1.5 flex items-start justify-between gap-2">
+                        <p className="text-sm text-slate-200">
+                          <span className="mr-1.5 text-xs text-slate-400">#{idx + 1}</span>
+                          {stat.question}
+                        </p>
+                        <span className={`shrink-0 rounded px-2 py-0.5 text-xs font-medium ${stat.correct_rate >= 0.7 ? 'bg-emerald-500/20 text-emerald-300' : stat.correct_rate >= 0.4 ? 'bg-amber-500/20 text-amber-300' : 'bg-rose-500/20 text-rose-300'}`}>
+                          答對率 {formatReportPercent(stat.correct_rate)}
+                        </span>
+                      </div>
+                      <p className="mb-2 text-xs text-slate-500">{stat.correct_count} / {stat.attempt_count} 人答對</p>
+                      {stat.option_count > 0 ? (
+                        <div className="space-y-1">
+                          {stat.option_votes.map((votes, oIdx) => {
+                            const pct = stat.attempt_count > 0 ? votes / stat.attempt_count : 0;
+                            return (
+                              <div key={oIdx} className="flex items-center gap-2 text-xs text-slate-400">
+                                <span className="w-6 shrink-0 text-right text-slate-500">{String.fromCharCode(65 + oIdx)}.</span>
+                                <div className="flex-1 overflow-hidden rounded-sm bg-slate-800">
+                                  <div className="h-2 rounded-sm bg-indigo-500/60" style={{ width: `${Math.round(pct * 100)}%` }} />
+                                </div>
+                                <span className="w-10 shrink-0 text-right">{Math.round(pct * 100)}%</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : null}
 
             <p className="text-right text-xs text-slate-500">產生時間：{new Date(summary.generated_at).toLocaleString()}</p>
           </div>

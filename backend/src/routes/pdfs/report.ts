@@ -34,6 +34,109 @@ interface PollSummaryRow {
   participant_count: number;
 }
 
+interface QuizSetRow {
+  id: number;
+  questions_json: string;
+}
+
+interface QuizAttemptAnswersRow {
+  answers_json: string;
+}
+
+interface QuizQuestionRecord {
+  id: string;
+  question: string;
+  options: Array<{ text: string }>;
+  answer_indices: number[];
+  type: 'single' | 'multiple';
+}
+
+interface QuestionStat {
+  question_id: string;
+  question: string;
+  option_count: number;
+  attempt_count: number;
+  correct_count: number;
+  wrong_count: number;
+  correct_rate: number;
+  option_votes: number[];
+}
+
+function computeQuestionStats(pdfId: string): QuestionStat[] {
+  const quizSets = db
+    .prepare(`SELECT id, questions_json FROM quiz_sets WHERE pdf_id = ? ORDER BY updated_at DESC`)
+    .all(pdfId) as QuizSetRow[];
+
+  const statMap = new Map<string, QuestionStat>();
+
+  for (const quizSet of quizSets) {
+    let questions: QuizQuestionRecord[];
+    try {
+      questions = JSON.parse(quizSet.questions_json) as QuizQuestionRecord[];
+      if (!Array.isArray(questions)) continue;
+    } catch {
+      continue;
+    }
+
+    const attempts = db
+      .prepare(`SELECT answers_json FROM quiz_attempts WHERE quiz_id = ?`)
+      .all(quizSet.id) as QuizAttemptAnswersRow[];
+
+    for (const q of questions) {
+      if (!q.id || typeof q.question !== 'string') continue;
+      const key = `${quizSet.id}:${q.id}`;
+      if (!statMap.has(key)) {
+        statMap.set(key, {
+          question_id: q.id,
+          question: q.question,
+          option_count: Array.isArray(q.options) ? q.options.length : 0,
+          attempt_count: 0,
+          correct_count: 0,
+          wrong_count: 0,
+          correct_rate: 0,
+          option_votes: Array.isArray(q.options) ? new Array(q.options.length).fill(0) as number[] : [],
+        });
+      }
+      const stat = statMap.get(key)!;
+      const correctSet = new Set(Array.isArray(q.answer_indices) ? q.answer_indices : []);
+
+      for (const attempt of attempts) {
+        let answersRecord: Record<string, number[]>;
+        try {
+          answersRecord = JSON.parse(attempt.answers_json) as Record<string, number[]>;
+          if (typeof answersRecord !== 'object' || answersRecord === null) continue;
+        } catch {
+          continue;
+        }
+        const selected: number[] = Array.isArray(answersRecord[q.id]) ? (answersRecord[q.id] ?? []) : [];
+        if (selected.length === 0 && !Object.prototype.hasOwnProperty.call(answersRecord, q.id)) continue;
+
+        stat.attempt_count += 1;
+        for (const idx of selected) {
+          if (idx >= 0 && idx < stat.option_votes.length) {
+            stat.option_votes[idx] = (stat.option_votes[idx] ?? 0) + 1;
+          }
+        }
+
+        const selectedSet = new Set(selected);
+        const isCorrect =
+          correctSet.size === selectedSet.size &&
+          Array.from(correctSet).every((i) => selectedSet.has(i));
+        if (isCorrect) {
+          stat.correct_count += 1;
+        } else {
+          stat.wrong_count += 1;
+        }
+      }
+    }
+  }
+
+  return Array.from(statMap.values()).map((s) => ({
+    ...s,
+    correct_rate: s.attempt_count > 0 ? s.correct_count / s.attempt_count : 0,
+  }));
+}
+
 interface WatchPageRow {
   page_number: number;
   total_viewers: number;
@@ -119,6 +222,19 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
     const participantCount = participantIds.length;
     const pollParticipationDenominator = Math.max(0, (poll.poll_count ?? 0) * participantCount);
 
+    const questionStats = computeQuestionStats(id);
+    const hardestQuestions = [...questionStats]
+      .filter((s) => s.attempt_count > 0)
+      .sort((a, b) => a.correct_rate - b.correct_rate || b.wrong_count - a.wrong_count)
+      .slice(0, 5)
+      .map((s) => ({
+        question_id: s.question_id,
+        question: s.question,
+        attempt_count: s.attempt_count,
+        wrong_count: s.wrong_count,
+        wrong_rate: s.attempt_count > 0 ? s.wrong_count / s.attempt_count : 0,
+      }));
+
     return reply.send({
       pdf_id: id,
       participant_count: participantCount,
@@ -126,6 +242,8 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
         attempt_count: quiz.attempt_count ?? 0,
         participant_count: quiz.participant_count ?? 0,
         average_score: quiz.average_score,
+        hardest_questions: hardestQuestions,
+        question_stats: questionStats,
       },
       polls: {
         poll_count: poll.poll_count ?? 0,
