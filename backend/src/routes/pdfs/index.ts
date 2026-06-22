@@ -22,6 +22,7 @@ import { registerSlaSettingsRoutes } from './sla-settings';
 import { registerSkillRoutes } from './skills';
 import { registerWatchProgressRoutes } from './watchProgress';
 import { registerReportRoutes } from './report';
+import { registerSubtitleRoutes } from './subtitles';
 
 export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerUploadRoutes(app);
@@ -47,4 +48,5 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerSkillRoutes(app);
   await registerWatchProgressRoutes(app);
   await registerReportRoutes(app);
+  await registerSubtitleRoutes(app);
 }

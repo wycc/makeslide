@@ -1258,4 +1258,6 @@ export const en = {
   'creditExhausted.errorCode': 'Error code: {code} (HTTP {status})',
   'creditExhausted.goToSettings': 'Go to settings',
   'creditExhausted.gotIt': 'Got it',
+  'play.header.downloadSrt': 'Download SRT subtitles',
+  'play.header.downloadVtt': 'Download VTT subtitles',
 } as const;
