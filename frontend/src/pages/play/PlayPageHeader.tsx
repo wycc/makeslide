@@ -600,6 +600,13 @@ export function PlayPageHeader() {
           >
             {t('play.header.downloadScriptsTxt')}
           </a>
+          <a
+            href={`api/pdfs/${encodeURIComponent(pdfId ?? '')}/notes.txt`}
+            download
+            className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-center text-sm text-cyan-100 hover:bg-cyan-500/25"
+          >
+            {t('play.header.downloadNotesTxt')}
+          </a>
           <button
             type="button"
             disabled={!currentPage || !scripts[currentPage.page_number]}
