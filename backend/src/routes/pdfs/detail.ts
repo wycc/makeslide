@@ -686,10 +686,21 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     if (category === DEFAULT_PDF_CATEGORY) {
       return reply.code(409).send(errorResponse('INVALID_STATE', 'general 類別不可刪除'));
     }
+    // 這個端點原本完全沒有身份檢查、且 UPDATE 不限 owner_sub：任何人（包含未登入訪客）
+    // 只要猜到一個分類名稱字串，就能把該分類底下「所有帳號」的簡報一次性改回 general，
+    // 等同跨帳號的全域資料汙染。分類本身是每個帳號自己在首頁列表上用來分組的個人化標籤
+    // （GET /api/pdfs 也只會顯示 sub 本人可讀的簡報），所以「刪除分類」要求必須登入，
+    // 且只能重新分類「目前登入帳號自己擁有」（owner_sub = sub）的簡報；沒有 owner_sub 的
+    // 舊資料本來就不會出現在使用者的首頁列表（見上面 GET /api/pdfs 的同類別註解），
+    // 也維持不受這個端點影響。
+    const sub = sessionSub(request);
+    if (!sub) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '請先登入才能刪除類別'));
+    }
 
     const now = nowIso();
-    const rows = db.prepare(`SELECT id FROM pdfs WHERE category = ?`).all(category) as Array<{ id: string }>;
-    db.prepare(`UPDATE pdfs SET category = ?, updated_at = ? WHERE category = ?`).run(DEFAULT_PDF_CATEGORY, now, category);
+    const rows = db.prepare(`SELECT id FROM pdfs WHERE category = ? AND owner_sub = ?`).all(category, sub) as Array<{ id: string }>;
+    db.prepare(`UPDATE pdfs SET category = ?, updated_at = ? WHERE category = ? AND owner_sub = ?`).run(DEFAULT_PDF_CATEGORY, now, category, sub);
 
     for (const row of rows) {
       try {
@@ -937,6 +948,13 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
     }
     const { id, n } = parsed.data;
+    const pdfRow = db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
+      | Pick<PdfRow, 'owner_sub' | 'visibility'>
+      | undefined;
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的封面'));
+    }
     const pageRow = db
       .prepare(`SELECT image_path FROM pages WHERE pdf_id = ? AND page_number = ?`)
       .get(id, n) as { image_path: string | null } | undefined;
