@@ -56,6 +56,8 @@ export interface PerAccountAiSettings {
   /** Bearer token this account's MCP server config should send; lets MCP requests authenticate as this specific account instead of anonymously. */
   mcpAuthToken: string;
   subtitleSyncMode: SubtitleSyncMode;
+  /** Monthly LLM+TTS cost budget in USD; null = no limit. */
+  monthlyBudgetUsd: number | null;
 }
 
 /**
@@ -196,6 +198,7 @@ function basePerAccountSettings(): PerAccountAiSettings {
     // apart. Each account must explicitly generate its own.
     mcpAuthToken: '',
     subtitleSyncMode: asSubtitleSyncMode(process.env.SUBTITLE_SYNC_MODE) ?? 'estimate',
+    monthlyBudgetUsd: null,
   };
 }
 
@@ -233,6 +236,12 @@ function loadPerAccountOverrides(accountId: string): Partial<PerAccountAiSetting
     autoGenerateAnimation: asBoolean(values.AUTO_GENERATE_ANIMATION),
     mcpAuthToken: values.MCP_AUTH_TOKEN,
     subtitleSyncMode: asSubtitleSyncMode(values.SUBTITLE_SYNC_MODE),
+    monthlyBudgetUsd: (() => {
+      const raw = values.MONTHLY_BUDGET_USD?.trim();
+      if (!raw) return undefined;
+      const n = Number(raw);
+      return Number.isFinite(n) && n >= 0 ? n : undefined;
+    })(),
   });
 }
 
@@ -286,6 +295,7 @@ const PER_ACCOUNT_ENV_PAIRS: Array<[string, keyof PerAccountAiSettings]> = [
   ['AUTO_GENERATE_ANIMATION', 'autoGenerateAnimation'],
   ['MCP_AUTH_TOKEN', 'mcpAuthToken'],
   ['SUBTITLE_SYNC_MODE', 'subtitleSyncMode'],
+  ['MONTHLY_BUDGET_USD', 'monthlyBudgetUsd'],
 ];
 
 /** Constant-time string equality (avoids a JS `===` timing side-channel comparing MCP tokens). */
@@ -457,7 +467,7 @@ function splitSettingsUpdate(next: Partial<RuntimeAiSettings>): {
 async function writeEnvOverrides<K extends string>(
   accountId: string,
   pairs: Array<[string, K]>,
-  next: Partial<Record<K, string | boolean | string[] | LlmProvider | TtsProvider | AppLanguage | undefined>>,
+  next: Partial<Record<K, string | boolean | number | null | string[] | LlmProvider | TtsProvider | AppLanguage | undefined>>,
 ): Promise<void> {
   const { accountDir, envPath } = getAccountSettingsLocation(accountId);
   let content = '';
@@ -470,7 +480,9 @@ async function writeEnvOverrides<K extends string>(
       ? raw.map((item) => sanitizeAccountId(item)).filter((item) => item.length > 0).join(',')
       : typeof raw === 'boolean'
         ? (raw ? 'true' : 'false')
-        : String(raw).trim();
+        : raw === null
+          ? ''
+          : String(raw).trim();
     const line = `${envKey}=${value}`;
     const re = new RegExp(`^${envKey}=.*`, 'm');
     if (re.test(content)) content = content.replace(re, line);

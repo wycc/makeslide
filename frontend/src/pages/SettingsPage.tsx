@@ -100,6 +100,7 @@ export default function SettingsPage() {
   const [githubToken, setGithubToken] = useState('');
   const [autoGenerateAnimation, setAutoGenerateAnimation] = useState(false);
   const [subtitleSyncMode, setSubtitleSyncMode] = useState<SubtitleSyncMode>('estimate');
+  const [monthlyBudgetUsd, setMonthlyBudgetUsd] = useState<string>('');
   const [slaSettings, setSlaSettings] = useState<SlaSettingsResponse | null>(null);
   const [slaOverrideInputs, setSlaOverrideInputs] = useState<Record<string, string>>({});
   const [slaLoading, setSlaLoading] = useState(false);
@@ -168,6 +169,7 @@ export default function SettingsPage() {
       setGithubToken(s.github_token ?? '');
       setAutoGenerateAnimation(Boolean(s.auto_generate_animation));
       setSubtitleSyncMode(s.subtitle_sync_mode ?? 'estimate');
+      setMonthlyBudgetUsd(typeof s.monthly_budget_usd === 'number' ? String(s.monthly_budget_usd) : '');
       const cachedUserCode = window.localStorage.getItem(LOCAL_USER_CODE_KEY)?.trim() ?? '';
       setUserCode((auth?.authenticated ? s.user_code : cachedUserCode) ?? '');
       if (s.has_openai_key || s.has_gemini_key) {
@@ -269,6 +271,7 @@ export default function SettingsPage() {
         github_token: githubToken.trim(),
         auto_generate_animation: autoGenerateAnimation,
         subtitle_sync_mode: subtitleSyncMode,
+        monthly_budget_usd: monthlyBudgetUsd.trim() === '' ? null : Number(monthlyBudgetUsd.trim()),
       });
       storeLanguageSettings(uiLanguage, contentLanguage);
       window.localStorage.setItem(PLAYBACK_SPEED_STORAGE_KEY, String(playbackSpeed));
@@ -326,6 +329,7 @@ export default function SettingsPage() {
     githubToken,
     autoGenerateAnimation,
     subtitleSyncMode,
+    monthlyBudgetUsd,
     DEFAULT_CGU_AIR_BASE_URL,
     DEFAULT_OPENROUTER_BASE_URL,
     t,
@@ -724,6 +728,19 @@ export default function SettingsPage() {
                     <span className="mt-1 block text-xs text-slate-500">
                       {subtitleSyncMode === 'whisper' ? t('settings.subtitleSyncModeWhisperHint') : t('settings.subtitleSyncModeEstimateHint')}
                     </span>
+                  </label>
+                  <label className="block text-sm text-slate-300 sm:col-span-2">
+                    {t('settings.monthlyBudgetUsd')}
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.5"
+                      value={monthlyBudgetUsd}
+                      onChange={(e) => setMonthlyBudgetUsd(e.target.value)}
+                      placeholder={t('settings.monthlyBudgetUsdPlaceholder')}
+                      className="mt-1 w-48 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                    />
+                    <span className="mt-1 block text-xs text-slate-500">{t('settings.monthlyBudgetUsdHint')}</span>
                   </label>
                   <label className="block text-sm text-slate-300 sm:col-span-2">
                     OPENAI_API_KEY

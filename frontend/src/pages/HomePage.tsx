@@ -22,6 +22,7 @@ import PromptModal from '../components/PromptModal';
 import UploadButton from '../components/UploadButton';
 import GlobalSearchBox from '../components/GlobalSearchBox';
 import { useI18n } from '../i18n';
+import { useBudgetWarning } from '../hooks/useBudgetWarning';
 
 const POLL_INTERVAL_ACTIVE_MS = 5000;
 const POLL_INTERVAL_IDLE_MS = 30000;
@@ -120,6 +121,7 @@ export const getDefaultSortModeForCategory = (categoryFilter: string): SortMode 
 
 export default function HomePage() {
   const { t } = useI18n();
+  const budgetWarning = useBudgetWarning();
   const RECENT_CATEGORY = t('home.recentCategory');
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -705,6 +707,13 @@ export default function HomePage() {
       </header>
 
       <main className="mx-auto max-w-7xl px-4 py-6">
+        {budgetWarning?.exceeded ? (
+          <div className="mb-4 rounded-md border border-amber-500/50 bg-amber-500/15 px-3 py-2 text-sm text-amber-100">
+            {t('budget.exceeded')
+              .replace('${cost}', String(Math.round(budgetWarning.costUsd * 100) / 100))
+              .replace('${limit}', String(budgetWarning.limitUsd))}
+          </div>
+        ) : null}
         {!loading && items.length === 0 && !error && (
           <section className="mb-6 rounded-xl border border-slate-700 bg-slate-900/50 p-4">
             <h2 className="text-sm font-semibold text-slate-100">{t('home.firstTimeGuide')}</h2>
