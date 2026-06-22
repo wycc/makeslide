@@ -400,6 +400,14 @@ function pruneExpiredClients(session: SyncSessionState): void {
     if (expiresAt <= now) {
       session.clients.delete(clientId);
       session.quizProgress.delete(clientId);
+      // userCodes/followerAccess are also per-client state, but unlike clients/quizProgress
+      // they were never pruned here — only /sync/leave deleted a single client's entry.
+      // Most disconnects (tab closed, network drop) never reach /sync/leave, so without this
+      // these two maps grow without bound for the lifetime of the in-memory session (i.e.
+      // until the PDF is deleted or the server restarts), even though the client itself has
+      // long since timed out of every other piece of bookkeeping.
+      session.userCodes.delete(clientId);
+      session.followerAccess.delete(clientId);
     }
   }
 }
