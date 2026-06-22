@@ -254,7 +254,50 @@ function computeStudentRecords(pdfId: string): StudentRecord[] {
   return Array.from(studentMap.values());
 }
 
+function escapeCsvField(value: string | number | null | undefined): string {
+  const str = value == null ? '' : String(value);
+  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
 export async function registerReportRoutes(app: FastifyInstance): Promise<void> {
+  app.get('/api/pdfs/:id/report/students.csv', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send('Invalid pdf id');
+
+    const { id } = parsed.data;
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow) return reply.code(404).send('PDF not found');
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send('Forbidden');
+    }
+
+    const students = computeStudentRecords(id);
+    const header = ['student_id', 'attempt_id', 'quiz_title', 'score', 'submitted_at', 'correct_count', 'total_questions'].join(',');
+    const rows: string[] = [header];
+    for (const student of students) {
+      for (const attempt of student.attempts) {
+        const correct = attempt.question_results.filter((q) => q.is_correct).length;
+        const total = attempt.question_results.length;
+        rows.push([
+          escapeCsvField(student.client_id),
+          escapeCsvField(attempt.attempt_id),
+          escapeCsvField(attempt.quiz_title),
+          escapeCsvField(attempt.score),
+          escapeCsvField(attempt.submitted_at),
+          escapeCsvField(correct),
+          escapeCsvField(total),
+        ].join(','));
+      }
+    }
+    const csv = rows.join('\n');
+    void reply.header('Content-Type', 'text/csv; charset=utf-8');
+    void reply.header('Content-Disposition', `attachment; filename="report-${id}.csv"`);
+    return reply.code(200).send(csv);
+  });
+
   app.get('/api/pdfs/:id/report/students', async (request, reply) => {
     const parsed = IdParamSchema.safeParse(request.params);
     if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid pdf id'));
@@ -355,7 +398,7 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
         wrong_rate: s.attempt_count > 0 ? s.wrong_count / s.attempt_count : 0,
       }));
 
-    return reply.send({
+    return reply.code(200).send({
       pdf_id: id,
       participant_count: participantCount,
       quiz: {

@@ -130,6 +130,13 @@ export function PostClassReportPanel({ pdfId, summary, loading, error, onClose, 
               >
                 匯出 CSV
               </a>
+              <a
+                href={`api/pdfs/${encodeURIComponent(pdfId)}/report/students.csv`}
+                download
+                className="rounded-md border border-teal-500/50 bg-teal-500/15 px-3 py-1.5 text-sm text-teal-100 hover:bg-teal-500/25"
+              >
+                學生報告 CSV
+              </a>
               <button type="button" onClick={() => window.print()} className="rounded-md border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-sm text-amber-100 hover:bg-amber-500/25">
                 列印 / 儲存 PDF
               </button>
