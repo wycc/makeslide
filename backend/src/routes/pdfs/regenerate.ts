@@ -16,6 +16,12 @@ function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibil
   return row.visibility === 'public_editable';
 }
 
+function canReadPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
+  if (!row.owner_sub) return true;
+  if (sub && row.owner_sub === sub) return true;
+  return row.visibility === 'public' || row.visibility === 'public_editable';
+}
+
 function getPdfPermissionRow(id: string): Pick<PdfRow, 'owner_sub' | 'visibility'> | undefined {
   return db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
     | Pick<PdfRow, 'owner_sub' | 'visibility'>
@@ -65,6 +71,13 @@ export async function registerRegenerateRoutes(app: FastifyInstance): Promise<vo
     const parsedParams = IdParamSchema.safeParse(request.params);
     if (!parsedParams.success) {
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const pdfRow = getPdfPermissionRow(parsedParams.data.id);
+    if (!pdfRow) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsedParams.data.id} not found`));
+    }
+    if (!canReadPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限查看此簡報的重新生成狀態'));
     }
     const state = getRegenerateJob(parsedParams.data.id);
     if (!state) return reply.code(404).send(errorResponse('REGENERATE_JOB_NOT_FOUND', 'Regenerate job not found'));
