@@ -301,3 +301,44 @@ test('all gated routes allow a read-write collaborator on a public_editable pres
 
   await app.close();
 });
+
+// --- Destructive/irreversible routes (DELETE /pages/:n, DELETE /pages/:n/chat-history):
+// must require an authenticated session even when the presentation is public_editable.
+// Mirrors delete-permission.test.ts's coverage of the same anonymous public_editable gap in
+// DELETE /api/pdfs/:id.
+
+test('DELETE /pages/:n rejects a fully anonymous request (no session cookie) on a public_editable presentation', async () => {
+  seedPageOpsPdf('pageops-del-edit-anon-01', 'public_editable');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'DELETE', url: '/api/pdfs/pageops-del-edit-anon-01/pages/1' });
+  assert.equal(resp.statusCode, 403);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+  const row = db.prepare(`SELECT page_number FROM pages WHERE pdf_id = ? AND page_number = 1`).get('pageops-del-edit-anon-01');
+  assert.notEqual(row, undefined);
+  await app.close();
+});
+
+test('DELETE /pages/:n allows a read-write collaborator on a public_editable presentation', async () => {
+  seedPageOpsPdf('pageops-del-edit-collab-01', 'public_editable');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'DELETE', url: '/api/pdfs/pageops-del-edit-collab-01/pages/1', headers: OTHER_HEADERS });
+  assert.equal(resp.statusCode, 200);
+  await app.close();
+});
+
+test('DELETE /pages/:n/chat-history rejects a fully anonymous request (no session cookie) on a public_editable presentation', async () => {
+  seedPageOpsPdf('pageops-chat-edit-anon-01', 'public_editable');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'DELETE', url: '/api/pdfs/pageops-chat-edit-anon-01/pages/1/chat-history' });
+  assert.equal(resp.statusCode, 403);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+  await app.close();
+});
+
+test('DELETE /pages/:n/chat-history allows a read-write collaborator on a public_editable presentation', async () => {
+  seedPageOpsPdf('pageops-chat-edit-collab-01', 'public_editable');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'DELETE', url: '/api/pdfs/pageops-chat-edit-collab-01/pages/1/chat-history', headers: OTHER_HEADERS });
+  assert.equal(resp.statusCode, 204);
+  await app.close();
+});

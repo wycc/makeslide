@@ -101,6 +101,20 @@ function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibil
   return row.visibility === 'public_editable';
 }
 
+// Stricter variant for this file's destructive/irreversible poll routes: deleting a poll outright,
+// and resetting (wiping) everyone's submitted votes. These are a different tier of action from
+// submitting a vote (POST /polls/:pollId/votes), which intentionally stays open to any reader via
+// canReadPdf() so anonymous classroom viewers can answer polls — that design choice has nothing to
+// do with whether an anonymous visitor should be able to delete the whole poll or erase every
+// participant's vote history. Reuses canEditPdf()'s owner/public_editable logic but additionally
+// requires an authenticated session before the public_editable fallback applies. Mirrors
+// delete.ts's canEditPdf() fix.
+function canDestructivelyEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
+  if (!row.owner_sub) return true;
+  if (sub && row.owner_sub === sub) return true;
+  return Boolean(sub) && row.visibility === 'public_editable';
+}
+
 const ShareTokenParamSchema = z.object({
   token: z.string().regex(/^[A-Za-z0-9_-]{12,128}$/, 'Invalid share token'),
 });
@@ -871,7 +885,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     const { id, pollId } = parsed.data;
     const pdf = db.prepare(`SELECT id, owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as Pick<PdfRow, 'id' | 'owner_sub' | 'visibility'> | undefined;
     if (!pdf) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!canEditPdf(sessionSub(request), pdf)) return reply.code(403).send(errorResponse('FORBIDDEN', 'No edit permission'));
+    if (!canDestructivelyEditPdf(sessionSub(request), pdf)) return reply.code(403).send(errorResponse('FORBIDDEN', 'No edit permission'));
     const row = db.prepare(`SELECT id FROM page_polls WHERE id = ? AND pdf_id = ?`).get(pollId, id) as { id: number } | undefined;
     if (!row) return reply.code(404).send(errorResponse('POLL_NOT_FOUND', `Poll ${pollId} not found`));
     db.prepare(`DELETE FROM page_polls WHERE id = ? AND pdf_id = ?`).run(pollId, id);
@@ -914,7 +928,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     const { id, pollId } = parsed.data;
     const pdf = db.prepare(`SELECT id, owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as Pick<PdfRow, 'id' | 'owner_sub' | 'visibility'> | undefined;
     if (!pdf) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!canEditPdf(sessionSub(request), pdf)) return reply.code(403).send(errorResponse('FORBIDDEN', 'No edit permission'));
+    if (!canDestructivelyEditPdf(sessionSub(request), pdf)) return reply.code(403).send(errorResponse('FORBIDDEN', 'No edit permission'));
     const row = db
       .prepare(`SELECT id, pdf_id, page_number, question, options_json, is_active, show_results, created_at, updated_at FROM page_polls WHERE id = ? AND pdf_id = ?`)
       .get(pollId, id) as PagePollRow | undefined;

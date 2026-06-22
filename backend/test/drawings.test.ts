@@ -165,6 +165,50 @@ test('DELETE drawing rejects a non-owner request and allows the owner', async ()
   await app.close();
 });
 
+test('DELETE drawing rejects a fully anonymous request (no session cookie) on a public_editable presentation', async () => {
+  seedDrawingPdf('drawing-del-edit-anon-01', 'public_editable');
+  const app = await buildApp();
+  await app.inject({
+    method: 'PUT',
+    url: '/api/pdfs/drawing-del-edit-anon-01/pages/1/drawing',
+    headers: OWNER_HEADERS,
+    payload: { drawing_json: '{"strokes":["a"]}' },
+  });
+
+  // No `headers` at all: a visitor who never logged in and holds no share token, just knows the
+  // pdf id. public_editable is meant to let signed-in collaborators edit content (including the
+  // drawing itself via PUT), not let anonymous requests wipe it via DELETE.
+  const resp = await app.inject({ method: 'DELETE', url: '/api/pdfs/drawing-del-edit-anon-01/pages/1/drawing' });
+  assert.equal(resp.statusCode, 403);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+  const stillThere = db.prepare(`SELECT drawing_json FROM page_drawings WHERE pdf_id = ? AND page_number = 1`).get('drawing-del-edit-anon-01');
+  assert.notEqual(stillThere, undefined);
+
+  await app.close();
+});
+
+test('DELETE drawing allows a read-write collaborator on a public_editable presentation', async () => {
+  seedDrawingPdf('drawing-del-edit-collab-01', 'public_editable');
+  const app = await buildApp();
+  await app.inject({
+    method: 'PUT',
+    url: '/api/pdfs/drawing-del-edit-collab-01/pages/1/drawing',
+    headers: OWNER_HEADERS,
+    payload: { drawing_json: '{"strokes":["a"]}' },
+  });
+
+  const resp = await app.inject({
+    method: 'DELETE',
+    url: '/api/pdfs/drawing-del-edit-collab-01/pages/1/drawing',
+    headers: OTHER_HEADERS,
+  });
+  assert.equal(resp.statusCode, 204);
+  const gone = db.prepare(`SELECT drawing_json FROM page_drawings WHERE pdf_id = ? AND page_number = 1`).get('drawing-del-edit-collab-01');
+  assert.equal(gone, undefined);
+
+  await app.close();
+});
+
 test('PUT/DELETE drawing return 404 for an unknown presentation', async () => {
   const app = await buildApp();
   const putResp = await app.inject({

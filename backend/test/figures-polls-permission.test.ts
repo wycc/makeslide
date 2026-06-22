@@ -145,6 +145,42 @@ test('DELETE /polls/:pollId rejects a non-owner request and allows the owner', a
   await app.close();
 });
 
+test('DELETE /polls/:pollId rejects a fully anonymous request (no session cookie) on a public_editable presentation', async () => {
+  seedPermPdf('fpperm-polldel-edit-anon-01', 'public_editable');
+  const pollId = insertPoll('fpperm-polldel-edit-anon-01');
+  const app = await buildApp();
+
+  // No `headers` at all: a visitor who never logged in and holds no share token, just knows the
+  // pdf id and a poll id. public_editable is meant to let signed-in collaborators edit content
+  // (and POST /polls/:pollId/votes intentionally stays open to any reader so classroom viewers can
+  // vote), but deleting the whole poll is a different, destructive tier of action that must not
+  // be reachable anonymously.
+  const resp = await app.inject({ method: 'DELETE', url: `/api/pdfs/fpperm-polldel-edit-anon-01/polls/${pollId}` });
+  assert.equal(resp.statusCode, 403);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+  const stillThere = db.prepare(`SELECT id FROM page_polls WHERE id = ?`).get(pollId);
+  assert.notEqual(stillThere, undefined);
+
+  await app.close();
+});
+
+test('DELETE /polls/:pollId allows a read-write collaborator on a public_editable presentation', async () => {
+  seedPermPdf('fpperm-polldel-edit-collab-01', 'public_editable');
+  const pollId = insertPoll('fpperm-polldel-edit-collab-01');
+  const app = await buildApp();
+
+  const resp = await app.inject({
+    method: 'DELETE',
+    url: `/api/pdfs/fpperm-polldel-edit-collab-01/polls/${pollId}`,
+    headers: OTHER_HEADERS,
+  });
+  assert.equal(resp.statusCode, 204);
+  const gone = db.prepare(`SELECT id FROM page_polls WHERE id = ?`).get(pollId);
+  assert.equal(gone, undefined);
+
+  await app.close();
+});
+
 // --- polls: reset-votes ---
 
 test('POST /polls/:pollId/reset-votes rejects a non-owner request and allows the owner', async () => {
@@ -171,6 +207,44 @@ test('POST /polls/:pollId/reset-votes rejects a non-owner request and allows the
   assert.equal(allowed.statusCode, 200);
   const cleared = db.prepare(`SELECT COUNT(*) AS c FROM page_poll_votes WHERE poll_id = ?`).get(pollId) as { c: number };
   assert.equal(cleared.c, 0);
+  await app.close();
+});
+
+test('POST /polls/:pollId/reset-votes rejects a fully anonymous request (no session cookie) on a public_editable presentation', async () => {
+  seedPermPdf('fpperm-pollrst-edit-anon-01', 'public_editable');
+  const pollId = insertPoll('fpperm-pollrst-edit-anon-01');
+  db.prepare(`INSERT INTO page_poll_votes (poll_id, voter_id, option_index, created_at, updated_at) VALUES (?, 'voter-1', 0, ?, ?)`)
+    .run(pollId, nowIso(), nowIso());
+  const app = await buildApp();
+
+  // No `headers` at all. Resetting every participant's submitted vote is a destructive,
+  // irreversible action distinct from submitting a vote (which intentionally stays open to any
+  // reader); it must require an authenticated session even on a public_editable presentation.
+  const resp = await app.inject({ method: 'POST', url: `/api/pdfs/fpperm-pollrst-edit-anon-01/polls/${pollId}/reset-votes` });
+  assert.equal(resp.statusCode, 403);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+  const stillVoted = db.prepare(`SELECT COUNT(*) AS c FROM page_poll_votes WHERE poll_id = ?`).get(pollId) as { c: number };
+  assert.equal(stillVoted.c, 1);
+
+  await app.close();
+});
+
+test('POST /polls/:pollId/reset-votes allows a read-write collaborator on a public_editable presentation', async () => {
+  seedPermPdf('fpperm-pollrst-edit-collab-01', 'public_editable');
+  const pollId = insertPoll('fpperm-pollrst-edit-collab-01');
+  db.prepare(`INSERT INTO page_poll_votes (poll_id, voter_id, option_index, created_at, updated_at) VALUES (?, 'voter-1', 0, ?, ?)`)
+    .run(pollId, nowIso(), nowIso());
+  const app = await buildApp();
+
+  const resp = await app.inject({
+    method: 'POST',
+    url: `/api/pdfs/fpperm-pollrst-edit-collab-01/polls/${pollId}/reset-votes`,
+    headers: OTHER_HEADERS_NO_BODY,
+  });
+  assert.equal(resp.statusCode, 200);
+  const cleared = db.prepare(`SELECT COUNT(*) AS c FROM page_poll_votes WHERE poll_id = ?`).get(pollId) as { c: number };
+  assert.equal(cleared.c, 0);
+
   await app.close();
 });
 
