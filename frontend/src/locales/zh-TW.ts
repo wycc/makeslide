@@ -515,6 +515,8 @@ export const zhTW = {
   'play.sync.mode': '同步模式',
   'play.sync.questionPlaceholder': '輸入要問 master 的問題',
   'play.sync.submitQuestion': '送出問題',
+  'play.sync.raiseHand': '舉手',
+  'play.sync.raiseHandTitle': '送出舉手信號通知教師',
   'play.sync.followerQuestionCount': 'Follower 問題：{count} 題',
   'play.sync.aiAnswerShortcut': '按 a 讓 AI 總結並回答',
   'play.sync.hideQuestion': '隱藏問題',

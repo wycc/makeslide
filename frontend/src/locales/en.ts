@@ -515,6 +515,8 @@ export const en = {
   'play.sync.mode': 'Sync mode',
   'play.sync.questionPlaceholder': 'Enter a question for the master',
   'play.sync.submitQuestion': 'Send question',
+  'play.sync.raiseHand': 'Raise Hand',
+  'play.sync.raiseHandTitle': 'Send a raise-hand signal to notify the teacher',
   'play.sync.followerQuestionCount': 'Follower questions: {count}',
   'play.sync.aiAnswerShortcut': 'Press a to let AI summarize and answer',
   'play.sync.hideQuestion': 'Hide question',
