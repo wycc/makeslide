@@ -290,6 +290,7 @@
 | 日期 | 工作摘要 | 分支 |
 |------|---------|------|
 | 2026-06-23 | 播放頁自動播放下一頁：autoAdvance state + localStorage、PlayPageContext 欄位、PlayPageSlidePanel checkbox、runPageEndedAdvance 守衛；i18n autoAdvance | feat/auto-advance-toggle（已 merge） |
+| 2026-06-23 | 播放頁逐頁備註：db migration pages.page_notes、PATCH /pages/:n/note 端點、GET detail 含 page_notes、PlayPageSidebar PageNoteSection textarea 失焦存檔；4 個後端測試 | feat/page-notes-impl（已 merge） |
 
 ---- 計數重設 ----
 
@@ -311,5 +312,6 @@
 - [ ] 測驗題目拖曳重排：在 `QuizBuilderPage` 題目列表加入拖曳排序（利用 HTML5 drag-and-drop 或 `@dnd-kit/core`），拖放後更新 `questions` 陣列順序並同步到 `quiz_set.questions_json`；補 i18n `quiz.dragToReorder`。
 - [x] 複製簡報自動加「（副本）」：`handleDuplicate` 建立副本後，若後端回傳的標題與原始標題相同，自動在 `PATCH /api/pdfs/:id/title` 追加「（副本）」後綴；後端 `POST /api/pdfs/:id/duplicate` 也可直接回傳帶後綴的標題；純邏輯改動。
   - 修改說明（2026-06-23）：`backend/src/routes/pdfs/upload.ts` 的複製標題格式由 `副本-{title}` 改為 `{title}（副本）`，與中文慣例一致；後端直接回傳帶後綴的標題，前端無需額外 PATCH 呼叫。分支 `feat/auto-advance`（commit 同批）。
-- [ ] 播放頁逐頁備註：新增 `page_notes TEXT DEFAULT ''` 欄位至 `pages` 表（migration），播放頁側邊欄每頁顯示備註文字區（`<textarea>`），失焦時自動儲存（`PATCH /api/pdfs/:id/pages/:n/note`）；補後端測試。
+- [x] 播放頁逐頁備註：新增 `page_notes TEXT DEFAULT ''` 欄位至 `pages` 表（migration），播放頁側邊欄每頁顯示備註文字區（`<textarea>`），失焦時自動儲存（`PATCH /api/pdfs/:id/pages/:n/note`）；補後端測試。
+  - 實作說明（2026-06-23）：db migration、PATCH 端點（owner-only）、GET detail 回傳 page_notes、PlayPageSidebar `PageNoteSection` component（失焦自動儲存）、4 個後端整合測試。分支 `feat/page-notes-impl`。
 - [ ] 首頁批次匯出所有 ZIP：在首頁工具列加入「匯出所有（ZIP）」按鈕，呼叫 `POST /api/export/batch`（後端）打包所有使用者的簡報 ZIP，進度以輪詢或 SSE 回報；限制擁有者存取；補後端測試 200 / 403。
