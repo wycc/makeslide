@@ -534,6 +534,7 @@ export function rowToListItem(row: PdfRow): PdfListItem {
     github_synced_at: row.github_synced_at ?? null,
     tags: row.tags ?? '',
     last_played_at: row.last_played_at ?? null,
+    description: row.description ?? '',
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -628,6 +629,7 @@ export function rowToDetail(row: PdfRow, pages: PageRow[], timingsByPage: PageTi
     outline_url: fs.existsSync(youtubeOutlinePath(row.id)) ? `api/pdfs/${row.id}/outline` : null,
     tags: row.tags ?? '',
     last_played_at: row.last_played_at ?? null,
+    description: row.description ?? '',
     created_at: row.created_at,
     updated_at: row.updated_at,
     video_url: fs.existsSync(videoPath(row.id)) ? `api/pdfs/${row.id}/video` : null,
