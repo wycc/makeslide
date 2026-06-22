@@ -5,6 +5,17 @@ import path from 'node:path';
 import { buildApp } from '../src/server';
 import { db } from '../src/db';
 import { createPdfDir } from '../src/services/storage';
+import { setSystemAuthSettings } from '../src/services/aiSettings';
+
+// This file's requests carry no session cookie, relying on server.ts's global
+// "Google login required" gate staying inactive. That gate reads real, persisted
+// Google OAuth credentials from accounts/default/settings.env via a lazily-cached
+// module-level setting, so leaving it unset would make these tests' pass/fail
+// outcome depend on which other test file happened to populate or clear that cache
+// first in this worker process. Disabling it here up front (the same defensive
+// pattern delete-permission.test.ts and friends already use) makes this file's
+// behavior deterministic regardless of ambient/disk state or test run order.
+setSystemAuthSettings({ googleAuthEnabled: false });
 
 function multipartZipUpload(boundary: string, filename: string, zipBuffer: Buffer): Buffer {
   const head = Buffer.from(
