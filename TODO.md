@@ -433,8 +433,23 @@
 
 ## 新增可執行項目（第十一輪）
 
-- [ ] 頁面備註匯出 TXT：新增 `GET /api/pdfs/:id/notes.txt` 後端端點，依頁碼串接所有非空 `page_notes`（格式 `=== 第 N 頁 ===\n{note}`），回傳純文字；前端在 header 匯出區加入下載按鈕；補後端測試 200 / 403 / 404 / 空備註。
-- [ ] 播放頁頁碼快速跳轉：將播放頁控制列的頁碼文字（`第 N 頁 / 共 M 頁`）改為可點擊的 `<input number>`，輸入後按 Enter 或失焦跳轉；無效頁碼自動夾限；純前端，補 i18n `play.slidePanel.jumpToPage`。
-- [ ] 首頁最近搜尋記錄：搜尋框聚焦時在下方顯示最近 5 個搜尋關鍵字（存至 `localStorage`，key: `makeslide.recentSearches`）；每次搜尋後更新列表；點選快速填入；純前端，補 i18n `home.search.recent/clearRecent`。
-- [ ] 課後報告作答時間軸：在課後報告面板「個別學生」卡片下方新增「作答時間軸」section，依 `submitted_at` 排序列出所有學生作答紀錄（時間、student_id 前 8 碼、分數 badge）；純前端消費既有 `/report/students` API 回傳資料；補 i18n。
-- [ ] 播放頁頁面書籤：在投影片頁面顯示區加入「🔖」書籤按鈕，點擊將目前頁碼加入 / 移除 `localStorage` 書籤清單（key: `makeslide.bookmarks.{pdfId}`）；側邊欄新增「書籤」分頁，列出書籤頁碼並提供跳頁連結；純前端，補 i18n `play.sidebar.bookmarks*`。
+- [x] 頁面備註匯出 TXT：新增 `GET /api/pdfs/:id/notes.txt` 後端端點，依頁碼串接所有非空 `page_notes`（格式 `=== 第 N 頁 ===\n{note}`），回傳純文字；前端在 header 匯出區加入下載按鈕；補後端測試 200 / 403 / 404 / 空備註。
+  - 實作說明（2026-06-23）：`backend/src/routes/pdfs/notes-txt.ts` 新增 GET 端點，讀取 `pages.page_notes`，跳過空備註，附 `Content-Disposition`；`index.ts` 新增 import 與 register；`PlayPageHeader.tsx` 新增 `<a download>` 連結；i18n `play.header.downloadNotesTxt`；`backend/test/notes-txt.test.ts` 5 個測試（200/public/404/403/empty）。分支 `feat/notes-txt-export`，已 merge 回 master。
+- [x] 播放頁頁碼快速跳轉：將播放頁控制列的頁碼文字（`第 N 頁 / 共 M 頁`）改為可點擊的 `<input number>`，輸入後按 Enter 或失焦跳轉；無效頁碼自動夾限；純前端，補 i18n `play.slidePanel.jumpToPage`。
+  - 實作說明（2026-06-23）：`PlayPageSlidePanel.tsx` 在 `⏮` 與播放按鈕之間插入頁碼 `<input type="number">`；聚焦時顯示可編輯值，失焦/Enter 呼叫 `handleJumpPageCommit` 夾限並 `setCurrentIdx(n-1)`；i18n `play.slidePanel.jumpToPage`。分支 `feat/page-jump-input`，已 merge 回 master。
+- [x] 首頁最近搜尋記錄：搜尋框聚焦時在下方顯示最近 5 個搜尋關鍵字（存至 `localStorage`，key: `makeslide.recentSearches`）；每次搜尋後更新列表；點選快速填入；純前端，補 i18n `home.search.recent/clearRecent`。
+  - 實作說明（2026-06-23）：`HomePage.tsx` 新增 `RECENT_SEARCHES_STORAGE_KEY`/`MAX_RECENT_SEARCHES`/`readRecentSearches()`/`saveRecentSearch()` helpers；`recentSearches` + `searchFocused` state；搜尋框 onBlur/Enter 呼叫 `commitSearchTerm`；聚焦且搜尋框為空時顯示最近搜尋下拉（含「清除記錄」按鈕）；i18n `home.search.recent`/`clearRecent`。分支 `feat/recent-search-history`，已 merge 回 master。
+- [x] 課後報告作答時間軸：在課後報告面板「個別學生」卡片下方新增「作答時間軸」section，依 `submitted_at` 排序列出所有學生作答紀錄（時間、student_id 前 8 碼、分數 badge）；純前端消費既有 `/report/students` API 回傳資料。
+  - 實作說明（2026-06-23）：`PostClassReportPanel.tsx` 在個別學生 section 之後加入 IIFE 渲染的時間軸 section，`allAttempts` flatMap 後依 `submitted_at` 排序，以 `<ol>` 垂直時間軸呈現（border-l 連接線、絕對定位圓點）；每條顯示時間戳、`client_id.slice(0,8)`、測驗標題、分數 badge。分支 `feat/quiz-submission-timeline`，已 merge 回 master。
+- [x] 播放頁頁面書籤：在投影片頁面顯示區加入「🔖」書籤按鈕，點擊將目前頁碼加入 / 移除 `localStorage` 書籤清單（key: `makeslide.bookmarks.{pdfId}`）；側邊欄新增書籤 section，列出書籤頁碼並提供跳頁連結；純前端，補 i18n `play.sidebar.bookmarks*`。
+  - 實作說明（2026-06-23）：`PlayPage.tsx` 新增 `bookmarks` state + `toggleBookmark` callback；`PlayPageContext.tsx` 介面補 `bookmarks`/`toggleBookmark`；`PlayPageSlidePanel.tsx` 投影片左上角加 🔖 書籤按鈕（已書籤時琥珀色）；`PlayPageSidebar.tsx` 新增書籤 section（amber chip 列，× 移除，點擊跳頁）；i18n `play.sidebar.bookmarkAdd/Remove/Title/Empty`。分支 `feat/page-bookmarks`，已 merge 回 master。
+
+## 工作記錄（第十一輪）
+
+| 日期 | 工作摘要 | 分支 |
+|------|---------|------|
+| 2026-06-23 | 頁面備註匯出 TXT：`GET /api/pdfs/:id/notes.txt`（非空備註格式化、Content-Disposition）；PlayPageHeader 下載按鈕；i18n downloadNotesTxt；5 個測試通過 | feat/notes-txt-export（已 merge） |
+| 2026-06-23 | 播放頁頁碼快速跳轉：PlayPageSlidePanel 控制列加入頁碼 `<input type="number">`，失焦/Enter 夾限並跳頁；i18n jumpToPage | feat/page-jump-input（已 merge） |
+| 2026-06-23 | 首頁最近搜尋記錄：readRecentSearches/saveRecentSearch helpers；recentSearches + searchFocused state；聚焦空框顯示下拉（含清除按鈕）；i18n search.recent/clearRecent | feat/recent-search-history（已 merge） |
+| 2026-06-23 | 課後報告作答時間軸：PostClassReportPanel 個別學生 section 之後加時間軸（allAttempts flatMap + sort，border-l 連接線，時間戳/client_id/分數 badge） | feat/quiz-submission-timeline（已 merge） |
+| 2026-06-23 | 播放頁頁面書籤：PlayPage bookmarks state + toggleBookmark；PlayPageContext 介面；SlidePanel 左上角 🔖 按鈕（琥珀色高亮）；Sidebar 書籤 section（chip 列 + × 移除 + 跳頁）；i18n bookmark* | feat/page-bookmarks（已 merge） |
