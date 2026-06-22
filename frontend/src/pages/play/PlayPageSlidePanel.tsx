@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import DrawingCanvas from '../../components/DrawingCanvas';
 import { SlideRenderer } from '../../components/slide/SlideRenderer';
 import { AnimationEditorTab } from './AnimationEditorTab';
@@ -181,6 +181,15 @@ export function PlayPageSlidePanel() {
   };
 
   const progressRatio = duration > 0 ? Math.min(1, currentTime / duration) * 1000 : 0;
+
+  const remainingSeconds = useMemo(() => {
+    if (!detail?.pages) return null;
+    const currentPageRemaining = duration > 0 ? Math.max(0, duration - currentTime) : 0;
+    const futurePages = detail.pages.slice(currentIdx + 1);
+    const futureSeconds = futurePages.reduce((sum, p) => sum + (p.audio_duration_seconds ?? 0), 0);
+    const total = currentPageRemaining + futureSeconds;
+    return total > 0 ? total : null;
+  }, [detail?.pages, currentIdx, currentTime, duration]);
 
   const [runHistory, setRunHistory] = useState<PipelineRunSummary[]>([]);
   const [runHistoryLoading, setRunHistoryLoading] = useState(false);
@@ -567,8 +576,13 @@ export function PlayPageSlidePanel() {
           className="order-2 min-w-0 flex-[1_1_calc(100%-5.75rem)] accent-emerald-500 sm:order-none sm:flex-1"
           aria-label={t('play.slidePanel.progressBarAriaLabel')}
         />
-        <div className="order-3 w-[5.25rem] shrink-0 whitespace-nowrap text-right font-mono text-[11px] text-slate-300 sm:order-none sm:w-24 sm:text-xs">
+        <div className="order-3 shrink-0 whitespace-nowrap text-right font-mono text-[11px] text-slate-300 sm:order-none sm:text-xs">
           {formatTime(Math.min(currentTime, duration))} / {formatTime(duration)}
+          {remainingSeconds != null && (
+            <span className="ml-1 text-slate-500" title={t('play.header.timeRemaining')}>
+              {' '}−{formatTime(remainingSeconds)}
+            </span>
+          )}
         </div>
         <div className="order-4 flex items-center gap-1 sm:order-none" title={t('play.controls.volume')}>
           <span className="text-[11px] text-slate-400">{audioVolume === 0 ? '🔇' : audioVolume < 0.5 ? '🔉' : '🔊'}</span>
