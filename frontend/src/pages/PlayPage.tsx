@@ -52,6 +52,7 @@ import katex from 'katex';
 import { resolveConfiguredUserCode } from './play/utils';
 import { VersionHistoryDialog } from './play/VersionHistoryDialog';
 import { ImagePreviewDialog } from './play/ImagePreviewDialog';
+import { useBudgetWarning } from '../hooks/useBudgetWarning';
 import { PlayPageCtx } from './play/PlayPageContext';
 import { PlayPageDialogs } from './play/PlayPageDialogs';
 import { PlayPageFullscreen } from './play/PlayPageFullscreen';
@@ -152,6 +153,7 @@ export default function PlayPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { t } = useI18n();
+  const budgetWarning = useBudgetWarning();
 
   const [detail, setDetail] = useState<PdfDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -2337,6 +2339,15 @@ export default function PlayPage() {
 
       {/* Header */}
       <PlayPageHeader />
+      {budgetWarning?.exceeded ? (
+        <div className="mx-auto w-full max-w-5xl px-4 pt-2">
+          <div className="rounded-md border border-amber-500/50 bg-amber-500/15 px-3 py-2 text-sm text-amber-100">
+            {t('budget.exceeded')
+              .replace('${cost}', String(Math.round(budgetWarning.costUsd * 100) / 100))
+              .replace('${limit}', String(budgetWarning.limitUsd))}
+          </div>
+        </div>
+      ) : null}
 
       <main className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col gap-4 px-4 py-4 md:flex-row">
         {/* Mobile-only tab 切換列 */}

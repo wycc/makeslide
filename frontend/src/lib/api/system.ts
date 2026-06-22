@@ -82,6 +82,7 @@ export interface SystemAiSettings {
   github_token?: string;
   auto_generate_animation?: boolean;
   subtitle_sync_mode?: SubtitleSyncMode;
+  monthly_budget_usd?: number | null;
 }
 
 export interface UpdateSystemAiSettingsPayload {
@@ -119,6 +120,19 @@ export interface UpdateSystemAiSettingsPayload {
   github_token?: string;
   auto_generate_animation?: boolean;
   subtitle_sync_mode?: SubtitleSyncMode;
+  monthly_budget_usd?: number | null;
+}
+
+export interface MonthlyCostResponse {
+  month: string;
+  total_cost_usd: number | null;
+  run_count: number;
+}
+
+export async function getMonthlyCost(): Promise<MonthlyCostResponse> {
+  const resp = await fetch('api/usage/monthly-cost');
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as MonthlyCostResponse;
 }
 
 export async function getOpenAIKeyStatus(): Promise<OpenAIKeyStatusResponse> {

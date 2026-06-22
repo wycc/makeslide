@@ -337,6 +337,7 @@ export const UpdateSystemAiSettingsBodySchema = z.object({
   github_token: z.string().optional(),
   auto_generate_animation: z.boolean().optional(),
   subtitle_sync_mode: z.enum(['estimate', 'whisper']).optional(),
+  monthly_budget_usd: z.number().min(0).nullable().optional(),
 });
 
 export { RegenerateBatchBodySchema };
