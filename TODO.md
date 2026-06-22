@@ -461,7 +461,7 @@
 - [x] 首頁批次設定標籤：多選模式工具列在「移動分類」下拉旁加入「設定標籤」輸入框（Enter 送出），批次呼叫 `PATCH /api/pdfs/:id/tags` 套用到所有已選 PDF；補 i18n `home.batchSetTags/Done/Failed`。→ feat/batch-set-tags（已 merge）
 - [x] 課後報告全頁完成率熱力圖：在課後報告面板頁面完成率卡片下方加入全頁熱力圖（每頁一格，顏色依完成率深淺），補 i18n `play.report.completionHeatmap`。→ feat/report-completion-heatmap（已 merge）
 - [x] 同步問答課後 AI 摘要：在 master 模式的學生提問列表旁加入「AI 摘要所有問題」按鈕，呼叫後端新增的 `POST /api/pdfs/:id/sync/questions/summarize` 端點，回傳 Markdown 摘要顯示於紫色卡片。→ feat/sync-qa-summary（已 merge）
-- [ ] 播放頁逐字稿關鍵字搜尋：在逐字稿分頁頂部加入搜尋輸入框，即時高亮符合的句子，並以「上一個/下一個」按鈕跳至相符段落；純前端，補 i18n `play.slidePanel.scriptSearch*`。
+- [x] 播放頁逐字稿關鍵字搜尋：在逐字稿分頁頂部加入搜尋輸入框，即時高亮符合的句子，並以「上一個/下一個」按鈕跳至相符段落；純前端，補 i18n `play.slidePanel.scriptSearch*`。→ feat/script-search（已 merge）
 
 ## 工作記錄（第十一輪）
 
@@ -481,3 +481,4 @@
 | 2026-06-23 | 首頁批次設定標籤：多選工具列新增 emerald 輸入框（Enter 送出），handleBatchSetTags 用 setItems in-place 更新；i18n batchSetTags/Done/Failed | feat/batch-set-tags（已 merge） |
 | 2026-06-23 | 課後報告全頁完成率熱力圖：PostClassReportPanel 加入 8×8 px 格子熱力圖，四色（emerald/muted/amber/rose）依完成率著色，tooltip 顯示頁碼 | feat/report-completion-heatmap（已 merge） |
 | 2026-06-23 | 同步問答 AI 摘要：`POST /api/pdfs/:id/sync/questions/summarize` 後端端點（master-only，callChatJSON 產出 Markdown 摘要）；前端「AI 摘要所有問題」紫色按鈕 + 摘要卡片；PlayPageContext 新增 handleSummarizeFollowerQuestions/questionSummary/questionSummaryBusy | feat/sync-qa-summary（已 merge） |
+| 2026-06-23 | 播放頁逐字稿關鍵字搜尋：SlidePanel script tab 頂部加入搜尋輸入框，pageSentences 過濾後顯示高亮結果（amber mark），Prev/Next 循環切換，計數顯示 N/total；i18n scriptSearch* | feat/script-search（已 merge） |
