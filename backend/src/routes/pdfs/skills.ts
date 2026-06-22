@@ -15,10 +15,18 @@ const MAX_SKILL_PROMPT_LENGTH = 2000;
 
 const SkillIdParamSchema = z.object({ skillId: z.string().trim().min(1).max(64) });
 
+const TemplateFieldsSchema = {
+  imageStylePrompt: z.string().trim().max(1000).optional(),
+  quizPrompt: z.string().trim().max(1000).optional(),
+  ttsProvider: z.string().trim().max(32).optional(),
+  ttsVoice: z.string().trim().max(64).optional(),
+};
+
 const CreateSkillBodySchema = z.object({
   name: z.string().trim().min(1).max(MAX_SKILL_NAME_LENGTH),
   prompt: z.string().trim().min(1).max(MAX_SKILL_PROMPT_LENGTH),
   applyTo: z.enum(['script', 'all']).default('script'),
+  ...TemplateFieldsSchema,
 });
 
 const UpdateSkillBodySchema = z.object({
@@ -26,6 +34,7 @@ const UpdateSkillBodySchema = z.object({
   prompt: z.string().trim().min(1).max(MAX_SKILL_PROMPT_LENGTH).optional(),
   applyTo: z.enum(['script', 'all']).optional(),
   enabled: z.boolean().optional(),
+  ...TemplateFieldsSchema,
 });
 
 export async function registerSkillRoutes(app: FastifyInstance): Promise<void> {
