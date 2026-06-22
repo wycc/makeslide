@@ -821,6 +821,7 @@ export interface PdfReportPollPageSummary {
   divergence_score: number;
 }
 
+
 export interface PdfReportWatchProgressPageSummary {
   page_number: number;
   total_viewers: number;

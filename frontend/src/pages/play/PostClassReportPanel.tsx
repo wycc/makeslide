@@ -29,7 +29,6 @@ export function PostClassReportPanel({ summary, loading, error, onClose, onReloa
   const hardestQuestions = getHardestQuestions(summary);
   const divergentPollPages = getMostDivergentPollPages(summary);
   const lowestCompletionPages = getLowestCompletionPages(summary);
-
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/80 px-4 py-8 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="post-class-report-title">
       <div className="w-full max-w-5xl rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
@@ -167,4 +166,3 @@ export function PostClassReportPanel({ summary, loading, error, onClose, onReloa
     </div>
   );
 }
-

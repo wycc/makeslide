@@ -26,6 +26,7 @@ import { registerSubtitleRoutes } from './subtitles';
 import { registerSearchRoutes } from './search';
 import { registerQualityCheckRoutes } from './quality-check';
 import { registerMonthlyCostRoutes } from './monthly-cost';
+import { registerPptxRoutes } from './pptx';
 
 export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerUploadRoutes(app);
@@ -55,4 +56,5 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerSearchRoutes(app);
   await registerQualityCheckRoutes(app);
   await registerMonthlyCostRoutes(app);
+  await registerPptxRoutes(app);
 }
