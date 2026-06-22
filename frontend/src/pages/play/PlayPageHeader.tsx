@@ -5,6 +5,64 @@ import type { ShareAccessMode } from '../../lib/api';
 import { useI18n } from '../../i18n';
 import { usePlayPageContext } from './PlayPageContext';
 
+function ShortcutsButton() {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const shortcuts: [string, string][] = [
+    ['← / →', t('play.shortcuts.prevPage') + ' / ' + t('play.shortcuts.nextPage')],
+    ['Space', t('play.shortcuts.spaceFullscreen')],
+    ['Space', t('play.shortcuts.spaceNormal')],
+    ['W', t('play.shortcuts.toggleDraw')],
+    ['P', t('play.shortcuts.pollControl')],
+    ['A', t('play.shortcuts.aiAnswer')],
+    ['Esc', t('play.shortcuts.exitEsc')],
+  ];
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
+        title={t('play.header.keyboardShortcutsTitle')}
+      >
+        ? {t('play.header.keyboardShortcuts')}
+      </button>
+      {open ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+          onClick={() => setOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-lg border border-slate-700 bg-slate-900 p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="mb-4 text-base font-semibold text-slate-100">
+              {t('play.header.keyboardShortcutsTitle')}
+            </h2>
+            <table className="w-full text-sm">
+              <tbody>
+                {shortcuts.map(([key, desc]) => (
+                  <tr key={key + desc} className="border-b border-slate-800">
+                    <td className="py-1.5 pr-4 font-mono text-cyan-300">{key}</td>
+                    <td className="py-1.5 text-slate-300">{desc}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="mt-4 rounded-md border border-slate-700 px-4 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
+            >
+              {t('play.shortcuts.close')}
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 export function PlayPageHeader() {
   const { t } = useI18n();
   const {
@@ -297,6 +355,7 @@ export function PlayPageHeader() {
         </div>
         {/* Mobile keeps a 3-column action grid; desktop keeps the original flexible toolbar. */}
         <div className="grid grid-cols-3 gap-2 md:flex md:flex-wrap md:items-center md:justify-end md:gap-2">
+          <ShortcutsButton />
           <button
             type="button"
             onClick={() => {
