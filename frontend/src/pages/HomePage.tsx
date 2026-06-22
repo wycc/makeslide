@@ -191,6 +191,7 @@ export default function HomePage() {
   };
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [batchDeleting, setBatchDeleting] = useState(false);
+  const [batchMoving, setBatchMoving] = useState(false);
 
   const toggleSelected = useCallback((id: string) => {
     setSelectedIds((prev) => {
@@ -291,6 +292,26 @@ export default function HomePage() {
       showToast(t('home.batchDeleteDone').replace('{count}', String(ids.length)));
     }
   }, [selectedIds, batchDeleting, showToast, t]);
+
+  const handleBatchMoveCategory = useCallback(async (targetCategory: string) => {
+    if (selectedIds.size === 0 || batchMoving) return;
+    setBatchMoving(true);
+    const ids = [...selectedIds];
+    let failed = 0;
+    for (const id of ids) {
+      try {
+        await updatePdfCategory(id, targetCategory);
+        setItems((prev) => prev.map((p) => p.id === id ? { ...p, category: targetCategory } : p));
+      } catch { failed++; }
+    }
+    setSelectedIds(new Set());
+    setBatchMoving(false);
+    if (failed > 0) {
+      showToast(t('home.batchMoveFailed').replace('{failed}', String(failed)));
+    } else {
+      showToast(t('home.batchMoveDone').replace('{count}', String(ids.length)).replace('{category}', targetCategory));
+    }
+  }, [selectedIds, batchMoving, showToast, t]);
 
   const updateCategoryFilter = useCallback((nextFilter: string) => {
     setCategoryFilter(nextFilter);
@@ -1016,14 +1037,27 @@ export default function HomePage() {
                 {favoritesOnly ? '★' : '☆'} {t('home.filter.favoritesOnly')}
               </button>
               {selectedIds.size > 0 && (
-                <button
-                  type="button"
-                  onClick={() => void handleBatchDelete()}
-                  disabled={batchDeleting}
-                  className="rounded-full border border-rose-500/60 bg-rose-500/15 px-3 py-0.5 text-xs text-rose-300 transition hover:bg-rose-500/25 disabled:opacity-50"
-                >
-                  {batchDeleting ? '…' : t('home.batchDeleteBtn').replace('{count}', String(selectedIds.size))}
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => void handleBatchDelete()}
+                    disabled={batchDeleting}
+                    className="rounded-full border border-rose-500/60 bg-rose-500/15 px-3 py-0.5 text-xs text-rose-300 transition hover:bg-rose-500/25 disabled:opacity-50"
+                  >
+                    {batchDeleting ? '…' : t('home.batchDeleteBtn').replace('{count}', String(selectedIds.size))}
+                  </button>
+                  <select
+                    value=""
+                    disabled={batchMoving}
+                    onChange={(e) => { if (e.target.value) void handleBatchMoveCategory(e.target.value); }}
+                    className="rounded-full border border-sky-500/60 bg-sky-500/15 px-2 py-0.5 text-xs text-sky-300 transition hover:bg-sky-500/25 disabled:opacity-50"
+                  >
+                    <option value="">{batchMoving ? '…' : t('home.batchMoveToCategory')}</option>
+                    {allCategories.filter((c: string) => c !== '__recent__').map((c: string) => (
+                      <option key={c} value={c}>{c || t('home.listUncategorized')}</option>
+                    ))}
+                  </select>
+                </>
               )}
             </div>
             {allTags.length > 0 && (
