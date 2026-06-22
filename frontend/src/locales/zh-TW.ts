@@ -240,7 +240,6 @@ export const zhTW = {
   'home.imported': '已匯入 ZIP',
   'home.importFailed': '匯入失敗',
   'home.tagAll': '全部',
-  'home.favoritesFilter': '★ 我的最愛',
   'card.favorite': '加入我的最愛',
   'card.unfavorite': '移除我的最愛',
   'card.processing': '處理中',

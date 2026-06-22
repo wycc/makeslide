@@ -240,7 +240,6 @@ export const en = {
   'home.imported': 'ZIP imported',
   'home.importFailed': 'Import failed',
   'home.tagAll': 'All',
-  'home.favoritesFilter': '★ Favorites',
   'card.favorite': 'Add to favorites',
   'card.unfavorite': 'Remove from favorites',
   'card.processing': 'Processing',
