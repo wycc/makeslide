@@ -68,9 +68,3 @@
 - [ ] 課後報告補上逐題答對率：擴充 `GET /api/pdfs/:id/report/summary` 回傳中新增 `question_stats` 陣列（含題目文字、選項分佈、答對率），前端在課後報告面板新增「逐題分析」卡片；補測試涵蓋無作答時的空陣列情況。
 - [ ] 搜尋結果關鍵字高亮：在 `GlobalSearchBox` 元件的 snippet 顯示中，將關鍵字以 `<mark>` 標籤（或 Tailwind `bg-yellow-300/30` span）高亮標記；純前端改動，不需後端修改。
 - [ ] 月費用預算警告：在系統設定新增「每月 LLM/TTS 費用上限（USD）」欄位，後端記錄到 settings；每次生成完成後檢查當月累計費用是否超過上限，若超過則在播放頁頂部顯示警告橫幅，並在首頁卡片上標示費用超限符號。
-
-## 工作記錄
-
-| 日期 | 工作內容 | 分支 |
-|------|---------|------|
-| 2026-06-22 | 品質檢查面板加入一鍵重生：為 `QualityCheckPanel` 每頁問題項目新增「重生此頁」按鈕，依問題類型決定重生旗標，整合 `startRegenerateJob` / `fetchRegenerateStatus` API，完成後自動重跑品質檢查；新增 `getRegenFlags()` 純函式與 8 個單元測試；更新 zh-TW / en i18n 鍵值 | `feat/quality-check-one-click-regen` |
