@@ -148,7 +148,127 @@ function sortedUnique(values: Iterable<string>): string[] {
   return Array.from(new Set(Array.from(values).map((value) => value.trim()).filter(Boolean))).sort();
 }
 
+interface StudentAttemptQuestionResult {
+  question_id: string;
+  question: string;
+  options: string[];
+  selected: number[];
+  correct_indices: number[];
+  is_correct: boolean;
+}
+
+interface StudentAttempt {
+  attempt_id: number;
+  quiz_id: number;
+  quiz_title: string;
+  score: number | null;
+  submitted_at: string;
+  question_results: StudentAttemptQuestionResult[];
+}
+
+interface StudentRecord {
+  client_id: string;
+  attempt_count: number;
+  average_score: number | null;
+  attempts: StudentAttempt[];
+}
+
+interface RawAttemptRow {
+  id: number;
+  quiz_id: number;
+  quiz_title: string | null;
+  client_id: string;
+  score: number | null;
+  submitted_at: string;
+  answers_json: string;
+  questions_json: string;
+}
+
+function computeStudentRecords(pdfId: string): StudentRecord[] {
+  const rows = db
+    .prepare(
+      `SELECT a.id, a.quiz_id, qs.title AS quiz_title, a.client_id,
+              a.score, a.submitted_at, a.answers_json, qs.questions_json
+         FROM quiz_attempts a
+         JOIN quiz_sets qs ON qs.id = a.quiz_id
+        WHERE a.pdf_id = ?
+        ORDER BY a.client_id ASC, a.submitted_at ASC`,
+    )
+    .all(pdfId) as RawAttemptRow[];
+
+  const studentMap = new Map<string, StudentRecord>();
+
+  for (const row of rows) {
+    let answers: Record<string, number[]> = {};
+    try {
+      const parsed = JSON.parse(row.answers_json) as unknown;
+      if (typeof parsed === 'object' && parsed !== null) {
+        answers = parsed as Record<string, number[]>;
+      }
+    } catch { /* skip */ }
+
+    let questions: QuizQuestionRecord[] = [];
+    try {
+      const parsed = JSON.parse(row.questions_json) as unknown;
+      if (Array.isArray(parsed)) questions = parsed as QuizQuestionRecord[];
+    } catch { /* skip */ }
+
+    const questionResults: StudentAttemptQuestionResult[] = questions.map((q) => {
+      const selected: number[] = Array.isArray(answers[q.id]) ? (answers[q.id] ?? []) : [];
+      const correctSet = new Set(Array.isArray(q.answer_indices) ? q.answer_indices : []);
+      const selectedSet = new Set(selected);
+      const is_correct =
+        correctSet.size === selectedSet.size &&
+        Array.from(correctSet).every((i) => selectedSet.has(i));
+      return {
+        question_id: q.id,
+        question: q.question ?? '',
+        options: Array.isArray(q.options) ? q.options.map((o) => (typeof o === 'object' && o !== null ? (o as { text?: string }).text ?? '' : String(o))) : [],
+        selected,
+        correct_indices: Array.isArray(q.answer_indices) ? q.answer_indices : [],
+        is_correct,
+      };
+    });
+
+    let student = studentMap.get(row.client_id);
+    if (!student) {
+      student = { client_id: row.client_id, attempt_count: 0, average_score: null, attempts: [] };
+      studentMap.set(row.client_id, student);
+    }
+    student.attempt_count += 1;
+    student.attempts.push({
+      attempt_id: row.id,
+      quiz_id: row.quiz_id,
+      quiz_title: row.quiz_title ?? '',
+      score: row.score,
+      submitted_at: row.submitted_at,
+      question_results: questionResults,
+    });
+  }
+
+  for (const student of studentMap.values()) {
+    const scores = student.attempts.map((a) => a.score).filter((s): s is number => s !== null);
+    student.average_score = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : null;
+  }
+
+  return Array.from(studentMap.values());
+}
+
 export async function registerReportRoutes(app: FastifyInstance): Promise<void> {
+  app.get('/api/pdfs/:id/report/students', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid pdf id'));
+
+    const { id } = parsed.data;
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的學生報告'));
+    }
+
+    return reply.send({ students: computeStudentRecords(id) });
+  });
+
   app.get('/api/pdfs/:id/report/summary', async (request, reply) => {
     const parsed = IdParamSchema.safeParse(request.params);
     if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid pdf id'));
