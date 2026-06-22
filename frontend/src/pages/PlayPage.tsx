@@ -46,6 +46,7 @@ import { usePageAnimation } from './play/usePageAnimation';
 import { usePromptAndSource } from './play/usePromptAndSource';
 import { useChatAndImageEdit } from './play/useChatAndImageEdit';
 import { usePagePolls } from './play/usePagePolls';
+import { usePageAsk } from './play/usePageAsk';
 import { useWatchProgress } from './play/useWatchProgress';
 import katex from 'katex';
 import { resolveConfiguredUserCode } from './play/utils';
@@ -477,6 +478,7 @@ export default function PlayPage() {
     !detail?.is_owner &&
     (detail?.share_mode === 'read_only' || (!currentShareToken && detail?.visibility === 'public'));
   const canViewPostClassReport = Boolean(detail?.is_owner && !currentShareToken);
+  const canAskPage = Boolean(detail?.is_authenticated);
   const isReadOnlyProcessing =
     (detail != null &&
       detail.status !== 'ready' &&
@@ -1764,6 +1766,12 @@ export default function PlayPage() {
     imageEditRegionOverlayRef,
   });
 
+  const pageAskState = usePageAsk({
+    pdfId,
+    currentPageNumber: currentPage?.page_number ?? null,
+    shareToken: currentShareToken,
+  });
+
   const scriptEditorState = useScriptEditor({
     pdfId,
     currentPage,
@@ -2171,6 +2179,9 @@ export default function PlayPage() {
     // chat + image edit / inpaint (from useChatAndImageEdit)
     ...chatState,
     handleReplaceImageFile,
+    // AI 導師問這一頁 (from usePageAsk)
+    canAskPage,
+    ...pageAskState,
     // TTS / audio (from usePdfMetadata + PlayPage)
     ...metaState,
     canViewPostClassReport,

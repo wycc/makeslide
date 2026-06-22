@@ -858,6 +858,22 @@ export async function fetchPdfReportSummary(id: string): Promise<PdfReportSummar
   return (await resp.json()) as PdfReportSummary;
 }
 
+export async function askPageQuestion(
+  id: string,
+  pageNumber: number,
+  question: string,
+  shareToken?: string,
+): Promise<{ answer: string }> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (shareToken) headers['X-MakeSlide-Share-Token'] = shareToken;
+  const resp = await fetch(
+    `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/ask`,
+    { method: 'POST', headers, body: JSON.stringify({ question }) },
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { answer: string };
+}
+
 export async function fetchQuizSets(id: string): Promise<QuizSet[]> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/quizzes`);
   if (!resp.ok) throw await parseErrorBody(resp);

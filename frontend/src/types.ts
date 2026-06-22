@@ -475,6 +475,8 @@ export interface PdfDetail {
    * `visibility`/`share_mode`, which only restrict other visitors.
    */
   is_owner?: boolean;
+  /** Whether the requester has an authenticated session (logged in). False for anonymous visitors. */
+  is_authenticated?: boolean;
   has_source_text?: boolean;
   created_at: string;
   updated_at: string;
