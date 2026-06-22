@@ -415,3 +415,110 @@ test('GET /api/pdfs/:id marks an anonymous read-only share visitor as is_owner=f
   assert.equal((resp.json() as { is_owner?: boolean }).is_owner, false);
   await app.close();
 });
+
+// --- POST /cover/from-page/:n ---
+// Real (but tiny) 4x4 JPEG, since this route pipes the source file through sharp.toFile().
+const TINY_JPEG_BASE64 =
+  '/9j/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAEAAQDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAABgj/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABykX//Z';
+
+function seedDetailPdfWithCoverableImage(pdfId: string, visibility: 'private' | 'public' | 'public_editable'): void {
+  seedDetailPdf(pdfId, visibility);
+  const uid = 'detperm1';
+  const pagesDir = path.join(config.storageRoot, pdfId, 'pages');
+  fs.writeFileSync(path.join(pagesDir, `${uid}.jpg`), Buffer.from(TINY_JPEG_BASE64, 'base64'));
+}
+
+// This route takes no request body; reuse the owner/other session cookies without the
+// 'content-type: application/json' header, otherwise Fastify rejects the bodyless POST
+// with 400 FST_ERR_CTP_EMPTY_JSON_BODY before the route's own permission check ever runs.
+const OWNER_COOKIE_ONLY = { cookie: OWNER_HEADERS.cookie };
+const OTHER_COOKIE_ONLY = { cookie: OTHER_HEADERS.cookie };
+
+test('POST /cover/from-page/:n rejects an anonymous request on a private presentation', async () => {
+  const pdfId = 'detperm-cover-anon-priv-01';
+  seedDetailPdfWithCoverableImage(pdfId, 'private');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'POST', url: `/api/pdfs/${pdfId}/cover/from-page/1` });
+  assert.equal(resp.statusCode, 403);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+  await app.close();
+});
+
+test('POST /cover/from-page/:n rejects a non-owner request on a private presentation', async () => {
+  const pdfId = 'detperm-cover-other-priv-01';
+  seedDetailPdfWithCoverableImage(pdfId, 'private');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'POST', url: `/api/pdfs/${pdfId}/cover/from-page/1`, headers: OTHER_COOKIE_ONLY });
+  assert.equal(resp.statusCode, 403);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+  await app.close();
+});
+
+test('POST /cover/from-page/:n rejects an anonymous request even on a public (read-only) presentation', async () => {
+  const pdfId = 'detperm-cover-anon-pub-01';
+  seedDetailPdfWithCoverableImage(pdfId, 'public');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'POST', url: `/api/pdfs/${pdfId}/cover/from-page/1` });
+  assert.equal(resp.statusCode, 403);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+  await app.close();
+});
+
+test('POST /cover/from-page/:n allows the owner', async () => {
+  const pdfId = 'detperm-cover-own-01';
+  seedDetailPdfWithCoverableImage(pdfId, 'private');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'POST', url: `/api/pdfs/${pdfId}/cover/from-page/1`, headers: OWNER_COOKIE_ONLY });
+  assert.equal(resp.statusCode, 200);
+  await app.close();
+});
+
+test('POST /cover/from-page/:n allows an anonymous request on a public_editable presentation', async () => {
+  const pdfId = 'detperm-cover-anon-editable-01';
+  seedDetailPdfWithCoverableImage(pdfId, 'public_editable');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'POST', url: `/api/pdfs/${pdfId}/cover/from-page/1` });
+  assert.equal(resp.statusCode, 200);
+  await app.close();
+});
+
+// --- DELETE /api/categories/:category ---
+
+function seedCategoryPdf(pdfId: string, ownerSub: string | null, category: string): void {
+  const t = nowIso();
+  db.prepare(`DELETE FROM pages WHERE pdf_id = ?`).run(pdfId);
+  db.prepare(`DELETE FROM pdfs WHERE id = ?`).run(pdfId);
+  db.prepare(
+    `INSERT INTO pdfs (id,title,original_filename,status,page_count,progress_step,progress_current,progress_total,error_message,user_prompt,require_script_confirmation,owner_sub,visibility,category,tts_voice,tts_speed,script_max_chars_per_page,created_at,updated_at)
+     VALUES (?,?,?,'ready',1,NULL,NULL,NULL,NULL,NULL,0,?,'private',?,NULL,NULL,NULL,?,?)`,
+  ).run(pdfId, 't', `${pdfId}.pdf`, ownerSub, category, t, t);
+}
+
+test('DELETE /api/categories/:category rejects an anonymous request', async () => {
+  const pdfId = 'detperm-category-anon-01';
+  seedCategoryPdf(pdfId, 'account-1', 'my-folder-anon-01');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'DELETE', url: `/api/categories/${encodeURIComponent('my-folder-anon-01')}` });
+  assert.equal(resp.statusCode, 403);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+  const row = db.prepare(`SELECT category FROM pdfs WHERE id = ?`).get(pdfId) as { category: string };
+  assert.equal(row.category, 'my-folder-anon-01', 'category must be untouched when the request is rejected');
+  await app.close();
+});
+
+test('DELETE /api/categories/:category only reassigns presentations owned by the requesting account, not another account\'s presentations using the same category name', async () => {
+  const ownPdfId = 'detperm-category-own-01';
+  const otherPdfId = 'detperm-category-other-01';
+  seedCategoryPdf(ownPdfId, 'account-1', 'shared-folder-name-01');
+  seedCategoryPdf(otherPdfId, 'account-2', 'shared-folder-name-01');
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'DELETE', url: `/api/categories/${encodeURIComponent('shared-folder-name-01')}`, headers: OWNER_HEADERS });
+  assert.equal(resp.statusCode, 200);
+  const body = resp.json() as { affected_count: number; reassigned_to: string };
+  assert.equal(body.affected_count, 1, 'must only reassign the requesting account\'s own presentation');
+  const ownRow = db.prepare(`SELECT category FROM pdfs WHERE id = ?`).get(ownPdfId) as { category: string };
+  const otherRow = db.prepare(`SELECT category FROM pdfs WHERE id = ?`).get(otherPdfId) as { category: string };
+  assert.equal(ownRow.category, 'general', 'the requesting account\'s own presentation must be reassigned');
+  assert.equal(otherRow.category, 'shared-folder-name-01', 'another account\'s presentation under the same category name must be untouched');
+  await app.close();
+});
