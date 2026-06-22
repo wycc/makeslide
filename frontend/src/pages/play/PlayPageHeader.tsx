@@ -132,6 +132,7 @@ export function PlayPageHeader() {
     handleMakeSharePrivate,
     canViewPostClassReport,
     openPostClassReport,
+    shareUrl,
     githubSyncBusy, handleSyncToGithub,
     regenJob, regenAllMsg,
     regenJobRunning, regenJobTerminal,
@@ -535,6 +536,19 @@ export function PlayPageHeader() {
               className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-3 py-1.5 text-center text-sm text-emerald-100 hover:bg-emerald-500/25"
             >
               📊 課後報告
+            </button>
+          ) : null}
+          {typeof navigator !== 'undefined' && typeof navigator.share === 'function' ? (
+            <button
+              type="button"
+              onClick={() => {
+                const url = shareUrl || window.location.href;
+                void navigator.share({ title: titleInput.trim() || 'MakeSlide', url });
+              }}
+              className="rounded-md border border-sky-500/50 bg-sky-500/15 px-3 py-1.5 text-sm text-sky-100 hover:bg-sky-500/25"
+              title={t('play.header.nativeShare')}
+            >
+              {t('play.header.nativeShare')}
             </button>
           ) : null}
           {videoUrl ? (

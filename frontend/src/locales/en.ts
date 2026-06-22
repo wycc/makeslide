@@ -1405,6 +1405,7 @@ export const en = {
   'creditExhausted.gotIt': 'Got it',
   'play.header.downloadCurrentImage': 'Download Current Slide Image',
   'play.header.downloadNotesTxt': 'Download Notes (TXT)',
+  'play.header.nativeShare': '📤 Share',
   'play.header.downloadSrt': 'Download SRT subtitles',
   'play.header.downloadVtt': 'Download VTT subtitles',
   'play.header.downloadPptx': 'Download PPTX',
