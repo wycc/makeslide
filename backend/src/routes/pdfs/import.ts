@@ -4,6 +4,7 @@ import { pipeline } from 'node:stream/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { nanoid } from 'nanoid';
+import { z } from 'zod';
 import { config } from '../../config';
 import { db } from '../../db';
 import { createPdfDir } from '../../services/storage';
@@ -11,6 +12,17 @@ import type { PdfMetadata, PdfRow } from '../../types';
 import { decodeSession, parseCookies } from '../auth';
 import { DEFAULT_PDF_CATEGORY, errorResponse, nowIso, rowToListItem } from './shared';
 import { runUnzipCommand } from './unzip';
+
+// 跟 detail.ts 的 `POST /api/pdfs/:id/sources/txt` 共用同一套上限，避免匯入端
+// 用一份刻意構造的超大/格式錯誤 sources.json 塞爆資料庫；單一筆驗證失敗只跳過
+// 那一筆，不影響整個匯入流程（其餘 metadata 欄位仍可能是合法、值得保留的）。
+const ImportedSourceSchema = z.object({
+  source_kind: z.enum(['pdf', 'txt', 'youtube_caption', 'youtube_audio']),
+  source_name: z.string().trim().max(200).nullable().optional(),
+  content_text: z.string().trim().min(1).max(120000),
+  created_at: z.string().trim().min(1).optional(),
+  updated_at: z.string().trim().min(1).optional(),
+});
 
 function ownerSubFromRequest(request: FastifyRequest): string | null {
   const session = decodeSession(parseCookies(request).makeslide_session);
@@ -60,6 +72,28 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
         metadata = JSON.parse(raw) as PdfMetadata;
       } catch {
         return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid export zip: metadata.json is not valid JSON'));
+      }
+
+      // sources.json 是選用的（舊版匯出檔、或這次匯出時這份簡報本來就沒有任何
+      // pdf_sources 紀錄都不會有這個檔案），缺檔或格式錯誤皆視為「沒有來源資料
+      // 可還原」，不視為整個匯入失敗。
+      const importedSources: z.infer<typeof ImportedSourceSchema>[] = [];
+      const sourcesJsonPath = path.join(extractedDir, 'sources.json');
+      if (fs.existsSync(sourcesJsonPath)) {
+        try {
+          const raw = await fs.promises.readFile(sourcesJsonPath, 'utf8');
+          const parsedJson = JSON.parse(raw);
+          if (Array.isArray(parsedJson)) {
+            for (const item of parsedJson) {
+              const result = ImportedSourceSchema.safeParse(item);
+              if (result.success) {
+                importedSources.push(result.data);
+              }
+            }
+          }
+        } catch (err) {
+          request.log.warn({ err }, 'Failed to parse sources.json in export zip, skipping source restoration');
+        }
       }
 
       const importedPageCount =
@@ -113,6 +147,10 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
       const destDir = createPdfDir(id);
       const entries = await fs.promises.readdir(extractedDir);
       for (const entry of entries) {
+        // sources.json 只是 export.zip 用來搭載 pdf_sources 資料表內容的中繼檔
+        // （該表不落在 pdfDir() 底下任何檔案裡），下面會把它的內容寫回資料庫，
+        // 不應該原樣留在新 PDF 的儲存目錄裡。
+        if (entry === 'sources.json') continue;
         await fs.promises.cp(path.join(extractedDir, entry), path.join(destDir, entry), { recursive: true });
       }
 
@@ -186,6 +224,23 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
             null,
             now,
             now,
+          );
+        }
+      }
+
+      if (importedSources.length > 0) {
+        const insertSource = db.prepare(
+          `INSERT INTO pdf_sources (pdf_id, source_kind, source_name, content_text, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?)`
+        );
+        for (const s of importedSources) {
+          insertSource.run(
+            id,
+            s.source_kind,
+            s.source_name?.trim() || null,
+            s.content_text,
+            s.created_at || now,
+            s.updated_at || now,
           );
         }
       }
