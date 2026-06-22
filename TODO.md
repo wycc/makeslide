@@ -126,7 +126,8 @@
   - 修改說明（2026-06-22）：在 header 的按鈕列加入琥珀色「列印 / 儲存 PDF」按鈕（`window.print()`）；以 `data-no-print="true"` 包裹所有操作按鈕使其列印時隱藏；在 JSX 中插入 `<style>` 含 `@media print` 規則：覆蓋 `fixed` 定位為 `static`、強制白底、調整文字顏色為可讀深色、各 `section` 加 `break-inside: avoid`；外層 div 改 id `pcr-print-root` 作為 scope。分支 `feat/report-print-style`，已 merge 回 master。
 - [x] 播放頁語速偏好持久化：將 `ttsSpeed`（播放語速）儲存至 `localStorage`（key：`makeslide.ttsSpeed`），下次開啟播放頁時自動套用已記憶的語速；在 `usePdfMetadata` hook 中新增讀取/寫入邏輯；純前端改動。
   - 修改說明（2026-06-22）：`i18n.ts` 新增 `TTS_SPEED_STORAGE_KEY`、`getStoredTtsSpeed()`（讀取，範圍 0.5–2）與 `setStoredTtsSpeed()`（寫入）；`usePdfMetadata.ts` 的 `ttsSpeed` 初始化改為 `useState(() => getStoredTtsSpeed())`，`handleSaveTtsSettings` 成功後呼叫 `setStoredTtsSpeed(ttsSpeed)` 將偏好寫入 localStorage；`PlayPage.tsx` 的 `setTtsSpeed(d.tts_speed ?? 1)` 改為 `setTtsSpeed(d.tts_speed ?? getStoredTtsSpeed())`，使新 PDF 繼承上次儲存的語速偏好。分支 `feat/tts-speed-persist`，已 merge 回 master。
-- [ ] 首頁依音頻時長排序：在首頁排序下拉選單新增「最長課程優先」與「最短課程優先」兩個選項，以 `pdf.audio_duration_seconds`（現有欄位）排序；若音頻時長為 null 則排到最後；純前端改動，補對應 `en`/`zh-TW` i18n 鍵值。
+- [x] 首頁依音頻時長排序：在首頁排序下拉選單新增「最長課程優先」與「最短課程優先」兩個選項，以 `pdf.audio_duration_seconds`（現有欄位）排序；若音頻時長為 null 則排到最後；純前端改動，補對應 `en`/`zh-TW` i18n 鍵值。
+  - 修改說明（2026-06-22）：新增 `compareByAudioDurationDesc`/`compareByAudioDurationAsc` comparator，null 在 desc 排到最後（視為 -1）、在 asc 排到最後（視為 Infinity）；`SortMode` 新增 `audio_desc`/`audio_asc`；`SORT_MODES` 陣列與 `getComparatorForSortMode` switch-case 同步更新；`<select>` 新增兩個 `<option>`；zh-TW/en i18n 新增 `home.sort.audioDurationDesc`/`audioDurationAsc`。分支 `feat/home-audio-duration-sort`，已 merge 回 master。
 - [ ] AI 自動草稿頁面投票題目：新增 `POST /api/pdfs/:id/pages/:n/generate-poll` 後端端點，讀取頁面逐字稿/文字，呼叫 LLM 生成一道 2–4 選項的投票題目（JSON 格式：`{ question, options }`），回傳給前端；播放頁 sidebar 投票分頁加入「AI 草稿投票題」按鈕，讓教師確認後一鍵建立投票；補後端測試驗證 200 / 404 / 403。
 - [ ] 分享連結有效期設定：在 `ShareDialog` 加入「連結有效期」下拉（永久 / 7 天 / 30 天 / 自訂日期）；後端 `pdfs` 表新增可選欄位 `share_expires_at TEXT`；`GET /api/pdfs/:id` 讀取分享時檢查有效期，過期則回傳 `410 Gone`；`PATCH /api/pdfs/:id` 支援更新 `share_expires_at`；補測試驗證 410 回應。
 
@@ -153,11 +154,36 @@
   - 修改說明（2026-06-22）：`db.ts` migration 新增 `pdfs.tags TEXT NOT NULL DEFAULT ''`；`backend/src/types.ts` / `frontend/src/types.ts` 新增 `tags` 欄位；`detail.ts` 的 GET /api/pdfs 與 GET /api/pdfs/:id SELECT 補 `tags`；`PATCH /api/pdfs/:id/tags` 端點已存在 detail.ts；`PdfCard` 新增 `onTagsEdit` prop 與內嵌標籤編輯 UI（鉛筆按鈕展開輸入框，儲存/取消）；`HomePage` 從 `allTags` 算出所有標籤並以可點擊 chip 列提供篩選，`handleTagsEdit` 呼叫 `updatePdfTags` API；i18n 新增 `card.editTags/tagsPlaceholder/saveTags/cancelEditTags`；4 個後端測試（200/404/403/list）通過。直接 commit 至 master（359d1a4）。
 - [x] 同步場次出席名單：同步播放進行時，後端記錄 follower join/leave 事件（利用既有 `sync_sessions` 或新增 `sync_attendees` 表），並提供 `GET /api/pdfs/:id/sync/attendees` 端點；教師端同步面板顯示目前線上學生列表（client_id + 加入時間），課後可在課後報告頁回顧出席記錄。
   - 修改說明（2026-06-22）：`db.ts` 新增 `sync_attendees` 表（id/pdf_id/client_id/user_code/joined_at）及索引；`sync.ts` 的 `/sync/join` 與 `/sync/share-join` 在首次 join 時寫入出席記錄；新增 `GET /api/pdfs/:id/sync/attendees` 端點（owner-only，回傳依時間排序的名單）；`PlayPageSlidePanel.tsx` 加入可折疊出席名單面板（master 角色才顯示，展開時 fetch），顯示 user_code 或 client_id 前 12 碼 + 加入時間；`fetchSyncAttendees` API 函式新增至 `pdfs.ts`；i18n 新增 `play.slidePanel.attendeesTitle/attendeesEmpty`；4 個後端測試通過（200/404/403/list）。master 直接 commit（4d8dd61）。
+- [x] 首頁依音頻時長排序：在首頁排序下拉選單新增「最長課程優先」與「最短課程優先」兩個選項，以 `pdf.total_audio_duration_seconds`（現有欄位）排序；若音頻時長為 null 則排到最後；純前端改動，補對應 `en`/`zh-TW` i18n 鍵值。
+  - 修改說明（2026-06-22）：新增 `compareByAudioDurationDesc`/`compareByAudioDurationAsc` comparator（null 在 desc=-1、asc=Infinity）；`SortMode` 新增 `audio_desc`/`audio_asc`，select 新增對應 option；i18n 鍵值 `home.sort.audioDurationDesc`/`audioDurationAsc`。分支 `feat/home-audio-duration-sort`，已 merge 回 master。
+
+## 掃描摘要（2026-06-22 第四輪繼續）
+
+- 第四輪目前已完成 6/20 項目（含音頻時長排序）。
+- 舊批尚有「全份逐字稿批次匯出 TXT」、「AI 自動草稿頁面投票題目」、「分享連結有效期設定」三個 `[ ]` 項目。
+- 課後報告面板已能顯示學生分析，但缺乏「發送通知給學生」的後續行動功能。
+- 播放頁目前無鍵盤快捷鍵說明對話框（Help Modal），教師與學生不易發現快捷鍵。
+- 首頁無法將簡報加入「我的最愛」快速存取，需靠分類管理。
+- 全份播放結束後沒有「自動跳回第一頁」或「重播」選項。
+- Follower 模式下尚無「舉手」功能，學生只能用提問框發問。
+- 設定頁尚缺「清除所有生成快取」功能，讓管理員可手動清除暫存圖片/音訊。
+
+## 新增可執行項目（第四輪繼續）
+
+- [ ] 全份逐字稿批次匯出 TXT：新增 `GET /api/pdfs/:id/scripts.txt` 後端端點，依頁碼順序串接所有頁面的 `script_path` 或 `text_path` 內容，回傳純文字檔案；前端在播放頁 header 匯出區新增「下載逐字稿 TXT」按鈕；補後端測試驗證 200 / content-type / 404 / 403。
+- [ ] AI 自動草稿頁面投票題目：新增 `POST /api/pdfs/:id/pages/:n/generate-poll` 後端端點，讀取頁面逐字稿/文字，呼叫 LLM 生成一道 2–4 選項的投票題目（JSON 格式：`{ question, options }`），回傳給前端；播放頁 sidebar 投票分頁加入「AI 草稿投票題」按鈕，讓教師確認後一鍵建立投票；補後端測試驗證 200 / 404 / 403。
+- [ ] 分享連結有效期設定：在 `ShareDialog` 加入「連結有效期」下拉（永久 / 7 天 / 30 天 / 自訂日期）；後端 `pdfs` 表新增可選欄位 `share_expires_at TEXT`；`GET /api/pdfs/:id` 讀取分享時檢查有效期，過期則回傳 `410 Gone`；`PATCH /api/pdfs/:id` 支援更新 `share_expires_at`；補測試驗證 410 回應。
+- [ ] 播放頁鍵盤快捷鍵說明對話框：在播放頁 header 加入「快捷鍵」按鈕（`?` 圖示），開啟說明對話框，列出目前所有可用快捷鍵（← → 換頁、Space 播放/暫停、F 全螢幕、A 插入暫停效果等）；純前端改動，補 i18n。
+- [ ] 首頁簡報「我的最愛」功能：在 `PdfCard` 加入星號按鈕，收藏狀態存至 `localStorage`（key: `makeslide.favorites`）；首頁篩選列新增「我的最愛」分類按鈕；純前端改動，不需後端修改。
+- [ ] 播放完成後顯示重播提示：播放最後一頁音訊結束後，在投影片顯示區覆蓋「播放完成」面板，提供「重播」（跳回第一頁）與「繼續手動瀏覽」兩個按鈕；純前端改動，補 i18n。
+- [ ] Follower 舉手功能：在 follower 播放頁加入「舉手」按鈕，呼叫現有 `POST /api/pdfs/:id/sync/question`（body: `{ question: '🖐' }`）送出舉手信號；master 端 Q&A 面板顯示舉手 icon 而非文字；純前端改動，不改後端 schema。
+- [ ] 設定頁「清除所有生成快取」功能：新增 `DELETE /api/admin/cache` 後端端點，清除 `data/pdfs/*/` 下所有 `artifact_cache/` 子目錄（保留 images/audio/script 等成品），限 admin；設定頁新增按鈕並顯示釋放空間統計；補後端測試驗證 200 / 403。
+
 | 2026-06-22 | 課後報告 AI 教學建議：`POST /api/pdfs/:id/report/ai-suggestions`，彙整答對率+觀看完成率交給 LLM 生成 Markdown 建議；`PostClassReportPanel` 紫羅蘭色「生成 AI 建議」按鈕；3 個測試通過 | feat/report-ai-suggestions（已 merge） |
 | 2026-06-22 | 播放頁底部分頁進度條：`PlayPageSlidePanel` 投影片與控制列之間插入 emerald `h-1` 進度條，依 `currentIdx/totalPages` 填色，附 ARIA 屬性；純前端 | master（直接 commit b198d46） |
 | 2026-06-22 | 測驗限時模式：`quiz_sets.time_limit_seconds` 欄位（migration）、後端 Zod 驗證、前端編輯器輸入框、倒數計時器 useEffect（10 秒內變紅）、i18n 鍵值 | feat/quiz-time-limit-v2（已 merge） |
 | 2026-06-22 | 簡報標籤與首頁篩選：`pdfs.tags` 欄位 migration、PATCH 端點、PdfCard 內嵌編輯 UI（鉛筆按鈕 + 輸入框）、首頁 chip 篩選列；4 個後端測試通過 | master（直接 commit 359d1a4） |
 | 2026-06-22 | 課後報告列印樣式：`PostClassReportPanel` 新增琥珀色「列印 / 儲存 PDF」按鈕（`window.print()`）、`data-no-print` 隱藏操作按鈕、`@media print` 白底/黑字/固定定位轉靜態 CSS | feat/report-print-style（已 merge） |
 | 2026-06-22 | 同步場次出席名單：`sync_attendees` 表、`/sync/join` 寫入、GET 端點（owner-only）、教師同步面板可折疊名單 UI；4 個後端測試通過 | master（直接 commit 4d8dd61） |
-| 2026-06-22 | 課後報告列印樣式：`PostClassReportPanel` 新增琥珀色「列印 / 儲存 PDF」按鈕、`data-no-print` 隱藏操作按鈕、`@media print` CSS | feat/report-print-style（已 merge） |
 | 2026-06-22 | 播放頁語速偏好持久化：`i18n.ts` 新增 `getStoredTtsSpeed`/`setStoredTtsSpeed`（key: `makeslide.ttsSpeed`）；`usePdfMetadata` 初始化從 localStorage 讀取，儲存設定時寫回；`PlayPage` fallback 改用 localStorage 值 | feat/tts-speed-persist（已 merge） |
+| 2026-06-22 | 首頁依音頻時長排序：新增 `audio_desc`/`audio_asc` SortMode，comparator null 容錯；首頁 select 新增兩個 option；i18n 鍵值 `home.sort.audioDurationDesc/audioDurationAsc` | feat/home-audio-duration-sort（已 merge） |
