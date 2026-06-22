@@ -233,6 +233,36 @@ test('GET /watch-progress caps each viewer\'s listened ratio at 1.0 so replaying
   }
 });
 
+test('DELETE /watch-progress resets all progress rows and returns deleted_rows count (200), 403 for non-owner, 404 for missing', async () => {
+  seedWatchProgressPdf('wp-reset-01', 'public');
+  const app = await buildApp();
+  try {
+    await app.inject({
+      method: 'POST',
+      url: '/api/pdfs/wp-reset-01/pages/1/watch-progress',
+      headers: OTHER_HEADERS,
+      payload: reportPayload({ viewer_id: 'viewer-1', listened_ms: 5000, tab_hidden_ms: 0, duration_ms: 10000, completed: false }),
+    });
+
+    const forbidden = await app.inject({ method: 'DELETE', url: '/api/pdfs/wp-reset-01/watch-progress', headers: OTHER_HEADERS });
+    assert.equal(forbidden.statusCode, 403);
+
+    const notFound = await app.inject({ method: 'DELETE', url: '/api/pdfs/does-not-exist-wp/watch-progress', headers: OWNER_HEADERS });
+    assert.equal(notFound.statusCode, 404);
+
+    const ok = await app.inject({ method: 'DELETE', url: '/api/pdfs/wp-reset-01/watch-progress', headers: OWNER_HEADERS });
+    assert.equal(ok.statusCode, 200);
+    const body = ok.json() as { ok: boolean; deleted_rows: number };
+    assert.equal(body.ok, true);
+    assert.equal(body.deleted_rows, 1);
+
+    const count = db.prepare(`SELECT COUNT(*) AS c FROM page_watch_progress WHERE pdf_id = ?`).get('wp-reset-01') as { c: number };
+    assert.equal(count.c, 0);
+  } finally {
+    await app.close();
+  }
+});
+
 test('POST /pages/:n/watch-progress returns 404 for an unknown pdf and 400 for an invalid body', async () => {
   seedWatchProgressPdf('wp-misc-01', 'public');
   const app = await buildApp();

@@ -1390,6 +1390,7 @@ export const zhTW = {
   'creditExhausted.errorCode': '錯誤碼：{code}（HTTP {status}）',
   'creditExhausted.goToSettings': '前往設定',
   'creditExhausted.gotIt': '我知道了',
+  'play.header.downloadCurrentImage': '下載本頁圖片',
   'play.header.downloadSrt': '下載 SRT 字幕',
   'play.header.downloadVtt': '下載 VTT 字幕',
   'play.header.downloadPptx': '下載 PPTX',

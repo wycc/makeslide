@@ -861,6 +861,12 @@ export interface PdfReportSummary {
   generated_at: string;
 }
 
+export async function resetWatchProgress(id: string): Promise<{ ok: boolean; deleted_rows: number }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/watch-progress`, { method: 'DELETE' });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { ok: boolean; deleted_rows: number };
+}
+
 export async function fetchWatchProgress(id: string): Promise<PageWatchProgressStats[]> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/watch-progress`);
   if (!resp.ok) throw await parseErrorBody(resp);

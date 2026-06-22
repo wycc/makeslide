@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { PdfReportQuestionStat, PdfReportSummary } from '../../lib/api';
+import { resetWatchProgress } from '../../lib/api';
 import {
   formatReportNumber,
   formatReportPercent,
@@ -64,6 +65,24 @@ export function PostClassReportPanel({ pdfId, summary, loading, error, onClose, 
   const [aiSuggestions, setAiSuggestions] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetMsg, setResetMsg] = useState<string | null>(null);
+
+  const handleResetWatchProgress = () => {
+    if (!window.confirm('確定要重置所有觀看進度紀錄？此動作無法復原。')) return;
+    setResetBusy(true);
+    void resetWatchProgress(pdfId)
+      .then((res) => {
+        setResetMsg(`已重置（${res.deleted_rows} 筆）`);
+        onReload();
+      })
+      .catch(() => { setResetMsg('重置失敗'); })
+      .finally(() => {
+        setResetBusy(false);
+        setTimeout(() => setResetMsg(null), 3000);
+      });
+  };
 
   useEffect(() => {
     if (!summary) return;
@@ -139,6 +158,15 @@ export function PostClassReportPanel({ pdfId, summary, loading, error, onClose, 
               </a>
               <button type="button" onClick={() => window.print()} className="rounded-md border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-sm text-amber-100 hover:bg-amber-500/25">
                 列印 / 儲存 PDF
+              </button>
+              <button
+                type="button"
+                onClick={handleResetWatchProgress}
+                disabled={resetBusy}
+                className="rounded-md border border-rose-500/50 bg-rose-500/15 px-3 py-1.5 text-sm text-rose-100 hover:bg-rose-500/25 disabled:opacity-50"
+                title="清除所有觀看進度紀錄，以重新統計課後觀看數據"
+              >
+                {resetMsg ?? (resetBusy ? '重置中…' : '重置觀看進度')}
               </button>
               <button type="button" onClick={onClose} className="rounded-md border border-slate-600 bg-slate-800 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-700">
                 關閉
