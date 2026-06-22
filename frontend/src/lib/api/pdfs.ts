@@ -304,6 +304,7 @@ export interface ShareInfoResponse {
   token: string;
   pdf_id: string;
   access: ShareAccessMode;
+  expires_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -321,11 +322,13 @@ export async function resolveShareToken(token: string): Promise<ShareInfoRespons
   return (await resp.json()) as ShareInfoResponse;
 }
 
-export async function createPdfShare(id: string, access: ShareAccessMode): Promise<CreateShareResponse> {
+export async function createPdfShare(id: string, access: ShareAccessMode, expiresDays?: number): Promise<CreateShareResponse> {
+  const body: Record<string, unknown> = { access, visibility: access === 'editable' ? 'public_editable' : 'public' };
+  if (expiresDays != null) body.expires_days = expiresDays;
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/share`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ access, visibility: access === 'editable' ? 'public_editable' : 'public' }),
+    body: JSON.stringify(body),
   });
   if (!resp.ok) {
     throw await parseErrorBody(resp);

@@ -560,6 +560,11 @@ function migrate(): void {
     logger.info('Added column pdfs.tags');
   }
 
+  if (!columnExists('pdf_shares', 'expires_at')) {
+    db.exec(`ALTER TABLE pdf_shares ADD COLUMN expires_at TEXT`);
+    logger.info('Added column pdf_shares.expires_at');
+  }
+
   logger.info({ dbPath: config.dbPath }, 'Database migrations applied');
 }
 

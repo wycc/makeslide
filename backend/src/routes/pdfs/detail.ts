@@ -122,6 +122,7 @@ const ShareTokenParamSchema = z.object({
 const CreatePdfShareBodySchema = z.object({
   access: z.enum(['read_only', 'editable']),
   visibility: z.enum(['private', 'public', 'public_editable']).optional(),
+  expires_days: z.number().int().min(1).max(3650).optional(),
 });
 
 function accessToVisibility(access: 'read_only' | 'editable'): 'public' | 'public_editable' {
@@ -154,12 +155,24 @@ function shareAccessForPdf(request: FastifyRequest, pdfId: string): 'read_only' 
   if (!token || !ShareTokenParamSchema.safeParse({ token }).success) return null;
   const row = db
     .prepare(
-      `SELECT access
+      `SELECT access, expires_at
          FROM pdf_shares
         WHERE token = ? AND pdf_id = ?`,
     )
-    .get(token, pdfId) as { access: 'read_only' | 'editable' } | undefined;
-  return row?.access ?? null;
+    .get(token, pdfId) as { access: 'read_only' | 'editable'; expires_at: string | null } | undefined;
+  if (!row) return null;
+  if (row.expires_at && row.expires_at < new Date().toISOString()) return null;
+  return row.access;
+}
+
+function isShareTokenExpired(request: FastifyRequest, pdfId: string): boolean {
+  const token = getShareToken(request);
+  if (!token || !ShareTokenParamSchema.safeParse({ token }).success) return false;
+  const row = db
+    .prepare(`SELECT expires_at FROM pdf_shares WHERE token = ? AND pdf_id = ?`)
+    .get(token, pdfId) as { expires_at: string | null } | undefined;
+  if (!row) return false;
+  return Boolean(row.expires_at && row.expires_at < new Date().toISOString());
 }
 
 function rowToPoll(row: PagePollRow) {
@@ -253,6 +266,9 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     }
     const sub = sessionSub(request);
     const shareAccess = shareAccessForPdf(request, parsed.data.id);
+    if (!shareAccess && isShareTokenExpired(request, parsed.data.id)) {
+      return reply.code(410).send(errorResponse('SHARE_LINK_EXPIRED', '此分享連結已過期'));
+    }
     if (!shareAccess && !canReadPdf(sub, row)) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報'));
     }
@@ -445,9 +461,14 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       }
     }
 
+    const expiresDays = body.data.expires_days;
+    const expiresAt = expiresDays
+      ? new Date(Date.now() + expiresDays * 86400000).toISOString()
+      : null;
+
     const existing = db
       .prepare(
-        `SELECT token, pdf_id, access, created_at, updated_at
+        `SELECT token, pdf_id, access, created_at, updated_at, expires_at
            FROM pdf_shares
           WHERE pdf_id = ? AND access = ?
           ORDER BY created_at ASC
@@ -460,31 +481,37 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
           access: 'read_only' | 'editable';
           created_at: string;
           updated_at: string;
+          expires_at: string | null;
         }
       | undefined;
     if (existing) {
+      if (expiresDays !== undefined && existing.expires_at !== expiresAt) {
+        db.prepare(`UPDATE pdf_shares SET expires_at = ?, updated_at = ? WHERE token = ?`).run(expiresAt, now, existing.token);
+      }
       return reply.send({
         token: existing.token,
         pdf_id: existing.pdf_id,
         access: existing.access,
         visibility,
+        expires_at: expiresDays !== undefined ? expiresAt : existing.expires_at,
         share_url: `${config.nbPrefix || ''}/#/play/${encodeURIComponent(existing.pdf_id)}?share=${encodeURIComponent(existing.token)}`,
         created_at: existing.created_at,
-        updated_at: existing.updated_at,
+        updated_at: now,
       });
     }
 
     const token = generateShareToken();
     db.prepare(
-      `INSERT INTO pdf_shares (token, pdf_id, access, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?)`,
-    ).run(token, parsed.data.id, body.data.access, now, now);
+      `INSERT INTO pdf_shares (token, pdf_id, access, expires_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run(token, parsed.data.id, body.data.access, expiresAt, now, now);
 
     return reply.send({
       token,
       pdf_id: parsed.data.id,
       access: body.data.access,
       visibility,
+      expires_at: expiresAt,
       share_url: `${config.nbPrefix || ''}/#/play/${encodeURIComponent(parsed.data.id)}?share=${encodeURIComponent(token)}`,
       created_at: now,
       updated_at: now,
