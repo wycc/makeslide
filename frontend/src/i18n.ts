@@ -113,3 +113,13 @@ export function getStoredInteractiveMode(): boolean {
   if (raw == null) return false;
   return raw === '1' || raw.toLowerCase() === 'true';
 }
+
+export const SUBTITLE_SIZE_STORAGE_KEY = 'makeslide.subtitleSize';
+export type SubtitleSize = 'sm' | 'md' | 'lg';
+
+export function getStoredSubtitleSize(): SubtitleSize {
+  if (typeof window === 'undefined') return 'md';
+  const raw = window.localStorage.getItem(SUBTITLE_SIZE_STORAGE_KEY);
+  if (raw === 'sm' || raw === 'md' || raw === 'lg') return raw;
+  return 'md';
+}

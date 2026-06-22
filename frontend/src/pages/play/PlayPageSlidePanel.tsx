@@ -7,7 +7,7 @@ import { formatTime, formatDurationMs, formatTokenCount, formatCostUsd } from '.
 import { PageTimingChips } from './PageTimingChips';
 import { ApiError, fetchPageGenerationPrompts, fetchPdfRunHistory, fetchPdfSlowArtifacts, figureImageUrl, fetchSyncAttendees } from '../../lib/api';
 import { copyTextToClipboard } from '../../lib/clipboard';
-import { SHOW_SUBTITLE_STORAGE_KEY, INTERACTIVE_MODE_STORAGE_KEY, useI18n, type TranslationKey } from '../../i18n';
+import { SHOW_SUBTITLE_STORAGE_KEY, SUBTITLE_SIZE_STORAGE_KEY, INTERACTIVE_MODE_STORAGE_KEY, useI18n, type TranslationKey, type SubtitleSize } from '../../i18n';
 import { debugLog, debugWarn } from '../../lib/debugLog';
 import { usePlayPageContext } from './PlayPageContext';
 import type { PageArtifact, PipelineRunStatus, PipelineRunSummary, PipelineRunType, PipelineStage, SlowArtifactSummary, TimingEventStatus } from '../../types';
@@ -82,7 +82,7 @@ export function PlayPageSlidePanel() {
     finished, setFinished,
     setCurrentIdx,
     playbackRate, setPlaybackRate,
-    showSubtitle, setShowSubtitle,
+    showSubtitle, setShowSubtitle, subtitleSize, setSubtitleSize,
     playbackSettingsOpen, setPlaybackSettingsOpen,
     playbackStatusMessage, handleClearPlaybackProgress,
     audioMuted, setAudioMuted,
@@ -440,7 +440,7 @@ export function PlayPageSlidePanel() {
           ) : null}
           {showSubtitle && currentSentence ? (
             <div className="pointer-events-none absolute bottom-3 left-1/2 w-[min(92%,900px)] -translate-x-1/2 px-2">
-              <div className="mx-auto rounded-md bg-black/60 px-4 py-2 text-center text-sm font-medium leading-relaxed text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] md:text-base">
+              <div className={`mx-auto rounded-md bg-black/60 px-4 py-2 text-center font-medium leading-relaxed text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${subtitleSize === 'sm' ? 'text-xs md:text-sm' : subtitleSize === 'lg' ? 'text-base md:text-xl' : 'text-sm md:text-base'}`}>
                 <p className="line-clamp-2 whitespace-pre-wrap">{currentSentence}</p>
               </div>
             </div>
@@ -673,6 +673,26 @@ export function PlayPageSlidePanel() {
                 {showSubtitle ? 'ON' : 'OFF'}
               </label>
             </div>
+            {showSubtitle && (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-950/70 px-3 py-2">
+                <span className="font-semibold text-slate-200">{t('play.slidePanel.subtitleSize')}</span>
+                <div className="flex gap-1">
+                  {(['sm', 'md', 'lg'] as SubtitleSize[]).map((size) => (
+                    <button
+                      key={size}
+                      type="button"
+                      onClick={() => {
+                        setSubtitleSize(size);
+                        window.localStorage.setItem(SUBTITLE_SIZE_STORAGE_KEY, size);
+                      }}
+                      className={`rounded-full border px-3 py-1 text-xs font-medium ${subtitleSize === size ? 'border-cyan-500 bg-cyan-500/20 text-cyan-100' : 'border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800'}`}
+                    >
+                      {t(`play.slidePanel.subtitleSize.${size}` as TranslationKey)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-950/70 px-3 py-2">
               <div>
                 <span className="font-semibold text-slate-200">{t('play.playbackProgress.title')}</span>

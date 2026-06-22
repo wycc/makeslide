@@ -73,9 +73,11 @@ import type {
 import {
   getStoredPlaybackSpeed,
   getStoredShowSubtitle,
+  getStoredSubtitleSize,
   getStoredInteractiveMode,
   getStoredTtsSpeed,
   useI18n,
+  type SubtitleSize,
 } from '../i18n';
 
 
@@ -196,6 +198,7 @@ export default function PlayPage() {
   });
   const [playbackRate, setPlaybackRate] = useState<number>(() => getStoredPlaybackSpeed());
   const [showSubtitle, setShowSubtitle] = useState<boolean>(() => getStoredShowSubtitle());
+  const [subtitleSize, setSubtitleSize] = useState<SubtitleSize>(() => getStoredSubtitleSize());
   const [playbackSettingsOpen, setPlaybackSettingsOpen] = useState(false);
   const [playbackStatusMessage, setPlaybackStatusMessage] = useState<string | null>(null);
   const [followerAudioUnlocked, setFollowerAudioUnlocked] = useState(false);
@@ -2184,7 +2187,7 @@ export default function PlayPage() {
     isPlaying, setIsPlaying, currentTime, setCurrentTime, duration, setDuration,
     finished, setFinished, audioMuted, setAudioMuted, effectiveAudioMuted,
     audioVolume, setAudioVolume,
-    playbackRate, setPlaybackRate, showSubtitle, setShowSubtitle,
+    playbackRate, setPlaybackRate, showSubtitle, setShowSubtitle, subtitleSize, setSubtitleSize,
     playbackSettingsOpen, setPlaybackSettingsOpen, playbackStatusMessage,
     followerAudioUnlocked, setFollowerAudioUnlocked,
     scripts, setScripts, displayedImageSrc,
