@@ -972,6 +972,15 @@ export async function deleteQuizSet(id: string, quizId: number): Promise<void> {
   if (!resp.ok && resp.status !== 204) throw await parseErrorBody(resp);
 }
 
+export async function copyQuizSetTo(srcId: string, quizId: number, targetId: string): Promise<QuizSet> {
+  const resp = await fetch(
+    `api/pdfs/${encodeURIComponent(srcId)}/quizzes/${encodeURIComponent(String(quizId))}/copy-to/${encodeURIComponent(targetId)}`,
+    { method: 'POST' },
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as QuizSet;
+}
+
 export interface UpdatePdfCoverFromPageResponse {
   id: string;
   page_number: number;

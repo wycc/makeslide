@@ -465,4 +465,39 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
     const sessions = Array.from(sessionsMap.values()).sort((a, b) => (a.submitted_at < b.submitted_at ? 1 : -1));
     return reply.send({ sessions });
   });
+
+  const CopyToParamSchema = z.object({
+    id: z.string().min(1),
+    quizId: z.string().regex(/^[1-9]\d{0,9}$/).transform(Number),
+    targetId: z.string().min(1),
+  });
+
+  app.post('/api/pdfs/:id/quizzes/:quizId/copy-to/:targetId', async (request, reply) => {
+    const parsed = CopyToParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid parameters'));
+    const { id, quizId, targetId } = parsed.data;
+    const sub = sessionSub(request);
+
+    const srcRow = getPdfPermissionRow(id);
+    if (!srcRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `Source PDF ${id} not found`));
+    if (!canReadPdf(sub, srcRow)) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限讀取來源簡報'));
+
+    const dstRow = getPdfPermissionRow(targetId);
+    if (!dstRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `Target PDF ${targetId} not found`));
+    if (!canEditPdf(sub, dstRow)) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限修改目標簡報'));
+
+    const quiz = db
+      .prepare(`SELECT title, questions_json, prompt, time_limit_seconds FROM quiz_sets WHERE id = ? AND pdf_id = ?`)
+      .get(quizId, id) as Pick<QuizSetRow, 'title' | 'questions_json' | 'prompt' | 'time_limit_seconds'> | undefined;
+    if (!quiz) return reply.code(404).send(errorResponse('QUIZ_NOT_FOUND', `Quiz ${quizId} not found`));
+
+    const now = nowIso();
+    const result = db
+      .prepare(`INSERT INTO quiz_sets (pdf_id, title, prompt, questions_json, time_limit_seconds, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .run(targetId, quiz.title, quiz.prompt, quiz.questions_json, quiz.time_limit_seconds, now, now);
+    const newRow = db
+      .prepare(`SELECT id, pdf_id, title, prompt, questions_json, time_limit_seconds, created_at, updated_at FROM quiz_sets WHERE id = ?`)
+      .get(result.lastInsertRowid) as QuizSetRow;
+    return reply.code(201).send(rowToQuiz(newRow));
+  });
 }
