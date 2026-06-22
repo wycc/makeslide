@@ -20,6 +20,7 @@ import type { PdfListItem, UploadResponse } from '../types';
 import PdfCard from '../components/PdfCard';
 import PromptModal from '../components/PromptModal';
 import UploadButton from '../components/UploadButton';
+import GlobalSearchBox from '../components/GlobalSearchBox';
 import { useI18n } from '../i18n';
 
 const POLL_INTERVAL_ACTIVE_MS = 5000;
@@ -644,6 +645,7 @@ export default function HomePage() {
       <header className="border-b border-slate-800 bg-slate-900/40 backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-xl font-semibold tracking-tight">makeslide</h1>
+          <GlobalSearchBox />
           <div className="flex flex-col items-end gap-2">
             <div className="flex items-center gap-2">
             <input
