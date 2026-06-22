@@ -3,6 +3,8 @@ import type { PdfListItem } from '../types';
 import StatusBadge from './StatusBadge';
 import { useI18n } from '../i18n';
 import { formatAudioDuration } from '../lib/audioDuration';
+import { createPdfShare } from '../lib/api/pdfs';
+import { copyTextToClipboard } from '../lib/clipboard';
 
 const PROGRESS_LABEL_KEYS: Record<string, Parameters<ReturnType<typeof useI18n>['t']>[0]> = {
   rendering: 'progress.rendering',
@@ -81,9 +83,25 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExpo
   const [isEditingTags, setIsEditingTags] = useState(false);
   const [tagInput, setTagInput] = useState('');
   const [isSavingTags, setIsSavingTags] = useState(false);
+  const [copyShareStatus, setCopyShareStatus] = useState<'idle' | 'ok' | 'fail'>('idle');
   // `uploaded` / `processing` 都允許刪除；
   // `isProcessing` 僅用於限制「複製」與「改類別」這類非刪除操作。
   const isProcessing = pdf.status === 'processing';
+
+  const handleCopyShareLink = async (ev: React.MouseEvent) => {
+    ev.stopPropagation();
+    try {
+      const res = await createPdfShare(pdf.id, 'read_only');
+      const url = res.share_url.startsWith('http')
+        ? res.share_url
+        : `${window.location.origin}${res.share_url.startsWith('/') ? '' : '/'}${res.share_url}`;
+      const ok = await copyTextToClipboard(url);
+      setCopyShareStatus(ok ? 'ok' : 'fail');
+    } catch {
+      setCopyShareStatus('fail');
+    }
+    setTimeout(() => setCopyShareStatus('idle'), 2000);
+  };
 
   const progressTotal = pdf.progress_total ?? 0;
   const progressCurrentRaw = pdf.progress_current ?? 0;
@@ -242,6 +260,17 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExpo
             aria-label={isFavorited ? t('card.unfavorite') : t('card.favorite')}
           >
             {isFavorited ? '★' : '☆'}
+          </button>
+        ) : null}
+        {(pdf.visibility === 'public' || pdf.visibility === 'public_editable') ? (
+          <button
+            type="button"
+            onClick={(ev) => { void handleCopyShareLink(ev); }}
+            className={`absolute bottom-2 left-2 rounded-full bg-slate-900/70 px-1.5 py-1 text-[11px] leading-none backdrop-blur-sm transition opacity-0 group-hover:opacity-100 ${copyShareStatus === 'ok' ? 'text-emerald-400' : copyShareStatus === 'fail' ? 'text-rose-400' : 'text-slate-300 hover:text-sky-300'}`}
+            title={copyShareStatus === 'ok' ? t('card.copyShareLinkDone') : copyShareStatus === 'fail' ? t('card.copyShareLinkFail') : t('card.copyShareLink')}
+            aria-label={t('card.copyShareLink')}
+          >
+            {copyShareStatus === 'ok' ? '✓' : copyShareStatus === 'fail' ? '✗' : '🔗'}
           </button>
         ) : null}
         {pdf.github_sync_dirty ? (
