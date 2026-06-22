@@ -1100,7 +1100,12 @@ export default function HomePage() {
                         />
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium text-slate-100">{pdf.title ?? pdf.id}</p>
-                          <p className="text-xs text-slate-400">{t('home.listPages').replace('{count}', String(pdf.page_count))} · {pdf.category ?? t('home.listUncategorized')}</p>
+                          <p className="text-xs text-slate-400">
+                            {t('home.listPages').replace('{count}', String(pdf.page_count))} · {pdf.category ?? t('home.listUncategorized')}
+                            {pdf.description?.trim() && (
+                              <span className="ml-2 truncate text-slate-500" title={pdf.description}>— {pdf.description}</span>
+                            )}
+                          </p>
                         </div>
                         <button
                           type="button"
