@@ -141,6 +141,7 @@ export function PlayPageSlidePanel() {
     expandedSourceId, setExpandedSourceId,
     currentAnimationSpec,
     animationWarning, setAnimationWarning,
+    bookmarks, toggleBookmark,
   } = usePlayPageContext();
 
   const { t } = useI18n();
@@ -351,15 +352,27 @@ export function PlayPageSlidePanel() {
               onImgClick={() => { if (!imageEditSelectMode && (!drawingMode || drawingTool === 'cursor')) playPause(); }}
               imgProps={{ role: 'button', tabIndex: -1, 'aria-label': isPlaying ? t('play.slidePanel.pauseAudioOverlay') : t('play.slidePanel.resumeAudioOverlay') }}
               overlay={
-                <button
-                  type="button"
-                  onClick={() => currentPage && void openVersionHistory('image', currentPage.page_number)}
-                  disabled={!currentPage}
-                  title={t('play.slidePanel.viewImageHistory')}
-                  className="absolute right-2 top-2 z-20 rounded-md border border-slate-600 bg-slate-900/80 px-2 py-1 text-xs text-slate-300 backdrop-blur hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {t('play.slidePanel.versionButton')}
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => currentPage && void openVersionHistory('image', currentPage.page_number)}
+                    disabled={!currentPage}
+                    title={t('play.slidePanel.viewImageHistory')}
+                    className="absolute right-2 top-2 z-20 rounded-md border border-slate-600 bg-slate-900/80 px-2 py-1 text-xs text-slate-300 backdrop-blur hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {t('play.slidePanel.versionButton')}
+                  </button>
+                  {currentPage && (
+                    <button
+                      type="button"
+                      onClick={() => toggleBookmark(currentPage.page_number)}
+                      title={bookmarks.includes(currentPage.page_number) ? t('play.sidebar.bookmarkRemove') : t('play.sidebar.bookmarkAdd')}
+                      className={`absolute left-2 top-2 z-20 rounded-md border bg-slate-900/80 px-2 py-1 text-sm backdrop-blur hover:bg-slate-800 ${bookmarks.includes(currentPage.page_number) ? 'border-amber-500/60 text-amber-300' : 'border-slate-600 text-slate-400'}`}
+                    >
+                      🔖
+                    </button>
+                  )}
+                </>
               }
             >
               {pdfId && currentPage && (

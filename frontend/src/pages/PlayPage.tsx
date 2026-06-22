@@ -427,6 +427,24 @@ export default function PlayPage() {
   // 透過分享連結開啟的簡報需直接進入全螢幕並鎖定，使用者只能在「全螢幕／全螢幕字幕」間切換，不能離開全螢幕。
   const isLockedFullscreen = Boolean(currentShareToken);
   const playbackProgressStorageKey = pdfId ? `makeslide.playback.progress.${pdfId}` : '';
+  const bookmarksStorageKey = pdfId ? `makeslide.bookmarks.${pdfId}` : '';
+  const [bookmarks, setBookmarks] = useState<number[]>(() => {
+    if (!pdfId) return [];
+    try {
+      const raw = window.localStorage.getItem(`makeslide.bookmarks.${pdfId}`);
+      const parsed: unknown = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? (parsed as number[]) : [];
+    } catch { return []; }
+  });
+
+  const toggleBookmark = useCallback((pageNumber: number) => {
+    if (!bookmarksStorageKey) return;
+    setBookmarks((prev) => {
+      const next = prev.includes(pageNumber) ? prev.filter((n) => n !== pageNumber) : [...prev, pageNumber].sort((a, b) => a - b);
+      window.localStorage.setItem(bookmarksStorageKey, JSON.stringify(next));
+      return next;
+    });
+  }, [bookmarksStorageKey]);
 
   useEffect(() => {
     hasRestoredProgressRef.current = false;
@@ -2269,6 +2287,8 @@ export default function PlayPage() {
     imageEditDragRef, imageEditRegionOverlayRef, activeSentenceRef, getActiveDrawingCanvas,
     // wake lock
     acquireWakeLock, releaseWakeLock,
+    // bookmarks
+    bookmarks, toggleBookmark,
   };
 
 

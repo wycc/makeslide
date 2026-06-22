@@ -476,6 +476,10 @@ export interface PlayPageContextValue {
   setPageAskError: (v: string | null) => void;
   handleAskPage: () => Promise<void>;
   clearPageAsk: () => void;
+
+  // ─── Page bookmarks ──────────────────────────────────────────────────────────
+  bookmarks: number[];
+  toggleBookmark: (pageNumber: number) => void;
 }
 
 // ── Context instance + hook ───────────────────────────────────────────────────
