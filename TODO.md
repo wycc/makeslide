@@ -228,9 +228,11 @@
 - [x] 播放頁複製本頁逐字稿：在播放頁 header 匯出區新增「複製本頁逐字稿」按鈕，呼叫 `GET /api/pdfs/:id/pages/:n/script`（已存在）取得逐字稿，再以 clipboard API 複製；顯示複製成功/失敗短暫提示；補 i18n。
   - 修改說明（2026-06-23）：`PlayPageHeader.tsx` import `copyTextToClipboard`；解構補 `scripts`；按鈕 onClick 讀取 `scripts[currentPage.page_number]` 並呼叫 clipboard API；`copyScriptStatus` state（idle/ok/fail）控制按鈕文字，2 秒後重設；i18n `play.header.copyScript`/`copyScriptDone`/`copyScriptFail` 新增。分支 `feat/copy-page-script`，已 merge 回 master。
 - [x] 首頁卡片顯示最後播放時間：`pdfs` 表已有 `updated_at`，但缺少「最後播放時間」欄位；新增 `last_played_at TEXT` 欄位（migration），播放頁進入時更新（`PATCH /api/pdfs/:id/last-played`）；首頁 PdfCard 顯示「上次播放：N 天前」文字；補後端測試。
-  - 修改說明（2026-06-23）：後端 migration、`PATCH /api/pdfs/:id/last-played` 端點與 `updateLastPlayed()` API 函式均已存在；`PlayPage.tsx` import 了但未呼叫（已在 ready 狀態時呼叫）；本次新增 `last_played_at` 至 `PdfListItem` 型別；`PdfCard.tsx` 加入 `formatRelativeTime()` 函式並在 metadata 列顯示「上次播放：N 天前」（`card.lastPlayed`/`lastPlayedLabel` i18n）；3 個後端測試通過（200/403/404）。分支 `feat/last-played-at-tracking`，已 merge 回 master。
+  - 修改說明（2026-06-23）：分兩階段完成。第一階段（`feat/last-played-at-tracking`）：`PdfListItem` 型別加 `last_played_at`；`PdfCard.tsx` 加 `formatRelativeTime()` 並顯示「上次播放：N 天前」；3 個後端測試（200/403/404）。第二階段（`fix/last-played-backend`）：補齊後端 migration（`ALTER TABLE pdfs ADD COLUMN last_played_at TEXT`）、`PATCH /api/pdfs/:id/last-played` 端點、`PdfRow`/`PdfDetail` 型別更新、`rowToListItem`/`rowToDetail` 加 `last_played_at`、`updateLastPlayed()` API 函式、`PlayPage.tsx` 在 ready 時呼叫；已 merge 回 master。
 
-⚠️ **已達 20/20 上限**：本輪（第四輪後半）已完成 20 個項目，暫停新增/執行新項目，等待使用者決定是否重設計數或調整門檻。
+⚠️ **已達 20/20 上限**：本輪（第四輪後半）已完成 20 個項目，使用者重新啟動 loop，計數重設。
+
+---- 計數重設 ----
 
 | 日期 | 工作摘要 | 分支 |
 |------|---------|------|
@@ -241,3 +243,22 @@
 | 2026-06-23 | 播放頁複製本頁逐字稿：PlayPageHeader 新增「複製本頁逐字稿」按鈕，讀 `scripts[page_number]`，clipboard API，2秒 flash；i18n `play.header.copyScript*` | feat/copy-page-script（已 merge） |
 | 2026-06-23 | 課後報告匯出 CSV：`GET /api/pdfs/:id/report/students.csv`（text/csv，7欄）；PostClassReportPanel「學生報告 CSV」teal 連結；3 個測試通過 | feat/report-csv-export（已 merge） |
 | 2026-06-23 | 首頁卡片顯示最後播放時間：`last_played_at` 加入 PdfListItem 型別；PdfCard 顯示「上次播放：N 天前」(`formatRelativeTime`)；3 個後端測試通過 | feat/last-played-at-tracking（已 merge） |
+
+## 掃描摘要（2026-06-23 第六輪）
+
+- 前五輪共完成 100+ 個項目；本輪計數從零重新開始。
+- 首頁目前只有 grid 視圖，缺少 list 緊湊視圖；教材量大時難以快速瀏覽。
+- 播放頁音訊無音量滑桿，使用者只能靠系統音量調整。
+- PDF 沒有備註/說明欄位，教師無法記錄教材版本或用途說明。
+- 首頁只能逐一刪除，缺乏多選批次刪除。
+- 播放頁字幕文字大小固定，視力差的使用者難以閱讀。
+- 測驗題目沒有答題解析，學生答錯後無法得知正確概念說明。
+
+## 新增可執行項目（第六輪）
+
+- [ ] 首頁列表/網格視圖切換：在首頁標題列加入 Grid/List 切換按鈕，list 模式以單行緊湊顯示每張簡報的標題、頁數、時長、標籤；切換狀態以 localStorage 持久化；純前端改動，補 i18n `home.viewGrid`/`home.viewList`。
+- [ ] 播放頁音量控制滑桿：在播放控制列加入音量滑桿（`<input type="range" min=0 max=1 step=0.05>`），對 `<audio>` 元素設定 `volume` 屬性；音量偏好存至 localStorage（key: `makeslide.audioVolume`）；補 i18n `play.controls.volume`。
+- [ ] PDF 備註/說明欄位：`pdfs` 表新增 `description TEXT DEFAULT ''` 欄位（migration），播放頁 header 中標題下方新增可展開的備註編輯區；新增 `PATCH /api/pdfs/:id/description` 端點；補後端測試驗證 200 / 403。
+- [ ] 首頁多選批次刪除：首頁每張卡片角落加入 checkbox（hover 時出現），選取一或多張後顯示「刪除已選（N）」按鈕，依序呼叫 `DELETE /api/pdfs/:id`；純前端改動（利用現有 delete API）。
+- [ ] 播放頁字幕文字大小調整：播放設定對話框中新增字幕大小選項（小/中/大），以 Tailwind class 套用至字幕渲染區塊；存至 localStorage（key: `makeslide.subtitleSize`）；補 i18n。
+- [ ] 測驗題目答題解析：`questions_json` 的每題 JSON 加入可選 `explanation?: string` 欄位；`QuizBuilderPage` 加入解析輸入框；答題結果頁面答錯時顯示解析文字；純前端資料結構延伸，不需 DB migration。
