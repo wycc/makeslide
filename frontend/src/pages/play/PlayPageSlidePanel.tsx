@@ -182,6 +182,13 @@ export function PlayPageSlidePanel() {
 
   const progressRatio = duration > 0 ? Math.min(1, currentTime / duration) * 1000 : 0;
 
+  const autoAdvanceCountdown = useMemo(() => {
+    if (!autoAdvance || duration <= 0 || finished) return null;
+    const remaining = duration - currentTime;
+    if (remaining > 3 || remaining <= 0) return null;
+    return Math.ceil(remaining);
+  }, [autoAdvance, duration, currentTime, finished]);
+
   const remainingSeconds = useMemo(() => {
     if (!detail?.pages) return null;
     const currentPageRemaining = duration > 0 ? Math.max(0, duration - currentTime) : 0;
@@ -453,6 +460,11 @@ export function PlayPageSlidePanel() {
               <div className={`mx-auto rounded-md bg-black/60 px-4 py-2 text-center font-medium leading-relaxed text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${subtitleSize === 'sm' ? 'text-xs md:text-sm' : subtitleSize === 'lg' ? 'text-base md:text-xl' : 'text-sm md:text-base'}`}>
                 <p className="line-clamp-2 whitespace-pre-wrap">{currentSentence}</p>
               </div>
+            </div>
+          ) : null}
+          {autoAdvanceCountdown != null ? (
+            <div className="pointer-events-none absolute bottom-4 right-4 flex h-10 w-10 items-center justify-center rounded-full border-2 border-emerald-400/80 bg-slate-900/80 text-lg font-bold text-emerald-300">
+              {autoAdvanceCountdown}
             </div>
           ) : null}
         </div>
