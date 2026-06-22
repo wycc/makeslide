@@ -435,6 +435,16 @@ export function PlayPageSlidePanel() {
         </div>
       </section>
 
+      {/* Page progress bar */}
+      {totalPages > 1 ? (
+        <div className="h-1 w-full bg-slate-800/60" role="progressbar" aria-valuenow={currentIdx + 1} aria-valuemin={1} aria-valuemax={totalPages} aria-label={`第 ${currentIdx + 1} 頁，共 ${totalPages} 頁`}>
+          <div
+            className="h-full bg-emerald-500/70 transition-all duration-300"
+            style={{ width: `${Math.round(((currentIdx + 1) / totalPages) * 100)}%` }}
+          />
+        </div>
+      ) : null}
+
       {/* Controls */}
       <section className={transcriptFocusMode ? 'absolute right-4 top-44 z-20 w-64 rounded-lg border border-slate-700 bg-slate-950/95 shadow-2xl md:top-56 md:w-80' : 'border-t border-slate-800 bg-slate-900/50'}>
         <div className={transcriptFocusMode ? 'flex flex-col gap-2 px-3 py-3' : 'flex flex-col gap-3 px-4 py-4'}>
