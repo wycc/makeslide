@@ -17,7 +17,7 @@ import {
   TTS_VOICES_BY_PROVIDER,
   type TtsProvider,
 } from '../../lib/ttsVoices';
-import { useI18n } from '../../i18n';
+import { useI18n, getStoredTtsSpeed, setStoredTtsSpeed } from '../../i18n';
 import { copyTextToClipboard } from '../../lib/clipboard';
 import type { PdfDetail } from '../../types';
 
@@ -94,7 +94,7 @@ export function usePdfMetadata({
   const [titleBusy, setTitleBusy] = useState(false);
   const [titleMsg, setTitleMsg] = useState<string | null>(null);
   const [ttsVoice, setTtsVoice] = useState('alloy');
-  const [ttsSpeed, setTtsSpeed] = useState(1);
+  const [ttsSpeed, setTtsSpeed] = useState(() => getStoredTtsSpeed());
   const [scriptMaxCharsPerPage, setScriptMaxCharsPerPage] = useState<number | null>(null);
   const [hostMode, setHostMode] = useState<'solo' | 'dual'>('solo');
   const [ttsBusy, setTtsBusy] = useState(false);
@@ -203,6 +203,7 @@ export function usePdfMetadata({
             }
           : prev,
       );
+      setStoredTtsSpeed(ttsSpeed);
       setTtsMsg(t('play.metadata.ttsSettingsSaved'));
     } catch (err) {
       setTtsMsg(err instanceof ApiError ? err.message : t('play.metadata.ttsSettingsSaveFailed'));

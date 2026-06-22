@@ -73,6 +73,7 @@ import {
   getStoredPlaybackSpeed,
   getStoredShowSubtitle,
   getStoredInteractiveMode,
+  getStoredTtsSpeed,
   useI18n,
 } from '../i18n';
 
@@ -445,7 +446,7 @@ export default function PlayPage() {
         setTagsInput(detailWithShare.tags ?? '');
         // page prompts are managed per page in local state
         setTtsVoice(d.tts_voice?.trim() || 'alloy');
-        setTtsSpeed(d.tts_speed ?? 1);
+        setTtsSpeed(d.tts_speed ?? getStoredTtsSpeed());
         setScriptMaxCharsPerPage(typeof d.script_max_chars_per_page === 'number' ? d.script_max_chars_per_page : null);
         setHostMode(d.host_mode === 'dual' ? 'dual' : 'solo');
         setLoadError(null);

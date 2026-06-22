@@ -16,6 +16,7 @@ export const CONTENT_LANGUAGE_STORAGE_KEY = 'makeslide.content_language';
 export const PLAYBACK_SPEED_STORAGE_KEY = 'makeslide.playback_speed';
 export const SHOW_SUBTITLE_STORAGE_KEY = 'makeslide.show_subtitle';
 export const INTERACTIVE_MODE_STORAGE_KEY = 'makeslide.interactive_mode';
+export const TTS_SPEED_STORAGE_KEY = 'makeslide.ttsSpeed';
 
 const dictionaries = {
   'zh-TW': zhTW,
@@ -84,6 +85,19 @@ export function normalizePlaybackSpeed(value: unknown, fallback = 1): number {
 export function getStoredPlaybackSpeed(): number {
   if (typeof window === 'undefined') return 1;
   return normalizePlaybackSpeed(window.localStorage.getItem(PLAYBACK_SPEED_STORAGE_KEY), 1);
+}
+
+export function getStoredTtsSpeed(): number {
+  if (typeof window === 'undefined') return 1;
+  const raw = window.localStorage.getItem(TTS_SPEED_STORAGE_KEY);
+  if (!raw) return 1;
+  const n = parseFloat(raw);
+  return Number.isFinite(n) && n >= 0.5 && n <= 2 ? n : 1;
+}
+
+export function setStoredTtsSpeed(speed: number): void {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(TTS_SPEED_STORAGE_KEY, String(speed));
 }
 
 export function getStoredShowSubtitle(): boolean {
