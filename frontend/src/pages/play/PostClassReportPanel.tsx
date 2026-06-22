@@ -61,6 +61,10 @@ export function PostClassReportPanel({ pdfId, summary, loading, error, onClose, 
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState('');
 
+  const [aiSuggestions, setAiSuggestions] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!summary) return;
     setStudentsLoading(true);
@@ -276,6 +280,37 @@ export function PostClassReportPanel({ pdfId, summary, loading, error, onClose, 
                     </div>
                   ))}
                 </div>
+              ) : null}
+            </section>
+
+            <section className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-semibold text-slate-100">AI 教學建議</h3>
+                  <p className="mt-1 text-xs text-slate-500">根據測驗答對率與觀看完成率，自動生成下一步教學建議。</p>
+                </div>
+                <button
+                  type="button"
+                  disabled={aiLoading}
+                  onClick={() => {
+                    setAiLoading(true);
+                    setAiError(null);
+                    fetch(`api/pdfs/${encodeURIComponent(pdfId)}/report/ai-suggestions`, { method: 'POST' })
+                      .then((r) => r.ok ? r.json() as Promise<{ suggestions: string }> : r.json().then((e: unknown) => Promise.reject(e)))
+                      .then((data) => { setAiSuggestions(data.suggestions); })
+                      .catch(() => { setAiError('AI 建議生成失敗，請稍後再試。'); })
+                      .finally(() => { setAiLoading(false); });
+                  }}
+                  className="shrink-0 rounded-md border border-violet-500/50 bg-violet-500/15 px-3 py-1.5 text-sm text-violet-200 hover:bg-violet-500/25 disabled:opacity-50"
+                >
+                  {aiLoading ? '生成中…' : aiSuggestions ? '重新生成' : '生成 AI 建議'}
+                </button>
+              </div>
+              {aiError ? <p className="mt-3 text-sm text-rose-300">{aiError}</p> : null}
+              {aiSuggestions ? (
+                <pre className="mt-3 whitespace-pre-wrap rounded-lg border border-slate-700 bg-slate-900/60 p-4 text-sm leading-relaxed text-slate-200">
+                  {aiSuggestions}
+                </pre>
               ) : null}
             </section>
 
