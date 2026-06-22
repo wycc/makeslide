@@ -186,6 +186,7 @@ export interface PdfListItem {
   github_sync_dirty?: boolean;
   github_synced_at?: string | null;
   tags?: string;
+  last_played_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -480,6 +481,7 @@ export interface PdfDetail {
   is_authenticated?: boolean;
   has_source_text?: boolean;
   tags?: string;
+  last_played_at?: string | null;
   created_at: string;
   updated_at: string;
   video_url?: string | null;

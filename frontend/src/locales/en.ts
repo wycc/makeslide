@@ -264,6 +264,8 @@ export const en = {
   'card.pageCount': '{count} pages',
   'card.totalAudioDuration': 'Audio {duration}',
   'card.totalAudioDurationLabel': 'Total audio duration',
+  'card.lastPlayed': 'Last played: {time}',
+  'card.lastPlayedLabel': 'Last played time',
   'card.awaitingPrompt': 'Not started — click the card to enter a style prompt.',
   'card.failedTitle': 'Processing failed',
   'card.failedMessage': 'Processing failed. Click to retry or delete.',
