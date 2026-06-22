@@ -34,6 +34,7 @@ const CATEGORY_FILTER_STORAGE_KEY = 'makeslide.home.categoryFilter';
 const CUSTOM_CATEGORIES_STORAGE_KEY = 'makeslide.home.customCategories';
 const TITLE_FILTER_STORAGE_KEY = 'makeslide.home.titleFilter';
 const SORT_MODE_STORAGE_KEY = 'makeslide.home.sortMode';
+const FAVORITES_STORAGE_KEY = 'makeslide.favorites';
 
 type SortMode = 'title_asc' | 'created_desc' | 'updated_desc' | 'page_count_desc' | 'audio_desc' | 'audio_asc';
 
@@ -154,6 +155,13 @@ export default function HomePage() {
   const [titleFilter, setTitleFilter] = useState<string>(readStoredTitleFilter);
   const [explicitSortMode, setExplicitSortMode] = useState<SortMode | null>(readStoredSortMode);
   const [tagFilter, setTagFilter] = useState<string>('');
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [favorites, setFavorites] = useState<Set<string>>(() => {
+    try {
+      const raw = window.localStorage.getItem(FAVORITES_STORAGE_KEY);
+      return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
+    } catch { return new Set(); }
+  });
   const [continuingPdfId, setContinuingPdfId] = useState<string | null>(null);
   const [isImportingZip, setIsImportingZip] = useState(false);
   const [zipImportProgress, setZipImportProgress] = useState(0);
@@ -180,12 +188,15 @@ export default function HomePage() {
         (pdf.tags ?? '').split(',').map((tag) => tag.trim()).includes(tagFilter)
       )
     : categoryFilteredItems;
+  const favFilteredItems = favoritesOnly
+    ? tagFilteredItems.filter((pdf) => favorites.has(pdf.id))
+    : tagFilteredItems;
   const filteredItems = normalizedTitleFilter
-    ? tagFilteredItems.filter((pdf) => {
+    ? favFilteredItems.filter((pdf) => {
       const title = (pdf.title?.trim() || '').toLocaleLowerCase();
       return title.includes(normalizedTitleFilter);
     })
-    : tagFilteredItems;
+    : favFilteredItems;
   const visibleSummary = t('home.resultSummary')
     .replace('{shown}', String(filteredItems.length))
     .replace('{total}', String(categoryFilteredItems.length));
@@ -391,6 +402,15 @@ export default function HomePage() {
     },
     [],
   );
+
+  const handleToggleFavorite = useCallback((id: string) => {
+    setFavorites((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      window.localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify([...next]));
+      return next;
+    });
+  }, []);
 
   const handleImportZipClick = useCallback(() => {
     zipImportInputRef.current?.click();
@@ -845,8 +865,17 @@ export default function HomePage() {
             <p className="mt-3 text-xs text-slate-400" aria-live="polite">
               {visibleSummary}
             </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setFavoritesOnly((v) => !v)}
+                className={`rounded-full border px-3 py-0.5 text-xs transition ${favoritesOnly ? 'border-amber-400 bg-amber-500/20 text-amber-200' : 'border-slate-600 bg-slate-800 text-slate-300 hover:border-slate-500'}`}
+              >
+                {favoritesOnly ? '★' : '☆'} {t('home.filter.favoritesOnly')}
+              </button>
+            </div>
             {allTags.length > 0 && (
-              <div className="mt-3 flex flex-wrap items-center gap-2">
+              <div className="mt-2 flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setTagFilter('')}
@@ -933,6 +962,8 @@ export default function HomePage() {
                       continuing={continuingPdfId === pdf.id}
                       onClick={handleCardClick}
                       currentUserSub={authStatus?.user?.sub ?? null}
+                      isFavorited={favorites.has(pdf.id)}
+                      onToggleFavorite={handleToggleFavorite}
                     />
                   ))}
                 </div>

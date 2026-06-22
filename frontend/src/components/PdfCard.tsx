@@ -26,6 +26,8 @@ interface PdfCardProps {
   onClick?: (pdf: PdfListItem) => void;
   /** The logged-in viewer's own sub, so cards for other people's presentations can show the owner's name. */
   currentUserSub?: string | null;
+  isFavorited?: boolean;
+  onToggleFavorite?: (id: string) => void;
 }
 
 function GitHubMarkIcon({ className }: { className?: string }) {
@@ -52,7 +54,7 @@ function formatDate(iso: string): string {
   }
 }
 
-export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExport, onCategoryChange, onTagsEdit, onContinue, continuing = false, onClick, currentUserSub }: PdfCardProps) {
+export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExport, onCategoryChange, onTagsEdit, onContinue, continuing = false, onClick, currentUserSub, isFavorited = false, onToggleFavorite }: PdfCardProps) {
   const { t } = useI18n();
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDuplicating, setIsDuplicating] = useState(false);
@@ -213,6 +215,17 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExpo
             progressTotal={pdf.progress_total}
           />
         </div>
+        {onToggleFavorite ? (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onToggleFavorite(pdf.id); }}
+            className={`absolute bottom-2 right-2 rounded-full bg-slate-900/70 p-1 text-base leading-none backdrop-blur-sm transition hover:scale-110 ${isFavorited ? 'text-amber-400' : 'text-slate-400 hover:text-amber-300'}`}
+            title={isFavorited ? t('card.unfavorite') : t('card.favorite')}
+            aria-label={isFavorited ? t('card.unfavorite') : t('card.favorite')}
+          >
+            {isFavorited ? '★' : '☆'}
+          </button>
+        ) : null}
         {pdf.github_sync_dirty ? (
           <div
             className="absolute left-2 top-2 rounded-full bg-slate-900/60 p-1 text-rose-400 backdrop-blur-sm"
