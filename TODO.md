@@ -444,6 +444,25 @@
 - [x] 播放頁頁面書籤：在投影片頁面顯示區加入「🔖」書籤按鈕，點擊將目前頁碼加入 / 移除 `localStorage` 書籤清單（key: `makeslide.bookmarks.{pdfId}`）；側邊欄新增書籤 section，列出書籤頁碼並提供跳頁連結；純前端，補 i18n `play.sidebar.bookmarks*`。
   - 實作說明（2026-06-23）：`PlayPage.tsx` 新增 `bookmarks` state + `toggleBookmark` callback；`PlayPageContext.tsx` 介面補 `bookmarks`/`toggleBookmark`；`PlayPageSlidePanel.tsx` 投影片左上角加 🔖 書籤按鈕（已書籤時琥珀色）；`PlayPageSidebar.tsx` 新增書籤 section（amber chip 列，× 移除，點擊跳頁）；i18n `play.sidebar.bookmarkAdd/Remove/Title/Empty`。分支 `feat/page-bookmarks`，已 merge 回 master。
 
+---- 計數重設 ----
+
+## 掃描摘要（2026-06-23 第十二輪）
+
+- 第十一輪 5 個項目全數完成。
+- 播放頁分享目前需進入 ShareDialog 才能取得連結，行動裝置無法觸發原生分享表單（Web Share API）。
+- 首頁多選批次操作已有「刪除」與「移動分類」，但無法批次設定標籤，教材標記效率低。
+- 課後報告的頁面觀看完成率目前只列最低的幾頁，缺乏整份簡報的全頁視覺化。
+- 同步課堂問答已有 AI 單題回答，但老師課後無法一鍵取得所有問題的摘要。
+- 播放頁逐字稿區塊無法搜尋，遇到長逐字稿需手動滾動才能找到對應語句。
+
+## 新增可執行項目（第十二輪）
+
+- [ ] 播放頁行動裝置原生分享：在播放頁 header 分享區偵測 `navigator.share`，若支援則顯示「原生分享」按鈕，呼叫 Web Share API 分享簡報標題與分享連結；不支援時靜默隱藏；純前端，補 i18n `play.header.nativeShare`。
+- [ ] 首頁批次設定標籤：多選模式工具列在「移動分類」下拉旁加入「設定標籤」輸入框（Enter 送出），批次呼叫 `PATCH /api/pdfs/:id/tags` 套用到所有已選 PDF；補 i18n `home.batchSetTags/Done/Failed`。
+- [ ] 課後報告全頁完成率熱力圖：在課後報告面板頁面完成率卡片下方加入全頁熱力圖（每頁一格，顏色依完成率深淺），補 i18n `play.report.completionHeatmap`。
+- [ ] 同步問答課後 AI 摘要：在 master 模式的學生提問列表旁加入「AI 摘要所有問題」按鈕，呼叫後端新增的 `POST /api/pdfs/:id/sync/summarize-questions` 端點（彙整所有 follower questions 交給 LLM 產出摘要），回傳 Markdown 摘要；補後端測試 200/403/400（無問題）。
+- [ ] 播放頁逐字稿關鍵字搜尋：在逐字稿分頁頂部加入搜尋輸入框，即時高亮符合的句子，並以「上一個/下一個」按鈕跳至相符段落；純前端，補 i18n `play.slidePanel.scriptSearch*`。
+
 ## 工作記錄（第十一輪）
 
 | 日期 | 工作摘要 | 分支 |
