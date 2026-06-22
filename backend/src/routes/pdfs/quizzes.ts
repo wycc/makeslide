@@ -76,6 +76,7 @@ const QuizQuestionSchema = z.object({
   answer_indices: z.array(z.number().int().min(0).max(7)).min(1).max(8),
   explanation: z.string().trim().max(1200).optional().default(''),
   score: z.number().min(0).max(1000).nullable().optional(),
+  page_number: z.number().int().min(1).max(9999).nullable().optional(),
 });
 const GeneratedQuizQuestionSchema = QuizQuestionSchema.extend({
   id: z.string().trim().min(1).max(80).optional(),
