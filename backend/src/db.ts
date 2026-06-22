@@ -537,6 +537,17 @@ function migrate(): void {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS sync_attendees (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      pdf_id TEXT NOT NULL,
+      client_id TEXT NOT NULL,
+      user_code TEXT,
+      joined_at TEXT NOT NULL,
+      FOREIGN KEY (pdf_id) REFERENCES pdfs(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_sync_attendees_pdf ON sync_attendees(pdf_id, joined_at);
   `);
 
   if (!columnExists('quiz_sets', 'time_limit_seconds')) {

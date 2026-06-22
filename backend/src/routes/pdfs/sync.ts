@@ -488,6 +488,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     }
     const { client_id: clientId, user_code: userCode } = parsedBody.data;
     const session = getSession(id);
+    const isNew = !session.clients.has(clientId);
     touchClient(session, clientId);
     if (userCode) session.userCodes.set(clientId, userCode);
     if (!session.masterClientId || session.masterExpiresAt <= nowMs()) {
@@ -496,6 +497,10 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       upsertPersistedSession(session);
     } else if (session.masterClientId !== clientId) {
       session.updatedAt = nowIso();
+    }
+    if (isNew) {
+      db.prepare(`INSERT INTO sync_attendees (pdf_id, client_id, user_code, joined_at) VALUES (?, ?, ?, ?)`)
+        .run(id, clientId, userCode ?? null, nowIso());
     }
     return reply.send(buildStateResponse(session, id, roleFor(session, clientId), clientId));
   });
@@ -516,6 +521,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     }
     const { client_id: clientId } = parsedBody.data;
     const session = getSession(id);
+    const isNew = !session.clients.has(clientId);
     touchClient(session, clientId);
     if (!session.masterClientId || session.masterExpiresAt <= nowMs()) {
       return reply.code(409).send(errorResponse('SYNC_NOT_ACTIVE', '原使用者尚未開啟定步模式'));
@@ -525,6 +531,10 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     }
     session.followerAccess.set(clientId, 'share');
     session.updatedAt = nowIso();
+    if (isNew) {
+      db.prepare(`INSERT INTO sync_attendees (pdf_id, client_id, user_code, joined_at) VALUES (?, ?, ?, ?)`)
+        .run(id, clientId, null, nowIso());
+    }
     return reply.send(buildStateResponse(session, id, 'follower', clientId));
   });
 
@@ -788,5 +798,28 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       request.log.error({ err, pdfId: id }, 'Failed to answer follower questions with AI');
       return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to answer follower questions with AI'));
     }
+  });
+
+  // GET /api/pdfs/:id/sync/attendees
+  app.get('/api/pdfs/:id/sync/attendees', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const { id } = parsed.data;
+    const pdfRow = db
+      .prepare(`SELECT id, owner_sub, visibility FROM pdfs WHERE id = ?`)
+      .get(id) as Pick<PdfRow, 'id' | 'owner_sub' | 'visibility'> | undefined;
+    if (!pdfRow) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限查看出席名單'));
+    }
+    interface AttendeeRow { client_id: string; user_code: string | null; joined_at: string }
+    const rows = db
+      .prepare(`SELECT client_id, user_code, joined_at FROM sync_attendees WHERE pdf_id = ? ORDER BY joined_at ASC`)
+      .all(id) as AttendeeRow[];
+    return reply.send({ attendees: rows });
   });
 }

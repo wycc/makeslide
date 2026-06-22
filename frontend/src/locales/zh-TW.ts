@@ -588,6 +588,8 @@ export const zhTW = {
   'play.slidePanel.playbackSpeedTitle': '播放速度',
   'play.slidePanel.subtitleTitle': '字幕',
   'play.slidePanel.subtitleDescription': '切換是否顯示目前句子字幕。',
+  'play.slidePanel.attendeesTitle': '出席名單',
+  'play.slidePanel.attendeesEmpty': '尚無學生加入',
   'play.slidePanel.studentAudioControlTitle': '學生端音訊控制',
   'play.slidePanel.studentAudioUnlocked': '已解鎖，學生可自行取消靜音播放。',
   'play.slidePanel.studentAudioLocked': '已鎖定，所有 follower 會被強制靜音。',

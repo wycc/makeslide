@@ -588,6 +588,8 @@ export const en = {
   'play.slidePanel.playbackSpeedTitle': 'Playback speed',
   'play.slidePanel.subtitleTitle': 'Subtitles',
   'play.slidePanel.subtitleDescription': 'Toggle whether the current sentence subtitle is shown.',
+  'play.slidePanel.attendeesTitle': 'Attendance',
+  'play.slidePanel.attendeesEmpty': 'No students have joined yet',
   'play.slidePanel.studentAudioControlTitle': 'Student audio control',
   'play.slidePanel.studentAudioUnlocked': 'Unlocked — students can unmute playback themselves.',
   'play.slidePanel.studentAudioLocked': 'Locked — all followers are forced to mute.',

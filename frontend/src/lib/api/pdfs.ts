@@ -1765,6 +1765,19 @@ export async function fetchQualityCheck(id: string): Promise<QualityCheckRespons
   return (await resp.json()) as QualityCheckResponse;
 }
 
+export interface SyncAttendee {
+  client_id: string;
+  user_code: string | null;
+  joined_at: string;
+}
+
+export async function fetchSyncAttendees(id: string): Promise<SyncAttendee[]> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/sync/attendees`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  const body = (await resp.json()) as { attendees: SyncAttendee[] };
+  return body.attendees;
+}
+
 export async function updatePdfTags(id: string, tags: string): Promise<{ id: string; tags: string; updated_at: string }> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/tags`, {
     method: 'PATCH',

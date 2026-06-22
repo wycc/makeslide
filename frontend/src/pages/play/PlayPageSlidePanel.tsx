@@ -5,7 +5,7 @@ import { AnimationEditorTab } from './AnimationEditorTab';
 import { FigureAssetsTab } from './FigureAssetsTab';
 import { formatTime, formatDurationMs, formatTokenCount, formatCostUsd } from './formatters';
 import { PageTimingChips } from './PageTimingChips';
-import { ApiError, fetchPageGenerationPrompts, fetchPdfRunHistory, fetchPdfSlowArtifacts, figureImageUrl } from '../../lib/api';
+import { ApiError, fetchPageGenerationPrompts, fetchPdfRunHistory, fetchPdfSlowArtifacts, figureImageUrl, fetchSyncAttendees } from '../../lib/api';
 import { copyTextToClipboard } from '../../lib/clipboard';
 import { SHOW_SUBTITLE_STORAGE_KEY, INTERACTIVE_MODE_STORAGE_KEY, useI18n, type TranslationKey } from '../../i18n';
 import { debugLog, debugWarn } from '../../lib/debugLog';
@@ -187,6 +187,17 @@ export function PlayPageSlidePanel() {
   const [slowArtifacts, setSlowArtifacts] = useState<SlowArtifactSummary[]>([]);
   const [slowArtifactsLoading, setSlowArtifactsLoading] = useState(false);
   const [slowArtifactsError, setSlowArtifactsError] = useState<string | null>(null);
+
+  type SyncAttendee = import('../../lib/api').SyncAttendee;
+  const [attendees, setAttendees] = useState<SyncAttendee[]>([]);
+  const [attendeesOpen, setAttendeesOpen] = useState(false);
+
+  useEffect(() => {
+    if (!syncEnabled || syncRole !== 'master' || !pdfId || !attendeesOpen) return;
+    let cancelled = false;
+    fetchSyncAttendees(pdfId).then((list) => { if (!cancelled) setAttendees(list); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [syncEnabled, syncRole, pdfId, attendeesOpen]);
 
   // 切到「系統資料」分頁時載入此 PDF 的執行歷程（pipeline_runs/pipeline_stage_summaries）。
   useEffect(() => {
@@ -636,6 +647,30 @@ export function PlayPageSlidePanel() {
                 {t('play.playbackProgress.clear')}
               </button>
             </div>
+            {syncEnabled && syncRole === 'master' ? (
+              <div className="rounded-md border border-indigo-500/30 bg-indigo-500/10 px-3 py-2">
+                <button
+                  type="button"
+                  onClick={() => setAttendeesOpen((o) => !o)}
+                  className="flex w-full items-center justify-between text-sm text-indigo-100"
+                >
+                  <span className="font-semibold">{t('play.slidePanel.attendeesTitle')}</span>
+                  <span className="text-xs text-indigo-300">{attendeesOpen ? '▲' : '▼'}</span>
+                </button>
+                {attendeesOpen ? (
+                  <div className="mt-2 max-h-40 overflow-y-auto space-y-1">
+                    {attendees.length === 0 ? (
+                      <p className="text-xs text-indigo-300/70">{t('play.slidePanel.attendeesEmpty')}</p>
+                    ) : attendees.map((a) => (
+                      <div key={`${a.client_id}-${a.joined_at}`} className="flex items-center justify-between text-xs text-indigo-100">
+                        <span className="truncate">{a.user_code ?? a.client_id.slice(0, 12)}</span>
+                        <span className="ml-2 shrink-0 text-indigo-300/60">{new Date(a.joined_at).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             {syncEnabled && syncRole === 'master' ? (
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-cyan-100">
                 <div>
