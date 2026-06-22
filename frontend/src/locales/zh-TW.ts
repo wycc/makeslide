@@ -1306,6 +1306,7 @@ export const zhTW = {
   'play.header.downloadSrt': '下載 SRT 字幕',
   'play.header.downloadVtt': '下載 VTT 字幕',
   'play.header.downloadPptx': '下載 PPTX',
+  'play.header.downloadScriptsTxt': '下載逐字稿 TXT',
   'play.header.downloadCoursePackage': '下載課程包',
   'play.header.coursePackageGenerating': '產生課程包中…',
   'play.header.remoteController': '遠端控制',

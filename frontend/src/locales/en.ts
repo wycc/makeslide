@@ -1306,6 +1306,7 @@ export const en = {
   'play.header.downloadSrt': 'Download SRT subtitles',
   'play.header.downloadVtt': 'Download VTT subtitles',
   'play.header.downloadPptx': 'Download PPTX',
+  'play.header.downloadScriptsTxt': 'Download Scripts (TXT)',
   'play.header.downloadCoursePackage': 'Download Course Package',
   'play.header.coursePackageGenerating': 'Generating course package…',
   'play.header.remoteController': 'Remote Control',

@@ -416,6 +416,13 @@ export function PlayPageHeader() {
           >
             {t('play.header.downloadPptx')}
           </a>
+          <a
+            href={`api/pdfs/${encodeURIComponent(pdfId ?? '')}/scripts.txt`}
+            download
+            className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-center text-sm text-cyan-100 hover:bg-cyan-500/25"
+          >
+            {t('play.header.downloadScriptsTxt')}
+          </a>
           <button
             type="button"
             onClick={() => void handleDownloadCoursePackage()}
