@@ -35,9 +35,9 @@ const CUSTOM_CATEGORIES_STORAGE_KEY = 'makeslide.home.customCategories';
 const TITLE_FILTER_STORAGE_KEY = 'makeslide.home.titleFilter';
 const SORT_MODE_STORAGE_KEY = 'makeslide.home.sortMode';
 
-type SortMode = 'title_asc' | 'created_desc' | 'updated_desc' | 'page_count_desc';
+type SortMode = 'title_asc' | 'created_desc' | 'updated_desc' | 'page_count_desc' | 'audio_desc' | 'audio_asc';
 
-const SORT_MODES: SortMode[] = ['title_asc', 'created_desc', 'updated_desc', 'page_count_desc'];
+const SORT_MODES: SortMode[] = ['title_asc', 'created_desc', 'updated_desc', 'page_count_desc', 'audio_desc', 'audio_asc'];
 
 const compareByTitle = (a: PdfListItem, b: PdfListItem) => {
   const titleA = a.title?.trim() || a.id;
@@ -63,6 +63,18 @@ const compareByPageCountDesc = (a: PdfListItem, b: PdfListItem) => {
   return countB - countA;
 };
 
+const compareByAudioDurationDesc = (a: PdfListItem, b: PdfListItem) => {
+  const durA = a.total_audio_duration_seconds ?? -1;
+  const durB = b.total_audio_duration_seconds ?? -1;
+  return durB - durA;
+};
+
+const compareByAudioDurationAsc = (a: PdfListItem, b: PdfListItem) => {
+  const durA = a.total_audio_duration_seconds ?? Infinity;
+  const durB = b.total_audio_duration_seconds ?? Infinity;
+  return durA - durB;
+};
+
 const getComparatorForSortMode = (sortMode: SortMode) => {
   switch (sortMode) {
     case 'created_desc':
@@ -71,6 +83,10 @@ const getComparatorForSortMode = (sortMode: SortMode) => {
       return compareByUpdatedAtDesc;
     case 'page_count_desc':
       return compareByPageCountDesc;
+    case 'audio_desc':
+      return compareByAudioDurationDesc;
+    case 'audio_asc':
+      return compareByAudioDurationAsc;
     case 'title_asc':
     default:
       return compareByTitle;
@@ -821,6 +837,8 @@ export default function HomePage() {
                   <option value="created_desc">{t('home.sort.createdDesc')}</option>
                   <option value="updated_desc">{t('home.sort.updatedDesc')}</option>
                   <option value="page_count_desc">{t('home.sort.pageCountDesc')}</option>
+                  <option value="audio_desc">{t('home.sort.audioDurationDesc')}</option>
+                  <option value="audio_asc">{t('home.sort.audioDurationAsc')}</option>
                 </select>
               </label>
             </div>
