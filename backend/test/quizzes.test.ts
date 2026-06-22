@@ -227,6 +227,50 @@ test('DELETE /quizzes/:quizId rejects a non-owner request, then allows the owner
   await app.close();
 });
 
+test('DELETE /quizzes/:quizId rejects a fully anonymous request (no session cookie) on a public_editable presentation', async () => {
+  seedQuizPdf('quiz-delete-editable-anon-01', 'public_editable');
+  const app = await buildApp();
+  const createResp = await app.inject({
+    method: 'POST',
+    url: '/api/pdfs/quiz-delete-editable-anon-01/quizzes',
+    headers: OWNER_HEADERS,
+    payload: validQuizPayload(),
+  });
+  const quizId = (createResp.json() as { id: number }).id;
+
+  // No `headers` at all: a visitor who never logged in and holds no share token, just knows the
+  // pdf id and a quiz id. public_editable is meant to let signed-in collaborators edit content,
+  // not let anonymous requests delete a whole quiz (and cascade-delete every student's attempts).
+  const resp = await app.inject({ method: 'DELETE', url: `/api/pdfs/quiz-delete-editable-anon-01/quizzes/${quizId}` });
+  assert.equal(resp.statusCode, 403);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+  const stillThere = db.prepare(`SELECT id FROM quiz_sets WHERE id = ?`).get(quizId);
+  assert.ok(stillThere);
+
+  await app.close();
+});
+
+test('DELETE /quizzes/:quizId allows a read-write collaborator on a public_editable presentation', async () => {
+  seedQuizPdf('quiz-delete-editable-collab-01', 'public_editable');
+  const app = await buildApp();
+  const createResp = await app.inject({
+    method: 'POST',
+    url: '/api/pdfs/quiz-delete-editable-collab-01/quizzes',
+    headers: OWNER_HEADERS,
+    payload: validQuizPayload(),
+  });
+  const quizId = (createResp.json() as { id: number }).id;
+
+  const resp = await app.inject({
+    method: 'DELETE',
+    url: `/api/pdfs/quiz-delete-editable-collab-01/quizzes/${quizId}`,
+    headers: OTHER_HEADERS,
+  });
+  assert.equal(resp.statusCode, 204);
+
+  await app.close();
+});
+
 test('DELETE /quizzes/:quizId returns 404 for an unknown quiz id or a mismatched pdf id', async () => {
   seedQuizPdf('quiz-delete-missing-01', 'public');
   const app = await buildApp();

@@ -24,6 +24,20 @@ function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibil
   return row.visibility === 'public_editable';
 }
 
+// Stricter variant for this file's one destructive/irreversible route (deleting the whole
+// drawing for a page). Reuses canEditPdf()'s owner/public_editable logic but additionally
+// requires an authenticated session before the public_editable fallback applies, so a fully
+// anonymous request can never wipe a page's drawing just because the presentation's visibility
+// happens to be public_editable. PUT (saving/overwriting a drawing) keeps using canEditPdf()
+// unchanged — overwriting is the expected behavior of the drawing tool itself (e.g. an
+// in-progress stroke autosave), not a one-way destructive action distinct from normal editing.
+// Mirrors delete.ts's canEditPdf() fix.
+function canDestructivelyEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
+  if (!row.owner_sub) return true;
+  if (sub && row.owner_sub === sub) return true;
+  return Boolean(sub) && row.visibility === 'public_editable';
+}
+
 function canReadPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
   if (!row.owner_sub) return true;
   if (sub && row.owner_sub === sub) return true;
@@ -119,7 +133,7 @@ export async function registerDrawingsRoutes(app: FastifyInstance): Promise<void
     if (!pdfRow) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     }
-    if (!canEditPdf(sessionSub(request), pdfRow)) {
+    if (!canDestructivelyEditPdf(sessionSub(request), pdfRow)) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的畫板'));
     }
     db.prepare(`DELETE FROM page_drawings WHERE pdf_id = ? AND page_number = ?`).run(id, n);

@@ -66,6 +66,18 @@ function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibil
   return row.visibility === 'public_editable';
 }
 
+// Stricter variant for this file's destructive/irreversible routes (deleting a page outright,
+// wiping a page's chat history). Reuses canEditPdf()'s owner/public_editable logic but additionally
+// requires an authenticated session before the public_editable fallback applies, so a fully
+// anonymous request (no session cookie, no share token) can never destroy data just because the
+// presentation's visibility happens to be public_editable. All other (reversible) content-editing
+// routes in this file keep using canEditPdf() unchanged. Mirrors delete.ts's canEditPdf() fix.
+function canDestructivelyEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
+  if (!row.owner_sub) return true;
+  if (sub && row.owner_sub === sub) return true;
+  return Boolean(sub) && row.visibility === 'public_editable';
+}
+
 function canReadPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
   if (!row.owner_sub) return true;
   if (sub && row.owner_sub === sub) return true;
@@ -521,7 +533,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     const { id, n } = parsed.data;
     const row = db.prepare(`SELECT * FROM pdfs WHERE id = ?`).get(id) as PdfRow | undefined;
     if (!row) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!canEditPdf(sessionSub(request), row)) {
+    if (!canDestructivelyEditPdf(sessionSub(request), row)) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
     }
     if (row.status !== 'ready' || !row.page_count || row.page_count <= 0) {
@@ -1166,7 +1178,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     const { id, n } = parsedParams.data;
     const pdfRow = getPdfPermissionRow(id);
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!canEditPdf(sessionSub(request), pdfRow)) {
+    if (!canDestructivelyEditPdf(sessionSub(request), pdfRow)) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
     }
     const info = db

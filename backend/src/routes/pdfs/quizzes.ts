@@ -20,6 +20,18 @@ function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibil
   return row.visibility === 'public_editable';
 }
 
+// Stricter variant for this file's one destructive/irreversible route (deleting a quiz set
+// outright, which also cascades to its attempts). Reuses canEditPdf()'s owner/public_editable
+// logic but additionally requires an authenticated session before the public_editable fallback
+// applies, so a fully anonymous request can never delete a quiz just because the presentation's
+// visibility happens to be public_editable. The other (reversible) generate/create/update routes
+// in this file keep using canEditPdf() unchanged. Mirrors delete.ts's canEditPdf() fix.
+function canDestructivelyEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
+  if (!row.owner_sub) return true;
+  if (sub && row.owner_sub === sub) return true;
+  return Boolean(sub) && row.visibility === 'public_editable';
+}
+
 function canReadPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
   if (!row.owner_sub) return true;
   if (sub && row.owner_sub === sub) return true;
@@ -373,7 +385,7 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid quiz parameters'));
     const pdfRow = getPdfPermissionRow(parsed.data.id);
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
-    if (!canEditPdf(sessionSub(request), pdfRow)) {
+    if (!canDestructivelyEditPdf(sessionSub(request), pdfRow)) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限刪除此簡報的測驗'));
     }
     const result = db.prepare(`DELETE FROM quiz_sets WHERE id = ? AND pdf_id = ?`).run(parsed.data.quizId, parsed.data.id);
