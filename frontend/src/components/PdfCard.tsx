@@ -291,6 +291,11 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExpo
         <h3 className="line-clamp-2 text-sm font-semibold text-slate-100" title={pdf.title ?? ''}>
           {pdf.title ?? t('card.untitled')}
         </h3>
+        {pdf.description?.trim() && (
+          <p className="line-clamp-2 text-[11px] leading-relaxed text-slate-400" title={pdf.description}>
+            {pdf.description}
+          </p>
+        )}
         {pdf.owner_sub && pdf.owner_sub !== currentUserSub && (
           <span className="truncate text-[11px] text-indigo-300" title={pdf.owner_name ?? undefined}>
             {t('card.ownerLabel').replace('{name}', pdf.owner_name?.trim() || t('card.ownerUnknown'))}
