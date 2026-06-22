@@ -142,6 +142,7 @@ export function PlayPageSlidePanel() {
     currentAnimationSpec,
     animationWarning, setAnimationWarning,
     bookmarks, toggleBookmark,
+    pageSentences,
   } = usePlayPageContext();
 
   const { t } = useI18n();
@@ -223,6 +224,22 @@ export function PlayPageSlidePanel() {
   type SyncAttendee = import('../../lib/api').SyncAttendee;
   const [attendees, setAttendees] = useState<SyncAttendee[]>([]);
   const [attendeesOpen, setAttendeesOpen] = useState(false);
+
+  const [scriptSearch, setScriptSearch] = useState('');
+  const [scriptSearchIdx, setScriptSearchIdx] = useState(0);
+  const scriptSearchResultRef = useRef<HTMLDivElement>(null);
+
+  const scriptSearchResults = useMemo(() => {
+    const q = scriptSearch.trim().toLowerCase();
+    if (!q) return [];
+    return pageSentences
+      .map((s, i) => ({ sentence: s, originalIdx: i }))
+      .filter(({ sentence }) => sentence.toLowerCase().includes(q));
+  }, [scriptSearch, pageSentences]);
+
+  const clampedSearchIdx = scriptSearchResults.length > 0
+    ? Math.min(scriptSearchIdx, scriptSearchResults.length - 1)
+    : 0;
 
   useEffect(() => {
     if (!syncEnabled || syncRole !== 'master' || !pdfId || !attendeesOpen) return;
@@ -971,6 +988,67 @@ export function PlayPageSlidePanel() {
                   {t('play.slidePanel.transcript.versionButton')}
                 </button>
               </div>
+              <div className="mb-2 flex items-center gap-2">
+                <input
+                  type="search"
+                  value={scriptSearch}
+                  onChange={(e) => { setScriptSearch(e.target.value); setScriptSearchIdx(0); }}
+                  placeholder={t('play.slidePanel.scriptSearchPlaceholder')}
+                  className="flex-1 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
+                />
+                {scriptSearch.trim() ? (
+                  <span className="shrink-0 text-xs text-slate-400">
+                    {scriptSearchResults.length === 0
+                      ? t('play.slidePanel.scriptSearchNoResult')
+                      : t('play.slidePanel.scriptSearchCount')
+                          .replace('{current}', String(clampedSearchIdx + 1))
+                          .replace('{total}', String(scriptSearchResults.length))}
+                  </span>
+                ) : null}
+                {scriptSearchResults.length > 1 ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setScriptSearchIdx((i) => (i - 1 + scriptSearchResults.length) % scriptSearchResults.length)}
+                      className="rounded border border-slate-700 px-1.5 py-0.5 text-xs text-slate-300 hover:bg-slate-800"
+                    >
+                      {t('play.slidePanel.scriptSearchPrev')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setScriptSearchIdx((i) => (i + 1) % scriptSearchResults.length)}
+                      className="rounded border border-slate-700 px-1.5 py-0.5 text-xs text-slate-300 hover:bg-slate-800"
+                    >
+                      {t('play.slidePanel.scriptSearchNext')}
+                    </button>
+                  </>
+                ) : null}
+              </div>
+              {scriptSearch.trim() && scriptSearchResults.length > 0 ? (
+                <div
+                  ref={scriptSearchResultRef}
+                  className="mb-2 max-h-40 overflow-y-auto rounded border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-slate-200 space-y-1"
+                >
+                  {scriptSearchResults.map(({ sentence, originalIdx }, rank) => {
+                    const q = scriptSearch.trim();
+                    const lower = sentence.toLowerCase();
+                    const matchStart = lower.indexOf(q.toLowerCase());
+                    const before = sentence.slice(0, matchStart);
+                    const match = sentence.slice(matchStart, matchStart + q.length);
+                    const after = sentence.slice(matchStart + q.length);
+                    return (
+                      <p
+                        key={originalIdx}
+                        className={`leading-relaxed ${rank === clampedSearchIdx ? 'rounded bg-amber-500/20 px-1' : ''}`}
+                      >
+                        {before}
+                        <mark className="rounded bg-amber-400 px-0.5 text-slate-900">{match}</mark>
+                        {after}
+                      </p>
+                    );
+                  })}
+                </div>
+              ) : null}
               <textarea
                 value={editingScript}
                 onChange={(e) => setEditingScript(e.target.value)}
