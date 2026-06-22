@@ -168,10 +168,21 @@ export default function HomePage() {
   const [viewMode, setViewMode] = useState<ViewMode>(() =>
     localStorage.getItem(VIEW_MODE_STORAGE_KEY) === 'list' ? 'list' : 'grid'
   );
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const updateViewMode = (mode: ViewMode) => {
     localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode);
     setViewMode(mode);
   };
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [batchDeleting, setBatchDeleting] = useState(false);
+
+  const toggleSelected = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) { next.delete(id); } else { next.add(id); }
+      return next;
+    });
+  }, []);
   const [continuingPdfId, setContinuingPdfId] = useState<string | null>(null);
   const [isImportingZip, setIsImportingZip] = useState(false);
   const [zipImportProgress, setZipImportProgress] = useState(0);
@@ -238,6 +249,26 @@ export default function HomePage() {
     }
     toastTimerRef.current = window.setTimeout(() => setToast(null), 2500);
   }, []);
+
+  const handleBatchDelete = useCallback(async () => {
+    if (selectedIds.size === 0 || batchDeleting) return;
+    setBatchDeleting(true);
+    const ids = [...selectedIds];
+    let failed = 0;
+    for (const id of ids) {
+      try {
+        await deletePdf(id);
+        setItems((prev) => prev.filter((p) => p.id !== id));
+      } catch { failed++; }
+    }
+    setSelectedIds(new Set());
+    setBatchDeleting(false);
+    if (failed > 0) {
+      showToast(t('home.batchDeletePartial').replace('{failed}', String(failed)));
+    } else {
+      showToast(t('home.batchDeleteDone').replace('{count}', String(ids.length)));
+    }
+  }, [selectedIds, batchDeleting, showToast, t]);
 
   const updateCategoryFilter = useCallback((nextFilter: string) => {
     setCategoryFilter(nextFilter);
@@ -904,6 +935,16 @@ export default function HomePage() {
               >
                 {favoritesOnly ? '★' : '☆'} {t('home.filter.favoritesOnly')}
               </button>
+              {selectedIds.size > 0 && (
+                <button
+                  type="button"
+                  onClick={() => void handleBatchDelete()}
+                  disabled={batchDeleting}
+                  className="rounded-full border border-rose-500/60 bg-rose-500/15 px-3 py-0.5 text-xs text-rose-300 transition hover:bg-rose-500/25 disabled:opacity-50"
+                >
+                  {batchDeleting ? '…' : t('home.batchDeleteBtn').replace('{count}', String(selectedIds.size))}
+                </button>
+              )}
             </div>
             {allTags.length > 0 && (
               <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -986,6 +1027,13 @@ export default function HomePage() {
                         className="flex cursor-pointer items-center gap-3 px-4 py-3 transition hover:bg-slate-800/50"
                         onClick={() => handleCardClick(pdf)}
                       >
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(pdf.id)}
+                          onChange={(e) => { e.stopPropagation(); toggleSelected(pdf.id); }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="h-4 w-4 shrink-0 cursor-pointer accent-indigo-500"
+                        />
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium text-slate-100">{pdf.title ?? pdf.id}</p>
                           <p className="text-xs text-slate-400">{t('home.listPages').replace('{count}', String(pdf.page_count))} · {pdf.category ?? t('home.listUncategorized')}</p>
@@ -1004,22 +1052,31 @@ export default function HomePage() {
                 ) : (
                   <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
                     {group.items.map((pdf) => (
-                      <PdfCard
-                        key={pdf.id}
-                        pdf={pdf}
-                        categories={allCategories}
-                        onDelete={handleDelete}
-                        onDuplicate={handleDuplicate}
-                        onExport={handleExport}
-                        onCategoryChange={handleCategoryChange}
-                        onTagsEdit={authStatus?.user?.sub === pdf.owner_sub ? handleTagsEdit : undefined}
-                        onContinue={handleContinueGeneration}
-                        continuing={continuingPdfId === pdf.id}
-                        onClick={handleCardClick}
-                        currentUserSub={authStatus?.user?.sub ?? null}
-                        isFavorited={favorites.has(pdf.id)}
-                        onToggleFavorite={handleToggleFavorite}
-                      />
+                      <div key={pdf.id} className="group/sel relative">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(pdf.id)}
+                          onChange={() => toggleSelected(pdf.id)}
+                          className="absolute left-2 top-2 z-10 h-4 w-4 cursor-pointer accent-indigo-500 opacity-0 transition group-hover/sel:opacity-100 data-[checked=true]:opacity-100"
+                          data-checked={selectedIds.has(pdf.id)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        <PdfCard
+                          pdf={pdf}
+                          categories={allCategories}
+                          onDelete={handleDelete}
+                          onDuplicate={handleDuplicate}
+                          onExport={handleExport}
+                          onCategoryChange={handleCategoryChange}
+                          onTagsEdit={authStatus?.user?.sub === pdf.owner_sub ? handleTagsEdit : undefined}
+                          onContinue={handleContinueGeneration}
+                          continuing={continuingPdfId === pdf.id}
+                          onClick={handleCardClick}
+                          currentUserSub={authStatus?.user?.sub ?? null}
+                          isFavorited={favorites.has(pdf.id)}
+                          onToggleFavorite={handleToggleFavorite}
+                        />
+                      </div>
                     ))}
                   </div>
                 )}
