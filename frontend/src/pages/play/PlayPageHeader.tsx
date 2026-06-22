@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { RegenerateProgress } from './RegenerateProgress';
 import type { ShareAccessMode } from '../../lib/api';
@@ -61,6 +62,27 @@ export function PlayPageHeader() {
   const currentRegenPageText = regenJob?.last_processed_page != null
     ? t('play.regenBanner.currentPage').replace('{page}', String(regenJob.last_processed_page))
     : '';
+
+  const [coursePackageBusy, setCoursePackageBusy] = useState(false);
+  const handleDownloadCoursePackage = async () => {
+    if (!pdfId || coursePackageBusy) return;
+    setCoursePackageBusy(true);
+    try {
+      const resp = await fetch(`api/pdfs/${encodeURIComponent(pdfId)}/course-package`, { method: 'POST' });
+      if (!resp.ok) { setCoursePackageBusy(false); return; }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const cd = resp.headers.get('content-disposition') ?? '';
+      const match = /filename="([^"]+)"/.exec(cd);
+      a.download = match?.[1] ?? 'course-package.zip';
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setCoursePackageBusy(false);
+    }
+  };
 
   return (
     <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur">
@@ -394,6 +416,14 @@ export function PlayPageHeader() {
           >
             {t('play.header.downloadPptx')}
           </a>
+          <button
+            type="button"
+            onClick={() => void handleDownloadCoursePackage()}
+            disabled={coursePackageBusy || isReadOnlyProcessing}
+            className="rounded-md border border-violet-500/50 bg-violet-500/15 px-3 py-1.5 text-sm text-violet-100 hover:bg-violet-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {coursePackageBusy ? t('play.header.coursePackageGenerating') : t('play.header.downloadCoursePackage')}
+          </button>
           <button
             type="button"
             onClick={() => void handleSyncToGithub()}
