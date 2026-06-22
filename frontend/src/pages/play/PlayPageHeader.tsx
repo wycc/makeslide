@@ -98,6 +98,7 @@ export function PlayPageHeader() {
     openImageStyleDialog,
     pdfId,
     shareAccess, setShareAccess,
+    shareExpiresDays, setShareExpiresDays,
     shareBusy,
     handleCreateShareLink,
     handleMakeSharePrivate,
@@ -541,6 +542,18 @@ export function PlayPageHeader() {
               >
                 <option value="read_only">{t('play.share.readOnlyVisible')}</option>
                 <option value="editable">{t('play.share.readWriteVisible')}</option>
+              </select>
+              <select
+                value={shareExpiresDays ?? ''}
+                onChange={(e) => setShareExpiresDays(e.target.value ? Number(e.target.value) : undefined)}
+                disabled={isReadOnlyProcessing}
+                className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+                aria-label={t('play.share.expiryLabel')}
+              >
+                <option value="">{t('play.share.expiryForever')}</option>
+                <option value="7">{t('play.share.expiry7days')}</option>
+                <option value="30">{t('play.share.expiry30days')}</option>
+                <option value="90">{t('play.share.expiry90days')}</option>
               </select>
               <button
                 type="button"
