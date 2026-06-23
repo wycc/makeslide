@@ -918,11 +918,26 @@
 
 ## 新增可執行項目（第二十七輪）
 
-- [ ] PlayPageSidebar 重要頁面按頁碼排序：重要頁面 section 的 `importantPages.map` 改為 `[...importantPages].sort((a, b) => a - b).map`，確保顯示時依頁碼升序排列；純前端改動，無需 i18n。
-- [ ] 首頁類別下拉各分類顯示 PDF 數量：在 `allCategories.map` 的 `<option>` 標籤加入各分類的 PDF 計數（`items.filter(...)` 算出），格式為「分類名稱（N）」；純前端改動。
-- [ ] PlayPageSlidePanel 逐字稿搜尋 × 清除按鈕：`scriptSearch` 有值時在搜尋框右側加入 × 按鈕（`setScriptSearch('')` 並 `setScriptSearchIdx(0)`）；純前端改動，無需 i18n。
-- [ ] QuizBuilderPage 題目過多警示：`questions.length > 20` 時在編輯區頂部顯示琥珀色警告橫幅（「題目數量較多，建議精簡至 20 題以內」）；補 i18n `quiz.tooManyQuestionsWarning`；純前端改動。
-- [ ] PlayPageSidebar 大綱面板頁數標題 badge：OutlineSection header 加入 `deckPages.length` 計數徽章（slate 色），方便使用者一眼確認頁數；純前端改動，無需新 i18n。
+- [x] PlayPageSidebar 重要頁面按頁碼排序：重要頁面 section 的 `importantPages.map` 改為 `[...importantPages].sort((a, b) => a - b).map`，確保顯示時依頁碼升序排列；純前端改動，無需 i18n。
+  - 修改說明（2026-06-24）：`PlayPageSidebar.tsx` `importantPages.map` 改為 `[...importantPages].sort((a, b) => a - b).map`，與書籤排序修正一致。分支 `feat/important-pages-sort`，已 merge 回 master。
+- [x] 首頁類別下拉各分類顯示 PDF 數量：在 `allCategories.map` 的 `<option>` 標籤加入各分類的 PDF 計數（`items.filter(...)` 算出），格式為「分類名稱（N）」；純前端改動。
+  - 修改說明（2026-06-24）：`HomePage.tsx` `allCategories.map` 改為回傳 `<option>` 含 `items.filter(...).length` 計數，格式化為「分類名稱（N）」。分支 `feat/category-select-count`，已 merge 回 master。
+- [x] PlayPageSlidePanel 逐字稿搜尋 × 清除按鈕：`scriptSearch` 有值時在搜尋框右側加入 × 按鈕（`setScriptSearch('')` 並 `setScriptSearchIdx(0)`）；純前端改動，無需 i18n。
+  - 修改說明（2026-06-24）：`PlayPageSlidePanel.tsx` 搜尋框改以 `relative div` 包覆；`scriptSearch` 有值時在右側渲染絕對定位 × 按鈕，點擊清空搜尋並重置 index。分支 `feat/script-search-clear-button`，已 merge 回 master。
+- [x] QuizBuilderPage 題目過多警示：`questions.length > 20` 時在編輯區頂部顯示琥珀色警告橫幅（「題目數量較多，建議精簡至 20 題以內」）；補 i18n `quiz.tooManyQuestionsWarning`；純前端改動。
+  - 修改說明（2026-06-24）：`QuizBuilderPage.tsx` 在 `{questions.map...}` 前加入條件渲染，`questions.length > 20` 時顯示琥珀色橫幅；i18n 1 個 key 新增至 zh-TW 及 en。分支 `feat/quiz-too-many-questions-warning`，已 merge 回 master。
+- [x] PlayPageSidebar 大綱面板頁數標題 badge：OutlineSection header 加入 `deckPages.length` 計數徽章（slate 色），方便使用者一眼確認頁數；純前端改動，無需新 i18n。
+  - 修改說明（2026-06-24）：`PlayPageSidebar.tsx` OutlineSection h2 改 flex，`deckPages.length > 0` 時顯示 slate 色計數徽章。分支 `feat/outline-page-count-badge`，已 merge 回 master。
+
+## 工作記錄（第二十七輪，2026-06-24）
+
+| 日期 | 工作內容 | 分支 |
+|------|----------|------|
+| 2026-06-24 | PlayPageSidebar 重要頁面升序排列：importantPages.map 前加 [...importantPages].sort((a,b)=>a-b) | feat/important-pages-sort（已 merge） |
+| 2026-06-24 | 首頁類別下拉加 PDF 計數：allCategories.map 加 items.filter(...).length，格式「分類（N）」 | feat/category-select-count（已 merge） |
+| 2026-06-24 | 逐字稿搜尋框 × 清除按鈕：relative 包覆，scriptSearch 有值時 absolute × 按鈕 | feat/script-search-clear-button（已 merge） |
+| 2026-06-24 | QuizBuilderPage 20 題以上警示：questions.length > 20 顯示 amber 橫幅；i18n tooManyQuestionsWarning | feat/quiz-too-many-questions-warning（已 merge） |
+| 2026-06-24 | 大綱面板頁數徽章：OutlineSection h2 加 slate 計數徽章（deckPages.length） | feat/outline-page-count-badge（已 merge） |
 
 ## 工作記錄（第二十六輪，2026-06-24）
 
