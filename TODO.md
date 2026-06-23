@@ -678,8 +678,23 @@
 
 ## 新增可執行項目（第十九輪）
 
-- [ ] 首頁排序加入「最近播放」選項：在 `SortMode` union 新增 `last_played_desc`，對應 `compareByLastPlayedAtDesc`；`SORT_MODES` 陣列和 switch 補 case；`home.sort.lastPlayedDesc` i18n；純前端改動。
-- [ ] 全螢幕字幕大小和位置設定生效：在 `PlayPageFullscreen.tsx` 從 context destructure `subtitleSize` / `subtitlePosition`，依 size 套用 `text-xs/sm`、`text-base/lg`、`text-lg/2xl` CSS，依 position 切換 `bottom-4` / `top-4`；純前端改動。
-- [ ] 逐字稿編輯區字數與預估時長：在 `PlayPageSlidePanel.tsx` 逐字稿 textarea 下方（儲存提示同列左側）顯示當前 `editingScript` 的字數和預估講解秒數（字數 ÷ 4，以 `mm:ss` 格式顯示）；純前端改動。
-- [ ] 首頁 list 模式鍵盤可聚焦：對 list 模式每列外層 div 加入 `tabIndex={0}` 及 `onKeyDown` Enter 鍵呼叫 `handleCardClick(pdf)`，使鍵盤用戶可以 Tab 移動並 Enter 開啟；純前端改動。
-- [ ] QuizBuilderPage 測驗集搜尋：在 `savedQuizzes` 清單頂部加入搜尋輸入框，以 `quiz.title` 關鍵字過濾顯示；補 i18n；純前端改動。
+- [x] 首頁排序加入「最近播放」選項：在 `SortMode` union 新增 `last_played_desc`，對應 `compareByLastPlayedAtDesc`；`SORT_MODES` 陣列和 switch 補 case；`home.sort.lastPlayedDesc` i18n；純前端改動。
+  - 修改說明（2026-06-24）：`HomePage.tsx` SortMode union + SORT_MODES + getComparatorForSortMode switch case 新增 `last_played_desc`；select option 新增；i18n 2 個 key。分支 `feat/home-sort-last-played`，已 merge 回 master。
+- [x] 全螢幕字幕大小和位置設定生效：在 `PlayPageFullscreen.tsx` 從 context destructure `subtitleSize` / `subtitlePosition`，依 size 套用 `text-xs/sm`、`text-base/lg`、`text-lg/2xl` CSS，依 position 切換 `bottom-4` / `top-4`；純前端改動。
+  - 修改說明（2026-06-24）：`PlayPageFullscreen.tsx` destructure `subtitleSize/subtitlePosition`；字幕 wrapper div 改以 `subtitlePosition` 切換 `top-4`/`bottom-4`；文字 div 改以 `subtitleSize` 套用 `text-xs md:text-sm`/`text-sm md:text-base`/`text-base md:text-xl`。分支 `feat/fullscreen-subtitle-settings`，已 merge 回 master。
+- [x] 逐字稿編輯區字數與預估時長：在 `PlayPageSlidePanel.tsx` 逐字稿 textarea 下方（儲存提示同列左側）顯示當前 `editingScript` 的字數和預估講解秒數（字數 ÷ 4，以 `mm:ss` 格式顯示）；純前端改動。
+  - 修改說明（2026-06-24）：`PlayPageSlidePanel.tsx` 儲存提示 div 後插入 IIFE 計算 chars/4 秒數並格式化為 `mm:ss`；i18n `play.slidePanel.transcript.charCount`。分支 `feat/script-char-count`，已 merge 回 master。
+- [x] 首頁 list 模式鍵盤可聚焦：對 list 模式每列外層 div 加入 `tabIndex={0}` 及 `onKeyDown` Enter 鍵呼叫 `handleCardClick(pdf)`，使鍵盤用戶可以 Tab 移動並 Enter 開啟；純前端改動。
+  - 修改說明（2026-06-24）：`HomePage.tsx` list 模式每列 div 加入 `role="button" tabIndex={0} onKeyDown Enter/Space` 及 focus ring；純 HTML/ARIA 改動。分支 `feat/list-keyboard-nav`，已 merge 回 master。
+- [x] QuizBuilderPage 測驗集搜尋：在 `savedQuizzes` 清單頂部加入搜尋輸入框，以 `quiz.title` 關鍵字過濾顯示；補 i18n；純前端改動。
+  - 修改說明（2026-06-24）：`QuizBuilderPage.tsx` 新增 `savedQuizzesSearch` state；測驗集 > 3 時顯示搜尋框；`.filter()` 以 title 關鍵字（大小寫忽略）過濾；i18n `quiz.searchQuizzes`。分支 `feat/quiz-saved-search`，已 merge 回 master。
+
+## 工作記錄（第十九輪）
+
+| 日期 | 工作摘要 | 分支 |
+| ---- | -------- | ---- |
+| 2026-06-24 | 首頁排序加入「最近播放優先」選項：SortMode 新增 last_played_desc；複用 compareByLastPlayedAtDesc；i18n 2 key | feat/home-sort-last-played（已 merge） |
+| 2026-06-24 | 全螢幕字幕設定生效：destructure subtitleSize/subtitlePosition；依設定動態切換 top/bottom 位置與 xs/sm/base/xl 字體大小 | feat/fullscreen-subtitle-settings（已 merge） |
+| 2026-06-24 | 逐字稿字數與預估時長：chars÷4 計算 mm:ss 預估；儲存提示旁顯示字數與時長；i18n 1 key | feat/script-char-count（已 merge） |
+| 2026-06-24 | list 模式鍵盤可聚焦：tabIndex={0} + role=button + onKeyDown Enter/Space + focus ring | feat/list-keyboard-nav（已 merge） |
+| 2026-06-24 | QuizBuilderPage 測驗集搜尋：savedQuizzesSearch state + > 3 才顯示框 + filter by title | feat/quiz-saved-search（已 merge） |
