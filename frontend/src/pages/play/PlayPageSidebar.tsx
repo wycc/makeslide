@@ -140,7 +140,12 @@ function PageNoteSection() {
   return (
     <section className="rounded-lg border border-slate-800 bg-slate-900/40">
       <div className="flex items-center justify-between gap-2 border-b border-slate-800 px-4 py-2">
-        <h2 className="text-sm font-semibold text-slate-300">📝 {t('play.sidebar.pageNote')}</h2>
+        <h2 className="flex items-center gap-1.5 text-sm font-semibold text-slate-300">
+          📝 {t('play.sidebar.pageNote')}
+          {currentPage?.page_notes?.trim() ? (
+            <span className="h-2 w-2 rounded-full bg-emerald-400" title="此頁已有筆記" />
+          ) : null}
+        </h2>
         <button
           type="button"
           onClick={handleCopyAllNotes}
