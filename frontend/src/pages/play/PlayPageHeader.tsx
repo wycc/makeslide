@@ -38,6 +38,7 @@ function ShortcutsButton() {
     ['← / →', t('play.shortcuts.prevPage') + ' / ' + t('play.shortcuts.nextPage')],
     ['Space', t('play.shortcuts.spaceFullscreen')],
     ['Space', t('play.shortcuts.spaceNormal')],
+    ['G', t('play.shortcuts.gotoPage')],
     ['W', t('play.shortcuts.toggleDraw')],
     ['P', t('play.shortcuts.pollControl')],
     ['A', t('play.shortcuts.aiAnswer')],

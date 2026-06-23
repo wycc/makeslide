@@ -192,6 +192,9 @@ export default function PlayPage() {
   const [thumbLoadUntilIdx, setThumbLoadUntilIdx] = useState(0);
   // 手機模式下的 tab 切換（桌面模式忽略此 state，永遠並排顯示）
   const [activeTab, setActiveTab] = useState<'play' | 'qa'>('play');
+  const [gotoPageOpen, setGotoPageOpen] = useState(false);
+  const [gotoPageInput, setGotoPageInput] = useState('');
+  const gotoPageInputRef = useRef<HTMLInputElement>(null);
   const [qaPanelExpanded, setQaPanelExpanded] = useState(false);
   const [syncEnabled, setSyncEnabled] = useState(false);
   const [syncRole, setSyncRole] = useState<'master' | 'follower'>('follower');
@@ -1603,7 +1606,17 @@ export default function PlayPage() {
         ev.preventDefault();
         setDrawingMode((prev) => !prev);
         if (drawingMode) setDrawingTool('pen');
+      } else if (ev.key.toLowerCase() === 'g') {
+        ev.preventDefault();
+        setGotoPageInput('');
+        setGotoPageOpen(true);
+        setTimeout(() => gotoPageInputRef.current?.focus(), 50);
       } else if (ev.key === 'Escape') {
+        if (gotoPageOpen) {
+          ev.preventDefault();
+          setGotoPageOpen(false);
+          return;
+        }
         if (drawingMode) {
           ev.preventDefault();
           setDrawingMode(false);
@@ -1629,7 +1642,7 @@ export default function PlayPage() {
     };
     window.addEventListener('keydown', onKey, { capture: true });
     return () => window.removeEventListener('keydown', onKey, { capture: true });
-  }, [playPause, goPrev, goNext, navigate, imageOnlyFullscreen, isLockedFullscreen, syncEnabled, syncRole, canUseDrawingTools, handleAiAnswerFollowerQuestions, fullscreenPollControlOpen, drawingMode]);
+  }, [playPause, goPrev, goNext, navigate, imageOnlyFullscreen, isLockedFullscreen, syncEnabled, syncRole, canUseDrawingTools, handleAiAnswerFollowerQuestions, fullscreenPollControlOpen, drawingMode, gotoPageOpen]);
 
   // ---- Fullscreen API integration ----
   // 編輯版面、動畫編輯版面，以及透過分享連結鎖定的全螢幕都不進入瀏覽器原生全螢幕：
@@ -2495,6 +2508,43 @@ export default function PlayPage() {
           </div>
         </div>
       ) : null}
+
+      {/* 跳頁對話框 */}
+      {gotoPageOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => setGotoPageOpen(false)}
+        >
+          <div
+            className="w-72 rounded-xl border border-slate-700 bg-slate-900 p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mb-3 text-sm font-semibold text-slate-200">{t('play.gotoPageDialog')}</p>
+            <input
+              ref={gotoPageInputRef}
+              type="number"
+              min={1}
+              max={deckPages.length}
+              value={gotoPageInput}
+              onChange={(e) => setGotoPageInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const n = Math.floor(Number(gotoPageInput));
+                  if (n >= 1 && n <= deckPages.length) {
+                    setCurrentIdx(n - 1);
+                    setGotoPageOpen(false);
+                  }
+                } else if (e.key === 'Escape') {
+                  setGotoPageOpen(false);
+                }
+              }}
+              placeholder={t('play.gotoPagePlaceholder')}
+              className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none"
+            />
+            <p className="mt-1.5 text-xs text-slate-500">1 – {deckPages.length}</p>
+          </div>
+        </div>
+      )}
 
       <main className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col gap-4 px-4 py-4 md:flex-row">
         {/* Mobile-only tab 切換列 */}
