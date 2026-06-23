@@ -547,7 +547,8 @@
 
 ## 新增可執行項目（第十五輪）
 
-- [ ] 測驗題目 AI 草稿：新增 `POST /api/pdfs/:id/pages/:n/generate-quiz-question` 後端端點，讀取頁面逐字稿/文字，呼叫 LLM 生成一道四選項選擇題（含正確答案索引與解析），回傳 `{ question, options, correct_index, explanation }`；`QuizBuilderPage` 新增「AI 生成一題」按鈕（每次一題，可連續點擊），直接插入題目列表；補後端測試 200 / 404 / 403。
+- [x] 測驗題目 AI 草稿：新增 `POST /api/pdfs/:id/pages/:n/generate-quiz-question` 後端端點，讀取頁面逐字稿/文字，呼叫 LLM 生成一道四選項選擇題（含正確答案索引與解析），回傳 `{ question, options, correct_index, explanation }`；`QuizBuilderPage` 新增「AI 生成一題」按鈕（每次一題，可連續點擊），直接插入題目列表；補後端測試 200 / 404 / 403。
+  - 修改說明（2026-06-23）：新增 `backend/src/routes/pdfs/generate-quiz-question.ts` 後端路由，呼叫 LLM 生成四選項題目（含 correct_index 與 explanation）；`index.ts` 新增 import 與 register；前端新增 `generateAiQuizQuestion()` API 函式；`QuizBuilderPage` 新增 `aiQuizPageNumber`/`aiQuizBusy` state 與 `handleAiGenerateQuestion` handler；題目按鈕列加入頁碼數字輸入框 + 紫羅蘭色「AI 生成一題」按鈕；i18n `quiz.aiGenerateQuestion/aiGenerating/aiGenerateFailed/aiGeneratePageLabel/aiGeneratePageSuffix` 新增至 zh-TW 及 en；3 個後端測試（200/404/403）。分支 `feat/quiz-ai-draft-question`，已 merge 回 master。
 - [x] 播放頁字幕位置切換：在播放設定對話框新增「字幕位置」選項（底部 / 頂部），存至 localStorage（key: `makeslide.subtitlePosition`）；`PlayPageSlidePanel` 依設定切換字幕區塊的 `top-*` 或 `bottom-*` 絕對定位 class；補 i18n `play.settings.subtitlePosition/Top/Bottom`。
   - 修改說明（2026-06-23）：`i18n.ts` 新增 `SubtitlePosition` 型別、`SUBTITLE_POSITION_STORAGE_KEY`、`getStoredSubtitlePosition()` helper；`PlayPageContext` 介面補 `subtitlePosition`/`setSubtitlePosition`；`PlayPage.tsx` 新增對應 state 並傳入 context；`PlayPageSlidePanel.tsx` 字幕 div 依 `subtitlePosition` 切換 `top-3`/`bottom-3`，設定面板在字幕開啟時顯示底部/頂部按鈕群組並寫入 localStorage；i18n `subtitlePosition/bottom/top` 新增至 zh-TW 及 en。分支 `feat/subtitle-position`，已 merge 回 master。
 - [x] 首頁卡片建立時間改為相對顯示：`PdfCard` 目前顯示 `formatDate(pdf.created_at)` 格式化日期，改為 `formatRelativeTime(pdf.created_at)` 相對時間（如「3 分鐘前」、「2 天前建立」），純前端改動；補 i18n `card.createdAt`。
@@ -563,3 +564,4 @@
 | 2026-06-23 | 首頁卡片建立時間改相對顯示：`formatDate(created_at)` → `formatRelativeTime(created_at)`，原始日期保留為 title tooltip；i18n `card.createdAt/createdAtLabel` | feat/pdfcard-relative-created-at（已 merge） |
 | 2026-06-23 | 播放頁字幕位置切換：`SubtitlePosition` 型別+helper；PlayPageContext/PlayPage/SlidePanel 全串接；設定面板底部/頂部按鈕群組；i18n subtitlePosition/bottom/top | feat/subtitle-position（已 merge） |
 | 2026-06-23 | 播放頁標題行內編輯：標題改為雙擊進入 inline input，Enter/blur commit，Escape cancel；移除常駐 input+Update 按鈕；儲存中顯示灰色文字；i18n editTitlePlaceholder/editTitleHint | feat/inline-title-edit（已 merge） |
+| 2026-06-23 | 測驗題目 AI 草稿：`POST /api/pdfs/:id/pages/:n/generate-quiz-question`（四選項+correct_index+explanation）；`generateAiQuizQuestion()` API 函式；QuizBuilderPage 頁碼選擇器 + 紫羅蘭色按鈕；3 個後端測試通過 | feat/quiz-ai-draft-question（已 merge） |
