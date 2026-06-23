@@ -884,3 +884,20 @@
 | 2026-06-24 | PlayPageHeader 標題字數統計：行內編輯模式加 N/200 字數 span；>150 字轉 amber-400 | feat/title-edit-char-count（已 merge） |
 | 2026-06-24 | PlayPageSidebar 有筆記小點：PageNoteSection h2 加條件 emerald 圓點（page_notes 非空時） | feat/sidebar-note-indicator（已 merge） |
 | 2026-06-24 | QuizBuilderPage 測驗題目數 badge：標題行改 flex，右側加圓角灰色題數 badge（questions.length > 0 才顯示） | feat/quiz-question-count-badge（已 merge） |
+
+## 掃描摘要（2026-06-24 第二十六輪）
+
+- 第二十五輪 5 個項目全數完成（全螢幕換頁按鈕、API Key 格式 icon、標題字數、筆記小點、題目數 badge）。
+- `PlayPageSidebar.tsx` QA/投票 tab 按鈕沒有未讀問題計數，教師切換其他分頁時不知道有新提問。
+- `QuizBuilderPage.tsx` 編輯器缺少「一鍵清除所有題目」按鈕，需逐題手動刪除才能重置。
+- 首頁批次選取模式沒有「全選/取消全選」快捷按鈕，多張簡報時需逐一勾選。
+- `PlayPageSlidePanel.tsx` 控制列沒有目前播放速率文字指示（如 `1.0×`），使用者只能進設定才知道目前速率。
+- `PlayPageSidebar.tsx` 書籤列表以加入順序排列，頁面多時難以定位；按頁碼升序排列更直覺。
+
+## 新增可執行項目（第二十六輪）
+
+- [ ] PlayPageSidebar QA/問答 tab 問題計數 badge：當 `syncFollowerQuestions` 有內容時，在「問答」tab 按鈕旁顯示問題總數徽章（slate 色）；純前端改動，補 i18n `play.sidebar.qaCount`。
+- [ ] QuizBuilderPage 一鍵清除所有題目：在題目編輯區加入「清除所有題目」玫瑰色按鈕（`window.confirm` 確認後清空 `questions` 陣列）；補 i18n `quiz.clearAllQuestions/confirmClear`；純前端改動。
+- [ ] 首頁批次選取全選/取消全選：批次工具列（多選模式）加入「全選（N）」/「取消全選」按鈕，呼叫現有 `selectedIds` Set 邏輯；補 i18n `home.selectAll/deselectAll`；純前端改動。
+- [ ] PlayPageSlidePanel 播放速率文字指示：在播放控制列（進度條旁）加入 `{playbackRate}×` 速率文字，點擊可循環切換 0.75/1.0/1.25/1.5/2.0；沿用已有 `playbackRate`/`setPlaybackRate`；補 i18n `play.controls.speedIndicator`；純前端改動。
+- [ ] PlayPageSidebar 書籤按頁碼排序：書籤 section 顯示前先對 `bookmarks` 陣列做 `sort((a, b) => a - b)` 升序排列，重要頁面 section 同樣處理；純前端改動，無需 i18n。
