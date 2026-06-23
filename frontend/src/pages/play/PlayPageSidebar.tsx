@@ -31,7 +31,12 @@ function OutlineSection() {
   return (
     <section className="rounded-lg border border-slate-800 bg-slate-900/40">
       <div className="border-b border-slate-800 px-4 py-3">
-        <h2 className="text-sm font-semibold text-slate-300">{t('play.sidebar.outlineTitle')}</h2>
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-300">
+          {t('play.sidebar.outlineTitle')}
+          {deckPages.length > 0 && (
+            <span className="rounded-full bg-slate-700/80 px-1.5 py-0.5 text-[10px] font-normal text-slate-300">{deckPages.length}</span>
+          )}
+        </h2>
       </div>
       <div className="max-h-72 overflow-y-auto">
         {deckPages.length === 0 ? (
