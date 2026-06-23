@@ -1104,6 +1104,24 @@ export default function QuizBuilderPage() {
                   {copyQuestionsStatus === 'ok' ? t('quiz.copyQuestionsDone') : copyQuestionsStatus === 'fail' ? t('quiz.copyQuestionsFail') : t('quiz.copyQuestions')}
                 </button>
               )}
+              {questions.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const data = { title, questions };
+                    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${title.trim() || 'quiz'}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="rounded-md border border-slate-600 bg-slate-800/70 px-4 py-2 text-sm text-slate-200 hover:bg-slate-700"
+                >
+                  {t('quiz.exportJson')}
+                </button>
+              )}
               <div className="flex items-center gap-1">
                 <span className="text-xs text-slate-400">{t('quiz.aiGeneratePageLabel')}</span>
                 <input
