@@ -182,6 +182,8 @@ export const zhTW = {
   'home.deleteFailed': '刪除失敗',
   'home.batchDeleteDone': '已刪除 {count} 份',
   'home.batchDeletePartial': '部分刪除失敗（{failed} 份未刪除）',
+  'home.selectAll': '全選',
+  'home.deselectAll': '取消全選',
   'home.batchDeleteBtn': '刪除已選（{count}）',
   'home.batchMoveDone': '已將 {count} 份移至「{category}」',
   'home.batchMoveFailed': '部分移動失敗（{failed} 份未移動）',

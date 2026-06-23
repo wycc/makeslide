@@ -182,6 +182,8 @@ export const en = {
   'home.deleteFailed': 'Delete failed',
   'home.batchDeleteDone': 'Deleted {count} items',
   'home.batchDeletePartial': 'Partial delete — {failed} item(s) failed',
+  'home.selectAll': 'Select all',
+  'home.deselectAll': 'Deselect all',
   'home.batchDeleteBtn': 'Delete selected ({count})',
   'home.batchMoveDone': 'Moved {count} item(s) to "{category}"',
   'home.batchMoveFailed': 'Partial move — {failed} item(s) failed',
