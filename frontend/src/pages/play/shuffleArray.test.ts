@@ -1,36 +1,35 @@
-import { describe, it, expect } from 'vitest';
+import test from 'node:test';
+import assert from 'node:assert/strict';
 import { shuffleArray } from './utils';
 
-describe('shuffleArray', () => {
-  it('returns the same array reference', () => {
-    const arr = [1, 2, 3];
-    expect(shuffleArray(arr)).toBe(arr);
-  });
+test('shuffleArray returns the same array reference', () => {
+  const arr = [1, 2, 3];
+  assert.equal(shuffleArray(arr), arr);
+});
 
-  it('preserves all elements', () => {
-    const original = [1, 2, 3, 4, 5];
-    const shuffled = shuffleArray([...original]);
-    expect(shuffled.sort((a, b) => a - b)).toEqual(original);
-  });
+test('shuffleArray preserves all elements', () => {
+  const original = [1, 2, 3, 4, 5];
+  const shuffled = shuffleArray([...original]);
+  assert.deepEqual(shuffled.sort((a, b) => a - b), original);
+});
 
-  it('handles empty array', () => {
-    expect(shuffleArray([])).toEqual([]);
-  });
+test('shuffleArray handles empty array', () => {
+  assert.deepEqual(shuffleArray([]), []);
+});
 
-  it('handles single element', () => {
-    expect(shuffleArray(['only'])).toEqual(['only']);
-  });
+test('shuffleArray handles single element', () => {
+  assert.deepEqual(shuffleArray(['only']), ['only']);
+});
 
-  it('produces at least one ordering different from the original over many runs', () => {
-    const original = [1, 2, 3, 4, 5, 6, 7, 8];
-    let sawDifferent = false;
-    for (let i = 0; i < 50; i++) {
-      const result = shuffleArray([...original]);
-      if (result.some((v, idx) => v !== original[idx])) {
-        sawDifferent = true;
-        break;
-      }
+test('shuffleArray produces at least one ordering different from the original over many runs', () => {
+  const original = [1, 2, 3, 4, 5, 6, 7, 8];
+  let sawDifferent = false;
+  for (let i = 0; i < 50; i++) {
+    const result = shuffleArray([...original]);
+    if (result.some((v, idx) => v !== original[idx])) {
+      sawDifferent = true;
+      break;
     }
-    expect(sawDifferent).toBe(true);
-  });
+  }
+  assert.ok(sawDifferent);
 });
