@@ -488,6 +488,9 @@ export interface PlayPageContextValue {
   // ─── Important pages ─────────────────────────────────────────────────────────
   importantPages: number[];
   toggleImportantPage: (pageNumber: number) => void;
+  // ─── Poll new badge ───────────────────────────────────────────────────────────
+  newPollBadge: boolean;
+  clearPollBadge: () => void;
 }
 
 // ── Context instance + hook ───────────────────────────────────────────────────

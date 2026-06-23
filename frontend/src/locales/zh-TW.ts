@@ -1134,6 +1134,7 @@ export const zhTW = {
   'play.sidebar.importantEmpty': '尚無重要頁面，在投影片左下角點擊 ★ 標記。',
   'play.sidebar.markImportant': '標記為重要',
   'play.sidebar.unmarkImportant': '取消重要標記',
+  'play.sidebar.pollNewBadge': '新投票',
   'play.sidebar.outlineTitle': '📋 大綱',
   'play.sidebar.outlineEmpty': '尚無頁面',
   'play.sidebar.outlinePageLabel': '第 {page} 頁',

@@ -472,6 +472,23 @@ export default function PlayPage() {
     });
   }, [importantPagesStorageKey]);
 
+  // ─── Poll new badge ────────────────────────────────────────────────────────
+  const [newPollBadge, setNewPollBadge] = useState(false);
+  const clearPollBadge = useCallback(() => setNewPollBadge(false), []);
+  const prevSyncDisplayedPollIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    const prev = prevSyncDisplayedPollIdRef.current;
+    if (
+      syncDisplayedPollId !== null
+      && syncDisplayedPollId !== prev
+      && isSyncFollower
+      && activeTab !== 'qa'
+    ) {
+      setNewPollBadge(true);
+    }
+    prevSyncDisplayedPollIdRef.current = syncDisplayedPollId;
+  }, [syncDisplayedPollId, isSyncFollower, activeTab]);
+
   useEffect(() => {
     hasRestoredProgressRef.current = false;
     resumePositionRef.current = null;
@@ -2357,6 +2374,8 @@ export default function PlayPage() {
     bookmarks, toggleBookmark,
     // important pages
     importantPages, toggleImportantPage,
+    // poll badge
+    newPollBadge, clearPollBadge,
   };
 
 
@@ -2494,8 +2513,8 @@ export default function PlayPage() {
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab('qa')}
-            className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
+            onClick={() => { setActiveTab('qa'); clearPollBadge(); }}
+            className={`relative flex-1 px-4 py-2 text-sm font-medium transition-colors ${
               activeTab === 'qa'
                 ? 'border-b-2 border-cyan-400 bg-slate-800/60 text-cyan-200'
                 : 'border-b-2 border-transparent text-slate-400 hover:text-slate-200'
@@ -2503,6 +2522,9 @@ export default function PlayPage() {
             aria-pressed={activeTab === 'qa'}
           >
             問答
+            {newPollBadge && (
+              <span className="absolute right-3 top-2 h-2 w-2 rounded-full bg-rose-500" aria-label="新投票" />
+            )}
           </button>
         </div>
 
