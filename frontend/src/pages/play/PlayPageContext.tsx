@@ -41,6 +41,7 @@ export interface PlayPageContextValue {
   currentPage: PdfDetailPage | null;
   currentIdx: number;
   setCurrentIdx: Dispatch<SetStateAction<number>>;
+  visitedIdxSet: ReadonlySet<number>;
   totalPages: number;
   loadError: string | null;
   /** 僅 owner 可見的每頁觀看進度聚合統計，依 `page_number` 查找；無資料或非 owner 時為空 Map。 */
