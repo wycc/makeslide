@@ -1211,7 +1211,12 @@ export default function QuizBuilderPage() {
                 <option value="single">{t('quiz.singleChoice')}</option>
                 <option value="multiple">{t('quiz.multipleChoice')}</option>
               </select>
-              <textarea value={q.question} onChange={(e) => updateQuestion(qIdx, { question: e.target.value })} rows={2} placeholder={t('quiz.questionPlaceholder')} className="mt-3 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+              <div className="relative mt-3">
+                <textarea value={q.question} onChange={(e) => updateQuestion(qIdx, { question: e.target.value })} rows={2} placeholder={t('quiz.questionPlaceholder')} className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+                {q.question.length > 0 && (
+                  <span className="pointer-events-none absolute bottom-1.5 right-2 text-[10px] text-slate-500">{q.question.length}</span>
+                )}
+              </div>
               <div className="mt-3 flex flex-wrap items-end gap-4">
                 <div>
                   <label className="block text-xs text-slate-400">{t('quiz.scoreLabel')}</label>
