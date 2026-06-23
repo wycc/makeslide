@@ -726,6 +726,11 @@ export function PlayPageHeader() {
           >
             {githubSyncBusy ? t('play.header.syncing') : `⤴ ${t('play.header.syncToGithub')}`}
           </button>
+          {!currentShareToken && detail && (
+            <span className={`rounded-full border px-2 py-0.5 text-[11px] ${detail.visibility === 'public_editable' ? 'border-emerald-500/40 text-emerald-300' : detail.visibility === 'public' ? 'border-sky-500/40 text-sky-300' : 'border-slate-600 text-slate-400'}`}>
+              {detail.visibility === 'public_editable' ? `✏️ ${t('play.share.statusEditable')}` : detail.visibility === 'public' ? `🌐 ${t('play.share.statusPublic')}` : `🔒 ${t('play.share.statusPrivate')}`}
+            </span>
+          )}
           {!currentShareToken ? (
             <div className="col-span-3 flex flex-wrap items-center gap-2 rounded-md border border-slate-700/80 px-2 py-1 md:col-span-1">
               <select
