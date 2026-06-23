@@ -1396,6 +1396,7 @@ export const zhTW = {
   'quiz.historyQuestionMissing': '找不到題目內容，無法顯示詳細作答。',
   'quiz.historyShowMore': '顯示更多（共 {n} 筆）',
   'quiz.historyShowLess': '收起',
+  'quiz.historyAvgScore': '共 {total} 筆作答，平均得分 {avg} 分',
   'quiz.titleLabel': '測驗名稱',
   'quiz.promptLabel': '給 AI 的指令',
   'quiz.busy': '處理中…',
