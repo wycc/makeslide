@@ -703,6 +703,8 @@ export const en = {
   'play.slidePanel.transcript.heading': '📝 Transcript (Page {page})',
   'play.slidePanel.transcript.viewHistory': 'View this page\'s transcript version history',
   'play.slidePanel.transcript.versionButton': '🕘 Version',
+  'play.slidePanel.transcript.copyScript': '📋 Copy',
+  'play.slidePanel.transcript.copyScriptDone': '✓ Copied',
   'play.slidePanel.transcript.placeholder': 'Enter the transcript for this page...',
   'play.slidePanel.transcript.saveHint': 'Saving will only regenerate audio for this page',
   'play.slidePanel.transcript.regenerating': 'Regenerating…',

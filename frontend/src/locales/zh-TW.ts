@@ -703,6 +703,8 @@ export const zhTW = {
   'play.slidePanel.transcript.heading': '📝 逐字稿（第 {page} 頁）',
   'play.slidePanel.transcript.viewHistory': '查看此頁逐字稿的歷史版本',
   'play.slidePanel.transcript.versionButton': '🕘 版本',
+  'play.slidePanel.transcript.copyScript': '📋 複製',
+  'play.slidePanel.transcript.copyScriptDone': '✓ 已複製',
   'play.slidePanel.transcript.placeholder': '請輸入本頁逐字稿...',
   'play.slidePanel.transcript.saveHint': '儲存後會僅重生此頁語音',
   'play.slidePanel.transcript.regenerating': '重生中…',

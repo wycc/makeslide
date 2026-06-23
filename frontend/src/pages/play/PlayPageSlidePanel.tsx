@@ -236,6 +236,7 @@ export function PlayPageSlidePanel() {
   const [aiRewriteBusy, setAiRewriteBusy] = useState(false);
   const [aiRewriteDraft, setAiRewriteDraft] = useState<string | null>(null);
   const [aiRewriteError, setAiRewriteError] = useState<string | null>(null);
+  const [scriptCopied, setScriptCopied] = useState(false);
 
   const scriptSearchResults = useMemo(() => {
     const q = scriptSearch.trim().toLowerCase();
@@ -1066,15 +1067,31 @@ export function PlayPageSlidePanel() {
                 <h2 className="text-sm font-semibold text-slate-300">
                   {t('play.slidePanel.transcript.heading').replace('{page}', String(currentPage?.page_number ?? '-'))}
                 </h2>
-                <button
-                  type="button"
-                  onClick={() => currentPage && void openVersionHistory('script', currentPage.page_number)}
-                  disabled={!currentPage}
-                  title={t('play.slidePanel.transcript.viewHistory')}
-                  className="rounded-md border border-slate-600 px-2 py-1 text-xs text-slate-400 hover:bg-slate-800 hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {t('play.slidePanel.transcript.versionButton')}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={!editingScript.trim()}
+                    onClick={() => {
+                      void copyTextToClipboard(editingScript).then(() => {
+                        setScriptCopied(true);
+                        setTimeout(() => setScriptCopied(false), 1500);
+                      });
+                    }}
+                    title={t('play.slidePanel.transcript.copyScript')}
+                    className="rounded-md border border-slate-600 px-2 py-1 text-xs text-slate-400 transition hover:bg-slate-800 hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {scriptCopied ? t('play.slidePanel.transcript.copyScriptDone') : t('play.slidePanel.transcript.copyScript')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => currentPage && void openVersionHistory('script', currentPage.page_number)}
+                    disabled={!currentPage}
+                    title={t('play.slidePanel.transcript.viewHistory')}
+                    className="rounded-md border border-slate-600 px-2 py-1 text-xs text-slate-400 hover:bg-slate-800 hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {t('play.slidePanel.transcript.versionButton')}
+                  </button>
+                </div>
               </div>
               {/* AI 改寫入口 */}
               <div className="mb-2 flex flex-wrap items-center gap-2 rounded-md border border-violet-500/30 bg-violet-500/5 px-3 py-2">
