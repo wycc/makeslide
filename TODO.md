@@ -907,6 +907,23 @@
 - [x] PlayPageSidebar 書籤按頁碼排序：書籤 section 顯示前先對 `bookmarks` 陣列做 `sort((a, b) => a - b)` 升序排列；純前端改動，無需 i18n。
   - 修改說明（2026-06-24）：`PlayPageSidebar.tsx` `bookmarks.map` 改為 `[...bookmarks].sort((a, b) => a - b).map`，確保書籤以頁碼升序顯示。分支 `feat/bookmark-sort-by-page`，已 merge 回 master。
 
+## 掃描摘要（2026-06-24 第二十七輪）
+
+- 第二十六輪 5 個項目全數完成（問答計數 badge、清除所有題目、全選按鈕、速率文字指示、書籤排序）。
+- `PlayPageSidebar.tsx` 重要頁面（importantPages）的 section 顯示也是未排序的，與剛修正的書籤排序問題相同。
+- 首頁類別下拉選單（`<select>`）只顯示名稱，不知道各分類有幾份 PDF，難以決定切換哪個分類。
+- `PlayPageSlidePanel.tsx` 逐字稿搜尋框輸入後無 × 清除按鈕，需手動全選刪除，操作不直覺。
+- `QuizBuilderPage.tsx` 題目數超過 20 題時無任何提示，學生作答時間可能過長。
+- `PlayPageSidebar.tsx` 的大綱面板（OutlineSection）標題列沒有顯示頁面總數，無法一眼知道共有幾頁。
+
+## 新增可執行項目（第二十七輪）
+
+- [ ] PlayPageSidebar 重要頁面按頁碼排序：重要頁面 section 的 `importantPages.map` 改為 `[...importantPages].sort((a, b) => a - b).map`，確保顯示時依頁碼升序排列；純前端改動，無需 i18n。
+- [ ] 首頁類別下拉各分類顯示 PDF 數量：在 `allCategories.map` 的 `<option>` 標籤加入各分類的 PDF 計數（`items.filter(...)` 算出），格式為「分類名稱（N）」；純前端改動。
+- [ ] PlayPageSlidePanel 逐字稿搜尋 × 清除按鈕：`scriptSearch` 有值時在搜尋框右側加入 × 按鈕（`setScriptSearch('')` 並 `setScriptSearchIdx(0)`）；純前端改動，無需 i18n。
+- [ ] QuizBuilderPage 題目過多警示：`questions.length > 20` 時在編輯區頂部顯示琥珀色警告橫幅（「題目數量較多，建議精簡至 20 題以內」）；補 i18n `quiz.tooManyQuestionsWarning`；純前端改動。
+- [ ] PlayPageSidebar 大綱面板頁數標題 badge：OutlineSection header 加入 `deckPages.length` 計數徽章（slate 色），方便使用者一眼確認頁數；純前端改動，無需新 i18n。
+
 ## 工作記錄（第二十六輪，2026-06-24）
 
 | 日期 | 工作內容 | 分支 |
