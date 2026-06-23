@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ApiError,
@@ -290,6 +290,18 @@ export default function HomePage() {
     }, [])
       .map((group) => ({ ...group, items: sortItems(group.items) }))
       .sort((a, b) => a.category.localeCompare(b.category, 'zh-Hant', { numeric: true, sensitivity: 'base' }));
+
+  const usageBarMaxValues = useMemo(() => {
+    let maxPlay = 1, maxPages = 1, maxAudio = 1;
+    for (const group of categoryGroups) {
+      for (const pdf of group.items) {
+        if ((pdf.play_count ?? 0) > maxPlay) maxPlay = pdf.play_count ?? 0;
+        if ((pdf.page_count ?? 0) > maxPages) maxPages = pdf.page_count ?? 0;
+        if ((pdf.total_audio_duration_seconds ?? 0) > maxAudio) maxAudio = pdf.total_audio_duration_seconds ?? 0;
+      }
+    }
+    return { maxPlay, maxPages, maxAudio };
+  }, [categoryGroups]);
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -1255,6 +1267,24 @@ export default function HomePage() {
                               <span className="ml-2 truncate text-slate-500" title={pdf.description}>— {pdf.description}</span>
                             )}
                           </p>
+                        </div>
+                        {/* Mini usage bar chart */}
+                        <div className="hidden shrink-0 flex-col gap-0.5 sm:flex" style={{ width: 80 }}>
+                          {[
+                            { value: pdf.play_count ?? 0, max: usageBarMaxValues.maxPlay, color: 'bg-sky-500', label: `▶ ${pdf.play_count ?? 0}` },
+                            { value: pdf.page_count ?? 0, max: usageBarMaxValues.maxPages, color: 'bg-emerald-500', label: `📄 ${pdf.page_count ?? 0}` },
+                            { value: pdf.total_audio_duration_seconds ?? 0, max: usageBarMaxValues.maxAudio, color: 'bg-amber-500', label: `🎵 ${Math.round((pdf.total_audio_duration_seconds ?? 0) / 60)}m` },
+                          ].map(({ value, max, color, label }) => (
+                            <div key={label} className="group/bar relative h-1.5 w-full rounded-full bg-slate-700" title={label}>
+                              <div
+                                className={`h-full rounded-full ${color} opacity-70`}
+                                style={{ width: `${max > 0 ? Math.round((value / max) * 100) : 0}%` }}
+                              />
+                              <span className="pointer-events-none absolute -top-5 left-0 hidden whitespace-nowrap rounded bg-slate-900 px-1 py-0.5 text-[10px] text-slate-200 shadow group-hover/bar:block">
+                                {label}
+                              </span>
+                            </div>
+                          ))}
                         </div>
                         <button
                           type="button"
