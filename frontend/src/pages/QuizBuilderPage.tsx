@@ -833,6 +833,9 @@ export default function QuizBuilderPage() {
           )}
           <div className="mt-3 space-y-2">
             {savedQuizzes.length === 0 ? <p className="text-xs text-slate-500">{t('quiz.noSavedQuizzes')}</p> : null}
+            {savedQuizzes.length > 0 && savedQuizzesSearch.trim() && !savedQuizzes.some((q) => q.title.toLowerCase().includes(savedQuizzesSearch.trim().toLowerCase())) ? (
+              <p className="text-xs text-slate-500">{t('quiz.searchNoResults').replace('{q}', savedQuizzesSearch.trim())}</p>
+            ) : null}
             {savedQuizzes.filter((q) => !savedQuizzesSearch.trim() || q.title.toLowerCase().includes(savedQuizzesSearch.trim().toLowerCase())).map((quiz) => (
               <div key={quiz.id} className={`rounded-md border px-3 py-2 text-sm ${selectedQuizId === quiz.id ? 'border-cyan-500 bg-cyan-500/10 text-cyan-100' : 'border-slate-700 text-slate-300'}`}>
                 <button type="button" onClick={() => { setSelectedQuizId(quiz.id); setTitle(quiz.title); setPrompt(quiz.prompt); setQuestions(quiz.questions); setTimeLimitSeconds(quiz.time_limit_seconds ?? 0); setShuffleQuestions(quiz.shuffle_questions ?? false); }} className="block w-full text-left hover:text-white">
