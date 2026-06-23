@@ -673,6 +673,7 @@ export const en = {
   'play.slidePanel.subtitlePosition.top': 'Top',
   'play.slidePanel.attendeesTitle': 'Attendance',
   'play.slidePanel.attendeesEmpty': 'No students have joined yet',
+  'play.slidePanel.kickAttendee': 'Kick',
   'play.slidePanel.studentAudioControlTitle': 'Student audio control',
   'play.slidePanel.studentAudioUnlocked': 'Unlocked — students can unmute playback themselves.',
   'play.slidePanel.studentAudioLocked': 'Locked — all followers are forced to mute.',

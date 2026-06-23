@@ -673,6 +673,7 @@ export const zhTW = {
   'play.slidePanel.subtitlePosition.top': '上方',
   'play.slidePanel.attendeesTitle': '出席名單',
   'play.slidePanel.attendeesEmpty': '尚無學生加入',
+  'play.slidePanel.kickAttendee': '踢出',
   'play.slidePanel.studentAudioControlTitle': '學生端音訊控制',
   'play.slidePanel.studentAudioUnlocked': '已解鎖，學生可自行取消靜音播放。',
   'play.slidePanel.studentAudioLocked': '已鎖定，所有 follower 會被強制靜音。',

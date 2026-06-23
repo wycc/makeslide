@@ -5,7 +5,7 @@ import { AnimationEditorTab } from './AnimationEditorTab';
 import { FigureAssetsTab } from './FigureAssetsTab';
 import { formatTime, formatDurationMs, formatTokenCount, formatCostUsd } from './formatters';
 import { PageTimingChips } from './PageTimingChips';
-import { ApiError, fetchPageGenerationPrompts, fetchPdfRunHistory, fetchPdfSlowArtifacts, figureImageUrl, fetchSyncAttendees } from '../../lib/api';
+import { ApiError, fetchPageGenerationPrompts, fetchPdfRunHistory, fetchPdfSlowArtifacts, figureImageUrl, fetchSyncAttendees, kickSyncAttendee } from '../../lib/api';
 import { copyTextToClipboard } from '../../lib/clipboard';
 import { SHOW_SUBTITLE_STORAGE_KEY, SUBTITLE_SIZE_STORAGE_KEY, SUBTITLE_POSITION_STORAGE_KEY, AUTO_ADVANCE_STORAGE_KEY, INTERACTIVE_MODE_STORAGE_KEY, useI18n, type TranslationKey, type SubtitleSize, type SubtitlePosition } from '../../i18n';
 import { debugLog, debugWarn } from '../../lib/debugLog';
@@ -224,6 +224,7 @@ export function PlayPageSlidePanel() {
   type SyncAttendee = import('../../lib/api').SyncAttendee;
   const [attendees, setAttendees] = useState<SyncAttendee[]>([]);
   const [attendeesOpen, setAttendeesOpen] = useState(false);
+  const [kickingClientId, setKickingClientId] = useState<string | null>(null);
 
   const [scriptSearch, setScriptSearch] = useState('');
   const [scriptSearchIdx, setScriptSearchIdx] = useState(0);
@@ -247,6 +248,19 @@ export function PlayPageSlidePanel() {
     fetchSyncAttendees(pdfId).then((list) => { if (!cancelled) setAttendees(list); }).catch(() => {});
     return () => { cancelled = true; };
   }, [syncEnabled, syncRole, pdfId, attendeesOpen]);
+
+  const handleKickAttendee = async (clientId: string) => {
+    if (!pdfId) return;
+    setKickingClientId(clientId);
+    try {
+      await kickSyncAttendee(pdfId, clientId);
+      setAttendees((prev) => prev.filter((a) => a.client_id !== clientId));
+    } catch {
+      // silently fail — list will refresh on next open
+    } finally {
+      setKickingClientId(null);
+    }
+  };
 
   // 切到「系統資料」分頁時載入此 PDF 的執行歷程（pipeline_runs/pipeline_stage_summaries）。
   useEffect(() => {
@@ -843,7 +857,17 @@ export function PlayPageSlidePanel() {
                     ) : attendees.map((a) => (
                       <div key={`${a.client_id}-${a.joined_at}`} className="flex items-center justify-between text-xs text-indigo-100">
                         <span className="truncate">{a.user_code ?? a.client_id.slice(0, 12)}</span>
-                        <span className="ml-2 shrink-0 text-indigo-300/60">{new Date(a.joined_at).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}</span>
+                        <div className="ml-2 flex shrink-0 items-center gap-1">
+                          <span className="text-indigo-300/60">{new Date(a.joined_at).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}</span>
+                          <button
+                            type="button"
+                            onClick={() => void handleKickAttendee(a.client_id)}
+                            disabled={kickingClientId === a.client_id}
+                            className="rounded px-1 py-0.5 text-[10px] text-rose-300/70 hover:bg-rose-500/20 hover:text-rose-200 disabled:opacity-40"
+                          >
+                            {kickingClientId === a.client_id ? '…' : t('play.slidePanel.kickAttendee')}
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>

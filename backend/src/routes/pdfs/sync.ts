@@ -857,6 +857,30 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
+  // DELETE /api/pdfs/:id/sync/attendees/:clientId
+  app.delete('/api/pdfs/:id/sync/attendees/:clientId', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const { id } = parsed.data;
+    const { clientId } = request.params as { clientId: string };
+    if (!clientId || clientId.length < 4) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid clientId'));
+    }
+    const pdfRow = db
+      .prepare(`SELECT id, owner_sub, visibility FROM pdfs WHERE id = ?`)
+      .get(id) as Pick<PdfRow, 'id' | 'owner_sub' | 'visibility'> | undefined;
+    if (!pdfRow) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限踢出學生'));
+    }
+    db.prepare(`DELETE FROM sync_attendees WHERE pdf_id = ? AND client_id = ?`).run(id, clientId);
+    return reply.send({ ok: true, pdf_id: id, client_id: clientId });
+  });
+
   // GET /api/pdfs/:id/sync/attendees
   app.get('/api/pdfs/:id/sync/attendees', async (request, reply) => {
     const parsed = IdParamSchema.safeParse(request.params);
