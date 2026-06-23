@@ -578,6 +578,7 @@
 | 2026-06-23 | 播放頁頁面重要性旗標：SlidePanel 左下角黃色 ★ 按鈕，localStorage 持久化；Sidebar 新增重要頁面 section（chip 跳頁+×移除）；i18n importantTitle/Empty/mark/unmark | feat/important-pages-flag（已 merge） |
 | 2026-06-23 | 同步投票新投票紅點提示：PlayPage 新增 newPollBadge state，follower 模式收到新 activePollId 時在「問答」tab 顯示玫瑰色紅點，點擊清除；i18n pollNewBadge | feat/poll-new-badge（已 merge） |
 | 2026-06-23 | 逐字稿 AI 改寫入口：SlidePanel script tab 搜尋框上方插入紫色 AI 改寫區塊，style select（精簡/詳細/對話式）+ 按鈕呼叫 rewritePageScript()，結果顯示 diff 卡片（接受/取消）；i18n rewriteScript* 11 個鍵值 | feat/script-ai-rewrite（已 merge） |
+| 2026-06-23 | 首頁 list 模式使用量橫條圖：每列右側 80px 三列橫條圖（sky/emerald/amber = play/pages/audio），以全域 max 做相對比例，hover tooltip 顯示數值；sm 以上顯示 | feat/home-usage-bar-chart（已 merge） |
 
 ## 掃描摘要（2026-06-23 第十六輪）
 
@@ -599,4 +600,5 @@
   - 修改說明（2026-06-23）：`PlayPage.tsx` 新增 `newPollBadge` state 與 `clearPollBadge` callback，以 `useEffect` 監聽 `syncDisplayedPollId` 變化，在 `isSyncFollower && activeTab !== 'qa'` 條件下設置紅點；context interface 補 `newPollBadge/clearPollBadge`；tab 按鈕 onClick 呼叫 `clearPollBadge()`，按鈕內渲染 `newPollBadge && <span className="...rose-500" />`；i18n `play.sidebar.pollNewBadge` 新增至 zh-TW 及 en。分支 `feat/poll-new-badge`，已 merge 回 master。
 - [x] 播放頁逐字稿 AI 改寫入口：在 `PlayPageSidebar` 逐字稿分頁頂部加入「AI 改寫」按鈕與風格選單（精簡/詳細/對話式），呼叫既有 `rewritePageScript()` API（`POST /api/pdfs/:id/pages/:n/rewrite-script`）；顯示改寫前後 diff（舊→新），提供「接受」與「取消」按鈕；補 i18n `play.sidebar.rewriteScript/rewriteStyle/rewriteAccept/rewriteCancel`。
   - 修改說明（2026-06-23）：`PlayPageSlidePanel.tsx` 新增 `aiRewriteStyle`（compact/detailed/conversational）、`aiRewriteBusy`、`aiRewriteDraft`、`aiRewriteError` state；`handleAiRewriteScript` 以風格對應固定 prompt 呼叫 `rewritePageScript()`；在逐字稿搜尋框上方插入紫色邊框 AI 改寫區塊（style select + 按鈕）；收到結果後顯示 diff 卡片（新稿文字 + 接受（emerald）/取消 按鈕）；Accept 將 editingScript 替換為 draft；i18n `rewriteScript/Busy/StyleLabel/StyleCompact/StyleDetailed/StyleConversational/Accept/Cancel/DiffOld/DiffNew` 新增至 zh-TW 及 en。分支 `feat/script-ai-rewrite`，已 merge 回 master。
-- [ ] 首頁 PDF 使用量橫條圖：在首頁 list 模式右側（或 grid 模式卡片底部）加入彩色 mini 橫條圖（3 個指標：play_count、total_pages、audio_duration），以各 PDF 的最大值做相對比例；hover 顯示數值 tooltip；純前端改動，利用已有欄位。
+- [x] 首頁 PDF 使用量橫條圖：在首頁 list 模式右側（或 grid 模式卡片底部）加入彩色 mini 橫條圖（3 個指標：play_count、total_pages、audio_duration），以各 PDF 的最大值做相對比例；hover 顯示數值 tooltip；純前端改動，利用已有欄位。
+  - 修改說明（2026-06-23）：`HomePage.tsx` 新增 `usageBarMaxValues` useMemo（遍歷 categoryGroups 取三指標最大值）；list 模式每列右側加入寬 80px 三列橫條圖（sky=play_count、emerald=page_count、amber=audio_duration），以 max 做相對比例；hover 顯示 tooltip 文字（`group/bar`）；sm 以上才顯示（`hidden sm:flex`）。分支 `feat/home-usage-bar-chart`，已 merge 回 master。
