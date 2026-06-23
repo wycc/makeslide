@@ -225,6 +225,7 @@ export const en = {
   'home.filter.favoritesOnly': 'Favorites',
   'home.filterByTitlePlaceholder': 'Enter keywords to search titles',
   'home.clearTitleFilter': 'Clear',
+  'home.clearAllFilters': '× Clear filters',
   'home.search.recent': 'Recent searches',
   'home.search.clearRecent': 'Clear history',
   'home.search.placeholder': 'Search across all slides (title, transcript, page text)…',

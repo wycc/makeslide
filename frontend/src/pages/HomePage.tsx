@@ -427,6 +427,14 @@ export default function HomePage() {
     window.localStorage.setItem(SORT_MODE_STORAGE_KEY, nextSortMode);
   }, []);
 
+  const clearAllFilters = useCallback(() => {
+    updateCategoryFilter('__all__');
+    updateTitleFilter('');
+    setTagFilter(new Set());
+    setExplicitSortMode(null);
+    window.localStorage.removeItem(SORT_MODE_STORAGE_KEY);
+  }, [updateCategoryFilter, updateTitleFilter]);
+
   const persistCustomCategories = useCallback((next: string[]) => {
     setCustomCategories(next);
     window.localStorage.setItem(CUSTOM_CATEGORIES_STORAGE_KEY, JSON.stringify(next));
@@ -1137,6 +1145,16 @@ export default function HomePage() {
                 </select>
               </label>
               <div className="flex items-end gap-1">
+                {(categoryFilter !== '__all__' || tagFilter.size > 0 || titleFilter.length > 0 || explicitSortMode !== null) && (
+                  <button
+                    type="button"
+                    onClick={clearAllFilters}
+                    className="rounded px-2 py-1.5 text-xs text-rose-400 transition hover:bg-slate-800 hover:text-rose-300"
+                    title={t('home.clearAllFilters')}
+                  >
+                    {t('home.clearAllFilters')}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => updateViewMode('grid')}

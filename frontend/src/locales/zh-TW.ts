@@ -225,6 +225,7 @@ export const zhTW = {
   'home.filter.favoritesOnly': '我的最愛',
   'home.filterByTitlePlaceholder': '輸入關鍵字搜尋標題',
   'home.clearTitleFilter': '清除',
+  'home.clearAllFilters': '× 清除篩選',
   'home.search.recent': '最近搜尋',
   'home.search.clearRecent': '清除記錄',
   'home.search.placeholder': '跨所有簡報搜尋（標題、逐字稿、頁面文字）…',
