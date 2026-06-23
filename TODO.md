@@ -992,8 +992,23 @@
 
 ## 新增可執行項目（第二十九輪）
 
-- [ ] RemoteControllerPage 當前頁縮圖預覽：在頁碼大數字下方加入 `pages[currentPage - 1]?.thumbnail_url ?? pages[currentPage - 1]?.image_url` 縮圖（`h-24 object-contain rounded-lg`），方便演講者確認目前頁面內容；純前端改動。
-- [ ] PlayPageSidebar 筆記字數計數器：PageNoteSection textarea 下方加入 `{noteText.length} / 5000` 字數顯示（`noteText.length > 4500` 時改 amber 色警示）；純前端改動，無需 i18n。
-- [ ] PlayPageSidebar 書籤縮圖預覽：書籤 section 每個書籤 chip 左側加入對應頁縮圖（`deckPages.find` 找出頁物件，取 `thumbnail_url ?? image_url`，`h-6 w-10 object-cover rounded`）；純前端改動。
-- [ ] 首頁 list 模式顯示 updated_at：list 模式每列在描述欄位後加入 `updated_at` 相對時間（`formatRelativeTime(pdf.updated_at)`，灰色），讓使用者快速辨識最近更新的教材；純前端改動，無需 i18n。
-- [ ] QuizBuilderPage 題幹字元計數：`q.question` textarea 右下方加入 `{q.question.length} 字` 計數（text-[10px] slate 色），讓出題者隨時掌握題目長度；純前端改動，無需 i18n。
+- [x] RemoteControllerPage 當前頁縮圖預覽：在頁碼大數字下方加入 `pages[currentPage - 1]?.thumbnail_url ?? pages[currentPage - 1]?.image_url` 縮圖（`h-28 object-contain rounded-lg`），方便演講者確認目前頁面內容；純前端改動。
+  - 修改說明（2026-06-24）：`RemoteControllerPage.tsx` 頁碼區改為 flex-col，縮圖渲染於大數字上方（`imgSrc` 非空才渲染）。分支 `feat/remote-page-thumbnail`，已 merge 回 master。
+- [x] PlayPageSidebar 筆記字數計數器：PageNoteSection textarea 下方字數計數 `noteText.length > 4500` 時改 amber 色警示；原本已有字數顯示，補 amber 警示色即完成。
+  - 修改說明（2026-06-24）：`PlayPageSidebar.tsx` 字數 span 改為三元式：`noteText.length > 4500 ? 'text-amber-400' : 'text-slate-500'`。分支 `feat/note-char-count`，已 merge 回 master。
+- [x] PlayPageSidebar 書籤縮圖預覽：書籤 section 每個書籤 chip 左側加入對應頁縮圖（`deckPages.find` 找出頁物件，取 `thumbnail_url ?? image_url`，`h-6 w-10 object-cover rounded`）；純前端改動。
+  - 修改說明（2026-06-24）：`PlayPageSidebar.tsx` 書籤 map 改為 block body，計算 `thumbSrc` 後在 button 內渲染縮圖 img。分支 `feat/bookmark-thumbnail`，已 merge 回 master。
+- [x] 首頁 list 模式顯示 updated_at：list 模式每列在描述欄位後加入 `updated_at` 相對時間（`formatRelativeTime(pdf.updated_at)`，灰色），讓使用者快速辨識最近更新的教材；純前端改動，無需 i18n。
+  - 修改說明（2026-06-24）：`HomePage.tsx` 描述 span 後加入 `pdf.updated_at` 條件渲染，呼叫 `formatRelativeTime` 顯示相對時間（text-slate-600）。分支 `feat/list-mode-updated-at`，已 merge 回 master。
+- [x] QuizBuilderPage 題幹字元計數：`q.question` textarea 改以 relative div 包覆，右下角加入 `{q.question.length}` 計數（text-[10px] slate 色，有內容才顯示）；純前端改動，無需 i18n。
+  - 修改說明（2026-06-24）：`QuizBuilderPage.tsx` textarea 加 relative div 包覆，`q.question.length > 0` 時顯示 absolute bottom-right 計數。分支 `feat/quiz-question-char-count`，已 merge 回 master。
+
+## 工作記錄（第二十九輪，2026-06-24）
+
+| 日期 | 工作內容 | 分支 |
+|------|----------|------|
+| 2026-06-24 | RemoteControllerPage 縮圖預覽：頁碼上方顯示當前頁 thumbnail，flex-col 排列 | feat/remote-page-thumbnail（已 merge） |
+| 2026-06-24 | PlayPageSidebar 筆記 4500+ 字 amber 警示：noteText.length > 4500 時改 amber 色 | feat/note-char-count（已 merge） |
+| 2026-06-24 | 書籤縮圖預覽：deckPages.find + thumbnail_url，h-6 w-10 img 插入 chip 左側 | feat/bookmark-thumbnail（已 merge） |
+| 2026-06-24 | 首頁 list 模式顯示 updated_at：formatRelativeTime(pdf.updated_at) 灰色顯示 | feat/list-mode-updated-at（已 merge） |
+| 2026-06-24 | QuizBuilderPage 題幹字元計數：relative 包覆 textarea，q.question.length 右下角顯示 | feat/quiz-question-char-count（已 merge） |
