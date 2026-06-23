@@ -590,6 +590,16 @@
 | 2026-06-23 | 測驗歷史相對時間：formatRelativeTime 替換 toLocaleString()，ⓘ title tooltip 保留完整時間 | feat/quiz-history-relative-time（已 merge） |
 | 2026-06-23 | 全螢幕跳頁快捷鍵：gotoPage state 加入 PlayPageContext；PlayPageFullscreen 內渲染 absolute z-50 dialog（native fullscreen 可見）；G 鍵觸發時暫停播放 | feat/fullscreen-goto-key（已 merge） |
 
+## 工作記錄（第十八輪）
+
+| 日期 | 工作摘要 | 分支 |
+| ---- | -------- | ---- |
+| 2026-06-24 | 首頁 list 模式收藏按鈕：刪除按鈕前插入 ★/☆ 收藏切換按鈕，呼叫 handleToggleFavorite；利用已有 favorites Set state 與 localStorage | feat/list-favorite-button（已 merge） |
+| 2026-06-24 | 播放頁逐字稿 tab 一鍵複製：標題列加「📋 複製」按鈕，呼叫 copyTextToClipboard，scriptCopied state 1.5s 後重置；i18n 2 個 key | feat/script-tab-copy-button（已 merge） |
+| 2026-06-24 | 播放頁書籤 B 鍵循環跳轉：鍵盤 handler 加 b 鍵，排序 bookmarks 後取下一個大於 currentPageNumber 的頁碼（循環回第一個）；PlayPageHeader 補快捷鍵說明；i18n 1 個 key | feat/bookmark-b-key（已 merge） |
+| 2026-06-24 | 首頁統計摘要列：homeStats useMemo（totalPdfs/totalPages/totalPlays/totalAudioMin from items）；visibleSummary 下方插入統計摘要 div；i18n 4 個 key | feat/home-stats-summary（已 merge） |
+| 2026-06-24 | 逐字稿搜尋關鍵字全高亮：改用 split(RegExp gi) 切分句子並對所有匹配 part 套 mark 元素；RegExp 特殊字元逃脫防注入 | feat/script-search-highlight-all（已 merge） |
+
 ## 掃描摘要（2026-06-23 第十六輪）
 
 - 第十五輪 5 個項目全數完成（AI 草稿投票題、字幕位置切換、相對建立時間、標題行內編輯、踢出學生）。
@@ -634,3 +644,25 @@
   - 修改說明（2026-06-23）：`QuizBuilderPage.tsx` 新增 `formatRelativeTime`；`session.submitted_at` 改用相對時間渲染，並在旁邊加入 `ⓘ` 圖示 title tooltip 顯示完整時間。分支 `feat/quiz-history-relative-time`，已 merge 回 master。
 - [x] 播放頁全螢幕模式跳頁快捷鍵：在全螢幕模式（`PlayPageFullscreen.tsx`）的鍵盤事件 handler 或現有 `PlayPage.tsx` onKey handler 中加入 `G` 鍵支援，與普通模式共用同一個跳頁 dialog state；確保全螢幕模式中彈出 dialog 時投影片不繼續自動播放（暫停）；純前端改動。
   - 修改說明（2026-06-23）：`PlayPageContext.tsx` 介面新增 `gotoPageOpen/setGotoPageOpen/gotoPageInput/setGotoPageInput/gotoPageInputRef/deckPages/setCurrentIdx`；`PlayPage.tsx` context value 補對應欄位，G 鍵 handler 加入 `if (isPlaying) playPause()` 暫停；`PlayPageFullscreen.tsx` destructure 新增欄位並在 return 結尾渲染 `absolute inset-0 z-50` dialog（確保出現在 native fullscreen 中）。分支 `feat/fullscreen-goto-key`，已 merge 回 master。
+
+## 掃描摘要（2026-06-24 第十八輪）
+
+- 第十七輪 5 個項目全數完成（G 鍵跳頁、list 最後播放、list 標籤、測驗相對時間、全螢幕跳頁）。
+- 首頁 list 模式缺少收藏（★）按鈕，grid 模式的 `PdfCard` 有 `handleToggleFavorite`，list 模式未實作。
+- `PlayPageSlidePanel.tsx` 逐字稿編輯 tab 本身沒有「一鍵複製」按鈕，`PlayPageHeader.tsx` 有 copy script 功能但位置不直覺。
+- 播放頁書籤（Bookmarks）功能已有 DB 儲存與 sidebar 顯示，但缺少 `B` 鍵快速循環跳轉至下一個書籤。
+- 首頁沒有統計摘要列（總簡報數、總播放次數等），使用者無法一眼看到整體狀況。
+- `QuizBuilderPage` 出題時無計時限制設定，所有測驗使用者可無限時作答；部分使用情境需要限時。
+
+## 新增可執行項目（第十八輪）
+
+- [x] 首頁 list 模式收藏按鈕：在 list 模式每列的右側加入 ★ 收藏切換按鈕（同 `PdfCard` 的 `handleToggleFavorite` 邏輯），點擊時呼叫 `toggleFavorite` API 並更新本地 state；純前端改動。
+  - 修改說明（2026-06-24）：`HomePage.tsx` list 模式刪除按鈕前插入 ★/☆ 收藏按鈕，呼叫已有的 `handleToggleFavorite`；已有 `favorites` Set state 與 localStorage 同步；i18n key `card.favorite/unfavorite` 已存在。分支 `feat/list-favorite-button`，已 merge 回 master。
+- [x] 播放頁逐字稿 tab 一鍵複製：在 `PlayPageSlidePanel.tsx` 的逐字稿編輯區塊（script edit tab）頂部加入「複製」按鈕，複製 `editingScript` 到剪貼簿，短暫顯示「已複製！」提示；補 i18n；純前端改動。
+  - 修改說明（2026-06-24）：`PlayPageSlidePanel.tsx` 新增 `scriptCopied` state；在逐字稿標題列右側加入「📋 複製」按鈕，呼叫已有的 `copyTextToClipboard`，1.5s 後重置 `scriptCopied`；i18n `play.slidePanel.transcript.copyScript/copyScriptDone` 新增至 zh-TW 及 en。分支 `feat/script-tab-copy-button`，已 merge 回 master。
+- [x] 播放頁書籤 B 鍵循環跳轉：在 `PlayPage.tsx` 的鍵盤 handler 加入 `B` 鍵，按下時從 `bookmarks` 陣列中找出下一個大於 `currentIdx` 的書籤頁，若無則循環回第一個（`setCurrentIdx`）；在快捷鍵說明中補 `B` 的說明；補 i18n；純前端改動。
+  - 修改說明（2026-06-24）：`PlayPage.tsx` 鍵盤 handler 加入 `b` 鍵分支：排序 bookmarks 後找第一個 `> currentPageNumber` 的頁碼，否則取 `sorted[0]`（循環），`next !== undefined` 防衛後呼叫 `setCurrentIdx(next - 1)`；`PlayPageHeader.tsx` 快捷鍵列表新增 B 項；i18n `play.shortcuts.nextBookmark` 新增至 zh-TW 及 en。分支 `feat/bookmark-b-key`，已 merge 回 master。
+- [x] 首頁統計摘要列：在 `HomePage.tsx` 頁面頂部（搜尋列之下、簡報格之上）新增一列統計資訊（總簡報數、總頁數、總播放次數），從已有的 `pdfs` state 即可計算，無需新 API；純前端改動。
+  - 修改說明（2026-06-24）：`HomePage.tsx` 新增 `homeStats` useMemo（totalPdfs/totalPages/totalPlays/totalAudioMin from `items`）；在 `visibleSummary` 段落後插入統計摘要 div，以 `·` 分隔各項，語音分鐘數為 0 時不顯示；i18n `home.stats.*` 4 個 key 新增至 zh-TW 及 en。分支 `feat/home-stats-summary`，已 merge 回 master。
+- [x] 播放頁逐字稿搜尋關鍵字高亮：`PlayPageSlidePanel.tsx` 已有搜尋框，但目前只是 filter 顯示列，搜尋時讓匹配到的關鍵字在文字中以黃色高亮顯示（`<mark>` 或 span），提升可讀性；純前端改動。
+  - 修改說明（2026-06-24）：原本搜尋結果只高亮每句的第一個匹配（`indexOf`）；改用 `String.prototype.split(RegExp)` 加 `gi` 旗標將句子切分成 parts 陣列，並用 `<mark>` 渲染所有匹配的 part（case-insensitive 比對）；加入 `replace(/[.*+?^${}()|[\]\\]/g, '\\$&')` 逃脫 RegExp 特殊字元。分支 `feat/script-search-highlight-all`，已 merge 回 master。
