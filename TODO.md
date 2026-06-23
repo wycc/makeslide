@@ -580,6 +580,16 @@
 | 2026-06-23 | 逐字稿 AI 改寫入口：SlidePanel script tab 搜尋框上方插入紫色 AI 改寫區塊，style select（精簡/詳細/對話式）+ 按鈕呼叫 rewritePageScript()，結果顯示 diff 卡片（接受/取消）；i18n rewriteScript* 11 個鍵值 | feat/script-ai-rewrite（已 merge） |
 | 2026-06-23 | 首頁 list 模式使用量橫條圖：每列右側 80px 三列橫條圖（sky/emerald/amber = play/pages/audio），以全域 max 做相對比例，hover tooltip 顯示數值；sm 以上顯示 | feat/home-usage-bar-chart（已 merge） |
 
+## 工作記錄（第十七輪）
+
+| 日期 | 工作摘要 | 分支 |
+| ---- | -------- | ---- |
+| 2026-06-23 | 播放頁 G 鍵跳頁 dialog：gotoPageOpen/Input/Ref state；Enter 跳轉，Escape 關閉；PlayPageHeader 補快捷鍵說明；i18n 4 鍵值 | feat/goto-page-dialog（已 merge） |
+| 2026-06-23 | 首頁 list 最後播放時間：formatRelativeTime helper；last_played_at 非空時顯示「最後播放 N 分鐘前」；i18n home.listLastPlayed | feat/list-last-played-at（已 merge） |
+| 2026-06-23 | 首頁 list 標籤 chips：pdf.tags 逗號分隔渲染 indigo chip 列，與 PdfCard grid 模式一致 | feat/list-tag-chips（已 merge） |
+| 2026-06-23 | 測驗歷史相對時間：formatRelativeTime 替換 toLocaleString()，ⓘ title tooltip 保留完整時間 | feat/quiz-history-relative-time（已 merge） |
+| 2026-06-23 | 全螢幕跳頁快捷鍵：gotoPage state 加入 PlayPageContext；PlayPageFullscreen 內渲染 absolute z-50 dialog（native fullscreen 可見）；G 鍵觸發時暫停播放 | feat/fullscreen-goto-key（已 merge） |
+
 ## 掃描摘要（2026-06-23 第十六輪）
 
 - 第十五輪 5 個項目全數完成（AI 草稿投票題、字幕位置切換、相對建立時間、標題行內編輯、踢出學生）。
@@ -614,8 +624,13 @@
 
 ## 新增可執行項目（第十七輪）
 
-- [ ] 播放頁跳頁對話框：在 `PlayPage.tsx` 的鍵盤事件 handler 加入 `G` 鍵，彈出一個輸入頁碼的小型 dialog（`<input type="number">`），Enter 確認後跳轉至指定頁（`setCurrentIdx(n-1)`），Escape 取消；同步在 `PlayPageHeader.tsx` 的快捷鍵說明列表補上 `G` 的說明；補 i18n `play.gotoPageDialog/gotoPagePlaceholder/gotoPageConfirm/gotoPageInvalid`；純前端改動。
-- [ ] 首頁 list 模式最後播放時間：在 list 模式每列的「頁數 · 類別」文字後加入 `· 最後播放：{相對時間}` 顯示（僅當 `last_played_at` 非空時顯示）；`formatRelativeTime` 已在 `PdfCard.tsx` 定義，可提取為共用 helper 或內聯使用；補 i18n `home.listLastPlayed`；純前端改動。
-- [ ] 首頁 list 模式顯示標籤 chips：在 list 模式每列的下方（`p` 元素行之後）加入 `pdf.tags` 的 chip 列（逗號分隔，indigo 樣式，同 PdfCard），當 `pdf.tags` 為空時不顯示；純前端改動，利用已有 `pdf.tags` 欄位。
-- [ ] 測驗歷史答題相對時間：`QuizBuilderPage.tsx` 中歷史答題 session 列表（`historySessions`）的時間顯示由 `new Date(session.submitted_at).toLocaleString()` 改為相對時間格式（`formatRelativeTime`），保留原始時間作 `title` tooltip；純前端改動，提取或複製 PdfCard 的 `formatRelativeTime` 函式。
-- [ ] 播放頁全螢幕模式跳頁快捷鍵：在全螢幕模式（`PlayPageFullscreen.tsx`）的鍵盤事件 handler 或現有 `PlayPage.tsx` onKey handler 中加入 `G` 鍵支援，與普通模式共用同一個跳頁 dialog state；確保全螢幕模式中彈出 dialog 時投影片不繼續自動播放（暫停）；純前端改動。
+- [x] 播放頁跳頁對話框：在 `PlayPage.tsx` 的鍵盤事件 handler 加入 `G` 鍵，彈出一個輸入頁碼的小型 dialog（`<input type="number">`），Enter 確認後跳轉至指定頁（`setCurrentIdx(n-1)`），Escape 取消；同步在 `PlayPageHeader.tsx` 的快捷鍵說明列表補上 `G` 的說明；補 i18n `play.gotoPageDialog/gotoPagePlaceholder/gotoPageConfirm/gotoPageInvalid`；純前端改動。
+  - 修改說明（2026-06-23）：`PlayPage.tsx` 新增 `gotoPageOpen/gotoPageInput/gotoPageInputRef` state；G 鍵 handler（`ev.key.toLowerCase() === 'g'`）設置 state 並 focus input；Escape 關閉；dialog 為 `fixed inset-0 z-50` overlay；`PlayPageHeader.tsx` 快捷鍵列表補 G 條目；i18n 4 個鍵值。分支 `feat/goto-page-dialog`，已 merge 回 master。
+- [x] 首頁 list 模式最後播放時間：在 list 模式每列的「頁數 · 類別」文字後加入 `· 最後播放：{相對時間}` 顯示（僅當 `last_played_at` 非空時顯示）；`formatRelativeTime` 已在 `PdfCard.tsx` 定義，可提取為共用 helper 或內聯使用；補 i18n `home.listLastPlayed`；純前端改動。
+  - 修改說明（2026-06-23）：`HomePage.tsx` 新增本地 `formatRelativeTime` 函式（與 PdfCard 相同邏輯）；list 模式文字行後插入「最後播放 {time}」span（僅 `last_played_at` 非空時顯示）；i18n `home.listLastPlayed` 新增至 zh-TW 及 en。分支 `feat/list-last-played-at`，已 merge 回 master。
+- [x] 首頁 list 模式顯示標籤 chips：在 list 模式每列的下方（`p` 元素行之後）加入 `pdf.tags` 的 chip 列（逗號分隔，indigo 樣式，同 PdfCard），當 `pdf.tags` 為空時不顯示；純前端改動，利用已有 `pdf.tags` 欄位。
+  - 修改說明（2026-06-23）：`HomePage.tsx` list 模式 `div.min-w-0` 內 `p` 下方新增條件式 chip 列；`pdf.tags` 以逗號分隔 + trim + filter 後渲染 indigo 圓角 span。分支 `feat/list-tag-chips`，已 merge 回 master。
+- [x] 測驗歷史答題相對時間：`QuizBuilderPage.tsx` 中歷史答題 session 列表（`historySessions`）的時間顯示由 `new Date(session.submitted_at).toLocaleString()` 改為相對時間格式（`formatRelativeTime`），保留原始時間作 `title` tooltip；純前端改動，提取或複製 PdfCard 的 `formatRelativeTime` 函式。
+  - 修改說明（2026-06-23）：`QuizBuilderPage.tsx` 新增 `formatRelativeTime`；`session.submitted_at` 改用相對時間渲染，並在旁邊加入 `ⓘ` 圖示 title tooltip 顯示完整時間。分支 `feat/quiz-history-relative-time`，已 merge 回 master。
+- [x] 播放頁全螢幕模式跳頁快捷鍵：在全螢幕模式（`PlayPageFullscreen.tsx`）的鍵盤事件 handler 或現有 `PlayPage.tsx` onKey handler 中加入 `G` 鍵支援，與普通模式共用同一個跳頁 dialog state；確保全螢幕模式中彈出 dialog 時投影片不繼續自動播放（暫停）；純前端改動。
+  - 修改說明（2026-06-23）：`PlayPageContext.tsx` 介面新增 `gotoPageOpen/setGotoPageOpen/gotoPageInput/setGotoPageInput/gotoPageInputRef/deckPages/setCurrentIdx`；`PlayPage.tsx` context value 補對應欄位，G 鍵 handler 加入 `if (isPlaying) playPause()` 暫停；`PlayPageFullscreen.tsx` destructure 新增欄位並在 return 結尾渲染 `absolute inset-0 z-50` dialog（確保出現在 native fullscreen 中）。分支 `feat/fullscreen-goto-key`，已 merge 回 master。
