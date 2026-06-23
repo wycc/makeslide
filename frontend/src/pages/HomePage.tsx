@@ -1073,9 +1073,10 @@ export default function HomePage() {
                   <option value="__all__">{t('home.allCategories')}</option>
                   <option value="__recent__">{RECENT_CATEGORY}</option>
                   <option value={ADD_CATEGORY_OPTION_VALUE}>{t('home.addCategory')}…</option>
-                  {allCategories.map((category) => (
-                    <option key={category} value={category}>{category}</option>
-                  ))}
+                  {allCategories.map((category) => {
+                    const count = items.filter((pdf) => (pdf.category?.trim() || DEFAULT_CATEGORY) === category).length;
+                    return <option key={category} value={category}>{category}（{count}）</option>;
+                  })}
                 </select>
               </label>
               <label className="flex flex-col gap-2 text-sm text-slate-300 sm:w-80">
