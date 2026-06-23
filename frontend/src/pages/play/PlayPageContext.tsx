@@ -15,7 +15,7 @@ import type { ImagePromptTemplate, PageGenerationPrompt, PageWatchProgressStats,
 import type { TtsProvider } from '../../lib/ttsVoices';
 import type { SentenceTimelineItem } from '../../lib/subtitles';
 import type { DrawingCanvasHandle, DrawingData, DrawingStroke } from '../../components/DrawingCanvas';
-import type { SubtitleSize } from '../../i18n';
+import type { SubtitleSize, SubtitlePosition } from '../../i18n';
 
 // ── Inline alias types ────────────────────────────────────────────────────────
 type HostMode = 'solo' | 'dual';
@@ -70,6 +70,8 @@ export interface PlayPageContextValue {
   setShowSubtitle: Dispatch<SetStateAction<boolean>>;
   subtitleSize: SubtitleSize;
   setSubtitleSize: Dispatch<SetStateAction<SubtitleSize>>;
+  subtitlePosition: SubtitlePosition;
+  setSubtitlePosition: Dispatch<SetStateAction<SubtitlePosition>>;
   autoAdvance: boolean;
   setAutoAdvance: Dispatch<SetStateAction<boolean>>;
   playbackSettingsOpen: boolean;
