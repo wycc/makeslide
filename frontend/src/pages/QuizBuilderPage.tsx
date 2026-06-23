@@ -841,8 +841,14 @@ export default function QuizBuilderPage() {
             {savedQuizzes.filter((q) => !savedQuizzesSearch.trim() || q.title.toLowerCase().includes(savedQuizzesSearch.trim().toLowerCase())).map((quiz) => (
               <div key={quiz.id} className={`rounded-md border px-3 py-2 text-sm ${selectedQuizId === quiz.id ? 'border-cyan-500 bg-cyan-500/10 text-cyan-100' : 'border-slate-700 text-slate-300'}`}>
                 <button type="button" onClick={() => { setSelectedQuizId(quiz.id); setTitle(quiz.title); setPrompt(quiz.prompt); setQuestions(quiz.questions); setTimeLimitSeconds(quiz.time_limit_seconds ?? 0); setShuffleQuestions(quiz.shuffle_questions ?? false); }} className="block w-full text-left hover:text-white">
-                  <span className="block font-medium">{quiz.title}</span>
-                  <span className="text-xs text-slate-500">{formatMessage('quiz.questionCount', { count: quiz.questions.length })}</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="min-w-0 flex-1 truncate font-medium">{quiz.title}</span>
+                    {quiz.questions.length > 0 && (
+                      <span className="shrink-0 rounded-full bg-slate-700/80 px-1.5 py-0.5 text-[10px] font-normal text-slate-300">
+                        {formatMessage('quiz.questionCount', { count: quiz.questions.length })}
+                      </span>
+                    )}
+                  </span>
                 </button>
                 <div className="mt-2 flex flex-wrap gap-1">
                   <button
