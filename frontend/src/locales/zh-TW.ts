@@ -1412,6 +1412,8 @@ export const zhTW = {
   'quiz.copyQuestions': '複製所有題目',
   'quiz.copyQuestionsDone': '已複製',
   'quiz.copyQuestionsFail': '複製失敗',
+  'quiz.clearAllQuestions': '清除所有題目',
+  'quiz.confirmClear': '確定要清除所有題目嗎？此操作無法復原。',
   'quiz.exportJson': '匯出 JSON',
   'quiz.titleLabel': '測驗名稱',
   'quiz.promptLabel': '給 AI 的指令',
