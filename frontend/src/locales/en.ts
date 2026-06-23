@@ -1480,6 +1480,8 @@ export const en = {
   'play.header.copyScript': 'Copy Page Script',
   'play.header.copyScriptDone': 'Copied!',
   'play.header.copyScriptFail': 'Copy failed',
+  'play.header.copyAllScripts': 'Copy All Scripts',
+  'play.header.copyAllScriptsDone': 'All copied!',
   'play.header.downloadCoursePackage': 'Download Course Package',
   'play.header.coursePackageGenerating': 'Generating course package…',
   'play.header.timeRemaining': 'Remaining time for full presentation',

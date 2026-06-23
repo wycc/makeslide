@@ -185,6 +185,7 @@ export function PlayPageHeader() {
     : '';
 
   const [copyScriptStatus, setCopyScriptStatus] = useState<'idle' | 'ok' | 'fail'>('idle');
+  const [copyAllScriptsStatus, setCopyAllScriptsStatus] = useState<'idle' | 'ok' | 'fail'>('idle');
   const [coursePackageBusy, setCoursePackageBusy] = useState(false);
 
   const [attendeeCount, setAttendeeCount] = useState<number | null>(null);
@@ -689,6 +690,24 @@ export function PlayPageHeader() {
             className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-100 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {copyScriptStatus === 'ok' ? t('play.header.copyScriptDone') : copyScriptStatus === 'fail' ? t('play.header.copyScriptFail') : t('play.header.copyScript')}
+          </button>
+          <button
+            type="button"
+            disabled={!detail?.pages?.length}
+            onClick={async () => {
+              const pages = detail?.pages ?? [];
+              const text = pages
+                .slice()
+                .sort((a, b) => a.page_number - b.page_number)
+                .map((p) => `## 第 ${p.page_number} 頁\n${scripts[p.page_number] ?? ''}`)
+                .join('\n\n');
+              const result = await copyTextToClipboard(text);
+              setCopyAllScriptsStatus(result.ok ? 'ok' : 'fail');
+              setTimeout(() => setCopyAllScriptsStatus('idle'), 2000);
+            }}
+            className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-100 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {copyAllScriptsStatus === 'ok' ? t('play.header.copyAllScriptsDone') : copyAllScriptsStatus === 'fail' ? t('play.header.copyScriptFail') : t('play.header.copyAllScripts')}
           </button>
           <button
             type="button"
