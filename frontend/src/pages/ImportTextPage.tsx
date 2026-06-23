@@ -201,9 +201,7 @@ export default function ImportTextPage() {
             </button>
           </div>
           <p className="mt-3 text-xs text-slate-400">
-            {mode === 'paste'
-              ? '目前模式：貼上匯入（下方會顯示文字貼上區）'
-              : '目前模式：AI 生成大綱（若要看到貼上區，請切換到「貼上匯入」）'}
+            {mode === 'paste' ? t('importText.currentModePaste') : t('importText.currentModePrompt')}
           </p>
           <div className="mt-3 flex items-center gap-2">
             <span className="whitespace-nowrap text-xs text-slate-400">{t('upload.hostModeLabel')}</span>
