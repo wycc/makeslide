@@ -30,6 +30,8 @@ interface PdfCardProps {
   currentUserSub?: string | null;
   isFavorited?: boolean;
   onToggleFavorite?: (id: string) => void;
+  onTagFilter?: (tag: string) => void;
+  activeTagFilters?: Set<string>;
 }
 
 function GitHubMarkIcon({ className }: { className?: string }) {
@@ -74,7 +76,7 @@ function formatDate(iso: string): string {
   }
 }
 
-export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExport, onCategoryChange, onTagsEdit, onContinue, continuing = false, onClick, currentUserSub, isFavorited = false, onToggleFavorite }: PdfCardProps) {
+export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExport, onCategoryChange, onTagsEdit, onContinue, continuing = false, onClick, currentUserSub, isFavorited = false, onToggleFavorite, onTagFilter, activeTagFilters }: PdfCardProps) {
   const { t } = useI18n();
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDuplicating, setIsDuplicating] = useState(false);
@@ -395,9 +397,20 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExpo
         ) : (
           <div className="flex flex-wrap items-center gap-1">
             {(pdf.tags ?? '').split(',').map((tag) => tag.trim()).filter(Boolean).map((tag) => (
-              <span key={tag} className="rounded-full border border-indigo-500/40 bg-indigo-500/15 px-2 py-0.5 text-[11px] text-indigo-300">
-                {tag}
-              </span>
+              onTagFilter ? (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onTagFilter(tag); }}
+                  className={`rounded-full border px-2 py-0.5 text-[11px] transition active:scale-95 ${activeTagFilters?.has(tag) ? 'border-indigo-400 bg-indigo-500/30 text-indigo-200' : 'border-indigo-500/40 bg-indigo-500/15 text-indigo-300 hover:border-indigo-400 hover:bg-indigo-500/25'}`}
+                >
+                  {tag}
+                </button>
+              ) : (
+                <span key={tag} className="rounded-full border border-indigo-500/40 bg-indigo-500/15 px-2 py-0.5 text-[11px] text-indigo-300">
+                  {tag}
+                </span>
+              )
             ))}
             {onTagsEdit && (
               <button

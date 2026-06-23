@@ -1428,6 +1428,8 @@ export default function HomePage() {
                           currentUserSub={authStatus?.user?.sub ?? null}
                           isFavorited={favorites.has(pdf.id)}
                           onToggleFavorite={handleToggleFavorite}
+                          onTagFilter={(tag) => setTagFilter((prev) => { const next = new Set(prev); next.has(tag) ? next.delete(tag) : next.add(tag); return next; })}
+                          activeTagFilters={tagFilter}
                         />
                       </div>
                     ))}
