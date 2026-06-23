@@ -760,3 +760,20 @@
 | 2026-06-24 | Quiz 答題記錄平均得分：flatMap 所有 attempts 計算平均；historyAvgScore i18n | feat/quiz-history-avg-score（已 merge） |
 | 2026-06-24 | list 模式標籤可點擊：span 改 button，toggle tagFilter Set，active 高亮 | feat/list-mode-tags（已 merge） |
 | 2026-06-24 | 筆記字數統計：PlayPageSidebar noteText.length / 5000 顯示，與儲存提示並排 | feat/slide-panel-jump-to-page（已 merge） |
+
+## 掃描摘要（2026-06-24 第二十二輪）
+
+- 第二十一輪 5 個項目全數完成（清除篩選、Quiz 平均分、list 標籤可點擊、筆記字數統計）。
+- 首頁 grid 模式 PdfCard 不顯示 description，但 list 模式有；grid 使用者無法看到 description 資訊。
+- PlayPageHeader 有「建立分享連結」功能，但連結生成後沒有一鍵複製按鈕，需手動選取 URL。
+- QuizBuilderPage 測驗集搜尋只有無結果時不顯示任何提示，使用者不知道是篩選導致還是真的空的。
+- PlayPageSidebar 書籤與重要頁面 section header 不顯示計數，需展開才知道有幾筆。
+- 首頁篩選後零結果只顯示通用訊息，沒有建議清除篩選的行動呼籲。
+
+## 新增可執行項目（第二十二輪）
+
+- [ ] QuizBuilderPage 搜尋零結果提示：當 `savedQuizzesSearch` 非空但過濾結果為空時，顯示「找不到符合「...」的測驗集」；補 i18n；純前端改動。
+- [ ] PlayPageSidebar 書籤/重要頁面計數徽章：在 Bookmarks 和 Important Pages section header 旁加入計數徽章（如「🔖 3」），section 折疊時也可見；純前端改動。
+- [ ] PlayPageHeader 複製分享連結按鈕：shareUrl 生成後，在 URL 旁加入「複製連結」按鈕，複製成功後短暫顯示「已複製」；補 i18n；純前端改動。
+- [ ] 首頁 grid 模式顯示 description：PdfCard 在標題下方加入一行 description 截斷文字（最多 2 行），僅在有值時顯示；純前端改動。
+- [ ] 首頁篩選零結果時建議清除：當篩選後無結果但 items.length > 0 時，在空狀態下顯示「找不到符合條件的簡報，試試清除篩選」並附上「清除篩選」按鈕；純前端改動。
