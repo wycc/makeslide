@@ -182,7 +182,7 @@ function PageNoteSection() {
             ) : null}
           </span>
           {noteText.length > 0 && (
-            <span className="text-slate-500">{noteText.length} / 5000</span>
+            <span className={noteText.length > 4500 ? 'text-amber-400' : 'text-slate-500'}>{noteText.length} / 5000</span>
           )}
         </div>
       </div>
