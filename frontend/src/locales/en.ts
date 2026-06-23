@@ -1378,6 +1378,7 @@ export const en = {
   'quiz.timeLimitLabel': 'Time limit (seconds, 0 = unlimited)',
   'quiz.timeLimitNone': 'Unlimited',
   'quiz.timeLimitUnit': 'seconds',
+  'quiz.shuffleQuestions': 'Shuffle question order for students',
   'quiz.countdownPrefix': '',
   'quiz.countdownSuffix': 's remaining',
   'language.zhTW': '繁體中文',

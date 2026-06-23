@@ -1378,6 +1378,7 @@ export const zhTW = {
   'quiz.timeLimitLabel': '作答時限（秒，0 = 無限制）',
   'quiz.timeLimitNone': '無限制',
   'quiz.timeLimitUnit': '秒',
+  'quiz.shuffleQuestions': '隨機排序題目（學生作答時打亂題序）',
   'quiz.countdownPrefix': '剩餘',
   'quiz.countdownSuffix': '秒',
   'language.zhTW': '繁體中文',

@@ -583,6 +583,10 @@ function migrate(): void {
     db.exec(`ALTER TABLE pdfs ADD COLUMN play_count INTEGER NOT NULL DEFAULT 0`);
     logger.info('Added column pdfs.play_count');
   }
+  if (!columnExists('quiz_sets', 'shuffle_questions')) {
+    db.exec(`ALTER TABLE quiz_sets ADD COLUMN shuffle_questions INTEGER NOT NULL DEFAULT 0`);
+    logger.info('Added column quiz_sets.shuffle_questions');
+  }
 
   logger.info({ dbPath: config.dbPath }, 'Database migrations applied');
 }

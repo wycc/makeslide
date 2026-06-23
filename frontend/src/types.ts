@@ -547,6 +547,7 @@ export interface QuizSet {
   prompt: string;
   questions: QuizQuestion[];
   time_limit_seconds: number;
+  shuffle_questions?: boolean;
   created_at: string;
   updated_at: string;
 }

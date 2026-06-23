@@ -19,6 +19,7 @@ import {
   submitSyncQuizProgress,
   updatePlaybackSyncState,
 } from '../lib/api';
+import { shuffleArray } from './play/utils';
 import type {
   PdfDetail,
   PdfListItem,
@@ -119,6 +120,8 @@ export default function QuizBuilderPage() {
   const [prompt, setPrompt] = useState(() => t('quiz.defaultPrompt'));
   const [questions, setQuestions] = useState<QuizQuestion[]>([emptyQuestion(0)]);
   const [timeLimitSeconds, setTimeLimitSeconds] = useState(0);
+  const [shuffleQuestions, setShuffleQuestions] = useState(false);
+  const [shuffledQuestionsForTaking, setShuffledQuestionsForTaking] = useState<QuizQuestion[] | null>(null);
   const [quizCountdown, setQuizCountdown] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -166,6 +169,7 @@ export default function QuizBuilderPage() {
           setPrompt(nextQuizzes[0].prompt);
           setQuestions(nextQuizzes[0].questions);
           setTimeLimitSeconds(nextQuizzes[0].time_limit_seconds ?? 0);
+          setShuffleQuestions(nextQuizzes[0].shuffle_questions ?? false);
         }
       } catch (err) {
         if (alive) setError(err instanceof ApiError ? err.message : t('quiz.loadFailed'));
@@ -196,6 +200,15 @@ export default function QuizBuilderPage() {
   );
 
   const isFollowerTesting = syncRole === 'follower' && activeQuiz != null;
+
+  useEffect(() => {
+    if (!activeQuiz || !activeQuiz.shuffle_questions) {
+      setShuffledQuestionsForTaking(null);
+      return;
+    }
+    setShuffledQuestionsForTaking(shuffleArray([...activeQuiz.questions]));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeQuiz?.id, activeQuiz?.shuffle_questions]);
 
   useEffect(() => {
     if (!pdfId || !isFollowerTesting || !activeQuiz) return;
@@ -573,7 +586,7 @@ export default function QuizBuilderPage() {
     setBusy(true);
     setError(null);
     try {
-      const saved = await saveQuizSet(pdfId, { title, prompt, questions, quizId: selectedQuizId, time_limit_seconds: timeLimitSeconds });
+      const saved = await saveQuizSet(pdfId, { title, prompt, questions, quizId: selectedQuizId, time_limit_seconds: timeLimitSeconds, shuffle_questions: shuffleQuestions });
       setSelectedQuizId(saved.id);
       setSavedQuizzes((prev) => [saved, ...prev.filter((q) => q.id !== saved.id)]);
       setMessage(t('quiz.saveDone'));
@@ -628,11 +641,13 @@ export default function QuizBuilderPage() {
     }
   }, [pdfId, copyingQuizId, t]);
 
-  const renderQuizTakingView = (quiz: QuizSet) => (
+  const renderQuizTakingView = (quiz: QuizSet) => {
+    const effectiveQuestions = shuffledQuestionsForTaking ?? quiz.questions;
+    return (
     <div className="rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/10 p-4">
       {syncQuizShowAnswers ? (() => {
-        const scoreTable = normalizeQuestionScores(quiz.questions);
-        const total = quiz.questions.reduce((acc, q, idx) => {
+        const scoreTable = normalizeQuestionScores(effectiveQuestions);
+        const total = effectiveQuestions.reduce((acc, q, idx) => {
           const selected = studentAnswers[q.id] ?? [];
           return acc + calcQuestionScore(q, selected, scoreTable[idx] ?? 0);
         }, 0);
@@ -739,6 +754,7 @@ export default function QuizBuilderPage() {
       })() : null}
     </div>
   );
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -764,7 +780,7 @@ export default function QuizBuilderPage() {
             {savedQuizzes.length === 0 ? <p className="text-xs text-slate-500">{t('quiz.noSavedQuizzes')}</p> : null}
             {savedQuizzes.map((quiz) => (
               <div key={quiz.id} className={`rounded-md border px-3 py-2 text-sm ${selectedQuizId === quiz.id ? 'border-cyan-500 bg-cyan-500/10 text-cyan-100' : 'border-slate-700 text-slate-300'}`}>
-                <button type="button" onClick={() => { setSelectedQuizId(quiz.id); setTitle(quiz.title); setPrompt(quiz.prompt); setQuestions(quiz.questions); setTimeLimitSeconds(quiz.time_limit_seconds ?? 0); }} className="block w-full text-left hover:text-white">
+                <button type="button" onClick={() => { setSelectedQuizId(quiz.id); setTitle(quiz.title); setPrompt(quiz.prompt); setQuestions(quiz.questions); setTimeLimitSeconds(quiz.time_limit_seconds ?? 0); setShuffleQuestions(quiz.shuffle_questions ?? false); }} className="block w-full text-left hover:text-white">
                   <span className="block font-medium">{quiz.title}</span>
                   <span className="text-xs text-slate-500">{formatMessage('quiz.questionCount', { count: quiz.questions.length })}</span>
                 </button>
@@ -974,6 +990,15 @@ export default function QuizBuilderPage() {
               />
               <span className="text-xs text-slate-400">{timeLimitSeconds === 0 ? t('quiz.timeLimitNone') : t('quiz.timeLimitUnit')}</span>
             </div>
+            <label className="mt-3 flex cursor-pointer items-center gap-2">
+              <input
+                type="checkbox"
+                checked={shuffleQuestions}
+                onChange={(e) => setShuffleQuestions(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-indigo-500"
+              />
+              <span className="text-sm text-slate-300">{t('quiz.shuffleQuestions')}</span>
+            </label>
             <div className="mt-3 flex flex-wrap gap-2">
               <button type="button" onClick={() => void handleGenerate()} disabled={busy || !prompt.trim()} className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-4 py-2 text-sm text-fuchsia-100 hover:bg-fuchsia-500/25 disabled:opacity-50">{busy ? t('quiz.busy') : t('quiz.generate')}</button>
               <button type="button" onClick={() => void handleSave()} disabled={busy || !canSave} className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-4 py-2 text-sm text-emerald-100 hover:bg-emerald-500/25 disabled:opacity-50">{t('quiz.save')}</button>

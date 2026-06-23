@@ -951,7 +951,7 @@ export async function generateQuizSet(
 
 export async function saveQuizSet(
   id: string,
-  payload: { title: string; prompt: string; questions: QuizQuestion[]; quizId?: number | null; time_limit_seconds?: number },
+  payload: { title: string; prompt: string; questions: QuizQuestion[]; quizId?: number | null; time_limit_seconds?: number; shuffle_questions?: boolean },
 ): Promise<QuizSet> {
   const url = payload.quizId
     ? `api/pdfs/${encodeURIComponent(id)}/quizzes/${encodeURIComponent(String(payload.quizId))}`
@@ -959,7 +959,7 @@ export async function saveQuizSet(
   const resp = await fetch(url, {
     method: payload.quizId ? 'PUT' : 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ title: payload.title, prompt: payload.prompt, questions: payload.questions, time_limit_seconds: payload.time_limit_seconds ?? 0 }),
+    body: JSON.stringify({ title: payload.title, prompt: payload.prompt, questions: payload.questions, time_limit_seconds: payload.time_limit_seconds ?? 0, shuffle_questions: payload.shuffle_questions ?? false }),
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as QuizSet;
