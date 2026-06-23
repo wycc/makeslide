@@ -811,7 +811,10 @@ export function PlayPageSlidePanel() {
               </label>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-950/70 px-3 py-2">
-              <div><span className="font-semibold text-slate-200">{t('play.slidePanel.playbackSpeedTitle')}</span></div>
+              <div>
+                <span className="font-semibold text-slate-200">{t('play.slidePanel.playbackSpeedTitle')}</span>
+                <span className="ml-2 text-xs text-cyan-400">{t('play.slidePanel.currentSpeed').replace('{rate}', String(playbackRate))}</span>
+              </div>
               <select value={String(playbackRate)} onChange={(e)=>setPlaybackRate(Number(e.target.value))} className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200">
                 {[0.5,0.75,1,1.25,1.5,2].map((speed)=><option key={speed} value={String(speed)}>{speed}x</option>)}
               </select>
