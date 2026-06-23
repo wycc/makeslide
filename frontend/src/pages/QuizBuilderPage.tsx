@@ -21,6 +21,7 @@ import {
   updatePlaybackSyncState,
 } from '../lib/api';
 import { shuffleArray } from './play/utils';
+import { copyTextToClipboard } from '../lib/clipboard';
 import type {
   PdfDetail,
   PdfListItem,
@@ -144,6 +145,7 @@ export default function QuizBuilderPage() {
   const [shuffledQuestionsForTaking, setShuffledQuestionsForTaking] = useState<QuizQuestion[] | null>(null);
   const [quizCountdown, setQuizCountdown] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  const [copyQuestionsStatus, setCopyQuestionsStatus] = useState<'idle' | 'ok' | 'fail'>('idle');
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [syncRole, setSyncRole] = useState<'master' | 'follower'>('follower');
@@ -1085,6 +1087,23 @@ export default function QuizBuilderPage() {
               <button type="button" onClick={() => void handleGenerate()} disabled={busy || !prompt.trim()} className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-4 py-2 text-sm text-fuchsia-100 hover:bg-fuchsia-500/25 disabled:opacity-50">{busy ? t('quiz.busy') : t('quiz.generate')}</button>
               <button type="button" onClick={() => void handleSave()} disabled={busy || !canSave} className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-4 py-2 text-sm text-emerald-100 hover:bg-emerald-500/25 disabled:opacity-50">{t('quiz.save')}</button>
               <button type="button" onClick={() => setQuestions((prev) => [...prev, emptyQuestion(prev.length)])} className="rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800">{t('quiz.addQuestion')}</button>
+              {questions.length > 0 && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const text = questions.map((q, i) => {
+                      const opts = q.options.map((o, oi) => `  ${String.fromCharCode(65 + oi)}. ${o.text}${q.answer_indices.includes(oi) ? ' ✓' : ''}`).join('\n');
+                      return `${i + 1}. ${q.question}\n${opts}${q.explanation ? `\n   解說：${q.explanation}` : ''}`;
+                    }).join('\n\n');
+                    const result = await copyTextToClipboard(text);
+                    setCopyQuestionsStatus(result.ok ? 'ok' : 'fail');
+                    setTimeout(() => setCopyQuestionsStatus('idle'), 2000);
+                  }}
+                  className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-4 py-2 text-sm text-cyan-100 hover:bg-cyan-500/25"
+                >
+                  {copyQuestionsStatus === 'ok' ? t('quiz.copyQuestionsDone') : copyQuestionsStatus === 'fail' ? t('quiz.copyQuestionsFail') : t('quiz.copyQuestions')}
+                </button>
+              )}
               <div className="flex items-center gap-1">
                 <span className="text-xs text-slate-400">{t('quiz.aiGeneratePageLabel')}</span>
                 <input
