@@ -730,3 +730,20 @@
 | 2026-06-24 | 複製全部逐字稿按鈕：所有頁面 scripts 排序後 join，## 第 N 頁標題 | feat/copy-all-scripts（已 merge） |
 | 2026-06-24 | list 模式最近播放綠點：isRecentlyPlayed() 為 true 顯示 emerald-400 圓點 | feat/list-recently-played-dot（已 merge） |
 | 2026-06-24 | 答題記錄折疊：預設顯示 5 筆，超過時顯示「顯示更多（共 N 筆）」toggle | feat/quiz-history-collapse（已 merge） |
+
+## 掃描摘要（2026-06-24 第二十一輪）
+
+- 第二十輪 5 個項目全數完成（標籤多選、I 鍵快捷、複製全部稿、list 綠點、答題記錄折疊）。
+- 首頁篩選同時有 categoryFilter、tagFilter、titleFilter、sortMode 四個維度，但沒有一鍵重設按鈕。
+- QuizBuilderPage 答題記錄只列 session 列表，沒有顯示整體平均得分的摘要統計。
+- 首頁 list 模式只顯示標題與時間，card 模式才有標籤 pill；list 模式缺少標籤可見性。
+- PlayPageSlidePanel 缺少直接跳到指定頁碼的快速輸入框（目前需點縮圖一頁一頁捲）。
+- 播放頁側邊欄的筆記編輯區沒有字數統計（script 編輯區第 19 輪已加過，note 區尚未加）。
+
+## 新增可執行項目（第二十一輪）
+
+- [ ] 首頁一鍵清除所有篩選：當 categoryFilter/tagFilter/titleFilter 任一非預設時，在篩選列右側顯示「× 清除篩選」按鈕，一次重設全部篩選條件及排序；補 i18n；純前端改動。
+- [ ] QuizBuilderPage 答題記錄平均得分摘要：在答題記錄列表頂部（historySessions 不為空時）顯示「共 N 次作答，平均得分 X.X 分」的摘要行，從 sessions.attempts[].score 計算；補 i18n；純前端改動。
+- [ ] 首頁 list 模式顯示標籤 pill：list 模式每列標題下方加入最多 3 個標籤 pill（超過 3 個顯示 +N），樣式與 card 模式一致；純前端改動。
+- [ ] PlayPageSlidePanel 跳頁輸入框：在縮圖側邊欄頂部加入頁碼輸入框（type=number），按 Enter 或 blur 時跳到指定頁；超出範圍自動 clamp；補 i18n；純前端改動。
+- [ ] 播放頁筆記字數統計：在 PlayPageSlidePanel 的筆記編輯器底部加入字數統計（類似 script 的字數統計），顯示 `note.charCount` 格式的字數；補 i18n；純前端改動。
