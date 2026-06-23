@@ -5,7 +5,7 @@ import { AnimationEditorTab } from './AnimationEditorTab';
 import { FigureAssetsTab } from './FigureAssetsTab';
 import { formatTime, formatDurationMs, formatTokenCount, formatCostUsd } from './formatters';
 import { PageTimingChips } from './PageTimingChips';
-import { ApiError, fetchPageGenerationPrompts, fetchPdfRunHistory, fetchPdfSlowArtifacts, figureImageUrl, fetchSyncAttendees, kickSyncAttendee } from '../../lib/api';
+import { ApiError, fetchPageGenerationPrompts, fetchPdfRunHistory, fetchPdfSlowArtifacts, figureImageUrl, fetchSyncAttendees, kickSyncAttendee, rewritePageScript } from '../../lib/api';
 import { copyTextToClipboard } from '../../lib/clipboard';
 import { SHOW_SUBTITLE_STORAGE_KEY, SUBTITLE_SIZE_STORAGE_KEY, SUBTITLE_POSITION_STORAGE_KEY, AUTO_ADVANCE_STORAGE_KEY, INTERACTIVE_MODE_STORAGE_KEY, useI18n, type TranslationKey, type SubtitleSize, type SubtitlePosition } from '../../i18n';
 import { debugLog, debugWarn } from '../../lib/debugLog';
@@ -231,6 +231,12 @@ export function PlayPageSlidePanel() {
   const [scriptSearchIdx, setScriptSearchIdx] = useState(0);
   const scriptSearchResultRef = useRef<HTMLDivElement>(null);
 
+  type RewriteStyle = 'compact' | 'detailed' | 'conversational';
+  const [aiRewriteStyle, setAiRewriteStyle] = useState<RewriteStyle>('compact');
+  const [aiRewriteBusy, setAiRewriteBusy] = useState(false);
+  const [aiRewriteDraft, setAiRewriteDraft] = useState<string | null>(null);
+  const [aiRewriteError, setAiRewriteError] = useState<string | null>(null);
+
   const scriptSearchResults = useMemo(() => {
     const q = scriptSearch.trim().toLowerCase();
     if (!q) return [];
@@ -260,6 +266,33 @@ export function PlayPageSlidePanel() {
       // silently fail — list will refresh on next open
     } finally {
       setKickingClientId(null);
+    }
+  };
+
+  const REWRITE_STYLE_PROMPTS: Record<RewriteStyle, string> = {
+    compact: '請將以下逐字稿改寫為精簡風格，去除贅詞，保留核心資訊。',
+    detailed: '請將以下逐字稿改寫為詳細說明風格，補充說明使內容更易理解。',
+    conversational: '請將以下逐字稿改寫為口語對話式風格，使其更自然流暢。',
+  };
+
+  const handleAiRewriteScript = async () => {
+    if (!pdfId || !currentPage || !editingScript.trim()) return;
+    setAiRewriteBusy(true);
+    setAiRewriteError(null);
+    setAiRewriteDraft(null);
+    try {
+      const res = await rewritePageScript(
+        pdfId,
+        currentPage.page_number,
+        REWRITE_STYLE_PROMPTS[aiRewriteStyle],
+        editingScript.trim(),
+        { currentScript: editingScript.trim() },
+      );
+      setAiRewriteDraft(res.script);
+    } catch (err) {
+      setAiRewriteError(err instanceof ApiError ? err.message : '改寫失敗，請重試。');
+    } finally {
+      setAiRewriteBusy(false);
     }
   };
 
@@ -1043,6 +1076,56 @@ export function PlayPageSlidePanel() {
                   {t('play.slidePanel.transcript.versionButton')}
                 </button>
               </div>
+              {/* AI 改寫入口 */}
+              <div className="mb-2 flex flex-wrap items-center gap-2 rounded-md border border-violet-500/30 bg-violet-500/5 px-3 py-2">
+                <span className="text-xs text-slate-400">{t('play.sidebar.rewriteStyleLabel')}</span>
+                <select
+                  value={aiRewriteStyle}
+                  onChange={(e) => setAiRewriteStyle(e.target.value as RewriteStyle)}
+                  disabled={aiRewriteBusy}
+                  className="rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-xs text-slate-200 disabled:opacity-50"
+                >
+                  <option value="compact">{t('play.sidebar.rewriteStyleCompact')}</option>
+                  <option value="detailed">{t('play.sidebar.rewriteStyleDetailed')}</option>
+                  <option value="conversational">{t('play.sidebar.rewriteStyleConversational')}</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={() => void handleAiRewriteScript()}
+                  disabled={aiRewriteBusy || !editingScript.trim() || !currentPage}
+                  className="rounded-md border border-violet-500/50 bg-violet-500/15 px-2.5 py-1 text-xs text-violet-200 hover:bg-violet-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {aiRewriteBusy ? t('play.sidebar.rewriteScriptBusy') : t('play.sidebar.rewriteScript')}
+                </button>
+                {aiRewriteError && (
+                  <span className="text-xs text-rose-400">{aiRewriteError}</span>
+                )}
+              </div>
+              {/* AI 改寫 diff */}
+              {aiRewriteDraft !== null && (
+                <div className="mb-2 rounded-md border border-violet-500/40 bg-slate-900/60 p-3 text-xs">
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <span className="font-semibold text-violet-300">{t('play.sidebar.rewriteDiffNew')}</span>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => { setEditingScript(aiRewriteDraft); setAiRewriteDraft(null); }}
+                        className="rounded border border-emerald-500/50 bg-emerald-500/15 px-2.5 py-0.5 text-emerald-200 hover:bg-emerald-500/25"
+                      >
+                        {t('play.sidebar.rewriteAccept')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAiRewriteDraft(null)}
+                        className="rounded border border-slate-600 bg-slate-800 px-2.5 py-0.5 text-slate-300 hover:bg-slate-700"
+                      >
+                        {t('play.sidebar.rewriteCancel')}
+                      </button>
+                    </div>
+                  </div>
+                  <p className="whitespace-pre-wrap leading-relaxed text-slate-200">{aiRewriteDraft}</p>
+                </div>
+              )}
               <div className="mb-2 flex items-center gap-2">
                 <input
                   type="search"
