@@ -252,6 +252,10 @@ export function PlayPageSlidePanel() {
     : 0;
 
   useEffect(() => {
+    if (scriptSearch.trim()) setScriptSearchIdx(0);
+  }, [currentIdx]);
+
+  useEffect(() => {
     if (!syncEnabled || syncRole !== 'master' || !pdfId || !attendeesOpen) return;
     let cancelled = false;
     fetchSyncAttendees(pdfId).then((list) => { if (!cancelled) setAttendees(list); }).catch(() => {});
