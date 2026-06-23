@@ -485,6 +485,9 @@ export interface PlayPageContextValue {
   // ─── Page bookmarks ──────────────────────────────────────────────────────────
   bookmarks: number[];
   toggleBookmark: (pageNumber: number) => void;
+  // ─── Important pages ─────────────────────────────────────────────────────────
+  importantPages: number[];
+  toggleImportantPage: (pageNumber: number) => void;
 }
 
 // ── Context instance + hook ───────────────────────────────────────────────────

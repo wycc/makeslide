@@ -142,6 +142,7 @@ export function PlayPageSlidePanel() {
     currentAnimationSpec,
     animationWarning, setAnimationWarning,
     bookmarks, toggleBookmark,
+    importantPages, toggleImportantPage,
     pageSentences,
   } = usePlayPageContext();
 
@@ -394,14 +395,24 @@ export function PlayPageSlidePanel() {
                     {t('play.slidePanel.versionButton')}
                   </button>
                   {currentPage && (
-                    <button
-                      type="button"
-                      onClick={() => toggleBookmark(currentPage.page_number)}
-                      title={bookmarks.includes(currentPage.page_number) ? t('play.sidebar.bookmarkRemove') : t('play.sidebar.bookmarkAdd')}
-                      className={`absolute left-2 top-2 z-20 rounded-md border bg-slate-900/80 px-2 py-1 text-sm backdrop-blur hover:bg-slate-800 ${bookmarks.includes(currentPage.page_number) ? 'border-amber-500/60 text-amber-300' : 'border-slate-600 text-slate-400'}`}
-                    >
-                      🔖
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => toggleBookmark(currentPage.page_number)}
+                        title={bookmarks.includes(currentPage.page_number) ? t('play.sidebar.bookmarkRemove') : t('play.sidebar.bookmarkAdd')}
+                        className={`absolute left-2 top-2 z-20 rounded-md border bg-slate-900/80 px-2 py-1 text-sm backdrop-blur hover:bg-slate-800 ${bookmarks.includes(currentPage.page_number) ? 'border-amber-500/60 text-amber-300' : 'border-slate-600 text-slate-400'}`}
+                      >
+                        🔖
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => toggleImportantPage(currentPage.page_number)}
+                        title={importantPages.includes(currentPage.page_number) ? t('play.sidebar.unmarkImportant') : t('play.sidebar.markImportant')}
+                        className={`absolute bottom-2 left-2 z-20 rounded-md border bg-slate-900/80 px-2 py-1 text-sm backdrop-blur hover:bg-slate-800 ${importantPages.includes(currentPage.page_number) ? 'border-yellow-500/60 text-yellow-300' : 'border-slate-600 text-slate-400'}`}
+                      >
+                        ★
+                      </button>
+                    </>
                   )}
                 </>
               }

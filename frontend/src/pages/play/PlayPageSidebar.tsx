@@ -223,6 +223,7 @@ export function PlayPageSidebar() {
     setImagePreviewPageNumber,
     setImagePreviewOpen,
     bookmarks, toggleBookmark,
+    importantPages, toggleImportantPage,
   } = usePlayPageContext();
 
   const { t } = useI18n();
@@ -711,6 +712,40 @@ export function PlayPageSidebar() {
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); toggleBookmark(pageNum); } }}
                     className="ml-0.5 text-amber-400/60 hover:text-amber-300"
                     aria-label={t('play.sidebar.bookmarkRemove')}
+                  >
+                    ×
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className={`rounded-lg border border-slate-800 bg-slate-900/40 ${qaPanelExpanded ? 'md:hidden' : ''}`}>
+        <div className="border-b border-slate-800 px-4 py-3">
+          <h2 className="text-sm font-semibold text-slate-300">{t('play.sidebar.importantTitle')}</h2>
+        </div>
+        <div className="px-4 py-3">
+          {importantPages.length === 0 ? (
+            <p className="text-xs text-slate-500">{t('play.sidebar.importantEmpty')}</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {importantPages.map((pageNum) => (
+                <button
+                  key={pageNum}
+                  type="button"
+                  onClick={() => setCurrentIdx(pageNum - 1)}
+                  className="flex items-center gap-1.5 rounded-md border border-yellow-500/40 bg-yellow-500/10 px-2.5 py-1 text-xs text-yellow-200 hover:bg-yellow-500/20"
+                >
+                  <span>★ 第 {pageNum} 頁</span>
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => { e.stopPropagation(); toggleImportantPage(pageNum); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); toggleImportantPage(pageNum); } }}
+                    className="ml-0.5 text-yellow-400/60 hover:text-yellow-300"
+                    aria-label={t('play.sidebar.unmarkImportant')}
                   >
                     ×
                   </span>
