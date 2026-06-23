@@ -1362,6 +1362,9 @@ export default function HomePage() {
                             {pdf.total_audio_duration_seconds != null && pdf.total_audio_duration_seconds > 0 && (
                               <span className="ml-2">{formatAudioDuration(pdf.total_audio_duration_seconds)}</span>
                             )}
+                            {(pdf.play_count ?? 0) > 0 && (
+                              <span className="ml-2 text-sky-400/70">{t('home.listPlayCount').replace('{count}', String(pdf.play_count ?? 0))}</span>
+                            )}
                             {pdf.last_played_at && (
                               <span className="ml-2 text-slate-500">
                                 {t('home.listLastPlayed').replace('{time}', formatRelativeTime(pdf.last_played_at))}

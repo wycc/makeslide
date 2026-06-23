@@ -246,6 +246,7 @@ export const zhTW = {
   'home.listPages': '{count} 頁',
   'home.listUncategorized': '未分類',
   'home.listLastPlayed': '最後播放 {time}',
+  'home.listPlayCount': '播放 {count} 次',
   'home.stats.totalPdfs': '共 {n} 份簡報',
   'home.stats.totalPages': '{n} 頁',
   'home.stats.totalPlays': '播放 {n} 次',
