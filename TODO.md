@@ -520,7 +520,8 @@
   - 修改說明（2026-06-23）：新增 `backend/src/routes/pdfs/poll-results-csv.ts`，JOIN `page_polls` 與 `page_poll_votes` 統計各選項票數，回傳 7 欄 CSV（page_number/poll_id/poll_question/option_index/option_text/vote_count/total_votes）；`PostClassReportPanel` 新增紫羅蘭色「投票結果 CSV」`<a download>` 按鈕；4 個後端測試全通過（200 含資料、空投票僅 header、404、403）。分支 `feat/poll-results-csv`，已 merge 回 master。
 - [x] 播放頁側邊欄大綱面板：在側邊欄新增「大綱」分頁（Tab），列出所有頁面的縮圖與頁碼，點擊可跳頁；若頁面有 `page_notes` 標題行（`# `開頭的第一行）或前 20 字的逐字稿摘要作為顯示標題；純前端改動，不需新增後端端點。
   - 修改說明（2026-06-23）：在 `PlayPageSidebar.tsx` 新增 `getOutlineTitle()` pure function（優先取 page_notes 第一個 `# ` 標題行，次取 scripts 前 20 字）與 `OutlineSection` 元件；各頁以縮圖（thumbnail_url 或 image_url）+ 頁碼 + 標題排列，最大高度 `max-h-72` 含捲動，目前頁以 indigo 環高亮；插入在書籤 section 之後。i18n 鍵值 `outlineTitle/Empty/PageLabel/NoTitle` 新增至 zh-TW 及 en。分支 `feat/sidebar-outline-panel`，已 merge 回 master。
-- [ ] AI 問答回覆存為個人筆記：在 `PageAskPanel` 的 AI 回覆卡片旁加入「存為筆記」按鈕，將「Q: {問題}\nA: {回覆}」追加至目前頁面的 `page_notes`（呼叫既有 `PATCH /api/pdfs/:id/pages/:n/note`）；補 i18n `play.sidebar.saveAsNote/saveAsNoteDone/saveAsNoteFail`。
+- [x] AI 問答回覆存為個人筆記：在 `PageAskPanel` 的 AI 回覆卡片旁加入「存為筆記」按鈕，將「Q: {問題}\nA: {回覆}」追加至目前頁面的 `page_notes`（呼叫既有 `PATCH /api/pdfs/:id/pages/:n/note`）；補 i18n `play.sidebar.saveAsNote/saveAsNoteDone/saveAsNoteFail`。
+  - 修改說明（2026-06-23）：`PageAskPanel.tsx` 新增 `saveStatus` state（idle/saving/ok/fail）與 `handleSaveAsNote()` async handler；取 `currentPage.page_notes` 現有備註追加 `Q: …\nA: …` 格式後呼叫 `updatePageNote()`；回覆卡片底部加入琥珀色「存為筆記」按鈕，成功/失敗 2 秒 flash 訊息；i18n `saveAsNote/Done/Fail` 新增至 zh-TW 及 en。分支 `feat/ask-save-as-note`，已 merge 回 master。
 
 
 ## 工作記錄（第十四輪）
@@ -531,3 +532,23 @@
 | 2026-06-23 | 測驗隨機排序題目：DB migration shuffle_questions；SaveQuizBodySchema 與 SQL 查詢更新；QuizBuilderPage checkbox UI + Fisher-Yates shuffle effect；shuffleArray() 提取至 play/utils.ts；後端 3 + 前端 5 個測試通過 | feat/quiz-shuffle（已 merge） |
 | 2026-06-23 | 頁面投票結果 CSV 匯出：`GET /api/pdfs/:id/poll-results.csv`，JOIN page_polls+page_poll_votes 統計選項票數，7 欄 CSV；PostClassReportPanel 紫羅蘭色「投票結果 CSV」下載按鈕；4 個後端測試通過（200/空header/404/403） | feat/poll-results-csv（已 merge） |
 | 2026-06-23 | 播放頁側邊欄大綱面板：`OutlineSection` 元件（縮圖+頁碼+標題）插入書籤 section 後；`getOutlineTitle()` 優先取 `# ` 標題行，次取逐字稿前 20 字；目前頁 indigo 環高亮；i18n outline* 4 個鍵值 | feat/sidebar-outline-panel（已 merge） |
+| 2026-06-23 | AI 問答回覆存為個人筆記：PageAskPanel 回覆卡片底部新增琥珀色「存為筆記」按鈕，追加 Q/A 至 page_notes；2 秒 ok/fail flash；i18n saveAsNote/Done/Fail | feat/ask-save-as-note（已 merge） |
+
+---- 計數重設 ----
+
+## 掃描摘要（2026-06-23 第十五輪）
+
+- 第十四輪 5 個項目全數完成（播放次數統計、測驗隨機排序、投票 CSV、大綱面板、AI 問答存筆記）。
+- `QuizBuilderPage` 已有 AI 投票草稿的前例，但測驗題目仍需手動新增，缺少 AI 一鍵草稿。
+- 播放頁字幕目前固定顯示在投影片底部，視覺空間受限時（如底部有動畫）遮擋內容。
+- `PdfCard` 顯示的是格式化日期（created_at），對當天建立的教材缺乏時效感，改為相對時間（「3 分鐘前」）更直覺。
+- 播放頁標題只能在 Settings 對話框修改，常見的快速改名場景需要多步操作。
+- 同步模式目前無法從出席名單踢出特定學生，教師缺乏課堂管理控制能力。
+
+## 新增可執行項目（第十五輪）
+
+- [ ] 測驗題目 AI 草稿：新增 `POST /api/pdfs/:id/pages/:n/generate-quiz-question` 後端端點，讀取頁面逐字稿/文字，呼叫 LLM 生成一道四選項選擇題（含正確答案索引與解析），回傳 `{ question, options, correct_index, explanation }`；`QuizBuilderPage` 新增「AI 生成一題」按鈕（每次一題，可連續點擊），直接插入題目列表；補後端測試 200 / 404 / 403。
+- [ ] 播放頁字幕位置切換：在播放設定對話框新增「字幕位置」選項（底部 / 頂部），存至 localStorage（key: `makeslide.subtitlePosition`）；`PlayPageSlidePanel` 依設定切換字幕區塊的 `top-*` 或 `bottom-*` 絕對定位 class；補 i18n `play.settings.subtitlePosition/Top/Bottom`。
+- [ ] 首頁卡片建立時間改為相對顯示：`PdfCard` 目前顯示 `formatDate(pdf.created_at)` 格式化日期，改為 `formatRelativeTime(pdf.created_at)` 相對時間（如「3 分鐘前」、「2 天前建立」），純前端改動；補 i18n `card.createdAt`。
+- [ ] 播放頁標題行內編輯：播放頁 header 的標題文字雙擊（dblclick）進入 inline `<input>` 編輯模式，Enter 或失焦時呼叫 `PATCH /api/pdfs/:id/title` 儲存，Escape 取消；補 i18n `play.header.editTitlePlaceholder`。
+- [ ] 同步模式踢出學生：`PlayPageSlidePanel` 出席名單每位學生旁加入「踢出」按鈕；新增後端 `DELETE /api/pdfs/:id/sync/attendees/:clientId` 端點（owner-only，從 `sync_attendees` 標記封鎖，或直接清除該 client 的 attendee 紀錄）；follower 被踢後下次輪詢 GET /sync/state 可回傳 forbidden 訊號；補後端測試 200 / 403 / 404。
