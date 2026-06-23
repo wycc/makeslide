@@ -132,6 +132,7 @@ export default function QuizBuilderPage() {
   }, [t]);
   const [detail, setDetail] = useState<PdfDetail | null>(null);
   const [savedQuizzes, setSavedQuizzes] = useState<QuizSet[]>([]);
+  const [savedQuizzesSearch, setSavedQuizzesSearch] = useState('');
   const [allPdfs, setAllPdfs] = useState<PdfListItem[]>([]);
   const [copyingQuizId, setCopyingQuizId] = useState<number | null>(null);
   const [selectedQuizId, setSelectedQuizId] = useState<number | null>(null);
@@ -820,9 +821,18 @@ export default function QuizBuilderPage() {
           <h2 className="text-sm font-semibold text-slate-200">{t('quiz.savedQuizzes')}</h2>
           <p className="mt-1 text-xs text-slate-500">{formatMessage('quiz.syncRole', { role: syncRole === 'master' ? 'master' : 'follower' })}</p>
           {syncError ? <p className="mt-2 text-xs text-rose-300">{syncError}</p> : null}
+          {savedQuizzes.length > 3 && (
+            <input
+              type="search"
+              value={savedQuizzesSearch}
+              onChange={(e) => setSavedQuizzesSearch(e.target.value)}
+              placeholder={t('quiz.searchQuizzes')}
+              className="mt-2 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
+            />
+          )}
           <div className="mt-3 space-y-2">
             {savedQuizzes.length === 0 ? <p className="text-xs text-slate-500">{t('quiz.noSavedQuizzes')}</p> : null}
-            {savedQuizzes.map((quiz) => (
+            {savedQuizzes.filter((q) => !savedQuizzesSearch.trim() || q.title.toLowerCase().includes(savedQuizzesSearch.trim().toLowerCase())).map((quiz) => (
               <div key={quiz.id} className={`rounded-md border px-3 py-2 text-sm ${selectedQuizId === quiz.id ? 'border-cyan-500 bg-cyan-500/10 text-cyan-100' : 'border-slate-700 text-slate-300'}`}>
                 <button type="button" onClick={() => { setSelectedQuizId(quiz.id); setTitle(quiz.title); setPrompt(quiz.prompt); setQuestions(quiz.questions); setTimeLimitSeconds(quiz.time_limit_seconds ?? 0); setShuffleQuestions(quiz.shuffle_questions ?? false); }} className="block w-full text-left hover:text-white">
                   <span className="block font-medium">{quiz.title}</span>
