@@ -1491,6 +1491,7 @@ export const zhTW = {
   'play.shortcuts.aiAnswer': 'AI 回答學生提問（主持模式，同步中）',
   'play.shortcuts.exitEsc': '退出全螢幕 / 繪圖模式',
   'play.shortcuts.gotoPage': '跳至指定頁面',
+  'play.shortcuts.nextBookmark': '跳至下一個書籤（循環）',
   'play.shortcuts.close': '關閉',
   'play.gotoPageDialog': '跳至頁面',
   'play.gotoPagePlaceholder': '輸入頁碼…',

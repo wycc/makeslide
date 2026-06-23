@@ -1612,6 +1612,14 @@ export default function PlayPage() {
         setGotoPageInput('');
         setGotoPageOpen(true);
         setTimeout(() => gotoPageInputRef.current?.focus(), 50);
+      } else if (ev.key.toLowerCase() === 'b') {
+        if (bookmarks.length > 0) {
+          ev.preventDefault();
+          const currentPageNumber = currentIdx + 1;
+          const sorted = [...bookmarks].sort((a, b) => a - b);
+          const next = sorted.find((n) => n > currentPageNumber) ?? sorted[0];
+          if (next !== undefined) setCurrentIdx(next - 1);
+        }
       } else if (ev.key === 'Escape') {
         if (gotoPageOpen) {
           ev.preventDefault();
