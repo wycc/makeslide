@@ -710,8 +710,23 @@
 
 ## 新增可執行項目（第二十輪）
 
-- [ ] 首頁標籤多選過濾：將 `tagFilter: string` 改為 `tagFilter: Set<string>`，讓多個標籤可同時啟用（顯示所有已選標籤皆有的簡報）；點擊已選標籤可取消；補 i18n；純前端改動。
-- [ ] 播放頁 I 鍵切換重要頁面：在 `PlayPage.tsx` 鍵盤 handler 加入 `I` 鍵，呼叫 `toggleImportantPage(currentPage.page_number)`；在快捷鍵說明中補 `I` 的說明；純前端改動。
-- [ ] 播放頁複製全部逐字稿：在 `PlayPageHeader.tsx` 加入「複製全部逐字稿」按鈕，將所有頁面的 scripts 依頁碼排序後串接（每頁前加 `## 第 N 頁` 標題），複製到剪貼簿；補 i18n；純前端改動。
-- [ ] 首頁 list 模式「最近播放」綠點標記：對 `isRecentlyPlayed(pdf)` 為 true 的 list 列加入小綠點 badge（類似書籤的紅點），不影響既有的相對時間文字顯示；純前端改動。
-- [ ] QuizBuilderPage 答題記錄折疊：`historySessions` 列表預設只顯示最近 5 筆，超過時顯示「顯示更多（共 N 筆）」按鈕；點擊後展開顯示全部；補 i18n；純前端改動。
+- [x] 首頁標籤多選過濾：將 `tagFilter: string` 改為 `tagFilter: Set<string>`，讓多個標籤可同時啟用（顯示所有已選標籤皆有的簡報）；點擊已選標籤可取消；補 i18n；純前端改動。
+  - 修改說明（2026-06-24）：`HomePage.tsx` tagFilter 改 `Set<string>`；filter 以 `every()` 做 AND 邏輯；All 按鈕 `new Set()`；tag 按鈕 prev-Set toggle；i18n 無需新增。分支 `feat/home-tag-multiselect`，已 merge 回 master。
+- [x] 播放頁 I 鍵切換重要頁面：在 `PlayPage.tsx` 鍵盤 handler 加入 `I` 鍵，呼叫 `toggleImportantPage(currentPage.page_number)`；在快捷鍵說明中補 `I` 的說明；純前端改動。
+  - 修改說明（2026-06-24）：`PlayPage.tsx` `i` key handler；`PlayPageHeader.tsx` shortcuts array 補 `I` 項目。分支 `feat/important-page-i-key`，已 merge 回 master。
+- [x] 播放頁複製全部逐字稿：在 `PlayPageHeader.tsx` 加入「複製全部逐字稿」按鈕，將所有頁面的 scripts 依頁碼排序後串接（每頁前加 `## 第 N 頁` 標題），複製到剪貼簿；補 i18n；純前端改動。
+  - 修改說明（2026-06-24）：`PlayPageHeader.tsx` 新增 `copyAllScriptsStatus` state + button；頁面依 page_number 排序後 join；i18n `play.header.copyAllScripts/Done`。分支 `feat/copy-all-scripts`，已 merge 回 master。
+- [x] 首頁 list 模式「最近播放」綠點標記：對 `isRecentlyPlayed(pdf)` 為 true 的 list 列加入小綠點 badge（類似書籤的紅點），不影響既有的相對時間文字顯示；純前端改動。
+  - 修改說明（2026-06-24）：`HomePage.tsx` list 模式 title `<p>` 改 flex + gap；`isRecentlyPlayed()` 為 true 時插入 `h-2 w-2 bg-emerald-400` 圓點；i18n `home.recentlyPlayedBadge`。分支 `feat/list-recently-played-dot`，已 merge 回 master。
+- [x] QuizBuilderPage 答題記錄折疊：`historySessions` 列表預設只顯示最近 5 筆，超過時顯示「顯示更多（共 N 筆）」按鈕；點擊後展開顯示全部；補 i18n；純前端改動。
+  - 修改說明（2026-06-24）：`QuizBuilderPage.tsx` 新增 `historyShowAll` state；map 改 slice(0,5)；超過 5 筆顯示 toggle button；i18n `quiz.historyShowMore/Less`。分支 `feat/quiz-history-collapse`，已 merge 回 master。
+
+## 工作記錄（第二十輪，2026-06-24）
+
+| 日期 | 工作內容 | 分支 |
+|------|----------|------|
+| 2026-06-24 | 首頁標籤多選：tagFilter 改 Set<string>，AND 邏輯過濾，toggle 選取/取消 | feat/home-tag-multiselect（已 merge） |
+| 2026-06-24 | 播放頁 I 鍵快捷鍵：toggleImportantPage 綁 I 鍵；shortcuts 說明補 I 項 | feat/important-page-i-key（已 merge） |
+| 2026-06-24 | 複製全部逐字稿按鈕：所有頁面 scripts 排序後 join，## 第 N 頁標題 | feat/copy-all-scripts（已 merge） |
+| 2026-06-24 | list 模式最近播放綠點：isRecentlyPlayed() 為 true 顯示 emerald-400 圓點 | feat/list-recently-played-dot（已 merge） |
+| 2026-06-24 | 答題記錄折疊：預設顯示 5 筆，超過時顯示「顯示更多（共 N 筆）」toggle | feat/quiz-history-collapse（已 merge） |
