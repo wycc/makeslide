@@ -1373,6 +1373,9 @@ export default function HomePage() {
                             {pdf.description?.trim() && (
                               <span className="ml-2 truncate text-slate-500" title={pdf.description}>— {pdf.description}</span>
                             )}
+                            {pdf.updated_at && (
+                              <span className="ml-2 text-slate-600">{formatRelativeTime(pdf.updated_at)}</span>
+                            )}
                           </p>
                           {(pdf.tags ?? '').trim() && (
                             <div className="mt-1 flex flex-wrap gap-1">
