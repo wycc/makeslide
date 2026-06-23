@@ -1872,3 +1872,9 @@ export async function pollBatchExport(jobId: string): Promise<{ jobId: string; s
 export function batchExportDownloadUrl(jobId: string): string {
   return `api/export/batch/${encodeURIComponent(jobId)}/download`;
 }
+
+export async function generateAiQuizQuestion(id: string, pageNumber: number): Promise<{ question: string; options: string[]; correct_index: number; explanation: string }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/generate-quiz-question`, { method: 'POST' });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { question: string; options: string[]; correct_index: number; explanation: string };
+}
