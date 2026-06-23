@@ -956,6 +956,20 @@ export default function QuizBuilderPage() {
               {!historyBusy && !historyError && historySessions.length === 0 ? (
                 <p className="mt-1 text-xs text-slate-500">{t('quiz.noHistory')}</p>
               ) : null}
+              {!historyBusy && !historyError && historySessions.length > 0 && (() => {
+                const allAttempts = historySessions.flatMap((s) => s.attempts);
+                const scoredAttempts = allAttempts.filter((a) => a.score != null);
+                const avgScore = scoredAttempts.length > 0
+                  ? Math.round(scoredAttempts.reduce((sum, a) => sum + (a.score ?? 0), 0) / scoredAttempts.length * 100) / 100
+                  : null;
+                return (
+                  <p className="mt-1 text-xs text-slate-400">
+                    {t('quiz.historyAvgScore')
+                      .replace('{total}', String(allAttempts.length))
+                      .replace('{avg}', avgScore != null ? String(avgScore) : t('quiz.notScored'))}
+                  </p>
+                );
+              })()}
               <ul className="mt-2 space-y-3">
                 {(historyShowAll ? historySessions : historySessions.slice(0, 5)).map((session) => (
                   <li key={session.session_id} className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-xs">

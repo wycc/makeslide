@@ -1396,6 +1396,7 @@ export const en = {
   'quiz.historyQuestionMissing': 'Question content not found, so detailed answers cannot be displayed.',
   'quiz.historyShowMore': 'Show more ({n} total)',
   'quiz.historyShowLess': 'Show less',
+  'quiz.historyAvgScore': '{total} attempts total, avg score {avg}',
   'quiz.titleLabel': 'Quiz name',
   'quiz.promptLabel': 'Instructions for AI',
   'quiz.busy': 'Processing…',
