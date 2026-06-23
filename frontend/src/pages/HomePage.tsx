@@ -1320,6 +1320,14 @@ export default function HomePage() {
                         </div>
                         <button
                           type="button"
+                          className={`shrink-0 rounded p-1 transition ${favorites.has(pdf.id) ? 'text-amber-400 hover:text-amber-300' : 'text-slate-500 hover:bg-slate-700 hover:text-amber-400'}`}
+                          onClick={(e) => { e.stopPropagation(); handleToggleFavorite(pdf.id); }}
+                          aria-label={favorites.has(pdf.id) ? t('card.unfavorite') : t('card.favorite')}
+                        >
+                          {favorites.has(pdf.id) ? '★' : '☆'}
+                        </button>
+                        <button
+                          type="button"
                           className="shrink-0 rounded p-1 text-slate-400 transition hover:bg-slate-700 hover:text-rose-400"
                           onClick={(e) => { e.stopPropagation(); void handleDelete(pdf.id); }}
                           aria-label={t('card.delete')}
