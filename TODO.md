@@ -482,3 +482,16 @@
 | 2026-06-23 | 課後報告全頁完成率熱力圖：PostClassReportPanel 加入 8×8 px 格子熱力圖，四色（emerald/muted/amber/rose）依完成率著色，tooltip 顯示頁碼 | feat/report-completion-heatmap（已 merge） |
 | 2026-06-23 | 同步問答 AI 摘要：`POST /api/pdfs/:id/sync/questions/summarize` 後端端點（master-only，callChatJSON 產出 Markdown 摘要）；前端「AI 摘要所有問題」紫色按鈕 + 摘要卡片；PlayPageContext 新增 handleSummarizeFollowerQuestions/questionSummary/questionSummaryBusy | feat/sync-qa-summary（已 merge） |
 | 2026-06-23 | 播放頁逐字稿關鍵字搜尋：SlidePanel script tab 頂部加入搜尋輸入框，pageSentences 過濾後顯示高亮結果（amber mark），Prev/Next 循環切換，計數顯示 N/total；i18n scriptSearch* | feat/script-search（已 merge） |
+
+## 新增可執行項目（第十三輪）
+[ ] 在設定中，產生 MCP Auth Token 時，自動產生可用的 MCP json 設定檔的模版。
+[x] 新增簡報時，如果可能的話新增在目前的類別中。
+  - 修改說明（2026-06-23）：`handleUploaded` callback 在 `categoryFilter` 不為特殊值（`__all__`、`__recent__` 等前綴為 `__` 的過濾條件）時，自動呼叫 `updatePdfCategory(resp.id, categoryFilter)` 將新上傳的 PDF 歸入目前顯示的類別；category 更新完成後再次 `load({ silent: true })` 刷新列表。純前端改動，無需後端修改。分支 `feat/upload-to-current-category`，已 merge 回 master。
+[ ] 檢查同步模式時，為什麼有時會自動跳到 follower 模式中。應該想辦法讓進入 master 模式後，就算 reload page 也不應該變成 follower 模式。
+
+## 工作記錄（第十三輪）
+
+| 日期 | 工作摘要 | 分支 |
+|------|---------|------|
+| 2026-06-23 | 新增簡報時自動歸入目前類別：handleUploaded 在非特殊 categoryFilter 時呼叫 updatePdfCategory，更新後再次刷新列表；純前端改動 | feat/upload-to-current-category（已 merge） |
+
