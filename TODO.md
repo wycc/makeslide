@@ -832,8 +832,23 @@
 
 ## 新增可執行項目（第二十四輪）
 
-- [ ] PlayPageSidebar 複製書籤/重要頁面頁碼清單：在書籤與重要頁面 section 各加入「複製清單」小按鈕，以「第 3, 7, 12 頁」格式複製到剪貼簿；補 i18n；純前端改動。
-- [ ] QuizBuilderPage JSON 匯出：在題目編輯器按鈕列加入「匯出 JSON」按鈕，觸發瀏覽器下載包含 title + questions 的 JSON 檔案；無需 i18n 新 key（可複用）；純前端改動。
-- [ ] 首頁收藏按鈕顯示數量：在「只顯示收藏」切換按鈕旁加入收藏數量徽章（如「★ 5」），讓使用者一眼知道有幾筆收藏；純前端改動。
-- [ ] PlayPageSlidePanel 逐字稿搜尋跨頁保留：換頁時保留 scriptSearch 詞，不重置 scriptSearchIdx；換頁後重新在新頁的稿中搜尋（highlight 保持）；純前端改動。
-- [ ] PlayPageHeader 目前分享狀態標籤：在分享建立表單上方加入目前 visibility 狀態小標籤（🌐 公開 / ✏️ 可編輯 / 🔒 私密），讓使用者知道現在是什麼狀態；補 i18n；純前端改動。
+- [x] PlayPageSidebar 複製書籤/重要頁面頁碼清單：書籤/重要頁面 section header 各加「複製清單」按鈕；i18n 3 key；純前端改動。
+  - 修改說明（2026-06-24）：`PlayPageSidebar.tsx` 加 bookmarkCopyMsg/importantCopyMsg state；兩個 section header 各加 button；i18n `play.sidebar.copyList/Done/Fail`。分支 `feat/sidebar-copy-page-list`，已 merge 回 master。
+- [x] QuizBuilderPage JSON 匯出：按鈕列加「匯出 JSON」；Blob + URL.createObjectURL 下載；i18n `quiz.exportJson`；純前端改動。
+  - 修改說明（2026-06-24）：`QuizBuilderPage.tsx` 新增 export button；Blob 下載；i18n 1 key。分支 `feat/quiz-export-json`，已 merge 回 master。
+- [x] 首頁收藏按鈕顯示數量：收藏按鈕內加入 `favorites.size` 徽章（amber 背景）；純前端改動。
+  - 修改說明（2026-06-24）：`HomePage.tsx` favoritesOnly button 文字後加 span 顯示 `favorites.size`。分支 `feat/home-favorites-count`，已 merge 回 master。
+- [x] PlayPageHeader 目前分享狀態標籤：在分享表單上方加 visibility 狀態 span（🔒/🌐/✏️）；i18n 3 key；純前端改動。
+  - 修改說明（2026-06-24）：`PlayPageHeader.tsx` 在 !currentShareToken div 前加狀態 span；i18n `play.share.statusPrivate/Public/Editable`。分支 `feat/play-share-status-badge`，已 merge 回 master。
+- [x] PlayPageSlidePanel 逐字稿搜尋跨頁自動回到第一結果：換頁時 useEffect reset scriptSearchIdx → 0（若有搜尋詞）；純前端改動。
+  - 修改說明（2026-06-24）：`PlayPageSlidePanel.tsx` 新增 useEffect([currentIdx]) reset scriptSearchIdx。分支 `feat/script-search-persist`，已 merge 回 master。
+
+## 工作記錄（第二十四輪，2026-06-24）
+
+| 日期 | 工作內容 | 分支 |
+|------|----------|------|
+| 2026-06-24 | Sidebar 複製書籤/重要頁面清單：copyList button + 3 i18n key | feat/sidebar-copy-page-list（已 merge） |
+| 2026-06-24 | Quiz JSON 匯出：Blob 下載 + quiz.exportJson i18n | feat/quiz-export-json（已 merge） |
+| 2026-06-24 | 首頁收藏計數徽章：favorites.size span in favoritesOnly button | feat/home-favorites-count（已 merge） |
+| 2026-06-24 | Play header 分享狀態標籤：visibility span + 3 i18n key | feat/play-share-status-badge（已 merge） |
+| 2026-06-24 | 逐字稿搜尋換頁回第一結果：useEffect([currentIdx]) reset index | feat/script-search-persist（已 merge） |
