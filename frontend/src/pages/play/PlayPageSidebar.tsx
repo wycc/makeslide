@@ -696,7 +696,12 @@ export function PlayPageSidebar() {
 
       <section className={`rounded-lg border border-slate-800 bg-slate-900/40 ${qaPanelExpanded ? 'md:hidden' : ''}`}>
         <div className="border-b border-slate-800 px-4 py-3">
-          <h2 className="text-sm font-semibold text-slate-300">{t('play.sidebar.bookmarksTitle')}</h2>
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-300">
+            {t('play.sidebar.bookmarksTitle')}
+            {bookmarks.length > 0 && (
+              <span className="rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-normal text-amber-300">{bookmarks.length}</span>
+            )}
+          </h2>
         </div>
         <div className="px-4 py-3">
           {bookmarks.length === 0 ? (
@@ -731,7 +736,12 @@ export function PlayPageSidebar() {
 
       <section className={`rounded-lg border border-slate-800 bg-slate-900/40 ${qaPanelExpanded ? 'md:hidden' : ''}`}>
         <div className="border-b border-slate-800 px-4 py-3">
-          <h2 className="text-sm font-semibold text-slate-300">{t('play.sidebar.importantTitle')}</h2>
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-300">
+            {t('play.sidebar.importantTitle')}
+            {importantPages.length > 0 && (
+              <span className="rounded-full bg-yellow-500/20 px-1.5 py-0.5 text-[10px] font-normal text-yellow-300">{importantPages.length}</span>
+            )}
+          </h2>
         </div>
         <div className="px-4 py-3">
           {importantPages.length === 0 ? (
