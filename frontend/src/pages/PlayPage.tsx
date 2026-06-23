@@ -2568,6 +2568,20 @@ export default function PlayPage() {
               className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none"
             />
             <p className="mt-1.5 text-xs text-slate-500">1 – {deckPages.length}</p>
+            <button
+              type="button"
+              onClick={() => {
+                const n = Math.floor(Number(gotoPageInput));
+                if (n >= 1 && n <= deckPages.length) {
+                  setCurrentIdx(n - 1);
+                  setGotoPageOpen(false);
+                }
+              }}
+              disabled={(() => { const n = Math.floor(Number(gotoPageInput)); return !(n >= 1 && n <= deckPages.length); })()}
+              className="mt-3 w-full rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-40"
+            >
+              {t('play.gotoPageConfirm')}
+            </button>
           </div>
         </div>
       )}
