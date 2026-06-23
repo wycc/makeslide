@@ -1608,6 +1608,7 @@ export default function PlayPage() {
         if (drawingMode) setDrawingTool('pen');
       } else if (ev.key.toLowerCase() === 'g') {
         ev.preventDefault();
+        if (isPlaying) playPause();
         setGotoPageInput('');
         setGotoPageOpen(true);
         setTimeout(() => gotoPageInputRef.current?.focus(), 50);
@@ -1642,7 +1643,7 @@ export default function PlayPage() {
     };
     window.addEventListener('keydown', onKey, { capture: true });
     return () => window.removeEventListener('keydown', onKey, { capture: true });
-  }, [playPause, goPrev, goNext, navigate, imageOnlyFullscreen, isLockedFullscreen, syncEnabled, syncRole, canUseDrawingTools, handleAiAnswerFollowerQuestions, fullscreenPollControlOpen, drawingMode, gotoPageOpen]);
+  }, [playPause, goPrev, goNext, navigate, imageOnlyFullscreen, isLockedFullscreen, syncEnabled, syncRole, canUseDrawingTools, handleAiAnswerFollowerQuestions, fullscreenPollControlOpen, drawingMode, gotoPageOpen, isPlaying]);
 
   // ---- Fullscreen API integration ----
   // 編輯版面、動畫編輯版面，以及透過分享連結鎖定的全螢幕都不進入瀏覽器原生全螢幕：
@@ -2389,6 +2390,8 @@ export default function PlayPage() {
     importantPages, toggleImportantPage,
     // poll badge
     newPollBadge, clearPollBadge,
+    // goto page dialog
+    gotoPageOpen, setGotoPageOpen, gotoPageInput, setGotoPageInput, gotoPageInputRef,
   };
 
 

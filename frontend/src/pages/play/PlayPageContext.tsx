@@ -491,6 +491,12 @@ export interface PlayPageContextValue {
   // ─── Poll new badge ───────────────────────────────────────────────────────────
   newPollBadge: boolean;
   clearPollBadge: () => void;
+  // ─── Goto page dialog ────────────────────────────────────────────────────────
+  gotoPageOpen: boolean;
+  setGotoPageOpen: (open: boolean) => void;
+  gotoPageInput: string;
+  setGotoPageInput: (v: string) => void;
+  gotoPageInputRef: RefObject<HTMLInputElement>;
 }
 
 // ── Context instance + hook ───────────────────────────────────────────────────
