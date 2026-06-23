@@ -579,6 +579,10 @@ function migrate(): void {
     db.exec(`ALTER TABLE pages ADD COLUMN page_notes TEXT NOT NULL DEFAULT ''`);
     logger.info('Added column pages.page_notes');
   }
+  if (!columnExists('pdfs', 'play_count')) {
+    db.exec(`ALTER TABLE pdfs ADD COLUMN play_count INTEGER NOT NULL DEFAULT 0`);
+    logger.info('Added column pdfs.play_count');
+  }
 
   logger.info({ dbPath: config.dbPath }, 'Database migrations applied');
 }

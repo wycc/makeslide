@@ -163,6 +163,7 @@ export interface PdfRow {
   tags?: string;
   last_played_at?: string | null;
   description?: string;
+  play_count?: number;
   created_at: string;
   updated_at: string;
 }
@@ -223,6 +224,7 @@ export interface PdfListItem {
   tags?: string;
   last_played_at?: string | null;
   description?: string;
+  play_count?: number;
   created_at: string;
   updated_at: string;
 }
@@ -291,6 +293,7 @@ export interface PdfDetail {
   tags?: string;
   last_played_at?: string | null;
   description?: string;
+  play_count?: number;
   created_at: string;
   updated_at: string;
   share_mode?: 'read_only' | 'editable';

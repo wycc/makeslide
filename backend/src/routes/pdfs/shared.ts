@@ -535,6 +535,7 @@ export function rowToListItem(row: PdfRow): PdfListItem {
     tags: row.tags ?? '',
     last_played_at: row.last_played_at ?? null,
     description: row.description ?? '',
+    play_count: row.play_count ?? 0,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -631,6 +632,7 @@ export function rowToDetail(row: PdfRow, pages: PageRow[], timingsByPage: PageTi
     tags: row.tags ?? '',
     last_played_at: row.last_played_at ?? null,
     description: row.description ?? '',
+    play_count: row.play_count ?? 0,
     created_at: row.created_at,
     updated_at: row.updated_at,
     video_url: fs.existsSync(videoPath(row.id)) ? `api/pdfs/${row.id}/video` : null,

@@ -770,6 +770,30 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     return reply.send({ id, description, updated_at: now });
   });
 
+  // POST /api/pdfs/:id/increment-play-count
+  app.post('/api/pdfs/:id/increment-play-count', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const { id } = parsed.data;
+    const row = db
+      .prepare(`SELECT id, owner_sub, visibility FROM pdfs WHERE id = ?`)
+      .get(id) as Pick<PdfRow, 'id' | 'owner_sub' | 'visibility'> | undefined;
+    if (!row) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    const sub = sessionSub(request);
+    const shareAccess = shareAccessForPdf(request, id);
+    if (!shareAccess && !canReadPdf(sub, row)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限存取此簡報'));
+    }
+    const result = db
+      .prepare(`UPDATE pdfs SET play_count = play_count + 1 WHERE id = ? RETURNING play_count`)
+      .get(id) as { play_count: number } | undefined;
+    return reply.send({ id, play_count: result?.play_count ?? 0 });
+  });
+
   // PATCH /api/pdfs/:id/last-played
   app.patch('/api/pdfs/:id/last-played', async (request, reply) => {
     const parsed = IdParamSchema.safeParse(request.params);

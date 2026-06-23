@@ -188,6 +188,7 @@ export interface PdfListItem {
   tags?: string;
   last_played_at?: string | null;
   description?: string;
+  play_count?: number;
   created_at: string;
   updated_at: string;
 }
@@ -485,6 +486,7 @@ export interface PdfDetail {
   tags?: string;
   last_played_at?: string | null;
   description?: string;
+  play_count?: number;
   created_at: string;
   updated_at: string;
   video_url?: string | null;

@@ -16,6 +16,7 @@ import {
   fetchWatchProgress,
   resolveShareToken,
   updateLastPlayed,
+  incrementPlayCount,
   fetchPlaybackSyncState,
   joinSharedPlaybackSync,
   joinPlaybackSync,
@@ -490,6 +491,7 @@ export default function PlayPage() {
         setLoadError(null);
         if (detailWithShare.status === 'ready') {
           void updateLastPlayed(pdfId).catch(() => undefined);
+          void incrementPlayCount(pdfId).catch(() => undefined);
         } else {
           timer = window.setTimeout(load, POLL_INTERVAL_MS);
         }

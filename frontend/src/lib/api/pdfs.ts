@@ -1851,6 +1851,12 @@ export async function updateLastPlayed(id: string): Promise<{ id: string; last_p
   return (await resp.json()) as { id: string; last_played_at: string };
 }
 
+export async function incrementPlayCount(id: string): Promise<{ id: string; play_count: number }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/increment-play-count`, { method: 'POST' });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { id: string; play_count: number };
+}
+
 export async function startBatchExport(): Promise<{ jobId: string; status: string }> {
   const resp = await fetch('api/export/batch', { method: 'POST' });
   if (!resp.ok) throw await parseErrorBody(resp);

@@ -288,10 +288,11 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExpo
             <GitHubMarkIcon className="h-3.5 w-3.5" />
           </div>
         ) : null}
-        {!showProcessingOverlay && (pdf.page_count != null || totalAudioDuration) && (
+        {!showProcessingOverlay && (pdf.page_count != null || totalAudioDuration || (pdf.play_count != null && pdf.play_count > 0)) && (
           <div className="absolute bottom-2 left-2 flex items-center gap-1.5 rounded-md bg-slate-900/70 px-2 py-0.5 text-[11px] text-slate-200 opacity-0 backdrop-blur-sm transition-opacity duration-200 group-hover:opacity-100">
             {pdf.page_count != null && <span>{t('card.pageCount').replace('{count}', String(pdf.page_count))}</span>}
             {totalAudioDuration && <span>{totalAudioDuration}</span>}
+            {pdf.play_count != null && pdf.play_count > 0 && <span>▶ {pdf.play_count}</span>}
           </div>
         )}
         {showProcessingOverlay && (
