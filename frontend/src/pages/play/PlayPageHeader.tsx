@@ -240,19 +240,24 @@ export function PlayPageHeader() {
         )}
         <div className="flex min-w-0 flex-1 items-center justify-center gap-1 sm:gap-2">
           {editingTitle ? (
-            <input
-              ref={inlineTitleRef}
-              value={titleInput}
-              onChange={(e) => setTitleInput(e.target.value)}
-              onBlur={commitTitleEdit}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') { e.preventDefault(); commitTitleEdit(); }
-                if (e.key === 'Escape') { cancelTitleEdit(); }
-              }}
-              placeholder={t('play.header.editTitlePlaceholder')}
-              maxLength={200}
-              className="min-w-0 flex-1 rounded-md border border-cyan-500/60 bg-slate-900 px-1.5 py-1 text-center text-xs text-slate-100 sm:px-2 sm:text-sm"
-            />
+            <>
+              <input
+                ref={inlineTitleRef}
+                value={titleInput}
+                onChange={(e) => setTitleInput(e.target.value)}
+                onBlur={commitTitleEdit}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); commitTitleEdit(); }
+                  if (e.key === 'Escape') { cancelTitleEdit(); }
+                }}
+                placeholder={t('play.header.editTitlePlaceholder')}
+                maxLength={200}
+                className="min-w-0 flex-1 rounded-md border border-cyan-500/60 bg-slate-900 px-1.5 py-1 text-center text-xs text-slate-100 sm:px-2 sm:text-sm"
+              />
+              <span className={`shrink-0 text-[11px] tabular-nums ${titleInput.length > 150 ? 'text-amber-400' : 'text-slate-500'}`}>
+                {titleInput.length}/200
+              </span>
+            </>
           ) : (
             <span
               onDoubleClick={startEditTitle}
