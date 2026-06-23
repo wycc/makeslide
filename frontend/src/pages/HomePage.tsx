@@ -27,6 +27,7 @@ import UploadButton from '../components/UploadButton';
 import GlobalSearchBox from '../components/GlobalSearchBox';
 import { useI18n } from '../i18n';
 import { useBudgetWarning } from '../hooks/useBudgetWarning';
+import { formatAudioDuration } from '../lib/audioDuration';
 
 const POLL_INTERVAL_ACTIVE_MS = 5000;
 const POLL_INTERVAL_IDLE_MS = 30000;
@@ -1358,6 +1359,9 @@ export default function HomePage() {
                           </p>
                           <p className="text-xs text-slate-400">
                             {t('home.listPages').replace('{count}', String(pdf.page_count))} · {pdf.category ?? t('home.listUncategorized')}
+                            {pdf.total_audio_duration_seconds != null && pdf.total_audio_duration_seconds > 0 && (
+                              <span className="ml-2">{formatAudioDuration(pdf.total_audio_duration_seconds)}</span>
+                            )}
                             {pdf.last_played_at && (
                               <span className="ml-2 text-slate-500">
                                 {t('home.listLastPlayed').replace('{time}', formatRelativeTime(pdf.last_played_at))}
