@@ -499,3 +499,22 @@
 | 2026-06-23 | MCP JSON 設定檔範本：token 產生後顯示 indigo 色設定檔區塊（npx tsx 格式，MAKESLIDE_URL 自動填入 origin，path placeholder 提示）；「複製設定檔」按鈕；i18n mcpConfig* 5 個鍵值 | feat/mcp-config-template（已 merge） |
 | 2026-06-23 | 修正同步 master 重整後變 follower：後端 GET /sync/state 對 master 呼叫者更新 TTL（keep-alive）；前端 wasMaster localStorage 旗標 + 輪詢時自動重奪空缺 master 槽 | feat/sync-master-persist（已 merge） |
 
+---- 計數重設 ----
+
+## 掃描摘要（2026-06-23 第十四輪）
+
+- 第十三輪 3 個項目全數完成（MCP 設定檔模版、上傳歸入目前類別、同步 master 持久化修正）。
+- 首頁 PDF 卡片沒有顯示播放次數，教師無法快速了解哪份教材最常被使用。
+- 測驗題目目前每次出題順序固定，無法隨機排列以避免學生作弊或重複印象。
+- 課堂投票已有票數統計，但缺少一鍵匯出 CSV 供離線分析。
+- 播放頁側邊欄缺少大綱/目錄面板，頁數多時跳頁不方便。
+- AI 導師問答回答後沒有「儲存為個人筆記」功能，學生學習紀錄無法保留。
+
+## 新增可執行項目（第十四輪）
+
+- [ ] 首頁 PDF 播放次數統計：`pdfs` 表新增 `play_count INTEGER DEFAULT 0` 欄位（migration），播放頁進入 ready 狀態時呼叫新增的 `POST /api/pdfs/:id/increment-play-count` 端點遞增；首頁 `PdfCard` 在頁數/時長 badge 旁顯示 `▶ N 次` 播放計數（有播放紀錄才顯示）；補後端測試 200 / 403 / 404。
+- [ ] 測驗隨機排序題目：`quiz_sets` 表新增 `shuffle_questions BOOLEAN DEFAULT 0` 欄位（migration），測驗編輯頁加入「隨機排序題目」checkbox；播放頁載入測驗時若 `shuffle_questions = 1`，前端對 `questions` 陣列做 Fisher-Yates shuffle 後再渲染；補後端 schema 測試與前端 shuffle 純函式測試。
+- [ ] 頁面投票結果 CSV 匯出：新增 `GET /api/pdfs/:id/poll-results.csv` 後端端點，彙整所有 `page_polls` 的投票選項與票數（欄位：page_number、poll_question、option_index、option_text、vote_count、total_votes），回傳 `text/csv`；播放頁課後報告面板或側邊欄加入「匯出投票 CSV」按鈕；補後端測試 200 / 403 / 404 / 空投票。
+- [ ] 播放頁側邊欄大綱面板：在側邊欄新增「大綱」分頁（Tab），列出所有頁面的縮圖與頁碼，點擊可跳頁；若頁面有 `page_notes` 標題行（`# `開頭的第一行）或前 20 字的逐字稿摘要作為顯示標題；純前端改動，不需新增後端端點。
+- [ ] AI 問答回覆存為個人筆記：在 `PageAskPanel` 的 AI 回覆卡片旁加入「存為筆記」按鈕，將「Q: {問題}\nA: {回覆}」追加至目前頁面的 `page_notes`（呼叫既有 `PATCH /api/pdfs/:id/pages/:n/note`）；補 i18n `play.sidebar.saveAsNote/saveAsNoteDone/saveAsNoteFail`。
+
