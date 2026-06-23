@@ -1134,6 +1134,7 @@ export const en = {
   'play.sidebar.importantEmpty': 'No important pages yet. Click ★ at the bottom-left of a slide to mark one.',
   'play.sidebar.markImportant': 'Mark as important',
   'play.sidebar.unmarkImportant': 'Unmark important',
+  'play.sidebar.pollNewBadge': 'New poll',
   'play.sidebar.outlineTitle': '📋 Outline',
   'play.sidebar.outlineEmpty': 'No pages yet',
   'play.sidebar.outlinePageLabel': 'Page {page}',
