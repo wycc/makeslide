@@ -453,6 +453,25 @@ export default function PlayPage() {
     });
   }, [bookmarksStorageKey]);
 
+  const importantPagesStorageKey = pdfId ? `makeslide.importantPages.${pdfId}` : '';
+  const [importantPages, setImportantPages] = useState<number[]>(() => {
+    if (!pdfId) return [];
+    try {
+      const raw = window.localStorage.getItem(`makeslide.importantPages.${pdfId}`);
+      const parsed: unknown = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? (parsed as number[]) : [];
+    } catch { return []; }
+  });
+
+  const toggleImportantPage = useCallback((pageNumber: number) => {
+    if (!importantPagesStorageKey) return;
+    setImportantPages((prev) => {
+      const next = prev.includes(pageNumber) ? prev.filter((n) => n !== pageNumber) : [...prev, pageNumber].sort((a, b) => a - b);
+      window.localStorage.setItem(importantPagesStorageKey, JSON.stringify(next));
+      return next;
+    });
+  }, [importantPagesStorageKey]);
+
   useEffect(() => {
     hasRestoredProgressRef.current = false;
     resumePositionRef.current = null;
@@ -2336,6 +2355,8 @@ export default function PlayPage() {
     acquireWakeLock, releaseWakeLock,
     // bookmarks
     bookmarks, toggleBookmark,
+    // important pages
+    importantPages, toggleImportantPage,
   };
 
 
