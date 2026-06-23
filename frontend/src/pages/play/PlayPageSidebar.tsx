@@ -26,7 +26,7 @@ function getOutlineTitle(page: import('../../types').PdfDetailPage, scripts: Rec
 
 function OutlineSection() {
   const { t } = useI18n();
-  const { deckPages, currentIdx, setCurrentIdx, scripts, withImageBust } = usePlayPageContext();
+  const { deckPages, currentIdx, setCurrentIdx, visitedIdxSet, scripts, withImageBust } = usePlayPageContext();
 
   return (
     <section className="rounded-lg border border-slate-800 bg-slate-900/40">
@@ -71,8 +71,11 @@ function OutlineSection() {
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className={`text-xs font-medium ${isActive ? 'text-indigo-200' : 'text-slate-300'}`}>
+                      <p className={`flex items-center gap-1 text-xs font-medium ${isActive ? 'text-indigo-200' : 'text-slate-300'}`}>
                         {label}
+                        {visitedIdxSet.has(idx) && !isActive && (
+                          <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                        )}
                       </p>
                       {title ? (
                         <p className="truncate text-[11px] text-slate-500">{title}</p>

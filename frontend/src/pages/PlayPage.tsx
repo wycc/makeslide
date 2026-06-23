@@ -172,6 +172,7 @@ export default function PlayPage() {
   const [postClassReportLoading, setPostClassReportLoading] = useState(false);
   const [postClassReportError, setPostClassReportError] = useState<string | null>(null);
   const [currentIdx, setCurrentIdx] = useState(0);
+  const [visitedIdxSet, setVisitedIdxSet] = useState<ReadonlySet<number>>(() => new Set([0]));
   const [loadedSlideImage, setLoadedSlideImage] = useState<LoadedSlideImageState | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -587,6 +588,15 @@ export default function PlayPage() {
       return base;
     });
   }, [deckPages.length, currentIdx]);
+
+  useEffect(() => {
+    setVisitedIdxSet((prev) => {
+      if (prev.has(currentIdx)) return prev;
+      const next = new Set(prev);
+      next.add(currentIdx);
+      return next;
+    });
+  }, [currentIdx]);
 
   const readOnlyReason = isReadOnlyProcessing
     ? shareIsReadOnly
@@ -2314,7 +2324,7 @@ export default function PlayPage() {
     // routing
     pdfId, currentShareToken, isLockedFullscreen,
     // deck data
-    detail, setDetail, deckPages, currentPage, currentIdx, setCurrentIdx, totalPages, loadError,
+    detail, setDetail, deckPages, currentPage, currentIdx, setCurrentIdx, visitedIdxSet, totalPages, loadError,
     watchProgressByPage,
     // playback
     isPlaying, setIsPlaying, currentTime, setCurrentTime, duration, setDuration,
