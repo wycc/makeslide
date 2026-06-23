@@ -347,7 +347,9 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExpo
           </select>
         </label>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400">
-          <span>{formatDate(pdf.created_at)}</span>
+          <span title={`${t('card.createdAtLabel')}：${formatDate(pdf.created_at)}`}>
+            {t('card.createdAt').replace('{time}', formatRelativeTime(pdf.created_at))}
+          </span>
           {pdf.page_count != null && (
             <span>{t('card.pageCount').replace('{count}', String(pdf.page_count))}</span>
           )}

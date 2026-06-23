@@ -296,6 +296,8 @@ export const zhTW = {
   'card.totalAudioDurationLabel': '總語音長度',
   'card.lastPlayed': '上次播放：{time}',
   'card.lastPlayedLabel': '上次播放時間',
+  'card.createdAt': '建立於 {time}',
+  'card.createdAtLabel': '建立時間',
   'card.awaitingPrompt': '尚未開始 — 點擊卡片以輸入風格提示詞。',
   'card.failedTitle': '處理失敗',
   'card.failedMessage': '處理失敗，可點擊重試或刪除',

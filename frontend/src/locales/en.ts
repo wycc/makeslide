@@ -296,6 +296,8 @@ export const en = {
   'card.totalAudioDurationLabel': 'Total audio duration',
   'card.lastPlayed': 'Last played: {time}',
   'card.lastPlayedLabel': 'Last played time',
+  'card.createdAt': 'Created {time}',
+  'card.createdAtLabel': 'Creation time',
   'card.awaitingPrompt': 'Not started — click the card to enter a style prompt.',
   'card.failedTitle': 'Processing failed',
   'card.failedMessage': 'Processing failed. Click to retry or delete.',
