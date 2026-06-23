@@ -960,8 +960,23 @@
 
 ## 新增可執行項目（第二十八輪）
 
-- [ ] QualityCheckPanel 結果問題頁數 badge：檢查完成後（`results !== null`）在「品質檢查」標題旁顯示 `issuePages.length` 徽章（有問題時 rose 色，全無問題時 emerald 色 ✓）；純前端改動，無需 i18n。
-- [ ] 首頁 list 模式顯示音頻時長：list 模式頁數/類別文字行後加入 `· {formatAudioDuration(pdf.total_audio_duration_seconds)}` 音頻時長（`total_audio_duration_seconds` 非空才顯示）；純前端改動，不需後端修改。
-- [ ] PlayPageSidebar 大綱已觀看頁面 emerald 點：OutlineSection 每個項目若 `watchProgressByPage.has(page.page_number)` 且進度 > 0 則在頁碼旁加入 `h-1.5 w-1.5 rounded-full bg-emerald-400` 小點；純前端改動。
-- [ ] autoAdvance 倒數 badge 加單位文字：`autoAdvanceCountdown` badge 的數字後加入 `<span className="text-xs font-normal">s</span>` 秒單位；純前端改動，無需 i18n。
-- [ ] 首頁 list 模式顯示播放次數：list 模式每列在音頻時長資訊旁加入 `▶ {pdf.play_count}` 播放計數（`play_count > 0` 才顯示）；純前端改動。
+- [x] QualityCheckPanel 結果問題頁數 badge：檢查完成後（`results !== null`）在「品質檢查」標題旁顯示 `issuePages.length` 徽章（有問題時 rose 色，全無問題時 emerald 色 ✓）；純前端改動，無需 i18n。
+  - 修改說明（2026-06-24）：`QualityCheckPanel.tsx` 標題 h2 改 flex，`results !== null && !running` 時依 `issuePages.length` 顯示 emerald ✓ 或 rose 計數徽章。分支 `feat/quality-check-result-badge`，已 merge 回 master。
+- [x] 首頁 list 模式顯示音頻時長：list 模式頁數/類別文字行後加入 `formatAudioDuration(pdf.total_audio_duration_seconds)` 音頻時長（`total_audio_duration_seconds` 非空才顯示）；純前端改動，不需後端修改。
+  - 修改說明（2026-06-24）：`HomePage.tsx` list 模式類別文字後加入 `pdf.total_audio_duration_seconds > 0` 條件渲染，呼叫 `formatAudioDuration` 格式化並顯示音頻時長。分支 `feat/list-mode-audio-duration`，已 merge 回 master。
+- [x] PlayPageSidebar 大綱已觀看頁面 emerald 點：OutlineSection 每個項目在頁碼旁加入 emerald 小點標記已訪問頁面（session 內追蹤 `visitedIdxSet`，非 active 頁時顯示）；`PlayPageContext` 新增 `visitedIdxSet`；純前端改動。
+  - 修改說明（2026-06-24）：`PlayPageContext.tsx` 介面新增 `visitedIdxSet: ReadonlySet<number>`；`PlayPage.tsx` 加入 `useState<ReadonlySet<number>>(new Set([0]))` 及 `useEffect` 追蹤 `currentIdx` 變化；`PlayPageSidebar.tsx` OutlineSection 非 active 的已訪問頁顯示 emerald 小點。分支 `feat/outline-watched-dot`，已 merge 回 master。
+- [x] autoAdvance 倒數 badge 加單位文字：`autoAdvanceCountdown` badge 的數字後加入 `s` 秒單位（小號 text-[9px]）；純前端改動，無需 i18n。
+  - 修改說明（2026-06-24）：`PlayPageSlidePanel.tsx` 倒數 badge 改為 flex-col，數字下加 `text-[9px]` 的 `s` 單位標籤（emerald-400/70 色）。分支 `feat/auto-advance-countdown-unit`，已 merge 回 master。
+- [x] 首頁 list 模式顯示播放次數：list 模式每列音頻時長後加入 `播放 N 次`（sky 色，`play_count > 0` 才顯示）；補 i18n `home.listPlayCount`。
+  - 修改說明（2026-06-24）：`HomePage.tsx` 音頻時長 span 後加入 `pdf.play_count > 0` 條件渲染 sky 色播放計數；i18n `home.listPlayCount` 新增至 zh-TW 及 en。分支 `feat/list-mode-play-count`，已 merge 回 master。
+
+## 工作記錄（第二十八輪，2026-06-24）
+
+| 日期 | 工作內容 | 分支 |
+|------|----------|------|
+| 2026-06-24 | QualityCheckPanel 品質檢查結果 badge：h2 加 issuePages.length 徽章（emerald ✓ / rose 數字） | feat/quality-check-result-badge（已 merge） |
+| 2026-06-24 | 首頁 list 模式顯示音頻時長：total_audio_duration_seconds 非空時呼叫 formatAudioDuration 顯示 | feat/list-mode-audio-duration（已 merge） |
+| 2026-06-24 | 大綱已觀看頁面 emerald 點：PlayPageContext 新增 visitedIdxSet；PlayPage useEffect 追蹤；Sidebar 顯示小點 | feat/outline-watched-dot（已 merge） |
+| 2026-06-24 | autoAdvance 倒數 badge 加「s」後綴：flex-col 排列，數字下 text-[9px] 秒單位 | feat/auto-advance-countdown-unit（已 merge） |
+| 2026-06-24 | 首頁 list 模式顯示播放次數：play_count > 0 時顯示 sky 色「播放 N 次」；i18n home.listPlayCount | feat/list-mode-play-count（已 merge） |
