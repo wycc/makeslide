@@ -160,11 +160,18 @@ function PageNoteSection() {
           maxLength={5000}
           className="w-full resize-none rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 outline-none focus:border-indigo-400"
         />
-        {noteBusy ? (
-          <p className="mt-1 text-[11px] text-slate-400">…</p>
-        ) : noteMsg ? (
-          <p className="mt-1 text-[11px] text-emerald-300">{noteMsg}</p>
-        ) : null}
+        <div className="mt-1 flex items-center justify-between text-[11px]">
+          <span>
+            {noteBusy ? (
+              <span className="text-slate-400">…</span>
+            ) : noteMsg ? (
+              <span className="text-emerald-300">{noteMsg}</span>
+            ) : null}
+          </span>
+          {noteText.length > 0 && (
+            <span className="text-slate-500">{noteText.length} / 5000</span>
+          )}
+        </div>
       </div>
     </section>
   );
