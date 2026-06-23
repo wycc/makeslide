@@ -1357,7 +1357,7 @@ export default function HomePage() {
                                   key={tag}
                                   type="button"
                                   onClick={(e) => { e.stopPropagation(); setTagFilter((prev) => { const next = new Set(prev); next.has(tag) ? next.delete(tag) : next.add(tag); return next; }); }}
-                                  className={`rounded-full border px-2 py-0.5 text-[10px] transition ${tagFilter.has(tag) ? 'border-indigo-400 bg-indigo-500/30 text-indigo-200' : 'border-indigo-500/40 bg-indigo-500/15 text-indigo-300 hover:border-indigo-400 hover:bg-indigo-500/25'}`}
+                                  className={`rounded-full border px-2 py-0.5 text-[10px] transition active:scale-95 ${tagFilter.has(tag) ? 'border-indigo-400 bg-indigo-500/30 text-indigo-200' : 'border-indigo-500/40 bg-indigo-500/15 text-indigo-300 hover:border-indigo-400 hover:bg-indigo-500/25'}`}
                                 >
                                   {tag}
                                 </button>
