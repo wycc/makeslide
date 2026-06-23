@@ -484,7 +484,8 @@
 | 2026-06-23 | 播放頁逐字稿關鍵字搜尋：SlidePanel script tab 頂部加入搜尋輸入框，pageSentences 過濾後顯示高亮結果（amber mark），Prev/Next 循環切換，計數顯示 N/total；i18n scriptSearch* | feat/script-search（已 merge） |
 
 ## 新增可執行項目（第十三輪）
-[ ] 在設定中，產生 MCP Auth Token 時，自動產生可用的 MCP json 設定檔的模版。
+[x] 在設定中，產生 MCP Auth Token 時，自動產生可用的 MCP json 設定檔的模版。
+  - 修改說明（2026-06-23）：`SettingsPage.tsx` 新增 `getMcpConfigJson()` helper，以 `window.location.origin` 作為 `MAKESLIDE_URL`、產生的 token 作為 `MAKESLIDE_MCP_TOKEN`，產生可直接貼入 `~/.claude/mcp_servers.json` 的 `npx tsx` 格式 JSON（路徑含 placeholder）；`onCopyMcpConfigTemplate` callback 負責複製；token 顯示的 amber 區塊之後新增 indigo 色「MCP JSON 設定檔範本」區塊，含 `<pre>` 預覽與「複製設定檔」按鈕；zh-TW/en i18n 各新增 5 個 `settings.mcpConfig*` 鍵值。分支 `feat/mcp-config-template`，已 merge 回 master。
 [x] 新增簡報時，如果可能的話新增在目前的類別中。
   - 修改說明（2026-06-23）：`handleUploaded` callback 在 `categoryFilter` 不為特殊值（`__all__`、`__recent__` 等前綴為 `__` 的過濾條件）時，自動呼叫 `updatePdfCategory(resp.id, categoryFilter)` 將新上傳的 PDF 歸入目前顯示的類別；category 更新完成後再次 `load({ silent: true })` 刷新列表。純前端改動，無需後端修改。分支 `feat/upload-to-current-category`，已 merge 回 master。
 [ ] 檢查同步模式時，為什麼有時會自動跳到 follower 模式中。應該想辦法讓進入 master 模式後，就算 reload page 也不應該變成 follower 模式。
@@ -494,4 +495,5 @@
 | 日期 | 工作摘要 | 分支 |
 |------|---------|------|
 | 2026-06-23 | 新增簡報時自動歸入目前類別：handleUploaded 在非特殊 categoryFilter 時呼叫 updatePdfCategory，更新後再次刷新列表；純前端改動 | feat/upload-to-current-category（已 merge） |
+| 2026-06-23 | MCP JSON 設定檔範本：token 產生後顯示 indigo 色設定檔區塊（npx tsx 格式，MAKESLIDE_URL 自動填入 origin，path placeholder 提示）；「複製設定檔」按鈕；i18n mcpConfig* 5 個鍵值 | feat/mcp-config-template（已 merge） |
 
