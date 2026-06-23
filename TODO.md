@@ -1024,8 +1024,23 @@
 
 ## 新增可執行項目（第三十輪）
 
-- [ ] PlayPageSidebar 重要頁面縮圖預覽：重要頁面 chip 左側加入對應縮圖（`deckPages.find(p => p.page_number === pageNum)?.thumbnail_url ?? ...image_url`，`h-6 w-10 object-cover rounded`），與書籤 chip 視覺一致；純前端改動。
-- [ ] ImportTextPage 模式說明文字 i18n 化：第 204-207 行 hardcoded 中文改為 `t('importText.currentModePaste')` 和 `t('importText.currentModePrompt')`；補對應 i18n key 至 zh-TW 及 en。
-- [ ] GotoPage 對話框加「前往」確認按鈕：跳頁 dialog 的 input 下方加入「前往」按鈕（indigo 色），按下後執行跳頁並關閉 dialog（與 Enter 行為一致）；補 i18n `play.gotoPageConfirm`。
-- [ ] PlayPageSidebar 大綱標題顯示總播放時長：OutlineSection h2 標題列加入 `detail?.total_audio_duration_seconds` 格式化時長（`formatAudioDuration`，`> 0` 才顯示，slate-400 色）；引入 `formatAudioDuration`，純前端改動。
-- [ ] PlayPageHeader 頁碼計數加百分比：頁碼計數器 `{pageCounterText}` 下方加入 `{Math.round((currentIdx + 1) / totalPages * 100)}%` 進度百分比（text-[10px] slate-500 色）；純前端改動，無需 i18n。
+- [x] PlayPageSidebar 重要頁面縮圖預覽：重要頁面 chip 左側加入對應縮圖（`deckPages.find`，`h-6 w-10 object-cover rounded`），與書籤 chip 視覺一致；純前端改動。
+  - 修改說明（2026-06-24）：`PlayPageSidebar.tsx` 重要頁面 map 改為 block body，計算 `thumbSrc` 後在 button 內渲染縮圖 img。分支 `feat/important-pages-thumbnail`，已 merge 回 master。
+- [x] ImportTextPage 模式說明文字 i18n 化：第 204-207 行 hardcoded 中文改用 `t('importText.currentModePaste')` 和 `t('importText.currentModePrompt')`；補 2 個 key 至 zh-TW 及 en。
+  - 修改說明（2026-06-24）：`ImportTextPage.tsx` `mode === 'paste'` 三元式改用 t()；i18n 2 個 key 新增至 zh-TW 及 en。分支 `feat/importtext-mode-i18n`，已 merge 回 master。
+- [x] GotoPage 對話框加「前往」確認按鈕：跳頁 dialog input 下方加入 indigo「前往」按鈕（按下後跳頁並關閉），頁碼無效時 disabled；補 i18n `play.gotoPageConfirm`。
+  - 修改說明（2026-06-24）：`PlayPage.tsx` 跳頁 dialog 加入「前往」按鈕，邏輯與 Enter 相同；i18n `play.gotoPageConfirm` 新增至 zh-TW 及 en。分支 `feat/goto-page-confirm-button`，已 merge 回 master。
+- [x] PlayPageSidebar 大綱標題顯示總播放時長：OutlineSection 加入 `detail?.total_audio_duration_seconds` 時長（`formatAudioDuration`，slate-400 色）；引入 `formatAudioDuration`，並取 `detail` 自 context；純前端改動。
+  - 修改說明（2026-06-24）：`PlayPageSidebar.tsx` 匯入 `formatAudioDuration`，OutlineSection 解構 `detail`，標題 h2 flex 後加入時長 span。分支 `feat/outline-total-duration`，已 merge 回 master。
+- [x] PlayPageHeader 頁碼計數加百分比：頁碼計數器下方加入 `{Math.round((currentIdx+1)/totalPages*100)}%`（text-[10px] slate-500）；`totalPages > 1` 才顯示；純前端改動。
+  - 修改說明（2026-06-24）：`PlayPageHeader.tsx` 頁碼 div 加入 `totalPages > 1` 條件渲染的百分比 div（text-[10px] slate-500）。分支 `feat/header-page-percent`，已 merge 回 master。
+
+## 工作記錄（第三十輪，2026-06-24）
+
+| 日期 | 工作內容 | 分支 |
+|------|----------|------|
+| 2026-06-24 | 重要頁面縮圖預覽：deckPages.find + thumbnail_url，h-6 w-10 img 插入 chip 左側 | feat/important-pages-thumbnail（已 merge） |
+| 2026-06-24 | ImportTextPage 模式說明 i18n：hardcoded 中文改 t()；補 importText.currentModePaste/Prompt | feat/importtext-mode-i18n（已 merge） |
+| 2026-06-24 | GotoPage 加「前往」按鈕：indigo 按鈕，頁碼無效 disabled；i18n play.gotoPageConfirm | feat/goto-page-confirm-button（已 merge） |
+| 2026-06-24 | 大綱標題顯示總時長：formatAudioDuration(detail.total_audio_duration_seconds) slate-400 | feat/outline-total-duration（已 merge） |
+| 2026-06-24 | PlayPageHeader 頁碼計數加百分比：totalPages > 1 時顯示 text-[10px] 百分比 | feat/header-page-percent（已 merge） |
