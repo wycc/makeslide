@@ -802,8 +802,21 @@
 
 ## 新增可執行項目（第二十三輪）
 
-- [ ] PlayPageFullscreen 退出按鈕加 Esc 提示：在退出全螢幕按鈕的 title/tooltip 加入「(Esc)」說明；純前端改動，無需 i18n。
-- [ ] HomePage list 模式標籤按鈕按下動畫：對標籤 button 加入 `active:scale-95 transition-transform` 樣式；純前端改動。
-- [ ] QuizBuilderPage 保存後自動選中：`handleSave` 成功後 `setSelectedQuizId(savedId)`，讓剛存的測驗在列表中自動高亮；純前端改動。
-- [ ] PdfCard grid 模式標籤可點擊：與 list 模式一致，將 card 中的 `<span>` 標籤改為 `<button>`，onClick 觸發 `onTagFilter?.(tag)`；在 HomePage 傳入 handler；補 i18n（無需新 key）；純前端改動。
-- [ ] QuizBuilderPage 複製所有題目按鈕：在測驗編輯器頂部加入「複製所有題目」按鈕，將 questions 格式化為純文字（每題加題號、選項）後複製到剪貼簿；補 i18n；純前端改動。
+- [x] PlayPageFullscreen 退出按鈕加 Esc 提示：在退出全螢幕按鈕的 title/tooltip 加入「(Esc)」說明；純前端改動，無需 i18n。
+  - 修改說明（2026-06-24）：`PlayPageFullscreen.tsx` exit button 加 `title="Esc"` 及按鈕內 `(Esc)` span 文字提示。分支 `feat/fullscreen-esc-tooltip`，已 merge 回 master。
+- [x] HomePage list 模式標籤按鈕按下動畫：對標籤 button 加入 `active:scale-95` 樣式；純前端改動。
+  - 修改說明（2026-06-24）：`HomePage.tsx` list 模式標籤 className 加入 `active:scale-95`。分支 `feat/list-tag-active-animation`，已 merge 回 master。
+- [x] PdfCard grid 模式標籤可點擊：與 list 模式一致，card 標籤改 `<button>`；新增 `onTagFilter`/`activeTagFilters` props；HomePage 傳入 handler；純前端改動。
+  - 修改說明（2026-06-24）：`PdfCard.tsx` 新增 2 props；tag 改 button；`HomePage.tsx` 傳入 onTagFilter/activeTagFilters。分支 `feat/quiz-auto-select-saved`，已 merge 回 master。
+- [x] QuizBuilderPage 保存後自動選中（既有功能）：line 636 `handleSave` 已自動 `setSelectedQuizId(saved.id)`，無需實作。
+- [x] QuizBuilderPage 複製所有題目按鈕：在測驗編輯器按鈕列加入「複製所有題目」；格式化題目文字（題號、選項、✓ 標記、解說）後複製；補 i18n 3 key；純前端改動。
+  - 修改說明（2026-06-24）：`QuizBuilderPage.tsx` 新增 `copyQuestionsStatus` state + button；import `copyTextToClipboard`；i18n `quiz.copyQuestions/Done/Fail`。分支 `feat/quiz-copy-all-questions`，已 merge 回 master。
+
+## 工作記錄（第二十三輪，2026-06-24）
+
+| 日期 | 工作內容 | 分支 |
+|------|----------|------|
+| 2026-06-24 | 全螢幕退出按鈕加 (Esc) 提示：title + span 文字 | feat/fullscreen-esc-tooltip（已 merge） |
+| 2026-06-24 | list 標籤按下動畫：active:scale-95 | feat/list-tag-active-animation（已 merge） |
+| 2026-06-24 | PdfCard grid 標籤可點擊：onTagFilter/activeTagFilters props + button | feat/quiz-auto-select-saved（已 merge） |
+| 2026-06-24 | Quiz 複製所有題目：格式化題目文字 + 複製；3 個 i18n key | feat/quiz-copy-all-questions（已 merge） |
