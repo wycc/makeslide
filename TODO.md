@@ -852,3 +852,20 @@
 | 2026-06-24 | 首頁收藏計數徽章：favorites.size span in favoritesOnly button | feat/home-favorites-count（已 merge） |
 | 2026-06-24 | Play header 分享狀態標籤：visibility span + 3 i18n key | feat/play-share-status-badge（已 merge） |
 | 2026-06-24 | 逐字稿搜尋換頁回第一結果：useEffect([currentIdx]) reset index | feat/script-search-persist（已 merge） |
+
+## 掃描摘要（2026-06-24 第二十五輪）
+
+- 第二十四輪 5 個項目全數完成（Sidebar 複製清單、Quiz JSON 匯出、收藏計數、分享狀態標籤、搜尋換頁重置）。
+- `PlayPageFullscreen.tsx` 全螢幕模式只有手勢換頁，沒有滑鼠可見的 prev/next 按鈕；滑鼠操作不直覺。
+- `SettingsPage.tsx` OpenAI/Gemini API Key 輸入框沒有即時格式指示，使用者不確定填入的 key 格式是否正確。
+- `PlayPageHeader.tsx` 行內標題編輯有 maxLength=200 但無字數顯示，接近上限時無警告。
+- `PlayPageSidebar.tsx` 瀏覽到有筆記的頁面時，sidebar 無任何視覺提示；使用者容易遺漏既有筆記。
+- `QuizBuilderPage.tsx` 測驗集列表只顯示標題，沒有題目數量 badge，難以快速比較各測驗的規模。
+
+## 新增可執行項目（第二十五輪）
+
+- [ ] PlayPageFullscreen 兩側換頁按鈕：全螢幕模式投影片左右各加半透明 prev/next 按鈕，hover 時以 `opacity-0 hover:opacity-100` 淡入，點擊換頁；不干擾手勢滑動；純前端改動，補 i18n `play.fullscreen.prevPage/nextPage`。
+- [ ] SettingsPage API Key 格式指示 icon：OpenAI key 輸入框右側加格式 icon（輸入以 `sk-` 開頭時顯示 ✓、空白時顯示 -、其他顯示 ?），Gemini 以 `AIza` 開頭判斷；純前端靜態驗證，不呼叫 API；補 i18n `settings.apiKeyValid/Invalid/Empty`。
+- [ ] PlayPageHeader 標題編輯字數顯示：行內標題編輯模式啟用時，在輸入框旁顯示「N/200」字數統計；字數 > 150 時文字轉 amber 色；純前端改動。
+- [ ] PlayPageSidebar 有筆記頁面指示點：PageNoteSection 標題旁加入小圓點（emerald），當目前頁面的 `currentPage?.page_notes?.trim()` 非空時顯示，提示此頁已有筆記；純前端改動，無需 i18n。
+- [ ] QuizBuilderPage 測驗題目數量 badge：在 `savedQuizzes` 列表每個測驗標題右側加入灰色 badge 顯示題目數量（`quiz.questions.length` 道題）；若 `questions` 為空不顯示；補 i18n `quiz.questionCount`；純前端改動。
