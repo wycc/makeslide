@@ -555,7 +555,8 @@
   - 修改說明（2026-06-23）：`PdfCard.tsx` 將 `<span>{formatDate(pdf.created_at)}</span>` 改為使用 `formatRelativeTime(pdf.created_at)`（已有同函式用於 last_played_at）；原始格式化日期保留在 `title` tooltip 中供 hover 查看；i18n `card.createdAt/createdAtLabel` 新增至 zh-TW 及 en。分支 `feat/pdfcard-relative-created-at`，已 merge 回 master。
 - [x] 播放頁標題行內編輯：播放頁 header 的標題文字雙擊（dblclick）進入 inline `<input>` 編輯模式，Enter 或失焦時呼叫 `PATCH /api/pdfs/:id/title` 儲存，Escape 取消；補 i18n `play.header.editTitlePlaceholder`。
   - 修改說明（2026-06-23）：`PlayPageHeader.tsx` 移除常駐 `<input>` + 「Update Title」按鈕，改為標題 `<span>`（雙擊進入編輯模式）+ 條件式 `<input>`（Enter/blur commit、Escape cancel）；新增 `editingTitle`/`titleBeforeEdit`/`inlineTitleRef` 狀態與 `startEditTitle`/`commitTitleEdit`/`cancelTitleEdit` handlers；儲存中時顯示行內灰色「儲存中…」文字，`titleBusy` 期間不可重複觸發；i18n `play.header.editTitlePlaceholder`/`editTitleHint` 新增至 zh-TW 及 en；TypeCheck 無誤。分支 `feat/inline-title-edit`，已 merge 回 master。
-- [ ] 同步模式踢出學生：`PlayPageSlidePanel` 出席名單每位學生旁加入「踢出」按鈕；新增後端 `DELETE /api/pdfs/:id/sync/attendees/:clientId` 端點（owner-only，從 `sync_attendees` 標記封鎖，或直接清除該 client 的 attendee 紀錄）；follower 被踢後下次輪詢 GET /sync/state 可回傳 forbidden 訊號；補後端測試 200 / 403 / 404。
+- [x] 同步模式踢出學生：`PlayPageSlidePanel` 出席名單每位學生旁加入「踢出」按鈕；新增後端 `DELETE /api/pdfs/:id/sync/attendees/:clientId` 端點（owner-only，從 `sync_attendees` 標記封鎖，或直接清除該 client 的 attendee 紀錄）；follower 被踢後下次輪詢 GET /sync/state 可回傳 forbidden 訊號；補後端測試 200 / 403 / 404。
+  - 修改說明（2026-06-23）：後端 `sync.ts` 新增 `DELETE /api/pdfs/:id/sync/attendees/:clientId`（owner-only，直接清除出席紀錄）；前端 `kickSyncAttendee()` API 函式；`PlayPageSlidePanel` 引入 `kickSyncAttendee`、新增 `kickingClientId` state 與 `handleKickAttendee` async handler；出席名單每位學生旁加入玫瑰色「踢出」按鈕（踢出中顯示「…」），踢出後立即從本地列表移除；i18n `play.slidePanel.kickAttendee` 新增至 zh-TW 及 en；`sync-attendees.test.ts` 補 3 個 DELETE 測試（200/403/404）。分支 `feat/sync-kick-attendee`，已 merge 回 master。
 
 ## 工作記錄（第十五輪）
 
@@ -565,3 +566,4 @@
 | 2026-06-23 | 播放頁字幕位置切換：`SubtitlePosition` 型別+helper；PlayPageContext/PlayPage/SlidePanel 全串接；設定面板底部/頂部按鈕群組；i18n subtitlePosition/bottom/top | feat/subtitle-position（已 merge） |
 | 2026-06-23 | 播放頁標題行內編輯：標題改為雙擊進入 inline input，Enter/blur commit，Escape cancel；移除常駐 input+Update 按鈕；儲存中顯示灰色文字；i18n editTitlePlaceholder/editTitleHint | feat/inline-title-edit（已 merge） |
 | 2026-06-23 | 測驗題目 AI 草稿：`POST /api/pdfs/:id/pages/:n/generate-quiz-question`（四選項+correct_index+explanation）；`generateAiQuizQuestion()` API 函式；QuizBuilderPage 頁碼選擇器 + 紫羅蘭色按鈕；3 個後端測試通過 | feat/quiz-ai-draft-question（已 merge） |
+| 2026-06-23 | 同步模式踢出學生：`DELETE /api/pdfs/:id/sync/attendees/:clientId`（owner-only）；`kickSyncAttendee()` API；SlidePanel 出席名單玫瑰色「踢出」按鈕 + handleKickAttendee；3 個後端測試（200/403/404） | feat/sync-kick-attendee（已 merge） |
