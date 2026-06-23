@@ -583,8 +583,9 @@ export function PlayPageSlidePanel() {
             </div>
           ) : null}
           {autoAdvanceCountdown != null ? (
-            <div className="pointer-events-none absolute bottom-4 right-4 flex h-10 w-10 items-center justify-center rounded-full border-2 border-emerald-400/80 bg-slate-900/80 text-lg font-bold text-emerald-300">
-              {autoAdvanceCountdown}
+            <div className="pointer-events-none absolute bottom-4 right-4 flex h-10 w-10 flex-col items-center justify-center rounded-full border-2 border-emerald-400/80 bg-slate-900/80 font-bold text-emerald-300">
+              <span className="text-lg leading-none">{autoAdvanceCountdown}</span>
+              <span className="text-[9px] leading-none text-emerald-400/70">s</span>
             </div>
           ) : null}
         </div>
