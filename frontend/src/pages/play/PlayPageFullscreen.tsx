@@ -569,9 +569,10 @@ export function PlayPageFullscreen() {
               e.stopPropagation();
               setImageOnlyFullscreen(false);
             }}
+            title="Esc"
             className="rounded-md border border-slate-500 bg-slate-900/70 px-3 py-1.5 text-sm text-slate-100"
           >
-            {t('play.fullscreen.exit')}
+            {t('play.fullscreen.exit')} <span className="ml-1 text-[11px] text-slate-400">(Esc)</span>
           </button>
         ) : null}
       </div>
