@@ -250,6 +250,7 @@ export const zhTW = {
   'home.sort.pageCountDesc': '頁數多到少',
   'home.sort.audioDurationDesc': '最長課程優先',
   'home.sort.audioDurationAsc': '最短課程優先',
+  'home.sort.lastPlayedDesc': '最近播放優先',
   'home.allCategories': '全部類別',
   'home.manageDisplayCategories': '管理顯示類別',
   'home.newCategoryPlaceholder': '輸入新類別名稱',

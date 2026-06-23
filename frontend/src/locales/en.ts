@@ -250,6 +250,7 @@ export const en = {
   'home.sort.pageCountDesc': 'Most pages',
   'home.sort.audioDurationDesc': 'Longest course first',
   'home.sort.audioDurationAsc': 'Shortest course first',
+  'home.sort.lastPlayedDesc': 'Recently played first',
   'home.allCategories': 'All categories',
   'home.manageDisplayCategories': 'Manage display categories',
   'home.newCategoryPlaceholder': 'Enter a new category name',
