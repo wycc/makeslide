@@ -281,6 +281,9 @@ export function PlayPageHeader() {
         </div>
           <div className="shrink-0 whitespace-nowrap text-right text-xs text-slate-400 sm:w-20 sm:text-sm">
             {pageCounterText}
+            {totalPages > 1 && (
+              <div className="text-[10px] text-slate-500">{Math.round((currentIdx + 1) / totalPages * 100)}%</div>
+            )}
           </div>
           <label className="ml-2 inline-flex items-center gap-1 text-xs text-slate-300">
             <input
