@@ -1214,6 +1214,13 @@ export function PlayPageSlidePanel() {
               <div className="mt-2 flex items-center justify-between gap-3">
                 <div className="text-xs text-slate-400">
                   {editorError ? <span className="text-rose-300">{editorError}</span> : t('play.slidePanel.transcript.saveHint')}
+                  {!editorError && editingScript.trim() && (() => {
+                    const chars = editingScript.trim().length;
+                    const secs = Math.round(chars / 4);
+                    const mm = Math.floor(secs / 60);
+                    const ss = String(secs % 60).padStart(2, '0');
+                    return <span className="ml-2 text-slate-500">{t('play.slidePanel.transcript.charCount').replace('{n}', String(chars))} · {mm}:{ss}</span>;
+                  })()}
                 </div>
                 <button
                   type="button"

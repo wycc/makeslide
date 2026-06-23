@@ -712,6 +712,7 @@ export const zhTW = {
   'play.slidePanel.transcript.copyScriptDone': '✓ 已複製',
   'play.slidePanel.transcript.placeholder': '請輸入本頁逐字稿...',
   'play.slidePanel.transcript.saveHint': '儲存後會僅重生此頁語音',
+  'play.slidePanel.transcript.charCount': '{n} 字',
   'play.slidePanel.transcript.regenerating': '重生中…',
   'play.slidePanel.transcript.saveAndRegenerate': '儲存並重生語音',
   'play.slidePanel.prompt.heading': '🪄 提示詞（第 {page} 頁）',
