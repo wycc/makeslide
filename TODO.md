@@ -820,3 +820,20 @@
 | 2026-06-24 | list 標籤按下動畫：active:scale-95 | feat/list-tag-active-animation（已 merge） |
 | 2026-06-24 | PdfCard grid 標籤可點擊：onTagFilter/activeTagFilters props + button | feat/quiz-auto-select-saved（已 merge） |
 | 2026-06-24 | Quiz 複製所有題目：格式化題目文字 + 複製；3 個 i18n key | feat/quiz-copy-all-questions（已 merge） |
+
+## 掃描摘要（2026-06-24 第二十四輪）
+
+- 第二十三輪 4 個項目實作完成（全螢幕 Esc 提示、list 標籤動畫、grid 標籤可點擊、Quiz 複製題目）。
+- PlayPageSidebar 書籤/重要頁面只能逐一點選跳頁，沒有「複製頁碼清單」功能以方便記錄分享。
+- QuizBuilderPage 題目只能複製純文字，缺少 JSON 格式下載（可用於備份或匯入其他系統）。
+- 首頁收藏過濾切換有按鈕，但沒有在按鈕旁顯示目前收藏數量（只知道有/無收藏，不知道幾筆）。
+- PlayPageSlidePanel 逐字稿搜尋在換頁後 index 重置，搜尋詞不跨頁保留。
+- PlayPageHeader 分享狀態（公開/私密/可編輯）在畫面上只有建立連結表單，沒有明確顯示目前狀態的標籤。
+
+## 新增可執行項目（第二十四輪）
+
+- [ ] PlayPageSidebar 複製書籤/重要頁面頁碼清單：在書籤與重要頁面 section 各加入「複製清單」小按鈕，以「第 3, 7, 12 頁」格式複製到剪貼簿；補 i18n；純前端改動。
+- [ ] QuizBuilderPage JSON 匯出：在題目編輯器按鈕列加入「匯出 JSON」按鈕，觸發瀏覽器下載包含 title + questions 的 JSON 檔案；無需 i18n 新 key（可複用）；純前端改動。
+- [ ] 首頁收藏按鈕顯示數量：在「只顯示收藏」切換按鈕旁加入收藏數量徽章（如「★ 5」），讓使用者一眼知道有幾筆收藏；純前端改動。
+- [ ] PlayPageSlidePanel 逐字稿搜尋跨頁保留：換頁時保留 scriptSearch 詞，不重置 scriptSearchIdx；換頁後重新在新頁的稿中搜尋（highlight 保持）；純前端改動。
+- [ ] PlayPageHeader 目前分享狀態標籤：在分享建立表單上方加入目前 visibility 狀態小標籤（🌐 公開 / ✏️ 可編輯 / 🔒 私密），讓使用者知道現在是什麼狀態；補 i18n；純前端改動。
