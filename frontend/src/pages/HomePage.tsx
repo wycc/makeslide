@@ -218,7 +218,7 @@ export default function HomePage() {
   const [recentSearches, setRecentSearches] = useState<string[]>(readRecentSearches);
   const [searchFocused, setSearchFocused] = useState(false);
   const [explicitSortMode, setExplicitSortMode] = useState<SortMode | null>(readStoredSortMode);
-  const [tagFilter, setTagFilter] = useState<string>('');
+  const [tagFilter, setTagFilter] = useState<Set<string>>(new Set());
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [favorites, setFavorites] = useState<Set<string>>(() => {
     try {
@@ -273,10 +273,11 @@ export default function HomePage() {
   )).sort((a, b) => a.localeCompare(b, 'zh-Hant', { sensitivity: 'base' }));
 
   const normalizedTitleFilter = titleFilter.trim().toLocaleLowerCase();
-  const tagFilteredItems = tagFilter
-    ? categoryFilteredItems.filter((pdf) =>
-        (pdf.tags ?? '').split(',').map((tag) => tag.trim()).includes(tagFilter)
-      )
+  const tagFilteredItems = tagFilter.size > 0
+    ? categoryFilteredItems.filter((pdf) => {
+        const pdfTags = (pdf.tags ?? '').split(',').map((tag) => tag.trim());
+        return [...tagFilter].every((t) => pdfTags.includes(t));
+      })
     : categoryFilteredItems;
   const favFilteredItems = favoritesOnly
     ? tagFilteredItems.filter((pdf) => favorites.has(pdf.id))
@@ -1217,8 +1218,8 @@ export default function HomePage() {
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setTagFilter('')}
-                  className={`rounded-full border px-3 py-0.5 text-xs transition ${tagFilter === '' ? 'border-indigo-400 bg-indigo-500/20 text-indigo-200' : 'border-slate-600 bg-slate-800 text-slate-300 hover:border-slate-500'}`}
+                  onClick={() => setTagFilter(new Set())}
+                  className={`rounded-full border px-3 py-0.5 text-xs transition ${tagFilter.size === 0 ? 'border-indigo-400 bg-indigo-500/20 text-indigo-200' : 'border-slate-600 bg-slate-800 text-slate-300 hover:border-slate-500'}`}
                 >
                   {t('home.tagAll')}
                 </button>
@@ -1226,8 +1227,8 @@ export default function HomePage() {
                   <button
                     key={tag}
                     type="button"
-                    onClick={() => setTagFilter(tagFilter === tag ? '' : tag)}
-                    className={`rounded-full border px-3 py-0.5 text-xs transition ${tagFilter === tag ? 'border-indigo-400 bg-indigo-500/20 text-indigo-200' : 'border-slate-600 bg-slate-800 text-slate-300 hover:border-slate-500'}`}
+                    onClick={() => setTagFilter((prev) => { const next = new Set(prev); next.has(tag) ? next.delete(tag) : next.add(tag); return next; })}
+                    className={`rounded-full border px-3 py-0.5 text-xs transition ${tagFilter.has(tag) ? 'border-indigo-400 bg-indigo-500/20 text-indigo-200' : 'border-slate-600 bg-slate-800 text-slate-300 hover:border-slate-500'}`}
                   >
                     {tag}
                   </button>
