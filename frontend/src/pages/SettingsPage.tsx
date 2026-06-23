@@ -457,6 +457,31 @@ export default function SettingsPage() {
     }
   }, [generatedMcpAuthToken, t]);
 
+  const getMcpConfigJson = useCallback(() => {
+    const backendUrl = window.location.origin;
+    const pathPlaceholder = t('settings.mcpConfigPathPlaceholder');
+    const config = {
+      makeslide: {
+        command: 'npx',
+        args: ['--prefix', pathPlaceholder, 'tsx', 'src/mcp-server.ts'],
+        env: {
+          MAKESLIDE_URL: backendUrl,
+          MAKESLIDE_MCP_TOKEN: generatedMcpAuthToken,
+        },
+      },
+    };
+    return JSON.stringify(config, null, 2);
+  }, [generatedMcpAuthToken, t]);
+
+  const onCopyMcpConfigTemplate = useCallback(async () => {
+    const result = await copyTextToClipboard(getMcpConfigJson());
+    if (result.ok) {
+      setMsg(t('settings.mcpConfigCopied'));
+    } else {
+      setErr(t('settings.mcpConfigCopyError'));
+    }
+  }, [getMcpConfigJson, t]);
+
   const applySlaSettingsResponse = useCallback((result: SlaSettingsResponse) => {
     setSlaSettings(result);
     const inputs: Record<string, string> = {};
@@ -695,7 +720,22 @@ export default function SettingsPage() {
                     </button>
                     {generatedMcpAuthToken ? <button type="button" onClick={() => void onCopyGeneratedMcpToken()} className="rounded-md bg-slate-100 px-4 py-2 text-sm font-medium text-slate-900 hover:bg-white">{t('settings.mcpTokenCopyButton')}</button> : null}
                   </div>
-                  {generatedMcpAuthToken ? <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-3"><div className="mb-1 text-xs font-medium text-amber-100">{t('settings.mcpTokenOneTimeNotice')}</div><code className="block break-all rounded bg-slate-950 px-2 py-1 font-mono text-xs text-slate-100">{generatedMcpAuthToken}</code></div> : null}
+                  {generatedMcpAuthToken ? (
+                    <>
+                      <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-3">
+                        <div className="mb-1 text-xs font-medium text-amber-100">{t('settings.mcpTokenOneTimeNotice')}</div>
+                        <code className="block break-all rounded bg-slate-950 px-2 py-1 font-mono text-xs text-slate-100">{generatedMcpAuthToken}</code>
+                      </div>
+                      <div className="mt-3 rounded-md border border-indigo-500/30 bg-indigo-500/10 p-3">
+                        <div className="mb-1 text-xs font-medium text-indigo-100">{t('settings.mcpConfigTemplateTitle')}</div>
+                        <p className="mb-2 text-xs text-slate-400">{t('settings.mcpConfigTemplateHint')}</p>
+                        <pre className="mb-2 overflow-x-auto rounded bg-slate-950 px-2 py-2 font-mono text-xs text-slate-100">{getMcpConfigJson()}</pre>
+                        <button type="button" onClick={() => void onCopyMcpConfigTemplate()} className="rounded-md border border-indigo-500/50 px-3 py-1.5 text-xs text-indigo-200 hover:bg-indigo-500/20">
+                          {t('settings.mcpConfigCopyButton')}
+                        </button>
+                      </div>
+                    </>
+                  ) : null}
                 </div>
                 {authStatus?.authenticated ? (
                   <div className="rounded-lg border border-rose-500/30 bg-rose-950/20 p-3">
