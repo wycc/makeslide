@@ -650,6 +650,8 @@ export const en = {
   'play.slidePanel.prevPage': 'Previous page',
   'play.slidePanel.nextPage': 'Next page',
   'play.slidePanel.jumpToPage': 'Click to enter page number and jump',
+  'play.slidePanel.copyShareLink': 'Copy link',
+  'play.slidePanel.shareLinkCopied': 'Copied!',
   'play.slidePanel.audioRetry': 'Audio failed to load, click to retry',
   'play.slidePanel.noAudio': 'No audio for this page',
   'play.slidePanel.nextAndPlay': 'Next page and play',

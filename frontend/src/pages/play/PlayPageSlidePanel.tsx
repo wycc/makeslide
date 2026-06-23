@@ -237,6 +237,7 @@ export function PlayPageSlidePanel() {
   const [aiRewriteDraft, setAiRewriteDraft] = useState<string | null>(null);
   const [aiRewriteError, setAiRewriteError] = useState<string | null>(null);
   const [scriptCopied, setScriptCopied] = useState(false);
+  const [shareUrlCopied, setShareUrlCopied] = useState(false);
 
   const scriptSearchResults = useMemo(() => {
     const q = scriptSearch.trim().toLowerCase();
@@ -390,7 +391,21 @@ export function PlayPageSlidePanel() {
                 className="w-auto rounded-md border border-slate-700 bg-white p-2"
                 style={{ maxHeight: transcriptFocusMode ? '8rem' : `${slideImageMaxHeightVh}vh` }}
               />
-              {!transcriptFocusMode && shareUrl ? <p className="max-w-[85vw] break-all text-center text-xs text-slate-300">{shareUrl}</p> : null}
+              {!transcriptFocusMode && shareUrl ? (
+                <div className="flex flex-col items-center gap-1">
+                  <p className="max-w-[85vw] break-all text-center text-xs text-slate-300">{shareUrl}</p>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const result = await copyTextToClipboard(shareUrl);
+                      if (result.ok) { setShareUrlCopied(true); setTimeout(() => setShareUrlCopied(false), 2000); }
+                    }}
+                    className="rounded border border-violet-500/40 bg-violet-500/15 px-2 py-0.5 text-[10px] text-violet-300 hover:bg-violet-500/25"
+                  >
+                    {shareUrlCopied ? t('play.slidePanel.shareLinkCopied') : t('play.slidePanel.copyShareLink')}
+                  </button>
+                </div>
+              ) : null}
             </div>
           ) : currentPage?.image_url || currentPage?.thumbnail_url || displayedImageSrc ? (
             <SlideRenderer
