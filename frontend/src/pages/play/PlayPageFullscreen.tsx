@@ -171,6 +171,8 @@ export function PlayPageFullscreen() {
     playbackRate,
     currentAnimationSpec,
     setAnimationWarning,
+    gotoPageOpen, setGotoPageOpen, gotoPageInput, setGotoPageInput, gotoPageInputRef,
+    deckPages, setCurrentIdx,
   } = usePlayPageContext();
 
   const { t } = useI18n();
@@ -809,6 +811,43 @@ export function PlayPageFullscreen() {
           </div>
         </div>
       ) : null}
+
+      {/* 跳頁對話框（全螢幕模式內渲染，確保出現在 native fullscreen 中） */}
+      {gotoPageOpen && (
+        <div
+          className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => setGotoPageOpen(false)}
+        >
+          <div
+            className="w-72 rounded-xl border border-slate-700 bg-slate-900 p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mb-3 text-sm font-semibold text-slate-200">{t('play.gotoPageDialog')}</p>
+            <input
+              ref={gotoPageInputRef}
+              type="number"
+              min={1}
+              max={deckPages.length}
+              value={gotoPageInput}
+              onChange={(e) => setGotoPageInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const n = Math.floor(Number(gotoPageInput));
+                  if (n >= 1 && n <= deckPages.length) {
+                    setCurrentIdx(n - 1);
+                    setGotoPageOpen(false);
+                  }
+                } else if (e.key === 'Escape') {
+                  setGotoPageOpen(false);
+                }
+              }}
+              placeholder={t('play.gotoPagePlaceholder')}
+              className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none"
+            />
+            <p className="mt-1.5 text-xs text-slate-500">1 – {deckPages.length}</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
