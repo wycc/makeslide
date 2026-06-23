@@ -742,8 +742,21 @@
 
 ## 新增可執行項目（第二十一輪）
 
-- [ ] 首頁一鍵清除所有篩選：當 categoryFilter/tagFilter/titleFilter 任一非預設時，在篩選列右側顯示「× 清除篩選」按鈕，一次重設全部篩選條件及排序；補 i18n；純前端改動。
-- [ ] QuizBuilderPage 答題記錄平均得分摘要：在答題記錄列表頂部（historySessions 不為空時）顯示「共 N 次作答，平均得分 X.X 分」的摘要行，從 sessions.attempts[].score 計算；補 i18n；純前端改動。
-- [ ] 首頁 list 模式顯示標籤 pill：list 模式每列標題下方加入最多 3 個標籤 pill（超過 3 個顯示 +N），樣式與 card 模式一致；純前端改動。
-- [ ] PlayPageSlidePanel 跳頁輸入框：在縮圖側邊欄頂部加入頁碼輸入框（type=number），按 Enter 或 blur 時跳到指定頁；超出範圍自動 clamp；補 i18n；純前端改動。
-- [ ] 播放頁筆記字數統計：在 PlayPageSlidePanel 的筆記編輯器底部加入字數統計（類似 script 的字數統計），顯示 `note.charCount` 格式的字數；補 i18n；純前端改動。
+- [x] 首頁一鍵清除所有篩選：當 categoryFilter/tagFilter/titleFilter 任一非預設時，在篩選列右側顯示「× 清除篩選」按鈕，一次重設全部篩選條件及排序；補 i18n；純前端改動。
+  - 修改說明（2026-06-24）：`HomePage.tsx` 新增 `clearAllFilters` callback；條件判斷 categoryFilter/tagFilter/sortMode；按鈕插入 view mode div；i18n `home.clearAllFilters`。分支 `feat/home-clear-filters`，已 merge 回 master。
+- [x] QuizBuilderPage 答題記錄平均得分摘要：在答題記錄列表頂部（historySessions 不為空時）顯示「共 N 次作答，平均得分 X.X 分」的摘要行，從 sessions.attempts[].score 計算；補 i18n；純前端改動。
+  - 修改說明（2026-06-24）：`QuizBuilderPage.tsx` IIFE 計算 flatMap 所有 attempts，filter score != null，計算平均後 replace 字串；i18n `quiz.historyAvgScore`。分支 `feat/quiz-history-avg-score`，已 merge 回 master。
+- [x] 首頁 list 模式標籤 pill 可點擊過濾：list 模式每列的標籤 pill 已存在；改為 `<button>` 元素，點擊可 toggle tagFilter Set（已選則高亮）；e.stopPropagation() 避免觸發行點擊；純前端改動。
+  - 修改說明（2026-06-24）：`HomePage.tsx` list 模式標籤 `<span>` 改 `<button>`，onClick toggle tagFilter Set，active 時高亮樣式。分支 `feat/list-mode-tags`，已 merge 回 master。
+- [x] PlayPageSidebar 筆記字數統計：在 `PlayPageSidebar.tsx` 筆記 textarea 下方加入「N / 5000」字數顯示，與儲存提示並排；pure frontend；無需新 i18n。
+  - 修改說明（2026-06-24）：`PlayPageSidebar.tsx` 將 noteBusy/noteMsg 改為 flex row；右側顯示 `noteText.length / 5000` 字數（noteText 非空才顯示）。分支 `feat/slide-panel-jump-to-page`，已 merge 回 master。
+- [x] 播放頁筆記字數統計（合併於上一項）：與 PlayPageSidebar 筆記字數統計同分支實作完成。
+
+## 工作記錄（第二十一輪，2026-06-24）
+
+| 日期 | 工作內容 | 分支 |
+|------|----------|------|
+| 2026-06-24 | 首頁一鍵清除篩選：clearAllFilters callback + 條件顯示 × 清除篩選 button | feat/home-clear-filters（已 merge） |
+| 2026-06-24 | Quiz 答題記錄平均得分：flatMap 所有 attempts 計算平均；historyAvgScore i18n | feat/quiz-history-avg-score（已 merge） |
+| 2026-06-24 | list 模式標籤可點擊：span 改 button，toggle tagFilter Set，active 高亮 | feat/list-mode-tags（已 merge） |
+| 2026-06-24 | 筆記字數統計：PlayPageSidebar noteText.length / 5000 顯示，與儲存提示並排 | feat/slide-panel-jump-to-page（已 merge） |
