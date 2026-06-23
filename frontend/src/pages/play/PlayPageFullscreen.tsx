@@ -277,6 +277,28 @@ export function PlayPageFullscreen() {
           <span className="ml-2 h-6 w-2 rounded-sm bg-current" aria-hidden="true" />
         </div>
       ) : null}
+      {fullscreenLayout === 'image' && !drawingMode ? (
+        <>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); goPrev(); }}
+            disabled={currentIdx === 0}
+            className="absolute left-0 top-0 z-20 flex h-full w-14 items-center justify-start pl-1.5 opacity-0 transition-opacity duration-200 hover:opacity-100 disabled:pointer-events-none"
+            aria-label={t('play.slidePanel.prevPage')}
+          >
+            <span className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/50 text-lg text-white backdrop-blur-sm">◀</span>
+          </button>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); goNext(); }}
+            disabled={currentIdx >= totalPages - 1}
+            className="absolute right-0 top-0 z-20 flex h-full w-14 items-center justify-end pr-1.5 opacity-0 transition-opacity duration-200 hover:opacity-100 disabled:pointer-events-none"
+            aria-label={t('play.slidePanel.nextPage')}
+          >
+            <span className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/50 text-lg text-white backdrop-blur-sm">▶</span>
+          </button>
+        </>
+      ) : null}
       {fullscreenLayout === 'split' || fullscreenLayout === 'edit' || fullscreenLayout === 'animation' ? (
         <div className="flex h-full w-full items-stretch">
           <div className="flex h-full w-1/2 shrink-0 flex-col p-2">
