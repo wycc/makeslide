@@ -712,6 +712,7 @@ export const en = {
   'play.slidePanel.transcript.copyScriptDone': '✓ Copied',
   'play.slidePanel.transcript.placeholder': 'Enter the transcript for this page...',
   'play.slidePanel.transcript.saveHint': 'Saving will only regenerate audio for this page',
+  'play.slidePanel.transcript.charCount': '{n} chars',
   'play.slidePanel.transcript.regenerating': 'Regenerating…',
   'play.slidePanel.transcript.saveAndRegenerate': 'Save and regenerate audio',
   'play.slidePanel.prompt.heading': '🪄 Prompt (Page {page})',
