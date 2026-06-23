@@ -1186,19 +1186,18 @@ export function PlayPageSlidePanel() {
                 >
                   {scriptSearchResults.map(({ sentence, originalIdx }, rank) => {
                     const q = scriptSearch.trim();
-                    const lower = sentence.toLowerCase();
-                    const matchStart = lower.indexOf(q.toLowerCase());
-                    const before = sentence.slice(0, matchStart);
-                    const match = sentence.slice(matchStart, matchStart + q.length);
-                    const after = sentence.slice(matchStart + q.length);
+                    const safeQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const parts = sentence.split(new RegExp(`(${safeQ})`, 'gi'));
                     return (
                       <p
                         key={originalIdx}
                         className={`leading-relaxed ${rank === clampedSearchIdx ? 'rounded bg-amber-500/20 px-1' : ''}`}
                       >
-                        {before}
-                        <mark className="rounded bg-amber-400 px-0.5 text-slate-900">{match}</mark>
-                        {after}
+                        {parts.map((part, i) =>
+                          part.toLowerCase() === q.toLowerCase()
+                            ? <mark key={i} className="rounded bg-amber-400 px-0.5 text-slate-900">{part}</mark>
+                            : part
+                        )}
                       </p>
                     );
                   })}
