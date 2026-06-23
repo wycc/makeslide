@@ -1499,6 +1499,7 @@ export const en = {
   'play.shortcuts.exitEsc': 'Exit Fullscreen / Drawing Mode',
   'play.shortcuts.gotoPage': 'Go to page',
   'play.shortcuts.nextBookmark': 'Jump to next bookmark (cycles)',
+  'play.shortcuts.toggleImportant': 'Mark / unmark as important page',
   'play.shortcuts.close': 'Close',
   'play.gotoPageDialog': 'Go to page',
   'play.gotoPagePlaceholder': 'Enter page number…',

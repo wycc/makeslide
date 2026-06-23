@@ -1620,6 +1620,11 @@ export default function PlayPage() {
           const next = sorted.find((n) => n > currentPageNumber) ?? sorted[0];
           if (next !== undefined) setCurrentIdx(next - 1);
         }
+      } else if (ev.key.toLowerCase() === 'i') {
+        if (currentPage) {
+          ev.preventDefault();
+          toggleImportantPage(currentPage.page_number);
+        }
       } else if (ev.key === 'Escape') {
         if (gotoPageOpen) {
           ev.preventDefault();
