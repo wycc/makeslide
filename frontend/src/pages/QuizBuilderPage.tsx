@@ -10,6 +10,7 @@ import {
   fetchPlaybackSyncState,
   fetchQuizAttempts,
   fetchQuizSets,
+  generateAiQuizQuestion,
   getAuthStatus,
   getSystemAiSettings,
   generateQuizSet,
@@ -142,6 +143,8 @@ export default function QuizBuilderPage() {
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [viewingAttemptId, setViewingAttemptId] = useState<number | null>(null);
   const [draggingQIdx, setDraggingQIdx] = useState<number | null>(null);
+  const [aiQuizPageNumber, setAiQuizPageNumber] = useState(1);
+  const [aiQuizBusy, setAiQuizBusy] = useState(false);
   const syncClientIdRef = useRef('');
   const lastReportedProgressRef = useRef<{ quizId: number; answeredCount: number; submitted: boolean } | null>(null);
   const submittedAttemptRef = useRef<string | null>(null);
@@ -563,6 +566,29 @@ export default function QuizBuilderPage() {
     },
     [pdfId, t],
   );
+
+  const handleAiGenerateQuestion = async () => {
+    if (!pdfId) return;
+    setAiQuizBusy(true);
+    setError(null);
+    try {
+      const result = await generateAiQuizQuestion(pdfId, aiQuizPageNumber);
+      const newQuestion: QuizQuestion = {
+        id: `q${Date.now()}`,
+        type: 'single',
+        question: result.question,
+        options: result.options.map((text: string) => ({ text })),
+        answer_indices: [result.correct_index],
+        explanation: result.explanation,
+        score: null,
+      };
+      setQuestions((prev) => [...prev, newQuestion]);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t('quiz.aiGenerateFailed'));
+    } finally {
+      setAiQuizBusy(false);
+    }
+  };
 
   const handleGenerate = async () => {
     if (!pdfId) return;
@@ -1003,6 +1029,26 @@ export default function QuizBuilderPage() {
               <button type="button" onClick={() => void handleGenerate()} disabled={busy || !prompt.trim()} className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-4 py-2 text-sm text-fuchsia-100 hover:bg-fuchsia-500/25 disabled:opacity-50">{busy ? t('quiz.busy') : t('quiz.generate')}</button>
               <button type="button" onClick={() => void handleSave()} disabled={busy || !canSave} className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-4 py-2 text-sm text-emerald-100 hover:bg-emerald-500/25 disabled:opacity-50">{t('quiz.save')}</button>
               <button type="button" onClick={() => setQuestions((prev) => [...prev, emptyQuestion(prev.length)])} className="rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800">{t('quiz.addQuestion')}</button>
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-slate-400">{t('quiz.aiGeneratePageLabel')}</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={detail?.pages?.length ?? 999}
+                  value={aiQuizPageNumber}
+                  onChange={(e) => setAiQuizPageNumber(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+                  className="w-14 rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-center text-xs text-slate-100"
+                />
+                {t('quiz.aiGeneratePageSuffix') && <span className="text-xs text-slate-400">{t('quiz.aiGeneratePageSuffix')}</span>}
+                <button
+                  type="button"
+                  onClick={() => void handleAiGenerateQuestion()}
+                  disabled={aiQuizBusy || busy}
+                  className="rounded-md border border-violet-500/50 bg-violet-500/15 px-3 py-1 text-xs text-violet-200 hover:bg-violet-500/25 disabled:opacity-50"
+                >
+                  {aiQuizBusy ? t('quiz.aiGenerating') : t('quiz.aiGenerateQuestion')}
+                </button>
+              </div>
               <button
                 type="button"
                 onClick={() => setShowEditorAnswers((prev) => !prev)}
