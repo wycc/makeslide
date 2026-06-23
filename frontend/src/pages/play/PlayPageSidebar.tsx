@@ -738,7 +738,10 @@ export function PlayPageSidebar() {
             <p className="text-xs text-slate-500">{t('play.sidebar.bookmarksEmpty')}</p>
           ) : (
             <div className="flex flex-wrap gap-2">
-              {[...bookmarks].sort((a, b) => a - b).map((pageNum) => (
+              {[...bookmarks].sort((a, b) => a - b).map((pageNum) => {
+                const bookmarkPage = deckPages.find((p) => p.page_number === pageNum);
+                const thumbSrc = bookmarkPage?.thumbnail_url ?? bookmarkPage?.image_url;
+                return (
                 <button
                   key={pageNum}
                   type="button"
@@ -746,6 +749,9 @@ export function PlayPageSidebar() {
                   className="flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs text-amber-200 hover:bg-amber-500/20"
                   title={t('play.sidebar.bookmarkRemove')}
                 >
+                  {thumbSrc && (
+                    <img src={withImageBust(thumbSrc) ?? thumbSrc} alt={`第 ${pageNum} 頁`} className="h-6 w-10 shrink-0 rounded object-cover" />
+                  )}
                   <span>🔖 第 {pageNum} 頁</span>
                   <span
                     role="button"
@@ -758,7 +764,8 @@ export function PlayPageSidebar() {
                     ×
                   </span>
                 </button>
-              ))}
+              );
+              })}
             </div>
           )}
         </div>
