@@ -1012,3 +1012,20 @@
 | 2026-06-24 | 書籤縮圖預覽：deckPages.find + thumbnail_url，h-6 w-10 img 插入 chip 左側 | feat/bookmark-thumbnail（已 merge） |
 | 2026-06-24 | 首頁 list 模式顯示 updated_at：formatRelativeTime(pdf.updated_at) 灰色顯示 | feat/list-mode-updated-at（已 merge） |
 | 2026-06-24 | QuizBuilderPage 題幹字元計數：relative 包覆 textarea，q.question.length 右下角顯示 | feat/quiz-question-char-count（已 merge） |
+
+## 掃描摘要（2026-06-24 第三十輪）
+
+- 第二十九輪 5 個項目全數完成（遙控器縮圖、筆記字數 amber、書籤縮圖、updated_at、題幹字數）。
+- `PlayPageSidebar.tsx` 重要頁面 chip 沒有縮圖，與剛更新的書籤 chip 不一致。
+- `ImportTextPage.tsx` 第 204-207 行有 hardcoded 中文模式說明文字（非 i18n），會在英文介面下顯示中文。
+- `PlayPage.tsx` 跳頁 dialog（`gotoPageOpen`）只支援 Enter 確認，觸控裝置需要點擊確認按鈕才方便操作。
+- `PlayPageSidebar.tsx` OutlineSection 標題列有頁數 badge，但缺少整份簡報的總播放時長資訊（`detail.total_audio_duration_seconds`）。
+- `PlayPageHeader.tsx` 頁碼計數器只顯示「N / M 頁」，不顯示百分比進度，使用者難以直覺感受播放進度。
+
+## 新增可執行項目（第三十輪）
+
+- [ ] PlayPageSidebar 重要頁面縮圖預覽：重要頁面 chip 左側加入對應縮圖（`deckPages.find(p => p.page_number === pageNum)?.thumbnail_url ?? ...image_url`，`h-6 w-10 object-cover rounded`），與書籤 chip 視覺一致；純前端改動。
+- [ ] ImportTextPage 模式說明文字 i18n 化：第 204-207 行 hardcoded 中文改為 `t('importText.currentModePaste')` 和 `t('importText.currentModePrompt')`；補對應 i18n key 至 zh-TW 及 en。
+- [ ] GotoPage 對話框加「前往」確認按鈕：跳頁 dialog 的 input 下方加入「前往」按鈕（indigo 色），按下後執行跳頁並關閉 dialog（與 Enter 行為一致）；補 i18n `play.gotoPageConfirm`。
+- [ ] PlayPageSidebar 大綱標題顯示總播放時長：OutlineSection h2 標題列加入 `detail?.total_audio_duration_seconds` 格式化時長（`formatAudioDuration`，`> 0` 才顯示，slate-400 色）；引入 `formatAudioDuration`，純前端改動。
+- [ ] PlayPageHeader 頁碼計數加百分比：頁碼計數器 `{pageCounterText}` 下方加入 `{Math.round((currentIdx + 1) / totalPages * 100)}%` 進度百分比（text-[10px] slate-500 色）；純前端改動，無需 i18n。
