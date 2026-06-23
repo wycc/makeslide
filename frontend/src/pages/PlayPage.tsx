@@ -76,11 +76,13 @@ import {
   getStoredPlaybackSpeed,
   getStoredShowSubtitle,
   getStoredSubtitleSize,
+  getStoredSubtitlePosition,
   getStoredInteractiveMode,
   getStoredAutoAdvance,
   getStoredTtsSpeed,
   useI18n,
   type SubtitleSize,
+  type SubtitlePosition,
 } from '../i18n';
 
 
@@ -202,6 +204,7 @@ export default function PlayPage() {
   const [playbackRate, setPlaybackRate] = useState<number>(() => getStoredPlaybackSpeed());
   const [showSubtitle, setShowSubtitle] = useState<boolean>(() => getStoredShowSubtitle());
   const [subtitleSize, setSubtitleSize] = useState<SubtitleSize>(() => getStoredSubtitleSize());
+  const [subtitlePosition, setSubtitlePosition] = useState<SubtitlePosition>(() => getStoredSubtitlePosition());
   const [autoAdvance, setAutoAdvance] = useState<boolean>(() => getStoredAutoAdvance());
   const [playbackSettingsOpen, setPlaybackSettingsOpen] = useState(false);
   const [playbackStatusMessage, setPlaybackStatusMessage] = useState<string | null>(null);
@@ -2254,7 +2257,7 @@ export default function PlayPage() {
     isPlaying, setIsPlaying, currentTime, setCurrentTime, duration, setDuration,
     finished, setFinished, audioMuted, setAudioMuted, effectiveAudioMuted,
     audioVolume, setAudioVolume,
-    playbackRate, setPlaybackRate, showSubtitle, setShowSubtitle, subtitleSize, setSubtitleSize,
+    playbackRate, setPlaybackRate, showSubtitle, setShowSubtitle, subtitleSize, setSubtitleSize, subtitlePosition, setSubtitlePosition,
     autoAdvance, setAutoAdvance,
     playbackSettingsOpen, setPlaybackSettingsOpen, playbackStatusMessage,
     followerAudioUnlocked, setFollowerAudioUnlocked,

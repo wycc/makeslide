@@ -132,3 +132,13 @@ export function getStoredSubtitleSize(): SubtitleSize {
   if (raw === 'sm' || raw === 'md' || raw === 'lg') return raw;
   return 'md';
 }
+
+export const SUBTITLE_POSITION_STORAGE_KEY = 'makeslide.subtitlePosition';
+export type SubtitlePosition = 'bottom' | 'top';
+
+export function getStoredSubtitlePosition(): SubtitlePosition {
+  if (typeof window === 'undefined') return 'bottom';
+  const raw = window.localStorage.getItem(SUBTITLE_POSITION_STORAGE_KEY);
+  if (raw === 'bottom' || raw === 'top') return raw;
+  return 'bottom';
+}
