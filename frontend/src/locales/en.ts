@@ -1406,6 +1406,7 @@ export const en = {
   'quiz.copyQuestions': 'Copy all questions',
   'quiz.copyQuestionsDone': 'Copied!',
   'quiz.copyQuestionsFail': 'Copy failed',
+  'quiz.exportJson': 'Export JSON',
   'quiz.titleLabel': 'Quiz name',
   'quiz.promptLabel': 'Instructions for AI',
   'quiz.busy': 'Processing…',

@@ -1406,6 +1406,7 @@ export const zhTW = {
   'quiz.copyQuestions': '複製所有題目',
   'quiz.copyQuestionsDone': '已複製',
   'quiz.copyQuestionsFail': '複製失敗',
+  'quiz.exportJson': '匯出 JSON',
   'quiz.titleLabel': '測驗名稱',
   'quiz.promptLabel': '給 AI 的指令',
   'quiz.busy': '處理中…',
