@@ -238,6 +238,7 @@ export const en = {
   'home.viewList': 'List view',
   'home.listPages': '{count} pages',
   'home.listUncategorized': 'Uncategorized',
+  'home.listLastPlayed': 'Last played {time}',
   'home.sortBy': 'Sort by',
   'home.sort.titleAsc': 'Title A-Z',
   'home.sort.createdDesc': 'Newest created',
