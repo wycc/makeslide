@@ -790,3 +790,20 @@
 | 2026-06-24 | Sidebar 書籤/重要頁面計數徽章：h2 flex + amber/yellow 徽章 | feat/sidebar-count-badges（已 merge） |
 | 2026-06-24 | QR Code 區複製連結按鈕：shareUrlCopied state + button + 2 個 i18n key | feat/copy-share-link（已 merge） |
 | 2026-06-24 | 篩選零結果加清除篩選按鈕：tagFilter/titleFilter 有值時顯示清除 button | feat/grid-card-description（已 merge） |
+
+## 掃描摘要（2026-06-24 第二十三輪）
+
+- 第二十二輪 5 個項目全數完成（Quiz 搜尋空態、Sidebar 計數徽章、QR 複製連結、清除篩選在空態）。
+- PlayPageFullscreen 退出按鈕沒有說明 Esc 快捷鍵；用戶不知道可按 Esc 退出全螢幕。
+- HomePage list 模式標籤按鈕已可點擊，但缺少按下視覺回饋（active 縮放/動畫）。
+- QuizBuilderPage 保存測驗後不會自動選中，使用者需手動在列表中找到剛存的測驗。
+- PdfCard grid 模式的標籤 pill 是 span（不可點擊），但 list 模式已改為可點擊 button；兩者行為不一致。
+- QuizBuilderPage 沒有「複製所有題目」功能，無法快速把題目文本複製到剪貼簿。
+
+## 新增可執行項目（第二十三輪）
+
+- [ ] PlayPageFullscreen 退出按鈕加 Esc 提示：在退出全螢幕按鈕的 title/tooltip 加入「(Esc)」說明；純前端改動，無需 i18n。
+- [ ] HomePage list 模式標籤按鈕按下動畫：對標籤 button 加入 `active:scale-95 transition-transform` 樣式；純前端改動。
+- [ ] QuizBuilderPage 保存後自動選中：`handleSave` 成功後 `setSelectedQuizId(savedId)`，讓剛存的測驗在列表中自動高亮；純前端改動。
+- [ ] PdfCard grid 模式標籤可點擊：與 list 模式一致，將 card 中的 `<span>` 標籤改為 `<button>`，onClick 觸發 `onTagFilter?.(tag)`；在 HomePage 傳入 handler；補 i18n（無需新 key）；純前端改動。
+- [ ] QuizBuilderPage 複製所有題目按鈕：在測驗編輯器頂部加入「複製所有題目」按鈕，將 questions 格式化為純文字（每題加題號、選項）後複製到剪貼簿；補 i18n；純前端改動。
