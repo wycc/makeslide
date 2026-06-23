@@ -7,6 +7,7 @@ import { usePlayPageContext } from './PlayPageContext';
 import { PageAskPanel } from './PageAskPanel';
 import { QualityCheckPanel } from './QualityCheckPanel';
 import { copyTextToClipboard } from '../../lib/clipboard';
+import { formatAudioDuration } from '../../lib/audioDuration';
 
 const IMAGE_MSG_PREFIX = '[image] ';
 
@@ -26,7 +27,7 @@ function getOutlineTitle(page: import('../../types').PdfDetailPage, scripts: Rec
 
 function OutlineSection() {
   const { t } = useI18n();
-  const { deckPages, currentIdx, setCurrentIdx, visitedIdxSet, scripts, withImageBust } = usePlayPageContext();
+  const { detail, deckPages, currentIdx, setCurrentIdx, visitedIdxSet, scripts, withImageBust } = usePlayPageContext();
 
   return (
     <section className="rounded-lg border border-slate-800 bg-slate-900/40">
@@ -35,6 +36,9 @@ function OutlineSection() {
           {t('play.sidebar.outlineTitle')}
           {deckPages.length > 0 && (
             <span className="rounded-full bg-slate-700/80 px-1.5 py-0.5 text-[10px] font-normal text-slate-300">{deckPages.length}</span>
+          )}
+          {detail?.total_audio_duration_seconds != null && detail.total_audio_duration_seconds > 0 && (
+            <span className="text-[10px] font-normal text-slate-400">{formatAudioDuration(detail.total_audio_duration_seconds)}</span>
           )}
         </h2>
       </div>
