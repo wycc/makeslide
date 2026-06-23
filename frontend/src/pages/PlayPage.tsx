@@ -2587,7 +2587,14 @@ export default function PlayPage() {
             }`}
             aria-pressed={activeTab === 'qa'}
           >
-            問答
+            <span className="inline-flex items-center gap-1.5">
+              問答
+              {syncFollowerQuestions.length > 0 && (
+                <span className="rounded-full bg-slate-700/80 px-1.5 py-0.5 text-[10px] font-normal text-slate-300">
+                  {syncFollowerQuestions.length}
+                </span>
+              )}
+            </span>
             {newPollBadge && (
               <span className="absolute right-3 top-2 h-2 w-2 rounded-full bg-rose-500" aria-label="新投票" />
             )}
