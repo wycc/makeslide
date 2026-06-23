@@ -47,7 +47,16 @@ export function QualityCheckPanel() {
   return (
     <section className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-slate-300">{t('play.quality.title')}</h2>
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-300">
+          {t('play.quality.title')}
+          {results !== null && !running && (
+            issuePages.length === 0 ? (
+              <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-normal text-emerald-400">✓</span>
+            ) : (
+              <span className="rounded-full bg-rose-500/20 px-1.5 py-0.5 text-[10px] font-normal text-rose-300">{issuePages.length}</span>
+            )
+          )}
+        </h2>
         <button
           type="button"
           onClick={() => void handleRun()}
