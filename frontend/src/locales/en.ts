@@ -1393,6 +1393,8 @@ export const en = {
   'quiz.correctAnswerParen': '(Correct answer)',
   'quiz.selectedWrongParen': '(Selected but wrong)',
   'quiz.historyQuestionMissing': 'Question content not found, so detailed answers cannot be displayed.',
+  'quiz.historyShowMore': 'Show more ({n} total)',
+  'quiz.historyShowLess': 'Show less',
   'quiz.titleLabel': 'Quiz name',
   'quiz.promptLabel': 'Instructions for AI',
   'quiz.busy': 'Processing…',
