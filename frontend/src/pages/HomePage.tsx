@@ -769,13 +769,17 @@ export default function HomePage() {
 
   const handleUploaded = useCallback(
     (resp: UploadResponse) => {
-      // Refresh the list in the background so the new card (in
-      // awaiting_prompt state) shows up immediately, then open the prompt
-      // modal for the user.
       void load({ silent: true });
+      // If a specific category is active, assign the new PDF to it automatically.
+      // Special filter values (__all__, __recent__, etc.) are not real categories.
+      if (!categoryFilter.startsWith('__')) {
+        void updatePdfCategory(resp.id, categoryFilter).then(() => {
+          void load({ silent: true });
+        });
+      }
       openPromptFor(resp);
     },
-    [load, openPromptFor],
+    [load, openPromptFor, categoryFilter],
   );
 
   const handlePromptSubmit = useCallback(
