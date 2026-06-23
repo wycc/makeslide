@@ -1393,6 +1393,8 @@ export const zhTW = {
   'quiz.correctAnswerParen': '（正確答案）',
   'quiz.selectedWrongParen': '（已選但錯誤）',
   'quiz.historyQuestionMissing': '找不到題目內容，無法顯示詳細作答。',
+  'quiz.historyShowMore': '顯示更多（共 {n} 筆）',
+  'quiz.historyShowLess': '收起',
   'quiz.titleLabel': '測驗名稱',
   'quiz.promptLabel': '給 AI 的指令',
   'quiz.busy': '處理中…',

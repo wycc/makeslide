@@ -160,6 +160,7 @@ export default function QuizBuilderPage() {
   const [historySessions, setHistorySessions] = useState<QuizAttemptSession[]>([]);
   const [historyBusy, setHistoryBusy] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyShowAll, setHistoryShowAll] = useState(false);
   const [viewingAttemptId, setViewingAttemptId] = useState<number | null>(null);
   const [draggingQIdx, setDraggingQIdx] = useState<number | null>(null);
   const [aiQuizPageNumber, setAiQuizPageNumber] = useState(1);
@@ -956,7 +957,7 @@ export default function QuizBuilderPage() {
                 <p className="mt-1 text-xs text-slate-500">{t('quiz.noHistory')}</p>
               ) : null}
               <ul className="mt-2 space-y-3">
-                {historySessions.map((session) => (
+                {(historyShowAll ? historySessions : historySessions.slice(0, 5)).map((session) => (
                   <li key={session.session_id} className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-xs">
                     <div className="font-medium text-slate-300">
                       {formatMessage('quiz.sessionTime', { time: formatRelativeTime(session.submitted_at) })}
@@ -1023,6 +1024,15 @@ export default function QuizBuilderPage() {
                   </li>
                 ))}
               </ul>
+              {historySessions.length > 5 && (
+                <button
+                  type="button"
+                  onClick={() => setHistoryShowAll((prev) => !prev)}
+                  className="mt-2 text-xs text-cyan-400 hover:text-cyan-300"
+                >
+                  {historyShowAll ? t('quiz.historyShowLess') : t('quiz.historyShowMore').replace('{n}', String(historySessions.length))}
+                </button>
+              )}
             </div>
           ) : null}
           {isFollowerTesting ? null : (
