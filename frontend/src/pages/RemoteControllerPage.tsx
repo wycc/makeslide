@@ -176,12 +176,21 @@ export default function RemoteControllerPage() {
         </span>
       </div>
 
-      <div className="flex items-center justify-center py-10">
-        <span className="text-7xl font-bold tabular-nums text-slate-100 leading-none">
-          {currentPage}
-        </span>
-        <span className="mx-4 text-3xl text-slate-600">/</span>
-        <span className="text-3xl tabular-nums text-slate-400">{totalPages}</span>
+      <div className="flex flex-col items-center gap-4 py-8">
+        {(() => {
+          const page = pages[currentPage - 1];
+          const imgSrc = page?.thumbnail_url ?? page?.image_url;
+          return imgSrc ? (
+            <img src={imgSrc} alt={`第 ${currentPage} 頁`} className="h-28 rounded-lg object-contain shadow-lg" />
+          ) : null;
+        })()}
+        <div className="flex items-center">
+          <span className="text-7xl font-bold tabular-nums text-slate-100 leading-none">
+            {currentPage}
+          </span>
+          <span className="mx-4 text-3xl text-slate-600">/</span>
+          <span className="text-3xl tabular-nums text-slate-400">{totalPages}</span>
+        </div>
       </div>
 
       <div className="flex gap-4 px-6">
