@@ -548,7 +548,16 @@
 ## 新增可執行項目（第十五輪）
 
 - [ ] 測驗題目 AI 草稿：新增 `POST /api/pdfs/:id/pages/:n/generate-quiz-question` 後端端點，讀取頁面逐字稿/文字，呼叫 LLM 生成一道四選項選擇題（含正確答案索引與解析），回傳 `{ question, options, correct_index, explanation }`；`QuizBuilderPage` 新增「AI 生成一題」按鈕（每次一題，可連續點擊），直接插入題目列表；補後端測試 200 / 404 / 403。
-- [ ] 播放頁字幕位置切換：在播放設定對話框新增「字幕位置」選項（底部 / 頂部），存至 localStorage（key: `makeslide.subtitlePosition`）；`PlayPageSlidePanel` 依設定切換字幕區塊的 `top-*` 或 `bottom-*` 絕對定位 class；補 i18n `play.settings.subtitlePosition/Top/Bottom`。
-- [ ] 首頁卡片建立時間改為相對顯示：`PdfCard` 目前顯示 `formatDate(pdf.created_at)` 格式化日期，改為 `formatRelativeTime(pdf.created_at)` 相對時間（如「3 分鐘前」、「2 天前建立」），純前端改動；補 i18n `card.createdAt`。
+- [x] 播放頁字幕位置切換：在播放設定對話框新增「字幕位置」選項（底部 / 頂部），存至 localStorage（key: `makeslide.subtitlePosition`）；`PlayPageSlidePanel` 依設定切換字幕區塊的 `top-*` 或 `bottom-*` 絕對定位 class；補 i18n `play.settings.subtitlePosition/Top/Bottom`。
+  - 修改說明（2026-06-23）：`i18n.ts` 新增 `SubtitlePosition` 型別、`SUBTITLE_POSITION_STORAGE_KEY`、`getStoredSubtitlePosition()` helper；`PlayPageContext` 介面補 `subtitlePosition`/`setSubtitlePosition`；`PlayPage.tsx` 新增對應 state 並傳入 context；`PlayPageSlidePanel.tsx` 字幕 div 依 `subtitlePosition` 切換 `top-3`/`bottom-3`，設定面板在字幕開啟時顯示底部/頂部按鈕群組並寫入 localStorage；i18n `subtitlePosition/bottom/top` 新增至 zh-TW 及 en。分支 `feat/subtitle-position`，已 merge 回 master。
+- [x] 首頁卡片建立時間改為相對顯示：`PdfCard` 目前顯示 `formatDate(pdf.created_at)` 格式化日期，改為 `formatRelativeTime(pdf.created_at)` 相對時間（如「3 分鐘前」、「2 天前建立」），純前端改動；補 i18n `card.createdAt`。
+  - 修改說明（2026-06-23）：`PdfCard.tsx` 將 `<span>{formatDate(pdf.created_at)}</span>` 改為使用 `formatRelativeTime(pdf.created_at)`（已有同函式用於 last_played_at）；原始格式化日期保留在 `title` tooltip 中供 hover 查看；i18n `card.createdAt/createdAtLabel` 新增至 zh-TW 及 en。分支 `feat/pdfcard-relative-created-at`，已 merge 回 master。
 - [ ] 播放頁標題行內編輯：播放頁 header 的標題文字雙擊（dblclick）進入 inline `<input>` 編輯模式，Enter 或失焦時呼叫 `PATCH /api/pdfs/:id/title` 儲存，Escape 取消；補 i18n `play.header.editTitlePlaceholder`。
 - [ ] 同步模式踢出學生：`PlayPageSlidePanel` 出席名單每位學生旁加入「踢出」按鈕；新增後端 `DELETE /api/pdfs/:id/sync/attendees/:clientId` 端點（owner-only，從 `sync_attendees` 標記封鎖，或直接清除該 client 的 attendee 紀錄）；follower 被踢後下次輪詢 GET /sync/state 可回傳 forbidden 訊號；補後端測試 200 / 403 / 404。
+
+## 工作記錄（第十五輪）
+
+| 日期 | 工作摘要 | 分支 |
+|------|---------|------|
+| 2026-06-23 | 首頁卡片建立時間改相對顯示：`formatDate(created_at)` → `formatRelativeTime(created_at)`，原始日期保留為 title tooltip；i18n `card.createdAt/createdAtLabel` | feat/pdfcard-relative-created-at（已 merge） |
+| 2026-06-23 | 播放頁字幕位置切換：`SubtitlePosition` 型別+helper；PlayPageContext/PlayPage/SlidePanel 全串接；設定面板底部/頂部按鈕群組；i18n subtitlePosition/bottom/top | feat/subtitle-position（已 merge） |
