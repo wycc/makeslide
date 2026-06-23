@@ -1128,6 +1128,19 @@ export default function QuizBuilderPage() {
                   {t('quiz.exportJson')}
                 </button>
               )}
+              {questions.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm(t('quiz.confirmClear'))) {
+                      setQuestions([emptyQuestion(0)]);
+                    }
+                  }}
+                  className="rounded-md border border-rose-500/50 bg-rose-500/10 px-4 py-2 text-sm text-rose-300 hover:bg-rose-500/20"
+                >
+                  {t('quiz.clearAllQuestions')}
+                </button>
+              )}
               <div className="flex items-center gap-1">
                 <span className="text-xs text-slate-400">{t('quiz.aiGeneratePageLabel')}</span>
                 <input
