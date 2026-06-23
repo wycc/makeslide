@@ -1291,8 +1291,11 @@ export default function HomePage() {
                     {group.items.map((pdf) => (
                       <div
                         key={pdf.id}
-                        className="flex cursor-pointer items-center gap-3 px-4 py-3 transition hover:bg-slate-800/50"
+                        className="flex cursor-pointer items-center gap-3 px-4 py-3 transition hover:bg-slate-800/50 focus:outline-none focus:ring-1 focus:ring-inset focus:ring-indigo-500"
+                        role="button"
+                        tabIndex={0}
                         onClick={() => handleCardClick(pdf)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleCardClick(pdf); } }}
                       >
                         <input
                           type="checkbox"
