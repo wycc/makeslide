@@ -1290,6 +1290,15 @@ export default function HomePage() {
                               <span className="ml-2 truncate text-slate-500" title={pdf.description}>— {pdf.description}</span>
                             )}
                           </p>
+                          {(pdf.tags ?? '').trim() && (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {(pdf.tags ?? '').split(',').map((tag) => tag.trim()).filter(Boolean).map((tag) => (
+                                <span key={tag} className="rounded-full border border-indigo-500/40 bg-indigo-500/15 px-2 py-0.5 text-[10px] text-indigo-300">
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                         {/* Mini usage bar chart */}
                         <div className="hidden shrink-0 flex-col gap-0.5 sm:flex" style={{ width: 80 }}>
