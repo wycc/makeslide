@@ -1415,6 +1415,7 @@ export const zhTW = {
   'quiz.copyQuestions': '複製所有題目',
   'quiz.copyQuestionsDone': '已複製',
   'quiz.copyQuestionsFail': '複製失敗',
+  'quiz.tooManyQuestionsWarning': '目前有 {count} 題，題目較多時建議精簡至 20 題以內以確保作答體驗。',
   'quiz.clearAllQuestions': '清除所有題目',
   'quiz.confirmClear': '確定要清除所有題目嗎？此操作無法復原。',
   'quiz.exportJson': '匯出 JSON',

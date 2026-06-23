@@ -1415,6 +1415,7 @@ export const en = {
   'quiz.copyQuestions': 'Copy all questions',
   'quiz.copyQuestionsDone': 'Copied!',
   'quiz.copyQuestionsFail': 'Copy failed',
+  'quiz.tooManyQuestionsWarning': 'You have {count} questions. Consider trimming to 20 or fewer for a better quiz experience.',
   'quiz.clearAllQuestions': 'Clear all questions',
   'quiz.confirmClear': 'Clear all questions? This cannot be undone.',
   'quiz.exportJson': 'Export JSON',

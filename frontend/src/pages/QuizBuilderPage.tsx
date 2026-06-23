@@ -1174,6 +1174,11 @@ export default function QuizBuilderPage() {
             ) : null}
             {message ? <p className="mt-2 text-sm text-emerald-300">{message}</p> : null}
             {error ? <p className="mt-2 text-sm text-rose-300">{error}</p> : null}
+            {questions.length > 20 ? (
+              <p className="mt-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+                {t('quiz.tooManyQuestionsWarning').replace('{count}', String(questions.length))}
+              </p>
+            ) : null}
           </div>
           {questions.map((q, qIdx) => (
             <div
