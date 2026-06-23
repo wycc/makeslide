@@ -1197,7 +1197,7 @@ export default function HomePage() {
                 onClick={() => setFavoritesOnly((v) => !v)}
                 className={`rounded-full border px-3 py-0.5 text-xs transition ${favoritesOnly ? 'border-amber-400 bg-amber-500/20 text-amber-200' : 'border-slate-600 bg-slate-800 text-slate-300 hover:border-slate-500'}`}
               >
-                {favoritesOnly ? '★' : '☆'} {t('home.filter.favoritesOnly')}
+                {favoritesOnly ? '★' : '☆'} {t('home.filter.favoritesOnly')}{favorites.size > 0 && <span className="ml-1.5 rounded-full bg-amber-500/30 px-1.5 text-[10px] text-amber-300">{favorites.size}</span>}
               </button>
               {selectedIds.size > 0 && (
                 <>
