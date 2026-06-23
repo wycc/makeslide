@@ -1260,6 +1260,15 @@ export default function HomePage() {
         {items.length > 0 && categoryGroups.length === 0 && (
           <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/40 p-10 text-center">
             <p className="text-slate-300">{t('home.noSlidesInCategory')}</p>
+            {(tagFilter.size > 0 || titleFilter.length > 0) && (
+              <button
+                type="button"
+                onClick={clearAllFilters}
+                className="mt-3 rounded-md border border-indigo-500/40 px-3 py-1.5 text-xs text-indigo-300 transition hover:bg-indigo-500/10"
+              >
+                {t('home.clearAllFilters')}
+              </button>
+            )}
             {categoryFilter !== '__all__' &&
               categoryFilter !== '__recent__' &&
               categoryFilter !== DEFAULT_CATEGORY && (
