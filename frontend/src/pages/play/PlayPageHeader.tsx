@@ -39,6 +39,7 @@ function ShortcutsButton() {
     ['Space', t('play.shortcuts.spaceFullscreen')],
     ['Space', t('play.shortcuts.spaceNormal')],
     ['G', t('play.shortcuts.gotoPage')],
+    ['B', t('play.shortcuts.nextBookmark')],
     ['W', t('play.shortcuts.toggleDraw')],
     ['P', t('play.shortcuts.pollControl')],
     ['A', t('play.shortcuts.aiAnswer')],

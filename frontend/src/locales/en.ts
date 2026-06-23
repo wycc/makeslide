@@ -1491,6 +1491,7 @@ export const en = {
   'play.shortcuts.aiAnswer': 'AI Answer Questions (host, sync on)',
   'play.shortcuts.exitEsc': 'Exit Fullscreen / Drawing Mode',
   'play.shortcuts.gotoPage': 'Go to page',
+  'play.shortcuts.nextBookmark': 'Jump to next bookmark (cycles)',
   'play.shortcuts.close': 'Close',
   'play.gotoPageDialog': 'Go to page',
   'play.gotoPagePlaceholder': 'Enter page number…',
