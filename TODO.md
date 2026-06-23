@@ -512,9 +512,18 @@
 
 ## 新增可執行項目（第十四輪）
 
-- [ ] 首頁 PDF 播放次數統計：`pdfs` 表新增 `play_count INTEGER DEFAULT 0` 欄位（migration），播放頁進入 ready 狀態時呼叫新增的 `POST /api/pdfs/:id/increment-play-count` 端點遞增；首頁 `PdfCard` 在頁數/時長 badge 旁顯示 `▶ N 次` 播放計數（有播放紀錄才顯示）；補後端測試 200 / 403 / 404。
-- [ ] 測驗隨機排序題目：`quiz_sets` 表新增 `shuffle_questions BOOLEAN DEFAULT 0` 欄位（migration），測驗編輯頁加入「隨機排序題目」checkbox；播放頁載入測驗時若 `shuffle_questions = 1`，前端對 `questions` 陣列做 Fisher-Yates shuffle 後再渲染；補後端 schema 測試與前端 shuffle 純函式測試。
+- [x] 首頁 PDF 播放次數統計：`pdfs` 表新增 `play_count INTEGER DEFAULT 0` 欄位（migration），播放頁進入 ready 狀態時呼叫新增的 `POST /api/pdfs/:id/increment-play-count` 端點遞增；首頁 `PdfCard` 在頁數/時長 badge 旁顯示 `▶ N 次` 播放計數（有播放紀錄才顯示）；補後端測試 200 / 403 / 404。
+  - 修改說明（2026-06-23）：DB migration `pdfs.play_count INTEGER NOT NULL DEFAULT 0`；後端 `POST /api/pdfs/:id/increment-play-count`（owner 或可讀，原子遞增 + `RETURNING play_count`）；前端 `incrementPlayCount` API 函式；`PlayPage` ready 時呼叫；`PdfCard` hover badge 加入 `▶ N`（play_count > 0 才顯示）；3 個後端測試通過。分支 `feat/play-count`，已 merge 回 master。
+- [x] 測驗隨機排序題目：`quiz_sets` 表新增 `shuffle_questions BOOLEAN DEFAULT 0` 欄位（migration），測驗編輯頁加入「隨機排序題目」checkbox；播放頁載入測驗時若 `shuffle_questions = 1`，前端對 `questions` 陣列做 Fisher-Yates shuffle 後再渲染；補後端 schema 測試與前端 shuffle 純函式測試。
+  - 修改說明（2026-06-23）：DB migration `quiz_sets.shuffle_questions INTEGER NOT NULL DEFAULT 0`；後端 `SaveQuizBodySchema` 加入欄位；`rowToQuiz()` 輸出 `Boolean(row.shuffle_questions)`；INSERT/UPDATE/SELECT/copy-to 查詢全部更新；前端 `QuizSet` 型別加入 `shuffle_questions?: boolean`；`saveQuizSet()` payload 傳遞 `shuffle_questions`；`QuizBuilderPage` 加入 checkbox UI，quiz ID 變更時做一次 Fisher-Yates shuffle 存入 `shuffledQuestionsForTaking`；提取 `shuffleArray()` 至 `play/utils.ts`；後端 3 + 前端 5 個測試通過。分支 `feat/quiz-shuffle`，已 merge 回 master。
 - [ ] 頁面投票結果 CSV 匯出：新增 `GET /api/pdfs/:id/poll-results.csv` 後端端點，彙整所有 `page_polls` 的投票選項與票數（欄位：page_number、poll_question、option_index、option_text、vote_count、total_votes），回傳 `text/csv`；播放頁課後報告面板或側邊欄加入「匯出投票 CSV」按鈕；補後端測試 200 / 403 / 404 / 空投票。
 - [ ] 播放頁側邊欄大綱面板：在側邊欄新增「大綱」分頁（Tab），列出所有頁面的縮圖與頁碼，點擊可跳頁；若頁面有 `page_notes` 標題行（`# `開頭的第一行）或前 20 字的逐字稿摘要作為顯示標題；純前端改動，不需新增後端端點。
 - [ ] AI 問答回覆存為個人筆記：在 `PageAskPanel` 的 AI 回覆卡片旁加入「存為筆記」按鈕，將「Q: {問題}\nA: {回覆}」追加至目前頁面的 `page_notes`（呼叫既有 `PATCH /api/pdfs/:id/pages/:n/note`）；補 i18n `play.sidebar.saveAsNote/saveAsNoteDone/saveAsNoteFail`。
 
+
+## 工作記錄（第十四輪）
+
+| 日期 | 工作摘要 | 分支 |
+|------|---------|------|
+| 2026-06-23 | 首頁 PDF 播放次數統計：DB migration play_count；POST increment-play-count 端點（原子遞增）；PlayPage ready 時呼叫；PdfCard hover badge 顯示 ▶ N；後端 3 個測試通過 | feat/play-count（已 merge） |
+| 2026-06-23 | 測驗隨機排序題目：DB migration shuffle_questions；SaveQuizBodySchema 與 SQL 查詢更新；QuizBuilderPage checkbox UI + Fisher-Yates shuffle effect；shuffleArray() 提取至 play/utils.ts；後端 3 + 前端 5 個測試通過 | feat/quiz-shuffle（已 merge） |
