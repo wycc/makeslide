@@ -802,13 +802,19 @@ export function PlayPageSidebar() {
             <p className="text-xs text-slate-500">{t('play.sidebar.importantEmpty')}</p>
           ) : (
             <div className="flex flex-wrap gap-2">
-              {[...importantPages].sort((a, b) => a - b).map((pageNum) => (
+              {[...importantPages].sort((a, b) => a - b).map((pageNum) => {
+                const importantPage = deckPages.find((p) => p.page_number === pageNum);
+                const thumbSrc = importantPage?.thumbnail_url ?? importantPage?.image_url;
+                return (
                 <button
                   key={pageNum}
                   type="button"
                   onClick={() => setCurrentIdx(pageNum - 1)}
                   className="flex items-center gap-1.5 rounded-md border border-yellow-500/40 bg-yellow-500/10 px-2.5 py-1 text-xs text-yellow-200 hover:bg-yellow-500/20"
                 >
+                  {thumbSrc && (
+                    <img src={withImageBust(thumbSrc) ?? thumbSrc} alt={`第 ${pageNum} 頁`} className="h-6 w-10 shrink-0 rounded object-cover" />
+                  )}
                   <span>★ 第 {pageNum} 頁</span>
                   <span
                     role="button"
@@ -821,7 +827,8 @@ export function PlayPageSidebar() {
                     ×
                   </span>
                 </button>
-              ))}
+              );
+              })}
             </div>
           )}
         </div>
