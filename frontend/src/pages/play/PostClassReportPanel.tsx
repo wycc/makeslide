@@ -156,6 +156,13 @@ export function PostClassReportPanel({ pdfId, summary, loading, error, onClose, 
               >
                 學生報告 CSV
               </a>
+              <a
+                href={`api/pdfs/${encodeURIComponent(pdfId)}/poll-results.csv`}
+                download
+                className="rounded-md border border-violet-500/50 bg-violet-500/15 px-3 py-1.5 text-sm text-violet-100 hover:bg-violet-500/25"
+              >
+                投票結果 CSV
+              </a>
               <button type="button" onClick={() => window.print()} className="rounded-md border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-sm text-amber-100 hover:bg-amber-500/25">
                 列印 / 儲存 PDF
               </button>

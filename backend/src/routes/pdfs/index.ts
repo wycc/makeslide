@@ -34,6 +34,7 @@ import { registerScriptsTxtRoutes } from './scripts-txt';
 import { registerNotesTxtRoutes } from './notes-txt';
 import { registerGeneratePollRoutes } from './generate-poll';
 import { registerBatchExportRoutes } from './batch-export';
+import { registerPollResultsCsvRoutes } from './poll-results-csv';
 
 export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerUploadRoutes(app);
@@ -71,4 +72,5 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerNotesTxtRoutes(app);
   await registerGeneratePollRoutes(app);
   await registerBatchExportRoutes(app);
+  await registerPollResultsCsvRoutes(app);
 }
