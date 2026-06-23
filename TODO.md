@@ -570,6 +570,14 @@
 
 ---- 計數重設 ----
 
+## 工作記錄（第十六輪）
+
+| 日期 | 工作摘要 | 分支 |
+| ---- | -------- | ---- |
+| 2026-06-23 | 播放頁嵌入分享 iframe 代碼：ShareDialog 新增 embed tab，iframe snippet textarea，青色「複製嵌入代碼」按鈕 2s flash；i18n tabLink/embedTab/embedCode/copyEmbed/embedCopied | feat/share-embed-code（已 merge） |
+| 2026-06-23 | 播放頁頁面重要性旗標：SlidePanel 左下角黃色 ★ 按鈕，localStorage 持久化；Sidebar 新增重要頁面 section（chip 跳頁+×移除）；i18n importantTitle/Empty/mark/unmark | feat/important-pages-flag（已 merge） |
+| 2026-06-23 | 同步投票新投票紅點提示：PlayPage 新增 newPollBadge state，follower 模式收到新 activePollId 時在「問答」tab 顯示玫瑰色紅點，點擊清除；i18n pollNewBadge | feat/poll-new-badge（已 merge） |
+
 ## 掃描摘要（2026-06-23 第十六輪）
 
 - 第十五輪 5 個項目全數完成（AI 草稿投票題、字幕位置切換、相對建立時間、標題行內編輯、踢出學生）。
@@ -582,8 +590,11 @@
 
 ## 新增可執行項目（第十六輪）
 
-- [ ] 播放頁嵌入分享 iframe 代碼產生器：在 `ShareDialog` 加入「嵌入代碼」tab，自動產生 `<iframe src="..." />` HTML 片段（含 share_url 與建議的 width/height），提供複製按鈕；純前端改動，不需新增後端端點；補 i18n `play.shareDialog.embedTab/embedCode/copyEmbed/embedCopied`。
-- [ ] 播放頁頁面重要性旗標：在 `PlayPageSlidePanel` 投影片左下角加入「★ 標記重要」按鈕，旗標狀態存至 `localStorage`（key: `makeslide.importantPages.{pdfId}`）；在側邊欄書籤 section 下方加入「重要頁面」section，以星號 chip 列出已標記頁面並提供跳頁連結；補 i18n `play.sidebar.importantTitle/importantEmpty/markImportant/unmarkImportant`。
-- [ ] 同步投票新投票高亮提示：follower 模式播放中收到新投票（轉換自 `syncState.activePollId` 變化），在 sidebar 投票 tab icon 旁顯示紅點；點擊後清除紅點；純前端改動，利用既有 syncState 輪詢；補 i18n `play.sidebar.pollNewBadge`。
+- [x] 播放頁嵌入分享 iframe 代碼產生器：在 `ShareDialog` 加入「嵌入代碼」tab，自動產生 `<iframe src="..." />` HTML 片段（含 share_url 與建議的 width/height），提供複製按鈕；純前端改動，不需新增後端端點；補 i18n `play.shareDialog.embedTab/embedCode/copyEmbed/embedCopied`。
+  - 修改說明（2026-06-23）：`ShareDialog.tsx` 新增 `activeTab`（link/embed）與 `embedCopyStatus` state；dialog 頂部加入 tab 切換列；link tab 保留原有功能；embed tab 顯示 `<iframe src="{shareUrl}" ...>` 代碼的 monospace textarea 與青色「複製嵌入代碼」按鈕（2 秒 flash）；i18n `tabLink/embedTab/embedCode/copyEmbed/embedCopied` 新增至 zh-TW 及 en。分支 `feat/share-embed-code`，已 merge 回 master。
+- [x] 播放頁頁面重要性旗標：在 `PlayPageSlidePanel` 投影片左下角加入「★ 標記重要」按鈕，旗標狀態存至 `localStorage`（key: `makeslide.importantPages.{pdfId}`）；在側邊欄書籤 section 下方加入「重要頁面」section，以星號 chip 列出已標記頁面並提供跳頁連結；補 i18n `play.sidebar.importantTitle/importantEmpty/markImportant/unmarkImportant`。
+  - 修改說明（2026-06-23）：`PlayPage.tsx` 新增 `importantPagesStorageKey`、`importantPages` state 與 `toggleImportantPage` callback（localStorage 持久化）；`PlayPageContext.tsx` 介面補對應欄位；`PlayPageSlidePanel.tsx` 投影片左下角新增黃色 ★ 按鈕（已標記時 `border-yellow-500/60 text-yellow-300`）；`PlayPageSidebar.tsx` 書籤 section 後新增「重要頁面」section（yellow chip 列 + × 移除 + 跳頁）；i18n `importantTitle/Empty/markImportant/unmarkImportant` 新增至 zh-TW 及 en。分支 `feat/important-pages-flag`，已 merge 回 master。
+- [x] 同步投票新投票高亮提示：follower 模式播放中收到新投票（轉換自 `syncState.activePollId` 變化），在 sidebar 投票 tab icon 旁顯示紅點；點擊後清除紅點；純前端改動，利用既有 syncState 輪詢；補 i18n `play.sidebar.pollNewBadge`。
+  - 修改說明（2026-06-23）：`PlayPage.tsx` 新增 `newPollBadge` state 與 `clearPollBadge` callback，以 `useEffect` 監聽 `syncDisplayedPollId` 變化，在 `isSyncFollower && activeTab !== 'qa'` 條件下設置紅點；context interface 補 `newPollBadge/clearPollBadge`；tab 按鈕 onClick 呼叫 `clearPollBadge()`，按鈕內渲染 `newPollBadge && <span className="...rose-500" />`；i18n `play.sidebar.pollNewBadge` 新增至 zh-TW 及 en。分支 `feat/poll-new-badge`，已 merge 回 master。
 - [ ] 播放頁逐字稿 AI 改寫入口：在 `PlayPageSidebar` 逐字稿分頁頂部加入「AI 改寫」按鈕與風格選單（精簡/詳細/對話式），呼叫既有 `rewritePageScript()` API（`POST /api/pdfs/:id/pages/:n/rewrite-script`）；顯示改寫前後 diff（舊→新），提供「接受」與「取消」按鈕；補 i18n `play.sidebar.rewriteScript/rewriteStyle/rewriteAccept/rewriteCancel`。
 - [ ] 首頁 PDF 使用量橫條圖：在首頁 list 模式右側（或 grid 模式卡片底部）加入彩色 mini 橫條圖（3 個指標：play_count、total_pages、audio_duration），以各 PDF 的最大值做相對比例；hover 顯示數值 tooltip；純前端改動，利用已有欄位。
