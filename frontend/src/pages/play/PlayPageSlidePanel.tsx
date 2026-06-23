@@ -1166,13 +1166,25 @@ export function PlayPageSlidePanel() {
                 </div>
               )}
               <div className="mb-2 flex items-center gap-2">
-                <input
-                  type="search"
-                  value={scriptSearch}
-                  onChange={(e) => { setScriptSearch(e.target.value); setScriptSearchIdx(0); }}
-                  placeholder={t('play.slidePanel.scriptSearchPlaceholder')}
-                  className="flex-1 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
-                />
+                <div className="relative flex-1">
+                  <input
+                    type="search"
+                    value={scriptSearch}
+                    onChange={(e) => { setScriptSearch(e.target.value); setScriptSearchIdx(0); }}
+                    placeholder={t('play.slidePanel.scriptSearchPlaceholder')}
+                    className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 pr-6 text-xs text-slate-200 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
+                  />
+                  {scriptSearch ? (
+                    <button
+                      type="button"
+                      onClick={() => { setScriptSearch(''); setScriptSearchIdx(0); }}
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                      aria-label="清除搜尋"
+                    >
+                      ×
+                    </button>
+                  ) : null}
+                </div>
                 {scriptSearch.trim() ? (
                   <span className="shrink-0 text-xs text-slate-400">
                     {scriptSearchResults.length === 0
