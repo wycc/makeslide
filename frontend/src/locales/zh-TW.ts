@@ -209,6 +209,7 @@ export const zhTW = {
   'home.logoutGoogle': '登出 Google 帳號',
   'home.apiKeySettings': '設定',
   'home.recentCategory': '最近的簡報',
+  'home.recentlyPlayedBadge': '7 天內播放過',
   'home.firstTimeGuide': '首次流程導引',
   'home.step1': '第 1 步：準備 API Key',
   'home.step2': '第 2 步：匯入來源（PDF／文字／YouTube）',

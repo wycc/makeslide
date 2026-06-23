@@ -209,6 +209,7 @@ export const en = {
   'home.logoutGoogle': 'Sign out of Google account',
   'home.apiKeySettings': 'Settings',
   'home.recentCategory': 'Recent slides',
+  'home.recentlyPlayedBadge': 'Played within 7 days',
   'home.firstTimeGuide': 'First-time setup guide',
   'home.step1': 'Step 1 Prepare API keys',
   'home.step2': 'Step 2 Import source (PDF / Text / YouTube)',
