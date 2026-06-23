@@ -1536,6 +1536,7 @@ export const zhTW = {
   'play.gotoPageDialog': '跳至頁面',
   'play.gotoPagePlaceholder': '輸入頁碼…',
   'play.gotoPageInvalid': '頁碼無效',
+  'play.gotoPageConfirm': '前往',
   'remote.loading': '載入簡報資料中…',
   'remote.loadError': '無法載入簡報資料，請確認您有權限存取此簡報。',
   'remote.joinError': '無法加入同步會話，請確認您是此簡報的擁有者。',

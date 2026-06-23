@@ -1536,6 +1536,7 @@ export const en = {
   'play.gotoPageDialog': 'Go to page',
   'play.gotoPagePlaceholder': 'Enter page number…',
   'play.gotoPageInvalid': 'Invalid page number',
+  'play.gotoPageConfirm': 'Go',
   'remote.loading': 'Loading presentation data…',
   'remote.loadError': 'Failed to load presentation. Check that you have permission to access it.',
   'remote.joinError': 'Failed to join sync session. Make sure you are the owner of this presentation.',
