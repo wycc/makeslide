@@ -698,3 +698,20 @@
 | 2026-06-24 | 逐字稿字數與預估時長：chars÷4 計算 mm:ss 預估；儲存提示旁顯示字數與時長；i18n 1 key | feat/script-char-count（已 merge） |
 | 2026-06-24 | list 模式鍵盤可聚焦：tabIndex={0} + role=button + onKeyDown Enter/Space + focus ring | feat/list-keyboard-nav（已 merge） |
 | 2026-06-24 | QuizBuilderPage 測驗集搜尋：savedQuizzesSearch state + > 3 才顯示框 + filter by title | feat/quiz-saved-search（已 merge） |
+
+## 掃描摘要（2026-06-24 第二十輪）
+
+- 第十九輪 5 個項目全數完成（最近播放排序、全螢幕字幕設定生效、字數統計、list 鍵盤聚焦、測驗集搜尋）。
+- 首頁標籤過濾目前 `tagFilter` 為單一 string，每次只能啟用一個標籤，無法同時篩選多個。
+- `PlayPage.tsx` 鍵盤 handler 未處理 `I` 鍵，但 `toggleImportantPage` 函式已存在，可作為快捷鍵。
+- `PlayPageHeader.tsx` 有「複製目前頁逐字稿」按鈕，但沒有「複製全部頁面逐字稿」按鈕；側邊欄有「複製全部筆記」作為參考。
+- 首頁 list 模式已顯示 `last_played_at` 相對時間，但沒有類似「近期播放」視覺標記，難以一眼識別。
+- `QuizBuilderPage` 答題記錄一次性顯示所有 session，記錄多時需大量捲動；缺少折疊/顯示更多機制。
+
+## 新增可執行項目（第二十輪）
+
+- [ ] 首頁標籤多選過濾：將 `tagFilter: string` 改為 `tagFilter: Set<string>`，讓多個標籤可同時啟用（顯示所有已選標籤皆有的簡報）；點擊已選標籤可取消；補 i18n；純前端改動。
+- [ ] 播放頁 I 鍵切換重要頁面：在 `PlayPage.tsx` 鍵盤 handler 加入 `I` 鍵，呼叫 `toggleImportantPage(currentPage.page_number)`；在快捷鍵說明中補 `I` 的說明；純前端改動。
+- [ ] 播放頁複製全部逐字稿：在 `PlayPageHeader.tsx` 加入「複製全部逐字稿」按鈕，將所有頁面的 scripts 依頁碼排序後串接（每頁前加 `## 第 N 頁` 標題），複製到剪貼簿；補 i18n；純前端改動。
+- [ ] 首頁 list 模式「最近播放」綠點標記：對 `isRecentlyPlayed(pdf)` 為 true 的 list 列加入小綠點 badge（類似書籤的紅點），不影響既有的相對時間文字顯示；純前端改動。
+- [ ] QuizBuilderPage 答題記錄折疊：`historySessions` 列表預設只顯示最近 5 筆，超過時顯示「顯示更多（共 N 筆）」按鈕；點擊後展開顯示全部；補 i18n；純前端改動。
