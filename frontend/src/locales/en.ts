@@ -382,6 +382,8 @@ export const en = {
   'importText.modePasteDescription': 'Use pasted TXT content directly with the original workflow.',
   'importText.modePromptTitle': 'Generate from a prompt',
   'importText.modePromptDescription': 'Use multi-turn AI chat to build a slide outline, then continue through the TXT upload flow.',
+  'importText.currentModePaste': 'Current mode: Paste import (text area shown below)',
+  'importText.currentModePrompt': 'Current mode: AI outline generation (switch to "Paste import" to see the text area)',
   'importText.pastePlaceholder': 'Paste the text you want to turn into slides',
   'importText.aiOutlineChat': 'AI outline chat',
   'importText.aiOutlineDescription': 'Describe the topic, audience, page count, key points, or style first. The AI will keep updating the outline on the right.',

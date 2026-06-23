@@ -382,6 +382,8 @@ export const zhTW = {
   'importText.modePasteDescription': '直接使用貼上的 TXT 內容進入原本流程。',
   'importText.modePromptTitle': '從提示詞生成',
   'importText.modePromptDescription': '透過多輪對話和 AI 逐步完成簡報大綱，再進入 TXT 上傳後續流程。',
+  'importText.currentModePaste': '目前模式：貼上匯入（下方會顯示文字貼上區）',
+  'importText.currentModePrompt': '目前模式：AI 生成大綱（若要看到貼上區，請切換到「貼上匯入」）',
   'importText.pastePlaceholder': '請貼上要轉成簡報的文字內容',
   'importText.aiOutlineChat': 'AI 大綱對話',
   'importText.aiOutlineDescription': '先描述主題、聽眾、頁數、重點或風格；AI 會持續更新右側大綱。',
