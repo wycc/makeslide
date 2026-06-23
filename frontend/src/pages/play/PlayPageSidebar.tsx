@@ -239,6 +239,8 @@ export function PlayPageSidebar() {
       (message, [name, value]) => message.replaceAll(`{${name}}`, String(value)),
       t(key),
     );
+  const [bookmarkCopyMsg, setBookmarkCopyMsg] = useState<string | null>(null);
+  const [importantCopyMsg, setImportantCopyMsg] = useState<string | null>(null);
 
   return (
     <aside
@@ -695,13 +697,28 @@ export function PlayPageSidebar() {
       </section>
 
       <section className={`rounded-lg border border-slate-800 bg-slate-900/40 ${qaPanelExpanded ? 'md:hidden' : ''}`}>
-        <div className="border-b border-slate-800 px-4 py-3">
+        <div className="flex items-center justify-between gap-2 border-b border-slate-800 px-4 py-3">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-300">
             {t('play.sidebar.bookmarksTitle')}
             {bookmarks.length > 0 && (
               <span className="rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-normal text-amber-300">{bookmarks.length}</span>
             )}
           </h2>
+          {bookmarks.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                const text = [...bookmarks].sort((a, b) => a - b).map((n) => `第 ${n} 頁`).join('、');
+                void copyTextToClipboard(text).then((ok) => {
+                  setBookmarkCopyMsg(ok ? t('play.sidebar.copyListDone') : t('play.sidebar.copyListFail'));
+                  setTimeout(() => setBookmarkCopyMsg(null), 2000);
+                });
+              }}
+              className="rounded border border-slate-700 px-2 py-0.5 text-xs text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+            >
+              {bookmarkCopyMsg ?? t('play.sidebar.copyList')}
+            </button>
+          )}
         </div>
         <div className="px-4 py-3">
           {bookmarks.length === 0 ? (
@@ -736,12 +753,29 @@ export function PlayPageSidebar() {
 
       <section className={`rounded-lg border border-slate-800 bg-slate-900/40 ${qaPanelExpanded ? 'md:hidden' : ''}`}>
         <div className="border-b border-slate-800 px-4 py-3">
+          <div className="flex items-center justify-between gap-2">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-300">
             {t('play.sidebar.importantTitle')}
             {importantPages.length > 0 && (
               <span className="rounded-full bg-yellow-500/20 px-1.5 py-0.5 text-[10px] font-normal text-yellow-300">{importantPages.length}</span>
             )}
           </h2>
+          {importantPages.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                const text = [...importantPages].sort((a, b) => a - b).map((n) => `第 ${n} 頁`).join('、');
+                void copyTextToClipboard(text).then((ok) => {
+                  setImportantCopyMsg(ok ? t('play.sidebar.copyListDone') : t('play.sidebar.copyListFail'));
+                  setTimeout(() => setImportantCopyMsg(null), 2000);
+                });
+              }}
+              className="rounded border border-slate-700 px-2 py-0.5 text-xs text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+            >
+              {importantCopyMsg ?? t('play.sidebar.copyList')}
+            </button>
+          )}
+          </div>
         </div>
         <div className="px-4 py-3">
           {importantPages.length === 0 ? (
