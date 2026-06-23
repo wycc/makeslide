@@ -602,3 +602,20 @@
   - 修改說明（2026-06-23）：`PlayPageSlidePanel.tsx` 新增 `aiRewriteStyle`（compact/detailed/conversational）、`aiRewriteBusy`、`aiRewriteDraft`、`aiRewriteError` state；`handleAiRewriteScript` 以風格對應固定 prompt 呼叫 `rewritePageScript()`；在逐字稿搜尋框上方插入紫色邊框 AI 改寫區塊（style select + 按鈕）；收到結果後顯示 diff 卡片（新稿文字 + 接受（emerald）/取消 按鈕）；Accept 將 editingScript 替換為 draft；i18n `rewriteScript/Busy/StyleLabel/StyleCompact/StyleDetailed/StyleConversational/Accept/Cancel/DiffOld/DiffNew` 新增至 zh-TW 及 en。分支 `feat/script-ai-rewrite`，已 merge 回 master。
 - [x] 首頁 PDF 使用量橫條圖：在首頁 list 模式右側（或 grid 模式卡片底部）加入彩色 mini 橫條圖（3 個指標：play_count、total_pages、audio_duration），以各 PDF 的最大值做相對比例；hover 顯示數值 tooltip；純前端改動，利用已有欄位。
   - 修改說明（2026-06-23）：`HomePage.tsx` 新增 `usageBarMaxValues` useMemo（遍歷 categoryGroups 取三指標最大值）；list 模式每列右側加入寬 80px 三列橫條圖（sky=play_count、emerald=page_count、amber=audio_duration），以 max 做相對比例；hover 顯示 tooltip 文字（`group/bar`）；sm 以上才顯示（`hidden sm:flex`）。分支 `feat/home-usage-bar-chart`，已 merge 回 master。
+
+## 掃描摘要（2026-06-23 第十七輪）
+
+- 第十六輪 5 個項目全數完成（嵌入分享、重要頁面旗標、投票紅點提示、逐字稿 AI 改寫、使用量橫條圖）。
+- 播放頁目前沒有直接輸入頁碼的跳頁功能，需滾動縮圖列或連按方向鍵才能到達遠處頁面。
+- 首頁 list 模式已有 `last_played_at` 欄位但未顯示，使用者無法快速判斷哪份簡報最近播過。
+- 首頁 list 模式沒有顯示標籤（tags），grid 模式的 PdfCard 有，造成兩種瀏覽模式資訊不一致。
+- QuizBuilderPage 歷史答題 session 列表的 `submitted_at` 以 `toLocaleString()` 顯示，缺乏「3 分鐘前」相對時間感。
+- 播放頁全螢幕模式下頁碼顯示已存在（pageNumberLabel），但缺少從全螢幕模式直接跳頁的快捷鍵。
+
+## 新增可執行項目（第十七輪）
+
+- [ ] 播放頁跳頁對話框：在 `PlayPage.tsx` 的鍵盤事件 handler 加入 `G` 鍵，彈出一個輸入頁碼的小型 dialog（`<input type="number">`），Enter 確認後跳轉至指定頁（`setCurrentIdx(n-1)`），Escape 取消；同步在 `PlayPageHeader.tsx` 的快捷鍵說明列表補上 `G` 的說明；補 i18n `play.gotoPageDialog/gotoPagePlaceholder/gotoPageConfirm/gotoPageInvalid`；純前端改動。
+- [ ] 首頁 list 模式最後播放時間：在 list 模式每列的「頁數 · 類別」文字後加入 `· 最後播放：{相對時間}` 顯示（僅當 `last_played_at` 非空時顯示）；`formatRelativeTime` 已在 `PdfCard.tsx` 定義，可提取為共用 helper 或內聯使用；補 i18n `home.listLastPlayed`；純前端改動。
+- [ ] 首頁 list 模式顯示標籤 chips：在 list 模式每列的下方（`p` 元素行之後）加入 `pdf.tags` 的 chip 列（逗號分隔，indigo 樣式，同 PdfCard），當 `pdf.tags` 為空時不顯示；純前端改動，利用已有 `pdf.tags` 欄位。
+- [ ] 測驗歷史答題相對時間：`QuizBuilderPage.tsx` 中歷史答題 session 列表（`historySessions`）的時間顯示由 `new Date(session.submitted_at).toLocaleString()` 改為相對時間格式（`formatRelativeTime`），保留原始時間作 `title` tooltip；純前端改動，提取或複製 PdfCard 的 `formatRelativeTime` 函式。
+- [ ] 播放頁全螢幕模式跳頁快捷鍵：在全螢幕模式（`PlayPageFullscreen.tsx`）的鍵盤事件 handler 或現有 `PlayPage.tsx` onKey handler 中加入 `G` 鍵支援，與普通模式共用同一個跳頁 dialog state；確保全螢幕模式中彈出 dialog 時投影片不繼續自動播放（暫停）；純前端改動。
