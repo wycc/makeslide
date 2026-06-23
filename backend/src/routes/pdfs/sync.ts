@@ -628,7 +628,14 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     }
     const clientId = parsedQuery.data.client_id;
     const session = getSession(id);
-    if (clientId) touchClient(session, clientId);
+    if (clientId) {
+      touchClient(session, clientId);
+      // Keep-alive: renew master TTL while master is actively polling so the
+      // role does not expire during an idle-but-watching session (no page changes).
+      if (session.masterClientId === clientId && session.masterExpiresAt > nowMs()) {
+        session.masterExpiresAt = nowMs() + MASTER_TTL_MS;
+      }
+    }
     const role = clientId ? roleFor(session, clientId) : 'follower';
     return reply.send(buildStateResponse(session, id, role, clientId));
   });

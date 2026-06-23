@@ -1069,6 +1069,11 @@ export default function PlayPage() {
           : await joinPlaybackSync(pdfId, next, userCode || undefined);
         if (cancelled) return;
         setSyncRole(joined.role);
+        // Remember that this browser was master so polling can reclaim the slot
+        // after a server-side reset (e.g. server restart or session expiry).
+        if (joined.role === 'master' && !currentShareToken) {
+          window.localStorage.setItem(`makeslide.sync.wasMaster.${pdfId}`, '1');
+        }
         setFollowerAudioUnlocked(joined.follower_audio_unlocked);
         if (joined.role === 'follower' && !joined.follower_audio_unlocked) setAudioMuted(true);
         setSyncFollowerQuestions(joined.follower_questions ?? []);
@@ -1121,6 +1126,7 @@ export default function PlayPage() {
         return;
       }
       window.localStorage.removeItem(enabledKey);
+      window.localStorage.removeItem(`makeslide.sync.wasMaster.${pdfId}`);
       setSyncError(null);
       setSyncEnabled(false);
       setSyncRole('follower');
@@ -1304,6 +1310,24 @@ export default function PlayPage() {
             setSyncRole('follower');
             syncClientIdRef.current = '';
             setSyncError(null);
+            return;
+          }
+          // If we were master before (e.g. server restarted, session reset) but
+          // the slot is now vacant, reclaim master automatically so a reload or
+          // server restart does not permanently strand the user as follower.
+          if (
+            state.role === 'follower'
+            && !state.master_client_id
+            && !currentShareToken
+            && syncClientIdRef.current
+            && window.localStorage.getItem(`makeslide.sync.wasMaster.${pdfId}`) === '1'
+          ) {
+            void joinPlaybackSync(pdfId, syncClientIdRef.current).then((rejoined) => {
+              setSyncRole(rejoined.role);
+              if (rejoined.role === 'master') {
+                window.localStorage.setItem(`makeslide.sync.wasMaster.${pdfId}`, '1');
+              }
+            }).catch(() => undefined);
             return;
           }
           if (state.role !== 'master' && !state.follower_audio_unlocked) {
