@@ -1344,9 +1344,14 @@ export default function HomePage() {
                           {(pdf.tags ?? '').trim() && (
                             <div className="mt-1 flex flex-wrap gap-1">
                               {(pdf.tags ?? '').split(',').map((tag) => tag.trim()).filter(Boolean).map((tag) => (
-                                <span key={tag} className="rounded-full border border-indigo-500/40 bg-indigo-500/15 px-2 py-0.5 text-[10px] text-indigo-300">
+                                <button
+                                  key={tag}
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setTagFilter((prev) => { const next = new Set(prev); next.has(tag) ? next.delete(tag) : next.add(tag); return next; }); }}
+                                  className={`rounded-full border px-2 py-0.5 text-[10px] transition ${tagFilter.has(tag) ? 'border-indigo-400 bg-indigo-500/30 text-indigo-200' : 'border-indigo-500/40 bg-indigo-500/15 text-indigo-300 hover:border-indigo-400 hover:bg-indigo-500/25'}`}
+                                >
                                   {tag}
-                                </span>
+                                </button>
                               ))}
                             </div>
                           )}
