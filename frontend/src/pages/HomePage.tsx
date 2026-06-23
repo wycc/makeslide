@@ -321,6 +321,14 @@ export default function HomePage() {
     return { maxPlay, maxPages, maxAudio };
   }, [categoryGroups]);
 
+  const homeStats = useMemo(() => {
+    const totalPdfs = items.length;
+    const totalPages = items.reduce((s, p) => s + (p.page_count ?? 0), 0);
+    const totalPlays = items.reduce((s, p) => s + (p.play_count ?? 0), 0);
+    const totalAudioMin = Math.round(items.reduce((s, p) => s + (p.total_audio_duration_seconds ?? 0), 0) / 60);
+    return { totalPdfs, totalPages, totalPlays, totalAudioMin };
+  }, [items]);
+
   const showToast = useCallback((message: string) => {
     setToast(message);
     if (toastTimerRef.current != null) {
@@ -1148,6 +1156,19 @@ export default function HomePage() {
             <p className="mt-3 text-xs text-slate-400" aria-live="polite">
               {visibleSummary}
             </p>
+            <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-500">
+              <span>{t('home.stats.totalPdfs').replace('{n}', String(homeStats.totalPdfs))}</span>
+              <span>·</span>
+              <span>{t('home.stats.totalPages').replace('{n}', String(homeStats.totalPages))}</span>
+              <span>·</span>
+              <span>{t('home.stats.totalPlays').replace('{n}', String(homeStats.totalPlays))}</span>
+              {homeStats.totalAudioMin > 0 && (
+                <>
+                  <span>·</span>
+                  <span>{t('home.stats.totalAudio').replace('{n}', String(homeStats.totalAudioMin))}</span>
+                </>
+              )}
+            </div>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <button
                 type="button"
