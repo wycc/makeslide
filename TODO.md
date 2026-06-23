@@ -488,7 +488,8 @@
   - 修改說明（2026-06-23）：`SettingsPage.tsx` 新增 `getMcpConfigJson()` helper，以 `window.location.origin` 作為 `MAKESLIDE_URL`、產生的 token 作為 `MAKESLIDE_MCP_TOKEN`，產生可直接貼入 `~/.claude/mcp_servers.json` 的 `npx tsx` 格式 JSON（路徑含 placeholder）；`onCopyMcpConfigTemplate` callback 負責複製；token 顯示的 amber 區塊之後新增 indigo 色「MCP JSON 設定檔範本」區塊，含 `<pre>` 預覽與「複製設定檔」按鈕；zh-TW/en i18n 各新增 5 個 `settings.mcpConfig*` 鍵值。分支 `feat/mcp-config-template`，已 merge 回 master。
 [x] 新增簡報時，如果可能的話新增在目前的類別中。
   - 修改說明（2026-06-23）：`handleUploaded` callback 在 `categoryFilter` 不為特殊值（`__all__`、`__recent__` 等前綴為 `__` 的過濾條件）時，自動呼叫 `updatePdfCategory(resp.id, categoryFilter)` 將新上傳的 PDF 歸入目前顯示的類別；category 更新完成後再次 `load({ silent: true })` 刷新列表。純前端改動，無需後端修改。分支 `feat/upload-to-current-category`，已 merge 回 master。
-[ ] 檢查同步模式時，為什麼有時會自動跳到 follower 模式中。應該想辦法讓進入 master 模式後，就算 reload page 也不應該變成 follower 模式。
+[x] 檢查同步模式時，為什麼有時會自動跳到 follower 模式中。應該想辦法讓進入 master 模式後，就算 reload page 也不應該變成 follower 模式。
+  - 修改說明（2026-06-23）：找出兩個根本原因：① `GET /sync/state`（輪詢）不會續期 master TTL，導致閒置 10+ 分鐘後 master 身份消失；② 沒有機制讓 master 在 server 重啟或 TTL 過期後自動重奪。後端 `sync.ts` 在 GET /sync/state 對 master 呼叫者更新 `masterExpiresAt`（keep-alive），使主動輪詢的 master 永遠不會因閒置而過期。前端 `PlayPage.tsx` 在成功 join as master 時寫入 `localStorage makeslide.sync.wasMaster.{pdfId}`，停用 sync 時清除；輪詢若收到 `role=follower` 且 `master_client_id` 為空且 wasMaster 旗標存在（非分享連結），自動呼叫 `joinPlaybackSync` 重奪 master，覆蓋 server 重啟等邊緣情境。分支 `feat/sync-master-persist`，已 merge 回 master。
 
 ## 工作記錄（第十三輪）
 
@@ -496,4 +497,5 @@
 |------|---------|------|
 | 2026-06-23 | 新增簡報時自動歸入目前類別：handleUploaded 在非特殊 categoryFilter 時呼叫 updatePdfCategory，更新後再次刷新列表；純前端改動 | feat/upload-to-current-category（已 merge） |
 | 2026-06-23 | MCP JSON 設定檔範本：token 產生後顯示 indigo 色設定檔區塊（npx tsx 格式，MAKESLIDE_URL 自動填入 origin，path placeholder 提示）；「複製設定檔」按鈕；i18n mcpConfig* 5 個鍵值 | feat/mcp-config-template（已 merge） |
+| 2026-06-23 | 修正同步 master 重整後變 follower：後端 GET /sync/state 對 master 呼叫者更新 TTL（keep-alive）；前端 wasMaster localStorage 旗標 + 輪詢時自動重奪空缺 master 槽 | feat/sync-master-persist（已 merge） |
 
