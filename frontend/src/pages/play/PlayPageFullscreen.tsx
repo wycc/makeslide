@@ -164,7 +164,7 @@ export function PlayPageFullscreen() {
     isReadOnlyProcessing,
     isLockedFullscreen,
     remoteCursor,
-    showSubtitle,
+    showSubtitle, subtitleSize, subtitlePosition,
     hasScriptChanges,
     playQrCodeUrl,
     currentTime,
@@ -805,8 +805,8 @@ export function PlayPageFullscreen() {
           </div>
         </div>
       ) : showSubtitle && currentSentence && fullscreenLayout === 'image' ? (
-        <div className="pointer-events-none absolute bottom-4 left-1/2 w-[min(92vw,1000px)] -translate-x-1/2 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-          <div className="mx-auto rounded-md bg-black/65 px-4 py-2 text-center text-base font-medium leading-relaxed text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] md:text-lg">
+        <div className={`pointer-events-none absolute left-1/2 w-[min(92vw,1000px)] -translate-x-1/2 px-3 ${subtitlePosition === 'top' ? 'top-4 pt-[max(0.5rem,env(safe-area-inset-top))]' : 'bottom-4 pb-[max(0.5rem,env(safe-area-inset-bottom))]'}`}>
+          <div className={`mx-auto rounded-md bg-black/65 px-4 py-2 text-center font-medium leading-relaxed text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${subtitleSize === 'sm' ? 'text-xs md:text-sm' : subtitleSize === 'lg' ? 'text-base md:text-xl' : 'text-sm md:text-base'}`}>
             <p className="line-clamp-2 whitespace-pre-wrap">{currentSentence}</p>
           </div>
         </div>
