@@ -1809,6 +1809,12 @@ export async function fetchSyncAttendees(id: string): Promise<SyncAttendee[]> {
   return body.attendees;
 }
 
+export async function kickSyncAttendee(id: string, clientId: string): Promise<{ ok: boolean; pdf_id: string; client_id: string }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/sync/attendees/${encodeURIComponent(clientId)}`, { method: 'DELETE' });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { ok: boolean; pdf_id: string; client_id: string };
+}
+
 export async function updatePdfTags(id: string, tags: string): Promise<{ id: string; tags: string; updated_at: string }> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/tags`, {
     method: 'PATCH',

@@ -110,3 +110,59 @@ test('GET /api/pdfs/:id/sync/attendees includes seeded records', async () => {
     await app.close();
   }
 });
+
+test('DELETE /api/pdfs/:id/sync/attendees/:clientId removes attendee for owner', async () => {
+  const id = `attend-kick-200-${Date.now()}`;
+  seedPdf(id, 'owner-attend');
+  const t = nowIso();
+  db.prepare(`INSERT INTO sync_attendees (pdf_id, client_id, user_code, joined_at) VALUES (?, ?, ?, ?)`)
+    .run(id, 'client-kick', 'Bob', t);
+  const app = await buildApp();
+  try {
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/pdfs/${id}/sync/attendees/client-kick`,
+      headers: ownerHeaders('owner-attend'),
+    });
+    assert.equal(res.statusCode, 200, `expected 200 but got ${res.statusCode}: ${res.body}`);
+    const body = JSON.parse(res.body) as { ok: boolean; client_id: string };
+    assert.equal(body.ok, true);
+    assert.equal(body.client_id, 'client-kick');
+    const remaining = db.prepare(`SELECT client_id FROM sync_attendees WHERE pdf_id = ? AND client_id = ?`).get(id, 'client-kick');
+    assert.equal(remaining, undefined, 'attendee should be removed from DB');
+  } finally {
+    cleanup(id);
+    await app.close();
+  }
+});
+
+test('DELETE /api/pdfs/:id/sync/attendees/:clientId returns 403 for non-owner', async () => {
+  const id = `attend-kick-403-${Date.now()}`;
+  seedPdf(id, 'owner-attend');
+  const app = await buildApp();
+  try {
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/pdfs/${id}/sync/attendees/some-client`,
+      headers: ownerHeaders('other-user'),
+    });
+    assert.equal(res.statusCode, 403);
+  } finally {
+    cleanup(id);
+    await app.close();
+  }
+});
+
+test('DELETE /api/pdfs/:id/sync/attendees/:clientId returns 404 for unknown PDF', async () => {
+  const app = await buildApp();
+  try {
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/api/pdfs/nonexistent-pdf-kick/sync/attendees/client-xyz',
+      headers: ownerHeaders('owner-attend'),
+    });
+    assert.equal(res.statusCode, 404);
+  } finally {
+    await app.close();
+  }
+});
