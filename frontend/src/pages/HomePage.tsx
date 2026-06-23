@@ -62,9 +62,9 @@ function formatRelativeTime(iso: string): string {
   }
 }
 
-type SortMode = 'title_asc' | 'created_desc' | 'updated_desc' | 'page_count_desc' | 'audio_desc' | 'audio_asc';
+type SortMode = 'title_asc' | 'created_desc' | 'updated_desc' | 'page_count_desc' | 'audio_desc' | 'audio_asc' | 'last_played_desc';
 
-const SORT_MODES: SortMode[] = ['title_asc', 'created_desc', 'updated_desc', 'page_count_desc', 'audio_desc', 'audio_asc'];
+const SORT_MODES: SortMode[] = ['title_asc', 'created_desc', 'updated_desc', 'page_count_desc', 'audio_desc', 'audio_asc', 'last_played_desc'];
 
 const compareByTitle = (a: PdfListItem, b: PdfListItem) => {
   const titleA = a.title?.trim() || a.id;
@@ -128,6 +128,8 @@ const getComparatorForSortMode = (sortMode: SortMode) => {
       return compareByAudioDurationDesc;
     case 'audio_asc':
       return compareByAudioDurationAsc;
+    case 'last_played_desc':
+      return compareByLastPlayedAtDesc;
     case 'title_asc':
     default:
       return compareByTitle;
@@ -1130,6 +1132,7 @@ export default function HomePage() {
                   <option value="page_count_desc">{t('home.sort.pageCountDesc')}</option>
                   <option value="audio_desc">{t('home.sort.audioDurationDesc')}</option>
                   <option value="audio_asc">{t('home.sort.audioDurationAsc')}</option>
+                  <option value="last_played_desc">{t('home.sort.lastPlayedDesc')}</option>
                 </select>
               </label>
               <div className="flex items-end gap-1">
