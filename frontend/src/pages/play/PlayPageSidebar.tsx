@@ -10,6 +10,80 @@ import { copyTextToClipboard } from '../../lib/clipboard';
 
 const IMAGE_MSG_PREFIX = '[image] ';
 
+function getOutlineTitle(page: import('../../types').PdfDetailPage, scripts: Record<number, string>): string {
+  const notes = page.page_notes?.trim();
+  if (notes) {
+    const firstLine = notes.split('\n')[0] ?? '';
+    if (firstLine.startsWith('# ')) return firstLine.slice(2).trim();
+  }
+  const script = scripts[page.page_number];
+  if (script) {
+    const text = script.trim();
+    if (text.length > 0) return text.slice(0, 20) + (text.length > 20 ? '…' : '');
+  }
+  return '';
+}
+
+function OutlineSection() {
+  const { t } = useI18n();
+  const { deckPages, currentIdx, setCurrentIdx, scripts, withImageBust } = usePlayPageContext();
+
+  return (
+    <section className="rounded-lg border border-slate-800 bg-slate-900/40">
+      <div className="border-b border-slate-800 px-4 py-3">
+        <h2 className="text-sm font-semibold text-slate-300">{t('play.sidebar.outlineTitle')}</h2>
+      </div>
+      <div className="max-h-72 overflow-y-auto">
+        {deckPages.length === 0 ? (
+          <p className="px-4 py-3 text-xs text-slate-500">{t('play.sidebar.outlineEmpty')}</p>
+        ) : (
+          <ul className="divide-y divide-slate-800/60">
+            {deckPages.map((page, idx) => {
+              const isActive = idx === currentIdx;
+              const label = t('play.sidebar.outlinePageLabel').replace('{page}', String(page.page_number));
+              const title = getOutlineTitle(page, scripts);
+              const imgSrc = page.thumbnail_url ?? page.image_url;
+              return (
+                <li key={page.page_number}>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentIdx(idx)}
+                    className={`flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-slate-800/60 ${
+                      isActive ? 'bg-indigo-500/15 ring-1 ring-inset ring-indigo-500/40' : ''
+                    }`}
+                  >
+                    <div className="h-9 w-14 shrink-0 overflow-hidden rounded border border-slate-700 bg-slate-800">
+                      {imgSrc ? (
+                        <img
+                          src={withImageBust(imgSrc) ?? imgSrc}
+                          alt={label}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-[9px] text-slate-500">
+                          {page.page_number}
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-xs font-medium ${isActive ? 'text-indigo-200' : 'text-slate-300'}`}>
+                        {label}
+                      </p>
+                      {title ? (
+                        <p className="truncate text-[11px] text-slate-500">{title}</p>
+                      ) : null}
+                    </div>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function PageNoteSection() {
   const { t } = useI18n();
   const { currentPage, deckPages, pdfId, isReadOnlyProcessing } = usePlayPageContext();
@@ -646,6 +720,8 @@ export function PlayPageSidebar() {
           )}
         </div>
       </section>
+
+      <OutlineSection />
 
       <PageAskPanel />
 
