@@ -864,8 +864,23 @@
 
 ## 新增可執行項目（第二十五輪）
 
-- [ ] PlayPageFullscreen 兩側換頁按鈕：全螢幕模式投影片左右各加半透明 prev/next 按鈕，hover 時以 `opacity-0 hover:opacity-100` 淡入，點擊換頁；不干擾手勢滑動；純前端改動，補 i18n `play.fullscreen.prevPage/nextPage`。
-- [ ] SettingsPage API Key 格式指示 icon：OpenAI key 輸入框右側加格式 icon（輸入以 `sk-` 開頭時顯示 ✓、空白時顯示 -、其他顯示 ?），Gemini 以 `AIza` 開頭判斷；純前端靜態驗證，不呼叫 API；補 i18n `settings.apiKeyValid/Invalid/Empty`。
-- [ ] PlayPageHeader 標題編輯字數顯示：行內標題編輯模式啟用時，在輸入框旁顯示「N/200」字數統計；字數 > 150 時文字轉 amber 色；純前端改動。
-- [ ] PlayPageSidebar 有筆記頁面指示點：PageNoteSection 標題旁加入小圓點（emerald），當目前頁面的 `currentPage?.page_notes?.trim()` 非空時顯示，提示此頁已有筆記；純前端改動，無需 i18n。
-- [ ] QuizBuilderPage 測驗題目數量 badge：在 `savedQuizzes` 列表每個測驗標題右側加入灰色 badge 顯示題目數量（`quiz.questions.length` 道題）；若 `questions` 為空不顯示；補 i18n `quiz.questionCount`；純前端改動。
+- [x] PlayPageFullscreen 兩側換頁按鈕：全螢幕模式投影片左右各加半透明 prev/next 按鈕，hover 時以 `opacity-0 hover:opacity-100` 淡入，點擊換頁；不干擾手勢滑動；純前端改動，沿用 `play.slidePanel.prevPage/nextPage` i18n。
+  - 修改說明（2026-06-24）：`PlayPageFullscreen.tsx` 在暫停圓形 icon 後加入條件渲染（`fullscreenLayout === 'image' && !drawingMode`），左右各一個 `absolute` 全高按鈕（`w-14 h-full opacity-0 hover:opacity-100`），內含圓形半透明 icon；disabled 時 `pointer-events-none`。分支 `feat/fullscreen-nav-buttons`，已 merge 回 master。
+- [x] SettingsPage API Key 格式指示 icon：OpenAI key 輸入框右側加格式 icon（輸入以 `sk-` 開頭時顯示 ✓、空白時顯示 -、其他顯示 ?），Gemini 以 `AIza` 開頭判斷；純前端靜態驗證，不呼叫 API；補 i18n `settings.apiKeyValid/Invalid/Empty`。
+  - 修改說明（2026-06-24）：`SettingsPage.tsx` OPENAI_API_KEY 與 GEMINI_API_KEY `<label>` 改 `<span className="flex items-center gap-1.5">`，根據 `openaiApiKey`/`geminiApiKey` 值以三元運算渲染 `✓`（emerald）、`?`（amber）或 `—`（slate）的 title tooltip span；i18n 各補 3 個 `settings.apiKey*` 鍵值。分支 `feat/settings-apikey-validation`，已 merge 回 master。
+- [x] PlayPageHeader 標題編輯字數顯示：行內標題編輯模式啟用時，在輸入框旁顯示「N/200」字數統計；字數 > 150 時文字轉 amber 色；純前端改動。
+  - 修改說明（2026-06-24）：`PlayPageHeader.tsx` 行內編輯 `<input>` 包入 `<>...</>`，輸入框後加 `<span className="shrink-0 text-[11px] tabular-nums {amber/slate}">{titleInput.length}/200</span>`；>150 字時 amber-400，否則 slate-500。分支 `feat/title-edit-char-count`，已 merge 回 master。
+- [x] PlayPageSidebar 有筆記頁面指示點：PageNoteSection 標題旁加入小圓點（emerald），當目前頁面的 `currentPage?.page_notes?.trim()` 非空時顯示，提示此頁已有筆記；純前端改動，無需 i18n。
+  - 修改說明（2026-06-24）：`PlayPageSidebar.tsx` `PageNoteSection` h2 改 `flex items-center gap-1.5`，條件渲染 `h-2 w-2 rounded-full bg-emerald-400`（有筆記時）。分支 `feat/sidebar-note-indicator`，已 merge 回 master。
+- [x] QuizBuilderPage 測驗題目數量 badge：在 `savedQuizzes` 列表每個測驗標題右側加入灰色 badge 顯示題目數量；若 `questions` 為空不顯示；沿用已有 `quiz.questionCount` i18n；純前端改動。
+  - 修改說明（2026-06-24）：`QuizBuilderPage.tsx` 測驗列表按鈕內部由兩個 `<span>` 改為 flex row，標題後加 `rounded-full bg-slate-700/80 px-1.5 py-0.5 text-[10px]` 的題數 badge（`quiz.questions.length > 0` 才顯示）；原本在標題下方的文字行已移除。分支 `feat/quiz-question-count-badge`，已 merge 回 master。
+
+## 工作記錄（第二十五輪，2026-06-24）
+
+| 日期 | 工作內容 | 分支 |
+|------|----------|------|
+| 2026-06-24 | PlayPageFullscreen 兩側 hover 換頁按鈕：image 模式加 absolute 全高 prev/next 按鈕（opacity-0 hover:opacity-100），disabled 時 pointer-events-none | feat/fullscreen-nav-buttons（已 merge） |
+| 2026-06-24 | SettingsPage API Key 格式 icon：OpenAI（sk- prefix）與 Gemini（AIza prefix）輸入框標籤加 ✓/—/? icon；i18n apiKeyValid/Invalid/Empty 3 個 key | feat/settings-apikey-validation（已 merge） |
+| 2026-06-24 | PlayPageHeader 標題字數統計：行內編輯模式加 N/200 字數 span；>150 字轉 amber-400 | feat/title-edit-char-count（已 merge） |
+| 2026-06-24 | PlayPageSidebar 有筆記小點：PageNoteSection h2 加條件 emerald 圓點（page_notes 非空時） | feat/sidebar-note-indicator（已 merge） |
+| 2026-06-24 | QuizBuilderPage 測驗題目數 badge：標題行改 flex，右側加圓角灰色題數 badge（questions.length > 0 才顯示） | feat/quiz-question-count-badge（已 merge） |
