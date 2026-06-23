@@ -1480,6 +1480,8 @@ export const zhTW = {
   'play.header.copyScript': '複製本頁逐字稿',
   'play.header.copyScriptDone': '已複製！',
   'play.header.copyScriptFail': '複製失敗',
+  'play.header.copyAllScripts': '複製全部逐字稿',
+  'play.header.copyAllScriptsDone': '全部已複製！',
   'play.header.downloadCoursePackage': '下載課程包',
   'play.header.coursePackageGenerating': '產生課程包中…',
   'play.header.timeRemaining': '全簡報剩餘時間',
