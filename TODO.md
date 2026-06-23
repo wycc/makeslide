@@ -980,3 +980,20 @@
 | 2026-06-24 | 大綱已觀看頁面 emerald 點：PlayPageContext 新增 visitedIdxSet；PlayPage useEffect 追蹤；Sidebar 顯示小點 | feat/outline-watched-dot（已 merge） |
 | 2026-06-24 | autoAdvance 倒數 badge 加「s」後綴：flex-col 排列，數字下 text-[9px] 秒單位 | feat/auto-advance-countdown-unit（已 merge） |
 | 2026-06-24 | 首頁 list 模式顯示播放次數：play_count > 0 時顯示 sky 色「播放 N 次」；i18n home.listPlayCount | feat/list-mode-play-count（已 merge） |
+
+## 掃描摘要（2026-06-24 第二十九輪）
+
+- 第二十八輪 5 個項目全數完成（品質 badge、音頻時長、大綱已觀看點、倒數單位、播放次數）。
+- `RemoteControllerPage.tsx` 遙控器頁面在大型頁碼旁沒有縮圖，演講者不易確認目前正在顯示哪一張投影片。
+- `PlayPageSidebar.tsx` PageNoteSection textarea 有 `maxLength={5000}`，但沒有顯示目前字數，使用者不知道距離上限還有多少字。
+- 書籤 section（PlayPageSidebar）只顯示頁碼 chip，缺少對應縮圖，難以一眼辨識頁面內容（大綱面板已有縮圖）。
+- 首頁 list 模式行文字包含播放次數、音頻時長，但沒有 `updated_at`，無法快速判斷哪些教材是最近修改的。
+- `QuizBuilderPage.tsx` 題目 textarea 沒有字元計數，出題者不易控制題目長短，容易出現過長的題幹。
+
+## 新增可執行項目（第二十九輪）
+
+- [ ] RemoteControllerPage 當前頁縮圖預覽：在頁碼大數字下方加入 `pages[currentPage - 1]?.thumbnail_url ?? pages[currentPage - 1]?.image_url` 縮圖（`h-24 object-contain rounded-lg`），方便演講者確認目前頁面內容；純前端改動。
+- [ ] PlayPageSidebar 筆記字數計數器：PageNoteSection textarea 下方加入 `{noteText.length} / 5000` 字數顯示（`noteText.length > 4500` 時改 amber 色警示）；純前端改動，無需 i18n。
+- [ ] PlayPageSidebar 書籤縮圖預覽：書籤 section 每個書籤 chip 左側加入對應頁縮圖（`deckPages.find` 找出頁物件，取 `thumbnail_url ?? image_url`，`h-6 w-10 object-cover rounded`）；純前端改動。
+- [ ] 首頁 list 模式顯示 updated_at：list 模式每列在描述欄位後加入 `updated_at` 相對時間（`formatRelativeTime(pdf.updated_at)`，灰色），讓使用者快速辨識最近更新的教材；純前端改動，無需 i18n。
+- [ ] QuizBuilderPage 題幹字元計數：`q.question` textarea 右下方加入 `{q.question.length} 字` 計數（text-[10px] slate 色），讓出題者隨時掌握題目長度；純前端改動，無需 i18n。
