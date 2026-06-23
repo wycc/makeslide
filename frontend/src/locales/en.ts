@@ -246,6 +246,7 @@ export const en = {
   'home.listPages': '{count} pages',
   'home.listUncategorized': 'Uncategorized',
   'home.listLastPlayed': 'Last played {time}',
+  'home.listPlayCount': 'Played {count}×',
   'home.stats.totalPdfs': '{n} decks',
   'home.stats.totalPages': '{n} pages',
   'home.stats.totalPlays': '{n} plays',
