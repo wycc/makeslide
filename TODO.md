@@ -896,8 +896,23 @@
 
 ## 新增可執行項目（第二十六輪）
 
-- [ ] PlayPageSidebar QA/問答 tab 問題計數 badge：當 `syncFollowerQuestions` 有內容時，在「問答」tab 按鈕旁顯示問題總數徽章（slate 色）；純前端改動，補 i18n `play.sidebar.qaCount`。
-- [ ] QuizBuilderPage 一鍵清除所有題目：在題目編輯區加入「清除所有題目」玫瑰色按鈕（`window.confirm` 確認後清空 `questions` 陣列）；補 i18n `quiz.clearAllQuestions/confirmClear`；純前端改動。
-- [ ] 首頁批次選取全選/取消全選：批次工具列（多選模式）加入「全選（N）」/「取消全選」按鈕，呼叫現有 `selectedIds` Set 邏輯；補 i18n `home.selectAll/deselectAll`；純前端改動。
-- [ ] PlayPageSlidePanel 播放速率文字指示：在播放控制列（進度條旁）加入 `{playbackRate}×` 速率文字，點擊可循環切換 0.75/1.0/1.25/1.5/2.0；沿用已有 `playbackRate`/`setPlaybackRate`；補 i18n `play.controls.speedIndicator`；純前端改動。
-- [ ] PlayPageSidebar 書籤按頁碼排序：書籤 section 顯示前先對 `bookmarks` 陣列做 `sort((a, b) => a - b)` 升序排列，重要頁面 section 同樣處理；純前端改動，無需 i18n。
+- [x] PlayPageSidebar QA/問答 tab 問題計數 badge：當 `syncFollowerQuestions` 有內容時，在「問答」tab 按鈕旁顯示問題總數徽章（slate 色）；純前端改動，補 i18n `play.sidebar.qaCount`。
+  - 修改說明（2026-06-24）：`PlayPage.tsx` 移動裝置 tab 按鈕（問答）內加入 `syncFollowerQuestions.length > 0` 條件渲染的 slate 色圓角徽章顯示問題數。分支 `feat/qa-tab-question-badge`，已 merge 回 master。
+- [x] QuizBuilderPage 一鍵清除所有題目：在題目編輯區加入「清除所有題目」玫瑰色按鈕（`window.confirm` 確認後清空 `questions` 陣列）；補 i18n `quiz.clearAllQuestions/confirmClear`；純前端改動。
+  - 修改說明（2026-06-24）：`QuizBuilderPage.tsx` 在匯出 JSON 按鈕後加入玫瑰色「清除所有題目」按鈕，呼叫 `window.confirm(t('quiz.confirmClear'))` 後 `setQuestions([emptyQuestion(0)])`；i18n 2 個 key 新增至 zh-TW 及 en。分支 `feat/quiz-clear-all-questions`，已 merge 回 master。
+- [x] 首頁批次選取全選/取消全選：批次工具列（多選模式）加入「全選（N）」/「取消全選」按鈕，呼叫現有 `selectedIds` Set 邏輯；補 i18n `home.selectAll/deselectAll`；純前端改動。
+  - 修改說明（2026-06-24）：`HomePage.tsx` 在收藏按鈕後新增紫羅蘭色全選切換按鈕（`filteredItems.length > 0` 才顯示），判斷 `filteredItems.every()` 決定顯示「全選」或「取消全選」；i18n 2 個 key 新增至 zh-TW 及 en。分支 `feat/home-select-all`，已 merge 回 master。
+- [x] PlayPageSlidePanel 播放速率文字指示：在播放速率設定列標題旁加入「目前：{rate}x」文字標籤（cyan 色）；沿用已有 `playbackRate`；補 i18n `play.slidePanel.currentSpeed`；純前端改動。
+  - 修改說明（2026-06-24）：`PlayPageSlidePanel.tsx` 播放速率 div 的標題 div 加入 `<span className="ml-2 text-xs text-cyan-400">` 顯示目前速率；i18n `play.slidePanel.currentSpeed` 新增至 zh-TW 及 en。分支 `feat/playback-speed-indicator`，已 merge 回 master。
+- [x] PlayPageSidebar 書籤按頁碼排序：書籤 section 顯示前先對 `bookmarks` 陣列做 `sort((a, b) => a - b)` 升序排列；純前端改動，無需 i18n。
+  - 修改說明（2026-06-24）：`PlayPageSidebar.tsx` `bookmarks.map` 改為 `[...bookmarks].sort((a, b) => a - b).map`，確保書籤以頁碼升序顯示。分支 `feat/bookmark-sort-by-page`，已 merge 回 master。
+
+## 工作記錄（第二十六輪，2026-06-24）
+
+| 日期 | 工作內容 | 分支 |
+|------|----------|------|
+| 2026-06-24 | PlayPage 問答 tab 問題計數 badge：移動裝置「問答」tab 按鈕加入 syncFollowerQuestions.length 徽章 | feat/qa-tab-question-badge（已 merge） |
+| 2026-06-24 | QuizBuilderPage 清除所有題目按鈕：玫瑰色按鈕 + window.confirm + setQuestions([emptyQuestion(0)])；i18n quiz.clearAllQuestions/confirmClear | feat/quiz-clear-all-questions（已 merge） |
+| 2026-06-24 | 首頁全選/取消全選按鈕：filteredItems.every() 判斷；violet 色 toggle；i18n home.selectAll/deselectAll | feat/home-select-all（已 merge） |
+| 2026-06-24 | PlayPageSlidePanel 播放速率目前值標籤：播放速率標題旁加 cyan「目前：{rate}x」span；i18n play.slidePanel.currentSpeed | feat/playback-speed-indicator（已 merge） |
+| 2026-06-24 | PlayPageSidebar 書籤升序排列：bookmarks.map 前加 [...bookmarks].sort((a,b)=>a-b) | feat/bookmark-sort-by-page（已 merge） |
