@@ -772,8 +772,21 @@
 
 ## 新增可執行項目（第二十二輪）
 
-- [ ] QuizBuilderPage 搜尋零結果提示：當 `savedQuizzesSearch` 非空但過濾結果為空時，顯示「找不到符合「...」的測驗集」；補 i18n；純前端改動。
-- [ ] PlayPageSidebar 書籤/重要頁面計數徽章：在 Bookmarks 和 Important Pages section header 旁加入計數徽章（如「🔖 3」），section 折疊時也可見；純前端改動。
-- [ ] PlayPageHeader 複製分享連結按鈕：shareUrl 生成後，在 URL 旁加入「複製連結」按鈕，複製成功後短暫顯示「已複製」；補 i18n；純前端改動。
-- [ ] 首頁 grid 模式顯示 description：PdfCard 在標題下方加入一行 description 截斷文字（最多 2 行），僅在有值時顯示；純前端改動。
-- [ ] 首頁篩選零結果時建議清除：當篩選後無結果但 items.length > 0 時，在空狀態下顯示「找不到符合條件的簡報，試試清除篩選」並附上「清除篩選」按鈕；純前端改動。
+- [x] QuizBuilderPage 搜尋零結果提示：當 `savedQuizzesSearch` 非空但過濾結果為空時，顯示「找不到符合「...」的測驗集」；補 i18n；純前端改動。
+  - 修改說明（2026-06-24）：`QuizBuilderPage.tsx` 在 filter map 前加 some() 判斷；若無符合則顯示 `quiz.searchNoResults` 字串（含 {q} 替換）。分支 `feat/quiz-search-empty-state`，已 merge 回 master。
+- [x] PlayPageSidebar 書籤/重要頁面計數徽章：在 Bookmarks 和 Important Pages section header 旁加入計數徽章，section 折疊時也可見；純前端改動。
+  - 修改說明（2026-06-24）：`PlayPageSidebar.tsx` h2 改 flex；bookmarks.length > 0 時顯示 amber 徽章；importantPages.length > 0 時顯示 yellow 徽章。分支 `feat/sidebar-count-badges`，已 merge 回 master。
+- [x] PlayPageSlidePanel QR Code 展示區複製連結按鈕：shareUrl 顯示時，在文字下方加入「複製連結」按鈕；補 i18n 2 個 key；純前端改動。
+  - 修改說明（2026-06-24）：`PlayPageSlidePanel.tsx` 新增 shareUrlCopied state；shareUrl 文字改 flex column；加 button 點擊複製並 2s 後重置；i18n `play.slidePanel.copyShareLink/shareLinkCopied`。分支 `feat/copy-share-link`，已 merge 回 master。
+- [x] 首頁 grid 模式 PdfCard 已顯示 description（既有功能）；改為「篩選零結果時加清除篩選提示」；純前端改動。
+  - 修改說明（2026-06-24）：`HomePage.tsx` 空狀態 div 中，tagFilter.size > 0 || titleFilter.length > 0 時顯示清除篩選 button（複用 clearAllFilters + home.clearAllFilters i18n）。分支 `feat/grid-card-description`，已 merge 回 master。
+- [x] 首頁篩選零結果時建議清除（與上一項合併實作）。
+
+## 工作記錄（第二十二輪，2026-06-24）
+
+| 日期 | 工作內容 | 分支 |
+|------|----------|------|
+| 2026-06-24 | Quiz 測驗集搜尋零結果提示：some() 判斷 + searchNoResults i18n | feat/quiz-search-empty-state（已 merge） |
+| 2026-06-24 | Sidebar 書籤/重要頁面計數徽章：h2 flex + amber/yellow 徽章 | feat/sidebar-count-badges（已 merge） |
+| 2026-06-24 | QR Code 區複製連結按鈕：shareUrlCopied state + button + 2 個 i18n key | feat/copy-share-link（已 merge） |
+| 2026-06-24 | 篩選零結果加清除篩選按鈕：tagFilter/titleFilter 有值時顯示清除 button | feat/grid-card-description（已 merge） |
