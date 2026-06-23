@@ -518,7 +518,8 @@
   - 修改說明（2026-06-23）：DB migration `quiz_sets.shuffle_questions INTEGER NOT NULL DEFAULT 0`；後端 `SaveQuizBodySchema` 加入欄位；`rowToQuiz()` 輸出 `Boolean(row.shuffle_questions)`；INSERT/UPDATE/SELECT/copy-to 查詢全部更新；前端 `QuizSet` 型別加入 `shuffle_questions?: boolean`；`saveQuizSet()` payload 傳遞 `shuffle_questions`；`QuizBuilderPage` 加入 checkbox UI，quiz ID 變更時做一次 Fisher-Yates shuffle 存入 `shuffledQuestionsForTaking`；提取 `shuffleArray()` 至 `play/utils.ts`；後端 3 + 前端 5 個測試通過。分支 `feat/quiz-shuffle`，已 merge 回 master。
 - [x] 頁面投票結果 CSV 匯出：新增 `GET /api/pdfs/:id/poll-results.csv` 後端端點，彙整所有 `page_polls` 的投票選項與票數（欄位：page_number、poll_question、option_index、option_text、vote_count、total_votes），回傳 `text/csv`；播放頁課後報告面板或側邊欄加入「匯出投票 CSV」按鈕；補後端測試 200 / 403 / 404 / 空投票。
   - 修改說明（2026-06-23）：新增 `backend/src/routes/pdfs/poll-results-csv.ts`，JOIN `page_polls` 與 `page_poll_votes` 統計各選項票數，回傳 7 欄 CSV（page_number/poll_id/poll_question/option_index/option_text/vote_count/total_votes）；`PostClassReportPanel` 新增紫羅蘭色「投票結果 CSV」`<a download>` 按鈕；4 個後端測試全通過（200 含資料、空投票僅 header、404、403）。分支 `feat/poll-results-csv`，已 merge 回 master。
-- [ ] 播放頁側邊欄大綱面板：在側邊欄新增「大綱」分頁（Tab），列出所有頁面的縮圖與頁碼，點擊可跳頁；若頁面有 `page_notes` 標題行（`# `開頭的第一行）或前 20 字的逐字稿摘要作為顯示標題；純前端改動，不需新增後端端點。
+- [x] 播放頁側邊欄大綱面板：在側邊欄新增「大綱」分頁（Tab），列出所有頁面的縮圖與頁碼，點擊可跳頁；若頁面有 `page_notes` 標題行（`# `開頭的第一行）或前 20 字的逐字稿摘要作為顯示標題；純前端改動，不需新增後端端點。
+  - 修改說明（2026-06-23）：在 `PlayPageSidebar.tsx` 新增 `getOutlineTitle()` pure function（優先取 page_notes 第一個 `# ` 標題行，次取 scripts 前 20 字）與 `OutlineSection` 元件；各頁以縮圖（thumbnail_url 或 image_url）+ 頁碼 + 標題排列，最大高度 `max-h-72` 含捲動，目前頁以 indigo 環高亮；插入在書籤 section 之後。i18n 鍵值 `outlineTitle/Empty/PageLabel/NoTitle` 新增至 zh-TW 及 en。分支 `feat/sidebar-outline-panel`，已 merge 回 master。
 - [ ] AI 問答回覆存為個人筆記：在 `PageAskPanel` 的 AI 回覆卡片旁加入「存為筆記」按鈕，將「Q: {問題}\nA: {回覆}」追加至目前頁面的 `page_notes`（呼叫既有 `PATCH /api/pdfs/:id/pages/:n/note`）；補 i18n `play.sidebar.saveAsNote/saveAsNoteDone/saveAsNoteFail`。
 
 
@@ -529,3 +530,4 @@
 | 2026-06-23 | 首頁 PDF 播放次數統計：DB migration play_count；POST increment-play-count 端點（原子遞增）；PlayPage ready 時呼叫；PdfCard hover badge 顯示 ▶ N；後端 3 個測試通過 | feat/play-count（已 merge） |
 | 2026-06-23 | 測驗隨機排序題目：DB migration shuffle_questions；SaveQuizBodySchema 與 SQL 查詢更新；QuizBuilderPage checkbox UI + Fisher-Yates shuffle effect；shuffleArray() 提取至 play/utils.ts；後端 3 + 前端 5 個測試通過 | feat/quiz-shuffle（已 merge） |
 | 2026-06-23 | 頁面投票結果 CSV 匯出：`GET /api/pdfs/:id/poll-results.csv`，JOIN page_polls+page_poll_votes 統計選項票數，7 欄 CSV；PostClassReportPanel 紫羅蘭色「投票結果 CSV」下載按鈕；4 個後端測試通過（200/空header/404/403） | feat/poll-results-csv（已 merge） |
+| 2026-06-23 | 播放頁側邊欄大綱面板：`OutlineSection` 元件（縮圖+頁碼+標題）插入書籤 section 後；`getOutlineTitle()` 優先取 `# ` 標題行，次取逐字稿前 20 字；目前頁 indigo 環高亮；i18n outline* 4 個鍵值 | feat/sidebar-outline-panel（已 merge） |
