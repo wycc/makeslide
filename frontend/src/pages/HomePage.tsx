@@ -1306,7 +1306,12 @@ export default function HomePage() {
                           className="h-4 w-4 shrink-0 cursor-pointer accent-indigo-500"
                         />
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-slate-100">{pdf.title ?? pdf.id}</p>
+                          <p className="flex items-center gap-1.5 truncate text-sm font-medium text-slate-100">
+                            {isRecentlyPlayed(pdf) && (
+                              <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-emerald-400" title={t('home.recentlyPlayedBadge')} />
+                            )}
+                            {pdf.title ?? pdf.id}
+                          </p>
                           <p className="text-xs text-slate-400">
                             {t('home.listPages').replace('{count}', String(pdf.page_count))} · {pdf.category ?? t('home.listUncategorized')}
                             {pdf.last_played_at && (
