@@ -238,6 +238,7 @@ export const zhTW = {
   'home.viewList': '列表視圖',
   'home.listPages': '{count} 頁',
   'home.listUncategorized': '未分類',
+  'home.listLastPlayed': '最後播放 {time}',
   'home.sortBy': '排序方式',
   'home.sort.titleAsc': '標題 A-Z',
   'home.sort.createdDesc': '建立時間新到舊',

@@ -44,6 +44,24 @@ const VIEW_MODE_STORAGE_KEY = 'makeslide.home.viewMode';
 
 type ViewMode = 'grid' | 'list';
 
+function formatRelativeTime(iso: string): string {
+  try {
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return '剛剛';
+    if (mins < 60) return `${mins} 分鐘前`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours} 小時前`;
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `${days} 天前`;
+    const months = Math.floor(days / 30);
+    if (months < 12) return `${months} 個月前`;
+    return `${Math.floor(months / 12)} 年前`;
+  } catch {
+    return iso;
+  }
+}
+
 type SortMode = 'title_asc' | 'created_desc' | 'updated_desc' | 'page_count_desc' | 'audio_desc' | 'audio_asc';
 
 const SORT_MODES: SortMode[] = ['title_asc', 'created_desc', 'updated_desc', 'page_count_desc', 'audio_desc', 'audio_asc'];
@@ -1263,6 +1281,11 @@ export default function HomePage() {
                           <p className="truncate text-sm font-medium text-slate-100">{pdf.title ?? pdf.id}</p>
                           <p className="text-xs text-slate-400">
                             {t('home.listPages').replace('{count}', String(pdf.page_count))} · {pdf.category ?? t('home.listUncategorized')}
+                            {pdf.last_played_at && (
+                              <span className="ml-2 text-slate-500">
+                                {t('home.listLastPlayed').replace('{time}', formatRelativeTime(pdf.last_played_at))}
+                              </span>
+                            )}
                             {pdf.description?.trim() && (
                               <span className="ml-2 truncate text-slate-500" title={pdf.description}>— {pdf.description}</span>
                             )}
