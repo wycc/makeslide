@@ -1367,6 +1367,7 @@ export const zhTW = {
   'quiz.syncRole': '同步角色：{role}',
   'quiz.noSavedQuizzes': '尚未儲存測驗。',
   'quiz.searchQuizzes': '搜尋測驗…',
+  'quiz.searchNoResults': '找不到符合「{q}」的測驗集',
   'quiz.questionCount': '{count} 題',
   'quiz.startTitle': '開始測驗並同步至所有 follower',
   'quiz.start': '開始測驗',

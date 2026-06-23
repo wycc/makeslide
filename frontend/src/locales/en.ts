@@ -1367,6 +1367,7 @@ export const en = {
   'quiz.syncRole': 'Sync role: {role}',
   'quiz.noSavedQuizzes': 'No saved quizzes yet.',
   'quiz.searchQuizzes': 'Search quizzes…',
+  'quiz.searchNoResults': 'No quizzes match "{q}"',
   'quiz.questionCount': '{count} questions',
   'quiz.startTitle': 'Start quiz and sync to all followers',
   'quiz.start': 'Start quiz',
