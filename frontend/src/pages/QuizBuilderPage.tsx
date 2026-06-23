@@ -45,6 +45,24 @@ async function resolveConfiguredUserCode(): Promise<string> {
   }
 }
 
+function formatRelativeTime(iso: string): string {
+  try {
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return '剛剛';
+    if (mins < 60) return `${mins} 分鐘前`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours} 小時前`;
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `${days} 天前`;
+    const months = Math.floor(days / 30);
+    if (months < 12) return `${months} 個月前`;
+    return `${Math.floor(months / 12)} 年前`;
+  } catch {
+    return iso;
+  }
+}
+
 function emptyQuestion(index: number): QuizQuestion {
   return {
     id: `q${index + 1}`,
@@ -931,7 +949,8 @@ export default function QuizBuilderPage() {
                 {historySessions.map((session) => (
                   <li key={session.session_id} className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-xs">
                     <div className="font-medium text-slate-300">
-                      {formatMessage('quiz.sessionTime', { time: new Date(session.submitted_at).toLocaleString() })}
+                      {formatMessage('quiz.sessionTime', { time: formatRelativeTime(session.submitted_at) })}
+                      <span className="ml-1 text-slate-600" title={new Date(session.submitted_at).toLocaleString()}>ⓘ</span>
                       <span className="ml-2 text-slate-500">{formatMessage('quiz.attemptCount', { count: session.attempts.length })}</span>
                     </div>
                     <ul className="mt-1.5 space-y-1">
