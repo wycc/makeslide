@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { useI18n } from '../../i18n';
 import { usePlayPageContext } from './PlayPageContext';
+import { updatePageNote } from '../../lib/api/pdfs';
 
 export function PageAskPanel() {
   const { t } = useI18n();
@@ -9,7 +11,25 @@ export function PageAskPanel() {
     pageAskAnswer,
     pageAskBusy, pageAskError,
     handleAskPage, clearPageAsk,
+    pdfId, currentPage,
   } = usePlayPageContext();
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'ok' | 'fail'>('idle');
+
+  const handleSaveAsNote = async () => {
+    if (!pdfId || !currentPage || !pageAskAnswer) return;
+    setSaveStatus('saving');
+    try {
+      const existing = currentPage.page_notes?.trim() ?? '';
+      const appended = `Q: ${pageAskInput.trim()}\nA: ${pageAskAnswer.trim()}`;
+      const newNote = existing ? `${existing}\n\n${appended}` : appended;
+      await updatePageNote(pdfId, currentPage.page_number, newNote);
+      setSaveStatus('ok');
+    } catch {
+      setSaveStatus('fail');
+    } finally {
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    }
+  };
 
   if (!canAskPage) {
     return (
@@ -40,6 +60,22 @@ export function PageAskPanel() {
       {pageAskAnswer && (
         <div className="border-b border-slate-800 p-3">
           <p className="whitespace-pre-wrap text-sm text-emerald-200">{pageAskAnswer}</p>
+          <div className="mt-2 flex justify-end">
+            <button
+              type="button"
+              onClick={() => void handleSaveAsNote()}
+              disabled={saveStatus === 'saving'}
+              className="rounded-md border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-xs text-amber-200 hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {saveStatus === 'ok'
+                ? t('play.sidebar.saveAsNoteDone')
+                : saveStatus === 'fail'
+                  ? t('play.sidebar.saveAsNoteFail')
+                  : saveStatus === 'saving'
+                    ? '…'
+                    : t('play.sidebar.saveAsNote')}
+            </button>
+          </div>
         </div>
       )}
 
