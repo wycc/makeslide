@@ -787,7 +787,7 @@ export function PlayPageSidebar() {
             <p className="text-xs text-slate-500">{t('play.sidebar.importantEmpty')}</p>
           ) : (
             <div className="flex flex-wrap gap-2">
-              {importantPages.map((pageNum) => (
+              {[...importantPages].sort((a, b) => a - b).map((pageNum) => (
                 <button
                   key={pageNum}
                   type="button"
