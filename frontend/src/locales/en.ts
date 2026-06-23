@@ -685,6 +685,7 @@ export const en = {
   'play.slidePanel.audioStatusMutedLocal': 'Currently muted locally.',
   'play.slidePanel.audioStatusUnmutedLocal': 'Currently playing sound locally.',
   'play.slidePanel.playbackSpeedTitle': 'Playback speed',
+  'play.slidePanel.currentSpeed': 'Current: {rate}x',
   'play.slidePanel.subtitleTitle': 'Subtitles',
   'play.slidePanel.subtitleDescription': 'Toggle whether the current sentence subtitle is shown.',
   'play.slidePanel.subtitleSize': 'Subtitle size',

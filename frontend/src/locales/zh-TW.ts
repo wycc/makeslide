@@ -685,6 +685,7 @@ export const zhTW = {
   'play.slidePanel.audioStatusMutedLocal': '目前本機靜音。',
   'play.slidePanel.audioStatusUnmutedLocal': '目前本機可播放聲音。',
   'play.slidePanel.playbackSpeedTitle': '播放速度',
+  'play.slidePanel.currentSpeed': '目前：{rate}x',
   'play.slidePanel.subtitleTitle': '字幕',
   'play.slidePanel.subtitleDescription': '切換是否顯示目前句子字幕。',
   'play.slidePanel.subtitleSize': '字幕大小',
