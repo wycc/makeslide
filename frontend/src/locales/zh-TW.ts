@@ -472,6 +472,8 @@ export const zhTW = {
   'promptModal.costEstimate.noPageCount': '（無法取得頁數，無法預估費用）',
   'play.header.back': '返回',
   'play.header.updateTitle': '更新標題',
+  'play.header.editTitlePlaceholder': '輸入簡報標題…',
+  'play.header.editTitleHint': '雙擊以編輯標題',
   'play.header.saveTags': '儲存標籤',
   'play.header.savingTitle': '儲存中…',
   'play.header.regenerateTitle': '重新生成標題',

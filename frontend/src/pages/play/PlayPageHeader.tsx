@@ -145,6 +145,31 @@ export function PlayPageHeader() {
     handleStopRegenerate, handleRollbackRegenerate,
   } = usePlayPageContext();
 
+  const [editingTitle, setEditingTitle] = useState(false);
+  const titleBeforeEdit = useRef('');
+  const inlineTitleRef = useRef<HTMLInputElement>(null);
+
+  const startEditTitle = () => {
+    if (isReadOnlyProcessing || currentShareToken) return;
+    titleBeforeEdit.current = titleInput;
+    setEditingTitle(true);
+    setTimeout(() => inlineTitleRef.current?.select(), 0);
+  };
+
+  const commitTitleEdit = () => {
+    setEditingTitle(false);
+    if (titleInput.trim()) {
+      void handleSaveTitle();
+    } else {
+      setTitleInput(titleBeforeEdit.current);
+    }
+  };
+
+  const cancelTitleEdit = () => {
+    setEditingTitle(false);
+    setTitleInput(titleBeforeEdit.current);
+  };
+
   const pageCounterText = t('play.header.pageCounter')
     .replace('{current}', String(currentIdx + 1))
     .replace('{total}', String(totalPages));
@@ -210,21 +235,32 @@ export function PlayPageHeader() {
           <div className="w-16 shrink-0 sm:w-20" aria-hidden="true" />
         )}
         <div className="flex min-w-0 flex-1 items-center justify-center gap-1 sm:gap-2">
-          <input
-            value={titleInput}
-            onChange={(e) => setTitleInput(e.target.value)}
-            disabled={isReadOnlyProcessing}
-            className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-900 px-1.5 py-1 text-center text-xs text-slate-100 sm:px-2 sm:text-sm"
-            maxLength={200}
-          />
-          <button
-            type="button"
-            onClick={() => void handleSaveTitle()}
-            disabled={isReadOnlyProcessing || titleBusy || !titleInput.trim()}
-            className="shrink-0 whitespace-nowrap rounded-md border border-cyan-500/50 bg-cyan-500/15 px-1.5 py-1 text-[11px] text-cyan-200 disabled:opacity-40 sm:px-2 sm:text-xs"
-          >
-            {titleBusy ? t('play.header.savingTitle') : t('play.header.updateTitle')}
-          </button>
+          {editingTitle ? (
+            <input
+              ref={inlineTitleRef}
+              value={titleInput}
+              onChange={(e) => setTitleInput(e.target.value)}
+              onBlur={commitTitleEdit}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); commitTitleEdit(); }
+                if (e.key === 'Escape') { cancelTitleEdit(); }
+              }}
+              placeholder={t('play.header.editTitlePlaceholder')}
+              maxLength={200}
+              className="min-w-0 flex-1 rounded-md border border-cyan-500/60 bg-slate-900 px-1.5 py-1 text-center text-xs text-slate-100 sm:px-2 sm:text-sm"
+            />
+          ) : (
+            <span
+              onDoubleClick={startEditTitle}
+              title={(!isReadOnlyProcessing && !currentShareToken) ? t('play.header.editTitleHint') : undefined}
+              className={`min-w-0 flex-1 truncate text-center text-xs text-slate-100 sm:text-sm ${(!isReadOnlyProcessing && !currentShareToken) ? 'cursor-text' : ''}`}
+            >
+              {titleInput || '—'}
+            </span>
+          )}
+          {titleBusy && (
+            <span className="shrink-0 text-[11px] text-slate-400">{t('play.header.savingTitle')}</span>
+          )}
           <button
             type="button"
             onClick={() => void handleRegenerateTitle()}
