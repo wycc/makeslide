@@ -819,11 +819,29 @@ export default function SettingsPage() {
                     <span className="mt-1 block text-xs text-slate-500">{t('settings.monthlyBudgetUsdHint')}</span>
                   </label>
                   <label className="block text-sm text-slate-300 sm:col-span-2">
-                    OPENAI_API_KEY
+                    <span className="flex items-center gap-1.5">
+                      OPENAI_API_KEY
+                      {openaiApiKey.trim() === '' ? (
+                        <span className="text-xs text-slate-600" title={t('settings.apiKeyEmpty')}>—</span>
+                      ) : openaiApiKey.trim().startsWith('sk-') ? (
+                        <span className="text-xs text-emerald-400" title={t('settings.apiKeyValid')}>✓</span>
+                      ) : (
+                        <span className="text-xs text-amber-400" title={t('settings.apiKeyInvalid')}>?</span>
+                      )}
+                    </span>
                     <input type="password" value={openaiApiKey} onChange={(e) => setOpenaiApiKey(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none ring-0 focus:border-slate-500" placeholder="sk-..." />
                   </label>
                   <label className="block text-sm text-slate-300 sm:col-span-2">
-                    GEMINI_API_KEY
+                    <span className="flex items-center gap-1.5">
+                      GEMINI_API_KEY
+                      {geminiApiKey.trim() === '' ? (
+                        <span className="text-xs text-slate-600" title={t('settings.apiKeyEmpty')}>—</span>
+                      ) : geminiApiKey.trim().startsWith('AIza') ? (
+                        <span className="text-xs text-emerald-400" title={t('settings.apiKeyValid')}>✓</span>
+                      ) : (
+                        <span className="text-xs text-amber-400" title={t('settings.apiKeyInvalid')}>?</span>
+                      )}
+                    </span>
                     <input type="password" value={geminiApiKey} onChange={(e) => setGeminiApiKey(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none ring-0 focus:border-slate-500" placeholder="AIza..." />
                   </label>
                   <label className="block text-sm text-slate-300 sm:col-span-2">CGU_AIR_API_KEY<input type="password" value={cguAirApiKey} onChange={(e) => setCguAirApiKey(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none ring-0 focus:border-slate-500" placeholder="cgusk-..." /></label>
