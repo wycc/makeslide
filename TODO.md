@@ -948,3 +948,20 @@
 | 2026-06-24 | 首頁全選/取消全選按鈕：filteredItems.every() 判斷；violet 色 toggle；i18n home.selectAll/deselectAll | feat/home-select-all（已 merge） |
 | 2026-06-24 | PlayPageSlidePanel 播放速率目前值標籤：播放速率標題旁加 cyan「目前：{rate}x」span；i18n play.slidePanel.currentSpeed | feat/playback-speed-indicator（已 merge） |
 | 2026-06-24 | PlayPageSidebar 書籤升序排列：bookmarks.map 前加 [...bookmarks].sort((a,b)=>a-b) | feat/bookmark-sort-by-page（已 merge） |
+
+## 掃描摘要（2026-06-24 第二十八輪）
+
+- 第二十七輪 5 個項目全數完成（重要頁面排序、類別計數、搜尋清除、20 題警示、大綱頁數 badge）。
+- `QualityCheckPanel.tsx` 品質檢查結果呈現 `issuePages.length` 問題頁數，但標題列沒有 badge，無法在結果展示前就一眼看到問題數。
+- 首頁 list 模式行文字只有頁數和類別，缺少音頻時長資訊（`total_audio_duration_seconds` 欄位已有）。
+- `PlayPageSidebar.tsx` 大綱面板（OutlineSection）每個項目只有縮圖 + 頁碼 + 標題，沒有「已觀看」視覺標示。
+- `PlayPageSlidePanel.tsx` 的自動播放倒數 badge（`autoAdvanceCountdown`）只顯示數字，沒有單位；新使用者不易理解倒數的意義。
+- 首頁 list 模式缺少播放次數（`play_count`）欄位顯示，無法快速判斷哪份教材最常被使用。
+
+## 新增可執行項目（第二十八輪）
+
+- [ ] QualityCheckPanel 結果問題頁數 badge：檢查完成後（`results !== null`）在「品質檢查」標題旁顯示 `issuePages.length` 徽章（有問題時 rose 色，全無問題時 emerald 色 ✓）；純前端改動，無需 i18n。
+- [ ] 首頁 list 模式顯示音頻時長：list 模式頁數/類別文字行後加入 `· {formatAudioDuration(pdf.total_audio_duration_seconds)}` 音頻時長（`total_audio_duration_seconds` 非空才顯示）；純前端改動，不需後端修改。
+- [ ] PlayPageSidebar 大綱已觀看頁面 emerald 點：OutlineSection 每個項目若 `watchProgressByPage.has(page.page_number)` 且進度 > 0 則在頁碼旁加入 `h-1.5 w-1.5 rounded-full bg-emerald-400` 小點；純前端改動。
+- [ ] autoAdvance 倒數 badge 加單位文字：`autoAdvanceCountdown` badge 的數字後加入 `<span className="text-xs font-normal">s</span>` 秒單位；純前端改動，無需 i18n。
+- [ ] 首頁 list 模式顯示播放次數：list 模式每列在音頻時長資訊旁加入 `▶ {pdf.play_count}` 播放計數（`play_count > 0` 才顯示）；純前端改動。
