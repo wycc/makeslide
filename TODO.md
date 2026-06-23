@@ -666,3 +666,20 @@
   - 修改說明（2026-06-24）：`HomePage.tsx` 新增 `homeStats` useMemo（totalPdfs/totalPages/totalPlays/totalAudioMin from `items`）；在 `visibleSummary` 段落後插入統計摘要 div，以 `·` 分隔各項，語音分鐘數為 0 時不顯示；i18n `home.stats.*` 4 個 key 新增至 zh-TW 及 en。分支 `feat/home-stats-summary`，已 merge 回 master。
 - [x] 播放頁逐字稿搜尋關鍵字高亮：`PlayPageSlidePanel.tsx` 已有搜尋框，但目前只是 filter 顯示列，搜尋時讓匹配到的關鍵字在文字中以黃色高亮顯示（`<mark>` 或 span），提升可讀性；純前端改動。
   - 修改說明（2026-06-24）：原本搜尋結果只高亮每句的第一個匹配（`indexOf`）；改用 `String.prototype.split(RegExp)` 加 `gi` 旗標將句子切分成 parts 陣列，並用 `<mark>` 渲染所有匹配的 part（case-insensitive 比對）；加入 `replace(/[.*+?^${}()|[\]\\]/g, '\\$&')` 逃脫 RegExp 特殊字元。分支 `feat/script-search-highlight-all`，已 merge 回 master。
+
+## 掃描摘要（2026-06-24 第十九輪）
+
+- 第十八輪 5 個項目全數完成（list 收藏、逐字稿複製、B 鍵書籤、首頁統計摘要、搜尋全高亮）。
+- 首頁排序選項缺少「最近播放時間（由新到舊）」，`compareByLastPlayedAtDesc` 函式已存在但未加入 `SortMode` 下拉選單。
+- `PlayPageFullscreen.tsx` 的字幕渲染使用硬寫的 `bottom-4` 和 `text-base md:text-lg`，完全未讀取 `subtitleSize` / `subtitlePosition` context 值，導致側邊欄設定對全螢幕字幕無效。
+- `PlayPageSlidePanel.tsx` 逐字稿編輯區底部只有「儲存提示」，缺少即時字數統計與預估講解時長（粗估 4 字/秒）。
+- 首頁 list 模式每列外層 `div` 只有 `onClick`，缺少 `tabIndex` 和 `onKeyDown` Enter 鍵處理，滑鼠以外的使用者無法操作。
+- `QuizBuilderPage` 儲存的測驗集列表（`savedQuizzes`）沒有搜尋/過濾框，題庫多時難以找到指定測驗。
+
+## 新增可執行項目（第十九輪）
+
+- [ ] 首頁排序加入「最近播放」選項：在 `SortMode` union 新增 `last_played_desc`，對應 `compareByLastPlayedAtDesc`；`SORT_MODES` 陣列和 switch 補 case；`home.sort.lastPlayedDesc` i18n；純前端改動。
+- [ ] 全螢幕字幕大小和位置設定生效：在 `PlayPageFullscreen.tsx` 從 context destructure `subtitleSize` / `subtitlePosition`，依 size 套用 `text-xs/sm`、`text-base/lg`、`text-lg/2xl` CSS，依 position 切換 `bottom-4` / `top-4`；純前端改動。
+- [ ] 逐字稿編輯區字數與預估時長：在 `PlayPageSlidePanel.tsx` 逐字稿 textarea 下方（儲存提示同列左側）顯示當前 `editingScript` 的字數和預估講解秒數（字數 ÷ 4，以 `mm:ss` 格式顯示）；純前端改動。
+- [ ] 首頁 list 模式鍵盤可聚焦：對 list 模式每列外層 div 加入 `tabIndex={0}` 及 `onKeyDown` Enter 鍵呼叫 `handleCardClick(pdf)`，使鍵盤用戶可以 Tab 移動並 Enter 開啟；純前端改動。
+- [ ] QuizBuilderPage 測驗集搜尋：在 `savedQuizzes` 清單頂部加入搜尋輸入框，以 `quiz.title` 關鍵字過濾顯示；補 i18n；純前端改動。
