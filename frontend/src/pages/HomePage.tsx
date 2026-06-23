@@ -1199,6 +1199,22 @@ export default function HomePage() {
               >
                 {favoritesOnly ? '★' : '☆'} {t('home.filter.favoritesOnly')}{favorites.size > 0 && <span className="ml-1.5 rounded-full bg-amber-500/30 px-1.5 text-[10px] text-amber-300">{favorites.size}</span>}
               </button>
+              {filteredItems.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const allSelected = filteredItems.every((pdf) => selectedIds.has(pdf.id));
+                    setSelectedIds(allSelected ? new Set() : new Set(filteredItems.map((pdf) => pdf.id)));
+                  }}
+                  className={`rounded-full border px-3 py-0.5 text-xs transition ${
+                    filteredItems.every((pdf) => selectedIds.has(pdf.id))
+                      ? 'border-violet-400 bg-violet-500/20 text-violet-200'
+                      : 'border-slate-600 bg-slate-800 text-slate-300 hover:border-slate-500'
+                  }`}
+                >
+                  {filteredItems.every((pdf) => selectedIds.has(pdf.id)) ? t('home.deselectAll') : t('home.selectAll')}
+                </button>
+              )}
               {selectedIds.size > 0 && (
                 <>
                   <button
