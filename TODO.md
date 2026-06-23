@@ -567,3 +567,23 @@
 | 2026-06-23 | 播放頁標題行內編輯：標題改為雙擊進入 inline input，Enter/blur commit，Escape cancel；移除常駐 input+Update 按鈕；儲存中顯示灰色文字；i18n editTitlePlaceholder/editTitleHint | feat/inline-title-edit（已 merge） |
 | 2026-06-23 | 測驗題目 AI 草稿：`POST /api/pdfs/:id/pages/:n/generate-quiz-question`（四選項+correct_index+explanation）；`generateAiQuizQuestion()` API 函式；QuizBuilderPage 頁碼選擇器 + 紫羅蘭色按鈕；3 個後端測試通過 | feat/quiz-ai-draft-question（已 merge） |
 | 2026-06-23 | 同步模式踢出學生：`DELETE /api/pdfs/:id/sync/attendees/:clientId`（owner-only）；`kickSyncAttendee()` API；SlidePanel 出席名單玫瑰色「踢出」按鈕 + handleKickAttendee；3 個後端測試（200/403/404） | feat/sync-kick-attendee（已 merge） |
+
+---- 計數重設 ----
+
+## 掃描摘要（2026-06-23 第十六輪）
+
+- 第十五輪 5 個項目全數完成（AI 草稿投票題、字幕位置切換、相對建立時間、標題行內編輯、踢出學生）。
+- 播放頁逐字稿分頁已有 AI 改寫功能（`rewritePageScript`），但尚未在前端側邊欄逐字稿 tab 加入入口。
+- 同步課堂中，follower 被踢出後仍可重新加入，缺少「封鎖清單」持久化機制。
+- 播放頁嵌入分享（embed）尚無 iframe snippet 生成功能，教師無法將課程嵌入外部頁面。
+- 個人化複習清單功能：測驗答錯後尚無「收集到複習清單」並在首頁顯示的完整流程。
+- 播放頁頁面重要性旗標尚無實作，教師無法快速標記「必看頁面」。
+- 同步場次中，follower 端收到投票的時機依賴輪詢，缺少「有新投票時立即高亮提示」。
+
+## 新增可執行項目（第十六輪）
+
+- [ ] 播放頁嵌入分享 iframe 代碼產生器：在 `ShareDialog` 加入「嵌入代碼」tab，自動產生 `<iframe src="..." />` HTML 片段（含 share_url 與建議的 width/height），提供複製按鈕；純前端改動，不需新增後端端點；補 i18n `play.shareDialog.embedTab/embedCode/copyEmbed/embedCopied`。
+- [ ] 播放頁頁面重要性旗標：在 `PlayPageSlidePanel` 投影片左下角加入「★ 標記重要」按鈕，旗標狀態存至 `localStorage`（key: `makeslide.importantPages.{pdfId}`）；在側邊欄書籤 section 下方加入「重要頁面」section，以星號 chip 列出已標記頁面並提供跳頁連結；補 i18n `play.sidebar.importantTitle/importantEmpty/markImportant/unmarkImportant`。
+- [ ] 同步投票新投票高亮提示：follower 模式播放中收到新投票（轉換自 `syncState.activePollId` 變化），在 sidebar 投票 tab icon 旁顯示紅點；點擊後清除紅點；純前端改動，利用既有 syncState 輪詢；補 i18n `play.sidebar.pollNewBadge`。
+- [ ] 播放頁逐字稿 AI 改寫入口：在 `PlayPageSidebar` 逐字稿分頁頂部加入「AI 改寫」按鈕與風格選單（精簡/詳細/對話式），呼叫既有 `rewritePageScript()` API（`POST /api/pdfs/:id/pages/:n/rewrite-script`）；顯示改寫前後 diff（舊→新），提供「接受」與「取消」按鈕；補 i18n `play.sidebar.rewriteScript/rewriteStyle/rewriteAccept/rewriteCancel`。
+- [ ] 首頁 PDF 使用量橫條圖：在首頁 list 模式右側（或 grid 模式卡片底部）加入彩色 mini 橫條圖（3 個指標：play_count、total_pages、audio_duration），以各 PDF 的最大值做相對比例；hover 顯示數值 tooltip；純前端改動，利用已有欄位。
