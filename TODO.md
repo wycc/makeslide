@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | 播放頁 PDF 描述折疊顯示：PlayPageHeader 標題列下方加入折疊描述區塊，description 非空時顯示「▼ 顯示簡介」切換鈕（純 state toggle，分享訪客亦可見）；補 i18n 2 個 key（`play.header.showDescription`/`hideDescription`，zh-TW/en）；純前端改動 | feat/play-description-collapse（已 merge） |
 | 2026-06-25 | 首頁近期搜尋刪除個別記錄：搜尋下拉清單每筆記錄右側加入 × 按鈕，新增 `removeRecentSearch()` helper 只移除單筆並同步 localStorage；補 i18n key `home.search.removeRecent`（zh-TW/en）；純前端改動 | feat/recent-search-remove-item（已 merge） |
 | 2026-06-22 | 建立課後學習報告後端摘要 API（`GET /api/pdfs/:id/report/summary`） | feature/post-class-report-summary-api（已 merge） |
 | 2026-06-22 | 在播放頁加入課後報告入口與 MVP 畫面（PostClassReportPanel） | feature/post-class-report-mvp（已 merge） |
@@ -1141,7 +1142,7 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [ ] TemplatesPage 模板使用次數顯示：`templates` 資料表加入 `apply_count INTEGER NOT NULL DEFAULT 0` 欄位（DB migration）；新增後端端點 `POST /api/templates/:id/apply`（僅遞增計數，不需驗證，回傳 204）；前端「套用」動作同時呼叫此端點；TemplatesPage 卡片顯示使用次數徽章；補後端測試；i18n 1 個 key。
 
-- [ ] 播放頁 PDF 描述折疊顯示：PlayPageHeader 若 `detail?.description` 非空，在標題下方加入可展開的描述區塊（初始收折，點擊「顯示簡介 ▼」展開，點再折疊），純 state toggle；補 i18n 2 個 key；純前端改動。
+- [x] 播放頁 PDF 描述折疊顯示：PlayPageHeader 在標題列下方加入折疊描述區塊，`detail?.description` 非空時顯示「▼ 顯示簡介」切換鈕（初始收折，點擊展開/收合），純 `descExpanded` state toggle，對分享連結訪客也可見；補 i18n 2 個 key（`play.header.showDescription`/`hideDescription`，zh-TW/en）。純前端改動。分支 `feat/play-description-collapse`。
 
 - [x] 首頁近期搜尋刪除個別記錄：近期搜尋列表（實際位於 `HomePage.tsx`，非 `GlobalSearchBox.tsx`）原本只有全部清除，無法刪除單筆。已在每筆記錄右側加入 × 按鈕，新增 `removeRecentSearch(term)` helper 只移除該筆並同步 localStorage；補 i18n 1 個 key（`home.search.removeRecent`，zh-TW/en）。純前端改動。分支 `feat/recent-search-remove-item`。
 
