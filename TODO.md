@@ -1112,3 +1112,36 @@
 | 2026-06-25 | 遙控器手繪同步到投影端（2.6）：`RemoteControllerPage.tsx` 加入 canvas 手繪（refs 管理筆跡 + pointer events + ResizeObserver）；正規化 [0,1] 座標透過既有 `updatePlaybackSyncState` 的 drawing_page_number/drawing_json 欄位推送；follower 端透過現有 syncDrawingState→remoteDrawingData→DrawingCanvas 路徑即時顯示；換頁清空；i18n 3 個 key；TypeScript 通過 | feat/remote-drawing-sync（已 merge） |
 | 2026-06-25 | 模板市集（2.8）：`templates` DB 表 migration；GET/POST/DELETE /api/templates 端點；TemplatesPage.tsx（/templates 路由）卡片列表 + Apply 跳首頁；SettingsPage Skills 區塊加「上架為模板」按鈕 + 「瀏覽市集」連結；PromptModal 技能模板區塊加「瀏覽市集 →」連結；i18n 15 個 key；4 個後端測試通過 | feat/template-marketplace（已 merge） |
 | 2026-06-25 | 向量語意搜尋（2.4）：`page_embeddings` DB 表；`services/embeddings.ts`（OpenAI text-embedding-3-small 批次快取）；`/api/search?semantic=true` 路徑（cosine similarity >= 0.3 排序，限自己的 PDF）；GlobalSearchBox「AI」切換按鈕；i18n 3 個 key；4 個後端測試全通過 | feat/vector-semantic-search（已 merge） |
+| 2026-06-25 | TemplatesPage 分類篩選 + 搜尋框：TemplatesPage 加入搜尋 input（client-side 過濾 name/description/prompt）與分類 chips（依實際 categories 動態生成）；i18n 3 個 key；純前端改動 | feat/templates-filter-search（已 merge） |
+
+----
+
+## 掃描摘要（2026-06-25 第三十二輪）
+
+FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次掃描，補充以下可執行的功能增強項目。優先選擇能利用已有表結構、路由與服務的改動，避免引入全新外部依賴。
+
+## 新增可執行項目（第三十二輪）
+
+- [x] TemplatesPage 分類篩選 + 搜尋框：TemplatesPage 目前無法按 category 篩選也無搜尋。在標題下方加入類別 chips（依 API 回傳的實際 categories 動態生成，含「全部」選項）與文字搜尋 input（client-side 過濾 name + description）；純前端改動，不需後端修改，補 i18n 3 個 key（searchPlaceholder/categoryAll/noFilterResults）。分支 `feat/templates-filter-search`。
+
+- [ ] 設定頁語意搜尋索引統計：Settings 頁「技能」section 下方加入「語意搜尋索引」小節，顯示「已索引 N 頁（共 M 份簡報）」；新增後端端點 `GET /api/me/embedding-stats`（回傳 indexed_pages/indexed_pdfs 數量，限登入用戶自己的資料）；補後端測試；i18n 3 個 key。
+
+- [ ] 相似頁面推薦：PlayPageSidebar 新增「相似頁面」section，利用既有 `page_embeddings` 表，呼叫新後端端點 `GET /api/pdfs/:id/pages/:n/similar`（從 page_embeddings 以 cosine similarity 找出同 owner 其他頁面的 top-5）；結果以縮圖 + 標題 + 頁碼卡片呈現，點擊跳轉；補後端測試；i18n 3 個 key。
+
+- [ ] 自動生成 PDF 描述：播放頁「簡報資訊」區若 description 為空時，在描述輸入框旁顯示「✨ AI 生成描述」按鈕，呼叫後端 `POST /api/pdfs/:id/generate-description`（取前三頁逐字稿送 LLM 生成 2–3 句中文摘要），成功後自動填入 description 並 PATCH 更新；補後端測試；i18n 2 個 key。
+
+- [ ] 測驗結果分享按鈕：學生完成測驗後（QuizBuilderPage 成績顯示區）加入「分享成績」按鈕，使用 `navigator.share` API（fallback 複製文字 + toast），分享文字包含得分/滿分與簡報標題；補 i18n 2 個 key；純前端改動。
+
+- [ ] 課後班級報告列印樣式：ReportPage（班級報告 `/play/:id?tab=report`）加入「列印報告」按鈕，觸發 `window.print()`，搭配 `@media print` CSS（隱藏導覽列與工具按鈕、展開摺疊統計表、自動分頁）；補 i18n 1 個 key；純前端改動。
+
+- [ ] AI 一鍵補全空白逐字稿：品質檢查面板（QualityCheckPanel）若有 `missing_script`/`empty_script` 問題，在對應卡片旁加入「批次補全」按鈕，依序對每頁呼叫既有 regenerate-script API（限單份簡報，不超過 10 頁）；顯示進度 badge；補 i18n 2 個 key。
+
+- [ ] 播放頁鍵盤快捷鍵說明 overlay：全螢幕或一般播放模式新增「快捷鍵說明」按鈕（`?` 鍵觸發），以 modal 列出所有快捷鍵（翻頁 ← →、b 書籤、i 重要頁面、f 全螢幕、a 動畫效果等）；補 i18n 鍵盤說明 4 個 key；純前端改動。
+
+- [ ] TemplatesPage 模板使用次數顯示：`templates` 資料表加入 `apply_count INTEGER NOT NULL DEFAULT 0` 欄位（DB migration）；新增後端端點 `POST /api/templates/:id/apply`（僅遞增計數，不需驗證，回傳 204）；前端「套用」動作同時呼叫此端點；TemplatesPage 卡片顯示使用次數徽章；補後端測試；i18n 1 個 key。
+
+- [ ] 播放頁 PDF 描述折疊顯示：PlayPageHeader 若 `detail?.description` 非空，在標題下方加入可展開的描述區塊（初始收折，點擊「顯示簡介 ▼」展開，點再折疊），純 state toggle；補 i18n 2 個 key；純前端改動。
+
+- [ ] 首頁近期搜尋刪除個別記錄：`GlobalSearchBox.tsx` 的近期搜尋列表目前只有全部清除，無法刪除單筆記錄。在每筆搜尋記錄右側加入 × 按鈕，呼叫 `removeRecentSearch(term)` 只移除該筆；純前端改動，補 i18n 1 個 key。
+
+- [ ] 課後報告加入頁面觀看率：`GET /api/pdfs/:id/report` 的回應目前含 student list，加入每頁的 `watch_progress` 彙整（`avg_watched_ratio` per page）；`watch_progress` 表已存在（`pdf_id`/`page_number`/`watched_ratio`），只需 JOIN 聚合；ReportPage 對應表格加入欄位；補後端測試；i18n 1 個 key。

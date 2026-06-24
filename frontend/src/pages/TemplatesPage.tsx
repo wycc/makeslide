@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../i18n';
 import { listTemplates, deleteTemplate, type Template } from '../lib/api/templates';
@@ -76,6 +76,8 @@ export default function TemplatesPage() {
   const [loading, setLoading] = useState(true);
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
   const [appliedId, setAppliedId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeCategory, setActiveCategory] = useState<string>('all');
 
   useEffect(() => {
     void listTemplates()
@@ -83,6 +85,24 @@ export default function TemplatesPage() {
       .finally(() => setLoading(false));
     void getAuthStatus().then(setAuthStatus).catch(() => {});
   }, []);
+
+  const categories = useMemo(() => {
+    const cats = new Set(templates.map((t) => t.category));
+    return ['all', ...Array.from(cats).sort()];
+  }, [templates]);
+
+  const filtered = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return templates.filter((tmpl) => {
+      if (activeCategory !== 'all' && tmpl.category !== activeCategory) return false;
+      if (!q) return true;
+      return (
+        tmpl.name.toLowerCase().includes(q) ||
+        tmpl.description.toLowerCase().includes(q) ||
+        tmpl.skill_data.prompt.toLowerCase().includes(q)
+      );
+    });
+  }, [templates, activeCategory, searchQuery]);
 
   function handleApply(template: Template) {
     const { prompt, applyTo, imageStylePrompt, quizPrompt, ttsProvider, ttsVoice } = template.skill_data;
@@ -121,13 +141,45 @@ export default function TemplatesPage() {
           </div>
         </div>
 
+        {!loading && templates.length > 0 && (
+          <div className="mb-4 space-y-3">
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t('templates.searchPlaceholder')}
+              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            />
+            {categories.length > 2 && (
+              <div className="flex flex-wrap gap-2">
+                {categories.map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setActiveCategory(cat)}
+                    className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                      activeCategory === cat
+                        ? 'bg-indigo-600 text-white'
+                        : 'border border-slate-700 text-slate-400 hover:border-indigo-500/60 hover:text-indigo-300'
+                    }`}
+                  >
+                    {cat === 'all' ? t('templates.categoryAll') : cat}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {loading ? (
           <div className="py-16 text-center text-sm text-slate-500">Loading…</div>
-        ) : templates.length === 0 ? (
-          <div className="py-16 text-center text-sm text-slate-500">{t('templates.empty')}</div>
+        ) : filtered.length === 0 ? (
+          <div className="py-16 text-center text-sm text-slate-500">
+            {templates.length === 0 ? t('templates.empty') : t('templates.noFilterResults')}
+          </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
-            {templates.map((tmpl) => (
+            {filtered.map((tmpl) => (
               <TemplateCard
                 key={tmpl.id}
                 template={tmpl}

@@ -1607,5 +1607,8 @@ export const en = {
   'templates.browseCta': 'Browse Template Marketplace',
   'templates.myTemplates': 'My Templates',
   'templates.deleteConfirm': 'Delete this template?',
+  'templates.searchPlaceholder': 'Search templates by name or description…',
+  'templates.categoryAll': 'All',
+  'templates.noFilterResults': 'No templates match the current filter',
   'settings.publishSkillAsTemplate': 'Publish as template',
 } as const;
