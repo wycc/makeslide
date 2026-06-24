@@ -1604,6 +1604,7 @@ export const zhTW = {
   'templates.subtitle': '瀏覽社群分享的教學風格模板，一鍵套用到新建簡報',
   'templates.empty': '目前沒有公開模板',
   'templates.apply': '套用模板',
+  'templates.applyCount': '已套用 {n} 次',
   'templates.applied': '已套用！',
   'templates.delete': '刪除',
   'templates.publish': '上架為公開模板',

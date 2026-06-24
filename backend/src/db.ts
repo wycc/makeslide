@@ -615,11 +615,18 @@ function migrate(): void {
         skill_data TEXT NOT NULL,
         is_public INTEGER NOT NULL DEFAULT 1,
         author TEXT NOT NULL DEFAULT '',
-        created_at TEXT NOT NULL
+        created_at TEXT NOT NULL,
+        apply_count INTEGER NOT NULL DEFAULT 0
       );
       CREATE INDEX IF NOT EXISTS idx_templates_is_public ON templates(is_public, created_at DESC);
     `);
     logger.info('Created table templates');
+  }
+
+  // Track how many times each template has been applied (popularity badge).
+  if (tableExists('templates') && !columnExists('templates', 'apply_count')) {
+    db.exec(`ALTER TABLE templates ADD COLUMN apply_count INTEGER NOT NULL DEFAULT 0`);
+    logger.info('Added column templates.apply_count');
   }
 
   if (!tableExists('page_embeddings')) {
