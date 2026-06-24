@@ -254,6 +254,17 @@ export async function logoutAuth(): Promise<{ ok: boolean }> {
   return (await resp.json()) as { ok: boolean };
 }
 
+export interface EmbeddingStats {
+  indexed_pages: number;
+  indexed_pdfs: number;
+}
+
+export async function getEmbeddingStats(): Promise<EmbeddingStats> {
+  const resp = await fetch('api/me/embedding-stats');
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as EmbeddingStats;
+}
+
 export interface ObservabilityStatusCount {
   status: string;
   count: number;

@@ -23,6 +23,8 @@ import {
   type SystemAiSettings,
   type TtsProvider,
   type Skill,
+  getEmbeddingStats,
+  type EmbeddingStats,
 } from '../lib/api';
 import type { SlaSettingsResponse, SlaTargetKind, SlaTargetSetting } from '../types';
 import {
@@ -113,6 +115,7 @@ export default function SettingsPage() {
 
   const [skills, setSkills] = useState<Skill[]>([]);
   const [skillsLoading, setSkillsLoading] = useState(false);
+  const [embeddingStats, setEmbeddingStats] = useState<EmbeddingStats | null>(null);
   const [newSkillName, setNewSkillName] = useState('');
   const [newSkillPrompt, setNewSkillPrompt] = useState('');
   const [newSkillApplyTo, setNewSkillApplyTo] = useState<'script' | 'all'>('script');
@@ -208,6 +211,7 @@ export default function SettingsPage() {
     void loadStatus();
     setSkillsLoading(true);
     listSkills().then(setSkills).catch(() => {}).finally(() => setSkillsLoading(false));
+    getEmbeddingStats().then(setEmbeddingStats).catch(() => setEmbeddingStats(null));
   }, [loadStatus]);
 
   const onSave = useCallback(async () => {
@@ -995,6 +999,17 @@ export default function SettingsPage() {
                   <textarea value={newSkillPrompt} onChange={(e) => setNewSkillPrompt(e.target.value)} placeholder={t('settings.skillPromptPlaceholder')} rows={3} maxLength={2000} className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-200" />
                   <div className="flex items-center gap-3"><label className="flex items-center gap-1.5 text-xs text-slate-400">{t('settings.skillApplyTo')}<select value={newSkillApplyTo} onChange={(e) => setNewSkillApplyTo(e.target.value as 'script' | 'all')} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200"><option value="script">{t('settings.skillApplyToScript')}</option><option value="all">{t('settings.skillApplyToAll')}</option></select></label><button type="button" disabled={addingSkill || !newSkillName.trim() || !newSkillPrompt.trim()} onClick={() => { setAddingSkill(true); void createSkill({ name: newSkillName.trim(), prompt: newSkillPrompt.trim(), applyTo: newSkillApplyTo }).then((skill) => { setSkills((prev) => [...prev, skill]); setNewSkillName(''); setNewSkillPrompt(''); }).finally(() => setAddingSkill(false)); }} className="ml-auto rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 hover:bg-indigo-500">{addingSkill ? t('settings.saving') : t('settings.addSkillBtn')}</button></div>
                 </div>
+                {embeddingStats ? (
+                  <div className="space-y-1 rounded-lg border border-slate-700 bg-slate-950/40 p-3">
+                    <h3 className="text-xs font-medium text-slate-300">{t('settings.embeddingIndex')}</h3>
+                    <p className="text-xs text-slate-400">
+                      {t('settings.embeddingIndexStats')
+                        .replace('{pages}', String(embeddingStats.indexed_pages))
+                        .replace('{pdfs}', String(embeddingStats.indexed_pdfs))}
+                    </p>
+                    <p className="text-[11px] text-slate-500">{t('settings.embeddingIndexHint')}</p>
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </section>
