@@ -305,7 +305,10 @@ export default function PromptModal({
                   </button>
                 ))}
               </div>
-              <p className="mt-1.5 text-xs text-violet-200/40">{t('promptModal.skillTemplate.hint')}</p>
+              <div className="mt-1.5 flex items-center justify-between">
+                <p className="text-xs text-violet-200/40">{t('promptModal.skillTemplate.hint')}</p>
+                <a href="/templates" target="_blank" rel="noreferrer" className="text-xs text-violet-400/70 hover:text-violet-300">{t('templates.browseCta')} →</a>
+              </div>
             </div>
           )}
 

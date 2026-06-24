@@ -605,6 +605,23 @@ function migrate(): void {
     logger.info('Created table page_comments');
   }
 
+  if (!tableExists('templates')) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS templates (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        category TEXT NOT NULL DEFAULT 'general',
+        skill_data TEXT NOT NULL,
+        is_public INTEGER NOT NULL DEFAULT 1,
+        author TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_templates_is_public ON templates(is_public, created_at DESC);
+    `);
+    logger.info('Created table templates');
+  }
+
   logger.info({ dbPath: config.dbPath }, 'Database migrations applied');
 }
 
