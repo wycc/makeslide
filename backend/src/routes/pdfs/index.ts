@@ -39,6 +39,7 @@ import { registerGenerateQuizQuestionRoutes } from './generate-quiz-question';
 import { registerCommentsRoutes } from './comments';
 import { registerScormRoutes } from './scorm';
 import { registerScriptQualityRoutes } from './script-quality';
+import { registerH5pRoutes } from './h5p';
 
 export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerUploadRoutes(app);
@@ -81,4 +82,5 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerCommentsRoutes(app);
   await registerScormRoutes(app);
   await registerScriptQualityRoutes(app);
+  await registerH5pRoutes(app);
 }

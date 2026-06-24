@@ -692,6 +692,13 @@ export function PlayPageHeader() {
           >
             {t('play.header.downloadScorm')}
           </a>
+          <a
+            href={`api/pdfs/${encodeURIComponent(pdfId ?? '')}/export.h5p`}
+            download
+            className="rounded-md border border-teal-500/50 bg-teal-500/15 px-3 py-1.5 text-center text-sm text-teal-100 hover:bg-teal-500/25"
+          >
+            {t('play.header.downloadH5p')}
+          </a>
           <button
             type="button"
             disabled={!currentPage || !scripts[currentPage.page_number]}
