@@ -1071,7 +1071,8 @@
 
 - [ ] 從搜尋結果挑選頁面組成新簡報（2.4）：全域搜尋結果頁面每筆加入 checkbox，選好後點「建立新簡報」呼叫後端 `POST /api/pdfs/from-pages`，把所選頁面的圖片/逐字稿/音檔複製到新 PDF；適合教師從多份教材中抽取重點頁面組成複習簡報。
 
-- [ ] SCORM 1.2 課程包匯出（2.5/2.10）：新增 `GET /api/pdfs/:id/export.scorm` 後端端點，按 SCORM 1.2 規格產生標準目錄結構（`imsmanifest.xml`、`index.html`、各頁圖片與音檔），打包為 ZIP 回傳；前端播放頁匯出區加入「下載 SCORM 包」按鈕；補後端測試驗證 200 / 403 / 404 及 manifest 格式正確性。
+- [x] SCORM 1.2 課程包匯出（2.5/2.10）：新增 `GET /api/pdfs/:id/export.scorm` 後端端點，按 SCORM 1.2 規格產生標準目錄結構（`imsmanifest.xml`、`index.html`、各頁圖片與音檔），打包為 ZIP 回傳；前端播放頁匯出區加入「下載 SCORM 包」按鈕；補後端測試驗證 200 / 403 / 404 及 manifest 格式正確性。
+  - 修改說明（2026-06-24）：新增 `backend/src/routes/pdfs/scorm.ts`；`GET /api/pdfs/:id/export.scorm` 讀取各頁 image/audio/script，產生 SCORM 1.2 規格的 `imsmanifest.xml`（含 resource file 清單）與自含 `index.html` SCO（鍵盤換頁、SCORM API 初始化、完課時自動回報 `lesson_status=completed`）；使用 JSZip 打包為 ZIP，Content-Disposition 設為 `.scorm.zip`；`PlayPageHeader.tsx` 匯出區加入紫羅蘭色「下載 SCORM 包」按鈕；zh-TW/en i18n 各新增 `play.header.downloadScorm` 1 個鍵值；4 個後端測試全通過（200/public/404/403）。分支 `feat/scorm-export`，已 merge 回 master。
 
 - [x] 遙控器投票開/關控制（2.6）：`RemoteControllerPage.tsx` 目前只有翻頁功能。新增「投票」section，列出目前頁面的投票（呼叫 `GET /api/pdfs/:id/pages/:n/polls`），提供「開啟投票」/「關閉投票」按鈕（呼叫既有的 `PATCH /api/pdfs/:id/polls/:pollId`）；補 i18n `remote.pollControl/openPoll/closePoll`。
 
@@ -1099,3 +1100,4 @@
 | 2026-06-24 | 遙控器投票開/關控制（2.6）：後端新增 `PATCH /api/pdfs/:id/polls/:pollId` 端點（切換 is_active）；前端 `updatePagePoll()` API；`RemoteControllerPage` 換頁時自動抓取本頁投票，顯示投票清單與開/關按鈕；補 i18n zh-TW/en | feat/remote-poll-control（已 merge） |
 | 2026-06-24 | 個人化複習清單（2.2）：新增 `reviewList.ts` localStorage helper；`QuizBuilderPage` 在答案公布時自動儲存答錯且有頁碼的題目；`PlayPageSidebar` 新增 `ReviewListSection`（rose 色，點擊跳頁，× 移除）；首頁顯示 rose 橫幅提示；i18n 5 個 key | feat/personalized-review-list（已 merge） |
 | 2026-06-24 | 評論討論串（2.9）：新增 `page_comments` DB 資料表 + index；後端 GET/POST/PATCH/DELETE 四個端點（access control by pdf visibility）；前端 `listPageComments`/`createPageComment`/`resolvePageComment`/`deletePageComment` API；`PlayPageSidebar` 新增 `CommentsSection`（sky 色調，顯示/新增/標記已處理/刪除）；i18n 10 個 key；9 個 node:test | feat/page-comments |
+| 2026-06-24 | SCORM 1.2 課程包匯出（2.5/2.10）：`GET /api/pdfs/:id/export.scorm`；imsmanifest.xml + index.html SCO（SCORM API + 鍵盤換頁 + 完課回報）；各頁圖片/音檔打包為 ZIP；PlayPageHeader 紫色「下載 SCORM 包」按鈕；i18n downloadScorm；4 個後端測試通過 | feat/scorm-export（已 merge） |
