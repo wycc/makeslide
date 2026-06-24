@@ -6,6 +6,7 @@ import QuizBuilderPage from './pages/QuizBuilderPage';
 import SettingsPage from './pages/SettingsPage';
 import SystemDataPage from './pages/SystemDataPage';
 import RemoteControllerPage from './pages/RemoteControllerPage';
+import TemplatesPage from './pages/TemplatesPage';
 import { useEffect, useState } from 'react';
 import { getAuthStatus, getOpenAIKeyStatus } from './lib/api';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -68,6 +69,7 @@ export default function App() {
         <Route path="/play/:id/quizzes" element={<QuizBuilderPage />} />
         <Route path="/remote/:id" element={<RemoteControllerPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/templates" element={<TemplatesPage />} />
         <Route path="/system" element={<SystemDataPage />} />
         <Route
           path="*"

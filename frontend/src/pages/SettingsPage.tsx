@@ -40,6 +40,7 @@ import {
 import { GEMINI_TTS_VOICES, OPENAI_TTS_VOICES, geminiVoiceLabel, openaiVoiceLabel } from '../lib/ttsVoices';
 import { formatSlaOverrideRangeMessage, validateSlaOverrideSecondsInput } from '../lib/slaOverrideValidation';
 import { copyTextToClipboard } from '../lib/clipboard';
+import { createTemplate } from '../lib/api/templates';
 
 type SettingsCategory = 'account' | 'ai' | 'sync' | 'skills' | 'admin';
 
@@ -121,6 +122,8 @@ export default function SettingsPage() {
   const [editPrompt, setEditPrompt] = useState('');
   const [editApplyTo, setEditApplyTo] = useState<'script' | 'all'>('script');
   const [savingSkillId, setSavingSkillId] = useState<string | null>(null);
+  const [publishingSkillId, setPublishingSkillId] = useState<string | null>(null);
+  const [publishedSkillId, setPublishedSkillId] = useState<string | null>(null);
 
   const DEFAULT_CGU_AIR_BASE_URL = 'https://air.cgu.edu.tw/cgullmapi/v1';
   const DEFAULT_OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
@@ -960,7 +963,10 @@ export default function SettingsPage() {
 
             {activeCategoryInfo.id === 'skills' ? (
               <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-                <h2 className="text-sm font-semibold text-slate-200">{t('settings.skills')}</h2>
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-sm font-semibold text-slate-200">{t('settings.skills')}</h2>
+                  <Link to="/templates" className="text-xs text-indigo-400 hover:text-indigo-300">{t('templates.browseCta')} →</Link>
+                </div>
                 <p className="text-xs text-slate-400">{t('settings.skillsDesc')}</p>
                 {skillsLoading ? <div className="text-xs text-slate-500">{t('settings.loading')}</div> : (
                   <div className="space-y-2">
@@ -976,7 +982,7 @@ export default function SettingsPage() {
                           <div className="flex items-start gap-3">
                             <input type="checkbox" checked={skill.enabled} onChange={() => { if (skill.isBuiltIn) { void toggleBuiltInSkill(skill.id).then((res) => { setSkills((prev) => prev.map((s) => s.id === skill.id ? { ...s, enabled: res.enabled } : s)); }); } else { void updateSkill(skill.id, { enabled: !skill.enabled }).then((updated) => { setSkills((prev) => prev.map((s) => s.id === skill.id ? updated : s)); }); } }} className="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-800 accent-indigo-500" />
                             <div className="min-w-0 flex-1"><div className="flex items-center gap-2"><span className="text-sm font-medium text-slate-200">{skill.isBuiltIn ? (t('settings.skillLangZh') === 'zh-TW' ? skill.nameZh ?? skill.name : skill.name) : skill.name}</span>{skill.isBuiltIn && <span className="rounded bg-slate-800 px-1.5 py-0.5 text-xs text-slate-400">{t('settings.skillBuiltIn')}</span>}<span className="rounded bg-slate-800 px-1.5 py-0.5 text-xs text-slate-400">{skill.applyTo}</span></div>{skill.isBuiltIn && skill.descriptionZh && <p className="mt-1 text-xs text-slate-500">{skill.descriptionZh}</p>}{!skill.isBuiltIn && <p className="mt-1 text-xs text-slate-500 line-clamp-2">{skill.prompt}</p>}</div>
-                            {!skill.isBuiltIn && <div className="flex shrink-0 gap-2"><button type="button" onClick={() => { setEditingSkillId(skill.id); setEditName(skill.name); setEditPrompt(skill.prompt); setEditApplyTo(skill.applyTo); }} className="text-xs text-slate-400 hover:text-slate-200">{t('settings.skillEdit')}</button><button type="button" onClick={() => { void deleteSkill(skill.id).then(() => { setSkills((prev) => prev.filter((s) => s.id !== skill.id)); }); }} className="text-xs text-red-400 hover:text-red-300">{t('settings.delete')}</button></div>}
+                            {!skill.isBuiltIn && <div className="flex shrink-0 flex-wrap gap-2"><button type="button" onClick={() => { setEditingSkillId(skill.id); setEditName(skill.name); setEditPrompt(skill.prompt); setEditApplyTo(skill.applyTo); }} className="text-xs text-slate-400 hover:text-slate-200">{t('settings.skillEdit')}</button><button type="button" disabled={publishingSkillId === skill.id} onClick={() => { setPublishingSkillId(skill.id); void createTemplate({ name: skill.name, description: '', category: 'general', skill_data: { prompt: skill.prompt, applyTo: skill.applyTo, imageStylePrompt: skill.imageStylePrompt, quizPrompt: skill.quizPrompt, ttsProvider: skill.ttsProvider, ttsVoice: skill.ttsVoice } }).then(() => { setPublishedSkillId(skill.id); setTimeout(() => setPublishedSkillId(null), 2000); }).catch(() => {}).finally(() => setPublishingSkillId(null)); }} className="text-xs text-indigo-400 hover:text-indigo-300 disabled:opacity-50">{publishingSkillId === skill.id ? '…' : publishedSkillId === skill.id ? t('templates.publishDone') : t('settings.publishSkillAsTemplate')}</button><button type="button" onClick={() => { void deleteSkill(skill.id).then(() => { setSkills((prev) => prev.filter((s) => s.id !== skill.id)); }); }} className="text-xs text-red-400 hover:text-red-300">{t('settings.delete')}</button></div>}
                           </div>
                         )}
                       </div>

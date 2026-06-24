@@ -1084,7 +1084,8 @@
 
 - [x] AI 腳本品質分析（2.7）：`GET /api/pdfs/:id/script-quality` 批次呼叫 LLM 分析相鄰頁逐字稿脈絡斷裂，回傳 `contextBreaks` 陣列；`QualityCheckPanel` 新增紫色 AI 分析按鈕與琥珀色斷裂警示卡；5 個後端測試全通過（含 LLM mock）。實作於 `feat/script-quality-analysis` 分支，2026-06-24 合入 master。
 
-- [ ] 模板市集（2.8）：建立完整的模板瀏覽、下載、上架流程。後端新增 `templates` 資料表（含 name/description/category/skill_data/is_public/author），新增 CRUD 端點；前端新增「模板市集」頁面（`/templates`），以卡片列表呈現公開模板，可一鍵套用到新建簡報的 PromptModal；使用者可從 Skills 設定頁一鍵「上架為公開模板」。
+- [x] 模板市集（2.8）：建立完整的模板瀏覽、下載、上架流程。後端新增 `templates` 資料表（含 name/description/category/skill_data/is_public/author），新增 CRUD 端點；前端新增「模板市集」頁面（`/templates`），以卡片列表呈現公開模板，可一鍵套用到新建簡報的 PromptModal；使用者可從 Skills 設定頁一鍵「上架為公開模板」。
+  - 修改說明（2026-06-25）：後端 `db.ts` migration 新增 `templates` 資料表（id/name/description/category/skill_data JSON/is_public/author/created_at）；新增 `backend/src/routes/pdfs/templates.ts`（GET /api/templates 公開列表、POST /api/templates 建立需登入、DELETE /api/templates/:id 需為作者）；前端新增 `frontend/src/lib/api/templates.ts` API 函式與 `Template` 型別、`frontend/src/pages/TemplatesPage.tsx` 模板卡片頁面（`/templates`）；`App.tsx` 補路由；`SettingsPage.tsx` Skills 區塊加入「上架為模板」按鈕與「瀏覽模板市集」連結；`PromptModal.tsx` 技能模板區塊加入「瀏覽模板市集 →」連結；i18n zh-TW/en 各新增 15 個 `templates.*`/`settings.publishSkillAsTemplate` 鍵值；4 個後端測試通過（201/401/200 list/403）。分支 `feat/template-marketplace`，已 merge 回 master。
 
 - [x] 版本差異視圖（2.9）：版本歷史面板（`useVersionHistory`）目前只能預覽舊版逐字稿，無 diff 比較。加入 diff 視圖：選擇一個舊版本後，以紅/綠底色顯示與目前版本的逐行差異（可用純 JavaScript Myers diff 演算法，不需後端改動）；補 i18n `play.version.diffView/noChange`。
 
@@ -1108,3 +1109,4 @@
 | 2026-06-24 | 從搜尋結果組成新簡報（2.4）：`POST /api/pdfs/from-pages` 複製頁面至新 PDF；GlobalSearchBox 多選模式 + checkbox + 「建立新簡報（N 頁）」按鈕；i18n 4 個 key；5 個後端測試全通過 | feat/from-pages（已 merge） |
 | 2026-06-24 | AI 圖片品質分析（2.7）：`GET /api/pdfs/:id/image-quality` 以 vision LLM 逐頁判斷圖片與逐字稿是否相符；QualityCheckPanel 新增天藍色 AI 圖片分析 section，rose 警示卡顯示不符詳情；i18n 5 個 key；4 個後端測試全通過 | feat/image-quality-ai-analysis（已 merge） |
 | 2026-06-25 | 遙控器手繪同步到投影端（2.6）：`RemoteControllerPage.tsx` 加入 canvas 手繪（refs 管理筆跡 + pointer events + ResizeObserver）；正規化 [0,1] 座標透過既有 `updatePlaybackSyncState` 的 drawing_page_number/drawing_json 欄位推送；follower 端透過現有 syncDrawingState→remoteDrawingData→DrawingCanvas 路徑即時顯示；換頁清空；i18n 3 個 key；TypeScript 通過 | feat/remote-drawing-sync（已 merge） |
+| 2026-06-25 | 模板市集（2.8）：`templates` DB 表 migration；GET/POST/DELETE /api/templates 端點；TemplatesPage.tsx（/templates 路由）卡片列表 + Apply 跳首頁；SettingsPage Skills 區塊加「上架為模板」按鈕 + 「瀏覽市集」連結；PromptModal 技能模板區塊加「瀏覽市集 →」連結；i18n 15 個 key；4 個後端測試通過 | feat/template-marketplace（已 merge） |

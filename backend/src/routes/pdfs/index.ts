@@ -42,6 +42,7 @@ import { registerScriptQualityRoutes } from './script-quality';
 import { registerH5pRoutes } from './h5p';
 import { registerFromPagesRoutes } from './from-pages';
 import { registerImageQualityRoutes } from './image-quality';
+import { registerTemplateRoutes } from './templates';
 
 export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerUploadRoutes(app);
@@ -87,4 +88,5 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerH5pRoutes(app);
   await registerFromPagesRoutes(app);
   await registerImageQualityRoutes(app);
+  await registerTemplateRoutes(app);
 }
