@@ -1895,3 +1895,47 @@ export async function generateAiQuizQuestion(id: string, pageNumber: number): Pr
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as { question: string; options: string[]; correct_index: number; explanation: string };
 }
+
+export interface PageComment {
+  id: number;
+  pdf_id: string;
+  page_number: number;
+  author: string;
+  text: string;
+  resolved: boolean;
+  created_at: string;
+}
+
+export async function listPageComments(id: string, pageNumber: number): Promise<PageComment[]> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/comments`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  const data = (await resp.json()) as { comments: PageComment[] };
+  return data.comments;
+}
+
+export async function createPageComment(id: string, pageNumber: number, author: string, text: string): Promise<PageComment> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ author, text }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  const data = (await resp.json()) as { comment: PageComment };
+  return data.comment;
+}
+
+export async function resolvePageComment(id: string, commentId: number, resolved: boolean): Promise<PageComment> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/comments/${commentId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ resolved }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  const data = (await resp.json()) as { comment: PageComment };
+  return data.comment;
+}
+
+export async function deletePageComment(id: string, commentId: number): Promise<void> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/comments/${commentId}`, { method: 'DELETE' });
+  if (!resp.ok) throw await parseErrorBody(resp);
+}

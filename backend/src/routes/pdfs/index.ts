@@ -36,6 +36,7 @@ import { registerGeneratePollRoutes } from './generate-poll';
 import { registerBatchExportRoutes } from './batch-export';
 import { registerPollResultsCsvRoutes } from './poll-results-csv';
 import { registerGenerateQuizQuestionRoutes } from './generate-quiz-question';
+import { registerCommentsRoutes } from './comments';
 
 export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerUploadRoutes(app);
@@ -75,4 +76,5 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerBatchExportRoutes(app);
   await registerPollResultsCsvRoutes(app);
   await registerGenerateQuizQuestionRoutes(app);
+  await registerCommentsRoutes(app);
 }
