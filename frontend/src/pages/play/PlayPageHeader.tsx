@@ -685,6 +685,13 @@ export function PlayPageHeader() {
           >
             {t('play.header.downloadNotesTxt')}
           </a>
+          <a
+            href={`api/pdfs/${encodeURIComponent(pdfId ?? '')}/export.scorm`}
+            download
+            className="rounded-md border border-violet-500/50 bg-violet-500/15 px-3 py-1.5 text-center text-sm text-violet-100 hover:bg-violet-500/25"
+          >
+            {t('play.header.downloadScorm')}
+          </a>
           <button
             type="button"
             disabled={!currentPage || !scripts[currentPage.page_number]}
