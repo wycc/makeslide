@@ -1532,6 +1532,7 @@ export const zhTW = {
   'play.header.downloadPptx': '下載 PPTX',
   'play.header.downloadScriptsTxt': '下載逐字稿 TXT',
   'play.header.downloadScorm': '下載 SCORM 包',
+  'play.header.downloadH5p': '下載 H5P',
   'play.header.copyScript': '複製本頁逐字稿',
   'play.header.copyScriptDone': '已複製！',
   'play.header.copyScriptFail': '複製失敗',
