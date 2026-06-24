@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../../i18n';
 import { debugLog, debugWarn } from '../../lib/debugLog';
 import { calculateWatchProgressPercent, formatWatchProgressBadgeCount } from '../../lib/watchProgress';
-import { updatePageNote, listPageComments, createPageComment, resolvePageComment, deletePageComment, type PageComment } from '../../lib/api/pdfs';
+import { updatePageNote, listPageComments, createPageComment, resolvePageComment, deletePageComment, fetchSimilarPages, type PageComment, type SimilarPage } from '../../lib/api/pdfs';
 import { usePlayPageContext } from './PlayPageContext';
 import { PageAskPanel } from './PageAskPanel';
 import { QualityCheckPanel } from './QualityCheckPanel';
@@ -24,6 +25,61 @@ function getOutlineTitle(page: import('../../types').PdfDetailPage, scripts: Rec
     if (text.length > 0) return text.slice(0, 20) + (text.length > 20 ? '…' : '');
   }
   return '';
+}
+
+function SimilarPagesSection() {
+  const { t } = useI18n();
+  const { pdfId, currentPage } = usePlayPageContext();
+  const navigate = useNavigate();
+  const [items, setItems] = useState<SimilarPage[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!pdfId || !currentPage) { setItems([]); return; }
+    setLoading(true);
+    fetchSimilarPages(pdfId, currentPage.page_number)
+      .then(setItems)
+      .catch(() => setItems([]))
+      .finally(() => setLoading(false));
+  }, [pdfId, currentPage?.page_number]);
+
+  // Hide entirely when there is nothing to recommend (e.g. anonymous viewer,
+  // page not indexed, or no similar pages above the threshold).
+  if (!pdfId || !currentPage || (!loading && items.length === 0)) return null;
+
+  return (
+    <section className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
+      <h3 className="mb-2 text-xs font-semibold text-slate-300">{t('play.sidebar.similarPages')}</h3>
+      {loading ? (
+        <p className="text-xs text-slate-500">{t('play.sidebar.similarPagesLoading')}</p>
+      ) : (
+        <ul className="space-y-2">
+          {items.map((it) => (
+            <li key={`${it.pdf_id}-${it.page_number}`}>
+              <button
+                type="button"
+                onClick={() => navigate(`/play/${encodeURIComponent(it.pdf_id)}?page=${it.page_number}`)}
+                className="flex w-full items-center gap-2 rounded border border-slate-700 bg-slate-950/50 p-1.5 text-left hover:bg-slate-800"
+              >
+                <img
+                  src={`api/pdfs/${encodeURIComponent(it.pdf_id)}/pages/${it.page_number}/image`}
+                  alt=""
+                  loading="lazy"
+                  className="h-10 w-14 shrink-0 rounded object-cover"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs text-slate-200">{it.pdf_title || it.pdf_id}</p>
+                  <p className="text-[10px] text-slate-500">
+                    {t('play.sidebar.similarPagesPage').replace('{n}', String(it.page_number))} · {Math.round(it.score * 100)}%
+                  </p>
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
 }
 
 function CommentsSection() {
@@ -1021,6 +1077,8 @@ export function PlayPageSidebar() {
       </section>
 
       <CommentsSection />
+
+      <SimilarPagesSection />
 
       <ReviewListSection />
 

@@ -1883,6 +1883,20 @@ export async function updatePdfDescription(id: string, description: string): Pro
   return (await resp.json()) as { id: string; description: string; updated_at: string };
 }
 
+export interface SimilarPage {
+  pdf_id: string;
+  page_number: number;
+  pdf_title: string | null;
+  score: number;
+}
+
+export async function fetchSimilarPages(id: string, pageNumber: number): Promise<SimilarPage[]> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/similar`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  const data = (await resp.json()) as { similar: SimilarPage[] };
+  return data.similar;
+}
+
 export async function updatePageNote(id: string, pageNumber: number, note: string): Promise<{ id: string; page_number: number; page_notes: string; updated_at: string }> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/note`, {
     method: 'PATCH',
