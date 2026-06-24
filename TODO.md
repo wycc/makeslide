@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | 測驗結果分享按鈕：QuizBuilderPage 成績顯示區加入「分享成績」按鈕，使用 `navigator.share`（fallback clipboard 複製 + toast），分享文字含得分/滿分與測驗標題；i18n 2 key；純前端 | feat/quiz-share-score（已 merge） |
 | 2026-06-25 | TemplatesPage 模板使用次數顯示：templates 表新增 `apply_count` 欄位（含 migration），新增無驗證 `POST /api/templates/:id/apply` 遞增端點（404 防護），前端套用時 fire-and-forget 呼叫並樂觀更新，卡片顯示「已套用 N 次」徽章；補後端測試 2 個（共 6 通過）；i18n 1 key | feat/template-apply-count（已 merge） |
 | 2026-06-25 | 設定頁語意搜尋索引統計：Settings「技能」分頁底部新增「語意搜尋索引」小節，新增登入限定 `GET /api/me/embedding-stats`（JOIN page_embeddings 與 pdfs.owner_sub），顯示「已索引 N 頁（共 M 份簡報）」；補後端測試 2 個；i18n 3 key | feat/embedding-index-stats（已 merge） |
 | 2026-06-25 | 播放頁 PDF 描述折疊顯示：PlayPageHeader 標題列下方加入折疊描述區塊，description 非空時顯示「▼ 顯示簡介」切換鈕（純 state toggle，分享訪客亦可見）；補 i18n 2 個 key（`play.header.showDescription`/`hideDescription`，zh-TW/en）；純前端改動 | feat/play-description-collapse（已 merge） |
@@ -1134,7 +1135,7 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [ ] 自動生成 PDF 描述：播放頁「簡報資訊」區若 description 為空時，在描述輸入框旁顯示「✨ AI 生成描述」按鈕，呼叫後端 `POST /api/pdfs/:id/generate-description`（取前三頁逐字稿送 LLM 生成 2–3 句中文摘要），成功後自動填入 description 並 PATCH 更新；補後端測試；i18n 2 個 key。
 
-- [ ] 測驗結果分享按鈕：學生完成測驗後（QuizBuilderPage 成績顯示區）加入「分享成績」按鈕，使用 `navigator.share` API（fallback 複製文字 + toast），分享文字包含得分/滿分與簡報標題；補 i18n 2 個 key；純前端改動。
+- [x] 測驗結果分享按鈕：QuizBuilderPage 學生作答的成績顯示區（`quiz.totalScore` 區塊）加入「分享成績」按鈕，使用 `navigator.share` API（不支援或取消時 fallback 至 `copyTextToClipboard` 複製文字 + toast），分享文字含得分/滿分與測驗標題；補 i18n 2 個 key（`quiz.shareScore`/`quiz.shareText`，zh-TW/en）；純前端改動。分支 `feat/quiz-share-score`。
 
 - [ ] 課後班級報告列印樣式：ReportPage（班級報告 `/play/:id?tab=report`）加入「列印報告」按鈕，觸發 `window.print()`，搭配 `@media print` CSS（隱藏導覽列與工具按鈕、展開摺疊統計表、自動分頁）；補 i18n 1 個 key；純前端改動。
 
