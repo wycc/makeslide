@@ -1550,4 +1550,11 @@ export const zhTW = {
   'remote.prevPage': '上一頁',
   'remote.nextPage': '下一頁',
   'remote.online': '已連線：{n} 人',
+  'remote.pollControl.title': '本頁投票',
+  'remote.pollControl.loading': '載入投票中…',
+  'remote.pollControl.noPolls': '本頁沒有投票',
+  'remote.pollControl.statusOpen': '開放中',
+  'remote.pollControl.statusClosed': '已關閉',
+  'remote.pollControl.open': '開啟投票',
+  'remote.pollControl.close': '關閉投票',
 } as const;
