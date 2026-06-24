@@ -1088,7 +1088,7 @@
 
 - [x] 評論討論串（2.9）：新增 `page_comments` 資料表（pdf_id/page_number/author/text/resolved/created_at），後端新增 `GET`/`POST`/`PATCH`（標記已處理）/`DELETE` 端點（`backend/src/routes/pdfs/comments.ts`）；`PlayPageSidebar` 加入 `CommentsSection`（sky 色調，顯示/新增/標記已處理/刪除評論）；i18n 10 個 key；補 9 個 node:test 測試。
 
-- [ ] H5P 互動內容匯出（2.10）：新增 `GET /api/pdfs/:id/export.h5p` 後端端點，依 H5P Course Presentation 格式（`h5p.json` + `content/content.json`）產生每頁投影片圖片與逐字稿，打包為 `.h5p` ZIP 檔；前端播放頁加入「下載 H5P」按鈕；適合 Moodle 等 LMS 使用。
+- [x] H5P 互動內容匯出（2.10）：`GET /api/pdfs/:id/export.h5p` 依 H5P Course Presentation 1.25 格式產生 `h5p.json` + `content/content.json`（含每頁 H5P.Image + H5P.AdvancedText 元素）；打包為 `.h5p` ZIP；前端加入青綠色「下載 H5P」按鈕；i18n zh-TW/en 各 1 key；4 個後端測試全通過。實作於 `feat/h5p-export` 分支，2026-06-24 合入 master。
 
 ----
 
@@ -1102,3 +1102,4 @@
 | 2026-06-24 | 評論討論串（2.9）：新增 `page_comments` DB 資料表 + index；後端 GET/POST/PATCH/DELETE 四個端點（access control by pdf visibility）；前端 `listPageComments`/`createPageComment`/`resolvePageComment`/`deletePageComment` API；`PlayPageSidebar` 新增 `CommentsSection`（sky 色調，顯示/新增/標記已處理/刪除）；i18n 10 個 key；9 個 node:test | feat/page-comments |
 | 2026-06-24 | SCORM 1.2 課程包匯出（2.5/2.10）：`GET /api/pdfs/:id/export.scorm`；imsmanifest.xml + index.html SCO（SCORM API + 鍵盤換頁 + 完課回報）；各頁圖片/音檔打包為 ZIP；PlayPageHeader 紫色「下載 SCORM 包」按鈕；i18n downloadScorm；4 個後端測試通過 | feat/scorm-export（已 merge） |
 | 2026-06-24 | AI 腳本品質分析（2.7）：`GET /api/pdfs/:id/script-quality` 批次 LLM 分析相鄰頁逐字稿脈絡斷裂，Zod schema 驗證；QualityCheckPanel 新增紫色 AI 分析按鈕與琥珀色斷裂警示卡；i18n 5 個 key；5 個後端測試全通過（含 LLM mock） | feat/script-quality-analysis（已 merge） |
+| 2026-06-24 | H5P 互動內容匯出（2.10）：`GET /api/pdfs/:id/export.h5p` H5P Course Presentation 格式（h5p.json + content.json + 各頁圖片）打包 .h5p ZIP；PlayPageHeader 青綠色下載按鈕；i18n 2 個 key；4 個後端測試全通過 | feat/h5p-export（已 merge） |
