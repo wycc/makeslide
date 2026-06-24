@@ -1408,6 +1408,8 @@ export const zhTW = {
   'quiz.deleteFailed': '刪除測驗失敗',
   'quiz.deleteQuizTitle': '刪除此測驗',
   'quiz.totalScore': '測驗總分：{score} / 100',
+  'quiz.shareScore': '分享成績',
+  'quiz.shareText': '我在「{title}」測驗得到 {score} / {max} 分！',
   'quiz.inProgressTitle': '測驗進行中：{title}',
   'quiz.answersVisibleHint': '測驗已結束，以下顯示正確答案與解析。',
   'quiz.answerBeforeEndHint': '請作答；測驗結束前不會顯示正確答案。',
