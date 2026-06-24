@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { searchPdfs, type SearchResultItem } from '../lib/api';
+import { searchPdfs, createPdfFromPages, type SearchResultItem } from '../lib/api';
 import { useI18n } from '../i18n';
 
 const DEBOUNCE_MS = 300;
@@ -25,6 +25,10 @@ function highlightText(text: string, query: string): { text: string; isMatch: bo
   return parts;
 }
 
+function makeSelKey(result: SearchResultItem): string {
+  return `${result.pdf_id}::${result.page_number ?? 'null'}`;
+}
+
 export default function GlobalSearchBox() {
   const { t } = useI18n();
   const navigate = useNavigate();
@@ -32,6 +36,9 @@ export default function GlobalSearchBox() {
   const [results, setResults] = useState<SearchResultItem[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selectMode, setSelectMode] = useState(false);
+  const [fromPagesBusy, setFromPagesBusy] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -74,14 +81,47 @@ export default function GlobalSearchBox() {
     setQuery('');
     setResults(null);
     setOpen(false);
+    setSelected(new Set());
+    setSelectMode(false);
   };
 
   const handleResultClick = (result: SearchResultItem) => {
+    if (selectMode) {
+      if (result.page_number == null) return;
+      const key = makeSelKey(result);
+      setSelected((prev) => {
+        const next = new Set(prev);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+      return;
+    }
     setOpen(false);
     if (result.page_number != null) {
       navigate(`/play/${encodeURIComponent(result.pdf_id)}?page=${result.page_number}`);
     } else {
       navigate(`/play/${encodeURIComponent(result.pdf_id)}`);
+    }
+  };
+
+  const handleCreateFromPages = async () => {
+    if (fromPagesBusy || selected.size === 0 || !results) return;
+    const pageSpecs = results
+      .filter((r) => r.page_number != null && selected.has(makeSelKey(r)))
+      .map((r) => ({ pdf_id: r.pdf_id, page_number: r.page_number! }));
+    if (pageSpecs.length === 0) return;
+    setFromPagesBusy(true);
+    try {
+      const resp = await createPdfFromPages(pageSpecs);
+      setOpen(false);
+      setSelectMode(false);
+      setSelected(new Set());
+      navigate(`/play/${encodeURIComponent(resp.id)}`);
+    } catch {
+      // ignore
+    } finally {
+      setFromPagesBusy(false);
     }
   };
 
@@ -93,6 +133,8 @@ export default function GlobalSearchBox() {
     if (matchType === 'script') return t('home.search.matchType.script');
     return t('home.search.matchType.text');
   };
+
+  const pageResults = results?.filter((r) => r.page_number != null) ?? [];
 
   return (
     <div ref={containerRef} className="relative w-full max-w-sm">
@@ -129,42 +171,86 @@ export default function GlobalSearchBox() {
             <p className="px-4 py-3 text-sm text-slate-400">{t('home.search.noResults')}</p>
           )}
           {hasResults && (
-            <ul>
-              {results.map((result, idx) => (
-                <li key={`${result.pdf_id}-${result.page_number ?? 'title'}-${idx}`}>
+            <>
+              {pageResults.length > 0 && (
+                <div className="flex items-center gap-2 border-b border-slate-800 px-3 py-1.5">
                   <button
                     type="button"
-                    onClick={() => handleResultClick(result)}
-                    className="flex w-full flex-col gap-0.5 px-4 py-2.5 text-left hover:bg-slate-800"
+                    onClick={() => {
+                      setSelectMode((m) => !m);
+                      if (selectMode) setSelected(new Set());
+                    }}
+                    className={`rounded border px-2 py-0.5 text-xs ${selectMode ? 'border-indigo-500/60 bg-indigo-500/20 text-indigo-200' : 'border-slate-700 text-slate-400 hover:text-slate-200'}`}
                   >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="truncate text-sm font-medium text-slate-100">
-                        {result.pdf_title ?? result.pdf_id}
-                      </span>
-                      <span className="rounded-full border border-indigo-500/50 bg-indigo-500/10 px-1.5 py-0.5 text-xs text-indigo-300">
-                        {matchTypeLabel(result.match_type)}
-                      </span>
-                      {result.page_number != null && (
-                        <span className="text-xs text-slate-500">
-                          {t('home.search.page').replace('{n}', String(result.page_number))}
-                        </span>
-                      )}
-                    </div>
-                    {result.snippet && (
-                      <p className="line-clamp-2 text-xs text-slate-400">
-                        {highlightText(result.snippet, query).map((part, i) =>
-                          part.isMatch ? (
-                            <mark key={i} className="rounded-sm bg-yellow-400/25 text-yellow-200 not-italic">{part.text}</mark>
-                          ) : (
-                            <span key={i}>{part.text}</span>
-                          )
-                        )}
-                      </p>
-                    )}
+                    {selectMode ? t('home.search.selectModeOn') : t('home.search.selectMode')}
                   </button>
-                </li>
-              ))}
-            </ul>
+                  {selectMode && selected.size > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => void handleCreateFromPages()}
+                      disabled={fromPagesBusy}
+                      className="rounded border border-emerald-500/60 bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50"
+                    >
+                      {fromPagesBusy
+                        ? t('home.search.creatingPresentation')
+                        : t('home.search.createFromPages').replace('{n}', String(selected.size))}
+                    </button>
+                  )}
+                </div>
+              )}
+              <ul>
+                {results.map((result, idx) => {
+                  const key = makeSelKey(result);
+                  const isSelectable = result.page_number != null;
+                  const isChecked = selected.has(key);
+                  return (
+                    <li key={`${result.pdf_id}-${result.page_number ?? 'title'}-${idx}`}>
+                      <button
+                        type="button"
+                        onClick={() => handleResultClick(result)}
+                        className={`flex w-full items-start gap-2 px-4 py-2.5 text-left hover:bg-slate-800 ${isChecked ? 'bg-indigo-500/10' : ''}`}
+                      >
+                        {selectMode && isSelectable && (
+                          <span className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${isChecked ? 'border-indigo-500 bg-indigo-500 text-white' : 'border-slate-600'}`}>
+                            {isChecked && (
+                              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </span>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="truncate text-sm font-medium text-slate-100">
+                              {result.pdf_title ?? result.pdf_id}
+                            </span>
+                            <span className="rounded-full border border-indigo-500/50 bg-indigo-500/10 px-1.5 py-0.5 text-xs text-indigo-300">
+                              {matchTypeLabel(result.match_type)}
+                            </span>
+                            {result.page_number != null && (
+                              <span className="text-xs text-slate-500">
+                                {t('home.search.page').replace('{n}', String(result.page_number))}
+                              </span>
+                            )}
+                          </div>
+                          {result.snippet && (
+                            <p className="line-clamp-2 text-xs text-slate-400">
+                              {highlightText(result.snippet, query).map((part, i) =>
+                                part.isMatch ? (
+                                  <mark key={i} className="rounded-sm bg-yellow-400/25 text-yellow-200 not-italic">{part.text}</mark>
+                                ) : (
+                                  <span key={i}>{part.text}</span>
+                                )
+                              )}
+                            </p>
+                          )}
+                        </div>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
           )}
         </div>
       )}
