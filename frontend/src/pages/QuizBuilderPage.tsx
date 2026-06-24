@@ -22,6 +22,7 @@ import {
 } from '../lib/api';
 import { shuffleArray } from './play/utils';
 import { copyTextToClipboard } from '../lib/clipboard';
+import { addReviewItems } from '../lib/reviewList';
 import type {
   PdfDetail,
   PdfListItem,
@@ -301,6 +302,26 @@ export default function QuizBuilderPage() {
     if (syncRole !== 'follower' || !syncQuizShowAnswers) return;
     submitFollowerAttempt();
   }, [syncRole, syncQuizShowAnswers, submitFollowerAttempt]);
+
+  useEffect(() => {
+    if (!syncQuizShowAnswers || !activeQuiz || !pdfId) return;
+    const scoreTable = normalizeQuestionScores(activeQuiz.questions);
+    const wrongWithPage = activeQuiz.questions.filter(
+      (q, idx) =>
+        typeof q.page_number === 'number' &&
+        calcQuestionScore(q, studentAnswers[q.id] ?? [], scoreTable[idx] ?? 0) === 0,
+    );
+    if (wrongWithPage.length === 0) return;
+    addReviewItems(
+      wrongWithPage.map((q) => ({
+        pdfId,
+        pdfTitle: detail?.title ?? '',
+        pageNumber: q.page_number as number,
+        questionText: q.question,
+        addedAt: new Date().toISOString(),
+      })),
+    );
+  }, [syncQuizShowAnswers, activeQuiz, pdfId, detail, studentAnswers]);
 
   useEffect(() => {
     if (quizCountdown === 0 && isFollowerTesting && !syncQuizShowAnswers) {

@@ -8,6 +8,7 @@ import { PageAskPanel } from './PageAskPanel';
 import { QualityCheckPanel } from './QualityCheckPanel';
 import { copyTextToClipboard } from '../../lib/clipboard';
 import { formatAudioDuration } from '../../lib/audioDuration';
+import { getReviewItems, removeReviewItem, type ReviewItem } from '../../lib/reviewList';
 
 const IMAGE_MSG_PREFIX = '[image] ';
 
@@ -23,6 +24,62 @@ function getOutlineTitle(page: import('../../types').PdfDetailPage, scripts: Rec
     if (text.length > 0) return text.slice(0, 20) + (text.length > 20 ? '…' : '');
   }
   return '';
+}
+
+function ReviewListSection() {
+  const { t } = useI18n();
+  const { pdfId, setCurrentIdx } = usePlayPageContext();
+  const [items, setItems] = useState<ReviewItem[]>([]);
+
+  useEffect(() => {
+    if (!pdfId) return;
+    setItems(getReviewItems().filter((item) => item.pdfId === pdfId));
+  }, [pdfId]);
+
+  if (!pdfId || items.length === 0) return null;
+
+  const handleRemove = (pageNumber: number) => {
+    removeReviewItem(pdfId, pageNumber);
+    setItems((prev) => prev.filter((item) => !(item.pdfId === pdfId && item.pageNumber === pageNumber)));
+  };
+
+  return (
+    <section className="rounded-lg border border-rose-800/40 bg-rose-900/20">
+      <div className="border-b border-rose-800/30 px-4 py-3">
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-rose-300">
+          {t('play.sidebar.reviewListTitle')}
+          <span className="rounded-full bg-rose-500/20 px-1.5 py-0.5 text-[10px] font-normal text-rose-300">{items.length}</span>
+        </h2>
+        <p className="mt-0.5 text-[11px] text-rose-400/70">{t('play.sidebar.reviewListHint')}</p>
+      </div>
+      <div className="px-4 py-3">
+        <ul className="space-y-2">
+          {items.map((item) => (
+            <li key={`${item.pdfId}-${item.pageNumber}-${item.questionText.slice(0, 10)}`} className="flex items-start gap-2 rounded-md border border-rose-500/20 bg-rose-500/10 px-2.5 py-2">
+              <button
+                type="button"
+                onClick={() => setCurrentIdx(item.pageNumber - 1)}
+                className="min-w-0 flex-1 text-left"
+              >
+                <span className="block text-[11px] font-medium text-rose-200">
+                  {t('play.sidebar.reviewListPage').replace('{n}', String(item.pageNumber))}
+                </span>
+                <span className="block truncate text-[10px] text-rose-300/70">{item.questionText}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleRemove(item.pageNumber)}
+                className="shrink-0 text-rose-500/60 hover:text-rose-400"
+                aria-label={t('play.sidebar.reviewListRemove')}
+              >
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
 }
 
 function OutlineSection() {
@@ -837,6 +894,8 @@ export function PlayPageSidebar() {
           )}
         </div>
       </section>
+
+      <ReviewListSection />
 
       <OutlineSection />
 

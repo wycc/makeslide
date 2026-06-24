@@ -28,6 +28,7 @@ import GlobalSearchBox from '../components/GlobalSearchBox';
 import { useI18n } from '../i18n';
 import { useBudgetWarning } from '../hooks/useBudgetWarning';
 import { formatAudioDuration } from '../lib/audioDuration';
+import { getReviewItems } from '../lib/reviewList';
 
 const POLL_INTERVAL_ACTIVE_MS = 5000;
 const POLL_INTERVAL_IDLE_MS = 30000;
@@ -332,6 +333,8 @@ export default function HomePage() {
     const totalAudioMin = Math.round(items.reduce((s, p) => s + (p.total_audio_duration_seconds ?? 0), 0) / 60);
     return { totalPdfs, totalPages, totalPlays, totalAudioMin };
   }, [items]);
+
+  const reviewCount = useMemo(() => getReviewItems().length, []);
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -1193,6 +1196,12 @@ export default function HomePage() {
                 </>
               )}
             </div>
+            {reviewCount > 0 && (
+              <div className="mt-2 flex items-center gap-2 rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
+                <span>📝</span>
+                <span>{t('home.reviewListBanner').replace('{n}', String(reviewCount))}</span>
+              </div>
+            )}
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <button
                 type="button"
