@@ -2443,6 +2443,7 @@ export default function PlayPage() {
           versionHistoryLoading={versionHistoryLoading}
           versionPreviewHash={versionPreviewHash}
           versionPreviewScript={versionPreviewScript}
+          currentScript={versionHistoryType === 'script' ? currentScript : null}
           versionRestoring={versionRestoring}
           versionError={versionError}
           isReadOnlyProcessing={isReadOnlyProcessing}
