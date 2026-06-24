@@ -1408,6 +1408,8 @@ export const en = {
   'quiz.deleteFailed': 'Failed to delete quiz',
   'quiz.deleteQuizTitle': 'Delete this quiz',
   'quiz.totalScore': 'Total score: {score} / 100',
+  'quiz.shareScore': 'Share score',
+  'quiz.shareText': 'I scored {score} / {max} on the "{title}" quiz!',
   'quiz.inProgressTitle': 'Quiz in progress: {title}',
   'quiz.answersVisibleHint': 'The quiz has ended. Correct answers and explanations are shown below.',
   'quiz.answerBeforeEndHint': 'Answer the questions. Correct answers are hidden until the quiz ends.',

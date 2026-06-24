@@ -720,9 +720,30 @@ export default function QuizBuilderPage() {
           const selected = studentAnswers[q.id] ?? [];
           return acc + calcQuestionScore(q, selected, scoreTable[idx] ?? 0);
         }, 0);
+        const score = Math.round(total * 100) / 100;
+        const max = scoreTable.reduce((acc, s) => acc + s, 0);
         return (
-          <div className="mb-3 rounded border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
-            {formatMessage('quiz.totalScore', { score: Math.round(total * 100) / 100 })}
+          <div className="mb-3 flex items-center justify-between gap-2 rounded border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+            <span>{formatMessage('quiz.totalScore', { score })}</span>
+            <button
+              type="button"
+              onClick={async () => {
+                const text = formatMessage('quiz.shareText', { title: quiz.title, score, max });
+                if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+                  try {
+                    await navigator.share({ title: t('quiz.shareScore'), text });
+                    return;
+                  } catch {
+                    // user cancelled or share unsupported — fall through to clipboard
+                  }
+                }
+                const result = await copyTextToClipboard(text);
+                setMessage(result.ok ? t('quiz.copyDone') : t('quiz.copyFailed'));
+              }}
+              className="shrink-0 rounded border border-amber-400/50 bg-amber-500/20 px-2 py-1 text-xs text-amber-50 hover:bg-amber-500/30"
+            >
+              {t('quiz.shareScore')}
+            </button>
           </div>
         );
       })() : null}
