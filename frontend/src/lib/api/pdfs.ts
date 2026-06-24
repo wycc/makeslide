@@ -1956,3 +1956,24 @@ export async function deletePageComment(id: string, commentId: number): Promise<
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/comments/${commentId}`, { method: 'DELETE' });
   if (!resp.ok) throw await parseErrorBody(resp);
 }
+
+export interface FromPagesSpec {
+  pdf_id: string;
+  page_number: number;
+}
+
+export interface FromPagesResponse {
+  id: string;
+  title: string;
+  pageCount: number;
+}
+
+export async function createPdfFromPages(pages: FromPagesSpec[], title?: string): Promise<FromPagesResponse> {
+  const resp = await fetch('api/pdfs/from-pages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pages, title }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as FromPagesResponse;
+}
