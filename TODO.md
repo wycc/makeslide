@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | TemplatesPage 模板使用次數顯示：templates 表新增 `apply_count` 欄位（含 migration），新增無驗證 `POST /api/templates/:id/apply` 遞增端點（404 防護），前端套用時 fire-and-forget 呼叫並樂觀更新，卡片顯示「已套用 N 次」徽章；補後端測試 2 個（共 6 通過）；i18n 1 key | feat/template-apply-count（已 merge） |
 | 2026-06-25 | 設定頁語意搜尋索引統計：Settings「技能」分頁底部新增「語意搜尋索引」小節，新增登入限定 `GET /api/me/embedding-stats`（JOIN page_embeddings 與 pdfs.owner_sub），顯示「已索引 N 頁（共 M 份簡報）」；補後端測試 2 個；i18n 3 key | feat/embedding-index-stats（已 merge） |
 | 2026-06-25 | 播放頁 PDF 描述折疊顯示：PlayPageHeader 標題列下方加入折疊描述區塊，description 非空時顯示「▼ 顯示簡介」切換鈕（純 state toggle，分享訪客亦可見）；補 i18n 2 個 key（`play.header.showDescription`/`hideDescription`，zh-TW/en）；純前端改動 | feat/play-description-collapse（已 merge） |
 | 2026-06-25 | 首頁近期搜尋刪除個別記錄：搜尋下拉清單每筆記錄右側加入 × 按鈕，新增 `removeRecentSearch()` helper 只移除單筆並同步 localStorage；補 i18n key `home.search.removeRecent`（zh-TW/en）；純前端改動 | feat/recent-search-remove-item（已 merge） |
@@ -1141,7 +1142,7 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [ ] 播放頁鍵盤快捷鍵說明 overlay：全螢幕或一般播放模式新增「快捷鍵說明」按鈕（`?` 鍵觸發），以 modal 列出所有快捷鍵（翻頁 ← →、b 書籤、i 重要頁面、f 全螢幕、a 動畫效果等）；補 i18n 鍵盤說明 4 個 key；純前端改動。
 
-- [ ] TemplatesPage 模板使用次數顯示：`templates` 資料表加入 `apply_count INTEGER NOT NULL DEFAULT 0` 欄位（DB migration）；新增後端端點 `POST /api/templates/:id/apply`（僅遞增計數，不需驗證，回傳 204）；前端「套用」動作同時呼叫此端點；TemplatesPage 卡片顯示使用次數徽章；補後端測試；i18n 1 個 key。
+- [x] TemplatesPage 模板使用次數顯示：`templates` 表新增 `apply_count INTEGER NOT NULL DEFAULT 0` 欄位（含舊庫 `columnExists` migration）；新增無需驗證的 `POST /api/templates/:templateId/apply`（遞增計數→204，不存在→404）；前端 `applyTemplate()` fire-and-forget 呼叫並樂觀遞增本地計數，卡片顯示「已套用 N 次」徽章；補後端測試 2 個（遞增+204／404）共 6 通過；i18n 1 個 key（`templates.applyCount`，zh-TW/en）。分支 `feat/template-apply-count`。
 
 - [x] 播放頁 PDF 描述折疊顯示：PlayPageHeader 在標題列下方加入折疊描述區塊，`detail?.description` 非空時顯示「▼ 顯示簡介」切換鈕（初始收折，點擊展開/收合），純 `descExpanded` state toggle，對分享連結訪客也可見；補 i18n 2 個 key（`play.header.showDescription`/`hideDescription`，zh-TW/en）。純前端改動。分支 `feat/play-description-collapse`。
 

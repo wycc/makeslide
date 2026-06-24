@@ -1,5 +1,33 @@
 # MakeSlide 功能說明
 
+## 模板市集：使用次數徽章
+
+### 功能目的
+
+模板市集（TemplatesPage）讓使用者分享與套用彼此的教學技能模板。過去模板之間沒有任何
+「熱門程度」的指標，使用者難以判斷哪些模板較受歡迎、較值得參考。這次為每個模板加上
+「使用次數」統計，並在卡片上以徽章呈現，提供簡單的社群熱度訊號。
+
+### 使用方式
+
+1. 進入模板市集頁，每張模板卡片在被套用過後，會於提示詞預覽下方顯示「已套用 N 次」徽章
+   （從未被套用的模板不顯示徽章，保持版面清爽）。
+2. 點擊任一模板的「套用」按鈕時，系統會在背景把該模板的使用次數 +1，並立即在當前畫面
+   反映新的數字（樂觀更新），不會延遲導向流程。
+
+### 技術說明
+
+- **資料表**：`templates` 表新增 `apply_count INTEGER NOT NULL DEFAULT 0` 欄位；`db.ts` 同時為
+  既有資料庫加上 `columnExists` 防護的 `ALTER TABLE` migration，確保升級時不遺漏舊庫。
+- **後端**：新增 `POST /api/templates/:templateId/apply` 端點，**不需登入**即可呼叫，
+  以 `UPDATE ... SET apply_count = apply_count + 1` 遞增；找不到模板回傳 404，成功回傳 204。
+- **前端**：`applyTemplate()` 為 fire-and-forget 呼叫（失敗時靜默忽略，不阻斷套用導向）；
+  `TemplatesPage` 在套用時樂觀地把該模板的 `apply_count` 加一，卡片以 `templates.applyCount`
+  文案顯示徽章。
+- **測試**：`backend/test/templates.test.ts` 新增 2 個 node:test（遞增並回 204、未知模板回 404），
+  該檔共 6 個測試全數通過。
+- **i18n**：zh-TW / en 各新增 1 個 key（`templates.applyCount`）。
+
 ## 設定頁：語意搜尋索引統計
 
 ### 功能目的
