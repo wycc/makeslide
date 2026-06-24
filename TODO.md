@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | 設定頁語意搜尋索引統計：Settings「技能」分頁底部新增「語意搜尋索引」小節，新增登入限定 `GET /api/me/embedding-stats`（JOIN page_embeddings 與 pdfs.owner_sub），顯示「已索引 N 頁（共 M 份簡報）」；補後端測試 2 個；i18n 3 key | feat/embedding-index-stats（已 merge） |
 | 2026-06-25 | 播放頁 PDF 描述折疊顯示：PlayPageHeader 標題列下方加入折疊描述區塊，description 非空時顯示「▼ 顯示簡介」切換鈕（純 state toggle，分享訪客亦可見）；補 i18n 2 個 key（`play.header.showDescription`/`hideDescription`，zh-TW/en）；純前端改動 | feat/play-description-collapse（已 merge） |
 | 2026-06-25 | 首頁近期搜尋刪除個別記錄：搜尋下拉清單每筆記錄右側加入 × 按鈕，新增 `removeRecentSearch()` helper 只移除單筆並同步 localStorage；補 i18n key `home.search.removeRecent`（zh-TW/en）；純前端改動 | feat/recent-search-remove-item（已 merge） |
 | 2026-06-22 | 建立課後學習報告後端摘要 API（`GET /api/pdfs/:id/report/summary`） | feature/post-class-report-summary-api（已 merge） |
@@ -1126,7 +1127,7 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [x] TemplatesPage 分類篩選 + 搜尋框：TemplatesPage 目前無法按 category 篩選也無搜尋。在標題下方加入類別 chips（依 API 回傳的實際 categories 動態生成，含「全部」選項）與文字搜尋 input（client-side 過濾 name + description）；純前端改動，不需後端修改，補 i18n 3 個 key（searchPlaceholder/categoryAll/noFilterResults）。分支 `feat/templates-filter-search`。
 
-- [ ] 設定頁語意搜尋索引統計：Settings 頁「技能」section 下方加入「語意搜尋索引」小節，顯示「已索引 N 頁（共 M 份簡報）」；新增後端端點 `GET /api/me/embedding-stats`（回傳 indexed_pages/indexed_pdfs 數量，限登入用戶自己的資料）；補後端測試；i18n 3 個 key。
+- [x] 設定頁語意搜尋索引統計：Settings「技能」分頁底部新增「語意搜尋索引」小節，顯示「已索引 N 頁（共 M 份簡報）」；新增登入限定端點 `GET /api/me/embedding-stats`（JOIN `page_embeddings` 與 `pdfs.owner_sub`，回傳 indexed_pages/indexed_pdfs）；補後端測試 2 個（401／計數正確排除他人 PDF）；i18n 3 個 key（`settings.embeddingIndex`/`embeddingIndexStats`/`embeddingIndexHint`，zh-TW/en）。分支 `feat/embedding-index-stats`。
 
 - [ ] 相似頁面推薦：PlayPageSidebar 新增「相似頁面」section，利用既有 `page_embeddings` 表，呼叫新後端端點 `GET /api/pdfs/:id/pages/:n/similar`（從 page_embeddings 以 cosine similarity 找出同 owner 其他頁面的 top-5）；結果以縮圖 + 標題 + 頁碼卡片呈現，點擊跳轉；補後端測試；i18n 3 個 key。
 

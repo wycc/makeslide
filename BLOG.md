@@ -1,5 +1,31 @@
 # MakeSlide 功能說明
 
+## 設定頁：語意搜尋索引統計
+
+### 功能目的
+
+MakeSlide 的 AI 語意搜尋會在背景為簡報頁面建立向量索引（`page_embeddings`），讓使用者能用
+語意（而非僅關鍵字）找到相關內容。過去使用者無從得知自己究竟有多少內容已被索引、涵蓋幾份簡報，
+缺乏對「語意搜尋可用範圍」的可見度。這次在設定頁加入索引統計，讓使用者一眼掌握覆蓋情況。
+
+### 使用方式
+
+1. 進入「設定 → 技能」分頁。
+2. 在技能清單與新增技能區塊下方，會看到「語意搜尋索引」小節。
+3. 小節顯示「已索引 N 頁（共 M 份簡報）」，僅統計**你自己擁有**的簡報，不含他人分享的內容。
+
+### 技術說明
+
+- **後端**：新增 `GET /api/me/embedding-stats` 端點，**限登入使用者**（未登入回 401）。
+  以 `page_embeddings` JOIN `pdfs`（`pdfs.owner_sub = 當前使用者`）統計 `indexed_pages`
+  （已索引頁數）與 `indexed_pdfs`（涵蓋簡報數，`COUNT(DISTINCT pdf_id)`），確保不洩漏他人資料。
+- **前端**：`SettingsPage` 於技能分頁載入時呼叫 `getEmbeddingStats()`，成功才渲染統計小節
+  （失敗則靜默隱藏，例如未登入時）。
+- **測試**：`backend/test/embedding-stats.test.ts` 2 個 node:test —— 未登入回 401、以及計數正確
+  並排除非本人擁有的 PDF（測試以隨機 run id 隔離共用資料庫的殘留資料）。
+- **i18n**：zh-TW / en 各新增 3 個 key（`settings.embeddingIndex`、`embeddingIndexStats`、
+  `embeddingIndexHint`）。
+
 ## 播放頁：PDF 簡介折疊顯示
 
 ### 功能目的
