@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | 播放頁鍵盤快捷鍵說明 overlay：既有按鈕+modal 基礎上補 `?` 全域熱鍵切換顯示（輸入框忽略）並新增 `?` 說明列；i18n 1 key；純前端 | feat/shortcuts-help-hotkey（已 merge） |
 | 2026-06-25 | 相似頁面推薦：新增 owner 限定 `GET /api/pdfs/:id/pages/:n/similar`，以既有 page_embeddings + cosineSimilarity 找同 owner 其他頁面 top-5（無新 LLM）；PlayPageSidebar 加「相似頁面」縮圖卡片可跨簡報跳轉；補後端測試 3 個；i18n 3 key | feat/similar-pages（已 merge） |
 | 2026-06-25 | 課後報告加入頁面觀看率：經檢視 report/summary 已內建每頁 avg_listened_ratio + completion_rate，PostClassReportPanel 也已顯示完成率熱力圖，需求已由既有程式碼滿足，標記完成（無新增程式碼） | （既有功能） |
 | 2026-06-25 | AI 一鍵補全空白逐字稿：QualityCheckPanel 偵測 missing/empty script 頁面時顯示「批次補全」按鈕，依序呼叫既有 rewrite-script API（上限 10 頁、進度 badge、完成後重檢）；i18n 2 key；純前端 | feat/quality-batch-fill-scripts（已 merge） |
@@ -1145,7 +1146,7 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [x] AI 一鍵補全空白逐字稿：QualityCheckPanel 偵測到 `missing_script`/`empty_script` 頁面時，於問題數列右側顯示「批次補全」按鈕，依序對每頁呼叫既有 `rewritePageScript()`（`POST /api/pdfs/:id/pages/:n/rewrite-script`，會持久化逐字稿），上限 10 頁，附帶生成指令 prompt；按鈕顯示「補全中… done/total」進度，完成後自動重跑品質檢查；補 i18n 2 個 key（`play.quality.batchFill`/`batchFilling`，zh-TW/en）。純前端改動。分支 `feat/quality-batch-fill-scripts`。
 
-- [ ] 播放頁鍵盤快捷鍵說明 overlay：全螢幕或一般播放模式新增「快捷鍵說明」按鈕（`?` 鍵觸發），以 modal 列出所有快捷鍵（翻頁 ← →、b 書籤、i 重要頁面、f 全螢幕、a 動畫效果等）；補 i18n 鍵盤說明 4 個 key；純前端改動。
+- [x] 播放頁鍵盤快捷鍵說明 overlay：`PlayPageHeader` 既有「快捷鍵說明」按鈕 + modal（列出 ←→/Space/G/B/I/W/P/A/Esc 等，i18n 已存在），本次補上 `?` 全域熱鍵切換顯示（輸入框聚焦時忽略），並在 overlay 中新增 `?` 說明列；補 i18n 1 個 key（`play.shortcuts.showHelp`，zh-TW/en）。純前端改動。分支 `feat/shortcuts-help-hotkey`。
 
 - [x] TemplatesPage 模板使用次數顯示：`templates` 表新增 `apply_count INTEGER NOT NULL DEFAULT 0` 欄位（含舊庫 `columnExists` migration）；新增無需驗證的 `POST /api/templates/:templateId/apply`（遞增計數→204，不存在→404）；前端 `applyTemplate()` fire-and-forget 呼叫並樂觀遞增本地計數，卡片顯示「已套用 N 次」徽章；補後端測試 2 個（遞增+204／404）共 6 通過；i18n 1 個 key（`templates.applyCount`，zh-TW/en）。分支 `feat/template-apply-count`。
 
