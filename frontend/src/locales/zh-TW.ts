@@ -1526,6 +1526,7 @@ export const zhTW = {
   'play.header.downloadVtt': '下載 VTT 字幕',
   'play.header.downloadPptx': '下載 PPTX',
   'play.header.downloadScriptsTxt': '下載逐字稿 TXT',
+  'play.header.downloadScorm': '下載 SCORM 包',
   'play.header.copyScript': '複製本頁逐字稿',
   'play.header.copyScriptDone': '已複製！',
   'play.header.copyScriptFail': '複製失敗',

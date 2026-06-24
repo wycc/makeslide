@@ -1526,6 +1526,7 @@ export const en = {
   'play.header.downloadVtt': 'Download VTT subtitles',
   'play.header.downloadPptx': 'Download PPTX',
   'play.header.downloadScriptsTxt': 'Download Scripts (TXT)',
+  'play.header.downloadScorm': 'Download SCORM Package',
   'play.header.copyScript': 'Copy Page Script',
   'play.header.copyScriptDone': 'Copied!',
   'play.header.copyScriptFail': 'Copy failed',
