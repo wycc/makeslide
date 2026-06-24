@@ -1580,6 +1580,7 @@ export const en = {
   'play.shortcuts.pollControl': 'Poll Control (fullscreen, host)',
   'play.shortcuts.aiAnswer': 'AI Answer Questions (host, sync on)',
   'play.shortcuts.exitEsc': 'Exit Fullscreen / Drawing Mode',
+  'play.shortcuts.showHelp': 'Show / hide keyboard shortcuts',
   'play.shortcuts.gotoPage': 'Go to page',
   'play.shortcuts.nextBookmark': 'Jump to next bookmark (cycles)',
   'play.shortcuts.toggleImportant': 'Mark / unmark as important page',

@@ -34,7 +34,23 @@ function CopyAllQuestionsButton({ questions }: { questions: SyncFollowerQuestion
 function ShortcutsButton() {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
+
+  // Global "?" hotkey toggles the help overlay, ignored while typing in a field.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '?') return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return;
+      e.preventDefault();
+      setOpen((v) => !v);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   const shortcuts: [string, string][] = [
+    ['?', t('play.shortcuts.showHelp')],
     ['← / →', t('play.shortcuts.prevPage') + ' / ' + t('play.shortcuts.nextPage')],
     ['Space', t('play.shortcuts.spaceFullscreen')],
     ['Space', t('play.shortcuts.spaceNormal')],

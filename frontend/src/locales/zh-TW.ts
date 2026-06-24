@@ -1580,6 +1580,7 @@ export const zhTW = {
   'play.shortcuts.pollControl': '投票控制（全螢幕，主持模式）',
   'play.shortcuts.aiAnswer': 'AI 回答學生提問（主持模式，同步中）',
   'play.shortcuts.exitEsc': '退出全螢幕 / 繪圖模式',
+  'play.shortcuts.showHelp': '顯示 / 隱藏快捷鍵說明',
   'play.shortcuts.gotoPage': '跳至指定頁面',
   'play.shortcuts.nextBookmark': '跳至下一個書籤（循環）',
   'play.shortcuts.toggleImportant': '標記 / 取消標記為重要頁面',
