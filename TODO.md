@@ -38,6 +38,8 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | 相似頁面推薦：新增 owner 限定 `GET /api/pdfs/:id/pages/:n/similar`，以既有 page_embeddings + cosineSimilarity 找同 owner 其他頁面 top-5（無新 LLM）；PlayPageSidebar 加「相似頁面」縮圖卡片可跨簡報跳轉；補後端測試 3 個；i18n 3 key | feat/similar-pages（已 merge） |
+| 2026-06-25 | 課後報告加入頁面觀看率：經檢視 report/summary 已內建每頁 avg_listened_ratio + completion_rate，PostClassReportPanel 也已顯示完成率熱力圖，需求已由既有程式碼滿足，標記完成（無新增程式碼） | （既有功能） |
 | 2026-06-25 | AI 一鍵補全空白逐字稿：QualityCheckPanel 偵測 missing/empty script 頁面時顯示「批次補全」按鈕，依序呼叫既有 rewrite-script API（上限 10 頁、進度 badge、完成後重檢）；i18n 2 key；純前端 | feat/quality-batch-fill-scripts（已 merge） |
 | 2026-06-25 | 課後班級報告列印樣式：經檢視 PostClassReportPanel 已內建 @media print 樣式 + window.print() 按鈕 + data-no-print，需求已由既有程式碼滿足，標記完成（無新增程式碼） | （既有功能） |
 | 2026-06-25 | 測驗結果分享按鈕：QuizBuilderPage 成績顯示區加入「分享成績」按鈕，使用 `navigator.share`（fallback clipboard 複製 + toast），分享文字含得分/滿分與測驗標題；i18n 2 key；純前端 | feat/quiz-share-score（已 merge） |
@@ -1133,7 +1135,7 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [x] 設定頁語意搜尋索引統計：Settings「技能」分頁底部新增「語意搜尋索引」小節，顯示「已索引 N 頁（共 M 份簡報）」；新增登入限定端點 `GET /api/me/embedding-stats`（JOIN `page_embeddings` 與 `pdfs.owner_sub`，回傳 indexed_pages/indexed_pdfs）；補後端測試 2 個（401／計數正確排除他人 PDF）；i18n 3 個 key（`settings.embeddingIndex`/`embeddingIndexStats`/`embeddingIndexHint`，zh-TW/en）。分支 `feat/embedding-index-stats`。
 
-- [ ] 相似頁面推薦：PlayPageSidebar 新增「相似頁面」section，利用既有 `page_embeddings` 表，呼叫新後端端點 `GET /api/pdfs/:id/pages/:n/similar`（從 page_embeddings 以 cosine similarity 找出同 owner 其他頁面的 top-5）；結果以縮圖 + 標題 + 頁碼卡片呈現，點擊跳轉；補後端測試；i18n 3 個 key。
+- [x] 相似頁面推薦：新增 owner 限定端點 `GET /api/pdfs/:id/pages/:n/similar`，以既有 `page_embeddings` + `cosineSimilarity` 找出同 owner 其他已索引頁面的 top-5（僅查既有 embeddings，無新 LLM 呼叫；≥0.3 門檻）；PlayPageSidebar 新增「相似頁面」section，以縮圖 + 標題 + 頁碼 + 相似度卡片呈現，點擊跨簡報跳轉；補後端測試 3 個（401／排序正確且過濾正交頁／403 非 owner）；i18n 3 個 key。分支 `feat/similar-pages`。
 
 - [ ] 自動生成 PDF 描述：播放頁「簡報資訊」區若 description 為空時，在描述輸入框旁顯示「✨ AI 生成描述」按鈕，呼叫後端 `POST /api/pdfs/:id/generate-description`（取前三頁逐字稿送 LLM 生成 2–3 句中文摘要），成功後自動填入 description 並 PATCH 更新；補後端測試；i18n 2 個 key。
 
@@ -1151,4 +1153,4 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [x] 首頁近期搜尋刪除個別記錄：近期搜尋列表（實際位於 `HomePage.tsx`，非 `GlobalSearchBox.tsx`）原本只有全部清除，無法刪除單筆。已在每筆記錄右側加入 × 按鈕，新增 `removeRecentSearch(term)` helper 只移除該筆並同步 localStorage；補 i18n 1 個 key（`home.search.removeRecent`，zh-TW/en）。純前端改動。分支 `feat/recent-search-remove-item`。
 
-- [ ] 課後報告加入頁面觀看率：`GET /api/pdfs/:id/report` 的回應目前含 student list，加入每頁的 `watch_progress` 彙整（`avg_watched_ratio` per page）；`watch_progress` 表已存在（`pdf_id`/`page_number`/`watched_ratio`），只需 JOIN 聚合；ReportPage 對應表格加入欄位；補後端測試；i18n 1 個 key。
+- [x] 課後報告加入頁面觀看率：經檢視 `GET /api/pdfs/:id/report/summary` 已內建每頁 `avg_listened_ratio`（`listened_ms/duration_ms` 聚合，report.ts 行 355、427）與 `completion_rate`，`PostClassReportPanel` 也已顯示「觀看完成率最低頁面」與完成率熱力圖。需求已由既有程式碼滿足，標記為已完成（無需新增程式碼）。

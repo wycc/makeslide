@@ -1,5 +1,33 @@
 # MakeSlide 功能說明
 
+## 播放頁：相似頁面推薦
+
+### 功能目的
+
+當教材累積到一定數量，使用者常希望知道「我其他簡報裡，有沒有跟這一頁主題相近的內容」，
+以便交叉參考、重用素材或檢查是否重複。MakeSlide 既有的語意搜尋已為頁面建立向量索引
+（`page_embeddings`），這次善用這份索引，在播放頁側邊欄即時推薦與目前頁面語意最相近的頁面。
+
+### 使用方式
+
+1. 以**簡報擁有者**身分開啟播放頁（此功能僅比對你自己擁有的簡報，不會洩漏他人內容）。
+2. 側邊欄會出現「相似頁面」區塊，列出與目前頁面最相近的至多 5 個頁面，含縮圖、簡報標題、
+   頁碼與相似度百分比。
+3. 點擊任一卡片即可跳轉到該頁面（可跨不同簡報）。
+4. 若目前頁面尚未建立索引、或沒有足夠相近的頁面，該區塊會自動隱藏。
+
+### 技術說明
+
+- **後端**：新增 `GET /api/pdfs/:id/pages/:n/similar`（限登入且須為簡報擁有者，否則 401/403）。
+  以目標頁面的 `page_uid` 取出其既有 embedding，與**同 owner**所有已索引頁面計算
+  `cosineSimilarity`，過濾相似度 < 0.3 後取 top-5。**僅查詢既有 embeddings，不觸發任何新的
+  LLM 呼叫**，因此沒有額外 API 成本；尚未索引的頁面回傳空陣列。
+- **前端**：`PlayPageSidebar` 新增 `SimilarPagesSection`，於頁面切換時呼叫 API，以縮圖
+  （`api/pdfs/:id/pages/:n/image`）卡片呈現，點擊以 `navigate` 跳轉。
+- **測試**：`backend/test/similar-pages.test.ts` 3 個 node:test（未登入 401、依相似度排序並過濾正交頁面、
+  非擁有者 403）。
+- **i18n**：zh-TW / en 各新增 3 個 key（`play.sidebar.similarPages`、`similarPagesLoading`、`similarPagesPage`）。
+
 ## 品質檢查：一鍵批次補全空白逐字稿
 
 ### 功能目的
