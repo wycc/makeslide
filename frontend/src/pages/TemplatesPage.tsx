@@ -83,6 +83,7 @@ export default function TemplatesPage() {
   const [appliedId, setAppliedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('all');
+  const [sortMode, setSortMode] = useState<'newest' | 'popular'>('newest');
 
   useEffect(() => {
     void listTemplates()
@@ -98,7 +99,7 @@ export default function TemplatesPage() {
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return templates.filter((tmpl) => {
+    const matched = templates.filter((tmpl) => {
       if (activeCategory !== 'all' && tmpl.category !== activeCategory) return false;
       if (!q) return true;
       return (
@@ -107,7 +108,13 @@ export default function TemplatesPage() {
         tmpl.skill_data.prompt.toLowerCase().includes(q)
       );
     });
-  }, [templates, activeCategory, searchQuery]);
+    // 'newest' keeps the API's created_at DESC order; 'popular' sorts by
+    // apply_count desc (stable sort preserves recency as the tiebreaker).
+    if (sortMode === 'popular') {
+      return [...matched].sort((a, b) => b.apply_count - a.apply_count);
+    }
+    return matched;
+  }, [templates, activeCategory, searchQuery, sortMode]);
 
   function handleApply(template: Template) {
     const { prompt, applyTo, imageStylePrompt, quizPrompt, ttsProvider, ttsVoice } = template.skill_data;
@@ -154,13 +161,29 @@ export default function TemplatesPage() {
 
         {!loading && templates.length > 0 && (
           <div className="mb-4 space-y-3">
-            <input
-              type="search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={t('templates.searchPlaceholder')}
-              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            />
+            <div className="flex items-center gap-2">
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={t('templates.searchPlaceholder')}
+                className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+              <div className="flex shrink-0 overflow-hidden rounded-lg border border-slate-700">
+                {(['newest', 'popular'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setSortMode(mode)}
+                    className={`px-3 py-2 text-xs font-medium transition-colors ${
+                      sortMode === mode ? 'bg-indigo-600 text-white' : 'bg-slate-900 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {mode === 'newest' ? t('templates.sortNewest') : t('templates.sortPopular')}
+                  </button>
+                ))}
+              </div>
+            </div>
             {categories.length > 2 && (
               <div className="flex flex-wrap gap-2">
                 {categories.map((cat) => (
