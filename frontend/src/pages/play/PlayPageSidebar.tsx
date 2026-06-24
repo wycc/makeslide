@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useI18n } from '../../i18n';
 import { debugLog, debugWarn } from '../../lib/debugLog';
 import { calculateWatchProgressPercent, formatWatchProgressBadgeCount } from '../../lib/watchProgress';
-import { updatePageNote } from '../../lib/api/pdfs';
+import { updatePageNote, listPageComments, createPageComment, resolvePageComment, deletePageComment, type PageComment } from '../../lib/api/pdfs';
 import { usePlayPageContext } from './PlayPageContext';
 import { PageAskPanel } from './PageAskPanel';
 import { QualityCheckPanel } from './QualityCheckPanel';
@@ -24,6 +24,131 @@ function getOutlineTitle(page: import('../../types').PdfDetailPage, scripts: Rec
     if (text.length > 0) return text.slice(0, 20) + (text.length > 20 ? '…' : '');
   }
   return '';
+}
+
+function CommentsSection() {
+  const { t } = useI18n();
+  const { pdfId, currentPage } = usePlayPageContext();
+  const [comments, setComments] = useState<PageComment[]>([]);
+  const [author, setAuthor] = useState('');
+  const [text, setText] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!pdfId || !currentPage) return;
+    listPageComments(pdfId, currentPage.page_number)
+      .then(setComments)
+      .catch(() => setComments([]));
+  }, [pdfId, currentPage?.page_number]);
+
+  if (!pdfId || !currentPage) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmedText = text.trim();
+    if (!trimmedText) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const created = await createPageComment(pdfId, currentPage.page_number, author.trim() || 'anonymous', trimmedText);
+      setComments((prev) => [...prev, created]);
+      setText('');
+    } catch {
+      setError(t('play.sidebar.commentPostFailed'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleResolve = async (c: PageComment) => {
+    try {
+      const updated = await resolvePageComment(pdfId, c.id, !c.resolved);
+      setComments((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+    } catch { /* ignore */ }
+  };
+
+  const handleDelete = async (commentId: number) => {
+    try {
+      await deletePageComment(pdfId, commentId);
+      setComments((prev) => prev.filter((x) => x.id !== commentId));
+    } catch { /* ignore */ }
+  };
+
+  return (
+    <section className="rounded-lg border border-sky-800/40 bg-sky-900/20">
+      <div className="border-b border-sky-800/30 px-4 py-3">
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-sky-300">
+          {t('play.sidebar.commentsTitle')}
+          {comments.length > 0 && (
+            <span className="rounded-full bg-sky-500/20 px-1.5 py-0.5 text-[10px] font-normal text-sky-300">{comments.length}</span>
+          )}
+        </h2>
+      </div>
+      <div className="px-4 py-3 space-y-3">
+        {comments.length === 0 && (
+          <p className="text-[11px] text-sky-400/60">{t('play.sidebar.commentsEmpty')}</p>
+        )}
+        <ul className="space-y-2">
+          {comments.map((c) => (
+            <li key={c.id} className={`rounded-md border px-2.5 py-2 text-[11px] ${c.resolved ? 'border-slate-700/40 bg-slate-800/30 opacity-60' : 'border-sky-500/20 bg-sky-500/10'}`}>
+              <div className="flex items-start gap-1.5">
+                <div className="min-w-0 flex-1">
+                  <span className="font-medium text-sky-200">{c.author}</span>
+                  <span className="ml-1.5 text-sky-400/50 text-[10px]">{new Date(c.created_at).toLocaleString()}</span>
+                  <p className={`mt-0.5 break-words text-sky-100/80 ${c.resolved ? 'line-through text-slate-400' : ''}`}>{c.text}</p>
+                </div>
+                <div className="flex shrink-0 flex-col gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => handleResolve(c)}
+                    className={`text-[11px] ${c.resolved ? 'text-slate-500 hover:text-slate-400' : 'text-sky-500/60 hover:text-sky-300'}`}
+                    title={c.resolved ? t('play.sidebar.commentUnresolve') : t('play.sidebar.commentResolve')}
+                  >
+                    {c.resolved ? '↩' : '✓'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(c.id)}
+                    className="text-[11px] text-slate-500/60 hover:text-red-400"
+                    title={t('play.sidebar.commentDelete')}
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+        <form onSubmit={handleSubmit} className="space-y-1.5">
+          <input
+            type="text"
+            value={author}
+            onChange={(e) => setAuthor(e.target.value)}
+            placeholder={t('play.sidebar.commentAuthorPlaceholder')}
+            className="w-full rounded border border-sky-700/40 bg-sky-900/30 px-2 py-1 text-[11px] text-sky-100 placeholder-sky-700/60 focus:outline-none focus:ring-1 focus:ring-sky-600/60"
+            maxLength={80}
+          />
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder={t('play.sidebar.commentTextPlaceholder')}
+            rows={2}
+            className="w-full resize-none rounded border border-sky-700/40 bg-sky-900/30 px-2 py-1 text-[11px] text-sky-100 placeholder-sky-700/60 focus:outline-none focus:ring-1 focus:ring-sky-600/60"
+            maxLength={2000}
+          />
+          {error && <p className="text-[10px] text-red-400">{error}</p>}
+          <button
+            type="submit"
+            disabled={submitting || !text.trim()}
+            className="w-full rounded bg-sky-700/60 px-2 py-1 text-[11px] text-sky-100 hover:bg-sky-600/70 disabled:opacity-40"
+          >
+            {submitting ? t('play.sidebar.commentPosting') : t('play.sidebar.commentPost')}
+          </button>
+        </form>
+      </div>
+    </section>
+  );
 }
 
 function ReviewListSection() {
@@ -894,6 +1019,8 @@ export function PlayPageSidebar() {
           )}
         </div>
       </section>
+
+      <CommentsSection />
 
       <ReviewListSection />
 

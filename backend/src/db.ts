@@ -588,6 +588,23 @@ function migrate(): void {
     logger.info('Added column quiz_sets.shuffle_questions');
   }
 
+  if (!tableExists('page_comments')) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS page_comments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        pdf_id TEXT NOT NULL,
+        page_number INTEGER NOT NULL,
+        author TEXT NOT NULL DEFAULT 'anonymous',
+        text TEXT NOT NULL,
+        resolved INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (pdf_id) REFERENCES pdfs(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_page_comments_pdf_page ON page_comments(pdf_id, page_number, created_at DESC);
+    `);
+    logger.info('Created table page_comments');
+  }
+
   logger.info({ dbPath: config.dbPath }, 'Database migrations applied');
 }
 

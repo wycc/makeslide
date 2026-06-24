@@ -1085,7 +1085,7 @@
 
 - [x] 版本差異視圖（2.9）：版本歷史面板（`useVersionHistory`）目前只能預覽舊版逐字稿，無 diff 比較。加入 diff 視圖：選擇一個舊版本後，以紅/綠底色顯示與目前版本的逐行差異（可用純 JavaScript Myers diff 演算法，不需後端改動）；補 i18n `play.version.diffView/noChange`。
 
-- [ ] 評論討論串（2.9）：新增 `page_comments` 資料表（pdf_id/page_number/author/text/resolved/created_at），後端新增 `GET`/`POST`/`PATCH`（標記已處理）/`DELETE` 端點；播放頁側邊欄加入「評論」tab，允許登入用戶針對目前頁留言並回覆；適合教師共備、助教協作審閱教材。
+- [x] 評論討論串（2.9）：新增 `page_comments` 資料表（pdf_id/page_number/author/text/resolved/created_at），後端新增 `GET`/`POST`/`PATCH`（標記已處理）/`DELETE` 端點（`backend/src/routes/pdfs/comments.ts`）；`PlayPageSidebar` 加入 `CommentsSection`（sky 色調，顯示/新增/標記已處理/刪除評論）；i18n 10 個 key；補 9 個 node:test 測試。
 
 - [ ] H5P 互動內容匯出（2.10）：新增 `GET /api/pdfs/:id/export.h5p` 後端端點，依 H5P Course Presentation 格式（`h5p.json` + `content/content.json`）產生每頁投影片圖片與逐字稿，打包為 `.h5p` ZIP 檔；前端播放頁加入「下載 H5P」按鈕；適合 Moodle 等 LMS 使用。
 
@@ -1098,3 +1098,4 @@
 | 2026-06-24 | 版本差異視圖（2.9）：新增 `computeLineDiff.ts`（LCS 逐行 diff），`VersionHistoryDialog.tsx` 加入「顯示差異」切換按鈕，以紅/綠底色呈現舊版本與現版本的逐行差異；PlayPage 傳入 `currentScript`；補 8 個 node:test 測試；補 i18n zh-TW/en | feat/version-diff-view（已 merge） |
 | 2026-06-24 | 遙控器投票開/關控制（2.6）：後端新增 `PATCH /api/pdfs/:id/polls/:pollId` 端點（切換 is_active）；前端 `updatePagePoll()` API；`RemoteControllerPage` 換頁時自動抓取本頁投票，顯示投票清單與開/關按鈕；補 i18n zh-TW/en | feat/remote-poll-control（已 merge） |
 | 2026-06-24 | 個人化複習清單（2.2）：新增 `reviewList.ts` localStorage helper；`QuizBuilderPage` 在答案公布時自動儲存答錯且有頁碼的題目；`PlayPageSidebar` 新增 `ReviewListSection`（rose 色，點擊跳頁，× 移除）；首頁顯示 rose 橫幅提示；i18n 5 個 key | feat/personalized-review-list（已 merge） |
+| 2026-06-24 | 評論討論串（2.9）：新增 `page_comments` DB 資料表 + index；後端 GET/POST/PATCH/DELETE 四個端點（access control by pdf visibility）；前端 `listPageComments`/`createPageComment`/`resolvePageComment`/`deletePageComment` API；`PlayPageSidebar` 新增 `CommentsSection`（sky 色調，顯示/新增/標記已處理/刪除）；i18n 10 個 key；9 個 node:test | feat/page-comments |
