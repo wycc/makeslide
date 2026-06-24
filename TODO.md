@@ -1044,3 +1044,54 @@
 | 2026-06-24 | GotoPage 加「前往」按鈕：indigo 按鈕，頁碼無效 disabled；i18n play.gotoPageConfirm | feat/goto-page-confirm-button（已 merge） |
 | 2026-06-24 | 大綱標題顯示總時長：formatAudioDuration(detail.total_audio_duration_seconds) slate-400 | feat/outline-total-duration（已 merge） |
 | 2026-06-24 | PlayPageHeader 頁碼計數加百分比：totalPages > 1 時顯示 text-[10px] 百分比 | feat/header-page-percent（已 merge） |
+
+----
+
+## 掃描摘要（2026-06-24 FUTURE_ROADMAP 全面盤點）
+
+本次對照 `docs/FUTURE_ROADMAP.md`（2.1–2.10 十大主要功能）與 `BLOG.md`（所有已完成功能紀錄）逐一比對，確認哪些功能已完成、哪些尚未實作。結果如下：
+
+- **2.1 課後學習報告**：班級摘要、個別學生分析、逐題答對率、AI 課後建議、觀看完成率全部已完成。唯「多頁理解差異分析（頁面困難度分布）」UI 仍為佔位符，可考慮補強。
+- **2.2 AI 導師/自學模式**：問這一頁面板、答錯後推薦回看頁面均已完成。缺：個人化複習清單（依歷史作答生成並持久化顯示）。
+- **2.3 成本預估**：生成前成本預估 modal、月費用預算警告均已完成。
+- **2.4 教材知識庫與跨簡報搜尋**：全域關鍵字搜尋 MVP 已完成。缺：向量語意搜尋、從知識庫挑選頁面組成新簡報。
+- **2.5 AI 課程包**：ZIP 課程包（講義+測驗+學習單）已完成。缺：SCORM/xAPI 格式匯出。
+- **2.6 手機/平板課堂控制器**：基本遙控翻頁已完成。缺：遙控器投票開/關控制、遙控器手繪同步到投影端。
+- **2.7 生成品質評估與自動修復**：品質檢查面板 + 一鍵重生已完成。缺：AI 圖片品質分析（內容不符偵測）、AI 腳本品質分析（脈絡不連貫偵測）。
+- **2.8 模板市集**：Skills 擴充為教學模板已完成。缺：完整的模板市集（社群瀏覽/分享/下載/上架）。
+- **2.9 協作編輯**：版本歷史查詢已完成。缺：版本差異視圖（diff 比較）、評論討論串（頁面綁定留言）、多人即時編輯。
+- **2.10 更完整匯出**：SRT/VTT、PPTX 均已完成。缺：SCORM 匯出、H5P 互動內容匯出。
+
+## 未完成項目（來自 FUTURE_ROADMAP.md）
+
+- [ ] 個人化複習清單（2.2）：依學生在各份簡報的測驗作答歷史，生成「建議複習頁面」清單並存入 localStorage 或後端；播放頁側邊欄或首頁顯示「你有 N 頁需要複習」入口，點擊直接跳到對應簡報頁碼。後端可新增 `GET /api/me/review-items` 彙整所有答錯題目的 `page_number`，前端以獨立面板或首頁提示呈現。
+
+- [ ] 向量語意搜尋（2.4）：現有搜尋為 SQL LIKE 關鍵字比對，無法找到語意相近但用詞不同的頁面。可整合 OpenAI `text-embedding-3-small` 或 Gemini embedding API，對每頁逐字稿建立向量，儲存於後端（SQLite FTS5 或輕量向量庫），搜尋時以 cosine similarity 排序結果；前端搜尋框加入「語意搜尋」開關。
+
+- [ ] 從搜尋結果挑選頁面組成新簡報（2.4）：全域搜尋結果頁面每筆加入 checkbox，選好後點「建立新簡報」呼叫後端 `POST /api/pdfs/from-pages`，把所選頁面的圖片/逐字稿/音檔複製到新 PDF；適合教師從多份教材中抽取重點頁面組成複習簡報。
+
+- [ ] SCORM 1.2 課程包匯出（2.5/2.10）：新增 `GET /api/pdfs/:id/export.scorm` 後端端點，按 SCORM 1.2 規格產生標準目錄結構（`imsmanifest.xml`、`index.html`、各頁圖片與音檔），打包為 ZIP 回傳；前端播放頁匯出區加入「下載 SCORM 包」按鈕；補後端測試驗證 200 / 403 / 404 及 manifest 格式正確性。
+
+- [ ] 遙控器投票開/關控制（2.6）：`RemoteControllerPage.tsx` 目前只有翻頁功能。新增「投票」section，列出目前頁面的投票（呼叫 `GET /api/pdfs/:id/pages/:n/polls`），提供「開啟投票」/「關閉投票」按鈕（呼叫既有的 `PATCH /api/pdfs/:id/polls/:pollId`）；補 i18n `remote.pollControl/openPoll/closePoll`。
+
+- [ ] 遙控器手繪同步到投影端（2.6）：`RemoteControllerPage.tsx` 加入簡易手繪 canvas（`<canvas>` + pointer events），筆跡以 JSON 格式推送給後端 `POST /api/pdfs/:id/sync/drawing`（共用既有畫板儲存機制）；主播放頁 follower 端重新繪製接收到的筆跡；適合演講者在手機上圈重點即時顯示在大螢幕。
+
+- [ ] AI 圖片品質分析（2.7）：品質檢查加入 AI 視覺分析步驟，對每頁投影片截圖呼叫 Gemini/GPT-4o Vision 檢查圖片是否與逐字稿內容相符（例如：逐字稿提到「長條圖」但圖片是山脈風景），回傳 `content_mismatch` 問題代碼；`QualityCheckPanel` 新增對應警示並提供「重生圖片」快捷入口。
+
+- [ ] AI 腳本品質分析（2.7）：品質檢查加入逐字稿語義分析，對相鄰頁面的逐字稿呼叫 LLM 偵測脈絡斷裂（例如：上頁說「下面介紹 A 概念」，下頁卻直接跳到完全無關的主題），回傳 `context_break` 問題代碼及建議修改方向；補後端測試驗證 200 / 404 / 403。
+
+- [ ] 模板市集（2.8）：建立完整的模板瀏覽、下載、上架流程。後端新增 `templates` 資料表（含 name/description/category/skill_data/is_public/author），新增 CRUD 端點；前端新增「模板市集」頁面（`/templates`），以卡片列表呈現公開模板，可一鍵套用到新建簡報的 PromptModal；使用者可從 Skills 設定頁一鍵「上架為公開模板」。
+
+- [x] 版本差異視圖（2.9）：版本歷史面板（`useVersionHistory`）目前只能預覽舊版逐字稿，無 diff 比較。加入 diff 視圖：選擇一個舊版本後，以紅/綠底色顯示與目前版本的逐行差異（可用純 JavaScript Myers diff 演算法，不需後端改動）；補 i18n `play.version.diffView/noChange`。
+
+- [ ] 評論討論串（2.9）：新增 `page_comments` 資料表（pdf_id/page_number/author/text/resolved/created_at），後端新增 `GET`/`POST`/`PATCH`（標記已處理）/`DELETE` 端點；播放頁側邊欄加入「評論」tab，允許登入用戶針對目前頁留言並回覆；適合教師共備、助教協作審閱教材。
+
+- [ ] H5P 互動內容匯出（2.10）：新增 `GET /api/pdfs/:id/export.h5p` 後端端點，依 H5P Course Presentation 格式（`h5p.json` + `content/content.json`）產生每頁投影片圖片與逐字稿，打包為 `.h5p` ZIP 檔；前端播放頁加入「下載 H5P」按鈕；適合 Moodle 等 LMS 使用。
+
+----
+
+## 工作記錄（第三十一輪）
+
+| 日期 | 工作內容 | 分支 |
+|------|----------|------|
+| 2026-06-24 | 版本差異視圖（2.9）：新增 `computeLineDiff.ts`（LCS 逐行 diff），`VersionHistoryDialog.tsx` 加入「顯示差異」切換按鈕，以紅/綠底色呈現舊版本與現版本的逐行差異；PlayPage 傳入 `currentScript`；補 8 個 node:test 測試；補 i18n zh-TW/en | feat/version-diff-view（已 merge） |
