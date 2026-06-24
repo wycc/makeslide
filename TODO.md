@@ -1156,3 +1156,23 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] 首頁近期搜尋刪除個別記錄：近期搜尋列表（實際位於 `HomePage.tsx`，非 `GlobalSearchBox.tsx`）原本只有全部清除，無法刪除單筆。已在每筆記錄右側加入 × 按鈕，新增 `removeRecentSearch(term)` helper 只移除該筆並同步 localStorage；補 i18n 1 個 key（`home.search.removeRecent`，zh-TW/en）。純前端改動。分支 `feat/recent-search-remove-item`。
 
 - [x] 課後報告加入頁面觀看率：經檢視 `GET /api/pdfs/:id/report/summary` 已內建每頁 `avg_listened_ratio`（`listened_ms/duration_ms` 聚合，report.ts 行 355、427）與 `completion_rate`，`PostClassReportPanel` 也已顯示「觀看完成率最低頁面」與完成率熱力圖。需求已由既有程式碼滿足，標記為已完成（無需新增程式碼）。
+
+## 掃描摘要（2026-06-25 第三十三輪）
+
+第三十二輪那批項目已全部結清（重設後完成 99/100）。本輪依 LOOP.md「無待辦項目時分析程式並新增項目」，
+對本 session 實際讀過的程式碼再次掃描，補充以下小而明確、可獨立完成、且複用既有路由／表結構的增強項目，
+避免引入新外部依賴。優先順序：純前端與低風險者在前；涉及 LLM 成本者已標註。
+
+## 新增可執行項目（第三十三輪）
+
+- [ ] PostClassReportPanel 國際化（第一階段）：`PostClassReportPanel.tsx` 目前所有文案為硬編中文（標題、按鈕、區塊標題、`window.confirm` 文字等）。先將「工具列按鈕」與標題抽成 i18n key（重新整理／匯出 CSV／學生報告 CSV／投票結果 CSV／列印 / 儲存 PDF／重置觀看進度／關閉／課後報告標題與副標），改用 `useI18n()`；補 zh-TW/en 各約 10 個 key；純前端改動，不改資料流。
+
+- [ ] TemplatesPage 依使用次數排序：`TemplatesPage.tsx` 既有 `apply_count`（已實作），在搜尋框旁加入排序切換（最新／最熱門），`最熱門` 以 `apply_count` 由大到小排序、`最新` 維持現有 `created_at DESC`；純前端 client-side 排序，補 i18n 2 個 key（`templates.sortNewest`/`templates.sortPopular`）。
+
+- [ ] 播放頁簡介「複製」按鈕：`PlayPageHeader` 折疊簡介區塊（`descExpanded`）展開時，於描述文字旁加入「複製」按鈕，使用既有 `copyTextToClipboard()`，成功顯示短暫 toast；純前端改動，補 i18n 2 個 key（`play.header.copyDescription`/`copyDescriptionDone`）。
+
+- [ ] 相似頁面推薦空狀態與數量：`SimilarPagesSection`（`PlayPageSidebar.tsx`）目前無結果時整段隱藏；改為當「目標頁已索引但無相似結果」時顯示一行「找不到相似頁面」提示（與「未索引」區分：未索引仍隱藏）。後端 `GET /api/pdfs/:id/pages/:n/similar` 回傳已含足夠資訊（空陣列 vs 未索引可用 `indexed` 旗標區分）；需在端點回傳 `{ similar, indexed }`，前端據以顯示；補後端測試 1 個與 i18n 1 個 key。
+
+- [ ] 設定頁語意索引涵蓋率長條：`SettingsPage` 既有 `GET /api/me/embedding-stats`（indexed_pages/indexed_pdfs），新增後端回傳 `total_pages`（該 owner 所有 pdf 的頁數總和，JOIN pages），前端在「語意搜尋索引」小節加入一條覆蓋率長條（indexed_pages / total_pages 百分比）；補後端測試 1 個與 i18n 1 個 key。
+
+- [ ] 課後報告列印頁首：`PostClassReportPanel` 列印（`@media print`）時於報告頂端顯示簡報標題與列印日期（目前列印輸出僅有「課後報告」泛標題）。利用既有 `summary`／`detail` 資料，加入一個僅列印時顯示（`hidden print:block`）的頁首；純前端改動，無新 i18n（沿用既有標題）或補 1 個 key。
