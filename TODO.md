@@ -1072,7 +1072,7 @@
 
 - [ ] SCORM 1.2 課程包匯出（2.5/2.10）：新增 `GET /api/pdfs/:id/export.scorm` 後端端點，按 SCORM 1.2 規格產生標準目錄結構（`imsmanifest.xml`、`index.html`、各頁圖片與音檔），打包為 ZIP 回傳；前端播放頁匯出區加入「下載 SCORM 包」按鈕；補後端測試驗證 200 / 403 / 404 及 manifest 格式正確性。
 
-- [ ] 遙控器投票開/關控制（2.6）：`RemoteControllerPage.tsx` 目前只有翻頁功能。新增「投票」section，列出目前頁面的投票（呼叫 `GET /api/pdfs/:id/pages/:n/polls`），提供「開啟投票」/「關閉投票」按鈕（呼叫既有的 `PATCH /api/pdfs/:id/polls/:pollId`）；補 i18n `remote.pollControl/openPoll/closePoll`。
+- [x] 遙控器投票開/關控制（2.6）：`RemoteControllerPage.tsx` 目前只有翻頁功能。新增「投票」section，列出目前頁面的投票（呼叫 `GET /api/pdfs/:id/pages/:n/polls`），提供「開啟投票」/「關閉投票」按鈕（呼叫既有的 `PATCH /api/pdfs/:id/polls/:pollId`）；補 i18n `remote.pollControl/openPoll/closePoll`。
 
 - [ ] 遙控器手繪同步到投影端（2.6）：`RemoteControllerPage.tsx` 加入簡易手繪 canvas（`<canvas>` + pointer events），筆跡以 JSON 格式推送給後端 `POST /api/pdfs/:id/sync/drawing`（共用既有畫板儲存機制）；主播放頁 follower 端重新繪製接收到的筆跡；適合演講者在手機上圈重點即時顯示在大螢幕。
 
@@ -1095,3 +1095,4 @@
 | 日期 | 工作內容 | 分支 |
 |------|----------|------|
 | 2026-06-24 | 版本差異視圖（2.9）：新增 `computeLineDiff.ts`（LCS 逐行 diff），`VersionHistoryDialog.tsx` 加入「顯示差異」切換按鈕，以紅/綠底色呈現舊版本與現版本的逐行差異；PlayPage 傳入 `currentScript`；補 8 個 node:test 測試；補 i18n zh-TW/en | feat/version-diff-view（已 merge） |
+| 2026-06-24 | 遙控器投票開/關控制（2.6）：後端新增 `PATCH /api/pdfs/:id/polls/:pollId` 端點（切換 is_active）；前端 `updatePagePoll()` API；`RemoteControllerPage` 換頁時自動抓取本頁投票，顯示投票清單與開/關按鈕；補 i18n zh-TW/en | feat/remote-poll-control（已 merge） |
