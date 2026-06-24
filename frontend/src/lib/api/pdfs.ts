@@ -1807,6 +1807,23 @@ export async function fetchQualityCheck(id: string): Promise<QualityCheckRespons
   return (await resp.json()) as QualityCheckResponse;
 }
 
+export interface ScriptContextBreak {
+  pageNumber: number;
+  nextPageNumber: number;
+  suggestion: string;
+}
+
+export interface ScriptQualityResponse {
+  contextBreaks: ScriptContextBreak[];
+  analyzedAt: string;
+}
+
+export async function fetchScriptQuality(id: string): Promise<ScriptQualityResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/script-quality`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as ScriptQualityResponse;
+}
+
 export interface SyncAttendee {
   client_id: string;
   user_code: string | null;

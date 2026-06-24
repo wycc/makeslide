@@ -38,6 +38,7 @@ import { registerPollResultsCsvRoutes } from './poll-results-csv';
 import { registerGenerateQuizQuestionRoutes } from './generate-quiz-question';
 import { registerCommentsRoutes } from './comments';
 import { registerScormRoutes } from './scorm';
+import { registerScriptQualityRoutes } from './script-quality';
 
 export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerUploadRoutes(app);
@@ -79,4 +80,5 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerGenerateQuizQuestionRoutes(app);
   await registerCommentsRoutes(app);
   await registerScormRoutes(app);
+  await registerScriptQualityRoutes(app);
 }

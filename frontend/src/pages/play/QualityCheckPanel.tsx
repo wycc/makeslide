@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { fetchQualityCheck, type PageQualityResult, type QualityIssueCode } from '../../lib/api';
+import {
+  fetchQualityCheck, fetchScriptQuality,
+  type PageQualityResult, type QualityIssueCode, type ScriptContextBreak,
+} from '../../lib/api';
 import { useI18n } from '../../i18n';
 import { usePlayPageContext } from './PlayPageContext';
 
@@ -22,6 +25,9 @@ export function QualityCheckPanel() {
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState<PageQualityResult[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [scriptRunning, setScriptRunning] = useState(false);
+  const [scriptBreaks, setScriptBreaks] = useState<ScriptContextBreak[] | null>(null);
+  const [scriptError, setScriptError] = useState<string | null>(null);
 
   const handleRun = async () => {
     if (!pdfId || running) return;
@@ -34,6 +40,20 @@ export function QualityCheckPanel() {
       setError(err instanceof Error ? err.message : '品質檢查失敗');
     } finally {
       setRunning(false);
+    }
+  };
+
+  const handleScriptAnalysis = async () => {
+    if (!pdfId || scriptRunning) return;
+    setScriptRunning(true);
+    setScriptError(null);
+    try {
+      const data = await fetchScriptQuality(pdfId);
+      setScriptBreaks(data.contextBreaks);
+    } catch (err) {
+      setScriptError(err instanceof Error ? err.message : 'AI 腳本分析失敗');
+    } finally {
+      setScriptRunning(false);
     }
   };
 
@@ -108,6 +128,50 @@ export function QualityCheckPanel() {
           </>
         )
       )}
+
+      <div className="mt-4 border-t border-slate-800 pt-4">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h3 className="flex items-center gap-2 text-xs font-semibold text-violet-300">
+            {t('play.quality.scriptAnalysisTitle')}
+            {scriptBreaks !== null && !scriptRunning && (
+              scriptBreaks.length === 0 ? (
+                <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-normal text-emerald-400">✓</span>
+              ) : (
+                <span className="rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-normal text-amber-300">{scriptBreaks.length}</span>
+              )
+            )}
+          </h3>
+          <button
+            type="button"
+            onClick={() => void handleScriptAnalysis()}
+            disabled={scriptRunning || !pdfId}
+            className="rounded border border-violet-700 px-2 py-1 text-xs text-violet-300 hover:bg-violet-900/30 disabled:opacity-50"
+          >
+            {scriptRunning ? t('play.quality.scriptAnalysisRunning') : t('play.quality.scriptAnalysisRun')}
+          </button>
+        </div>
+
+        {scriptError && <p className="text-xs text-rose-400">{scriptError}</p>}
+
+        {scriptBreaks !== null && !scriptRunning && (
+          scriptBreaks.length === 0 ? (
+            <p className="text-xs text-emerald-400">{t('play.quality.scriptAnalysisGood')}</p>
+          ) : (
+            <ul className="space-y-2">
+              {scriptBreaks.map((b, i) => (
+                <li key={i} className="rounded border border-amber-800/50 bg-amber-950/30 px-3 py-2 text-xs">
+                  <p className="mb-1 font-medium text-amber-300">
+                    {t('play.quality.scriptBreakLabel')
+                      .replace('{from}', String(b.pageNumber))
+                      .replace('{to}', String(b.nextPageNumber))}
+                  </p>
+                  <p className="text-slate-300">{b.suggestion}</p>
+                </li>
+              ))}
+            </ul>
+          )
+        )}
+      </div>
     </section>
   );
 }
