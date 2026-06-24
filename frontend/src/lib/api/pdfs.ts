@@ -1883,6 +1883,12 @@ export async function updatePdfDescription(id: string, description: string): Pro
   return (await resp.json()) as { id: string; description: string; updated_at: string };
 }
 
+export async function generatePdfDescription(id: string): Promise<{ id: string; description: string; updated_at: string }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/generate-description`, { method: 'POST' });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { id: string; description: string; updated_at: string };
+}
+
 export interface SimilarPage {
   pdf_id: string;
   page_number: number;

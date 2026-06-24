@@ -602,6 +602,8 @@ export const en = {
   'play.metadata.descriptionSaved': 'Notes saved',
   'play.metadata.descriptionSaveFailed': 'Failed to save notes',
   'play.metadata.descriptionLabel': 'Notes / Description',
+  'play.metadata.aiGenerateDescription': '✨ AI description',
+  'play.metadata.generatingDescription': 'Generating…',
   'play.metadata.descriptionPlaceholder': 'Enter notes or description for this presentation…',
   'play.metadata.tagsLabel': 'Tags (comma-separated)',
   'play.metadata.ttsSettingsSaved': 'Settings saved (host mode changes require regenerating the transcript to apply).',

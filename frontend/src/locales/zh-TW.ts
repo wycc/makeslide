@@ -602,6 +602,8 @@ export const zhTW = {
   'play.metadata.descriptionSaved': '備註已儲存',
   'play.metadata.descriptionSaveFailed': '儲存備註失敗',
   'play.metadata.descriptionLabel': '備註／說明',
+  'play.metadata.aiGenerateDescription': '✨ AI 生成描述',
+  'play.metadata.generatingDescription': '生成中…',
   'play.metadata.descriptionPlaceholder': '輸入簡報備註或說明…',
   'play.metadata.tagsLabel': '標籤（以逗號分隔）',
   'play.metadata.ttsSettingsSaved': '設定已儲存（主持模式變更需重新產生逐字稿才會套用）',
