@@ -1824,6 +1824,23 @@ export async function fetchScriptQuality(id: string): Promise<ScriptQualityRespo
   return (await resp.json()) as ScriptQualityResponse;
 }
 
+export interface ImageMismatchResult {
+  pageNumber: number;
+  mismatch: boolean;
+  detail: string;
+}
+
+export interface ImageQualityResponse {
+  pages: ImageMismatchResult[];
+  analyzedAt: string;
+}
+
+export async function fetchImageQuality(id: string): Promise<ImageQualityResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/image-quality`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as ImageQualityResponse;
+}
+
 export interface SyncAttendee {
   client_id: string;
   user_code: string | null;

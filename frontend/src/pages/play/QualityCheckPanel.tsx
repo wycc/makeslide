@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  fetchQualityCheck, fetchScriptQuality,
-  type PageQualityResult, type QualityIssueCode, type ScriptContextBreak,
+  fetchQualityCheck, fetchScriptQuality, fetchImageQuality,
+  type PageQualityResult, type QualityIssueCode, type ScriptContextBreak, type ImageMismatchResult,
 } from '../../lib/api';
 import { useI18n } from '../../i18n';
 import { usePlayPageContext } from './PlayPageContext';
@@ -28,6 +28,9 @@ export function QualityCheckPanel() {
   const [scriptRunning, setScriptRunning] = useState(false);
   const [scriptBreaks, setScriptBreaks] = useState<ScriptContextBreak[] | null>(null);
   const [scriptError, setScriptError] = useState<string | null>(null);
+  const [imageRunning, setImageRunning] = useState(false);
+  const [imageMismatches, setImageMismatches] = useState<ImageMismatchResult[] | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
 
   const handleRun = async () => {
     if (!pdfId || running) return;
@@ -54,6 +57,20 @@ export function QualityCheckPanel() {
       setScriptError(err instanceof Error ? err.message : 'AI 腳本分析失敗');
     } finally {
       setScriptRunning(false);
+    }
+  };
+
+  const handleImageAnalysis = async () => {
+    if (!pdfId || imageRunning) return;
+    setImageRunning(true);
+    setImageError(null);
+    try {
+      const data = await fetchImageQuality(pdfId);
+      setImageMismatches(data.pages);
+    } catch (err) {
+      setImageError(err instanceof Error ? err.message : 'AI 圖片分析失敗');
+    } finally {
+      setImageRunning(false);
     }
   };
 
@@ -166,6 +183,57 @@ export function QualityCheckPanel() {
                       .replace('{to}', String(b.nextPageNumber))}
                   </p>
                   <p className="text-slate-300">{b.suggestion}</p>
+                </li>
+              ))}
+            </ul>
+          )
+        )}
+      </div>
+
+      <div className="mt-4 border-t border-slate-800 pt-4">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h3 className="flex items-center gap-2 text-xs font-semibold text-sky-300">
+            {t('play.quality.imageAnalysisTitle')}
+            {imageMismatches !== null && !imageRunning && (
+              imageMismatches.length === 0 ? (
+                <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-normal text-emerald-400">✓</span>
+              ) : (
+                <span className="rounded-full bg-rose-500/20 px-1.5 py-0.5 text-[10px] font-normal text-rose-300">{imageMismatches.length}</span>
+              )
+            )}
+          </h3>
+          <button
+            type="button"
+            onClick={() => void handleImageAnalysis()}
+            disabled={imageRunning || !pdfId}
+            className="rounded border border-sky-700 px-2 py-1 text-xs text-sky-300 hover:bg-sky-900/30 disabled:opacity-50"
+          >
+            {imageRunning ? t('play.quality.imageAnalysisRunning') : t('play.quality.imageAnalysisRun')}
+          </button>
+        </div>
+
+        {imageError && <p className="text-xs text-rose-400">{imageError}</p>}
+
+        {imageMismatches !== null && !imageRunning && (
+          imageMismatches.length === 0 ? (
+            <p className="text-xs text-emerald-400">{t('play.quality.imageAnalysisGood')}</p>
+          ) : (
+            <ul className="space-y-2">
+              {imageMismatches.map((m) => (
+                <li key={m.pageNumber} className="rounded border border-rose-800/50 bg-rose-950/20 px-3 py-2 text-xs">
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className="font-medium text-rose-300">
+                      {t('play.quality.page').replace('{n}', String(m.pageNumber))}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/play/${encodeURIComponent(pdfId ?? '')}?page=${m.pageNumber}`)}
+                      className="text-xs text-indigo-400 hover:text-indigo-300"
+                    >
+                      →
+                    </button>
+                  </div>
+                  <p className="text-slate-300">{m.detail || t('play.quality.contentMismatch')}</p>
                 </li>
               ))}
             </ul>
