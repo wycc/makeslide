@@ -38,6 +38,8 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | AI 一鍵補全空白逐字稿：QualityCheckPanel 偵測 missing/empty script 頁面時顯示「批次補全」按鈕，依序呼叫既有 rewrite-script API（上限 10 頁、進度 badge、完成後重檢）；i18n 2 key；純前端 | feat/quality-batch-fill-scripts（已 merge） |
+| 2026-06-25 | 課後班級報告列印樣式：經檢視 PostClassReportPanel 已內建 @media print 樣式 + window.print() 按鈕 + data-no-print，需求已由既有程式碼滿足，標記完成（無新增程式碼） | （既有功能） |
 | 2026-06-25 | 測驗結果分享按鈕：QuizBuilderPage 成績顯示區加入「分享成績」按鈕，使用 `navigator.share`（fallback clipboard 複製 + toast），分享文字含得分/滿分與測驗標題；i18n 2 key；純前端 | feat/quiz-share-score（已 merge） |
 | 2026-06-25 | TemplatesPage 模板使用次數顯示：templates 表新增 `apply_count` 欄位（含 migration），新增無驗證 `POST /api/templates/:id/apply` 遞增端點（404 防護），前端套用時 fire-and-forget 呼叫並樂觀更新，卡片顯示「已套用 N 次」徽章；補後端測試 2 個（共 6 通過）；i18n 1 key | feat/template-apply-count（已 merge） |
 | 2026-06-25 | 設定頁語意搜尋索引統計：Settings「技能」分頁底部新增「語意搜尋索引」小節，新增登入限定 `GET /api/me/embedding-stats`（JOIN page_embeddings 與 pdfs.owner_sub），顯示「已索引 N 頁（共 M 份簡報）」；補後端測試 2 個；i18n 3 key | feat/embedding-index-stats（已 merge） |
@@ -1137,9 +1139,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [x] 測驗結果分享按鈕：QuizBuilderPage 學生作答的成績顯示區（`quiz.totalScore` 區塊）加入「分享成績」按鈕，使用 `navigator.share` API（不支援或取消時 fallback 至 `copyTextToClipboard` 複製文字 + toast），分享文字含得分/滿分與測驗標題；補 i18n 2 個 key（`quiz.shareScore`/`quiz.shareText`，zh-TW/en）；純前端改動。分支 `feat/quiz-share-score`。
 
-- [ ] 課後班級報告列印樣式：ReportPage（班級報告 `/play/:id?tab=report`）加入「列印報告」按鈕，觸發 `window.print()`，搭配 `@media print` CSS（隱藏導覽列與工具按鈕、展開摺疊統計表、自動分頁）；補 i18n 1 個 key；純前端改動。
+- [x] 課後班級報告列印樣式：經檢視 `PostClassReportPanel` 已內建完整列印功能 —— `@media print` 樣式（行 100-132，含 `break-inside: avoid` 自動分頁、深色轉淺色）、`window.print()` 的「列印 / 儲存 PDF」按鈕、`data-no-print` 隱藏工具列。需求已由既有程式碼滿足，本項標記為已完成（無需新增程式碼）。
 
-- [ ] AI 一鍵補全空白逐字稿：品質檢查面板（QualityCheckPanel）若有 `missing_script`/`empty_script` 問題，在對應卡片旁加入「批次補全」按鈕，依序對每頁呼叫既有 regenerate-script API（限單份簡報，不超過 10 頁）；顯示進度 badge；補 i18n 2 個 key。
+- [x] AI 一鍵補全空白逐字稿：QualityCheckPanel 偵測到 `missing_script`/`empty_script` 頁面時，於問題數列右側顯示「批次補全」按鈕，依序對每頁呼叫既有 `rewritePageScript()`（`POST /api/pdfs/:id/pages/:n/rewrite-script`，會持久化逐字稿），上限 10 頁，附帶生成指令 prompt；按鈕顯示「補全中… done/total」進度，完成後自動重跑品質檢查；補 i18n 2 個 key（`play.quality.batchFill`/`batchFilling`，zh-TW/en）。純前端改動。分支 `feat/quality-batch-fill-scripts`。
 
 - [ ] 播放頁鍵盤快捷鍵說明 overlay：全螢幕或一般播放模式新增「快捷鍵說明」按鈕（`?` 鍵觸發），以 modal 列出所有快捷鍵（翻頁 ← →、b 書籤、i 重要頁面、f 全螢幕、a 動畫效果等）；補 i18n 鍵盤說明 4 個 key；純前端改動。
 
