@@ -1550,4 +1550,11 @@ export const en = {
   'remote.prevPage': 'Previous page',
   'remote.nextPage': 'Next page',
   'remote.online': '{n} online',
+  'remote.pollControl.title': 'Polls on this page',
+  'remote.pollControl.loading': 'Loading polls…',
+  'remote.pollControl.noPolls': 'No polls on this page',
+  'remote.pollControl.statusOpen': 'Open',
+  'remote.pollControl.statusClosed': 'Closed',
+  'remote.pollControl.open': 'Open poll',
+  'remote.pollControl.close': 'Close poll',
 } as const;

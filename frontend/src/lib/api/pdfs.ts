@@ -758,6 +758,17 @@ export async function resetPagePollVotes(id: string, pollId: number): Promise<Pa
   return (await resp.json()) as PagePoll;
 }
 
+export async function updatePagePoll(id: string, pollId: number, patch: { is_active: boolean }): Promise<PagePoll> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/polls/${encodeURIComponent(String(pollId))}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  const data = (await resp.json()) as { poll: PagePoll };
+  return data.poll;
+}
+
 export interface ReportWatchProgressInput {
   viewer_id: string;
   listened_ms: number;

@@ -2,13 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useI18n } from '../i18n';
 import {
+  fetchPagePolls,
   fetchPdfDetail,
   fetchPlaybackSyncState,
   joinPlaybackSync,
   leavePlaybackSync,
+  updatePagePoll,
   updatePlaybackSyncState,
 } from '../lib/api/pdfs';
-import type { PdfDetailPage } from '../types';
+import type { PagePoll, PdfDetailPage } from '../types';
 
 const POLL_INTERVAL_MS = 2000;
 
@@ -26,6 +28,11 @@ export default function RemoteControllerPage() {
   const [script, setScript] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [polls, setPolls] = useState<PagePoll[]>([]);
+  const [pollsLoading, setPollsLoading] = useState(false);
+  const [togglingPollId, setTogglingPollId] = useState<number | null>(null);
+
   const syncActiveRef = useRef(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -68,6 +75,27 @@ export default function RemoteControllerPage() {
       alive = false;
     };
   }, [currentPage, pages]);
+
+  // Fetch polls for current page
+  useEffect(() => {
+    if (!pdfId) return;
+    let alive = true;
+    setPollsLoading(true);
+    setPolls([]);
+    void (async () => {
+      try {
+        const data = await fetchPagePolls(pdfId, currentPage);
+        if (alive) setPolls(data);
+      } catch {
+        if (alive) setPolls([]);
+      } finally {
+        if (alive) setPollsLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [pdfId, currentPage]);
 
   useEffect(() => {
     if (!syncActive || !pdfId) return;
@@ -130,6 +158,19 @@ export default function RemoteControllerPage() {
       });
     } catch {
       // ignore
+    }
+  };
+
+  const handleTogglePoll = async (poll: PagePoll) => {
+    if (!pdfId || togglingPollId != null) return;
+    setTogglingPollId(poll.id);
+    try {
+      const updated = await updatePagePoll(pdfId, poll.id, { is_active: !poll.is_active });
+      setPolls((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+    } catch {
+      // ignore
+    } finally {
+      setTogglingPollId(null);
     }
   };
 
@@ -219,6 +260,51 @@ export default function RemoteControllerPage() {
           {script}
         </div>
       )}
+
+      {/* Poll control section */}
+      <div className="mx-4 mt-5">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+          {t('remote.pollControl.title')}
+        </p>
+        {pollsLoading ? (
+          <p className="text-xs text-slate-500">{t('remote.pollControl.loading')}</p>
+        ) : polls.length === 0 ? (
+          <p className="text-xs text-slate-600">{t('remote.pollControl.noPolls')}</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {polls.map((poll) => (
+              <div
+                key={poll.id}
+                className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-900 px-4 py-3"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="truncate text-sm text-slate-200">{poll.question}</p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    {poll.is_active ? t('remote.pollControl.statusOpen') : t('remote.pollControl.statusClosed')}
+                    {' · '}{poll.total_votes} 票
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={togglingPollId === poll.id}
+                  onClick={() => void handleTogglePoll(poll)}
+                  className={`flex-shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${
+                    poll.is_active
+                      ? 'bg-rose-600/80 text-white active:bg-rose-700'
+                      : 'bg-emerald-600/80 text-white active:bg-emerald-700'
+                  }`}
+                >
+                  {togglingPollId === poll.id
+                    ? '…'
+                    : poll.is_active
+                      ? t('remote.pollControl.close')
+                      : t('remote.pollControl.open')}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="mt-auto px-6 pb-10 pt-8">
         {!syncActive ? (
