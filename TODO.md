@@ -1057,7 +1057,7 @@
 - **2.4 教材知識庫與跨簡報搜尋**：全域關鍵字搜尋 MVP 已完成。缺：向量語意搜尋、從知識庫挑選頁面組成新簡報。
 - **2.5 AI 課程包**：ZIP 課程包（講義+測驗+學習單）已完成。缺：SCORM/xAPI 格式匯出。
 - **2.6 手機/平板課堂控制器**：基本遙控翻頁已完成。缺：遙控器投票開/關控制、遙控器手繪同步到投影端。
-- **2.7 生成品質評估與自動修復**：品質檢查面板 + 一鍵重生已完成。缺：AI 圖片品質分析（內容不符偵測）、AI 腳本品質分析（脈絡不連貫偵測）。
+- **2.7 生成品質評估與自動修復**：品質檢查面板 + 一鍵重生 + AI 腳本脈絡分析已完成。缺：AI 圖片品質分析（內容不符偵測）。
 - **2.8 模板市集**：Skills 擴充為教學模板已完成。缺：完整的模板市集（社群瀏覽/分享/下載/上架）。
 - **2.9 協作編輯**：版本歷史查詢已完成。缺：版本差異視圖（diff 比較）、評論討論串（頁面綁定留言）、多人即時編輯。
 - **2.10 更完整匯出**：SRT/VTT、PPTX 均已完成。缺：SCORM 匯出、H5P 互動內容匯出。
@@ -1080,7 +1080,7 @@
 
 - [ ] AI 圖片品質分析（2.7）：品質檢查加入 AI 視覺分析步驟，對每頁投影片截圖呼叫 Gemini/GPT-4o Vision 檢查圖片是否與逐字稿內容相符（例如：逐字稿提到「長條圖」但圖片是山脈風景），回傳 `content_mismatch` 問題代碼；`QualityCheckPanel` 新增對應警示並提供「重生圖片」快捷入口。
 
-- [ ] AI 腳本品質分析（2.7）：品質檢查加入逐字稿語義分析，對相鄰頁面的逐字稿呼叫 LLM 偵測脈絡斷裂（例如：上頁說「下面介紹 A 概念」，下頁卻直接跳到完全無關的主題），回傳 `context_break` 問題代碼及建議修改方向；補後端測試驗證 200 / 404 / 403。
+- [x] AI 腳本品質分析（2.7）：`GET /api/pdfs/:id/script-quality` 批次呼叫 LLM 分析相鄰頁逐字稿脈絡斷裂，回傳 `contextBreaks` 陣列；`QualityCheckPanel` 新增紫色 AI 分析按鈕與琥珀色斷裂警示卡；5 個後端測試全通過（含 LLM mock）。實作於 `feat/script-quality-analysis` 分支，2026-06-24 合入 master。
 
 - [ ] 模板市集（2.8）：建立完整的模板瀏覽、下載、上架流程。後端新增 `templates` 資料表（含 name/description/category/skill_data/is_public/author），新增 CRUD 端點；前端新增「模板市集」頁面（`/templates`），以卡片列表呈現公開模板，可一鍵套用到新建簡報的 PromptModal；使用者可從 Skills 設定頁一鍵「上架為公開模板」。
 
@@ -1101,3 +1101,4 @@
 | 2026-06-24 | 個人化複習清單（2.2）：新增 `reviewList.ts` localStorage helper；`QuizBuilderPage` 在答案公布時自動儲存答錯且有頁碼的題目；`PlayPageSidebar` 新增 `ReviewListSection`（rose 色，點擊跳頁，× 移除）；首頁顯示 rose 橫幅提示；i18n 5 個 key | feat/personalized-review-list（已 merge） |
 | 2026-06-24 | 評論討論串（2.9）：新增 `page_comments` DB 資料表 + index；後端 GET/POST/PATCH/DELETE 四個端點（access control by pdf visibility）；前端 `listPageComments`/`createPageComment`/`resolvePageComment`/`deletePageComment` API；`PlayPageSidebar` 新增 `CommentsSection`（sky 色調，顯示/新增/標記已處理/刪除）；i18n 10 個 key；9 個 node:test | feat/page-comments |
 | 2026-06-24 | SCORM 1.2 課程包匯出（2.5/2.10）：`GET /api/pdfs/:id/export.scorm`；imsmanifest.xml + index.html SCO（SCORM API + 鍵盤換頁 + 完課回報）；各頁圖片/音檔打包為 ZIP；PlayPageHeader 紫色「下載 SCORM 包」按鈕；i18n downloadScorm；4 個後端測試通過 | feat/scorm-export（已 merge） |
+| 2026-06-24 | AI 腳本品質分析（2.7）：`GET /api/pdfs/:id/script-quality` 批次 LLM 分析相鄰頁逐字稿脈絡斷裂，Zod schema 驗證；QualityCheckPanel 新增紫色 AI 分析按鈕與琥珀色斷裂警示卡；i18n 5 個 key；5 個後端測試全通過（含 LLM mock） | feat/script-quality-analysis（已 merge） |
