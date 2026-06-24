@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | TemplatesPage 依使用次數排序：搜尋框旁加「最新／最熱門」切換，最熱門以既有 apply_count 排序（穩定排序保留 recency）；純前端；i18n 2 key。**此項使重設後完成數達 100，觸及 LOOP.md 上限** | feat/templates-sort-popular（已 merge） |
 | 2026-06-25 | 自動生成 PDF 描述：新增 generateDescription worker step（前 3 頁逐字稿 → LLM 2–3 句摘要）+ owner 限定 `POST /api/pdfs/:id/generate-description`（持久化）；PlayPageHeader 描述為空時顯示「✨ AI 生成描述」按鈕；補後端測試 4 個（mock LLM）；i18n 2 key | feat/ai-generate-description（已 merge） |
 | 2026-06-25 | 播放頁鍵盤快捷鍵說明 overlay：既有按鈕+modal 基礎上補 `?` 全域熱鍵切換顯示（輸入框忽略）並新增 `?` 說明列；i18n 1 key；純前端 | feat/shortcuts-help-hotkey（已 merge） |
 | 2026-06-25 | 相似頁面推薦：新增 owner 限定 `GET /api/pdfs/:id/pages/:n/similar`，以既有 page_embeddings + cosineSimilarity 找同 owner 其他頁面 top-5（無新 LLM）；PlayPageSidebar 加「相似頁面」縮圖卡片可跨簡報跳轉；補後端測試 3 個；i18n 3 key | feat/similar-pages（已 merge） |
@@ -1167,7 +1168,7 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [ ] PostClassReportPanel 國際化（第一階段）：`PostClassReportPanel.tsx` 目前所有文案為硬編中文（標題、按鈕、區塊標題、`window.confirm` 文字等）。先將「工具列按鈕」與標題抽成 i18n key（重新整理／匯出 CSV／學生報告 CSV／投票結果 CSV／列印 / 儲存 PDF／重置觀看進度／關閉／課後報告標題與副標），改用 `useI18n()`；補 zh-TW/en 各約 10 個 key；純前端改動，不改資料流。
 
-- [ ] TemplatesPage 依使用次數排序：`TemplatesPage.tsx` 既有 `apply_count`（已實作），在搜尋框旁加入排序切換（最新／最熱門），`最熱門` 以 `apply_count` 由大到小排序、`最新` 維持現有 `created_at DESC`；純前端 client-side 排序，補 i18n 2 個 key（`templates.sortNewest`/`templates.sortPopular`）。
+- [x] TemplatesPage 依使用次數排序：`TemplatesPage.tsx` 搜尋框旁加入「最新／最熱門」排序切換，`最熱門` 以既有 `apply_count` 由大到小（穩定排序保留 recency 為次序）、`最新` 維持 API 的 `created_at DESC`；純前端 client-side 排序，補 i18n 2 個 key（`templates.sortNewest`/`templates.sortPopular`，zh-TW/en）。分支 `feat/templates-sort-popular`。
 
 - [ ] 播放頁簡介「複製」按鈕：`PlayPageHeader` 折疊簡介區塊（`descExpanded`）展開時，於描述文字旁加入「複製」按鈕，使用既有 `copyTextToClipboard()`，成功顯示短暫 toast；純前端改動，補 i18n 2 個 key（`play.header.copyDescription`/`copyDescriptionDone`）。
 
