@@ -622,6 +622,21 @@ function migrate(): void {
     logger.info('Created table templates');
   }
 
+  if (!tableExists('page_embeddings')) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS page_embeddings (
+        id TEXT PRIMARY KEY,
+        pdf_id TEXT NOT NULL,
+        page_uid TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        embedding TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_page_embeddings_pdf_id ON page_embeddings(pdf_id);
+    `);
+    logger.info('Created table page_embeddings');
+  }
+
   logger.info({ dbPath: config.dbPath }, 'Database migrations applied');
 }
 

@@ -39,10 +39,11 @@ export default function GlobalSearchBox() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [selectMode, setSelectMode] = useState(false);
   const [fromPagesBusy, setFromPagesBusy] = useState(false);
+  const [semanticMode, setSemanticMode] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  const doSearch = useCallback(async (q: string) => {
+  const doSearch = useCallback(async (q: string, semantic: boolean) => {
     const trimmed = q.trim();
     if (!trimmed) {
       setResults(null);
@@ -52,7 +53,7 @@ export default function GlobalSearchBox() {
     setSearching(true);
     setOpen(true);
     try {
-      const data = await searchPdfs(trimmed);
+      const data = await searchPdfs(trimmed, 20, semantic);
       setResults(data.results);
     } catch {
       setResults([]);
@@ -63,9 +64,9 @@ export default function GlobalSearchBox() {
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => { void doSearch(query); }, DEBOUNCE_MS);
+    debounceRef.current = setTimeout(() => { void doSearch(query, semanticMode); }, DEBOUNCE_MS);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [query, doSearch]);
+  }, [query, semanticMode, doSearch]);
 
   useEffect(() => {
     const onClickOutside = (e: MouseEvent) => {
@@ -131,6 +132,7 @@ export default function GlobalSearchBox() {
   const matchTypeLabel = (matchType: SearchResultItem['match_type']) => {
     if (matchType === 'title') return t('home.search.matchType.title');
     if (matchType === 'script') return t('home.search.matchType.script');
+    if (matchType === 'semantic') return t('home.search.matchType.semantic');
     return t('home.search.matchType.text');
   };
 
@@ -147,9 +149,17 @@ export default function GlobalSearchBox() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => { if (results) setOpen(true); }}
-          placeholder={t('home.search.placeholder')}
+          placeholder={semanticMode ? t('home.search.placeholderSemantic') : t('home.search.placeholder')}
           className="min-w-0 flex-1 bg-transparent text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none"
         />
+        <button
+          type="button"
+          title={t('home.search.semanticToggle')}
+          onClick={() => setSemanticMode((m) => !m)}
+          className={`shrink-0 rounded px-1 py-0.5 text-[10px] font-medium transition-colors ${semanticMode ? 'bg-violet-600/30 text-violet-300' : 'text-slate-600 hover:text-slate-400'}`}
+        >
+          AI
+        </button>
         {query && (
           <button
             type="button"
