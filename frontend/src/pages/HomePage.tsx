@@ -192,6 +192,12 @@ const saveRecentSearch = (term: string): string[] => {
   return next;
 };
 
+const removeRecentSearch = (term: string): string[] => {
+  const next = readRecentSearches().filter((s) => s !== term);
+  window.localStorage.setItem(RECENT_SEARCHES_STORAGE_KEY, JSON.stringify(next));
+  return next;
+};
+
 const readStoredSortMode = (): SortMode | null => {
   if (typeof window === 'undefined') return null;
   const stored = window.localStorage.getItem(SORT_MODE_STORAGE_KEY);
@@ -1119,13 +1125,22 @@ export default function HomePage() {
                         </button>
                       </li>
                       {recentSearches.map((term) => (
-                        <li key={term}>
+                        <li key={term} className="group flex items-center hover:bg-slate-800">
                           <button
                             type="button"
                             onMouseDown={(e) => { e.preventDefault(); updateTitleFilter(term); setSearchFocused(false); }}
-                            className="w-full px-3 py-1.5 text-left text-sm text-slate-200 hover:bg-slate-800"
+                            className="min-w-0 flex-1 truncate px-3 py-1.5 text-left text-sm text-slate-200"
                           >
                             {term}
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={t('home.search.removeRecent')}
+                            title={t('home.search.removeRecent')}
+                            onMouseDown={(e) => { e.preventDefault(); setRecentSearches(removeRecentSearch(term)); }}
+                            className="shrink-0 px-2 py-1.5 text-slate-500 hover:text-slate-200"
+                          >
+                            ✕
                           </button>
                         </li>
                       ))}
