@@ -1540,6 +1540,8 @@ export const en = {
   'play.header.downloadCurrentImage': 'Download Current Slide Image',
   'play.header.downloadNotesTxt': 'Download Notes (TXT)',
   'play.header.nativeShare': '📤 Share',
+  'play.header.showDescription': 'Show description',
+  'play.header.hideDescription': 'Hide description',
   'play.header.downloadSrt': 'Download SRT subtitles',
   'play.header.downloadVtt': 'Download VTT subtitles',
   'play.header.downloadPptx': 'Download PPTX',

@@ -149,6 +149,7 @@ export function PlayPageHeader() {
   } = usePlayPageContext();
 
   const [editingTitle, setEditingTitle] = useState(false);
+  const [descExpanded, setDescExpanded] = useState(false);
   const titleBeforeEdit = useRef('');
   const inlineTitleRef = useRef<HTMLInputElement>(null);
 
@@ -300,6 +301,23 @@ export function PlayPageHeader() {
             )}
           </label>
         </div>
+        {detail?.description?.trim() ? (
+          <div className="mx-auto w-full max-w-5xl px-4 pb-2">
+            <button
+              type="button"
+              onClick={() => setDescExpanded((v) => !v)}
+              aria-expanded={descExpanded}
+              className="text-xs text-slate-400 hover:text-slate-200"
+            >
+              {descExpanded ? `▲ ${t('play.header.hideDescription')}` : `▼ ${t('play.header.showDescription')}`}
+            </button>
+            {descExpanded ? (
+              <p className="mt-1 whitespace-pre-wrap rounded-md border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs text-slate-300">
+                {detail.description}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
         {syncError ? <div className="mt-1 text-xs text-rose-300">{syncError}</div> : null}
         {syncEnabled ? (
           <div className="mx-auto w-full max-w-5xl px-4 pb-3">
