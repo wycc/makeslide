@@ -1078,7 +1078,8 @@
 
 - [ ] 遙控器手繪同步到投影端（2.6）：`RemoteControllerPage.tsx` 加入簡易手繪 canvas（`<canvas>` + pointer events），筆跡以 JSON 格式推送給後端 `POST /api/pdfs/:id/sync/drawing`（共用既有畫板儲存機制）；主播放頁 follower 端重新繪製接收到的筆跡；適合演講者在手機上圈重點即時顯示在大螢幕。
 
-- [ ] AI 圖片品質分析（2.7）：品質檢查加入 AI 視覺分析步驟，對每頁投影片截圖呼叫 Gemini/GPT-4o Vision 檢查圖片是否與逐字稿內容相符（例如：逐字稿提到「長條圖」但圖片是山脈風景），回傳 `content_mismatch` 問題代碼；`QualityCheckPanel` 新增對應警示並提供「重生圖片」快捷入口。
+- [x] AI 圖片品質分析（2.7）：品質檢查加入 AI 視覺分析步驟，對每頁投影片截圖呼叫 Gemini/GPT-4o Vision 檢查圖片是否與逐字稿內容相符（例如：逐字稿提到「長條圖」但圖片是山脈風景），回傳 `content_mismatch` 問題代碼；`QualityCheckPanel` 新增對應警示並提供「重生圖片」快捷入口。
+  - 修改說明（2026-06-24）：新增 `backend/src/routes/pdfs/image-quality.ts`，提供 `GET /api/pdfs/:id/image-quality` 端點；以 `sharp` 將頁面圖片縮至 800px 寬後轉 base64，透過 `callChatJSON` vision 呼叫 LLM 逐頁判斷圖片內容是否與逐字稿主題相符，僅回傳 `mismatch=true` 的頁面；`QualityCheckPanel.tsx` 新增天藍色「🖼️ AI 圖片內容分析」section，含執行按鈕、計數徽章（emerald ✓ 或 rose 數字）與每頁不符警示卡（rose 邊框、不符說明文字、跳頁按鈕）；前端新增 `ImageMismatchResult`/`ImageQualityResponse` 型別與 `fetchImageQuality()` API 函式；zh-TW/en i18n 各新增 5 個 `play.quality.imageAnalysis*` / `contentMismatch` 鍵值；4 個後端測試全通過（200/空頁、404、403、public 200）。分支 `feat/image-quality-ai-analysis`，已 merge 回 master。
 
 - [x] AI 腳本品質分析（2.7）：`GET /api/pdfs/:id/script-quality` 批次呼叫 LLM 分析相鄰頁逐字稿脈絡斷裂，回傳 `contextBreaks` 陣列；`QualityCheckPanel` 新增紫色 AI 分析按鈕與琥珀色斷裂警示卡；5 個後端測試全通過（含 LLM mock）。實作於 `feat/script-quality-analysis` 分支，2026-06-24 合入 master。
 
@@ -1104,3 +1105,4 @@
 | 2026-06-24 | AI 腳本品質分析（2.7）：`GET /api/pdfs/:id/script-quality` 批次 LLM 分析相鄰頁逐字稿脈絡斷裂，Zod schema 驗證；QualityCheckPanel 新增紫色 AI 分析按鈕與琥珀色斷裂警示卡；i18n 5 個 key；5 個後端測試全通過（含 LLM mock） | feat/script-quality-analysis（已 merge） |
 | 2026-06-24 | H5P 互動內容匯出（2.10）：`GET /api/pdfs/:id/export.h5p` H5P Course Presentation 格式（h5p.json + content.json + 各頁圖片）打包 .h5p ZIP；PlayPageHeader 青綠色下載按鈕；i18n 2 個 key；4 個後端測試全通過 | feat/h5p-export（已 merge） |
 | 2026-06-24 | 從搜尋結果組成新簡報（2.4）：`POST /api/pdfs/from-pages` 複製頁面至新 PDF；GlobalSearchBox 多選模式 + checkbox + 「建立新簡報（N 頁）」按鈕；i18n 4 個 key；5 個後端測試全通過 | feat/from-pages（已 merge） |
+| 2026-06-24 | AI 圖片品質分析（2.7）：`GET /api/pdfs/:id/image-quality` 以 vision LLM 逐頁判斷圖片與逐字稿是否相符；QualityCheckPanel 新增天藍色 AI 圖片分析 section，rose 警示卡顯示不符詳情；i18n 5 個 key；4 個後端測試全通過 | feat/image-quality-ai-analysis（已 merge） |
