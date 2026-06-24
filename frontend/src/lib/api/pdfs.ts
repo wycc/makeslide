@@ -1762,17 +1762,20 @@ export interface SearchResultItem {
   pdf_id: string;
   pdf_title: string | null;
   page_number: number | null;
-  match_type: 'title' | 'script' | 'text';
+  match_type: 'title' | 'script' | 'text' | 'semantic';
   snippet: string;
+  score?: number;
 }
 
 export interface SearchResponse {
   query: string;
   results: SearchResultItem[];
+  semantic?: boolean;
 }
 
-export async function searchPdfs(q: string, limit = 20): Promise<SearchResponse> {
+export async function searchPdfs(q: string, limit = 20, semantic = false): Promise<SearchResponse> {
   const params = new URLSearchParams({ q, limit: String(limit) });
+  if (semantic) params.set('semantic', 'true');
   const resp = await fetch(`api/search?${params.toString()}`);
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as SearchResponse;

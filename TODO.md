@@ -1067,7 +1067,8 @@
 - [x] 個人化複習清單（2.2）：依學生在各份簡報的測驗作答歷史，生成「建議複習頁面」清單並存入 localStorage 或後端；播放頁側邊欄或首頁顯示「你有 N 頁需要複習」入口，點擊直接跳到對應簡報頁碼。後端可新增 `GET /api/me/review-items` 彙整所有答錯題目的 `page_number`，前端以獨立面板或首頁提示呈現。
   - 修改說明（2026-06-24）：新增 `frontend/src/lib/reviewList.ts`（`getReviewItems`/`addReviewItems`/`removeReviewItem`/`clearAllReviewItems`，以 `makeslide.reviewItems` localStorage key 持久化）；`QuizBuilderPage.tsx` 新增 `useEffect`，在 `syncQuizShowAnswers` 變為 true 時掃描答錯且有 `page_number` 的題目並呼叫 `addReviewItems`；`PlayPageSidebar.tsx` 新增 `ReviewListSection` 元件（rose 色邊框，僅顯示當前 PDF 的複習項目，含點擊跳頁與 × 移除功能）；`HomePage.tsx` 當 `reviewCount > 0` 時顯示 rose 色提示橫幅；zh-TW/en i18n 各新增 5 個 key（`reviewListTitle/Hint/Page/Remove`、`home.reviewListBanner`）。分支 `feat/personalized-review-list`，已 merge 回 master。
 
-- [ ] 向量語意搜尋（2.4）：現有搜尋為 SQL LIKE 關鍵字比對，無法找到語意相近但用詞不同的頁面。可整合 OpenAI `text-embedding-3-small` 或 Gemini embedding API，對每頁逐字稿建立向量，儲存於後端（SQLite FTS5 或輕量向量庫），搜尋時以 cosine similarity 排序結果；前端搜尋框加入「語意搜尋」開關。
+- [x] 向量語意搜尋（2.4）：現有搜尋為 SQL LIKE 關鍵字比對，無法找到語意相近但用詞不同的頁面。可整合 OpenAI `text-embedding-3-small` 或 Gemini embedding API，對每頁逐字稿建立向量，儲存於後端（SQLite FTS5 或輕量向量庫），搜尋時以 cosine similarity 排序結果；前端搜尋框加入「語意搜尋」開關。
+  - 修改說明（2026-06-25）：新增 `page_embeddings` DB 表（pdf_id/page_uid/content_hash/embedding JSON）；新增 `backend/src/services/embeddings.ts`（`getOrCreateEmbeddings`、`embedQuery`、`cosineSimilarity`，使用 OpenAI text-embedding-3-small，支援批次快取）；修改 `backend/src/routes/pdfs/search.ts` 加入 `?semantic=true` 路徑（只搜尋自己的 PDF，相似度門檻 0.3）；更新 `frontend/src/lib/api/pdfs.ts` 加入 `semantic` 參數；`GlobalSearchBox.tsx` 加入「AI」語意搜尋切換按鈕；i18n 3 個 key；4 個後端測試全通過。分支 `feat/vector-semantic-search`。
 
 - [x] 從搜尋結果挑選頁面組成新簡報（2.4）：`GlobalSearchBox` 新增「多選頁面」按鈕切換多選模式（含 checkbox）；選取後點「建立新簡報（N 頁）」呼叫 `POST /api/pdfs/from-pages` 複製各頁圖片/逐字稿/音檔至新 PDF，自動導航至新簡報；i18n 4 個 key；5 個後端測試全通過。實作於 `feat/from-pages` 分支，2026-06-24 合入 master。
 
@@ -1110,3 +1111,4 @@
 | 2026-06-24 | AI 圖片品質分析（2.7）：`GET /api/pdfs/:id/image-quality` 以 vision LLM 逐頁判斷圖片與逐字稿是否相符；QualityCheckPanel 新增天藍色 AI 圖片分析 section，rose 警示卡顯示不符詳情；i18n 5 個 key；4 個後端測試全通過 | feat/image-quality-ai-analysis（已 merge） |
 | 2026-06-25 | 遙控器手繪同步到投影端（2.6）：`RemoteControllerPage.tsx` 加入 canvas 手繪（refs 管理筆跡 + pointer events + ResizeObserver）；正規化 [0,1] 座標透過既有 `updatePlaybackSyncState` 的 drawing_page_number/drawing_json 欄位推送；follower 端透過現有 syncDrawingState→remoteDrawingData→DrawingCanvas 路徑即時顯示；換頁清空；i18n 3 個 key；TypeScript 通過 | feat/remote-drawing-sync（已 merge） |
 | 2026-06-25 | 模板市集（2.8）：`templates` DB 表 migration；GET/POST/DELETE /api/templates 端點；TemplatesPage.tsx（/templates 路由）卡片列表 + Apply 跳首頁；SettingsPage Skills 區塊加「上架為模板」按鈕 + 「瀏覽市集」連結；PromptModal 技能模板區塊加「瀏覽市集 →」連結；i18n 15 個 key；4 個後端測試通過 | feat/template-marketplace（已 merge） |
+| 2026-06-25 | 向量語意搜尋（2.4）：`page_embeddings` DB 表；`services/embeddings.ts`（OpenAI text-embedding-3-small 批次快取）；`/api/search?semantic=true` 路徑（cosine similarity >= 0.3 排序，限自己的 PDF）；GlobalSearchBox「AI」切換按鈕；i18n 3 個 key；4 個後端測試全通過 | feat/vector-semantic-search（已 merge） |
