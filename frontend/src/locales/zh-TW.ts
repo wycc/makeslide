@@ -1540,6 +1540,8 @@ export const zhTW = {
   'play.header.downloadCurrentImage': '下載本頁圖片',
   'play.header.downloadNotesTxt': '下載備註 TXT',
   'play.header.nativeShare': '📤 分享',
+  'play.header.showDescription': '顯示簡介',
+  'play.header.hideDescription': '隱藏簡介',
   'play.header.downloadSrt': '下載 SRT 字幕',
   'play.header.downloadVtt': '下載 VTT 字幕',
   'play.header.downloadPptx': '下載 PPTX',
