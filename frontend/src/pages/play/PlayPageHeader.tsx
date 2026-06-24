@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { RegenerateProgress } from './RegenerateProgress';
 import type { ShareAccessMode } from '../../lib/api';
-import { fetchSyncAttendees } from '../../lib/api';
+import { fetchSyncAttendees, generatePdfDescription } from '../../lib/api';
 import { useI18n } from '../../i18n';
 import { usePlayPageContext } from './PlayPageContext';
 import { copyTextToClipboard } from '../../lib/clipboard';
@@ -166,6 +166,7 @@ export function PlayPageHeader() {
 
   const [editingTitle, setEditingTitle] = useState(false);
   const [descExpanded, setDescExpanded] = useState(false);
+  const [genDescBusy, setGenDescBusy] = useState(false);
   const titleBeforeEdit = useRef('');
   const inlineTitleRef = useRef<HTMLInputElement>(null);
 
@@ -509,6 +510,22 @@ export function PlayPageHeader() {
                 className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100 resize-none"
                 maxLength={2000}
               />
+              {descriptionInput.trim() === '' && pdfId ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setGenDescBusy(true);
+                    void generatePdfDescription(pdfId)
+                      .then((res) => setDescriptionInput(res.description))
+                      .catch(() => { /* non-fatal: leave field empty */ })
+                      .finally(() => setGenDescBusy(false));
+                  }}
+                  disabled={genDescBusy}
+                  className="shrink-0 whitespace-nowrap rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-2 py-1 text-[11px] text-fuchsia-200 disabled:opacity-40"
+                >
+                  {genDescBusy ? t('play.metadata.generatingDescription') : t('play.metadata.aiGenerateDescription')}
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => void handleSaveDescription()}

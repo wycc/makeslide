@@ -34,6 +34,7 @@ import {
 } from './shared';
 import { callChatJSON, transcribeAudioBuffer } from '../../services/openai';
 import { generateTitle } from '../../worker/steps/generateTitle';
+import { generateDescription } from '../../worker/steps/generateDescription';
 import { extractPdfText } from '../../worker/poppler';
 
 interface PagePollRow {
@@ -768,6 +769,42 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     const description = body.data.description.trim();
     db.prepare(`UPDATE pdfs SET description = ?, updated_at = ? WHERE id = ?`).run(description, now, id);
     return reply.send({ id, description, updated_at: now });
+  });
+
+  // POST /api/pdfs/:id/generate-description — LLM-summarise the first pages.
+  app.post('/api/pdfs/:id/generate-description', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const { id } = parsed.data;
+    const row = db
+      .prepare(`SELECT id, owner_sub, visibility, page_count FROM pdfs WHERE id = ?`)
+      .get(id) as Pick<PdfRow, 'id' | 'owner_sub' | 'visibility' | 'page_count'> | undefined;
+    if (!row) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    if (!canEditPdf(sessionSub(request), row)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
+    }
+    try {
+      const result = await generateDescription(id);
+      const now = nowIso();
+      db.prepare(`UPDATE pdfs SET description = ?, updated_at = ? WHERE id = ?`).run(result.description, now, id);
+      try {
+        const metadata = await readMetadata(id);
+        if (metadata) {
+          metadata.updated_at = now;
+          await writeMetadata(id, metadata);
+        }
+      } catch (err) {
+        request.log.warn({ err, id }, 'Failed to update metadata after generate-description');
+      }
+      return reply.send({ id, description: result.description, updated_at: now, source: result.source });
+    } catch (err) {
+      request.log.warn({ err, id }, 'generate-description failed');
+      return reply.code(409).send(errorResponse('INVALID_STATE', '尚無可用內容可生成簡介'));
+    }
   });
 
   // POST /api/pdfs/:id/increment-play-count
