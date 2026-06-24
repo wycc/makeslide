@@ -1,5 +1,33 @@
 # MakeSlide 功能說明
 
+## 播放頁：AI 自動生成簡報描述
+
+### 功能目的
+
+簡報的「簡介／描述」有助於日後檢索、分享與課後報告呈現，但使用者常因懶得撰寫而留白。
+這次加入「AI 生成描述」功能：當描述欄為空時，一鍵讓 AI 根據簡報前幾頁的逐字稿，
+自動生成 2–3 句的中文摘要，降低撰寫門檻。
+
+### 使用方式
+
+1. 在播放頁的「簡報資訊」區，若「備註／說明」欄位目前是空的，欄位旁會出現「✨ AI 生成描述」按鈕。
+2. 點擊後 AI 會讀取此簡報**前 3 頁**的逐字稿，生成 2–3 句摘要並自動填入欄位（按鈕顯示「生成中…」）。
+3. 你可以再編輯內容，並按既有的「備註／說明」儲存鈕保存。
+4. 一旦欄位已有內容，按鈕即隱藏，避免覆蓋既有描述。
+
+### 技術說明
+
+- **後端**：新增 `generateDescription` worker step（仿 `generateTitle`），收集前 3 頁逐字稿
+  （無逐字稿則退回擷取文字），呼叫一次 LLM 產出 `{"description": "..."}`。新增 owner 限定端點
+  `POST /api/pdfs/:id/generate-description`，成功後將結果寫回 `pdfs.description` 並更新 metadata；
+  無內容可摘要時回 409。
+- **前端**：`PlayPageHeader` 在描述欄為空且使用者可編輯時顯示「✨ AI 生成描述」按鈕，
+  呼叫 `generatePdfDescription()` 後把結果填入描述輸入框。
+- **測試**：`backend/test/generate-description.test.ts` 4 個 node:test，皆以 `setOpenAIClientForTest`
+  **mock LLM 回應**（不產生任何真實 API 費用）：語言建構、step 摘要、端點持久化、非擁有者 403。
+- **i18n**：zh-TW / en 各新增 2 個 key（`play.metadata.aiGenerateDescription`、`generatingDescription`）。
+- **費用提醒**：實際點擊按鈕時會呼叫一次 LLM（使用者自付帳號額度）；開發與測試階段未呼叫真實 API。
+
 ## 播放頁：快捷鍵說明 `?` 熱鍵
 
 ### 功能目的

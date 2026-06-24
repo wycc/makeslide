@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | 自動生成 PDF 描述：新增 generateDescription worker step（前 3 頁逐字稿 → LLM 2–3 句摘要）+ owner 限定 `POST /api/pdfs/:id/generate-description`（持久化）；PlayPageHeader 描述為空時顯示「✨ AI 生成描述」按鈕；補後端測試 4 個（mock LLM）；i18n 2 key | feat/ai-generate-description（已 merge） |
 | 2026-06-25 | 播放頁鍵盤快捷鍵說明 overlay：既有按鈕+modal 基礎上補 `?` 全域熱鍵切換顯示（輸入框忽略）並新增 `?` 說明列；i18n 1 key；純前端 | feat/shortcuts-help-hotkey（已 merge） |
 | 2026-06-25 | 相似頁面推薦：新增 owner 限定 `GET /api/pdfs/:id/pages/:n/similar`，以既有 page_embeddings + cosineSimilarity 找同 owner 其他頁面 top-5（無新 LLM）；PlayPageSidebar 加「相似頁面」縮圖卡片可跨簡報跳轉；補後端測試 3 個；i18n 3 key | feat/similar-pages（已 merge） |
 | 2026-06-25 | 課後報告加入頁面觀看率：經檢視 report/summary 已內建每頁 avg_listened_ratio + completion_rate，PostClassReportPanel 也已顯示完成率熱力圖，需求已由既有程式碼滿足，標記完成（無新增程式碼） | （既有功能） |
@@ -1138,7 +1139,7 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [x] 相似頁面推薦：新增 owner 限定端點 `GET /api/pdfs/:id/pages/:n/similar`，以既有 `page_embeddings` + `cosineSimilarity` 找出同 owner 其他已索引頁面的 top-5（僅查既有 embeddings，無新 LLM 呼叫；≥0.3 門檻）；PlayPageSidebar 新增「相似頁面」section，以縮圖 + 標題 + 頁碼 + 相似度卡片呈現，點擊跨簡報跳轉；補後端測試 3 個（401／排序正確且過濾正交頁／403 非 owner）；i18n 3 個 key。分支 `feat/similar-pages`。
 
-- [ ] 自動生成 PDF 描述：播放頁「簡報資訊」區若 description 為空時，在描述輸入框旁顯示「✨ AI 生成描述」按鈕，呼叫後端 `POST /api/pdfs/:id/generate-description`（取前三頁逐字稿送 LLM 生成 2–3 句中文摘要），成功後自動填入 description 並 PATCH 更新；補後端測試；i18n 2 個 key。
+- [x] 自動生成 PDF 描述：新增 `generateDescription` worker step（取前 3 頁逐字稿送 LLM 生成 2–3 句中文摘要，仿 `generateTitle`）與 owner 限定 `POST /api/pdfs/:id/generate-description`（會持久化 description）；PlayPageHeader 描述欄為空時於旁邊顯示「✨ AI 生成描述」按鈕，成功後自動填入欄位；補後端測試 4 個（mock LLM、無實際 API 呼叫）；i18n 2 個 key（`play.metadata.aiGenerateDescription`/`generatingDescription`，zh-TW/en）。分支 `feat/ai-generate-description`。
 
 - [x] 測驗結果分享按鈕：QuizBuilderPage 學生作答的成績顯示區（`quiz.totalScore` 區塊）加入「分享成績」按鈕，使用 `navigator.share` API（不支援或取消時 fallback 至 `copyTextToClipboard` 複製文字 + toast），分享文字含得分/滿分與測驗標題；補 i18n 2 個 key（`quiz.shareScore`/`quiz.shareText`，zh-TW/en）；純前端改動。分支 `feat/quiz-share-score`。
 
