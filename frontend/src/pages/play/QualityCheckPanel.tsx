@@ -1,9 +1,14 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  fetchQualityCheck, fetchScriptQuality, fetchImageQuality,
+  fetchQualityCheck, fetchScriptQuality, fetchImageQuality, rewritePageScript,
   type PageQualityResult, type QualityIssueCode, type ScriptContextBreak, type ImageMismatchResult,
 } from '../../lib/api';
+
+// Generation-oriented instruction passed to the per-page rewrite-script API
+// when batch-filling empty/missing scripts (not user-facing UI text).
+const BATCH_FILL_PROMPT = '這一頁目前沒有逐字稿，請依投影片內容生成一段適合朗讀、約 2–4 句的中文逐字稿。';
+const BATCH_FILL_MAX_PAGES = 10;
 import { useI18n } from '../../i18n';
 import { usePlayPageContext } from './PlayPageContext';
 
@@ -31,6 +36,8 @@ export function QualityCheckPanel() {
   const [imageRunning, setImageRunning] = useState(false);
   const [imageMismatches, setImageMismatches] = useState<ImageMismatchResult[] | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
+  const [batchFilling, setBatchFilling] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
 
   const handleRun = async () => {
     if (!pdfId || running) return;
@@ -81,6 +88,30 @@ export function QualityCheckPanel() {
 
   const issuePages = results?.filter((r) => r.issues.length > 0) ?? [];
 
+  // Pages flagged with a missing/empty script, capped so a single click can't
+  // fan out into an unbounded number of LLM calls.
+  const emptyScriptPages = issuePages
+    .filter((p) => p.issues.some((it) => it.code === 'missing_script' || it.code === 'empty_script'))
+    .map((p) => p.pageNumber)
+    .slice(0, BATCH_FILL_MAX_PAGES);
+
+  const handleBatchFill = async () => {
+    if (!pdfId || batchFilling || emptyScriptPages.length === 0) return;
+    setBatchFilling(true);
+    setBatchProgress({ done: 0, total: emptyScriptPages.length });
+    for (let i = 0; i < emptyScriptPages.length; i++) {
+      const pageNumber = emptyScriptPages[i];
+      try {
+        if (pageNumber != null) await rewritePageScript(pdfId, pageNumber, BATCH_FILL_PROMPT, '');
+      } catch {
+        // skip pages that fail (e.g. no script slot yet); continue the batch
+      }
+      setBatchProgress({ done: i + 1, total: emptyScriptPages.length });
+    }
+    setBatchFilling(false);
+    await handleRun(); // refresh the issue list after filling
+  };
+
   return (
     <section className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
@@ -113,9 +144,25 @@ export function QualityCheckPanel() {
           <p className="text-xs text-emerald-400">{t('play.quality.allGood')}</p>
         ) : (
           <>
-            <p className="mb-2 text-xs text-amber-400">
-              {t('play.quality.issueCount').replace('{n}', String(issuePages.length))}
-            </p>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-xs text-amber-400">
+                {t('play.quality.issueCount').replace('{n}', String(issuePages.length))}
+              </p>
+              {emptyScriptPages.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => void handleBatchFill()}
+                  disabled={batchFilling}
+                  className="shrink-0 rounded border border-emerald-600/60 bg-emerald-500/15 px-2 py-1 text-xs text-emerald-200 hover:bg-emerald-500/25 disabled:opacity-50"
+                >
+                  {batchFilling && batchProgress
+                    ? t('play.quality.batchFilling')
+                        .replace('{done}', String(batchProgress.done))
+                        .replace('{total}', String(batchProgress.total))
+                    : t('play.quality.batchFill').replace('{n}', String(emptyScriptPages.length))}
+                </button>
+              )}
+            </div>
             <ul className="space-y-2">
               {issuePages.map((page) => (
                 <li key={page.pageNumber} className="rounded border border-slate-700 bg-slate-950/50 px-3 py-2">
