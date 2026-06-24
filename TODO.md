@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | 首頁近期搜尋刪除個別記錄：搜尋下拉清單每筆記錄右側加入 × 按鈕，新增 `removeRecentSearch()` helper 只移除單筆並同步 localStorage；補 i18n key `home.search.removeRecent`（zh-TW/en）；純前端改動 | feat/recent-search-remove-item（已 merge） |
 | 2026-06-22 | 建立課後學習報告後端摘要 API（`GET /api/pdfs/:id/report/summary`） | feature/post-class-report-summary-api（已 merge） |
 | 2026-06-22 | 在播放頁加入課後報告入口與 MVP 畫面（PostClassReportPanel） | feature/post-class-report-mvp（已 merge） |
 | 2026-06-22 | 補強 AI 導師「問這一頁」MVP：新增 `POST /api/pdfs/:id/pages/:n/ask`、`is_authenticated` 欄位、`PageAskPanel` 元件 | feature/ai-tutor-ask-page（已 merge） |
@@ -1142,6 +1143,6 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [ ] 播放頁 PDF 描述折疊顯示：PlayPageHeader 若 `detail?.description` 非空，在標題下方加入可展開的描述區塊（初始收折，點擊「顯示簡介 ▼」展開，點再折疊），純 state toggle；補 i18n 2 個 key；純前端改動。
 
-- [ ] 首頁近期搜尋刪除個別記錄：`GlobalSearchBox.tsx` 的近期搜尋列表目前只有全部清除，無法刪除單筆記錄。在每筆搜尋記錄右側加入 × 按鈕，呼叫 `removeRecentSearch(term)` 只移除該筆；純前端改動，補 i18n 1 個 key。
+- [x] 首頁近期搜尋刪除個別記錄：近期搜尋列表（實際位於 `HomePage.tsx`，非 `GlobalSearchBox.tsx`）原本只有全部清除，無法刪除單筆。已在每筆記錄右側加入 × 按鈕，新增 `removeRecentSearch(term)` helper 只移除該筆並同步 localStorage；補 i18n 1 個 key（`home.search.removeRecent`，zh-TW/en）。純前端改動。分支 `feat/recent-search-remove-item`。
 
 - [ ] 課後報告加入頁面觀看率：`GET /api/pdfs/:id/report` 的回應目前含 student list，加入每頁的 `watch_progress` 彙整（`avg_watched_ratio` per page）；`watch_progress` 表已存在（`pdf_id`/`page_number`/`watched_ratio`），只需 JOIN 聚合；ReportPage 對應表格加入欄位；補後端測試；i18n 1 個 key。
