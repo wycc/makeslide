@@ -1607,5 +1607,8 @@ export const zhTW = {
   'templates.browseCta': '瀏覽模板市集',
   'templates.myTemplates': '我的模板',
   'templates.deleteConfirm': '確定要刪除此模板嗎？',
+  'templates.searchPlaceholder': '搜尋模板名稱或說明…',
+  'templates.categoryAll': '全部',
+  'templates.noFilterResults': '沒有符合篩選條件的模板',
   'settings.publishSkillAsTemplate': '上架為模板',
 } as const;
