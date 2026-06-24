@@ -1588,4 +1588,7 @@ export const en = {
   'remote.pollControl.statusClosed': 'Closed',
   'remote.pollControl.open': 'Open poll',
   'remote.pollControl.close': 'Close poll',
+  'remote.drawing.title': 'Draw annotations',
+  'remote.drawing.clear': 'Clear',
+  'remote.drawing.hint': 'Draw here to highlight on the big screen in real time',
 } as const;

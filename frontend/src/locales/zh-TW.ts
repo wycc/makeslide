@@ -1588,4 +1588,7 @@ export const zhTW = {
   'remote.pollControl.statusClosed': '已關閉',
   'remote.pollControl.open': '開啟投票',
   'remote.pollControl.close': '關閉投票',
+  'remote.drawing.title': '手繪標記',
+  'remote.drawing.clear': '清除',
+  'remote.drawing.hint': '在此畫板圈重點，筆跡會即時顯示在大螢幕上',
 } as const;
