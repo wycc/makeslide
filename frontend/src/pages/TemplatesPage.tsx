@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../i18n';
-import { listTemplates, deleteTemplate, type Template } from '../lib/api/templates';
+import { listTemplates, deleteTemplate, applyTemplate, type Template } from '../lib/api/templates';
 import { getAuthStatus, type AuthStatus } from '../lib/api';
 
 function TemplateCard({
@@ -46,6 +46,11 @@ function TemplateCard({
       <div className="mt-1 rounded-md bg-slate-800/60 p-2 font-mono text-[11px] text-slate-300 line-clamp-3">
         {template.skill_data.prompt}
       </div>
+      {template.apply_count > 0 && (
+        <span className="text-[10px] text-slate-500">
+          {t('templates.applyCount').replace('{n}', String(template.apply_count))}
+        </span>
+      )}
       <div className="mt-2 flex items-center gap-2">
         <button
           type="button"
@@ -115,6 +120,12 @@ export default function TemplatesPage() {
     if (ttsVoice) params.set('templateTtsVoice', ttsVoice);
     setAppliedId(template.id);
     setTimeout(() => setAppliedId(null), 2000);
+    void applyTemplate(template.id);
+    setTemplates((prev) =>
+      prev.map((tmpl) =>
+        tmpl.id === template.id ? { ...tmpl, apply_count: tmpl.apply_count + 1 } : tmpl,
+      ),
+    );
     navigate(`/?${params.toString()}`);
   }
 

@@ -1604,6 +1604,7 @@ export const en = {
   'templates.subtitle': 'Browse community-shared teaching style templates and apply them to new presentations',
   'templates.empty': 'No public templates yet',
   'templates.apply': 'Apply',
+  'templates.applyCount': 'Used {n} times',
   'templates.applied': 'Applied!',
   'templates.delete': 'Delete',
   'templates.publish': 'Publish as public template',

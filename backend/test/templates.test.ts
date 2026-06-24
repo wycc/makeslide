@@ -86,3 +86,33 @@ test('DELETE /api/templates/:id — 403 when not owner', async () => {
   assert.equal(del.statusCode, 403);
   await app.close();
 });
+
+test('POST /api/templates/:id/apply — increments apply_count, 204 no auth', async () => {
+  const app = await buildApp();
+  const create = await app.inject({
+    method: 'POST',
+    url: '/api/templates',
+    headers: { ...OWNER_HEADERS, 'content-type': 'application/json' },
+    body: JSON.stringify({ name: 'apply-test', skill_data: SKILL_DATA }),
+  });
+  const { template } = create.json() as { template: { id: string; apply_count: number } };
+  assert.equal(template.apply_count, 0);
+
+  // No auth header required; bump twice.
+  const first = await app.inject({ method: 'POST', url: `/api/templates/${template.id}/apply` });
+  assert.equal(first.statusCode, 204);
+  await app.inject({ method: 'POST', url: `/api/templates/${template.id}/apply` });
+
+  const list = await app.inject({ method: 'GET', url: '/api/templates' });
+  const { templates } = list.json() as { templates: { id: string; apply_count: number }[] };
+  const found = templates.find((t) => t.id === template.id);
+  assert.equal(found?.apply_count, 2);
+  await app.close();
+});
+
+test('POST /api/templates/:id/apply — 404 for unknown template', async () => {
+  const app = await buildApp();
+  const resp = await app.inject({ method: 'POST', url: '/api/templates/tmpl-nonexistent/apply' });
+  assert.equal(resp.statusCode, 404);
+  await app.close();
+});

@@ -44,6 +44,7 @@ interface TemplateRow {
   is_public: number;
   author: string;
   created_at: string;
+  apply_count: number;
 }
 
 function rowToTemplate(row: TemplateRow) {
@@ -56,6 +57,7 @@ function rowToTemplate(row: TemplateRow) {
     is_public: row.is_public === 1,
     author: row.author,
     created_at: row.created_at,
+    apply_count: row.apply_count ?? 0,
   };
 }
 
@@ -101,6 +103,21 @@ export async function registerTemplateRoutes(app: FastifyInstance): Promise<void
       if (!existing) return reply.code(404).send(errorResponse('NOT_FOUND', 'Template not found'));
       if (existing.author !== sub) return reply.code(403).send(errorResponse('FORBIDDEN', 'Access denied'));
       db.prepare(`DELETE FROM templates WHERE id = ?`).run(templateId);
+      return reply.code(204).send();
+    },
+  );
+
+  // POST /api/templates/:templateId/apply — increment usage counter (no auth).
+  app.post<{ Params: z.infer<typeof TemplateIdParamSchema> }>(
+    '/api/templates/:templateId/apply',
+    async (request, reply) => {
+      const parsed = TemplateIdParamSchema.safeParse(request.params);
+      if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_PARAMS', parsed.error.message));
+      const { templateId } = parsed.data;
+      const result = db
+        .prepare(`UPDATE templates SET apply_count = apply_count + 1 WHERE id = ?`)
+        .run(templateId);
+      if (result.changes === 0) return reply.code(404).send(errorResponse('NOT_FOUND', 'Template not found'));
       return reply.code(204).send();
     },
   );

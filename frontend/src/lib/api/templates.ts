@@ -19,6 +19,7 @@ export interface Template {
   is_public: boolean;
   author: string;
   created_at: string;
+  apply_count: number;
 }
 
 export async function listTemplates(): Promise<Template[]> {
@@ -48,4 +49,14 @@ export async function createTemplate(input: {
 export async function deleteTemplate(templateId: string): Promise<void> {
   const resp = await fetch(`api/templates/${templateId}`, { method: 'DELETE' });
   if (!resp.ok) throw await parseErrorBody(resp);
+}
+
+// Fire-and-forget usage counter bump; failures are ignored so they never
+// block the apply navigation.
+export async function applyTemplate(templateId: string): Promise<void> {
+  try {
+    await fetch(`api/templates/${templateId}/apply`, { method: 'POST' });
+  } catch {
+    // ignore
+  }
 }
