@@ -1290,6 +1290,8 @@ export const en = {
   'play.quality.running': 'Checking…',
   'play.quality.allGood': 'All pages passed quality checks',
   'play.quality.issueCount': '{n} page(s) have issues',
+  'play.quality.batchFill': '✨ Batch-fill empty scripts ({n})',
+  'play.quality.batchFilling': 'Filling… {done}/{total}',
   'play.quality.page': 'Page {n}',
   'play.quality.missing_image': 'Missing slide image',
   'play.quality.missing_audio': 'Missing audio file',

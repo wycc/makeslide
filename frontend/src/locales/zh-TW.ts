@@ -1290,6 +1290,8 @@ export const zhTW = {
   'play.quality.running': '檢查中…',
   'play.quality.allGood': '所有頁面均通過品質檢查',
   'play.quality.issueCount': '{n} 頁有問題',
+  'play.quality.batchFill': '✨ 批次補全空白逐字稿（{n} 頁）',
+  'play.quality.batchFilling': '補全中… {done}/{total}',
   'play.quality.page': '第 {n} 頁',
   'play.quality.missing_image': '缺失投影片圖片',
   'play.quality.missing_audio': '缺失音檔',
