@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type PointerEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useI18n } from '../i18n';
 import {
@@ -11,6 +11,9 @@ import {
   updatePlaybackSyncState,
 } from '../lib/api/pdfs';
 import type { PagePoll, PdfDetailPage } from '../types';
+
+const REMOTE_DRAWING_COLOR = '#ef4444';
+const REMOTE_DRAWING_LINE_WIDTH = 8; // ref-space units (REF_H = 1080)
 
 const POLL_INTERVAL_MS = 2000;
 
@@ -35,6 +38,13 @@ export default function RemoteControllerPage() {
 
   const syncActiveRef = useRef(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Drawing canvas refs (all drawing state in refs to avoid re-renders on every pointer event)
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const drawingStrokesRef = useRef<[number, number][][]>([]);
+  const currentStrokeRef = useRef<[number, number][]>([]);
+  const isDrawingRef = useRef(false);
+  const drawPushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     syncActiveRef.current = syncActive;
@@ -123,6 +133,128 @@ export default function RemoteControllerPage() {
       }
     };
   }, [pdfId, clientId]);
+
+  const renderCanvas = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const paintStroke = (pts: [number, number][]) => {
+      if (pts.length < 2) return;
+      ctx.beginPath();
+      ctx.strokeStyle = REMOTE_DRAWING_COLOR;
+      ctx.lineWidth = (REMOTE_DRAWING_LINE_WIDTH / 1080) * canvas.height;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      const p0 = pts[0];
+      if (!p0) return;
+      ctx.moveTo(p0[0] * canvas.width, p0[1] * canvas.height);
+      for (let i = 1; i < pts.length; i++) {
+        const pi = pts[i];
+        if (!pi) continue;
+        ctx.lineTo(pi[0] * canvas.width, pi[1] * canvas.height);
+      }
+      ctx.stroke();
+    };
+    for (const stroke of drawingStrokesRef.current) paintStroke(stroke);
+    paintStroke(currentStrokeRef.current);
+  }, []);
+
+  const pushDrawingToSync = useCallback(() => {
+    if (!syncActiveRef.current || !pdfId) return;
+    if (drawPushTimerRef.current) clearTimeout(drawPushTimerRef.current);
+    drawPushTimerRef.current = setTimeout(() => {
+      const strokes = drawingStrokesRef.current.map((pts) => ({
+        color: REMOTE_DRAWING_COLOR,
+        lineWidth: REMOTE_DRAWING_LINE_WIDTH,
+        points: pts,
+      }));
+      void updatePlaybackSyncState(pdfId, clientId, {
+        page_number: currentPage,
+        is_playing: false,
+        current_time: 0,
+        drawing_page_number: currentPage,
+        drawing_json: JSON.stringify({ strokes }),
+      }).catch(() => { /* ignore transient errors */ });
+    }, 100);
+  }, [pdfId, clientId, currentPage]);
+
+  const clearDrawing = useCallback(() => {
+    drawingStrokesRef.current = [];
+    currentStrokeRef.current = [];
+    renderCanvas();
+    if (syncActiveRef.current && pdfId) {
+      void updatePlaybackSyncState(pdfId, clientId, {
+        page_number: currentPage,
+        is_playing: false,
+        current_time: 0,
+        drawing_page_number: currentPage,
+        drawing_json: JSON.stringify({ strokes: [] }),
+      }).catch(() => { /* ignore */ });
+    }
+  }, [pdfId, clientId, currentPage, renderCanvas]);
+
+  const getNormCoords = (e: PointerEvent<HTMLCanvasElement>): [number, number] => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    return [
+      Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width)),
+      Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height)),
+    ];
+  };
+
+  const handleCanvasPointerDown = (e: PointerEvent<HTMLCanvasElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    isDrawingRef.current = true;
+    currentStrokeRef.current = [getNormCoords(e)];
+    renderCanvas();
+  };
+
+  const handleCanvasPointerMove = (e: PointerEvent<HTMLCanvasElement>) => {
+    if (!isDrawingRef.current) return;
+    currentStrokeRef.current.push(getNormCoords(e));
+    renderCanvas();
+  };
+
+  const handleCanvasPointerUp = () => {
+    if (!isDrawingRef.current) return;
+    isDrawingRef.current = false;
+    const pts = currentStrokeRef.current;
+    if (pts.length > 1) {
+      drawingStrokesRef.current = [...drawingStrokesRef.current, pts];
+      pushDrawingToSync();
+    }
+    currentStrokeRef.current = [];
+    renderCanvas();
+  };
+
+  // Clear drawing strokes when page changes
+  useEffect(() => {
+    drawingStrokesRef.current = [];
+    currentStrokeRef.current = [];
+    renderCanvas();
+  }, [currentPage, renderCanvas]);
+
+  // Resize canvas to match its CSS dimensions
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const observer = new ResizeObserver(() => {
+      const rect = canvas.getBoundingClientRect();
+      const w = Math.round(rect.width) || 1;
+      const h = Math.round(rect.height) || 1;
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w;
+        canvas.height = h;
+        renderCanvas();
+      }
+    });
+    observer.observe(canvas);
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = Math.round(rect.width) || 300;
+    canvas.height = Math.round(rect.height) || 169;
+    return () => observer.disconnect();
+  }, [renderCanvas]);
 
   const handleStartSync = async () => {
     if (!pdfId) return;
@@ -305,6 +437,36 @@ export default function RemoteControllerPage() {
           </div>
         )}
       </div>
+
+      {/* Drawing canvas section — shown only while sync is active */}
+      {syncActive && (
+        <div className="mx-4 mt-5">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              {t('remote.drawing.title')}
+            </p>
+            <button
+              type="button"
+              onClick={clearDrawing}
+              className="rounded border border-slate-700 px-2 py-0.5 text-xs text-slate-400 hover:bg-slate-800 active:bg-slate-700"
+            >
+              {t('remote.drawing.clear')}
+            </button>
+          </div>
+          <canvas
+            ref={canvasRef}
+            className="w-full rounded-xl border border-slate-700 bg-slate-900"
+            style={{ height: '180px', touchAction: 'none', cursor: 'crosshair' }}
+            onPointerDown={handleCanvasPointerDown}
+            onPointerMove={handleCanvasPointerMove}
+            onPointerUp={handleCanvasPointerUp}
+            onPointerLeave={handleCanvasPointerUp}
+          />
+          <p className="mt-1 text-center text-[10px] text-slate-600">
+            {t('remote.drawing.hint')}
+          </p>
+        </div>
+      )}
 
       <div className="mt-auto px-6 pb-10 pt-8">
         {!syncActive ? (
