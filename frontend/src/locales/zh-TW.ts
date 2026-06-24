@@ -233,6 +233,7 @@ export const zhTW = {
   'home.clearAllFilters': '× 清除篩選',
   'home.search.recent': '最近搜尋',
   'home.search.clearRecent': '清除記錄',
+  'home.search.removeRecent': '移除這筆',
   'home.search.placeholder': '跨所有簡報搜尋（標題、逐字稿、頁面文字）…',
   'home.search.searching': '搜尋中…',
   'home.search.noResults': '找不到符合的結果',
