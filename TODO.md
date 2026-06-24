@@ -1069,7 +1069,7 @@
 
 - [ ] 向量語意搜尋（2.4）：現有搜尋為 SQL LIKE 關鍵字比對，無法找到語意相近但用詞不同的頁面。可整合 OpenAI `text-embedding-3-small` 或 Gemini embedding API，對每頁逐字稿建立向量，儲存於後端（SQLite FTS5 或輕量向量庫），搜尋時以 cosine similarity 排序結果；前端搜尋框加入「語意搜尋」開關。
 
-- [ ] 從搜尋結果挑選頁面組成新簡報（2.4）：全域搜尋結果頁面每筆加入 checkbox，選好後點「建立新簡報」呼叫後端 `POST /api/pdfs/from-pages`，把所選頁面的圖片/逐字稿/音檔複製到新 PDF；適合教師從多份教材中抽取重點頁面組成複習簡報。
+- [x] 從搜尋結果挑選頁面組成新簡報（2.4）：`GlobalSearchBox` 新增「多選頁面」按鈕切換多選模式（含 checkbox）；選取後點「建立新簡報（N 頁）」呼叫 `POST /api/pdfs/from-pages` 複製各頁圖片/逐字稿/音檔至新 PDF，自動導航至新簡報；i18n 4 個 key；5 個後端測試全通過。實作於 `feat/from-pages` 分支，2026-06-24 合入 master。
 
 - [x] SCORM 1.2 課程包匯出（2.5/2.10）：新增 `GET /api/pdfs/:id/export.scorm` 後端端點，按 SCORM 1.2 規格產生標準目錄結構（`imsmanifest.xml`、`index.html`、各頁圖片與音檔），打包為 ZIP 回傳；前端播放頁匯出區加入「下載 SCORM 包」按鈕；補後端測試驗證 200 / 403 / 404 及 manifest 格式正確性。
   - 修改說明（2026-06-24）：新增 `backend/src/routes/pdfs/scorm.ts`；`GET /api/pdfs/:id/export.scorm` 讀取各頁 image/audio/script，產生 SCORM 1.2 規格的 `imsmanifest.xml`（含 resource file 清單）與自含 `index.html` SCO（鍵盤換頁、SCORM API 初始化、完課時自動回報 `lesson_status=completed`）；使用 JSZip 打包為 ZIP，Content-Disposition 設為 `.scorm.zip`；`PlayPageHeader.tsx` 匯出區加入紫羅蘭色「下載 SCORM 包」按鈕；zh-TW/en i18n 各新增 `play.header.downloadScorm` 1 個鍵值；4 個後端測試全通過（200/public/404/403）。分支 `feat/scorm-export`，已 merge 回 master。
@@ -1103,3 +1103,4 @@
 | 2026-06-24 | SCORM 1.2 課程包匯出（2.5/2.10）：`GET /api/pdfs/:id/export.scorm`；imsmanifest.xml + index.html SCO（SCORM API + 鍵盤換頁 + 完課回報）；各頁圖片/音檔打包為 ZIP；PlayPageHeader 紫色「下載 SCORM 包」按鈕；i18n downloadScorm；4 個後端測試通過 | feat/scorm-export（已 merge） |
 | 2026-06-24 | AI 腳本品質分析（2.7）：`GET /api/pdfs/:id/script-quality` 批次 LLM 分析相鄰頁逐字稿脈絡斷裂，Zod schema 驗證；QualityCheckPanel 新增紫色 AI 分析按鈕與琥珀色斷裂警示卡；i18n 5 個 key；5 個後端測試全通過（含 LLM mock） | feat/script-quality-analysis（已 merge） |
 | 2026-06-24 | H5P 互動內容匯出（2.10）：`GET /api/pdfs/:id/export.h5p` H5P Course Presentation 格式（h5p.json + content.json + 各頁圖片）打包 .h5p ZIP；PlayPageHeader 青綠色下載按鈕；i18n 2 個 key；4 個後端測試全通過 | feat/h5p-export（已 merge） |
+| 2026-06-24 | 從搜尋結果組成新簡報（2.4）：`POST /api/pdfs/from-pages` 複製頁面至新 PDF；GlobalSearchBox 多選模式 + checkbox + 「建立新簡報（N 頁）」按鈕；i18n 4 個 key；5 個後端測試全通過 | feat/from-pages（已 merge） |
