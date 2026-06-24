@@ -1064,7 +1064,8 @@
 
 ## 未完成項目（來自 FUTURE_ROADMAP.md）
 
-- [ ] 個人化複習清單（2.2）：依學生在各份簡報的測驗作答歷史，生成「建議複習頁面」清單並存入 localStorage 或後端；播放頁側邊欄或首頁顯示「你有 N 頁需要複習」入口，點擊直接跳到對應簡報頁碼。後端可新增 `GET /api/me/review-items` 彙整所有答錯題目的 `page_number`，前端以獨立面板或首頁提示呈現。
+- [x] 個人化複習清單（2.2）：依學生在各份簡報的測驗作答歷史，生成「建議複習頁面」清單並存入 localStorage 或後端；播放頁側邊欄或首頁顯示「你有 N 頁需要複習」入口，點擊直接跳到對應簡報頁碼。後端可新增 `GET /api/me/review-items` 彙整所有答錯題目的 `page_number`，前端以獨立面板或首頁提示呈現。
+  - 修改說明（2026-06-24）：新增 `frontend/src/lib/reviewList.ts`（`getReviewItems`/`addReviewItems`/`removeReviewItem`/`clearAllReviewItems`，以 `makeslide.reviewItems` localStorage key 持久化）；`QuizBuilderPage.tsx` 新增 `useEffect`，在 `syncQuizShowAnswers` 變為 true 時掃描答錯且有 `page_number` 的題目並呼叫 `addReviewItems`；`PlayPageSidebar.tsx` 新增 `ReviewListSection` 元件（rose 色邊框，僅顯示當前 PDF 的複習項目，含點擊跳頁與 × 移除功能）；`HomePage.tsx` 當 `reviewCount > 0` 時顯示 rose 色提示橫幅；zh-TW/en i18n 各新增 5 個 key（`reviewListTitle/Hint/Page/Remove`、`home.reviewListBanner`）。分支 `feat/personalized-review-list`，已 merge 回 master。
 
 - [ ] 向量語意搜尋（2.4）：現有搜尋為 SQL LIKE 關鍵字比對，無法找到語意相近但用詞不同的頁面。可整合 OpenAI `text-embedding-3-small` 或 Gemini embedding API，對每頁逐字稿建立向量，儲存於後端（SQLite FTS5 或輕量向量庫），搜尋時以 cosine similarity 排序結果；前端搜尋框加入「語意搜尋」開關。
 
@@ -1096,3 +1097,4 @@
 |------|----------|------|
 | 2026-06-24 | 版本差異視圖（2.9）：新增 `computeLineDiff.ts`（LCS 逐行 diff），`VersionHistoryDialog.tsx` 加入「顯示差異」切換按鈕，以紅/綠底色呈現舊版本與現版本的逐行差異；PlayPage 傳入 `currentScript`；補 8 個 node:test 測試；補 i18n zh-TW/en | feat/version-diff-view（已 merge） |
 | 2026-06-24 | 遙控器投票開/關控制（2.6）：後端新增 `PATCH /api/pdfs/:id/polls/:pollId` 端點（切換 is_active）；前端 `updatePagePoll()` API；`RemoteControllerPage` 換頁時自動抓取本頁投票，顯示投票清單與開/關按鈕；補 i18n zh-TW/en | feat/remote-poll-control（已 merge） |
+| 2026-06-24 | 個人化複習清單（2.2）：新增 `reviewList.ts` localStorage helper；`QuizBuilderPage` 在答案公布時自動儲存答錯且有頁碼的題目；`PlayPageSidebar` 新增 `ReviewListSection`（rose 色，點擊跳頁，× 移除）；首頁顯示 rose 橫幅提示；i18n 5 個 key | feat/personalized-review-list（已 merge） |
