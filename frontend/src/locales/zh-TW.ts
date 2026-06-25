@@ -1425,6 +1425,7 @@ export const zhTW = {
   'play.system.status.partial': '部分完成',
   'play.system.status.skipped': '已跳過',
   'play.system.status.unknown': '未知',
+  'play.system.costUnknown': '未知',
   'play.system.stage.queueWait': '排隊等待',
   'play.system.stage.sourcePrepare': '來源準備',
   'play.system.stage.renderPages': '頁面渲染',

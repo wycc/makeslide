@@ -110,17 +110,6 @@ export function sumCompletedDurationMs(items: Array<{ status: string; duration_m
   return total > 0 ? total : null;
 }
 
-export function formatEta(seconds: number | null | undefined): string | null {
-  if (seconds == null || !Number.isFinite(seconds) || seconds <= 0) return null;
-  if (seconds < 60) return `約 ${Math.ceil(seconds)} 秒`;
-  const minutes = Math.floor(seconds / 60);
-  const remainSeconds = Math.ceil(seconds % 60);
-  if (minutes < 60) return remainSeconds > 0 ? `約 ${minutes} 分 ${remainSeconds} 秒` : `約 ${minutes} 分`;
-  const hours = Math.floor(minutes / 60);
-  const remainMinutes = minutes % 60;
-  return remainMinutes > 0 ? `約 ${hours} 小時 ${remainMinutes} 分` : `約 ${hours} 小時`;
-}
-
 export function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return '00:00';
   const total = Math.floor(seconds);
@@ -135,8 +124,8 @@ export function formatTokenCount(tokens: number): string {
   return `${tokens}`;
 }
 
-export function formatCostUsd(cost: number | null): string {
-  if (cost == null) return '未知';
+export function formatCostUsd(cost: number | null, unknownLabel = 'Unknown'): string {
+  if (cost == null) return unknownLabel;
   if (cost === 0) return '$0';
   if (cost < 0.01) return '<$0.01';
   return `$${cost.toFixed(2)}`;

@@ -1640,7 +1640,7 @@ export function PlayPageSlidePanel() {
                                   {t('play.system.llmUsage')
                                     .replace('{requests}', String(run.llm_usage.requests))
                                     .replace('{tokens}', formatTokenCount(run.llm_usage.total_tokens))
-                                    .replace('{cost}', formatCostUsd(run.llm_usage.estimated_cost_usd))}
+                                    .replace('{cost}', formatCostUsd(run.llm_usage.estimated_cost_usd, t('play.system.costUnknown')))}
                                 </p>
                               )}
                             </div>

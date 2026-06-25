@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import type { TranslationKey } from '../../i18n';
 import { zhTW } from '../../locales/zh-TW';
 import {
+  formatCostUsd,
   formatDurationMs,
   formatRegenerateEta,
   formatRegenerateJobStatus,
@@ -24,6 +25,14 @@ test('formatDurationMs returns placeholder for missing or invalid values', () =>
   assert.equal(formatDurationMs(null), '尚無紀錄');
   assert.equal(formatDurationMs(undefined), '尚無紀錄');
   assert.equal(formatDurationMs(Number.NaN), '尚無紀錄');
+});
+
+test('formatCostUsd formats dollar amounts and uses the provided unknown label', () => {
+  assert.equal(formatCostUsd(0), '$0');
+  assert.equal(formatCostUsd(0.004), '<$0.01');
+  assert.equal(formatCostUsd(1.2345), '$1.23');
+  assert.equal(formatCostUsd(null, t('play.system.costUnknown')), '未知');
+  assert.equal(formatCostUsd(null), 'Unknown');
 });
 
 test('sumCompletedDurationMs sums only succeeded finite artifact durations', () => {
