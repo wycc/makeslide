@@ -419,8 +419,8 @@ export interface PlayPageContextValue {
   slideImageMaxHeightVh: number;
   activeTab: ActiveTab;
   setActiveTab: Dispatch<SetStateAction<ActiveTab>>;
-  qaPanelExpanded: boolean;
-  setQaPanelExpanded: Dispatch<SetStateAction<boolean>>;
+  sidebarExpanded: boolean;
+  setSidebarExpanded: Dispatch<SetStateAction<boolean>>;
 
   // ─── Drawing ────────────────────────────────────────────────────────────────
   drawingMode: boolean;

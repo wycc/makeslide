@@ -439,7 +439,7 @@ function PageNoteSection() {
 export function PlayPageSidebar() {
   const {
     activeTab,
-    qaPanelExpanded, setQaPanelExpanded,
+    sidebarExpanded, setSidebarExpanded,
     isReadOnlyProcessing,
     detail,
     currentPage, currentIdx, deckPages, totalPages,
@@ -502,20 +502,15 @@ export function PlayPageSidebar() {
   const selectNotebookTab = (tab: NotebookTab) => {
     setNotebookTab(tab);
     setStoredNotebookTab(tab);
-    // The expand state only makes sense within the AI tab; reset it on switch so
-    // a stale expanded state can't blank out another tab's sections (which still
-    // carry the `qaPanelExpanded ? 'md:hidden'` class). Phase 2 will generalise
-    // this into a tab-independent sidebar-expand control.
-    setQaPanelExpanded(false);
   };
 
   return (
     <aside
-      className={`max-h-[calc(100vh-7rem)] w-full shrink-0 flex-col gap-3 overflow-y-auto md:flex md:w-[360px] ${
-        activeTab === 'qa' ? 'flex' : 'hidden'
-      }`}
+      className={`max-h-[calc(100vh-7rem)] w-full flex-col gap-3 overflow-y-auto md:flex ${
+        sidebarExpanded ? 'md:w-full md:flex-1' : 'shrink-0 md:w-[360px]'
+      } ${activeTab === 'qa' ? 'flex' : 'hidden'}`}
     >
-      <div className={`flex shrink-0 flex-wrap gap-1 rounded-lg border border-slate-800 bg-slate-900/40 p-1 ${qaPanelExpanded ? 'md:hidden' : ''}`} role="tablist">
+      <div className="flex shrink-0 flex-wrap items-center gap-1 rounded-lg border border-slate-800 bg-slate-900/40 p-1" role="tablist">
         {NOTEBOOK_TABS.map((tab) => (
           <button
             key={tab.id}
@@ -532,10 +527,19 @@ export function PlayPageSidebar() {
             {tab.icon} {t(tab.labelKey)}
           </button>
         ))}
+        <button
+          type="button"
+          onClick={() => setSidebarExpanded((v) => !v)}
+          className="hidden shrink-0 rounded-md border border-cyan-500/50 bg-cyan-500/10 px-2 py-1.5 text-xs text-cyan-200 hover:bg-cyan-500/20 md:inline-flex"
+          aria-pressed={sidebarExpanded}
+          title={sidebarExpanded ? t('play.sidebar.qa.restoreSidebarTitle') : t('play.sidebar.qa.expandSidebarTitle')}
+        >
+          {sidebarExpanded ? t('play.sidebar.qa.restore') : t('play.sidebar.qa.expand')}
+        </button>
       </div>
 
       {notebookTab === 'slides' && (
-      <section className={`rounded-lg border border-slate-800 bg-slate-900/40 ${qaPanelExpanded ? 'md:hidden' : ''}`}>
+      <section className="rounded-lg border border-slate-800 bg-slate-900/40">
         <div className="border-b border-slate-800 px-4 py-3">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-sm font-semibold text-slate-300">🧩 {t('play.sidebar.slideManagement')}</h2>
@@ -820,7 +824,7 @@ export function PlayPageSidebar() {
       {notebookTab === 'notes' && <PageNoteSection />}
 
       {notebookTab === 'interact' && (
-      <section className={`rounded-lg border border-slate-800 bg-slate-900/40 ${qaPanelExpanded ? 'md:hidden' : ''}`}>
+      <section className="rounded-lg border border-slate-800 bg-slate-900/40">
         <div className="flex items-center justify-between gap-2 px-3 py-2">
           <div className="min-w-0">
             <h2 className="truncate text-sm font-semibold text-slate-300">📊 Realtime Poll</h2>
@@ -987,7 +991,7 @@ export function PlayPageSidebar() {
       )}
 
       {notebookTab === 'interact' && (
-      <section className={`rounded-lg border border-slate-800 bg-slate-900/40 ${qaPanelExpanded ? 'md:hidden' : ''}`}>
+      <section className="rounded-lg border border-slate-800 bg-slate-900/40">
         <div className="flex items-center justify-between gap-2 border-b border-slate-800 px-4 py-3">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-300">
             {t('play.sidebar.bookmarksTitle')}
@@ -1051,7 +1055,7 @@ export function PlayPageSidebar() {
       )}
 
       {notebookTab === 'interact' && (
-      <section className={`rounded-lg border border-slate-800 bg-slate-900/40 ${qaPanelExpanded ? 'md:hidden' : ''}`}>
+      <section className="rounded-lg border border-slate-800 bg-slate-900/40">
         <div className="border-b border-slate-800 px-4 py-3">
           <div className="flex items-center justify-between gap-2">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-300">
@@ -1136,15 +1140,6 @@ export function PlayPageSidebar() {
         <h2 className="min-w-0 truncate text-sm font-semibold text-slate-300">
           💬 {t('play.sidebar.qa.title')}
         </h2>
-        <button
-          type="button"
-          onClick={() => setQaPanelExpanded((v) => !v)}
-          className="hidden shrink-0 rounded-md border border-cyan-500/50 bg-cyan-500/10 px-2 py-1 text-xs text-cyan-200 hover:bg-cyan-500/20 md:inline-flex"
-          aria-pressed={qaPanelExpanded}
-          title={qaPanelExpanded ? t('play.sidebar.qa.restoreSidebarTitle') : t('play.sidebar.qa.expandSidebarTitle')}
-        >
-          {qaPanelExpanded ? t('play.sidebar.qa.restore') : t('play.sidebar.qa.expand')}
-        </button>
       </div>
       <p className="mb-2 text-xs text-slate-500">{t('play.sidebar.qa.usageNote')}</p>
       <div className="flex justify-end">

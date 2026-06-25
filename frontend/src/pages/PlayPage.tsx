@@ -196,7 +196,7 @@ export default function PlayPage() {
   const [gotoPageOpen, setGotoPageOpen] = useState(false);
   const [gotoPageInput, setGotoPageInput] = useState('');
   const gotoPageInputRef = useRef<HTMLInputElement>(null);
-  const [qaPanelExpanded, setQaPanelExpanded] = useState(false);
+  const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [syncEnabled, setSyncEnabled] = useState(false);
   const [syncRole, setSyncRole] = useState<'master' | 'follower'>('follower');
   const [audioMuted, setAudioMuted] = useState(false);
@@ -2392,7 +2392,7 @@ export default function PlayPage() {
     imageOnlyFullscreen, setImageOnlyFullscreen, fullscreenLayout, setFullscreenLayout,
     positioningEffectId, setPositioningEffectId,
     slideImageScale, setSlideImageScale, slideImageMaxHeightVh, activeTab, setActiveTab,
-    qaPanelExpanded, setQaPanelExpanded,
+    sidebarExpanded, setSidebarExpanded,
     // drawing
     drawingMode, setDrawingMode, drawingTool, setDrawingTool, drawingColor, setDrawingColor,
     drawingLineWidth, setDrawingLineWidth, remoteDrawingData, pushLocalDrawingChange, flushLocalDrawingPush,

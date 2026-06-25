@@ -130,6 +130,7 @@ export function PlayPageSlidePanel() {
     remoteDrawingData, pushLocalDrawingChange,
     openVersionHistory,
     activeTab,
+    sidebarExpanded,
     syncEnabled, syncRole,
     classroomMode, setClassroomMode,
     classroomAwaitingNext,
@@ -354,9 +355,9 @@ export function PlayPageSlidePanel() {
 
   return (
     <div
-      className={`relative min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950/70 md:flex ${
-        activeTab === 'play' ? 'flex' : 'hidden'
-      }`}
+      className={`relative min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950/70 ${
+        sidebarExpanded ? 'md:hidden' : 'md:flex'
+      } ${activeTab === 'play' ? 'flex' : 'hidden'}`}
     >
       {/* Slide image */}
       <section
