@@ -10,6 +10,7 @@ import { QualityCheckPanel } from './QualityCheckPanel';
 import { copyTextToClipboard } from '../../lib/clipboard';
 import { formatAudioDuration } from '../../lib/audioDuration';
 import { getReviewItems, removeReviewItem, type ReviewItem } from '../../lib/reviewList';
+import { NOTEBOOK_TABS, getStoredNotebookTab, setStoredNotebookTab, type NotebookTab } from './notebookTabs';
 
 const IMAGE_MSG_PREFIX = '[image] ';
 
@@ -497,6 +498,16 @@ export function PlayPageSidebar() {
     );
   const [bookmarkCopyMsg, setBookmarkCopyMsg] = useState<string | null>(null);
   const [importantCopyMsg, setImportantCopyMsg] = useState<string | null>(null);
+  const [notebookTab, setNotebookTab] = useState<NotebookTab>(() => getStoredNotebookTab());
+  const selectNotebookTab = (tab: NotebookTab) => {
+    setNotebookTab(tab);
+    setStoredNotebookTab(tab);
+    // The expand state only makes sense within the AI tab; reset it on switch so
+    // a stale expanded state can't blank out another tab's sections (which still
+    // carry the `qaPanelExpanded ? 'md:hidden'` class). Phase 2 will generalise
+    // this into a tab-independent sidebar-expand control.
+    setQaPanelExpanded(false);
+  };
 
   return (
     <aside
@@ -504,6 +515,26 @@ export function PlayPageSidebar() {
         activeTab === 'qa' ? 'flex' : 'hidden'
       }`}
     >
+      <div className={`flex shrink-0 flex-wrap gap-1 rounded-lg border border-slate-800 bg-slate-900/40 p-1 ${qaPanelExpanded ? 'md:hidden' : ''}`} role="tablist">
+        {NOTEBOOK_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={notebookTab === tab.id}
+            onClick={() => selectNotebookTab(tab.id)}
+            className={`flex-1 whitespace-nowrap rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
+              notebookTab === tab.id
+                ? 'bg-cyan-500/20 text-cyan-100'
+                : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+            }`}
+          >
+            {tab.icon} {t(tab.labelKey)}
+          </button>
+        ))}
+      </div>
+
+      {notebookTab === 'slides' && (
       <section className={`rounded-lg border border-slate-800 bg-slate-900/40 ${qaPanelExpanded ? 'md:hidden' : ''}`}>
         <div className="border-b border-slate-800 px-4 py-3">
           <div className="flex items-center justify-between gap-2">
@@ -784,9 +815,11 @@ export function PlayPageSidebar() {
           </button>
         </div>
       </section>
+      )}
 
-      <PageNoteSection />
+      {notebookTab === 'notes' && <PageNoteSection />}
 
+      {notebookTab === 'interact' && (
       <section className={`rounded-lg border border-slate-800 bg-slate-900/40 ${qaPanelExpanded ? 'md:hidden' : ''}`}>
         <div className="flex items-center justify-between gap-2 px-3 py-2">
           <div className="min-w-0">
@@ -951,7 +984,9 @@ export function PlayPageSidebar() {
           </div>
         )}
       </section>
+      )}
 
+      {notebookTab === 'interact' && (
       <section className={`rounded-lg border border-slate-800 bg-slate-900/40 ${qaPanelExpanded ? 'md:hidden' : ''}`}>
         <div className="flex items-center justify-between gap-2 border-b border-slate-800 px-4 py-3">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-300">
@@ -1013,7 +1048,9 @@ export function PlayPageSidebar() {
           )}
         </div>
       </section>
+      )}
 
+      {notebookTab === 'interact' && (
       <section className={`rounded-lg border border-slate-800 bg-slate-900/40 ${qaPanelExpanded ? 'md:hidden' : ''}`}>
         <div className="border-b border-slate-800 px-4 py-3">
           <div className="flex items-center justify-between gap-2">
@@ -1076,21 +1113,23 @@ export function PlayPageSidebar() {
           )}
         </div>
       </section>
+      )}
 
-      <CommentsSection />
+      {notebookTab === 'notes' && <CommentsSection />}
 
-      <SimilarPagesSection />
+      {notebookTab === 'slides' && <SimilarPagesSection />}
 
-      <ReviewListSection />
+      {notebookTab === 'interact' && <ReviewListSection />}
 
-      <OutlineSection />
+      {notebookTab === 'slides' && <OutlineSection />}
 
-      <PageAskPanel />
+      {notebookTab === 'ai' && <PageAskPanel />}
 
-      <QualityCheckPanel />
+      {notebookTab === 'ai' && <QualityCheckPanel />}
 
-      <PageNoteSection />
+      {notebookTab === 'notes' && <PageNoteSection />}
 
+      {notebookTab === 'ai' && (
       <section className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-lg border border-slate-800 bg-slate-900/40">
       <div className="border-b border-slate-800 px-4 py-3">
       <div className="mb-2 flex items-center justify-between gap-2">
@@ -1262,6 +1301,7 @@ export function PlayPageSidebar() {
         {chatInpaintError ? <p className="mt-1 text-xs text-rose-300">{chatInpaintError}</p> : null}
       </div>
       </section>
+      )}
     </aside>
   );
 }
