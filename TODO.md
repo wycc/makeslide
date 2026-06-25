@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | 抽出測驗進度彙總純函式：新增 `lib/quizProgress.ts` 的 `summarizeQuizProgress`（total/submitted/inProgress），QuizBuilderPage 改用之；補 3 個單元測試；typecheck + 291 前端測試全通過 | feat/quiz-progress-summary-helper（已 merge） |
 | 2026-06-25 | localStorage 存取防護一致性：reviewList 新增 `hasLocalStorage()` 守衛（get 回[]、mutators no-op）、viewerId 無 window 時回未持久化 id；各補 1 個回退測試（10 lib 測試）；typecheck + 288 前端測試全通過 | fix/localstorage-guard（已 merge） |
 | 2026-06-25 | 分析並新增可執行項目（第三十九輪）：TODO 清空、無新使用者項目，依 LOOP.md 聚焦健全性/可測性，新增 2 個低風險項目（viewerId/reviewList localStorage 存取防護一致性、抽出測驗進度彙總純函式 + 測試） | master（僅文件） |
 | 2026-06-25 | 動畫文字依解析度等比縮放：`SlideRenderer` 動畫 stage 以 ResizeObserver 量寬度、設 `font-size = 16*(width/960)px`，覆蓋層文字單位 rem/clamp→em 以繼承縮放（text-callout/step-list/pause/realtime/formula），使各解析度下文字相對投影片比例一致；typecheck + 286 前端測試通過 | fix/animation-text-resolution-scaling（已 merge） |
@@ -1410,5 +1411,6 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] localStorage 存取防護一致性：為 `lib/viewerId.ts`（`getOrCreateViewerId`）與 `lib/reviewList.ts`（`addReviewItems`/`removeReviewItem`/`clearAllReviewItems`）加上 `typeof window === 'undefined'`（或 `typeof localStorage === 'undefined'`）的早退防護，與 `i18n.ts` 既有慣例一致，避免非瀏覽器環境丟錯（`getReviewItems` 已有 try/catch，可一併確認）。更新/補既有測試涵蓋「無 localStorage 時安全回退」。純前端、低風險。
   - 修改說明（2026-06-25）：`reviewList.ts` 新增 `hasLocalStorage()`（`typeof localStorage !== 'undefined'`）守衛，`getReviewItems` 改為無 localStorage 時直接回 []（不再僅靠 try/catch），`addReviewItems`/`removeReviewItem`/`clearAllReviewItems` 在無 localStorage 時 no-op 早退；`viewerId.ts` 的 `getOrCreateViewerId` 先產生候選 id，於 `typeof window === 'undefined' || !window.localStorage` 時直接回傳該 id（不持久化），否則沿用既有讀/寫流程。兩測試檔各補 1 個「無 localStorage/window 時安全回退」測試（共 10 個 lib 測試）。frontend typecheck 通過、全部 288 個前端測試 + i18n 對等 21 個全通過。分支 `fix/localstorage-guard`，已 merge 回 master。
 
-- [ ] 抽出測驗進度彙總純函式：把 `QuizBuilderPage` 「測驗中的學員」面板 inline 的 `submitted / total / inProgress` 計算抽成純函式（例如 `lib/quizProgress.ts` 的 `summarizeQuizProgress(progress: SyncQuizProgress[])`），元件改用之；補單元測試涵蓋全提交/全作答中/混合/空陣列。純前端、低風險。
+- [x] 抽出測驗進度彙總純函式：把 `QuizBuilderPage` 「測驗中的學員」面板 inline 的 `submitted / total / inProgress` 計算抽成純函式（例如 `lib/quizProgress.ts` 的 `summarizeQuizProgress(progress: SyncQuizProgress[])`），元件改用之；補單元測試涵蓋全提交/全作答中/混合/空陣列。純前端、低風險。
+  - 修改說明（2026-06-25）：新增 `frontend/src/lib/quizProgress.ts`：純函式 `summarizeQuizProgress(progress)` 回傳 `{ total, submitted, inProgress }`（`QuizProgressSummary` 介面）。`QuizBuilderPage` 的彙總行改用之（`formatMessage('quiz.progressSummary', { ...summarizeQuizProgress(syncQuizProgress) } as Record<string, number>)`——因 `formatMessage` 參數為 `Record<string, string|number>`，介面型別需轉型）。新增 `quizProgress.test.ts` 3 個測試（空陣列、混合、全提交/全作答中）。frontend typecheck 通過、全部 291 個前端測試 + i18n 對等 21 個全通過。分支 `feat/quiz-progress-summary-helper`，已 merge 回 master。
 

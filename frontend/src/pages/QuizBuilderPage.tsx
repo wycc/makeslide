@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useI18n } from '../i18n';
 import { formatRelativeTime, buildRelativeTimeLabels } from '../lib/relativeTime';
+import { summarizeQuizProgress } from '../lib/quizProgress';
 import {
   ApiError,
   copyQuizSetTo,
@@ -951,11 +952,7 @@ export default function QuizBuilderPage() {
               ) : (
                 <>
                 <p className="mt-1 text-xs text-fuchsia-200">
-                  {formatMessage('quiz.progressSummary', {
-                    submitted: syncQuizProgress.filter((p) => p.submitted).length,
-                    total: syncQuizProgress.length,
-                    inProgress: syncQuizProgress.filter((p) => !p.submitted).length,
-                  })}
+                  {formatMessage('quiz.progressSummary', { ...summarizeQuizProgress(syncQuizProgress) } as Record<string, number>)}
                 </p>
                 <ul className="mt-2 space-y-2">
                   {syncQuizProgress.map((p) => {
