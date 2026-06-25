@@ -11,6 +11,26 @@ test('English and Traditional Chinese locale dictionaries expose the same keys',
   assert.deepEqual(enKeys, zhKeys);
 });
 
+test('English and Traditional Chinese share the same interpolation placeholders per key', () => {
+  // Callers substitute placeholders like `{count}` via String.replace; if one
+  // locale is missing a placeholder the other has, that locale silently drops
+  // the interpolated value at runtime. The key-equality test above does not
+  // catch this, so compare the `{name}` token set of every shared key.
+  const placeholders = (value: string) =>
+    new Set([...value.matchAll(/\{[a-zA-Z0-9_]+\}/g)].map((m) => m[0]));
+  const mismatches: string[] = [];
+  for (const key of Object.keys(zhTW) as Array<keyof typeof zhTW>) {
+    if (!(key in en)) continue;
+    const zhSet = placeholders(zhTW[key]);
+    const enSet = placeholders(en[key]);
+    const same = zhSet.size === enSet.size && [...zhSet].every((p) => enSet.has(p));
+    if (!same) {
+      mismatches.push(`${key}: zh={${[...zhSet].join(',')}} en={${[...enSet].join(',')}}`);
+    }
+  }
+  assert.deepEqual(mismatches, []);
+});
+
 test('admin account deletion locale keys are complete', () => {
   const requiredKeys = [
     'settings.accountDeleteTitle',
