@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | PlayPage.tsx 行動分頁與狀態畫面國際化：行動版「播放／問答」分頁、新投票 aria-label、四個全螢幕狀態畫面（invalid id/載入/無頁面/產生中）、圖片產生中浮層改用 t()；新增 11 個 `play.mobileTab.*`/`play.status.*` key（對等總數 1750）；錯誤訊息字串依項目允許延後；typecheck + i18n 對等 21 全通過 | feat/playpage-mobile-status-i18n（已 merge） |
 | 2026-06-25 | RemoteControllerPage 殘留中文國際化：投影片 alt「第 N 頁」與投票「N 票」抽成 3 個 `remote.*` key（slideAltPrefix/Suffix、votesSuffix）；grep 確認無殘留中文；zh-TW/en 各補 3 key；typecheck + i18n 對等全通過 | feat/remote-controller-i18n（已 merge） |
 | 2026-06-25 | notebook 分頁鍵盤 Home/End 跳首末分頁：新增純函式 `getEdgeNotebookTab`，`handleTabKeyDown` 支援 Home/End（跳首/末分頁並移動焦點，沿用 roving tabindex）；補 1 單元測試；無新 i18n key；typecheck + 275 前端測試 + i18n 對等全通過 | feat/notebook-home-end-keys（已 merge） |
 | 2026-06-25 | notebook「投影片」分頁總頁數 badge：把分頁數量計算抽成純函式 `computeNotebookTabCounts`（slides=總頁數、interact=書籤+重點頁+投票），`PlayPageSidebar` 改用之，投影片分頁現顯示總頁數 badge；補 2 個單元測試；無新 i18n key；typecheck + 274 前端測試 + i18n 對等全通過 | feat/notebook-slides-count-badge（已 merge） |
@@ -1264,7 +1265,8 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 ## 新增可執行項目（2026-06-25 第三十四輪）
 
-- [ ] PlayPage.tsx 行動分頁與狀態畫面國際化：把 `frontend/src/pages/PlayPage.tsx` 中的硬編中文抽成 i18n key，至少包含：行動版頂部分頁「播放」「問答」標籤、`新投票` 的 `aria-label`、`無效的 PDF id`／`返回首頁`（出現兩處）／`載入中…`／`圖片產生中…`／「尚未產生可瀏覽的頁面（…）」／「這份 PDF 沒有可播放的語音頁面」／「系統將每 3 秒重新檢查一次狀態…」等狀態畫面文字。改用 `useI18n()`；含插值（status / progress_step）處以樣板字串 + 前後綴 key 組合。錯誤訊息字串（`setSyncError`/`setAudioError`/`ApiError` fallback 等）可一併或後續處理（量大，至少先處理使用者直接可見的版面文字）。補 zh-TW/en 對應 key 並跑 `i18n.test.ts` 對等測試。純前端。
+- [x] PlayPage.tsx 行動分頁與狀態畫面國際化：把 `frontend/src/pages/PlayPage.tsx` 中的硬編中文抽成 i18n key，至少包含：行動版頂部分頁「播放」「問答」標籤、`新投票` 的 `aria-label`、`無效的 PDF id`／`返回首頁`（出現兩處）／`載入中…`／`圖片產生中…`／「尚未產生可瀏覽的頁面（…）」／「這份 PDF 沒有可播放的語音頁面」／「系統將每 3 秒重新檢查一次狀態…」等狀態畫面文字。改用 `useI18n()`；含插值（status / progress_step）處以樣板字串 + 前後綴 key 組合。錯誤訊息字串（`setSyncError`/`setAudioError`/`ApiError` fallback 等）可一併或後續處理（量大，至少先處理使用者直接可見的版面文字）。補 zh-TW/en 對應 key 並跑 `i18n.test.ts` 對等測試。純前端。
+  - 修改說明（2026-06-25）：新增 `play.mobileTab.*`（play/qa/newPollAria）與 `play.status.*`（invalidPdfId/backHome/loading/noPagesGeneratingPrefix/noPagesGeneratingSuffix/noAudioPages/recheckHint/imageGenerating）共 11 個 key（zh-TW/en 各 11，i18n 對等總數 1750）。`PlayPage.tsx` 行動版分頁「播放／問答」、新投票 `aria-label`、四個全螢幕狀態畫面（invalid id／loadError 返回首頁／載入中／totalPages=0 的產生中或無語音頁＋每 3 秒重檢提示＋返回首頁）、以及「圖片產生中…」浮層全部改用 `t()`；「尚未產生可瀏覽的頁面（status / progress_step）」以 prefix+插值+suffix 組合。`t` 早已於 PlayPage 取得（`useI18n()`，行 164），所有早期 return 皆在其後故 in scope。**範圍說明**：依本項允許，`setSyncError`/`setAudioError`/`ApiError` fallback 等錯誤訊息字串量大且多為非主要版面文字，本次未處理、留待後續輪次（可另開 i18n 項目）。frontend typecheck 通過、i18n 對等測試 21 個全通過。分支 `feat/playpage-mobile-status-i18n`，已 merge 回 master。
 
 - [x] RemoteControllerPage 殘留硬編中文國際化：把 `frontend/src/pages/RemoteControllerPage.tsx` 的 2 處硬編中文抽成 i18n key——投影片 `alt={`第 ${currentPage} 頁`}` 與投票結果 `{poll.total_votes} 票`，沿用既有 `play.report.pagePrefix/pageSuffix`、`votesSuffix` 之類或新增 `remote.*` key（擇一致風格）。補 zh-TW/en 並跑 i18n 對等測試。純前端、小改動。
   - 修改說明（2026-06-25）：新增 3 個 `remote.*` key（`slideAltPrefix`/`slideAltSuffix`/`votesSuffix`，與該頁既有 `remote.*` 命名一致）；投影片 `alt` 改為 `${slideAltPrefix}${currentPage}${slideAltSuffix}`、投票數改為 `{poll.total_votes}{votesSuffix}`。`grep` 確認該頁已無中文字元；zh-TW/en 各補 3 key；frontend typecheck 通過、i18n 對等測試 21 個全通過。分支 `feat/remote-controller-i18n`，已 merge 回 master。
