@@ -1466,3 +1466,14 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] 為 logSanitizer.ts 補單元測試：新增 `backend/test/logSanitizer.test.ts`，涵蓋 `redactLogValue`/`redactLogObject`/`redactPromptForLog`/`redactTextForLog`：原始型別（null/number/boolean/bigint）穿透、字串中的 API key／Bearer token／data URL／長 hex／長 base64 脫敏、長字串截斷（保留原長度）、敏感 key 摘要（短值帶 preview、長值僅 chars）、SAFE_METADATA_KEYS 白名單豁免、Buffer/TypedArray 尺寸摘要、Error 化簡、巢狀遞迴、陣列上限 20、深度上限。純後端、僅新增測試、不改產品程式碼。
   - 修改說明（2026-06-25）：新增 `backend/test/logSanitizer.test.ts`，14 個測試完整涵蓋上述各分支（含 `hasUrl` 雖結尾匹配敏感樣式但在白名單故豁免、`url` 未白名單則摘要的對照；深度上限以 8 層巢狀斷言出現 `[redacted-depth-limit]`）。因該模組無 DB 相依，以 `tsx --test` 直跑驗證 14 個測試全通過（避開後端整套 better-sqlite3 開機在 sandbox 的 timeout）；backend typecheck 通過。未改動產品程式碼。分支 `test/log-sanitizer`，已 merge 回 master。
 
+## 掃描摘要（2026-06-25 第四十四輪）
+
+- TODO 唯一未完成項目（formatDurationMs i18n）仍暫緩（方案待使用者確認）。延續第四十三輪被使用者接受的方向（為後端無 DB 相依的純函式服務補單元測試），繼續清理測試覆蓋缺口。
+- 觀察：`backend/src/services/subtitleAlignment.ts`（Whisper 逐字時間戳的字幕精準對齊，純函式、無 DB 相依）**無單元測試**；其 `splitScriptIntoSentences`（須與前端 `lib/subtitles.ts` 的切句規則鏡像一致）與 `alignSentencesToWordTimestamps`（依字元權重比例對齊、邊界 clamping）皆有可測的邊界邏輯。
+- 其餘無測試的純函式服務（`pdfPageMarkers`/`imagePromptTemplates`/`accountContext`/`promptTemplates`）可留待後續輪次。
+
+## 新增可執行項目（2026-06-25 第四十四輪）
+
+- [x] 為 subtitleAlignment.ts 補單元測試：新增 `backend/test/subtitleAlignment.test.ts`，涵蓋 `splitScriptIntoSentences`（CJK/ASCII 句尾標點切句並保留標點、分號、CRLF 正規化、空行丟棄、`[[tone]]` 標記移除、空輸入）與 `alignSentencesToWordTimestamps`（空輸入 fallback、等權對齊、依字元權重比例分配、末句結束於總時長、忽略空白權重、時間在界內且不遞減）。純後端、僅新增測試、不改產品程式碼。
+  - 修改說明（2026-06-25）：新增 `backend/test/subtitleAlignment.test.ts`，11 個測試涵蓋上述各案例（比例分配以「權重 4:2 的兩句對單一 6 字、0–6 秒的詞」驗證切在 4 秒；忽略空白以兩個各含單一非空白字元的詞驗證對半切）。因模組無 DB 相依，以 `tsx --test` 直跑驗證 11 個測試全通過；backend typecheck 通過。未改動產品程式碼。分支 `test/subtitle-alignment`，已 merge 回 master。
+
