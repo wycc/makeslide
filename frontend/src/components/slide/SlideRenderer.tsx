@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ImgHTMLAttributes, ReactNode, Ref } from 'react';
 import katex from 'katex';
 import type { SlideAnimationEffect, SlideAnimationSpec, SlideRenderType } from '../../types';
@@ -14,6 +14,13 @@ import {
 } from '../../lib/animationSpec';
 import { useGsapSlideTimeline } from './useGsapSlideTimeline';
 import { WRAPPING_OVERLAY_TEXT_STYLE } from './overlayTextStyle';
+
+// Overlay animation text uses `em`/em-derived sizes that inherit the stage's
+// font-size. We set the stage font-size proportional to its rendered width so
+// text keeps the same proportion across resolutions (editor preview, normal
+// playback, fullscreen). At this reference width the scale is 1 (i.e. 1em≈16px).
+const ANIMATION_TEXT_REFERENCE_WIDTH = 960;
+const ANIMATION_TEXT_BASE_PX = 16;
 
 const TEXT_CALLOUT_PADDING: Record<NonNullable<SlideAnimationEffect['textCalloutPadding']>, string> = {
   sm: '0.25em 0.5em',
@@ -129,7 +136,7 @@ function EffectOverlay({
   if (effect.type === 'text-callout') {
     const tcBg = effect.textCalloutBgColor ?? '#0f172a';
     const tcText = effect.textCalloutTextColor ?? '#f8fafc';
-    const tcFontSize = `${effect.textCalloutFontSize ?? 1.25}rem`;
+    const tcFontSize = `${effect.textCalloutFontSize ?? 1.25}em`;
     const tcBr = `${effect.textCalloutBorderRadius ?? 8}px`;
     const tcAlign = effect.textCalloutAlign ?? 'center';
     const tcJustify = tcAlign === 'left' ? 'flex-start' : tcAlign === 'right' ? 'flex-end' : 'center';
@@ -216,7 +223,7 @@ function EffectOverlay({
     const items = (effect.items ?? []).map((item) => item.trim()).filter((item) => item.length > 0);
     const bgColor = effect.stepListBgColor ?? '#1e293b';
     const textColor = effect.stepListTextColor ?? '#f1f5f9';
-    const slFontSize = `${effect.stepListFontSize ?? 1.1}rem`;
+    const slFontSize = `${effect.stepListFontSize ?? 1.1}em`;
     const slBr = `${effect.stepListBorderRadius ?? 8}px`;
     const slBorder = effect.stepListBorderColor ? `2px solid ${effect.stepListBorderColor}` : undefined;
     const slBullet = effect.stepListBulletStyle ?? 'disc';
@@ -323,7 +330,7 @@ function EffectOverlay({
           border: '2px solid rgba(125, 211, 252, 0.75)',
           background: 'rgba(15, 23, 42, 0.88)',
           color: '#e0f2fe',
-          fontSize: 'clamp(1rem, 3vw, 2.25rem)',
+          fontSize: '1.6em',
           fontWeight: 800,
           textAlign: 'center',
           ...WRAPPING_OVERLAY_TEXT_STYLE,
@@ -348,7 +355,7 @@ function EffectOverlay({
           border: '2px solid rgba(232, 121, 249, 0.75)',
           background: 'rgba(15, 23, 42, 0.88)',
           color: '#fdf4ff',
-          fontSize: 'clamp(1rem, 3vw, 2.25rem)',
+          fontSize: '1.6em',
           fontWeight: 800,
           textAlign: 'center',
           ...WRAPPING_OVERLAY_TEXT_STYLE,
@@ -434,6 +441,25 @@ export function SlideRenderer({
     onError: onAnimationError,
   });
 
+  // Track the stage's rendered width so overlay text scales proportionally.
+  const [stageWidth, setStageWidth] = useState(0);
+  const showStage = animated && !animationFailed;
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el || !showStage) return;
+    if (typeof ResizeObserver === 'undefined') {
+      setStageWidth(el.getBoundingClientRect().width);
+      return;
+    }
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width ?? el.getBoundingClientRect().width;
+      setStageWidth(w);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [showStage, pageKey]);
+  const stageFontScale = stageWidth > 0 ? stageWidth / ANIMATION_TEXT_REFERENCE_WIDTH : 1;
+
   const img = (
     <img
       ref={imgRef}
@@ -459,7 +485,7 @@ export function SlideRenderer({
 
   return (
     <div className={`${wrapperClassName ?? ''} overflow-hidden`} style={wrapperStyle}>
-      <div ref={stageRef} className="relative" style={{ lineHeight: 0, willChange: 'transform, opacity' }}>
+      <div ref={stageRef} className="relative" style={{ lineHeight: 0, fontSize: `${ANIMATION_TEXT_BASE_PX * stageFontScale}px`, willChange: 'transform, opacity' }}>
         {img}
         {children}
         {spec?.effects
