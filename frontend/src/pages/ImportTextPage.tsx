@@ -61,10 +61,10 @@ export default function ImportTextPage() {
       navigate(`/?openPrompt=${encodeURIComponent(resp.id)}`);
     } catch (err) {
       if (err instanceof ApiError) {
-        const h = mapApiErrorToHumanMessage(err);
+        const h = mapApiErrorToHumanMessage(err, t);
         setError(formatTemplate(t('importText.uploadFailedDetail'), { title: h.title, message: h.message, nextStep: h.nextStep }));
       } else if (err instanceof Error) {
-        const h = mapApiErrorToHumanMessage(err);
+        const h = mapApiErrorToHumanMessage(err, t);
         setError(formatTemplate(t('importText.uploadFailedDetail'), { title: h.title, message: h.message, nextStep: h.nextStep }));
       } else {
         setError(t('importText.uploadFailedUnknown'));
@@ -95,10 +95,10 @@ export default function ImportTextPage() {
       setChatMessages([...nextMessages, { role: 'assistant', content: resp.assistant_message }]);
     } catch (err) {
       if (err instanceof ApiError) {
-        const h = mapApiErrorToHumanMessage(err);
+        const h = mapApiErrorToHumanMessage(err, t);
         setError(formatTemplate(t('importText.chatFailedDetail'), { title: h.title, message: h.message, nextStep: h.nextStep }));
       } else if (err instanceof Error) {
-        const h = mapApiErrorToHumanMessage(err);
+        const h = mapApiErrorToHumanMessage(err, t);
         setError(formatTemplate(t('importText.chatFailedDetail'), { title: h.title, message: h.message, nextStep: h.nextStep }));
       } else {
         setError(t('importText.chatFailedUnknown'));
@@ -130,10 +130,10 @@ export default function ImportTextPage() {
       navigate(`/?openPrompt=${encodeURIComponent(resp.id)}`);
     } catch (err) {
       if (err instanceof ApiError) {
-        const h = mapApiErrorToHumanMessage(err);
+        const h = mapApiErrorToHumanMessage(err, t);
         setError(formatTemplate(t('importText.createFailedDetail'), { title: h.title, message: h.message, nextStep: h.nextStep }));
       } else if (err instanceof Error) {
-        const h = mapApiErrorToHumanMessage(err);
+        const h = mapApiErrorToHumanMessage(err, t);
         setError(formatTemplate(t('importText.createFailedDetail'), { title: h.title, message: h.message, nextStep: h.nextStep }));
       } else {
         setError(t('importText.createFailedUnknown'));
