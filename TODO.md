@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | 逐字稿對話式改寫對話框：新增自包含 `ScriptRewriteDialog`（自有多輪對話 state，不共用 QA chat），透過既有 rewrite-script 端點逐步改寫並套用到編輯器；`PlayPageSlidePanel` 加「對話式改寫」按鈕開啟；抽出 `buildRewriteContext` 純函式 + 3 個單元測試；zh-TW/en 各補 13 個 key；typecheck/測試/i18n 對等全通過 | feat/script-rewrite-dialog（已 merge） |
 | 2026-06-25 | AI 導師 ask 加入原始來源全文：`POST /pages/:n/ask` corpus 除逐頁文字+逐字稿外，另附 `source.txt`（上限 12000 字）並更新提示詞，使原文獨有的答案也能回答；新增後端測試（以獨立 inject 腳本驗證通過）；backend typecheck 通過 | feat/ai-tutor-source-text（已 merge） |
 | 2026-06-25 | UI 顯示簡報生成提示詞：`user_prompt` 早已記錄於 `pdfs` 表，`PlayPageHeader` 簡介下方新增「顯示生成提示詞」折疊區（非分享檢視限定、含複製按鈕）；zh-TW/en 各補 4 個 key；純前端；typecheck 通過、i18n 對等測試 21 個全通過 | feat/show-generation-prompt（已 merge） |
 | 2026-06-25 | 記下動畫生成提示詞：custom-script 生成成功時寫入 `effect.prompt`（隨存檔持久化，後端 `validateAnimationSpec` 早已保留該欄位），`AnimationEditorTab` 開啟對話框時以記錄的 prompt 回填輸入框供迭代；純前端；typecheck 通過、`AnimationEditorTab.test.ts` 3 個測試全通過 | feat/animation-record-prompt（已 merge） |
@@ -1195,7 +1196,8 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-25）：`PostClassReportPanel` 新增 `pdfTitle?: string | null` prop，並在面板容器最上方插入僅列印時顯示（`hidden print:block`）的頁首區塊，顯示簡報標題（無標題則 fallback「課後報告」）與「列印日期：」+ `new Date().toLocaleDateString()`；`PlayPage` 渲染時傳入 `pdfTitle={detail?.title ?? detail?.original_filename}`。純前端改動，無新增 i18n key；typecheck 通過、reportSummary 既有測試 4 個全通過。分支 `feat/report-print-header`，已 merge 回 master。
 - [x] AI 導師問這一頁的功能，應該將所有的頁面和原文都送出去。並不要限制回答的長度，目前回答都太簡短了。並且應該改成多輪對話，讓使用者可以追問。
   - 確認說明（2026-06-25）：此需求已於 commit `e51302b`（分支 `feat/ai-tutor-fulldeck-multiturn`，已 merge）完整實作並驗證既存於現行程式碼：`backend/src/routes/pdfs/page-operations.ts` 的 ask 端點改以「全份簡報每頁 text + script」組成 corpus（`ASK_DECK_CORPUS_MAX_CHARS = 14000`）而非僅當前頁；接受 `history`（多輪對話歷史，最多 20 輪）並注入提示；回答 token 上限自 1200 提高至 4000、移除「請簡短」指示讓回答更完整；前端 `usePageAsk.ts` 維護完整 user/assistant 對話、`PageAskPanel.tsx` 以多輪 thread 呈現並支援追問。對應後端測試 `backend/test/page-ask.test.ts`（full-deck + history）。本輪僅作既有功能確認，無新增程式碼。
-- [ ] 逐字稿 AI 改寫改成跳一個新的對話框，並在其它做多輪對話，可以根據對話結果再重新產生逐字稿。
+- [x] 逐字稿 AI 改寫改成跳一個新的對話框，並在其它做多輪對話，可以根據對話結果再重新產生逐字稿。
+  - 修改說明（2026-06-25）：原本逐字稿改寫只有「風格預設單次改寫」或被併進共用的 QA／圖片 chat 串（與問答、生圖共用同一條對話）。新增專屬 `ScriptRewriteDialog.tsx` 獨立對話框，擁有自己的多輪對話 state（不再共用 `chatHistory`），透過既有 `rewrite-script` 端點（早已支援 history）逐步改寫本頁逐字稿，每次結果自動套用到 `editingScript`（下方逐字稿編輯器）。對話框自包含（自有 state、讀 `PlayPageContext`，不修改共用 context 與既有 handler），由 `PlayPageSlidePanel` 風格改寫旁的「對話式改寫」按鈕開啟。抽出純函式 `buildRewriteContext()` 並新增 3 個單元測試；zh-TW/en 各補 13 個 `play.scriptRewrite.*` key（共 1668 對等）。typecheck 通過、helper 測試 3 個 + i18n 對等測試 21 個全通過。視覺版面因 sandbox 無瀏覽器未做互動驗證，但接線與邏輯均已驗證。分支 `feat/script-rewrite-dialog`，已 merge 回 master。
 
 - [ ] 右邊改成 notebook 界面，
 - [ ] AI 生成動畫的紅框位置都不正確，是否圖片有被正確的傳送。
