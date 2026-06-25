@@ -1488,6 +1488,7 @@ export const zhTW = {
   'quiz.history': '歷史紀錄',
   'quiz.followerReadonlyHint': '目前角色是 follower，僅 master 可開始測驗。',
   'quiz.studentsInQuiz': '測驗中的學員',
+  'quiz.progressSummary': '已提交 {submitted} / {total} 人，作答中 {inProgress}',
   'quiz.noStudentProgress': '目前還沒有人開始作答。',
   'quiz.anonymousStudent': '匿名學員',
   'quiz.completed': '已完成',

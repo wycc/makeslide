@@ -949,6 +949,14 @@ export default function QuizBuilderPage() {
               {syncQuizProgress.length === 0 ? (
                 <p className="mt-1 text-xs text-slate-500">{t('quiz.noStudentProgress')}</p>
               ) : (
+                <>
+                <p className="mt-1 text-xs text-fuchsia-200">
+                  {formatMessage('quiz.progressSummary', {
+                    submitted: syncQuizProgress.filter((p) => p.submitted).length,
+                    total: syncQuizProgress.length,
+                    inProgress: syncQuizProgress.filter((p) => !p.submitted).length,
+                  })}
+                </p>
                 <ul className="mt-2 space-y-2">
                   {syncQuizProgress.map((p) => {
                     const ratio = p.total_questions > 0 ? Math.min(1, p.answered_count / p.total_questions) : 0;
@@ -970,6 +978,7 @@ export default function QuizBuilderPage() {
                     );
                   })}
                 </ul>
+                </>
               )}
             </div>
           ) : null}
