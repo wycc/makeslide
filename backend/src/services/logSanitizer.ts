@@ -42,6 +42,13 @@ const SAFE_METADATA_KEYS = new Set([
 
 const API_KEY_VALUE_PATTERN = /\b(?:sk|sk-proj|sk-ant|AIza)[A-Za-z0-9_\-]{16,}\b/g;
 const BEARER_VALUE_PATTERN = /\bBearer\s+[A-Za-z0-9._\-]{16,}\b/gi;
+// Credentials embedded in a URL, e.g. the https://x-access-token:<token>@github.com
+// remote presentationGit builds for GitHub pushes — redact the user:secret part
+// (any token shape) while keeping the scheme/host for debugging.
+const URL_CREDENTIALS_PATTERN = /([a-z][a-z0-9+.-]*:\/\/)[^/\s:@]+:[^/\s@]+@/gi;
+// GitHub personal access tokens (classic gh*_ and fine-grained github_pat_), which
+// the generic API-key pattern above does not match.
+const GITHUB_TOKEN_PATTERN = /\b(?:gh[opsru]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{16,})\b/g;
 const DATA_URL_PATTERN = /data:[^;,]+;base64,[A-Za-z0-9+/=]{64,}/gi;
 const LONG_HEX_PATTERN = /\b(?:[a-f0-9]{2}){64,}\b/gi;
 const LONG_BASE64_PATTERN = /\b[A-Za-z0-9+/]{256,}={0,2}\b/g;
@@ -62,8 +69,10 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 function sanitizeString(value: string): string {
   let out = value
     .replace(DATA_URL_PATTERN, LARGE_CONTENT_REDACTED)
+    .replace(URL_CREDENTIALS_PATTERN, `$1${REDACTED}@`)
     .replace(BEARER_VALUE_PATTERN, `Bearer ${REDACTED}`)
     .replace(API_KEY_VALUE_PATTERN, REDACTED)
+    .replace(GITHUB_TOKEN_PATTERN, REDACTED)
     .replace(LONG_HEX_PATTERN, LARGE_CONTENT_REDACTED)
     .replace(LONG_BASE64_PATTERN, LARGE_CONTENT_REDACTED);
   if (out.length > LARGE_STRING_LIMIT) {
