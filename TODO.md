@@ -1492,6 +1492,8 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] 修復「產生中」橫幅未翻譯狀態／步驟（第八十六輪，2026-06-26 掃描修復）：`PlayPage` 的「產生中…」橫幅（兩處：`readOnlyReason` 與無頁面時的狀態列）以 `${detail.status}${' / ' + detail.progress_step}` 直接插入後端原始 enum 值，導致中英文使用者都看到 `processing / rendering_video` 而非「處理中 / 產生影片中」——`StatusBadge` 早已用私有標籤 map 正確翻譯，但橫幅沒有。將兩個標籤 map 抽到共用 `lib/statusLabels.ts`（單一真實來源，`Record<PdfStatus>`／`Record<Exclude<ProgressStep,null>>` 編譯期完整性）並提供純函式 `formatGeneratingStatusLabel()`；`StatusBadge` 改 import 共用模組（移除重複定義、`STATUS_STYLES` 精簡為 className-only），兩處橫幅改用 helper。新增 `statusLabels.test.ts`（3 測試，含「不得洩漏原始 enum 值」斷言）。`StatusBadge` 行為不變；前端 typecheck 與全測試 330 個通過。分支 `fix/generating-banner-i18n`，已 merge 回 master。
 
 - [x] SLA override 驗證拒絕非正值（第八十七輪，2026-06-26 掃描修復）：`validateSlaOverrideSecondsInput` 僅以 `Number.isFinite` 擋非數字，再倚賴「選用參數 `bounds`」的範圍檢查擋越界值。當未傳 `bounds` 時，`0` 或負數秒會被核可為 `{ ok: true, targetMs: <= 0 }`——函式不該放行非正的 SLA 目標（合法最小值遠大於 0）。在 finite 檢查後加上 `seconds <= 0` → `invalid-number`，使契約不依賴 bounds 即成立。有 bounds 時唯一行為變化是 0/負數改報 `invalid-number`（原為 `out-of-range`，兩者皆已顯示錯誤）；`SettingsPage` 對 `invalid-number` 顯示 `settings.slaInvalidValue`，無回歸。新增 3 個測試（0／負數無 bounds、負數有 bounds）。前端 typecheck 與全測試 331 個通過。純前端、低風險。分支 `fix/sla-validation-nonpositive`，已 merge 回 master。
+
+- [x] 前後端狀態 enum 鏡像 drift-guard（第八十八輪，2026-06-26 掃描新增）：第八十六輪修橫幅時注意到前端 `PdfStatus`/`PageStatus`/`ProgressStep` 字串 union（`types.ts`）鏡像後端 `statusMachine.ts` 的 `PDF_STATUSES`/`PAGE_STATUSES`/`PROGRESS_STEPS`，驅動狀態徽章／橫幅／步驟標籤，但無 drift guard。經確認三組值集目前一致（`ProgressStep` 與後端順序不同但集合相同、另多 `null`）。新增後端測試 `statusEnumConsistency.test.ts`：以 `fs` 解析前端 union 成員，與後端陣列**比對排序後的值集**（忽略順序，因 union 順序非契約；`ProgressStep` 排除 `null`）。任一端新增/移除狀態即 CI 失敗。後端 typecheck 與新測試 4 個通過。純測試、低風險。分支 `test/status-enum-mirror-guard`，已 merge 回 master。
 ## 掃描摘要（2026-06-25 第四十三輪）
 
 - 本輪 TODO 唯一未完成項目（formatDurationMs i18n）先前的實作方案被使用者否決，已標記暫緩。經詢問使用者後，本輪改為「為後端 `logSanitizer.ts` 補單元測試」。
@@ -1870,3 +1872,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - 時間：2026-06-26
 - 分支：`fix/sla-validation-nonpositive`（已 merge 回 master）
 - 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 91 個完成項目（91/100，未達上限）。
+## 工作記錄（第八十八輪，2026-06-26）
+
+- 工作內容：審查純函式 `buildSentenceTimeline`（字幕時間軸估算）——縮放與邊界處理正確、健全，無 bug。延續第八十六輪發現，為前後端狀態 enum 鏡像補 drift-guard：前端 `PdfStatus`/`PageStatus`/`ProgressStep` union 鏡像後端 `statusMachine.ts` 三個陣列（驅動狀態徽章／橫幅／步驟標籤），原無守護。確認三組值集一致後，新增後端測試 `statusEnumConsistency.test.ts`，以 fs 解析前端 union 與後端陣列比對排序值集（忽略順序、ProgressStep 排除 null）。後端 typecheck 與新測試 4 個通過。純測試、低風險。
+- 時間：2026-06-26
+- 分支：`test/status-enum-mirror-guard`（已 merge 回 master）
+- 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 92 個完成項目（92/100，未達上限）。
