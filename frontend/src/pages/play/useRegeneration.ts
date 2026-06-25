@@ -11,6 +11,7 @@ import {
 } from '../../lib/api';
 import { debugWarn } from '../../lib/debugLog';
 import type { PdfDetail, RegenJobState } from '../../types';
+import { useI18n } from '../../i18n';
 
 export type RegenOptions = { image: boolean; script: boolean; audio: boolean; animation: boolean };
 
@@ -73,6 +74,7 @@ export function useRegeneration({
   scriptMaxCharsPerPage,
   setDetail,
 }: UseRegenerationParams): RegenerationState {
+  const { t } = useI18n();
   const [regenAllDialogOpen, setRegenAllDialogOpen] = useState(false);
   const [regenAllPrompt, setRegenAllPrompt] = useState(
     '請讓整份簡報的圖像風格一致，色調、字體與版面語言維持統一。',
@@ -163,7 +165,7 @@ export function useRegeneration({
           setRegenAllBusy(false);
           return;
         }
-        setRegenAllMsg(err instanceof ApiError ? err.message : '取得進度失敗');
+        setRegenAllMsg(err instanceof ApiError ? err.message : t('play.regenerate.msg.progressFailed'));
       }
     };
     timer = window.setTimeout(tick, 1500);
@@ -171,7 +173,7 @@ export function useRegeneration({
       cancelled = true;
       if (timer != null) window.clearTimeout(timer);
     };
-  }, [pdfId, regenJob?.job_id, regenJobRunning]);
+  }, [pdfId, regenJob?.job_id, regenJobRunning, t]);
 
   // 任務結束後：關閉 busy、顯示結果訊息，並重新載入詳情；若有成功完成的頁碼資訊
   // 則自動切到該頁供使用者檢視。每個 job 只自動跳頁一次。
@@ -184,11 +186,11 @@ export function useRegeneration({
     if (!terminal) return;
     setRegenAllBusy(false);
     if (regenJob.status === 'completed') {
-      setRegenAllMsg('重生完成');
+      setRegenAllMsg(t('play.regenerate.msg.done'));
     } else if (regenJob.status === 'failed') {
-      setRegenAllMsg(regenJob.error ?? '重生失敗');
+      setRegenAllMsg(regenJob.error ?? t('play.regenerate.msg.failed'));
     } else {
-      setRegenAllMsg('已停止生成');
+      setRegenAllMsg(t('play.regenerate.msg.stopped'));
     }
     void reloadDetail();
     // 自動跳頁：優先跳到 last_processed_page（使用者可看到剛生成的頁）。
@@ -201,20 +203,20 @@ export function useRegeneration({
       }
       autoJumpedJobIdRef.current = regenJob.job_id;
     }
-  }, [regenJob, reloadDetail, setCurrentIdx]);
+  }, [regenJob, reloadDetail, setCurrentIdx, t]);
 
   const handleConfirmRegenerate = useCallback(async () => {
     if (isReadOnlyProcessing) return;
     if (!pdfId) return;
     if (regenJobRunning) return; // 防重複提交
     if (!regenAnySelected) {
-      setRegenAllMsg('請至少選擇一個重生項目');
+      setRegenAllMsg(t('play.regenerate.msg.selectAtLeastOne'));
       return;
     }
     if (regenOptions.image) {
       const p = regenAllPrompt.trim();
       if (!p) {
-        setRegenAllMsg('圖檔提示詞不可為空');
+        setRegenAllMsg(t('play.regenerate.msg.imagePromptRequired'));
         return;
       }
     }
@@ -262,9 +264,9 @@ export function useRegeneration({
       autoJumpedJobIdRef.current = null;
       setRegenJob(started);
       setRegenAllDialogOpen(false); // 關閉對話框，讓進度顯示在主畫面
-      setRegenAllMsg('重生任務已啟動，進度顯示在畫面上方');
+      setRegenAllMsg(t('play.regenerate.msg.started'));
     } catch (err) {
-      setRegenAllMsg(err instanceof ApiError ? err.message : '重生失敗');
+      setRegenAllMsg(err instanceof ApiError ? err.message : t('play.regenerate.msg.failed'));
       setRegenAllBusy(false);
     }
   }, [
@@ -281,6 +283,7 @@ export function useRegeneration({
     hostMode,
     scriptMaxCharsPerPage,
     setDetail,
+    t,
     // deckImageStylePromptRef omitted: ref 本身穩定，透過 .current 讀最新值
   ]);
 
@@ -291,11 +294,11 @@ export function useRegeneration({
       await confirmScript(pdfId);
       void reloadDetail();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : '確認失敗');
+      alert(err instanceof ApiError ? err.message : t('play.regenerate.msg.confirmFailed'));
     } finally {
       setConfirmScriptBusy(false);
     }
-  }, [pdfId, reloadDetail]);
+  }, [pdfId, reloadDetail, t]);
 
   const handleStopRegenerate = useCallback(async () => {
     if (!pdfId || !regenJob) return;
@@ -303,17 +306,17 @@ export function useRegeneration({
     try {
       const next = await cancelRegenerateJob(pdfId);
       setRegenJob(next);
-      setRegenAllMsg('已送出停止請求，等待目前頁面處理完成…');
+      setRegenAllMsg(t('play.regenerate.msg.stopRequested'));
     } catch (err) {
-      setRegenAllMsg(err instanceof ApiError ? err.message : '停止失敗');
+      setRegenAllMsg(err instanceof ApiError ? err.message : t('play.regenerate.msg.stopFailed'));
     } finally {
       setRegenStopBusy(false);
     }
-  }, [pdfId, regenJob]);
+  }, [pdfId, regenJob, t]);
 
   const handleRollbackRegenerate = useCallback(async () => {
     if (!pdfId) return;
-    if (!window.confirm('確定要還原到重生前的狀態？此操作無法復原。')) return;
+    if (!window.confirm(t('play.regenerate.msg.rollbackConfirm'))) return;
     setRegenRollbackBusy(true);
     try {
       await rollbackRegenerate(pdfId);
@@ -327,14 +330,14 @@ export function useRegeneration({
       // 清除記憶體中的 job，隱藏 banner
       setRegenJob(null);
       setRegenBannerDismissed(false);
-      setRegenAllMsg('已還原至重生前狀態');
+      setRegenAllMsg(t('play.regenerate.msg.rolledBack'));
       autoJumpedJobIdRef.current = null;
     } catch (err) {
-      setRegenAllMsg(err instanceof ApiError ? err.message : '還原失敗');
+      setRegenAllMsg(err instanceof ApiError ? err.message : t('play.regenerate.msg.rollbackFailed'));
     } finally {
       setRegenRollbackBusy(false);
     }
-  }, [pdfId, reloadDetail, setCurrentIdx]);
+  }, [pdfId, reloadDetail, setCurrentIdx, t]);
 
   return {
     regenAllDialogOpen,
