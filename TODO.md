@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | PostClassReportPanel 國際化（第二階段）：把面板內文所有殘留硬編中文全面抽成 i18n key（SummaryCard、各區塊標題/副標/空狀態、個別學生分析、作答時間軸、AI 教學建議、頁尾、列印頁首、熱力圖 tooltip、reset 訊息），插值處以前後綴 key + 樣板字串組合；zh-TW/en 各補 60 個 `play.report.*` key（共 1731 對等）；grep 確認元件無中文、typecheck 通過、i18n 對等 21 個全通過 | feat/report-panel-i18n-phase2（已 merge） |
 | 2026-06-25 | 逐字稿改寫對話框顯示原稿並可復原：`ScriptRewriteDialog` 頂端新增唯讀「目前逐字稿」區與「復原上一次改寫」按鈕；新增 `undoStack`（送出前記住原稿）與純函式 `popRewriteUndo`（還原 script + 移除最後一則 assistant 訊息）；清除對話一併清空 undoStack；zh-TW/en 各補 3 個 key。新增 3 個 popRewriteUndo 測試（共 6 helper）、i18n 對等 21 個、typecheck 全通過 | feat/script-rewrite-show-original-undo（已 merge） |
 | 2026-06-25 | 釐清「右邊改成 notebook 界面」需求並更新 TODO：經 AskUserQuestion 與使用者確認三項決策（介面＝頂部分頁標籤切換、粒度＝合併成約 4 個主題分頁、放大＝全域放大任一分頁）；將原模糊項目改寫為含 4 分頁歸併建議與三階段執行計畫的可執行規格，並更新對應掃描摘要 | feat/clarify-notebook-todo（僅文件，已 merge） |
 | 2026-06-25 | 分析並新增可執行項目：唯一剩餘項目「右邊改成 notebook 界面」範圍大且需求模糊、需使用者釐清，暫不盲做；依 LOOP.md 分析程式後新增 3 個低風險可執行項目（PostClassReportPanel i18n 第二階段、逐字稿改寫對話框顯示原稿+復原、側邊欄 QA 面板拆分逐字稿改寫=notebook 化第一步） | master（僅文件） |
@@ -1232,7 +1233,8 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 ## 新增可執行項目（2026-06-25）
 
-- [ ] PostClassReportPanel 國際化（第二階段）：延續第一階段（已抽工具列與標題），把面板內文其餘硬編中文抽成 i18n key，至少包含：載入訊息「正在載入課後報告…」、四張 `SummaryCard` 的 label/hint（參與人數、測驗平均分數、投票參與率、學生提問及其 hint）、各區塊標題（最容易答錯的題目／投票分歧最高頁面／觀看完成率最低頁面／全頁完成率熱力圖／逐題答對率）與其副說明、各空狀態提示、`重置失敗`／`已重置（N 筆）` 結果訊息（含插值，註：`t()` 目前不支援插值，數字部分用樣板字串組合）。改用 `useI18n()`，補 zh-TW/en 對應 key；純前端，跑 `i18n.test.ts` 對等性測試確保兩語系 key 數對齊。
+- [x] PostClassReportPanel 國際化（第二階段）：延續第一階段（已抽工具列與標題），把面板內文其餘硬編中文抽成 i18n key，至少包含：載入訊息「正在載入課後報告…」、四張 `SummaryCard` 的 label/hint（參與人數、測驗平均分數、投票參與率、學生提問及其 hint）、各區塊標題（最容易答錯的題目／投票分歧最高頁面／觀看完成率最低頁面／全頁完成率熱力圖／逐題答對率）與其副說明、各空狀態提示、`重置失敗`／`已重置（N 筆）` 結果訊息（含插值，註：`t()` 目前不支援插值，數字部分用樣板字串組合）。改用 `useI18n()`，補 zh-TW/en 對應 key；純前端，跑 `i18n.test.ts` 對等性測試確保兩語系 key 數對齊。
+  - 修改說明（2026-06-25）：把 `PostClassReportPanel.tsx` 內文所有殘留硬編中文全面抽成 i18n key（超出原列舉範圍，連同「個別學生分析」下拉/選項、「作答時間軸」、「AI 教學建議」按鈕與錯誤、頁尾「產生時間」、列印頁首「列印日期」、熱力圖 tooltip、reset title/結果訊息一併處理）；含插值處依規範以樣板字串 + 前後綴 key 組合（如 `已重置（N 筆）`＝`resetDonePrefix`+N+`resetDoneSuffix`、SummaryCard hint、學生選項 `(N 次作答，平均 M 分)` 等），頁碼/分數/括號統一用 `pagePrefix/pageSuffix`、`completionLabel`、ASCII 括號組合。zh-TW/en 各新增 60 個 `play.report.*` key（共 1731 對等）。`grep` 確認元件已無中文字元；frontend typecheck 通過、i18n 對等測試 21 個全通過。分支 `feat/report-panel-i18n-phase2`，已 merge 回 master。
 
 - [x] 逐字稿改寫對話框顯示目前逐字稿並可復原：`ScriptRewriteDialog` 目前每輪改寫會直接覆寫 `editingScript`，使用者看不到改寫前的原稿、也無法復原。於對話框頂端（對話串上方）新增一塊唯讀區顯示「目前逐字稿」（`editingScript`），並在每次套用改寫後提供「復原上一次改寫」按鈕（送出前先記住套用前的 `editingScript`，按下即還原並從對話串移除該輪 assistant 訊息）。純前端、自包含於該對話框；補對應 i18n key 與一個記錄/還原邏輯的純函式單元測試。
   - 修改說明（2026-06-25）：`ScriptRewriteDialog.tsx` 在 header 與對話串之間新增唯讀「目前逐字稿」區（`max-h-32` 可捲動、空稿顯示提示），其右上角放「復原上一次改寫」按鈕。新增 `undoStack` state：每次改寫送出前先記下套用前的 `editingScript`（原始未 trim 值），改寫成功時 push；復原時抽出純函式 `popRewriteUndo(messages, undoStack)`，還原 script、移除對話串中最後一則 assistant（改寫結果）訊息並 pop undo stack，無可復原時回傳 null。「清除對話」一併清空 undoStack（抽成 `handleClear`）。zh-TW/en 各補 3 個 `play.scriptRewrite.*` key（currentScriptLabel/currentScriptEmpty/undo，共 1671 對等）。新增 3 個 `popRewriteUndo` 單元測試（空堆疊回 null、單輪還原、多輪逐步還原），helper 測試共 6 個 + i18n 對等測試 21 個全通過；frontend typecheck 通過。分支 `feat/script-rewrite-show-original-undo`，已 merge 回 master。

@@ -77,10 +77,10 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
     setResetBusy(true);
     void resetWatchProgress(pdfId)
       .then((res) => {
-        setResetMsg(`已重置（${res.deleted_rows} 筆）`);
+        setResetMsg(`${t('play.report.resetDonePrefix')}${res.deleted_rows}${t('play.report.resetDoneSuffix')}`);
         onReload();
       })
-      .catch(() => { setResetMsg('重置失敗'); })
+      .catch(() => { setResetMsg(t('play.report.resetFailed')); })
       .finally(() => {
         setResetBusy(false);
         setTimeout(() => setResetMsg(null), 3000);
@@ -139,7 +139,7 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
             <h1 className="text-lg font-semibold text-black">
               {(pdfTitle && pdfTitle.trim()) ? pdfTitle : t('play.report.title')}
             </h1>
-            <p className="mt-1 text-xs text-slate-600">列印日期：{new Date().toLocaleDateString()}</p>
+            <p className="mt-1 text-xs text-slate-600">{t('play.report.printDate')}{new Date().toLocaleDateString()}</p>
           </div>
           <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800 pb-4">
             <div>
@@ -180,7 +180,7 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
                 onClick={handleResetWatchProgress}
                 disabled={resetBusy}
                 className="rounded-md border border-rose-500/50 bg-rose-500/15 px-3 py-1.5 text-sm text-rose-100 hover:bg-rose-500/25 disabled:opacity-50"
-                title="清除所有觀看進度紀錄，以重新統計課後觀看數據"
+                title={t('play.report.resetWatchTitle')}
               >
                 {resetMsg ?? (resetBusy ? t('play.report.resetting') : t('play.report.resetWatch'))}
               </button>
@@ -195,76 +195,76 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
         ) : null}
 
         {loading && !summary ? (
-          <div className="mt-6 rounded-xl border border-slate-800 bg-slate-950/70 p-6 text-center text-sm text-slate-300">正在載入課後報告…</div>
+          <div className="mt-6 rounded-xl border border-slate-800 bg-slate-950/70 p-6 text-center text-sm text-slate-300">{t('play.report.loading')}</div>
         ) : null}
 
         {summary ? (
           <div className="mt-5 space-y-5">
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-              <SummaryCard label="參與人數" value={formatReportNumber(summary.participant_count)} hint="合併測驗、投票、提問與觀看紀錄的唯一參與者" />
-              <SummaryCard label="測驗平均分數" value={summary.quiz.average_score == null ? '—' : formatReportNumber(summary.quiz.average_score)} hint={`${summary.quiz.attempt_count} 次作答，${summary.quiz.participant_count} 位作答者`} />
-              <SummaryCard label="投票參與率" value={formatReportPercent(summary.polls.participation_rate)} hint={`${summary.polls.vote_count} 票 / ${summary.polls.poll_count} 題投票`} />
-              <SummaryCard label="學生提問" value={formatReportNumber(summary.questions.count)} hint={`${summary.questions.participant_count} 位提問者`} />
+              <SummaryCard label={t('play.report.cardParticipants')} value={formatReportNumber(summary.participant_count)} hint={t('play.report.cardParticipantsHint')} />
+              <SummaryCard label={t('play.report.cardQuizAvg')} value={summary.quiz.average_score == null ? '—' : formatReportNumber(summary.quiz.average_score)} hint={`${summary.quiz.attempt_count}${t('play.report.hintAttemptsSuffix')}${summary.quiz.participant_count}${t('play.report.hintAttemptParticipantsSuffix')}`} />
+              <SummaryCard label={t('play.report.cardPollRate')} value={formatReportPercent(summary.polls.participation_rate)} hint={`${summary.polls.vote_count}${t('play.report.hintVotesSuffix')}${summary.polls.poll_count}${t('play.report.hintPollsSuffix')}`} />
+              <SummaryCard label={t('play.report.cardQuestions')} value={formatReportNumber(summary.questions.count)} hint={`${summary.questions.participant_count}${t('play.report.hintAskersSuffix')}`} />
             </div>
 
             <div className="grid gap-4 lg:grid-cols-3">
               <section className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-                <h3 className="font-semibold text-slate-100">最容易答錯的題目</h3>
-                <p className="mt-1 text-xs text-slate-500">後端若提供逐題統計，會依答錯率排序顯示。</p>
+                <h3 className="font-semibold text-slate-100">{t('play.report.hardestTitle')}</h3>
+                <p className="mt-1 text-xs text-slate-500">{t('play.report.hardestSubtitle')}</p>
                 {hardestQuestions.length > 0 ? (
                   <ol className="mt-3 space-y-2 text-sm text-slate-200">
                     {hardestQuestions.map((item, index) => (
                       <li key={item.question_id} className="rounded-lg border border-slate-800 bg-slate-900/70 p-3">
-                        <span className="text-xs text-cyan-300">#{index + 1} · 答錯率 {formatReportPercent(item.wrong_rate)}</span>
-                        <p className="mt-1">{item.question?.trim() || `題目 ${item.question_id}`}</p>
-                        <p className="mt-1 text-xs text-slate-500">{item.wrong_count} / {item.attempt_count} 次答錯</p>
+                        <span className="text-xs text-cyan-300">#{index + 1} · {t('play.report.wrongRateLabel')} {formatReportPercent(item.wrong_rate)}</span>
+                        <p className="mt-1">{item.question?.trim() || `${t('play.report.questionFallbackPrefix')}${item.question_id}`}</p>
+                        <p className="mt-1 text-xs text-slate-500">{item.wrong_count} / {item.attempt_count}{t('play.report.wrongCountSuffix')}</p>
                       </li>
                     ))}
                   </ol>
                 ) : (
-                  <div className="mt-3 rounded-lg border border-dashed border-slate-700 p-3 text-sm text-slate-400">目前摘要 API 尚未提供逐題答錯細節；總覽仍顯示測驗作答數與平均分數。</div>
+                  <div className="mt-3 rounded-lg border border-dashed border-slate-700 p-3 text-sm text-slate-400">{t('play.report.hardestEmpty')}</div>
                 )}
               </section>
 
               <section className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-                <h3 className="font-semibold text-slate-100">投票分歧最高頁面</h3>
-                <p className="mt-1 text-xs text-slate-500">後端若提供頁面分歧分數，會優先呈現最需要討論的頁面。</p>
+                <h3 className="font-semibold text-slate-100">{t('play.report.divergentTitle')}</h3>
+                <p className="mt-1 text-xs text-slate-500">{t('play.report.divergentSubtitle')}</p>
                 {divergentPollPages.length > 0 ? (
                   <ol className="mt-3 space-y-2 text-sm text-slate-200">
                     {divergentPollPages.map((item) => (
                       <li key={`${item.page_number}-${item.question ?? ''}`} className="rounded-lg border border-slate-800 bg-slate-900/70 p-3">
-                        <span className="text-xs text-fuchsia-300">第 {item.page_number} 頁 · 分歧 {formatReportPercent(item.divergence_score)}</span>
-                        <p className="mt-1">{item.question?.trim() || '未提供投票題目文字'}</p>
-                        <p className="mt-1 text-xs text-slate-500">{item.total_votes} 票</p>
+                        <span className="text-xs text-fuchsia-300">{t('play.report.pagePrefix')}{item.page_number}{t('play.report.pageSuffix')} · {t('play.report.divergenceLabel')} {formatReportPercent(item.divergence_score)}</span>
+                        <p className="mt-1">{item.question?.trim() || t('play.report.pollQuestionFallback')}</p>
+                        <p className="mt-1 text-xs text-slate-500">{item.total_votes}{t('play.report.votesSuffix')}</p>
                       </li>
                     ))}
                   </ol>
                 ) : (
-                  <div className="mt-3 rounded-lg border border-dashed border-slate-700 p-3 text-sm text-slate-400">目前摘要 API 尚未提供每頁投票分歧細節；總覽仍顯示投票數與參與率。</div>
+                  <div className="mt-3 rounded-lg border border-dashed border-slate-700 p-3 text-sm text-slate-400">{t('play.report.divergentEmpty')}</div>
                 )}
               </section>
 
               <section className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-                <h3 className="font-semibold text-slate-100">觀看完成率最低頁面</h3>
-                <p className="mt-1 text-xs text-slate-500">以既有每頁觀看完成率排序，優先找出可能太難或太長的頁面。</p>
+                <h3 className="font-semibold text-slate-100">{t('play.report.lowestTitle')}</h3>
+                <p className="mt-1 text-xs text-slate-500">{t('play.report.lowestSubtitle')}</p>
                 {lowestCompletionPages.length > 0 ? (
                   <ol className="mt-3 space-y-2 text-sm text-slate-200">
                     {lowestCompletionPages.map((item) => (
                       <li key={item.page_number} className="rounded-lg border border-slate-800 bg-slate-900/70 p-3">
-                        <span className="text-xs text-amber-300">第 {item.page_number} 頁 · 完成率 {formatReportPercent(item.completion_rate)}</span>
-                        <p className="mt-1 text-xs text-slate-500">{item.completed_viewers} / {item.total_viewers} 位完成，平均聽取 {formatReportPercent(item.avg_listened_ratio)}</p>
+                        <span className="text-xs text-amber-300">{t('play.report.pagePrefix')}{item.page_number}{t('play.report.pageSuffix')} · {t('play.report.completionLabel')} {formatReportPercent(item.completion_rate)}</span>
+                        <p className="mt-1 text-xs text-slate-500">{item.completed_viewers} / {item.total_viewers}{t('play.report.completedMidfix')}{formatReportPercent(item.avg_listened_ratio)}</p>
                       </li>
                     ))}
                   </ol>
                 ) : (
-                  <div className="mt-3 rounded-lg border border-dashed border-slate-700 p-3 text-sm text-slate-400">尚無觀看紀錄。學生觀看後，這裡會列出完成率最低的頁面。</div>
+                  <div className="mt-3 rounded-lg border border-dashed border-slate-700 p-3 text-sm text-slate-400">{t('play.report.lowestEmpty')}</div>
                 )}
               </section>
 
               {summary.watch_progress.pages.length > 0 ? (
                 <section className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-                  <h3 className="mb-1 font-semibold text-slate-100">全頁完成率熱力圖</h3>
-                  <p className="mb-3 text-xs text-slate-500">每格代表一頁，顏色越深代表完成率越高。</p>
+                  <h3 className="mb-1 font-semibold text-slate-100">{t('play.report.heatmapTitle')}</h3>
+                  <p className="mb-3 text-xs text-slate-500">{t('play.report.heatmapSubtitle')}</p>
                   <div className="flex flex-wrap gap-1">
                     {summary.watch_progress.pages.map((page) => {
                       const rate = page.completion_rate;
@@ -273,7 +273,7 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
                         <div
                           key={page.page_number}
                           className={`flex h-8 w-8 items-center justify-center rounded text-[10px] font-medium text-white/90 ${bg}`}
-                          title={`第 ${page.page_number} 頁：完成率 ${Math.round(rate * 100)}%（${page.completed_viewers}/${page.total_viewers}）`}
+                          title={`${t('play.report.pagePrefix')}${page.page_number}${t('play.report.pageSuffix')} · ${t('play.report.completionLabel')} ${Math.round(rate * 100)}% (${page.completed_viewers}/${page.total_viewers})`}
                         >
                           {page.page_number}
                         </div>
@@ -292,8 +292,8 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
 
             {Array.isArray(summary.quiz.question_stats) && summary.quiz.question_stats.length > 0 ? (
               <section className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-                <h3 className="mb-1 font-semibold text-slate-100">逐題答對率</h3>
-                <p className="mb-3 text-xs text-slate-500">依據所有提交紀錄計算每道題目的答對人數與選項分佈。</p>
+                <h3 className="mb-1 font-semibold text-slate-100">{t('play.report.questionStatsTitle')}</h3>
+                <p className="mb-3 text-xs text-slate-500">{t('play.report.questionStatsSubtitle')}</p>
                 <div className="space-y-3">
                   {(summary.quiz.question_stats as PdfReportQuestionStat[]).map((stat, idx) => (
                     <div key={stat.question_id} className="rounded-lg border border-slate-700 bg-slate-900/60 p-3">
@@ -303,10 +303,10 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
                           {stat.question}
                         </p>
                         <span className={`shrink-0 rounded px-2 py-0.5 text-xs font-medium ${stat.correct_rate >= 0.7 ? 'bg-emerald-500/20 text-emerald-300' : stat.correct_rate >= 0.4 ? 'bg-amber-500/20 text-amber-300' : 'bg-rose-500/20 text-rose-300'}`}>
-                          答對率 {formatReportPercent(stat.correct_rate)}
+                          {t('play.report.correctRateLabel')} {formatReportPercent(stat.correct_rate)}
                         </span>
                       </div>
-                      <p className="mb-2 text-xs text-slate-500">{stat.correct_count} / {stat.attempt_count} 人答對</p>
+                      <p className="mb-2 text-xs text-slate-500">{stat.correct_count} / {stat.attempt_count}{t('play.report.correctCountSuffix')}</p>
                       {stat.option_count > 0 ? (
                         <div className="space-y-1">
                           {stat.option_votes.map((votes, oIdx) => {
@@ -330,8 +330,8 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
             ) : null}
 
             <section className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-              <h3 className="mb-1 font-semibold text-slate-100">個別學生分析</h3>
-              <p className="mb-3 text-xs text-slate-500">依學生篩選，檢視其各題作答詳情。</p>
+              <h3 className="mb-1 font-semibold text-slate-100">{t('play.report.studentTitle')}</h3>
+              <p className="mb-3 text-xs text-slate-500">{t('play.report.studentSubtitle')}</p>
               <div className="flex items-center gap-3">
                 <select
                   value={selectedClientId}
@@ -339,15 +339,15 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
                   disabled={studentsLoading || students.length === 0}
                   className="w-64 rounded-md border border-slate-600 bg-slate-800 px-2 py-1.5 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-500 disabled:opacity-50"
                 >
-                  <option value="">— 選擇學生 —</option>
+                  <option value="">{t('play.report.studentSelectPlaceholder')}</option>
                   {students.map((s) => (
                     <option key={s.client_id} value={s.client_id}>
-                      {s.client_id}（{s.attempt_count} 次作答，平均 {s.average_score != null ? Math.round(s.average_score) : '—'} 分）
+                      {s.client_id} ({s.attempt_count}{t('play.report.studentOptionAttempts')}{s.average_score != null ? Math.round(s.average_score) : '—'}{t('play.report.studentOptionAvgSuffix')}
                     </option>
                   ))}
                 </select>
-                {studentsLoading ? <span className="text-xs text-slate-400">載入中…</span> : null}
-                {!studentsLoading && students.length === 0 ? <span className="text-xs text-slate-500">尚無作答紀錄。</span> : null}
+                {studentsLoading ? <span className="text-xs text-slate-400">{t('play.report.studentLoading')}</span> : null}
+                {!studentsLoading && students.length === 0 ? <span className="text-xs text-slate-500">{t('play.report.studentEmpty')}</span> : null}
               </div>
 
               {selectedStudent ? (
@@ -355,10 +355,10 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
                   {selectedStudent.attempts.map((attempt) => (
                     <div key={attempt.attempt_id} className="rounded-lg border border-slate-700 bg-slate-900/60 p-4">
                       <div className="mb-2 flex items-center justify-between gap-2">
-                        <p className="text-sm font-medium text-slate-200">{attempt.quiz_title || `測驗 #${attempt.quiz_id}`}</p>
+                        <p className="text-sm font-medium text-slate-200">{attempt.quiz_title || `${t('play.report.quizFallbackPrefix')}${attempt.quiz_id}`}</p>
                         <div className="flex items-center gap-2 text-xs">
                           <span className={`rounded px-2 py-0.5 font-medium ${attempt.score != null && attempt.score >= 70 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}`}>
-                            {attempt.score != null ? `${Math.round(attempt.score)} 分` : '未計分'}
+                            {attempt.score != null ? `${Math.round(attempt.score)}${t('play.report.scoreSuffix')}` : t('play.report.scoreUngraded')}
                           </span>
                           <span className="text-slate-500">{new Date(attempt.submitted_at).toLocaleString()}</span>
                         </div>
@@ -405,8 +405,8 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
                 .sort((a, b) => new Date(a.submitted_at).getTime() - new Date(b.submitted_at).getTime());
               return (
                 <section className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-                  <h3 className="mb-1 font-semibold text-slate-100">作答時間軸</h3>
-                  <p className="mb-3 text-xs text-slate-500">所有學生提交記錄，依時間先後排序。</p>
+                  <h3 className="mb-1 font-semibold text-slate-100">{t('play.report.timelineTitle')}</h3>
+                  <p className="mb-3 text-xs text-slate-500">{t('play.report.timelineSubtitle')}</p>
                   <ol className="relative border-l border-slate-700 pl-4 space-y-3">
                     {allAttempts.map((a) => (
                       <li key={a.attempt_id} className="relative">
@@ -414,9 +414,9 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
                         <div className="flex flex-wrap items-center gap-2 text-xs">
                           <span className="text-slate-400">{new Date(a.submitted_at).toLocaleString()}</span>
                           <span className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-slate-300">{a.client_id.slice(0, 8)}</span>
-                          <span className="text-slate-400">{a.quiz_title || `測驗 #${a.quiz_id}`}</span>
+                          <span className="text-slate-400">{a.quiz_title || `${t('play.report.quizFallbackPrefix')}${a.quiz_id}`}</span>
                           <span className={`rounded px-1.5 py-0.5 font-medium ${a.score != null && a.score >= 70 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}`}>
-                            {a.score != null ? `${Math.round(a.score)} 分` : '未計分'}
+                            {a.score != null ? `${Math.round(a.score)}${t('play.report.scoreSuffix')}` : t('play.report.scoreUngraded')}
                           </span>
                         </div>
                       </li>
@@ -429,8 +429,8 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
             <section className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <h3 className="font-semibold text-slate-100">AI 教學建議</h3>
-                  <p className="mt-1 text-xs text-slate-500">根據測驗答對率與觀看完成率，自動生成下一步教學建議。</p>
+                  <h3 className="font-semibold text-slate-100">{t('play.report.aiTitle')}</h3>
+                  <p className="mt-1 text-xs text-slate-500">{t('play.report.aiSubtitle')}</p>
                 </div>
                 <button
                   type="button"
@@ -441,12 +441,12 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
                     fetch(`api/pdfs/${encodeURIComponent(pdfId)}/report/ai-suggestions`, { method: 'POST' })
                       .then((r) => r.ok ? r.json() as Promise<{ suggestions: string }> : r.json().then((e: unknown) => Promise.reject(e)))
                       .then((data) => { setAiSuggestions(data.suggestions); })
-                      .catch(() => { setAiError('AI 建議生成失敗，請稍後再試。'); })
+                      .catch(() => { setAiError(t('play.report.aiError')); })
                       .finally(() => { setAiLoading(false); });
                   }}
                   className="shrink-0 rounded-md border border-violet-500/50 bg-violet-500/15 px-3 py-1.5 text-sm text-violet-200 hover:bg-violet-500/25 disabled:opacity-50"
                 >
-                  {aiLoading ? '生成中…' : aiSuggestions ? '重新生成' : '生成 AI 建議'}
+                  {aiLoading ? t('play.report.aiGenerating') : aiSuggestions ? t('play.report.aiRegenerate') : t('play.report.aiGenerate')}
                 </button>
               </div>
               {aiError ? <p className="mt-3 text-sm text-rose-300">{aiError}</p> : null}
@@ -457,7 +457,7 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
               ) : null}
             </section>
 
-            <p className="text-right text-xs text-slate-500">產生時間：{new Date(summary.generated_at).toLocaleString()}</p>
+            <p className="text-right text-xs text-slate-500">{t('play.report.generatedAt')}{new Date(summary.generated_at).toLocaleString()}</p>
           </div>
         ) : null}
         </div>
