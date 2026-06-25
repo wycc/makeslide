@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | HomePage 改用共用 relativeTime helper：移除第三份重複的本地 formatRelativeTime（消硬編中文 + NaN 舊問題），改用 `lib/relativeTime.ts` 並以 `t('time.*')` 傳 labels；三處相對時間格式化全統一；無新增 key；typecheck + 277 前端測試 + i18n 對等全通過 | feat/homepage-relative-time-dedup（已 merge） |
 | 2026-06-25 | 分析並新增可執行項目（第三十六輪）：TODO 清空後依 LOOP.md 掃描，新增 3 個低風險清理項目（HomePage 改用共用 relativeTime helper 完成第三份去重、SystemDataPage「模型價格未知」i18n、FigureAssetsTab header「（第 N 頁）」i18n） | master（僅文件） |
 | 2026-06-25 | AnimationEditorTab 國際化：掃描後確認 ~50 處中文多為程式碼註解、UI 早已 i18n；真正可見殘留為 header「（第 N 頁）」與 5 個範例提示詞插入內容——改用新增的 `headerPagePrefix/Suffix` 與 `customScriptExamplePrompt.*`（promptKey，en 提供英文版），共 7 個 key；typecheck + 277 前端測試 + i18n 對等全通過 | feat/animation-editor-i18n（已 merge） |
 | 2026-06-25 | PlayPage.tsx 錯誤與狀態訊息國際化（第二批）：setAudioError/setSyncError 8 種/loadError 預設/分享不符 ApiError/課後報告載入失敗/文稿不可為空/重生語音失敗、唯讀與產生中橫幅全部改用 t()；新增 18 個 `play.banner.*`/`play.error.*` key；僅保留生成用預設圖片風格 prompt；typecheck + 277 前端測試 + i18n 對等全通過 | feat/playpage-error-messages-i18n（已 merge） |
@@ -1315,7 +1316,8 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 ## 新增可執行項目（2026-06-25 第三十六輪）
 
-- [ ] HomePage 改用共用 relativeTime helper（完成相對時間去重）：`pages/HomePage.tsx` 仍保有一份與 `lib/relativeTime.ts` 重複的本地 `formatRelativeTime`（硬編中文）。移除本地版、改 import 共用 `formatRelativeTime` 並以 `t('time.*')` 建 `relativeTimeLabels` 傳入（沿用既有 `time.*` key，無需新增）；兩處呼叫（`last_played_at`、`updated_at`）改用之。純前端、低風險，跑 typecheck 與既有前端測試。
+- [x] HomePage 改用共用 relativeTime helper（完成相對時間去重）：`pages/HomePage.tsx` 仍保有一份與 `lib/relativeTime.ts` 重複的本地 `formatRelativeTime`（硬編中文）。移除本地版、改 import 共用 `formatRelativeTime` 並以 `t('time.*')` 建 `relativeTimeLabels` 傳入（沿用既有 `time.*` key，無需新增）；兩處呼叫（`last_played_at`、`updated_at`）改用之。純前端、低風險，跑 typecheck 與既有前端測試。
+  - 修改說明（2026-06-25）：移除 `HomePage.tsx` 第三份重複的本地 `formatRelativeTime`（連同其硬編中文與「NaN 年前」舊問題一併消除），改 import `lib/relativeTime.ts` 的共用版並以 `t('time.*')` 建 `relativeTimeLabels`；`last_played_at`、`updated_at` 兩處呼叫改傳 labels。沿用既有 6 個 `time.*` key、無新增 key。至此三處（PdfCard/QuizBuilderPage/HomePage）的相對時間格式化已全部統一到單一共用 helper。frontend typecheck 通過、全部 277 個前端測試 + i18n 對等 21 個全通過。分支 `feat/homepage-relative-time-dedup`，已 merge 回 master。
 
 - [ ] SystemDataPage 殘留中文國際化：把 `pages/SystemDataPage.tsx` 的 `模型價格未知`（及掃描確認的其他少量可見中文）抽成 i18n key（如 `systemData.modelPriceUnknown`），改用 `useI18n()`，補 zh-TW/en 並跑 i18n 對等測試。純前端、小改動。
 
