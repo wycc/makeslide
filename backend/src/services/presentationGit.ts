@@ -367,6 +367,24 @@ export async function pullAndMergeFromGitHub(pdfId: string, dir: string, authent
  * Pulls and auto-merges remote changes first so syncing from multiple
  * machines folds edits together instead of overwriting them.
  */
+/**
+ * Scrub secrets from every string property of a failed git command error. A
+ * child_process failure sets not just `message` but also `cmd`/`stdout`/`stderr`
+ * to the raw command and output — `cmd` contains the literal
+ * https://x-access-token:<token>@github.com argument — and pino serializes all of
+ * them when the error is logged via `{ err }`. Redacting only `message` would
+ * still leak the token through `cmd`.
+ */
+function redactGitExecError(err: unknown): unknown {
+  if (!(err instanceof Error)) return err;
+  err.message = redactSecretsInText(err.message);
+  const props = err as unknown as Record<string, unknown>;
+  for (const key of ['cmd', 'stdout', 'stderr'] as const) {
+    if (typeof props[key] === 'string') props[key] = redactSecretsInText(props[key] as string);
+  }
+  return err;
+}
+
 export async function pushPresentationToGitHub(
   pdfId: string,
   repoUrl: string,
@@ -389,11 +407,11 @@ export async function pushPresentationToGitHub(
     );
   } catch (err) {
     // execFile failures embed the full command (including the
-    // https://x-access-token:<token>@github.com URL) in the error message, which
-    // the caller surfaces in the API response. Scrub the token before rethrowing
-    // so it never leaves this module.
-    if (err instanceof Error) err.message = redactSecretsInText(err.message);
-    throw err;
+    // https://x-access-token:<token>@github.com URL) in the error's message AND
+    // its cmd/stdout/stderr properties, which the caller surfaces in the API
+    // response and logs via `{ err }`. Scrub them all before rethrowing so the
+    // token never leaves this module.
+    throw redactGitExecError(err);
   }
   const headHash = await git(dir, ['rev-parse', 'HEAD']);
   markGithubSynced(pdfId, headHash);
