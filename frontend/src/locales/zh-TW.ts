@@ -1494,6 +1494,7 @@ export const zhTW = {
   'quiz.loading': '讀取中…',
   'quiz.noHistory': '這個測驗尚未有任何作答紀錄。',
   'quiz.sessionTime': '測試時間：{time}',
+  'quiz.exportExplanationLabel': '解說：',
   'quiz.attemptCount': '（{count} 人作答）',
   'quiz.scorePoints': '{score} 分',
   'quiz.notScored': '未計分',
