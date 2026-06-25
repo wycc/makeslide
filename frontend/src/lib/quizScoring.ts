@@ -29,3 +29,48 @@ export function scoreSumExceedingTotal(questions: QuizQuestion[]): number | null
   const sum = explicitScoreSum(questions);
   return sum > QUIZ_TOTAL_SCORE + QUIZ_SCORE_SUM_EPSILON ? sum : null;
 }
+
+/**
+ * Per-question point values (mirrors backend normalizeQuestionScores()):
+ * questions with an explicit score keep it; the rest split the remaining points
+ * of the 100-point pool evenly.
+ */
+export function normalizeQuestionScores(questions: QuizQuestion[]): number[] {
+  if (questions.length === 0) return [];
+  const explicit = questions.map((q) => (typeof q.score === 'number' && Number.isFinite(q.score) && q.score >= 0 ? q.score : null));
+  const assigned = explicit.reduce<number>((acc, v) => acc + (v ?? 0), 0);
+  const emptyIndices = explicit.map((v, i) => (v == null ? i : -1)).filter((i) => i >= 0);
+  const remaining = Math.max(0, QUIZ_TOTAL_SCORE - assigned);
+  const even = emptyIndices.length > 0 ? remaining / emptyIndices.length : 0;
+  return explicit.map((v) => (v == null ? (emptyIndices.length > 0 ? even : 0) : v));
+}
+
+/** True when the selected option set exactly equals the question's answer set. */
+export function isCorrectAnswer(question: QuizQuestion, selected: number[]): boolean {
+  const a = Array.from(new Set(question.answer_indices)).sort((x, y) => x - y);
+  const b = Array.from(new Set(selected)).sort((x, y) => x - y);
+  if (a.length !== b.length) return false;
+  return a.every((v, i) => v === b[i]);
+}
+
+/**
+ * Points earned for a question (mirrors backend calcQuestionScore()):
+ * single = all-or-nothing; multiple = per-option partial credit where each
+ * option whose selected-state matches the answer key earns an equal share.
+ */
+export function calcQuestionScore(question: QuizQuestion, selected: number[], questionScore: number): number {
+  if (question.type === 'single') {
+    return isCorrectAnswer(question, selected) ? questionScore : 0;
+  }
+  const optionCount = question.options.length;
+  if (optionCount <= 0) return 0;
+  const perOption = questionScore / optionCount;
+  const selectedSet = new Set(selected);
+  let earned = 0;
+  for (let idx = 0; idx < optionCount; idx += 1) {
+    const shouldSelect = question.answer_indices.includes(idx);
+    const didSelect = selectedSet.has(idx);
+    if (shouldSelect === didSelect) earned += perOption;
+  }
+  return earned;
+}
