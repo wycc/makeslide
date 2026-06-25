@@ -923,17 +923,23 @@ export async function fetchPdfStudentRecords(id: string): Promise<StudentRecord[
   return Array.isArray(data.students) ? data.students : [];
 }
 
+export interface PageAskMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 export async function askPageQuestion(
   id: string,
   pageNumber: number,
   question: string,
   shareToken?: string,
+  history: PageAskMessage[] = [],
 ): Promise<{ answer: string }> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (shareToken) headers['X-MakeSlide-Share-Token'] = shareToken;
   const resp = await fetch(
     `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/ask`,
-    { method: 'POST', headers, body: JSON.stringify({ question }) },
+    { method: 'POST', headers, body: JSON.stringify({ question, history }) },
   );
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as { answer: string };

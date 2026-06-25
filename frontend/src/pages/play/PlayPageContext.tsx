@@ -476,7 +476,7 @@ export interface PlayPageContextValue {
   canAskPage: boolean;
   pageAskInput: string;
   setPageAskInput: (v: string) => void;
-  pageAskAnswer: string | null;
+  pageAskMessages: import('../../lib/api').PageAskMessage[];
   pageAskBusy: boolean;
   pageAskError: string | null;
   setPageAskError: (v: string | null) => void;

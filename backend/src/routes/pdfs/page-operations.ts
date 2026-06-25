@@ -306,11 +306,20 @@ const PageChatResponseSchema = z.object({
 
 const AskPageBodySchema = z.object({
   question: z.string().trim().min(1, '問題不可為空').max(500, '問題不可超過 500 字'),
+  // Prior turns of the same conversation, oldest first (multi-turn follow-ups).
+  history: z
+    .array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(8000) }))
+    .max(20)
+    .optional(),
 });
 
 const AskPageResponseSchema = z.object({
-  answer: z.string().min(1).max(2000),
+  answer: z.string().min(1),
 });
+
+// Budget for the full-deck corpus sent to the AI tutor, keeping prompts bounded
+// while still covering the whole presentation.
+const ASK_DECK_CORPUS_MAX_CHARS = 14000;
 
 function parseChatHistory(json: string | null): Array<z.infer<typeof ChatMessageSchema>> {
   if (!json) return [];
@@ -1298,28 +1307,50 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     if (!pageRow) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
     const pdfTitleRow = db.prepare(`SELECT title FROM pdfs WHERE id = ?`).get(id) as { title?: string | null } | undefined;
     try {
-      const pageText = pageRow.text_path ? await fs.promises.readFile(safeJoinPdfPath(id, pageRow.text_path), 'utf8').catch(() => '') : '';
-      const pageScript = pageRow.script_path ? await fs.promises.readFile(safeJoinPdfPath(id, pageRow.script_path), 'utf8').catch(() => '') : '';
+      // Build a corpus from EVERY page (text + script), so the tutor can answer
+      // using the whole presentation, not just the current page.
+      const allPages = db
+        .prepare(`SELECT page_number, text_path, script_path FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`)
+        .all(id) as Array<{ page_number: number; text_path: string | null; script_path: string | null }>;
+      const sections: string[] = [];
+      for (const p of allPages) {
+        const text = p.text_path ? await fs.promises.readFile(safeJoinPdfPath(id, p.text_path), 'utf8').catch(() => '') : '';
+        const script = p.script_path ? await fs.promises.readFile(safeJoinPdfPath(id, p.script_path), 'utf8').catch(() => '') : '';
+        if (!text.trim() && !script.trim()) continue;
+        sections.push(
+          [`# 第 ${p.page_number} 頁${p.page_number === n ? '（學生目前所在頁）' : ''}`,
+            text.trim() ? `頁面文字：${text.trim()}` : '',
+            script.trim() ? `逐字稿：${script.trim()}` : '',
+          ].filter(Boolean).join('\n'),
+        );
+      }
+      let corpus = sections.join('\n\n');
+      if (corpus.length > ASK_DECK_CORPUS_MAX_CHARS) corpus = corpus.slice(0, ASK_DECK_CORPUS_MAX_CHARS) + '\n……（內容過長，後略）……';
+
+      const history = (parsedBody.data.history ?? []).map((m) => ({ role: m.role, content: m.content }));
       const result = await callChatJSON({
         label: `ask-page ${id}/${n}`,
         schema: AskPageResponseSchema,
-        maxTokens: 1200,
+        maxTokens: 4000,
         temperature: 0.3,
         messages: [
           {
             role: 'system',
-            content: '你是繁體中文課堂 AI 導師。請只輸出 JSON：{"answer":"..."}。依據提供的頁面文字與逐字稿回答學生問題，並在回答中以括號標示引用來源，例如「（來自逐字稿）」或「（來自頁面文字）」。若頁面無相關內容，請誠實說明。回答請精簡扼要。',
+            content: '你是繁體中文課堂 AI 導師。請只輸出 JSON：{"answer":"..."}。你會獲得整份簡報所有頁面的頁面文字與逐字稿，請綜合全份內容詳細回答學生問題，必要時可跨頁說明並標示頁碼。回答請完整、清楚、有條理，盡量解釋透徹，不要刻意精簡；可使用條列。引用內容時以括號標示來源頁碼，例如「（第 3 頁逐字稿）」。若全份簡報都沒有相關內容，請誠實說明。',
           },
           {
             role: 'user',
             content: [
               `簡報標題：${pdfTitleRow?.title?.trim() || '（未命名）'}`,
-              `頁碼：${n}`,
-              `頁面文字：${pageText.trim() || '（無）'}`,
-              `頁面逐字稿：${pageScript.trim() || '（無）'}`,
-              `學生問題：${parsedBody.data.question}`,
-            ].join('\n\n'),
+              `學生目前頁碼：${n}`,
+              `以下為整份簡報內容：`,
+              '-----------------',
+              corpus || '（無可用內容）',
+              '-----------------',
+            ].join('\n'),
           },
+          ...history,
+          { role: 'user', content: parsedBody.data.question },
         ],
       });
       return reply.code(200).send({ answer: result.data.answer.trim() });
