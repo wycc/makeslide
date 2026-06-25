@@ -1923,8 +1923,13 @@ export async function updatePageNote(id: string, pageNumber: number, note: strin
   return (await resp.json()) as { id: string; page_number: number; page_notes: string; updated_at: string };
 }
 
-export async function generatePollDraft(id: string, pageNumber: number): Promise<{ question: string; options: string[] }> {
-  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/generate-poll`, { method: 'POST' });
+export async function generatePollDraft(id: string, pageNumber: number, question?: string): Promise<{ question: string; options: string[] }> {
+  const trimmed = question?.trim() ?? '';
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/generate-poll`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(trimmed ? { question: trimmed } : {}),
+  });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as { question: string; options: string[] };
 }

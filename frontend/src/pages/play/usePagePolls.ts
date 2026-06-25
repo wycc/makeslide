@@ -160,7 +160,9 @@ export function usePagePolls({
     setAiPollBusy(true);
     setPollError(null);
     try {
-      const draft = await generatePollDraft(pdfId, currentPage.page_number);
+      // If the teacher already typed a question, only (re)generate options for it;
+      // otherwise let the AI draft both the question and the options from the page.
+      const draft = await generatePollDraft(pdfId, currentPage.page_number, pollQuestion);
       setPollQuestion(draft.question);
       setPollOptionsText(draft.options.join('\n'));
       setPollSettingsOpen(true);
@@ -169,7 +171,7 @@ export function usePagePolls({
     } finally {
       setAiPollBusy(false);
     }
-  }, [pdfId, currentPage]);
+  }, [pdfId, currentPage, pollQuestion]);
 
   const handleCreatePoll = useCallback(async () => {
     if (!pdfId || !currentPage) return;
