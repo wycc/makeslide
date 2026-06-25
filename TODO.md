@@ -1485,6 +1485,8 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [x] 動畫型別／形狀 i18n 標籤完整性測試（第八十三輪，2026-06-26 掃描新增並完成）：動畫編輯器以 `play.animation.type.${type}` 與 `play.animation.shapeKind.${kind}` 直接插值渲染效果型別與形狀下拉。第八十／八十二輪的 drift-guard 已確保前端陣列與後端 `z.enum` 同步，但沒有任何測試確保每個成員「也有對應 i18n 標籤」——若未來新增一個型別/形狀（通過 drift-guard）卻漏補 i18n 鍵，下拉會顯示原始 key。經確認 18 種 effect type 與 8 種 shape kind 的中英鍵目前皆齊全。於 `i18n.test.ts` 新增兩個測試：直接由 `SLIDE_ANIMATION_EFFECT_TYPES`／`ANIMATION_SHAPE_KINDS` 陣列推導必需鍵，逐一斷言 zh-TW/en 皆存在且非空（未來新增成員自動納入檢查）。前端 typecheck 與 i18n 測試（含 2 新）通過。純測試、低風險。分支 `test/animation-i18n-label-completeness`，已 merge 回 master。
 
+- [x] 字幕大小／位置標籤改為編譯期安全（第八十四輪，2026-06-26 掃描重構）：盤點所有 `t(\`prefix.${var}\`)` 動態插值點，發現 `PlayPageSlidePanel` 的字幕大小／位置選擇器以 `t(\`play.slidePanel.subtitleSize.${size}\` as TranslationKey)` 直接插值——繞過型別檢查，若 `SubtitleSize`/`SubtitlePosition` 新增值卻漏補標籤會在執行期顯示原始 key（與動畫型別/形狀同類，但動畫已有第八十三輪測試守護）。改用 `as const satisfies Record<SubtitleSize/SubtitlePosition, TranslationKey>` 的標籤 map（與既有 `EASE_LABELS` 同一手法），使漏標籤變成編譯錯誤而非執行期 footgun。其餘動態插值（動畫型別/形狀＝有完整性測試、ease＝已 satisfies、`*_LABEL_KEYS` 記錄＝`Record<EnumType>` 編譯保證）皆已安全。純重構、無行為變更；前端 typecheck 與全測試 327 個通過。分支 `refactor/subtitle-label-compile-safe`，已 merge 回 master。
+
 ## 掃描摘要（2026-06-25 第四十三輪）
 
 - 本輪 TODO 唯一未完成項目（formatDurationMs i18n）先前的實作方案被使用者否決，已標記暫緩。經詢問使用者後，本輪改為「為後端 `logSanitizer.ts` 補單元測試」。
@@ -1839,3 +1841,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - 時間：2026-06-26
 - 分支：`test/animation-i18n-label-completeness`（已 merge 回 master）
 - 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 87 個完成項目（87/100，未達上限）。
+## 工作記錄（第八十四輪，2026-06-26）
+
+- 工作內容：延續「動態 i18n key 插值缺鍵」bug 類別的系統性收尾。盤點全前端 `t(\`prefix.${var}\`)` 插值點共 4 處：動畫型別/形狀（第八十三輪已加完整性測試）、字幕大小、字幕位置。後兩者以 `as TranslationKey` 強制轉型插值、繞過型別檢查，是僅存的執行期 footgun。將 `PlayPageSlidePanel` 的字幕大小／位置標籤改為 `as const satisfies Record<SubtitleSize/SubtitlePosition, TranslationKey>` 的 map（沿用既有 `EASE_LABELS` 手法），使漏補標籤變成編譯錯誤。另確認 `*_LABEL_KEYS`（`Record<EnumType,...>` 編譯保證）與 ease（已 satisfies）皆安全。至此所有動態 i18n 標籤映射不是編譯期安全、就是有完整性測試守護。純重構、零行為變更；前端 typecheck 與全測試 327 個通過。
+- 時間：2026-06-26
+- 分支：`refactor/subtitle-label-compile-safe`（已 merge 回 master）
+- 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 88 個完成項目（88/100，未達上限）。
