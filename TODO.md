@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | 分析並新增可執行項目（第三十四輪）：notebook 大項目完成後 TODO 已清空，依 LOOP.md 掃描程式 + 參考 FUTURE_ROADMAP（2.1–2.10 多已實作）後，新增 4 個低風險增量項目（PlayPage.tsx 行動分頁/狀態畫面 i18n、RemoteControllerPage 殘留中文 i18n、notebook 投影片分頁總頁數 badge、notebook Home/End 鍵盤跳首末分頁） | master（僅文件） |
 | 2026-06-25 | Notebook 側邊欄分頁（階段三 → 整項完成）：分頁列 ARIA roving tabindex + ArrowLeft/Right 循環切換（抽純函式 `getAdjacentNotebookTab` + 測試，焦點限定分頁列不與翻頁衝突）；分頁數量 badge（課堂互動顯示 bookmarks+重點頁+投票合計）；行動版面 flex-wrap/flex-1、放大鈕 md 限定。「右邊改成 notebook 界面」三階段全部完成標記 [x]。typecheck + 272 前端測試 + i18n 對等全通過 | feat/notebook-sidebar-phase3（已 merge） |
 | 2026-06-25 | Notebook 側邊欄分頁（階段二）：`qaPanelExpanded` 重命名為全域 `sidebarExpanded`；放大改為隱藏左側播放區（`PlayPageSlidePanel` md:hidden）+ 右側欄全寬（aside md:w-full md:flex-1）；放大/還原按鈕移到分頁列尾端（任一分頁可放大）；移除殘留 md:hidden、切換分頁不再重置展開；沿用既有 i18n key；typecheck + 271 前端測試 + i18n 對等全通過。階段三待續 | feat/notebook-sidebar-expand-phase2（已 merge） |
 | 2026-06-25 | Notebook 側邊欄分頁（階段一）：新增純函式 `notebookTabs.ts`（NotebookTab 型別、4 分頁定義、normalize/persist helper）＋3 測試；`PlayPageSidebar` 頂端加 4 個分頁標籤（投影片／AI 助手／課堂互動／筆記留言），13 個頂層區塊依分頁條件渲染、一次只顯示一個分頁，localStorage 記住上次分頁，切換時重置 qaPanelExpanded；zh-TW/en 各補 4 key；typecheck + 271 前端測試 + i18n 對等全通過。階段二、三待續 | feat/notebook-sidebar-tabs-phase1（已 merge） |
@@ -1248,3 +1249,22 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [x] 側邊欄 QA 面板拆分逐字稿改寫與問答/生圖（notebook 化第一步）：目前 `PlayPageSidebar` 的 QA 面板讓「AI 問答」「生圖/inpaint」「逐字稿改寫」共用同一條 `chatHistory`，三種用途混在一起、語意混淆（這也是「右邊改成 notebook 界面」可獨立先做的一步）。將逐字稿改寫從共用 chat 串移除（改走已新增的獨立 `ScriptRewriteDialog`），QA 面板專注於「問答 + 生圖」，並在面板加上簡短用途說明。純前端、以既有元件與 context 為主，不新增後端；變更後跑 typecheck 與既有前端測試確認無回歸。
   - 修改說明（2026-06-25）：`PlayPageSidebar` 的 QA 面板輸入區移除「修改逐字稿」按鈕（原 `handleRewriteScript`，會把改寫塞進共用 `chatHistory`）與其 `rewriteError` 顯示，並從 context 解構中移除 `handleRewriteScript`/`rewriteBusy`/`rewriteError`（這三者仍保留在 `useScriptEditor`/`PlayPageContext` 供日後使用，僅 QA 面板不再呼叫）。QA 面板現專注於「問答 + 生圖／改圖」，標題下方新增一行用途說明，指引逐字稿改寫改用投影片面板的「對話式改寫」對話框（`ScriptRewriteDialog`，自有獨立多輪 state）。zh-TW/en 各新增 1 個 `play.sidebar.qa.usageNote` key（`editTranscript` key 保留未用）。純前端、未動後端；frontend typecheck 通過、全部 268 個前端測試 + i18n 對等 21 個全通過。分支 `feat/qa-panel-split-rewrite`，已 merge 回 master。
+
+## 掃描摘要（2026-06-25 第三十四輪）
+
+- 本輪開始時 TODO 已無未完成項目（notebook 三階段全數完成）。依 LOOP.md「無可安全執行項目時分析程式並參考 `docs/FUTURE_ROADMAP.md` 新增項目」進行一次掃描。
+- roadmap 的十項主要功能（2.1–2.10：課後報告、AI 導師、成本預估、跨簡報搜尋、課程包、行動控制器、品質檢查、模板、協作/版本、匯出）多已於前數十輪實作完成；本輪改聚焦於既有程式中的低風險增量缺口。
+- 觀察：`PlayPage.tsx` 仍有大量硬編中文（行動版「播放／問答」分頁標籤、`無效的 PDF id`／`返回首頁`／`載入中…`／`圖片產生中…`／無可播放頁面等狀態畫面、`aria-label="新投票"`、唯讀/產生中提示），與已完成的多輪 i18n 工作不一致。
+- 觀察：`RemoteControllerPage.tsx` 有 2 處殘留硬編中文（投影片 alt「第 N 頁」、「N 票」）。
+- 觀察：notebook 分頁數量 badge 目前只有「課堂互動」分頁；「投影片」分頁可用既有 `deckPages.length` 直接顯示總頁數，提升一致性。
+- 觀察：notebook 分頁鍵盤切換已支援 ←/→，可再補 Home/End 跳到首/末分頁（延續既有 roving tabindex，純前端 a11y 小增強）。
+
+## 新增可執行項目（2026-06-25 第三十四輪）
+
+- [ ] PlayPage.tsx 行動分頁與狀態畫面國際化：把 `frontend/src/pages/PlayPage.tsx` 中的硬編中文抽成 i18n key，至少包含：行動版頂部分頁「播放」「問答」標籤、`新投票` 的 `aria-label`、`無效的 PDF id`／`返回首頁`（出現兩處）／`載入中…`／`圖片產生中…`／「尚未產生可瀏覽的頁面（…）」／「這份 PDF 沒有可播放的語音頁面」／「系統將每 3 秒重新檢查一次狀態…」等狀態畫面文字。改用 `useI18n()`；含插值（status / progress_step）處以樣板字串 + 前後綴 key 組合。錯誤訊息字串（`setSyncError`/`setAudioError`/`ApiError` fallback 等）可一併或後續處理（量大，至少先處理使用者直接可見的版面文字）。補 zh-TW/en 對應 key 並跑 `i18n.test.ts` 對等測試。純前端。
+
+- [ ] RemoteControllerPage 殘留硬編中文國際化：把 `frontend/src/pages/RemoteControllerPage.tsx` 的 2 處硬編中文抽成 i18n key——投影片 `alt={`第 ${currentPage} 頁`}` 與投票結果 `{poll.total_votes} 票`，沿用既有 `play.report.pagePrefix/pageSuffix`、`votesSuffix` 之類或新增 `remote.*` key（擇一致風格）。補 zh-TW/en 並跑 i18n 對等測試。純前端、小改動。
+
+- [ ] notebook「投影片」分頁顯示總頁數 badge：在 `PlayPageSidebar` 的 `notebookTabCounts` 加入 `slides: deckPages.length`（沿用既有 badge 渲染，>0 才顯示），讓使用者不必切換即可看到簡報總頁數。可把 `notebookTabCounts` 的計算抽成純函式（輸入 bookmarks/importantPages/pagePolls/deckPages 長度，輸出各分頁數量）並補一個單元測試。純前端、低風險。
+
+- [ ] notebook 分頁鍵盤 Home/End 跳首末分頁：延續 phase 3 的 ARIA roving tabindex，在 `handleTabKeyDown` 支援 `Home`（跳第一個分頁）與 `End`（跳最後一個分頁）並移動焦點；抽出/沿用純函式取首末分頁 id 並補單元測試。純前端 a11y 小增強。
