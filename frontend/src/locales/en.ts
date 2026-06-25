@@ -1425,6 +1425,7 @@ export const en = {
   'play.system.status.partial': 'Partial',
   'play.system.status.skipped': 'Skipped',
   'play.system.status.unknown': 'Unknown',
+  'play.system.costUnknown': 'Unknown',
   'play.system.stage.queueWait': 'Queue wait',
   'play.system.stage.sourcePrepare': 'Source preparation',
   'play.system.stage.renderPages': 'Page rendering',
