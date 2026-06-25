@@ -1508,6 +1508,8 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] 補測試：`buildAuthenticatedRepoUrl` token 嵌入行為（第九十四輪，2026-06-26 掃描補測試）：延續 GitHub token 安全審查。`buildAuthenticatedRepoUrl`（將 token 嵌入 https push remote）為 exported 純函式但無測試。先核對相關安全面皆健全：admin 設定回應雖回傳各 provider API key/`github_token` 明文，但屬「帳號擁有者預填自己的設定」設計（僅 MCP token 用 write-only `has_*` 布林，為刻意取捨，非 bug）；git 指令路徑參數皆有 `--` 分隔、ref 為內部產生（無 argument injection）；token 僅作 git 參數、不寫入 `.git/config`。新增 `presentation-git-auth-url.test.ts` 鎖定安全行為：①僅 http(s) URL 嵌入 token、SSH/scp-style 不嵌入；②空 token 原樣返回；③格式錯誤 URL 不丟例外；④token 特殊字元被 percent-encode（不破壞 URL 結構）。預期輸出已以 node 重實作逐一驗證；該測試檔因模組連帶載入 better-sqlite3 而於 sandbox 無法執行（既有限制），於 CI 執行、本機以 typecheck 驗證。純測試、低風險。分支 `test/auth-repo-url`，已 merge 回 master。
 
 - [x] 修補 GitHub token 經 git 錯誤 `cmd`/`stderr` 洩漏到日誌（第九十五輪，2026-06-26 掃描安全修復）：追查日誌脫敏接線方式時發現第九十三輪修補的殘留缺口。`logSanitizer` 是在各 log 呼叫端「手動套用」（gemini/openai/worker 等），並非 pino 全域 serializer；而 `admin.ts` 以 `app.log.warn({ err })` 記錄 push 失敗的原始 error。第九十三輪僅脫敏 `err.message`，但 `execFile` 失敗的 error 還有 `cmd`（Node 設為原始 argv：`git push https://x-access-token:<token>@github.com…`）與 `stdout`/`stderr`——pino 會序列化這些屬性，故 token 仍會經 `err.cmd` 洩漏到日誌。新增 `redactGitExecError()`，對 `message`+`cmd`+`stdout`+`stderr` 全部套 `redactSecretsInText` 後再 rethrow。以 node 重實作驗證 token 從三者皆被遮蔽；`redactSecretsInText` 單元已由 logSanitizer 測試（17 個）涵蓋。後端 typecheck 通過。安全修復、低風險。分支 `fix/git-error-cmd-token-leak`，已 merge 回 master。
+
+- [x] 全域錯誤處理：production 對所有 5xx 隱藏原始訊息（第九十六輪，2026-06-26 掃描安全修復；**此為計數第 100 項，已達 LOOP.md 上限**）：`server.ts` 的 `setErrorHandler` 原本只在 `status === 500` 時於 production 以泛用訊息取代原始 `err.message`。但帶 `statusCode` 502/503/504（或任意 5xx）的未捕捉錯誤仍會把原始訊息回傳給 client，可能洩漏伺服器內部（檔案路徑、db 識別子、嵌入的憑證等）。改為 `status >= 500`（`isServerError`）即套用泛用訊息並標為 `INTERNAL_ERROR`；4xx 客戶端錯誤維持回傳自身訊息。新增 502 測試，既有 500/dev/400 案例不變。註：handler 測試需 better-sqlite3，sandbox 無法執行（既有限制），於 CI 執行、本機以 typecheck 與既有案例一致性驗證。安全修復、低風險。分支 `fix/error-handler-redact-all-5xx`，已 merge 回 master。
 ## 掃描摘要（2026-06-25 第四十三輪）
 
 - 本輪 TODO 唯一未完成項目（formatDurationMs i18n）先前的實作方案被使用者否決，已標記暫緩。經詢問使用者後，本輪改為「為後端 `logSanitizer.ts` 補單元測試」。
@@ -1934,3 +1936,18 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - 時間：2026-06-26
 - 分支：`fix/git-error-cmd-token-leak`（已 merge 回 master）
 - 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 99 個完成項目（99/100，未達上限；下一個完成即達 100 上限）。
+## 工作記錄（第九十六輪，2026-06-26）—— 已達 100/100 計數上限
+
+- 工作內容：完成自上次計數重設（2026-06-25）以來的**第 100 個項目**。本項延續安全審查，將全域錯誤處理器的 production 原始訊息隱藏條件由「僅 status === 500」擴大為「所有 status >= 500」，使 502/503/504 等未捕捉錯誤也不再把可能含內部資訊/憑證的原始訊息回傳給 client，並一致標為 `INTERNAL_ERROR`；4xx 維持回傳自身訊息。新增 502 測試，既有 500/dev/400 案例不變。後端 typecheck 通過（handler 測試需 better-sqlite3，於 CI 執行）。
+- 時間：2026-06-26
+- 分支：`fix/error-handler-redact-all-5xx`（已 merge 回 master）
+- **計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 100 個完成項目（100/100，已達 LOOP.md 門檻）。**
+
+### ⛔ 已達 100 項上限 —— 暫停執行新項目
+
+依 LOOP.md「完成 100 個項目後就停止做新的項目」，自本輪起**停止新增/執行新項目**，等待使用者決定：
+1. 重設計數（在 TODO.md 末尾加入新的「---- 計數重設 ----」標記後可重新起算）；或
+2. 調整門檻（例如提高至 150）；或
+3. 結束本輪自動改善。
+
+這一批（第 33～96 輪、共 100 項）主要成果：完整的前端 i18n 收尾（play hooks／元件硬編中文、API 錯誤提示、動畫/字幕/狀態標籤）、動態 i18n key 編譯期安全化、多組前後端鏡像 drift-guard（LLM 價格、動畫常數與子屬性 enum、字幕分句、狀態 enum、TTS 語音）、quiz 計分邏輯抽出與測試，以及一連串 GitHub token 洩漏的安全修復（日誌脫敏、API 回應、git 錯誤 cmd/stderr、全域 5xx 訊息）。
