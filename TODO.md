@@ -1498,6 +1498,8 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] 前後端 TTS 語音清單鏡像 drift-guard（第八十九輪，2026-06-26 掃描新增）：前端語音選擇器 `ttsVoices.ts` 的 `GEMINI_TTS_VOICES`（22）／`OPENAI_TTS_VOICES`（11）鏡像後端可接受的語音（`services/gemini.ts` 的 `GEMINI_VOICES` Set、`config.ts` 的 `OPENAI_TTS_VOICES`）。`GEMINI_TTS_VOICES` 原始碼註解已明言「Keep in sync with backend GEMINI_VOICES」，但跨 package 無守護——drift 會讓選擇器列出後端會 coerce 成 fallback（Gemini 一律轉 `Kore`）的語音。經確認兩組值集完全一致（OpenAI 順序 onyx/nova 互換但集合相同）。新增後端測試 `ttsVoiceConsistency.test.ts`：以 `fs` 解析前端兩份清單與後端 `GEMINI_VOICES`，並 import 後端 `OPENAI_TTS_VOICES`，比對排序值集。後端 typecheck 與新測試 3 個通過。純測試、低風險。分支 `test/tts-voice-mirror-guard`，已 merge 回 master。
 
 - [x] Quiz 分數溢出檢查對齊後端容差＋抽出可測模組（第九十輪，2026-06-26 掃描修復）：`QuizBuilderPage` 的分數溢出警告（同時 gate「儲存」按鈕）以嚴格 `sum > 100` 比較，但後端 cap 用 `sum > 100 + QUIZ_SCORE_SUM_EPSILON`（1e-6）。對於浮點誤差落在 (100, 100+1e-6] 的總和，前端會判定溢出、後端卻接受——與「mirrors backend」註解的本意不符的潛在不一致（實測一般輸入難以觸發，屬一致性對齊而非顯性 bug）。將原本私有且無測試的計分 helper 抽到 `lib/quizScoring.ts`（`QUIZ_TOTAL_SCORE`、`explicitScoreSum`、新增套用相同 epsilon 的 `scoreSumExceedingTotal`），`QuizBuilderPage` 改用之；新增 `quizScoring.test.ts` 4 測試（總和、剛好 100、epsilon 邊界）。前端 typecheck 與全測試 335 個通過。純前端、低風險。分支 `fix/quiz-score-overflow-epsilon`，已 merge 回 master。
+
+- [x] 抽出並測試 quiz 評分函式（第九十一輪，2026-06-26 掃描重構）：延續第九十輪，`QuizBuilderPage` 還有 3 個私有且無測試的純評分函式——`normalizeQuestionScores`（未給分題平分剩餘額度）、`isCorrectAnswer`（答案集合比對）、`calcQuestionScore`（單選 all-or-nothing／多選逐選項部分給分），均鏡像後端評分且用於 11 處 client-side 分數顯示。將三者併入 `lib/quizScoring.ts`、`QuizBuilderPage` 改 import（行為不變），並補 `quizScoring.test.ts` 4 個測試（平分分配、集合相等忽略順序/重複、單選全有或全無、多選逐選項部分給分含 0 選項）。前端 typecheck 與全測試 339 個通過。純重構＋測試、低風險。分支 `refactor/quiz-scoring-extract-test`，已 merge 回 master。
 ## 掃描摘要（2026-06-25 第四十三輪）
 
 - 本輪 TODO 唯一未完成項目（formatDurationMs i18n）先前的實作方案被使用者否決，已標記暫緩。經詢問使用者後，本輪改為「為後端 `logSanitizer.ts` 補單元測試」。
@@ -1894,3 +1896,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - 時間：2026-06-26
 - 分支：`fix/quiz-score-overflow-epsilon`（已 merge 回 master）
 - 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 94 個完成項目（94/100，未達上限）。
+## 工作記錄（第九十一輪，2026-06-26）
+
+- 工作內容：延續第九十輪，將 `QuizBuilderPage` 剩餘 3 個私有且無測試的純評分函式（`normalizeQuestionScores`、`isCorrectAnswer`、`calcQuestionScore`，鏡像後端評分、用於 11 處 client-side 分數顯示）併入 `lib/quizScoring.ts`，QuizBuilderPage 改 import（行為不變、移除已不再使用的 `QUIZ_TOTAL_SCORE` import）。補 `quizScoring.test.ts` 4 個測試涵蓋平分分配、答案集合比對、單選/多選給分。至此 quiz 計分邏輯有單一可測之家。前端 typecheck 與全測試 339 個通過。純重構＋測試、低風險。
+- 時間：2026-06-26
+- 分支：`refactor/quiz-scoring-extract-test`（已 merge 回 master）
+- 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 95 個完成項目（95/100，未達上限）。
