@@ -1542,3 +1542,14 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] 為 pageAnimation spec 驗證純函式補單元測試：新增 `backend/test/animationSpecValidate.test.ts`，涵蓋 `defaultAnimationSpec`、`validateAnimationSpec`（最小合法 spec、拒絕非物件/錯版本、未知 effect type 訊息含 path、保留合法 typed 欄位、params 依 effect type 白名單過濾並剔除非允許/非有限/非數字、無允許 params 時整段移除、空 hints 移除但保留非空）、`renderTypeForSpec`、`parseStoredAnimationSpec`（合法 JSON 往返、壞 JSON 與非法 spec fallback 至預設）。純後端、僅新增測試、不改產品程式碼。
   - 修改說明（2026-06-25）：新增 `backend/test/animationSpecValidate.test.ts`，11 個測試涵蓋上述各案例（params 過濾以 `zoom-in` 帶 `{fromScale:1.5, toScale:2, distancePct:10, bad:NaN}` 驗證只留白名單內的有限數字 `{fromScale, toScale}`；`fade-in` 無允許 params 故整段 `params` 不出現；`hints: {}` 移除、`{'0':'note'}` 保留）。clamp/round 防禦因 schema 先以 `z.number().min/max/int` 把關、外部難觸發故未特別測。以 `tsx --test` 直跑驗證 11 個測試全通過；backend typecheck 通過。未改動產品程式碼。分支 `test/animation-spec`，已 merge 回 master。
 
+## 掃描摘要（2026-06-25 第五十一輪）
+
+- TODO 唯一未完成項目（formatDurationMs i18n）仍暫緩（方案待使用者確認）。`pageAnimation` 的純函式已測完，本輪檢視 `pdfFigures.ts`（14 exports，多涉檔案 I/O）中的純函式。
+- 觀察：`pdfFigures.ts` 多數函式涉 `figures.json`/selection 的讀寫（I/O），但 `buildFigureReferenceNotes(figures: FigureEntry[])` 為純函式（由 figures 陣列組生圖參考說明字串、含 caption→context→佔位的優先序）且**無測試**。
+- 說明：後端可獨立測試的純函式缺口已接近見底，剩餘多為 DB/檔案 I/O/外部 API 相依（需整合測試環境，於 sandbox 受 timeout 限制）。後續若無新方向，價值較高的工作（新功能）需使用者提供方向。
+
+## 新增可執行項目（2026-06-25 第五十一輪）
+
+- [x] 為 buildFigureReferenceNotes 補單元測試：新增 `backend/test/figureReferenceNotes.test.ts`，涵蓋空陣列回 null、逐圖 1-indexed 行、caption→context→`(無圖說文字)` 的優先序 fallback、以及說明用的 header/footer 包裹（行數）。純後端、僅新增測試、不改產品程式碼。
+  - 修改說明（2026-06-25）：新增 `backend/test/figureReferenceNotes.test.ts`，4 個測試以 `makeFigure()` helper 構造符合 `FigureEntry` 型別的測試資料，涵蓋上述各案例（caption 為空白 `'   '` 時 trim 後 fallback 到 context、caption/context 皆 null 時用 `(無圖說文字)`；單圖時總行數為 header+1+footer=3）。import 連帶 `storage`/`openai`/`logger` 無副作用問題；以 `tsx --test` 直跑驗證 4 個測試全通過；backend typecheck 通過。未改動產品程式碼。分支 `test/figure-reference-notes`，已 merge 回 master。
+
