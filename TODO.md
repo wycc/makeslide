@@ -1632,6 +1632,16 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] 為 safeJoinPdfPath 補路徑穿越防護測試：新增 `backend/test/safeJoinPdfPath.test.ts`，涵蓋正常片段解析於 base 內、無片段回 base、base 內的 `..` 正規化、以及阻擋上層穿越/絕對路徑片段/同前綴 sibling（`../abc-evil` 不可被當成 `abc` 子路徑）。純後端、僅新增測試、不改產品程式碼。
   - 修改說明（2026-06-25）：新增 `backend/test/safeJoinPdfPath.test.ts`，6 個測試以 `path.resolve(pdfDir(id))` 為 base 比較預期，涵蓋：正常多片段解析、無片段回 base、`sub/../f.txt` 正規化仍在 base、`../../etc/passwd` 上層穿越 throw、`/etc/passwd` 絕對路徑片段 throw、`../abc-evil` 同前綴 sibling throw（驗證 prefix 檢查用 `+ path.sep` 避免 abc-evil 誤判為 abc 子路徑）。以 `tsx --test` 直跑驗證 6 個測試全通過；backend typecheck 通過。分支 `test/safe-join-path`，已 merge 回 master。
 
+## 掃描摘要（2026-06-25 第六十一輪）
+
+- 盤點 `backend/src/worker/` 的純函式測試缺口。多個 worker step 含未測純函式：`renderTextPages`（escapeXml/splitLines/toPages）、`synthesizeAudio`（parseWavPcmChunk/splitByToneMarkers/splitSpeakerPrefix/isRetryableTtsError/extractTtsErrorMessage）、`generateScript`（scriptCharBounds/isMinimalSlideStyleRequested）、`generateVideo`（evenCeil/buildScaleAndPadFilter）、`splitTextWithLlm`（splitBySlideMarkers）等，皆無測試。
+- 本輪先處理 `renderTextPages` 的三個純函式（含安全相關的 `escapeXml`，防 SVG/XML injection）。其餘列為後續輪次候選。
+
+## 新增可執行項目（2026-06-25 第六十一輪）
+
+- [x] 為 renderTextPages 純函式補測試：新增 `backend/test/renderTextPagesHelpers.test.ts`，涵蓋 `escapeXml`（五個 XML 特殊字元、`&` 先行避免雙重 escape、純文字不變）、`splitLines`（CRLF/CR 正規化、空行保留、空輸入→`['']`、trailing trim、超過 CHARS_PER_LINE 硬換行）、`toPages`（LINES_PER_PAGE 分頁、空/短清單）。純後端、僅新增測試、不改產品程式碼。
+  - 修改說明（2026-06-25）：新增 `backend/test/renderTextPagesHelpers.test.ts`，8 個測試。測試頂部以註解標明 `CHARS_PER_LINE=34`/`LINES_PER_PAGE=12` 對應 src module-private 常數（固化 wrapping/分頁規格，改 src 需同步）。`escapeXml` 驗證 `&`→`&amp;` 先行（`escapeXml('&lt;')`→`'&amp;lt;'`）。以 `tsx --test` 直跑驗證 8 個測試全通過；backend typecheck 通過。分支 `test/render-text-pages-helpers`，已 merge 回 master。
+
 ## 掃描摘要（2026-06-25 第五十六輪）
 
 - 延續錯誤碼一致性調查，檢視後端 `errors.ts`。發現架構落差：`normalizeErrorCode`（legacy→standard 映射）**有單元測試**（`pages-api.test.ts`）卻**從未被產品程式碼呼叫**——路由實際用的 `errorResponse`（`routes/pdfs.ts`、`routes/pdfs/shared.ts` 兩份重複定義）直接送原始 code、不 normalize。導致 legacy 碼（PAGE_IMAGE_NOT_FOUND、COVER_NOT_READY、NO_FILE、INVALID_MIME 等）原樣洩漏到前端，而前端 `ERROR_HINTS` 無對應條目、顯示英文 fallback。
