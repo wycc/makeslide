@@ -4,7 +4,7 @@ import { SlideRenderer } from '../../components/slide/SlideRenderer';
 import { AnimationEditorTab } from './AnimationEditorTab';
 import { FigureAssetsTab } from './FigureAssetsTab';
 import { ScriptRewriteDialog } from './ScriptRewriteDialog';
-import { formatTime, formatDurationMs, formatTokenCount, formatCostUsd } from './formatters';
+import { formatTime, formatDurationMs, formatTokenCount, formatCostUsd, adjustRemainingForSpeed } from './formatters';
 import { PageTimingChips } from './PageTimingChips';
 import { ApiError, fetchPageGenerationPrompts, fetchPdfRunHistory, fetchPdfSlowArtifacts, figureImageUrl, fetchSyncAttendees, kickSyncAttendee, rewritePageScript } from '../../lib/api';
 import { copyTextToClipboard } from '../../lib/clipboard';
@@ -745,8 +745,15 @@ export function PlayPageSlidePanel() {
         <div className="order-3 shrink-0 whitespace-nowrap text-right font-mono text-[11px] text-slate-300 sm:order-none sm:text-xs">
           {formatTime(Math.min(currentTime, duration))} / {formatTime(duration)}
           {remainingSeconds != null && (
-            <span className="ml-1 text-slate-500" title={t('play.header.timeRemaining')}>
-              {' '}−{formatTime(remainingSeconds)}
+            <span
+              className="ml-1 text-slate-500"
+              title={
+                playbackRate !== 1
+                  ? t('play.header.timeRemainingAtSpeed').replace('{rate}', String(playbackRate))
+                  : t('play.header.timeRemaining')
+              }
+            >
+              {' '}−{formatTime(adjustRemainingForSpeed(remainingSeconds, playbackRate))}
             </span>
           )}
         </div>

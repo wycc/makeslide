@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import type { TranslationKey } from '../../i18n';
 import { zhTW } from '../../locales/zh-TW';
 import {
+  adjustRemainingForSpeed,
   formatCostUsd,
   formatDurationMs,
   formatRegenerateEta,
@@ -62,6 +63,21 @@ test('sumCompletedDurationMs returns null when no completed duration exists', ()
     ]),
     null,
   );
+});
+
+test('adjustRemainingForSpeed divides audio seconds by the playback rate', () => {
+  assert.equal(adjustRemainingForSpeed(120, 1), 120);
+  assert.equal(adjustRemainingForSpeed(120, 1.5), 80);
+  assert.equal(adjustRemainingForSpeed(90, 0.75), 120);
+});
+
+test('adjustRemainingForSpeed guards against invalid rates and non-positive seconds', () => {
+  assert.equal(adjustRemainingForSpeed(120, 0), 120);
+  assert.equal(adjustRemainingForSpeed(120, -2), 120);
+  assert.equal(adjustRemainingForSpeed(120, Number.NaN), 120);
+  assert.equal(adjustRemainingForSpeed(0, 1.5), 0);
+  assert.equal(adjustRemainingForSpeed(-5, 1.5), 0);
+  assert.equal(adjustRemainingForSpeed(Number.NaN, 1.5), 0);
 });
 
 test('formatRegenerateJobStatus formats running/completed/failed status labels', () => {

@@ -1745,6 +1745,7 @@ export const en = {
   'play.header.downloadCoursePackage': 'Download Course Package',
   'play.header.coursePackageGenerating': 'Generating course package…',
   'play.header.timeRemaining': 'Remaining time for full presentation',
+  'play.header.timeRemainingAtSpeed': 'Remaining time for full presentation (at {rate}× speed)',
   'play.header.copyAllQuestions': 'Copy all questions',
   'play.header.copyAllQuestionsDone': 'All questions copied',
   'play.header.copyAllQuestionsFail': 'Copy failed',

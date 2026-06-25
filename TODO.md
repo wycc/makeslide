@@ -1951,3 +1951,24 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 3. 結束本輪自動改善。
 
 這一批（第 33～96 輪、共 100 項）主要成果：完整的前端 i18n 收尾（play hooks／元件硬編中文、API 錯誤提示、動畫/字幕/狀態標籤）、動態 i18n key 編譯期安全化、多組前後端鏡像 drift-guard（LLM 價格、動畫常數與子屬性 enum、字幕分句、狀態 enum、TTS 語音）、quiz 計分邏輯抽出與測試，以及一連串 GitHub token 洩漏的安全修復（日誌脫敏、API 回應、git 錯誤 cmd/stderr、全域 5xx 訊息）。
+
+---- 計數重設 ----
+
+<!-- 第九十七輪起點（2026-06-26）：經使用者同意重設計數，自此重新從 0 起算，繼續執行新項目。 -->
+
+## 掃描摘要（第九十七輪，2026-06-26）
+
+- 計數已於本輪重設；前一批（第 33～96 輪）共完成 100 項，使用者同意重新起算。
+- 播放控制列的 `−剩餘時間` 直接加總各頁音訊內容秒數，未隨 `playbackRate` 換算；非 1× 倍速時顯示偏高，與實際播完所需牆鐘時間不符。
+
+## 新增可執行項目（第九十七輪）
+
+- [x] 剩餘播放時間隨速度校正：播放控制列的 `−剩餘時間` 改為依目前 `playbackRate` 換算實際牆鐘時間。新增純函式 `adjustRemainingForSpeed(seconds, rate)` 至 `formatters.ts`（除以倍速，含 ≤0/NaN 速率與非正秒數的安全 fallback），`PlayPageSlidePanel` 顯示處套用；`playbackRate !== 1` 時 tooltip 改用新 i18n `play.header.timeRemainingAtSpeed`（含 `{rate}` 佔位）。
+  - 修改說明（2026-06-26）：`formatters.ts` 新增 `adjustRemainingForSpeed`；`formatters.test.ts` 補 2 個 node:test（倍速換算、邊界保護）；`PlayPageSlidePanel.tsx` import 並於剩餘時間 span 套用換算與條件 tooltip；zh-TW/en 各新增 `play.header.timeRemainingAtSpeed`。前端 341 測試 + typecheck 全通過。分支 `feat/remaining-time-speed-adjusted`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 1 個完成項目（1/100，未達上限）。
+
+## 工作記錄（第九十七輪）
+
+| 日期 | 工作摘要 | 分支 |
+| ---- | -------- | ---- |
+| 2026-06-26 | 剩餘播放時間隨速度校正：新增 `adjustRemainingForSpeed(seconds, rate)` 純函式並於 `PlayPageSlidePanel` 剩餘時間顯示套用；非 1× 倍速 tooltip 改用 `play.header.timeRemainingAtSpeed`；formatters.test.ts +2 測試；i18n zh-TW/en 各 +1 key | feat/remaining-time-speed-adjusted（已 merge） |

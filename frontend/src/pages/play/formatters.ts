@@ -110,6 +110,12 @@ export function sumCompletedDurationMs(items: Array<{ status: string; duration_m
   return total > 0 ? total : null;
 }
 
+export function adjustRemainingForSpeed(seconds: number, rate: number): number {
+  if (!Number.isFinite(seconds) || seconds <= 0) return 0;
+  if (!Number.isFinite(rate) || rate <= 0) return seconds;
+  return seconds / rate;
+}
+
 export function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return '00:00';
   const total = Math.floor(seconds);

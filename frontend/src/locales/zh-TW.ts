@@ -1745,6 +1745,7 @@ export const zhTW = {
   'play.header.downloadCoursePackage': '下載課程包',
   'play.header.coursePackageGenerating': '產生課程包中…',
   'play.header.timeRemaining': '全簡報剩餘時間',
+  'play.header.timeRemainingAtSpeed': '全簡報剩餘時間（{rate}× 速度）',
   'play.header.copyAllQuestions': '複製全部提問',
   'play.header.copyAllQuestionsDone': '已複製全部提問',
   'play.header.copyAllQuestionsFail': '複製失敗',
