@@ -1571,6 +1571,8 @@ export const en = {
   'systemData.tokensHint': 'Input {prompt} / Output {completion}',
   'systemData.averageLatency': 'Average latency',
   'systemData.estimatedCost': 'Estimated cost',
+  'systemData.modelPriceUnknown': 'Model price unknown',
+  'systemData.secondsSuffix': ' s',
   'systemData.costHint': 'Estimated using known OpenAI model pricing',
   'systemData.stageDistribution': 'Stage status distribution',
   'systemData.noStageData': 'No stage timing data yet.',
