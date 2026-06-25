@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | 修正英文相對時間單複數：`RelativeTimeLabels` 各單位改 `{one,other}`、`formatRelativeTime` 依 count===1 選用；locale 改 11 個 `time.*` key（en 完整單複數，修掉「1 days ago」）；測試補單數斷言；typecheck + 292 前端測試全通過 | fix/relative-time-en-plural（已 merge） |
 | 2026-06-25 | 分析並新增可執行項目（第四十一輪）：確認 computeLineDiff 已接 VersionHistoryDialog、backlog 大致消化；找到真實小瑕疵（英文相對時間缺單複數，「1 days ago」），新增該修正項；再次說明高價值工作需使用者方向 | master（僅文件） |
 | 2026-06-25 | apiKeyErrors.ts 補單元測試：新增 `apiKeyErrors.test.ts`（5 測試，涵蓋 ApiKeyMissingError 屬性/訊息與 isApiKeyMissingError 的 instance/duck-typing/拒絕分支）；以 tsx 直跑通過、backend typecheck 通過；未改產品碼 | test/api-key-errors（已 merge） |
 | 2026-06-25 | 分析並新增可執行項目（第四十輪）：盤點確認前端純 helper 與後端測試覆蓋已大致完整、i18n 對等檢查健全；唯一明確小缺口為 apiKeyErrors.ts 無測試，新增該項；並記錄低風險清理項目近枯竭、後續高價值工作需使用者方向 | master（僅文件） |
@@ -1436,5 +1437,6 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 ## 新增可執行項目（2026-06-25 第四十一輪）
 
-- [ ] 修正英文相對時間單複數：`lib/relativeTime.ts` 的英文相對時間在數值為 1 時文法錯誤（「1 days ago」）。在不影響中文的前提下支援單複數——例如將 `RelativeTimeLabels` 各單位後綴改為可帶單/複數兩式（或讓 `buildRelativeTimeLabels` 依語言提供 singular/plural），`formatRelativeTime` 依 `count === 1` 選用；中文沿用單一形式。更新 zh-TW/en key 與 `relativeTime.test.ts`（補 count=1 的單數斷言）。純前端、低風險。
+- [x] 修正英文相對時間單複數：`lib/relativeTime.ts` 的英文相對時間在數值為 1 時文法錯誤（「1 days ago」）。在不影響中文的前提下支援單複數——例如將 `RelativeTimeLabels` 各單位後綴改為可帶單/複數兩式（或讓 `buildRelativeTimeLabels` 依語言提供 singular/plural），`formatRelativeTime` 依 `count === 1` 選用；中文沿用單一形式。更新 zh-TW/en key 與 `relativeTime.test.ts`（補 count=1 的單數斷言）。純前端、低風險。
+  - 修改說明（2026-06-25）：`RelativeTimeLabels` 各時間單位由單一後綴改為 `PluralSuffix { one; other }`（minutes/hours/days/months/years），`formatRelativeTime` 以 `count === 1 ? one : other` 選用（新增 `suffix()` helper）；`RELATIVE_TIME_LABEL_KEYS`/`buildRelativeTimeLabels` 同步改為 one/other 對照。locale 由原 6 個 `time.*Suffix` 改為 11 個 key（`time.justNow` + 各單位 `One`/`Other`）：en 用完整單複數（minute/minutes、day/days…，修掉「1 days ago」並順帶把縮寫改全字更清楚），zh one===other（無單複數、文字不變）。`relativeTime.test.ts` 更新為新結構並新增 count=1 單數斷言（1 minute/1 hour/1 day ago）。三個消費端（PdfCard/QuizBuilderPage/HomePage）沿用 `buildRelativeTimeLabels(t)` 無需改動。frontend typecheck 通過、全部 292 個前端測試 + i18n 對等 21 個全通過。分支 `fix/relative-time-en-plural`，已 merge 回 master。
 
