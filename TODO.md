@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | 分析並新增可執行項目（第三十七輪）：TODO 清空後依 LOOP.md 全面掃描可見硬編中文，新增 3 個低風險清理項目（PageTimingChips tooltip i18n、App.tsx 載入設定畫面 i18n、複製/匯出文字 i18n） | master（僅文件） |
 | 2026-06-25 | FigureAssetsTab header「（第 N 頁）」國際化：新增 `play.figures.headerPagePrefix/Suffix` 並改用之；2 個 key；grep 確認該檔無可見中文；typecheck + 277 前端測試 + i18n 對等全通過 | feat/figures-header-i18n（已 merge） |
 | 2026-06-25 | SystemDataPage 殘留中文國際化：`formatCost`/`formatDuration` 改接 label 參數，呼叫端傳 `t()`；「模型價格未知」與時長「秒」抽成 2 個 `systemData.*` key；grep 確認該檔無中文；typecheck + 277 前端測試 + i18n 對等全通過 | feat/systemdata-i18n（已 merge） |
 | 2026-06-25 | HomePage 改用共用 relativeTime helper：移除第三份重複的本地 formatRelativeTime（消硬編中文 + NaN 舊問題），改用 `lib/relativeTime.ts` 並以 `t('time.*')` 傳 labels；三處相對時間格式化全統一；無新增 key；typecheck + 277 前端測試 + i18n 對等全通過 | feat/homepage-relative-time-dedup（已 merge） |
@@ -1329,3 +1330,19 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [x] 零星小元件殘留硬編中文國際化：把 `pages/play/PageTimingChips.tsx`（如「產生中」）與其他少量殘留可見中文（掃描 `QualityCheckPanel`、`PlayPageSlidePanel`、`PlayPageSidebar`、`PlayPageHeader` 等元件確認）抽成 i18n key，補 zh-TW/en 並跑 i18n 對等測試。純前端、低風險清理。
   - 修改說明（2026-06-25）：將使用者可見的硬編中文抽成 i18n key：`PageTimingChips` 計時「產生中」；`PlayPageSlidePanel` 分頁進度條 `aria-label`（第 X 頁，共 Y 頁）與「清除搜尋」`aria-label`；`PlayPageSidebar` 「此頁已有筆記」title、書籤/重點頁的「第 N 頁」縮圖 alt 與顯示文字、以及複製清單文字（「第 N 頁」以分隔符 join）。新增 7 個 key：`play.common.pagePrefix`/`pageSuffix`（共用「第 N 頁」前後綴）、`play.timing.generating`、`play.slidePanel.clearSearchAria`/`pageProgressMid`、`play.sidebar.hasNotesTitle`/`pageListSeparator`（zh-TW/en 各 7）。**範圍說明**：`QualityCheckPanel` 與 `PlayPageSlidePanel` 的 LLM 提示詞常數（如 BATCH_FILL_PROMPT、改寫風格 prompt）、各元件 `ApiError`/`Error` fallback 錯誤訊息、以及 `PlayPageHeader` 全文逐字稿 markdown 匯出的「## 第 N 頁」標頭屬內部/匯出內容或 PlayPage 錯誤訊息批次（第二批項目）範疇，本次未動。frontend typecheck 通過、全部 277 個前端測試 + i18n 對等 21 個全通過。分支 `feat/misc-components-i18n`，已 merge 回 master。
+
+## 掃描摘要（2026-06-25 第三十七輪）
+
+- 第三十六輪 3 個項目完成後 TODO 再次清空，依 LOOP.md 做一次較全面的「使用者可見硬編中文」掃描（含 JSX 文字、屬性、template literal）。
+- 前端可見硬編中文已大致清乾淨，剩餘多為：① 工具提示/tooltip 文字，② 根層載入畫面，③ 複製/匯出用的文字內容，④ 刻意延後的內部 LLM 提示詞常數與錯誤 fallback。
+- 觀察：`PageTimingChips.tsx` 的 `timingTitle()`（hover tooltip）仍硬編「耗時：／原因：／開始：／結束：／錯誤：／尚無紀錄」。
+- 觀察：`App.tsx` 設定載入畫面有「載入設定中…」。
+- 觀察：複製/匯出文字仍含中文標籤：`QuizBuilderPage` 匯出題目的「解說：」、`PlayPageHeader` 逐字稿全文 markdown 匯出的「## 第 N 頁」標頭。
+
+## 新增可執行項目（2026-06-25 第三十七輪）
+
+- [ ] PageTimingChips tooltip 文字國際化：`pages/play/PageTimingChips.tsx` 的 module 層 `timingTitle()` 組出的 hover tooltip 仍硬編中文（`${label}：尚無紀錄`、`耗時：`、`原因：`、`開始：`、`結束：`、`錯誤：`）。將這些標籤抽成 i18n key，並把 `timingTitle` 改為接受 label 字串（或 `t`）以保持 module 層純函式可測；補 zh-TW/en 並跑 i18n 對等測試。純前端、低風險。
+
+- [ ] App.tsx 設定載入畫面國際化：`App.tsx` 設定載入時的「載入設定中…」改用 `useI18n()` 的 `t`（`useI18n` 由 localStorage 取語言、無需 provider 即可運作），補 zh-TW/en key 並跑 i18n 對等測試。純前端、小改動。
+
+- [ ] 複製/匯出文字國際化：`QuizBuilderPage` 複製題目時的「解說：」標籤與 `PlayPageHeader` 逐字稿全文 markdown 匯出的「## 第 N 頁」標頭抽成 i18n key（沿用既有 `play.common.pagePrefix/pageSuffix` 或新增），使匯出內容依介面語言產生；補 zh-TW/en 並跑 i18n 對等測試。純前端、低風險。
