@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | 分析並新增可執行項目（第四十一輪）：確認 computeLineDiff 已接 VersionHistoryDialog、backlog 大致消化；找到真實小瑕疵（英文相對時間缺單複數，「1 days ago」），新增該修正項；再次說明高價值工作需使用者方向 | master（僅文件） |
 | 2026-06-25 | apiKeyErrors.ts 補單元測試：新增 `apiKeyErrors.test.ts`（5 測試，涵蓋 ApiKeyMissingError 屬性/訊息與 isApiKeyMissingError 的 instance/duck-typing/拒絕分支）；以 tsx 直跑通過、backend typecheck 通過；未改產品碼 | test/api-key-errors（已 merge） |
 | 2026-06-25 | 分析並新增可執行項目（第四十輪）：盤點確認前端純 helper 與後端測試覆蓋已大致完整、i18n 對等檢查健全；唯一明確小缺口為 apiKeyErrors.ts 無測試，新增該項；並記錄低風險清理項目近枯竭、後續高價值工作需使用者方向 | master（僅文件） |
 | 2026-06-25 | 抽出測驗進度彙總純函式：新增 `lib/quizProgress.ts` 的 `summarizeQuizProgress`（total/submitted/inProgress），QuizBuilderPage 改用之；補 3 個單元測試；typecheck + 291 前端測試全通過 | feat/quiz-progress-summary-helper（已 merge） |
@@ -1426,4 +1427,14 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [x] 為 apiKeyErrors.ts 補單元測試：新增 `backend/test/apiKeyErrors.test.ts`（或就近放置），測試 `isApiKeyMissingError`：對 `new ApiKeyMissingError('openai')` 回 true、對帶 `{ code: 'API_KEY_MISSING' }` 的純物件回 true、對一般 Error / null / 無關物件回 false；並驗證 `ApiKeyMissingError` 的 `code`/`provider`/預設 message。因該模組無 DB 相依，測試可用 `node --import tsx --test` 直跑驗證（不受後端整套 sandbox timeout 影響）。純後端、僅新增測試。
   - 修改說明（2026-06-25）：新增 `backend/test/apiKeyErrors.test.ts`，5 個測試涵蓋 `ApiKeyMissingError` 的 code/provider/預設訊息與自訂訊息、`isApiKeyMissingError` 對 error 實例與 `{code:'API_KEY_MISSING'}` duck-typed 物件回 true、對一般 Error/`{code:'OTHER'}`/null/undefined/字串/空物件回 false。因該模組無 DB 相依，以 `node --import tsx --test` 直跑驗證 5 個測試全通過（避開後端整套 better-sqlite3 開機在 sandbox 的 timeout）；backend typecheck 通過。未改動產品程式碼。分支 `test/api-key-errors`，已 merge 回 master。
+
+## 掃描摘要（2026-06-25 第四十一輪）
+
+- TODO 清空且無新使用者項目。確認 `computeLineDiff` 已接到 `VersionHistoryDialog`（腳本版本 diff 功能完整）；roadmap 2.1–2.10 主要功能與既有低風險 backlog 已大致消化。
+- 經實質檢視找到一個真實但小的正確性瑕疵：英文相對時間缺單複數——`lib/relativeTime.ts` 的 en 後綴為固定 `' min ago' / ' hr ago' / ' days ago' / ...`，當數值為 1 時會輸出文法錯誤的「1 days ago / 1 hr ago」（中文無單複數、不受影響）。
+- 再次說明：明顯的低風險清理/補測試項目已枯竭；更高價值的工作（新功能）需要使用者提供方向。
+
+## 新增可執行項目（2026-06-25 第四十一輪）
+
+- [ ] 修正英文相對時間單複數：`lib/relativeTime.ts` 的英文相對時間在數值為 1 時文法錯誤（「1 days ago」）。在不影響中文的前提下支援單複數——例如將 `RelativeTimeLabels` 各單位後綴改為可帶單/複數兩式（或讓 `buildRelativeTimeLabels` 依語言提供 singular/plural），`formatRelativeTime` 依 `count === 1` 選用；中文沿用單一形式。更新 zh-TW/en key 與 `relativeTime.test.ts`（補 count=1 的單數斷言）。純前端、低風險。
 
