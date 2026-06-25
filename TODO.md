@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | 課後報告列印頁首：`PostClassReportPanel` 新增 `pdfTitle` prop，面板頂端加入僅列印顯示（`hidden print:block`）的頁首，含簡報標題與列印日期；`PlayPage` 傳入 `detail.title`；純前端，無新 i18n；typecheck 通過、既有測試 4 個全通過 | feat/report-print-header（已 merge） |
 | 2026-06-25 | 相似頁面推薦空狀態：similar 端點改回傳 `{ similar, indexed }`，側邊欄「未索引」隱藏、「已索引無相似」顯示提示；補後端測試 1 個；i18n 1 key | feat/similar-pages-empty-state（已 merge） |
 | 2026-06-25 | 設定頁語意索引涵蓋率長條：embedding-stats 端點加 `total_pages`（JOIN pages），SettingsPage 加 indexed/total 覆蓋率長條；更新後端測試；i18n 1 key | feat/embedding-coverage-bar（已 merge） |
 | 2026-06-25 | 播放頁簡介「複製」按鈕：折疊簡介展開時於描述下方加「複製簡介」按鈕（複用 copyTextToClipboard，2 秒「已複製」toast）；純前端；i18n 2 key | feat/copy-description（已 merge） |
@@ -1184,4 +1185,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [x] 設定頁語意索引涵蓋率長條：`GET /api/me/embedding-stats` 新增回傳 `total_pages`（該 owner 所有 PDF 的頁數總和，JOIN pages）；`SettingsPage`「語意搜尋索引」小節加入涵蓋率長條（indexed_pages / total_pages 百分比 + 文字）；更新既有後端測試斷言 `total_pages`（共 2 通過）；i18n 1 個 key（`settings.embeddingIndexCoverage`，zh-TW/en）。分支 `feat/embedding-coverage-bar`。
 
-- [ ] 課後報告列印頁首：`PostClassReportPanel` 列印（`@media print`）時於報告頂端顯示簡報標題與列印日期（目前列印輸出僅有「課後報告」泛標題）。利用既有 `summary`／`detail` 資料，加入一個僅列印時顯示（`hidden print:block`）的頁首；純前端改動，無新 i18n（沿用既有標題）或補 1 個 key。
+- [x] 課後報告列印頁首：`PostClassReportPanel` 列印（`@media print`）時於報告頂端顯示簡報標題與列印日期（目前列印輸出僅有「課後報告」泛標題）。利用既有 `summary`／`detail` 資料，加入一個僅列印時顯示（`hidden print:block`）的頁首；純前端改動，無新 i18n（沿用既有標題）或補 1 個 key。
+  - 修改說明（2026-06-25）：`PostClassReportPanel` 新增 `pdfTitle?: string | null` prop，並在面板容器最上方插入僅列印時顯示（`hidden print:block`）的頁首區塊，顯示簡報標題（無標題則 fallback「課後報告」）與「列印日期：」+ `new Date().toLocaleDateString()`；`PlayPage` 渲染時傳入 `pdfTitle={detail?.title ?? detail?.original_filename}`。純前端改動，無新增 i18n key；typecheck 通過、reportSummary 既有測試 4 個全通過。分支 `feat/report-print-header`，已 merge 回 master。
+- [ ] AI 導師問這一頁的功能，應該將所有的頁面和原文都送出去。並不要限制回答的長度，目前回答都太簡短了。並且應該改成多輪對話，讓使用者可以追問。
+- [ ] 逐字稿 AI 改寫改成跳一個新的對話框，並在其它做多輪對話，可以根據對話結果再重新產生逐字稿。
+
+- [ ] 右邊改成 notebook 界面，
+- [ ] AI 生成動畫的紅框位置都不正確，是否圖片有被正確的傳送。
