@@ -1563,3 +1563,13 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] 抽出可測的投影片 transform 純函式並補測試：把 `buildGsapTimeline.ts` 內的 `panDistance`/`transformFromTo` 抽到新的、無 GSAP 相依的 `frontend/src/components/slide/slideTransforms.ts`，`buildGsapTimeline` 改 import 之；新增 `slideTransforms.test.ts` 涵蓋 pan 距離 fallback、zoom 預設/覆寫、各 pan 方向軸與正負號、overlay 型別回 null。純前端、行為不變、低風險。
   - 修改說明（2026-06-25）：新增無 GSAP 相依的 `slideTransforms.ts`（export `panDistance`/`transformFromTo`，僅 import 型別），`buildGsapTimeline.ts` 移除本地兩函式與不再使用的 `SlideAnimationEffect` import、改 import `transformFromTo`（行為不變）。新增 `slideTransforms.test.ts` 6 個測試（distancePct 缺/NaN/Infinity→3、有限值含 0、fade-in、zoom 預設 1→1.08 與 1.08→1、顯式 scales、四個 pan 方向的 x/yPercent 正負、text-callout/pointer/highlight-box 回 null）。frontend typecheck 通過、全部 299 個前端測試 + i18n 對等 21 個全通過。分支 `refactor/extract-slide-transforms`，已 merge 回 master。
 
+## 掃描摘要（2026-06-25 第五十三輪）
+
+- TODO 唯一未完成項目（formatDurationMs i18n）仍暫緩（方案待使用者確認）。本輪轉向找「現有測試攔不到的真實風險」：i18n 對等測試（`i18n.test.ts` 第一個測試）只比對 zh-TW/en 的 **key 集合**，不檢查同一 key 的**插值 placeholder（`{count}` 等）是否一致**。
+- 觀察：以腳本比對全部 1811 個 key 的 `{...}` placeholder 集合，目前 zh-TW 與 en **完全一致（0 不一致）**；但缺乏防回歸測試——未來新增 key 時若某語系漏帶 placeholder，會在該語系 UI 執行期靜默丟失插值（如數字不顯示），而現有測試不會攔截。
+
+## 新增可執行項目（2026-06-25 第五十三輪）
+
+- [x] i18n placeholder 一致性防回歸測試：在 `frontend/src/i18n.test.ts` 新增一個測試，對每個共有 key 比對 zh-TW 與 en 的 `{name}` placeholder token 集合是否相同，不同則列出 key 與雙方 placeholder。純前端、僅新增測試、不改產品程式碼。
+  - 修改說明（2026-06-25）：在 `i18n.test.ts` key 對等測試之後新增「English and Traditional Chinese share the same interpolation placeholders per key」測試（以 `/\{[a-zA-Z0-9_]+\}/g` 擷取雙方 placeholder 集合並比對，蒐集所有不一致 key 後一次 `deepEqual([])` 斷言）。經先期腳本掃描確認目前全部 1811 個 key 一致故測試通過，此測試固化該不變量、防止未來回歸。frontend typecheck 通過、全部 i18n 測試 22 個（原 21+1）通過。分支 `test/i18n-placeholder-consistency`，已 merge 回 master。
+
