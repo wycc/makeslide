@@ -27,6 +27,34 @@ export function buildRewriteContext(
   };
 }
 
+/**
+ * Computes the state after undoing the most recent applied rewrite. Pure so it
+ * can be unit-tested without rendering. Returns the script to restore (the
+ * snapshot taken right before that rewrite was applied), the messages with the
+ * latest assistant (rewrite-result) message removed, and the remaining undo
+ * stack. Returns `null` when there is nothing to undo.
+ */
+export function popRewriteUndo(
+  messages: ChatMessage[],
+  undoStack: string[],
+): { script: string; messages: ChatMessage[]; undoStack: string[] } | null {
+  if (undoStack.length === 0) return null;
+  const script = undoStack[undoStack.length - 1] ?? '';
+  const nextUndoStack = undoStack.slice(0, -1);
+  let lastAssistantIdx = -1;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i]?.role === 'assistant') {
+      lastAssistantIdx = i;
+      break;
+    }
+  }
+  const nextMessages =
+    lastAssistantIdx === -1
+      ? messages
+      : [...messages.slice(0, lastAssistantIdx), ...messages.slice(lastAssistantIdx + 1)];
+  return { script, messages: nextMessages, undoStack: nextUndoStack };
+}
+
 export function ScriptRewriteDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useI18n();
   const {
@@ -44,6 +72,9 @@ export function ScriptRewriteDialog({ open, onClose }: { open: boolean; onClose:
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Snapshots of `editingScript` taken right before each applied rewrite, so a
+  // rewrite can be reverted one step at a time.
+  const [undoStack, setUndoStack] = useState<string[]>([]);
 
   if (!open) return null;
 
@@ -51,6 +82,7 @@ export function ScriptRewriteDialog({ open, onClose }: { open: boolean; onClose:
     if (isReadOnlyProcessing || busy) return;
     const prompt = input.trim();
     if (!pdfId || !currentPage || !prompt) return;
+    const preApplyScript = editingScript;
     const sourceScript = editingScript.trim();
     setBusy(true);
     setError(null);
@@ -66,6 +98,7 @@ export function ScriptRewriteDialog({ open, onClose }: { open: boolean; onClose:
         buildRewriteContext(currentIdx, deckPages, scripts, sourceScript),
         historyForRequest,
       );
+      setUndoStack((prev) => [...prev, preApplyScript]);
       setEditingScript(res.script);
       setMessages((prev) => [...prev, { role: 'assistant', content: res.script }]);
     } catch (err) {
@@ -73,6 +106,20 @@ export function ScriptRewriteDialog({ open, onClose }: { open: boolean; onClose:
     } finally {
       setBusy(false);
     }
+  };
+
+  const handleUndo = () => {
+    if (busy) return;
+    const result = popRewriteUndo(messages, undoStack);
+    if (!result) return;
+    setEditingScript(result.script);
+    setMessages(result.messages);
+    setUndoStack(result.undoStack);
+  };
+
+  const handleClear = () => {
+    setMessages([]);
+    setUndoStack([]);
   };
 
   return (
@@ -93,7 +140,7 @@ export function ScriptRewriteDialog({ open, onClose }: { open: boolean; onClose:
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setMessages([])}
+              onClick={handleClear}
               disabled={busy || messages.length === 0}
               className="rounded-md border border-rose-500/50 bg-rose-500/15 px-2.5 py-1 text-xs text-rose-200 hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-40"
             >
@@ -106,6 +153,27 @@ export function ScriptRewriteDialog({ open, onClose }: { open: boolean; onClose:
             >
               {t('play.scriptRewrite.close')}
             </button>
+          </div>
+        </div>
+
+        <div className="border-b border-slate-800 bg-slate-900/60 p-4">
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
+              {t('play.scriptRewrite.currentScriptLabel')}
+            </span>
+            <button
+              type="button"
+              onClick={handleUndo}
+              disabled={busy || undoStack.length === 0}
+              className="rounded-md border border-amber-500/50 bg-amber-500/15 px-2.5 py-1 text-xs text-amber-200 hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {t('play.scriptRewrite.undo')}
+            </button>
+          </div>
+          <div className="max-h-32 overflow-y-auto whitespace-pre-wrap rounded-md border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm text-slate-200">
+            {editingScript.trim() ? editingScript : (
+              <span className="text-slate-500">{t('play.scriptRewrite.currentScriptEmpty')}</span>
+            )}
           </div>
         </div>
 

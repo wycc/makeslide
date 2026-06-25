@@ -1667,4 +1667,7 @@ export const zhTW = {
   'play.scriptRewrite.clear': '清除對話',
   'play.scriptRewrite.close': '關閉',
   'play.scriptRewrite.error': '逐字稿改寫失敗',
+  'play.scriptRewrite.currentScriptLabel': '目前逐字稿',
+  'play.scriptRewrite.currentScriptEmpty': '（逐字稿為空）',
+  'play.scriptRewrite.undo': '復原上一次改寫',
 } as const;
