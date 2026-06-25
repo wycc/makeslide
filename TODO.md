@@ -1680,6 +1680,15 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] 為 handoutPdf 文字純函式補測試：新增 `backend/test/handoutPdfHelpers.test.ts`，涵蓋 `escapePdfText`（反斜線/括號 escape、反斜線先行）、`sanitizePdfText`（CRLF 正規化、控制字元→空格、保留 tab/newline）、`wrapText`（界內單行、空/空行段落、最後空格斷行、多位元組硬斷）、`toUtf16BeHex`（BOM + big-endian 大寫 hex 含 CJK）。純後端、僅新增測試、不改產品程式碼。
   - 修改說明（2026-06-25）：新增 `backend/test/handoutPdfHelpers.test.ts`，8 個測試全通過。`sanitizePdfText` 的控制字元測資以 `String.fromCharCode(0)`/`(7)` 構造（避免在源碼嵌入裸控制字元，且規避 Write 工具對 `\uXXXX` 跳脫處理不一致的問題）；`toUtf16BeHex('中')`→`'FEFF4E2D'` 驗證 big-endian 順序。以 `tsx --test` 直跑驗證 8 個測試全通過；backend typecheck 通過。分支 `test/handout-pdf-helpers`，已 merge 回 master。
 
+## 掃描摘要（2026-06-25 第六十六輪）
+
+- `animationAutoFocus.ts`（import 鏈乾淨）的 `mapAutoFocusResponseToEffects` 是把 AI 逐句焦點決策映射為 `AnimationEffect[]` 的純函式，含豐富邏輯（line 範圍過濾、同 line 去重保留第一、依 line 排序、`show:false` 過濾、text-callout/step-list/formula/custom-script 無內容時 fallback `highlight-box`、pointer 僅 xPct/yPct、座標/尺寸/exitDuration clamp、custom-script 每頁上限）但**無測試**。
+
+## 新增可執行項目（2026-06-25 第六十六輪）
+
+- [x] 為 mapAutoFocusResponseToEffects 補單元測試：新增 `backend/test/animationAutoFocusMap.test.ts`，涵蓋 show 過濾 + 依 line 排序、line 範圍外丟棄、同 line 去重（保留第一）、text-callout/step-list 無內容 fallback highlight-box、pointer 僅 xPct/yPct + angle、box 座標/尺寸 clamp、effect 骨架（target/start/ease/startTrigger/id）與 exitDuration clamp。純後端、僅新增測試、不改產品程式碼。
+  - 修改說明（2026-06-25）：新增 `backend/test/animationAutoFocusMap.test.ts`，8 個測試。以 `resp()`/`box()` helper 構造已驗證型別的輸入（函式不再 validate，故 `as unknown as AutoFocusAiResponse`）。clamp 以 `xPct:200→95`、`yPct:-5→0`、`widthPct:1→5`、`heightPct:999→100` 驗證 box 範圍；id 以 `/^ai-focus-2-/` match（含 `crypto.randomUUID()` 不可預測尾段）；exitDuration `99999` 驗證被 clamp。以 `tsx --test` 直跑驗證 8 個測試全通過；backend typecheck 通過。分支 `test/auto-focus-map`，已 merge 回 master。
+
 ## 掃描摘要（2026-06-25 第五十六輪）
 
 - 延續錯誤碼一致性調查，檢視後端 `errors.ts`。發現架構落差：`normalizeErrorCode`（legacy→standard 映射）**有單元測試**（`pages-api.test.ts`）卻**從未被產品程式碼呼叫**——路由實際用的 `errorResponse`（`routes/pdfs.ts`、`routes/pdfs/shared.ts` 兩份重複定義）直接送原始 code、不 normalize。導致 legacy 碼（PAGE_IMAGE_NOT_FOUND、COVER_NOT_READY、NO_FILE、INVALID_MIME 等）原樣洩漏到前端，而前端 `ERROR_HINTS` 無對應條目、顯示英文 fallback。
