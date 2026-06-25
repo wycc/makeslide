@@ -1457,6 +1457,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`formatDurationMs` 新增**必填** `noRecordLabel` 參數（移除硬編 `尚無紀錄`），由 TypeScript 編譯期確保所有呼叫端皆傳入 label。`PageTimingChips`（chips 標題、tooltip、SLA、total 共 4 處）傳入既有 `play.timing.tooltip.noRecord`；`PlayPageSlidePanel`（計時表、run 歷史、stage、慢成品表共 6 處）傳入既有 `play.system.noRecord`。兩鍵 zh-TW=「尚無紀錄」、en=「no record/No record」皆已存在，故**沿用既有鍵、未新增重複鍵**。更新 `formatters.test.ts`：原「尚無紀錄」斷言改為傳入 label，並加一筆英文 label 斷言。typecheck 通過、formatters 測試 11 個與 i18n 對等測試 28 個全通過。純前端改動。分支 `feat/format-duration-norecord-i18n`，已 merge 回 master。
   - 暫緩說明（2026-06-25 第四十三輪）：本項先前嘗試以「`formatDurationMs(ms, noRecordLabel = '—')` 改簽章 + 11 處呼叫端傳 label」的做法實作，但使用者否決了該編輯。**保留為待辦但暫緩**，待使用者確認偏好的做法（例如預設 placeholder 用何值、是否接受改簽章/改 11 處呼叫端）後再進行，避免重複套用被否決的方案。
 
+- [x] TTS 語音性別標籤 i18n（第七十輪，2026-06-26 掃描新增並完成）：`lib/ttsVoices.ts` 的 `geminiVoiceLabel`/`openaiVoiceLabel` 將語音性別後綴硬編成中文「（男）/（女）」，於英文介面的語音選單（`SettingsPage` 雙主持人聲音、`TtsDialog`、`PromptModal`）洩漏未翻譯文字。改為新增**必填** `genderLabels { male, female }` 參數，6 處呼叫端各以 `useI18n()` 的 `t()` 組出 label 傳入。
+  - 修改說明（2026-06-26）：兩個 label helper 加 `VoiceGenderLabels` 參數（`male`/`female`），移除硬編「男/女」。新增共用鍵 `tts.voiceGenderMale`/`tts.voiceGenderFemale`（zh-TW=男/女、en=M/F）。呼叫端 `SettingsPage`（4 處）、`TtsDialog`（1 處）、`PromptModal`（1 處）各建一個 `voiceGenderLabels` 物件傳入。更新 `ttsVoices.test.ts` 既有中文斷言改傳 label、並各加一筆英文 label 案例。typecheck 通過、`ttsVoices.test.ts` 與 i18n 對等測試共 40 個全通過。純前端、低風險。分支 `feat/voice-gender-label-i18n`，已 merge 回 master。
+
 ## 掃描摘要（2026-06-25 第四十三輪）
 
 - 本輪 TODO 唯一未完成項目（formatDurationMs i18n）先前的實作方案被使用者否決，已標記暫緩。經詢問使用者後，本輪改為「為後端 `logSanitizer.ts` 補單元測試」。
@@ -1727,3 +1730,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - 時間：2026-06-26
 - 分支：`feat/format-duration-norecord-i18n`（已 merge 回 master）
 - 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 73 個完成項目（73/100，未達上限）。
+## 工作記錄（第七十輪，2026-06-26）
+
+- 工作內容：TODO.md 既有未完成項目僅剩 2 個皆明確標註「待使用者決定／涉 CI 行為變更與 npm install」，不宜於自動 loop 逕行；依 LOOP.md 改為「分析程式找可加強之處並加入新項目」。延續 i18n 主題掃描，發現 `lib/ttsVoices.ts` 的 `geminiVoiceLabel`/`openaiVoiceLabel` 把語音性別後綴硬編成中文「（男）/（女）」，於英文介面的語音選單（`SettingsPage`、`TtsDialog`、`PromptModal`）洩漏未翻譯文字。將其新增為 TODO 項目並當輪完成：兩 helper 改收**必填** `genderLabels { male, female }` 參數（由 TypeScript 編譯期確保 6 處呼叫端皆傳入），新增共用鍵 `tts.voiceGenderMale`/`tts.voiceGenderFemale`（zh-TW 男/女、en M/F）。typecheck 通過、`ttsVoices.test.ts` 與 i18n 對等測試共 40 個全通過。純前端、低風險。
+- 時間：2026-06-26
+- 分支：`feat/voice-gender-label-i18n`（已 merge 回 master）
+- 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 74 個完成項目（74/100，未達上限）。
