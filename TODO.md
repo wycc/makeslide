@@ -1466,10 +1466,11 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] usePromptAndSource 訊息 i18n（第七十二輪，2026-06-26 掃描新增並完成）：`pages/play/usePromptAndSource.ts` 有 7 處硬編中文 UI 訊息（提示詞已更新／更新提示詞失敗／請先輸入來源文字內容／已新增文字來源／新增文字來源失敗／已新增 PDF 來源／新增 PDF 來源失敗），於英文介面洩漏。改為以 `useI18n()` 取得 `t()`，新增 `play.promptSource.*` 鍵（zh-TW/en）。
   - 修改說明（2026-06-26）：hook 引入 `useI18n()`，7 處狀態/錯誤/驗證訊息改走 `t()`；新增 7 個 `play.promptSource.*` 對等鍵。`t` 加入各 `useCallback` 依賴。**刻意不動**送往後端/LLM 的內容預設值。typecheck 通過、i18n 對等測試 28 個全通過。純前端、低風險。分支 `feat/prompt-source-i18n`，已 merge 回 master。
 
-- [ ] （持續，play hooks UI 訊息 i18n 收尾）多個 `pages/play/use*.ts` hook 仍有硬編中文 UI 訊息待 i18n（已完成 `useSlideManagement`、`usePromptAndSource`、`useVersionHistory`、`useVideoGeneration`、`usePageAsk`、`useScriptEditor`、`usePagePolls`、`useImageStyle`）。待處理：`useChatAndImageEdit`、`useRegeneration`。**注意**：僅翻譯 UI 狀態/錯誤/確認/驗證訊息；送往後端或 LLM 的「內容預設值」（如預設提示詞、預設投票選項「同意/不同意」、預設圖片風格字串）**不可翻譯**，以免改變行為。每輪挑 1 個 hook 以分支獨立完成、跑 typecheck 與 i18n 對等測試。
+- [ ] （持續，play hooks UI 訊息 i18n 收尾）多個 `pages/play/use*.ts` hook 仍有硬編中文 UI 訊息待 i18n（已完成 `useSlideManagement`、`usePromptAndSource`、`useVersionHistory`、`useVideoGeneration`、`usePageAsk`、`useScriptEditor`、`usePagePolls`、`useImageStyle`、`useRegeneration`）。待處理：`useChatAndImageEdit`（最後一個，含較多送往 LLM 的內容組裝字串，需最謹慎甄別）。**注意**：僅翻譯 UI 狀態/錯誤/確認/驗證訊息；送往後端或 LLM 的「內容預設值」（如預設提示詞、預設投票選項「同意/不同意」、預設圖片風格字串）**不可翻譯**，以免改變行為。每輪挑 1 個 hook 以分支獨立完成、跑 typecheck 與 i18n 對等測試。
   - 進度（2026-06-26 第七十三輪）：一次完成 4 個僅含純 UI 錯誤訊息的小型 hook——`useVersionHistory`（3：載入歷史/載入內容/還原失敗）、`useVideoGeneration`（1：產生影片失敗）、`usePageAsk`（1：問答失敗）、`useScriptEditor`（1：逐字稿改寫失敗）。新增 6 個對等鍵（`play.versionHistory.loadListFailed`/`loadContentFailed`/`restoreFailed`、`play.videoGen.generateFailed`、`play.sidebar.pageAsk.askFailed`、`play.scriptRewrite.rewriteFailed`），`t` 加入各 `useCallback` 依賴。typecheck 通過、i18n 對等測試 28 個全通過。分支 `feat/play-hooks-error-i18n`，已 merge。剩餘 4 個 hook（含內容預設值，需逐一甄別）待後續輪次。
   - 進度（2026-06-26 第七十四輪）：完成 `usePagePolls`——翻譯 8 處純 UI 訊息（讀取/建立/投票/清除結果/刪除題目失敗、AI 草稿失敗、請輸入投票問題、至少兩個選項），新增 8 個 `play.sidebar.poll.*` 對等鍵。**刻意保留** 2 處 `'同意\n不同意'`（line 96、199）內容預設值不翻譯（會成為實際投票選項送往後端、顯示給投票者）。typecheck 通過、i18n 對等測試 28 個全通過。分支 `feat/page-polls-i18n`，已 merge。剩餘 3 個 hook（`useChatAndImageEdit`、`useImageStyle`、`useRegeneration`）待後續輪次。
   - 進度（2026-06-26 第七十五輪）：完成 `useImageStyle`——翻譯 2 處 UI 訊息（已儲存整份圖片風格設定／儲存圖片風格設定失敗），新增 2 個 `play.imageStyleDialog.saved`/`saveFailed` 對等鍵。**刻意保留** line 42 預設圖片風格提示詞（送往後端的內容預設值）不翻譯。typecheck 通過、i18n 對等測試 28 個全通過。分支 `feat/image-style-i18n`，已 merge。剩餘 2 個 hook（`useChatAndImageEdit`、`useRegeneration`）待後續輪次。
+  - 進度（2026-06-26 第七十六輪）：完成 `useRegeneration`——翻譯 14 處 UI 訊息（取得進度失敗、重生完成/失敗/已停止生成、請至少選擇一個重生項目、圖檔提示詞不可為空、重生任務已啟動、確認失敗、已送出停止請求、停止失敗、還原 confirm、已還原至重生前狀態、還原失敗），新增 13 個 `play.regenerate.msg.*` 對等鍵（`重生失敗` 由兩處共用）。**刻意保留** 4 處內容預設值（line 80/83 預設重生提示詞、line 256/257 送往 LLM 的 prompt 組裝標籤）不翻譯。typecheck 通過、i18n 對等測試 28 個全通過。分支 `feat/regeneration-i18n`，已 merge。剩餘 1 個 hook（`useChatAndImageEdit`）待後續輪次。
 
 ## 掃描摘要（2026-06-25 第四十三輪）
 
@@ -1777,3 +1778,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - 時間：2026-06-26
 - 分支：`feat/image-style-i18n`（已 merge 回 master）
 - 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 79 個完成項目（79/100，未達上限）。play hooks i18n 收尾尚餘 2 個 hook。
+## 工作記錄（第七十六輪，2026-06-26）
+
+- 工作內容：延續 play hooks UI 訊息 i18n 收尾，完成較大的 `useRegeneration`。翻譯 14 處 UI 訊息（輪詢進度錯誤、任務結束的完成/失敗/已停止狀態、選項驗證「請至少選擇一個重生項目」「圖檔提示詞不可為空」、任務啟動狀態、確認逐字稿失敗 alert、停止請求/失敗、還原 window.confirm 與還原成功/失敗），新增 13 個 `play.regenerate.msg.*` 對等鍵（「重生失敗」由 job failed fallback 與啟動 catch 兩處共用同一鍵）。`t` 加入相關 `useEffect`/`useCallback` 依賴。**刻意保留** 4 處內容預設值：line 80/83 的 `regenAllPrompt`/`regenScriptPrompt` 預設提示詞、line 256/257 組進 `startRegenerateJob` images.prompt 送往 LLM 的「整份圖片風格（固定套用）/本次圖片重生需求」標籤——翻譯會改變模型收到的 prompt 內容。改後 grep 確認檔內僅剩這 4 處內容中文。typecheck 通過、i18n 對等測試 28 個全通過。純前端、低風險。
+- 時間：2026-06-26
+- 分支：`feat/regeneration-i18n`（已 merge 回 master）
+- 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 80 個完成項目（80/100，未達上限）。play hooks i18n 收尾尚餘 1 個 hook（`useChatAndImageEdit`）。
