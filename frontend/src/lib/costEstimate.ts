@@ -77,7 +77,7 @@ export function estimateGenerationCost(params: CostEstimateParams): CostEstimate
 }
 
 export interface CostTier {
-  /** i18n-key suffix; full key is `costEstimate.tier.<name>`. */
+  /** Tier identifier; PromptModal maps it to the `promptModal.costEstimate.tier<Name>`(`Desc`) labels. */
   name: 'cheap' | 'balanced' | 'quality';
   charsPerPage: number;
 }
