@@ -10,7 +10,7 @@ import { QualityCheckPanel } from './QualityCheckPanel';
 import { copyTextToClipboard } from '../../lib/clipboard';
 import { formatAudioDuration } from '../../lib/audioDuration';
 import { getReviewItems, removeReviewItem, type ReviewItem } from '../../lib/reviewList';
-import { NOTEBOOK_TABS, getAdjacentNotebookTab, getStoredNotebookTab, setStoredNotebookTab, type NotebookTab } from './notebookTabs';
+import { NOTEBOOK_TABS, computeNotebookTabCounts, getAdjacentNotebookTab, getStoredNotebookTab, setStoredNotebookTab, type NotebookTab } from './notebookTabs';
 
 const IMAGE_MSG_PREFIX = '[image] ';
 
@@ -512,11 +512,15 @@ export function PlayPageSidebar() {
     const nextIdx = NOTEBOOK_TABS.findIndex((tab) => tab.id === next);
     tabButtonRefs.current[nextIdx]?.focus();
   };
-  // Per-tab count badges: "class interaction" surfaces the user's saved markers
-  // and live polls for this deck so they are discoverable from any tab.
-  const notebookTabCounts: Partial<Record<NotebookTab, number>> = {
-    interact: bookmarks.length + importantPages.length + pagePolls.length,
-  };
+  // Per-tab count badges: "slides" shows the deck page count and "class
+  // interaction" surfaces the user's saved markers and live polls, so both are
+  // discoverable without switching tabs.
+  const notebookTabCounts = computeNotebookTabCounts({
+    slides: deckPages.length,
+    bookmarks: bookmarks.length,
+    important: importantPages.length,
+    polls: pagePolls.length,
+  });
 
   return (
     <aside
