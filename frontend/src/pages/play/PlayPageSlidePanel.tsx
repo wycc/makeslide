@@ -1560,9 +1560,9 @@ export function PlayPageSlidePanel() {
                         <tr key={key}>
                           <td className="whitespace-nowrap px-3 py-2 text-slate-200">{label}</td>
                           <td className="whitespace-nowrap px-3 py-2 text-slate-300">{timing?.status ? t(STAGE_STATUS_LABEL_KEYS[timing.status]) : t('play.system.noRecord')}</td>
-                          <td className="whitespace-nowrap px-3 py-2 font-mono text-slate-200">{timing?.status === 'running' ? t('play.system.generating') : formatDurationMs(timing?.duration_ms)}</td>
+                          <td className="whitespace-nowrap px-3 py-2 font-mono text-slate-200">{timing?.status === 'running' ? t('play.system.generating') : formatDurationMs(timing?.duration_ms, t('play.system.noRecord'))}</td>
                           <td className="whitespace-nowrap px-3 py-2 text-slate-400">
-                            {timing ? `${timing.sla_status}${timing.sla_target_ms != null ? ` / ${formatDurationMs(timing.sla_target_ms)}` : ''}` : '-'}
+                            {timing ? `${timing.sla_status}${timing.sla_target_ms != null ? ` / ${formatDurationMs(timing.sla_target_ms, t('play.system.noRecord'))}` : ''}` : '-'}
                           </td>
                         </tr>
                       );
@@ -1600,7 +1600,7 @@ export function PlayPageSlidePanel() {
                             </span>
                             <span className="flex items-center gap-2 text-slate-400">
                               <span className={RUN_STATUS_COLORS[run.status]}>{RUN_STATUS_LABEL_KEYS[run.status] ? t(RUN_STATUS_LABEL_KEYS[run.status]) : run.status}</span>
-                              <span className="font-mono">{run.status === 'running' ? t('play.system.status.running') : formatDurationMs(run.duration_ms)}</span>
+                              <span className="font-mono">{run.status === 'running' ? t('play.system.status.running') : formatDurationMs(run.duration_ms, t('play.system.noRecord'))}</span>
                               <span>{isExpanded ? '▲' : '▼'}</span>
                             </span>
                           </button>
@@ -1626,10 +1626,10 @@ export function PlayPageSlidePanel() {
                                       <td className="px-2 py-1 text-slate-200">{STAGE_LABEL_KEYS[stage.stage] ? t(STAGE_LABEL_KEYS[stage.stage]) : stage.stage}</td>
                                       <td className="px-2 py-1 text-slate-300">{STAGE_STATUS_LABEL_KEYS[stage.status] ? t(STAGE_STATUS_LABEL_KEYS[stage.status]) : stage.status}</td>
                                       <td className="px-2 py-1 font-mono text-slate-200">
-                                        {stage.status === 'running' ? t('play.system.status.running') : formatDurationMs(stage.duration_ms)}
+                                        {stage.status === 'running' ? t('play.system.status.running') : formatDurationMs(stage.duration_ms, t('play.system.noRecord'))}
                                       </td>
                                       <td className="px-2 py-1 text-slate-400">
-                                        {stage.sla_status}{stage.sla_target_ms != null ? ` / ${formatDurationMs(stage.sla_target_ms)}` : ''}
+                                        {stage.sla_status}{stage.sla_target_ms != null ? ` / ${formatDurationMs(stage.sla_target_ms, t('play.system.noRecord'))}` : ''}
                                       </td>
                                     </tr>
                                   ))}
@@ -1677,9 +1677,9 @@ export function PlayPageSlidePanel() {
                             <td className="whitespace-nowrap px-3 py-2 text-slate-200">{pageLabel(item.page_number)}</td>
                             <td className="whitespace-nowrap px-3 py-2 text-slate-200">{PAGE_ARTIFACT_LABEL_KEYS[item.artifact] ? t(PAGE_ARTIFACT_LABEL_KEYS[item.artifact]) : item.artifact}</td>
                             <td className="whitespace-nowrap px-3 py-2 text-slate-300">{STAGE_STATUS_LABEL_KEYS[item.status] ? t(STAGE_STATUS_LABEL_KEYS[item.status]) : item.status}</td>
-                            <td className="whitespace-nowrap px-3 py-2 font-mono text-slate-200">{formatDurationMs(item.duration_ms)}</td>
+                            <td className="whitespace-nowrap px-3 py-2 font-mono text-slate-200">{formatDurationMs(item.duration_ms, t('play.system.noRecord'))}</td>
                             <td className="whitespace-nowrap px-3 py-2 text-slate-400">
-                              {item.sla_status}{item.sla_target_ms != null ? ` / ${formatDurationMs(item.sla_target_ms)}` : ''}
+                              {item.sla_status}{item.sla_target_ms != null ? ` / ${formatDurationMs(item.sla_target_ms, t('play.system.noRecord'))}` : ''}
                             </td>
                           </tr>
                         ))}

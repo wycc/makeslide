@@ -15,16 +15,19 @@ import {
 
 const t = (key: TranslationKey) => zhTW[key];
 
+const noRecord = t('play.system.noRecord');
+
 test('formatDurationMs formats milliseconds and seconds', () => {
-  assert.equal(formatDurationMs(123), '123ms');
-  assert.equal(formatDurationMs(1500), '1.5s');
-  assert.equal(formatDurationMs(12_345), '12s');
+  assert.equal(formatDurationMs(123, noRecord), '123ms');
+  assert.equal(formatDurationMs(1500, noRecord), '1.5s');
+  assert.equal(formatDurationMs(12_345, noRecord), '12s');
 });
 
-test('formatDurationMs returns placeholder for missing or invalid values', () => {
-  assert.equal(formatDurationMs(null), '尚無紀錄');
-  assert.equal(formatDurationMs(undefined), '尚無紀錄');
-  assert.equal(formatDurationMs(Number.NaN), '尚無紀錄');
+test('formatDurationMs returns the provided label for missing or invalid values', () => {
+  assert.equal(formatDurationMs(null, noRecord), '尚無紀錄');
+  assert.equal(formatDurationMs(undefined, noRecord), '尚無紀錄');
+  assert.equal(formatDurationMs(Number.NaN, noRecord), '尚無紀錄');
+  assert.equal(formatDurationMs(null, 'no record'), 'no record');
 });
 
 test('formatCostUsd formats dollar amounts and uses the provided unknown label', () => {

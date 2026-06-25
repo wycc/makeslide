@@ -26,9 +26,9 @@ function timingTitle(label: string, timing: PdfDetailPageTimingItem | null, L: T
   if (!timing) return `${label}${L.colon}${L.noRecord}`;
   return [
     `${label}${L.colon}${timing.status}`,
-    `${L.elapsed}${L.colon}${formatDurationMs(timing.duration_ms)}`,
+    `${L.elapsed}${L.colon}${formatDurationMs(timing.duration_ms, L.noRecord)}`,
     timing.reason ? `${L.reason}${L.colon}${timing.reason}` : null,
-    timing.sla_target_ms != null ? `SLA${L.colon}${formatDurationMs(timing.sla_target_ms)} / ${timing.sla_status}` : `SLA${L.colon}${timing.sla_status}`,
+    timing.sla_target_ms != null ? `SLA${L.colon}${formatDurationMs(timing.sla_target_ms, L.noRecord)} / ${timing.sla_status}` : `SLA${L.colon}${timing.sla_status}`,
     timing.started_at ? `${L.started}${L.colon}${timing.started_at}` : null,
     timing.ended_at ? `${L.ended}${L.colon}${timing.ended_at}` : null,
     timing.run_id ? `run${L.colon}${timing.run_id}${timing.attempt ? ` #${timing.attempt}` : ''}` : null,
@@ -62,7 +62,7 @@ export function PageTimingChips({ page }: { page: PdfDetailPage | null | undefin
       <div className="mb-1 flex flex-wrap items-center gap-2 text-xs font-medium text-slate-400">
         <span>{t('play.timing.title')}</span>
         <span className="rounded-full border border-slate-700 bg-slate-800/70 px-2 py-0.5 text-slate-300">
-          {t('play.timing.total').replace('{duration}', formatDurationMs(totalDurationMs))}
+          {t('play.timing.total').replace('{duration}', formatDurationMs(totalDurationMs, tooltipLabels.noRecord))}
         </span>
         {attentionCount > 0 ? (
           <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-amber-200">
@@ -73,7 +73,7 @@ export function PageTimingChips({ page }: { page: PdfDetailPage | null | undefin
       <div className="flex flex-wrap gap-2">
         {items.map(([key, label]) => {
           const timing = timings?.[key] ?? null;
-          const value = timing?.status === 'running' ? t('play.timing.generating') : formatDurationMs(timing?.duration_ms);
+          const value = timing?.status === 'running' ? t('play.timing.generating') : formatDurationMs(timing?.duration_ms, tooltipLabels.noRecord);
           return (
             <span
               key={key}

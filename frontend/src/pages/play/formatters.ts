@@ -1,8 +1,8 @@
 import type { RegenJobStatus, RegenStepStatus } from '../../types';
 import type { TranslationKey } from '../../i18n';
 
-export function formatDurationMs(ms: number | null | undefined): string {
-  if (ms == null || !Number.isFinite(ms)) return '尚無紀錄';
+export function formatDurationMs(ms: number | null | undefined, noRecordLabel: string): string {
+  if (ms == null || !Number.isFinite(ms)) return noRecordLabel;
   if (ms < 1000) return `${Math.round(ms)}ms`;
   return `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)}s`;
 }
