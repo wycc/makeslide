@@ -12,22 +12,41 @@ function timingChipClass(timing: PdfDetailPageTimingItem | null): string {
   return 'border-slate-700 bg-slate-800/50 text-slate-300';
 }
 
-function timingTitle(label: string, timing: PdfDetailPageTimingItem | null): string {
-  if (!timing) return `${label}：尚無紀錄`;
+interface TimingTooltipLabels {
+  colon: string;
+  noRecord: string;
+  elapsed: string;
+  reason: string;
+  started: string;
+  ended: string;
+  error: string;
+}
+
+function timingTitle(label: string, timing: PdfDetailPageTimingItem | null, L: TimingTooltipLabels): string {
+  if (!timing) return `${label}${L.colon}${L.noRecord}`;
   return [
-    `${label}：${timing.status}`,
-    `耗時：${formatDurationMs(timing.duration_ms)}`,
-    timing.reason ? `原因：${timing.reason}` : null,
-    timing.sla_target_ms != null ? `SLA：${formatDurationMs(timing.sla_target_ms)} / ${timing.sla_status}` : `SLA：${timing.sla_status}`,
-    timing.started_at ? `開始：${timing.started_at}` : null,
-    timing.ended_at ? `結束：${timing.ended_at}` : null,
-    timing.run_id ? `run：${timing.run_id}${timing.attempt ? ` #${timing.attempt}` : ''}` : null,
-    timing.error_message ? `錯誤：${timing.error_message}` : null,
+    `${label}${L.colon}${timing.status}`,
+    `${L.elapsed}${L.colon}${formatDurationMs(timing.duration_ms)}`,
+    timing.reason ? `${L.reason}${L.colon}${timing.reason}` : null,
+    timing.sla_target_ms != null ? `SLA${L.colon}${formatDurationMs(timing.sla_target_ms)} / ${timing.sla_status}` : `SLA${L.colon}${timing.sla_status}`,
+    timing.started_at ? `${L.started}${L.colon}${timing.started_at}` : null,
+    timing.ended_at ? `${L.ended}${L.colon}${timing.ended_at}` : null,
+    timing.run_id ? `run${L.colon}${timing.run_id}${timing.attempt ? ` #${timing.attempt}` : ''}` : null,
+    timing.error_message ? `${L.error}${L.colon}${timing.error_message}` : null,
   ].filter(Boolean).join('\n');
 }
 
 export function PageTimingChips({ page }: { page: PdfDetailPage | null | undefined }) {
   const { t } = useI18n();
+  const tooltipLabels: TimingTooltipLabels = {
+    colon: t('play.timing.tooltip.colon'),
+    noRecord: t('play.timing.tooltip.noRecord'),
+    elapsed: t('play.timing.tooltip.elapsed'),
+    reason: t('play.timing.tooltip.reason'),
+    started: t('play.timing.tooltip.started'),
+    ended: t('play.timing.tooltip.ended'),
+    error: t('play.timing.tooltip.error'),
+  };
   const timings = page?.timings ?? null;
   const items: Array<[keyof NonNullable<PdfDetailPage['timings']>, string]> = [
     ['image', t('play.timing.artifact.image')],
@@ -59,7 +78,7 @@ export function PageTimingChips({ page }: { page: PdfDetailPage | null | undefin
             <span
               key={key}
               className={`rounded-full border px-2 py-1 text-xs ${timingChipClass(timing)}`}
-              title={timingTitle(label, timing)}
+              title={timingTitle(label, timing, tooltipLabels)}
             >
               {label} {value}
             </span>

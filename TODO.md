@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | PageTimingChips tooltip 文字國際化：`timingTitle()` 改接 labels 參數，元件以 `t('play.timing.tooltip.*')` 傳入（耗時/原因/開始/結束/錯誤/尚無紀錄/冒號）；SLA、run 保留字面；新增 7 個 key；grep 確認無中文；typecheck + 277 前端測試 + i18n 對等全通過 | feat/timing-tooltip-i18n（已 merge） |
 | 2026-06-25 | 分析並新增可執行項目（第三十七輪）：TODO 清空後依 LOOP.md 全面掃描可見硬編中文，新增 3 個低風險清理項目（PageTimingChips tooltip i18n、App.tsx 載入設定畫面 i18n、複製/匯出文字 i18n） | master（僅文件） |
 | 2026-06-25 | FigureAssetsTab header「（第 N 頁）」國際化：新增 `play.figures.headerPagePrefix/Suffix` 並改用之；2 個 key；grep 確認該檔無可見中文；typecheck + 277 前端測試 + i18n 對等全通過 | feat/figures-header-i18n（已 merge） |
 | 2026-06-25 | SystemDataPage 殘留中文國際化：`formatCost`/`formatDuration` 改接 label 參數，呼叫端傳 `t()`；「模型價格未知」與時長「秒」抽成 2 個 `systemData.*` key；grep 確認該檔無中文；typecheck + 277 前端測試 + i18n 對等全通過 | feat/systemdata-i18n（已 merge） |
@@ -1341,7 +1342,8 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 ## 新增可執行項目（2026-06-25 第三十七輪）
 
-- [ ] PageTimingChips tooltip 文字國際化：`pages/play/PageTimingChips.tsx` 的 module 層 `timingTitle()` 組出的 hover tooltip 仍硬編中文（`${label}：尚無紀錄`、`耗時：`、`原因：`、`開始：`、`結束：`、`錯誤：`）。將這些標籤抽成 i18n key，並把 `timingTitle` 改為接受 label 字串（或 `t`）以保持 module 層純函式可測；補 zh-TW/en 並跑 i18n 對等測試。純前端、低風險。
+- [x] PageTimingChips tooltip 文字國際化：`pages/play/PageTimingChips.tsx` 的 module 層 `timingTitle()` 組出的 hover tooltip 仍硬編中文（`${label}：尚無紀錄`、`耗時：`、`原因：`、`開始：`、`結束：`、`錯誤：`）。將這些標籤抽成 i18n key，並把 `timingTitle` 改為接受 label 字串（或 `t`）以保持 module 層純函式可測；補 zh-TW/en 並跑 i18n 對等測試。純前端、低風險。
+  - 修改說明（2026-06-25）：`timingTitle()` 維持 module 層純函式，新增第三參數 `L: TimingTooltipLabels`（colon/noRecord/elapsed/reason/started/ended/error），元件以 `t('play.timing.tooltip.*')` 組好傳入；`SLA` 與 `run` 為英數縮寫保留字面，僅冒號改用 `L.colon`。新增 7 個 `play.timing.tooltip.*` key（含全形/半形冒號差異，zh-TW/en 各 7）。`grep` 確認該檔已無可見硬編中文。frontend typecheck 通過、全部 277 個前端測試 + i18n 對等 21 個全通過。分支 `feat/timing-tooltip-i18n`，已 merge 回 master。
 
 - [ ] App.tsx 設定載入畫面國際化：`App.tsx` 設定載入時的「載入設定中…」改用 `useI18n()` 的 `t`（`useI18n` 由 localStorage 取語言、無需 provider 即可運作），補 zh-TW/en key 並跑 i18n 對等測試。純前端、小改動。
 
