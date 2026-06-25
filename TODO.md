@@ -1466,7 +1466,8 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] usePromptAndSource 訊息 i18n（第七十二輪，2026-06-26 掃描新增並完成）：`pages/play/usePromptAndSource.ts` 有 7 處硬編中文 UI 訊息（提示詞已更新／更新提示詞失敗／請先輸入來源文字內容／已新增文字來源／新增文字來源失敗／已新增 PDF 來源／新增 PDF 來源失敗），於英文介面洩漏。改為以 `useI18n()` 取得 `t()`，新增 `play.promptSource.*` 鍵（zh-TW/en）。
   - 修改說明（2026-06-26）：hook 引入 `useI18n()`，7 處狀態/錯誤/驗證訊息改走 `t()`；新增 7 個 `play.promptSource.*` 對等鍵。`t` 加入各 `useCallback` 依賴。**刻意不動**送往後端/LLM 的內容預設值。typecheck 通過、i18n 對等測試 28 個全通過。純前端、低風險。分支 `feat/prompt-source-i18n`，已 merge 回 master。
 
-- [ ] （持續，play hooks UI 訊息 i18n 收尾）多個 `pages/play/use*.ts` hook 仍有硬編中文 UI 訊息待 i18n（已完成 `useSlideManagement`、`usePromptAndSource`）。待處理：`useChatAndImageEdit`、`useImageStyle`、`usePagePolls`、`usePageAsk`、`useScriptEditor`、`useVersionHistory`、`useVideoGeneration`、`useRegeneration`。**注意**：僅翻譯 UI 狀態/錯誤/確認/驗證訊息；送往後端或 LLM 的「內容預設值」（如預設提示詞、預設投票選項「同意/不同意」、預設圖片風格字串）**不可翻譯**，以免改變行為。每輪挑 1 個 hook 以分支獨立完成、跑 typecheck 與 i18n 對等測試。
+- [ ] （持續，play hooks UI 訊息 i18n 收尾）多個 `pages/play/use*.ts` hook 仍有硬編中文 UI 訊息待 i18n（已完成 `useSlideManagement`、`usePromptAndSource`、`useVersionHistory`、`useVideoGeneration`、`usePageAsk`、`useScriptEditor`）。待處理：`useChatAndImageEdit`、`useImageStyle`、`usePagePolls`、`useRegeneration`。**注意**：僅翻譯 UI 狀態/錯誤/確認/驗證訊息；送往後端或 LLM 的「內容預設值」（如預設提示詞、預設投票選項「同意/不同意」、預設圖片風格字串）**不可翻譯**，以免改變行為。每輪挑 1 個 hook 以分支獨立完成、跑 typecheck 與 i18n 對等測試。
+  - 進度（2026-06-26 第七十三輪）：一次完成 4 個僅含純 UI 錯誤訊息的小型 hook——`useVersionHistory`（3：載入歷史/載入內容/還原失敗）、`useVideoGeneration`（1：產生影片失敗）、`usePageAsk`（1：問答失敗）、`useScriptEditor`（1：逐字稿改寫失敗）。新增 6 個對等鍵（`play.versionHistory.loadListFailed`/`loadContentFailed`/`restoreFailed`、`play.videoGen.generateFailed`、`play.sidebar.pageAsk.askFailed`、`play.scriptRewrite.rewriteFailed`），`t` 加入各 `useCallback` 依賴。typecheck 通過、i18n 對等測試 28 個全通過。分支 `feat/play-hooks-error-i18n`，已 merge。剩餘 4 個 hook（含內容預設值，需逐一甄別）待後續輪次。
 
 ## 掃描摘要（2026-06-25 第四十三輪）
 
@@ -1756,3 +1757,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - 時間：2026-06-26
 - 分支：`feat/prompt-source-i18n`（已 merge 回 master）
 - 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 76 個完成項目（76/100，未達上限）。
+## 工作記錄（第七十三輪，2026-06-26）
+
+- 工作內容：延續 play hooks UI 訊息 i18n 收尾，一次完成 4 個僅含純 UI 錯誤訊息的小型 hook：`useVersionHistory`（無法載入版本歷史／無法載入此版本逐字稿內容／還原失敗）、`useVideoGeneration`（產生影片失敗）、`usePageAsk`（問答失敗，請稍後再試）、`useScriptEditor`（逐字稿改寫失敗），共 6 處硬編中文。各 hook 引入 `useI18n()`，新增 6 個對等鍵（沿用既有 `play.versionHistory.*`、`play.sidebar.pageAsk.*`、`play.scriptRewrite.*` 命名空間，新增 `play.videoGen.*`），`t` 加入各 `useCallback` 依賴。確認 4 檔除註解外無其他遺漏 UI 字串。typecheck 通過、i18n 對等測試 28 個全通過。純前端、低風險。
+- 時間：2026-06-26
+- 分支：`feat/play-hooks-error-i18n`（已 merge 回 master）
+- 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 77 個完成項目（77/100，未達上限）。play hooks i18n 收尾尚餘 4 個含內容預設值的 hook。
