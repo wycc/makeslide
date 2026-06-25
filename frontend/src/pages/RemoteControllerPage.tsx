@@ -354,7 +354,7 @@ export default function RemoteControllerPage() {
           const page = pages[currentPage - 1];
           const imgSrc = page?.thumbnail_url ?? page?.image_url;
           return imgSrc ? (
-            <img src={imgSrc} alt={`第 ${currentPage} 頁`} className="h-28 rounded-lg object-contain shadow-lg" />
+            <img src={imgSrc} alt={`${t('remote.slideAltPrefix')}${currentPage}${t('remote.slideAltSuffix')}`} className="h-28 rounded-lg object-contain shadow-lg" />
           ) : null;
         })()}
         <div className="flex items-center">
@@ -413,7 +413,7 @@ export default function RemoteControllerPage() {
                   <p className="truncate text-sm text-slate-200">{poll.question}</p>
                   <p className="mt-0.5 text-xs text-slate-500">
                     {poll.is_active ? t('remote.pollControl.statusOpen') : t('remote.pollControl.statusClosed')}
-                    {' · '}{poll.total_votes} 票
+                    {' · '}{poll.total_votes}{t('remote.votesSuffix')}
                   </p>
                 </div>
                 <button
