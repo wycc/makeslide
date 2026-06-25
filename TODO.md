@@ -1481,6 +1481,8 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [x] 字幕分句邏輯三份鏡像 drift-guard（第八十一輪，2026-06-26 掃描新增並完成）：`splitScriptIntoSentences` 共有三份「需完全一致」的複本——前端 `lib/subtitles.ts`（字幕顯示＋transcript-line 動畫觸發）、後端 `services/textSentences.ts`、後端 `services/subtitleAlignment.ts`（Whisper 對齊時間軸獨立複本）。三者共用相同的 `SENTENCE_MATCH_RE`/`TONE_MARKER_RE`；若 drift，時間軸所依據的句子索引會與前端重新切句不符，悄悄使字幕／動畫去同步。原本三份各有自己的行為測試、卻無任何測試比對彼此一致。經確認三份目前完全一致（無 bug），新增 guard 測試 `subtitleSplitConsistency.test.ts`：①以一批代表性 script（CJK/ASCII 終止符、分號、tone tag、換行、無標點尾段）跑兩個後端複本斷言輸出相同；②以 `fs` 從三份原始碼抽取兩個 regex 字面值斷言完全相同。後端 typecheck 與新測試 2 個通過。純測試、低風險。分支 `test/subtitle-split-consistency`，已 merge 回 master。
 
+- [x] 動畫效果子屬性 enum 前後端 drift-guard（第八十二輪，2026-06-26 掃描新增並完成）：延續第八十輪的動畫常數 guard，動畫效果還有 6 個子屬性 enum 是「手動維護於前端型別 union（`types.ts` 的 `SlideAnimationEffect`）、編輯器硬編 `<option>`、後端 Zod `z.enum`」三處——`pointerShape`/`highlightBorderStyle`/`textCalloutAlign`/`textCalloutPadding`/`spotlightShape`/`stepListBulletStyle`，正是 shape kinds 當初 drift 的同類風險（編輯器可選值與後端接受值不一致）。經確認 6 者目前前後端皆一致（無 bug）。將 `animationConstantsConsistency.test.ts` 擴充：以 `fs` 解析前端 `types.ts` 的 union 成員與後端 `pageAnimation.ts` 對應 `z.enum` 成員，逐欄位斷言相同（共 6 個新測試），未來任一端新增/移除值即 CI 失敗。後端 typecheck 與該檔測試 10 個（4 既有＋6 新）全通過。純測試、低風險。分支 `test/animation-enum-fields-guard`，已 merge 回 master。
+
 ## 掃描摘要（2026-06-25 第四十三輪）
 
 - 本輪 TODO 唯一未完成項目（formatDurationMs i18n）先前的實作方案被使用者否決，已標記暫緩。經詢問使用者後，本輪改為「為後端 `logSanitizer.ts` 補單元測試」。
@@ -1823,3 +1825,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - 時間：2026-06-26
 - 分支：`test/subtitle-split-consistency`（已 merge 回 master）
 - 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 85 個完成項目（85/100，未達上限）。
+## 工作記錄（第八十二輪，2026-06-26）
+
+- 工作內容：延續前後端鏡像 drift 排查。核對 LLM/TTS provider 清單（前端 `LlmProvider`/`TtsProvider` 型別、SettingsPage 下拉選項、後端 `config.ts`/`shared.ts` 的 `z.enum`）與動畫 6 個子屬性 enum——皆一致無 bug。為動畫子屬性 enum 補上 drift-guard：將第八十輪的 `animationConstantsConsistency.test.ts` 擴充 6 個欄位測試，以 `fs` 解析前端 `types.ts` union 與後端 `pageAnimation.ts` `z.enum` 成員逐一比對（`pointerShape`/`highlightBorderStyle`/`textCalloutAlign`/`textCalloutPadding`/`spotlightShape`/`stepListBulletStyle`），這正是 shape kinds 當初 drift 的同類風險。後端 typecheck 與該檔 10 個測試全通過。純測試、低風險。
+- 時間：2026-06-26
+- 分支：`test/animation-enum-fields-guard`（已 merge 回 master）
+- 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 86 個完成項目（86/100，未達上限）。
