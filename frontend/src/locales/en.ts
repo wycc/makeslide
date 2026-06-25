@@ -1650,4 +1650,8 @@ export const en = {
   'play.report.resetting': 'Resetting…',
   'play.report.close': 'Close',
   'play.report.resetConfirm': 'Reset all watch-progress records? This cannot be undone.',
+  'play.header.showPrompt': 'Show generation prompt',
+  'play.header.hidePrompt': 'Hide generation prompt',
+  'play.header.copyPrompt': 'Copy prompt',
+  'play.header.copyPromptDone': 'Copied',
 } as const;

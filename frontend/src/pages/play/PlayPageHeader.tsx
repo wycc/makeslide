@@ -166,6 +166,8 @@ export function PlayPageHeader() {
 
   const [editingTitle, setEditingTitle] = useState(false);
   const [descExpanded, setDescExpanded] = useState(false);
+  const [promptExpanded, setPromptExpanded] = useState(false);
+  const [promptCopyDone, setPromptCopyDone] = useState(false);
   const [descCopyDone, setDescCopyDone] = useState(false);
   const [genDescBusy, setGenDescBusy] = useState(false);
   const titleBeforeEdit = useRef('');
@@ -347,6 +349,39 @@ export function PlayPageHeader() {
                   className="mt-1 text-[11px] text-slate-400 hover:text-slate-200"
                 >
                   {descCopyDone ? t('play.header.copyDescriptionDone') : t('play.header.copyDescription')}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {!currentShareToken && detail?.user_prompt?.trim() ? (
+          <div className="mx-auto w-full max-w-5xl px-4 pb-2">
+            <button
+              type="button"
+              onClick={() => setPromptExpanded((v) => !v)}
+              aria-expanded={promptExpanded}
+              className="text-xs text-slate-400 hover:text-slate-200"
+            >
+              {promptExpanded ? `▲ ${t('play.header.hidePrompt')}` : `▼ ${t('play.header.showPrompt')}`}
+            </button>
+            {promptExpanded ? (
+              <div className="mt-1">
+                <p className="whitespace-pre-wrap rounded-md border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs text-slate-300">
+                  {detail.user_prompt}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void copyTextToClipboard(detail.user_prompt ?? '').then((r) => {
+                      if (r.ok) {
+                        setPromptCopyDone(true);
+                        setTimeout(() => setPromptCopyDone(false), 2000);
+                      }
+                    });
+                  }}
+                  className="mt-1 text-[11px] text-slate-400 hover:text-slate-200"
+                >
+                  {promptCopyDone ? t('play.header.copyPromptDone') : t('play.header.copyPrompt')}
                 </button>
               </div>
             ) : null}
