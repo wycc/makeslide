@@ -9,6 +9,7 @@ import RemoteControllerPage from './pages/RemoteControllerPage';
 import TemplatesPage from './pages/TemplatesPage';
 import { useEffect, useState } from 'react';
 import { getAuthStatus, getOpenAIKeyStatus } from './lib/api';
+import { useI18n } from './i18n';
 import { useLocation, useNavigate } from 'react-router-dom';
 import CreditExhaustedDialog from './components/CreditExhaustedDialog';
 import ApiKeyRequiredDialog, { shouldShowApiKeyOnboardingPrompt } from './components/ApiKeyRequiredDialog';
@@ -21,6 +22,7 @@ function hasShareToken(search: string): boolean {
 }
 
 export default function App() {
+  const { t } = useI18n();
   const [checked, setChecked] = useState(false);
   const [apiKeyOnboardingOpen, setApiKeyOnboardingOpen] = useState(false);
   const navigate = useNavigate();
@@ -55,7 +57,7 @@ export default function App() {
   if (!checked) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-100">
-        <p className="text-sm text-slate-400">載入設定中…</p>
+        <p className="text-sm text-slate-400">{t('app.loadingSettings')}</p>
       </div>
     );
   }
