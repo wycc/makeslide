@@ -1454,4 +1454,15 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-25）：`formatters.ts` 移除整段未使用的 `formatEta`（連同其 `約 N 秒/分/小時` 硬編中文，`grep` 確認全專案僅其定義處出現、測試亦未引用）；`formatCostUsd(cost, unknownLabel = 'Unknown')` 改為以參數提供未知標籤（預設英文 `Unknown` 作為無 i18n 環境的安全 fallback、消除字面中文），`PlayPageSlidePanel` 行 1643 改傳 `t('play.system.costUnknown')`（該元件早有 `const { t } = useI18n()`）。新增 1 個 `play.system.costUnknown` key（zh-TW/en 各 1）。`formatters.test.ts` 新增 `formatCostUsd` 測試（$0／<$0.01／$1.23／帶 label 回「未知」／無 label 回 'Unknown'）。frontend typecheck 通過、全部 293 個前端測試 + i18n 對等 21 個全通過。分支 `chore/formatters-cleanup-cost-i18n`，已 merge 回 master。
 
 - [ ] formatDurationMs「尚無紀錄」i18n：`formatters.ts` 的 `formatDurationMs(ms)` 在 `ms == null || !Number.isFinite(ms)` 時回傳硬編中文 `尚無紀錄`（使用者可見於 `PageTimingChips`、`PlayPageSlidePanel` 的計時/SLA 表格）。改為接受 label 參數（如 `formatDurationMs(ms, noRecordLabel)`），約 11 處呼叫端傳入對應 label——`PageTimingChips` 的 `timingTitle()` 已有 `TimingTooltipLabels.noRecord` 可用、其餘 JSX 處傳 `t('...')`；新增 zh-TW/en key 並更新 `formatters.test.ts` 既有「尚無紀錄」斷言、跑 i18n 對等測試。純前端、低風險但牽動多處呼叫端。
+  - 暫緩說明（2026-06-25 第四十三輪）：本項先前嘗試以「`formatDurationMs(ms, noRecordLabel = '—')` 改簽章 + 11 處呼叫端傳 label」的做法實作，但使用者否決了該編輯。**保留為待辦但暫緩**，待使用者確認偏好的做法（例如預設 placeholder 用何值、是否接受改簽章/改 11 處呼叫端）後再進行，避免重複套用被否決的方案。
+
+## 掃描摘要（2026-06-25 第四十三輪）
+
+- 本輪 TODO 唯一未完成項目（formatDurationMs i18n）先前的實作方案被使用者否決，已標記暫緩。經詢問使用者後，本輪改為「為後端 `logSanitizer.ts` 補單元測試」。
+- 觀察：`backend/src/services/logSanitizer.ts`（日誌脫敏，安全相關純函式，被 `gemini`/`openai` 服務與多個 worker steps 使用）**無單元測試**；該模組無 DB 相依，可用 `tsx --test` 直跑（不受後端整套測試於 sandbox timeout 影響），是明確的低風險覆蓋缺口。
+
+## 新增可執行項目（2026-06-25 第四十三輪）
+
+- [x] 為 logSanitizer.ts 補單元測試：新增 `backend/test/logSanitizer.test.ts`，涵蓋 `redactLogValue`/`redactLogObject`/`redactPromptForLog`/`redactTextForLog`：原始型別（null/number/boolean/bigint）穿透、字串中的 API key／Bearer token／data URL／長 hex／長 base64 脫敏、長字串截斷（保留原長度）、敏感 key 摘要（短值帶 preview、長值僅 chars）、SAFE_METADATA_KEYS 白名單豁免、Buffer/TypedArray 尺寸摘要、Error 化簡、巢狀遞迴、陣列上限 20、深度上限。純後端、僅新增測試、不改產品程式碼。
+  - 修改說明（2026-06-25）：新增 `backend/test/logSanitizer.test.ts`，14 個測試完整涵蓋上述各分支（含 `hasUrl` 雖結尾匹配敏感樣式但在白名單故豁免、`url` 未白名單則摘要的對照；深度上限以 8 層巢狀斷言出現 `[redacted-depth-limit]`）。因該模組無 DB 相依，以 `tsx --test` 直跑驗證 14 個測試全通過（避開後端整套 better-sqlite3 開機在 sandbox 的 timeout）；backend typecheck 通過。未改動產品程式碼。分支 `test/log-sanitizer`，已 merge 回 master。
 
