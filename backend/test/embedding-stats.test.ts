@@ -36,6 +36,16 @@ function seedEmbedding(pdfId: string, pageUid: string): void {
   ).run(`${pdfId}:${pageUid}`, pdfId, pageUid, 'hash', '[0.1,0.2]', new Date().toISOString());
 }
 
+function seedPages(pdfId: string, count: number): void {
+  const now = new Date().toISOString();
+  for (let n = 1; n <= count; n++) {
+    db.prepare(
+      `INSERT INTO pages (pdf_id, page_number, page_uid, status, created_at, updated_at)
+       VALUES (?, ?, ?, 'ready', ?, ?)`,
+    ).run(pdfId, n, `${pdfId}-pg${n}`, now, now);
+  }
+}
+
 test('GET /api/me/embedding-stats — 401 when not authenticated', async () => {
   const app = await buildApp();
   const resp = await app.inject({ method: 'GET', url: '/api/me/embedding-stats' });
@@ -51,6 +61,9 @@ test('GET /api/me/embedding-stats — counts indexed pages across owned PDFs', a
   seedPdf(pdf1, OWNER_SUB);
   seedPdf(pdf2, OWNER_SUB);
   seedPdf(pdfOther, `someone-else-${RUN}`);
+  seedPages(pdf1, 3); // 3 pages, 2 indexed
+  seedPages(pdf2, 2); // 2 pages, 1 indexed
+  seedPages(pdfOther, 5); // not owned — excluded from total
   seedEmbedding(pdf1, 'p1');
   seedEmbedding(pdf1, 'p2');
   seedEmbedding(pdf2, 'p1');
@@ -58,8 +71,9 @@ test('GET /api/me/embedding-stats — counts indexed pages across owned PDFs', a
 
   const resp = await app.inject({ method: 'GET', url: '/api/me/embedding-stats', headers: OWNER_HEADERS });
   assert.equal(resp.statusCode, 200);
-  const body = resp.json() as { indexed_pages: number; indexed_pdfs: number };
+  const body = resp.json() as { indexed_pages: number; indexed_pdfs: number; total_pages: number };
   assert.equal(body.indexed_pages, 3);
   assert.equal(body.indexed_pdfs, 2);
+  assert.equal(body.total_pages, 5); // 3 + 2 owned pages, excludes the other owner's 5
   await app.close();
 });

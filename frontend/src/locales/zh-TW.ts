@@ -155,6 +155,7 @@ export const zhTW = {
   'settings.embeddingIndex': '語意搜尋索引',
   'settings.embeddingIndexStats': '已索引 {pages} 頁（共 {pdfs} 份簡報）',
   'settings.embeddingIndexHint': '語意搜尋會在你開啟 AI 搜尋時自動為頁面建立向量索引。',
+  'settings.embeddingIndexCoverage': '索引涵蓋率 {percent}%（{indexed}/{total} 頁）',
   'settings.skillBuiltIn': '內建',
   'settings.skillLangZh': 'zh-TW',
   'settings.addSkill': '新增自訂技能',

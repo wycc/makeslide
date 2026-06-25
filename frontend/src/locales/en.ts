@@ -155,6 +155,7 @@ export const en = {
   'settings.embeddingIndex': 'Semantic search index',
   'settings.embeddingIndexStats': '{pages} pages indexed across {pdfs} presentations',
   'settings.embeddingIndexHint': 'Pages are vector-indexed automatically when you use AI semantic search.',
+  'settings.embeddingIndexCoverage': 'Index coverage {percent}% ({indexed}/{total} pages)',
   'settings.skillBuiltIn': 'built-in',
   'settings.skillLangZh': 'en',
   'settings.addSkill': 'Add custom skill',

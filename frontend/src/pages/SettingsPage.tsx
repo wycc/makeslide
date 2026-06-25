@@ -1007,6 +1007,22 @@ export default function SettingsPage() {
                         .replace('{pages}', String(embeddingStats.indexed_pages))
                         .replace('{pdfs}', String(embeddingStats.indexed_pdfs))}
                     </p>
+                    {embeddingStats.total_pages > 0 ? (() => {
+                      const pct = Math.round((embeddingStats.indexed_pages / embeddingStats.total_pages) * 100);
+                      return (
+                        <div className="space-y-1">
+                          <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
+                            <div className="h-full rounded-full bg-indigo-500" style={{ width: `${Math.min(pct, 100)}%` }} />
+                          </div>
+                          <p className="text-[11px] text-slate-500">
+                            {t('settings.embeddingIndexCoverage')
+                              .replace('{percent}', String(pct))
+                              .replace('{indexed}', String(embeddingStats.indexed_pages))
+                              .replace('{total}', String(embeddingStats.total_pages))}
+                          </p>
+                        </div>
+                      );
+                    })() : null}
                     <p className="text-[11px] text-slate-500">{t('settings.embeddingIndexHint')}</p>
                   </div>
                 ) : null}
