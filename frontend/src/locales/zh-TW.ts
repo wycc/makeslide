@@ -117,6 +117,8 @@ export const zhTW = {
   'settings.openaiSpeaker1Voice': 'OpenAI Speaker 1 聲音',
   'settings.openaiSpeaker2Voice': 'OpenAI Speaker 2 聲音',
   'settings.openaiSpeakerVoiceInherit': '（沿用主聲音）',
+  'tts.voiceGenderMale': '男',
+  'tts.voiceGenderFemale': '女',
   'settings.saving': '儲存中…',
   'settings.apiKeyValid': '格式正確',
   'settings.apiKeyInvalid': '格式可能有誤',

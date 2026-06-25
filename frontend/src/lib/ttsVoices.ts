@@ -70,9 +70,14 @@ export const GEMINI_TTS_VOICE_GENDER: Record<string, 'M' | 'F'> = {
   Gacrux: 'F',
 };
 
-export function geminiVoiceLabel(voice: string): string {
+export interface VoiceGenderLabels {
+  male: string;
+  female: string;
+}
+
+export function geminiVoiceLabel(voice: string, genderLabels: VoiceGenderLabels): string {
   const g = GEMINI_TTS_VOICE_GENDER[voice];
-  return g ? `${voice}（${g === 'M' ? '男' : '女'}）` : voice;
+  return g ? `${voice}（${g === 'M' ? genderLabels.male : genderLabels.female}）` : voice;
 }
 
 // Approximate perceived gender per OpenAI prebuilt voice (M = male, F = female).
@@ -93,9 +98,9 @@ export const OPENAI_TTS_VOICE_GENDER: Record<string, 'M' | 'F'> = {
   verse: 'M',
 };
 
-export function openaiVoiceLabel(voice: string): string {
+export function openaiVoiceLabel(voice: string, genderLabels: VoiceGenderLabels): string {
   const g = OPENAI_TTS_VOICE_GENDER[voice];
-  return g ? `${voice}（${g === 'M' ? '男' : '女'}）` : voice;
+  return g ? `${voice}（${g === 'M' ? genderLabels.male : genderLabels.female}）` : voice;
 }
 
 export const TTS_VOICES_BY_PROVIDER = {

@@ -117,6 +117,8 @@ export const en = {
   'settings.openaiSpeaker1Voice': 'OpenAI Speaker 1 voice',
   'settings.openaiSpeaker2Voice': 'OpenAI Speaker 2 voice',
   'settings.openaiSpeakerVoiceInherit': '(inherit main voice)',
+  'tts.voiceGenderMale': 'M',
+  'tts.voiceGenderFemale': 'F',
   'settings.apiKeyValid': 'Format looks correct',
   'settings.apiKeyInvalid': 'Format may be incorrect',
   'settings.apiKeyEmpty': 'Not set',

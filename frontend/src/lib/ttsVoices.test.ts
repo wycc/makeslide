@@ -10,32 +10,45 @@ import {
   openaiVoiceLabel,
 } from './ttsVoices';
 
+const zhLabels = { male: '男', female: '女' };
+const enLabels = { male: 'M', female: 'F' };
+
 // ── geminiVoiceLabel ──────────────────────────────────────────────────────
 
 test('geminiVoiceLabel appends the male marker for a known male voice', () => {
-  assert.equal(geminiVoiceLabel('Puck'), 'Puck（男）');
+  assert.equal(geminiVoiceLabel('Puck', zhLabels), 'Puck（男）');
 });
 
 test('geminiVoiceLabel appends the female marker for a known female voice', () => {
-  assert.equal(geminiVoiceLabel('Kore'), 'Kore（女）');
+  assert.equal(geminiVoiceLabel('Kore', zhLabels), 'Kore（女）');
+});
+
+test('geminiVoiceLabel uses the provided gender labels (e.g. English)', () => {
+  assert.equal(geminiVoiceLabel('Puck', enLabels), 'Puck（M）');
+  assert.equal(geminiVoiceLabel('Kore', enLabels), 'Kore（F）');
 });
 
 test('geminiVoiceLabel returns the voice name unchanged when it has no gender entry', () => {
-  assert.equal(geminiVoiceLabel('NotARealVoice'), 'NotARealVoice');
+  assert.equal(geminiVoiceLabel('NotARealVoice', zhLabels), 'NotARealVoice');
 });
 
 // ── openaiVoiceLabel ──────────────────────────────────────────────────────
 
 test('openaiVoiceLabel appends the male marker for a known male voice', () => {
-  assert.equal(openaiVoiceLabel('alloy'), 'alloy（男）');
+  assert.equal(openaiVoiceLabel('alloy', zhLabels), 'alloy（男）');
 });
 
 test('openaiVoiceLabel appends the female marker for a known female voice', () => {
-  assert.equal(openaiVoiceLabel('nova'), 'nova（女）');
+  assert.equal(openaiVoiceLabel('nova', zhLabels), 'nova（女）');
+});
+
+test('openaiVoiceLabel uses the provided gender labels (e.g. English)', () => {
+  assert.equal(openaiVoiceLabel('alloy', enLabels), 'alloy（M）');
+  assert.equal(openaiVoiceLabel('nova', enLabels), 'nova（F）');
 });
 
 test('openaiVoiceLabel returns the voice name unchanged when it has no gender entry', () => {
-  assert.equal(openaiVoiceLabel('not-a-real-voice'), 'not-a-real-voice');
+  assert.equal(openaiVoiceLabel('not-a-real-voice', zhLabels), 'not-a-real-voice');
 });
 
 // ── data-integrity: every listed voice has a gender entry ──────────────────

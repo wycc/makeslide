@@ -37,6 +37,7 @@ export function TtsDialog({
   onSave,
 }: TtsDialogProps) {
   const { t } = useI18n();
+  const voiceGenderLabels = { male: t('tts.voiceGenderMale'), female: t('tts.voiceGenderFemale') };
   const disabled = isReadOnlyProcessing || ttsBusy;
 
   return (
@@ -53,7 +54,7 @@ export function TtsDialog({
               className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs"
             >
               {availableTtsVoices.map((v) => (
-                <option key={v} value={v}>{ttsProvider === 'gemini' ? geminiVoiceLabel(v) : openaiVoiceLabel(v)}</option>
+                <option key={v} value={v}>{ttsProvider === 'gemini' ? geminiVoiceLabel(v, voiceGenderLabels) : openaiVoiceLabel(v, voiceGenderLabels)}</option>
               ))}
             </select>
           </div>

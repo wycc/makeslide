@@ -86,6 +86,7 @@ export default function PromptModal({
   onClose,
 }: PromptModalProps) {
   const { language, t } = useI18n();
+  const voiceGenderLabels = { male: t('tts.voiceGenderMale'), female: t('tts.voiceGenderFemale') };
   const availableTtsVoices = TTS_VOICES_BY_PROVIDER[ttsProvider];
   const [value, setValue] = useState<string>(initialValue);
   const [submitting, setSubmitting] = useState(false);
@@ -388,7 +389,7 @@ export default function PromptModal({
                 disabled={submitting}
               >
                 {availableTtsVoices.map((v) => (
-                  <option key={v} value={v}>{ttsProvider === 'gemini' ? geminiVoiceLabel(v) : openaiVoiceLabel(v)}</option>
+                  <option key={v} value={v}>{ttsProvider === 'gemini' ? geminiVoiceLabel(v, voiceGenderLabels) : openaiVoiceLabel(v, voiceGenderLabels)}</option>
                 ))}
               </select>
             </label>
