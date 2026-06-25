@@ -1163,6 +1163,8 @@ export const en = {
   'play.animation.customScriptPreview': 'Display preview',
   'play.figures.tab': 'Figures',
   'play.figures.title': 'Figure assets',
+  'play.figures.headerPagePrefix': ' (Page ',
+  'play.figures.headerPageSuffix': ')',
   'play.figures.description': "Figures detected on this slide's source PDF page(s). The two largest are used as reference images when regenerating the slide image by default; uncheck a figure to exclude it from those references.",
   'play.figures.loading': 'Loading figure assets…',
   'play.figures.loadError': 'Failed to load figure assets',
