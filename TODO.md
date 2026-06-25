@@ -1489,6 +1489,7 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [x] 成本分級標籤改為編譯期安全＋修正過時註解（第八十五輪，2026-06-26 掃描重構）：第八十四輪的 grep 漏掉一處動態 i18n 插值——`PromptModal` 的成本估算分級以 `t(\`promptModal.costEstimate.tier${Capitalize(tier.name)}\` as TranslationKey)`（含 `Desc`）渲染，因 key 由 `tier.name` 首字母大寫拼出、未被 `prefix.${var}` 樣式命中。改用 `as const satisfies Record<CostTier['name'], { label; desc }>` 的 `COST_TIER_LABEL_KEYS` map，使漏補標籤變編譯錯誤。另修正 `costEstimate.ts` 的 `CostTier` 過時註解（原寫 `costEstimate.tier.<name>`，實際鍵為 `promptModal.costEstimate.tier<Name>`）。6 個 tier 鍵經確認皆存在、無執行期 bug。純重構＋文件修正、無行為變更；前端 typecheck 與全測試 327 個通過。分支 `refactor/cost-tier-labels-compile-safe`，已 merge 回 master。
 
+- [x] 修復「產生中」橫幅未翻譯狀態／步驟（第八十六輪，2026-06-26 掃描修復）：`PlayPage` 的「產生中…」橫幅（兩處：`readOnlyReason` 與無頁面時的狀態列）以 `${detail.status}${' / ' + detail.progress_step}` 直接插入後端原始 enum 值，導致中英文使用者都看到 `processing / rendering_video` 而非「處理中 / 產生影片中」——`StatusBadge` 早已用私有標籤 map 正確翻譯，但橫幅沒有。將兩個標籤 map 抽到共用 `lib/statusLabels.ts`（單一真實來源，`Record<PdfStatus>`／`Record<Exclude<ProgressStep,null>>` 編譯期完整性）並提供純函式 `formatGeneratingStatusLabel()`；`StatusBadge` 改 import 共用模組（移除重複定義、`STATUS_STYLES` 精簡為 className-only），兩處橫幅改用 helper。新增 `statusLabels.test.ts`（3 測試，含「不得洩漏原始 enum 值」斷言）。`StatusBadge` 行為不變；前端 typecheck 與全測試 330 個通過。分支 `fix/generating-banner-i18n`，已 merge 回 master。
 ## 掃描摘要（2026-06-25 第四十三輪）
 
 - 本輪 TODO 唯一未完成項目（formatDurationMs i18n）先前的實作方案被使用者否決，已標記暫緩。經詢問使用者後，本輪改為「為後端 `logSanitizer.ts` 補單元測試」。
@@ -1855,3 +1856,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - 時間：2026-06-26
 - 分支：`refactor/cost-tier-labels-compile-safe`（已 merge 回 master）
 - 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 89 個完成項目（89/100，未達上限）。
+## 工作記錄（第八十六輪，2026-06-26）
+
+- 工作內容：審查後端狀態機 `statusMachine.ts`（轉移表 `satisfies Record` 編譯安全、有測試，無 bug），並追查其 `PROGRESS_STEPS`/`PDF_STATUSES` 在前端的呈現。發現使用者可見的 i18n 漏洞：`PlayPage` 兩處「產生中…」橫幅以 `${detail.status} / ${detail.progress_step}` 直接插入後端原始 enum，導致中英文使用者都看到 `processing / rendering_video` 等未翻譯字串（`StatusBadge` 已正確翻譯，橫幅卻沒有）。修復：抽出共用 `lib/statusLabels.ts`（單一真實來源＋編譯期完整 Record＋純函式 `formatGeneratingStatusLabel`），`StatusBadge` 改用共用模組並移除重複定義，兩處橫幅改用 helper；新增 `statusLabels.test.ts` 3 測試（含防原始 enum 洩漏斷言）。前端 typecheck 與全測試 330 個通過。低風險（StatusBadge 行為等價、僅修橫幅文字）。
+- 時間：2026-06-26
+- 分支：`fix/generating-banner-i18n`（已 merge 回 master）
+- 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 90 個完成項目（90/100，未達上限）。
