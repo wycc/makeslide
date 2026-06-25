@@ -34,6 +34,17 @@ export function normalizeNotebookTab(value: unknown, fallback: NotebookTab = DEF
   return isNotebookTab(value) ? value : fallback;
 }
 
+/**
+ * The next/previous tab for keyboard (ArrowRight/ArrowLeft) navigation, wrapping
+ * around the ends. `direction` is +1 for next, -1 for previous. Pure for testing.
+ */
+export function getAdjacentNotebookTab(current: NotebookTab, direction: 1 | -1): NotebookTab {
+  const idx = NOTEBOOK_TABS.findIndex((tab) => tab.id === current);
+  const base = idx === -1 ? 0 : idx;
+  const next = (base + direction + NOTEBOOK_TABS.length) % NOTEBOOK_TABS.length;
+  return NOTEBOOK_TABS[next]?.id ?? DEFAULT_NOTEBOOK_TAB;
+}
+
 export function getStoredNotebookTab(): NotebookTab {
   if (typeof window === 'undefined') return DEFAULT_NOTEBOOK_TAB;
   return normalizeNotebookTab(window.localStorage.getItem(NOTEBOOK_TAB_STORAGE_KEY));

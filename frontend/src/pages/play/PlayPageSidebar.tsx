@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../../i18n';
 import { debugLog, debugWarn } from '../../lib/debugLog';
@@ -10,7 +10,7 @@ import { QualityCheckPanel } from './QualityCheckPanel';
 import { copyTextToClipboard } from '../../lib/clipboard';
 import { formatAudioDuration } from '../../lib/audioDuration';
 import { getReviewItems, removeReviewItem, type ReviewItem } from '../../lib/reviewList';
-import { NOTEBOOK_TABS, getStoredNotebookTab, setStoredNotebookTab, type NotebookTab } from './notebookTabs';
+import { NOTEBOOK_TABS, getAdjacentNotebookTab, getStoredNotebookTab, setStoredNotebookTab, type NotebookTab } from './notebookTabs';
 
 const IMAGE_MSG_PREFIX = '[image] ';
 
@@ -503,6 +503,20 @@ export function PlayPageSidebar() {
     setNotebookTab(tab);
     setStoredNotebookTab(tab);
   };
+  const tabButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const handleTabKeyDown = (e: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+    e.preventDefault();
+    const next = getAdjacentNotebookTab(notebookTab, e.key === 'ArrowRight' ? 1 : -1);
+    selectNotebookTab(next);
+    const nextIdx = NOTEBOOK_TABS.findIndex((tab) => tab.id === next);
+    tabButtonRefs.current[nextIdx]?.focus();
+  };
+  // Per-tab count badges: "class interaction" surfaces the user's saved markers
+  // and live polls for this deck so they are discoverable from any tab.
+  const notebookTabCounts: Partial<Record<NotebookTab, number>> = {
+    interact: bookmarks.length + importantPages.length + pagePolls.length,
+  };
 
   return (
     <aside
@@ -511,22 +525,31 @@ export function PlayPageSidebar() {
       } ${activeTab === 'qa' ? 'flex' : 'hidden'}`}
     >
       <div className="flex shrink-0 flex-wrap items-center gap-1 rounded-lg border border-slate-800 bg-slate-900/40 p-1" role="tablist">
-        {NOTEBOOK_TABS.map((tab) => (
+        {NOTEBOOK_TABS.map((tab, idx) => {
+          const count = notebookTabCounts[tab.id] ?? 0;
+          return (
           <button
             key={tab.id}
+            ref={(el) => { tabButtonRefs.current[idx] = el; }}
             type="button"
             role="tab"
             aria-selected={notebookTab === tab.id}
+            tabIndex={notebookTab === tab.id ? 0 : -1}
             onClick={() => selectNotebookTab(tab.id)}
-            className={`flex-1 whitespace-nowrap rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
+            onKeyDown={handleTabKeyDown}
+            className={`flex flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
               notebookTab === tab.id
                 ? 'bg-cyan-500/20 text-cyan-100'
                 : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
             }`}
           >
-            {tab.icon} {t(tab.labelKey)}
+            <span>{tab.icon} {t(tab.labelKey)}</span>
+            {count > 0 ? (
+              <span className="rounded-full bg-cyan-500/30 px-1.5 py-0.5 text-[10px] font-normal text-cyan-100">{count}</span>
+            ) : null}
           </button>
-        ))}
+          );
+        })}
         <button
           type="button"
           onClick={() => setSidebarExpanded((v) => !v)}
