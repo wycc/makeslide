@@ -427,7 +427,7 @@ export default function PlayPage() {
         audio.src = retryUrl;
         audio.load();
         audio.playbackRate = playbackRateRef.current;
-        setAudioError('語音載入失敗，正在自動重試…');
+        setAudioError(t('play.error.audioLoad'));
       }, AUDIO_RETRY_DELAY_MS);
     },
     [clearAudioRetryTimer],
@@ -514,7 +514,7 @@ export default function PlayPage() {
         if (currentShareToken) {
           const share = await resolveShareToken(currentShareToken);
           if (share.pdf_id !== pdfId) {
-            throw new ApiError('分享連結與簡報不符', 'INVALID_SHARE_TARGET', 400);
+            throw new ApiError(t('play.error.shareMismatch'), 'INVALID_SHARE_TARGET', 400);
           }
           shareMode = share.access;
         }
@@ -540,7 +540,7 @@ export default function PlayPage() {
         }
       } catch (err) {
         if (cancelled) return;
-        const msg = err instanceof ApiError ? err.message : '載入失敗';
+        const msg = err instanceof ApiError ? err.message : t('play.error.loadFailed');
         setLoadError(msg);
       }
     };
@@ -600,8 +600,8 @@ export default function PlayPage() {
 
   const readOnlyReason = isReadOnlyProcessing
     ? shareIsReadOnly
-      ? '此分享連結為唯讀模式：可瀏覽與播放，但不可修改或生成功能。'
-      : `產生過程中可瀏覽與播放；目前狀態為 ${detail.status}${detail.progress_step ? ` / ${detail.progress_step}` : ''}，所有更改與生成功能暫時停用。`
+      ? t('play.banner.readOnlyShare')
+      : `${t('play.banner.generatingPrefix')}${detail.status}${detail.progress_step ? ` / ${detail.progress_step}` : ''}${t('play.banner.generatingSuffix')}`
     : null;
   const slideImageMaxHeightVh = Math.round(52 * slideImageScale);
   const imageBustKey = detail?.updated_at ?? '';
@@ -1143,7 +1143,7 @@ export default function PlayPage() {
         setSyncError(null);
       } catch (err) {
         if (cancelled) return;
-        setSyncError(err instanceof ApiError ? err.message : '同步模式連線失敗');
+        setSyncError(err instanceof ApiError ? err.message : t('play.error.syncConnect'));
         const enabledKey = `makeslide.sync.enabled.${pdfId}`;
         window.localStorage.removeItem(enabledKey);
         setSyncEnabled(false);
@@ -1267,7 +1267,7 @@ export default function PlayPage() {
       quiz_show_answers: syncPollShowResults,
       active_quiz_id: syncDisplayedPollId,
     }).catch((err) => {
-      setSyncError(err instanceof ApiError ? err.message : '同步狀態更新失敗');
+      setSyncError(err instanceof ApiError ? err.message : t('play.error.syncStateUpdate'));
     });
   }, [syncEnabled, syncRole, pdfId, currentIdx, isPlaying, currentTime, followerAudioUnlocked, pollState.pollStarted, syncPollShowResults, syncDisplayedPollId]);
 
@@ -1457,7 +1457,7 @@ export default function PlayPage() {
           }
           setSyncError(null);
         } catch (err) {
-          setSyncError(err instanceof ApiError ? err.message : '同步輪詢失敗');
+          setSyncError(err instanceof ApiError ? err.message : t('play.error.syncPoll'));
         } finally {
           applyingRemoteSyncRef.current = false;
         }
@@ -1494,7 +1494,7 @@ export default function PlayPage() {
       setFullscreenQuestionDialogOpen(false);
       setSyncError(null);
     } catch (err) {
-      setSyncError(err instanceof ApiError ? err.message : '送出問題失敗');
+      setSyncError(err instanceof ApiError ? err.message : t('play.error.submitQuestion'));
     }
   }, [pdfId, syncFollowerQuestionInput, syncQuestionInput]);
 
@@ -1506,7 +1506,7 @@ export default function PlayPage() {
       setSyncFollowerQuestions((prev) => [item, ...prev]);
       setSyncError(null);
     } catch (err) {
-      setSyncError(err instanceof ApiError ? err.message : '舉手失敗');
+      setSyncError(err instanceof ApiError ? err.message : t('play.error.raiseHand'));
     }
   }, [pdfId]);
 
@@ -1517,7 +1517,7 @@ export default function PlayPage() {
       setSyncDisplayedQuestionId(result.displayed_question_id);
       setSyncError(null);
     } catch (err) {
-      setSyncError(err instanceof ApiError ? err.message : '切換顯示問題失敗');
+      setSyncError(err instanceof ApiError ? err.message : t('play.error.toggleQuestion'));
     }
   }, [pdfId]);
 
@@ -1530,7 +1530,7 @@ export default function PlayPage() {
       setSyncDisplayedQuestionId(null);
       setSyncError(null);
     } catch (err) {
-      setSyncError(err instanceof ApiError ? err.message : 'AI 回答 follower 問題失敗');
+      setSyncError(err instanceof ApiError ? err.message : t('play.error.aiAnswerFollower'));
     } finally {
       setSyncAiAnswerBusy(false);
     }
@@ -1544,7 +1544,7 @@ export default function PlayPage() {
       setQuestionSummary(res.summary);
       setSyncError(null);
     } catch (err) {
-      setSyncError(err instanceof ApiError ? err.message : 'AI 摘要問題失敗');
+      setSyncError(err instanceof ApiError ? err.message : t('play.error.aiSummarizeQuestions'));
     } finally {
       setQuestionSummaryBusy(false);
     }
@@ -1783,8 +1783,8 @@ export default function PlayPage() {
       const summary = await fetchPdfReportSummary(pdfId);
       setPostClassReportSummary(summary);
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : err instanceof Error ? err.message : '課後報告載入失敗';
-      setPostClassReportError(message || '課後報告載入失敗');
+      const message = err instanceof ApiError ? err.message : err instanceof Error ? err.message : t('play.error.reportLoad');
+      setPostClassReportError(message || t('play.error.reportLoad'));
     } finally {
       setPostClassReportLoading(false);
     }
@@ -1857,7 +1857,7 @@ export default function PlayPage() {
     if (currentShareToken) {
       const share = await resolveShareToken(currentShareToken);
       if (share.pdf_id !== pdfId) {
-        throw new ApiError('分享連結與簡報不符', 'INVALID_SHARE_TARGET', 400);
+        throw new ApiError(t('play.error.shareMismatch'), 'INVALID_SHARE_TARGET', 400);
       }
       shareMode = share.access;
     }
@@ -2089,7 +2089,7 @@ export default function PlayPage() {
     if (!pdfId || !currentPage) return;
     const nextScript = scriptEditorState.editingScript.trim();
     if (!nextScript) {
-      scriptEditorState.setEditorError('文稿不可為空');
+      scriptEditorState.setEditorError(t('play.error.scriptEmpty'));
       return;
     }
     scriptEditorState.setEditorBusy(true);
@@ -2170,7 +2170,7 @@ export default function PlayPage() {
         pageNumber: currentPage?.page_number,
         error: err,
       });
-      scriptEditorState.setEditorError(err instanceof ApiError ? err.message : '重生語音失敗');
+      scriptEditorState.setEditorError(err instanceof ApiError ? err.message : t('play.error.regenAudio'));
     } finally {
       scriptEditorState.setEditorBusy(false);
     }
