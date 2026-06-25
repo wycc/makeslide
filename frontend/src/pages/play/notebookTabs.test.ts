@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   DEFAULT_NOTEBOOK_TAB,
   NOTEBOOK_TABS,
+  getAdjacentNotebookTab,
   isNotebookTab,
   normalizeNotebookTab,
 } from './notebookTabs';
@@ -28,4 +29,17 @@ test('normalizeNotebookTab keeps valid values and falls back otherwise', () => {
   assert.equal(normalizeNotebookTab('bogus'), DEFAULT_NOTEBOOK_TAB);
   assert.equal(normalizeNotebookTab(null), DEFAULT_NOTEBOOK_TAB);
   assert.equal(normalizeNotebookTab('bogus', 'notes'), 'notes');
+});
+
+test('getAdjacentNotebookTab moves and wraps in both directions', () => {
+  // Walk forward through every tab starting from the default (first) tab.
+  let cur = DEFAULT_NOTEBOOK_TAB;
+  const seen = [cur];
+  for (let i = 0; i < NOTEBOOK_TABS.length - 1; i += 1) {
+    cur = getAdjacentNotebookTab(cur, 1);
+    seen.push(cur);
+  }
+  assert.equal(new Set(seen).size, NOTEBOOK_TABS.length); // visited all distinct tabs
+  assert.equal(getAdjacentNotebookTab(cur, 1), DEFAULT_NOTEBOOK_TAB); // forward wraps to start
+  assert.equal(getAdjacentNotebookTab(DEFAULT_NOTEBOOK_TAB, -1), cur); // backward wraps to last
 });
