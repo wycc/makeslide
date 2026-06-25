@@ -47,7 +47,7 @@ export function QualityCheckPanel() {
       const data = await fetchQualityCheck(pdfId);
       setResults(data.pages);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '品質檢查失敗');
+      setError(err instanceof Error ? err.message : t('play.quality.checkFailed'));
     } finally {
       setRunning(false);
     }
@@ -61,7 +61,7 @@ export function QualityCheckPanel() {
       const data = await fetchScriptQuality(pdfId);
       setScriptBreaks(data.contextBreaks);
     } catch (err) {
-      setScriptError(err instanceof Error ? err.message : 'AI 腳本分析失敗');
+      setScriptError(err instanceof Error ? err.message : t('play.quality.scriptAnalysisFailed'));
     } finally {
       setScriptRunning(false);
     }
@@ -75,7 +75,7 @@ export function QualityCheckPanel() {
       const data = await fetchImageQuality(pdfId);
       setImageMismatches(data.pages);
     } catch (err) {
-      setImageError(err instanceof Error ? err.message : 'AI 圖片分析失敗');
+      setImageError(err instanceof Error ? err.message : t('play.quality.imageAnalysisFailed'));
     } finally {
       setImageRunning(false);
     }

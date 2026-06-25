@@ -300,7 +300,7 @@ export function PlayPageSlidePanel() {
       );
       setAiRewriteDraft(res.script);
     } catch (err) {
-      setAiRewriteError(err instanceof ApiError ? err.message : '改寫失敗，請重試。');
+      setAiRewriteError(err instanceof ApiError ? err.message : t('play.slidePanel.aiRewriteFailed'));
     } finally {
       setAiRewriteBusy(false);
     }
