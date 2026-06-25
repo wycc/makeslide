@@ -1490,6 +1490,8 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] 成本分級標籤改為編譯期安全＋修正過時註解（第八十五輪，2026-06-26 掃描重構）：第八十四輪的 grep 漏掉一處動態 i18n 插值——`PromptModal` 的成本估算分級以 `t(\`promptModal.costEstimate.tier${Capitalize(tier.name)}\` as TranslationKey)`（含 `Desc`）渲染，因 key 由 `tier.name` 首字母大寫拼出、未被 `prefix.${var}` 樣式命中。改用 `as const satisfies Record<CostTier['name'], { label; desc }>` 的 `COST_TIER_LABEL_KEYS` map，使漏補標籤變編譯錯誤。另修正 `costEstimate.ts` 的 `CostTier` 過時註解（原寫 `costEstimate.tier.<name>`，實際鍵為 `promptModal.costEstimate.tier<Name>`）。6 個 tier 鍵經確認皆存在、無執行期 bug。純重構＋文件修正、無行為變更；前端 typecheck 與全測試 327 個通過。分支 `refactor/cost-tier-labels-compile-safe`，已 merge 回 master。
 
 - [x] 修復「產生中」橫幅未翻譯狀態／步驟（第八十六輪，2026-06-26 掃描修復）：`PlayPage` 的「產生中…」橫幅（兩處：`readOnlyReason` 與無頁面時的狀態列）以 `${detail.status}${' / ' + detail.progress_step}` 直接插入後端原始 enum 值，導致中英文使用者都看到 `processing / rendering_video` 而非「處理中 / 產生影片中」——`StatusBadge` 早已用私有標籤 map 正確翻譯，但橫幅沒有。將兩個標籤 map 抽到共用 `lib/statusLabels.ts`（單一真實來源，`Record<PdfStatus>`／`Record<Exclude<ProgressStep,null>>` 編譯期完整性）並提供純函式 `formatGeneratingStatusLabel()`；`StatusBadge` 改 import 共用模組（移除重複定義、`STATUS_STYLES` 精簡為 className-only），兩處橫幅改用 helper。新增 `statusLabels.test.ts`（3 測試，含「不得洩漏原始 enum 值」斷言）。`StatusBadge` 行為不變；前端 typecheck 與全測試 330 個通過。分支 `fix/generating-banner-i18n`，已 merge 回 master。
+
+- [x] SLA override 驗證拒絕非正值（第八十七輪，2026-06-26 掃描修復）：`validateSlaOverrideSecondsInput` 僅以 `Number.isFinite` 擋非數字，再倚賴「選用參數 `bounds`」的範圍檢查擋越界值。當未傳 `bounds` 時，`0` 或負數秒會被核可為 `{ ok: true, targetMs: <= 0 }`——函式不該放行非正的 SLA 目標（合法最小值遠大於 0）。在 finite 檢查後加上 `seconds <= 0` → `invalid-number`，使契約不依賴 bounds 即成立。有 bounds 時唯一行為變化是 0/負數改報 `invalid-number`（原為 `out-of-range`，兩者皆已顯示錯誤）；`SettingsPage` 對 `invalid-number` 顯示 `settings.slaInvalidValue`，無回歸。新增 3 個測試（0／負數無 bounds、負數有 bounds）。前端 typecheck 與全測試 331 個通過。純前端、低風險。分支 `fix/sla-validation-nonpositive`，已 merge 回 master。
 ## 掃描摘要（2026-06-25 第四十三輪）
 
 - 本輪 TODO 唯一未完成項目（formatDurationMs i18n）先前的實作方案被使用者否決，已標記暫緩。經詢問使用者後，本輪改為「為後端 `logSanitizer.ts` 補單元測試」。
@@ -1862,3 +1864,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - 時間：2026-06-26
 - 分支：`fix/generating-banner-i18n`（已 merge 回 master）
 - 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 90 個完成項目（90/100，未達上限）。
+## 工作記錄（第八十七輪，2026-06-26）
+
+- 工作內容：審查後端 SLA 計時邏輯（`evaluateSla` 邊界完整測試、`setSlaTargetOverride` bounds 驗證嚴謹、SLA bounds 由後端 `SLA_TARGET_BOUNDS_MS` 經 API 提供給前端＝單一真實來源無 drift）——皆健全。發現前端純函式 `validateSlaOverrideSecondsInput` 一處潛在缺口：`bounds` 為選用參數，未傳時 `0`/負數秒會被核可為 `ok:true, targetMs<=0`（非正 SLA 目標本不該放行）。加上 `seconds <= 0` 防護使契約獨立於 bounds 成立，並補 3 個測試。實務上 `SettingsPage` 一律傳入後端 bounds，故無使用者面回歸；此為防禦性正確性強化。前端 typecheck 與全測試 331 個通過。純前端、低風險。
+- 時間：2026-06-26
+- 分支：`fix/sla-validation-nonpositive`（已 merge 回 master）
+- 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 91 個完成項目（91/100，未達上限）。
