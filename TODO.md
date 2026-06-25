@@ -1488,3 +1488,14 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] 為 pdfPageMarkers.ts 補單元測試：新增 `backend/test/pdfPageMarkers.test.ts`，涵蓋 `formatPdfPageMarker`（1-indexed 包裝）、`containsPdfPageMarkers`（合法標記 vs 缺數字 vs 無標記）、`stripPdfPageMarkers`（移除標記 + 折疊 3+ 空行）、`buildTextWithPdfPageMarkers`（逐頁加 1-indexed 前綴、單頁/空輸入），以及 build→strip 往返。純後端、僅新增測試、不改產品程式碼。
   - 修改說明（2026-06-25）：新增 `backend/test/pdfPageMarkers.test.ts`，6 個測試涵蓋上述各案例（含 `[[PDF_PAGE_]]` 缺數字不算合法標記、`buildTextWithPdfPageMarkers([])` 回空字串、build→strip 往返回到 `'A\n\nB'`）。因模組為無 I/O 純函式，以 `tsx --test` 直跑驗證 6 個測試全通過；backend typecheck 通過。未改動產品程式碼。分支 `test/pdf-page-markers`，已 merge 回 master。
 
+## 掃描摘要（2026-06-25 第四十六輪）
+
+- TODO 唯一未完成項目（formatDurationMs i18n）仍暫緩（方案待使用者確認）。延續第四十三～四十五輪方向，繼續為後端無 DB 相依的純函式服務補測試。
+- 觀察：`backend/src/services/imagePromptTemplates.ts` 的 `buildImagePrompt`（生圖提示詞組裝，純函式、無 DB/env 相依）**無單元測試**；其依各參數條件加行、trim、以及 `pageText !== undefined` 與 falsy 的差異（present-but-empty 會放 `(無)` 佔位）皆有可測分支。
+- 其餘無測試的純函式服務：`accountContext`（`sanitizeAccountId` 消毒邏輯 + AsyncLocalStorage 情境，DEFAULT 依 env）、`promptTemplates`（`renderPromptTemplate` 純函式、`loadPromptTemplate` 涉檔案 I/O）可留待後續輪次。
+
+## 新增可執行項目（2026-06-25 第四十六輪）
+
+- [x] 為 imagePromptTemplates.buildImagePrompt 補單元測試：新增 `backend/test/imagePromptTemplates.test.ts`，涵蓋 `buildImagePrompt`（僅通則 baseline、style 行 trim、空白選填略過、deck 一致性行先於整份調整需求、`pageText`/`pageScript` 的「省略 vs 空/null（佔位 `(無)`）」差異、slideLabel/userAdjustment/figureNotes/textBody 嵌入）與 `IMAGE_PROMPT_TEMPLATES` 健全性（key 唯一、各欄位非空）。純後端、僅新增測試、不改產品程式碼。
+  - 修改說明（2026-06-25）：新增 `backend/test/imagePromptTemplates.test.ts`，8 個測試涵蓋上述各案例（含 `buildImagePrompt({})` 等於通則 join、`pageText: ''`/`null` 產生 `(無)` 佔位而省略時整段不出現、deck 一致性行 index 早於整份調整需求行）。因模組為無 DB/env 相依純函式，以 `tsx --test` 直跑驗證 8 個測試全通過；backend typecheck 通過。未改動產品程式碼。分支 `test/image-prompt-templates`，已 merge 回 master。
+
