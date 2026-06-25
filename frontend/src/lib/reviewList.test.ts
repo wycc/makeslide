@@ -71,3 +71,16 @@ test('clearAllReviewItems empties the list', () => {
   clearAllReviewItems();
   assert.deepEqual(getReviewItems(), []);
 });
+
+test('review list helpers are safe when localStorage is unavailable', () => {
+  const saved = (globalThis as { localStorage?: unknown }).localStorage;
+  (globalThis as { localStorage?: unknown }).localStorage = undefined;
+  try {
+    assert.deepEqual(getReviewItems(), []);
+    assert.doesNotThrow(() => addReviewItems([item()]));
+    assert.doesNotThrow(() => removeReviewItem('pdf1', 1));
+    assert.doesNotThrow(() => clearAllReviewItems());
+  } finally {
+    (globalThis as { localStorage?: unknown }).localStorage = saved;
+  }
+});

@@ -31,3 +31,14 @@ test('getOrCreateViewerId reuses an existing stored id', () => {
   window.localStorage.setItem('makeslide.viewer.id', 'viewer-preexisting');
   assert.equal(getOrCreateViewerId(), 'viewer-preexisting');
 });
+
+test('getOrCreateViewerId returns a fresh id without window/localStorage', () => {
+  const saved = (globalThis as { window?: unknown }).window;
+  (globalThis as { window?: unknown }).window = undefined;
+  try {
+    const id = getOrCreateViewerId();
+    assert.match(id, /^viewer-/);
+  } finally {
+    (globalThis as { window?: unknown }).window = saved;
+  }
+});

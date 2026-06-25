@@ -8,7 +8,14 @@ export interface ReviewItem {
   addedAt: string;
 }
 
+// Guard so these helpers are safe in non-browser environments (SSR, tests),
+// consistent with the `typeof window` checks used in i18n.ts.
+function hasLocalStorage(): boolean {
+  return typeof localStorage !== 'undefined';
+}
+
 export function getReviewItems(): ReviewItem[] {
+  if (!hasLocalStorage()) return [];
   try {
     const raw = localStorage.getItem(REVIEW_LIST_KEY);
     if (!raw) return [];
@@ -28,14 +35,17 @@ export function addReviewItems(items: ReviewItem[]): void {
       ),
   );
   if (newItems.length === 0) return;
+  if (!hasLocalStorage()) return;
   localStorage.setItem(REVIEW_LIST_KEY, JSON.stringify([...existing, ...newItems]));
 }
 
 export function removeReviewItem(pdfId: string, pageNumber: number): void {
+  if (!hasLocalStorage()) return;
   const items = getReviewItems().filter((item) => !(item.pdfId === pdfId && item.pageNumber === pageNumber));
   localStorage.setItem(REVIEW_LIST_KEY, JSON.stringify(items));
 }
 
 export function clearAllReviewItems(): void {
+  if (!hasLocalStorage()) return;
   localStorage.removeItem(REVIEW_LIST_KEY);
 }

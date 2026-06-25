@@ -5,9 +5,11 @@
 const STORAGE_KEY = 'makeslide.viewer.id';
 
 export function getOrCreateViewerId(): string {
+  const next = `viewer-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  // Guard for non-browser environments (SSR, tests), consistent with i18n.ts.
+  if (typeof window === 'undefined' || !window.localStorage) return next;
   const existing = window.localStorage.getItem(STORAGE_KEY);
   if (existing) return existing;
-  const next = `viewer-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   window.localStorage.setItem(STORAGE_KEY, next);
   return next;
 }
