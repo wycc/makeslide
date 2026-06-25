@@ -12,6 +12,7 @@ import {
 } from '../../lib/api';
 import type { PagePoll, PdfDetailPage } from '../../types';
 import { resolveConfiguredUserCode } from './utils';
+import { useI18n } from '../../i18n';
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -89,6 +90,7 @@ export function usePagePolls({
   setSyncPollShowResults,
   setSyncDisplayedPollId,
 }: UsePagePollsParams): PagePollsState {
+  const { t } = useI18n();
   const [pagePolls, setPagePolls] = useState<PagePoll[]>([]);
   const [pollQuestion, setPollQuestion] = useState('');
   const [pollOptionsText, setPollOptionsText] = useState('同意\n不同意');
@@ -144,7 +146,7 @@ export function usePagePolls({
         setPagePolls(polls);
         setPollError(null);
       } catch (err) {
-        if (!cancelled) setPollError(err instanceof ApiError ? err.message : '讀取投票失敗');
+        if (!cancelled) setPollError(err instanceof ApiError ? err.message : t('play.sidebar.poll.loadFailed'));
       }
       if (!cancelled) timer = window.setTimeout(loadPolls, POLL_INTERVAL_MS);
     };
@@ -153,7 +155,7 @@ export function usePagePolls({
       cancelled = true;
       if (timer != null) window.clearTimeout(timer);
     };
-  }, [shouldFetchPolls, pdfId, currentPage?.page_number]);
+  }, [shouldFetchPolls, pdfId, currentPage?.page_number, t]);
 
   const handleGeneratePollDraft = useCallback(async () => {
     if (!pdfId || !currentPage) return;
@@ -167,11 +169,11 @@ export function usePagePolls({
       setPollOptionsText(draft.options.join('\n'));
       setPollSettingsOpen(true);
     } catch (err) {
-      setPollError(err instanceof ApiError ? err.message : 'AI 草稿生成失敗');
+      setPollError(err instanceof ApiError ? err.message : t('play.sidebar.poll.aiDraftFailed'));
     } finally {
       setAiPollBusy(false);
     }
-  }, [pdfId, currentPage, pollQuestion]);
+  }, [pdfId, currentPage, pollQuestion, t]);
 
   const handleCreatePoll = useCallback(async () => {
     if (!pdfId || !currentPage) return;
@@ -181,11 +183,11 @@ export function usePagePolls({
       .map((line) => line.trim())
       .filter(Boolean);
     if (!question) {
-      setPollError('請輸入投票問題');
+      setPollError(t('play.sidebar.poll.questionRequired'));
       return;
     }
     if (options.length < 2) {
-      setPollError('至少需要兩個答案選項');
+      setPollError(t('play.sidebar.poll.minTwoOptions'));
       return;
     }
     setPollBusy(true);
@@ -197,11 +199,11 @@ export function usePagePolls({
       setPollOptionsText('同意\n不同意');
       setPollStarted(true);
     } catch (err) {
-      setPollError(err instanceof ApiError ? err.message : '建立投票失敗');
+      setPollError(err instanceof ApiError ? err.message : t('play.sidebar.poll.createFailed'));
     } finally {
       setPollBusy(false);
     }
-  }, [pdfId, currentPage, pollQuestion, pollOptionsText]);
+  }, [pdfId, currentPage, pollQuestion, pollOptionsText, t]);
 
   const handleStartPoll = useCallback(() => {
     setPollStarted(true);
@@ -255,12 +257,12 @@ export function usePagePolls({
         setPagePolls((prev) => prev.map((item) => (item.id === poll.id ? poll : item)));
         setPollVotes((prev) => ({ ...prev, [pollId]: optionIndex }));
       } catch (err) {
-        setPollError(err instanceof ApiError ? err.message : '投票失敗');
+        setPollError(err instanceof ApiError ? err.message : t('play.sidebar.poll.voteFailed'));
       } finally {
         setPollBusy(false);
       }
     },
-    [pdfId],
+    [pdfId, t],
   );
 
   const handleResetPollVotes = useCallback(
@@ -277,12 +279,12 @@ export function usePagePolls({
           return next;
         });
       } catch (err) {
-        setPollError(err instanceof ApiError ? err.message : '清除投票結果失敗');
+        setPollError(err instanceof ApiError ? err.message : t('play.sidebar.poll.clearResultsFailed'));
       } finally {
         setPollBusy(false);
       }
     },
-    [pdfId],
+    [pdfId, t],
   );
 
   const handleDeletePoll = useCallback(
@@ -299,12 +301,12 @@ export function usePagePolls({
           return next;
         });
       } catch (err) {
-        setPollError(err instanceof ApiError ? err.message : '刪除投票問題失敗');
+        setPollError(err instanceof ApiError ? err.message : t('play.sidebar.poll.deleteFailed'));
       } finally {
         setPollBusy(false);
       }
     },
-    [pdfId],
+    [pdfId, t],
   );
 
   const handleSelectDisplayedPoll = useCallback(
