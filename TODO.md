@@ -1473,6 +1473,8 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 進度（2026-06-26 第七十六輪）：完成 `useRegeneration`——翻譯 14 處 UI 訊息（取得進度失敗、重生完成/失敗/已停止生成、請至少選擇一個重生項目、圖檔提示詞不可為空、重生任務已啟動、確認失敗、已送出停止請求、停止失敗、還原 confirm、已還原至重生前狀態、還原失敗），新增 13 個 `play.regenerate.msg.*` 對等鍵（`重生失敗` 由兩處共用）。**刻意保留** 4 處內容預設值（line 80/83 預設重生提示詞、line 256/257 送往 LLM 的 prompt 組裝標籤）不翻譯。typecheck 通過、i18n 對等測試 28 個全通過。分支 `feat/regeneration-i18n`，已 merge。剩餘 1 個 hook（`useChatAndImageEdit`）待後續輪次。
   - 進度（2026-06-26 第七十七輪，收尾完成）：完成最後的 `useChatAndImageEdit`——翻譯 6 處純 UI 錯誤訊息（讀取問答紀錄失敗、對話失敗、清除問答失敗、修改圖片失敗 ×2、套用圖片失敗），新增 5 個 `play.sidebar.qa.*` 對等鍵（「修改圖片失敗」由 inpaint 與 regenerate 兩處共用）。**刻意保留** 8 處內容字串：line 192/270 送往後端的預設 prompt、line 220/221/224/280 對話串訊息內容（含 `【修改投影片圖片】` 等標籤與使用者 prompt、且 chatHistory 由伺服器回填）、line 272/273 組進 `regenerateSlideImage` 送往 LLM 的 prompt。typecheck 通過、i18n 對等測試 28 個全通過。分支 `feat/chat-image-edit-i18n`，已 merge。**play hooks UI 訊息 i18n 收尾全部完成（10/10 hook）。**
 
+- [x] play 元件殘留 UI 錯誤訊息 i18n（第七十八輪，2026-06-26 掃描新增並完成）：hook i18n 收尾後，掃描 `pages/play/*.tsx` 元件發現 4 處殘留硬編中文 UI 錯誤訊息——`QualityCheckPanel`（品質檢查失敗／AI 腳本分析失敗／AI 圖片分析失敗）與 `PlayPageSlidePanel`（改寫失敗，請重試。）。新增 4 個對等鍵（`play.quality.checkFailed`/`scriptAnalysisFailed`/`imageAnalysisFailed`、`play.slidePanel.aiRewriteFailed`），改走 `t()`。**刻意保留** `QualityCheckPanel` 的 `BATCH_FILL_PROMPT` 與 `PlayPageSlidePanel` 的 3 個逐字稿改寫風格 prompt（compact/detailed/conversational）——皆送往 LLM 的 prompt 內容。兩元件的處理器皆為元件內一般函式，`t` 已在 closure scope、無需改依賴。typecheck 通過、i18n 對等測試 28 個全通過。純前端、低風險。分支 `feat/quality-rewrite-error-i18n`，已 merge 回 master。
+
 ## 掃描摘要（2026-06-25 第四十三輪）
 
 - 本輪 TODO 唯一未完成項目（formatDurationMs i18n）先前的實作方案被使用者否決，已標記暫緩。經詢問使用者後，本輪改為「為後端 `logSanitizer.ts` 補單元測試」。
@@ -1791,3 +1793,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - 時間：2026-06-26
 - 分支：`feat/chat-image-edit-i18n`（已 merge 回 master）
 - 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 81 個完成項目（81/100，未達上限）。play hooks UI 訊息 i18n 收尾系列（第七十一～七十七輪，10 個 hook）全部完成。
+## 工作記錄（第七十八輪，2026-06-26）
+
+- 工作內容：play hooks i18n 收尾後，掃描 `pages/play/*.tsx` 元件找殘留硬編中文，發現並完成 4 處 UI 錯誤訊息 i18n：`QualityCheckPanel` 的品質檢查失敗／AI 腳本分析失敗／AI 圖片分析失敗，與 `PlayPageSlidePanel` 的「改寫失敗，請重試。」。新增 4 個對等鍵（`play.quality.checkFailed`/`scriptAnalysisFailed`/`imageAnalysisFailed`、`play.slidePanel.aiRewriteFailed`）。**刻意保留** 送往 LLM 的 prompt 內容：`QualityCheckPanel` 的 `BATCH_FILL_PROMPT`（批次補全空白逐字稿提示）與 `PlayPageSlidePanel` 三個改寫風格 prompt（精簡/詳細/口語）。兩元件的錯誤處理器為元件內一般函式，`t` 已在 scope、無需動依賴。改後 grep 確認兩檔僅剩上述 prompt 內容中文。typecheck 通過、i18n 對等測試 28 個全通過。純前端、低風險。
+- 時間：2026-06-26
+- 分支：`feat/quality-rewrite-error-i18n`（已 merge 回 master）
+- 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 82 個完成項目（82/100，未達上限）。
