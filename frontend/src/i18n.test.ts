@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { en } from './locales/en';
 import { zhTW } from './locales/zh-TW';
+import { SLIDE_ANIMATION_EFFECT_TYPES, ANIMATION_SHAPE_KINDS } from './lib/animationSpec';
 
 test('English and Traditional Chinese locale dictionaries expose the same keys', () => {
   const zhKeys = Object.keys(zhTW).sort();
@@ -691,5 +692,32 @@ test('SettingsPage MCP auth token locale keys are complete', () => {
     assert.equal(typeof en[key], 'string');
     assert.notEqual(zhTW[key].trim(), '');
     assert.notEqual(en[key].trim(), '');
+  }
+});
+
+test('every animation effect type has a play.animation.type.* label in both locales', () => {
+  // The animation editor renders the effect-type <select> by interpolating
+  // play.animation.type.${type} for every SLIDE_ANIMATION_EFFECT_TYPES member.
+  // If a type is added to the arrays (and the backend) without a matching key,
+  // the dropdown silently shows the raw key instead of a label. Derive the
+  // required keys from the array so future additions are covered automatically.
+  for (const type of SLIDE_ANIMATION_EFFECT_TYPES) {
+    const key = `play.animation.type.${type}` as keyof typeof zhTW;
+    assert.equal(typeof zhTW[key], 'string', `missing zh-TW label for effect type ${type}`);
+    assert.equal(typeof en[key], 'string', `missing en label for effect type ${type}`);
+    assert.notEqual(zhTW[key]?.trim(), '');
+    assert.notEqual(en[key]?.trim(), '');
+  }
+});
+
+test('every animation shape kind has a play.animation.shapeKind.* label in both locales', () => {
+  // Same contract for the shape picker, interpolated as
+  // play.animation.shapeKind.${kind} for every ANIMATION_SHAPE_KINDS member.
+  for (const kind of ANIMATION_SHAPE_KINDS) {
+    const key = `play.animation.shapeKind.${kind}` as keyof typeof zhTW;
+    assert.equal(typeof zhTW[key], 'string', `missing zh-TW label for shape kind ${kind}`);
+    assert.equal(typeof en[key], 'string', `missing en label for shape kind ${kind}`);
+    assert.notEqual(zhTW[key]?.trim(), '');
+    assert.notEqual(en[key]?.trim(), '');
   }
 });
