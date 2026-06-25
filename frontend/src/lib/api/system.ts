@@ -257,6 +257,7 @@ export async function logoutAuth(): Promise<{ ok: boolean }> {
 export interface EmbeddingStats {
   indexed_pages: number;
   indexed_pdfs: number;
+  total_pages: number;
 }
 
 export async function getEmbeddingStats(): Promise<EmbeddingStats> {

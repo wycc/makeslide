@@ -22,9 +22,19 @@ export async function registerEmbeddingStatsRoutes(app: FastifyInstance): Promis
          WHERE p.owner_sub = ?`,
       )
       .get(sub) as { indexed_pages: number; indexed_pdfs: number };
+    // Total pages across the owner's decks — denominator for coverage display.
+    const totalRow = db
+      .prepare(
+        `SELECT COUNT(*) AS total_pages
+         FROM pages pg
+         JOIN pdfs pf ON pf.id = pg.pdf_id
+         WHERE pf.owner_sub = ?`,
+      )
+      .get(sub) as { total_pages: number };
     return reply.send({
       indexed_pages: row.indexed_pages ?? 0,
       indexed_pdfs: row.indexed_pdfs ?? 0,
+      total_pages: totalRow.total_pages ?? 0,
     });
   });
 }
