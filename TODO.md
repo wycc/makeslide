@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | AI 導師問這一頁（確認既有功能）：經檢視 `page-operations.ts` ask 端點已送全份簡報每頁 text+script（corpus 上限 14000 字）、接受最多 20 輪 history、回答 token 上限 4000 且移除簡短指示，前端 `usePageAsk`/`PageAskPanel` 為多輪 thread；需求已由 commit `e51302b` 滿足，標記完成（無新增程式碼） | feat/ai-tutor-fulldeck-multiturn（已 merge） |
 | 2026-06-25 | 課後報告面板 i18n（第一階段）：`PostClassReportPanel` 引入 `useI18n()`，標題/副標/工具列 7 個按鈕/重置確認文字改用 `t()`；zh-TW/en 各補 12 個 `play.report.*` key；純前端；typecheck 通過、i18n 對等測試 21 個全通過 | feat/report-panel-i18n（已 merge） |
 | 2026-06-25 | 課後報告列印頁首：`PostClassReportPanel` 新增 `pdfTitle` prop，面板頂端加入僅列印顯示（`hidden print:block`）的頁首，含簡報標題與列印日期；`PlayPage` 傳入 `detail.title`；純前端，無新 i18n；typecheck 通過、既有測試 4 個全通過 | feat/report-print-header（已 merge） |
 | 2026-06-25 | 相似頁面推薦空狀態：similar 端點改回傳 `{ similar, indexed }`，側邊欄「未索引」隱藏、「已索引無相似」顯示提示；補後端測試 1 個；i18n 1 key | feat/similar-pages-empty-state（已 merge） |
@@ -1189,7 +1190,8 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [x] 課後報告列印頁首：`PostClassReportPanel` 列印（`@media print`）時於報告頂端顯示簡報標題與列印日期（目前列印輸出僅有「課後報告」泛標題）。利用既有 `summary`／`detail` 資料，加入一個僅列印時顯示（`hidden print:block`）的頁首；純前端改動，無新 i18n（沿用既有標題）或補 1 個 key。
   - 修改說明（2026-06-25）：`PostClassReportPanel` 新增 `pdfTitle?: string | null` prop，並在面板容器最上方插入僅列印時顯示（`hidden print:block`）的頁首區塊，顯示簡報標題（無標題則 fallback「課後報告」）與「列印日期：」+ `new Date().toLocaleDateString()`；`PlayPage` 渲染時傳入 `pdfTitle={detail?.title ?? detail?.original_filename}`。純前端改動，無新增 i18n key；typecheck 通過、reportSummary 既有測試 4 個全通過。分支 `feat/report-print-header`，已 merge 回 master。
-- [ ] AI 導師問這一頁的功能，應該將所有的頁面和原文都送出去。並不要限制回答的長度，目前回答都太簡短了。並且應該改成多輪對話，讓使用者可以追問。
+- [x] AI 導師問這一頁的功能，應該將所有的頁面和原文都送出去。並不要限制回答的長度，目前回答都太簡短了。並且應該改成多輪對話，讓使用者可以追問。
+  - 確認說明（2026-06-25）：此需求已於 commit `e51302b`（分支 `feat/ai-tutor-fulldeck-multiturn`，已 merge）完整實作並驗證既存於現行程式碼：`backend/src/routes/pdfs/page-operations.ts` 的 ask 端點改以「全份簡報每頁 text + script」組成 corpus（`ASK_DECK_CORPUS_MAX_CHARS = 14000`）而非僅當前頁；接受 `history`（多輪對話歷史，最多 20 輪）並注入提示；回答 token 上限自 1200 提高至 4000、移除「請簡短」指示讓回答更完整；前端 `usePageAsk.ts` 維護完整 user/assistant 對話、`PageAskPanel.tsx` 以多輪 thread 呈現並支援追問。對應後端測試 `backend/test/page-ask.test.ts`（full-deck + history）。本輪僅作既有功能確認，無新增程式碼。
 - [ ] 逐字稿 AI 改寫改成跳一個新的對話框，並在其它做多輪對話，可以根據對話結果再重新產生逐字稿。
 
 - [ ] 右邊改成 notebook 界面，
