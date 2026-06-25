@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useI18n } from '../i18n';
 import {
+  ApiError,
   CREDIT_EXHAUSTED_EVENT,
+  mapApiErrorToHumanMessage,
   type CreditExhaustedEventDetail,
 } from '../lib/api';
 
@@ -20,6 +22,8 @@ export default function CreditExhaustedDialog() {
 
   if (!detail) return null;
 
+  const human = mapApiErrorToHumanMessage(new ApiError('', detail.code, detail.status), t);
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/75 p-4">
       <div
@@ -34,15 +38,15 @@ export default function CreditExhaustedDialog() {
           </div>
           <div>
             <h2 id="credit-exhausted-title" className="text-lg font-semibold text-amber-100">
-              {detail.title}
+              {human.title}
             </h2>
-            <p className="mt-1 text-sm leading-6 text-slate-300">{detail.message}</p>
+            <p className="mt-1 text-sm leading-6 text-slate-300">{human.message}</p>
           </div>
         </div>
 
         <div className="rounded-lg border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm text-slate-200">
           <p className="font-medium text-slate-100">{t('creditExhausted.suggestedNextStep')}</p>
-          <p className="mt-1 text-slate-300">{detail.nextStep}</p>
+          <p className="mt-1 text-slate-300">{human.nextStep}</p>
         </div>
 
         <p className="mt-3 text-xs text-slate-500">

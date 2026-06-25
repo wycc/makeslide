@@ -115,11 +115,11 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
           setRecoveryGuide([]);
           return;
         }
-        const h = mapApiErrorToHumanMessage(err);
+        const h = mapApiErrorToHumanMessage(err, t);
         setError(t('upload.uploadFailedDetail').replace('{title}', h.title).replace('{message}', h.message).replace('{nextStep}', h.nextStep));
         setRecoveryGuide(buildRecoveryGuide(err, t));
       } else if (err instanceof Error) {
-        const h = mapApiErrorToHumanMessage(err);
+        const h = mapApiErrorToHumanMessage(err, t);
         setError(t('upload.uploadFailedDetail').replace('{title}', h.title).replace('{message}', h.message).replace('{nextStep}', h.nextStep));
         setRecoveryGuide(buildRecoveryGuide(err, t));
       } else {
@@ -163,11 +163,11 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
       setYoutubeUrl('');
     } catch (err) {
       if (err instanceof ApiError) {
-        const h = mapApiErrorToHumanMessage(err);
+        const h = mapApiErrorToHumanMessage(err, t);
         setError(t('upload.youtubeTaskFailedDetail').replace('{title}', h.title).replace('{message}', h.message).replace('{nextStep}', h.nextStep));
         setRecoveryGuide(buildRecoveryGuide(err, t));
       } else if (err instanceof Error) {
-        const h = mapApiErrorToHumanMessage(err);
+        const h = mapApiErrorToHumanMessage(err, t);
         setError(t('upload.youtubeTaskFailedDetail').replace('{title}', h.title).replace('{message}', h.message).replace('{nextStep}', h.nextStep));
         setRecoveryGuide(buildRecoveryGuide(err, t));
       } else {
