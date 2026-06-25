@@ -1477,3 +1477,14 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] 為 subtitleAlignment.ts 補單元測試：新增 `backend/test/subtitleAlignment.test.ts`，涵蓋 `splitScriptIntoSentences`（CJK/ASCII 句尾標點切句並保留標點、分號、CRLF 正規化、空行丟棄、`[[tone]]` 標記移除、空輸入）與 `alignSentencesToWordTimestamps`（空輸入 fallback、等權對齊、依字元權重比例分配、末句結束於總時長、忽略空白權重、時間在界內且不遞減）。純後端、僅新增測試、不改產品程式碼。
   - 修改說明（2026-06-25）：新增 `backend/test/subtitleAlignment.test.ts`，11 個測試涵蓋上述各案例（比例分配以「權重 4:2 的兩句對單一 6 字、0–6 秒的詞」驗證切在 4 秒；忽略空白以兩個各含單一非空白字元的詞驗證對半切）。因模組無 DB 相依，以 `tsx --test` 直跑驗證 11 個測試全通過；backend typecheck 通過。未改動產品程式碼。分支 `test/subtitle-alignment`，已 merge 回 master。
 
+## 掃描摘要（2026-06-25 第四十五輪）
+
+- TODO 唯一未完成項目（formatDurationMs i18n）仍暫緩（方案待使用者確認）。延續第四十三、四十四輪方向，繼續為後端無 DB 相依的純函式服務補測試。
+- 觀察：`backend/src/services/pdfPageMarkers.ts`（document-mode 匯入時的 `[[PDF_PAGE_N]]` 標記輔助，4 個純函式、無 I/O、無 config 相依）**無單元測試**——是最乾淨的可測缺口。
+- 其餘無測試的純函式服務（`imagePromptTemplates`/`accountContext`/`promptTemplates` 的 `renderPromptTemplate`）可留待後續輪次（`promptTemplates.loadPromptTemplate` 涉及檔案 I/O，需謹慎處理）。
+
+## 新增可執行項目（2026-06-25 第四十五輪）
+
+- [x] 為 pdfPageMarkers.ts 補單元測試：新增 `backend/test/pdfPageMarkers.test.ts`，涵蓋 `formatPdfPageMarker`（1-indexed 包裝）、`containsPdfPageMarkers`（合法標記 vs 缺數字 vs 無標記）、`stripPdfPageMarkers`（移除標記 + 折疊 3+ 空行）、`buildTextWithPdfPageMarkers`（逐頁加 1-indexed 前綴、單頁/空輸入），以及 build→strip 往返。純後端、僅新增測試、不改產品程式碼。
+  - 修改說明（2026-06-25）：新增 `backend/test/pdfPageMarkers.test.ts`，6 個測試涵蓋上述各案例（含 `[[PDF_PAGE_]]` 缺數字不算合法標記、`buildTextWithPdfPageMarkers([])` 回空字串、build→strip 往返回到 `'A\n\nB'`）。因模組為無 I/O 純函式，以 `tsx --test` 直跑驗證 6 個測試全通過；backend typecheck 通過。未改動產品程式碼。分支 `test/pdf-page-markers`，已 merge 回 master。
+
