@@ -1573,3 +1573,13 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] i18n placeholder 一致性防回歸測試：在 `frontend/src/i18n.test.ts` 新增一個測試，對每個共有 key 比對 zh-TW 與 en 的 `{name}` placeholder token 集合是否相同，不同則列出 key 與雙方 placeholder。純前端、僅新增測試、不改產品程式碼。
   - 修改說明（2026-06-25）：在 `i18n.test.ts` key 對等測試之後新增「English and Traditional Chinese share the same interpolation placeholders per key」測試（以 `/\{[a-zA-Z0-9_]+\}/g` 擷取雙方 placeholder 集合並比對，蒐集所有不一致 key 後一次 `deepEqual([])` 斷言）。經先期腳本掃描確認目前全部 1811 個 key 一致故測試通過，此測試固化該不變量、防止未來回歸。frontend typecheck 通過、全部 i18n 測試 22 個（原 21+1）通過。分支 `test/i18n-placeholder-consistency`，已 merge 回 master。
 
+## 掃描摘要（2026-06-25 第五十四輪）
+
+- TODO 唯一未完成項目（formatDurationMs i18n）仍暫緩（方案待使用者確認）。延續「找測試攔不到的真實瑕疵」角度，核對 `docs/error-codes.md` 主要錯誤碼與前端 `mapApiErrorToHumanMessage()`（`lib/api/common.ts` 的 `ERROR_HINTS`）的覆蓋。
+- 發現真實缺口：`INVALID_REQUEST` 是後端最常見的 client-facing 錯誤碼（**202 處使用**、`errors.ts` 標準碼），且其 message 多為英文技術字串（'Invalid body'、'Invalid id or page number' 等），但 `ERROR_HINTS` **沒有對應條目**，導致 `mapApiErrorToHumanMessage` 對它走 fallback、把英文原文直接顯示給使用者（其他主要碼皆有友善中文訊息，唯獨此最常見者沒有，不一致也傷 UX）。
+
+## 新增可執行項目（2026-06-25 第五十四輪）
+
+- [x] 為 INVALID_REQUEST 補友善錯誤訊息：在 `ERROR_HINTS` 新增 `INVALID_REQUEST` 的中文 title/message/nextStep，使 `mapApiErrorToHumanMessage` 不再對最常見的請求驗證錯誤顯示後端英文原文；補一個測試斷言其映射到友善訊息且非原始字串。純前端、低風險。
+  - 修改說明（2026-06-25）：在 `lib/api/common.ts` 的 `ERROR_HINTS` 最前面（對應文件順序）新增 `INVALID_REQUEST: { title: '請求格式不正確', message: '送出的資料未通過驗證。', nextStep: '請檢查輸入內容後重新送出。' }`；於 `api.error-mapping.test.ts` 新增測試斷言 `INVALID_REQUEST` 映射 title 為「請求格式不正確」、message 不等於後端原文 'Invalid body' 且有 nextStep。frontend typecheck 通過、全部 301 個前端測試（原 299+2）+ i18n 對等 22 個全通過。分支 `fix/invalid-request-human-message`，已 merge 回 master。
+
