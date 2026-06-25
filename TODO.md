@@ -1611,6 +1611,17 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] 補 api/common.ts 錯誤判斷純函式測試：為 `isApiErrorBody`、`isCreditExhaustedError`、`isApiKeyMissingError` 補單元測試（`isAlreadyProcessingConflict` 已有）。純前端、僅新增測試、不改產品程式碼。
   - 修改說明（2026-06-25）：在 `lib/api/common.test.ts` 新增 4 個測試：`isApiErrorBody`（良構 body vs null/非物件/缺 message/code 非字串）、`isCreditExhaustedError`（遍歷 `CREDIT_EXHAUSTED_ERROR_CODES` 全 7 碼為 true、其他碼/非 ApiError 為 false）、`isApiKeyMissingError`（僅 API_KEY_MISSING）。以 `tsx --test` 直跑驗證 8 個測試（原 4+4）全通過；frontend typecheck 通過。分支 `test/api-error-predicates`，已 merge 回 master。
 
+## 掃描摘要（2026-06-25 第五十九輪）
+
+- 實質檢視前端核心 `lib/subtitles.ts`（字幕切句 + 時間軸估算）：邏輯正確、邊界處理完善、與後端 `subtitleAlignment.ts` 的 `splitScriptIntoSentences` 正則/邏輯**鏡像一致**，且測試覆蓋完整（split 各案例 + timeline 不變量），無可補缺口。
+- 注意：本 loop 由 cron（job `e56cc706`，每 5 分鐘）自動觸發「請依 LOOP.md 執行」，非使用者即時互動，故自主完成可獨立驗證的工作。
+- 觀察：`lib/api/*` 子模組中三個純函式 URL builder（`figureImageUrl`/`imageVersionUrl`/`batchExportDownloadUrl`）皆以 `encodeURIComponent` 編碼路徑片段（前後端 URL 契約、防特殊字元破壞），但**無測試**。
+
+## 新增可執行項目（2026-06-25 第五十九輪）
+
+- [x] 補 URL builder 純函式測試：為 `figureImageUrl`/`imageVersionUrl`/`batchExportDownloadUrl` 新增 `lib/api.url-builders.test.ts`，涵蓋正常路徑結構與 `/`、空格、`#` 等特殊字元的 percent-encoding。純前端、僅新增測試、不改產品程式碼。
+  - 修改說明（2026-06-25）：新增 `frontend/src/lib/api.url-builders.test.ts`，5 個測試斷言三個 URL builder 的路徑結構（如 `figureImageUrl('abc','p1-img2')` → `api/pdfs/abc/figures/p1-img2/image`）與特殊字元編碼（`a/b`→`a%2Fb`、空格→`%20`、`#`→`%23`、`imageVersionUrl` 各 segment 皆編碼且 pageNumber 字串化）。以 `tsx --test` 直跑驗證 5 個測試全通過；frontend typecheck 通過。分支 `test/url-builders`，已 merge 回 master。
+
 ## 掃描摘要（2026-06-25 第五十六輪）
 
 - 延續錯誤碼一致性調查，檢視後端 `errors.ts`。發現架構落差：`normalizeErrorCode`（legacy→standard 映射）**有單元測試**（`pages-api.test.ts`）卻**從未被產品程式碼呼叫**——路由實際用的 `errorResponse`（`routes/pdfs.ts`、`routes/pdfs/shared.ts` 兩份重複定義）直接送原始 code、不 normalize。導致 legacy 碼（PAGE_IMAGE_NOT_FOUND、COVER_NOT_READY、NO_FILE、INVALID_MIME 等）原樣洩漏到前端，而前端 `ERROR_HINTS` 無對應條目、顯示英文 fallback。
