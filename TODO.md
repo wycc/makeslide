@@ -1440,3 +1440,18 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] 修正英文相對時間單複數：`lib/relativeTime.ts` 的英文相對時間在數值為 1 時文法錯誤（「1 days ago」）。在不影響中文的前提下支援單複數——例如將 `RelativeTimeLabels` 各單位後綴改為可帶單/複數兩式（或讓 `buildRelativeTimeLabels` 依語言提供 singular/plural），`formatRelativeTime` 依 `count === 1` 選用；中文沿用單一形式。更新 zh-TW/en key 與 `relativeTime.test.ts`（補 count=1 的單數斷言）。純前端、低風險。
   - 修改說明（2026-06-25）：`RelativeTimeLabels` 各時間單位由單一後綴改為 `PluralSuffix { one; other }`（minutes/hours/days/months/years），`formatRelativeTime` 以 `count === 1 ? one : other` 選用（新增 `suffix()` helper）；`RELATIVE_TIME_LABEL_KEYS`/`buildRelativeTimeLabels` 同步改為 one/other 對照。locale 由原 6 個 `time.*Suffix` 改為 11 個 key（`time.justNow` + 各單位 `One`/`Other`）：en 用完整單複數（minute/minutes、day/days…，修掉「1 days ago」並順帶把縮寫改全字更清楚），zh one===other（無單複數、文字不變）。`relativeTime.test.ts` 更新為新結構並新增 count=1 單數斷言（1 minute/1 hour/1 day ago）。三個消費端（PdfCard/QuizBuilderPage/HomePage）沿用 `buildRelativeTimeLabels(t)` 無需改動。frontend typecheck 通過、全部 292 個前端測試 + i18n 對等 21 個全通過。分支 `fix/relative-time-en-plural`，已 merge 回 master。
 
+## 掃描摘要（2026-06-25 第四十二輪）
+
+- TODO 清空且無新使用者項目。本輪聚焦 `frontend/src/pages/play/formatters.ts` 一檔的收尾：該檔的 `formatRegen*` 系列早已 i18n 化（接受 `t`），但仍殘留少量硬編中文與死碼。
+- 觀察（死碼）：`formatEta`（`約 N 秒/分/小時`）已被 `formatRegenerateEta` 取代，全專案（含 backend、測試）零引用——可直接移除。
+- 觀察（i18n 殘留）：`formatCostUsd` 的 `未知` fallback、`formatDurationMs` 的 `尚無紀錄` fallback 仍為硬編中文（皆 module 層純函式，`t` 不可用，須比照前例改為接受 label 參數）。
+- 其餘 `formatTime`（`00:00`）、`formatTokenCount`（M/K）無中文，無需處理。
+- 再次說明：明顯的低風險清理/補測試項目已枯竭；更高價值的新功能需使用者提供方向。
+
+## 新增可執行項目（2026-06-25 第四十二輪）
+
+- [x] formatters.ts 死碼清理 + formatCostUsd「未知」i18n：移除未使用的 `formatEta`（已被 `formatRegenerateEta` 取代、全專案零引用）；`formatCostUsd` 的 `未知` fallback 改為接受 `unknownLabel` 參數，呼叫端（`PlayPageSlidePanel`）傳入 `t('play.system.costUnknown')`；新增 zh-TW/en key 並補 `formatCostUsd` 單元測試、跑 i18n 對等測試。純前端、低風險。
+  - 修改說明（2026-06-25）：`formatters.ts` 移除整段未使用的 `formatEta`（連同其 `約 N 秒/分/小時` 硬編中文，`grep` 確認全專案僅其定義處出現、測試亦未引用）；`formatCostUsd(cost, unknownLabel = 'Unknown')` 改為以參數提供未知標籤（預設英文 `Unknown` 作為無 i18n 環境的安全 fallback、消除字面中文），`PlayPageSlidePanel` 行 1643 改傳 `t('play.system.costUnknown')`（該元件早有 `const { t } = useI18n()`）。新增 1 個 `play.system.costUnknown` key（zh-TW/en 各 1）。`formatters.test.ts` 新增 `formatCostUsd` 測試（$0／<$0.01／$1.23／帶 label 回「未知」／無 label 回 'Unknown'）。frontend typecheck 通過、全部 293 個前端測試 + i18n 對等 21 個全通過。分支 `chore/formatters-cleanup-cost-i18n`，已 merge 回 master。
+
+- [ ] formatDurationMs「尚無紀錄」i18n：`formatters.ts` 的 `formatDurationMs(ms)` 在 `ms == null || !Number.isFinite(ms)` 時回傳硬編中文 `尚無紀錄`（使用者可見於 `PageTimingChips`、`PlayPageSlidePanel` 的計時/SLA 表格）。改為接受 label 參數（如 `formatDurationMs(ms, noRecordLabel)`），約 11 處呼叫端傳入對應 label——`PageTimingChips` 的 `timingTitle()` 已有 `TimingTooltipLabels.noRecord` 可用、其餘 JSX 處傳 `t('...')`；新增 zh-TW/en key 並更新 `formatters.test.ts` 既有「尚無紀錄」斷言、跑 i18n 對等測試。純前端、低風險但牽動多處呼叫端。
+
