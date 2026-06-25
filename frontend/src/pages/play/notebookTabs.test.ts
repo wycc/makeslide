@@ -5,6 +5,7 @@ import {
   NOTEBOOK_TABS,
   computeNotebookTabCounts,
   getAdjacentNotebookTab,
+  getEdgeNotebookTab,
   isNotebookTab,
   normalizeNotebookTab,
 } from './notebookTabs';
@@ -44,6 +45,11 @@ test('computeNotebookTabCounts handles empty deck', () => {
   const counts = computeNotebookTabCounts({ slides: 0, bookmarks: 0, important: 0, polls: 0 });
   assert.equal(counts.slides, 0);
   assert.equal(counts.interact, 0);
+});
+
+test('getEdgeNotebookTab returns the first and last tabs', () => {
+  assert.equal(getEdgeNotebookTab('first'), NOTEBOOK_TABS[0]!.id);
+  assert.equal(getEdgeNotebookTab('last'), NOTEBOOK_TABS[NOTEBOOK_TABS.length - 1]!.id);
 });
 
 test('getAdjacentNotebookTab moves and wraps in both directions', () => {

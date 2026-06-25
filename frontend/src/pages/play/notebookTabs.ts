@@ -62,6 +62,12 @@ export function computeNotebookTabCounts(input: {
   };
 }
 
+/** The first or last tab, for Home/End keyboard navigation. Pure for testing. */
+export function getEdgeNotebookTab(edge: 'first' | 'last'): NotebookTab {
+  const tab = edge === 'first' ? NOTEBOOK_TABS[0] : NOTEBOOK_TABS[NOTEBOOK_TABS.length - 1];
+  return tab?.id ?? DEFAULT_NOTEBOOK_TAB;
+}
+
 export function getStoredNotebookTab(): NotebookTab {
   if (typeof window === 'undefined') return DEFAULT_NOTEBOOK_TAB;
   return normalizeNotebookTab(window.localStorage.getItem(NOTEBOOK_TAB_STORAGE_KEY));
