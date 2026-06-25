@@ -38,6 +38,8 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | 播放頁簡介「複製」按鈕：折疊簡介展開時於描述下方加「複製簡介」按鈕（複用 copyTextToClipboard，2 秒「已複製」toast）；純前端；i18n 2 key | feat/copy-description（已 merge） |
+| 2026-06-25 | （已達 100 上限 → 經使用者同意重設計數，於第三十三輪項目區開頭加「---- 計數重設 ----」標記，重新起算） | — |
 | 2026-06-25 | TemplatesPage 依使用次數排序：搜尋框旁加「最新／最熱門」切換，最熱門以既有 apply_count 排序（穩定排序保留 recency）；純前端；i18n 2 key。**此項使重設後完成數達 100，觸及 LOOP.md 上限** | feat/templates-sort-popular（已 merge） |
 | 2026-06-25 | 自動生成 PDF 描述：新增 generateDescription worker step（前 3 頁逐字稿 → LLM 2–3 句摘要）+ owner 限定 `POST /api/pdfs/:id/generate-description`（持久化）；PlayPageHeader 描述為空時顯示「✨ AI 生成描述」按鈕；補後端測試 4 個（mock LLM）；i18n 2 key | feat/ai-generate-description（已 merge） |
 | 2026-06-25 | 播放頁鍵盤快捷鍵說明 overlay：既有按鈕+modal 基礎上補 `?` 全域熱鍵切換顯示（輸入框忽略）並新增 `?` 說明列；i18n 1 key；純前端 | feat/shortcuts-help-hotkey（已 merge） |
@@ -1174,7 +1176,7 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [x] TemplatesPage 依使用次數排序：`TemplatesPage.tsx` 搜尋框旁加入「最新／最熱門」排序切換，`最熱門` 以既有 `apply_count` 由大到小（穩定排序保留 recency 為次序）、`最新` 維持 API 的 `created_at DESC`；純前端 client-side 排序，補 i18n 2 個 key（`templates.sortNewest`/`templates.sortPopular`，zh-TW/en）。分支 `feat/templates-sort-popular`。
 
-- [ ] 播放頁簡介「複製」按鈕：`PlayPageHeader` 折疊簡介區塊（`descExpanded`）展開時，於描述文字旁加入「複製」按鈕，使用既有 `copyTextToClipboard()`，成功顯示短暫 toast；純前端改動，補 i18n 2 個 key（`play.header.copyDescription`/`copyDescriptionDone`）。
+- [x] 播放頁簡介「複製」按鈕：`PlayPageHeader` 折疊簡介區塊（`descExpanded`）展開時，於描述文字下方加入「複製簡介」按鈕，使用既有 `copyTextToClipboard()`，成功顯示短暫「已複製」toast（2 秒）；純前端改動，補 i18n 2 個 key（`play.header.copyDescription`/`copyDescriptionDone`，zh-TW/en）。分支 `feat/copy-description`。
 
 - [ ] 相似頁面推薦空狀態與數量：`SimilarPagesSection`（`PlayPageSidebar.tsx`）目前無結果時整段隱藏；改為當「目標頁已索引但無相似結果」時顯示一行「找不到相似頁面」提示（與「未索引」區分：未索引仍隱藏）。後端 `GET /api/pdfs/:id/pages/:n/similar` 回傳已含足夠資訊（空陣列 vs 未索引可用 `indexed` 旗標區分）；需在端點回傳 `{ similar, indexed }`，前端據以顯示；補後端測試 1 個與 i18n 1 個 key。
 
