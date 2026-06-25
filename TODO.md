@@ -1594,8 +1594,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] 為通用 NOT_FOUND 補友善錯誤訊息：在 `ERROR_HINTS` 新增 `NOT_FOUND` 的中文 title/message/nextStep，使最常見的通用「找不到」錯誤不再對使用者顯示後端英文原文（'PDF not found' 等）；補一個測試。`ADMIN_REQUIRED`/具體 `FORBIDDEN` 因 message 已是具體中文，刻意保留 fallback、不補固定 hint。純前端、低風險。
   - 修改說明（2026-06-25）：在 `ERROR_HINTS` 的 `PAGE_NOT_FOUND` 後新增 `NOT_FOUND: { title: '找不到資源', message: '要求的資料不存在或已被移除。', nextStep: '請重新整理後再試，或確認操作對象是否仍存在。' }`；於 `api.error-mapping.test.ts` 新增測試斷言 `NOT_FOUND` 映射 title「找不到資源」、message 不等於後端原文 'PDF not found' 且有 nextStep。frontend typecheck 通過、全部前端測試（含 error-mapping 5 個）+ i18n 對等 22 個全通過。分支 `fix/not-found-human-message`，已 merge 回 master。
 
-- [ ] （待評估）`*_NOT_FOUND` pattern fallback：在 `mapApiErrorToHumanMessage` 精確查表失敗後，對「以 `_NOT_FOUND` 結尾」的未知碼回傳通用「找不到資源」訊息，一次涵蓋 QUIZ_NOT_FOUND/POLL_NOT_FOUND/VERSION_NOT_FOUND/PAGE_*_NOT_FOUND/FIGURE_NOT_FOUND 等（這些多帶英文 message）。屬行為變更（會以通用訊息覆蓋後端具體 message），需確認可接受性後再做。
-  - 補充（第五十六輪後）：部分 legacy `*_NOT_FOUND`（PAGE_IMAGE/TEXT/SCRIPT/AUDIO_NOT_FOUND、COVER_NOT_READY、VIDEO/OUTLINE_NOT_FOUND）已於第五十六輪透過後端 `normalizeErrorCode` 接線改為送出 `RESOURCE_NOT_FOUND`（前端已有友善訊息），故此 pattern 項目的涵蓋面縮小，主要剩 QUIZ/POLL/VERSION/FIGURE/SKILL_NOT_FOUND 等未被 normalize 的碼。
+- [x] `*_NOT_FOUND` pattern fallback：在 `mapApiErrorToHumanMessage` 精確查表失敗後，對「以 `_NOT_FOUND` 結尾」的未知碼回傳通用「找不到資源」訊息，一次涵蓋 QUIZ_NOT_FOUND/POLL_NOT_FOUND/VERSION_NOT_FOUND/FIGURE_NOT_FOUND/SKILL_NOT_FOUND 等。
+  - 補充（第五十六輪後）：部分 legacy `*_NOT_FOUND`（PAGE_IMAGE/TEXT/SCRIPT/AUDIO_NOT_FOUND、COVER_NOT_READY、VIDEO/OUTLINE_NOT_FOUND）已於第五十六輪透過後端 `normalizeErrorCode` 接線改為送出 `RESOURCE_NOT_FOUND`，故此 pattern 項目的涵蓋面縮小，主要剩 QUIZ/POLL/VERSION/FIGURE/SKILL_NOT_FOUND 等未被 normalize 的碼。
+  - 修改說明（2026-06-25 第五十七輪）：先核實剩餘未 normalize 的 `*_NOT_FOUND` 碼（QUIZ/POLL/VERSION/FIGURE/SKILL/REGENERATE_JOB/ADD_PAGES_JOB_NOT_FOUND）之後端 message **全為英文**（'Quiz X not found' 等），確認原「會覆蓋具體中文 message」的疑慮不成立、此 pattern 為純改善（英文洩漏→友善中文），故逕行實作。在 `mapApiErrorToHumanMessage` 精確查表後、fallback 前加 `if (err.code.endsWith('_NOT_FOUND')) return RESOURCE_NOT_FOUND_HINT`；抽出型別安全常數 `RESOURCE_NOT_FOUND_HINT`（因 tsconfig `noUncheckedIndexedAccess`，`ERROR_HINTS.NOT_FOUND` 索引型別含 undefined）供 `ERROR_HINTS.NOT_FOUND` 與 fallback 共用。新增 2 測試（QUIZ/FIGURE_NOT_FOUND → 通用訊息、PDF_NOT_FOUND 仍優先用專屬 hint）。frontend typecheck 通過、全部 304 個前端測試 + i18n 對等 22 個全通過。分支 `feat/not-found-pattern-fallback`，已 merge 回 master。
 
 ## 掃描摘要（2026-06-25 第五十六輪）
 
