@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | 修正 AI 動畫紅框錯位：編輯器預覽容器原寫死 16:9 致非 16:9 投影片被 letterbox、方框錯位；改為依圖片實際比例（`imageAspectPaddingPct` + img onLoad）。查證後端圖片以 sharp `fit:'inside'` 保比例傳送無誤。新增單元測試；typecheck/4 測試通過 | fix/animation-focus-box-aspect（已 merge） |
 | 2026-06-25 | 逐字稿對話式改寫對話框：新增自包含 `ScriptRewriteDialog`（自有多輪對話 state，不共用 QA chat），透過既有 rewrite-script 端點逐步改寫並套用到編輯器；`PlayPageSlidePanel` 加「對話式改寫」按鈕開啟；抽出 `buildRewriteContext` 純函式 + 3 個單元測試；zh-TW/en 各補 13 個 key；typecheck/測試/i18n 對等全通過 | feat/script-rewrite-dialog（已 merge） |
 | 2026-06-25 | AI 導師 ask 加入原始來源全文：`POST /pages/:n/ask` corpus 除逐頁文字+逐字稿外，另附 `source.txt`（上限 12000 字）並更新提示詞，使原文獨有的答案也能回答；新增後端測試（以獨立 inject 腳本驗證通過）；backend typecheck 通過 | feat/ai-tutor-source-text（已 merge） |
 | 2026-06-25 | UI 顯示簡報生成提示詞：`user_prompt` 早已記錄於 `pdfs` 表，`PlayPageHeader` 簡介下方新增「顯示生成提示詞」折疊區（非分享檢視限定、含複製按鈕）；zh-TW/en 各補 4 個 key；純前端；typecheck 通過、i18n 對等測試 21 個全通過 | feat/show-generation-prompt（已 merge） |
@@ -1200,7 +1201,8 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-25）：原本逐字稿改寫只有「風格預設單次改寫」或被併進共用的 QA／圖片 chat 串（與問答、生圖共用同一條對話）。新增專屬 `ScriptRewriteDialog.tsx` 獨立對話框，擁有自己的多輪對話 state（不再共用 `chatHistory`），透過既有 `rewrite-script` 端點（早已支援 history）逐步改寫本頁逐字稿，每次結果自動套用到 `editingScript`（下方逐字稿編輯器）。對話框自包含（自有 state、讀 `PlayPageContext`，不修改共用 context 與既有 handler），由 `PlayPageSlidePanel` 風格改寫旁的「對話式改寫」按鈕開啟。抽出純函式 `buildRewriteContext()` 並新增 3 個單元測試；zh-TW/en 各補 13 個 `play.scriptRewrite.*` key（共 1668 對等）。typecheck 通過、helper 測試 3 個 + i18n 對等測試 21 個全通過。視覺版面因 sandbox 無瀏覽器未做互動驗證，但接線與邏輯均已驗證。分支 `feat/script-rewrite-dialog`，已 merge 回 master。
 
 - [ ] 右邊改成 notebook 界面，
-- [ ] AI 生成動畫的紅框位置都不正確，是否圖片有被正確的傳送。
+- [x] AI 生成動畫的紅框位置都不正確，是否圖片有被正確的傳送。
+  - 修改說明（2026-06-25）：根因為**前端編輯器預覽容器寫死 16:9**（`AnimationEditorTab.tsx` 的 `EffectPositionEditor`，`paddingTop:'56.25%'`）搭配 `object-fit:contain`：當投影片實際長寬比非 16:9（如 PDF 匯入的 4:3／直式頁面）時，圖片在容器內被 letterbox 留邊，而焦點方框的 `left/top/width/height` 是相對「容器」百分比，AI 卻是相對「真實圖片」回傳百分比，於是紅框錯位。修正：容器 `paddingTop` 改為依圖片實際比例（img `onLoad` 讀 `naturalWidth/Height`，抽出純函式 `imageAspectPaddingPct()`、預設 56.25% fallback），消除 letterbox 使百分比對齊。另查證後端圖片傳送正確（`animationAutoFocus.loadFocusAiPageImageDataUrl` 以 sharp `fit:'inside'` 保留長寬比、送的是該頁 `image_path`），播放/全螢幕側以 `object-contain` + max 尺寸依自然比例渲染、stage 緊貼圖片，故一致。新增 `imageAspectPaddingPct` 單元測試（16:9→56.25、4:3→75、直式、無效值 fallback）。typecheck 通過、`AnimationEditorTab.test.ts` 4 個測試全通過。視覺結果因 sandbox 無瀏覽器未做像素級驗證，但座標數學與最小改動已驗證。分支 `fix/animation-focus-box-aspect`，已 merge 回 master。
 - [x] 動畫生成的提示詞沒有記下來。
   - 修改說明（2026-06-25）：`SlideAnimationEffect.prompt`（產生 custom-script `code` 的提示詞）型別早已定義、後端 `validateAnimationSpec` 也已保留（`pageAnimation.ts` 行 618），但前端 `usePageAnimation.ts` 生成成功時只寫入 `code` 與 `conversation`、從未寫入 `prompt`，導致提示詞未被記錄。修正：生成成功時一併設定 `effect.prompt = prompt`（隨存檔持久化）；並修改 `AnimationEditorTab.tsx` 開啟 custom-script 對話框時，以該效果已記錄的 `prompt` 回填輸入框（無則清空），方便直接在原提示詞上迭代。純前端改動；typecheck 通過、`AnimationEditorTab.test.ts` 3 個測試全通過。分支 `feat/animation-record-prompt`，已 merge 回 master。
 - [x] 大網生成的提示詞也要記錄下來。並在 UI 上可以顯示出來。

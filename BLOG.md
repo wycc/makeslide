@@ -1,5 +1,36 @@
 # MakeSlide 功能說明
 
+## 修正：AI 動畫紅框在非 16:9 投影片上的錯位
+
+### 問題
+
+用 AI 自動產生動畫（auto-focus）時，紅色的醒目方框／聚光燈位置常常對不準——
+框框跑掉、偏移、大小不對。經追查，問題不在「圖片有沒有正確傳給 AI」（那部分是正確的），
+而在動畫編輯器的預覽容器把每張投影片都當成 16:9。
+
+### 根因
+
+動畫位置編輯器（`AnimationEditorTab` 的 `EffectPositionEditor`）的預覽容器寫死了
+16:9（`paddingTop: 56.25%`），圖片再以 `object-fit: contain` 放進去。當投影片實際比例
+不是 16:9（例如從 PDF 匯入的 4:3 或直式頁面）時，圖片會被「letterbox」——上下或左右
+留黑邊、只佔容器的一部分。但方框的座標是用「相對容器」的百分比定位，而 AI 回傳的百分比
+是「相對真實圖片」，兩者基準不一致，框框自然就跑掉了。
+
+### 修正
+
+- 預覽容器的長寬比不再寫死，而是依實際載入圖片的 `naturalWidth/naturalHeight` 計算
+  （`<img onLoad>` 取得後套用），讓容器精確等於圖片比例、消除 letterbox，
+  百分比座標就能對齊。抽出純函式 `imageAspectPaddingPct()`（無效尺寸時回退 16:9）並加單元測試。
+- 一併查證：後端傳給 AI 的圖片是正確的——`animationAutoFocus` 以 sharp `fit:'inside'`
+  縮圖、保留長寬比，送的是該頁實際的 `image_path`；播放／全螢幕側也是以
+  `object-contain` + 上限尺寸依自然比例渲染，overlay 緊貼圖片，因此各情境一致。
+
+### 影響
+
+- 16:9 的投影片行為不變（仍是 56.25%）。
+- 非 16:9 的投影片（PDF 匯入的 4:3、直式頁面等）AI 動畫方框終於對齊到正確位置。
+- `frontend typecheck` 通過、`AnimationEditorTab.test.ts` 4 個測試全通過。
+
 ## 逐字稿：對話式多輪改寫對話框
 
 ### 功能目的
