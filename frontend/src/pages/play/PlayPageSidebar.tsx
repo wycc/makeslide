@@ -482,8 +482,6 @@ export function PlayPageSidebar() {
     imageEditRegion, clearImageEditRegion,
     handleSendChat, handleClearChat,
     handleInpaintImage, handleRegenerateImageWithPrompt,
-    handleRewriteScript,
-    rewriteBusy, rewriteError,
     setImagePreviewUrl,
     setImagePreviewPageNumber,
     setImagePreviewOpen,
@@ -1109,6 +1107,7 @@ export function PlayPageSidebar() {
           {qaPanelExpanded ? t('play.sidebar.qa.restore') : t('play.sidebar.qa.expand')}
         </button>
       </div>
+      <p className="mb-2 text-xs text-slate-500">{t('play.sidebar.qa.usageNote')}</p>
       <div className="flex justify-end">
         <button
           type="button"
@@ -1251,14 +1250,6 @@ export function PlayPageSidebar() {
             )}
             <button
               type="button"
-              onClick={() => void handleRewriteScript()}
-              disabled={isReadOnlyProcessing || rewriteBusy || !hasChatInput}
-              className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-3 py-2 text-sm text-fuchsia-200 hover:bg-fuchsia-500/25 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {rewriteBusy ? t('play.sidebar.qa.editing') : t('play.sidebar.qa.editTranscript')}
-            </button>
-            <button
-              type="button"
               onClick={() => void handleSendChat()}
               disabled={isReadOnlyProcessing || chatBusy || !hasChatInput}
               className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
@@ -1268,7 +1259,6 @@ export function PlayPageSidebar() {
           </div>
         </div>
         {chatError ? <p className="mt-1 text-xs text-rose-300">{chatError}</p> : null}
-        {rewriteError ? <p className="mt-1 text-xs text-rose-300">{rewriteError}</p> : null}
         {chatInpaintError ? <p className="mt-1 text-xs text-rose-300">{chatInpaintError}</p> : null}
       </div>
       </section>

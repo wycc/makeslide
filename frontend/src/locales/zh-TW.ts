@@ -1258,6 +1258,7 @@ export const zhTW = {
   'play.sidebar.poll.clearResults': '清除結果',
   'play.sidebar.poll.deleteQuestion': '刪除題目',
   'play.sidebar.qa.title': '本頁問答（含本頁圖片與文字上下文）',
+  'play.sidebar.qa.usageNote': '此面板用於 AI 問答與生圖／改圖。逐字稿改寫請改用投影片面板的「對話式改寫」。',
   'play.sidebar.qa.restoreSidebarTitle': '還原右側欄內容',
   'play.sidebar.qa.expandSidebarTitle': '讓問答佔滿右側欄',
   'play.sidebar.qa.restore': '還原',
