@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { ApiError, rewritePageScript } from '../../lib/api';
 import type { ChatMessage, PdfDetailPage } from '../../types';
+import { useI18n } from '../../i18n';
 
 const CHAT_HISTORY_REQUEST_LIMIT = 20;
 
@@ -54,6 +55,7 @@ export function useScriptEditor({
   setChatHistory,
   setChatInput,
 }: UseScriptEditorParams): ScriptEditorState {
+  const { t } = useI18n();
   const [editingScript, setEditingScript] = useState('');
   const [editorBusy, setEditorBusy] = useState(false);
   const [editorError, setEditorError] = useState<string | null>(null);
@@ -107,7 +109,7 @@ export function useScriptEditor({
     } catch (err) {
       if (currentPageNumberRef.current !== pageNumberAtSend) return;
       setChatHistory(chatHistory);
-      setRewriteError(err instanceof ApiError ? err.message : '逐字稿改寫失敗');
+      setRewriteError(err instanceof ApiError ? err.message : t('play.scriptRewrite.rewriteFailed'));
     } finally {
       setRewriteBusy(false);
     }
@@ -123,6 +125,7 @@ export function useScriptEditor({
     isReadOnlyProcessing,
     setChatHistory,
     setChatInput,
+    t,
   ]);
 
   return {

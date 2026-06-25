@@ -8,6 +8,7 @@ import {
   restoreScriptVersion,
   type FileVersionEntry,
 } from '../../lib/api';
+import { useI18n } from '../../i18n';
 
 interface UseVersionHistoryParams {
   pdfId: string | undefined;
@@ -31,6 +32,7 @@ export interface VersionHistoryState {
 }
 
 export function useVersionHistory({ pdfId, reloadDetail }: UseVersionHistoryParams): VersionHistoryState {
+  const { t } = useI18n();
   const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
   const [versionHistoryType, setVersionHistoryType] = useState<'image' | 'script'>('image');
   const [versionHistoryPage, setVersionHistoryPage] = useState<number | null>(null);
@@ -57,11 +59,11 @@ export function useVersionHistory({ pdfId, reloadDetail }: UseVersionHistoryPara
         : await fetchScriptHistory(pdfId, pageNumber);
       setVersionHistoryEntries(resp.history);
     } catch {
-      setVersionError('無法載入版本歷史');
+      setVersionError(t('play.versionHistory.loadListFailed'));
     } finally {
       setVersionHistoryLoading(false);
     }
-  }, [pdfId]);
+  }, [pdfId, t]);
 
   const handleVersionPreview = useCallback(async (hash: string) => {
     if (!pdfId || versionHistoryPage == null) return;
@@ -76,12 +78,12 @@ export function useVersionHistory({ pdfId, reloadDetail }: UseVersionHistoryPara
         // 而不是讓使用者卡在永遠顯示「載入中」、卻其實已經失敗的畫面。
         setVersionPreviewScript(null);
         setVersionPreviewHash(null);
-        setVersionError(err instanceof ApiError ? err.message : '無法載入此版本的逐字稿內容');
+        setVersionError(err instanceof ApiError ? err.message : t('play.versionHistory.loadContentFailed'));
       }
     } else {
       setVersionPreviewScript(null);
     }
-  }, [pdfId, versionHistoryPage, versionHistoryType]);
+  }, [pdfId, versionHistoryPage, versionHistoryType, t]);
 
   const handleVersionRestore = useCallback(async () => {
     if (!pdfId || versionHistoryPage == null || !versionPreviewHash) return;
@@ -96,11 +98,11 @@ export function useVersionHistory({ pdfId, reloadDetail }: UseVersionHistoryPara
       await reloadDetail();
       setVersionHistoryOpen(false);
     } catch (err) {
-      setVersionError(err instanceof ApiError ? err.message : '還原失敗');
+      setVersionError(err instanceof ApiError ? err.message : t('play.versionHistory.restoreFailed'));
     } finally {
       setVersionRestoring(false);
     }
-  }, [pdfId, versionHistoryPage, versionPreviewHash, versionHistoryType, reloadDetail]);
+  }, [pdfId, versionHistoryPage, versionPreviewHash, versionHistoryType, reloadDetail, t]);
 
   return {
     versionHistoryOpen,

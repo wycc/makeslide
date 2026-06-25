@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { ApiError, fetchPdfDetail, generatePdfVideo } from '../../lib/api';
 import type { PdfDetail } from '../../types';
+import { useI18n } from '../../i18n';
 
 interface UseVideoGenerationParams {
   pdfId: string | undefined;
@@ -27,6 +28,7 @@ export function useVideoGeneration({
   detail,
   setDetail,
 }: UseVideoGenerationParams): VideoGenerationState {
+  const { t } = useI18n();
   const [videoBusy, setVideoBusy] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -50,11 +52,11 @@ export function useVideoGeneration({
         prev ? { ...prev, video_url: res.video_url, updated_at: res.updated_at } : prev,
       );
     } catch (err) {
-      setVideoError(err instanceof ApiError ? err.message : '產生影片失敗');
+      setVideoError(err instanceof ApiError ? err.message : t('play.videoGen.generateFailed'));
     } finally {
       setVideoBusy(false);
     }
-  }, [pdfId, isReadOnlyProcessing, setDetail]);
+  }, [pdfId, isReadOnlyProcessing, setDetail, t]);
 
   // 影片渲染中時輪詢 detail 取得進度。
   useEffect(() => {
