@@ -49,3 +49,41 @@ test('frontend and backend agree on animation shape kinds', () => {
     [...ANIMATION_SHAPE_KINDS],
   );
 });
+
+// Several animation effect sub-properties are enums maintained by hand in three
+// places: the frontend SlideAnimationEffect type union (types.ts), the editor's
+// hard-coded <option> lists, and the backend Zod schema. The shape-kinds list
+// once drifted exactly this way (the editor offered fewer values than the
+// backend accepted). Guard the frontend type union against the backend z.enum so
+// a value added on one side can't silently be rejected/ignored on the other.
+function readBackendEnumField(field: string): string[] {
+  const src = fs.readFileSync(new URL('../src/services/pageAnimation.ts', import.meta.url), 'utf8');
+  const m = src.match(new RegExp(`${field}:\\s*z\\.enum\\(\\[([^\\]]*)\\]`));
+  assert.ok(m, `could not locate backend z.enum for ${field}`);
+  return [...m![1]!.matchAll(/'([^']+)'/g)].map((x) => x[1]!);
+}
+
+function readFrontendUnionField(field: string): string[] {
+  const src = fs.readFileSync(new URL('../../frontend/src/types.ts', import.meta.url), 'utf8');
+  const m = src.match(new RegExp(`${field}\\?:\\s*([^;]+);`));
+  assert.ok(m, `could not locate frontend union for ${field}`);
+  return [...m![1]!.matchAll(/'([^']+)'/g)].map((x) => x[1]!);
+}
+
+const ENUM_FIELDS = [
+  'pointerShape',
+  'highlightBorderStyle',
+  'textCalloutAlign',
+  'textCalloutPadding',
+  'spotlightShape',
+  'stepListBulletStyle',
+] as const;
+
+for (const field of ENUM_FIELDS) {
+  test(`frontend and backend agree on animation enum field "${field}"`, () => {
+    const frontend = readFrontendUnionField(field);
+    const backend = readBackendEnumField(field);
+    assert.ok(frontend.length >= 2, `expected the frontend union for ${field} to parse`);
+    assert.deepEqual(frontend, backend, `animation enum field ${field} drifted between frontend type and backend schema`);
+  });
+}
