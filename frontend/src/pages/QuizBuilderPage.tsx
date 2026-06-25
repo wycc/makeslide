@@ -34,6 +34,7 @@ import type {
   QuizSet,
   SyncQuizProgress,
 } from '../types';
+import { QUIZ_TOTAL_SCORE, scoreSumExceedingTotal } from '../lib/quizScoring';
 
 const LOCAL_USER_CODE_KEY = 'makeslide.user_code';
 
@@ -62,8 +63,6 @@ function emptyQuestion(index: number): QuizQuestion {
   };
 }
 
-const QUIZ_TOTAL_SCORE = 100;
-
 function normalizeQuestionScores(questions: QuizQuestion[]): number[] {
   if (questions.length === 0) return [];
   const TOTAL = QUIZ_TOTAL_SCORE;
@@ -73,13 +72,6 @@ function normalizeQuestionScores(questions: QuizQuestion[]): number[] {
   const remaining = Math.max(0, TOTAL - assigned);
   const even = emptyIndices.length > 0 ? remaining / emptyIndices.length : 0;
   return explicit.map((v) => (v == null ? (emptyIndices.length > 0 ? even : 0) : v));
-}
-
-// Sum of only the explicitly-set per-question scores (mirrors backend explicitScoreSum() in
-// backend/src/routes/pdfs/quizzes.ts). Used to warn the teacher in the editor, before the save
-// request reaches the server-side cap, that a fully-correct attempt could exceed the 100-point total.
-function explicitScoreSum(questions: QuizQuestion[]): number {
-  return questions.reduce((acc, q) => acc + (typeof q.score === 'number' && Number.isFinite(q.score) && q.score >= 0 ? q.score : 0), 0);
 }
 
 function isCorrectAnswer(question: QuizQuestion, selected: number[]): boolean {
@@ -192,10 +184,7 @@ export default function QuizBuilderPage() {
     };
   }, [pdfId]);
 
-  const scoreSumExceeded = useMemo(() => {
-    const sum = explicitScoreSum(questions);
-    return sum > QUIZ_TOTAL_SCORE ? sum : null;
-  }, [questions]);
+  const scoreSumExceeded = useMemo(() => scoreSumExceedingTotal(questions), [questions]);
 
   const canSave = useMemo(
     () =>
