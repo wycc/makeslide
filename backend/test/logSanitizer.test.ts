@@ -5,6 +5,7 @@ import {
   redactLogObject,
   redactPromptForLog,
   redactTextForLog,
+  redactSecretsInText,
 } from '../src/services/logSanitizer';
 
 test('redactLogValue passes through nullish, number, boolean and stringifies bigint', () => {
@@ -164,4 +165,12 @@ test('redactLogValue masks bare GitHub tokens and leaves credential-free URLs in
   assert.equal(redactLogValue('clone https://github.com/owner/repo.git'), 'clone https://github.com/owner/repo.git');
   // host:port without credentials must not be redacted
   assert.equal(redactLogValue('connect http://localhost:3000/api'), 'connect http://localhost:3000/api');
+});
+
+test('redactSecretsInText scrubs the tokenized URL from a git push command-failed error', () => {
+  const raw = "Command failed: git push https://x-access-token:ghp_abcdEFGH1234567890wxyz@github.com/owner/repo.git main:refs/heads/p\nremote: error";
+  const out = redactSecretsInText(raw);
+  assert.ok(!out.includes('ghp_abcdEFGH1234567890wxyz'), 'token must be redacted');
+  assert.ok(!out.includes('x-access-token:'), 'url credentials must be redacted');
+  assert.ok(out.includes('https://[redacted]@github.com/owner/repo.git'), 'host/path kept for debugging');
 });

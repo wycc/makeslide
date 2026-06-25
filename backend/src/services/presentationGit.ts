@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import { pdfDir } from './storage';
 import { logger } from '../logger';
 import { db } from '../db';
+import { redactSecretsInText } from './logSanitizer';
 
 const execFile = promisify(execFileCb);
 
@@ -380,11 +381,20 @@ export async function pushPresentationToGitHub(
   const authenticatedUrl = buildAuthenticatedRepoUrl(trimmedRepoUrl, token);
   await pullAndMergeFromGitHub(pdfId, dir, authenticatedUrl);
   const branch = await git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']);
-  await execFile(
-    'git',
-    ['push', authenticatedUrl, `${branch}:refs/heads/${pdfId}`, '--force'],
-    gitOpts(dir),
-  );
+  try {
+    await execFile(
+      'git',
+      ['push', authenticatedUrl, `${branch}:refs/heads/${pdfId}`, '--force'],
+      gitOpts(dir),
+    );
+  } catch (err) {
+    // execFile failures embed the full command (including the
+    // https://x-access-token:<token>@github.com URL) in the error message, which
+    // the caller surfaces in the API response. Scrub the token before rethrowing
+    // so it never leaves this module.
+    if (err instanceof Error) err.message = redactSecretsInText(err.message);
+    throw err;
+  }
   const headHash = await git(dir, ['rev-parse', 'HEAD']);
   markGithubSynced(pdfId, headHash);
 }
