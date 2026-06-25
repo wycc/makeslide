@@ -1701,6 +1701,15 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [ ] （待處理，涉 CI 行為變更 / npm install）把前端測試納入 root `npm test` 並補 frontend tsx 顯式依賴：① root `package.json` 的 `test` 改為同時跑 backend 與 frontend workspace（目前只跑 backend，前端 323 測試未納入 CI）；② 為 `frontend/package.json` 補 `tsx` devDependency（目前靠 hoisting，非顯式）使依賴正確。因 ① 改變 CI 行為、② 需 `npm install`，且 sandbox 的 `with-node-env.sh` 環境無法完整驗證 `npm test`，留待正式環境處理或使用者確認後再做。
 
+## 掃描摘要（2026-06-25 第六十八輪）
+
+- 檢查前後端「鏡像」資料的 drift 風險。發現：前端 `lib/costEstimate.ts` 的 `LLM_PRICE_PER_1M_TOKENS` 原始碼註解明言「Mirrors the backend's MODEL_PRICE_PER_1M_TOKENS」，兩份手動維護的模型價格表必須一致（否則使用者看到的成本估算會與後端記帳不符），但分屬不同 package、無任何測試防止 drift。經完整比對，目前 6 個模型（gpt-4o-mini/gpt-4o/gemini-2.0-flash/-lite/1.5-flash/1.5-pro）的 input/output 價格**完全一致**（無 bug）。
+
+## 新增可執行項目（2026-06-25 第六十八輪）
+
+- [x] 前後端 LLM 價格表一致性防 drift 測試：因兩表分屬不同 package、無法以單一單元測試交叉 import 比對，於後端測試以 `fs` 讀取前端 `costEstimate.ts` 原始碼、正則抽取其 `LLM_PRICE_PER_1M_TOKENS` 條目，與後端 import 的 `MODEL_PRICE_PER_1M_TOKENS` 比對（model 集合 + 每個 input/output 價格）。純後端、僅新增測試、不改產品程式碼。
+  - 修改說明（2026-06-25）：新增 `backend/test/llmPricingConsistency.test.ts`，3 個測試：前端表可正則 parse 出 ≥5 個 model（防正則失效誤判通過）、前後端 model 集合相同、每個 model 的 input/output 價格相同。以 `new URL('../../frontend/src/lib/costEstimate.ts', import.meta.url)` 定位前端檔；此測試會在任一端價格表 drift 時失敗。以 `tsx --test` 直跑驗證 3 個測試全通過；backend typecheck 通過。分支 `test/llm-pricing-consistency`，已 merge 回 master。
+
 ## 掃描摘要（2026-06-25 第五十六輪）
 
 - 延續錯誤碼一致性調查，檢視後端 `errors.ts`。發現架構落差：`normalizeErrorCode`（legacy→standard 映射）**有單元測試**（`pages-api.test.ts`）卻**從未被產品程式碼呼叫**——路由實際用的 `errorResponse`（`routes/pdfs.ts`、`routes/pdfs/shared.ts` 兩份重複定義）直接送原始 code、不 normalize。導致 legacy 碼（PAGE_IMAGE_NOT_FOUND、COVER_NOT_READY、NO_FILE、INVALID_MIME 等）原樣洩漏到前端，而前端 `ERROR_HINTS` 無對應條目、顯示英文 fallback。
