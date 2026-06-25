@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | 相對時間格式化抽共用 i18n helper：新增 `lib/relativeTime.ts` 純函式（接受 label 字串、修掉無效日期 NaN bug），`PdfCard`/`QuizBuilderPage` 移除重複本地版改用之並以 `t('time.*')` 傳 label；新增 6 個 `time.*` key、2 個單元測試；typecheck + 277 前端測試 + i18n 對等全通過 | feat/shared-relative-time-i18n（已 merge） |
 | 2026-06-25 | 分析並新增可執行項目（第三十五輪）：TODO 清空後依 LOOP.md 掃描程式 + 參考 FUTURE_ROADMAP，新增 4 個低風險增量項目（相對時間格式化抽共用 i18n helper 消除 PdfCard/QuizBuilderPage 重複、PlayPage.tsx 錯誤/狀態訊息 i18n 第二批、AnimationEditorTab i18n、零星小元件殘留中文 i18n） | master（僅文件） |
 | 2026-06-25 | AI 導師跨頁引用強制化：`ask` 端點系統提示詞新增「【引用規則（務必遵守）】」，回答用到「學生目前所在頁」以外頁面資訊時必須主動以括號標示頁碼（如「（第 3 頁）」），引用原始來源標示「（原始來源）」；page-ask 測試加 2 條斷言；backend typecheck 通過（後端測試 sandbox timeout，改以 typecheck + 提示詞字串核對確認） | feat/ai-tutor-mandatory-cross-page-citation（已 merge） |
 | 2026-06-25 | PlayPage.tsx 行動分頁與狀態畫面國際化：行動版「播放／問答」分頁、新投票 aria-label、四個全螢幕狀態畫面（invalid id/載入/無頁面/產生中）、圖片產生中浮層改用 t()；新增 11 個 `play.mobileTab.*`/`play.status.*` key（對等總數 1750）；錯誤訊息字串依項目允許延後；typecheck + i18n 對等 21 全通過 | feat/playpage-mobile-status-i18n（已 merge） |
@@ -1291,7 +1292,8 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 ## 新增可執行項目（2026-06-25 第三十五輪）
 
-- [ ] 相對時間格式化抽成共用 i18n helper：`components/PdfCard.tsx` 與 `pages/QuizBuilderPage.tsx` 各有一份完全相同、硬編中文的 `formatRelativeTime`。抽成共用模組（例如 `frontend/src/lib/relativeTime.ts`）並 i18n 化（因 `t()` 不支援插值，回傳「數字 + 單位後綴 key」樣板字串組合，或讓 helper 接受一組 label 字串）；兩處改用共用版本以消除重複。補單元測試涵蓋各區間（剛剛 / 分鐘 / 小時 / 天 / 月 / 年、無效輸入 fallback）。補 zh-TW/en key、跑 i18n 對等測試。純前端、低風險。
+- [x] 相對時間格式化抽成共用 i18n helper：`components/PdfCard.tsx` 與 `pages/QuizBuilderPage.tsx` 各有一份完全相同、硬編中文的 `formatRelativeTime`。抽成共用模組（例如 `frontend/src/lib/relativeTime.ts`）並 i18n 化（因 `t()` 不支援插值，回傳「數字 + 單位後綴 key」樣板字串組合，或讓 helper 接受一組 label 字串）；兩處改用共用版本以消除重複。補單元測試涵蓋各區間（剛剛 / 分鐘 / 小時 / 天 / 月 / 年、無效輸入 fallback）。補 zh-TW/en key、跑 i18n 對等測試。純前端、低風險。
+  - 修改說明（2026-06-25）：新增 `frontend/src/lib/relativeTime.ts`：純函式 `formatRelativeTime(iso, labels, now?)` 與 `RelativeTimeLabels` 介面（labels 由呼叫端以 `t()` 組好傳入，因 `t()` 不支援插值；後綴含前導空白）；順手修掉原版對無效日期會回傳「NaN 年前」的問題（新增 `Number.isNaN(ts)` 防護回傳原字串）。`PdfCard` 與 `QuizBuilderPage` 移除各自重複的本地 `formatRelativeTime`，改 import 共用版並各自以 `t('time.*')` 建 `relativeTimeLabels` 傳入。新增 6 個 `time.*` key（justNow/minutesSuffix/hoursSuffix/daysSuffix/monthsSuffix/yearsSuffix，zh-TW/en 各 6）。新增 `relativeTime.test.ts` 2 個單元測試（各區間 bucket、無效輸入 fallback）。frontend typecheck 通過、全部 277 個前端測試 + i18n 對等 21 個全通過。分支 `feat/shared-relative-time-i18n`，已 merge 回 master。
 
 - [ ] PlayPage.tsx 錯誤與狀態訊息國際化（第二批）：延續上一輪（已處理行動分頁與全螢幕版面文字），把 `PlayPage.tsx` 仍硬編中文的錯誤/狀態訊息抽成 i18n key，至少包含 `setSyncError` 系列（同步連線/狀態更新/輪詢/送出問題/舉手/切換顯示/AI 回答/AI 摘要 失敗）、`setAudioError`（語音載入失敗）、`loadError` 預設（`載入失敗`、`分享連結與簡報不符`）、`文稿不可為空`、`重生語音失敗`、唯讀/產生中橫幅提示文字等。改用 `useI18n()` 既有 `t`；含 `status`/`progress_step` 插值處以樣板字串組合。補 zh-TW/en 並跑 i18n 對等測試。純前端。
 
