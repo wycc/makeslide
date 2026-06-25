@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useI18n } from '../i18n';
-import { formatRelativeTime, type RelativeTimeLabels } from '../lib/relativeTime';
+import { formatRelativeTime, buildRelativeTimeLabels } from '../lib/relativeTime';
 import {
   ApiError,
   copyQuizSetTo,
@@ -109,14 +109,7 @@ export default function QuizBuilderPage() {
   const { id: pdfId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { t } = useI18n();
-  const relativeTimeLabels: RelativeTimeLabels = {
-    justNow: t('time.justNow'),
-    minutesSuffix: t('time.minutesSuffix'),
-    hoursSuffix: t('time.hoursSuffix'),
-    daysSuffix: t('time.daysSuffix'),
-    monthsSuffix: t('time.monthsSuffix'),
-    yearsSuffix: t('time.yearsSuffix'),
-  };
+  const relativeTimeLabels = buildRelativeTimeLabels(t);
   const formatMessage = useCallback((key: Parameters<typeof t>[0], replacements: Record<string, string | number>) => {
     let message = t(key);
     for (const [name, value] of Object.entries(replacements)) {

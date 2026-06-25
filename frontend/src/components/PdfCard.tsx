@@ -3,7 +3,7 @@ import type { PdfListItem } from '../types';
 import StatusBadge from './StatusBadge';
 import { useI18n } from '../i18n';
 import { formatAudioDuration } from '../lib/audioDuration';
-import { formatRelativeTime, type RelativeTimeLabels } from '../lib/relativeTime';
+import { formatRelativeTime, buildRelativeTimeLabels } from '../lib/relativeTime';
 import { createPdfShare } from '../lib/api/pdfs';
 import { copyTextToClipboard } from '../lib/clipboard';
 
@@ -62,14 +62,7 @@ function formatDate(iso: string): string {
 
 export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExport, onCategoryChange, onTagsEdit, onContinue, continuing = false, onClick, currentUserSub, isFavorited = false, onToggleFavorite, onTagFilter, activeTagFilters }: PdfCardProps) {
   const { t } = useI18n();
-  const relativeTimeLabels: RelativeTimeLabels = {
-    justNow: t('time.justNow'),
-    minutesSuffix: t('time.minutesSuffix'),
-    hoursSuffix: t('time.hoursSuffix'),
-    daysSuffix: t('time.daysSuffix'),
-    monthsSuffix: t('time.monthsSuffix'),
-    yearsSuffix: t('time.yearsSuffix'),
-  };
+  const relativeTimeLabels = buildRelativeTimeLabels(t);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDuplicating, setIsDuplicating] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
