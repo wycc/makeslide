@@ -34,7 +34,7 @@ import type {
   QuizSet,
   SyncQuizProgress,
 } from '../types';
-import { QUIZ_TOTAL_SCORE, scoreSumExceedingTotal } from '../lib/quizScoring';
+import { scoreSumExceedingTotal, normalizeQuestionScores, calcQuestionScore } from '../lib/quizScoring';
 
 const LOCAL_USER_CODE_KEY = 'makeslide.user_code';
 
@@ -61,41 +61,6 @@ function emptyQuestion(index: number): QuizQuestion {
     explanation: '',
     score: null,
   };
-}
-
-function normalizeQuestionScores(questions: QuizQuestion[]): number[] {
-  if (questions.length === 0) return [];
-  const TOTAL = QUIZ_TOTAL_SCORE;
-  const explicit = questions.map((q) => (typeof q.score === 'number' && Number.isFinite(q.score) && q.score >= 0 ? q.score : null));
-  const assigned = explicit.reduce<number>((acc, v) => acc + (v ?? 0), 0);
-  const emptyIndices = explicit.map((v, i) => (v == null ? i : -1)).filter((i) => i >= 0);
-  const remaining = Math.max(0, TOTAL - assigned);
-  const even = emptyIndices.length > 0 ? remaining / emptyIndices.length : 0;
-  return explicit.map((v) => (v == null ? (emptyIndices.length > 0 ? even : 0) : v));
-}
-
-function isCorrectAnswer(question: QuizQuestion, selected: number[]): boolean {
-  const a = Array.from(new Set(question.answer_indices)).sort((x, y) => x - y);
-  const b = Array.from(new Set(selected)).sort((x, y) => x - y);
-  if (a.length !== b.length) return false;
-  return a.every((v, i) => v === b[i]);
-}
-
-function calcQuestionScore(question: QuizQuestion, selected: number[], questionScore: number): number {
-  if (question.type === 'single') {
-    return isCorrectAnswer(question, selected) ? questionScore : 0;
-  }
-  const optionCount = question.options.length;
-  if (optionCount <= 0) return 0;
-  const perOption = questionScore / optionCount;
-  const selectedSet = new Set(selected);
-  let earned = 0;
-  for (let idx = 0; idx < optionCount; idx += 1) {
-    const shouldSelect = question.answer_indices.includes(idx);
-    const didSelect = selectedSet.has(idx);
-    if (shouldSelect === didSelect) earned += perOption;
-  }
-  return earned;
 }
 
 export default function QuizBuilderPage() {
