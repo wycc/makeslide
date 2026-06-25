@@ -817,6 +817,7 @@ export const zhTW = {
   'play.addPages.error.outlineEmpty': '大綱內容不可為空',
   'play.addPages.error.startFailed': '啟動失敗，請稍後重試',
   'play.fullscreen.audioPaused': '語音已暫停',
+  'play.fullscreen.pollButton': '投票',
   'play.fullscreen.noSubtitle': '（本頁尚無字幕）',
   'play.fullscreen.editTranscriptHeading': '📝 編輯逐字稿（第 {page} 頁）',
   'play.fullscreen.exit': '離開全螢幕',
