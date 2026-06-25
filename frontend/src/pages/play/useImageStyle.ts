@@ -8,6 +8,7 @@ import {
   type ImagePromptTemplate,
 } from '../../lib/api';
 import type { PdfDetail } from '../../types';
+import { useI18n } from '../../i18n';
 
 interface UseImageStyleParams {
   pdfId: string | undefined;
@@ -35,6 +36,7 @@ export function useImageStyle({
   setDetail,
   setRegenAllMsg,
 }: UseImageStyleParams): ImageStyleState {
+  const { t } = useI18n();
   const [imageStyleDialogOpen, setImageStyleDialogOpen] = useState(false);
   const [deckImageStylePrompt, setDeckImageStylePrompt] = useState(
     '簡潔商業風格，以深色系為主，文字清晰對比，版面留白充足',
@@ -101,14 +103,14 @@ export function useImageStyle({
             ? { ...prev, image_style_prompt: res.image_style_prompt, updated_at: res.updated_at }
             : prev,
         );
-        setRegenAllMsg('已儲存整份圖片風格設定，後續重生會自動套用');
+        setRegenAllMsg(t('play.imageStyleDialog.saved'));
       } catch (err) {
-        setRegenAllMsg(err instanceof ApiError ? err.message : '儲存圖片風格設定失敗');
+        setRegenAllMsg(err instanceof ApiError ? err.message : t('play.imageStyleDialog.saveFailed'));
       } finally {
         setImageStyleDialogOpen(false);
       }
     })();
-  }, [pdfId, isReadOnlyProcessing, deckImageStylePrompt, setDetail, setRegenAllMsg]);
+  }, [pdfId, isReadOnlyProcessing, deckImageStylePrompt, setDetail, setRegenAllMsg, t]);
 
   return {
     imageStyleDialogOpen,

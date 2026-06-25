@@ -570,6 +570,8 @@ export const en = {
   'play.imageStyleDialog.promptPlaceholder': 'e.g. academic minimalist style, clean layout...',
   'play.imageStyleDialog.close': 'Close',
   'play.imageStyleDialog.save': 'Save settings',
+  'play.imageStyleDialog.saved': 'Image style settings saved; future regenerations will apply them automatically',
+  'play.imageStyleDialog.saveFailed': 'Failed to save image style settings',
   'play.imagePreviewDialog.title': 'Image generation result preview',
   'play.imagePreviewDialog.imageAlt': 'Generated result preview',
   'play.imagePreviewDialog.close': 'Close preview',
