@@ -13,7 +13,16 @@ import {
   MAX_PROMPT_TO_OUTLINE_CHARS,
   PROMPT_TO_OUTLINE_TEXTAREA_MAX_CHARS,
 } from '../lib/promptLimits';
-import { COST_TIERS, estimateGenerationCost, formatUsd } from '../lib/costEstimate';
+import { COST_TIERS, estimateGenerationCost, formatUsd, type CostTier } from '../lib/costEstimate';
+
+// Compile-safe tier label keys (same pattern as EASE_LABELS): `satisfies Record<...>`
+// forces label/desc keys for every CostTier name, instead of building the key by
+// capitalising tier.name where a missing label would silently render the raw key.
+const COST_TIER_LABEL_KEYS = {
+  cheap: { label: 'promptModal.costEstimate.tierCheap', desc: 'promptModal.costEstimate.tierCheapDesc' },
+  balanced: { label: 'promptModal.costEstimate.tierBalanced', desc: 'promptModal.costEstimate.tierBalancedDesc' },
+  quality: { label: 'promptModal.costEstimate.tierQuality', desc: 'promptModal.costEstimate.tierQualityDesc' },
+} as const satisfies Record<CostTier['name'], { label: TranslationKey; desc: TranslationKey }>;
 
 export interface PromptPreset {
   key: string;
@@ -477,10 +486,10 @@ export default function PromptModal({
                   return (
                     <div key={tier.name} className="rounded border border-amber-500/20 bg-amber-500/5 px-2 py-1.5 text-center">
                       <div className="text-xs font-medium text-amber-200">
-                        {t(`promptModal.costEstimate.tier${tier.name.charAt(0).toUpperCase() + tier.name.slice(1)}` as TranslationKey)}
+                        {t(COST_TIER_LABEL_KEYS[tier.name].label)}
                       </div>
                       <div className="mt-0.5 text-xs text-amber-100/70">
-                        {t(`promptModal.costEstimate.tier${tier.name.charAt(0).toUpperCase() + tier.name.slice(1)}Desc` as TranslationKey)}
+                        {t(COST_TIER_LABEL_KEYS[tier.name].desc)}
                       </div>
                       <div className="mt-1 text-sm font-semibold text-amber-100">{formatUsd(est.totalCostUsd)}</div>
                       <div className="mt-0.5 text-xs text-amber-200/50">
