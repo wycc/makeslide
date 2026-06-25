@@ -570,6 +570,8 @@ export const zhTW = {
   'play.imageStyleDialog.promptPlaceholder': '例如：academic minimalist style, clean layout...',
   'play.imageStyleDialog.close': '關閉',
   'play.imageStyleDialog.save': '儲存設定',
+  'play.imageStyleDialog.saved': '已儲存整份圖片風格設定，後續重生會自動套用',
+  'play.imageStyleDialog.saveFailed': '儲存圖片風格設定失敗',
   'play.imagePreviewDialog.title': '圖片產生結果預覽',
   'play.imagePreviewDialog.imageAlt': '生成結果預覽',
   'play.imagePreviewDialog.close': '關閉預覽',
