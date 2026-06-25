@@ -1553,3 +1553,13 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] 為 buildFigureReferenceNotes 補單元測試：新增 `backend/test/figureReferenceNotes.test.ts`，涵蓋空陣列回 null、逐圖 1-indexed 行、caption→context→`(無圖說文字)` 的優先序 fallback、以及說明用的 header/footer 包裹（行數）。純後端、僅新增測試、不改產品程式碼。
   - 修改說明（2026-06-25）：新增 `backend/test/figureReferenceNotes.test.ts`，4 個測試以 `makeFigure()` helper 構造符合 `FigureEntry` 型別的測試資料，涵蓋上述各案例（caption 為空白 `'   '` 時 trim 後 fallback 到 context、caption/context 皆 null 時用 `(無圖說文字)`；單圖時總行數為 header+1+footer=3）。import 連帶 `storage`/`openai`/`logger` 無副作用問題；以 `tsx --test` 直跑驗證 4 個測試全通過；backend typecheck 通過。未改動產品程式碼。分支 `test/figure-reference-notes`，已 merge 回 master。
 
+## 掃描摘要（2026-06-25 第五十二輪）
+
+- TODO 唯一未完成項目（formatDurationMs i18n）仍暫緩（方案待使用者確認）。後端可獨立測試的純函式缺口見底，本輪轉向前端，找「純計算但未 export 故無法測」的可測性缺口。
+- 觀察：`frontend/src/components/slide/buildGsapTimeline.ts` 內的 `panDistance` 與 `transformFromTo` 為純計算（不碰 GSAP/DOM），但未 export 且同檔 import `gsap`（node 測試環境 import gsap 風險未知），故無法獨立測試；兩者含真實的預設值邏輯（`fromScale ?? 1`、zoom-in 預設 to `1.08`、pan 距離 fallback `3`、各方向軸/正負號）值得測。
+
+## 新增可執行項目（2026-06-25 第五十二輪）
+
+- [x] 抽出可測的投影片 transform 純函式並補測試：把 `buildGsapTimeline.ts` 內的 `panDistance`/`transformFromTo` 抽到新的、無 GSAP 相依的 `frontend/src/components/slide/slideTransforms.ts`，`buildGsapTimeline` 改 import 之；新增 `slideTransforms.test.ts` 涵蓋 pan 距離 fallback、zoom 預設/覆寫、各 pan 方向軸與正負號、overlay 型別回 null。純前端、行為不變、低風險。
+  - 修改說明（2026-06-25）：新增無 GSAP 相依的 `slideTransforms.ts`（export `panDistance`/`transformFromTo`，僅 import 型別），`buildGsapTimeline.ts` 移除本地兩函式與不再使用的 `SlideAnimationEffect` import、改 import `transformFromTo`（行為不變）。新增 `slideTransforms.test.ts` 6 個測試（distancePct 缺/NaN/Infinity→3、有限值含 0、fade-in、zoom 預設 1→1.08 與 1.08→1、顯式 scales、四個 pan 方向的 x/yPercent 正負、text-callout/pointer/highlight-box 回 null）。frontend typecheck 通過、全部 299 個前端測試 + i18n 對等 21 個全通過。分支 `refactor/extract-slide-transforms`，已 merge 回 master。
+
