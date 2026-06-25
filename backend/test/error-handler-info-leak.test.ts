@@ -51,6 +51,27 @@ test('global error handler keeps the raw error message outside production for de
   });
 });
 
+test('global error handler hides the raw message for any 5xx (e.g. 502) in production', async () => {
+  await withNodeEnv('production', async () => {
+    const app = await buildApp();
+    app.get('/__test-throw-502', async () => {
+      const err = new Error(SENSITIVE_MESSAGE) as Error & { statusCode: number };
+      err.statusCode = 502;
+      throw err;
+    });
+    try {
+      const res = await app.inject({ method: 'GET', url: '/__test-throw-502' });
+      assert.equal(res.statusCode, 502);
+      const body = res.json() as { error: { code: string; message: string } };
+      assert.equal(body.error.code, 'INTERNAL_ERROR');
+      assert.doesNotMatch(body.error.message, /ENOENT|storage|secret-pdf-id/);
+      assert.equal(body.error.message, '系統發生未預期的錯誤，請稍後再試');
+    } finally {
+      await app.close();
+    }
+  });
+});
+
 test('global error handler still returns a known error\'s own message for a non-500 status in production', async () => {
   await withNodeEnv('production', async () => {
     const app = await buildApp();
