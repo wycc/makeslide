@@ -1598,6 +1598,19 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 補充（第五十六輪後）：部分 legacy `*_NOT_FOUND`（PAGE_IMAGE/TEXT/SCRIPT/AUDIO_NOT_FOUND、COVER_NOT_READY、VIDEO/OUTLINE_NOT_FOUND）已於第五十六輪透過後端 `normalizeErrorCode` 接線改為送出 `RESOURCE_NOT_FOUND`，故此 pattern 項目的涵蓋面縮小，主要剩 QUIZ/POLL/VERSION/FIGURE/SKILL_NOT_FOUND 等未被 normalize 的碼。
   - 修改說明（2026-06-25 第五十七輪）：先核實剩餘未 normalize 的 `*_NOT_FOUND` 碼（QUIZ/POLL/VERSION/FIGURE/SKILL/REGENERATE_JOB/ADD_PAGES_JOB_NOT_FOUND）之後端 message **全為英文**（'Quiz X not found' 等），確認原「會覆蓋具體中文 message」的疑慮不成立、此 pattern 為純改善（英文洩漏→友善中文），故逕行實作。在 `mapApiErrorToHumanMessage` 精確查表後、fallback 前加 `if (err.code.endsWith('_NOT_FOUND')) return RESOURCE_NOT_FOUND_HINT`；抽出型別安全常數 `RESOURCE_NOT_FOUND_HINT`（因 tsconfig `noUncheckedIndexedAccess`，`ERROR_HINTS.NOT_FOUND` 索引型別含 undefined）供 `ERROR_HINTS.NOT_FOUND` 與 fallback 共用。新增 2 測試（QUIZ/FIGURE_NOT_FOUND → 通用訊息、PDF_NOT_FOUND 仍優先用專屬 hint）。frontend typecheck 通過、全部 304 個前端測試 + i18n 對等 22 個全通過。分支 `feat/not-found-pattern-fallback`，已 merge 回 master。
 
+## 掃描摘要（2026-06-25 第五十八輪）
+
+- 檢視 `mapApiErrorToHumanMessage` 的**採用情況**，發現結構問題：該映射函式（第 54–57 輪改進的 `ERROR_HINTS` 入口）**全前端僅 2 處使用**（`UploadButton`、`ImportTextPage`），而有約 **55 處** catch 區塊直接 `setError(err.message)` 顯示後端原始 message、繞過映射。意即前幾輪 ERROR_HINTS 改進的實際惠及面有限（主要是上傳/匯入入口）。直接顯示 message 的大戶：QuizBuilderPage(12)、PlayPage(9)、QualityCheckPanel(3)、PlayPageSlidePanel(3)。
+- 判斷：全面改造 55 處改用 `mapApiErrorToHumanMessage` 屬較大工程，且每處 catch 上下文不同、許多後端 message 已是中文（未必都是英文洩漏），逐點需判斷，**不適合自動 loop 單輪盲改**；列為待使用者決定的較大項目。
+- 本輪改做確定安全的測試補強：`lib/api/common.ts` 的錯誤判斷純函式僅 `isAlreadyProcessingConflict` 有測試。
+
+## 新增可執行項目（2026-06-25 第五十八輪）
+
+- [ ] （待使用者決定，較大工程）系統性採用 `mapApiErrorToHumanMessage`：目前約 55 處 catch 直接顯示後端 `err.message`、繞過錯誤訊息映射，使 ERROR_HINTS 友善訊息影響面受限。可逐區（先 QuizBuilderPage/PlayPage 等大戶）改為經 `mapApiErrorToHumanMessage` 顯示，但需逐點確認該處後端 message 是否本就中文、catch 上下文是否適用。範圍大、需產品判斷顯示風格，故不於自動 loop 逕行。
+
+- [x] 補 api/common.ts 錯誤判斷純函式測試：為 `isApiErrorBody`、`isCreditExhaustedError`、`isApiKeyMissingError` 補單元測試（`isAlreadyProcessingConflict` 已有）。純前端、僅新增測試、不改產品程式碼。
+  - 修改說明（2026-06-25）：在 `lib/api/common.test.ts` 新增 4 個測試：`isApiErrorBody`（良構 body vs null/非物件/缺 message/code 非字串）、`isCreditExhaustedError`（遍歷 `CREDIT_EXHAUSTED_ERROR_CODES` 全 7 碼為 true、其他碼/非 ApiError 為 false）、`isApiKeyMissingError`（僅 API_KEY_MISSING）。以 `tsx --test` 直跑驗證 8 個測試（原 4+4）全通過；frontend typecheck 通過。分支 `test/api-error-predicates`，已 merge 回 master。
+
 ## 掃描摘要（2026-06-25 第五十六輪）
 
 - 延續錯誤碼一致性調查，檢視後端 `errors.ts`。發現架構落差：`normalizeErrorCode`（legacy→standard 映射）**有單元測試**（`pages-api.test.ts`）卻**從未被產品程式碼呼叫**——路由實際用的 `errorResponse`（`routes/pdfs.ts`、`routes/pdfs/shared.ts` 兩份重複定義）直接送原始 code、不 normalize。導致 legacy 碼（PAGE_IMAGE_NOT_FOUND、COVER_NOT_READY、NO_FILE、INVALID_MIME 等）原樣洩漏到前端，而前端 `ERROR_HINTS` 無對應條目、顯示英文 fallback。
