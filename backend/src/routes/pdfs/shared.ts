@@ -6,6 +6,7 @@ import { nanoid } from 'nanoid';
 import { z } from 'zod';
 import { db } from '../../db';
 import { config, OPENAI_TTS_VOICES } from '../../config';
+import { normalizeErrorCode } from '../../errors';
 import {
   coverImagePath,
   coverThumbnailPath,
@@ -343,7 +344,7 @@ export const UpdateSystemAiSettingsBodySchema = z.object({
 export { RegenerateBatchBodySchema };
 
 export function errorResponse(code: string, message: string): ApiError {
-  return { error: { code, message } };
+  return { error: { code: normalizeErrorCode(code), message } };
 }
 
 export function nowIso(): string {
