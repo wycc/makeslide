@@ -1689,6 +1689,18 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] 為 mapAutoFocusResponseToEffects 補單元測試：新增 `backend/test/animationAutoFocusMap.test.ts`，涵蓋 show 過濾 + 依 line 排序、line 範圍外丟棄、同 line 去重（保留第一）、text-callout/step-list 無內容 fallback highlight-box、pointer 僅 xPct/yPct + angle、box 座標/尺寸 clamp、effect 骨架（target/start/ease/startTrigger/id）與 exitDuration clamp。純後端、僅新增測試、不改產品程式碼。
   - 修改說明（2026-06-25）：新增 `backend/test/animationAutoFocusMap.test.ts`，8 個測試。以 `resp()`/`box()` helper 構造已驗證型別的輸入（函式不再 validate，故 `as unknown as AutoFocusAiResponse`）。clamp 以 `xPct:200→95`、`yPct:-5→0`、`widthPct:1→5`、`heightPct:999→100` 驗證 box 範圍；id 以 `/^ai-focus-2-/` match（含 `crypto.randomUUID()` 不可預測尾段）；exitDuration `99999` 驗證被 clamp。以 `tsx --test` 直跑驗證 8 個測試全通過；backend typecheck 通過。分支 `test/auto-focus-map`，已 merge 回 master。
 
+## 掃描摘要（2026-06-25 第六十七輪）
+
+- 可在 sandbox 測試的純函式接近枯竭（`llmUsage` 已有測試、`animationAutoFocus` 純函式上輪已測、worker 多受 native module 限制）。改檢視測試「執行流程」本身。
+- **重要發現**：此為 npm workspaces monorepo，root `package.json` 的 `test` script 只跑 backend（`npm --workspace backend test`）——前端的 **323 個** node:test 從未被 `npm test` 執行，是「孤兒測試」（typecheck 有涵蓋前端、test 沒有）。且 `frontend/package.json` 原本連 `test` script 都沒有，亦無 `tsx` 顯式依賴（既有前端測試靠 workspace hoisting 的 tsx 跑）。
+
+## 新增可執行項目（2026-06-25 第六十七輪）
+
+- [x] 前端 workspace 新增 test script：在 `frontend/package.json` 加 `"test": "../scripts/with-node-env.sh tsx --test 'src/**/*.test.ts'"`，提供前端測試執行入口（先前完全沒有）。tsx 靠 workspace hoisting 解析（與既有前端測試跑法一致）。低風險。
+  - 修改說明（2026-06-25）：`frontend/package.json` 於 `typecheck` 後新增 `test` script。以 `npx tsx --test 'src/**/*.test.ts'` 驗證 glob 涵蓋全部 **323 個前端測試**（4 suites）全通過；script 內容與 backend 對稱。分支 `chore/frontend-test-script`，已 merge 回 master。
+
+- [ ] （待處理，涉 CI 行為變更 / npm install）把前端測試納入 root `npm test` 並補 frontend tsx 顯式依賴：① root `package.json` 的 `test` 改為同時跑 backend 與 frontend workspace（目前只跑 backend，前端 323 測試未納入 CI）；② 為 `frontend/package.json` 補 `tsx` devDependency（目前靠 hoisting，非顯式）使依賴正確。因 ① 改變 CI 行為、② 需 `npm install`，且 sandbox 的 `with-node-env.sh` 環境無法完整驗證 `npm test`，留待正式環境處理或使用者確認後再做。
+
 ## 掃描摘要（2026-06-25 第五十六輪）
 
 - 延續錯誤碼一致性調查，檢視後端 `errors.ts`。發現架構落差：`normalizeErrorCode`（legacy→standard 映射）**有單元測試**（`pages-api.test.ts`）卻**從未被產品程式碼呼叫**——路由實際用的 `errorResponse`（`routes/pdfs.ts`、`routes/pdfs/shared.ts` 兩份重複定義）直接送原始 code、不 normalize。導致 legacy 碼（PAGE_IMAGE_NOT_FOUND、COVER_NOT_READY、NO_FILE、INVALID_MIME 等）原樣洩漏到前端，而前端 `ERROR_HINTS` 無對應條目、顯示英文 fallback。
