@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | 分析並新增可執行項目（第四十輪）：盤點確認前端純 helper 與後端測試覆蓋已大致完整、i18n 對等檢查健全；唯一明確小缺口為 apiKeyErrors.ts 無測試，新增該項；並記錄低風險清理項目近枯竭、後續高價值工作需使用者方向 | master（僅文件） |
 | 2026-06-25 | 抽出測驗進度彙總純函式：新增 `lib/quizProgress.ts` 的 `summarizeQuizProgress`（total/submitted/inProgress），QuizBuilderPage 改用之；補 3 個單元測試；typecheck + 291 前端測試全通過 | feat/quiz-progress-summary-helper（已 merge） |
 | 2026-06-25 | localStorage 存取防護一致性：reviewList 新增 `hasLocalStorage()` 守衛（get 回[]、mutators no-op）、viewerId 無 window 時回未持久化 id；各補 1 個回退測試（10 lib 測試）；typecheck + 288 前端測試全通過 | fix/localstorage-guard（已 merge） |
 | 2026-06-25 | 分析並新增可執行項目（第三十九輪）：TODO 清空、無新使用者項目，依 LOOP.md 聚焦健全性/可測性，新增 2 個低風險項目（viewerId/reviewList localStorage 存取防護一致性、抽出測驗進度彙總純函式 + 測試） | master（僅文件） |
@@ -1413,4 +1414,14 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [x] 抽出測驗進度彙總純函式：把 `QuizBuilderPage` 「測驗中的學員」面板 inline 的 `submitted / total / inProgress` 計算抽成純函式（例如 `lib/quizProgress.ts` 的 `summarizeQuizProgress(progress: SyncQuizProgress[])`），元件改用之；補單元測試涵蓋全提交/全作答中/混合/空陣列。純前端、低風險。
   - 修改說明（2026-06-25）：新增 `frontend/src/lib/quizProgress.ts`：純函式 `summarizeQuizProgress(progress)` 回傳 `{ total, submitted, inProgress }`（`QuizProgressSummary` 介面）。`QuizBuilderPage` 的彙總行改用之（`formatMessage('quiz.progressSummary', { ...summarizeQuizProgress(syncQuizProgress) } as Record<string, number>)`——因 `formatMessage` 參數為 `Record<string, string|number>`，介面型別需轉型）。新增 `quizProgress.test.ts` 3 個測試（空陣列、混合、全提交/全作答中）。frontend typecheck 通過、全部 291 個前端測試 + i18n 對等 21 個全通過。分支 `feat/quiz-progress-summary-helper`，已 merge 回 master。
+
+## 掃描摘要（2026-06-25 第四十輪）
+
+- TODO 清空且無新使用者項目。經本輪盤點：**前端純 helper 測試覆蓋已大致完整**（lib 與 pages/play 的純函式如 relativeTime、reviewList、viewerId、quizProgress、notebookTabs、reportSummary、computeLineDiff、formatters、playbackReadiness、shuffleArray 等皆有測試）；後端有 125 個測試檔、覆蓋廣。`i18n.test.ts` 已以 `deepEqual(sortedKeys)` 完整比對兩語系 key 集合（非僅數量），對等性檢查健全。
+- 唯一明確的小覆蓋缺口：`backend/src/services/apiKeyErrors.ts` 的 `isApiKeyMissingError`（含 `instanceof` 與 `code==='API_KEY_MISSING'` duck-typing 兩分支）尚無測試；此模組無 DB 相依，可用 `node --import tsx` 直跑（不受後端整套測試於 sandbox timeout 影響）。
+- 說明：明顯的低風險清理/補測試項目已接近枯竭；後續更高價值的工作（新功能）可能需要使用者提供方向。
+
+## 新增可執行項目（2026-06-25 第四十輪）
+
+- [ ] 為 apiKeyErrors.ts 補單元測試：新增 `backend/test/apiKeyErrors.test.ts`（或就近放置），測試 `isApiKeyMissingError`：對 `new ApiKeyMissingError('openai')` 回 true、對帶 `{ code: 'API_KEY_MISSING' }` 的純物件回 true、對一般 Error / null / 無關物件回 false；並驗證 `ApiKeyMissingError` 的 `code`/`provider`/預設 message。因該模組無 DB 相依，測試可用 `node --import tsx --test` 直跑驗證（不受後端整套 sandbox timeout 影響）。純後端、僅新增測試。
 
