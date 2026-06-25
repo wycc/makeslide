@@ -1460,6 +1460,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] TTS 語音性別標籤 i18n（第七十輪，2026-06-26 掃描新增並完成）：`lib/ttsVoices.ts` 的 `geminiVoiceLabel`/`openaiVoiceLabel` 將語音性別後綴硬編成中文「（男）/（女）」，於英文介面的語音選單（`SettingsPage` 雙主持人聲音、`TtsDialog`、`PromptModal`）洩漏未翻譯文字。改為新增**必填** `genderLabels { male, female }` 參數，6 處呼叫端各以 `useI18n()` 的 `t()` 組出 label 傳入。
   - 修改說明（2026-06-26）：兩個 label helper 加 `VoiceGenderLabels` 參數（`male`/`female`），移除硬編「男/女」。新增共用鍵 `tts.voiceGenderMale`/`tts.voiceGenderFemale`（zh-TW=男/女、en=M/F）。呼叫端 `SettingsPage`（4 處）、`TtsDialog`（1 處）、`PromptModal`（1 處）各建一個 `voiceGenderLabels` 物件傳入。更新 `ttsVoices.test.ts` 既有中文斷言改傳 label、並各加一筆英文 label 案例。typecheck 通過、`ttsVoices.test.ts` 與 i18n 對等測試共 40 個全通過。純前端、低風險。分支 `feat/voice-gender-label-i18n`，已 merge 回 master。
 
+- [x] useSlideManagement 訊息 i18n（第七十一輪，2026-06-26 掃描新增並完成）：`pages/play/useSlideManagement.ts` 有 7 處硬編中文——刪除頁的 `window.confirm`（「確定刪除第 N 頁？」）與 6 個 fallback 訊息（新增/刪除/搬移/替換圖片/封面無圖/更新封面失敗），於英文介面洩漏未翻譯文字。改為以 `useI18n()` 取得 `t()`，新增 `play.slideManagement.*` 鍵（zh-TW/en）並對 confirm 用 `{page}` 插值。
+  - 修改說明（2026-06-26）：hook 引入 `useI18n()`，7 處字串改走 `t()`；新增 7 個 `play.slideManagement.*` 對等鍵（deleteConfirm/addFailed/deleteFailed/moveFailed/replaceImageFailed/coverNoImage/coverUpdateFailed）。`t` 在 `useI18n` 內以 `useCallback([language])` 記憶化為穩定參考，故安全加入各 `useCallback` 依賴陣列。typecheck 通過、i18n 對等測試 28 個全通過（確認 zh-TW/en 鍵集合一致）。純前端、低風險。分支 `feat/slide-management-i18n`，已 merge 回 master。
+
 ## 掃描摘要（2026-06-25 第四十三輪）
 
 - 本輪 TODO 唯一未完成項目（formatDurationMs i18n）先前的實作方案被使用者否決，已標記暫緩。經詢問使用者後，本輪改為「為後端 `logSanitizer.ts` 補單元測試」。
@@ -1736,3 +1739,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - 時間：2026-06-26
 - 分支：`feat/voice-gender-label-i18n`（已 merge 回 master）
 - 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 74 個完成項目（74/100，未達上限）。
+## 工作記錄（第七十一輪，2026-06-26）
+
+- 工作內容：既有未完成項目仍僅 2 個皆需使用者裁示，依 LOOP.md 改為分析新增可執行項目。延續 i18n 主題，發現 `pages/play/useSlideManagement.ts` 有 7 處硬編中文（刪除頁 `window.confirm` 與 6 個 fallback 錯誤/狀態訊息），於英文介面洩漏未翻譯文字。當輪新增並完成：hook 引入 `useI18n()`，新增 7 個 `play.slideManagement.*` 對等鍵（zh-TW/en），confirm 以 `{page}` 插值；`t` 因在 `useI18n` 內 `useCallback([language])` 記憶化故安全加入各 `useCallback` 依賴。typecheck 通過、i18n 對等測試 28 個全通過。純前端、低風險。
+- 時間：2026-06-26
+- 分支：`feat/slide-management-i18n`（已 merge 回 master）
+- 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 75 個完成項目（75/100，未達上限）。
