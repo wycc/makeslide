@@ -1463,6 +1463,11 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] useSlideManagement 訊息 i18n（第七十一輪，2026-06-26 掃描新增並完成）：`pages/play/useSlideManagement.ts` 有 7 處硬編中文——刪除頁的 `window.confirm`（「確定刪除第 N 頁？」）與 6 個 fallback 訊息（新增/刪除/搬移/替換圖片/封面無圖/更新封面失敗），於英文介面洩漏未翻譯文字。改為以 `useI18n()` 取得 `t()`，新增 `play.slideManagement.*` 鍵（zh-TW/en）並對 confirm 用 `{page}` 插值。
   - 修改說明（2026-06-26）：hook 引入 `useI18n()`，7 處字串改走 `t()`；新增 7 個 `play.slideManagement.*` 對等鍵（deleteConfirm/addFailed/deleteFailed/moveFailed/replaceImageFailed/coverNoImage/coverUpdateFailed）。`t` 在 `useI18n` 內以 `useCallback([language])` 記憶化為穩定參考，故安全加入各 `useCallback` 依賴陣列。typecheck 通過、i18n 對等測試 28 個全通過（確認 zh-TW/en 鍵集合一致）。純前端、低風險。分支 `feat/slide-management-i18n`，已 merge 回 master。
 
+- [x] usePromptAndSource 訊息 i18n（第七十二輪，2026-06-26 掃描新增並完成）：`pages/play/usePromptAndSource.ts` 有 7 處硬編中文 UI 訊息（提示詞已更新／更新提示詞失敗／請先輸入來源文字內容／已新增文字來源／新增文字來源失敗／已新增 PDF 來源／新增 PDF 來源失敗），於英文介面洩漏。改為以 `useI18n()` 取得 `t()`，新增 `play.promptSource.*` 鍵（zh-TW/en）。
+  - 修改說明（2026-06-26）：hook 引入 `useI18n()`，7 處狀態/錯誤/驗證訊息改走 `t()`；新增 7 個 `play.promptSource.*` 對等鍵。`t` 加入各 `useCallback` 依賴。**刻意不動**送往後端/LLM 的內容預設值。typecheck 通過、i18n 對等測試 28 個全通過。純前端、低風險。分支 `feat/prompt-source-i18n`，已 merge 回 master。
+
+- [ ] （持續，play hooks UI 訊息 i18n 收尾）多個 `pages/play/use*.ts` hook 仍有硬編中文 UI 訊息待 i18n（已完成 `useSlideManagement`、`usePromptAndSource`）。待處理：`useChatAndImageEdit`、`useImageStyle`、`usePagePolls`、`usePageAsk`、`useScriptEditor`、`useVersionHistory`、`useVideoGeneration`、`useRegeneration`。**注意**：僅翻譯 UI 狀態/錯誤/確認/驗證訊息；送往後端或 LLM 的「內容預設值」（如預設提示詞、預設投票選項「同意/不同意」、預設圖片風格字串）**不可翻譯**，以免改變行為。每輪挑 1 個 hook 以分支獨立完成、跑 typecheck 與 i18n 對等測試。
+
 ## 掃描摘要（2026-06-25 第四十三輪）
 
 - 本輪 TODO 唯一未完成項目（formatDurationMs i18n）先前的實作方案被使用者否決，已標記暫緩。經詢問使用者後，本輪改為「為後端 `logSanitizer.ts` 補單元測試」。
@@ -1745,3 +1750,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - 時間：2026-06-26
 - 分支：`feat/slide-management-i18n`（已 merge 回 master）
 - 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 75 個完成項目（75/100，未達上限）。
+## 工作記錄（第七十二輪，2026-06-26）
+
+- 工作內容：延續 play hooks UI 訊息 i18n 收尾，完成 `pages/play/usePromptAndSource.ts` 的 7 處硬編中文 UI 訊息（提示詞更新狀態、空來源驗證、文字/PDF 來源新增狀態與其 fallback 錯誤）。改用 `useI18n()`，新增 7 個 `play.promptSource.*` 對等鍵（zh-TW/en），`t` 加入各 `useCallback` 依賴。刻意保留送往後端/LLM 的內容預設值不翻譯。同時於 TODO 新增一個「持續」追蹤項，列出尚待 i18n 的 play hooks 與「內容預設值不可翻譯」的注意事項。typecheck 通過、i18n 對等測試 28 個全通過。純前端、低風險。
+- 時間：2026-06-26
+- 分支：`feat/prompt-source-i18n`（已 merge 回 master）
+- 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 76 個完成項目（76/100，未達上限）。
