@@ -69,6 +69,42 @@ test('POST /api/pdfs/:id/pages/:n/generate-poll returns draft question for owner
   }
 });
 
+function mockLlmOptionsOnly(): void {
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async () => ({
+          choices: [{ message: { content: JSON.stringify({ options: ['是', '否'] }) }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 20, completion_tokens: 10, total_tokens: 30 },
+        }),
+      },
+    },
+  } as never);
+}
+
+test('POST generate-poll with a provided question keeps it and only generates options', async () => {
+  const id = `gpoll-q-${Date.now()}`;
+  seedPdf(id);
+  mockLlmOptionsOnly();
+  const app = await buildApp();
+  try {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${id}/pages/1/generate-poll`,
+      headers: { ...OWNER_HEADERS, 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '你贊成這個論點嗎？' }),
+    });
+    assert.equal(res.statusCode, 200, `expected 200 but got ${res.statusCode}: ${res.body.slice(0, 200)}`);
+    const body = res.json() as { question: string; options: string[] };
+    assert.equal(body.question, '你贊成這個論點嗎？', 'should keep the provided question verbatim');
+    assert.deepEqual(body.options, ['是', '否']);
+  } finally {
+    setOpenAIClientForTest(null);
+    cleanup(id);
+    await app.close();
+  }
+});
+
 test('POST /api/pdfs/:id/pages/:n/generate-poll returns 404 for unknown PDF', async () => {
   const app = await buildApp();
   try {

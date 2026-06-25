@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | AI 草稿投票題支援已輸入題目：`generate-poll` 端點新增可選 body `question`——有輸入則只依本頁內容生成選項並保留原題（新 GeneratedOptionsSchema + 專用 prompt），無輸入維持整題生成；前端 `generatePollDraft`/`handleGeneratePollDraft` 傳入目前 pollQuestion；新增 1 個後端測試；backend+frontend typecheck + 277 前端測試通過（後端測試 sandbox timeout，改 typecheck+邏輯核對） | feat/poll-draft-options-for-given-question（已 merge） |
 | 2026-06-25 | 複製/匯出文字國際化：QuizBuilderPage 複製題目「解說：」用新增 `quiz.exportExplanationLabel`；PlayPageHeader 逐字稿 markdown 匯出「## 第 N 頁」改用既有 `play.common.pagePrefix/pageSuffix`；新增 1 個 key；typecheck + 277 前端測試 + i18n 對等全通過 | feat/copy-export-text-i18n（已 merge） |
 | 2026-06-25 | App.tsx 設定載入畫面國際化：載入畫面「載入設定中…」改用 `t('app.loadingSettings')`（App 新增 useI18n）；新增 1 個 key；grep 確認 App 無中文；typecheck + 277 前端測試 + i18n 對等全通過 | feat/app-loading-i18n（已 merge） |
 | 2026-06-25 | PageTimingChips tooltip 文字國際化：`timingTitle()` 改接 labels 參數，元件以 `t('play.timing.tooltip.*')` 傳入（耗時/原因/開始/結束/錯誤/尚無紀錄/冒號）；SLA、run 保留字面；新增 7 個 key；grep 確認無中文；typecheck + 277 前端測試 + i18n 對等全通過 | feat/timing-tooltip-i18n（已 merge） |
@@ -1352,3 +1353,6 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [x] 複製/匯出文字國際化：`QuizBuilderPage` 複製題目時的「解說：」標籤與 `PlayPageHeader` 逐字稿全文 markdown 匯出的「## 第 N 頁」標頭抽成 i18n key（沿用既有 `play.common.pagePrefix/pageSuffix` 或新增），使匯出內容依介面語言產生；補 zh-TW/en 並跑 i18n 對等測試。純前端、低風險。
   - 修改說明（2026-06-25）：`QuizBuilderPage` 複製題目文字的「解說：」改用新增的 `quiz.exportExplanationLabel`（zh「解說：」/en「Explanation: 」）；`PlayPageHeader` 複製全文逐字稿的 markdown 標頭「## 第 N 頁」改用既有 `play.common.pagePrefix/pageSuffix`（zh「## 第 N 頁」/en「## Page N」），無需新增 page key。共新增 1 個 key（zh-TW/en 各 1）。兩處皆在元件 callback、`t` 可用。frontend typecheck 通過、全部 277 個前端測試 + i18n 對等 21 個全通過。分支 `feat/copy-export-text-i18n`，已 merge 回 master。
+
+- [x] AI 草稿投票題的地方，如果問題有輸入，那就產生問題的選項。否則根據本頁資訊產生問題和選項。
+  - 修改說明（2026-06-25）：`POST /api/pdfs/:id/pages/:n/generate-poll`（`generate-poll.ts`）新增可選 body `{ question?: string }`。若帶非空 `question`：以新 `GeneratedOptionsSchema`（只驗 `options` 2–4）與專用 system prompt「依投影片內容為『這道題目』產生互斥、貼題、不含答案提示的選項」，回傳 `{ question: <原輸入>, options }`；若無 `question`：維持原行為（同時產生題目與選項）。前端 `generatePollDraft(id, n, question?)` 在有輸入時以 JSON body 帶 `question`；`usePagePolls.handleGeneratePollDraft` 改傳目前 `pollQuestion`（deps 補 `pollQuestion`），故教師若已在投票設定輸入題目，按「AI 草稿」只補選項、否則整題生成。`generate-poll.test.ts` 新增「帶 question 只生成選項並保留原題」測試（mock options-only）。backend + frontend typecheck 通過、全部 277 個前端測試通過；後端測試於 sandbox 仍 timeout（與前數輪一致），改以 typecheck + 邏輯核對確認。分支 `feat/poll-draft-options-for-given-question`，已 merge 回 master。
