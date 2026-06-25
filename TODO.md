@@ -1971,9 +1971,14 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`HomePage.tsx` 加入 `title_desc` 排序模式（`compareByTitleDesc = compareByTitle(b, a)`，沿用 localeCompare/numeric/id fallback），export `getComparatorForSortMode`；排序下拉於 titleAsc 後插入 titleDesc option；zh-TW/en 各新增 `home.sort.titleDesc`；`HomePage.sort.test.ts` +2 測試（反向結果、id fallback）。前端 343 測試 + typecheck 全通過。分支 `feat/home-sort-title-desc`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 2 個完成項目（2/100，未達上限）。
 
+- [x] 播放時間顯示支援小時：`formatTime` 先前一律 `MM:SS`，剩餘時間超過 1 小時時顯示成 `75:30` 等難讀格式。改為 `h > 0` 時回傳 `H:MM:SS`，未滿 1 小時維持 `MM:SS`；無效輸入仍回 `00:00`。
+  - 修改說明（2026-06-26）：`formatters.ts` 的 `formatTime` 加入小時計算，`h > 0` 時回傳 `H:MM:SS`（分秒補零、時不補零）；三處顯示（目前/總長/速度校正剩餘）一致受惠。`formatters.test.ts` 新增 2 個測試涵蓋臨界值與無效輸入（此函式先前無測試）。前端 345 測試 + typecheck 全通過。分支 `feat/format-time-hours`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 3 個完成項目（3/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
 | ---- | -------- | ---- |
 | 2026-06-26 | 剩餘播放時間隨速度校正：新增 `adjustRemainingForSpeed(seconds, rate)` 純函式並於 `PlayPageSlidePanel` 剩餘時間顯示套用；非 1× 倍速 tooltip 改用 `play.header.timeRemainingAtSpeed`；formatters.test.ts +2 測試；i18n zh-TW/en 各 +1 key | feat/remaining-time-speed-adjusted（已 merge） |
 | 2026-06-26 | 首頁新增「標題 Z-A」排序：`SortMode`/`SORT_MODES` 加 `title_desc`，新增 `compareByTitleDesc` 並 export `getComparatorForSortMode`；下拉加 option；i18n zh-TW/en 各 +1 key；HomePage.sort.test.ts +2 測試 | feat/home-sort-title-desc（已 merge） |
+| 2026-06-26 | 播放時間顯示支援小時：`formatTime` 在 ≥1 小時時改回傳 `H:MM:SS`（未滿則維持 `MM:SS`）；formatters.test.ts +2 測試（先前無覆蓋） | feat/format-time-hours（已 merge） |

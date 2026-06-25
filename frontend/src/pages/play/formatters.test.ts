@@ -11,6 +11,7 @@ import {
   formatRegenerateJobStatus,
   formatRegenerateStepStatus,
   formatRegenSelectedPagesSummary,
+  formatTime,
   sumCompletedDurationMs,
 } from './formatters';
 
@@ -63,6 +64,21 @@ test('sumCompletedDurationMs returns null when no completed duration exists', ()
     ]),
     null,
   );
+});
+
+test('formatTime renders MM:SS below an hour and H:MM:SS at or above an hour', () => {
+  assert.equal(formatTime(0), '00:00');
+  assert.equal(formatTime(9), '00:09');
+  assert.equal(formatTime(75), '01:15');
+  assert.equal(formatTime(3599), '59:59');
+  assert.equal(formatTime(3600), '1:00:00');
+  assert.equal(formatTime(4515), '1:15:15');
+  assert.equal(formatTime(36_000), '10:00:00');
+});
+
+test('formatTime guards against invalid or negative input', () => {
+  assert.equal(formatTime(Number.NaN), '00:00');
+  assert.equal(formatTime(-5), '00:00');
 });
 
 test('adjustRemainingForSpeed divides audio seconds by the playback rate', () => {
