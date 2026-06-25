@@ -1583,3 +1583,16 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] 為 INVALID_REQUEST 補友善錯誤訊息：在 `ERROR_HINTS` 新增 `INVALID_REQUEST` 的中文 title/message/nextStep，使 `mapApiErrorToHumanMessage` 不再對最常見的請求驗證錯誤顯示後端英文原文；補一個測試斷言其映射到友善訊息且非原始字串。純前端、低風險。
   - 修改說明（2026-06-25）：在 `lib/api/common.ts` 的 `ERROR_HINTS` 最前面（對應文件順序）新增 `INVALID_REQUEST: { title: '請求格式不正確', message: '送出的資料未通過驗證。', nextStep: '請檢查輸入內容後重新送出。' }`；於 `api.error-mapping.test.ts` 新增測試斷言 `INVALID_REQUEST` 映射 title 為「請求格式不正確」、message 不等於後端原文 'Invalid body' 且有 nextStep。frontend typecheck 通過、全部 301 個前端測試（原 299+2）+ i18n 對等 22 個全通過。分支 `fix/invalid-request-human-message`，已 merge 回 master。
 
+## 掃描摘要（2026-06-25 第五十五輪）
+
+- 延續第五十四輪，系統性比對後端 `errorResponse('CODE',…)` 高頻 client-facing 碼與前端 `ERROR_HINTS` 覆蓋。高頻清單：INVALID_REQUEST(199)、FORBIDDEN(135)、PDF_NOT_FOUND(125)、PAGE_NOT_FOUND(42)、INTERNAL_ERROR(33)、INVALID_STATE(21)、NOT_FOUND(16)、ADMIN_REQUIRED(8)…。
+- 抽查 message 內容後判定：`NOT_FOUND`（16 次）的 message **全為英文**（'PDF not found'、'Comment not found'）且無前端 hint → 純改善缺口，補。`ADMIN_REQUIRED`（全中文具體，如「只有 admin 可以刪除帳號」）與部分 `FORBIDDEN`（中文具體，如「只有簡報擁有者可以建立分享連結」）若補固定 hint 反而會**覆蓋掉後端的具體中文訊息**，故刻意不補、保留 message fallback。
+- 後續觀察：`mapApiErrorToHumanMessage` 為精確 key 查表、無 pattern fallback；眾多 `*_NOT_FOUND`（QUIZ_NOT_FOUND/POLL_NOT_FOUND/VERSION_NOT_FOUND/PAGE_*_NOT_FOUND/FIGURE_NOT_FOUND…）多帶英文 message。可評估在 fallback 前加「以 `_NOT_FOUND` 結尾 → 通用『找不到資源』」規則一次涵蓋，但屬行為變更（會覆蓋具體性），列為待評估，未逕行。
+
+## 新增可執行項目（2026-06-25 第五十五輪）
+
+- [x] 為通用 NOT_FOUND 補友善錯誤訊息：在 `ERROR_HINTS` 新增 `NOT_FOUND` 的中文 title/message/nextStep，使最常見的通用「找不到」錯誤不再對使用者顯示後端英文原文（'PDF not found' 等）；補一個測試。`ADMIN_REQUIRED`/具體 `FORBIDDEN` 因 message 已是具體中文，刻意保留 fallback、不補固定 hint。純前端、低風險。
+  - 修改說明（2026-06-25）：在 `ERROR_HINTS` 的 `PAGE_NOT_FOUND` 後新增 `NOT_FOUND: { title: '找不到資源', message: '要求的資料不存在或已被移除。', nextStep: '請重新整理後再試，或確認操作對象是否仍存在。' }`；於 `api.error-mapping.test.ts` 新增測試斷言 `NOT_FOUND` 映射 title「找不到資源」、message 不等於後端原文 'PDF not found' 且有 nextStep。frontend typecheck 通過、全部前端測試（含 error-mapping 5 個）+ i18n 對等 22 個全通過。分支 `fix/not-found-human-message`，已 merge 回 master。
+
+- [ ] （待評估）`*_NOT_FOUND` pattern fallback：在 `mapApiErrorToHumanMessage` 精確查表失敗後，對「以 `_NOT_FOUND` 結尾」的未知碼回傳通用「找不到資源」訊息，一次涵蓋 QUIZ_NOT_FOUND/POLL_NOT_FOUND/VERSION_NOT_FOUND/PAGE_*_NOT_FOUND/FIGURE_NOT_FOUND 等（這些多帶英文 message）。屬行為變更（會以通用訊息覆蓋後端具體 message），需確認可接受性後再做。
+
