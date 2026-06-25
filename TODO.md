@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | AI 導師跨頁引用強制化：`ask` 端點系統提示詞新增「【引用規則（務必遵守）】」，回答用到「學生目前所在頁」以外頁面資訊時必須主動以括號標示頁碼（如「（第 3 頁）」），引用原始來源標示「（原始來源）」；page-ask 測試加 2 條斷言；backend typecheck 通過（後端測試 sandbox timeout，改以 typecheck + 提示詞字串核對確認） | feat/ai-tutor-mandatory-cross-page-citation（已 merge） |
 | 2026-06-25 | PlayPage.tsx 行動分頁與狀態畫面國際化：行動版「播放／問答」分頁、新投票 aria-label、四個全螢幕狀態畫面（invalid id/載入/無頁面/產生中）、圖片產生中浮層改用 t()；新增 11 個 `play.mobileTab.*`/`play.status.*` key（對等總數 1750）；錯誤訊息字串依項目允許延後；typecheck + i18n 對等 21 全通過 | feat/playpage-mobile-status-i18n（已 merge） |
 | 2026-06-25 | RemoteControllerPage 殘留中文國際化：投影片 alt「第 N 頁」與投票「N 票」抽成 3 個 `remote.*` key（slideAltPrefix/Suffix、votesSuffix）；grep 確認無殘留中文；zh-TW/en 各補 3 key；typecheck + i18n 對等全通過 | feat/remote-controller-i18n（已 merge） |
 | 2026-06-25 | notebook 分頁鍵盤 Home/End 跳首末分頁：新增純函式 `getEdgeNotebookTab`，`handleTabKeyDown` 支援 Home/End（跳首/末分頁並移動焦點，沿用 roving tabindex）；補 1 單元測試；無新 i18n key；typecheck + 275 前端測試 + i18n 對等全通過 | feat/notebook-home-end-keys（已 merge） |
@@ -1276,4 +1277,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [x] notebook 分頁鍵盤 Home/End 跳首末分頁：延續 phase 3 的 ARIA roving tabindex，在 `handleTabKeyDown` 支援 `Home`（跳第一個分頁）與 `End`（跳最後一個分頁）並移動焦點；抽出/沿用純函式取首末分頁 id 並補單元測試。純前端 a11y 小增強。
   - 修改說明（2026-06-25）：新增純函式 `getEdgeNotebookTab('first'|'last')`（`notebookTabs.ts`）回傳首/末分頁 id；`PlayPageSidebar` 的 `handleTabKeyDown` 改為依 `ArrowRight/ArrowLeft/Home/End` 計算目標分頁，命中才 `preventDefault` 並切換 + 移動焦點（沿用 roving tabindex，焦點限定分頁列故不與翻頁衝突）。補 1 個 `getEdgeNotebookTab` 單元測試（notebookTabs 測試共 7 個）；無新增 i18n key。frontend typecheck 通過、全部 275 個前端測試 + i18n 對等 21 個全通過。分支 `feat/notebook-home-end-keys`，已 merge 回 master。
-- [ ] AI 導師問這一頁時，回答時如果引用其它頁的資訊，要主動加入引用。
+- [x] AI 導師問這一頁時，回答時如果引用其它頁的資訊，要主動加入引用。
+  - 修改說明（2026-06-25）：`POST /api/pdfs/:id/pages/:n/ask`（`page-operations.ts`）的 corpus 早已把每頁標為「# 第 N 頁」並標示「（學生目前所在頁）」，系統提示詞也已提「必要時可跨頁說明並標示頁碼／引用內容時以括號標示來源」，但語氣為「必要時」「引用時」屬非強制。強化系統提示詞為**強制引用規則**：新增「【引用規則（務必遵守）】只要回答用到『學生目前所在頁』以外其他頁面的資訊，就必須在該處主動以括號標示來源頁碼（例如「（第 3 頁）」「（第 3 頁逐字稿）」），不可省略；引用原始來源全文標示「（原始來源）」；引用目前所在頁則可不標示」，並在開頭說明每頁的「# 第 N 頁」標示方式。`page-ask.test.ts` 既有「綜合全份」測試新增 2 條斷言（系統提示含「引用規則」與「學生目前所在頁…以外」）。backend typecheck 通過；後端測試於 sandbox 跑 `with-node-env.sh` 套件測試達 180s timeout 被終止（與前數輪 sandbox 限制一致），改以 backend typecheck + 核對新提示詞確含兩個斷言目標字串確認測試斷言成立。分支 `feat/ai-tutor-mandatory-cross-page-citation`，已 merge 回 master。
