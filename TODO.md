@@ -1642,6 +1642,16 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] 為 renderTextPages 純函式補測試：新增 `backend/test/renderTextPagesHelpers.test.ts`，涵蓋 `escapeXml`（五個 XML 特殊字元、`&` 先行避免雙重 escape、純文字不變）、`splitLines`（CRLF/CR 正規化、空行保留、空輸入→`['']`、trailing trim、超過 CHARS_PER_LINE 硬換行）、`toPages`（LINES_PER_PAGE 分頁、空/短清單）。純後端、僅新增測試、不改產品程式碼。
   - 修改說明（2026-06-25）：新增 `backend/test/renderTextPagesHelpers.test.ts`，8 個測試。測試頂部以註解標明 `CHARS_PER_LINE=34`/`LINES_PER_PAGE=12` 對應 src module-private 常數（固化 wrapping/分頁規格，改 src 需同步）。`escapeXml` 驗證 `&`→`&amp;` 先行（`escapeXml('&lt;')`→`'&amp;lt;'`）。以 `tsx --test` 直跑驗證 8 個測試全通過；backend typecheck 通過。分支 `test/render-text-pages-helpers`，已 merge 回 master。
 
+## 掃描摘要（2026-06-25 第六十二輪）
+
+- 嘗試續測 worker 層純函式（synthesizeAudio/generateVideo 等），但確認這些檔的 import 鏈會觸及 `better-sqlite3` native module（`NODE_MODULE_VERSION` 127 vs 147 不符，sandbox 環境問題），無法以 `tsx --test` 直跑——這也是後端整套測試在 sandbox 失敗的主因。`renderTextPages`（上輪）是少數 import 鏈不含 db 的 worker step 例外。
+- 因此改回 import 鏈乾淨的前端。發現 `frontend/src/i18n.ts` 的純函式 `normalizeLanguage`/`translate`/`normalizePlaybackSpeed` 未測（`i18n.test.ts` 只測 locale key 對等，不測這些函式）。`translate` 的 fallback 鏈（lang→zh-TW→key 本身）是缺失翻譯時的行為保證，值得測。
+
+## 新增可執行項目（2026-06-25 第六十二輪）
+
+- [x] 為 i18n 純函式補測試：新增 `frontend/src/i18n.helpers.test.ts`，涵蓋 `normalizeLanguage`（支援語言 vs 不支援/非字串/自訂 fallback）、`translate`（各語系條目 + 缺失 key 時 zh-TW→key 本身的 fallback 鏈）、`normalizePlaybackSpeed`（允許速度的 number/string、超集合/非數字/自訂 fallback）。純前端、僅新增測試、不改產品程式碼。
+  - 修改說明（2026-06-25）：新增 `frontend/src/i18n.helpers.test.ts`，6 個測試。`translate` 缺失 key 以 `'__definitely.not.a.key__' as TranslationKey` 驗證最終 fallback 回 key 本身；正常條目以 import 的 `en`/`zhTW` 比較（不硬編字串）。`normalizePlaybackSpeed` 驗證允許集合 `[0.5,0.75,1,1.25,1.5,2]`、`'2'`/`'0.75'` 字串轉換、`1.1`/`'abc'`/null/NaN fallback。以 `tsx --test` 直跑驗證 6 個測試全通過；frontend typecheck 通過。分支 `test/i18n-helpers`，已 merge 回 master。
+
 ## 掃描摘要（2026-06-25 第五十六輪）
 
 - 延續錯誤碼一致性調查，檢視後端 `errors.ts`。發現架構落差：`normalizeErrorCode`（legacy→standard 映射）**有單元測試**（`pages-api.test.ts`）卻**從未被產品程式碼呼叫**——路由實際用的 `errorResponse`（`routes/pdfs.ts`、`routes/pdfs/shared.ts` 兩份重複定義）直接送原始 code、不 normalize。導致 legacy 碼（PAGE_IMAGE_NOT_FOUND、COVER_NOT_READY、NO_FILE、INVALID_MIME 等）原樣洩漏到前端，而前端 `ERROR_HINTS` 無對應條目、顯示英文 fallback。
