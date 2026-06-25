@@ -26,6 +26,7 @@ import PromptModal from '../components/PromptModal';
 import UploadButton from '../components/UploadButton';
 import GlobalSearchBox from '../components/GlobalSearchBox';
 import { useI18n } from '../i18n';
+import { formatRelativeTime, type RelativeTimeLabels } from '../lib/relativeTime';
 import { useBudgetWarning } from '../hooks/useBudgetWarning';
 import { formatAudioDuration } from '../lib/audioDuration';
 import { getReviewItems } from '../lib/reviewList';
@@ -46,23 +47,6 @@ const VIEW_MODE_STORAGE_KEY = 'makeslide.home.viewMode';
 
 type ViewMode = 'grid' | 'list';
 
-function formatRelativeTime(iso: string): string {
-  try {
-    const diff = Date.now() - new Date(iso).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return '剛剛';
-    if (mins < 60) return `${mins} 分鐘前`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours} 小時前`;
-    const days = Math.floor(hours / 24);
-    if (days < 30) return `${days} 天前`;
-    const months = Math.floor(days / 30);
-    if (months < 12) return `${months} 個月前`;
-    return `${Math.floor(months / 12)} 年前`;
-  } catch {
-    return iso;
-  }
-}
 
 type SortMode = 'title_asc' | 'created_desc' | 'updated_desc' | 'page_count_desc' | 'audio_desc' | 'audio_asc' | 'last_played_desc';
 
@@ -209,6 +193,14 @@ export const getDefaultSortModeForCategory = (categoryFilter: string): SortMode 
 
 export default function HomePage() {
   const { t } = useI18n();
+  const relativeTimeLabels: RelativeTimeLabels = {
+    justNow: t('time.justNow'),
+    minutesSuffix: t('time.minutesSuffix'),
+    hoursSuffix: t('time.hoursSuffix'),
+    daysSuffix: t('time.daysSuffix'),
+    monthsSuffix: t('time.monthsSuffix'),
+    yearsSuffix: t('time.yearsSuffix'),
+  };
   const budgetWarning = useBudgetWarning();
   const RECENT_CATEGORY = t('home.recentCategory');
   const navigate = useNavigate();
@@ -1391,14 +1383,14 @@ export default function HomePage() {
                             )}
                             {pdf.last_played_at && (
                               <span className="ml-2 text-slate-500">
-                                {t('home.listLastPlayed').replace('{time}', formatRelativeTime(pdf.last_played_at))}
+                                {t('home.listLastPlayed').replace('{time}', formatRelativeTime(pdf.last_played_at, relativeTimeLabels))}
                               </span>
                             )}
                             {pdf.description?.trim() && (
                               <span className="ml-2 truncate text-slate-500" title={pdf.description}>— {pdf.description}</span>
                             )}
                             {pdf.updated_at && (
-                              <span className="ml-2 text-slate-600">{formatRelativeTime(pdf.updated_at)}</span>
+                              <span className="ml-2 text-slate-600">{formatRelativeTime(pdf.updated_at, relativeTimeLabels)}</span>
                             )}
                           </p>
                           {(pdf.tags ?? '').trim() && (
