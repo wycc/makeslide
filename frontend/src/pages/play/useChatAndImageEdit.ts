@@ -10,6 +10,7 @@ import {
   replaceSlideImage,
 } from '../../lib/api';
 import type { ChatMessage, PdfDetailPage } from '../../types';
+import { useI18n } from '../../i18n';
 
 const CHAT_HISTORY_REQUEST_LIMIT = 20;
 export const IMAGE_MSG_PREFIX = '[image] ';
@@ -74,6 +75,7 @@ export function useChatAndImageEdit({
   reloadDetail,
   imageEditRegionOverlayRef,
 }: UseChatAndImageEditParams): ChatAndImageEditState {
+  const { t } = useI18n();
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatBusy, setChatBusy] = useState(false);
@@ -111,7 +113,7 @@ export function useChatAndImageEdit({
       .catch((err) => {
         if (cancelled) return;
         setChatHistory([]);
-        setChatError(err instanceof ApiError ? err.message : '讀取問答紀錄失敗');
+        setChatError(err instanceof ApiError ? err.message : t('play.sidebar.qa.loadFailed'));
       })
       .finally(() => {
         if (!cancelled) setChatBusy(false);
@@ -119,7 +121,7 @@ export function useChatAndImageEdit({
     return () => {
       cancelled = true;
     };
-  }, [pdfId, currentPage?.page_number]);
+  }, [pdfId, currentPage?.page_number, t]);
 
   const hasChatInput = chatInput.trim().length > 0;
 
@@ -162,11 +164,11 @@ export function useChatAndImageEdit({
       setChatHistory((prev) => [...prev, { role: 'assistant', content: res.answer }]);
     } catch (err) {
       if (currentPageNumberRef.current !== pageNumberAtSend) return;
-      setChatError(err instanceof ApiError ? err.message : '對話失敗');
+      setChatError(err instanceof ApiError ? err.message : t('play.sidebar.qa.chatFailed'));
     } finally {
       setChatBusy(false);
     }
-  }, [pdfId, currentPage, chatInput, chatHistory, isReadOnlyProcessing]);
+  }, [pdfId, currentPage, chatInput, chatHistory, isReadOnlyProcessing, t]);
 
   const handleClearChat = useCallback(async () => {
     if (isReadOnlyProcessing) return;
@@ -178,11 +180,11 @@ export function useChatAndImageEdit({
       setChatHistory([]);
       setChatInput('');
     } catch (err) {
-      setChatError(err instanceof ApiError ? err.message : '清除問答失敗');
+      setChatError(err instanceof ApiError ? err.message : t('play.sidebar.qa.clearFailed'));
     } finally {
       setChatBusy(false);
     }
-  }, [pdfId, currentPage, isReadOnlyProcessing]);
+  }, [pdfId, currentPage, isReadOnlyProcessing, t]);
 
   const handleInpaintImage = useCallback(async () => {
     if (isReadOnlyProcessing || !pdfId || !currentPage) return;
@@ -244,7 +246,7 @@ export function useChatAndImageEdit({
     } catch (err) {
       if (currentPageNumberRef.current !== pageNumberAtSend) return;
       setChatHistory(chatHistory);
-      setChatInpaintError(err instanceof ApiError ? err.message : '修改圖片失敗');
+      setChatInpaintError(err instanceof ApiError ? err.message : t('play.sidebar.qa.imageEditFailed'));
     } finally {
       setChatInpaintBusy(false);
     }
@@ -258,6 +260,7 @@ export function useChatAndImageEdit({
     chatHistory,
     clearChatPastedImage,
     clearImageEditRegion,
+    t,
   ]);
 
   const handleRegenerateImageWithPrompt = useCallback(async () => {
@@ -292,7 +295,7 @@ export function useChatAndImageEdit({
     } catch (err) {
       if (currentPageNumberRef.current !== pageNumberAtSend) return;
       setChatHistory(chatHistory);
-      setSlideError(err instanceof ApiError ? err.message : '修改圖片失敗');
+      setSlideError(err instanceof ApiError ? err.message : t('play.sidebar.qa.imageEditFailed'));
     } finally {
       setSlideBusy(false);
     }
@@ -305,6 +308,7 @@ export function useChatAndImageEdit({
     isReadOnlyProcessing,
     setSlideBusy,
     setSlideError,
+    t,
   ]);
 
   const handleApplyPreviewImage = useCallback(async () => {
@@ -322,7 +326,7 @@ export function useChatAndImageEdit({
       await replaceSlideImage(pdfId, imagePreviewPageNumber, file);
       await reloadDetail();
     } catch (err) {
-      setSlideError(err instanceof ApiError ? err.message : '套用圖片失敗');
+      setSlideError(err instanceof ApiError ? err.message : t('play.sidebar.qa.imageApplyFailed'));
     } finally {
       setSlideBusy(false);
     }
@@ -335,6 +339,7 @@ export function useChatAndImageEdit({
     isReadOnlyProcessing,
     setSlideBusy,
     setSlideError,
+    t,
   ]);
 
   return {
