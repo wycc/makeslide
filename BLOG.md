@@ -1,5 +1,29 @@
 # MakeSlide 功能說明
 
+## 相似頁面推薦：空狀態提示
+
+### 功能目的
+
+「相似頁面」側邊欄區塊原本在沒有相似結果時整段消失，使用者無法分辨是「這頁還沒被索引」
+還是「已索引但確實找不到相似頁面」。這次讓兩種情況有所區別：未索引時仍隱藏（避免雜訊），
+已索引但無相似時改顯示明確的「找不到相似頁面」提示。
+
+### 使用方式
+
+1. 在已索引的頁面上，若系統找到相似頁面，照常以縮圖卡片列出。
+2. 若該頁**已索引但沒有達到相似度門檻**的其他頁面，區塊會顯示一行「找不到相似頁面」。
+3. 若該頁**尚未被索引**（例如從未用過語意搜尋、或匿名訪客），區塊維持隱藏。
+
+### 技術說明
+
+- **後端**：`GET /api/pdfs/:id/pages/:n/similar` 回傳值由 `{ similar }` 改為 `{ similar, indexed }`；
+  無 `page_uid` 或查無 embedding 時 `indexed:false`，否則 `true`。
+- **前端**：`SimilarPagesSection` 改以 `indexed` 旗標決定是否整段隱藏；`indexed && similar.length===0`
+  時顯示空狀態提示；API helper 回傳型別改為 `SimilarPagesResult`。
+- **測試**：`backend/test/similar-pages.test.ts` 新增 1 個 case（頁面存在但無 embedding → `indexed:false`），
+  並於既有排序測試補斷言 `indexed:true`，共 4 個通過。
+- **i18n**：zh-TW / en 各新增 1 個 key（`play.sidebar.similarPagesEmpty`）。
+
 ## 設定頁：語意索引涵蓋率長條
 
 ### 功能目的

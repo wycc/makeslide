@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | 相似頁面推薦空狀態：similar 端點改回傳 `{ similar, indexed }`，側邊欄「未索引」隱藏、「已索引無相似」顯示提示；補後端測試 1 個；i18n 1 key | feat/similar-pages-empty-state（已 merge） |
 | 2026-06-25 | 設定頁語意索引涵蓋率長條：embedding-stats 端點加 `total_pages`（JOIN pages），SettingsPage 加 indexed/total 覆蓋率長條；更新後端測試；i18n 1 key | feat/embedding-coverage-bar（已 merge） |
 | 2026-06-25 | 播放頁簡介「複製」按鈕：折疊簡介展開時於描述下方加「複製簡介」按鈕（複用 copyTextToClipboard，2 秒「已複製」toast）；純前端；i18n 2 key | feat/copy-description（已 merge） |
 | 2026-06-25 | （已達 100 上限 → 經使用者同意重設計數，於第三十三輪項目區開頭加「---- 計數重設 ----」標記，重新起算） | — |
@@ -1179,7 +1180,7 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [x] 播放頁簡介「複製」按鈕：`PlayPageHeader` 折疊簡介區塊（`descExpanded`）展開時，於描述文字下方加入「複製簡介」按鈕，使用既有 `copyTextToClipboard()`，成功顯示短暫「已複製」toast（2 秒）；純前端改動，補 i18n 2 個 key（`play.header.copyDescription`/`copyDescriptionDone`，zh-TW/en）。分支 `feat/copy-description`。
 
-- [ ] 相似頁面推薦空狀態與數量：`SimilarPagesSection`（`PlayPageSidebar.tsx`）目前無結果時整段隱藏；改為當「目標頁已索引但無相似結果」時顯示一行「找不到相似頁面」提示（與「未索引」區分：未索引仍隱藏）。後端 `GET /api/pdfs/:id/pages/:n/similar` 回傳已含足夠資訊（空陣列 vs 未索引可用 `indexed` 旗標區分）；需在端點回傳 `{ similar, indexed }`，前端據以顯示；補後端測試 1 個與 i18n 1 個 key。
+- [x] 相似頁面推薦空狀態與數量：`GET /api/pdfs/:id/pages/:n/similar` 改回傳 `{ similar, indexed }`（未索引→`indexed:false`、已索引→`true`）；`SimilarPagesSection`（`PlayPageSidebar.tsx`）只在「未索引」時整段隱藏，「已索引但無相似」時顯示「找不到相似頁面」提示；API 型別改為 `SimilarPagesResult`；補後端測試 1 個（`indexed:false`，共 4 通過）與 i18n 1 個 key（`play.sidebar.similarPagesEmpty`，zh-TW/en）。分支 `feat/similar-pages-empty-state`。
 
 - [x] 設定頁語意索引涵蓋率長條：`GET /api/me/embedding-stats` 新增回傳 `total_pages`（該 owner 所有 PDF 的頁數總和，JOIN pages）；`SettingsPage`「語意搜尋索引」小節加入涵蓋率長條（indexed_pages / total_pages 百分比 + 文字）；更新既有後端測試斷言 `total_pages`（共 2 通過）；i18n 1 個 key（`settings.embeddingIndexCoverage`，zh-TW/en）。分支 `feat/embedding-coverage-bar`。
 
