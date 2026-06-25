@@ -36,6 +36,7 @@ interface StudentRecord {
 
 interface PostClassReportPanelProps {
   pdfId: string;
+  pdfTitle?: string | null;
   summary: PdfReportSummary | null;
   loading: boolean;
   error: string | null;
@@ -53,7 +54,7 @@ function SummaryCard({ label, value, hint }: { label: string; value: string; hin
   );
 }
 
-export function PostClassReportPanel({ pdfId, summary, loading, error, onClose, onReload }: PostClassReportPanelProps) {
+export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error, onClose, onReload }: PostClassReportPanelProps) {
   const hardestQuestions = getHardestQuestions(summary);
   const divergentPollPages = getMostDivergentPollPages(summary);
   const lowestCompletionPages = getLowestCompletionPages(summary);
@@ -132,6 +133,12 @@ export function PostClassReportPanel({ pdfId, summary, loading, error, onClose, 
       `}</style>
       <div id="pcr-print-root" className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/80 px-4 py-8 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="post-class-report-title">
         <div className="w-full max-w-5xl rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
+          <div className="hidden print:block mb-4 border-b border-slate-300 pb-3">
+            <h1 className="text-lg font-semibold text-black">
+              {(pdfTitle && pdfTitle.trim()) ? pdfTitle : '課後報告'}
+            </h1>
+            <p className="mt-1 text-xs text-slate-600">列印日期：{new Date().toLocaleDateString()}</p>
+          </div>
           <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800 pb-4">
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-cyan-300">Post-class report</p>
