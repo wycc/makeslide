@@ -1521,3 +1521,14 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] 為 promptTemplates.ts 補單元測試：新增 `backend/test/promptTemplates.test.ts`，涵蓋 `renderPromptTemplate`（具名替換、大括號內空白容忍、缺值/空值→空字串、重複與多變數、底線/數字 key、無 placeholder 原樣、非名稱字元 token 保留）與 `loadPromptTemplate`（檔案不存在回 fallback）。純後端、僅新增測試、不改產品程式碼。
   - 修改說明（2026-06-25）：新增 `backend/test/promptTemplates.test.ts`，8 個測試涵蓋上述各案例（`{{a-b}}` 因 `-` 不在 `[a-zA-Z0-9_]` 命名集合故整個 token 原樣保留；`loadPromptTemplate('definitely/missing/...', 'FALLBACK')` 走 existsSync=false 分支回 fallback，無需建 fixture）。模組 import 連帶 `config` 無副作用問題；以 `tsx --test` 直跑驗證 8 個測試全通過；backend typecheck 通過。未改動產品程式碼。分支 `test/prompt-templates`，已 merge 回 master。
 
+## 掃描摘要（2026-06-25 第四十九輪）
+
+- TODO 唯一未完成項目（formatDurationMs i18n）仍暫緩（方案待使用者確認）。先前盤點的無 DB 純函式服務測試已補齊，本輪重新盤點 `backend/src/services/*.ts` 各檔的 export 與測試覆蓋，找出仍含可獨立測試之純函式者。
+- 觀察：`backend/src/services/animationCustomScript.ts` 雖整體含 LLM streaming（非純），但其兩個**安全相關純函式** `findUnsafeScriptPattern`（防禦 LLM 產出的 custom-script 含 fetch/eval/localStorage/window.parent 等不安全 API）與 `findCustomScriptContractIssue`（驗證 `window.renderAnimation` + `api.onFrame` 契約）**無單元測試**——屬 defense-in-depth，值得測。import 連帶 `openai`/`pageAnimation` 無副作用問題，可 `tsx --test` 直跑。
+- 其餘無測試 service 多涉 DB/外部 API/檔案 IO（aiSettings/gemini/openai/embeddings/storage/pdfFigures/presentationGit/handoutPdf/youtubeCaptions/imageMigration/accountProfiles），或為 `pageAnimation`（65 exports，含 `validateAnimationSpec` 等純驗證，可作後續較大項目）。
+
+## 新增可執行項目（2026-06-25 第四十九輪）
+
+- [x] 為 animationCustomScript 安全檢查補單元測試：新增 `backend/test/animationCustomScript.test.ts`，涵蓋 `findUnsafeScriptPattern`（安全碼通過；fetch/XMLHttpRequest/WebSocket/import/require/eval/new Function；cookie 與 storage 的 dot/bracket 兩式；window.parent/top/frameElement frame 逃逸；依定義順序回首個命中）與 `findCustomScriptContractIssue`（接受 renderAnimation+onFrame 的 dot/bracket 式；缺任一時各回對應訊息）。純後端、僅新增測試、不改產品程式碼。
+  - 修改說明（2026-06-25）：新增 `backend/test/animationCustomScript.test.ts`，8 個測試涵蓋上述各案例（如 `eval("x"); fetch("/y")` 因 fetch 規則定義在 eval 之前故回 `fetch`；`window["renderAnimation"]` 與 `api.onFrame(...)` 的 bracket/dot 兩式皆視為合法契約）。import 連帶 `openai`/`pageAnimation` 無副作用問題；以 `tsx --test` 直跑驗證 8 個測試全通過；backend typecheck 通過。未改動產品程式碼。分支 `test/animation-custom-script`，已 merge 回 master。
+
