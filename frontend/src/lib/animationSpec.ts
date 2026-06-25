@@ -49,7 +49,7 @@ export const OVERLAY_EFFECT_TYPES: readonly SlideAnimationEffectType[] = [
 ];
 
 /** SVG primitive shapes drawable by `shape` effects (design doc §12 V2 "SVG 圖元"), matching the backend's `ANIMATION_SHAPE_KINDS`. */
-export const ANIMATION_SHAPE_KINDS: readonly SlideAnimationShapeKind[] = ['circle', 'rect', 'ellipse', 'arrow'];
+export const ANIMATION_SHAPE_KINDS: readonly SlideAnimationShapeKind[] = ['circle', 'rect', 'ellipse', 'arrow', 'line', 'triangle', 'star', 'hexagon'];
 
 /** Default `shape` kind when a `shape` effect doesn't specify one. */
 export const DEFAULT_SHAPE_KIND: SlideAnimationShapeKind = 'circle';
