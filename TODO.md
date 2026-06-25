@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | 全螢幕顯示已投票人數：`PlayPageFullscreen` 在 master+本頁有投票時於右上角加 pointer-events-none 投票數 overlay（🗳 N 人已投票，逐題）；沿用既有 liveVotesCount key；typecheck + 286 前端測試全通過 | feat/fullscreen-vote-count（已 merge） |
 | 2026-06-25 | master 畫面顯示測驗回答進度：QuizBuilderPage master「測驗中的學員」面板（原已逐位顯示進度條）新增彙總行「已提交 X / 共 Y 人，作答中 Z」；新增 1 個 `quiz.progressSummary` key；typecheck + 286 前端測試全通過 | feat/master-quiz-progress-summary（已 merge） |
 | 2026-06-25 | master 畫面顯示已投票人數：`PlayPageSlidePanel` 在 master+本頁有投票時於同步控制區新增「即時投票狀況」面板，列各題「N 人已投票」（poll.total_votes）；解構 pagePolls；新增 2 個 i18n key；typecheck + 286 前端測試全通過 | feat/master-live-vote-count（已 merge） |
 | 2026-06-25 | viewerId.ts 補單元測試：新增 `viewerId.test.ts`（stub `window.localStorage` + 動態 import），3 個測試涵蓋產生/持久化/沿用既有值；未改邏輯；typecheck + 286 前端測試全通過 | test/viewer-id-unit（已 merge） |
@@ -1382,7 +1383,8 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-25）：新增 `frontend/src/lib/viewerId.test.ts`，因 viewerId 讀 `window.localStorage`，先以 `MemoryStorage` stub 設定 `globalThis.window = { localStorage }` 再動態 import。3 個測試：首次產生 `viewer-` 前綴 id 並持久化、後續呼叫回傳同一值、已有儲存值時沿用。未改動 viewerId.ts。`node --test` 各檔獨立行程故 window stub 不污染其他測試。frontend typecheck 通過、全部 286 個前端測試 + i18n 對等 21 個全通過。分支 `test/viewer-id-unit`，已 merge 回 master。
 - [x] 請在 master 的畫面上顯示已投票的人數。
   - 修改說明（2026-06-25）：`PlayPageSlidePanel` 在 master（`syncEnabled && syncRole === 'master'`）且本頁有投票（`pagePolls.length > 0`）時，於同步控制區（出席名單下方）新增「即時投票狀況」面板，逐一列出本頁各投票題目與「N 人已投票」（取 `poll.total_votes`，隨既有投票輪詢更新）。這樣教師即使切到別的 notebook 分頁、主畫面仍能看到投票人數。從 context 解構 `pagePolls`；新增 2 個 i18n key（`play.slidePanel.liveVotesTitle`/`liveVotesCount`，zh-TW/en 各 2）。frontend typecheck 通過、全部 286 個前端測試 + i18n 對等 21 個全通過。分支 `feat/master-live-vote-count`，已 merge 回 master。
-- [ ] 已投票人數在全螢幕也要顯示
+- [x] 已投票人數在全螢幕也要顯示
+  - 修改說明（2026-06-25）：延續 master 投票數顯示，`PlayPageFullscreen` 在 master（`syncEnabled && syncRole === 'master'`）且本頁有投票時，於全螢幕右上角新增 `pointer-events-none` 的投票數 overlay，逐題以藥丸樣式顯示「🗳 N 人已投票」（`poll.total_votes`）。沿用既有 `play.slidePanel.liveVotesCount` key、無新增 key。`pagePolls`/`syncEnabled`/`syncRole` 已於 fullscreen 解構。frontend typecheck 通過、全部 286 個前端測試 + i18n 對等 21 個全通過。分支 `feat/fullscreen-vote-count`，已 merge 回 master。
 - [x] 請在 master 的畫面上顯示測試回答的進度。
   - 修改說明（2026-06-25）：測驗的即時作答進度資料（`quiz_progress`：每位學生 answered_count/total_questions/submitted）由同步狀態提供，並在 `QuizBuilderPage` 的 master 視圖「測驗中的學員」面板已逐位顯示（每人完成比例進度條 + 是否提交）。本次在該面板標題下方新增一行**彙總進度**：以 `formatMessage('quiz.progressSummary', { submitted, total, inProgress })` 顯示「已提交 X / 共 Y 人，作答中 Z」，讓教師一眼掌握整體作答狀況（PlayPage 本身不含真正的測驗流程——其 `active_quiz_id` 是借用來傳即時投票 id——故測驗進度顯示於測驗主控頁 QuizBuilderPage）。新增 1 個 i18n key `quiz.progressSummary`（zh-TW/en 各 1）。frontend typecheck 通過、全部 286 個前端測試 + i18n 對等 21 個全通過。分支 `feat/master-quiz-progress-summary`，已 merge 回 master。
 - [ ] 當一頁有投票時，全螢幕顯示的右上角要有投票按鍵。
