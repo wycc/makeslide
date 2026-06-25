@@ -1479,6 +1479,8 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [x] 修復動畫形狀選單缺漏（前後端 shape kinds drift）（第八十輪，2026-06-26 掃描發現並修復）：前端 `animationSpec.ts` 的 `ANIMATION_SHAPE_KINDS` 只列 4 種形狀（circle/rect/ellipse/arrow），但前端型別 `SlideAnimationShapeKind`、`SlideRenderer`（實際繪製 line/triangle/star/hexagon）、8 個 `play.animation.shapeKind.*` i18n 標籤、以及後端 `pageAnimation.ts` 的 `ANIMATION_SHAPE_KINDS` 全部支援 8 種。因 `AnimationEditorTab` 的形狀下拉是用此常數產生，使用者無法選取 line/triangle/star/hexagon——是真實 bug。修復：將前端常數補回完整 8 種（順序對齊後端）。並新增後端 drift-guard 測試 `animationConstantsConsistency.test.ts`（仿第六十八輪價格表 guard），以 `fs` 讀前端 `animationSpec.ts` 原始碼、抽取 `SLIDE_ANIMATION_EFFECT_TYPES`/`SLIDE_ANIMATION_EASES`/`ANIMATION_SHAPE_KINDS` 與後端對應常數逐一比對（effect types 18、eases 7 原本就一致），未來任一端 drift 即 CI 失敗。前端 typecheck 與 animationSpec 測試 58 個通過、後端新測試 4 個通過。分支 `fix/animation-shape-kinds-drift`，已 merge 回 master。
 
+- [x] 字幕分句邏輯三份鏡像 drift-guard（第八十一輪，2026-06-26 掃描新增並完成）：`splitScriptIntoSentences` 共有三份「需完全一致」的複本——前端 `lib/subtitles.ts`（字幕顯示＋transcript-line 動畫觸發）、後端 `services/textSentences.ts`、後端 `services/subtitleAlignment.ts`（Whisper 對齊時間軸獨立複本）。三者共用相同的 `SENTENCE_MATCH_RE`/`TONE_MARKER_RE`；若 drift，時間軸所依據的句子索引會與前端重新切句不符，悄悄使字幕／動畫去同步。原本三份各有自己的行為測試、卻無任何測試比對彼此一致。經確認三份目前完全一致（無 bug），新增 guard 測試 `subtitleSplitConsistency.test.ts`：①以一批代表性 script（CJK/ASCII 終止符、分號、tone tag、換行、無標點尾段）跑兩個後端複本斷言輸出相同；②以 `fs` 從三份原始碼抽取兩個 regex 字面值斷言完全相同。後端 typecheck 與新測試 2 個通過。純測試、低風險。分支 `test/subtitle-split-consistency`，已 merge 回 master。
+
 ## 掃描摘要（2026-06-25 第四十三輪）
 
 - 本輪 TODO 唯一未完成項目（formatDurationMs i18n）先前的實作方案被使用者否決，已標記暫緩。經詢問使用者後，本輪改為「為後端 `logSanitizer.ts` 補單元測試」。
@@ -1815,3 +1817,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - 時間：2026-06-26
 - 分支：`fix/animation-shape-kinds-drift`（已 merge 回 master）
 - 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 84 個完成項目（84/100，未達上限）。
+## 工作記錄（第八十一輪，2026-06-26）
+
+- 工作內容：延續「前後端鏡像 drift」排查。逐一核對既有鏡像點：quiz 計分（`explicitScoreSum`/`normalizeQuestionScores`/`calcQuestionScore`，前後端）與 `QUIZ_TOTAL_SCORE=100` 皆一致、`splitScriptIntoSentences` 三份複本也一致——均無 bug。但發現 `splitScriptIntoSentences` 有三份「需完全一致」複本（前端 `subtitles.ts`、後端 `textSentences.ts`、後端 `subtitleAlignment.ts`，含後端內部重複），各自只有獨立行為測試、缺少交叉一致性 guard，drift 會悄悄使字幕／動畫去同步。新增 guard 測試 `subtitleSplitConsistency.test.ts`：①跑兩個後端複本對一批代表性 script 斷言輸出相同；②從三份原始碼抽取 `SENTENCE_MATCH_RE`/`TONE_MARKER_RE` 兩個 regex 字面值斷言完全相同。後端 typecheck 與新測試 2 個通過。純測試、低風險。
+- 時間：2026-06-26
+- 分支：`test/subtitle-split-consistency`（已 merge 回 master）
+- 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 85 個完成項目（85/100，未達上限）。
