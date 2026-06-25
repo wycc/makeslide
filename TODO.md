@@ -1496,6 +1496,8 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] 前後端狀態 enum 鏡像 drift-guard（第八十八輪，2026-06-26 掃描新增）：第八十六輪修橫幅時注意到前端 `PdfStatus`/`PageStatus`/`ProgressStep` 字串 union（`types.ts`）鏡像後端 `statusMachine.ts` 的 `PDF_STATUSES`/`PAGE_STATUSES`/`PROGRESS_STEPS`，驅動狀態徽章／橫幅／步驟標籤，但無 drift guard。經確認三組值集目前一致（`ProgressStep` 與後端順序不同但集合相同、另多 `null`）。新增後端測試 `statusEnumConsistency.test.ts`：以 `fs` 解析前端 union 成員，與後端陣列**比對排序後的值集**（忽略順序，因 union 順序非契約；`ProgressStep` 排除 `null`）。任一端新增/移除狀態即 CI 失敗。後端 typecheck 與新測試 4 個通過。純測試、低風險。分支 `test/status-enum-mirror-guard`，已 merge 回 master。
 
 - [x] 前後端 TTS 語音清單鏡像 drift-guard（第八十九輪，2026-06-26 掃描新增）：前端語音選擇器 `ttsVoices.ts` 的 `GEMINI_TTS_VOICES`（22）／`OPENAI_TTS_VOICES`（11）鏡像後端可接受的語音（`services/gemini.ts` 的 `GEMINI_VOICES` Set、`config.ts` 的 `OPENAI_TTS_VOICES`）。`GEMINI_TTS_VOICES` 原始碼註解已明言「Keep in sync with backend GEMINI_VOICES」，但跨 package 無守護——drift 會讓選擇器列出後端會 coerce 成 fallback（Gemini 一律轉 `Kore`）的語音。經確認兩組值集完全一致（OpenAI 順序 onyx/nova 互換但集合相同）。新增後端測試 `ttsVoiceConsistency.test.ts`：以 `fs` 解析前端兩份清單與後端 `GEMINI_VOICES`，並 import 後端 `OPENAI_TTS_VOICES`，比對排序值集。後端 typecheck 與新測試 3 個通過。純測試、低風險。分支 `test/tts-voice-mirror-guard`，已 merge 回 master。
+
+- [x] Quiz 分數溢出檢查對齊後端容差＋抽出可測模組（第九十輪，2026-06-26 掃描修復）：`QuizBuilderPage` 的分數溢出警告（同時 gate「儲存」按鈕）以嚴格 `sum > 100` 比較，但後端 cap 用 `sum > 100 + QUIZ_SCORE_SUM_EPSILON`（1e-6）。對於浮點誤差落在 (100, 100+1e-6] 的總和，前端會判定溢出、後端卻接受——與「mirrors backend」註解的本意不符的潛在不一致（實測一般輸入難以觸發，屬一致性對齊而非顯性 bug）。將原本私有且無測試的計分 helper 抽到 `lib/quizScoring.ts`（`QUIZ_TOTAL_SCORE`、`explicitScoreSum`、新增套用相同 epsilon 的 `scoreSumExceedingTotal`），`QuizBuilderPage` 改用之；新增 `quizScoring.test.ts` 4 測試（總和、剛好 100、epsilon 邊界）。前端 typecheck 與全測試 335 個通過。純前端、低風險。分支 `fix/quiz-score-overflow-epsilon`，已 merge 回 master。
 ## 掃描摘要（2026-06-25 第四十三輪）
 
 - 本輪 TODO 唯一未完成項目（formatDurationMs i18n）先前的實作方案被使用者否決，已標記暫緩。經詢問使用者後，本輪改為「為後端 `logSanitizer.ts` 補單元測試」。
@@ -1886,3 +1888,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - 時間：2026-06-26
 - 分支：`test/tts-voice-mirror-guard`（已 merge 回 master）
 - 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 93 個完成項目（93/100，未達上限）。
+## 工作記錄（第九十輪，2026-06-26）
+
+- 工作內容：審查 QuizBuilderPage 計分邏輯（並核對 a11y：所有 `<img>` 皆已有 alt、`formatUsd` 正確）。發現前端分數溢出檢查 `sum > 100`（嚴格）與後端 cap `sum > 100 + 1e-6`（含 epsilon 容差）不一致——前端可能對浮點誤差落在 (100, 100+1e-6] 的總和判定溢出並擋下儲存，後端卻接受（與「mirrors backend」註解本意不符；實測一般輸入難觸發，定位為一致性對齊）。將原本私有且無測試的計分 helper 抽出至 `lib/quizScoring.ts` 並新增套用相同 epsilon 的 `scoreSumExceedingTotal`，QuizBuilderPage 改用之；補 `quizScoring.test.ts` 4 測試（含 epsilon 邊界）。前端 typecheck 與全測試 335 個通過。純前端、低風險。
+- 時間：2026-06-26
+- 分支：`fix/quiz-score-overflow-epsilon`（已 merge 回 master）
+- 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 94 個完成項目（94/100，未達上限）。
