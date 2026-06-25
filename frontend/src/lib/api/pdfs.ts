@@ -1896,11 +1896,15 @@ export interface SimilarPage {
   score: number;
 }
 
-export async function fetchSimilarPages(id: string, pageNumber: number): Promise<SimilarPage[]> {
+export interface SimilarPagesResult {
+  similar: SimilarPage[];
+  indexed: boolean;
+}
+
+export async function fetchSimilarPages(id: string, pageNumber: number): Promise<SimilarPagesResult> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/similar`);
   if (!resp.ok) throw await parseErrorBody(resp);
-  const data = (await resp.json()) as { similar: SimilarPage[] };
-  return data.similar;
+  return (await resp.json()) as SimilarPagesResult;
 }
 
 export async function updatePageNote(id: string, pageNumber: number, note: string): Promise<{ id: string; page_number: number; page_notes: string; updated_at: string }> {

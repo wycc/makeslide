@@ -66,12 +66,26 @@ test('GET /api/pdfs/:id/pages/:n/similar — ranks owner pages by cosine similar
 
   const resp = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfA}/pages/1/similar`, headers: OWNER_HEADERS });
   assert.equal(resp.statusCode, 200);
-  const body = resp.json() as { similar: Array<{ pdf_id: string; page_number: number; score: number }> };
+  const body = resp.json() as { similar: Array<{ pdf_id: string; page_number: number; score: number }>; indexed: boolean };
+  assert.equal(body.indexed, true); // target page has an embedding
   // The orthogonal page is filtered (< MIN_SCORE); only the similar one remains.
   assert.equal(body.similar.length, 1);
   assert.equal(body.similar[0]?.pdf_id, pdfB);
   assert.equal(body.similar[0]?.page_number, 1);
   assert.ok(body.similar[0]!.score > 0.9);
+  await app.close();
+});
+
+test('GET /api/pdfs/:id/pages/:n/similar — indexed:false when target page has no embedding', async () => {
+  const app = await buildApp();
+  const pdf = `sim-noembed-${RUN}`;
+  seedPdf(pdf, OWNER_SUB);
+  seedPage(pdf, 1, `ne1-${RUN}`); // page exists but no embedding seeded
+  const resp = await app.inject({ method: 'GET', url: `/api/pdfs/${pdf}/pages/1/similar`, headers: OWNER_HEADERS });
+  assert.equal(resp.statusCode, 200);
+  const body = resp.json() as { similar: unknown[]; indexed: boolean };
+  assert.equal(body.indexed, false);
+  assert.equal(body.similar.length, 0);
   await app.close();
 });
 
