@@ -1571,6 +1571,8 @@ export const zhTW = {
   'systemData.tokensHint': '輸入 {prompt} / 輸出 {completion}',
   'systemData.averageLatency': '平均延遲',
   'systemData.estimatedCost': '估算成本',
+  'systemData.modelPriceUnknown': '模型價格未知',
+  'systemData.secondsSuffix': ' 秒',
   'systemData.costHint': '依已知 OpenAI 模型價格估算',
   'systemData.stageDistribution': 'Stage 狀態分布',
   'systemData.noStageData': '尚無 stage timing 資料。',

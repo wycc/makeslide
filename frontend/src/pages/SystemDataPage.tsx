@@ -7,14 +7,14 @@ function formatInt(value: number): string {
   return new Intl.NumberFormat('zh-TW').format(value);
 }
 
-function formatDuration(ms: number | null): string {
+function formatDuration(ms: number | null, secondsSuffix: string): string {
   if (ms == null) return '—';
   if (ms < 1000) return `${ms} ms`;
-  return `${Math.round(ms / 100) / 10} 秒`;
+  return `${Math.round(ms / 100) / 10}${secondsSuffix}`;
 }
 
-function formatCost(value: number | null): string {
-  if (value == null) return '模型價格未知';
+function formatCost(value: number | null, unknownLabel: string): string {
+  if (value == null) return unknownLabel;
   return `US$${value.toFixed(6)}`;
 }
 
@@ -124,7 +124,7 @@ export default function SystemDataPage() {
                 <MetricCard label={t('systemData.totalRuns')} value={formatInt(metrics.pipeline_runs.total)} />
                 <MetricCard label={t('systemData.runSuccessRate')} value={`${metrics.pipeline_runs.success_rate}%`} hint={formatMessage('systemData.runSucceededHint', { count: formatInt(metrics.pipeline_runs.succeeded) })} tone="good" />
                 <MetricCard label={t('systemData.runFailureRate')} value={`${metrics.pipeline_runs.failure_rate}%`} hint={formatMessage('systemData.runFailedHint', { count: formatInt(metrics.pipeline_runs.failed) })} tone="bad" />
-                <MetricCard label={t('systemData.averageDuration')} value={formatDuration(metrics.pipeline_runs.average_duration_ms)} hint={formatMessage('systemData.runningHint', { count: formatInt(metrics.pipeline_runs.running) })} />
+                <MetricCard label={t('systemData.averageDuration')} value={formatDuration(metrics.pipeline_runs.average_duration_ms, t('systemData.secondsSuffix'))} hint={formatMessage('systemData.runningHint', { count: formatInt(metrics.pipeline_runs.running) })} />
               </div>
             </section>
 
@@ -133,8 +133,8 @@ export default function SystemDataPage() {
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <MetricCard label={t('systemData.llmResponses')} value={formatInt(metrics.llm_usage.requests)} />
                 <MetricCard label={t('systemData.totalTokens')} value={formatInt(metrics.llm_usage.total_tokens)} hint={formatMessage('systemData.tokensHint', { prompt: formatInt(metrics.llm_usage.prompt_tokens), completion: formatInt(metrics.llm_usage.completion_tokens) })} />
-                <MetricCard label={t('systemData.averageLatency')} value={formatDuration(metrics.llm_usage.average_latency_ms)} />
-                <MetricCard label={t('systemData.estimatedCost')} value={formatCost(metrics.llm_usage.estimated_cost_usd)} hint={t('systemData.costHint')} />
+                <MetricCard label={t('systemData.averageLatency')} value={formatDuration(metrics.llm_usage.average_latency_ms, t('systemData.secondsSuffix'))} />
+                <MetricCard label={t('systemData.estimatedCost')} value={formatCost(metrics.llm_usage.estimated_cost_usd, t('systemData.modelPriceUnknown'))} hint={t('systemData.costHint')} />
               </div>
             </section>
 
