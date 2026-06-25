@@ -2263,7 +2263,7 @@ export default function PlayPage() {
   if (!pdfId) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-100">
-        無效的 PDF id
+        {t('play.status.invalidPdfId')}
       </div>
     );
   }
@@ -2273,7 +2273,7 @@ export default function PlayPage() {
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-slate-950 text-slate-100">
         <p className="text-rose-300">{loadError}</p>
         <Link to="/" className="text-sm text-slate-400 underline">
-          返回首頁
+          {t('play.status.backHome')}
         </Link>
       </div>
     );
@@ -2282,7 +2282,7 @@ export default function PlayPage() {
   if (!detail) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-100">
-        載入中…
+        {t('play.status.loading')}
       </div>
     );
   }
@@ -2292,12 +2292,12 @@ export default function PlayPage() {
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-slate-950 text-slate-100">
         <p className="text-slate-300">
           {isReadOnlyProcessing
-            ? `尚未產生可瀏覽的頁面（${detail.status}${detail.progress_step ? ` / ${detail.progress_step}` : ''}）`
-            : '這份 PDF 沒有可播放的語音頁面'}
+            ? `${t('play.status.noPagesGeneratingPrefix')}${detail.status}${detail.progress_step ? ` / ${detail.progress_step}` : ''}${t('play.status.noPagesGeneratingSuffix')}`
+            : t('play.status.noAudioPages')}
         </p>
-        {isReadOnlyProcessing ? <p className="text-xs text-slate-500">系統將每 3 秒重新檢查一次狀態…</p> : null}
+        {isReadOnlyProcessing ? <p className="text-xs text-slate-500">{t('play.status.recheckHint')}</p> : null}
         <Link to="/" className="text-sm text-slate-400 underline">
-          返回首頁
+          {t('play.status.backHome')}
         </Link>
       </div>
     );
@@ -2429,7 +2429,7 @@ export default function PlayPage() {
         <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-slate-950/60">
           <div className="rounded-lg border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-200 shadow-xl">
             <span className="mr-2 inline-block h-3 w-3 animate-pulse rounded-full bg-cyan-400" />
-            圖片產生中…
+            {t('play.status.imageGenerating')}
           </div>
         </div>
       ) : null}
@@ -2601,7 +2601,7 @@ export default function PlayPage() {
             }`}
             aria-pressed={activeTab === 'play'}
           >
-            播放
+            {t('play.mobileTab.play')}
           </button>
           <button
             type="button"
@@ -2614,7 +2614,7 @@ export default function PlayPage() {
             aria-pressed={activeTab === 'qa'}
           >
             <span className="inline-flex items-center gap-1.5">
-              問答
+              {t('play.mobileTab.qa')}
               {syncFollowerQuestions.length > 0 && (
                 <span className="rounded-full bg-slate-700/80 px-1.5 py-0.5 text-[10px] font-normal text-slate-300">
                   {syncFollowerQuestions.length}
@@ -2622,7 +2622,7 @@ export default function PlayPage() {
               )}
             </span>
             {newPollBadge && (
-              <span className="absolute right-3 top-2 h-2 w-2 rounded-full bg-rose-500" aria-label="新投票" />
+              <span className="absolute right-3 top-2 h-2 w-2 rounded-full bg-rose-500" aria-label={t('play.mobileTab.newPollAria')} />
             )}
           </button>
         </div>
