@@ -9,6 +9,7 @@ import {
   updatePdfCoverFromPage,
 } from '../../lib/api';
 import type { PdfDetailPage } from '../../types';
+import { useI18n } from '../../i18n';
 
 interface UseSlideManagementParams {
   pdfId: string | undefined;
@@ -45,6 +46,7 @@ export function useSlideManagement({
   setCurrentIdx,
   setRegenSelectedPages,
 }: UseSlideManagementParams): SlideManagementState {
+  const { t } = useI18n();
   const [slideBusy, setSlideBusy] = useState(false);
   const [slideError, setSlideError] = useState<string | null>(null);
 
@@ -59,16 +61,16 @@ export function useSlideManagement({
       setCurrentIdx(res.page_number - 1);
       setRegenSelectedPages(new Set());
     } catch (err) {
-      setSlideError(err instanceof ApiError ? err.message : '新增投影片失敗');
+      setSlideError(err instanceof ApiError ? err.message : t('play.slideManagement.addFailed'));
     } finally {
       setSlideBusy(false);
     }
-  }, [pdfId, currentPage, isReadOnlyProcessing, reloadDetail, setCurrentIdx, setRegenSelectedPages]);
+  }, [pdfId, currentPage, isReadOnlyProcessing, reloadDetail, setCurrentIdx, setRegenSelectedPages, t]);
 
   const handleDeleteCurrentSlide = useCallback(async () => {
     if (isReadOnlyProcessing) return;
     if (!pdfId || !currentPage) return;
-    if (!window.confirm(`確定刪除第 ${currentPage.page_number} 頁？`)) return;
+    if (!window.confirm(t('play.slideManagement.deleteConfirm').replace('{page}', String(currentPage.page_number)))) return;
     setSlideBusy(true);
     setSlideError(null);
     const idxBeforeDelete = currentIdx;
@@ -79,11 +81,11 @@ export function useSlideManagement({
       setCurrentIdx(Math.max(0, Math.min(idxBeforeDelete, totalBeforeDelete - 2)));
       setRegenSelectedPages(new Set());
     } catch (err) {
-      setSlideError(err instanceof ApiError ? err.message : '刪除投影片失敗');
+      setSlideError(err instanceof ApiError ? err.message : t('play.slideManagement.deleteFailed'));
     } finally {
       setSlideBusy(false);
     }
-  }, [pdfId, currentPage, currentIdx, totalPages, isReadOnlyProcessing, reloadDetail, setCurrentIdx, setRegenSelectedPages]);
+  }, [pdfId, currentPage, currentIdx, totalPages, isReadOnlyProcessing, reloadDetail, setCurrentIdx, setRegenSelectedPages, t]);
 
   const handleMoveSlide = useCallback(
     async (fromPageNumber: number, toPageNumber: number) => {
@@ -97,12 +99,12 @@ export function useSlideManagement({
         setCurrentIdx(Math.max(0, toPageNumber - 1));
         setRegenSelectedPages(new Set());
       } catch (err) {
-        setSlideError(err instanceof ApiError ? err.message : '調整頁面順序失敗');
+        setSlideError(err instanceof ApiError ? err.message : t('play.slideManagement.moveFailed'));
       } finally {
         setSlideBusy(false);
       }
     },
-    [pdfId, reloadDetail, isReadOnlyProcessing, setCurrentIdx, setRegenSelectedPages],
+    [pdfId, reloadDetail, isReadOnlyProcessing, setCurrentIdx, setRegenSelectedPages, t],
   );
 
   const handleReplaceImageFile = useCallback(
@@ -116,18 +118,18 @@ export function useSlideManagement({
         await replaceSlideImage(pdfId, pageNumber, file);
         await reloadDetail();
       } catch (err) {
-        setSlideError(err instanceof ApiError ? err.message : '替換圖片失敗');
+        setSlideError(err instanceof ApiError ? err.message : t('play.slideManagement.replaceImageFailed'));
       } finally {
         setSlideBusy(false);
       }
     },
-    [pdfId, currentPage, reloadDetail, isReadOnlyProcessing],
+    [pdfId, currentPage, reloadDetail, isReadOnlyProcessing, t],
   );
 
   const handleUpdateCoverFromCurrentPage = useCallback(async () => {
     if (!pdfId || !currentPage) return;
     if (!currentPage.image_url) {
-      setSlideError('目前頁沒有可用圖片，無法更新封面');
+      setSlideError(t('play.slideManagement.coverNoImage'));
       return;
     }
     setSlideBusy(true);
@@ -136,11 +138,11 @@ export function useSlideManagement({
       await updatePdfCoverFromPage(pdfId, currentPage.page_number);
       await reloadDetail();
     } catch (err) {
-      setSlideError(err instanceof ApiError ? err.message : '更新封面失敗');
+      setSlideError(err instanceof ApiError ? err.message : t('play.slideManagement.coverUpdateFailed'));
     } finally {
       setSlideBusy(false);
     }
-  }, [pdfId, currentPage, reloadDetail]);
+  }, [pdfId, currentPage, reloadDetail, t]);
 
   return {
     slideBusy,
