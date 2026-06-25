@@ -1483,6 +1483,8 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [x] 動畫效果子屬性 enum 前後端 drift-guard（第八十二輪，2026-06-26 掃描新增並完成）：延續第八十輪的動畫常數 guard，動畫效果還有 6 個子屬性 enum 是「手動維護於前端型別 union（`types.ts` 的 `SlideAnimationEffect`）、編輯器硬編 `<option>`、後端 Zod `z.enum`」三處——`pointerShape`/`highlightBorderStyle`/`textCalloutAlign`/`textCalloutPadding`/`spotlightShape`/`stepListBulletStyle`，正是 shape kinds 當初 drift 的同類風險（編輯器可選值與後端接受值不一致）。經確認 6 者目前前後端皆一致（無 bug）。將 `animationConstantsConsistency.test.ts` 擴充：以 `fs` 解析前端 `types.ts` 的 union 成員與後端 `pageAnimation.ts` 對應 `z.enum` 成員，逐欄位斷言相同（共 6 個新測試），未來任一端新增/移除值即 CI 失敗。後端 typecheck 與該檔測試 10 個（4 既有＋6 新）全通過。純測試、低風險。分支 `test/animation-enum-fields-guard`，已 merge 回 master。
 
+- [x] 動畫型別／形狀 i18n 標籤完整性測試（第八十三輪，2026-06-26 掃描新增並完成）：動畫編輯器以 `play.animation.type.${type}` 與 `play.animation.shapeKind.${kind}` 直接插值渲染效果型別與形狀下拉。第八十／八十二輪的 drift-guard 已確保前端陣列與後端 `z.enum` 同步，但沒有任何測試確保每個成員「也有對應 i18n 標籤」——若未來新增一個型別/形狀（通過 drift-guard）卻漏補 i18n 鍵，下拉會顯示原始 key。經確認 18 種 effect type 與 8 種 shape kind 的中英鍵目前皆齊全。於 `i18n.test.ts` 新增兩個測試：直接由 `SLIDE_ANIMATION_EFFECT_TYPES`／`ANIMATION_SHAPE_KINDS` 陣列推導必需鍵，逐一斷言 zh-TW/en 皆存在且非空（未來新增成員自動納入檢查）。前端 typecheck 與 i18n 測試（含 2 新）通過。純測試、低風險。分支 `test/animation-i18n-label-completeness`，已 merge 回 master。
+
 ## 掃描摘要（2026-06-25 第四十三輪）
 
 - 本輪 TODO 唯一未完成項目（formatDurationMs i18n）先前的實作方案被使用者否決，已標記暫緩。經詢問使用者後，本輪改為「為後端 `logSanitizer.ts` 補單元測試」。
@@ -1831,3 +1833,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - 時間：2026-06-26
 - 分支：`test/animation-enum-fields-guard`（已 merge 回 master）
 - 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 86 個完成項目（86/100，未達上限）。
+## 工作記錄（第八十三輪，2026-06-26）
+
+- 工作內容：延續「UI 清單完整性」排查。先驗證動畫編輯器：效果型別下拉由 `SLIDE_ANIMATION_EFFECT_TYPES`（全 18 種）產生、形狀下拉由 `ANIMATION_SHAPE_KINDS`（修復後 8 種）產生，故所有型別/形狀皆可達；18 種 effect type 的 `play.animation.type.*` i18n 鍵也都齊全——無 bug。發現一個防護缺口：drift-guard 確保前端陣列↔後端 enum 一致，但無測試確保每個陣列成員「也有 i18n 標籤」，未來新增成員若漏補鍵會顯示原始 key。於 `i18n.test.ts` 新增兩個由陣列推導必需鍵的完整性測試（effect types、shape kinds），自動涵蓋未來新增成員。前端 typecheck 與 i18n 測試通過。純測試、低風險。
+- 時間：2026-06-26
+- 分支：`test/animation-i18n-label-completeness`（已 merge 回 master）
+- 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 87 個完成項目（87/100，未達上限）。
