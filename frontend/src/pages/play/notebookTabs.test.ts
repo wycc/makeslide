@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   DEFAULT_NOTEBOOK_TAB,
   NOTEBOOK_TABS,
+  computeNotebookTabCounts,
   getAdjacentNotebookTab,
   isNotebookTab,
   normalizeNotebookTab,
@@ -29,6 +30,20 @@ test('normalizeNotebookTab keeps valid values and falls back otherwise', () => {
   assert.equal(normalizeNotebookTab('bogus'), DEFAULT_NOTEBOOK_TAB);
   assert.equal(normalizeNotebookTab(null), DEFAULT_NOTEBOOK_TAB);
   assert.equal(normalizeNotebookTab('bogus', 'notes'), 'notes');
+});
+
+test('computeNotebookTabCounts sums interaction markers and reports slide count', () => {
+  const counts = computeNotebookTabCounts({ slides: 12, bookmarks: 2, important: 3, polls: 1 });
+  assert.equal(counts.slides, 12);
+  assert.equal(counts.interact, 6);
+  assert.equal(counts.ai, undefined);
+  assert.equal(counts.notes, undefined);
+});
+
+test('computeNotebookTabCounts handles empty deck', () => {
+  const counts = computeNotebookTabCounts({ slides: 0, bookmarks: 0, important: 0, polls: 0 });
+  assert.equal(counts.slides, 0);
+  assert.equal(counts.interact, 0);
 });
 
 test('getAdjacentNotebookTab moves and wraps in both directions', () => {
