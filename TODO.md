@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | 分析並新增可執行項目（第三十八輪）：TODO 清空、前端 i18n 大致完成，依 LOOP.md 轉向品質改善，新增 3 個低風險項目（消除 relativeTimeLabels 三處重複、reviewList.ts 補單元測試、viewerId.ts 補單元測試） | master（僅文件） |
 | 2026-06-25 | AI 草稿投票題支援已輸入題目：`generate-poll` 端點新增可選 body `question`——有輸入則只依本頁內容生成選項並保留原題（新 GeneratedOptionsSchema + 專用 prompt），無輸入維持整題生成；前端 `generatePollDraft`/`handleGeneratePollDraft` 傳入目前 pollQuestion；新增 1 個後端測試；backend+frontend typecheck + 277 前端測試通過（後端測試 sandbox timeout，改 typecheck+邏輯核對） | feat/poll-draft-options-for-given-question（已 merge） |
 | 2026-06-25 | 複製/匯出文字國際化：QuizBuilderPage 複製題目「解說：」用新增 `quiz.exportExplanationLabel`；PlayPageHeader 逐字稿 markdown 匯出「## 第 N 頁」改用既有 `play.common.pagePrefix/pageSuffix`；新增 1 個 key；typecheck + 277 前端測試 + i18n 對等全通過 | feat/copy-export-text-i18n（已 merge） |
 | 2026-06-25 | App.tsx 設定載入畫面國際化：載入畫面「載入設定中…」改用 `t('app.loadingSettings')`（App 新增 useI18n）；新增 1 個 key；grep 確認 App 無中文；typecheck + 277 前端測試 + i18n 對等全通過 | feat/app-loading-i18n（已 merge） |
@@ -1356,3 +1357,18 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [x] AI 草稿投票題的地方，如果問題有輸入，那就產生問題的選項。否則根據本頁資訊產生問題和選項。
   - 修改說明（2026-06-25）：`POST /api/pdfs/:id/pages/:n/generate-poll`（`generate-poll.ts`）新增可選 body `{ question?: string }`。若帶非空 `question`：以新 `GeneratedOptionsSchema`（只驗 `options` 2–4）與專用 system prompt「依投影片內容為『這道題目』產生互斥、貼題、不含答案提示的選項」，回傳 `{ question: <原輸入>, options }`；若無 `question`：維持原行為（同時產生題目與選項）。前端 `generatePollDraft(id, n, question?)` 在有輸入時以 JSON body 帶 `question`；`usePagePolls.handleGeneratePollDraft` 改傳目前 `pollQuestion`（deps 補 `pollQuestion`），故教師若已在投票設定輸入題目，按「AI 草稿」只補選項、否則整題生成。`generate-poll.test.ts` 新增「帶 question 只生成選項並保留原題」測試（mock options-only）。backend + frontend typecheck 通過、全部 277 個前端測試通過；後端測試於 sandbox 仍 timeout（與前數輪一致），改以 typecheck + 邏輯核對確認。分支 `feat/poll-draft-options-for-given-question`，已 merge 回 master。
+
+## 掃描摘要（2026-06-25 第三十八輪）
+
+- TODO 再次清空，前端使用者可見硬編中文已大致清乾淨（剩餘多為刻意保留的 LLM 生成提示詞內容）。本輪依 LOOP.md 轉向其他類型的低風險改善：消除重複、補既有純函式 helper 的測試覆蓋。
+- 觀察：上一波相對時間 i18n 後，`PdfCard`、`QuizBuilderPage`、`HomePage` **三處各自重複建立相同的 `relativeTimeLabels` 物件**（6 個 `t('time.*')`）——可抽成一個小 helper 消除重複。
+- 觀察：`lib/reviewList.ts`（複習清單，含 `addReviewItems` dedup、`removeReviewItem` 過濾、`getReviewItems` 解析/fallback）為真實使用中的邏輯但**無單元測試**。
+- 觀察：`lib/viewerId.ts`（匿名訪客 id 產生/持久化）亦無單元測試。
+
+## 新增可執行項目（2026-06-25 第三十八輪）
+
+- [ ] 消除 relativeTimeLabels 重複：`PdfCard`/`QuizBuilderPage`/`HomePage` 各自以 6 個 `t('time.*')` 建相同的 `relativeTimeLabels`。在 `lib/relativeTime.ts` 新增小 helper（例如 `buildRelativeTimeLabels(t)` 回傳 `RelativeTimeLabels`，或 `formatRelativeTimeI18n(iso, t)`），三處改用之以消除重複；型別上 `t` 以 `(key: TranslationKey) => string` 表示。補一個 helper 單元測試（以假 `t` 驗證對應 key）。純前端、低風險，跑 typecheck 與既有前端測試。
+
+- [ ] 為 reviewList.ts 補單元測試：在測試檔注入 in-memory `localStorage` stub（`globalThis.localStorage`），涵蓋 `addReviewItems` 的去重（同 pdfId+pageNumber+questionText 不重複加入）、`removeReviewItem` 依 pdfId+pageNumber 過濾、`getReviewItems` 對壞資料/非陣列的 fallback、`clearAllReviewItems`。純前端、僅新增測試，不改邏輯。
+
+- [ ] 為 viewerId.ts 補單元測試：注入 in-memory `localStorage` stub，驗證 `getOrCreateViewerId` 首次產生並持久化、第二次回傳同一值、格式符合 `viewer-...` 前綴。純前端、僅新增測試。
