@@ -261,6 +261,8 @@ export function usePageAnimation({
                 ? {
                     ...e,
                     code: res.code,
+                    // 記下產生這段 code 的提示詞，方便之後重新開啟對話框時回填迭代。
+                    prompt,
                     conversation: appendConversationMessages(e.conversation, {
                       role: 'assistant',
                       content: t('play.animation.customScriptDone'),
