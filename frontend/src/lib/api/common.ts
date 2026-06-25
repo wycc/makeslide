@@ -126,6 +126,7 @@ const ERROR_HINTS: Record<string, HumanReadableApiError> = {
   POPPLER_NOT_FOUND: { title: 'PDF 解析工具缺失', message: '系統找不到 poppler（pdftoppm / pdftotext）。', nextStep: '請先安裝 poppler，並確認可在系統 PATH 中使用。' },
   PDF_NOT_FOUND: { title: '找不到簡報資料', message: '此簡報可能已被刪除或不存在。', nextStep: '請回首頁重新整理清單，再重新操作。' },
   PAGE_NOT_FOUND: { title: '找不到頁面', message: '指定頁面不存在。', nextStep: '請重新整理頁面並確認頁碼。' },
+  NOT_FOUND: { title: '找不到資源', message: '要求的資料不存在或已被移除。', nextStep: '請重新整理後再試，或確認操作對象是否仍存在。' },
   RESOURCE_NOT_FOUND: { title: '資源尚未產生', message: '目前請求的檔案資源不存在。', nextStep: '等待流程完成後再試，或先確認流程是否失敗。' },
   INVALID_STATE: { title: '目前狀態不可執行', message: '當前任務狀態不允許此操作。', nextStep: '請依照流程先完成前一步，或重新整理後再嘗試。' },
   JOB_CONFLICT: { title: '任務狀態衝突', message: '已有任務進行中或不可取消。', nextStep: '請等待目前任務結束，或稍後再發送同類操作。' },
