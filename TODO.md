@@ -1532,3 +1532,13 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] 為 animationCustomScript 安全檢查補單元測試：新增 `backend/test/animationCustomScript.test.ts`，涵蓋 `findUnsafeScriptPattern`（安全碼通過；fetch/XMLHttpRequest/WebSocket/import/require/eval/new Function；cookie 與 storage 的 dot/bracket 兩式；window.parent/top/frameElement frame 逃逸；依定義順序回首個命中）與 `findCustomScriptContractIssue`（接受 renderAnimation+onFrame 的 dot/bracket 式；缺任一時各回對應訊息）。純後端、僅新增測試、不改產品程式碼。
   - 修改說明（2026-06-25）：新增 `backend/test/animationCustomScript.test.ts`，8 個測試涵蓋上述各案例（如 `eval("x"); fetch("/y")` 因 fetch 規則定義在 eval 之前故回 `fetch`；`window["renderAnimation"]` 與 `api.onFrame(...)` 的 bracket/dot 兩式皆視為合法契約）。import 連帶 `openai`/`pageAnimation` 無副作用問題；以 `tsx --test` 直跑驗證 8 個測試全通過；backend typecheck 通過。未改動產品程式碼。分支 `test/animation-custom-script`，已 merge 回 master。
 
+## 掃描摘要（2026-06-25 第五十輪）
+
+- TODO 唯一未完成項目（formatDurationMs i18n）仍暫緩（方案待使用者確認）。延續以純函式測試補覆蓋的方向。
+- 觀察：`backend/src/services/pageAnimation.ts`（65 exports，整體含 LLM 生成等非純邏輯）中有四個**純函式**未直接測試：`defaultAnimationSpec`、`validateAnimationSpec`（zod 驗證 + 依 effect type 白名單過濾 params + hints 處理，是動畫 spec 儲存/載入的核心把關）、`renderTypeForSpec`、`parseStoredAnimationSpec`（壞 JSON/非法 spec fallback 至預設）。import 無副作用，可 `tsx --test` 直跑。
+
+## 新增可執行項目（2026-06-25 第五十輪）
+
+- [x] 為 pageAnimation spec 驗證純函式補單元測試：新增 `backend/test/animationSpecValidate.test.ts`，涵蓋 `defaultAnimationSpec`、`validateAnimationSpec`（最小合法 spec、拒絕非物件/錯版本、未知 effect type 訊息含 path、保留合法 typed 欄位、params 依 effect type 白名單過濾並剔除非允許/非有限/非數字、無允許 params 時整段移除、空 hints 移除但保留非空）、`renderTypeForSpec`、`parseStoredAnimationSpec`（合法 JSON 往返、壞 JSON 與非法 spec fallback 至預設）。純後端、僅新增測試、不改產品程式碼。
+  - 修改說明（2026-06-25）：新增 `backend/test/animationSpecValidate.test.ts`，11 個測試涵蓋上述各案例（params 過濾以 `zoom-in` 帶 `{fromScale:1.5, toScale:2, distancePct:10, bad:NaN}` 驗證只留白名單內的有限數字 `{fromScale, toScale}`；`fade-in` 無允許 params 故整段 `params` 不出現；`hints: {}` 移除、`{'0':'note'}` 保留）。clamp/round 防禦因 schema 先以 `z.number().min/max/int` 把關、外部難觸發故未特別測。以 `tsx --test` 直跑驗證 11 個測試全通過；backend typecheck 通過。未改動產品程式碼。分支 `test/animation-spec`，已 merge 回 master。
+
