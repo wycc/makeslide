@@ -1622,6 +1622,16 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] 補 URL builder 純函式測試：為 `figureImageUrl`/`imageVersionUrl`/`batchExportDownloadUrl` 新增 `lib/api.url-builders.test.ts`，涵蓋正常路徑結構與 `/`、空格、`#` 等特殊字元的 percent-encoding。純前端、僅新增測試、不改產品程式碼。
   - 修改說明（2026-06-25）：新增 `frontend/src/lib/api.url-builders.test.ts`，5 個測試斷言三個 URL builder 的路徑結構（如 `figureImageUrl('abc','p1-img2')` → `api/pdfs/abc/figures/p1-img2/image`）與特殊字元編碼（`a/b`→`a%2Fb`、空格→`%20`、`#`→`%23`、`imageVersionUrl` 各 segment 皆編碼且 pageNumber 字串化）。以 `tsx --test` 直跑驗證 5 個測試全通過；frontend typecheck 通過。分支 `test/url-builders`，已 merge 回 master。
 
+## 掃描摘要（2026-06-25 第六十輪）
+
+- 檢視後端 `storage.ts`（33 exports）：多數為簡單路徑拼接（測試價值低），但 `safeJoinPdfPath`（路徑穿越防護的安全函式，限制使用者可影響的路徑片段於該 pdf 的 storage 目錄內）**無測試**。屬安全關鍵（類比 logSanitizer、custom-script 安全檢查），值得測。
+- 其餘無測試後端 service 多涉 DB/外部 API/檔案 IO。
+
+## 新增可執行項目（2026-06-25 第六十輪）
+
+- [x] 為 safeJoinPdfPath 補路徑穿越防護測試：新增 `backend/test/safeJoinPdfPath.test.ts`，涵蓋正常片段解析於 base 內、無片段回 base、base 內的 `..` 正規化、以及阻擋上層穿越/絕對路徑片段/同前綴 sibling（`../abc-evil` 不可被當成 `abc` 子路徑）。純後端、僅新增測試、不改產品程式碼。
+  - 修改說明（2026-06-25）：新增 `backend/test/safeJoinPdfPath.test.ts`，6 個測試以 `path.resolve(pdfDir(id))` 為 base 比較預期，涵蓋：正常多片段解析、無片段回 base、`sub/../f.txt` 正規化仍在 base、`../../etc/passwd` 上層穿越 throw、`/etc/passwd` 絕對路徑片段 throw、`../abc-evil` 同前綴 sibling throw（驗證 prefix 檢查用 `+ path.sep` 避免 abc-evil 誤判為 abc 子路徑）。以 `tsx --test` 直跑驗證 6 個測試全通過；backend typecheck 通過。分支 `test/safe-join-path`，已 merge 回 master。
+
 ## 掃描摘要（2026-06-25 第五十六輪）
 
 - 延續錯誤碼一致性調查，檢視後端 `errors.ts`。發現架構落差：`normalizeErrorCode`（legacy→standard 映射）**有單元測試**（`pages-api.test.ts`）卻**從未被產品程式碼呼叫**——路由實際用的 `errorResponse`（`routes/pdfs.ts`、`routes/pdfs/shared.ts` 兩份重複定義）直接送原始 code、不 normalize。導致 legacy 碼（PAGE_IMAGE_NOT_FOUND、COVER_NOT_READY、NO_FILE、INVALID_MIME 等）原樣洩漏到前端，而前端 `ERROR_HINTS` 無對應條目、顯示英文 fallback。
