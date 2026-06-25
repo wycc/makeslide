@@ -70,6 +70,20 @@ const PAGE_ARTIFACT_LABEL_KEYS: Record<PageArtifact, TranslationKey> = {
   audio: 'play.timing.artifact.audio',
 };
 
+// Compile-safe label maps (same pattern as EASE_LABELS): `satisfies Record<...>`
+// forces a label whenever a SubtitleSize/SubtitlePosition value is added, instead
+// of interpolating the key by hand where a missing label silently renders raw.
+const SUBTITLE_SIZE_LABEL_KEYS = {
+  sm: 'play.slidePanel.subtitleSize.sm',
+  md: 'play.slidePanel.subtitleSize.md',
+  lg: 'play.slidePanel.subtitleSize.lg',
+} as const satisfies Record<SubtitleSize, TranslationKey>;
+
+const SUBTITLE_POSITION_LABEL_KEYS = {
+  bottom: 'play.slidePanel.subtitlePosition.bottom',
+  top: 'play.slidePanel.subtitlePosition.top',
+} as const satisfies Record<SubtitlePosition, TranslationKey>;
+
 export function PlayPageSlidePanel() {
   const {
     pdfId,
@@ -858,7 +872,7 @@ export function PlayPageSlidePanel() {
                         }}
                         className={`rounded-full border px-3 py-1 text-xs font-medium ${subtitleSize === size ? 'border-cyan-500 bg-cyan-500/20 text-cyan-100' : 'border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800'}`}
                       >
-                        {t(`play.slidePanel.subtitleSize.${size}` as TranslationKey)}
+                        {t(SUBTITLE_SIZE_LABEL_KEYS[size])}
                       </button>
                     ))}
                   </div>
@@ -876,7 +890,7 @@ export function PlayPageSlidePanel() {
                         }}
                         className={`rounded-full border px-3 py-1 text-xs font-medium ${subtitlePosition === pos ? 'border-cyan-500 bg-cyan-500/20 text-cyan-100' : 'border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800'}`}
                       >
-                        {t(`play.slidePanel.subtitlePosition.${pos}` as TranslationKey)}
+                        {t(SUBTITLE_POSITION_LABEL_KEYS[pos])}
                       </button>
                     ))}
                   </div>
