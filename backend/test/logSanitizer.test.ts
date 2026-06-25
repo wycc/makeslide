@@ -145,3 +145,23 @@ test('redactPromptForLog and redactTextForLog summarize non-empty prompts', () =
     chars: 50,
   });
 });
+
+test('redactLogValue strips credentials embedded in a git remote URL (any token shape)', () => {
+  // presentationGit builds https://x-access-token:<token>@github.com remotes; a git
+  // error leaking that URL must not expose the token, whatever its format.
+  assert.equal(
+    redactLogValue('failed to push to https://x-access-token:ghp_abcdEFGH1234567890wxyz@github.com/owner/repo.git'),
+    'failed to push to https://[redacted]@github.com/owner/repo.git',
+  );
+  assert.equal(
+    redactLogValue('https://user:github_pat_11ABCDEFG0abcdefghij_KLMNOP@github.com/x/y.git'),
+    'https://[redacted]@github.com/x/y.git',
+  );
+});
+
+test('redactLogValue masks bare GitHub tokens and leaves credential-free URLs intact', () => {
+  assert.equal(redactLogValue('token ghp_abcdEFGH1234567890wxyzABCD here'), 'token [redacted] here');
+  assert.equal(redactLogValue('clone https://github.com/owner/repo.git'), 'clone https://github.com/owner/repo.git');
+  // host:port without credentials must not be redacted
+  assert.equal(redactLogValue('connect http://localhost:3000/api'), 'connect http://localhost:3000/api');
+});
