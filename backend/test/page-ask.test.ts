@@ -112,3 +112,32 @@ test('POST ask — sends all pages and prior history to the model', async () => 
     await app.close();
   }
 });
+
+test('POST ask — attaches the original source.txt full text when present', async () => {
+  const pdfId = `ask-source-${RUN}`;
+  seedPdfWithPages(pdfId, OWNER_SUB, [
+    { text: '投影片只有摘要', script: '逐字稿只有摘要' },
+  ]);
+  // Detail that lives ONLY in the original extracted source, not in any
+  // page's slide text or script.
+  fs.writeFileSync(path.join(config.storageRoot, pdfId, 'source.txt'), '原文獨有關鍵字ZETA9', 'utf8');
+  mockAsk('依原文作答。');
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${pdfId}/pages/1/ask`,
+      headers: { ...OWNER_HEADERS, 'content-type': 'application/json' },
+      body: JSON.stringify({ question: 'ZETA9 是什麼？' }),
+    });
+    assert.equal(resp.statusCode, 200);
+    assert.ok(captured, 'model was called');
+    const flat = JSON.stringify(captured!.messages);
+    // The original source text (and its label) is forwarded to the model.
+    assert.match(flat, /ZETA9/);
+    assert.match(flat, /原始來源全文/);
+  } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+  }
+});
