@@ -19,6 +19,13 @@ test("mapApiErrorToHumanMessage maps INVALID_REQUEST to a friendly message inste
   assert.ok(msg.nextStep);
 });
 
+test("mapApiErrorToHumanMessage maps the generic NOT_FOUND code to a friendly message", () => {
+  const msg = mapApiErrorToHumanMessage(new ApiError("PDF not found", "NOT_FOUND", 404));
+  assert.equal(msg.title, "找不到資源");
+  assert.notEqual(msg.message, "PDF not found");
+  assert.ok(msg.nextStep);
+});
+
 test("mapApiErrorToHumanMessage maps poppler/dependency issues", () => {
   const poppler = mapApiErrorToHumanMessage(new ApiError("x", "POPPLER_NOT_FOUND", 500));
   assert.equal(poppler.title, "PDF 解析工具缺失");
