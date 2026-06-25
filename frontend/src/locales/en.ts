@@ -1201,6 +1201,7 @@ export const en = {
   'play.sidebar.commentPostFailed': 'Failed to post, please try again',
   'play.sidebar.similarPages': 'Similar pages',
   'play.sidebar.similarPagesLoading': 'Finding similar pages…',
+  'play.sidebar.similarPagesEmpty': 'No similar pages found',
   'play.sidebar.similarPagesPage': 'Page {n}',
   'play.sidebar.commentResolve': 'Mark as resolved',
   'play.sidebar.commentUnresolve': 'Unresolve',

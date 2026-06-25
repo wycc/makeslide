@@ -41,12 +41,14 @@ export async function registerSimilarPagesRoutes(app: FastifyInstance): Promise<
     const pageRow = db
       .prepare(`SELECT page_uid FROM pages WHERE pdf_id = ? AND page_number = ?`)
       .get(id, pageNumber) as { page_uid: string | null } | undefined;
-    if (!pageRow?.page_uid) return reply.send({ similar: [] });
+    // `indexed` lets the client distinguish "page not indexed yet" (hide the
+    // section) from "indexed but nothing similar" (show an empty-state hint).
+    if (!pageRow?.page_uid) return reply.send({ similar: [], indexed: false });
 
     const targetRow = db
       .prepare(`SELECT embedding FROM page_embeddings WHERE id = ?`)
       .get(`${id}:${pageRow.page_uid}`) as { embedding: string } | undefined;
-    if (!targetRow) return reply.send({ similar: [] });
+    if (!targetRow) return reply.send({ similar: [], indexed: false });
 
     const targetVec = JSON.parse(targetRow.embedding) as number[];
 
@@ -72,6 +74,6 @@ export async function registerSimilarPagesRoutes(app: FastifyInstance): Promise<
       .sort((a, b) => b.score - a.score)
       .slice(0, TOP_K);
 
-    return reply.send({ similar });
+    return reply.send({ similar, indexed: true });
   });
 }

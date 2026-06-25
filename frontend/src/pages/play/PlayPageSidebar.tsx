@@ -32,26 +32,29 @@ function SimilarPagesSection() {
   const { pdfId, currentPage } = usePlayPageContext();
   const navigate = useNavigate();
   const [items, setItems] = useState<SimilarPage[]>([]);
+  const [indexed, setIndexed] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!pdfId || !currentPage) { setItems([]); return; }
+    if (!pdfId || !currentPage) { setItems([]); setIndexed(false); return; }
     setLoading(true);
     fetchSimilarPages(pdfId, currentPage.page_number)
-      .then(setItems)
-      .catch(() => setItems([]))
+      .then((res) => { setItems(res.similar); setIndexed(res.indexed); })
+      .catch(() => { setItems([]); setIndexed(false); })
       .finally(() => setLoading(false));
   }, [pdfId, currentPage?.page_number]);
 
-  // Hide entirely when there is nothing to recommend (e.g. anonymous viewer,
-  // page not indexed, or no similar pages above the threshold).
-  if (!pdfId || !currentPage || (!loading && items.length === 0)) return null;
+  // Hide entirely when the page is not indexed (e.g. anonymous viewer or not
+  // yet vector-indexed). When indexed but empty, fall through to an empty state.
+  if (!pdfId || !currentPage || (!loading && !indexed)) return null;
 
   return (
     <section className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
       <h3 className="mb-2 text-xs font-semibold text-slate-300">{t('play.sidebar.similarPages')}</h3>
       {loading ? (
         <p className="text-xs text-slate-500">{t('play.sidebar.similarPagesLoading')}</p>
+      ) : items.length === 0 ? (
+        <p className="text-xs text-slate-500">{t('play.sidebar.similarPagesEmpty')}</p>
       ) : (
         <ul className="space-y-2">
           {items.map((it) => (

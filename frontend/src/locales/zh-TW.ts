@@ -1201,6 +1201,7 @@ export const zhTW = {
   'play.sidebar.commentPostFailed': '送出失敗，請稍後再試',
   'play.sidebar.similarPages': '相似頁面',
   'play.sidebar.similarPagesLoading': '尋找相似頁面中…',
+  'play.sidebar.similarPagesEmpty': '找不到相似頁面',
   'play.sidebar.similarPagesPage': '第 {n} 頁',
   'play.sidebar.commentResolve': '標記已處理',
   'play.sidebar.commentUnresolve': '取消標記',
