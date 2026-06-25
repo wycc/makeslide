@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | 分析並新增可執行項目（第三十六輪）：TODO 清空後依 LOOP.md 掃描，新增 3 個低風險清理項目（HomePage 改用共用 relativeTime helper 完成第三份去重、SystemDataPage「模型價格未知」i18n、FigureAssetsTab header「（第 N 頁）」i18n） | master（僅文件） |
 | 2026-06-25 | AnimationEditorTab 國際化：掃描後確認 ~50 處中文多為程式碼註解、UI 早已 i18n；真正可見殘留為 header「（第 N 頁）」與 5 個範例提示詞插入內容——改用新增的 `headerPagePrefix/Suffix` 與 `customScriptExamplePrompt.*`（promptKey，en 提供英文版），共 7 個 key；typecheck + 277 前端測試 + i18n 對等全通過 | feat/animation-editor-i18n（已 merge） |
 | 2026-06-25 | PlayPage.tsx 錯誤與狀態訊息國際化（第二批）：setAudioError/setSyncError 8 種/loadError 預設/分享不符 ApiError/課後報告載入失敗/文稿不可為空/重生語音失敗、唯讀與產生中橫幅全部改用 t()；新增 18 個 `play.banner.*`/`play.error.*` key；僅保留生成用預設圖片風格 prompt；typecheck + 277 前端測試 + i18n 對等全通過 | feat/playpage-error-messages-i18n（已 merge） |
 | 2026-06-25 | 零星小元件殘留中文國際化：PageTimingChips「產生中」、SlidePanel 分頁進度/清除搜尋 aria-label、Sidebar「此頁已有筆記」與書籤/重點頁「第 N 頁」alt/文字/複製清單抽成 i18n；新增 7 個 key（含共用 `play.common.pagePrefix/pageSuffix`）；LLM 提示詞/錯誤字串/markdown 匯出標頭留待後續；typecheck + 277 前端測試 + i18n 對等全通過 | feat/misc-components-i18n（已 merge） |
@@ -1303,6 +1304,22 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [x] AnimationEditorTab 國際化：把 `pages/play/AnimationEditorTab.tsx` 的硬編中文（UI 標籤、按鈕、狀態文字，以及內建範例提示詞清單）抽成 i18n key；範例提示詞可作為預設內容 key（zh-TW 維持現中文、en 提供英文版）。改用 `useI18n()`，補 zh-TW/en 對應 key 並跑 i18n 對等測試。純前端；量較大，可只先處理 UI 標籤/按鈕、範例提示詞列為次階段。
   - 修改說明（2026-06-25）：實際掃描後發現 `AnimationEditorTab.tsx` 的 ~50 處中文絕大多數是**程式碼註解**（開發用、非 UI），UI 標籤/按鈕/狀態先前早已用 `t()`；真正殘留的使用者可見硬編中文僅兩處：① header 的「（第 N 頁）」、② 自訂腳本對話框的 5 個範例提示詞下拉（`labelKey` 已 i18n，但點選後插入輸入框的 `prompt` 仍是中文內容）。修正：header 改用新增的 `play.animation.headerPagePrefix/Suffix`；範例陣列 `prompt: string` 改為 `promptKey: string`（5 個 `play.animation.customScriptExamplePrompt.*`），`<option value={t(ex.promptKey)}>` 於點選時依語系插入對應語言的提示詞（en 提供英文版）。共新增 7 個 key（zh-TW/en 各 7）。frontend typecheck 通過、全部 277 個前端測試 + i18n 對等 21 個全通過。分支 `feat/animation-editor-i18n`，已 merge 回 master。
+
+## 掃描摘要（2026-06-25 第三十六輪）
+
+- 第三十五輪 4 個 i18n 項目完成後 TODO 再次清空，依 LOOP.md 掃描程式 + 參考 `docs/FUTURE_ROADMAP.md`（主要功能多已實作）後，繼續清理零星低風險缺口。
+- 觀察：上一輪把 `formatRelativeTime` 抽成 `lib/relativeTime.ts` 並改寫 `PdfCard`/`QuizBuilderPage`，但 **`HomePage.tsx` 仍有第三份重複**的本地 `formatRelativeTime`（行 49，用於 1394/1401）尚未改用共用版——應一併去重 + i18n。
+- 觀察：`SystemDataPage.tsx` 有 1 處可見硬編中文（`模型價格未知`）。
+- 觀察：`FigureAssetsTab.tsx` header 有「（第 N 頁）」硬編中文（與 AnimationEditorTab header 同模式）。
+- `DrawingCanvas`/`SlideRenderer` 等其餘元件的中文多為程式碼註解，非 UI，無需處理。
+
+## 新增可執行項目（2026-06-25 第三十六輪）
+
+- [ ] HomePage 改用共用 relativeTime helper（完成相對時間去重）：`pages/HomePage.tsx` 仍保有一份與 `lib/relativeTime.ts` 重複的本地 `formatRelativeTime`（硬編中文）。移除本地版、改 import 共用 `formatRelativeTime` 並以 `t('time.*')` 建 `relativeTimeLabels` 傳入（沿用既有 `time.*` key，無需新增）；兩處呼叫（`last_played_at`、`updated_at`）改用之。純前端、低風險，跑 typecheck 與既有前端測試。
+
+- [ ] SystemDataPage 殘留中文國際化：把 `pages/SystemDataPage.tsx` 的 `模型價格未知`（及掃描確認的其他少量可見中文）抽成 i18n key（如 `systemData.modelPriceUnknown`），改用 `useI18n()`，補 zh-TW/en 並跑 i18n 對等測試。純前端、小改動。
+
+- [ ] FigureAssetsTab header「（第 N 頁）」國際化：把 `pages/play/FigureAssetsTab.tsx` header 的「（第 N 頁）」改用 i18n（沿用既有 `play.animation.headerPagePrefix/Suffix`，或新增 `play.figures.headerPagePrefix/Suffix` 保持語意一致），補 zh-TW/en（若新增）並跑 i18n 對等測試。純前端、小改動。
 
 - [x] 零星小元件殘留硬編中文國際化：把 `pages/play/PageTimingChips.tsx`（如「產生中」）與其他少量殘留可見中文（掃描 `QualityCheckPanel`、`PlayPageSlidePanel`、`PlayPageSidebar`、`PlayPageHeader` 等元件確認）抽成 i18n key，補 zh-TW/en 並跑 i18n 對等測試。純前端、低風險清理。
   - 修改說明（2026-06-25）：將使用者可見的硬編中文抽成 i18n key：`PageTimingChips` 計時「產生中」；`PlayPageSlidePanel` 分頁進度條 `aria-label`（第 X 頁，共 Y 頁）與「清除搜尋」`aria-label`；`PlayPageSidebar` 「此頁已有筆記」title、書籤/重點頁的「第 N 頁」縮圖 alt 與顯示文字、以及複製清單文字（「第 N 頁」以分隔符 join）。新增 7 個 key：`play.common.pagePrefix`/`pageSuffix`（共用「第 N 頁」前後綴）、`play.timing.generating`、`play.slidePanel.clearSearchAria`/`pageProgressMid`、`play.sidebar.hasNotesTitle`/`pageListSeparator`（zh-TW/en 各 7）。**範圍說明**：`QualityCheckPanel` 與 `PlayPageSlidePanel` 的 LLM 提示詞常數（如 BATCH_FILL_PROMPT、改寫風格 prompt）、各元件 `ApiError`/`Error` fallback 錯誤訊息、以及 `PlayPageHeader` 全文逐字稿 markdown 匯出的「## 第 N 頁」標頭屬內部/匯出內容或 PlayPage 錯誤訊息批次（第二批項目）範疇，本次未動。frontend typecheck 通過、全部 277 個前端測試 + i18n 對等 21 個全通過。分支 `feat/misc-components-i18n`，已 merge 回 master。
