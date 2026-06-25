@@ -725,6 +725,8 @@ export const en = {
   'play.slidePanel.subtitlePosition.bottom': 'Bottom',
   'play.slidePanel.subtitlePosition.top': 'Top',
   'play.slidePanel.attendeesTitle': 'Attendance',
+  'play.slidePanel.liveVotesTitle': 'Live votes',
+  'play.slidePanel.liveVotesCount': '{count} voted',
   'play.slidePanel.attendeesEmpty': 'No students have joined yet',
   'play.slidePanel.kickAttendee': 'Kick',
   'play.slidePanel.studentAudioControlTitle': 'Student audio control',
