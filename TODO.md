@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | 設定頁語意索引涵蓋率長條：embedding-stats 端點加 `total_pages`（JOIN pages），SettingsPage 加 indexed/total 覆蓋率長條；更新後端測試；i18n 1 key | feat/embedding-coverage-bar（已 merge） |
 | 2026-06-25 | 播放頁簡介「複製」按鈕：折疊簡介展開時於描述下方加「複製簡介」按鈕（複用 copyTextToClipboard，2 秒「已複製」toast）；純前端；i18n 2 key | feat/copy-description（已 merge） |
 | 2026-06-25 | （已達 100 上限 → 經使用者同意重設計數，於第三十三輪項目區開頭加「---- 計數重設 ----」標記，重新起算） | — |
 | 2026-06-25 | TemplatesPage 依使用次數排序：搜尋框旁加「最新／最熱門」切換，最熱門以既有 apply_count 排序（穩定排序保留 recency）；純前端；i18n 2 key。**此項使重設後完成數達 100，觸及 LOOP.md 上限** | feat/templates-sort-popular（已 merge） |
@@ -1180,6 +1181,6 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [ ] 相似頁面推薦空狀態與數量：`SimilarPagesSection`（`PlayPageSidebar.tsx`）目前無結果時整段隱藏；改為當「目標頁已索引但無相似結果」時顯示一行「找不到相似頁面」提示（與「未索引」區分：未索引仍隱藏）。後端 `GET /api/pdfs/:id/pages/:n/similar` 回傳已含足夠資訊（空陣列 vs 未索引可用 `indexed` 旗標區分）；需在端點回傳 `{ similar, indexed }`，前端據以顯示；補後端測試 1 個與 i18n 1 個 key。
 
-- [ ] 設定頁語意索引涵蓋率長條：`SettingsPage` 既有 `GET /api/me/embedding-stats`（indexed_pages/indexed_pdfs），新增後端回傳 `total_pages`（該 owner 所有 pdf 的頁數總和，JOIN pages），前端在「語意搜尋索引」小節加入一條覆蓋率長條（indexed_pages / total_pages 百分比）；補後端測試 1 個與 i18n 1 個 key。
+- [x] 設定頁語意索引涵蓋率長條：`GET /api/me/embedding-stats` 新增回傳 `total_pages`（該 owner 所有 PDF 的頁數總和，JOIN pages）；`SettingsPage`「語意搜尋索引」小節加入涵蓋率長條（indexed_pages / total_pages 百分比 + 文字）；更新既有後端測試斷言 `total_pages`（共 2 通過）；i18n 1 個 key（`settings.embeddingIndexCoverage`，zh-TW/en）。分支 `feat/embedding-coverage-bar`。
 
 - [ ] 課後報告列印頁首：`PostClassReportPanel` 列印（`@media print`）時於報告頂端顯示簡報標題與列印日期（目前列印輸出僅有「課後報告」泛標題）。利用既有 `summary`／`detail` 資料，加入一個僅列印時顯示（`hidden print:block`）的頁首；純前端改動，無新 i18n（沿用既有標題）或補 1 個 key。
