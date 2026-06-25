@@ -1670,6 +1670,16 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] BLOG.md 補記「錯誤提示友善化」：為第 54–57 輪的錯誤訊息 UX 改善（後端 normalizeErrorCode 接線、INVALID_REQUEST/NOT_FOUND 友善訊息、通用 `*_NOT_FOUND` fallback）在 BLOG.md 新增 section（功能目的／使用方式／技術細節）。文件、低風險。
   - 修改說明（2026-06-25）：BLOG.md 末尾新增「## 錯誤提示友善化（2026-06-25）」section，說明此批改善的目的（使用者見友善中文而非英文技術字串）、使用方式（無需操作、錯誤提示自動友善化）與技術細節（errorResponse 接線 normalizeErrorCode、ERROR_HINTS 新增 INVALID_REQUEST/NOT_FOUND、`*_NOT_FOUND` 通用 fallback 且保留具體中文訊息的 ADMIN_REQUIRED/FORBIDDEN、對應測試）。分支 `docs/blog-error-messages`，已 merge 回 master。
 
+## 掃描摘要（2026-06-25 第六十五輪）
+
+- 重新試探仍無測試的後端 services 中 import 鏈乾淨（不含 better-sqlite3 native module）者：`animationAutoFocus`、`handoutPdf`、`llmUsage` 可 import；`imageMigration`/`presentationGit`/`accountProfiles` 因 native module 失敗、無法測。
+- `handoutPdf.ts`（講義 PDF 生成）有多個未測純函式：`escapePdfText`（PDF 字串語法 escape）、`sanitizePdfText`（CRLF/控制字元清理）、`wrapText`（依字元數換行、空格優先斷行、Array.from 處理多位元組）、`toUtf16BeHex`（UTF-16BE + BOM hex 編碼，byte 順序為常見 bug 點）——皆值得測。
+
+## 新增可執行項目（2026-06-25 第六十五輪）
+
+- [x] 為 handoutPdf 文字純函式補測試：新增 `backend/test/handoutPdfHelpers.test.ts`，涵蓋 `escapePdfText`（反斜線/括號 escape、反斜線先行）、`sanitizePdfText`（CRLF 正規化、控制字元→空格、保留 tab/newline）、`wrapText`（界內單行、空/空行段落、最後空格斷行、多位元組硬斷）、`toUtf16BeHex`（BOM + big-endian 大寫 hex 含 CJK）。純後端、僅新增測試、不改產品程式碼。
+  - 修改說明（2026-06-25）：新增 `backend/test/handoutPdfHelpers.test.ts`，8 個測試全通過。`sanitizePdfText` 的控制字元測資以 `String.fromCharCode(0)`/`(7)` 構造（避免在源碼嵌入裸控制字元，且規避 Write 工具對 `\uXXXX` 跳脫處理不一致的問題）；`toUtf16BeHex('中')`→`'FEFF4E2D'` 驗證 big-endian 順序。以 `tsx --test` 直跑驗證 8 個測試全通過；backend typecheck 通過。分支 `test/handout-pdf-helpers`，已 merge 回 master。
+
 ## 掃描摘要（2026-06-25 第五十六輪）
 
 - 延續錯誤碼一致性調查，檢視後端 `errors.ts`。發現架構落差：`normalizeErrorCode`（legacy→standard 映射）**有單元測試**（`pages-api.test.ts`）卻**從未被產品程式碼呼叫**——路由實際用的 `errorResponse`（`routes/pdfs.ts`、`routes/pdfs/shared.ts` 兩份重複定義）直接送原始 code、不 normalize。導致 legacy 碼（PAGE_IMAGE_NOT_FOUND、COVER_NOT_READY、NO_FILE、INVALID_MIME 等）原樣洩漏到前端，而前端 `ERROR_HINTS` 無對應條目、顯示英文 fallback。
