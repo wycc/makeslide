@@ -1,5 +1,28 @@
 # MakeSlide 功能說明
 
+## 計時表「尚無紀錄」改為可翻譯
+
+### 目的
+
+播放頁的計時與 SLA 相關表格（投影片計時 chips、系統面板的計時表／執行歷史／慢成品表）在
+某個成品「尚無耗時紀錄」時會顯示一段佔位文字。這段文字原本被硬編成中文「尚無紀錄」，導致
+切到英文介面時仍然冒出中文，與周邊已翻譯的欄位不一致。
+
+### 變更內容
+
+- 「尚無紀錄」佔位字現在會跟隨介面語言：中文顯示「尚無紀錄」，英文顯示「no record / No
+  record」。
+- 涵蓋投影片計時 chips、tooltip、SLA 欄，以及系統面板的計時表、執行歷史、stage 明細與慢
+  成品表。
+- 沿用既有翻譯鍵，未新增重複鍵，因此各語言的字典數量不變。
+
+### 實作備註
+
+`formatDurationMs(ms)` 改為 `formatDurationMs(ms, noRecordLabel)`——把佔位字改成必填參數，
+由 TypeScript 編譯期確保每個呼叫端都帶入對應語言的 label。`PageTimingChips` 傳入既有
+`play.timing.tooltip.noRecord`、`PlayPageSlidePanel` 傳入既有 `play.system.noRecord`。純前端
+改動，typecheck、`formatters.test.ts`（11）與 i18n 對等測試（28）全數通過。
+
 ## 英文相對時間單複數修正
 
 ### 目的
