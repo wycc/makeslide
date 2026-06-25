@@ -18,6 +18,13 @@ export function validateSlaOverrideSecondsInput(rawInput: string, bounds?: SlaBo
     return { ok: false, reason: 'invalid-number' };
   }
 
+  // A zero/negative SLA target is never valid (the allowed minimum is well above
+  // zero). Reject it here so the function never approves a non-positive target
+  // even when called without bounds — don't rely on the bounds check alone.
+  if (seconds <= 0) {
+    return { ok: false, reason: 'invalid-number' };
+  }
+
   const targetMs = Math.round(seconds * 1000);
   if (bounds && (targetMs < bounds.min_ms || targetMs > bounds.max_ms)) {
     return {

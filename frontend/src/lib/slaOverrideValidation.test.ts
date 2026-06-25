@@ -39,6 +39,17 @@ test('validateSlaOverrideSecondsInput rejects values outside server-provided bou
   });
 });
 
+test('validateSlaOverrideSecondsInput rejects zero and negative seconds as invalid', () => {
+  // Non-positive targets are nonsensical and must be rejected even without bounds,
+  // not silently approved as ok:true.
+  assert.deepEqual(validateSlaOverrideSecondsInput('0'), { ok: false, reason: 'invalid-number' });
+  assert.deepEqual(validateSlaOverrideSecondsInput('-5'), { ok: false, reason: 'invalid-number' });
+  assert.deepEqual(validateSlaOverrideSecondsInput('-5', { min_ms: 1000, max_ms: 60_000 }), {
+    ok: false,
+    reason: 'invalid-number',
+  });
+});
+
 test('formatSlaOverrideRangeMessage injects allowed range in seconds', () => {
   assert.equal(
     formatSlaOverrideRangeMessage('請輸入 {min} 到 {max} 秒之間的 SLA 目標', 1, 60),
