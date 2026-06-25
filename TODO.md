@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | 分析並新增可執行項目：唯一剩餘項目「右邊改成 notebook 界面」範圍大且需求模糊、需使用者釐清，暫不盲做；依 LOOP.md 分析程式後新增 3 個低風險可執行項目（PostClassReportPanel i18n 第二階段、逐字稿改寫對話框顯示原稿+復原、側邊欄 QA 面板拆分逐字稿改寫=notebook 化第一步） | master（僅文件） |
 | 2026-06-25 | 修正 AI 動畫紅框錯位：編輯器預覽容器原寫死 16:9 致非 16:9 投影片被 letterbox、方框錯位；改為依圖片實際比例（`imageAspectPaddingPct` + img onLoad）。查證後端圖片以 sharp `fit:'inside'` 保比例傳送無誤。新增單元測試；typecheck/4 測試通過 | fix/animation-focus-box-aspect（已 merge） |
 | 2026-06-25 | 逐字稿對話式改寫對話框：新增自包含 `ScriptRewriteDialog`（自有多輪對話 state，不共用 QA chat），透過既有 rewrite-script 端點逐步改寫並套用到編輯器；`PlayPageSlidePanel` 加「對話式改寫」按鈕開啟；抽出 `buildRewriteContext` 純函式 + 3 個單元測試；zh-TW/en 各補 13 個 key；typecheck/測試/i18n 對等全通過 | feat/script-rewrite-dialog（已 merge） |
 | 2026-06-25 | AI 導師 ask 加入原始來源全文：`POST /pages/:n/ask` corpus 除逐頁文字+逐字稿外，另附 `source.txt`（上限 12000 字）並更新提示詞，使原文獨有的答案也能回答；新增後端測試（以獨立 inject 腳本驗證通過）；backend typecheck 通過 | feat/ai-tutor-source-text（已 merge） |
@@ -1209,3 +1210,16 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-25）：簡報生成提示詞早已記錄於 `pdfs.user_prompt`（`upload.ts` 於送出生成時寫入、`detail` 路由回傳），但前端僅用於「重新生成」對話框的預填，從未在檢視時顯示。新增：`PlayPageHeader` 在簡介折疊區下方新增「顯示生成提示詞」折疊區塊（複用 description 的折疊 + 複製模式），僅在非分享檢視（`!currentShareToken`）且 `detail.user_prompt` 非空時顯示，附「複製提示詞」按鈕。zh-TW/en 各新增 4 個 `play.header.*Prompt*` key（共 1655 對等）。純前端改動；typecheck 通過、i18n 對等測試 21 個全通過。分支 `feat/show-generation-prompt`，已 merge 回 master。
 - [x] AI 導師問這一頁的功能， 沒有將原文 extra 出的全文或 PDF 傳出去，所以無法顯示不在逐字稿的答案。
   - 修改說明（2026-06-25）：先前 ask 端點的全份 corpus 只含每頁的「投影片文字（text_path）+ 逐字稿（script_path）」，未納入原始 extract 出的來源全文（`source.txt`），導致答案只存在於原文、未寫進投影片/逐字稿時無法回答。修正：`page-operations.ts` 的 `POST /api/pdfs/:id/pages/:n/ask` 改為另外讀取 `sourceTextPath(id)`（`source.txt`，上限 12000 字、`ASK_SOURCE_TEXT_MAX_CHARS`），以獨立區塊「原始來源全文」附在簡報逐頁內容之後送給模型；system/user 提示詞同步說明「當答案只在原始來源全文時也要據以作答」。新增後端測試（頁面 text/script 不含關鍵字、`source.txt` 含 `ZETA9`，斷言送模型的 prompt 含原文與標籤）。因 sandbox 無法捕捉 node:test 輸出，另以獨立 Fastify inject 腳本驗證通過（STATUS 200、原文與標籤皆送達）。backend typecheck 通過。分支 `feat/ai-tutor-source-text`，已 merge 回 master。
+
+## 掃描摘要（2026-06-25 第三十三輪後半）
+
+- 本輪結束時，TODO 僅剩 1 個未完成項目「右邊改成 notebook 界面」——此項範圍大且需求模糊（「右邊」應指播放頁側邊欄 `PlayPageSidebar`，「notebook 界面」可能指 Jupyter 式的 cell 化介面），屬大型 UI 重構，需使用者進一步釐清才適合執行；暫不盲目實作。
+- 依 LOOP.md「無可安全執行項目時分析程式並新增項目」，依本輪在程式中的實際觀察新增以下可執行、低風險項目，供後續輪次處理。
+
+## 新增可執行項目（2026-06-25）
+
+- [ ] PostClassReportPanel 國際化（第二階段）：延續第一階段（已抽工具列與標題），把面板內文其餘硬編中文抽成 i18n key，至少包含：載入訊息「正在載入課後報告…」、四張 `SummaryCard` 的 label/hint（參與人數、測驗平均分數、投票參與率、學生提問及其 hint）、各區塊標題（最容易答錯的題目／投票分歧最高頁面／觀看完成率最低頁面／全頁完成率熱力圖／逐題答對率）與其副說明、各空狀態提示、`重置失敗`／`已重置（N 筆）` 結果訊息（含插值，註：`t()` 目前不支援插值，數字部分用樣板字串組合）。改用 `useI18n()`，補 zh-TW/en 對應 key；純前端，跑 `i18n.test.ts` 對等性測試確保兩語系 key 數對齊。
+
+- [ ] 逐字稿改寫對話框顯示目前逐字稿並可復原：`ScriptRewriteDialog` 目前每輪改寫會直接覆寫 `editingScript`，使用者看不到改寫前的原稿、也無法復原。於對話框頂端（對話串上方）新增一塊唯讀區顯示「目前逐字稿」（`editingScript`），並在每次套用改寫後提供「復原上一次改寫」按鈕（送出前先記住套用前的 `editingScript`，按下即還原並從對話串移除該輪 assistant 訊息）。純前端、自包含於該對話框；補對應 i18n key 與一個記錄/還原邏輯的純函式單元測試。
+
+- [ ] 側邊欄 QA 面板拆分逐字稿改寫與問答/生圖（notebook 化第一步）：目前 `PlayPageSidebar` 的 QA 面板讓「AI 問答」「生圖/inpaint」「逐字稿改寫」共用同一條 `chatHistory`，三種用途混在一起、語意混淆（這也是「右邊改成 notebook 界面」可獨立先做的一步）。將逐字稿改寫從共用 chat 串移除（改走已新增的獨立 `ScriptRewriteDialog`），QA 面板專注於「問答 + 生圖」，並在面板加上簡短用途說明。純前端、以既有元件與 context 為主，不新增後端；變更後跑 typecheck 與既有前端測試確認無回歸。
