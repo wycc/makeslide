@@ -36,6 +36,7 @@ import {
   resolveAnimationSpec,
 } from '../lib/animationSpec';
 import { debugLog, debugWarn } from '../lib/debugLog';
+import { formatGeneratingStatusLabel } from '../lib/statusLabels';
 import { splitScriptIntoSentences, buildSentenceTimeline, type SentenceTimelineItem } from '../lib/subtitles';
 import { type DrawingCanvasHandle, type DrawingData, type DrawingStroke } from '../components/DrawingCanvas';
 import { useVersionHistory } from './play/useVersionHistory';
@@ -601,7 +602,7 @@ export default function PlayPage() {
   const readOnlyReason = isReadOnlyProcessing
     ? shareIsReadOnly
       ? t('play.banner.readOnlyShare')
-      : `${t('play.banner.generatingPrefix')}${detail.status}${detail.progress_step ? ` / ${detail.progress_step}` : ''}${t('play.banner.generatingSuffix')}`
+      : `${t('play.banner.generatingPrefix')}${formatGeneratingStatusLabel(detail.status, detail.progress_step, t)}${t('play.banner.generatingSuffix')}`
     : null;
   const slideImageMaxHeightVh = Math.round(52 * slideImageScale);
   const imageBustKey = detail?.updated_at ?? '';
@@ -2292,7 +2293,7 @@ export default function PlayPage() {
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-slate-950 text-slate-100">
         <p className="text-slate-300">
           {isReadOnlyProcessing
-            ? `${t('play.status.noPagesGeneratingPrefix')}${detail.status}${detail.progress_step ? ` / ${detail.progress_step}` : ''}${t('play.status.noPagesGeneratingSuffix')}`
+            ? `${t('play.status.noPagesGeneratingPrefix')}${formatGeneratingStatusLabel(detail.status, detail.progress_step, t)}${t('play.status.noPagesGeneratingSuffix')}`
             : t('play.status.noAudioPages')}
         </p>
         {isReadOnlyProcessing ? <p className="text-xs text-slate-500">{t('play.status.recheckHint')}</p> : null}
