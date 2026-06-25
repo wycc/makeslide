@@ -3,6 +3,7 @@ import DrawingCanvas from '../../components/DrawingCanvas';
 import { SlideRenderer } from '../../components/slide/SlideRenderer';
 import { AnimationEditorTab } from './AnimationEditorTab';
 import { FigureAssetsTab } from './FigureAssetsTab';
+import { ScriptRewriteDialog } from './ScriptRewriteDialog';
 import { formatTime, formatDurationMs, formatTokenCount, formatCostUsd } from './formatters';
 import { PageTimingChips } from './PageTimingChips';
 import { ApiError, fetchPageGenerationPrompts, fetchPdfRunHistory, fetchPdfSlowArtifacts, figureImageUrl, fetchSyncAttendees, kickSyncAttendee, rewritePageScript } from '../../lib/api';
@@ -234,6 +235,7 @@ export function PlayPageSlidePanel() {
   type RewriteStyle = 'compact' | 'detailed' | 'conversational';
   const [aiRewriteStyle, setAiRewriteStyle] = useState<RewriteStyle>('compact');
   const [aiRewriteBusy, setAiRewriteBusy] = useState(false);
+  const [scriptRewriteDialogOpen, setScriptRewriteDialogOpen] = useState(false);
   const [aiRewriteDraft, setAiRewriteDraft] = useState<string | null>(null);
   const [aiRewriteError, setAiRewriteError] = useState<string | null>(null);
   const [scriptCopied, setScriptCopied] = useState(false);
@@ -1137,10 +1139,19 @@ export function PlayPageSlidePanel() {
                 >
                   {aiRewriteBusy ? t('play.sidebar.rewriteScriptBusy') : t('play.sidebar.rewriteScript')}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setScriptRewriteDialogOpen(true)}
+                  disabled={!currentPage}
+                  className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-2.5 py-1 text-xs text-fuchsia-200 hover:bg-fuchsia-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {t('play.scriptRewrite.open')}
+                </button>
                 {aiRewriteError && (
                   <span className="text-xs text-rose-400">{aiRewriteError}</span>
                 )}
               </div>
+              <ScriptRewriteDialog open={scriptRewriteDialogOpen} onClose={() => setScriptRewriteDialogOpen(false)} />
               {/* AI 改寫 diff */}
               {aiRewriteDraft !== null && (
                 <div className="mb-2 rounded-md border border-violet-500/40 bg-slate-900/60 p-3 text-xs">
