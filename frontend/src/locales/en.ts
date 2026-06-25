@@ -1667,4 +1667,7 @@ export const en = {
   'play.scriptRewrite.clear': 'Clear chat',
   'play.scriptRewrite.close': 'Close',
   'play.scriptRewrite.error': 'Script rewrite failed',
+  'play.scriptRewrite.currentScriptLabel': 'Current script',
+  'play.scriptRewrite.currentScriptEmpty': '(script is empty)',
+  'play.scriptRewrite.undo': 'Undo last rewrite',
 } as const;
