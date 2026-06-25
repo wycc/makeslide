@@ -9,6 +9,7 @@ import {
   type PageGenerationPrompt,
 } from '../../lib/api';
 import type { PdfDetail, PdfDetailPage } from '../../types';
+import { useI18n } from '../../i18n';
 
 interface UsePromptAndSourceParams {
   pdfId: string | undefined;
@@ -49,6 +50,7 @@ export function usePromptAndSource({
   isReadOnlyProcessing,
   setDetail,
 }: UsePromptAndSourceParams): PromptAndSourceState {
+  const { t } = useI18n();
   const [promptInput, setPromptInput] = useState('');
   const [sourceTextName, setSourceTextName] = useState('');
   const [sourceTextContent, setSourceTextContent] = useState('');
@@ -100,19 +102,19 @@ export function usePromptAndSource({
       const res = await updatePdfPrompt(pdfId, currentPage.page_number, promptInput);
       setPagePrompts((prev) => ({ ...prev, [res.page_number]: res.page_prompt ?? '' }));
       setDetail((prev) => (prev ? { ...prev, updated_at: res.updated_at } : prev));
-      setPromptMsg('提示詞已更新');
+      setPromptMsg(t('play.promptSource.promptUpdated'));
     } catch (err) {
-      setPromptMsg(err instanceof ApiError ? err.message : '更新提示詞失敗');
+      setPromptMsg(err instanceof ApiError ? err.message : t('play.promptSource.promptUpdateFailed'));
     } finally {
       setPromptBusy(false);
     }
-  }, [pdfId, currentPage, promptInput, isReadOnlyProcessing, setDetail]);
+  }, [pdfId, currentPage, promptInput, isReadOnlyProcessing, setDetail, t]);
 
   const handleAddTxtSource = useCallback(async () => {
     if (!pdfId) return;
     const content = sourceTextContent.trim();
     if (!content) {
-      setSourceErr('請先輸入來源文字內容');
+      setSourceErr(t('play.promptSource.sourceTextRequired'));
       return;
     }
     setSourceBusy(true);
@@ -129,13 +131,13 @@ export function usePromptAndSource({
         return { ...prev, sources: [...prevSources, created] };
       });
       setSourceTextContent('');
-      setSourceMsg('已新增文字來源');
+      setSourceMsg(t('play.promptSource.textSourceAdded'));
     } catch (err) {
-      setSourceErr(err instanceof ApiError ? err.message : '新增文字來源失敗');
+      setSourceErr(err instanceof ApiError ? err.message : t('play.promptSource.textSourceAddFailed'));
     } finally {
       setSourceBusy(false);
     }
-  }, [pdfId, sourceTextContent, sourceTextName, setDetail]);
+  }, [pdfId, sourceTextContent, sourceTextName, setDetail, t]);
 
   const handleAddPdfSource = useCallback(
     async (file: File) => {
@@ -150,14 +152,14 @@ export function usePromptAndSource({
           const prevSources = prev.sources ?? [];
           return { ...prev, sources: [...prevSources, created] };
         });
-        setSourceMsg('已新增 PDF 來源');
+        setSourceMsg(t('play.promptSource.pdfSourceAdded'));
       } catch (err) {
-        setSourceErr(err instanceof ApiError ? err.message : '新增 PDF 來源失敗');
+        setSourceErr(err instanceof ApiError ? err.message : t('play.promptSource.pdfSourceAddFailed'));
       } finally {
         setSourceBusy(false);
       }
     },
-    [pdfId, setDetail],
+    [pdfId, setDetail, t],
   );
 
   return {
