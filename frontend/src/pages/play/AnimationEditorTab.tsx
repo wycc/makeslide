@@ -102,6 +102,25 @@ const HANDLE_CURSORS: Record<DragHandle, string> = {
 };
 
 /**
+ * 計算焦點方框編輯預覽容器的長寬比 padding（paddingTop 百分比），使容器精確
+ * 對齊投影片圖片的實際比例，而非寫死的 16:9。寫死 16:9 + `object-fit: contain`
+ * 會讓非 16:9 的投影片（例如 PDF 匯入的 4:3／直式頁面）被 letterbox 留邊，導致
+ * 方框的百分比座標（AI 是相對「真實圖片」回傳）與顯示出來的圖片錯位。無效尺寸
+ * 時回退為 56.25%（16:9）。
+ */
+export function imageAspectPaddingPct(naturalWidth: number, naturalHeight: number): number {
+  if (
+    !Number.isFinite(naturalWidth) ||
+    !Number.isFinite(naturalHeight) ||
+    naturalWidth <= 0 ||
+    naturalHeight <= 0
+  ) {
+    return 56.25;
+  }
+  return (naturalHeight / naturalWidth) * 100;
+}
+
+/**
  * 在投影片縮圖上以拖曳方式直接編輯 overlay 效果的位置與大小。
  * 非 overlay 效果或 pointer/custom-script 效果僅顯示位置點（pointer）或不顯示。
  */
@@ -120,6 +139,8 @@ function EffectPositionEditor({
   disabled?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  // 預覽容器的長寬比 padding，依實際載入的圖片比例調整，避免 letterbox 造成方框錯位。
+  const [aspectPaddingPct, setAspectPaddingPct] = useState(56.25);
   const dragRef = useRef<{
     handle: DragHandle;
     startMouseX: number;
@@ -214,13 +235,14 @@ function EffectPositionEditor({
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
-      style={{ position: 'relative', width: '100%', paddingTop: '56.25%', userSelect: 'none' }}
+      style={{ position: 'relative', width: '100%', paddingTop: `${aspectPaddingPct}%`, userSelect: 'none' }}
       className="overflow-hidden rounded-md border border-slate-700 bg-slate-950"
     >
       <img
         src={imageUrl}
         alt=""
         draggable={false}
+        onLoad={(e) => setAspectPaddingPct(imageAspectPaddingPct(e.currentTarget.naturalWidth, e.currentTarget.naturalHeight))}
         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block', pointerEvents: 'none' }}
       />
       {isPointerOnly ? (
