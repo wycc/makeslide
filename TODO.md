@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | 分析並新增可執行項目（第三十五輪）：TODO 清空後依 LOOP.md 掃描程式 + 參考 FUTURE_ROADMAP，新增 4 個低風險增量項目（相對時間格式化抽共用 i18n helper 消除 PdfCard/QuizBuilderPage 重複、PlayPage.tsx 錯誤/狀態訊息 i18n 第二批、AnimationEditorTab i18n、零星小元件殘留中文 i18n） | master（僅文件） |
 | 2026-06-25 | AI 導師跨頁引用強制化：`ask` 端點系統提示詞新增「【引用規則（務必遵守）】」，回答用到「學生目前所在頁」以外頁面資訊時必須主動以括號標示頁碼（如「（第 3 頁）」），引用原始來源標示「（原始來源）」；page-ask 測試加 2 條斷言；backend typecheck 通過（後端測試 sandbox timeout，改以 typecheck + 提示詞字串核對確認） | feat/ai-tutor-mandatory-cross-page-citation（已 merge） |
 | 2026-06-25 | PlayPage.tsx 行動分頁與狀態畫面國際化：行動版「播放／問答」分頁、新投票 aria-label、四個全螢幕狀態畫面（invalid id/載入/無頁面/產生中）、圖片產生中浮層改用 t()；新增 11 個 `play.mobileTab.*`/`play.status.*` key（對等總數 1750）；錯誤訊息字串依項目允許延後；typecheck + i18n 對等 21 全通過 | feat/playpage-mobile-status-i18n（已 merge） |
 | 2026-06-25 | RemoteControllerPage 殘留中文國際化：投影片 alt「第 N 頁」與投票「N 票」抽成 3 個 `remote.*` key（slideAltPrefix/Suffix、votesSuffix）；grep 確認無殘留中文；zh-TW/en 各補 3 key；typecheck + i18n 對等全通過 | feat/remote-controller-i18n（已 merge） |
@@ -1279,3 +1280,21 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-25）：新增純函式 `getEdgeNotebookTab('first'|'last')`（`notebookTabs.ts`）回傳首/末分頁 id；`PlayPageSidebar` 的 `handleTabKeyDown` 改為依 `ArrowRight/ArrowLeft/Home/End` 計算目標分頁，命中才 `preventDefault` 並切換 + 移動焦點（沿用 roving tabindex，焦點限定分頁列故不與翻頁衝突）。補 1 個 `getEdgeNotebookTab` 單元測試（notebookTabs 測試共 7 個）；無新增 i18n key。frontend typecheck 通過、全部 275 個前端測試 + i18n 對等 21 個全通過。分支 `feat/notebook-home-end-keys`，已 merge 回 master。
 - [x] AI 導師問這一頁時，回答時如果引用其它頁的資訊，要主動加入引用。
   - 修改說明（2026-06-25）：`POST /api/pdfs/:id/pages/:n/ask`（`page-operations.ts`）的 corpus 早已把每頁標為「# 第 N 頁」並標示「（學生目前所在頁）」，系統提示詞也已提「必要時可跨頁說明並標示頁碼／引用內容時以括號標示來源」，但語氣為「必要時」「引用時」屬非強制。強化系統提示詞為**強制引用規則**：新增「【引用規則（務必遵守）】只要回答用到『學生目前所在頁』以外其他頁面的資訊，就必須在該處主動以括號標示來源頁碼（例如「（第 3 頁）」「（第 3 頁逐字稿）」），不可省略；引用原始來源全文標示「（原始來源）」；引用目前所在頁則可不標示」，並在開頭說明每頁的「# 第 N 頁」標示方式。`page-ask.test.ts` 既有「綜合全份」測試新增 2 條斷言（系統提示含「引用規則」與「學生目前所在頁…以外」）。backend typecheck 通過；後端測試於 sandbox 跑 `with-node-env.sh` 套件測試達 180s timeout 被終止（與前數輪 sandbox 限制一致），改以 backend typecheck + 核對新提示詞確含兩個斷言目標字串確認測試斷言成立。分支 `feat/ai-tutor-mandatory-cross-page-citation`，已 merge 回 master。
+
+## 掃描摘要（2026-06-25 第三十五輪）
+
+- 上一輪結束時 TODO 再次清空，依 LOOP.md 掃描程式 + 參考 `docs/FUTURE_ROADMAP.md`（主要功能 2.1–2.10 多已實作）後，聚焦既有程式碼的低風險增量缺口。
+- 觀察：`formatRelativeTime`（「剛剛／N 分鐘前／N 小時前／N 天前／N 個月前／N 年前」）在 `components/PdfCard.tsx` 與 `pages/QuizBuilderPage.tsx` **完全重複**且硬編中文——可抽成共用、可測、i18n 化的 helper，同時消除重複。
+- 觀察：`PlayPage.tsx` 仍有大量硬編中文的錯誤/狀態訊息（`setSyncError`/`setAudioError`/`ApiError` fallback、`載入失敗`、`文稿不可為空`、`重生語音失敗` 等），上一輪 i18n 已處理版面文字、這批錯誤字串留待本輪後續。
+- 觀察：`AnimationEditorTab.tsx` 有約 50 處中文（UI 標籤 + 範例提示詞），尚未 i18n，是較大的一塊。
+- 觀察：零星小元件仍有可見硬編中文（`PageTimingChips` 的「產生中」等）。
+
+## 新增可執行項目（2026-06-25 第三十五輪）
+
+- [ ] 相對時間格式化抽成共用 i18n helper：`components/PdfCard.tsx` 與 `pages/QuizBuilderPage.tsx` 各有一份完全相同、硬編中文的 `formatRelativeTime`。抽成共用模組（例如 `frontend/src/lib/relativeTime.ts`）並 i18n 化（因 `t()` 不支援插值，回傳「數字 + 單位後綴 key」樣板字串組合，或讓 helper 接受一組 label 字串）；兩處改用共用版本以消除重複。補單元測試涵蓋各區間（剛剛 / 分鐘 / 小時 / 天 / 月 / 年、無效輸入 fallback）。補 zh-TW/en key、跑 i18n 對等測試。純前端、低風險。
+
+- [ ] PlayPage.tsx 錯誤與狀態訊息國際化（第二批）：延續上一輪（已處理行動分頁與全螢幕版面文字），把 `PlayPage.tsx` 仍硬編中文的錯誤/狀態訊息抽成 i18n key，至少包含 `setSyncError` 系列（同步連線/狀態更新/輪詢/送出問題/舉手/切換顯示/AI 回答/AI 摘要 失敗）、`setAudioError`（語音載入失敗）、`loadError` 預設（`載入失敗`、`分享連結與簡報不符`）、`文稿不可為空`、`重生語音失敗`、唯讀/產生中橫幅提示文字等。改用 `useI18n()` 既有 `t`；含 `status`/`progress_step` 插值處以樣板字串組合。補 zh-TW/en 並跑 i18n 對等測試。純前端。
+
+- [ ] AnimationEditorTab 國際化：把 `pages/play/AnimationEditorTab.tsx` 的硬編中文（UI 標籤、按鈕、狀態文字，以及內建範例提示詞清單）抽成 i18n key；範例提示詞可作為預設內容 key（zh-TW 維持現中文、en 提供英文版）。改用 `useI18n()`，補 zh-TW/en 對應 key 並跑 i18n 對等測試。純前端；量較大，可只先處理 UI 標籤/按鈕、範例提示詞列為次階段。
+
+- [ ] 零星小元件殘留硬編中文國際化：把 `pages/play/PageTimingChips.tsx`（如「產生中」）與其他少量殘留可見中文（掃描 `QualityCheckPanel`、`PlayPageSlidePanel`、`PlayPageSidebar`、`PlayPageHeader` 等元件確認）抽成 i18n key，補 zh-TW/en 並跑 i18n 對等測試。純前端、低風險清理。
