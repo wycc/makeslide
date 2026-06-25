@@ -1477,6 +1477,8 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [x] API 錯誤提示訊息 i18n（mapApiErrorToHumanMessage）（第七十九輪，2026-06-26 掃描新增並完成）：`lib/api/common.ts` 的 `ERROR_HINTS` 與 `mapApiErrorToHumanMessage` 硬編約 20 組中文 `title/message/nextStep`，於英文介面的上傳／匯入錯誤對話框與 credit 用盡對話框洩漏未翻譯文字。將 `ERROR_HINTS` 改為翻譯鍵三元組（`apiError.*`，以 `hintKeys()` 產生）、`mapApiErrorToHumanMessage(err, t)` 接受 translator；新增 zh-TW/en 各 66 個 `apiError.*` 鍵。兩呼叫端元件（`UploadButton`、`ImportTextPage`）傳入 `t`。`notifyCreditExhausted` 改為只在事件帶 `code/status`，由有 i18n context 的 `CreditExhaustedDialog` 以 mapper 推導人類可讀文字（跟隨介面語言）。更新 `api.error-mapping.test.ts` 以 zh-TW 字典解析鍵、斷言不變。typecheck 通過、前端全測試 325 個全通過。純前端、低風險（行為等價、僅文字來源改為翻譯鍵）。分支 `feat/api-error-hints-i18n`，已 merge 回 master。
 
+- [x] 修復動畫形狀選單缺漏（前後端 shape kinds drift）（第八十輪，2026-06-26 掃描發現並修復）：前端 `animationSpec.ts` 的 `ANIMATION_SHAPE_KINDS` 只列 4 種形狀（circle/rect/ellipse/arrow），但前端型別 `SlideAnimationShapeKind`、`SlideRenderer`（實際繪製 line/triangle/star/hexagon）、8 個 `play.animation.shapeKind.*` i18n 標籤、以及後端 `pageAnimation.ts` 的 `ANIMATION_SHAPE_KINDS` 全部支援 8 種。因 `AnimationEditorTab` 的形狀下拉是用此常數產生，使用者無法選取 line/triangle/star/hexagon——是真實 bug。修復：將前端常數補回完整 8 種（順序對齊後端）。並新增後端 drift-guard 測試 `animationConstantsConsistency.test.ts`（仿第六十八輪價格表 guard），以 `fs` 讀前端 `animationSpec.ts` 原始碼、抽取 `SLIDE_ANIMATION_EFFECT_TYPES`/`SLIDE_ANIMATION_EASES`/`ANIMATION_SHAPE_KINDS` 與後端對應常數逐一比對（effect types 18、eases 7 原本就一致），未來任一端 drift 即 CI 失敗。前端 typecheck 與 animationSpec 測試 58 個通過、後端新測試 4 個通過。分支 `fix/animation-shape-kinds-drift`，已 merge 回 master。
+
 ## 掃描摘要（2026-06-25 第四十三輪）
 
 - 本輪 TODO 唯一未完成項目（formatDurationMs i18n）先前的實作方案被使用者否決，已標記暫緩。經詢問使用者後，本輪改為「為後端 `logSanitizer.ts` 補單元測試」。
@@ -1807,3 +1809,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - 時間：2026-06-26
 - 分支：`feat/api-error-hints-i18n`（已 merge 回 master）
 - 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 83 個完成項目（83/100，未達上限）。
+## 工作記錄（第八十輪，2026-06-26）
+
+- 工作內容：前端 i18n 洩漏掃描已收尾（剩餘皆為註解或送往 LLM 的內容），轉而排查前後端「鏡像常數」drift。發現真實 bug：前端 `animationSpec.ts` 的 `ANIMATION_SHAPE_KINDS` 只有 4 種形狀，但前端型別、`SlideRenderer` 繪製邏輯、8 個 shapeKind i18n 標籤與後端 `ANIMATION_SHAPE_KINDS` 都支援 8 種；由於 `AnimationEditorTab` 形狀下拉用此常數產生選項，使用者無法選 line/triangle/star/hexagon。修復：補回完整 8 種（順序對齊後端）。同時新增後端 drift-guard 測試（仿第六十八輪 LLM 價格表 guard 手法，以 fs 讀前端原始碼比對 effect types/eases/shape kinds 三組鏡像），防止再次 drift。前端 typecheck + animationSpec 測試 58 個通過、後端新測試 4 個通過。低風險（補資料 + 純測試）。
+- 時間：2026-06-26
+- 分支：`fix/animation-shape-kinds-drift`（已 merge 回 master）
+- 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 84 個完成項目（84/100，未達上限）。
