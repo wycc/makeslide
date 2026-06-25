@@ -1,44 +1,6 @@
 import { gsap } from 'gsap';
-import type { SlideAnimationEffect, SlideAnimationSpec } from '../../types';
-
-function panDistance(effect: SlideAnimationEffect): number {
-  const d = effect.params?.distancePct;
-  return typeof d === 'number' && Number.isFinite(d) ? d : 3;
-}
-
-/**
- * `from`/`to` GSAP vars for a whole-slide transform effect's entrance tween
- * (`from` is also the "reverted" state used when `exitDuration` is set).
- * Returns `null` for non-transform effect types (overlay effects).
- */
-function transformFromTo(effect: SlideAnimationEffect): { from: Record<string, number>; to: Record<string, number> } | null {
-  switch (effect.type) {
-    case 'fade-in':
-      return { from: { autoAlpha: 0 }, to: { autoAlpha: 1 } };
-    case 'zoom-in':
-      return { from: { scale: effect.params?.fromScale ?? 1 }, to: { scale: effect.params?.toScale ?? 1.08 } };
-    case 'zoom-out':
-      return { from: { scale: effect.params?.fromScale ?? 1.08 }, to: { scale: effect.params?.toScale ?? 1 } };
-    case 'pan-left': {
-      const d = panDistance(effect);
-      return { from: { xPercent: d }, to: { xPercent: -d } };
-    }
-    case 'pan-right': {
-      const d = panDistance(effect);
-      return { from: { xPercent: -d }, to: { xPercent: d } };
-    }
-    case 'pan-up': {
-      const d = panDistance(effect);
-      return { from: { yPercent: d }, to: { yPercent: -d } };
-    }
-    case 'pan-down': {
-      const d = panDistance(effect);
-      return { from: { yPercent: -d }, to: { yPercent: d } };
-    }
-    default:
-      return null;
-  }
-}
+import type { SlideAnimationSpec } from '../../types';
+import { transformFromTo } from './slideTransforms';
 
 /**
  * Builds a paused GSAP timeline from a whitelisted-preset spec. Only the
