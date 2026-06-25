@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { PdfReportQuestionStat, PdfReportSummary } from '../../lib/api';
 import { resetWatchProgress } from '../../lib/api';
+import { useI18n } from '../../i18n';
 import {
   formatReportNumber,
   formatReportPercent,
@@ -55,6 +56,7 @@ function SummaryCard({ label, value, hint }: { label: string; value: string; hin
 }
 
 export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error, onClose, onReload }: PostClassReportPanelProps) {
+  const { t } = useI18n();
   const hardestQuestions = getHardestQuestions(summary);
   const divergentPollPages = getMostDivergentPollPages(summary);
   const lowestCompletionPages = getLowestCompletionPages(summary);
@@ -71,7 +73,7 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
   const [resetMsg, setResetMsg] = useState<string | null>(null);
 
   const handleResetWatchProgress = () => {
-    if (!window.confirm('確定要重置所有觀看進度紀錄？此動作無法復原。')) return;
+    if (!window.confirm(t('play.report.resetConfirm'))) return;
     setResetBusy(true);
     void resetWatchProgress(pdfId)
       .then((res) => {
@@ -135,43 +137,43 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
         <div className="w-full max-w-5xl rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
           <div className="hidden print:block mb-4 border-b border-slate-300 pb-3">
             <h1 className="text-lg font-semibold text-black">
-              {(pdfTitle && pdfTitle.trim()) ? pdfTitle : '課後報告'}
+              {(pdfTitle && pdfTitle.trim()) ? pdfTitle : t('play.report.title')}
             </h1>
             <p className="mt-1 text-xs text-slate-600">列印日期：{new Date().toLocaleDateString()}</p>
           </div>
           <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800 pb-4">
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-cyan-300">Post-class report</p>
-              <h2 id="post-class-report-title" className="mt-1 text-xl font-semibold text-slate-100">課後報告</h2>
-              <p className="mt-1 text-sm text-slate-400">彙整測驗、投票、提問與觀看完成率，協助簡報擁有者快速找出課後補強重點。</p>
+              <h2 id="post-class-report-title" className="mt-1 text-xl font-semibold text-slate-100">{t('play.report.title')}</h2>
+              <p className="mt-1 text-sm text-slate-400">{t('play.report.subtitle')}</p>
             </div>
             <div className="flex items-center gap-2" data-no-print="true">
               <button type="button" onClick={onReload} disabled={loading} className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-100 hover:bg-cyan-500/25 disabled:opacity-50">
-                {loading ? '更新中…' : '重新整理'}
+                {loading ? t('play.report.refreshing') : t('play.report.refresh')}
               </button>
               <a
                 href={`api/pdfs/${encodeURIComponent(pdfId)}/quiz-results.csv`}
                 download
                 className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-3 py-1.5 text-sm text-emerald-100 hover:bg-emerald-500/25"
               >
-                匯出 CSV
+                {t('play.report.exportQuizCsv')}
               </a>
               <a
                 href={`api/pdfs/${encodeURIComponent(pdfId)}/report/students.csv`}
                 download
                 className="rounded-md border border-teal-500/50 bg-teal-500/15 px-3 py-1.5 text-sm text-teal-100 hover:bg-teal-500/25"
               >
-                學生報告 CSV
+                {t('play.report.exportStudentCsv')}
               </a>
               <a
                 href={`api/pdfs/${encodeURIComponent(pdfId)}/poll-results.csv`}
                 download
                 className="rounded-md border border-violet-500/50 bg-violet-500/15 px-3 py-1.5 text-sm text-violet-100 hover:bg-violet-500/25"
               >
-                投票結果 CSV
+                {t('play.report.exportPollCsv')}
               </a>
               <button type="button" onClick={() => window.print()} className="rounded-md border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-sm text-amber-100 hover:bg-amber-500/25">
-                列印 / 儲存 PDF
+                {t('play.report.print')}
               </button>
               <button
                 type="button"
@@ -180,10 +182,10 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
                 className="rounded-md border border-rose-500/50 bg-rose-500/15 px-3 py-1.5 text-sm text-rose-100 hover:bg-rose-500/25 disabled:opacity-50"
                 title="清除所有觀看進度紀錄，以重新統計課後觀看數據"
               >
-                {resetMsg ?? (resetBusy ? '重置中…' : '重置觀看進度')}
+                {resetMsg ?? (resetBusy ? t('play.report.resetting') : t('play.report.resetWatch'))}
               </button>
               <button type="button" onClick={onClose} className="rounded-md border border-slate-600 bg-slate-800 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-700">
-                關閉
+                {t('play.report.close')}
               </button>
             </div>
           </div>
