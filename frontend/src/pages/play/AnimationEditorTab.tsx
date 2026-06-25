@@ -586,9 +586,17 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
     ? customScriptStreamingPlan[customScriptDialogEffect.id]
     : undefined;
 
-  // 開啟對話框（或切換效果）時清空尚未送出的訊息。
+  // 開啟對話框（或切換效果）時，以該效果上次記下的提示詞回填輸入框，方便直接迭代；
+  // 沒有記錄時則清空。僅在開啟/切換效果時執行，避免打字途中被覆寫。
   useEffect(() => {
-    setCustomScriptChatInput('');
+    if (!customScriptDialogEffectId) {
+      setCustomScriptChatInput('');
+      return;
+    }
+    const opened = draft.effects.find(
+      (effect) => effect.id === customScriptDialogEffectId && effect.type === 'custom-script',
+    );
+    setCustomScriptChatInput(opened?.prompt ?? '');
   }, [customScriptDialogEffectId]);
 
   useEffect(() => {
