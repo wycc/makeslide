@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | 分析並新增可執行項目（第三十九輪）：TODO 清空、無新使用者項目，依 LOOP.md 聚焦健全性/可測性，新增 2 個低風險項目（viewerId/reviewList localStorage 存取防護一致性、抽出測驗進度彙總純函式 + 測試） | master（僅文件） |
 | 2026-06-25 | 動畫文字依解析度等比縮放：`SlideRenderer` 動畫 stage 以 ResizeObserver 量寬度、設 `font-size = 16*(width/960)px`，覆蓋層文字單位 rem/clamp→em 以繼承縮放（text-callout/step-list/pause/realtime/formula），使各解析度下文字相對投影片比例一致；typecheck + 286 前端測試通過 | fix/animation-text-resolution-scaling（已 merge） |
 | 2026-06-25 | 全螢幕提問圖示：`PlayPageFullscreen` 在 master 且有學生提問時於左上角顯示 💬 + 提問數徽章（pointer-events-none、含 sr-only 文字）；新增 1 個 i18n key；typecheck + 286 前端測試全通過 | feat/fullscreen-question-indicator（已 merge） |
 | 2026-06-25 | 全螢幕投票按鈕：`PlayPageFullscreen` 本頁有進行中投票時右上角加 🗳 按鈕，點擊開可投票 overlay（複用 handleVotePoll/pollVotes，顯示選項得票/比例）；master 票數 overlay 移至按鈕下方且開啟時隱藏；新增 1 個 i18n key；typecheck + 286 前端測試全通過 | feat/fullscreen-poll-button（已 merge） |
@@ -1396,4 +1397,16 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-25）：`PlayPageFullscreen` 在 master（`syncEnabled && syncRole === 'master'`）且有學生提問（`syncFollowerQuestions.length > 0`）時，於全螢幕**左上角**（避開右上角投票按鈕，位於暫停指示器下方 `top-20`）顯示 `pointer-events-none` 的 💬 提問圖示 + 提問數量徽章（附 sr-only `play.fullscreen.pendingQuestions` 無障礙文字）。新增 1 個 i18n key（zh-TW/en 各 1）。frontend typecheck 通過、全部 286 個前端測試 + i18n 對等 21 個全通過。分支 `feat/fullscreen-question-indicator`，已 merge 回 master。
 - [x] 動畫中的文字要根據解析度設定文字小大, 在不同解析度文字的比例看起來要一樣
   - 修改說明（2026-06-25）：根因為動畫覆蓋層文字用固定單位（`rem` 與 `clamp(...,3vw,...)`），不隨投影片實際渲染尺寸等比縮放——在編輯器小預覽、一般播放、全螢幕下文字相對投影片的比例不一致。修正集中於 `SlideRenderer`：① 動畫 stage（`stageRef` 容器）以 `ResizeObserver` 量測實際寬度，計算 `stageFontScale = stageWidth / 960`（參考寬度 960，無 ResizeObserver 時以 `getBoundingClientRect` fallback），並將 stage 的 `font-size` 設為 `16 * scale px`；② 將覆蓋層文字單位由絕對改為相對 `em`，以繼承 stage 字級而等比縮放：text-callout、step-list 由 `rem`→`em`，pause-playback、realtime-poll 由 `clamp(1rem,3vw,2.25rem)`→`1.6em`，formula 原即 `em`（現一併隨 stage 縮放）。如此同一動畫在任何解析度下，文字相對投影片的比例一致。pointer/shape 等非文字元素維持原樣。frontend typecheck 通過、全部 286 個前端測試通過；視覺等比結果因 sandbox 無瀏覽器未做像素級驗證，但單位/縮放數學已驗證。分支 `fix/animation-text-resolution-scaling`，已 merge 回 master。
+
+## 掃描摘要（2026-06-25 第三十九輪）
+
+- TODO 清空且無新使用者項目。前端使用者可見硬編中文與相對時間重複已清理；本輪聚焦健全性與可測性的小改善。
+- 觀察：`lib/viewerId.ts` 直接呼叫 `window.localStorage`、`lib/reviewList.ts` 的 `addReviewItems`/`removeReviewItem`/`clearAllReviewItems` 直接呼叫 `localStorage`，皆未做 `typeof window === 'undefined'` 防護（不同於 `i18n.ts` 的既有慣例），在非瀏覽器環境會丟錯。
+- 觀察：`QuizBuilderPage` 計算測驗作答彙總（submitted/total/inProgress）為 inline 邏輯，可抽成純函式以利重用與測試。
+
+## 新增可執行項目（2026-06-25 第三十九輪）
+
+- [ ] localStorage 存取防護一致性：為 `lib/viewerId.ts`（`getOrCreateViewerId`）與 `lib/reviewList.ts`（`addReviewItems`/`removeReviewItem`/`clearAllReviewItems`）加上 `typeof window === 'undefined'`（或 `typeof localStorage === 'undefined'`）的早退防護，與 `i18n.ts` 既有慣例一致，避免非瀏覽器環境丟錯（`getReviewItems` 已有 try/catch，可一併確認）。更新/補既有測試涵蓋「無 localStorage 時安全回退」。純前端、低風險。
+
+- [ ] 抽出測驗進度彙總純函式：把 `QuizBuilderPage` 「測驗中的學員」面板 inline 的 `submitted / total / inProgress` 計算抽成純函式（例如 `lib/quizProgress.ts` 的 `summarizeQuizProgress(progress: SyncQuizProgress[])`），元件改用之；補單元測試涵蓋全提交/全作答中/混合/空陣列。純前端、低風險。
 
