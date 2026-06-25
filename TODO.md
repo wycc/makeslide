@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | viewerId.ts 補單元測試：新增 `viewerId.test.ts`（stub `window.localStorage` + 動態 import），3 個測試涵蓋產生/持久化/沿用既有值；未改邏輯；typecheck + 286 前端測試全通過 | test/viewer-id-unit（已 merge） |
 | 2026-06-25 | reviewList.ts 補單元測試：新增 `reviewList.test.ts`（in-memory localStorage stub + 動態 import），5 個測試涵蓋去重/移除/壞資料 fallback/清空；未改邏輯；typecheck + 283 前端測試全通過 | test/review-list-unit（已 merge） |
 | 2026-06-25 | 消除 relativeTimeLabels 重複：`lib/relativeTime.ts` 新增 `buildRelativeTimeLabels(t)` + `RELATIVE_TIME_LABEL_KEYS`，PdfCard/QuizBuilderPage/HomePage 三處各 6 行的 labels 物件改為一行呼叫；補 1 個 helper 測試；typecheck + 278 前端測試 + i18n 對等全通過 | feat/dedup-relative-time-labels（已 merge） |
 | 2026-06-25 | 分析並新增可執行項目（第三十八輪）：TODO 清空、前端 i18n 大致完成，依 LOOP.md 轉向品質改善，新增 3 個低風險項目（消除 relativeTimeLabels 三處重複、reviewList.ts 補單元測試、viewerId.ts 補單元測試） | master（僅文件） |
@@ -1375,6 +1376,8 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] 為 reviewList.ts 補單元測試：在測試檔注入 in-memory `localStorage` stub（`globalThis.localStorage`），涵蓋 `addReviewItems` 的去重（同 pdfId+pageNumber+questionText 不重複加入）、`removeReviewItem` 依 pdfId+pageNumber 過濾、`getReviewItems` 對壞資料/非陣列的 fallback、`clearAllReviewItems`。純前端、僅新增測試，不改邏輯。
   - 修改說明（2026-06-25）：新增 `frontend/src/lib/reviewList.test.ts`，以 `MemoryStorage` class 實作 in-memory `localStorage` stub 掛到 `globalThis.localStorage`（reviewList 於函式內延遲讀取，故 stub 安裝後再以動態 `await import` 載入）。5 個測試涵蓋：空清單回 []、`addReviewItems` 去重、`removeReviewItem` 依 pdfId+pageNumber 過濾、`getReviewItems` 對壞 JSON/非陣列 fallback、`clearAllReviewItems` 清空。未改動 reviewList.ts 邏輯。frontend typecheck 通過、全部 283 個前端測試 + i18n 對等 21 個全通過。分支 `test/review-list-unit`，已 merge 回 master。
 
-- [ ] 為 viewerId.ts 補單元測試：注入 in-memory `localStorage` stub，驗證 `getOrCreateViewerId` 首次產生並持久化、第二次回傳同一值、格式符合 `viewer-...` 前綴。純前端、僅新增測試。
+- [x] 為 viewerId.ts 補單元測試：注入 in-memory `localStorage` stub，驗證 `getOrCreateViewerId` 首次產生並持久化、第二次回傳同一值、格式符合 `viewer-...` 前綴。純前端、僅新增測試。
+  - 修改說明（2026-06-25）：新增 `frontend/src/lib/viewerId.test.ts`，因 viewerId 讀 `window.localStorage`，先以 `MemoryStorage` stub 設定 `globalThis.window = { localStorage }` 再動態 import。3 個測試：首次產生 `viewer-` 前綴 id 並持久化、後續呼叫回傳同一值、已有儲存值時沿用。未改動 viewerId.ts。`node --test` 各檔獨立行程故 window stub 不污染其他測試。frontend typecheck 通過、全部 286 個前端測試 + i18n 對等 21 個全通過。分支 `test/viewer-id-unit`，已 merge 回 master。
 - [ ] 請在 master 的畫面上顯示已投票的人數。
 - [ ] 請在 master 的畫面上顯示測試回答的進度。
+- [ ] 當一頁有投票時，全螢幕顯示的右上角要有投票按鍵。
