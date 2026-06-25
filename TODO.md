@@ -1475,6 +1475,8 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [x] play 元件殘留 UI 錯誤訊息 i18n（第七十八輪，2026-06-26 掃描新增並完成）：hook i18n 收尾後，掃描 `pages/play/*.tsx` 元件發現 4 處殘留硬編中文 UI 錯誤訊息——`QualityCheckPanel`（品質檢查失敗／AI 腳本分析失敗／AI 圖片分析失敗）與 `PlayPageSlidePanel`（改寫失敗，請重試。）。新增 4 個對等鍵（`play.quality.checkFailed`/`scriptAnalysisFailed`/`imageAnalysisFailed`、`play.slidePanel.aiRewriteFailed`），改走 `t()`。**刻意保留** `QualityCheckPanel` 的 `BATCH_FILL_PROMPT` 與 `PlayPageSlidePanel` 的 3 個逐字稿改寫風格 prompt（compact/detailed/conversational）——皆送往 LLM 的 prompt 內容。兩元件的處理器皆為元件內一般函式，`t` 已在 closure scope、無需改依賴。typecheck 通過、i18n 對等測試 28 個全通過。純前端、低風險。分支 `feat/quality-rewrite-error-i18n`，已 merge 回 master。
 
+- [x] API 錯誤提示訊息 i18n（mapApiErrorToHumanMessage）（第七十九輪，2026-06-26 掃描新增並完成）：`lib/api/common.ts` 的 `ERROR_HINTS` 與 `mapApiErrorToHumanMessage` 硬編約 20 組中文 `title/message/nextStep`，於英文介面的上傳／匯入錯誤對話框與 credit 用盡對話框洩漏未翻譯文字。將 `ERROR_HINTS` 改為翻譯鍵三元組（`apiError.*`，以 `hintKeys()` 產生）、`mapApiErrorToHumanMessage(err, t)` 接受 translator；新增 zh-TW/en 各 66 個 `apiError.*` 鍵。兩呼叫端元件（`UploadButton`、`ImportTextPage`）傳入 `t`。`notifyCreditExhausted` 改為只在事件帶 `code/status`，由有 i18n context 的 `CreditExhaustedDialog` 以 mapper 推導人類可讀文字（跟隨介面語言）。更新 `api.error-mapping.test.ts` 以 zh-TW 字典解析鍵、斷言不變。typecheck 通過、前端全測試 325 個全通過。純前端、低風險（行為等價、僅文字來源改為翻譯鍵）。分支 `feat/api-error-hints-i18n`，已 merge 回 master。
+
 ## 掃描摘要（2026-06-25 第四十三輪）
 
 - 本輪 TODO 唯一未完成項目（formatDurationMs i18n）先前的實作方案被使用者否決，已標記暫緩。經詢問使用者後，本輪改為「為後端 `logSanitizer.ts` 補單元測試」。
@@ -1799,3 +1801,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - 時間：2026-06-26
 - 分支：`feat/quality-rewrite-error-i18n`（已 merge 回 master）
 - 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 82 個完成項目（82/100，未達上限）。
+## 工作記錄（第七十九輪，2026-06-26）
+
+- 工作內容：掃描範圍擴到 `lib/`，發現 `lib/api/common.ts` 的 `ERROR_HINTS`／`mapApiErrorToHumanMessage` 硬編約 20 組中文錯誤提示（title/message/nextStep），於英文介面的上傳／匯入錯誤對話框與 credit 用盡對話框洩漏。將其完整 i18n：`ERROR_HINTS` 改為 `apiError.*` 翻譯鍵三元組（以 `hintKeys()` 工具產生）、`mapApiErrorToHumanMessage` 改簽章為 `(err, t)` 接受 translator；zh-TW/en 各新增 66 個 `apiError.*` 鍵。兩呼叫端元件 `UploadButton`、`ImportTextPage` 傳入 `t`。另處理 fetch 層的 `notifyCreditExhausted`（無 React context）：改為事件只帶 `code/status`，由具 i18n context 的 `CreditExhaustedDialog` 以 mapper 推導人類可讀文字，使其跟隨介面語言（同步調整 `CreditExhaustedEventDetail` 型別）。更新 `api.error-mapping.test.ts` 以 `(k)=>zhTW[k]` 解析鍵、既有中文斷言不變。typecheck 通過、前端全測試 325 個全通過。純前端、低風險（行為等價，僅文字來源由硬編改為翻譯鍵）。
+- 時間：2026-06-26
+- 分支：`feat/api-error-hints-i18n`（已 merge 回 master）
+- 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 83 個完成項目（83/100，未達上限）。
