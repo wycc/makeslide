@@ -277,6 +277,18 @@ export function PlayPageFullscreen() {
           <span className="ml-2 h-6 w-2 rounded-sm bg-current" aria-hidden="true" />
         </div>
       ) : null}
+      {syncEnabled && syncRole === 'master' && pagePolls.length > 0 ? (
+        <div className="pointer-events-none absolute right-4 top-4 z-30 flex flex-col items-end gap-1">
+          {pagePolls.map((poll) => (
+            <span
+              key={poll.id}
+              className="rounded-full border border-fuchsia-300/40 bg-black/55 px-3 py-1 text-sm text-fuchsia-100 shadow-lg backdrop-blur-sm"
+            >
+              🗳 {t('play.slidePanel.liveVotesCount').replace('{count}', String(poll.total_votes))}
+            </span>
+          ))}
+        </div>
+      ) : null}
       {fullscreenLayout === 'image' && !drawingMode ? (
         <>
           <button
