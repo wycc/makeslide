@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | apiKeyErrors.ts 補單元測試：新增 `apiKeyErrors.test.ts`（5 測試，涵蓋 ApiKeyMissingError 屬性/訊息與 isApiKeyMissingError 的 instance/duck-typing/拒絕分支）；以 tsx 直跑通過、backend typecheck 通過；未改產品碼 | test/api-key-errors（已 merge） |
 | 2026-06-25 | 分析並新增可執行項目（第四十輪）：盤點確認前端純 helper 與後端測試覆蓋已大致完整、i18n 對等檢查健全；唯一明確小缺口為 apiKeyErrors.ts 無測試，新增該項；並記錄低風險清理項目近枯竭、後續高價值工作需使用者方向 | master（僅文件） |
 | 2026-06-25 | 抽出測驗進度彙總純函式：新增 `lib/quizProgress.ts` 的 `summarizeQuizProgress`（total/submitted/inProgress），QuizBuilderPage 改用之；補 3 個單元測試；typecheck + 291 前端測試全通過 | feat/quiz-progress-summary-helper（已 merge） |
 | 2026-06-25 | localStorage 存取防護一致性：reviewList 新增 `hasLocalStorage()` 守衛（get 回[]、mutators no-op）、viewerId 無 window 時回未持久化 id；各補 1 個回退測試（10 lib 測試）；typecheck + 288 前端測試全通過 | fix/localstorage-guard（已 merge） |
@@ -1423,5 +1424,6 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 ## 新增可執行項目（2026-06-25 第四十輪）
 
-- [ ] 為 apiKeyErrors.ts 補單元測試：新增 `backend/test/apiKeyErrors.test.ts`（或就近放置），測試 `isApiKeyMissingError`：對 `new ApiKeyMissingError('openai')` 回 true、對帶 `{ code: 'API_KEY_MISSING' }` 的純物件回 true、對一般 Error / null / 無關物件回 false；並驗證 `ApiKeyMissingError` 的 `code`/`provider`/預設 message。因該模組無 DB 相依，測試可用 `node --import tsx --test` 直跑驗證（不受後端整套 sandbox timeout 影響）。純後端、僅新增測試。
+- [x] 為 apiKeyErrors.ts 補單元測試：新增 `backend/test/apiKeyErrors.test.ts`（或就近放置），測試 `isApiKeyMissingError`：對 `new ApiKeyMissingError('openai')` 回 true、對帶 `{ code: 'API_KEY_MISSING' }` 的純物件回 true、對一般 Error / null / 無關物件回 false；並驗證 `ApiKeyMissingError` 的 `code`/`provider`/預設 message。因該模組無 DB 相依，測試可用 `node --import tsx --test` 直跑驗證（不受後端整套 sandbox timeout 影響）。純後端、僅新增測試。
+  - 修改說明（2026-06-25）：新增 `backend/test/apiKeyErrors.test.ts`，5 個測試涵蓋 `ApiKeyMissingError` 的 code/provider/預設訊息與自訂訊息、`isApiKeyMissingError` 對 error 實例與 `{code:'API_KEY_MISSING'}` duck-typed 物件回 true、對一般 Error/`{code:'OTHER'}`/null/undefined/字串/空物件回 false。因該模組無 DB 相依，以 `node --import tsx --test` 直跑驗證 5 個測試全通過（避開後端整套 better-sqlite3 開機在 sandbox 的 timeout）；backend typecheck 通過。未改動產品程式碼。分支 `test/api-key-errors`，已 merge 回 master。
 
