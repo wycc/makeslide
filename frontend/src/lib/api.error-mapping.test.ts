@@ -12,6 +12,13 @@ test("mapApiErrorToHumanMessage fallback unknown code", () => {
   assert.equal(msg.message, "raw");
 });
 
+test("mapApiErrorToHumanMessage maps INVALID_REQUEST to a friendly message instead of the raw backend text", () => {
+  const msg = mapApiErrorToHumanMessage(new ApiError("Invalid body", "INVALID_REQUEST", 400));
+  assert.equal(msg.title, "請求格式不正確");
+  assert.notEqual(msg.message, "Invalid body");
+  assert.ok(msg.nextStep);
+});
+
 test("mapApiErrorToHumanMessage maps poppler/dependency issues", () => {
   const poppler = mapApiErrorToHumanMessage(new ApiError("x", "POPPLER_NOT_FOUND", 500));
   assert.equal(poppler.title, "PDF 解析工具缺失");

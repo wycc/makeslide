@@ -108,6 +108,7 @@ export function notifyApiKeyRequired(err: ApiError): void {
 }
 
 const ERROR_HINTS: Record<string, HumanReadableApiError> = {
+  INVALID_REQUEST: { title: '請求格式不正確', message: '送出的資料未通過驗證。', nextStep: '請檢查輸入內容後重新送出。' },
   INVALID_UPLOAD_TYPE: { title: '檔案格式不支援', message: '目前僅支援 PDF 或純文字檔。', nextStep: '請改上傳 .pdf 或 .txt，並確認檔案未損毀。' },
   FILE_REQUIRED: { title: '缺少檔案', message: '請先選擇要上傳的檔案。', nextStep: '重新選檔後再送出。' },
   FILE_TOO_LARGE: { title: '檔案太大', message: '檔案超過系統允許大小。', nextStep: '請壓縮檔案、拆分內容或降低頁數後重試。' },
