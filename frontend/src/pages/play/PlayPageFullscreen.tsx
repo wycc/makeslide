@@ -281,6 +281,13 @@ export function PlayPageFullscreen() {
           <span className="ml-2 h-6 w-2 rounded-sm bg-current" aria-hidden="true" />
         </div>
       ) : null}
+      {syncEnabled && syncRole === 'master' && syncFollowerQuestions.length > 0 ? (
+        <div className="pointer-events-none absolute left-4 top-20 z-30 flex items-center gap-1 rounded-full border border-amber-300/40 bg-black/55 px-3 py-1 text-amber-100 shadow-lg backdrop-blur-sm">
+          <span aria-hidden="true">💬</span>
+          <span className="text-sm font-semibold">{syncFollowerQuestions.length}</span>
+          <span className="sr-only">{t('play.fullscreen.pendingQuestions')}</span>
+        </div>
+      ) : null}
       {activePagePolls.length > 0 ? (
         <button
           type="button"

@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | 全螢幕提問圖示：`PlayPageFullscreen` 在 master 且有學生提問時於左上角顯示 💬 + 提問數徽章（pointer-events-none、含 sr-only 文字）；新增 1 個 i18n key；typecheck + 286 前端測試全通過 | feat/fullscreen-question-indicator（已 merge） |
 | 2026-06-25 | 全螢幕投票按鈕：`PlayPageFullscreen` 本頁有進行中投票時右上角加 🗳 按鈕，點擊開可投票 overlay（複用 handleVotePoll/pollVotes，顯示選項得票/比例）；master 票數 overlay 移至按鈕下方且開啟時隱藏；新增 1 個 i18n key；typecheck + 286 前端測試全通過 | feat/fullscreen-poll-button（已 merge） |
 | 2026-06-25 | 全螢幕顯示已投票人數：`PlayPageFullscreen` 在 master+本頁有投票時於右上角加 pointer-events-none 投票數 overlay（🗳 N 人已投票，逐題）；沿用既有 liveVotesCount key；typecheck + 286 前端測試全通過 | feat/fullscreen-vote-count（已 merge） |
 | 2026-06-25 | master 畫面顯示測驗回答進度：QuizBuilderPage master「測驗中的學員」面板（原已逐位顯示進度條）新增彙總行「已提交 X / 共 Y 人，作答中 Z」；新增 1 個 `quiz.progressSummary` key；typecheck + 286 前端測試全通過 | feat/master-quiz-progress-summary（已 merge） |
@@ -1390,6 +1391,7 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-25）：測驗的即時作答進度資料（`quiz_progress`：每位學生 answered_count/total_questions/submitted）由同步狀態提供，並在 `QuizBuilderPage` 的 master 視圖「測驗中的學員」面板已逐位顯示（每人完成比例進度條 + 是否提交）。本次在該面板標題下方新增一行**彙總進度**：以 `formatMessage('quiz.progressSummary', { submitted, total, inProgress })` 顯示「已提交 X / 共 Y 人，作答中 Z」，讓教師一眼掌握整體作答狀況（PlayPage 本身不含真正的測驗流程——其 `active_quiz_id` 是借用來傳即時投票 id——故測驗進度顯示於測驗主控頁 QuizBuilderPage）。新增 1 個 i18n key `quiz.progressSummary`（zh-TW/en 各 1）。frontend typecheck 通過、全部 286 個前端測試 + i18n 對等 21 個全通過。分支 `feat/master-quiz-progress-summary`，已 merge 回 master。
 - [x] 當一頁有投票時，全螢幕顯示的右上角要有投票按鍵。
   - 修改說明（2026-06-25）：`PlayPageFullscreen` 當本頁有「進行中」投票（`pagePolls.filter(is_active)`）時，於右上角顯示 🗳 圓形投票按鈕（`play.fullscreen.pollButton`）。點擊切換一個投票 overlay（右上、可捲動），逐題顯示題目與可點選的選項，複用既有 `handleVotePoll`/`pollVotes`/`pollBusy` 進行投票並顯示各選項得票與比例；按鈕與 overlay 皆 `stopPropagation` 避免觸發背景的播放/暫停與翻頁。master 即時票數 overlay 移到按鈕下方（`top-20`）且 overlay 開啟時隱藏以免重疊。新增 local state `fullscreenPollOpen`、補 `useState` import；新增 1 個 i18n key（zh-TW/en 各 1）。frontend typecheck 通過、全部 286 個前端測試 + i18n 對等 21 個全通過。分支 `feat/fullscreen-poll-button`，已 merge 回 master。
-- [ ] 有人提問時要在在上角顯示問題的圖示。
+- [x] 有人提問時要在在上角顯示問題的圖示。
+  - 修改說明（2026-06-25）：`PlayPageFullscreen` 在 master（`syncEnabled && syncRole === 'master'`）且有學生提問（`syncFollowerQuestions.length > 0`）時，於全螢幕**左上角**（避開右上角投票按鈕，位於暫停指示器下方 `top-20`）顯示 `pointer-events-none` 的 💬 提問圖示 + 提問數量徽章（附 sr-only `play.fullscreen.pendingQuestions` 無障礙文字）。新增 1 個 i18n key（zh-TW/en 各 1）。frontend typecheck 通過、全部 286 個前端測試 + i18n 對等 21 個全通過。分支 `feat/fullscreen-question-indicator`，已 merge 回 master。
 - [ ] 動畫中的文字要根據解析度設定文字小大, 在不同解析度文字的比例看起來要一樣
 
