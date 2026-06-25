@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { askPageQuestion, ApiError, type PageAskMessage } from '../../lib/api';
+import { useI18n } from '../../i18n';
 
 export interface PageAskState {
   pageAskInput: string;
@@ -22,6 +23,7 @@ export function usePageAsk({
   currentPageNumber: number | null;
   shareToken: string;
 }): PageAskState {
+  const { t } = useI18n();
   const [pageAskInput, setPageAskInput] = useState('');
   const [pageAskMessages, setPageAskMessages] = useState<PageAskMessage[]>([]);
   const [pageAskBusy, setPageAskBusy] = useState(false);
@@ -43,11 +45,11 @@ export function usePageAsk({
       // Roll back the optimistic question so the user can retry.
       setPageAskMessages((prev) => prev.slice(0, -1));
       setPageAskInput(question);
-      setPageAskError(err instanceof ApiError ? err.message : '問答失敗，請稍後再試');
+      setPageAskError(err instanceof ApiError ? err.message : t('play.sidebar.pageAsk.askFailed'));
     } finally {
       setPageAskBusy(false);
     }
-  }, [pdfId, currentPageNumber, pageAskInput, pageAskMessages, shareToken]);
+  }, [pdfId, currentPageNumber, pageAskInput, pageAskMessages, shareToken, t]);
 
   const clearPageAsk = useCallback(() => {
     setPageAskInput('');
