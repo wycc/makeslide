@@ -1661,6 +1661,15 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] 為 i18n getStored* 設定解析補測試：新增 `frontend/src/i18n.stored-settings.test.ts`，以 MemoryStorage window stub 測 `getStoredShowSubtitle`（預設 true、`1`/`true` vs 其他）、`getStoredInteractiveMode`/`getStoredAutoAdvance`（預設 false）、`getStoredTtsSpeed`（0.5–2 範圍）、`getStoredPlaybackSpeed`（僅允許集合）。純前端、僅新增測試、不改產品程式碼。
   - 修改說明（2026-06-25）：新增 `frontend/src/i18n.stored-settings.test.ts`，4 個測試。`(globalThis as {window?:unknown}).window = { localStorage }` 注入 MemoryStorage，動態 `await import('./i18n')` 確保 stub 先就位。涵蓋各 boolean 解析（含 `'TRUE'` 大小寫、`'nope'`→false）、TTS 速度越界（`'0.3'`/`'3'`/`'abc'`→1）、播放速度非允許集合（`'1.1'`/`'9'`→1）。以 `tsx --test` 直跑驗證 4 個測試全通過；frontend typecheck 通過。分支 `test/i18n-stored-settings`，已 merge 回 master。
 
+## 掃描摘要（2026-06-25 第六十四輪）
+
+- 可在 sandbox 測試的純函式缺口已枯竭（worker 層受 native module 限制）。依 LOOP.md「面向使用者的改善需於 BLOG.md 加 section」，補記第 54–57 輪的「錯誤提示友善化」成果——這批改善使用者可感知（錯誤訊息由英文技術字串改為友善中文），但當時僅記於 TODO.md 修改說明、未補 BLOG.md。
+
+## 新增可執行項目（2026-06-25 第六十四輪）
+
+- [x] BLOG.md 補記「錯誤提示友善化」：為第 54–57 輪的錯誤訊息 UX 改善（後端 normalizeErrorCode 接線、INVALID_REQUEST/NOT_FOUND 友善訊息、通用 `*_NOT_FOUND` fallback）在 BLOG.md 新增 section（功能目的／使用方式／技術細節）。文件、低風險。
+  - 修改說明（2026-06-25）：BLOG.md 末尾新增「## 錯誤提示友善化（2026-06-25）」section，說明此批改善的目的（使用者見友善中文而非英文技術字串）、使用方式（無需操作、錯誤提示自動友善化）與技術細節（errorResponse 接線 normalizeErrorCode、ERROR_HINTS 新增 INVALID_REQUEST/NOT_FOUND、`*_NOT_FOUND` 通用 fallback 且保留具體中文訊息的 ADMIN_REQUIRED/FORBIDDEN、對應測試）。分支 `docs/blog-error-messages`，已 merge 回 master。
+
 ## 掃描摘要（2026-06-25 第五十六輪）
 
 - 延續錯誤碼一致性調查，檢視後端 `errors.ts`。發現架構落差：`normalizeErrorCode`（legacy→standard 映射）**有單元測試**（`pages-api.test.ts`）卻**從未被產品程式碼呼叫**——路由實際用的 `errorResponse`（`routes/pdfs.ts`、`routes/pdfs/shared.ts` 兩份重複定義）直接送原始 code、不 normalize。導致 legacy 碼（PAGE_IMAGE_NOT_FOUND、COVER_NOT_READY、NO_FILE、INVALID_MIME 等）原樣洩漏到前端，而前端 `ERROR_HINTS` 無對應條目、顯示英文 fallback。
