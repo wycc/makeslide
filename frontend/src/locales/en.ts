@@ -335,6 +335,7 @@ export const en = {
   'home.reviewListBanner': 'You have {n} review item(s) — check the Review List in the play page sidebar',
   'home.sortBy': 'Sort by',
   'home.sort.titleAsc': 'Title A-Z',
+  'home.sort.titleDesc': 'Title Z-A',
   'home.sort.createdDesc': 'Newest created',
   'home.sort.updatedDesc': 'Recently updated',
   'home.sort.pageCountDesc': 'Most pages',

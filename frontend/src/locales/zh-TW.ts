@@ -335,6 +335,7 @@ export const zhTW = {
   'home.reviewListBanner': '你有 {n} 個複習項目，前往播放頁側邊欄的複習清單查看',
   'home.sortBy': '排序方式',
   'home.sort.titleAsc': '標題 A-Z',
+  'home.sort.titleDesc': '標題 Z-A',
   'home.sort.createdDesc': '建立時間新到舊',
   'home.sort.updatedDesc': '更新時間新到舊',
   'home.sort.pageCountDesc': '頁數多到少',
