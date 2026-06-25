@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | notebook 分頁鍵盤 Home/End 跳首末分頁：新增純函式 `getEdgeNotebookTab`，`handleTabKeyDown` 支援 Home/End（跳首/末分頁並移動焦點，沿用 roving tabindex）；補 1 單元測試；無新 i18n key；typecheck + 275 前端測試 + i18n 對等全通過 | feat/notebook-home-end-keys（已 merge） |
 | 2026-06-25 | notebook「投影片」分頁總頁數 badge：把分頁數量計算抽成純函式 `computeNotebookTabCounts`（slides=總頁數、interact=書籤+重點頁+投票），`PlayPageSidebar` 改用之，投影片分頁現顯示總頁數 badge；補 2 個單元測試；無新 i18n key；typecheck + 274 前端測試 + i18n 對等全通過 | feat/notebook-slides-count-badge（已 merge） |
 | 2026-06-25 | 分析並新增可執行項目（第三十四輪）：notebook 大項目完成後 TODO 已清空，依 LOOP.md 掃描程式 + 參考 FUTURE_ROADMAP（2.1–2.10 多已實作）後，新增 4 個低風險增量項目（PlayPage.tsx 行動分頁/狀態畫面 i18n、RemoteControllerPage 殘留中文 i18n、notebook 投影片分頁總頁數 badge、notebook Home/End 鍵盤跳首末分頁） | master（僅文件） |
 | 2026-06-25 | Notebook 側邊欄分頁（階段三 → 整項完成）：分頁列 ARIA roving tabindex + ArrowLeft/Right 循環切換（抽純函式 `getAdjacentNotebookTab` + 測試，焦點限定分頁列不與翻頁衝突）；分頁數量 badge（課堂互動顯示 bookmarks+重點頁+投票合計）；行動版面 flex-wrap/flex-1、放大鈕 md 限定。「右邊改成 notebook 界面」三階段全部完成標記 [x]。typecheck + 272 前端測試 + i18n 對等全通過 | feat/notebook-sidebar-phase3（已 merge） |
@@ -1269,4 +1270,6 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] notebook「投影片」分頁顯示總頁數 badge：在 `PlayPageSidebar` 的 `notebookTabCounts` 加入 `slides: deckPages.length`（沿用既有 badge 渲染，>0 才顯示），讓使用者不必切換即可看到簡報總頁數。可把 `notebookTabCounts` 的計算抽成純函式（輸入 bookmarks/importantPages/pagePolls/deckPages 長度，輸出各分頁數量）並補一個單元測試。純前端、低風險。
   - 修改說明（2026-06-25）：把分頁數量計算抽成純函式 `computeNotebookTabCounts({ slides, bookmarks, important, polls })`（`notebookTabs.ts`），回傳 `{ slides, interact }`（slides＝總頁數、interact＝書籤+重點頁+投票合計）；`PlayPageSidebar` 改呼叫此函式並傳入 `deckPages.length` 等，沿用既有 badge 渲染（>0 才顯示）故「投影片」分頁現顯示總頁數。新增 2 個單元測試（一般值、空 deck），notebookTabs 測試共 6 個；無新增 i18n key（badge 為數字）。frontend typecheck 通過、全部 274 個前端測試 + i18n 對等 21 個全通過。分支 `feat/notebook-slides-count-badge`，已 merge 回 master。
 
-- [ ] notebook 分頁鍵盤 Home/End 跳首末分頁：延續 phase 3 的 ARIA roving tabindex，在 `handleTabKeyDown` 支援 `Home`（跳第一個分頁）與 `End`（跳最後一個分頁）並移動焦點；抽出/沿用純函式取首末分頁 id 並補單元測試。純前端 a11y 小增強。
+- [x] notebook 分頁鍵盤 Home/End 跳首末分頁：延續 phase 3 的 ARIA roving tabindex，在 `handleTabKeyDown` 支援 `Home`（跳第一個分頁）與 `End`（跳最後一個分頁）並移動焦點；抽出/沿用純函式取首末分頁 id 並補單元測試。純前端 a11y 小增強。
+  - 修改說明（2026-06-25）：新增純函式 `getEdgeNotebookTab('first'|'last')`（`notebookTabs.ts`）回傳首/末分頁 id；`PlayPageSidebar` 的 `handleTabKeyDown` 改為依 `ArrowRight/ArrowLeft/Home/End` 計算目標分頁，命中才 `preventDefault` 並切換 + 移動焦點（沿用 roving tabindex，焦點限定分頁列故不與翻頁衝突）。補 1 個 `getEdgeNotebookTab` 單元測試（notebookTabs 測試共 7 個）；無新增 i18n key。frontend typecheck 通過、全部 275 個前端測試 + i18n 對等 21 個全通過。分支 `feat/notebook-home-end-keys`，已 merge 回 master。
+- [ ] AI 導師問這一頁時，回答時如果引用其它頁的資訊，要主動加入引用。

@@ -10,7 +10,7 @@ import { QualityCheckPanel } from './QualityCheckPanel';
 import { copyTextToClipboard } from '../../lib/clipboard';
 import { formatAudioDuration } from '../../lib/audioDuration';
 import { getReviewItems, removeReviewItem, type ReviewItem } from '../../lib/reviewList';
-import { NOTEBOOK_TABS, computeNotebookTabCounts, getAdjacentNotebookTab, getStoredNotebookTab, setStoredNotebookTab, type NotebookTab } from './notebookTabs';
+import { NOTEBOOK_TABS, computeNotebookTabCounts, getAdjacentNotebookTab, getEdgeNotebookTab, getStoredNotebookTab, setStoredNotebookTab, type NotebookTab } from './notebookTabs';
 
 const IMAGE_MSG_PREFIX = '[image] ';
 
@@ -505,9 +505,13 @@ export function PlayPageSidebar() {
   };
   const tabButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const handleTabKeyDown = (e: ReactKeyboardEvent<HTMLButtonElement>) => {
-    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+    let next: NotebookTab | null = null;
+    if (e.key === 'ArrowRight') next = getAdjacentNotebookTab(notebookTab, 1);
+    else if (e.key === 'ArrowLeft') next = getAdjacentNotebookTab(notebookTab, -1);
+    else if (e.key === 'Home') next = getEdgeNotebookTab('first');
+    else if (e.key === 'End') next = getEdgeNotebookTab('last');
+    if (!next) return;
     e.preventDefault();
-    const next = getAdjacentNotebookTab(notebookTab, e.key === 'ArrowRight' ? 1 : -1);
     selectNotebookTab(next);
     const nextIdx = NOTEBOOK_TABS.findIndex((tab) => tab.id === next);
     tabButtonRefs.current[nextIdx]?.focus();
