@@ -1595,4 +1595,15 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-25）：在 `ERROR_HINTS` 的 `PAGE_NOT_FOUND` 後新增 `NOT_FOUND: { title: '找不到資源', message: '要求的資料不存在或已被移除。', nextStep: '請重新整理後再試，或確認操作對象是否仍存在。' }`；於 `api.error-mapping.test.ts` 新增測試斷言 `NOT_FOUND` 映射 title「找不到資源」、message 不等於後端原文 'PDF not found' 且有 nextStep。frontend typecheck 通過、全部前端測試（含 error-mapping 5 個）+ i18n 對等 22 個全通過。分支 `fix/not-found-human-message`，已 merge 回 master。
 
 - [ ] （待評估）`*_NOT_FOUND` pattern fallback：在 `mapApiErrorToHumanMessage` 精確查表失敗後，對「以 `_NOT_FOUND` 結尾」的未知碼回傳通用「找不到資源」訊息，一次涵蓋 QUIZ_NOT_FOUND/POLL_NOT_FOUND/VERSION_NOT_FOUND/PAGE_*_NOT_FOUND/FIGURE_NOT_FOUND 等（這些多帶英文 message）。屬行為變更（會以通用訊息覆蓋後端具體 message），需確認可接受性後再做。
+  - 補充（第五十六輪後）：部分 legacy `*_NOT_FOUND`（PAGE_IMAGE/TEXT/SCRIPT/AUDIO_NOT_FOUND、COVER_NOT_READY、VIDEO/OUTLINE_NOT_FOUND）已於第五十六輪透過後端 `normalizeErrorCode` 接線改為送出 `RESOURCE_NOT_FOUND`（前端已有友善訊息），故此 pattern 項目的涵蓋面縮小，主要剩 QUIZ/POLL/VERSION/FIGURE/SKILL_NOT_FOUND 等未被 normalize 的碼。
+
+## 掃描摘要（2026-06-25 第五十六輪）
+
+- 延續錯誤碼一致性調查，檢視後端 `errors.ts`。發現架構落差：`normalizeErrorCode`（legacy→standard 映射）**有單元測試**（`pages-api.test.ts`）卻**從未被產品程式碼呼叫**——路由實際用的 `errorResponse`（`routes/pdfs.ts`、`routes/pdfs/shared.ts` 兩份重複定義）直接送原始 code、不 normalize。導致 legacy 碼（PAGE_IMAGE_NOT_FOUND、COVER_NOT_READY、NO_FILE、INVALID_MIME 等）原樣洩漏到前端，而前端 `ERROR_HINTS` 無對應條目、顯示英文 fallback。
+- 經 AskUserQuestion 確認，使用者選擇「接線啟用 normalize」。
+
+## 新增可執行項目（2026-06-25 第五十六輪）
+
+- [x] 接線 normalizeErrorCode 至 errorResponse：讓兩份 `errorResponse`（`routes/pdfs.ts` local、`routes/pdfs/shared.ts` export，後者為所有 pdf 子路由共用）套用 `normalizeErrorCode`，使 legacy 錯誤碼在 API 邊界正規化為標準碼，前端即可顯示友善訊息。補後端純函式測試。後端、低風險（normalize 目標標準碼前端皆有 hint、無 API-level 測試斷言 legacy code）。
+  - 修改說明（2026-06-25）：兩份 `errorResponse` 改為 `{ error: { code: normalizeErrorCode(code), message } }`（各自 import `../errors`/`../../errors`；確認全後端僅此 2 處定義、其餘子路由皆 import 自 shared.ts 故一併涵蓋；兩檔互不 import、無循環）。新增 `backend/test/errors.test.ts`（5 測試）完整覆蓋全部 12 個 legacy→standard 映射、標準碼/未知碼 passthrough、`apiError` 正規化與 detail 條件。接線後 RESOURCE_NOT_FOUND/FILE_REQUIRED/INVALID_UPLOAD_TYPE/INVALID_URL/JOB_CONFLICT 皆對應前端既有 `ERROR_HINTS`。backend typecheck 通過、`errors.test.ts` 5 測試以 `tsx --test` 直跑全通過（既有 `pages-api.test.ts` 的 normalizeErrorCode 斷言不受影響，因函式行為不變）。分支 `feat/wire-normalize-error-code`，已 merge 回 master。
 
