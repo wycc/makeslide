@@ -1967,8 +1967,13 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`formatters.ts` 新增 `adjustRemainingForSpeed`；`formatters.test.ts` 補 2 個 node:test（倍速換算、邊界保護）；`PlayPageSlidePanel.tsx` import 並於剩餘時間 span 套用換算與條件 tooltip；zh-TW/en 各新增 `play.header.timeRemainingAtSpeed`。前端 341 測試 + typecheck 全通過。分支 `feat/remaining-time-speed-adjusted`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 1 個完成項目（1/100，未達上限）。
 
+- [x] 首頁新增「標題 Z-A」排序：排序下拉只有「標題 A-Z」升冪，補上對應降冪選項。`SortMode`/`SORT_MODES` 加入 `'title_desc'`，新增 `compareByTitleDesc`（反轉既有 `compareByTitle`），`getComparatorForSortMode` 加 case 並 export 供測試；下拉新增 option；i18n `home.sort.titleDesc`。
+  - 修改說明（2026-06-26）：`HomePage.tsx` 加入 `title_desc` 排序模式（`compareByTitleDesc = compareByTitle(b, a)`，沿用 localeCompare/numeric/id fallback），export `getComparatorForSortMode`；排序下拉於 titleAsc 後插入 titleDesc option；zh-TW/en 各新增 `home.sort.titleDesc`；`HomePage.sort.test.ts` +2 測試（反向結果、id fallback）。前端 343 測試 + typecheck 全通過。分支 `feat/home-sort-title-desc`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 2 個完成項目（2/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
 | ---- | -------- | ---- |
 | 2026-06-26 | 剩餘播放時間隨速度校正：新增 `adjustRemainingForSpeed(seconds, rate)` 純函式並於 `PlayPageSlidePanel` 剩餘時間顯示套用；非 1× 倍速 tooltip 改用 `play.header.timeRemainingAtSpeed`；formatters.test.ts +2 測試；i18n zh-TW/en 各 +1 key | feat/remaining-time-speed-adjusted（已 merge） |
+| 2026-06-26 | 首頁新增「標題 Z-A」排序：`SortMode`/`SORT_MODES` 加 `title_desc`，新增 `compareByTitleDesc` 並 export `getComparatorForSortMode`；下拉加 option；i18n zh-TW/en 各 +1 key；HomePage.sort.test.ts +2 測試 | feat/home-sort-title-desc（已 merge） |

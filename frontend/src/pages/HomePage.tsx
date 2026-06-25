@@ -48,15 +48,17 @@ const VIEW_MODE_STORAGE_KEY = 'makeslide.home.viewMode';
 type ViewMode = 'grid' | 'list';
 
 
-type SortMode = 'title_asc' | 'created_desc' | 'updated_desc' | 'page_count_desc' | 'audio_desc' | 'audio_asc' | 'last_played_desc';
+type SortMode = 'title_asc' | 'title_desc' | 'created_desc' | 'updated_desc' | 'page_count_desc' | 'audio_desc' | 'audio_asc' | 'last_played_desc';
 
-const SORT_MODES: SortMode[] = ['title_asc', 'created_desc', 'updated_desc', 'page_count_desc', 'audio_desc', 'audio_asc', 'last_played_desc'];
+const SORT_MODES: SortMode[] = ['title_asc', 'title_desc', 'created_desc', 'updated_desc', 'page_count_desc', 'audio_desc', 'audio_asc', 'last_played_desc'];
 
 const compareByTitle = (a: PdfListItem, b: PdfListItem) => {
   const titleA = a.title?.trim() || a.id;
   const titleB = b.title?.trim() || b.id;
   return titleA.localeCompare(titleB, 'zh-Hant', { numeric: true, sensitivity: 'base' });
 };
+
+const compareByTitleDesc = (a: PdfListItem, b: PdfListItem) => compareByTitle(b, a);
 
 const compareByCreatedAtDesc = (a: PdfListItem, b: PdfListItem) => {
   const timeA = Date.parse(a.created_at);
@@ -102,7 +104,7 @@ const isRecentlyPlayed = (pdf: PdfListItem): boolean => {
   return Date.now() - t <= RECENT_DAYS * 24 * 60 * 60 * 1000;
 };
 
-const getComparatorForSortMode = (sortMode: SortMode) => {
+export const getComparatorForSortMode = (sortMode: SortMode) => {
   switch (sortMode) {
     case 'created_desc':
       return compareByCreatedAtDesc;
@@ -116,6 +118,8 @@ const getComparatorForSortMode = (sortMode: SortMode) => {
       return compareByAudioDurationAsc;
     case 'last_played_desc':
       return compareByLastPlayedAtDesc;
+    case 'title_desc':
+      return compareByTitleDesc;
     case 'title_asc':
     default:
       return compareByTitle;
@@ -1141,6 +1145,7 @@ export default function HomePage() {
                   className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition hover:border-slate-500 focus:border-indigo-400"
                 >
                   <option value="title_asc">{t('home.sort.titleAsc')}</option>
+                  <option value="title_desc">{t('home.sort.titleDesc')}</option>
                   <option value="created_desc">{t('home.sort.createdDesc')}</option>
                   <option value="updated_desc">{t('home.sort.updatedDesc')}</option>
                   <option value="page_count_desc">{t('home.sort.pageCountDesc')}</option>
