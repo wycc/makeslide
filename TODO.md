@@ -1652,6 +1652,15 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] 為 i18n 純函式補測試：新增 `frontend/src/i18n.helpers.test.ts`，涵蓋 `normalizeLanguage`（支援語言 vs 不支援/非字串/自訂 fallback）、`translate`（各語系條目 + 缺失 key 時 zh-TW→key 本身的 fallback 鏈）、`normalizePlaybackSpeed`（允許速度的 number/string、超集合/非數字/自訂 fallback）。純前端、僅新增測試、不改產品程式碼。
   - 修改說明（2026-06-25）：新增 `frontend/src/i18n.helpers.test.ts`，6 個測試。`translate` 缺失 key 以 `'__definitely.not.a.key__' as TranslationKey` 驗證最終 fallback 回 key 本身；正常條目以 import 的 `en`/`zhTW` 比較（不硬編字串）。`normalizePlaybackSpeed` 驗證允許集合 `[0.5,0.75,1,1.25,1.5,2]`、`'2'`/`'0.75'` 字串轉換、`1.1`/`'abc'`/null/NaN fallback。以 `tsx --test` 直跑驗證 6 個測試全通過；frontend typecheck 通過。分支 `test/i18n-helpers`，已 merge 回 master。
 
+## 掃描摘要（2026-06-25 第六十三輪）
+
+- `hooks/useBudgetWarning.ts` 僅單一 hook、無純 helper。`i18n.ts` 的 `getStored*` 設定讀取函式（`getStoredShowSubtitle`/`getStoredInteractiveMode`/`getStoredAutoAdvance`/`getStoredTtsSpeed`/`getStoredPlaybackSpeed`）含 boolean（`'1'`/`'true'`）與數字範圍解析及預設邏輯，但**無測試**；所有對應 `*_STORAGE_KEY` 皆有 export，可用 MemoryStorage stub（模式同 `viewerId.test.ts`）測試。
+
+## 新增可執行項目（2026-06-25 第六十三輪）
+
+- [x] 為 i18n getStored* 設定解析補測試：新增 `frontend/src/i18n.stored-settings.test.ts`，以 MemoryStorage window stub 測 `getStoredShowSubtitle`（預設 true、`1`/`true` vs 其他）、`getStoredInteractiveMode`/`getStoredAutoAdvance`（預設 false）、`getStoredTtsSpeed`（0.5–2 範圍）、`getStoredPlaybackSpeed`（僅允許集合）。純前端、僅新增測試、不改產品程式碼。
+  - 修改說明（2026-06-25）：新增 `frontend/src/i18n.stored-settings.test.ts`，4 個測試。`(globalThis as {window?:unknown}).window = { localStorage }` 注入 MemoryStorage，動態 `await import('./i18n')` 確保 stub 先就位。涵蓋各 boolean 解析（含 `'TRUE'` 大小寫、`'nope'`→false）、TTS 速度越界（`'0.3'`/`'3'`/`'abc'`→1）、播放速度非允許集合（`'1.1'`/`'9'`→1）。以 `tsx --test` 直跑驗證 4 個測試全通過；frontend typecheck 通過。分支 `test/i18n-stored-settings`，已 merge 回 master。
+
 ## 掃描摘要（2026-06-25 第五十六輪）
 
 - 延續錯誤碼一致性調查，檢視後端 `errors.ts`。發現架構落差：`normalizeErrorCode`（legacy→standard 映射）**有單元測試**（`pages-api.test.ts`）卻**從未被產品程式碼呼叫**——路由實際用的 `errorResponse`（`routes/pdfs.ts`、`routes/pdfs/shared.ts` 兩份重複定義）直接送原始 code、不 normalize。導致 legacy 碼（PAGE_IMAGE_NOT_FOUND、COVER_NOT_READY、NO_FILE、INVALID_MIME 等）原樣洩漏到前端，而前端 `ERROR_HINTS` 無對應條目、顯示英文 fallback。
