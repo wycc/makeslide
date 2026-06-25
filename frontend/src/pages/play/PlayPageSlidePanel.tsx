@@ -131,6 +131,7 @@ export function PlayPageSlidePanel() {
     openVersionHistory,
     activeTab,
     sidebarExpanded,
+    pagePolls,
     syncEnabled, syncRole,
     classroomMode, setClassroomMode,
     classroomAwaitingNext,
@@ -943,6 +944,21 @@ export function PlayPageSlidePanel() {
                     ))}
                   </div>
                 ) : null}
+              </div>
+            ) : null}
+            {syncEnabled && syncRole === 'master' && pagePolls.length > 0 ? (
+              <div className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-3 py-2">
+                <span className="text-sm font-semibold text-fuchsia-100">{t('play.slidePanel.liveVotesTitle')}</span>
+                <div className="mt-1.5 space-y-1">
+                  {pagePolls.map((poll) => (
+                    <div key={poll.id} className="flex items-center justify-between gap-2 text-xs text-fuchsia-100">
+                      <span className="min-w-0 truncate">{poll.question}</span>
+                      <span className="shrink-0 rounded-full bg-fuchsia-500/20 px-2 py-0.5 font-medium">
+                        {t('play.slidePanel.liveVotesCount').replace('{count}', String(poll.total_votes))}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             ) : null}
             {syncEnabled && syncRole === 'master' ? (
