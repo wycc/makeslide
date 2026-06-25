@@ -1500,6 +1500,8 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] Quiz 分數溢出檢查對齊後端容差＋抽出可測模組（第九十輪，2026-06-26 掃描修復）：`QuizBuilderPage` 的分數溢出警告（同時 gate「儲存」按鈕）以嚴格 `sum > 100` 比較，但後端 cap 用 `sum > 100 + QUIZ_SCORE_SUM_EPSILON`（1e-6）。對於浮點誤差落在 (100, 100+1e-6] 的總和，前端會判定溢出、後端卻接受——與「mirrors backend」註解的本意不符的潛在不一致（實測一般輸入難以觸發，屬一致性對齊而非顯性 bug）。將原本私有且無測試的計分 helper 抽到 `lib/quizScoring.ts`（`QUIZ_TOTAL_SCORE`、`explicitScoreSum`、新增套用相同 epsilon 的 `scoreSumExceedingTotal`），`QuizBuilderPage` 改用之；新增 `quizScoring.test.ts` 4 測試（總和、剛好 100、epsilon 邊界）。前端 typecheck 與全測試 335 個通過。純前端、低風險。分支 `fix/quiz-score-overflow-epsilon`，已 merge 回 master。
 
 - [x] 抽出並測試 quiz 評分函式（第九十一輪，2026-06-26 掃描重構）：延續第九十輪，`QuizBuilderPage` 還有 3 個私有且無測試的純評分函式——`normalizeQuestionScores`（未給分題平分剩餘額度）、`isCorrectAnswer`（答案集合比對）、`calcQuestionScore`（單選 all-or-nothing／多選逐選項部分給分），均鏡像後端評分且用於 11 處 client-side 分數顯示。將三者併入 `lib/quizScoring.ts`、`QuizBuilderPage` 改 import（行為不變），並補 `quizScoring.test.ts` 4 個測試（平分分配、集合相等忽略順序/重複、單選全有或全無、多選逐選項部分給分含 0 選項）。前端 typecheck 與全測試 339 個通過。純重構＋測試、低風險。分支 `refactor/quiz-scoring-extract-test`，已 merge 回 master。
+
+- [x] 日誌脫敏補強：git URL 憑證與 GitHub token（第九十二輪，2026-06-26 掃描安全強化）：`logSanitizer.ts` 的 `API_KEY_VALUE_PATTERN` 僅比對 OpenAI/Anthropic/Google 金鑰形狀（`sk*`/`AIza`）。但本專案的 `presentationGit` 以 `https://x-access-token:<token>@github.com` remote 推送 GitHub（`presentationGit.ts`），且支援 `GITHUB_TOKEN` 設定——一旦 git 操作失敗、該 URL 或裸 token 進入日誌，GitHub PAT 不會被遮蔽。新增兩條規則：①`URL_CREDENTIALS_PATTERN` 遮蔽任何 URL 的 `user:secret@` 部分（保留 scheme/host 供除錯，涵蓋任意 token 形狀）；②`GITHUB_TOKEN_PATTERN` 遮蔽 classic `gh*_` 與 fine-grained `github_pat_`。新增測試含「無憑證 URL 與 host:port 不被誤遮蔽」。後端 typecheck 與 sanitizer 測試 18 個通過。低風險（僅增加遮蔽）。分支 `fix/log-sanitizer-git-credentials`，已 merge 回 master。
 ## 掃描摘要（2026-06-25 第四十三輪）
 
 - 本輪 TODO 唯一未完成項目（formatDurationMs i18n）先前的實作方案被使用者否決，已標記暫緩。經詢問使用者後，本輪改為「為後端 `logSanitizer.ts` 補單元測試」。
@@ -1902,3 +1904,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - 時間：2026-06-26
 - 分支：`refactor/quiz-scoring-extract-test`（已 merge 回 master）
 - 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 95 個完成項目（95/100，未達上限）。
+## 工作記錄（第九十二輪，2026-06-26）
+
+- 工作內容：審查安全相關的 `logSanitizer.ts`（日誌脫敏）。發現一處真實洩漏面：本專案有 GitHub 整合（`presentationGit` 以 `https://x-access-token:<token>@github.com` remote 推送、`aiSettings` 支援 `GITHUB_TOKEN`），但脫敏的金鑰值樣式只認 `sk*`/`AIza`，未涵蓋 GitHub token；若 git 錯誤把含 token 的 remote URL 寫進日誌，PAT 會外洩。新增 `URL_CREDENTIALS_PATTERN`（遮蔽任意 URL 的 `user:secret@`、保留 scheme/host）與 `GITHUB_TOKEN_PATTERN`（`gh*_`／`github_pat_`），並補測試確認無憑證 URL 與 host:port 不被誤遮蔽。後端 typecheck 與 sanitizer 測試 18 個通過。安全強化、低風險（僅增加遮蔽範圍）。
+- 時間：2026-06-26
+- 分支：`fix/log-sanitizer-git-credentials`（已 merge 回 master）
+- 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 96 個完成項目（96/100，未達上限）。

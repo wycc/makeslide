@@ -1,5 +1,27 @@
 # MakeSlide 功能說明
 
+## 日誌脫敏補強：遮蔽 git 網址中的憑證與 GitHub Token
+
+### 目的
+
+系統在寫入日誌前會先「脫敏」，把 API 金鑰等機密遮蔽掉。但同步到 GitHub 的功能會用形如
+`https://x-access-token:<token>@github.com/...` 的網址推送，而原本的金鑰遮蔽規則只認得
+OpenAI／Anthropic／Google 的金鑰格式，沒有涵蓋 GitHub Token。萬一 git 操作失敗、含 token 的
+網址被寫進日誌，存取權杖就可能外洩。
+
+### 變更內容
+
+- 任何網址中的「帳號:密碼@」憑證片段都會被遮蔽（保留通訊協定與主機名稱以利除錯），不論 token
+  是什麼格式。
+- 額外遮蔽 GitHub 個人存取權杖（傳統 `gh*_` 與細粒度 `github_pat_`）。
+- 不含憑證的一般網址、以及「主機:埠號」不會被誤遮蔽。
+
+### 實作備註
+
+於 `logSanitizer.ts` 的字串脫敏流程加入 `URL_CREDENTIALS_PATTERN` 與 `GITHUB_TOKEN_PATTERN`
+兩條規則，並補上對應測試（含「無憑證網址／host:port 不被誤遮蔽」）。屬純增量遮蔽、不影響其他
+行為；後端 typecheck 與脫敏測試（18）全數通過。
+
 ## 「產生中」橫幅狀態與步驟改為可翻譯
 
 ### 目的
