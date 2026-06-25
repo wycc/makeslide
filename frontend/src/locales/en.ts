@@ -1554,6 +1554,8 @@ export const en = {
   'play.header.nativeShare': '📤 Share',
   'play.header.showDescription': 'Show description',
   'play.header.hideDescription': 'Hide description',
+  'play.header.copyDescription': 'Copy description',
+  'play.header.copyDescriptionDone': 'Copied',
   'play.header.downloadSrt': 'Download SRT subtitles',
   'play.header.downloadVtt': 'Download VTT subtitles',
   'play.header.downloadPptx': 'Download PPTX',

@@ -166,6 +166,7 @@ export function PlayPageHeader() {
 
   const [editingTitle, setEditingTitle] = useState(false);
   const [descExpanded, setDescExpanded] = useState(false);
+  const [descCopyDone, setDescCopyDone] = useState(false);
   const [genDescBusy, setGenDescBusy] = useState(false);
   const titleBeforeEdit = useRef('');
   const inlineTitleRef = useRef<HTMLInputElement>(null);
@@ -329,9 +330,25 @@ export function PlayPageHeader() {
               {descExpanded ? `▲ ${t('play.header.hideDescription')}` : `▼ ${t('play.header.showDescription')}`}
             </button>
             {descExpanded ? (
-              <p className="mt-1 whitespace-pre-wrap rounded-md border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs text-slate-300">
-                {detail.description}
-              </p>
+              <div className="mt-1">
+                <p className="whitespace-pre-wrap rounded-md border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs text-slate-300">
+                  {detail.description}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void copyTextToClipboard(detail.description ?? '').then((r) => {
+                      if (r.ok) {
+                        setDescCopyDone(true);
+                        setTimeout(() => setDescCopyDone(false), 2000);
+                      }
+                    });
+                  }}
+                  className="mt-1 text-[11px] text-slate-400 hover:text-slate-200"
+                >
+                  {descCopyDone ? t('play.header.copyDescriptionDone') : t('play.header.copyDescription')}
+                </button>
+              </div>
             ) : null}
           </div>
         ) : null}
