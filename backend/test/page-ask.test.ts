@@ -107,6 +107,9 @@ test('POST ask — sends all pages and prior history to the model', async () => 
     assert.match(flat, /先前回答/);
     // The new question is present.
     assert.match(flat, /請追問第二頁/);
+    // The system prompt mandates citing page numbers when answering from other pages.
+    assert.match(flat, /引用規則/);
+    assert.match(flat, /學生目前所在頁.*以外/);
   } finally {
     setOpenAIClientForTest(null);
     await app.close();
