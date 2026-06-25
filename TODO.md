@@ -1166,6 +1166,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 ## 新增可執行項目（第三十三輪）
 
+---- 計數重設 ----
+
+> 2026-06-25：上一批已達 100/100 上限，經使用者同意重設計數，於此標記後重新起算。第三十三輪這批項目（含已完成的「依使用次數排序」）自此重新計數。
+
 - [ ] PostClassReportPanel 國際化（第一階段）：`PostClassReportPanel.tsx` 目前所有文案為硬編中文（標題、按鈕、區塊標題、`window.confirm` 文字等）。先將「工具列按鈕」與標題抽成 i18n key（重新整理／匯出 CSV／學生報告 CSV／投票結果 CSV／列印 / 儲存 PDF／重置觀看進度／關閉／課後報告標題與副標），改用 `useI18n()`；補 zh-TW/en 各約 10 個 key；純前端改動，不改資料流。
 
 - [x] TemplatesPage 依使用次數排序：`TemplatesPage.tsx` 搜尋框旁加入「最新／最熱門」排序切換，`最熱門` 以既有 `apply_count` 由大到小（穩定排序保留 recency 為次序）、`最新` 維持 API 的 `created_at DESC`；純前端 client-side 排序，補 i18n 2 個 key（`templates.sortNewest`/`templates.sortPopular`，zh-TW/en）。分支 `feat/templates-sort-popular`。
