@@ -3,6 +3,7 @@ import type { PdfListItem } from '../types';
 import StatusBadge from './StatusBadge';
 import { useI18n } from '../i18n';
 import { formatAudioDuration } from '../lib/audioDuration';
+import { formatRelativeTime, type RelativeTimeLabels } from '../lib/relativeTime';
 import { createPdfShare } from '../lib/api/pdfs';
 import { copyTextToClipboard } from '../lib/clipboard';
 
@@ -42,23 +43,6 @@ function GitHubMarkIcon({ className }: { className?: string }) {
   );
 }
 
-function formatRelativeTime(iso: string): string {
-  try {
-    const diff = Date.now() - new Date(iso).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return '剛剛';
-    if (mins < 60) return `${mins} 分鐘前`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours} 小時前`;
-    const days = Math.floor(hours / 24);
-    if (days < 30) return `${days} 天前`;
-    const months = Math.floor(days / 30);
-    if (months < 12) return `${months} 個月前`;
-    return `${Math.floor(months / 12)} 年前`;
-  } catch {
-    return iso;
-  }
-}
 
 function formatDate(iso: string): string {
   try {
@@ -78,6 +62,14 @@ function formatDate(iso: string): string {
 
 export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExport, onCategoryChange, onTagsEdit, onContinue, continuing = false, onClick, currentUserSub, isFavorited = false, onToggleFavorite, onTagFilter, activeTagFilters }: PdfCardProps) {
   const { t } = useI18n();
+  const relativeTimeLabels: RelativeTimeLabels = {
+    justNow: t('time.justNow'),
+    minutesSuffix: t('time.minutesSuffix'),
+    hoursSuffix: t('time.hoursSuffix'),
+    daysSuffix: t('time.daysSuffix'),
+    monthsSuffix: t('time.monthsSuffix'),
+    yearsSuffix: t('time.yearsSuffix'),
+  };
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDuplicating, setIsDuplicating] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -350,7 +342,7 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExpo
         </label>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400">
           <span title={`${t('card.createdAtLabel')}：${formatDate(pdf.created_at)}`}>
-            {t('card.createdAt').replace('{time}', formatRelativeTime(pdf.created_at))}
+            {t('card.createdAt').replace('{time}', formatRelativeTime(pdf.created_at, relativeTimeLabels))}
           </span>
           {pdf.page_count != null && (
             <span>{t('card.pageCount').replace('{count}', String(pdf.page_count))}</span>
@@ -362,7 +354,7 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExpo
           )}
           {pdf.last_played_at && (
             <span title={t('card.lastPlayedLabel')} className="text-slate-500">
-              {t('card.lastPlayed').replace('{time}', formatRelativeTime(pdf.last_played_at))}
+              {t('card.lastPlayed').replace('{time}', formatRelativeTime(pdf.last_played_at, relativeTimeLabels))}
             </span>
           )}
         </div>

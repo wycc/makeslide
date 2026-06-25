@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useI18n } from '../i18n';
+import { formatRelativeTime, type RelativeTimeLabels } from '../lib/relativeTime';
 import {
   ApiError,
   copyQuizSetTo,
@@ -47,23 +48,6 @@ async function resolveConfiguredUserCode(): Promise<string> {
   }
 }
 
-function formatRelativeTime(iso: string): string {
-  try {
-    const diff = Date.now() - new Date(iso).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return '剛剛';
-    if (mins < 60) return `${mins} 分鐘前`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours} 小時前`;
-    const days = Math.floor(hours / 24);
-    if (days < 30) return `${days} 天前`;
-    const months = Math.floor(days / 30);
-    if (months < 12) return `${months} 個月前`;
-    return `${Math.floor(months / 12)} 年前`;
-  } catch {
-    return iso;
-  }
-}
 
 function emptyQuestion(index: number): QuizQuestion {
   return {
@@ -125,6 +109,14 @@ export default function QuizBuilderPage() {
   const { id: pdfId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { t } = useI18n();
+  const relativeTimeLabels: RelativeTimeLabels = {
+    justNow: t('time.justNow'),
+    minutesSuffix: t('time.minutesSuffix'),
+    hoursSuffix: t('time.hoursSuffix'),
+    daysSuffix: t('time.daysSuffix'),
+    monthsSuffix: t('time.monthsSuffix'),
+    yearsSuffix: t('time.yearsSuffix'),
+  };
   const formatMessage = useCallback((key: Parameters<typeof t>[0], replacements: Record<string, string | number>) => {
     let message = t(key);
     for (const [name, value] of Object.entries(replacements)) {
@@ -1027,7 +1019,7 @@ export default function QuizBuilderPage() {
                 {(historyShowAll ? historySessions : historySessions.slice(0, 5)).map((session) => (
                   <li key={session.session_id} className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-xs">
                     <div className="font-medium text-slate-300">
-                      {formatMessage('quiz.sessionTime', { time: formatRelativeTime(session.submitted_at) })}
+                      {formatMessage('quiz.sessionTime', { time: formatRelativeTime(session.submitted_at, relativeTimeLabels) })}
                       <span className="ml-1 text-slate-600" title={new Date(session.submitted_at).toLocaleString()}>ⓘ</span>
                       <span className="ml-2 text-slate-500">{formatMessage('quiz.attemptCount', { count: session.attempts.length })}</span>
                     </div>
