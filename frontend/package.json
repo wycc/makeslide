@@ -7,7 +7,8 @@
     "dev": "../scripts/with-node-env.sh vite",
     "build": "../scripts/with-node-env.sh tsc --noEmit && ../scripts/with-node-env.sh vite build",
     "preview": "../scripts/with-node-env.sh vite preview",
-    "typecheck": "../scripts/with-node-env.sh tsc --noEmit"
+    "typecheck": "../scripts/with-node-env.sh tsc --noEmit",
+    "test": "../scripts/with-node-env.sh tsx --test 'src/**/*.test.ts'"
   },
   "dependencies": {
     "gsap": "^3.15.0",
