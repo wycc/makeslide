@@ -1466,8 +1466,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] usePromptAndSource 訊息 i18n（第七十二輪，2026-06-26 掃描新增並完成）：`pages/play/usePromptAndSource.ts` 有 7 處硬編中文 UI 訊息（提示詞已更新／更新提示詞失敗／請先輸入來源文字內容／已新增文字來源／新增文字來源失敗／已新增 PDF 來源／新增 PDF 來源失敗），於英文介面洩漏。改為以 `useI18n()` 取得 `t()`，新增 `play.promptSource.*` 鍵（zh-TW/en）。
   - 修改說明（2026-06-26）：hook 引入 `useI18n()`，7 處狀態/錯誤/驗證訊息改走 `t()`；新增 7 個 `play.promptSource.*` 對等鍵。`t` 加入各 `useCallback` 依賴。**刻意不動**送往後端/LLM 的內容預設值。typecheck 通過、i18n 對等測試 28 個全通過。純前端、低風險。分支 `feat/prompt-source-i18n`，已 merge 回 master。
 
-- [ ] （持續，play hooks UI 訊息 i18n 收尾）多個 `pages/play/use*.ts` hook 仍有硬編中文 UI 訊息待 i18n（已完成 `useSlideManagement`、`usePromptAndSource`、`useVersionHistory`、`useVideoGeneration`、`usePageAsk`、`useScriptEditor`）。待處理：`useChatAndImageEdit`、`useImageStyle`、`usePagePolls`、`useRegeneration`。**注意**：僅翻譯 UI 狀態/錯誤/確認/驗證訊息；送往後端或 LLM 的「內容預設值」（如預設提示詞、預設投票選項「同意/不同意」、預設圖片風格字串）**不可翻譯**，以免改變行為。每輪挑 1 個 hook 以分支獨立完成、跑 typecheck 與 i18n 對等測試。
+- [ ] （持續，play hooks UI 訊息 i18n 收尾）多個 `pages/play/use*.ts` hook 仍有硬編中文 UI 訊息待 i18n（已完成 `useSlideManagement`、`usePromptAndSource`、`useVersionHistory`、`useVideoGeneration`、`usePageAsk`、`useScriptEditor`、`usePagePolls`）。待處理：`useChatAndImageEdit`、`useImageStyle`、`useRegeneration`。**注意**：僅翻譯 UI 狀態/錯誤/確認/驗證訊息；送往後端或 LLM 的「內容預設值」（如預設提示詞、預設投票選項「同意/不同意」、預設圖片風格字串）**不可翻譯**，以免改變行為。每輪挑 1 個 hook 以分支獨立完成、跑 typecheck 與 i18n 對等測試。
   - 進度（2026-06-26 第七十三輪）：一次完成 4 個僅含純 UI 錯誤訊息的小型 hook——`useVersionHistory`（3：載入歷史/載入內容/還原失敗）、`useVideoGeneration`（1：產生影片失敗）、`usePageAsk`（1：問答失敗）、`useScriptEditor`（1：逐字稿改寫失敗）。新增 6 個對等鍵（`play.versionHistory.loadListFailed`/`loadContentFailed`/`restoreFailed`、`play.videoGen.generateFailed`、`play.sidebar.pageAsk.askFailed`、`play.scriptRewrite.rewriteFailed`），`t` 加入各 `useCallback` 依賴。typecheck 通過、i18n 對等測試 28 個全通過。分支 `feat/play-hooks-error-i18n`，已 merge。剩餘 4 個 hook（含內容預設值，需逐一甄別）待後續輪次。
+  - 進度（2026-06-26 第七十四輪）：完成 `usePagePolls`——翻譯 8 處純 UI 訊息（讀取/建立/投票/清除結果/刪除題目失敗、AI 草稿失敗、請輸入投票問題、至少兩個選項），新增 8 個 `play.sidebar.poll.*` 對等鍵。**刻意保留** 2 處 `'同意\n不同意'`（line 96、199）內容預設值不翻譯（會成為實際投票選項送往後端、顯示給投票者）。typecheck 通過、i18n 對等測試 28 個全通過。分支 `feat/page-polls-i18n`，已 merge。剩餘 3 個 hook（`useChatAndImageEdit`、`useImageStyle`、`useRegeneration`）待後續輪次。
 
 ## 掃描摘要（2026-06-25 第四十三輪）
 
@@ -1763,3 +1764,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - 時間：2026-06-26
 - 分支：`feat/play-hooks-error-i18n`（已 merge 回 master）
 - 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 77 個完成項目（77/100，未達上限）。play hooks i18n 收尾尚餘 4 個含內容預設值的 hook。
+## 工作記錄（第七十四輪，2026-06-26）
+
+- 工作內容：延續 play hooks UI 訊息 i18n 收尾，處理含內容預設值的 `usePagePolls`。翻譯 8 處純 UI 訊息（讀取投票失敗、AI 草稿生成失敗、請輸入投票問題、至少需要兩個答案選項、建立投票失敗、投票失敗、清除投票結果失敗、刪除投票問題失敗），新增 8 個 `play.sidebar.poll.*` 對等鍵；`t` 加入各 `useCallback`/`useEffect` 依賴。**刻意保留** 2 處 `'同意\n不同意'` 內容預設值不翻譯——它是 textarea 預設投票選項，會成為實際投票內容送往後端並顯示給投票者，翻譯會改變行為。改後以 grep 確認檔內僅剩這 2 處中文。typecheck 通過、i18n 對等測試 28 個全通過。純前端、低風險。
+- 時間：2026-06-26
+- 分支：`feat/page-polls-i18n`（已 merge 回 master）
+- 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 78 個完成項目（78/100，未達上限）。play hooks i18n 收尾尚餘 3 個 hook。
