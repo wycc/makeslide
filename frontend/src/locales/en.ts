@@ -1,4 +1,5 @@
 export const en = {
+  'app.loadingSettings': 'Loading settings…',
   'settings.title': 'AI Settings (OpenAI / Gemini / CGU Air / OpenRouter)',
   'settings.systemDashboard': 'System Dashboard',
   'settings.backHome': 'Back to Home',

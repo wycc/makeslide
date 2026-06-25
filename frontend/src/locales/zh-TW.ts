@@ -1,4 +1,5 @@
 export const zhTW = {
+  'app.loadingSettings': '載入設定中…',
   'settings.title': 'AI 設定（OpenAI / Gemini / CGU Air / OpenRouter）',
   'settings.systemDashboard': '系統儀表',
   'settings.backHome': '返回首頁',
