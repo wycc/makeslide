@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | 零星小元件殘留中文國際化：PageTimingChips「產生中」、SlidePanel 分頁進度/清除搜尋 aria-label、Sidebar「此頁已有筆記」與書籤/重點頁「第 N 頁」alt/文字/複製清單抽成 i18n；新增 7 個 key（含共用 `play.common.pagePrefix/pageSuffix`）；LLM 提示詞/錯誤字串/markdown 匯出標頭留待後續；typecheck + 277 前端測試 + i18n 對等全通過 | feat/misc-components-i18n（已 merge） |
 | 2026-06-25 | 相對時間格式化抽共用 i18n helper：新增 `lib/relativeTime.ts` 純函式（接受 label 字串、修掉無效日期 NaN bug），`PdfCard`/`QuizBuilderPage` 移除重複本地版改用之並以 `t('time.*')` 傳 label；新增 6 個 `time.*` key、2 個單元測試；typecheck + 277 前端測試 + i18n 對等全通過 | feat/shared-relative-time-i18n（已 merge） |
 | 2026-06-25 | 分析並新增可執行項目（第三十五輪）：TODO 清空後依 LOOP.md 掃描程式 + 參考 FUTURE_ROADMAP，新增 4 個低風險增量項目（相對時間格式化抽共用 i18n helper 消除 PdfCard/QuizBuilderPage 重複、PlayPage.tsx 錯誤/狀態訊息 i18n 第二批、AnimationEditorTab i18n、零星小元件殘留中文 i18n） | master（僅文件） |
 | 2026-06-25 | AI 導師跨頁引用強制化：`ask` 端點系統提示詞新增「【引用規則（務必遵守）】」，回答用到「學生目前所在頁」以外頁面資訊時必須主動以括號標示頁碼（如「（第 3 頁）」），引用原始來源標示「（原始來源）」；page-ask 測試加 2 條斷言；backend typecheck 通過（後端測試 sandbox timeout，改以 typecheck + 提示詞字串核對確認） | feat/ai-tutor-mandatory-cross-page-citation（已 merge） |
@@ -1299,4 +1300,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [ ] AnimationEditorTab 國際化：把 `pages/play/AnimationEditorTab.tsx` 的硬編中文（UI 標籤、按鈕、狀態文字，以及內建範例提示詞清單）抽成 i18n key；範例提示詞可作為預設內容 key（zh-TW 維持現中文、en 提供英文版）。改用 `useI18n()`，補 zh-TW/en 對應 key 並跑 i18n 對等測試。純前端；量較大，可只先處理 UI 標籤/按鈕、範例提示詞列為次階段。
 
-- [ ] 零星小元件殘留硬編中文國際化：把 `pages/play/PageTimingChips.tsx`（如「產生中」）與其他少量殘留可見中文（掃描 `QualityCheckPanel`、`PlayPageSlidePanel`、`PlayPageSidebar`、`PlayPageHeader` 等元件確認）抽成 i18n key，補 zh-TW/en 並跑 i18n 對等測試。純前端、低風險清理。
+- [x] 零星小元件殘留硬編中文國際化：把 `pages/play/PageTimingChips.tsx`（如「產生中」）與其他少量殘留可見中文（掃描 `QualityCheckPanel`、`PlayPageSlidePanel`、`PlayPageSidebar`、`PlayPageHeader` 等元件確認）抽成 i18n key，補 zh-TW/en 並跑 i18n 對等測試。純前端、低風險清理。
+  - 修改說明（2026-06-25）：將使用者可見的硬編中文抽成 i18n key：`PageTimingChips` 計時「產生中」；`PlayPageSlidePanel` 分頁進度條 `aria-label`（第 X 頁，共 Y 頁）與「清除搜尋」`aria-label`；`PlayPageSidebar` 「此頁已有筆記」title、書籤/重點頁的「第 N 頁」縮圖 alt 與顯示文字、以及複製清單文字（「第 N 頁」以分隔符 join）。新增 7 個 key：`play.common.pagePrefix`/`pageSuffix`（共用「第 N 頁」前後綴）、`play.timing.generating`、`play.slidePanel.clearSearchAria`/`pageProgressMid`、`play.sidebar.hasNotesTitle`/`pageListSeparator`（zh-TW/en 各 7）。**範圍說明**：`QualityCheckPanel` 與 `PlayPageSlidePanel` 的 LLM 提示詞常數（如 BATCH_FILL_PROMPT、改寫風格 prompt）、各元件 `ApiError`/`Error` fallback 錯誤訊息、以及 `PlayPageHeader` 全文逐字稿 markdown 匯出的「## 第 N 頁」標頭屬內部/匯出內容或 PlayPage 錯誤訊息批次（第二批項目）範疇，本次未動。frontend typecheck 通過、全部 277 個前端測試 + i18n 對等 21 個全通過。分支 `feat/misc-components-i18n`，已 merge 回 master。

@@ -596,7 +596,7 @@ export function PlayPageSlidePanel() {
 
       {/* Page progress bar */}
       {totalPages > 1 ? (
-        <div className="h-1 w-full bg-slate-800/60" role="progressbar" aria-valuenow={currentIdx + 1} aria-valuemin={1} aria-valuemax={totalPages} aria-label={`第 ${currentIdx + 1} 頁，共 ${totalPages} 頁`}>
+        <div className="h-1 w-full bg-slate-800/60" role="progressbar" aria-valuenow={currentIdx + 1} aria-valuemin={1} aria-valuemax={totalPages} aria-label={`${t('play.common.pagePrefix')}${currentIdx + 1}${t('play.common.pageSuffix')}${t('play.slidePanel.pageProgressMid')}${totalPages}${t('play.common.pageSuffix')}`}>
           <div
             className="h-full bg-emerald-500/70 transition-all duration-300"
             style={{ width: `${Math.round(((currentIdx + 1) / totalPages) * 100)}%` }}
@@ -1192,7 +1192,7 @@ export function PlayPageSlidePanel() {
                       type="button"
                       onClick={() => { setScriptSearch(''); setScriptSearchIdx(0); }}
                       className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-                      aria-label="清除搜尋"
+                      aria-label={t('play.slidePanel.clearSearchAria')}
                     >
                       ×
                     </button>

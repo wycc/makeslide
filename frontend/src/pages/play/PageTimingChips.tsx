@@ -54,7 +54,7 @@ export function PageTimingChips({ page }: { page: PdfDetailPage | null | undefin
       <div className="flex flex-wrap gap-2">
         {items.map(([key, label]) => {
           const timing = timings?.[key] ?? null;
-          const value = timing?.status === 'running' ? '產生中' : formatDurationMs(timing?.duration_ms);
+          const value = timing?.status === 'running' ? t('play.timing.generating') : formatDurationMs(timing?.duration_ms);
           return (
             <span
               key={key}

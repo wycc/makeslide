@@ -397,7 +397,7 @@ function PageNoteSection() {
         <h2 className="flex items-center gap-1.5 text-sm font-semibold text-slate-300">
           📝 {t('play.sidebar.pageNote')}
           {currentPage?.page_notes?.trim() ? (
-            <span className="h-2 w-2 rounded-full bg-emerald-400" title="此頁已有筆記" />
+            <span className="h-2 w-2 rounded-full bg-emerald-400" title={t('play.sidebar.hasNotesTitle')} />
           ) : null}
         </h2>
         <button
@@ -1034,7 +1034,7 @@ export function PlayPageSidebar() {
             <button
               type="button"
               onClick={() => {
-                const text = [...bookmarks].sort((a, b) => a - b).map((n) => `第 ${n} 頁`).join('、');
+                const text = [...bookmarks].sort((a, b) => a - b).map((n) => `${t('play.common.pagePrefix')}${n}${t('play.common.pageSuffix')}`).join(t('play.sidebar.pageListSeparator'));
                 void copyTextToClipboard(text).then((ok) => {
                   setBookmarkCopyMsg(ok ? t('play.sidebar.copyListDone') : t('play.sidebar.copyListFail'));
                   setTimeout(() => setBookmarkCopyMsg(null), 2000);
@@ -1063,9 +1063,9 @@ export function PlayPageSidebar() {
                   title={t('play.sidebar.bookmarkRemove')}
                 >
                   {thumbSrc && (
-                    <img src={withImageBust(thumbSrc) ?? thumbSrc} alt={`第 ${pageNum} 頁`} className="h-6 w-10 shrink-0 rounded object-cover" />
+                    <img src={withImageBust(thumbSrc) ?? thumbSrc} alt={`${t('play.common.pagePrefix')}${pageNum}${t('play.common.pageSuffix')}`} className="h-6 w-10 shrink-0 rounded object-cover" />
                   )}
-                  <span>🔖 第 {pageNum} 頁</span>
+                  <span>🔖 {t('play.common.pagePrefix')}{pageNum}{t('play.common.pageSuffix')}</span>
                   <span
                     role="button"
                     tabIndex={0}
@@ -1099,7 +1099,7 @@ export function PlayPageSidebar() {
             <button
               type="button"
               onClick={() => {
-                const text = [...importantPages].sort((a, b) => a - b).map((n) => `第 ${n} 頁`).join('、');
+                const text = [...importantPages].sort((a, b) => a - b).map((n) => `${t('play.common.pagePrefix')}${n}${t('play.common.pageSuffix')}`).join(t('play.sidebar.pageListSeparator'));
                 void copyTextToClipboard(text).then((ok) => {
                   setImportantCopyMsg(ok ? t('play.sidebar.copyListDone') : t('play.sidebar.copyListFail'));
                   setTimeout(() => setImportantCopyMsg(null), 2000);
@@ -1128,9 +1128,9 @@ export function PlayPageSidebar() {
                   className="flex items-center gap-1.5 rounded-md border border-yellow-500/40 bg-yellow-500/10 px-2.5 py-1 text-xs text-yellow-200 hover:bg-yellow-500/20"
                 >
                   {thumbSrc && (
-                    <img src={withImageBust(thumbSrc) ?? thumbSrc} alt={`第 ${pageNum} 頁`} className="h-6 w-10 shrink-0 rounded object-cover" />
+                    <img src={withImageBust(thumbSrc) ?? thumbSrc} alt={`${t('play.common.pagePrefix')}${pageNum}${t('play.common.pageSuffix')}`} className="h-6 w-10 shrink-0 rounded object-cover" />
                   )}
-                  <span>★ 第 {pageNum} 頁</span>
+                  <span>★ {t('play.common.pagePrefix')}{pageNum}{t('play.common.pageSuffix')}</span>
                   <span
                     role="button"
                     tabIndex={0}
