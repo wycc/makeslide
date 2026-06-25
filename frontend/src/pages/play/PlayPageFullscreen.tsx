@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent, RefObject, TouchEvent } from 'react';
 import DrawingCanvas from '../../components/DrawingCanvas';
 import { SlideRenderer } from '../../components/slide/SlideRenderer';
@@ -177,6 +177,10 @@ export function PlayPageFullscreen() {
 
   const { t } = useI18n();
 
+  // Fullscreen poll voting overlay (so viewers can vote without leaving fullscreen).
+  const [fullscreenPollOpen, setFullscreenPollOpen] = useState(false);
+  const activePagePolls = pagePolls.filter((poll) => poll.is_active);
+
   const syncDisplayedQuestion = syncDisplayedQuestionId
     ? syncFollowerQuestions.find((q) => q.id === syncDisplayedQuestionId) ?? null
     : null;
@@ -277,8 +281,20 @@ export function PlayPageFullscreen() {
           <span className="ml-2 h-6 w-2 rounded-sm bg-current" aria-hidden="true" />
         </div>
       ) : null}
-      {syncEnabled && syncRole === 'master' && pagePolls.length > 0 ? (
-        <div className="pointer-events-none absolute right-4 top-4 z-30 flex flex-col items-end gap-1">
+      {activePagePolls.length > 0 ? (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setFullscreenPollOpen((o) => !o); }}
+          className="absolute right-4 top-4 z-40 flex h-12 w-12 items-center justify-center rounded-full border border-fuchsia-300/40 bg-black/60 text-2xl shadow-lg backdrop-blur-sm hover:bg-black/75"
+          aria-label={t('play.fullscreen.pollButton')}
+          aria-pressed={fullscreenPollOpen}
+          title={t('play.fullscreen.pollButton')}
+        >
+          🗳
+        </button>
+      ) : null}
+      {syncEnabled && syncRole === 'master' && pagePolls.length > 0 && !fullscreenPollOpen ? (
+        <div className="pointer-events-none absolute right-4 top-20 z-30 flex flex-col items-end gap-1">
           {pagePolls.map((poll) => (
             <span
               key={poll.id}
@@ -286,6 +302,41 @@ export function PlayPageFullscreen() {
             >
               🗳 {t('play.slidePanel.liveVotesCount').replace('{count}', String(poll.total_votes))}
             </span>
+          ))}
+        </div>
+      ) : null}
+      {fullscreenPollOpen && activePagePolls.length > 0 ? (
+        <div
+          className="absolute right-4 top-20 z-40 max-h-[70vh] w-80 max-w-[90vw] overflow-y-auto rounded-xl border border-fuchsia-400/40 bg-slate-950/95 p-4 shadow-2xl backdrop-blur"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {activePagePolls.map((poll) => (
+            <div key={poll.id} className="mb-3 last:mb-0">
+              <p className="mb-2 text-sm font-semibold text-fuchsia-100">{poll.question}</p>
+              <div className="space-y-1.5">
+                {poll.options.map((option, idx) => {
+                  const ratio = poll.total_votes > 0 ? Math.round((option.votes / poll.total_votes) * 100) : 0;
+                  const selected = pollVotes[poll.id] === idx;
+                  return (
+                    <button
+                      key={`${poll.id}-${idx}`}
+                      type="button"
+                      onClick={() => void handleVotePoll(poll.id, idx)}
+                      disabled={pollBusy || !poll.is_active}
+                      className={`w-full rounded-md border px-2 py-1.5 text-left text-sm transition ${selected ? 'border-emerald-400 bg-emerald-500/15 text-emerald-100' : 'border-slate-700 bg-slate-900/70 text-slate-200 hover:bg-slate-800'} disabled:cursor-not-allowed disabled:opacity-60`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate">{option.text}</span>
+                        <span className="font-mono text-[10px] text-slate-400">{option.votes} · {ratio}%</span>
+                      </div>
+                      <div className="mt-1 h-1 overflow-hidden rounded-full bg-slate-800">
+                        <div className="h-full rounded-full bg-cyan-400" style={{ width: `${ratio}%` }} />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           ))}
         </div>
       ) : null}

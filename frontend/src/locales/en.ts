@@ -817,6 +817,7 @@ export const en = {
   'play.addPages.error.outlineEmpty': 'Outline content cannot be empty.',
   'play.addPages.error.startFailed': 'Failed to start. Please try again later.',
   'play.fullscreen.audioPaused': 'Audio paused',
+  'play.fullscreen.pollButton': 'Vote',
   'play.fullscreen.noSubtitle': '(No subtitles for this page)',
   'play.fullscreen.editTranscriptHeading': '📝 Edit transcript (Page {page})',
   'play.fullscreen.exit': 'Exit fullscreen',
