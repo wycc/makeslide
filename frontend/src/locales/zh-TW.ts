@@ -1650,4 +1650,8 @@ export const zhTW = {
   'play.report.resetting': '重置中…',
   'play.report.close': '關閉',
   'play.report.resetConfirm': '確定要重置所有觀看進度紀錄？此動作無法復原。',
+  'play.header.showPrompt': '顯示生成提示詞',
+  'play.header.hidePrompt': '隱藏生成提示詞',
+  'play.header.copyPrompt': '複製提示詞',
+  'play.header.copyPromptDone': '已複製',
 } as const;
