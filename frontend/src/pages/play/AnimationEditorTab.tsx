@@ -453,26 +453,26 @@ export const EFFECT_PRESETS: readonly EffectPreset[] = [
   },
 ];
 
-const CUSTOM_SCRIPT_EXAMPLE_PROMPTS: ReadonlyArray<{ labelKey: string; prompt: string }> = [
+const CUSTOM_SCRIPT_EXAMPLE_PROMPTS: ReadonlyArray<{ labelKey: string; promptKey: string }> = [
   {
     labelKey: 'play.animation.customScriptExample.manImTex',
-    prompt: '用 Manim 在畫面中央顯示愛因斯坦公式 E=mc²，公式淡入後放大到 1.5 倍再縮回原大小',
+    promptKey: 'play.animation.customScriptExamplePrompt.manImTex',
   },
   {
     labelKey: 'play.animation.customScriptExample.manimAxes',
-    prompt: '用 Manim 畫一個座標平面，顯示一個點沿 y=x² 拋物線從左移到右，並在點旁標記 (x, x²) 座標',
+    promptKey: 'play.animation.customScriptExamplePrompt.manimAxes',
   },
   {
     labelKey: 'play.animation.customScriptExample.manimCircleToSquare',
-    prompt: '用 Manim 從圓形變形為正方形，搭配顏色由藍變紅',
+    promptKey: 'play.animation.customScriptExamplePrompt.manimCircleToSquare',
   },
   {
     labelKey: 'play.animation.customScriptExample.canvasCount',
-    prompt: '畫一個計數器，數字從 0 逐漸增加到 100，用 canvas 顯示大型數字',
+    promptKey: 'play.animation.customScriptExamplePrompt.canvasCount',
   },
   {
     labelKey: 'play.animation.customScriptExample.svgArrow',
-    prompt: '用 SVG 畫一條從左到右延伸的箭頭，邊延伸邊顯示標籤文字「成長 35%」',
+    promptKey: 'play.animation.customScriptExamplePrompt.svgArrow',
   },
 ];
 
@@ -849,7 +849,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
   return (
     <>
       <h2 className="mb-2 text-sm font-semibold text-slate-300">
-        🎞 {t('play.animation.title')}（第 {currentPage?.page_number ?? '-'} 頁）
+        🎞 {t('play.animation.title')}{t('play.animation.headerPagePrefix')}{currentPage?.page_number ?? '-'}{t('play.animation.headerPageSuffix')}
       </h2>
       {!compact && <label className="mb-3 flex items-center gap-2 text-sm text-slate-200">
         <input
@@ -2548,7 +2548,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                   >
                     <option value="">{t('play.animation.customScriptExamplePromptsLabel')}</option>
                     {CUSTOM_SCRIPT_EXAMPLE_PROMPTS.map((ex) => (
-                      <option key={ex.labelKey} value={ex.prompt}>
+                      <option key={ex.labelKey} value={t(ex.promptKey as TranslationKey)}>
                         {t(ex.labelKey as TranslationKey)}
                       </option>
                     ))}
