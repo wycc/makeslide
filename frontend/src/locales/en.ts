@@ -1258,6 +1258,7 @@ export const en = {
   'play.sidebar.poll.clearResults': 'Clear results',
   'play.sidebar.poll.deleteQuestion': 'Delete question',
   'play.sidebar.qa.title': 'Q&A for this page (with this page image and text context)',
+  'play.sidebar.qa.usageNote': 'This panel is for AI Q&A and image generation/editing. To rewrite the transcript, use “Rewrite via chat” in the slide panel.',
   'play.sidebar.qa.restoreSidebarTitle': 'Restore right sidebar content',
   'play.sidebar.qa.expandSidebarTitle': 'Let Q&A fill the right sidebar',
   'play.sidebar.qa.restore': 'Restore',
