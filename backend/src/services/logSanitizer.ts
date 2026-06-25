@@ -66,8 +66,14 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return proto === Object.prototype || proto === null;
 }
 
-function sanitizeString(value: string): string {
-  let out = value
+/**
+ * Replace secret-shaped substrings (API keys, bearer tokens, URL-embedded
+ * credentials, GitHub tokens, large binary blobs) with redaction markers, without
+ * truncating. Safe to apply to a string before surfacing it anywhere a secret
+ * must not appear — e.g. an error message that is logged AND returned to a client.
+ */
+export function redactSecretsInText(value: string): string {
+  return value
     .replace(DATA_URL_PATTERN, LARGE_CONTENT_REDACTED)
     .replace(URL_CREDENTIALS_PATTERN, `$1${REDACTED}@`)
     .replace(BEARER_VALUE_PATTERN, `Bearer ${REDACTED}`)
@@ -75,6 +81,10 @@ function sanitizeString(value: string): string {
     .replace(GITHUB_TOKEN_PATTERN, REDACTED)
     .replace(LONG_HEX_PATTERN, LARGE_CONTENT_REDACTED)
     .replace(LONG_BASE64_PATTERN, LARGE_CONTENT_REDACTED);
+}
+
+function sanitizeString(value: string): string {
+  let out = redactSecretsInText(value);
   if (out.length > LARGE_STRING_LIMIT) {
     out = `${out.slice(0, LARGE_STRING_LIMIT)}…[truncated chars=${value.length}]`;
   }
