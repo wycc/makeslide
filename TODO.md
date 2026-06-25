@@ -1502,6 +1502,8 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] 抽出並測試 quiz 評分函式（第九十一輪，2026-06-26 掃描重構）：延續第九十輪，`QuizBuilderPage` 還有 3 個私有且無測試的純評分函式——`normalizeQuestionScores`（未給分題平分剩餘額度）、`isCorrectAnswer`（答案集合比對）、`calcQuestionScore`（單選 all-or-nothing／多選逐選項部分給分），均鏡像後端評分且用於 11 處 client-side 分數顯示。將三者併入 `lib/quizScoring.ts`、`QuizBuilderPage` 改 import（行為不變），並補 `quizScoring.test.ts` 4 個測試（平分分配、集合相等忽略順序/重複、單選全有或全無、多選逐選項部分給分含 0 選項）。前端 typecheck 與全測試 339 個通過。純重構＋測試、低風險。分支 `refactor/quiz-scoring-extract-test`，已 merge 回 master。
 
 - [x] 日誌脫敏補強：git URL 憑證與 GitHub token（第九十二輪，2026-06-26 掃描安全強化）：`logSanitizer.ts` 的 `API_KEY_VALUE_PATTERN` 僅比對 OpenAI/Anthropic/Google 金鑰形狀（`sk*`/`AIza`）。但本專案的 `presentationGit` 以 `https://x-access-token:<token>@github.com` remote 推送 GitHub（`presentationGit.ts`），且支援 `GITHUB_TOKEN` 設定——一旦 git 操作失敗、該 URL 或裸 token 進入日誌，GitHub PAT 不會被遮蔽。新增兩條規則：①`URL_CREDENTIALS_PATTERN` 遮蔽任何 URL 的 `user:secret@` 部分（保留 scheme/host 供除錯，涵蓋任意 token 形狀）；②`GITHUB_TOKEN_PATTERN` 遮蔽 classic `gh*_` 與 fine-grained `github_pat_`。新增測試含「無憑證 URL 與 host:port 不被誤遮蔽」。後端 typecheck 與 sanitizer 測試 18 個通過。低風險（僅增加遮蔽）。分支 `fix/log-sanitizer-git-credentials`，已 merge 回 master。
+
+- [x] 修復 GitHub 推送失敗時 token 洩漏到 API 回應（第九十三輪，2026-06-26 掃描安全修復）：延續第九十二輪追查 GitHub token 流向，發現真實洩漏：`pushPresentationToGitHub` 執行 `git push https://x-access-token:<token>@github.com…`，`execFile` 失敗時 Error.message 內含完整指令（含 token），而 admin 同步路由（`admin.ts`）以 `errorResponse('GITHUB_SYNC_FAILED', err.message)` 將該訊息**回傳給 client**——token 從 HTTP 回應外洩（日誌路徑已於上輪脫敏，但回應沒有）。於來源頭修復：`logSanitizer` 匯出可重用的 `redactSecretsInText()`（無截斷的脫敏鏈，已涵蓋 URL 憑證與 GitHub token），`presentationGit` 在 push 失敗時先 scrub 再 rethrow，使 token 不離開模組（自動保護 admin.ts 與未來呼叫端）。新增針對 `Command failed: git push …` 訊息形狀的測試。註：`presentationGit` 自身測試需 better-sqlite3，sandbox 無法載入（既有限制），已以 typecheck 與 sanitizer 測試 17 個驗證。安全修復、低風險。分支 `fix/git-push-error-token-leak`，已 merge 回 master。
 ## 掃描摘要（2026-06-25 第四十三輪）
 
 - 本輪 TODO 唯一未完成項目（formatDurationMs i18n）先前的實作方案被使用者否決，已標記暫緩。經詢問使用者後，本輪改為「為後端 `logSanitizer.ts` 補單元測試」。
@@ -1910,3 +1912,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - 時間：2026-06-26
 - 分支：`fix/log-sanitizer-git-credentials`（已 merge 回 master）
 - 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 96 個完成項目（96/100，未達上限）。
+## 工作記錄（第九十三輪，2026-06-26）
+
+- 工作內容：延續第九十二輪追查 GitHub token 流向，發現比日誌更嚴重的真實洩漏：`pushPresentationToGitHub` 以 `git push https://x-access-token:<token>@github.com…` 推送，`execFile` 失敗時 Error.message 含完整指令（含 token），admin 同步路由 `admin.ts` 直接把該 message 經 `errorResponse('GITHUB_SYNC_FAILED', message)` 回傳給 client，導致 token 從 HTTP 回應外洩（上輪只脫敏了日誌、未涵蓋回應）。先確認 `pullAndMergeFromGitHub` 的 fetch 錯誤已被吞掉、且 token 僅作為 git 指令參數傳入（不寫入 .git/config，無 token at rest）。於來源頭修復：`logSanitizer` 匯出 `redactSecretsInText()`（重構自既有脫敏鏈、無截斷），`presentationGit` push 失敗時 scrub Error.message 再 rethrow，使 token 不離開模組。新增 command-failed 訊息形狀測試。註：presentationGit 測試需 better-sqlite3，sandbox 無法載入（既有限制，已確認 master 同樣失敗），以 typecheck 與 sanitizer 測試 17 個驗證。
+- 時間：2026-06-26
+- 分支：`fix/git-push-error-token-leak`（已 merge 回 master）
+- 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 97 個完成項目（97/100，未達上限）。
