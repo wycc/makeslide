@@ -824,7 +824,7 @@ export function PlayPageHeader() {
               const text = pages
                 .slice()
                 .sort((a, b) => a.page_number - b.page_number)
-                .map((p) => `## 第 ${p.page_number} 頁\n${scripts[p.page_number] ?? ''}`)
+                .map((p) => `## ${t('play.common.pagePrefix')}${p.page_number}${t('play.common.pageSuffix')}\n${scripts[p.page_number] ?? ''}`)
                 .join('\n\n');
               const result = await copyTextToClipboard(text);
               setCopyAllScriptsStatus(result.ok ? 'ok' : 'fail');

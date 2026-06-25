@@ -1494,6 +1494,7 @@ export const en = {
   'quiz.loading': 'Loading…',
   'quiz.noHistory': 'This quiz does not have any answer history yet.',
   'quiz.sessionTime': 'Test time: {time}',
+  'quiz.exportExplanationLabel': 'Explanation: ',
   'quiz.attemptCount': '({count} students answered)',
   'quiz.scorePoints': '{score} pts',
   'quiz.notScored': 'Not scored',
