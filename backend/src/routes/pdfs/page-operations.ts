@@ -41,6 +41,7 @@ import {
   readMetadata,
   writeMetadata,
   pdfDir,
+  sourceTextPath,
 } from '../../services/storage';
 import { generateCoverThumbnail, generatePageThumbnail } from '../../services/thumbnails';
 import { commitPresentationFile } from '../../services/presentationGit';
@@ -320,6 +321,10 @@ const AskPageResponseSchema = z.object({
 // Budget for the full-deck corpus sent to the AI tutor, keeping prompts bounded
 // while still covering the whole presentation.
 const ASK_DECK_CORPUS_MAX_CHARS = 14000;
+// Budget for the original extracted source text (source.txt) attached to the
+// AI tutor prompt, so it can answer from the full document even when a detail
+// only exists in the source and not in any page's slide text or script.
+const ASK_SOURCE_TEXT_MAX_CHARS = 12000;
 
 function parseChatHistory(json: string | null): Array<z.infer<typeof ChatMessageSchema>> {
   if (!json) return [];
@@ -1327,6 +1332,15 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       let corpus = sections.join('\n\n');
       if (corpus.length > ASK_DECK_CORPUS_MAX_CHARS) corpus = corpus.slice(0, ASK_DECK_CORPUS_MAX_CHARS) + '\n……（內容過長，後略）……';
 
+      // Also attach the original extracted source text (source.txt) when present,
+      // so the tutor can answer from the full document even when an answer only
+      // exists in the source and not in any page's slide text or script.
+      let sourceText = await fs.promises.readFile(sourceTextPath(id), 'utf8').catch(() => '');
+      sourceText = sourceText.trim();
+      if (sourceText.length > ASK_SOURCE_TEXT_MAX_CHARS) {
+        sourceText = sourceText.slice(0, ASK_SOURCE_TEXT_MAX_CHARS) + '\n……（原文過長，後略）……';
+      }
+
       const history = (parsedBody.data.history ?? []).map((m) => ({ role: m.role, content: m.content }));
       const result = await callChatJSON({
         label: `ask-page ${id}/${n}`,
@@ -1336,17 +1350,25 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         messages: [
           {
             role: 'system',
-            content: '你是繁體中文課堂 AI 導師。請只輸出 JSON：{"answer":"..."}。你會獲得整份簡報所有頁面的頁面文字與逐字稿，請綜合全份內容詳細回答學生問題，必要時可跨頁說明並標示頁碼。回答請完整、清楚、有條理，盡量解釋透徹，不要刻意精簡；可使用條列。引用內容時以括號標示來源頁碼，例如「（第 3 頁逐字稿）」。若全份簡報都沒有相關內容，請誠實說明。',
+            content: '你是繁體中文課堂 AI 導師。請只輸出 JSON：{"answer":"..."}。你會獲得整份簡報所有頁面的頁面文字與逐字稿，以及（若有）這份教材的原始來源全文。請綜合全份內容詳細回答學生問題，必要時可跨頁說明並標示頁碼；當答案只出現在原始來源全文、而不在投影片文字或逐字稿時，也要依原始來源全文作答。回答請完整、清楚、有條理，盡量解釋透徹，不要刻意精簡；可使用條列。引用內容時以括號標示來源，例如「（第 3 頁逐字稿）」或「（原始來源）」。若所有提供的內容都沒有相關資訊，請誠實說明。',
           },
           {
             role: 'user',
             content: [
               `簡報標題：${pdfTitleRow?.title?.trim() || '（未命名）'}`,
               `學生目前頁碼：${n}`,
-              `以下為整份簡報內容：`,
+              `以下為整份簡報內容（逐頁的投影片文字與逐字稿）：`,
               '-----------------',
               corpus || '（無可用內容）',
               '-----------------',
+              ...(sourceText
+                ? [
+                    '以下為這份教材的原始來源全文（可能包含未寫進投影片或逐字稿的細節）：',
+                    '=================',
+                    sourceText,
+                    '=================',
+                  ]
+                : []),
             ].join('\n'),
           },
           ...history,
