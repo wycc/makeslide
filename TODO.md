@@ -1487,6 +1487,8 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [x] 字幕大小／位置標籤改為編譯期安全（第八十四輪，2026-06-26 掃描重構）：盤點所有 `t(\`prefix.${var}\`)` 動態插值點，發現 `PlayPageSlidePanel` 的字幕大小／位置選擇器以 `t(\`play.slidePanel.subtitleSize.${size}\` as TranslationKey)` 直接插值——繞過型別檢查，若 `SubtitleSize`/`SubtitlePosition` 新增值卻漏補標籤會在執行期顯示原始 key（與動畫型別/形狀同類，但動畫已有第八十三輪測試守護）。改用 `as const satisfies Record<SubtitleSize/SubtitlePosition, TranslationKey>` 的標籤 map（與既有 `EASE_LABELS` 同一手法），使漏標籤變成編譯錯誤而非執行期 footgun。其餘動態插值（動畫型別/形狀＝有完整性測試、ease＝已 satisfies、`*_LABEL_KEYS` 記錄＝`Record<EnumType>` 編譯保證）皆已安全。純重構、無行為變更；前端 typecheck 與全測試 327 個通過。分支 `refactor/subtitle-label-compile-safe`，已 merge 回 master。
 
+- [x] 成本分級標籤改為編譯期安全＋修正過時註解（第八十五輪，2026-06-26 掃描重構）：第八十四輪的 grep 漏掉一處動態 i18n 插值——`PromptModal` 的成本估算分級以 `t(\`promptModal.costEstimate.tier${Capitalize(tier.name)}\` as TranslationKey)`（含 `Desc`）渲染，因 key 由 `tier.name` 首字母大寫拼出、未被 `prefix.${var}` 樣式命中。改用 `as const satisfies Record<CostTier['name'], { label; desc }>` 的 `COST_TIER_LABEL_KEYS` map，使漏補標籤變編譯錯誤。另修正 `costEstimate.ts` 的 `CostTier` 過時註解（原寫 `costEstimate.tier.<name>`，實際鍵為 `promptModal.costEstimate.tier<Name>`）。6 個 tier 鍵經確認皆存在、無執行期 bug。純重構＋文件修正、無行為變更；前端 typecheck 與全測試 327 個通過。分支 `refactor/cost-tier-labels-compile-safe`，已 merge 回 master。
+
 ## 掃描摘要（2026-06-25 第四十三輪）
 
 - 本輪 TODO 唯一未完成項目（formatDurationMs i18n）先前的實作方案被使用者否決，已標記暫緩。經詢問使用者後，本輪改為「為後端 `logSanitizer.ts` 補單元測試」。
@@ -1847,3 +1849,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - 時間：2026-06-26
 - 分支：`refactor/subtitle-label-compile-safe`（已 merge 回 master）
 - 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 88 個完成項目（88/100，未達上限）。
+## 工作記錄（第八十五輪，2026-06-26）
+
+- 工作內容：審查核心純函式（`watchProgress.ts` 觀看完成判定、`costEstimate.ts` 成本估算）——邏輯正確且測試完整，無 bug。但在 `costEstimate.ts` 發現第八十四輪 grep 漏網的一處動態 i18n 插值：`PromptModal` 的成本分級標籤以 `t(\`...tier${首字母大寫(tier.name)}\` as TranslationKey)` 渲染（key 由字串拼接、未被上輪的 `prefix.${var}` 樣式命中）。改用 `as const satisfies Record<CostTier['name'], {label,desc}>` 的 `COST_TIER_LABEL_KEYS`，使漏標籤變編譯錯誤；並修正 `CostTier` 指向不存在 key 的過時註解。6 個 tier 鍵皆存在、無執行期 bug。純重構＋文件修正、無行為變更；前端 typecheck 與全測試 327 個通過。至此前端動態 i18n 標籤映射全數為編譯期安全或有測試守護。
+- 時間：2026-06-26
+- 分支：`refactor/cost-tier-labels-compile-safe`（已 merge 回 master）
+- 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 89 個完成項目（89/100，未達上限）。
