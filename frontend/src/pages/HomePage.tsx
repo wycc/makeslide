@@ -26,7 +26,7 @@ import PromptModal from '../components/PromptModal';
 import UploadButton from '../components/UploadButton';
 import GlobalSearchBox from '../components/GlobalSearchBox';
 import { useI18n } from '../i18n';
-import { formatRelativeTime, type RelativeTimeLabels } from '../lib/relativeTime';
+import { formatRelativeTime, buildRelativeTimeLabels } from '../lib/relativeTime';
 import { useBudgetWarning } from '../hooks/useBudgetWarning';
 import { formatAudioDuration } from '../lib/audioDuration';
 import { getReviewItems } from '../lib/reviewList';
@@ -193,14 +193,7 @@ export const getDefaultSortModeForCategory = (categoryFilter: string): SortMode 
 
 export default function HomePage() {
   const { t } = useI18n();
-  const relativeTimeLabels: RelativeTimeLabels = {
-    justNow: t('time.justNow'),
-    minutesSuffix: t('time.minutesSuffix'),
-    hoursSuffix: t('time.hoursSuffix'),
-    daysSuffix: t('time.daysSuffix'),
-    monthsSuffix: t('time.monthsSuffix'),
-    yearsSuffix: t('time.yearsSuffix'),
-  };
+  const relativeTimeLabels = buildRelativeTimeLabels(t);
   const budgetWarning = useBudgetWarning();
   const RECENT_CATEGORY = t('home.recentCategory');
   const navigate = useNavigate();

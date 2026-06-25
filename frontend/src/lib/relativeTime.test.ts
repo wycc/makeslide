@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { formatRelativeTime, type RelativeTimeLabels } from './relativeTime';
+import { formatRelativeTime, buildRelativeTimeLabels, RELATIVE_TIME_LABEL_KEYS, type RelativeTimeLabels } from './relativeTime';
 
 const labels: RelativeTimeLabels = {
   justNow: 'just now',
@@ -28,4 +28,15 @@ test('formatRelativeTime picks the right bucket', () => {
 
 test('formatRelativeTime returns the raw string on invalid input', () => {
   assert.equal(formatRelativeTime('not-a-date', labels, NOW), 'not-a-date');
+});
+
+test('buildRelativeTimeLabels maps each field to its time.* key', () => {
+  // Fake t echoes the key so we can assert the mapping.
+  const built = buildRelativeTimeLabels((key) => `[${key}]`);
+  assert.equal(built.justNow, `[${RELATIVE_TIME_LABEL_KEYS.justNow}]`);
+  assert.equal(built.minutesSuffix, `[${RELATIVE_TIME_LABEL_KEYS.minutesSuffix}]`);
+  assert.equal(built.hoursSuffix, `[${RELATIVE_TIME_LABEL_KEYS.hoursSuffix}]`);
+  assert.equal(built.daysSuffix, `[${RELATIVE_TIME_LABEL_KEYS.daysSuffix}]`);
+  assert.equal(built.monthsSuffix, `[${RELATIVE_TIME_LABEL_KEYS.monthsSuffix}]`);
+  assert.equal(built.yearsSuffix, `[${RELATIVE_TIME_LABEL_KEYS.yearsSuffix}]`);
 });

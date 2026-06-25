@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | 消除 relativeTimeLabels 重複：`lib/relativeTime.ts` 新增 `buildRelativeTimeLabels(t)` + `RELATIVE_TIME_LABEL_KEYS`，PdfCard/QuizBuilderPage/HomePage 三處各 6 行的 labels 物件改為一行呼叫；補 1 個 helper 測試；typecheck + 278 前端測試 + i18n 對等全通過 | feat/dedup-relative-time-labels（已 merge） |
 | 2026-06-25 | 分析並新增可執行項目（第三十八輪）：TODO 清空、前端 i18n 大致完成，依 LOOP.md 轉向品質改善，新增 3 個低風險項目（消除 relativeTimeLabels 三處重複、reviewList.ts 補單元測試、viewerId.ts 補單元測試） | master（僅文件） |
 | 2026-06-25 | AI 草稿投票題支援已輸入題目：`generate-poll` 端點新增可選 body `question`——有輸入則只依本頁內容生成選項並保留原題（新 GeneratedOptionsSchema + 專用 prompt），無輸入維持整題生成；前端 `generatePollDraft`/`handleGeneratePollDraft` 傳入目前 pollQuestion；新增 1 個後端測試；backend+frontend typecheck + 277 前端測試通過（後端測試 sandbox timeout，改 typecheck+邏輯核對） | feat/poll-draft-options-for-given-question（已 merge） |
 | 2026-06-25 | 複製/匯出文字國際化：QuizBuilderPage 複製題目「解說：」用新增 `quiz.exportExplanationLabel`；PlayPageHeader 逐字稿 markdown 匯出「## 第 N 頁」改用既有 `play.common.pagePrefix/pageSuffix`；新增 1 個 key；typecheck + 277 前端測試 + i18n 對等全通過 | feat/copy-export-text-i18n（已 merge） |
@@ -1367,7 +1368,8 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 ## 新增可執行項目（2026-06-25 第三十八輪）
 
-- [ ] 消除 relativeTimeLabels 重複：`PdfCard`/`QuizBuilderPage`/`HomePage` 各自以 6 個 `t('time.*')` 建相同的 `relativeTimeLabels`。在 `lib/relativeTime.ts` 新增小 helper（例如 `buildRelativeTimeLabels(t)` 回傳 `RelativeTimeLabels`，或 `formatRelativeTimeI18n(iso, t)`），三處改用之以消除重複；型別上 `t` 以 `(key: TranslationKey) => string` 表示。補一個 helper 單元測試（以假 `t` 驗證對應 key）。純前端、低風險，跑 typecheck 與既有前端測試。
+- [x] 消除 relativeTimeLabels 重複：`PdfCard`/`QuizBuilderPage`/`HomePage` 各自以 6 個 `t('time.*')` 建相同的 `relativeTimeLabels`。在 `lib/relativeTime.ts` 新增小 helper（例如 `buildRelativeTimeLabels(t)` 回傳 `RelativeTimeLabels`，或 `formatRelativeTimeI18n(iso, t)`），三處改用之以消除重複；型別上 `t` 以 `(key: TranslationKey) => string` 表示。補一個 helper 單元測試（以假 `t` 驗證對應 key）。純前端、低風險，跑 typecheck 與既有前端測試。
+  - 修改說明（2026-06-25）：`lib/relativeTime.ts` 新增 `RELATIVE_TIME_LABEL_KEYS`（欄位→i18n key 對照表）與 `buildRelativeTimeLabels(t: (key: TranslationKey) => string)`（type-only import `TranslationKey`）。`PdfCard`/`QuizBuilderPage`/`HomePage` 三處原本各自展開的 6 行 `t('time.*')` 物件改為一行 `buildRelativeTimeLabels(t)`，並移除未再使用的 `RelativeTimeLabels` import。新增 1 個 helper 單元測試（以 echo 假 `t` 驗證每欄對應正確 key）。frontend typecheck 通過、全部 278 個前端測試 + i18n 對等 21 個全通過。分支 `feat/dedup-relative-time-labels`，已 merge 回 master。
 
 - [ ] 為 reviewList.ts 補單元測試：在測試檔注入 in-memory `localStorage` stub（`globalThis.localStorage`），涵蓋 `addReviewItems` 的去重（同 pdfId+pageNumber+questionText 不重複加入）、`removeReviewItem` 依 pdfId+pageNumber 過濾、`getReviewItems` 對壞資料/非陣列的 fallback、`clearAllReviewItems`。純前端、僅新增測試，不改邏輯。
 
