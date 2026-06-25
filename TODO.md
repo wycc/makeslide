@@ -1506,6 +1506,8 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] 修復 GitHub 推送失敗時 token 洩漏到 API 回應（第九十三輪，2026-06-26 掃描安全修復）：延續第九十二輪追查 GitHub token 流向，發現真實洩漏：`pushPresentationToGitHub` 執行 `git push https://x-access-token:<token>@github.com…`，`execFile` 失敗時 Error.message 內含完整指令（含 token），而 admin 同步路由（`admin.ts`）以 `errorResponse('GITHUB_SYNC_FAILED', err.message)` 將該訊息**回傳給 client**——token 從 HTTP 回應外洩（日誌路徑已於上輪脫敏，但回應沒有）。於來源頭修復：`logSanitizer` 匯出可重用的 `redactSecretsInText()`（無截斷的脫敏鏈，已涵蓋 URL 憑證與 GitHub token），`presentationGit` 在 push 失敗時先 scrub 再 rethrow，使 token 不離開模組（自動保護 admin.ts 與未來呼叫端）。新增針對 `Command failed: git push …` 訊息形狀的測試。註：`presentationGit` 自身測試需 better-sqlite3，sandbox 無法載入（既有限制），已以 typecheck 與 sanitizer 測試 17 個驗證。安全修復、低風險。分支 `fix/git-push-error-token-leak`，已 merge 回 master。
 
 - [x] 補測試：`buildAuthenticatedRepoUrl` token 嵌入行為（第九十四輪，2026-06-26 掃描補測試）：延續 GitHub token 安全審查。`buildAuthenticatedRepoUrl`（將 token 嵌入 https push remote）為 exported 純函式但無測試。先核對相關安全面皆健全：admin 設定回應雖回傳各 provider API key/`github_token` 明文，但屬「帳號擁有者預填自己的設定」設計（僅 MCP token 用 write-only `has_*` 布林，為刻意取捨，非 bug）；git 指令路徑參數皆有 `--` 分隔、ref 為內部產生（無 argument injection）；token 僅作 git 參數、不寫入 `.git/config`。新增 `presentation-git-auth-url.test.ts` 鎖定安全行為：①僅 http(s) URL 嵌入 token、SSH/scp-style 不嵌入；②空 token 原樣返回；③格式錯誤 URL 不丟例外；④token 特殊字元被 percent-encode（不破壞 URL 結構）。預期輸出已以 node 重實作逐一驗證；該測試檔因模組連帶載入 better-sqlite3 而於 sandbox 無法執行（既有限制），於 CI 執行、本機以 typecheck 驗證。純測試、低風險。分支 `test/auth-repo-url`，已 merge 回 master。
+
+- [x] 修補 GitHub token 經 git 錯誤 `cmd`/`stderr` 洩漏到日誌（第九十五輪，2026-06-26 掃描安全修復）：追查日誌脫敏接線方式時發現第九十三輪修補的殘留缺口。`logSanitizer` 是在各 log 呼叫端「手動套用」（gemini/openai/worker 等），並非 pino 全域 serializer；而 `admin.ts` 以 `app.log.warn({ err })` 記錄 push 失敗的原始 error。第九十三輪僅脫敏 `err.message`，但 `execFile` 失敗的 error 還有 `cmd`（Node 設為原始 argv：`git push https://x-access-token:<token>@github.com…`）與 `stdout`/`stderr`——pino 會序列化這些屬性，故 token 仍會經 `err.cmd` 洩漏到日誌。新增 `redactGitExecError()`，對 `message`+`cmd`+`stdout`+`stderr` 全部套 `redactSecretsInText` 後再 rethrow。以 node 重實作驗證 token 從三者皆被遮蔽；`redactSecretsInText` 單元已由 logSanitizer 測試（17 個）涵蓋。後端 typecheck 通過。安全修復、低風險。分支 `fix/git-error-cmd-token-leak`，已 merge 回 master。
 ## 掃描摘要（2026-06-25 第四十三輪）
 
 - 本輪 TODO 唯一未完成項目（formatDurationMs i18n）先前的實作方案被使用者否決，已標記暫緩。經詢問使用者後，本輪改為「為後端 `logSanitizer.ts` 補單元測試」。
@@ -1926,3 +1928,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - 時間：2026-06-26
 - 分支：`test/auth-repo-url`（已 merge 回 master）
 - 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 98 個完成項目（98/100，未達上限）。
+## 工作記錄（第九十五輪，2026-06-26）
+
+- 工作內容：審查全域錯誤處理與日誌脫敏接線。確認 server.ts 的 `setErrorHandler` 對 production 的 500 錯誤已回傳泛用訊息（不洩漏內部）。但發現 `logSanitizer` 是「各呼叫端手動套用」而非 pino 全域 serializer——`admin.ts` 的 `app.log.warn({ err })` 會記錄原始 error。第九十三輪只脫敏 `err.message`，但 `execFile` 失敗的 error 還帶 `cmd`（原始 argv 含 token）與 `stdout/stderr`，pino 會序列化它們→token 仍經 `err.cmd` 洩漏到日誌。新增 `redactGitExecError()` 對 message+cmd+stdout+stderr 全脫敏再 rethrow。以 node 重實作驗證三屬性 token 皆被遮蔽；`redactSecretsInText` 單元由 logSanitizer 測試 17 個涵蓋；後端 typecheck 通過。安全修復、低風險。
+- 時間：2026-06-26
+- 分支：`fix/git-error-cmd-token-leak`（已 merge 回 master）
+- 計數：自上次「---- 計數重設 ----」(2026-06-25) 起算，本項為第 99 個完成項目（99/100，未達上限；下一個完成即達 100 上限）。
