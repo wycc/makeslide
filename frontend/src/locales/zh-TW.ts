@@ -1163,6 +1163,8 @@ export const zhTW = {
   'play.animation.customScriptPreview': '顯示預覽',
   'play.figures.tab': '圖表素材',
   'play.figures.title': '圖表素材',
+  'play.figures.headerPagePrefix': '（第 ',
+  'play.figures.headerPageSuffix': ' 頁）',
   'play.figures.description': '本頁（或其對應的原始 PDF 頁面）所偵測到的圖表，預設會挑選面積最大的兩張作為「重新生成圖片」時的參考圖；取消勾選可將該圖表排除在參考之外。',
   'play.figures.loading': '載入圖表素材中…',
   'play.figures.loadError': '圖表素材載入失敗',

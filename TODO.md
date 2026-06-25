@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | FigureAssetsTab header「（第 N 頁）」國際化：新增 `play.figures.headerPagePrefix/Suffix` 並改用之；2 個 key；grep 確認該檔無可見中文；typecheck + 277 前端測試 + i18n 對等全通過 | feat/figures-header-i18n（已 merge） |
 | 2026-06-25 | SystemDataPage 殘留中文國際化：`formatCost`/`formatDuration` 改接 label 參數，呼叫端傳 `t()`；「模型價格未知」與時長「秒」抽成 2 個 `systemData.*` key；grep 確認該檔無中文；typecheck + 277 前端測試 + i18n 對等全通過 | feat/systemdata-i18n（已 merge） |
 | 2026-06-25 | HomePage 改用共用 relativeTime helper：移除第三份重複的本地 formatRelativeTime（消硬編中文 + NaN 舊問題），改用 `lib/relativeTime.ts` 並以 `t('time.*')` 傳 labels；三處相對時間格式化全統一；無新增 key；typecheck + 277 前端測試 + i18n 對等全通過 | feat/homepage-relative-time-dedup（已 merge） |
 | 2026-06-25 | 分析並新增可執行項目（第三十六輪）：TODO 清空後依 LOOP.md 掃描，新增 3 個低風險清理項目（HomePage 改用共用 relativeTime helper 完成第三份去重、SystemDataPage「模型價格未知」i18n、FigureAssetsTab header「（第 N 頁）」i18n） | master（僅文件） |
@@ -1323,7 +1324,8 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] SystemDataPage 殘留中文國際化：把 `pages/SystemDataPage.tsx` 的 `模型價格未知`（及掃描確認的其他少量可見中文）抽成 i18n key（如 `systemData.modelPriceUnknown`），改用 `useI18n()`，補 zh-TW/en 並跑 i18n 對等測試。純前端、小改動。
   - 修改說明（2026-06-25）：`formatCost`/`formatDuration` 為 module 層函式（`t` 不可用），改為各接受一個 label 參數：`formatCost(value, unknownLabel)`、`formatDuration(ms, secondsSuffix)`，呼叫端傳入 `t('systemData.modelPriceUnknown')` 與 `t('systemData.secondsSuffix')`。除原列舉的「模型價格未知」外，另一併處理掃描發現的時長單位「秒」（原於 template literal 中漏抓）。新增 2 個 key（`systemData.modelPriceUnknown`、`systemData.secondsSuffix`，zh-TW/en 各 2）。`grep` 確認該檔已無任何中文字元。frontend typecheck 通過、全部 277 個前端測試 + i18n 對等 21 個全通過。分支 `feat/systemdata-i18n`，已 merge 回 master。
 
-- [ ] FigureAssetsTab header「（第 N 頁）」國際化：把 `pages/play/FigureAssetsTab.tsx` header 的「（第 N 頁）」改用 i18n（沿用既有 `play.animation.headerPagePrefix/Suffix`，或新增 `play.figures.headerPagePrefix/Suffix` 保持語意一致），補 zh-TW/en（若新增）並跑 i18n 對等測試。純前端、小改動。
+- [x] FigureAssetsTab header「（第 N 頁）」國際化：把 `pages/play/FigureAssetsTab.tsx` header 的「（第 N 頁）」改用 i18n（沿用既有 `play.animation.headerPagePrefix/Suffix`，或新增 `play.figures.headerPagePrefix/Suffix` 保持語意一致），補 zh-TW/en（若新增）並跑 i18n 對等測試。純前端、小改動。
+  - 修改說明（2026-06-25）：為語意一致新增 `play.figures.headerPagePrefix`/`headerPageSuffix`（與 `play.figures.*` 同命名空間，值同 animation header），header 改為 `{title}{headerPagePrefix}{pageNumber ?? '-'}{headerPageSuffix}`（zh「（第 N 頁）」、en「 (Page N)」）。新增 2 個 key（zh-TW/en 各 2）。`grep` 確認該檔已無可見硬編中文。frontend typecheck 通過、全部 277 個前端測試 + i18n 對等 21 個全通過。分支 `feat/figures-header-i18n`，已 merge 回 master。
 
 - [x] 零星小元件殘留硬編中文國際化：把 `pages/play/PageTimingChips.tsx`（如「產生中」）與其他少量殘留可見中文（掃描 `QualityCheckPanel`、`PlayPageSlidePanel`、`PlayPageSidebar`、`PlayPageHeader` 等元件確認）抽成 i18n key，補 zh-TW/en 並跑 i18n 對等測試。純前端、低風險清理。
   - 修改說明（2026-06-25）：將使用者可見的硬編中文抽成 i18n key：`PageTimingChips` 計時「產生中」；`PlayPageSlidePanel` 分頁進度條 `aria-label`（第 X 頁，共 Y 頁）與「清除搜尋」`aria-label`；`PlayPageSidebar` 「此頁已有筆記」title、書籤/重點頁的「第 N 頁」縮圖 alt 與顯示文字、以及複製清單文字（「第 N 頁」以分隔符 join）。新增 7 個 key：`play.common.pagePrefix`/`pageSuffix`（共用「第 N 頁」前後綴）、`play.timing.generating`、`play.slidePanel.clearSearchAria`/`pageProgressMid`、`play.sidebar.hasNotesTitle`/`pageListSeparator`（zh-TW/en 各 7）。**範圍說明**：`QualityCheckPanel` 與 `PlayPageSlidePanel` 的 LLM 提示詞常數（如 BATCH_FILL_PROMPT、改寫風格 prompt）、各元件 `ApiError`/`Error` fallback 錯誤訊息、以及 `PlayPageHeader` 全文逐字稿 markdown 匯出的「## 第 N 頁」標頭屬內部/匯出內容或 PlayPage 錯誤訊息批次（第二批項目）範疇，本次未動。frontend typecheck 通過、全部 277 個前端測試 + i18n 對等 21 個全通過。分支 `feat/misc-components-i18n`，已 merge 回 master。

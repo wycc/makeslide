@@ -87,7 +87,7 @@ export function FigureAssetsTab() {
   return (
     <>
       <h2 className="mb-2 text-sm font-semibold text-slate-300">
-        📊 {t('play.figures.title')}（第 {pageNumber ?? '-'} 頁）
+        📊 {t('play.figures.title')}{t('play.figures.headerPagePrefix')}{pageNumber ?? '-'}{t('play.figures.headerPageSuffix')}
       </h2>
       <p className="mb-3 text-xs text-slate-400">{t('play.figures.description')}</p>
       {loading ? (
