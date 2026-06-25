@@ -38,6 +38,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-25 | AI 導師 ask 加入原始來源全文：`POST /pages/:n/ask` corpus 除逐頁文字+逐字稿外，另附 `source.txt`（上限 12000 字）並更新提示詞，使原文獨有的答案也能回答；新增後端測試（以獨立 inject 腳本驗證通過）；backend typecheck 通過 | feat/ai-tutor-source-text（已 merge） |
 | 2026-06-25 | UI 顯示簡報生成提示詞：`user_prompt` 早已記錄於 `pdfs` 表，`PlayPageHeader` 簡介下方新增「顯示生成提示詞」折疊區（非分享檢視限定、含複製按鈕）；zh-TW/en 各補 4 個 key；純前端；typecheck 通過、i18n 對等測試 21 個全通過 | feat/show-generation-prompt（已 merge） |
 | 2026-06-25 | 記下動畫生成提示詞：custom-script 生成成功時寫入 `effect.prompt`（隨存檔持久化，後端 `validateAnimationSpec` 早已保留該欄位），`AnimationEditorTab` 開啟對話框時以記錄的 prompt 回填輸入框供迭代；純前端；typecheck 通過、`AnimationEditorTab.test.ts` 3 個測試全通過 | feat/animation-record-prompt（已 merge） |
 | 2026-06-25 | AI 導師問這一頁（確認既有功能）：經檢視 `page-operations.ts` ask 端點已送全份簡報每頁 text+script（corpus 上限 14000 字）、接受最多 20 輪 history、回答 token 上限 4000 且移除簡短指示，前端 `usePageAsk`/`PageAskPanel` 為多輪 thread；需求已由 commit `e51302b` 滿足，標記完成（無新增程式碼） | feat/ai-tutor-fulldeck-multiturn（已 merge） |
@@ -1202,4 +1203,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-25）：`SlideAnimationEffect.prompt`（產生 custom-script `code` 的提示詞）型別早已定義、後端 `validateAnimationSpec` 也已保留（`pageAnimation.ts` 行 618），但前端 `usePageAnimation.ts` 生成成功時只寫入 `code` 與 `conversation`、從未寫入 `prompt`，導致提示詞未被記錄。修正：生成成功時一併設定 `effect.prompt = prompt`（隨存檔持久化）；並修改 `AnimationEditorTab.tsx` 開啟 custom-script 對話框時，以該效果已記錄的 `prompt` 回填輸入框（無則清空），方便直接在原提示詞上迭代。純前端改動；typecheck 通過、`AnimationEditorTab.test.ts` 3 個測試全通過。分支 `feat/animation-record-prompt`，已 merge 回 master。
 - [x] 大網生成的提示詞也要記錄下來。並在 UI 上可以顯示出來。
   - 修改說明（2026-06-25）：簡報生成提示詞早已記錄於 `pdfs.user_prompt`（`upload.ts` 於送出生成時寫入、`detail` 路由回傳），但前端僅用於「重新生成」對話框的預填，從未在檢視時顯示。新增：`PlayPageHeader` 在簡介折疊區下方新增「顯示生成提示詞」折疊區塊（複用 description 的折疊 + 複製模式），僅在非分享檢視（`!currentShareToken`）且 `detail.user_prompt` 非空時顯示，附「複製提示詞」按鈕。zh-TW/en 各新增 4 個 `play.header.*Prompt*` key（共 1655 對等）。純前端改動；typecheck 通過、i18n 對等測試 21 個全通過。分支 `feat/show-generation-prompt`，已 merge 回 master。
-- [ ] AI 導師問這一頁的功能， 沒有將原文 extra 出的全文或 PDF 傳出去，所以無法顯示不在逐字稿的答案。
+- [x] AI 導師問這一頁的功能， 沒有將原文 extra 出的全文或 PDF 傳出去，所以無法顯示不在逐字稿的答案。
+  - 修改說明（2026-06-25）：先前 ask 端點的全份 corpus 只含每頁的「投影片文字（text_path）+ 逐字稿（script_path）」，未納入原始 extract 出的來源全文（`source.txt`），導致答案只存在於原文、未寫進投影片/逐字稿時無法回答。修正：`page-operations.ts` 的 `POST /api/pdfs/:id/pages/:n/ask` 改為另外讀取 `sourceTextPath(id)`（`source.txt`，上限 12000 字、`ASK_SOURCE_TEXT_MAX_CHARS`），以獨立區塊「原始來源全文」附在簡報逐頁內容之後送給模型；system/user 提示詞同步說明「當答案只在原始來源全文時也要據以作答」。新增後端測試（頁面 text/script 不含關鍵字、`source.txt` 含 `ZETA9`，斷言送模型的 prompt 含原文與標籤）。因 sandbox 無法捕捉 node:test 輸出，另以獨立 Fastify inject 腳本驗證通過（STATUS 200、原文與標籤皆送達）。backend typecheck 通過。分支 `feat/ai-tutor-source-text`，已 merge 回 master。
