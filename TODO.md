@@ -2485,7 +2485,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [ ] 抽出書籤導覽純函式並加「上一個書籤」快捷鍵（可用性 / 可測性）：`PlayPage` 的 `B` 鍵以內嵌邏輯跳到「下一個書籤」（`sorted.find(n > current) ?? sorted[0]`）。抽成 `frontend/src/lib/` 純函式 `nextBookmarkPage(bookmarks, currentPage)` 與 `prevBookmarkPage(bookmarks, currentPage)`（皆環狀、回 1-based 頁碼或 null；排序去重）並補測試（環繞、邊界、空清單、重複）；`B` 改用 `nextBookmarkPage`，新增 `Shift+B` 用 `prevBookmarkPage`；於快捷鍵說明面板（`PlayPageHeader` 的 `shortcuts`）加入 `Shift+B` 一列、補 zh-TW/en 說明 key。純前端。
 
-- [ ] CSV 匯出加 UTF-8 BOM（Roadmap Phase 5 / 相容性）：各 CSV 端點（`comments.csv`、`report/pages.csv`、`report/questions.csv`、`report/students.csv`、`poll-results.csv`、`quiz-results.csv`）目前直接回傳純文字，Excel 開啟含中文時易誤判編碼而亂碼。於回傳前統一在 CSV 字串前置 UTF-8 BOM（`﻿`）。建議抽一個共用小工具（如 `csv.ts` 內 `withCsvBom(text)`）並逐端點套用；更新既有相關 node:test 的 body 斷言（改以 `.replace(/^﻿/, '')` 或在預期值前加 BOM）。後端小改 + 測試更新。
+- [x] CSV 匯出加 UTF-8 BOM（Roadmap Phase 5 / 相容性）：各 CSV 端點（`comments.csv`、`report/pages.csv`、`report/questions.csv`、`report/students.csv`、`poll-results.csv`、`quiz-results.csv`）目前直接回傳純文字，Excel 開啟含中文時易誤判編碼而亂碼。於回傳前統一在 CSV 字串前置 UTF-8 BOM（`﻿`）。建議抽一個共用小工具（如 `csv.ts` 內 `withCsvBom(text)`）並逐端點套用；更新既有相關 node:test 的 body 斷言（改以 `.replace(/^﻿/, '')` 或在預期值前加 BOM）。後端小改 + 測試更新。
+  - 修改說明（2026-06-26）：`csv.ts` 新增 `withCsvBom(text)`（前置 `﻿`，已有 BOM 則不重複，冪等）。`comments.ts`、`report.ts`（pages/questions/students 三個 send）、`poll-results-csv.ts`、`quiz-results-csv.ts` 改以 `reply.send(withCsvBom(csv))` 回傳（subtitles 的 srt/vtt/txt 非 CSV，不動）。`csvEscape.test.ts` 補 `withCsvBom` 測試（前置 BOM、冪等、空字串、字元為 U+FEFF）。既有 CSV handler 測試多以 `resp.body.trim().split('\n')` 取行——`String.trim()` 會移除 U+FEFF，故 lines-based 斷言不受影響；僅兩處精確比對整段 body 者（`comments-csv` 空清單、`report-questions-csv` 無測驗）於預期值前補 BOM。後端 `tsc --noEmit` 通過、`csvEscape.test.ts` 7 測試通過；CSV handler 測試需 better-sqlite3、留 CI。分支 `feat/csv-utf8-bom`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 86 個完成項目（86/100，未達上限）。
 
 - [ ] 抽出投票百分比計算純函式（可用性 / 可測性）：投票結果百分比 `total > 0 ? Math.round(votes/total*100) : 0` 在 `PlayPageFullscreen`、`PlayPageSidebar` 等多處重複內嵌。抽成 `frontend/src/lib/` 純函式 `pollOptionPercent(votes, total)`（total ≤ 0 回 0、四捨五入整數）並補測試（零票、整除、四捨五入、總票為 0）；將重複處改呼叫之（行為不變）。純前端、降低重複。
 
