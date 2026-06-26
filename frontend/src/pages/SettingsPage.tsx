@@ -48,6 +48,7 @@ import {
 import { GEMINI_TTS_VOICES, OPENAI_TTS_VOICES, geminiVoiceLabel, openaiVoiceLabel } from '../lib/ttsVoices';
 import { formatSlaOverrideRangeMessage, validateSlaOverrideSecondsInput } from '../lib/slaOverrideValidation';
 import { copyTextToClipboard } from '../lib/clipboard';
+import { LLM_PRICE_PER_1M_TOKENS, TTS_PRICE_PER_1K_CHARS, formatUsd } from '../lib/costEstimate';
 import { createTemplate } from '../lib/api/templates';
 
 type SettingsCategory = 'account' | 'ai' | 'sync' | 'skills' | 'admin';
@@ -848,6 +849,36 @@ export default function SettingsPage() {
                     />
                     <span className="mt-1 block text-xs text-slate-500">{t('settings.monthlyBudgetUsdHint')}</span>
                   </label>
+                  <div className="block text-sm text-slate-300 sm:col-span-2">
+                    <span>{t('settings.priceReferenceTitle')}</span>
+                    <span className="mt-1 block text-xs text-slate-500">{t('settings.priceReferenceHint')}</span>
+                    <div className="mt-2 grid grid-cols-1 gap-3 rounded-md border border-border bg-bg/40 p-3 text-xs sm:grid-cols-2">
+                      <div>
+                        <p className="mb-1 font-medium text-slate-400">{t('settings.priceReferenceLlm')}</p>
+                        <ul className="space-y-0.5">
+                          {Object.entries(LLM_PRICE_PER_1M_TOKENS).map(([model, price]) => (
+                            <li key={model} className="flex items-baseline justify-between gap-2">
+                              <span className="truncate font-mono text-slate-400">{model}</span>
+                              <span className="shrink-0 tabular-nums text-slate-500">
+                                {t('settings.priceReferenceInOut').replace('{in}', formatUsd(price.input)).replace('{out}', formatUsd(price.output))}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div>
+                        <p className="mb-1 font-medium text-slate-400">{t('settings.priceReferenceTts')}</p>
+                        <ul className="space-y-0.5">
+                          {Object.entries(TTS_PRICE_PER_1K_CHARS).map(([provider, price]) => (
+                            <li key={provider} className="flex items-baseline justify-between gap-2">
+                              <span className="truncate font-mono text-slate-400">{provider}</span>
+                              <span className="shrink-0 tabular-nums text-slate-500">{formatUsd(price)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
                   <label className="block text-sm text-slate-300 sm:col-span-2">
                     <span className="flex items-center gap-1.5">
                       OPENAI_API_KEY
