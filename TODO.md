@@ -2011,6 +2011,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：新增 `backend/src/routes/pdfs/csv.ts` 匯出強化版 `csvEscape`；兩個 CSV 路由改 `import { csvEscape } from './csv'` 並移除本地副本（`sessionSub`/`canEditPdf` 維持各自，因非完全共用範疇）。新增 `backend/test/csvEscape.test.ts` +6 純函式測試（一般/數字、null、引用與雙引號、單獨 CR、四種 formula 起始字元含與逗號併用、負數不被前綴），sandbox 執行通過；後端 `tsc` build 通過。兩個 CSV 整合測試因 sandbox better-sqlite3 ABI 不符（NODE_MODULE_VERSION 127 vs 147）無法本機執行、留待 CI；經分析（數字不變、測試資料無危險字元開頭、header 不經 escape）確認不破壞。分支 `feat/csv-escape-shared-hardened`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 12 個完成項目（12/100，未達上限）。
 
+- [x] 分享對話框支援 Esc／背景點擊關閉：`ShareDialog`（fixed inset-0 modal）原本只能用「關閉」按鈕關閉——沒有 Escape、沒有背景點擊關閉，與同檔 `ShortcutsButton` modal（有背景關閉）及播放頁其他 overlay 不一致，也缺 `role="dialog"` 等無障礙屬性。新增 Escape keydown 監聽、背景（點到 overlay 本身時）點擊關閉、`role="dialog"`/`aria-modal`/`aria-label`，並把 `embedCode` 建構抽成可測純函式 `buildEmbedCode`。
+  - 修改說明（2026-06-26）：`ShareDialog.tsx` 新增 export `buildEmbedCode(shareUrl)`（空 URL 回 ''）；加 `useEffect` 監聽 window keydown（Escape → onClose，含 cleanup）；overlay div 加 `onClick`（`event.target === event.currentTarget` 才 onClose，避免點內容誤關）；內層面板加 `role`/`aria-modal`/`aria-label`。新增 `ShareDialog.test.ts` +2 測試（有/無 URL 的 embed 片段）。前端 365 測試 + typecheck 全通過。分支 `feat/share-dialog-dismiss`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 13 個完成項目（13/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2027,4 +2031,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | 播放頁下拉選單支援 Esc／點外部關閉：`HeaderDropdown` 加 `useEffect`（Escape + 外部 pointer-down 關閉），決策邏輯抽成純函式 `headerDropdownDismiss.ts`；headerDropdownDismiss.test.ts +2 測試；前端 358 測試通過 | feat/header-dropdown-dismiss（已 merge） |
 | 2026-06-26 | 全域搜尋忽略過時回應：`GlobalSearchBox` 以 `requestSeqRef` 守門，捨棄非最新的 async 搜尋回應（修 search-as-you-type race）；export `highlightText` 並 +5 測試；前端 363 測試通過 | fix/global-search-race（已 merge） |
 | 2026-06-26 | CSV 匯出去重並強化：兩個 CSV 路由共用的 `csvEscape` 抽成 `routes/pdfs/csv.ts`，並加 CSV formula injection 防護（`=`/`+`/`-`/`@`/Tab/CR 開頭字串前綴 `'`、僅對 string）與單獨 CR 引用；csvEscape.test.ts +6 測試（sandbox 通過）、後端 build 通過；CSV 整合測試留待 CI | feat/csv-escape-shared-hardened（已 merge） |
+| 2026-06-26 | 分享對話框支援 Esc／背景點擊關閉：`ShareDialog` 加 Escape keydown、背景點擊（target===currentTarget）關閉與 `role=dialog`/`aria-modal`/`aria-label`；`embedCode` 抽成純函式 `buildEmbedCode`；ShareDialog.test.ts +2 測試；前端 365 測試通過 | feat/share-dialog-dismiss（已 merge） |
 
