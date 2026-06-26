@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '../config';
 import { DEFAULT_ACCOUNT_ID, currentAccountId, sanitizeAccountId } from './accountContext';
+import { timingSafeStringEqual } from '../timingSafe';
 
 export type LlmProvider = 'openai' | 'gemini' | 'cgu-air' | 'openrouter';
 export type TtsProvider = 'openai' | 'gemini';
@@ -299,12 +300,6 @@ const PER_ACCOUNT_ENV_PAIRS: Array<[string, keyof PerAccountAiSettings]> = [
 ];
 
 /** Constant-time string equality (avoids a JS `===` timing side-channel comparing MCP tokens). */
-function timingSafeStringEqual(a: string, b: string): boolean {
-  const bufA = Buffer.from(a, 'utf8');
-  const bufB = Buffer.from(b, 'utf8');
-  if (bufA.length !== bufB.length) return false;
-  return crypto.timingSafeEqual(bufA, bufB);
-}
 
 /**
  * Resolves which account a bearer token belongs to, so an MCP request can be treated as that
