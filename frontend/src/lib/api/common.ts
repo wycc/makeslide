@@ -126,7 +126,7 @@ function hintKeys(name: string): ApiErrorHintKeys {
   };
 }
 
-const ERROR_HINT_KEYS: Record<string, ApiErrorHintKeys> = {
+export const ERROR_HINT_KEYS: Record<string, ApiErrorHintKeys> = {
   INVALID_REQUEST: hintKeys('invalidRequest'),
   INVALID_UPLOAD_TYPE: hintKeys('invalidUploadType'),
   FILE_REQUIRED: hintKeys('fileRequired'),
