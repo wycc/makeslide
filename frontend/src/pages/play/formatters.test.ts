@@ -12,6 +12,7 @@ import {
   formatRegenerateStepStatus,
   formatRegenSelectedPagesSummary,
   formatTime,
+  formatTokenCount,
   sumCompletedDurationMs,
 } from './formatters';
 
@@ -94,6 +95,28 @@ test('adjustRemainingForSpeed guards against invalid rates and non-positive seco
   assert.equal(adjustRemainingForSpeed(0, 1.5), 0);
   assert.equal(adjustRemainingForSpeed(-5, 1.5), 0);
   assert.equal(adjustRemainingForSpeed(Number.NaN, 1.5), 0);
+});
+
+test('formatTokenCount formats raw, thousands, and millions units', () => {
+  assert.equal(formatTokenCount(0), '0');
+  assert.equal(formatTokenCount(999), '999');
+  assert.equal(formatTokenCount(1_000), '1.0K');
+  assert.equal(formatTokenCount(1_500), '1.5K');
+  assert.equal(formatTokenCount(999_499), '999.5K');
+  assert.equal(formatTokenCount(1_000_000), '1.00M');
+  assert.equal(formatTokenCount(1_500_000), '1.50M');
+});
+
+test('formatTokenCount promotes to millions instead of overflowing the K unit', () => {
+  // 999_950+ would render as "1000.0K"; it should roll over to "1.00M" instead.
+  assert.equal(formatTokenCount(999_950), '1.00M');
+  assert.equal(formatTokenCount(999_999), '1.00M');
+  assert.equal(formatTokenCount(999_949), '999.9K');
+});
+
+test('formatTokenCount guards against non-finite input', () => {
+  assert.equal(formatTokenCount(Number.NaN), '0');
+  assert.equal(formatTokenCount(Number.POSITIVE_INFINITY), '0');
 });
 
 test('formatRegenerateJobStatus formats running/completed/failed status labels', () => {
