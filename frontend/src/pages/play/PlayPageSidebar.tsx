@@ -16,6 +16,7 @@ import { formatCommentsMarkdown } from '../../lib/commentMarkdown';
 import { formatPollResultsMarkdown } from '../../lib/pollResultsMarkdown';
 import { pollOptionPercent } from '../../lib/pollPercent';
 import { formatNotesMarkdown } from '../../lib/notesMarkdown';
+import { formatPageListText } from '../../lib/pageListText';
 import { formatRelativeTime } from '../../lib/formatRelativeTime';
 import { NOTEBOOK_TABS, computeNotebookTabCounts, getAdjacentNotebookTab, getEdgeNotebookTab, getStoredNotebookTab, setStoredNotebookTab, type NotebookTab } from './notebookTabs';
 
@@ -1280,7 +1281,7 @@ export function PlayPageSidebar() {
             <button
               type="button"
               onClick={() => {
-                const text = [...bookmarks].sort((a, b) => a - b).map((n) => `${t('play.common.pagePrefix')}${n}${t('play.common.pageSuffix')}`).join(t('play.sidebar.pageListSeparator'));
+                const text = formatPageListText(bookmarks, { prefix: t('play.common.pagePrefix'), suffix: t('play.common.pageSuffix'), separator: t('play.sidebar.pageListSeparator') });
                 void copyTextToClipboard(text).then((ok) => {
                   setBookmarkCopyMsg(ok ? t('play.sidebar.copyListDone') : t('play.sidebar.copyListFail'));
                   setTimeout(() => setBookmarkCopyMsg(null), 2000);
@@ -1345,7 +1346,7 @@ export function PlayPageSidebar() {
             <button
               type="button"
               onClick={() => {
-                const text = [...importantPages].sort((a, b) => a - b).map((n) => `${t('play.common.pagePrefix')}${n}${t('play.common.pageSuffix')}`).join(t('play.sidebar.pageListSeparator'));
+                const text = formatPageListText(importantPages, { prefix: t('play.common.pagePrefix'), suffix: t('play.common.pageSuffix'), separator: t('play.sidebar.pageListSeparator') });
                 void copyTextToClipboard(text).then((ok) => {
                   setImportantCopyMsg(ok ? t('play.sidebar.copyListDone') : t('play.sidebar.copyListFail'));
                   setTimeout(() => setImportantCopyMsg(null), 2000);

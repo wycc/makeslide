@@ -8192,3 +8192,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **收斂**（`frontend/src/pages/PlayPage.tsx`）：跳頁框三處改呼叫此函式，輸出與原本相同。
 - **測試**（`parseGotoPage.test.ts`）：5 個案例（合法/去空白、捨去小數、越界 0/負/超過、空白/非數字、totalPages=0）。
 - **驗證**：前端 `tsc --noEmit` 通過；新測試通過；無 i18n 變更。
+
+## 抽出頁碼清單複製文字為純函式（2026-06-26）
+
+### 功能目的
+播放頁側欄的「書籤」與「重點頁」各有一個「複製清單」按鈕，把頁碼組成像「第 1 頁、第 3 頁」的文字，但這段組裝邏輯在兩處各自內嵌、重複且無法測試。本項抽成單一純函式收斂，提升可測性與一致性，行為不變。
+
+### 使用方式
+無可見變化。書籤/重點頁「複製清單」輸出與先前相同（依頁碼排序、以分隔符串接）。
+
+### 技術細節
+- **純函式**（`frontend/src/lib/pageListText.ts`）：`formatPageListText(pages, labels)` 將頁碼排序去重後，以 `{prefix}{n}{suffix}` 套用並用 `separator` 串接，空清單回空字串；前綴/後綴/分隔符由 `PageListTextLabels` 注入以保持純粹可測。
+- **收斂**（`frontend/src/pages/play/PlayPageSidebar.tsx`）：書籤與重點頁兩處「複製清單」改呼叫此函式；因兩份清單本就唯一，去重不改變結果。
+- **測試**（`pageListText.test.ts`）：4 個案例（空、排序串接、prefix/suffix、去重）。
+- **驗證**：前端 `tsc --noEmit` 通過；新測試通過；無 i18n 變更。
