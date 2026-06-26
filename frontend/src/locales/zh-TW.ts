@@ -1766,6 +1766,7 @@ export const zhTW = {
   'play.header.copyDescriptionDone': '已複製',
   'play.header.downloadSrt': '下載 SRT 字幕',
   'play.header.downloadVtt': '下載 VTT 字幕',
+  'play.header.downloadTxt': '下載逐字稿 TXT',
   'play.header.downloadPptx': '下載 PPTX',
   'play.header.downloadScriptsTxt': '下載逐字稿 TXT',
   'play.header.downloadScorm': '下載 SCORM 包',

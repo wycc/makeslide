@@ -2341,7 +2341,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [ ] 全域搜尋最近關鍵字（Roadmap Phase 4 搜尋體驗）：`GlobalSearchBox`（`frontend/src/components/GlobalSearchBox.tsx`）送出搜尋後，把關鍵字存入 localStorage 最近清單（去重、上限 8 筆、最新在前）；輸入框聚焦且為空時顯示最近關鍵字 chips，點擊即帶入搜尋。新增純函式模組 `frontend/src/lib/recentSearches.ts`（`getRecentSearches()`/`addRecentSearch(q)`，含非瀏覽器防護、壞值 fallback）並補單元測試（去重、上限、最新在前、空白忽略）；新增 zh-TW/en i18n key（「最近搜尋」「清除」）。純前端。
 
-- [ ] 逐字稿純文字匯出（Roadmap Phase 5 匯出）：新增後端 `GET /api/pdfs/:id/subtitles.txt`，輸出整份逐字稿純文字（無時間碼，逐頁以空行分隔，可於每頁前加「# 第 N 頁」標題），沿用 `backend/src/routes/pdfs/subtitles.ts` 既有的逐字稿/句子組裝來源與權限檢查、回應帶 `text/plain; charset=utf-8` 與 `attachment; filename`；`PlayPageHeader.tsx` 在既有 srt/vtt 下載旁加「TXT」連結；補後端 node:test（200 內容/分頁、權限、404）。
+- [x] 逐字稿純文字匯出（Roadmap Phase 5 匯出）：新增後端 `GET /api/pdfs/:id/subtitles.txt`，輸出整份逐字稿純文字（無時間碼，逐頁以空行分隔，可於每頁前加「# 第 N 頁」標題），沿用 `backend/src/routes/pdfs/subtitles.ts` 既有的逐字稿/句子組裝來源與權限檢查、回應帶 `text/plain; charset=utf-8` 與 `attachment; filename`；`PlayPageHeader.tsx` 在既有 srt/vtt 下載旁加「TXT」連結；補後端 node:test（200 內容/分頁、權限、404）。
+  - 修改說明（2026-06-26）：`subtitles.ts` 新增 `buildPagePlainText`（優先讀 `pageScriptPath` 原始逐字稿、無則 fallback 用 `buildPageTimeline` 句子以換行接合）與 `buildPlainTextContent`（每頁前加 `# 第 N 頁` 標題、頁間空行、收尾正規化單一換行），並新增 `GET /api/pdfs/:id/subtitles.txt` 路由（沿用既有 `canReadPdf` 權限與 pages 查詢，回應 `text/plain; charset=utf-8` + `attachment; filename="transcript.txt"` + `cache-control: no-store`）。`PlayPageHeader.tsx` 在 SRT/VTT 下載連結後加入「下載逐字稿 TXT」連結；新增 zh-TW/en `play.header.downloadTxt`。新增 `backend/test/subtitles-txt.test.ts`（4 測試：逐頁內容/分頁格式、無稿頁仍出標題、private 403、404）。前端+後端 `tsc --noEmit` 皆通過、`i18n.test.ts` 對等通過；後端 handler 測試需 better-sqlite3 native module、sandbox 無法載入，留 CI 執行。分支 `feat/transcript-txt-export`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 68 個完成項目（68/100，未達上限）。
 
 ## 工作記錄（第一〇三輪，2026-06-26）
 
