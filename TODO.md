@@ -2063,6 +2063,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`lib/api/common.ts` 將 `ERROR_HINT_KEYS` 改 export；新增 `lib/api/apiErrorHintKeys.test.ts`（迭代所有 hint 條目 × title/message/nextStep，檢查存在於兩個 locale）。`mapApiErrorToHumanMessage` 內的字面 key（requestFailed/unknownError）本就由 tsc 驗證、不需此測試。前端 378 測試 + typecheck 全通過。分支 `test/api-error-hint-keys-guard`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 25 個完成項目（25/100，未達上限）。
 
+- [x] DrawingCanvas getNorm 防零面積除法：`getNorm` 以 canvas `getBoundingClientRect()` 的寬高做除法、無守門，若 rect 寬或高為 0（畫布短暫收合/隱藏）會產生 NaN/Infinity 座標並存入筆劃資料（JSON 序列化成 null）。抽出可測純函式 `normalizeCanvasPoint`（零/無效面積回 `[0,0]`）取代內聯計算。（檢視時另確認 sandbox 屬性、存檔快照、diff/動畫驗證等皆穩健。）
+  - 修改說明（2026-06-26）：`drawingGeometry.ts` 新增 `normalizeCanvasPoint(clientX, clientY, rect)`（`rect.width/height > 0` 才換算，否則回 `[0,0]`）；`DrawingCanvas.tsx` 的 `getNorm` 改呼叫之、import 更新。`drawingGeometry.test.ts` +2 測試（一般換算含邊界、零面積回 [0,0] 不產 NaN）。前端 380 測試 + typecheck 全通過。分支 `fix/drawing-getnorm-zero-guard`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 26 個完成項目（26/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2092,4 +2096,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | 暫停播放/即時問答動畫預設文字 i18n：移除 `pause-playback`/`realtime-poll` preset 硬編中文 text（與 text-callout 一致），editor placeholder 與 `SlideRenderer` fallback 改 `t()`；zh/en 各 +2 key；前端 377 測試通過 | fix/animation-default-text-i18n（已 merge） |
 | 2026-06-26 | custom-script 安全檢查補擋可呼叫 Function 建構式：`findUnsafeScriptPattern` 新增 `/\bFunction\s*\(/`（大寫 F，擋 `Function("…")()`、不誤擋 `function(`）；animation-custom-script.test.ts +3、後端 build 通過 | fix/unsafe-pattern-function-ctor（已 merge） |
 | 2026-06-26 | API 錯誤提示 key drift-guard：export `ERROR_HINT_KEYS` 並新增測試，斷言所有 `apiError.<name>.{title,message,nextStep}` 在 zh-TW/en 皆存在（防 `as TranslationKey` 動態 key 漂移顯示原始 key）；前端 378 測試通過 | test/api-error-hint-keys-guard（已 merge） |
+| 2026-06-26 | DrawingCanvas getNorm 防零面積除法：抽出 `normalizeCanvasPoint`（零/無效 rect 回 [0,0]，避免 NaN 座標存入筆劃），`getNorm` 改用之；drawingGeometry.test.ts +2 測試；前端 380 測試通過 | fix/drawing-getnorm-zero-guard（已 merge） |
 
