@@ -8262,3 +8262,19 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **接入**（`frontend/src/pages/play/PlayPageSidebar.tsx` 的 `CommentsSection`）：`author` state 初值改為 `getStoredCommentAuthor()`；`submitComment` 成功後 `setStoredCommentAuthor(author)`。
 - **測試**（`commentAuthor.test.ts`）：5 個案例（預設空、儲存/讀取、trim + 上限、空白移除、無 window 降級）。
 - **驗證**：前端 `tsc --noEmit` 通過；新測試通過；不需新 i18n。
+
+## 評論編輯框字數提示與計數邏輯抽出（2026-06-27）
+
+### 功能目的
+新增評論的輸入框原本就有「目前字數／上限」提示，接近 2000 字上限時會轉為琥珀色警示；但「編輯既有評論」的輸入框雖同樣有 `maxLength={2000}`，卻完全沒有字數回饋，使用者貼上長文時不易得知還剩多少額度。本項補上編輯框的一致字數提示，並把原本內聯在 JSX 的計數判斷抽成可測的純函式，方便日後其他輸入框重用。
+
+### 使用方式
+在「頁面評論」中：
+- 新增評論：輸入時右下角持續顯示 `字數/2000`，剩餘不足 100 字時轉為琥珀色（行為與先前一致）。
+- 編輯評論：點某則評論的編輯，輸入框下方新增同樣的 `字數/2000` 提示與接近上限警示。
+
+### 技術細節
+- **純函式模組**（`frontend/src/lib/textLengthHint.ts`）：`getTextLengthHint(count, max, warnWithin = 100)` 回傳 `{ count, max, remaining, nearLimit, label }`。`nearLimit` 定義為「剩餘字數嚴格小於 warnWithin」，預設 100 以對齊舊有的 `count > max - 100` 行為；對負值、NaN、小數均做淨化（floor、夾到 0）。
+- **接入**（`frontend/src/pages/play/PlayPageSidebar.tsx` 的 `CommentsSection`）：新增評論計數器改用 `getTextLengthHint(text.length, 2000)`；編輯評論的 textarea 下方新增以同函式產生的字數提示。
+- **測試**（`textLengthHint.test.ts`）：7 個案例（基本未警示、與舊內聯行為對齊的邊界 1900/1901、達上限、超過上限夾到 0、自訂 warnWithin 門檻、負值/NaN 淨化、小數 floor）。
+- **驗證**：前端 `tsc --noEmit` 通過；新測試 7/7 通過；純前端、不動後端、不需新 i18n。

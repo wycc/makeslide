@@ -2620,3 +2620,15 @@ TODO.md 目前仍有兩個明確標註「待使用者決定 / 待處理」的未
 ---- 計數重設 ---- (2026-06-27)
 
 > 使用者於 2026-06-27 決定「重設計數並繼續」。自本標記起，loop 重新從 0 起算下一批 100 個完成項目；先前 100/100 的上限狀態已解除。
+
+## 新增可執行項目（第一二一輪，2026-06-27）
+
+- [x] 評論編輯框字數提示與計數邏輯抽出（一致性 / 可測性）：新增評論輸入框已有 `字數/2000` 提示與接近上限警示，但「編輯既有評論」的 textarea（同 `maxLength={2000}`）完全沒有字數回饋。新增純函式 `frontend/src/lib/textLengthHint.ts`（`getTextLengthHint(count, max, warnWithin)`）並補單元測試，將新增評論的內聯計數判斷改用此函式，並為編輯評論的 textarea 補上一致的字數提示。純前端、不動後端、不需新 i18n。
+  - 修改說明（2026-06-27）：新增 `frontend/src/lib/textLengthHint.ts`（`getTextLengthHint` 回傳 `{count,max,remaining,nearLimit,label}`，`nearLimit` 為「剩餘 < warnWithin」，預設 100 對齊舊 `count > max-100` 行為，含負值/NaN/小數淨化）。`CommentsSection` 新增評論計數器改用 `getTextLengthHint(text.length, 2000)`；編輯評論 textarea 下方新增同函式產生的字數提示。新增 `textLengthHint.test.ts` 7 測試。前端 `tsc --noEmit` 通過、新測試 7/7 通過；不需新 i18n。分支 `feat/comment-length-hint`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 1 個完成項目（1/100，未達上限）。
+
+## 工作記錄（第一二一輪，2026-06-27）
+
+- 工作內容：使用者選擇「重設計數並繼續」，先在 TODO.md 末尾加入新的「---- 計數重設 ----」(2026-06-27) 標記解除先前 100/100 上限。本輪僅剩三個 `[ ]` 項目皆為「待使用者決定 / 涉 CI 變更」不宜於自動 loop 逕行，依 LOOP.md 第 2 條分析程式後完成一個小型、可測、低風險項目（評論編輯框字數提示 + 計數邏輯抽出為純函式）。完成過程中發現原先擬做的「新增評論字數計數器」已存在（第 400 行），改為「補編輯框缺漏的計數器 + 抽出共用純函式」。
+- 時間：2026-06-27
+- 分支：`feat/comment-length-hint`（已 merge 回 master）
