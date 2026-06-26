@@ -15,6 +15,14 @@ test('findUnsafeScriptPattern returns null for safe code that follows the runtim
   assert.equal(findUnsafeScriptPattern(VALID_CONTRACT_CODE), null);
 });
 
+test('findUnsafeScriptPattern does not flag the lowercase function keyword', () => {
+  // The Function-constructor guard is case-sensitive, so ordinary function
+  // expressions/declarations must stay allowed.
+  assert.equal(findUnsafeScriptPattern('const draw = function (root) { return root; };'), null);
+  assert.equal(findUnsafeScriptPattern('(function () { return 1; })();'), null);
+  assert.equal(findUnsafeScriptPattern('window.renderAnimation = function (root, api) { api.onFrame(() => {}); };'), null);
+});
+
 test('findUnsafeScriptPattern detects every disallowed API, including bracket-access variants', () => {
   const cases: Array<{ code: string; label: string }> = [
     { code: 'fetch("https://example.com")', label: 'fetch' },
@@ -25,6 +33,8 @@ test('findUnsafeScriptPattern detects every disallowed API, including bracket-ac
     { code: 'require("fs")', label: 'require' },
     { code: 'eval("1 + 1")', label: 'eval' },
     { code: 'new Function("return 1")', label: 'new Function' },
+    { code: 'Function("return 1")()', label: 'Function constructor' },
+    { code: 'const f = Function ("alert(1)")', label: 'Function constructor' },
     { code: 'document.cookie = "a=b"', label: 'document.cookie' },
     { code: 'document["cookie"] = "a=b"', label: 'document.cookie' },
     { code: "document['cookie']", label: 'document.cookie' },

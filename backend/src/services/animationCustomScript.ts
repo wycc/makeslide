@@ -22,6 +22,10 @@ const UNSAFE_PATTERNS: ReadonlyArray<{ pattern: RegExp; label: string }> = [
   { pattern: /\brequire\s*\(/i, label: 'require' },
   { pattern: /\beval\s*\(/i, label: 'eval' },
   { pattern: /new\s+Function\s*\(/i, label: 'new Function' },
+  // Also block the callable Function constructor (`Function("…")()`), an eval
+  // equivalent that `new Function` alone misses. Case-sensitive on the capital F
+  // so it never matches the lowercase `function(` keyword in ordinary code.
+  { pattern: /\bFunction\s*\(/, label: 'Function constructor' },
   { pattern: /document\s*\.\s*cookie/i, label: 'document.cookie' },
   { pattern: /document\s*\[\s*['"]cookie['"]\s*\]/i, label: 'document.cookie' },
   { pattern: /localStorage/i, label: 'localStorage' },
