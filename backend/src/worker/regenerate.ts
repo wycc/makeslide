@@ -25,6 +25,7 @@ import {
   writeMetadata,
 } from '../services/storage';
 import type { PageStatus, PdfRow, PipelineStage, SlideRenderType } from '../types';
+import { sumAudioDurationSeconds } from './audioDurationSum';
 import { generateScript } from './steps/generateScript';
 import { commitPresentationFile } from '../services/presentationGit';
 import { readScriptsForTts, synthesizeAudio } from './steps/synthesizeAudio';
@@ -218,18 +219,6 @@ function calculateStepEtaSeconds(step: RegenStepProgress, nowMs = Date.now()): n
   const elapsedSeconds = (nowMs - startedMs) / 1000;
   const secondsPerUnit = elapsedSeconds / step.completed;
   return Math.max(1, Math.ceil(secondsPerUnit * (step.total - step.completed)));
-}
-
-function sumAudioDurationSeconds(values: Array<number | null | undefined>): number | null {
-  let total = 0;
-  let count = 0;
-  for (const value of values) {
-    if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
-      total += value;
-      count += 1;
-    }
-  }
-  return count > 0 ? Math.round(total * 1000) / 1000 : null;
 }
 
 function refreshJobEta(state: RegenJobState, nowMs = Date.now()): void {

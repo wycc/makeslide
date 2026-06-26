@@ -36,6 +36,7 @@ import type {
   PdfStatus,
   ProgressStep,
 } from '../types';
+import { sumAudioDurationSeconds } from './audioDurationSum';
 import { renderPages } from './steps/renderPages';
 import { renderTextPagesWithLlm } from './steps/renderTextPagesWithLlm';
 import { splitTextWithLlm } from './steps/splitTextWithLlm';
@@ -266,18 +267,6 @@ function setProgress(
 /** Bump progress_current without changing step/total. */
 function bumpProgress(pdfId: string, current: number): void {
   updatePdf(pdfId, { progress_current: current });
-}
-
-function sumAudioDurationSeconds(values: Array<number | null | undefined>): number | null {
-  let total = 0;
-  let count = 0;
-  for (const value of values) {
-    if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
-      total += value;
-      count += 1;
-    }
-  }
-  return count > 0 ? Math.round(total * 1000) / 1000 : null;
 }
 
 function getPdfRow(pdfId: string): PdfRow | undefined {
