@@ -2115,6 +2115,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`useChatAndImageEdit.ts` 新增 `chatPastedImageUrlRef`（每次 render 同步最新值）與 `useEffect(() => () => { if (ref.current) URL.revokeObjectURL(ref.current); }, [])`，於卸載時釋放當下的 URL；session 內的重新貼上/清除仍由 `clearChatPastedImage` 先行 revoke（ref 隨之為 null），不會重複釋放。前端 384 測試 + typecheck 全通過。分支 `fix/chat-pasted-image-url-leak`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 38 個完成項目（38/100，未達上限）。
 
+- [x] 搜尋結果片段函式抽離為純可測模組：`extractSnippet`（在搜尋命中關鍵字附近擷取預覽片段、加上下文與省略號，search.ts 內 5 處使用）原為 import `db` 的 route 內 local 函式，無法 sandbox 單元測試。抽到純 `routes/pdfs/searchSnippet.ts`（連同 `SNIPPET_CONTEXT` 常數），search.ts 改 import。
+  - 修改說明（2026-06-26）：新增 `searchSnippet.ts`（`extractSnippet` + `SNIPPET_CONTEXT = 60`）；`search.ts` 移除本地定義與常數、改 import。新增 `searchSnippet.test.ts` +5（短字串不裁切無省略號、兩側裁切含前後 `...` 且長度正確、命中於開頭無前置 `...`、大小寫不敏感但保留原大小寫、查無關鍵字 fallback 取前段），sandbox 通過；後端 build 通過。分支 `refactor/extract-search-snippet`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 39 個完成項目（39/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2157,4 +2161,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | 首頁搜尋納入描述：抽出純函式 `pdfMatchesSearch`（title/tags/description），首頁列表過濾改用之；HomePage.search.test.ts +4；前端 384 測試通過 | feat/home-search-description（已 merge） |
 | 2026-06-26 | cosineSimilarity 抽離可測模組：語意搜尋排序的 `cosineSimilarity` 抽到純 `services/cosineSimilarity.ts`（embeddings re-export）；cosineSimilarity.test.ts +5、後端 build 通過 | refactor/extract-cosine-similarity（已 merge） |
 | 2026-06-26 | 修正貼上圖片 object URL 卸載洩漏：`useChatAndImageEdit` 加 unmount cleanup 釋放未送出貼上圖片的 blob URL（修 SPA 反覆進出播放頁的 blob 累積）；前端 384 測試通過 | fix/chat-pasted-image-url-leak（已 merge） |
+| 2026-06-26 | 搜尋片段函式抽離可測模組：`extractSnippet`(+`SNIPPET_CONTEXT`) 抽到純 `routes/pdfs/searchSnippet.ts`，search.ts 改 import；searchSnippet.test.ts +5、後端 build 通過 | refactor/extract-search-snippet（已 merge） |
 

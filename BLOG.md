@@ -7402,3 +7402,16 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **卸載清理**（`frontend/src/pages/play/useChatAndImageEdit.ts`）：新增一個 `chatPastedImageUrlRef`，每次 render 同步指向最新的 `chatPastedImageUrl`；再加一個相依陣列為 `[]` 的 `useEffect`，其 cleanup 在元件卸載時 `URL.revokeObjectURL(ref.current)`。用 ref 是為了讓「只在卸載時執行一次」的 cleanup 能讀到卸載當下的最新網址（直接捕捉 state 會是掛載時的舊值）。
 - **不會重複釋放**：session 進行中的「重新貼上」與「清除」仍由 `clearChatPastedImage` 即時 revoke 並把狀態設為 `null`（ref 隨之為 `null`），因此卸載時若已清除就不會再次 revoke。
 - **驗證**：此為 React 標準 cleanup、無可單元測試的純邏輯；前端既有 384 測試與 `tsc --noEmit` typecheck 全通過確認無回歸。
+
+## 搜尋結果片段函式抽離為純可測模組（2026-06-26）
+
+### 功能目的
+全域搜尋的結果列表會在每筆結果下顯示一小段「預覽片段」，把命中的關鍵字連同前後文一起擷取出來（並在裁切處加上省略號），方便使用者快速判斷這筆結果是否相關。負責產生這段片段的 `extractSnippet` 函式在 `search.ts` 路由內被用於標題、描述、逐字稿、頁面文字等 5 個地方，邏輯也有一些需要小心的邊界（命中在開頭/結尾、找不到關鍵字時的退場行為）。但它原本是 route 檔內的私有函式，而該檔 import 了資料庫，導致這個純字串函式無法在 sandbox 單元測試。本次把它抽成獨立純模組並補上測試。
+
+### 使用方式
+無需任何操作，純內部重構，搜尋結果片段的呈現不變。
+
+### 技術細節
+- **純模組**（新檔 `backend/src/routes/pdfs/searchSnippet.ts`）：匯出 `extractSnippet(content, keyword)` 與 `SNIPPET_CONTEXT = 60`。以不分大小寫的 `indexOf` 找到關鍵字位置，向左右各取 `SNIPPET_CONTEXT` 個字元，若有裁切則於對應側加上 `...`；找不到關鍵字時退回 `content` 的前 `SNIPPET_CONTEXT * 2` 個字元。回傳時保留原文的大小寫。
+- **去重**：`search.ts` 移除本地定義與常數，改為 import；5 處呼叫不變。
+- **測試**：新增 `backend/test/searchSnippet.test.ts` 5 個 node:test——短於視窗時整段回傳且無省略號、兩側都裁切時含前後 `...` 且長度等於 `SNIPPET_CONTEXT*2 + 關鍵字長 + 6`、命中於開頭時無前置 `...`、不分大小寫但保留原大小寫、查無關鍵字時 fallback 取前段。此函式先前無測試覆蓋；測試不依賴資料庫、sandbox 可驗證；後端 `tsc -p tsconfig.json` build 通過。
