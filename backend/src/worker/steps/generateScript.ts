@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
+import { sanitiseUserPrompt } from './promptSanitize';
 import { z } from 'zod';
 import type { ChatCompletionContentPart } from 'openai/resources/chat/completions';
 import { config } from '../../config';
@@ -278,7 +279,6 @@ async function loadPageImageDataUrl(
   }
 }
 
-const MAX_USER_PROMPT_CHARS_IN_SYSTEM = 2000;
 const TONE_MARKER_PATTERN = /\[\[\s*[^\]]+\s*\]\]/;
 const LEGACY_TONE_MARKER_RE = /\[\[\s*話氣提示伺\s*:\s*([^\]]+?)\s*\]\]/g;
 
@@ -305,14 +305,6 @@ function ensureToneMarkers(script: string): string {
     .join('');
 }
 
-function sanitiseUserPrompt(raw: string | null | undefined): string {
-  if (!raw) return '';
-  const trimmed = raw.trim();
-  if (!trimmed) return '';
-  return trimmed.length > MAX_USER_PROMPT_CHARS_IN_SYSTEM
-    ? trimmed.slice(0, MAX_USER_PROMPT_CHARS_IN_SYSTEM) + '……（已截斷）'
-    : trimmed;
-}
 
 /** Read the per-PDF host mode ('solo' single narrator | 'dual' two-host podcast). Defaults to 'solo'. */
 export function getPdfHostMode(pdfId: string): 'solo' | 'dual' {
