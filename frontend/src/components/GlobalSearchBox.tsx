@@ -5,7 +5,7 @@ import { useI18n } from '../i18n';
 
 const DEBOUNCE_MS = 300;
 
-function highlightText(text: string, query: string): { text: string; isMatch: boolean }[] {
+export function highlightText(text: string, query: string): { text: string; isMatch: boolean }[] {
   const q = query.trim();
   if (!q) return [{ text, isMatch: false }];
   const parts: { text: string; isMatch: boolean }[] = [];
@@ -42,23 +42,31 @@ export default function GlobalSearchBox() {
   const [semanticMode, setSemanticMode] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  // Monotonic id of the latest issued search; lets us drop out-of-order responses
+  // so a slower earlier query (e.g. "ab") can't clobber the results of the newer
+  // one the user actually typed ("abc").
+  const requestSeqRef = useRef(0);
 
   const doSearch = useCallback(async (q: string, semantic: boolean) => {
     const trimmed = q.trim();
     if (!trimmed) {
+      requestSeqRef.current += 1; // invalidate any in-flight response
       setResults(null);
       setOpen(false);
       return;
     }
+    const seq = ++requestSeqRef.current;
     setSearching(true);
     setOpen(true);
     try {
       const data = await searchPdfs(trimmed, 20, semantic);
+      if (seq !== requestSeqRef.current) return; // superseded by a newer search
       setResults(data.results);
     } catch {
+      if (seq !== requestSeqRef.current) return;
       setResults([]);
     } finally {
-      setSearching(false);
+      if (seq === requestSeqRef.current) setSearching(false);
     }
   }, []);
 
