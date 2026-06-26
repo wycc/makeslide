@@ -2027,6 +2027,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：新增純函式 `frontend/src/components/pdfCardCover.ts` 的 `shouldShowCoverImage(coverSrc, failedSrc)`（有 URL 且 ≠ 失敗的 URL 才顯示圖片，附 type guard）；`PdfCard.tsx` 新增 `failedCoverSrc` state、封面改用此函式判斷、`<img>` 加 `onError={() => setFailedCoverSrc(coverSrc)}`。新增 `pdfCardCover.test.ts` +4 測試（無 URL、未失敗、失敗 URL 退回、換新 URL 重試）。前端 371 測試 + typecheck 全通過。分支 `fix/pdf-card-cover-fallback`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 16 個完成項目（16/100，未達上限）。
 
+- [x] 播放頁選單標籤 i18n：`PlayPageHeader` 的行動版選單切換鈕（aria-label 與「選單」文字）與 6 個 `HeaderDropdown` 群組標籤（資訊／播放／生成／下載／逐字稿／分享）原為硬編中文，英文介面仍顯示中文。新增 i18n key 並改用 `t()`。
+  - 修改說明（2026-06-26）：zh-TW/en 各新增 8 個 key（`play.header.menuToggle`、`play.header.menu`、`play.header.groupInfo/Playback/Generate/Download/Script/Share`）；`PlayPageHeader.tsx` 對應 8 處硬編中文改用 `t()`。i18n key 對齊由 `tsc`（`TranslationKey`）與 i18n 測試把關。前端 371 測試 + typecheck 全通過。分支 `fix/play-header-menu-i18n`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 17 個完成項目（17/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2047,4 +2051,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | 可重用 overlay 關閉 hook：新增 `useOverlayDismiss`（Escape+背景關閉，純函式 `isOverlayDismissKey`/`isBackdropClick`）；套用至 `ImagePreviewDialog`（補 Escape/背景/aria）並重構 `ShareDialog` 使用之；useOverlayDismiss.test.ts +2 測試；前端 367 測試通過 | feat/overlay-dismiss-hook（已 merge） |
 | 2026-06-26 | students.csv 報表沿用共用 csvEscape：`report.ts` 移除第三份 `escapeCsvField`，改用共用強化版 `csvEscape`，使該匯出（含使用者可控 quiz_title）也防 formula injection 並補 CR 引用；後端 build 通過、整合測試留待 CI | refactor/report-csv-use-shared-escape（已 merge） |
 | 2026-06-26 | 卡片封面載入失敗退回佔位圖：`PdfCard` 封面 `<img>` 加 `onError` 退回 PDF 佔位圖（純函式 `shouldShowCoverImage`，以失敗 URL 為鍵可在換新 URL 時重試）；pdfCardCover.test.ts +4 測試；前端 371 測試通過 | fix/pdf-card-cover-fallback（已 merge） |
+| 2026-06-26 | 播放頁選單標籤 i18n：`PlayPageHeader` 行動選單切換鈕與 6 個 HeaderDropdown 群組標籤（資訊/播放/生成/下載/逐字稿/分享）改用 `t()`；zh-TW/en 各 +8 key；前端 371 測試通過 | fix/play-header-menu-i18n（已 merge） |
 
