@@ -2019,6 +2019,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：新增 `frontend/src/components/useOverlayDismiss.ts`（hook + 兩個純函式）與 `useOverlayDismiss.test.ts` +2 測試（只認 Escape、背景點擊須 target===currentTarget，使用真實 `EventTarget` 實例以符型別）。`ImagePreviewDialog.tsx` import hook、overlay 加 `onClick={onBackdropClick}`、面板加 aria 屬性。`ShareDialog.tsx` 改用 hook（移除 `useEffect`／inline onClick，`useState` import 收斂）。前端 367 測試 + typecheck 全通過。分支 `feat/overlay-dismiss-hook`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 14 個完成項目（14/100，未達上限）。
 
+- [x] students.csv 報表沿用共用強化版 csvEscape：`report.ts` 的學生報表匯出（students.csv）另有第三份 `escapeCsvField`，與先前修過的 csv.ts 同樣有 CSV formula injection 弱點與未防單獨 CR——而其欄位 `quiz_title` 為使用者可控。改用上一輪建立的共用 `csvEscape`，讓此匯出也獲得公式注入防護與 CR 引用，並消除第三份重複。
+  - 修改說明（2026-06-26）：`report.ts` 移除本地 `escapeCsvField`，`import { csvEscape } from './csv'`，7 處呼叫改為 `csvEscape`。一般值/數字行為不變。後端 `tsc` build 通過、共用 `csvEscape.test.ts` 通過；students.csv 整合測試需 better-sqlite3（sandbox ABI 不符）留待 CI，經分析（header 不經 escape、測試資料無危險起始字元、數字不變）確認不破壞。分支 `refactor/report-csv-use-shared-escape`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 15 個完成項目（15/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2037,4 +2041,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | CSV 匯出去重並強化：兩個 CSV 路由共用的 `csvEscape` 抽成 `routes/pdfs/csv.ts`，並加 CSV formula injection 防護（`=`/`+`/`-`/`@`/Tab/CR 開頭字串前綴 `'`、僅對 string）與單獨 CR 引用；csvEscape.test.ts +6 測試（sandbox 通過）、後端 build 通過；CSV 整合測試留待 CI | feat/csv-escape-shared-hardened（已 merge） |
 | 2026-06-26 | 分享對話框支援 Esc／背景點擊關閉：`ShareDialog` 加 Escape keydown、背景點擊（target===currentTarget）關閉與 `role=dialog`/`aria-modal`/`aria-label`；`embedCode` 抽成純函式 `buildEmbedCode`；ShareDialog.test.ts +2 測試；前端 365 測試通過 | feat/share-dialog-dismiss（已 merge） |
 | 2026-06-26 | 可重用 overlay 關閉 hook：新增 `useOverlayDismiss`（Escape+背景關閉，純函式 `isOverlayDismissKey`/`isBackdropClick`）；套用至 `ImagePreviewDialog`（補 Escape/背景/aria）並重構 `ShareDialog` 使用之；useOverlayDismiss.test.ts +2 測試；前端 367 測試通過 | feat/overlay-dismiss-hook（已 merge） |
+| 2026-06-26 | students.csv 報表沿用共用 csvEscape：`report.ts` 移除第三份 `escapeCsvField`，改用共用強化版 `csvEscape`，使該匯出（含使用者可控 quiz_title）也防 formula injection 並補 CR 引用；後端 build 通過、整合測試留待 CI | refactor/report-csv-use-shared-escape（已 merge） |
 
