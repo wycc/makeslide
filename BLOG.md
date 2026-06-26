@@ -8025,3 +8025,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **i18n**：新增 zh-TW/en `play.report.downloadSummaryMd`。
 - **測試**：內容由既有具測試的 `formatReportSummaryMarkdown` 產生，下載為瀏覽器 API、無新增可抽出純邏輯，故不另加單元測試。
 - **驗證**：前端 `tsc --noEmit` 通過；`reportSummary.test.ts` 與 `i18n.test.ts`（含 zh/en key 對等）全通過。
+
+## 評論輸入 Ctrl/⌘+Enter 送出（2026-06-26）
+
+### 功能目的
+頁面評論的輸入框先前只能用滑鼠點按鈕送出，連續留多則回饋時手要在鍵盤與滑鼠間來回。本項加入鍵盤快捷鍵送出，提升留言效率。
+
+### 使用方式
+在「頁面評論」輸入框打完字後，按 Ctrl+Enter（macOS 為 ⌘+Enter）即可直接送出；滑鼠移到輸入框上會看到快捷鍵提示。內容空白時不會送出，與按鈕送出行為一致。
+
+### 技術細節
+- **重構**（`frontend/src/pages/play/PlayPageSidebar.tsx` 的 `CommentsSection`）：把原 `handleSubmit` 的送出邏輯抽成 `submitComment()`（含 trim 非空與 `submitting` 防重入），`handleSubmit` 改為 `preventDefault` + 呼叫它，避免兩條送出路徑邏輯重複。
+- **快捷鍵**：textarea 的 `onKeyDown` 在 `(ctrlKey || metaKey) && key === 'Enter'` 時 `preventDefault` 並 `submitComment()`，並以 `title` 標示快捷鍵。
+- **i18n**：新增 zh-TW/en `play.sidebar.commentSubmitHint`。
+- **驗證**：前端 `tsc --noEmit` 通過；`i18n.test.ts`（含 zh/en key 對等）通過。事件處理 UI、無新增可抽出純邏輯，故不另加單元測試。
