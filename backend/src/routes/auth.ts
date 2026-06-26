@@ -5,6 +5,7 @@ import { config } from '../config';
 import { ensureAdminAccount, getSystemAuthSettings, isAdminAccount } from '../services/aiSettings';
 import { upsertAccountProfile } from '../services/accountProfiles';
 import { logger } from '../logger';
+import { timingSafeStringEqual } from '../timingSafe';
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -49,13 +50,8 @@ const GoogleUserInfoSchema = z.object({
 type TokenResponse = z.infer<typeof TokenResponseSchema>;
 type GoogleUserInfo = z.infer<typeof GoogleUserInfoSchema>;
 
-/** Constant-time string equality (avoids a JS `===`/`!==` timing side-channel for secret comparisons — session signatures, OAuth state). Exported for unit testing. */
-export function timingSafeStringEqual(a: string, b: string): boolean {
-  const bufA = Buffer.from(a, 'utf8');
-  const bufB = Buffer.from(b, 'utf8');
-  if (bufA.length !== bufB.length) return false;
-  return crypto.timingSafeEqual(bufA, bufB);
-}
+// Re-exported (imported at top) so existing importers/tests keep importing it from this module.
+export { timingSafeStringEqual };
 
 function base64UrlEncode(input: Buffer | string): string {
   const raw = Buffer.isBuffer(input) ? input : Buffer.from(input, 'utf8');
