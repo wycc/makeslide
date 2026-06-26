@@ -103,6 +103,21 @@ const compareByLastPlayedAtDesc = (a: PdfListItem, b: PdfListItem) => {
   return (Number.isNaN(timeB) ? 0 : timeB) - (Number.isNaN(timeA) ? 0 : timeA);
 };
 
+/**
+ * Whether a deck matches the home search box. `normalizedQuery` must already be
+ * trimmed and lower-cased. Matches the title, comma-separated tags, or the
+ * description so a deck can be found by any of those. Pure for unit testing.
+ */
+export const pdfMatchesSearch = (pdf: PdfListItem, normalizedQuery: string): boolean => {
+  if (!normalizedQuery) return true;
+  const title = (pdf.title?.trim() || '').toLocaleLowerCase();
+  const tags = (pdf.tags ?? '').toLocaleLowerCase();
+  const description = (pdf.description ?? '').toLocaleLowerCase();
+  return title.includes(normalizedQuery)
+    || tags.includes(normalizedQuery)
+    || description.includes(normalizedQuery);
+};
+
 const RECENT_DAYS = 14;
 const isRecentlyPlayed = (pdf: PdfListItem): boolean => {
   if (!pdf.last_played_at) return false;
@@ -289,11 +304,7 @@ export default function HomePage() {
     ? tagFilteredItems.filter((pdf) => favorites.has(pdf.id))
     : tagFilteredItems;
   const filteredItems = normalizedTitleFilter
-    ? favFilteredItems.filter((pdf) => {
-      const title = (pdf.title?.trim() || '').toLocaleLowerCase();
-      const tags = (pdf.tags ?? '').toLocaleLowerCase();
-      return title.includes(normalizedTitleFilter) || tags.includes(normalizedTitleFilter);
-    })
+    ? favFilteredItems.filter((pdf) => pdfMatchesSearch(pdf, normalizedTitleFilter))
     : favFilteredItems;
   const visibleSummary = t('home.resultSummary')
     .replace('{shown}', String(filteredItems.length))
