@@ -7514,3 +7514,15 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 ### 技術細節
 - **元件**（`frontend/src/pages/play/FigureAssetsTab.tsx`）：圖表縮圖 `<img>` 加上 `onError={(e) => { e.currentTarget.style.display = 'none'; }}`，載入失敗時隱藏。
 - 此為單純的 DOM 事件處理、無可抽出純邏輯，故不另加單元測試；以前端既有 384 測試與 `tsc --noEmit` typecheck 全通過確認未造成回歸。
+
+## 新增頁面對話框縮圖隱藏破圖（2026-06-26）
+
+### 功能目的
+「從提示新增頁面」功能會開一個對話框（`AddPagesFromPromptModal`）顯示生成進度，每張新頁面在圖片生成完成（`imageDone`）後會顯示一張縮圖預覽。但這張縮圖 `<img>` 沒有 `onError` 處理，若在 `imageDone` 翻為 true 的當下縮圖檔還沒完全就緒（時序競態），就會短暫顯示瀏覽器的破圖小圖示。本次讓它與其他縮圖一致地優雅降級。至此，前端各列表與縮圖的 `<img>` 破圖降級已全面補齊（首頁卡片、播放頁側邊欄導覽/書籤/重點、大綱主縮圖、遙控器、圖表資產、以及本對話框）。
+
+### 使用方式
+無需任何操作。新增頁面進度中若某張縮圖一時無法載入，會被隱藏而非顯示破圖；該頁的其他狀態（生成中的轉圈動畫等）照常呈現。
+
+### 技術細節
+- **元件**（`frontend/src/components/AddPagesFromPromptModal.tsx`）：頁面縮圖 `<img>`（`imageDone` 為真時顯示）加上 `onError={(e) => { e.currentTarget.style.display = 'none'; }}`，載入失敗時隱藏（其外層容器仍維持固定比例的占位框）。
+- 此為單純的 DOM 事件處理、無可抽出純邏輯，故不另加單元測試；以前端既有 384 測試與 `tsc --noEmit` typecheck 全通過確認未造成回歸。
