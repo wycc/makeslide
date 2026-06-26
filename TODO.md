@@ -2031,6 +2031,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：zh-TW/en 各新增 8 個 key（`play.header.menuToggle`、`play.header.menu`、`play.header.groupInfo/Playback/Generate/Download/Script/Share`）；`PlayPageHeader.tsx` 對應 8 處硬編中文改用 `t()`。i18n key 對齊由 `tsc`（`TranslationKey`）與 i18n 測試把關。前端 371 測試 + typecheck 全通過。分支 `fix/play-header-menu-i18n`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 17 個完成項目（17/100，未達上限）。
 
+- [x] figure 圖片路徑越界防護（defense-in-depth）：`figureImageAbsPath` 原以裸 `path.join(pdfDir(pdfId), figure.imagePath)` 解析，無 containment 檢查；其結果由 `/api/pdfs/:id/figures/:figureId/image` 路由 stream 給 client。雖然 `figures.json` 目前由伺服器自寫，但若 manifest 被竄改/損壞、`imagePath` 含 `../` 即可逃逸 PDF 目錄。改走既有的 `safeJoinPdfPath` 助手（與 `pdfDir` 一致的越界檢查），任何 traversal 直接 throw。
+  - 修改說明（2026-06-26）：`pdfFigures.ts` 的 `figureImageAbsPath` 改用 `safeJoinPdfPath(pdfId, figure.imagePath)`，移除已不需要的 `path` import。新增 `figureImageAbsPath.test.ts` +2 測試（正常 figures/ 路徑解析正確、`../` 越界 throw），sandbox 執行通過；後端 `tsc` build 通過。分支 `fix/figure-path-traversal-guard`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 18 個完成項目（18/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2052,4 +2056,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | students.csv 報表沿用共用 csvEscape：`report.ts` 移除第三份 `escapeCsvField`，改用共用強化版 `csvEscape`，使該匯出（含使用者可控 quiz_title）也防 formula injection 並補 CR 引用；後端 build 通過、整合測試留待 CI | refactor/report-csv-use-shared-escape（已 merge） |
 | 2026-06-26 | 卡片封面載入失敗退回佔位圖：`PdfCard` 封面 `<img>` 加 `onError` 退回 PDF 佔位圖（純函式 `shouldShowCoverImage`，以失敗 URL 為鍵可在換新 URL 時重試）；pdfCardCover.test.ts +4 測試；前端 371 測試通過 | fix/pdf-card-cover-fallback（已 merge） |
 | 2026-06-26 | 播放頁選單標籤 i18n：`PlayPageHeader` 行動選單切換鈕與 6 個 HeaderDropdown 群組標籤（資訊/播放/生成/下載/逐字稿/分享）改用 `t()`；zh-TW/en 各 +8 key；前端 371 測試通過 | fix/play-header-menu-i18n（已 merge） |
+| 2026-06-26 | figure 圖片路徑越界防護：`figureImageAbsPath` 改用 `safeJoinPdfPath`，避免被竄改的 figures.json imagePath（含 `../`）逃逸 PDF 目錄被 stream 給 client；figureImageAbsPath.test.ts +2 測試、後端 build 通過 | fix/figure-path-traversal-guard（已 merge） |
 
