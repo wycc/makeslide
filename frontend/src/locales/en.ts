@@ -1035,6 +1035,8 @@ export const en = {
   'play.timing.artifact.script': 'Script',
   'play.timing.artifact.audio': 'Audio',
   'play.animation.tab': 'Animation',
+  'play.animation.defaultPausePlaybackText': 'Paused: press play to continue',
+  'play.animation.defaultRealtimePollText': '📊 Q&A time',
   'play.animation.title': 'Animation effects',
   'play.animation.badge': 'FX',
   'play.animation.enabled': 'Enable animation',

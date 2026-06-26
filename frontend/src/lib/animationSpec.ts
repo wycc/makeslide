@@ -78,10 +78,6 @@ export const TRANSFORM_EFFECT_TYPES: readonly SlideAnimationEffectType[] = [
 /** Max length (chars) for a `text-callout` or `pause-playback` effect's `text`, matching the backend's `MAX_TEXT_CALLOUT_LENGTH`. */
 export const MAX_TEXT_CALLOUT_LENGTH = 80;
 
-export const DEFAULT_PAUSE_PLAYBACK_TEXT = '暫停：請按播放鍵繼續';
-
-export const DEFAULT_REALTIME_POLL_TEXT = '📊 即時問答時間';
-
 /** Effect types that, when their start time is reached, pause playback (see `getDuePausePlaybackEffect`). */
 const PAUSING_EFFECT_TYPES: readonly SlideAnimationEffectType[] = ['pause-playback', 'realtime-poll'];
 

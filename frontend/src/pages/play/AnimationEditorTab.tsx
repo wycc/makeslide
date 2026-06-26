@@ -7,8 +7,6 @@ import { fetchPageFigures, fetchPagePolls, figureImageUrl, savePageAnimation } f
 import { copyTextToClipboard } from '../../lib/clipboard';
 import {
   ANIMATION_SHAPE_KINDS,
-  DEFAULT_PAUSE_PLAYBACK_TEXT,
-  DEFAULT_REALTIME_POLL_TEXT,
   DEFAULT_EXIT_DURATION_SECONDS,
   MAX_CUSTOM_SCRIPT_CODE_LENGTH,
   MAX_CUSTOM_SCRIPT_PROMPT_LENGTH,
@@ -435,7 +433,6 @@ export const EFFECT_PRESETS: readonly EffectPreset[] = [
       duration: 0.4,
       ease: 'power1.out',
       exitDuration: DEFAULT_EXIT_DURATION_SECONDS,
-      text: DEFAULT_PAUSE_PLAYBACK_TEXT,
       params: { xPct: 18, yPct: 34, widthPct: 64, heightPct: 24 },
     }),
   },
@@ -447,7 +444,6 @@ export const EFFECT_PRESETS: readonly EffectPreset[] = [
       duration: 0.4,
       ease: 'power1.out',
       exitDuration: DEFAULT_EXIT_DURATION_SECONDS,
-      text: DEFAULT_REALTIME_POLL_TEXT,
       params: { xPct: 18, yPct: 34, widthPct: 64, heightPct: 24 },
     }),
   },
@@ -1602,7 +1598,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                     maxLength={MAX_TEXT_CALLOUT_LENGTH}
                     value={effect.text ?? ''}
                     disabled={disabled}
-                    placeholder={DEFAULT_PAUSE_PLAYBACK_TEXT}
+                    placeholder={t('play.animation.defaultPausePlaybackText')}
                     onChange={(e) => updateEffect(effect.id, { text: e.target.value })}
                     className="w-64 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
                   />
@@ -1620,7 +1616,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                       maxLength={MAX_TEXT_CALLOUT_LENGTH}
                       value={effect.text ?? ''}
                       disabled={disabled}
-                      placeholder={DEFAULT_REALTIME_POLL_TEXT}
+                      placeholder={t('play.animation.defaultRealtimePollText')}
                       onChange={(e) => updateEffect(effect.id, { text: e.target.value })}
                       className="w-64 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
                     />

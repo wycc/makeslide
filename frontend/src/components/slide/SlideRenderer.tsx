@@ -3,8 +3,6 @@ import type { CSSProperties, ImgHTMLAttributes, ReactNode, Ref } from 'react';
 import katex from 'katex';
 import type { SlideAnimationEffect, SlideAnimationSpec, SlideRenderType } from '../../types';
 import {
-  DEFAULT_PAUSE_PLAYBACK_TEXT,
-  DEFAULT_REALTIME_POLL_TEXT,
   OVERLAY_EFFECT_TYPES,
   buildCustomScriptSandboxDoc,
   customScriptDurationSeconds,
@@ -12,6 +10,7 @@ import {
   getShapeKind,
   hasPlayableAnimation,
 } from '../../lib/animationSpec';
+import { useI18n } from '../../i18n';
 import { useGsapSlideTimeline } from './useGsapSlideTimeline';
 import { WRAPPING_OVERLAY_TEXT_STYLE } from './overlayTextStyle';
 
@@ -37,6 +36,7 @@ function EffectOverlay({
   /** 將 `overlay-image` 效果的 `figureId` 解析為可顯示的圖片網址；未提供時 `overlay-image` 不會渲染。 */
   resolveFigureImageUrl?: (figureId: string) => string;
 }) {
+  const { t } = useI18n();
   const { xPct, yPct, widthPct, heightPct } = getFocusEffectParams(effect);
   const position: CSSProperties = {
     position: 'absolute',
@@ -337,7 +337,7 @@ function EffectOverlay({
           boxShadow: '0 12px 40px rgba(0,0,0,0.55), 0 0 28px rgba(56,189,248,0.35)',
         }}
       >
-        {effect.text?.trim() || DEFAULT_PAUSE_PLAYBACK_TEXT}
+        {effect.text?.trim() || t('play.animation.defaultPausePlaybackText')}
       </div>
     );
   }
@@ -362,7 +362,7 @@ function EffectOverlay({
           boxShadow: '0 12px 40px rgba(0,0,0,0.55), 0 0 28px rgba(217,70,239,0.35)',
         }}
       >
-        {effect.text?.trim() || DEFAULT_REALTIME_POLL_TEXT}
+        {effect.text?.trim() || t('play.animation.defaultRealtimePollText')}
       </div>
     );
   }
