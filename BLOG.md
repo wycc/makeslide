@@ -7937,3 +7937,18 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **允許清單**：實作時發現英文有 5 個刻意為空的結構性前/後綴 key（`play.common.pageSuffix`、`quiz.aiGeneratePageSuffix`、`quiz.countdownPrefix`、`remote.slideAltSuffix`、`play.report.pageSuffix`）——中文以「頁」後綴呈現「第 N 頁」，英文改用「Page N」前綴，故後綴在英文留空。這些屬合理空值，以允許清單排除；其餘所有值在兩語系皆須非空。
 - **允許清單守誠**：再加一個測試，確保允許清單上的每個 key「至少一個語系非空」，避免允許清單被濫用成永久空殼。
 - **驗證**：3 個測試全通過；前端 `tsc --noEmit` 通過。純測試、不改產品程式。
+
+## 測驗從 JSON 匯入（2026-06-26）
+
+### 功能目的
+測驗編輯頁先前可把題目「匯出 JSON」，但無法把 JSON 匯入回來，導致備份/分享後無法復原或套用。本項補上匯入功能，與既有匯出形成完整的往返流程（Roadmap Phase 5）。
+
+### 使用方式
+在測驗編輯頁工具列，點「匯入 JSON」並選擇先前匯出的 `.json` 檔，即會以檔案內容取代目前題目（若含標題也一併套用）。匯入成功會顯示「已匯入 N 題」，格式不符則顯示「匯入失敗」。
+
+### 技術細節
+- **純函式**（`frontend/src/lib/quizImport.ts`）：`parseQuizImportJson(text)` 回傳 discriminated union（`ok:true` 帶 `{title, questions}`，或 `ok:false` 帶 `invalid_json`/`no_questions`/`no_valid_questions`），不丟例外。寬鬆但安全地正規化：題幹 trim 後非空才保留、選項接受字串或 `{text}`、`answer_indices` 過濾為合法 in-range 整數並去重排序、`type` 取 single/multiple 否則依答案數推斷、重新編號 id。
+- **UI**（`frontend/src/pages/QuizBuilderPage.tsx`）：「匯出 JSON」旁加隱藏 file input 與「匯入 JSON」按鈕；`handleImportFile` 讀檔解析後套用，並顯示 2.5 秒的成功/失敗提示。
+- **i18n**：新增 zh-TW/en `quiz.importJson`、`quiz.importDone`（含 `{n}`）、`quiz.importFailed`。
+- **測試**：`quizImport.test.ts` 5 個案例（壞 JSON、缺/非陣列 questions、正規化與 id 重編與型別推斷、越界/重複索引過濾、無合法題目）。
+- **驗證**：前端 `tsc --noEmit` 通過；`quizImport.test.ts` 與 `i18n.test.ts`（含 zh/en key 對等）全通過。

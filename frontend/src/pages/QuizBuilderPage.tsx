@@ -25,6 +25,7 @@ import {
 import { shuffleArray } from './play/utils';
 import { copyTextToClipboard } from '../lib/clipboard';
 import { formatQuizQuestionsText } from '../lib/quizQuestionsText';
+import { parseQuizImportJson } from '../lib/quizImport';
 import { addReviewItems } from '../lib/reviewList';
 import type {
   PdfDetail,
@@ -112,6 +113,21 @@ export default function QuizBuilderPage() {
   const [draggingQIdx, setDraggingQIdx] = useState<number | null>(null);
   const [aiQuizPageNumber, setAiQuizPageNumber] = useState(1);
   const [aiQuizBusy, setAiQuizBusy] = useState(false);
+  const importFileRef = useRef<HTMLInputElement>(null);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
+  const handleImportFile = async (file: File) => {
+    const text = await file.text();
+    const outcome = parseQuizImportJson(text);
+    if (!outcome.ok) {
+      setImportMsg(t('quiz.importFailed'));
+      window.setTimeout(() => setImportMsg(null), 2500);
+      return;
+    }
+    if (outcome.value.title.trim()) setTitle(outcome.value.title);
+    setQuestions(outcome.value.questions);
+    setImportMsg(t('quiz.importDone').replace('{n}', String(outcome.value.questions.length)));
+    window.setTimeout(() => setImportMsg(null), 2500);
+  };
   const syncClientIdRef = useRef('');
   const lastReportedProgressRef = useRef<{ quizId: number; answeredCount: number; submitted: boolean } | null>(null);
   const submittedAttemptRef = useRef<string | null>(null);
@@ -1113,6 +1129,24 @@ export default function QuizBuilderPage() {
                   {t('quiz.exportJson')}
                 </button>
               )}
+              <input
+                ref={importFileRef}
+                type="file"
+                accept="application/json,.json"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = '';
+                  if (file) void handleImportFile(file);
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => importFileRef.current?.click()}
+                className="rounded-md border border-slate-600 bg-slate-800/70 px-4 py-2 text-sm text-slate-200 hover:bg-slate-700"
+              >
+                {importMsg ?? t('quiz.importJson')}
+              </button>
               {questions.length > 0 && (
                 <button
                   type="button"
