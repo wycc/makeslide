@@ -2119,6 +2119,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：新增 `searchSnippet.ts`（`extractSnippet` + `SNIPPET_CONTEXT = 60`）；`search.ts` 移除本地定義與常數、改 import。新增 `searchSnippet.test.ts` +5（短字串不裁切無省略號、兩側裁切含前後 `...` 且長度正確、命中於開頭無前置 `...`、大小寫不敏感但保留原大小寫、查無關鍵字 fallback 取前段），sandbox 通過；後端 build 通過。分支 `refactor/extract-search-snippet`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 39 個完成項目（39/100，未達上限）。
 
+- [x] formatDurationMs 負值守門：play `formatters.ts` 的 `formatDurationMs` 原本守門 null/NaN/非有限值，但未守負值——若 `duration_ms` 為負會輸出如 `-5ms`。負的時長與「無紀錄」一樣無意義，改為回傳 noRecordLabel。此函式用於 PlayPageSlidePanel／PageTimingChips 的 timing/SLA 時長顯示。
+  - 修改說明（2026-06-26）：`formatDurationMs` 的守門條件由 `ms == null || !Number.isFinite(ms)` 擴為再加 `|| ms < 0`；`formatters.test.ts` 在既有「missing/invalid」測試新增 `-1 → noRecordLabel`。前端 384 測試 + typecheck 全通過。分支 `fix/format-duration-negative-guard`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 40 個完成項目（40/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2162,4 +2166,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | cosineSimilarity 抽離可測模組：語意搜尋排序的 `cosineSimilarity` 抽到純 `services/cosineSimilarity.ts`（embeddings re-export）；cosineSimilarity.test.ts +5、後端 build 通過 | refactor/extract-cosine-similarity（已 merge） |
 | 2026-06-26 | 修正貼上圖片 object URL 卸載洩漏：`useChatAndImageEdit` 加 unmount cleanup 釋放未送出貼上圖片的 blob URL（修 SPA 反覆進出播放頁的 blob 累積）；前端 384 測試通過 | fix/chat-pasted-image-url-leak（已 merge） |
 | 2026-06-26 | 搜尋片段函式抽離可測模組：`extractSnippet`(+`SNIPPET_CONTEXT`) 抽到純 `routes/pdfs/searchSnippet.ts`，search.ts 改 import；searchSnippet.test.ts +5、後端 build 通過 | refactor/extract-search-snippet（已 merge） |
+| 2026-06-26 | formatDurationMs 負值守門：負時長改回 noRecordLabel（原會輸出 `-5ms`）；formatters.test.ts +1；前端 384 測試通過 | fix/format-duration-negative-guard（已 merge） |
 

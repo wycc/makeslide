@@ -7415,3 +7415,15 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **純模組**（新檔 `backend/src/routes/pdfs/searchSnippet.ts`）：匯出 `extractSnippet(content, keyword)` 與 `SNIPPET_CONTEXT = 60`。以不分大小寫的 `indexOf` 找到關鍵字位置，向左右各取 `SNIPPET_CONTEXT` 個字元，若有裁切則於對應側加上 `...`；找不到關鍵字時退回 `content` 的前 `SNIPPET_CONTEXT * 2` 個字元。回傳時保留原文的大小寫。
 - **去重**：`search.ts` 移除本地定義與常數，改為 import；5 處呼叫不變。
 - **測試**：新增 `backend/test/searchSnippet.test.ts` 5 個 node:test——短於視窗時整段回傳且無省略號、兩側都裁切時含前後 `...` 且長度等於 `SNIPPET_CONTEXT*2 + 關鍵字長 + 6`、命中於開頭時無前置 `...`、不分大小寫但保留原大小寫、查無關鍵字時 fallback 取前段。此函式先前無測試覆蓋；測試不依賴資料庫、sandbox 可驗證；後端 `tsc -p tsconfig.json` build 通過。
+
+## formatDurationMs 負值守門（2026-06-26）
+
+### 功能目的
+播放頁的「系統資訊／時序」面板（`PlayPageSlidePanel`、`PageTimingChips`）會顯示各管線階段、執行與成品的耗時與 SLA 目標時間，統一透過 `formatDurationMs` 把毫秒數格式化成 `123ms`、`1.5s`、`12s` 之類的可讀字串，沒有數值時則顯示「尚無紀錄」。原本這個函式對 `null`、`undefined`、`NaN`、`Infinity` 都會回退成「尚無紀錄」，唯獨沒有處理負數——萬一某個 `duration_ms` 因資料異常為負，就會顯示成 `-5ms` 這種無意義的字串。本次把負值也視為「無效時長」，與缺值一致處理。
+
+### 使用方式
+無需任何操作。正常的時長顯示不變；若遇到負的時長值，會顯示「尚無紀錄」而非 `-5ms`。
+
+### 技術細節
+- **守門擴充**（`frontend/src/pages/play/formatters.ts`）：`formatDurationMs` 的早返條件由 `ms == null || !Number.isFinite(ms)` 擴充為再加上 `|| ms < 0`，負值直接回傳 `noRecordLabel`。
+- **測試**：`frontend/src/pages/play/formatters.test.ts` 在既有「missing or invalid values」測試補上 `formatDurationMs(-1, noRecord)` 應回傳「尚無紀錄」。前端 384 個測試與 `tsc --noEmit` typecheck 全通過。
