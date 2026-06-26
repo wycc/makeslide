@@ -26,6 +26,7 @@ import { shuffleArray } from './play/utils';
 import { copyTextToClipboard } from '../lib/clipboard';
 import { formatQuizQuestionsText } from '../lib/quizQuestionsText';
 import { parseQuizImportJson } from '../lib/quizImport';
+import { formatMmSs } from '../lib/formatMmSs';
 import { addReviewItems } from '../lib/reviewList';
 import type {
   PdfDetail,
@@ -707,7 +708,7 @@ export default function QuizBuilderPage() {
       {quizCountdown !== null && !syncQuizShowAnswers ? (
         <div className={`mb-3 flex items-center gap-2 rounded border px-3 py-2 text-sm font-mono ${quizCountdown <= 10 ? 'border-rose-500/60 bg-rose-500/20 text-rose-200' : 'border-amber-400/40 bg-amber-500/10 text-amber-100'}`}>
           {t('quiz.countdownPrefix') ? <span>{t('quiz.countdownPrefix')}</span> : null}
-          <span className="tabular-nums">{Math.floor(quizCountdown / 60).toString().padStart(2, '0')}:{(quizCountdown % 60).toString().padStart(2, '0')}</span>
+          <span className="tabular-nums">{formatMmSs(quizCountdown)}</span>
           <span>{t('quiz.countdownSuffix')}</span>
         </div>
       ) : null}

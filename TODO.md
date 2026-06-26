@@ -2513,7 +2513,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [ ] 重點頁導覽快捷鍵（可用性 / 可測性）：播放頁重點頁（`importantPages`）目前只有 `I` 切換、無快速跳轉。將 `frontend/src/lib/bookmarkNav.ts` 泛化為頁面清單導覽（建議改名 `pageListNav.ts`、函式 `nextPageInList`/`prevPageInList`，或保留現名並新增泛用別名），`PlayPage` 既有 `B`/`Shift+B`（書籤）改用泛化函式、並新增 `N`（下一個重點頁）/`Shift+N`（上一個重點頁）以 `importantPages` 導覽；快捷鍵面板補 `N`/`Shift+N` 兩列、補 zh-TW/en 說明 key；既有 `bookmarkNav.test.ts` 隨改名/別名更新。純前端、復用既有已測純函式。
 
-- [ ] 抽出 mm:ss 倒數格式化純函式（可用性 / 可測性）：`QuizBuilderPage` 倒數以內嵌 `Math.floor(s/60).padStart(2)…:…padStart(2)` 呈現。抽成 `frontend/src/lib/` 純函式 `formatMmSs(totalSeconds)`（負值/NaN 視為 0、超過 60 分鐘仍以分:秒呈現、各補零兩位）並補測試（0、整分、含秒、補零、負值）；倒數顯示改呼叫之。純前端。
+- [x] 抽出 mm:ss 倒數格式化純函式（可用性 / 可測性）：`QuizBuilderPage` 倒數以內嵌 `Math.floor(s/60).padStart(2)…:…padStart(2)` 呈現。抽成 `frontend/src/lib/` 純函式 `formatMmSs(totalSeconds)`（負值/NaN 視為 0、超過 60 分鐘仍以分:秒呈現、各補零兩位）並補測試（0、整分、含秒、補零、負值）；倒數顯示改呼叫之。純前端。
+  - 修改說明（2026-06-26）：新增 `frontend/src/lib/formatMmSs.ts` 之純函式 `formatMmSs(totalSeconds)`（非有限或 ≤0 視為 0、`Math.floor` 取整、`mm:ss` 各補零兩位、超過 60 分仍以分:秒呈現如 3661→`61:01`）。`QuizBuilderPage` 倒數顯示改呼叫之，輸出與原內嵌邏輯相同、行為不變（已確認無其他相同 mm:ss 內嵌）。新增 `formatMmSs.test.ts` 5 測試（0/補零、分秒拆分、>60 分、捨去小數秒、負值/NaN→0）。前端 `tsc --noEmit` 通過、新測試通過；無 i18n 變更。分支 `feat/format-mmss`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 90 個完成項目（90/100，未達上限）。
 
 - [ ] 分享「複製連結」按鈕（可用性）：播放頁分享區目前只有 `navigator.share`（多數桌機瀏覽器無此 API、按鈕不顯示），導致桌機無法快速取得分享連結。新增「複製連結」按鈕（always 顯示），以 `copyTextToClipboard(shareUrl || window.location.href)` 複製並顯示短暫提示；新增 zh-TW/en i18n key。純前端、不動後端。
 
