@@ -7427,3 +7427,15 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 ### 技術細節
 - **守門擴充**（`frontend/src/pages/play/formatters.ts`）：`formatDurationMs` 的早返條件由 `ms == null || !Number.isFinite(ms)` 擴充為再加上 `|| ms < 0`，負值直接回傳 `noRecordLabel`。
 - **測試**：`frontend/src/pages/play/formatters.test.ts` 在既有「missing or invalid values」測試補上 `formatDurationMs(-1, noRecord)` 應回傳「尚無紀錄」。前端 384 個測試與 `tsc --noEmit` typecheck 全通過。
+
+## 投票選項上限與索引上界以常數連結（2026-06-26）
+
+### 功能目的
+播放頁的即時投票，後端對「建立投票」與「投票」兩個動作各有一組 zod 驗證：建立投票時 `options` 陣列最多 6 個選項；投票時 `option_index` 必須在 0 到 5 之間。這兩個上限其實是同一件事的兩面——6 個選項對應的合法索引就是 0..5。但原本它們是兩個各自寫死的魔術數字（`max(6)` 與 `max(5)`），分散在兩個 schema 裡、沒有任何關聯。隱患在於：若未來有人想把投票選項上限調高（例如改成 8 個），很容易只改了 `options` 的 `max(6)→max(8)`，卻忘了同步把 `option_index` 的 `max(5)` 改成 `max(7)`，結果第 7、8 個選項雖然能建立，使用者投給它們時卻會被驗證擋下而投不進去——而且不會有人立刻發現。本次把這個耦合用一個共用常數明確表達出來。
+
+### 使用方式
+無需任何操作。目前投票選項上限維持 6 個、行為完全不變。這是一項防止未來改錯的維護性改善。
+
+### 技術細節
+- **共用常數**（`backend/src/routes/pdfs/shared.ts`）：新增 `export const MAX_POLL_OPTIONS = 6`，並加註解說明合法 `option_index` 範圍（0..MAX_POLL_OPTIONS-1）由它推導。`CreatePollBodySchema.options` 改用 `.max(MAX_POLL_OPTIONS, \`最多 ${MAX_POLL_OPTIONS} 個選項\`)`，`VotePollBodySchema.option_index` 改用 `.max(MAX_POLL_OPTIONS - 1)`。如此只要調整一個常數，兩處上限就會同步，不可能再各改各的而漂移。`option_index` 的下界（`min(0)`）原本就有驗證，行為不變。
+- **驗證**：後端 `tsc -p tsconfig.json` build 通過。由於 `shared.ts` 於頂層 import 資料庫，其 schema 的整合測試需要 better-sqlite3（sandbox 的 ABI 版本不符），留待 CI 執行；不過此次的關聯性已由常數結構在編譯期保證。

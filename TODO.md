@@ -2123,6 +2123,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`formatDurationMs` 的守門條件由 `ms == null || !Number.isFinite(ms)` 擴為再加 `|| ms < 0`；`formatters.test.ts` 在既有「missing/invalid」測試新增 `-1 → noRecordLabel`。前端 384 測試 + typecheck 全通過。分支 `fix/format-duration-negative-guard`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 40 個完成項目（40/100，未達上限）。
 
+- [x] 投票選項上限與索引上界以常數連結（防漂移）：`CreatePollBodySchema.options` 上限硬編 6、`VotePollBodySchema.option_index` 上界硬編 5，是兩個耦合卻獨立的魔術數字——若日後調高選項上限卻忘了同步索引上界，新選項將被投票驗證擋下而無法投票。引入 `MAX_POLL_OPTIONS` 並由它推導兩處邊界，使耦合顯式化、無法漂移。
+  - 修改說明（2026-06-26）：`routes/pdfs/shared.ts` 新增 `export const MAX_POLL_OPTIONS = 6`（含註解說明連動關係）；`CreatePollBodySchema` 改 `.max(MAX_POLL_OPTIONS, ...)`、`VotePollBodySchema.option_index` 改 `.max(MAX_POLL_OPTIONS - 1)`。下界（`option_index.min(0)`）原已驗證、行為不變。後端 `tsc` build 通過；schema 整合測試因 shared.ts import db（sandbox better-sqlite3 ABI 不符）留待 CI，但耦合已由常數結構保證。分支 `refactor/poll-max-options-constant`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 41 個完成項目（41/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2167,4 +2171,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | 修正貼上圖片 object URL 卸載洩漏：`useChatAndImageEdit` 加 unmount cleanup 釋放未送出貼上圖片的 blob URL（修 SPA 反覆進出播放頁的 blob 累積）；前端 384 測試通過 | fix/chat-pasted-image-url-leak（已 merge） |
 | 2026-06-26 | 搜尋片段函式抽離可測模組：`extractSnippet`(+`SNIPPET_CONTEXT`) 抽到純 `routes/pdfs/searchSnippet.ts`，search.ts 改 import；searchSnippet.test.ts +5、後端 build 通過 | refactor/extract-search-snippet（已 merge） |
 | 2026-06-26 | formatDurationMs 負值守門：負時長改回 noRecordLabel（原會輸出 `-5ms`）；formatters.test.ts +1；前端 384 測試通過 | fix/format-duration-negative-guard（已 merge） |
+| 2026-06-26 | 投票選項上限/索引上界以常數連結：引入 `MAX_POLL_OPTIONS`，`CreatePollBodySchema`/`VotePollBodySchema` 由它推導邊界（防調高選項上限卻漏改索引上界）；後端 build 通過 | refactor/poll-max-options-constant（已 merge） |
 
