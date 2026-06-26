@@ -7389,3 +7389,16 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **純模組**（新檔 `backend/src/services/cosineSimilarity.ts`）：`cosineSimilarity(a, b)` 計算 `dot / (|a| · |b|)`，任一向量為零向量（沒有方向可比）時回傳 0。不 import 資料庫或 OpenAI。
 - **相容性**：`embeddings.ts` 移除本地定義，改為 import 後 `export { cosineSimilarity }`，讓既有從 `embeddings` 匯入此函式的 `routes/pdfs/search.ts` 與 `similar-pages.ts` 完全不需更動。
 - **測試**：新增 `backend/test/cosineSimilarity.test.ts` 5 個 node:test——相同方向（含不同長度的同向向量）回 1、正交回 0、相反回 -1、任一零向量回 0、已知中間值 `[1,1]·[1,0] = 1/√2`、以及較短向量缺尾元素以 0 補的行為（浮點比較均用容差）。此函式先前無測試覆蓋；測試不依賴資料庫、sandbox 可驗證；後端 `tsc -p tsconfig.json` build 通過。
+
+## 修正貼上圖片的 object URL 卸載洩漏（2026-06-26）
+
+### 功能目的
+播放頁側邊欄的 QA 聊天允許使用者直接貼上（paste）一張參考圖片，用來輔助提問或請 AI 修改投影片圖片。貼上時，前端會用 `URL.createObjectURL(file)` 產生一個 blob 預覽網址顯示縮圖。這種 object URL 會一直佔用記憶體，直到呼叫 `URL.revokeObjectURL` 釋放或整個文件被卸載。原本程式只在「重新貼上另一張」或「清除」時，透過 `clearChatPastedImage` 釋放前一個網址；但若使用者貼了一張圖卻沒送出也沒清除，就直接離開播放頁（元件 unmount），那個 blob 網址不會被釋放。在單頁式應用（SPA）中反覆進出播放頁、每次都貼圖，就會累積一個個沒被釋放的 blob，造成記憶體洩漏。本次補上卸載時的釋放。
+
+### 使用方式
+無需任何操作，貼圖與聊天行為不變。這是記憶體衛生修正：離開播放頁時，尚未送出/清除的貼上圖片預覽網址會被正確釋放。
+
+### 技術細節
+- **卸載清理**（`frontend/src/pages/play/useChatAndImageEdit.ts`）：新增一個 `chatPastedImageUrlRef`，每次 render 同步指向最新的 `chatPastedImageUrl`；再加一個相依陣列為 `[]` 的 `useEffect`，其 cleanup 在元件卸載時 `URL.revokeObjectURL(ref.current)`。用 ref 是為了讓「只在卸載時執行一次」的 cleanup 能讀到卸載當下的最新網址（直接捕捉 state 會是掛載時的舊值）。
+- **不會重複釋放**：session 進行中的「重新貼上」與「清除」仍由 `clearChatPastedImage` 即時 revoke 並把狀態設為 `null`（ref 隨之為 `null`），因此卸載時若已清除就不會再次 revoke。
+- **驗證**：此為 React 標準 cleanup、無可單元測試的純邏輯；前端既有 384 測試與 `tsc --noEmit` typecheck 全通過確認無回歸。
