@@ -2691,3 +2691,15 @@ TODO.md 目前仍有兩個明確標註「待使用者決定 / 待處理」的未
 - 工作內容：剩餘 2 個 `[ ]` 項目仍不宜自動逕行，依 LOOP.md 第 2 條分析程式。以 grep 盤點 `Math.round(x*100)/100` 發現跨 3 檔 8 處重複，抽成 `roundToTwoDecimals` 收斂，並以測試固化浮點誤差收斂意圖。測試斷言中的浮點進位方向先以 node 實測確認（修正 `-2.345 → -2.35`）後定稿。
 - 時間：2026-06-27
 - 分支：`refactor/round-two-decimals`（已 merge 回 master，經由 `.roo` master worktree）
+
+## 新增可執行項目（第一二七輪，2026-06-27）
+
+- [x] 字串截斷加省略號收斂為共用純函式（去重 / 防呆 / 可測性）：`AnimationEditorTab` 的 `truncateSentence`（maxLen 18）與 `PlayPageSidebar` 的頁面摘要（maxLen 20）各自內嵌 `text.slice(0, n)` + `'…'` 的截斷寫法，邏輯重複且無測試；對 `maxLen` 邊界（0／負值／非有限值）與非字串輸入皆無防呆。抽成共用純函式並補測試。純前端、不動後端、不需新 i18n。
+  - 修改說明（2026-06-27）：新增 `frontend/src/lib/truncate.ts`（`truncateWithEllipsis(text, maxLen)`：長度 `<= maxLen` 原樣回傳不加省略號、超過則取前 `maxLen` 字接 `…`；`maxLen` 非有限值或負數視為不截斷、非字串輸入回空字串）。`AnimationEditorTab.truncateSentence` 改委派此函式（保留預設 maxLen 18 與本地命名）；`PlayPageSidebar` 第 36 行 `text.slice(0, 20) + (text.length > 20 ? '…' : '')` 改用 `truncateWithEllipsis(text, 20)`（行為完全一致）。新增 `truncate.test.ts` 5 組測試（未超長不變含等長邊界、超長截斷加單一省略號含 CJK、maxLen 0 邊界、非有限值/負值不截斷、非字串淨化）。前端 `tsc --noEmit` 通過、新測試 5/5 通過。分支 `refactor/truncate-ellipsis`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 7 個完成項目（7/100，未達上限）。
+
+## 工作記錄（第一二七輪，2026-06-27）
+
+- 工作內容：剩餘 2 個 `[ ]` 項目仍為「待使用者決定 / 涉 CI 變更」不宜自動逕行，依 LOOP.md 第 2 條分析程式。grep 盤點截斷加省略號寫法，發現 `AnimationEditorTab` 與 `PlayPageSidebar` 兩處重複且缺防呆，抽成 `truncateWithEllipsis` 收斂並補邊界/淨化測試，兩處呼叫點行為不變。
+- 時間：2026-06-27
+- 分支：`refactor/truncate-ellipsis`（已 merge 回 master）

@@ -8402,3 +8402,20 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **純函式模組**（`frontend/src/lib/contrastRatio.ts`）：`relativeLuminance(rgb)`、`contrastRatio(a, b)`（WCAG 2.x 演算法，1–21、順序無關）、`parseRgbTriple(str)`（解析「空白分隔 RGB 三元組」並容忍逗號／註解殘留）。
 - **回歸測試**（`contrastRatio.test.ts`，8 案例）：除基本數學（黑白=21、自身=1、解析容錯）外，**直接讀取 `index.css`、解析 `:root` 的 light token，斷言 muted/primary/danger 在 surface 與 bg 上 ≥ 4.5、text ≥ 7**，日後若有人把 light 前景色改回低對比值，測試會立即失敗。
 - **驗證**：前端 `tsc --noEmit` 通過；測試 8/8 通過；純前端、不動後端、不需新 i18n。
+
+## 字串截斷加省略號收斂為共用純函式（2026-06-27）
+
+### 功能目的
+前端有多處「文字過長就截斷並加上省略號（…）」的小工具，原本各自內聯實作：動畫編輯分頁的句子下拉選單（`truncateSentence`，上限 18 字）、播放頁側邊欄的頁面摘要（上限 20 字）。兩段邏輯本質相同卻分散，且都未處理 `maxLen` 的邊界情況（0、負值、`NaN`／`Infinity`）與非字串輸入。本項把它收斂成單一可測的純函式，統一行為並補上防呆，方便日後其他需要截斷顯示的地方直接重用。
+
+### 使用方式
+此為內部重構，畫面行為與先前完全一致：
+- 動畫編輯分頁的句子選單仍在超過 18 字時截斷並顯示 `…`。
+- 播放頁側邊欄的頁面摘要仍在超過 20 字時截斷並顯示 `…`。
+日後若有新的截斷需求，只需 `import { truncateWithEllipsis } from '../../lib/truncate'` 並傳入文字與上限字數。
+
+### 技術細節
+- **純函式模組**（`frontend/src/lib/truncate.ts`）：`truncateWithEllipsis(text, maxLen)`——長度不超過 `maxLen` 時原樣回傳（不附加省略號）；超過時取前 `maxLen` 個字元再接單一 `…`；`maxLen` 為非有限值或負數時視為不截斷、原樣回傳；非字串輸入一律回空字串，避免顯示 `undefined`。
+- **接入**：`AnimationEditorTab.truncateSentence` 改為委派 `truncateWithEllipsis`（保留預設上限 18 與本地函式名）；`PlayPageSidebar` 把 `text.slice(0, 20) + (text.length > 20 ? '…' : '')` 改為 `truncateWithEllipsis(text, 20)`，輸出完全等價。
+- **測試**（`truncate.test.ts`，5 案例）：未超長不變（含等長邊界不加省略號）、超長截斷加單一省略號（含 CJK 字元）、`maxLen` 0 邊界（非空回 `…`、空字串回空）、非有限值／負值不截斷、非字串淨化為空字串。
+- **驗證**：前端 `tsc --noEmit` 通過；新測試 5/5 通過；純前端、不動後端、不需新 i18n。
