@@ -7642,3 +7642,20 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **安全**：專案未設 CSP，inline script 可正常執行；腳本不讀取任何敏感資料。
 - **驗證**：前端 `tsc --noEmit` 通過；`theme.test.ts` 10 個測試全通過（inline script 為 HTML 內嵌，其邏輯已由 `theme.ts` 的單元測試覆蓋，故不另加測試）。
 - **範圍**：本項僅處理「啟動前套用主題」；各頁面元件實際的淺色外觀適配（把硬編 slate/white class 換成語意 token）為下一獨立項目。
+
+## 高頻畫面第一批暗色模式適配（2026-06-26）
+
+### 功能目的
+這是 Theme 系列的第五項，把前面建立的「語意色彩 token」實際接到畫面上。先前 token（`bg-bg`/`bg-surface`/`text-text`/`text-muted`/`border-border`…）已可用，但首頁、播放頁外層、設定頁、PDF 卡片仍是硬編的 `slate-*` 顏色，不會隨主題切換。本項把這批高頻畫面的結構性顏色換成語意 token，作為暗色/淺色主題的「第一批」適配。
+
+設計上採「dark token 值 = 現有 slate 值」的精確對應：例如 `--color-surface` 在 dark 即 slate-900，所以 `bg-slate-900 → bg-surface` 在深色模式下渲染完全相同。這讓本項對目前預設的深色體驗達成「零回歸」，同時讓淺色模式開始部分生效。
+
+### 使用方式
+無需操作。在設定頁切換「外觀主題」時，首頁、設定頁、PDF 卡片與播放頁外層的底色、表面色、主要/次要文字與邊框會隨主題改變；深色模式外觀與先前一致。淺色模式為漸進適配，部分中間色階與深層播放頁子元件會在後續迭代補齊。
+
+### 技術細節
+- **轉換範圍**（`components/PdfCard.tsx`、`pages/HomePage.tsx`、`pages/SettingsPage.tsx`、`pages/PlayPage.tsx` 外層）：`bg-slate-950→bg-bg`、`bg-slate-900→bg-surface`、`text-slate-200→text-text`、`text-slate-400→text-muted`、`border-slate-700→border-border`，包含其 `/opacity` 變體（如 `bg-slate-900/40→bg-surface/40`）。
+- **全域底色**（`index.html`）：body 的 `bg-slate-950 text-slate-100` 改為 `bg-bg text-text`，避免淺色模式下透出深色底。
+- **刻意保留**：品牌色（cyan/emerald/violet 等）、狀態色（rose/amber 等）與其他中間 slate 階（100/300/500/800）不動，以免壓平深色模式的視覺層次；深層播放頁子元件（`pages/play/*`）依規畫不在本批處理。
+- **零回歸依據**：因 dark token 值與被取代的 slate 值相同，深色模式為像素級一致；此性質讓本項不需逐頁人工視覺確認即可安全合併。
+- **驗證**：前端 `tsc --noEmit` 通過；以 tailwind CLI 確認語意 class 正常產出；HomePage 排序/搜尋、PdfCard cover、theme helper 等 24 個測試全通過。

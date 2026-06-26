@@ -961,8 +961,8 @@ export default function HomePage() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/40 backdrop-blur">
+    <div className="min-h-screen bg-bg text-slate-100">
+      <header className="border-b border-slate-800 bg-surface/40 backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-xl font-semibold tracking-tight">makeslide</h1>
           <GlobalSearchBox />
@@ -979,7 +979,7 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => void handleLogout()}
-                className="inline-flex items-center rounded-md border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 hover:text-white"
+                className="inline-flex items-center rounded-md border border-border bg-surface/70 px-3 py-2 text-sm text-text hover:bg-slate-800 hover:text-white"
                 title={authStatus.user?.email ? `${t('home.logout')} ${authStatus.user.email}` : t('home.logoutGoogle')}
               >
                 {t('home.logout')}
@@ -987,7 +987,7 @@ export default function HomePage() {
             ) : null}
             <Link
               to="/settings"
-              className="inline-flex items-center rounded-md border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 hover:text-white"
+              className="inline-flex items-center rounded-md border border-border bg-surface/70 px-3 py-2 text-sm text-text hover:bg-slate-800 hover:text-white"
             >
               {t('home.apiKeySettings')}
             </Link>
@@ -995,7 +995,7 @@ export default function HomePage() {
               type="button"
               onClick={handleImportZipClick}
               disabled={isImportingZip}
-              className="inline-flex items-center rounded-md border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 hover:text-white"
+              className="inline-flex items-center rounded-md border border-border bg-surface/70 px-3 py-2 text-sm text-text hover:bg-slate-800 hover:text-white"
             >
               {t('home.importZip')}
             </button>
@@ -1003,7 +1003,7 @@ export default function HomePage() {
               type="button"
               onClick={() => void handleBatchExportAll()}
               disabled={batchExportJobId !== null}
-              className="inline-flex items-center rounded-md border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 hover:text-white disabled:opacity-50"
+              className="inline-flex items-center rounded-md border border-border bg-surface/70 px-3 py-2 text-sm text-text hover:bg-slate-800 hover:text-white disabled:opacity-50"
             >
               {batchExportJobId !== null
                 ? t('home.batchExporting').replace('{progress}', String(batchExportProgress)).replace('{total}', String(batchExportTotal))
@@ -1043,7 +1043,7 @@ export default function HomePage() {
           </div>
         ) : null}
         {!loading && items.length === 0 && !error && (
-          <section className="mb-6 rounded-xl border border-slate-700 bg-slate-900/50 p-4">
+          <section className="mb-6 rounded-xl border border-border bg-surface/50 p-4">
             <h2 className="text-sm font-semibold text-slate-100">{t('home.firstTimeGuide')}</h2>
             <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-slate-300">
               <li>{t('home.step1')}</li>
@@ -1051,11 +1051,11 @@ export default function HomePage() {
               <li>{t('home.step3')}</li>
               <li>{t('home.step4')}</li>
             </ol>
-            <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-400">
-              <a className="underline underline-offset-2 hover:text-slate-200" href="/docs/error-codes.md" target="_blank" rel="noreferrer">
+            <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted">
+              <a className="underline underline-offset-2 hover:text-text" href="/docs/error-codes.md" target="_blank" rel="noreferrer">
                 {t('home.errorCodeGuide')}
               </a>
-              <a className="underline underline-offset-2 hover:text-slate-200" href="/docs/userguide.md" target="_blank" rel="noreferrer">
+              <a className="underline underline-offset-2 hover:text-text" href="/docs/userguide.md" target="_blank" rel="noreferrer">
                 {t('home.userGuide')}
               </a>
             </div>
@@ -1063,7 +1063,7 @@ export default function HomePage() {
         )}
 
         {loading && items.length === 0 && (
-          <p className="text-sm text-slate-400">{t('home.loading')}</p>
+          <p className="text-sm text-muted">{t('home.loading')}</p>
         )}
 
         {error && (
@@ -1073,21 +1073,21 @@ export default function HomePage() {
         )}
 
         {!loading && items.length === 0 && !error && (
-          <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/40 p-10 text-center">
+          <div className="rounded-xl border border-dashed border-border bg-surface/40 p-10 text-center">
             <p className="text-slate-300">{t('home.noPdf')}</p>
             <p className="mt-1 text-sm text-slate-500">{t('home.clickUpload')}</p>
           </div>
         )}
 
         {items.length > 0 && (
-          <section className="mb-6 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+          <section className="mb-6 rounded-xl border border-slate-800 bg-surface/50 p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <label className="flex flex-col gap-2 text-sm text-slate-300 sm:max-w-xs">
                 {t('home.showCategory')}
                 <select
                   value={categoryFilter}
                   onChange={(ev) => handleCategoryFilterSelect(ev.target.value)}
-                  className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition hover:border-slate-500"
+                  className="rounded-md border border-border bg-bg px-3 py-2 text-sm text-slate-100 outline-none transition hover:border-slate-500"
                 >
                   <option value="__all__">{t('home.allCategories')}</option>
                   <option value="__recent__">{RECENT_CATEGORY}</option>
@@ -1109,20 +1109,20 @@ export default function HomePage() {
                     onBlur={() => { commitSearchTerm(titleFilter); setSearchFocused(false); }}
                     onKeyDown={(e) => { if (e.key === 'Enter') { commitSearchTerm(titleFilter); (e.target as HTMLInputElement).blur(); } }}
                     placeholder={t('home.filterByTitlePlaceholder')}
-                    className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 pr-16 text-sm text-slate-100 outline-none transition hover:border-slate-500 focus:border-indigo-400"
+                    className="w-full rounded-md border border-border bg-bg px-3 py-2 pr-16 text-sm text-slate-100 outline-none transition hover:border-slate-500 focus:border-indigo-400"
                   />
                   {titleFilter.length > 0 && (
                     <button
                       type="button"
                       onClick={() => updateTitleFilter('')}
-                      className="absolute right-1 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-xs text-slate-400 transition hover:bg-slate-800 hover:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                      className="absolute right-1 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-xs text-muted transition hover:bg-slate-800 hover:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-400"
                       aria-label={t('home.clearTitleFilter')}
                     >
                       {t('home.clearTitleFilter')}
                     </button>
                   )}
                   {searchFocused && recentSearches.length > 0 && titleFilter.length === 0 && (
-                    <ul className="absolute left-0 top-full z-20 mt-1 w-full rounded-md border border-slate-700 bg-slate-900 py-1 shadow-lg">
+                    <ul className="absolute left-0 top-full z-20 mt-1 w-full rounded-md border border-border bg-surface py-1 shadow-lg">
                       <li className="flex items-center justify-between px-3 py-1 text-xs text-slate-500">
                         <span>{t('home.search.recent')}</span>
                         <button
@@ -1138,7 +1138,7 @@ export default function HomePage() {
                           <button
                             type="button"
                             onMouseDown={(e) => { e.preventDefault(); updateTitleFilter(term); setSearchFocused(false); }}
-                            className="min-w-0 flex-1 truncate px-3 py-1.5 text-left text-sm text-slate-200"
+                            className="min-w-0 flex-1 truncate px-3 py-1.5 text-left text-sm text-text"
                           >
                             {term}
                           </button>
@@ -1147,7 +1147,7 @@ export default function HomePage() {
                             aria-label={t('home.search.removeRecent')}
                             title={t('home.search.removeRecent')}
                             onMouseDown={(e) => { e.preventDefault(); setRecentSearches(removeRecentSearch(term)); }}
-                            className="shrink-0 px-2 py-1.5 text-slate-500 hover:text-slate-200"
+                            className="shrink-0 px-2 py-1.5 text-slate-500 hover:text-text"
                           >
                             ✕
                           </button>
@@ -1162,7 +1162,7 @@ export default function HomePage() {
                 <select
                   value={sortMode}
                   onChange={(ev) => updateSortMode(ev.target.value as SortMode)}
-                  className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition hover:border-slate-500 focus:border-indigo-400"
+                  className="rounded-md border border-border bg-bg px-3 py-2 text-sm text-slate-100 outline-none transition hover:border-slate-500 focus:border-indigo-400"
                 >
                   <option value="title_asc">{t('home.sort.titleAsc')}</option>
                   <option value="title_desc">{t('home.sort.titleDesc')}</option>
@@ -1189,7 +1189,7 @@ export default function HomePage() {
                 <button
                   type="button"
                   onClick={() => updateViewMode('grid')}
-                  className={`rounded p-2 text-sm transition ${viewMode === 'grid' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:bg-slate-800'}`}
+                  className={`rounded p-2 text-sm transition ${viewMode === 'grid' ? 'bg-slate-700 text-white' : 'text-muted hover:bg-slate-800'}`}
                   title={t('home.viewGrid')}
                   aria-label={t('home.viewGrid')}
                 >
@@ -1198,7 +1198,7 @@ export default function HomePage() {
                 <button
                   type="button"
                   onClick={() => updateViewMode('list')}
-                  className={`rounded p-2 text-sm transition ${viewMode === 'list' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:bg-slate-800'}`}
+                  className={`rounded p-2 text-sm transition ${viewMode === 'list' ? 'bg-slate-700 text-white' : 'text-muted hover:bg-slate-800'}`}
                   title={t('home.viewList')}
                   aria-label={t('home.viewList')}
                 >
@@ -1206,7 +1206,7 @@ export default function HomePage() {
                 </button>
               </div>
             </div>
-            <p className="mt-3 text-xs text-slate-400" aria-live="polite">
+            <p className="mt-3 text-xs text-muted" aria-live="polite">
               {visibleSummary}
             </p>
             <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-500">
@@ -1311,7 +1311,7 @@ export default function HomePage() {
         )}
 
         {items.length > 0 && categoryGroups.length === 0 && (
-          <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/40 p-10 text-center">
+          <div className="rounded-xl border border-dashed border-border bg-surface/40 p-10 text-center">
             <p className="text-slate-300">{t('home.noSlidesInCategory')}</p>
             {(tagFilter.size > 0 || titleFilter.length > 0) && (
               <button
@@ -1344,7 +1344,7 @@ export default function HomePage() {
                   <h2 id={`category-${group.category}`} className="text-lg font-semibold text-slate-100">
                     {group.category}
                   </h2>
-                  <span className="rounded-full border border-slate-700 px-2 py-0.5 text-xs text-slate-400">
+                  <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted">
                     {t('home.slideCount').replace('{count}', String(group.items.length))}
                   </span>
                   {group.category !== DEFAULT_CATEGORY && group.category !== RECENT_CATEGORY && (
@@ -1392,7 +1392,7 @@ export default function HomePage() {
                             )}
                             {pdf.title ?? pdf.id}
                           </p>
-                          <p className="text-xs text-slate-400">
+                          <p className="text-xs text-muted">
                             {t('home.listPages').replace('{count}', String(pdf.page_count))} · {pdf.category ?? t('home.listUncategorized')}
                             {pdf.total_audio_duration_seconds != null && pdf.total_audio_duration_seconds > 0 && (
                               <span className="ml-2">{formatAudioDuration(pdf.total_audio_duration_seconds)}</span>
@@ -1439,7 +1439,7 @@ export default function HomePage() {
                                 className={`h-full rounded-full ${color} opacity-70`}
                                 style={{ width: `${max > 0 ? Math.round((value / max) * 100) : 0}%` }}
                               />
-                              <span className="pointer-events-none absolute -top-5 left-0 hidden whitespace-nowrap rounded bg-slate-900 px-1 py-0.5 text-[10px] text-slate-200 shadow group-hover/bar:block">
+                              <span className="pointer-events-none absolute -top-5 left-0 hidden whitespace-nowrap rounded bg-surface px-1 py-0.5 text-[10px] text-text shadow group-hover/bar:block">
                                 {label}
                               </span>
                             </div>
@@ -1455,7 +1455,7 @@ export default function HomePage() {
                         </button>
                         <button
                           type="button"
-                          className="shrink-0 rounded p-1 text-slate-400 transition hover:bg-slate-700 hover:text-rose-400"
+                          className="shrink-0 rounded p-1 text-muted transition hover:bg-slate-700 hover:text-rose-400"
                           onClick={(e) => { e.stopPropagation(); void handleDelete(pdf.id); }}
                           aria-label={t('card.delete')}
                         >
