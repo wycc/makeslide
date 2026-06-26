@@ -147,6 +147,18 @@ function CommentsSection() {
     } catch { /* ignore */ }
   };
 
+  // 批次把所有未解決評論標記為已解決（複用既有 resolvePageComment，無需新後端端點）。
+  const handleResolveAll = async () => {
+    const unresolved = comments.filter((c) => !c.resolved);
+    if (unresolved.length === 0) return;
+    const results = await Promise.allSettled(unresolved.map((c) => resolvePageComment(pdfId, c.id, true)));
+    const resolvedIds = new Set<number>();
+    results.forEach((r, i) => { if (r.status === 'fulfilled') resolvedIds.add(unresolved[i]!.id); });
+    if (resolvedIds.size > 0) {
+      setComments((prev) => prev.map((x) => (resolvedIds.has(x.id) ? { ...x, resolved: true } : x)));
+    }
+  };
+
   const filteredComments = filterComments(comments, filterQuery);
   const visibleComments = unresolvedFirst ? sortCommentsUnresolvedFirst(filteredComments) : filteredComments;
   const unresolvedCount = countUnresolvedComments(comments);
@@ -213,6 +225,15 @@ function CommentsSection() {
                 className={`rounded border px-2 py-0.5 text-[10px] ${unresolvedFirst ? 'border-sky-600/60 bg-sky-700/40 text-sky-200' : 'border-sky-800/40 text-sky-400/70 hover:text-sky-300'}`}
               >
                 {t('play.sidebar.commentsUnresolvedFirst')}
+              </button>
+            )}
+            {unresolvedCount > 0 && (
+              <button
+                type="button"
+                onClick={() => void handleResolveAll()}
+                className="rounded border border-emerald-800/40 px-2 py-0.5 text-[10px] text-emerald-400/80 hover:text-emerald-300"
+              >
+                {t('play.sidebar.commentsResolveAll')}
               </button>
             )}
           </div>

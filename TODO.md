@@ -2427,7 +2427,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [ ] 評論文字編輯（協作可用性）：評論目前只能建立 / 標記已解決 / 刪除，無法修正錯字。後端為 `comments.ts` 的 `PATCH /api/pdfs/:id/comments/:commentId` 增加可選 `text`（zod：trim、1..2000；與既有 `resolved` 並存、至少提供其一），更新後回傳整列；沿用 `canEditPdf`。前端 `CommentsSection` 每則評論加「編輯」進入 inline textarea（沿用字數上限/計數），呼叫新增的 `editPageComment(id, commentId, text)` API。補後端 node:test（更新 text、保留 resolved、空字串 400、403/404）；新增 zh-TW/en i18n key。
 
-- [ ] 評論批次「全部標記已解決」（協作可用性，小顆粒）：`CommentsSection` 標題列加一顆按鈕，對目前清單中所有「未解決」評論依序呼叫既有 `resolvePageComment(..., true)` 並更新本地狀態；僅在有未解決評論（`countUnresolvedComments(comments) > 0`）時顯示；採既有 API、不需新後端端點；新增 zh-TW/en i18n key。純前端（複用既有 API）。
+- [x] 評論批次「全部標記已解決」（協作可用性，小顆粒）：`CommentsSection` 標題列加一顆按鈕，對目前清單中所有「未解決」評論依序呼叫既有 `resolvePageComment(..., true)` 並更新本地狀態；僅在有未解決評論（`countUnresolvedComments(comments) > 0`）時顯示；採既有 API、不需新後端端點；新增 zh-TW/en i18n key。純前端（複用既有 API）。
+  - 修改說明（2026-06-26）：`CommentsSection` 新增 `handleResolveAll`——取所有 `!resolved` 評論，以 `Promise.allSettled` 並行呼叫既有 `resolvePageComment(pdfId, id, true)`，僅將成功者（fulfilled）於本地 state 標為 `resolved:true`（部分失敗不影響其他、不丟例外）。按鈕置於標題列按鈕群（未解決優先切換之後），僅在 `unresolvedCount > 0` 時顯示。複用既有 API，無新後端端點。新增 zh-TW/en `play.sidebar.commentsResolveAll`。前端 `tsc --noEmit` 通過、`i18n.test.ts`（含 zh/en 對等）通過。此為複用既有 API 的 UI 批次操作、無新增可抽出純邏輯，故不另加單元測試（既有 `commentStats`/resolve 行為已有覆蓋）。分支 `feat/comments-resolve-all`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 80 個完成項目（80/100，未達上限）。
 
 - [x] 逐字稿純文字匯出加入簡報標題行（Roadmap Phase 5 匯出，小顆粒）：`subtitles.txt`（`subtitles.ts` 的 `buildPlainTextContent`）目前以「# 第 1 頁」起頭，未含簡報標題。改為在最前面加一行 `# {pdf.title}`（標題為空時退回檔名或略過該行），其後接既有逐頁內容；對應更新 `backend/test/subtitles-txt.test.ts` 既有斷言。後端小改 + 測試更新。
   - 修改說明（2026-06-26）：`buildPlainTextContent` 加上可選 `title` 參數，於 trim 後非空時在最前面 push `# {title}` + 空行，再接既有逐頁 `# 第 N 頁` 內容；標題為空白時略過標題行（不退回檔名，因 content-disposition 已帶 `transcript.txt`）。`subtitles.txt` 路由將既有查到的 `row.title` 傳入。更新 `subtitles-txt.test.ts`：兩個內容斷言補上 `# Test <id>\n\n` 前綴，並新增一個「標題為空白時略過標題行」測試（seed 後 `UPDATE title=''`，斷言不含標題行）。純後端、前端下載連結與 i18n 不需變更。後端 `tsc --noEmit` 通過；handler 測試需 better-sqlite3 native module、sandbox 無法載入，留 CI 執行。分支 `feat/transcript-title-line`，已 merge 回 master。
