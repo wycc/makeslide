@@ -1991,6 +1991,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`reviewList.ts` 的 `removeReviewItem(pdfId, pageNumber, questionText?)` 改以「同頁且（未指定 questionText 或題目相符）才移除」的條件過濾；`PlayPageSidebar.tsx` 的 `handleRemove(pageNumber, questionText)` 傳入題目並修正本地 state 過濾條件，按鈕 onClick 傳 `item.questionText`。`reviewList.test.ts` +1 測試（同頁多題只刪指定題、保留其餘）。前端 354 測試 + typecheck 全通過。分支 `fix/review-item-remove-by-question`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 7 個完成項目（7/100，未達上限）。
 
+- [x] 首頁新增「頁數少到多」排序：排序下拉的頁數只有「頁數多到少」(`page_count_desc`)，缺少升冪選項，與音訊長度有雙向（最長/最短）不對稱。補上 `page_count_asc`，方便使用者找頁數少的短簡報。`SortMode`/`SORT_MODES` 加入 `page_count_asc`，新增 `compareByPageCountAsc`（缺頁數以 `Infinity` 排到最後，與 `audio_asc` 的 null 處理一致），`getComparatorForSortMode` 加 case；下拉新增 option；i18n `home.sort.pageCountAsc`。
+  - 修改說明（2026-06-26）：`HomePage.tsx` 加入 `page_count_asc` 排序模式；排序下拉於 pageCountDesc 後插入 pageCountAsc option；zh-TW/en 各新增 `home.sort.pageCountAsc`（「頁數少到多」／「Fewest pages」）；`HomePage.sort.test.ts` +2 測試（升冪含缺頁數排尾、與降冪互為反向）。前端 356 測試 + typecheck（含 i18n key 對齊）全通過。分支 `feat/home-sort-page-count-asc`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 8 個完成項目（8/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2002,4 +2006,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | 成本顯示守門：`formatCostUsd` 對 `NaN`/`Infinity` 改回傳 unknown label（原為 `$NaN`），負成本以絕對值+負號格式化（`-$1.23`／`-<$0.01`，原誤為 `<$0.01`）；formatters.test.ts +2 測試；前端 350 測試通過 | fix/format-cost-guard（已 merge） |
 | 2026-06-26 | 觀看進度百分比夾在 0-100：新增 `clampPercent`，`calculateWatchProgressPercent` 防 >100%，並抽出 `calculateAvgListenedPercent`（倒退重聽 ratio>1 時夾頂）取代 `PlayPageSidebar` 內聯計算；watchProgress.test.ts +3 測試；前端 353 測試通過 | fix/watch-progress-percent-clamp（已 merge） |
 | 2026-06-26 | 複習清單只刪指定題目：`removeReviewItem` 加選用 `questionText` 參數（同頁多題時只刪該題，原會整頁誤刪），`PlayPageSidebar` handler 傳入題目並修正本地 state 過濾；reviewList.test.ts +1 測試；前端 354 測試通過 | fix/review-item-remove-by-question（已 merge） |
+| 2026-06-26 | 首頁新增「頁數少到多」排序：補上 `page_count_asc`（與既有 `page_count_desc` 對稱、缺頁數排尾），`SortMode`/`SORT_MODES`/comparator/下拉/i18n 一併更新；HomePage.sort.test.ts +2 測試；前端 356 測試通過 | feat/home-sort-page-count-asc（已 merge） |
 
