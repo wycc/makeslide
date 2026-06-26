@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   evaluateWatchCompletion,
   calculateWatchProgressPercent,
+  calculateAvgListenedPercent,
   formatWatchProgressBadgeCount,
 } from './watchProgress';
 
@@ -93,6 +94,27 @@ test('calculateWatchProgressPercent returns 100 when every viewer completed the 
     avg_listened_ratio: 1,
   });
   assert.equal(result, 100);
+});
+
+test('calculateWatchProgressPercent clamps anomalous data to 100', () => {
+  // completed_viewers > total_viewers（資料異常）不應顯示成 >100%
+  const result = calculateWatchProgressPercent({
+    total_viewers: 3,
+    completed_viewers: 5,
+    avg_listened_ratio: 1,
+  });
+  assert.equal(result, 100);
+});
+
+test('calculateAvgListenedPercent returns null for null ratio and rounds normal values', () => {
+  assert.equal(calculateAvgListenedPercent(null), null);
+  assert.equal(calculateAvgListenedPercent(0.5), 50);
+  assert.equal(calculateAvgListenedPercent(0.333), 33);
+});
+
+test('calculateAvgListenedPercent clamps rewind ratios above 1 to 100', () => {
+  // 使用者倒退重聽會使 ratio > 1，須夾在 100
+  assert.equal(calculateAvgListenedPercent(1.3), 100);
 });
 
 test('formatWatchProgressBadgeCount returns null when there are no viewers', () => {
