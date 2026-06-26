@@ -2035,6 +2035,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`pdfFigures.ts` 的 `figureImageAbsPath` 改用 `safeJoinPdfPath(pdfId, figure.imagePath)`，移除已不需要的 `path` import。新增 `figureImageAbsPath.test.ts` +2 測試（正常 figures/ 路徑解析正確、`../` 越界 throw），sandbox 執行通過；後端 `tsc` build 通過。分支 `fix/figure-path-traversal-guard`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 18 個完成項目（18/100，未達上限）。
 
+- [x] 橡皮擦命中幾何抽離並補測試：`DrawingCanvas` 的橡皮擦命中判定幾何（`distSq`／`distPointToSegment`／`strokeHitsPoint`）原為元件內未匯出、未測試的非平凡邏輯（點到線段距離、稀疏點之間的線段命中），是繪圖標註橡皮擦正確性的核心。抽成純模組 `drawingGeometry.ts`（`DrawingCanvas` 改 import `strokeHitsPoint`），並補單元測試鎖定行為。
+  - 修改說明（2026-06-26）：新增 `frontend/src/components/drawingGeometry.ts`（3 個純函式，`strokeHitsPoint` 以 `import type` 取得 `DrawingStroke` 型別、執行期無循環依賴）；`DrawingCanvas.tsx` 移除內聯 helper、改 import。新增 `drawingGeometry.test.ts` +6 測試（平方距離、點到線段距離之垂足/端點夾擠/零長線段、頂點命中、稀疏點線段命中、未命中）。前端 377 測試 + typecheck 全通過。分支 `refactor/drawing-geometry-tested`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 19 個完成項目（19/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2057,4 +2061,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | 卡片封面載入失敗退回佔位圖：`PdfCard` 封面 `<img>` 加 `onError` 退回 PDF 佔位圖（純函式 `shouldShowCoverImage`，以失敗 URL 為鍵可在換新 URL 時重試）；pdfCardCover.test.ts +4 測試；前端 371 測試通過 | fix/pdf-card-cover-fallback（已 merge） |
 | 2026-06-26 | 播放頁選單標籤 i18n：`PlayPageHeader` 行動選單切換鈕與 6 個 HeaderDropdown 群組標籤（資訊/播放/生成/下載/逐字稿/分享）改用 `t()`；zh-TW/en 各 +8 key；前端 371 測試通過 | fix/play-header-menu-i18n（已 merge） |
 | 2026-06-26 | figure 圖片路徑越界防護：`figureImageAbsPath` 改用 `safeJoinPdfPath`，避免被竄改的 figures.json imagePath（含 `../`）逃逸 PDF 目錄被 stream 給 client；figureImageAbsPath.test.ts +2 測試、後端 build 通過 | fix/figure-path-traversal-guard（已 merge） |
+| 2026-06-26 | 橡皮擦命中幾何抽離並補測試：`DrawingCanvas` 的 `distSq`/`distPointToSegment`/`strokeHitsPoint` 抽成純模組 `drawingGeometry.ts` 並補 6 個單元測試（點到線段距離、稀疏點線段命中等）；前端 377 測試通過 | refactor/drawing-geometry-tested（已 merge） |
 
