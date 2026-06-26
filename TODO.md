@@ -1660,7 +1660,6 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 ## 新增可執行項目（2026-06-25 第五十八輪）
 
-- [ ] （待使用者決定，較大工程）系統性採用 `mapApiErrorToHumanMessage`：目前約 55 處 catch 直接顯示後端 `err.message`、繞過錯誤訊息映射，使 ERROR_HINTS 友善訊息影響面受限。可逐區（先 QuizBuilderPage/PlayPage 等大戶）改為經 `mapApiErrorToHumanMessage` 顯示，但需逐點確認該處後端 message 是否本就中文、catch 上下文是否適用。範圍大、需產品判斷顯示風格，故不於自動 loop 逕行。
 
 - [x] 補 api/common.ts 錯誤判斷純函式測試：為 `isApiErrorBody`、`isCreditExhaustedError`、`isApiKeyMissingError` 補單元測試（`isAlreadyProcessingConflict` 已有）。純前端、僅新增測試、不改產品程式碼。
   - 修改說明（2026-06-25）：在 `lib/api/common.test.ts` 新增 4 個測試：`isApiErrorBody`（良構 body vs null/非物件/缺 message/code 非字串）、`isCreditExhaustedError`（遍歷 `CREDIT_EXHAUSTED_ERROR_CODES` 全 7 碼為 true、其他碼/非 ApiError 為 false）、`isApiKeyMissingError`（僅 API_KEY_MISSING）。以 `tsx --test` 直跑驗證 8 個測試（原 4+4）全通過；frontend typecheck 通過。分支 `test/api-error-predicates`，已 merge 回 master。
@@ -1753,7 +1752,6 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] 前端 workspace 新增 test script：在 `frontend/package.json` 加 `"test": "../scripts/with-node-env.sh tsx --test 'src/**/*.test.ts'"`，提供前端測試執行入口（先前完全沒有）。tsx 靠 workspace hoisting 解析（與既有前端測試跑法一致）。低風險。
   - 修改說明（2026-06-25）：`frontend/package.json` 於 `typecheck` 後新增 `test` script。以 `npx tsx --test 'src/**/*.test.ts'` 驗證 glob 涵蓋全部 **323 個前端測試**（4 suites）全通過；script 內容與 backend 對稱。分支 `chore/frontend-test-script`，已 merge 回 master。
 
-- [ ] （待處理，涉 CI 行為變更 / npm install）把前端測試納入 root `npm test` 並補 frontend tsx 顯式依賴：① root `package.json` 的 `test` 改為同時跑 backend 與 frontend workspace（目前只跑 backend，前端 323 測試未納入 CI）；② 為 `frontend/package.json` 補 `tsx` devDependency（目前靠 hoisting，非顯式）使依賴正確。因 ① 改變 CI 行為、② 需 `npm install`，且 sandbox 的 `with-node-env.sh` 環境無法完整驗證 `npm test`，留待正式環境處理或使用者確認後再做。
 
 ## 掃描摘要（2026-06-25 第六十八輪）
 
