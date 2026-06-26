@@ -1341,6 +1341,7 @@ export const en = {
   'play.sidebar.commentsResolvedTag': 'resolved',
   'play.sidebar.commentsUnresolvedFirst': 'Unresolved first',
   'play.sidebar.commentsResolveAll': 'Resolve all',
+  'play.sidebar.commentsRefresh': 'Refresh comments',
   'play.sidebar.commentsUnresolvedTitle': '{unresolved} unresolved / {total} total',
   'play.sidebar.commentsFilterPlaceholder': 'Search comments or author…',
   'play.sidebar.commentsNoMatch': 'No matching comments',
