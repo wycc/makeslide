@@ -15,6 +15,7 @@ import { countUnresolvedComments, sortCommentsUnresolvedFirst } from '../../lib/
 import { formatCommentsMarkdown } from '../../lib/commentMarkdown';
 import { formatPollResultsMarkdown } from '../../lib/pollResultsMarkdown';
 import { pollOptionPercent } from '../../lib/pollPercent';
+import { formatNotesMarkdown } from '../../lib/notesMarkdown';
 import { formatRelativeTime } from '../../lib/formatRelativeTime';
 import { NOTEBOOK_TABS, computeNotebookTabCounts, getAdjacentNotebookTab, getEdgeNotebookTab, getStoredNotebookTab, setStoredNotebookTab, type NotebookTab } from './notebookTabs';
 
@@ -579,19 +580,13 @@ function PageNoteSection() {
   const savingRef = useRef(false);
 
   const handleCopyAllNotes = () => {
-    const lines: string[] = [];
-    for (const page of deckPages) {
-      const note = page.page_notes?.trim();
-      if (note) {
-        lines.push(`## ${t('play.sidebar.copyAllNotesPagePrefix')} ${page.page_number}\n${note}`);
-      }
-    }
-    if (lines.length === 0) {
+    const md = formatNotesMarkdown(deckPages, { pagePrefix: t('play.sidebar.copyAllNotesPagePrefix') });
+    if (!md) {
       setCopyMsg(t('play.sidebar.noNotesToCopy'));
       setTimeout(() => setCopyMsg(null), 2000);
       return;
     }
-    void copyTextToClipboard(lines.join('\n\n')).then((ok) => {
+    void copyTextToClipboard(md).then((ok) => {
       setCopyMsg(ok ? t('play.sidebar.copyAllNotesDone') : t('play.sidebar.copyAllNotesFail'));
       setTimeout(() => setCopyMsg(null), 2000);
     });
