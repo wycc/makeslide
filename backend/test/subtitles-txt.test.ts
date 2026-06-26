@@ -67,7 +67,7 @@ test('GET /api/pdfs/:id/subtitles.txt returns a per-page plain-text transcript',
     assert.equal(resp.statusCode, 200);
     assert.match(resp.headers['content-type'] as string, /text\/plain/);
     assert.match(resp.headers['content-disposition'] as string, /attachment; filename="transcript\.txt"/);
-    assert.equal(resp.body, '# 第 1 頁\n第一頁的逐字稿。\n\n# 第 2 頁\n第二頁的逐字稿。\n');
+    assert.equal(resp.body, '# Test subtitle-txt-01\n\n# 第 1 頁\n第一頁的逐字稿。\n\n# 第 2 頁\n第二頁的逐字稿。\n');
   } finally {
     cleanup(pdfId);
     await app.close();
@@ -87,7 +87,7 @@ test('GET /api/pdfs/:id/subtitles.txt still emits a heading for pages without a 
   try {
     const resp = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}/subtitles.txt` });
     assert.equal(resp.statusCode, 200);
-    assert.equal(resp.body, '# 第 1 頁\n有稿。\n\n# 第 2 頁\n');
+    assert.equal(resp.body, '# Test subtitle-txt-02\n\n# 第 1 頁\n有稿。\n\n# 第 2 頁\n');
   } finally {
     cleanup(pdfId);
     await app.close();
@@ -101,6 +101,21 @@ test('GET /api/pdfs/:id/subtitles.txt returns 403 for a non-owner on a private P
   try {
     const resp = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}/subtitles.txt`, headers: { cookie: `makeslide_session=${encodeURIComponent(testSessionCookie('someone-else'))}` } });
     assert.equal(resp.statusCode, 403);
+  } finally {
+    cleanup(pdfId);
+    await app.close();
+  }
+});
+
+test('GET /api/pdfs/:id/subtitles.txt omits the title line when the title is blank', async () => {
+  const pdfId = 'subtitle-txt-04';
+  seedPdf(pdfId, { visibility: 'public', pages: [{ pageUid: 'uid-txt-6', pageNumber: 1, script: '只有頁。' }] });
+  db.prepare(`UPDATE pdfs SET title = '' WHERE id = ?`).run(pdfId);
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}/subtitles.txt` });
+    assert.equal(resp.statusCode, 200);
+    assert.equal(resp.body, '# 第 1 頁\n只有頁。\n');
   } finally {
     cleanup(pdfId);
     await app.close();

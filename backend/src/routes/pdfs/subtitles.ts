@@ -166,11 +166,16 @@ async function buildPagePlainText(pdfId: string, page: PageRecord): Promise<stri
 }
 
 /**
- * Build a full plain-text transcript with a `# 第 N 頁` heading per page,
+ * Build a full plain-text transcript: an optional `# {title}` heading first
+ * (skipped when the title is blank), then a `# 第 N 頁` heading per page with
  * pages separated by a blank line.
  */
-async function buildPlainTextContent(pdfId: string, pages: PageRecord[]): Promise<string> {
+async function buildPlainTextContent(pdfId: string, pages: PageRecord[], title?: string | null): Promise<string> {
   const blocks: string[] = [];
+  const trimmedTitle = title?.trim();
+  if (trimmedTitle) {
+    blocks.push(`# ${trimmedTitle}`, '');
+  }
   for (const page of pages) {
     const text = await buildPagePlainText(pdfId, page);
     blocks.push(`# 第 ${page.page_number} 頁`);
@@ -283,7 +288,7 @@ export async function registerSubtitleRoutes(app: FastifyInstance): Promise<void
       )
       .all(parsed.data.id) as PageRecord[];
 
-    const content = await buildPlainTextContent(parsed.data.id, pages);
+    const content = await buildPlainTextContent(parsed.data.id, pages, row.title);
 
     reply.header('content-type', 'text/plain; charset=utf-8');
     reply.header('content-disposition', `attachment; filename="transcript.txt"`);

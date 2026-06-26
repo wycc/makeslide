@@ -2429,7 +2429,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [ ] 評論批次「全部標記已解決」（協作可用性，小顆粒）：`CommentsSection` 標題列加一顆按鈕，對目前清單中所有「未解決」評論依序呼叫既有 `resolvePageComment(..., true)` 並更新本地狀態；僅在有未解決評論（`countUnresolvedComments(comments) > 0`）時顯示；採既有 API、不需新後端端點；新增 zh-TW/en i18n key。純前端（複用既有 API）。
 
-- [ ] 逐字稿純文字匯出加入簡報標題行（Roadmap Phase 5 匯出，小顆粒）：`subtitles.txt`（`subtitles.ts` 的 `buildPlainTextContent`）目前以「# 第 1 頁」起頭，未含簡報標題。改為在最前面加一行 `# {pdf.title}`（標題為空時退回檔名或略過該行），其後接既有逐頁內容；對應更新 `backend/test/subtitles-txt.test.ts` 既有斷言。後端小改 + 測試更新。
+- [x] 逐字稿純文字匯出加入簡報標題行（Roadmap Phase 5 匯出，小顆粒）：`subtitles.txt`（`subtitles.ts` 的 `buildPlainTextContent`）目前以「# 第 1 頁」起頭，未含簡報標題。改為在最前面加一行 `# {pdf.title}`（標題為空時退回檔名或略過該行），其後接既有逐頁內容；對應更新 `backend/test/subtitles-txt.test.ts` 既有斷言。後端小改 + 測試更新。
+  - 修改說明（2026-06-26）：`buildPlainTextContent` 加上可選 `title` 參數，於 trim 後非空時在最前面 push `# {title}` + 空行，再接既有逐頁 `# 第 N 頁` 內容；標題為空白時略過標題行（不退回檔名，因 content-disposition 已帶 `transcript.txt`）。`subtitles.txt` 路由將既有查到的 `row.title` 傳入。更新 `subtitles-txt.test.ts`：兩個內容斷言補上 `# Test <id>\n\n` 前綴，並新增一個「標題為空白時略過標題行」測試（seed 後 `UPDATE title=''`，斷言不含標題行）。純後端、前端下載連結與 i18n 不需變更。後端 `tsc --noEmit` 通過；handler 測試需 better-sqlite3 native module、sandbox 無法載入，留 CI 執行。分支 `feat/transcript-title-line`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 79 個完成項目（79/100，未達上限）。
 
 ## 工作記錄（第一〇八輪，2026-06-26）
 

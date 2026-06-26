@@ -7952,3 +7952,16 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **i18n**：新增 zh-TW/en `quiz.importJson`、`quiz.importDone`（含 `{n}`）、`quiz.importFailed`。
 - **測試**：`quizImport.test.ts` 5 個案例（壞 JSON、缺/非陣列 questions、正規化與 id 重編與型別推斷、越界/重複索引過濾、無合法題目）。
 - **驗證**：前端 `tsc --noEmit` 通過；`quizImport.test.ts` 與 `i18n.test.ts`（含 zh/en key 對等）全通過。
+
+## 逐字稿匯出加入簡報標題行（2026-06-26）
+
+### 功能目的
+逐字稿純文字匯出（`subtitles.txt`）先前直接以「# 第 1 頁」起頭，下載多份檔案後難以從內容辨識是哪一份簡報。本項在最前面加上簡報標題行，讓匯出的逐字稿自帶辨識資訊（Roadmap Phase 5）。
+
+### 使用方式
+無需額外操作。下載「逐字稿 TXT」後，檔案最上方會多一行 `# {簡報標題}`，其後接既有的逐頁內容。若簡報沒有標題，則略過標題行、維持原本的逐頁起頭。
+
+### 技術細節
+- **後端**（`backend/src/routes/pdfs/subtitles.ts`）：`buildPlainTextContent` 新增可選 `title` 參數，trim 後非空時於最前面加入 `# {title}` 與一個空行，再接既有逐頁內容；空白標題則略過。`subtitles.txt` 路由把既有查詢到的 `row.title` 傳入。
+- **測試**（`backend/test/subtitles-txt.test.ts`）：兩個內容斷言補上 `# Test <id>\n\n` 前綴；新增一個「標題為空白時略過標題行」案例（seed 後 `UPDATE title=''`）。
+- **驗證**：後端 `tsc --noEmit` 通過。純後端改動，前端下載連結與 i18n 不需調整。handler 測試需 better-sqlite3 native module，於本機 sandbox 無法載入，留待 CI 執行。
