@@ -222,12 +222,18 @@ export const UpdatePromptBodySchema = z.object({
   prompt: z.string().max(MAX_USER_PROMPT_CHARS, `提示詞不可超過 ${MAX_USER_PROMPT_CHARS} 字`),
 });
 
+// Max number of options a page poll may have. The valid `option_index` range
+// (0..MAX_POLL_OPTIONS-1) is derived from this in VotePollBodySchema, so raising
+// the option cap automatically widens the accepted vote indices — keep them
+// linked here rather than as two independent magic numbers.
+export const MAX_POLL_OPTIONS = 6;
+
 export const CreatePollBodySchema = z.object({
   question: z.string().trim().min(1, 'question 不可為空').max(300, 'question 不可超過 300 字'),
   options: z
     .array(z.string().trim().min(1, '選項不可為空').max(120, '選項不可超過 120 字'))
     .min(2, '至少需要 2 個選項')
-    .max(6, '最多 6 個選項'),
+    .max(MAX_POLL_OPTIONS, `最多 ${MAX_POLL_OPTIONS} 個選項`),
   show_results: z.boolean().optional().default(true),
 });
 
@@ -242,7 +248,7 @@ export const PollParamSchema = z.object({
 
 export const VotePollBodySchema = z.object({
   voter_id: z.string().trim().min(1, 'voter_id 太短').max(128, 'voter_id 過長'),
-  option_index: z.number().int().min(0).max(5),
+  option_index: z.number().int().min(0).max(MAX_POLL_OPTIONS - 1),
 });
 
 export const YoutubeCreateBodySchema = z.object({
