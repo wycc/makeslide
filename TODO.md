@@ -2251,7 +2251,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`index.css` 新增 `:root`（light）與 `.dark` 兩組 CSS 變數，值以空白分隔 RGB 三元組表示，涵蓋 `--color-bg/surface/text/muted/border/primary/danger`；dark 值刻意貼齊專案既有 slate/cyan 深色視覺（bg slate-950、surface slate-900、text slate-200、border slate-700、primary cyan-400 等）。`tailwind.config.js` 設 `darkMode: 'class'`（配合 `lib/theme.ts` 在 `<html>` 切換 `dark` class，使 OS 偏好可被使用者覆寫），並在 `theme.extend.colors` 以 `rgb(var(--color-*) / <alpha-value>)` 暴露 `bg/surface/text/muted/border/primary/danger` 語意色。以 tailwind CLI 編譯驗證：`:root`/`.dark` 變數區塊、`dark:` variant（`:is(.dark *)`）、語意 class 與透明度修飾（如 `bg-surface/80` → `rgb(var(--color-surface) / 0.8)`）皆正確產出；前端 `tsc --noEmit` 通過。此項只建立 token 基礎，未改動任何元件既有 class（屬 Theme 系列第 2 項）。分支 `feat/theme-css-tokens`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 55 個完成項目（55/100，未達上限）。
 
-- [ ] 設定頁加入 Theme 選項：在 `SettingsPage` 的帳號/偏好區加入「外觀主題」select（跟隨系統／淺色／深色），沿用既有語言設定的 localStorage 模式；切換後立即呼叫 `applyThemePreference()`，不需按儲存；補 zh-TW/en i18n key；若目前尚未把 theme 納入後端 `SystemAiSettings`，先明確維持本機偏好，避免影響多帳號設定 API。
+- [x] 設定頁加入 Theme 選項：在 `SettingsPage` 的帳號/偏好區加入「外觀主題」select（跟隨系統／淺色／深色），沿用既有語言設定的 localStorage 模式；切換後立即呼叫 `applyThemePreference()`，不需按儲存；補 zh-TW/en i18n key；若目前尚未把 theme 納入後端 `SystemAiSettings`，先明確維持本機偏好，避免影響多帳號設定 API。
+  - 修改說明（2026-06-26）：`SettingsPage.tsx` 帳號/偏好區（播放速度 select 之後）新增「外觀主題」select（跟隨系統 / 淺色 / 深色），初值由 `getStoredThemePreference()` 取得；新增 `handleThemeChange` 於 onChange 立即 `setStoredThemePreference()` + `applyThemePreference()`，不經 Save 按鈕（明確維持為純本機偏好，未納入後端 `SystemAiSettings` / 設定 API，避免影響多帳號）。新增 zh-TW/en i18n key `settings.theme`/`themeSystem`/`themeLight`/`themeDark`/`themeHint`。前端 `tsc --noEmit` 通過、`i18n.test.ts`（含 zh/en key 對等檢查）24 測試全通過。注意：此項只做設定頁切換與即時套用；「App 啟動前套用 stored theme 避免白閃」為 Theme 系列下一獨立項目（在那之前重新整理頁面需再進設定頁才會重新套用）。屬 Theme 系列第 3 項。分支 `feat/settings-theme-option`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 56 個完成項目（56/100，未達上限）。
 
 - [ ] App 啟動前避免 theme flash：在 `frontend/src/main.tsx` 或 `frontend/index.html` 的最早可行位置套用 stored theme（優先避免 first paint 白閃）；確保 React hydration 後與 hook 狀態一致；若使用 inline script，需保持無外部依賴且不讀取敏感資料。
 
