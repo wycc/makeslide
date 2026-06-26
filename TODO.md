@@ -2103,6 +2103,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`PostClassReportPanel.tsx` import `useOverlayDismiss`、`const { onBackdropClick } = useOverlayDismiss(onClose)`、最外層 overlay 加 `onClick={onBackdropClick}`（`target===currentTarget` 才關，報告內容捲動/點擊不誤關）。前端 380 測試 + typecheck 全通過。分支 `feat/post-class-report-dismiss`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 35 個完成項目（35/100，未達上限）。
 
+- [x] 首頁搜尋納入簡報描述：首頁搜尋框原本只比對標題與標籤，無法以描述（description）內的文字找到簡報。抽出可測純函式 `pdfMatchesSearch(pdf, normalizedQuery)`，加入描述比對（大小寫不敏感、容忍缺欄位），並用於列表過濾。
+  - 修改說明（2026-06-26）：`HomePage.tsx` 新增 export `pdfMatchesSearch`（比對 title／tags／description，空查詢回 true），`filteredItems` 改用之取代內聯 title+tags 過濾。新增 `HomePage.search.test.ts` +4（標題大小寫不敏感、標籤、描述、空查詢/缺欄位）。前端 384 測試 + typecheck 全通過。分支 `feat/home-search-description`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 36 個完成項目（36/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2142,4 +2146,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | 版本歷史對話框 Esc／背景關閉：`VersionHistoryDialog` 套用共用 `useOverlayDismiss`，補 Escape/背景關閉與 `role=dialog`/aria；前端 380 測試通過 | feat/version-history-dialog-dismiss（已 merge） |
 | 2026-06-26 | 額度用盡對話框 Esc／背景關閉：`CreditExhaustedDialog` 套用共用 `useOverlayDismiss`（useCallback 穩定 close）；前端 380 測試通過 | feat/credit-exhausted-dialog-dismiss（已 merge） |
 | 2026-06-26 | 課後報告面板 Esc／背景關閉：`PostClassReportPanel` 套用共用 `useOverlayDismiss`；前端 380 測試通過 | feat/post-class-report-dismiss（已 merge） |
+| 2026-06-26 | 首頁搜尋納入描述：抽出純函式 `pdfMatchesSearch`（title/tags/description），首頁列表過濾改用之；HomePage.search.test.ts +4；前端 384 測試通過 | feat/home-search-description（已 merge） |
 

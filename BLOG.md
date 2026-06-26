@@ -7364,3 +7364,15 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 ### 技術細節
 - **沿用共用 hook**（`frontend/src/pages/play/PostClassReportPanel.tsx`）：import `useOverlayDismiss(onClose)`，於最外層 overlay（`fixed inset-0 ... overflow-y-auto`）加 `onClick={onBackdropClick}`。`onBackdropClick` 僅在 `event.target === event.currentTarget`（點到 overlay 本身、而非冒泡自報告內容）時才關閉，因此捲動長報告或點擊內部元素都不會誤觸關閉。
 - **驗證**：`useOverlayDismiss` 的純決策函式先前已測；本次無新增純邏輯，前端既有 380 測試與 `tsc --noEmit` typecheck 全通過。
+
+## 首頁搜尋納入簡報描述（2026-06-26）
+
+### 功能目的
+首頁的搜尋框可用關鍵字快速找到簡報，但原本只比對「標題」與「標籤」兩個欄位。由於簡報本身還有一個「描述」（description）欄位（例如老師寫的課程摘要），使用者若記得描述裡的字句卻不記得標題，就搜不到。本次把描述也納入搜尋比對範圍。
+
+### 使用方式
+無需任何操作。在首頁搜尋框輸入關鍵字時，除了標題與標籤，現在也會比對簡報描述——任一欄位包含關鍵字（不分大小寫）即會顯示該簡報。
+
+### 技術細節
+- **抽出純函式**（`frontend/src/pages/HomePage.tsx`）：新增 export `pdfMatchesSearch(pdf, normalizedQuery)`，`normalizedQuery` 須為已 trim + 轉小寫的字串；比對 `title`、逗號分隔的 `tags`、以及 `description` 三者（皆 `toLocaleLowerCase` 後 `includes`），空查詢回傳 `true`，並容忍 `title`/`tags`/`description` 為 null/undefined。首頁列表的 `filteredItems` 改用此函式，取代原本內聯的「title 或 tags」過濾。
+- **測試**：新增 `frontend/src/pages/HomePage.search.test.ts` 4 個 node:test，涵蓋標題大小寫不敏感比對、標籤比對、描述比對（命中與未命中）、以及空查詢回 true 且缺欄位時安全回 false。前端 384 個測試與 `tsc --noEmit` typecheck 全通過。
