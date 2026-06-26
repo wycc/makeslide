@@ -291,7 +291,12 @@ function CommentsSection() {
             className="w-full resize-none rounded border border-sky-700/40 bg-sky-900/30 px-2 py-1 text-[11px] text-sky-100 placeholder-sky-700/60 focus:outline-none focus:ring-1 focus:ring-sky-600/60"
             maxLength={2000}
           />
-          {error && <p className="text-[10px] text-red-400">{error}</p>}
+          <div className="flex items-center justify-between gap-2">
+            {error ? <p className="text-[10px] text-red-400">{error}</p> : <span />}
+            <span className={`shrink-0 text-[10px] tabular-nums ${text.length > 1900 ? 'text-amber-400' : 'text-sky-400/50'}`}>
+              {text.length}/2000
+            </span>
+          </div>
           <button
             type="submit"
             disabled={submitting || !text.trim()}

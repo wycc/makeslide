@@ -2373,7 +2373,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`ReviewListSection` 標題列在「複製」旁新增「清除全部」按鈕（兩鈕收進同一 flex 群組）。**偏離原項目敘述的重要決定**：`clearAllReviewItems()` 會清掉「所有 PDF」的複習項目，但本區塊僅顯示且使用者只認知「目前 PDF」的清單，逕用會誤刪其他 PDF 的複習項目；故改為 `handleClearAll` 以 `removeReviewItem(pdfId, pageNumber)`（省略 questionText 時整頁移除）逐一清除**目前 PDF**的項目、再 `setItems([])`，不影響其他 PDF（未使用 `clearAllReviewItems`，避免破壞跨簡報複習清單）。新增 zh-TW/en `play.sidebar.reviewListClearAll`。前端 `tsc --noEmit` 通過、`i18n.test.ts`（含 zh/en 對等）通過。分支 `feat/review-list-clear-all`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 72 個完成項目（72/100，未達上限）。
 
-- [ ] 評論輸入即時字數計數（可用性，小顆粒）：評論輸入 textarea（`CommentsSection`，`maxLength=2000`）目前無字數提示。在 textarea 下方顯示 `{n}/2000`（接近上限時可改色提醒，例如 >1900 轉 amber/rose）；計數直接用 `text.length`；新增 zh-TW/en i18n key（含 `{n}`/`{max}` 佔位或以純數字呈現）。純前端、不動後端。
+- [x] 評論輸入即時字數計數（可用性，小顆粒）：評論輸入 textarea（`CommentsSection`，`maxLength=2000`）目前無字數提示。在 textarea 下方顯示 `{n}/2000`（接近上限時可改色提醒，例如 >1900 轉 amber/rose）；計數直接用 `text.length`；新增 zh-TW/en i18n key（含 `{n}`/`{max}` 佔位或以純數字呈現）。純前端、不動後端。
+  - 修改說明（2026-06-26）：`CommentsSection` 評論輸入 textarea 下方新增一列，左側保留既有錯誤訊息（無錯誤時佔位）、右側以 `tabular-nums` 顯示 `{text.length}/2000` 即時字數；超過 1900 時數字轉 amber 提醒接近上限。採純數字呈現（`{n}/2000`），不引入新 i18n key（與作者欄 maxLength 等既有純數字 UI 一致）。純前端、不動後端、不改 `maxLength`。前端 `tsc --noEmit` 通過；此為純顯示 UI、無可抽出純邏輯，故不另加單元測試。分支 `feat/comment-char-counter`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 74 個完成項目（74/100，未達上限）。
 
 - [ ] 設定頁顯示生成成本價目參考（Roadmap Phase 3 成本透明度）：`SettingsPage` 的 AI 區新增一個唯讀「價目參考」小區塊，讀 `lib/costEstimate.ts` 既有的 `TTS_PRICE_PER_1K_CHARS` 與 `LLM_PRICE_PER_1M_TOKENS`，以表格列出各模型單價（沿用 `formatUsd`）；不新增後端、不改價格來源；新增 zh-TW/en i18n key（標題與單位說明）。純前端。若價目資料結構不利直接列表，於實作時改以精簡條列呈現並於說明標明。
 

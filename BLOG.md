@@ -7882,3 +7882,16 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **前端**（`frontend/src/pages/play/PostClassReportPanel.tsx`）：在「每頁分析 CSV」後加入「逐題統計 CSV」下載連結；新增 zh-TW/en `play.report.exportQuestionsCsv`。
 - **測試**（`backend/test/report-questions-csv.test.ts`）：4 個案例（兩題兩次作答的欄位/數值與 `option_votes` 串接、無測驗時僅 header、403 非擁有者、404）。
 - **驗證**：前端與後端 `tsc --noEmit` 通過；`i18n.test.ts`（含 zh/en key 對等）通過。後端 handler 測試需 better-sqlite3 native module，於本機 sandbox 無法載入，留待 CI 執行。
+
+## 評論輸入即時字數計數（2026-06-26）
+
+### 功能目的
+頁面評論的輸入框有 2000 字上限，但先前沒有任何字數提示，使用者要打到貼上去被截斷才會發現接近上限。本項在輸入框下方加入即時字數計數，讓長留言更有掌握感。
+
+### 使用方式
+在「頁面評論」輸入框打字時，下方右側會即時顯示「目前字數/2000」。字數超過 1900 時數字會轉為琥珀色，提醒接近上限。
+
+### 技術細節
+- **UI**（`frontend/src/pages/play/PlayPageSidebar.tsx` 的 `CommentsSection`）：textarea 下方新增一列，左側保留原本的錯誤訊息（無錯誤時佔位以維持右對齊），右側以 `tabular-nums` 顯示 `{text.length}/2000`；`text.length > 1900` 時數字套用 amber 色。
+- **取捨**：採純數字呈現（locale 無關），不新增 i18n key，與作者欄等既有純數字 UI 一致；不更動既有 `maxLength={2000}`。
+- **驗證**：前端 `tsc --noEmit` 通過。此為純顯示 UI、無可抽出的純邏輯，故不另加單元測試。
