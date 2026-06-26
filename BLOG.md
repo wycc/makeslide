@@ -8152,3 +8152,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **說明面板**（`frontend/src/pages/play/PlayPageHeader.tsx`）：補 `N`/`Shift + N` 兩列；新增 zh-TW/en `play.shortcuts.nextImportant`/`prevImportant`。
 - **測試**：測試檔隨改名同步（`pageListNav.test.ts`，4 案例）。
 - **驗證**：前端 `tsc --noEmit` 通過；`pageListNav.test.ts` 與 `i18n.test.ts`（含 zh/en key 對等）全通過。
+
+## CSV 匯出檔名帶簡報標題（2026-06-26）
+
+### 功能目的
+先前各種 CSV 匯出（評論、每頁分析、逐題統計、學生名單、投票結果、測驗結果）的下載檔名都是 id-based（如 `comments-{id}.csv`），一次下載多份簡報的資料後很難分辨。本項沿用先前為字幕做的檔名工具，讓 CSV 也以簡報標題命名，匯出檔自帶辨識資訊（Roadmap Phase 5 一致性）。
+
+### 使用方式
+無需操作。下載任一 CSV 時，檔名會是「{簡報標題}-comments.csv」「{簡報標題}-pages.csv」等；標題中的特殊字元會被清理，中文標題在現代瀏覽器也能正確顯示。若簡報沒有標題，則退回原本的 id-based 檔名。
+
+### 技術細節
+- **復用工具**：6 個 CSV 端點改用 `downloadFilename.ts` 的 `safeDownloadBaseName` + `buildContentDisposition`（ASCII fallback + RFC 5987 `filename*`），檔名 `{safeTitle}-{kind}.csv`，標題為空時退回 id-based 名。
+- **查詢擴充**：`comments.ts` 的 `getPdfRow` 與 `report.ts` 的 `getPdfPermissionRow` 權限查詢加選 `title` 欄（兩檔多個 handler 共用，其他 handler 忽略無害）；poll/quiz CSV 的既有查詢已含 title。
+- **測試**：更新 `comments-csv`/`report-pages-csv`/`report-questions-csv` 的 content-disposition 斷言為標題命名，並於 `comments-csv` 新增「空白標題退回 id-based 名」案例。
+- **驗證**：後端 `tsc --noEmit` 通過；`download-filename.test.ts` 與 `csvEscape.test.ts`（14 測試）通過。CSV handler 測試需 better-sqlite3 native module，於本機 sandbox 無法載入，留待 CI 執行。

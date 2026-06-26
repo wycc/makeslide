@@ -47,7 +47,7 @@ test('GET /api/pdfs/:id/comments.csv returns CSV with header and rows ordered by
     const resp = await app.inject({ method: 'GET', url: `/api/pdfs/${PDF_ID}/comments.csv`, headers: OWNER_HEADERS });
     assert.equal(resp.statusCode, 200);
     assert.match(resp.headers['content-type'] as string, /text\/csv/);
-    assert.match(resp.headers['content-disposition'] as string, /attachment; filename="comments-cmcsv-test-1x\.csv"/);
+    assert.match(resp.headers['content-disposition'] as string, /attachment; filename="PDF cmcsv-test-1x-comments\.csv"/);
 
     const lines = resp.body.trim().split('\n');
     assert.equal(lines[0], 'page,author,text,resolved,created_at');
@@ -133,6 +133,20 @@ test('GET /api/pdfs/:id/comments.csv returns 404 for unknown PDF', async () => {
     const resp = await app.inject({ method: 'GET', url: `/api/pdfs/nonexistent-xx/comments.csv`, headers: OWNER_HEADERS });
     assert.equal(resp.statusCode, 404);
   } finally {
+    await app.close();
+  }
+});
+
+test('GET /api/pdfs/:id/comments.csv falls back to an id-based filename when the title is blank', async () => {
+  seedPdf(PDF_ID);
+  db.prepare(`UPDATE pdfs SET title = '' WHERE id = ?`).run(PDF_ID);
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({ method: 'GET', url: `/api/pdfs/${PDF_ID}/comments.csv`, headers: OWNER_HEADERS });
+    assert.equal(resp.statusCode, 200);
+    assert.match(resp.headers['content-disposition'] as string, /attachment; filename="comments-cmcsv-test-1x\.csv"/);
+  } finally {
+    cleanup(PDF_ID);
     await app.close();
   }
 });

@@ -76,7 +76,7 @@ test('GET /api/pdfs/:id/report/pages.csv returns per-page analytics ordered by p
     const resp = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}/report/pages.csv`, headers: OWNER_HEADERS });
     assert.equal(resp.statusCode, 200);
     assert.match(resp.headers['content-type'] as string, /text\/csv/);
-    assert.match(resp.headers['content-disposition'] as string, /attachment; filename="report-pages-report-pages-01\.csv"/);
+    assert.match(resp.headers['content-disposition'] as string, /attachment; filename="Report PDF-pages\.csv"/);
     const lines = resp.body.trim().split('\n');
     assert.equal(lines[0], 'page_number,total_viewers,completed_viewers,completion_rate,poll_total_votes,poll_divergence_score,avg_listened_ratio');
     // page 1: 2 viewers, 1 completed -> 0.5; poll votes split 1/1 -> divergence 0.5;
