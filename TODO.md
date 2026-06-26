@@ -2656,3 +2656,15 @@ TODO.md 目前仍有兩個明確標註「待使用者決定 / 待處理」的未
 - 工作內容：剩餘 2 個 `[ ]` 項目皆為「待使用者決定 / 涉 CI 變更」不宜於自動 loop 逕行，依 LOOP.md 第 2 條分析程式後完成一個小型、可測、低風險項目。掃描元件內聯格式化邏輯，選定 `SettingsPage` 兩處重複的 bytes→KB 換算，抽成共用純函式 `bytesToRoundedKb` 並補非有限值/負值防呆與單元測試。
 - 時間：2026-06-27
 - 分支：`refactor/bytes-freed-kb`（已 merge 回 master）
+
+## 新增可執行項目（第一二四輪，2026-06-27）
+
+- [x] 進度百分比顯示收斂為共用純函式（去重 / 防呆 / 可測性）：`PdfCard`、`RegenerateProgress`、`PlayPageHeader` 三處各自內嵌 `total > 0 ? Math.round(current/total*100) : 0`（只有部分另加 `Math.min(100, …)`），寫法分散；後端回報 current > total 時未夾上限處會顯示 >100%。抽成共用純函式並 clamp 到 0–100、補非有限值淨化與測試。純前端、不動後端、不需新 i18n。
+  - 修改說明（2026-06-27）：新增 `frontend/src/lib/progressPercent.ts`（`progressPercent(current, total)` 回傳夾在 0–100 的整數百分比，`!Number.isFinite(current/total) || total<=0` 回 0，並 `Math.max(0, Math.min(100, …))` 夾上下限）。`PdfCard`／`RegenerateProgress`／`PlayPageHeader` 三處改呼叫此函式；在各呼叫點既有 guard 下顯示行為不變，clamp 與淨化為額外防呆。新增 `progressPercent.test.ts` 4 組測試（回 0 條件、四捨五入、上下限 clamp、`NaN`／`Infinity` 淨化）。前端 `tsc --noEmit` 通過、新測試 4/4 通過。分支 `refactor/progress-percent`，已 merge 回 master。BLOG.md 新增對應 section。沿用既有 `pollOptionPercent` 收斂模式。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 4 個完成項目（4/100，未達上限）。
+
+## 工作記錄（第一二四輪，2026-06-27）
+
+- 工作內容：剩餘 2 個 `[ ]` 項目仍為「待使用者決定 / 涉 CI 變更」不宜自動逕行，依 LOOP.md 第 2 條分析程式。掃描元件內聯進度百分比計算，發現三處重複且 clamp 行為不一致，抽成共用純函式 `progressPercent`（clamp 0–100 + 非有限值淨化）並補測試，三處呼叫點收斂。
+- 時間：2026-06-27
+- 分支：`refactor/progress-percent`（已 merge 回 master）

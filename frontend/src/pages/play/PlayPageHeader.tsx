@@ -6,6 +6,7 @@ import { fetchSyncAttendees, generatePdfDescription } from '../../lib/api';
 import { useI18n } from '../../i18n';
 import { usePlayPageContext } from './PlayPageContext';
 import { copyTextToClipboard } from '../../lib/clipboard';
+import { progressPercent } from '../../lib/progressPercent';
 import { shouldCloseOnOutsidePointer, isDropdownDismissKey } from './headerDropdownDismiss';
 import type { SyncFollowerQuestion } from '../../types';
 
@@ -409,7 +410,7 @@ export function PlayPageHeader() {
           <div className="shrink-0 whitespace-nowrap text-right text-xs text-slate-400 sm:w-20 sm:text-sm">
             {pageCounterText}
             {totalPages > 1 && (
-              <div className="text-[10px] text-slate-500">{Math.round((currentIdx + 1) / totalPages * 100)}%</div>
+              <div className="text-[10px] text-slate-500">{progressPercent(currentIdx + 1, totalPages)}%</div>
             )}
           </div>
           <label className="ml-2 inline-flex items-center gap-1 text-xs text-slate-300">

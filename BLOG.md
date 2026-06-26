@@ -1,5 +1,33 @@
 # MakeSlide 功能說明
 
+## 進度百分比顯示收斂為共用純函式（clamp 0–100）
+
+### 目的
+
+PDF 卡片進度、重新生成各步驟進度、播放頁頁碼進度三處，各自內嵌了
+`total > 0 ? Math.round(current/total*100) : 0` 這段進度百分比計算（其中只有部分有 `Math.min(100, …)`
+夾住上限）。寫法分散、容易飄移；且當後端回報的 current 超過 total 時，未夾上限的地方會顯示出超過
+100% 的進度。
+
+### 變更內容
+
+- 三處進度百分比改用同一個共用函式，計算方式一致。
+- 結果一律 clamp 在 0–100 之間，後端資料異常（current > total 或負值）也不會顯示出 >100% 或負百分比。
+- `total` ≤ 0 或數值非有限時回 0，不再出現 `NaN%`。
+- 在各呼叫點既有的 guard 下，顯示行為與原本一致；clamp 與淨化是額外的防呆。
+
+### 使用方式
+
+此為內部重構，使用者操作不變：首頁 PDF 卡片的處理進度、播放頁重新生成面板的步驟進度、播放頁頂端
+的頁碼百分比，皆由共用函式計算。
+
+### 實作備註
+
+新增純函式 `progressPercent(current, total)`（`frontend/src/lib/progressPercent.ts`），回傳夾在 0–100 的
+整數百分比，並對 `total` ≤ 0 與非有限輸入回 0。`PdfCard`、`RegenerateProgress`、`PlayPageHeader` 三處
+改呼叫此函式。新增 `progressPercent.test.ts`（回 0 條件、四捨五入、上下限 clamp、非有限值淨化共 4 組）。
+前端 `tsc --noEmit` 通過、新測試 4/4 通過；不動後端、不需新 i18n。沿用既有 `pollOptionPercent` 的收斂模式。
+
 ## 清除快取「釋放空間」KB 換算收斂為共用純函式
 
 ### 目的

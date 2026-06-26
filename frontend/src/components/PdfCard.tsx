@@ -6,6 +6,7 @@ import { formatAudioDuration } from '../lib/audioDuration';
 import { formatRelativeTime, buildRelativeTimeLabels } from '../lib/relativeTime';
 import { createPdfShare } from '../lib/api/pdfs';
 import { copyTextToClipboard } from '../lib/clipboard';
+import { progressPercent } from '../lib/progressPercent';
 import { shouldShowCoverImage } from './pdfCardCover';
 
 const PROGRESS_LABEL_KEYS: Record<string, Parameters<ReturnType<typeof useI18n>['t']>[0]> = {
@@ -95,7 +96,7 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExpo
   const progressTotal = pdf.progress_total ?? 0;
   const progressCurrentRaw = pdf.progress_current ?? 0;
   const progressCurrent = Math.max(0, Math.min(progressCurrentRaw, progressTotal || progressCurrentRaw));
-  const progressPct = progressTotal > 0 ? Math.round((progressCurrent / progressTotal) * 100) : 0;
+  const progressPct = progressPercent(progressCurrent, progressTotal);
   const progressStepLabel =
       pdf.progress_step != null
       ? t(PROGRESS_LABEL_KEYS[pdf.progress_step] ?? 'card.processing')
