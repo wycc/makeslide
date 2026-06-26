@@ -30,6 +30,7 @@ test('formatDurationMs returns the provided label for missing or invalid values'
   assert.equal(formatDurationMs(null, noRecord), '尚無紀錄');
   assert.equal(formatDurationMs(undefined, noRecord), '尚無紀錄');
   assert.equal(formatDurationMs(Number.NaN, noRecord), '尚無紀錄');
+  assert.equal(formatDurationMs(-1, noRecord), '尚無紀錄');
   assert.equal(formatDurationMs(null, 'no record'), 'no record');
 });
 
