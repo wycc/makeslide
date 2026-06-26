@@ -8067,3 +8067,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **套用端點**：`comments.csv`、`report/pages.csv`、`report/questions.csv`、`report/students.csv`、`poll-results.csv`、`quiz-results.csv` 改以 `reply.send(withCsvBom(csv))` 回傳。字幕的 srt/vtt/txt 非 CSV，維持不變。
 - **測試**：`csvEscape.test.ts` 補 `withCsvBom` 案例（前置 BOM、冪等、空字串、字元為 U+FEFF）。既有 CSV handler 測試多以 `resp.body.trim().split('\n')` 取行，而 `String.trim()` 會移除 U+FEFF，故 lines-based 斷言不受影響；僅兩處精確比對整段 body 者於預期值前補 BOM。
 - **驗證**：後端 `tsc --noEmit` 通過；`csvEscape.test.ts` 7 個測試通過。CSV handler 測試需 better-sqlite3 native module，於本機 sandbox 無法載入，留待 CI 執行。
+
+## 抽出投票百分比計算純函式（2026-06-26）
+
+### 功能目的
+投票結果的百分比計算（`總票數 > 0 ? 四捨五入(票數/總票數×100) : 0`）先前在全螢幕大型/小型 overlay、側邊欄投票橫條圖、以及投票結果 Markdown 等多處各自內嵌、邏輯重複。本項抽成單一純函式收斂，降低重複、提升可測性，使用者行為不變。
+
+### 使用方式
+無可見變化。各處投票百分比顯示與先前完全相同。
+
+### 技術細節
+- **純函式**（`frontend/src/lib/pollPercent.ts`）：`pollOptionPercent(votes, total)` 在 `total > 0` 時回 `Math.round(votes/total*100)`，否則回 0（負總票同樣回 0）。
+- **收斂**：`PlayPageFullscreen.tsx`（兩處 overlay）、`PlayPageSidebar.tsx`（投票橫條圖）、`pollResultsMarkdown.ts`（`formatPollResultsMarkdown`）皆改呼叫此函式，輸出逐字相同。
+- **測試**：`pollPercent.test.ts` 4 個案例（零票/負總票回 0、整除、四捨五入兩向、12.5→13）。
+- **驗證**：前端 `tsc --noEmit` 通過；`pollPercent.test.ts` 與 `pollResultsMarkdown.test.ts` 全通過。

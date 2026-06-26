@@ -2489,7 +2489,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`csv.ts` 新增 `withCsvBom(text)`（前置 `﻿`，已有 BOM 則不重複，冪等）。`comments.ts`、`report.ts`（pages/questions/students 三個 send）、`poll-results-csv.ts`、`quiz-results-csv.ts` 改以 `reply.send(withCsvBom(csv))` 回傳（subtitles 的 srt/vtt/txt 非 CSV，不動）。`csvEscape.test.ts` 補 `withCsvBom` 測試（前置 BOM、冪等、空字串、字元為 U+FEFF）。既有 CSV handler 測試多以 `resp.body.trim().split('\n')` 取行——`String.trim()` 會移除 U+FEFF，故 lines-based 斷言不受影響；僅兩處精確比對整段 body 者（`comments-csv` 空清單、`report-questions-csv` 無測驗）於預期值前補 BOM。後端 `tsc --noEmit` 通過、`csvEscape.test.ts` 7 測試通過；CSV handler 測試需 better-sqlite3、留 CI。分支 `feat/csv-utf8-bom`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 86 個完成項目（86/100，未達上限）。
 
-- [ ] 抽出投票百分比計算純函式（可用性 / 可測性）：投票結果百分比 `total > 0 ? Math.round(votes/total*100) : 0` 在 `PlayPageFullscreen`、`PlayPageSidebar` 等多處重複內嵌。抽成 `frontend/src/lib/` 純函式 `pollOptionPercent(votes, total)`（total ≤ 0 回 0、四捨五入整數）並補測試（零票、整除、四捨五入、總票為 0）；將重複處改呼叫之（行為不變）。純前端、降低重複。
+- [x] 抽出投票百分比計算純函式（可用性 / 可測性）：投票結果百分比 `total > 0 ? Math.round(votes/total*100) : 0` 在 `PlayPageFullscreen`、`PlayPageSidebar` 等多處重複內嵌。抽成 `frontend/src/lib/` 純函式 `pollOptionPercent(votes, total)`（total ≤ 0 回 0、四捨五入整數）並補測試（零票、整除、四捨五入、總票為 0）；將重複處改呼叫之（行為不變）。純前端、降低重複。
+  - 修改說明（2026-06-26）：新增 `frontend/src/lib/pollPercent.ts` 之純函式 `pollOptionPercent(votes, total)`（`total > 0 ? Math.round(votes/total*100) : 0`，含負總票回 0）。收斂 4 處重複：`PlayPageFullscreen.tsx`（大型 overlay 與小型 overlay 各一）、`PlayPageSidebar.tsx`（投票結果橫條圖），以及 `pollResultsMarkdown.ts`（`formatPollResultsMarkdown` 內的百分比）皆改呼叫之，行為與原本逐字相同。新增 `pollPercent.test.ts` 4 測試（零票/負總票回 0、整除、四捨五入兩向、12.5→13）。前端 `tsc --noEmit` 通過、`pollPercent.test.ts` 與 `pollResultsMarkdown.test.ts` 全通過。純前端、降低重複。分支 `feat/poll-percent-helper`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 87 個完成項目（87/100，未達上限）。
 
 ## 工作記錄（第一一二輪，2026-06-26）
 
