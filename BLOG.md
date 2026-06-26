@@ -7994,3 +7994,19 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **i18n**：新增 zh-TW/en `play.sidebar.commentEdit`/`commentEditSave`/`commentEditCancel`。
 - **測試**（`backend/test/page-comments.test.ts`）：補 2 個案例（編輯 text 並保留 resolved 與 trim、空白 text 與空 body 皆 400）。
 - **驗證**：前端與後端 `tsc --noEmit` 通過；`i18n.test.ts`（含 zh/en key 對等）通過。後端 handler 測試需 better-sqlite3 native module，於本機 sandbox 無法載入，留待 CI 執行。
+
+## 字幕／逐字稿下載檔名帶簡報標題（2026-06-26）
+
+### 功能目的
+匯出 SRT／VTT 字幕與逐字稿 TXT 時，下載的檔名先前是固定的 `subtitles.srt`／`subtitles.vtt`／`transcript.txt`。一次下載多份簡報的字幕後，檔案全部同名、難以分辨。本項改用簡報標題自動命名，讓下載檔自帶辨識資訊（Roadmap Phase 5）。
+
+### 使用方式
+無需操作。下載字幕／逐字稿時，檔名會是「{簡報標題}.srt／.vtt／.txt」。標題中的特殊字元會被清理；若簡報沒有標題，則退回原本的固定檔名。中文標題在現代瀏覽器也能正確顯示。
+
+### 技術細節
+- **獨立工具模組**（`backend/src/routes/pdfs/downloadFilename.ts`）：刻意不 import DB，讓純函式可在 sandbox 單元測試。
+  - `safeDownloadBaseName(title, fallback)`：把 `\/:*?"<>|` 與 ASCII 控制字元換成空白、壓縮空白並 trim、長度上限 80、空白退回 fallback；保留連字號與 unicode。
+  - `buildContentDisposition(filename)`：輸出 ASCII fallback 的 `filename="…"` 加上 RFC 5987 的 `filename*=UTF-8''…`，使非 ASCII（如中文）標題能正確命名。
+- **路由**（`backend/src/routes/pdfs/subtitles.ts`）：srt/vtt/txt 三端點改以 `buildContentDisposition(\`${safeDownloadBaseName(row.title, fallback)}.{ext}\`)` 設定 `content-disposition`。
+- **測試**：新增 `download-filename.test.ts`（7 個純函式案例）並更新 `subtitles-txt.test.ts` 的檔名斷言。
+- **驗證**：後端 `tsc --noEmit` 通過；純函式測試全通過。handler 測試需 better-sqlite3 native module，於本機 sandbox 無法載入，留待 CI 執行。
