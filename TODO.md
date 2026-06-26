@@ -1983,6 +1983,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`formatters.ts` 的 `formatCostUsd` 加入 `Number.isFinite` 守門，並以 `Math.abs(cost)` + sign 處理負值微額判斷與格式化；`formatters.test.ts` 新增 2 個測試（非有限輸入回 unknown label、負值不誤判微額）。前端 350 測試 + typecheck 全通過。分支 `fix/format-cost-guard`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 5 個完成項目（5/100，未達上限）。
 
+- [x] 觀看進度百分比夾在 0-100：側邊欄縮圖徽章的完成率 `calculateWatchProgressPercent` 在資料異常（`completed_viewers > total_viewers`）時會回傳 >100；tooltip 的平均聆聽率先前在 `PlayPageSidebar` 內聯計算（`Math.round(avg_listened_ratio * 100)`），使用者倒退重聽使比例 > 1 時會顯示「130%」。新增共用 `clampPercent` 將兩者夾在 0-100，並把平均聆聽率抽成可測純函式 `calculateAvgListenedPercent`。
+  - 修改說明（2026-06-26）：`watchProgress.ts` 新增私有 `clampPercent`（非有限值回 null、夾 0-100）；`calculateWatchProgressPercent` 改用之；新增 export `calculateAvgListenedPercent(ratio)`。`PlayPageSidebar.tsx` 改呼叫新函式取代內聯計算。`watchProgress.test.ts` +3 測試（完成率夾頂、平均聆聽率 null/一般/倒退重聽夾頂）。前端 353 測試 + typecheck 全通過。分支 `fix/watch-progress-percent-clamp`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 6 個完成項目（6/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -1992,4 +1996,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | 播放時間顯示支援小時：`formatTime` 在 ≥1 小時時改回傳 `H:MM:SS`（未滿則維持 `MM:SS`）；formatters.test.ts +2 測試（先前無覆蓋） | feat/format-time-hours（已 merge） |
 | 2026-06-26 | Token 數顯示百萬進位修正：`formatTokenCount` 對 999_950+ 改以 `1.00M` 顯示（原誤為 `1000.0K`），並守門非有限輸入回 `'0'`；formatters.test.ts +3 測試（先前無覆蓋）；前端 348 測試通過 | feat/token-count-rollover（已 merge） |
 | 2026-06-26 | 成本顯示守門：`formatCostUsd` 對 `NaN`/`Infinity` 改回傳 unknown label（原為 `$NaN`），負成本以絕對值+負號格式化（`-$1.23`／`-<$0.01`，原誤為 `<$0.01`）；formatters.test.ts +2 測試；前端 350 測試通過 | fix/format-cost-guard（已 merge） |
+| 2026-06-26 | 觀看進度百分比夾在 0-100：新增 `clampPercent`，`calculateWatchProgressPercent` 防 >100%，並抽出 `calculateAvgListenedPercent`（倒退重聽 ratio>1 時夾頂）取代 `PlayPageSidebar` 內聯計算；watchProgress.test.ts +3 測試；前端 353 測試通過 | fix/watch-progress-percent-clamp（已 merge） |
 
