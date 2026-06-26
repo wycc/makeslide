@@ -43,9 +43,14 @@ const CreateCommentBodySchema = z.object({
   text: z.string().trim().min(1, 'text 不可為空').max(2000, 'text 不可超過 2000 字'),
 });
 
-const ResolveCommentBodySchema = z.object({
-  resolved: z.boolean(),
-});
+const PatchCommentBodySchema = z
+  .object({
+    resolved: z.boolean().optional(),
+    text: z.string().trim().min(1, 'text 不可為空').max(2000, 'text 不可超過 2000 字').optional(),
+  })
+  .refine((b) => b.resolved !== undefined || b.text !== undefined, {
+    message: '需提供 resolved 或 text 至少其一',
+  });
 
 interface PageCommentRow {
   id: number;
@@ -155,25 +160,29 @@ export async function registerCommentsRoutes(app: FastifyInstance): Promise<void
     },
   );
 
-  // PATCH /api/pdfs/:id/comments/:commentId (resolve/unresolve)
-  app.patch<{ Params: z.infer<typeof CommentParamSchema>; Body: z.infer<typeof ResolveCommentBodySchema> }>(
+  // PATCH /api/pdfs/:id/comments/:commentId — update resolved and/or text
+  app.patch<{ Params: z.infer<typeof CommentParamSchema>; Body: z.infer<typeof PatchCommentBodySchema> }>(
     '/api/pdfs/:id/comments/:commentId',
     async (request, reply) => {
       const parsed = CommentParamSchema.safeParse(request.params);
       if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_PARAMS', parsed.error.message));
       const { id, commentId } = parsed.data;
-      const bodyParsed = ResolveCommentBodySchema.safeParse(request.body);
+      const bodyParsed = PatchCommentBodySchema.safeParse(request.body);
       if (!bodyParsed.success) return reply.code(400).send(errorResponse('INVALID_BODY', bodyParsed.error.message));
-      const { resolved } = bodyParsed.data;
+      const { resolved, text } = bodyParsed.data;
       const sub = sessionSub(request);
       const pdfRow = getPdfRow(id);
       if (!pdfRow) return reply.code(404).send(errorResponse('NOT_FOUND', 'PDF not found'));
       if (!canEditPdf(sub, pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', 'Access denied'));
       const existing = db.prepare(`SELECT id FROM page_comments WHERE id = ? AND pdf_id = ?`).get(commentId, id);
       if (!existing) return reply.code(404).send(errorResponse('NOT_FOUND', 'Comment not found'));
+      const sets: string[] = [];
+      const values: unknown[] = [];
+      if (text !== undefined) { sets.push('text = ?'); values.push(text); }
+      if (resolved !== undefined) { sets.push('resolved = ?'); values.push(resolved ? 1 : 0); }
       const updated = db
-        .prepare(`UPDATE page_comments SET resolved = ? WHERE id = ? AND pdf_id = ? RETURNING *`)
-        .get(resolved ? 1 : 0, commentId, id) as PageCommentRow;
+        .prepare(`UPDATE page_comments SET ${sets.join(', ')} WHERE id = ? AND pdf_id = ? RETURNING *`)
+        .get(...values, commentId, id) as PageCommentRow;
       return reply.send({ comment: rowToComment(updated) });
     },
   );

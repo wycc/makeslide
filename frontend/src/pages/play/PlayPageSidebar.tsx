@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../../i18n';
 import { debugLog, debugWarn } from '../../lib/debugLog';
 import { calculateWatchProgressPercent, calculateAvgListenedPercent, formatWatchProgressBadgeCount } from '../../lib/watchProgress';
-import { updatePageNote, listPageComments, listAllComments, createPageComment, resolvePageComment, deletePageComment, fetchSimilarPages, type PageComment, type SimilarPage } from '../../lib/api/pdfs';
+import { updatePageNote, listPageComments, listAllComments, createPageComment, resolvePageComment, editPageComment, deletePageComment, fetchSimilarPages, type PageComment, type SimilarPage } from '../../lib/api/pdfs';
 import { usePlayPageContext } from './PlayPageContext';
 import { PageAskPanel } from './PageAskPanel';
 import { QualityCheckPanel } from './QualityCheckPanel';
@@ -100,6 +100,8 @@ function CommentsSection() {
   const [filterQuery, setFilterQuery] = useState('');
   const [unresolvedFirst, setUnresolvedFirst] = useState(false);
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingText, setEditingText] = useState('');
   const [author, setAuthor] = useState('');
   const [text, setText] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -144,6 +146,17 @@ function CommentsSection() {
     try {
       await deletePageComment(pdfId, commentId);
       setComments((prev) => prev.filter((x) => x.id !== commentId));
+    } catch { /* ignore */ }
+  };
+
+  const handleSaveEdit = async (commentId: number) => {
+    const trimmed = editingText.trim();
+    if (!trimmed) return;
+    try {
+      const updated = await editPageComment(pdfId, commentId, trimmed);
+      setComments((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+      setEditingId(null);
+      setEditingText('');
     } catch { /* ignore */ }
   };
 
@@ -271,7 +284,36 @@ function CommentsSection() {
                   )}
                   <span className="font-medium text-sky-200">{c.author}</span>
                   <span className="ml-1.5 text-sky-400/50 text-[10px]" title={new Date(c.created_at).toLocaleString()}>{formatRelativeTime(c.created_at)}</span>
-                  <p className={`mt-0.5 break-words text-sky-100/80 ${c.resolved ? 'line-through text-slate-400' : ''}`}>{c.text}</p>
+                  {editingId === c.id ? (
+                    <div className="mt-0.5 space-y-1">
+                      <textarea
+                        value={editingText}
+                        onChange={(e) => setEditingText(e.target.value)}
+                        rows={2}
+                        maxLength={2000}
+                        className="w-full resize-none rounded border border-sky-700/40 bg-sky-900/30 px-2 py-1 text-[11px] text-sky-100 focus:outline-none focus:ring-1 focus:ring-sky-600/60"
+                      />
+                      <div className="flex gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => void handleSaveEdit(c.id)}
+                          disabled={!editingText.trim()}
+                          className="rounded bg-sky-700/60 px-2 py-0.5 text-[10px] text-sky-100 hover:bg-sky-600/70 disabled:opacity-40"
+                        >
+                          {t('play.sidebar.commentEditSave')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setEditingId(null); setEditingText(''); }}
+                          className="rounded border border-sky-800/40 px-2 py-0.5 text-[10px] text-sky-400/70 hover:text-sky-300"
+                        >
+                          {t('play.sidebar.commentEditCancel')}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className={`mt-0.5 break-words text-sky-100/80 ${c.resolved ? 'line-through text-slate-400' : ''}`}>{c.text}</p>
+                  )}
                 </div>
                 <div className="flex shrink-0 flex-col gap-0.5">
                   <button
@@ -281,6 +323,14 @@ function CommentsSection() {
                     title={c.resolved ? t('play.sidebar.commentUnresolve') : t('play.sidebar.commentResolve')}
                   >
                     {c.resolved ? '↩' : '✓'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setEditingId(c.id); setEditingText(c.text); }}
+                    className="text-[11px] text-slate-500/60 hover:text-sky-300"
+                    title={t('play.sidebar.commentEdit')}
+                  >
+                    ✎
                   </button>
                   <button
                     type="button"

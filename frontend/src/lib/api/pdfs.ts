@@ -2014,6 +2014,17 @@ export async function resolvePageComment(id: string, commentId: number, resolved
   return data.comment;
 }
 
+export async function editPageComment(id: string, commentId: number, text: string): Promise<PageComment> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/comments/${commentId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  const data = (await resp.json()) as { comment: PageComment };
+  return data.comment;
+}
+
 export async function deletePageComment(id: string, commentId: number): Promise<void> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/comments/${commentId}`, { method: 'DELETE' });
   if (!resp.ok) throw await parseErrorBody(resp);
