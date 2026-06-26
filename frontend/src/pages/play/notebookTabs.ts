@@ -48,17 +48,18 @@ export function getAdjacentNotebookTab(current: NotebookTab, direction: 1 | -1):
 /**
  * Per-tab count badges shown on the tab bar. Only entries with a positive count
  * render a badge. "slides" surfaces the deck page count; "interact" sums the
- * user's saved markers and live polls for this deck. Pure for testing.
+ * user's saved markers, live polls, and review-list items for this deck. Pure for testing.
  */
 export function computeNotebookTabCounts(input: {
   slides: number;
   bookmarks: number;
   important: number;
   polls: number;
+  reviewItems?: number;
 }): Partial<Record<NotebookTab, number>> {
   return {
     slides: input.slides,
-    interact: input.bookmarks + input.important + input.polls,
+    interact: input.bookmarks + input.important + input.polls + (input.reviewItems ?? 0),
   };
 }
 
