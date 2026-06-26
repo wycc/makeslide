@@ -1979,6 +1979,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`formatters.ts` 的 `formatTokenCount` 加入 `Number.isFinite` 守門與 `abs >= 999_950 → 百萬單位` 的進位判斷（K 與 M 邊界無縫銜接：999_949 仍為 `999.9K`）。`formatters.test.ts` 新增 3 個測試涵蓋一般格式、進位邊界與非有限輸入（此函式先前無測試）。前端 348 測試 + typecheck 全通過。分支 `feat/token-count-rollover`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 4 個完成項目（4/100，未達上限）。
 
+- [x] 成本顯示守門非有限值與負值：`formatCostUsd` 先前對 `NaN`/`Infinity` 會輸出 `$NaN`，且負成本因 `cost < 0.01` 落入微額分支誤顯示成 `<$0.01`。改為非有限值回傳 `unknownLabel`；負值改以絕對值格式化並補回負號（`-$1.23`／`-<$0.01`）。此函式用於 `PlayPageSlidePanel` 的 LLM 成本顯示。
+  - 修改說明（2026-06-26）：`formatters.ts` 的 `formatCostUsd` 加入 `Number.isFinite` 守門，並以 `Math.abs(cost)` + sign 處理負值微額判斷與格式化；`formatters.test.ts` 新增 2 個測試（非有限輸入回 unknown label、負值不誤判微額）。前端 350 測試 + typecheck 全通過。分支 `fix/format-cost-guard`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 5 個完成項目（5/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -1987,4 +1991,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | 首頁新增「標題 Z-A」排序：`SortMode`/`SORT_MODES` 加 `title_desc`，新增 `compareByTitleDesc` 並 export `getComparatorForSortMode`；下拉加 option；i18n zh-TW/en 各 +1 key；HomePage.sort.test.ts +2 測試 | feat/home-sort-title-desc（已 merge） |
 | 2026-06-26 | 播放時間顯示支援小時：`formatTime` 在 ≥1 小時時改回傳 `H:MM:SS`（未滿則維持 `MM:SS`）；formatters.test.ts +2 測試（先前無覆蓋） | feat/format-time-hours（已 merge） |
 | 2026-06-26 | Token 數顯示百萬進位修正：`formatTokenCount` 對 999_950+ 改以 `1.00M` 顯示（原誤為 `1000.0K`），並守門非有限輸入回 `'0'`；formatters.test.ts +3 測試（先前無覆蓋）；前端 348 測試通過 | feat/token-count-rollover（已 merge） |
+| 2026-06-26 | 成本顯示守門：`formatCostUsd` 對 `NaN`/`Infinity` 改回傳 unknown label（原為 `$NaN`），負成本以絕對值+負號格式化（`-$1.23`／`-<$0.01`，原誤為 `<$0.01`）；formatters.test.ts +2 測試；前端 350 測試通過 | fix/format-cost-guard（已 merge） |
 
