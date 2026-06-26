@@ -7659,3 +7659,20 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **刻意保留**：品牌色（cyan/emerald/violet 等）、狀態色（rose/amber 等）與其他中間 slate 階（100/300/500/800）不動，以免壓平深色模式的視覺層次；深層播放頁子元件（`pages/play/*`）依規畫不在本批處理。
 - **零回歸依據**：因 dark token 值與被取代的 slate 值相同，深色模式為像素級一致；此性質讓本項不需逐頁人工視覺確認即可安全合併。
 - **驗證**：前端 `tsc --noEmit` 通過；以 tailwind CLI 確認語意 class 正常產出；HomePage 排序/搜尋、PdfCard cover、theme helper 等 24 個測試全通過。
+
+## Theme 回歸測試與文件（2026-06-26）
+
+### 功能目的
+這是 Theme 功能系列（共六項）的收尾：補上回歸測試與面向使用者的文件，確保前面五項建立的主題能力不會在後續重構中悄悄壞掉，並讓使用者/開發者有一處正式說明可查。
+
+### 使用方式
+無需操作。開發者執行前端測試即會驗證 Theme 相關邏輯與 i18n key；使用者可在 `README.md` 的「開發中 / Unreleased」段落看到「外觀主題 / Appearance Theme」的雙語說明。
+
+### 技術細節
+- **回歸測試**：
+  - theme preference helper 已由系列第一項的 `frontend/src/lib/theme.test.ts`（10 個案例）覆蓋（normalize、fallback、resolve、套用 class/data-theme、watch、降級等）。
+  - 新增 `frontend/src/i18n.theme-keys.test.ts`：通用 parity 測試（`i18n.test.ts`）只保證 zh-TW/en「key 一致」，若某 key 從兩邊同時被刪仍會通過；此焦點測試明確斷言 `settings.theme`、`settings.themeSystem`、`settings.themeLight`、`settings.themeDark`、`settings.themeHint` 在兩語系皆存在且非空。
+- **文件**：在 `README.md`「開發中 / Unreleased」新增雙語「外觀主題 / Appearance Theme」段落，涵蓋選項位置、即時套用、本機偏好（localStorage `makeslide.theme`）、首屏防白閃、語意 token 基礎與第一批適配範圍。
+- **關於手動三模式檢查**：自動化流程無法啟動瀏覽器逐頁視覺確認；惟系列第五項採「dark token 值 == 原 slate 值」對應，深色（現行預設）為建構上零回歸，淺色細部色階屬漸進完善，建議於正式環境快速目視 light 模式。
+- **驗證**：前端 `tsc --noEmit` 通過；新測試與既有 theme/i18n 測試全通過。
+- 至此 Theme 功能系列第 1～6 項全部完成。
