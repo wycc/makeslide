@@ -2571,7 +2571,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 ## 新增可執行項目（第一一八輪，2026-06-26）
 
-- [ ] RemoteController 投票結果複製（可用性，復用既有純函式）：`RemoteControllerPage` 投票控制區（`polls`，每個 poll 有 `question`/`options[].text/.votes`/`total_votes`）目前可看結果但無法帶出。復用 `frontend/src/lib/pollResultsMarkdown.ts` 的 `formatPollResultsMarkdown(polls, labels)` 新增「複製結果」按鈕（有 poll 時顯示），以 `copyTextToClipboard` 複製並顯示短暫提示；沿用/新增 remote 區 i18n key（票數單位用既有 `remote.votesSuffix` 或新增）。純前端、不動後端。
+- [x] RemoteController 投票結果複製（可用性，復用既有純函式）：`RemoteControllerPage` 投票控制區（`polls`，每個 poll 有 `question`/`options[].text/.votes`/`total_votes`）目前可看結果但無法帶出。復用 `frontend/src/lib/pollResultsMarkdown.ts` 的 `formatPollResultsMarkdown(polls, labels)` 新增「複製結果」按鈕（有 poll 時顯示），以 `copyTextToClipboard` 複製並顯示短暫提示；沿用/新增 remote 區 i18n key（票數單位用既有 `remote.votesSuffix` 或新增）。純前端、不動後端。
+  - 修改說明（2026-06-26）：`RemoteControllerPage` import `formatPollResultsMarkdown` 與 `copyTextToClipboard`，新增 `pollCopyMsg` state 與 `handleCopyPollResults`（labels：heading 用 `remote.pollControl.title`、votesUnit 用既有 `remote.votesSuffix`）；poll 控制區標題列改左右排版，右側在 `polls.length > 0` 時顯示「複製結果」按鈕，以 `copyTextToClipboard` 複製、顯示 2 秒 `copyDone`/`copyFail` 提示。新增 zh-TW/en `remote.pollControl.copyResults`/`copyDone`/`copyFail`。復用既有具測試的 `formatPollResultsMarkdown`（`pollResultsMarkdown.test.ts`），不另加測試。前端 `tsc --noEmit` 通過、`i18n.test.ts`（含 zh/en 對等）通過。分支 `feat/remote-poll-copy`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 98 個完成項目（98/100，未達上限）。
 
 - [ ] 評論點作者名快速過濾（可用性，小顆粒）：`CommentsSection` 每則評論的作者名目前為純文字。改為可點擊：點擊後把 `filterQuery` 設為該作者名（`filterComments` 已比對 author，會即時過濾）；作者名加上可點樣式與 `title` 提示。純前端、不動後端、不需新 i18n（沿用既有過濾）。
 
