@@ -2644,3 +2644,15 @@ TODO.md 目前仍有兩個明確標註「待使用者決定 / 待處理」的未
 - 工作內容：發現 TODO.md 末尾有使用者新增的待辦 `[ ] 淡色theme 的文字和底色對比不足`，依 LOOP.md 第 1 條優先完成。分析 `index.css` 的語意色彩 token，量化各前景色於淺色底的 WCAG 對比後，將 light 模式 muted/primary/danger 調深至符合 AA；並新增可重用的 WCAG 對比純函式與「解析實際 CSS 並驗證對比」的回歸測試。dark 模式完全不動。
 - 時間：2026-06-27
 - 分支：`fix/light-theme-contrast`（已 merge 回 master）
+
+## 新增可執行項目（第一二三輪，2026-06-27）
+
+- [x] 清除快取「釋放空間」KB 換算收斂為共用純函式（去重 / 可測性 / 防呆）：設定頁「清除縮圖快取」與「清除產物快取」兩個 handler 各自內嵌相同的 `Math.round(data.bytes_freed / 1024)`，屬重複邏輯；且後端若回傳 `NaN`／負值會直接顯示成 `NaN KB`。抽成共用純函式並補非有限值/負值淨化與測試。純前端、不動後端、不需新 i18n。
+  - 修改說明（2026-06-27）：新增 `frontend/src/lib/bytesFreed.ts`（`bytesToRoundedKb(bytes)` 回傳四捨五入整數 KB，`!Number.isFinite || <=0` 一律回 0）。`SettingsPage` 兩處 `const kb = Math.round(data.bytes_freed / 1024)` 改用 `bytesToRoundedKb(data.bytes_freed)`。新增 `bytesFreed.test.ts` 3 組測試（精確 KB、四捨五入含 sub-512-byte 進位成 0、`NaN`／`±Infinity`／負值淨化）。前端 `tsc --noEmit` 通過、新測試 3/3 通過。分支 `refactor/bytes-freed-kb`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 3 個完成項目（3/100，未達上限）。
+
+## 工作記錄（第一二三輪，2026-06-27）
+
+- 工作內容：剩餘 2 個 `[ ]` 項目皆為「待使用者決定 / 涉 CI 變更」不宜於自動 loop 逕行，依 LOOP.md 第 2 條分析程式後完成一個小型、可測、低風險項目。掃描元件內聯格式化邏輯，選定 `SettingsPage` 兩處重複的 bytes→KB 換算，抽成共用純函式 `bytesToRoundedKb` 並補非有限值/負值防呆與單元測試。
+- 時間：2026-06-27
+- 分支：`refactor/bytes-freed-kb`（已 merge 回 master）
