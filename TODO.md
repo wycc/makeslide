@@ -2127,6 +2127,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`routes/pdfs/shared.ts` 新增 `export const MAX_POLL_OPTIONS = 6`（含註解說明連動關係）；`CreatePollBodySchema` 改 `.max(MAX_POLL_OPTIONS, ...)`、`VotePollBodySchema.option_index` 改 `.max(MAX_POLL_OPTIONS - 1)`。下界（`option_index.min(0)`）原已驗證、行為不變。後端 `tsc` build 通過；schema 整合測試因 shared.ts import db（sandbox better-sqlite3 ABI 不符）留待 CI，但耦合已由常數結構保證。分支 `refactor/poll-max-options-constant`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 41 個完成項目（41/100，未達上限）。
 
+- [x] 前端投票選項上限驗證（與後端一致）：承上輪，前端 `handleCreatePoll` 只檢查 `< 2`（下限），未檢查上限——老師填超過 6 個選項會送出後才被後端以原始 400（「最多 6 個選項」）拒絕。前端補上限檢查（鏡像後端 `MAX_POLL_OPTIONS = 6`），送出前以友善、可 i18n 的訊息攔下。
+  - 修改說明（2026-06-26）：`usePagePolls.ts` 新增 `const MAX_POLL_OPTIONS = 6`（註解標明鏡像後端）；`handleCreatePoll` 在 `< 2` 檢查後加 `options.length > MAX_POLL_OPTIONS` 檢查並顯示 `play.sidebar.poll.maxOptions`（含 `{max}` 佔位）。zh-TW/en 各新增該 key。前端 384 測試 + typecheck（含 i18n key 對齊）全通過。分支 `feat/poll-max-options-frontend-validation`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 42 個完成項目（42/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2172,4 +2176,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | 搜尋片段函式抽離可測模組：`extractSnippet`(+`SNIPPET_CONTEXT`) 抽到純 `routes/pdfs/searchSnippet.ts`，search.ts 改 import；searchSnippet.test.ts +5、後端 build 通過 | refactor/extract-search-snippet（已 merge） |
 | 2026-06-26 | formatDurationMs 負值守門：負時長改回 noRecordLabel（原會輸出 `-5ms`）；formatters.test.ts +1；前端 384 測試通過 | fix/format-duration-negative-guard（已 merge） |
 | 2026-06-26 | 投票選項上限/索引上界以常數連結：引入 `MAX_POLL_OPTIONS`，`CreatePollBodySchema`/`VotePollBodySchema` 由它推導邊界（防調高選項上限卻漏改索引上界）；後端 build 通過 | refactor/poll-max-options-constant（已 merge） |
+| 2026-06-26 | 前端投票選項上限驗證：`handleCreatePoll` 補 `> MAX_POLL_OPTIONS`(6) 檢查，送出前以 `play.sidebar.poll.maxOptions` 友善訊息攔下；zh/en 各 +1 key；前端 384 測試通過 | feat/poll-max-options-frontend-validation（已 merge） |
 

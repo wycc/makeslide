@@ -7439,3 +7439,16 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 ### 技術細節
 - **共用常數**（`backend/src/routes/pdfs/shared.ts`）：新增 `export const MAX_POLL_OPTIONS = 6`，並加註解說明合法 `option_index` 範圍（0..MAX_POLL_OPTIONS-1）由它推導。`CreatePollBodySchema.options` 改用 `.max(MAX_POLL_OPTIONS, \`最多 ${MAX_POLL_OPTIONS} 個選項\`)`，`VotePollBodySchema.option_index` 改用 `.max(MAX_POLL_OPTIONS - 1)`。如此只要調整一個常數，兩處上限就會同步，不可能再各改各的而漂移。`option_index` 的下界（`min(0)`）原本就有驗證，行為不變。
 - **驗證**：後端 `tsc -p tsconfig.json` build 通過。由於 `shared.ts` 於頂層 import 資料庫，其 schema 的整合測試需要 better-sqlite3（sandbox 的 ABI 版本不符），留待 CI 執行；不過此次的關聯性已由常數結構在編譯期保證。
+
+## 前端投票選項上限驗證（與後端一致）（2026-06-26）
+
+### 功能目的
+承接上一個項目（後端以 `MAX_POLL_OPTIONS` 把投票選項上限與投票索引上界連結起來）。在前端，老師建立投票時是以「每行一個選項」的多行文字輸入選項，送出前的 `handleCreatePoll` 只檢查了「至少 2 個選項」這個下限，卻沒有檢查上限。於是若老師一口氣填了 7 個以上的選項，前端會照樣送出，再由後端以原始的 400 錯誤（zod 的「最多 6 個選項」）退回——使用者要等到送出後才知道，而且看到的是較生硬的後端訊息。本次在前端也補上上限檢查，在送出前就以友善、可隨介面語言切換的訊息提醒。
+
+### 使用方式
+無需任何操作。建立投票時若輸入超過 6 個選項，送出前就會看到提示（中文「最多只能有 6 個答案選項」／英文「A poll can have at most 6 answer options」），可立即修正，不必等到送出失敗。
+
+### 技術細節
+- **前端常數**（`frontend/src/pages/play/usePagePolls.ts`）：新增 `const MAX_POLL_OPTIONS = 6`，並加註解標明它鏡像後端 `routes/pdfs/shared.ts` 的同名常數（兩個套件無法共用程式碼，故各自定義但以註解連結）。`handleCreatePoll` 在原本的 `< 2` 檢查之後，新增 `options.length > MAX_POLL_OPTIONS` 的檢查，超過時 `setPollError(t('play.sidebar.poll.maxOptions').replace('{max}', '6'))` 並提早返回，不發送請求。
+- **i18n**：`zh-TW`／`en` 各新增 `play.sidebar.poll.maxOptions`（含 `{max}` 佔位）。
+- **驗證**：i18n key 對齊由 `tsc --noEmit`（`TranslationKey`）與 i18n 測試把關；前端 384 個測試與 typecheck 全通過。
