@@ -6,7 +6,7 @@ import {
   useRef,
 } from 'react';
 
-import { strokeHitsPoint } from './drawingGeometry';
+import { strokeHitsPoint, normalizeCanvasPoint } from './drawingGeometry';
 
 // Drawing coordinates are stored normalized to this reference space.
 const REF_H = 1080;
@@ -211,11 +211,7 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
     const getNorm = useCallback((e: React.PointerEvent<HTMLCanvasElement>): [number, number] => {
       const canvas = canvasRef.current;
       if (!canvas) return [0, 0];
-      const rect = canvas.getBoundingClientRect();
-      return [
-        (e.clientX - rect.left) / rect.width,
-        (e.clientY - rect.top) / rect.height,
-      ];
+      return normalizeCanvasPoint(e.clientX, e.clientY, canvas.getBoundingClientRect());
     }, []);
 
     // Erase any strokes touched by the current pointer position.
