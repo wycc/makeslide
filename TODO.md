@@ -2326,3 +2326,25 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - 工作內容：第九十九輪新增的 4 個可執行項目已全部完成，可執行項目又僅剩兩個「待使用者決定 / 待處理」項目，依 LOOP.md 第 2 條分析現有程式並對照 `docs/FUTURE_ROADMAP.md`，於 TODO.md 新增 4 個小顆粒、可單輪完成、可加測試、低風險的可執行項目（評論複製為 Markdown、複習清單複製為 Markdown、每頁分析 CSV 增列 avg_listened_ratio、評論未解決優先排序），並補掃描摘要。本輪為規畫輪，不計入 100 完成計數（計數維持 63/100）。
 - 時間：2026-06-26
 - 分支：直接於 master 更新 TODO.md（規畫輪，無程式碼變更）
+
+## 掃描摘要（第一〇三輪，2026-06-26）
+
+- 觸發原因：第一〇一輪新增的 4 個可執行項目已全數完成，TODO.md 又只剩兩個「待使用者決定 / 待處理」項目，依其說明不宜於自動 loop 逕行。故依 LOOP.md 第 2 條再次分析程式並對照 `docs/FUTURE_ROADMAP.md` 補新項目。
+- 現況觀察：成本估算（`lib/costEstimate.ts`）與預算警示（`hooks/useBudgetWarning.ts`）已存在（Phase 3 部分覆蓋）；字幕匯出 srt/vtt 已有端點與播放頁下載按鈕；課後報告、報告/評論/複習清單複製、評論過濾/排序、Theme 系列等近期皆完成。發現尚缺：投票結果無法複製、報告面板未顯示產生時間、全域搜尋無最近關鍵字、字幕無純文字版。
+- 取材方向：刻意分散主題（避免再集中於評論），取 Phase 1（投票結果輸出）、Phase 4（搜尋體驗）、Phase 5（匯出格式）與通用可用性中「小顆粒、可單輪完成、可加單元/handler 測試、低風險」的延伸。
+
+## 新增可執行項目（第一〇三輪，2026-06-26）
+
+- [ ] 投票結果複製為 Markdown（Roadmap Phase 1）：播放頁側欄投票區（`PlayPageSidebar.tsx`，每個 poll 有 `question`/`options[].text`/`options[].votes`/`total_votes`）目前可看結果橫條圖但無法整批帶出。新增純函式 `formatPollResultsMarkdown(polls, labels)`（每個 poll 輸出 `## 問題` 與各選項 `- 選項文字：N 票（X%）`，百分比沿用 `Math.round(votes/total*100)`、total 為 0 時 0%）置於 `frontend/src/lib/`（新檔）並補測試（空清單、單一 poll、零票）；投票區標題加「複製」按鈕，沿用 `copyTextToClipboard` 與短暫提示；新增 zh-TW/en i18n key。純前端。
+
+- [ ] 報告面板顯示產生時間（可用性，小顆粒）：`PostClassReportPanel`（`frontend/src/pages/play/PostClassReportPanel.tsx`）的 `summary.generated_at` 目前未呈現。在標題或工具列附近顯示「資料產生於 {相對時間}」，沿用 `lib/formatRelativeTime.ts`；`title` 顯示完整本地時間。新增 zh-TW/en i18n key（含 `{time}` 佔位）。純前端、不動後端與資料型別。
+
+- [ ] 全域搜尋最近關鍵字（Roadmap Phase 4 搜尋體驗）：`GlobalSearchBox`（`frontend/src/components/GlobalSearchBox.tsx`）送出搜尋後，把關鍵字存入 localStorage 最近清單（去重、上限 8 筆、最新在前）；輸入框聚焦且為空時顯示最近關鍵字 chips，點擊即帶入搜尋。新增純函式模組 `frontend/src/lib/recentSearches.ts`（`getRecentSearches()`/`addRecentSearch(q)`，含非瀏覽器防護、壞值 fallback）並補單元測試（去重、上限、最新在前、空白忽略）；新增 zh-TW/en i18n key（「最近搜尋」「清除」）。純前端。
+
+- [ ] 逐字稿純文字匯出（Roadmap Phase 5 匯出）：新增後端 `GET /api/pdfs/:id/subtitles.txt`，輸出整份逐字稿純文字（無時間碼，逐頁以空行分隔，可於每頁前加「# 第 N 頁」標題），沿用 `backend/src/routes/pdfs/subtitles.ts` 既有的逐字稿/句子組裝來源與權限檢查、回應帶 `text/plain; charset=utf-8` 與 `attachment; filename`；`PlayPageHeader.tsx` 在既有 srt/vtt 下載旁加「TXT」連結；補後端 node:test（200 內容/分頁、權限、404）。
+
+## 工作記錄（第一〇三輪，2026-06-26）
+
+- 工作內容：第一〇一輪新增的 4 個可執行項目已全部完成，可執行項目又僅剩兩個「待使用者決定 / 待處理」項目，依 LOOP.md 第 2 條分析現有程式並對照 `docs/FUTURE_ROADMAP.md`，於 TODO.md 新增 4 個小顆粒、可單輪完成、可加測試、低風險且主題分散的可執行項目（投票結果複製為 Markdown、報告面板顯示產生時間、全域搜尋最近關鍵字、逐字稿純文字匯出），並補掃描摘要。本輪為規畫輪，不計入 100 完成計數（計數維持 67/100）。
+- 時間：2026-06-26
+- 分支：直接於 master 更新 TODO.md（規畫輪，無程式碼變更）
