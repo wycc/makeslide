@@ -2051,6 +2051,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：zh-TW/en 各新增 `play.sidebar.poll.defaultOptions`（`同意\n不同意`／`Agree\nDisagree`）；`usePagePolls.ts` 的 `useState` 初始值改 lazy initializer `() => t(...)`、建立後重設改 `t(...)`（`handleCreatePoll` 的 useCallback deps 已含 `t`）。前端 377 測試 + typecheck（含 i18n key 對齊）全通過。分支 `fix/poll-default-options-i18n`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 22 個完成項目（22/100，未達上限）。
 
+- [x] 暫停播放／即時問答動畫預設文字 i18n：`pause-playback` 與 `realtime-poll` 兩個動畫 preset 在建立時把硬編中文（`暫停：請按播放鍵繼續`／`📊 即時問答時間`）烤進 effect.text，導致英文簡報的觀看者看到中文疊加文字——且與 `text-callout` preset（不設預設 text、靠 placeholder/fallback）不一致。移除這兩個 preset 的硬編 text（與 text-callout 一致），改在 editor placeholder 與 `SlideRenderer` fallback 以 i18n 顯示。
+  - 修改說明（2026-06-26）：zh-TW/en 各新增 `play.animation.defaultPausePlaybackText`／`defaultRealtimePollText`；`AnimationEditorTab.tsx` 兩個 preset 移除 `text:`、placeholder 改 `t()`、移除常數 import；`SlideRenderer.tsx` 的 `EffectOverlay` 加 `useI18n`、兩處 fallback 改 `t()`、移除常數 import；`animationSpec.ts` 移除已不再使用的兩個常數。preset 測試只檢查 exitDuration/pollId 不受影響。前端 377 測試 + typecheck（含 i18n key 對齊）全通過。分支 `fix/animation-default-text-i18n`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 23 個完成項目（23/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2077,4 +2081,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | 側邊欄導覽縮圖隱藏破圖：`PlayPageSidebar` 搜尋結果/書籤/重點三處 `<img>` 加 `onError` 載入失敗隱藏，與主縮圖網格一致；前端 377 測試通過 | fix/sidebar-secondary-thumb-onerror（已 merge） |
 | 2026-06-26 | add-pages outline 純函式抽離並補測試：`parseOutlineText`/`buildInsertionContext`/`renderNewSlideTexts` 抽到無 db 依賴的 `addPagesOutline.ts`（從 `addPagesFromPrompt` re-export 維持相容）；addPagesOutline.test.ts +7 測試、後端 build 通過 | refactor/add-pages-outline-pure（已 merge） |
 | 2026-06-26 | 預設投票選項 i18n：`usePagePolls` 新投票預設選項 `同意/不同意` 改用 `t('play.sidebar.poll.defaultOptions')`（zh/en）；前端 377 測試通過 | fix/poll-default-options-i18n（已 merge） |
+| 2026-06-26 | 暫停播放/即時問答動畫預設文字 i18n：移除 `pause-playback`/`realtime-poll` preset 硬編中文 text（與 text-callout 一致），editor placeholder 與 `SlideRenderer` fallback 改 `t()`；zh/en 各 +2 key；前端 377 測試通過 | fix/animation-default-text-i18n（已 merge） |
 
