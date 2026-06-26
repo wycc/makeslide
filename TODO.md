@@ -2067,6 +2067,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`drawingGeometry.ts` 新增 `normalizeCanvasPoint(clientX, clientY, rect)`（`rect.width/height > 0` 才換算，否則回 `[0,0]`）；`DrawingCanvas.tsx` 的 `getNorm` 改呼叫之、import 更新。`drawingGeometry.test.ts` +2 測試（一般換算含邊界、零面積回 [0,0] 不產 NaN）。前端 380 測試 + typecheck 全通過。分支 `fix/drawing-getnorm-zero-guard`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 26 個完成項目（26/100，未達上限）。
 
+- [x] 移除 routes/pdfs.ts 重構前遺留死碼：`backend/src/routes/pdfs.ts` 有約 450 行重構前的舊 monolith 程式碼（route helper + 與 `pdfs/shared.ts` byte 相同的重複 `extractYoutubeVideoId`／`streamFile` 等 38 個函式），但全檔僅 export 底部的 `pdfRoutes` shim（委派給 `./pdfs/index`），其餘皆不可達死碼。`server.ts` 的 `import('./routes/pdfs')` 因檔案解析優先於目錄而命中此 shim。將整檔縮減為僅該 shim，維持相同模組解析與執行行為，消除死碼與重複。
+  - 修改說明（2026-06-26）：`routes/pdfs.ts` 由 454 行縮為 9 行（僅 `import type { FastifyInstance }` 與委派 `pdfRoutes`）。確認全檔唯一 export 為 `pdfRoutes`、無頂層副作用、shim 不引用任何本地定義；後端 `tsc` build 通過（證實無其他程式依賴被移除的程式碼）。淨刪 450 行。分支 `refactor/remove-dead-pdfs-monolith`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 27 個完成項目（27/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2097,4 +2101,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | custom-script 安全檢查補擋可呼叫 Function 建構式：`findUnsafeScriptPattern` 新增 `/\bFunction\s*\(/`（大寫 F，擋 `Function("…")()`、不誤擋 `function(`）；animation-custom-script.test.ts +3、後端 build 通過 | fix/unsafe-pattern-function-ctor（已 merge） |
 | 2026-06-26 | API 錯誤提示 key drift-guard：export `ERROR_HINT_KEYS` 並新增測試，斷言所有 `apiError.<name>.{title,message,nextStep}` 在 zh-TW/en 皆存在（防 `as TranslationKey` 動態 key 漂移顯示原始 key）；前端 378 測試通過 | test/api-error-hint-keys-guard（已 merge） |
 | 2026-06-26 | DrawingCanvas getNorm 防零面積除法：抽出 `normalizeCanvasPoint`（零/無效 rect 回 [0,0]，避免 NaN 座標存入筆劃），`getNorm` 改用之；drawingGeometry.test.ts +2 測試；前端 380 測試通過 | fix/drawing-getnorm-zero-guard（已 merge） |
+| 2026-06-26 | 移除 routes/pdfs.ts 遺留死碼：450 行重構前 monolith（含重複的 extractYoutubeVideoId/streamFile）縮為僅委派 shim，行為不變；後端 build 通過、淨刪 450 行 | refactor/remove-dead-pdfs-monolith（已 merge） |
 
