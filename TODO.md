@@ -2059,6 +2059,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`animationCustomScript.ts` 的 `UNSAFE_PATTERNS` 在 `new Function` 後新增 `{ pattern: /\bFunction\s*\(/, label: 'Function constructor' }`（`new Function(` 仍由前項先回報、標籤不變）。`animation-custom-script.test.ts` 新增可呼叫 Function 建構式偵測（+2 case）與「不誤擋小寫 function 關鍵字」測試（+1 test，含函式運算式/IIFE/renderAnimation）。相關測試 17 通過、後端 build 通過。分支 `fix/unsafe-pattern-function-ctor`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 24 個完成項目（24/100，未達上限）。
 
+- [x] API 錯誤提示 key 存在性 drift-guard：`mapApiErrorToHumanMessage` 透過 `hintKeys(name)` 以 `as TranslationKey` 動態組出 `apiError.<name>.{title,message,nextStep}`，繞過 tsc 對 key 是否存在的檢查；若缺漏/打錯，使用者會看到原始 key 字串（如 `apiError.invalidRequest.title`）。新增測試掃過 `ERROR_HINT_KEYS` 所有值，斷言每個 key 在 zh-TW 與 en 皆有定義，把漂移在測試期擋下。（已實測目前全部存在、無 bug。）
+  - 修改說明（2026-06-26）：`lib/api/common.ts` 將 `ERROR_HINT_KEYS` 改 export；新增 `lib/api/apiErrorHintKeys.test.ts`（迭代所有 hint 條目 × title/message/nextStep，檢查存在於兩個 locale）。`mapApiErrorToHumanMessage` 內的字面 key（requestFailed/unknownError）本就由 tsc 驗證、不需此測試。前端 378 測試 + typecheck 全通過。分支 `test/api-error-hint-keys-guard`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 25 個完成項目（25/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2087,4 +2091,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | 預設投票選項 i18n：`usePagePolls` 新投票預設選項 `同意/不同意` 改用 `t('play.sidebar.poll.defaultOptions')`（zh/en）；前端 377 測試通過 | fix/poll-default-options-i18n（已 merge） |
 | 2026-06-26 | 暫停播放/即時問答動畫預設文字 i18n：移除 `pause-playback`/`realtime-poll` preset 硬編中文 text（與 text-callout 一致），editor placeholder 與 `SlideRenderer` fallback 改 `t()`；zh/en 各 +2 key；前端 377 測試通過 | fix/animation-default-text-i18n（已 merge） |
 | 2026-06-26 | custom-script 安全檢查補擋可呼叫 Function 建構式：`findUnsafeScriptPattern` 新增 `/\bFunction\s*\(/`（大寫 F，擋 `Function("…")()`、不誤擋 `function(`）；animation-custom-script.test.ts +3、後端 build 通過 | fix/unsafe-pattern-function-ctor（已 merge） |
+| 2026-06-26 | API 錯誤提示 key drift-guard：export `ERROR_HINT_KEYS` 並新增測試，斷言所有 `apiError.<name>.{title,message,nextStep}` 在 zh-TW/en 皆存在（防 `as TranslationKey` 動態 key 漂移顯示原始 key）；前端 378 測試通過 | test/api-error-hint-keys-guard（已 merge） |
 
