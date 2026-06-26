@@ -2266,3 +2266,25 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - [x] Theme 回歸測試與文件：新增/更新測試確認 theme preference helper 與 i18n key 對等；手動檢查 light/dark/system 三模式下首頁、播放頁、設定頁；在 README 或 BLOG 補一小段使用說明（若功能對使用者可見，依專案慣例記錄）。
   - 修改說明（2026-06-26）：① theme preference helper 已於系列第 1 項由 `lib/theme.test.ts`（10 測試）覆蓋；② i18n 對等：既有 `i18n.test.ts` 通用 parity 測試已涵蓋全部 key（含 theme），但該測試在「某 key 從 zh/en 同時消失」時仍會通過，故新增 `frontend/src/i18n.theme-keys.test.ts`（1 測試）明確斷言 `settings.theme`/`themeSystem`/`themeLight`/`themeDark`/`themeHint` 五個 key 於兩語系皆存在且非空，作為 Theme 功能的回歸守門；③ 文件：在 `README.md`「開發中 / Unreleased」新增雙語「外觀主題 / Appearance Theme」段落，說明選項位置、即時套用、本機偏好、防白閃、語意 token 基礎與第一批適配範圍（BLOG.md 已於系列各項逐篇記錄）。前端 `tsc --noEmit` 通過、新測試與既有 theme/i18n 測試全通過。關於「手動檢查 light/dark/system 三模式」：自動 loop 環境無法啟動瀏覽器逐頁視覺確認；惟系列第 5 項採「dark token 值 == 原 slate 值」對應，**深色（現行預設）為建構上零回歸**，淺色模式之細部色階屬漸進完善（見 FUTURE），建議由使用者於正式環境快速目視 light 模式。Theme 功能系列（第 1～6 項）至此完成。分支 `feat/theme-tests-docs`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 59 個完成項目（59/100，未達上限）。
+
+## 掃描摘要（第九十九輪，2026-06-26）
+
+- 觸發原因：TODO.md 目前剩餘的未完成項目只有兩個明確標註「待使用者決定 / 待處理」者——①系統性採用 `mapApiErrorToHumanMessage`（範圍大、需產品判斷顯示風格）、②把前端測試納入 root `npm test`（涉 CI 行為變更 / 需 `npm install`，sandbox 無法驗證）——依其說明皆不宜在自動 loop 中逕行。故依 LOOP.md 第 2 條，分析現有程式並對照 `docs/FUTURE_ROADMAP.md` 補充新的可執行項目。
+- 現況觀察：匯出能力已相當完整（`comments.csv`、`poll-results.csv`、`quiz-results.csv`、`report/students.csv`、`subtitles.srt`/`.vtt`）；課後報告（Phase 1）已具最難題、最分歧投票頁、最低完成率頁三榜單（`reportSummary.ts`）；遙控器、同步、投票橫條圖、Theme 等近期皆已完成。
+- 取材方向：聚焦 Roadmap Phase 1（把互動資料變成教學洞察）與 Phase 4/5（教材資產與匯出）中「小顆粒、可單輪完成、可加單元/handler 測試、低視覺風險」的延伸，避免一次吃下大型功能。
+
+## 新增可執行項目（第九十九輪，2026-06-26）
+
+- [ ] 評論區關鍵字過濾（Roadmap Phase 4 雛形 / 可用性）：在 `CommentsSection`（`frontend/src/pages/play/PlayPageSidebar.tsx`）標題列下方加入一個關鍵字輸入框，即時過濾目前清單；抽出純函式 `filterComments(comments, query)`（不分大小寫、同時比對 `text` 與 `author`，空字串回全部）置於 `frontend/src/lib/`（新檔，例如 `commentFilter.ts`）並補單元測試（空白/大小寫/比對欄位/無符合）；新增 zh-TW/en placeholder i18n key。純前端、不動後端與資料型別。
+
+- [ ] 報告摘要「複製為 Markdown」（Roadmap Phase 1 可用性）：在 `PostClassReportPanel`（`frontend/src/pages/play/PostClassReportPanel.tsx`）的工具列加入「複製摘要」按鈕；於 `frontend/src/pages/play/reportSummary.ts` 新增純函式 `formatReportSummaryMarkdown(summary)`，輸出「最難測驗題 / 最分歧投票頁 / 最低完成率頁」三榜單與整體數字的 Markdown，沿用既有 `getHardestQuestions`/`getMostDivergentPollPages`/`getLowestCompletionPages` 與 `formatReportPercent`；以 `lib/clipboard.ts` 的 `copyTextToClipboard` 觸發複製並顯示短暫提示；補 `reportSummary` 純函式測試（含 summary 為 null / 各榜單為空的情況）；新增 zh-TW/en i18n key。
+
+- [ ] 每頁學習分析 CSV 匯出（Roadmap Phase 1）：新增後端 `GET /api/pdfs/:id/report/pages.csv`（欄位 `page_number,total_viewers,completed_viewers,completion_rate,poll_total_votes,poll_divergence_score`），資料沿用 `report/summary` 既有的 watch_progress 與 polls 聚合來源，以共用 `csvEscape`（`backend/src/routes/pdfs/csv.ts`）輸出、權限沿用 `canEditPdf`、回應帶 `text/csv` 與 `attachment; filename`；在 `PostClassReportPanel` 既有 CSV 下載按鈕群加入「每頁分析 CSV」連結；補後端 node:test（200 欄位/排序、403 無編輯權限、404 未知 PDF）。
+
+- [ ] 評論未解決數徽章（可用性，小顆粒）：`CommentsSection`（`PlayPageSidebar.tsx`）標題徽章目前只顯示評論總數；改為同時呈現未解決數（如 `2 / 5`，未解決 / 總數），抽出純函式 `countUnresolvedComments(comments)`（回傳 `resolved === false` 的數量）置於 lib 並補單元測試；全解決或無評論時的顯示需處理（例如全解決顯示總數即可）。純前端、不動後端。
+
+## 工作記錄（第九十九輪，2026-06-26）
+
+- 工作內容：可執行項目僅剩兩個「待使用者決定 / 待處理」項目，依 LOOP.md 第 2 條改為分析現有程式並對照 `docs/FUTURE_ROADMAP.md`，於 TODO.md 新增 4 個小顆粒、可單輪完成、可加測試、低風險的可執行項目（評論關鍵字過濾、報告摘要複製為 Markdown、每頁學習分析 CSV 匯出、評論未解決數徽章），並補掃描摘要。本輪未完成功能項目（屬規畫輪），不計入 100 完成計數（計數維持 59/100）。
+- 時間：2026-06-26
+- 分支：直接於 master 更新 TODO.md（規畫輪，無程式碼變更）
