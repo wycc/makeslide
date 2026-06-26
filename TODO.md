@@ -2015,6 +2015,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`ShareDialog.tsx` 新增 export `buildEmbedCode(shareUrl)`（空 URL 回 ''）；加 `useEffect` 監聽 window keydown（Escape → onClose，含 cleanup）；overlay div 加 `onClick`（`event.target === event.currentTarget` 才 onClose，避免點內容誤關）；內層面板加 `role`/`aria-modal`/`aria-label`。新增 `ShareDialog.test.ts` +2 測試（有/無 URL 的 embed 片段）。前端 365 測試 + typecheck 全通過。分支 `feat/share-dialog-dismiss`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 13 個完成項目（13/100，未達上限）。
 
+- [x] 可重用 overlay 關閉 hook（套用至圖片預覽與分享對話框）：多個 `fixed inset-0` modal 缺 Escape／背景點擊關閉。新增可重用的 `useOverlayDismiss(onClose)` hook（Escape keydown + 背景點擊關閉），決策邏輯抽成可測純函式 `isOverlayDismissKey`／`isBackdropClick`。`ImagePreviewDialog` 套用後新增 Escape／背景關閉與原本缺少的 `role=dialog`/`aria-modal`/`aria-label`；同時把上一輪的 `ShareDialog` 重構為使用此 hook，移除其手寫的 keydown effect 與 inline 背景判斷（消除重複、統一行為）。
+  - 修改說明（2026-06-26）：新增 `frontend/src/components/useOverlayDismiss.ts`（hook + 兩個純函式）與 `useOverlayDismiss.test.ts` +2 測試（只認 Escape、背景點擊須 target===currentTarget，使用真實 `EventTarget` 實例以符型別）。`ImagePreviewDialog.tsx` import hook、overlay 加 `onClick={onBackdropClick}`、面板加 aria 屬性。`ShareDialog.tsx` 改用 hook（移除 `useEffect`／inline onClick，`useState` import 收斂）。前端 367 測試 + typecheck 全通過。分支 `feat/overlay-dismiss-hook`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 14 個完成項目（14/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2032,4 +2036,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | 全域搜尋忽略過時回應：`GlobalSearchBox` 以 `requestSeqRef` 守門，捨棄非最新的 async 搜尋回應（修 search-as-you-type race）；export `highlightText` 並 +5 測試；前端 363 測試通過 | fix/global-search-race（已 merge） |
 | 2026-06-26 | CSV 匯出去重並強化：兩個 CSV 路由共用的 `csvEscape` 抽成 `routes/pdfs/csv.ts`，並加 CSV formula injection 防護（`=`/`+`/`-`/`@`/Tab/CR 開頭字串前綴 `'`、僅對 string）與單獨 CR 引用；csvEscape.test.ts +6 測試（sandbox 通過）、後端 build 通過；CSV 整合測試留待 CI | feat/csv-escape-shared-hardened（已 merge） |
 | 2026-06-26 | 分享對話框支援 Esc／背景點擊關閉：`ShareDialog` 加 Escape keydown、背景點擊（target===currentTarget）關閉與 `role=dialog`/`aria-modal`/`aria-label`；`embedCode` 抽成純函式 `buildEmbedCode`；ShareDialog.test.ts +2 測試；前端 365 測試通過 | feat/share-dialog-dismiss（已 merge） |
+| 2026-06-26 | 可重用 overlay 關閉 hook：新增 `useOverlayDismiss`（Escape+背景關閉，純函式 `isOverlayDismissKey`/`isBackdropClick`）；套用至 `ImagePreviewDialog`（補 Escape/背景/aria）並重構 `ShareDialog` 使用之；useOverlayDismiss.test.ts +2 測試；前端 367 測試通過 | feat/overlay-dismiss-hook（已 merge） |
 
