@@ -1999,6 +1999,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`subtitleAlignment.ts` 移除本地 `SENTENCE_MATCH_RE`/`TONE_MARKER_RE`/`splitScriptIntoSentences`，改為 `export { splitScriptIntoSentences } from './textSentences'`（其餘 `alignSentencesToWordTimestamps` 等不變）。`subtitleSplitConsistency.test.ts` 第一個測試改斷言 `splitTextSentences === splitSubtitleAlignment`；regex 測試移除已不存在的 subtitleAlignment 字面量檢查、保留 frontend↔textSentences 比對。相關後端測試（subtitleSplitConsistency／subtitleAlignment／subtitle-alignment／textSentences）與後端 `tsc` build 全通過。分支 `refactor/dedupe-backend-split-sentences`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 9 個完成項目（9/100，未達上限）。
 
+- [x] 播放頁下拉選單支援 Esc／點外部關閉：`PlayPageHeader` 的 `HeaderDropdown` 以受控 `<details>` 實作，原本只有「開啟另一個選單」才會互斥關閉——點頁面其他空白處或按 Escape 都不會關閉，與其 commit 自稱的「accessible dropdown」不符。新增 `useEffect`（僅在 open 時掛載）監聽 Escape 與選單外部 pointer-down 關閉；決策邏輯抽成純函式 `shouldCloseOnOutsidePointer`／`isDropdownDismissKey` 以利單元測試（沿用本專案從元件抽純函式測試的慣例，避免測試載入 context-heavy 元件）。
+  - 修改說明（2026-06-26）：新增 `frontend/src/pages/play/headerDropdownDismiss.ts`（兩個純決策函式）；`PlayPageHeader.tsx` 的 `HeaderDropdown` 加 `rootRef` 與 `useEffect`（`document` mousedown + `window` keydown，含 cleanup），`<details>` 掛上 ref。新增 `headerDropdownDismiss.test.ts` +2 測試（外部/內部 pointer 與 open 狀態組合、只認 Escape）。前端 358 測試 + typecheck 全通過。分支 `feat/header-dropdown-dismiss`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 10 個完成項目（10/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2012,4 +2016,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | 複習清單只刪指定題目：`removeReviewItem` 加選用 `questionText` 參數（同頁多題時只刪該題，原會整頁誤刪），`PlayPageSidebar` handler 傳入題目並修正本地 state 過濾；reviewList.test.ts +1 測試；前端 354 測試通過 | fix/review-item-remove-by-question（已 merge） |
 | 2026-06-26 | 首頁新增「頁數少到多」排序：補上 `page_count_asc`（與既有 `page_count_desc` 對稱、缺頁數排尾），`SortMode`/`SORT_MODES`/comparator/下拉/i18n 一併更新；HomePage.sort.test.ts +2 測試；前端 356 測試通過 | feat/home-sort-page-count-asc（已 merge） |
 | 2026-06-26 | 後端字幕分句去重：`subtitleAlignment.ts` 改 re-export `textSentences.ts` 的 `splitScriptIntoSentences`，消除後端同套件內兩份相同副本（含 regex）；一致性測試改以函式 identity 斷言並保留前端↔後端 regex 守護；相關後端測試與 build 通過 | refactor/dedupe-backend-split-sentences（已 merge） |
+| 2026-06-26 | 播放頁下拉選單支援 Esc／點外部關閉：`HeaderDropdown` 加 `useEffect`（Escape + 外部 pointer-down 關閉），決策邏輯抽成純函式 `headerDropdownDismiss.ts`；headerDropdownDismiss.test.ts +2 測試；前端 358 測試通過 | feat/header-dropdown-dismiss（已 merge） |
 
