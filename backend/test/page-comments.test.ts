@@ -111,6 +111,76 @@ test('page-comments: PATCH resolves a comment', async () => {
   }
 });
 
+test('page-comments: PATCH updates text and preserves resolved state', async () => {
+  const app = await buildApp();
+  try {
+    seedPdf(PDF_ID);
+    const postResp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${PDF_ID}/pages/1/comments`,
+      headers: { ...OWNER_HEADERS, 'content-type': 'application/json' },
+      payload: JSON.stringify({ author: 'teacher', text: 'original text' }),
+    });
+    const commentId = (JSON.parse(postResp.body) as { comment: { id: number } }).comment.id;
+
+    // mark resolved first
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/pdfs/${PDF_ID}/comments/${commentId}`,
+      headers: { ...OWNER_HEADERS, 'content-type': 'application/json' },
+      payload: JSON.stringify({ resolved: true }),
+    });
+
+    // now edit just the text; resolved must stay true
+    const patchResp = await app.inject({
+      method: 'PATCH',
+      url: `/api/pdfs/${PDF_ID}/comments/${commentId}`,
+      headers: { ...OWNER_HEADERS, 'content-type': 'application/json' },
+      payload: JSON.stringify({ text: '  edited text  ' }),
+    });
+    assert.equal(patchResp.statusCode, 200);
+    const updated = (JSON.parse(patchResp.body) as { comment: { text: string; resolved: boolean } }).comment;
+    assert.equal(updated.text, 'edited text'); // trimmed
+    assert.equal(updated.resolved, true); // preserved
+  } finally {
+    cleanup(PDF_ID);
+    await app.close();
+  }
+});
+
+test('page-comments: PATCH rejects empty text and an empty body', async () => {
+  const app = await buildApp();
+  try {
+    seedPdf(PDF_ID);
+    const postResp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${PDF_ID}/pages/1/comments`,
+      headers: { ...OWNER_HEADERS, 'content-type': 'application/json' },
+      payload: JSON.stringify({ author: 'teacher', text: 'x' }),
+    });
+    const commentId = (JSON.parse(postResp.body) as { comment: { id: number } }).comment.id;
+
+    const emptyText = await app.inject({
+      method: 'PATCH',
+      url: `/api/pdfs/${PDF_ID}/comments/${commentId}`,
+      headers: { ...OWNER_HEADERS, 'content-type': 'application/json' },
+      payload: JSON.stringify({ text: '   ' }),
+    });
+    assert.equal(emptyText.statusCode, 400);
+
+    const emptyBody = await app.inject({
+      method: 'PATCH',
+      url: `/api/pdfs/${PDF_ID}/comments/${commentId}`,
+      headers: { ...OWNER_HEADERS, 'content-type': 'application/json' },
+      payload: JSON.stringify({}),
+    });
+    assert.equal(emptyBody.statusCode, 400);
+  } finally {
+    cleanup(PDF_ID);
+    await app.close();
+  }
+});
+
 test('page-comments: DELETE removes a comment', async () => {
   const app = await buildApp();
   try {

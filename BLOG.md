@@ -7979,3 +7979,18 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **複用既有 API**：不新增後端端點，沿用單筆 resolve 端點。
 - **i18n**：新增 zh-TW/en `play.sidebar.commentsResolveAll`。
 - **驗證**：前端 `tsc --noEmit` 通過；`i18n.test.ts`（含 zh/en key 對等）通過。此為複用既有 API 的 UI 批次操作、無新增可抽出純邏輯，故不另加單元測試。
+
+## 評論文字編輯（2026-06-26）
+
+### 功能目的
+頁面評論先前只能建立、標記已解決或刪除，打錯字只能刪掉重打。本項讓有編輯權限者可直接修改評論內文，讓協作回饋的維護更方便。
+
+### 使用方式
+在「頁面評論」每則評論的動作欄點「✎」即進入行內編輯，修改後按「儲存」即更新（按「取消」放棄）。編輯沿用 2000 字上限，內容空白時無法儲存。標記已解決的評論也可編輯，且編輯不會改變其已解決狀態。
+
+### 技術細節
+- **後端**（`backend/src/routes/pdfs/comments.ts`）：`PATCH /api/pdfs/:id/comments/:commentId` 的 body schema 由「僅 resolved」擴充為「`resolved?` 與 `text?`（trim、1..2000）至少其一」；handler 依提供的欄位動態組 `SET`，兩者可並存、只更新有提供者，回傳整列。權限沿用 `canEditPdf`。
+- **前端**（`frontend/src/lib/api/pdfs.ts`、`frontend/src/pages/play/PlayPageSidebar.tsx`）：新增 `editPageComment(id, commentId, text)` API；`CommentsSection` 以 `editingId`/`editingText` 控制行內 textarea，`handleSaveEdit` 呼叫 API 並就地更新清單。
+- **i18n**：新增 zh-TW/en `play.sidebar.commentEdit`/`commentEditSave`/`commentEditCancel`。
+- **測試**（`backend/test/page-comments.test.ts`）：補 2 個案例（編輯 text 並保留 resolved 與 trim、空白 text 與空 body 皆 400）。
+- **驗證**：前端與後端 `tsc --noEmit` 通過；`i18n.test.ts`（含 zh/en key 對等）通過。後端 handler 測試需 better-sqlite3 native module，於本機 sandbox 無法載入，留待 CI 執行。
