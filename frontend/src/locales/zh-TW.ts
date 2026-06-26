@@ -1370,6 +1370,7 @@ export const zhTW = {
   'play.sidebar.poll.showResults': '顯示結果',
   'play.sidebar.poll.questionPlaceholder': '輸入投票問題',
   'play.sidebar.poll.optionsPlaceholder': '每行一個答案選項',
+  'play.sidebar.poll.defaultOptions': '同意\n不同意',
   'play.sidebar.poll.processing': '處理中…',
   'play.sidebar.poll.createAndStart': '建立並開始本頁投票',
   'play.sidebar.poll.aiDraft': 'AI 草稿投票題',

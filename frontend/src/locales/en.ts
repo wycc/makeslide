@@ -1370,6 +1370,7 @@ export const en = {
   'play.sidebar.poll.showResults': 'Show results',
   'play.sidebar.poll.questionPlaceholder': 'Enter poll question',
   'play.sidebar.poll.optionsPlaceholder': 'One answer option per line',
+  'play.sidebar.poll.defaultOptions': 'Agree\nDisagree',
   'play.sidebar.poll.processing': 'Processing…',
   'play.sidebar.poll.createAndStart': 'Create and start poll for this page',
   'play.sidebar.poll.aiDraft': 'AI Draft Poll Question',

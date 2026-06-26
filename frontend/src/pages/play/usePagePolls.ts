@@ -93,7 +93,7 @@ export function usePagePolls({
   const { t } = useI18n();
   const [pagePolls, setPagePolls] = useState<PagePoll[]>([]);
   const [pollQuestion, setPollQuestion] = useState('');
-  const [pollOptionsText, setPollOptionsText] = useState('同意\n不同意');
+  const [pollOptionsText, setPollOptionsText] = useState(() => t('play.sidebar.poll.defaultOptions'));
   const [pollBusy, setPollBusy] = useState(false);
   const [aiPollBusy, setAiPollBusy] = useState(false);
   const [pollError, setPollError] = useState<string | null>(null);
@@ -196,7 +196,7 @@ export function usePagePolls({
       const poll = await createPagePoll(pdfId, currentPage.page_number, question, options);
       setPagePolls((prev) => [poll, ...prev]);
       setPollQuestion('');
-      setPollOptionsText('同意\n不同意');
+      setPollOptionsText(t('play.sidebar.poll.defaultOptions'));
       setPollStarted(true);
     } catch (err) {
       setPollError(err instanceof ApiError ? err.message : t('play.sidebar.poll.createFailed'));
