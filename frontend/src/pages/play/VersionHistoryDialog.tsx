@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { imageVersionUrl, type FileVersionEntry } from '../../lib/api';
 import { useI18n } from '../../i18n';
 import { computeLineDiff } from './computeLineDiff';
+import { useOverlayDismiss } from '../../components/useOverlayDismiss';
 
 interface VersionHistoryDialogProps {
   pdfId: string | undefined;
@@ -38,6 +39,11 @@ export function VersionHistoryDialog({
 }: VersionHistoryDialogProps) {
   const { t } = useI18n();
   const [showDiff, setShowDiff] = useState(false);
+  const { onBackdropClick } = useOverlayDismiss(onClose);
+
+  const dialogTitle = versionHistoryType === 'image'
+    ? t('play.versionHistory.titleImage')
+    : t('play.versionHistory.titleScript');
 
   const canShowDiff =
     versionHistoryType === 'script' &&
@@ -50,11 +56,11 @@ export function VersionHistoryDialog({
       : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
-      <div className="flex w-full max-w-5xl flex-col rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl" style={{ maxHeight: '90vh' }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4" onClick={onBackdropClick}>
+      <div role="dialog" aria-modal="true" aria-label={dialogTitle} className="flex w-full max-w-5xl flex-col rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl" style={{ maxHeight: '90vh' }}>
         <div className="mb-3 flex items-center gap-3">
           <h3 className="flex-1 text-sm font-semibold text-slate-200">
-            {versionHistoryType === 'image' ? t('play.versionHistory.titleImage') : t('play.versionHistory.titleScript')}
+            {dialogTitle}
             {versionHistoryPage != null ? t('play.versionHistory.pageSuffix').replace('{page}', String(versionHistoryPage)) : ''}
           </h3>
           {canShowDiff ? (
