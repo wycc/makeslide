@@ -48,6 +48,7 @@ import {
 import { GEMINI_TTS_VOICES, OPENAI_TTS_VOICES, geminiVoiceLabel, openaiVoiceLabel } from '../lib/ttsVoices';
 import { formatSlaOverrideRangeMessage, validateSlaOverrideSecondsInput } from '../lib/slaOverrideValidation';
 import { copyTextToClipboard } from '../lib/clipboard';
+import { bytesToRoundedKb } from '../lib/bytesFreed';
 import { LLM_PRICE_PER_1M_TOKENS, TTS_PRICE_PER_1K_CHARS, formatUsd } from '../lib/costEstimate';
 import { createTemplate } from '../lib/api/templates';
 
@@ -386,7 +387,7 @@ export default function SettingsPage() {
       const resp = await fetch('api/system/thumbnail-cache', { method: 'DELETE' });
       if (!resp.ok) { setThumbnailCacheMsg(t('settings.clearThumbnailCacheButton')); return; }
       const data = (await resp.json()) as { files_deleted: number; bytes_freed: number };
-      const kb = Math.round(data.bytes_freed / 1024);
+      const kb = bytesToRoundedKb(data.bytes_freed);
       setThumbnailCacheMsg(t('settings.clearThumbnailCacheDone').replace('{files}', String(data.files_deleted)).replace('{kb}', String(kb)));
     } catch {
       setThumbnailCacheMsg(null);
@@ -402,7 +403,7 @@ export default function SettingsPage() {
       const resp = await fetch('api/admin/cache', { method: 'DELETE' });
       if (!resp.ok) { setArtifactCacheMsg(t('settings.clearArtifactCacheButton')); return; }
       const data = (await resp.json()) as { dirs_cleared: number; bytes_freed: number };
-      const kb = Math.round(data.bytes_freed / 1024);
+      const kb = bytesToRoundedKb(data.bytes_freed);
       setArtifactCacheMsg(t('settings.clearArtifactCacheDone').replace('{dirs}', String(data.dirs_cleared)).replace('{kb}', String(kb)));
     } catch {
       setArtifactCacheMsg(null);
