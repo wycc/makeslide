@@ -7526,3 +7526,15 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 ### 技術細節
 - **元件**（`frontend/src/components/AddPagesFromPromptModal.tsx`）：頁面縮圖 `<img>`（`imageDone` 為真時顯示）加上 `onError={(e) => { e.currentTarget.style.display = 'none'; }}`，載入失敗時隱藏（其外層容器仍維持固定比例的占位框）。
 - 此為單純的 DOM 事件處理、無可抽出純邏輯，故不另加單元測試；以前端既有 384 測試與 `tsc --noEmit` typecheck 全通過確認未造成回歸。
+
+## 焦點在下拉選單時不觸發播放頁快捷鍵（2026-06-26）
+
+### 功能目的
+播放頁支援許多鍵盤快捷鍵：方向鍵翻頁、空白鍵播放/下一頁、G 跳頁、B 下一個書籤等。為了避免使用者在輸入框打字時誤觸這些快捷鍵，鍵盤處理器原本會在焦點位於 `<input>`、`<textarea>` 或可編輯區（contentEditable）時直接跳過。但這個忽略清單漏掉了原生的 `<select>` 下拉選單。結果是：當焦點落在某個下拉（例如分享對話框的「有效期」、TTS 設定的「語音」選單）時，按方向鍵雖然會如預期地切換下拉選項，卻同時也觸發了底層投影片的上一頁/下一頁——一個按鍵造成兩個動作，讓人困惑。本次把 `<select>` 也加入忽略清單。
+
+### 使用方式
+無需任何操作。當焦點在下拉選單上時，方向鍵只會切換下拉選項，不會再連帶翻動投影片；焦點不在表單元素時，快捷鍵照常運作。
+
+### 技術細節
+- **守門條件**（`frontend/src/pages/PlayPage.tsx`）：播放頁有兩個 `keydown` 處理器（一般快捷鍵與另一組），兩者開頭都會檢查 `ev.target` 是否為表單/可編輯元素而提早 return。在這兩處的判斷式中，於 `INPUT`／`TEXTAREA`／`isContentEditable` 之外補上 `target.tagName === 'SELECT'`（以一次 replace-all 同步處理兩處，避免只改一處造成不一致）。
+- **驗證**：前端 384 個測試與 `tsc --noEmit` typecheck 全通過。

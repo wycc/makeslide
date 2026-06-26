@@ -2155,6 +2155,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`AddPagesFromPromptModal.tsx` 頁面縮圖 `<img>` 加 `onError={(e) => { e.currentTarget.style.display = 'none'; }}`。前端 384 測試 + typecheck 全通過。分支 `fix/add-pages-modal-img-onerror`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 48 個完成項目（48/100，未達上限）。
 
+- [x] 焦點在下拉選單時不觸發播放頁快捷鍵：`PlayPage` 的兩個鍵盤處理器原本只在焦點位於 INPUT／TEXTAREA／contentEditable 時跳過快捷鍵，未含原生 `<select>`——當焦點在下拉（分享有效期、TTS 語音等）時按方向鍵會同時改變選項**並**切換投影片（雙重動作）。兩處守門加入 `SELECT`。
+  - 修改說明（2026-06-26）：`PlayPage.tsx` 兩處 keydown 守門的條件加 `target.tagName === 'SELECT'`（以 replace_all 一致處理）。前端 384 測試 + typecheck 全通過。分支 `fix/keyboard-ignore-select`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 49 個完成項目（49/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2207,4 +2211,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | 遙控器投影片預覽隱藏破圖：`RemoteControllerPage` 預覽 `<img>` 加 `onError` 載入失敗隱藏；前端 384 測試通過 | fix/remote-controller-img-onerror（已 merge） |
 | 2026-06-26 | 圖表資產縮圖隱藏破圖：`FigureAssetsTab` 縮圖 `<img>` 加 `onError` 載入失敗隱藏；前端 384 測試通過 | fix/figure-assets-img-onerror（已 merge） |
 | 2026-06-26 | 新增頁面對話框縮圖隱藏破圖：`AddPagesFromPromptModal` 頁面縮圖 `<img>` 加 `onError`（前端 img 破圖降級全面補齊）；前端 384 測試通過 | fix/add-pages-modal-img-onerror（已 merge） |
+| 2026-06-26 | 下拉焦點不觸發快捷鍵：`PlayPage` 兩處 keydown 守門加 `SELECT`（修方向鍵改下拉同時切頁的雙重動作）；前端 384 測試通過 | fix/keyboard-ignore-select（已 merge） |
 
