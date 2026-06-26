@@ -42,10 +42,27 @@ export interface PageWatchProgressSummary {
   avg_listened_ratio: number | null;
 }
 
+/** 將任意百分比夾到 0-100 的整數區間；非有限值回傳 null。 */
+function clampPercent(value: number): number | null {
+  if (!Number.isFinite(value)) return null;
+  return Math.min(100, Math.max(0, Math.round(value)));
+}
+
 /** 完成率（0-100 的整數百分比）。`total_viewers <= 0` 時回傳 null，代表沒有足夠資料可顯示。 */
 export function calculateWatchProgressPercent(stats: PageWatchProgressSummary): number | null {
   if (stats.total_viewers <= 0) return null;
-  return Math.round((stats.completed_viewers / stats.total_viewers) * 100);
+  // 資料異常（completed_viewers > total_viewers）時夾在 100，避免徽章顯示 >100%。
+  return clampPercent((stats.completed_viewers / stats.total_viewers) * 100);
+}
+
+/**
+ * 平均聆聽比例的整數百分比（0-100）。`ratio` 為 null 時回傳 null。
+ * 使用者倒退重聽會使 listenedMs 超過語音長度、令 ratio > 1，故需夾在 100 上限，
+ * 否則 tooltip 會出現「平均聆聽 130%」這種失真數字。
+ */
+export function calculateAvgListenedPercent(ratio: number | null): number | null {
+  if (ratio == null) return null;
+  return clampPercent(ratio * 100);
 }
 
 /** 縮圖徽章用的精簡顯示文字（例如 `3/5`）。回傳 null 代表沒有足夠資料可顯示徽章。 */

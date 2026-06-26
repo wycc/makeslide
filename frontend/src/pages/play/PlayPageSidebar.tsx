@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent }
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../../i18n';
 import { debugLog, debugWarn } from '../../lib/debugLog';
-import { calculateWatchProgressPercent, formatWatchProgressBadgeCount } from '../../lib/watchProgress';
+import { calculateWatchProgressPercent, calculateAvgListenedPercent, formatWatchProgressBadgeCount } from '../../lib/watchProgress';
 import { updatePageNote, listPageComments, createPageComment, resolvePageComment, deletePageComment, fetchSimilarPages, type PageComment, type SimilarPage } from '../../lib/api/pdfs';
 import { usePlayPageContext } from './PlayPageContext';
 import { PageAskPanel } from './PageAskPanel';
@@ -799,9 +799,7 @@ export function PlayPageSidebar() {
                 const badgeText = formatWatchProgressBadgeCount(stats);
                 if (badgeText == null) return null;
                 const percent = calculateWatchProgressPercent(stats);
-                const avgListenedPercent = stats.avg_listened_ratio != null
-                  ? Math.round(stats.avg_listened_ratio * 100)
-                  : null;
+                const avgListenedPercent = calculateAvgListenedPercent(stats.avg_listened_ratio);
                 const tooltip = formatMessage('play.sidebar.watchProgress.tooltip', {
                   total: stats.total_viewers,
                   completed: stats.completed_viewers,
