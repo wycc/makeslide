@@ -8222,3 +8222,16 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **i18n**：沿用既有的 `time.*` 鍵（11 組，含 just-now 與 minutes/hours/days/months/years 的單複數），無需新增。
 - **行為差異（屬修正）**：英文語系不再顯示中文；>3 天從絕對日期改為相對描述，與首頁一致。
 - **驗證**：前端 `tsc --noEmit` 通過；`relativeTime.test.ts` 與 `i18n.test.ts`（含 zh/en key 對等）全通過。
+
+## 遙控器投票結果複製（2026-06-26）
+
+### 功能目的
+手機/平板遙控器頁（RemoteControllerPage）的投票控制區可看到各 poll 的結果，但無法把結果帶出。播放頁側欄早已有「複製結果」，本項讓遙控器也能一鍵複製，方便講者在控制端直接帶走投票結果。
+
+### 使用方式
+在遙控器頁的「本頁投票」區，只要本頁有投票，標題列右側就會出現「複製結果」按鈕。點擊即把所有 poll 的結果以 Markdown 複製到剪貼簿（按鈕短暫顯示「已複製 ✓」），每個 poll 為一個 `## 問題` 區段、各選項一行「選項：N 票（X%）」。
+
+### 技術細節
+- **復用純函式**（`frontend/src/pages/RemoteControllerPage.tsx`）：以既有 `formatPollResultsMarkdown(polls, labels)` 產生內容，labels 的 heading 用 `remote.pollControl.title`、票數單位用既有 `remote.votesSuffix`；`handleCopyPollResults` 以 `copyTextToClipboard` 複製並顯示 2 秒提示。按鈕在 `polls.length > 0` 時顯示。
+- **i18n**：新增 zh-TW/en `remote.pollControl.copyResults`/`copyDone`/`copyFail`。
+- **驗證**：前端 `tsc --noEmit` 通過；`i18n.test.ts`（含 zh/en key 對等）通過。內容由既有具測試的 `formatPollResultsMarkdown` 產生，故不另加測試。

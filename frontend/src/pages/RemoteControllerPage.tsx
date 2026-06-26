@@ -12,6 +12,8 @@ import {
 } from '../lib/api/pdfs';
 import type { PagePoll, PdfDetailPage } from '../types';
 import { pollOptionPercent } from '../lib/pollPercent';
+import { formatPollResultsMarkdown } from '../lib/pollResultsMarkdown';
+import { copyTextToClipboard } from '../lib/clipboard';
 
 const REMOTE_DRAWING_COLOR = '#ef4444';
 const REMOTE_DRAWING_LINE_WIDTH = 8; // ref-space units (REF_H = 1080)
@@ -36,6 +38,7 @@ export default function RemoteControllerPage() {
   const [polls, setPolls] = useState<PagePoll[]>([]);
   const [pollsLoading, setPollsLoading] = useState(false);
   const [togglingPollId, setTogglingPollId] = useState<number | null>(null);
+  const [pollCopyMsg, setPollCopyMsg] = useState<string | null>(null);
 
   const syncActiveRef = useRef(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -294,6 +297,16 @@ export default function RemoteControllerPage() {
     }
   };
 
+  const handleCopyPollResults = async () => {
+    const md = formatPollResultsMarkdown(polls, {
+      heading: t('remote.pollControl.title'),
+      votesUnit: t('remote.votesSuffix'),
+    });
+    const ok = await copyTextToClipboard(md);
+    setPollCopyMsg(ok ? t('remote.pollControl.copyDone') : t('remote.pollControl.copyFail'));
+    window.setTimeout(() => setPollCopyMsg(null), 2000);
+  };
+
   const handleTogglePoll = async (poll: PagePoll) => {
     if (!pdfId || togglingPollId != null) return;
     setTogglingPollId(poll.id);
@@ -396,9 +409,20 @@ export default function RemoteControllerPage() {
 
       {/* Poll control section */}
       <div className="mx-4 mt-5">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
-          {t('remote.pollControl.title')}
-        </p>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+            {t('remote.pollControl.title')}
+          </p>
+          {polls.length > 0 && (
+            <button
+              type="button"
+              onClick={() => void handleCopyPollResults()}
+              className="rounded border border-slate-700 px-2 py-0.5 text-[10px] text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+            >
+              {pollCopyMsg ?? t('remote.pollControl.copyResults')}
+            </button>
+          )}
+        </div>
         {pollsLoading ? (
           <p className="text-xs text-slate-500">{t('remote.pollControl.loading')}</p>
         ) : polls.length === 0 ? (
