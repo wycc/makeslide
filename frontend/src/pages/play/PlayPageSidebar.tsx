@@ -8,6 +8,7 @@ import { usePlayPageContext } from './PlayPageContext';
 import { PageAskPanel } from './PageAskPanel';
 import { QualityCheckPanel } from './QualityCheckPanel';
 import { copyTextToClipboard } from '../../lib/clipboard';
+import { truncateWithEllipsis } from '../../lib/truncate';
 import { formatAudioDuration } from '../../lib/audioDuration';
 import { getReviewItems, removeReviewItem, formatReviewListMarkdown, type ReviewItem } from '../../lib/reviewList';
 import { filterComments } from '../../lib/commentFilter';
@@ -33,7 +34,7 @@ function getOutlineTitle(page: import('../../types').PdfDetailPage, scripts: Rec
   const script = scripts[page.page_number];
   if (script) {
     const text = script.trim();
-    if (text.length > 0) return text.slice(0, 20) + (text.length > 20 ? '…' : '');
+    if (text.length > 0) return truncateWithEllipsis(text, 20);
   }
   return '';
 }

@@ -5,6 +5,7 @@ import type { TranslationKey } from '../../i18n';
 import type { PageFigure, PagePoll, SlideAnimationEffect, SlideAnimationEffectType, SlideAnimationEase, SlideAnimationShapeKind } from '../../types';
 import { fetchPageFigures, fetchPagePolls, figureImageUrl, savePageAnimation } from '../../lib/api';
 import { copyTextToClipboard } from '../../lib/clipboard';
+import { truncateWithEllipsis } from '../../lib/truncate';
 import {
   ANIMATION_SHAPE_KINDS,
   DEFAULT_EXIT_DURATION_SECONDS,
@@ -474,7 +475,7 @@ const CUSTOM_SCRIPT_EXAMPLE_PROMPTS: ReadonlyArray<{ labelKey: string; promptKey
 
 /** 句子文字過長時，於下拉選單中截斷顯示。 */
 function truncateSentence(text: string, maxLen = 18): string {
-  return text.length > maxLen ? `${text.slice(0, maxLen)}…` : text;
+  return truncateWithEllipsis(text, maxLen);
 }
 
 type AnimationEditorTabMode = 'full' | 'fullscreen';
