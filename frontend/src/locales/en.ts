@@ -1877,6 +1877,7 @@ export const en = {
   'play.report.exportQuestionsCsv': 'Per-question stats CSV',
   'play.report.print': 'Print / Save PDF',
   'play.report.copySummary': 'Copy summary',
+  'play.report.downloadSummaryMd': 'Download .md',
   'play.report.copyHeading': 'Post-class learning report summary',
   'play.report.copyPollParticipation': 'Poll participation rate',
   'play.report.copyNone': '(no data)',

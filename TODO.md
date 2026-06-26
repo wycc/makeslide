@@ -2451,7 +2451,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 ## 新增可執行項目（第一一〇輪，2026-06-26）
 
-- [ ] 報告摘要下載為 Markdown 檔（Roadmap Phase 1 / 可用性）：`PostClassReportPanel` 已可「複製摘要」（`formatReportSummaryMarkdown`）但無法存成檔。在複製鈕旁加「下載 .md」按鈕，複用同一個 `formatReportSummaryMarkdown(summary, labels, pdfTitle)` 產生內容、以 `Blob`+暫時 `<a download>` 觸發下載（檔名如 `report-{pdfId}.md`）；`summary` 為空時停用。新增 zh-TW/en i18n key。純前端、複用既有純函式（已具測試）。
+- [x] 報告摘要下載為 Markdown 檔（Roadmap Phase 1 / 可用性）：`PostClassReportPanel` 已可「複製摘要」（`formatReportSummaryMarkdown`）但無法存成檔。在複製鈕旁加「下載 .md」按鈕，複用同一個 `formatReportSummaryMarkdown(summary, labels, pdfTitle)` 產生內容、以 `Blob`+暫時 `<a download>` 觸發下載（檔名如 `report-{pdfId}.md`）；`summary` 為空時停用。新增 zh-TW/en i18n key。純前端、複用既有純函式（已具測試）。
+  - 修改說明（2026-06-26）：`PostClassReportPanel` 把原 `handleCopySummary` 內嵌的 labels 抽成共用 `buildSummaryMarkdown()`（`summary` 為空回空字串），供複製與下載共用、避免重複 labels；`handleCopySummary` 改呼叫它。新增 `handleDownloadSummary`：以 `Blob`（`text/markdown;charset=utf-8`）+ 暫時 `<a download>` 觸發下載，檔名 `report-{pdfId}.md`、`URL.revokeObjectURL` 釋放。複製鈕旁新增「下載 .md」按鈕（`summary` 為空時 disabled）。新增 zh-TW/en `play.report.downloadSummaryMd`。內容由既有具測試的 `formatReportSummaryMarkdown` 產生，故不另加測試。前端 `tsc --noEmit` 通過、`reportSummary.test.ts` 與 `i18n.test.ts`（含 zh/en 對等）全通過。分支 `feat/report-summary-download-md`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 83 個完成項目（83/100，未達上限）。
 
 - [ ] 評論輸入 Ctrl/⌘+Enter 送出（可用性，小顆粒）：`CommentsSection` 的新增評論 textarea 目前只能點按鈕送出。為 textarea 加 `onKeyDown`：`(e.ctrlKey || e.metaKey) && e.key === 'Enter'` 時 `e.preventDefault()` 並觸發既有送出流程（沿用 `handleSubmit` 的非空檢查與送出邏輯，避免重複邏輯）；可於 placeholder 或鄰近提示標明快捷鍵。純前端、不動後端。
 
