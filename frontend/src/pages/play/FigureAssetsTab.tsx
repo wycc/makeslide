@@ -130,6 +130,7 @@ export function FigureAssetsTab() {
                 <img
                   src={withShareToken(figure.image_url) ?? figure.image_url}
                   alt={figure.caption ?? figure.id}
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
                   className="mb-2 max-h-40 w-full rounded border border-slate-800 bg-slate-950 object-contain"
                 />
                 <p className="mb-1 line-clamp-3 text-xs text-slate-300">
