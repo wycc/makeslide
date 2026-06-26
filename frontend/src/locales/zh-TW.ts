@@ -1862,6 +1862,7 @@ export const zhTW = {
   'play.report.exportStudentCsv': '學生報告 CSV',
   'play.report.exportPollCsv': '投票結果 CSV',
   'play.report.exportPagesCsv': '每頁分析 CSV',
+  'play.report.exportQuestionsCsv': '逐題統計 CSV',
   'play.report.print': '列印 / 儲存 PDF',
   'play.report.copySummary': '複製摘要',
   'play.report.copyHeading': '課後學習報告摘要',

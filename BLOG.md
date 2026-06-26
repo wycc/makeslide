@@ -7868,3 +7868,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **作用域決定**：`lib/reviewList.ts` 的 `clearAllReviewItems()` 會清掉所有簡報的複習項目，但本區塊只呈現目前簡報的清單，逕用會誤刪其他簡報的複習項目。因此改為以 `removeReviewItem(pdfId, pageNumber)`（省略 questionText 時整頁移除）逐頁清除**目前簡報**的項目，刻意不使用 `clearAllReviewItems`，避免破壞跨簡報的複習清單。
 - **i18n**：新增 zh-TW/en `play.sidebar.reviewListClearAll`。
 - **驗證**：前端 `tsc --noEmit` 通過；`i18n.test.ts`（含 zh/en key 對等）通過。
+
+## 測驗逐題統計 CSV 匯出（2026-06-26）
+
+### 功能目的
+課後報告已能匯出測驗結果（逐次作答）、學生名單、投票結果、每頁分析等 CSV，但缺少「以題為單位」的統計總表。本項新增逐題統計 CSV，讓教師一眼看出每一題的作答數、答對/答錯數、正確率與各選項被選次數，快速定位最需要回顧的題目（Roadmap Phase 1）。
+
+### 使用方式
+開啟課後報告，點工具列的「逐題統計 CSV」即可下載 `report-questions-<id>.csv`。每題一列，欄位為 `question_id,question,option_count,attempt_count,correct_count,wrong_count,correct_rate,option_votes`；其中 `option_votes` 以 `|` 串接各選項得票（如 `1|1|0`），避免欄數隨選項數浮動。需編輯權限。
+
+### 技術細節
+- **後端**（`backend/src/routes/pdfs/report.ts`）：新增 `GET /api/pdfs/:id/report/questions.csv`，沿用既有 `computeQuestionStats(id)` 的彙整結果逐題輸出；`correct_rate` 四捨五入到小數第 4 位、`option_votes` 以 `|` 串為單一欄位。沿用共用 `csvEscape` 與 `canEditPdf` 權限，回應 `text/csv` + `attachment` 檔名。
+- **前端**（`frontend/src/pages/play/PostClassReportPanel.tsx`）：在「每頁分析 CSV」後加入「逐題統計 CSV」下載連結；新增 zh-TW/en `play.report.exportQuestionsCsv`。
+- **測試**（`backend/test/report-questions-csv.test.ts`）：4 個案例（兩題兩次作答的欄位/數值與 `option_votes` 串接、無測驗時僅 header、403 非擁有者、404）。
+- **驗證**：前端與後端 `tsc --noEmit` 通過；`i18n.test.ts`（含 zh/en key 對等）通過。後端 handler 測試需 better-sqlite3 native module，於本機 sandbox 無法載入，留待 CI 執行。

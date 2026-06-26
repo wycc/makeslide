@@ -215,6 +215,13 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
               >
                 {t('play.report.exportPagesCsv')}
               </a>
+              <a
+                href={`api/pdfs/${encodeURIComponent(pdfId)}/report/questions.csv`}
+                download
+                className="rounded-md border border-sky-500/50 bg-sky-500/15 px-3 py-1.5 text-sm text-sky-100 hover:bg-sky-500/25"
+              >
+                {t('play.report.exportQuestionsCsv')}
+              </a>
               <button
                 type="button"
                 onClick={() => void handleCopySummary()}
