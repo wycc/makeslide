@@ -7477,3 +7477,16 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 ### 技術細節
 - **跨套件一致性測試**（新檔 `backend/test/quizCorrectnessConsistency.test.ts`）：同時 import 後端 `services/quizCorrectness.ts` 與前端 `lib/quizScoring.ts` 的 `isCorrectAnswer`（前端僅以 `import type` 取用 `QuizQuestion`、執行期無相依，故後端測試可直接載入）。兩者簽章不同——前端收一個 `QuizQuestion`（用其 `answer_indices`），後端收索引陣列，因此測試以最小的 `{ answer_indices } as QuizQuestion` 物件包裝前端呼叫。對 11 個代表性案例（單選相符/不符、多選忽略順序與重複、子集、超集、相異、空對空、空對非空）斷言兩份回傳值相同。
 - **驗證**：此測試不依賴資料庫、可在 sandbox 直接執行並通過；後端 `tsc -p tsconfig.json` build 通過（測試檔不在 build 範圍，跨套件 import 僅在測試執行時解析）。
+
+## 後端測驗計分抽離為純可測且有守門的模組（2026-06-26）
+
+### 功能目的
+測驗的「分數」有兩套計算：前端在編輯器/作答時即時顯示「預估得分」，後端則是學生提交後的「權威計分」（絕不信任用戶端傳來的分數）。兩邊的規則必須一模一樣——單選題「全對才得分」、多選題「逐選項部分給分」（每個選項的勾選狀態與正解相符就拿到該選項的均分）、沒有手動設定分數的題目則平分 100 分池裡剩下的分數。但後端這兩個函式（`calcQuestionScore`、`normalizeQuestionScores`）原本內嵌在 import 了資料庫的 `quizzes.ts` 裡——雖然註解寫著「鏡像前端 lib/quizScoring.ts」，卻既沒有後端自己的單元測試，也沒有任何「前後端是否一致」的守門。萬一某天有人調整了其中一邊的計分規則（例如改了多選的部分給分演算法），學生看到的預估分就會和實際入帳的分數對不上。本次把後端計分抽成獨立的純模組，補上測試與跨套件一致性守門。
+
+### 使用方式
+無需任何操作，純內部重構，計分行為不變（與先前一致，且現在保證前後端一致）。
+
+### 技術細節
+- **純模組**（新檔 `backend/src/services/quizScoring.ts`）：匯出 `QUIZ_TOTAL_SCORE`、最小結構型別 `ScorableQuestion`（只含計分需要的 `type`/`options`/`answer_indices`/`score`）、以及 `calcQuestionScore` 與 `normalizeQuestionScores`。`calcQuestionScore` 複用先前抽出的 `isCorrectAnswer`。不 import 資料庫。
+- **去重 / 收斂**：`quizzes.ts` 移除本地兩個函式定義，改為 import；其原本以 zod `z.infer` 推導的 `ScorableQuestion` 型別與新模組的最小結構型別結構相容，呼叫端不需改動。順帶移除已不再使用的 `isCorrectAnswer` import。
+- **測試**：`quizScoring.test.ts` 5 個 node:test——單選全對/全無、多選部分給分（手算驗證 4 選項中選 1 個正解得 6/8、全不選得 4/8）、0 選項得 0、未填分數均分、全填保留與空陣列。另新增跨套件 `quizScoringConsistency.test.ts` 2 個 test，同時載入後端與前端 `lib/quizScoring.ts` 的 `calcQuestionScore`／`normalizeQuestionScores`，對多個案例斷言兩者一致（沿用 `isCorrectAnswer` 一致性守門的模式）。後端 `tsc -p tsconfig.json` build 通過，相關測試全數通過。

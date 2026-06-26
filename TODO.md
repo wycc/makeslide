@@ -2139,6 +2139,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：新增 `backend/test/quizCorrectnessConsistency.test.ts`，import 後端與前端兩個 `isCorrectAnswer`（簽章不同——前端收 `QuizQuestion`、後端收索引陣列，故以最小 question 物件包裝），對 11 個案例（單選、多選忽略順序/重複、子集/超集/相異、空對空/空對非空）斷言兩者一致。sandbox 執行通過；後端 build 通過。分支 `test/quiz-correctness-consistency`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 44 個完成項目（44/100，未達上限）。
 
+- [x] 後端測驗計分抽離為純可測且有守門的模組：`calcQuestionScore`／`normalizeQuestionScores`（伺服器端權威計分，單選 all-or-nothing、多選逐選項部分給分、未填分數均分 100 分池）原為 import db 的 `quizzes.ts` 內 module-local 函式，註解明言鏡像前端 `lib/quizScoring.ts` 卻無後端測試、無跨套件守門。抽到純 `services/quizScoring.ts`（最小 `ScorableQuestion` 結構型別、複用 `isCorrectAnswer`），`quizzes.ts` 改 import。
+  - 修改說明（2026-06-26）：新增 `backend/src/services/quizScoring.ts`（`QUIZ_TOTAL_SCORE`/`ScorableQuestion`/兩函式）；`quizzes.ts` 移除本地定義、改 `import { calcQuestionScore, normalizeQuestionScores }`、移除已不需的 `isCorrectAnswer` import（z.infer 型別結構相容傳入）。新增 `quizScoring.test.ts` +5（單選 all-or-nothing、多選部分給分 6/4 邊界、0 選項、均分、全填/空陣列）與跨套件 `quizScoringConsistency.test.ts` +2（前後端 calc／normalize 在多案例一致）。後端 build 通過、相關測試全通過。分支 `refactor/extract-backend-quiz-scoring`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 45 個完成項目（45/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2187,4 +2191,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | 前端投票選項上限驗證：`handleCreatePoll` 補 `> MAX_POLL_OPTIONS`(6) 檢查，送出前以 `play.sidebar.poll.maxOptions` 友善訊息攔下；zh/en 各 +1 key；前端 384 測試通過 | feat/poll-max-options-frontend-validation（已 merge） |
 | 2026-06-26 | 測驗答對判定收斂單一來源：`isCorrectAnswer` 抽到 `services/quizCorrectness.ts`，`quizzes.ts` 與 `report.ts`(2處) 共用（防報告與計分判定漂移）；quizCorrectness.test.ts +4、後端 build 通過 | refactor/dedupe-quiz-correctness（已 merge） |
 | 2026-06-26 | 前後端 isCorrectAnswer 一致性 drift-guard：新增跨套件測試斷言後端/前端 `isCorrectAnswer` 在 11 個案例一致；後端 build 通過 | test/quiz-correctness-consistency（已 merge） |
+| 2026-06-26 | 後端測驗計分抽離可測+守門：`calcQuestionScore`/`normalizeQuestionScores` 抽到純 `services/quizScoring.ts`，quizzes.ts 改 import；quizScoring.test.ts +5、quizScoringConsistency.test.ts +2（前後端一致）；後端 build 通過 | refactor/extract-backend-quiz-scoring（已 merge） |
 
