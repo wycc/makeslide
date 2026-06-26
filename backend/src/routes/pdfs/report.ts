@@ -4,6 +4,7 @@ import type { PdfRow } from '../../types';
 import { decodeSession, parseCookies } from '../auth';
 import { errorResponse, IdParamSchema } from './shared';
 import { csvEscape, withCsvBom } from './csv';
+import { safeDownloadBaseName, buildContentDisposition } from './downloadFilename';
 import { isCorrectAnswer } from '../../services/quizCorrectness';
 import { getSyncFollowerQuestionsSnapshot } from './sync';
 
@@ -18,9 +19,9 @@ function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibil
   return row.visibility === 'public_editable';
 }
 
-function getPdfPermissionRow(id: string): Pick<PdfRow, 'owner_sub' | 'visibility'> | undefined {
-  return db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
-    | Pick<PdfRow, 'owner_sub' | 'visibility'>
+function getPdfPermissionRow(id: string): Pick<PdfRow, 'owner_sub' | 'visibility' | 'title'> | undefined {
+  return db.prepare(`SELECT owner_sub, visibility, title FROM pdfs WHERE id = ?`).get(id) as
+    | Pick<PdfRow, 'owner_sub' | 'visibility' | 'title'>
     | undefined;
 }
 
@@ -280,7 +281,7 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
     }
     const csv = rows.join('\n');
     void reply.header('Content-Type', 'text/csv; charset=utf-8');
-    void reply.header('Content-Disposition', `attachment; filename="report-${id}.csv"`);
+    void reply.header('Content-Disposition', buildContentDisposition(safeDownloadBaseName(pdfRow.title, '') ? `${safeDownloadBaseName(pdfRow.title, '')}-students.csv` : `report-${id}.csv`));
     return reply.code(200).send(withCsvBom(csv));
   });
 
@@ -351,7 +352,7 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
     }
     const csv = rows.join('\n');
     void reply.header('Content-Type', 'text/csv; charset=utf-8');
-    void reply.header('Content-Disposition', `attachment; filename="report-pages-${id}.csv"`);
+    void reply.header('Content-Disposition', buildContentDisposition(safeDownloadBaseName(pdfRow.title, '') ? `${safeDownloadBaseName(pdfRow.title, '')}-pages.csv` : `report-pages-${id}.csv`));
     return reply.code(200).send(withCsvBom(csv));
   });
 
@@ -386,7 +387,7 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
     }
     const csv = rows.join('\n');
     void reply.header('Content-Type', 'text/csv; charset=utf-8');
-    void reply.header('Content-Disposition', `attachment; filename="report-questions-${id}.csv"`);
+    void reply.header('Content-Disposition', buildContentDisposition(safeDownloadBaseName(pdfRow.title, '') ? `${safeDownloadBaseName(pdfRow.title, '')}-questions.csv` : `report-questions-${id}.csv`));
     return reply.code(200).send(withCsvBom(csv));
   });
 

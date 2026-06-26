@@ -63,7 +63,7 @@ test('GET /api/pdfs/:id/report/questions.csv returns per-question stats', async 
     const resp = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}/report/questions.csv`, headers: OWNER_HEADERS });
     assert.equal(resp.statusCode, 200);
     assert.match(resp.headers['content-type'] as string, /text\/csv/);
-    assert.match(resp.headers['content-disposition'] as string, /attachment; filename="report-questions-report-q-csv-01\.csv"/);
+    assert.match(resp.headers['content-disposition'] as string, /attachment; filename="Quiz PDF report-q-csv-01-questions\.csv"/);
     const lines = resp.body.trim().split('\n');
     assert.equal(lines[0], 'question_id,question,option_count,attempt_count,correct_count,wrong_count,correct_rate,option_votes');
     // q1: answer [0]; a picked 0 (correct), b picked 1 (wrong) -> 1/1, votes 1|1|0

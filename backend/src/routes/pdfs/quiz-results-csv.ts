@@ -4,6 +4,7 @@ import type { PdfRow } from '../../types';
 import { decodeSession, parseCookies } from '../auth';
 import { errorResponse, IdParamSchema } from './shared';
 import { csvEscape, withCsvBom } from './csv';
+import { safeDownloadBaseName, buildContentDisposition } from './downloadFilename';
 
 function sessionSub(request: FastifyRequest): string | null {
   const session = decodeSession(parseCookies(request).makeslide_session);
@@ -69,10 +70,11 @@ export async function registerQuizResultsCsvRoutes(app: FastifyInstance): Promis
     }
 
     const csv = lines.join('\n') + '\n';
-    const filename = `quiz-results-${parsed.data.id}.csv`;
+    const titleBase = safeDownloadBaseName(row.title, '');
+    const filename = titleBase ? `${titleBase}-quiz-results.csv` : `quiz-results-${parsed.data.id}.csv`;
 
     reply.header('content-type', 'text/csv; charset=utf-8');
-    reply.header('content-disposition', `attachment; filename="${filename}"`);
+    reply.header('content-disposition', buildContentDisposition(filename));
     reply.header('cache-control', 'no-store');
     return reply.send(withCsvBom(csv));
   });

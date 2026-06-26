@@ -5,6 +5,7 @@ import { decodeSession, parseCookies } from '../auth';
 import type { PdfRow } from '../../types';
 import { errorResponse, IdParamSchema, PageParamSchema, nowIso } from './shared';
 import { csvEscape, withCsvBom } from './csv';
+import { safeDownloadBaseName, buildContentDisposition } from './downloadFilename';
 
 function sessionSub(request: FastifyRequest): string | null {
   const session = decodeSession(parseCookies(request).makeslide_session);
@@ -23,9 +24,9 @@ function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibil
   return row.visibility === 'public_editable';
 }
 
-function getPdfRow(id: string): Pick<PdfRow, 'owner_sub' | 'visibility'> | undefined {
-  return db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
-    | Pick<PdfRow, 'owner_sub' | 'visibility'>
+function getPdfRow(id: string): Pick<PdfRow, 'owner_sub' | 'visibility' | 'title'> | undefined {
+  return db.prepare(`SELECT owner_sub, visibility, title FROM pdfs WHERE id = ?`).get(id) as
+    | Pick<PdfRow, 'owner_sub' | 'visibility' | 'title'>
     | undefined;
 }
 
@@ -115,8 +116,10 @@ export async function registerCommentsRoutes(app: FastifyInstance): Promise<void
       );
     }
     const csv = lines.join('\n') + '\n';
+    const titleBase = safeDownloadBaseName(pdfRow.title, '');
+    const filename = titleBase ? `${titleBase}-comments.csv` : `comments-${id}.csv`;
     reply.header('content-type', 'text/csv; charset=utf-8');
-    reply.header('content-disposition', `attachment; filename="comments-${id}.csv"`);
+    reply.header('content-disposition', buildContentDisposition(filename));
     reply.header('cache-control', 'no-store');
     return reply.send(withCsvBom(csv));
   });
