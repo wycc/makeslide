@@ -7627,3 +7627,18 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **設計取捨**：主題刻意維持本機偏好、不寫入後端 `SystemAiSettings`，避免影響多帳號設定 API；即時套用而非等 Save，符合「外觀切換要馬上看到」的直覺。
 - **已知限制**：本項只負責設定頁切換與即時套用；頁面重新整理後於 App 啟動時自動套用 stored theme（避免首屏白閃）為下一獨立項目，在那之前重整頁面需再次進設定頁才會重新套用。
 - **驗證**：前端 `tsc --noEmit` 通過；`i18n.test.ts`（含 zh/en key 對等檢查）24 個測試全通過。
+
+## App 啟動前套用主題、避免白閃（2026-06-26）
+
+### 功能目的
+承接 Theme 系列前三項，本項解決「重新整理頁面時主題會閃一下」的問題。先前設定頁雖能切換並即時套用主題，但重整後在 React 載入並執行套用邏輯之前，畫面會先以 HTML 的預設外觀（`<html class="dark">`）渲染，造成首屏與使用者偏好不一致的閃爍。本項在最早可行的時點（首屏 paint 前）套用已儲存的主題，消除這個 flash，並確保之後 React 端狀態一致。
+
+### 使用方式
+無需任何操作。重新整理或重新開啟頁面時，畫面會直接以你選定的主題（或在「跟隨系統」模式下依 OS 偏好）呈現，不再出現短暫的主題閃爍。
+
+### 技術細節
+- **inline script**（`frontend/index.html`）：於 `<head>` 最前端（charset 之後、其他資源之前）加入一段自包含 IIFE，在首屏 paint 前讀取 `localStorage['makeslide.theme']`，依 `system → matchMedia('(prefers-color-scheme: dark)')` 解析，toggle `<html>` 的 `dark` class 並設 `data-theme`。此腳本無 import、無網路請求、只讀取公開的主題偏好，並以 try/catch 包覆（localStorage 不可用時保留原本的 `class="dark"` 作為 no-JS fallback）。邏輯刻意鏡像 `src/lib/theme.ts`。
+- **bundle 端一致性**（`frontend/src/main.tsx`）：在 React render 前再次呼叫 `applyThemePreference()`（與 inline script 結果一致，作為防呆），並啟動 `watchSystemThemeChange()`，讓 `system` 模式在執行期也能跟隨 OS 的深色/淺色切換即時更新。
+- **安全**：專案未設 CSP，inline script 可正常執行；腳本不讀取任何敏感資料。
+- **驗證**：前端 `tsc --noEmit` 通過；`theme.test.ts` 10 個測試全通過（inline script 為 HTML 內嵌，其邏輯已由 `theme.ts` 的單元測試覆蓋，故不另加測試）。
+- **範圍**：本項僅處理「啟動前套用主題」；各頁面元件實際的淺色外觀適配（把硬編 slate/white class 換成語意 token）為下一獨立項目。

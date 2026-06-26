@@ -2,6 +2,27 @@
 <html lang="zh-TW" class="dark">
   <head>
     <meta charset="UTF-8" />
+    <!--
+      Apply the stored theme before first paint to avoid a flash. Self-contained
+      (no imports / no network / reads only the public theme preference); mirrors
+      the logic in src/lib/theme.ts (key 'makeslide.theme', system -> matchMedia).
+      The <html class="dark"> above is a no-JS fallback that this script corrects.
+    -->
+    <script>
+      (function () {
+        try {
+          var pref = localStorage.getItem('makeslide.theme');
+          if (pref !== 'light' && pref !== 'dark' && pref !== 'system') pref = 'system';
+          var resolved = pref;
+          if (pref === 'system') {
+            resolved = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+          }
+          var root = document.documentElement;
+          root.classList.toggle('dark', resolved === 'dark');
+          root.setAttribute('data-theme', resolved);
+        } catch (e) { /* localStorage unavailable -> keep fallback class */ }
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/icons/makeslide-icon.svg" />
     <link rel="apple-touch-icon" href="/icons/makeslide-icon.svg" />
     <link rel="manifest" href="/manifest.webmanifest" />
