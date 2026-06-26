@@ -6,6 +6,7 @@ import { fetchSyncAttendees, generatePdfDescription } from '../../lib/api';
 import { useI18n } from '../../i18n';
 import { usePlayPageContext } from './PlayPageContext';
 import { copyTextToClipboard } from '../../lib/clipboard';
+import { shouldCloseOnOutsidePointer, isDropdownDismissKey } from './headerDropdownDismiss';
 import type { SyncFollowerQuestion } from '../../types';
 
 function CopyAllQuestionsButton({ questions }: { questions: SyncFollowerQuestion[] }) {
@@ -130,8 +131,31 @@ function HeaderDropdown({
     emerald: 'border-emerald-500/60 bg-emerald-950 text-emerald-100 hover:bg-emerald-900 md:bg-emerald-500/10 md:hover:bg-emerald-500/20',
     amber: 'border-amber-500/60 bg-amber-950 text-amber-100 hover:bg-amber-900 md:bg-amber-500/10 md:hover:bg-amber-500/20',
   }[accent];
+  const rootRef = useRef<HTMLDetailsElement>(null);
+
+  // Close on Escape or a pointer-down outside the menu — a controlled <details>
+  // does neither on its own, so an open dropdown would otherwise linger.
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: MouseEvent) => {
+      const root = rootRef.current;
+      const inside = !!root && event.target instanceof Node && root.contains(event.target);
+      if (shouldCloseOnOutsidePointer(open, inside)) onOpenChange(null);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (isDropdownDismissKey(event.key)) onOpenChange(null);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open, onOpenChange]);
+
   return (
     <details
+      ref={rootRef}
       open={open}
       className="group relative z-[100]"
     >
