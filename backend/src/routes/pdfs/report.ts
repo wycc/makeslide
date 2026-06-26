@@ -4,6 +4,7 @@ import type { PdfRow } from '../../types';
 import { decodeSession, parseCookies } from '../auth';
 import { errorResponse, IdParamSchema } from './shared';
 import { csvEscape } from './csv';
+import { isCorrectAnswer } from '../../services/quizCorrectness';
 import { getSyncFollowerQuestionsSnapshot } from './sync';
 
 function sessionSub(request: FastifyRequest): string | null {
@@ -99,7 +100,7 @@ function computeQuestionStats(pdfId: string): QuestionStat[] {
         });
       }
       const stat = statMap.get(key)!;
-      const correctSet = new Set(Array.isArray(q.answer_indices) ? q.answer_indices : []);
+      const answerIndices = Array.isArray(q.answer_indices) ? q.answer_indices : [];
 
       for (const attempt of attempts) {
         let answersRecord: Record<string, number[]>;
@@ -119,11 +120,7 @@ function computeQuestionStats(pdfId: string): QuestionStat[] {
           }
         }
 
-        const selectedSet = new Set(selected);
-        const isCorrect =
-          correctSet.size === selectedSet.size &&
-          Array.from(correctSet).every((i) => selectedSet.has(i));
-        if (isCorrect) {
+        if (isCorrectAnswer(answerIndices, selected)) {
           stat.correct_count += 1;
         } else {
           stat.wrong_count += 1;
@@ -216,11 +213,7 @@ function computeStudentRecords(pdfId: string): StudentRecord[] {
 
     const questionResults: StudentAttemptQuestionResult[] = questions.map((q) => {
       const selected: number[] = Array.isArray(answers[q.id]) ? (answers[q.id] ?? []) : [];
-      const correctSet = new Set(Array.isArray(q.answer_indices) ? q.answer_indices : []);
-      const selectedSet = new Set(selected);
-      const is_correct =
-        correctSet.size === selectedSet.size &&
-        Array.from(correctSet).every((i) => selectedSet.has(i));
+      const is_correct = isCorrectAnswer(Array.isArray(q.answer_indices) ? q.answer_indices : [], selected);
       return {
         question_id: q.id,
         question: q.question ?? '',
