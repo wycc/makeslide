@@ -2055,6 +2055,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：zh-TW/en 各新增 `play.animation.defaultPausePlaybackText`／`defaultRealtimePollText`；`AnimationEditorTab.tsx` 兩個 preset 移除 `text:`、placeholder 改 `t()`、移除常數 import；`SlideRenderer.tsx` 的 `EffectOverlay` 加 `useI18n`、兩處 fallback 改 `t()`、移除常數 import；`animationSpec.ts` 移除已不再使用的兩個常數。preset 測試只檢查 exitDuration/pollId 不受影響。前端 377 測試 + typecheck（含 i18n key 對齊）全通過。分支 `fix/animation-default-text-i18n`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 23 個完成項目（23/100，未達上限）。
 
+- [x] custom-script 安全檢查擋下可呼叫的 Function 建構式：`findUnsafeScriptPattern`（AI 產生之 custom-script 程式碼於 sandboxed iframe 執行前的縱深防禦）原本擋 `new Function(...)`，卻漏了可呼叫形式 `Function("...")()`（等同 eval 的向量）。新增 case-sensitive `/\bFunction\s*\(/`（僅大寫 F，避免誤擋一般程式碼的小寫 `function(` 關鍵字）。
+  - 修改說明（2026-06-26）：`animationCustomScript.ts` 的 `UNSAFE_PATTERNS` 在 `new Function` 後新增 `{ pattern: /\bFunction\s*\(/, label: 'Function constructor' }`（`new Function(` 仍由前項先回報、標籤不變）。`animation-custom-script.test.ts` 新增可呼叫 Function 建構式偵測（+2 case）與「不誤擋小寫 function 關鍵字」測試（+1 test，含函式運算式/IIFE/renderAnimation）。相關測試 17 通過、後端 build 通過。分支 `fix/unsafe-pattern-function-ctor`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 24 個完成項目（24/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2082,4 +2086,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | add-pages outline 純函式抽離並補測試：`parseOutlineText`/`buildInsertionContext`/`renderNewSlideTexts` 抽到無 db 依賴的 `addPagesOutline.ts`（從 `addPagesFromPrompt` re-export 維持相容）；addPagesOutline.test.ts +7 測試、後端 build 通過 | refactor/add-pages-outline-pure（已 merge） |
 | 2026-06-26 | 預設投票選項 i18n：`usePagePolls` 新投票預設選項 `同意/不同意` 改用 `t('play.sidebar.poll.defaultOptions')`（zh/en）；前端 377 測試通過 | fix/poll-default-options-i18n（已 merge） |
 | 2026-06-26 | 暫停播放/即時問答動畫預設文字 i18n：移除 `pause-playback`/`realtime-poll` preset 硬編中文 text（與 text-callout 一致），editor placeholder 與 `SlideRenderer` fallback 改 `t()`；zh/en 各 +2 key；前端 377 測試通過 | fix/animation-default-text-i18n（已 merge） |
+| 2026-06-26 | custom-script 安全檢查補擋可呼叫 Function 建構式：`findUnsafeScriptPattern` 新增 `/\bFunction\s*\(/`（大寫 F，擋 `Function("…")()`、不誤擋 `function(`）；animation-custom-script.test.ts +3、後端 build 通過 | fix/unsafe-pattern-function-ctor（已 merge） |
 
