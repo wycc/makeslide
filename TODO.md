@@ -2403,12 +2403,34 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：新增 `frontend/src/i18n.nonempty.test.ts`。**實作發現**：直接斷言「所有值非空」會誤報——`en` 有 5 個刻意為空的結構性前後綴 key（`play.common.pageSuffix`、`quiz.aiGeneratePageSuffix`、`quiz.countdownPrefix`、`remote.slideAltSuffix`、`play.report.pageSuffix`；中文以「頁」後綴呈現「第 N 頁」、英文用「Page N」前綴故後綴留空，皆在 zh 有值）。故採「允許清單」模式：明列這 5 個可空 key，其餘所有值在兩語系皆須非空白；並加第 3 個測試確保允許清單上的 key「至少一個語系非空」，使允許清單不致淪為永久空殼。共 3 測試全通過、`tsc --noEmit` 通過。純測試、不改產品程式。分支 `feat/i18n-nonempty-test`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 77 個完成項目（77/100，未達上限）。
 
-- [ ] 首頁顯示目前篩選結果數（可用性，小顆粒）：`HomePage` 清單上方（或工具列附近）顯示「共 N 筆」，數量為目前 `filteredItems.length`（隨搜尋/分類/標籤篩選即時更新）；新增 zh-TW/en i18n key（含 `{count}` 佔位）。純前端、不動後端與資料型別。
+- [x] ~~首頁顯示目前篩選結果數~~（**已存在，無需實作**）：經查 `HomePage` 已於清單上方（`HomePage.tsx:1209-1211`）以 `visibleSummary` 顯示「顯示 {shown} / {total} 份簡報」（i18n key `home.resultSummary`，含 `aria-live="polite"`，`{shown}=filteredItems.length`、`{total}=categoryFilteredItems.length`，隨搜尋/分類/最愛篩選即時更新）。本項規畫時 grep 漏看既有實作，故標為已存在、**不計入 100 完成計數**（無程式碼變更）。發現時間 2026-06-26。
 
-- [ ] 播放頁鍵盤快捷鍵說明面板（可用性）：`PlayPage` 有多個鍵盤快捷鍵（方向鍵翻頁、空白鍵、G 跳頁、B 書籤、W 手寫等）但無集中說明。新增一個可開關的快捷鍵說明 overlay（由標題列一個「⌨」/「?」按鈕開啟，Esc 或點擊外部關閉），以清單列出按鍵與說明；按鍵說明文字以 i18n 提供。先以「靜態列出目前已實作快捷鍵」為範圍，不改動快捷鍵行為本身。純前端。
+- [x] ~~播放頁鍵盤快捷鍵說明面板~~（**已存在，無需實作**）：經查 `PlayPageHeader.tsx`（約 40-110 行）已有完整的快捷鍵說明面板——標題列「? 鍵盤快捷鍵」按鈕、`?` 鍵切換開關、modal 以表格列出 `?`/`←‧→`/`Space`（全螢幕與一般兩種）/`G`/`B`/`I`/`W`/`P`/`A`/`Esc` 及其 i18n 說明、點擊外部或關閉鈕關閉。本項規畫時未驗證既有實作，故標為已存在、**不計入 100 完成計數**（無程式碼變更）。發現時間 2026-06-26。
 
 ## 工作記錄（第一〇七輪，2026-06-26）
 
 - 工作內容：第一〇五輪新增的 4 個可執行項目已全部完成，可執行項目又僅剩兩個「待使用者決定 / 待處理」項目，依 LOOP.md 第 2 條分析現有程式並對照 `docs/FUTURE_ROADMAP.md`，於 TODO.md 新增 4 個小顆粒、可單輪完成、可加測試、低風險且主題分散的可執行項目（抽出測驗題目純文字格式化純函式、i18n 值非空守門測試、首頁顯示篩選結果數、播放頁鍵盤快捷鍵說明面板），並補掃描摘要。本輪為規畫輪，不計入 100 完成計數（計數維持 75/100）。
+- 時間：2026-06-26
+- 分支：直接於 master 更新 TODO.md（規畫輪，無程式碼變更）
+
+## 掃描摘要（第一〇八輪，2026-06-26）
+
+- 觸發原因：第一〇七輪新增的 4 項中，2 個可測性/測試項目已完成（76、77），另 2 個 UX 項目（首頁篩選結果數、播放頁鍵盤快捷鍵說明面板）經本輪查證**其實早已實作**（分別在 `HomePage.tsx:1209-1211` 的 `visibleSummary` 與 `PlayPageHeader.tsx` 的快捷鍵 modal），已就地標記為「已存在、不計入計數」。教訓：規畫新項目前須先 grep 既有實作再加入。
+- 本輪改進：以下新項目皆已先 grep 驗證「目前不存在」才列入（測驗 JSON 只有匯出無匯入；評論只有 resolve/delete 無文字編輯與批次標記；subtitles.txt 無簡報標題行）。
+- 取材方向：Phase 5 匯入/匯出、評論協作可用性，維持「小顆粒、可單輪完成、可加測試、低風險」。
+
+## 新增可執行項目（第一〇八輪，2026-06-26）
+
+- [ ] 測驗從 JSON 匯入（Roadmap Phase 5 匯入；可用性）：`QuizBuilderPage.tsx` 目前可「匯出 JSON」但無匯入。新增純函式 `frontend/src/lib/quizImport.ts` 之 `parseQuizImportJson(text)`：解析並驗證 `{ title?, questions: [...] }`，過濾/正規化每題（`question` 為非空字串、`options` 為 `{text}` 陣列、`answer_indices` 為合法索引、`type` 預設 single、`explanation` 預設空），回傳 `{ ok, value?/error? }` 形式；補單元測試（合法、壞 JSON、缺 questions、索引越界過濾）。UI 加「匯入 JSON」按鈕（隱藏 `<input type=file accept=.json>`，讀檔後套用），新增 zh-TW/en i18n key。純前端。
+
+- [ ] 評論文字編輯（協作可用性）：評論目前只能建立 / 標記已解決 / 刪除，無法修正錯字。後端為 `comments.ts` 的 `PATCH /api/pdfs/:id/comments/:commentId` 增加可選 `text`（zod：trim、1..2000；與既有 `resolved` 並存、至少提供其一），更新後回傳整列；沿用 `canEditPdf`。前端 `CommentsSection` 每則評論加「編輯」進入 inline textarea（沿用字數上限/計數），呼叫新增的 `editPageComment(id, commentId, text)` API。補後端 node:test（更新 text、保留 resolved、空字串 400、403/404）；新增 zh-TW/en i18n key。
+
+- [ ] 評論批次「全部標記已解決」（協作可用性，小顆粒）：`CommentsSection` 標題列加一顆按鈕，對目前清單中所有「未解決」評論依序呼叫既有 `resolvePageComment(..., true)` 並更新本地狀態；僅在有未解決評論（`countUnresolvedComments(comments) > 0`）時顯示；採既有 API、不需新後端端點；新增 zh-TW/en i18n key。純前端（複用既有 API）。
+
+- [ ] 逐字稿純文字匯出加入簡報標題行（Roadmap Phase 5 匯出，小顆粒）：`subtitles.txt`（`subtitles.ts` 的 `buildPlainTextContent`）目前以「# 第 1 頁」起頭，未含簡報標題。改為在最前面加一行 `# {pdf.title}`（標題為空時退回檔名或略過該行），其後接既有逐頁內容；對應更新 `backend/test/subtitles-txt.test.ts` 既有斷言。後端小改 + 測試更新。
+
+## 工作記錄（第一〇八輪，2026-06-26）
+
+- 工作內容：本輪初擬實作第一〇七輪的兩個 UX 項目，但查證發現「首頁篩選結果數」與「播放頁鍵盤快捷鍵說明面板」皆早已實作，遂就地標記為「已存在、不計入計數」（無程式碼變更），並反省規畫前未先 grep 既有實作。隨後依 LOOP.md 第 2 條，先 grep 驗證「不存在」再新增 4 個可執行項目（測驗 JSON 匯入、評論文字編輯、評論批次標記已解決、逐字稿匯出加簡報標題行），並補掃描摘要。本輪為規畫/修正輪，不計入 100 完成計數（計數維持 77/100）。
 - 時間：2026-06-26
 - 分支：直接於 master 更新 TODO.md（規畫輪，無程式碼變更）
