@@ -7274,3 +7274,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **單一來源**（新檔 `backend/src/timingSafe.ts`）：匯出唯一的 `timingSafeStringEqual(a, b)`——以 UTF-8 buffer 比較、長度不同先回 `false`、相同長度才呼叫 `crypto.timingSafeEqual`。
 - **相容處理**：`server.ts` 與 `routes/auth.ts` 原本各自 `export` 此函式、且有測試從這兩個模組 import，因此改成從 `timingSafe.ts` re-export（`auth.ts` 內部第 80/230 行仍用到，於頂部 import 後再 `export`）；`services/aiSettings.ts` 僅內部使用（MCP token 比對），改為 import。三處的 `crypto` import 因仍有其他用途而保留。
 - **測試**：新增 `backend/test/timingSafe.test.ts` 4 個 node:test（完全相等才為 true、長度不同安全回 false 不拋錯、兩個空字串相等、UTF-8 多位元組內容比對）。此測試不依賴資料庫、可在 sandbox 直接驗證；後端 `tsc -p tsconfig.json` build 通過。既有的 auth／mcp 整合測試因需 better-sqlite3（sandbox ABI 版本不符）留待 CI 執行。
+
+## escapeXml 收斂為單一來源（2026-06-26）
+
+### 功能目的
+系統有兩處會把文字嵌入 XML/SVG 標記：純文字簡報的 SVG 文字渲染（`renderTextPages.ts`，把每行字放進 `<tspan>`）與 SCORM 課程包的 `imsmanifest.xml`（`scorm.ts`，把標題等放進 XML 屬性/節點）。兩者都需要把 `&`、`<`、`>`、`"`、`'` 這五個 XML 保留字元跳脫，否則使用者標題裡的特殊字元會破壞輸出格式（甚至造成 XML 注入）。原本這個 `escapeXml` 在兩個檔案各複製了一份一字不差的實作。本次把它收斂成單一正本，避免兩份日後漂移（例如其中一份漏跳脫某個字元）。
+
+### 使用方式
+無需任何操作，純內部重構，SVG 文字頁與 SCORM 匯出的跳脫行為不變。
+
+### 技術細節
+- **單一來源**（新檔 `backend/src/escapeXml.ts`）：匯出唯一的 `escapeXml(input)`，依序替換五個保留字元。
+- **相容處理**：`renderTextPages.ts` 內部於 `<tspan>` 組裝時用到它、且有測試從此模組 import，故改為頂部 import 後 `export { escapeXml }` 再匯出；`scorm.ts` 移除本地副本改為 import。
+- **附帶觀察**：比對時發現另一個 `safeFilename` 在 `course-package.ts`／`pptx.ts`／`handout.ts` 有三份，但它們其實**不同**（course-package 額外允許 CJK 字元、handout 的 fallback 名稱不同），屬刻意的變體而非單純重複，貿然合併會改變行為，故本次不動。
+- **驗證**：`renderTextPages` 相關測試 23 個全通過，後端 `tsc -p tsconfig.json` build 通過。
