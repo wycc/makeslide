@@ -7591,3 +7591,21 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **環境防護**：所有 `window` / `localStorage` / `matchMedia` / `document` 的存取都先檢查存在性，於 SSR 與測試環境優雅降級（沿用 `i18n.ts`、`viewerId.ts` 的慣例），不丟例外。
 - **測試**（`frontend/src/lib/theme.test.ts`）：以記憶體 storage、可切換的 `matchMedia` stub 與最小 `<html>` stub，覆蓋 normalize、預設與壞值 fallback、set/get、`getSystemTheme`、light/dark/system 解析、套用 class + `data-theme`、system 跟隨 OS、watch 僅在 `system` 模式作用、以及無 `window`/`document` 的降級，共 10 個案例。
 - **驗證**：`node --test` 10/10 通過、前端 `tsc --noEmit` 通過。
+
+## Tailwind/CSS 語意色彩 token 化（2026-06-26）
+
+### 功能目的
+這是深色模式 / 主題切換系列的第二塊地基，承接前一項的 `lib/theme.ts`。前一項負責「決定並套用」目前主題（在 `<html>` 加 `dark` class 與 `data-theme`），但畫面顏色仍是各元件硬編的 `white` / `slate-*` / `gray-*`，無法隨主題自動切換。本項建立一層「語意色彩 token」：以 CSS 變數定義 light / dark 兩套配色，並透過 Tailwind 暴露成語意 class，讓後續元件能把硬編色彩逐步換成 `bg-surface`、`text-text`、`border-border` 等，一處切換、全站跟著變。本項只建立基礎，不改動任何既有元件外觀。
+
+### 使用方式
+此項對使用者尚無可見變化。對開發者而言，現在可使用以下語意 class（會自動隨 light/dark 切換）：
+- `bg-bg`：頁面底色；`bg-surface`：卡片/面板表面色。
+- `text-text`：主要文字；`text-muted`：次要/輔助文字。
+- `border-border`：邊框色。
+- `bg-primary` / `text-primary`：品牌主色（cyan 系）；`text-danger` / `bg-danger`：危險/錯誤色（rose 系）。
+- 透明度修飾照常可用，例如 `bg-surface/80`、`border-border/50`。
+
+### 技術細節
+- **CSS 變數**（`frontend/src/index.css`）：新增 `:root`（light 預設）與 `.dark`（覆寫）兩組變數 `--color-bg/surface/text/muted/border/primary/danger`。值刻意採「空白分隔的 RGB 三元組」（例如 `15 23 42`），以支援 Tailwind 的 `<alpha-value>` 機制。dark 配色貼齊專案既有的 slate/cyan 深色視覺（surface = slate-900、text = slate-200、border = slate-700、primary = cyan-400…）。
+- **Tailwind 設定**（`frontend/tailwind.config.js`）：設 `darkMode: 'class'`，使深色由 `<html>` 上的 `dark` class 控制（與 `lib/theme.ts` 一致，讓使用者能覆寫 OS 偏好）；在 `theme.extend.colors` 以 `rgb(var(--color-*) / <alpha-value>)` 形式暴露七個語意色。
+- **驗證**：以 `tailwindcss` CLI 編譯確認 `:root` / `.dark` 變數區塊、`dark:` variant（`:is(.dark *)`）、語意 class 與透明度修飾（`bg-surface/80` → `rgb(var(--color-surface) / 0.8)`）皆正確產出；前端 `tsc --noEmit` 通過。本項為純設定與 CSS 變數，不含元件改動，故不另加單元測試。
