@@ -7826,3 +7826,16 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **i18n**：新增 zh-TW/en `home.search.recentTitle`、`home.search.recentClear`。
 - **測試**：`recentSearches.test.ts` 6 個案例（空、最新在前、空白忽略、trim + 不分大小寫去重置頂、上限 8、壞值容錯）。
 - **驗證**：前端 `tsc --noEmit` 通過；`recentSearches.test.ts` 與 `i18n.test.ts`（含 zh/en key 對等）全通過。
+
+## 報告面板標題顯示產生時間（2026-06-26）
+
+### 功能目的
+課後報告的數據是某一時刻的快照。先前只有報告底部（列印用）以「產生時間：完整時間戳」呈現，畫面標題區看不到，使用者不易一眼判斷手上的數據是否為最新。本項在標題區補上相對時間（如「3 分鐘前」），讓資料新鮮度更直覺。
+
+### 使用方式
+開啟課後報告，標題與副標題下方會顯示「資料產生於 {相對時間}」（例如「資料產生於 5 分鐘前」）。把滑鼠移上去可看到完整的本地時間。需要更新時可按「重新整理」。
+
+### 技術細節
+- **UI**（`frontend/src/pages/play/PostClassReportPanel.tsx`）：在副標題下、`summary` 存在時顯示一行相對時間，沿用 `lib/formatRelativeTime.ts`；`title` tooltip 顯示 `new Date(summary.generated_at).toLocaleString()`。
+- **i18n**：因報告底部已有前綴型 `play.report.generatedAt`（「產生時間：」），為避免衝突，本項新增獨立 key `play.report.generatedAtRelative`（含 `{time}` 佔位，zh-TW/en）；底部既有顯示維持不變。
+- **驗證**：前端 `tsc --noEmit` 通過；`i18n.test.ts`（含 zh/en key 對等與佔位符集合檢查）通過。

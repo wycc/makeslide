@@ -1849,6 +1849,7 @@ export const en = {
   'settings.publishSkillAsTemplate': 'Publish as template',
   'play.report.title': 'Post-class report',
   'play.report.subtitle': 'Aggregates quizzes, polls, questions and watch completion to help the owner pinpoint follow-up areas.',
+  'play.report.generatedAtRelative': 'Generated {time}',
   'play.report.refresh': 'Refresh',
   'play.report.refreshing': 'Refreshing…',
   'play.report.exportQuizCsv': 'Export CSV',

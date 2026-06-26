@@ -12,6 +12,7 @@ import {
   getMostDivergentPollPages,
 } from './reportSummary';
 import { copyTextToClipboard } from '../../lib/clipboard';
+import { formatRelativeTime } from '../../lib/formatRelativeTime';
 
 interface StudentQuestionResult {
   question_id: string;
@@ -173,6 +174,14 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
               <p className="text-xs uppercase tracking-[0.2em] text-cyan-300">Post-class report</p>
               <h2 id="post-class-report-title" className="mt-1 text-xl font-semibold text-slate-100">{t('play.report.title')}</h2>
               <p className="mt-1 text-sm text-slate-400">{t('play.report.subtitle')}</p>
+              {summary && (
+                <p
+                  className="mt-1 text-xs text-slate-500"
+                  title={new Date(summary.generated_at).toLocaleString()}
+                >
+                  {t('play.report.generatedAtRelative').replace('{time}', formatRelativeTime(summary.generated_at))}
+                </p>
+              )}
             </div>
             <div className="flex items-center gap-2" data-no-print="true">
               <button type="button" onClick={onReload} disabled={loading} className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-100 hover:bg-cyan-500/25 disabled:opacity-50">
