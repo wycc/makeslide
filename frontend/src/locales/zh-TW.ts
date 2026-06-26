@@ -1344,6 +1344,7 @@ export const zhTW = {
   'play.sidebar.commentsRefresh': '重新整理評論',
   'play.sidebar.commentsUnresolvedTitle': '未解決 {unresolved} / 共 {total} 則',
   'play.sidebar.commentsFilterPlaceholder': '搜尋評論或作者…',
+  'play.sidebar.commentsFilterByAuthor': '只顯示 {author} 的評論',
   'play.sidebar.commentsNoMatch': '沒有符合的評論',
   'play.sidebar.commentAuthorPlaceholder': '暱稱（選填）',
   'play.sidebar.commentTextPlaceholder': '輸入評論…',

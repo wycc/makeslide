@@ -8235,3 +8235,16 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **復用純函式**（`frontend/src/pages/RemoteControllerPage.tsx`）：以既有 `formatPollResultsMarkdown(polls, labels)` 產生內容，labels 的 heading 用 `remote.pollControl.title`、票數單位用既有 `remote.votesSuffix`；`handleCopyPollResults` 以 `copyTextToClipboard` 複製並顯示 2 秒提示。按鈕在 `polls.length > 0` 時顯示。
 - **i18n**：新增 zh-TW/en `remote.pollControl.copyResults`/`copyDone`/`copyFail`。
 - **驗證**：前端 `tsc --noEmit` 通過；`i18n.test.ts`（含 zh/en key 對等）通過。內容由既有具測試的 `formatPollResultsMarkdown` 產生，故不另加測試。
+
+## 評論點作者名快速過濾（2026-06-26）
+
+### 功能目的
+頁面評論已支援以關鍵字搜尋（同時比對內文與作者）。本項讓每則評論的作者名可直接點擊，一鍵把清單過濾成「只看這位作者的評論」，省去手動輸入。
+
+### 使用方式
+在「頁面評論」中，點任一則評論的作者名，搜尋框就會自動填入該作者名並即時過濾出他的評論；清空搜尋框即可恢復完整清單。
+
+### 技術細節
+- **UI**（`frontend/src/pages/play/PlayPageSidebar.tsx` 的 `CommentsSection`）：作者名由 `<span>` 改為 `<button>`，`onClick` 將 `filterQuery` 設為該作者名（沿用既有 `filterComments` 對 author 的比對），並加 hover 底線與 `title` 提示。
+- **i18n**：新增 zh-TW/en `play.sidebar.commentsFilterByAuthor`（含 `{author}` 佔位）作為提示文字。
+- **驗證**：前端 `tsc --noEmit` 通過；`i18n.test.ts`（含 zh/en key 對等與佔位符檢查）通過。過濾邏輯由既有 `commentFilter.test.ts` 覆蓋，故不另加測試。

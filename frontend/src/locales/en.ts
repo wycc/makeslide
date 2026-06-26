@@ -1344,6 +1344,7 @@ export const en = {
   'play.sidebar.commentsRefresh': 'Refresh comments',
   'play.sidebar.commentsUnresolvedTitle': '{unresolved} unresolved / {total} total',
   'play.sidebar.commentsFilterPlaceholder': 'Search comments or author…',
+  'play.sidebar.commentsFilterByAuthor': "Show only {author}'s comments",
   'play.sidebar.commentsNoMatch': 'No matching comments',
   'play.sidebar.commentAuthorPlaceholder': 'Nickname (optional)',
   'play.sidebar.commentTextPlaceholder': 'Add a comment…',
