@@ -1843,6 +1843,7 @@ export const en = {
   'play.report.exportQuizCsv': 'Export CSV',
   'play.report.exportStudentCsv': 'Student report CSV',
   'play.report.exportPollCsv': 'Poll results CSV',
+  'play.report.exportPagesCsv': 'Per-page analytics CSV',
   'play.report.print': 'Print / Save PDF',
   'play.report.copySummary': 'Copy summary',
   'play.report.copyHeading': 'Post-class learning report summary',

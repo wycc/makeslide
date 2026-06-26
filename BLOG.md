@@ -7724,3 +7724,18 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **i18n**：重用既有報告區段標題 key，新增 `play.report.copySummary`/`copyHeading`/`copyPollParticipation`/`copyNone`/`copyDone`/`copyFail`（zh-TW/en）。
 - **測試**：`reportSummary.test.ts` 補 3 個案例（null→空字串、空榜單→三個 none、有資料→三榜單行格式）。
 - **驗證**：前端 `tsc --noEmit` 通過；`reportSummary.test.ts` 與 `i18n.test.ts`（含 zh/en key 對等）全通過。
+
+## 每頁學習分析 CSV 匯出（2026-06-26）
+
+### 功能目的
+課後報告面板已能匯出測驗結果、學生名單、投票結果等 CSV，但缺少「以頁為單位」的綜合分析。本項新增每頁學習分析 CSV，讓教師把「哪一頁觀看完成率低、哪一頁投票最分歧」等逐頁數據帶到試算表進一步排序、製圖或彙整，呼應 Roadmap Phase 1「把互動資料變成教學洞察」。
+
+### 使用方式
+開啟課後報告，點工具列的「每頁分析 CSV」即可下載 `report-pages-<id>.csv`。每列一頁，欄位為 `page_number,total_viewers,completed_viewers,completion_rate,poll_total_votes,poll_divergence_score`，依頁碼排序。需編輯權限（自己的簡報或 `public_editable` 共編簡報）。
+
+### 技術細節
+- **後端**（`backend/src/routes/pdfs/report.ts`）：新增 `GET /api/pdfs/:id/report/pages.csv`。以 `pages` 為列集左連 `page_watch_progress` 聚合每頁觀看人數與完成數（`completion_rate = completed/total`）；以 `page_polls JOIN page_poll_votes` 依 `page_number, option_index` 聚合，於 JS 端計算每頁總票數與 `poll_divergence_score = 1 - 最大選項得票占比`（0 = 共識，越高越分歧，無票為 0）。比率四捨五入到小數第 4 位。沿用共用 `csvEscape` 與 `canEditPdf`，回應 `text/csv` + `attachment` 檔名。
+- **前端**（`frontend/src/pages/play/PostClassReportPanel.tsx`）：在投票結果 CSV 連結後加入「每頁分析 CSV」download 連結；新增 zh-TW/en `play.report.exportPagesCsv`。
+- **divergence 定義**：因 `report/summary` 目前未在伺服器端計算每頁投票分歧，故本端點自行以「1 − 最大選項得票占比」定義一個簡單、確定且可測的分歧分數。
+- **測試**：`backend/test/report-pages-csv.test.ts` 3 個案例（欄位/排序/divergence 計算、403 非擁有者、404 未知 PDF）。
+- **驗證**：前端與後端 `tsc --noEmit` 通過；`i18n.test.ts`（含 zh/en key 對等）通過。後端 handler 測試需 better-sqlite3 native module，於本機 sandbox 無法載入，留待 CI 執行。
