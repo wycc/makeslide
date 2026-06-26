@@ -8206,3 +8206,19 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **收斂**（`frontend/src/pages/play/PlayPageSidebar.tsx`）：書籤與重點頁兩處「複製清單」改呼叫此函式；因兩份清單本就唯一，去重不改變結果。
 - **測試**（`pageListText.test.ts`）：4 個案例（空、排序串接、prefix/suffix、去重）。
 - **驗證**：前端 `tsc --noEmit` 通過；新測試通過；無 i18n 變更。
+
+## 統一相對時間格式化（移除重複實作）（2026-06-26）
+
+### 功能目的
+專案先前有兩套「相對時間」格式化：一個是硬編中文、>3 天退回絕對日期的簡易版（給課後報告與評論用），另一個是支援 i18n、含複數變化的版本（給首頁、PDF 卡片等用）。兩套並存造成重複，且簡易版在英文語系下仍輸出中文。本項統一到 i18n 版、移除重複，順帶修正英文語系顯示。
+
+### 使用方式
+- 課後報告的「資料產生於」與頁面評論的時間戳，現在會依介面語言正確顯示（先前固定中文）。
+- 超過 3 天的時間，從原本顯示絕對日期改為「N 天/月/年前」，與首頁的相對時間一致。
+
+### 技術細節
+- **遷移**：`PostClassReportPanel`（報告產生時間）與 `PlayPageSidebar` 的 `CommentsSection`（評論時間戳）改用 `lib/relativeTime.ts` 的 `formatRelativeTime` + `buildRelativeTimeLabels(t)`（以注入的 i18n labels 呼叫）。
+- **移除**：刪除硬編中文版 `lib/formatRelativeTime.ts` 與其測試；grep 確認無殘留引用。
+- **i18n**：沿用既有的 `time.*` 鍵（11 組，含 just-now 與 minutes/hours/days/months/years 的單複數），無需新增。
+- **行為差異（屬修正）**：英文語系不再顯示中文；>3 天從絕對日期改為相對描述，與首頁一致。
+- **驗證**：前端 `tsc --noEmit` 通過；`relativeTime.test.ts` 與 `i18n.test.ts`（含 zh/en key 對等）全通過。

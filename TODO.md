@@ -2553,7 +2553,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`RemoteControllerPage.tsx` import `pollOptionPercent`，投票結果 `ratio` 改為 `pollOptionPercent(option.votes, poll.total_votes)`，移除內嵌三元式；輸出與原本逐字相同、行為不變。`grep` 確認全前端已無其他 `Math.round(votes/total*100)` 投票百分比殘留。前端 `tsc --noEmit` 通過；行為不變、邏輯由既有 `pollPercent.test.ts` 覆蓋，不另加測試。分支 `feat/remote-poll-percent`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 94 個完成項目（94/100，未達上限）。
 
-- [ ] 統一兩份 relativeTime 實作（一致性，需小心）：`lib/formatRelativeTime.ts`（簡易、被 `PostClassReportPanel`/`PlayPageSidebar` 使用）與 `lib/relativeTime.ts`（含 i18n labels、被 `HomePage`/`PdfCard`/`QuizBuilderPage` 使用）為兩套相對時間格式化。評估後擇一保留：建議以具 i18n 的 `relativeTime.ts` 為準，將 `formatRelativeTime.ts` 的兩處呼叫遷移（提供對應 labels）後移除該檔；確保兩種語系輸出合理、補/更新測試。因涉 i18n 與兩頁顯示，需逐處確認、低風險地進行；若遷移成本高於效益，可改為在 `formatRelativeTime.ts` 標註並收斂命名以免混淆。純前端。
+- [x] 統一兩份 relativeTime 實作（一致性，需小心）：`lib/formatRelativeTime.ts`（簡易、被 `PostClassReportPanel`/`PlayPageSidebar` 使用）與 `lib/relativeTime.ts`（含 i18n labels、被 `HomePage`/`PdfCard`/`QuizBuilderPage` 使用）為兩套相對時間格式化。評估後擇一保留：建議以具 i18n 的 `relativeTime.ts` 為準，將 `formatRelativeTime.ts` 的兩處呼叫遷移（提供對應 labels）後移除該檔；確保兩種語系輸出合理、補/更新測試。因涉 i18n 與兩頁顯示，需逐處確認、低風險地進行；若遷移成本高於效益，可改為在 `formatRelativeTime.ts` 標註並收斂命名以免混淆。純前端。
+  - 修改說明（2026-06-26）：採「保留 i18n 版」方案。`PostClassReportPanel`（報告產生時間）與 `PlayPageSidebar` 的 `CommentsSection`（評論時間戳）改 import `lib/relativeTime.ts` 的 `formatRelativeTime`+`buildRelativeTimeLabels`，各自 `const relativeTimeLabels = buildRelativeTimeLabels(t)` 後以帶 labels 形式呼叫；刪除硬編中文版 `lib/formatRelativeTime.ts` 與其測試，grep 確認無殘留引用。**行為差異（屬修正）**：① 原硬編版固定輸出中文（英文語系下也是中文），改用 i18n 版後依語系正確顯示；② 原版 >3 天退回絕對日期，i18n 版改顯示「N 天/月/年前」（與首頁 `HomePage`/`PdfCard` 一致）。`time.*` i18n key 既存（11 組）、無需新增。前端 `tsc --noEmit` 通過、`relativeTime.test.ts` 與 `i18n.test.ts` 全通過。分支 `feat/unify-relative-time`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 97 個完成項目（97/100，未達上限）。
 
 ## 工作記錄（第一一六輪，2026-06-26）
 
