@@ -2225,7 +2225,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：新增 `frontend/src/lib/formatRelativeTime.ts` 純函式（<60s→剛剛、<60m→N 分鐘前、<24h→N 小時前、1天→昨天、<3天→N 天前、≥3天→toLocaleDateString）；`CommentsSection` import 並將時間 span 改用 `formatRelativeTime`，同時加 `title` 屬性保留完整日期 tooltip；`formatRelativeTime.test.ts` +7 測試（各邊界+無效輸入）；前端 typecheck 通過。分支 `feat/comment-relative-time`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 50 個完成項目（50/100，未達上限）。
 
-- [ ] 評論全覽端點：目前評論 API 只能依頁碼查詢（`GET /api/pdfs/:id/pages/:n/comments`），教師無法一次看到 PDF 所有評論。新增 `GET /api/pdfs/:id/comments`（不含 page_number）端點，以 `page_number ASC, created_at ASC` 排序回傳全部評論；`backend/test/page-comments-all.test.ts` 補 GET/403/404 測試；前端 `listAllPageComments(id)` API；在 `CommentsSection` 標題旁加入「全部」切換鈕以呈現跨頁評論清單。
+- [x] 評論全覽端點：目前評論 API 只能依頁碼查詢（`GET /api/pdfs/:id/pages/:n/comments`），教師無法一次看到 PDF 所有評論。新增 `GET /api/pdfs/:id/comments`（不含 page_number）端點，以 `page_number ASC, created_at ASC` 排序回傳全部評論；`backend/test/page-comments-all.test.ts` 補 GET/403/404 測試；前端 `listAllPageComments(id)` API；在 `CommentsSection` 標題旁加入「全部」切換鈕以呈現跨頁評論清單。
+  - 修改說明（2026-06-26）：`comments.ts` 新增 `GET /api/pdfs/:id/comments` 端點（IdParamSchema，回傳全 PDF 評論以 page ASC+time ASC 排序）；前端 `listAllComments(id)` API；`CommentsSection` 新增 `showAll` state，切換後 useEffect 呼叫不同 fetch；「全部/此頁」按鈕在標題列右側；全覽模式每則評論顯示可跳頁的頁碼；i18n zh-TW/en 各 +2 key；`page-comments-all.test.ts` +6 測試。前端+後端 typecheck 通過。分支 `feat/comments-list-all`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 51 個完成項目（51/100，未達上限）。
 
 - [ ] 評論 CSV 匯出：新增 `GET /api/pdfs/:id/comments.csv` 後端端點，以 CSV 格式輸出所有評論（欄位：`page,author,text,resolved,created_at`），沿用共用 `csvEscape` 防 formula injection；需 edit 權限（沿用 `canEditPdf`）；播放頁 `CommentsSection` 區塊加入「匯出 CSV」按鈕（以 download link 觸發）；補後端 node:test（200/403/CSV 欄位格式）。
 

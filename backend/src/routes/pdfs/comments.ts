@@ -69,6 +69,21 @@ function rowToComment(row: PageCommentRow) {
 }
 
 export async function registerCommentsRoutes(app: FastifyInstance): Promise<void> {
+  // GET /api/pdfs/:id/comments — list all comments across all pages, ordered by page then time
+  app.get<{ Params: z.infer<typeof IdParamSchema> }>('/api/pdfs/:id/comments', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_PARAMS', parsed.error.message));
+    const { id } = parsed.data;
+    const sub = sessionSub(request);
+    const pdfRow = getPdfRow(id);
+    if (!pdfRow) return reply.code(404).send(errorResponse('NOT_FOUND', 'PDF not found'));
+    if (!canReadPdf(sub, pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', 'Access denied'));
+    const rows = db
+      .prepare(`SELECT * FROM page_comments WHERE pdf_id = ? ORDER BY page_number ASC, created_at ASC`)
+      .all(id) as PageCommentRow[];
+    return reply.send({ comments: rows.map(rowToComment) });
+  });
+
   // GET /api/pdfs/:id/pages/:n/comments
   app.get<{ Params: z.infer<typeof PageParamSchema> }>('/api/pdfs/:id/pages/:n/comments', async (request, reply) => {
     const parsed = PageParamSchema.safeParse(request.params);

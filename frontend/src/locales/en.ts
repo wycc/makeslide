@@ -1320,6 +1320,8 @@ export const en = {
   'play.sidebar.rewriteDiffNew': 'Rewritten',
   'play.sidebar.commentsTitle': '💬 Page Comments',
   'play.sidebar.commentsEmpty': 'No comments on this page yet',
+  'play.sidebar.commentsAll': 'All',
+  'play.sidebar.commentsThisPage': 'This page',
   'play.sidebar.commentAuthorPlaceholder': 'Nickname (optional)',
   'play.sidebar.commentTextPlaceholder': 'Add a comment…',
   'play.sidebar.commentPost': 'Post',
