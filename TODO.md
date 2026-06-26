@@ -2356,3 +2356,25 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - 工作內容：第一〇一輪新增的 4 個可執行項目已全部完成，可執行項目又僅剩兩個「待使用者決定 / 待處理」項目，依 LOOP.md 第 2 條分析現有程式並對照 `docs/FUTURE_ROADMAP.md`，於 TODO.md 新增 4 個小顆粒、可單輪完成、可加測試、低風險且主題分散的可執行項目（投票結果複製為 Markdown、報告面板顯示產生時間、全域搜尋最近關鍵字、逐字稿純文字匯出），並補掃描摘要。本輪為規畫輪，不計入 100 完成計數（計數維持 67/100）。
 - 時間：2026-06-26
 - 分支：直接於 master 更新 TODO.md（規畫輪，無程式碼變更）
+
+## 掃描摘要（第一〇五輪，2026-06-26）
+
+- 觸發原因：第一〇三輪新增的 4 個可執行項目已全數完成，TODO.md 又只剩兩個「待使用者決定 / 待處理」項目，依其說明不宜於自動 loop 逕行。故依 LOOP.md 第 2 條再次分析程式並對照 `docs/FUTURE_ROADMAP.md` 補新項目。
+- 現況觀察：近期已大量補上「複製為 Markdown / CSV 匯出」類（評論、複習清單、報告摘要、投票結果、逐字稿、每頁分析）。本輪刻意改找其他類型缺口，實測發現：`lib/reviewList.ts` 的 `clearAllReviewItems` 未接任何 UI；評論輸入 textarea 有 `maxLength=2000` 但無即時字數提示；後端尚無測驗「逐題統計」CSV（`computeQuestionStats` 已具資料）；`lib/costEstimate.ts` 已有價目表但設定頁未呈現參考。
+- 取材方向：分散主題（UX 微調、後端分析匯出、Phase 3 成本透明度），維持「小顆粒、可單輪完成、可加測試、低風險」。
+
+## 新增可執行項目（第一〇五輪，2026-06-26）
+
+- [ ] 測驗逐題統計 CSV 匯出（Roadmap Phase 1）：新增後端 `GET /api/pdfs/:id/report/questions.csv`，沿用 `report.ts` 既有的 `computeQuestionStats(id)`（含 `question_id`/`question`/`option_count`/`attempt_count`/`correct_count`/`wrong_count`/`correct_rate`/`option_votes[]`）輸出每題一列；`option_votes` 以分號或管線串接為單一欄位（如 `option_votes` = `3|1|0`）避免欄數浮動；以共用 `csvEscape`、權限 `canEditPdf`、回應 `text/csv` + `attachment; filename`；`PostClassReportPanel` 既有 CSV 群加「逐題統計 CSV」連結；補後端 node:test（200 欄位/排序、403、404）。
+
+- [ ] 複習清單「全部清除」按鈕（可用性，小顆粒）：`ReviewListSection`（`PlayPageSidebar.tsx`）目前只能逐項移除；`lib/reviewList.ts` 已有 `clearAllReviewItems()` 但未接 UI。在複習清單標題列加「清除全部」按鈕（在「複製」旁），點擊後呼叫 `clearAllReviewItems()` 並把本地 `items` 設為 `[]`；新增 zh-TW/en i18n key。純前端、不動後端。
+
+- [ ] 評論輸入即時字數計數（可用性，小顆粒）：評論輸入 textarea（`CommentsSection`，`maxLength=2000`）目前無字數提示。在 textarea 下方顯示 `{n}/2000`（接近上限時可改色提醒，例如 >1900 轉 amber/rose）；計數直接用 `text.length`；新增 zh-TW/en i18n key（含 `{n}`/`{max}` 佔位或以純數字呈現）。純前端、不動後端。
+
+- [ ] 設定頁顯示生成成本價目參考（Roadmap Phase 3 成本透明度）：`SettingsPage` 的 AI 區新增一個唯讀「價目參考」小區塊，讀 `lib/costEstimate.ts` 既有的 `TTS_PRICE_PER_1K_CHARS` 與 `LLM_PRICE_PER_1M_TOKENS`，以表格列出各模型單價（沿用 `formatUsd`）；不新增後端、不改價格來源；新增 zh-TW/en i18n key（標題與單位說明）。純前端。若價目資料結構不利直接列表，於實作時改以精簡條列呈現並於說明標明。
+
+## 工作記錄（第一〇五輪，2026-06-26）
+
+- 工作內容：第一〇三輪新增的 4 個可執行項目已全部完成，可執行項目又僅剩兩個「待使用者決定 / 待處理」項目，依 LOOP.md 第 2 條分析現有程式並對照 `docs/FUTURE_ROADMAP.md`，於 TODO.md 新增 4 個小顆粒、可單輪完成、可加測試、低風險且主題分散的可執行項目（測驗逐題統計 CSV、複習清單全部清除、評論輸入字數計數、設定頁成本價目參考），並補掃描摘要。本輪為規畫輪，不計入 100 完成計數（計數維持 71/100）。
+- 時間：2026-06-26
+- 分支：直接於 master 更新 TODO.md（規畫輪，無程式碼變更）
