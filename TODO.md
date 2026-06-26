@@ -2079,6 +2079,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：新增 `escapeXml.ts`（唯一實作）；`renderTextPages.ts` 頂部 import 供內部使用（line 61 tspan）並 `export { escapeXml }`；`scorm.ts` 移除本地定義改 import。renderTextPages 相關測試 23 通過、後端 build 通過。分支 `refactor/dedupe-escape-xml`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 29 個完成項目（29/100，未達上限）。
 
+- [x] sanitiseUserPrompt 收斂為單一來源：將使用者提示詞嵌入 LLM system prompt 前的截斷/清理函式（與 `MAX_USER_PROMPT_CHARS_IN_SYSTEM = 2000`）在 `generateTitle.ts` 與 `generateScript.ts` 兩處 byte 相同重複。抽到共用 `promptSanitize.ts`（含常數），`generateTitle` re-export、兩者 import。
+  - 修改說明（2026-06-26）：新增 `backend/src/worker/steps/promptSanitize.ts`（`sanitiseUserPrompt` + `MAX_USER_PROMPT_CHARS_IN_SYSTEM`）；`generateTitle.ts` 移除本地定義、import 並 `export { sanitiseUserPrompt }`；`generateScript.ts` 移除本地定義與常數、改 import。新增 `promptSanitize.test.ts` +4（nullish/空白回空、trim、邊界不截斷、超長截斷含「……（已截斷）」標記），sandbox 通過；後端 build 通過。分支 `refactor/dedupe-sanitise-user-prompt`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 30 個完成項目（30/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2112,4 +2116,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | 移除 routes/pdfs.ts 遺留死碼：450 行重構前 monolith（含重複的 extractYoutubeVideoId/streamFile）縮為僅委派 shim，行為不變；後端 build 通過、淨刪 450 行 | refactor/remove-dead-pdfs-monolith（已 merge） |
 | 2026-06-26 | timingSafeStringEqual 收斂單一來源：常數時間比較三份重複抽到 `timingSafe.ts`，server/auth re-export、aiSettings import；timingSafe.test.ts +4、後端 build 通過 | refactor/dedupe-timing-safe-equal（已 merge） |
 | 2026-06-26 | escapeXml 收斂單一來源：`renderTextPages` 與 `scorm` 兩份相同 escapeXml 抽到 `escapeXml.ts`（前者 re-export、後者 import）；相關測試 23 通過、後端 build 通過 | refactor/dedupe-escape-xml（已 merge） |
+| 2026-06-26 | sanitiseUserPrompt 收斂單一來源：generateTitle/generateScript 兩份相同的 prompt 截斷函式抽到 `promptSanitize.ts`（含 2000 字上限常數）；promptSanitize.test.ts +4、後端 build 通過 | refactor/dedupe-sanitise-user-prompt（已 merge） |
 

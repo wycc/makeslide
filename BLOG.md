@@ -7288,3 +7288,16 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **相容處理**：`renderTextPages.ts` 內部於 `<tspan>` 組裝時用到它、且有測試從此模組 import，故改為頂部 import 後 `export { escapeXml }` 再匯出；`scorm.ts` 移除本地副本改為 import。
 - **附帶觀察**：比對時發現另一個 `safeFilename` 在 `course-package.ts`／`pptx.ts`／`handout.ts` 有三份，但它們其實**不同**（course-package 額外允許 CJK 字元、handout 的 fallback 名稱不同），屬刻意的變體而非單純重複，貿然合併會改變行為，故本次不動。
 - **驗證**：`renderTextPages` 相關測試 23 個全通過，後端 `tsc -p tsconfig.json` build 通過。
+
+## sanitiseUserPrompt 收斂為單一來源（2026-06-26）
+
+### 功能目的
+產生簡報標題與逐字稿時，後端會把使用者填寫的自由文字提示詞嵌入到送給 LLM 的 system prompt 裡。為了避免一段過長的提示詞把 system prompt 撐爆（也順帶 trim 掉前後空白），程式會先用 `sanitiseUserPrompt` 把它截斷到 2000 字並加上「……（已截斷）」標記。問題是這個函式連同它依賴的 `MAX_USER_PROMPT_CHARS_IN_SYSTEM = 2000` 常數，在 `generateTitle.ts` 與 `generateScript.ts` 兩個檔案各複製了一份一字不差的實作。兩份副本若日後漂移（例如其中一個把上限改成別的值、或漏了 trim），標題與逐字稿對使用者輸入的處理就會不一致。本次把它收斂成單一正本並補上測試。
+
+### 使用方式
+無需任何操作，純內部重構，標題／逐字稿產生對提示詞的處理行為不變（一律 trim、超過 2000 字截斷並標示）。
+
+### 技術細節
+- **單一來源**（新檔 `backend/src/worker/steps/promptSanitize.ts`）：匯出 `sanitiseUserPrompt(raw)` 與 `MAX_USER_PROMPT_CHARS_IN_SYSTEM` 常數。函式對 `null`/`undefined`/空白回傳空字串，否則 trim、超過上限時 `slice` 並接上「……（已截斷）」。
+- **相容處理**：`generateTitle.ts` 原本 `export` 此函式，故改為 import 後 `export { sanitiseUserPrompt }` 維持其對外可見性；`generateScript.ts` 內部使用，移除本地定義與重複常數後改為 import。
+- **測試**：新增 `backend/test/promptSanitize.test.ts` 4 個 node:test，涵蓋 nullish/空白回空字串、trim、剛好等於上限不截斷、以及超長截斷並帶「……（已截斷）」標記。此函式先前沒有任何測試覆蓋。測試不依賴資料庫、sandbox 可直接驗證；後端 `tsc -p tsconfig.json` build 通過。
