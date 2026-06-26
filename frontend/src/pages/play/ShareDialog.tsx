@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { copyTextToClipboard } from '../../lib/clipboard';
 import { useI18n } from '../../i18n';
+import { useOverlayDismiss } from '../../components/useOverlayDismiss';
 
 /** Builds the iframe embed snippet for a share URL, or '' when there is no URL yet. */
 export function buildEmbedCode(shareUrl: string): string {
@@ -26,15 +27,7 @@ export function ShareDialog({ shareUrl, expiresAt, selectedExpiresDays, onExpire
   const [embedCopyStatus, setEmbedCopyStatus] = useState<'idle' | 'success'>('idle');
 
   const embedCode = buildEmbedCode(shareUrl);
-
-  // Close on Escape, matching the other play-page overlays.
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const { onBackdropClick } = useOverlayDismiss(onClose);
 
   const EXPIRY_OPTIONS: Array<{ label: string; value: number | undefined }> = [
     { label: t('play.shareDialog.expiryNever'), value: undefined },
@@ -46,7 +39,7 @@ export function ShareDialog({ shareUrl, expiresAt, selectedExpiresDays, onExpire
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4"
-      onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}
+      onClick={onBackdropClick}
     >
       <div
         role="dialog"
