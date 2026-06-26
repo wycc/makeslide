@@ -6,6 +6,8 @@ import {
   useRef,
 } from 'react';
 
+import { strokeHitsPoint } from './drawingGeometry';
+
 // Drawing coordinates are stored normalized to this reference space.
 const REF_H = 1080;
 const SAVE_DEBOUNCE_MS = 1500;
@@ -19,46 +21,6 @@ export interface DrawingStroke {
 
 export interface DrawingData {
   strokes: DrawingStroke[];
-}
-
-// ---- hit-test helpers (pixel space) ----
-
-function distSq(ax: number, ay: number, bx: number, by: number): number {
-  return (ax - bx) ** 2 + (ay - by) ** 2;
-}
-
-function distPointToSegment(
-  px: number, py: number,
-  ax: number, ay: number,
-  bx: number, by: number,
-): number {
-  const dx = bx - ax;
-  const dy = by - ay;
-  const lenSq = dx * dx + dy * dy;
-  if (lenSq === 0) return Math.sqrt(distSq(px, py, ax, ay));
-  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
-  return Math.sqrt(distSq(px, py, ax + t * dx, ay + t * dy));
-}
-
-function strokeHitsPoint(
-  stroke: DrawingStroke,
-  ex: number, ey: number,
-  radius: number,
-  cw: number, ch: number,
-): boolean {
-  const pts = stroke.points;
-  for (let i = 0; i < pts.length; i++) {
-    const p = pts[i];
-    if (!p) continue;
-    const px = p[0] * cw;
-    const py = p[1] * ch;
-    if (distSq(ex, ey, px, py) <= radius * radius) return true;
-    if (i + 1 < pts.length) {
-      const q = pts[i + 1];
-      if (q && distPointToSegment(ex, ey, px, py, q[0] * cw, q[1] * ch) <= radius) return true;
-    }
-  }
-  return false;
 }
 
 // ---- server helpers ----
