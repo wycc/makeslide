@@ -7754,3 +7754,16 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **i18n**：新增 zh-TW/en `play.sidebar.reviewListCopy`/`reviewListCopyDone`/`reviewListCopyFail`。
 - **測試**：`reviewList.test.ts` 補 2 個案例（空清單→空字串、依頁排序與 `{n}` 代入）。
 - **驗證**：前端 `tsc --noEmit` 通過；`reviewList.test.ts` 與 `i18n.test.ts`（含 zh/en key 對等）全通過。
+
+## 每頁分析 CSV 增列平均聆聽比例（2026-06-26）
+
+### 功能目的
+每頁學習分析 CSV（`report/pages.csv`）原本提供觀看人數、完成率與投票分歧等指標。完成率只看「是否看完」，無法反映「平均聽了多少」。本項補上 `avg_listened_ratio`（每頁平均聆聽比例），讓教師能分辨「多數人有看完」與「多數人只聽了一半就完成」等差異，進一步定位需要補強或重講的頁面（Roadmap Phase 1）。
+
+### 使用方式
+無需額外操作。從課後報告下載「每頁分析 CSV」後，會多出一欄 `avg_listened_ratio`（0–1 的比例，四捨五入到小數第 4 位）。該頁若沒有任何觀看資料（無觀看者或皆無時長），此欄為空白而非 0，避免被誤讀為「都沒聽」。
+
+### 技術細節
+- **後端**（`backend/src/routes/pdfs/report.ts`）：`report/pages.csv` 的 watchPages 查詢新增 `AVG(CASE WHEN duration_ms>0 THEN MIN(listened_ms/duration_ms, 1.0) ELSE NULL END)`（與 `report/summary` 的平均聆聽比例同算法）；CSV 末欄輸出該值，有值四捨五入到 4 位、null 時輸出空字串。純後端改動，前端既有下載連結無需調整、無 i18n 變更。
+- **測試**（`backend/test/report-pages-csv.test.ts`）：更新 header 與三列斷言——page1 = 0.75（1.0 與 0.5 的平均）、page2 = 1（12000/10000 上限為 1）、page3 為空字串。
+- **驗證**：後端 `tsc --noEmit` 通過。handler 測試需 better-sqlite3 native module，於本機 sandbox 無法載入，留待 CI 執行。
