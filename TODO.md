@@ -2135,6 +2135,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：新增 `backend/src/services/quizCorrectness.ts`（`isCorrectAnswer`）；`quizzes.ts` 移除本地定義改 import；`report.ts` 兩處內聯（computeQuestionStats／computeStudentRecords）改呼叫之、移除多餘的 `correctSet`/`selectedSet`。新增 `quizCorrectness.test.ts` +4（單選相符、多選忽略順序/重複、子集/超集/相異為錯、空對空為對），sandbox 通過；後端 build 通過。分支 `refactor/dedupe-quiz-correctness`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 43 個完成項目（43/100，未達上限）。
 
+- [x] 前後端 isCorrectAnswer 跨套件一致性 drift-guard：承上輪，`isCorrectAnswer` 在後端 `services/quizCorrectness.ts`（計分/報告）與前端 `lib/quizScoring.ts`（編輯預覽/作答）各有一份（跨套件無法共用），兩者必須一致。沿用本專案既有的跨套件 drift-guard 模式（subtitle-split／status-enum／llm-pricing 一致性測試），新增測試斷言兩份在代表性案例上結果相同。
+  - 修改說明（2026-06-26）：新增 `backend/test/quizCorrectnessConsistency.test.ts`，import 後端與前端兩個 `isCorrectAnswer`（簽章不同——前端收 `QuizQuestion`、後端收索引陣列，故以最小 question 物件包裝），對 11 個案例（單選、多選忽略順序/重複、子集/超集/相異、空對空/空對非空）斷言兩者一致。sandbox 執行通過；後端 build 通過。分支 `test/quiz-correctness-consistency`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 44 個完成項目（44/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2182,4 +2186,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | 投票選項上限/索引上界以常數連結：引入 `MAX_POLL_OPTIONS`，`CreatePollBodySchema`/`VotePollBodySchema` 由它推導邊界（防調高選項上限卻漏改索引上界）；後端 build 通過 | refactor/poll-max-options-constant（已 merge） |
 | 2026-06-26 | 前端投票選項上限驗證：`handleCreatePoll` 補 `> MAX_POLL_OPTIONS`(6) 檢查，送出前以 `play.sidebar.poll.maxOptions` 友善訊息攔下；zh/en 各 +1 key；前端 384 測試通過 | feat/poll-max-options-frontend-validation（已 merge） |
 | 2026-06-26 | 測驗答對判定收斂單一來源：`isCorrectAnswer` 抽到 `services/quizCorrectness.ts`，`quizzes.ts` 與 `report.ts`(2處) 共用（防報告與計分判定漂移）；quizCorrectness.test.ts +4、後端 build 通過 | refactor/dedupe-quiz-correctness（已 merge） |
+| 2026-06-26 | 前後端 isCorrectAnswer 一致性 drift-guard：新增跨套件測試斷言後端/前端 `isCorrectAnswer` 在 11 個案例一致；後端 build 通過 | test/quiz-correctness-consistency（已 merge） |
 

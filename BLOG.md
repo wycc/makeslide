@@ -7465,3 +7465,15 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **單一來源**（新檔 `backend/src/services/quizCorrectness.ts`）：`isCorrectAnswer(answerIndices, selected)` 將兩邊去重、排序後逐元素比對，長度不同即為錯。鏡像前端 `lib/quizScoring.ts` 的同名函式。
 - **去重**：`quizzes.ts` 移除本地定義改 import（`calcQuestionScore` 內部仍用它）；`report.ts` 的 `computeQuestionStats` 與 `computeStudentRecords` 兩處內聯比對改為呼叫 `isCorrectAnswer`，並移除不再需要的 `correctSet`/`selectedSet` 暫存。
 - **測試**：新增 `backend/test/quizCorrectness.test.ts` 4 個 node:test——單選完全相符、多選忽略順序與重複、子集/超集/相異皆判錯、空對空為對而空對非空為錯。此判定先前在後端無直接單元測試覆蓋；測試不依賴資料庫、sandbox 可驗證；後端 `tsc -p tsconfig.json` build 通過。
+
+## 前後端 isCorrectAnswer 跨套件一致性 drift-guard（2026-06-26）
+
+### 功能目的
+承接上一個項目——後端把「答對」判定收斂成 `services/quizCorrectness.ts` 的單一 `isCorrectAnswer`。但前端其實也有一份對應的 `isCorrectAnswer`（在 `lib/quizScoring.ts`，用於編輯器的答案預覽與學生作答時的即時判定）。前後端是兩個獨立的套件，無法共用同一份程式碼，只能各自維護一份等價實作。風險和先前一樣：若某天有人只改了其中一邊的「何謂答對」語意（例如改成順序敏感、或允許部分相符），前端顯示的對錯就會和後端實際計分／報告對不上。本專案對這類「必須一致的跨套件副本」一向用「一致性測試（drift-guard）」鎖住（例如字幕分句、LLM 價格表、狀態機 enum 都有對應的一致性測試）。本次替 `isCorrectAnswer` 也補上同樣的守門。
+
+### 使用方式
+無需任何操作，這是開發期的保護網。日後若前端或後端任一方改動了答對判定的語意而沒同步另一方，跑測試就會立刻失敗，避免「畫面顯示答對、實際計分卻算錯（或反之）」這種難以察覺的不一致流到使用者面前。
+
+### 技術細節
+- **跨套件一致性測試**（新檔 `backend/test/quizCorrectnessConsistency.test.ts`）：同時 import 後端 `services/quizCorrectness.ts` 與前端 `lib/quizScoring.ts` 的 `isCorrectAnswer`（前端僅以 `import type` 取用 `QuizQuestion`、執行期無相依，故後端測試可直接載入）。兩者簽章不同——前端收一個 `QuizQuestion`（用其 `answer_indices`），後端收索引陣列，因此測試以最小的 `{ answer_indices } as QuizQuestion` 物件包裝前端呼叫。對 11 個代表性案例（單選相符/不符、多選忽略順序與重複、子集、超集、相異、空對空、空對非空）斷言兩份回傳值相同。
+- **驗證**：此測試不依賴資料庫、可在 sandbox 直接執行並通過；後端 `tsc -p tsconfig.json` build 通過（測試檔不在 build 範圍，跨套件 import 僅在測試執行時解析）。
