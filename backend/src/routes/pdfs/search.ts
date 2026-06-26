@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
 import { pageTextPath, pageScriptPath } from '../../services/storage';
+import { extractSnippet } from './searchSnippet';
 import { decodeSession, parseCookies } from '../auth';
 import type { PdfRow } from '../../types';
 import { getOrCreateEmbeddings, embedQuery, cosineSimilarity } from '../../services/embeddings';
@@ -10,7 +11,6 @@ import { logger } from '../../logger';
 
 const MAX_READABLE_PDFS = 100;
 const MAX_PAGE_RESULTS_PER_PDF = 3;
-const SNIPPET_CONTEXT = 60;
 const MAX_SEMANTIC_PDFS = 20;
 const SEMANTIC_TOP_K = 20;
 
@@ -48,20 +48,6 @@ function canReadPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibil
   return row.visibility === 'public' || row.visibility === 'public_editable';
 }
 
-function extractSnippet(content: string, keyword: string): string {
-  const lowerContent = content.toLowerCase();
-  const lowerKeyword = keyword.toLowerCase();
-  const idx = lowerContent.indexOf(lowerKeyword);
-  if (idx === -1) return content.slice(0, SNIPPET_CONTEXT * 2);
-
-  const start = Math.max(0, idx - SNIPPET_CONTEXT);
-  const end = Math.min(content.length, idx + lowerKeyword.length + SNIPPET_CONTEXT);
-
-  let snippet = content.slice(start, end);
-  if (start > 0) snippet = '...' + snippet;
-  if (end < content.length) snippet = snippet + '...';
-  return snippet;
-}
 
 function readFileOrNull(filePath: string): string | null {
   try {
