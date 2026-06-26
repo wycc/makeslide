@@ -29,3 +29,20 @@ test('title_desc falls back to id when title is empty', () => {
   const desc = [...items].sort(getComparatorForSortMode('title_desc')).map((p) => p.id);
   assert.deepEqual(desc, ['beta', 'alpha']);
 });
+
+const itemWithPages = (id: string, pageCount: number | null): PdfListItem =>
+  ({ id, title: id, page_count: pageCount } as PdfListItem);
+
+test('page_count_asc sorts fewest pages first, missing counts last', () => {
+  const items = [itemWithPages('a', 12), itemWithPages('b', 3), itemWithPages('c', null), itemWithPages('d', 7)];
+  const asc = [...items].sort(getComparatorForSortMode('page_count_asc')).map((p) => p.id);
+  assert.deepEqual(asc, ['b', 'd', 'a', 'c']);
+});
+
+test('page_count_asc is the reverse direction of page_count_desc for present counts', () => {
+  const items = [itemWithPages('a', 12), itemWithPages('b', 3), itemWithPages('d', 7)];
+  const asc = [...items].sort(getComparatorForSortMode('page_count_asc')).map((p) => p.id);
+  const desc = [...items].sort(getComparatorForSortMode('page_count_desc')).map((p) => p.id);
+  assert.deepEqual(asc, ['b', 'd', 'a']);
+  assert.deepEqual(desc, ['a', 'd', 'b']);
+});

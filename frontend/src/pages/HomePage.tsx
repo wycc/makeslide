@@ -48,9 +48,9 @@ const VIEW_MODE_STORAGE_KEY = 'makeslide.home.viewMode';
 type ViewMode = 'grid' | 'list';
 
 
-type SortMode = 'title_asc' | 'title_desc' | 'created_desc' | 'updated_desc' | 'page_count_desc' | 'audio_desc' | 'audio_asc' | 'last_played_desc';
+type SortMode = 'title_asc' | 'title_desc' | 'created_desc' | 'updated_desc' | 'page_count_desc' | 'page_count_asc' | 'audio_desc' | 'audio_asc' | 'last_played_desc';
 
-const SORT_MODES: SortMode[] = ['title_asc', 'title_desc', 'created_desc', 'updated_desc', 'page_count_desc', 'audio_desc', 'audio_asc', 'last_played_desc'];
+const SORT_MODES: SortMode[] = ['title_asc', 'title_desc', 'created_desc', 'updated_desc', 'page_count_desc', 'page_count_asc', 'audio_desc', 'audio_asc', 'last_played_desc'];
 
 const compareByTitle = (a: PdfListItem, b: PdfListItem) => {
   const titleA = a.title?.trim() || a.id;
@@ -76,6 +76,13 @@ const compareByPageCountDesc = (a: PdfListItem, b: PdfListItem) => {
   const countA = a.page_count ?? 0;
   const countB = b.page_count ?? 0;
   return countB - countA;
+};
+
+const compareByPageCountAsc = (a: PdfListItem, b: PdfListItem) => {
+  // 缺頁數的項目以 Infinity 排到最後（與 audio_asc 的 null 處理一致）。
+  const countA = a.page_count ?? Infinity;
+  const countB = b.page_count ?? Infinity;
+  return countA - countB;
 };
 
 const compareByAudioDurationDesc = (a: PdfListItem, b: PdfListItem) => {
@@ -112,6 +119,8 @@ export const getComparatorForSortMode = (sortMode: SortMode) => {
       return compareByUpdatedAtDesc;
     case 'page_count_desc':
       return compareByPageCountDesc;
+    case 'page_count_asc':
+      return compareByPageCountAsc;
     case 'audio_desc':
       return compareByAudioDurationDesc;
     case 'audio_asc':
@@ -1149,6 +1158,7 @@ export default function HomePage() {
                   <option value="created_desc">{t('home.sort.createdDesc')}</option>
                   <option value="updated_desc">{t('home.sort.updatedDesc')}</option>
                   <option value="page_count_desc">{t('home.sort.pageCountDesc')}</option>
+                  <option value="page_count_asc">{t('home.sort.pageCountAsc')}</option>
                   <option value="audio_desc">{t('home.sort.audioDurationDesc')}</option>
                   <option value="audio_asc">{t('home.sort.audioDurationAsc')}</option>
                   <option value="last_played_desc">{t('home.sort.lastPlayedDesc')}</option>
