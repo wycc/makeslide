@@ -8178,3 +8178,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 ### 技術細節
 - **收斂**（`frontend/src/pages/RemoteControllerPage.tsx`）：投票結果 `ratio` 改為 `pollOptionPercent(option.votes, poll.total_votes)`，移除內嵌的 `total>0 ? Math.round(...) : 0`；以 grep 確認全前端已無其他相同內嵌。
 - **驗證**：前端 `tsc --noEmit` 通過；行為不變、邏輯由既有 `pollPercent.test.ts` 覆蓋，故不另加測試。
+
+## 抽出跳頁輸入驗證純函式（2026-06-26）
+
+### 功能目的
+播放頁的「跳頁」對話框先前在三個地方（按 Enter、點確認鈕、確認鈕的停用判斷）各自內嵌相同的輸入驗證（`Math.floor(Number(輸入))` 加範圍檢查），重複且無法測試。本項把它抽成純函式收斂，提升可測性，行為不變。
+
+### 使用方式
+無可見變化。跳頁輸入的接受/拒絕條件與先前相同（需為 1 到總頁數的整數；小數會捨去、空白/非數字/越界一律拒絕）。
+
+### 技術細節
+- **純函式**（`frontend/src/lib/parseGotoPage.ts`）：`parseGotoPage(input, totalPages)` 回傳合法的 1-based 頁碼或 null（`Math.floor(Number(input))` 後檢查 `Number.isFinite` 與 `1..totalPages`）。
+- **收斂**（`frontend/src/pages/PlayPage.tsx`）：跳頁框三處改呼叫此函式，輸出與原本相同。
+- **測試**（`parseGotoPage.test.ts`）：5 個案例（合法/去空白、捨去小數、越界 0/負/超過、空白/非數字、totalPages=0）。
+- **驗證**：前端 `tsc --noEmit` 通過；新測試通過；無 i18n 變更。

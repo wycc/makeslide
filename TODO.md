@@ -2541,7 +2541,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 ## 新增可執行項目（第一一六輪，2026-06-26）
 
-- [ ] 抽出跳頁輸入驗證純函式（可測性）：`PlayPage` 跳頁框以 `Math.floor(Number(gotoPageInput))` + `n >= 1 && n <= deckPages.length` 在三處（送出、確認鈕、disabled 判斷）重複驗證。抽成 `frontend/src/lib/` 純函式 `parseGotoPage(input, totalPages)`（回合法 1-based 頁碼或 null；非數字/越界/小數捨去後仍越界→null）並補測試（合法、越界、0/負、空白、非數字、小數）；三處改呼叫之（行為不變）。純前端。
+- [x] 抽出跳頁輸入驗證純函式（可測性）：`PlayPage` 跳頁框以 `Math.floor(Number(gotoPageInput))` + `n >= 1 && n <= deckPages.length` 在三處（送出、確認鈕、disabled 判斷）重複驗證。抽成 `frontend/src/lib/` 純函式 `parseGotoPage(input, totalPages)`（回合法 1-based 頁碼或 null；非數字/越界/小數捨去後仍越界→null）並補測試（合法、越界、0/負、空白、非數字、小數）；三處改呼叫之（行為不變）。純前端。
+  - 修改說明（2026-06-26）：新增 `frontend/src/lib/parseGotoPage.ts` 之純函式 `parseGotoPage(input, totalPages)`（`Math.floor(Number(input))`，`Number.isFinite && 1..totalPages` 才回該頁、否則 null；空字串/非數字經 Number→0/NaN 落入 null）。`PlayPage` 跳頁框三處（Enter onKeyDown、確認鈕 onClick、disabled 判斷）改呼叫之，輸出與原內嵌邏輯相同、行為不變。新增 `parseGotoPage.test.ts` 5 測試（合法/trim、捨去小數、越界 0/負/超過、空白/非數字、totalPages=0）。前端 `tsc --noEmit` 通過、新測試通過；無 i18n 變更。分支 `feat/parse-goto-page`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 95 個完成項目（95/100，未達上限）。
 
 - [ ] 抽出頁碼清單複製文字為純函式（可測性 / 一致性）：`PlayPageSidebar` 書籤與重點頁「複製清單」各自內嵌 `[...pages].sort().map(n => prefix+n+suffix).join(sep)`。抽成 `frontend/src/lib/` 純函式 `formatPageListText(pages, labels)`（排序去重、`{prefix}{n}{suffix}` 以 `separator` 串接、空回空字串；labels 注入 prefix/suffix/separator）並補測試；兩處改呼叫之（行為不變）。純前端。
 

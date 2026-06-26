@@ -38,6 +38,7 @@ import {
 import { debugLog, debugWarn } from '../lib/debugLog';
 import { formatGeneratingStatusLabel } from '../lib/statusLabels';
 import { nextPageInList, prevPageInList } from '../lib/pageListNav';
+import { parseGotoPage } from '../lib/parseGotoPage';
 import { splitScriptIntoSentences, buildSentenceTimeline, type SentenceTimelineItem } from '../lib/subtitles';
 import { type DrawingCanvasHandle, type DrawingData, type DrawingStroke } from '../components/DrawingCanvas';
 import { useVersionHistory } from './play/useVersionHistory';
@@ -2573,8 +2574,8 @@ export default function PlayPage() {
               onChange={(e) => setGotoPageInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
-                  const n = Math.floor(Number(gotoPageInput));
-                  if (n >= 1 && n <= deckPages.length) {
+                  const n = parseGotoPage(gotoPageInput, deckPages.length);
+                  if (n !== null) {
                     setCurrentIdx(n - 1);
                     setGotoPageOpen(false);
                   }
@@ -2589,13 +2590,13 @@ export default function PlayPage() {
             <button
               type="button"
               onClick={() => {
-                const n = Math.floor(Number(gotoPageInput));
-                if (n >= 1 && n <= deckPages.length) {
+                const n = parseGotoPage(gotoPageInput, deckPages.length);
+                if (n !== null) {
                   setCurrentIdx(n - 1);
                   setGotoPageOpen(false);
                 }
               }}
-              disabled={(() => { const n = Math.floor(Number(gotoPageInput)); return !(n >= 1 && n <= deckPages.length); })()}
+              disabled={parseGotoPage(gotoPageInput, deckPages.length) === null}
               className="mt-3 w-full rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-40"
             >
               {t('play.gotoPageConfirm')}
