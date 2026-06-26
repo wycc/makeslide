@@ -69,6 +69,7 @@ function SimilarPagesSection() {
                   src={`api/pdfs/${encodeURIComponent(it.pdf_id)}/pages/${it.page_number}/image`}
                   alt=""
                   loading="lazy"
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
                   className="h-10 w-14 shrink-0 rounded object-cover"
                 />
                 <div className="min-w-0 flex-1">
@@ -1063,7 +1064,7 @@ export function PlayPageSidebar() {
                   title={t('play.sidebar.bookmarkRemove')}
                 >
                   {thumbSrc && (
-                    <img src={withImageBust(thumbSrc) ?? thumbSrc} alt={`${t('play.common.pagePrefix')}${pageNum}${t('play.common.pageSuffix')}`} className="h-6 w-10 shrink-0 rounded object-cover" />
+                    <img src={withImageBust(thumbSrc) ?? thumbSrc} alt={`${t('play.common.pagePrefix')}${pageNum}${t('play.common.pageSuffix')}`} onError={(e) => { e.currentTarget.style.display = 'none'; }} className="h-6 w-10 shrink-0 rounded object-cover" />
                   )}
                   <span>🔖 {t('play.common.pagePrefix')}{pageNum}{t('play.common.pageSuffix')}</span>
                   <span
@@ -1128,7 +1129,7 @@ export function PlayPageSidebar() {
                   className="flex items-center gap-1.5 rounded-md border border-yellow-500/40 bg-yellow-500/10 px-2.5 py-1 text-xs text-yellow-200 hover:bg-yellow-500/20"
                 >
                   {thumbSrc && (
-                    <img src={withImageBust(thumbSrc) ?? thumbSrc} alt={`${t('play.common.pagePrefix')}${pageNum}${t('play.common.pageSuffix')}`} className="h-6 w-10 shrink-0 rounded object-cover" />
+                    <img src={withImageBust(thumbSrc) ?? thumbSrc} alt={`${t('play.common.pagePrefix')}${pageNum}${t('play.common.pageSuffix')}`} onError={(e) => { e.currentTarget.style.display = 'none'; }} className="h-6 w-10 shrink-0 rounded object-cover" />
                   )}
                   <span>★ {t('play.common.pagePrefix')}{pageNum}{t('play.common.pageSuffix')}</span>
                   <span
