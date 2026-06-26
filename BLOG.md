@@ -7676,3 +7676,18 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **關於手動三模式檢查**：自動化流程無法啟動瀏覽器逐頁視覺確認；惟系列第五項採「dark token 值 == 原 slate 值」對應，深色（現行預設）為建構上零回歸，淺色細部色階屬漸進完善，建議於正式環境快速目視 light 模式。
 - **驗證**：前端 `tsc --noEmit` 通過；新測試與既有 theme/i18n 測試全通過。
 - 至此 Theme 功能系列第 1～6 項全部完成。
+
+## 評論區關鍵字過濾（2026-06-26）
+
+### 功能目的
+播放頁右側「頁面評論」可累積不少留言，尤其切到「全部」模式會列出整份簡報跨頁的評論。先前只能上下捲動尋找特定回饋。本項加入即時關鍵字過濾，讓教師能快速找出含特定字詞或某位作者的評論，是教材知識庫 / 搜尋（Roadmap Phase 4）的一個輕量雛形。
+
+### 使用方式
+在「頁面評論」區，只要該頁（或全部模式）有評論，標題下方就會出現搜尋框。輸入關鍵字即可即時過濾，會同時比對評論內文與作者、不分大小寫；清空即恢復完整清單。若有評論但無任何符合，會顯示「沒有符合的評論」。
+
+### 技術細節
+- **純函式**（`frontend/src/lib/commentFilter.ts`）：`filterComments(comments, query)` 以 `trim().toLowerCase()` 正規化查詢，命中 `text` 或 `author` 任一即保留；查詢為空時直接回傳原陣列（不複製，避免不必要重繪）。以最小結構泛型約束（只需 `text`/`author`）。
+- **UI**（`frontend/src/pages/play/PlayPageSidebar.tsx` 的 `CommentsSection`）：新增 `filterQuery` state 與輸入框（僅在有評論時顯示），清單改以 `visibleComments = filterComments(comments, filterQuery)` 渲染；過濾後為空時顯示 `commentsNoMatch` 提示。
+- **i18n**：新增 zh-TW/en `play.sidebar.commentsFilterPlaceholder`、`play.sidebar.commentsNoMatch`。
+- **測試**：`commentFilter.test.ts` 6 個案例（空白/大小寫/作者欄位/trim/非 ASCII/無符合）。
+- **驗證**：前端 `tsc --noEmit` 通過；`commentFilter.test.ts` 與 `i18n.test.ts`（含 zh/en key 對等）全通過。

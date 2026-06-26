@@ -2275,7 +2275,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 ## 新增可執行項目（第九十九輪，2026-06-26）
 
-- [ ] 評論區關鍵字過濾（Roadmap Phase 4 雛形 / 可用性）：在 `CommentsSection`（`frontend/src/pages/play/PlayPageSidebar.tsx`）標題列下方加入一個關鍵字輸入框，即時過濾目前清單；抽出純函式 `filterComments(comments, query)`（不分大小寫、同時比對 `text` 與 `author`，空字串回全部）置於 `frontend/src/lib/`（新檔，例如 `commentFilter.ts`）並補單元測試（空白/大小寫/比對欄位/無符合）；新增 zh-TW/en placeholder i18n key。純前端、不動後端與資料型別。
+- [x] 評論區關鍵字過濾（Roadmap Phase 4 雛形 / 可用性）：在 `CommentsSection`（`frontend/src/pages/play/PlayPageSidebar.tsx`）標題列下方加入一個關鍵字輸入框，即時過濾目前清單；抽出純函式 `filterComments(comments, query)`（不分大小寫、同時比對 `text` 與 `author`，空字串回全部）置於 `frontend/src/lib/`（新檔，例如 `commentFilter.ts`）並補單元測試（空白/大小寫/比對欄位/無符合）；新增 zh-TW/en placeholder i18n key。純前端、不動後端與資料型別。
+  - 修改說明（2026-06-26）：新增 `frontend/src/lib/commentFilter.ts` 之純函式 `filterComments<T extends {text,author}>(comments, query)`（trim + toLowerCase，命中內文或作者任一即保留，空查詢回原陣列不複製）；`CommentsSection` 新增 `filterQuery` state 與輸入框（僅在有評論時顯示，置於空狀態提示之後、清單之前），渲染改用 `visibleComments = filterComments(comments, filterQuery)`，並在「有評論但過濾後為空」時顯示 `commentsNoMatch` 提示。新增 zh-TW/en i18n key `play.sidebar.commentsFilterPlaceholder`/`commentsNoMatch`。新增 `commentFilter.test.ts` 6 測試（空白/大小寫/作者欄位/trim/非 ASCII/無符合）。前端 `tsc --noEmit` 通過、`commentFilter.test.ts` 與 `i18n.test.ts`（含 zh/en 對等）全通過。分支 `feat/comment-filter`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 60 個完成項目（60/100，未達上限）。
 
 - [ ] 報告摘要「複製為 Markdown」（Roadmap Phase 1 可用性）：在 `PostClassReportPanel`（`frontend/src/pages/play/PostClassReportPanel.tsx`）的工具列加入「複製摘要」按鈕；於 `frontend/src/pages/play/reportSummary.ts` 新增純函式 `formatReportSummaryMarkdown(summary)`，輸出「最難測驗題 / 最分歧投票頁 / 最低完成率頁」三榜單與整體數字的 Markdown，沿用既有 `getHardestQuestions`/`getMostDivergentPollPages`/`getLowestCompletionPages` 與 `formatReportPercent`；以 `lib/clipboard.ts` 的 `copyTextToClipboard` 觸發複製並顯示短暫提示；補 `reportSummary` 純函式測試（含 summary 為 null / 各榜單為空的情況）；新增 zh-TW/en i18n key。
 

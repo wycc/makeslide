@@ -10,6 +10,7 @@ import { QualityCheckPanel } from './QualityCheckPanel';
 import { copyTextToClipboard } from '../../lib/clipboard';
 import { formatAudioDuration } from '../../lib/audioDuration';
 import { getReviewItems, removeReviewItem, type ReviewItem } from '../../lib/reviewList';
+import { filterComments } from '../../lib/commentFilter';
 import { formatRelativeTime } from '../../lib/formatRelativeTime';
 import { NOTEBOOK_TABS, computeNotebookTabCounts, getAdjacentNotebookTab, getEdgeNotebookTab, getStoredNotebookTab, setStoredNotebookTab, type NotebookTab } from './notebookTabs';
 
@@ -93,6 +94,7 @@ function CommentsSection() {
   const { pdfId, currentPage, setCurrentIdx } = usePlayPageContext();
   const [showAll, setShowAll] = useState(false);
   const [comments, setComments] = useState<PageComment[]>([]);
+  const [filterQuery, setFilterQuery] = useState('');
   const [author, setAuthor] = useState('');
   const [text, setText] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -140,6 +142,8 @@ function CommentsSection() {
     } catch { /* ignore */ }
   };
 
+  const visibleComments = filterComments(comments, filterQuery);
+
   return (
     <section className="rounded-lg border border-sky-800/40 bg-sky-900/20">
       <div className="border-b border-sky-800/30 px-4 py-3">
@@ -174,8 +178,20 @@ function CommentsSection() {
         {comments.length === 0 && (
           <p className="text-[11px] text-sky-400/60">{t('play.sidebar.commentsEmpty')}</p>
         )}
+        {comments.length > 0 && (
+          <input
+            type="text"
+            value={filterQuery}
+            onChange={(e) => setFilterQuery(e.target.value)}
+            placeholder={t('play.sidebar.commentsFilterPlaceholder')}
+            className="w-full rounded-md border border-sky-800/40 bg-sky-950/30 px-2 py-1 text-[11px] text-sky-100 placeholder:text-sky-400/40 focus:border-sky-600/60 focus:outline-none"
+          />
+        )}
+        {comments.length > 0 && visibleComments.length === 0 && (
+          <p className="text-[11px] text-sky-400/60">{t('play.sidebar.commentsNoMatch')}</p>
+        )}
         <ul className="space-y-2">
-          {comments.map((c) => (
+          {visibleComments.map((c) => (
             <li key={c.id} className={`rounded-md border px-2.5 py-2 text-[11px] ${c.resolved ? 'border-slate-700/40 bg-slate-800/30 opacity-60' : 'border-sky-500/20 bg-sky-500/10'}`}>
               <div className="flex items-start gap-1.5">
                 <div className="min-w-0 flex-1">
