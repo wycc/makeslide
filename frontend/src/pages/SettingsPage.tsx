@@ -39,6 +39,12 @@ import {
   storeLanguageSettings,
   useI18n,
 } from '../i18n';
+import {
+  type ThemePreference,
+  getStoredThemePreference,
+  setStoredThemePreference,
+  applyThemePreference,
+} from '../lib/theme';
 import { GEMINI_TTS_VOICES, OPENAI_TTS_VOICES, geminiVoiceLabel, openaiVoiceLabel } from '../lib/ttsVoices';
 import { formatSlaOverrideRangeMessage, validateSlaOverrideSecondsInput } from '../lib/slaOverrideValidation';
 import { copyTextToClipboard } from '../lib/clipboard';
@@ -63,6 +69,13 @@ export default function SettingsPage() {
   const [uiLanguage, setUiLanguage] = useState<AppLanguage>(() => getStoredUiLanguage());
   const [contentLanguage, setContentLanguage] = useState<AppLanguage>(() => getStoredContentLanguage());
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(() => getStoredPlaybackSpeed());
+  // Theme 偏好為純本機設定（尚未納入後端 SystemAiSettings），切換後立即套用、不經 Save。
+  const [themePreference, setThemePreference] = useState<ThemePreference>(() => getStoredThemePreference());
+  const handleThemeChange = (next: ThemePreference) => {
+    setThemePreference(next);
+    setStoredThemePreference(next);
+    applyThemePreference(next);
+  };
   const [openaiLlmModel, setOpenaiLlmModel] = useState('gpt-4o-mini');
   const [geminiLlmModel, setGeminiLlmModel] = useState('gemini-2.0-flash');
   const [cguAirLlmModel, setCguAirLlmModel] = useState('gpt-4o-mini');
@@ -711,6 +724,15 @@ export default function SettingsPage() {
                     <select value={String(playbackSpeed)} onChange={(e) => setPlaybackSpeed(Number(e.target.value))} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm">
                       {[0.5, 0.75, 1, 1.25, 1.5, 2].map((speed) => <option key={speed} value={String(speed)}>{speed}x</option>)}
                     </select>
+                  </label>
+                  <label className="block text-sm text-slate-300">
+                    {t('settings.theme')}
+                    <select value={themePreference} onChange={(e) => handleThemeChange(e.target.value as ThemePreference)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm">
+                      <option value="system">{t('settings.themeSystem')}</option>
+                      <option value="light">{t('settings.themeLight')}</option>
+                      <option value="dark">{t('settings.themeDark')}</option>
+                    </select>
+                    <span className="mt-1 block text-xs text-slate-500">{t('settings.themeHint')}</span>
                   </label>
                 </div>
                 <div className="flex justify-end">

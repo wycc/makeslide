@@ -7609,3 +7609,21 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **CSS 變數**（`frontend/src/index.css`）：新增 `:root`（light 預設）與 `.dark`（覆寫）兩組變數 `--color-bg/surface/text/muted/border/primary/danger`。值刻意採「空白分隔的 RGB 三元組」（例如 `15 23 42`），以支援 Tailwind 的 `<alpha-value>` 機制。dark 配色貼齊專案既有的 slate/cyan 深色視覺（surface = slate-900、text = slate-200、border = slate-700、primary = cyan-400…）。
 - **Tailwind 設定**（`frontend/tailwind.config.js`）：設 `darkMode: 'class'`，使深色由 `<html>` 上的 `dark` class 控制（與 `lib/theme.ts` 一致，讓使用者能覆寫 OS 偏好）；在 `theme.extend.colors` 以 `rgb(var(--color-*) / <alpha-value>)` 形式暴露七個語意色。
 - **驗證**：以 `tailwindcss` CLI 編譯確認 `:root` / `.dark` 變數區塊、`dark:` variant（`:is(.dark *)`）、語意 class 與透明度修飾（`bg-surface/80` → `rgb(var(--color-surface) / 0.8)`）皆正確產出；前端 `tsc --noEmit` 通過。本項為純設定與 CSS 變數，不含元件改動，故不另加單元測試。
+
+## 設定頁加入外觀主題選項（2026-06-26）
+
+### 功能目的
+承接 Theme 系列前兩項（`lib/theme.ts` 偏好邏輯、CSS 語意 token），本項提供使用者實際可操作的入口：在設定頁加入「外觀主題」下拉，可選「跟隨系統 / 淺色 / 深色」。主題屬純本機偏好（存在 localStorage、未納入後端設定 API），切換後立即套用、不需按儲存，與語言/播放速度等帳號設定的「按儲存才生效」流程刻意區隔。
+
+### 使用方式
+進入「設定 → 帳號/偏好」區，於「播放速度」下方可見「外觀主題」下拉：
+- **跟隨系統**：依瀏覽器的深色/淺色偏好自動切換（預設）。
+- **淺色** / **深色**：強制使用該主題，覆寫系統偏好。
+選擇後立即生效，無須按「儲存」。
+
+### 技術細節
+- **元件**（`frontend/src/pages/SettingsPage.tsx`）：新增 `themePreference` state（初值 `getStoredThemePreference()`）與 `handleThemeChange`，於 `onChange` 立即呼叫 `setStoredThemePreference()` 與 `applyThemePreference()`；UI 為置於播放速度之後的 `<select>`（system/light/dark）加一行說明。
+- **i18n**：新增 zh-TW/en `settings.theme`、`settings.themeSystem`、`settings.themeLight`、`settings.themeDark`、`settings.themeHint`。
+- **設計取捨**：主題刻意維持本機偏好、不寫入後端 `SystemAiSettings`，避免影響多帳號設定 API；即時套用而非等 Save，符合「外觀切換要馬上看到」的直覺。
+- **已知限制**：本項只負責設定頁切換與即時套用；頁面重新整理後於 App 啟動時自動套用 stored theme（避免首屏白閃）為下一獨立項目，在那之前重整頁面需再次進設定頁才會重新套用。
+- **驗證**：前端 `tsc --noEmit` 通過；`i18n.test.ts`（含 zh/en key 對等檢查）24 個測試全通過。
