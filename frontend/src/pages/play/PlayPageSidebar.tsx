@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../../i18n';
 import { debugLog, debugWarn } from '../../lib/debugLog';
 import { calculateWatchProgressPercent, calculateAvgListenedPercent, formatWatchProgressBadgeCount } from '../../lib/watchProgress';
-import { updatePageNote, listPageComments, createPageComment, resolvePageComment, deletePageComment, fetchSimilarPages, type PageComment, type SimilarPage } from '../../lib/api/pdfs';
+import { updatePageNote, listPageComments, listAllComments, createPageComment, resolvePageComment, deletePageComment, fetchSimilarPages, type PageComment, type SimilarPage } from '../../lib/api/pdfs';
 import { usePlayPageContext } from './PlayPageContext';
 import { PageAskPanel } from './PageAskPanel';
 import { QualityCheckPanel } from './QualityCheckPanel';
@@ -90,7 +90,8 @@ function SimilarPagesSection() {
 
 function CommentsSection() {
   const { t } = useI18n();
-  const { pdfId, currentPage } = usePlayPageContext();
+  const { pdfId, currentPage, setCurrentIdx } = usePlayPageContext();
+  const [showAll, setShowAll] = useState(false);
   const [comments, setComments] = useState<PageComment[]>([]);
   const [author, setAuthor] = useState('');
   const [text, setText] = useState('');
@@ -99,10 +100,12 @@ function CommentsSection() {
 
   useEffect(() => {
     if (!pdfId || !currentPage) return;
-    listPageComments(pdfId, currentPage.page_number)
-      .then(setComments)
-      .catch(() => setComments([]));
-  }, [pdfId, currentPage?.page_number]);
+    if (showAll) {
+      listAllComments(pdfId).then(setComments).catch(() => setComments([]));
+    } else {
+      listPageComments(pdfId, currentPage.page_number).then(setComments).catch(() => setComments([]));
+    }
+  }, [pdfId, currentPage?.page_number, showAll]);
 
   if (!pdfId || !currentPage) return null;
 
@@ -140,12 +143,21 @@ function CommentsSection() {
   return (
     <section className="rounded-lg border border-sky-800/40 bg-sky-900/20">
       <div className="border-b border-sky-800/30 px-4 py-3">
-        <h2 className="flex items-center gap-2 text-sm font-semibold text-sky-300">
-          {t('play.sidebar.commentsTitle')}
-          {comments.length > 0 && (
-            <span className="rounded-full bg-sky-500/20 px-1.5 py-0.5 text-[10px] font-normal text-sky-300">{comments.length}</span>
-          )}
-        </h2>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-sky-300">
+            {t('play.sidebar.commentsTitle')}
+            {comments.length > 0 && (
+              <span className="rounded-full bg-sky-500/20 px-1.5 py-0.5 text-[10px] font-normal text-sky-300">{comments.length}</span>
+            )}
+          </h2>
+          <button
+            type="button"
+            onClick={() => setShowAll((v) => !v)}
+            className={`shrink-0 rounded border px-2 py-0.5 text-[10px] ${showAll ? 'border-sky-600/60 bg-sky-700/40 text-sky-200' : 'border-sky-800/40 text-sky-400/70 hover:text-sky-300'}`}
+          >
+            {showAll ? t('play.sidebar.commentsThisPage') : t('play.sidebar.commentsAll')}
+          </button>
+        </div>
       </div>
       <div className="px-4 py-3 space-y-3">
         {comments.length === 0 && (
@@ -156,6 +168,15 @@ function CommentsSection() {
             <li key={c.id} className={`rounded-md border px-2.5 py-2 text-[11px] ${c.resolved ? 'border-slate-700/40 bg-slate-800/30 opacity-60' : 'border-sky-500/20 bg-sky-500/10'}`}>
               <div className="flex items-start gap-1.5">
                 <div className="min-w-0 flex-1">
+                  {showAll && (
+                    <button
+                      type="button"
+                      onClick={() => setCurrentIdx(c.page_number - 1)}
+                      className="mb-0.5 text-[10px] font-semibold text-sky-400/70 hover:text-sky-300"
+                    >
+                      {t('play.sidebar.reviewListPage').replace('{n}', String(c.page_number))}
+                    </button>
+                  )}
                   <span className="font-medium text-sky-200">{c.author}</span>
                   <span className="ml-1.5 text-sky-400/50 text-[10px]" title={new Date(c.created_at).toLocaleString()}>{formatRelativeTime(c.created_at)}</span>
                   <p className={`mt-0.5 break-words text-sky-100/80 ${c.resolved ? 'line-through text-slate-400' : ''}`}>{c.text}</p>

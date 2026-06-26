@@ -1985,6 +1985,13 @@ export async function listPageComments(id: string, pageNumber: number): Promise<
   return data.comments;
 }
 
+export async function listAllComments(id: string): Promise<PageComment[]> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/comments`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  const data = (await resp.json()) as { comments: PageComment[] };
+  return data.comments;
+}
+
 export async function createPageComment(id: string, pageNumber: number, author: string, text: string): Promise<PageComment> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/comments`, {
     method: 'POST',

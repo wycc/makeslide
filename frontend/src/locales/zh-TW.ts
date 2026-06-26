@@ -1320,6 +1320,8 @@ export const zhTW = {
   'play.sidebar.rewriteDiffNew': '改寫後',
   'play.sidebar.commentsTitle': '💬 頁面評論',
   'play.sidebar.commentsEmpty': '此頁尚無評論',
+  'play.sidebar.commentsAll': '全部',
+  'play.sidebar.commentsThisPage': '此頁',
   'play.sidebar.commentAuthorPlaceholder': '暱稱（選填）',
   'play.sidebar.commentTextPlaceholder': '輸入評論…',
   'play.sidebar.commentPost': '送出',
