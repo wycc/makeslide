@@ -2399,7 +2399,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：新增 `frontend/src/lib/quizQuestionsText.ts` 之純函式 `formatQuizQuestionsText<T>(questions, labels)`，逐題輸出 `N. 題幹` + 選項 `  A. 文字`（正解附 ` ✓`）+（有解析時）`   {explanationLabel}{解析}`，題目間空行分隔，空清單回空字串；以最小結構泛型約束（`question`/`options[].text`/`answer_indices`/`explanation?`），解析標籤由 `QuizQuestionsTextLabels` 注入以保純粹可測。`QuizBuilderPage` 的「複製題目」onClick 改呼叫此函式（傳入 `{ explanationLabel: t('quiz.exportExplanationLabel') }`），輸出與原內嵌邏輯逐字相同、行為不變。新增 `quizQuestionsText.test.ts` 4 測試（空清單、單選正解+無解析、多選正解+解析、多題編號與空行分隔）。前端 `tsc --noEmit` 通過、新測試通過；無 i18n key 變更。分支 `feat/quiz-questions-text-helper`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 76 個完成項目（76/100，未達上限）。
 
-- [ ] i18n locale 值非空守門測試（品質，test-only）：新增 `frontend/src/i18n.nonempty.test.ts`，斷言 zh-TW 與 en 兩語系字典中所有值皆為「非空白字串」（`.trim().length > 0`），補既有 `i18n.test.ts`（只查 key 對等與佔位符集合）的盲點，避免日後不慎留下空字串翻譯。純測試、不改產品程式。
+- [x] i18n locale 值非空守門測試（品質，test-only）：新增 `frontend/src/i18n.nonempty.test.ts`，斷言 zh-TW 與 en 兩語系字典中所有值皆為「非空白字串」（`.trim().length > 0`），補既有 `i18n.test.ts`（只查 key 對等與佔位符集合）的盲點，避免日後不慎留下空字串翻譯。純測試、不改產品程式。
+  - 修改說明（2026-06-26）：新增 `frontend/src/i18n.nonempty.test.ts`。**實作發現**：直接斷言「所有值非空」會誤報——`en` 有 5 個刻意為空的結構性前後綴 key（`play.common.pageSuffix`、`quiz.aiGeneratePageSuffix`、`quiz.countdownPrefix`、`remote.slideAltSuffix`、`play.report.pageSuffix`；中文以「頁」後綴呈現「第 N 頁」、英文用「Page N」前綴故後綴留空，皆在 zh 有值）。故採「允許清單」模式：明列這 5 個可空 key，其餘所有值在兩語系皆須非空白；並加第 3 個測試確保允許清單上的 key「至少一個語系非空」，使允許清單不致淪為永久空殼。共 3 測試全通過、`tsc --noEmit` 通過。純測試、不改產品程式。分支 `feat/i18n-nonempty-test`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 77 個完成項目（77/100，未達上限）。
 
 - [ ] 首頁顯示目前篩選結果數（可用性，小顆粒）：`HomePage` 清單上方（或工具列附近）顯示「共 N 筆」，數量為目前 `filteredItems.length`（隨搜尋/分類/標籤篩選即時更新）；新增 zh-TW/en i18n key（含 `{count}` 佔位）。純前端、不動後端與資料型別。
 

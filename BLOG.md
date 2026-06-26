@@ -7923,3 +7923,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **元件**（`frontend/src/pages/QuizBuilderPage.tsx`）：「複製題目」onClick 改呼叫該函式並傳入 `{ explanationLabel: t('quiz.exportExplanationLabel') }`，移除內嵌格式化邏輯；輸出與原本逐字相同。
 - **測試**（`quizQuestionsText.test.ts`）：4 個案例（空清單、單選正解且無解析、多選正解且附解析、多題編號與空行分隔）。
 - **驗證**：前端 `tsc --noEmit` 通過；新測試通過；無 i18n key 變更。
+
+## i18n 翻譯值非空守門測試（2026-06-26）
+
+### 功能目的
+既有的 i18n 測試會檢查 zh-TW 與 en 兩語系「key 一致」與「{佔位符} 集合一致」，但若某個翻譯被不慎留成空字串，測試仍會通過。本項加入「值非空」守門測試，避免日後出現空白翻譯卻無人察覺。這是純測試強化，不影響任何產品行為。
+
+### 使用方式
+無使用者可見變化。開發者執行前端測試時，會額外驗證所有翻譯值皆為非空白字串。
+
+### 技術細節
+- **測試**（`frontend/src/i18n.nonempty.test.ts`）：逐一檢查兩語系字典的每個值是否為非空白字串。
+- **允許清單**：實作時發現英文有 5 個刻意為空的結構性前/後綴 key（`play.common.pageSuffix`、`quiz.aiGeneratePageSuffix`、`quiz.countdownPrefix`、`remote.slideAltSuffix`、`play.report.pageSuffix`）——中文以「頁」後綴呈現「第 N 頁」，英文改用「Page N」前綴，故後綴在英文留空。這些屬合理空值，以允許清單排除；其餘所有值在兩語系皆須非空。
+- **允許清單守誠**：再加一個測試，確保允許清單上的每個 key「至少一個語系非空」，避免允許清單被濫用成永久空殼。
+- **驗證**：3 個測試全通過；前端 `tsc --noEmit` 通過。純測試、不改產品程式。
