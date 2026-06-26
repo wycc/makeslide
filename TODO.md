@@ -2047,6 +2047,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：新增 `backend/src/worker/addPagesOutline.ts`（3 個純函式 + `OutlineSlide` 型別）；`addPagesFromPrompt.ts` 移除原定義、改 `import { ... } from './addPagesOutline'` 並 `export { buildInsertionContext }`。新增 `addPagesOutline.test.ts` +7 測試（outline 解析之 bullet 門檻/前綴去除/孤兒 bullet、插入情境的聚焦視窗/去重排序/空白略過/maxChars、新頁渲染），sandbox 執行通過；後端 `tsc` build 通過。分支 `refactor/add-pages-outline-pure`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 21 個完成項目（21/100，未達上限）。
 
+- [x] 預設投票選項 i18n：`usePagePolls` 的新投票選項欄位預設值硬編中文 `'同意\n不同意'`（初始 state 與建立後重設兩處）——英文介面的老師建立投票時會拿到中文預設選項，且這些選項會直接成為學生看到的投票項目。新增 i18n key 並改用 `t()`。（檢視時另確認投票輪詢採 `cancelled` flag + 遞迴 setTimeout，無 race。）
+  - 修改說明（2026-06-26）：zh-TW/en 各新增 `play.sidebar.poll.defaultOptions`（`同意\n不同意`／`Agree\nDisagree`）；`usePagePolls.ts` 的 `useState` 初始值改 lazy initializer `() => t(...)`、建立後重設改 `t(...)`（`handleCreatePoll` 的 useCallback deps 已含 `t`）。前端 377 測試 + typecheck（含 i18n key 對齊）全通過。分支 `fix/poll-default-options-i18n`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 22 個完成項目（22/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2072,4 +2076,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | 橡皮擦命中幾何抽離並補測試：`DrawingCanvas` 的 `distSq`/`distPointToSegment`/`strokeHitsPoint` 抽成純模組 `drawingGeometry.ts` 並補 6 個單元測試（點到線段距離、稀疏點線段命中等）；前端 377 測試通過 | refactor/drawing-geometry-tested（已 merge） |
 | 2026-06-26 | 側邊欄導覽縮圖隱藏破圖：`PlayPageSidebar` 搜尋結果/書籤/重點三處 `<img>` 加 `onError` 載入失敗隱藏，與主縮圖網格一致；前端 377 測試通過 | fix/sidebar-secondary-thumb-onerror（已 merge） |
 | 2026-06-26 | add-pages outline 純函式抽離並補測試：`parseOutlineText`/`buildInsertionContext`/`renderNewSlideTexts` 抽到無 db 依賴的 `addPagesOutline.ts`（從 `addPagesFromPrompt` re-export 維持相容）；addPagesOutline.test.ts +7 測試、後端 build 通過 | refactor/add-pages-outline-pure（已 merge） |
+| 2026-06-26 | 預設投票選項 i18n：`usePagePolls` 新投票預設選項 `同意/不同意` 改用 `t('play.sidebar.poll.defaultOptions')`（zh/en）；前端 377 測試通過 | fix/poll-default-options-i18n（已 merge） |
 
