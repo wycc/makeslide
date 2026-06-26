@@ -7839,3 +7839,18 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **UI**（`frontend/src/pages/play/PostClassReportPanel.tsx`）：在副標題下、`summary` 存在時顯示一行相對時間，沿用 `lib/formatRelativeTime.ts`；`title` tooltip 顯示 `new Date(summary.generated_at).toLocaleString()`。
 - **i18n**：因報告底部已有前綴型 `play.report.generatedAt`（「產生時間：」），為避免衝突，本項新增獨立 key `play.report.generatedAtRelative`（含 `{time}` 佔位，zh-TW/en）；底部既有顯示維持不變。
 - **驗證**：前端 `tsc --noEmit` 通過；`i18n.test.ts`（含 zh/en key 對等與佔位符集合檢查）通過。
+
+## 投票結果複製為 Markdown（2026-06-26）
+
+### 功能目的
+播放頁的即時投票（Realtime Poll）可即時看到各選項票數與橫條圖，但課後若要把投票結果整理進筆記或報告，先前只能逐筆手抄。本項在投票區加入「複製結果」按鈕，一鍵把本頁所有 poll 的結果輸出成 Markdown。
+
+### 使用方式
+在播放頁側欄「📊 Realtime Poll」區，只要本頁已有投票，標題列就會出現「複製結果」按鈕。點擊即把結果以 Markdown 複製到剪貼簿（按鈕短暫顯示「已複製 ✓」）。每個 poll 為一個 `## 問題` 區段，各選項一行 `- 選項：N 票（X%）`，百分比以總票數計（無票時 0%）。
+
+### 技術細節
+- **純函式**（`frontend/src/lib/pollResultsMarkdown.ts`）：`formatPollResultsMarkdown(polls, labels)` 逐 poll 輸出問題與各選項票數/百分比（`Math.round(votes/total*100)`，total 為 0 時 0%）；顯示文字（標題、票數單位）由 `PollResultsMarkdownLabels` 注入以保持純粹可測；空清單回空字串。
+- **UI**（`frontend/src/pages/play/PlayPageSidebar.tsx`）：投票區標題列在 `pagePolls` 非空時顯示「複製結果」按鈕，呼叫 `copyTextToClipboard` 並顯示 2 秒結果提示。
+- **i18n**：新增 zh-TW/en `play.sidebar.poll.copyResults`/`copyHeading`/`votesUnit`/`copyDone`/`copyFail`。
+- **測試**：`pollResultsMarkdown.test.ts` 4 個案例（空清單、單一 poll 票數與百分比、零票 0%、多 poll）。
+- **驗證**：前端 `tsc --noEmit` 通過；`pollResultsMarkdown.test.ts` 與 `i18n.test.ts`（含 zh/en key 對等）全通過。
