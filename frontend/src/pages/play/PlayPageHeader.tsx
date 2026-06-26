@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { RegenerateProgress } from './RegenerateProgress';
 import type { ShareAccessMode } from '../../lib/api';
@@ -108,6 +108,61 @@ function ShortcutsButton() {
   );
 }
 
+function HeaderDropdown({
+  id,
+  label,
+  children,
+  accent = 'slate',
+  open,
+  onOpenChange,
+}: {
+  id: string;
+  label: string;
+  children: ReactNode;
+  accent?: 'slate' | 'cyan' | 'violet' | 'emerald' | 'amber';
+  open: boolean;
+  onOpenChange: (id: string | null) => void;
+}) {
+  const accentClass = {
+    slate: 'border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 md:bg-transparent md:hover:bg-slate-800/80',
+    cyan: 'border-cyan-500/60 bg-cyan-950 text-cyan-100 hover:bg-cyan-900 md:bg-cyan-500/10 md:hover:bg-cyan-500/20',
+    violet: 'border-violet-500/60 bg-violet-950 text-violet-100 hover:bg-violet-900 md:bg-violet-500/10 md:hover:bg-violet-500/20',
+    emerald: 'border-emerald-500/60 bg-emerald-950 text-emerald-100 hover:bg-emerald-900 md:bg-emerald-500/10 md:hover:bg-emerald-500/20',
+    amber: 'border-amber-500/60 bg-amber-950 text-amber-100 hover:bg-amber-900 md:bg-amber-500/10 md:hover:bg-amber-500/20',
+  }[accent];
+  return (
+    <details
+      open={open}
+      className="group relative z-[100]"
+    >
+      <summary
+        onClick={(event) => {
+          event.preventDefault();
+          onOpenChange(open ? null : id);
+        }}
+        className={`flex cursor-pointer list-none items-center gap-1 rounded-md border px-3 py-1.5 text-sm transition-colors [&::-webkit-details-marker]:hidden ${accentClass}`}
+      >
+        {label}
+        <span className="text-[10px] opacity-70 transition-transform group-open:rotate-180">▼</span>
+      </summary>
+      <div
+        className="static z-[100] mt-2 w-full translate-x-0 rounded-xl border border-slate-700 bg-slate-950 p-3 shadow-2xl shadow-black/40 md:absolute md:left-1/2 md:w-72 md:-translate-x-1/2 md:bg-slate-950/95 md:backdrop-blur"
+        onClick={(event) => {
+          const target = event.target as HTMLElement | null;
+          const menuItem = target?.closest('button,a');
+          if (!menuItem) return;
+          if (menuItem instanceof HTMLButtonElement && menuItem.disabled) return;
+          onOpenChange(null);
+        }}
+      >
+        <div className="grid gap-2">
+          {children}
+        </div>
+      </div>
+    </details>
+  );
+}
+
 export function PlayPageHeader() {
   const { t } = useI18n();
   const {
@@ -170,6 +225,8 @@ export function PlayPageHeader() {
   const [promptCopyDone, setPromptCopyDone] = useState(false);
   const [descCopyDone, setDescCopyDone] = useState(false);
   const [genDescBusy, setGenDescBusy] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const titleBeforeEdit = useRef('');
   const inlineTitleRef = useRef<HTMLInputElement>(null);
 
@@ -247,7 +304,7 @@ export function PlayPageHeader() {
   };
 
   return (
-    <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur">
+    <header className="relative z-[1000] border-b border-slate-800 bg-slate-900/50 backdrop-blur">
       <div className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-2 py-2 sm:gap-3 sm:px-4 sm:py-3">
         {!currentShareToken ? (
           <Link
@@ -354,39 +411,7 @@ export function PlayPageHeader() {
             ) : null}
           </div>
         ) : null}
-        {!currentShareToken && detail?.user_prompt?.trim() ? (
-          <div className="mx-auto w-full max-w-5xl px-4 pb-2">
-            <button
-              type="button"
-              onClick={() => setPromptExpanded((v) => !v)}
-              aria-expanded={promptExpanded}
-              className="text-xs text-slate-400 hover:text-slate-200"
-            >
-              {promptExpanded ? `▲ ${t('play.header.hidePrompt')}` : `▼ ${t('play.header.showPrompt')}`}
-            </button>
-            {promptExpanded ? (
-              <div className="mt-1">
-                <p className="whitespace-pre-wrap rounded-md border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs text-slate-300">
-                  {detail.user_prompt}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void copyTextToClipboard(detail.user_prompt ?? '').then((r) => {
-                      if (r.ok) {
-                        setPromptCopyDone(true);
-                        setTimeout(() => setPromptCopyDone(false), 2000);
-                      }
-                    });
-                  }}
-                  className="mt-1 text-[11px] text-slate-400 hover:text-slate-200"
-                >
-                  {promptCopyDone ? t('play.header.copyPromptDone') : t('play.header.copyPrompt')}
-                </button>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
+        
         {syncError ? <div className="mt-1 text-xs text-rose-300">{syncError}</div> : null}
         {syncEnabled ? (
           <div className="mx-auto w-full max-w-5xl px-4 pb-3">
@@ -532,34 +557,52 @@ export function PlayPageHeader() {
         </div>
       ) : null}
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-2 px-4 pb-3 md:flex-row md:items-center md:justify-between md:gap-3">
-        {!isReadOnlyProcessing ? (
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-2">
+        <div className="space-y-1 text-xs text-slate-400">
+          {videoError ? <span className="text-rose-300">{videoError}</span> : null}
+          {!videoError && titleMsg ? <span className="text-slate-300">{titleMsg}</span> : null}
+          {shareMessage ? <div className="text-emerald-300">{shareMessage}</div> : null}
+          {shareError ? <div className="text-rose-300">{shareError}</div> : null}
+          {githubSyncMessage ? <div className="text-emerald-300">{githubSyncMessage}</div> : null}
+          {githubSyncError ? <div className="text-rose-300">{githubSyncError}</div> : null}
+        </div>
+        <div className="flex flex-col items-stretch gap-2 md:items-end">
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen((open) => !open)}
+            className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 hover:bg-slate-800 md:hidden"
+            aria-expanded={mobileMenuOpen}
+            aria-label="開啟播放頁選單"
+          >
+            <span className="text-lg leading-none">☰</span>
+            <span>選單</span>
+          </button>
+          <nav className={`${mobileMenuOpen ? 'grid' : 'hidden'} grid-cols-1 gap-2 rounded-xl border border-slate-700 bg-slate-950 p-3 shadow-xl md:flex md:border-0 md:bg-transparent md:p-0 md:shadow-none`} aria-label="PlayPage actions">
+          {!isReadOnlyProcessing ? (
+          <HeaderDropdown id="metadata" label="資訊" accent="slate" open={openMenuId === 'metadata'} onOpenChange={setOpenMenuId}>
+            <div className="grid gap-2">
               <input
                 type="text"
                 value={tagsInput}
                 onChange={(e) => setTagsInput(e.target.value)}
                 placeholder={t('play.metadata.tagsLabel')}
-                className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100"
+                className="min-w-0 rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100"
                 maxLength={500}
               />
               <button
                 type="button"
                 onClick={() => void handleSaveTags()}
                 disabled={tagsBusy}
-                className="shrink-0 whitespace-nowrap rounded-md border border-indigo-500/50 bg-indigo-500/15 px-2 py-1 text-[11px] text-indigo-200 disabled:opacity-40"
+                className="whitespace-nowrap rounded-md border border-indigo-500/50 bg-indigo-500/15 px-2 py-1.5 text-xs text-indigo-200 disabled:opacity-40"
               >
                 {tagsBusy ? '…' : t('play.header.saveTags')}
               </button>
               {tagsMsg ? <span className="text-xs text-emerald-300">{tagsMsg}</span> : null}
-            </div>
-            <div className="flex items-start gap-2">
               <textarea
                 value={descriptionInput}
                 onChange={(e) => setDescriptionInput(e.target.value)}
                 placeholder={t('play.metadata.descriptionPlaceholder')}
-                rows={2}
-                className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100 resize-none"
+                rows={3}
+                className="min-w-0 resize-none rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100"
                 maxLength={2000}
               />
               {descriptionInput.trim() === '' && pdfId ? (
@@ -573,7 +616,7 @@ export function PlayPageHeader() {
                       .finally(() => setGenDescBusy(false));
                   }}
                   disabled={genDescBusy}
-                  className="shrink-0 whitespace-nowrap rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-2 py-1 text-[11px] text-fuchsia-200 disabled:opacity-40"
+                  className="whitespace-nowrap rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-2 py-1.5 text-xs text-fuchsia-200 disabled:opacity-40"
                 >
                   {genDescBusy ? t('play.metadata.generatingDescription') : t('play.metadata.aiGenerateDescription')}
                 </button>
@@ -582,25 +625,52 @@ export function PlayPageHeader() {
                 type="button"
                 onClick={() => void handleSaveDescription()}
                 disabled={descriptionBusy}
-                className="shrink-0 whitespace-nowrap rounded-md border border-indigo-500/50 bg-indigo-500/15 px-2 py-1 text-[11px] text-indigo-200 disabled:opacity-40"
+                className="whitespace-nowrap rounded-md border border-indigo-500/50 bg-indigo-500/15 px-2 py-1.5 text-xs text-indigo-200 disabled:opacity-40"
               >
                 {descriptionBusy ? '…' : t('play.metadata.descriptionLabel')}
               </button>
               {descriptionMsg ? <span className="text-xs text-emerald-300">{descriptionMsg}</span> : null}
+              {!currentShareToken && detail?.user_prompt?.trim() ? (
+                <div className="rounded-md border border-slate-700/80 bg-slate-900/60 p-2">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setPromptExpanded((v) => !v);
+                    }}
+                    aria-expanded={promptExpanded}
+                    className="text-xs text-slate-400 hover:text-slate-200"
+                  >
+                    {promptExpanded ? `▲ ${t('play.header.hidePrompt')}` : `▼ ${t('play.header.showPrompt')}`}
+                  </button>
+                  {promptExpanded ? (
+                    <div className="mt-2">
+                      <p className="max-h-44 overflow-auto whitespace-pre-wrap rounded-md border border-slate-700 bg-slate-950/70 px-3 py-2 text-xs text-slate-300">
+                        {detail.user_prompt}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void copyTextToClipboard(detail.user_prompt ?? '').then((r) => {
+                            if (r.ok) {
+                              setPromptCopyDone(true);
+                              setTimeout(() => setPromptCopyDone(false), 2000);
+                            }
+                          });
+                        }}
+                        className="mt-1 text-[11px] text-slate-400 hover:text-slate-200"
+                      >
+                        {promptCopyDone ? t('play.header.copyPromptDone') : t('play.header.copyPrompt')}
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
-          </div>
-        ) : null}
-        <div className="space-y-1 text-xs text-slate-400">
-          {videoError ? <span className="text-rose-300">{videoError}</span> : null}
-          {!videoError && titleMsg ? <span className="text-slate-300">{titleMsg}</span> : null}
-          {shareMessage ? <div className="text-emerald-300">{shareMessage}</div> : null}
-          {shareError ? <div className="text-rose-300">{shareError}</div> : null}
-          {githubSyncMessage ? <div className="text-emerald-300">{githubSyncMessage}</div> : null}
-          {githubSyncError ? <div className="text-rose-300">{githubSyncError}</div> : null}
-        </div>
-        {/* Mobile keeps a 3-column action grid; desktop keeps the original flexible toolbar. */}
-        <div className="grid grid-cols-3 gap-2 md:flex md:flex-wrap md:items-center md:justify-end md:gap-2">
-          <ShortcutsButton />
+          </HeaderDropdown>
+          ) : null}
+          <HeaderDropdown id="playback" label="播放" accent="slate" open={openMenuId === 'playback'} onOpenChange={setOpenMenuId}>
+            <ShortcutsButton />
           <button
             type="button"
             onClick={() => {
@@ -633,11 +703,11 @@ export function PlayPageHeader() {
               disabled={isReadOnlyProcessing}
               className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
               title={t('play.header.fullscreenEditTitle')}
-            >
-              {t('play.header.fullscreenEdit')}
-            </button>
+          >
+            {t('play.header.fullscreenEdit')}
+          </button>
           ) : null}
-          <div className="col-span-2 flex items-center justify-center gap-1 rounded-md border border-slate-700 px-2 py-1 md:col-span-1" title={t('play.header.imageScaleTitle')}>
+          <div className="flex items-center justify-center gap-1 rounded-md border border-slate-700 px-2 py-1" title={t('play.header.imageScaleTitle')}>
             <button
               type="button"
               onClick={() => setSlideImageScale((scale) => Math.max(0.65, Number((scale - 0.1).toFixed(2))))}
@@ -668,6 +738,8 @@ export function PlayPageHeader() {
           >
             ⚙️ {t('play.header.settings')}
           </button>
+          </HeaderDropdown>
+          <HeaderDropdown id="generate" label="生成" accent="amber" open={openMenuId === 'generate'} onOpenChange={setOpenMenuId}>
           <button
             type="button"
             onClick={() => void openImageStyleDialog()}
@@ -718,6 +790,8 @@ export function PlayPageHeader() {
               {t('play.header.nativeShare')}
             </button>
           ) : null}
+          </HeaderDropdown>
+          <HeaderDropdown id="download" label="下載" accent="cyan" open={openMenuId === 'download'} onOpenChange={setOpenMenuId}>
           {videoUrl ? (
             <a
               href={videoUrl}
@@ -802,6 +876,8 @@ export function PlayPageHeader() {
           >
             {t('play.header.downloadH5p')}
           </a>
+          </HeaderDropdown>
+          <HeaderDropdown id="script" label="逐字稿" accent="violet" open={openMenuId === 'script'} onOpenChange={setOpenMenuId}>
           <button
             type="button"
             disabled={!currentPage || !scripts[currentPage.page_number]}
@@ -842,6 +918,8 @@ export function PlayPageHeader() {
           >
             {coursePackageBusy ? t('play.header.coursePackageGenerating') : t('play.header.downloadCoursePackage')}
           </button>
+          </HeaderDropdown>
+          <HeaderDropdown id="share" label="分享" accent="emerald" open={openMenuId === 'share'} onOpenChange={setOpenMenuId}>
           <button
             type="button"
             onClick={() => void handleSyncToGithub()}
@@ -857,7 +935,7 @@ export function PlayPageHeader() {
             </span>
           )}
           {!currentShareToken ? (
-            <div className="col-span-3 flex flex-wrap items-center gap-2 rounded-md border border-slate-700/80 px-2 py-1 md:col-span-1">
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-700/80 px-2 py-1">
               <select
                 value={shareAccess}
                 onChange={(e) => setShareAccess((e.target.value as ShareAccessMode) || 'read_only')}
@@ -898,6 +976,8 @@ export function PlayPageHeader() {
               </button>
             </div>
           ) : null}
+          </HeaderDropdown>
+          </nav>
         </div>
       </div>
       {showRegenBanner ? (
