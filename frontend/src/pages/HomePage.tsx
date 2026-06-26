@@ -961,8 +961,8 @@ export default function HomePage() {
   );
 
   return (
-    <div className="min-h-screen bg-bg text-slate-100">
-      <header className="border-b border-slate-800 bg-surface/40 backdrop-blur">
+    <div className="min-h-screen bg-slate-100 text-text dark:bg-bg">
+      <header className="border-b border-border bg-surface/40 backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-xl font-semibold tracking-tight">makeslide</h1>
           <GlobalSearchBox />
@@ -979,7 +979,7 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => void handleLogout()}
-                className="inline-flex items-center rounded-md border border-border bg-surface/70 px-3 py-2 text-sm text-text hover:bg-slate-800 hover:text-white"
+                className="inline-flex items-center rounded-md border border-border bg-surface/70 px-3 py-2 text-sm text-text hover:bg-border hover:text-bg dark:text-white"
                 title={authStatus.user?.email ? `${t('home.logout')} ${authStatus.user.email}` : t('home.logoutGoogle')}
               >
                 {t('home.logout')}
@@ -987,7 +987,7 @@ export default function HomePage() {
             ) : null}
             <Link
               to="/settings"
-              className="inline-flex items-center rounded-md border border-border bg-surface/70 px-3 py-2 text-sm text-text hover:bg-slate-800 hover:text-white"
+              className="inline-flex items-center rounded-md border border-border bg-surface/70 px-3 py-2 text-sm text-text hover:bg-border hover:text-bg dark:text-white"
             >
               {t('home.apiKeySettings')}
             </Link>
@@ -995,7 +995,7 @@ export default function HomePage() {
               type="button"
               onClick={handleImportZipClick}
               disabled={isImportingZip}
-              className="inline-flex items-center rounded-md border border-border bg-surface/70 px-3 py-2 text-sm text-text hover:bg-slate-800 hover:text-white"
+              className="inline-flex items-center rounded-md border border-border bg-surface/70 px-3 py-2 text-sm text-text hover:bg-border hover:text-bg dark:text-white"
             >
               {t('home.importZip')}
             </button>
@@ -1003,7 +1003,7 @@ export default function HomePage() {
               type="button"
               onClick={() => void handleBatchExportAll()}
               disabled={batchExportJobId !== null}
-              className="inline-flex items-center rounded-md border border-border bg-surface/70 px-3 py-2 text-sm text-text hover:bg-slate-800 hover:text-white disabled:opacity-50"
+              className="inline-flex items-center rounded-md border border-border bg-surface/70 px-3 py-2 text-sm text-text hover:bg-border hover:text-bg dark:text-white disabled:opacity-50"
             >
               {batchExportJobId !== null
                 ? t('home.batchExporting').replace('{progress}', String(batchExportProgress)).replace('{total}', String(batchExportTotal))
@@ -1017,7 +1017,7 @@ export default function HomePage() {
                   <span>{t('home.importingZip')}</span>
                   <span>{zipImportProgress}%</span>
                 </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-border">
                   <div
                     className="h-full rounded-full bg-indigo-400 transition-all duration-200"
                     style={{ width: `${zipImportProgress}%` }}
@@ -1044,8 +1044,8 @@ export default function HomePage() {
         ) : null}
         {!loading && items.length === 0 && !error && (
           <section className="mb-6 rounded-xl border border-border bg-surface/50 p-4">
-            <h2 className="text-sm font-semibold text-slate-100">{t('home.firstTimeGuide')}</h2>
-            <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-slate-300">
+            <h2 className="text-sm font-semibold text-text">{t('home.firstTimeGuide')}</h2>
+            <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-text">
               <li>{t('home.step1')}</li>
               <li>{t('home.step2')}</li>
               <li>{t('home.step3')}</li>
@@ -1067,27 +1067,27 @@ export default function HomePage() {
         )}
 
         {error && (
-          <div className="mb-4 rounded-md border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+          <div className="mb-4 rounded-md border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-sm text-danger">
             {error}
           </div>
         )}
 
         {!loading && items.length === 0 && !error && (
           <div className="rounded-xl border border-dashed border-border bg-surface/40 p-10 text-center">
-            <p className="text-slate-300">{t('home.noPdf')}</p>
-            <p className="mt-1 text-sm text-slate-500">{t('home.clickUpload')}</p>
+            <p className="text-text">{t('home.noPdf')}</p>
+            <p className="mt-1 text-sm text-muted">{t('home.clickUpload')}</p>
           </div>
         )}
 
         {items.length > 0 && (
-          <section className="mb-6 rounded-xl border border-slate-800 bg-surface/50 p-4">
+          <section className="mb-6 rounded-xl border border-border bg-surface/50 p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-              <label className="flex flex-col gap-2 text-sm text-slate-300 sm:max-w-xs">
+              <label className="flex flex-col gap-2 text-sm text-text sm:max-w-xs">
                 {t('home.showCategory')}
                 <select
                   value={categoryFilter}
                   onChange={(ev) => handleCategoryFilterSelect(ev.target.value)}
-                  className="rounded-md border border-border bg-bg px-3 py-2 text-sm text-slate-100 outline-none transition hover:border-slate-500"
+                  className="rounded-md border border-border bg-bg px-3 py-2 text-sm text-text outline-none transition hover:border-primary"
                 >
                   <option value="__all__">{t('home.allCategories')}</option>
                   <option value="__recent__">{RECENT_CATEGORY}</option>
@@ -1098,7 +1098,7 @@ export default function HomePage() {
                   })}
                 </select>
               </label>
-              <label className="flex flex-col gap-2 text-sm text-slate-300 sm:w-80">
+              <label className="flex flex-col gap-2 text-sm text-text sm:w-80">
                 {t('home.filterByTitle')}
                 <div className="relative">
                   <input
@@ -1109,13 +1109,13 @@ export default function HomePage() {
                     onBlur={() => { commitSearchTerm(titleFilter); setSearchFocused(false); }}
                     onKeyDown={(e) => { if (e.key === 'Enter') { commitSearchTerm(titleFilter); (e.target as HTMLInputElement).blur(); } }}
                     placeholder={t('home.filterByTitlePlaceholder')}
-                    className="w-full rounded-md border border-border bg-bg px-3 py-2 pr-16 text-sm text-slate-100 outline-none transition hover:border-slate-500 focus:border-indigo-400"
+                    className="w-full rounded-md border border-border bg-bg px-3 py-2 pr-16 text-sm text-text outline-none transition hover:border-primary focus:border-indigo-400"
                   />
                   {titleFilter.length > 0 && (
                     <button
                       type="button"
                       onClick={() => updateTitleFilter('')}
-                      className="absolute right-1 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-xs text-muted transition hover:bg-slate-800 hover:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                      className="absolute right-1 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-xs text-muted transition hover:bg-border hover:text-text focus:outline-none focus:ring-1 focus:ring-indigo-400"
                       aria-label={t('home.clearTitleFilter')}
                     >
                       {t('home.clearTitleFilter')}
@@ -1123,18 +1123,18 @@ export default function HomePage() {
                   )}
                   {searchFocused && recentSearches.length > 0 && titleFilter.length === 0 && (
                     <ul className="absolute left-0 top-full z-20 mt-1 w-full rounded-md border border-border bg-surface py-1 shadow-lg">
-                      <li className="flex items-center justify-between px-3 py-1 text-xs text-slate-500">
+                      <li className="flex items-center justify-between px-3 py-1 text-xs text-muted">
                         <span>{t('home.search.recent')}</span>
                         <button
                           type="button"
                           onMouseDown={(e) => { e.preventDefault(); window.localStorage.removeItem(RECENT_SEARCHES_STORAGE_KEY); setRecentSearches([]); }}
-                          className="text-slate-500 hover:text-slate-300"
+                          className="text-muted hover:text-text"
                         >
                           {t('home.search.clearRecent')}
                         </button>
                       </li>
                       {recentSearches.map((term) => (
-                        <li key={term} className="group flex items-center hover:bg-slate-800">
+                        <li key={term} className="group flex items-center hover:bg-border">
                           <button
                             type="button"
                             onMouseDown={(e) => { e.preventDefault(); updateTitleFilter(term); setSearchFocused(false); }}
@@ -1147,7 +1147,7 @@ export default function HomePage() {
                             aria-label={t('home.search.removeRecent')}
                             title={t('home.search.removeRecent')}
                             onMouseDown={(e) => { e.preventDefault(); setRecentSearches(removeRecentSearch(term)); }}
-                            className="shrink-0 px-2 py-1.5 text-slate-500 hover:text-text"
+                            className="shrink-0 px-2 py-1.5 text-muted hover:text-text"
                           >
                             ✕
                           </button>
@@ -1157,12 +1157,12 @@ export default function HomePage() {
                   )}
                 </div>
               </label>
-              <label className="flex flex-col gap-2 text-sm text-slate-300 sm:w-64">
+              <label className="flex flex-col gap-2 text-sm text-text sm:w-64">
                 {t('home.sortBy')}
                 <select
                   value={sortMode}
                   onChange={(ev) => updateSortMode(ev.target.value as SortMode)}
-                  className="rounded-md border border-border bg-bg px-3 py-2 text-sm text-slate-100 outline-none transition hover:border-slate-500 focus:border-indigo-400"
+                  className="rounded-md border border-border bg-bg px-3 py-2 text-sm text-text outline-none transition hover:border-primary focus:border-indigo-400"
                 >
                   <option value="title_asc">{t('home.sort.titleAsc')}</option>
                   <option value="title_desc">{t('home.sort.titleDesc')}</option>
@@ -1180,7 +1180,7 @@ export default function HomePage() {
                   <button
                     type="button"
                     onClick={clearAllFilters}
-                    className="rounded px-2 py-1.5 text-xs text-rose-400 transition hover:bg-slate-800 hover:text-rose-300"
+                    className="rounded px-2 py-1.5 text-xs text-danger transition hover:bg-border hover:text-danger"
                     title={t('home.clearAllFilters')}
                   >
                     {t('home.clearAllFilters')}
@@ -1189,7 +1189,7 @@ export default function HomePage() {
                 <button
                   type="button"
                   onClick={() => updateViewMode('grid')}
-                  className={`rounded p-2 text-sm transition ${viewMode === 'grid' ? 'bg-slate-700 text-white' : 'text-muted hover:bg-slate-800'}`}
+                  className={`rounded p-2 text-sm transition ${viewMode === 'grid' ? 'bg-primary text-bg dark:text-white' : 'text-muted hover:bg-border'}`}
                   title={t('home.viewGrid')}
                   aria-label={t('home.viewGrid')}
                 >
@@ -1198,7 +1198,7 @@ export default function HomePage() {
                 <button
                   type="button"
                   onClick={() => updateViewMode('list')}
-                  className={`rounded p-2 text-sm transition ${viewMode === 'list' ? 'bg-slate-700 text-white' : 'text-muted hover:bg-slate-800'}`}
+                  className={`rounded p-2 text-sm transition ${viewMode === 'list' ? 'bg-primary text-bg dark:text-white' : 'text-muted hover:bg-border'}`}
                   title={t('home.viewList')}
                   aria-label={t('home.viewList')}
                 >
@@ -1209,7 +1209,7 @@ export default function HomePage() {
             <p className="mt-3 text-xs text-muted" aria-live="polite">
               {visibleSummary}
             </p>
-            <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-500">
+            <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted">
               <span>{t('home.stats.totalPdfs').replace('{n}', String(homeStats.totalPdfs))}</span>
               <span>·</span>
               <span>{t('home.stats.totalPages').replace('{n}', String(homeStats.totalPages))}</span>
@@ -1223,7 +1223,7 @@ export default function HomePage() {
               )}
             </div>
             {reviewCount > 0 && (
-              <div className="mt-2 flex items-center gap-2 rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
+              <div className="mt-2 flex items-center gap-2 rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-danger">
                 <span>📝</span>
                 <span>{t('home.reviewListBanner').replace('{n}', String(reviewCount))}</span>
               </div>
@@ -1232,9 +1232,9 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => setFavoritesOnly((v) => !v)}
-                className={`rounded-full border px-3 py-0.5 text-xs transition ${favoritesOnly ? 'border-amber-400 bg-amber-500/20 text-amber-200' : 'border-slate-600 bg-slate-800 text-slate-300 hover:border-slate-500'}`}
+                className={`rounded-full border px-3 py-0.5 text-xs transition ${favoritesOnly ? 'border-amber-400 bg-amber-500/20 text-amber-800 dark:text-amber-200' : 'border-border bg-border text-text hover:border-primary'}`}
               >
-                {favoritesOnly ? '★' : '☆'} {t('home.filter.favoritesOnly')}{favorites.size > 0 && <span className="ml-1.5 rounded-full bg-amber-500/30 px-1.5 text-[10px] text-amber-300">{favorites.size}</span>}
+                {favoritesOnly ? '★' : '☆'} {t('home.filter.favoritesOnly')}{favorites.size > 0 && <span className="ml-1.5 rounded-full bg-amber-500/30 px-1.5 text-[10px] text-amber-800 dark:text-amber-300">{favorites.size}</span>}
               </button>
               {filteredItems.length > 0 && (
                 <button
@@ -1245,8 +1245,8 @@ export default function HomePage() {
                   }}
                   className={`rounded-full border px-3 py-0.5 text-xs transition ${
                     filteredItems.every((pdf) => selectedIds.has(pdf.id))
-                      ? 'border-violet-400 bg-violet-500/20 text-violet-200'
-                      : 'border-slate-600 bg-slate-800 text-slate-300 hover:border-slate-500'
+                      ? 'border-violet-400 bg-violet-500/20 text-violet-700 dark:text-violet-200'
+                      : 'border-border bg-border text-text hover:border-primary'
                   }`}
                 >
                   {filteredItems.every((pdf) => selectedIds.has(pdf.id)) ? t('home.deselectAll') : t('home.selectAll')}
@@ -1258,7 +1258,7 @@ export default function HomePage() {
                     type="button"
                     onClick={() => void handleBatchDelete()}
                     disabled={batchDeleting}
-                    className="rounded-full border border-rose-500/60 bg-rose-500/15 px-3 py-0.5 text-xs text-rose-300 transition hover:bg-rose-500/25 disabled:opacity-50"
+                    className="rounded-full border border-rose-500/60 bg-rose-500/15 px-3 py-0.5 text-xs text-danger transition hover:bg-rose-500/25 disabled:opacity-50"
                   >
                     {batchDeleting ? '…' : t('home.batchDeleteBtn').replace('{count}', String(selectedIds.size))}
                   </button>
@@ -1266,7 +1266,7 @@ export default function HomePage() {
                     value=""
                     disabled={batchMoving}
                     onChange={(e) => { if (e.target.value) void handleBatchMoveCategory(e.target.value); }}
-                    className="rounded-full border border-sky-500/60 bg-sky-500/15 px-2 py-0.5 text-xs text-sky-300 transition hover:bg-sky-500/25 disabled:opacity-50"
+                    className="rounded-full border border-sky-500/60 bg-sky-500/15 px-2 py-0.5 text-xs text-sky-700 dark:text-sky-300 transition hover:bg-sky-500/25 disabled:opacity-50"
                   >
                     <option value="">{batchMoving ? '…' : t('home.batchMoveToCategory')}</option>
                     {allCategories.filter((c: string) => c !== '__recent__').map((c: string) => (
@@ -1280,7 +1280,7 @@ export default function HomePage() {
                     onKeyDown={(e) => { if (e.key === 'Enter' && batchTagInput.trim()) void handleBatchSetTags(batchTagInput); }}
                     disabled={batchTagging}
                     placeholder={batchTagging ? '…' : t('home.batchSetTags')}
-                    className="w-28 rounded-full border border-emerald-500/60 bg-emerald-500/15 px-2 py-0.5 text-xs text-emerald-300 placeholder-emerald-600 transition focus:outline-none focus:ring-1 focus:ring-emerald-400 disabled:opacity-50"
+                    className="w-28 rounded-full border border-emerald-500/60 bg-emerald-500/15 px-2 py-0.5 text-xs text-emerald-700 dark:text-emerald-300 placeholder-emerald-600 transition focus:outline-none focus:ring-1 focus:ring-emerald-400 disabled:opacity-50"
                   />
                 </>
               )}
@@ -1290,7 +1290,7 @@ export default function HomePage() {
                 <button
                   type="button"
                   onClick={() => setTagFilter(new Set())}
-                  className={`rounded-full border px-3 py-0.5 text-xs transition ${tagFilter.size === 0 ? 'border-indigo-400 bg-indigo-500/20 text-indigo-200' : 'border-slate-600 bg-slate-800 text-slate-300 hover:border-slate-500'}`}
+                  className={`rounded-full border px-3 py-0.5 text-xs transition ${tagFilter.size === 0 ? 'border-indigo-400 bg-indigo-500/20 text-indigo-700 dark:text-indigo-200' : 'border-border bg-border text-text hover:border-primary'}`}
                 >
                   {t('home.tagAll')}
                 </button>
@@ -1299,7 +1299,7 @@ export default function HomePage() {
                     key={tag}
                     type="button"
                     onClick={() => setTagFilter((prev) => { const next = new Set(prev); next.has(tag) ? next.delete(tag) : next.add(tag); return next; })}
-                    className={`rounded-full border px-3 py-0.5 text-xs transition ${tagFilter.has(tag) ? 'border-indigo-400 bg-indigo-500/20 text-indigo-200' : 'border-slate-600 bg-slate-800 text-slate-300 hover:border-slate-500'}`}
+                    className={`rounded-full border px-3 py-0.5 text-xs transition ${tagFilter.has(tag) ? 'border-indigo-400 bg-indigo-500/20 text-indigo-700 dark:text-indigo-200' : 'border-border bg-border text-text hover:border-primary'}`}
                   >
                     {tag}
                   </button>
@@ -1312,12 +1312,12 @@ export default function HomePage() {
 
         {items.length > 0 && categoryGroups.length === 0 && (
           <div className="rounded-xl border border-dashed border-border bg-surface/40 p-10 text-center">
-            <p className="text-slate-300">{t('home.noSlidesInCategory')}</p>
+            <p className="text-text">{t('home.noSlidesInCategory')}</p>
             {(tagFilter.size > 0 || titleFilter.length > 0) && (
               <button
                 type="button"
                 onClick={clearAllFilters}
-                className="mt-3 rounded-md border border-indigo-500/40 px-3 py-1.5 text-xs text-indigo-300 transition hover:bg-indigo-500/10"
+                className="mt-3 rounded-md border border-indigo-500/40 px-3 py-1.5 text-xs text-indigo-700 dark:text-indigo-300 transition hover:bg-indigo-500/10"
               >
                 {t('home.clearAllFilters')}
               </button>
@@ -1328,7 +1328,7 @@ export default function HomePage() {
                 <button
                   type="button"
                   onClick={() => void handleDeleteCategory(categoryFilter)}
-                  className="mt-4 rounded-md border border-rose-500/40 px-3 py-1.5 text-xs text-rose-300 transition hover:bg-rose-500/10"
+                  className="mt-4 rounded-md border border-rose-500/40 px-3 py-1.5 text-xs text-danger transition hover:bg-rose-500/10"
                 >
                   {t('home.deleteCategory')}
                 </button>
@@ -1341,7 +1341,7 @@ export default function HomePage() {
             {categoryGroups.map((group) => (
               <section key={group.category} aria-labelledby={`category-${group.category}`}>
                 <div className="mb-3 flex flex-wrap items-center gap-3">
-                  <h2 id={`category-${group.category}`} className="text-lg font-semibold text-slate-100">
+                  <h2 id={`category-${group.category}`} className="text-lg font-semibold text-text">
                     {group.category}
                   </h2>
                   <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted">
@@ -1353,14 +1353,14 @@ export default function HomePage() {
                         type="button"
                         onClick={() => void handleRenameCategory(group.category)}
                         disabled={renamingCategory === group.category}
-                        className="rounded-md border border-indigo-500/40 px-2 py-1 text-xs text-indigo-200 transition hover:bg-indigo-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="rounded-md border border-indigo-500/40 px-2 py-1 text-xs text-indigo-700 dark:text-indigo-200 transition hover:bg-indigo-500/10 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {renamingCategory === group.category ? t('home.renamingCategory') : t('home.renameCategory')}
                       </button>
                       <button
                         type="button"
                         onClick={() => void handleDeleteCategory(group.category)}
-                        className="rounded-md border border-rose-500/40 px-2 py-1 text-xs text-rose-300 transition hover:bg-rose-500/10"
+                        className="rounded-md border border-rose-500/40 px-2 py-1 text-xs text-danger transition hover:bg-rose-500/10"
                       >
                         {t('home.deleteCategory')}
                       </button>
@@ -1368,11 +1368,11 @@ export default function HomePage() {
                   )}
                 </div>
                 {viewMode === 'list' ? (
-                  <div className="flex flex-col divide-y divide-slate-800 rounded-lg border border-slate-800">
+                  <div className="flex flex-col divide-y divide-border rounded-lg border border-border">
                     {group.items.map((pdf) => (
                       <div
                         key={pdf.id}
-                        className="flex cursor-pointer items-center gap-3 px-4 py-3 transition hover:bg-slate-800/50 focus:outline-none focus:ring-1 focus:ring-inset focus:ring-indigo-500"
+                        className="flex cursor-pointer items-center gap-3 px-4 py-3 transition hover:bg-border/50 focus:outline-none focus:ring-1 focus:ring-inset focus:ring-indigo-500"
                         role="button"
                         tabIndex={0}
                         onClick={() => handleCardClick(pdf)}
@@ -1386,7 +1386,7 @@ export default function HomePage() {
                           className="h-4 w-4 shrink-0 cursor-pointer accent-indigo-500"
                         />
                         <div className="min-w-0 flex-1">
-                          <p className="flex items-center gap-1.5 truncate text-sm font-medium text-slate-100">
+                          <p className="flex items-center gap-1.5 truncate text-sm font-medium text-text">
                             {isRecentlyPlayed(pdf) && (
                               <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-emerald-400" title={t('home.recentlyPlayedBadge')} />
                             )}
@@ -1401,15 +1401,15 @@ export default function HomePage() {
                               <span className="ml-2 text-sky-400/70">{t('home.listPlayCount').replace('{count}', String(pdf.play_count ?? 0))}</span>
                             )}
                             {pdf.last_played_at && (
-                              <span className="ml-2 text-slate-500">
+                              <span className="ml-2 text-muted">
                                 {t('home.listLastPlayed').replace('{time}', formatRelativeTime(pdf.last_played_at, relativeTimeLabels))}
                               </span>
                             )}
                             {pdf.description?.trim() && (
-                              <span className="ml-2 truncate text-slate-500" title={pdf.description}>— {pdf.description}</span>
+                              <span className="ml-2 truncate text-muted" title={pdf.description}>— {pdf.description}</span>
                             )}
                             {pdf.updated_at && (
-                              <span className="ml-2 text-slate-600">{formatRelativeTime(pdf.updated_at, relativeTimeLabels)}</span>
+                              <span className="ml-2 text-muted">{formatRelativeTime(pdf.updated_at, relativeTimeLabels)}</span>
                             )}
                           </p>
                           {(pdf.tags ?? '').trim() && (
@@ -1419,7 +1419,7 @@ export default function HomePage() {
                                   key={tag}
                                   type="button"
                                   onClick={(e) => { e.stopPropagation(); setTagFilter((prev) => { const next = new Set(prev); next.has(tag) ? next.delete(tag) : next.add(tag); return next; }); }}
-                                  className={`rounded-full border px-2 py-0.5 text-[10px] transition active:scale-95 ${tagFilter.has(tag) ? 'border-indigo-400 bg-indigo-500/30 text-indigo-200' : 'border-indigo-500/40 bg-indigo-500/15 text-indigo-300 hover:border-indigo-400 hover:bg-indigo-500/25'}`}
+                                  className={`rounded-full border px-2 py-0.5 text-[10px] transition active:scale-95 ${tagFilter.has(tag) ? 'border-indigo-400 bg-indigo-500/30 text-indigo-700 dark:text-indigo-200' : 'border-indigo-500/40 bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 hover:border-indigo-400 hover:bg-indigo-500/25'}`}
                                 >
                                   {tag}
                                 </button>
@@ -1434,7 +1434,7 @@ export default function HomePage() {
                             { value: pdf.page_count ?? 0, max: usageBarMaxValues.maxPages, color: 'bg-emerald-500', label: `📄 ${pdf.page_count ?? 0}` },
                             { value: pdf.total_audio_duration_seconds ?? 0, max: usageBarMaxValues.maxAudio, color: 'bg-amber-500', label: `🎵 ${Math.round((pdf.total_audio_duration_seconds ?? 0) / 60)}m` },
                           ].map(({ value, max, color, label }) => (
-                            <div key={label} className="group/bar relative h-1.5 w-full rounded-full bg-slate-700" title={label}>
+                            <div key={label} className="group/bar relative h-1.5 w-full rounded-full bg-primary" title={label}>
                               <div
                                 className={`h-full rounded-full ${color} opacity-70`}
                                 style={{ width: `${max > 0 ? Math.round((value / max) * 100) : 0}%` }}
@@ -1447,7 +1447,7 @@ export default function HomePage() {
                         </div>
                         <button
                           type="button"
-                          className={`shrink-0 rounded p-1 transition ${favorites.has(pdf.id) ? 'text-amber-400 hover:text-amber-300' : 'text-slate-500 hover:bg-slate-700 hover:text-amber-400'}`}
+                          className={`shrink-0 rounded p-1 transition ${favorites.has(pdf.id) ? 'text-amber-400 hover:text-amber-800 dark:text-amber-300' : 'text-muted hover:bg-primary hover:text-amber-400'}`}
                           onClick={(e) => { e.stopPropagation(); handleToggleFavorite(pdf.id); }}
                           aria-label={favorites.has(pdf.id) ? t('card.unfavorite') : t('card.favorite')}
                         >
@@ -1455,7 +1455,7 @@ export default function HomePage() {
                         </button>
                         <button
                           type="button"
-                          className="shrink-0 rounded p-1 text-muted transition hover:bg-slate-700 hover:text-rose-400"
+                          className="shrink-0 rounded p-1 text-muted transition hover:bg-primary hover:text-danger"
                           onClick={(e) => { e.stopPropagation(); void handleDelete(pdf.id); }}
                           aria-label={t('card.delete')}
                         >
@@ -1504,7 +1504,7 @@ export default function HomePage() {
       </main>
 
       {toast && (
-        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-slate-800 px-4 py-2 text-sm text-slate-100 shadow-lg ring-1 ring-slate-700">
+        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-border px-4 py-2 text-sm text-text shadow-lg ring-1 ring-slate-700">
           {toast}
         </div>
       )}
