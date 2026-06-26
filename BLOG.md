@@ -7301,3 +7301,16 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **單一來源**（新檔 `backend/src/worker/steps/promptSanitize.ts`）：匯出 `sanitiseUserPrompt(raw)` 與 `MAX_USER_PROMPT_CHARS_IN_SYSTEM` 常數。函式對 `null`/`undefined`/空白回傳空字串，否則 trim、超過上限時 `slice` 並接上「……（已截斷）」。
 - **相容處理**：`generateTitle.ts` 原本 `export` 此函式，故改為 import 後 `export { sanitiseUserPrompt }` 維持其對外可見性；`generateScript.ts` 內部使用，移除本地定義與重複常數後改為 import。
 - **測試**：新增 `backend/test/promptSanitize.test.ts` 4 個 node:test，涵蓋 nullish/空白回空字串、trim、剛好等於上限不截斷、以及超長截斷並帶「……（已截斷）」標記。此函式先前沒有任何測試覆蓋。測試不依賴資料庫、sandbox 可直接驗證；後端 `tsc -p tsconfig.json` build 通過。
+
+## sumAudioDurationSeconds 收斂為單一來源（2026-06-26）
+
+### 功能目的
+產生與重新生成簡報時，後端都需要把每一頁的語音長度加總成整份簡報的總長度（顯示在首頁卡片、播放頁等）。這段加總邏輯——忽略缺失或非正數的值、四捨五入到毫秒、全部為空時回傳 null——原本在 `pipeline.ts`（首次生成）與 `regenerate.ts`（重新生成）兩個 worker 各複製了一份一字不差的 `sumAudioDurationSeconds`。兩份若日後漂移（例如其中一個改了四捨五入精度或對 0 的處理），同一份簡報在「首次生成」與「重新生成」後算出的總長度就可能不一致。本次收斂成單一正本並補測試。
+
+### 使用方式
+無需任何操作，純內部重構，總音訊長度的計算行為不變。
+
+### 技術細節
+- **單一來源**（新檔 `backend/src/worker/audioDurationSum.ts`）：匯出 `sumAudioDurationSeconds(values)`，只累加 `typeof === 'number' && Number.isFinite && > 0` 的值，以 `Math.round(total * 1000) / 1000` 取毫秒精度，沒有任何有效值時回傳 `null`。
+- **去重**：`pipeline.ts` 與 `regenerate.ts` 移除各自的本地定義，改為 import 共用版本。
+- **測試**：新增 `backend/test/audioDurationSum.test.ts` 3 個 node:test——全空/全無效（含 0、負值、NaN、Infinity）回 `null`、只加總有限正值並略過其他、以及浮點加總四捨五入到毫秒（`0.1 + 0.2 → 0.3` 而非 `0.30000000000000004`）。此函式先前無測試覆蓋；測試不依賴資料庫、sandbox 可驗證；後端 `tsc -p tsconfig.json` build 通過。
