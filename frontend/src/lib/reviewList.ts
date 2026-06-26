@@ -39,9 +39,19 @@ export function addReviewItems(items: ReviewItem[]): void {
   localStorage.setItem(REVIEW_LIST_KEY, JSON.stringify([...existing, ...newItems]));
 }
 
-export function removeReviewItem(pdfId: string, pageNumber: number): void {
+/**
+ * Removes a single review item. Since a page can hold several questions
+ * (addReviewItems dedups by pdfId+pageNumber+questionText), pass `questionText`
+ * to remove just that question; omitting it removes every question on the page.
+ */
+export function removeReviewItem(pdfId: string, pageNumber: number, questionText?: string): void {
   if (!hasLocalStorage()) return;
-  const items = getReviewItems().filter((item) => !(item.pdfId === pdfId && item.pageNumber === pageNumber));
+  const items = getReviewItems().filter((item) => {
+    const samePage = item.pdfId === pdfId && item.pageNumber === pageNumber;
+    if (!samePage) return true;
+    // 指定 questionText 時只移除該題（保留同頁其他題目）；未指定則整頁移除。
+    return questionText !== undefined && item.questionText !== questionText;
+  });
   localStorage.setItem(REVIEW_LIST_KEY, JSON.stringify(items));
 }
 
