@@ -11,6 +11,7 @@ import { copyTextToClipboard } from '../../lib/clipboard';
 import { formatAudioDuration } from '../../lib/audioDuration';
 import { getReviewItems, removeReviewItem, type ReviewItem } from '../../lib/reviewList';
 import { filterComments } from '../../lib/commentFilter';
+import { countUnresolvedComments } from '../../lib/commentStats';
 import { formatRelativeTime } from '../../lib/formatRelativeTime';
 import { NOTEBOOK_TABS, computeNotebookTabCounts, getAdjacentNotebookTab, getEdgeNotebookTab, getStoredNotebookTab, setStoredNotebookTab, type NotebookTab } from './notebookTabs';
 
@@ -143,6 +144,9 @@ function CommentsSection() {
   };
 
   const visibleComments = filterComments(comments, filterQuery);
+  const unresolvedCount = countUnresolvedComments(comments);
+  // 有未解決且非全部未解決時，徽章顯示「未解決 / 總數」凸顯待處理；否則只顯示總數。
+  const showSplitBadge = unresolvedCount > 0 && unresolvedCount < comments.length;
 
   return (
     <section className="rounded-lg border border-sky-800/40 bg-sky-900/20">
@@ -151,7 +155,12 @@ function CommentsSection() {
           <h2 className="flex items-center gap-2 text-sm font-semibold text-sky-300">
             {t('play.sidebar.commentsTitle')}
             {comments.length > 0 && (
-              <span className="rounded-full bg-sky-500/20 px-1.5 py-0.5 text-[10px] font-normal text-sky-300">{comments.length}</span>
+              <span
+                className="rounded-full bg-sky-500/20 px-1.5 py-0.5 text-[10px] font-normal text-sky-300"
+                title={t('play.sidebar.commentsUnresolvedTitle').replace('{unresolved}', String(unresolvedCount)).replace('{total}', String(comments.length))}
+              >
+                {showSplitBadge ? `${unresolvedCount}/${comments.length}` : comments.length}
+              </span>
             )}
           </h2>
           <div className="flex shrink-0 items-center gap-1.5">

@@ -1328,6 +1328,7 @@ export const en = {
   'play.sidebar.commentsAll': 'All',
   'play.sidebar.commentsThisPage': 'This page',
   'play.sidebar.commentsExportCsv': 'Export CSV',
+  'play.sidebar.commentsUnresolvedTitle': '{unresolved} unresolved / {total} total',
   'play.sidebar.commentsFilterPlaceholder': 'Search comments or author…',
   'play.sidebar.commentsNoMatch': 'No matching comments',
   'play.sidebar.commentAuthorPlaceholder': 'Nickname (optional)',
