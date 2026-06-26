@@ -1035,6 +1035,8 @@ export const zhTW = {
   'play.timing.artifact.script': '講稿',
   'play.timing.artifact.audio': '語音',
   'play.animation.tab': '動畫',
+  'play.animation.defaultPausePlaybackText': '暫停：請按播放鍵繼續',
+  'play.animation.defaultRealtimePollText': '📊 即時問答時間',
   'play.animation.title': '動畫效果',
   'play.animation.badge': '動畫',
   'play.animation.enabled': '啟用動畫',
