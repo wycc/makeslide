@@ -354,7 +354,7 @@ export default function RemoteControllerPage() {
           const page = pages[currentPage - 1];
           const imgSrc = page?.thumbnail_url ?? page?.image_url;
           return imgSrc ? (
-            <img src={imgSrc} alt={`${t('remote.slideAltPrefix')}${currentPage}${t('remote.slideAltSuffix')}`} className="h-28 rounded-lg object-contain shadow-lg" />
+            <img src={imgSrc} alt={`${t('remote.slideAltPrefix')}${currentPage}${t('remote.slideAltSuffix')}`} onError={(e) => { e.currentTarget.style.display = 'none'; }} className="h-28 rounded-lg object-contain shadow-lg" />
           ) : null;
         })()}
         <div className="flex items-center">
