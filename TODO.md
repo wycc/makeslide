@@ -2532,3 +2532,25 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - 工作內容：第一一二輪新增的 4 個可執行項目已全部完成，可執行項目又僅剩兩個「待使用者決定 / 待處理」項目，依 LOOP.md 第 2 條（先 grep 驗證不存在）新增 4 個小顆粒、可單輪完成、可加測試、主題分散的可執行項目（重點頁導覽快捷鍵、抽出 mm:ss 倒數格式化純函式、分享「複製連結」按鈕、CSV 匯出檔名帶簡報標題），並補掃描摘要。本輪為規畫輪，不計入 100 完成計數（計數維持 89/100）。提醒：再完成 11 項即達 100 上限。
 - 時間：2026-06-26
 - 分支：直接於 master 更新 TODO.md（規畫輪，無程式碼變更）
+
+## 掃描摘要（第一一六輪，2026-06-26）
+
+- 觸發原因：第一一四輪新增的 4 個可執行項目已全數完成（90~93），TODO.md 又只剩兩個「待使用者決定 / 待處理」項目。依 LOOP.md 第 2 條，先 grep 驗證「不存在」再補新項目。
+- 現況觀察（皆已驗證）：`PlayPage` 跳頁輸入驗證 `Math.floor(Number(input))` + 範圍檢查在 onSubmit/onClick/disabled 三處重複內嵌；`PlayPageSidebar` 書籤/重點頁「複製清單」的文字組裝（`[...pages].sort().map(…).join(sep)`）在兩處重複內嵌；`RemoteControllerPage` 投票百分比 `Math.round(votes/total*100)` 仍內嵌（未用第一一四輪抽出的 `pollOptionPercent`）；`lib/` 同時有 `formatRelativeTime.ts`（簡易、無 i18n）與 `relativeTime.ts`（含 i18n labels）兩份 `formatRelativeTime`，被不同頁面各自使用、為重複實作。
+- 取材方向：以「抽出純函式 / 收斂重複」為主（可測性與一致性），維持小顆粒、低風險；relativeTime 整併較大且涉 i18n，標註需小心。
+
+## 新增可執行項目（第一一六輪，2026-06-26）
+
+- [ ] 抽出跳頁輸入驗證純函式（可測性）：`PlayPage` 跳頁框以 `Math.floor(Number(gotoPageInput))` + `n >= 1 && n <= deckPages.length` 在三處（送出、確認鈕、disabled 判斷）重複驗證。抽成 `frontend/src/lib/` 純函式 `parseGotoPage(input, totalPages)`（回合法 1-based 頁碼或 null；非數字/越界/小數捨去後仍越界→null）並補測試（合法、越界、0/負、空白、非數字、小數）；三處改呼叫之（行為不變）。純前端。
+
+- [ ] 抽出頁碼清單複製文字為純函式（可測性 / 一致性）：`PlayPageSidebar` 書籤與重點頁「複製清單」各自內嵌 `[...pages].sort().map(n => prefix+n+suffix).join(sep)`。抽成 `frontend/src/lib/` 純函式 `formatPageListText(pages, labels)`（排序去重、`{prefix}{n}{suffix}` 以 `separator` 串接、空回空字串；labels 注入 prefix/suffix/separator）並補測試；兩處改呼叫之（行為不變）。純前端。
+
+- [ ] RemoteController 投票百分比改用 pollOptionPercent（一致性 / 降低重複）：`RemoteControllerPage` 投票結果百分比仍以 `poll.total_votes > 0 ? Math.round(option.votes/poll.total_votes*100) : 0` 內嵌。改用第一一四輪抽出的 `frontend/src/lib/pollPercent.ts` 之 `pollOptionPercent(votes, total)`（行為相同），收斂最後一處重複。純前端、無測試新增（既有 `pollPercent.test.ts` 已覆蓋）。
+
+- [ ] 統一兩份 relativeTime 實作（一致性，需小心）：`lib/formatRelativeTime.ts`（簡易、被 `PostClassReportPanel`/`PlayPageSidebar` 使用）與 `lib/relativeTime.ts`（含 i18n labels、被 `HomePage`/`PdfCard`/`QuizBuilderPage` 使用）為兩套相對時間格式化。評估後擇一保留：建議以具 i18n 的 `relativeTime.ts` 為準，將 `formatRelativeTime.ts` 的兩處呼叫遷移（提供對應 labels）後移除該檔；確保兩種語系輸出合理、補/更新測試。因涉 i18n 與兩頁顯示，需逐處確認、低風險地進行；若遷移成本高於效益，可改為在 `formatRelativeTime.ts` 標註並收斂命名以免混淆。純前端。
+
+## 工作記錄（第一一六輪，2026-06-26）
+
+- 工作內容：第一一四輪新增的 4 個可執行項目已全部完成，可執行項目又僅剩兩個「待使用者決定 / 待處理」項目，依 LOOP.md 第 2 條（先 grep 驗證不存在）新增 4 個小顆粒、可單輪完成、主題集中於「抽出純函式 / 收斂重複」的可執行項目（抽出跳頁輸入驗證、抽出頁碼清單複製文字、RemoteController 投票百分比改用 pollOptionPercent、統一兩份 relativeTime），並補掃描摘要。本輪為規畫輪，不計入 100 完成計數（計數維持 93/100）。提醒：再完成 7 項即達 100 上限。
+- 時間：2026-06-26
+- 分支：直接於 master 更新 TODO.md（規畫輪，無程式碼變更）
