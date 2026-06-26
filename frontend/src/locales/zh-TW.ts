@@ -1388,6 +1388,7 @@ export const zhTW = {
   'play.sidebar.poll.aiDraftFailed': 'AI 草稿生成失敗',
   'play.sidebar.poll.questionRequired': '請輸入投票問題',
   'play.sidebar.poll.minTwoOptions': '至少需要兩個答案選項',
+  'play.sidebar.poll.maxOptions': '最多只能有 {max} 個答案選項',
   'play.sidebar.poll.createFailed': '建立投票失敗',
   'play.sidebar.poll.voteFailed': '投票失敗',
   'play.sidebar.poll.clearResultsFailed': '清除投票結果失敗',

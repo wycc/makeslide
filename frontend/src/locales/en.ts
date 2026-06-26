@@ -1388,6 +1388,7 @@ export const en = {
   'play.sidebar.poll.aiDraftFailed': 'AI draft generation failed',
   'play.sidebar.poll.questionRequired': 'Please enter a poll question',
   'play.sidebar.poll.minTwoOptions': 'At least two answer options are required',
+  'play.sidebar.poll.maxOptions': 'A poll can have at most {max} answer options',
   'play.sidebar.poll.createFailed': 'Failed to create poll',
   'play.sidebar.poll.voteFailed': 'Failed to vote',
   'play.sidebar.poll.clearResultsFailed': 'Failed to clear poll results',
