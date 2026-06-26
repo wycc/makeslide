@@ -2562,3 +2562,23 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - 工作內容：第一一四輪新增的 4 個可執行項目已全部完成，可執行項目又僅剩兩個「待使用者決定 / 待處理」項目，依 LOOP.md 第 2 條（先 grep 驗證不存在）新增 4 個小顆粒、可單輪完成、主題集中於「抽出純函式 / 收斂重複」的可執行項目（抽出跳頁輸入驗證、抽出頁碼清單複製文字、RemoteController 投票百分比改用 pollOptionPercent、統一兩份 relativeTime），並補掃描摘要。本輪為規畫輪，不計入 100 完成計數（計數維持 93/100）。提醒：再完成 7 項即達 100 上限。
 - 時間：2026-06-26
 - 分支：直接於 master 更新 TODO.md（規畫輪，無程式碼變更）
+
+## 掃描摘要（第一一八輪，2026-06-26）
+
+- 觸發原因：第一一六輪新增的 4 個可執行項目已全數完成（94~97），TODO.md 又只剩兩個「待使用者決定 / 待處理」項目。依 LOOP.md 第 2 條，先 grep 驗證「不存在」再補新項目。**計數已達 97/100，本批刻意只補 3 項作為達 100 上限前的 runway。**
+- 現況觀察（皆已驗證）：`RemoteControllerPage` 投票控制區無「複製結果」（側邊欄 `PlayPageSidebar` 已有，可復用 `formatPollResultsMarkdown`）；評論清單無「點作者名快速過濾」（`filterComments` 已支援比對 author，只差 UI 觸發）；`HomePage` 有分類/搜尋/最愛三種篩選但無「清除所有篩選」一鍵重設。
+- 取材方向：復用既有純函式 / 小型 UX，維持小顆粒、低風險。
+
+## 新增可執行項目（第一一八輪，2026-06-26）
+
+- [ ] RemoteController 投票結果複製（可用性，復用既有純函式）：`RemoteControllerPage` 投票控制區（`polls`，每個 poll 有 `question`/`options[].text/.votes`/`total_votes`）目前可看結果但無法帶出。復用 `frontend/src/lib/pollResultsMarkdown.ts` 的 `formatPollResultsMarkdown(polls, labels)` 新增「複製結果」按鈕（有 poll 時顯示），以 `copyTextToClipboard` 複製並顯示短暫提示；沿用/新增 remote 區 i18n key（票數單位用既有 `remote.votesSuffix` 或新增）。純前端、不動後端。
+
+- [ ] 評論點作者名快速過濾（可用性，小顆粒）：`CommentsSection` 每則評論的作者名目前為純文字。改為可點擊：點擊後把 `filterQuery` 設為該作者名（`filterComments` 已比對 author，會即時過濾）；作者名加上可點樣式與 `title` 提示。純前端、不動後端、不需新 i18n（沿用既有過濾）。
+
+- [ ] 首頁「清除所有篩選」按鈕（可用性，小顆粒）：`HomePage` 同時有分類（`categoryFilter`）、標題搜尋（`titleFilter`）、最愛（`favoritesOnly`）三種篩選，但無一鍵重設。在工具列或結果摘要附近，當任一篩選為非預設（分類非 `__all__` 或有搜尋字或最愛開啟）時顯示「清除篩選」按鈕，點擊重設三者（`setCategoryFilter('__all__')`、`setTitleFilter('')`、`setFavoritesOnly(false)`，並同步清除對應 localStorage）；新增 zh-TW/en i18n key。純前端、不動後端。
+
+## 工作記錄（第一一八輪，2026-06-26）
+
+- 工作內容：第一一六輪新增的 4 個可執行項目已全部完成，可執行項目又僅剩兩個「待使用者決定 / 待處理」項目，依 LOOP.md 第 2 條（先 grep 驗證不存在）新增 3 個小顆粒、可單輪完成、低風險的可執行項目（RemoteController 投票結果複製、評論點作者名快速過濾、首頁清除所有篩選）。因計數已達 97/100，本批刻意只補 3 項作為達上限前的 runway。本輪為規畫輪，不計入 100 完成計數（計數維持 97/100）。**提醒：完成接下來 3 項即達 100 上限，屆時依 LOOP.md 應停止新增/執行新項目並等候使用者決定。**
+- 時間：2026-06-26
+- 分支：直接於 master 更新 TODO.md（規畫輪，無程式碼變更）
