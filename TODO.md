@@ -2681,3 +2681,15 @@ TODO.md 目前仍有兩個明確標註「待使用者決定 / 待處理」的未
 - 時間：2026-06-27
 - 分支：`refactor/system-metric-format`（已 merge 回 master）
 - 備註：master 仍被 `.roo` worktree（`/home/cluster/.roo/worktrees/makeslide-k5950`）佔用，merge 經由該 worktree 完成；另一套 roo loop 並行運作，已提醒使用者注意分歧風險。
+
+## 新增可執行項目（第一二六輪，2026-06-27）
+
+- [x] 分數與成本的「四捨五入到兩位小數」收斂為共用純函式（去重 / 可測性）：`QuizBuilderPage`（6 處分數）、`HomePage`、`PlayPage`（各 1 處預算成本）共 8 處內嵌 `Math.round(x * 100) / 100`，分散且無測試保護其「收斂浮點累加誤差」的意圖。抽成共用純函式並補測試。純前端、不動後端、不需新 i18n。
+  - 修改說明（2026-06-27）：新增 `frontend/src/lib/roundTo.ts`（`roundToTwoDecimals(value)` = `Math.round(value * 100) / 100`）。8 處呼叫點改用此函式（行為完全一致）。新增 `roundTo.test.ts` 4 組測試（乾淨值不變、就近進位含負值、`33.33+33.33+33.34→100` 與 `0.1+0.2→0.3` 浮點誤差收斂、較高精度成本截兩位）。前端 `tsc --noEmit` 通過、新測試 4/4 通過。分支 `refactor/round-two-decimals`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 6 個完成項目（6/100，未達上限）。
+
+## 工作記錄（第一二六輪，2026-06-27）
+
+- 工作內容：剩餘 2 個 `[ ]` 項目仍不宜自動逕行，依 LOOP.md 第 2 條分析程式。以 grep 盤點 `Math.round(x*100)/100` 發現跨 3 檔 8 處重複，抽成 `roundToTwoDecimals` 收斂，並以測試固化浮點誤差收斂意圖。測試斷言中的浮點進位方向先以 node 實測確認（修正 `-2.345 → -2.35`）後定稿。
+- 時間：2026-06-27
+- 分支：`refactor/round-two-decimals`（已 merge 回 master，經由 `.roo` master worktree）

@@ -38,6 +38,7 @@ import type {
   SyncQuizProgress,
 } from '../types';
 import { scoreSumExceedingTotal, normalizeQuestionScores, calcQuestionScore } from '../lib/quizScoring';
+import { roundToTwoDecimals } from '../lib/roundTo';
 
 const LOCAL_USER_CODE_KEY = 'makeslide.user_code';
 
@@ -243,7 +244,7 @@ export default function QuizBuilderPage() {
     if (quiz) {
       const scoreTable = normalizeQuestionScores(quiz.questions);
       const total = quiz.questions.reduce((acc, q, idx) => acc + calcQuestionScore(q, snapshot.answers[q.id] ?? [], scoreTable[idx] ?? 0), 0);
-      score = Math.round(total * 100) / 100;
+      score = roundToTwoDecimals(total);
     }
     void submitQuizAttempt(snapshot.pdfId, snapshot.quizId, {
       client_id: clientId,
@@ -678,7 +679,7 @@ export default function QuizBuilderPage() {
           const selected = studentAnswers[q.id] ?? [];
           return acc + calcQuestionScore(q, selected, scoreTable[idx] ?? 0);
         }, 0);
-        const score = Math.round(total * 100) / 100;
+        const score = roundToTwoDecimals(total);
         const max = scoreTable.reduce((acc, s) => acc + s, 0);
         return (
           <div className="mb-3 flex items-center justify-between gap-2 rounded border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
@@ -739,7 +740,7 @@ export default function QuizBuilderPage() {
           return (
             <div key={q.id} className="rounded-lg border border-slate-700 bg-slate-950/70 p-4">
               <h3 className="font-medium text-slate-100">
-                {formatMessage('quiz.questionScoreHeading', { index: qIdx + 1, score: Math.round(qScore * 100) / 100, question: q.question })}
+                {formatMessage('quiz.questionScoreHeading', { index: qIdx + 1, score: roundToTwoDecimals(qScore), question: q.question })}
               </h3>
               <div className="mt-3 space-y-2">
                 {q.options.map((option, oIdx) => {
@@ -761,7 +762,7 @@ export default function QuizBuilderPage() {
               </div>
               {syncQuizShowAnswers ? (
                 <p className={`mt-2 text-xs ${earned > 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
-                  {formatMessage('quiz.questionEarnedScore', { earned: Math.round(earned * 100) / 100, total: Math.round(qScore * 100) / 100 })}
+                  {formatMessage('quiz.questionEarnedScore', { earned: roundToTwoDecimals(earned), total: roundToTwoDecimals(qScore) })}
                 </p>
               ) : null}
               {syncQuizShowAnswers ? <p className="mt-3 rounded bg-slate-900 px-3 py-2 text-sm text-slate-200">{formatMessage('quiz.explanation', { explanation: q.explanation || t('quiz.noExplanation') })}</p> : null}
@@ -976,7 +977,7 @@ export default function QuizBuilderPage() {
                 const allAttempts = historySessions.flatMap((s) => s.attempts);
                 const scoredAttempts = allAttempts.filter((a) => a.score != null);
                 const avgScore = scoredAttempts.length > 0
-                  ? Math.round(scoredAttempts.reduce((sum, a) => sum + (a.score ?? 0), 0) / scoredAttempts.length * 100) / 100
+                  ? roundToTwoDecimals(scoredAttempts.reduce((sum, a) => sum + (a.score ?? 0), 0) / scoredAttempts.length)
                   : null;
                 return (
                   <p className="mt-1 text-xs text-slate-400">
@@ -1003,7 +1004,7 @@ export default function QuizBuilderPage() {
                             <div className="flex items-center justify-between gap-2">
                               <span className="truncate text-slate-200">{attempt.code || t('quiz.anonymousStudent')}</span>
                               <span className="flex items-center gap-2 text-slate-400">
-                                {attempt.score != null ? formatMessage('quiz.scorePoints', { score: Math.round(attempt.score * 100) / 100 }) : t('quiz.notScored')}
+                                {attempt.score != null ? formatMessage('quiz.scorePoints', { score: roundToTwoDecimals(attempt.score) }) : t('quiz.notScored')}
                                 <span className="text-slate-500">{new Date(attempt.submitted_at).toLocaleTimeString()}</span>
                                 <button
                                   type="button"
