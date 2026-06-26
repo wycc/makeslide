@@ -9,7 +9,7 @@ import { PageAskPanel } from './PageAskPanel';
 import { QualityCheckPanel } from './QualityCheckPanel';
 import { copyTextToClipboard } from '../../lib/clipboard';
 import { formatAudioDuration } from '../../lib/audioDuration';
-import { getReviewItems, removeReviewItem, type ReviewItem } from '../../lib/reviewList';
+import { getReviewItems, removeReviewItem, formatReviewListMarkdown, type ReviewItem } from '../../lib/reviewList';
 import { filterComments } from '../../lib/commentFilter';
 import { countUnresolvedComments } from '../../lib/commentStats';
 import { formatRelativeTime } from '../../lib/formatRelativeTime';
@@ -274,6 +274,7 @@ function ReviewListSection() {
   const { t } = useI18n();
   const { pdfId, setCurrentIdx } = usePlayPageContext();
   const [items, setItems] = useState<ReviewItem[]>([]);
+  const [copyMsg, setCopyMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (!pdfId) return;
@@ -289,13 +290,32 @@ function ReviewListSection() {
     );
   };
 
+  const handleCopy = async () => {
+    const md = formatReviewListMarkdown(items, {
+      heading: t('play.sidebar.reviewListTitle'),
+      page: t('play.sidebar.reviewListPage'),
+    });
+    const ok = await copyTextToClipboard(md);
+    setCopyMsg(ok ? t('play.sidebar.reviewListCopyDone') : t('play.sidebar.reviewListCopyFail'));
+    window.setTimeout(() => setCopyMsg(null), 2000);
+  };
+
   return (
     <section className="rounded-lg border border-rose-800/40 bg-rose-900/20">
       <div className="border-b border-rose-800/30 px-4 py-3">
-        <h2 className="flex items-center gap-2 text-sm font-semibold text-rose-300">
-          {t('play.sidebar.reviewListTitle')}
-          <span className="rounded-full bg-rose-500/20 px-1.5 py-0.5 text-[10px] font-normal text-rose-300">{items.length}</span>
-        </h2>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-rose-300">
+            {t('play.sidebar.reviewListTitle')}
+            <span className="rounded-full bg-rose-500/20 px-1.5 py-0.5 text-[10px] font-normal text-rose-300">{items.length}</span>
+          </h2>
+          <button
+            type="button"
+            onClick={() => void handleCopy()}
+            className="shrink-0 rounded border border-rose-800/40 px-2 py-0.5 text-[10px] text-rose-300/80 hover:text-rose-200"
+          >
+            {copyMsg ?? t('play.sidebar.reviewListCopy')}
+          </button>
+        </div>
         <p className="mt-0.5 text-[11px] text-rose-400/70">{t('play.sidebar.reviewListHint')}</p>
       </div>
       <div className="px-4 py-3">

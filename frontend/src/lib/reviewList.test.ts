@@ -17,6 +17,7 @@ const {
   addReviewItems,
   removeReviewItem,
   clearAllReviewItems,
+  formatReviewListMarkdown,
 } = await import('./reviewList');
 type ReviewItem = import('./reviewList').ReviewItem;
 
@@ -34,6 +35,20 @@ function item(over: Partial<ReviewItem> = {}): ReviewItem {
 test('getReviewItems returns [] when empty', () => {
   clearAllReviewItems();
   assert.deepEqual(getReviewItems(), []);
+});
+
+const MD_LABELS = { heading: 'Review List', page: 'Page {n}' };
+
+test('formatReviewListMarkdown returns empty string for an empty list', () => {
+  assert.equal(formatReviewListMarkdown([], MD_LABELS), '');
+});
+
+test('formatReviewListMarkdown sorts by page number and substitutes {n}', () => {
+  const md = formatReviewListMarkdown(
+    [item({ pageNumber: 3, questionText: 'C?' }), item({ pageNumber: 1, questionText: 'A?' })],
+    MD_LABELS,
+  );
+  assert.equal(md, '# Review List\n\n- Page 1：A?\n- Page 3：C?');
 });
 
 test('addReviewItems stores items and dedups by pdfId+pageNumber+questionText', () => {
