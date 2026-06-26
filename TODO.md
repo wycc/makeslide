@@ -2283,7 +2283,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [ ] 每頁學習分析 CSV 匯出（Roadmap Phase 1）：新增後端 `GET /api/pdfs/:id/report/pages.csv`（欄位 `page_number,total_viewers,completed_viewers,completion_rate,poll_total_votes,poll_divergence_score`），資料沿用 `report/summary` 既有的 watch_progress 與 polls 聚合來源，以共用 `csvEscape`（`backend/src/routes/pdfs/csv.ts`）輸出、權限沿用 `canEditPdf`、回應帶 `text/csv` 與 `attachment; filename`；在 `PostClassReportPanel` 既有 CSV 下載按鈕群加入「每頁分析 CSV」連結；補後端 node:test（200 欄位/排序、403 無編輯權限、404 未知 PDF）。
 
-- [ ] 評論未解決數徽章（可用性，小顆粒）：`CommentsSection`（`PlayPageSidebar.tsx`）標題徽章目前只顯示評論總數；改為同時呈現未解決數（如 `2 / 5`，未解決 / 總數），抽出純函式 `countUnresolvedComments(comments)`（回傳 `resolved === false` 的數量）置於 lib 並補單元測試；全解決或無評論時的顯示需處理（例如全解決顯示總數即可）。純前端、不動後端。
+- [x] 評論未解決數徽章（可用性，小顆粒）：`CommentsSection`（`PlayPageSidebar.tsx`）標題徽章目前只顯示評論總數；改為同時呈現未解決數（如 `2 / 5`，未解決 / 總數），抽出純函式 `countUnresolvedComments(comments)`（回傳 `resolved === false` 的數量）置於 lib 並補單元測試；全解決或無評論時的顯示需處理（例如全解決顯示總數即可）。純前端、不動後端。
+  - 修改說明（2026-06-26）：新增 `frontend/src/lib/commentStats.ts` 之純函式 `countUnresolvedComments<T extends {resolved}>(comments)`（reduce 計 `resolved === false` 數）；`CommentsSection` 徽章改為：有未解決且非全部未解決（`0 < unresolved < total`）時顯示 `未解決/總數`（如 `2/5`），否則（全解決或全未解決或空）顯示總數，並加 `title` tooltip（i18n `commentsUnresolvedTitle`，含 `{unresolved}`/`{total}` 佔位）。新增 zh-TW/en i18n key `play.sidebar.commentsUnresolvedTitle`。新增 `commentStats.test.ts` 4 測試（空/全解決/全未解決/混合）。前端 `tsc --noEmit` 通過、`commentStats.test.ts` 與 `i18n.test.ts`（含 zh/en 對等及佔位符集合檢查）全通過。分支 `feat/comment-unresolved-badge`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 61 個完成項目（61/100，未達上限）。
 
 ## 工作記錄（第九十九輪，2026-06-26）
 

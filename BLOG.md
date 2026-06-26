@@ -7691,3 +7691,21 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **i18n**：新增 zh-TW/en `play.sidebar.commentsFilterPlaceholder`、`play.sidebar.commentsNoMatch`。
 - **測試**：`commentFilter.test.ts` 6 個案例（空白/大小寫/作者欄位/trim/非 ASCII/無符合）。
 - **驗證**：前端 `tsc --noEmit` 通過；`commentFilter.test.ts` 與 `i18n.test.ts`（含 zh/en key 對等）全通過。
+
+## 評論未解決數徽章（2026-06-26）
+
+### 功能目的
+播放頁「頁面評論」標題旁的徽章原本只顯示評論總數，教師無法一眼看出還有多少則尚未處理（未解決）。本項讓徽章在仍有待處理評論時直接呈現「未解決 / 總數」，提升課中/課後追蹤回饋的效率。
+
+### 使用方式
+無需操作。當該頁（或全部模式）有評論時：
+- 仍有部分未解決（且非全部未解決）→ 徽章顯示「未解決/總數」，例如 `2/5`。
+- 全部已解決、全部未解決、或無評論 → 徽章顯示總數。
+- 滑鼠移到徽章可看到「未解決 N / 共 M 則」的完整說明（tooltip）。
+
+### 技術細節
+- **純函式**（`frontend/src/lib/commentStats.ts`）：`countUnresolvedComments(comments)` 以 reduce 計算 `resolved === false` 的數量；以最小結構泛型約束（只需 `resolved`）。
+- **UI**（`frontend/src/pages/play/PlayPageSidebar.tsx` 的 `CommentsSection`）：計算 `unresolvedCount` 與 `showSplitBadge = 0 < unresolved < total`，據此切換徽章文字並加上 `title` tooltip。
+- **i18n**：新增 zh-TW/en `play.sidebar.commentsUnresolvedTitle`（含 `{unresolved}`/`{total}` 佔位符）。
+- **測試**：`commentStats.test.ts` 4 個案例（空 / 全解決 / 全未解決 / 混合）。
+- **驗證**：前端 `tsc --noEmit` 通過；`commentStats.test.ts` 與 `i18n.test.ts`（含 zh/en key 對等與佔位符集合檢查）全通過。
