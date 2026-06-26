@@ -2502,3 +2502,25 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - 工作內容：第一一〇輪新增的 4 個可執行項目已全部完成，可執行項目又僅剩兩個「待使用者決定 / 待處理」項目，依 LOOP.md 第 2 條（先 grep 驗證不存在）新增 4 個小顆粒、可單輪完成、可加測試、主題分散的可執行項目（抽出筆記複製為 Markdown 純函式、抽出書籤導覽純函式並加 Shift+B、CSV 匯出加 UTF-8 BOM、抽出投票百分比計算純函式），並補掃描摘要。本輪為規畫輪，不計入 100 完成計數（計數維持 85/100）。
 - 時間：2026-06-26
 - 分支：直接於 master 更新 TODO.md（規畫輪，無程式碼變更）
+
+## 掃描摘要（第一一四輪，2026-06-26）
+
+- 觸發原因：第一一二輪新增的 4 個可執行項目已全數完成（86~89），TODO.md 又只剩兩個「待使用者決定 / 待處理」項目。依 LOOP.md 第 2 條，先 grep 驗證「不存在」再補新項目。
+- 現況觀察（皆已驗證）：重點頁（important）只有 `I` 切換、無「跳到下一個/上一個重點頁」快捷鍵（`M`/`N` 鍵未使用）；quiz 倒數 `mm:ss` 格式內嵌於 JSX（`Math.floor(s/60)…`）、無共用工具與測試；分享只有 `navigator.share`（行動裝置）按鈕、桌機無「複製連結」；各 CSV 匯出檔名為 id-based（`comments-{id}.csv`、`report-pages-{id}.csv`…），未用簡報標題（字幕已於第一一〇輪改為標題命名、`downloadFilename.ts` helper 已存在可復用）。
+- 取材方向：分散主題（鍵盤導覽復用、純函式抽出、桌機分享可用性、匯出檔名一致化），維持「小顆粒、可單輪完成、可加測試、低風險」。
+
+## 新增可執行項目（第一一四輪，2026-06-26）
+
+- [ ] 重點頁導覽快捷鍵（可用性 / 可測性）：播放頁重點頁（`importantPages`）目前只有 `I` 切換、無快速跳轉。將 `frontend/src/lib/bookmarkNav.ts` 泛化為頁面清單導覽（建議改名 `pageListNav.ts`、函式 `nextPageInList`/`prevPageInList`，或保留現名並新增泛用別名），`PlayPage` 既有 `B`/`Shift+B`（書籤）改用泛化函式、並新增 `N`（下一個重點頁）/`Shift+N`（上一個重點頁）以 `importantPages` 導覽；快捷鍵面板補 `N`/`Shift+N` 兩列、補 zh-TW/en 說明 key；既有 `bookmarkNav.test.ts` 隨改名/別名更新。純前端、復用既有已測純函式。
+
+- [ ] 抽出 mm:ss 倒數格式化純函式（可用性 / 可測性）：`QuizBuilderPage` 倒數以內嵌 `Math.floor(s/60).padStart(2)…:…padStart(2)` 呈現。抽成 `frontend/src/lib/` 純函式 `formatMmSs(totalSeconds)`（負值/NaN 視為 0、超過 60 分鐘仍以分:秒呈現、各補零兩位）並補測試（0、整分、含秒、補零、負值）；倒數顯示改呼叫之。純前端。
+
+- [ ] 分享「複製連結」按鈕（可用性）：播放頁分享區目前只有 `navigator.share`（多數桌機瀏覽器無此 API、按鈕不顯示），導致桌機無法快速取得分享連結。新增「複製連結」按鈕（always 顯示），以 `copyTextToClipboard(shareUrl || window.location.href)` 複製並顯示短暫提示；新增 zh-TW/en i18n key。純前端、不動後端。
+
+- [ ] CSV 匯出檔名帶簡報標題（Roadmap Phase 5 / 一致性）：`comments.csv`、`report/pages.csv`、`report/questions.csv`、`report/students.csv`、`poll-results.csv`、`quiz-results.csv` 的 `content-disposition` 檔名目前為 id-based。復用第一一〇輪新增的 `downloadFilename.ts`（`safeDownloadBaseName` + `buildContentDisposition`），改為 `{safeTitle}-comments.csv`、`{safeTitle}-pages.csv` 等（標題空白時退回原 id-based 名）；各端點本就查得到 pdf row（含 title 或可加查）。更新相關 node:test 的 content-disposition 斷言。後端小改 + 測試更新。
+
+## 工作記錄（第一一四輪，2026-06-26）
+
+- 工作內容：第一一二輪新增的 4 個可執行項目已全部完成，可執行項目又僅剩兩個「待使用者決定 / 待處理」項目，依 LOOP.md 第 2 條（先 grep 驗證不存在）新增 4 個小顆粒、可單輪完成、可加測試、主題分散的可執行項目（重點頁導覽快捷鍵、抽出 mm:ss 倒數格式化純函式、分享「複製連結」按鈕、CSV 匯出檔名帶簡報標題），並補掃描摘要。本輪為規畫輪，不計入 100 完成計數（計數維持 89/100）。提醒：再完成 11 項即達 100 上限。
+- 時間：2026-06-26
+- 分支：直接於 master 更新 TODO.md（規畫輪，無程式碼變更）
