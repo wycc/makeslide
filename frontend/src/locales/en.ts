@@ -315,6 +315,8 @@ export const en = {
   'home.search.placeholder': 'Search across all slides (title, transcript, page text)…',
   'home.search.searching': 'Searching…',
   'home.search.noResults': 'No matching results found',
+  'home.search.recentTitle': 'Recent searches',
+  'home.search.recentClear': 'Clear',
   'home.search.matchType.title': 'Title',
   'home.search.matchType.script': 'Transcript',
   'home.search.matchType.text': 'Page text',

@@ -7811,3 +7811,18 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **前端**（`frontend/src/pages/play/PlayPageHeader.tsx`）：在 SRT/VTT 下載連結後加入 TXT 下載連結；新增 zh-TW/en `play.header.downloadTxt`。
 - **測試**（`backend/test/subtitles-txt.test.ts`）：4 個案例（逐頁內容與分頁格式、無稿頁仍輸出標題、private 403、未知 PDF 404）。
 - **驗證**：前端與後端 `tsc --noEmit` 通過；`i18n.test.ts`（含 zh/en key 對等）通過。後端 handler 測試需 better-sqlite3 native module，於本機 sandbox 無法載入，留待 CI 執行。
+
+## 全域搜尋最近關鍵字（2026-06-26）
+
+### 功能目的
+首頁的全域搜尋（`GlobalSearchBox`）支援標題/內文/語意搜尋，但每次都要重打關鍵字。本項加入「最近搜尋」記錄，讓使用者一鍵重用先前搜過的詞，呼應 Roadmap Phase 4 的教材搜尋體驗。
+
+### 使用方式
+搜尋後按 Enter，關鍵字會記入最近清單。之後點進搜尋框、且尚未輸入任何字時，下拉最上方會顯示「最近搜尋」的關鍵字 chips，點任一即帶入搜尋；右上的「清除」可清空紀錄。清單最多保留 8 筆、最新在前、相同關鍵字（不分大小寫）會置頂去重。
+
+### 技術細節
+- **純函式模組**（`frontend/src/lib/recentSearches.ts`）：`getRecentSearches`/`addRecentSearch`/`clearRecentSearches`，以 localStorage（key `makeslide.recentSearches`）儲存；`addRecentSearch` 會 trim、忽略空白、不分大小寫去重並置頂、上限 8 筆、回傳更新後清單；含非瀏覽器環境與壞值/JSON 解析的防護。
+- **UI**（`frontend/src/components/GlobalSearchBox.tsx`）：輸入框聚焦一律開啟下拉、Enter 時記錄目前關鍵字；下拉在「查詢為空且有紀錄」時顯示 chips 與「清除」鈕，並調整開啟條件避免空白下拉框。
+- **i18n**：新增 zh-TW/en `home.search.recentTitle`、`home.search.recentClear`。
+- **測試**：`recentSearches.test.ts` 6 個案例（空、最新在前、空白忽略、trim + 不分大小寫去重置頂、上限 8、壞值容錯）。
+- **驗證**：前端 `tsc --noEmit` 通過；`recentSearches.test.ts` 與 `i18n.test.ts`（含 zh/en key 對等）全通過。
