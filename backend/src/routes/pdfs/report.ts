@@ -355,6 +355,41 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
     return reply.code(200).send(csv);
   });
 
+  // Per-question quiz statistics export (one row per question).
+  app.get('/api/pdfs/:id/report/questions.csv', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send('Invalid pdf id');
+
+    const { id } = parsed.data;
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow) return reply.code(404).send('PDF not found');
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send('Forbidden');
+    }
+
+    const stats = computeQuestionStats(id);
+    const round4 = (n: number) => Math.round(n * 10000) / 10000;
+    const header = ['question_id', 'question', 'option_count', 'attempt_count', 'correct_count', 'wrong_count', 'correct_rate', 'option_votes'].join(',');
+    const rows: string[] = [header];
+    for (const s of stats) {
+      rows.push([
+        csvEscape(s.question_id),
+        csvEscape(s.question),
+        csvEscape(s.option_count),
+        csvEscape(s.attempt_count),
+        csvEscape(s.correct_count),
+        csvEscape(s.wrong_count),
+        csvEscape(round4(s.correct_rate)),
+        // option_votes is a variable-length array; join into one field to keep column count fixed.
+        csvEscape(s.option_votes.join('|')),
+      ].join(','));
+    }
+    const csv = rows.join('\n');
+    void reply.header('Content-Type', 'text/csv; charset=utf-8');
+    void reply.header('Content-Disposition', `attachment; filename="report-questions-${id}.csv"`);
+    return reply.code(200).send(csv);
+  });
+
   app.get('/api/pdfs/:id/report/students', async (request, reply) => {
     const parsed = IdParamSchema.safeParse(request.params);
     if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid pdf id'));
