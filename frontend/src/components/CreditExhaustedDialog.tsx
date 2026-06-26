@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useI18n } from '../i18n';
+import { useOverlayDismiss } from './useOverlayDismiss';
 import {
   ApiError,
   CREDIT_EXHAUSTED_EVENT,
@@ -10,6 +11,8 @@ import {
 export default function CreditExhaustedDialog() {
   const { t } = useI18n();
   const [detail, setDetail] = useState<CreditExhaustedEventDetail | null>(null);
+  const close = useCallback(() => setDetail(null), []);
+  const { onBackdropClick } = useOverlayDismiss(close);
 
   useEffect(() => {
     const onCreditExhausted = (event: Event) => {
@@ -25,7 +28,7 @@ export default function CreditExhaustedDialog() {
   const human = mapApiErrorToHumanMessage(new ApiError('', detail.code, detail.status), t);
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/75 p-4">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/75 p-4" onClick={onBackdropClick}>
       <div
         role="dialog"
         aria-modal="true"
@@ -57,13 +60,13 @@ export default function CreditExhaustedDialog() {
           <a
             href="/settings"
             className="rounded-md border border-slate-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
-            onClick={() => setDetail(null)}
+            onClick={close}
           >
             {t('creditExhausted.goToSettings')}
           </a>
           <button
             type="button"
-            onClick={() => setDetail(null)}
+            onClick={close}
             className="rounded-md bg-amber-300 px-3 py-1.5 text-sm font-medium text-slate-950 hover:bg-amber-200"
           >
             {t('creditExhausted.gotIt')}
