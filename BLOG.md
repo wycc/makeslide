@@ -7571,3 +7571,23 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **安全**：透過共用 `csvEscape` 防 CSV formula injection（`=`/`+`/`-`/`@`/tab/CR 開頭的字串前加單引號），含逗號/引號/換行的欄位以雙引號包裹並將內部引號加倍。
 - **測試**：新增 `backend/test/comments-csv.test.ts`，涵蓋排序與欄位格式、escaping 與 formula injection、空清單僅輸出表頭、private/public 403、public_editable 200、未知 PDF 404 共 7 個案例。
 - **驗證**：前端與後端 `tsc --noEmit` typecheck 全通過。後端 handler 測試需 better-sqlite3 native module，於本機 sandbox 無法載入，留待 CI 執行。
+
+## Theme 基礎設施 MVP（2026-06-26）
+
+### 功能目的
+這是「深色模式 / 主題切換」功能系列的第一塊地基。目標是先以不動後端資料模型的前端 MVP 做起：建立一層集中、可測試的主題偏好工具，讓後續的 CSS token 化、設定頁切換選項、啟動防白閃、各頁面暗色適配都建構在同一套邏輯上，避免散落各處、降低回歸風險。本項只交付基礎設施與單元測試，尚未改動任何畫面外觀。
+
+支援三種偏好：`system`（跟隨瀏覽器 `prefers-color-scheme`，預設）、`light`、`dark`。使用者選擇會寫入 localStorage；套用時於 `<html>` 同時加上 `class="dark"`（給 Tailwind 的 `dark:` variant 使用）與 `data-theme` 屬性（給 CSS variables 切換使用）。
+
+### 使用方式
+此項對使用者尚無可見變化（無 UI）。對開發者而言，可從 `frontend/src/lib/theme.ts` 取用：
+- `getStoredThemePreference()` / `setStoredThemePreference(pref)`：讀寫使用者偏好。
+- `resolveThemePreference(pref?)`：把偏好解析成實際的 `light` / `dark`（`system` 會依 OS 判斷）。
+- `applyThemePreference(pref?)`：解析並套用到 `<html>`，回傳實際套用的主題。
+- `watchSystemThemeChange(onChange?)`：監聽 OS 色彩偏好變化，僅在偏好為 `system` 時自動重新套用，回傳取消監聽函式。
+
+### 技術細節
+- **新檔**（`frontend/src/lib/theme.ts`）：型別 `ThemePreference`/`ResolvedTheme`、常數 `THEME_STORAGE_KEY = 'makeslide.theme'`，以及上述 helper 與 `normalizeThemePreference`（壞值/未設定收斂為 `system`）、`getSystemTheme`（讀 `matchMedia`，無 matchMedia 時保守回 `light`）。
+- **環境防護**：所有 `window` / `localStorage` / `matchMedia` / `document` 的存取都先檢查存在性，於 SSR 與測試環境優雅降級（沿用 `i18n.ts`、`viewerId.ts` 的慣例），不丟例外。
+- **測試**（`frontend/src/lib/theme.test.ts`）：以記憶體 storage、可切換的 `matchMedia` stub 與最小 `<html>` stub，覆蓋 normalize、預設與壞值 fallback、set/get、`getSystemTheme`、light/dark/system 解析、套用 class + `data-theme`、system 跟隨 OS、watch 僅在 `system` 模式作用、以及無 `window`/`document` 的降級，共 10 個案例。
+- **驗證**：`node --test` 10/10 通過、前端 `tsc --noEmit` 通過。
