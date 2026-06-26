@@ -8010,3 +8010,18 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **路由**（`backend/src/routes/pdfs/subtitles.ts`）：srt/vtt/txt 三端點改以 `buildContentDisposition(\`${safeDownloadBaseName(row.title, fallback)}.{ext}\`)` 設定 `content-disposition`。
 - **測試**：新增 `download-filename.test.ts`（7 個純函式案例）並更新 `subtitles-txt.test.ts` 的檔名斷言。
 - **驗證**：後端 `tsc --noEmit` 通過；純函式測試全通過。handler 測試需 better-sqlite3 native module，於本機 sandbox 無法載入，留待 CI 執行。
+
+## 報告摘要下載為 Markdown 檔（2026-06-26）
+
+### 功能目的
+課後報告先前已能「複製摘要」成 Markdown，但只能貼到別處、無法直接存檔。本項加入「下載 .md」，讓教師把摘要存成檔案歸檔或附加到課程資料，與既有複製功能互補（Roadmap Phase 1）。
+
+### 使用方式
+開啟課後報告，點工具列「複製摘要」旁的「下載 .md」即可下載 `report-{pdfId}.md`，內容與複製的 Markdown 相同（整體數字 + 最難測驗題／最分歧投票頁／最低完成率頁三榜單）。無報告資料時按鈕停用。
+
+### 技術細節
+- **共用內容產生**（`frontend/src/pages/play/PostClassReportPanel.tsx`）：把原本內嵌於複製流程的 labels 抽成 `buildSummaryMarkdown()`，供複製與下載共用，避免重複；複製與下載都呼叫同一個既有純函式 `formatReportSummaryMarkdown`。
+- **下載**：`handleDownloadSummary` 以 `Blob`（`text/markdown;charset=utf-8`）+ 暫時 `<a download>` 觸發，檔名 `report-{pdfId}.md`，並 `URL.revokeObjectURL` 釋放。
+- **i18n**：新增 zh-TW/en `play.report.downloadSummaryMd`。
+- **測試**：內容由既有具測試的 `formatReportSummaryMarkdown` 產生，下載為瀏覽器 API、無新增可抽出純邏輯，故不另加單元測試。
+- **驗證**：前端 `tsc --noEmit` 通過；`reportSummary.test.ts` 與 `i18n.test.ts`（含 zh/en key 對等）全通過。
