@@ -1995,6 +1995,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`HomePage.tsx` 加入 `page_count_asc` 排序模式；排序下拉於 pageCountDesc 後插入 pageCountAsc option；zh-TW/en 各新增 `home.sort.pageCountAsc`（「頁數少到多」／「Fewest pages」）；`HomePage.sort.test.ts` +2 測試（升冪含缺頁數排尾、與降冪互為反向）。前端 356 測試 + typecheck（含 i18n key 對齊）全通過。分支 `feat/home-sort-page-count-asc`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 8 個完成項目（8/100，未達上限）。
 
+- [x] 後端字幕分句去重：`splitScriptIntoSentences` 在後端**同一套件**內有兩份 byte 相同的副本（`textSentences.ts` 與 `subtitleAlignment.ts`，連同 sentence/tone 兩個 regex），註解要求彼此「mirror exactly」——屬套件內 drift 風險。讓 `subtitleAlignment.ts` 改 re-export `textSentences.ts` 的實作，後端所有呼叫端共用單一來源；前端副本因跨套件維持獨立。原 `subtitleSplitConsistency.test.ts` 同步調整：以函式 identity 斷言兩個後端入口為同一份、regex 比對改守護真正重要的「前端 ↔ 後端」一致性。
+  - 修改說明（2026-06-26）：`subtitleAlignment.ts` 移除本地 `SENTENCE_MATCH_RE`/`TONE_MARKER_RE`/`splitScriptIntoSentences`，改為 `export { splitScriptIntoSentences } from './textSentences'`（其餘 `alignSentencesToWordTimestamps` 等不變）。`subtitleSplitConsistency.test.ts` 第一個測試改斷言 `splitTextSentences === splitSubtitleAlignment`；regex 測試移除已不存在的 subtitleAlignment 字面量檢查、保留 frontend↔textSentences 比對。相關後端測試（subtitleSplitConsistency／subtitleAlignment／subtitle-alignment／textSentences）與後端 `tsc` build 全通過。分支 `refactor/dedupe-backend-split-sentences`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 9 個完成項目（9/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2007,4 +2011,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | 觀看進度百分比夾在 0-100：新增 `clampPercent`，`calculateWatchProgressPercent` 防 >100%，並抽出 `calculateAvgListenedPercent`（倒退重聽 ratio>1 時夾頂）取代 `PlayPageSidebar` 內聯計算；watchProgress.test.ts +3 測試；前端 353 測試通過 | fix/watch-progress-percent-clamp（已 merge） |
 | 2026-06-26 | 複習清單只刪指定題目：`removeReviewItem` 加選用 `questionText` 參數（同頁多題時只刪該題，原會整頁誤刪），`PlayPageSidebar` handler 傳入題目並修正本地 state 過濾；reviewList.test.ts +1 測試；前端 354 測試通過 | fix/review-item-remove-by-question（已 merge） |
 | 2026-06-26 | 首頁新增「頁數少到多」排序：補上 `page_count_asc`（與既有 `page_count_desc` 對稱、缺頁數排尾），`SortMode`/`SORT_MODES`/comparator/下拉/i18n 一併更新；HomePage.sort.test.ts +2 測試；前端 356 測試通過 | feat/home-sort-page-count-asc（已 merge） |
+| 2026-06-26 | 後端字幕分句去重：`subtitleAlignment.ts` 改 re-export `textSentences.ts` 的 `splitScriptIntoSentences`，消除後端同套件內兩份相同副本（含 regex）；一致性測試改以函式 identity 斷言並保留前端↔後端 regex 守護；相關後端測試與 build 通過 | refactor/dedupe-backend-split-sentences（已 merge） |
 
