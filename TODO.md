@@ -2579,7 +2579,7 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`CommentsSection` 每則評論的作者名由 `<span>` 改為 `<button>`，`onClick` 將 `filterQuery` 設為該作者名（`filterComments` 既已比對 author，故即時過濾出該作者的評論）；加 hover 底線樣式與 `title` 提示。實作時為提示加了一個小 i18n key `play.sidebar.commentsFilterByAuthor`（含 `{author}` 佔位，zh-TW/en），略多於原「不需新 i18n」之預估但提升可發現性。純前端、不動後端。前端 `tsc --noEmit` 通過、`i18n.test.ts`（含 zh/en 對等及佔位符集合檢查）通過；事件處理 UI、過濾邏輯由既有 `commentFilter.test.ts` 覆蓋，不另加測試。分支 `feat/comment-author-filter`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 99 個完成項目（99/100，未達上限；下一個完成即達 100 上限）。
 
-- [ ] 首頁「清除所有篩選」按鈕（可用性，小顆粒）：`HomePage` 同時有分類（`categoryFilter`）、標題搜尋（`titleFilter`）、最愛（`favoritesOnly`）三種篩選，但無一鍵重設。在工具列或結果摘要附近，當任一篩選為非預設（分類非 `__all__` 或有搜尋字或最愛開啟）時顯示「清除篩選」按鈕，點擊重設三者（`setCategoryFilter('__all__')`、`setTitleFilter('')`、`setFavoritesOnly(false)`，並同步清除對應 localStorage）；新增 zh-TW/en i18n key。純前端、不動後端。
+- [x] ~~首頁「清除所有篩選」按鈕~~（**已存在，無需實作**）：經查 `HomePage` 早已有「清除篩選」功能——`clearAllFilters` callback、i18n key `home.clearAllFilters`（「× 清除篩選」/「× Clear filters」），於約 1182、1319 兩處在 `(categoryFilter !== '__all__' || tagFilter.size > 0 || titleFilter.length > 0 || explicitSortMode !== null)` 時顯示按鈕（涵蓋分類/標籤/搜尋/排序，比本項預想更完整）。本項規畫（第一一八輪）時 grep 用詞（`清除.*篩選`/`clearFilters`/`resetFilters`）未命中既有 `clearAllFilters`/`home.clearAllFilters` 命名而誤判為缺口。實作前查證發現已存在，遂丟棄重複編輯、標為已存在、**不計入 100 完成計數**（無程式碼變更）。發現時間 2026-06-26。教訓：grep 驗證時應涵蓋更多命名變體（含 `clearAll*`）。
 
 ## 工作記錄（第一一八輪，2026-06-26）
 
