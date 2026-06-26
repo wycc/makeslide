@@ -18,6 +18,7 @@ import { pollOptionPercent } from '../../lib/pollPercent';
 import { formatNotesMarkdown } from '../../lib/notesMarkdown';
 import { formatPageListText } from '../../lib/pageListText';
 import { getStoredCommentAuthor, setStoredCommentAuthor } from '../../lib/commentAuthor';
+import { getTextLengthHint } from '../../lib/textLengthHint';
 import { formatRelativeTime, buildRelativeTimeLabels } from '../../lib/relativeTime';
 import { NOTEBOOK_TABS, computeNotebookTabCounts, getAdjacentNotebookTab, getEdgeNotebookTab, getStoredNotebookTab, setStoredNotebookTab, type NotebookTab } from './notebookTabs';
 
@@ -319,6 +320,16 @@ function CommentsSection() {
                         maxLength={2000}
                         className="w-full resize-none rounded border border-sky-700/40 bg-sky-900/30 px-2 py-1 text-[11px] text-sky-100 focus:outline-none focus:ring-1 focus:ring-sky-600/60"
                       />
+                      {(() => {
+                        const hint = getTextLengthHint(editingText.length, 2000);
+                        return (
+                          <div className="flex justify-end">
+                            <span className={`text-[10px] tabular-nums ${hint.nearLimit ? 'text-amber-400' : 'text-sky-400/50'}`}>
+                              {hint.label}
+                            </span>
+                          </div>
+                        );
+                      })()}
                       <div className="flex gap-1.5">
                         <button
                           type="button"
@@ -397,9 +408,14 @@ function CommentsSection() {
           />
           <div className="flex items-center justify-between gap-2">
             {error ? <p className="text-[10px] text-red-400">{error}</p> : <span />}
-            <span className={`shrink-0 text-[10px] tabular-nums ${text.length > 1900 ? 'text-amber-400' : 'text-sky-400/50'}`}>
-              {text.length}/2000
-            </span>
+            {(() => {
+              const hint = getTextLengthHint(text.length, 2000);
+              return (
+                <span className={`shrink-0 text-[10px] tabular-nums ${hint.nearLimit ? 'text-amber-400' : 'text-sky-400/50'}`}>
+                  {hint.label}
+                </span>
+              );
+            })()}
           </div>
           <button
             type="submit"
