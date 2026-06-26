@@ -1,5 +1,31 @@
 # MakeSlide 功能說明
 
+## 系統資料頁數值格式化抽出為可測純函式（含非有限值防呆）
+
+### 目的
+
+系統資料頁（SystemDataPage）的「平均耗時」「平均延遲」「估算成本」等卡片，原本以頁面內的
+`formatDuration`／`formatCost` 兩個 function 計算，沒有任何測試，也沒有處理非有限值——當後端回報的
+平均耗時或成本為 `NaN`（例如沒有任何樣本時的除以零）時，畫面會直接顯示出 `NaN s` 或 `US$NaN`。
+
+### 變更內容
+
+- 兩個格式化函式抽到共用 lib 並補上單元測試，行為（毫秒/秒切換、6 位小數成本）維持不變。
+- 平均耗時為 `null` 或非有限值時顯示 `—`（破折號），不再出現 `NaN s`。
+- 估算成本為 `null` 或非有限值時顯示「未知」標籤，不再出現 `US$NaN`。
+
+### 使用方式
+
+此為內部重構，使用者操作不變：開啟「系統資料」頁即可看到以共用函式格式化的耗時與成本數值。
+
+### 實作備註
+
+新增 `frontend/src/lib/metricFormat.ts`（`formatMetricDurationMs(ms, secondsSuffix)`：`null`／非有限值回
+`—`、`<1000ms` 顯示 `{ms} ms`、否則秒數保留 1 位小數並接 i18n 後綴；`formatMetricCostUsd(value, unknownLabel)`：
+`null`／非有限值回 `unknownLabel`、否則 `US$` + 6 位小數）。`SystemDataPage` 移除 page-local 定義改為 import。
+新增 `metricFormat.test.ts`（5 組：非有限值防呆、ms<1000 邊界、秒數四捨五入、6 位小數成本）。前端
+`tsc --noEmit` 通過、新測試 5/5 通過；不動後端、不需新 i18n。
+
 ## 進度百分比顯示收斂為共用純函式（clamp 0–100）
 
 ### 目的
