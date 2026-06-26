@@ -3,6 +3,7 @@ import { db } from '../../db';
 import type { PdfRow } from '../../types';
 import { decodeSession, parseCookies } from '../auth';
 import { errorResponse, IdParamSchema } from './shared';
+import { csvEscape } from './csv';
 import { getSyncFollowerQuestionsSnapshot } from './sync';
 
 function sessionSub(request: FastifyRequest): string | null {
@@ -254,14 +255,6 @@ function computeStudentRecords(pdfId: string): StudentRecord[] {
   return Array.from(studentMap.values());
 }
 
-function escapeCsvField(value: string | number | null | undefined): string {
-  const str = value == null ? '' : String(value);
-  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
-}
-
 export async function registerReportRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/pdfs/:id/report/students.csv', async (request, reply) => {
     const parsed = IdParamSchema.safeParse(request.params);
@@ -282,13 +275,13 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
         const correct = attempt.question_results.filter((q) => q.is_correct).length;
         const total = attempt.question_results.length;
         rows.push([
-          escapeCsvField(student.client_id),
-          escapeCsvField(attempt.attempt_id),
-          escapeCsvField(attempt.quiz_title),
-          escapeCsvField(attempt.score),
-          escapeCsvField(attempt.submitted_at),
-          escapeCsvField(correct),
-          escapeCsvField(total),
+          csvEscape(student.client_id),
+          csvEscape(attempt.attempt_id),
+          csvEscape(attempt.quiz_title),
+          csvEscape(attempt.score),
+          csvEscape(attempt.submitted_at),
+          csvEscape(correct),
+          csvEscape(total),
         ].join(','));
       }
     }
