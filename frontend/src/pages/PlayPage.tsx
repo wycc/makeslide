@@ -2265,7 +2265,7 @@ export default function PlayPage() {
   // ---- Render loading / error states ----
   if (!pdfId) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-100">
+      <div className="flex min-h-screen items-center justify-center bg-bg text-slate-100">
         {t('play.status.invalidPdfId')}
       </div>
     );
@@ -2273,9 +2273,9 @@ export default function PlayPage() {
 
   if (loadError) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-slate-950 text-slate-100">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-bg text-slate-100">
         <p className="text-rose-300">{loadError}</p>
-        <Link to="/" className="text-sm text-slate-400 underline">
+        <Link to="/" className="text-sm text-muted underline">
           {t('play.status.backHome')}
         </Link>
       </div>
@@ -2284,7 +2284,7 @@ export default function PlayPage() {
 
   if (!detail) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-100">
+      <div className="flex min-h-screen items-center justify-center bg-bg text-slate-100">
         {t('play.status.loading')}
       </div>
     );
@@ -2292,14 +2292,14 @@ export default function PlayPage() {
 
   if (totalPages === 0) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-slate-950 text-slate-100">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-bg text-slate-100">
         <p className="text-slate-300">
           {isReadOnlyProcessing
             ? `${t('play.status.noPagesGeneratingPrefix')}${formatGeneratingStatusLabel(detail.status, detail.progress_step, t)}${t('play.status.noPagesGeneratingSuffix')}`
             : t('play.status.noAudioPages')}
         </p>
         {isReadOnlyProcessing ? <p className="text-xs text-slate-500">{t('play.status.recheckHint')}</p> : null}
-        <Link to="/" className="text-sm text-slate-400 underline">
+        <Link to="/" className="text-sm text-muted underline">
           {t('play.status.backHome')}
         </Link>
       </div>
@@ -2425,12 +2425,12 @@ export default function PlayPage() {
 
   return (
     <PlayPageCtx.Provider value={_ctxValue}>
-    <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
+    <div className="flex min-h-screen flex-col bg-bg text-slate-100">
       {imageOnlyFullscreen ? <PlayPageFullscreen /> : null}
 
       {slideBusy ? (
-        <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-slate-950/60">
-          <div className="rounded-lg border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-200 shadow-xl">
+        <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-bg/60">
+          <div className="rounded-lg border border-border bg-surface px-4 py-3 text-sm text-text shadow-xl">
             <span className="mr-2 inline-block h-3 w-3 animate-pulse rounded-full bg-cyan-400" />
             {t('play.status.imageGenerating')}
           </div>
@@ -2547,10 +2547,10 @@ export default function PlayPage() {
           onClick={() => setGotoPageOpen(false)}
         >
           <div
-            className="w-72 rounded-xl border border-slate-700 bg-slate-900 p-5 shadow-2xl"
+            className="w-72 rounded-xl border border-border bg-surface p-5 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="mb-3 text-sm font-semibold text-slate-200">{t('play.gotoPageDialog')}</p>
+            <p className="mb-3 text-sm font-semibold text-text">{t('play.gotoPageDialog')}</p>
             <input
               ref={gotoPageInputRef}
               type="number"
@@ -2593,14 +2593,14 @@ export default function PlayPage() {
 
       <main className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col gap-4 px-4 py-4 md:flex-row">
         {/* Mobile-only tab 切換列 */}
-        <div className="flex shrink-0 overflow-hidden rounded-lg border border-slate-800 bg-slate-900/40 md:hidden">
+        <div className="flex shrink-0 overflow-hidden rounded-lg border border-slate-800 bg-surface/40 md:hidden">
           <button
             type="button"
             onClick={() => setActiveTab('play')}
             className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
               activeTab === 'play'
                 ? 'border-b-2 border-cyan-400 bg-slate-800/60 text-cyan-200'
-                : 'border-b-2 border-transparent text-slate-400 hover:text-slate-200'
+                : 'border-b-2 border-transparent text-muted hover:text-text'
             }`}
             aria-pressed={activeTab === 'play'}
           >
@@ -2612,7 +2612,7 @@ export default function PlayPage() {
             className={`relative flex-1 px-4 py-2 text-sm font-medium transition-colors ${
               activeTab === 'qa'
                 ? 'border-b-2 border-cyan-400 bg-slate-800/60 text-cyan-200'
-                : 'border-b-2 border-transparent text-slate-400 hover:text-slate-200'
+                : 'border-b-2 border-transparent text-muted hover:text-text'
             }`}
             aria-pressed={activeTab === 'qa'}
           >

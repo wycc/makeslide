@@ -201,7 +201,7 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExpo
   return (
     <div
       onClick={handleCardClick}
-      className="group flex cursor-pointer flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900/70 shadow transition hover:border-slate-600 hover:shadow-lg"
+      className="group flex cursor-pointer flex-col overflow-hidden rounded-xl border border-slate-800 bg-surface/70 shadow transition hover:border-slate-600 hover:shadow-lg"
     >
       {/* Cover */}
       <div className="relative aspect-[4/3] w-full bg-slate-800">
@@ -233,7 +233,7 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExpo
             <span className="text-xs tracking-wide uppercase">PDF</span>
           </div>
         )}
-        <div className="absolute right-2 top-2 rounded-full bg-slate-900/60 p-0.5 backdrop-blur-sm">
+        <div className="absolute right-2 top-2 rounded-full bg-surface/60 p-0.5 backdrop-blur-sm">
           <StatusBadge
             status={pdf.status}
             progressStep={pdf.progress_step}
@@ -245,7 +245,7 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExpo
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); onToggleFavorite(pdf.id); }}
-            className={`absolute bottom-2 right-2 rounded-full bg-slate-900/70 p-1 text-base leading-none backdrop-blur-sm transition hover:scale-110 ${isFavorited ? 'text-amber-400' : 'text-slate-400 hover:text-amber-300'}`}
+            className={`absolute bottom-2 right-2 rounded-full bg-surface/70 p-1 text-base leading-none backdrop-blur-sm transition hover:scale-110 ${isFavorited ? 'text-amber-400' : 'text-muted hover:text-amber-300'}`}
             title={isFavorited ? t('card.unfavorite') : t('card.favorite')}
             aria-label={isFavorited ? t('card.unfavorite') : t('card.favorite')}
           >
@@ -256,7 +256,7 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExpo
           <button
             type="button"
             onClick={(ev) => { void handleCopyShareLink(ev); }}
-            className={`absolute bottom-2 left-2 rounded-full bg-slate-900/70 px-1.5 py-1 text-[11px] leading-none backdrop-blur-sm transition opacity-0 group-hover:opacity-100 ${copyShareStatus === 'ok' ? 'text-emerald-400' : copyShareStatus === 'fail' ? 'text-rose-400' : 'text-slate-300 hover:text-sky-300'}`}
+            className={`absolute bottom-2 left-2 rounded-full bg-surface/70 px-1.5 py-1 text-[11px] leading-none backdrop-blur-sm transition opacity-0 group-hover:opacity-100 ${copyShareStatus === 'ok' ? 'text-emerald-400' : copyShareStatus === 'fail' ? 'text-rose-400' : 'text-slate-300 hover:text-sky-300'}`}
             title={copyShareStatus === 'ok' ? t('card.copyShareLinkDone') : copyShareStatus === 'fail' ? t('card.copyShareLinkFail') : t('card.copyShareLink')}
             aria-label={t('card.copyShareLink')}
           >
@@ -265,32 +265,32 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExpo
         ) : null}
         {pdf.github_sync_dirty ? (
           <div
-            className="absolute left-2 top-2 rounded-full bg-slate-900/60 p-1 text-rose-400 backdrop-blur-sm"
+            className="absolute left-2 top-2 rounded-full bg-surface/60 p-1 text-rose-400 backdrop-blur-sm"
             title={t('card.githubUnsynced')}
           >
             <GitHubMarkIcon className="h-3.5 w-3.5" />
           </div>
         ) : pdf.github_synced_at ? (
           <div
-            className="absolute left-2 top-2 rounded-full bg-slate-900/60 p-1 text-slate-200 backdrop-blur-sm"
+            className="absolute left-2 top-2 rounded-full bg-surface/60 p-1 text-text backdrop-blur-sm"
             title={t('card.githubSynced')}
           >
             <GitHubMarkIcon className="h-3.5 w-3.5" />
           </div>
         ) : null}
         {!showProcessingOverlay && (pdf.page_count != null || totalAudioDuration || (pdf.play_count != null && pdf.play_count > 0)) && (
-          <div className="absolute bottom-2 left-2 flex items-center gap-1.5 rounded-md bg-slate-900/70 px-2 py-0.5 text-[11px] text-slate-200 opacity-0 backdrop-blur-sm transition-opacity duration-200 group-hover:opacity-100">
+          <div className="absolute bottom-2 left-2 flex items-center gap-1.5 rounded-md bg-surface/70 px-2 py-0.5 text-[11px] text-text opacity-0 backdrop-blur-sm transition-opacity duration-200 group-hover:opacity-100">
             {pdf.page_count != null && <span>{t('card.pageCount').replace('{count}', String(pdf.page_count))}</span>}
             {totalAudioDuration && <span>{totalAudioDuration}</span>}
             {pdf.play_count != null && pdf.play_count > 0 && <span>▶ {pdf.play_count}</span>}
           </div>
         )}
         {showProcessingOverlay && (
-          <div className="absolute inset-x-0 bottom-0 bg-slate-900/75 px-2 py-2 backdrop-blur-sm">
+          <div className="absolute inset-x-0 bottom-0 bg-surface/75 px-2 py-2 backdrop-blur-sm">
             <div className="mb-1 flex items-center justify-between gap-2 text-[11px] text-slate-100">
               <span className="truncate">{progressStepLabel}</span>
               {progressTotal > 0 && (
-                <span className="shrink-0 text-slate-200">
+                <span className="shrink-0 text-text">
                   {progressCurrent}/{progressTotal}
                 </span>
               )}
@@ -312,7 +312,7 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExpo
           {pdf.title ?? t('card.untitled')}
         </h3>
         {pdf.description?.trim() && (
-          <p className="line-clamp-2 text-[11px] leading-relaxed text-slate-400" title={pdf.description}>
+          <p className="line-clamp-2 text-[11px] leading-relaxed text-muted" title={pdf.description}>
             {pdf.description}
           </p>
         )}
@@ -321,14 +321,14 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExpo
             {t('card.ownerLabel').replace('{name}', pdf.owner_name?.trim() || t('card.ownerUnknown'))}
           </span>
         )}
-        <label className="flex flex-col gap-1 text-[11px] text-slate-400" onClick={(ev) => ev.stopPropagation()}>
+        <label className="flex flex-col gap-1 text-[11px] text-muted" onClick={(ev) => ev.stopPropagation()}>
           {t('card.category')}
           <select
             value={pdf.category?.trim() || 'general'}
             onChange={handleCategoryChange}
             disabled={isProcessing || isChangingCategory}
             title={isProcessing ? t('card.cannotChangeCategoryWhileProcessing') : undefined}
-            className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-200 outline-none transition hover:border-slate-500 disabled:opacity-60"
+            className="rounded-md border border-border bg-bg px-2 py-1 text-xs text-text outline-none transition hover:border-slate-500 disabled:opacity-60"
           >
             {categories.map((category) => (
               <option key={category} value={category}>{category}</option>
@@ -336,7 +336,7 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExpo
             <option value="__new__">{t('card.addCategory')}</option>
           </select>
         </label>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
           <span title={`${t('card.createdAtLabel')}：${formatDate(pdf.created_at)}`}>
             {t('card.createdAt').replace('{time}', formatRelativeTime(pdf.created_at, relativeTimeLabels))}
           </span>
@@ -405,7 +405,7 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExpo
                 type="button"
                 onClick={handleEditTagsClick}
                 title={t('card.editTags')}
-                className="rounded-full border border-slate-600 px-2 py-0.5 text-[11px] text-slate-400 transition hover:border-slate-400 hover:text-slate-200"
+                className="rounded-full border border-slate-600 px-2 py-0.5 text-[11px] text-muted transition hover:border-slate-400 hover:text-text"
               >
                 {(pdf.tags ?? '').trim() ? '✎' : `+ ${t('card.editTags')}`}
               </button>
