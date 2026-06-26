@@ -7556,3 +7556,18 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **遙控器**（`frontend/src/pages/RemoteControllerPage.tsx`）：poll 卡片外層由 `flex items-center` 改為直式容器，原標題／狀態／開關按鈕收進上方 row；下方新增逐選項結果區（選項文字 + 「N 票 · X%」+ `h-1` 橫條圖），沿用既有 `remote.votesSuffix` i18n key。
 - **設計取捨**：不引入任何 chart library，純以 Tailwind class 與行內 `width` style 實作；不調整 `PagePoll`／`PagePollOption` 資料型別，亦未新增 i18n key。其餘原本已有橫條圖的位置（`PlayPageSidebar`、全螢幕小型 overlay）維持不變。
 - **驗證**：前端 `tsc --noEmit` typecheck 全通過。
+
+## 評論 CSV 匯出（2026-06-26）
+
+### 功能目的
+播放頁的「頁面評論」讓觀眾/協作者針對每一頁留下評論，講者也能標記已解決。但過去評論只能在介面上逐則瀏覽，無法整批帶出做課後整理、彙整回饋或存檔。本次新增評論 CSV 匯出，讓有編輯權限者一鍵下載整份 PDF 的所有評論，沿用專案既有的 CSV 防護（formula injection 防護 + RFC4180 跳脫），與投票結果、測驗結果、學生名單的 CSV 匯出體驗一致。
+
+### 使用方式
+在播放頁右側「💬 頁面評論」區塊，當該 PDF 有任何評論時，標題列右側會出現「匯出 CSV」連結；點擊即下載 `comments-<pdfId>.csv`。檔案含表頭 `page,author,text,resolved,created_at`，每列一則評論，依頁碼、時間排序。`resolved` 欄以 `true`/`false` 呈現。此功能需要編輯權限（自己的簡報，或 `public_editable` 的共編簡報）；純唯讀的公開簡報無法匯出。
+
+### 技術細節
+- **後端**（`backend/src/routes/pdfs/comments.ts`）：新增 `GET /api/pdfs/:id/comments.csv`，以 `page_number ASC, created_at ASC` 查詢 `page_comments`，逐列用共用 `csvEscape`（`./csv`）組成 CSV；權限沿用 `canEditPdf`（owner 或 `public_editable`）；回應帶 `text/csv; charset=utf-8`、`content-disposition: attachment; filename="comments-<id>.csv"`、`cache-control: no-store`。
+- **前端**（`frontend/src/pages/play/PlayPageSidebar.tsx`）：`CommentsSection` 標題列在 `comments.length > 0` 時顯示一個 `download` 的 `<a>`，指向相對路徑 `api/pdfs/:id/comments.csv`；新增 zh-TW/en `play.sidebar.commentsExportCsv` i18n key。
+- **安全**：透過共用 `csvEscape` 防 CSV formula injection（`=`/`+`/`-`/`@`/tab/CR 開頭的字串前加單引號），含逗號/引號/換行的欄位以雙引號包裹並將內部引號加倍。
+- **測試**：新增 `backend/test/comments-csv.test.ts`，涵蓋排序與欄位格式、escaping 與 formula injection、空清單僅輸出表頭、private/public 403、public_editable 200、未知 PDF 404 共 7 個案例。
+- **驗證**：前端與後端 `tsc --noEmit` typecheck 全通過。後端 handler 測試需 better-sqlite3 native module，於本機 sandbox 無法載入，留待 CI 執行。
