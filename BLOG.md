@@ -7782,3 +7782,18 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **i18n**：新增 zh-TW/en `play.sidebar.commentsCopy`/`commentsCopyDone`/`commentsCopyFail`/`commentsResolvedTag`。
 - **測試**：`commentMarkdown.test.ts` 3 個案例（空清單、依頁排序與已解決標記、同頁穩定序）。
 - **驗證**：前端 `tsc --noEmit` 通過；`commentMarkdown.test.ts` 與 `i18n.test.ts`（含 zh/en key 對等）全通過。
+
+## 評論「未解決優先」排序（2026-06-26）
+
+### 功能目的
+播放頁「頁面評論」原本依頁碼/時間順序排列，已解決與未解決混在一起。本項加入「未解決優先」切換，讓教師在處理回饋時能把尚待處理的評論集中在最上方，快速聚焦待辦，呼應評論未解決徽章帶來的追蹤體驗。
+
+### 使用方式
+在「頁面評論」區（評論超過一則時），標題列會出現「未解決優先」切換鈕。開啟後，未解決的評論排在最前、已解決的排在後面；同一組內維持原本的頁碼/時間順序。再按一次即恢復原順序。此設定只影響顯示順序，不影響複製或 CSV 匯出。
+
+### 技術細節
+- **純函式**（`frontend/src/lib/commentStats.ts`）：`sortCommentsUnresolvedFirst(comments)` 以 `(a.resolved?1:0) - (b.resolved?1:0)` 做穩定排序，使未解決在前、兩組內維持原相對順序，並回傳新陣列（不變動輸入）。
+- **UI**（`frontend/src/pages/play/PlayPageSidebar.tsx` 的 `CommentsSection`）：新增 `unresolvedFirst` state 與切換鈕（評論多於一則才顯示、`aria-pressed` 標示狀態）；渲染先以 `filterComments` 過濾，再依切換套用排序，得到最終的 `visibleComments`。
+- **i18n**：新增 zh-TW/en `play.sidebar.commentsUnresolvedFirst`。
+- **測試**：`commentStats.test.ts` 補 2 個案例（混合 → 未解決在前且穩定、且不變動原陣列；全同狀態 → 順序不變）。
+- **驗證**：前端 `tsc --noEmit` 通過；`commentStats.test.ts` 與 `i18n.test.ts`（含 zh/en key 對等）全通過。

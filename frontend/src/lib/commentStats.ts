@@ -9,3 +9,11 @@ export interface ResolvableComment {
 export function countUnresolvedComments<T extends ResolvableComment>(comments: T[]): number {
   return comments.reduce((n, c) => (c.resolved ? n : n + 1), 0);
 }
+
+/**
+ * 回傳「未解決在前」的新陣列：未解決者排在已解決者之前，兩組內部維持原本相對順序
+ * （穩定排序）。不變動傳入的陣列。
+ */
+export function sortCommentsUnresolvedFirst<T extends ResolvableComment>(comments: T[]): T[] {
+  return [...comments].sort((a, b) => (a.resolved ? 1 : 0) - (b.resolved ? 1 : 0));
+}
