@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { searchPdfs, createPdfFromPages, type SearchResultItem } from '../lib/api';
+import { getRecentSearches, addRecentSearch, clearRecentSearches } from '../lib/recentSearches';
 import { useI18n } from '../i18n';
 
 const DEBOUNCE_MS = 300;
@@ -40,6 +41,7 @@ export default function GlobalSearchBox() {
   const [selectMode, setSelectMode] = useState(false);
   const [fromPagesBusy, setFromPagesBusy] = useState(false);
   const [semanticMode, setSemanticMode] = useState(false);
+  const [recents, setRecents] = useState<string[]>(() => getRecentSearches());
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   // Monotonic id of the latest issued search; lets us drop out-of-order responses
@@ -93,6 +95,25 @@ export default function GlobalSearchBox() {
     setSelected(new Set());
     setSelectMode(false);
   };
+
+  // Record the committed query (Enter) into the recent-search history.
+  const commitRecent = () => {
+    if (!query.trim()) return;
+    setRecents(addRecentSearch(query));
+  };
+
+  const handleRecentClick = (q: string) => {
+    setQuery(q);
+    setRecents(addRecentSearch(q));
+    setOpen(true);
+  };
+
+  const handleClearRecents = () => {
+    clearRecentSearches();
+    setRecents([]);
+  };
+
+  const showRecents = query.trim() === '' && recents.length > 0;
 
   const handleResultClick = (result: SearchResultItem) => {
     if (selectMode) {
@@ -156,7 +177,8 @@ export default function GlobalSearchBox() {
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          onFocus={() => { if (results) setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={(e) => { if (e.key === 'Enter') commitRecent(); }}
           placeholder={semanticMode ? t('home.search.placeholderSemantic') : t('home.search.placeholder')}
           className="min-w-0 flex-1 bg-transparent text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none"
         />
@@ -180,8 +202,30 @@ export default function GlobalSearchBox() {
         )}
       </div>
 
-      {open && (
+      {open && (showRecents || searching || noResults || hasResults) && (
         <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-96 overflow-y-auto rounded-lg border border-slate-700 bg-slate-900 shadow-xl">
+          {showRecents && (
+            <div className="px-3 py-2">
+              <div className="mb-1.5 flex items-center justify-between">
+                <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">{t('home.search.recentTitle')}</span>
+                <button type="button" onClick={handleClearRecents} className="text-[10px] text-slate-500 hover:text-slate-300">
+                  {t('home.search.recentClear')}
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {recents.map((q) => (
+                  <button
+                    key={q}
+                    type="button"
+                    onClick={() => handleRecentClick(q)}
+                    className="rounded-full border border-slate-700 bg-slate-800/60 px-2 py-0.5 text-xs text-slate-300 hover:bg-slate-700 hover:text-slate-100"
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {searching && (
             <p className="px-4 py-3 text-sm text-slate-400">{t('home.search.searching')}</p>
           )}

@@ -315,6 +315,8 @@ export const zhTW = {
   'home.search.placeholder': '跨所有簡報搜尋（標題、逐字稿、頁面文字）…',
   'home.search.searching': '搜尋中…',
   'home.search.noResults': '找不到符合的結果',
+  'home.search.recentTitle': '最近搜尋',
+  'home.search.recentClear': '清除',
   'home.search.matchType.title': '標題',
   'home.search.matchType.script': '逐字稿',
   'home.search.matchType.text': '頁面文字',
