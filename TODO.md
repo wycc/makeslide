@@ -2296,3 +2296,25 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - 工作內容：可執行項目僅剩兩個「待使用者決定 / 待處理」項目，依 LOOP.md 第 2 條改為分析現有程式並對照 `docs/FUTURE_ROADMAP.md`，於 TODO.md 新增 4 個小顆粒、可單輪完成、可加測試、低風險的可執行項目（評論關鍵字過濾、報告摘要複製為 Markdown、每頁學習分析 CSV 匯出、評論未解決數徽章），並補掃描摘要。本輪未完成功能項目（屬規畫輪），不計入 100 完成計數（計數維持 59/100）。
 - 時間：2026-06-26
 - 分支：直接於 master 更新 TODO.md（規畫輪，無程式碼變更）
+
+## 掃描摘要（第一〇一輪，2026-06-26）
+
+- 觸發原因：上一批（第九十九輪）新增的 4 個可執行項目已全數完成，TODO.md 又只剩兩個「待使用者決定 / 待處理」項目（`mapApiErrorToHumanMessage` 全面套用、前端測試納入 root `npm test`），依其說明不宜於自動 loop 逕行。故依 LOOP.md 第 2 條再次分析程式並對照 `docs/FUTURE_ROADMAP.md` 補新項目。
+- 現況觀察：匯出（comments/poll/quiz/students/pages CSV、subtitles srt/vtt）與課後報告三榜單、報告摘要複製、評論過濾/未解決徽章、Theme 系列等近期皆已完成；HomePage 排序已涵蓋 title/created/updated/page_count/audio/last_played，無需再加。
+- 取材方向：Roadmap Phase 2（個人化複習清單）、Phase 1（逐頁分析細化）與通用可用性中「小顆粒、可單輪完成、可加單元/handler 測試、低風險」的延伸。
+
+## 新增可執行項目（第一〇一輪，2026-06-26）
+
+- [ ] 評論複製為 Markdown（Roadmap Phase 4 / 可用性）：在 `CommentsSection`（`frontend/src/pages/play/PlayPageSidebar.tsx`）標題列加入「複製」按鈕，把目前清單（沿用既有 `filterComments` 過濾後的 `visibleComments`，或全部 `comments`，擇一並於說明標明）輸出為 Markdown 清單；於 `frontend/src/lib/` 新增純函式 `formatCommentsMarkdown(comments, labels)`（每則一行，如 `- [第 N 頁] 作者（已解決）：內文`，labels 注入頁碼/已解決字樣以保持純粹可測），以 `lib/clipboard.ts` 的 `copyTextToClipboard` 複製並顯示短暫提示；補純函式測試（空清單、已解決標記、跨頁）；新增 zh-TW/en i18n key。純前端、不動後端。
+
+- [ ] 複習清單複製為 Markdown（Roadmap Phase 2 個人化複習清單）：複習清單區（`PlayPageSidebar.tsx` 的 ReviewList 區塊，資料來自 `lib/reviewList.ts` 的 `getReviewItems`）目前可加入/移除/清空但無法整批帶出。新增純函式 `formatReviewListMarkdown(items, labels)`（輸出 `- 第 N 頁：問題文字` 之類，依 pageNumber 排序）置於 `lib/reviewList.ts` 或新檔並補測試；複習清單標題列加「複製」按鈕，沿用 `copyTextToClipboard` 與短暫提示；新增 zh-TW/en i18n key。純前端。
+
+- [ ] 每頁分析 CSV 增列 avg_listened_ratio（Roadmap Phase 1）：`GET /api/pdfs/:id/report/pages.csv` 現有欄位再加一欄 `avg_listened_ratio`（每頁平均聆聽比例，沿用 `report/summary` 既有的 `AVG(MIN(listened_ms/duration_ms,1))` 計法，無資料以空字串輸出避免誤判為 0）；更新 `backend/test/report-pages-csv.test.ts` 既有斷言的欄位與數值。後端小改 + 測試。
+
+- [ ] 評論「未解決優先」排序（可用性，小顆粒）：在 `CommentsSection` 加入一個切換鈕，開啟時把清單以「未解決在前、其次依現有順序（頁碼/時間）穩定排序」呈現；抽出純函式 `sortCommentsUnresolvedFirst(comments)`（穩定排序，不變動原陣列）置於 `lib/commentStats.ts` 並補測試（全已解決、混合、保持穩定相對序）；切換狀態為純前端 state，不需 i18n 以外的後端改動；新增 zh-TW/en 切換鈕 label key。
+
+## 工作記錄（第一〇一輪，2026-06-26）
+
+- 工作內容：第九十九輪新增的 4 個可執行項目已全部完成，可執行項目又僅剩兩個「待使用者決定 / 待處理」項目，依 LOOP.md 第 2 條分析現有程式並對照 `docs/FUTURE_ROADMAP.md`，於 TODO.md 新增 4 個小顆粒、可單輪完成、可加測試、低風險的可執行項目（評論複製為 Markdown、複習清單複製為 Markdown、每頁分析 CSV 增列 avg_listened_ratio、評論未解決優先排序），並補掃描摘要。本輪為規畫輪，不計入 100 完成計數（計數維持 63/100）。
+- 時間：2026-06-26
+- 分支：直接於 master 更新 TODO.md（規畫輪，無程式碼變更）
