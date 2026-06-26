@@ -7261,3 +7261,16 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **縮減為 shim**（`backend/src/routes/pdfs.ts`）：由 454 行縮為 9 行，只保留 `import type { FastifyInstance }` 與委派用的 `export async function pdfRoutes(app) { return import('./pdfs/index').then((m) => m.pdfRoutes(app)); }`。
 - **安全性確認**：先確認此檔唯一的 export 是 `pdfRoutes`、沒有任何頂層副作用（無函式外的 `app.get` 等註冊）、且 shim 本身不引用檔內任何一個本地函式（只做動態 import），因此 1~450 行皆不可達。移除的重複函式（`extractYoutubeVideoId`、`streamFile`）在 `pdfs/shared.ts` 內仍有正本，呼叫端不受影響。
 - **驗證**：後端 `tsc -p tsconfig.json` build 通過，證實沒有其他程式依賴被移除的程式碼；模組解析與執行行為維持不變。淨刪 450 行。
+
+## timingSafeStringEqual 收斂為單一來源（2026-06-26）
+
+### 功能目的
+系統有多處需要比較「祕密字串」是否相符：session cookie 的 HMAC 簽章、OAuth 登入流程的 state 參數、以及 MCP 介面的 bearer token。這類比較必須用「常數時間」演算法（`crypto.timingSafeEqual`），否則攻擊者可能從「比較花了多久」推測出祕密的前綴，逐字元破解（timing side channel）。專案為此寫了 `timingSafeStringEqual`，但它被一字不差地複製在三個檔案裡（`server.ts`、`routes/auth.ts`、`services/aiSettings.ts`）。三份副本的風險在於：日後若有人只改其中一份、或在某處圖方便改回 `===`，就會在對應的祕密比較上悄悄重新開一個 timing 側通道，而其他副本看起來仍然安全。本次把它收斂成單一實作。
+
+### 使用方式
+無需任何操作，純內部重構，所有祕密比較行為不變。價值在於常數時間比較現在只有一份正本，不會因為副本漂移而在某條驗證路徑上退化。
+
+### 技術細節
+- **單一來源**（新檔 `backend/src/timingSafe.ts`）：匯出唯一的 `timingSafeStringEqual(a, b)`——以 UTF-8 buffer 比較、長度不同先回 `false`、相同長度才呼叫 `crypto.timingSafeEqual`。
+- **相容處理**：`server.ts` 與 `routes/auth.ts` 原本各自 `export` 此函式、且有測試從這兩個模組 import，因此改成從 `timingSafe.ts` re-export（`auth.ts` 內部第 80/230 行仍用到，於頂部 import 後再 `export`）；`services/aiSettings.ts` 僅內部使用（MCP token 比對），改為 import。三處的 `crypto` import 因仍有其他用途而保留。
+- **測試**：新增 `backend/test/timingSafe.test.ts` 4 個 node:test（完全相等才為 true、長度不同安全回 false 不拋錯、兩個空字串相等、UTF-8 多位元組內容比對）。此測試不依賴資料庫、可在 sandbox 直接驗證；後端 `tsc -p tsconfig.json` build 通過。既有的 auth／mcp 整合測試因需 better-sqlite3（sandbox ABI 版本不符）留待 CI 執行。
