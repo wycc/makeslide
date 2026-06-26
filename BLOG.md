@@ -7797,3 +7797,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **i18n**：新增 zh-TW/en `play.sidebar.commentsUnresolvedFirst`。
 - **測試**：`commentStats.test.ts` 補 2 個案例（混合 → 未解決在前且穩定、且不變動原陣列；全同狀態 → 順序不變）。
 - **驗證**：前端 `tsc --noEmit` 通過；`commentStats.test.ts` 與 `i18n.test.ts`（含 zh/en key 對等）全通過。
+
+## 逐字稿純文字匯出（2026-06-26）
+
+### 功能目的
+播放頁已能下載 SRT/VTT 字幕（含時間碼），但若教師或學生只想要乾淨的「整份逐字稿文字」做筆記、翻譯、餵給其他工具或張貼，帶時間碼的字幕並不方便。本項新增純文字逐字稿匯出，輸出無時間碼、逐頁分段的全文，呼應 Roadmap Phase 5 的匯出整合。
+
+### 使用方式
+在播放頁標題列的下載區，SRT/VTT 旁新增「下載逐字稿 TXT」。點擊即下載 `transcript.txt`，內容每頁前有 `# 第 N 頁` 標題、頁與頁之間以空行分隔，沒有任何時間碼。
+
+### 技術細節
+- **後端**（`backend/src/routes/pdfs/subtitles.ts`）：新增 `GET /api/pdfs/:id/subtitles.txt`。`buildPagePlainText` 優先讀取該頁原始逐字稿檔（`pageScriptPath`），缺檔時 fallback 以 `buildPageTimeline` 的句子換行接合；`buildPlainTextContent` 為每頁加 `# 第 N 頁` 標題、頁間空行並正規化結尾換行。沿用既有 `canReadPdf` 權限與 pages 查詢，回應 `text/plain; charset=utf-8` + `attachment; filename="transcript.txt"`。
+- **前端**（`frontend/src/pages/play/PlayPageHeader.tsx`）：在 SRT/VTT 下載連結後加入 TXT 下載連結；新增 zh-TW/en `play.header.downloadTxt`。
+- **測試**（`backend/test/subtitles-txt.test.ts`）：4 個案例（逐頁內容與分頁格式、無稿頁仍輸出標題、private 403、未知 PDF 404）。
+- **驗證**：前端與後端 `tsc --noEmit` 通過；`i18n.test.ts`（含 zh/en key 對等）通過。後端 handler 測試需 better-sqlite3 native module，於本機 sandbox 無法載入，留待 CI 執行。

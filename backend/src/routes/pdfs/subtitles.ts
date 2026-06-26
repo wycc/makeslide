@@ -147,6 +147,39 @@ function buildVttContent(timeline: SentenceTimelineItem[]): string {
   return lines.join('\n');
 }
 
+/**
+ * Plain text of one page's transcript (no timecodes). Prefers the raw script
+ * file; falls back to the sentence timeline joined by newlines.
+ */
+async function buildPagePlainText(pdfId: string, page: PageRecord): Promise<string> {
+  const scriptPath = pageScriptPath(pdfId, page.page_uid);
+  if (fs.existsSync(scriptPath)) {
+    try {
+      const script = (await fs.promises.readFile(scriptPath, 'utf8')).trim();
+      if (script) return script;
+    } catch {
+      // fall through to timeline-based text
+    }
+  }
+  const timeline = await buildPageTimeline(pdfId, page.page_uid, page.audio_duration_seconds);
+  return timeline.map((t) => t.text).join('\n').trim();
+}
+
+/**
+ * Build a full plain-text transcript with a `# 第 N 頁` heading per page,
+ * pages separated by a blank line.
+ */
+async function buildPlainTextContent(pdfId: string, pages: PageRecord[]): Promise<string> {
+  const blocks: string[] = [];
+  for (const page of pages) {
+    const text = await buildPagePlainText(pdfId, page);
+    blocks.push(`# 第 ${page.page_number} 頁`);
+    if (text) blocks.push(text);
+    blocks.push('');
+  }
+  return blocks.join('\n').replace(/\n+$/, '\n');
+}
+
 export async function registerSubtitleRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/pdfs/:id/subtitles.srt
   app.get('/api/pdfs/:id/subtitles.srt', async (request, reply) => {
@@ -218,6 +251,42 @@ export async function registerSubtitleRoutes(app: FastifyInstance): Promise<void
 
     reply.header('content-type', 'text/vtt; charset=utf-8');
     reply.header('content-disposition', `attachment; filename="subtitles.vtt"`);
+    reply.header('cache-control', 'no-store');
+    return reply.send(content);
+  });
+
+  // GET /api/pdfs/:id/subtitles.txt — plain-text transcript (no timecodes)
+  app.get('/api/pdfs/:id/subtitles.txt', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+
+    const row = db
+      .prepare('SELECT id, title, owner_sub, visibility FROM pdfs WHERE id = ?')
+      .get(parsed.data.id) as Pick<PdfRow, 'id' | 'title' | 'owner_sub' | 'visibility'> | undefined;
+    if (!row) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
+    }
+
+    const sub = sessionSubFromRequest(request);
+    if (!canReadPdf(sub, row)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報'));
+    }
+
+    const pages = db
+      .prepare(
+        `SELECT page_uid, page_number, audio_duration_seconds
+           FROM pages
+          WHERE pdf_id = ?
+          ORDER BY page_number ASC`,
+      )
+      .all(parsed.data.id) as PageRecord[];
+
+    const content = await buildPlainTextContent(parsed.data.id, pages);
+
+    reply.header('content-type', 'text/plain; charset=utf-8');
+    reply.header('content-disposition', `attachment; filename="transcript.txt"`);
     reply.header('cache-control', 'no-store');
     return reply.send(content);
   });
