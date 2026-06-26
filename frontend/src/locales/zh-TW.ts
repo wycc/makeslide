@@ -1328,6 +1328,8 @@ export const zhTW = {
   'play.sidebar.commentsAll': '全部',
   'play.sidebar.commentsThisPage': '此頁',
   'play.sidebar.commentsExportCsv': '匯出 CSV',
+  'play.sidebar.commentsFilterPlaceholder': '搜尋評論或作者…',
+  'play.sidebar.commentsNoMatch': '沒有符合的評論',
   'play.sidebar.commentAuthorPlaceholder': '暱稱（選填）',
   'play.sidebar.commentTextPlaceholder': '輸入評論…',
   'play.sidebar.commentPost': '送出',
