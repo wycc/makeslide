@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { csvEscape } from '../src/routes/pdfs/csv';
+import { csvEscape, withCsvBom } from '../src/routes/pdfs/csv';
 
 test('csvEscape passes through plain strings and numbers untouched', () => {
   assert.equal(csvEscape('hello'), 'hello');
@@ -36,4 +36,12 @@ test('csvEscape defuses formula injection in string values', () => {
 test('csvEscape never mangles legitimate negative numbers', () => {
   assert.equal(csvEscape(-1), '-1');
   assert.equal(csvEscape(-3.5), '-3.5');
+});
+
+test('withCsvBom prepends a UTF-8 BOM and is idempotent', () => {
+  assert.equal(withCsvBom('a,b\n1,2'), '﻿a,b\n1,2');
+  assert.equal(withCsvBom('﻿a,b'), '﻿a,b'); // already has BOM -> unchanged
+  assert.equal(withCsvBom(''), '﻿');
+  // the prepended char is exactly U+FEFF
+  assert.equal(withCsvBom('x').charCodeAt(0), 0xfeff);
 });

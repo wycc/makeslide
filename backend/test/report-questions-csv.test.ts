@@ -83,7 +83,7 @@ test('GET /api/pdfs/:id/report/questions.csv returns only the header when there 
   try {
     const resp = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}/report/questions.csv`, headers: OWNER_HEADERS });
     assert.equal(resp.statusCode, 200);
-    assert.equal(resp.body, 'question_id,question,option_count,attempt_count,correct_count,wrong_count,correct_rate,option_votes');
+    assert.equal(resp.body, '﻿question_id,question,option_count,attempt_count,correct_count,wrong_count,correct_rate,option_votes');
   } finally {
     cleanup(pdfId);
     await app.close();

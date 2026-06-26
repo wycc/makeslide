@@ -3,7 +3,7 @@ import { db } from '../../db';
 import type { PdfRow } from '../../types';
 import { decodeSession, parseCookies } from '../auth';
 import { errorResponse, IdParamSchema } from './shared';
-import { csvEscape } from './csv';
+import { csvEscape, withCsvBom } from './csv';
 import { isCorrectAnswer } from '../../services/quizCorrectness';
 import { getSyncFollowerQuestionsSnapshot } from './sync';
 
@@ -281,7 +281,7 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
     const csv = rows.join('\n');
     void reply.header('Content-Type', 'text/csv; charset=utf-8');
     void reply.header('Content-Disposition', `attachment; filename="report-${id}.csv"`);
-    return reply.code(200).send(csv);
+    return reply.code(200).send(withCsvBom(csv));
   });
 
   // Per-page learning analytics export: viewers/completion plus aggregated poll
@@ -352,7 +352,7 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
     const csv = rows.join('\n');
     void reply.header('Content-Type', 'text/csv; charset=utf-8');
     void reply.header('Content-Disposition', `attachment; filename="report-pages-${id}.csv"`);
-    return reply.code(200).send(csv);
+    return reply.code(200).send(withCsvBom(csv));
   });
 
   // Per-question quiz statistics export (one row per question).
@@ -387,7 +387,7 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
     const csv = rows.join('\n');
     void reply.header('Content-Type', 'text/csv; charset=utf-8');
     void reply.header('Content-Disposition', `attachment; filename="report-questions-${id}.csv"`);
-    return reply.code(200).send(csv);
+    return reply.code(200).send(withCsvBom(csv));
   });
 
   app.get('/api/pdfs/:id/report/students', async (request, reply) => {

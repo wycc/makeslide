@@ -8053,3 +8053,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **UI**：標題列按鈕群最前新增「↻」按鈕，`title`/`aria-label` 標示用途，點擊重跑 `loadComments`。
 - **i18n**：新增 zh-TW/en `play.sidebar.commentsRefresh`。
 - **驗證**：前端 `tsc --noEmit` 通過；`i18n.test.ts`（含 zh/en key 對等）通過。複用既有載入邏輯的 UI 按鈕、無新增可抽出純邏輯，故不另加單元測試。
+
+## CSV 匯出加 UTF-8 BOM（2026-06-26）
+
+### 功能目的
+專案的各種 CSV 匯出（評論、每頁分析、逐題統計、學生名單、投票結果、測驗結果）內容含中文。先前回傳的 CSV 沒有 BOM，使用者用 Excel 直接開啟時 Excel 常誤判編碼、把中文顯示成亂碼。本項在 CSV 前面加上 UTF-8 BOM，讓 Excel 正確辨識為 UTF-8（Roadmap Phase 5 匯出相容性）。
+
+### 使用方式
+無需操作。下載任一 CSV 後用 Excel 開啟，中文會正確顯示。其他能正確處理 UTF-8 的工具（如 Google Sheets、純文字編輯器）也照常運作（BOM 為標準做法）。
+
+### 技術細節
+- **共用工具**（`backend/src/routes/pdfs/csv.ts`）：新增 `withCsvBom(text)`，在字串前置 U+FEFF BOM；若已有 BOM 則原樣返回（冪等）。
+- **套用端點**：`comments.csv`、`report/pages.csv`、`report/questions.csv`、`report/students.csv`、`poll-results.csv`、`quiz-results.csv` 改以 `reply.send(withCsvBom(csv))` 回傳。字幕的 srt/vtt/txt 非 CSV，維持不變。
+- **測試**：`csvEscape.test.ts` 補 `withCsvBom` 案例（前置 BOM、冪等、空字串、字元為 U+FEFF）。既有 CSV handler 測試多以 `resp.body.trim().split('\n')` 取行，而 `String.trim()` 會移除 U+FEFF，故 lines-based 斷言不受影響；僅兩處精確比對整段 body 者於預期值前補 BOM。
+- **驗證**：後端 `tsc --noEmit` 通過；`csvEscape.test.ts` 7 個測試通過。CSV handler 測試需 better-sqlite3 native module，於本機 sandbox 無法載入，留待 CI 執行。

@@ -4,7 +4,7 @@ import { db } from '../../db';
 import { decodeSession, parseCookies } from '../auth';
 import type { PdfRow } from '../../types';
 import { errorResponse, IdParamSchema, PageParamSchema, nowIso } from './shared';
-import { csvEscape } from './csv';
+import { csvEscape, withCsvBom } from './csv';
 
 function sessionSub(request: FastifyRequest): string | null {
   const session = decodeSession(parseCookies(request).makeslide_session);
@@ -118,7 +118,7 @@ export async function registerCommentsRoutes(app: FastifyInstance): Promise<void
     reply.header('content-type', 'text/csv; charset=utf-8');
     reply.header('content-disposition', `attachment; filename="comments-${id}.csv"`);
     reply.header('cache-control', 'no-store');
-    return reply.send(csv);
+    return reply.send(withCsvBom(csv));
   });
 
   // GET /api/pdfs/:id/pages/:n/comments

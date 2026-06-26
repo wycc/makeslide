@@ -83,7 +83,7 @@ test('GET /api/pdfs/:id/comments.csv returns only the header when there are no c
     seedPdf(PDF_ID);
     const resp = await app.inject({ method: 'GET', url: `/api/pdfs/${PDF_ID}/comments.csv`, headers: OWNER_HEADERS });
     assert.equal(resp.statusCode, 200);
-    assert.equal(resp.body, 'page,author,text,resolved,created_at\n');
+    assert.equal(resp.body, '﻿page,author,text,resolved,created_at\n');
   } finally {
     cleanup(PDF_ID);
     await app.close();

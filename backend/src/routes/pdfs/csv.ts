@@ -31,3 +31,13 @@ export function csvEscape(value: string | number | null | undefined): string {
   }
   return s;
 }
+
+/**
+ * Prepend a UTF-8 BOM so spreadsheet apps (notably Excel) detect UTF-8 and
+ * render non-ASCII text (e.g. CJK) correctly instead of mojibake. Idempotent:
+ * a string that already starts with the BOM is returned unchanged.
+ */
+export function withCsvBom(text: string): string {
+  const BOM = '﻿';
+  return text.startsWith(BOM) ? text : BOM + text;
+}
