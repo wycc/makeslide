@@ -2213,12 +2213,17 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | 新增頁面對話框縮圖隱藏破圖：`AddPagesFromPromptModal` 頁面縮圖 `<img>` 加 `onError`（前端 img 破圖降級全面補齊）；前端 384 測試通過 | fix/add-pages-modal-img-onerror（已 merge） |
 | 2026-06-26 | 下拉焦點不觸發快捷鍵：`PlayPage` 兩處 keydown 守門加 `SELECT`（修方向鍵改下拉同時切頁的雙重動作）；前端 384 測試通過 | fix/keyboard-ignore-select（已 merge） |
 | 2026-06-26 | 評論討論串（2.9）：新增 `page_comments` DB 資料表 + index；後端 GET/POST/PATCH/DELETE 四個端點；前端 `CommentsSection`（sky 色調，顯示/新增/標記已處理/刪除）；i18n 10 個 key；9 個 node:test | feat/page-comments（已 merge） |
+| 2026-06-26 | interact tab badge 計入 reviewItems：`computeNotebookTabCounts` 加 `reviewItems?` 選用參數；`PlayPageSidebar` 主元件計算 pdfId 對應複習項目數並傳入；notebookTabs.test.ts +2 測試；前端 typecheck 通過 | feat/interact-tab-badge-review-items（已 merge） |
 
 ## 新增可執行項目（第九十八輪）
 
 - [x] interact tab badge 計入 reviewItems：`computeNotebookTabCounts` 的 `interact` tab 目前計入 bookmarks + important + polls，但遺漏了複習清單項目數（`reviewItems`，存於 localStorage）。補充：① `notebookTabs.ts` 的 `computeNotebookTabCounts` 加入 `reviewItems` 參數並納入 `interact` 計數；② `PlayPageSidebar.tsx` 呼叫時透過 `getReviewItems().filter(x => x.pdfId === pdfId)` 傳入當前 PDF 的複習項目數；③ `notebookTabs.test.ts` 補含 reviewItems 的測試案例。
+  - 修改說明（2026-06-26）：`notebookTabs.ts` 的 `computeNotebookTabCounts` 加入 `reviewItems?` 選用參數（預設 0），`interact` 計數改為 `bookmarks + important + polls + reviewItems`；`PlayPageSidebar.tsx` 主元件新增 `pdfId` 解構並計算 `reviewItemCount = getReviewItems().filter(x => x.pdfId === pdfId).length`，傳入 `computeNotebookTabCounts`；`notebookTabs.test.ts` +2 測試。前端 typecheck 通過。分支 `feat/interact-tab-badge-review-items`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 49 個完成項目（49/100，未達上限）。
 
-- [ ] 評論相對時間顯示：`CommentsSection` 的評論時間目前以 `new Date(c.created_at).toLocaleString()` 顯示完整日期，閱讀不直覺。改以相對時間（如「剛剛」、「3 分鐘前」、「2 小時前」、「昨天」、超過 3 天改回絕對日期）顯示。新增純函式 `formatRelativeTime(isoString, now?)` 至 `frontend/src/lib/formatRelativeTime.ts`，`CommentsSection` 改用之；`formatRelativeTime.test.ts` 補測試（各區間邊界）；i18n 無需改動（直接中文或英文組字串即可）。
+- [x] 評論相對時間顯示：`CommentsSection` 的評論時間目前以 `new Date(c.created_at).toLocaleString()` 顯示完整日期，閱讀不直覺。改以相對時間（如「剛剛」、「3 分鐘前」、「2 小時前」、「昨天」、超過 3 天改回絕對日期）顯示。新增純函式 `formatRelativeTime(isoString, now?)` 至 `frontend/src/lib/formatRelativeTime.ts`，`CommentsSection` 改用之；`formatRelativeTime.test.ts` 補測試（各區間邊界）；i18n 無需改動（直接中文或英文組字串即可）。
+  - 修改說明（2026-06-26）：新增 `frontend/src/lib/formatRelativeTime.ts` 純函式（<60s→剛剛、<60m→N 分鐘前、<24h→N 小時前、1天→昨天、<3天→N 天前、≥3天→toLocaleDateString）；`CommentsSection` import 並將時間 span 改用 `formatRelativeTime`，同時加 `title` 屬性保留完整日期 tooltip；`formatRelativeTime.test.ts` +7 測試（各邊界+無效輸入）；前端 typecheck 通過。分支 `feat/comment-relative-time`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 50 個完成項目（50/100，未達上限）。
 
 - [ ] 評論全覽端點：目前評論 API 只能依頁碼查詢（`GET /api/pdfs/:id/pages/:n/comments`），教師無法一次看到 PDF 所有評論。新增 `GET /api/pdfs/:id/comments`（不含 page_number）端點，以 `page_number ASC, created_at ASC` 排序回傳全部評論；`backend/test/page-comments-all.test.ts` 補 GET/403/404 測試；前端 `listAllPageComments(id)` API；在 `CommentsSection` 標題旁加入「全部」切換鈕以呈現跨頁評論清單。
 

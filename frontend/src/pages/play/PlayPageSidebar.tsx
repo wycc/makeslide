@@ -10,6 +10,7 @@ import { QualityCheckPanel } from './QualityCheckPanel';
 import { copyTextToClipboard } from '../../lib/clipboard';
 import { formatAudioDuration } from '../../lib/audioDuration';
 import { getReviewItems, removeReviewItem, type ReviewItem } from '../../lib/reviewList';
+import { formatRelativeTime } from '../../lib/formatRelativeTime';
 import { NOTEBOOK_TABS, computeNotebookTabCounts, getAdjacentNotebookTab, getEdgeNotebookTab, getStoredNotebookTab, setStoredNotebookTab, type NotebookTab } from './notebookTabs';
 
 const IMAGE_MSG_PREFIX = '[image] ';
@@ -156,7 +157,7 @@ function CommentsSection() {
               <div className="flex items-start gap-1.5">
                 <div className="min-w-0 flex-1">
                   <span className="font-medium text-sky-200">{c.author}</span>
-                  <span className="ml-1.5 text-sky-400/50 text-[10px]">{new Date(c.created_at).toLocaleString()}</span>
+                  <span className="ml-1.5 text-sky-400/50 text-[10px]" title={new Date(c.created_at).toLocaleString()}>{formatRelativeTime(c.created_at)}</span>
                   <p className={`mt-0.5 break-words text-sky-100/80 ${c.resolved ? 'line-through text-slate-400' : ''}`}>{c.text}</p>
                 </div>
                 <div className="flex shrink-0 flex-col gap-0.5">
