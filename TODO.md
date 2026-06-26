@@ -2575,7 +2575,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`RemoteControllerPage` import `formatPollResultsMarkdown` 與 `copyTextToClipboard`，新增 `pollCopyMsg` state 與 `handleCopyPollResults`（labels：heading 用 `remote.pollControl.title`、votesUnit 用既有 `remote.votesSuffix`）；poll 控制區標題列改左右排版，右側在 `polls.length > 0` 時顯示「複製結果」按鈕，以 `copyTextToClipboard` 複製、顯示 2 秒 `copyDone`/`copyFail` 提示。新增 zh-TW/en `remote.pollControl.copyResults`/`copyDone`/`copyFail`。復用既有具測試的 `formatPollResultsMarkdown`（`pollResultsMarkdown.test.ts`），不另加測試。前端 `tsc --noEmit` 通過、`i18n.test.ts`（含 zh/en 對等）通過。分支 `feat/remote-poll-copy`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 98 個完成項目（98/100，未達上限）。
 
-- [ ] 評論點作者名快速過濾（可用性，小顆粒）：`CommentsSection` 每則評論的作者名目前為純文字。改為可點擊：點擊後把 `filterQuery` 設為該作者名（`filterComments` 已比對 author，會即時過濾）；作者名加上可點樣式與 `title` 提示。純前端、不動後端、不需新 i18n（沿用既有過濾）。
+- [x] 評論點作者名快速過濾（可用性，小顆粒）：`CommentsSection` 每則評論的作者名目前為純文字。改為可點擊：點擊後把 `filterQuery` 設為該作者名（`filterComments` 已比對 author，會即時過濾）；作者名加上可點樣式與 `title` 提示。純前端、不動後端、不需新 i18n（沿用既有過濾）。
+  - 修改說明（2026-06-26）：`CommentsSection` 每則評論的作者名由 `<span>` 改為 `<button>`，`onClick` 將 `filterQuery` 設為該作者名（`filterComments` 既已比對 author，故即時過濾出該作者的評論）；加 hover 底線樣式與 `title` 提示。實作時為提示加了一個小 i18n key `play.sidebar.commentsFilterByAuthor`（含 `{author}` 佔位，zh-TW/en），略多於原「不需新 i18n」之預估但提升可發現性。純前端、不動後端。前端 `tsc --noEmit` 通過、`i18n.test.ts`（含 zh/en 對等及佔位符集合檢查）通過；事件處理 UI、過濾邏輯由既有 `commentFilter.test.ts` 覆蓋，不另加測試。分支 `feat/comment-author-filter`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 99 個完成項目（99/100，未達上限；下一個完成即達 100 上限）。
 
 - [ ] 首頁「清除所有篩選」按鈕（可用性，小顆粒）：`HomePage` 同時有分類（`categoryFilter`）、標題搜尋（`titleFilter`）、最愛（`favoritesOnly`）三種篩選，但無一鍵重設。在工具列或結果摘要附近，當任一篩選為非預設（分類非 `__all__` 或有搜尋字或最愛開啟）時顯示「清除篩選」按鈕，點擊重設三者（`setCategoryFilter('__all__')`、`setTitleFilter('')`、`setFavoritesOnly(false)`，並同步清除對應 localStorage）；新增 zh-TW/en i18n key。純前端、不動後端。
 

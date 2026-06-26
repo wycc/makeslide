@@ -299,7 +299,14 @@ function CommentsSection() {
                       {t('play.sidebar.reviewListPage').replace('{n}', String(c.page_number))}
                     </button>
                   )}
-                  <span className="font-medium text-sky-200">{c.author}</span>
+                  <button
+                    type="button"
+                    onClick={() => setFilterQuery(c.author)}
+                    className="font-medium text-sky-200 hover:text-sky-100 hover:underline"
+                    title={t('play.sidebar.commentsFilterByAuthor').replace('{author}', c.author)}
+                  >
+                    {c.author}
+                  </button>
                   <span className="ml-1.5 text-sky-400/50 text-[10px]" title={new Date(c.created_at).toLocaleString()}>{formatRelativeTime(c.created_at, relativeTimeLabels)}</span>
                   {editingId === c.id ? (
                     <div className="mt-0.5 space-y-1">
