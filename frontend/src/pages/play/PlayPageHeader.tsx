@@ -595,14 +595,14 @@ export function PlayPageHeader() {
             onClick={() => setMobileMenuOpen((open) => !open)}
             className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 hover:bg-slate-800 md:hidden"
             aria-expanded={mobileMenuOpen}
-            aria-label="開啟播放頁選單"
+            aria-label={t('play.header.menuToggle')}
           >
             <span className="text-lg leading-none">☰</span>
-            <span>選單</span>
+            <span>{t('play.header.menu')}</span>
           </button>
           <nav className={`${mobileMenuOpen ? 'grid' : 'hidden'} grid-cols-1 gap-2 rounded-xl border border-slate-700 bg-slate-950 p-3 shadow-xl md:flex md:border-0 md:bg-transparent md:p-0 md:shadow-none`} aria-label="PlayPage actions">
           {!isReadOnlyProcessing ? (
-          <HeaderDropdown id="metadata" label="資訊" accent="slate" open={openMenuId === 'metadata'} onOpenChange={setOpenMenuId}>
+          <HeaderDropdown id="metadata" label={t('play.header.groupInfo')} accent="slate" open={openMenuId === 'metadata'} onOpenChange={setOpenMenuId}>
             <div className="grid gap-2">
               <input
                 type="text"
@@ -693,7 +693,7 @@ export function PlayPageHeader() {
             </div>
           </HeaderDropdown>
           ) : null}
-          <HeaderDropdown id="playback" label="播放" accent="slate" open={openMenuId === 'playback'} onOpenChange={setOpenMenuId}>
+          <HeaderDropdown id="playback" label={t('play.header.groupPlayback')} accent="slate" open={openMenuId === 'playback'} onOpenChange={setOpenMenuId}>
             <ShortcutsButton />
           <button
             type="button"
@@ -763,7 +763,7 @@ export function PlayPageHeader() {
             ⚙️ {t('play.header.settings')}
           </button>
           </HeaderDropdown>
-          <HeaderDropdown id="generate" label="生成" accent="amber" open={openMenuId === 'generate'} onOpenChange={setOpenMenuId}>
+          <HeaderDropdown id="generate" label={t('play.header.groupGenerate')} accent="amber" open={openMenuId === 'generate'} onOpenChange={setOpenMenuId}>
           <button
             type="button"
             onClick={() => void openImageStyleDialog()}
@@ -815,7 +815,7 @@ export function PlayPageHeader() {
             </button>
           ) : null}
           </HeaderDropdown>
-          <HeaderDropdown id="download" label="下載" accent="cyan" open={openMenuId === 'download'} onOpenChange={setOpenMenuId}>
+          <HeaderDropdown id="download" label={t('play.header.groupDownload')} accent="cyan" open={openMenuId === 'download'} onOpenChange={setOpenMenuId}>
           {videoUrl ? (
             <a
               href={videoUrl}
@@ -901,7 +901,7 @@ export function PlayPageHeader() {
             {t('play.header.downloadH5p')}
           </a>
           </HeaderDropdown>
-          <HeaderDropdown id="script" label="逐字稿" accent="violet" open={openMenuId === 'script'} onOpenChange={setOpenMenuId}>
+          <HeaderDropdown id="script" label={t('play.header.groupScript')} accent="violet" open={openMenuId === 'script'} onOpenChange={setOpenMenuId}>
           <button
             type="button"
             disabled={!currentPage || !scripts[currentPage.page_number]}
@@ -943,7 +943,7 @@ export function PlayPageHeader() {
             {coursePackageBusy ? t('play.header.coursePackageGenerating') : t('play.header.downloadCoursePackage')}
           </button>
           </HeaderDropdown>
-          <HeaderDropdown id="share" label="分享" accent="emerald" open={openMenuId === 'share'} onOpenChange={setOpenMenuId}>
+          <HeaderDropdown id="share" label={t('play.header.groupShare')} accent="emerald" open={openMenuId === 'share'} onOpenChange={setOpenMenuId}>
           <button
             type="button"
             onClick={() => void handleSyncToGithub()}
