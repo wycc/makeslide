@@ -7538,3 +7538,21 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 ### 技術細節
 - **守門條件**（`frontend/src/pages/PlayPage.tsx`）：播放頁有兩個 `keydown` 處理器（一般快捷鍵與另一組），兩者開頭都會檢查 `ev.target` 是否為表單/可編輯元素而提早 return。在這兩處的判斷式中，於 `INPUT`／`TEXTAREA`／`isContentEditable` 之外補上 `target.tagName === 'SELECT'`（以一次 replace-all 同步處理兩處，避免只改一處造成不一致）。
 - **驗證**：前端 384 個測試與 `tsc --noEmit` typecheck 全通過。
+
+## 投票結果橫條圖（2026-06-26）
+
+### 功能目的
+即時投票（Realtime Poll）顯示結果時，過去在部分畫面只用純文字呈現各選項票數，例如「選項 A：3 票 · 50%」。純文字不易讓觀眾與講者一眼比較各選項的相對高低。本次為兩個尚未有視覺化的位置補上 CSS 橫條圖，讓票數分布一目了然，並與播放頁側邊欄、全螢幕小型 overlay 既有的橫條圖樣式一致。
+
+涵蓋的兩處：
+- **全螢幕大型 Realtime Poll overlay**：投票進行中投影到全場的大型結果卡片，原本各選項僅顯示「N 票 · X%」文字。
+- **遙控器（RemoteControllerPage）投票控制區**：原本每個 poll 只顯示總票數，看不到逐選項分布；現在遙控端操作者也能即時看到每個選項的票數與佔比。
+
+### 使用方式
+無需任何操作。當投票開放結果顯示時，每個選項文字下方會出現一條橫條，長度對應該選項佔總票數的比例（`ratio = 票數 / 總票數`），右側仍保留「N 票 · X%」數字。票數變動時橫條會以短動畫平滑過渡。
+
+### 技術細節
+- **全螢幕 overlay**（`frontend/src/pages/play/PlayPageFullscreen.tsx`）：在 `syncPollShowResults` 為真時，於每個選項下方加入 `h-1.5` 圓角底條（`bg-slate-800`）+ `bg-cyan-400` 填充條，寬度為 `ratio%`，加 `transition-[width] duration-300`；`ratio` 改為每個選項計算一次（取代原本內嵌兩次的百分比計算）。
+- **遙控器**（`frontend/src/pages/RemoteControllerPage.tsx`）：poll 卡片外層由 `flex items-center` 改為直式容器，原標題／狀態／開關按鈕收進上方 row；下方新增逐選項結果區（選項文字 + 「N 票 · X%」+ `h-1` 橫條圖），沿用既有 `remote.votesSuffix` i18n key。
+- **設計取捨**：不引入任何 chart library，純以 Tailwind class 與行內 `width` style 實作；不調整 `PagePoll`／`PagePollOption` 資料型別，亦未新增 i18n key。其餘原本已有橫條圖的位置（`PlayPageSidebar`、全螢幕小型 overlay）維持不變。
+- **驗證**：前端 `tsc --noEmit` typecheck 全通過。

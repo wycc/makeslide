@@ -407,31 +407,55 @@ export default function RemoteControllerPage() {
             {polls.map((poll) => (
               <div
                 key={poll.id}
-                className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-900 px-4 py-3"
+                className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-3"
               >
-                <div className="flex-1 min-w-0">
-                  <p className="truncate text-sm text-slate-200">{poll.question}</p>
-                  <p className="mt-0.5 text-xs text-slate-500">
-                    {poll.is_active ? t('remote.pollControl.statusOpen') : t('remote.pollControl.statusClosed')}
-                    {' · '}{poll.total_votes}{t('remote.votesSuffix')}
-                  </p>
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate text-sm text-slate-200">{poll.question}</p>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      {poll.is_active ? t('remote.pollControl.statusOpen') : t('remote.pollControl.statusClosed')}
+                      {' · '}{poll.total_votes}{t('remote.votesSuffix')}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={togglingPollId === poll.id}
+                    onClick={() => void handleTogglePoll(poll)}
+                    className={`flex-shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${
+                      poll.is_active
+                        ? 'bg-rose-600/80 text-white active:bg-rose-700'
+                        : 'bg-emerald-600/80 text-white active:bg-emerald-700'
+                    }`}
+                  >
+                    {togglingPollId === poll.id
+                      ? '…'
+                      : poll.is_active
+                        ? t('remote.pollControl.close')
+                        : t('remote.pollControl.open')}
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  disabled={togglingPollId === poll.id}
-                  onClick={() => void handleTogglePoll(poll)}
-                  className={`flex-shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${
-                    poll.is_active
-                      ? 'bg-rose-600/80 text-white active:bg-rose-700'
-                      : 'bg-emerald-600/80 text-white active:bg-emerald-700'
-                  }`}
-                >
-                  {togglingPollId === poll.id
-                    ? '…'
-                    : poll.is_active
-                      ? t('remote.pollControl.close')
-                      : t('remote.pollControl.open')}
-                </button>
+                {poll.options.length > 0 ? (
+                  <div className="mt-2 flex flex-col gap-1.5">
+                    {poll.options.map((option, idx) => {
+                      const ratio = poll.total_votes > 0
+                        ? Math.round((option.votes / poll.total_votes) * 100)
+                        : 0;
+                      return (
+                        <div key={`${poll.id}-${idx}`}>
+                          <div className="flex items-center justify-between gap-2 text-xs text-slate-300">
+                            <span className="truncate">{option.text}</span>
+                            <span className="flex-shrink-0 font-mono text-[10px] text-slate-400">
+                              {option.votes}{t('remote.votesSuffix')} · {ratio}%
+                            </span>
+                          </div>
+                          <div className="mt-0.5 h-1 overflow-hidden rounded-full bg-slate-800">
+                            <div className="h-full rounded-full bg-cyan-400 transition-[width] duration-300" style={{ width: `${ratio}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
