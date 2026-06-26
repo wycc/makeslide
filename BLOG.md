@@ -8137,3 +8137,18 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **元件**（`frontend/src/pages/play/PlayPageHeader.tsx`）：新增 `CopyLinkButton`（自帶提示 state，沿用既有 `CopyAllQuestionsButton` 模式），以 `copyTextToClipboard(shareUrl || window.location.href)` 複製並顯示 2 秒結果；置於分享下拉內、原生分享按鈕之前。
 - **i18n**：新增 zh-TW/en `play.header.copyLink`、`copyLinkDone`、`copyLinkFail`。
 - **驗證**：前端 `tsc --noEmit` 通過；`i18n.test.ts`（含 zh/en key 對等）通過。複用既有 clipboard API 的 UI 按鈕、無新增可抽出純邏輯，故不另加單元測試。
+
+## 重點頁導覽快捷鍵（N / Shift+N）（2026-06-26）
+
+### 功能目的
+播放頁可用 `I` 把目前頁標記為重點頁，但沒有在重點頁之間快速跳轉的方式。本項新增 `N`／`Shift+N` 在重點頁間環狀導覽，與書籤的 `B`／`Shift+B` 對稱。同時把書籤導覽的純函式泛化，讓書籤與重點頁共用同一套已測邏輯。
+
+### 使用方式
+播放時按 `N` 跳到下一個重點頁、`Shift+N` 跳到上一個重點頁（皆環狀，到頭/尾會繞回另一端）；沒有任何重點頁時不作用。快捷鍵說明面板也新增了 `N`／`Shift + N` 兩列。
+
+### 技術細節
+- **泛化純函式**（`frontend/src/lib/pageListNav.ts`，由 `bookmarkNav.ts` 改名而來）：`nextPageInList`/`prevPageInList` 在一份 1-based 頁碼清單中環狀找下一個/上一個（排序去重、空清單回 null）。書籤與重點頁共用。
+- **鍵盤**（`frontend/src/pages/PlayPage.tsx`）：`B`/`Shift+B` 改呼叫泛化函式；新增 `N`/`Shift+N` 以 `importantPages` 導覽；並把 `importantPages`/`bookmarks` 補入鍵盤 effect 的相依，避免讀到舊值。
+- **說明面板**（`frontend/src/pages/play/PlayPageHeader.tsx`）：補 `N`/`Shift + N` 兩列；新增 zh-TW/en `play.shortcuts.nextImportant`/`prevImportant`。
+- **測試**：測試檔隨改名同步（`pageListNav.test.ts`，4 案例）。
+- **驗證**：前端 `tsc --noEmit` 通過；`pageListNav.test.ts` 與 `i18n.test.ts`（含 zh/en key 對等）全通過。

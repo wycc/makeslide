@@ -1823,6 +1823,8 @@ export const en = {
   'play.shortcuts.gotoPage': 'Go to page',
   'play.shortcuts.nextBookmark': 'Jump to next bookmark (cycles)',
   'play.shortcuts.prevBookmark': 'Jump to previous bookmark (cycles)',
+  'play.shortcuts.nextImportant': 'Jump to next important page (cycles)',
+  'play.shortcuts.prevImportant': 'Jump to previous important page (cycles)',
   'play.shortcuts.toggleImportant': 'Mark / unmark as important page',
   'play.shortcuts.close': 'Close',
   'play.gotoPageDialog': 'Go to page',

@@ -80,6 +80,8 @@ function ShortcutsButton() {
     ['G', t('play.shortcuts.gotoPage')],
     ['B', t('play.shortcuts.nextBookmark')],
     ['Shift + B', t('play.shortcuts.prevBookmark')],
+    ['N', t('play.shortcuts.nextImportant')],
+    ['Shift + N', t('play.shortcuts.prevImportant')],
     ['I', t('play.shortcuts.toggleImportant')],
     ['W', t('play.shortcuts.toggleDraw')],
     ['P', t('play.shortcuts.pollControl')],

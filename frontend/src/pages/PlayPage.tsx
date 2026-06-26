@@ -37,7 +37,7 @@ import {
 } from '../lib/animationSpec';
 import { debugLog, debugWarn } from '../lib/debugLog';
 import { formatGeneratingStatusLabel } from '../lib/statusLabels';
-import { nextBookmarkPage, prevBookmarkPage } from '../lib/bookmarkNav';
+import { nextPageInList, prevPageInList } from '../lib/pageListNav';
 import { splitScriptIntoSentences, buildSentenceTimeline, type SentenceTimelineItem } from '../lib/subtitles';
 import { type DrawingCanvasHandle, type DrawingData, type DrawingStroke } from '../components/DrawingCanvas';
 import { useVersionHistory } from './play/useVersionHistory';
@@ -1631,8 +1631,18 @@ export default function PlayPage() {
           const currentPageNumber = currentIdx + 1;
           // Shift+B 跳到上一個書籤，B 跳到下一個（皆環狀）。
           const target = ev.shiftKey
-            ? prevBookmarkPage(bookmarks, currentPageNumber)
-            : nextBookmarkPage(bookmarks, currentPageNumber);
+            ? prevPageInList(bookmarks, currentPageNumber)
+            : nextPageInList(bookmarks, currentPageNumber);
+          if (target !== null) setCurrentIdx(target - 1);
+        }
+      } else if (ev.key.toLowerCase() === 'n') {
+        if (importantPages.length > 0) {
+          ev.preventDefault();
+          const currentPageNumber = currentIdx + 1;
+          // Shift+N 跳到上一個重點頁，N 跳到下一個（皆環狀）。
+          const target = ev.shiftKey
+            ? prevPageInList(importantPages, currentPageNumber)
+            : nextPageInList(importantPages, currentPageNumber);
           if (target !== null) setCurrentIdx(target - 1);
         }
       } else if (ev.key.toLowerCase() === 'i') {
@@ -1671,7 +1681,7 @@ export default function PlayPage() {
     };
     window.addEventListener('keydown', onKey, { capture: true });
     return () => window.removeEventListener('keydown', onKey, { capture: true });
-  }, [playPause, goPrev, goNext, navigate, imageOnlyFullscreen, isLockedFullscreen, syncEnabled, syncRole, canUseDrawingTools, handleAiAnswerFollowerQuestions, fullscreenPollControlOpen, drawingMode, gotoPageOpen, isPlaying]);
+  }, [playPause, goPrev, goNext, navigate, imageOnlyFullscreen, isLockedFullscreen, syncEnabled, syncRole, canUseDrawingTools, handleAiAnswerFollowerQuestions, fullscreenPollControlOpen, drawingMode, gotoPageOpen, isPlaying, importantPages, bookmarks]);
 
   // ---- Fullscreen API integration ----
   // 編輯版面、動畫編輯版面，以及透過分享連結鎖定的全螢幕都不進入瀏覽器原生全螢幕：
