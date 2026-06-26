@@ -6,6 +6,7 @@ import { formatAudioDuration } from '../lib/audioDuration';
 import { formatRelativeTime, buildRelativeTimeLabels } from '../lib/relativeTime';
 import { createPdfShare } from '../lib/api/pdfs';
 import { copyTextToClipboard } from '../lib/clipboard';
+import { shouldShowCoverImage } from './pdfCardCover';
 
 const PROGRESS_LABEL_KEYS: Record<string, Parameters<ReturnType<typeof useI18n>['t']>[0]> = {
   rendering: 'progress.rendering',
@@ -71,6 +72,7 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExpo
   const [tagInput, setTagInput] = useState('');
   const [isSavingTags, setIsSavingTags] = useState(false);
   const [copyShareStatus, setCopyShareStatus] = useState<'idle' | 'ok' | 'fail'>('idle');
+  const [failedCoverSrc, setFailedCoverSrc] = useState<string | null>(null);
   // `uploaded` / `processing` 都允許刪除；
   // `isProcessing` 僅用於限制「複製」與「改類別」這類非刪除操作。
   const isProcessing = pdf.status === 'processing';
@@ -203,11 +205,12 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExpo
     >
       {/* Cover */}
       <div className="relative aspect-[4/3] w-full bg-slate-800">
-        {coverSrc ? (
+        {shouldShowCoverImage(coverSrc, failedCoverSrc) ? (
           <img
             src={coverSrc}
             alt={pdf.title ?? pdf.id}
             loading="lazy"
+            onError={() => setFailedCoverSrc(coverSrc)}
             className="h-full w-full object-cover"
           />
         ) : (
