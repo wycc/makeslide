@@ -8081,3 +8081,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **收斂**：`PlayPageFullscreen.tsx`（兩處 overlay）、`PlayPageSidebar.tsx`（投票橫條圖）、`pollResultsMarkdown.ts`（`formatPollResultsMarkdown`）皆改呼叫此函式，輸出逐字相同。
 - **測試**：`pollPercent.test.ts` 4 個案例（零票/負總票回 0、整除、四捨五入兩向、12.5→13）。
 - **驗證**：前端 `tsc --noEmit` 通過；`pollPercent.test.ts` 與 `pollResultsMarkdown.test.ts` 全通過。
+
+## 抽出筆記複製為 Markdown 純函式（2026-06-26）
+
+### 功能目的
+播放頁的「複製全部筆記」會把各頁筆記組成 Markdown，但這段邏輯先前直接寫在 `handleCopyAllNotes` 裡，無法單元測試。本項把它抽成純函式並補測試，是純粹的可測性重構，使用者體驗不變。
+
+### 使用方式
+無可見變化。「複製全部筆記」輸出格式與先前相同（每頁有筆記者一段 `## 第 N 頁\n筆記`），全無筆記時仍顯示「無筆記可複製」。
+
+### 技術細節
+- **純函式**（`frontend/src/lib/notesMarkdown.ts`）：`formatNotesMarkdown(pages, labels)` 逐頁輸出筆記段落（`page_notes` trim 後非空才納入、段落間空行、依輸入順序），頁碼前綴由 `NotesMarkdownLabels` 注入以保持純粹可測；全無筆記回空字串。
+- **元件**（`frontend/src/pages/play/PlayPageSidebar.tsx`）：`handleCopyAllNotes` 改呼叫該函式，空字串時維持「無筆記可複製」提示、否則複製；輸出與原本逐字相同。
+- **測試**（`notesMarkdown.test.ts`）：3 個案例（全無筆記/空白回空、跳過無筆記頁與多段、trim）。
+- **驗證**：前端 `tsc --noEmit` 通過；新測試通過；無 i18n key 變更。

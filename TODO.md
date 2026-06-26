@@ -2481,7 +2481,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 ## 新增可執行項目（第一一二輪，2026-06-26）
 
-- [ ] 抽出筆記複製為 Markdown 純函式（可用性 / 可測性）：`PlayPageSidebar` 的 `handleCopyAllNotes` 內嵌把各頁 `page_notes` 組成 Markdown 的邏輯。抽成 `frontend/src/lib/` 純函式 `formatNotesMarkdown(pages, labels)`（每頁有筆記者輸出 `## {pagePrefix} {n}\n{note}`、依頁序、`page_notes` trim 後非空才納入、全空回空字串；labels 注入頁碼前綴）並補單元測試（空、單頁、跳過無筆記頁、trim）；元件改呼叫之（行為不變，空清單仍顯示「無筆記可複製」提示）。純前端。
+- [x] 抽出筆記複製為 Markdown 純函式（可用性 / 可測性）：`PlayPageSidebar` 的 `handleCopyAllNotes` 內嵌把各頁 `page_notes` 組成 Markdown 的邏輯。抽成 `frontend/src/lib/` 純函式 `formatNotesMarkdown(pages, labels)`（每頁有筆記者輸出 `## {pagePrefix} {n}\n{note}`、依頁序、`page_notes` trim 後非空才納入、全空回空字串；labels 注入頁碼前綴）並補單元測試（空、單頁、跳過無筆記頁、trim）；元件改呼叫之（行為不變，空清單仍顯示「無筆記可複製」提示）。純前端。
+  - 修改說明（2026-06-26）：新增 `frontend/src/lib/notesMarkdown.ts` 之純函式 `formatNotesMarkdown<T>(pages, labels)`，逐頁輸出 `## {pagePrefix} {n}\n{note}`（`page_notes` trim 後非空才納入、段落間空行、依輸入順序、全無回空字串），頁碼前綴由 `NotesMarkdownLabels` 注入以保純粹可測。`handleCopyAllNotes` 改呼叫之（傳入 `{ pagePrefix: t('play.sidebar.copyAllNotesPagePrefix') }`），空字串時維持顯示「無筆記可複製」、否則複製；輸出與原內嵌邏輯逐字相同、行為不變。新增 `notesMarkdown.test.ts` 3 測試（全無筆記/空白回空、跳過無筆記頁與多段、trim）。前端 `tsc --noEmit` 通過、新測試通過；無 i18n key 變更。分支 `feat/notes-markdown-helper`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 88 個完成項目（88/100，未達上限）。
 
 - [ ] 抽出書籤導覽純函式並加「上一個書籤」快捷鍵（可用性 / 可測性）：`PlayPage` 的 `B` 鍵以內嵌邏輯跳到「下一個書籤」（`sorted.find(n > current) ?? sorted[0]`）。抽成 `frontend/src/lib/` 純函式 `nextBookmarkPage(bookmarks, currentPage)` 與 `prevBookmarkPage(bookmarks, currentPage)`（皆環狀、回 1-based 頁碼或 null；排序去重）並補測試（環繞、邊界、空清單、重複）；`B` 改用 `nextBookmarkPage`，新增 `Shift+B` 用 `prevBookmarkPage`；於快捷鍵說明面板（`PlayPageHeader` 的 `shortcuts`）加入 `Shift+B` 一列、補 zh-TW/en 說明 key。純前端。
 
