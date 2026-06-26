@@ -2472,3 +2472,25 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - 工作內容：第一〇八輪新增的 4 個可執行項目已全部完成，可執行項目又僅剩兩個「待使用者決定 / 待處理」項目，依 LOOP.md 第 2 條（並記取第一〇七輪教訓，先 grep 驗證不存在）新增 4 個小顆粒、可單輪完成、可加測試、主題分散的可執行項目（報告摘要下載為 Markdown 檔、評論輸入 Ctrl/⌘+Enter 送出、評論清單手動重新整理、字幕/逐字稿下載檔名帶簡報標題），並補掃描摘要。本輪為規畫輪，不計入 100 完成計數（計數維持 81/100）。
 - 時間：2026-06-26
 - 分支：直接於 master 更新 TODO.md（規畫輪，無程式碼變更）
+
+## 掃描摘要（第一一二輪，2026-06-26）
+
+- 觸發原因：第一一〇輪新增的 4 個可執行項目已全數完成（82~85），TODO.md 又只剩兩個「待使用者決定 / 待處理」項目。依 LOOP.md 第 2 條，先 grep 驗證「不存在」再補新項目。
+- 現況觀察（皆已驗證）：頁面筆記「複製全部」的 Markdown 組裝邏輯內嵌於 `handleCopyAllNotes`、無測試；書籤只有「下一個」(`B`)、其導覽計算內嵌、無「上一個」快捷鍵；CSV 匯出端點皆未加 UTF-8 BOM（中文於 Excel 開啟易亂碼）；投票百分比 `Math.round(votes/total*100)` 在多處（`PlayPageFullscreen`/`PlayPageSidebar`）重複內嵌、無共用純函式。`csvEscape` 已有測試。
+- 取材方向：分散主題（可測性重構 ×2、鍵盤快捷鍵、後端 Excel 相容），維持「小顆粒、可單輪完成、可加測試、低風險」。
+
+## 新增可執行項目（第一一二輪，2026-06-26）
+
+- [ ] 抽出筆記複製為 Markdown 純函式（可用性 / 可測性）：`PlayPageSidebar` 的 `handleCopyAllNotes` 內嵌把各頁 `page_notes` 組成 Markdown 的邏輯。抽成 `frontend/src/lib/` 純函式 `formatNotesMarkdown(pages, labels)`（每頁有筆記者輸出 `## {pagePrefix} {n}\n{note}`、依頁序、`page_notes` trim 後非空才納入、全空回空字串；labels 注入頁碼前綴）並補單元測試（空、單頁、跳過無筆記頁、trim）；元件改呼叫之（行為不變，空清單仍顯示「無筆記可複製」提示）。純前端。
+
+- [ ] 抽出書籤導覽純函式並加「上一個書籤」快捷鍵（可用性 / 可測性）：`PlayPage` 的 `B` 鍵以內嵌邏輯跳到「下一個書籤」（`sorted.find(n > current) ?? sorted[0]`）。抽成 `frontend/src/lib/` 純函式 `nextBookmarkPage(bookmarks, currentPage)` 與 `prevBookmarkPage(bookmarks, currentPage)`（皆環狀、回 1-based 頁碼或 null；排序去重）並補測試（環繞、邊界、空清單、重複）；`B` 改用 `nextBookmarkPage`，新增 `Shift+B` 用 `prevBookmarkPage`；於快捷鍵說明面板（`PlayPageHeader` 的 `shortcuts`）加入 `Shift+B` 一列、補 zh-TW/en 說明 key。純前端。
+
+- [ ] CSV 匯出加 UTF-8 BOM（Roadmap Phase 5 / 相容性）：各 CSV 端點（`comments.csv`、`report/pages.csv`、`report/questions.csv`、`report/students.csv`、`poll-results.csv`、`quiz-results.csv`）目前直接回傳純文字，Excel 開啟含中文時易誤判編碼而亂碼。於回傳前統一在 CSV 字串前置 UTF-8 BOM（`﻿`）。建議抽一個共用小工具（如 `csv.ts` 內 `withCsvBom(text)`）並逐端點套用；更新既有相關 node:test 的 body 斷言（改以 `.replace(/^﻿/, '')` 或在預期值前加 BOM）。後端小改 + 測試更新。
+
+- [ ] 抽出投票百分比計算純函式（可用性 / 可測性）：投票結果百分比 `total > 0 ? Math.round(votes/total*100) : 0` 在 `PlayPageFullscreen`、`PlayPageSidebar` 等多處重複內嵌。抽成 `frontend/src/lib/` 純函式 `pollOptionPercent(votes, total)`（total ≤ 0 回 0、四捨五入整數）並補測試（零票、整除、四捨五入、總票為 0）；將重複處改呼叫之（行為不變）。純前端、降低重複。
+
+## 工作記錄（第一一二輪，2026-06-26）
+
+- 工作內容：第一一〇輪新增的 4 個可執行項目已全部完成，可執行項目又僅剩兩個「待使用者決定 / 待處理」項目，依 LOOP.md 第 2 條（先 grep 驗證不存在）新增 4 個小顆粒、可單輪完成、可加測試、主題分散的可執行項目（抽出筆記複製為 Markdown 純函式、抽出書籤導覽純函式並加 Shift+B、CSV 匯出加 UTF-8 BOM、抽出投票百分比計算純函式），並補掃描摘要。本輪為規畫輪，不計入 100 完成計數（計數維持 85/100）。
+- 時間：2026-06-26
+- 分支：直接於 master 更新 TODO.md（規畫輪，無程式碼變更）
