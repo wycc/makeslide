@@ -1341,6 +1341,7 @@ export const zhTW = {
   'play.sidebar.commentsResolvedTag': '已解決',
   'play.sidebar.commentsUnresolvedFirst': '未解決優先',
   'play.sidebar.commentsResolveAll': '全部標記已解決',
+  'play.sidebar.commentsRefresh': '重新整理評論',
   'play.sidebar.commentsUnresolvedTitle': '未解決 {unresolved} / 共 {total} 則',
   'play.sidebar.commentsFilterPlaceholder': '搜尋評論或作者…',
   'play.sidebar.commentsNoMatch': '沒有符合的評論',

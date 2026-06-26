@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useState, useEffect, useCallback, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../../i18n';
 import { debugLog, debugWarn } from '../../lib/debugLog';
@@ -107,14 +107,14 @@ function CommentsSection() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadComments = useCallback(() => {
     if (!pdfId || !currentPage) return;
-    if (showAll) {
-      listAllComments(pdfId).then(setComments).catch(() => setComments([]));
-    } else {
-      listPageComments(pdfId, currentPage.page_number).then(setComments).catch(() => setComments([]));
-    }
+    const fetcher = showAll ? listAllComments(pdfId) : listPageComments(pdfId, currentPage.page_number);
+    fetcher.then(setComments).catch(() => setComments([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pdfId, currentPage?.page_number, showAll]);
+
+  useEffect(() => { loadComments(); }, [loadComments]);
 
   if (!pdfId || !currentPage) return null;
 
@@ -209,6 +209,15 @@ function CommentsSection() {
             )}
           </h2>
           <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => loadComments()}
+              className="rounded border border-sky-800/40 px-2 py-0.5 text-[10px] text-sky-400/80 hover:text-sky-300"
+              title={t('play.sidebar.commentsRefresh')}
+              aria-label={t('play.sidebar.commentsRefresh')}
+            >
+              ↻
+            </button>
             {visibleComments.length > 0 && (
               <button
                 type="button"

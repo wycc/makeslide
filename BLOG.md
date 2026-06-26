@@ -8039,3 +8039,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **快捷鍵**：textarea 的 `onKeyDown` 在 `(ctrlKey || metaKey) && key === 'Enter'` 時 `preventDefault` 並 `submitComment()`，並以 `title` 標示快捷鍵。
 - **i18n**：新增 zh-TW/en `play.sidebar.commentSubmitHint`。
 - **驗證**：前端 `tsc --noEmit` 通過；`i18n.test.ts`（含 zh/en key 對等）通過。事件處理 UI、無新增可抽出純邏輯，故不另加單元測試。
+
+## 評論清單手動重新整理（2026-06-26）
+
+### 功能目的
+頁面評論先前只在開啟、換頁或切換「全部/此頁」時才載入，協作情境下別人新增的評論不會即時出現，得切頁再切回來才看得到。本項加入「重新整理」按鈕，讓教師隨時手動拉取最新評論。
+
+### 使用方式
+在「頁面評論」標題列點「↻」即重新載入目前的評論清單（依目前的「全部/此頁」模式）。
+
+### 技術細節
+- **重構**（`frontend/src/pages/play/PlayPageSidebar.tsx` 的 `CommentsSection`）：把原本內嵌於 `useEffect` 的載入邏輯抽成 `loadComments`（`useCallback`，依 `showAll` 呼叫 `listAllComments` 或 `listPageComments`），`useEffect` 改為呼叫它，避免兩處重複。
+- **UI**：標題列按鈕群最前新增「↻」按鈕，`title`/`aria-label` 標示用途，點擊重跑 `loadComments`。
+- **i18n**：新增 zh-TW/en `play.sidebar.commentsRefresh`。
+- **驗證**：前端 `tsc --noEmit` 通過；`i18n.test.ts`（含 zh/en key 對等）通過。複用既有載入邏輯的 UI 按鈕、無新增可抽出純邏輯，故不另加單元測試。
