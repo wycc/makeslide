@@ -3,6 +3,7 @@ import type { PointerEvent as ReactPointerEvent, RefObject, TouchEvent } from 'r
 import DrawingCanvas from '../../components/DrawingCanvas';
 import { SlideRenderer } from '../../components/slide/SlideRenderer';
 import { useI18n } from '../../i18n';
+import { pollOptionPercent } from '../../lib/pollPercent';
 import type { TranslationKey } from '../../i18n';
 import { figureImageUrl } from '../../lib/api';
 import { getFocusEffectParams, OVERLAY_EFFECT_TYPES } from '../../lib/animationSpec';
@@ -322,7 +323,7 @@ export function PlayPageFullscreen() {
               <p className="mb-2 text-sm font-semibold text-fuchsia-100">{poll.question}</p>
               <div className="space-y-1.5">
                 {poll.options.map((option, idx) => {
-                  const ratio = poll.total_votes > 0 ? Math.round((option.votes / poll.total_votes) * 100) : 0;
+                  const ratio = pollOptionPercent(option.votes, poll.total_votes);
                   const selected = pollVotes[poll.id] === idx;
                   return (
                     <button
@@ -862,9 +863,7 @@ export function PlayPageFullscreen() {
             {activePoll?.options?.length ? (
               <div className="mt-5 grid grid-cols-1 gap-2 text-left md:grid-cols-2 md:gap-3">
                 {activePoll.options.map((option, idx) => {
-                  const ratio = activePoll.total_votes > 0
-                    ? Math.round((option.votes / activePoll.total_votes) * 100)
-                    : 0;
+                  const ratio = pollOptionPercent(option.votes, activePoll.total_votes);
                   return (
                     <button
                       key={`${activePoll.id}-${idx}`}

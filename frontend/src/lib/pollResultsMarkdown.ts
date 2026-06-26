@@ -1,4 +1,5 @@
 // 投票結果輸出為 Markdown（純函式，供播放頁投票區「複製」使用）。
+import { pollOptionPercent } from './pollPercent';
 
 export interface MarkdownablePollOption {
   text: string;
@@ -29,7 +30,7 @@ export function formatPollResultsMarkdown<T extends MarkdownablePoll>(polls: T[]
   for (const poll of polls) {
     lines.push('', `## ${poll.question}`);
     for (const opt of poll.options) {
-      const pct = poll.total_votes > 0 ? Math.round((opt.votes / poll.total_votes) * 100) : 0;
+      const pct = pollOptionPercent(opt.votes, poll.total_votes);
       lines.push(`- ${opt.text}：${opt.votes} ${labels.votesUnit}（${pct}%）`);
     }
   }

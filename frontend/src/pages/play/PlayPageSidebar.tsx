@@ -14,6 +14,7 @@ import { filterComments } from '../../lib/commentFilter';
 import { countUnresolvedComments, sortCommentsUnresolvedFirst } from '../../lib/commentStats';
 import { formatCommentsMarkdown } from '../../lib/commentMarkdown';
 import { formatPollResultsMarkdown } from '../../lib/pollResultsMarkdown';
+import { pollOptionPercent } from '../../lib/pollPercent';
 import { formatRelativeTime } from '../../lib/formatRelativeTime';
 import { NOTEBOOK_TABS, computeNotebookTabCounts, getAdjacentNotebookTab, getEdgeNotebookTab, getStoredNotebookTab, setStoredNotebookTab, type NotebookTab } from './notebookTabs';
 
@@ -1240,7 +1241,7 @@ export function PlayPageSidebar() {
                       ) : null}
                       <div className="space-y-1.5">
                         {poll.options.map((option, idx) => {
-                          const ratio = poll.total_votes > 0 ? Math.round((option.votes / poll.total_votes) * 100) : 0;
+                          const ratio = pollOptionPercent(option.votes, poll.total_votes);
                           const selected = pollVotes[poll.id] === idx;
                           return (
                             <button
