@@ -3,6 +3,7 @@ import sharp from 'sharp';
 import { nanoid } from 'nanoid';
 import { coverImagePath, pageImagePath, pageTextPath, sourceTextPath } from '../../services/storage';
 import { generateCoverThumbnail, generatePageThumbnail } from '../../services/thumbnails';
+import { escapeXml } from '../../escapeXml';
 
 const PAGE_WIDTH = 1920;
 const PAGE_HEIGHT = 1080;
@@ -18,14 +19,8 @@ export interface RenderTextPagesResult {
   pagePaths: string[];
 }
 
-export function escapeXml(input: string): string {
-  return input
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
+// Re-exported (imported at top) so existing importers/tests keep importing it from this module.
+export { escapeXml };
 
 export function splitLines(raw: string): string[] {
   const normalized = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');

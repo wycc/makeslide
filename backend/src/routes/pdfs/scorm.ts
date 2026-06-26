@@ -10,6 +10,7 @@ const JSZip = require('jszip') as new () => any;
 import { db } from '../../db';
 import type { PageRow, PdfRow } from '../../types';
 import { safeJoinPdfPath, pageImagePath, pageAudioPath, pageScriptPath, pageTextPath } from '../../services/storage';
+import { escapeXml } from '../../escapeXml';
 import { decodeSession, parseCookies } from '../auth';
 import { errorResponse, IdParamSchema } from './shared';
 
@@ -40,15 +41,6 @@ async function readTextSafe(absPath: string | null): Promise<string> {
   } catch {
     return '';
   }
-}
-
-function escapeXml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
 }
 
 function buildManifest(pdfId: string, title: string, pages: PageRow[], hasAudio: boolean[]): string {
