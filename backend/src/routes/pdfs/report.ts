@@ -301,14 +301,15 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
       .prepare(
         `SELECT p.page_number AS page_number,
                 COUNT(w.viewer_id) AS total_viewers,
-                COALESCE(SUM(w.completed), 0) AS completed_viewers
+                COALESCE(SUM(w.completed), 0) AS completed_viewers,
+                AVG(CASE WHEN w.duration_ms IS NOT NULL AND w.duration_ms > 0 THEN MIN(CAST(w.listened_ms AS REAL) / w.duration_ms, 1.0) ELSE NULL END) AS avg_listened_ratio
            FROM pages p
            LEFT JOIN page_watch_progress w ON w.pdf_id = p.pdf_id AND w.page_number = p.page_number
           WHERE p.pdf_id = ?
           GROUP BY p.page_number
           ORDER BY p.page_number ASC`,
       )
-      .all(id) as Array<{ page_number: number; total_viewers: number; completed_viewers: number }>;
+      .all(id) as Array<{ page_number: number; total_viewers: number; completed_viewers: number; avg_listened_ratio: number | null }>;
 
     const pollVoteRows = db
       .prepare(
@@ -329,13 +330,15 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
     }
 
     const round4 = (n: number) => Math.round(n * 10000) / 10000;
-    const header = ['page_number', 'total_viewers', 'completed_viewers', 'completion_rate', 'poll_total_votes', 'poll_divergence_score'].join(',');
+    const header = ['page_number', 'total_viewers', 'completed_viewers', 'completion_rate', 'poll_total_votes', 'poll_divergence_score', 'avg_listened_ratio'].join(',');
     const rows: string[] = [header];
     for (const wp of watchPages) {
       const completion = wp.total_viewers > 0 ? wp.completed_viewers / wp.total_viewers : 0;
       const poll = pollByPage.get(wp.page_number);
       const totalVotes = poll?.total ?? 0;
       const divergence = totalVotes > 0 ? 1 - poll!.max / totalVotes : 0;
+      // 無聆聽資料（無觀看者或皆無 duration）時輸出空字串，避免被誤讀為 0%。
+      const avgListened = wp.avg_listened_ratio == null ? '' : round4(wp.avg_listened_ratio);
       rows.push([
         csvEscape(wp.page_number),
         csvEscape(wp.total_viewers),
@@ -343,6 +346,7 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
         csvEscape(round4(completion)),
         csvEscape(totalVotes),
         csvEscape(round4(divergence)),
+        csvEscape(avgListened),
       ].join(','));
     }
     const csv = rows.join('\n');

@@ -78,13 +78,14 @@ test('GET /api/pdfs/:id/report/pages.csv returns per-page analytics ordered by p
     assert.match(resp.headers['content-type'] as string, /text\/csv/);
     assert.match(resp.headers['content-disposition'] as string, /attachment; filename="report-pages-report-pages-01\.csv"/);
     const lines = resp.body.trim().split('\n');
-    assert.equal(lines[0], 'page_number,total_viewers,completed_viewers,completion_rate,poll_total_votes,poll_divergence_score');
-    // page 1: 2 viewers, 1 completed -> 0.5; poll votes split 1/1 -> divergence 1 - 1/2 = 0.5
-    assert.equal(lines[1], '1,2,1,0.5,2,0.5');
-    // page 2: 1 viewer completed -> 1; single vote -> divergence 0
-    assert.equal(lines[2], '2,1,1,1,1,0');
-    // page 3: no viewers, no votes
-    assert.equal(lines[3], '3,0,0,0,0,0');
+    assert.equal(lines[0], 'page_number,total_viewers,completed_viewers,completion_rate,poll_total_votes,poll_divergence_score,avg_listened_ratio');
+    // page 1: 2 viewers, 1 completed -> 0.5; poll votes split 1/1 -> divergence 0.5;
+    //         listened ratios 1.0 and 0.5 -> avg 0.75
+    assert.equal(lines[1], '1,2,1,0.5,2,0.5,0.75');
+    // page 2: 1 viewer completed -> 1; single vote -> divergence 0; listened 12000/10000 capped at 1
+    assert.equal(lines[2], '2,1,1,1,1,0,1');
+    // page 3: no viewers, no votes -> avg_listened_ratio is blank (no data, not 0)
+    assert.equal(lines[3], '3,0,0,0,0,0,');
   } finally {
     cleanup(pdfId);
     await app.close();
