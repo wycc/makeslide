@@ -339,6 +339,7 @@ export const en = {
   'home.sort.createdDesc': 'Newest created',
   'home.sort.updatedDesc': 'Recently updated',
   'home.sort.pageCountDesc': 'Most pages',
+  'home.sort.pageCountAsc': 'Fewest pages',
   'home.sort.audioDurationDesc': 'Longest course first',
   'home.sort.audioDurationAsc': 'Shortest course first',
   'home.sort.lastPlayedDesc': 'Recently played first',

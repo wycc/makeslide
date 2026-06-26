@@ -339,6 +339,7 @@ export const zhTW = {
   'home.sort.createdDesc': '建立時間新到舊',
   'home.sort.updatedDesc': '更新時間新到舊',
   'home.sort.pageCountDesc': '頁數多到少',
+  'home.sort.pageCountAsc': '頁數少到多',
   'home.sort.audioDurationDesc': '最長課程優先',
   'home.sort.audioDurationAsc': '最短課程優先',
   'home.sort.lastPlayedDesc': '最近播放優先',
