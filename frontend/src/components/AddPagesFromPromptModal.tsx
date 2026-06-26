@@ -390,6 +390,7 @@ export default function AddPagesFromPromptModal({
                             <img
                               src={`api/pdfs/${encodeURIComponent(pdfId)}/pages/${pr.pageNumber}/thumbnail`}
                               alt={formatMessage(t('play.addPages.pageAlt'), { page: pr.pageNumber })}
+                              onError={(e) => { e.currentTarget.style.display = 'none'; }}
                               className="h-full w-full object-cover"
                             />
                           ) : (
