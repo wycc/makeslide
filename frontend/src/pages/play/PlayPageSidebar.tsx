@@ -13,6 +13,7 @@ import { getReviewItems, removeReviewItem, formatReviewListMarkdown, type Review
 import { filterComments } from '../../lib/commentFilter';
 import { countUnresolvedComments, sortCommentsUnresolvedFirst } from '../../lib/commentStats';
 import { formatCommentsMarkdown } from '../../lib/commentMarkdown';
+import { formatPollResultsMarkdown } from '../../lib/pollResultsMarkdown';
 import { formatRelativeTime } from '../../lib/formatRelativeTime';
 import { NOTEBOOK_TABS, computeNotebookTabCounts, getAdjacentNotebookTab, getEdgeNotebookTab, getStoredNotebookTab, setStoredNotebookTab, type NotebookTab } from './notebookTabs';
 
@@ -614,6 +615,16 @@ export function PlayPageSidebar() {
     );
   const [bookmarkCopyMsg, setBookmarkCopyMsg] = useState<string | null>(null);
   const [importantCopyMsg, setImportantCopyMsg] = useState<string | null>(null);
+  const [pollCopyMsg, setPollCopyMsg] = useState<string | null>(null);
+  const handleCopyPollResults = async () => {
+    const md = formatPollResultsMarkdown(pagePolls, {
+      heading: t('play.sidebar.poll.copyHeading'),
+      votesUnit: t('play.sidebar.poll.votesUnit'),
+    });
+    const ok = await copyTextToClipboard(md);
+    setPollCopyMsg(ok ? t('play.sidebar.poll.copyDone') : t('play.sidebar.poll.copyFail'));
+    window.setTimeout(() => setPollCopyMsg(null), 2000);
+  };
   const [notebookTab, setNotebookTab] = useState<NotebookTab>(() => getStoredNotebookTab());
   const selectNotebookTab = (tab: NotebookTab) => {
     setNotebookTab(tab);
@@ -982,6 +993,15 @@ export function PlayPageSidebar() {
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            {pagePolls.length > 0 && (
+              <button
+                type="button"
+                onClick={() => void handleCopyPollResults()}
+                className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
+              >
+                {pollCopyMsg ?? t('play.sidebar.poll.copyResults')}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setPollSettingsOpen((v) => !v)}
