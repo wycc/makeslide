@@ -129,8 +129,12 @@ export function formatTime(seconds: number): string {
 }
 
 export function formatTokenCount(tokens: number): string {
-  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(2)}M`;
-  if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}K`;
+  if (!Number.isFinite(tokens)) return '0';
+  const abs = Math.abs(tokens);
+  // 999_950 以上的 token 經 (tokens / 1_000).toFixed(1) 會四捨五入成 "1000.0K"，
+  // 應改用百萬單位顯示成 "1.0M" 等可讀格式（避免 K 位數溢位）。
+  if (abs >= 999_950) return `${(tokens / 1_000_000).toFixed(2)}M`;
+  if (abs >= 1_000) return `${(tokens / 1_000).toFixed(1)}K`;
   return `${tokens}`;
 }
 
