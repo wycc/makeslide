@@ -7502,3 +7502,15 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 ### 技術細節
 - **元件**（`frontend/src/pages/RemoteControllerPage.tsx`）：投影片預覽 `<img>` 加上 `onError={(e) => { e.currentTarget.style.display = 'none'; }}`，載入失敗時隱藏該圖。
 - 此為單純的 DOM 事件處理、沒有可抽出的純邏輯，故不另加單元測試；以前端既有 384 測試與 `tsc --noEmit` typecheck 全數通過確認未造成回歸。
+
+## 圖表資產縮圖隱藏破圖（2026-06-26）
+
+### 功能目的
+文件模式匯入的簡報會抽出圖表（figures），教師可在播放頁的「圖表資產」分頁（`FigureAssetsTab`）瀏覽這些圖表縮圖、挑選要當作圖片生成的參考。先前這些圖表縮圖 `<img>` 沒有 `onError` 處理，一旦某張圖表圖片無法載入（尚未產生、已刪除、或路徑問題）就會顯示瀏覽器的破圖小圖示。本次讓它與其他縮圖一致地優雅降級。
+
+### 使用方式
+無需任何操作。圖表瀏覽中若某張縮圖無法載入，會被隱藏而非顯示破圖；該圖表的標題、來源等文字資訊照常顯示。
+
+### 技術細節
+- **元件**（`frontend/src/pages/play/FigureAssetsTab.tsx`）：圖表縮圖 `<img>` 加上 `onError={(e) => { e.currentTarget.style.display = 'none'; }}`，載入失敗時隱藏。
+- 此為單純的 DOM 事件處理、無可抽出純邏輯，故不另加單元測試；以前端既有 384 測試與 `tsc --noEmit` typecheck 全通過確認未造成回歸。

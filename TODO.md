@@ -2147,6 +2147,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`RemoteControllerPage.tsx` 投影片預覽 `<img>` 加 `onError={(e) => { e.currentTarget.style.display = 'none'; }}`。此為小型 DOM 事件處理、無可抽出純邏輯，依前端 384 測試 + typecheck 全通過驗證不破壞。分支 `fix/remote-controller-img-onerror`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 46 個完成項目（46/100，未達上限）。
 
+- [x] 圖表資產縮圖隱藏破圖：`FigureAssetsTab`（圖表瀏覽/選取）的縮圖 `<img>` 缺 `onError`，圖表圖片缺失（未產生/刪除/路徑問題）時會顯示破圖示。加上 `onError` 失敗時隱藏，與其他縮圖一致。
+  - 修改說明（2026-06-26）：`FigureAssetsTab.tsx` 圖表縮圖 `<img>` 加 `onError={(e) => { e.currentTarget.style.display = 'none'; }}`。前端 384 測試 + typecheck 全通過。分支 `fix/figure-assets-img-onerror`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 47 個完成項目（47/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2197,4 +2201,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | 前後端 isCorrectAnswer 一致性 drift-guard：新增跨套件測試斷言後端/前端 `isCorrectAnswer` 在 11 個案例一致；後端 build 通過 | test/quiz-correctness-consistency（已 merge） |
 | 2026-06-26 | 後端測驗計分抽離可測+守門：`calcQuestionScore`/`normalizeQuestionScores` 抽到純 `services/quizScoring.ts`，quizzes.ts 改 import；quizScoring.test.ts +5、quizScoringConsistency.test.ts +2（前後端一致）；後端 build 通過 | refactor/extract-backend-quiz-scoring（已 merge） |
 | 2026-06-26 | 遙控器投影片預覽隱藏破圖：`RemoteControllerPage` 預覽 `<img>` 加 `onError` 載入失敗隱藏；前端 384 測試通過 | fix/remote-controller-img-onerror（已 merge） |
+| 2026-06-26 | 圖表資產縮圖隱藏破圖：`FigureAssetsTab` 縮圖 `<img>` 加 `onError` 載入失敗隱藏；前端 384 測試通過 | fix/figure-assets-img-onerror（已 merge） |
 
