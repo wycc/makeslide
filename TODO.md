@@ -2377,7 +2377,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`CommentsSection` 評論輸入 textarea 下方新增一列，左側保留既有錯誤訊息（無錯誤時佔位）、右側以 `tabular-nums` 顯示 `{text.length}/2000` 即時字數；超過 1900 時數字轉 amber 提醒接近上限。採純數字呈現（`{n}/2000`），不引入新 i18n key（與作者欄 maxLength 等既有純數字 UI 一致）。純前端、不動後端、不改 `maxLength`。前端 `tsc --noEmit` 通過；此為純顯示 UI、無可抽出純邏輯，故不另加單元測試。分支 `feat/comment-char-counter`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 74 個完成項目（74/100，未達上限）。
 
-- [ ] 設定頁顯示生成成本價目參考（Roadmap Phase 3 成本透明度）：`SettingsPage` 的 AI 區新增一個唯讀「價目參考」小區塊，讀 `lib/costEstimate.ts` 既有的 `TTS_PRICE_PER_1K_CHARS` 與 `LLM_PRICE_PER_1M_TOKENS`，以表格列出各模型單價（沿用 `formatUsd`）；不新增後端、不改價格來源；新增 zh-TW/en i18n key（標題與單位說明）。純前端。若價目資料結構不利直接列表，於實作時改以精簡條列呈現並於說明標明。
+- [x] 設定頁顯示生成成本價目參考（Roadmap Phase 3 成本透明度）：`SettingsPage` 的 AI 區新增一個唯讀「價目參考」小區塊，讀 `lib/costEstimate.ts` 既有的 `TTS_PRICE_PER_1K_CHARS` 與 `LLM_PRICE_PER_1M_TOKENS`，以表格列出各模型單價（沿用 `formatUsd`）；不新增後端、不改價格來源；新增 zh-TW/en i18n key（標題與單位說明）。純前端。若價目資料結構不利直接列表，於實作時改以精簡條列呈現並於說明標明。
+  - 修改說明（2026-06-26）：`SettingsPage` AI 區（月預算欄位後）新增唯讀「生成成本價目參考」區塊，import `lib/costEstimate.ts` 的 `LLM_PRICE_PER_1M_TOKENS`/`TTS_PRICE_PER_1K_CHARS`/`formatUsd`，以兩欄（LLM／TTS）條列各模型/供應商單價：LLM 每列顯示「輸入 {in}／輸出 {out}」（每 1M tokens）、TTS 每列顯示 `formatUsd(price)`（每 1K 字元）；標明「僅供參考；實際費用以供應商當前費率為準」。不新增後端、不改價格來源、沿用語意 token class（`border-border`/`bg-bg`）。新增 zh-TW/en `settings.priceReferenceTitle`/`priceReferenceHint`/`priceReferenceLlm`/`priceReferenceTts`/`priceReferenceInOut`（後者含 `{in}`/`{out}` 佔位）。前端 `tsc --noEmit` 通過、`i18n.test.ts`（含 zh/en 對等與佔位符集合檢查）通過。此為純顯示 UI、資料來源為既有具測試的純函式模組，故不另加測試。分支 `feat/settings-price-reference`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 75 個完成項目（75/100，未達上限）。
 
 ## 工作記錄（第一〇五輪，2026-06-26）
 

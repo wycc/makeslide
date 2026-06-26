@@ -7895,3 +7895,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **UI**（`frontend/src/pages/play/PlayPageSidebar.tsx` 的 `CommentsSection`）：textarea 下方新增一列，左側保留原本的錯誤訊息（無錯誤時佔位以維持右對齊），右側以 `tabular-nums` 顯示 `{text.length}/2000`；`text.length > 1900` 時數字套用 amber 色。
 - **取捨**：採純數字呈現（locale 無關），不新增 i18n key，與作者欄等既有純數字 UI 一致；不更動既有 `maxLength={2000}`。
 - **驗證**：前端 `tsc --noEmit` 通過。此為純顯示 UI、無可抽出的純邏輯，故不另加單元測試。
+
+## 設定頁顯示生成成本價目參考（2026-06-26）
+
+### 功能目的
+專案已有月預算上限與超支警示，但使用者在設定 LLM／TTS 供應商時，看不到各模型的單價，難以判斷選擇對成本的影響。本項在設定頁加入唯讀的「價目參考」小區塊，把 `lib/costEstimate.ts` 既有的價目表直接呈現，提升成本透明度（Roadmap Phase 3）。
+
+### 使用方式
+進入「設定 → AI」區，在「月預算」欄位下方可見「生成成本價目參考」：左欄列出各 LLM 模型的「輸入／輸出」單價（每 1M tokens），右欄列出各 TTS 供應商單價（每 1K 字元）。此為唯讀資訊，並標明「僅供參考；實際費用以供應商當前費率為準」。
+
+### 技術細節
+- **UI**（`frontend/src/pages/SettingsPage.tsx`）：import `LLM_PRICE_PER_1M_TOKENS`、`TTS_PRICE_PER_1K_CHARS`、`formatUsd`，以 `Object.entries` 條列兩組價目；LLM 每列以 `settings.priceReferenceInOut`（`{in}`/`{out}` 佔位）顯示輸入/輸出單價，TTS 直接以 `formatUsd(price)` 顯示；沿用語意 token class（`border-border`/`bg-bg`）。
+- **資料來源**：完全沿用 `lib/costEstimate.ts` 既有的價目常數，不新增後端、不改價格來源。
+- **i18n**：新增 zh-TW/en `settings.priceReferenceTitle`/`priceReferenceHint`/`priceReferenceLlm`/`priceReferenceTts`/`priceReferenceInOut`。
+- **驗證**：前端 `tsc --noEmit` 通過；`i18n.test.ts`（含 zh/en key 對等與佔位符集合檢查）通過。此為純顯示 UI、資料來源為既有具測試的純函式模組，故不另加測試。
