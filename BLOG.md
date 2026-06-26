@@ -7490,3 +7490,15 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **純模組**（新檔 `backend/src/services/quizScoring.ts`）：匯出 `QUIZ_TOTAL_SCORE`、最小結構型別 `ScorableQuestion`（只含計分需要的 `type`/`options`/`answer_indices`/`score`）、以及 `calcQuestionScore` 與 `normalizeQuestionScores`。`calcQuestionScore` 複用先前抽出的 `isCorrectAnswer`。不 import 資料庫。
 - **去重 / 收斂**：`quizzes.ts` 移除本地兩個函式定義，改為 import；其原本以 zod `z.infer` 推導的 `ScorableQuestion` 型別與新模組的最小結構型別結構相容，呼叫端不需改動。順帶移除已不再使用的 `isCorrectAnswer` import。
 - **測試**：`quizScoring.test.ts` 5 個 node:test——單選全對/全無、多選部分給分（手算驗證 4 選項中選 1 個正解得 6/8、全不選得 4/8）、0 選項得 0、未填分數均分、全填保留與空陣列。另新增跨套件 `quizScoringConsistency.test.ts` 2 個 test，同時載入後端與前端 `lib/quizScoring.ts` 的 `calcQuestionScore`／`normalizeQuestionScores`，對多個案例斷言兩者一致（沿用 `isCorrectAnswer` 一致性守門的模式）。後端 `tsc -p tsconfig.json` build 通過，相關測試全數通過。
+
+## 遙控器投影片預覽隱藏破圖（2026-06-26）
+
+### 功能目的
+教師可用手機開啟「遙控器」頁面（`RemoteControllerPage`）遠端控制播放、查看目前投影片。頁面上會顯示一張「目前投影片」的小縮圖預覽。先前這張預覽 `<img>` 沒有 `onError` 處理，一旦縮圖載入失敗（尚未產生、404、暫時性網路問題）就會顯示瀏覽器的破圖小圖示。本次讓它與首頁卡片、播放頁側邊欄的縮圖一致地優雅降級。
+
+### 使用方式
+無需任何操作。遙控器頁面的投影片預覽縮圖若無法載入，會被隱藏而非顯示破圖；頁碼等其餘控制項照常顯示，遙控功能不受影響。
+
+### 技術細節
+- **元件**（`frontend/src/pages/RemoteControllerPage.tsx`）：投影片預覽 `<img>` 加上 `onError={(e) => { e.currentTarget.style.display = 'none'; }}`，載入失敗時隱藏該圖。
+- 此為單純的 DOM 事件處理、沒有可抽出的純邏輯，故不另加單元測試；以前端既有 384 測試與 `tsc --noEmit` typecheck 全數通過確認未造成回歸。

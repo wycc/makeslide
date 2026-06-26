@@ -2143,6 +2143,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：新增 `backend/src/services/quizScoring.ts`（`QUIZ_TOTAL_SCORE`/`ScorableQuestion`/兩函式）；`quizzes.ts` 移除本地定義、改 `import { calcQuestionScore, normalizeQuestionScores }`、移除已不需的 `isCorrectAnswer` import（z.infer 型別結構相容傳入）。新增 `quizScoring.test.ts` +5（單選 all-or-nothing、多選部分給分 6/4 邊界、0 選項、均分、全填/空陣列）與跨套件 `quizScoringConsistency.test.ts` +2（前後端 calc／normalize 在多案例一致）。後端 build 通過、相關測試全通過。分支 `refactor/extract-backend-quiz-scoring`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 45 個完成項目（45/100，未達上限）。
 
+- [x] 遙控器投影片預覽隱藏破圖：教師手機遙控頁 `RemoteControllerPage` 的目前投影片預覽 `<img>` 缺 `onError`，縮圖載入失敗時會顯示破圖示，與側邊欄/卡片縮圖的優雅降級不一致。加上 `onError` 在失敗時隱藏該圖。
+  - 修改說明（2026-06-26）：`RemoteControllerPage.tsx` 投影片預覽 `<img>` 加 `onError={(e) => { e.currentTarget.style.display = 'none'; }}`。此為小型 DOM 事件處理、無可抽出純邏輯，依前端 384 測試 + typecheck 全通過驗證不破壞。分支 `fix/remote-controller-img-onerror`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 46 個完成項目（46/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2192,4 +2196,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | 測驗答對判定收斂單一來源：`isCorrectAnswer` 抽到 `services/quizCorrectness.ts`，`quizzes.ts` 與 `report.ts`(2處) 共用（防報告與計分判定漂移）；quizCorrectness.test.ts +4、後端 build 通過 | refactor/dedupe-quiz-correctness（已 merge） |
 | 2026-06-26 | 前後端 isCorrectAnswer 一致性 drift-guard：新增跨套件測試斷言後端/前端 `isCorrectAnswer` 在 11 個案例一致；後端 build 通過 | test/quiz-correctness-consistency（已 merge） |
 | 2026-06-26 | 後端測驗計分抽離可測+守門：`calcQuestionScore`/`normalizeQuestionScores` 抽到純 `services/quizScoring.ts`，quizzes.ts 改 import；quizScoring.test.ts +5、quizScoringConsistency.test.ts +2（前後端一致）；後端 build 通過 | refactor/extract-backend-quiz-scoring（已 merge） |
+| 2026-06-26 | 遙控器投影片預覽隱藏破圖：`RemoteControllerPage` 預覽 `<img>` 加 `onError` 載入失敗隱藏；前端 384 測試通過 | fix/remote-controller-img-onerror（已 merge） |
 
