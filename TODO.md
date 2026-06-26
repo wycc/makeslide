@@ -2255,7 +2255,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`SettingsPage.tsx` 帳號/偏好區（播放速度 select 之後）新增「外觀主題」select（跟隨系統 / 淺色 / 深色），初值由 `getStoredThemePreference()` 取得；新增 `handleThemeChange` 於 onChange 立即 `setStoredThemePreference()` + `applyThemePreference()`，不經 Save 按鈕（明確維持為純本機偏好，未納入後端 `SystemAiSettings` / 設定 API，避免影響多帳號）。新增 zh-TW/en i18n key `settings.theme`/`themeSystem`/`themeLight`/`themeDark`/`themeHint`。前端 `tsc --noEmit` 通過、`i18n.test.ts`（含 zh/en key 對等檢查）24 測試全通過。注意：此項只做設定頁切換與即時套用；「App 啟動前套用 stored theme 避免白閃」為 Theme 系列下一獨立項目（在那之前重新整理頁面需再進設定頁才會重新套用）。屬 Theme 系列第 3 項。分支 `feat/settings-theme-option`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 56 個完成項目（56/100，未達上限）。
 
-- [ ] App 啟動前避免 theme flash：在 `frontend/src/main.tsx` 或 `frontend/index.html` 的最早可行位置套用 stored theme（優先避免 first paint 白閃）；確保 React hydration 後與 hook 狀態一致；若使用 inline script，需保持無外部依賴且不讀取敏感資料。
+- [x] App 啟動前避免 theme flash：在 `frontend/src/main.tsx` 或 `frontend/index.html` 的最早可行位置套用 stored theme（優先避免 first paint 白閃）；確保 React hydration 後與 hook 狀態一致；若使用 inline script，需保持無外部依賴且不讀取敏感資料。
+  - 修改說明（2026-06-26）：`index.html` 於 `<head>` 最前（charset 後、其他資源前）加入一段自包含 inline script，在首屏 paint 前讀 `localStorage['makeslide.theme']`，依 `system→matchMedia('(prefers-color-scheme: dark)')` 解析後 toggle `<html>` 的 `dark` class 並設 `data-theme`；邏輯刻意鏡像 `lib/theme.ts`，無 import / 無網路、只讀公開的 theme 偏好、以 try/catch 包覆（localStorage 不可用時保留原 `class="dark"` no-JS fallback）。`main.tsx` 在 render 前 `applyThemePreference()` 再套用一次確保與 bundle 邏輯一致，並 `watchSystemThemeChange()` 讓 `system` 模式在執行期跟隨 OS 變化。確認專案無 CSP，inline script 可執行。前端 `tsc --noEmit` 通過、`theme.test.ts` 10 測試全通過（inline script 為 HTML 內嵌、邏輯已由 theme.ts 單元測試覆蓋，不另加測試）。屬 Theme 系列第 4 項；元件實際淺色外觀適配為下一獨立項目。分支 `feat/theme-no-flash`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 57 個完成項目（57/100，未達上限）。
 
 - [ ] 高頻畫面第一批暗色模式適配：將 HomePage、PlayPage 外層、SettingsPage 主要卡片/表單、PdfCard 的白底/灰底/黑字/邊框 class 改為語意 token class；保留現有品牌色與狀態色但確認 dark 下對比足夠；不在此項一次處理所有深層播放頁子元件。
 
