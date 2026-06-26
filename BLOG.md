@@ -7767,3 +7767,18 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **後端**（`backend/src/routes/pdfs/report.ts`）：`report/pages.csv` 的 watchPages 查詢新增 `AVG(CASE WHEN duration_ms>0 THEN MIN(listened_ms/duration_ms, 1.0) ELSE NULL END)`（與 `report/summary` 的平均聆聽比例同算法）；CSV 末欄輸出該值，有值四捨五入到 4 位、null 時輸出空字串。純後端改動，前端既有下載連結無需調整、無 i18n 變更。
 - **測試**（`backend/test/report-pages-csv.test.ts`）：更新 header 與三列斷言——page1 = 0.75（1.0 與 0.5 的平均）、page2 = 1（12000/10000 上限為 1）、page3 為空字串。
 - **驗證**：後端 `tsc --noEmit` 通過。handler 測試需 better-sqlite3 native module，於本機 sandbox 無法載入，留待 CI 執行。
+
+## 評論複製為 Markdown（2026-06-26）
+
+### 功能目的
+播放頁「頁面評論」已支援搜尋過濾、未解決徽章與 CSV 匯出。CSV 適合做表格分析，但若教師只是想把回饋貼進筆記、訊息或課程平台，Markdown 清單更直覺。本項在評論區加入「複製」按鈕，一鍵把（目前過濾後顯示的）評論複製成 Markdown。
+
+### 使用方式
+在「頁面評論」區，只要目前有顯示的評論（會反映搜尋過濾結果），標題列就會出現「複製」按鈕。點擊即把清單以 Markdown 複製到剪貼簿（按鈕短暫顯示「已複製 ✓」）。每則一行，格式為 `- [第 N 頁] 作者（已解決）：內文`，依頁碼排序；「已解決」標記只在該則已解決時出現。
+
+### 技術細節
+- **純函式**（`frontend/src/lib/commentMarkdown.ts`）：`formatCommentsMarkdown(comments, labels)` 依 `page_number` 穩定排序後輸出標題與條列；顯示文字（標題、含 `{n}` 的頁碼標籤、已解決字樣）由 `CommentMarkdownLabels` 注入以保持純粹可測；空清單回空字串。
+- **UI**（`frontend/src/pages/play/PlayPageSidebar.tsx` 的 `CommentsSection`）：複製對象為過濾後的 `visibleComments`（會反映目前搜尋），按鈕呼叫 `copyTextToClipboard` 並顯示 2 秒結果提示，labels 重用既有 `commentsTitle`/`reviewListPage`。
+- **i18n**：新增 zh-TW/en `play.sidebar.commentsCopy`/`commentsCopyDone`/`commentsCopyFail`/`commentsResolvedTag`。
+- **測試**：`commentMarkdown.test.ts` 3 個案例（空清單、依頁排序與已解決標記、同頁穩定序）。
+- **驗證**：前端 `tsc --noEmit` 通過；`commentMarkdown.test.ts` 與 `i18n.test.ts`（含 zh/en key 對等）全通過。

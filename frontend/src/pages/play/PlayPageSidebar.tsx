@@ -12,6 +12,7 @@ import { formatAudioDuration } from '../../lib/audioDuration';
 import { getReviewItems, removeReviewItem, formatReviewListMarkdown, type ReviewItem } from '../../lib/reviewList';
 import { filterComments } from '../../lib/commentFilter';
 import { countUnresolvedComments } from '../../lib/commentStats';
+import { formatCommentsMarkdown } from '../../lib/commentMarkdown';
 import { formatRelativeTime } from '../../lib/formatRelativeTime';
 import { NOTEBOOK_TABS, computeNotebookTabCounts, getAdjacentNotebookTab, getEdgeNotebookTab, getStoredNotebookTab, setStoredNotebookTab, type NotebookTab } from './notebookTabs';
 
@@ -96,6 +97,7 @@ function CommentsSection() {
   const [showAll, setShowAll] = useState(false);
   const [comments, setComments] = useState<PageComment[]>([]);
   const [filterQuery, setFilterQuery] = useState('');
+  const [copyMsg, setCopyMsg] = useState<string | null>(null);
   const [author, setAuthor] = useState('');
   const [text, setText] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -145,6 +147,17 @@ function CommentsSection() {
 
   const visibleComments = filterComments(comments, filterQuery);
   const unresolvedCount = countUnresolvedComments(comments);
+
+  const handleCopyComments = async () => {
+    const md = formatCommentsMarkdown(visibleComments, {
+      heading: t('play.sidebar.commentsTitle'),
+      page: t('play.sidebar.reviewListPage'),
+      resolved: t('play.sidebar.commentsResolvedTag'),
+    });
+    const ok = await copyTextToClipboard(md);
+    setCopyMsg(ok ? t('play.sidebar.commentsCopyDone') : t('play.sidebar.commentsCopyFail'));
+    window.setTimeout(() => setCopyMsg(null), 2000);
+  };
   // 有未解決且非全部未解決時，徽章顯示「未解決 / 總數」凸顯待處理；否則只顯示總數。
   const showSplitBadge = unresolvedCount > 0 && unresolvedCount < comments.length;
 
@@ -164,6 +177,15 @@ function CommentsSection() {
             )}
           </h2>
           <div className="flex shrink-0 items-center gap-1.5">
+            {visibleComments.length > 0 && (
+              <button
+                type="button"
+                onClick={() => void handleCopyComments()}
+                className="rounded border border-sky-800/40 px-2 py-0.5 text-[10px] text-sky-400/80 hover:text-sky-300"
+              >
+                {copyMsg ?? t('play.sidebar.commentsCopy')}
+              </button>
+            )}
             {comments.length > 0 && (
               <a
                 href={`api/pdfs/${encodeURIComponent(pdfId)}/comments.csv`}
