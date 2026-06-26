@@ -2091,6 +2091,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：新增 `backend/src/services/wav.ts`（`WavPcmChunk` 型別 + 兩函式）；`synthesizeAudio.ts` 頂部 import、`export { parseWavPcmChunk, buildWavPcm16 }`；`shared.ts` 刪除 ~40 行未使用的重複定義。新增 `wav.test.ts` +4（build→parse round-trip、44-byte 標頭與各 size 欄位、非 WAV/過短回 null、跳過非 data chunk 找到 data），sandbox 通過；後端 build 通過。分支 `refactor/extract-wav-helpers`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 32 個完成項目（32/100，未達上限）。
 
+- [x] 版本歷史對話框支援 Esc／背景點擊關閉：`VersionHistoryDialog`（檢視類、無表單輸入、restore 為明確按鈕、關閉=取消無副作用）原本只能用「關閉」按鈕關閉。套用先前建立的共用 `useOverlayDismiss` hook 補上 Escape／背景關閉與 `role=dialog`/`aria-modal`/`aria-label`，與其他播放頁 overlay 一致。
+  - 修改說明（2026-06-26）：`VersionHistoryDialog.tsx` import `useOverlayDismiss`、overlay 加 `onClick={onBackdropClick}`、面板加 aria 屬性、抽出 `dialogTitle` 供標題與 aria-label 共用。hook 的純函式先前已測；前端 380 測試 + typecheck 全通過。分支 `feat/version-history-dialog-dismiss`，已 merge 回 master。（註：本項實作時一度誤將 commit 直接提交至 master，已重整為標準「分支→--no-ff merge」結構。）
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 33 個完成項目（33/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2127,4 +2131,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | sanitiseUserPrompt 收斂單一來源：generateTitle/generateScript 兩份相同的 prompt 截斷函式抽到 `promptSanitize.ts`（含 2000 字上限常數）；promptSanitize.test.ts +4、後端 build 通過 | refactor/dedupe-sanitise-user-prompt（已 merge） |
 | 2026-06-26 | sumAudioDurationSeconds 收斂單一來源：pipeline/regenerate 兩份相同的音訊長度加總抽到 `audioDurationSum.ts`；audioDurationSum.test.ts +3、後端 build 通過 | refactor/dedupe-sum-audio-duration（已 merge） |
 | 2026-06-26 | WAV PCM 助手抽離可測模組：`parseWavPcmChunk`/`buildWavPcm16` 抽到 `services/wav.ts`（synthesizeAudio re-export、刪除 shared.ts 死碼）；wav.test.ts +4、後端 build 通過 | refactor/extract-wav-helpers（已 merge） |
+| 2026-06-26 | 版本歷史對話框 Esc／背景關閉：`VersionHistoryDialog` 套用共用 `useOverlayDismiss`，補 Escape/背景關閉與 `role=dialog`/aria；前端 380 測試通過 | feat/version-history-dialog-dismiss（已 merge） |
 

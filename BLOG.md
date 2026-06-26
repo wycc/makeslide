@@ -7327,3 +7327,16 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **共用純模組**（新檔 `backend/src/services/wav.ts`）：匯出 `WavPcmChunk` 型別與 `parseWavPcmChunk(buf)`（解析 RIFF/WAVE 的 `data` chunk，會走訪 chunk 並跳過非 data 區塊；非 WAV 或過短回 `null`）、`buildWavPcm16(pcm, sampleRate, channels)`（寫 44-byte 標頭並接上 PCM）。Buffer 進、Buffer 出，無任何 db/pipeline 相依。
 - **去重 + 清死碼**：`synthesizeAudio.ts` 改為頂部 import 後 `export { parseWavPcmChunk, buildWavPcm16 }`（維持對外可見性，內部第 390/401 行的串接仍可用）；`routes/pdfs/shared.ts` 刪除約 40 行從未被呼叫的重複定義。
 - **測試**：新增 `backend/test/wav.test.ts` 4 個 node:test——build→parse 的 PCM 與格式 round-trip、44-byte RIFF/WAVE 標頭與 RIFF/data size 等欄位、非 WAV/過短/缺 magic 回 `null`、以及在 fmt 與 data 之間插入一個 `LIST` chunk 後仍能正確走訪找到 data。此二進位函式先前無測試覆蓋；測試不依賴資料庫、sandbox 可驗證；後端 `tsc -p tsconfig.json` build 通過。
+
+## 版本歷史對話框支援 Esc／背景點擊關閉（2026-06-26）
+
+### 功能目的
+延續播放頁 overlay 的一致性收尾。`VersionHistoryDialog`（檢視某頁圖片或逐字稿的歷史版本，可預覽、比對差異、還原）原本只能透過面板內的「關閉」按鈕關閉，按 Escape 或點背景都沒反應，且缺少 `role="dialog"` 等無障礙標記。由於這個對話框沒有任何表單輸入、關閉等同取消（不會有副作用，「還原」是另一個明確按鈕），因此非常適合補上 Escape 與背景點擊關閉。
+
+### 使用方式
+無需任何操作。開啟版本歷史對話框後，可按鍵盤 Escape 或點對話框以外的背景關閉；點對話框內部（切換差異檢視、預覽、還原等）不會誤關。螢幕報讀軟體也能辨識這是一個對話框。
+
+### 技術細節
+- **沿用共用 hook**（`frontend/src/pages/play/VersionHistoryDialog.tsx`）：import 先前建立的 `useOverlayDismiss(onClose)`，於最外層 overlay 加 `onClick={onBackdropClick}`（僅當點擊落在背景本身時關閉），並在面板加上 `role="dialog"`、`aria-modal="true"`、`aria-label`；順手把對話框標題抽成 `dialogTitle` 變數供標題列與 `aria-label` 共用。
+- `useOverlayDismiss` 的純決策函式（`isOverlayDismissKey`、`isBackdropClick`）先前已有單元測試，本次無新增純邏輯，故以前端既有 380 測試與 `tsc --noEmit` typecheck 全通過確認無回歸。
+- **流程備註**：本項實作過程中一度疏忽，把功能 commit 直接提交到了 master；隨即將其重整為標準的「功能分支 → `--no-ff` merge」結構（內容不變），維持與其他項目一致的版本歷史。
