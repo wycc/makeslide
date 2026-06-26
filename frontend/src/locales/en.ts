@@ -1346,6 +1346,7 @@ export const en = {
   'play.sidebar.commentsNoMatch': 'No matching comments',
   'play.sidebar.commentAuthorPlaceholder': 'Nickname (optional)',
   'play.sidebar.commentTextPlaceholder': 'Add a comment…',
+  'play.sidebar.commentSubmitHint': 'Ctrl/⌘ + Enter to submit',
   'play.sidebar.commentPost': 'Post',
   'play.sidebar.commentPosting': 'Posting…',
   'play.sidebar.commentPostFailed': 'Failed to post, please try again',

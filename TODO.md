@@ -2455,7 +2455,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`PostClassReportPanel` 把原 `handleCopySummary` 內嵌的 labels 抽成共用 `buildSummaryMarkdown()`（`summary` 為空回空字串），供複製與下載共用、避免重複 labels；`handleCopySummary` 改呼叫它。新增 `handleDownloadSummary`：以 `Blob`（`text/markdown;charset=utf-8`）+ 暫時 `<a download>` 觸發下載，檔名 `report-{pdfId}.md`、`URL.revokeObjectURL` 釋放。複製鈕旁新增「下載 .md」按鈕（`summary` 為空時 disabled）。新增 zh-TW/en `play.report.downloadSummaryMd`。內容由既有具測試的 `formatReportSummaryMarkdown` 產生，故不另加測試。前端 `tsc --noEmit` 通過、`reportSummary.test.ts` 與 `i18n.test.ts`（含 zh/en 對等）全通過。分支 `feat/report-summary-download-md`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 83 個完成項目（83/100，未達上限）。
 
-- [ ] 評論輸入 Ctrl/⌘+Enter 送出（可用性，小顆粒）：`CommentsSection` 的新增評論 textarea 目前只能點按鈕送出。為 textarea 加 `onKeyDown`：`(e.ctrlKey || e.metaKey) && e.key === 'Enter'` 時 `e.preventDefault()` 並觸發既有送出流程（沿用 `handleSubmit` 的非空檢查與送出邏輯，避免重複邏輯）；可於 placeholder 或鄰近提示標明快捷鍵。純前端、不動後端。
+- [x] 評論輸入 Ctrl/⌘+Enter 送出（可用性，小顆粒）：`CommentsSection` 的新增評論 textarea 目前只能點按鈕送出。為 textarea 加 `onKeyDown`：`(e.ctrlKey || e.metaKey) && e.key === 'Enter'` 時 `e.preventDefault()` 並觸發既有送出流程（沿用 `handleSubmit` 的非空檢查與送出邏輯，避免重複邏輯）；可於 placeholder 或鄰近提示標明快捷鍵。純前端、不動後端。
+  - 修改說明（2026-06-26）：把原 `handleSubmit` 的送出邏輯抽成共用 `submitComment()`（含 trim 非空與 `submitting` 防重入檢查），`handleSubmit` 改為 `e.preventDefault()` + `void submitComment()`；評論 textarea 加 `onKeyDown`，`(ctrlKey || metaKey) && key === 'Enter'` 時 `preventDefault()` 並 `submitComment()`，並以 `title` tooltip 標示快捷鍵。新增 zh-TW/en `play.sidebar.commentSubmitHint`。純前端、不動後端。前端 `tsc --noEmit` 通過、`i18n.test.ts`（含 zh/en 對等）通過；此為事件處理 UI、無新增可抽出純邏輯，不另加單元測試。分支 `feat/comment-ctrl-enter`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 84 個完成項目（84/100，未達上限）。
 
 - [ ] 評論清單手動重新整理（可用性，小顆粒）：`CommentsSection` 目前只在掛載 / 換頁 / 切換全部時載入評論，協作情境下他人新增的評論不會自動出現。標題列加「重新整理」按鈕，重跑既有載入邏輯（依 `showAll` 呼叫 `listAllComments` 或 `listPageComments` 並 `setComments`）；載入中可顯示簡單狀態。為避免重複，將既有 useEffect 內的載入邏輯抽成一個可重用的 `loadComments()`。純前端、不動後端。
 

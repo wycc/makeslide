@@ -118,10 +118,9 @@ function CommentsSection() {
 
   if (!pdfId || !currentPage) return null;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const submitComment = async () => {
     const trimmedText = text.trim();
-    if (!trimmedText) return;
+    if (!trimmedText || submitting) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -133,6 +132,11 @@ function CommentsSection() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    void submitComment();
   };
 
   const handleResolve = async (c: PageComment) => {
@@ -357,7 +361,14 @@ function CommentsSection() {
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                void submitComment();
+              }
+            }}
             placeholder={t('play.sidebar.commentTextPlaceholder')}
+            title={t('play.sidebar.commentSubmitHint')}
             rows={2}
             className="w-full resize-none rounded border border-sky-700/40 bg-sky-900/30 px-2 py-1 text-[11px] text-sky-100 placeholder-sky-700/60 focus:outline-none focus:ring-1 focus:ring-sky-600/60"
             maxLength={2000}
