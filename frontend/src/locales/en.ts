@@ -1353,6 +1353,7 @@ export const en = {
   'play.sidebar.reviewListTitle': '📝 Review List',
   'play.sidebar.reviewListHint': 'Wrong answers with page numbers are added automatically',
   'play.sidebar.reviewListCopy': 'Copy',
+  'play.sidebar.reviewListClearAll': 'Clear all',
   'play.sidebar.reviewListCopyDone': 'Copied ✓',
   'play.sidebar.reviewListCopyFail': 'Copy failed',
   'play.sidebar.reviewListPage': 'Page {n}',
