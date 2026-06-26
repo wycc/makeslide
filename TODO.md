@@ -2442,3 +2442,25 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 - 工作內容：本輪初擬實作第一〇七輪的兩個 UX 項目，但查證發現「首頁篩選結果數」與「播放頁鍵盤快捷鍵說明面板」皆早已實作，遂就地標記為「已存在、不計入計數」（無程式碼變更），並反省規畫前未先 grep 既有實作。隨後依 LOOP.md 第 2 條，先 grep 驗證「不存在」再新增 4 個可執行項目（測驗 JSON 匯入、評論文字編輯、評論批次標記已解決、逐字稿匯出加簡報標題行），並補掃描摘要。本輪為規畫/修正輪，不計入 100 完成計數（計數維持 77/100）。
 - 時間：2026-06-26
 - 分支：直接於 master 更新 TODO.md（規畫輪，無程式碼變更）
+
+## 掃描摘要（第一一〇輪，2026-06-26）
+
+- 觸發原因：第一〇八輪新增的 4 個可執行項目已全數完成（78~81），TODO.md 又只剩兩個「待使用者決定 / 待處理」項目。依 LOOP.md 第 2 條，先 grep 驗證「不存在」再補新項目。
+- 現況觀察（皆已驗證）：報告摘要目前只有「複製」無「下載成檔」；評論輸入只能按鈕送出、無 Ctrl/⌘+Enter；評論清單無手動重新整理鈕；字幕/逐字稿下載的 `content-disposition` 檔名為固定 `subtitles.srt`/`.vtt`/`transcript.txt`、未含簡報標題。前端 lib 純函式幾乎都有對應測試（僅 `api.ts`/`debugLog.ts` 無，皆非純函式），PdfCard 已顯示頁數/時長。
+- 取材方向：分散主題（匯出檔、輸入快捷鍵、資料重整、檔名語意化），維持「小顆粒、可單輪完成、可加測試、低風險」。
+
+## 新增可執行項目（第一一〇輪，2026-06-26）
+
+- [ ] 報告摘要下載為 Markdown 檔（Roadmap Phase 1 / 可用性）：`PostClassReportPanel` 已可「複製摘要」（`formatReportSummaryMarkdown`）但無法存成檔。在複製鈕旁加「下載 .md」按鈕，複用同一個 `formatReportSummaryMarkdown(summary, labels, pdfTitle)` 產生內容、以 `Blob`+暫時 `<a download>` 觸發下載（檔名如 `report-{pdfId}.md`）；`summary` 為空時停用。新增 zh-TW/en i18n key。純前端、複用既有純函式（已具測試）。
+
+- [ ] 評論輸入 Ctrl/⌘+Enter 送出（可用性，小顆粒）：`CommentsSection` 的新增評論 textarea 目前只能點按鈕送出。為 textarea 加 `onKeyDown`：`(e.ctrlKey || e.metaKey) && e.key === 'Enter'` 時 `e.preventDefault()` 並觸發既有送出流程（沿用 `handleSubmit` 的非空檢查與送出邏輯，避免重複邏輯）；可於 placeholder 或鄰近提示標明快捷鍵。純前端、不動後端。
+
+- [ ] 評論清單手動重新整理（可用性，小顆粒）：`CommentsSection` 目前只在掛載 / 換頁 / 切換全部時載入評論，協作情境下他人新增的評論不會自動出現。標題列加「重新整理」按鈕，重跑既有載入邏輯（依 `showAll` 呼叫 `listAllComments` 或 `listPageComments` 並 `setComments`）；載入中可顯示簡單狀態。為避免重複，將既有 useEffect 內的載入邏輯抽成一個可重用的 `loadComments()`。純前端、不動後端。
+
+- [ ] 字幕/逐字稿下載檔名帶簡報標題（Roadmap Phase 5 匯出，小顆粒）：`subtitles.ts` 的 srt/vtt/txt 三個端點 `content-disposition` 檔名為固定值。改為以簡報標題產生安全檔名（新增小工具：trim、移除/替換 `\\/:*?"<>|` 與控制字元、壓縮空白、長度上限、空標題退回原本固定名），輸出如 `{safeTitle}.srt`/`.vtt`/`.txt`；對 ASCII 檔名即可（避免 RFC5987 複雜度，必要時以 `filename*` 留待後續）。補後端 node:test 斷言 `content-disposition` 含預期檔名（含特殊字元被清理、空標題 fallback）。後端小改 + 測試。
+
+## 工作記錄（第一一〇輪，2026-06-26）
+
+- 工作內容：第一〇八輪新增的 4 個可執行項目已全部完成，可執行項目又僅剩兩個「待使用者決定 / 待處理」項目，依 LOOP.md 第 2 條（並記取第一〇七輪教訓，先 grep 驗證不存在）新增 4 個小顆粒、可單輪完成、可加測試、主題分散的可執行項目（報告摘要下載為 Markdown 檔、評論輸入 Ctrl/⌘+Enter 送出、評論清單手動重新整理、字幕/逐字稿下載檔名帶簡報標題），並補掃描摘要。本輪為規畫輪，不計入 100 完成計數（計數維持 81/100）。
+- 時間：2026-06-26
+- 分支：直接於 master 更新 TODO.md（規畫輪，無程式碼變更）
