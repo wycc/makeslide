@@ -32,6 +32,28 @@ function CopyAllQuestionsButton({ questions }: { questions: SyncFollowerQuestion
   );
 }
 
+function CopyLinkButton({ shareUrl }: { shareUrl?: string }) {
+  const { t } = useI18n();
+  const [msg, setMsg] = useState<string | null>(null);
+  const handleCopy = () => {
+    const url = shareUrl || window.location.href;
+    void copyTextToClipboard(url).then((ok) => {
+      setMsg(ok ? t('play.header.copyLinkDone') : t('play.header.copyLinkFail'));
+      setTimeout(() => setMsg(null), 2000);
+    });
+  };
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="rounded-md border border-sky-500/50 bg-sky-500/15 px-3 py-1.5 text-sm text-sky-100 hover:bg-sky-500/25"
+      title={t('play.header.copyLink')}
+    >
+      {msg ?? t('play.header.copyLink')}
+    </button>
+  );
+}
+
 function ShortcutsButton() {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
@@ -802,6 +824,7 @@ export function PlayPageHeader() {
               📊 課後報告
             </button>
           ) : null}
+          <CopyLinkButton shareUrl={shareUrl} />
           {typeof navigator !== 'undefined' && typeof navigator.share === 'function' ? (
             <button
               type="button"

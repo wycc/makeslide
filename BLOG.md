@@ -8124,3 +8124,16 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **元件**（`frontend/src/pages/QuizBuilderPage.tsx`）：倒數顯示改呼叫此函式，輸出與原本相同（已確認無其他相同 mm:ss 內嵌可一併收斂）。
 - **測試**（`formatMmSs.test.ts`）：5 個案例（0/補零、分秒拆分、>60 分、捨去小數秒、負值/NaN→0）。
 - **驗證**：前端 `tsc --noEmit` 通過；新測試通過；無 i18n 變更。
+
+## 分享「複製連結」按鈕（2026-06-26）
+
+### 功能目的
+播放頁的分享區先前只有「📤 分享」按鈕，且它依賴 `navigator.share` API——多數桌機瀏覽器沒有這個 API，按鈕根本不顯示，導致桌機使用者無法快速取得分享連結。本項加入一律可用的「複製連結」按鈕，補齊桌機的分享路徑。
+
+### 使用方式
+在播放頁標題列的「分享」下拉中，點「🔗 複製連結」即把目前簡報的分享連結複製到剪貼簿（按鈕短暫顯示「已複製連結 ✓」）。此按鈕在桌機與行動裝置皆顯示；原生「分享」按鈕仍在支援的裝置上保留。
+
+### 技術細節
+- **元件**（`frontend/src/pages/play/PlayPageHeader.tsx`）：新增 `CopyLinkButton`（自帶提示 state，沿用既有 `CopyAllQuestionsButton` 模式），以 `copyTextToClipboard(shareUrl || window.location.href)` 複製並顯示 2 秒結果；置於分享下拉內、原生分享按鈕之前。
+- **i18n**：新增 zh-TW/en `play.header.copyLink`、`copyLinkDone`、`copyLinkFail`。
+- **驗證**：前端 `tsc --noEmit` 通過；`i18n.test.ts`（含 zh/en key 對等）通過。複用既有 clipboard API 的 UI 按鈕、無新增可抽出純邏輯，故不另加單元測試。

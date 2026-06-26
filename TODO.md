@@ -2517,7 +2517,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：新增 `frontend/src/lib/formatMmSs.ts` 之純函式 `formatMmSs(totalSeconds)`（非有限或 ≤0 視為 0、`Math.floor` 取整、`mm:ss` 各補零兩位、超過 60 分仍以分:秒呈現如 3661→`61:01`）。`QuizBuilderPage` 倒數顯示改呼叫之，輸出與原內嵌邏輯相同、行為不變（已確認無其他相同 mm:ss 內嵌）。新增 `formatMmSs.test.ts` 5 測試（0/補零、分秒拆分、>60 分、捨去小數秒、負值/NaN→0）。前端 `tsc --noEmit` 通過、新測試通過；無 i18n 變更。分支 `feat/format-mmss`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 90 個完成項目（90/100，未達上限）。
 
-- [ ] 分享「複製連結」按鈕（可用性）：播放頁分享區目前只有 `navigator.share`（多數桌機瀏覽器無此 API、按鈕不顯示），導致桌機無法快速取得分享連結。新增「複製連結」按鈕（always 顯示），以 `copyTextToClipboard(shareUrl || window.location.href)` 複製並顯示短暫提示；新增 zh-TW/en i18n key。純前端、不動後端。
+- [x] 分享「複製連結」按鈕（可用性）：播放頁分享區目前只有 `navigator.share`（多數桌機瀏覽器無此 API、按鈕不顯示），導致桌機無法快速取得分享連結。新增「複製連結」按鈕（always 顯示），以 `copyTextToClipboard(shareUrl || window.location.href)` 複製並顯示短暫提示；新增 zh-TW/en i18n key。純前端、不動後端。
+  - 修改說明（2026-06-26）：`PlayPageHeader.tsx` 新增小元件 `CopyLinkButton`（自帶 `msg` state，沿用既有 `CopyAllQuestionsButton` 模式），點擊以 `copyTextToClipboard(shareUrl || window.location.href)` 複製、顯示 2 秒成功/失敗提示；置於分享下拉內、原生 `navigator.share` 按鈕之前，故桌機（無 `navigator.share`）也一律可用。新增 zh-TW/en `play.header.copyLink`/`copyLinkDone`/`copyLinkFail`。純前端、不動後端。前端 `tsc --noEmit` 通過、`i18n.test.ts`（含 zh/en 對等）通過；此為複用既有 clipboard API 的 UI 按鈕、無新增可抽出純邏輯，不另加單元測試。分支 `feat/share-copy-link`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 91 個完成項目（91/100，未達上限）。
 
 - [ ] CSV 匯出檔名帶簡報標題（Roadmap Phase 5 / 一致性）：`comments.csv`、`report/pages.csv`、`report/questions.csv`、`report/students.csv`、`poll-results.csv`、`quiz-results.csv` 的 `content-disposition` 檔名目前為 id-based。復用第一一〇輪新增的 `downloadFilename.ts`（`safeDownloadBaseName` + `buildContentDisposition`），改為 `{safeTitle}-comments.csv`、`{safeTitle}-pages.csv` 等（標題空白時退回原 id-based 名）；各端點本就查得到 pdf row（含 title 或可加查）。更新相關 node:test 的 content-disposition 斷言。後端小改 + 測試更新。
 
