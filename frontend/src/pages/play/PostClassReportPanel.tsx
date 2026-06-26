@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { PdfReportQuestionStat, PdfReportSummary } from '../../lib/api';
 import { resetWatchProgress } from '../../lib/api';
 import { useI18n } from '../../i18n';
+import { useOverlayDismiss } from '../../components/useOverlayDismiss';
 import {
   formatReportNumber,
   formatReportPercent,
@@ -57,6 +58,7 @@ function SummaryCard({ label, value, hint }: { label: string; value: string; hin
 
 export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error, onClose, onReload }: PostClassReportPanelProps) {
   const { t } = useI18n();
+  const { onBackdropClick } = useOverlayDismiss(onClose);
   const hardestQuestions = getHardestQuestions(summary);
   const divergentPollPages = getMostDivergentPollPages(summary);
   const lowestCompletionPages = getLowestCompletionPages(summary);
@@ -133,7 +135,7 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
           .text-fuchsia-300 { color: #86198f !important; }
         }
       `}</style>
-      <div id="pcr-print-root" className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/80 px-4 py-8 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="post-class-report-title">
+      <div id="pcr-print-root" onClick={onBackdropClick} className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/80 px-4 py-8 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="post-class-report-title">
         <div className="w-full max-w-5xl rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
           <div className="hidden print:block mb-4 border-b border-slate-300 pb-3">
             <h1 className="text-lg font-semibold text-black">
