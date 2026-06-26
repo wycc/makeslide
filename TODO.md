@@ -2095,6 +2095,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`VersionHistoryDialog.tsx` import `useOverlayDismiss`、overlay 加 `onClick={onBackdropClick}`、面板加 aria 屬性、抽出 `dialogTitle` 供標題與 aria-label 共用。hook 的純函式先前已測；前端 380 測試 + typecheck 全通過。分支 `feat/version-history-dialog-dismiss`，已 merge 回 master。（註：本項實作時一度誤將 commit 直接提交至 master，已重整為標準「分支→--no-ff merge」結構。）
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 33 個完成項目（33/100，未達上限）。
 
+- [x] 額度用盡對話框支援 Esc／背景點擊關閉：`CreditExhaustedDialog`（資訊類、無表單輸入、已有 aria）原本只能用按鈕關閉。套用共用 `useOverlayDismiss` 補 Escape／背景關閉，並以 `useCallback` 包裝 close（穩定參考，避免 hook 每次 render 重新訂閱）、兩個關閉鈕統一走同一 close handler。
+  - 修改說明（2026-06-26）：`CreditExhaustedDialog.tsx` import `useOverlayDismiss` 與 `useCallback`；`const close = useCallback(() => setDetail(null), [])`、`const { onBackdropClick } = useOverlayDismiss(close)`；overlay 加 `onClick={onBackdropClick}`、兩個 `onClick` 改 `close`。前端 380 測試 + typecheck 全通過。分支 `feat/credit-exhausted-dialog-dismiss`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 34 個完成項目（34/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2132,4 +2136,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | sumAudioDurationSeconds 收斂單一來源：pipeline/regenerate 兩份相同的音訊長度加總抽到 `audioDurationSum.ts`；audioDurationSum.test.ts +3、後端 build 通過 | refactor/dedupe-sum-audio-duration（已 merge） |
 | 2026-06-26 | WAV PCM 助手抽離可測模組：`parseWavPcmChunk`/`buildWavPcm16` 抽到 `services/wav.ts`（synthesizeAudio re-export、刪除 shared.ts 死碼）；wav.test.ts +4、後端 build 通過 | refactor/extract-wav-helpers（已 merge） |
 | 2026-06-26 | 版本歷史對話框 Esc／背景關閉：`VersionHistoryDialog` 套用共用 `useOverlayDismiss`，補 Escape/背景關閉與 `role=dialog`/aria；前端 380 測試通過 | feat/version-history-dialog-dismiss（已 merge） |
+| 2026-06-26 | 額度用盡對話框 Esc／背景關閉：`CreditExhaustedDialog` 套用共用 `useOverlayDismiss`（useCallback 穩定 close）；前端 380 測試通過 | feat/credit-exhausted-dialog-dismiss（已 merge） |
 

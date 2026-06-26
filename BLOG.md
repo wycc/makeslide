@@ -7340,3 +7340,15 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **沿用共用 hook**（`frontend/src/pages/play/VersionHistoryDialog.tsx`）：import 先前建立的 `useOverlayDismiss(onClose)`，於最外層 overlay 加 `onClick={onBackdropClick}`（僅當點擊落在背景本身時關閉），並在面板加上 `role="dialog"`、`aria-modal="true"`、`aria-label`；順手把對話框標題抽成 `dialogTitle` 變數供標題列與 `aria-label` 共用。
 - `useOverlayDismiss` 的純決策函式（`isOverlayDismissKey`、`isBackdropClick`）先前已有單元測試，本次無新增純邏輯，故以前端既有 380 測試與 `tsc --noEmit` typecheck 全通過確認無回歸。
 - **流程備註**：本項實作過程中一度疏忽，把功能 commit 直接提交到了 master；隨即將其重整為標準的「功能分支 → `--no-ff` merge」結構（內容不變），維持與其他項目一致的版本歷史。
+
+## 額度用盡對話框支援 Esc／背景點擊關閉（2026-06-26）
+
+### 功能目的
+當帳號的 LLM／TTS 額度（credit）用盡時，前端會跳出 `CreditExhaustedDialog` 告知使用者並引導前往設定。這是一個純資訊性的對話框（沒有任何表單輸入），但先前只能透過「前往設定」或「知道了」兩個按鈕關閉，按 Escape 或點背景都沒反應。本次沿用先前建立的共用 `useOverlayDismiss` hook，讓它與其他對話框一致地支援 Escape 與背景點擊關閉。
+
+### 使用方式
+無需任何操作。額度用盡提示出現後，除了點按鈕，也可以按 Escape 或點對話框以外的背景關閉它。
+
+### 技術細節
+- **沿用共用 hook**（`frontend/src/components/CreditExhaustedDialog.tsx`）：新增 `const close = useCallback(() => setDetail(null), [])` 作為穩定的關閉函式（避免每次 render 產生新的 callback 導致 `useOverlayDismiss` 的 keydown 監聽反覆重新訂閱），再 `const { onBackdropClick } = useOverlayDismiss(close)`；最外層 overlay 加上 `onClick={onBackdropClick}`，並把「前往設定」與「知道了」兩個按鈕的關閉行為統一改走 `close`。此對話框原本就有 `role="dialog"`／`aria-modal`／`aria-labelledby`，無需再補。
+- **驗證**：`useOverlayDismiss` 的純決策函式先前已有測試，本次無新增純邏輯；前端既有 380 測試與 `tsc --noEmit` typecheck 全通過。
