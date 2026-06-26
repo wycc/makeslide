@@ -2107,6 +2107,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`HomePage.tsx` 新增 export `pdfMatchesSearch`（比對 title／tags／description，空查詢回 true），`filteredItems` 改用之取代內聯 title+tags 過濾。新增 `HomePage.search.test.ts` +4（標題大小寫不敏感、標籤、描述、空查詢/缺欄位）。前端 384 測試 + typecheck 全通過。分支 `feat/home-search-description`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 36 個完成項目（36/100，未達上限）。
 
+- [x] cosineSimilarity 抽離為純可測模組：語意搜尋／相似頁面排序所用的 `cosineSimilarity` 原住在 import `db`／OpenAI client 的 `embeddings.ts`，無法在 sandbox 單元測試。抽到純 `services/cosineSimilarity.ts`，`embeddings.ts` re-export（`search.ts`／`similar-pages.ts` 不受影響）。
+  - 修改說明（2026-06-26）：新增 `backend/src/services/cosineSimilarity.ts`（零向量回 0）；`embeddings.ts` 移除本地定義改 import 並 `export { cosineSimilarity }`。新增 `cosineSimilarity.test.ts` +5（相同/正交/相反向量、零向量守門、已知中間值 1/√2、長度不一致以 0 補尾，含浮點容差），sandbox 通過；後端 build 通過。分支 `refactor/extract-cosine-similarity`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 37 個完成項目（37/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2147,4 +2151,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | 額度用盡對話框 Esc／背景關閉：`CreditExhaustedDialog` 套用共用 `useOverlayDismiss`（useCallback 穩定 close）；前端 380 測試通過 | feat/credit-exhausted-dialog-dismiss（已 merge） |
 | 2026-06-26 | 課後報告面板 Esc／背景關閉：`PostClassReportPanel` 套用共用 `useOverlayDismiss`；前端 380 測試通過 | feat/post-class-report-dismiss（已 merge） |
 | 2026-06-26 | 首頁搜尋納入描述：抽出純函式 `pdfMatchesSearch`（title/tags/description），首頁列表過濾改用之；HomePage.search.test.ts +4；前端 384 測試通過 | feat/home-search-description（已 merge） |
+| 2026-06-26 | cosineSimilarity 抽離可測模組：語意搜尋排序的 `cosineSimilarity` 抽到純 `services/cosineSimilarity.ts`（embeddings re-export）；cosineSimilarity.test.ts +5、後端 build 通過 | refactor/extract-cosine-similarity（已 merge） |
 

@@ -7376,3 +7376,16 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 ### 技術細節
 - **抽出純函式**（`frontend/src/pages/HomePage.tsx`）：新增 export `pdfMatchesSearch(pdf, normalizedQuery)`，`normalizedQuery` 須為已 trim + 轉小寫的字串；比對 `title`、逗號分隔的 `tags`、以及 `description` 三者（皆 `toLocaleLowerCase` 後 `includes`），空查詢回傳 `true`，並容忍 `title`/`tags`/`description` 為 null/undefined。首頁列表的 `filteredItems` 改用此函式，取代原本內聯的「title 或 tags」過濾。
 - **測試**：新增 `frontend/src/pages/HomePage.search.test.ts` 4 個 node:test，涵蓋標題大小寫不敏感比對、標籤比對、描述比對（命中與未命中）、以及空查詢回 true 且缺欄位時安全回 false。前端 384 個測試與 `tsc --noEmit` typecheck 全通過。
+
+## cosineSimilarity 抽離為純可測模組（2026-06-26）
+
+### 功能目的
+語意搜尋（依語意找相關投影片）與「相似頁面」推薦都靠 `cosineSimilarity` 計算兩個 embedding 向量的方向相似度來排序結果——這是排序正確性的核心。但這個純數學函式原本住在 `embeddings.ts` 裡，而該檔在頂層 import 了資料庫與 OpenAI client，導致這個本身不需要任何外部相依的函式，沒辦法在不啟動資料庫的情況下單元測試（而 sandbox 環境的 better-sqlite3 ABI 又與當前 Node 不符）。本次把它抽成一個獨立的純模組，讓它可被測試並鎖定行為。
+
+### 使用方式
+無需任何操作，純內部重構，語意搜尋與相似頁面的排序結果不變。
+
+### 技術細節
+- **純模組**（新檔 `backend/src/services/cosineSimilarity.ts`）：`cosineSimilarity(a, b)` 計算 `dot / (|a| · |b|)`，任一向量為零向量（沒有方向可比）時回傳 0。不 import 資料庫或 OpenAI。
+- **相容性**：`embeddings.ts` 移除本地定義，改為 import 後 `export { cosineSimilarity }`，讓既有從 `embeddings` 匯入此函式的 `routes/pdfs/search.ts` 與 `similar-pages.ts` 完全不需更動。
+- **測試**：新增 `backend/test/cosineSimilarity.test.ts` 5 個 node:test——相同方向（含不同長度的同向向量）回 1、正交回 0、相反回 -1、任一零向量回 0、已知中間值 `[1,1]·[1,0] = 1/√2`、以及較短向量缺尾元素以 0 補的行為（浮點比較均用容差）。此函式先前無測試覆蓋；測試不依賴資料庫、sandbox 可驗證；後端 `tsc -p tsconfig.json` build 通過。
