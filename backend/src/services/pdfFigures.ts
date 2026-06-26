@@ -1,8 +1,7 @@
 import fs from 'node:fs';
-import path from 'node:path';
 import { toFile } from 'openai';
 import { logger } from '../logger';
-import { figureManifestPath, figureSelectionPath, pdfDir, splitFigureMapPath } from './storage';
+import { figureManifestPath, figureSelectionPath, safeJoinPdfPath, splitFigureMapPath } from './storage';
 import type { FigureEntry, FigureManifest } from '../worker/steps/extractPdfFigures';
 
 /** Loads `storage/<pdfId>/figures.json`, or `null` if it doesn't exist (not a PDF import, or extraction hasn't run yet). */
@@ -29,9 +28,14 @@ function figuresForPage(manifest: FigureManifest | null, pageNumber: number, exc
   return figures.filter((figure) => !excludeIds.has(figure.id));
 }
 
-/** Resolves a figure's `imagePath` to an absolute path on disk. */
+/**
+ * Resolves a figure's `imagePath` to an absolute path on disk. Uses
+ * `safeJoinPdfPath` so a corrupted/crafted `figures.json` imagePath (e.g. one
+ * containing `../`) can never resolve to a file outside the PDF's own directory
+ * before it is streamed to a client.
+ */
 export function figureImageAbsPath(pdfId: string, figure: FigureEntry): string {
-  return path.join(pdfDir(pdfId), figure.imagePath);
+  return safeJoinPdfPath(pdfId, figure.imagePath);
 }
 
 /**
