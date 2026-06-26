@@ -2632,3 +2632,15 @@ TODO.md 目前仍有兩個明確標註「待使用者決定 / 待處理」的未
 - 工作內容：使用者選擇「重設計數並繼續」，先在 TODO.md 末尾加入新的「---- 計數重設 ----」(2026-06-27) 標記解除先前 100/100 上限。本輪僅剩三個 `[ ]` 項目皆為「待使用者決定 / 涉 CI 變更」不宜於自動 loop 逕行，依 LOOP.md 第 2 條分析程式後完成一個小型、可測、低風險項目（評論編輯框字數提示 + 計數邏輯抽出為純函式）。完成過程中發現原先擬做的「新增評論字數計數器」已存在（第 400 行），改為「補編輯框缺漏的計數器 + 抽出共用純函式」。
 - 時間：2026-06-27
 - 分支：`feat/comment-length-hint`（已 merge 回 master）
+
+## 完成使用者新增項目（第一二二輪，2026-06-27）
+
+- [x] 淡色 theme 的文字和底色對比不足（無障礙 / 可讀性）：light 主題的前景語意色彩 token 在淺色底上對比偏低——`--color-primary` cyan-500 在白底僅約 **2.43:1**（遠低於 WCAG AA 4.5）、`--color-muted` slate-500 約 4.5（大量用於次要文字、在 slate-50 底上更低）、`--color-danger` rose-600 約 4.7（邊緣）。將 light 模式三個前景 token 調深至符合 WCAG AA，dark 模式不動。
+  - 修改說明（2026-06-27）：`frontend/src/index.css` 的 `:root`（light）token 調整——`--color-muted` slate-500→slate-600（白底 4.76→7.58、slate-50 底 7.24）、`--color-primary` cyan-500→cyan-700（2.43→5.36）、`--color-danger` rose-600→rose-700（4.70→6.29）；`bg/surface/text/border` 維持不變。新增純函式 `frontend/src/lib/contrastRatio.ts`（`relativeLuminance`/`contrastRatio`/`parseRgbTriple`，WCAG 2.x 演算法）與 `contrastRatio.test.ts`（8 測試：黑白=21、自身=1、parse 容錯，並**實際解析 index.css 的 light token 斷言 muted/primary/danger 在 surface/bg 上 ≥ 4.5、text ≥ 7**，作為回歸防護）。前端 `tsc --noEmit` 通過、測試 8/8 通過。BLOG.md 新增對應 section。分支 `fix/light-theme-contrast`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 2 個完成項目（2/100，未達上限）。
+
+## 工作記錄（第一二二輪，2026-06-27）
+
+- 工作內容：發現 TODO.md 末尾有使用者新增的待辦 `[ ] 淡色theme 的文字和底色對比不足`，依 LOOP.md 第 1 條優先完成。分析 `index.css` 的語意色彩 token，量化各前景色於淺色底的 WCAG 對比後，將 light 模式 muted/primary/danger 調深至符合 AA；並新增可重用的 WCAG 對比純函式與「解析實際 CSS 並驗證對比」的回歸測試。dark 模式完全不動。
+- 時間：2026-06-27
+- 分支：`fix/light-theme-contrast`（已 merge 回 master）

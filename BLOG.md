@@ -8278,3 +8278,21 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **接入**（`frontend/src/pages/play/PlayPageSidebar.tsx` 的 `CommentsSection`）：新增評論計數器改用 `getTextLengthHint(text.length, 2000)`；編輯評論的 textarea 下方新增以同函式產生的字數提示。
 - **測試**（`textLengthHint.test.ts`）：7 個案例（基本未警示、與舊內聯行為對齊的邊界 1900/1901、達上限、超過上限夾到 0、自訂 warnWithin 門檻、負值/NaN 淨化、小數 floor）。
 - **驗證**：前端 `tsc --noEmit` 通過；新測試 7/7 通過；純前端、不動後端、不需新 i18n。
+
+## 淡色主題文字對比改善至 WCAG AA（2026-06-27）
+
+### 功能目的
+淺色（light）主題的前景語意色彩在淺色底上對比不足，影響可讀性與無障礙：品牌主色 `--color-primary`（cyan-500）在白底上對比僅約 2.43:1，遠低於 WCAG AA 對一般文字要求的 4.5:1；次要文字色 `--color-muted`（slate-500）大量用於說明文字，在 slate-50 底上也僅約 4.5、屬邊緣；危險色 `--color-danger`（rose-600）約 4.7、餘裕很小。本項把這三個前景 token 在 light 模式調深，讓淺色主題達到 WCAG AA，深色（dark）主題維持原樣。
+
+### 使用方式
+無需任何操作。將主題切換到「淺色」或在淺色系統下使用時，次要文字、連結／主色強調、危險（刪除等）文字都會更清晰；視覺風格仍延續原本的 slate／cyan 色系，只是色階更深。
+
+### 技術細節
+- **色彩 token 調整**（`frontend/src/index.css` 的 `:root`，僅 light 模式）：
+  - `--color-muted`：slate-500 → slate-600（白底對比 4.76→7.58、slate-50 底 7.24）
+  - `--color-primary`：cyan-500 → cyan-700（2.43→5.36）
+  - `--color-danger`：rose-600 → rose-700（4.70→6.29）
+  - `--color-bg / surface / text / border` 不變；`.dark` 區塊完全不動。
+- **純函式模組**（`frontend/src/lib/contrastRatio.ts`）：`relativeLuminance(rgb)`、`contrastRatio(a, b)`（WCAG 2.x 演算法，1–21、順序無關）、`parseRgbTriple(str)`（解析「空白分隔 RGB 三元組」並容忍逗號／註解殘留）。
+- **回歸測試**（`contrastRatio.test.ts`，8 案例）：除基本數學（黑白=21、自身=1、解析容錯）外，**直接讀取 `index.css`、解析 `:root` 的 light token，斷言 muted/primary/danger 在 surface 與 bg 上 ≥ 4.5、text ≥ 7**，日後若有人把 light 前景色改回低對比值，測試會立即失敗。
+- **驗證**：前端 `tsc --noEmit` 通過；測試 8/8 通過；純前端、不動後端、不需新 i18n。
