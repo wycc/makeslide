@@ -9,19 +9,11 @@
  * start/end time grounded in what was actually spoken.
  */
 
-/** Mirrors frontend/src/lib/subtitles.ts's splitScriptIntoSentences() exactly, so the sentence
- * list a presentation's Whisper-aligned timeline was built from always matches what the
- * frontend independently re-derives from the same script text when displaying subtitles. */
-const SENTENCE_MATCH_RE = /[^。！？!?；;\n]+[。！？!?；;]?|\n+/g;
-const TONE_MARKER_RE = /\[\[\s*[^\]]+\s*\]\]/g;
-
-export function splitScriptIntoSentences(script: string): string[] {
-  const withoutToneMarkers = script.replace(TONE_MARKER_RE, ' ');
-  const normalized = withoutToneMarkers.replace(/\r\n?/g, '\n').trim();
-  if (!normalized) return [];
-  const parts = normalized.match(SENTENCE_MATCH_RE) ?? [];
-  return parts.map((s) => s.trim()).filter((s) => s !== '');
-}
+// Re-export the single backend implementation so the Whisper-aligned timeline and every other
+// backend caller share one source of truth (it still mirrors frontend/src/lib/subtitles.ts, which
+// must stay a separate copy because it lives in a different package). Keeping one backend copy
+// removes the in-package drift risk between this module and textSentences.ts.
+export { splitScriptIntoSentences } from './textSentences';
 
 export interface SentenceTimelineItem {
   text: string;
