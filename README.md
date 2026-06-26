@@ -78,6 +78,12 @@ Voice presentation generation and playback system.
 - 工具列提供三種模式切換：✏️ 筆（畫圖）、🖱️ 游標（點擊投影片仍可 pause/resume）、⬜ 橡皮擦（智慧型：碰到即移除整條筆劃）。
   Three toolbar modes: ✏️ Pen (draw), 🖱️ Cursor (click-to-pause/resume still works), ⬜ Eraser (smart: touching a stroke removes the entire stroke instantly).
 
+**外觀主題 / Appearance Theme**
+- 設定頁新增「外觀主題」選項：跟隨系統 / 淺色 / 深色，切換後立即套用、不需按儲存；偏好存於本機（localStorage `makeslide.theme`），不影響後端帳號設定。重新整理時會在首屏 paint 前套用，避免主題閃爍。深色模式為現行預設外觀。
+  Settings now include an "Appearance Theme" option (Follow system / Light / Dark) that applies instantly without saving; the preference is stored locally (localStorage `makeslide.theme`) and does not touch backend account settings. It is applied before first paint on reload to avoid theme flash. Dark remains the current default look.
+- 實作以語意色彩 token（`bg`/`surface`/`text`/`muted`/`border`/`primary`/`danger`，由 CSS variables + Tailwind 暴露）為基礎；首頁、設定頁、播放頁外層與 PDF 卡片已完成第一批適配，淺色模式的細部色階為漸進完善中。
+  Built on semantic colour tokens (`bg`/`surface`/`text`/`muted`/`border`/`primary`/`danger`, exposed via CSS variables + Tailwind). HomePage, Settings, the PlayPage shell, and PDF cards are adapted in the first batch; finer light-mode shades are being refined incrementally.
+
 ---
 
 這個專案提供類似 NotebookLM 影片生成的工作流：可接受 PDF，抽取頁面圖片與文字，產生逐字稿，再合成語音。也支援以簡報大綱（例如 ChatGPT 產生、以 `## Slide XX` 分頁）直接產圖、產稿、配音。
