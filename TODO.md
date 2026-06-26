@@ -2317,7 +2317,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`report.ts` 的 `report/pages.csv` watchPages 查詢加入 `AVG(CASE WHEN w.duration_ms IS NOT NULL AND w.duration_ms > 0 THEN MIN(CAST(w.listened_ms AS REAL)/w.duration_ms, 1.0) ELSE NULL END) AS avg_listened_ratio`（與 `report/summary` 同算法）；CSV 末尾新增 `avg_listened_ratio` 欄，有值四捨五入到小數 4 位、為 null（無觀看者或皆無 duration）時輸出空字串以免誤讀為 0。純後端、前端既有下載連結不需改動、無 i18n 變更。更新 `report-pages-csv.test.ts`：header 加新欄、三列斷言補 avg（page1=0.75〔1.0 與 0.5 平均〕、page2=1〔12000/10000 上限 1〕、page3 空字串）。後端 `tsc --noEmit` 通過；handler 測試需 better-sqlite3 native module、sandbox 無法載入，留 CI 執行。分支 `feat/report-pages-csv-avg-listened`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 65 個完成項目（65/100，未達上限）。
 
-- [ ] 評論「未解決優先」排序（可用性，小顆粒）：在 `CommentsSection` 加入一個切換鈕，開啟時把清單以「未解決在前、其次依現有順序（頁碼/時間）穩定排序」呈現；抽出純函式 `sortCommentsUnresolvedFirst(comments)`（穩定排序，不變動原陣列）置於 `lib/commentStats.ts` 並補測試（全已解決、混合、保持穩定相對序）；切換狀態為純前端 state，不需 i18n 以外的後端改動；新增 zh-TW/en 切換鈕 label key。
+- [x] 評論「未解決優先」排序（可用性，小顆粒）：在 `CommentsSection` 加入一個切換鈕，開啟時把清單以「未解決在前、其次依現有順序（頁碼/時間）穩定排序」呈現；抽出純函式 `sortCommentsUnresolvedFirst(comments)`（穩定排序，不變動原陣列）置於 `lib/commentStats.ts` 並補測試（全已解決、混合、保持穩定相對序）；切換狀態為純前端 state，不需 i18n 以外的後端改動；新增 zh-TW/en 切換鈕 label key。
+  - 修改說明（2026-06-26）：`lib/commentStats.ts` 新增純函式 `sortCommentsUnresolvedFirst<T extends {resolved}>(comments)`——以 `(a.resolved?1:0)-(b.resolved?1:0)` 穩定排序使未解決在前、兩組內維持原相對順序，回傳新陣列不變動輸入。`CommentsSection` 新增 `unresolvedFirst` state 與切換鈕（`comments.length > 1` 才顯示、`aria-pressed` 標示狀態、active 高亮沿用 showAll 樣式）；渲染順序改為先 `filterComments` 得 `filteredComments`，再依切換套用排序得 `visibleComments`（複製/CSV 不受影響）。新增 zh-TW/en `play.sidebar.commentsUnresolvedFirst`。`commentStats.test.ts` 補 2 測試（混合→未解決在前且穩定、不變動原陣列；全同狀態→順序不變）。前端 `tsc --noEmit` 通過、`commentStats.test.ts` 與 `i18n.test.ts` 全通過。分支 `feat/comment-unresolved-first-sort`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 67 個完成項目（67/100，未達上限）。
 
 ## 工作記錄（第一〇一輪，2026-06-26）
 

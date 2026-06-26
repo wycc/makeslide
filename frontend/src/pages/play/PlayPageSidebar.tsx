@@ -11,7 +11,7 @@ import { copyTextToClipboard } from '../../lib/clipboard';
 import { formatAudioDuration } from '../../lib/audioDuration';
 import { getReviewItems, removeReviewItem, formatReviewListMarkdown, type ReviewItem } from '../../lib/reviewList';
 import { filterComments } from '../../lib/commentFilter';
-import { countUnresolvedComments } from '../../lib/commentStats';
+import { countUnresolvedComments, sortCommentsUnresolvedFirst } from '../../lib/commentStats';
 import { formatCommentsMarkdown } from '../../lib/commentMarkdown';
 import { formatRelativeTime } from '../../lib/formatRelativeTime';
 import { NOTEBOOK_TABS, computeNotebookTabCounts, getAdjacentNotebookTab, getEdgeNotebookTab, getStoredNotebookTab, setStoredNotebookTab, type NotebookTab } from './notebookTabs';
@@ -97,6 +97,7 @@ function CommentsSection() {
   const [showAll, setShowAll] = useState(false);
   const [comments, setComments] = useState<PageComment[]>([]);
   const [filterQuery, setFilterQuery] = useState('');
+  const [unresolvedFirst, setUnresolvedFirst] = useState(false);
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
   const [author, setAuthor] = useState('');
   const [text, setText] = useState('');
@@ -145,7 +146,8 @@ function CommentsSection() {
     } catch { /* ignore */ }
   };
 
-  const visibleComments = filterComments(comments, filterQuery);
+  const filteredComments = filterComments(comments, filterQuery);
+  const visibleComments = unresolvedFirst ? sortCommentsUnresolvedFirst(filteredComments) : filteredComments;
   const unresolvedCount = countUnresolvedComments(comments);
 
   const handleCopyComments = async () => {
@@ -202,6 +204,16 @@ function CommentsSection() {
             >
               {showAll ? t('play.sidebar.commentsThisPage') : t('play.sidebar.commentsAll')}
             </button>
+            {comments.length > 1 && (
+              <button
+                type="button"
+                onClick={() => setUnresolvedFirst((v) => !v)}
+                aria-pressed={unresolvedFirst}
+                className={`rounded border px-2 py-0.5 text-[10px] ${unresolvedFirst ? 'border-sky-600/60 bg-sky-700/40 text-sky-200' : 'border-sky-800/40 text-sky-400/70 hover:text-sky-300'}`}
+              >
+                {t('play.sidebar.commentsUnresolvedFirst')}
+              </button>
+            )}
           </div>
         </div>
       </div>

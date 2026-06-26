@@ -1332,6 +1332,7 @@ export const en = {
   'play.sidebar.commentsCopyDone': 'Copied ✓',
   'play.sidebar.commentsCopyFail': 'Copy failed',
   'play.sidebar.commentsResolvedTag': 'resolved',
+  'play.sidebar.commentsUnresolvedFirst': 'Unresolved first',
   'play.sidebar.commentsUnresolvedTitle': '{unresolved} unresolved / {total} total',
   'play.sidebar.commentsFilterPlaceholder': 'Search comments or author…',
   'play.sidebar.commentsNoMatch': 'No matching comments',
