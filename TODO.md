@@ -1975,6 +1975,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`formatters.ts` 的 `formatTime` 加入小時計算，`h > 0` 時回傳 `H:MM:SS`（分秒補零、時不補零）；三處顯示（目前/總長/速度校正剩餘）一致受惠。`formatters.test.ts` 新增 2 個測試涵蓋臨界值與無效輸入（此函式先前無測試）。前端 345 測試 + typecheck 全通過。分支 `feat/format-time-hours`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 3 個完成項目（3/100，未達上限）。
 
+- [x] Token 數顯示百萬進位修正：`formatTokenCount` 對 999_950 以上的值會因 `(tokens / 1_000).toFixed(1)` 四捨五入成 `1000.0K`（K 位數溢位、難讀），改為該範圍直接以百萬單位顯示 `1.00M`；並新增非有限值（NaN/Infinity）守門回傳 `'0'`。此函式用於 `PlayPageSlidePanel` 的 LLM token 用量顯示。
+  - 修改說明（2026-06-26）：`formatters.ts` 的 `formatTokenCount` 加入 `Number.isFinite` 守門與 `abs >= 999_950 → 百萬單位` 的進位判斷（K 與 M 邊界無縫銜接：999_949 仍為 `999.9K`）。`formatters.test.ts` 新增 3 個測試涵蓋一般格式、進位邊界與非有限輸入（此函式先前無測試）。前端 348 測試 + typecheck 全通過。分支 `feat/token-count-rollover`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 4 個完成項目（4/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -1982,3 +1986,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | 剩餘播放時間隨速度校正：新增 `adjustRemainingForSpeed(seconds, rate)` 純函式並於 `PlayPageSlidePanel` 剩餘時間顯示套用；非 1× 倍速 tooltip 改用 `play.header.timeRemainingAtSpeed`；formatters.test.ts +2 測試；i18n zh-TW/en 各 +1 key | feat/remaining-time-speed-adjusted（已 merge） |
 | 2026-06-26 | 首頁新增「標題 Z-A」排序：`SortMode`/`SORT_MODES` 加 `title_desc`，新增 `compareByTitleDesc` 並 export `getComparatorForSortMode`；下拉加 option；i18n zh-TW/en 各 +1 key；HomePage.sort.test.ts +2 測試 | feat/home-sort-title-desc（已 merge） |
 | 2026-06-26 | 播放時間顯示支援小時：`formatTime` 在 ≥1 小時時改回傳 `H:MM:SS`（未滿則維持 `MM:SS`）；formatters.test.ts +2 測試（先前無覆蓋） | feat/format-time-hours（已 merge） |
+| 2026-06-26 | Token 數顯示百萬進位修正：`formatTokenCount` 對 999_950+ 改以 `1.00M` 顯示（原誤為 `1000.0K`），並守門非有限輸入回 `'0'`；formatters.test.ts +3 測試（先前無覆蓋）；前端 348 測試通過 | feat/token-count-rollover（已 merge） |
+
