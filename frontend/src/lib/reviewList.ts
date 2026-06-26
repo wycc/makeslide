@@ -59,3 +59,24 @@ export function clearAllReviewItems(): void {
   if (!hasLocalStorage()) return;
   localStorage.removeItem(REVIEW_LIST_KEY);
 }
+
+/** formatReviewListMarkdown 所需的可翻譯字串；由元件以 i18n 注入，使本函式維持純粹可測。 */
+export interface ReviewMarkdownLabels {
+  heading: string;
+  /** 頁碼標籤，含 `{n}` 佔位符，例如「第 {n} 頁」。 */
+  page: string;
+}
+
+/**
+ * 將複習清單輸出為 Markdown（依頁碼遞增、穩定排序）。
+ * 純函式：顯示文字由 labels 注入。清單為空時回傳空字串。
+ */
+export function formatReviewListMarkdown(items: ReviewItem[], labels: ReviewMarkdownLabels): string {
+  if (items.length === 0) return '';
+  const sorted = [...items].sort((a, b) => a.pageNumber - b.pageNumber);
+  const lines = [`# ${labels.heading}`, ''];
+  for (const item of sorted) {
+    lines.push(`- ${labels.page.replace('{n}', String(item.pageNumber))}：${item.questionText}`);
+  }
+  return lines.join('\n');
+}

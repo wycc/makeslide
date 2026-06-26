@@ -7739,3 +7739,18 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **divergence 定義**：因 `report/summary` 目前未在伺服器端計算每頁投票分歧，故本端點自行以「1 − 最大選項得票占比」定義一個簡單、確定且可測的分歧分數。
 - **測試**：`backend/test/report-pages-csv.test.ts` 3 個案例（欄位/排序/divergence 計算、403 非擁有者、404 未知 PDF）。
 - **驗證**：前端與後端 `tsc --noEmit` 通過；`i18n.test.ts`（含 zh/en key 對等）通過。後端 handler 測試需 better-sqlite3 native module，於本機 sandbox 無法載入，留待 CI 執行。
+
+## 複習清單複製為 Markdown（2026-06-26）
+
+### 功能目的
+播放頁的「複習清單」會在學生答錯且該題有對應頁碼時自動收錄，幫助個人化複習（Roadmap Phase 2）。但先前只能在側欄逐項點看、移除或清空，無法整批帶走。本項讓使用者一鍵把複習清單複製成 Markdown，方便貼到筆記、待辦或學習平台後續複習。
+
+### 使用方式
+在播放頁側欄的「複習清單」區（有項目時才顯示），點標題列右側的「複製」按鈕，即可把清單以 Markdown 複製到剪貼簿（按鈕短暫顯示「已複製 ✓」）。內容依頁碼遞增排序，每行為 `- 第 N 頁：問題文字`。
+
+### 技術細節
+- **純函式**（`frontend/src/lib/reviewList.ts`）：新增 `formatReviewListMarkdown(items, labels)`，依 `pageNumber` 穩定排序後輸出標題與條列；顯示文字（標題、含 `{n}` 的頁碼標籤）由 `ReviewMarkdownLabels` 注入以保持純粹可測；空清單回空字串。
+- **UI**（`frontend/src/pages/play/PlayPageSidebar.tsx` 的 `ReviewListSection`）：標題列改為左右排版，右側「複製」按鈕呼叫 `copyTextToClipboard` 並顯示 2 秒結果提示，labels 重用既有 `reviewListTitle`/`reviewListPage`。
+- **i18n**：新增 zh-TW/en `play.sidebar.reviewListCopy`/`reviewListCopyDone`/`reviewListCopyFail`。
+- **測試**：`reviewList.test.ts` 補 2 個案例（空清單→空字串、依頁排序與 `{n}` 代入）。
+- **驗證**：前端 `tsc --noEmit` 通過；`reviewList.test.ts` 與 `i18n.test.ts`（含 zh/en key 對等）全通過。
