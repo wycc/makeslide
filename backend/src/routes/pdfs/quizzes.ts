@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
 import { logger } from '../../logger';
+import { isCorrectAnswer } from '../../services/quizCorrectness';
 import { decodeSession, parseCookies } from '../auth';
 import { callChatJSON } from '../../services/openai';
 import { pageScriptPath, pageTextPath } from '../../services/storage';
@@ -253,13 +254,6 @@ function normalizeQuestionScores(questions: ScorableQuestion[]): number[] {
   const remaining = Math.max(0, TOTAL - assigned);
   const even = emptyIndices.length > 0 ? remaining / emptyIndices.length : 0;
   return explicit.map((v) => (v == null ? (emptyIndices.length > 0 ? even : 0) : v));
-}
-
-function isCorrectAnswer(answerIndices: number[], selected: number[]): boolean {
-  const a = Array.from(new Set(answerIndices)).sort((x, y) => x - y);
-  const b = Array.from(new Set(selected)).sort((x, y) => x - y);
-  if (a.length !== b.length) return false;
-  return a.every((v, i) => v === b[i]);
 }
 
 /** Mirrors frontend/src/pages/QuizBuilderPage.tsx calcQuestionScore(): single = all-or-nothing, multiple = per-option partial credit. */
