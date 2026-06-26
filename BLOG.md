@@ -8166,3 +8166,15 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **查詢擴充**：`comments.ts` 的 `getPdfRow` 與 `report.ts` 的 `getPdfPermissionRow` 權限查詢加選 `title` 欄（兩檔多個 handler 共用，其他 handler 忽略無害）；poll/quiz CSV 的既有查詢已含 title。
 - **測試**：更新 `comments-csv`/`report-pages-csv`/`report-questions-csv` 的 content-disposition 斷言為標題命名，並於 `comments-csv` 新增「空白標題退回 id-based 名」案例。
 - **驗證**：後端 `tsc --noEmit` 通過；`download-filename.test.ts` 與 `csvEscape.test.ts`（14 測試）通過。CSV handler 測試需 better-sqlite3 native module，於本機 sandbox 無法載入，留待 CI 執行。
+
+## RemoteController 投票百分比改用共用純函式（2026-06-26）
+
+### 功能目的
+先前抽出的 `pollOptionPercent` 已收斂了全螢幕 overlay、側邊欄與投票 Markdown 的百分比計算，但遙控器頁（`RemoteControllerPage`）的投票結果百分比仍是內嵌的最後一處重複。本項把它也改用共用純函式，完成投票百分比計算的全面收斂，使用者行為不變。
+
+### 使用方式
+無可見變化。遙控器頁的投票百分比顯示與先前相同。
+
+### 技術細節
+- **收斂**（`frontend/src/pages/RemoteControllerPage.tsx`）：投票結果 `ratio` 改為 `pollOptionPercent(option.votes, poll.total_votes)`，移除內嵌的 `total>0 ? Math.round(...) : 0`；以 grep 確認全前端已無其他相同內嵌。
+- **驗證**：前端 `tsc --noEmit` 通過；行為不變、邏輯由既有 `pollPercent.test.ts` 覆蓋，故不另加測試。
