@@ -1,7 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { PdfReportSummary } from '../../lib/api';
-import { formatReportPercent, getHardestQuestions, getLowestCompletionPages, getMostDivergentPollPages } from './reportSummary';
+import {
+  formatReportPercent,
+  formatReportSummaryMarkdown,
+  getHardestQuestions,
+  getLowestCompletionPages,
+  getMostDivergentPollPages,
+  type ReportMarkdownLabels,
+} from './reportSummary';
+
+const LABELS: ReportMarkdownLabels = {
+  heading: 'Report',
+  participants: 'Participants',
+  quizAverage: 'Quiz avg',
+  pollParticipation: 'Poll rate',
+  hardestQuestions: 'Hardest',
+  divergentPolls: 'Divergent',
+  lowestCompletion: 'Lowest completion',
+  page: 'Page',
+  none: '(none)',
+};
 
 const baseSummary: PdfReportSummary = {
   pdf_id: 'pdf-1',
@@ -67,5 +86,48 @@ test('formatReportPercent clamps finite ratios and hides missing values', () => 
   assert.equal(formatReportPercent(0.426), '43%');
   assert.equal(formatReportPercent(1.2), '100%');
   assert.equal(formatReportPercent(null), '—');
+});
+
+test('formatReportSummaryMarkdown returns empty string for a null summary', () => {
+  assert.equal(formatReportSummaryMarkdown(null, LABELS), '');
+});
+
+test('formatReportSummaryMarkdown renders overall numbers and shows (none) for empty rankings', () => {
+  const md = formatReportSummaryMarkdown(baseSummary, LABELS, 'My Deck');
+  assert.match(md, /^# Report：My Deck/);
+  assert.match(md, /- Participants: 3/);
+  assert.match(md, /- Quiz avg: —/); // average_score is null
+  assert.match(md, /- Poll rate: 0%/);
+  // all three rankings are empty in baseSummary -> each section shows the none label
+  assert.equal((md.match(/\(none\)/g) ?? []).length, 3);
+});
+
+test('formatReportSummaryMarkdown lists ranked questions, poll pages and completion pages', () => {
+  const summary: PdfReportSummary = {
+    ...baseSummary,
+    quiz: {
+      attempt_count: 5,
+      participant_count: 3,
+      average_score: 72,
+      hardest_questions: [
+        { question_id: 'a', question: 'What is X?', attempt_count: 4, wrong_count: 3, wrong_rate: 0.75 },
+      ],
+    },
+    polls: {
+      poll_count: 1,
+      vote_count: 5,
+      participant_count: 5,
+      participation_rate: 0.5,
+      most_divergent_pages: [{ page_number: 2, question: 'Agree?', total_votes: 5, divergence_score: 0.9 }],
+    },
+    watch_progress: {
+      pages: [{ page_number: 4, total_viewers: 4, completed_viewers: 1, completion_rate: 0.25, avg_listened_ratio: 0.4 }],
+    },
+  };
+  const md = formatReportSummaryMarkdown(summary, LABELS);
+  assert.match(md, /## Hardest\n1\. What is X\? — 75% \(3\/4\)/);
+  assert.match(md, /## Divergent\n1\. Page 2 — Agree\? \(5\)/);
+  assert.match(md, /## Lowest completion\n1\. Page 4 — 25% \(1\/4\)/);
+  assert.doesNotMatch(md, /\(none\)/);
 });
 

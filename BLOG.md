@@ -7709,3 +7709,18 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **i18n**：新增 zh-TW/en `play.sidebar.commentsUnresolvedTitle`（含 `{unresolved}`/`{total}` 佔位符）。
 - **測試**：`commentStats.test.ts` 4 個案例（空 / 全解決 / 全未解決 / 混合）。
 - **驗證**：前端 `tsc --noEmit` 通過；`commentStats.test.ts` 與 `i18n.test.ts`（含 zh/en key 對等與佔位符集合檢查）全通過。
+
+## 報告摘要複製為 Markdown（2026-06-26）
+
+### 功能目的
+課後學習報告（PostClassReportPanel）已彙整測驗、投票、觀看完成率等教學洞察，但教師若想把重點貼到聯絡簿、課程平台或會議記錄，先前只能逐項手抄或列印 PDF。本項新增「複製摘要」按鈕，一鍵把整體數字與三大榜單（最難測驗題 / 最分歧投票頁 / 最低完成率頁）輸出成 Markdown 放入剪貼簿，方便貼到任何支援 Markdown 的地方。
+
+### 使用方式
+開啟課後報告，點工具列的「複製摘要」即可把摘要以 Markdown 複製到剪貼簿（按鈕會短暫顯示「已複製 ✓」）。無報告資料時按鈕停用。貼上後內容包含：標題（含簡報名稱）、參與人數 / 測驗平均 / 投票參與率，以及三個榜單各前三名（無資料的榜單會標示「（無資料）」）。
+
+### 技術細節
+- **純函式**（`frontend/src/pages/play/reportSummary.ts`）：新增 `formatReportSummaryMarkdown(summary, labels, pdfTitle?)`，所有顯示字串由 `ReportMarkdownLabels` 注入（讓函式保持純粹、可測，i18n 留在元件層）；沿用既有 `getHardestQuestions`/`getMostDivergentPollPages`/`getLowestCompletionPages` 與 `formatReportPercent`/`formatReportNumber`。`summary` 為 null 回空字串，榜單為空輸出 none label。
+- **UI**（`frontend/src/pages/play/PostClassReportPanel.tsx`）：工具列加「複製摘要」按鈕與 `handleCopySummary`，以 `lib/clipboard.ts` 的 `copyTextToClipboard` 複製並顯示 2 秒提示。
+- **i18n**：重用既有報告區段標題 key，新增 `play.report.copySummary`/`copyHeading`/`copyPollParticipation`/`copyNone`/`copyDone`/`copyFail`（zh-TW/en）。
+- **測試**：`reportSummary.test.ts` 補 3 個案例（null→空字串、空榜單→三個 none、有資料→三榜單行格式）。
+- **驗證**：前端 `tsc --noEmit` 通過；`reportSummary.test.ts` 與 `i18n.test.ts`（含 zh/en key 對等）全通過。

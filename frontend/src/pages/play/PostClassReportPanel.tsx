@@ -6,10 +6,12 @@ import { useOverlayDismiss } from '../../components/useOverlayDismiss';
 import {
   formatReportNumber,
   formatReportPercent,
+  formatReportSummaryMarkdown,
   getHardestQuestions,
   getLowestCompletionPages,
   getMostDivergentPollPages,
 } from './reportSummary';
+import { copyTextToClipboard } from '../../lib/clipboard';
 
 interface StudentQuestionResult {
   question_id: string;
@@ -73,6 +75,29 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
 
   const [resetBusy, setResetBusy] = useState(false);
   const [resetMsg, setResetMsg] = useState<string | null>(null);
+  const [copyMsg, setCopyMsg] = useState<string | null>(null);
+
+  const handleCopySummary = async () => {
+    if (!summary) return;
+    const md = formatReportSummaryMarkdown(
+      summary,
+      {
+        heading: t('play.report.copyHeading'),
+        participants: t('play.report.cardParticipants'),
+        quizAverage: t('play.report.cardQuizAvg'),
+        pollParticipation: t('play.report.copyPollParticipation'),
+        hardestQuestions: t('play.report.hardestTitle'),
+        divergentPolls: t('play.report.divergentTitle'),
+        lowestCompletion: t('play.report.lowestTitle'),
+        page: t('play.report.pagePrefix'),
+        none: t('play.report.copyNone'),
+      },
+      pdfTitle,
+    );
+    const ok = await copyTextToClipboard(md);
+    setCopyMsg(ok ? t('play.report.copyDone') : t('play.report.copyFail'));
+    window.setTimeout(() => setCopyMsg(null), 2000);
+  };
 
   const handleResetWatchProgress = () => {
     if (!window.confirm(t('play.report.resetConfirm'))) return;
@@ -174,6 +199,14 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
               >
                 {t('play.report.exportPollCsv')}
               </a>
+              <button
+                type="button"
+                onClick={() => void handleCopySummary()}
+                disabled={!summary}
+                className="rounded-md border border-sky-500/50 bg-sky-500/15 px-3 py-1.5 text-sm text-sky-100 hover:bg-sky-500/25 disabled:opacity-50"
+              >
+                {copyMsg ?? t('play.report.copySummary')}
+              </button>
               <button type="button" onClick={() => window.print()} className="rounded-md border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-sm text-amber-100 hover:bg-amber-500/25">
                 {t('play.report.print')}
               </button>
