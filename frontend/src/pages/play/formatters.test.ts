@@ -41,6 +41,17 @@ test('formatCostUsd formats dollar amounts and uses the provided unknown label',
   assert.equal(formatCostUsd(null), 'Unknown');
 });
 
+test('formatCostUsd guards against non-finite input', () => {
+  assert.equal(formatCostUsd(Number.NaN), 'Unknown');
+  assert.equal(formatCostUsd(Number.POSITIVE_INFINITY), 'Unknown');
+  assert.equal(formatCostUsd(Number.NaN, t('play.system.costUnknown')), '未知');
+});
+
+test('formatCostUsd handles negative costs without misclassifying as sub-cent', () => {
+  assert.equal(formatCostUsd(-0.004), '-<$0.01');
+  assert.equal(formatCostUsd(-1.2345), '-$1.23');
+});
+
 test('sumCompletedDurationMs sums only succeeded finite artifact durations', () => {
   assert.equal(
     sumCompletedDurationMs([

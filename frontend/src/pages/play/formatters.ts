@@ -139,8 +139,11 @@ export function formatTokenCount(tokens: number): string {
 }
 
 export function formatCostUsd(cost: number | null, unknownLabel = 'Unknown'): string {
-  if (cost == null) return unknownLabel;
+  if (cost == null || !Number.isFinite(cost)) return unknownLabel;
   if (cost === 0) return '$0';
-  if (cost < 0.01) return '<$0.01';
-  return `$${cost.toFixed(2)}`;
+  // 負成本不應落入 `< 0.01` 的 "<$0.01" 分支，需取絕對值判斷微額，並補回負號。
+  const abs = Math.abs(cost);
+  const sign = cost < 0 ? '-' : '';
+  if (abs < 0.01) return `${sign}<$0.01`;
+  return `${sign}$${abs.toFixed(2)}`;
 }
