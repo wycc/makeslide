@@ -8095,3 +8095,18 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **元件**（`frontend/src/pages/play/PlayPageSidebar.tsx`）：`handleCopyAllNotes` 改呼叫該函式，空字串時維持「無筆記可複製」提示、否則複製；輸出與原本逐字相同。
 - **測試**（`notesMarkdown.test.ts`）：3 個案例（全無筆記/空白回空、跳過無筆記頁與多段、trim）。
 - **驗證**：前端 `tsc --noEmit` 通過；新測試通過；無 i18n key 變更。
+
+## 書籤導覽純函式與「上一個書籤」快捷鍵（2026-06-26）
+
+### 功能目的
+播放頁的 `B` 鍵可跳到下一個書籤，但沒有反向跳的快捷鍵；且該導覽計算先前內嵌於鍵盤處理器、無法單元測試。本項把書籤導覽抽成可測試的純函式，並新增 `Shift+B` 跳到「上一個書籤」，讓在多個書籤間來回更方便。
+
+### 使用方式
+播放時按 `B` 跳到下一個書籤、按 `Shift+B` 跳到上一個書籤，兩者皆為環狀（到頭/尾會繞回另一端）。快捷鍵說明面板（標題列「? 鍵盤快捷鍵」）也新增了 `Shift + B` 一列。
+
+### 技術細節
+- **純函式**（`frontend/src/lib/bookmarkNav.ts`）：`nextBookmarkPage(bookmarks, currentPage)` 取第一個大於目前頁的書籤、無則環繞回最小；`prevBookmarkPage` 取最後一個小於目前頁的書籤、無則環繞回最大；先排序去重，空清單回 `null`，皆為 1-based 頁碼。
+- **鍵盤**（`frontend/src/pages/PlayPage.tsx`）：`b` 分支改為依 `ev.shiftKey` 選 prev/next，行為與原 `B` 一致並新增反向。
+- **說明面板**（`frontend/src/pages/play/PlayPageHeader.tsx`）：`shortcuts` 在 `B` 後加入 `Shift + B`；新增 zh-TW/en `play.shortcuts.prevBookmark`。
+- **測試**（`bookmarkNav.test.ts`）：4 個案例（空清單回 null、next 環繞、prev 環繞、排序去重）。
+- **驗證**：前端 `tsc --noEmit` 通過；`bookmarkNav.test.ts` 與 `i18n.test.ts`（含 zh/en key 對等）全通過。

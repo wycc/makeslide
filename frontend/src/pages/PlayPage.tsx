@@ -37,6 +37,7 @@ import {
 } from '../lib/animationSpec';
 import { debugLog, debugWarn } from '../lib/debugLog';
 import { formatGeneratingStatusLabel } from '../lib/statusLabels';
+import { nextBookmarkPage, prevBookmarkPage } from '../lib/bookmarkNav';
 import { splitScriptIntoSentences, buildSentenceTimeline, type SentenceTimelineItem } from '../lib/subtitles';
 import { type DrawingCanvasHandle, type DrawingData, type DrawingStroke } from '../components/DrawingCanvas';
 import { useVersionHistory } from './play/useVersionHistory';
@@ -1628,9 +1629,11 @@ export default function PlayPage() {
         if (bookmarks.length > 0) {
           ev.preventDefault();
           const currentPageNumber = currentIdx + 1;
-          const sorted = [...bookmarks].sort((a, b) => a - b);
-          const next = sorted.find((n) => n > currentPageNumber) ?? sorted[0];
-          if (next !== undefined) setCurrentIdx(next - 1);
+          // Shift+B 跳到上一個書籤，B 跳到下一個（皆環狀）。
+          const target = ev.shiftKey
+            ? prevBookmarkPage(bookmarks, currentPageNumber)
+            : nextBookmarkPage(bookmarks, currentPageNumber);
+          if (target !== null) setCurrentIdx(target - 1);
         }
       } else if (ev.key.toLowerCase() === 'i') {
         if (currentPage) {

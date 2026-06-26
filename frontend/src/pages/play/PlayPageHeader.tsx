@@ -57,6 +57,7 @@ function ShortcutsButton() {
     ['Space', t('play.shortcuts.spaceNormal')],
     ['G', t('play.shortcuts.gotoPage')],
     ['B', t('play.shortcuts.nextBookmark')],
+    ['Shift + B', t('play.shortcuts.prevBookmark')],
     ['I', t('play.shortcuts.toggleImportant')],
     ['W', t('play.shortcuts.toggleDraw')],
     ['P', t('play.shortcuts.pollControl')],
