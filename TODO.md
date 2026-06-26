@@ -2131,6 +2131,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`usePagePolls.ts` 新增 `const MAX_POLL_OPTIONS = 6`（註解標明鏡像後端）；`handleCreatePoll` 在 `< 2` 檢查後加 `options.length > MAX_POLL_OPTIONS` 檢查並顯示 `play.sidebar.poll.maxOptions`（含 `{max}` 佔位）。zh-TW/en 各新增該 key。前端 384 測試 + typecheck（含 i18n key 對齊）全通過。分支 `feat/poll-max-options-frontend-validation`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 42 個完成項目（42/100，未達上限）。
 
+- [x] 測驗「答對」判定收斂為單一來源：`isCorrectAnswer`（選取集合與答案鍵完全相符、忽略順序/重複）在 `quizzes.ts`（計分）有正式版、`report.ts`（課後報告）內聯重複兩次——三份等價但獨立，漂移會使報告與其所報告的計分結果不一致。抽到純 `services/quizCorrectness.ts`，三處共用（鏡像前端 `lib/quizScoring.ts`）。
+  - 修改說明（2026-06-26）：新增 `backend/src/services/quizCorrectness.ts`（`isCorrectAnswer`）；`quizzes.ts` 移除本地定義改 import；`report.ts` 兩處內聯（computeQuestionStats／computeStudentRecords）改呼叫之、移除多餘的 `correctSet`/`selectedSet`。新增 `quizCorrectness.test.ts` +4（單選相符、多選忽略順序/重複、子集/超集/相異為錯、空對空為對），sandbox 通過；後端 build 通過。分支 `refactor/dedupe-quiz-correctness`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 43 個完成項目（43/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2177,4 +2181,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | formatDurationMs 負值守門：負時長改回 noRecordLabel（原會輸出 `-5ms`）；formatters.test.ts +1；前端 384 測試通過 | fix/format-duration-negative-guard（已 merge） |
 | 2026-06-26 | 投票選項上限/索引上界以常數連結：引入 `MAX_POLL_OPTIONS`，`CreatePollBodySchema`/`VotePollBodySchema` 由它推導邊界（防調高選項上限卻漏改索引上界）；後端 build 通過 | refactor/poll-max-options-constant（已 merge） |
 | 2026-06-26 | 前端投票選項上限驗證：`handleCreatePoll` 補 `> MAX_POLL_OPTIONS`(6) 檢查，送出前以 `play.sidebar.poll.maxOptions` 友善訊息攔下；zh/en 各 +1 key；前端 384 測試通過 | feat/poll-max-options-frontend-validation（已 merge） |
+| 2026-06-26 | 測驗答對判定收斂單一來源：`isCorrectAnswer` 抽到 `services/quizCorrectness.ts`，`quizzes.ts` 與 `report.ts`(2處) 共用（防報告與計分判定漂移）；quizCorrectness.test.ts +4、後端 build 通過 | refactor/dedupe-quiz-correctness（已 merge） |
 

@@ -7452,3 +7452,16 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **前端常數**（`frontend/src/pages/play/usePagePolls.ts`）：新增 `const MAX_POLL_OPTIONS = 6`，並加註解標明它鏡像後端 `routes/pdfs/shared.ts` 的同名常數（兩個套件無法共用程式碼，故各自定義但以註解連結）。`handleCreatePoll` 在原本的 `< 2` 檢查之後，新增 `options.length > MAX_POLL_OPTIONS` 的檢查，超過時 `setPollError(t('play.sidebar.poll.maxOptions').replace('{max}', '6'))` 並提早返回，不發送請求。
 - **i18n**：`zh-TW`／`en` 各新增 `play.sidebar.poll.maxOptions`（含 `{max}` 佔位）。
 - **驗證**：i18n key 對齊由 `tsc --noEmit`（`TranslationKey`）與 i18n 測試把關；前端 384 個測試與 typecheck 全通過。
+
+## 測驗「答對」判定收斂為單一來源（2026-06-26）
+
+### 功能目的
+測驗系統有兩個地方需要判斷「學生的作答是否正確」：一是計分（`routes/pdfs/quizzes.ts`），二是課後報告統計每題答對率與每位學生的逐題對錯（`routes/pdfs/report.ts`）。判斷規則一樣——學生選取的選項集合必須與題目的正解集合「完全相符」（忽略順序與重複）。但原本 `quizzes.ts` 有一個正式的 `isCorrectAnswer` 函式，`report.ts` 卻在兩個地方各自內聯重寫了一份等價的集合比對邏輯，等於同一個語意有三份獨立實作。風險在於：若日後有人調整「何謂答對」的判定（例如改成允許部分給分也算對、或改為順序敏感），只改其中一處就會讓「課後報告顯示的對錯」與「實際計分」對不上，而且很難察覺。本次把它收斂成單一正本。
+
+### 使用方式
+無需任何操作，純內部重構，計分與報告的對錯判定行為不變（與先前一致、且現在保證彼此一致）。
+
+### 技術細節
+- **單一來源**（新檔 `backend/src/services/quizCorrectness.ts`）：`isCorrectAnswer(answerIndices, selected)` 將兩邊去重、排序後逐元素比對，長度不同即為錯。鏡像前端 `lib/quizScoring.ts` 的同名函式。
+- **去重**：`quizzes.ts` 移除本地定義改 import（`calcQuestionScore` 內部仍用它）；`report.ts` 的 `computeQuestionStats` 與 `computeStudentRecords` 兩處內聯比對改為呼叫 `isCorrectAnswer`，並移除不再需要的 `correctSet`/`selectedSet` 暫存。
+- **測試**：新增 `backend/test/quizCorrectness.test.ts` 4 個 node:test——單選完全相符、多選忽略順序與重複、子集/超集/相異皆判錯、空對空為對而空對非空為錯。此判定先前在後端無直接單元測試覆蓋；測試不依賴資料庫、sandbox 可驗證；後端 `tsc -p tsconfig.json` build 通過。
