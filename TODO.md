@@ -2003,6 +2003,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：新增 `frontend/src/pages/play/headerDropdownDismiss.ts`（兩個純決策函式）；`PlayPageHeader.tsx` 的 `HeaderDropdown` 加 `rootRef` 與 `useEffect`（`document` mousedown + `window` keydown，含 cleanup），`<details>` 掛上 ref。新增 `headerDropdownDismiss.test.ts` +2 測試（外部/內部 pointer 與 open 狀態組合、只認 Escape）。前端 358 測試 + typecheck 全通過。分支 `feat/header-dropdown-dismiss`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 10 個完成項目（10/100，未達上限）。
 
+- [x] 全域搜尋忽略過時回應（async race）：`GlobalSearchBox` 邊打邊搜（debounced，每次按鍵發一次請求）但會套用「任何先回來的」回應——較早送出的較慢請求（"ab"）若比後送的（"abc"）晚回，會用過時結果覆蓋使用者實際輸入的最新結果。debounce 只能緩解、無法消除此 race。改以單調遞增的 request id 守門，回應非最新時直接捨棄（searching spinner 重設也一併 gate）。
+  - 修改說明（2026-06-26）：`GlobalSearchBox.tsx` 新增 `requestSeqRef`，`doSearch` 取 `seq = ++requestSeqRef.current`，await 後僅在 `seq === requestSeqRef.current` 時 `setResults`／清除 searching；空查詢分支則 `+= 1` 使在途回應失效。同時把原本未測試的純函式 `highlightText` export 並新增 `GlobalSearchBox.test.ts` +5 測試（空查詢、單一/多個大小寫不敏感匹配、保留原大小寫且 trim 查詢、無匹配）。前端 363 測試 + typecheck 全通過。分支 `fix/global-search-race`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 11 個完成項目（11/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2017,4 +2021,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | 首頁新增「頁數少到多」排序：補上 `page_count_asc`（與既有 `page_count_desc` 對稱、缺頁數排尾），`SortMode`/`SORT_MODES`/comparator/下拉/i18n 一併更新；HomePage.sort.test.ts +2 測試；前端 356 測試通過 | feat/home-sort-page-count-asc（已 merge） |
 | 2026-06-26 | 後端字幕分句去重：`subtitleAlignment.ts` 改 re-export `textSentences.ts` 的 `splitScriptIntoSentences`，消除後端同套件內兩份相同副本（含 regex）；一致性測試改以函式 identity 斷言並保留前端↔後端 regex 守護；相關後端測試與 build 通過 | refactor/dedupe-backend-split-sentences（已 merge） |
 | 2026-06-26 | 播放頁下拉選單支援 Esc／點外部關閉：`HeaderDropdown` 加 `useEffect`（Escape + 外部 pointer-down 關閉），決策邏輯抽成純函式 `headerDropdownDismiss.ts`；headerDropdownDismiss.test.ts +2 測試；前端 358 測試通過 | feat/header-dropdown-dismiss（已 merge） |
+| 2026-06-26 | 全域搜尋忽略過時回應：`GlobalSearchBox` 以 `requestSeqRef` 守門，捨棄非最新的 async 搜尋回應（修 search-as-you-type race）；export `highlightText` 並 +5 測試；前端 363 測試通過 | fix/global-search-race（已 merge） |
 
