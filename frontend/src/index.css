@@ -2,6 +2,33 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * 語意化色彩 token（Theme 功能用）。值以「空白分隔的 RGB 三元組」表示，
+ * 搭配 tailwind.config.js 的 `rgb(var(--color-*) / <alpha-value>)` 讓語意 class
+ * （bg/surface/text/muted/border/primary/danger）支援透明度修飾。
+ * 預設為 light；`.dark`（由 lib/theme.ts 套用於 <html>）覆寫為 dark。
+ * 預設 dark 值刻意貼齊本專案既有的 slate/cyan 深色視覺。
+ */
+:root {
+  --color-bg: 248 250 252; /* slate-50 */
+  --color-surface: 255 255 255; /* white */
+  --color-text: 15 23 42; /* slate-900 */
+  --color-muted: 100 116 139; /* slate-500 */
+  --color-border: 226 232 240; /* slate-200 */
+  --color-primary: 6 182 212; /* cyan-500 */
+  --color-danger: 225 29 72; /* rose-600 */
+}
+
+.dark {
+  --color-bg: 2 6 23; /* slate-950 */
+  --color-surface: 15 23 42; /* slate-900 */
+  --color-text: 226 232 240; /* slate-200 */
+  --color-muted: 148 163 184; /* slate-400 */
+  --color-border: 51 65 85; /* slate-700 */
+  --color-primary: 34 211 238; /* cyan-400 */
+  --color-danger: 251 113 133; /* rose-400 */
+}
+
 html,
 body,
 #root {
