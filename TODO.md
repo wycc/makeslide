@@ -2668,3 +2668,16 @@ TODO.md 目前仍有兩個明確標註「待使用者決定 / 待處理」的未
 - 工作內容：剩餘 2 個 `[ ]` 項目仍為「待使用者決定 / 涉 CI 變更」不宜自動逕行，依 LOOP.md 第 2 條分析程式。掃描元件內聯進度百分比計算，發現三處重複且 clamp 行為不一致，抽成共用純函式 `progressPercent`（clamp 0–100 + 非有限值淨化）並補測試，三處呼叫點收斂。
 - 時間：2026-06-27
 - 分支：`refactor/progress-percent`（已 merge 回 master）
+
+## 新增可執行項目（第一二五輪，2026-06-27）
+
+- [x] 系統資料頁數值格式化抽出為可測純函式（去重觀念 / 防呆 / 可測性）：`SystemDataPage` 以 page-local `formatDuration`／`formatCost` 顯示平均耗時與估算成本，無測試且未處理非有限值——後端回報 `NaN`（如除以零）時會顯示成 `NaN s`／`US$NaN`。抽到 lib、補非有限值防呆與測試。純前端、不動後端、不需新 i18n。
+  - 修改說明（2026-06-27）：新增 `frontend/src/lib/metricFormat.ts`（`formatMetricDurationMs(ms, secondsSuffix)`：`null`／`!Number.isFinite` 回 `—`、`<1000` 顯示 `{ms} ms`、否則 `Math.round(ms/100)/10` + 後綴；`formatMetricCostUsd(value, unknownLabel)`：`null`／非有限值回 `unknownLabel`、否則 `US$` + `toFixed(6)`）。`SystemDataPage` 移除兩個 page-local 定義改 import，三處呼叫點更新。新增 `metricFormat.test.ts` 5 組測試（非有限值、ms<1000 邊界、秒數四捨五入、6 位小數成本）。前端 `tsc --noEmit` 通過、新測試 5/5 通過。分支 `refactor/system-metric-format`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 5 個完成項目（5/100，未達上限）。
+
+## 工作記錄（第一二五輪，2026-06-27）
+
+- 工作內容：剩餘 2 個 `[ ]` 項目仍為「待使用者決定 / 涉 CI 變更」不宜自動逕行，依 LOOP.md 第 2 條分析程式。發現 `SystemDataPage` 自帶未測試、未防呆的 `formatDuration`／`formatCost`（與 `play/formatters.ts` 已有的同類函式對照、後者皆有非有限值 guard 與測試），將其抽到 `metricFormat.ts` 補 guard 與測試以對齊既有水準。
+- 時間：2026-06-27
+- 分支：`refactor/system-metric-format`（已 merge 回 master）
+- 備註：master 仍被 `.roo` worktree（`/home/cluster/.roo/worktrees/makeslide-k5950`）佔用，merge 經由該 worktree 完成；另一套 roo loop 並行運作，已提醒使用者注意分歧風險。
