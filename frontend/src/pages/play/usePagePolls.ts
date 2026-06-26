@@ -15,6 +15,9 @@ import { resolveConfiguredUserCode } from './utils';
 import { useI18n } from '../../i18n';
 
 const POLL_INTERVAL_MS = 3000;
+// Mirrors the backend MAX_POLL_OPTIONS (routes/pdfs/shared.ts); validate here too
+// so a teacher gets a friendly message before the request instead of a raw 400.
+const MAX_POLL_OPTIONS = 6;
 
 interface UsePagePollsParams {
   pdfId: string | undefined;
@@ -188,6 +191,10 @@ export function usePagePolls({
     }
     if (options.length < 2) {
       setPollError(t('play.sidebar.poll.minTwoOptions'));
+      return;
+    }
+    if (options.length > MAX_POLL_OPTIONS) {
+      setPollError(t('play.sidebar.poll.maxOptions').replace('{max}', String(MAX_POLL_OPTIONS)));
       return;
     }
     setPollBusy(true);
