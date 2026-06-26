@@ -4,14 +4,14 @@ import fs from 'node:fs';
 import { splitScriptIntoSentences as splitTextSentences } from '../src/services/textSentences';
 import { splitScriptIntoSentences as splitSubtitleAlignment } from '../src/services/subtitleAlignment';
 
-// splitScriptIntoSentences is duplicated in three places that are documented to
-// mirror each other "exactly": frontend/src/lib/subtitles.ts (subtitle display +
-// transcript-line animation triggers), backend/src/services/textSentences.ts, and
-// backend/src/services/subtitleAlignment.ts (Whisper-aligned timeline). If they
-// drift, the sentence indices a presentation's timeline was built from stop lining
-// up with what the frontend re-derives, silently desyncing subtitles/animations.
-// Each copy already has its own behavioural test, but nothing checks they agree, so
-// this guard locks the three copies together.
+// splitScriptIntoSentences must behave identically across two packages:
+// frontend/src/lib/subtitles.ts (subtitle display + transcript-line animation
+// triggers) and the backend. The backend now has a single implementation in
+// backend/src/services/textSentences.ts which backend/src/services/subtitleAlignment.ts
+// (Whisper-aligned timeline) re-exports, so the two backend entry points can no longer
+// drift. If the frontend and backend copies drift, the sentence indices a presentation's
+// timeline was built from stop lining up with what the frontend re-derives, silently
+// desyncing subtitles/animations — so this guard locks the frontend copy to the backend.
 
 // Representative scripts exercising CJK/ASCII terminators, semicolons, tone tags,
 // newlines and trailing punctuation-less fragments.
@@ -29,13 +29,11 @@ const CASES: string[] = [
   'Hello world. This is English! Is it? Yes;',
 ];
 
-test('backend textSentences and subtitleAlignment split identically', () => {
+test('subtitleAlignment re-exports the single backend split implementation', () => {
+  // Same function identity proves there is one backend copy, not two that could drift.
+  assert.equal(splitTextSentences, splitSubtitleAlignment);
   for (const script of CASES) {
-    assert.deepEqual(
-      splitTextSentences(script),
-      splitSubtitleAlignment(script),
-      `backend split copies disagree for: ${JSON.stringify(script)}`,
-    );
+    assert.deepEqual(splitTextSentences(script), splitSubtitleAlignment(script));
   }
 });
 
@@ -53,11 +51,9 @@ function regexesFromSource(relPath: string): { sentence: string; tone: string } 
   };
 }
 
-test('the three splitScriptIntoSentences copies use identical splitting regexes', () => {
+test('the frontend and backend splitScriptIntoSentences copies use identical splitting regexes', () => {
   const frontend = regexesFromSource('../../frontend/src/lib/subtitles.ts');
   const textSentences = regexesFromSource('../src/services/textSentences.ts');
-  const subtitleAlignment = regexesFromSource('../src/services/subtitleAlignment.ts');
 
   assert.deepEqual(textSentences, frontend, 'backend textSentences regexes drifted from the frontend');
-  assert.deepEqual(subtitleAlignment, frontend, 'backend subtitleAlignment regexes drifted from the frontend');
 });
