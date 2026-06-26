@@ -1987,6 +1987,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`watchProgress.ts` 新增私有 `clampPercent`（非有限值回 null、夾 0-100）；`calculateWatchProgressPercent` 改用之；新增 export `calculateAvgListenedPercent(ratio)`。`PlayPageSidebar.tsx` 改呼叫新函式取代內聯計算。`watchProgress.test.ts` +3 測試（完成率夾頂、平均聆聽率 null/一般/倒退重聽夾頂）。前端 353 測試 + typecheck 全通過。分支 `fix/watch-progress-percent-clamp`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 6 個完成項目（6/100，未達上限）。
 
+- [x] 複習清單只刪指定題目：複習清單（review list）的 `addReviewItems` 以 `pdfId+pageNumber+questionText` 去重，同一頁可加入多題；但 `removeReviewItem` 只比對 `pdfId+pageNumber`，導致在側邊欄點某一題的「×」會把該頁所有題目一起刪除。為 `removeReviewItem` 加上選用的 `questionText` 參數（指定時只刪該題，省略時維持整頁刪除以向後相容），`PlayPageSidebar` 的移除 handler 改傳入 `questionText` 並同步只過濾該題的本地 state。
+  - 修改說明（2026-06-26）：`reviewList.ts` 的 `removeReviewItem(pdfId, pageNumber, questionText?)` 改以「同頁且（未指定 questionText 或題目相符）才移除」的條件過濾；`PlayPageSidebar.tsx` 的 `handleRemove(pageNumber, questionText)` 傳入題目並修正本地 state 過濾條件，按鈕 onClick 傳 `item.questionText`。`reviewList.test.ts` +1 測試（同頁多題只刪指定題、保留其餘）。前端 354 測試 + typecheck 全通過。分支 `fix/review-item-remove-by-question`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 7 個完成項目（7/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -1997,4 +2001,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | Token 數顯示百萬進位修正：`formatTokenCount` 對 999_950+ 改以 `1.00M` 顯示（原誤為 `1000.0K`），並守門非有限輸入回 `'0'`；formatters.test.ts +3 測試（先前無覆蓋）；前端 348 測試通過 | feat/token-count-rollover（已 merge） |
 | 2026-06-26 | 成本顯示守門：`formatCostUsd` 對 `NaN`/`Infinity` 改回傳 unknown label（原為 `$NaN`），負成本以絕對值+負號格式化（`-$1.23`／`-<$0.01`，原誤為 `<$0.01`）；formatters.test.ts +2 測試；前端 350 測試通過 | fix/format-cost-guard（已 merge） |
 | 2026-06-26 | 觀看進度百分比夾在 0-100：新增 `clampPercent`，`calculateWatchProgressPercent` 防 >100%，並抽出 `calculateAvgListenedPercent`（倒退重聽 ratio>1 時夾頂）取代 `PlayPageSidebar` 內聯計算；watchProgress.test.ts +3 測試；前端 353 測試通過 | fix/watch-progress-percent-clamp（已 merge） |
+| 2026-06-26 | 複習清單只刪指定題目：`removeReviewItem` 加選用 `questionText` 參數（同頁多題時只刪該題，原會整頁誤刪），`PlayPageSidebar` handler 傳入題目並修正本地 state 過濾；reviewList.test.ts +1 測試；前端 354 測試通過 | fix/review-item-remove-by-question（已 merge） |
 
