@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { distSq, distPointToSegment, strokeHitsPoint } from './drawingGeometry';
+import { distSq, distPointToSegment, strokeHitsPoint, normalizeCanvasPoint } from './drawingGeometry';
 import type { DrawingStroke } from './DrawingCanvas';
 
 const stroke = (points: [number, number][]): DrawingStroke =>
@@ -35,4 +35,16 @@ test('strokeHitsPoint detects a hit along the segment between two sparse points'
 
 test('strokeHitsPoint returns false when the eraser is far from the stroke', () => {
   assert.equal(strokeHitsPoint(stroke([[0.1, 0.1], [0.2, 0.1]]), 90, 90, 5, 100, 100), false);
+});
+
+test('normalizeCanvasPoint maps client coords to [0,1] within the rect', () => {
+  const rect = { left: 100, top: 50, width: 200, height: 100 };
+  assert.deepEqual(normalizeCanvasPoint(200, 100, rect), [0.5, 0.5]);
+  assert.deepEqual(normalizeCanvasPoint(100, 50, rect), [0, 0]);
+  assert.deepEqual(normalizeCanvasPoint(300, 150, rect), [1, 1]);
+});
+
+test('normalizeCanvasPoint returns [0,0] for a zero-area rect instead of NaN', () => {
+  assert.deepEqual(normalizeCanvasPoint(10, 10, { left: 0, top: 0, width: 0, height: 0 }), [0, 0]);
+  assert.deepEqual(normalizeCanvasPoint(10, 10, { left: 0, top: 0, width: 200, height: 0 }), [0, 0]);
 });

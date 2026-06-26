@@ -1,5 +1,18 @@
 import type { DrawingStroke } from './DrawingCanvas';
 
+/**
+ * Normalizes a pointer's client coordinates to [0,1] within a canvas rect.
+ * Returns [0,0] when the rect has no area (e.g. a momentarily collapsed/hidden
+ * canvas), so a zero-division never stores NaN points into the saved stroke data.
+ */
+export function normalizeCanvasPoint(
+  clientX: number, clientY: number,
+  rect: { left: number; top: number; width: number; height: number },
+): [number, number] {
+  if (!(rect.width > 0) || !(rect.height > 0)) return [0, 0];
+  return [(clientX - rect.left) / rect.width, (clientY - rect.top) / rect.height];
+}
+
 // Pure pixel-space hit-test geometry for the drawing eraser, split out of
 // DrawingCanvas so the (non-trivial) point/segment distance maths can be unit
 // tested without rendering the canvas component.
