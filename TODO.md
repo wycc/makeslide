@@ -2395,7 +2395,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 ## 新增可執行項目（第一〇七輪，2026-06-26）
 
-- [ ] 抽出測驗題目純文字格式化純函式（可用性 / 可測性）：`QuizBuilderPage.tsx` 的「複製題目」onClick 內嵌了把題目轉純文字的邏輯（編號、選項以 A./B.、正解 ✓、解析）。抽成 `frontend/src/lib/` 純函式 `formatQuizQuestionsText(questions, labels)`（labels 注入解析標籤等以保純粹可測）並補單元測試（多選正解、無解析、空清單）；元件改呼叫該函式（行為不變）。純前端、不動後端。
+- [x] 抽出測驗題目純文字格式化純函式（可用性 / 可測性）：`QuizBuilderPage.tsx` 的「複製題目」onClick 內嵌了把題目轉純文字的邏輯（編號、選項以 A./B.、正解 ✓、解析）。抽成 `frontend/src/lib/` 純函式 `formatQuizQuestionsText(questions, labels)`（labels 注入解析標籤等以保純粹可測）並補單元測試（多選正解、無解析、空清單）；元件改呼叫該函式（行為不變）。純前端、不動後端。
+  - 修改說明（2026-06-26）：新增 `frontend/src/lib/quizQuestionsText.ts` 之純函式 `formatQuizQuestionsText<T>(questions, labels)`，逐題輸出 `N. 題幹` + 選項 `  A. 文字`（正解附 ` ✓`）+（有解析時）`   {explanationLabel}{解析}`，題目間空行分隔，空清單回空字串；以最小結構泛型約束（`question`/`options[].text`/`answer_indices`/`explanation?`），解析標籤由 `QuizQuestionsTextLabels` 注入以保純粹可測。`QuizBuilderPage` 的「複製題目」onClick 改呼叫此函式（傳入 `{ explanationLabel: t('quiz.exportExplanationLabel') }`），輸出與原內嵌邏輯逐字相同、行為不變。新增 `quizQuestionsText.test.ts` 4 測試（空清單、單選正解+無解析、多選正解+解析、多題編號與空行分隔）。前端 `tsc --noEmit` 通過、新測試通過；無 i18n key 變更。分支 `feat/quiz-questions-text-helper`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 76 個完成項目（76/100，未達上限）。
 
 - [ ] i18n locale 值非空守門測試（品質，test-only）：新增 `frontend/src/i18n.nonempty.test.ts`，斷言 zh-TW 與 en 兩語系字典中所有值皆為「非空白字串」（`.trim().length > 0`），補既有 `i18n.test.ts`（只查 key 對等與佔位符集合）的盲點，避免日後不慎留下空字串翻譯。純測試、不改產品程式。
 
