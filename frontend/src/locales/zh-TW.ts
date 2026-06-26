@@ -1849,6 +1849,7 @@ export const zhTW = {
   'settings.publishSkillAsTemplate': '上架為模板',
   'play.report.title': '課後報告',
   'play.report.subtitle': '彙整測驗、投票、提問與觀看完成率，協助簡報擁有者快速找出課後補強重點。',
+  'play.report.generatedAtRelative': '資料產生於 {time}',
   'play.report.refresh': '重新整理',
   'play.report.refreshing': '更新中…',
   'play.report.exportQuizCsv': '匯出 CSV',
