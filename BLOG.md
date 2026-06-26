@@ -7314,3 +7314,16 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **單一來源**（新檔 `backend/src/worker/audioDurationSum.ts`）：匯出 `sumAudioDurationSeconds(values)`，只累加 `typeof === 'number' && Number.isFinite && > 0` 的值，以 `Math.round(total * 1000) / 1000` 取毫秒精度，沒有任何有效值時回傳 `null`。
 - **去重**：`pipeline.ts` 與 `regenerate.ts` 移除各自的本地定義，改為 import 共用版本。
 - **測試**：新增 `backend/test/audioDurationSum.test.ts` 3 個 node:test——全空/全無效（含 0、負值、NaN、Infinity）回 `null`、只加總有限正值並略過其他、以及浮點加總四捨五入到毫秒（`0.1 + 0.2 → 0.3` 而非 `0.30000000000000004`）。此函式先前無測試覆蓋；測試不依賴資料庫、sandbox 可驗證；後端 `tsc -p tsconfig.json` build 通過。
+
+## WAV PCM 助手抽離為共用可測模組（2026-06-26）
+
+### 功能目的
+雙人對談（dual host）等情境下，TTS 會分段產生音訊，後端需要把多段 WAV 串接成一段：先用 `parseWavPcmChunk` 從每段 WAV 取出 PCM 資料與格式，再用 `buildWavPcm16` 把合併後的 PCM 重新包成一個 WAV 檔。這兩個二進位處理函式原本定義在 `synthesizeAudio.ts`（實際使用中），卻又在 `routes/pdfs/shared.ts` 被複製了一份——而且 shared.ts 的那份定義後從未被呼叫，是純死碼。二進位 buffer 操作（offset、chunk 走訪、size 欄位）特別容易在複製後悄悄改錯卻沒被發現，因此本次把實際使用的版本抽成一個獨立、可單元測試的純模組，並刪掉 shared.ts 的死碼。
+
+### 使用方式
+無需任何操作，純內部重構，音訊串接行為不變。
+
+### 技術細節
+- **共用純模組**（新檔 `backend/src/services/wav.ts`）：匯出 `WavPcmChunk` 型別與 `parseWavPcmChunk(buf)`（解析 RIFF/WAVE 的 `data` chunk，會走訪 chunk 並跳過非 data 區塊；非 WAV 或過短回 `null`）、`buildWavPcm16(pcm, sampleRate, channels)`（寫 44-byte 標頭並接上 PCM）。Buffer 進、Buffer 出，無任何 db/pipeline 相依。
+- **去重 + 清死碼**：`synthesizeAudio.ts` 改為頂部 import 後 `export { parseWavPcmChunk, buildWavPcm16 }`（維持對外可見性，內部第 390/401 行的串接仍可用）；`routes/pdfs/shared.ts` 刪除約 40 行從未被呼叫的重複定義。
+- **測試**：新增 `backend/test/wav.test.ts` 4 個 node:test——build→parse 的 PCM 與格式 round-trip、44-byte RIFF/WAVE 標頭與 RIFF/data size 等欄位、非 WAV/過短/缺 magic 回 `null`、以及在 fmt 與 data 之間插入一個 `LIST` chunk 後仍能正確走訪找到 data。此二進位函式先前無測試覆蓋；測試不依賴資料庫、sandbox 可驗證；後端 `tsc -p tsconfig.json` build 通過。

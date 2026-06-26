@@ -2087,6 +2087,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：新增 `audioDurationSum.ts`（唯一實作）；`regenerate.ts`／`pipeline.ts` 移除本地定義改 import。新增 `audioDurationSum.test.ts` +3（全空/全無效回 null、只加有限正值、浮點加總四捨五入到毫秒如 0.1+0.2→0.3），sandbox 通過；後端 build 通過。分支 `refactor/dedupe-sum-audio-duration`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 31 個完成項目（31/100，未達上限）。
 
+- [x] WAV PCM 助手抽離為共用可測模組：`parseWavPcmChunk`／`buildWavPcm16`（WAV 二進位解析/封裝，用於拼接逐段 TTS 音訊）在 `synthesizeAudio.ts`（live）與 `routes/pdfs/shared.ts`（死碼，定義後從未呼叫）各有一份。把 live 版抽到純 `services/wav.ts`、synthesizeAudio import+re-export、刪除 shared.ts 死碼，並補測試（先前無覆蓋的二進位函式）。
+  - 修改說明（2026-06-26）：新增 `backend/src/services/wav.ts`（`WavPcmChunk` 型別 + 兩函式）；`synthesizeAudio.ts` 頂部 import、`export { parseWavPcmChunk, buildWavPcm16 }`；`shared.ts` 刪除 ~40 行未使用的重複定義。新增 `wav.test.ts` +4（build→parse round-trip、44-byte 標頭與各 size 欄位、非 WAV/過短回 null、跳過非 data chunk 找到 data），sandbox 通過；後端 build 通過。分支 `refactor/extract-wav-helpers`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 32 個完成項目（32/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2122,4 +2126,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | escapeXml 收斂單一來源：`renderTextPages` 與 `scorm` 兩份相同 escapeXml 抽到 `escapeXml.ts`（前者 re-export、後者 import）；相關測試 23 通過、後端 build 通過 | refactor/dedupe-escape-xml（已 merge） |
 | 2026-06-26 | sanitiseUserPrompt 收斂單一來源：generateTitle/generateScript 兩份相同的 prompt 截斷函式抽到 `promptSanitize.ts`（含 2000 字上限常數）；promptSanitize.test.ts +4、後端 build 通過 | refactor/dedupe-sanitise-user-prompt（已 merge） |
 | 2026-06-26 | sumAudioDurationSeconds 收斂單一來源：pipeline/regenerate 兩份相同的音訊長度加總抽到 `audioDurationSum.ts`；audioDurationSum.test.ts +3、後端 build 通過 | refactor/dedupe-sum-audio-duration（已 merge） |
+| 2026-06-26 | WAV PCM 助手抽離可測模組：`parseWavPcmChunk`/`buildWavPcm16` 抽到 `services/wav.ts`（synthesizeAudio re-export、刪除 shared.ts 死碼）；wav.test.ts +4、後端 build 通過 | refactor/extract-wav-helpers（已 merge） |
 
