@@ -1,6 +1,7 @@
 import type { RegenJobState, RegenStepName } from '../../types';
 import type { TranslationKey } from '../../i18n';
 import { useI18n } from '../../i18n';
+import { progressPercent } from '../../lib/progressPercent';
 import {
   formatRegenerateEtaSummary,
   formatRegenerateEta,
@@ -47,7 +48,7 @@ export function RegenerateProgress({ job }: { job: RegenJobState | null }) {
       )}
       <ul className="space-y-1.5">
         {job.steps.map((s) => {
-          const ratio = s.total > 0 ? Math.min(100, Math.round((s.completed / s.total) * 100)) : 0;
+          const ratio = progressPercent(s.completed, s.total);
           const isCurrent = job.current_step === s.name;
           const stepEta = isCurrent ? formatRegenerateEta(s.eta_seconds, t) : null;
           const color =
