@@ -5,6 +5,7 @@ import { db } from '../../db';
 import { type AppLanguage, getRuntimeAiSettings } from '../../services/aiSettings';
 import { callChatJSON, type TokenUsage } from '../../services/openai';
 import { pageScriptPath, pageTextPath } from '../../services/storage';
+import { sanitiseUserPrompt } from './promptSanitize';
 
 export interface GenerateTitleResult {
   title: string;
@@ -70,16 +71,8 @@ export function clipCorpus(corpus: string): string {
   return `${t.slice(0, headLen)}\n……（內容過長，中段略）……\n${t.slice(-tailLen)}`;
 }
 
-const MAX_USER_PROMPT_CHARS_IN_SYSTEM = 2000;
-
-export function sanitiseUserPrompt(raw: string | null | undefined): string {
-  if (!raw) return '';
-  const trimmed = raw.trim();
-  if (!trimmed) return '';
-  return trimmed.length > MAX_USER_PROMPT_CHARS_IN_SYSTEM
-    ? trimmed.slice(0, MAX_USER_PROMPT_CHARS_IN_SYSTEM) + '……（已截斷）'
-    : trimmed;
-}
+// Re-exported (imported at top) so any importer of this module keeps working.
+export { sanitiseUserPrompt };
 
 export function buildSystem(userPrompt: string | null | undefined, contentLanguage: AppLanguage): string {
   const base = contentLanguage === 'en'
