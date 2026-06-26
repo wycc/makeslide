@@ -7909,3 +7909,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **資料來源**：完全沿用 `lib/costEstimate.ts` 既有的價目常數，不新增後端、不改價格來源。
 - **i18n**：新增 zh-TW/en `settings.priceReferenceTitle`/`priceReferenceHint`/`priceReferenceLlm`/`priceReferenceTts`/`priceReferenceInOut`。
 - **驗證**：前端 `tsc --noEmit` 通過；`i18n.test.ts`（含 zh/en key 對等與佔位符集合檢查）通過。此為純顯示 UI、資料來源為既有具測試的純函式模組，故不另加測試。
+
+## 抽出測驗題目純文字格式化純函式（2026-06-26）
+
+### 功能目的
+測驗編輯頁（QuizBuilderPage）的「複製題目」會把目前題目轉成純文字放入剪貼簿，但這段格式化邏輯先前直接寫在按鈕的 onClick 裡，無法被單元測試覆蓋、也難以重用。本項把它抽成純函式並補測試，是一次純粹的可測性重構，使用者體驗不變。
+
+### 使用方式
+無可見變化。「複製題目」按鈕行為與輸出格式與先前完全相同（每題 `N. 題幹`、選項 `  A. 文字`、正解標 ` ✓`、有解析時附 `   解析：…`，題目間空行分隔）。
+
+### 技術細節
+- **純函式**（`frontend/src/lib/quizQuestionsText.ts`）：`formatQuizQuestionsText(questions, labels)` 逐題輸出純文字；以最小結構泛型約束（`question`/`options[].text`/`answer_indices`/`explanation?`），解析標籤由 `QuizQuestionsTextLabels` 注入以保持純粹可測；空清單回空字串。
+- **元件**（`frontend/src/pages/QuizBuilderPage.tsx`）：「複製題目」onClick 改呼叫該函式並傳入 `{ explanationLabel: t('quiz.exportExplanationLabel') }`，移除內嵌格式化邏輯；輸出與原本逐字相同。
+- **測試**（`quizQuestionsText.test.ts`）：4 個案例（空清單、單選正解且無解析、多選正解且附解析、多題編號與空行分隔）。
+- **驗證**：前端 `tsc --noEmit` 通過；新測試通過；無 i18n key 變更。

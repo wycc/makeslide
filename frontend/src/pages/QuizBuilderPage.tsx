@@ -24,6 +24,7 @@ import {
 } from '../lib/api';
 import { shuffleArray } from './play/utils';
 import { copyTextToClipboard } from '../lib/clipboard';
+import { formatQuizQuestionsText } from '../lib/quizQuestionsText';
 import { addReviewItems } from '../lib/reviewList';
 import type {
   PdfDetail,
@@ -1084,10 +1085,7 @@ export default function QuizBuilderPage() {
                 <button
                   type="button"
                   onClick={async () => {
-                    const text = questions.map((q, i) => {
-                      const opts = q.options.map((o, oi) => `  ${String.fromCharCode(65 + oi)}. ${o.text}${q.answer_indices.includes(oi) ? ' ✓' : ''}`).join('\n');
-                      return `${i + 1}. ${q.question}\n${opts}${q.explanation ? `\n   ${t('quiz.exportExplanationLabel')}${q.explanation}` : ''}`;
-                    }).join('\n\n');
+                    const text = formatQuizQuestionsText(questions, { explanationLabel: t('quiz.exportExplanationLabel') });
                     const result = await copyTextToClipboard(text);
                     setCopyQuestionsStatus(result.ok ? 'ok' : 'fail');
                     setTimeout(() => setCopyQuestionsStatus('idle'), 2000);
