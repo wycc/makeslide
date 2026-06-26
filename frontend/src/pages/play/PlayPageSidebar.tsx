@@ -150,13 +150,24 @@ function CommentsSection() {
               <span className="rounded-full bg-sky-500/20 px-1.5 py-0.5 text-[10px] font-normal text-sky-300">{comments.length}</span>
             )}
           </h2>
-          <button
-            type="button"
-            onClick={() => setShowAll((v) => !v)}
-            className={`shrink-0 rounded border px-2 py-0.5 text-[10px] ${showAll ? 'border-sky-600/60 bg-sky-700/40 text-sky-200' : 'border-sky-800/40 text-sky-400/70 hover:text-sky-300'}`}
-          >
-            {showAll ? t('play.sidebar.commentsThisPage') : t('play.sidebar.commentsAll')}
-          </button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {comments.length > 0 && (
+              <a
+                href={`api/pdfs/${encodeURIComponent(pdfId)}/comments.csv`}
+                download
+                className="rounded border border-emerald-800/40 px-2 py-0.5 text-[10px] text-emerald-400/80 hover:text-emerald-300"
+              >
+                {t('play.sidebar.commentsExportCsv')}
+              </a>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowAll((v) => !v)}
+              className={`rounded border px-2 py-0.5 text-[10px] ${showAll ? 'border-sky-600/60 bg-sky-700/40 text-sky-200' : 'border-sky-800/40 text-sky-400/70 hover:text-sky-300'}`}
+            >
+              {showAll ? t('play.sidebar.commentsThisPage') : t('play.sidebar.commentsAll')}
+            </button>
+          </div>
         </div>
       </div>
       <div className="px-4 py-3 space-y-3">

@@ -1322,6 +1322,7 @@ export const zhTW = {
   'play.sidebar.commentsEmpty': '此頁尚無評論',
   'play.sidebar.commentsAll': '全部',
   'play.sidebar.commentsThisPage': '此頁',
+  'play.sidebar.commentsExportCsv': '匯出 CSV',
   'play.sidebar.commentAuthorPlaceholder': '暱稱（選填）',
   'play.sidebar.commentTextPlaceholder': '輸入評論…',
   'play.sidebar.commentPost': '送出',

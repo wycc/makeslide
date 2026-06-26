@@ -4,6 +4,7 @@ import { db } from '../../db';
 import { decodeSession, parseCookies } from '../auth';
 import type { PdfRow } from '../../types';
 import { errorResponse, IdParamSchema, PageParamSchema, nowIso } from './shared';
+import { csvEscape } from './csv';
 
 function sessionSub(request: FastifyRequest): string | null {
   const session = decodeSession(parseCookies(request).makeslide_session);
@@ -82,6 +83,37 @@ export async function registerCommentsRoutes(app: FastifyInstance): Promise<void
       .prepare(`SELECT * FROM page_comments WHERE pdf_id = ? ORDER BY page_number ASC, created_at ASC`)
       .all(id) as PageCommentRow[];
     return reply.send({ comments: rows.map(rowToComment) });
+  });
+
+  // GET /api/pdfs/:id/comments.csv — export all comments as CSV (requires edit permission)
+  app.get<{ Params: z.infer<typeof IdParamSchema> }>('/api/pdfs/:id/comments.csv', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_PARAMS', parsed.error.message));
+    const { id } = parsed.data;
+    const sub = sessionSub(request);
+    const pdfRow = getPdfRow(id);
+    if (!pdfRow) return reply.code(404).send(errorResponse('NOT_FOUND', 'PDF not found'));
+    if (!canEditPdf(sub, pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限下載評論'));
+    const rows = db
+      .prepare(`SELECT * FROM page_comments WHERE pdf_id = ? ORDER BY page_number ASC, created_at ASC`)
+      .all(id) as PageCommentRow[];
+    const lines: string[] = [['page', 'author', 'text', 'resolved', 'created_at'].join(',')];
+    for (const row of rows) {
+      lines.push(
+        [
+          csvEscape(row.page_number),
+          csvEscape(row.author),
+          csvEscape(row.text),
+          csvEscape(row.resolved === 1 ? 'true' : 'false'),
+          csvEscape(row.created_at),
+        ].join(','),
+      );
+    }
+    const csv = lines.join('\n') + '\n';
+    reply.header('content-type', 'text/csv; charset=utf-8');
+    reply.header('content-disposition', `attachment; filename="comments-${id}.csv"`);
+    reply.header('cache-control', 'no-store');
+    return reply.send(csv);
   });
 
   // GET /api/pdfs/:id/pages/:n/comments

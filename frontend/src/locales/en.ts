@@ -1322,6 +1322,7 @@ export const en = {
   'play.sidebar.commentsEmpty': 'No comments on this page yet',
   'play.sidebar.commentsAll': 'All',
   'play.sidebar.commentsThisPage': 'This page',
+  'play.sidebar.commentsExportCsv': 'Export CSV',
   'play.sidebar.commentAuthorPlaceholder': 'Nickname (optional)',
   'play.sidebar.commentTextPlaceholder': 'Add a comment…',
   'play.sidebar.commentPost': 'Post',
