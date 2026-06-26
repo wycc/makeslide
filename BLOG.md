@@ -7352,3 +7352,15 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 ### 技術細節
 - **沿用共用 hook**（`frontend/src/components/CreditExhaustedDialog.tsx`）：新增 `const close = useCallback(() => setDetail(null), [])` 作為穩定的關閉函式（避免每次 render 產生新的 callback 導致 `useOverlayDismiss` 的 keydown 監聽反覆重新訂閱），再 `const { onBackdropClick } = useOverlayDismiss(close)`；最外層 overlay 加上 `onClick={onBackdropClick}`，並把「前往設定」與「知道了」兩個按鈕的關閉行為統一改走 `close`。此對話框原本就有 `role="dialog"`／`aria-modal`／`aria-labelledby`，無需再補。
 - **驗證**：`useOverlayDismiss` 的純決策函式先前已有測試，本次無新增純邏輯；前端既有 380 測試與 `tsc --noEmit` typecheck 全通過。
+
+## 課後報告面板支援 Esc／背景點擊關閉（2026-06-26）
+
+### 功能目的
+完成課程後，教師可開啟「課後報告」面板（`PostClassReportPanel`）檢視測驗答對率、投票分歧、觀看完成率等統計。這是一個全螢幕的報告檢視 modal，先前只能透過面板內的「關閉」按鈕關閉，按 Escape 或點背景都沒反應。由於它沒有任何表單輸入、關閉等同取消（重新整理、列印、重置觀看進度都是另外的明確按鈕），很適合補上 Escape 與背景點擊關閉，與其他播放頁 overlay 一致。
+
+### 使用方式
+無需任何操作。開啟課後報告後，可按 Escape 或點報告以外的背景關閉它；捲動或點擊報告內容不會誤關。此面板原本就有 `role="dialog"` 等無障礙標記。
+
+### 技術細節
+- **沿用共用 hook**（`frontend/src/pages/play/PostClassReportPanel.tsx`）：import `useOverlayDismiss(onClose)`，於最外層 overlay（`fixed inset-0 ... overflow-y-auto`）加 `onClick={onBackdropClick}`。`onBackdropClick` 僅在 `event.target === event.currentTarget`（點到 overlay 本身、而非冒泡自報告內容）時才關閉，因此捲動長報告或點擊內部元素都不會誤觸關閉。
+- **驗證**：`useOverlayDismiss` 的純決策函式先前已測；本次無新增純邏輯，前端既有 380 測試與 `tsc --noEmit` typecheck 全通過。
