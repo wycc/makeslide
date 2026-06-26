@@ -8248,3 +8248,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **UI**（`frontend/src/pages/play/PlayPageSidebar.tsx` 的 `CommentsSection`）：作者名由 `<span>` 改為 `<button>`，`onClick` 將 `filterQuery` 設為該作者名（沿用既有 `filterComments` 對 author 的比對），並加 hover 底線與 `title` 提示。
 - **i18n**：新增 zh-TW/en `play.sidebar.commentsFilterByAuthor`（含 `{author}` 佔位）作為提示文字。
 - **驗證**：前端 `tsc --noEmit` 通過；`i18n.test.ts`（含 zh/en key 對等與佔位符檢查）通過。過濾邏輯由既有 `commentFilter.test.ts` 覆蓋，故不另加測試。
+
+## 記住上次評論暱稱（2026-06-26）
+
+### 功能目的
+頁面評論的「暱稱」欄先前每次開啟都是空白，常留言的使用者得反覆輸入同一個暱稱。本項把暱稱記在本機，下次留言自動帶入，減少重複輸入。
+
+### 使用方式
+在「頁面評論」輸入暱稱並送出一則評論後，該暱稱會被記住；之後（同一瀏覽器）再開啟評論輸入時會自動填入上次的暱稱，仍可隨時修改。把暱稱清空再送出則會清除記憶。
+
+### 技術細節
+- **純函式模組**（`frontend/src/lib/commentAuthor.ts`）：`getStoredCommentAuthor()`/`setStoredCommentAuthor(name)`，以 localStorage（key `makeslide.comment.author`）儲存；trim 後上限 80 字（對齊輸入框 maxLength），空白則移除紀錄；含非瀏覽器環境與 try/catch 防護。
+- **接入**（`frontend/src/pages/play/PlayPageSidebar.tsx` 的 `CommentsSection`）：`author` state 初值改為 `getStoredCommentAuthor()`；`submitComment` 成功後 `setStoredCommentAuthor(author)`。
+- **測試**（`commentAuthor.test.ts`）：5 個案例（預設空、儲存/讀取、trim + 上限、空白移除、無 window 降級）。
+- **驗證**：前端 `tsc --noEmit` 通過；新測試通過；不需新 i18n。

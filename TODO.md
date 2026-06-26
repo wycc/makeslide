@@ -2595,7 +2595,21 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 ## 新增可執行項目（第一二〇輪，2026-06-26）
 
-- [ ] 記住上次評論暱稱（可用性 / 可測性）：評論輸入的暱稱欄目前每次都空白、需重打。新增 `frontend/src/lib/` 純函式模組（如 `commentAuthor.ts`：`getStoredCommentAuthor()`/`setStoredCommentAuthor(name)`，key `makeslide.comment.author`，含非瀏覽器與壞值防護、trim、長度上限 80 對齊 input maxLength）並補單元測試（預設空、儲存/讀取、trim、上限、非瀏覽器降級）；`CommentsSection` 的 `author` state 以 `getStoredCommentAuthor()` 為初值，送出評論成功後 `setStoredCommentAuthor(author.trim())`。純前端、不動後端、不需新 i18n。**註：完成此項將達 100/100 計數上限，屆時依 LOOP.md 應停止新增/執行新項目並等候使用者決定是否重設計數。**
+- [x] 記住上次評論暱稱（可用性 / 可測性）：評論輸入的暱稱欄目前每次都空白、需重打。新增 `frontend/src/lib/` 純函式模組（如 `commentAuthor.ts`：`getStoredCommentAuthor()`/`setStoredCommentAuthor(name)`，key `makeslide.comment.author`，含非瀏覽器與壞值防護、trim、長度上限 80 對齊 input maxLength）並補單元測試（預設空、儲存/讀取、trim、上限、非瀏覽器降級）；`CommentsSection` 的 `author` state 以 `getStoredCommentAuthor()` 為初值，送出評論成功後 `setStoredCommentAuthor(author.trim())`。純前端、不動後端、不需新 i18n。
+  - 修改說明（2026-06-26）：新增 `frontend/src/lib/commentAuthor.ts`（`getStoredCommentAuthor`/`setStoredCommentAuthor`，key `makeslide.comment.author`，trim + 上限 80、空白則 removeItem、含非瀏覽器與壞值/try-catch 防護）。`CommentsSection` 的 `author` state 初值改為 `getStoredCommentAuthor()`，`submitComment` 成功送出後 `setStoredCommentAuthor(author)`，使下次留言自動帶入上次暱稱。新增 `commentAuthor.test.ts` 5 測試（預設空、儲存/讀取、trim+上限、空白移除、無 window 降級）。前端 `tsc --noEmit` 通過、新測試通過；不需新 i18n。分支 `feat/remember-comment-author`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 100 個完成項目（**100/100，已達 LOOP.md 門檻**）。
+
+---
+
+## ⚠️ 已達 100/100 計數上限（2026-06-26）
+
+依 LOOP.md：「當完成 100 個項目後就停止做新的項目」。自上次「---- 計數重設 ----」(2026-06-26) 起算，已完成 **100** 個項目（第 1～100，跨多輪 loop）。**即日起停止新增/執行新的功能項目**，等候使用者決定：
+
+1. **重設計數**：在 TODO.md 末尾加入新的「---- 計數重設 ----」標記後，loop 可重新起算、繼續做下一批項目；或
+2. **調整門檻**：提高 100 的上限數字；或
+3. **結束本輪 loop**。
+
+TODO.md 目前仍有兩個明確標註「待使用者決定 / 待處理」的未完成項目（系統性採用 `mapApiErrorToHumanMessage`、把前端測試納入 root `npm test`），需使用者裁示後才適合進行。
 
 ## 工作記錄（第一二〇輪，2026-06-26）
 

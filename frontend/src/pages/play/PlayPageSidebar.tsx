@@ -17,6 +17,7 @@ import { formatPollResultsMarkdown } from '../../lib/pollResultsMarkdown';
 import { pollOptionPercent } from '../../lib/pollPercent';
 import { formatNotesMarkdown } from '../../lib/notesMarkdown';
 import { formatPageListText } from '../../lib/pageListText';
+import { getStoredCommentAuthor, setStoredCommentAuthor } from '../../lib/commentAuthor';
 import { formatRelativeTime, buildRelativeTimeLabels } from '../../lib/relativeTime';
 import { NOTEBOOK_TABS, computeNotebookTabCounts, getAdjacentNotebookTab, getEdgeNotebookTab, getStoredNotebookTab, setStoredNotebookTab, type NotebookTab } from './notebookTabs';
 
@@ -106,7 +107,7 @@ function CommentsSection() {
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingText, setEditingText] = useState('');
-  const [author, setAuthor] = useState('');
+  const [author, setAuthor] = useState(() => getStoredCommentAuthor());
   const [text, setText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -130,6 +131,7 @@ function CommentsSection() {
     try {
       const created = await createPageComment(pdfId, currentPage.page_number, author.trim() || 'anonymous', trimmedText);
       setComments((prev) => [...prev, created]);
+      setStoredCommentAuthor(author);
       setText('');
     } catch {
       setError(t('play.sidebar.commentPostFailed'));
