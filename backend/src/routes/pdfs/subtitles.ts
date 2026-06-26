@@ -12,6 +12,7 @@ import {
   splitScriptIntoSentences,
   type SentenceTimelineItem,
 } from '../../services/subtitleAlignment';
+import { safeDownloadBaseName, buildContentDisposition } from './downloadFilename';
 
 interface PageRecord {
   page_uid: string;
@@ -218,7 +219,7 @@ export async function registerSubtitleRoutes(app: FastifyInstance): Promise<void
     const content = buildSrtContent(timeline);
 
     reply.header('content-type', 'application/x-subrip; charset=utf-8');
-    reply.header('content-disposition', `attachment; filename="subtitles.srt"`);
+    reply.header('content-disposition', buildContentDisposition(`${safeDownloadBaseName(row.title, 'subtitles')}.srt`));
     reply.header('cache-control', 'no-store');
     return reply.send(content);
   });
@@ -255,7 +256,7 @@ export async function registerSubtitleRoutes(app: FastifyInstance): Promise<void
     const content = buildVttContent(timeline);
 
     reply.header('content-type', 'text/vtt; charset=utf-8');
-    reply.header('content-disposition', `attachment; filename="subtitles.vtt"`);
+    reply.header('content-disposition', buildContentDisposition(`${safeDownloadBaseName(row.title, 'subtitles')}.vtt`));
     reply.header('cache-control', 'no-store');
     return reply.send(content);
   });
@@ -291,7 +292,7 @@ export async function registerSubtitleRoutes(app: FastifyInstance): Promise<void
     const content = await buildPlainTextContent(parsed.data.id, pages, row.title);
 
     reply.header('content-type', 'text/plain; charset=utf-8');
-    reply.header('content-disposition', `attachment; filename="transcript.txt"`);
+    reply.header('content-disposition', buildContentDisposition(`${safeDownloadBaseName(row.title, 'transcript')}.txt`));
     reply.header('cache-control', 'no-store');
     return reply.send(content);
   });

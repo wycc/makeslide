@@ -66,7 +66,8 @@ test('GET /api/pdfs/:id/subtitles.txt returns a per-page plain-text transcript',
     const resp = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}/subtitles.txt` });
     assert.equal(resp.statusCode, 200);
     assert.match(resp.headers['content-type'] as string, /text\/plain/);
-    assert.match(resp.headers['content-disposition'] as string, /attachment; filename="transcript\.txt"/);
+    // filename now derives from the presentation title (seeded as `Test <id>`)
+    assert.match(resp.headers['content-disposition'] as string, /attachment; filename="Test subtitle-txt-01\.txt"/);
     assert.equal(resp.body, '# Test subtitle-txt-01\n\n# 第 1 頁\n第一頁的逐字稿。\n\n# 第 2 頁\n第二頁的逐字稿。\n');
   } finally {
     cleanup(pdfId);

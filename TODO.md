@@ -2457,7 +2457,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [ ] 評論清單手動重新整理（可用性，小顆粒）：`CommentsSection` 目前只在掛載 / 換頁 / 切換全部時載入評論，協作情境下他人新增的評論不會自動出現。標題列加「重新整理」按鈕，重跑既有載入邏輯（依 `showAll` 呼叫 `listAllComments` 或 `listPageComments` 並 `setComments`）；載入中可顯示簡單狀態。為避免重複，將既有 useEffect 內的載入邏輯抽成一個可重用的 `loadComments()`。純前端、不動後端。
 
-- [ ] 字幕/逐字稿下載檔名帶簡報標題（Roadmap Phase 5 匯出，小顆粒）：`subtitles.ts` 的 srt/vtt/txt 三個端點 `content-disposition` 檔名為固定值。改為以簡報標題產生安全檔名（新增小工具：trim、移除/替換 `\\/:*?"<>|` 與控制字元、壓縮空白、長度上限、空標題退回原本固定名），輸出如 `{safeTitle}.srt`/`.vtt`/`.txt`；對 ASCII 檔名即可（避免 RFC5987 複雜度，必要時以 `filename*` 留待後續）。補後端 node:test 斷言 `content-disposition` 含預期檔名（含特殊字元被清理、空標題 fallback）。後端小改 + 測試。
+- [x] 字幕/逐字稿下載檔名帶簡報標題（Roadmap Phase 5 匯出，小顆粒）：`subtitles.ts` 的 srt/vtt/txt 三個端點 `content-disposition` 檔名為固定值。改為以簡報標題產生安全檔名（新增小工具：trim、移除/替換 `\\/:*?"<>|` 與控制字元、壓縮空白、長度上限、空標題退回原本固定名），輸出如 `{safeTitle}.srt`/`.vtt`/`.txt`；對 ASCII 檔名即可（避免 RFC5987 複雜度，必要時以 `filename*` 留待後續）。補後端 node:test 斷言 `content-disposition` 含預期檔名（含特殊字元被清理、空標題 fallback）。後端小改 + 測試。
+  - 修改說明（2026-06-26）：新增**獨立無 DB 相依**模組 `backend/src/routes/pdfs/downloadFilename.ts`（`safeDownloadBaseName`：替換 `\/:*?"<>|` 與 ASCII 控制字元為空白、壓縮空白、trim、長度上限 80、空白退回 fallback，保留連字號與 unicode；`buildContentDisposition`：輸出 ASCII fallback `filename="…"` + RFC5987 `filename*=UTF-8''…`，使中文標題在現代瀏覽器也能正確命名）——刻意拆出獨立檔以避免 import `db`、讓純函式可在 sandbox 單元測試。`subtitles.ts` 三端點改用 `buildContentDisposition(\`${safeDownloadBaseName(row.title, fallback)}.{ext}\`)`（srt/vtt fallback `subtitles`、txt fallback `transcript`）。新增 `backend/test/download-filename.test.ts`（7 個純函式測試：保留連字號、非法字元→空白、壓縮空白、空/null/whitespace fallback、unicode 保留+長度上限、RFC5987 輸出、非 ASCII fallback）並更新 `subtitles-txt.test.ts` 的 content-disposition 斷言。**實作插曲**：以 sed/perl 改正則時誤把 `\x00-\x1f` 寫成真實控制位元組污染原始碼，經 `od` 檢視後修回字面文字。後端 `tsc --noEmit` 通過、純函式測試全通過；handler 測試需 better-sqlite3、留 CI。分支 `feat/download-filename-title`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 82 個完成項目（82/100，未達上限）。
 
 ## 工作記錄（第一一〇輪，2026-06-26）
 
