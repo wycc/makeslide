@@ -2231,5 +2231,24 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [ ] 評論 CSV 匯出：新增 `GET /api/pdfs/:id/comments.csv` 後端端點，以 CSV 格式輸出所有評論（欄位：`page,author,text,resolved,created_at`），沿用共用 `csvEscape` 防 formula injection；需 edit 權限（沿用 `canEditPdf`）；播放頁 `CommentsSection` 區塊加入「匯出 CSV」按鈕（以 download link 觸發）；補後端 node:test（200/403/CSV 欄位格式）。
 
-- [ ] 投票結果橫條圖：播放頁 Realtime Poll 及 `RemoteControllerPage` 投票結果目前以純文字「選項 A：3 票（50%）」呈現。改為在每個選項右側加入 CSS 橫條圖（背景色條，寬度 = `ratio * 100%`，不需 chart library）；不調整現有資料型別，純 JSX+Tailwind 改動；i18n 無需改動。
+- [x] 投票結果橫條圖：播放頁 Realtime Poll 及 `RemoteControllerPage` 投票結果目前以純文字「選項 A：3 票（50%）」呈現。改為在每個選項右側加入 CSS 橫條圖（背景色條，寬度 = `ratio * 100%`，不需 chart library）；不調整現有資料型別，純 JSX+Tailwind 改動；i18n 無需改動。
+  - 修改說明（2026-06-26）：①`PlayPageFullscreen.tsx` 全螢幕大型 Realtime Poll overlay 原本在 `syncPollShowResults` 時僅以「N 票 · X%」純文字呈現各選項結果，現於每個選項文字下方加入 CSS 橫條圖（`h-1.5` 圓角底條 + `bg-cyan-400` 寬度 `ratio%`，含 `transition-[width]`），ratio 改為每選項計算一次。②`RemoteControllerPage.tsx` Poll 控制區原本只顯示每個 poll 的總票數，無逐選項分布；現於 poll 標題列下方新增逐選項結果（選項文字 + 「N 票 · X%」+ 橫條圖），讓遙控端操作者也能看到即時票數分布；外層 div 由 `flex items-center` 改為直式容器、原本的標題/狀態/按鈕收進上方 row。其餘已有橫條圖的位置（`PlayPageSidebar`、`PlayPageFullscreen` 小型 overlay）維持不變。純 JSX+Tailwind 改動，不動資料型別，沿用既有 `remote.votesSuffix` i18n key、無新增 key。前端 typecheck 通過。分支 `feat/poll-result-bars`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 52 個完成項目（52/100，未達上限）。
 
+## Theme 功能規畫（使用者指定，2026-06-26）
+
+- 目前觀察：前端 Tailwind 設定仍是空的 `extend`，全域 CSS 只設定高度與字型；SettingsPage 已有 UI/content language 與 playback speed 這類 localStorage + 設定頁偏好的模式，可沿用於 theme 偏好。Theme 應先以「不動後端資料模型」的前端 MVP 做起，避免牽涉帳號同步、資料 migration 與大量元件重寫。
+- 設計目標：支援 `system`／`light`／`dark` 三種模式；預設 `system` 跟隨瀏覽器 `prefers-color-scheme`；使用者選擇寫入 localStorage；套用時在 `<html>` 加 `data-theme` 或 `class="dark"`，並透過 CSS variables 統一背景、文字、卡片、邊框、互動色。
+- 實作原則：先建立主題基礎設施與少數高頻頁面/元件的 token 化，後續再逐步掃描替換散落的 Tailwind 灰階/白底/黑字 class；避免一次性大改所有 UI，降低回歸風險。
+
+- [ ] Theme 基礎設施 MVP：新增 `frontend/src/lib/theme.ts`，定義 `ThemePreference = 'system' | 'light' | 'dark'`、localStorage key、`getStoredThemePreference()`、`resolveThemePreference()`、`applyThemePreference()`；監聽 `prefers-color-scheme` 變化，在 `system` 模式自動更新實際 theme；補純函式測試（預設值、壞值 fallback、system/light/dark resolve、套用 class/data attribute）。
+
+- [ ] Tailwind/CSS token 化：在 `frontend/src/index.css` 新增 CSS variables（如 `--color-bg`、`--color-surface`、`--color-text`、`--color-muted`、`--color-border`、`--color-primary`、`--color-danger`），提供 light/dark 兩組值；更新 `frontend/tailwind.config.js` 的 `theme.extend.colors` 以 `rgb(var(--...)/<alpha-value>)` 暴露 `bg`, `surface`, `text`, `muted`, `border`, `primary` 等語意色，讓後續元件可用語意 class 取代硬編 `white/slate/gray`。
+
+- [ ] 設定頁加入 Theme 選項：在 `SettingsPage` 的帳號/偏好區加入「外觀主題」select（跟隨系統／淺色／深色），沿用既有語言設定的 localStorage 模式；切換後立即呼叫 `applyThemePreference()`，不需按儲存；補 zh-TW/en i18n key；若目前尚未把 theme 納入後端 `SystemAiSettings`，先明確維持本機偏好，避免影響多帳號設定 API。
+
+- [ ] App 啟動前避免 theme flash：在 `frontend/src/main.tsx` 或 `frontend/index.html` 的最早可行位置套用 stored theme（優先避免 first paint 白閃）；確保 React hydration 後與 hook 狀態一致；若使用 inline script，需保持無外部依賴且不讀取敏感資料。
+
+- [ ] 高頻畫面第一批暗色模式適配：將 HomePage、PlayPage 外層、SettingsPage 主要卡片/表單、PdfCard 的白底/灰底/黑字/邊框 class 改為語意 token class；保留現有品牌色與狀態色但確認 dark 下對比足夠；不在此項一次處理所有深層播放頁子元件。
+
+- [ ] Theme 回歸測試與文件：新增/更新測試確認 theme preference helper 與 i18n key 對等；手動檢查 light/dark/system 三模式下首頁、播放頁、設定頁；在 README 或 BLOG 補一小段使用說明（若功能對使用者可見，依專案慣例記錄）。

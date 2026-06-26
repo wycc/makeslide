@@ -861,33 +861,41 @@ export function PlayPageFullscreen() {
             </p>
             {activePoll?.options?.length ? (
               <div className="mt-5 grid grid-cols-1 gap-2 text-left md:grid-cols-2 md:gap-3">
-                {activePoll.options.map((option, idx) => (
-                  <button
-                    key={`${activePoll.id}-${idx}`}
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void handleVotePoll(activePoll.id, idx);
-                    }}
-                    disabled={pollBusy || !activePoll.is_active}
-                    className={`rounded-lg border px-4 py-3 text-left text-base font-semibold shadow-[0_2px_10px_rgba(0,0,0,0.35)] md:text-lg ${
-                      pollVotes[activePoll.id] === idx
-                        ? 'border-emerald-300/90 bg-emerald-600/45 text-white'
-                        : 'border-cyan-200/65 bg-slate-900/88 text-white hover:bg-slate-800/95'
-                    } disabled:cursor-not-allowed disabled:opacity-55`}
-                  >
-                    <span className="mr-2 text-cyan-200">{idx + 1}.</span>
-                    <span className="whitespace-pre-wrap">{option.text}</span>
-                    {syncPollShowResults ? (
-                      <span className="mt-2 block text-xs text-cyan-100/90">
-                        {formatMessage('play.fullscreen.pollVotes', { count: option.votes })}
-                        {activePoll.total_votes > 0
-                          ? ` · ${Math.round((option.votes / activePoll.total_votes) * 100)}%`
-                          : ' · 0%'}
-                      </span>
-                    ) : null}
-                  </button>
-                ))}
+                {activePoll.options.map((option, idx) => {
+                  const ratio = activePoll.total_votes > 0
+                    ? Math.round((option.votes / activePoll.total_votes) * 100)
+                    : 0;
+                  return (
+                    <button
+                      key={`${activePoll.id}-${idx}`}
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void handleVotePoll(activePoll.id, idx);
+                      }}
+                      disabled={pollBusy || !activePoll.is_active}
+                      className={`rounded-lg border px-4 py-3 text-left text-base font-semibold shadow-[0_2px_10px_rgba(0,0,0,0.35)] md:text-lg ${
+                        pollVotes[activePoll.id] === idx
+                          ? 'border-emerald-300/90 bg-emerald-600/45 text-white'
+                          : 'border-cyan-200/65 bg-slate-900/88 text-white hover:bg-slate-800/95'
+                      } disabled:cursor-not-allowed disabled:opacity-55`}
+                    >
+                      <span className="mr-2 text-cyan-200">{idx + 1}.</span>
+                      <span className="whitespace-pre-wrap">{option.text}</span>
+                      {syncPollShowResults ? (
+                        <>
+                          <span className="mt-2 block text-xs text-cyan-100/90">
+                            {formatMessage('play.fullscreen.pollVotes', { count: option.votes })}
+                            {` · ${ratio}%`}
+                          </span>
+                          <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-slate-800">
+                            <span className="block h-full rounded-full bg-cyan-400 transition-[width] duration-300" style={{ width: `${ratio}%` }} />
+                          </span>
+                        </>
+                      ) : null}
+                    </button>
+                  );
+                })}
               </div>
             ) : null}
             {syncPollShowResults ? (
