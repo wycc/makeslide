@@ -2039,6 +2039,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：新增 `frontend/src/components/drawingGeometry.ts`（3 個純函式，`strokeHitsPoint` 以 `import type` 取得 `DrawingStroke` 型別、執行期無循環依賴）；`DrawingCanvas.tsx` 移除內聯 helper、改 import。新增 `drawingGeometry.test.ts` +6 測試（平方距離、點到線段距離之垂足/端點夾擠/零長線段、頂點命中、稀疏點線段命中、未命中）。前端 377 測試 + typecheck 全通過。分支 `refactor/drawing-geometry-tested`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 19 個完成項目（19/100，未達上限）。
 
+- [x] 側邊欄導覽縮圖隱藏破圖：`PlayPageSidebar` 的「從頁面建立」搜尋結果、書籤清單、重點頁清單三處的 `<img>` 缺 `onError`，縮圖載入失敗時會顯示瀏覽器破圖示——與主大綱縮圖網格（已優雅降級）不一致。三處加上 `onError` 在載入失敗時隱藏該圖，行為一致。
+  - 修改說明（2026-06-26）：`PlayPageSidebar.tsx` 三個導覽縮圖 `<img>` 加 `onError={(e) => { e.currentTarget.style.display = 'none'; }}`（書籤/重點兩處同字串以 replace_all 一併處理）。此為小型 DOM 事件處理、無可抽出純邏輯，依前端 377 測試 + typecheck 全通過驗證不破壞。分支 `fix/sidebar-secondary-thumb-onerror`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 20 個完成項目（20/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2062,4 +2066,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | 播放頁選單標籤 i18n：`PlayPageHeader` 行動選單切換鈕與 6 個 HeaderDropdown 群組標籤（資訊/播放/生成/下載/逐字稿/分享）改用 `t()`；zh-TW/en 各 +8 key；前端 371 測試通過 | fix/play-header-menu-i18n（已 merge） |
 | 2026-06-26 | figure 圖片路徑越界防護：`figureImageAbsPath` 改用 `safeJoinPdfPath`，避免被竄改的 figures.json imagePath（含 `../`）逃逸 PDF 目錄被 stream 給 client；figureImageAbsPath.test.ts +2 測試、後端 build 通過 | fix/figure-path-traversal-guard（已 merge） |
 | 2026-06-26 | 橡皮擦命中幾何抽離並補測試：`DrawingCanvas` 的 `distSq`/`distPointToSegment`/`strokeHitsPoint` 抽成純模組 `drawingGeometry.ts` 並補 6 個單元測試（點到線段距離、稀疏點線段命中等）；前端 377 測試通過 | refactor/drawing-geometry-tested（已 merge） |
+| 2026-06-26 | 側邊欄導覽縮圖隱藏破圖：`PlayPageSidebar` 搜尋結果/書籤/重點三處 `<img>` 加 `onError` 載入失敗隱藏，與主縮圖網格一致；前端 377 測試通過 | fix/sidebar-secondary-thumb-onerror（已 merge） |
 
