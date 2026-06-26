@@ -284,6 +284,73 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
     return reply.code(200).send(csv);
   });
 
+  // Per-page learning analytics export: viewers/completion plus aggregated poll
+  // participation and a divergence score (1 - top option's vote share; 0 = consensus).
+  app.get('/api/pdfs/:id/report/pages.csv', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send('Invalid pdf id');
+
+    const { id } = parsed.data;
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow) return reply.code(404).send('PDF not found');
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send('Forbidden');
+    }
+
+    const watchPages = db
+      .prepare(
+        `SELECT p.page_number AS page_number,
+                COUNT(w.viewer_id) AS total_viewers,
+                COALESCE(SUM(w.completed), 0) AS completed_viewers
+           FROM pages p
+           LEFT JOIN page_watch_progress w ON w.pdf_id = p.pdf_id AND w.page_number = p.page_number
+          WHERE p.pdf_id = ?
+          GROUP BY p.page_number
+          ORDER BY p.page_number ASC`,
+      )
+      .all(id) as Array<{ page_number: number; total_viewers: number; completed_viewers: number }>;
+
+    const pollVoteRows = db
+      .prepare(
+        `SELECT p.page_number AS page_number, v.option_index AS option_index, COUNT(*) AS votes
+           FROM page_polls p
+           JOIN page_poll_votes v ON v.poll_id = p.id
+          WHERE p.pdf_id = ?
+          GROUP BY p.page_number, v.option_index`,
+      )
+      .all(id) as Array<{ page_number: number; option_index: number; votes: number }>;
+
+    const pollByPage = new Map<number, { total: number; max: number }>();
+    for (const row of pollVoteRows) {
+      const agg = pollByPage.get(row.page_number) ?? { total: 0, max: 0 };
+      agg.total += row.votes;
+      agg.max = Math.max(agg.max, row.votes);
+      pollByPage.set(row.page_number, agg);
+    }
+
+    const round4 = (n: number) => Math.round(n * 10000) / 10000;
+    const header = ['page_number', 'total_viewers', 'completed_viewers', 'completion_rate', 'poll_total_votes', 'poll_divergence_score'].join(',');
+    const rows: string[] = [header];
+    for (const wp of watchPages) {
+      const completion = wp.total_viewers > 0 ? wp.completed_viewers / wp.total_viewers : 0;
+      const poll = pollByPage.get(wp.page_number);
+      const totalVotes = poll?.total ?? 0;
+      const divergence = totalVotes > 0 ? 1 - poll!.max / totalVotes : 0;
+      rows.push([
+        csvEscape(wp.page_number),
+        csvEscape(wp.total_viewers),
+        csvEscape(wp.completed_viewers),
+        csvEscape(round4(completion)),
+        csvEscape(totalVotes),
+        csvEscape(round4(divergence)),
+      ].join(','));
+    }
+    const csv = rows.join('\n');
+    void reply.header('Content-Type', 'text/csv; charset=utf-8');
+    void reply.header('Content-Disposition', `attachment; filename="report-pages-${id}.csv"`);
+    return reply.code(200).send(csv);
+  });
+
   app.get('/api/pdfs/:id/report/students', async (request, reply) => {
     const parsed = IdParamSchema.safeParse(request.params);
     if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid pdf id'));
