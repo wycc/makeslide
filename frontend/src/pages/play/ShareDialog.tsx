@@ -1,6 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { copyTextToClipboard } from '../../lib/clipboard';
 import { useI18n } from '../../i18n';
+
+/** Builds the iframe embed snippet for a share URL, or '' when there is no URL yet. */
+export function buildEmbedCode(shareUrl: string): string {
+  return shareUrl
+    ? `<iframe src="${shareUrl}" width="800" height="600" frameborder="0" allowfullscreen></iframe>`
+    : '';
+}
 
 interface ShareDialogProps {
   shareUrl: string;
@@ -18,9 +25,16 @@ export function ShareDialog({ shareUrl, expiresAt, selectedExpiresDays, onExpire
   const [activeTab, setActiveTab] = useState<'link' | 'embed'>('link');
   const [embedCopyStatus, setEmbedCopyStatus] = useState<'idle' | 'success'>('idle');
 
-  const embedCode = shareUrl
-    ? `<iframe src="${shareUrl}" width="800" height="600" frameborder="0" allowfullscreen></iframe>`
-    : '';
+  const embedCode = buildEmbedCode(shareUrl);
+
+  // Close on Escape, matching the other play-page overlays.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   const EXPIRY_OPTIONS: Array<{ label: string; value: number | undefined }> = [
     { label: t('play.shareDialog.expiryNever'), value: undefined },
@@ -30,8 +44,16 @@ export function ShareDialog({ shareUrl, expiresAt, selectedExpiresDays, onExpire
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
-      <div className="w-full max-w-2xl rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4"
+      onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('play.shareDialog.title')}
+        className="w-full max-w-2xl rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl"
+      >
         <h3 className="text-base font-semibold text-slate-100">{t('play.shareDialog.title')}</h3>
         <div className="mt-3 flex gap-1 border-b border-slate-700">
           {(['link', 'embed'] as const).map((tab) => (
