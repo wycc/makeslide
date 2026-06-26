@@ -11,6 +11,7 @@ import {
   updatePlaybackSyncState,
 } from '../lib/api/pdfs';
 import type { PagePoll, PdfDetailPage } from '../types';
+import { pollOptionPercent } from '../lib/pollPercent';
 
 const REMOTE_DRAWING_COLOR = '#ef4444';
 const REMOTE_DRAWING_LINE_WIDTH = 8; // ref-space units (REF_H = 1080)
@@ -437,9 +438,7 @@ export default function RemoteControllerPage() {
                 {poll.options.length > 0 ? (
                   <div className="mt-2 flex flex-col gap-1.5">
                     {poll.options.map((option, idx) => {
-                      const ratio = poll.total_votes > 0
-                        ? Math.round((option.votes / poll.total_votes) * 100)
-                        : 0;
+                      const ratio = pollOptionPercent(option.votes, poll.total_votes);
                       return (
                         <div key={`${poll.id}-${idx}`}>
                           <div className="flex items-center justify-between gap-2 text-xs text-slate-300">

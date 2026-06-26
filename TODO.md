@@ -2545,7 +2545,9 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 
 - [ ] 抽出頁碼清單複製文字為純函式（可測性 / 一致性）：`PlayPageSidebar` 書籤與重點頁「複製清單」各自內嵌 `[...pages].sort().map(n => prefix+n+suffix).join(sep)`。抽成 `frontend/src/lib/` 純函式 `formatPageListText(pages, labels)`（排序去重、`{prefix}{n}{suffix}` 以 `separator` 串接、空回空字串；labels 注入 prefix/suffix/separator）並補測試；兩處改呼叫之（行為不變）。純前端。
 
-- [ ] RemoteController 投票百分比改用 pollOptionPercent（一致性 / 降低重複）：`RemoteControllerPage` 投票結果百分比仍以 `poll.total_votes > 0 ? Math.round(option.votes/poll.total_votes*100) : 0` 內嵌。改用第一一四輪抽出的 `frontend/src/lib/pollPercent.ts` 之 `pollOptionPercent(votes, total)`（行為相同），收斂最後一處重複。純前端、無測試新增（既有 `pollPercent.test.ts` 已覆蓋）。
+- [x] RemoteController 投票百分比改用 pollOptionPercent（一致性 / 降低重複）：`RemoteControllerPage` 投票結果百分比仍以 `poll.total_votes > 0 ? Math.round(option.votes/poll.total_votes*100) : 0` 內嵌。改用第一一四輪抽出的 `frontend/src/lib/pollPercent.ts` 之 `pollOptionPercent(votes, total)`（行為相同），收斂最後一處重複。純前端、無測試新增（既有 `pollPercent.test.ts` 已覆蓋）。
+  - 修改說明（2026-06-26）：`RemoteControllerPage.tsx` import `pollOptionPercent`，投票結果 `ratio` 改為 `pollOptionPercent(option.votes, poll.total_votes)`，移除內嵌三元式；輸出與原本逐字相同、行為不變。`grep` 確認全前端已無其他 `Math.round(votes/total*100)` 投票百分比殘留。前端 `tsc --noEmit` 通過；行為不變、邏輯由既有 `pollPercent.test.ts` 覆蓋，不另加測試。分支 `feat/remote-poll-percent`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 94 個完成項目（94/100，未達上限）。
 
 - [ ] 統一兩份 relativeTime 實作（一致性，需小心）：`lib/formatRelativeTime.ts`（簡易、被 `PostClassReportPanel`/`PlayPageSidebar` 使用）與 `lib/relativeTime.ts`（含 i18n labels、被 `HomePage`/`PdfCard`/`QuizBuilderPage` 使用）為兩套相對時間格式化。評估後擇一保留：建議以具 i18n 的 `relativeTime.ts` 為準，將 `formatRelativeTime.ts` 的兩處呼叫遷移（提供對應 labels）後移除該檔；確保兩種語系輸出合理、補/更新測試。因涉 i18n 與兩頁顯示，需逐處確認、低風險地進行；若遷移成本高於效益，可改為在 `formatRelativeTime.ts` 標註並收斂命名以免混淆。純前端。
 
