@@ -2007,6 +2007,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`GlobalSearchBox.tsx` 新增 `requestSeqRef`，`doSearch` 取 `seq = ++requestSeqRef.current`，await 後僅在 `seq === requestSeqRef.current` 時 `setResults`／清除 searching；空查詢分支則 `+= 1` 使在途回應失效。同時把原本未測試的純函式 `highlightText` export 並新增 `GlobalSearchBox.test.ts` +5 測試（空查詢、單一/多個大小寫不敏感匹配、保留原大小寫且 trim 查詢、無匹配）。前端 363 測試 + typecheck 全通過。分支 `fix/global-search-race`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 11 個完成項目（11/100，未達上限）。
 
+- [x] CSV 匯出去重並強化（防 formula injection）：`poll-results-csv.ts` 與 `quiz-results-csv.ts` 各自有一份 byte 相同的 `csvEscape`（重複）。抽成共用 `routes/pdfs/csv.ts` 並強化：① 對使用者輸入的 string，若以公式起始字元（`=`/`+`/`-`/`@`/Tab/CR）開頭，前綴單引號 `'` 以瓦解 Excel/Sheets 的 CSV formula injection（投票題目、選項文字、測驗標題等皆為使用者可控）；② 補上單獨 CR 也觸發引用（RFC 4180）；③ 數字維持原樣，避免合法負數被誤前綴。
+  - 修改說明（2026-06-26）：新增 `backend/src/routes/pdfs/csv.ts` 匯出強化版 `csvEscape`；兩個 CSV 路由改 `import { csvEscape } from './csv'` 並移除本地副本（`sessionSub`/`canEditPdf` 維持各自，因非完全共用範疇）。新增 `backend/test/csvEscape.test.ts` +6 純函式測試（一般/數字、null、引用與雙引號、單獨 CR、四種 formula 起始字元含與逗號併用、負數不被前綴），sandbox 執行通過；後端 `tsc` build 通過。兩個 CSV 整合測試因 sandbox better-sqlite3 ABI 不符（NODE_MODULE_VERSION 127 vs 147）無法本機執行、留待 CI；經分析（數字不變、測試資料無危險字元開頭、header 不經 escape）確認不破壞。分支 `feat/csv-escape-shared-hardened`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 12 個完成項目（12/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2022,4 +2026,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | 後端字幕分句去重：`subtitleAlignment.ts` 改 re-export `textSentences.ts` 的 `splitScriptIntoSentences`，消除後端同套件內兩份相同副本（含 regex）；一致性測試改以函式 identity 斷言並保留前端↔後端 regex 守護；相關後端測試與 build 通過 | refactor/dedupe-backend-split-sentences（已 merge） |
 | 2026-06-26 | 播放頁下拉選單支援 Esc／點外部關閉：`HeaderDropdown` 加 `useEffect`（Escape + 外部 pointer-down 關閉），決策邏輯抽成純函式 `headerDropdownDismiss.ts`；headerDropdownDismiss.test.ts +2 測試；前端 358 測試通過 | feat/header-dropdown-dismiss（已 merge） |
 | 2026-06-26 | 全域搜尋忽略過時回應：`GlobalSearchBox` 以 `requestSeqRef` 守門，捨棄非最新的 async 搜尋回應（修 search-as-you-type race）；export `highlightText` 並 +5 測試；前端 363 測試通過 | fix/global-search-race（已 merge） |
+| 2026-06-26 | CSV 匯出去重並強化：兩個 CSV 路由共用的 `csvEscape` 抽成 `routes/pdfs/csv.ts`，並加 CSV formula injection 防護（`=`/`+`/`-`/`@`/Tab/CR 開頭字串前綴 `'`、僅對 string）與單獨 CR 引用；csvEscape.test.ts +6 測試（sandbox 通過）、後端 build 通過；CSV 整合測試留待 CI | feat/csv-escape-shared-hardened（已 merge） |
 
