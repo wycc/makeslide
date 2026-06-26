@@ -223,9 +223,11 @@ function ReviewListSection() {
 
   if (!pdfId || items.length === 0) return null;
 
-  const handleRemove = (pageNumber: number) => {
-    removeReviewItem(pdfId, pageNumber);
-    setItems((prev) => prev.filter((item) => !(item.pdfId === pdfId && item.pageNumber === pageNumber)));
+  const handleRemove = (pageNumber: number, questionText: string) => {
+    removeReviewItem(pdfId, pageNumber, questionText);
+    setItems((prev) =>
+      prev.filter((item) => !(item.pdfId === pdfId && item.pageNumber === pageNumber && item.questionText === questionText)),
+    );
   };
 
   return (
@@ -253,7 +255,7 @@ function ReviewListSection() {
               </button>
               <button
                 type="button"
-                onClick={() => handleRemove(item.pageNumber)}
+                onClick={() => handleRemove(item.pageNumber, item.questionText)}
                 className="shrink-0 text-rose-500/60 hover:text-rose-400"
                 aria-label={t('play.sidebar.reviewListRemove')}
               >

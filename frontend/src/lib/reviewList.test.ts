@@ -58,6 +58,22 @@ test('removeReviewItem removes by pdfId + pageNumber', () => {
   assert.ok(items.some((i) => i.pdfId === 'b' && i.pageNumber === 1));
 });
 
+test('removeReviewItem with questionText removes only that question on the page', () => {
+  clearAllReviewItems();
+  addReviewItems([
+    item({ pdfId: 'a', pageNumber: 1, questionText: 'Q1?' }),
+    item({ pdfId: 'a', pageNumber: 1, questionText: 'Q2?' }),
+    item({ pdfId: 'a', pageNumber: 2, questionText: 'Q1?' }),
+  ]);
+  removeReviewItem('a', 1, 'Q1?');
+  const items = getReviewItems();
+  assert.equal(items.length, 2);
+  // 同頁的另一題保留，不被一併刪除
+  assert.ok(items.some((i) => i.pageNumber === 1 && i.questionText === 'Q2?'));
+  assert.ok(!items.some((i) => i.pageNumber === 1 && i.questionText === 'Q1?'));
+  assert.ok(items.some((i) => i.pageNumber === 2 && i.questionText === 'Q1?'));
+});
+
 test('getReviewItems falls back to [] on corrupt or non-array data', () => {
   localStorage.setItem('makeslide.reviewItems', 'not json{');
   assert.deepEqual(getReviewItems(), []);
