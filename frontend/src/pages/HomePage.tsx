@@ -30,6 +30,7 @@ import { formatRelativeTime, buildRelativeTimeLabels } from '../lib/relativeTime
 import { useBudgetWarning } from '../hooks/useBudgetWarning';
 import { formatAudioDuration } from '../lib/audioDuration';
 import { getReviewItems } from '../lib/reviewList';
+import { roundToTwoDecimals } from '../lib/roundTo';
 
 const POLL_INTERVAL_ACTIVE_MS = 5000;
 const POLL_INTERVAL_IDLE_MS = 30000;
@@ -1038,7 +1039,7 @@ export default function HomePage() {
         {budgetWarning?.exceeded ? (
           <div className="mb-4 rounded-md border border-amber-500/50 bg-amber-500/15 px-3 py-2 text-sm text-amber-100">
             {t('budget.exceeded')
-              .replace('${cost}', String(Math.round(budgetWarning.costUsd * 100) / 100))
+              .replace('${cost}', String(roundToTwoDecimals(budgetWarning.costUsd)))
               .replace('${limit}', String(budgetWarning.limitUsd))}
           </div>
         ) : null}

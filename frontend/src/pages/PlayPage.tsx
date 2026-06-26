@@ -40,6 +40,7 @@ import { formatGeneratingStatusLabel } from '../lib/statusLabels';
 import { nextPageInList, prevPageInList } from '../lib/pageListNav';
 import { parseGotoPage } from '../lib/parseGotoPage';
 import { splitScriptIntoSentences, buildSentenceTimeline, type SentenceTimelineItem } from '../lib/subtitles';
+import { roundToTwoDecimals } from '../lib/roundTo';
 import { type DrawingCanvasHandle, type DrawingData, type DrawingStroke } from '../components/DrawingCanvas';
 import { useVersionHistory } from './play/useVersionHistory';
 import { useRegeneration } from './play/useRegeneration';
@@ -2548,7 +2549,7 @@ export default function PlayPage() {
         <div className="mx-auto w-full max-w-5xl px-4 pt-2">
           <div className="rounded-md border border-amber-500/50 bg-amber-500/15 px-3 py-2 text-sm text-amber-100">
             {t('budget.exceeded')
-              .replace('${cost}', String(Math.round(budgetWarning.costUsd * 100) / 100))
+              .replace('${cost}', String(roundToTwoDecimals(budgetWarning.costUsd)))
               .replace('${limit}', String(budgetWarning.limitUsd))}
           </div>
         </div>
