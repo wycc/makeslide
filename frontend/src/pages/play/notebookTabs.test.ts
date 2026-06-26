@@ -47,6 +47,17 @@ test('computeNotebookTabCounts handles empty deck', () => {
   assert.equal(counts.interact, 0);
 });
 
+test('computeNotebookTabCounts includes reviewItems in interact count', () => {
+  const counts = computeNotebookTabCounts({ slides: 5, bookmarks: 1, important: 0, polls: 0, reviewItems: 4 });
+  assert.equal(counts.interact, 5); // 1 bookmark + 4 review items
+});
+
+test('computeNotebookTabCounts defaults reviewItems to 0 when omitted', () => {
+  const withoutReview = computeNotebookTabCounts({ slides: 3, bookmarks: 2, important: 1, polls: 1 });
+  const withZeroReview = computeNotebookTabCounts({ slides: 3, bookmarks: 2, important: 1, polls: 1, reviewItems: 0 });
+  assert.equal(withoutReview.interact, withZeroReview.interact);
+});
+
 test('getEdgeNotebookTab returns the first and last tabs', () => {
   assert.equal(getEdgeNotebookTab('first'), NOTEBOOK_TABS[0]!.id);
   assert.equal(getEdgeNotebookTab('last'), NOTEBOOK_TABS[NOTEBOOK_TABS.length - 1]!.id);

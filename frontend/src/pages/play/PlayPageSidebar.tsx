@@ -491,6 +491,7 @@ export function PlayPageSidebar() {
     setImagePreviewOpen,
     bookmarks, toggleBookmark,
     importantPages, toggleImportantPage,
+    pdfId,
   } = usePlayPageContext();
 
   const { t } = useI18n();
@@ -520,13 +521,15 @@ export function PlayPageSidebar() {
     tabButtonRefs.current[nextIdx]?.focus();
   };
   // Per-tab count badges: "slides" shows the deck page count and "class
-  // interaction" surfaces the user's saved markers and live polls, so both are
-  // discoverable without switching tabs.
+  // interaction" surfaces the user's saved markers, live polls, and review-list
+  // items so both tabs' contents are discoverable without switching.
+  const reviewItemCount = pdfId ? getReviewItems().filter((x) => x.pdfId === pdfId).length : 0;
   const notebookTabCounts = computeNotebookTabCounts({
     slides: deckPages.length,
     bookmarks: bookmarks.length,
     important: importantPages.length,
     polls: pagePolls.length,
+    reviewItems: reviewItemCount,
   });
 
   return (
