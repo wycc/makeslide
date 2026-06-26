@@ -2023,6 +2023,10 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
   - 修改說明（2026-06-26）：`report.ts` 移除本地 `escapeCsvField`，`import { csvEscape } from './csv'`，7 處呼叫改為 `csvEscape`。一般值/數字行為不變。後端 `tsc` build 通過、共用 `csvEscape.test.ts` 通過；students.csv 整合測試需 better-sqlite3（sandbox ABI 不符）留待 CI，經分析（header 不經 escape、測試資料無危險起始字元、數字不變）確認不破壞。分支 `refactor/report-csv-use-shared-escape`，已 merge 回 master。
   - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 15 個完成項目（15/100，未達上限）。
 
+- [x] 卡片封面載入失敗退回佔位圖：`PdfCard` 的封面 `<img>` 沒有 `onError` fallback，縮圖 404／尚未產生／載入失敗時會顯示瀏覽器的破圖示。改為記錄「失敗的 src」並退回 PDF 佔位圖；以 URL（而非布林旗標）為鍵，使之後 `coverSrc` 換成新 URL（例如渲染中下一張即時頁面預覽）時會重試而非永遠停在佔位圖。
+  - 修改說明（2026-06-26）：新增純函式 `frontend/src/components/pdfCardCover.ts` 的 `shouldShowCoverImage(coverSrc, failedSrc)`（有 URL 且 ≠ 失敗的 URL 才顯示圖片，附 type guard）；`PdfCard.tsx` 新增 `failedCoverSrc` state、封面改用此函式判斷、`<img>` 加 `onError={() => setFailedCoverSrc(coverSrc)}`。新增 `pdfCardCover.test.ts` +4 測試（無 URL、未失敗、失敗 URL 退回、換新 URL 重試）。前端 371 測試 + typecheck 全通過。分支 `fix/pdf-card-cover-fallback`，已 merge 回 master。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-26) 起算，本項為第 16 個完成項目（16/100，未達上限）。
+
 ## 工作記錄（第九十七輪）
 
 | 日期 | 工作摘要 | 分支 |
@@ -2042,4 +2046,5 @@ FUTURE_ROADMAP.md 2.1–2.10 全部完成（88/100），對現有程式碼再次
 | 2026-06-26 | 分享對話框支援 Esc／背景點擊關閉：`ShareDialog` 加 Escape keydown、背景點擊（target===currentTarget）關閉與 `role=dialog`/`aria-modal`/`aria-label`；`embedCode` 抽成純函式 `buildEmbedCode`；ShareDialog.test.ts +2 測試；前端 365 測試通過 | feat/share-dialog-dismiss（已 merge） |
 | 2026-06-26 | 可重用 overlay 關閉 hook：新增 `useOverlayDismiss`（Escape+背景關閉，純函式 `isOverlayDismissKey`/`isBackdropClick`）；套用至 `ImagePreviewDialog`（補 Escape/背景/aria）並重構 `ShareDialog` 使用之；useOverlayDismiss.test.ts +2 測試；前端 367 測試通過 | feat/overlay-dismiss-hook（已 merge） |
 | 2026-06-26 | students.csv 報表沿用共用 csvEscape：`report.ts` 移除第三份 `escapeCsvField`，改用共用強化版 `csvEscape`，使該匯出（含使用者可控 quiz_title）也防 formula injection 並補 CR 引用；後端 build 通過、整合測試留待 CI | refactor/report-csv-use-shared-escape（已 merge） |
+| 2026-06-26 | 卡片封面載入失敗退回佔位圖：`PdfCard` 封面 `<img>` 加 `onError` 退回 PDF 佔位圖（純函式 `shouldShowCoverImage`，以失敗 URL 為鍵可在換新 URL 時重試）；pdfCardCover.test.ts +4 測試；前端 371 測試通過 | fix/pdf-card-cover-fallback（已 merge） |
 
