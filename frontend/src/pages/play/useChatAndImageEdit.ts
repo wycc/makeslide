@@ -98,6 +98,15 @@ export function useChatAndImageEdit({
   // 換頁時重新拉取聊天紀錄
   // 使用 ref 暫存 currentPage.page_number 避免 closure stale 問題
   const currentPageNumberRef = useRef<number | null>(null);
+
+  // 卸載時釋放尚未送出/清除的貼上圖片 object URL，避免離開播放頁時洩漏 blob。
+  // 用 ref 追蹤最新 URL，讓 [] 相依的 cleanup 能取得卸載當下的值；session 內的
+  // 重新貼上/清除已由 clearChatPastedImage 先行 revoke，故不會重複釋放。
+  const chatPastedImageUrlRef = useRef<string | null>(null);
+  chatPastedImageUrlRef.current = chatPastedImageUrl;
+  useEffect(() => () => {
+    if (chatPastedImageUrlRef.current) URL.revokeObjectURL(chatPastedImageUrlRef.current);
+  }, []);
   useEffect(() => {
     if (!pdfId || !currentPage) return;
     currentPageNumberRef.current = currentPage.page_number;
