@@ -1353,6 +1353,7 @@ export const zhTW = {
   'play.sidebar.reviewListTitle': '📝 複習清單',
   'play.sidebar.reviewListHint': '答錯且有頁碼的題目會自動加入',
   'play.sidebar.reviewListCopy': '複製',
+  'play.sidebar.reviewListClearAll': '清除全部',
   'play.sidebar.reviewListCopyDone': '已複製 ✓',
   'play.sidebar.reviewListCopyFail': '複製失敗',
   'play.sidebar.reviewListPage': '第 {n} 頁',

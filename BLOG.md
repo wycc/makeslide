@@ -7854,3 +7854,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **i18n**：新增 zh-TW/en `play.sidebar.poll.copyResults`/`copyHeading`/`votesUnit`/`copyDone`/`copyFail`。
 - **測試**：`pollResultsMarkdown.test.ts` 4 個案例（空清單、單一 poll 票數與百分比、零票 0%、多 poll）。
 - **驗證**：前端 `tsc --noEmit` 通過；`pollResultsMarkdown.test.ts` 與 `i18n.test.ts`（含 zh/en key 對等）全通過。
+
+## 複習清單「清除全部」按鈕（2026-06-26）
+
+### 功能目的
+播放頁的複習清單會收錄答錯且有頁碼的題目。先前只能逐項點 × 移除，項目多時清空很麻煩。本項加入「清除全部」一鍵清空，配合先前的「複製」讓複習清單的整理更順手。
+
+### 使用方式
+在複習清單區（有項目時顯示），標題列「複製」旁新增「清除全部」按鈕，點擊即清空**目前這份簡報**的複習清單。其他簡報的複習清單不受影響。
+
+### 技術細節
+- **UI**（`frontend/src/pages/play/PlayPageSidebar.tsx` 的 `ReviewListSection`）：標題列把「複製」與新「清除全部」收進同一個 flex 群組；`handleClearAll` 清除後將本地 `items` 設為 `[]`。
+- **作用域決定**：`lib/reviewList.ts` 的 `clearAllReviewItems()` 會清掉所有簡報的複習項目，但本區塊只呈現目前簡報的清單，逕用會誤刪其他簡報的複習項目。因此改為以 `removeReviewItem(pdfId, pageNumber)`（省略 questionText 時整頁移除）逐頁清除**目前簡報**的項目，刻意不使用 `clearAllReviewItems`，避免破壞跨簡報的複習清單。
+- **i18n**：新增 zh-TW/en `play.sidebar.reviewListClearAll`。
+- **驗證**：前端 `tsc --noEmit` 通過；`i18n.test.ts`（含 zh/en key 對等）通過。

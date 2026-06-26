@@ -335,6 +335,15 @@ function ReviewListSection() {
     window.setTimeout(() => setCopyMsg(null), 2000);
   };
 
+  // 只清除目前 PDF 的複習項目（removeReviewItem 省略 questionText 時整頁移除），
+  // 不影響其他 PDF 的複習清單。
+  const handleClearAll = () => {
+    for (const pageNumber of new Set(items.map((i) => i.pageNumber))) {
+      removeReviewItem(pdfId, pageNumber);
+    }
+    setItems([]);
+  };
+
   return (
     <section className="rounded-lg border border-rose-800/40 bg-rose-900/20">
       <div className="border-b border-rose-800/30 px-4 py-3">
@@ -343,13 +352,22 @@ function ReviewListSection() {
             {t('play.sidebar.reviewListTitle')}
             <span className="rounded-full bg-rose-500/20 px-1.5 py-0.5 text-[10px] font-normal text-rose-300">{items.length}</span>
           </h2>
-          <button
-            type="button"
-            onClick={() => void handleCopy()}
-            className="shrink-0 rounded border border-rose-800/40 px-2 py-0.5 text-[10px] text-rose-300/80 hover:text-rose-200"
-          >
-            {copyMsg ?? t('play.sidebar.reviewListCopy')}
-          </button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => void handleCopy()}
+              className="rounded border border-rose-800/40 px-2 py-0.5 text-[10px] text-rose-300/80 hover:text-rose-200"
+            >
+              {copyMsg ?? t('play.sidebar.reviewListCopy')}
+            </button>
+            <button
+              type="button"
+              onClick={handleClearAll}
+              className="rounded border border-rose-800/40 px-2 py-0.5 text-[10px] text-rose-400/70 hover:text-rose-300"
+            >
+              {t('play.sidebar.reviewListClearAll')}
+            </button>
+          </div>
         </div>
         <p className="mt-0.5 text-[11px] text-rose-400/70">{t('play.sidebar.reviewListHint')}</p>
       </div>
