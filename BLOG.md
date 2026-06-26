@@ -8110,3 +8110,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **說明面板**（`frontend/src/pages/play/PlayPageHeader.tsx`）：`shortcuts` 在 `B` 後加入 `Shift + B`；新增 zh-TW/en `play.shortcuts.prevBookmark`。
 - **測試**（`bookmarkNav.test.ts`）：4 個案例（空清單回 null、next 環繞、prev 環繞、排序去重）。
 - **驗證**：前端 `tsc --noEmit` 通過；`bookmarkNav.test.ts` 與 `i18n.test.ts`（含 zh/en key 對等）全通過。
+
+## 抽出 mm:ss 倒數格式化純函式（2026-06-26）
+
+### 功能目的
+測驗作答的倒數計時先前以內嵌的 `Math.floor(秒/60)…:…` 直接寫在 JSX 裡，無法單元測試、也難以重用。本項把它抽成純函式並補測試，是純粹的可測性重構，顯示不變。
+
+### 使用方式
+無可見變化。倒數計時仍以 `分:秒`（各兩位）呈現。
+
+### 技術細節
+- **純函式**（`frontend/src/lib/formatMmSs.ts`）：`formatMmSs(totalSeconds)` 對非有限或非正數視為 0、`Math.floor` 取整、分與秒各補零兩位；超過 60 分仍以分:秒呈現（例 3661 → `61:01`）。
+- **元件**（`frontend/src/pages/QuizBuilderPage.tsx`）：倒數顯示改呼叫此函式，輸出與原本相同（已確認無其他相同 mm:ss 內嵌可一併收斂）。
+- **測試**（`formatMmSs.test.ts`）：5 個案例（0/補零、分秒拆分、>60 分、捨去小數秒、負值/NaN→0）。
+- **驗證**：前端 `tsc --noEmit` 通過；新測試通過；無 i18n 變更。
