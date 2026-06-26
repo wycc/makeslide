@@ -7965,3 +7965,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **後端**（`backend/src/routes/pdfs/subtitles.ts`）：`buildPlainTextContent` 新增可選 `title` 參數，trim 後非空時於最前面加入 `# {title}` 與一個空行，再接既有逐頁內容；空白標題則略過。`subtitles.txt` 路由把既有查詢到的 `row.title` 傳入。
 - **測試**（`backend/test/subtitles-txt.test.ts`）：兩個內容斷言補上 `# Test <id>\n\n` 前綴；新增一個「標題為空白時略過標題行」案例（seed 後 `UPDATE title=''`）。
 - **驗證**：後端 `tsc --noEmit` 通過。純後端改動，前端下載連結與 i18n 不需調整。handler 測試需 better-sqlite3 native module，於本機 sandbox 無法載入，留待 CI 執行。
+
+## 評論批次「全部標記已解決」（2026-06-26）
+
+### 功能目的
+頁面評論累積後，教師要把一批已處理的回饋一一點「已解決」很費事。本項加入一鍵「全部標記已解決」，配合先前的未解決徽章、未解決優先排序，讓回饋的批次處理更順手。
+
+### 使用方式
+在「頁面評論」區，只要還有未解決的評論，標題列就會出現「全部標記已解決」按鈕。點一下即把目前所有未解決的評論標記為已解決。
+
+### 技術細節
+- **UI/邏輯**（`frontend/src/pages/play/PlayPageSidebar.tsx` 的 `CommentsSection`）：`handleResolveAll` 取所有未解決評論，以 `Promise.allSettled` 並行呼叫既有的 `resolvePageComment(pdfId, id, true)`，僅將成功者於本地 state 標為已解決（部分失敗不影響其他、不丟例外）。按鈕僅在 `unresolvedCount > 0` 時顯示。
+- **複用既有 API**：不新增後端端點，沿用單筆 resolve 端點。
+- **i18n**：新增 zh-TW/en `play.sidebar.commentsResolveAll`。
+- **驗證**：前端 `tsc --noEmit` 通過；`i18n.test.ts`（含 zh/en key 對等）通過。此為複用既有 API 的 UI 批次操作、無新增可抽出純邏輯，故不另加單元測試。
