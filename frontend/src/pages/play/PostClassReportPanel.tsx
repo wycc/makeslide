@@ -12,7 +12,7 @@ import {
   getMostDivergentPollPages,
 } from './reportSummary';
 import { copyTextToClipboard } from '../../lib/clipboard';
-import { formatRelativeTime } from '../../lib/formatRelativeTime';
+import { formatRelativeTime, buildRelativeTimeLabels } from '../../lib/relativeTime';
 
 interface StudentQuestionResult {
   question_id: string;
@@ -61,6 +61,7 @@ function SummaryCard({ label, value, hint }: { label: string; value: string; hin
 
 export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error, onClose, onReload }: PostClassReportPanelProps) {
   const { t } = useI18n();
+  const relativeTimeLabels = buildRelativeTimeLabels(t);
   const { onBackdropClick } = useOverlayDismiss(onClose);
   const hardestQuestions = getHardestQuestions(summary);
   const divergentPollPages = getMostDivergentPollPages(summary);
@@ -194,7 +195,7 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
                   className="mt-1 text-xs text-slate-500"
                   title={new Date(summary.generated_at).toLocaleString()}
                 >
-                  {t('play.report.generatedAtRelative').replace('{time}', formatRelativeTime(summary.generated_at))}
+                  {t('play.report.generatedAtRelative').replace('{time}', formatRelativeTime(summary.generated_at, relativeTimeLabels))}
                 </p>
               )}
             </div>

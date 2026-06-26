@@ -17,7 +17,7 @@ import { formatPollResultsMarkdown } from '../../lib/pollResultsMarkdown';
 import { pollOptionPercent } from '../../lib/pollPercent';
 import { formatNotesMarkdown } from '../../lib/notesMarkdown';
 import { formatPageListText } from '../../lib/pageListText';
-import { formatRelativeTime } from '../../lib/formatRelativeTime';
+import { formatRelativeTime, buildRelativeTimeLabels } from '../../lib/relativeTime';
 import { NOTEBOOK_TABS, computeNotebookTabCounts, getAdjacentNotebookTab, getEdgeNotebookTab, getStoredNotebookTab, setStoredNotebookTab, type NotebookTab } from './notebookTabs';
 
 const IMAGE_MSG_PREFIX = '[image] ';
@@ -97,6 +97,7 @@ function SimilarPagesSection() {
 
 function CommentsSection() {
   const { t } = useI18n();
+  const relativeTimeLabels = buildRelativeTimeLabels(t);
   const { pdfId, currentPage, setCurrentIdx } = usePlayPageContext();
   const [showAll, setShowAll] = useState(false);
   const [comments, setComments] = useState<PageComment[]>([]);
@@ -299,7 +300,7 @@ function CommentsSection() {
                     </button>
                   )}
                   <span className="font-medium text-sky-200">{c.author}</span>
-                  <span className="ml-1.5 text-sky-400/50 text-[10px]" title={new Date(c.created_at).toLocaleString()}>{formatRelativeTime(c.created_at)}</span>
+                  <span className="ml-1.5 text-sky-400/50 text-[10px]" title={new Date(c.created_at).toLocaleString()}>{formatRelativeTime(c.created_at, relativeTimeLabels)}</span>
                   {editingId === c.id ? (
                     <div className="mt-0.5 space-y-1">
                       <textarea
