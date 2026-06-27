@@ -1401,6 +1401,13 @@ async function runRegenerateImages(
       .toFile(pageImagePath(pdfId, p.page_uid));
     await generatePageThumbnail(pdfId, p.page_uid, pageImagePath(pdfId, p.page_uid));
     const relImg = path.posix.join('pages', `${p.page_uid}.jpg`);
+    // Persist image_path. Normal pages already point here (image is rewritten in place at the
+    // uid-based path), but a page whose image_path was NULL — e.g. one recovered from a
+    // half-failed add-pages insert — would otherwise have its freshly generated image left
+    // invisible (file on disk, but the DB/API still reports no image for the page).
+    db.prepare(
+      `UPDATE pages SET image_path = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`,
+    ).run(relImg, nowIso(), pdfId, p.page_number);
     void commitPresentationFile(pdfId, relImg, `image: regenerate page ${p.page_number}`);
 
     finishArtifact(artifactHandle, 'succeeded', {
