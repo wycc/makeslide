@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第一七六輪已完成 **55/100**，未達上限。
+- 最新進度：截至第一七七輪已完成 **56/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -34,6 +34,14 @@
   - 資料修復（2026-06-27）：以現行 gpt-5.5 設定，透過真正的持久化路徑 `generateAnimationForPage` 重產第 42、43 頁焦點動畫並寫回 `animation.json` + `pages` 資料表。重產後 distinct xPct 由 1（全 x10）變為 4–5、效果數由 13/6 收斂為 8/5、方框位置貼合實際版面。第 44 頁為 `static-image`、本就無動畫規格（非壞殘留），未變動。
   - 程式碼修復（分支 `fix/autofocus-image-provider-comment`，已 merge）：修正 [animationAutoFocus.ts](backend/src/services/animationAutoFocus.ts) `generateAiFocusEffects` docstring 中**已過時且會誤導排查的註解**——原稱圖片「only actually used when `LLM_PROVIDER=openai`」（因 Gemini 會剝除非文字內容）。此說法已不正確：`buildGeminiContents` 會把 data URL 轉成 `inlineData`、OpenAI 相容 provider（openai/cgu-air/openrouter）直接透傳 `image_url`，故圖片在**所有現行 provider 都會送達模型**；改寫為依實際逐 provider 行為描述，並點明「結果看似純文字（方框機械排成一欄、無視版面）代表模型/閘道未套用 vision，而非本程式碼把圖片丟掉」。僅改註解，後端 `tsc --noEmit` 通過。
   - 本項為使用者回報 bug 修復，**不計入** 100 輪計數。
+
+## 品質檢查面板挑選邏輯抽出純函式（第一七七輪，2026-06-27）
+
+轉向前端：`QualityCheckPanel`（290 行元件）內聯「有問題頁」與「缺/空逐字稿可批次補頁」的挑選邏輯，後者含 LLM fan-out 上限（10 頁）這種安全相關邏輯卻無測試。
+
+- [x] 抽出品質檢查面板頁面挑選純函式（可測 / 固化 fan-out 上限）：`selectIssuePages`／`selectEmptyScriptFillPages(results, max)`。
+  - 修改說明（2026-06-27）：新增 `frontend/src/lib/qualityCheckSelection.ts`（`selectIssuePages` null-safe 篩有問題頁；`selectEmptyScriptFillPages` 挑缺/空逐字稿頁碼、保序、夾 `max`、`max≤0` 回空避免無上限 fan-out）。`QualityCheckPanel` 改用之、移除內聯邏輯（行為等價）。新增 `qualityCheckSelection.test.ts`（5 組）。前端 `tsc --noEmit` 通過、新測試 5/5 通過。分支 `refactor/quality-check-selection`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 56 個完成項目（56/100，未達上限）。
 
 ## 相似頁面 embedding 防護解析（第一七六輪，2026-06-27）
 
@@ -317,6 +325,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （前端，去重/可測）品質檢查面板挑選邏輯抽出純函式：`selectIssuePages`／`selectEmptyScriptFillPages`（含 LLM 批次補逐字稿 fan-out 上限），`QualityCheckPanel` 改用之、移除內聯；補 5 測試；前端 typecheck 通過（計數 56/100） | refactor/quality-check-selection（已 merge） |
 | 2026-06-27 | （後端，健壯性修復）相似頁面 embedding 無防護解析致一壞全壞：`GET …/similar` 跨整個帳號教材庫比對，任一筆 embedding 損壞 500 整個面板；新增 `parseEmbedding`（非法/非陣列/含非數字回 null），目標損壞→indexed:false、候選損壞→跳過；補純函式 5 + 整合 2 測試（16 回歸）（計數 55/100） | fix/similar-pages-guard-embedding-parse（已 merge） |
 | 2026-06-27 | （後端，健壯性修復）範本清單 `skill_data` 無防護解析致一壞全壞：`GET /api/templates` 逐列 `rowToTemplate` 的 `JSON.parse(skill_data)` 任一筆損壞會 500 整份清單；抽出 `parseSkillData`（非法/非物件回 {}）改用之、損壞列退化為空；補純函式 + 損壞列整合測試（8/8）（計數 54/100） | fix/templates-guard-skill-data-parse（已 merge） |
 | 2026-06-27 | （後端，去重+健壯性修復）抽出共用 `parsePollOptions`：`page_polls.options_json` 兩處無防護 `JSON.parse(...) as string[]`（投票結果 CSV、投票端點）單筆損壞會 500，統一改用穩健解析（非法/非陣列回 []、過濾非字串）；`rowToPoll` 去重；補 5 測試，poll 路由共 100+ 測試回歸通過（計數 53/100） | refactor/parse-poll-options（已 merge） |
