@@ -13,6 +13,14 @@
 - [ ] 系統性採用 `mapApiErrorToHumanMessage`：目前約 55 處 catch 區塊直接 `setError(err.message)` 顯示後端原始 message、繞過既有的錯誤訊息映射（前端僅 2 處 `UploadButton`、`ImportTextPage` 使用 mapper）。全面改造屬較大工程，且各 catch 上下文不同、許多後端 message 已是中文（未必都是英文洩漏），逐點需產品判斷顯示風格，故列為待使用者決定。
 - [ ] 把前端測試納入 root `npm test`：目前 root 測試腳本未涵蓋前端 `node:test` 測試。納入涉及 CI 行為變更與 `npm install`（sandbox 無法驗證），列為待使用者決定。
 
+## addPagesFromPrompt 補 defer FK（第一六三輪，2026-06-27）
+
+延續稽核：`addPagesFromPrompt`（AI 批次加頁）在中間插頁時也位移頁碼並呼叫 `shiftChildPageNumbers`，但**缺 `defer_foreign_keys = ON`**——與 page-operations 修前同樣的 FK-timing bug：先 `UPDATE pages` 即讓 polls 變孤兒 → 在後續頁有投票時 FK 500。
+
+- [x] `addPagesFromPrompt` 中間插頁缺 defer FK → 後續頁有投票時 FK 失敗：在其 page-shift 交易開頭加 `db.pragma('defer_foreign_keys = ON')`（`shiftChildPageNumbers` 已涵蓋 polls/comments/drawings）。
+  - 修改說明（2026-06-27）：於 `addPagesFromPrompt.ts` 的「中間插頁」交易加 defer pragma。worker 難以端到端單元測，以重現腳本驗證（在第 3 頁有 poll/comment、insertAfter=1/insertCount=2 → 交易成功、poll/comment 正確移到第 5 頁、無 FK error）；既有 `add-pages-permission`/`add-pages-orphan-recovery` 17 測試回歸通過。backend `tsc --noEmit` 通過。分支 `fix/addpages-defer-fk`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 42 個完成項目（42/100，未達上限）。
+
 ## 擴展頁面重排的子表對齊（第一六二輪，2026-06-27）
 
 延續 round-161：盤點所有以 `page_number` 關聯 pages 的子表，發現除 polls 外，**comments 與 drawings 在增刪移頁時也會錯位**（無 FK 故不崩、但附到錯頁；drawings 刪頁時甚至不會被清掉而殘留）。embeddings 以 `page_uid` 為鍵不受影響；watch_progress/timings/events 屬歷史分析、刻意不重排。
@@ -196,6 +204,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （FK 稽核收尾）`addPagesFromPrompt` 中間插頁補 `defer_foreign_keys`（避免後續頁有投票時 FK 500）；重現驗證 + 17 測試回歸（計數 42/100） | fix/addpages-defer-fk（已 merge） |
 | 2026-06-27 | （資料對齊擴展）頁面增/刪/移時 comments/drawings 也對齊：`shiftChildPageNumbers` 擴為三表、move per-page 移三表、delete 顯式刪被刪頁 comments/drawings；補 4 測試；後端 1203/1203 全綠（計數 41/100） | fix/realign-page-content-children（已 merge） |
 | 2026-06-27 | （真 bug 修復）頁面增/刪/移時投票（page_polls）未隨頁碼重編號致 FK 500+錯位：三 renumber 交易加 `defer_foreign_keys`、delete 補子表 lockstep 位移；補 2 回歸測試；後端 1201/1201 全綠（計數 40/100） | fix/page-renumber-fk-defer-and-poll-shift（已 merge） |
 | 2026-06-27 | 規畫輪（第一六〇輪）：確認 backlog 見底、品質檢查修正完整無缺口；依 STATUS_REPORT §7–§8 補 5 個優先可執行項目（多需 UI/後端整合，部分待使用者確認方向）。本輪為規畫輪、不計入 100 完成計數（維持 39/100） | master（僅文件） |
