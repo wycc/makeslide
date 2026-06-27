@@ -1,5 +1,27 @@
 # MakeSlide 功能說明
 
+## 重生圖片會把 image_path 寫回資料庫（修正「重生後圖片不顯示」）
+
+### 目的
+
+批次「重生」的圖檔步驟產生新圖後，會把圖檔寫到磁碟（以頁面 `page_uid` 命名）、產縮圖並 commit，但
+**沒有更新 `pages.image_path`**——它假設該頁原本就已經有 `image_path` 指向那個檔。對一般頁面這成立
+（重生是「就地覆寫」同一個檔），但對 `image_path` 原本是 NULL 的頁面（例如由半失敗的「新增多頁」復原
+而來的頁），重生後會出現「圖檔已經在磁碟上、資料庫卻仍記錄該頁沒有圖」的情況，於是前端讀不到、圖
+不顯示。
+
+### 變更內容
+
+- 重生圖檔步驟在寫檔後，明確 `UPDATE pages SET image_path = ?`，確保新產生的圖一定被資料庫記錄、
+  前端看得到。對一般頁面是無害的同值寫入。
+
+### 實作備註
+
+修改 `regenerate.ts` 圖檔步驟，於 `pageImagePath` 寫檔＋縮圖後寫回 `image_path`。新增
+`regenerate-image-persists-path.test.ts`：對一個 `image_path` 為 NULL、磁碟上也沒有底圖的頁面跑重生
+（圖檔），斷言完成後 `pages.image_path` 被設為 `pages/{uid}.jpg` 且檔案存在。backend `tsc` 通過、
+figure-reference 重生回歸 3/3 通過。
+
 ## 動畫自動聚焦容忍 LLM 回傳的超範圍座標（不再整步失敗）
 
 ### 目的
