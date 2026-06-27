@@ -336,6 +336,7 @@ export const en = {
   'home.search.selectModeOn': '✓ Selecting',
   'home.search.createFromPages': 'Create presentation ({n} pages)',
   'home.search.creatingPresentation': 'Creating…',
+  'home.search.addToReviewList': 'Add to review list ({n} pages)',
   'home.resultSummary': 'Showing {shown} / {total} presentations',
   'home.viewGrid': 'Grid view',
   'home.viewList': 'List view',

@@ -1,5 +1,34 @@
 # MakeSlide 功能說明
 
+## 全域搜尋：把選取的頁面批次加入複習清單
+
+### 目的
+
+全域搜尋框（GlobalSearchBox）原本在「選取模式」下，只能把勾選的頁面組成一份新的複習簡報
+（createFromPages）。但有時老師／學生只是想把幾頁「先記下來、稍後複習」，不需要立刻另建簡報。
+本次在選取模式新增「加入複習清單」批次動作，複用既有、已有測試的 `reviewList`，讓搜尋到的重點頁
+可以一鍵收進複習清單。
+
+### 變更內容
+
+- 全域搜尋的選取模式下，勾選頁面後除了「建立新簡報」，新增「加入複習清單（N 頁）」按鈕。
+- 點擊後把勾選的頁面結果寫入複習清單（`addReviewItems`），以該頁的搜尋摘要（snippet）作為項目
+  說明文字；標題類（無頁碼）的結果會被略過。`addReviewItems` 既有的去重（pdfId+頁碼+文字）沿用。
+
+### 使用方式
+
+在頂部搜尋框輸入關鍵字 → 點「選取」進入選取模式 → 勾選想複習的頁面 → 按「加入複習清單」。
+之後可於播放頁側邊欄的複習清單看到這些頁面。
+
+### 實作備註
+
+新增純函式 `lib/searchResultsToReviewItems.ts`（`searchResultsToReviewItems(results, addedAt)`：過濾無頁碼
+的標題結果、snippet 去空白後作 `questionText`、null 標題回空字串），`GlobalSearchBox` 的
+`handleAddToReviewList` 把勾選結果經此函式轉換後交給 `addReviewItems`，並收合選取狀態。新增 i18n 鍵
+`home.search.addToReviewList`（zh-TW／en）。新增 `searchResultsToReviewItems.test.ts`（snippet→questionText
+與去空白、略過無頁碼、null 標題/缺 snippet 共 3 測試）。前端 `tsc --noEmit` 通過、helper 3/3 + i18n
+parity/nonempty + 既有 GlobalSearchBox 測試回歸通過。
+
 ## 課後報告：每頁困難度指標（pages.csv）
 
 ### 目的

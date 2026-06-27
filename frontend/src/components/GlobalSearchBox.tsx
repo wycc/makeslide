@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { searchPdfs, createPdfFromPages, type SearchResultItem } from '../lib/api';
 import { getRecentSearches, addRecentSearch, clearRecentSearches } from '../lib/recentSearches';
+import { addReviewItems } from '../lib/reviewList';
+import { searchResultsToReviewItems } from '../lib/searchResultsToReviewItems';
 import { useI18n } from '../i18n';
 
 const DEBOUNCE_MS = 300;
@@ -155,6 +157,17 @@ export default function GlobalSearchBox() {
     }
   };
 
+  const handleAddToReviewList = () => {
+    if (selected.size === 0 || !results) return;
+    const selectedResults = results.filter((r) => r.page_number != null && selected.has(makeSelKey(r)));
+    const items = searchResultsToReviewItems(selectedResults, new Date().toISOString());
+    if (items.length === 0) return;
+    addReviewItems(items);
+    setSelectMode(false);
+    setSelected(new Set());
+    setOpen(false);
+  };
+
   const hasResults = results !== null && results.length > 0;
   const noResults = results !== null && results.length === 0 && !searching;
 
@@ -256,6 +269,15 @@ export default function GlobalSearchBox() {
                       {fromPagesBusy
                         ? t('home.search.creatingPresentation')
                         : t('home.search.createFromPages').replace('{n}', String(selected.size))}
+                    </button>
+                  )}
+                  {selectMode && selected.size > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleAddToReviewList}
+                      className="rounded border border-rose-500/60 bg-rose-500/20 px-2 py-0.5 text-xs text-rose-200 hover:bg-rose-500/30"
+                    >
+                      {t('home.search.addToReviewList').replace('{n}', String(selected.size))}
                     </button>
                   )}
                 </div>

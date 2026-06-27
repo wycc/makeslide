@@ -336,6 +336,7 @@ export const zhTW = {
   'home.search.selectModeOn': '✓ 多選中',
   'home.search.createFromPages': '建立新簡報（{n} 頁）',
   'home.search.creatingPresentation': '建立中…',
+  'home.search.addToReviewList': '加入複習清單（{n} 頁）',
   'home.resultSummary': '顯示 {shown} / {total} 份簡報',
   'home.viewGrid': '網格視圖',
   'home.viewList': '列表視圖',
