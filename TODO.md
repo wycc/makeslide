@@ -29,6 +29,12 @@
   - 修改說明（2026-06-27）：兩處都改為「底圖檔缺失時不丟錯、改走文字→圖生成」——讀底圖以 `try/catch` 包覆（僅吞 `ENOENT`、其餘照拋並記 warn）；有 figure 參考圖則 `images.edit`（以參考圖為輸入、用 base prompt）、否則純 `images.generate`，比照初次產圖 `renderTextPagesWithLlm` 的選擇邏輯；有真底圖時行為完全不變（仍用 edit + edit 模板）。新增 `regenerate-image-missing-base.test.ts`（單頁路由 + 重生 job 各驗證缺底圖時呼叫 generate 而非 edit、且 job 完成並寫出新圖）。後端 typecheck 通過，新測試 2/2 + figure-reference/image-edit-timeout 回歸通過。分支 `fix/regenerate-image-missing-base`（已 merge）。
   - 本項為使用者回報 bug 修復，**不計入** 100 輪計數。
 
+- [x] **Uhga6bY0Bm 第 42/43 頁焦點動畫紅框位置全錯（使用者回報，2026-06-27）**：使用者回報「AI 產生動畫時似乎沒看到正確的圖片，紅框位置都差很多」，以第 42 頁為例。
+  - 診斷（2026-06-27）：經完整查證，**目前的程式碼是正常的**——圖片有正確送出、模型也看得到。(1) 第 42 頁 `image_path` 指向的 `gVY2JLjpeT.jpg`（1920×1080）內容正確、`sharp` 能正常載入成 1024px data URL；(2) 該帳號用 `LLM_PROVIDER=cgu-air`、`CGU_AIR_LLM_MODEL=gpt-5.5`，直接把圖片送該端點問它看到什麼，它精準描述出版面（左 5 項目卡片、右側矩陣 A×x=y 與展開式、底部說明框），證實 gpt-5.5 支援 vision 且圖片有被處理；(3) 用真正的 `generateAiFocusEffects` 程式路徑對第 42 頁重跑 4 次，全部產生**貼合版面、多樣**的方框（左欄穩定落在 xPct≈16、底部展開式框在右下、無視覺元素的句子被正確略過），從未退化。對照存檔的壞規格：第 42/43 頁全是 `xPct:10`、`yPct` 機械遞增（10/25/40/55/70/85/95…）、幾乎每句都顯示——這是**純文字模型「看不到圖片」時平均分散方框**的典型特徵。結論：第 42/43 頁是先前 add-pages 失敗後那批補產動畫的**舊殘留**，當時圖片未被模型使用（推測為當下用了不具 vision 的模型或閘道暫時性丟棄圖片），與現行程式碼無關。
+  - 資料修復（2026-06-27）：以現行 gpt-5.5 設定，透過真正的持久化路徑 `generateAnimationForPage` 重產第 42、43 頁焦點動畫並寫回 `animation.json` + `pages` 資料表。重產後 distinct xPct 由 1（全 x10）變為 4–5、效果數由 13/6 收斂為 8/5、方框位置貼合實際版面。第 44 頁為 `static-image`、本就無動畫規格（非壞殘留），未變動。
+  - 程式碼修復（分支 `fix/autofocus-image-provider-comment`，已 merge）：修正 [animationAutoFocus.ts](backend/src/services/animationAutoFocus.ts) `generateAiFocusEffects` docstring 中**已過時且會誤導排查的註解**——原稱圖片「only actually used when `LLM_PROVIDER=openai`」（因 Gemini 會剝除非文字內容）。此說法已不正確：`buildGeminiContents` 會把 data URL 轉成 `inlineData`、OpenAI 相容 provider（openai/cgu-air/openrouter）直接透傳 `image_url`，故圖片在**所有現行 provider 都會送達模型**；改寫為依實際逐 provider 行為描述，並點明「結果看似純文字（方框機械排成一欄、無視版面）代表模型/閘道未套用 vision，而非本程式碼把圖片丟掉」。僅改註解，後端 `tsc --noEmit` 通過。
+  - 本項為使用者回報 bug 修復，**不計入** 100 輪計數。
+
 ## 品質檢查回應新增摘要計數（第一七一輪，2026-06-27）
 
 依 §7.2 品質檢查自動化，完成其「後端摘要」子項：為品質檢查 API 加上播放頁徽章所需的彙總計數。
@@ -270,6 +276,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （使用者回報 bug，不計數）Uhga6bY0Bm 42/43 頁焦點動畫紅框位置全錯：查證確認現行程式碼正常（圖片有送、cgu-air gpt-5.5 支援 vision、真實路徑重跑 4 次皆產生貼合版面方框），壞規格是先前 add-pages 失敗那批補產動畫的舊殘留（當時圖片未被模型使用）。資料修復：以 gpt-5.5 透過 `generateAnimationForPage` 重產 42/43 頁焦點動畫寫回 animation.json + DB（distinct xPct 由 1→4–5、貼合版面）；44 頁本就 static-image 未動。程式碼：修正 `generateAiFocusEffects` docstring 中「圖片只在 LLM_PROVIDER=openai 才會用」之過時誤導註解，改述各 provider 實際圖片處理行為，typecheck 通過 | fix/autofocus-image-provider-comment（已 merge）＋資料修復 | 
 | 2026-06-27 | （使用者回報 bug，不計數）重生圖檔未把 image_path 寫回 DB：批次重生圖檔步驟（[regenerate.ts](backend/src/worker/regenerate.ts)）產圖後只寫檔/縮圖/commit，假設該頁原本就有 image_path；對原本 image_path 為 NULL 的頁（如 Uhga6bY0Bm 43/44，由半失敗 add-pages 復原而來）→ 檔在磁碟、DB 仍 NULL、前端讀不到圖。改為產圖後 `UPDATE pages SET image_path=?`。另修復實例 Uhga6bY0Bm 42/43/44（DB+metadata 補上已產生的圖路徑）。新增 `regenerate-image-persists-path.test.ts`，typecheck + figure-reference 3/3 回歸通過 | fix/regenerate-image-persist-path（已 merge） |
 | 2026-06-27 | （使用者回報 bug，不計數）動畫 auto-focus 容忍 LLM 超範圍座標：CGU Air 模型回 `yPct>100` 被 `AutoFocusItemSchema` 的 `.min/.max` 擋下、重試 2 次後整個動畫步驟失敗，但下游 `mapAutoFocusResponseToEffects` 早已 clamp。改為 schema 對 xPct/yPct/widthPct/heightPct/exitDuration/angle 只驗 `z.number().finite()`（不再限範圍）、由既有 clamp 正規化，並補上 angle 的 modulo 正規化。新增 `animation-autofocus-schema-tolerance.test.ts`（3 測試，含重現 yPct>100、angle 環繞、仍拒 NaN/Infinity），backend typecheck + auto-focus map 11/11 通過 | fix/autofocus-tolerate-out-of-range-coords（已 merge） |
 | 2026-06-27 | （使用者回報 bug，不計數）圖片生成改為跟隨所選供應商：原本所有產圖（初次 `renderTextPagesWithLlm`、批次重生、單頁 regenerate-image/inpaint）都硬用 `getOpenAIClient()`＋`config.openaiImageModel`，導致帳號選 CGU Air 當 LLM 時圖片仍送 OpenAI、無效金鑰時 401。新增 `getImageClient()`（影像 provider 跟隨 `llmProvider`，gemini→openai fallback）＋ per-provider 影像模型設定 `cguAirImageModel`/`openrouterImageModel`（env/設定 API/前端欄位/i18n）。四個產圖點全改用之。新增 `image-client-provider.test.ts`（4 測試），前後端 typecheck + regenerate-image/figure-reference 回歸通過。**注意：須 CGU Air 端提供 OpenAI 相容的 /images 介面才會實際運作，模型名稱由使用者於設定填入** | feat/image-provider-follows-selection（已 merge） |
