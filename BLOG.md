@@ -8659,3 +8659,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **根因**：`seedPdf` 第 2 頁的 INSERT 與「無備註時回退文字」測試的 `UPDATE pages SET page_notes = NULL` 都寫入 NULL。`notes.txt` 路由本身以 `COALESCE(page_notes, '')` + `.trim()` 處理，對 `''` 與 `NULL` 行為相同，因此產品碼不需更動。
 - **修正**：把那兩處的 `NULL` 改為 `''`（空字串，代表「無備註」，且符合 `NOT NULL DEFAULT ''` 的 schema）。
 - **驗證**：`notes-txt.test.ts` 由 1/5 變為 5/5 通過（以 `scripts/run-tests.sh backend` 執行）。純測試修正，未動產品碼。
+
+## 修正 quizzes copy-to 測試的空 body 400（2026-06-27）
+
+### 功能目的
+`quizzes.test.ts` 有一個測試（測驗複製到另一份簡報的 copy-to 端點）長期失敗：預期 201 卻得到 400。本項先釐清「是端點壞了還是測試壞了」，再做最小修正。
+
+### 使用方式
+此為測試修正，無行為變更；copy-to 端點本身運作正常。
+
+### 技術細節
+- **診斷**：寫了一支隔離重現腳本（同樣的 seed 與請求）直接打 copy-to 端點，得到 **201 成功**。可見端點本身沒問題。差別在於測試使用共用的 `OWNER_HEADERS`/`OTHER_HEADERS`，其中含 `content-type: application/json`，但 copy-to 是**無 body** 的 POST（所有參數都在 URL）。Fastify 對「宣告了 `application/json` 卻送空 body」的請求會在進入 handler 前直接回 400。前端的 `copyQuizSetTo()` 用 `fetch(url, { method: 'POST' })`、不帶 content-type，所以正式環境不會踩到。
+- **結論**：這是測試 bug，不是端點 bug。
+- **修正**：把 copy-to 測試裡 3 個無 body 的請求（201／403／404 三個情境）改成只帶 `cookie` 的 headers（移除 content-type），與前端實際呼叫方式一致，並加註解說明原因。
+- **驗證**：`quizzes.test.ts` 由 23/24 變為 24/24 通過（以 `scripts/run-tests.sh backend` 執行）。未動產品碼。

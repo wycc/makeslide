@@ -668,10 +668,13 @@ test('POST /quizzes/:quizId/copy-to/:targetId copies quiz to target PDF (201), 4
 
   const app = await buildApp();
   try {
+    // copy-to takes no request body; send cookie only. The shared *_HEADERS set
+    // content-type: application/json, which makes Fastify reject the empty body
+    // with 400 — the frontend's copyQuizSetTo() sends no content-type either.
     const ok = await app.inject({
       method: 'POST',
       url: `/api/pdfs/quiz-copy-src-01/quizzes/${quizId}/copy-to/quiz-copy-dst-01`,
-      headers: OWNER_HEADERS,
+      headers: { cookie: OWNER_HEADERS.cookie },
     });
     assert.equal(ok.statusCode, 201);
     const body = ok.json() as { pdf_id: string; title: string };
@@ -681,14 +684,14 @@ test('POST /quizzes/:quizId/copy-to/:targetId copies quiz to target PDF (201), 4
     const forbidden = await app.inject({
       method: 'POST',
       url: `/api/pdfs/quiz-copy-src-01/quizzes/${quizId}/copy-to/quiz-copy-dst-01`,
-      headers: OTHER_HEADERS,
+      headers: { cookie: OTHER_HEADERS.cookie },
     });
     assert.equal(forbidden.statusCode, 403);
 
     const notFound = await app.inject({
       method: 'POST',
       url: `/api/pdfs/quiz-copy-src-01/quizzes/99999/copy-to/quiz-copy-dst-01`,
-      headers: OWNER_HEADERS,
+      headers: { cookie: OWNER_HEADERS.cookie },
     });
     assert.equal(notFound.statusCode, 404);
   } finally {
