@@ -7,6 +7,12 @@ import { useI18n } from '../../i18n';
 import { usePlayPageContext } from './PlayPageContext';
 import { copyTextToClipboard } from '../../lib/clipboard';
 import { progressPercent } from '../../lib/progressPercent';
+import {
+  stepSlideImageScale,
+  SLIDE_IMAGE_SCALE_MIN,
+  SLIDE_IMAGE_SCALE_MAX,
+  SLIDE_IMAGE_SCALE_STEP,
+} from '../../lib/slideImageScale';
 import { shouldCloseOnOutsidePointer, isDropdownDismissKey } from './headerDropdownDismiss';
 import type { SyncFollowerQuestion } from '../../types';
 
@@ -760,9 +766,9 @@ export function PlayPageHeader() {
           <div className="flex items-center justify-center gap-1 rounded-md border border-slate-700 px-2 py-1" title={t('play.header.imageScaleTitle')}>
             <button
               type="button"
-              onClick={() => setSlideImageScale((scale) => Math.max(0.65, Number((scale - 0.1).toFixed(2))))}
+              onClick={() => setSlideImageScale((scale) => stepSlideImageScale(scale, -SLIDE_IMAGE_SCALE_STEP))}
               className="rounded px-2 py-0.5 text-sm text-slate-300 hover:bg-slate-800 disabled:opacity-40"
-              disabled={slideImageScale <= 0.65}
+              disabled={slideImageScale <= SLIDE_IMAGE_SCALE_MIN}
               aria-label={t('play.header.decreaseImageScale')}
             >
               −
@@ -770,9 +776,9 @@ export function PlayPageHeader() {
             <span className="w-10 text-center text-xs tabular-nums text-slate-400">{Math.round(slideImageScale * 100)}%</span>
             <button
               type="button"
-              onClick={() => setSlideImageScale((scale) => Math.min(1.35, Number((scale + 0.1).toFixed(2))))}
+              onClick={() => setSlideImageScale((scale) => stepSlideImageScale(scale, SLIDE_IMAGE_SCALE_STEP))}
               className="rounded px-2 py-0.5 text-sm text-slate-300 hover:bg-slate-800 disabled:opacity-40"
-              disabled={slideImageScale >= 1.35}
+              disabled={slideImageScale >= SLIDE_IMAGE_SCALE_MAX}
               aria-label={t('play.header.increaseImageScale')}
             >
               ＋
