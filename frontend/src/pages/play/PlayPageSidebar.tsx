@@ -8,7 +8,6 @@ import { usePlayPageContext } from './PlayPageContext';
 import { PageAskPanel } from './PageAskPanel';
 import { QualityCheckPanel } from './QualityCheckPanel';
 import { copyTextToClipboard } from '../../lib/clipboard';
-import { truncateWithEllipsis } from '../../lib/truncate';
 import { formatAudioDuration } from '../../lib/audioDuration';
 import { getReviewItems, removeReviewItem, formatReviewListMarkdown, type ReviewItem } from '../../lib/reviewList';
 import { filterComments } from '../../lib/commentFilter';
@@ -26,20 +25,6 @@ import { formatRelativeTime, buildRelativeTimeLabels } from '../../lib/relativeT
 import { NOTEBOOK_TABS, computeNotebookTabCounts, getAdjacentNotebookTab, getEdgeNotebookTab, getStoredNotebookTab, setStoredNotebookTab, type NotebookTab } from './notebookTabs';
 
 const IMAGE_MSG_PREFIX = '[image] ';
-
-function getOutlineTitle(page: import('../../types').PdfDetailPage, scripts: Record<number, string>): string {
-  const notes = page.page_notes?.trim();
-  if (notes) {
-    const firstLine = notes.split('\n')[0] ?? '';
-    if (firstLine.startsWith('# ')) return firstLine.slice(2).trim();
-  }
-  const script = scripts[page.page_number];
-  if (script) {
-    const text = script.trim();
-    if (text.length > 0) return truncateWithEllipsis(text, 20);
-  }
-  return '';
-}
 
 function SimilarPagesSection() {
   const { t } = useI18n();
@@ -529,77 +514,6 @@ function ReviewListSection() {
   );
 }
 
-function OutlineSection() {
-  const { t } = useI18n();
-  const { detail, deckPages, currentIdx, setCurrentIdx, visitedIdxSet, scripts, withImageBust } = usePlayPageContext();
-
-  return (
-    <section className="rounded-lg border border-border bg-surface">
-      <div className="border-b border-border px-4 py-3">
-        <h2 className="flex items-center gap-2 text-sm font-semibold text-text">
-          {t('play.sidebar.outlineTitle')}
-          {deckPages.length > 0 && (
-            <span className="rounded-full bg-surface-muted px-1.5 py-0.5 text-[10px] font-normal text-text">{deckPages.length}</span>
-          )}
-          {detail?.total_audio_duration_seconds != null && detail.total_audio_duration_seconds > 0 && (
-            <span className="text-[10px] font-normal text-muted">{formatAudioDuration(detail.total_audio_duration_seconds)}</span>
-          )}
-        </h2>
-      </div>
-      <div className="max-h-72 overflow-y-auto">
-        {deckPages.length === 0 ? (
-          <p className="px-4 py-3 text-xs text-muted">{t('play.sidebar.outlineEmpty')}</p>
-        ) : (
-          <ul className="divide-y divide-border-light">
-            {deckPages.map((page, idx) => {
-              const isActive = idx === currentIdx;
-              const label = t('play.sidebar.outlinePageLabel').replace('{page}', String(page.page_number));
-              const title = getOutlineTitle(page, scripts);
-              const imgSrc = page.thumbnail_url ?? page.image_url;
-              return (
-                <li key={page.page_number}>
-                  <button
-                    type="button"
-                    onClick={() => setCurrentIdx(idx)}
-                    className={`flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-surface-muted ${
-                      isActive ? 'bg-indigo-500/15 ring-1 ring-inset ring-indigo-500/40' : ''
-                    }`}
-                  >
-                    <div className="h-9 w-14 shrink-0 overflow-hidden rounded border border-border bg-surface-muted">
-                      {imgSrc ? (
-                        <img
-                          src={withImageBust(imgSrc) ?? imgSrc}
-                          alt={label}
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-[9px] text-muted">
-                          {page.page_number}
-                        </div>
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className={`flex items-center gap-1 text-xs font-medium ${isActive ? 'text-indigo-700 dark:text-indigo-200' : 'text-text'}`}>
-                        {label}
-                        {visitedIdxSet.has(idx) && !isActive && (
-                          <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                        )}
-                      </p>
-                      {title ? (
-                        <p className="truncate text-[11px] text-muted">{title}</p>
-                      ) : null}
-                    </div>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
-    </section>
-  );
-}
-
 function PageNoteSection() {
   const { t } = useI18n();
   const { currentPage, deckPages, pdfId, isReadOnlyProcessing } = usePlayPageContext();
@@ -699,6 +613,7 @@ export function PlayPageSidebar() {
     isReadOnlyProcessing,
     detail,
     currentPage, currentIdx, deckPages, totalPages,
+    visitedIdxSet,
     watchProgressByPage,
     slideBusy, slideError,
     regenJobRunning, regenAllBusy,
@@ -839,8 +754,23 @@ export function PlayPageSidebar() {
       <section className="rounded-lg border border-border bg-surface">
         <div className="border-b border-border px-4 py-3">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-text">🧩 {t('play.sidebar.slideManagement')}</h2>
-            <div className="flex gap-2">
+            <div className="min-w-0">
+              <h2 className="text-sm font-semibold text-text">🧩 {t('play.sidebar.slideManagement')}</h2>
+              {deckPages.length > 0 && (
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] font-normal text-muted">
+                  {detail?.total_audio_duration_seconds != null && detail.total_audio_duration_seconds > 0 && (
+                    <span>⏱ {formatAudioDuration(detail.total_audio_duration_seconds)}</span>
+                  )}
+                  <span className="inline-flex items-center gap-1">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                    {t('play.sidebar.slideViewedProgress')
+                      .replace('{viewed}', String(Math.min(visitedIdxSet.size, deckPages.length)))
+                      .replace('{total}', String(deckPages.length))}
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="flex shrink-0 gap-2">
               <button
                 type="button"
                 onClick={() => {
@@ -1428,8 +1358,6 @@ export function PlayPageSidebar() {
       {notebookTab === 'slides' && <SimilarPagesSection />}
 
       {notebookTab === 'interact' && <ReviewListSection />}
-
-      {notebookTab === 'slides' && <OutlineSection />}
 
       {notebookTab === 'ai' && <PageAskPanel />}
 
