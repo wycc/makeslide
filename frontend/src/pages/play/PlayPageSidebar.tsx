@@ -63,12 +63,12 @@ function SimilarPagesSection() {
   if (!pdfId || !currentPage || (!loading && !indexed)) return null;
 
   return (
-    <section className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
-      <h3 className="mb-2 text-xs font-semibold text-slate-300">{t('play.sidebar.similarPages')}</h3>
+    <section className="rounded-lg border border-border bg-surface p-3">
+      <h3 className="mb-2 text-xs font-semibold text-text">{t('play.sidebar.similarPages')}</h3>
       {loading ? (
-        <p className="text-xs text-slate-500">{t('play.sidebar.similarPagesLoading')}</p>
+        <p className="text-xs text-muted">{t('play.sidebar.similarPagesLoading')}</p>
       ) : items.length === 0 ? (
-        <p className="text-xs text-slate-500">{t('play.sidebar.similarPagesEmpty')}</p>
+        <p className="text-xs text-muted">{t('play.sidebar.similarPagesEmpty')}</p>
       ) : (
         <ul className="space-y-2">
           {items.map((it) => (
@@ -76,7 +76,7 @@ function SimilarPagesSection() {
               <button
                 type="button"
                 onClick={() => navigate(`/play/${encodeURIComponent(it.pdf_id)}?page=${it.page_number}`)}
-                className="flex w-full items-center gap-2 rounded border border-slate-700 bg-slate-950/50 p-1.5 text-left hover:bg-slate-800"
+                className="flex w-full items-center gap-2 rounded border border-border bg-surface-muted p-1.5 text-left hover:bg-surface-muted"
               >
                 <img
                   src={`api/pdfs/${encodeURIComponent(it.pdf_id)}/pages/${it.page_number}/image`}
@@ -86,8 +86,8 @@ function SimilarPagesSection() {
                   className="h-10 w-14 shrink-0 rounded object-cover"
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs text-slate-200">{it.pdf_title || it.pdf_id}</p>
-                  <p className="text-[10px] text-slate-500">
+                  <p className="truncate text-xs text-text">{it.pdf_title || it.pdf_id}</p>
+                  <p className="text-[10px] text-muted">
                     {t('play.sidebar.similarPagesPage').replace('{n}', String(it.page_number))} · {Math.round(it.score * 100)}%
                   </p>
                 </div>
@@ -204,14 +204,14 @@ function CommentsSection() {
   const showSplitBadge = unresolvedCount > 0 && unresolvedCount < comments.length;
 
   return (
-    <section className="rounded-lg border border-sky-800/40 bg-sky-900/20">
-      <div className="border-b border-sky-800/30 px-4 py-3">
+    <section className="rounded-lg border border-sky-200 dark:border-sky-800/40 bg-sky-50 dark:bg-sky-900/20">
+      <div className="border-b border-sky-200 dark:border-sky-800/30 px-4 py-3">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-sky-300">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-sky-800 dark:text-sky-300">
             {t('play.sidebar.commentsTitle')}
             {comments.length > 0 && (
               <span
-                className="rounded-full bg-sky-500/20 px-1.5 py-0.5 text-[10px] font-normal text-sky-300"
+                className="rounded-full bg-sky-100 dark:bg-sky-500/20 px-1.5 py-0.5 text-[10px] font-normal text-sky-800 dark:text-sky-300"
                 title={t('play.sidebar.commentsUnresolvedTitle').replace('{unresolved}', String(unresolvedCount)).replace('{total}', String(comments.length))}
               >
                 {showSplitBadge ? `${unresolvedCount}/${comments.length}` : comments.length}
@@ -222,7 +222,7 @@ function CommentsSection() {
             <button
               type="button"
               onClick={() => loadComments()}
-              className="rounded border border-sky-800/40 px-2 py-0.5 text-[10px] text-sky-400/80 hover:text-sky-300"
+              className="rounded border border-sky-200 dark:border-sky-800/40 px-2 py-0.5 text-[10px] text-sky-700 dark:text-sky-400/80 hover:text-sky-800 dark:text-sky-300"
               title={t('play.sidebar.commentsRefresh')}
               aria-label={t('play.sidebar.commentsRefresh')}
             >
@@ -232,7 +232,7 @@ function CommentsSection() {
               <button
                 type="button"
                 onClick={() => void handleCopyComments()}
-                className="rounded border border-sky-800/40 px-2 py-0.5 text-[10px] text-sky-400/80 hover:text-sky-300"
+                className="rounded border border-sky-200 dark:border-sky-800/40 px-2 py-0.5 text-[10px] text-sky-700 dark:text-sky-400/80 hover:text-sky-800 dark:text-sky-300"
               >
                 {copyMsg ?? t('play.sidebar.commentsCopy')}
               </button>
@@ -241,7 +241,7 @@ function CommentsSection() {
               <a
                 href={`api/pdfs/${encodeURIComponent(pdfId)}/comments.csv`}
                 download
-                className="rounded border border-emerald-800/40 px-2 py-0.5 text-[10px] text-emerald-400/80 hover:text-emerald-300"
+                className="rounded border border-emerald-200 dark:border-emerald-800/40 px-2 py-0.5 text-[10px] text-emerald-700 dark:text-emerald-400/80 hover:text-emerald-300"
               >
                 {t('play.sidebar.commentsExportCsv')}
               </a>
@@ -249,7 +249,7 @@ function CommentsSection() {
             <button
               type="button"
               onClick={() => setShowAll((v) => !v)}
-              className={`rounded border px-2 py-0.5 text-[10px] ${showAll ? 'border-sky-600/60 bg-sky-700/40 text-sky-200' : 'border-sky-800/40 text-sky-400/70 hover:text-sky-300'}`}
+              className={`rounded border px-2 py-0.5 text-[10px] ${showAll ? 'border-sky-400 dark:border-sky-600/60 bg-sky-200 dark:bg-sky-700/40 text-sky-800 dark:text-sky-200' : 'border-sky-200 dark:border-sky-800/40 text-sky-700 dark:text-sky-400/70 hover:text-sky-800 dark:text-sky-300'}`}
             >
               {showAll ? t('play.sidebar.commentsThisPage') : t('play.sidebar.commentsAll')}
             </button>
@@ -258,7 +258,7 @@ function CommentsSection() {
                 type="button"
                 onClick={() => setUnresolvedFirst((v) => !v)}
                 aria-pressed={unresolvedFirst}
-                className={`rounded border px-2 py-0.5 text-[10px] ${unresolvedFirst ? 'border-sky-600/60 bg-sky-700/40 text-sky-200' : 'border-sky-800/40 text-sky-400/70 hover:text-sky-300'}`}
+                className={`rounded border px-2 py-0.5 text-[10px] ${unresolvedFirst ? 'border-sky-400 dark:border-sky-600/60 bg-sky-200 dark:bg-sky-700/40 text-sky-800 dark:text-sky-200' : 'border-sky-200 dark:border-sky-800/40 text-sky-700 dark:text-sky-400/70 hover:text-sky-800 dark:text-sky-300'}`}
               >
                 {t('play.sidebar.commentsUnresolvedFirst')}
               </button>
@@ -267,7 +267,7 @@ function CommentsSection() {
               <button
                 type="button"
                 onClick={() => void handleResolveAll()}
-                className="rounded border border-emerald-800/40 px-2 py-0.5 text-[10px] text-emerald-400/80 hover:text-emerald-300"
+                className="rounded border border-emerald-200 dark:border-emerald-800/40 px-2 py-0.5 text-[10px] text-emerald-700 dark:text-emerald-400/80 hover:text-emerald-300"
               >
                 {t('play.sidebar.commentsResolveAll')}
               </button>
@@ -277,7 +277,7 @@ function CommentsSection() {
       </div>
       <div className="px-4 py-3 space-y-3">
         {comments.length === 0 && (
-          <p className="text-[11px] text-sky-400/60">{t('play.sidebar.commentsEmpty')}</p>
+          <p className="text-[11px] text-sky-700 dark:text-sky-400/60">{t('play.sidebar.commentsEmpty')}</p>
         )}
         {comments.length > 0 && (
           <input
@@ -285,22 +285,22 @@ function CommentsSection() {
             value={filterQuery}
             onChange={(e) => setFilterQuery(e.target.value)}
             placeholder={t('play.sidebar.commentsFilterPlaceholder')}
-            className="w-full rounded-md border border-sky-800/40 bg-sky-950/30 px-2 py-1 text-[11px] text-sky-100 placeholder:text-sky-400/40 focus:border-sky-600/60 focus:outline-none"
+            className="w-full rounded-md border border-sky-200 dark:border-sky-800/40 bg-white dark:bg-sky-950/30 px-2 py-1 text-[11px] text-sky-900 dark:text-sky-100 placeholder:text-sky-500 dark:placeholder:text-sky-400/40 focus:border-sky-400 dark:focus:border-sky-600/60 focus:outline-none"
           />
         )}
         {comments.length > 0 && visibleComments.length === 0 && (
-          <p className="text-[11px] text-sky-400/60">{t('play.sidebar.commentsNoMatch')}</p>
+          <p className="text-[11px] text-sky-700 dark:text-sky-400/60">{t('play.sidebar.commentsNoMatch')}</p>
         )}
         <ul className="space-y-2">
           {visibleComments.map((c) => (
-            <li key={c.id} className={`rounded-md border px-2.5 py-2 text-[11px] ${c.resolved ? 'border-slate-700/40 bg-slate-800/30 opacity-60' : 'border-sky-500/20 bg-sky-500/10'}`}>
+            <li key={c.id} className={`rounded-md border px-2.5 py-2 text-[11px] ${c.resolved ? 'border-border bg-surface-muted opacity-60' : 'border-sky-200 dark:border-sky-500/20 bg-sky-50 dark:bg-sky-500/10'}`}>
               <div className="flex items-start gap-1.5">
                 <div className="min-w-0 flex-1">
                   {showAll && (
                     <button
                       type="button"
                       onClick={() => setCurrentIdx(c.page_number - 1)}
-                      className="mb-0.5 text-[10px] font-semibold text-sky-400/70 hover:text-sky-300"
+                      className="mb-0.5 text-[10px] font-semibold text-sky-700 dark:text-sky-400/70 hover:text-sky-800 dark:text-sky-300"
                     >
                       {t('play.sidebar.reviewListPage').replace('{n}', String(c.page_number))}
                     </button>
@@ -308,12 +308,12 @@ function CommentsSection() {
                   <button
                     type="button"
                     onClick={() => setFilterQuery(c.author)}
-                    className="font-medium text-sky-200 hover:text-sky-100 hover:underline"
+                    className="font-medium text-sky-800 dark:text-sky-200 hover:text-sky-900 dark:text-sky-100 hover:underline"
                     title={t('play.sidebar.commentsFilterByAuthor').replace('{author}', c.author)}
                   >
                     {c.author}
                   </button>
-                  <span className="ml-1.5 text-sky-400/50 text-[10px]" title={new Date(c.created_at).toLocaleString()}>{formatRelativeTime(c.created_at, relativeTimeLabels)}</span>
+                  <span className="ml-1.5 text-sky-600 dark:text-sky-400/50 text-[10px]" title={new Date(c.created_at).toLocaleString()}>{formatRelativeTime(c.created_at, relativeTimeLabels)}</span>
                   {editingId === c.id ? (
                     <div className="mt-0.5 space-y-1">
                       <textarea
@@ -321,13 +321,13 @@ function CommentsSection() {
                         onChange={(e) => setEditingText(e.target.value)}
                         rows={2}
                         maxLength={2000}
-                        className="w-full resize-none rounded border border-sky-700/40 bg-sky-900/30 px-2 py-1 text-[11px] text-sky-100 focus:outline-none focus:ring-1 focus:ring-sky-600/60"
+                        className="w-full resize-none rounded border border-sky-200 dark:border-sky-700/40 bg-white dark:bg-sky-900/30 px-2 py-1 text-[11px] text-sky-900 dark:text-sky-100 focus:outline-none focus:ring-1 focus:ring-sky-600/60"
                       />
                       {(() => {
                         const hint = getTextLengthHint(editingText.length, 2000);
                         return (
                           <div className="flex justify-end">
-                            <span className={`text-[10px] tabular-nums ${hint.nearLimit ? 'text-amber-400' : 'text-sky-400/50'}`}>
+                            <span className={`text-[10px] tabular-nums ${hint.nearLimit ? 'text-amber-400' : 'text-sky-600 dark:text-sky-400/50'}`}>
                               {hint.label}
                             </span>
                           </div>
@@ -338,28 +338,28 @@ function CommentsSection() {
                           type="button"
                           onClick={() => void handleSaveEdit(c.id)}
                           disabled={!editingText.trim()}
-                          className="rounded bg-sky-700/60 px-2 py-0.5 text-[10px] text-sky-100 hover:bg-sky-600/70 disabled:opacity-40"
+                          className="rounded bg-sky-600 px-2 py-0.5 text-[10px] text-white hover:bg-sky-500 disabled:opacity-40 dark:bg-sky-700/60 dark:hover:bg-sky-600/70"
                         >
                           {t('play.sidebar.commentEditSave')}
                         </button>
                         <button
                           type="button"
                           onClick={() => { setEditingId(null); setEditingText(''); }}
-                          className="rounded border border-sky-800/40 px-2 py-0.5 text-[10px] text-sky-400/70 hover:text-sky-300"
+                          className="rounded border border-sky-200 dark:border-sky-800/40 px-2 py-0.5 text-[10px] text-sky-700 dark:text-sky-400/70 hover:text-sky-800 dark:text-sky-300"
                         >
                           {t('play.sidebar.commentEditCancel')}
                         </button>
                       </div>
                     </div>
                   ) : (
-                    <p className={`mt-0.5 break-words text-sky-100/80 ${c.resolved ? 'line-through text-slate-400' : ''}`}>{c.text}</p>
+                    <p className={`mt-0.5 break-words text-sky-900/90 dark:text-sky-100/80 ${c.resolved ? 'line-through text-muted' : ''}`}>{c.text}</p>
                   )}
                 </div>
                 <div className="flex shrink-0 flex-col gap-0.5">
                   <button
                     type="button"
                     onClick={() => handleResolve(c)}
-                    className={`text-[11px] ${c.resolved ? 'text-slate-500 hover:text-slate-400' : 'text-sky-500/60 hover:text-sky-300'}`}
+                    className={`text-[11px] ${c.resolved ? 'text-muted hover:text-muted' : 'text-sky-700 dark:text-sky-500/60 hover:text-sky-800 dark:text-sky-300'}`}
                     title={c.resolved ? t('play.sidebar.commentUnresolve') : t('play.sidebar.commentResolve')}
                   >
                     {c.resolved ? '↩' : '✓'}
@@ -367,7 +367,7 @@ function CommentsSection() {
                   <button
                     type="button"
                     onClick={() => { setEditingId(c.id); setEditingText(c.text); }}
-                    className="text-[11px] text-slate-500/60 hover:text-sky-300"
+                    className="text-[11px] text-muted hover:text-sky-800 dark:text-sky-300"
                     title={t('play.sidebar.commentEdit')}
                   >
                     ✎
@@ -375,7 +375,7 @@ function CommentsSection() {
                   <button
                     type="button"
                     onClick={() => handleDelete(c.id)}
-                    className="text-[11px] text-slate-500/60 hover:text-red-400"
+                    className="text-[11px] text-muted hover:text-red-400"
                     title={t('play.sidebar.commentDelete')}
                   >
                     ×
@@ -391,7 +391,7 @@ function CommentsSection() {
             value={author}
             onChange={(e) => setAuthor(e.target.value)}
             placeholder={t('play.sidebar.commentAuthorPlaceholder')}
-            className="w-full rounded border border-sky-700/40 bg-sky-900/30 px-2 py-1 text-[11px] text-sky-100 placeholder-sky-700/60 focus:outline-none focus:ring-1 focus:ring-sky-600/60"
+            className="w-full rounded border border-sky-200 dark:border-sky-700/40 bg-white dark:bg-sky-900/30 px-2 py-1 text-[11px] text-sky-900 dark:text-sky-100 placeholder-sky-400 dark:placeholder-sky-700/60 focus:outline-none focus:ring-1 focus:ring-sky-600/60"
             maxLength={80}
           />
           <textarea
@@ -406,7 +406,7 @@ function CommentsSection() {
             placeholder={t('play.sidebar.commentTextPlaceholder')}
             title={t('play.sidebar.commentSubmitHint')}
             rows={2}
-            className="w-full resize-none rounded border border-sky-700/40 bg-sky-900/30 px-2 py-1 text-[11px] text-sky-100 placeholder-sky-700/60 focus:outline-none focus:ring-1 focus:ring-sky-600/60"
+            className="w-full resize-none rounded border border-sky-200 dark:border-sky-700/40 bg-white dark:bg-sky-900/30 px-2 py-1 text-[11px] text-sky-900 dark:text-sky-100 placeholder-sky-400 dark:placeholder-sky-700/60 focus:outline-none focus:ring-1 focus:ring-sky-600/60"
             maxLength={2000}
           />
           <div className="flex items-center justify-between gap-2">
@@ -414,7 +414,7 @@ function CommentsSection() {
             {(() => {
               const hint = getTextLengthHint(text.length, 2000);
               return (
-                <span className={`shrink-0 text-[10px] tabular-nums ${hint.nearLimit ? 'text-amber-400' : 'text-sky-400/50'}`}>
+                <span className={`shrink-0 text-[10px] tabular-nums ${hint.nearLimit ? 'text-amber-400' : 'text-sky-600 dark:text-sky-400/50'}`}>
                   {hint.label}
                 </span>
               );
@@ -423,7 +423,7 @@ function CommentsSection() {
           <button
             type="submit"
             disabled={submitting || !text.trim()}
-            className="w-full rounded bg-sky-700/60 px-2 py-1 text-[11px] text-sky-100 hover:bg-sky-600/70 disabled:opacity-40"
+            className="w-full rounded bg-sky-600 px-2 py-1 text-[11px] text-white hover:bg-sky-500 disabled:opacity-40 dark:bg-sky-700/60 dark:hover:bg-sky-600/70"
           >
             {submitting ? t('play.sidebar.commentPosting') : t('play.sidebar.commentPost')}
           </button>
@@ -473,50 +473,50 @@ function ReviewListSection() {
   };
 
   return (
-    <section className="rounded-lg border border-rose-800/40 bg-rose-900/20">
-      <div className="border-b border-rose-800/30 px-4 py-3">
+    <section className="rounded-lg border border-rose-200 dark:border-rose-800/40 bg-rose-50 dark:bg-rose-900/20">
+      <div className="border-b border-rose-200 dark:border-rose-800/30 px-4 py-3">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-rose-300">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-rose-800 dark:text-rose-300">
             {t('play.sidebar.reviewListTitle')}
-            <span className="rounded-full bg-rose-500/20 px-1.5 py-0.5 text-[10px] font-normal text-rose-300">{items.length}</span>
+            <span className="rounded-full bg-rose-100 dark:bg-rose-500/20 px-1.5 py-0.5 text-[10px] font-normal text-rose-800 dark:text-rose-300">{items.length}</span>
           </h2>
           <div className="flex shrink-0 items-center gap-1.5">
             <button
               type="button"
               onClick={() => void handleCopy()}
-              className="rounded border border-rose-800/40 px-2 py-0.5 text-[10px] text-rose-300/80 hover:text-rose-200"
+              className="rounded border border-rose-200 dark:border-rose-800/40 px-2 py-0.5 text-[10px] text-rose-700 hover:text-rose-800 dark:text-rose-300/80 dark:hover:text-rose-200"
             >
               {copyMsg ?? t('play.sidebar.reviewListCopy')}
             </button>
             <button
               type="button"
               onClick={handleClearAll}
-              className="rounded border border-rose-800/40 px-2 py-0.5 text-[10px] text-rose-400/70 hover:text-rose-300"
+              className="rounded border border-rose-200 dark:border-rose-800/40 px-2 py-0.5 text-[10px] text-rose-700 dark:text-rose-400/70 hover:text-rose-800 dark:text-rose-300"
             >
               {t('play.sidebar.reviewListClearAll')}
             </button>
           </div>
         </div>
-        <p className="mt-0.5 text-[11px] text-rose-400/70">{t('play.sidebar.reviewListHint')}</p>
+        <p className="mt-0.5 text-[11px] text-rose-700 dark:text-rose-400/70">{t('play.sidebar.reviewListHint')}</p>
       </div>
       <div className="px-4 py-3">
         <ul className="space-y-2">
           {items.map((item) => (
-            <li key={`${item.pdfId}-${item.pageNumber}-${item.questionText.slice(0, 10)}`} className="flex items-start gap-2 rounded-md border border-rose-500/20 bg-rose-500/10 px-2.5 py-2">
+            <li key={`${item.pdfId}-${item.pageNumber}-${item.questionText.slice(0, 10)}`} className="flex items-start gap-2 rounded-md border border-rose-200 dark:border-rose-500/20 bg-rose-50 dark:bg-rose-500/10 px-2.5 py-2">
               <button
                 type="button"
                 onClick={() => setCurrentIdx(item.pageNumber - 1)}
                 className="min-w-0 flex-1 text-left"
               >
-                <span className="block text-[11px] font-medium text-rose-200">
+                <span className="block text-[11px] font-medium text-rose-800 dark:text-rose-200">
                   {t('play.sidebar.reviewListPage').replace('{n}', String(item.pageNumber))}
                 </span>
-                <span className="block truncate text-[10px] text-rose-300/70">{item.questionText}</span>
+                <span className="block truncate text-[10px] text-rose-700 dark:text-rose-300/70">{item.questionText}</span>
               </button>
               <button
                 type="button"
                 onClick={() => handleRemove(item.pageNumber, item.questionText)}
-                className="shrink-0 text-rose-500/60 hover:text-rose-400"
+                className="shrink-0 text-rose-600 dark:text-rose-500/60 hover:text-rose-400"
                 aria-label={t('play.sidebar.reviewListRemove')}
               >
                 ×
@@ -534,23 +534,23 @@ function OutlineSection() {
   const { detail, deckPages, currentIdx, setCurrentIdx, visitedIdxSet, scripts, withImageBust } = usePlayPageContext();
 
   return (
-    <section className="rounded-lg border border-slate-800 bg-slate-900/40">
-      <div className="border-b border-slate-800 px-4 py-3">
-        <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-300">
+    <section className="rounded-lg border border-border bg-surface">
+      <div className="border-b border-border px-4 py-3">
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-text">
           {t('play.sidebar.outlineTitle')}
           {deckPages.length > 0 && (
-            <span className="rounded-full bg-slate-700/80 px-1.5 py-0.5 text-[10px] font-normal text-slate-300">{deckPages.length}</span>
+            <span className="rounded-full bg-surface-muted px-1.5 py-0.5 text-[10px] font-normal text-text">{deckPages.length}</span>
           )}
           {detail?.total_audio_duration_seconds != null && detail.total_audio_duration_seconds > 0 && (
-            <span className="text-[10px] font-normal text-slate-400">{formatAudioDuration(detail.total_audio_duration_seconds)}</span>
+            <span className="text-[10px] font-normal text-muted">{formatAudioDuration(detail.total_audio_duration_seconds)}</span>
           )}
         </h2>
       </div>
       <div className="max-h-72 overflow-y-auto">
         {deckPages.length === 0 ? (
-          <p className="px-4 py-3 text-xs text-slate-500">{t('play.sidebar.outlineEmpty')}</p>
+          <p className="px-4 py-3 text-xs text-muted">{t('play.sidebar.outlineEmpty')}</p>
         ) : (
-          <ul className="divide-y divide-slate-800/60">
+          <ul className="divide-y divide-border-light">
             {deckPages.map((page, idx) => {
               const isActive = idx === currentIdx;
               const label = t('play.sidebar.outlinePageLabel').replace('{page}', String(page.page_number));
@@ -561,11 +561,11 @@ function OutlineSection() {
                   <button
                     type="button"
                     onClick={() => setCurrentIdx(idx)}
-                    className={`flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-slate-800/60 ${
+                    className={`flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-surface-muted ${
                       isActive ? 'bg-indigo-500/15 ring-1 ring-inset ring-indigo-500/40' : ''
                     }`}
                   >
-                    <div className="h-9 w-14 shrink-0 overflow-hidden rounded border border-slate-700 bg-slate-800">
+                    <div className="h-9 w-14 shrink-0 overflow-hidden rounded border border-border bg-surface-muted">
                       {imgSrc ? (
                         <img
                           src={withImageBust(imgSrc) ?? imgSrc}
@@ -573,20 +573,20 @@ function OutlineSection() {
                           className="h-full w-full object-cover"
                         />
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center text-[9px] text-slate-500">
+                        <div className="flex h-full w-full items-center justify-center text-[9px] text-muted">
                           {page.page_number}
                         </div>
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className={`flex items-center gap-1 text-xs font-medium ${isActive ? 'text-indigo-200' : 'text-slate-300'}`}>
+                      <p className={`flex items-center gap-1 text-xs font-medium ${isActive ? 'text-indigo-700 dark:text-indigo-200' : 'text-text'}`}>
                         {label}
                         {visitedIdxSet.has(idx) && !isActive && (
                           <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
                         )}
                       </p>
                       {title ? (
-                        <p className="truncate text-[11px] text-slate-500">{title}</p>
+                        <p className="truncate text-[11px] text-muted">{title}</p>
                       ) : null}
                     </div>
                   </button>
@@ -648,9 +648,9 @@ function PageNoteSection() {
   if (!currentPage || isReadOnlyProcessing) return null;
 
   return (
-    <section className="rounded-lg border border-slate-800 bg-slate-900/40">
-      <div className="flex items-center justify-between gap-2 border-b border-slate-800 px-4 py-2">
-        <h2 className="flex items-center gap-1.5 text-sm font-semibold text-slate-300">
+    <section className="rounded-lg border border-border bg-surface">
+      <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2">
+        <h2 className="flex items-center gap-1.5 text-sm font-semibold text-text">
           📝 {t('play.sidebar.pageNote')}
           {currentPage?.page_notes?.trim() ? (
             <span className="h-2 w-2 rounded-full bg-emerald-400" title={t('play.sidebar.hasNotesTitle')} />
@@ -659,7 +659,7 @@ function PageNoteSection() {
         <button
           type="button"
           onClick={handleCopyAllNotes}
-          className="rounded border border-slate-700 px-2 py-0.5 text-xs text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+          className="rounded border border-border px-2 py-0.5 text-xs text-muted hover:bg-surface-muted hover:text-text"
           title={t('play.sidebar.copyAllNotes')}
         >
           {copyMsg ?? t('play.sidebar.copyAllNotes')}
@@ -673,18 +673,18 @@ function PageNoteSection() {
           placeholder={t('play.sidebar.pageNotePlaceholder')}
           rows={3}
           maxLength={5000}
-          className="w-full resize-none rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 outline-none focus:border-indigo-400"
+          className="w-full resize-none rounded-md border border-border bg-surface-muted px-2 py-1.5 text-xs text-text outline-none focus:border-indigo-400"
         />
         <div className="mt-1 flex items-center justify-between text-[11px]">
           <span>
             {noteBusy ? (
-              <span className="text-slate-400">…</span>
+              <span className="text-muted">…</span>
             ) : noteMsg ? (
-              <span className="text-emerald-300">{noteMsg}</span>
+              <span className="text-emerald-600 dark:text-emerald-300">{noteMsg}</span>
             ) : null}
           </span>
           {noteText.length > 0 && (
-            <span className={noteText.length > 4500 ? 'text-amber-400' : 'text-slate-500'}>{noteText.length} / 5000</span>
+            <span className={noteText.length > 4500 ? 'text-amber-600 dark:text-amber-400' : 'text-muted'}>{noteText.length} / 5000</span>
           )}
         </div>
       </div>
@@ -798,7 +798,7 @@ export function PlayPageSidebar() {
         sidebarExpanded ? 'md:w-full md:flex-1' : 'shrink-0 md:w-[360px]'
       } ${activeTab === 'qa' ? 'flex' : 'hidden'}`}
     >
-      <div className="flex shrink-0 flex-wrap items-center gap-1 rounded-lg border border-slate-800 bg-slate-900/40 p-1" role="tablist">
+      <div className="flex shrink-0 flex-wrap items-center gap-1 rounded-lg border border-border bg-surface p-1" role="tablist">
         {NOTEBOOK_TABS.map((tab, idx) => {
           const count = notebookTabCounts[tab.id] ?? 0;
           return (
@@ -813,13 +813,13 @@ export function PlayPageSidebar() {
             onKeyDown={handleTabKeyDown}
             className={`flex flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
               notebookTab === tab.id
-                ? 'bg-cyan-500/20 text-cyan-100'
-                : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+                ? 'bg-primary/15 text-primary dark:bg-primary/20'
+                : 'text-muted hover:bg-surface-muted hover:text-text'
             }`}
           >
             <span>{tab.icon} {t(tab.labelKey)}</span>
             {count > 0 ? (
-              <span className="rounded-full bg-cyan-500/30 px-1.5 py-0.5 text-[10px] font-normal text-cyan-100">{count}</span>
+              <span className="rounded-full bg-primary/20 px-1.5 py-0.5 text-[10px] font-normal text-primary">{count}</span>
             ) : null}
           </button>
           );
@@ -827,7 +827,7 @@ export function PlayPageSidebar() {
         <button
           type="button"
           onClick={() => setSidebarExpanded((v) => !v)}
-          className="hidden shrink-0 rounded-md border border-cyan-500/50 bg-cyan-500/10 px-2 py-1.5 text-xs text-cyan-200 hover:bg-cyan-500/20 md:inline-flex"
+          className="hidden shrink-0 rounded-md border border-border bg-surface px-2 py-1.5 text-xs text-text hover:bg-surface-muted md:inline-flex"
           aria-pressed={sidebarExpanded}
           title={sidebarExpanded ? t('play.sidebar.qa.restoreSidebarTitle') : t('play.sidebar.qa.expandSidebarTitle')}
         >
@@ -836,10 +836,10 @@ export function PlayPageSidebar() {
       </div>
 
       {notebookTab === 'slides' && (
-      <section className="rounded-lg border border-slate-800 bg-slate-900/40">
-        <div className="border-b border-slate-800 px-4 py-3">
+      <section className="rounded-lg border border-border bg-surface">
+        <div className="border-b border-border px-4 py-3">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-slate-300">🧩 {t('play.sidebar.slideManagement')}</h2>
+            <h2 className="text-sm font-semibold text-text">🧩 {t('play.sidebar.slideManagement')}</h2>
             <div className="flex gap-2">
               <button
                 type="button"
@@ -859,7 +859,7 @@ export function PlayPageSidebar() {
                   setRegenAllDialogOpen(true);
                 }}
                 disabled={isReadOnlyProcessing}
-                className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-2 py-1 text-xs text-fuchsia-200 hover:bg-fuchsia-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-md border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs text-indigo-700 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-indigo-500/40 dark:bg-indigo-500/15 dark:text-indigo-200 dark:hover:bg-indigo-500/25"
                 title={t('play.sidebar.regenerateTitle')}
               >
                 {regenJobRunning
@@ -872,7 +872,7 @@ export function PlayPageSidebar() {
                 type="button"
                 onClick={() => void handleAddSlideAfterCurrent()}
                 disabled={isReadOnlyProcessing || slideBusy || !currentPage}
-                className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-2 py-1 text-xs text-emerald-200 disabled:opacity-40"
+                className="rounded-md border border-transparent bg-indigo-600 px-2 py-1 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-40"
               >
                 {t('play.sidebar.add')}
               </button>
@@ -880,7 +880,7 @@ export function PlayPageSidebar() {
                 type="button"
                 onClick={() => setShowAddPagesModal(true)}
                 disabled={isReadOnlyProcessing || slideBusy}
-                className="rounded-md border border-indigo-500/50 bg-indigo-500/15 px-2 py-1 text-xs text-indigo-200 disabled:opacity-40"
+                className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-text hover:bg-surface-muted disabled:opacity-40"
                 title={t('play.sidebar.addMultipleTitle')}
               >
                 {t('play.sidebar.addMultiple')}
@@ -889,13 +889,13 @@ export function PlayPageSidebar() {
                 type="button"
                 onClick={() => void handleDeleteCurrentSlide()}
                 disabled={isReadOnlyProcessing || slideBusy || !currentPage || totalPages <= 1}
-                className="rounded-md border border-rose-500/50 bg-rose-500/15 px-2 py-1 text-xs text-rose-200 disabled:opacity-40"
+                className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700 hover:bg-rose-100 disabled:opacity-40 dark:border-rose-500/40 dark:bg-rose-500/15 dark:text-rose-200"
               >
                 {t('play.sidebar.delete')}
               </button>
             </div>
           </div>
-          {slideError ? <p className="mt-2 text-xs text-rose-300">{slideError}</p> : null}
+          {slideError ? <p className="mt-2 text-xs text-rose-700 dark:text-rose-300">{slideError}</p> : null}
         </div>
         <div
           className="grid max-h-48 grid-cols-4 gap-2 overflow-y-auto p-3"
@@ -984,7 +984,7 @@ export function PlayPageSidebar() {
                   ? 'border-fuchsia-400 ring-1 ring-fuchsia-500/50'
                   : idx === currentIdx
                     ? 'border-cyan-400'
-                    : 'border-slate-700'
+                    : 'border-border'
               } ${draggingPage === p.page_number ? 'opacity-50' : ''}`}
               title={t('play.sidebar.thumbnailTitle')
                 .replace('{page}', String(p.page_number))
@@ -1009,7 +1009,7 @@ export function PlayPageSidebar() {
                   debugLog('[reorder][dragend]', { page: p.page_number });
                 }}
                 onClick={(e) => e.stopPropagation()}
-                className="absolute right-0 top-0 z-10 rounded-bl bg-slate-900/80 px-1.5 py-0.5 text-[10px] text-slate-200 cursor-grab active:cursor-grabbing"
+                className="absolute right-0 top-0 z-10 rounded-bl bg-surface px-1.5 py-0.5 text-[10px] text-text cursor-grab active:cursor-grabbing"
                 title={t('play.sidebar.dragToReorder')}
               >
                 ↕
@@ -1048,7 +1048,7 @@ export function PlayPageSidebar() {
                   }}
                 />
                 ) : (
-                <div className="flex h-14 w-full items-center justify-center bg-slate-800 text-[10px] text-slate-400">
+                <div className="flex h-14 w-full items-center justify-center bg-surface-muted text-[10px] text-muted">
                   {thumbSrc ? t('play.sidebar.loading') : t('play.sidebar.noImage')}
                 </div>
                 );
@@ -1085,29 +1085,29 @@ export function PlayPageSidebar() {
           ))}
         </div>
         {regenSelectedPages.size > 0 ? (
-          <div className="flex items-center justify-between gap-2 border-t border-fuchsia-500/30 bg-fuchsia-500/10 px-3 py-1.5">
-            <span className="text-xs text-fuchsia-300">
+          <div className="flex items-center justify-between gap-2 border-t border-indigo-200 bg-indigo-50 px-3 py-1.5 dark:border-fuchsia-500/30 dark:bg-fuchsia-500/10">
+            <span className="text-xs text-indigo-700 dark:text-fuchsia-300">
               {t('play.sidebar.selectedRegenerate').replace('{count}', String(regenSelectedPages.size))}
             </span>
             <button
               type="button"
               onClick={() => setRegenSelectedPages(new Set())}
-              className="text-xs text-fuchsia-400 hover:text-fuchsia-200"
+              className="text-xs text-indigo-600 hover:text-indigo-800 dark:text-fuchsia-400 dark:hover:text-fuchsia-200"
             >
               {t('play.sidebar.clear')}
             </button>
           </div>
         ) : (
-          <div className="border-t border-slate-800/50 px-3 py-1">
-            <p className="text-[10px] text-slate-600">{t('play.sidebar.multiSelectHint')}</p>
+          <div className="border-t border-border-light px-3 py-1">
+            <p className="text-[10px] text-muted">{t('play.sidebar.multiSelectHint')}</p>
           </div>
         )}
-        <div className="border-t border-slate-800 px-3 py-2">
+        <div className="border-t border-border px-3 py-2">
           <button
             type="button"
             onClick={() => void handleUpdateCoverFromCurrentPage()}
             disabled={slideBusy || !currentPage?.image_url}
-            className="w-full rounded-md border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-xs text-amber-200 hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+            className="w-full rounded-md border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-xs text-amber-700 dark:text-amber-200 hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-40"
             title={t('play.sidebar.setCoverTitle')}
           >
             {t('play.sidebar.setCover')}
@@ -1119,11 +1119,11 @@ export function PlayPageSidebar() {
       {notebookTab === 'notes' && <PageNoteSection />}
 
       {notebookTab === 'interact' && (
-      <section className="rounded-lg border border-slate-800 bg-slate-900/40">
+      <section className="rounded-lg border border-border bg-surface">
         <div className="flex items-center justify-between gap-2 px-3 py-2">
           <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold text-slate-300">📊 Realtime Poll</h2>
-            <p className="text-[11px] text-slate-500">
+            <h2 className="truncate text-sm font-semibold text-text">📊 Realtime Poll</h2>
+            <p className="text-[11px] text-muted">
               {pollStarted
                 ? formatMessage('play.sidebar.poll.activePage', { page: currentPage?.page_number ?? '-' })
                 : t('play.sidebar.poll.notStarted')}
@@ -1134,7 +1134,7 @@ export function PlayPageSidebar() {
               <button
                 type="button"
                 onClick={() => void handleCopyPollResults()}
-                className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
+                className="rounded-md border border-border px-2 py-1 text-xs text-text hover:bg-surface-muted"
               >
                 {pollCopyMsg ?? t('play.sidebar.poll.copyResults')}
               </button>
@@ -1142,7 +1142,7 @@ export function PlayPageSidebar() {
             <button
               type="button"
               onClick={() => setPollSettingsOpen((v) => !v)}
-              className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
+              className="rounded-md border border-border px-2 py-1 text-xs text-text hover:bg-surface-muted"
             >
               {pollSettingsOpen ? t('play.sidebar.poll.collapseSettings') : t('play.sidebar.poll.settings')}
             </button>
@@ -1150,7 +1150,7 @@ export function PlayPageSidebar() {
               <button
                 type="button"
                 onClick={handleStopPoll}
-                className="rounded-md border border-rose-500/50 bg-rose-500/10 px-2 py-1 text-xs text-rose-200 hover:bg-rose-500/20"
+                className="rounded-md border border-rose-500/50 bg-rose-500/10 px-2 py-1 text-xs text-rose-700 dark:text-rose-200 hover:bg-rose-500/20"
               >
                 {t('play.sidebar.poll.stop')}
               </button>
@@ -1159,7 +1159,7 @@ export function PlayPageSidebar() {
                 type="button"
                 onClick={handleStartPoll}
                 disabled={!currentPage}
-                className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-2 py-1 text-xs text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-2 py-1 text-xs text-cyan-700 dark:text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {t('play.sidebar.poll.start')}
               </button>
@@ -1168,7 +1168,7 @@ export function PlayPageSidebar() {
               <button
                 type="button"
                 onClick={() => setSyncPollShowResults((v) => !v)}
-                className="rounded-md border border-emerald-500/50 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-200 hover:bg-emerald-500/20"
+                className="rounded-md border border-emerald-500/50 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-700 dark:text-emerald-200 hover:bg-emerald-500/20"
               >
                 {syncPollShowResults ? t('play.sidebar.poll.hideResults') : t('play.sidebar.poll.showResults')}
               </button>
@@ -1176,14 +1176,14 @@ export function PlayPageSidebar() {
           </div>
         </div>
         {(pollSettingsOpen || pollStarted || pollError) && (
-          <div className="space-y-2 border-t border-slate-800 p-2">
+          <div className="space-y-2 border-t border-border p-2">
             {pollSettingsOpen && (
-              <div className="rounded-md border border-slate-800 bg-slate-950/50 p-2">
+              <div className="rounded-md border border-border bg-surface-muted p-2">
                 <button
                   type="button"
                   onClick={() => void handleGeneratePollDraft()}
                   disabled={aiPollBusy || !currentPage}
-                  className="mb-2 w-full rounded-md border border-violet-500/50 bg-violet-500/10 px-2 py-1 text-xs text-violet-300 hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="mb-2 w-full rounded-md border border-violet-500/50 bg-violet-500/10 px-2 py-1 text-xs text-violet-700 dark:text-violet-300 hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {aiPollBusy ? t('play.sidebar.poll.aiDraftGenerating') : t('play.sidebar.poll.aiDraft')}
                 </button>
@@ -1192,39 +1192,39 @@ export function PlayPageSidebar() {
                   onChange={(e) => setPollQuestion(e.target.value)}
                   maxLength={300}
                   placeholder={t('play.sidebar.poll.questionPlaceholder')}
-                  className="mb-2 w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 outline-none ring-cyan-500/40 placeholder:text-slate-500 focus:ring"
+                  className="mb-2 w-full rounded-md border border-border bg-surface px-2 py-1.5 text-xs text-text outline-none ring-cyan-500/40 placeholder:text-muted focus:ring"
                 />
                 <textarea
                   value={pollOptionsText}
                   onChange={(e) => setPollOptionsText(e.target.value)}
                   rows={2}
                   placeholder={t('play.sidebar.poll.optionsPlaceholder')}
-                  className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 outline-none ring-cyan-500/40 placeholder:text-slate-500 focus:ring"
+                  className="w-full rounded-md border border-border bg-surface px-2 py-1.5 text-xs text-text outline-none ring-cyan-500/40 placeholder:text-muted focus:ring"
                 />
                 <button
                   type="button"
                   onClick={() => void handleCreatePoll()}
                   disabled={pollBusy || !currentPage}
-                  className="mt-2 w-full rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-xs text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="mt-2 w-full rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-xs text-cyan-700 dark:text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {pollBusy ? t('play.sidebar.poll.processing') : t('play.sidebar.poll.createAndStart')}
                 </button>
               </div>
             )}
-            {pollError ? <p className="text-xs text-rose-300">{pollError}</p> : null}
+            {pollError ? <p className="text-xs text-rose-700 dark:text-rose-300">{pollError}</p> : null}
 
             {(pollStarted || pollSettingsOpen) && (
               <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
                 {pagePolls.length === 0 ? (
-                  <div className="rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1.5 text-xs text-slate-500">
+                  <div className="rounded-md border border-border bg-surface-muted px-2 py-1.5 text-xs text-muted">
                     {pollStarted ? t('play.sidebar.poll.emptyStarted') : t('play.sidebar.poll.empty')}
                   </div>
                 ) : (
                   pagePolls.map((poll) => (
-                    <div key={poll.id} className="rounded-md border border-slate-800 bg-slate-950/50 p-2">
+                    <div key={poll.id} className="rounded-md border border-border bg-surface-muted p-2">
                       <div className="mb-1 flex items-start justify-between gap-2">
-                        <h3 className="text-xs font-medium text-slate-200">{poll.question}</h3>
-                        <span className="shrink-0 rounded-full border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-400">
+                        <h3 className="text-xs font-medium text-text">{poll.question}</h3>
+                        <span className="shrink-0 rounded-full border border-border px-1.5 py-0.5 text-[10px] text-muted">
                           {formatMessage('play.sidebar.poll.voteCount', { count: poll.total_votes })}
                         </span>
                       </div>
@@ -1235,8 +1235,8 @@ export function PlayPageSidebar() {
                             onClick={() => void handleSelectDisplayedPoll(poll.id)}
                             className={`rounded border px-2 py-1 text-[11px] ${
                               syncDisplayedPollId === poll.id
-                                ? 'border-cyan-300/80 bg-cyan-500/30 text-cyan-50'
-                                : 'border-cyan-500/50 bg-cyan-500/15 text-cyan-200 hover:bg-cyan-500/25'
+                                ? 'border-cyan-300/80 bg-cyan-500/30 text-cyan-800 dark:text-cyan-50'
+                                : 'border-cyan-500/50 bg-cyan-500/15 text-cyan-700 dark:text-cyan-200 hover:bg-cyan-500/25'
                             }`}
                           >
                             {syncDisplayedPollId === poll.id
@@ -1247,7 +1247,7 @@ export function PlayPageSidebar() {
                             type="button"
                             onClick={() => void handleResetPollVotes(poll.id)}
                             disabled={pollBusy || poll.total_votes === 0}
-                            className="rounded border border-amber-500/50 bg-amber-500/15 px-2 py-1 text-[11px] text-amber-200 hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                            className="rounded border border-amber-500/50 bg-amber-500/15 px-2 py-1 text-[11px] text-amber-700 dark:text-amber-200 hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             {t('play.sidebar.poll.clearResults')}
                           </button>
@@ -1255,7 +1255,7 @@ export function PlayPageSidebar() {
                             type="button"
                             onClick={() => void handleDeletePoll(poll.id)}
                             disabled={pollBusy}
-                            className="rounded border border-rose-500/50 bg-rose-500/15 px-2 py-1 text-[11px] text-rose-200 hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                            className="rounded border border-rose-500/50 bg-rose-500/15 px-2 py-1 text-[11px] text-rose-700 dark:text-rose-200 hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             {t('play.sidebar.poll.deleteQuestion')}
                           </button>
@@ -1271,13 +1271,13 @@ export function PlayPageSidebar() {
                               type="button"
                               onClick={() => void handleVotePoll(poll.id, idx)}
                               disabled={pollBusy || !poll.is_active}
-                              className={`w-full rounded-md border px-2 py-1.5 text-left text-xs transition ${selected ? 'border-emerald-400 bg-emerald-500/15 text-emerald-100' : 'border-slate-700 bg-slate-900/70 text-slate-200 hover:bg-slate-800'} disabled:cursor-not-allowed disabled:opacity-60`}
+                              className={`w-full rounded-md border px-2 py-1.5 text-left text-xs transition ${selected ? 'border-emerald-400 bg-emerald-500/15 text-emerald-800 dark:text-emerald-100' : 'border-border bg-surface text-text hover:bg-surface-muted'} disabled:cursor-not-allowed disabled:opacity-60`}
                             >
                               <div className="mb-1 flex items-center justify-between gap-2">
                                 <span className="truncate">{option.text}</span>
-                                <span className="font-mono text-[10px] text-slate-400">{option.votes} · {ratio}%</span>
+                                <span className="font-mono text-[10px] text-muted">{option.votes} · {ratio}%</span>
                               </div>
-                              <div className="h-1 overflow-hidden rounded-full bg-slate-800">
+                              <div className="h-1 overflow-hidden rounded-full bg-surface-muted">
                                 <div className="h-full rounded-full bg-cyan-400" style={{ width: `${ratio}%` }} />
                               </div>
                             </button>
@@ -1295,12 +1295,12 @@ export function PlayPageSidebar() {
       )}
 
       {notebookTab === 'interact' && (
-      <section className="rounded-lg border border-slate-800 bg-slate-900/40">
-        <div className="flex items-center justify-between gap-2 border-b border-slate-800 px-4 py-3">
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-300">
+      <section className="rounded-lg border border-border bg-surface">
+        <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-text">
             {t('play.sidebar.bookmarksTitle')}
             {bookmarks.length > 0 && (
-              <span className="rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-normal text-amber-300">{bookmarks.length}</span>
+              <span className="rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-normal text-amber-700 dark:text-amber-300">{bookmarks.length}</span>
             )}
           </h2>
           {bookmarks.length > 0 && (
@@ -1313,7 +1313,7 @@ export function PlayPageSidebar() {
                   setTimeout(() => setBookmarkCopyMsg(null), 2000);
                 });
               }}
-              className="rounded border border-slate-700 px-2 py-0.5 text-xs text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+              className="rounded border border-border px-2 py-0.5 text-xs text-muted hover:bg-surface-muted hover:text-text"
             >
               {bookmarkCopyMsg ?? t('play.sidebar.copyList')}
             </button>
@@ -1321,7 +1321,7 @@ export function PlayPageSidebar() {
         </div>
         <div className="px-4 py-3">
           {bookmarks.length === 0 ? (
-            <p className="text-xs text-slate-500">{t('play.sidebar.bookmarksEmpty')}</p>
+            <p className="text-xs text-muted">{t('play.sidebar.bookmarksEmpty')}</p>
           ) : (
             <div className="flex flex-wrap gap-2">
               {[...bookmarks].sort((a, b) => a - b).map((pageNum) => {
@@ -1332,7 +1332,7 @@ export function PlayPageSidebar() {
                   key={pageNum}
                   type="button"
                   onClick={() => setCurrentIdx(pageNum - 1)}
-                  className="flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs text-amber-200 hover:bg-amber-500/20"
+                  className="flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs text-amber-700 dark:text-amber-200 hover:bg-amber-500/20"
                   title={t('play.sidebar.bookmarkRemove')}
                 >
                   {thumbSrc && (
@@ -1344,7 +1344,7 @@ export function PlayPageSidebar() {
                     tabIndex={0}
                     onClick={(e) => { e.stopPropagation(); toggleBookmark(pageNum); }}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); toggleBookmark(pageNum); } }}
-                    className="ml-0.5 text-amber-400/60 hover:text-amber-300"
+                    className="ml-0.5 text-amber-600 hover:text-amber-700 dark:text-amber-400/60 dark:hover:text-amber-300"
                     aria-label={t('play.sidebar.bookmarkRemove')}
                   >
                     ×
@@ -1359,10 +1359,10 @@ export function PlayPageSidebar() {
       )}
 
       {notebookTab === 'interact' && (
-      <section className="rounded-lg border border-slate-800 bg-slate-900/40">
-        <div className="border-b border-slate-800 px-4 py-3">
+      <section className="rounded-lg border border-border bg-surface">
+        <div className="border-b border-border px-4 py-3">
           <div className="flex items-center justify-between gap-2">
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-300">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-text">
             {t('play.sidebar.importantTitle')}
             {importantPages.length > 0 && (
               <span className="rounded-full bg-yellow-500/20 px-1.5 py-0.5 text-[10px] font-normal text-yellow-300">{importantPages.length}</span>
@@ -1378,7 +1378,7 @@ export function PlayPageSidebar() {
                   setTimeout(() => setImportantCopyMsg(null), 2000);
                 });
               }}
-              className="rounded border border-slate-700 px-2 py-0.5 text-xs text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+              className="rounded border border-border px-2 py-0.5 text-xs text-muted hover:bg-surface-muted hover:text-text"
             >
               {importantCopyMsg ?? t('play.sidebar.copyList')}
             </button>
@@ -1387,7 +1387,7 @@ export function PlayPageSidebar() {
         </div>
         <div className="px-4 py-3">
           {importantPages.length === 0 ? (
-            <p className="text-xs text-slate-500">{t('play.sidebar.importantEmpty')}</p>
+            <p className="text-xs text-muted">{t('play.sidebar.importantEmpty')}</p>
           ) : (
             <div className="flex flex-wrap gap-2">
               {[...importantPages].sort((a, b) => a - b).map((pageNum) => {
@@ -1438,20 +1438,20 @@ export function PlayPageSidebar() {
       {notebookTab === 'notes' && <PageNoteSection />}
 
       {notebookTab === 'ai' && (
-      <section className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-lg border border-slate-800 bg-slate-900/40">
-      <div className="border-b border-slate-800 px-4 py-3">
+      <section className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-lg border border-border bg-surface">
+      <div className="border-b border-border px-4 py-3">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h2 className="min-w-0 truncate text-sm font-semibold text-slate-300">
+        <h2 className="min-w-0 truncate text-sm font-semibold text-text">
           💬 {t('play.sidebar.qa.title')}
         </h2>
       </div>
-      <p className="mb-2 text-xs text-slate-500">{t('play.sidebar.qa.usageNote')}</p>
+      <p className="mb-2 text-xs text-muted">{t('play.sidebar.qa.usageNote')}</p>
       <div className="flex justify-end">
         <button
           type="button"
           onClick={() => void handleClearChat()}
           disabled={isReadOnlyProcessing || chatBusy || chatHistory.length === 0}
-          className="rounded-md border border-rose-500/50 bg-rose-500/15 px-2 py-1 text-xs text-rose-200 hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-md border border-rose-500/50 bg-rose-500/15 px-2 py-1 text-xs text-rose-700 dark:text-rose-200 hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {t('play.sidebar.qa.clearAllMessages')}
         </button>
@@ -1459,10 +1459,10 @@ export function PlayPageSidebar() {
       </div>
       <div className="flex-1 space-y-2 overflow-y-auto p-3 text-sm">
         {chatHistory.length === 0 ? (
-          <div className="text-slate-500">{t('play.sidebar.qa.emptyChat')}</div>
+          <div className="text-muted">{t('play.sidebar.qa.emptyChat')}</div>
         ) : (
           chatHistory.map((m, idx) => (
-            <div key={idx} className={m.role === 'user' ? 'text-slate-100' : 'text-emerald-200'}>
+            <div key={idx} className={m.role === 'user' ? 'text-text' : 'text-emerald-700 dark:text-emerald-200'}>
               <span className="mr-2 text-xs uppercase opacity-70">{m.role === 'user' ? t('play.sidebar.qa.roleUser') : t('play.sidebar.qa.roleAssistant')}</span>
               {m.role === 'assistant' && m.content.startsWith(IMAGE_MSG_PREFIX) ? (
                 <button
@@ -1486,7 +1486,7 @@ export function PlayPageSidebar() {
           ))
         )}
       </div>
-      <div className="border-t border-slate-800 p-3">
+      <div className="border-t border-border p-3">
         <div className="flex flex-col gap-2">
           {/* Reference image thumbnail (paste from clipboard) */}
           {chatPastedImageUrl && (
@@ -1495,16 +1495,16 @@ export function PlayPageSidebar() {
                 <img
                   src={chatPastedImageUrl}
                   alt={t('play.sidebar.qa.referenceImageAlt')}
-                  className="max-h-16 w-auto rounded border border-slate-600 object-contain"
+                  className="max-h-16 w-auto rounded border border-border object-contain"
                 />
                 <button
                   type="button"
                   onClick={clearChatPastedImage}
-                  className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-slate-900 text-[10px] text-slate-200 hover:bg-rose-600"
+                  className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-surface text-[10px] text-text hover:bg-rose-600"
                   title={t('play.sidebar.qa.removeReferenceImage')}
                 >✕</button>
               </div>
-              <p className="text-xs text-slate-400">{t('play.sidebar.qa.referenceImageLabel')}</p>
+              <p className="text-xs text-muted">{t('play.sidebar.qa.referenceImageLabel')}</p>
             </div>
           )}
           {/* Region selection status */}
@@ -1514,7 +1514,7 @@ export function PlayPageSidebar() {
               <button
                 type="button"
                 onClick={clearImageEditRegion}
-                className="text-slate-400 hover:text-rose-400"
+                className="text-muted hover:text-rose-400"
               >{t('play.sidebar.qa.clearRegion')}</button>
             </div>
           )}
@@ -1542,7 +1542,7 @@ export function PlayPageSidebar() {
             rows={3}
             disabled={isReadOnlyProcessing}
             placeholder={isReadOnlyProcessing ? t('play.sidebar.qa.readOnlyPlaceholder') : t('play.sidebar.qa.inputPlaceholder')}
-            className="flex-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-emerald-500/40 placeholder:text-slate-500 focus:ring"
+            className="flex-1 rounded-md border border-border bg-surface px-3 py-2 text-sm text-text outline-none ring-emerald-500/40 placeholder:text-muted focus:ring"
           />
           <div className="flex flex-wrap items-center justify-end gap-2">
             {/* Region select toggle */}
@@ -1558,8 +1558,8 @@ export function PlayPageSidebar() {
                 aria-pressed={imageEditSelectMode}
                 className={`rounded-md border px-3 py-2 text-sm ${
                   imageEditSelectMode
-                    ? 'border-cyan-400/70 bg-cyan-500/25 text-cyan-100'
-                    : 'border-slate-600 bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
+                    ? 'border-cyan-400/70 bg-cyan-500/25 text-cyan-800 dark:text-cyan-100'
+                    : 'border-border bg-surface-muted text-text hover:bg-surface-muted'
                 }`}
                 title={t('play.sidebar.qa.selectRegionTitle')}
               >
@@ -1572,7 +1572,7 @@ export function PlayPageSidebar() {
                 type="button"
                 onClick={() => void handleInpaintImage()}
                 disabled={isReadOnlyProcessing || chatInpaintBusy || !currentPage}
-                className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-700 dark:text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {chatInpaintBusy ? t('play.sidebar.qa.editing') : t('play.sidebar.qa.editImage')}
               </button>
@@ -1581,7 +1581,7 @@ export function PlayPageSidebar() {
                 type="button"
                 onClick={() => void handleRegenerateImageWithPrompt()}
                 disabled={isReadOnlyProcessing || slideBusy || !currentPage}
-                className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-700 dark:text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {t('play.sidebar.qa.editImage')}
               </button>
@@ -1590,7 +1590,7 @@ export function PlayPageSidebar() {
               type="button"
               onClick={() => void handleSendChat()}
               disabled={isReadOnlyProcessing || chatBusy || !hasChatInput}
-              className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-sm text-cyan-700 dark:text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {chatBusy ? t('play.sidebar.qa.asking') : t('play.sidebar.qa.ask')}
             </button>

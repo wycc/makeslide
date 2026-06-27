@@ -369,7 +369,7 @@ export function PlayPageSlidePanel() {
 
   return (
     <div
-      className={`relative min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950/70 ${
+      className={`relative min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950/70 shadow-lg shadow-slate-900/20 dark:shadow-none ${
         sidebarExpanded ? 'md:hidden' : 'md:flex'
       } ${activeTab === 'play' ? 'flex' : 'hidden'}`}
     >
