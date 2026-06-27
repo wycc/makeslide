@@ -30,6 +30,7 @@ import { formatRelativeTime, buildRelativeTimeLabels } from '../lib/relativeTime
 import { useBudgetWarning } from '../hooks/useBudgetWarning';
 import { formatAudioDuration } from '../lib/audioDuration';
 import { getReviewItems } from '../lib/reviewList';
+import { groupItemsByCategory } from '../lib/groupItemsByCategory';
 import { roundToTwoDecimals } from '../lib/roundTo';
 import { uploadProgressPercent } from '../lib/uploadProgress';
 import { promptTargetPageCount } from '../lib/promptTargetPageCount';
@@ -321,18 +322,7 @@ export default function HomePage() {
   }), [sortMode]);
   const categoryGroups = categoryFilter === '__recent__'
     ? [{ category: RECENT_CATEGORY, items: [...filteredItems].sort(compareByLastPlayedAtDesc) }]
-    : filteredItems.reduce<Array<{ category: string; items: PdfListItem[] }>>((groups, pdf) => {
-      const category = pdf.category?.trim() || DEFAULT_CATEGORY;
-      const group = groups.find((g) => g.category === category);
-      if (group) {
-        group.items.push(pdf);
-      } else {
-        groups.push({ category, items: [pdf] });
-      }
-      return groups;
-    }, [])
-      .map((group) => ({ ...group, items: sortItems(group.items) }))
-      .sort((a, b) => a.category.localeCompare(b.category, 'zh-Hant', { numeric: true, sensitivity: 'base' }));
+    : groupItemsByCategory(filteredItems, DEFAULT_CATEGORY, sortItems);
 
   const usageBarMaxValues = useMemo(() => {
     let maxPlay = 1, maxPages = 1, maxAudio = 1;

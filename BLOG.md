@@ -1,5 +1,24 @@
 # MakeSlide 功能說明
 
+## 首頁依分類分組的組裝邏輯抽出為可測純函式
+
+### 背景
+
+首頁會把簡報依「分類」分組顯示：相同分類的簡報歸到同一組、每組內依目前的排序模式排序、各組再依分類名稱排列；沒有分類的簡報歸到預設分類。原本這段「find-or-create 分組 + 組內排序 + 組間排序」直接內聯在 `HomePage` 的 `categoryGroups` 計算裡、沒有獨立測試（比較器本身已有 `HomePage.sort.test.ts` 覆蓋，但分組組裝沒有）。
+
+### 變更內容
+
+- 新增 `frontend/src/lib/groupItemsByCategory.ts` 的泛型純函式 `groupItemsByCategory(items, defaultCategory, sortItemsInGroup)`：依 `category`（空白/缺失 → `defaultCategory`）分組、組內以傳入的排序器排序、組間以分類名稱（locale-aware、numeric）排序；不修改輸入陣列。
+- `HomePage` 的 `categoryGroups` 改用之（「最近播放」檢視的特例維持原樣），移除內聯的 reduce 分組與雙重排序。
+
+### 使用方式
+
+純內部重構，首頁的分類分組顯示行為不變。
+
+### 測試
+
+新增 `groupItemsByCategory.test.ts`（5 組：分組並依分類名排序、空白/缺分類歸預設、套用傳入排序器、不可變不改輸入、空陣列回空）。前端 `tsc --noEmit` 通過、groupItemsByCategory + HomePage.sort 共 11 測試通過。
+
 ## 範本庫的分類/搜尋/排序邏輯抽出為可測純函式
 
 ### 背景
