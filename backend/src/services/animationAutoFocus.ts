@@ -83,12 +83,19 @@ const AutoFocusItemSchema = z.object({
    * Rotation angle in degrees for `pointer` effects (0=points down-right,
    * 90=down-left, 180=up-right, 270=up-left). Only meaningful for pointer.
    */
-  angle: z.number().int().min(0).max(359).optional(),
-  xPct: z.number().min(0).max(100).optional(),
-  yPct: z.number().min(0).max(100).optional(),
-  widthPct: z.number().min(1).max(100).optional(),
-  heightPct: z.number().min(1).max(100).optional(),
-  exitDuration: z.number().min(0).max(MAX_EXIT_DURATION_SECONDS).optional(),
+  // Geometry/angle/duration bounds are intentionally NOT enforced here: the prompt asks for
+  // 0–100 percentages (0–359 degrees, etc.), but models — especially non-OpenAI ones routed
+  // through getImageClient/callChatJSON — occasionally emit slightly out-of-range numbers
+  // (e.g. yPct just over 100). Enforcing the range at parse time made zod reject the whole
+  // response and fail the entire auto-focus/animation step after retries, even though
+  // mapAutoFocusResponseToEffects already clamps every one of these fields to a valid range
+  // (and normalizes angle). Accept any finite number here and let that clamping normalize it.
+  angle: z.number().finite().optional(),
+  xPct: z.number().finite().optional(),
+  yPct: z.number().finite().optional(),
+  widthPct: z.number().finite().optional(),
+  heightPct: z.number().finite().optional(),
+  exitDuration: z.number().finite().optional(),
 });
 
 export const AutoFocusAiResponseSchema = z.object({
@@ -296,7 +303,9 @@ export function mapAutoFocusResponseToEffects(response: AutoFocusAiResponse, sen
       effect.exitDuration = clamp(item.exitDuration, 0, MAX_EXIT_DURATION_SECONDS);
     }
     if (type === 'pointer' && item.angle !== undefined) {
-      effect.angle = item.angle;
+      // Normalize to an integer in [0, 359]; the schema no longer constrains angle (see
+      // AutoFocusItemSchema), so wrap out-of-range values instead of trusting them verbatim.
+      effect.angle = ((Math.round(item.angle) % 360) + 360) % 360;
     }
     effects.push(effect);
   }

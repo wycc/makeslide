@@ -1,5 +1,29 @@
 # MakeSlide 功能說明
 
+## 動畫自動聚焦容忍 LLM 回傳的超範圍座標（不再整步失敗）
+
+### 目的
+
+動畫「自動聚焦」(auto-focus) 會請 LLM 為每句逐字稿輸出聚焦方框的座標（`xPct`/`yPct`/`widthPct`/
+`heightPct`，皆為 0–100 的百分比）。原本解析用的 zod schema 以 `.min()/.max()` 嚴格限制這些範圍，只要
+模型回傳一個超出範圍的數字（例如 `yPct` 略大於 100），整份回應就會被拒、重試後讓整個動畫重生步驟
+失敗。非 OpenAI 供應商（如 CGU Air）的模型較容易出現這種輕微超界，於是動畫步驟頻繁失敗。
+
+### 變更內容
+
+- 放寬 `AutoFocusItemSchema`：`xPct`/`yPct`/`widthPct`/`heightPct`/`exitDuration`/`angle` 不再於解析時限制
+  範圍，只要求是有限數字（`z.number().finite()`）。
+- 仍由既有的 `mapAutoFocusResponseToEffects` 把每個欄位 clamp 到合法範圍（這段本來就在做），並新增 `angle`
+  的環繞正規化（modulo 進 0–359）。
+- 結果：模型偶爾輸出的輕微超界座標會被自動修正成合理值，而不是讓整個自動聚焦／動畫步驟失敗；
+  非有限數（NaN/Infinity）仍會被拒，避免放進垃圾值。
+
+### 實作備註
+
+範圍約束從 schema 移到「下游 clamp」單一處負責，消除「schema 在 clamp 之前先拒絕」的矛盾。新增
+`animation-autofocus-schema-tolerance.test.ts`：重現 `yPct>100` 現在能通過解析並被 clamp、`angle` 環繞、
+NaN/Infinity 仍被拒。backend `tsc` 通過、auto-focus map 測試 11/11 通過。
+
 ## 圖片生成跟隨所選的 AI 供應商（不再硬綁 OpenAI）
 
 ### 目的
