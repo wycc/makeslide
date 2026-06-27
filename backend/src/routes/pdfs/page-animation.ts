@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { ShareTokenParamSchema, getShareToken, hasShareAccess } from './share';
-import { canReadPdf, canEditPdf } from './permissions';
+import { getPdfPermissionRow, canReadPdf, canEditPdf } from './permissions';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
@@ -56,12 +56,6 @@ function getAnimationPageRow(id: string, n: number): AnimationPageRow | undefine
   return db
     .prepare(`SELECT page_uid, render_type, animation_spec_path, text_path, image_path FROM pages WHERE pdf_id = ? AND page_number = ?`)
     .get(id, n) as AnimationPageRow | undefined;
-}
-
-function getPdfPermissionRow(id: string): Pick<PdfRow, 'owner_sub' | 'visibility'> | undefined {
-  return db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
-    | Pick<PdfRow, 'owner_sub' | 'visibility'>
-    | undefined;
 }
 
 /**

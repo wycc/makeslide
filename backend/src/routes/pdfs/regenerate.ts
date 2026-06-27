@@ -1,16 +1,10 @@
 import type { FastifyInstance } from 'fastify';
-import { canReadPdf, canEditPdf } from './permissions';
+import { getPdfPermissionRow, canReadPdf, canEditPdf } from './permissions';
 import { db } from '../../db';
 import { sessionSub } from '../auth';
 import type { PdfRow } from '../../types';
 import { rollbackRegenerate, getRegenerateJob, requestCancelRegenerateJob, startRegenerateJob } from '../../worker/regenerate';
 import { IdParamSchema, RegenerateBatchBodySchema, errorResponse } from './shared';
-
-function getPdfPermissionRow(id: string): Pick<PdfRow, 'owner_sub' | 'visibility'> | undefined {
-  return db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
-    | Pick<PdfRow, 'owner_sub' | 'visibility'>
-    | undefined;
-}
 
 export async function registerRegenerateRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/pdfs/:id/regenerate', async (request, reply) => {

@@ -1,3 +1,4 @@
+import { db } from '../../db';
 import type { PdfRow } from '../../types';
 
 /**
@@ -34,4 +35,17 @@ export function canEditPdf(
   if (!row.owner_sub) return true;
   if (sub && row.owner_sub === sub) return true;
   return row.visibility === 'public_editable';
+}
+
+/**
+ * Fetch just the owner/visibility columns used for permission checks, or
+ * undefined when the PDF does not exist. Previously duplicated verbatim in 10
+ * route files. (report.ts keeps its own variant that also selects `title`.)
+ */
+export function getPdfPermissionRow(
+  id: string,
+): Pick<PdfRow, 'owner_sub' | 'visibility'> | undefined {
+  return db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
+    | Pick<PdfRow, 'owner_sub' | 'visibility'>
+    | undefined;
 }

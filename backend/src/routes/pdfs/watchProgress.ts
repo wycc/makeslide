@@ -1,17 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import { ShareTokenParamSchema, getShareToken, hasShareAccess } from './share';
-import { canReadPdf, canEditPdf } from './permissions';
+import { getPdfPermissionRow, canReadPdf, canEditPdf } from './permissions';
 import { z } from 'zod';
 import { db } from '../../db';
 import { sessionSub } from '../auth';
 import type { PdfRow } from '../../types';
 import { errorResponse, IdParamSchema, PageParamSchema, nowIso } from './shared';
-
-function getPdfPermissionRow(id: string): Pick<PdfRow, 'owner_sub' | 'visibility'> | undefined {
-  return db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
-    | Pick<PdfRow, 'owner_sub' | 'visibility'>
-    | undefined;
-}
 
 const ReportWatchProgressBodySchema = z.object({
   viewer_id: z.string().trim().min(1, 'viewer_id 太短').max(128, 'viewer_id 過長'),

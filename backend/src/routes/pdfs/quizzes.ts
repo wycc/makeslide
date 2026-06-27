@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import { ShareTokenParamSchema, getShareToken, hasShareAccess } from './share';
-import { canReadPdf, canEditPdf } from './permissions';
+import { getPdfPermissionRow, canReadPdf, canEditPdf } from './permissions';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
@@ -22,12 +22,6 @@ function canDestructivelyEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_su
   if (!row.owner_sub) return true;
   if (sub && row.owner_sub === sub) return true;
   return Boolean(sub) && row.visibility === 'public_editable';
-}
-
-function getPdfPermissionRow(id: string): Pick<PdfRow, 'owner_sub' | 'visibility'> | undefined {
-  return db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
-    | Pick<PdfRow, 'owner_sub' | 'visibility'>
-    | undefined;
 }
 
 const QuizOptionSchema = z.object({ text: z.string().trim().min(1).max(300) });

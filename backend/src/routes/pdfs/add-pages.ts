@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { ShareTokenParamSchema, getShareToken, hasShareAccess } from './share';
-import { canReadPdf, canEditPdf } from './permissions';
+import { getPdfPermissionRow, canReadPdf, canEditPdf } from './permissions';
 import { z } from 'zod';
 import {
   getAddPagesJob,
@@ -16,12 +16,6 @@ import fs from 'node:fs';
 import { pdfDir } from '../../services/storage';
 import { sessionSub } from '../auth';
 import type { PdfRow } from '../../types';
-
-function getPdfPermissionRow(id: string): Pick<PdfRow, 'owner_sub' | 'visibility'> | undefined {
-  return db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
-    | Pick<PdfRow, 'owner_sub' | 'visibility'>
-    | undefined;
-}
 
 const AddPagesFromPromptBodySchema = z.object({
   prompt: z.string().trim().max(2000).default(''),

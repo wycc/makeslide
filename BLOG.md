@@ -8741,3 +8741,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **測試**：新增 `share.test.ts`（6 案例：getShareToken 的 header/query/優先序/trim/陣列處理、ShareTokenParamSchema 的長度與字元規則）。`hasShareAccess` 由既有約 75 個權限測試覆蓋。
 - **驗證**：backend `tsc --noEmit` 通過；share 相關路由回歸約 263 個測試全通過。以 `scripts/run-tests.sh backend` 執行。
 - **小插曲**：腳本一度因 `grep` 命中 `share.ts` 自身而把它也處理、造成毀損，已重寫修復——之後操作均明確排除目標共用檔。
+
+## 抽出共用 getPdfPermissionRow（10 檔去重）（2026-06-27）
+
+### 功能目的
+做權限檢查前，路由通常要先查出某簡報的 `owner_sub` 與 `visibility`。這個小查詢 `getPdfPermissionRow(id)` 原本在 10 個路由檔逐字重複。繼 `canReadPdf`/`canEditPdf` 之後，把這個搭配它們使用的查詢也收斂到 `permissions.ts`。
+
+### 使用方式
+此為後端內部重構，行為不變。`import { getPdfPermissionRow } from './permissions'`，回傳 `{ owner_sub, visibility }` 或 `undefined`（簡報不存在）。
+
+### 技術細節
+- **共用函式**（`backend/src/routes/pdfs/permissions.ts`）：新增 `getPdfPermissionRow(id)`，執行 `SELECT owner_sub, visibility FROM pdfs WHERE id = ?`；模組新增 `db` import。
+- **接入**：以腳本移除 10 個標準檔（watchProgress、regenerate、versioning、figures、add-pages、drawings、quizzes、page-animation、sync、page-operations）的本地定義，並把 `getPdfPermissionRow` 併入它們既有的 `./permissions` import（這些檔已 import canReadPdf/canEditPdf）。
+- **例外**：`report.ts` 另有一個也選 `title` 欄位的變體，回傳型別不同，維持不動（permissions.ts 註解標明此例外）。
+- **驗證**：backend `tsc --noEmit` 通過；migrated 路由回歸約 274 個測試全通過。`getPdfPermissionRow` 為單行 DB 查詢，由這些整合測試覆蓋。以 `scripts/run-tests.sh backend` 執行。
