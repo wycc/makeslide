@@ -1,5 +1,26 @@
 # MakeSlide 功能說明
 
+## 品質檢查面板的頁面挑選邏輯抽出為可測純函式
+
+### 背景
+
+播放頁的「品質檢查」面板（`QualityCheckPanel`）會把後端回傳的逐頁檢查結果，篩出「有問題的頁」清單，並從中挑出「逐字稿缺漏／空白」的頁來提供「一鍵批次補逐字稿」動作。這個批次動作會對每頁呼叫一次 LLM 重寫，因此挑選時**刻意設了 10 頁上限**避免單次點擊觸發無上限的 LLM 呼叫。原本這兩段挑選邏輯（含上限）是直接內聯在 290 行的元件裡、沒有獨立測試，上限這種安全相關的邏輯尤其值得固化。
+
+### 變更內容
+
+- 新增 `frontend/src/lib/qualityCheckSelection.ts`：
+  - `selectIssuePages(results)`：篩出至少有一個問題的頁（null-safe）。
+  - `selectEmptyScriptFillPages(results, max)`：挑出標記為缺逐字稿／空逐字稿的頁碼，並夾在 `max` 上限內（保序、`max ≤ 0` 回空陣列，避免無上限 fan-out）。
+- `QualityCheckPanel` 改用這兩個純函式，移除內聯挑選邏輯（行為等價）。
+
+### 使用方式
+
+純內部重構，品質檢查面板的顯示與批次補逐字稿行為不變。
+
+### 測試
+
+新增 `qualityCheckSelection.test.ts`（5 組：篩有問題頁、null-safe、只挑缺/空逐字稿且保序、夾上限與 `max=0` 回空、null-safe）。前端 `tsc --noEmit` 通過、新測試 5/5 通過。
+
 ## 相似頁面 embedding 防護解析（一筆損壞不再拖垮整個面板）
 
 ### 背景
