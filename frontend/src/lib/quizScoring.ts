@@ -96,3 +96,15 @@ export function calcAttemptScore(
 export function maxAttemptScore(questions: QuizQuestion[]): number {
   return normalizeQuestionScores(questions).reduce((acc, s) => acc + s, 0);
 }
+
+/**
+ * Mean score across the attempts that actually have a score, ignoring attempts
+ * whose score is null (not yet graded). Returns null when no attempt is scored,
+ * so callers can show "—" instead of a misleading 0. The result is the raw mean;
+ * round at the call site if needed.
+ */
+export function averageAttemptScore(attempts: ReadonlyArray<{ score: number | null }>): number | null {
+  const scored = attempts.filter((a): a is { score: number } => a.score != null);
+  if (scored.length === 0) return null;
+  return scored.reduce((sum, a) => sum + a.score, 0) / scored.length;
+}

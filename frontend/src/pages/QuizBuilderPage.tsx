@@ -39,7 +39,7 @@ import type {
   QuizSet,
   SyncQuizProgress,
 } from '../types';
-import { scoreSumExceedingTotal, normalizeQuestionScores, calcQuestionScore, calcAttemptScore, maxAttemptScore } from '../lib/quizScoring';
+import { scoreSumExceedingTotal, normalizeQuestionScores, calcQuestionScore, calcAttemptScore, maxAttemptScore, averageAttemptScore } from '../lib/quizScoring';
 import { roundToTwoDecimals } from '../lib/roundTo';
 
 const LOCAL_USER_CODE_KEY = 'makeslide.user_code';
@@ -968,10 +968,8 @@ export default function QuizBuilderPage() {
               ) : null}
               {!historyBusy && !historyError && historySessions.length > 0 && (() => {
                 const allAttempts = historySessions.flatMap((s) => s.attempts);
-                const scoredAttempts = allAttempts.filter((a) => a.score != null);
-                const avgScore = scoredAttempts.length > 0
-                  ? roundToTwoDecimals(scoredAttempts.reduce((sum, a) => sum + (a.score ?? 0), 0) / scoredAttempts.length)
-                  : null;
+                const avgRaw = averageAttemptScore(allAttempts);
+                const avgScore = avgRaw != null ? roundToTwoDecimals(avgRaw) : null;
                 return (
                   <p className="mt-1 text-xs text-slate-400">
                     {t('quiz.historyAvgScore')
