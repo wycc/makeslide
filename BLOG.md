@@ -8755,3 +8755,16 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **接入**：以腳本移除 10 個標準檔（watchProgress、regenerate、versioning、figures、add-pages、drawings、quizzes、page-animation、sync、page-operations）的本地定義，並把 `getPdfPermissionRow` 併入它們既有的 `./permissions` import（這些檔已 import canReadPdf/canEditPdf）。
 - **例外**：`report.ts` 另有一個也選 `title` 欄位的變體，回傳型別不同，維持不動（permissions.ts 註解標明此例外）。
 - **驗證**：backend `tsc --noEmit` 通過；migrated 路由回歸約 274 個測試全通過。`getPdfPermissionRow` 為單行 DB 查詢，由這些整合測試覆蓋。以 `scripts/run-tests.sh backend` 執行。
+
+## detail.ts 改用共用 share 工具（去重收尾）（2026-06-27）
+
+### 功能目的
+上一個 share 重構把 `getShareToken`/`ShareTokenParamSchema`/`hasShareAccess` 收斂到 `share.ts`，但分享管理檔 `detail.ts` 當時還留著自己的 `getShareToken` 與 object 版 `ShareTokenParamSchema`（因為它另有處理到期的獨特函式而沒被納入第一批）。本項把這兩個與共用版完全相同的定義也接到 `share.ts`。
+
+### 使用方式
+此為後端內部重構，分享連結建立／存取／到期行為不變。
+
+### 技術細節
+- **接入**：`detail.ts` 移除本地 `getShareToken` 與 `ShareTokenParamSchema`，改 `import { getShareToken, ShareTokenParamSchema } from './share'`。其獨有的 `shareAccessForPdf`（回傳 access level 並判斷到期）與 `isShareTokenExpired` 保留，改用 imported 版本。
+- **刻意不統一的部分**：`sync.ts` 與 `server.ts` 的 `shareTokenFromRequest` 是 **header-only 變體**——只讀 `x-makeslide-share-token` header、不讀 `?share=` query，且用 bare-string schema。它與 `getShareToken`（header + query）行為不同，若強行替換會改變這些端點接受 token 的方式，因此保留不動。
+- **驗證**：backend `tsc --noEmit` 通過；`detail-permission`(92)、`share-expiry`(3)、`share`(6) 共 101 個測試回歸通過。以 `scripts/run-tests.sh backend` 執行。
