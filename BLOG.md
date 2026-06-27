@@ -8436,3 +8436,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **接入**（共 9 個檔案）：`QuizBuilderPage`（時限輸入）、`useSlideManagement`（刪片後索引回退）、`PlayPage`（音訊 `currentTime` 跳轉）、`reportSummary`（百分比 0–1 夾值）、`drawingGeometry`（線段最近點參數 t）、`PdfCard`（進度 current 夾值）、`PlayPageSlidePanel`（跳頁輸入夾 1–總頁數）、`AnimationEditorTab`（移除 local `clamp` useCallback，拖曳調整與 7 處 onChange 圓角／不透明度／線寬輸入改用共用函式）、`progressPercent`（內部最後一步 clamp 改委派）。
 - **測試**（`clamp.test.ts`，5 案例）：範圍內值不變（含上下邊界 inclusive）、超界拉回最近邊界、與被取代的 `Math.max/Math.min` 寫法輸出一致、`NaN` 傳遞、`min > max` 倒置邊界回 `max`。
 - **驗證**：前端 `tsc --noEmit` 通過；`clamp` 與 `progressPercent` 測試共 9/9 通過；全專案已無殘留的 `Math.max(0, Math.min` ／ `Math.max(1, Math.min` 內聯 clamp（測試檔除外）；純前端、不動後端、不需新 i18n。
+
+## 逐字稿每頁字數上限正規化收斂為共用純函式（2026-06-27）
+
+### 功能目的
+「逐字稿每頁字數上限」（script max chars per page）這個設定在前端有三個輸入入口：`TtsDialog`（語音設定對話框）、`RegenAllDialog`（批次重生對話框）、以及 `PlayPageSidebar`（開啟批次重生時帶入既有設定）。三處原本各自內嵌相同的正規化寫法 `Math.max(80, Math.min(2000, Math.round(x)))`，把 80／2000 這兩個 magic number 與「先四捨五入再夾範圍」的邏輯重複了三遍，容易在改動範圍時漏改其中一處，且沒有測試保護。本項把它收斂成單一可測的共用純函式與具名常數，消除重複並固化邊界行為。
+
+### 使用方式
+此為內部重構，三處輸入框的行為與先前完全一致——輸入會四捨五入為整數並夾在 80–2000 之間。日後若有新的逐字稿字數上限輸入點，只需 `import { normalizeScriptMaxChars, SCRIPT_MAX_CHARS_MIN, SCRIPT_MAX_CHARS_MAX } from '<相對路徑>/lib/scriptMaxChars'`，呼叫 `normalizeScriptMaxChars(Number(input))` 即可，並可用兩個常數標示允許範圍。
+
+### 技術細節
+- **純函式模組**（`frontend/src/lib/scriptMaxChars.ts`）：匯出 `SCRIPT_MAX_CHARS_MIN = 80`、`SCRIPT_MAX_CHARS_MAX = 2000` 與 `normalizeScriptMaxChars(value)`，後者實作為 `clamp(Math.round(value), MIN, MAX)`，沿用前一輪抽出的共用 `clamp` helper。行為與原內聯寫法完全等價：`NaN` 仍傳遞為 `NaN`（三處呼叫端原本即各自以 `Number.isFinite` 或 fallback 防呆，維持不變）。
+- **接入**（3 個檔案）：`TtsDialog`、`RegenAllDialog`、`PlayPageSidebar` 三處的內聯 `Math.max(80, Math.min(2000, Math.round(x)))` 改為 `normalizeScriptMaxChars(x)`，各自原有的 `Number.isFinite` 守衛保留不動。
+- **測試**（`scriptMaxChars.test.ts`，5 案例）：範圍內整數原樣回傳（含上下界 80／2000）、超界拉回最近邊界、非整數先四捨五入再夾範圍、與被取代的舊內聯寫法對多組輸入輸出一致、`NaN` 傳遞。
+- **驗證**：前端 `tsc --noEmit` 通過；新測試 5/5 通過；全專案已無殘留的 `Math.max(80, Math.min(2000` 內聯寫法（測試檔除外）；純前端、不動後端、不需新 i18n。

@@ -20,6 +20,7 @@ import { formatNotesMarkdown } from '../../lib/notesMarkdown';
 import { formatPageListText } from '../../lib/pageListText';
 import { getStoredCommentAuthor, setStoredCommentAuthor } from '../../lib/commentAuthor';
 import { getTextLengthHint } from '../../lib/textLengthHint';
+import { normalizeScriptMaxChars } from '../../lib/scriptMaxChars';
 import { formatRelativeTime, buildRelativeTimeLabels } from '../../lib/relativeTime';
 import { NOTEBOOK_TABS, computeNotebookTabCounts, getAdjacentNotebookTab, getEdgeNotebookTab, getStoredNotebookTab, setStoredNotebookTab, type NotebookTab } from './notebookTabs';
 
@@ -854,7 +855,7 @@ export function PlayPageSidebar() {
                   const fromDetail = detail?.script_max_chars_per_page;
                   const nextMaxChars =
                     typeof fromDetail === 'number' && Number.isFinite(fromDetail)
-                      ? Math.max(80, Math.min(2000, Math.round(fromDetail)))
+                      ? normalizeScriptMaxChars(fromDetail)
                       : fallback;
                   setRegenScriptMaxCharsPerPage(nextMaxChars);
                   setRegenAllDialogOpen(true);
