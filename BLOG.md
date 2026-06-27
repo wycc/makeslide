@@ -8574,3 +8574,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **接入**：`QuizBuilderPage` 兩處計分內聯（提交作答、同步顯示分數/滿分）改用上述函式，呼叫端維持 `roundToTwoDecimals`；其他 per-question 用途（如答錯偵測）維持不變。
 - **測試**（`quizScoring.test.ts`，新增 3 案例）：`maxAttemptScore` 配分加總、`calcAttemptScore` 依 id 加總（含全對／部分對／缺答／全缺）、回傳未四捨五入的原始值（三題均分 33.33… 全對回 100、單題回 100/3）。全檔 11/11 通過。
 - **驗證**：前端 `tsc --noEmit` 通過；測試以 `scripts/run-tests.sh frontend` 執行通過；純前端、不動後端、不需新 i18n。
+
+## 抽出剩餘播放秒數純函式 computeRemainingSeconds（2026-06-27）
+
+### 功能目的
+播放頁側欄會顯示「到簡報結束還剩多少時間」。這段估算原本是 `PlayPageSlidePanel` 內聯的 `useMemo`：取目前頁的剩餘時間，再加上之後每一頁的音訊長度。邏輯雖小卻含數個容易出錯的邊界（`duration` 未知時怎麼算、`currentTime` 超過 `duration` 時的負值、總和為 0 時要回 `null` 以隱藏顯示、頁面尚未載入時回 `null`），而且完全沒有測試。本項把它收斂成可測的純函式。
+
+### 使用方式
+此為內部重構，剩餘時間顯示與先前一致。需要估算剩餘播放秒數時，`import { computeRemainingSeconds } from '<相對路徑>/lib/remainingTime'`，呼叫 `computeRemainingSeconds(pages, currentIdx, currentTime, duration)`。
+
+### 技術細節
+- **純函式模組**（`frontend/src/lib/remainingTime.ts`）：`computeRemainingSeconds(pages, currentIdx, currentTime, duration)`——`pages` 為 null/undefined 時回 `null`；目前頁剩餘為 `duration > 0 ? Math.max(0, duration - currentTime) : 0`（`duration` 未知或 0 時以 0 計、`currentTime` 超界夾在 0）；再加上 `currentIdx` 之後每頁的 `audio_duration_seconds ?? 0`；總和為 0 時回 `null`。輸入 `pages` 採只取 `audio_duration_seconds` 的結構型別，降低耦合。
+- **接入**：`PlayPageSlidePanel` 的 `remainingSeconds` useMemo 改為委派此函式，相依陣列不變。
+- **測試**（`remainingTime.test.ts`，7 案例）：null pages、目前頁剩餘 + 後續加總、只計目前頁之後的頁、`duration <= 0` 以 0 計、`currentTime` 超界夾 0、缺 `audio_duration_seconds` 以 0 計、總和 0 回 null。
+- **驗證**：前端 `tsc --noEmit` 通過；測試 7/7 通過（以 `scripts/run-tests.sh frontend` 執行）；純前端、不動後端、不需新 i18n。
