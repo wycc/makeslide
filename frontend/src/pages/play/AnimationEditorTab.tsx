@@ -489,6 +489,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
   } = usePlayPageContext();
   const { t } = useI18n();
   const [customScriptDialogEffectId, setCustomScriptDialogEffectId] = useState<string | null>(null);
+  const [enlargeFocusEffectId, setEnlargeFocusEffectId] = useState<string | null>(null);
   const [customScriptChatInput, setCustomScriptChatInput] = useState('');
   const customScriptChatScrollRef = useRef<HTMLDivElement>(null);
   const [selectedEffectIds, setSelectedEffectIds] = useState<Set<string>>(new Set());
@@ -573,6 +574,10 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
     () => draft.effects.find((effect) => effect.id === customScriptDialogEffectId && effect.type === 'custom-script') ?? null,
     [draft.effects, customScriptDialogEffectId],
   );
+  const enlargeFocusEffect = useMemo(
+    () => draft.effects.find((effect) => effect.id === enlargeFocusEffectId) ?? null,
+    [draft.effects, enlargeFocusEffectId],
+  );
   // AI 產生中（或最近一次產生失敗）時顯示即時串流內容；否則顯示已儲存於 draft 的 code。
   const customScriptSourceValue = customScriptDialogEffect
     ? customScriptStreamingCode[customScriptDialogEffect.id] ?? customScriptDialogEffect.code ?? ''
@@ -628,6 +633,25 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
         effects: base.effects.map((e) => (e.id === id ? { ...e, ...patch } : e)),
       };
     });
+  };
+
+  // 套用焦點框（位置/大小）參數，含 overlay-image 鎖定比例時的高度連動；
+  // 供行內小預覽與「放大」對話框共用，避免邏輯重複。
+  const applyFocusParams = (
+    effect: SlideAnimationEffect,
+    params: { xPct: number; yPct: number; widthPct: number; heightPct: number },
+  ) => {
+    let next = { ...getFocusEffectParams(effect), ...params };
+    if (
+      effect.type === 'overlay-image' &&
+      effect.figureId &&
+      lockedAspectEffectIds.has(effect.id) &&
+      figureNaturalRatios[effect.figureId]
+    ) {
+      const ratio = figureNaturalRatios[effect.figureId]!;
+      next = { ...next, heightPct: Math.round((next.widthPct / ratio) * 10) / 10 };
+    }
+    updateEffect(effect.id, { params: next });
   };
 
   /** 調整效果在清單中的順序；順序也決定重疊 overlay 效果的疊加層次（越後面越上層）。 */
@@ -2102,41 +2126,42 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                 <div className="flex flex-col gap-2 text-xs text-muted">
                   <div className="flex items-center justify-between gap-2">
                     <span>{t(effect.type === 'pointer' ? 'play.animation.pointerPosition' : 'play.animation.focusPosition')}</span>
-                    {compact && (
-                      <button
-                        type="button"
-                        disabled={disabled}
-                        onClick={() => setPositioningEffectId((prev) => (prev === effect.id ? null : effect.id))}
-                        className={`rounded-md border px-2 py-1 text-[11px] ${
-                          positioningEffectId === effect.id
-                            ? 'border-fuchsia-400 bg-fuchsia-500/25 font-medium text-fuchsia-800 dark:text-fuchsia-100'
-                            : 'border-border text-text hover:bg-surface-muted'
-                        }`}
-                      >
-                        {positioningEffectId === effect.id
-                          ? t('play.animation.positionOnFullscreenActive')
-                          : t('play.animation.positionOnFullscreen')}
-                      </button>
-                    )}
+                    <div className="flex items-center gap-1">
+                      {compact && (
+                        <button
+                          type="button"
+                          disabled={disabled}
+                          onClick={() => setPositioningEffectId((prev) => (prev === effect.id ? null : effect.id))}
+                          className={`rounded-md border px-2 py-1 text-[11px] ${
+                            positioningEffectId === effect.id
+                              ? 'border-fuchsia-400 bg-fuchsia-500/25 font-medium text-fuchsia-800 dark:text-fuchsia-100'
+                              : 'border-border text-text hover:bg-surface-muted'
+                          }`}
+                        >
+                          {positioningEffectId === effect.id
+                            ? t('play.animation.positionOnFullscreenActive')
+                            : t('play.animation.positionOnFullscreen')}
+                        </button>
+                      )}
+                      {currentPage?.image_url && (
+                        <button
+                          type="button"
+                          onClick={() => setEnlargeFocusEffectId(effect.id)}
+                          className="rounded-md border border-border px-2 py-1 text-[11px] text-text hover:bg-surface-muted"
+                          title={t('play.animation.enlargeFocusEditor')}
+                          aria-label={t('play.animation.enlargeFocusEditor')}
+                        >
+                          ⤢
+                        </button>
+                      )}
+                    </div>
                   </div>
                   {currentPage?.image_url && (
                     <EffectPositionEditor
                       effect={effect}
                       imageUrl={currentPage.image_url}
                       isPointerOnly={effect.type === 'pointer'}
-                      onParamsChange={(params) => {
-                        let next = { ...getFocusEffectParams(effect), ...params };
-                        if (
-                          effect.type === 'overlay-image' &&
-                          effect.figureId &&
-                          lockedAspectEffectIds.has(effect.id) &&
-                          figureNaturalRatios[effect.figureId]
-                        ) {
-                          const ratio = figureNaturalRatios[effect.figureId]!;
-                          next = { ...next, heightPct: Math.round((next.widthPct / ratio) * 10) / 10 };
-                        }
-                        updateEffect(effect.id, { params: next });
-                      }}
+                      onParamsChange={(params) => applyFocusParams(effect, params)}
                       disabled={disabled}
                     />
                   )}
@@ -2416,6 +2441,62 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
         </>
       )}
       </div>
+
+      {enlargeFocusEffect && currentPage?.image_url && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setEnlargeFocusEffectId(null)}
+        >
+          <div
+            className="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-xl border border-border bg-surface-muted shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
+              <div className="text-sm font-semibold text-text">{t('play.animation.enlargeFocusTitle')}</div>
+              <button
+                type="button"
+                onClick={() => setEnlargeFocusEffectId(null)}
+                className="rounded-md border border-border px-3 py-1.5 text-sm text-text hover:bg-surface-muted"
+              >
+                {t('play.animation.enlargeFocusClose')}
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              <EffectPositionEditor
+                effect={enlargeFocusEffect}
+                imageUrl={currentPage.image_url}
+                isPointerOnly={enlargeFocusEffect.type === 'pointer'}
+                onParamsChange={(params) => applyFocusParams(enlargeFocusEffect, params)}
+                disabled={disabled}
+              />
+              <div className="mt-3 flex flex-wrap justify-center gap-2">
+                {(
+                  enlargeFocusEffect.type === 'pointer'
+                    ? (['xPct', 'yPct'] as const)
+                    : (Object.keys(FOCUS_PARAM_LABELS) as Array<keyof typeof FOCUS_PARAM_LABELS>)
+                ).map((key) => (
+                  <label key={key} className="flex flex-col items-center gap-0.5 text-[11px] text-muted">
+                    {t(FOCUS_PARAM_LABELS[key])}
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={getFocusEffectParams(enlargeFocusEffect)[key]}
+                      disabled={disabled}
+                      onChange={(e) => {
+                        const newVal = Math.min(100, Math.max(0, Number(e.target.value) || 0));
+                        applyFocusParams(enlargeFocusEffect, { ...getFocusEffectParams(enlargeFocusEffect), [key]: newVal });
+                      }}
+                      className="w-16 rounded-md border border-border bg-surface px-1 py-1 text-sm text-text"
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {customScriptDialogEffect && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
