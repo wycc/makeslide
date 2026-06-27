@@ -8619,3 +8619,16 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **接入**：`report.ts` 的 `computeStudentRecords` 學生平均分改用 `average(scores)`。
 - **測試**：`report-metrics.test.ts` 新增 1 案例（多值平均、單值、空陣列回 null、小數）。
 - **驗證**：backend `tsc --noEmit` 通過；新測試 5/5 通過；既有 `report-students`、`student-report` 共 15/15 回歸通過。以 `scripts/run-tests.sh backend` 執行。
+
+## 抽出 watch 聚合查詢 queryWatchPages（2026-06-27）
+
+### 功能目的
+課後報告的「每頁學習分析 CSV」與「報告摘要」端點，各自跑了一段幾乎一模一樣的 SQL，去彙總每頁的觀看人數、完成人數，以及平均聆聽比例（`avg_listened_ratio`，每筆 listened/duration 上限 1.0、無有效 duration 的列排除在平均外）。這段 SQL（特別是 `avg_listened_ratio` 的 `AVG(CASE WHEN ...)` 寫法）重複兩份，日後若只改一邊就會造成兩個端點數字不一致。本項把整段查詢收斂成單一共用函式。
+
+### 使用方式
+此為後端內部重構，兩個端點的輸出與先前一致。需要每頁觀看彙總時，呼叫 `queryWatchPages(pdfId)` 取得 `WatchPageRow[]`。
+
+### 技術細節
+- **共用函式**（`backend/src/routes/pdfs/report.ts`）：新增模組層級 `queryWatchPages(pdfId): WatchPageRow[]`，內含完整 SQL 與註解說明 `avg_listened_ratio` 的語意（capped at 1.0、無 duration 的列不計入平均）。
+- **接入**：pages CSV 匯出與 summary 端點原本各自 `const watchPages = db.prepare(<重複 SQL>).all(id)`，改為 `const watchPages = queryWatchPages(id)`。原本兩種輕微不同的回傳型別轉型（inline 物件型別 vs `WatchPageRow[]`）統一為 `WatchPageRow[]`。
+- **驗證**：backend `tsc --noEmit` 通過；既有 `report-pages-csv`、`report-summary` 共 7/7 回歸通過；專案內 `avg_listened_ratio` 的 inline SQL 由 2 處降為 1 處（即此共用函式內）。以 `scripts/run-tests.sh backend` 執行。

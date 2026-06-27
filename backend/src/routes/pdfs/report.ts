@@ -144,6 +144,28 @@ interface WatchPageRow {
   avg_listened_ratio: number | null;
 }
 
+/**
+ * Per-page watch aggregation shared by the pages CSV export and the summary
+ * endpoint: viewer count, completed count, and the average listened ratio
+ * (each row's listened/duration capped at 1.0; rows without a positive duration
+ * are excluded from the average so they don't count as 0%).
+ */
+function queryWatchPages(pdfId: string): WatchPageRow[] {
+  return db
+    .prepare(
+      `SELECT p.page_number AS page_number,
+              COUNT(w.viewer_id) AS total_viewers,
+              COALESCE(SUM(w.completed), 0) AS completed_viewers,
+              AVG(CASE WHEN w.duration_ms IS NOT NULL AND w.duration_ms > 0 THEN MIN(CAST(w.listened_ms AS REAL) / w.duration_ms, 1.0) ELSE NULL END) AS avg_listened_ratio
+         FROM pages p
+         LEFT JOIN page_watch_progress w ON w.pdf_id = p.pdf_id AND w.page_number = p.page_number
+        WHERE p.pdf_id = ?
+        GROUP BY p.page_number
+        ORDER BY p.page_number ASC`,
+    )
+    .all(pdfId) as WatchPageRow[];
+}
+
 function sortedUnique(values: Iterable<string>): string[] {
   return Array.from(new Set(Array.from(values).map((value) => value.trim()).filter(Boolean))).sort();
 }
@@ -299,19 +321,7 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
       return reply.code(403).send('Forbidden');
     }
 
-    const watchPages = db
-      .prepare(
-        `SELECT p.page_number AS page_number,
-                COUNT(w.viewer_id) AS total_viewers,
-                COALESCE(SUM(w.completed), 0) AS completed_viewers,
-                AVG(CASE WHEN w.duration_ms IS NOT NULL AND w.duration_ms > 0 THEN MIN(CAST(w.listened_ms AS REAL) / w.duration_ms, 1.0) ELSE NULL END) AS avg_listened_ratio
-           FROM pages p
-           LEFT JOIN page_watch_progress w ON w.pdf_id = p.pdf_id AND w.page_number = p.page_number
-          WHERE p.pdf_id = ?
-          GROUP BY p.page_number
-          ORDER BY p.page_number ASC`,
-      )
-      .all(id) as Array<{ page_number: number; total_viewers: number; completed_viewers: number; avg_listened_ratio: number | null }>;
+    const watchPages = queryWatchPages(id);
 
     const pollVoteRows = db
       .prepare(
@@ -438,20 +448,7 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
       )
       .get(id, id) as PollSummaryRow;
 
-    const watchPages = db
-      .prepare(
-        `SELECT
-           p.page_number,
-           COUNT(w.viewer_id) AS total_viewers,
-           COALESCE(SUM(w.completed), 0) AS completed_viewers,
-           AVG(CASE WHEN w.duration_ms IS NOT NULL AND w.duration_ms > 0 THEN MIN(CAST(w.listened_ms AS REAL) / w.duration_ms, 1.0) ELSE NULL END) AS avg_listened_ratio
-         FROM pages p
-         LEFT JOIN page_watch_progress w ON w.pdf_id = p.pdf_id AND w.page_number = p.page_number
-        WHERE p.pdf_id = ?
-        GROUP BY p.page_number
-        ORDER BY p.page_number ASC`,
-      )
-      .all(id) as WatchPageRow[];
+    const watchPages = queryWatchPages(id);
 
     const quizParticipants = db
       .prepare(`SELECT DISTINCT client_id AS id FROM quiz_attempts WHERE pdf_id = ?`)
