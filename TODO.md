@@ -13,6 +13,14 @@
 - [ ] 系統性採用 `mapApiErrorToHumanMessage`：目前約 55 處 catch 區塊直接 `setError(err.message)` 顯示後端原始 message、繞過既有的錯誤訊息映射（前端僅 2 處 `UploadButton`、`ImportTextPage` 使用 mapper）。全面改造屬較大工程，且各 catch 上下文不同、許多後端 message 已是中文（未必都是英文洩漏），逐點需產品判斷顯示風格，故列為待使用者決定。
 - [ ] 把前端測試納入 root `npm test`：目前 root 測試腳本未涵蓋前端 `node:test` 測試。納入涉及 CI 行為變更與 `npm install`（sandbox 無法驗證），列為待使用者決定。
 
+## ZIP 匯入頁面狀態正規化（第一六五輪，2026-06-27）
+
+延續 from-pages 的「非法 page 狀態」bug 類，盤點所有建立 pages 的入口：page-operations(audio_ready✓)、pipeline(各正確狀態✓)、addPagesFromPrompt(script_ready→audio_ready 流程✓)、upload(不設 status✓)、from-pages(已修✓)、**import(ZIP) 有問題**。
+
+- [x] ZIP 匯入時 page 狀態 fallback 為非法 `'ready'` 且不驗證：`import.ts` 以 `p.status || 'ready'` 設定匯入頁狀態；缺 status 或舊匯出含非法 'ready'（如 round-164 前的 from-pages 匯出）時，匯入頁會帶非法狀態 → 被 quality-check/匯出略過、且重啟時被 orphan-recovery 標 failed。
+  - 修改說明（2026-06-27）：改為 `isPageStatus(p.status) ? p.status : 'audio_ready'`（用 statusMachine 的 `isPageStatus` 驗證；有效則保留、無效/缺失正規化為終態 audio_ready）。backend `tsc --noEmit` 通過；export/import ZIP round-trip（有效狀態保留）+ import-unzip-timeout + status-machine（isPageStatus 已測）共 13 測試回歸通過。匯入用系統 unzip、無 jszip 依賴，自製含非法狀態的 zip fixture 成本高且脆弱，故不另造 fixture 測試（由 round-trip + isPageStatus 測試 + 一行 guard 邏輯共同保證）。分支 `fix/import-page-status-normalize`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 44 個完成項目（44/100，未達上限）。
+
 ## from-pages 頁面狀態 bug（第一六四輪，2026-06-27）
 
 稽核 `from-pages`（從多份簡報選頁組「複習簡報」）：複製頁面用新 page_uid、循序 page_number、uid 路徑——大致正確。但發現**嚴重真 bug**。
@@ -213,6 +221,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （真 bug 修復）ZIP 匯入 page 狀態 fallback 非法 `'ready'`+不驗證 → 改用 `isPageStatus` 驗證、無效正規化為 audio_ready；13 測試回歸（計數 44/100） | fix/import-page-status-normalize（已 merge） |
 | 2026-06-27 | （真 bug 修復）from-pages 頁面用非法狀態 `'ready'`→ 重啟後被 orphan-recovery 標 failed；改 `'audio_ready'`、補回歸測試（from-pages 6/6）。另記錄完整套件零星 flaky（figure-reference/llmUsage、隔離下通過）（計數 43/100） | fix/from-pages-page-status（已 merge） |
 | 2026-06-27 | （FK 稽核收尾）`addPagesFromPrompt` 中間插頁補 `defer_foreign_keys`（避免後續頁有投票時 FK 500）；重現驗證 + 17 測試回歸（計數 42/100） | fix/addpages-defer-fk（已 merge） |
 | 2026-06-27 | （資料對齊擴展）頁面增/刪/移時 comments/drawings 也對齊：`shiftChildPageNumbers` 擴為三表、move per-page 移三表、delete 顯式刪被刪頁 comments/drawings；補 4 測試；後端 1203/1203 全綠（計數 41/100） | fix/realign-page-content-children（已 merge） |
