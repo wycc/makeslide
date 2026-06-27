@@ -649,6 +649,7 @@ export const zhTW = {
   'play.ttsDialog.scriptMaxChars': '逐字稿每頁上限字數',
   'play.ttsDialog.scriptMaxCharsHint': '（留空使用系統預設）',
   'play.ttsDialog.scriptMaxCharsPlaceholder': '系統預設',
+  'play.scriptMaxCharsRange': '允許範圍 {min}–{max} 字',
   'play.ttsDialog.close': '關閉',
   'play.ttsDialog.saving': '儲存中…',
   'play.ttsDialog.save': '儲存設定',

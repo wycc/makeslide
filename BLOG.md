@@ -8492,3 +8492,16 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **接入**：`PlayPageHeader` 的 −／＋ 按鈕 onClick 改用 `stepSlideImageScale(scale, ∓STEP)`，兩個按鈕的 disabled 判斷改用 `SLIDE_IMAGE_SCALE_MIN`／`SLIDE_IMAGE_SCALE_MAX` 常數，元件內已無散落的 magic number。
 - **測試**（`slideImageScale.test.ts`，4 案例）：步進並消除浮點誤差、縮小不低於 0.65、放大不高於 1.35、與被取代的舊內聯寫法對多個比例輸出一致。
 - **驗證**：前端 `tsc --noEmit` 通過；新測試 4/4 通過；純前端、不動後端、不需新 i18n。
+
+## 逐字稿每頁字數上限的範圍提示（2026-06-27）
+
+### 功能目的
+語音設定（`TtsDialog`）與批次重生（`RegenAllDialog`）都有「逐字稿每頁字數上限」的數字輸入框，允許值為 80–2000；輸入超出範圍會被靜默正規化（夾回邊界），但畫面上原本沒有任何文字告訴使用者這個範圍，容易讓人困惑「為什麼我打的數字被改掉了」。本項在兩個輸入框下方補上明確的範圍提示，並把範圍邊界值與正規化邏輯收斂到同一個來源。
+
+### 使用方式
+開啟語音設定或批次重生對話框時，字數上限輸入框下方會顯示「允許範圍 80–2000 字」（英文介面為「Allowed range: 80–2000」）。數字會跟著 `SCRIPT_MAX_CHARS_MIN/MAX` 常數自動更新，未來若調整範圍，提示文字與輸入框的 `min/max` 限制會一起變動，不需逐處改字。
+
+### 技術細節
+- **共用 i18n 鍵**：新增 `play.scriptMaxCharsRange`（zh-TW「允許範圍 {min}–{max} 字」、en「Allowed range: {min}–{max}」），以既有的 `.replace('{min}', …).replace('{max}', …)` 內插慣例帶入 `SCRIPT_MAX_CHARS_MIN`／`SCRIPT_MAX_CHARS_MAX`。
+- **接入**：`TtsDialog`、`RegenAllDialog` 的字數上限 `<input>` 下方各新增一行範圍提示；同時把原本硬編的 `min={80} max={2000}` HTML 屬性改為 `min={SCRIPT_MAX_CHARS_MIN} max={SCRIPT_MAX_CHARS_MAX}`，讓提示文字、HTML 限制與 `normalizeScriptMaxChars` 的夾值邏輯共用同一組常數來源。
+- **驗證**：前端 `tsc --noEmit` 通過；i18n parity（兩語系鍵集合與每個值的 `{placeholder}` 集合一致）與 nonempty（無空白翻譯）等 27 個測試全通過；純前端、不動後端。
