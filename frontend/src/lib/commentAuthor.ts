@@ -1,13 +1,11 @@
 // 記住上次留言的暱稱（localStorage，含非瀏覽器環境防護）。
 // 慣例沿用 i18n.ts / viewerId.ts 的 `typeof window` 檢查。
 
+import { hasLocalStorage } from './hasLocalStorage';
+
 const COMMENT_AUTHOR_KEY = 'makeslide.comment.author';
 // 對齊評論作者輸入框的 maxLength。
 const MAX_LEN = 80;
-
-function hasLocalStorage(): boolean {
-  return typeof window !== 'undefined' && !!window.localStorage;
-}
 
 /** 讀取上次儲存的暱稱；未設定、壞值或非瀏覽器環境回空字串。 */
 export function getStoredCommentAuthor(): string {

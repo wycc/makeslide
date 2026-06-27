@@ -13,6 +13,14 @@
 - [ ] 系統性採用 `mapApiErrorToHumanMessage`：目前約 55 處 catch 區塊直接 `setError(err.message)` 顯示後端原始 message、繞過既有的錯誤訊息映射（前端僅 2 處 `UploadButton`、`ImportTextPage` 使用 mapper）。全面改造屬較大工程，且各 catch 上下文不同、許多後端 message 已是中文（未必都是英文洩漏），逐點需產品判斷顯示風格，故列為待使用者決定。
 - [ ] 把前端測試納入 root `npm test`：目前 root 測試腳本未涵蓋前端 `node:test` 測試。納入涉及 CI 行為變更與 `npm install`（sandbox 無法驗證），列為待使用者決定。
 
+## 前端去重 hasLocalStorage（第一五八輪，2026-06-27）
+
+確認後端 1199/1199、前端 551/551 全綠（全棧綠燈基線）。掃描前端後完成一個小去重：
+
+- [x] 抽出共用 `hasLocalStorage`（去重）：`recentSearches.ts`、`commentAuthor.ts` 各有相同的 `typeof window !== 'undefined' && !!window.localStorage` 守衛。抽成 `lib/hasLocalStorage.ts` 並補測試。
+  - 修改說明（2026-06-27）：新增 `frontend/src/lib/hasLocalStorage.ts`（window-based 穩健版）+ `hasLocalStorage.test.ts`（3 測試：無 window、有 window.localStorage、有 window 無 localStorage；每次清理 globalThis.window 避免污染）。`recentSearches`/`commentAuthor` 移除本地定義改 import。**`reviewList.ts` 刻意不動**——其守衛為 `typeof localStorage !== 'undefined'`（bare localStorage），且其測試注入 bare `localStorage`（非 window），改用 window-based 版會使測試 mutator no-op（已實測 4 失敗）；為零行為變更，保留 reviewList 自身守衛。前端 `tsc --noEmit` 通過；相關 lib 測試 23/23；完整前端 551/551 全綠。分支 `refactor/shared-has-local-storage`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 38 個完成項目（38/100，未達上限）。
+
 ## 完整後端測試套件基線 + 既有失敗盤點（第一五四輪，2026-06-27）
 
 本輪以 `scripts/run-tests.sh backend` 跑完整後端套件：**1199 測試，18 失敗**。經抽查與在去重前 commit（`e0d9db8`）比對，**18 個全為既有失敗、與近期去重無關**。逐一分類並修復其一：
@@ -153,6 +161,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （前端去重）抽出共用 `hasLocalStorage`（recentSearches/commentAuthor）；reviewList 因測試耦合保留；補 3 測試；前端 551/551 全綠（計數 38/100） | refactor/shared-has-local-storage（已 merge） |
 | 2026-06-27 | （修既有失敗）`timing.test.ts`+`regenerate-matrix.test.ts` 共 5 個 401：補 `setSystemAuthSettings({googleAuthEnabled:false})`；12/12 + 4/4 通過（連跑穩定）（計數 36/100） | fix/timing-regen-test-auth（已 merge） |
 | 2026-06-27 | （修既有失敗）`skills.test.ts`：`updateUserSkill` 改條件 spread 省略 undefined 模板鍵（與 create 形狀一致、修磁碟 round-trip 不符）；5/5 通過（計數 35/100） | fix/update-skill-omit-undefined-template-fields（已 merge） |
 | 2026-06-27 | 跑完整後端套件（1199 測試/18 既有失敗，與去重無關）並分類；修 `input-security.test.ts` 4 失敗（缺 googleAuthEnabled:false 致 401）；其餘 14 個分組記錄待判斷（計數 34/100） | fix/input-security-test-auth（已 merge） |
