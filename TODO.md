@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第一六九輪已完成 **48/100**，未達上限。
+- 最新進度：截至第一七〇輪已完成 **49/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -78,7 +78,9 @@
 
 - [ ] （驗證確認）round-136 品質檢查狀態修正已驗證完整：頁面終態為 `audio_ready`（`addPagesFromPrompt.ts` 的 normalization 與 pipeline 註解均證實 ready PDF 全頁為 audio_ready/failed），`script_ready` 僅為 require_script_confirmation 流程的暫態。**無需再擴充狀態集合**。（本項為分析結論，非待辦。）
 - [ ] （P0，§7.2）品質檢查自動化：生成完成後自動跑一次 quality-check，於播放頁以徽章顯示「N 頁有品質問題」摘要，點擊開啟既有 `QualityCheckPanel`。延伸 `quality-check` route 與前端面板，屬前端整合。
-- [ ] （§8.1.4）首頁／播放頁搜尋結果加入「加入複習清單」動作：`GlobalSearchBox` 結果列加入按鈕，複用既有 `reviewList.addReviewItems`（已有測試）。純前端 UI 整合。
+- [x] （§8.1.4）首頁／播放頁搜尋結果加入「加入複習清單」動作：`GlobalSearchBox` 結果列加入按鈕，複用既有 `reviewList.addReviewItems`（已有測試）。純前端 UI 整合。（第一七〇輪，2026-06-27 完成）
+  - 修改說明（2026-06-27）：`GlobalSearchBox` 選取模式原僅有「建立新簡報」批次動作，新增「加入複習清單（N 頁）」按鈕。新增純函式 `lib/searchResultsToReviewItems.ts`（過濾無頁碼標題結果、snippet 去空白作 questionText、null 標題回空字串）；`handleAddToReviewList` 將勾選結果轉換後交 `addReviewItems`（沿用其 pdfId+頁碼+文字 去重）並收合選取狀態。新增 i18n 鍵 `home.search.addToReviewList`（zh-TW/en）。新增 `searchResultsToReviewItems.test.ts` 3 測試；前端 `tsc --noEmit` 通過、helper 3/3 + i18n parity/nonempty + 既有 GlobalSearchBox 測試回歸通過（共 35）。分支 `feat/search-add-to-review-list`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 49 個完成項目（49/100，未達上限）。
 - [ ] （P0，§7.1）課後報告個人層級報表：後端 `computeStudentRecords` 已彙整每位學生作答；補前端「個人」分頁顯示每位學生完成率／提問／投票參與。前端為主、後端視需要補欄位。
 - [ ] （§8.1.5／§4.1）播放頁 header 入口分組為「製作／授課／自學／報告／匯出」任務流：降低功能密度造成的新手阻力（資訊架構調整，純前端、需產品確認分組）。
 - [x] （§7.5）生成前成本估算覆蓋確認：確認 PDF／文字／YouTube 三個生成入口皆於 `PromptModal` 顯示 `costEstimate` 估算；補缺口並為 pageCount 傳遞補測試。（第一六八輪，2026-06-27 完成）
@@ -244,6 +246,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （§8.1.4 純前端）全域搜尋選取模式新增「加入複習清單」批次動作：新增純函式 `searchResultsToReviewItems`（過濾無頁碼、snippet→questionText），`GlobalSearchBox` 加按鈕呼叫 `addReviewItems`；新增 i18n 鍵與 3 測試，前端 typecheck + i18n + GlobalSearchBox 回歸通過（計數 49/100） | feat/search-add-to-review-list（已 merge） |
 | 2026-06-27 | （§7.1 後端聚合子項）課後報告 pages.csv 新增頁面困難度：`reportMetrics.ts` 新增純函式 `pageDifficultyScore`（完成率/投票分歧/提問率三訊號平均、0–1、缺值略過），`report/pages.csv` 新增 `question_count`/`difficulty_score` 欄位；補 4 純函式測試 + 更新 pages-csv 測試，報告測試回歸通過（計數 48/100） | feat/report-page-difficulty（已 merge） |
 | 2026-06-27 | （§7.5，補真缺口）上傳 PDF 後在生成前顯示成本估算：`POST /api/pdfs` 新增回傳 `source_page_count`（PDF 實體頁數，不寫 persisted page_count），前端新增 `promptTargetPageCount` 純函式（page_count → source_page_count fallback）供 PromptModal；確認 TXT/YouTube 生成前無從估算（非缺口）。補 backend 2 + frontend 3 測試，前後端 typecheck + 上傳路由回歸通過（計數 47/100） | feat/upload-source-page-count-cost-estimate（已 merge） |
 | 2026-06-27 | （新功能，使用者指定）播放頁一般檢視點擊投影片改為進入全螢幕（取代點擊 playPause，播放/暫停改用獨立按鈕與空白鍵）：`PlayPageSlidePanel` 的 `onImgClick` 改用 context 的 `setFullscreenLayout`/`setImageOnlyFullscreen`；新增 aria-label i18n 鍵；前端 typecheck + i18n 27 測試通過（計數 46/100） | feat/click-slide-toggle-fullscreen（已 merge） |
