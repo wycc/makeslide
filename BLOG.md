@@ -1,5 +1,27 @@
 # MakeSlide 功能說明
 
+## 投票選項 JSON 防護解析收斂為共用函式（修無防護解析致 500）
+
+### 背景
+
+每頁的即時投票把選項文字以 JSON 字串陣列存在 `page_polls.options_json` 欄。程式有三處會解析它，但行為不一致：投票結果讀取（`rowToPoll`）已用 try/catch + 過濾字串的**穩健版**；但**投票結果 CSV 匯出**（`poll-results-csv.ts`）與**投票端點**（`detail.ts` 的 `POST …/vote`）卻是 `JSON.parse(options_json) as string[]`、**完全沒有防護**。一旦某筆 `options_json` 損壞（非合法 JSON 或不是陣列），CSV 匯出會整份 500、投票請求也會 500，而不是優雅處理。
+
+### 變更內容
+
+- 新增 `backend/src/routes/pdfs/pollOptions.ts` 的純函式 `parsePollOptions(optionsJson)`：非合法 JSON 或非陣列一律回 `[]`，並過濾掉非字串項目，讓呼叫端永遠拿到乾淨的 `string[]`。
+- 三處統一改用之：
+  - `detail.ts` 的 `rowToPoll`（移除重複的 try/catch 防護邏輯）。
+  - `detail.ts` 投票端點（無防護 → 損壞時 `options.length` 為 0，`option_index` 驗證會回 400 而非 500）。
+  - `poll-results-csv.ts`（無防護 → 損壞的投票該段不輸出列，整份匯出仍成功）。
+
+### 使用方式
+
+純內部健壯性修復，正常資料行為不變；差別在於遇到單筆損壞的投票資料時，系統會優雅略過/拒絕，而不再讓整個匯出或投票請求 500。
+
+### 測試
+
+新增 `poll-options.test.ts`（5 組：合法陣列、損壞 JSON 回 []、非陣列回 []、過濾非字串、null/undefined）。後端 `tsc --noEmit` 通過；poll-options／poll-results-csv／detail-permission（92）／figures-polls-permission／page-poll-realign／generate-poll 等共 100+ 測試回歸全通過。
+
 ## CSV 下載檔名「標題優先、否則退回 ID」邏輯收斂為共用純函式
 
 ### 背景

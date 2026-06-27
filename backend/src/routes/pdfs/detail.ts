@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { canReadPdf, canEditPdf, canDestructivelyEditPdf } from './permissions';
 import { getShareToken, ShareTokenParamSchema } from './share';
+import { parsePollOptions } from './pollOptions';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -142,13 +143,7 @@ function isShareTokenExpired(request: FastifyRequest, pdfId: string): boolean {
 }
 
 function rowToPoll(row: PagePollRow) {
-  let optionTexts: string[] = [];
-  try {
-    const parsed = JSON.parse(row.options_json) as unknown;
-    if (Array.isArray(parsed)) optionTexts = parsed.filter((v): v is string => typeof v === 'string');
-  } catch {
-    optionTexts = [];
-  }
+  const optionTexts = parsePollOptions(row.options_json);
   const counts = db
     .prepare(`SELECT option_index, COUNT(*) AS votes FROM page_poll_votes WHERE poll_id = ? GROUP BY option_index`)
     .all(row.id) as Array<{ option_index: number; votes: number }>;
@@ -1078,7 +1073,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       .get(pollId, id) as PagePollRow | undefined;
     if (!row) return reply.code(404).send(errorResponse('POLL_NOT_FOUND', `Poll ${pollId} not found`));
     if (row.is_active !== 1) return reply.code(409).send(errorResponse('POLL_CLOSED', 'Poll is closed'));
-    const options = JSON.parse(row.options_json) as string[];
+    const options = parsePollOptions(row.options_json);
     if (body.data.option_index >= options.length) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid option_index'));
     const now = nowIso();
     db.prepare(`INSERT INTO page_poll_votes (poll_id, voter_id, option_index, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(poll_id, voter_id) DO UPDATE SET option_index = excluded.option_index, updated_at = excluded.updated_at`)
