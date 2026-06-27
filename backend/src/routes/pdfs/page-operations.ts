@@ -468,11 +468,15 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
           id,
           src + 100000,
         );
-        db.prepare(`UPDATE page_polls SET page_number = ? WHERE pdf_id = ? AND page_number = ?`).run(
-          dst,
-          id,
-          src + 100000,
-        );
+        // Move the page's interactive/annotation content in lockstep (polls,
+        // comments, drawings) so it stays attached to the same page content.
+        for (const table of ['page_polls', 'page_comments', 'page_drawings']) {
+          db.prepare(`UPDATE ${table} SET page_number = ? WHERE pdf_id = ? AND page_number = ?`).run(
+            dst,
+            id,
+            src + 100000,
+          );
+        }
       }
       db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(now, id);
     });
@@ -554,6 +558,11 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       db.pragma('defer_foreign_keys = ON');
       cancelRunningPageArtifactsForDeletedPage(id, n, now);
       db.prepare(`DELETE FROM pages WHERE pdf_id = ? AND page_number = ?`).run(id, n);
+      // page_polls cascade-deletes via its FK to pages; page_comments and
+      // page_drawings only reference pdfs, so remove the deleted page's rows
+      // explicitly (otherwise they'd survive and reattach to the next page).
+      db.prepare(`DELETE FROM page_comments WHERE pdf_id = ? AND page_number = ?`).run(id, n);
+      db.prepare(`DELETE FROM page_drawings WHERE pdf_id = ? AND page_number = ?`).run(id, n);
       // Compact the trailing pages (and their child rows) down by one. A direct
       // `page_number - 1` can transiently violate the UNIQUE(pdf_id, page_number)
       // index because SQLite applies the bulk UPDATE row by row in an unspecified

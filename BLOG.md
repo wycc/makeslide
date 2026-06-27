@@ -8876,3 +8876,20 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **修正**：三個 renumber 交易（insert/move/delete）開頭加 `db.pragma('defer_foreign_keys = ON')`，把外鍵檢查延到交易 commit 時才做，讓父子表能在交易內分步、安全地一起重排（SQLite 會在交易結束後自動關閉此 pragma）。delete handler 另補上 `shiftChildPageNumbers` 的兩步 lockstep 位移（與 pages 的 `+100000 / -100001` offset 同步），使被刪頁之後各頁的投票正確下移一位。
 - **測試**：新增 `page-poll-realign.test.ts`（刪頁、插頁後投票 page_number 正確對齊且無 FK 錯誤）。
 - **驗證**：backend `tsc --noEmit` 通過；`pages-api`、`page-operations-permission` 共 50 測試回歸通過；完整後端套件 1201/1201 全綠。以 `scripts/run-tests.sh backend` 執行。
+
+## 頁面重排時對齊評論與手寫（接續投票修復）（2026-06-27）
+
+### 功能目的
+接續上一則的投票對齊修復，這次把所有「綁在某一頁上的使用者內容」都納入頁面重排時的對齊：除了投票（poll），還有評論（comment）與手寫標註（drawing）。先前 `shiftChildPageNumbers` 只移動投票，導致插入/刪除/搬移頁面後，評論與手寫會留在原本的 page_number、附到錯誤的頁面；刪除頁面時，由於評論／手寫的外鍵只指向 `pdfs`（不像投票指向 `pages` 會連鎖刪除），那一頁的評論／手寫還會殘留並錯附到下一頁。
+
+### 使用方式
+此為後端修正：對含評論／手寫的簡報增/刪/移頁後，這些內容會正確跟著它原本所屬的頁面；刪頁時該頁的評論／手寫會一併移除。
+
+### 技術細節
+- **盤點**：以 `page_number` 關聯 pages 的子表中，`page_polls`／`page_comments`／`page_drawings` 是「每頁使用者內容」應跟隨頁面；`page_embeddings` 以 `page_uid` 為鍵、不受頁碼重排影響；`page_watch_progress`／`page_artifact_timings`／`page_artifact_events` 屬歷史分析／觀測資料，刻意不重排。
+- **修正**：
+  - `shiftChildPageNumbers` 改為位移 `PAGE_CONTENT_CHILD_TABLES = [page_polls, page_comments, page_drawings]`（insert 的兩步 offset、move 的 step 1、delete 的兩步 lockstep 都自動涵蓋三表）。
+  - move handler 的 per-page 重排迴圈一併移動三個子表。
+  - delete handler 顯式刪除被刪頁的 `page_comments`／`page_drawings`（`page_polls` 由其 FK ON DELETE CASCADE 處理）。
+- **測試**：`page-poll-realign.test.ts` 擴充為涵蓋 poll／comment／drawing 在刪／插／移頁後的對齊，以及刪頁移除該頁評論／手寫不殘留，共 4 個案例。
+- **驗證**：backend `tsc --noEmit` 通過；相關 86 測試回歸；完整後端套件 1203/1203 全綠。以 `scripts/run-tests.sh backend` 執行。

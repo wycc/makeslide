@@ -11,12 +11,13 @@ setSystemAuthSettings({ googleAuthEnabled: false });
 
 function nowIso() { return new Date().toISOString(); }
 
-// Seed an ownerless (publicly editable) ready PDF with `pageCount` pages and one
-// poll on `pollPage`. Pages use stable uid paths matching production.
-function seed(id: string, pageCount: number, pollPage: number): void {
+// Seed an ownerless ready PDF with `pageCount` pages, plus a poll, a comment and
+// a drawing all on `contentPage`. Pages use stable uid paths.
+function seed(id: string, pageCount: number, contentPage: number): void {
   const t = nowIso();
-  db.prepare(`DELETE FROM page_polls WHERE pdf_id = ?`).run(id);
-  db.prepare(`DELETE FROM pages WHERE pdf_id = ?`).run(id);
+  for (const tb of ['page_polls', 'page_comments', 'page_drawings', 'pages']) {
+    db.prepare(`DELETE FROM ${tb} WHERE pdf_id = ?`).run(id);
+  }
   db.prepare(`DELETE FROM pdfs WHERE id = ?`).run(id);
   db.prepare(
     `INSERT INTO pdfs (id,title,original_filename,status,page_count,require_script_confirmation,created_at,updated_at)
@@ -30,51 +31,83 @@ function seed(id: string, pageCount: number, pollPage: number): void {
        VALUES (?,?,?,?,'audio_ready',?,?)`,
     ).run(id, i, `u${i}`, `pages/u${i}.jpg`, t, t);
   }
-  db.prepare(
-    `INSERT INTO page_polls (pdf_id,page_number,question,options_json,created_at,updated_at)
-     VALUES (?,?,?,?,?,?)`,
-  ).run(id, pollPage, 'Q', '["a","b"]', t, t);
+  db.prepare(`INSERT INTO page_polls (pdf_id,page_number,question,options_json,created_at,updated_at) VALUES (?,?,?,?,?,?)`)
+    .run(id, contentPage, 'Q', '["a","b"]', t, t);
+  db.prepare(`INSERT INTO page_comments (pdf_id,page_number,author,text,created_at) VALUES (?,?,?,?,?)`)
+    .run(id, contentPage, 'me', 'hi', t);
+  db.prepare(`INSERT INTO page_drawings (pdf_id,page_number,drawing_json,updated_at) VALUES (?,?,?,?)`)
+    .run(id, contentPage, '{}', t);
 }
 
-function pollPage(id: string): number | undefined {
-  const row = db.prepare(`SELECT page_number FROM page_polls WHERE pdf_id = ?`).get(id) as { page_number: number } | undefined;
-  return row?.page_number;
+function contentPages(id: string): { poll?: number; comment?: number; drawing?: number } {
+  const get = (tb: string) =>
+    (db.prepare(`SELECT page_number FROM ${tb} WHERE pdf_id = ?`).get(id) as { page_number: number } | undefined)?.page_number;
+  return { poll: get('page_polls'), comment: get('page_comments'), drawing: get('page_drawings') };
 }
 
 function cleanup(id: string): void {
-  db.prepare(`DELETE FROM page_polls WHERE pdf_id = ?`).run(id);
-  db.prepare(`DELETE FROM pages WHERE pdf_id = ?`).run(id);
+  for (const tb of ['page_polls', 'page_comments', 'page_drawings', 'pages']) {
+    db.prepare(`DELETE FROM ${tb} WHERE pdf_id = ?`).run(id);
+  }
   db.prepare(`DELETE FROM pdfs WHERE id = ?`).run(id);
 }
 
-// Regression: deleting a page used to throw a FOREIGN KEY error (500) when a
-// later page had a poll, and left polls misaligned, because page renumbering did
-// not move the child page_polls rows. The delete path now defers FK checks and
-// shifts child rows in lockstep.
-test('DELETE page realigns polls on later pages (no FK error)', async () => {
-  const id = `poll-del-${Date.now()}`;
-  seed(id, 4, 3); // poll on page 3
+// Regression: renumbering pages must realign per-page content (polls/comments/
+// drawings) and must not throw FK errors (page_polls used to 500 on delete).
+test('DELETE page realigns polls/comments/drawings on later pages', async () => {
+  const id = `content-del-${Date.now()}`;
+  seed(id, 4, 3); // content on page 3
   const app = await buildApp();
   try {
     const res = await app.inject({ method: 'DELETE', url: `/api/pdfs/${id}/pages/2` });
     assert.equal(res.statusCode, 200, `expected 200 but got ${res.statusCode}: ${res.body.slice(0, 200)}`);
-    // page 3 became page 2; its poll must follow.
-    assert.equal(pollPage(id), 2);
+    // page 3 became page 2; its poll/comment/drawing must follow.
+    assert.deepEqual(contentPages(id), { poll: 2, comment: 2, drawing: 2 });
   } finally {
     cleanup(id);
     await app.close();
   }
 });
 
-test('INSERT page realigns polls on later pages (no FK error)', async () => {
-  const id = `poll-ins-${Date.now()}`;
-  seed(id, 3, 3); // poll on page 3
+test('DELETE removes the deleted page\'s comments and drawings (no reattach)', async () => {
+  const id = `content-del2-${Date.now()}`;
+  seed(id, 3, 2); // content on page 2, which we delete
+  const app = await buildApp();
+  try {
+    const res = await app.inject({ method: 'DELETE', url: `/api/pdfs/${id}/pages/2` });
+    assert.equal(res.statusCode, 200);
+    // The deleted page's content is gone, not reattached to another page.
+    assert.deepEqual(contentPages(id), { poll: undefined, comment: undefined, drawing: undefined });
+  } finally {
+    cleanup(id);
+    await app.close();
+  }
+});
+
+test('INSERT page realigns polls/comments/drawings on later pages', async () => {
+  const id = `content-ins-${Date.now()}`;
+  seed(id, 3, 3); // content on page 3
   const app = await buildApp();
   try {
     const res = await app.inject({ method: 'POST', url: `/api/pdfs/${id}/pages`, payload: { after_page_number: 1 } });
     assert.equal(res.statusCode, 201, `expected 201 but got ${res.statusCode}: ${res.body.slice(0, 200)}`);
-    // page 3 shifted to page 4; its poll must follow.
-    assert.equal(pollPage(id), 4);
+    assert.deepEqual(contentPages(id), { poll: 4, comment: 4, drawing: 4 });
+  } finally {
+    cleanup(id);
+    await app.close();
+  }
+});
+
+test('MOVE page realigns polls/comments/drawings with the moved page', async () => {
+  const id = `content-move-${Date.now()}`;
+  seed(id, 3, 3); // content on page 3
+  const app = await buildApp();
+  try {
+    // move page 3 to position 1
+    const res = await app.inject({ method: 'POST', url: `/api/pdfs/${id}/pages/move`, payload: { from_page_number: 3, to_page_number: 1 } });
+    assert.equal(res.statusCode, 200, `expected 200 but got ${res.statusCode}: ${res.body.slice(0, 200)}`);
+    // page 3's content follows it to page 1.
+    assert.deepEqual(contentPages(id), { poll: 1, comment: 1, drawing: 1 });
   } finally {
     cleanup(id);
     await app.close();

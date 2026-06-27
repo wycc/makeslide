@@ -408,27 +408,35 @@ export function detectAudioMimeFromBuffer(buf: Buffer): 'audio/mpeg' | 'audio/wa
 }
 
 /**
- * Shift page_number by `delta` in all child tables that reference pages.
- * Must be called inside the same transaction as the corresponding pages UPDATE.
- * Use `filter` to limit which pages are shifted:
- *   - 'all'         → every page of this PDF
- *   - { gt: N }     → only page_number > N
- *   - { gtTmp: N }  → only page_number > N (use after the first +100000 temp shift)
+ * Per-page user content that should follow its page when pages are renumbered
+ * (inserted / deleted / moved): interactive polls, comments and hand-drawn
+ * annotations. Analytics/observability tables (watch progress, artifact timings/
+ * events) are intentionally NOT realigned — they record what happened at the
+ * time. Embeddings are keyed by page_uid, so they are unaffected by renumbering.
+ */
+const PAGE_CONTENT_CHILD_TABLES = ['page_polls', 'page_comments', 'page_drawings'] as const;
+
+/**
+ * Shift page_number by `delta` in the per-page content child tables, so they
+ * stay aligned with their page across renumbering. Must be called inside the
+ * same transaction as the corresponding pages UPDATE (with foreign_keys deferred
+ * where applicable). Use `filter` to limit which pages are shifted:
+ *   - 'all'      → every page of this PDF
+ *   - { gt: N }  → only page_number > N
  */
 export function shiftChildPageNumbers(
   pdfId: string,
   delta: number,
   filter: 'all' | { gt: number },
 ): void {
-  if (filter === 'all') {
-    db.prepare(`UPDATE page_polls SET page_number = page_number + ? WHERE pdf_id = ?`).run(
-      delta,
-      pdfId,
-    );
-  } else {
-    db.prepare(
-      `UPDATE page_polls SET page_number = page_number + ? WHERE pdf_id = ? AND page_number > ?`,
-    ).run(delta, pdfId, filter.gt);
+  for (const table of PAGE_CONTENT_CHILD_TABLES) {
+    if (filter === 'all') {
+      db.prepare(`UPDATE ${table} SET page_number = page_number + ? WHERE pdf_id = ?`).run(delta, pdfId);
+    } else {
+      db.prepare(
+        `UPDATE ${table} SET page_number = page_number + ? WHERE pdf_id = ? AND page_number > ?`,
+      ).run(delta, pdfId, filter.gt);
+    }
   }
 }
 
