@@ -18,7 +18,9 @@
 - [x] 抽出共用 `sessionSub` 工具（大量去重 / 可測）：`sessionSub(request)`（解 session cookie 取 account sub）在 **40 個** PDF 路由檔逐字重複定義（38 同名 + 2 個 `sessionSubFromRequest` 同 body）。抽成共用並補測試。
   - 修改說明（2026-06-27）：在 `backend/src/routes/auth.ts` 新增 `export function sessionSub(request)`（與既有 `decodeSession`/`parseCookies` 同模組）。以腳本移除 38 個 `sessionSub` 同名定義並改 `import { sessionSub } from '../auth'`（其中 admin.ts 保留其 `SESSION_COOKIE, clearCookie` 匯入）；同時清理 26 個因移除而未使用的 `FastifyRequest` type import。2 個 `sessionSubFromRequest`（命名不同）暫不動。新增 `session-sub.test.ts` 4 組測試（無 cookie/竄改/有效/無關 cookie）。backend `tsc --noEmit` 通過；抽查約 14 個路由測試檔回歸全通過（detail-permission 92、quizzes 24、quality/h5p/report-summary…）；殘留本地定義 0。分支 `refactor/shared-session-sub`，已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 26 個完成項目（26/100，未達上限）。
-- [ ] 收斂 2 個 `sessionSubFromRequest` 同 body 函式：與共用 `sessionSub` 實作相同但命名不同，評估改用共用版本或統一命名。
+- [x] 收斂 2 個 `sessionSubFromRequest` 同 body 函式：與共用 `sessionSub` 實作相同但命名不同，評估改用共用版本或統一命名。
+  - 修改說明（2026-06-27）：`export.ts`、`subtitles.ts` 的 `sessionSubFromRequest`（與共用 `sessionSub` 實作完全相同）移除本地定義、4 處呼叫改用 `import { sessionSub } from '../auth'`，並清掉因此未使用的 `decodeSession`/`parseCookies`/`FastifyRequest` import。backend `tsc --noEmit` 通過；`subtitles`/`export-import-zip-sources`/`batch-export`/`export-zip-cjk-filename` 共 10/10 回歸通過；全 repo 已無 `sessionSubFromRequest`。分支 `refactor/collapse-session-sub-from-request`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 27 個完成項目（27/100，未達上限）。
 
 ## 後端去重 + 發現既有失敗（第一四三輪，2026-06-27）
 
@@ -106,6 +108,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （後端）收斂 2 個 `sessionSubFromRequest`（export/subtitles）改用共用 `sessionSub`，清理未用 import；10 測試回歸通過；全 repo 無殘留（計數 27/100） | refactor/collapse-session-sub-from-request（已 merge） |
 | 2026-06-27 | （後端，大量去重）抽出共用 `sessionSub` 至 auth.ts：移除 38 檔逐字重複定義 + 清理 26 檔未使用 FastifyRequest import；補 4 測試；typecheck 通過、14 路由測試回歸通過（計數 26/100） | refactor/shared-session-sub（已 merge） |
 | 2026-06-27 | （修既有失敗）`quizzes.test.ts` copy-to：診斷確認端點正常回 201，400 是測試送 `content-type: application/json` 卻無 body 觸發 Fastify body parser；改 3 請求為只帶 cookie；24/24 通過（計數 25/100） | fix/quizzes-copyto-test-headers（已 merge） |
 | 2026-06-27 | （修既有失敗）`notes-txt.test.ts`：fixture 兩處塞 `page_notes = NULL` 違反 NOT NULL，改為 `''`；5/5 通過（計數 24/100）。quizzes copy-to 400 仍待重現除錯 | fix/notes-txt-test-page-notes-not-null（已 merge） |

@@ -8687,3 +8687,15 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **接入**：以腳本移除 38 個檔案的本地 `sessionSub` 定義，改從 `../auth` import。其中 `admin.ts` 原本就從 `../auth` 匯入 `SESSION_COOKIE`/`clearCookie`，合併保留。移除後有 26 個檔案的 `FastifyRequest` 型別 import 變成未使用，一併從 `import type { FastifyInstance, FastifyRequest } from 'fastify'` 清掉 `FastifyRequest`。2 個命名不同的 `sessionSubFromRequest` 暫不更動（已列入 TODO 後續收斂）。
 - **測試**：新增 `session-sub.test.ts`（4 案例：無 cookie → null、竄改的 token → null、有效 session → sub、無關 cookie → null）。
 - **驗證**：backend `tsc --noEmit` 通過；殘留本地定義 0；抽查約 14 個路由測試檔回歸（含 detail-permission 92、quizzes 24）全數通過。以 `scripts/run-tests.sh backend` 執行。
+
+## 收斂 sessionSubFromRequest 至共用 sessionSub（2026-06-27）
+
+### 功能目的
+上一輪把 38 個同名的 `sessionSub` 收斂到 `auth.ts`，但還有 2 個檔案（`export.ts`、`subtitles.ts`）用的是命名不同、實作完全相同的 `sessionSubFromRequest`。本項把這兩個也接到共用函式，讓「從 request 取登入 sub」在整個後端只有一個實作。
+
+### 使用方式
+此為後端內部重構，行為不變。
+
+### 技術細節
+- **接入**：移除 `export.ts`、`subtitles.ts` 的本地 `sessionSubFromRequest` 定義，4 處呼叫改為共用的 `sessionSub(request)`（`import { sessionSub } from '../auth'`），並清掉因此不再使用的 `decodeSession`/`parseCookies`/`FastifyRequest` import。
+- **驗證**：backend `tsc --noEmit` 通過；`subtitles`、`export-import-zip-sources`、`batch-export`、`export-zip-cjk-filename` 共 10/10 回歸通過；全 repo 已無 `sessionSubFromRequest`。以 `scripts/run-tests.sh backend` 執行。
