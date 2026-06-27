@@ -6,6 +6,7 @@ import { sessionSub } from '../auth';
 import { errorResponse, IdParamSchema } from './shared';
 import { csvEscape, withCsvBom } from './csv';
 import { csvDownloadFilename, buildContentDisposition } from './downloadFilename';
+import { parsePollOptions } from './pollOptions';
 
 interface PollRow {
   id: number;
@@ -44,7 +45,7 @@ export async function registerPollResultsCsvRoutes(app: FastifyInstance): Promis
     ];
 
     for (const poll of polls) {
-      const options = JSON.parse(poll.options_json) as string[];
+      const options = parsePollOptions(poll.options_json);
       const voteCounts = db
         .prepare(
           `SELECT option_index, COUNT(*) AS vote_count
