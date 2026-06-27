@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第一七三輪已完成 **52/100**，未達上限。
+- 最新進度：截至第一七四輪已完成 **53/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -34,6 +34,14 @@
   - 資料修復（2026-06-27）：以現行 gpt-5.5 設定，透過真正的持久化路徑 `generateAnimationForPage` 重產第 42、43 頁焦點動畫並寫回 `animation.json` + `pages` 資料表。重產後 distinct xPct 由 1（全 x10）變為 4–5、效果數由 13/6 收斂為 8/5、方框位置貼合實際版面。第 44 頁為 `static-image`、本就無動畫規格（非壞殘留），未變動。
   - 程式碼修復（分支 `fix/autofocus-image-provider-comment`，已 merge）：修正 [animationAutoFocus.ts](backend/src/services/animationAutoFocus.ts) `generateAiFocusEffects` docstring 中**已過時且會誤導排查的註解**——原稱圖片「only actually used when `LLM_PROVIDER=openai`」（因 Gemini 會剝除非文字內容）。此說法已不正確：`buildGeminiContents` 會把 data URL 轉成 `inlineData`、OpenAI 相容 provider（openai/cgu-air/openrouter）直接透傳 `image_url`，故圖片在**所有現行 provider 都會送達模型**；改寫為依實際逐 provider 行為描述，並點明「結果看似純文字（方框機械排成一欄、無視版面）代表模型/閘道未套用 vision，而非本程式碼把圖片丟掉」。僅改註解，後端 `tsc --noEmit` 通過。
   - 本項為使用者回報 bug 修復，**不計入** 100 輪計數。
+
+## 投票選項 JSON 防護解析收斂（第一七四輪，2026-06-27）
+
+延續匯出/投票路由盤點，發現 `page_polls.options_json` 有三處解析、行為不一致：`rowToPoll` 已穩健（try/catch + 過濾），但投票結果 CSV 匯出與投票端點為**無防護** `JSON.parse(...) as string[]`，單筆損壞資料會 500。
+
+- [x] 抽出共用 `parsePollOptions(optionsJson)`（去重 + 修無防護解析致 500）：非合法 JSON／非陣列回 `[]`、過濾非字串，三處（`rowToPoll`／`detail.ts` 投票端點／`poll-results-csv.ts`）統一改用。
+  - 修改說明（2026-06-27）：新增 `backend/src/routes/pdfs/pollOptions.ts` 的 `parsePollOptions`。`rowToPoll` 移除重複防護邏輯改用之；`detail.ts` 投票端點與 `poll-results-csv.ts` 兩處無防護解析改用之（損壞時投票端點 `option_index` 驗證回 400 而非 500、CSV 該段不輸出列但整份匯出仍成功）。新增 `poll-options.test.ts`（5 組：合法陣列、損壞 JSON 回 []、非陣列回 []、過濾非字串、null/undefined）。後端 `tsc --noEmit` 通過；poll-options／poll-results-csv／detail-permission(92)／figures-polls-permission／page-poll-realign／generate-poll 共 100+ 測試回歸全通過。分支 `refactor/parse-poll-options`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 53 個完成項目（53/100，未達上限）。
 
 ## CSV 下載檔名邏輯收斂為共用純函式（第一七三輪，2026-06-27）
 
@@ -293,6 +301,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （後端，去重+健壯性修復）抽出共用 `parsePollOptions`：`page_polls.options_json` 兩處無防護 `JSON.parse(...) as string[]`（投票結果 CSV、投票端點）單筆損壞會 500，統一改用穩健解析（非法/非陣列回 []、過濾非字串）；`rowToPoll` 去重；補 5 測試，poll 路由共 100+ 測試回歸通過（計數 53/100） | refactor/parse-poll-options（已 merge） |
 | 2026-06-27 | （後端，去重）抽出共用 `csvDownloadFilename`：收斂 6 個匯出/報告路由（quiz-results/poll-results/comments/report 學生·逐頁·題目）內聯的「標題優先、否則退回 ID」CSV 檔名邏輯；report 3 處順帶消除重複 `safeDownloadBaseName` 呼叫；補 4 測試，37 測試回歸通過、檔名輸出不變（計數 52/100） | refactor/csv-download-filename（已 merge） |
 | 2026-06-27 | （§7.1 後端聚合子項）課後報告摘要「最難題目」排序抽出為純函式：`reportMetrics.ts` 新增 `selectHardestQuestions`（過濾未作答→正確率升冪、並列以答錯數多者優先→取前 5→補 wrong_rate），`report/summary` 改用之（行為等價、API 不變）；補 4 測試，report-metrics/report-question-stats/report-summary 共 21 測試回歸通過（計數 51/100） | refactor/select-hardest-questions（已 merge） |
 | 2026-06-27 | （使用者回報 bug，不計數）Uhga6bY0Bm 42/43 頁焦點動畫紅框位置全錯：查證確認現行程式碼正常（圖片有送、cgu-air gpt-5.5 支援 vision、真實路徑重跑 4 次皆產生貼合版面方框），壞規格是先前 add-pages 失敗那批補產動畫的舊殘留（當時圖片未被模型使用）。資料修復：以 gpt-5.5 透過 `generateAnimationForPage` 重產 42/43 頁焦點動畫寫回 animation.json + DB（distinct xPct 由 1→4–5、貼合版面）；44 頁本就 static-image 未動。程式碼：修正 `generateAiFocusEffects` docstring 中「圖片只在 LLM_PROVIDER=openai 才會用」之過時誤導註解，改述各 provider 實際圖片處理行為，typecheck 通過 | fix/autofocus-image-provider-comment（已 merge）＋資料修復 | 
