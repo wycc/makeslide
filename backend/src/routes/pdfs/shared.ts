@@ -323,6 +323,8 @@ export const UpdateSystemAiSettingsBodySchema = z.object({
   gemini_llm_model: z.string().optional(),
   cgu_air_llm_model: z.string().optional(),
   openrouter_llm_model: z.string().optional(),
+  cgu_air_image_model: z.string().optional(),
+  openrouter_image_model: z.string().optional(),
   openai_tts_model: z.string().optional(),
   gemini_tts_model: z.string().optional(),
   gemini_tts_speaker1: z.string().optional(),

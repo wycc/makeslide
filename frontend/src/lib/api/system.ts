@@ -58,6 +58,8 @@ export interface SystemAiSettings {
   gemini_llm_model: string;
   cgu_air_llm_model?: string;
   openrouter_llm_model?: string;
+  cgu_air_image_model?: string;
+  openrouter_image_model?: string;
   openai_tts_model: string;
   gemini_tts_model: string;
   gemini_tts_speaker1?: string;
@@ -100,6 +102,8 @@ export interface UpdateSystemAiSettingsPayload {
   gemini_llm_model?: string;
   cgu_air_llm_model?: string;
   openrouter_llm_model?: string;
+  cgu_air_image_model?: string;
+  openrouter_image_model?: string;
   openai_tts_model?: string;
   gemini_tts_model?: string;
   gemini_tts_speaker1?: string;

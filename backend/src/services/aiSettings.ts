@@ -54,6 +54,14 @@ export interface PerAccountAiSettings {
   geminiLlmModel: string;
   cguAirLlmModel: string;
   openrouterLlmModel: string;
+  /**
+   * Image-generation model names for the OpenAI-compatible providers. Image generation uses
+   * the OpenAI Images API shape; when the account routes images through a non-OpenAI provider
+   * (see getImageClient), that provider needs its own image model name (OpenAI's `gpt-image-2`
+   * is unlikely to exist there). Empty = fall back to the OpenAI image model name.
+   */
+  cguAirImageModel: string;
+  openrouterImageModel: string;
   openaiTtsModel: string;
   geminiTtsModel: string;
   geminiTtsSpeaker1: string;
@@ -196,6 +204,8 @@ function basePerAccountSettings(): PerAccountAiSettings {
     geminiLlmModel: config.geminiLlmModel,
     cguAirLlmModel: config.cguAirLlmModel,
     openrouterLlmModel: config.openrouterLlmModel,
+    cguAirImageModel: process.env.CGU_AIR_IMAGE_MODEL?.trim() || '',
+    openrouterImageModel: process.env.OPENROUTER_IMAGE_MODEL?.trim() || '',
     openaiTtsModel: config.openaiTtsModel,
     geminiTtsModel: config.geminiTtsModel,
     geminiTtsSpeaker1: process.env.GEMINI_TTS_SPEAKER1?.trim() || '',
@@ -243,6 +253,8 @@ function loadPerAccountOverrides(accountId: string): Partial<PerAccountAiSetting
     geminiLlmModel: values.GEMINI_LLM_MODEL,
     cguAirLlmModel: values.CGU_AIR_LLM_MODEL,
     openrouterLlmModel: values.OPENROUTER_LLM_MODEL,
+    cguAirImageModel: values.CGU_AIR_IMAGE_MODEL,
+    openrouterImageModel: values.OPENROUTER_IMAGE_MODEL,
     openaiTtsModel: values.OPENAI_TTS_MODEL,
     geminiTtsModel: values.GEMINI_TTS_MODEL,
     geminiTtsSpeaker1: values.GEMINI_TTS_SPEAKER1,
@@ -308,6 +320,8 @@ const PER_ACCOUNT_ENV_PAIRS: Array<[string, keyof PerAccountAiSettings]> = [
   ['GEMINI_LLM_MODEL', 'geminiLlmModel'],
   ['CGU_AIR_LLM_MODEL', 'cguAirLlmModel'],
   ['OPENROUTER_LLM_MODEL', 'openrouterLlmModel'],
+  ['CGU_AIR_IMAGE_MODEL', 'cguAirImageModel'],
+  ['OPENROUTER_IMAGE_MODEL', 'openrouterImageModel'],
   ['OPENAI_TTS_MODEL', 'openaiTtsModel'],
   ['GEMINI_TTS_MODEL', 'geminiTtsModel'],
   ['GEMINI_TTS_SPEAKER1', 'geminiTtsSpeaker1'],

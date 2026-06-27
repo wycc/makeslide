@@ -82,6 +82,7 @@ export default function SettingsPage() {
   const [openaiLlmModel, setOpenaiLlmModel] = useState('gpt-4o-mini');
   const [geminiLlmModel, setGeminiLlmModel] = useState('gemini-2.0-flash');
   const [cguAirLlmModel, setCguAirLlmModel] = useState('gpt-4o-mini');
+  const [cguAirImageModel, setCguAirImageModel] = useState('');
   const [openrouterLlmModel, setOpenrouterLlmModel] = useState('openai/gpt-4o-mini');
   const [openaiTtsModel, setOpenaiTtsModel] = useState('gpt-4o-mini-tts');
   const [geminiTtsModel, setGeminiTtsModel] = useState('gemini-2.5-flash-preview-tts');
@@ -167,6 +168,7 @@ export default function SettingsPage() {
       setOpenaiLlmModel(s.openai_llm_model);
       setGeminiLlmModel(s.gemini_llm_model);
       setCguAirLlmModel(s.cgu_air_llm_model ?? 'gpt-4o-mini');
+      setCguAirImageModel(s.cgu_air_image_model ?? '');
       setOpenrouterLlmModel(s.openrouter_llm_model ?? 'openai/gpt-4o-mini');
       setOpenaiTtsModel(s.openai_tts_model);
       setGeminiTtsModel(s.gemini_tts_model);
@@ -275,6 +277,7 @@ export default function SettingsPage() {
         openai_llm_model: openaiLlmModel.trim(),
         gemini_llm_model: geminiLlmModel.trim(),
         cgu_air_llm_model: cguAirLlmModel.trim(),
+        cgu_air_image_model: cguAirImageModel.trim(),
         openrouter_llm_model: openrouterLlmModel.trim(),
         openai_tts_model: openaiTtsModel.trim(),
         gemini_tts_model: geminiTtsModel.trim(),
@@ -331,6 +334,7 @@ export default function SettingsPage() {
     cguAirApiKey,
     cguAirBaseUrl,
     cguAirLlmModel,
+    cguAirImageModel,
     openrouterApiKey,
     openrouterBaseUrl,
     openrouterLlmModel,
@@ -935,6 +939,7 @@ export default function SettingsPage() {
                   <label className="block text-sm text-text">OpenAI LLM Model<input value={openaiLlmModel} onChange={(e) => setOpenaiLlmModel(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" /></label>
                   <label className="block text-sm text-text">Gemini LLM Model<input value={geminiLlmModel} onChange={(e) => setGeminiLlmModel(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" /></label>
                   <label className="block text-sm text-text">CGU Air LLM Model<input value={cguAirLlmModel} onChange={(e) => setCguAirLlmModel(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" /></label>
+                  <label className="block text-sm text-text">{t('settings.cguAirImageModelLabel')}<input value={cguAirImageModel} onChange={(e) => setCguAirImageModel(e.target.value)} placeholder={t('settings.cguAirImageModelPlaceholder')} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" /><span className="mt-1 block text-xs text-muted">{t('settings.cguAirImageModelHint')}</span></label>
                   <label className="block text-sm text-text">OpenRouter LLM Model<input value={openrouterLlmModel} onChange={(e) => setOpenrouterLlmModel(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" /></label>
                   <label className="block text-sm text-text">OpenAI TTS Model<input value={openaiTtsModel} onChange={(e) => setOpenaiTtsModel(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" /></label>
                   <label className="block text-sm text-text">Gemini TTS Model<input value={geminiTtsModel} onChange={(e) => setGeminiTtsModel(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" /></label>

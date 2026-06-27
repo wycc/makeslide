@@ -7,7 +7,7 @@ import { nanoid } from 'nanoid';
 import { config } from '../config';
 import { db } from '../db';
 import { logger } from '../logger';
-import { getOpenAIClient } from '../services/openai';
+import { getImageClient } from '../services/openai';
 import { accountIdFromOwnerSub, currentAccountId, runWithAccountId } from '../services/accountContext';
 import { getEnabledSkillPrompts } from '../services/skills';
 import { setLlmUsageContext } from '../services/llmUsage';
@@ -1264,7 +1264,7 @@ async function runRegenerateImages(
       ? config.openaiImageTimeoutMsHighQuality
       : config.openaiImageTimeoutMs;
 
-  const client = getOpenAIClient();
+  const { client, model: imageModel } = getImageClient();
   for (const p of pageRows) {
     if (shouldAbort()) {
       throw makeCancelledError();
@@ -1353,7 +1353,7 @@ async function runRegenerateImages(
       () =>
         editInputs.length > 0
           ? client.images.edit({
-              model: config.openaiImageModel,
+              model: imageModel,
               image: editInputs.length === 1 ? editInputs[0]! : editInputs,
               // With a real base image use the "edit this slide" template; with only figure
               // references (no base) the base-image-oriented edit template doesn't apply, so
@@ -1365,7 +1365,7 @@ async function runRegenerateImages(
               timeout: imageTimeoutMs,
             })
           : client.images.generate({
-              model: config.openaiImageModel,
+              model: imageModel,
               prompt: basePrompt,
               size: '1536x1024',
               quality: 'low',

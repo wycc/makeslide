@@ -1,5 +1,42 @@
 # MakeSlide 功能說明
 
+## 圖片生成跟隨所選的 AI 供應商（不再硬綁 OpenAI）
+
+### 目的
+
+過去無論帳號在設定中選了哪個 LLM 供應商，**所有圖片生成都固定送到 OpenAI**（用 `config.openaiImageModel`、
+預設的 OpenAI client）。於是當使用者把 LLM 選成 CGU Air、又沒有設定有效的 OpenAI 金鑰時，產圖／重生
+就會以一個無效的 OpenAI 金鑰呼叫而得到 `401 Incorrect API key`——明明選的是 CGU Air，卻冒出 OpenAI 的
+錯誤，令人困惑。
+
+### 變更內容
+
+- 新增 `getImageClient()`：依帳號目前選的供應商（`llmProvider`）決定圖片要用哪個 OpenAI 相容 client 與
+  影像模型；供應商若是無法處理 Images API 的 Gemini，則回退 OpenAI。
+- 新增 per-provider 影像模型設定 `cguAirImageModel`／`openrouterImageModel`（OpenAI 仍用既有的
+  `OPENAI_IMAGE_MODEL`）。留空時回退為 OpenAI 影像模型名稱。可在設定頁或 `settings.env`
+  （`CGU_AIR_IMAGE_MODEL=…`）設定。
+- 四個產圖點全部改用 `getImageClient()`：初次產圖（`renderTextPagesWithLlm`）、批次「重生」圖檔步驟、
+  單頁 `regenerate-image`、單頁 `inpaint-image`。
+- 設定頁新增「CGU Air 圖片模型」欄位與說明（中英 i18n）。
+
+### 使用方式
+
+在設定頁把 **LLM 供應商**選為 CGU Air 後，圖片生成／重生會自動改用 CGU Air 的金鑰與 base URL；於
+新欄位「CGU Air 圖片模型」填入 CGU Air 端的影像生成模型名稱即可。OpenAI 使用者的行為完全不變。
+
+### 實作備註
+
+`getImageClient(accountId)` 回傳 `{ client, model, provider }`；`provider = llmProvider === 'gemini' ? 'openai' :
+llmProvider`，`model` 由 `providerImageModel()` 解析（cgu-air/openrouter 取各自影像模型、空值回退
+`config.openaiImageModel`）。設定接線涵蓋 `aiSettings`（型別／預設／env 對應）、settings API（admin.ts +
+shared.ts schema）、前端 `system.ts` 型別與 `SettingsPage` 欄位。新增 `image-client-provider.test.ts`
+（cgu-air＋模型、空值回退、openai、gemini 回退共 4 例）。前後端 `tsc` 通過，regenerate-image／
+figure-reference 回歸通過。
+
+> 這是 best-effort 路由：實際能否成功取決於 CGU Air 是否提供 OpenAI 相容的 `/images/generations`、
+> `/images/edits` 端點；若不支援，呼叫會回傳 CGU Air 自己的錯誤，而非誤導性的 OpenAI 401。
+
 ## 重新產生圖片時，即使原圖不存在也能進行（改走文字→圖生成）
 
 ### 目的

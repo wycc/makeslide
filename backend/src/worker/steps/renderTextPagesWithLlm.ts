@@ -3,7 +3,7 @@ import path from 'node:path';
 import { coverImagePath, pageImagePath, pageTextPath, pagesDir, pdfDir, sourcePdfPath } from '../../services/storage';
 import { commitPresentationFiles } from '../../services/presentationGit';
 import { generateCoverThumbnail, generatePageThumbnail, ensurePageThumbnail } from '../../services/thumbnails';
-import { getOpenAIClient } from '../../services/openai';
+import { getImageClient } from '../../services/openai';
 import { logger } from '../../logger';
 import { config } from '../../config';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
@@ -153,7 +153,7 @@ async function buildSourcePdfDataUrl(pdfId: string): Promise<string | null> {
 export async function renderTextPagesWithLlm(
   opts: RenderTextPagesWithLlmOptions,
 ): Promise<RenderTextPagesWithLlmResult> {
-  const client = getOpenAIClient();
+  const { client, model: imageModel } = getImageClient();
   const pageCount = opts.totalPageCount ?? opts.pages.length;
   const pagePaths: string[] = [];
   const pageUids: string[] = [];
@@ -241,7 +241,7 @@ export async function renderTextPagesWithLlm(
       ? `${prompt}\n\n[Context]\nA source PDF exists for this slide deck. Keep generated visuals semantically aligned with the provided slide text.`
       : prompt;
 
-    savePageGenerationPrompt(opts.pdfId, p.pageNumber, 'image', promptWithSourceHint, config.openaiImageModel);
+    savePageGenerationPrompt(opts.pdfId, p.pageNumber, 'image', promptWithSourceHint, imageModel);
 
     let image;
     let finalAttempt = 0;
@@ -252,7 +252,7 @@ export async function renderTextPagesWithLlm(
       try {
         if (figureRefFiles.length > 0) {
           image = await client.images.edit({
-            model: config.openaiImageModel,
+            model: imageModel,
             image: figureRefFiles.length === 1 ? figureRefFiles[0]! : figureRefFiles,
             prompt: promptWithSourceHint,
             size: '1536x1024',
@@ -260,7 +260,7 @@ export async function renderTextPagesWithLlm(
           } as never, { timeout: timeoutMs });
         } else {
           const imagePayload: Record<string, unknown> = {
-            model: config.openaiImageModel,
+            model: imageModel,
             prompt: promptWithSourceHint,
             size: '1536x1024',
             quality: config.openaiImageQuality,
@@ -291,7 +291,7 @@ export async function renderTextPagesWithLlm(
             pageCount,
             attempt,
             maxAttempts: IMAGE_GENERATION_MAX_ATTEMPTS,
-            model: config.openaiImageModel,
+            model: imageModel,
             quality: config.openaiImageQuality,
             promptLength: prompt.length,
             timeoutMs,
@@ -312,7 +312,7 @@ export async function renderTextPagesWithLlm(
             reused: false,
             status: 'failed',
             attempt,
-            model: config.openaiImageModel,
+            model: imageModel,
             metadata: {
               source_type: 'text',
               precision: 'step_timing',
@@ -341,7 +341,7 @@ export async function renderTextPagesWithLlm(
           pdfId: opts.pdfId,
           pageNumber: p.pageNumber,
           pageCount,
-          model: config.openaiImageModel,
+          model: imageModel,
           quality: config.openaiImageQuality,
           promptLength: prompt.length,
           timeoutMs,
@@ -358,7 +358,7 @@ export async function renderTextPagesWithLlm(
         reused: false,
         status: 'failed',
         attempt: finalAttempt,
-        model: config.openaiImageModel,
+        model: imageModel,
         promptLength: prompt.length,
         timeoutMs,
         error: lastErrorInfo,
@@ -386,7 +386,7 @@ export async function renderTextPagesWithLlm(
           pdfId: opts.pdfId,
           pageNumber: p.pageNumber,
           pageCount,
-          model: config.openaiImageModel,
+          model: imageModel,
           quality: config.openaiImageQuality,
           promptLength: prompt.length,
           timeoutMs,
@@ -403,7 +403,7 @@ export async function renderTextPagesWithLlm(
         reused: false,
         status: 'failed',
         attempt: finalAttempt,
-        model: config.openaiImageModel,
+        model: imageModel,
         promptLength: prompt.length,
         timeoutMs,
         error: lastErrorInfo,
@@ -439,7 +439,7 @@ export async function renderTextPagesWithLlm(
           pageNumber: p.pageNumber,
           pageCount,
           latencyMs,
-          model: config.openaiImageModel,
+          model: imageModel,
           quality: config.openaiImageQuality,
           attempt: finalAttempt,
           promptLength: prompt.length,
@@ -455,7 +455,7 @@ export async function renderTextPagesWithLlm(
       reused: false,
       status: 'succeeded',
       attempt: finalAttempt,
-      model: config.openaiImageModel,
+      model: imageModel,
       promptLength: prompt.length,
       timeoutMs,
       metadata: {
