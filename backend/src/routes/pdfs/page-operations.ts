@@ -326,6 +326,10 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     const now = nowIso();
     const pageUid = nanoid(10);
     const tx = db.transaction(() => {
+      // Defer FK checks to commit: we renumber pages and their child rows
+      // (page_polls) in separate statements, which would otherwise transiently
+      // orphan child rows mid-transaction and trip foreign_keys=ON.
+      db.pragma('defer_foreign_keys = ON');
       db.prepare(
         `UPDATE pages
             SET page_number = page_number + 100000
@@ -445,6 +449,9 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
 
     const now = nowIso();
     const tx = db.transaction(() => {
+      // Defer FK checks to commit so renumbering pages and their child rows in
+      // separate statements doesn't transiently orphan child rows.
+      db.pragma('defer_foreign_keys = ON');
       // Step 1: shift all pages (and child tables) to temp range to avoid pk collisions
       db.prepare(`UPDATE pages SET page_number = page_number + 100000 WHERE pdf_id = ?`).run(id);
       shiftChildPageNumbers(id, 100000, 'all');
@@ -540,25 +547,32 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     ];
 
     const tx = db.transaction(() => {
+      // Defer FK checks to commit: pages and their child rows (page_polls) are
+      // renumbered in separate statements; without this the intermediate state
+      // would orphan child rows and trip foreign_keys=ON (deleting a page that
+      // has polls on later pages used to fail with a FOREIGN KEY error).
+      db.pragma('defer_foreign_keys = ON');
       cancelRunningPageArtifactsForDeletedPage(id, n, now);
       db.prepare(`DELETE FROM pages WHERE pdf_id = ? AND page_number = ?`).run(id, n);
-      // Compact the trailing pages down by one. A direct `page_number - 1` can
-      // transiently violate the UNIQUE(pdf_id, page_number) index because SQLite
-      // applies the bulk UPDATE row by row in an unspecified order (rowids and
-      // page_numbers diverge after earlier inserts/deletes). Shift the affected
-      // pages out of range first, then back at -1 net — the same offset trick the
-      // insert path uses.
+      // Compact the trailing pages (and their child rows) down by one. A direct
+      // `page_number - 1` can transiently violate the UNIQUE(pdf_id, page_number)
+      // index because SQLite applies the bulk UPDATE row by row in an unspecified
+      // order (rowids and page_numbers diverge after earlier inserts/deletes).
+      // Shift the affected pages out of range first, then back at -1 net — the
+      // same offset trick the insert path uses — keeping child rows in lockstep.
       db.prepare(
         `UPDATE pages
             SET page_number = page_number + 100000
           WHERE pdf_id = ? AND page_number > ?`,
       ).run(id, n);
+      shiftChildPageNumbers(id, 100000, { gt: n });
       db.prepare(
         `UPDATE pages
             SET page_number = page_number - 100001,
                 updated_at = ?
           WHERE pdf_id = ? AND page_number > ?`,
       ).run(now, id, n + 100000);
+      shiftChildPageNumbers(id, -100001, { gt: n + 100000 });
       db.prepare(`UPDATE pdfs SET page_count = ?, updated_at = ? WHERE id = ?`).run(newCount, now, id);
     });
 

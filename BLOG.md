@@ -8862,3 +8862,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 ### 技術細節
 - **測試**（`frontend/src/lib/debugLog.test.ts`，3 案例）：旗標為 '1' 時 `debugLog`→`console.info`、`debugWarn`→`console.warn` 且原樣帶入引數；旗標非 '1' 時完全不輸出；`localStorage.getItem` 拋錯時靜默且不向外拋。測試以可還原的方式注入 `console.info/warn` 與 `globalThis.localStorage`，並在 finally 清理，避免污染同進程其他測試。
 - **驗證**：前端 `tsc --noEmit` 通過；3/3；完整前端套件 532/532 全綠。至此前端 lib 中含邏輯的模組皆有測試（僅 `api.ts` 為 HTTP 包裝／re-export 未測）。以 `scripts/run-tests.sh frontend` 執行。
+
+## 修正頁面增/刪/移時投票對齊的 FK bug（2026-06-27）
+
+### 功能目的
+投票（`page_polls`）以外鍵 `(pdf_id, page_number) REFERENCES pages` 綁定到所屬頁面。插入、刪除、搬移頁面時會重新編號 `pages.page_number`，但子表 `page_polls` 必須跟著一起調整、否則投票就會對應到錯的頁、甚至違反外鍵。本項修復一個真實的 production bug：在「某一頁之後有投票」的簡報上刪除頁面，會直接回 500（`FOREIGN KEY constraint failed`）。
+
+### 使用方式
+此為後端修正：對含投票的簡報增/刪/移頁不再失敗，且投票會正確跟著它原本所屬的頁面。
+
+### 技術細節
+- **根因**：`foreign_keys=ON` 下，更新父表 `pages.page_number` 會即時檢查子表參照。delete handler 完全沒有調整 `page_polls`；insert/move 雖呼叫 `shiftChildPageNumbers`，但順序是「先 `UPDATE pages +100000`、再 shift 子表」，在第一步就讓投票變成孤兒參照而立刻觸發 FK 錯誤。實測：第 3 頁有投票時刪第 2 頁 → `FOREIGN KEY constraint failed`。
+- **修正**：三個 renumber 交易（insert/move/delete）開頭加 `db.pragma('defer_foreign_keys = ON')`，把外鍵檢查延到交易 commit 時才做，讓父子表能在交易內分步、安全地一起重排（SQLite 會在交易結束後自動關閉此 pragma）。delete handler 另補上 `shiftChildPageNumbers` 的兩步 lockstep 位移（與 pages 的 `+100000 / -100001` offset 同步），使被刪頁之後各頁的投票正確下移一位。
+- **測試**：新增 `page-poll-realign.test.ts`（刪頁、插頁後投票 page_number 正確對齊且無 FK 錯誤）。
+- **驗證**：backend `tsc --noEmit` 通過；`pages-api`、`page-operations-permission` 共 50 測試回歸通過；完整後端套件 1201/1201 全綠。以 `scripts/run-tests.sh backend` 執行。

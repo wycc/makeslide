@@ -13,6 +13,14 @@
 - [ ] 系統性採用 `mapApiErrorToHumanMessage`：目前約 55 處 catch 區塊直接 `setError(err.message)` 顯示後端原始 message、繞過既有的錯誤訊息映射（前端僅 2 處 `UploadButton`、`ImportTextPage` 使用 mapper）。全面改造屬較大工程，且各 catch 上下文不同、許多後端 message 已是中文（未必都是英文洩漏），逐點需產品判斷顯示風格，故列為待使用者決定。
 - [ ] 把前端測試納入 root `npm test`：目前 root 測試腳本未涵蓋前端 `node:test` 測試。納入涉及 CI 行為變更與 `npm install`（sandbox 無法驗證），列為待使用者決定。
 
+## 修正頁面增刪移的 FK/投票對齊真 bug（第一六一輪，2026-06-27）
+
+延續 round-157 的 page renumber 稽核，發現並修復一個真實 production bug：
+
+- [x] 頁面增/刪/移時 page_polls 未跟著重編號 → `foreign_keys=ON` 下 FK 失敗（500）且投票錯位：`page_polls` 以 FK `(pdf_id, page_number) REFERENCES pages` 關聯，但 delete handler **完全沒有**位移子表；insert/move 雖呼叫 `shiftChildPageNumbers`，卻在「先 `UPDATE pages +100000`、後 shift 子表」的順序下、於子表 shift 前就讓投票變孤兒 → FK 立即失敗。實測：在第 3 頁有投票時刪第 2 頁 → `FOREIGN KEY constraint failed`（刪頁 500）；insert/move 同類。
+  - 修改說明（2026-06-27）：三個 renumber 交易（insert/move/delete）開頭加 `db.pragma('defer_foreign_keys = ON')`（FK 延到 commit 檢查、交易內可安全分步重排父子表，SQLite 於 commit 後自動關閉此 pragma）；delete handler 補上 `shiftChildPageNumbers` 兩步 lockstep 位移（與 pages 的 +100000/-100001 offset 同步），使後續頁的投票正確跟隨（刪第 2 頁後，原第 3 頁→第 2 頁、其投票也→第 2 頁）。新增 `page-poll-realign.test.ts`（2 測試：刪頁/插頁後投票對齊且無 FK error）。backend `tsc --noEmit` 通過；`pages-api`/`page-operations-permission` 50/50 回歸；**完整後端套件 1201/1201 全綠**。分支 `fix/page-renumber-fk-defer-and-poll-shift`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 40 個完成項目（40/100，未達上限）。
+
 ## 規畫輪：補充可執行項目（第一六〇輪，2026-06-27）
 
 前後端測試套件皆全綠；後端權限/分享/身分去重、既有失敗修復、前端 lib 測試覆蓋皆完成。乾淨且低風險的「純函式抽出／補測試」自動 backlog 已實質見底。依 LOOP.md 第 2 條，分析後依 `docs/STATUS_REPORT_2026_06_27.md` §7–§8 與 `docs/FUTURE_ROADMAP.md` 補充以下優先項目。這些多為需 UI／後端整合的功能，**單輪可完成但較難在現有測試框架自動驗證 UI**，部分建議由使用者確認方向後再投入：
@@ -180,6 +188,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （真 bug 修復）頁面增/刪/移時投票（page_polls）未隨頁碼重編號致 FK 500+錯位：三 renumber 交易加 `defer_foreign_keys`、delete 補子表 lockstep 位移；補 2 回歸測試；後端 1201/1201 全綠（計數 40/100） | fix/page-renumber-fk-defer-and-poll-shift（已 merge） |
 | 2026-06-27 | 規畫輪（第一六〇輪）：確認 backlog 見底、品質檢查修正完整無缺口；依 STATUS_REPORT §7–§8 補 5 個優先可執行項目（多需 UI/後端整合，部分待使用者確認方向）。本輪為規畫輪、不計入 100 完成計數（維持 39/100） | master（僅文件） |
 | 2026-06-27 | （前端補測試）`debugLog.ts` 補 3 單元測試（開關/防呆分支）；前端 532/532 全綠（計數 39/100） | test/debug-log（已 merge） |
 | 2026-06-27 | （前端去重）抽出共用 `hasLocalStorage`（recentSearches/commentAuthor）；reviewList 因測試耦合保留；補 3 測試；前端 551/551 全綠（計數 38/100） | refactor/shared-has-local-storage（已 merge） |
