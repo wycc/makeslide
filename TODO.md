@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第一七二輪已完成 **51/100**，未達上限。
+- 最新進度：截至第一七三輪已完成 **52/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -34,6 +34,14 @@
   - 資料修復（2026-06-27）：以現行 gpt-5.5 設定，透過真正的持久化路徑 `generateAnimationForPage` 重產第 42、43 頁焦點動畫並寫回 `animation.json` + `pages` 資料表。重產後 distinct xPct 由 1（全 x10）變為 4–5、效果數由 13/6 收斂為 8/5、方框位置貼合實際版面。第 44 頁為 `static-image`、本就無動畫規格（非壞殘留），未變動。
   - 程式碼修復（分支 `fix/autofocus-image-provider-comment`，已 merge）：修正 [animationAutoFocus.ts](backend/src/services/animationAutoFocus.ts) `generateAiFocusEffects` docstring 中**已過時且會誤導排查的註解**——原稱圖片「only actually used when `LLM_PROVIDER=openai`」（因 Gemini 會剝除非文字內容）。此說法已不正確：`buildGeminiContents` 會把 data URL 轉成 `inlineData`、OpenAI 相容 provider（openai/cgu-air/openrouter）直接透傳 `image_url`，故圖片在**所有現行 provider 都會送達模型**；改寫為依實際逐 provider 行為描述，並點明「結果看似純文字（方框機械排成一欄、無視版面）代表模型/閘道未套用 vision，而非本程式碼把圖片丟掉」。僅改註解，後端 `tsc --noEmit` 通過。
   - 本項為使用者回報 bug 修復，**不計入** 100 輪計數。
+
+## CSV 下載檔名邏輯收斂為共用純函式（第一七三輪，2026-06-27）
+
+延續匯出/報告路由盤點，發現 CSV 下載檔名「標題優先、否則退回 ID」模式在 6 個路由各自內聯重複（report 3 處還重複呼叫 `safeDownloadBaseName` 兩次）、且無針對該取捨的獨立測試。
+
+- [x] 抽出共用 `csvDownloadFilename(title, id, {titleSuffix, fallbackPrefix})`（去重 / 可測）：原 `quiz-results-csv`／`poll-results-csv`／`comments`／`report`(學生/逐頁/題目) 各自內聯「標題基底→`<基底>-<類別>.csv`、否則 `<類別>-<id>.csv`」。
+  - 修改說明（2026-06-27）：`downloadFilename.ts` 新增純函式 `csvDownloadFilename`，6 處呼叫點改用之（檔名輸出完全等價；report 3 處順帶消除重複呼叫 `safeDownloadBaseName`，import 由 `safeDownloadBaseName` 改為 `csvDownloadFilename`）。`download-filename.test.ts` 新增 4 組測試（標題版含 CJK、空白/null/undefined 退回 ID、對齊先前內聯模式）。後端 `tsc --noEmit` 通過；download-filename／poll-results-csv／quiz-results-csv／comments-csv／report-pages-csv／report-questions-csv／report-summary 共 37 測試回歸全通過。分支 `refactor/csv-download-filename`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 52 個完成項目（52/100，未達上限）。
 
 ## 課後報告最難題目排序抽出純函式（第一七二輪，2026-06-27）
 
@@ -285,6 +293,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （後端，去重）抽出共用 `csvDownloadFilename`：收斂 6 個匯出/報告路由（quiz-results/poll-results/comments/report 學生·逐頁·題目）內聯的「標題優先、否則退回 ID」CSV 檔名邏輯；report 3 處順帶消除重複 `safeDownloadBaseName` 呼叫；補 4 測試，37 測試回歸通過、檔名輸出不變（計數 52/100） | refactor/csv-download-filename（已 merge） |
 | 2026-06-27 | （§7.1 後端聚合子項）課後報告摘要「最難題目」排序抽出為純函式：`reportMetrics.ts` 新增 `selectHardestQuestions`（過濾未作答→正確率升冪、並列以答錯數多者優先→取前 5→補 wrong_rate），`report/summary` 改用之（行為等價、API 不變）；補 4 測試，report-metrics/report-question-stats/report-summary 共 21 測試回歸通過（計數 51/100） | refactor/select-hardest-questions（已 merge） |
 | 2026-06-27 | （使用者回報 bug，不計數）Uhga6bY0Bm 42/43 頁焦點動畫紅框位置全錯：查證確認現行程式碼正常（圖片有送、cgu-air gpt-5.5 支援 vision、真實路徑重跑 4 次皆產生貼合版面方框），壞規格是先前 add-pages 失敗那批補產動畫的舊殘留（當時圖片未被模型使用）。資料修復：以 gpt-5.5 透過 `generateAnimationForPage` 重產 42/43 頁焦點動畫寫回 animation.json + DB（distinct xPct 由 1→4–5、貼合版面）；44 頁本就 static-image 未動。程式碼：修正 `generateAiFocusEffects` docstring 中「圖片只在 LLM_PROVIDER=openai 才會用」之過時誤導註解，改述各 provider 實際圖片處理行為，typecheck 通過 | fix/autofocus-image-provider-comment（已 merge）＋資料修復 | 
 | 2026-06-27 | （使用者回報 bug，不計數）重生圖檔未把 image_path 寫回 DB：批次重生圖檔步驟（[regenerate.ts](backend/src/worker/regenerate.ts)）產圖後只寫檔/縮圖/commit，假設該頁原本就有 image_path；對原本 image_path 為 NULL 的頁（如 Uhga6bY0Bm 43/44，由半失敗 add-pages 復原而來）→ 檔在磁碟、DB 仍 NULL、前端讀不到圖。改為產圖後 `UPDATE pages SET image_path=?`。另修復實例 Uhga6bY0Bm 42/43/44（DB+metadata 補上已產生的圖路徑）。新增 `regenerate-image-persists-path.test.ts`，typecheck + figure-reference 3/3 回歸通過 | fix/regenerate-image-persist-path（已 merge） |
