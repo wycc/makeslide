@@ -13,7 +13,7 @@ import { config } from '../../config';
 import { sessionSub } from '../auth';
 import type { PageRow, PdfRow } from '../../types';
 import { callChatJSON } from '../../services/openai';
-import { getOpenAIClient } from '../../services/openai';
+import { getImageClient } from '../../services/openai';
 import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
 import { buildFigureReferenceNotes, getFigureReferencesForPage, loadFigureReferenceFiles, loadFigureSelection } from '../../services/pdfFigures';
@@ -716,7 +716,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     }
 
     try {
-      const client = getOpenAIClient();
+      const { client, model: imageModel } = getImageClient();
       let pageText = '';
       let pageScript = '';
       if (pageRow.text_path) {
@@ -781,7 +781,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         editInputs.length > 0
           ? await client.images.edit(
               {
-                model: config.openaiImageModel,
+                model: imageModel,
                 image: editInputs.length === 1 ? editInputs[0]! : editInputs,
                 // With a real base image use the "edit this slide" template; with only figure
                 // references (no base) that base-oriented template doesn't apply.
@@ -792,7 +792,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
             )
           : await client.images.generate(
               {
-                model: config.openaiImageModel,
+                model: imageModel,
                 prompt: basePrompt,
                 size: '1536x1024',
               } as never,
@@ -866,7 +866,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     }
 
     try {
-      const client = getOpenAIClient();
+      const { client, model: imageModel } = getImageClient();
 
       // Read current slide image from disk and resize to 1536x1024 to match mask dimensions.
       // GPT-Image-2 requires the mask to be the same size as the input image.
@@ -894,7 +894,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
 
       const edited = await client.images.edit(
         {
-          model: 'gpt-image-2',
+          model: imageModel,
           image: images,
           prompt: prompt.trim(),
           size: '1536x1024',

@@ -243,6 +243,50 @@ function providerEnvPrefix(provider: OpenAiCompatibleProvider): string {
   return 'OPENAI';
 }
 
+function providerImageModel(
+  settings: ReturnType<typeof getRuntimeAiSettings>,
+  provider: OpenAiCompatibleProvider,
+): string {
+  // Non-OpenAI providers need their own image model name; fall back to the OpenAI image
+  // model when unset (lets it work out of the box if the provider happens to accept it).
+  if (provider === 'cgu-air') return settings.cguAirImageModel.trim() || config.openaiImageModel;
+  if (provider === 'openrouter') return settings.openrouterImageModel.trim() || config.openaiImageModel;
+  return config.openaiImageModel;
+}
+
+export interface ImageGenerationTarget {
+  client: OpenAI;
+  /** Image model name to send for this account's selected image provider. */
+  model: string;
+  provider: OpenAiCompatibleProvider;
+}
+
+/**
+ * Resolve which OpenAI-compatible client + image model to use for image generation.
+ *
+ * Image generation uses the OpenAI Images API shape (`images.generate` / `images.edit`).
+ * Historically every image call hard-coded the default OpenAI client + `config.openaiImageModel`,
+ * so an account that selected e.g. CGU Air for its LLM still had its images sent to OpenAI —
+ * and failed with a 401 when no valid OpenAI key was configured. This routes images through
+ * whichever OpenAI-compatible provider the account picked (so CGU Air for text also means
+ * CGU Air for images, using that provider's key/base URL), falling back to OpenAI for
+ * providers that don't speak the Images API (Gemini).
+ *
+ * Best-effort: whether the selected provider actually implements the Images API is up to that
+ * provider; if it doesn't, the call will surface that provider's error instead of a misleading
+ * OpenAI 401.
+ */
+export function getImageClient(accountId: string = currentAccountId()): ImageGenerationTarget {
+  const settings = getRuntimeAiSettings(accountId);
+  const selected = settings.llmProvider;
+  const provider: OpenAiCompatibleProvider = selected === 'gemini' ? 'openai' : selected;
+  return {
+    client: getOpenAIClient(accountId, provider),
+    model: providerImageModel(settings, provider),
+    provider,
+  };
+}
+
 function providerLabel(provider: OpenAiCompatibleProvider): string {
   if (provider === 'cgu-air') return 'CGU Air';
   if (provider === 'openrouter') return 'OpenRouter';
