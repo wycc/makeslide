@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { canReadPdf } from './permissions';
+import { canReadPdf, canEditPdf } from './permissions';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
@@ -59,12 +59,6 @@ function getAnimationPageRow(id: string, n: number): AnimationPageRow | undefine
   return db
     .prepare(`SELECT page_uid, render_type, animation_spec_path, text_path, image_path FROM pages WHERE pdf_id = ? AND page_number = ?`)
     .get(id, n) as AnimationPageRow | undefined;
-}
-
-function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
-  if (!row.owner_sub) return true;
-  if (sub && row.owner_sub === sub) return true;
-  return row.visibility === 'public_editable';
 }
 
 function getShareToken(request: FastifyRequest): string | null {

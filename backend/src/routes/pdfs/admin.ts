@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { canEditPdf } from './permissions';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { z } from 'zod';
@@ -26,12 +27,6 @@ import path from 'node:path';
 import { clearRegenerateJob } from '../../worker/regenerate';
 import { clearAddPagesJob } from '../../worker/addPagesFromPrompt';
 import { clearSyncSession } from './sync';
-
-function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
-  if (!row.owner_sub) return true;
-  if (sub && row.owner_sub === sub) return true;
-  return row.visibility === 'public_editable';
-}
 
 const TransferAdminBodySchema = z.object({
   account_id: z.string().trim().min(1).max(256),

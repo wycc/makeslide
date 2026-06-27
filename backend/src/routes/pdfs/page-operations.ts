@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { canReadPdf } from './permissions';
+import { canReadPdf, canEditPdf } from './permissions';
 import { toFile } from 'openai';
 import type { ChatCompletionContentPart } from 'openai/resources/chat/completions';
 import fs from 'node:fs';
@@ -55,12 +55,6 @@ const RewriteScriptResponseSchema = z.object({
 function imageEditTimeoutMs(): number {
   const quality = config.openaiImageQuality;
   return quality === 'high' || quality === 'medium' ? config.openaiImageTimeoutMsHighQuality : config.openaiImageTimeoutMs;
-}
-
-function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
-  if (!row.owner_sub) return true;
-  if (sub && row.owner_sub === sub) return true;
-  return row.visibility === 'public_editable';
 }
 
 // Stricter variant for this file's destructive/irreversible routes (deleting a page outright,

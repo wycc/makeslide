@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { canReadPdf } from './permissions';
+import { canReadPdf, canEditPdf } from './permissions';
 import { z } from 'zod';
 import { db } from '../../db';
 import { sessionSub } from '../auth';
@@ -25,12 +25,6 @@ function getPageArtifactPaths(
     .get(pdfId, pageNumber) as
     | { page_uid: string; image_path: string | null; script_path: string | null }
     | undefined;
-}
-
-function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
-  if (!row.owner_sub) return true;
-  if (sub && row.owner_sub === sub) return true;
-  return row.visibility === 'public_editable';
 }
 
 const ShareTokenParamSchema = z.object({

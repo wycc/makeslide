@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { canEditPdf } from './permissions';
 import { z } from 'zod';
 import { db } from '../../db';
 import type { PdfRow } from '../../types';
@@ -7,12 +8,6 @@ import { callChatJSON } from '../../services/openai';
 import { safeJoinPdfPath } from '../../services/storage';
 import { errorResponse, PageParamSchema } from './shared';
 import fs from 'node:fs';
-
-function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
-  if (!row.owner_sub) return true;
-  if (sub && row.owner_sub === sub) return true;
-  return row.visibility === 'public_editable';
-}
 
 function readPageText(pdfId: string, relativePath: string | null): string {
   if (!relativePath) return '';

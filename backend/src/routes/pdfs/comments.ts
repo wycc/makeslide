@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { canReadPdf } from './permissions';
+import { canReadPdf, canEditPdf } from './permissions';
 import { z } from 'zod';
 import { db } from '../../db';
 import { sessionSub } from '../auth';
@@ -7,12 +7,6 @@ import type { PdfRow } from '../../types';
 import { errorResponse, IdParamSchema, PageParamSchema, nowIso } from './shared';
 import { csvEscape, withCsvBom } from './csv';
 import { safeDownloadBaseName, buildContentDisposition } from './downloadFilename';
-
-function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
-  if (!row.owner_sub) return true;
-  if (sub && row.owner_sub === sub) return true;
-  return row.visibility === 'public_editable';
-}
 
 function getPdfRow(id: string): Pick<PdfRow, 'owner_sub' | 'visibility' | 'title'> | undefined {
   return db.prepare(`SELECT owner_sub, visibility, title FROM pdfs WHERE id = ?`).get(id) as
