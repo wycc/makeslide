@@ -9530,3 +9530,17 @@ AI 批次加頁（`addPagesFromPrompt`）在簡報中間插入多頁時，會把
 - **修正**：`import.ts` 由 `typeof p.status === 'string' && p.status.trim() ? p.status : 'ready'` 改為 `isPageStatus(p.status) ? p.status : 'audio_ready'`，用 `statusMachine` 的 `isPageStatus` 守衛：合法狀態（audio_ready/failed/…）保留，無效或缺失則正規化為 `audio_ready`。
 - **驗證**：backend `tsc --noEmit` 通過；export/import ZIP round-trip（確認有效狀態原樣保留）、import-unzip-timeout、status-machine（`isPageStatus` 本身已測）共 13 個測試回歸通過。匯入端使用系統 `unzip`、專案無 jszip 依賴，自行打包「含非法狀態」的 ZIP fixture 成本高且脆弱，因此不另造 fixture 測試——此一行守衛的正確性由 round-trip 測試、`isPageStatus` 的單元測試與邏輯本身共同保證。
 - 至此，所有建立 pages 的入口（手動加頁、pipeline、AI 加頁、上傳、from-pages、ZIP 匯入）都使用合法的頁面狀態。
+
+## 播放頁右側大綱次要文字對比過低修正（使用者回報 UI，2026-06-27）
+
+### 功能目的
+使用者回報播放頁右側大綱（📋 大綱）列表中，每筆下方的次要文字（逐字稿開頭／Speaker 行，例如「Speaker 1: [seriousl...」）「文字和背景對比太低」、不易閱讀。
+
+### 使用方式
+此為純前端樣式調整：大綱列表的次要說明文字變得更清楚，主標題（第 N 頁）層次不變。
+
+### 技術細節
+- **問題**：`PlayPageSidebar` 的 `OutlineSection` 中，次要文字用 `text-[11px] text-slate-500`。在 `bg-slate-900/40` 的深色背景上，slate-500（#64748b）對比僅約 2.8:1，未達 WCAG AA 對小字（11px）所要求的 4.5:1。
+- **修正**：將該行由 `text-slate-500` 改為 `text-slate-400`（#94a3b8），對比提升至約 4.9:1、通過 AA；同時仍暗於上方主標題的 `text-slate-300`，保留「標題亮、副標暗」的視覺層次。
+- **範圍**：僅改動 `OutlineSection` 的副標題顏色一處；側欄其他 `text-slate-500`（空狀態提示、縮圖頁碼 fallback、留言時間戳等）為刻意的弱化次要資訊，未一併調整以免破壞既有層次。
+- **驗證**：純 className 變更、無型別或邏輯影響。分支 `fix/outline-text-contrast`。

@@ -375,6 +375,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （前端，使用者回報 UI）播放頁右側大綱列表次要文字（Speaker/標題行）對比過低：`PlayPageSidebar` `OutlineSection` 由 `text-slate-500` 改為 `text-slate-400`（深色背景上由約 2.8:1 提升至約 4.9:1，達 WCAG AA 小字標準，仍暗於標題 slate-300 維持層次）。純樣式調整，不計入 100 輪計數 | fix/outline-text-contrast |
 | 2026-06-27 | （前端，可測）首頁分類分組組裝抽出 `groupItemsByCategory`（find-or-create 分組/組內排序/組間依分類名排序/預設分類 fallback），`HomePage` 改用之；補 5 測試（共 11）；前端 typecheck 通過（計數 62/100） | refactor/group-items-by-category（已 merge） |
 | 2026-06-27 | （前端，可測）範本庫分類/搜尋/排序抽出 `templateCategories`／`filterAndSortTemplates`（newest 保留序、popular 套用次數降冪穩定排序、搜尋名稱/說明/提示詞），`TemplatesPage` 改用之；補 5 測試；前端 typecheck 通過（計數 61/100） | refactor/template-filter（已 merge） |
 | 2026-06-27 | （前端，可測）測驗歷史平均分抽出 `averageAttemptScore`（忽略未評分 null、全空回 null、未四捨五入），`QuizBuilderPage` 改用之；補 4 測試（quizScoring 15）；前端 typecheck 通過。另記錄 `render-text-pages-figure-injection` 非確定性 flaky 調查結論（跨檔全域污染、不值得自動盲修）（計數 60/100） | refactor/average-attempt-score（已 merge） |
