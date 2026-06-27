@@ -5,7 +5,7 @@ import type { PdfRow } from '../../types';
 import { sessionSub } from '../auth';
 import { errorResponse, IdParamSchema } from './shared';
 import { csvEscape, withCsvBom } from './csv';
-import { safeDownloadBaseName, buildContentDisposition } from './downloadFilename';
+import { csvDownloadFilename, buildContentDisposition } from './downloadFilename';
 
 interface AttemptRow {
   id: number;
@@ -60,8 +60,10 @@ export async function registerQuizResultsCsvRoutes(app: FastifyInstance): Promis
     }
 
     const csv = lines.join('\n') + '\n';
-    const titleBase = safeDownloadBaseName(row.title, '');
-    const filename = titleBase ? `${titleBase}-quiz-results.csv` : `quiz-results-${parsed.data.id}.csv`;
+    const filename = csvDownloadFilename(row.title, parsed.data.id, {
+      titleSuffix: 'quiz-results',
+      fallbackPrefix: 'quiz-results',
+    });
 
     reply.header('content-type', 'text/csv; charset=utf-8');
     reply.header('content-disposition', buildContentDisposition(filename));

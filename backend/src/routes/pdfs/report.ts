@@ -6,7 +6,7 @@ import { sessionSub } from '../auth';
 import { errorResponse, IdParamSchema } from './shared';
 import { csvEscape, withCsvBom } from './csv';
 import { safeRatio, round4, pollDivergence, average, pageDifficultyScore, selectHardestQuestions } from './reportMetrics';
-import { safeDownloadBaseName, buildContentDisposition } from './downloadFilename';
+import { csvDownloadFilename, buildContentDisposition } from './downloadFilename';
 import { isCorrectAnswer } from '../../services/quizCorrectness';
 import { getSyncFollowerQuestionsSnapshot } from './sync';
 
@@ -294,7 +294,7 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
     }
     const csv = rows.join('\n');
     void reply.header('Content-Type', 'text/csv; charset=utf-8');
-    void reply.header('Content-Disposition', buildContentDisposition(safeDownloadBaseName(pdfRow.title, '') ? `${safeDownloadBaseName(pdfRow.title, '')}-students.csv` : `report-${id}.csv`));
+    void reply.header('Content-Disposition', buildContentDisposition(csvDownloadFilename(pdfRow.title, id, { titleSuffix: 'students', fallbackPrefix: 'report' })));
     return reply.code(200).send(withCsvBom(csv));
   });
 
@@ -369,7 +369,7 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
     }
     const csv = rows.join('\n');
     void reply.header('Content-Type', 'text/csv; charset=utf-8');
-    void reply.header('Content-Disposition', buildContentDisposition(safeDownloadBaseName(pdfRow.title, '') ? `${safeDownloadBaseName(pdfRow.title, '')}-pages.csv` : `report-pages-${id}.csv`));
+    void reply.header('Content-Disposition', buildContentDisposition(csvDownloadFilename(pdfRow.title, id, { titleSuffix: 'pages', fallbackPrefix: 'report-pages' })));
     return reply.code(200).send(withCsvBom(csv));
   });
 
@@ -403,7 +403,7 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
     }
     const csv = rows.join('\n');
     void reply.header('Content-Type', 'text/csv; charset=utf-8');
-    void reply.header('Content-Disposition', buildContentDisposition(safeDownloadBaseName(pdfRow.title, '') ? `${safeDownloadBaseName(pdfRow.title, '')}-questions.csv` : `report-questions-${id}.csv`));
+    void reply.header('Content-Disposition', buildContentDisposition(csvDownloadFilename(pdfRow.title, id, { titleSuffix: 'questions', fallbackPrefix: 'report-questions' })));
     return reply.code(200).send(withCsvBom(csv));
   });
 

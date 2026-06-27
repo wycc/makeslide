@@ -22,6 +22,22 @@ export function safeDownloadBaseName(title: string | null | undefined, fallback:
 }
 
 /**
+ * Build a CSV download filename from a presentation title with an id-based
+ * fallback. When the title yields a usable base name the file is named
+ * `<title>-<titleSuffix>.csv`; otherwise it falls back to
+ * `<fallbackPrefix>-<id>.csv`. Consolidates the title-or-id filename pattern
+ * repeated across the CSV/report export routes. Pure and unit-testable.
+ */
+export function csvDownloadFilename(
+  title: string | null | undefined,
+  id: string,
+  opts: { titleSuffix: string; fallbackPrefix: string },
+): string {
+  const base = safeDownloadBaseName(title, '');
+  return base ? `${base}-${opts.titleSuffix}.csv` : `${opts.fallbackPrefix}-${id}.csv`;
+}
+
+/**
  * Build a `Content-Disposition` value with an ASCII `filename` fallback and a
  * RFC 5987 `filename*` so non-ASCII (e.g. CJK) titles download with a readable
  * name in modern browsers.

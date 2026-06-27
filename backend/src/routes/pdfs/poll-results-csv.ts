@@ -5,7 +5,7 @@ import type { PdfRow } from '../../types';
 import { sessionSub } from '../auth';
 import { errorResponse, IdParamSchema } from './shared';
 import { csvEscape, withCsvBom } from './csv';
-import { safeDownloadBaseName, buildContentDisposition } from './downloadFilename';
+import { csvDownloadFilename, buildContentDisposition } from './downloadFilename';
 
 interface PollRow {
   id: number;
@@ -76,8 +76,10 @@ export async function registerPollResultsCsvRoutes(app: FastifyInstance): Promis
     }
 
     const csv = lines.join('\n') + '\n';
-    const titleBase = safeDownloadBaseName(row.title, '');
-    const filename = titleBase ? `${titleBase}-poll-results.csv` : `poll-results-${parsed.data.id}.csv`;
+    const filename = csvDownloadFilename(row.title, parsed.data.id, {
+      titleSuffix: 'poll-results',
+      fallbackPrefix: 'poll-results',
+    });
 
     reply.header('content-type', 'text/csv; charset=utf-8');
     reply.header('content-disposition', buildContentDisposition(filename));
