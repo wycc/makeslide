@@ -21,7 +21,9 @@
 - [x] 收斂 `getPdfPermissionRow`（10 標準）至 permissions.ts；`report.ts` 的 title 變體保留。
   - 修改說明（2026-06-27）：在 `permissions.ts` 新增 `getPdfPermissionRow(id)`（`SELECT owner_sub, visibility`，加 `db` import）。以腳本移除 10 個標準檔（watchProgress/regenerate/versioning/figures/add-pages/drawings/quizzes/page-animation/sync/page-operations）的本地定義並合併進其既有 `./permissions` import。`report.ts` 另含 `title` 的變體維持不動（註解標明）。backend `tsc --noEmit` 通過；migrated 路由回歸約 274 測試全通過（quizzes/drawings/page-animation/sync/regenerate/add-pages/figures/各權限測試）。分支 `refactor/shared-get-pdf-permission-row`，已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 31 個完成項目（31/100，未達上限）。
-- [ ] 收斂 share 群剩餘變體：`detail.ts`（getShareToken + object schema，無 hasShareAccess）、bare-string schema + `shareTokenFromRequest` 的 outlier 檔。評估改用共用版本。
+- [x] 收斂 share 群剩餘變體：`detail.ts`（getShareToken + object schema，無 hasShareAccess）、bare-string schema + `shareTokenFromRequest` 的 outlier 檔。評估改用共用版本。
+  - 修改說明（2026-06-27）：`detail.ts` 的 `getShareToken` 與 object 版 `ShareTokenParamSchema` 與共用版完全相同，改 `import { getShareToken, ShareTokenParamSchema } from './share'` 並移除本地定義；其獨有的 `shareAccessForPdf`/`isShareTokenExpired`（含到期判斷、回傳 access level）保留並改用 imported 版本。經評估，`sync.ts`/`server.ts` 的 `shareTokenFromRequest` 為 **header-only 變體**（不讀 `?share=` query、用 bare-string schema），行為與 `getShareToken` 不同，若替換會改變行為，故**刻意不統一**。backend `tsc --noEmit` 通過；`detail-permission`(92)、`share-expiry`(3)、`share`(6) 共 101 測試回歸通過。分支 `refactor/detail-reuse-share`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 32 個完成項目（32/100，未達上限）。
 
 ## 後端去重 canEditPdf（第一四八輪，2026-06-27）
 
@@ -127,6 +129,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （後端，去重收尾）detail.ts 改用共用 share `getShareToken`/`ShareTokenParamSchema`；`shareTokenFromRequest`(sync/server) 為 header-only 變體刻意保留；101 測試回歸通過（計數 32/100） | refactor/detail-reuse-share（已 merge） |
 | 2026-06-27 | （後端，去重）抽出共用 `getPdfPermissionRow` 至 permissions.ts：10 標準檔收斂、合併 import；report.ts title 變體保留；typecheck 通過、約 274 路由測試回歸通過（計數 31/100） | refactor/shared-get-pdf-permission-row（已 merge） |
 | 2026-06-27 | （後端，去重）抽出共用 share 存取群 `share.ts`（ShareTokenParamSchema/getShareToken/hasShareAccess）：10 檔成組收斂、清理 FastifyRequest import；補 6 測試；typecheck 通過、約 263 share 路由測試回歸通過（計數 30/100） | refactor/shared-share-access（已 merge） |
 | 2026-06-27 | （修既有失敗）`page-animation.test.ts`：shape kind mirror drift——`triangle` 早已成合法形狀，測試改用真正不合法的 `octagon`；123/123 通過（計數 29/100） | fix/animation-shape-kind-test（已 merge） |
