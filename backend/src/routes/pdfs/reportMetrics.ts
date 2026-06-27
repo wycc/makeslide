@@ -22,3 +22,8 @@ export function round4(n: number): number {
 export function pollDivergence(maxVotes: number, totalVotes: number): number {
   return totalVotes > 0 ? 1 - maxVotes / totalVotes : 0;
 }
+
+/** Arithmetic mean of the values, or null for an empty array. */
+export function average(values: number[]): number | null {
+  return values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : null;
+}

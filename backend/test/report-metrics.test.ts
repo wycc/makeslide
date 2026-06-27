@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { safeRatio, round4, pollDivergence } from '../src/routes/pdfs/reportMetrics';
+import { safeRatio, round4, pollDivergence, average } from '../src/routes/pdfs/reportMetrics';
 
 test('safeRatio divides normally', () => {
   assert.equal(safeRatio(3, 4), 0.75);
@@ -26,4 +26,11 @@ test('pollDivergence is 0 at full consensus and rises as votes split', () => {
   assert.equal(pollDivergence(5, 10), 0.5);
   // no votes → 0 (no division by zero)
   assert.equal(pollDivergence(0, 0), 0);
+});
+
+test('average returns the mean, or null for an empty array', () => {
+  assert.equal(average([10, 20, 30]), 20);
+  assert.equal(average([5]), 5);
+  assert.equal(average([]), null);
+  assert.equal(average([1, 2]), 1.5);
 });

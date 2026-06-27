@@ -4,7 +4,7 @@ import type { PdfRow } from '../../types';
 import { decodeSession, parseCookies } from '../auth';
 import { errorResponse, IdParamSchema } from './shared';
 import { csvEscape, withCsvBom } from './csv';
-import { safeRatio, round4, pollDivergence } from './reportMetrics';
+import { safeRatio, round4, pollDivergence, average } from './reportMetrics';
 import { safeDownloadBaseName, buildContentDisposition } from './downloadFilename';
 import { isCorrectAnswer } from '../../services/quizCorrectness';
 import { getSyncFollowerQuestionsSnapshot } from './sync';
@@ -244,7 +244,7 @@ function computeStudentRecords(pdfId: string): StudentRecord[] {
 
   for (const student of studentMap.values()) {
     const scores = student.attempts.map((a) => a.score).filter((s): s is number => s !== null);
-    student.average_score = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : null;
+    student.average_score = average(scores);
   }
 
   return Array.from(studentMap.values());
