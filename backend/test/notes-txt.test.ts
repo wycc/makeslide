@@ -32,7 +32,7 @@ function seedPdf(id: string, opts: { ownerSub?: string | null; visibility?: stri
   ).run(id, t, t);
   db.prepare(
     `INSERT INTO pages (pdf_id,page_number,page_uid,status,script_path,text_path,page_notes,created_at,updated_at)
-     VALUES (?,2,'uid-n2','ready',NULL,NULL,NULL,?,?)`,
+     VALUES (?,2,'uid-n2','ready',NULL,NULL,'',?,?)`,
   ).run(id, t, t);
 }
 
@@ -97,7 +97,7 @@ test('GET /api/pdfs/:id/notes.txt returns 403 for private PDF without auth', asy
 test('GET /api/pdfs/:id/notes.txt returns fallback text when no notes exist', async () => {
   const id = `nttest-empty-${Date.now()}`;
   seedPdf(id);
-  db.prepare(`UPDATE pages SET page_notes = NULL WHERE pdf_id = ?`).run(id);
+  db.prepare(`UPDATE pages SET page_notes = '' WHERE pdf_id = ?`).run(id);
   const app = await buildApp();
   try {
     const res = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/notes.txt`, headers: OWNER_HEADERS });
