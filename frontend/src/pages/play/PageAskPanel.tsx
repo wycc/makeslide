@@ -37,23 +37,23 @@ export function PageAskPanel() {
 
   if (!canAskPage) {
     return (
-      <section className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
-        <h2 className="mb-2 text-sm font-semibold text-slate-300">{t('play.sidebar.pageAsk.title')}</h2>
-        <p className="text-xs text-slate-500">{t('play.sidebar.pageAsk.loginRequired')}</p>
+      <section className="rounded-lg border border-border bg-surface p-4">
+        <h2 className="mb-2 text-sm font-semibold text-text">{t('play.sidebar.pageAsk.title')}</h2>
+        <p className="text-xs text-muted">{t('play.sidebar.pageAsk.loginRequired')}</p>
       </section>
     );
   }
 
   return (
-    <section className="rounded-lg border border-slate-800 bg-slate-900/40">
-      <div className="border-b border-slate-800 px-4 py-3">
+    <section className="rounded-lg border border-border bg-surface">
+      <div className="border-b border-border px-4 py-3">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-slate-300">{t('play.sidebar.pageAsk.title')}</h2>
+          <h2 className="text-sm font-semibold text-text">{t('play.sidebar.pageAsk.title')}</h2>
           {(hasConversation || pageAskError) && (
             <button
               type="button"
               onClick={clearPageAsk}
-              className="rounded-md border border-slate-600 bg-slate-800 px-2 py-1 text-xs text-slate-300 hover:bg-slate-700"
+              className="rounded-md border border-border bg-surface-muted px-2 py-1 text-xs text-text hover:bg-surface-muted"
             >
               {t('play.sidebar.pageAsk.clear')}
             </button>
@@ -62,28 +62,28 @@ export function PageAskPanel() {
       </div>
 
       {hasConversation && (
-        <div className="max-h-96 space-y-2 overflow-y-auto border-b border-slate-800 p-3">
+        <div className="max-h-96 space-y-2 overflow-y-auto border-b border-border p-3">
           {pageAskMessages.map((m, i) => (
             <div
               key={i}
               className={m.role === 'user'
-                ? 'ml-6 rounded-md bg-slate-800/70 px-3 py-2 text-sm text-slate-200'
-                : 'mr-2 rounded-md bg-emerald-950/30 px-3 py-2 text-sm text-emerald-100'}
+                ? 'ml-6 rounded-md bg-surface-muted px-3 py-2 text-sm text-text'
+                : 'mr-2 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100'}
             >
-              <p className="mb-0.5 text-[10px] uppercase tracking-wide text-slate-500">
+              <p className="mb-0.5 text-[10px] uppercase tracking-wide text-muted">
                 {m.role === 'user' ? t('play.sidebar.pageAsk.you') : t('play.sidebar.pageAsk.tutor')}
               </p>
               <p className="whitespace-pre-wrap">{m.content}</p>
             </div>
           ))}
-          {pageAskBusy && <p className="text-xs text-slate-500">{t('play.sidebar.pageAsk.asking')}</p>}
+          {pageAskBusy && <p className="text-xs text-muted">{t('play.sidebar.pageAsk.asking')}</p>}
           {lastAnswer && !pageAskBusy && (
             <div className="flex justify-end">
               <button
                 type="button"
                 onClick={() => void handleSaveAsNote()}
                 disabled={saveStatus === 'saving'}
-                className="rounded-md border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-xs text-amber-200 hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-800 hover:bg-amber-100 dark:border-amber-500/50 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {saveStatus === 'ok'
                   ? t('play.sidebar.saveAsNoteDone')
@@ -99,14 +99,14 @@ export function PageAskPanel() {
       )}
 
       {pageAskError && (
-        <div className="border-b border-slate-800 p-3">
-          <p className="text-xs text-rose-300">{pageAskError}</p>
+        <div className="border-b border-border p-3">
+          <p className="text-xs text-rose-700 dark:text-rose-300">{pageAskError}</p>
         </div>
       )}
 
       <div className="p-3">
         <textarea
-          className="mb-2 w-full resize-none rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-cyan-500 focus:outline-none disabled:opacity-50"
+          className="mb-2 w-full resize-none rounded-md border border-border bg-surface px-3 py-2 text-sm text-text placeholder:text-muted focus:border-primary focus:outline-none disabled:opacity-50"
           rows={3}
           placeholder={hasConversation ? t('play.sidebar.pageAsk.followUpPlaceholder') : t('play.sidebar.pageAsk.inputPlaceholder')}
           maxLength={500}
@@ -124,7 +124,7 @@ export function PageAskPanel() {
           type="button"
           onClick={() => void handleAskPage()}
           disabled={pageAskBusy || !pageAskInput.trim()}
-          className="w-full rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm font-medium text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+          className="w-full rounded-md border border-transparent bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {pageAskBusy ? t('play.sidebar.pageAsk.asking') : hasConversation ? t('play.sidebar.pageAsk.followUp') : t('play.sidebar.pageAsk.ask')}
         </button>

@@ -111,15 +111,15 @@ export function QualityCheckPanel() {
   };
 
   return (
-    <section className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
+    <section className="rounded-lg border border-border bg-surface p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-300">
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-text">
           {t('play.quality.title')}
           {results !== null && !running && (
             issuePages.length === 0 ? (
-              <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-normal text-emerald-400">✓</span>
+              <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-normal text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400">✓</span>
             ) : (
-              <span className="rounded-full bg-rose-500/20 px-1.5 py-0.5 text-[10px] font-normal text-rose-300">{issuePages.length}</span>
+              <span className="rounded-full bg-rose-100 px-1.5 py-0.5 text-[10px] font-normal text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">{issuePages.length}</span>
             )
           )}
         </h2>
@@ -127,23 +127,23 @@ export function QualityCheckPanel() {
           type="button"
           onClick={() => void handleRun()}
           disabled={running || !pdfId}
-          className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+          className="rounded border border-border px-2 py-1 text-xs text-text hover:bg-surface-muted disabled:opacity-50"
         >
           {running ? t('play.quality.running') : t('play.quality.run')}
         </button>
       </div>
 
       {error && (
-        <p className="text-xs text-rose-400">{error}</p>
+        <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>
       )}
 
       {results !== null && !running && (
         issuePages.length === 0 ? (
-          <p className="text-xs text-emerald-400">{t('play.quality.allGood')}</p>
+          <p className="text-xs text-emerald-600 dark:text-emerald-400">{t('play.quality.allGood')}</p>
         ) : (
           <>
             <div className="mb-2 flex items-center justify-between gap-2">
-              <p className="text-xs text-amber-400">
+              <p className="text-xs text-amber-600 dark:text-amber-400">
                 {t('play.quality.issueCount').replace('{n}', String(issuePages.length))}
               </p>
               {emptyScriptPages.length > 0 && (
@@ -151,7 +151,7 @@ export function QualityCheckPanel() {
                   type="button"
                   onClick={() => void handleBatchFill()}
                   disabled={batchFilling}
-                  className="shrink-0 rounded border border-emerald-600/60 bg-emerald-500/15 px-2 py-1 text-xs text-emerald-200 hover:bg-emerald-500/25 disabled:opacity-50"
+                  className="shrink-0 rounded border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-100 dark:border-emerald-600/60 dark:bg-emerald-500/15 dark:text-emerald-200 dark:hover:bg-emerald-500/25 disabled:opacity-50"
                 >
                   {batchFilling && batchProgress
                     ? t('play.quality.batchFilling')
@@ -163,15 +163,15 @@ export function QualityCheckPanel() {
             </div>
             <ul className="space-y-2">
               {issuePages.map((page) => (
-                <li key={page.pageNumber} className="rounded border border-slate-700 bg-slate-950/50 px-3 py-2">
+                <li key={page.pageNumber} className="rounded border border-border bg-surface-muted px-3 py-2">
                   <div className="mb-1 flex items-center justify-between gap-2">
-                    <span className="text-xs font-medium text-slate-200">
+                    <span className="text-xs font-medium text-text">
                       {t('play.quality.page').replace('{n}', String(page.pageNumber))}
                     </span>
                     <button
                       type="button"
                       onClick={() => navigate(`/play/${encodeURIComponent(pdfId ?? '')}?page=${page.pageNumber}`)}
-                      className="text-xs text-indigo-400 hover:text-indigo-300"
+                      className="text-xs text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300"
                       title={t('play.quality.goToPage')}
                     >
                       →
@@ -179,7 +179,7 @@ export function QualityCheckPanel() {
                   </div>
                   <ul className="space-y-0.5">
                     {page.issues.map((issue, i) => (
-                      <li key={i} className="text-xs text-amber-300">
+                      <li key={i} className="text-xs text-amber-700 dark:text-amber-300">
                         {issueLabel(issue.code, issue.detail)}
                       </li>
                     ))}
@@ -191,15 +191,15 @@ export function QualityCheckPanel() {
         )
       )}
 
-      <div className="mt-4 border-t border-slate-800 pt-4">
+      <div className="mt-4 border-t border-border pt-4">
         <div className="mb-2 flex items-center justify-between gap-2">
-          <h3 className="flex items-center gap-2 text-xs font-semibold text-violet-300">
+          <h3 className="flex items-center gap-2 text-xs font-semibold text-violet-700 dark:text-violet-300">
             {t('play.quality.scriptAnalysisTitle')}
             {scriptBreaks !== null && !scriptRunning && (
               scriptBreaks.length === 0 ? (
-                <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-normal text-emerald-400">✓</span>
+                <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-normal text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400">✓</span>
               ) : (
-                <span className="rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-normal text-amber-300">{scriptBreaks.length}</span>
+                <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-normal text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">{scriptBreaks.length}</span>
               )
             )}
           </h3>
@@ -207,27 +207,27 @@ export function QualityCheckPanel() {
             type="button"
             onClick={() => void handleScriptAnalysis()}
             disabled={scriptRunning || !pdfId}
-            className="rounded border border-violet-700 px-2 py-1 text-xs text-violet-300 hover:bg-violet-900/30 disabled:opacity-50"
+            className="rounded border border-violet-300 px-2 py-1 text-xs text-violet-700 hover:bg-violet-50 dark:border-violet-700 dark:text-violet-300 dark:hover:bg-violet-900/30 disabled:opacity-50"
           >
             {scriptRunning ? t('play.quality.scriptAnalysisRunning') : t('play.quality.scriptAnalysisRun')}
           </button>
         </div>
 
-        {scriptError && <p className="text-xs text-rose-400">{scriptError}</p>}
+        {scriptError && <p className="text-xs text-rose-600 dark:text-rose-400">{scriptError}</p>}
 
         {scriptBreaks !== null && !scriptRunning && (
           scriptBreaks.length === 0 ? (
-            <p className="text-xs text-emerald-400">{t('play.quality.scriptAnalysisGood')}</p>
+            <p className="text-xs text-emerald-600 dark:text-emerald-400">{t('play.quality.scriptAnalysisGood')}</p>
           ) : (
             <ul className="space-y-2">
               {scriptBreaks.map((b, i) => (
-                <li key={i} className="rounded border border-amber-800/50 bg-amber-950/30 px-3 py-2 text-xs">
-                  <p className="mb-1 font-medium text-amber-300">
+                <li key={i} className="rounded border border-amber-200 bg-amber-50 dark:border-amber-800/50 dark:bg-amber-950/30 px-3 py-2 text-xs">
+                  <p className="mb-1 font-medium text-amber-700 dark:text-amber-300">
                     {t('play.quality.scriptBreakLabel')
                       .replace('{from}', String(b.pageNumber))
                       .replace('{to}', String(b.nextPageNumber))}
                   </p>
-                  <p className="text-slate-300">{b.suggestion}</p>
+                  <p className="text-text">{b.suggestion}</p>
                 </li>
               ))}
             </ul>
@@ -235,15 +235,15 @@ export function QualityCheckPanel() {
         )}
       </div>
 
-      <div className="mt-4 border-t border-slate-800 pt-4">
+      <div className="mt-4 border-t border-border pt-4">
         <div className="mb-2 flex items-center justify-between gap-2">
-          <h3 className="flex items-center gap-2 text-xs font-semibold text-sky-300">
+          <h3 className="flex items-center gap-2 text-xs font-semibold text-sky-700 dark:text-sky-300">
             {t('play.quality.imageAnalysisTitle')}
             {imageMismatches !== null && !imageRunning && (
               imageMismatches.length === 0 ? (
-                <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-normal text-emerald-400">✓</span>
+                <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-normal text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400">✓</span>
               ) : (
-                <span className="rounded-full bg-rose-500/20 px-1.5 py-0.5 text-[10px] font-normal text-rose-300">{imageMismatches.length}</span>
+                <span className="rounded-full bg-rose-100 px-1.5 py-0.5 text-[10px] font-normal text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">{imageMismatches.length}</span>
               )
             )}
           </h3>
@@ -251,34 +251,34 @@ export function QualityCheckPanel() {
             type="button"
             onClick={() => void handleImageAnalysis()}
             disabled={imageRunning || !pdfId}
-            className="rounded border border-sky-700 px-2 py-1 text-xs text-sky-300 hover:bg-sky-900/30 disabled:opacity-50"
+            className="rounded border border-sky-300 px-2 py-1 text-xs text-sky-700 hover:bg-sky-50 dark:border-sky-700 dark:text-sky-300 dark:hover:bg-sky-900/30 disabled:opacity-50"
           >
             {imageRunning ? t('play.quality.imageAnalysisRunning') : t('play.quality.imageAnalysisRun')}
           </button>
         </div>
 
-        {imageError && <p className="text-xs text-rose-400">{imageError}</p>}
+        {imageError && <p className="text-xs text-rose-600 dark:text-rose-400">{imageError}</p>}
 
         {imageMismatches !== null && !imageRunning && (
           imageMismatches.length === 0 ? (
-            <p className="text-xs text-emerald-400">{t('play.quality.imageAnalysisGood')}</p>
+            <p className="text-xs text-emerald-600 dark:text-emerald-400">{t('play.quality.imageAnalysisGood')}</p>
           ) : (
             <ul className="space-y-2">
               {imageMismatches.map((m) => (
-                <li key={m.pageNumber} className="rounded border border-rose-800/50 bg-rose-950/20 px-3 py-2 text-xs">
+                <li key={m.pageNumber} className="rounded border border-rose-200 bg-rose-50 dark:border-rose-800/50 dark:bg-rose-950/20 px-3 py-2 text-xs">
                   <div className="mb-1 flex items-center justify-between gap-2">
-                    <span className="font-medium text-rose-300">
+                    <span className="font-medium text-rose-700 dark:text-rose-300">
                       {t('play.quality.page').replace('{n}', String(m.pageNumber))}
                     </span>
                     <button
                       type="button"
                       onClick={() => navigate(`/play/${encodeURIComponent(pdfId ?? '')}?page=${m.pageNumber}`)}
-                      className="text-xs text-indigo-400 hover:text-indigo-300"
+                      className="text-xs text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300"
                     >
                       →
                     </button>
                   </div>
-                  <p className="text-slate-300">{m.detail || t('play.quality.contentMismatch')}</p>
+                  <p className="text-text">{m.detail || t('play.quality.contentMismatch')}</p>
                 </li>
               ))}
             </ul>
