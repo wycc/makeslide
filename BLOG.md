@@ -8893,3 +8893,16 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
   - delete handler 顯式刪除被刪頁的 `page_comments`／`page_drawings`（`page_polls` 由其 FK ON DELETE CASCADE 處理）。
 - **測試**：`page-poll-realign.test.ts` 擴充為涵蓋 poll／comment／drawing 在刪／插／移頁後的對齊，以及刪頁移除該頁評論／手寫不殘留，共 4 個案例。
 - **驗證**：backend `tsc --noEmit` 通過；相關 86 測試回歸；完整後端套件 1203/1203 全綠。以 `scripts/run-tests.sh backend` 執行。
+
+## addPagesFromPrompt 補上 defer FK（接續頁面重排修復）（2026-06-27）
+
+### 功能目的
+AI 批次加頁（`addPagesFromPrompt`）在簡報中間插入多頁時，會把插入點之後的頁碼往後移，並呼叫 `shiftChildPageNumbers` 一起移動每頁內容。但這個交易**沒有**像 page-operations 的手動增刪移那樣先 `defer_foreign_keys = ON`，因此會踩到同一個外鍵時序問題：先 `UPDATE pages` 就讓投票（page_polls，外鍵指向 pages）暫時變成孤兒 → 在插入點之後的頁有投票時，AI 加頁會以 `FOREIGN KEY constraint failed` 失敗。
+
+### 使用方式
+此為後端修正：對「插入點之後仍有投票」的簡報做 AI 中間插頁不再失敗，且投票／評論／手寫會正確往後移。
+
+### 技術細節
+- **修正**：在 `addPagesFromPrompt` 的「中間插頁」交易開頭加 `db.pragma('defer_foreign_keys = ON')`，把外鍵檢查延到 commit。其位移已透過 `shiftChildPageNumbers`（涵蓋 polls/comments/drawings）處理。
+- **驗證**：worker 屬背景任務、難以端到端單元測，以重現腳本確認（第 3 頁有投票/評論、insertAfter=1、insertCount=2 → 交易成功、投票/評論正確移到第 5 頁、無 FK 錯誤）；既有 `add-pages-permission`、`add-pages-orphan-recovery` 共 17 個測試回歸通過；backend `tsc --noEmit` 通過。以 `scripts/run-tests.sh backend` 執行。
+- 至此，所有會重排頁碼的路徑（手動 insert/delete/move 與 AI 批次加頁）都已正確處理外鍵延遲與每頁內容對齊。

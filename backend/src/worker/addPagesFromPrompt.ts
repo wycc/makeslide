@@ -329,6 +329,11 @@ async function runAddPagesJob(
     // Shift existing pages if inserting in the middle
     if (insertAfter < existingPageCount) {
       db.transaction(() => {
+        // Defer FK checks to commit: pages and their child rows (page_polls) are
+        // renumbered in separate statements; without this the intermediate state
+        // orphans child rows and trips foreign_keys=ON (same fix as the manual
+        // insert/delete/move handlers in page-operations.ts).
+        db.pragma('defer_foreign_keys = ON');
         db.prepare(
           `UPDATE pages SET page_number = page_number + ? + 100000 WHERE pdf_id = ? AND page_number > ?`,
         ).run(insertCount, pdfId, insertAfter);
