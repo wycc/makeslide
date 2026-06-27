@@ -38,6 +38,24 @@ export function canEditPdf(
 }
 
 /**
+ * Edit-access rule for destructive / irreversible actions (deleting a whole
+ * presentation, a page, a quiz set, a poll, a page's drawing, etc.). Same as
+ * canEditPdf but additionally requires an authenticated session before honoring
+ * a public_editable share: a fully anonymous request must never be able to
+ * destroy content just because an editable share link is enabled. Previously
+ * duplicated verbatim in 5 route files (4 as canDestructivelyEditPdf + delete.ts
+ * as a local stricter canEditPdf).
+ */
+export function canDestructivelyEditPdf(
+  sub: string | null,
+  row: Pick<PdfRow, 'owner_sub' | 'visibility'>,
+): boolean {
+  if (!row.owner_sub) return true;
+  if (sub && row.owner_sub === sub) return true;
+  return Boolean(sub) && row.visibility === 'public_editable';
+}
+
+/**
  * Fetch just the owner/visibility columns used for permission checks, or
  * undefined when the PDF does not exist. Previously duplicated verbatim in 10
  * route files. (report.ts keeps its own variant that also selects `title`.)

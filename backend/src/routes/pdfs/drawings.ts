@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { ShareTokenParamSchema, getShareToken, hasShareAccess } from './share';
-import { getPdfPermissionRow, canReadPdf, canEditPdf } from './permissions';
+import { getPdfPermissionRow, canReadPdf, canEditPdf, canDestructivelyEditPdf } from './permissions';
 import { z } from 'zod';
 import { db } from '../../db';
 import { sessionSub } from '../auth';
@@ -19,12 +19,6 @@ const SaveDrawingBodySchema = z.object({
 // unchanged — overwriting is the expected behavior of the drawing tool itself (e.g. an
 // in-progress stroke autosave), not a one-way destructive action distinct from normal editing.
 // Mirrors delete.ts's canEditPdf() fix.
-function canDestructivelyEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
-  if (!row.owner_sub) return true;
-  if (sub && row.owner_sub === sub) return true;
-  return Boolean(sub) && row.visibility === 'public_editable';
-}
-
 export async function registerDrawingsRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/pdfs/:id/pages/:n/drawing', async (request, reply) => {
     const parsed = PageParamSchema.safeParse(request.params);

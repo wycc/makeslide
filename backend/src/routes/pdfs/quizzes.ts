@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import { ShareTokenParamSchema, getShareToken, hasShareAccess } from './share';
-import { getPdfPermissionRow, canReadPdf, canEditPdf } from './permissions';
+import { getPdfPermissionRow, canReadPdf, canEditPdf, canDestructivelyEditPdf } from './permissions';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
@@ -18,12 +18,6 @@ import { errorResponse, IdParamSchema } from './shared';
 // applies, so a fully anonymous request can never delete a quiz just because the presentation's
 // visibility happens to be public_editable. The other (reversible) generate/create/update routes
 // in this file keep using canEditPdf() unchanged. Mirrors delete.ts's canEditPdf() fix.
-function canDestructivelyEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
-  if (!row.owner_sub) return true;
-  if (sub && row.owner_sub === sub) return true;
-  return Boolean(sub) && row.visibility === 'public_editable';
-}
-
 const QuizOptionSchema = z.object({ text: z.string().trim().min(1).max(300) });
 const QuizQuestionSchema = z.object({
   id: z.string().trim().min(1).max(80),

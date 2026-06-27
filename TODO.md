@@ -13,6 +13,12 @@
 - [ ] 系統性採用 `mapApiErrorToHumanMessage`：目前約 55 處 catch 區塊直接 `setError(err.message)` 顯示後端原始 message、繞過既有的錯誤訊息映射（前端僅 2 處 `UploadButton`、`ImportTextPage` 使用 mapper）。全面改造屬較大工程，且各 catch 上下文不同、許多後端 message 已是中文（未必都是英文洩漏），逐點需產品判斷顯示風格，故列為待使用者決定。
 - [ ] 把前端測試納入 root `npm test`：目前 root 測試腳本未涵蓋前端 `node:test` 測試。納入涉及 CI 行為變更與 `npm install`（sandbox 無法驗證），列為待使用者決定。
 
+## 後端去重 canDestructivelyEditPdf（第一五三輪，2026-06-27）
+
+- [x] 抽出共用 `canDestructivelyEditPdf`（去重 / 可測 / 安全一致）：破壞性動作（刪簡報/頁/測驗/投票/手寫）的嚴格編輯權限（`Boolean(sub) && public_editable`，禁止匿名）在 4 檔以 `canDestructivelyEditPdf` 重複、且 `delete.ts` 以同邏輯的 local `canEditPdf` 存在（同名不同 body 易混淆）。抽成共用並補測試。
+  - 修改說明（2026-06-27）：在 `permissions.ts` 新增 `canDestructivelyEditPdf`（含註解說明與 canEditPdf 的差異）。4 檔（page-operations/detail/quizzes/drawings）移除本地定義並併入既有 `./permissions` import。`delete.ts` 移除其 local stricter `canEditPdf`、改 `import { canDestructivelyEditPdf }` 並把呼叫點改名（消除同名不同 body 的混淆）。`permissions.test.ts` 新增測試（匿名於 public_editable 不可破壞性編輯、與 canEditPdf 對比）。backend `tsc --noEmit` 通過；`delete-permission`/`delete-pdf-job-cleanup`/`permissions`/`quizzes`/`drawings`/`page-operations-permission`/`detail-permission` 共 177 測試回歸通過（嚴格匿名行為保留）。分支 `refactor/shared-can-destructively-edit`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 33 個完成項目（33/100，未達上限）。
+
 ## 後端去重 share 存取群（第一五〇輪，2026-06-27）
 
 - [x] 抽出共用 share 存取工具（去重 / 可測）：`ShareTokenParamSchema`、`getShareToken`、`hasShareAccess` 在約 10 個路由檔成組逐字重複。抽成共用 `share.ts` 並補測試。
@@ -129,6 +135,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （後端，去重）抽出共用 `canDestructivelyEditPdf`：4 檔 + delete.ts（消除同名不同 body）收斂至 permissions.ts；補測試；177 測試回歸通過、嚴格匿名行為保留（計數 33/100） | refactor/shared-can-destructively-edit（已 merge） |
 | 2026-06-27 | （後端，去重收尾）detail.ts 改用共用 share `getShareToken`/`ShareTokenParamSchema`；`shareTokenFromRequest`(sync/server) 為 header-only 變體刻意保留；101 測試回歸通過（計數 32/100） | refactor/detail-reuse-share（已 merge） |
 | 2026-06-27 | （後端，去重）抽出共用 `getPdfPermissionRow` 至 permissions.ts：10 標準檔收斂、合併 import；report.ts title 變體保留；typecheck 通過、約 274 路由測試回歸通過（計數 31/100） | refactor/shared-get-pdf-permission-row（已 merge） |
 | 2026-06-27 | （後端，去重）抽出共用 share 存取群 `share.ts`（ShareTokenParamSchema/getShareToken/hasShareAccess）：10 檔成組收斂、清理 FastifyRequest import；補 6 測試；typecheck 通過、約 263 share 路由測試回歸通過（計數 30/100） | refactor/shared-share-access（已 merge） |

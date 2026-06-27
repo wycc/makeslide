@@ -8768,3 +8768,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **接入**：`detail.ts` 移除本地 `getShareToken` 與 `ShareTokenParamSchema`，改 `import { getShareToken, ShareTokenParamSchema } from './share'`。其獨有的 `shareAccessForPdf`（回傳 access level 並判斷到期）與 `isShareTokenExpired` 保留，改用 imported 版本。
 - **刻意不統一的部分**：`sync.ts` 與 `server.ts` 的 `shareTokenFromRequest` 是 **header-only 變體**——只讀 `x-makeslide-share-token` header、不讀 `?share=` query，且用 bare-string schema。它與 `getShareToken`（header + query）行為不同，若強行替換會改變這些端點接受 token 的方式，因此保留不動。
 - **驗證**：backend `tsc --noEmit` 通過；`detail-permission`(92)、`share-expiry`(3)、`share`(6) 共 101 個測試回歸通過。以 `scripts/run-tests.sh backend` 執行。
+
+## 抽出共用 canDestructivelyEditPdf 權限函式（2026-06-27）
+
+### 功能目的
+刪除類的破壞性／不可逆動作（刪整份簡報、刪一頁、刪測驗、刪投票、清空某頁手寫）使用比一般編輯更嚴格的權限：除了 owner 或 public_editable 之外，還**額外要求已登入**——避免完全匿名的請求只因為某簡報開了 editable 分享連結，就能把內容刪掉。這個規則原本在 4 個檔以 `canDestructivelyEditPdf` 重複，而 `delete.ts` 又用一個邏輯相同、卻沿用 `canEditPdf` 名稱的 local 函式（與其他檔的 `canEditPdf` 同名但行為不同，容易誤讀）。本項把它收斂成單一具名函式。
+
+### 使用方式
+此為後端內部重構，所有破壞性端點的權限判斷不變。需要時 `import { canDestructivelyEditPdf } from './permissions'`。
+
+### 技術細節
+- **共用函式**（`backend/src/routes/pdfs/permissions.ts`）：新增 `canDestructivelyEditPdf(sub, row)`——`!owner_sub` 可、owner 可、其餘需 `Boolean(sub) && public_editable`。註解標明與 `canEditPdf` 的唯一差異（匿名不可）。
+- **接入**：`page-operations`、`detail`、`quizzes`、`drawings` 4 檔移除本地 `canDestructivelyEditPdf` 並併入既有 `./permissions` import；`delete.ts` 移除其同邏輯但同名為 `canEditPdf` 的 local 函式、改用共用的 `canDestructivelyEditPdf`，消除「同名不同行為」的混淆。
+- **測試**：`permissions.test.ts` 新增案例，特別斷言「匿名請求在 public_editable 下：canEditPdf 為 true、canDestructivelyEditPdf 為 false」這個關鍵差異。
+- **驗證**：backend `tsc --noEmit` 通過；`delete-permission`、`delete-pdf-job-cleanup`、`permissions`、`quizzes`、`drawings`、`page-operations-permission`、`detail-permission` 共 177 個測試回歸通過，確認嚴格的匿名禁止行為維持不變。以 `scripts/run-tests.sh backend` 執行。
