@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第一七〇輪已完成 **49/100**，未達上限。
+- 最新進度：截至第一七一輪已完成 **50/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -13,6 +13,14 @@
 
 - [ ] 系統性採用 `mapApiErrorToHumanMessage`：目前約 55 處 catch 區塊直接 `setError(err.message)` 顯示後端原始 message、繞過既有的錯誤訊息映射（前端僅 2 處 `UploadButton`、`ImportTextPage` 使用 mapper）。全面改造屬較大工程，且各 catch 上下文不同、許多後端 message 已是中文（未必都是英文洩漏），逐點需產品判斷顯示風格，故列為待使用者決定。
 - [ ] 把前端測試納入 root `npm test`：目前 root 測試腳本未涵蓋前端 `node:test` 測試。納入涉及 CI 行為變更與 `npm install`（sandbox 無法驗證），列為待使用者決定。
+
+## 品質檢查回應新增摘要計數（第一七一輪，2026-06-27）
+
+依 §7.2 品質檢查自動化，完成其「後端摘要」子項：為品質檢查 API 加上播放頁徽章所需的彙總計數。
+
+- [x] 品質檢查回應新增 `summary` 摘要（pagesChecked/pagesWithIssues/totalIssues）：原本只回有問題的頁清單，前端得自行彙總；為播放頁徽章「N 頁有品質問題」提供單一可測來源。
+  - 修改說明（2026-06-27）：`quality-check.ts` 新增純函式 `summarizeQualityResults(results, pagesChecked)`（回傳 `QualityCheckSummary` 介面：pagesChecked=已檢查 audio_ready 頁數、pagesWithIssues=有問題頁數、totalIssues=問題總數），route 以 `pageRows.length` 呼叫並把 `summary` 併入回應（`pages`/`checkedAt` 不變、純附加、向後相容）。前端 `pdfs.ts` 的 `QualityCheckResponse` 新增 `summary: QualityCheckSummary`。新增 `summarizeQualityResults` 單元測試 + 在既有整合測試斷言 summary（2 頁各 3 問題→{2,2,6}、rendered 頁→{0,0,0}）。前後端 `tsc --noEmit` 通過、quality-check 5/5 通過。分支 `feat/quality-check-summary`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 50 個完成項目（50/100，未達上限）。
 
 ## 課後報告頁面困難度後端聚合（第一六九輪，2026-06-27）
 
@@ -78,6 +86,7 @@
 
 - [ ] （驗證確認）round-136 品質檢查狀態修正已驗證完整：頁面終態為 `audio_ready`（`addPagesFromPrompt.ts` 的 normalization 與 pipeline 註解均證實 ready PDF 全頁為 audio_ready/failed），`script_ready` 僅為 require_script_confirmation 流程的暫態。**無需再擴充狀態集合**。（本項為分析結論，非待辦。）
 - [ ] （P0，§7.2）品質檢查自動化：生成完成後自動跑一次 quality-check，於播放頁以徽章顯示「N 頁有品質問題」摘要，點擊開啟既有 `QualityCheckPanel`。延伸 `quality-check` route 與前端面板，屬前端整合。
+  - 進度（第一七一輪，2026-06-27）：**後端摘要子項已完成**（見下方「品質檢查回應新增摘要計數」section，計數第 50 項）——`quality-check` 回應新增 `summary`（`pagesChecked`/`pagesWithIssues`/`totalIssues`），前端型別同步。**仍待辦**：播放頁 header 徽章顯示「N 頁有品質問題」+ 生成完成後自動觸發 quality-check。
 - [x] （§8.1.4）首頁／播放頁搜尋結果加入「加入複習清單」動作：`GlobalSearchBox` 結果列加入按鈕，複用既有 `reviewList.addReviewItems`（已有測試）。純前端 UI 整合。（第一七〇輪，2026-06-27 完成）
   - 修改說明（2026-06-27）：`GlobalSearchBox` 選取模式原僅有「建立新簡報」批次動作，新增「加入複習清單（N 頁）」按鈕。新增純函式 `lib/searchResultsToReviewItems.ts`（過濾無頁碼標題結果、snippet 去空白作 questionText、null 標題回空字串）；`handleAddToReviewList` 將勾選結果轉換後交 `addReviewItems`（沿用其 pdfId+頁碼+文字 去重）並收合選取狀態。新增 i18n 鍵 `home.search.addToReviewList`（zh-TW/en）。新增 `searchResultsToReviewItems.test.ts` 3 測試；前端 `tsc --noEmit` 通過、helper 3/3 + i18n parity/nonempty + 既有 GlobalSearchBox 測試回歸通過（共 35）。分支 `feat/search-add-to-review-list`，已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 49 個完成項目（49/100，未達上限）。
@@ -246,6 +255,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （§7.2 後端子項）品質檢查回應新增 `summary` 摘要（pagesChecked/pagesWithIssues/totalIssues）：新增純函式 `summarizeQualityResults`、前端型別同步；補單元測試 + 整合測試斷言，quality-check 5/5、前後端 typecheck 通過（計數 50/100） | feat/quality-check-summary（已 merge） |
 | 2026-06-27 | （§8.1.4 純前端）全域搜尋選取模式新增「加入複習清單」批次動作：新增純函式 `searchResultsToReviewItems`（過濾無頁碼、snippet→questionText），`GlobalSearchBox` 加按鈕呼叫 `addReviewItems`；新增 i18n 鍵與 3 測試，前端 typecheck + i18n + GlobalSearchBox 回歸通過（計數 49/100） | feat/search-add-to-review-list（已 merge） |
 | 2026-06-27 | （§7.1 後端聚合子項）課後報告 pages.csv 新增頁面困難度：`reportMetrics.ts` 新增純函式 `pageDifficultyScore`（完成率/投票分歧/提問率三訊號平均、0–1、缺值略過），`report/pages.csv` 新增 `question_count`/`difficulty_score` 欄位；補 4 純函式測試 + 更新 pages-csv 測試，報告測試回歸通過（計數 48/100） | feat/report-page-difficulty（已 merge） |
 | 2026-06-27 | （§7.5，補真缺口）上傳 PDF 後在生成前顯示成本估算：`POST /api/pdfs` 新增回傳 `source_page_count`（PDF 實體頁數，不寫 persisted page_count），前端新增 `promptTargetPageCount` 純函式（page_count → source_page_count fallback）供 PromptModal；確認 TXT/YouTube 生成前無從估算（非缺口）。補 backend 2 + frontend 3 測試，前後端 typecheck + 上傳路由回歸通過（計數 47/100） | feat/upload-source-page-count-cost-estimate（已 merge） |

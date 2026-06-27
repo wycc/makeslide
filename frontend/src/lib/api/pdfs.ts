@@ -1805,8 +1805,18 @@ export interface PageQualityResult {
   issues: PageQualityIssue[];
 }
 
+export interface QualityCheckSummary {
+  /** Completed (audio_ready) pages inspected. */
+  pagesChecked: number;
+  /** How many of those pages have at least one issue (the play-page badge count). */
+  pagesWithIssues: number;
+  /** Total issues across all flagged pages. */
+  totalIssues: number;
+}
+
 export interface QualityCheckResponse {
   pages: PageQualityResult[];
+  summary: QualityCheckSummary;
   checkedAt: string;
 }
 

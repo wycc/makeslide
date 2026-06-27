@@ -43,6 +43,28 @@ export interface PageQualityResult {
   issues: PageQualityIssue[];
 }
 
+export interface QualityCheckSummary {
+  /** Completed (audio_ready) pages inspected. */
+  pagesChecked: number;
+  /** How many of those pages have at least one issue (drives the play-page badge count). */
+  pagesWithIssues: number;
+  /** Total issues across all flagged pages (a page can carry several). */
+  totalIssues: number;
+}
+
+/**
+ * Rolls up per-page quality results into the headline counts the play-page badge shows
+ * ("N pages have quality issues"). Pure function — no I/O — so it is easy to unit test.
+ */
+export function summarizeQualityResults(
+  results: PageQualityResult[],
+  pagesChecked: number,
+): QualityCheckSummary {
+  let totalIssues = 0;
+  for (const result of results) totalIssues += result.issues.length;
+  return { pagesChecked, pagesWithIssues: results.length, totalIssues };
+}
+
 export async function registerQualityCheckRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/pdfs/:id/quality-check', async (request, reply) => {
     const sub = sessionSub(request);
@@ -106,6 +128,10 @@ export async function registerQualityCheckRoutes(app: FastifyInstance): Promise<
       }
     }
 
-    return reply.code(200).send({ pages: results, checkedAt: new Date().toISOString() });
+    return reply.code(200).send({
+      pages: results,
+      summary: summarizeQualityResults(results, pageRows.length),
+      checkedAt: new Date().toISOString(),
+    });
   });
 }
