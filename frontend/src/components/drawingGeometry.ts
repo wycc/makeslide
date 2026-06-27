@@ -1,4 +1,5 @@
 import type { DrawingStroke } from './DrawingCanvas';
+import { clamp } from '../lib/clamp';
 
 /**
  * Normalizes a pointer's client coordinates to [0,1] within a canvas rect.
@@ -32,7 +33,7 @@ export function distPointToSegment(
   const dy = by - ay;
   const lenSq = dx * dx + dy * dy;
   if (lenSq === 0) return Math.sqrt(distSq(px, py, ax, ay));
-  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+  const t = clamp(((px - ax) * dx + (py - ay) * dy) / lenSq, 0, 1);
   return Math.sqrt(distSq(px, py, ax + t * dx, ay + t * dy));
 }
 

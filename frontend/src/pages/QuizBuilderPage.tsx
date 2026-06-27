@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useI18n } from '../i18n';
 import { formatRelativeTime, buildRelativeTimeLabels } from '../lib/relativeTime';
 import { summarizeQuizProgress } from '../lib/quizProgress';
+import { clamp } from '../lib/clamp';
 import {
   ApiError,
   copyQuizSetTo,
@@ -1081,7 +1082,7 @@ export default function QuizBuilderPage() {
                 max={3600}
                 step={30}
                 value={timeLimitSeconds}
-                onChange={(e) => setTimeLimitSeconds(Math.max(0, Math.min(3600, Number(e.target.value))))}
+                onChange={(e) => setTimeLimitSeconds(clamp(Number(e.target.value), 0, 3600))}
                 className="w-28 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
               />
               <span className="text-xs text-slate-400">{timeLimitSeconds === 0 ? t('quiz.timeLimitNone') : t('quiz.timeLimitUnit')}</span>

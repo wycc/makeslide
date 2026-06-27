@@ -36,6 +36,7 @@ import {
   resolveAnimationSpec,
 } from '../lib/animationSpec';
 import { debugLog, debugWarn } from '../lib/debugLog';
+import { clamp } from '../lib/clamp';
 import { formatGeneratingStatusLabel } from '../lib/statusLabels';
 import { nextPageInList, prevPageInList } from '../lib/pageListNav';
 import { parseGotoPage } from '../lib/parseGotoPage';
@@ -1051,7 +1052,7 @@ export default function PlayPage() {
       const audio = audioRef.current;
       if (!audio || !Number.isFinite(duration) || duration <= 0) return;
       clearPendingPageExtend();
-      audio.currentTime = Math.max(0, Math.min(seconds, duration));
+      audio.currentTime = clamp(seconds, 0, duration);
     },
     [duration, syncEnabled, syncRole, clearPendingPageExtend],
   );

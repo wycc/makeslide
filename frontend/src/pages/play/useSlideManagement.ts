@@ -10,6 +10,7 @@ import {
 } from '../../lib/api';
 import type { PdfDetailPage } from '../../types';
 import { useI18n } from '../../i18n';
+import { clamp } from '../../lib/clamp';
 
 interface UseSlideManagementParams {
   pdfId: string | undefined;
@@ -78,7 +79,7 @@ export function useSlideManagement({
     try {
       await deleteSlide(pdfId, currentPage.page_number);
       await reloadDetail();
-      setCurrentIdx(Math.max(0, Math.min(idxBeforeDelete, totalBeforeDelete - 2)));
+      setCurrentIdx(clamp(idxBeforeDelete, 0, totalBeforeDelete - 2));
       setRegenSelectedPages(new Set());
     } catch (err) {
       setSlideError(err instanceof ApiError ? err.message : t('play.slideManagement.deleteFailed'));

@@ -6,6 +6,7 @@ import type { PageFigure, PagePoll, SlideAnimationEffect, SlideAnimationEffectTy
 import { fetchPageFigures, fetchPagePolls, figureImageUrl, savePageAnimation } from '../../lib/api';
 import { copyTextToClipboard } from '../../lib/clipboard';
 import { truncateWithEllipsis } from '../../lib/truncate';
+import { clamp } from '../../lib/clamp';
 import {
   ANIMATION_SHAPE_KINDS,
   DEFAULT_EXIT_DURATION_SECONDS,
@@ -151,8 +152,6 @@ function EffectPositionEditor({
   } | null>(null);
 
   const { xPct, yPct, widthPct, heightPct } = getFocusEffectParams(effect);
-
-  const clamp = useCallback((v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v)), []);
 
   const onPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>, handle: DragHandle) => {
     if (disabled) return;
@@ -1439,7 +1438,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                         step={4}
                         value={effect.spotlightBorderRadius ?? 8}
                         disabled={disabled}
-                        onChange={(e) => updateEffect(effect.id, { spotlightBorderRadius: Math.max(0, Math.min(32, Math.round(Number(e.target.value) || 0))) })}
+                        onChange={(e) => updateEffect(effect.id, { spotlightBorderRadius: clamp(Math.round(Number(e.target.value) || 0), 0, 32) })}
                         className="w-20 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
                       />
                     </label>
@@ -1509,7 +1508,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                       step={2}
                       value={effect.textCalloutBorderRadius ?? 8}
                       disabled={disabled}
-                      onChange={(e) => updateEffect(effect.id, { textCalloutBorderRadius: Math.max(0, Math.min(32, Math.round(Number(e.target.value) || 8))) })}
+                      onChange={(e) => updateEffect(effect.id, { textCalloutBorderRadius: clamp(Math.round(Number(e.target.value) || 8), 0, 32) })}
                       className="w-20 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
                     />
                     <span className="text-slate-500">px</span>
@@ -1693,7 +1692,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                         value={effect.strokeWidth ?? 5}
                         disabled={disabled}
                         onChange={(e) => {
-                          const v = Math.max(1, Math.min(20, Math.round(Number(e.target.value))));
+                          const v = clamp(Math.round(Number(e.target.value)), 1, 20);
                           updateEffect(effect.id, { strokeWidth: Number.isFinite(v) ? v : 5 });
                         }}
                         className="w-16 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
@@ -1740,7 +1739,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                       step={0.05}
                       value={effect.shapeOpacity ?? 1}
                       disabled={disabled}
-                      onChange={(e) => updateEffect(effect.id, { shapeOpacity: Math.max(0, Math.min(1, parseFloat(e.target.value) || 1)) })}
+                      onChange={(e) => updateEffect(effect.id, { shapeOpacity: clamp(parseFloat(e.target.value) || 1, 0, 1) })}
                       className="w-20 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
                     />
                   </label>
@@ -1769,7 +1768,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                         step={2}
                         value={effect.shapeRectRadius ?? 6}
                         disabled={disabled}
-                        onChange={(e) => updateEffect(effect.id, { shapeRectRadius: Math.max(0, Math.min(24, Math.round(Number(e.target.value) || 0))) })}
+                        onChange={(e) => updateEffect(effect.id, { shapeRectRadius: clamp(Math.round(Number(e.target.value) || 0), 0, 24) })}
                         className="w-20 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
                       />
                     </label>
@@ -2002,7 +2001,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                         step={4}
                         value={effect.overlayImageBorderRadius ?? 0}
                         disabled={disabled}
-                        onChange={(e) => updateEffect(effect.id, { overlayImageBorderRadius: Math.max(0, Math.min(48, Math.round(Number(e.target.value) || 0))) })}
+                        onChange={(e) => updateEffect(effect.id, { overlayImageBorderRadius: clamp(Math.round(Number(e.target.value) || 0), 0, 48) })}
                         className="w-16 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
                       />
                       <span className="text-slate-500">px</span>
@@ -2089,7 +2088,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                       step={2}
                       value={effect.formulaBorderRadius ?? 8}
                       disabled={disabled}
-                      onChange={(e) => updateEffect(effect.id, { formulaBorderRadius: Math.max(0, Math.min(32, Math.round(Number(e.target.value) || 8))) })}
+                      onChange={(e) => updateEffect(effect.id, { formulaBorderRadius: clamp(Math.round(Number(e.target.value) || 8), 0, 32) })}
                       className="w-20 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
                     />
                     <span className="text-slate-500">px</span>
