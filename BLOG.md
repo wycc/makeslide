@@ -8605,3 +8605,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **接入**（`report.ts`）：`correct_rate`、`wrong_rate`、`participation_rate`、`completion_rate`（CSV 與 summary 各一）改用 `safeRatio`；兩處 local `round4` 改用共用版本；頁面 CSV 的投票分歧改用 `pollDivergence`。
 - **測試**：新增 `report-metrics.test.ts`（4 案例，涵蓋 `safeRatio` 正常/除以 0、`round4`、`pollDivergence` 共識/半分裂/無票）。
 - **驗證**：backend `tsc --noEmit` 通過；新測試 4/4 通過；既有 `report-pages-csv`、`report-questions-csv`、`report-summary`、`report-question-stats` 共 16/16 回歸通過，確認行為等價。以 `scripts/run-tests.sh backend` 執行。
+
+## 抽出學生平均分純函式 average（2026-06-27）
+
+### 功能目的
+課後報告的學生報表會算每位學生的平均分數。原本 `report.ts` 的 `computeStudentRecords` 內聯了 `scores.length > 0 ? scores.reduce((a,b)=>a+b,0)/scores.length : null`。本項把這個「陣列平均、空陣列回 null」的小邏輯收斂成可測純函式，放進上一輪建立的報告指標模組。
+
+### 使用方式
+此為後端內部重構，學生平均分與先前一致。需要算平均時，`import { average } from './reportMetrics'`，`average([10,20,30])` → 20、`average([])` → null。
+
+### 技術細節
+- **新增純函式**（`backend/src/routes/pdfs/reportMetrics.ts`）：`average(values: number[]): number | null`——非空回算術平均，空陣列回 `null`（讓「沒有可計分作答」與「平均為 0」可區分）。
+- **接入**：`report.ts` 的 `computeStudentRecords` 學生平均分改用 `average(scores)`。
+- **測試**：`report-metrics.test.ts` 新增 1 案例（多值平均、單值、空陣列回 null、小數）。
+- **驗證**：backend `tsc --noEmit` 通過；新測試 5/5 通過；既有 `report-students`、`student-report` 共 15/15 回歸通過。以 `scripts/run-tests.sh backend` 執行。

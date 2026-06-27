@@ -22,7 +22,9 @@
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 20 個完成項目（20/100，未達上限）。
 - [ ] 抽出 `avg_listened_ratio` 的 SQL 聚合為共用片段或測試：`report.ts` 兩處（pages.csv 與 summary）重複同一段 `AVG(CASE WHEN w.duration_ms ... MIN(listened_ms/duration_ms, 1.0) ...)` SQL，易漂移。評估抽成共用常數字串或補一個針對該聚合的整合測試固化語意。
 - [ ] 後端搜尋語意索引上限可設定：`search.ts` 的 `MAX_SEMANTIC_PDFS = 20`（STATUS_REPORT §4.4）為硬編，教材知識庫成長後需要更大或可調。評估改為可由系統設定調整並補測試。
-- [ ] 抽出學生平均分計算純函式：`report.ts` 的 `computeStudentRecords` 內聯 `scores.reduce((a,b)=>a+b,0)/scores.length`（平均分），與其他平均邏輯重複，抽成可測純函式（含空陣列回 null）。
+- [x] 抽出學生平均分計算純函式：`report.ts` 的 `computeStudentRecords` 內聯 `scores.reduce((a,b)=>a+b,0)/scores.length`（平均分），與其他平均邏輯重複，抽成可測純函式（含空陣列回 null）。
+  - 修改說明（2026-06-27）：於 `reportMetrics.ts` 新增 `average(values): number | null`（空陣列回 null），`report.ts` 的 `computeStudentRecords` 學生平均分改用之（行為等價）。`report-metrics.test.ts` 補 1 組測試（平均/單值/空陣列回 null/小數）。backend `tsc --noEmit` 通過；新測試 5/5 + 既有 `report-students`/`student-report` 共 15/15 回歸通過。分支 `refactor/report-average-helper`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 21 個完成項目（21/100，未達上限）。
 
 ## 修正既有失敗測試（第一三七輪，2026-06-27）
 
@@ -83,6 +85,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （後端）抽出學生平均分純函式：`reportMetrics.ts` 新增 `average`（空回 null），`report.ts` computeStudentRecords 改用；補 1 測試，15 報告測試回歸通過（計數 21/100） | refactor/report-average-helper（已 merge） |
 | 2026-06-27 | （後端，依 LOOP 第 2 條）抽出課後報告共用比例/四捨五入純函式：新增 `reportMetrics.ts`（`safeRatio`/`round4`/`pollDivergence`），收斂 `report.ts` 多處內聯比例與重複 `round4`；補 4 測試，既有 16 報告測試回歸通過（計數 20/100）；另新增 3 個後端可執行項目 | refactor/report-metrics-helpers（已 merge） |
 | 2026-06-27 | 抽出剩餘播放秒數純函式：新增 `lib/remainingTime.ts` 的 `computeRemainingSeconds`，`PlayPageSlidePanel` 的 useMemo 改委派；補 7 測試；typecheck 通過（計數 19/100） | refactor/remaining-seconds（已 merge） |
 | 2026-06-27 | 抽出測驗計分純函式：`quizScoring.ts` 新增 `calcAttemptScore`/`maxAttemptScore`，收斂 `QuizBuilderPage` 兩處計分內聯；補 3 測試（11/11）；typecheck 通過（計數 18/100） | refactor/quiz-attempt-score（已 merge） |
