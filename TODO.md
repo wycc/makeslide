@@ -13,6 +13,11 @@
 - [ ] 系統性採用 `mapApiErrorToHumanMessage`：目前約 55 處 catch 區塊直接 `setError(err.message)` 顯示後端原始 message、繞過既有的錯誤訊息映射（前端僅 2 處 `UploadButton`、`ImportTextPage` 使用 mapper）。全面改造屬較大工程，且各 catch 上下文不同、許多後端 message 已是中文（未必都是英文洩漏），逐點需產品判斷顯示風格，故列為待使用者決定。
 - [ ] 把前端測試納入 root `npm test`：目前 root 測試腳本未涵蓋前端 `node:test` 測試。納入涉及 CI 行為變更與 `npm install`（sandbox 無法驗證），列為待使用者決定。
 
+## 修正既有失敗測試（第一三七輪，2026-06-27）
+
+- [x] 修正 `status-machine.test.ts` 的 PROGRESS_STEPS 鏡像 drift（上輪跑測試時發現的既有失敗）：測試期望的 `PROGRESS_STEPS` 只有 7 個，但 `statusMachine.ts` 已新增 3 個 YouTube 相關步驟（`downloading_captions`／`downloading_audio`／`transcribing_audio`，於 `youtubeCaptions.ts`／`pipeline.ts` 實際使用、前端 `types.ts` 亦已鏡像），導致 `deepEqual` 失敗。確認 source 正確、test 過時，更新測試期望陣列（依 backend 陣列順序）並補 `isProgressStep('transcribing_audio')` 斷言。後端 `tsc --noEmit` 通過、`status-machine.test.ts` 5/5 通過（以 `scripts/run-tests.sh` 執行）。分支 `fix/progress-steps-test-mirror`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 17 個完成項目（17/100，未達上限）。
+
 ## 依 STATUS_REPORT 新增可執行項目（第一三五輪，2026-06-27）
 
 使用者提示產生新項目時應參考 `docs/STATUS_REPORT_2026_06_27.md`（該檔此前因檔名問題不存在、現已補上）。依其 §4.2／§7.2／§9 的優先建議，新增以下項目（P0 bug 列首，已初步以 grep 驗證）：
@@ -63,6 +68,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | 修正既有失敗測試 `status-machine.test.ts`：PROGRESS_STEPS 期望陣列補上 3 個 YouTube 步驟（source 正確、test 過時），5/5 通過；新增 `scripts/run-tests.sh` 一次測試成功（依使用者要求）（計數 17/100） | fix/progress-steps-test-mirror（已 merge） |
 | 2026-06-27 | （P0 bug，依 STATUS_REPORT §4.2）修正品質檢查／匯出漏頁：`quality-check`/`image-quality`/`script-quality`/`h5p` 4 路由的頁面查詢由不存在的 page 狀態 `'ready'` 改為終態 `'audio_ready'`；修正 3 測試 fixture、新增 quality-check.test.ts；以 Node 22 + `--test-force-exit` 驗證子測試全通過（計數 16/100） | fix/quality-export-page-status（已 merge） |
 | 2026-06-27 | 比例條百分比收斂：發現既有 `progressPercent` 已是該通用函式，改為重用而非新增；收斂 `HomePage` 用量比例條與 `SettingsPage` 索引進度條 2 處，順帶修掉 `total_pages=0` 時 `NaN%` 潛在 bug；typecheck 通過、既有測試續通過（計數 15/100） | refactor/reuse-progress-percent（已 merge） |
 | 2026-06-27 | 依 LOOP.md 第 2 條分析前端程式（第一三四輪）：TODO 僅剩 2 個待使用者決定項目，新增 5 個項目並完成其一——模板字串內插收斂為 `lib/interpolateTemplate.ts`，收斂 6 處內聯（ImportTextPage/AddPagesFromPromptModal/PlayPageSidebar/SystemDataPage/QuizBuilderPage/PlayPageFullscreen）；補 6 測試；typecheck 通過、無殘留（計數 14/100） | refactor/interpolate-template（已 merge） |
