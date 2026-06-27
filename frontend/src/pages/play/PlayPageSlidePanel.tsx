@@ -8,6 +8,7 @@ import { formatTime, formatDurationMs, formatTokenCount, formatCostUsd, adjustRe
 import { PageTimingChips } from './PageTimingChips';
 import { ApiError, fetchPageGenerationPrompts, fetchPdfRunHistory, fetchPdfSlowArtifacts, figureImageUrl, fetchSyncAttendees, kickSyncAttendee, rewritePageScript } from '../../lib/api';
 import { copyTextToClipboard } from '../../lib/clipboard';
+import { clamp } from '../../lib/clamp';
 import { SHOW_SUBTITLE_STORAGE_KEY, SUBTITLE_SIZE_STORAGE_KEY, SUBTITLE_POSITION_STORAGE_KEY, AUTO_ADVANCE_STORAGE_KEY, INTERACTIVE_MODE_STORAGE_KEY, useI18n, type TranslationKey, type SubtitleSize, type SubtitlePosition } from '../../i18n';
 import { debugLog, debugWarn } from '../../lib/debugLog';
 import { usePlayPageContext } from './PlayPageContext';
@@ -207,7 +208,7 @@ export function PlayPageSlidePanel() {
   const handleJumpPageCommit = () => {
     const n = parseInt(jumpPageInput, 10);
     if (!isNaN(n)) {
-      const clamped = Math.max(1, Math.min(n, totalPages));
+      const clamped = clamp(n, 1, totalPages);
       setCurrentIdx(clamped - 1);
     }
     setJumpPageInput('');

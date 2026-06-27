@@ -4,10 +4,11 @@ import type {
   PdfReportSummary,
   PdfReportWatchProgressPageSummary,
 } from '../../lib/api';
+import { clamp } from '../../lib/clamp';
 
 export function formatReportPercent(value: number | null | undefined): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
-  return `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`;
+  return `${Math.round(clamp(value, 0, 1) * 100)}%`;
 }
 
 export function formatReportNumber(value: number | null | undefined): string {

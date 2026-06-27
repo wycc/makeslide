@@ -7,6 +7,7 @@ import { formatRelativeTime, buildRelativeTimeLabels } from '../lib/relativeTime
 import { createPdfShare } from '../lib/api/pdfs';
 import { copyTextToClipboard } from '../lib/clipboard';
 import { progressPercent } from '../lib/progressPercent';
+import { clamp } from '../lib/clamp';
 import { shouldShowCoverImage } from './pdfCardCover';
 
 const PROGRESS_LABEL_KEYS: Record<string, Parameters<ReturnType<typeof useI18n>['t']>[0]> = {
@@ -95,7 +96,7 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExpo
 
   const progressTotal = pdf.progress_total ?? 0;
   const progressCurrentRaw = pdf.progress_current ?? 0;
-  const progressCurrent = Math.max(0, Math.min(progressCurrentRaw, progressTotal || progressCurrentRaw));
+  const progressCurrent = clamp(progressCurrentRaw, 0, progressTotal || progressCurrentRaw);
   const progressPct = progressPercent(progressCurrent, progressTotal);
   const progressStepLabel =
       pdf.progress_step != null
