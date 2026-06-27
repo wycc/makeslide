@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { ShareTokenParamSchema, getShareToken, hasShareAccess } from './share';
-import { getPdfPermissionRow, canReadPdf, canEditPdf } from './permissions';
+import { getPdfPermissionRow, canReadPdf, canEditPdf, canDestructivelyEditPdf } from './permissions';
 import { toFile } from 'openai';
 import type { ChatCompletionContentPart } from 'openai/resources/chat/completions';
 import fs from 'node:fs';
@@ -64,12 +64,6 @@ function imageEditTimeoutMs(): number {
 // anonymous request (no session cookie, no share token) can never destroy data just because the
 // presentation's visibility happens to be public_editable. All other (reversible) content-editing
 // routes in this file keep using canEditPdf() unchanged. Mirrors delete.ts's canEditPdf() fix.
-function canDestructivelyEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
-  if (!row.owner_sub) return true;
-  if (sub && row.owner_sub === sub) return true;
-  return Boolean(sub) && row.visibility === 'public_editable';
-}
-
 const EDIT_SLIDE_IMAGE_PROMPT_FALLBACK = [
   'You are editing an existing presentation slide image provided as the input image.',
   'Use the uploaded image as the strict visual source of truth.',

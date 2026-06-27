@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { canReadPdf, canEditPdf } from './permissions';
+import { canReadPdf, canEditPdf, canDestructivelyEditPdf } from './permissions';
 import { getShareToken, ShareTokenParamSchema } from './share';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -95,12 +95,6 @@ function hasOwnerOrLegacyAccess(sub: string | null, row: Pick<PdfRow, 'owner_sub
 // participant's vote history. Reuses canEditPdf()'s owner/public_editable logic but additionally
 // requires an authenticated session before the public_editable fallback applies. Mirrors
 // delete.ts's canEditPdf() fix.
-function canDestructivelyEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
-  if (!row.owner_sub) return true;
-  if (sub && row.owner_sub === sub) return true;
-  return Boolean(sub) && row.visibility === 'public_editable';
-}
-
 const CreatePdfShareBodySchema = z.object({
   access: z.enum(['read_only', 'editable']),
   visibility: z.enum(['private', 'public', 'public_editable']).optional(),
