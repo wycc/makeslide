@@ -2,6 +2,7 @@ import { RegenerateProgress } from './RegenerateProgress';
 import type { RegenJobState } from '../../types';
 import { useI18n } from '../../i18n';
 import { formatRegenSelectedPagesSummary } from './formatters';
+import { normalizeScriptMaxChars } from '../../lib/scriptMaxChars';
 
 interface RegenOptions {
   image: boolean;
@@ -197,7 +198,7 @@ export function RegenAllDialog({
                 onChange={(e) => {
                   const raw = Number(e.target.value);
                   if (!Number.isFinite(raw)) return;
-                  const normalized = Math.max(80, Math.min(2000, Math.round(raw)));
+                  const normalized = normalizeScriptMaxChars(raw);
                   onRegenScriptMaxCharsPerPageChange(normalized);
                 }}
                 className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-fuchsia-500/40 placeholder:text-slate-500 focus:ring"

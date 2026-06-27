@@ -1,4 +1,5 @@
 import { geminiVoiceLabel, openaiVoiceLabel, type TtsProvider } from '../../lib/ttsVoices';
+import { normalizeScriptMaxChars } from '../../lib/scriptMaxChars';
 import { useI18n } from '../../i18n';
 
 interface TtsDialogProps {
@@ -118,7 +119,7 @@ export function TtsDialog({
                 if (raw === '') { onScriptMaxCharsPerPageChange(null); return; }
                 const n = Number(raw);
                 if (!Number.isFinite(n)) return;
-                onScriptMaxCharsPerPageChange(Math.max(80, Math.min(2000, Math.round(n))));
+                onScriptMaxCharsPerPageChange(normalizeScriptMaxChars(n));
               }}
               disabled={disabled}
               className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100 placeholder:text-slate-500"
