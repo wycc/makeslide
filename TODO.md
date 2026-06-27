@@ -18,7 +18,9 @@
 - [x] 抽出共用 `canEditPdf` 權限函式（去重 / 可測）：標準 `canEditPdf`（owner / public_editable）在 21 個路由檔逐字重複。抽成共用並補測試；**delete.ts 的版本刻意更嚴格**（`Boolean(sub) && public_editable`，禁止匿名刪除），不替換。
   - 修改說明（2026-06-27）：在 `permissions.ts` 新增 `canEditPdf`（標準版，含註解說明 delete.ts 例外）。以腳本移除 21 檔標準本地定義並合併 import（已有 `import { canReadPdf } from './permissions'` 的 12 檔改為 `{ canReadPdf, canEditPdf }`、其餘 9 檔新增 import）。delete.ts 的嚴格版維持不動。新增 `permissions.test.ts` 的 canEditPdf 測試（見下）。修正腳本誤把 permissions.ts 自身納入而加的自我 import。backend `tsc --noEmit` 通過；抽查約 12 個路由測試檔回歸全通過（quizzes 24、drawings、page-comments、detail-permission 92、figures-polls-permission、add-pages…）；標準本地定義 0。分支 `refactor/shared-can-edit-pdf`，已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 28 個完成項目（28/100，未達上限）。
-- [ ] （既有失敗，待修）`page-animation.test.ts` 1/123 失敗：`validateAnimationSpec rejects a shape effect with an invalid shape kind`。在 master 即失敗、與權限重構無關。待查 `validateAnimationSpec` 對 shape kind 的驗證。
+- [x] （既有失敗，待修）`page-animation.test.ts` 1/123 失敗：`validateAnimationSpec rejects a shape effect with an invalid shape kind`。在 master 即失敗、與權限重構無關。待查 `validateAnimationSpec` 對 shape kind 的驗證。
+  - 修改說明（2026-06-27）：又一個 mirror drift——測試用 `shape: 'triangle'` 當「不合法」案例，但 `ANIMATION_SHAPE_KINDS` 早已新增 `triangle`/`star`/`hexagon`（前端 `types.ts` 與 i18n 三角形/五角星/六角形齊備、為**已支援**形狀），故 triangle 實為合法、測試斷言過時。確認 enum 正確、測試過時後，將測試改用真正不在清單的 `'octagon'`。`page-animation.test.ts` 123/123 通過（先前 122/123）。純測試修正、未動產品碼。分支 `fix/animation-shape-kind-test`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 29 個完成項目（29/100，未達上限）。
 
 ## 後端大量去重 sessionSub（第一四六輪，2026-06-27）
 
@@ -115,6 +117,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （修既有失敗）`page-animation.test.ts`：shape kind mirror drift——`triangle` 早已成合法形狀，測試改用真正不合法的 `octagon`；123/123 通過（計數 29/100） | fix/animation-shape-kind-test（已 merge） |
 | 2026-06-27 | （後端，去重）抽出共用 `canEditPdf` 至 permissions.ts：21 檔標準定義收斂、合併 import；delete.ts 嚴格版保留；補測試；typecheck 通過、12 路由測試回歸通過；另記 1 個既有失敗（page-animation shape kind）（計數 28/100） | refactor/shared-can-edit-pdf（已 merge） |
 | 2026-06-27 | （後端）收斂 2 個 `sessionSubFromRequest`（export/subtitles）改用共用 `sessionSub`，清理未用 import；10 測試回歸通過；全 repo 無殘留（計數 27/100） | refactor/collapse-session-sub-from-request（已 merge） |
 | 2026-06-27 | （後端，大量去重）抽出共用 `sessionSub` 至 auth.ts：移除 38 檔逐字重複定義 + 清理 26 檔未使用 FastifyRequest import；補 4 測試；typecheck 通過、14 路由測試回歸通過（計數 26/100） | refactor/shared-session-sub（已 merge） |

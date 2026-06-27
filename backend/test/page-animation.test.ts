@@ -275,7 +275,8 @@ test('validateAnimationSpec accepts a shape effect with each shape kind and over
 });
 
 test('validateAnimationSpec rejects a shape effect with an invalid shape kind', () => {
-  assert.equal(validateAnimationSpec(validSpec([fadeIn({ type: 'shape', shape: 'triangle' })])).ok, false);
+  // 'octagon' is not in ANIMATION_SHAPE_KINDS (circle/rect/ellipse/arrow/line/triangle/star/hexagon).
+  assert.equal(validateAnimationSpec(validSpec([fadeIn({ type: 'shape', shape: 'octagon' })])).ok, false);
 });
 
 test('validateAnimationSpec accepts a shape effect without an explicit shape (defaults applied by frontend)', () => {
