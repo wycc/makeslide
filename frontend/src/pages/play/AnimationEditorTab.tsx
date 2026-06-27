@@ -30,6 +30,7 @@ import {
   getFocusEffectParams,
   getShapeKind,
   insertEffectAfterPlaybackEffect,
+  mergeEffectRanges,
   resolveStartTriggerSeconds,
 } from '../../lib/animationSpec';
 import { usePlayPageContext } from './PlayPageContext';
@@ -660,20 +661,14 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
           : effect.start;
         return { effect, start, end: start + effect.duration };
       });
-      const minStart = Math.min(...ranges.map((r) => r.start));
-      const maxEnd = Math.max(...ranges.map((r) => r.end));
-      const earliest = ranges.reduce((a, b) => (b.start < a.start ? b : a)).effect;
-      const merged: SlideAnimationEffect = {
-        ...earliest,
-        start: minStart,
-        duration: maxEnd - minStart,
-      };
+      const merged = mergeEffectRanges(ranges);
+      if (!merged) return base;
       const selectedIds = new Set(selected.map((e) => e.id));
       return {
         ...base,
         effects: base.effects
-          .filter((e) => !selectedIds.has(e.id) || e.id === earliest.id)
-          .map((e) => (e.id === earliest.id ? merged : e)),
+          .filter((e) => !selectedIds.has(e.id) || e.id === merged.id)
+          .map((e) => (e.id === merged.id ? merged : e)),
       };
     });
     setSelectedEffectIds(new Set());
