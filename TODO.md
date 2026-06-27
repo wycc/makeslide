@@ -18,8 +18,10 @@
 - [x] 抽出共用 `canReadPdf` 權限函式（大量去重 / 可測）：`canReadPdf(sub, row)` 在 **27 個** PDF 路由檔案中**逐字重複**定義（grep 確認 27 份實作完全一致），維護風險高。抽成共用模組並補測試。
   - 修改說明（2026-06-27）：新增 `backend/src/routes/pdfs/permissions.ts` 匯出 `canReadPdf`（含註解說明規則：無 owner 公開、owner 可讀、其餘僅 public/public_editable）。以腳本機械式移除 27 檔的本地定義並改 `import { canReadPdf } from './permissions'`（移除後各檔 `PdfRow` 仍有其他用途、且未啟用 `noUnusedLocals`，無未使用 import 問題）。新增 `permissions.test.ts` 3 組測試（無 owner、owner、非 owner×可見度）。backend `tsc --noEmit` 通過；抽查 30 個路由測試檔回歸（detail-permission 92、quality/h5p/script/image/report-summary 等）全通過，殘留本地定義 0。分支 `refactor/shared-can-read-pdf`，已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 23 個完成項目（23/100，未達上限）。
-- [ ] （既有失敗，待修）`notes-txt.test.ts` 4/5 失敗：`NOT NULL constraint failed: pages.page_notes`——測試插入 pages 未給 `page_notes`，但該欄為 NOT NULL。在 master 即失敗、與權限重構無關。評估是測試 fixture 漏給欄位、或 schema 應給預設值。
-- [ ] （既有失敗，待修）`quizzes.test.ts` 1/24 失敗：在 master 即失敗、與本輪無關，待查明根因後修正。
+- [x] （既有失敗，待修）`notes-txt.test.ts` 4/5 失敗：`NOT NULL constraint failed: pages.page_notes`——測試插入 pages 未給 `page_notes`，但該欄為 NOT NULL。在 master 即失敗、與權限重構無關。評估是測試 fixture 漏給欄位、或 schema 應給預設值。
+  - 修改說明（2026-06-27）：根因為**測試 fixture 與 schema 不符**——`pages.page_notes` 是 `NOT NULL DEFAULT ''`（production 不會是 NULL），但測試 2 處明確塞 `NULL`（seedPdf 第 2 頁、fallback 測試的 `UPDATE ... SET page_notes = NULL`），違反 NOT NULL。路由本身用 `COALESCE(page_notes,'')` + `.trim()` 對 ''/NULL 行為相同，無需改。將兩處 `NULL` 改為 `''`（代表「無備註」、符合 schema）。`notes-txt.test.ts` 5/5 通過（先前 1/5）。純測試修正、未動產品碼。分支 `fix/notes-txt-test-page-notes-not-null`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 24 個完成項目（24/100，未達上限）。
+- [ ] （既有失敗，待修）`quizzes.test.ts` 1/24 失敗：`POST /quizzes/:quizId/copy-to/:targetId` 預期 201 卻得 **400**（來自 `CopyToParamSchema.safeParse` 失敗）。靜態看參數（id/quizId 數字字串/targetId）似乎合法，需實際重現印出 400 body 與 `request.params` 才能定位（可能是路由匹配順序、quizId regex `^[1-9]\d{0,9}$` 邊界、或 params 解析）。在 master 即失敗、與本輪無關。
 
 ## 後端分析新增可執行項目（第一四〇輪，2026-06-27）
 
@@ -95,6 +97,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （修既有失敗）`notes-txt.test.ts`：fixture 兩處塞 `page_notes = NULL` 違反 NOT NULL，改為 `''`；5/5 通過（計數 24/100）。quizzes copy-to 400 仍待重現除錯 | fix/notes-txt-test-page-notes-not-null（已 merge） |
 | 2026-06-27 | （後端，大量去重）抽出共用 `canReadPdf`：27 個路由檔逐字重複的權限函式收斂為 `permissions.ts`；補 3 測試；typecheck 通過、30 路由測試回歸通過；另記錄 2 個與本輪無關的既有失敗測試（notes-txt、quizzes）（計數 23/100） | refactor/shared-can-read-pdf（已 merge） |
 | 2026-06-27 | （後端）抽出 watch 聚合查詢 `queryWatchPages`：收斂 `report.ts` pages.csv 與 summary 兩處重複的 avg_listened_ratio SQL 為單一函式；7 報告測試回歸通過（計數 22/100） | refactor/query-watch-pages（已 merge） |
 | 2026-06-27 | （後端）抽出學生平均分純函式：`reportMetrics.ts` 新增 `average`（空回 null），`report.ts` computeStudentRecords 改用；補 1 測試，15 報告測試回歸通過（計數 21/100） | refactor/report-average-helper（已 merge） |

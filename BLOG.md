@@ -8646,3 +8646,16 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **接入**：以腳本機械式移除 27 個路由檔（add-pages、comments、detail、drawings、export、figures、from-pages、h5p、handout、image-quality、notes-txt、page-animation、page-operations、pptx、quality-check、quizzes、regenerate、runs、scorm、scripts-txt、script-quality、search、slow-artifacts、subtitles、upload、versioning、watchProgress）的本地定義，改為從 `./permissions` import。移除後各檔的 `PdfRow` 型別仍有其他用途，且專案未啟用 `noUnusedLocals`，無未使用 import 問題。
 - **測試**：新增 `permissions.test.ts`（3 案例：無 owner 任何人可讀、owner 可讀私有、非 owner 僅能讀 public/public_editable）。
 - **驗證**：backend `tsc --noEmit` 通過；殘留本地定義 0；抽查約 30 個路由測試檔回歸（含 detail-permission 92 個）全數通過。注意：`notes-txt`（4 個）與 `quizzes`（1 個）有失敗，但比對 master 確認為**與本重構無關的既有失敗**，已另列入 TODO 待修。以 `scripts/run-tests.sh backend` 執行。
+
+## 修正 notes-txt 測試的 page_notes NOT NULL 失敗（2026-06-27）
+
+### 功能目的
+`notes-txt.test.ts` 原本有 4/5 個測試失敗，錯誤是 `NOT NULL constraint failed: pages.page_notes`。根因是**測試資料與資料表結構不符**：`pages.page_notes` 欄位定義為 `TEXT NOT NULL DEFAULT ''`（實際營運中永遠不會是 NULL），但測試在兩個地方明確把它塞成 `NULL`，違反 NOT NULL 約束，導致連測試資料都建不起來。本項修正測試讓它反映真實的資料表行為。
+
+### 使用方式
+此為測試修正，無行為變更。
+
+### 技術細節
+- **根因**：`seedPdf` 第 2 頁的 INSERT 與「無備註時回退文字」測試的 `UPDATE pages SET page_notes = NULL` 都寫入 NULL。`notes.txt` 路由本身以 `COALESCE(page_notes, '')` + `.trim()` 處理，對 `''` 與 `NULL` 行為相同，因此產品碼不需更動。
+- **修正**：把那兩處的 `NULL` 改為 `''`（空字串，代表「無備註」，且符合 `NOT NULL DEFAULT ''` 的 schema）。
+- **驗證**：`notes-txt.test.ts` 由 1/5 變為 5/5 通過（以 `scripts/run-tests.sh backend` 執行）。純測試修正，未動產品碼。
