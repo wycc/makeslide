@@ -1068,35 +1068,35 @@ export function PlayPageSlidePanel() {
             <button
               type="button"
               onClick={() => setEditTab('script')}
-              className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'script' ? 'bg-surface-muted text-emerald-700 dark:text-emerald-200' : 'text-muted'}`}
+              className={`flex-1 whitespace-nowrap px-2 py-1.5 text-xs ${editTab ==='script' ? 'bg-surface-muted text-emerald-700 dark:text-emerald-200' : 'text-muted'}`}
             >
               {t('play.slidePanel.transcriptTab')}
             </button>
             <button
               type="button"
               onClick={() => setEditTab('prompt')}
-              className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'prompt' ? 'bg-surface-muted text-cyan-700 dark:text-cyan-200' : 'text-muted'}`}
+              className={`flex-1 whitespace-nowrap px-2 py-1.5 text-xs ${editTab ==='prompt' ? 'bg-surface-muted text-cyan-700 dark:text-cyan-200' : 'text-muted'}`}
             >
               {t('play.slidePanel.promptTab')}
             </button>
             <button
               type="button"
               onClick={() => setEditTab('animation')}
-              className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'animation' ? 'bg-surface-muted text-fuchsia-700 dark:text-fuchsia-200' : 'text-muted'}`}
+              className={`flex-1 whitespace-nowrap px-2 py-1.5 text-xs ${editTab ==='animation' ? 'bg-surface-muted text-fuchsia-700 dark:text-fuchsia-200' : 'text-muted'}`}
             >
               🎞 {t('play.animation.tab')}
             </button>
             <button
               type="button"
               onClick={() => setEditTab('figures')}
-              className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'figures' ? 'bg-surface-muted text-sky-700 dark:text-sky-200' : 'text-muted'}`}
+              className={`flex-1 whitespace-nowrap px-2 py-1.5 text-xs ${editTab ==='figures' ? 'bg-surface-muted text-sky-700 dark:text-sky-200' : 'text-muted'}`}
             >
               📊 {t('play.figures.tab')}
             </button>
             <button
               type="button"
               onClick={() => setEditTab('system')}
-              className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'system' ? 'bg-surface-muted text-amber-700 dark:text-amber-200' : 'text-muted'}`}
+              className={`flex-1 whitespace-nowrap px-2 py-1.5 text-xs ${editTab ==='system' ? 'bg-surface-muted text-amber-700 dark:text-amber-200' : 'text-muted'}`}
             >
               🧾 {t('play.system.tab')}
             </button>
@@ -1112,14 +1112,14 @@ export function PlayPageSlidePanel() {
                     .finally(() => { setGenPromptsLoading(false); });
                 }
               }}
-              className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'source' ? 'bg-surface-muted text-violet-700 dark:text-violet-200' : 'text-muted'}`}
+              className={`flex-1 whitespace-nowrap px-2 py-1.5 text-xs ${editTab ==='source' ? 'bg-surface-muted text-violet-700 dark:text-violet-200' : 'text-muted'}`}
             >
               📚 {t('play.source.tab')}
             </button>
             <button
               type="button"
               onClick={() => setTranscriptFocusMode((enabled) => !enabled)}
-              className={`shrink-0 border-l border-border px-3 py-1.5 text-sm ${
+              className={`shrink-0 border-l border-border px-2 py-1.5 text-xs ${
                 transcriptFocusMode ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-200' : 'text-muted hover:bg-surface-muted hover:text-text'
               }`}
               aria-pressed={transcriptFocusMode}
