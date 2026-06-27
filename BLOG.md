@@ -8796,3 +8796,16 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **修正**：於檔頭加上 `setSystemAuthSettings({ googleAuthEnabled: false })`。已確認沒有任何測試把 `googleAuthEnabled` 設成 `true`，因此不會有全域狀態的順序衝突。
 - **驗證**：`input-security.test.ts` 由 0/4 變為 4/4 通過。純測試修正。
 - **其餘既有失敗（已記錄於 TODO 待逐一判斷）**：`pages-api`（7，頁面素材路徑由連號 `002.png` 變 uid 化 `<uid>.jpg` 的測試 vs 程式判斷）、`skills`（1，模板欄位未 round-trip）、`timing`/`figure-reference`/regenerate 矩陣（共約 5）。這些需判斷是測試過時或真實 regression，不宜為了綠燈盲改。
+
+## 修正 updateUserSkill 模板欄位形狀不一致（2026-06-27）
+
+### 功能目的
+使用者技能（教學模板）支援 `imageStylePrompt`/`quizPrompt`/`ttsProvider`/`ttsVoice` 等可選欄位。`createUserSkill` 用條件 spread——只有欄位有值時才放進物件；但 `updateUserSkill` 卻**一律**寫入這 4 個鍵，即使值是 `undefined`。由於 `JSON.stringify` 會丟棄 undefined，存到檔案再讀回時這些鍵就消失了，造成「函式回傳的物件」與「磁碟上持久化的物件」形狀不一致（一個有 undefined 鍵、一個沒有），`deepStrictEqual` 比對因此失敗。
+
+### 使用方式
+此為後端內部修正，技能 CRUD 行為不變。
+
+### 技術細節
+- **根因**：`updateUserSkill` 的物件字面值固定列出 4 個模板鍵，未值時為 `undefined`；與 `createUserSkill` 的條件 spread 形狀不一致。
+- **修正**：`updateUserSkill` 先把每個欄位解析成最終值（patch 優先、否則沿用 existing），再以 `...(value ? { key: value } : {})` 條件 spread 納入，與 `createUserSkill` 一致。值不變、只是不再寫出 undefined 鍵，使回傳物件與持久化形狀相同。
+- **驗證**：backend `tsc --noEmit` 通過；`skills.test.ts` 由 4/5 變為 5/5 通過。確認無其他測試依賴舊形狀。以 `scripts/run-tests.sh backend` 執行。
