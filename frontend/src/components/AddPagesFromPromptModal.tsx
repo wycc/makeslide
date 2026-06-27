@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { uploadProgressPercent } from '../lib/uploadProgress';
 import {
   ApiError,
   cancelAddPagesJob,
@@ -190,7 +191,7 @@ export default function AddPagesFromPromptModal({
   const progress = jobState?.progress;
   const progressPct =
     progress && progress.total > 0
-      ? Math.round((progress.current / progress.total) * 100)
+      ? uploadProgressPercent(progress.current, progress.total)
       : null;
 
   const pageResults = jobState?.pageResults ?? [];

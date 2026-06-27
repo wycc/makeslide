@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { uploadProgressPercent } from '../lib/uploadProgress';
 import {
   ApiError,
   continuePromptOutlineChat,
@@ -55,7 +56,7 @@ export default function ImportTextPage() {
       const resp = await uploadPdf(new File([content], 'pasted.txt', { type: 'text/plain' }), {
         hostMode,
         onProgress: (loaded, total) => {
-          if (total > 0) setProgress(Math.round((loaded / total) * 100));
+          if (total > 0) setProgress(uploadProgressPercent(loaded, total));
         },
       });
       navigate(`/?openPrompt=${encodeURIComponent(resp.id)}`);
@@ -124,7 +125,7 @@ export default function ImportTextPage() {
       const resp = await uploadPdf(new File([content], 'prompt-outline.txt', { type: 'text/plain' }), {
         hostMode,
         onProgress: (loaded, total) => {
-          if (total > 0) setProgress(Math.round((loaded / total) * 100));
+          if (total > 0) setProgress(uploadProgressPercent(loaded, total));
         },
       });
       navigate(`/?openPrompt=${encodeURIComponent(resp.id)}`);
