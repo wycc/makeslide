@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第一八二輪已完成 **61/100**，未達上限。
+- 最新進度：截至第一八三輪已完成 **62/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -34,6 +34,14 @@
   - 資料修復（2026-06-27）：以現行 gpt-5.5 設定，透過真正的持久化路徑 `generateAnimationForPage` 重產第 42、43 頁焦點動畫並寫回 `animation.json` + `pages` 資料表。重產後 distinct xPct 由 1（全 x10）變為 4–5、效果數由 13/6 收斂為 8/5、方框位置貼合實際版面。第 44 頁為 `static-image`、本就無動畫規格（非壞殘留），未變動。
   - 程式碼修復（分支 `fix/autofocus-image-provider-comment`，已 merge）：修正 [animationAutoFocus.ts](backend/src/services/animationAutoFocus.ts) `generateAiFocusEffects` docstring 中**已過時且會誤導排查的註解**——原稱圖片「only actually used when `LLM_PROVIDER=openai`」（因 Gemini 會剝除非文字內容）。此說法已不正確：`buildGeminiContents` 會把 data URL 轉成 `inlineData`、OpenAI 相容 provider（openai/cgu-air/openrouter）直接透傳 `image_url`，故圖片在**所有現行 provider 都會送達模型**；改寫為依實際逐 provider 行為描述，並點明「結果看似純文字（方框機械排成一欄、無視版面）代表模型/閘道未套用 vision，而非本程式碼把圖片丟掉」。僅改註解，後端 `tsc --noEmit` 通過。
   - 本項為使用者回報 bug 修復，**不計入** 100 輪計數。
+
+## 首頁分類分組組裝抽出純函式（第一八三輪，2026-06-27）
+
+延續前端：`HomePage` 的 `categoryGroups` 內聯了「find-or-create 分組+組內排序+組間排序+預設分類 fallback」，比較器本身已測但分組組裝無測試。
+
+- [x] 抽出首頁分類分組純函式 `groupItemsByCategory`（可測 / 固化分組與排序組裝）。
+  - 修改說明（2026-06-27）：新增 `lib/groupItemsByCategory.ts` 泛型 `groupItemsByCategory(items, defaultCategory, sortItemsInGroup)`（依 category 分組、空白/缺失歸預設、組內用傳入排序器、組間依分類名 locale-aware/numeric、不可變）。`HomePage` `categoryGroups` 改用之（「最近播放」特例維持）。新增 `groupItemsByCategory.test.ts`（5 組：分組排序、缺分類歸預設、套用排序器、不改輸入、空回空）。前端 `tsc --noEmit` 通過、groupItemsByCategory + HomePage.sort 共 11 測試通過。分支 `refactor/group-items-by-category`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 62 個完成項目（62/100，未達上限）。
 
 ## 範本庫分類/搜尋/排序抽出純函式（第一八二輪，2026-06-27）
 
@@ -367,6 +375,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （前端，可測）首頁分類分組組裝抽出 `groupItemsByCategory`（find-or-create 分組/組內排序/組間依分類名排序/預設分類 fallback），`HomePage` 改用之；補 5 測試（共 11）；前端 typecheck 通過（計數 62/100） | refactor/group-items-by-category（已 merge） |
 | 2026-06-27 | （前端，可測）範本庫分類/搜尋/排序抽出 `templateCategories`／`filterAndSortTemplates`（newest 保留序、popular 套用次數降冪穩定排序、搜尋名稱/說明/提示詞），`TemplatesPage` 改用之；補 5 測試；前端 typecheck 通過（計數 61/100） | refactor/template-filter（已 merge） |
 | 2026-06-27 | （前端，可測）測驗歷史平均分抽出 `averageAttemptScore`（忽略未評分 null、全空回 null、未四捨五入），`QuizBuilderPage` 改用之；補 4 測試（quizScoring 15）；前端 typecheck 通過。另記錄 `render-text-pages-figure-injection` 非確定性 flaky 調查結論（跨檔全域污染、不值得自動盲修）（計數 60/100） | refactor/average-attempt-score（已 merge） |
 | 2026-06-27 | （基線檢查+修自引入回歸）跑完整套件：前端 575/575 全綠；後端 3 失敗中 2 個為既有 flaky（figure-reference/llmUsage，隔離 10/10、僅併跑全域污染），1 個是第一七五輪自引入——templates「corrupt skill_data」測試用固定 id 致持久化 DB `UNIQUE` 衝突；改隨機後綴 id、連跑 8/8（計數 59/100） | fix/templates-test-unique-id（已 merge） |
