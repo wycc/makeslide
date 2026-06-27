@@ -369,7 +369,7 @@ export function PlayPageSlidePanel() {
 
   return (
     <div
-      className={`relative min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950/70 shadow-lg shadow-slate-900/20 dark:shadow-none ${
+      className={`relative min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950/70 text-slate-100 shadow-lg shadow-slate-900/20 dark:shadow-none ${
         sidebarExpanded ? 'md:hidden' : 'md:flex'
       } ${activeTab === 'play' ? 'flex' : 'hidden'}`}
     >
@@ -751,7 +751,7 @@ export function PlayPageSlidePanel() {
           {formatTime(Math.min(currentTime, duration))} / {formatTime(duration)}
           {remainingSeconds != null && (
             <span
-              className="ml-1 text-slate-500"
+              className="ml-1 text-slate-400"
               title={
                 playbackRate !== 1
                   ? t('play.header.timeRemainingAtSpeed').replace('{rate}', String(playbackRate))
