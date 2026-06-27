@@ -9579,3 +9579,17 @@ AI 批次加頁（`addPagesFromPrompt`）在簡報中間插入多頁時，會把
 - **深色播放器文字對比**：根因是「觀看深／編輯淺」改造後，常駐深色的播放面板沒設基底文字色，於淺色主題下繼承到 `text-text`（深 slate-900），導致控制列無色圖示（上一頁/播放/下一頁/QR）近乎隱形。給播放面板 `text-slate-100` 淺色基底（淺色編輯區自有 `text-text` 覆蓋），剩餘時間由 slate-500 提到 slate-400。
 - **焦點框放大對話框**：動畫效果的「焦點位置與大小」原本只有小預覽，拖曳調整不易。在標題旁加 ⤢ 按鈕開啟對話框，內含放大版的 `EffectPositionEditor`（本就 responsive，自動放大）＋ X/Y/寬/高 數字輸入；抽出共用 `applyFocusParams`（含 overlay-image 鎖定比例時高度連動），讓行內小預覽與對話框邏輯一致。
 - **驗證**：前端 `tsc --noEmit`、i18n parity/nonempty、`vite build` 全通過；`cleanTranscriptForReview` 5/5。分支 `refactor/merge-outline-into-slide-mgmt`（已 merge）。
+
+## 「AI 助手」分頁改 notebook 子分頁，各功能有較大顯示高度（使用者回報 UI，2026-06-28）
+
+### 功能目的
+播放頁右側「AI 助手」分頁原本把三個功能（🎓 導師問答 `PageAskPanel`、品質報告 `QualityCheckPanel`、💬 本頁問答 chat）垂直堆疊，每塊都被壓得很矮、對話與報告區侷促。使用者要求改成 notebook 形式，讓每個功能各自有較大的顯示區域。
+
+### 使用方式
+進入「AI 助手」分頁後，頂端多了一排子分頁（導師問答／品質報告／本頁問答），一次只顯示一個功能，且該功能會撐滿側欄可用高度。
+
+### 技術細節
+- `PlayPageSidebar` 新增 `aiSubTab`（`'tutor' | 'quality' | 'chat'`）狀態與子分頁列（沿用主 notebook 樣式、active 用 `primary` token）；三個 `notebookTab === 'ai'` 區塊各自再以 `aiSubTab` 收斂，一次渲染一個。
+- 撐高：本頁問答（chat）區段本就 `flex min-h-0 flex-1`；`PageAskPanel` root 改為 `flex min-h-0 flex-1 flex-col`、對話區由 `max-h-96` 改 `min-h-0 flex-1`，讓對話用滿高度；`QualityCheckPanel` root 改 `flex min-h-0 flex-1 flex-col overflow-y-auto`。由於 aside 在 PlayPage 的 flex-row 中會被拉伸到與播放面板等高，子面板 `flex-1` 即可取得確定高度。
+- 子分頁標籤新增 3 個 i18n key（`play.sidebar.aiSubTab.*`），`AI_SUBTABS` 的 `labelKey` 以 `TranslationKey` 型別標註以通過型別檢查。
+- **驗證**：前端 `tsc --noEmit`、i18n parity/nonempty、`vite build` 全通過。分支 `feat/ai-tab-notebook`（已 merge）。
