@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第一七八輪已完成 **57/100**，未達上限。
+- 最新進度：截至第一七九輪已完成 **58/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -34,6 +34,14 @@
   - 資料修復（2026-06-27）：以現行 gpt-5.5 設定，透過真正的持久化路徑 `generateAnimationForPage` 重產第 42、43 頁焦點動畫並寫回 `animation.json` + `pages` 資料表。重產後 distinct xPct 由 1（全 x10）變為 4–5、效果數由 13/6 收斂為 8/5、方框位置貼合實際版面。第 44 頁為 `static-image`、本就無動畫規格（非壞殘留），未變動。
   - 程式碼修復（分支 `fix/autofocus-image-provider-comment`，已 merge）：修正 [animationAutoFocus.ts](backend/src/services/animationAutoFocus.ts) `generateAiFocusEffects` docstring 中**已過時且會誤導排查的註解**——原稱圖片「only actually used when `LLM_PROVIDER=openai`」（因 Gemini 會剝除非文字內容）。此說法已不正確：`buildGeminiContents` 會把 data URL 轉成 `inlineData`、OpenAI 相容 provider（openai/cgu-air/openrouter）直接透傳 `image_url`，故圖片在**所有現行 provider 都會送達模型**；改寫為依實際逐 provider 行為描述，並點明「結果看似純文字（方框機械排成一欄、無視版面）代表模型/閘道未套用 vision，而非本程式碼把圖片丟掉」。僅改註解，後端 `tsc --noEmit` 通過。
   - 本項為使用者回報 bug 修復，**不計入** 100 輪計數。
+
+## 動畫效果合併選取計算抽出純函式（第一七九輪，2026-06-27）
+
+延續前端 AnimationEditorTab：「合併選取效果」的計算（最早 start／最晚 end／挑最早效果／組合併效果）內聯在 handler、無測試；合併語意（保留哪個效果設定、duration 算法、保留 startTrigger）值得固化。
+
+- [x] 抽出動畫效果合併純函式 `mergeEffectRanges`（可測 / 固化合併語意）。
+  - 修改說明（2026-06-27）：`lib/animationSpec.ts` 新增 `mergeEffectRanges(ranges)` + `SelectedEffectRange` 介面（輸入效果+已解析 start/end，回傳合併效果：起點最早 start、長度=最晚 end−最早 start、沿用最早效果設定與 id，<2 回 null）。`AnimationEditorTab` 合併處理改用之（逐字稿→秒數解析仍留元件）、移除內聯。新增 3 測試（<2 回 null、跨最早到最晚並沿用最早 id/設定、保留 startTrigger 並以解析最早秒數更新 start）。前端 `tsc --noEmit` 通過、animationSpec 61 測試通過。分支 `refactor/merge-effect-ranges`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 58 個完成項目（58/100，未達上限）。
 
 ## 焦點動畫框拖曳/縮放幾何抽出純函式（第一七八輪，2026-06-27）
 
@@ -333,6 +341,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （前端，可測）動畫效果合併選取計算抽出 `mergeEffectRanges`：最早 start/最晚 end/沿用最早效果(含 startTrigger)/duration 算法，`AnimationEditorTab` 合併處理改用之；補 3 測試（animationSpec 61）；前端 typecheck 通過（計數 58/100） | refactor/merge-effect-ranges（已 merge） |
 | 2026-06-27 | （前端，可測）焦點動畫框拖曳/縮放幾何抽出 `resizeFocusBox`：9 把手邊界夾界/最小尺寸/西北把手連動原點/四捨五入，`AnimationEditorTab` onPointerMove 改用之；補 7 邊界測試；前端 typecheck 通過（計數 57/100） | refactor/focus-box-resize（已 merge） |
 | 2026-06-27 | （前端，去重/可測）品質檢查面板挑選邏輯抽出純函式：`selectIssuePages`／`selectEmptyScriptFillPages`（含 LLM 批次補逐字稿 fan-out 上限），`QualityCheckPanel` 改用之、移除內聯；補 5 測試；前端 typecheck 通過（計數 56/100） | refactor/quality-check-selection（已 merge） |
 | 2026-06-27 | （後端，健壯性修復）相似頁面 embedding 無防護解析致一壞全壞：`GET …/similar` 跨整個帳號教材庫比對，任一筆 embedding 損壞 500 整個面板；新增 `parseEmbedding`（非法/非陣列/含非數字回 null），目標損壞→indexed:false、候選損壞→跳過；補純函式 5 + 整合 2 測試（16 回歸）（計數 55/100） | fix/similar-pages-guard-embedding-parse（已 merge） |
