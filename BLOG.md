@@ -1,5 +1,38 @@
 # MakeSlide 功能說明
 
+## 語意搜尋掃描簡報數上限改為可設定
+
+### 目的
+
+語意搜尋（首頁／播放頁的「語意」搜尋模式）一次最多掃描使用者自己的幾份簡報，原本被硬編在
+`backend/src/routes/pdfs/search.ts` 的 `MAX_SEMANTIC_PDFS = 20`。教材知識庫成長後，20 份可能太少而漏掉
+較舊的簡報；但若無上限又會讓單次搜尋要嵌入（embedding）過多內容、推高 API 成本。因此把它開放成
+每帳號可調的設定，並夾在合理範圍內。
+
+### 變更內容
+
+- 新增每帳號設定 `semanticSearchMaxPdfs`（預設 20，允許範圍 1–200），沿用既有的 per-account
+  `settings.env` 機制（與 `monthlyBudgetUsd` 相同模式）。
+- 語意搜尋改為讀取此設定（並於讀取時再夾一次範圍，作為防呆）。
+- 設定頁（Settings）新增「語意搜尋掃描簡報數上限」數字輸入框，留空維持預設值。
+- 後端 `clampSemanticSearchMaxPdfs` 統一負責「取整 + 夾 [1,200]、非有限值回退預設」。
+
+### 使用方式
+
+到「設定」頁的 AI 設定區塊，找到「語意搜尋掃描簡報數上限」，填入 1–200 的整數後儲存即可生效；
+留空代表沿用預設的 20。也可直接在帳號的 `accounts/<id>/settings.env` 設定 `SEMANTIC_SEARCH_MAX_PDFS=NN`。
+教材變多、發現語意搜尋漏掉舊簡報時可調高，但每次搜尋的 embedding 成本也會隨之增加。
+
+### 實作備註
+
+`aiSettings.ts` 新增常數（DEFAULT=20／MIN=1／MAX=200）、`clampSemanticSearchMaxPdfs`、`PerAccountAiSettings`
+欄位、base 預設、`loadPerAccountOverrides` 解析（`SEMANTIC_SEARCH_MAX_PDFS`）與 `PER_ACCOUNT_ENV_PAIRS`。
+`admin.ts` 的 GET 回傳 `semantic_search_max_pdfs`、PATCH 解析並 clamp；`shared.ts` 的 schema 加
+`z.number().int().min(1).max(200).optional()`。`search.ts` 改用 `getRuntimeAiSettings().semanticSearchMaxPdfs`
+（request 範圍的帳號情境，取搜尋者自身設定）。前端 `system.ts` 兩個 interface、`SettingsPage` 表單欄位、
+zh-TW／en 三個 i18n 鍵。新增 `semantic-search-max-pdfs.test.ts`（clamp 行為、GET 預設、PATCH 持久化 + 讀回、
+超範圍 schema 擋為 400 共 4 測試）。前後端 `tsc --noEmit` 通過；新測試 4/4、search/admin/i18n 相關回歸通過。
+
 ## 分數與成本的「四捨五入到兩位小數」收斂為共用純函式
 
 ### 目的

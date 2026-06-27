@@ -5,6 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
+- 最新進度：截至第一六六輪已完成 **45/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -157,7 +158,9 @@
 - [x] 抽出 `avg_listened_ratio` 的 SQL 聚合為共用片段或測試：`report.ts` 兩處（pages.csv 與 summary）重複同一段 `AVG(CASE WHEN w.duration_ms ... MIN(listened_ms/duration_ms, 1.0) ...)` SQL，易漂移。評估抽成共用常數字串或補一個針對該聚合的整合測試固化語意。
   - 修改說明（2026-06-27）：兩處 watch 聚合查詢實質相同（僅空白/別名差異），抽成模組層級函式 `queryWatchPages(pdfId): WatchPageRow[]`（含完整 SQL 與註解說明 avg_listened_ratio 語意），pages.csv 與 summary 兩處 `const watchPages = db.prepare(...).all(id)` 改為 `queryWatchPages(id)`，整段 SQL 收斂為單一來源。backend `tsc --noEmit` 通過；既有 `report-pages-csv`/`report-summary` 共 7/7 回歸通過（行為等價）；殘留 inline watch SQL 由 2 降為 1（即共用函式內）。分支 `refactor/query-watch-pages`，已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 22 個完成項目（22/100，未達上限）。
-- [ ] 後端搜尋語意索引上限可設定：`search.ts` 的 `MAX_SEMANTIC_PDFS = 20`（STATUS_REPORT §4.4）為硬編，教材知識庫成長後需要更大或可調。評估改為可由系統設定調整並補測試。
+- [x] 後端搜尋語意索引上限可設定：`search.ts` 的 `MAX_SEMANTIC_PDFS = 20`（STATUS_REPORT §4.4）為硬編，教材知識庫成長後需要更大或可調。評估改為可由系統設定調整並補測試。（第一六六輪，2026-06-27 完成）
+  - 修改說明（2026-06-27）：改為每帳號可調設定 `semanticSearchMaxPdfs`（預設 20、範圍 1–200），沿用既有 per-account `settings.env` 機制（同 `monthlyBudgetUsd` 模式）。`aiSettings.ts` 新增常數 + `clampSemanticSearchMaxPdfs`（取整 + 夾範圍 + 非有限值回退預設）+ interface 欄位 + base 預設 + override 解析（`SEMANTIC_SEARCH_MAX_PDFS`）+ env pair；`admin.ts` GET 回傳 `semantic_search_max_pdfs`、PATCH 解析 clamp；`shared.ts` schema 加 `z.number().int().min(1).max(200).optional()`；`search.ts` 改用 `getRuntimeAiSettings().semanticSearchMaxPdfs`（request 範圍帳號情境、讀取時再夾一次防呆）。前端 `system.ts` 兩 interface、`SettingsPage` 數字輸入欄位（留空維持預設）、zh-TW/en 三個 i18n 鍵。新增 `semantic-search-max-pdfs.test.ts` 4 測試（clamp 行為、GET 預設 20、PATCH 持久化到 settings.env + 讀回、超範圍 schema 擋 400）。前後端 `tsc --noEmit` 通過；新測試 4/4、search/admin/i18n 相關回歸通過。分支 `feat/configurable-semantic-search-limit`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 45 個完成項目（45/100，未達上限）。
 - [x] 抽出學生平均分計算純函式：`report.ts` 的 `computeStudentRecords` 內聯 `scores.reduce((a,b)=>a+b,0)/scores.length`（平均分），與其他平均邏輯重複，抽成可測純函式（含空陣列回 null）。
   - 修改說明（2026-06-27）：於 `reportMetrics.ts` 新增 `average(values): number | null`（空陣列回 null），`report.ts` 的 `computeStudentRecords` 學生平均分改用之（行為等價）。`report-metrics.test.ts` 補 1 組測試（平均/單值/空陣列回 null/小數）。backend `tsc --noEmit` 通過；新測試 5/5 + 既有 `report-students`/`student-report` 共 15/15 回歸通過。分支 `refactor/report-average-helper`，已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 21 個完成項目（21/100，未達上限）。
@@ -221,6 +224,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （新功能）語意搜尋掃描簡報數上限改為每帳號可設定：硬編 `MAX_SEMANTIC_PDFS=20` → 設定 `semanticSearchMaxPdfs`（預設 20、範圍 1–200，clamp 防呆），串接 settings.env/admin API/Settings 頁/i18n；補 4 測試，前後端 typecheck + 回歸通過（計數 45/100） | feat/configurable-semantic-search-limit（已 merge） |
 | 2026-06-27 | （真 bug 修復）ZIP 匯入 page 狀態 fallback 非法 `'ready'`+不驗證 → 改用 `isPageStatus` 驗證、無效正規化為 audio_ready；13 測試回歸（計數 44/100） | fix/import-page-status-normalize（已 merge） |
 | 2026-06-27 | （真 bug 修復）from-pages 頁面用非法狀態 `'ready'`→ 重啟後被 orphan-recovery 標 failed；改 `'audio_ready'`、補回歸測試（from-pages 6/6）。另記錄完整套件零星 flaky（figure-reference/llmUsage、隔離下通過）（計數 43/100） | fix/from-pages-page-status（已 merge） |
 | 2026-06-27 | （FK 稽核收尾）`addPagesFromPrompt` 中間插頁補 `defer_foreign_keys`（避免後續頁有投票時 FK 500）；重現驗證 + 17 測試回歸（計數 42/100） | fix/addpages-defer-fk（已 merge） |

@@ -8,11 +8,11 @@ import { extractSnippet } from './searchSnippet';
 import { sessionSub } from '../auth';
 import type { PdfRow } from '../../types';
 import { getOrCreateEmbeddings, embedQuery, cosineSimilarity } from '../../services/embeddings';
+import { getRuntimeAiSettings, clampSemanticSearchMaxPdfs } from '../../services/aiSettings';
 import { logger } from '../../logger';
 
 const MAX_READABLE_PDFS = 100;
 const MAX_PAGE_RESULTS_PER_PDF = 3;
-const MAX_SEMANTIC_PDFS = 20;
 const SEMANTIC_TOP_K = 20;
 
 const SearchQuerySchema = z.object({
@@ -64,12 +64,14 @@ export async function registerSearchRoutes(app: FastifyInstance): Promise<void> 
         return reply.code(401).send({ error: { code: 'UNAUTHORIZED', message: 'Semantic search requires authentication' } });
       }
 
-      // Only search own PDFs (need API key, limit API cost)
+      // Only search own PDFs (need API key, limit API cost). The per-account cap is
+      // configurable (re-clamped here as defence in depth against an out-of-range stored value).
+      const maxSemanticPdfs = clampSemanticSearchMaxPdfs(getRuntimeAiSettings().semanticSearchMaxPdfs);
       const ownPdfs = db
         .prepare(
           `SELECT id, title FROM pdfs WHERE owner_sub = ? ORDER BY created_at DESC LIMIT ?`,
         )
-        .all(sub, MAX_SEMANTIC_PDFS) as Array<Pick<PdfRow, 'id' | 'title'>>;
+        .all(sub, maxSemanticPdfs) as Array<Pick<PdfRow, 'id' | 'title'>>;
 
       if (ownPdfs.length === 0) {
         return reply.send({ query: q, results: [], semantic: true });

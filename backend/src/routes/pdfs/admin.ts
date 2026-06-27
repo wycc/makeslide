@@ -11,6 +11,7 @@ import {
   persistEnvSettings,
   setRuntimeAiSettings,
   transferAdminAccount,
+  clampSemanticSearchMaxPdfs,
 } from '../../services/aiSettings';
 import { invalidateOpenAIClientCache, setOpenAIApiKeyRuntime, setOpenAIBaseUrlRuntime } from '../../services/openai';
 import { currentAccountId } from '../../services/accountContext';
@@ -103,6 +104,7 @@ function aiSettingsResponse(accountId: string, isAdmin: boolean) {
     has_mcp_auth_token: runtime.mcpAuthToken.trim().length > 0,
     subtitle_sync_mode: runtime.subtitleSyncMode,
     monthly_budget_usd: runtime.monthlyBudgetUsd,
+    semantic_search_max_pdfs: runtime.semanticSearchMaxPdfs,
   };
   if (isAdmin) {
     response.google_auth_enabled = runtime.googleAuthEnabled;
@@ -238,6 +240,10 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       autoGenerateAnimation: data.auto_generate_animation,
       subtitleSyncMode: data.subtitle_sync_mode,
       monthlyBudgetUsd: data.monthly_budget_usd,
+      semanticSearchMaxPdfs:
+        typeof data.semantic_search_max_pdfs === 'number'
+          ? clampSemanticSearchMaxPdfs(data.semantic_search_max_pdfs)
+          : undefined,
     };
     if (typeof next.openaiApiKey === 'string') setOpenAIApiKeyRuntime(accountId, next.openaiApiKey);
     if (typeof next.openaiBaseUrl === 'string') setOpenAIBaseUrlRuntime(accountId, next.openaiBaseUrl);

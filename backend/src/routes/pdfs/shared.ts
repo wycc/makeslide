@@ -345,6 +345,7 @@ export const UpdateSystemAiSettingsBodySchema = z.object({
   auto_generate_animation: z.boolean().optional(),
   subtitle_sync_mode: z.enum(['estimate', 'whisper']).optional(),
   monthly_budget_usd: z.number().min(0).nullable().optional(),
+  semantic_search_max_pdfs: z.number().int().min(1).max(200).optional(),
 });
 
 export { RegenerateBatchBodySchema };
