@@ -7,6 +7,7 @@ import { fetchPageFigures, fetchPagePolls, figureImageUrl, savePageAnimation } f
 import { copyTextToClipboard } from '../../lib/clipboard';
 import { truncateWithEllipsis } from '../../lib/truncate';
 import { clamp } from '../../lib/clamp';
+import { resizeFocusBox, type FocusBoxHandle } from '../../lib/focusBoxResize';
 import {
   ANIMATION_SHAPE_KINDS,
   DEFAULT_EXIT_DURATION_SECONDS,
@@ -91,7 +92,7 @@ const EASE_LABELS = {
 } as const satisfies Record<SlideAnimationEase, TranslationKey>;
 
 /** 拖曳 handle 種類：中央為移動，四邊與四角為縮放。 */
-type DragHandle = 'move' | 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se';
+type DragHandle = FocusBoxHandle;
 
 const HANDLE_CURSORS: Record<DragHandle, string> = {
   move: 'move',
@@ -178,36 +179,14 @@ function EffectPositionEditor({
     const dy = ((e.clientY - dragRef.current.startMouseY) / rect.height) * 100;
     const { handle, startXPct, startYPct, startWidthPct, startHeightPct } = dragRef.current;
 
-    let newX = startXPct;
-    let newY = startYPct;
-    let newW = startWidthPct;
-    let newH = startHeightPct;
-
-    if (handle === 'move' || isPointerOnly) {
-      newX = clamp(startXPct + dx, 0, 100);
-      newY = clamp(startYPct + dy, 0, 100);
-    } else {
-      if (handle === 'e' || handle === 'ne' || handle === 'se') newW = clamp(startWidthPct + dx, 2, 100 - startXPct);
-      if (handle === 'w' || handle === 'nw' || handle === 'sw') {
-        const newWidth = clamp(startWidthPct - dx, 2, startXPct + startWidthPct);
-        newX = startXPct + startWidthPct - newWidth;
-        newW = newWidth;
-      }
-      if (handle === 's' || handle === 'se' || handle === 'sw') newH = clamp(startHeightPct + dy, 2, 100 - startYPct);
-      if (handle === 'n' || handle === 'nw' || handle === 'ne') {
-        const newHeight = clamp(startHeightPct - dy, 2, startYPct + startHeightPct);
-        newY = startYPct + startHeightPct - newHeight;
-        newH = newHeight;
-      }
-    }
-
-    onParamsChange({
-      xPct: Math.round(newX * 10) / 10,
-      yPct: Math.round(newY * 10) / 10,
-      widthPct: Math.round(newW * 10) / 10,
-      heightPct: Math.round(newH * 10) / 10,
-    });
-  }, [clamp, isPointerOnly, onParamsChange]);
+    onParamsChange(resizeFocusBox(
+      handle,
+      { xPct: startXPct, yPct: startYPct, widthPct: startWidthPct, heightPct: startHeightPct },
+      dx,
+      dy,
+      isPointerOnly,
+    ));
+  }, [isPointerOnly, onParamsChange]);
 
   const onPointerUp = useCallback(() => {
     dragRef.current = null;
