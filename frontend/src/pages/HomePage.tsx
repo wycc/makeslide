@@ -33,6 +33,7 @@ import { getReviewItems } from '../lib/reviewList';
 import { roundToTwoDecimals } from '../lib/roundTo';
 import { uploadProgressPercent } from '../lib/uploadProgress';
 import { summarizeHomeStats } from '../lib/homeStats';
+import { progressPercent } from '../lib/progressPercent';
 
 const POLL_INTERVAL_ACTIVE_MS = 5000;
 const POLL_INTERVAL_IDLE_MS = 30000;
@@ -1434,7 +1435,7 @@ export default function HomePage() {
                             <div key={label} className="group/bar relative h-1.5 w-full rounded-full bg-primary" title={label}>
                               <div
                                 className={`h-full rounded-full ${color} opacity-70`}
-                                style={{ width: `${max > 0 ? Math.round((value / max) * 100) : 0}%` }}
+                                style={{ width: `${progressPercent(value, max)}%` }}
                               />
                               <span className="pointer-events-none absolute -top-5 left-0 hidden whitespace-nowrap rounded bg-surface px-1 py-0.5 text-[10px] text-text shadow group-hover/bar:block">
                                 {label}
