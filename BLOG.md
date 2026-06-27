@@ -8836,3 +8836,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **測試重寫**：`seedReadyPdfFor` 改以 uid 路徑（`pages/u<i>.jpg/.text.txt/.script.txt/.m4a`）建資料與檔案、並寫入 `page_uid`；`assertDeckAligned` 改為斷言 `page_number` 連續 1..N（uid 設計下唯一的全域不變式）；670/672/673/675 的內聯路徑斷言改為 uid 契約——既有頁保留各自 uid 路徑（只是 page_number 壓縮），刪除只移除「被刪那一頁」的 uid 檔，其餘頁的檔與內容不動。
 - **真實 bug 修正**：重寫後，測試 676（連續多次增刪）暴露出 delete handler 的 `UPDATE pages SET page_number = page_number - 1 WHERE page_number > n` 會**暫態違反** `UNIQUE(pdf_id, page_number)`。原因是經過多次插入/刪除後，rowid 與 page_number 不再同序，而 SQLite 對 bulk UPDATE 的逐列套用順序未定義，可能在中途撞到尚未更新的既有 page_number。改用與 insert 路徑相同的「+offset 兩步」renumber（先 `+100000` 移出範圍、再 `-100001` 帶回，淨 -1），徹底避免暫態碰撞。這在正式環境也可能發生（使用者增頁後刪頁）。
 - **驗證**：backend `tsc --noEmit` 通過；`pages-api` 19/19；page-operations/delete 相關 51/51 回歸通過。**至此完整後端測試套件 1199/1199 全數通過（exit 0）**——2026-06-27 盤點的 18 個既有失敗全部清除。以 `scripts/run-tests.sh backend` 執行。
+
+## 抽出共用 hasLocalStorage 守衛（2026-06-27）
+
+### 功能目的
+`recentSearches.ts` 與 `commentAuthor.ts` 各自定義了相同的 `hasLocalStorage()` 守衛（`typeof window !== 'undefined' && !!window.localStorage`），用來讓這些 localStorage 工具在非瀏覽器環境（SSR、單元測試）安全 no-op。把它收斂成一個共用工具。
+
+### 使用方式
+此為內部重構，行為不變。需要時 `import { hasLocalStorage } from '<相對路徑>/lib/hasLocalStorage'`。
+
+### 技術細節
+- **共用工具**（`frontend/src/lib/hasLocalStorage.ts`）：window-based 穩健版，附測試（無 window、有 window.localStorage、有 window 但無 localStorage 三種情境；每個情境後清理 `globalThis.window`，避免污染同進程其他測試）。
+- **接入**：`recentSearches`、`commentAuthor` 移除本地定義改用共用版。
+- **刻意保留**：`reviewList.ts` 用的是 `typeof localStorage !== 'undefined'`（bare localStorage 檢查），且其測試是注入 bare `localStorage` 全域（沒有 window）。若改用 window-based 守衛，這些測試的 mutator 會 no-op（實測造成 4 個失敗）。為維持零行為變更，保留 reviewList 自己的守衛。
+- **驗證**：前端 `tsc --noEmit` 通過；相關 lib 測試 23/23；完整前端套件 551/551 全綠。以 `scripts/run-tests.sh frontend` 執行。

@@ -1,12 +1,10 @@
 // 全域搜尋的「最近關鍵字」記錄（localStorage，含非瀏覽器環境防護）。
 // 慣例沿用 i18n.ts / viewerId.ts 的 `typeof window` 檢查。
 
+import { hasLocalStorage } from './hasLocalStorage';
+
 const RECENT_SEARCHES_KEY = 'makeslide.recentSearches';
 const MAX_RECENT = 8;
-
-function hasLocalStorage(): boolean {
-  return typeof window !== 'undefined' && !!window.localStorage;
-}
 
 /** 讀取最近搜尋（最新在前）；壞值或非瀏覽器環境回 []。 */
 export function getRecentSearches(): string[] {

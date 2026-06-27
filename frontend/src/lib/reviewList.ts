@@ -14,6 +14,7 @@ function hasLocalStorage(): boolean {
   return typeof localStorage !== 'undefined';
 }
 
+
 export function getReviewItems(): ReviewItem[] {
   if (!hasLocalStorage()) return [];
   try {
