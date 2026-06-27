@@ -8450,3 +8450,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **接入**（3 個檔案）：`TtsDialog`、`RegenAllDialog`、`PlayPageSidebar` 三處的內聯 `Math.max(80, Math.min(2000, Math.round(x)))` 改為 `normalizeScriptMaxChars(x)`，各自原有的 `Number.isFinite` 守衛保留不動。
 - **測試**（`scriptMaxChars.test.ts`，5 案例）：範圍內整數原樣回傳（含上下界 80／2000）、超界拉回最近邊界、非整數先四捨五入再夾範圍、與被取代的舊內聯寫法對多組輸入輸出一致、`NaN` 傳遞。
 - **驗證**：前端 `tsc --noEmit` 通過；新測試 5/5 通過；全專案已無殘留的 `Math.max(80, Math.min(2000` 內聯寫法（測試檔除外）；純前端、不動後端、不需新 i18n。
+
+## 上傳進度百分比計算收斂為共用純函式（2026-06-27）
+
+### 功能目的
+前端有多個「把已傳輸位元組換算成 0–100 百分比」的進度顯示點：`UploadButton`（PDF 上傳）、`ImportTextPage`（貼上文字上傳，兩處）、`HomePage`（ZIP 匯入），以及 `AddPagesFromPromptModal`（背景加頁任務進度）。這些地方原本各自內嵌 `Math.round((loaded / total) * 100)`，公式重複了五遍，而且對「分母為 0／未知」的處理散落不一致。本項把內層換算收斂成單一可測的共用純函式，消除重複並統一除以 0 的防呆。
+
+### 使用方式
+此為內部重構，所有進度條行為與先前一致。日後新增任何「已完成 / 總量 → 百分比」的進度顯示，只需 `import { uploadProgressPercent } from '<相對路徑>/lib/uploadProgress'`，呼叫 `uploadProgressPercent(loaded, total)` 取得 0–100 的整數。
+
+### 技術細節
+- **純函式模組**（`frontend/src/lib/uploadProgress.ts`）：`uploadProgressPercent(loaded, total)`——`total <= 0`（含 0、負值、`NaN`）回傳 0，避免除以 0 產生 `NaN`/`Infinity`；其餘四捨五入後以共用 `clamp` 夾在 [0, 100]，使 `loaded > total` 的極端情況不會超過 100。
+- **接入**（4 個檔案、5 處）：`UploadButton`、`ImportTextPage`(2 處)、`HomePage`(ZIP 匯入)、`AddPagesFromPromptModal`。為維持行為完全一致，各呼叫端保留自身的外層 fallback 語意——位元組進度點維持 `if (total > 0)` 才更新（分母無效時不動進度），`AddPagesFromPromptModal` 維持 `progress.total > 0 ? ... : null`（分母無效時隱藏百分比）。`HomePage` 的音訊用量比例條（`value / max`）語意不同（非上傳進度），未納入本次收斂。
+- **測試**（`uploadProgress.test.ts`，4 案例）：一般進度四捨五入、分母無效（0／負值／`NaN`）回 0、`loaded > total` 夾在 100、與被取代的舊內聯寫法在分母 > 0 時輸出一致。
+- **驗證**：前端 `tsc --noEmit` 通過；新測試 4/4 通過；全專案已無殘留的上傳進度內聯寫法（測試檔除外）；純前端、不動後端、不需新 i18n。

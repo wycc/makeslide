@@ -31,6 +31,7 @@ import { useBudgetWarning } from '../hooks/useBudgetWarning';
 import { formatAudioDuration } from '../lib/audioDuration';
 import { getReviewItems } from '../lib/reviewList';
 import { roundToTwoDecimals } from '../lib/roundTo';
+import { uploadProgressPercent } from '../lib/uploadProgress';
 
 const POLL_INTERVAL_ACTIVE_MS = 5000;
 const POLL_INTERVAL_IDLE_MS = 30000;
@@ -657,7 +658,7 @@ export default function HomePage() {
       try {
         const imported = await importPdfZip(file, {
           onProgress: (loaded, total) => {
-            if (total > 0) setZipImportProgress(Math.round((loaded / total) * 100));
+            if (total > 0) setZipImportProgress(uploadProgressPercent(loaded, total));
           },
         });
         setItems((prev) => [imported, ...prev]);

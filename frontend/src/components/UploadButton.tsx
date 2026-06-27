@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../i18n';
 import { ApiError, createYoutubeTask, mapApiErrorToHumanMessage, uploadPdf } from '../lib/api';
 import { normalizeYoutubeSubtitleLanguageForSubmit, YOUTUBE_SUBTITLE_LANGUAGE_OPTIONS } from '../lib/youtubeLanguage';
+import { uploadProgressPercent } from '../lib/uploadProgress';
 import type { UploadResponse } from '../types';
 
 type T = ReturnType<typeof useI18n>['t'];
@@ -103,7 +104,7 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
         signal: abortController.signal,
         onProgress: (loaded, total) => {
           if (total > 0) {
-            setProgress(Math.round((loaded / total) * 100));
+            setProgress(uploadProgressPercent(loaded, total));
           }
         },
       });
