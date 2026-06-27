@@ -1,5 +1,35 @@
 # MakeSlide 功能說明
 
+## 品質檢查回應新增摘要計數（徽章基礎）
+
+### 目的
+
+品質檢查 API（`GET /api/pdfs/:id/quality-check`）原本只回傳「有問題的頁面清單」，前端品質檢查面板得
+自己數出「N 頁有問題」。為了讓播放頁能直接以徽章顯示「N 頁有品質問題」（§7.2 的目標），且讓這個
+數字有單一、可測的來源，本次在回應加上一個 `summary` 摘要物件。
+
+### 變更內容
+
+- 品質檢查回應新增 `summary`：
+  - `pagesChecked`：實際檢查的完成頁（audio_ready）數。
+  - `pagesWithIssues`：其中有問題的頁數（即徽章要顯示的數字）。
+  - `totalIssues`：所有問題的總數（一頁可能有多個問題）。
+- 既有的 `pages`／`checkedAt` 欄位不變，純附加，向後相容。
+
+### 使用方式
+
+呼叫品質檢查 API 後可直接讀 `summary.pagesWithIssues` 顯示「N 頁有品質問題」徽章、用
+`summary.totalIssues` 顯示問題總數，不必再從 `pages` 自行彙總。
+
+### 實作備註
+
+`quality-check.ts` 新增純函式 `summarizeQualityResults(results, pagesChecked)`（回傳 `QualityCheckSummary`），
+route 以 `pageRows.length` 為已檢查頁數呼叫之並併入回應。前端 `pdfs.ts` 的 `QualityCheckResponse` 新增
+`summary: QualityCheckSummary`。新增 `summarizeQualityResults` 單元測試 + 在既有 quality-check 整合測試
+斷言 summary（2 頁各 3 問題 → `{pagesChecked:2, pagesWithIssues:2, totalIssues:6}`；rendered 頁 → 全 0）。
+前後端 `tsc --noEmit` 通過、quality-check 5/5 通過。（屬 §7.2 品質檢查自動化的後端子項；播放頁徽章
+與生成後自動觸發為另一前端子項。）
+
 ## 全域搜尋：把選取的頁面批次加入複習清單
 
 ### 目的
