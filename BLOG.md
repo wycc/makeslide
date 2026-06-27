@@ -8850,3 +8850,15 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **接入**：`recentSearches`、`commentAuthor` 移除本地定義改用共用版。
 - **刻意保留**：`reviewList.ts` 用的是 `typeof localStorage !== 'undefined'`（bare localStorage 檢查），且其測試是注入 bare `localStorage` 全域（沒有 window）。若改用 window-based 守衛，這些測試的 mutator 會 no-op（實測造成 4 個失敗）。為維持零行為變更，保留 reviewList 自己的守衛。
 - **驗證**：前端 `tsc --noEmit` 通過；相關 lib 測試 23/23；完整前端套件 551/551 全綠。以 `scripts/run-tests.sh frontend` 執行。
+
+## 為 debugLog 補單元測試（2026-06-27）
+
+### 功能目的
+`debugLog.ts` 提供 `debugLog`/`debugWarn`，只有當 `localStorage['makeslide.debug'] === '1'` 時才輸出到 console，並以 try/catch 確保在無法存取 localStorage 時靜默。這是前端 lib 中少數還沒有測試、又含分支邏輯的模組，補上測試以鎖定行為。
+
+### 使用方式
+此為測試新增，無行為變更。
+
+### 技術細節
+- **測試**（`frontend/src/lib/debugLog.test.ts`，3 案例）：旗標為 '1' 時 `debugLog`→`console.info`、`debugWarn`→`console.warn` 且原樣帶入引數；旗標非 '1' 時完全不輸出；`localStorage.getItem` 拋錯時靜默且不向外拋。測試以可還原的方式注入 `console.info/warn` 與 `globalThis.localStorage`，並在 finally 清理，避免污染同進程其他測試。
+- **驗證**：前端 `tsc --noEmit` 通過；3/3；完整前端套件 532/532 全綠。至此前端 lib 中含邏輯的模組皆有測試（僅 `api.ts` 為 HTTP 包裝／re-export 未測）。以 `scripts/run-tests.sh frontend` 執行。
