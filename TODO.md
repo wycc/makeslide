@@ -13,6 +13,15 @@
 - [ ] 系統性採用 `mapApiErrorToHumanMessage`：目前約 55 處 catch 區塊直接 `setError(err.message)` 顯示後端原始 message、繞過既有的錯誤訊息映射（前端僅 2 處 `UploadButton`、`ImportTextPage` 使用 mapper）。全面改造屬較大工程，且各 catch 上下文不同、許多後端 message 已是中文（未必都是英文洩漏），逐點需產品判斷顯示風格，故列為待使用者決定。
 - [ ] 把前端測試納入 root `npm test`：目前 root 測試腳本未涵蓋前端 `node:test` 測試。納入涉及 CI 行為變更與 `npm install`（sandbox 無法驗證），列為待使用者決定。
 
+## from-pages 頁面狀態 bug（第一六四輪，2026-06-27）
+
+稽核 `from-pages`（從多份簡報選頁組「複習簡報」）：複製頁面用新 page_uid、循序 page_number、uid 路徑——大致正確。但發現**嚴重真 bug**。
+
+- [x] from-pages 建立的頁面用非法 page 狀態 `'ready'` → 伺服器重啟後整批被標 failed：`from-pages.ts` INSERT pages 時 status 寫死 `'ready'`，但 `'ready'` 不是合法 page 狀態（終態為 `audio_ready`）。後果：(1) quality-check/匯出（filter audio_ready）抓不到；(2) **`recoverOrphanedAddPagesPages()`（server.ts 啟動時呼叫）會把 ready PDF 中 status NOT IN ('audio_ready','failed') 的頁標成 failed** → 每次重啟後複習簡報全頁變 failed。
+  - 修改說明（2026-06-27）：from-pages 的 pages INSERT 改用終態 `'audio_ready'`（pdfs.status='ready' 為合法 PDF 狀態、不動）。新增測試：from-pages 頁面為 audio_ready，且呼叫 `recoverOrphanedAddPagesPages()` 後仍維持 audio_ready（不被標 failed）。backend `tsc --noEmit` 通過、`from-pages` 6/6。分支 `fix/from-pages-page-status`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 43 個完成項目（43/100，未達上限）。
+- [ ] （觀察，待處理）完整後端套件有零星 flaky 測試：`figure-reference-image-generation`、`llmUsage` 在完整套件併跑時偶發失敗、隔離下穩定通過，屬測試間全域狀態（setOpenAIClientForTest mock／setSystemAuthSettings／共用 DB/fs）污染。建議後續加強測試隔離（每檔自帶 setup/teardown 還原全域），非單一 bug。
+
 ## addPagesFromPrompt 補 defer FK（第一六三輪，2026-06-27）
 
 延續稽核：`addPagesFromPrompt`（AI 批次加頁）在中間插頁時也位移頁碼並呼叫 `shiftChildPageNumbers`，但**缺 `defer_foreign_keys = ON`**——與 page-operations 修前同樣的 FK-timing bug：先 `UPDATE pages` 即讓 polls 變孤兒 → 在後續頁有投票時 FK 500。
@@ -204,6 +213,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （真 bug 修復）from-pages 頁面用非法狀態 `'ready'`→ 重啟後被 orphan-recovery 標 failed；改 `'audio_ready'`、補回歸測試（from-pages 6/6）。另記錄完整套件零星 flaky（figure-reference/llmUsage、隔離下通過）（計數 43/100） | fix/from-pages-page-status（已 merge） |
 | 2026-06-27 | （FK 稽核收尾）`addPagesFromPrompt` 中間插頁補 `defer_foreign_keys`（避免後續頁有投票時 FK 500）；重現驗證 + 17 測試回歸（計數 42/100） | fix/addpages-defer-fk（已 merge） |
 | 2026-06-27 | （資料對齊擴展）頁面增/刪/移時 comments/drawings 也對齊：`shiftChildPageNumbers` 擴為三表、move per-page 移三表、delete 顯式刪被刪頁 comments/drawings；補 4 測試；後端 1203/1203 全綠（計數 41/100） | fix/realign-page-content-children（已 merge） |
 | 2026-06-27 | （真 bug 修復）頁面增/刪/移時投票（page_polls）未隨頁碼重編號致 FK 500+錯位：三 renumber 交易加 `defer_foreign_keys`、delete 補子表 lockstep 位移；補 2 回歸測試；後端 1201/1201 全綠（計數 40/100） | fix/page-renumber-fk-defer-and-poll-shift（已 merge） |

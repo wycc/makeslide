@@ -119,9 +119,13 @@ export async function registerFromPagesRoutes(app: FastifyInstance): Promise<voi
         copyFileSafe(srcText, destText),
       ]);
 
+      // Copied pages are complete, so use the terminal PAGE status 'audio_ready'
+      // ('ready' is a PDF-level status and not a valid page status — it would be
+      // skipped by quality-check/exports and, worse, marked 'failed' by the
+      // startup orphan-recovery sweep recoverOrphanedAddPagesPages()).
       db.prepare(
         `INSERT INTO pages (pdf_id, page_number, page_uid, image_path, audio_path, script_path, text_path, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'ready', ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'audio_ready', ?, ?)`,
       ).run(
         newId,
         newPageNumber,

@@ -8906,3 +8906,17 @@ AI 批次加頁（`addPagesFromPrompt`）在簡報中間插入多頁時，會把
 - **修正**：在 `addPagesFromPrompt` 的「中間插頁」交易開頭加 `db.pragma('defer_foreign_keys = ON')`，把外鍵檢查延到 commit。其位移已透過 `shiftChildPageNumbers`（涵蓋 polls/comments/drawings）處理。
 - **驗證**：worker 屬背景任務、難以端到端單元測，以重現腳本確認（第 3 頁有投票/評論、insertAfter=1、insertCount=2 → 交易成功、投票/評論正確移到第 5 頁、無 FK 錯誤）；既有 `add-pages-permission`、`add-pages-orphan-recovery` 共 17 個測試回歸通過；backend `tsc --noEmit` 通過。以 `scripts/run-tests.sh backend` 執行。
 - 至此，所有會重排頁碼的路徑（手動 insert/delete/move 與 AI 批次加頁）都已正確處理外鍵延遲與每頁內容對齊。
+
+## 修正 from-pages 複習簡報的頁面狀態 bug（2026-06-27）
+
+### 功能目的
+「從多份簡報挑頁組成複習簡報」（`/api/pdfs/from-pages`）建立的新簡報，其頁面狀態被寫成 `'ready'`。但 `'ready'` 是 PDF 層級的狀態、**不是合法的頁面狀態**（頁面終態是 `audio_ready`）。這造成兩個問題：品質檢查與各種匯出（會以 `audio_ready` 篩選頁面）抓不到這些頁；更嚴重的是，伺服器啟動時會跑 `recoverOrphanedAddPagesPages()`，它會把「ready 簡報中狀態不是 audio_ready/failed 的頁」標記為 `failed`——於是每次伺服器重啟後，複習簡報的所有頁面都會變成失敗狀態。
+
+### 使用方式
+此為後端修正：from-pages 建立的複習簡報頁面狀態正確，重啟後不再被誤標為 failed，也能正常被品質檢查與匯出涵蓋。
+
+### 技術細節
+- **修正**：`from-pages.ts` 的 pages INSERT 由 `status = 'ready'` 改為 `'audio_ready'`（複製進來的頁是完整頁面，終態即 audio_ready）。`pdfs.status = 'ready'` 維持不變（那是合法的 PDF 狀態）。
+- **測試**：新增案例——from-pages 頁面狀態為 `audio_ready`，且呼叫啟動時的 `recoverOrphanedAddPagesPages()` 後仍維持 `audio_ready`（不被標 failed）。
+- **驗證**：backend `tsc --noEmit` 通過；`from-pages` 6/6。以 `scripts/run-tests.sh backend` 執行。
+- **附帶觀察**：完整後端套件併跑時，`figure-reference-image-generation` 與 `llmUsage` 偶發失敗、隔離下穩定通過，屬測試間全域狀態污染（mock/設定/共用 DB），已記入 TODO 作為後續測試隔離強化項。
