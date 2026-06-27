@@ -19,7 +19,7 @@ import {
 } from '../../services/storage';
 import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { callChatJSON } from '../../services/openai';
-import { extractPdfText, extractPdfTextPages } from '../../worker/poppler';
+import { extractPdfText, extractPdfTextPages, getPdfPageCount } from '../../worker/poppler';
 import { buildTextWithPdfPageMarkers } from '../../services/pdfPageMarkers';
 import { enqueuePdfProcessing } from '../../worker/pipeline';
 import { generateVideo } from '../../worker/steps/generateVideo';
@@ -410,6 +410,11 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
     const status: PdfStatus = 'awaiting_prompt';
     const ownerSub = ownerSubFromRequest(request);
 
+    // Physical page count of the uploaded PDF. Returned to the client (but NOT persisted as
+    // pdfs.page_count, which the pipeline sets later) purely so the prompt modal can show a
+    // pre-generation cost estimate. Stays null for TXT/YouTube, where the slide count is only
+    // known once the AI paginates during generation.
+    let sourcePageCount: number | null = null;
     try {
       createPdfDir(pdfId);
       let sourceContentText = '';
@@ -423,12 +428,14 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
           const pageTexts = (await extractPdfTextPages(sourcePdfPath(pdfId))).map((t) =>
             t.replace(/\0/g, '').trim(),
           );
+          sourcePageCount = pageTexts.length;
           sourceContentText = pageTexts.join('\n').trim();
           if (!sourceContentText) {
             throw new Error('PDF 文件模式無法抽取可分頁文字');
           }
           await writeSourceText(pdfId, buildTextWithPdfPageMarkers(pageTexts));
         } else {
+          sourcePageCount = await getPdfPageCount(sourcePdfPath(pdfId));
           sourceContentText = await extractPdfText(sourcePdfPath(pdfId));
         }
       } else {
@@ -512,6 +519,8 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       host_mode: hostMode,
       created_at: createdAt,
       has_source_text: isTxt || pdfImportMode === 'document',
+      // Non-binding estimate basis for the prompt modal's cost estimate; null for TXT.
+      source_page_count: sourcePageCount,
     });
   });
 

@@ -32,6 +32,7 @@ import { formatAudioDuration } from '../lib/audioDuration';
 import { getReviewItems } from '../lib/reviewList';
 import { roundToTwoDecimals } from '../lib/roundTo';
 import { uploadProgressPercent } from '../lib/uploadProgress';
+import { promptTargetPageCount } from '../lib/promptTargetPageCount';
 import { summarizeHomeStats } from '../lib/homeStats';
 import { progressPercent } from '../lib/progressPercent';
 
@@ -639,7 +640,7 @@ export default function HomePage() {
         'tts_provider' in pdf && pdf.tts_provider
           ? pdf.tts_provider
           : DEFAULT_PROMPT_TTS_PROVIDER,
-      pageCount: 'page_count' in pdf ? pdf.page_count : null,
+      pageCount: promptTargetPageCount(pdf),
       hasSourceText: 'has_source_text' in pdf ? Boolean(pdf.has_source_text) : false,
     });
   }, []);

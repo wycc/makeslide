@@ -564,6 +564,12 @@ export interface UploadResponse {
   tts_provider?: 'openai' | 'gemini';
   host_mode?: 'solo' | 'dual';
   created_at: string;
+  /**
+   * Physical page count of an uploaded PDF (null for TXT/YouTube). Not the final slide count —
+   * the pipeline paginates during generation — but a good-enough basis for the prompt modal's
+   * pre-generation cost estimate.
+   */
+  source_page_count?: number | null;
 }
 
 export interface StartProcessingResponse {

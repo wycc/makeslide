@@ -1,5 +1,38 @@
 # MakeSlide 功能說明
 
+## 上傳 PDF 後在生成前就顯示成本估算
+
+### 目的
+
+提示詞視窗（PromptModal）會依「頁數 × 每頁字數」估算各成本級別的生成費用，但只在 `pageCount > 0`
+時才顯示。問題是：剛上傳的 PDF／文字／YouTube，其 `page_count` 在資料庫中為 `null`（要等 pipeline
+分頁後才有），所以**首次生成前看不到任何成本估算**——只有已生成過的簡報（重新生成）才看得到。
+對「第一次要不要花錢生成」最需要估算的時機，反而沒有估算。
+
+### 變更內容
+
+- 上傳 PDF 時，後端計算來源 PDF 的實體頁數，於上傳回應新增 `source_page_count` 欄位回傳。
+- 此值**不寫入** `pdfs.page_count`（真正的投影片數仍由 pipeline 決定），純粹作為提示詞視窗成本
+  估算的依據。
+- 提示詞視窗的頁數來源改為：優先用已生成簡報的真實 `page_count`，否則退而用上傳 PDF 的
+  `source_page_count`。如此一來首次上傳 PDF 也能在生成前看到成本估算。
+- 文字（TXT）與 YouTube 來源的投影片數在生成前本就無從得知（由 AI 分頁決定），維持不顯示估算
+  ——這也是本次「覆蓋確認」的結論：能在生成前估算的只有 PDF 來源。
+
+### 使用方式
+
+上傳一份 PDF 後，於跳出的提示詞視窗即可看到依該 PDF 頁數估算的各級別生成費用，幫助你在按下
+生成前先評估成本。文字／YouTube 來源因頁數未定，仍於生成後才有實際頁數與後續估算。
+
+### 實作備註
+
+後端 `POST /api/pdfs`：PDF 走 slides 模式時以 `getPdfPageCount()` 取得頁數、document 模式直接用
+抽取到的 `pageTexts.length`，置入回應的 `source_page_count`（TXT 為 null）。前端 `UploadResponse`
+型別新增 `source_page_count?: number | null`；新增純函式 `lib/promptTargetPageCount.ts`（優先
+`page_count`、否則 `source_page_count`、皆非正數回 null），`HomePage` 的 `openPromptFor` 改用之。
+新增 `upload-source-page-count.test.ts`（PDF 回傳實體頁數、TXT 為 null；poppler 不可用時自動跳過）與
+`promptTargetPageCount.test.ts`（優先序、fallback、無值回 null 共 3 測試）。前後端 `tsc --noEmit` 通過。
+
 ## 點擊投影片改為進入全螢幕（取代點擊暫停）
 
 ### 目的
