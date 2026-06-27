@@ -10,28 +10,33 @@
  * 預設 dark 值刻意貼齊本專案既有的 slate/cyan 深色視覺。
  */
 :root {
-  --color-bg: 248 250 252; /* slate-50 */
-  --color-surface: 255 255 255; /* white */
+  --color-bg: 245 247 250; /* #F5F7FA：真正的淺底，取代偏灰的 slate-50 */
+  --color-surface: 255 255 255; /* white：右側面板與卡片用白底 */
+  --color-surface-muted: 241 245 249; /* slate-100：卡片標題列／次要面板底 */
   --color-text: 15 23 42; /* slate-900 */
   /*
    * 前景語意色（muted/primary/danger）刻意比 dark 模式更深，確保在淺色
    * bg/surface 上達到 WCAG AA（一般文字 4.5:1）。原本的 slate-500 / cyan-500 /
    * rose-600 在白底上對比偏低（cyan-500 僅約 2.4:1），故於 light 模式調深。
-   * 對比門檻由 contrastRatio.test.ts 解析本檔案後驗證，避免日後回退。
+   * primary 改為 indigo 後同理：indigo-500(#6366F1) 當文字僅約 3.6:1，故用
+   * indigo-600(#4F46E5, 約 6.3:1)。對比門檻由 contrastRatio.test.ts 驗證。
    */
   --color-muted: 71 85 105; /* slate-600 */
-  --color-border: 226 232 240; /* slate-200 */
-  --color-primary: 14 116 144; /* cyan-700 */
+  --color-border: 203 213 225; /* slate-300：加深讓白卡片邊界更清楚 */
+  --color-border-light: 226 232 240; /* slate-200：卡片內細分隔線 */
+  --color-primary: 79 70 229; /* indigo-600 #4F46E5 */
   --color-danger: 190 18 60; /* rose-700 */
 }
 
 .dark {
   --color-bg: 2 6 23; /* slate-950 */
   --color-surface: 15 23 42; /* slate-900 */
+  --color-surface-muted: 30 41 59; /* slate-800 */
   --color-text: 226 232 240; /* slate-200 */
   --color-muted: 148 163 184; /* slate-400 */
   --color-border: 51 65 85; /* slate-700 */
-  --color-primary: 34 211 238; /* cyan-400 */
+  --color-border-light: 51 65 85; /* slate-700：深色下與 border 同階即可 */
+  --color-primary: 129 140 248; /* indigo-400 #818CF8 */
   --color-danger: 251 113 133; /* rose-400 */
 }
 

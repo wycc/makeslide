@@ -369,7 +369,7 @@ export function PlayPageSlidePanel() {
 
   return (
     <div
-      className={`relative min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950/70 ${
+      className={`relative min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950/70 shadow-lg shadow-slate-900/20 dark:shadow-none ${
         sidebarExpanded ? 'md:hidden' : 'md:flex'
       } ${activeTab === 'play' ? 'flex' : 'hidden'}`}
     >
@@ -1062,41 +1062,41 @@ export function PlayPageSlidePanel() {
       </section>
 
       {/* Script panel */}
-      <section className={`border-t border-slate-800 bg-slate-950 ${transcriptFocusMode ? 'flex min-h-[65vh] flex-1 flex-col' : ''}`}>
+      <section className={`border-t border-border bg-surface text-text ${transcriptFocusMode ? 'flex min-h-[65vh] flex-1 flex-col' : ''}`}>
         <div className={`px-4 py-4 ${transcriptFocusMode ? 'flex flex-1 flex-col pr-4 md:pr-[22rem]' : ''}`}>
-          <div className="mb-3 flex overflow-hidden rounded-md border border-slate-700 bg-slate-900/60">
+          <div className="mb-3 flex overflow-hidden rounded-md border border-border bg-surface">
             <button
               type="button"
               onClick={() => setEditTab('script')}
-              className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'script' ? 'bg-slate-800 text-emerald-200' : 'text-slate-400'}`}
+              className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'script' ? 'bg-surface-muted text-emerald-700 dark:text-emerald-200' : 'text-muted'}`}
             >
               {t('play.slidePanel.transcriptTab')}
             </button>
             <button
               type="button"
               onClick={() => setEditTab('prompt')}
-              className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'prompt' ? 'bg-slate-800 text-cyan-200' : 'text-slate-400'}`}
+              className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'prompt' ? 'bg-surface-muted text-cyan-700 dark:text-cyan-200' : 'text-muted'}`}
             >
               {t('play.slidePanel.promptTab')}
             </button>
             <button
               type="button"
               onClick={() => setEditTab('animation')}
-              className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'animation' ? 'bg-slate-800 text-fuchsia-200' : 'text-slate-400'}`}
+              className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'animation' ? 'bg-surface-muted text-fuchsia-700 dark:text-fuchsia-200' : 'text-muted'}`}
             >
               🎞 {t('play.animation.tab')}
             </button>
             <button
               type="button"
               onClick={() => setEditTab('figures')}
-              className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'figures' ? 'bg-slate-800 text-sky-200' : 'text-slate-400'}`}
+              className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'figures' ? 'bg-surface-muted text-sky-700 dark:text-sky-200' : 'text-muted'}`}
             >
               📊 {t('play.figures.tab')}
             </button>
             <button
               type="button"
               onClick={() => setEditTab('system')}
-              className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'system' ? 'bg-slate-800 text-amber-200' : 'text-slate-400'}`}
+              className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'system' ? 'bg-surface-muted text-amber-700 dark:text-amber-200' : 'text-muted'}`}
             >
               🧾 {t('play.system.tab')}
             </button>
@@ -1112,15 +1112,15 @@ export function PlayPageSlidePanel() {
                     .finally(() => { setGenPromptsLoading(false); });
                 }
               }}
-              className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'source' ? 'bg-slate-800 text-violet-200' : 'text-slate-400'}`}
+              className={`flex-1 px-3 py-1.5 text-sm ${editTab === 'source' ? 'bg-surface-muted text-violet-700 dark:text-violet-200' : 'text-muted'}`}
             >
               📚 {t('play.source.tab')}
             </button>
             <button
               type="button"
               onClick={() => setTranscriptFocusMode((enabled) => !enabled)}
-              className={`shrink-0 border-l border-slate-700 px-3 py-1.5 text-sm ${
-                transcriptFocusMode ? 'bg-emerald-500/15 text-emerald-200' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+              className={`shrink-0 border-l border-border px-3 py-1.5 text-sm ${
+                transcriptFocusMode ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-200' : 'text-muted hover:bg-surface-muted hover:text-text'
               }`}
               aria-pressed={transcriptFocusMode}
               title={transcriptFocusMode ? t('play.slidePanel.focusModeRestore') : t('play.slidePanel.focusModeEnlarge')}
@@ -1132,7 +1132,7 @@ export function PlayPageSlidePanel() {
           {editTab === 'script' ? (
             <>
               <div className="mb-2 flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-slate-300">
+                <h2 className="text-sm font-semibold text-text">
                   {t('play.slidePanel.transcript.heading').replace('{page}', String(currentPage?.page_number ?? '-'))}
                 </h2>
                 <div className="flex items-center gap-2">
@@ -1146,7 +1146,7 @@ export function PlayPageSlidePanel() {
                       });
                     }}
                     title={t('play.slidePanel.transcript.copyScript')}
-                    className="rounded-md border border-slate-600 px-2 py-1 text-xs text-slate-400 transition hover:bg-slate-800 hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="rounded-md border border-border px-2 py-1 text-xs text-muted transition hover:bg-surface-muted hover:text-text disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {scriptCopied ? t('play.slidePanel.transcript.copyScriptDone') : t('play.slidePanel.transcript.copyScript')}
                   </button>
@@ -1155,7 +1155,7 @@ export function PlayPageSlidePanel() {
                     onClick={() => currentPage && void openVersionHistory('script', currentPage.page_number)}
                     disabled={!currentPage}
                     title={t('play.slidePanel.transcript.viewHistory')}
-                    className="rounded-md border border-slate-600 px-2 py-1 text-xs text-slate-400 hover:bg-slate-800 hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="rounded-md border border-border px-2 py-1 text-xs text-muted hover:bg-surface-muted hover:text-text disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {t('play.slidePanel.transcript.versionButton')}
                   </button>
@@ -1163,12 +1163,12 @@ export function PlayPageSlidePanel() {
               </div>
               {/* AI 改寫入口 */}
               <div className="mb-2 flex flex-wrap items-center gap-2 rounded-md border border-violet-500/30 bg-violet-500/5 px-3 py-2">
-                <span className="text-xs text-slate-400">{t('play.sidebar.rewriteStyleLabel')}</span>
+                <span className="text-xs text-muted">{t('play.sidebar.rewriteStyleLabel')}</span>
                 <select
                   value={aiRewriteStyle}
                   onChange={(e) => setAiRewriteStyle(e.target.value as RewriteStyle)}
                   disabled={aiRewriteBusy}
-                  className="rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-xs text-slate-200 disabled:opacity-50"
+                  className="rounded border border-border bg-surface px-1.5 py-0.5 text-xs text-text disabled:opacity-50"
                 >
                   <option value="compact">{t('play.sidebar.rewriteStyleCompact')}</option>
                   <option value="detailed">{t('play.sidebar.rewriteStyleDetailed')}</option>
@@ -1178,7 +1178,7 @@ export function PlayPageSlidePanel() {
                   type="button"
                   onClick={() => void handleAiRewriteScript()}
                   disabled={aiRewriteBusy || !editingScript.trim() || !currentPage}
-                  className="rounded-md border border-violet-500/50 bg-violet-500/15 px-2.5 py-1 text-xs text-violet-200 hover:bg-violet-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-md border border-violet-500/50 bg-violet-500/15 px-2.5 py-1 text-xs text-violet-700 dark:text-violet-200 hover:bg-violet-500/25 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {aiRewriteBusy ? t('play.sidebar.rewriteScriptBusy') : t('play.sidebar.rewriteScript')}
                 </button>
@@ -1186,38 +1186,38 @@ export function PlayPageSlidePanel() {
                   type="button"
                   onClick={() => setScriptRewriteDialogOpen(true)}
                   disabled={!currentPage}
-                  className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-2.5 py-1 text-xs text-fuchsia-200 hover:bg-fuchsia-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-2.5 py-1 text-xs text-fuchsia-700 dark:text-fuchsia-200 hover:bg-fuchsia-500/25 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {t('play.scriptRewrite.open')}
                 </button>
                 {aiRewriteError && (
-                  <span className="text-xs text-rose-400">{aiRewriteError}</span>
+                  <span className="text-xs text-rose-600 dark:text-rose-400">{aiRewriteError}</span>
                 )}
               </div>
               <ScriptRewriteDialog open={scriptRewriteDialogOpen} onClose={() => setScriptRewriteDialogOpen(false)} />
               {/* AI 改寫 diff */}
               {aiRewriteDraft !== null && (
-                <div className="mb-2 rounded-md border border-violet-500/40 bg-slate-900/60 p-3 text-xs">
+                <div className="mb-2 rounded-md border border-violet-500/40 bg-surface-muted p-3 text-xs">
                   <div className="mb-1.5 flex items-center justify-between">
-                    <span className="font-semibold text-violet-300">{t('play.sidebar.rewriteDiffNew')}</span>
+                    <span className="font-semibold text-violet-700 dark:text-violet-300">{t('play.sidebar.rewriteDiffNew')}</span>
                     <div className="flex gap-2">
                       <button
                         type="button"
                         onClick={() => { setEditingScript(aiRewriteDraft); setAiRewriteDraft(null); }}
-                        className="rounded border border-emerald-500/50 bg-emerald-500/15 px-2.5 py-0.5 text-emerald-200 hover:bg-emerald-500/25"
+                        className="rounded border border-emerald-500/50 bg-emerald-500/15 px-2.5 py-0.5 text-emerald-700 dark:text-emerald-200 hover:bg-emerald-500/25"
                       >
                         {t('play.sidebar.rewriteAccept')}
                       </button>
                       <button
                         type="button"
                         onClick={() => setAiRewriteDraft(null)}
-                        className="rounded border border-slate-600 bg-slate-800 px-2.5 py-0.5 text-slate-300 hover:bg-slate-700"
+                        className="rounded border border-border bg-surface-muted px-2.5 py-0.5 text-text hover:bg-surface-muted"
                       >
                         {t('play.sidebar.rewriteCancel')}
                       </button>
                     </div>
                   </div>
-                  <p className="whitespace-pre-wrap leading-relaxed text-slate-200">{aiRewriteDraft}</p>
+                  <p className="whitespace-pre-wrap leading-relaxed text-text">{aiRewriteDraft}</p>
                 </div>
               )}
               <div className="mb-2 flex items-center gap-2">
@@ -1227,13 +1227,13 @@ export function PlayPageSlidePanel() {
                     value={scriptSearch}
                     onChange={(e) => { setScriptSearch(e.target.value); setScriptSearchIdx(0); }}
                     placeholder={t('play.slidePanel.scriptSearchPlaceholder')}
-                    className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 pr-6 text-xs text-slate-200 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
+                    className="w-full rounded border border-border bg-surface px-2 py-1 pr-6 text-xs text-text placeholder:text-muted focus:border-amber-500 focus:outline-none"
                   />
                   {scriptSearch ? (
                     <button
                       type="button"
                       onClick={() => { setScriptSearch(''); setScriptSearchIdx(0); }}
-                      className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted hover:text-text"
                       aria-label={t('play.slidePanel.clearSearchAria')}
                     >
                       ×
@@ -1241,7 +1241,7 @@ export function PlayPageSlidePanel() {
                   ) : null}
                 </div>
                 {scriptSearch.trim() ? (
-                  <span className="shrink-0 text-xs text-slate-400">
+                  <span className="shrink-0 text-xs text-muted">
                     {scriptSearchResults.length === 0
                       ? t('play.slidePanel.scriptSearchNoResult')
                       : t('play.slidePanel.scriptSearchCount')
@@ -1254,14 +1254,14 @@ export function PlayPageSlidePanel() {
                     <button
                       type="button"
                       onClick={() => setScriptSearchIdx((i) => (i - 1 + scriptSearchResults.length) % scriptSearchResults.length)}
-                      className="rounded border border-slate-700 px-1.5 py-0.5 text-xs text-slate-300 hover:bg-slate-800"
+                      className="rounded border border-border px-1.5 py-0.5 text-xs text-text hover:bg-surface-muted"
                     >
                       {t('play.slidePanel.scriptSearchPrev')}
                     </button>
                     <button
                       type="button"
                       onClick={() => setScriptSearchIdx((i) => (i + 1) % scriptSearchResults.length)}
-                      className="rounded border border-slate-700 px-1.5 py-0.5 text-xs text-slate-300 hover:bg-slate-800"
+                      className="rounded border border-border px-1.5 py-0.5 text-xs text-text hover:bg-surface-muted"
                     >
                       {t('play.slidePanel.scriptSearchNext')}
                     </button>
@@ -1271,7 +1271,7 @@ export function PlayPageSlidePanel() {
               {scriptSearch.trim() && scriptSearchResults.length > 0 ? (
                 <div
                   ref={scriptSearchResultRef}
-                  className="mb-2 max-h-40 overflow-y-auto rounded border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-slate-200 space-y-1"
+                  className="mb-2 max-h-40 overflow-y-auto rounded border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-text space-y-1"
                 >
                   {scriptSearchResults.map(({ sentence, originalIdx }, rank) => {
                     const q = scriptSearch.trim();
@@ -1297,25 +1297,25 @@ export function PlayPageSlidePanel() {
                 onChange={(e) => setEditingScript(e.target.value)}
                 disabled={isReadOnlyProcessing}
                 rows={transcriptFocusMode ? 18 : 6}
-                className={`w-full rounded-md border border-slate-700 bg-slate-900/70 p-3 text-sm leading-relaxed text-slate-100 outline-none ring-emerald-500/40 placeholder:text-slate-500 focus:ring ${transcriptFocusMode ? 'min-h-[55vh] flex-1' : ''}`}
+                className={`w-full rounded-md border border-border bg-surface/70 p-3 text-sm leading-relaxed text-text outline-none ring-emerald-500/40 placeholder:text-muted focus:ring ${transcriptFocusMode ? 'min-h-[55vh] flex-1' : ''}`}
                 placeholder={t('play.slidePanel.transcript.placeholder')}
               />
               <div className="mt-2 flex items-center justify-between gap-3">
-                <div className="text-xs text-slate-400">
-                  {editorError ? <span className="text-rose-300">{editorError}</span> : t('play.slidePanel.transcript.saveHint')}
+                <div className="text-xs text-muted">
+                  {editorError ? <span className="text-rose-700 dark:text-rose-300">{editorError}</span> : t('play.slidePanel.transcript.saveHint')}
                   {!editorError && editingScript.trim() && (() => {
                     const chars = editingScript.trim().length;
                     const secs = Math.round(chars / 4);
                     const mm = Math.floor(secs / 60);
                     const ss = String(secs % 60).padStart(2, '0');
-                    return <span className="ml-2 text-slate-500">{t('play.slidePanel.transcript.charCount').replace('{n}', String(chars))} · {mm}:{ss}</span>;
+                    return <span className="ml-2 text-muted">{t('play.slidePanel.transcript.charCount').replace('{n}', String(chars))} · {mm}:{ss}</span>;
                   })()}
                 </div>
                 <button
                   type="button"
                   onClick={() => void handleRegenerateAudio()}
                   disabled={isReadOnlyProcessing || editorBusy || !hasScriptChanges}
-                  className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-3 py-1.5 text-sm text-emerald-200 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-3 py-1.5 text-sm text-emerald-700 dark:text-emerald-200 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {editorBusy ? t('play.slidePanel.transcript.regenerating') : t('play.slidePanel.transcript.saveAndRegenerate')}
                 </button>
@@ -1323,24 +1323,24 @@ export function PlayPageSlidePanel() {
             </>
           ) : editTab === 'prompt' ? (
             <>
-              <h2 className="mb-2 text-sm font-semibold text-slate-300">{t('play.slidePanel.prompt.heading').replace('{page}', String(currentPage?.page_number ?? '-'))}</h2>
+              <h2 className="mb-2 text-sm font-semibold text-text">{t('play.slidePanel.prompt.heading').replace('{page}', String(currentPage?.page_number ?? '-'))}</h2>
               <textarea
                 value={promptInput}
                 onChange={(e) => setPromptInput(e.target.value)}
                 disabled={isReadOnlyProcessing}
                 rows={6}
-                className="w-full rounded-md border border-slate-700 bg-slate-900/70 p-3 text-sm leading-relaxed text-slate-100 outline-none ring-cyan-500/40 placeholder:text-slate-500 focus:ring"
+                className="w-full rounded-md border border-border bg-surface/70 p-3 text-sm leading-relaxed text-text outline-none ring-cyan-500/40 placeholder:text-muted focus:ring"
                 placeholder={t('play.slidePanel.prompt.placeholder')}
               />
               <div className="mt-2 flex items-center justify-between gap-3">
-                <div className="text-xs text-slate-400">
-                  {promptMsg ? <span className="text-slate-300">{promptMsg}</span> : t('play.slidePanel.prompt.updateHint')}
+                <div className="text-xs text-muted">
+                  {promptMsg ? <span className="text-text">{promptMsg}</span> : t('play.slidePanel.prompt.updateHint')}
                 </div>
                 <button
                   type="button"
                   onClick={() => void handleSavePrompt()}
                   disabled={isReadOnlyProcessing || promptBusy}
-                  className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-700 dark:text-cyan-200 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {promptBusy ? t('play.slidePanel.prompt.saving') : t('play.slidePanel.prompt.save')}
                 </button>
@@ -1352,37 +1352,37 @@ export function PlayPageSlidePanel() {
             <FigureAssetsTab />
           ) : editTab === 'source' ? (
             <>
-              <h2 className="mb-2 text-sm font-semibold text-slate-300">📚 {t('play.source.managementTitle')}</h2>
+              <h2 className="mb-2 text-sm font-semibold text-text">📚 {t('play.source.managementTitle')}</h2>
               <div className="space-y-3">
-                <div className="rounded-md border border-slate-800 bg-slate-900/50 p-3">
-                  <p className="mb-2 text-xs text-slate-400">{t('play.source.addTxtDescription')}</p>
+                <div className="rounded-md border border-border bg-surface-muted p-3">
+                  <p className="mb-2 text-xs text-muted">{t('play.source.addTxtDescription')}</p>
                   <input
                     value={sourceTextName}
                     onChange={(e) => setSourceTextName(e.target.value)}
                     placeholder={t('play.source.namePlaceholder')}
-                    className="mb-2 w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100"
+                    className="mb-2 w-full rounded-md border border-border bg-surface px-2 py-1.5 text-sm text-text"
                   />
                   <textarea
                     value={sourceTextContent}
                     onChange={(e) => setSourceTextContent(e.target.value)}
                     rows={5}
                     placeholder={t('play.source.contentPlaceholder')}
-                    className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100"
+                    className="w-full rounded-md border border-border bg-surface px-2 py-1.5 text-sm text-text"
                   />
                   <div className="mt-2 flex justify-end">
                     <button
                       type="button"
                       onClick={() => void handleAddTxtSource()}
                       disabled={sourceBusy || isReadOnlyProcessing}
-                      className="rounded-md border border-violet-500/50 bg-violet-500/15 px-3 py-1.5 text-sm text-violet-200 disabled:opacity-40"
+                      className="rounded-md border border-violet-500/50 bg-violet-500/15 px-3 py-1.5 text-sm text-violet-700 dark:text-violet-200 disabled:opacity-40"
                     >
                       {t('play.source.addTxt')}
                     </button>
                   </div>
                 </div>
 
-                <div className="rounded-md border border-slate-800 bg-slate-900/50 p-3">
-                  <p className="mb-2 text-xs text-slate-400">{t('play.source.addPdfDescription')}</p>
+                <div className="rounded-md border border-border bg-surface-muted p-3">
+                  <p className="mb-2 text-xs text-muted">{t('play.source.addPdfDescription')}</p>
                   <input
                     ref={sourcePdfInputRef}
                     type="file"
@@ -1398,23 +1398,23 @@ export function PlayPageSlidePanel() {
                     type="button"
                     onClick={() => sourcePdfInputRef.current?.click()}
                     disabled={sourceBusy || isReadOnlyProcessing}
-                    className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-200 disabled:opacity-40"
+                    className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-700 dark:text-cyan-200 disabled:opacity-40"
                   >
                     {t('play.source.uploadPdf')}
                   </button>
                 </div>
 
-                {sourceErr ? <p className="text-xs text-rose-300">{sourceErr}</p> : null}
-                {sourceMsg ? <p className="text-xs text-emerald-300">{sourceMsg}</p> : null}
+                {sourceErr ? <p className="text-xs text-rose-700 dark:text-rose-300">{sourceErr}</p> : null}
+                {sourceMsg ? <p className="text-xs text-emerald-700 dark:text-emerald-300">{sourceMsg}</p> : null}
 
-                <div className="rounded-md border border-slate-800 bg-slate-900/50 p-3">
+                <div className="rounded-md border border-border bg-surface-muted p-3">
                   <div className="mb-2 flex items-center justify-between gap-2">
-                    <p className="text-xs text-slate-400">{t('play.source.currentList').replace('{count}', String(sourceItems.length))}</p>
+                    <p className="text-xs text-muted">{t('play.source.currentList').replace('{count}', String(sourceItems.length))}</p>
                     {expandedSourceId !== null ? (
                       <button
                         type="button"
                         onClick={() => setExpandedSourceId(null)}
-                        className="rounded border border-slate-700 px-1.5 py-0.5 text-[11px] text-slate-300 hover:border-slate-500"
+                        className="rounded border border-border px-1.5 py-0.5 text-[11px] text-text hover:border-muted"
                       >
                         {t('play.source.collapseAll')}
                       </button>
@@ -1422,7 +1422,7 @@ export function PlayPageSlidePanel() {
                   </div>
                   <div className="max-h-72 space-y-2 overflow-y-auto">
                     {sourceItems.length === 0 ? (
-                      <p className="text-xs text-slate-500">{t('play.source.emptyList')}</p>
+                      <p className="text-xs text-muted">{t('play.source.emptyList')}</p>
                     ) : sourceItems.map((s) => {
                       const isExpanded = expandedSourceId === s.id;
                       const hasContent = s.content_text.trim().length > 0;
@@ -1434,7 +1434,7 @@ export function PlayPageSlidePanel() {
                             e.stopPropagation();
                             handleCopySourceContent(s.id, s.content_text);
                           }}
-                          className="shrink-0 rounded border border-slate-700 px-1.5 py-0.5 text-[11px] text-slate-300 hover:border-slate-500"
+                          className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[11px] text-text hover:border-muted"
                         >
                           {copyStatus === 'success'
                             ? t('play.source.copyContentSuccess')
@@ -1444,19 +1444,19 @@ export function PlayPageSlidePanel() {
                       if (s.source_kind === 'youtube_audio') {
                         const audioSrc = withShareToken(`api/pdfs/${s.pdf_id}/source-audio`) ?? `api/pdfs/${s.pdf_id}/source-audio`;
                         return (
-                          <div key={s.id} className="rounded border border-slate-700 px-2 py-1.5">
+                          <div key={s.id} className="rounded border border-border px-2 py-1.5">
                             <div className="flex items-center justify-between gap-2">
-                              <p className="text-xs text-slate-300">[{s.source_kind}] {s.source_name ?? t('play.source.untitled')}</p>
+                              <p className="text-xs text-text">[{s.source_kind}] {s.source_name ?? t('play.source.untitled')}</p>
                               {copyButton}
                             </div>
                             <audio controls preload="none" className="mt-1 w-full" src={audioSrc} />
-                            {hasContent && <p className="mt-1 text-xs text-slate-500">{s.content_text}</p>}
-                            {copyStatus === 'error' ? <p className="mt-1 text-[11px] text-rose-300">{t('play.source.copyContentFailed')}</p> : null}
+                            {hasContent && <p className="mt-1 text-xs text-muted">{s.content_text}</p>}
+                            {copyStatus === 'error' ? <p className="mt-1 text-[11px] text-rose-700 dark:text-rose-300">{t('play.source.copyContentFailed')}</p> : null}
                           </div>
                         );
                       }
                       return (
-                        <div key={s.id} className="rounded border border-slate-700 px-2 py-1.5">
+                        <div key={s.id} className="rounded border border-border px-2 py-1.5">
                           <div className="flex items-center justify-between gap-2">
                             <button
                               type="button"
@@ -1464,33 +1464,33 @@ export function PlayPageSlidePanel() {
                               disabled={!hasContent}
                               className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left disabled:cursor-default"
                             >
-                              <p className="text-xs text-slate-300">[{s.source_kind}] {s.source_name ?? t('play.source.untitled')}</p>
-                              {hasContent ? <span className="text-xs text-slate-400">{isExpanded ? '▲' : '▼'}</span> : null}
+                              <p className="text-xs text-text">[{s.source_kind}] {s.source_name ?? t('play.source.untitled')}</p>
+                              {hasContent ? <span className="text-xs text-muted">{isExpanded ? '▲' : '▼'}</span> : null}
                             </button>
                             {copyButton}
                           </div>
                           {!hasContent ? (
-                            <p className="mt-1 text-xs text-slate-500">{t('play.source.noContent')}</p>
+                            <p className="mt-1 text-xs text-muted">{t('play.source.noContent')}</p>
                           ) : isExpanded ? (
-                            <pre className="mt-1 max-h-64 overflow-y-auto whitespace-pre-wrap break-all text-xs text-slate-400">{s.content_text}</pre>
+                            <pre className="mt-1 max-h-64 overflow-y-auto whitespace-pre-wrap break-all text-xs text-muted">{s.content_text}</pre>
                           ) : (
-                            <p className="mt-1 line-clamp-2 text-xs text-slate-400">{s.content_text}</p>
+                            <p className="mt-1 line-clamp-2 text-xs text-muted">{s.content_text}</p>
                           )}
-                          {copyStatus === 'error' ? <p className="mt-1 text-[11px] text-rose-300">{t('play.source.copyContentFailed')}</p> : null}
+                          {copyStatus === 'error' ? <p className="mt-1 text-[11px] text-rose-700 dark:text-rose-300">{t('play.source.copyContentFailed')}</p> : null}
                         </div>
                       );
                     })}
                   </div>
                 </div>
 
-                <div className="rounded-md border border-slate-800 bg-slate-900/50 p-3">
-                  <p className="mb-2 text-xs text-slate-400">
+                <div className="rounded-md border border-border bg-surface-muted p-3">
+                  <p className="mb-2 text-xs text-muted">
                     🔍 {t('play.source.generationRecords').replace('{page}', String(currentPage?.page_number ?? '-'))}
                   </p>
                   {genPromptsLoading ? (
-                    <p className="text-xs text-slate-500">{t('play.source.loading')}</p>
+                    <p className="text-xs text-muted">{t('play.source.loading')}</p>
                   ) : genPrompts.length === 0 ? (
-                    <p className="text-xs text-slate-500">{t('play.source.noGenerationRecords')}</p>
+                    <p className="text-xs text-muted">{t('play.source.noGenerationRecords')}</p>
                   ) : (
                     <div className="space-y-2">
                       {genPrompts.map((gp) => {
@@ -1500,20 +1500,20 @@ export function PlayPageSlidePanel() {
                           gp.stage === 'audio' ? `🔊 ${t('play.source.promptStage.audio')}` : gp.stage;
                         const isExpanded = expandedGenPrompt === gp.stage;
                         return (
-                          <div key={gp.stage} className="rounded border border-slate-700">
+                          <div key={gp.stage} className="rounded border border-border">
                             <button
                               type="button"
                               onClick={() => setExpandedGenPrompt(isExpanded ? null : gp.stage)}
                               className="flex w-full items-center justify-between px-2 py-1.5 text-left text-xs"
                             >
-                              <span className="font-medium text-slate-200">{stageLabel}</span>
-                              <span className="flex items-center gap-2 text-slate-400">
+                              <span className="font-medium text-text">{stageLabel}</span>
+                              <span className="flex items-center gap-2 text-muted">
                                 {gp.model && <span className="font-mono">{gp.model}</span>}
                                 <span>{isExpanded ? '▲' : '▼'}</span>
                               </span>
                             </button>
                             {isExpanded && (
-                              <pre className="max-h-64 overflow-y-auto border-t border-slate-700 bg-slate-950 px-2 py-2 text-xs text-slate-300 leading-5 whitespace-pre-wrap break-all">
+                              <pre className="max-h-64 overflow-y-auto border-t border-border bg-surface-muted px-2 py-2 text-xs text-text leading-5 whitespace-pre-wrap break-all">
                                 {gp.prompt_text}
                               </pre>
                             )}
@@ -1527,46 +1527,46 @@ export function PlayPageSlidePanel() {
             </>
           ) : (
             <>
-              <h2 className="mb-2 text-sm font-semibold text-slate-300">🧾 {t('play.system.title').replace('{page}', String(currentPage?.page_number ?? '-'))}</h2>
-              <div className="rounded-md border border-slate-800 bg-slate-900/50 p-3 text-xs text-slate-300">
+              <h2 className="mb-2 text-sm font-semibold text-text">🧾 {t('play.system.title').replace('{page}', String(currentPage?.page_number ?? '-'))}</h2>
+              <div className="rounded-md border border-border bg-surface-muted p-3 text-xs text-text">
                 <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <div>
-                    <dt className="text-slate-500">PDF ID</dt>
-                    <dd className="break-all font-mono text-slate-200">{detail?.id}</dd>
+                    <dt className="text-muted">PDF ID</dt>
+                    <dd className="break-all font-mono text-text">{detail?.id}</dd>
                   </div>
                   <div>
-                    <dt className="text-slate-500">{t('play.system.statusLabel')}</dt>
-                    <dd className="text-slate-200">{detail?.status}</dd>
+                    <dt className="text-muted">{t('play.system.statusLabel')}</dt>
+                    <dd className="text-text">{detail?.status}</dd>
                   </div>
                   <div>
-                    <dt className="text-slate-500">{t('play.system.originalFilename')}</dt>
-                    <dd className="break-all text-slate-200">{detail?.original_filename}</dd>
+                    <dt className="text-muted">{t('play.system.originalFilename')}</dt>
+                    <dd className="break-all text-text">{detail?.original_filename}</dd>
                   </div>
                   <div>
-                    <dt className="text-slate-500">{t('play.system.pageCount')}</dt>
-                    <dd className="text-slate-200">{detail?.page_count ?? totalPages}</dd>
+                    <dt className="text-muted">{t('play.system.pageCount')}</dt>
+                    <dd className="text-text">{detail?.page_count ?? totalPages}</dd>
                   </div>
                   <div>
-                    <dt className="text-slate-500">TTS</dt>
-                    <dd className="text-slate-200">{detail?.tts_provider ?? 'openai'} / {detail?.tts_voice ?? '-'} / {detail?.tts_speed ?? '-'}</dd>
+                    <dt className="text-muted">TTS</dt>
+                    <dd className="text-text">{detail?.tts_provider ?? 'openai'} / {detail?.tts_voice ?? '-'} / {detail?.tts_speed ?? '-'}</dd>
                   </div>
                   <div>
-                    <dt className="text-slate-500">{t('play.system.currentPageStatus')}</dt>
-                    <dd className="text-slate-200">{currentPage?.status ?? '-'}</dd>
+                    <dt className="text-muted">{t('play.system.currentPageStatus')}</dt>
+                    <dd className="text-text">{currentPage?.status ?? '-'}</dd>
                   </div>
                   <div>
-                    <dt className="text-slate-500">{t('play.system.createdAt')}</dt>
-                    <dd className="font-mono text-slate-200">{detail?.created_at}</dd>
+                    <dt className="text-muted">{t('play.system.createdAt')}</dt>
+                    <dd className="font-mono text-text">{detail?.created_at}</dd>
                   </div>
                   <div>
-                    <dt className="text-slate-500">{t('play.system.updatedAt')}</dt>
-                    <dd className="font-mono text-slate-200">{detail?.updated_at}</dd>
+                    <dt className="text-muted">{t('play.system.updatedAt')}</dt>
+                    <dd className="font-mono text-text">{detail?.updated_at}</dd>
                   </div>
                 </dl>
               </div>
-              <div className="mt-3 overflow-x-auto rounded-md border border-slate-800">
+              <div className="mt-3 overflow-x-auto rounded-md border border-border">
                 <table className="min-w-full divide-y divide-slate-800 text-left text-xs">
-                  <thead className="bg-slate-900/70 text-slate-400">
+                  <thead className="bg-surface/70 text-muted">
                     <tr>
                       <th className="px-3 py-2">{t('play.system.step')}</th>
                       <th className="px-3 py-2">{t('play.system.statusLabel')}</th>
@@ -1574,7 +1574,7 @@ export function PlayPageSlidePanel() {
                       <th className="px-3 py-2">SLA</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800 bg-slate-950/40">
+                  <tbody className="divide-y divide-slate-800 bg-surface-muted/40">
                     {([
                       ['image', t(PAGE_ARTIFACT_LABEL_KEYS.image)],
                       ['text', t(PAGE_ARTIFACT_LABEL_KEYS.text)],
@@ -1584,10 +1584,10 @@ export function PlayPageSlidePanel() {
                       const timing = currentPage?.timings?.[key] ?? null;
                       return (
                         <tr key={key}>
-                          <td className="whitespace-nowrap px-3 py-2 text-slate-200">{label}</td>
-                          <td className="whitespace-nowrap px-3 py-2 text-slate-300">{timing?.status ? t(STAGE_STATUS_LABEL_KEYS[timing.status]) : t('play.system.noRecord')}</td>
-                          <td className="whitespace-nowrap px-3 py-2 font-mono text-slate-200">{timing?.status === 'running' ? t('play.system.generating') : formatDurationMs(timing?.duration_ms, t('play.system.noRecord'))}</td>
-                          <td className="whitespace-nowrap px-3 py-2 text-slate-400">
+                          <td className="whitespace-nowrap px-3 py-2 text-text">{label}</td>
+                          <td className="whitespace-nowrap px-3 py-2 text-text">{timing?.status ? t(STAGE_STATUS_LABEL_KEYS[timing.status]) : t('play.system.noRecord')}</td>
+                          <td className="whitespace-nowrap px-3 py-2 font-mono text-text">{timing?.status === 'running' ? t('play.system.generating') : formatDurationMs(timing?.duration_ms, t('play.system.noRecord'))}</td>
+                          <td className="whitespace-nowrap px-3 py-2 text-muted">
                             {timing ? `${timing.sla_status}${timing.sla_target_ms != null ? ` / ${formatDurationMs(timing.sla_target_ms, t('play.system.noRecord'))}` : ''}` : '-'}
                           </td>
                         </tr>
@@ -1597,48 +1597,48 @@ export function PlayPageSlidePanel() {
                 </table>
               </div>
               {currentPage?.timings ? <div className="mt-3"><PageTimingChips page={currentPage} /></div> : null}
-              <div className="mt-3 rounded-md border border-slate-800 bg-slate-900/50 p-3">
-                <h3 className="mb-2 text-sm font-semibold text-slate-300">🗂 {t('play.system.runHistory')}</h3>
+              <div className="mt-3 rounded-md border border-border bg-surface-muted p-3">
+                <h3 className="mb-2 text-sm font-semibold text-text">🗂 {t('play.system.runHistory')}</h3>
                 {runHistoryLoading ? (
-                  <p className="text-xs text-slate-500">{t('play.source.loading')}</p>
+                  <p className="text-xs text-muted">{t('play.source.loading')}</p>
                 ) : runHistoryError ? (
-                  <p className="text-xs text-rose-300">{runHistoryError}</p>
+                  <p className="text-xs text-rose-700 dark:text-rose-300">{runHistoryError}</p>
                 ) : runHistory.length === 0 ? (
-                  <p className="text-xs text-slate-500">{t('play.system.noRunHistory')}</p>
+                  <p className="text-xs text-muted">{t('play.system.noRunHistory')}</p>
                 ) : (
                   <div className="space-y-2">
                     {runHistory.map((run) => {
                       const isExpanded = expandedRunId === run.id;
                       return (
-                        <div key={run.id} className="rounded border border-slate-700">
+                        <div key={run.id} className="rounded border border-border">
                           <button
                             type="button"
                             onClick={() => setExpandedRunId(isExpanded ? null : run.id)}
                             className="flex w-full items-center justify-between gap-2 px-2 py-1.5 text-left text-xs"
                           >
                             <span className="flex flex-col">
-                              <span className="font-medium text-slate-200">
+                              <span className="font-medium text-text">
                                 {(RUN_TYPE_LABEL_KEYS[run.run_type] ? t(RUN_TYPE_LABEL_KEYS[run.run_type]) : run.run_type)} · {t('play.system.attempt').replace('{attempt}', String(run.attempt))}
                               </span>
-                              <span className="font-mono text-slate-500">
+                              <span className="font-mono text-muted">
                                 {new Date(run.started_at).toLocaleString('zh-TW', { dateStyle: 'short', timeStyle: 'medium' })}
                               </span>
                             </span>
-                            <span className="flex items-center gap-2 text-slate-400">
+                            <span className="flex items-center gap-2 text-muted">
                               <span className={RUN_STATUS_COLORS[run.status]}>{RUN_STATUS_LABEL_KEYS[run.status] ? t(RUN_STATUS_LABEL_KEYS[run.status]) : run.status}</span>
                               <span className="font-mono">{run.status === 'running' ? t('play.system.status.running') : formatDurationMs(run.duration_ms, t('play.system.noRecord'))}</span>
                               <span>{isExpanded ? '▲' : '▼'}</span>
                             </span>
                           </button>
                           {isExpanded && (
-                            <div className="border-t border-slate-700 px-2 py-2">
+                            <div className="border-t border-border px-2 py-2">
                               {run.error_message && (
-                                <p className="mb-2 text-xs text-rose-300">
+                                <p className="mb-2 text-xs text-rose-700 dark:text-rose-300">
                                   {run.error_code ? `[${run.error_code}] ` : ''}{run.error_message}
                                 </p>
                               )}
                               <table className="min-w-full divide-y divide-slate-800 text-left text-xs">
-                                <thead className="text-slate-500">
+                                <thead className="text-muted">
                                   <tr>
                                     <th className="px-2 py-1">{t('play.system.stage')}</th>
                                     <th className="px-2 py-1">{t('play.system.statusLabel')}</th>
@@ -1649,12 +1649,12 @@ export function PlayPageSlidePanel() {
                                 <tbody className="divide-y divide-slate-800">
                                   {run.stages.map((stage) => (
                                     <tr key={stage.stage}>
-                                      <td className="px-2 py-1 text-slate-200">{STAGE_LABEL_KEYS[stage.stage] ? t(STAGE_LABEL_KEYS[stage.stage]) : stage.stage}</td>
-                                      <td className="px-2 py-1 text-slate-300">{STAGE_STATUS_LABEL_KEYS[stage.status] ? t(STAGE_STATUS_LABEL_KEYS[stage.status]) : stage.status}</td>
-                                      <td className="px-2 py-1 font-mono text-slate-200">
+                                      <td className="px-2 py-1 text-text">{STAGE_LABEL_KEYS[stage.stage] ? t(STAGE_LABEL_KEYS[stage.stage]) : stage.stage}</td>
+                                      <td className="px-2 py-1 text-text">{STAGE_STATUS_LABEL_KEYS[stage.status] ? t(STAGE_STATUS_LABEL_KEYS[stage.status]) : stage.status}</td>
+                                      <td className="px-2 py-1 font-mono text-text">
                                         {stage.status === 'running' ? t('play.system.status.running') : formatDurationMs(stage.duration_ms, t('play.system.noRecord'))}
                                       </td>
-                                      <td className="px-2 py-1 text-slate-400">
+                                      <td className="px-2 py-1 text-muted">
                                         {stage.sla_status}{stage.sla_target_ms != null ? ` / ${formatDurationMs(stage.sla_target_ms, t('play.system.noRecord'))}` : ''}
                                       </td>
                                     </tr>
@@ -1662,7 +1662,7 @@ export function PlayPageSlidePanel() {
                                 </tbody>
                               </table>
                               {run.llm_usage.requests > 0 && (
-                                <p className="mt-2 font-mono text-xs text-slate-400">
+                                <p className="mt-2 font-mono text-xs text-muted">
                                   {t('play.system.llmUsage')
                                     .replace('{requests}', String(run.llm_usage.requests))
                                     .replace('{tokens}', formatTokenCount(run.llm_usage.total_tokens))
@@ -1677,18 +1677,18 @@ export function PlayPageSlidePanel() {
                   </div>
                 )}
               </div>
-              <div className="mt-3 rounded-md border border-slate-800 bg-slate-900/50 p-3">
-                <h3 className="mb-2 text-sm font-semibold text-slate-300">🐢 {t('play.system.slowArtifacts')}</h3>
+              <div className="mt-3 rounded-md border border-border bg-surface-muted p-3">
+                <h3 className="mb-2 text-sm font-semibold text-text">🐢 {t('play.system.slowArtifacts')}</h3>
                 {slowArtifactsLoading ? (
-                  <p className="text-xs text-slate-500">{t('play.source.loading')}</p>
+                  <p className="text-xs text-muted">{t('play.source.loading')}</p>
                 ) : slowArtifactsError ? (
-                  <p className="text-xs text-rose-300">{slowArtifactsError}</p>
+                  <p className="text-xs text-rose-700 dark:text-rose-300">{slowArtifactsError}</p>
                 ) : slowArtifacts.length === 0 ? (
-                  <p className="text-xs text-slate-500">{t('play.system.noSlowArtifacts')}</p>
+                  <p className="text-xs text-muted">{t('play.system.noSlowArtifacts')}</p>
                 ) : (
-                  <div className="overflow-x-auto rounded-md border border-slate-800">
+                  <div className="overflow-x-auto rounded-md border border-border">
                     <table className="min-w-full divide-y divide-slate-800 text-left text-xs">
-                      <thead className="bg-slate-900/70 text-slate-400">
+                      <thead className="bg-surface/70 text-muted">
                         <tr>
                           <th className="px-3 py-2">{t('play.system.pageNumber')}</th>
                           <th className="px-3 py-2">{t('play.system.artifact')}</th>
@@ -1697,14 +1697,14 @@ export function PlayPageSlidePanel() {
                           <th className="px-3 py-2">SLA</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-800 bg-slate-950/40">
+                      <tbody className="divide-y divide-slate-800 bg-surface-muted/40">
                         {slowArtifacts.map((item) => (
                           <tr key={`${item.page_number}-${item.artifact}`}>
-                            <td className="whitespace-nowrap px-3 py-2 text-slate-200">{pageLabel(item.page_number)}</td>
-                            <td className="whitespace-nowrap px-3 py-2 text-slate-200">{PAGE_ARTIFACT_LABEL_KEYS[item.artifact] ? t(PAGE_ARTIFACT_LABEL_KEYS[item.artifact]) : item.artifact}</td>
-                            <td className="whitespace-nowrap px-3 py-2 text-slate-300">{STAGE_STATUS_LABEL_KEYS[item.status] ? t(STAGE_STATUS_LABEL_KEYS[item.status]) : item.status}</td>
-                            <td className="whitespace-nowrap px-3 py-2 font-mono text-slate-200">{formatDurationMs(item.duration_ms, t('play.system.noRecord'))}</td>
-                            <td className="whitespace-nowrap px-3 py-2 text-slate-400">
+                            <td className="whitespace-nowrap px-3 py-2 text-text">{pageLabel(item.page_number)}</td>
+                            <td className="whitespace-nowrap px-3 py-2 text-text">{PAGE_ARTIFACT_LABEL_KEYS[item.artifact] ? t(PAGE_ARTIFACT_LABEL_KEYS[item.artifact]) : item.artifact}</td>
+                            <td className="whitespace-nowrap px-3 py-2 text-text">{STAGE_STATUS_LABEL_KEYS[item.status] ? t(STAGE_STATUS_LABEL_KEYS[item.status]) : item.status}</td>
+                            <td className="whitespace-nowrap px-3 py-2 font-mono text-text">{formatDurationMs(item.duration_ms, t('play.system.noRecord'))}</td>
+                            <td className="whitespace-nowrap px-3 py-2 text-muted">
                               {item.sla_status}{item.sla_target_ms != null ? ` / ${formatDurationMs(item.sla_target_ms, t('play.system.noRecord'))}` : ''}
                             </td>
                           </tr>

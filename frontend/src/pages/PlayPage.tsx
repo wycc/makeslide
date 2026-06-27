@@ -2281,7 +2281,7 @@ export default function PlayPage() {
   // ---- Render loading / error states ----
   if (!pdfId) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-bg text-slate-100">
+      <div className="flex min-h-screen items-center justify-center bg-bg text-text">
         {t('play.status.invalidPdfId')}
       </div>
     );
@@ -2289,7 +2289,7 @@ export default function PlayPage() {
 
   if (loadError) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-bg text-slate-100">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-bg text-text">
         <p className="text-rose-300">{loadError}</p>
         <Link to="/" className="text-sm text-muted underline">
           {t('play.status.backHome')}
@@ -2300,7 +2300,7 @@ export default function PlayPage() {
 
   if (!detail) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-bg text-slate-100">
+      <div className="flex min-h-screen items-center justify-center bg-bg text-text">
         {t('play.status.loading')}
       </div>
     );
@@ -2308,13 +2308,13 @@ export default function PlayPage() {
 
   if (totalPages === 0) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-bg text-slate-100">
-        <p className="text-slate-300">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-bg text-text">
+        <p className="text-text">
           {isReadOnlyProcessing
             ? `${t('play.status.noPagesGeneratingPrefix')}${formatGeneratingStatusLabel(detail.status, detail.progress_step, t)}${t('play.status.noPagesGeneratingSuffix')}`
             : t('play.status.noAudioPages')}
         </p>
-        {isReadOnlyProcessing ? <p className="text-xs text-slate-500">{t('play.status.recheckHint')}</p> : null}
+        {isReadOnlyProcessing ? <p className="text-xs text-muted">{t('play.status.recheckHint')}</p> : null}
         <Link to="/" className="text-sm text-muted underline">
           {t('play.status.backHome')}
         </Link>
@@ -2441,7 +2441,7 @@ export default function PlayPage() {
 
   return (
     <PlayPageCtx.Provider value={_ctxValue}>
-    <div className="flex min-h-screen flex-col bg-bg text-slate-100">
+    <div className="flex min-h-screen flex-col bg-bg text-text">
       {imageOnlyFullscreen ? <PlayPageFullscreen /> : null}
 
       {slideBusy ? (
@@ -2586,9 +2586,9 @@ export default function PlayPage() {
                 }
               }}
               placeholder={t('play.gotoPagePlaceholder')}
-              className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none"
+              className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text placeholder:text-muted focus:border-primary focus:outline-none"
             />
-            <p className="mt-1.5 text-xs text-slate-500">1 – {deckPages.length}</p>
+            <p className="mt-1.5 text-xs text-muted">1 – {deckPages.length}</p>
             <button
               type="button"
               onClick={() => {
@@ -2609,13 +2609,13 @@ export default function PlayPage() {
 
       <main className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col gap-4 px-4 py-4 md:flex-row">
         {/* Mobile-only tab 切換列 */}
-        <div className="flex shrink-0 overflow-hidden rounded-lg border border-slate-800 bg-surface/40 md:hidden">
+        <div className="flex shrink-0 overflow-hidden rounded-lg border border-border bg-surface md:hidden">
           <button
             type="button"
             onClick={() => setActiveTab('play')}
             className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
               activeTab === 'play'
-                ? 'border-b-2 border-cyan-400 bg-slate-800/60 text-cyan-200'
+                ? 'border-b-2 border-primary bg-primary/10 text-primary'
                 : 'border-b-2 border-transparent text-muted hover:text-text'
             }`}
             aria-pressed={activeTab === 'play'}
@@ -2627,7 +2627,7 @@ export default function PlayPage() {
             onClick={() => { setActiveTab('qa'); clearPollBadge(); }}
             className={`relative flex-1 px-4 py-2 text-sm font-medium transition-colors ${
               activeTab === 'qa'
-                ? 'border-b-2 border-cyan-400 bg-slate-800/60 text-cyan-200'
+                ? 'border-b-2 border-primary bg-primary/10 text-primary'
                 : 'border-b-2 border-transparent text-muted hover:text-text'
             }`}
             aria-pressed={activeTab === 'qa'}
@@ -2635,7 +2635,7 @@ export default function PlayPage() {
             <span className="inline-flex items-center gap-1.5">
               {t('play.mobileTab.qa')}
               {syncFollowerQuestions.length > 0 && (
-                <span className="rounded-full bg-slate-700/80 px-1.5 py-0.5 text-[10px] font-normal text-slate-300">
+                <span className="rounded-full bg-surface-muted px-1.5 py-0.5 text-[10px] font-normal text-muted">
                   {syncFollowerQuestions.length}
                 </span>
               )}
