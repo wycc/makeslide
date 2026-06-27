@@ -13,6 +13,14 @@
 - [ ] 系統性採用 `mapApiErrorToHumanMessage`：目前約 55 處 catch 區塊直接 `setError(err.message)` 顯示後端原始 message、繞過既有的錯誤訊息映射（前端僅 2 處 `UploadButton`、`ImportTextPage` 使用 mapper）。全面改造屬較大工程，且各 catch 上下文不同、許多後端 message 已是中文（未必都是英文洩漏），逐點需產品判斷顯示風格，故列為待使用者決定。
 - [ ] 把前端測試納入 root `npm test`：目前 root 測試腳本未涵蓋前端 `node:test` 測試。納入涉及 CI 行為變更與 `npm install`（sandbox 無法驗證），列為待使用者決定。
 
+## 前端補測試 debugLog（第一五九輪，2026-06-27）
+
+前後端套件皆全綠；盤點前端 lib 僅 `api.ts`（HTTP/re-export）與 `debugLog.ts` 無測試。補後者：
+
+- [x] 為 `debugLog.ts` 補單元測試（覆蓋）：`debugLog`/`debugWarn` 依 `localStorage['makeslide.debug']==='1'` 開關、含 try/catch 防呆，原無測試。
+  - 修改說明（2026-06-27）：新增 `frontend/src/lib/debugLog.test.ts`（3 測試：旗標='1' 才經 `console.info`/`warn` 輸出且帶原引數、旗標非 '1' 不輸出、localStorage 存取拋錯時靜默不拋）。以可還原的 console 與 globalThis.localStorage 注入測試、finally 清理避免污染。未動產品碼。前端 `tsc --noEmit` 通過、3/3；完整前端 532/532 全綠。至此前端 lib 中含邏輯的模組皆有測試（僅 api.ts 屬 HTTP/re-export 未測）。分支 `test/debug-log`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 39 個完成項目（39/100，未達上限）。
+
 ## 前端去重 hasLocalStorage（第一五八輪，2026-06-27）
 
 確認後端 1199/1199、前端 551/551 全綠（全棧綠燈基線）。掃描前端後完成一個小去重：
@@ -161,6 +169,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （前端補測試）`debugLog.ts` 補 3 單元測試（開關/防呆分支）；前端 532/532 全綠（計數 39/100） | test/debug-log（已 merge） |
 | 2026-06-27 | （前端去重）抽出共用 `hasLocalStorage`（recentSearches/commentAuthor）；reviewList 因測試耦合保留；補 3 測試；前端 551/551 全綠（計數 38/100） | refactor/shared-has-local-storage（已 merge） |
 | 2026-06-27 | （修既有失敗）`timing.test.ts`+`regenerate-matrix.test.ts` 共 5 個 401：補 `setSystemAuthSettings({googleAuthEnabled:false})`；12/12 + 4/4 通過（連跑穩定）（計數 36/100） | fix/timing-regen-test-auth（已 merge） |
 | 2026-06-27 | （修既有失敗）`skills.test.ts`：`updateUserSkill` 改條件 spread 省略 undefined 模板鍵（與 create 形狀一致、修磁碟 round-trip 不符）；5/5 通過（計數 35/100） | fix/update-skill-omit-undefined-template-fields（已 merge） |
