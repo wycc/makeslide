@@ -137,17 +137,20 @@ test('GET /api/templates — a corrupt skill_data row does not 500 the whole lis
     headers: { ...OWNER_HEADERS, 'content-type': 'application/json' },
     body: JSON.stringify({ name: 'valid-one', skill_data: SKILL_DATA }),
   });
-  // inject a row with corrupt (non-JSON) skill_data directly, simulating bad data
+  // inject a row with corrupt (non-JSON) skill_data directly, simulating bad data.
+  // Use a unique id: the backend test DB persists across runs, so a fixed id
+  // would hit a UNIQUE constraint on the second run.
+  const corruptId = `tmpl-corrupt-${crypto.randomBytes(4).toString('hex')}`;
   const now = new Date().toISOString();
   db.prepare(
     `INSERT INTO templates (id, name, description, category, skill_data, is_public, author, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run('tmpl-corrupt', 'corrupt-one', '', 'general', '{not valid json', 1, OWNER_SUB, now);
+  ).run(corruptId, 'corrupt-one', '', 'general', '{not valid json', 1, OWNER_SUB, now);
 
   const resp = await app.inject({ method: 'GET', url: '/api/templates' });
   assert.equal(resp.statusCode, 200);
   const { templates } = resp.json() as { templates: { id: string; skill_data: Record<string, unknown> }[] };
-  const corrupt = templates.find((t) => t.id === 'tmpl-corrupt');
+  const corrupt = templates.find((t) => t.id === corruptId);
   assert.ok(corrupt, 'corrupt template is still listed');
   assert.deepEqual(corrupt!.skill_data, {}); // degraded to empty instead of throwing
   await app.close();
