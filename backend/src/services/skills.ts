@@ -163,6 +163,15 @@ export async function updateUserSkill(
   const idx = data.userSkills.findIndex((s) => s.id === skillId);
   if (idx < 0 || !data.userSkills[idx]) return null;
   const existing = data.userSkills[idx] as UserSkill;
+  // Resolve each optional template field (patch wins, else keep existing), then
+  // include it only when truthy — matching createUserSkill's conditional spread
+  // so the returned object has the same shape as what gets persisted to JSON
+  // (JSON drops undefined keys, so always-present undefined keys would otherwise
+  // make the in-memory object differ from the round-tripped one).
+  const imageStylePrompt = patch.imageStylePrompt !== undefined ? patch.imageStylePrompt.trim() || undefined : existing.imageStylePrompt;
+  const quizPrompt = patch.quizPrompt !== undefined ? patch.quizPrompt.trim() || undefined : existing.quizPrompt;
+  const ttsProvider = patch.ttsProvider !== undefined ? patch.ttsProvider || undefined : existing.ttsProvider;
+  const ttsVoice = patch.ttsVoice !== undefined ? patch.ttsVoice || undefined : existing.ttsVoice;
   const updated: UserSkill = {
     id: existing.id,
     createdAt: existing.createdAt,
@@ -171,10 +180,10 @@ export async function updateUserSkill(
     prompt: patch.prompt !== undefined ? patch.prompt.trim() : existing.prompt,
     applyTo: patch.applyTo !== undefined ? patch.applyTo : existing.applyTo,
     enabled: patch.enabled !== undefined ? patch.enabled : existing.enabled,
-    imageStylePrompt: patch.imageStylePrompt !== undefined ? patch.imageStylePrompt.trim() || undefined : existing.imageStylePrompt,
-    quizPrompt: patch.quizPrompt !== undefined ? patch.quizPrompt.trim() || undefined : existing.quizPrompt,
-    ttsProvider: patch.ttsProvider !== undefined ? patch.ttsProvider || undefined : existing.ttsProvider,
-    ttsVoice: patch.ttsVoice !== undefined ? patch.ttsVoice || undefined : existing.ttsVoice,
+    ...(imageStylePrompt ? { imageStylePrompt } : {}),
+    ...(quizPrompt ? { quizPrompt } : {}),
+    ...(ttsProvider ? { ttsProvider } : {}),
+    ...(ttsVoice ? { ttsVoice } : {}),
   };
   data.userSkills[idx] = updated;
   await writeSkillsFile(accountId, data);
