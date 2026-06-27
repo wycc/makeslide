@@ -21,6 +21,7 @@ import { formatPageListText } from '../../lib/pageListText';
 import { getStoredCommentAuthor, setStoredCommentAuthor } from '../../lib/commentAuthor';
 import { getTextLengthHint } from '../../lib/textLengthHint';
 import { normalizeScriptMaxChars } from '../../lib/scriptMaxChars';
+import { interpolateTemplate } from '../../lib/interpolateTemplate';
 import { formatRelativeTime, buildRelativeTimeLabels } from '../../lib/relativeTime';
 import { NOTEBOOK_TABS, computeNotebookTabCounts, getAdjacentNotebookTab, getEdgeNotebookTab, getStoredNotebookTab, setStoredNotebookTab, type NotebookTab } from './notebookTabs';
 
@@ -748,10 +749,7 @@ export function PlayPageSidebar() {
 
   const { t } = useI18n();
   const formatMessage = (key: Parameters<typeof t>[0], values: Record<string, string | number>) =>
-    Object.entries(values).reduce(
-      (message, [name, value]) => message.replaceAll(`{${name}}`, String(value)),
-      t(key),
-    );
+    interpolateTemplate(t(key), values);
   const [bookmarkCopyMsg, setBookmarkCopyMsg] = useState<string | null>(null);
   const [importantCopyMsg, setImportantCopyMsg] = useState<string | null>(null);
   const [pollCopyMsg, setPollCopyMsg] = useState<string | null>(null);

@@ -8505,3 +8505,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **共用 i18n 鍵**：新增 `play.scriptMaxCharsRange`（zh-TW「允許範圍 {min}–{max} 字」、en「Allowed range: {min}–{max}」），以既有的 `.replace('{min}', …).replace('{max}', …)` 內插慣例帶入 `SCRIPT_MAX_CHARS_MIN`／`SCRIPT_MAX_CHARS_MAX`。
 - **接入**：`TtsDialog`、`RegenAllDialog` 的字數上限 `<input>` 下方各新增一行範圍提示；同時把原本硬編的 `min={80} max={2000}` HTML 屬性改為 `min={SCRIPT_MAX_CHARS_MIN} max={SCRIPT_MAX_CHARS_MAX}`，讓提示文字、HTML 限制與 `normalizeScriptMaxChars` 的夾值邏輯共用同一組常數來源。
 - **驗證**：前端 `tsc --noEmit` 通過；i18n parity（兩語系鍵集合與每個值的 `{placeholder}` 集合一致）與 nonempty（無空白翻譯）等 27 個測試全通過；純前端、不動後端。
+
+## 模板字串內插收斂為共用純函式（2026-06-27）
+
+### 功能目的
+前端有六個地方各自實作了「把訊息模板裡的 `{key}` 佔位符換成實際值」的小工具：`ImportTextPage`（`formatTemplate`，處理錯誤提示）、`AddPagesFromPromptModal`、`PlayPageSidebar`、`SystemDataPage`、`QuizBuilderPage`、`PlayPageFullscreen`（皆為 `formatMessage`，用來填入 i18n 文字中的數量／頁碼等變數）。這些實作邏輯完全相同（`Object.entries(values).reduce(...replaceAll('{k}', String(v)))`，部分寫成 `for...of`），重複了六遍且沒有測試。本項把它收斂成單一可測的共用純函式。
+
+### 使用方式
+此為內部重構，所有訊息文字與先前完全一致。日後需要做字串內插時，`import { interpolateTemplate } from '<相對路徑>/lib/interpolateTemplate'`，呼叫 `interpolateTemplate('進度 {progress}%', { progress: 42 })` 即可；搭配 i18n 時通常寫成 `interpolateTemplate(t(key), values)`。
+
+### 技術細節
+- **純函式模組**（`frontend/src/lib/interpolateTemplate.ts`）：`interpolateTemplate(template, values)` 以 `replaceAll` 取代每個 `{key}` 的所有出現處，值以 `String()` 轉換（同時支援字串與數字），模板中沒有對應值的佔位符原樣保留。
+- **接入**（6 個檔案）：`ImportTextPage` 與 `AddPagesFromPromptModal` 直接以 `import { interpolateTemplate as formatTemplate / formatMessage }` 取代原本的本地函式，呼叫點不需改動；`PlayPageSidebar`、`SystemDataPage`、`QuizBuilderPage`、`PlayPageFullscreen` 的 `formatMessage` 改為 `interpolateTemplate(t(key), values)` 的薄包裝（保留各自的 `useCallback` 與型別簽章）。
+- **測試**（`interpolateTemplate.test.ts`，6 案例）：單一／多佔位符、同一佔位符多處出現、數字以 `String()` 轉換、無對應值原樣保留、空 values 回傳原模板、與被取代的舊內聯 reduce 寫法輸出一致。
+- **驗證**：前端 `tsc --noEmit` 通過；新測試 6/6 通過；全專案已無殘留的內聯 `{key}` 內插寫法（測試檔除外）；純前端、不動後端、不需新 i18n。

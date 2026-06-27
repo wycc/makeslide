@@ -4,6 +4,7 @@ import DrawingCanvas from '../../components/DrawingCanvas';
 import { SlideRenderer } from '../../components/slide/SlideRenderer';
 import { useI18n } from '../../i18n';
 import { pollOptionPercent } from '../../lib/pollPercent';
+import { interpolateTemplate } from '../../lib/interpolateTemplate';
 import type { TranslationKey } from '../../i18n';
 import { figureImageUrl } from '../../lib/api';
 import { getFocusEffectParams, OVERLAY_EFFECT_TYPES } from '../../lib/animationSpec';
@@ -207,13 +208,8 @@ export function PlayPageFullscreen() {
     });
   }, [positioningEffectId, setAnimationDraft]);
 
-  const formatMessage = (key: TranslationKey, replacements: Record<string, string | number>) => {
-    let message = t(key);
-    for (const [name, value] of Object.entries(replacements)) {
-      message = message.replaceAll(`{${name}}`, String(value));
-    }
-    return message;
-  };
+  const formatMessage = (key: TranslationKey, replacements: Record<string, string | number>) =>
+    interpolateTemplate(t(key), replacements);
 
   const formatPageStatusMessage = () => {
     if (currentPage?.status === 'failed') {
