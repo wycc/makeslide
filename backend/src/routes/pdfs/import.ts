@@ -9,6 +9,7 @@ import { config } from '../../config';
 import { db } from '../../db';
 import { createPdfDir } from '../../services/storage';
 import type { PdfMetadata, PdfRow } from '../../types';
+import { isPageStatus } from '../../statusMachine';
 import { decodeSession, parseCookies } from '../auth';
 import { DEFAULT_PDF_CATEGORY, errorResponse, nowIso, rowToListItem } from './shared';
 import { runUnzipCommand } from './unzip';
@@ -211,7 +212,12 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
           const textPath = typeof p.text === 'string' ? p.text : null;
           const scriptPath = typeof p.script === 'string' ? p.script : null;
           const audioPath = typeof p.audio === 'string' ? p.audio : null;
-          const pageStatus = typeof p.status === 'string' && p.status.trim() ? p.status : 'ready';
+          // Normalize to a valid PAGE status: preserve the imported one when it's
+          // valid, otherwise fall back to the terminal 'audio_ready'. ('ready' is a
+          // PDF-level status, not a page status — importing it would make the page
+          // invisible to quality-check/exports and get it marked 'failed' by the
+          // startup orphan-recovery sweep.)
+          const pageStatus = isPageStatus(p.status) ? p.status : 'audio_ready';
           insertPage.run(
             id,
             pageNumber,

@@ -8920,3 +8920,16 @@ AI 批次加頁（`addPagesFromPrompt`）在簡報中間插入多頁時，會把
 - **測試**：新增案例——from-pages 頁面狀態為 `audio_ready`，且呼叫啟動時的 `recoverOrphanedAddPagesPages()` 後仍維持 `audio_ready`（不被標 failed）。
 - **驗證**：backend `tsc --noEmit` 通過；`from-pages` 6/6。以 `scripts/run-tests.sh backend` 執行。
 - **附帶觀察**：完整後端套件併跑時，`figure-reference-image-generation` 與 `llmUsage` 偶發失敗、隔離下穩定通過，屬測試間全域狀態污染（mock/設定/共用 DB），已記入 TODO 作為後續測試隔離強化項。
+
+## ZIP 匯入時正規化頁面狀態（接續 from-pages 修復）（2026-06-27）
+
+### 功能目的
+延續上一則 from-pages 的修復，這次處理 ZIP 匯入（`/api/pdfs/import.zip`）的同類問題。匯入時每頁的狀態原本是「有 metadata 的 status 就用、否則預設 `'ready'`」，而且完全不驗證。`'ready'` 不是合法的頁面狀態；缺少 status、或匯入的是 round-164 修復前由 from-pages 匯出（頁面狀態為非法 'ready'）的 ZIP 時，匯入後的頁面就會帶著非法狀態——會被品質檢查與匯出略過，並在伺服器重啟時被 orphan-recovery 標記為 failed。
+
+### 使用方式
+此為後端修正：ZIP 匯入後頁面狀態一律是合法的頁面狀態；無法辨識的狀態會正規化為終態 `audio_ready`。
+
+### 技術細節
+- **修正**：`import.ts` 由 `typeof p.status === 'string' && p.status.trim() ? p.status : 'ready'` 改為 `isPageStatus(p.status) ? p.status : 'audio_ready'`，用 `statusMachine` 的 `isPageStatus` 守衛：合法狀態（audio_ready/failed/…）保留，無效或缺失則正規化為 `audio_ready`。
+- **驗證**：backend `tsc --noEmit` 通過；export/import ZIP round-trip（確認有效狀態原樣保留）、import-unzip-timeout、status-machine（`isPageStatus` 本身已測）共 13 個測試回歸通過。匯入端使用系統 `unzip`、專案無 jszip 依賴，自行打包「含非法狀態」的 ZIP fixture 成本高且脆弱，因此不另造 fixture 測試——此一行守衛的正確性由 round-trip 測試、`isPageStatus` 的單元測試與邏輯本身共同保證。
+- 至此，所有建立 pages 的入口（手動加頁、pipeline、AI 加頁、上傳、from-pages、ZIP 匯入）都使用合法的頁面狀態。
