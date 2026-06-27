@@ -1,15 +1,10 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
 import type { PdfRow } from '../../types';
-import { decodeSession, parseCookies } from '../auth';
+import { sessionSub } from '../auth';
 import { callChatJSON } from '../../services/openai';
 import { errorResponse, IdParamSchema } from './shared';
-
-function sessionSub(request: FastifyRequest): string | null {
-  const session = decodeSession(parseCookies(request).makeslide_session);
-  return session?.sub ?? null;
-}
 
 function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
   if (!row.owner_sub) return true;

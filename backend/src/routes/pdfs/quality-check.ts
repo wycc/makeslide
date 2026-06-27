@@ -1,8 +1,8 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { canReadPdf } from './permissions';
 import fs from 'node:fs';
 import { db } from '../../db';
-import { decodeSession, parseCookies } from '../auth';
+import { sessionSub } from '../auth';
 import {
   pageScriptPath,
   pageImagePath,
@@ -41,11 +41,6 @@ export interface PageQualityIssue {
 export interface PageQualityResult {
   pageNumber: number;
   issues: PageQualityIssue[];
-}
-
-function sessionSub(request: FastifyRequest): string | null {
-  const session = decodeSession(parseCookies(request).makeslide_session);
-  return session?.sub ?? null;
 }
 
 export async function registerQualityCheckRoutes(app: FastifyInstance): Promise<void> {

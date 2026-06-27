@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -6,7 +6,7 @@ import crypto from 'node:crypto';
 import { db } from '../../db';
 import type { PdfRow } from '../../types';
 import { pdfDir } from '../../services/storage';
-import { decodeSession, parseCookies } from '../auth';
+import { sessionSub } from '../auth';
 import { errorResponse } from './shared';
 import { runZipCommand, addFileToZip, loadExportedSources, buildContentDisposition } from './export';
 
@@ -34,11 +34,6 @@ setInterval(() => {
     }
   }
 }, 5 * 60_000);
-
-function sessionSub(request: FastifyRequest): string | null {
-  const session = decodeSession(parseCookies(request).makeslide_session);
-  return session?.sub ?? null;
-}
 
 function uniqueZipName(used: Set<string>, baseName: string): string {
   let candidate = `${baseName}.zip`;

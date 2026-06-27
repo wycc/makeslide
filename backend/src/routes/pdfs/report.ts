@@ -1,18 +1,13 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { db } from '../../db';
 import type { PdfRow } from '../../types';
-import { decodeSession, parseCookies } from '../auth';
+import { sessionSub } from '../auth';
 import { errorResponse, IdParamSchema } from './shared';
 import { csvEscape, withCsvBom } from './csv';
 import { safeRatio, round4, pollDivergence, average } from './reportMetrics';
 import { safeDownloadBaseName, buildContentDisposition } from './downloadFilename';
 import { isCorrectAnswer } from '../../services/quizCorrectness';
 import { getSyncFollowerQuestionsSnapshot } from './sync';
-
-function sessionSub(request: FastifyRequest): string | null {
-  const session = decodeSession(parseCookies(request).makeslide_session);
-  return session?.sub ?? null;
-}
 
 function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
   if (!row.owner_sub) return true;

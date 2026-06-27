@@ -5,16 +5,11 @@ import { z } from 'zod';
 import { db } from '../../db';
 import { logger } from '../../logger';
 import { calcQuestionScore, normalizeQuestionScores } from '../../services/quizScoring';
-import { decodeSession, parseCookies } from '../auth';
+import { sessionSub } from '../auth';
 import { callChatJSON } from '../../services/openai';
 import { pageScriptPath, pageTextPath } from '../../services/storage';
 import type { PdfRow } from '../../types';
 import { errorResponse, IdParamSchema } from './shared';
-
-function sessionSub(request: FastifyRequest): string | null {
-  const session = decodeSession(parseCookies(request).makeslide_session);
-  return session?.sub ?? null;
-}
 
 function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
   if (!row.owner_sub) return true;

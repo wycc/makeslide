@@ -13,6 +13,13 @@
 - [ ] 系統性採用 `mapApiErrorToHumanMessage`：目前約 55 處 catch 區塊直接 `setError(err.message)` 顯示後端原始 message、繞過既有的錯誤訊息映射（前端僅 2 處 `UploadButton`、`ImportTextPage` 使用 mapper）。全面改造屬較大工程，且各 catch 上下文不同、許多後端 message 已是中文（未必都是英文洩漏），逐點需產品判斷顯示風格，故列為待使用者決定。
 - [ ] 把前端測試納入 root `npm test`：目前 root 測試腳本未涵蓋前端 `node:test` 測試。納入涉及 CI 行為變更與 `npm install`（sandbox 無法驗證），列為待使用者決定。
 
+## 後端大量去重 sessionSub（第一四六輪，2026-06-27）
+
+- [x] 抽出共用 `sessionSub` 工具（大量去重 / 可測）：`sessionSub(request)`（解 session cookie 取 account sub）在 **40 個** PDF 路由檔逐字重複定義（38 同名 + 2 個 `sessionSubFromRequest` 同 body）。抽成共用並補測試。
+  - 修改說明（2026-06-27）：在 `backend/src/routes/auth.ts` 新增 `export function sessionSub(request)`（與既有 `decodeSession`/`parseCookies` 同模組）。以腳本移除 38 個 `sessionSub` 同名定義並改 `import { sessionSub } from '../auth'`（其中 admin.ts 保留其 `SESSION_COOKIE, clearCookie` 匯入）；同時清理 26 個因移除而未使用的 `FastifyRequest` type import。2 個 `sessionSubFromRequest`（命名不同）暫不動。新增 `session-sub.test.ts` 4 組測試（無 cookie/竄改/有效/無關 cookie）。backend `tsc --noEmit` 通過；抽查約 14 個路由測試檔回歸全通過（detail-permission 92、quizzes 24、quality/h5p/report-summary…）；殘留本地定義 0。分支 `refactor/shared-session-sub`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 26 個完成項目（26/100，未達上限）。
+- [ ] 收斂 2 個 `sessionSubFromRequest` 同 body 函式：與共用 `sessionSub` 實作相同但命名不同，評估改用共用版本或統一命名。
+
 ## 後端去重 + 發現既有失敗（第一四三輪，2026-06-27）
 
 - [x] 抽出共用 `canReadPdf` 權限函式（大量去重 / 可測）：`canReadPdf(sub, row)` 在 **27 個** PDF 路由檔案中**逐字重複**定義（grep 確認 27 份實作完全一致），維護風險高。抽成共用模組並補測試。
@@ -99,6 +106,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （後端，大量去重）抽出共用 `sessionSub` 至 auth.ts：移除 38 檔逐字重複定義 + 清理 26 檔未使用 FastifyRequest import；補 4 測試；typecheck 通過、14 路由測試回歸通過（計數 26/100） | refactor/shared-session-sub（已 merge） |
 | 2026-06-27 | （修既有失敗）`quizzes.test.ts` copy-to：診斷確認端點正常回 201，400 是測試送 `content-type: application/json` 卻無 body 觸發 Fastify body parser；改 3 請求為只帶 cookie；24/24 通過（計數 25/100） | fix/quizzes-copyto-test-headers（已 merge） |
 | 2026-06-27 | （修既有失敗）`notes-txt.test.ts`：fixture 兩處塞 `page_notes = NULL` 違反 NOT NULL，改為 `''`；5/5 通過（計數 24/100）。quizzes copy-to 400 仍待重現除錯 | fix/notes-txt-test-page-notes-not-null（已 merge） |
 | 2026-06-27 | （後端，大量去重）抽出共用 `canReadPdf`：27 個路由檔逐字重複的權限函式收斂為 `permissions.ts`；補 3 測試；typecheck 通過、30 路由測試回歸通過；另記錄 2 個與本輪無關的既有失敗測試（notes-txt、quizzes）（計數 23/100） | refactor/shared-can-read-pdf（已 merge） |

@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { canReadPdf } from './permissions';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -8,13 +8,8 @@ import { db } from '../../db';
 import type { PageRow, PdfRow } from '../../types';
 import { safeJoinPdfPath, pageImagePath, pageAudioPath, pageScriptPath, pageTextPath, pagesDir } from '../../services/storage';
 import { config } from '../../config';
-import { decodeSession, parseCookies } from '../auth';
+import { sessionSub } from '../auth';
 import { errorResponse } from './shared';
-
-function sessionSub(request: FastifyRequest): string | null {
-  const session = decodeSession(parseCookies(request).makeslide_session);
-  return session?.sub ?? null;
-}
 
 async function copyFileSafe(src: string, dest: string): Promise<boolean> {
   try {

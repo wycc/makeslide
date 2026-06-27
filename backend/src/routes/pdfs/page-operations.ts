@@ -9,7 +9,7 @@ import { z } from 'zod';
 import sharp from 'sharp';
 import { db, savePageGenerationPrompt } from '../../db';
 import { config } from '../../config';
-import { decodeSession, parseCookies } from '../auth';
+import { sessionSub } from '../auth';
 import type { PageRow, PdfRow } from '../../types';
 import { callChatJSON } from '../../services/openai';
 import { getOpenAIClient } from '../../services/openai';
@@ -55,11 +55,6 @@ const RewriteScriptResponseSchema = z.object({
 function imageEditTimeoutMs(): number {
   const quality = config.openaiImageQuality;
   return quality === 'high' || quality === 'medium' ? config.openaiImageTimeoutMsHighQuality : config.openaiImageTimeoutMs;
-}
-
-function sessionSub(request: FastifyRequest): string | null {
-  const session = decodeSession(parseCookies(request).makeslide_session);
-  return session?.sub ?? null;
 }
 
 function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {

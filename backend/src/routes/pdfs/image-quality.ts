@@ -1,10 +1,10 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { canReadPdf } from './permissions';
 import fs from 'node:fs';
 import { z } from 'zod';
 import sharp from 'sharp';
 import { db } from '../../db';
-import { decodeSession, parseCookies } from '../auth';
+import { sessionSub } from '../auth';
 import { pageScriptPath, pageTextPath, pageImagePath } from '../../services/storage';
 import { callChatJSON } from '../../services/openai';
 import type { PdfRow } from '../../types';
@@ -36,11 +36,6 @@ const PageAnalysisSchema = z.object({
   mismatch: z.boolean(),
   detail: z.string().max(200),
 });
-
-function sessionSub(request: FastifyRequest): string | null {
-  const session = decodeSession(parseCookies(request).makeslide_session);
-  return session?.sub ?? null;
-}
 
 function readScript(pdfId: string, row: PageImageRow): string {
   const scriptAbs = pageScriptPath(pdfId, row.page_uid);

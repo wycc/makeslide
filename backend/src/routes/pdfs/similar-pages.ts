@@ -1,13 +1,8 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { db } from '../../db';
-import { decodeSession, parseCookies } from '../auth';
+import { sessionSub } from '../auth';
 import { errorResponse } from './shared';
 import { cosineSimilarity } from '../../services/embeddings';
-
-function sessionSub(request: FastifyRequest): string | null {
-  const session = decodeSession(parseCookies(request).makeslide_session);
-  return session?.sub ?? null;
-}
 
 const TOP_K = 5;
 const MIN_SCORE = 0.3;

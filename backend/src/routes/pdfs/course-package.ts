@@ -1,9 +1,9 @@
 import fs from 'node:fs/promises';
 import { createRequire } from 'node:module';
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { db } from '../../db';
 import type { PdfRow } from '../../types';
-import { decodeSession, parseCookies } from '../auth';
+import { sessionSub } from '../auth';
 import { callChatJSON } from '../../services/openai';
 import { pageScriptPath, pageTextPath, safeJoinPdfPath } from '../../services/storage';
 import { buildHandoutPdf, readTextIfExists } from '../../services/handoutPdf';
@@ -13,11 +13,6 @@ import { z } from 'zod';
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any
 const JSZip = require('jszip') as new () => any;
-
-function sessionSub(request: FastifyRequest): string | null {
-  const session = decodeSession(parseCookies(request).makeslide_session);
-  return session?.sub ?? null;
-}
 
 function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
   if (!row.owner_sub) return true;

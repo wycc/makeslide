@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { z } from 'zod';
@@ -15,7 +15,7 @@ import { invalidateOpenAIClientCache, setOpenAIApiKeyRuntime, setOpenAIBaseUrlRu
 import { currentAccountId } from '../../services/accountContext';
 import { IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
 import { pushPresentationToGitHub } from '../../services/presentationGit';
-import { SESSION_COOKIE, clearCookie, decodeSession, parseCookies } from '../auth';
+import { SESSION_COOKIE, clearCookie, sessionSub } from '../auth';
 import { db } from '../../db';
 import type { PdfRow } from '../../types';
 import { IdParamSchema, UpdateSystemAiSettingsBodySchema, errorResponse } from './shared';
@@ -26,11 +26,6 @@ import path from 'node:path';
 import { clearRegenerateJob } from '../../worker/regenerate';
 import { clearAddPagesJob } from '../../worker/addPagesFromPrompt';
 import { clearSyncSession } from './sync';
-
-function sessionSub(request: FastifyRequest): string | null {
-  const session = decodeSession(parseCookies(request).makeslide_session);
-  return session?.sub ?? null;
-}
 
 function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
   if (!row.owner_sub) return true;
