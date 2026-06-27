@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { uploadProgressPercent } from '../lib/uploadProgress';
+import { interpolateTemplate as formatMessage } from '../lib/interpolateTemplate';
 import {
   ApiError,
   cancelAddPagesJob,
@@ -27,13 +28,6 @@ const STEP_LABEL_KEYS: Record<string, TranslationKey> = {
   generating_scripts: 'play.addPages.step.generatingScripts',
   synthesizing_audio: 'play.addPages.step.synthesizingAudio',
 };
-
-function formatMessage(template: string, replacements: Record<string, string | number>): string {
-  return Object.entries(replacements).reduce(
-    (text, [key, value]) => text.replaceAll(`{${key}}`, String(value)),
-    template,
-  );
-}
 
 const POLL_INTERVAL_MS = 2000;
 

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useI18n } from '../i18n';
 import { ApiError, getObservabilityMetrics, type ObservabilityMetrics } from '../lib/api';
 import { formatMetricDurationMs, formatMetricCostUsd } from '../lib/metricFormat';
+import { interpolateTemplate } from '../lib/interpolateTemplate';
 
 function formatInt(value: number): string {
   return new Intl.NumberFormat('zh-TW').format(value);
@@ -26,13 +27,11 @@ function MetricCard(props: { label: string; value: string; hint?: string; tone?:
 
 export default function SystemDataPage() {
   const { t } = useI18n();
-  const formatMessage = useCallback((key: Parameters<typeof t>[0], replacements: Record<string, string | number>) => {
-    let message = t(key);
-    for (const [name, value] of Object.entries(replacements)) {
-      message = message.replaceAll(`{${name}}`, String(value));
-    }
-    return message;
-  }, [t]);
+  const formatMessage = useCallback(
+    (key: Parameters<typeof t>[0], replacements: Record<string, string | number>) =>
+      interpolateTemplate(t(key), replacements),
+    [t],
+  );
   const [metrics, setMetrics] = useState<ObservabilityMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);

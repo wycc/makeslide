@@ -9,12 +9,9 @@ import {
   type PromptChatMessage,
 } from '../lib/api';
 import { useI18n, type TranslationKey } from '../i18n';
+import { interpolateTemplate as formatTemplate } from '../lib/interpolateTemplate';
 
 type ImportMode = 'paste' | 'prompt';
-
-function formatTemplate(template: string, values: Record<string, string>): string {
-  return Object.entries(values).reduce((result, [key, value]) => result.replaceAll(`{${key}}`, value), template);
-}
 
 function buildRecoveryGuide(err: unknown, t: (key: TranslationKey) => string): string[] {
   if (err instanceof ApiError) {

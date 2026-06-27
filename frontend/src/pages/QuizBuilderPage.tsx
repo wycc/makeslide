@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useI18n } from '../i18n';
 import { formatRelativeTime, buildRelativeTimeLabels } from '../lib/relativeTime';
 import { summarizeQuizProgress } from '../lib/quizProgress';
+import { interpolateTemplate } from '../lib/interpolateTemplate';
 import { clamp } from '../lib/clamp';
 import {
   ApiError,
@@ -73,13 +74,11 @@ export default function QuizBuilderPage() {
   const navigate = useNavigate();
   const { t } = useI18n();
   const relativeTimeLabels = buildRelativeTimeLabels(t);
-  const formatMessage = useCallback((key: Parameters<typeof t>[0], replacements: Record<string, string | number>) => {
-    let message = t(key);
-    for (const [name, value] of Object.entries(replacements)) {
-      message = message.replaceAll(`{${name}}`, String(value));
-    }
-    return message;
-  }, [t]);
+  const formatMessage = useCallback(
+    (key: Parameters<typeof t>[0], replacements: Record<string, string | number>) =>
+      interpolateTemplate(t(key), replacements),
+    [t],
+  );
   const [detail, setDetail] = useState<PdfDetail | null>(null);
   const [savedQuizzes, setSavedQuizzes] = useState<QuizSet[]>([]);
   const [savedQuizzesSearch, setSavedQuizzesSearch] = useState('');
