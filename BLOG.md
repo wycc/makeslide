@@ -1,5 +1,36 @@
 # MakeSlide 功能說明
 
+## 課後報告：每頁困難度指標（pages.csv）
+
+### 目的
+
+課後報告的逐頁分析（pages.csv）原本提供每頁的完成率、投票分歧、平均聆聽比例等欄位，但老師仍得
+自己交叉判讀「哪幾頁最讓學生卡住」。本次新增一個綜合的「頁面困難度」分數，把「完成率低、投票
+分歧高、提問多」三個訊號合成單一 0–1 指標（越高越難），讓難點頁一眼可辨、方便排序與後續補強。
+
+### 變更內容
+
+- `report/pages.csv` 新增兩個欄位（附加在原欄位之後，不影響既有欄位順序）：
+  - `question_count`：該頁的學生提問／留言數。
+  - `difficulty_score`：綜合困難度（0–1，越高越難）；無觀看者等無資料的頁面輸出空白而非 0。
+- 困難度由三個正規化訊號平均：完成率（取其「未完成」= 1 − 完成率）、投票分歧、每位觀看者的
+  提問率（上限 1）。只平均「當下有資料」的訊號，全部缺資料時回空白。
+
+### 使用方式
+
+下載課後報告的逐頁 CSV（pages.csv），用 `difficulty_score` 由大到小排序，即可優先檢視最困難的
+頁面；搭配 `question_count`、`completion_rate`、`poll_divergence_score` 可進一步了解難在哪裡。
+
+### 實作備註
+
+`reportMetrics.ts` 新增純函式 `pageDifficultyScore(signals)`（含 `PageDifficultySignals` 介面與 0–1
+clamp；缺資料訊號以 null 略過、全缺回 null）。`report.ts` 的 pages.csv 加上每頁 `page_comments`
+計數查詢，於每列計算 `question_count` 與 `difficulty_score`（完成率/分歧僅在有觀看者/有票時納入）。
+新增 `report-metrics.test.ts` 4 組 `pageDifficultyScore` 測試（三訊號平均、最易=0/最難=1、忽略 null/
+全 null 回 null、超範圍 clamp），並更新 `report-pages-csv.test.ts`（新增 page_comments fixture 與
+新欄位斷言）。後端 `tsc --noEmit` 通過、報告相關測試回歸通過。（屬 §7.1 課後報告補強的後端聚合
+子項；前端「個人分頁／困難度呈現」UI 為另一子項。）
+
 ## 上傳 PDF 後在生成前就顯示成本估算
 
 ### 目的

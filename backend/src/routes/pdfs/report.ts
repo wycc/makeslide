@@ -5,7 +5,7 @@ import type { PdfRow } from '../../types';
 import { sessionSub } from '../auth';
 import { errorResponse, IdParamSchema } from './shared';
 import { csvEscape, withCsvBom } from './csv';
-import { safeRatio, round4, pollDivergence, average } from './reportMetrics';
+import { safeRatio, round4, pollDivergence, average, pageDifficultyScore } from './reportMetrics';
 import { safeDownloadBaseName, buildContentDisposition } from './downloadFilename';
 import { isCorrectAnswer } from '../../services/quizCorrectness';
 import { getSyncFollowerQuestionsSnapshot } from './sync';
@@ -331,7 +331,14 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
       pollByPage.set(row.page_number, agg);
     }
 
-    const header = ['page_number', 'total_viewers', 'completed_viewers', 'completion_rate', 'poll_total_votes', 'poll_divergence_score', 'avg_listened_ratio'].join(',');
+    // Per-page question/comment counts feed the "harder pages draw more questions" difficulty signal.
+    const commentRows = db
+      .prepare(`SELECT page_number AS page_number, COUNT(*) AS count FROM page_comments WHERE pdf_id = ? GROUP BY page_number`)
+      .all(id) as Array<{ page_number: number; count: number }>;
+    const commentByPage = new Map<number, number>();
+    for (const row of commentRows) commentByPage.set(row.page_number, row.count);
+
+    const header = ['page_number', 'total_viewers', 'completed_viewers', 'completion_rate', 'poll_total_votes', 'poll_divergence_score', 'avg_listened_ratio', 'question_count', 'difficulty_score'].join(',');
     const rows: string[] = [header];
     for (const wp of watchPages) {
       const completion = safeRatio(wp.completed_viewers, wp.total_viewers);
@@ -340,6 +347,14 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
       const divergence = pollDivergence(poll?.max ?? 0, totalVotes);
       // 無聆聽資料（無觀看者或皆無 duration）時輸出空字串，避免被誤讀為 0%。
       const avgListened = wp.avg_listened_ratio == null ? '' : round4(wp.avg_listened_ratio);
+      const questionCount = commentByPage.get(wp.page_number) ?? 0;
+      // Signals are only meaningful with an audience / votes; null lets difficulty render blank
+      // rather than a misleading 0 for an unwatched page.
+      const difficulty = pageDifficultyScore({
+        completionRate: wp.total_viewers > 0 ? completion : null,
+        pollDivergence: totalVotes > 0 ? divergence : null,
+        questionRate: wp.total_viewers > 0 ? safeRatio(questionCount, wp.total_viewers) : null,
+      });
       rows.push([
         csvEscape(wp.page_number),
         csvEscape(wp.total_viewers),
@@ -348,6 +363,8 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
         csvEscape(totalVotes),
         csvEscape(round4(divergence)),
         csvEscape(avgListened),
+        csvEscape(questionCount),
+        csvEscape(difficulty == null ? '' : round4(difficulty)),
       ].join(','));
     }
     const csv = rows.join('\n');

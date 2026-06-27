@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第一六八輪已完成 **47/100**，未達上限。
+- 最新進度：截至第一六九輪已完成 **48/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -13,6 +13,14 @@
 
 - [ ] 系統性採用 `mapApiErrorToHumanMessage`：目前約 55 處 catch 區塊直接 `setError(err.message)` 顯示後端原始 message、繞過既有的錯誤訊息映射（前端僅 2 處 `UploadButton`、`ImportTextPage` 使用 mapper）。全面改造屬較大工程，且各 catch 上下文不同、許多後端 message 已是中文（未必都是英文洩漏），逐點需產品判斷顯示風格，故列為待使用者決定。
 - [ ] 把前端測試納入 root `npm test`：目前 root 測試腳本未涵蓋前端 `node:test` 測試。納入涉及 CI 行為變更與 `npm install`（sandbox 無法驗證），列為待使用者決定。
+
+## 課後報告頁面困難度後端聚合（第一六九輪，2026-06-27）
+
+依 §7.1 課後報告補強，完成其「後端聚合」子項：為逐頁分析加上綜合困難度指標。
+
+- [x] 課後報告 pages.csv 新增「頁面困難度」聚合（完成率低／投票分歧高／提問多）：原 pages.csv 已有完成率/投票分歧/聆聽比例，但缺一個綜合難度訊號。
+  - 修改說明（2026-06-27）：`reportMetrics.ts` 新增純函式 `pageDifficultyScore(signals)`（`PageDifficultySignals` 介面 + 0–1 clamp）——把完成率（取未完成 1−rate）、投票分歧、每位觀看者提問率三個正規化訊號取平均，只計當下有資料者、全缺回 null。`report.ts` 的 `report/pages.csv` 新增每頁 `page_comments` 計數查詢，於每列輸出 `question_count` 與 `difficulty_score`（附加於原欄位之後、不動既有欄位順序；完成率/分歧僅在有觀看者/有票時納入，無資料頁輸出空白）。新增 `report-metrics.test.ts` 4 組 `pageDifficultyScore` 測試（三訊號平均、最易 0/最難 1、忽略 null/全 null 回 null、超範圍 clamp），更新 `report-pages-csv.test.ts`（新增 page_comments fixture + 新欄位斷言）。backend `tsc --noEmit` 通過；report-metrics/report-pages-csv 11/11 + report-summary/questions-csv/students/question-stats 18/18 回歸通過。分支 `feat/report-page-difficulty`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 48 個完成項目（48/100，未達上限）。
 
 ## 點擊投影片改為進入全螢幕（第一六七輪，2026-06-27）
 
@@ -189,6 +197,7 @@
   - 修改說明（2026-06-27）：根因確認——`'ready'` **根本不是合法 page 狀態**（`statusMachine.ts` 的 `PAGE_STATUSES` 無 `ready`，終態為 `audio_ready`；`'ready'` 僅為 PDF 狀態），故 4 路由的 `WHERE status = 'ready'` 對 `pages` 永遠匹配 0 列。將 4 路由的頁面查詢一律改為 `status = 'audio_ready'` 並加註解說明。修正既有 3 個測試（image-quality/script-quality/h5p）的 fixture——原本用**不存在的** `'ready'` page 狀態（所以測試過但 production 壞），改為 `'audio_ready'`，使其反映真實狀態並成為回歸測試（pdfs INSERT 的 `'ready'` 為正確 PDF 狀態，維持不動）。為原本無測試的 quality-check 新增 `quality-check.test.ts`（4 子測試：audio_ready 頁面被檢查〔回歸〕、非完成頁〔rendered〕不檢查、404、403）。backend `tsc --noEmit` 通過；4 個路由測試以 Node 22（`.nvmrc`）+ `--test-force-exit` 執行，子測試全通過（quality-check 4/4、image-quality 4/4、script-quality 5/5、h5p 4/4）。分支 `fix/quality-export-page-status`，已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 16 個完成項目（16/100，未達上限）。
 - [ ] **（P0）課後報告補強**：依 §7.1，`registerReportRoutes()`／`PostClassReportPanel` 補上頁面困難度（完成率低／提問多／投票分歧高）、題目答錯率與 CSV 下載入口。可分拆為純函式（前端彙總）+ 後端聚合兩個子項。
+  - 進度（第一六九輪，2026-06-27）：**後端聚合子項「頁面困難度」已完成**（見下方「課後報告頁面困難度後端聚合」section，計數第 48 項）——`reportMetrics.ts` 新增純函式 `pageDifficultyScore`，`report/pages.csv` 新增 `question_count`／`difficulty_score` 欄位。**仍待辦**：前端 `PostClassReportPanel` 困難度呈現／排序、題目答錯率彙整與 CSV 下載入口。
 - [x] **（P1）生成前成本估算 modal 串接**：已有 `lib/costEstimate.ts` helper 與 `PromptModal` 估算，依 §7.5 確認是否已於所有來源（PDF／文字／YouTube）生成前顯示，補齊缺口並加測試。（與上方 §7.5「生成前成本估算覆蓋確認」為同一工作，已於第一六八輪一併完成；不重複計數。詳見該項與工作記錄。）
 - [ ] **（P1）教材知識庫：搜尋結果加入動作**：依 §7.4／§8.1，首頁搜尋結果加入「加入新簡報」或「收藏頁」入口（延伸 `search.ts`／`from-pages.ts`）。
 - [ ] **（P1）AI 導師自學模式入口正式化**：依 §7.3，將既有 `PageAskPanel`／`usePageAsk` 包裝成學生端自學入口（測驗後個人化複習清單、答錯題回看）。
@@ -235,6 +244,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （§7.1 後端聚合子項）課後報告 pages.csv 新增頁面困難度：`reportMetrics.ts` 新增純函式 `pageDifficultyScore`（完成率/投票分歧/提問率三訊號平均、0–1、缺值略過），`report/pages.csv` 新增 `question_count`/`difficulty_score` 欄位；補 4 純函式測試 + 更新 pages-csv 測試，報告測試回歸通過（計數 48/100） | feat/report-page-difficulty（已 merge） |
 | 2026-06-27 | （§7.5，補真缺口）上傳 PDF 後在生成前顯示成本估算：`POST /api/pdfs` 新增回傳 `source_page_count`（PDF 實體頁數，不寫 persisted page_count），前端新增 `promptTargetPageCount` 純函式（page_count → source_page_count fallback）供 PromptModal；確認 TXT/YouTube 生成前無從估算（非缺口）。補 backend 2 + frontend 3 測試，前後端 typecheck + 上傳路由回歸通過（計數 47/100） | feat/upload-source-page-count-cost-estimate（已 merge） |
 | 2026-06-27 | （新功能，使用者指定）播放頁一般檢視點擊投影片改為進入全螢幕（取代點擊 playPause，播放/暫停改用獨立按鈕與空白鍵）：`PlayPageSlidePanel` 的 `onImgClick` 改用 context 的 `setFullscreenLayout`/`setImageOnlyFullscreen`；新增 aria-label i18n 鍵；前端 typecheck + i18n 27 測試通過（計數 46/100） | feat/click-slide-toggle-fullscreen（已 merge） |
 | 2026-06-27 | （新功能）語意搜尋掃描簡報數上限改為每帳號可設定：硬編 `MAX_SEMANTIC_PDFS=20` → 設定 `semanticSearchMaxPdfs`（預設 20、範圍 1–200，clamp 防呆），串接 settings.env/admin API/Settings 頁/i18n；補 4 測試，前後端 typecheck + 回歸通過（計數 45/100） | feat/configurable-semantic-search-limit（已 merge） |

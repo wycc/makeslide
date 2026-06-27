@@ -27,3 +27,37 @@ export function pollDivergence(maxVotes: number, totalVotes: number): number {
 export function average(values: number[]): number | null {
   return values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : null;
 }
+
+/** Clamp to the [0, 1] range. */
+function clamp01(n: number): number {
+  return Math.max(0, Math.min(1, n));
+}
+
+/**
+ * Normalised per-page difficulty signals (each 0..1, or null when not applicable).
+ * A page is "harder" when fewer viewers finish it, when its poll vote is more split,
+ * and when it draws more questions/comments per viewer.
+ */
+export interface PageDifficultySignals {
+  /** Completion rate (completed / viewers); lower means harder. null when no viewers. */
+  completionRate: number | null;
+  /** Poll divergence (0 consensus … 1 fully split); higher means harder. null when no votes. */
+  pollDivergence: number | null;
+  /** Questions/comments per viewer (capped at 1); higher means harder. null when no viewers. */
+  questionRate: number | null;
+}
+
+/**
+ * Combines the available difficulty signals into a single 0..1 score (higher = harder) by
+ * averaging whichever signals are present (completion contributes its *in*completion, 1 - rate).
+ * Returns null when no signal is available (e.g. a page nobody watched), so callers can render
+ * an empty cell instead of a misleading 0. Pure function — easy to unit test in isolation.
+ */
+export function pageDifficultyScore(signals: PageDifficultySignals): number | null {
+  const parts: number[] = [];
+  if (signals.completionRate != null) parts.push(clamp01(1 - signals.completionRate));
+  if (signals.pollDivergence != null) parts.push(clamp01(signals.pollDivergence));
+  if (signals.questionRate != null) parts.push(clamp01(signals.questionRate));
+  if (parts.length === 0) return null;
+  return parts.reduce((a, b) => a + b, 0) / parts.length;
+}
