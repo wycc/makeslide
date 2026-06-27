@@ -296,6 +296,31 @@ export function customScriptDurationSeconds(effect: SlideAnimationEffect): numbe
   return Number.isFinite(total) && total > 0 ? total : 1;
 }
 
+/** A selected effect paired with its resolved absolute start/end seconds. */
+export interface SelectedEffectRange {
+  effect: SlideAnimationEffect;
+  start: number;
+  end: number;
+}
+
+/**
+ * Merge several selected effects (each with its resolved start/end seconds) into
+ * one: the result starts at the earliest start, lasts until the latest end, and
+ * inherits all other settings from the earliest effect — including its
+ * `startTrigger`, so a transcript-anchored effect stays anchored (`start` is
+ * still set to the resolved `minStart` as a fallback for when the transcript can
+ * no longer be resolved). The merged effect keeps the earliest effect's `id`.
+ * Returns `null` when there are fewer than two ranges (nothing to merge). Pure
+ * function extracted from AnimationEditorTab's merge handler for unit testing.
+ */
+export function mergeEffectRanges(ranges: SelectedEffectRange[]): SlideAnimationEffect | null {
+  if (ranges.length < 2) return null;
+  const minStart = Math.min(...ranges.map((r) => r.start));
+  const maxEnd = Math.max(...ranges.map((r) => r.end));
+  const earliest = ranges.reduce((a, b) => (b.start < a.start ? b : a)).effect;
+  return { ...earliest, start: minStart, duration: maxEnd - minStart };
+}
+
 /**
  * Total seconds the slide's GSAP animation timeline runs for: the latest
  * point at which any effect's tween ends (`start + duration`, plus

@@ -24,10 +24,47 @@ import {
   getShapeKind,
   insertEffectAfterFirstStartingEffect,
   insertEffectAfterPlaybackEffect,
+  mergeEffectRanges,
   pausePlaybackTriggerSeconds,
   resolveAnimationSpec,
   resolveStartTriggerSeconds,
 } from "./animationSpec";
+
+const fx = (id: string, start: number, duration: number, extra: Record<string, unknown> = {}) => ({
+  id, target: "slide" as const, type: "highlight-box" as const, start, duration, ease: "power1.out" as const, ...extra,
+});
+
+test("mergeEffectRanges returns null for fewer than two ranges", () => {
+  assert.equal(mergeEffectRanges([]), null);
+  assert.equal(mergeEffectRanges([{ effect: fx("a", 1, 2), start: 1, end: 3 }]), null);
+});
+
+test("mergeEffectRanges spans earliest start to latest end and inherits the earliest effect", () => {
+  const early = fx("early", 2, 3, { widthPct: 10 }); // ends at 5
+  const late = fx("late", 6, 2, { widthPct: 99 }); // ends at 8
+  const merged = mergeEffectRanges([
+    { effect: late, start: 6, end: 8 },
+    { effect: early, start: 2, end: 5 },
+  ]);
+  assert.ok(merged);
+  assert.equal(merged!.id, "early"); // inherits earliest effect's id/settings
+  assert.equal((merged as { widthPct?: number }).widthPct, 10);
+  assert.equal(merged!.start, 2); // earliest start
+  assert.equal(merged!.duration, 6); // 8 (latest end) - 2 (earliest start)
+});
+
+test("mergeEffectRanges keeps the earliest effect's startTrigger but updates start as fallback", () => {
+  const anchored = fx("anchored", 4, 1, { startTrigger: { type: "transcript-line", line: 2 } });
+  const merged = mergeEffectRanges([
+    { effect: anchored, start: 3, end: 4 }, // resolved start (3) earlier than effect.start (4)
+    { effect: fx("other", 7, 1), start: 7, end: 8 },
+  ]);
+  assert.ok(merged);
+  assert.equal(merged!.id, "anchored");
+  assert.deepEqual((merged as { startTrigger?: unknown }).startTrigger, { type: "transcript-line", line: 2 });
+  assert.equal(merged!.start, 3); // fallback start = resolved minStart
+  assert.equal(merged!.duration, 5); // 8 - 3
+});
 
 test("generateFocusEffectsFromTranscript creates one highlight-box effect per sentence", () => {
   const effects = generateFocusEffectsFromTranscript(3);
