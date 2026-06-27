@@ -1,5 +1,5 @@
 import { geminiVoiceLabel, openaiVoiceLabel, type TtsProvider } from '../../lib/ttsVoices';
-import { normalizeScriptMaxChars } from '../../lib/scriptMaxChars';
+import { normalizeScriptMaxChars, SCRIPT_MAX_CHARS_MIN, SCRIPT_MAX_CHARS_MAX } from '../../lib/scriptMaxChars';
 import { useI18n } from '../../i18n';
 
 interface TtsDialogProps {
@@ -109,8 +109,8 @@ export function TtsDialog({
             </div>
             <input
               type="number"
-              min={80}
-              max={2000}
+              min={SCRIPT_MAX_CHARS_MIN}
+              max={SCRIPT_MAX_CHARS_MAX}
               step={10}
               placeholder={t('play.ttsDialog.scriptMaxCharsPlaceholder')}
               value={scriptMaxCharsPerPage ?? ''}
@@ -124,6 +124,11 @@ export function TtsDialog({
               disabled={disabled}
               className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100 placeholder:text-slate-500"
             />
+            <p className="mt-1 text-[11px] text-slate-500">
+              {t('play.scriptMaxCharsRange')
+                .replace('{min}', String(SCRIPT_MAX_CHARS_MIN))
+                .replace('{max}', String(SCRIPT_MAX_CHARS_MAX))}
+            </p>
           </div>
           {ttsMsg ? <p className="text-xs text-slate-400">{ttsMsg}</p> : null}
         </div>

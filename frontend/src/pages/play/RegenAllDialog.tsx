@@ -2,7 +2,7 @@ import { RegenerateProgress } from './RegenerateProgress';
 import type { RegenJobState } from '../../types';
 import { useI18n } from '../../i18n';
 import { formatRegenSelectedPagesSummary } from './formatters';
-import { normalizeScriptMaxChars } from '../../lib/scriptMaxChars';
+import { normalizeScriptMaxChars, SCRIPT_MAX_CHARS_MIN, SCRIPT_MAX_CHARS_MAX } from '../../lib/scriptMaxChars';
 
 interface RegenOptions {
   image: boolean;
@@ -191,8 +191,8 @@ export function RegenAllDialog({
               <label className="mb-1 block text-xs text-slate-400">{t('play.regenDialog.scriptMaxCharsLabel')}</label>
               <input
                 type="number"
-                min={80}
-                max={2000}
+                min={SCRIPT_MAX_CHARS_MIN}
+                max={SCRIPT_MAX_CHARS_MAX}
                 step={1}
                 value={regenScriptMaxCharsPerPage}
                 onChange={(e) => {
@@ -204,6 +204,11 @@ export function RegenAllDialog({
                 className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-fuchsia-500/40 placeholder:text-slate-500 focus:ring"
                 disabled={disabled}
               />
+              <p className="mt-1 text-[11px] text-slate-500">
+                {t('play.scriptMaxCharsRange')
+                  .replace('{min}', String(SCRIPT_MAX_CHARS_MIN))
+                  .replace('{max}', String(SCRIPT_MAX_CHARS_MAX))}
+              </p>
             </div>
           </div>
         ) : null}
