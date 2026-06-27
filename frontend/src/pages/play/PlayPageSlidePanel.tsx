@@ -94,6 +94,7 @@ export function PlayPageSlidePanel() {
     displayedImageSrc,
     playbackImageSrc,
     isPlaying, setIsPlaying, playPause,
+    setFullscreenLayout, setImageOnlyFullscreen,
     slideAnimationPlaying,
     currentTime, duration,
     finished, setFinished,
@@ -450,8 +451,14 @@ export function PlayPageSlidePanel() {
                 maxHeight: transcriptFocusMode ? '10rem' : `${slideImageMaxHeightVh}vh`,
                 cursor: imageEditSelectMode ? 'crosshair' : (drawingMode && drawingTool !== 'cursor') ? 'default' : 'pointer',
               }}
-              onImgClick={() => { if (!imageEditSelectMode && (!drawingMode || drawingTool === 'cursor')) playPause(); }}
-              imgProps={{ role: 'button', tabIndex: -1, 'aria-label': isPlaying ? t('play.slidePanel.pauseAudioOverlay') : t('play.slidePanel.resumeAudioOverlay') }}
+              onImgClick={() => {
+                // 點擊投影片進入（圖片）全螢幕模式。播放/暫停改由獨立按鈕與空白鍵負責。
+                if (!imageEditSelectMode && (!drawingMode || drawingTool === 'cursor')) {
+                  setFullscreenLayout('image');
+                  setImageOnlyFullscreen(true);
+                }
+              }}
+              imgProps={{ role: 'button', tabIndex: -1, 'aria-label': t('play.slidePanel.enterFullscreenOverlay') }}
               overlay={
                 <>
                   <button

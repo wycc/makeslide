@@ -780,6 +780,7 @@ export const en = {
   'play.slidePanel.shareQrAlt': 'Share link QR code',
   'play.slidePanel.pauseAudioOverlay': 'Pause audio',
   'play.slidePanel.resumeAudioOverlay': 'Resume audio',
+  'play.slidePanel.enterFullscreenOverlay': 'Enter fullscreen',
   'play.slidePanel.viewImageHistory': 'View this page image\'s version history',
   'play.slidePanel.versionButton': '🖼 Version',
   'play.slidePanel.pageImageAlt': 'Page {page}',
