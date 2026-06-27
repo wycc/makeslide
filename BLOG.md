@@ -1,5 +1,24 @@
 # MakeSlide 功能說明
 
+## 範本清單 `skill_data` 防護解析（修一筆損壞 500 整份清單）
+
+### 背景
+
+公開教學範本（`GET /api/templates`）會把每筆範本的 `skill_data`（提示詞、套用範圍、圖片風格等設定）以 JSON 字串存在資料庫。清單端點對每一列呼叫 `rowToTemplate`，其中 `JSON.parse(row.skill_data) as Record<string, unknown>` **沒有任何防護**。由於這是「逐列映射」的清單端點，只要**任何一筆**範本的 `skill_data` 損壞（非合法 JSON 或非物件），整個 `GET /api/templates` 就會丟例外回 500——所有使用者都看不到任何範本，而非只略過那一筆壞資料。
+
+### 變更內容
+
+- 在 `templates.ts` 新增匯出純函式 `parseSkillData(raw)`：非合法 JSON、或解析出來不是「非陣列物件」時一律回 `{}`，其餘照常回該物件。
+- `rowToTemplate` 改用之：損壞的範本仍會出現在清單中，只是 `skill_data` 退化為空物件，不再讓整份清單 500。
+
+### 使用方式
+
+純內部健壯性修復，正常範本行為完全不變；差別只在於遇到單筆損壞資料時清單仍可正常載入。
+
+### 測試
+
+`templates.test.ts` 新增 2 個測試：`parseSkillData` 純函式（物件、損壞 JSON、陣列、null、字串等皆正確降級為 `{}`）；以及整合測試——直接插入一筆 `skill_data` 為非法 JSON 的範本後，`GET /api/templates` 仍回 200、該範本仍在清單中且 `skill_data` 為 `{}`。後端 `tsc --noEmit` 通過、templates 8/8 通過。
+
 ## 投票選項 JSON 防護解析收斂為共用函式（修無防護解析致 500）
 
 ### 背景

@@ -4,6 +4,8 @@ import crypto from 'node:crypto';
 import { buildApp } from '../src/server';
 import { config } from '../src/config';
 import { setSystemAuthSettings } from '../src/services/aiSettings';
+import { db } from '../src/db';
+import { parseSkillData } from '../src/routes/pdfs/templates';
 
 setSystemAuthSettings({ googleAuthEnabled: false });
 
@@ -114,5 +116,39 @@ test('POST /api/templates/:id/apply — 404 for unknown template', async () => {
   const app = await buildApp();
   const resp = await app.inject({ method: 'POST', url: '/api/templates/tmpl-nonexistent/apply' });
   assert.equal(resp.statusCode, 404);
+  await app.close();
+});
+
+test('parseSkillData parses objects and degrades bad data to {}', () => {
+  assert.deepEqual(parseSkillData('{"prompt":"hi"}'), { prompt: 'hi' });
+  assert.deepEqual(parseSkillData('not json'), {});
+  assert.deepEqual(parseSkillData('[1,2,3]'), {}); // arrays are not skill-data objects
+  assert.deepEqual(parseSkillData('null'), {});
+  assert.deepEqual(parseSkillData('"a string"'), {});
+  assert.deepEqual(parseSkillData(null), {});
+});
+
+test('GET /api/templates — a corrupt skill_data row does not 500 the whole list', async () => {
+  const app = await buildApp();
+  // a valid template
+  await app.inject({
+    method: 'POST',
+    url: '/api/templates',
+    headers: { ...OWNER_HEADERS, 'content-type': 'application/json' },
+    body: JSON.stringify({ name: 'valid-one', skill_data: SKILL_DATA }),
+  });
+  // inject a row with corrupt (non-JSON) skill_data directly, simulating bad data
+  const now = new Date().toISOString();
+  db.prepare(
+    `INSERT INTO templates (id, name, description, category, skill_data, is_public, author, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run('tmpl-corrupt', 'corrupt-one', '', 'general', '{not valid json', 1, OWNER_SUB, now);
+
+  const resp = await app.inject({ method: 'GET', url: '/api/templates' });
+  assert.equal(resp.statusCode, 200);
+  const { templates } = resp.json() as { templates: { id: string; skill_data: Record<string, unknown> }[] };
+  const corrupt = templates.find((t) => t.id === 'tmpl-corrupt');
+  assert.ok(corrupt, 'corrupt template is still listed');
+  assert.deepEqual(corrupt!.skill_data, {}); // degraded to empty instead of throwing
   await app.close();
 });
