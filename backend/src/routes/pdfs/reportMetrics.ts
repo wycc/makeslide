@@ -61,3 +61,45 @@ export function pageDifficultyScore(signals: PageDifficultySignals): number | nu
   if (parts.length === 0) return null;
   return parts.reduce((a, b) => a + b, 0) / parts.length;
 }
+
+/** Minimal per-question stat shape needed to rank quiz questions by difficulty. */
+export interface QuestionDifficultyStat {
+  question_id: string;
+  question: string;
+  attempt_count: number;
+  wrong_count: number;
+  correct_rate: number;
+}
+
+/** One entry in the "hardest questions" ranking returned by the report summary. */
+export interface HardestQuestion {
+  question_id: string;
+  question: string;
+  attempt_count: number;
+  wrong_count: number;
+  wrong_rate: number;
+}
+
+/**
+ * Pick the `limit` hardest quiz questions for the post-class report summary.
+ * Only attempted questions are considered; they are ranked by lowest correct
+ * rate first, breaking ties by more wrong answers, and annotated with their
+ * wrong rate (wrong / attempts, guarded against divide-by-zero). Pure function
+ * extracted from the report summary route so the ranking can be unit-tested.
+ */
+export function selectHardestQuestions(
+  stats: QuestionDifficultyStat[],
+  limit = 5,
+): HardestQuestion[] {
+  return [...stats]
+    .filter((s) => s.attempt_count > 0)
+    .sort((a, b) => a.correct_rate - b.correct_rate || b.wrong_count - a.wrong_count)
+    .slice(0, limit)
+    .map((s) => ({
+      question_id: s.question_id,
+      question: s.question,
+      attempt_count: s.attempt_count,
+      wrong_count: s.wrong_count,
+      wrong_rate: safeRatio(s.wrong_count, s.attempt_count),
+    }));
+}

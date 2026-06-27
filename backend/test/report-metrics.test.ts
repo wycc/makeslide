@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { safeRatio, round4, pollDivergence, average, pageDifficultyScore } from '../src/routes/pdfs/reportMetrics';
+import { safeRatio, round4, pollDivergence, average, pageDifficultyScore, selectHardestQuestions } from '../src/routes/pdfs/reportMetrics';
 
 test('safeRatio divides normally', () => {
   assert.equal(safeRatio(3, 4), 0.75);
@@ -59,4 +59,52 @@ test('pageDifficultyScore ignores null signals and returns null when none are pr
 test('pageDifficultyScore clamps out-of-range signals into [0,1]', () => {
   // questionRate above 1 (more questions than viewers) is capped; completion below 0 clamps too
   assert.equal(pageDifficultyScore({ completionRate: 1, pollDivergence: 0, questionRate: 5 }), 1 / 3);
+});
+
+const stat = (
+  question_id: string,
+  attempt_count: number,
+  correct_count: number,
+) => ({
+  question_id,
+  question: `Q ${question_id}`,
+  attempt_count,
+  wrong_count: attempt_count - correct_count,
+  correct_rate: attempt_count > 0 ? correct_count / attempt_count : 0,
+});
+
+test('selectHardestQuestions ranks by lowest correct rate then most wrong, and adds wrong_rate', () => {
+  const result = selectHardestQuestions([
+    stat('easy', 10, 9), // correct_rate 0.9
+    stat('hard', 10, 2), // correct_rate 0.2
+    stat('mid', 10, 5), // correct_rate 0.5
+  ]);
+  assert.deepEqual(result.map((r) => r.question_id), ['hard', 'mid', 'easy']);
+  assert.equal(result[0].wrong_count, 8);
+  assert.equal(result[0].wrong_rate, 0.8);
+  assert.equal(result[0].question, 'Q hard');
+});
+
+test('selectHardestQuestions breaks correct_rate ties by more wrong answers', () => {
+  // same correct_rate (0.5) but different volumes → the one with more wrong answers ranks first
+  const result = selectHardestQuestions([
+    stat('few', 4, 2), // wrong 2
+    stat('many', 20, 10), // wrong 10
+  ]);
+  assert.deepEqual(result.map((r) => r.question_id), ['many', 'few']);
+});
+
+test('selectHardestQuestions excludes unattempted questions and honours the limit', () => {
+  const result = selectHardestQuestions(
+    [stat('a', 0, 0), stat('b', 5, 1), stat('c', 5, 2), stat('d', 5, 3)],
+    2,
+  );
+  // 'a' has 0 attempts → excluded; top-2 hardest of the rest are b (0.2) then c (0.4)
+  assert.deepEqual(result.map((r) => r.question_id), ['b', 'c']);
+  assert.equal(result.length, 2);
+});
+
+test('selectHardestQuestions returns an empty array when nothing was attempted', () => {
+  assert.deepEqual(selectHardestQuestions([stat('a', 0, 0)]), []);
+  assert.deepEqual(selectHardestQuestions([]), []);
 });

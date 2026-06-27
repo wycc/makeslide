@@ -5,7 +5,7 @@ import type { PdfRow } from '../../types';
 import { sessionSub } from '../auth';
 import { errorResponse, IdParamSchema } from './shared';
 import { csvEscape, withCsvBom } from './csv';
-import { safeRatio, round4, pollDivergence, average, pageDifficultyScore } from './reportMetrics';
+import { safeRatio, round4, pollDivergence, average, pageDifficultyScore, selectHardestQuestions } from './reportMetrics';
 import { safeDownloadBaseName, buildContentDisposition } from './downloadFilename';
 import { isCorrectAnswer } from '../../services/quizCorrectness';
 import { getSyncFollowerQuestionsSnapshot } from './sync';
@@ -482,17 +482,7 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
     const pollParticipationDenominator = Math.max(0, (poll.poll_count ?? 0) * participantCount);
 
     const questionStats = computeQuestionStats(id);
-    const hardestQuestions = [...questionStats]
-      .filter((s) => s.attempt_count > 0)
-      .sort((a, b) => a.correct_rate - b.correct_rate || b.wrong_count - a.wrong_count)
-      .slice(0, 5)
-      .map((s) => ({
-        question_id: s.question_id,
-        question: s.question,
-        attempt_count: s.attempt_count,
-        wrong_count: s.wrong_count,
-        wrong_rate: safeRatio(s.wrong_count, s.attempt_count),
-      }));
+    const hardestQuestions = selectHardestQuestions(questionStats, 5);
 
     return reply.code(200).send({
       pdf_id: id,
