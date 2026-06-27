@@ -19,13 +19,17 @@
 
 - [x] 修 `input-security.test.ts`（4 失敗）：4 個 upload/youtube 驗證測試全回 **401**（未授權）——測試未呼叫 `setSystemAuthSettings({ googleAuthEnabled: false })`，請求在到達驗證邏輯前就被 auth 擋下（驗證邏輯本身正常）。確認無任何測試把 `googleAuthEnabled` 設 true（無全域順序衝突），於檔頭加上該設定。`input-security.test.ts` 4/4 通過。純測試修正。分支 `fix/input-security-test-auth`，已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 34 個完成項目（34/100，未達上限）。
-- [ ] （既有失敗，待判斷）`pages-api.test.ts`（7 失敗）+ page-operations 邊界（1）：測試預期頁面素材路徑為連號 `pages/002.png`，但實際為 uid 化 `pages/<uid>.jpg`。**需判斷**是測試過時（uid 為現行設計、應改測試）或為命名 regression。涉及插入/刪除頁的「path 對齊／compact 編號」不變式，需理解設計意圖後再改，勿盲改。
+- [x] （既有失敗）`pages-api.test.ts`（7 失敗）：測試預期連號 `pages/002.png`，實際為 uid 化 `pages/<uid>.jpg`。
+  - 修改說明（2026-06-27）：確認 uid 化為現行設計（page-operations.ts 註解明言「檔案以 page_uid 為鍵、不重命名」、前端/storage 皆 uid 化），測試過時。重寫 `seedReadyPdfFor`（uid 路徑 `pages/u<i>.jpg/.text.txt/.script.txt/.m4a` + 建檔 + 設 page_uid）與 `assertDeckAligned`（改為斷言 page_number 連續 1..N），並更新 670/672/673/675 的內聯路徑斷言為 uid 契約（既有頁保留 uid 路徑、僅 page_number 連續；刪除只移除被刪頁 uid 檔）。
+  - **順帶修真實潛在 bug**：重寫後 test 676 暴露 delete handler 的 `UPDATE page_number = page_number - 1` 在多次增刪後（rowid 與 page_number 分歧）會暫態違反 `UNIQUE(pdf_id, page_number)` → 500。改用與 insert 一致的 +offset 兩步 renumber（+100000 再 -100001）。此為 production 也可能觸發的真 bug（增頁後刪頁）。
+  - 驗證：backend `tsc --noEmit` 通過；`pages-api` 19/19；page-operations/delete 相關 51/51 回歸通過。**完整後端套件 1199/1199 全綠（exit 0）**。分支 `fix/pages-api-uid-tests-and-delete-renumber`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 37 個完成項目（37/100，未達上限）。
 - [x] （既有失敗）`skills.test.ts`（1）：`updateUserSkill` 回傳物件與磁碟 round-trip 形狀不符。
   - 修改說明（2026-06-27）：根因為 `createUserSkill`（條件 spread、省略 undefined 模板鍵）與 `updateUserSkill`（**總是**寫入 4 個模板鍵，即使值 undefined）不一致——回傳物件帶 `imageStylePrompt:undefined` 等鍵，但 JSON.stringify 丟棄 undefined，讀回後缺鍵，`deepStrictEqual(回傳, 磁碟)` 失敗。修法：`updateUserSkill` 改為先解析各欄位值、再以條件 spread 僅在 truthy 時納入（行為不變、與 create 形狀一致）。順帶修掉這個 create/update 形狀不一致。`skills.test.ts` 5/5 通過。分支 `fix/update-skill-omit-undefined-template-fields`，已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 35 個完成項目（35/100，未達上限）。
 - [x] （既有失敗）`timing.test.ts`(1) + `regenerate-matrix.test.ts`(4)：同 input-security 的 401 根因——兩檔皆缺 `setSystemAuthSettings({ googleAuthEnabled: false })`，HTTP 請求被 auth 擋下回 401。兩檔加上該設定後，timing 12/12、regenerate-matrix 4/4 通過（連跑 3 次穩定 16/16；首次觀察到的 regenerate test 2 一次性 flake 未再現）。純測試修正。分支 `fix/timing-regen-test-auth`，已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 36 個完成項目（36/100，未達上限）。
-- [ ] （既有失敗，待查）`figure-reference-image-generation.test.ts`(1：attaches extracted figure as reference image + notes)：逐一重現判斷測試 vs 程式。
+- [x] （既有失敗）`figure-reference-image-generation.test.ts`(1)：隔離下穩定通過、僅在完整套件中失敗，屬測試順序污染。第一五四–一五六輪新增多個 `setSystemAuthSettings` 改變全域順序後，重跑完整套件已自然通過，無需改動。
 
 ## 後端去重 canDestructivelyEditPdf（第一五三輪，2026-06-27）
 

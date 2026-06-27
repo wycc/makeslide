@@ -8823,3 +8823,16 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **修正**：兩檔檔頭加上 `setSystemAuthSettings({ googleAuthEnabled: false })`。
 - **驗證**：`timing.test.ts` 12/12、`regenerate-matrix.test.ts` 4/4 通過；兩檔一起連跑 3 次皆 16/16 穩定（過程中曾觀察到 regenerate 的 rollback 測試一次性 flake，重跑未再現）。以 `scripts/run-tests.sh backend` 執行。
 - 至此，2026-06-27 完整套件盤點的 18 個既有失敗已修復 10 個（input-security 4、skills 1、timing 1、regenerate-matrix 4）；剩 `pages-api`(7，需配合 uid 化儲存設計重寫) 與 `figure-reference-image-generation`(1) 待處理。
+
+## pages-api 測試 uid 化重寫 + 修正 delete renumber 潛在 bug（2026-06-27）
+
+### 功能目的
+這是 2026-06-27 完整後端測試套件盤點的最後一組失敗（pages-api.test.ts 的 7 個）。這些測試建立在一個**已被取代的設計**上：它們假設頁面素材檔名是連號的 `pages/002.png`，而現行系統改用「每頁一個穩定 page_uid、檔名為 `pages/<uid>.jpg`，插入/刪除頁時只重排 page_number、絕不重命名檔案」的設計（page-operations.ts 有明確註解）。本項把測試對齊現行設計，並在過程中發現並修掉一個真實的潛在 bug。
+
+### 使用方式
+測試部分無行為變更。產品修正部分：在多次插入/刪除頁之後再刪頁，不再可能回傳 500。
+
+### 技術細節
+- **測試重寫**：`seedReadyPdfFor` 改以 uid 路徑（`pages/u<i>.jpg/.text.txt/.script.txt/.m4a`）建資料與檔案、並寫入 `page_uid`；`assertDeckAligned` 改為斷言 `page_number` 連續 1..N（uid 設計下唯一的全域不變式）；670/672/673/675 的內聯路徑斷言改為 uid 契約——既有頁保留各自 uid 路徑（只是 page_number 壓縮），刪除只移除「被刪那一頁」的 uid 檔，其餘頁的檔與內容不動。
+- **真實 bug 修正**：重寫後，測試 676（連續多次增刪）暴露出 delete handler 的 `UPDATE pages SET page_number = page_number - 1 WHERE page_number > n` 會**暫態違反** `UNIQUE(pdf_id, page_number)`。原因是經過多次插入/刪除後，rowid 與 page_number 不再同序，而 SQLite 對 bulk UPDATE 的逐列套用順序未定義，可能在中途撞到尚未更新的既有 page_number。改用與 insert 路徑相同的「+offset 兩步」renumber（先 `+100000` 移出範圍、再 `-100001` 帶回，淨 -1），徹底避免暫態碰撞。這在正式環境也可能發生（使用者增頁後刪頁）。
+- **驗證**：backend `tsc --noEmit` 通過；`pages-api` 19/19；page-operations/delete 相關 51/51 回歸通過。**至此完整後端測試套件 1199/1199 全數通過（exit 0）**——2026-06-27 盤點的 18 個既有失敗全部清除。以 `scripts/run-tests.sh backend` 執行。
