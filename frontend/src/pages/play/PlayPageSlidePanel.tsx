@@ -9,6 +9,7 @@ import { PageTimingChips } from './PageTimingChips';
 import { ApiError, fetchPageGenerationPrompts, fetchPdfRunHistory, fetchPdfSlowArtifacts, figureImageUrl, fetchSyncAttendees, kickSyncAttendee, rewritePageScript } from '../../lib/api';
 import { copyTextToClipboard } from '../../lib/clipboard';
 import { clamp } from '../../lib/clamp';
+import { computeRemainingSeconds } from '../../lib/remainingTime';
 import { SHOW_SUBTITLE_STORAGE_KEY, SUBTITLE_SIZE_STORAGE_KEY, SUBTITLE_POSITION_STORAGE_KEY, AUTO_ADVANCE_STORAGE_KEY, INTERACTIVE_MODE_STORAGE_KEY, useI18n, type TranslationKey, type SubtitleSize, type SubtitlePosition } from '../../i18n';
 import { debugLog, debugWarn } from '../../lib/debugLog';
 import { usePlayPageContext } from './PlayPageContext';
@@ -222,14 +223,10 @@ export function PlayPageSlidePanel() {
     return Math.ceil(remaining);
   }, [autoAdvance, duration, currentTime, finished]);
 
-  const remainingSeconds = useMemo(() => {
-    if (!detail?.pages) return null;
-    const currentPageRemaining = duration > 0 ? Math.max(0, duration - currentTime) : 0;
-    const futurePages = detail.pages.slice(currentIdx + 1);
-    const futureSeconds = futurePages.reduce((sum, p) => sum + (p.audio_duration_seconds ?? 0), 0);
-    const total = currentPageRemaining + futureSeconds;
-    return total > 0 ? total : null;
-  }, [detail?.pages, currentIdx, currentTime, duration]);
+  const remainingSeconds = useMemo(
+    () => computeRemainingSeconds(detail?.pages, currentIdx, currentTime, duration),
+    [detail?.pages, currentIdx, currentTime, duration],
+  );
 
   const [runHistory, setRunHistory] = useState<PipelineRunSummary[]>([]);
   const [runHistoryLoading, setRunHistoryLoading] = useState(false);
