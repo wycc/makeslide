@@ -42,13 +42,30 @@ interface TemplateRow {
   apply_count: number;
 }
 
+/**
+ * Parse a template's stored `skill_data` JSON into an object. Returns `{}` when
+ * the value is not valid JSON or not a (non-array) object, so a single corrupt
+ * row can't 500 the whole `/api/templates` list — it just renders with empty
+ * skill data instead. Exported for unit testing.
+ */
+export function parseSkillData(raw: string | null | undefined): Record<string, unknown> {
+  if (raw == null) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return {};
+    return parsed as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
 function rowToTemplate(row: TemplateRow) {
   return {
     id: row.id,
     name: row.name,
     description: row.description,
     category: row.category,
-    skill_data: JSON.parse(row.skill_data) as Record<string, unknown>,
+    skill_data: parseSkillData(row.skill_data),
     is_public: row.is_public === 1,
     author: row.author,
     created_at: row.created_at,
