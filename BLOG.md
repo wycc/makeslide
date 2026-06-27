@@ -1,5 +1,26 @@
 # MakeSlide 功能說明
 
+## 焦點動畫框的拖曳/縮放幾何抽出為可測純函式
+
+### 背景
+
+在動畫編輯器（`AnimationEditorTab`）中，使用者可以用滑鼠拖曳「焦點框」的中央來移動、或拖曳四邊/四角的把手來縮放。這段幾何計算——依 9 種把手（移動 + n/s/e/w/ne/nw/se/sw）把滑鼠位移換算成新的 x/y/寬/高百分比、各邊夾在容器邊界內、維持最小尺寸、西/北把手還要連動原點讓對側邊固定——原本整段內聯在 `onPointerMove` 事件處理函式裡，沒有任何測試。這種多分支的座標運算最容易在邊界（拖出容器、縮到比最小尺寸還小）出錯，卻最難用手動操作驗證。
+
+### 變更內容
+
+- 新增 `frontend/src/lib/focusBoxResize.ts`：
+  - `resizeFocusBox(handle, start, dxPct, dyPct, moveOnly?)` 純函式，接收拖曳起始框與位移百分比，回傳夾界並四捨五入到小數一位的新框。
+  - 匯出 `FocusBoxHandle` 型別與 `FOCUS_BOX_MIN_SIZE_PCT` 常數。
+- `AnimationEditorTab` 的 `onPointerMove` 改為呼叫此純函式（行為等價），本地 `DragHandle` 型別改為 `FocusBoxHandle` 的別名以單一來源。
+
+### 使用方式
+
+純內部重構，焦點框的拖曳/縮放操作行為不變。
+
+### 測試
+
+新增 `focusBoxResize.test.ts`（7 組：移動並夾角落、moveOnly 強制移動、東把手放大並夾右界、西把手連動原點使右邊固定、南/北把手對稱、夾最小尺寸、四捨五入到一位小數）。前端 `tsc --noEmit` 通過、新測試 7/7 通過。
+
 ## 品質檢查面板的頁面挑選邏輯抽出為可測純函式
 
 ### 背景
