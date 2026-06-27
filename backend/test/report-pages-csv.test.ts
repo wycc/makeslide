@@ -62,6 +62,16 @@ function seedWatchProgress(pdfId: string): void {
   insertProgress.run(pdfId, 2, 'student-a', 12000, 10000, 1, t);
 }
 
+function seedComments(pdfId: string): void {
+  const t = nowIso();
+  const insertComment = db.prepare(
+    `INSERT INTO page_comments (pdf_id, page_number, author, text, created_at) VALUES (?, ?, ?, ?, ?)`,
+  );
+  // Two questions on page 1 (2 viewers) -> question rate 1.0; none elsewhere.
+  insertComment.run(pdfId, 1, 'student-a', '這頁看不懂', t);
+  insertComment.run(pdfId, 1, 'student-d', '可以再解釋嗎', t);
+}
+
 function cleanup(pdfId: string): void {
   db.prepare(`DELETE FROM pdfs WHERE id = ?`).run(pdfId);
 }
@@ -71,6 +81,7 @@ test('GET /api/pdfs/:id/report/pages.csv returns per-page analytics ordered by p
   seedReportPdf(pdfId, 'private');
   seedPollVotes(pdfId);
   seedWatchProgress(pdfId);
+  seedComments(pdfId);
   const app = await buildApp();
   try {
     const resp = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}/report/pages.csv`, headers: OWNER_HEADERS });
@@ -78,14 +89,16 @@ test('GET /api/pdfs/:id/report/pages.csv returns per-page analytics ordered by p
     assert.match(resp.headers['content-type'] as string, /text\/csv/);
     assert.match(resp.headers['content-disposition'] as string, /attachment; filename="Report PDF-pages\.csv"/);
     const lines = resp.body.trim().split('\n');
-    assert.equal(lines[0], 'page_number,total_viewers,completed_viewers,completion_rate,poll_total_votes,poll_divergence_score,avg_listened_ratio');
+    assert.equal(lines[0], 'page_number,total_viewers,completed_viewers,completion_rate,poll_total_votes,poll_divergence_score,avg_listened_ratio,question_count,difficulty_score');
     // page 1: 2 viewers, 1 completed -> 0.5; poll votes split 1/1 -> divergence 0.5;
-    //         listened ratios 1.0 and 0.5 -> avg 0.75
-    assert.equal(lines[1], '1,2,1,0.5,2,0.5,0.75');
-    // page 2: 1 viewer completed -> 1; single vote -> divergence 0; listened 12000/10000 capped at 1
-    assert.equal(lines[2], '2,1,1,1,1,0,1');
-    // page 3: no viewers, no votes -> avg_listened_ratio is blank (no data, not 0)
-    assert.equal(lines[3], '3,0,0,0,0,0,');
+    //         listened ratios 1.0 and 0.5 -> avg 0.75; 2 questions / 2 viewers -> rate 1.0;
+    //         difficulty = mean(incompletion 0.5, divergence 0.5, questionRate 1.0) = 0.6667
+    assert.equal(lines[1], '1,2,1,0.5,2,0.5,0.75,2,0.6667');
+    // page 2: 1 viewer completed -> 1; single vote -> divergence 0; listened 12000/10000 capped at 1;
+    //         no questions -> difficulty mean(0,0,0) = 0
+    assert.equal(lines[2], '2,1,1,1,1,0,1,0,0');
+    // page 3: no viewers, no votes -> avg_listened_ratio + difficulty blank (no data, not 0)
+    assert.equal(lines[3], '3,0,0,0,0,0,,0,');
   } finally {
     cleanup(pdfId);
     await app.close();
