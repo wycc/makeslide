@@ -8588,3 +8588,20 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **接入**：`PlayPageSlidePanel` 的 `remainingSeconds` useMemo 改為委派此函式，相依陣列不變。
 - **測試**（`remainingTime.test.ts`，7 案例）：null pages、目前頁剩餘 + 後續加總、只計目前頁之後的頁、`duration <= 0` 以 0 計、`currentTime` 超界夾 0、缺 `audio_duration_seconds` 以 0 計、總和 0 回 null。
 - **驗證**：前端 `tsc --noEmit` 通過；測試 7/7 通過（以 `scripts/run-tests.sh frontend` 執行）；純前端、不動後端、不需新 i18n。
+
+## 抽出課後報告共用比例／四捨五入純函式（2026-06-27）
+
+### 功能目的
+課後報告相關路由（`report.ts`）裡有不少重複的小計算：好幾處 `分子 > 0 的分母 ? 分子/分母 : 0` 的比例（答對率、答錯率、投票參與率、頁面完成率出現兩次）、把數字四捨五入到小數第 4 位的 `round4`（在兩個 CSV 匯出各自定義一次）、以及投票分歧分數 `1 - 最高票/總票`。這些公式散落、重複，且沒有針對純邏輯的單元測試。本項把它們收斂成後端共用純函式，消除重複並固化除以 0 的防呆。
+
+### 使用方式
+此為後端內部重構，報告數值與 CSV 輸出與先前完全一致。需要這類計算時，`import { safeRatio, round4, pollDivergence } from './reportMetrics'`。
+
+### 技術細節
+- **純函式模組**（`backend/src/routes/pdfs/reportMetrics.ts`）：
+  - `safeRatio(numerator, denominator)`：分母 ≤ 0 時回 0，避免 NaN/Infinity。
+  - `round4(n)`：四捨五入到小數第 4 位（CSV 友善的固定精度）。
+  - `pollDivergence(maxVotes, totalVotes)`：`1 - 最高票選項佔比`（0 = 完全共識、越接近 1 越分裂），無票回 0。
+- **接入**（`report.ts`）：`correct_rate`、`wrong_rate`、`participation_rate`、`completion_rate`（CSV 與 summary 各一）改用 `safeRatio`；兩處 local `round4` 改用共用版本；頁面 CSV 的投票分歧改用 `pollDivergence`。
+- **測試**：新增 `report-metrics.test.ts`（4 案例，涵蓋 `safeRatio` 正常/除以 0、`round4`、`pollDivergence` 共識/半分裂/無票）。
+- **驗證**：backend `tsc --noEmit` 通過；新測試 4/4 通過；既有 `report-pages-csv`、`report-questions-csv`、`report-summary`、`report-question-stats` 共 16/16 回歸通過，確認行為等價。以 `scripts/run-tests.sh backend` 執行。
