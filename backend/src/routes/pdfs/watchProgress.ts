@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { canReadPdf } from './permissions';
 import { z } from 'zod';
 import { db } from '../../db';
 import { decodeSession, parseCookies } from '../auth';
@@ -14,12 +15,6 @@ function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibil
   if (!row.owner_sub) return true;
   if (sub && row.owner_sub === sub) return true;
   return row.visibility === 'public_editable';
-}
-
-function canReadPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
-  if (!row.owner_sub) return true;
-  if (sub && row.owner_sub === sub) return true;
-  return row.visibility === 'public' || row.visibility === 'public_editable';
 }
 
 const ShareTokenParamSchema = z.object({

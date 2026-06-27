@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { canReadPdf } from './permissions';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -83,12 +84,6 @@ const VoicePollSchema = z.object({
 function sessionSub(request: FastifyRequest): string | null {
   const session = decodeSession(parseCookies(request).makeslide_session);
   return session?.sub ?? null;
-}
-
-function canReadPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
-  if (!row.owner_sub) return true;
-  if (sub && row.owner_sub === sub) return true;
-  return row.visibility === 'public' || row.visibility === 'public_editable';
 }
 
 function hasOwnerOrLegacyAccess(sub: string | null, row: Pick<PdfRow, 'owner_sub'>): boolean {

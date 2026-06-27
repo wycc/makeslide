@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import { canReadPdf } from './permissions';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
@@ -31,12 +32,6 @@ function canDestructivelyEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_su
   if (!row.owner_sub) return true;
   if (sub && row.owner_sub === sub) return true;
   return Boolean(sub) && row.visibility === 'public_editable';
-}
-
-function canReadPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
-  if (!row.owner_sub) return true;
-  if (sub && row.owner_sub === sub) return true;
-  return row.visibility === 'public' || row.visibility === 'public_editable';
 }
 
 const ShareTokenParamSchema = z.object({
