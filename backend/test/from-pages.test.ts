@@ -73,6 +73,32 @@ test('POST /api/pdfs/from-pages creates new PDF and returns 201', async () => {
   }
 });
 
+test('from-pages pages use the audio_ready status and survive orphan recovery', async () => {
+  const { recoverOrphanedAddPagesPages } = await import('../src/worker/addPagesFromPrompt');
+  const srcId = `fp-src-status-${Date.now()}`;
+  seedPdf(srcId, { ownerSub: 'fp-owner', visibility: 'private', pageCount: 2 });
+  const app = await buildApp();
+  try {
+    const body = { title: '複習簡報', pages: [{ pdf_id: srcId, page_number: 1 }, { pdf_id: srcId, page_number: 2 }] };
+    const res = await app.inject({ method: 'POST', url: '/api/pdfs/from-pages', headers: { ...OWNER_HEADERS, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    assert.equal(res.statusCode, 201);
+    const data = JSON.parse(res.body) as { id: string };
+
+    const statuses = () => (db.prepare(`SELECT status FROM pages WHERE pdf_id = ? ORDER BY page_number`).all(data.id) as { status: string }[]).map((r) => r.status);
+    assert.deepEqual(statuses(), ['audio_ready', 'audio_ready']);
+
+    // The startup orphan-recovery sweep marks pages of a ready PDF that are not
+    // audio_ready/failed as failed. from-pages pages must not be caught by it.
+    recoverOrphanedAddPagesPages();
+    assert.deepEqual(statuses(), ['audio_ready', 'audio_ready']);
+
+    cleanup(data.id);
+  } finally {
+    cleanup(srcId);
+    await app.close();
+  }
+});
+
 test('POST /api/pdfs/from-pages returns 401 without auth', async () => {
   const srcId = `fp-noauth-${Date.now()}`;
   seedPdf(srcId, { ownerSub: 'fp-owner', visibility: 'public' });
