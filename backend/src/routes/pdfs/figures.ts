@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { canReadPdf } from './permissions';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
@@ -28,12 +29,6 @@ function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibil
   if (!row.owner_sub) return true;
   if (sub && row.owner_sub === sub) return true;
   return row.visibility === 'public_editable';
-}
-
-function canReadPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
-  if (!row.owner_sub) return true;
-  if (sub && row.owner_sub === sub) return true;
-  return row.visibility === 'public' || row.visibility === 'public_editable';
 }
 
 function getShareToken(request: FastifyRequest): string | null {

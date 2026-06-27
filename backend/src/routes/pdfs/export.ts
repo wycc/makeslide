@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { canReadPdf } from './permissions';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -40,12 +41,6 @@ export function loadExportedSources(pdfId: string): ExportedPdfSource[] {
 function sessionSubFromRequest(request: FastifyRequest): string | null {
   const session = decodeSession(parseCookies(request).makeslide_session);
   return session?.sub ?? null;
-}
-
-function canReadPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
-  if (!row.owner_sub) return true;
-  if (sub && row.owner_sub === sub) return true;
-  return row.visibility === 'public' || row.visibility === 'public_editable';
 }
 
 const ZIP_EXPORT_TIMEOUT_MS = 2 * 60_000;

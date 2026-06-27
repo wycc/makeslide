@@ -8632,3 +8632,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **共用函式**（`backend/src/routes/pdfs/report.ts`）：新增模組層級 `queryWatchPages(pdfId): WatchPageRow[]`，內含完整 SQL 與註解說明 `avg_listened_ratio` 的語意（capped at 1.0、無 duration 的列不計入平均）。
 - **接入**：pages CSV 匯出與 summary 端點原本各自 `const watchPages = db.prepare(<重複 SQL>).all(id)`，改為 `const watchPages = queryWatchPages(id)`。原本兩種輕微不同的回傳型別轉型（inline 物件型別 vs `WatchPageRow[]`）統一為 `WatchPageRow[]`。
 - **驗證**：backend `tsc --noEmit` 通過；既有 `report-pages-csv`、`report-summary` 共 7/7 回歸通過；專案內 `avg_listened_ratio` 的 inline SQL 由 2 處降為 1 處（即此共用函式內）。以 `scripts/run-tests.sh backend` 執行。
+
+## 抽出共用 canReadPdf 權限函式（27 檔去重）（2026-06-27）
+
+### 功能目的
+判斷「某使用者能否讀取某份簡報」的 `canReadPdf(sub, row)` 規則，原本在 **27 個** PDF 路由檔案裡逐字重複定義（完全相同的 4 行實作）。這種大規模複製不只佔版面，更是維護地雷——若日後權限規則要調整（例如新增一種可見度），得同時改 27 個地方，漏改任何一處都會造成權限不一致的安全風險。本項把它收斂成單一共用、且有測試保護的函式。
+
+### 使用方式
+此為後端內部重構，所有路由的讀取權限判斷與先前完全一致。需要判斷讀取權限時，`import { canReadPdf } from './permissions'`，呼叫 `canReadPdf(sub, pdfRow)`。
+
+### 技術細節
+- **共用模組**（`backend/src/routes/pdfs/permissions.ts`）：匯出 `canReadPdf(sub, row)`，規則為——無 owner 的簡報公開可讀（legacy/匿名上傳）、owner 永遠可讀自己的、其餘僅 `public` 或 `public_editable` 可讀。附註解說明。
+- **接入**：以腳本機械式移除 27 個路由檔（add-pages、comments、detail、drawings、export、figures、from-pages、h5p、handout、image-quality、notes-txt、page-animation、page-operations、pptx、quality-check、quizzes、regenerate、runs、scorm、scripts-txt、script-quality、search、slow-artifacts、subtitles、upload、versioning、watchProgress）的本地定義，改為從 `./permissions` import。移除後各檔的 `PdfRow` 型別仍有其他用途，且專案未啟用 `noUnusedLocals`，無未使用 import 問題。
+- **測試**：新增 `permissions.test.ts`（3 案例：無 owner 任何人可讀、owner 可讀私有、非 owner 僅能讀 public/public_editable）。
+- **驗證**：backend `tsc --noEmit` 通過；殘留本地定義 0；抽查約 30 個路由測試檔回歸（含 detail-permission 92 個）全數通過。注意：`notes-txt`（4 個）與 `quizzes`（1 個）有失敗，但比對 master 確認為**與本重構無關的既有失敗**，已另列入 TODO 待修。以 `scripts/run-tests.sh backend` 執行。

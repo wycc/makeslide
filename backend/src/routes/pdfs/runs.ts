@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { canReadPdf } from './permissions';
 import { z } from 'zod';
 import { db } from '../../db';
 import { decodeSession, parseCookies } from '../auth';
@@ -32,12 +33,6 @@ const ShareTokenParamSchema = z.object({
 function sessionSub(request: FastifyRequest): string | null {
   const session = decodeSession(parseCookies(request).makeslide_session);
   return session?.sub ?? null;
-}
-
-function canReadPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
-  if (!row.owner_sub) return true;
-  if (sub && row.owner_sub === sub) return true;
-  return row.visibility === 'public' || row.visibility === 'public_editable';
 }
 
 function getShareToken(request: FastifyRequest): string | null {

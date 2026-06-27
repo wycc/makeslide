@@ -13,6 +13,14 @@
 - [ ] 系統性採用 `mapApiErrorToHumanMessage`：目前約 55 處 catch 區塊直接 `setError(err.message)` 顯示後端原始 message、繞過既有的錯誤訊息映射（前端僅 2 處 `UploadButton`、`ImportTextPage` 使用 mapper）。全面改造屬較大工程，且各 catch 上下文不同、許多後端 message 已是中文（未必都是英文洩漏），逐點需產品判斷顯示風格，故列為待使用者決定。
 - [ ] 把前端測試納入 root `npm test`：目前 root 測試腳本未涵蓋前端 `node:test` 測試。納入涉及 CI 行為變更與 `npm install`（sandbox 無法驗證），列為待使用者決定。
 
+## 後端去重 + 發現既有失敗（第一四三輪，2026-06-27）
+
+- [x] 抽出共用 `canReadPdf` 權限函式（大量去重 / 可測）：`canReadPdf(sub, row)` 在 **27 個** PDF 路由檔案中**逐字重複**定義（grep 確認 27 份實作完全一致），維護風險高。抽成共用模組並補測試。
+  - 修改說明（2026-06-27）：新增 `backend/src/routes/pdfs/permissions.ts` 匯出 `canReadPdf`（含註解說明規則：無 owner 公開、owner 可讀、其餘僅 public/public_editable）。以腳本機械式移除 27 檔的本地定義並改 `import { canReadPdf } from './permissions'`（移除後各檔 `PdfRow` 仍有其他用途、且未啟用 `noUnusedLocals`，無未使用 import 問題）。新增 `permissions.test.ts` 3 組測試（無 owner、owner、非 owner×可見度）。backend `tsc --noEmit` 通過；抽查 30 個路由測試檔回歸（detail-permission 92、quality/h5p/script/image/report-summary 等）全通過，殘留本地定義 0。分支 `refactor/shared-can-read-pdf`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 23 個完成項目（23/100，未達上限）。
+- [ ] （既有失敗，待修）`notes-txt.test.ts` 4/5 失敗：`NOT NULL constraint failed: pages.page_notes`——測試插入 pages 未給 `page_notes`，但該欄為 NOT NULL。在 master 即失敗、與權限重構無關。評估是測試 fixture 漏給欄位、或 schema 應給預設值。
+- [ ] （既有失敗，待修）`quizzes.test.ts` 1/24 失敗：在 master 即失敗、與本輪無關，待查明根因後修正。
+
 ## 後端分析新增可執行項目（第一四〇輪，2026-06-27）
 
 前端小型純函式 backlog 接近見底，依 LOOP.md 第 2 條轉向後端（受重構關注較少）分析。新增以下項目並完成其一：
@@ -87,6 +95,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （後端，大量去重）抽出共用 `canReadPdf`：27 個路由檔逐字重複的權限函式收斂為 `permissions.ts`；補 3 測試；typecheck 通過、30 路由測試回歸通過；另記錄 2 個與本輪無關的既有失敗測試（notes-txt、quizzes）（計數 23/100） | refactor/shared-can-read-pdf（已 merge） |
 | 2026-06-27 | （後端）抽出 watch 聚合查詢 `queryWatchPages`：收斂 `report.ts` pages.csv 與 summary 兩處重複的 avg_listened_ratio SQL 為單一函式；7 報告測試回歸通過（計數 22/100） | refactor/query-watch-pages（已 merge） |
 | 2026-06-27 | （後端）抽出學生平均分純函式：`reportMetrics.ts` 新增 `average`（空回 null），`report.ts` computeStudentRecords 改用；補 1 測試，15 報告測試回歸通過（計數 21/100） | refactor/report-average-helper（已 merge） |
 | 2026-06-27 | （後端，依 LOOP 第 2 條）抽出課後報告共用比例/四捨五入純函式：新增 `reportMetrics.ts`（`safeRatio`/`round4`/`pollDivergence`），收斂 `report.ts` 多處內聯比例與重複 `round4`；補 4 測試，既有 16 報告測試回歸通過（計數 20/100）；另新增 3 個後端可執行項目 | refactor/report-metrics-helpers（已 merge） |

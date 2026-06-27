@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { canReadPdf } from './permissions';
 import path from 'node:path';
 import sharp from 'sharp';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -29,12 +30,6 @@ import { decodeSession, parseCookies } from '../auth';
 function ownerSubFromRequest(request: FastifyRequest): string | null {
   const session = decodeSession(parseCookies(request).makeslide_session);
   return session?.sub ?? null;
-}
-
-function canReadPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
-  if (!row.owner_sub) return true;
-  if (sub && row.owner_sub === sub) return true;
-  return row.visibility === 'public' || row.visibility === 'public_editable';
 }
 
 function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
