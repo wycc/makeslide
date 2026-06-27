@@ -11,7 +11,7 @@ const BATCH_FILL_PROMPT = '這一頁目前沒有逐字稿，請依投影片內�
 const BATCH_FILL_MAX_PAGES = 10;
 import { useI18n } from '../../i18n';
 import { usePlayPageContext } from './PlayPageContext';
-import { selectIssuePages, selectEmptyScriptFillPages } from '../../lib/qualityCheckSelection';
+import { selectIssuePages, selectEmptyScriptFillPages, analysisBadgeState } from '../../lib/qualityCheckSelection';
 
 type IssueKeyMap = Record<QualityIssueCode, 'play.quality.missing_image' | 'play.quality.missing_audio' | 'play.quality.missing_script' | 'play.quality.empty_script' | 'play.quality.short_script' | 'play.quality.animation_over_limit'>;
 
@@ -88,6 +88,9 @@ export function QualityCheckPanel() {
   };
 
   const issuePages = selectIssuePages(results);
+  const qualityBadge = analysisBadgeState(results !== null, running, issuePages.length);
+  const scriptBadge = analysisBadgeState(scriptBreaks !== null, scriptRunning, scriptBreaks?.length ?? 0);
+  const imageBadge = analysisBadgeState(imageMismatches !== null, imageRunning, imageMismatches?.length ?? 0);
 
   // Pages flagged with a missing/empty script, capped so a single click can't
   // fan out into an unbounded number of LLM calls.
@@ -115,12 +118,11 @@ export function QualityCheckPanel() {
       <div className="mb-3 flex items-center justify-between gap-2">
         <h2 className="flex items-center gap-2 text-sm font-semibold text-text">
           {t('play.quality.title')}
-          {results !== null && !running && (
-            issuePages.length === 0 ? (
-              <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-normal text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400">✓</span>
-            ) : (
-              <span className="rounded-full bg-rose-100 px-1.5 py-0.5 text-[10px] font-normal text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">{issuePages.length}</span>
-            )
+          {qualityBadge.kind === 'ok' && (
+            <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-normal text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400">✓</span>
+          )}
+          {qualityBadge.kind === 'issues' && (
+            <span className="rounded-full bg-rose-100 px-1.5 py-0.5 text-[10px] font-normal text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">{qualityBadge.count}</span>
           )}
         </h2>
         <button
@@ -195,12 +197,11 @@ export function QualityCheckPanel() {
         <div className="mb-2 flex items-center justify-between gap-2">
           <h3 className="flex items-center gap-2 text-xs font-semibold text-violet-700 dark:text-violet-300">
             {t('play.quality.scriptAnalysisTitle')}
-            {scriptBreaks !== null && !scriptRunning && (
-              scriptBreaks.length === 0 ? (
-                <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-normal text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400">✓</span>
-              ) : (
-                <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-normal text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">{scriptBreaks.length}</span>
-              )
+            {scriptBadge.kind === 'ok' && (
+              <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-normal text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400">✓</span>
+            )}
+            {scriptBadge.kind === 'issues' && (
+              <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-normal text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">{scriptBadge.count}</span>
             )}
           </h3>
           <button
@@ -239,12 +240,11 @@ export function QualityCheckPanel() {
         <div className="mb-2 flex items-center justify-between gap-2">
           <h3 className="flex items-center gap-2 text-xs font-semibold text-sky-700 dark:text-sky-300">
             {t('play.quality.imageAnalysisTitle')}
-            {imageMismatches !== null && !imageRunning && (
-              imageMismatches.length === 0 ? (
-                <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-normal text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400">✓</span>
-              ) : (
-                <span className="rounded-full bg-rose-100 px-1.5 py-0.5 text-[10px] font-normal text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">{imageMismatches.length}</span>
-              )
+            {imageBadge.kind === 'ok' && (
+              <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-normal text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400">✓</span>
+            )}
+            {imageBadge.kind === 'issues' && (
+              <span className="rounded-full bg-rose-100 px-1.5 py-0.5 text-[10px] font-normal text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">{imageBadge.count}</span>
             )}
           </h3>
           <button

@@ -22,3 +22,24 @@ export function selectEmptyScriptFillPages(
     .map((p) => p.pageNumber)
     .slice(0, Math.max(0, max));
 }
+
+/**
+ * Display state for an analysis-section header badge (quality / script / image).
+ * Unifies the repeated "results not yet loaded → hide; loaded & clean → ✓;
+ * loaded & has issues → count" decision shared by all three QualityCheckPanel
+ * sections. `hasRun` is whether that analysis has produced a result, `running`
+ * whether it is currently in flight, `issueCount` the number of flagged items.
+ */
+export type AnalysisBadge =
+  | { kind: 'hidden' }
+  | { kind: 'ok' }
+  | { kind: 'issues'; count: number };
+
+export function analysisBadgeState(
+  hasRun: boolean,
+  running: boolean,
+  issueCount: number,
+): AnalysisBadge {
+  if (!hasRun || running) return { kind: 'hidden' };
+  return issueCount === 0 ? { kind: 'ok' } : { kind: 'issues', count: issueCount };
+}
