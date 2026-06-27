@@ -5,6 +5,11 @@ import path from 'node:path';
 import { buildApp } from '../src/server';
 import { db } from '../src/db';
 import { config } from '../src/config';
+import { setSystemAuthSettings } from '../src/services/aiSettings';
+
+// These tests exercise auth-gated HTTP endpoints; disable Google auth so the
+// requests reach the handlers instead of being rejected with 401.
+setSystemAuthSettings({ googleAuthEnabled: false });
 
 function nowIso(): string {
   return new Date().toISOString();

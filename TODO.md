@@ -23,7 +23,9 @@
 - [x] （既有失敗）`skills.test.ts`（1）：`updateUserSkill` 回傳物件與磁碟 round-trip 形狀不符。
   - 修改說明（2026-06-27）：根因為 `createUserSkill`（條件 spread、省略 undefined 模板鍵）與 `updateUserSkill`（**總是**寫入 4 個模板鍵，即使值 undefined）不一致——回傳物件帶 `imageStylePrompt:undefined` 等鍵，但 JSON.stringify 丟棄 undefined，讀回後缺鍵，`deepStrictEqual(回傳, 磁碟)` 失敗。修法：`updateUserSkill` 改為先解析各欄位值、再以條件 spread 僅在 truthy 時納入（行為不變、與 create 形狀一致）。順帶修掉這個 create/update 形狀不一致。`skills.test.ts` 5/5 通過。分支 `fix/update-skill-omit-undefined-template-fields`，已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 35 個完成項目（35/100，未達上限）。
-- [ ] （既有失敗，待查）其餘：`timing.test.ts`(1 page timings null fallback)、`figure-reference-image-generation.test.ts`(1)、regenerate/rollback 矩陣(約 3：start→status→conflict/cancel、rollback not found/conflict、cancel final state)。逐一重現並判斷測試 vs 程式正確性。
+- [x] （既有失敗）`timing.test.ts`(1) + `regenerate-matrix.test.ts`(4)：同 input-security 的 401 根因——兩檔皆缺 `setSystemAuthSettings({ googleAuthEnabled: false })`，HTTP 請求被 auth 擋下回 401。兩檔加上該設定後，timing 12/12、regenerate-matrix 4/4 通過（連跑 3 次穩定 16/16；首次觀察到的 regenerate test 2 一次性 flake 未再現）。純測試修正。分支 `fix/timing-regen-test-auth`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 36 個完成項目（36/100，未達上限）。
+- [ ] （既有失敗，待查）`figure-reference-image-generation.test.ts`(1：attaches extracted figure as reference image + notes)：逐一重現判斷測試 vs 程式。
 
 ## 後端去重 canDestructivelyEditPdf（第一五三輪，2026-06-27）
 
@@ -147,6 +149,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （修既有失敗）`timing.test.ts`+`regenerate-matrix.test.ts` 共 5 個 401：補 `setSystemAuthSettings({googleAuthEnabled:false})`；12/12 + 4/4 通過（連跑穩定）（計數 36/100） | fix/timing-regen-test-auth（已 merge） |
 | 2026-06-27 | （修既有失敗）`skills.test.ts`：`updateUserSkill` 改條件 spread 省略 undefined 模板鍵（與 create 形狀一致、修磁碟 round-trip 不符）；5/5 通過（計數 35/100） | fix/update-skill-omit-undefined-template-fields（已 merge） |
 | 2026-06-27 | 跑完整後端套件（1199 測試/18 既有失敗，與去重無關）並分類；修 `input-security.test.ts` 4 失敗（缺 googleAuthEnabled:false 致 401）；其餘 14 個分組記錄待判斷（計數 34/100） | fix/input-security-test-auth（已 merge） |
 | 2026-06-27 | （後端，去重）抽出共用 `canDestructivelyEditPdf`：4 檔 + delete.ts（消除同名不同 body）收斂至 permissions.ts；補測試；177 測試回歸通過、嚴格匿名行為保留（計數 33/100） | refactor/shared-can-destructively-edit（已 merge） |

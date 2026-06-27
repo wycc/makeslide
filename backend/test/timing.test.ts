@@ -2,6 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildApp } from '../src/server';
 import { db } from '../src/db';
+import { setSystemAuthSettings } from '../src/services/aiSettings';
+
+// The one HTTP test here (GET /api/pdfs/:id) needs auth disabled, otherwise the
+// request is rejected with 401 before the handler runs.
+setSystemAuthSettings({ googleAuthEnabled: false });
 import {
   evaluateSla,
   finishArtifact,
