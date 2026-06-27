@@ -8713,3 +8713,16 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **接入**：以腳本移除 21 個檔案的標準本地定義並合併 import（已有 `canReadPdf` 來自 `./permissions` 的 12 檔改成 `{ canReadPdf, canEditPdf }`，其餘 9 檔新增 import）。`delete.ts` 的嚴格版維持不動。
 - **測試**：`permissions.test.ts` 新增 `canEditPdf` 案例（ownerless/owner/public_editable 可編輯、public 與 private 非 owner 不可編輯、public_editable 連匿名也可編輯——與唯讀權限不同）。
 - **驗證**：backend `tsc --noEmit` 通過；標準本地定義 0（僅 permissions.ts 與 delete.ts 定義 canEditPdf）；抽查約 12 個路由測試檔回歸（含 detail-permission 92、quizzes 24）全通過。注意 `page-animation` 有 1 個與此無關的既有失敗（shape kind 驗證），已比對 master 確認並列入 TODO。以 `scripts/run-tests.sh backend` 執行。
+
+## 修正 page-animation 形狀種類測試的 mirror drift（2026-06-27）
+
+### 功能目的
+`page-animation.test.ts` 有一個長期失敗的測試：它用 `shape: 'triangle'` 當作「不合法的形狀種類」範例，斷言 `validateAnimationSpec` 會拒絕。但 `ANIMATION_SHAPE_KINDS` 後來已新增 `triangle`、`star`、`hexagon`（前端 `types.ts` 的 `SlideAnimationShapeKind` 與 i18n 標籤「三角形／五角星／六角形」都齊備，是**正式支援**的形狀），所以 triangle 其實是合法值、測試斷言早已過時。本項把測試對齊現況。
+
+### 使用方式
+此為測試修正，無行為變更。
+
+### 技術細節
+- **根因**：形狀種類清單擴充後，這個「拒絕不合法形狀」的測試沒有跟著更新，仍拿一個現在已合法的 `triangle` 當反例。
+- **修正**：改用真正不在 `ANIMATION_SHAPE_KINDS`（circle/rect/ellipse/arrow/line/triangle/star/hexagon）內的 `'octagon'`，並加註解。
+- **驗證**：`page-animation.test.ts` 由 122/123 變為 123/123 通過（以 `scripts/run-tests.sh backend` 執行）。純測試修正，未動產品碼。
