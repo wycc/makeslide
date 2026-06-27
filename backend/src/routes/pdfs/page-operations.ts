@@ -1,4 +1,5 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
+import { ShareTokenParamSchema, getShareToken, hasShareAccess } from './share';
 import { canReadPdf, canEditPdf } from './permissions';
 import { toFile } from 'openai';
 import type { ChatCompletionContentPart } from 'openai/resources/chat/completions';
@@ -67,29 +68,6 @@ function canDestructivelyEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_su
   if (!row.owner_sub) return true;
   if (sub && row.owner_sub === sub) return true;
   return Boolean(sub) && row.visibility === 'public_editable';
-}
-
-const ShareTokenParamSchema = z.object({
-  token: z.string().regex(/^[A-Za-z0-9_-]{12,128}$/, 'Invalid share token'),
-});
-
-function getShareToken(request: FastifyRequest): string | null {
-  const rawHeader = request.headers['x-makeslide-share-token'];
-  const headerValue = Array.isArray(rawHeader) ? rawHeader[0] : rawHeader;
-  if (typeof headerValue === 'string' && headerValue.trim()) return headerValue.trim();
-  const query = request.query as Record<string, unknown> | undefined;
-  const rawQuery = query?.share;
-  const queryValue = Array.isArray(rawQuery) ? rawQuery[0] : rawQuery;
-  return typeof queryValue === 'string' && queryValue.trim() ? queryValue.trim() : null;
-}
-
-function hasShareAccess(request: FastifyRequest, pdfId: string): boolean {
-  const token = getShareToken(request);
-  if (!token || !ShareTokenParamSchema.safeParse({ token }).success) return false;
-  const row = db.prepare(`SELECT access FROM pdf_shares WHERE token = ? AND pdf_id = ?`).get(token, pdfId) as
-    | { access: 'read_only' | 'editable' }
-    | undefined;
-  return Boolean(row);
 }
 
 function getPdfPermissionRow(id: string): Pick<PdfRow, 'owner_sub' | 'visibility'> | undefined {

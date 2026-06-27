@@ -13,6 +13,13 @@
 - [ ] 系統性採用 `mapApiErrorToHumanMessage`：目前約 55 處 catch 區塊直接 `setError(err.message)` 顯示後端原始 message、繞過既有的錯誤訊息映射（前端僅 2 處 `UploadButton`、`ImportTextPage` 使用 mapper）。全面改造屬較大工程，且各 catch 上下文不同、許多後端 message 已是中文（未必都是英文洩漏），逐點需產品判斷顯示風格，故列為待使用者決定。
 - [ ] 把前端測試納入 root `npm test`：目前 root 測試腳本未涵蓋前端 `node:test` 測試。納入涉及 CI 行為變更與 `npm install`（sandbox 無法驗證），列為待使用者決定。
 
+## 後端去重 share 存取群（第一五〇輪，2026-06-27）
+
+- [x] 抽出共用 share 存取工具（去重 / 可測）：`ShareTokenParamSchema`、`getShareToken`、`hasShareAccess` 在約 10 個路由檔成組逐字重複。抽成共用 `share.ts` 並補測試。
+  - 修改說明（2026-06-27）：新增 `backend/src/routes/pdfs/share.ts` 匯出三者（含註解）。以腳本移除 10 個一致檔（add-pages/runs/drawings/watchProgress/quizzes/figures/slow-artifacts/page-operations/versioning/page-animation）的本地三定義並改 `import { ShareTokenParamSchema, getShareToken, hasShareAccess } from './share'`，清理因此未使用的 `FastifyRequest` import。過程中腳本一度誤把 share.ts 自身納入（grep 命中）導致毀損，已重寫修復。新增 `share.test.ts` 6 組測試（getShareToken header/query/優先序/trim/陣列、ShareTokenParamSchema 長度與字元）。backend `tsc --noEmit` 通過；share 相關路由回歸約 263 測試全通過（quizzes/drawings/page-animation/權限類 watch/runs/versioning/page-operations…）。分支 `refactor/shared-share-access`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 30 個完成項目（30/100，未達上限）。
+- [ ] 收斂 share 群剩餘變體：`detail.ts`（getShareToken + object schema，無 hasShareAccess）、bare-string schema + `shareTokenFromRequest` 的 outlier 檔，以及 `getPdfPermissionRow`（10 標準 + 1 含 title 變體）。評估改用共用版本。
+
 ## 後端去重 canEditPdf（第一四八輪，2026-06-27）
 
 - [x] 抽出共用 `canEditPdf` 權限函式（去重 / 可測）：標準 `canEditPdf`（owner / public_editable）在 21 個路由檔逐字重複。抽成共用並補測試；**delete.ts 的版本刻意更嚴格**（`Boolean(sub) && public_editable`，禁止匿名刪除），不替換。
@@ -117,6 +124,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （後端，去重）抽出共用 share 存取群 `share.ts`（ShareTokenParamSchema/getShareToken/hasShareAccess）：10 檔成組收斂、清理 FastifyRequest import；補 6 測試；typecheck 通過、約 263 share 路由測試回歸通過（計數 30/100） | refactor/shared-share-access（已 merge） |
 | 2026-06-27 | （修既有失敗）`page-animation.test.ts`：shape kind mirror drift——`triangle` 早已成合法形狀，測試改用真正不合法的 `octagon`；123/123 通過（計數 29/100） | fix/animation-shape-kind-test（已 merge） |
 | 2026-06-27 | （後端，去重）抽出共用 `canEditPdf` 至 permissions.ts：21 檔標準定義收斂、合併 import；delete.ts 嚴格版保留；補測試；typecheck 通過、12 路由測試回歸通過；另記 1 個既有失敗（page-animation shape kind）（計數 28/100） | refactor/shared-can-edit-pdf（已 merge） |
 | 2026-06-27 | （後端）收斂 2 個 `sessionSubFromRequest`（export/subtitles）改用共用 `sessionSub`，清理未用 import；10 測試回歸通過；全 repo 無殘留（計數 27/100） | refactor/collapse-session-sub-from-request（已 merge） |

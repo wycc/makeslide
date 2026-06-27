@@ -1,33 +1,11 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
+import { ShareTokenParamSchema, getShareToken, hasShareAccess } from './share';
 import { canReadPdf, canEditPdf } from './permissions';
 import { z } from 'zod';
 import { db } from '../../db';
 import { sessionSub } from '../auth';
 import type { PdfRow } from '../../types';
 import { errorResponse, IdParamSchema, PageParamSchema, nowIso } from './shared';
-
-const ShareTokenParamSchema = z.object({
-  token: z.string().regex(/^[A-Za-z0-9_-]{12,128}$/, 'Invalid share token'),
-});
-
-function getShareToken(request: FastifyRequest): string | null {
-  const rawHeader = request.headers['x-makeslide-share-token'];
-  const headerValue = Array.isArray(rawHeader) ? rawHeader[0] : rawHeader;
-  if (typeof headerValue === 'string' && headerValue.trim()) return headerValue.trim();
-  const query = request.query as Record<string, unknown> | undefined;
-  const rawQuery = query?.share;
-  const queryValue = Array.isArray(rawQuery) ? rawQuery[0] : rawQuery;
-  return typeof queryValue === 'string' && queryValue.trim() ? queryValue.trim() : null;
-}
-
-function hasShareAccess(request: FastifyRequest, pdfId: string): boolean {
-  const token = getShareToken(request);
-  if (!token || !ShareTokenParamSchema.safeParse({ token }).success) return false;
-  const row = db.prepare(`SELECT access FROM pdf_shares WHERE token = ? AND pdf_id = ?`).get(token, pdfId) as
-    | { access: 'read_only' | 'editable' }
-    | undefined;
-  return Boolean(row);
-}
 
 function getPdfPermissionRow(id: string): Pick<PdfRow, 'owner_sub' | 'visibility'> | undefined {
   return db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
