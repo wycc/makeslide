@@ -70,7 +70,7 @@ function CustomScriptPreview({ effect }: { effect: SlideAnimationEffect }) {
       title="custom-script preview"
       sandbox="allow-scripts"
       srcDoc={buildCustomScriptSandboxDoc(effect.code ?? '', loopSeconds)}
-      className="h-40 w-full rounded-md border border-slate-700 bg-slate-950"
+      className="h-40 w-full rounded-md border border-border bg-surface-muted"
     />
   );
 }
@@ -214,7 +214,7 @@ function EffectPositionEditor({
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
       style={{ position: 'relative', width: '100%', paddingTop: `${aspectPaddingPct}%`, userSelect: 'none' }}
-      className="overflow-hidden rounded-md border border-slate-700 bg-slate-950"
+      className="overflow-hidden rounded-md border border-border bg-surface-muted"
     >
       <img
         src={imageUrl}
@@ -818,10 +818,10 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
 
   return (
     <>
-      <h2 className="mb-2 text-sm font-semibold text-slate-300">
+      <h2 className="mb-2 text-sm font-semibold text-text">
         🎞 {t('play.animation.title')}{t('play.animation.headerPagePrefix')}{currentPage?.page_number ?? '-'}{t('play.animation.headerPageSuffix')}
       </h2>
-      {!compact && <label className="mb-3 flex items-center gap-2 text-sm text-slate-200">
+      {!compact && <label className="mb-3 flex items-center gap-2 text-sm text-text">
         <input
           type="checkbox"
           checked={draft.enabled}
@@ -840,7 +840,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
           disabled={disabled || draft.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS}
           title={draft.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS ? t('play.animation.maxEffects') : undefined}
           onClick={handleAddEffect}
-          className="rounded-md border border-slate-600 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-md border border-border px-3 py-1.5 text-sm text-text hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
         >
           {t('play.animation.addEffect')}
         </button>
@@ -850,7 +850,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
             disabled={disabled || draft.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS}
             title={draft.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS ? t('play.animation.maxEffects') : undefined}
             onClick={handleAddPauseEffect}
-            className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/10 px-3 py-1.5 text-sm text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/10 px-3 py-1.5 text-sm text-fuchsia-700 dark:text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-40"
           >
             ⏸ {t('play.animation.preset.pausePlayback')}
           </button>
@@ -861,7 +861,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
             disabled={disabled || draft.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS}
             title={draft.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS ? t('play.animation.maxEffects') : undefined}
             onClick={() => handleApplyPreset('realtime-poll')}
-            className="rounded-md border border-purple-500/50 bg-purple-500/10 px-3 py-1.5 text-sm text-purple-200 hover:bg-purple-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-md border border-purple-500/50 bg-purple-500/10 px-3 py-1.5 text-sm text-purple-700 dark:text-purple-200 hover:bg-purple-500/20 disabled:cursor-not-allowed disabled:opacity-40"
           >
             📊 {t('play.animation.preset.realtimePoll')}
           </button>
@@ -876,7 +876,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
               if (presetId) handleApplyPreset(presetId);
               e.target.value = '';
             }}
-            className="rounded-md border border-slate-600 bg-slate-900 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
           >
             <option value="">{t('play.animation.presetApply')}</option>
             {EFFECT_PRESETS.map((preset) => (
@@ -891,7 +891,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
             type="button"
             disabled={disabled}
             onClick={handleMergeSelectedEffects}
-            className="rounded-md border border-cyan-400/50 bg-cyan-500/10 px-3 py-1.5 text-sm text-cyan-200 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-md border border-cyan-400/50 bg-cyan-500/10 px-3 py-1.5 text-sm text-cyan-700 dark:text-cyan-200 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {t('play.animation.mergeSelected')} ({selectedEffectIds.size})
           </button>
@@ -901,7 +901,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
           disabled={disabled || draft.effects.length === 0}
           title={t('play.animation.copyPageEffectsHint')}
           onClick={handleCopyPageEffects}
-          className="rounded-md border border-slate-600 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-md border border-border px-3 py-1.5 text-sm text-text hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
         >
           {t('play.animation.copyPageEffects')}
         </button>}
@@ -911,7 +911,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
             disabled={disabled || draft.effects.length >= MAX_SLIDE_ANIMATION_EFFECTS}
             title={t('play.animation.pastePageEffectsHint')}
             onClick={handlePastePageEffects}
-            className="rounded-md border border-emerald-500/50 bg-emerald-500/10 px-3 py-1.5 text-sm text-emerald-200 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-md border border-emerald-500/50 bg-emerald-500/10 px-3 py-1.5 text-sm text-emerald-700 dark:text-emerald-200 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {t('play.animation.pastePageEffects')} ({copiedEffects.length})
           </button>
@@ -922,7 +922,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
             disabled={disabled || applyingToAll}
             title={t('play.animation.applyToAllPagesHint')}
             onClick={() => { void handleApplyToAllPages(); }}
-            className="rounded-md border border-sky-500/50 bg-sky-500/10 px-3 py-1.5 text-sm text-sky-200 hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-md border border-sky-500/50 bg-sky-500/10 px-3 py-1.5 text-sm text-sky-700 dark:text-sky-200 hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {applyingToAll ? t('play.animation.applyToAllPagesBusy') : t('play.animation.applyToAllPages')}
           </button>
@@ -939,7 +939,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
               effects: generateFocusEffectsFromTranscript(pageSentences.length),
             }));
           }}
-          className="rounded-md border border-cyan-500/50 bg-cyan-500/10 px-3 py-1.5 text-sm text-cyan-200 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-md border border-cyan-500/50 bg-cyan-500/10 px-3 py-1.5 text-sm text-cyan-700 dark:text-cyan-200 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {t('play.animation.autoGenerateFocus')}
         </button>}
@@ -951,24 +951,24 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
             if (draft.effects.length > 0 && !window.confirm(t('play.animation.autoGenerateFocusAiConfirm'))) return;
             void handleGenerateAiFocusEffects(pageSentences, draft.hints);
           }}
-          className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/10 px-3 py-1.5 text-sm text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/10 px-3 py-1.5 text-sm text-fuchsia-700 dark:text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {aiFocusBusy ? t('play.animation.autoGenerateFocusAiBusy') : t('play.animation.autoGenerateFocusAi')}
         </button>}
       </div>
 
-      {!compact && <div className="mb-2 flex overflow-hidden rounded-md border border-slate-700 bg-slate-900/60">
+      {!compact && <div className="mb-2 flex overflow-hidden rounded-md border border-border bg-surface">
         <button
           type="button"
           onClick={() => setNotebookTab('effects')}
-          className={`flex-1 px-3 py-1.5 text-sm ${notebookTab === 'effects' ? 'bg-slate-800 text-fuchsia-200' : 'text-slate-400'}`}
+          className={`flex-1 px-3 py-1.5 text-sm ${notebookTab === 'effects' ? 'bg-surface-muted text-fuchsia-700 dark:text-fuchsia-200' : 'text-muted'}`}
         >
           {t('play.animation.effectList')} ({draft.effects.length})
         </button>
         <button
           type="button"
           onClick={() => setNotebookTab('hints')}
-          className={`flex-1 px-3 py-1.5 text-sm ${notebookTab === 'hints' ? 'bg-slate-800 text-fuchsia-200' : 'text-slate-400'}`}
+          className={`flex-1 px-3 py-1.5 text-sm ${notebookTab === 'hints' ? 'bg-surface-muted text-fuchsia-700 dark:text-fuchsia-200' : 'text-muted'}`}
         >
           {t('play.animation.hints')}
           {pageSentences.length > 0 ? ` (${Object.keys(draft.hints ?? {}).length}/${pageSentences.length})` : ''}
@@ -976,20 +976,20 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
         <button
           type="button"
           onClick={() => setNotebookTab('json')}
-          className={`flex-1 px-3 py-1.5 text-sm ${notebookTab === 'json' ? 'bg-slate-800 text-fuchsia-200' : 'text-slate-400'}`}
+          className={`flex-1 px-3 py-1.5 text-sm ${notebookTab === 'json' ? 'bg-surface-muted text-fuchsia-700 dark:text-fuchsia-200' : 'text-muted'}`}
         >
           {t('play.animation.rawJson')}
         </button>
       </div>}
 
-      <div className={`${compact ? 'max-h-[calc(100vh-12rem)]' : 'max-h-[60vh]'} mb-3 space-y-2 overflow-y-auto rounded-md border border-slate-800 bg-slate-950/30 p-2`}>
+      <div className={`${compact ? 'max-h-[calc(100vh-12rem)]' : 'max-h-[60vh]'} mb-3 space-y-2 overflow-y-auto rounded-md border border-border bg-surface-muted p-2`}>
       {compact || notebookTab === 'effects' ? (
         <>
         {draft.effects.length > 1 && (
-          <div className="text-[11px] text-slate-500">{t('play.animation.multiSelectHint')}</div>
+          <div className="text-[11px] text-muted">{t('play.animation.multiSelectHint')}</div>
         )}
         {draft.effects.length === 0 ? (
-          <div className="rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-500">
+          <div className="rounded-md border border-border bg-surface-muted px-3 py-2 text-xs text-muted">
             {t('play.animation.noEffects')}
           </div>
         ) : (
@@ -1017,7 +1017,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                 });
               }}
               className={`flex flex-col gap-2 rounded-md border px-3 py-2 transition-colors ${
-                isActive ? 'border-fuchsia-400 bg-fuchsia-500/15' : 'border-slate-800 bg-slate-900/50'
+                isActive ? 'border-fuchsia-400 bg-fuchsia-500/15' : 'border-border bg-surface-muted'
               } ${isSelected ? 'ring-2 ring-cyan-400' : ''}`}
             >
               <div className="flex flex-wrap items-end gap-2">
@@ -1029,7 +1029,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                     title={t('play.animation.moveUp')}
                     aria-label={t('play.animation.moveUp')}
                     onClick={() => moveEffect(effect.id, 'up')}
-                    className="rounded-md border border-slate-700 px-1.5 py-0.5 text-xs leading-none text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-30"
+                    className="rounded-md border border-border px-1.5 py-0.5 text-xs leading-none text-text hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-30"
                   >
                     ▲
                   </button>
@@ -1039,7 +1039,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                     title={t('play.animation.moveDown')}
                     aria-label={t('play.animation.moveDown')}
                     onClick={() => moveEffect(effect.id, 'down')}
-                    className="rounded-md border border-slate-700 px-1.5 py-0.5 text-xs leading-none text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-30"
+                    className="rounded-md border border-border px-1.5 py-0.5 text-xs leading-none text-text hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-30"
                   >
                     ▼
                   </button>
@@ -1051,7 +1051,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                 title={t('play.animation.jumpToEffectStart')}
                 aria-label={t('play.animation.jumpToEffectStart')}
                 onClick={() => handleSeekToTime(effectStart)}
-                className="rounded-md border border-slate-700 px-2 py-1.5 text-sm text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-md border border-border px-2 py-1.5 text-sm text-text hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
               >
                 ⏮
               </button>
@@ -1061,17 +1061,17 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                 title={t('play.animation.seekToMidpoint')}
                 aria-label={t('play.animation.seekToMidpoint')}
                 onClick={() => handleSeekToTime(effectStart + effect.duration / 2)}
-                className="rounded-md border border-slate-700 px-2 py-1.5 text-sm text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-md border border-border px-2 py-1.5 text-sm text-text hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
               >
                 ⏱
               </button>
-              <label className="flex flex-col gap-1 text-xs text-slate-400">
+              <label className="flex flex-col gap-1 text-xs text-muted">
                 {t('play.animation.effectType')}
                 <select
                   value={effect.type}
                   disabled={disabled}
                   onChange={(e) => updateEffect(effect.id, { type: e.target.value as SlideAnimationEffectType })}
-                  className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                  className="rounded-md border border-border bg-surface px-2 py-1 text-sm text-text"
                 >
                   {SLIDE_ANIMATION_EFFECT_TYPES.map((type) => (
                     <option key={type} value={type}>
@@ -1080,7 +1080,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                   ))}
                 </select>
               </label>
-              <label className="flex flex-col gap-1 text-xs text-slate-400">
+              <label className="flex flex-col gap-1 text-xs text-muted">
                 {t('play.animation.startMode')}
                 <select
                   value={effect.startTrigger ? 'transcript-line' : 'time'}
@@ -1100,7 +1100,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                       });
                     }
                   }}
-                  className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                  className="rounded-md border border-border bg-surface px-2 py-1 text-sm text-text"
                 >
                   <option value="time">{t('play.animation.startMode.time')}</option>
                   <option value="transcript-line" disabled={pageSentences.length === 0}>
@@ -1111,7 +1111,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
               {effect.startTrigger ? (
                 pageSentences.length > 0 ? (
                   <>
-                    <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    <label className="flex flex-col gap-1 text-xs text-muted">
                       {t('play.animation.startTranscriptLine')}
                       <select
                         value={effect.startTrigger.line}
@@ -1125,7 +1125,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                             },
                           })
                         }
-                        className="max-w-[14rem] rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                        className="max-w-[14rem] rounded-md border border-border bg-surface px-2 py-1 text-sm text-text"
                       >
                         {pageSentences.map((sentence, idx) => (
                           <option key={idx} value={idx}>
@@ -1134,7 +1134,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                         ))}
                       </select>
                     </label>
-                    <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    <label className="flex flex-col gap-1 text-xs text-muted">
                       {t('play.animation.startOffsetSeconds')}
                       <input
                         type="number"
@@ -1152,9 +1152,9 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                             },
                           })
                         }
-                        className="w-20 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                        className="w-20 rounded-md border border-border bg-surface px-2 py-1 text-sm text-text"
                       />
-                      <span className="text-[11px] text-slate-500">
+                      <span className="text-[11px] text-muted">
                         {t('play.animation.startResolved')}{' '}
                         {(resolveStartTriggerSeconds(effect.startTrigger, sentenceTimeline) ?? effect.start).toFixed(1)}
                         {t('play.animation.seconds')}
@@ -1162,15 +1162,15 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                     </label>
                   </>
                 ) : (
-                  <div className="flex flex-col gap-1 text-xs text-slate-400">
+                  <div className="flex flex-col gap-1 text-xs text-muted">
                     {t('play.animation.startTranscriptLine')}
-                    <span className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-500">
+                    <span className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-muted">
                       {t('play.animation.noTranscript')}
                     </span>
                   </div>
                 )
               ) : (
-                <label className="flex flex-col gap-1 text-xs text-slate-400">
+                <label className="flex flex-col gap-1 text-xs text-muted">
                   {t('play.animation.start')}
                   <input
                     type="number"
@@ -1179,11 +1179,11 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                     value={effect.start}
                     disabled={disabled}
                     onChange={(e) => updateEffect(effect.id, { start: Math.max(0, Number(e.target.value) || 0) })}
-                    className="w-20 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                    className="w-20 rounded-md border border-border bg-surface px-2 py-1 text-sm text-text"
                   />
                 </label>
               )}
-              <label className="flex flex-col gap-1 text-xs text-slate-400">
+              <label className="flex flex-col gap-1 text-xs text-muted">
                 {t('play.animation.duration')}
                 <input
                   type="number"
@@ -1192,17 +1192,17 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                   value={effect.duration}
                   disabled={disabled}
                   onChange={(e) => updateEffect(effect.id, { duration: Math.max(0.1, Number(e.target.value) || 0.1) })}
-                  className="w-20 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                  className="w-20 rounded-md border border-border bg-surface px-2 py-1 text-sm text-text"
                 />
               </label>
               {effect.type !== 'custom-script' && (
-                <label className="flex flex-col gap-1 text-xs text-slate-400">
+                <label className="flex flex-col gap-1 text-xs text-muted">
                   {t('play.animation.ease')}
                   <select
                     value={effect.ease}
                     disabled={disabled}
                     onChange={(e) => updateEffect(effect.id, { ease: e.target.value as SlideAnimationEase })}
-                    className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                    className="rounded-md border border-border bg-surface px-2 py-1 text-sm text-text"
                   >
                     {SLIDE_ANIMATION_EASES.map((ease) => (
                       <option key={ease} value={ease}>
@@ -1215,17 +1215,17 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
               {effect.type === 'highlight-box' && (
                 <>
                 <div className="flex gap-3 items-end">
-                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  <label className="flex flex-col gap-1 text-xs text-muted">
                     {t('play.animation.highlightColor')}
                     <input
                       type="color"
                       value={effect.highlightColor ?? '#ef4444'}
                       disabled={disabled}
                       onChange={(e) => updateEffect(effect.id, { highlightColor: e.target.value })}
-                      className="h-8 w-12 cursor-pointer rounded-md border border-slate-700 bg-slate-900 p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="h-8 w-12 cursor-pointer rounded-md border border-border bg-surface p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
                     />
                   </label>
-                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  <label className="flex flex-col gap-1 text-xs text-muted">
                     {t('play.animation.highlightBorderWidth')}
                     <div className="flex items-center gap-1">
                       <input
@@ -1238,25 +1238,25 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                         onChange={(e) =>
                           updateEffect(effect.id, { highlightBorderWidth: Math.min(12, Math.max(1, Math.round(Number(e.target.value) || 4))) })
                         }
-                        className="w-16 rounded-md border border-slate-700 bg-slate-900 px-1 py-1 text-sm text-slate-100"
+                        className="w-16 rounded-md border border-border bg-surface px-1 py-1 text-sm text-text"
                       />
-                      <span className="text-slate-500">px</span>
+                      <span className="text-muted">px</span>
                     </div>
                   </label>
-                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  <label className="flex flex-col gap-1 text-xs text-muted">
                     {t('play.animation.highlightBorderStyle')}
                     <select
                       value={effect.highlightBorderStyle ?? 'solid'}
                       disabled={disabled}
                       onChange={(e) => updateEffect(effect.id, { highlightBorderStyle: e.target.value as 'solid' | 'dashed' | 'dotted' })}
-                      className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                      className="rounded-md border border-border bg-surface px-2 py-1 text-sm text-text"
                     >
                       <option value="solid">{t('play.animation.highlightBorderStyle.solid')}</option>
                       <option value="dashed">{t('play.animation.highlightBorderStyle.dashed')}</option>
                       <option value="dotted">{t('play.animation.highlightBorderStyle.dotted')}</option>
                     </select>
                   </label>
-                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  <label className="flex flex-col gap-1 text-xs text-muted">
                     {t('play.animation.highlightBorderRadius')}
                     <div className="flex items-center gap-1">
                       <input
@@ -1269,13 +1269,13 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                         onChange={(e) =>
                           updateEffect(effect.id, { highlightBorderRadius: Math.min(50, Math.max(0, Math.round(Number(e.target.value)))) })
                         }
-                        className="w-16 rounded-md border border-slate-700 bg-slate-900 px-1 py-1 text-sm text-slate-100"
+                        className="w-16 rounded-md border border-border bg-surface px-1 py-1 text-sm text-text"
                       />
-                      <span className="text-slate-500">px</span>
+                      <span className="text-muted">px</span>
                     </div>
                   </label>
                 </div>
-                <label className="flex items-center gap-2 text-xs text-slate-400">
+                <label className="flex items-center gap-2 text-xs text-muted">
                   <input
                     type="checkbox"
                     checked={effect.highlightOuterColor !== undefined}
@@ -1292,11 +1292,11 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                       value={effect.highlightOuterColor}
                       disabled={disabled}
                       onChange={(e) => updateEffect(effect.id, { highlightOuterColor: e.target.value })}
-                      className="h-8 w-12 cursor-pointer rounded-md border border-slate-700 bg-slate-900 p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="h-8 w-12 cursor-pointer rounded-md border border-border bg-surface p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
                     />
                   )}
                 </label>
-                <label className="flex items-center gap-2 text-xs text-slate-400">
+                <label className="flex items-center gap-2 text-xs text-muted">
                   <input
                     type="checkbox"
                     checked={effect.highlightPulse ?? false}
@@ -1308,7 +1308,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                   />
                   {t('play.animation.highlightPulse')}
                 </label>
-                <label className="flex items-center gap-2 text-xs text-slate-400">
+                <label className="flex items-center gap-2 text-xs text-muted">
                   <input
                     type="checkbox"
                     checked={effect.highlightFillColor !== undefined}
@@ -1328,11 +1328,11 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                         const alpha = effect.highlightFillColor?.slice(7) ?? '30';
                         updateEffect(effect.id, { highlightFillColor: `${e.target.value}${alpha}` });
                       }}
-                      className="h-8 w-12 cursor-pointer rounded-md border border-slate-700 bg-slate-900 p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="h-8 w-12 cursor-pointer rounded-md border border-border bg-surface p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
                     />
                   )}
                 </label>
-                <label className="flex items-center gap-2 text-xs text-slate-400">
+                <label className="flex items-center gap-2 text-xs text-muted">
                   <input
                     type="checkbox"
                     checked={!!effect.highlightShadow}
@@ -1346,17 +1346,17 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
               )}
               {effect.type === 'spotlight' && (
                 <div className="flex gap-2 items-end">
-                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  <label className="flex flex-col gap-1 text-xs text-muted">
                     {t('play.animation.spotlightColor')}
                     <input
                       type="color"
                       value={effect.spotlightColor ?? '#000000'}
                       disabled={disabled}
                       onChange={(e) => updateEffect(effect.id, { spotlightColor: e.target.value })}
-                      className="h-8 w-12 cursor-pointer rounded-md border border-slate-700 bg-slate-900 p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="h-8 w-12 cursor-pointer rounded-md border border-border bg-surface p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
                     />
                   </label>
-                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  <label className="flex flex-col gap-1 text-xs text-muted">
                     {t('play.animation.spotlightOpacity')}
                     <input
                       type="number"
@@ -1369,10 +1369,10 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                         const v = parseFloat(e.target.value);
                         if (!isNaN(v)) updateEffect(effect.id, { spotlightOpacity: Math.min(1, Math.max(0, v)) });
                       }}
-                      className="w-16 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="w-16 rounded-md border border-border bg-surface px-2 py-1 text-sm text-text disabled:cursor-not-allowed disabled:opacity-40"
                     />
                   </label>
-                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  <label className="flex flex-col gap-1 text-xs text-muted">
                     {t('play.animation.spotlightSoftEdge')}
                     <div className="flex items-center gap-1">
                       <input
@@ -1385,25 +1385,25 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                         onChange={(e) =>
                           updateEffect(effect.id, { spotlightSoftEdge: Math.min(80, Math.max(0, Math.round(Number(e.target.value)))) })
                         }
-                        className="w-16 rounded-md border border-slate-700 bg-slate-900 px-1 py-1 text-sm text-slate-100"
+                        className="w-16 rounded-md border border-border bg-surface px-1 py-1 text-sm text-text"
                       />
-                      <span className="text-slate-500">px</span>
+                      <span className="text-muted">px</span>
                     </div>
                   </label>
-                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  <label className="flex flex-col gap-1 text-xs text-muted">
                     {t('play.animation.spotlightShape')}
                     <select
                       value={effect.spotlightShape ?? 'circle'}
                       disabled={disabled}
                       onChange={(e) => updateEffect(effect.id, { spotlightShape: e.target.value as 'circle' | 'rect' })}
-                      className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                      className="rounded-md border border-border bg-surface px-2 py-1 text-sm text-text"
                     >
                       <option value="circle">{t('play.animation.spotlightShape.circle')}</option>
                       <option value="rect">{t('play.animation.spotlightShape.rect')}</option>
                     </select>
                   </label>
                   {(effect.spotlightShape ?? 'circle') === 'rect' && (
-                    <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    <label className="flex flex-col gap-1 text-xs text-muted">
                       {t('play.animation.spotlightBorderRadius')}
                       <input
                         type="number"
@@ -1413,7 +1413,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                         value={effect.spotlightBorderRadius ?? 8}
                         disabled={disabled}
                         onChange={(e) => updateEffect(effect.id, { spotlightBorderRadius: clamp(Math.round(Number(e.target.value) || 0), 0, 32) })}
-                        className="w-20 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+                        className="w-20 rounded border border-border bg-surface px-2 py-1 text-xs text-text disabled:cursor-not-allowed disabled:opacity-40"
                       />
                     </label>
                   )}
@@ -1421,7 +1421,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
               )}
               {effect.type === 'text-callout' && (
                 <>
-                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  <label className="flex flex-col gap-1 text-xs text-muted">
                     {t('play.animation.textContent')}
                     <input
                       type="text"
@@ -1430,32 +1430,32 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                       disabled={disabled}
                       placeholder={t('play.animation.textContentPlaceholder')}
                       onChange={(e) => updateEffect(effect.id, { text: e.target.value })}
-                      className="w-40 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                      className="w-40 rounded-md border border-border bg-surface px-2 py-1 text-sm text-text"
                     />
                   </label>
                   <div className="flex gap-2">
-                    <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    <label className="flex flex-col gap-1 text-xs text-muted">
                       {t('play.animation.textCalloutBgColor')}
                       <input
                         type="color"
                         value={effect.textCalloutBgColor ?? '#0f172a'}
                         disabled={disabled}
                         onChange={(e) => updateEffect(effect.id, { textCalloutBgColor: e.target.value })}
-                        className="h-8 w-12 cursor-pointer rounded-md border border-slate-700 bg-slate-900 p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+                        className="h-8 w-12 cursor-pointer rounded-md border border-border bg-surface p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
                       />
                     </label>
-                    <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    <label className="flex flex-col gap-1 text-xs text-muted">
                       {t('play.animation.textCalloutTextColor')}
                       <input
                         type="color"
                         value={effect.textCalloutTextColor ?? '#f8fafc'}
                         disabled={disabled}
                         onChange={(e) => updateEffect(effect.id, { textCalloutTextColor: e.target.value })}
-                        className="h-8 w-12 cursor-pointer rounded-md border border-slate-700 bg-slate-900 p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+                        className="h-8 w-12 cursor-pointer rounded-md border border-border bg-surface p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
                       />
                     </label>
                   </div>
-                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  <label className="flex flex-col gap-1 text-xs text-muted">
                     {t('play.animation.textCalloutFontSize')}
                     <div className="flex items-center gap-1">
                       <input
@@ -1468,12 +1468,12 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                         onChange={(e) =>
                           updateEffect(effect.id, { textCalloutFontSize: Math.min(3, Math.max(0.5, Number(e.target.value) || 1.25)) })
                         }
-                        className="w-20 rounded-md border border-slate-700 bg-slate-900 px-1 py-1 text-sm text-slate-100"
+                        className="w-20 rounded-md border border-border bg-surface px-1 py-1 text-sm text-text"
                       />
-                      <span className="text-slate-500">rem</span>
+                      <span className="text-muted">rem</span>
                     </div>
                   </label>
-                  <label className="flex items-center gap-2 text-xs text-slate-400">
+                  <label className="flex items-center gap-2 text-xs text-muted">
                     {t('play.animation.textCalloutBorderRadius')}
                     <input
                       type="number"
@@ -1483,37 +1483,37 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                       value={effect.textCalloutBorderRadius ?? 8}
                       disabled={disabled}
                       onChange={(e) => updateEffect(effect.id, { textCalloutBorderRadius: clamp(Math.round(Number(e.target.value) || 8), 0, 32) })}
-                      className="w-20 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="w-20 rounded border border-border bg-surface px-2 py-1 text-xs text-text disabled:cursor-not-allowed disabled:opacity-40"
                     />
-                    <span className="text-slate-500">px</span>
+                    <span className="text-muted">px</span>
                   </label>
-                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  <label className="flex flex-col gap-1 text-xs text-muted">
                     {t('play.animation.textCalloutAlign')}
                     <select
                       value={effect.textCalloutAlign ?? 'center'}
                       disabled={disabled}
                       onChange={(e) => updateEffect(effect.id, { textCalloutAlign: e.target.value as 'left' | 'center' | 'right' })}
-                      className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                      className="rounded-md border border-border bg-surface px-2 py-1 text-sm text-text"
                     >
                       <option value="left">{t('play.animation.textCalloutAlign.left')}</option>
                       <option value="center">{t('play.animation.textCalloutAlign.center')}</option>
                       <option value="right">{t('play.animation.textCalloutAlign.right')}</option>
                     </select>
                   </label>
-                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  <label className="flex flex-col gap-1 text-xs text-muted">
                     {t('play.animation.textCalloutPadding')}
                     <select
                       value={effect.textCalloutPadding ?? 'md'}
                       disabled={disabled}
                       onChange={(e) => updateEffect(effect.id, { textCalloutPadding: e.target.value as 'sm' | 'md' | 'lg' })}
-                      className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                      className="rounded-md border border-border bg-surface px-2 py-1 text-sm text-text"
                     >
                       <option value="sm">{t('play.animation.textCalloutPadding.sm')}</option>
                       <option value="md">{t('play.animation.textCalloutPadding.md')}</option>
                       <option value="lg">{t('play.animation.textCalloutPadding.lg')}</option>
                     </select>
                   </label>
-                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  <label className="flex flex-col gap-1 text-xs text-muted">
                     <span className="flex items-center gap-2">
                       <input
                         type="checkbox"
@@ -1529,11 +1529,11 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                         value={effect.textCalloutBorderColor}
                         disabled={disabled}
                         onChange={(e) => updateEffect(effect.id, { textCalloutBorderColor: e.target.value })}
-                        className="h-8 w-full cursor-pointer rounded border border-slate-700 bg-slate-900"
+                        className="h-8 w-full cursor-pointer rounded border border-border bg-surface"
                       />
                     )}
                   </label>
-                  <label className="flex items-center gap-2 text-xs text-slate-400">
+                  <label className="flex items-center gap-2 text-xs text-muted">
                     <input
                       type="checkbox"
                       checked={!!effect.textCalloutShadow}
@@ -1542,7 +1542,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                     />
                     {t('play.animation.textCalloutShadow')}
                   </label>
-                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  <label className="flex flex-col gap-1 text-xs text-muted">
                     {t('play.animation.textCalloutMaxWidth')}
                     <div className="flex items-center gap-1">
                       <input
@@ -1557,15 +1557,15 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                           const v = e.target.value === '' ? undefined : Math.max(10, Math.min(80, Math.round(Number(e.target.value))));
                           updateEffect(effect.id, { textCalloutMaxWidth: v });
                         }}
-                        className="w-16 rounded-md border border-slate-700 bg-slate-900 px-1 py-1 text-sm text-slate-100 placeholder-slate-600"
+                        className="w-16 rounded-md border border-border bg-surface px-1 py-1 text-sm text-text placeholder:text-muted"
                       />
-                      <span className="text-slate-500">vw</span>
+                      <span className="text-muted">vw</span>
                     </div>
                   </label>
                 </>
               )}
               {effect.type === 'pause-playback' && (
-                <label className="flex flex-col gap-1 text-xs text-slate-400">
+                <label className="flex flex-col gap-1 text-xs text-muted">
                   {t('play.animation.pausePlaybackText')}
                   <input
                     type="text"
@@ -1574,16 +1574,16 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                     disabled={disabled}
                     placeholder={t('play.animation.defaultPausePlaybackText')}
                     onChange={(e) => updateEffect(effect.id, { text: e.target.value })}
-                    className="w-64 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                    className="w-64 rounded-md border border-border bg-surface px-2 py-1 text-sm text-text"
                   />
-                  <span className="text-[11px] text-cyan-200/80">
+                  <span className="text-[11px] text-cyan-700/80 dark:text-cyan-200/80">
                     {t('play.animation.pausePlaybackHelp')}
                   </span>
                 </label>
               )}
               {effect.type === 'realtime-poll' && (
                 <>
-                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  <label className="flex flex-col gap-1 text-xs text-muted">
                     {t('play.animation.realtimePollText')}
                     <input
                       type="text"
@@ -1592,20 +1592,20 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                       disabled={disabled}
                       placeholder={t('play.animation.defaultRealtimePollText')}
                       onChange={(e) => updateEffect(effect.id, { text: e.target.value })}
-                      className="w-64 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                      className="w-64 rounded-md border border-border bg-surface px-2 py-1 text-sm text-text"
                     />
-                    <span className="text-[11px] text-purple-200/80">
+                    <span className="text-[11px] text-purple-700/80 dark:text-purple-200/80">
                       {t('play.animation.realtimePollHelp')}
                     </span>
                   </label>
-                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  <label className="flex flex-col gap-1 text-xs text-muted">
                     {t('play.animation.realtimePollPoll')}
                     {pagePolls === null ? (
-                      <span className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-500">
+                      <span className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-muted">
                         {t('play.animation.realtimePollLoadingPolls')}
                       </span>
                     ) : pagePolls.length === 0 ? (
-                      <span className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-500">
+                      <span className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-muted">
                         {t('play.animation.realtimePollNoPolls')}
                       </span>
                     ) : (
@@ -1613,7 +1613,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                         value={effect.pollId ?? ''}
                         disabled={disabled}
                         onChange={(e) => updateEffect(effect.id, { pollId: e.target.value ? Number(e.target.value) : undefined })}
-                        className="max-w-[16rem] rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                        className="max-w-[16rem] rounded-md border border-border bg-surface px-2 py-1 text-sm text-text"
                       >
                         <option value="">{t('play.animation.realtimePollSelectPoll')}</option>
                         {pagePolls.map((poll) => (
@@ -1627,13 +1627,13 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                 </>
               )}
               {effect.type === 'shape' && (
-                <label className="flex flex-col gap-1 text-xs text-slate-400">
+                <label className="flex flex-col gap-1 text-xs text-muted">
                   {t('play.animation.shapeKind')}
                   <select
                     value={getShapeKind(effect)}
                     disabled={disabled}
                     onChange={(e) => updateEffect(effect.id, { shape: e.target.value as SlideAnimationShapeKind })}
-                    className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                    className="rounded-md border border-border bg-surface px-2 py-1 text-sm text-text"
                   >
                     {ANIMATION_SHAPE_KINDS.map((kind) => (
                       <option key={kind} value={kind}>
@@ -1646,17 +1646,17 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
               {effect.type === 'shape' && (
                 <div className="flex flex-col gap-2">
                   <div className="flex gap-2">
-                    <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    <label className="flex flex-col gap-1 text-xs text-muted">
                       {t('play.animation.shapeColor')}
                       <input
                         type="color"
                         value={effect.color ?? '#f43f5e'}
                         disabled={disabled}
                         onChange={(e) => updateEffect(effect.id, { color: e.target.value })}
-                        className="h-8 w-12 cursor-pointer rounded-md border border-slate-700 bg-slate-900 p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+                        className="h-8 w-12 cursor-pointer rounded-md border border-border bg-surface p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
                       />
                     </label>
-                    <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    <label className="flex flex-col gap-1 text-xs text-muted">
                       {t('play.animation.shapeStrokeWidth')}
                       <input
                         type="number"
@@ -1669,11 +1669,11 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                           const v = clamp(Math.round(Number(e.target.value)), 1, 20);
                           updateEffect(effect.id, { strokeWidth: Number.isFinite(v) ? v : 5 });
                         }}
-                        className="w-16 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                        className="w-16 rounded-md border border-border bg-surface px-2 py-1 text-sm text-text disabled:cursor-not-allowed disabled:opacity-40"
                       />
                     </label>
                   </div>
-                  <label className="flex items-center gap-2 text-xs text-slate-400">
+                  <label className="flex items-center gap-2 text-xs text-muted">
                     <input
                       type="checkbox"
                       checked={effect.shapeGlow ?? false}
@@ -1683,7 +1683,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                     />
                     {t('play.animation.shapeGlow')}
                   </label>
-                  <label className="flex items-center gap-2 text-xs text-slate-400">
+                  <label className="flex items-center gap-2 text-xs text-muted">
                     <input
                       type="checkbox"
                       checked={effect.shapeFillColor !== undefined}
@@ -1700,11 +1700,11 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                         value={effect.shapeFillColor}
                         disabled={disabled}
                         onChange={(e) => updateEffect(effect.id, { shapeFillColor: e.target.value })}
-                        className="h-8 w-12 cursor-pointer rounded-md border border-slate-700 bg-slate-900 p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+                        className="h-8 w-12 cursor-pointer rounded-md border border-border bg-surface p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
                       />
                     )}
                   </label>
-                  <label className="flex items-center gap-2 text-xs text-slate-400">
+                  <label className="flex items-center gap-2 text-xs text-muted">
                     {t('play.animation.shapeOpacity')}
                     <input
                       type="number"
@@ -1714,10 +1714,10 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                       value={effect.shapeOpacity ?? 1}
                       disabled={disabled}
                       onChange={(e) => updateEffect(effect.id, { shapeOpacity: clamp(parseFloat(e.target.value) || 1, 0, 1) })}
-                      className="w-20 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="w-20 rounded border border-border bg-surface px-2 py-1 text-xs text-text disabled:cursor-not-allowed disabled:opacity-40"
                     />
                   </label>
-                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  <label className="flex flex-col gap-1 text-xs text-muted">
                     {t('play.animation.shapeDashArray')}
                     <input
                       type="text"
@@ -1729,11 +1729,11 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                         const val = e.target.value.replace(/[^\d. ]/g, '').slice(0, 20);
                         updateEffect(effect.id, { shapeDashArray: val || undefined });
                       }}
-                      className="w-32 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="w-32 rounded border border-border bg-surface px-2 py-1 text-xs text-text disabled:cursor-not-allowed disabled:opacity-40"
                     />
                   </label>
                   {(effect.shape ?? 'circle') === 'rect' && (
-                    <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    <label className="flex flex-col gap-1 text-xs text-muted">
                       {t('play.animation.shapeRectRadius')}
                       <input
                         type="number"
@@ -1743,7 +1743,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                         value={effect.shapeRectRadius ?? 6}
                         disabled={disabled}
                         onChange={(e) => updateEffect(effect.id, { shapeRectRadius: clamp(Math.round(Number(e.target.value) || 0), 0, 24) })}
-                        className="w-20 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+                        className="w-20 rounded border border-border bg-surface px-2 py-1 text-xs text-text disabled:cursor-not-allowed disabled:opacity-40"
                       />
                     </label>
                   )}
@@ -1756,7 +1756,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                     const stepListHighlightMax = Math.max(0, stepListItemCount - 1);
                     return (
                       <>
-                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  <label className="flex flex-col gap-1 text-xs text-muted">
                     {t('play.animation.stepListItems')}
                     <textarea
                       rows={3}
@@ -1770,32 +1770,32 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                           .map((line) => line.slice(0, MAX_STEP_LIST_ITEM_LENGTH));
                         updateEffect(effect.id, { items: lines.some((line) => line.trim().length > 0) ? lines : undefined });
                       }}
-                      className="w-48 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                      className="w-48 rounded-md border border-border bg-surface px-2 py-1 text-sm text-text"
                     />
                   </label>
                   <div className="flex gap-3">
-                    <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    <label className="flex flex-col gap-1 text-xs text-muted">
                       {t('play.animation.stepListBgColor')}
                       <input
                         type="color"
                         value={effect.stepListBgColor ?? '#1e293b'}
                         disabled={disabled}
                         onChange={(e) => updateEffect(effect.id, { stepListBgColor: e.target.value })}
-                        className="h-8 w-10 cursor-pointer rounded border border-slate-700 bg-slate-900 p-0.5"
+                        className="h-8 w-10 cursor-pointer rounded border border-border bg-surface p-0.5"
                       />
                     </label>
-                    <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    <label className="flex flex-col gap-1 text-xs text-muted">
                       {t('play.animation.stepListTextColor')}
                       <input
                         type="color"
                         value={effect.stepListTextColor ?? '#f1f5f9'}
                         disabled={disabled}
                         onChange={(e) => updateEffect(effect.id, { stepListTextColor: e.target.value })}
-                        className="h-8 w-10 cursor-pointer rounded border border-slate-700 bg-slate-900 p-0.5"
+                        className="h-8 w-10 cursor-pointer rounded border border-border bg-surface p-0.5"
                       />
                     </label>
                   </div>
-                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  <label className="flex flex-col gap-1 text-xs text-muted">
                     {t('play.animation.stepListFontSize')}
                     <div className="flex items-center gap-1">
                       <input
@@ -1808,12 +1808,12 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                         onChange={(e) =>
                           updateEffect(effect.id, { stepListFontSize: Math.min(2.5, Math.max(0.5, Number(e.target.value) || 1.1)) })
                         }
-                        className="w-20 rounded-md border border-slate-700 bg-slate-900 px-1 py-1 text-sm text-slate-100"
+                        className="w-20 rounded-md border border-border bg-surface px-1 py-1 text-sm text-text"
                       />
-                      <span className="text-slate-500">rem</span>
+                      <span className="text-muted">rem</span>
                     </div>
                   </label>
-                  <label className="flex items-center gap-2 text-xs text-slate-400">
+                  <label className="flex items-center gap-2 text-xs text-muted">
                     {t('play.animation.stepListBorderRadius')}
                     <input
                       type="number"
@@ -1825,11 +1825,11 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                       onChange={(e) =>
                         updateEffect(effect.id, { stepListBorderRadius: Math.min(32, Math.max(0, Math.round(Number(e.target.value)))) })
                       }
-                      className="w-16 rounded-md border border-slate-700 bg-slate-900 px-1 py-1 text-sm text-slate-100"
+                      className="w-16 rounded-md border border-border bg-surface px-1 py-1 text-sm text-text"
                     />
-                    <span className="text-slate-500">px</span>
+                    <span className="text-muted">px</span>
                   </label>
-                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  <label className="flex flex-col gap-1 text-xs text-muted">
                     <span className="flex items-center gap-2">
                       <input
                         type="checkbox"
@@ -1845,24 +1845,24 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                         value={effect.stepListBorderColor}
                         disabled={disabled}
                         onChange={(e) => updateEffect(effect.id, { stepListBorderColor: e.target.value })}
-                        className="h-8 w-full cursor-pointer rounded border border-slate-700 bg-slate-900"
+                        className="h-8 w-full cursor-pointer rounded border border-border bg-surface"
                       />
                     )}
                   </label>
-                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  <label className="flex flex-col gap-1 text-xs text-muted">
                     {t('play.animation.stepListBulletStyle')}
                     <select
                       value={effect.stepListBulletStyle ?? 'disc'}
                       disabled={disabled}
                       onChange={(e) => updateEffect(effect.id, { stepListBulletStyle: e.target.value as 'disc' | 'decimal' | 'none' })}
-                      className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                      className="rounded-md border border-border bg-surface px-2 py-1 text-sm text-text"
                     >
                       <option value="disc">{t('play.animation.stepListBulletStyle.disc')}</option>
                       <option value="decimal">{t('play.animation.stepListBulletStyle.decimal')}</option>
                       <option value="none">{t('play.animation.stepListBulletStyle.none')}</option>
                     </select>
                   </label>
-                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  <label className="flex flex-col gap-1 text-xs text-muted">
                     {t('play.animation.stepListHighlightIndex')}
                     <input
                       type="number"
@@ -1880,7 +1880,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                         const next = Math.min(stepListHighlightMax, Math.max(0, Math.round(Number(e.target.value) || 0)));
                         updateEffect(effect.id, { stepListHighlightIndex: next });
                       }}
-                      className="w-24 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="w-24 rounded-md border border-border bg-surface px-2 py-1 text-sm text-text disabled:cursor-not-allowed disabled:opacity-40"
                     />
                   </label>
                       </>
@@ -1889,15 +1889,15 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                 </>
               )}
               {effect.type === 'overlay-image' && (
-                <div className="flex flex-col gap-1 text-xs text-slate-400">
+                <div className="flex flex-col gap-1 text-xs text-muted">
                   {t('play.animation.overlayImageFigure')}
                   <div className="flex items-center gap-2">
                     {pageFigures === null ? (
-                      <span className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-500">
+                      <span className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-muted">
                         {t('play.animation.overlayImageLoading')}
                       </span>
                     ) : pageFigures.length === 0 ? (
-                      <span className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-500">
+                      <span className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-muted">
                         {t('play.animation.overlayImageNoFigures')}
                       </span>
                     ) : (
@@ -1906,7 +1906,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                           value={effect.figureId ?? ''}
                           disabled={disabled}
                           onChange={(e) => updateEffect(effect.id, { figureId: e.target.value || undefined })}
-                          className="max-w-[12rem] rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                          className="max-w-[12rem] rounded-md border border-border bg-surface px-2 py-1 text-sm text-text"
                         >
                           <option value="">{t('play.animation.overlayImageSelectFigure')}</option>
                           {pageFigures.map((figure, idx) => (
@@ -1920,7 +1920,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                             <img
                               src={withShareToken(figureImageUrl(pdfId, effect.figureId)) ?? figureImageUrl(pdfId, effect.figureId)}
                               alt=""
-                              className="h-10 w-14 rounded border border-slate-700 bg-slate-950 object-contain"
+                              className="h-10 w-14 rounded border border-border bg-surface-muted object-contain"
                               onLoad={(e) => {
                                 const img = e.currentTarget;
                                 if (img.naturalWidth && img.naturalHeight) {
@@ -1940,7 +1940,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                                   return next;
                                 })
                               }
-                              className={`rounded-md border px-2 py-1.5 text-sm ${lockedAspectEffectIds.has(effect.id) ? 'border-fuchsia-500/50 bg-fuchsia-500/10 text-fuchsia-300' : 'border-slate-700 text-slate-400 hover:bg-slate-800'}`}
+                              className={`rounded-md border px-2 py-1.5 text-sm ${lockedAspectEffectIds.has(effect.id) ? 'border-fuchsia-500/50 bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-300' : 'border-border text-muted hover:bg-surface-muted'}`}
                             >
                               {lockedAspectEffectIds.has(effect.id) ? '🔒' : '🔓'}
                             </button>
@@ -1949,7 +1949,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                       </>
                     )}
                   </div>
-                  <label className="flex flex-col gap-1 text-xs text-slate-400 mt-1">
+                  <label className="flex flex-col gap-1 text-xs text-muted mt-1">
                     {t('play.animation.overlayImageOpacity')}
                     <input
                       type="number"
@@ -1962,10 +1962,10 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                         const v = parseFloat(e.target.value);
                         if (!isNaN(v)) updateEffect(effect.id, { overlayImageOpacity: Math.min(1, Math.max(0, v)) });
                       }}
-                      className="w-16 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="w-16 rounded-md border border-border bg-surface px-2 py-1 text-sm text-text disabled:cursor-not-allowed disabled:opacity-40"
                     />
                   </label>
-                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  <label className="flex flex-col gap-1 text-xs text-muted">
                     {t('play.animation.overlayImageBorderRadius')}
                     <div className="flex items-center gap-1">
                       <input
@@ -1976,12 +1976,12 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                         value={effect.overlayImageBorderRadius ?? 0}
                         disabled={disabled}
                         onChange={(e) => updateEffect(effect.id, { overlayImageBorderRadius: clamp(Math.round(Number(e.target.value) || 0), 0, 48) })}
-                        className="w-16 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                        className="w-16 rounded-md border border-border bg-surface px-2 py-1 text-sm text-text disabled:cursor-not-allowed disabled:opacity-40"
                       />
-                      <span className="text-slate-500">px</span>
+                      <span className="text-muted">px</span>
                     </div>
                   </label>
-                  <label className="flex items-center gap-2 text-xs text-slate-400">
+                  <label className="flex items-center gap-2 text-xs text-muted">
                     <input
                       type="checkbox"
                       checked={!!effect.overlayImageShadow}
@@ -1994,7 +1994,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
               )}
               {effect.type === 'formula' && (
                 <>
-                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  <label className="flex flex-col gap-1 text-xs text-muted">
                     {t('play.animation.formulaContent')}
                     <input
                       type="text"
@@ -2003,11 +2003,11 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                       disabled={disabled}
                       placeholder={t('play.animation.formulaContentPlaceholder')}
                       onChange={(e) => updateEffect(effect.id, { formula: e.target.value })}
-                      className="w-48 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                      className="w-48 rounded-md border border-border bg-surface px-2 py-1 text-sm text-text"
                     />
                     {effect.formula && (
                       <div
-                        className="w-48 overflow-x-auto rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-slate-100"
+                        className="w-48 overflow-x-auto rounded-md border border-border bg-surface-muted px-2 py-1 text-text"
                         style={{ fontSize: `${effect.formulaFontSize ?? 1.5}em` }}
                         dangerouslySetInnerHTML={{
                           __html: katex.renderToString(effect.formula, { throwOnError: false, displayMode: true }),
@@ -2015,7 +2015,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                       />
                     )}
                   </label>
-                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  <label className="flex flex-col gap-1 text-xs text-muted">
                     {t('play.animation.formulaFontSize')}
                     <input
                       type="number"
@@ -2028,32 +2028,32 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                         const v = parseFloat(e.target.value);
                         if (!isNaN(v)) updateEffect(effect.id, { formulaFontSize: Math.min(4, Math.max(0.5, v)) });
                       }}
-                      className="w-20 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                      className="w-20 rounded-md border border-border bg-surface px-2 py-1 text-sm text-text"
                     />
                   </label>
                   <div className="flex gap-3 items-end">
-                    <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    <label className="flex flex-col gap-1 text-xs text-muted">
                       {t('play.animation.formulaBgColor')}
                       <input
                         type="color"
                         value={effect.formulaBgColor ?? '#0f172a'}
                         disabled={disabled}
                         onChange={(e) => updateEffect(effect.id, { formulaBgColor: e.target.value })}
-                        className="h-8 w-12 cursor-pointer rounded-md border border-slate-700 bg-slate-900 p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+                        className="h-8 w-12 cursor-pointer rounded-md border border-border bg-surface p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
                       />
                     </label>
-                    <label className="flex flex-col gap-1 text-xs text-slate-400">
+                    <label className="flex flex-col gap-1 text-xs text-muted">
                       {t('play.animation.formulaTextColor')}
                       <input
                         type="color"
                         value={effect.formulaTextColor ?? '#f8fafc'}
                         disabled={disabled}
                         onChange={(e) => updateEffect(effect.id, { formulaTextColor: e.target.value })}
-                        className="h-8 w-12 cursor-pointer rounded-md border border-slate-700 bg-slate-900 p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+                        className="h-8 w-12 cursor-pointer rounded-md border border-border bg-surface p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
                       />
                     </label>
                   </div>
-                  <label className="flex items-center gap-2 text-xs text-slate-400">
+                  <label className="flex items-center gap-2 text-xs text-muted">
                     {t('play.animation.formulaBorderRadius')}
                     <input
                       type="number"
@@ -2063,11 +2063,11 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                       value={effect.formulaBorderRadius ?? 8}
                       disabled={disabled}
                       onChange={(e) => updateEffect(effect.id, { formulaBorderRadius: clamp(Math.round(Number(e.target.value) || 8), 0, 32) })}
-                      className="w-20 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="w-20 rounded border border-border bg-surface px-2 py-1 text-xs text-text disabled:cursor-not-allowed disabled:opacity-40"
                     />
-                    <span className="text-slate-500">px</span>
+                    <span className="text-muted">px</span>
                   </label>
-                  <label className="flex flex-col gap-1 text-xs text-slate-400">
+                  <label className="flex flex-col gap-1 text-xs text-muted">
                     <span className="flex items-center gap-2">
                       <input
                         type="checkbox"
@@ -2083,11 +2083,11 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                         value={effect.formulaBorderColor}
                         disabled={disabled}
                         onChange={(e) => updateEffect(effect.id, { formulaBorderColor: e.target.value })}
-                        className="h-8 w-full cursor-pointer rounded border border-slate-700 bg-slate-900"
+                        className="h-8 w-full cursor-pointer rounded border border-border bg-surface"
                       />
                     )}
                   </label>
-                  <label className="flex items-center gap-2 text-xs text-slate-400">
+                  <label className="flex items-center gap-2 text-xs text-muted">
                     <input
                       type="checkbox"
                       checked={!!effect.formulaShadow}
@@ -2099,7 +2099,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                 </>
               )}
               {OVERLAY_EFFECT_TYPES.includes(effect.type) && effect.type !== 'custom-script' && (
-                <div className="flex flex-col gap-2 text-xs text-slate-400">
+                <div className="flex flex-col gap-2 text-xs text-muted">
                   <div className="flex items-center justify-between gap-2">
                     <span>{t(effect.type === 'pointer' ? 'play.animation.pointerPosition' : 'play.animation.focusPosition')}</span>
                     {compact && (
@@ -2109,8 +2109,8 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                         onClick={() => setPositioningEffectId((prev) => (prev === effect.id ? null : effect.id))}
                         className={`rounded-md border px-2 py-1 text-[11px] ${
                           positioningEffectId === effect.id
-                            ? 'border-fuchsia-400 bg-fuchsia-500/25 font-medium text-fuchsia-100'
-                            : 'border-slate-600 text-slate-300 hover:bg-slate-800'
+                            ? 'border-fuchsia-400 bg-fuchsia-500/25 font-medium text-fuchsia-800 dark:text-fuchsia-100'
+                            : 'border-border text-text hover:bg-surface-muted'
                         }`}
                       >
                         {positioningEffectId === effect.id
@@ -2146,7 +2146,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                         ? (['xPct', 'yPct'] as const)
                         : (Object.keys(FOCUS_PARAM_LABELS) as Array<keyof typeof FOCUS_PARAM_LABELS>)
                     ).map((key) => (
-                      <label key={key} className="flex flex-col items-center gap-0.5 text-[11px] text-slate-500">
+                      <label key={key} className="flex flex-col items-center gap-0.5 text-[11px] text-muted">
                         {t(FOCUS_PARAM_LABELS[key])}
                         <input
                           type="number"
@@ -2170,27 +2170,27 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                             }
                             updateEffect(effect.id, { params: base });
                           }}
-                          className="w-14 rounded-md border border-slate-700 bg-slate-900 px-1 py-1 text-sm text-slate-100"
+                          className="w-14 rounded-md border border-border bg-surface px-1 py-1 text-sm text-text"
                         />
                       </label>
                     ))}
                   </div>
                   {effect.type === 'pointer' && (
                     <>
-                      <label className="flex flex-col gap-1 text-xs text-slate-400">
+                      <label className="flex flex-col gap-1 text-xs text-muted">
                         {t('play.animation.pointerShape')}
                         <select
                           value={effect.pointerShape ?? 'arrow'}
                           disabled={disabled}
                           onChange={(e) => updateEffect(effect.id, { pointerShape: e.target.value as 'arrow' | 'dot' | 'cross' })}
-                          className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                          className="rounded-md border border-border bg-surface px-2 py-1 text-sm text-text disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           <option value="arrow">{t('play.animation.pointerShape.arrow')}</option>
                           <option value="dot">{t('play.animation.pointerShape.dot')}</option>
                           <option value="cross">{t('play.animation.pointerShape.cross')}</option>
                         </select>
                       </label>
-                      <label className="flex flex-col gap-1 text-xs text-slate-400">
+                      <label className="flex flex-col gap-1 text-xs text-muted">
                         {t('play.animation.pointerAngle')}
                         <div className="flex items-center gap-1">
                           <input
@@ -2203,22 +2203,22 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                             onChange={(e) =>
                               updateEffect(effect.id, { angle: Number(e.target.value) || 0 })
                             }
-                            className="w-20 rounded-md border border-slate-700 bg-slate-900 px-1 py-1 text-sm text-slate-100"
+                            className="w-20 rounded-md border border-border bg-surface px-1 py-1 text-sm text-text"
                           />
-                          <span className="text-slate-500">°</span>
+                          <span className="text-muted">°</span>
                         </div>
                       </label>
-                      <label className="flex flex-col gap-1 text-xs text-slate-400">
+                      <label className="flex flex-col gap-1 text-xs text-muted">
                         {t('play.animation.pointerColor')}
                         <input
                           type="color"
                           value={effect.pointerColor ?? '#f43f5e'}
                           disabled={disabled}
                           onChange={(e) => updateEffect(effect.id, { pointerColor: e.target.value })}
-                          className="h-8 w-12 cursor-pointer rounded-md border border-slate-700 bg-slate-900 p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+                          className="h-8 w-12 cursor-pointer rounded-md border border-border bg-surface p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
                         />
                       </label>
-                      <label className="flex flex-col gap-1 text-xs text-slate-400">
+                      <label className="flex flex-col gap-1 text-xs text-muted">
                         {t('play.animation.pointerSize')}
                         <div className="flex items-center gap-1">
                           <input
@@ -2231,12 +2231,12 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                             onChange={(e) =>
                               updateEffect(effect.id, { pointerSize: Math.min(6, Math.max(1, Number(e.target.value) || 2.5)) })
                             }
-                            className="w-20 rounded-md border border-slate-700 bg-slate-900 px-1 py-1 text-sm text-slate-100"
+                            className="w-20 rounded-md border border-border bg-surface px-1 py-1 text-sm text-text"
                           />
-                          <span className="text-slate-500">rem</span>
+                          <span className="text-muted">rem</span>
                         </div>
                       </label>
-                      <label className="flex flex-col gap-1 text-xs text-slate-400">
+                      <label className="flex flex-col gap-1 text-xs text-muted">
                         {t('play.animation.pointerOpacity')}
                         <div className="flex items-center gap-2">
                           <input
@@ -2261,11 +2261,11 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                             onChange={(e) =>
                               updateEffect(effect.id, { pointerOpacity: Math.min(1, Math.max(0, Number(e.target.value) || 1)) })
                             }
-                            className="w-16 rounded-md border border-slate-700 bg-slate-900 px-1 py-1 text-sm text-slate-100 disabled:opacity-40"
+                            className="w-16 rounded-md border border-border bg-surface px-1 py-1 text-sm text-text disabled:opacity-40"
                           />
                         </div>
                       </label>
-                      <label className="flex items-center gap-2 text-xs text-slate-400">
+                      <label className="flex items-center gap-2 text-xs text-muted">
                         <input
                           type="checkbox"
                           checked={effect.pointerPulse ?? false}
@@ -2282,7 +2282,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                 </div>
               )}
               {(OVERLAY_EFFECT_TYPES.includes(effect.type) || TRANSFORM_EFFECT_TYPES.includes(effect.type)) && (
-                <label className="flex flex-col gap-1 text-xs text-slate-400">
+                <label className="flex flex-col gap-1 text-xs text-muted">
                   {t(
                     OVERLAY_EFFECT_TYPES.includes(effect.type)
                       ? 'play.animation.exitDuration'
@@ -2310,7 +2310,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                       onChange={(e) =>
                         updateEffect(effect.id, { exitDuration: Math.max(0, Number(e.target.value) || 0) })
                       }
-                      className="w-16 rounded-md border border-slate-700 bg-slate-900 px-1 py-1 text-sm text-slate-100 disabled:opacity-40"
+                      className="w-16 rounded-md border border-border bg-surface px-1 py-1 text-sm text-text disabled:opacity-40"
                     />
                     {t('play.animation.seconds')}
                   </div>
@@ -2321,7 +2321,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                   type="button"
                   disabled={disabled}
                   onClick={() => setCustomScriptDialogEffectId(effect.id)}
-                  className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/10 px-3 py-1.5 text-sm text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/10 px-3 py-1.5 text-sm text-fuchsia-700 dark:text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {t('play.animation.customScriptEdit' as TranslationKey)}
                 </button>
@@ -2342,7 +2342,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                   });
                   setPositioningEffectId((prev) => (prev === effect.id ? null : prev));
                 }}
-                className="ml-auto rounded-md border border-rose-600/50 bg-rose-600/15 px-2 py-1 text-xs text-rose-300 hover:bg-rose-600/25 disabled:cursor-not-allowed disabled:opacity-40"
+                className="ml-auto rounded-md border border-rose-600/50 bg-rose-600/15 px-2 py-1 text-xs text-rose-700 dark:text-rose-300 hover:bg-rose-600/25 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {t('play.animation.delete')}
               </button>
@@ -2354,18 +2354,18 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
         </>
       ) : notebookTab === 'hints' ? (
         <>
-        <div className="text-[11px] text-slate-500">{t('play.animation.hintsDescription')}</div>
+        <div className="text-[11px] text-muted">{t('play.animation.hintsDescription')}</div>
         {pageSentences.length === 0 ? (
-          <div className="rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-500">
+          <div className="rounded-md border border-border bg-surface-muted px-3 py-2 text-xs text-muted">
             {t('play.animation.noTranscript')}
           </div>
         ) : (
           pageSentences.map((sentence, idx) => (
             <div
               key={idx}
-              className="flex flex-wrap items-start gap-2 rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2"
+              className="flex flex-wrap items-start gap-2 rounded-md border border-border bg-surface-muted px-3 py-2"
             >
-              <div className="min-w-[8rem] flex-1 basis-64 text-xs text-slate-300">
+              <div className="min-w-[8rem] flex-1 basis-64 text-xs text-text">
                 {idx + 1}. {sentence}
               </div>
               <input
@@ -2375,7 +2375,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                 disabled={disabled}
                 placeholder={t('play.animation.hintsPlaceholder')}
                 onChange={(e) => updateHint(idx, e.target.value)}
-                className="min-w-[12rem] flex-1 basis-64 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                className="min-w-[12rem] flex-1 basis-64 rounded-md border border-border bg-surface px-2 py-1 text-sm text-text"
               />
             </div>
           ))
@@ -2385,11 +2385,11 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
         <>
         <div className="mb-2 flex flex-col gap-1">
           <div className="flex items-center justify-between gap-2">
-            <div className="text-[11px] text-slate-500">{t('play.animation.rawJsonDescription')}</div>
+            <div className="text-[11px] text-muted">{t('play.animation.rawJsonDescription')}</div>
             <button
               type="button"
               onClick={() => { void handleCopyRawJson(); }}
-              className="shrink-0 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
+              className="shrink-0 rounded-md border border-border px-2 py-1 text-xs text-text hover:bg-surface-muted"
             >
               {jsonCopyStatus === 'success' ? t('play.animation.copyJsonDone') : t('play.animation.copyJson')}
             </button>
@@ -2397,7 +2397,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
           {jsonCopyStatus !== 'idle' && (
             <div
               role="status"
-              className={`text-[11px] ${jsonCopyStatus === 'success' ? 'text-emerald-300' : 'text-rose-300'}`}
+              className={`text-[11px] ${jsonCopyStatus === 'success' ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300'}`}
             >
               {jsonCopyStatus === 'success'
                 ? t('play.animation.copyJsonDone')
@@ -2411,7 +2411,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
           onFocus={(e) => e.currentTarget.select()}
           rows={20}
           spellCheck={false}
-          className="w-full resize-y rounded-md border border-slate-800 bg-slate-950 px-2 py-2 font-mono text-xs leading-relaxed text-slate-300"
+          className="w-full resize-y rounded-md border border-border bg-surface-muted px-2 py-2 font-mono text-xs leading-relaxed text-text"
         />
         </>
       )}
@@ -2419,38 +2419,38 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
 
       {customScriptDialogEffect && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="flex max-h-[90vh] w-full max-w-5xl flex-col rounded-xl border border-slate-700 bg-slate-950 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
+          <div className="flex max-h-[90vh] w-full max-w-5xl flex-col rounded-xl border border-border bg-surface-muted shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <div>
-                <div className="text-sm font-semibold text-slate-100">
+                <div className="text-sm font-semibold text-text">
                   {t('play.animation.customScriptDialogTitle' as TranslationKey)}
                 </div>
-                <div className="text-xs text-slate-500">{t('play.animation.customScriptDraftNote')}</div>
+                <div className="text-xs text-muted">{t('play.animation.customScriptDraftNote')}</div>
               </div>
               <button
                 type="button"
                 onClick={() => setCustomScriptDialogEffectId(null)}
-                className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
+                className="rounded-md border border-border px-3 py-1.5 text-sm text-text hover:bg-surface-muted"
               >
                 {t('play.animation.customScriptClose' as TranslationKey)}
               </button>
             </div>
             <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto p-4 lg:grid-cols-2">
               <div className="flex min-h-0 flex-col gap-2">
-                <div className="text-xs font-semibold text-slate-400">
+                <div className="text-xs font-semibold text-muted">
                   {t('play.animation.customScriptPreview' as TranslationKey)}
                 </div>
                 {customScriptDialogEffect.code ? (
                   <CustomScriptPreview effect={customScriptDialogEffect} />
                 ) : (
-                  <div className="flex h-40 items-center justify-center rounded-md border border-slate-800 bg-slate-950 text-xs text-slate-500">
+                  <div className="flex h-40 items-center justify-center rounded-md border border-border bg-surface-muted text-xs text-muted">
                     {t('play.animation.customScriptEmpty')}
                   </div>
                 )}
-                <label className="flex min-h-0 flex-1 flex-col gap-1 text-xs text-slate-400">
+                <label className="flex min-h-0 flex-1 flex-col gap-1 text-xs text-muted">
                   <span className="flex items-center justify-between gap-2">
                     <span>{t('play.animation.customScriptSource' as TranslationKey)}</span>
-                    <span className="text-[11px] text-slate-500">
+                    <span className="text-[11px] text-muted">
                       {customScriptSourceValue.length}/{MAX_CUSTOM_SCRIPT_CODE_LENGTH}
                     </span>
                   </span>
@@ -2462,9 +2462,9 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                     disabled={disabled || customScriptBusyEffectId === customScriptDialogEffect.id}
                     placeholder={t('play.animation.customScriptSourcePlaceholder' as TranslationKey)}
                     onChange={(e) => updateEffect(customScriptDialogEffect.id, { code: e.target.value })}
-                    className="min-h-64 w-full flex-1 resize-y rounded-md border border-slate-700 bg-slate-950 px-2 py-2 font-mono text-xs leading-relaxed text-slate-100 disabled:opacity-50"
+                    className="min-h-64 w-full flex-1 resize-y rounded-md border border-border bg-surface-muted px-2 py-2 font-mono text-xs leading-relaxed text-text disabled:opacity-50"
                   />
-                  <span className="text-[11px] text-slate-500">
+                  <span className="text-[11px] text-muted">
                     {t('play.animation.customScriptSourceHelp' as TranslationKey)}
                   </span>
                 </label>
@@ -2472,10 +2472,10 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
               <div className="flex min-h-0 flex-col gap-3">
                 <div
                   ref={customScriptChatScrollRef}
-                  className="flex min-h-[8rem] flex-1 flex-col gap-2 overflow-y-auto rounded-md border border-slate-800 bg-slate-950 p-2"
+                  className="flex min-h-[8rem] flex-1 flex-col gap-2 overflow-y-auto rounded-md border border-border bg-surface-muted p-2"
                 >
                   {customScriptConversation.length === 0 && !customScriptIsBusy ? (
-                    <div className="m-auto text-xs text-slate-500">
+                    <div className="m-auto text-xs text-muted">
                       {t('play.animation.customScriptChatEmpty' as TranslationKey)}
                     </div>
                   ) : (
@@ -2485,8 +2485,8 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                           key={idx}
                           className={
                             msg.role === 'user'
-                              ? 'ml-auto max-w-[85%] whitespace-pre-wrap rounded-lg bg-fuchsia-500/20 px-3 py-2 text-sm text-fuchsia-100'
-                              : 'mr-auto max-w-[85%] whitespace-pre-wrap rounded-lg bg-slate-800 px-3 py-2 text-sm text-slate-200'
+                              ? 'ml-auto max-w-[85%] whitespace-pre-wrap rounded-lg bg-fuchsia-500/20 px-3 py-2 text-sm text-fuchsia-800 dark:text-fuchsia-100'
+                              : 'mr-auto max-w-[85%] whitespace-pre-wrap rounded-lg bg-surface-muted px-3 py-2 text-sm text-text'
                           }
                         >
                           {msg.content}
@@ -2494,11 +2494,11 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                       ))}
                       {customScriptIsBusy && (
                         customScriptPlanStreaming !== undefined ? (
-                          <div className="mr-auto max-w-[85%] whitespace-pre-wrap rounded-lg bg-slate-800 px-3 py-2 text-sm text-slate-200">
+                          <div className="mr-auto max-w-[85%] whitespace-pre-wrap rounded-lg bg-surface-muted px-3 py-2 text-sm text-text">
                             {customScriptPlanStreaming || t('play.animation.customScriptPlanBusy')}
                           </div>
                         ) : (
-                          <div className="mr-auto max-w-[85%] rounded-lg bg-slate-800 px-3 py-2 text-sm text-slate-400">
+                          <div className="mr-auto max-w-[85%] rounded-lg bg-surface-muted px-3 py-2 text-sm text-muted">
                             {t('play.animation.customScriptGenerateBusy')}
                           </div>
                         )
@@ -2514,7 +2514,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                       const prompt = e.target.value;
                       if (prompt) setCustomScriptChatInput(prompt);
                     }}
-                    className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-300 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="w-full rounded-md border border-border bg-surface px-2 py-1.5 text-xs text-text disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <option value="">{t('play.animation.customScriptExamplePromptsLabel')}</option>
                     {CUSTOM_SCRIPT_EXAMPLE_PROMPTS.map((ex) => (
@@ -2537,13 +2537,13 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                       e.preventDefault();
                       sendCustomScriptChatMessage();
                     }}
-                    className="flex-1 resize-y rounded-md border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-slate-100"
+                    className="flex-1 resize-y rounded-md border border-border bg-surface px-2 py-2 text-sm text-text"
                   />
                   <button
                     type="button"
                     disabled={disabled || customScriptBusy || !customScriptChatInput.trim()}
                     onClick={sendCustomScriptChatMessage}
-                    className="shrink-0 rounded-md border border-fuchsia-500/50 bg-fuchsia-500/10 px-3 py-1.5 text-sm text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="shrink-0 rounded-md border border-fuchsia-500/50 bg-fuchsia-500/10 px-3 py-1.5 text-sm text-fuchsia-700 dark:text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {customScriptIsBusy
                       ? t('play.animation.customScriptGenerateBusy')
@@ -2557,11 +2557,11 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
       )}
 
       <div className="flex items-center justify-between gap-3">
-        <div className="text-xs text-slate-400">
+        <div className="text-xs text-muted">
           {animationError ? (
-            <span className="text-rose-300">{animationError}</span>
+            <span className="text-rose-700 dark:text-rose-300">{animationError}</span>
           ) : animationMessage ? (
-            <span className="text-slate-300">{animationMessage}</span>
+            <span className="text-text">{animationMessage}</span>
           ) : (
             t('play.animation.videoExportNote')
           )}
@@ -2571,7 +2571,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
             type="button"
             disabled={disabled}
             onClick={() => handlePreviewAnimation()}
-            className="rounded-md border border-slate-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-md border border-border px-3 py-1.5 text-sm text-text hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
           >
             ▶ {t('play.animation.previewFromStart')}
           </button>
@@ -2579,7 +2579,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
             type="button"
             disabled={disabled}
             onClick={() => void handleSaveAnimation()}
-            className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-3 py-1.5 text-sm text-fuchsia-200 hover:bg-fuchsia-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-3 py-1.5 text-sm text-fuchsia-700 dark:text-fuchsia-200 hover:bg-fuchsia-500/25 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {animationBusy ? '…' : t('play.animation.save')}
           </button>

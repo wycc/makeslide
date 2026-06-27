@@ -86,25 +86,25 @@ export function FigureAssetsTab() {
 
   return (
     <>
-      <h2 className="mb-2 text-sm font-semibold text-slate-300">
+      <h2 className="mb-2 text-sm font-semibold text-text">
         📊 {t('play.figures.title')}{t('play.figures.headerPagePrefix')}{pageNumber ?? '-'}{t('play.figures.headerPageSuffix')}
       </h2>
-      <p className="mb-3 text-xs text-slate-400">{t('play.figures.description')}</p>
+      <p className="mb-3 text-xs text-muted">{t('play.figures.description')}</p>
       {loading ? (
-        <p className="text-sm text-slate-400">{t('play.figures.loading')}</p>
+        <p className="text-sm text-muted">{t('play.figures.loading')}</p>
       ) : !figures || figures.length === 0 ? (
         error ? (
-          <p className="text-sm text-rose-300">{error}</p>
+          <p className="text-sm text-rose-700 dark:text-rose-300">{error}</p>
         ) : (
-          <p className="text-sm text-slate-500">{t('play.figures.empty')}</p>
+          <p className="text-sm text-muted">{t('play.figures.empty')}</p>
         )
       ) : (
         <>
-          {error ? <p className="mb-3 text-sm text-rose-300">{error}</p> : null}
+          {error ? <p className="mb-3 text-sm text-rose-700 dark:text-rose-300">{error}</p> : null}
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <button
               type="button"
-              className="rounded border border-sky-700/70 px-2 py-1 text-xs font-medium text-sky-200 transition hover:border-sky-500 hover:bg-sky-950/60 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded border border-sky-300 px-2 py-1 text-xs font-medium text-sky-700 transition hover:border-sky-400 hover:bg-sky-50 dark:border-sky-700/70 dark:text-sky-200 dark:hover:border-sky-500 dark:hover:bg-sky-950/60 disabled:cursor-not-allowed disabled:opacity-50"
               disabled={isReadOnlyProcessing || savingBatch || Boolean(savingId)}
               onClick={() => void saveAllFigures(false)}
             >
@@ -112,7 +112,7 @@ export function FigureAssetsTab() {
             </button>
             <button
               type="button"
-              className="rounded border border-slate-700 px-2 py-1 text-xs font-medium text-slate-300 transition hover:border-slate-500 hover:bg-slate-800/70 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded border border-border px-2 py-1 text-xs font-medium text-text transition hover:border-muted hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50"
               disabled={isReadOnlyProcessing || savingBatch || Boolean(savingId)}
               onClick={() => void saveAllFigures(true)}
             >
@@ -124,24 +124,24 @@ export function FigureAssetsTab() {
               <div
                 key={figure.id}
                 className={`rounded-md border p-2 ${
-                  figure.excluded ? 'border-slate-800 bg-slate-900/30 opacity-60' : 'border-slate-700 bg-slate-900/60'
+                  figure.excluded ? 'border-border bg-surface-muted opacity-60' : 'border-border bg-surface'
                 }`}
               >
                 <img
                   src={withShareToken(figure.image_url) ?? figure.image_url}
                   alt={figure.caption ?? figure.id}
                   onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                  className="mb-2 max-h-40 w-full rounded border border-slate-800 bg-slate-950 object-contain"
+                  className="mb-2 max-h-40 w-full rounded border border-border bg-surface-muted object-contain"
                 />
-                <p className="mb-1 line-clamp-3 text-xs text-slate-300">
+                <p className="mb-1 line-clamp-3 text-xs text-text">
                   {figure.caption ?? figure.context ?? t('play.figures.noCaption')}
                 </p>
                 <div className="mb-2 flex items-center gap-1">
-                  <span className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-400">
+                  <span className="rounded border border-border px-1.5 py-0.5 text-[10px] text-muted">
                     {figure.source === 'vector' ? t('play.figures.sourceVector') : t('play.figures.sourceRaster')}
                   </span>
                 </div>
-                <label className="flex items-center gap-2 text-xs text-slate-400">
+                <label className="flex items-center gap-2 text-xs text-muted">
                   <input
                     type="checkbox"
                     className="h-4 w-4 accent-sky-500"
