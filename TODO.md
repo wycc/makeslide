@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第一七五輪已完成 **54/100**，未達上限。
+- 最新進度：截至第一七六輪已完成 **55/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -34,6 +34,14 @@
   - 資料修復（2026-06-27）：以現行 gpt-5.5 設定，透過真正的持久化路徑 `generateAnimationForPage` 重產第 42、43 頁焦點動畫並寫回 `animation.json` + `pages` 資料表。重產後 distinct xPct 由 1（全 x10）變為 4–5、效果數由 13/6 收斂為 8/5、方框位置貼合實際版面。第 44 頁為 `static-image`、本就無動畫規格（非壞殘留），未變動。
   - 程式碼修復（分支 `fix/autofocus-image-provider-comment`，已 merge）：修正 [animationAutoFocus.ts](backend/src/services/animationAutoFocus.ts) `generateAiFocusEffects` docstring 中**已過時且會誤導排查的註解**——原稱圖片「only actually used when `LLM_PROVIDER=openai`」（因 Gemini 會剝除非文字內容）。此說法已不正確：`buildGeminiContents` 會把 data URL 轉成 `inlineData`、OpenAI 相容 provider（openai/cgu-air/openrouter）直接透傳 `image_url`，故圖片在**所有現行 provider 都會送達模型**；改寫為依實際逐 provider 行為描述，並點明「結果看似純文字（方框機械排成一欄、無視版面）代表模型/閘道未套用 vision，而非本程式碼把圖片丟掉」。僅改註解，後端 `tsc --noEmit` 通過。
   - 本項為使用者回報 bug 修復，**不計入** 100 輪計數。
+
+## 相似頁面 embedding 防護解析（第一七六輪，2026-06-27）
+
+延續無防護 JSON.parse 盤點，發現 `GET …/similar` 對目標與每個候選 embedding 直接 `JSON.parse(...) as number[]`、無防護；候選比對跨整個帳號教材庫，**任一筆** embedding 損壞會 500 整個相似頁面面板（爆炸半徑大）。
+
+- [x] 相似頁面 embedding 解析加防護（一筆損壞不再拖垮整個面板）：新增匯出純函式 `parseEmbedding(raw)`（非法/非陣列/含非有限數字回 `null`），目標損壞→`indexed:false`、候選損壞→跳過。
+  - 修改說明（2026-06-27）：`services/embeddings.ts` 新增 `parseEmbedding`。`similar-pages.ts` 目標向量改用之（損壞回 `{similar:[],indexed:false}`、優雅隱藏區塊）、候選 `.map` 改用之（損壞該筆回 null 後過濾、其餘照常排名）。新增 `parse-embedding.test.ts`（5 組）+ similar-pages 2 整合測試（損壞候選被略過仍 200、損壞目標 indexed:false；以獨立 owner 隔離跨測試教材庫累積）。後端 `tsc --noEmit` 通過；parse-embedding／similar-pages／cosineSimilarity 共 16 測試回歸全通過。分支 `fix/similar-pages-guard-embedding-parse`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 55 個完成項目（55/100，未達上限）。
 
 ## 範本清單 skill_data 防護解析（第一七五輪，2026-06-27）
 
@@ -309,6 +317,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （後端，健壯性修復）相似頁面 embedding 無防護解析致一壞全壞：`GET …/similar` 跨整個帳號教材庫比對，任一筆 embedding 損壞 500 整個面板；新增 `parseEmbedding`（非法/非陣列/含非數字回 null），目標損壞→indexed:false、候選損壞→跳過；補純函式 5 + 整合 2 測試（16 回歸）（計數 55/100） | fix/similar-pages-guard-embedding-parse（已 merge） |
 | 2026-06-27 | （後端，健壯性修復）範本清單 `skill_data` 無防護解析致一壞全壞：`GET /api/templates` 逐列 `rowToTemplate` 的 `JSON.parse(skill_data)` 任一筆損壞會 500 整份清單；抽出 `parseSkillData`（非法/非物件回 {}）改用之、損壞列退化為空；補純函式 + 損壞列整合測試（8/8）（計數 54/100） | fix/templates-guard-skill-data-parse（已 merge） |
 | 2026-06-27 | （後端，去重+健壯性修復）抽出共用 `parsePollOptions`：`page_polls.options_json` 兩處無防護 `JSON.parse(...) as string[]`（投票結果 CSV、投票端點）單筆損壞會 500，統一改用穩健解析（非法/非陣列回 []、過濾非字串）；`rowToPoll` 去重；補 5 測試，poll 路由共 100+ 測試回歸通過（計數 53/100） | refactor/parse-poll-options（已 merge） |
 | 2026-06-27 | （後端，去重）抽出共用 `csvDownloadFilename`：收斂 6 個匯出/報告路由（quiz-results/poll-results/comments/report 學生·逐頁·題目）內聯的「標題優先、否則退回 ID」CSV 檔名邏輯；report 3 處順帶消除重複 `safeDownloadBaseName` 呼叫；補 4 測試，37 測試回歸通過、檔名輸出不變（計數 52/100） | refactor/csv-download-filename（已 merge） |
