@@ -89,6 +89,56 @@ test('GET /api/pdfs/:id/pages/:n/similar — indexed:false when target page has 
   await app.close();
 });
 
+function seedRawEmbedding(pdfId: string, pageUid: string, rawEmbedding: string): void {
+  db.prepare(
+    `INSERT OR REPLACE INTO page_embeddings (id, pdf_id, page_uid, content_hash, embedding, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(`${pdfId}:${pageUid}`, pdfId, pageUid, 'hash', rawEmbedding, new Date().toISOString());
+}
+
+test('GET /api/pdfs/:id/pages/:n/similar — a corrupt candidate embedding is skipped, not 500', async () => {
+  const app = await buildApp();
+  // isolated owner so only this test's pages are candidates (the similar query
+  // ranks across the whole owner corpus, not just the target deck).
+  const owner = `sim-corrupt-owner-${RUN}`;
+  const headers = { cookie: `makeslide_session=${encodeURIComponent(testSessionCookie(owner))}` };
+  const pdfA = `sim-corrupt-a-${RUN}`;
+  const pdfB = `sim-corrupt-b-${RUN}`;
+  seedPdf(pdfA, owner);
+  seedPdf(pdfB, owner);
+  seedPage(pdfA, 1, `ca1-${RUN}`);
+  seedEmbedding(pdfA, `ca1-${RUN}`, [1, 0, 0]); // valid target
+  // one valid similar candidate and one with corrupt embedding json
+  seedPage(pdfB, 1, `cb1-${RUN}`);
+  seedEmbedding(pdfB, `cb1-${RUN}`, [0.9, 0.1, 0]);
+  seedPage(pdfB, 2, `cb2-${RUN}`);
+  seedRawEmbedding(pdfB, `cb2-${RUN}`, '{not valid json');
+
+  const resp = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfA}/pages/1/similar`, headers });
+  assert.equal(resp.statusCode, 200); // corrupt candidate did not break the request
+  const body = resp.json() as { similar: Array<{ pdf_id: string }>; indexed: boolean };
+  assert.equal(body.indexed, true);
+  assert.equal(body.similar.length, 1); // only the valid candidate
+  assert.equal(body.similar[0]?.pdf_id, pdfB);
+  await app.close();
+});
+
+test('GET /api/pdfs/:id/pages/:n/similar — corrupt target embedding reports indexed:false', async () => {
+  const app = await buildApp();
+  const owner = `sim-corrupt-target-owner-${RUN}`;
+  const headers = { cookie: `makeslide_session=${encodeURIComponent(testSessionCookie(owner))}` };
+  const pdf = `sim-corrupt-target-${RUN}`;
+  seedPdf(pdf, owner);
+  seedPage(pdf, 1, `ct1-${RUN}`);
+  seedRawEmbedding(pdf, `ct1-${RUN}`, 'not-json-at-all');
+  const resp = await app.inject({ method: 'GET', url: `/api/pdfs/${pdf}/pages/1/similar`, headers });
+  assert.equal(resp.statusCode, 200);
+  const body = resp.json() as { similar: unknown[]; indexed: boolean };
+  assert.equal(body.indexed, false);
+  assert.equal(body.similar.length, 0);
+  await app.close();
+});
+
 test('GET /api/pdfs/:id/pages/:n/similar — 403 for non-owner', async () => {
   const app = await buildApp();
   const pdf = `sim-c-${RUN}`;

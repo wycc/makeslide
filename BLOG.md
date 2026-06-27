@@ -1,5 +1,26 @@
 # MakeSlide 功能說明
 
+## 相似頁面 embedding 防護解析（一筆損壞不再拖垮整個面板）
+
+### 背景
+
+播放頁的「相似頁面」面板（`GET /api/pdfs/:id/pages/:n/similar`）會把目標頁的語意向量（embedding）拿來和**該使用者整個教材庫**所有已索引頁面的向量逐一比對餘弦相似度。原本程式對目標向量與每個候選向量都直接 `JSON.parse(embedding) as number[]`、**沒有防護**。由於候選比對是跨整個帳號的 `.map`，只要使用者教材庫中**任何一筆** embedding 損壞，整個相似頁面請求就會丟例外 500——爆炸半徑遠大於單份匯出，等於一筆壞資料就讓該功能對該帳號全面失效。
+
+### 變更內容
+
+- 在 `services/embeddings.ts` 新增匯出純函式 `parseEmbedding(raw)`：非合法 JSON、非陣列、或含任何非有限數字一律回 `null`，否則回 `number[]`。
+- `similar-pages.ts` 改用之：
+  - **目標向量**損壞 → 視同「尚未索引」回 `{ similar: [], indexed: false }`，前端優雅隱藏該區塊，而非 500。
+  - **候選向量**損壞 → 該筆跳過（不納入排名），其餘候選照常比對排序。
+
+### 使用方式
+
+純內部健壯性修復，正常資料行為完全不變；差別只在於遇到單筆損壞 embedding 時，相似頁面面板仍能正常運作（略過壞資料）而非整個 500。
+
+### 測試
+
+新增 `parse-embedding.test.ts`（5 組：合法向量、損壞 JSON、非陣列、含非數字、null/undefined 皆回 null）；`similar-pages.test.ts` 新增 2 個整合測試（損壞候選被略過、請求仍 200 並回有效候選；損壞目標回 `indexed:false`），並以獨立 owner 隔離跨測試的教材庫累積。後端 `tsc --noEmit` 通過、parse-embedding／similar-pages／cosineSimilarity 共 16 測試回歸全通過。
+
 ## 範本清單 `skill_data` 防護解析（修一筆損壞 500 整份清單）
 
 ### 背景
