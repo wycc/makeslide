@@ -32,6 +32,7 @@ import { formatAudioDuration } from '../lib/audioDuration';
 import { getReviewItems } from '../lib/reviewList';
 import { roundToTwoDecimals } from '../lib/roundTo';
 import { uploadProgressPercent } from '../lib/uploadProgress';
+import { summarizeHomeStats } from '../lib/homeStats';
 
 const POLL_INTERVAL_ACTIVE_MS = 5000;
 const POLL_INTERVAL_IDLE_MS = 30000;
@@ -343,13 +344,7 @@ export default function HomePage() {
     return { maxPlay, maxPages, maxAudio };
   }, [categoryGroups]);
 
-  const homeStats = useMemo(() => {
-    const totalPdfs = items.length;
-    const totalPages = items.reduce((s, p) => s + (p.page_count ?? 0), 0);
-    const totalPlays = items.reduce((s, p) => s + (p.play_count ?? 0), 0);
-    const totalAudioMin = Math.round(items.reduce((s, p) => s + (p.total_audio_duration_seconds ?? 0), 0) / 60);
-    return { totalPdfs, totalPages, totalPlays, totalAudioMin };
-  }, [items]);
+  const homeStats = useMemo(() => summarizeHomeStats(items), [items]);
 
   const reviewCount = useMemo(() => getReviewItems().length, []);
 

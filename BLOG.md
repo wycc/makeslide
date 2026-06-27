@@ -8464,3 +8464,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **接入**（4 個檔案、5 處）：`UploadButton`、`ImportTextPage`(2 處)、`HomePage`(ZIP 匯入)、`AddPagesFromPromptModal`。為維持行為完全一致，各呼叫端保留自身的外層 fallback 語意——位元組進度點維持 `if (total > 0)` 才更新（分母無效時不動進度），`AddPagesFromPromptModal` 維持 `progress.total > 0 ? ... : null`（分母無效時隱藏百分比）。`HomePage` 的音訊用量比例條（`value / max`）語意不同（非上傳進度），未納入本次收斂。
 - **測試**（`uploadProgress.test.ts`，4 案例）：一般進度四捨五入、分母無效（0／負值／`NaN`）回 0、`loaded > total` 夾在 100、與被取代的舊內聯寫法在分母 > 0 時輸出一致。
 - **驗證**：前端 `tsc --noEmit` 通過；新測試 4/4 通過；全專案已無殘留的上傳進度內聯寫法（測試檔除外）；純前端、不動後端、不需新 i18n。
+
+## 首頁總覽統計彙總純函式（2026-06-27）
+
+### 功能目的
+首頁頂部的總覽列會顯示「簡報數 / 總頁數 / 總播放次數 / 音訊總時長（分鐘）」四個數字。原本這段彙總是 `HomePage` 內聯的計算，對同一份清單跑了三次 `items.reduce(...)`、再把音訊總秒數除以 60 四捨五入，且沒有測試保護。本項把它收斂成單一可測的純函式，改為單次遍歷，並把缺值處理與四捨五入行為固化在測試裡。
+
+### 使用方式
+此為內部重構，首頁顯示的數字與先前完全一致。需要這組統計時，`import { summarizeHomeStats } from '<相對路徑>/lib/homeStats'`，傳入 PDF 清單即可得到 `{ totalPdfs, totalPages, totalPlays, totalAudioMin }`。
+
+### 技術細節
+- **純函式模組**（`frontend/src/lib/homeStats.ts`）：`summarizeHomeStats(items)` 以單次 `for...of` 累加總頁數、總播放次數與音訊總秒數，最後 `Math.round(totalAudioSec / 60)` 得到總分鐘數；各欄位缺值（`null`/`undefined`）一律以 0 計入，與原內聯 `?? 0` 行為一致。輸入採 `Pick<PdfListItem, 'page_count' | 'play_count' | 'total_audio_duration_seconds'>` 的結構型別，降低與完整型別的耦合、方便測試。匯出 `HomeStats` 介面。
+- **接入**：`HomePage` 的 `homeStats` useMemo 由原本內聯三次 reduce 改為 `summarizeHomeStats(items)`，相依陣列不變（`[items]`）。
+- **測試**（`homeStats.test.ts`，4 案例）：空清單回傳全 0、正常彙總（含 3.5 分鐘四捨五入為 4）、缺值欄位以 0 計入、與被取代的舊 reduce 寫法對多筆資料輸出一致。
+- **驗證**：前端 `tsc --noEmit` 通過；新測試 4/4 通過；純前端、不動後端、不需新 i18n。
