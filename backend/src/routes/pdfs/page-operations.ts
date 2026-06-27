@@ -734,17 +734,32 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         }
       }
 
+      // The base image is the slide's existing render used as the edit source. It can be
+      // legitimately missing — e.g. a half-failed add-pages insert leaves the page row with
+      // image_path set but no file on disk. Rather than failing with ENOENT, fall back to
+      // generating the image from scratch (edit conditioned on figure references when any
+      // exist, otherwise a pure text->image generation).
       const currentImagePath = pageRow.image_path
         ? safeJoinPdfPath(id, pageRow.image_path)
         : pageImagePath(id, pageRow.page_uid);
-      const currentImageBuffer = await fs.promises.readFile(currentImagePath);
-      const currentImageForEdit = await toFile(currentImageBuffer, `page-${n}.jpg`, { type: 'image/jpeg' });
+      let currentImageForEdit: Awaited<ReturnType<typeof toFile>> | null = null;
+      try {
+        const currentImageBuffer = await fs.promises.readFile(currentImagePath);
+        currentImageForEdit = await toFile(currentImageBuffer, `page-${n}.jpg`, { type: 'image/jpeg' });
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+        request.log.warn(
+          { pdfId: id, pageNumber: n, imagePath: currentImagePath },
+          'regenerate-image: base image missing, generating from scratch instead of editing',
+        );
+      }
 
       const figureExcludeIds = new Set(loadFigureSelection(id, pageRow.page_uid).excluded);
       const rawFigureRefs = getFigureReferencesForPage(id, n, undefined, figureExcludeIds);
       const { figures: figureRefs, files: figureRefFiles } = await loadFigureReferenceFiles(id, rawFigureRefs);
-      const editImage: Parameters<typeof client.images.edit>[0]['image'] =
-        figureRefFiles.length > 0 ? [currentImageForEdit, ...figureRefFiles] : currentImageForEdit;
+      const editInputs: Array<Awaited<ReturnType<typeof toFile>>> = [];
+      if (currentImageForEdit) editInputs.push(currentImageForEdit);
+      editInputs.push(...figureRefFiles);
 
       const basePrompt = buildImagePrompt({
         stylePrompt: IMAGE_PROMPT_TEMPLATES[0]?.prompt_en,
@@ -762,15 +777,27 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         { base_prompt: basePrompt },
       );
 
-      const edited = await client.images.edit(
-        {
-          model: config.openaiImageModel,
-          image: editImage,
-          prompt: editPrompt,
-          size: '1536x1024',
-        },
-        { timeout: imageEditTimeoutMs() },
-      );
+      const edited =
+        editInputs.length > 0
+          ? await client.images.edit(
+              {
+                model: config.openaiImageModel,
+                image: editInputs.length === 1 ? editInputs[0]! : editInputs,
+                // With a real base image use the "edit this slide" template; with only figure
+                // references (no base) that base-oriented template doesn't apply.
+                prompt: currentImageForEdit ? editPrompt : basePrompt,
+                size: '1536x1024',
+              },
+              { timeout: imageEditTimeoutMs() },
+            )
+          : await client.images.generate(
+              {
+                model: config.openaiImageModel,
+                prompt: basePrompt,
+                size: '1536x1024',
+              } as never,
+              { timeout: imageEditTimeoutMs() },
+            );
       const b64 = edited.data?.[0]?.b64_json;
       if (!b64) throw new Error('OpenAI image edit returned empty result');
       const newBuf = Buffer.from(b64, 'base64');

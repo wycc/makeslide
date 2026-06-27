@@ -25,7 +25,9 @@
 
 ### 後續可執行項目（本輪盤點新增）
 
-- [ ] **單頁 `regenerate-image` 對「無底圖」頁面退而用文字→圖生成**：`POST /api/pdfs/:id/pages/:n/regenerate-image`（[page-operations.ts](backend/src/routes/pdfs/page-operations.ts)）一律以 `client.images.edit` 拿現有圖當基底；像 `Uhga6bY0Bm` 第 43/44 頁這種失敗後沒有底圖（`image_path` 為 null）的頁面會在讀檔時丟錯、無法於 UI 重產。應在無底圖時改走 add-pages 用的「文字→圖」生成路徑（`renderTextPagesWithLlm` 或 `images.generate`），讓任何 failed/部分完成頁都恆可修復。需實機 LLM 影像測試（sandbox 無法驗證影像生成），列為後續項目。
+- [x] **`regenerate-image` 對「無底圖」頁面退而用文字→圖生成**：原本單頁 `POST /api/pdfs/:id/pages/:n/regenerate-image`（[page-operations.ts](backend/src/routes/pdfs/page-operations.ts)）與「重生」批次 job 的圖檔步驟（[regenerate.ts](backend/src/worker/regenerate.ts)）都一律以 `client.images.edit` 拿現有圖當基底；像 `Uhga6bY0Bm` 第 42/43/44 頁這種失敗後底圖檔不存在的頁面，會在讀檔時 `ENOENT` 整個任務失敗、無法於 UI 重產（使用者實際遇到）。
+  - 修改說明（2026-06-27）：兩處都改為「底圖檔缺失時不丟錯、改走文字→圖生成」——讀底圖以 `try/catch` 包覆（僅吞 `ENOENT`、其餘照拋並記 warn）；有 figure 參考圖則 `images.edit`（以參考圖為輸入、用 base prompt）、否則純 `images.generate`，比照初次產圖 `renderTextPagesWithLlm` 的選擇邏輯；有真底圖時行為完全不變（仍用 edit + edit 模板）。新增 `regenerate-image-missing-base.test.ts`（單頁路由 + 重生 job 各驗證缺底圖時呼叫 generate 而非 edit、且 job 完成並寫出新圖）。後端 typecheck 通過，新測試 2/2 + figure-reference/image-edit-timeout 回歸通過。分支 `fix/regenerate-image-missing-base`。
+  - 本項為使用者回報 bug 修復，**不計入** 100 輪計數。
 
 ## 品質檢查回應新增摘要計數（第一七一輪，2026-06-27）
 
@@ -268,6 +270,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （使用者回報 bug，不計數）重生圖片時原圖不存在也要能進行：單頁 `regenerate-image` 與「重生」批次 job 的圖檔步驟原本一律 `images.edit` 讀現有圖當基底，缺檔（如 Uhga6bY0Bm 42/43/44）會 ENOENT 整個失敗。兩處改為缺底圖時退回文字→圖：try/catch 只吞 ENOENT、有 figure 則 edit 否則 `images.generate`，有真底圖行為不變。新增 `regenerate-image-missing-base.test.ts`（2 測試），typecheck + figure-reference/image-edit-timeout 回歸通過 | fix/regenerate-image-missing-base |
 | 2026-06-27 | （使用者回報 bug，不計數）add-pages 失敗讓 DB↔metadata 分歧、簡報像整份壞掉：`runAddPagesJob` 先位移頁碼/+page_count/插新頁但僅成功時重寫 metadata.json → 失敗留下位移後 DB 與舊 metadata 不一致。抽出 `rebuildAddPagesMetadataFromDb` 並在成功/失敗/取消三路徑都呼叫；新增 2 測試，typecheck + orphan-recovery 5 回歸通過。另實例修復 `Uhga6bY0Bm`：依裁示「保留 3 頁並重新產生」把 metadata 重建為與 DB 一致的 86 頁（原 83 頁時間戳保留）。盤點新增後續項目「regenerate-image 無底圖退化生成」 | fix/add-pages-failure-metadata-consistency（已 merge） |
 | 2026-06-27 | （§7.2 後端子項）品質檢查回應新增 `summary` 摘要（pagesChecked/pagesWithIssues/totalIssues）：新增純函式 `summarizeQualityResults`、前端型別同步；補單元測試 + 整合測試斷言，quality-check 5/5、前後端 typecheck 通過（計數 50/100） | feat/quality-check-summary（已 merge） |
 | 2026-06-27 | （§8.1.4 純前端）全域搜尋選取模式新增「加入複習清單」批次動作：新增純函式 `searchResultsToReviewItems`（過濾無頁碼、snippet→questionText），`GlobalSearchBox` 加按鈕呼叫 `addReviewItems`；新增 i18n 鍵與 3 測試，前端 typecheck + i18n + GlobalSearchBox 回歸通過（計數 49/100） | feat/search-add-to-review-list（已 merge） |
