@@ -3,7 +3,7 @@ import { canReadPdf } from './permissions';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
-import { decodeSession, parseCookies } from '../auth';
+import { sessionSub } from '../auth';
 import type { PdfRow } from '../../types';
 import { pageAnimationSpecPath, pageImagePath, safeJoinPdfPath } from '../../services/storage';
 import {
@@ -59,11 +59,6 @@ function getAnimationPageRow(id: string, n: number): AnimationPageRow | undefine
   return db
     .prepare(`SELECT page_uid, render_type, animation_spec_path, text_path, image_path FROM pages WHERE pdf_id = ? AND page_number = ?`)
     .get(id, n) as AnimationPageRow | undefined;
-}
-
-function sessionSub(request: FastifyRequest): string | null {
-  const session = decodeSession(parseCookies(request).makeslide_session);
-  return session?.sub ?? null;
 }
 
 function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {

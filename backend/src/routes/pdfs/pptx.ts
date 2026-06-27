@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { canReadPdf } from './permissions';
 import path from 'node:path';
 import fs from 'node:fs/promises';
@@ -10,13 +10,8 @@ const PptxGenJS = require('pptxgenjs') as new () => any;
 import { db } from '../../db';
 import type { PageRow, PdfRow } from '../../types';
 import { safeJoinPdfPath } from '../../services/storage';
-import { decodeSession, parseCookies } from '../auth';
+import { sessionSub } from '../auth';
 import { errorResponse, IdParamSchema } from './shared';
-
-function sessionSub(request: FastifyRequest): string | null {
-  const session = decodeSession(parseCookies(request).makeslide_session);
-  return session?.sub ?? null;
-}
 
 function safeFilename(input: string): string {
   const name = input.trim().replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');

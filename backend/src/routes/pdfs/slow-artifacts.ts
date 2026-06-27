@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { canReadPdf } from './permissions';
 import { z } from 'zod';
 import { db } from '../../db';
-import { decodeSession, parseCookies } from '../auth';
+import { sessionSub } from '../auth';
 import type { PageArtifact, PdfRow, SlowArtifactSummary, TimingEventStatus, TimingSlaStatus } from '../../types';
 import { IdParamSchema, errorResponse } from './shared';
 
@@ -16,11 +16,6 @@ const SlowArtifactsQuerySchema = z.object({
 const ShareTokenParamSchema = z.object({
   token: z.string().regex(/^[A-Za-z0-9_-]{12,128}$/, 'Invalid share token'),
 });
-
-function sessionSub(request: FastifyRequest): string | null {
-  const session = decodeSession(parseCookies(request).makeslide_session);
-  return session?.sub ?? null;
-}
 
 function getShareToken(request: FastifyRequest): string | null {
   const rawHeader = request.headers['x-makeslide-share-token'];

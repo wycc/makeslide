@@ -8673,3 +8673,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **結論**：這是測試 bug，不是端點 bug。
 - **修正**：把 copy-to 測試裡 3 個無 body 的請求（201／403／404 三個情境）改成只帶 `cookie` 的 headers（移除 content-type），與前端實際呼叫方式一致，並加註解說明原因。
 - **驗證**：`quizzes.test.ts` 由 23/24 變為 24/24 通過（以 `scripts/run-tests.sh backend` 執行）。未動產品碼。
+
+## 抽出共用 sessionSub 工具（40 檔去重）（2026-06-27）
+
+### 功能目的
+`sessionSub(request)`——從 session cookie 解出登入帳號的 sub（沒有有效 session 時回 null）——原本在 **40 個** PDF 路由檔裡逐字重複定義（38 個叫 `sessionSub`、2 個叫 `sessionSubFromRequest` 但實作相同）。這是繼上一輪 `canReadPdf` 之後另一處大規模複製。本項把同名的 38 份收斂成單一共用函式。
+
+### 使用方式
+此為後端內部重構，所有路由解析登入身分的行為不變。需要取得目前登入者的 sub 時，`import { sessionSub } from '../auth'`，呼叫 `sessionSub(request)`。
+
+### 技術細節
+- **共用函式**（`backend/src/routes/auth.ts`）：新增 `export function sessionSub(request)`，內部沿用同模組的 `decodeSession` 與 `parseCookies`，與原本 40 份複製的行為完全一致。
+- **接入**：以腳本移除 38 個檔案的本地 `sessionSub` 定義，改從 `../auth` import。其中 `admin.ts` 原本就從 `../auth` 匯入 `SESSION_COOKIE`/`clearCookie`，合併保留。移除後有 26 個檔案的 `FastifyRequest` 型別 import 變成未使用，一併從 `import type { FastifyInstance, FastifyRequest } from 'fastify'` 清掉 `FastifyRequest`。2 個命名不同的 `sessionSubFromRequest` 暫不更動（已列入 TODO 後續收斂）。
+- **測試**：新增 `session-sub.test.ts`（4 案例：無 cookie → null、竄改的 token → null、有效 session → sub、無關 cookie → null）。
+- **驗證**：backend `tsc --noEmit` 通過；殘留本地定義 0；抽查約 14 個路由測試檔回歸（含 detail-permission 92、quizzes 24）全數通過。以 `scripts/run-tests.sh backend` 執行。

@@ -93,6 +93,15 @@ export function parseCookies(request: FastifyRequest): Record<string, string> {
   );
 }
 
+/**
+ * Decode the session cookie and return the account sub, or null when there is
+ * no valid session. Previously duplicated verbatim in ~40 PDF route files.
+ */
+export function sessionSub(request: FastifyRequest): string | null {
+  const session = decodeSession(parseCookies(request).makeslide_session);
+  return session?.sub ?? null;
+}
+
 /** Production always runs behind TLS (see Dockerfile); dev/test typically runs on plain http://localhost where Secure would break login. */
 function secureCookieSuffix(): string {
   return process.env.NODE_ENV === 'production' ? '; Secure' : '';

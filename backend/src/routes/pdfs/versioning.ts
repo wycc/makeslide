@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { canReadPdf } from './permissions';
 import { z } from 'zod';
 import { db } from '../../db';
-import { decodeSession, parseCookies } from '../auth';
+import { sessionSub } from '../auth';
 import type { PdfRow } from '../../types';
 import { safeJoinPdfPath } from '../../services/storage';
 import {
@@ -25,11 +25,6 @@ function getPageArtifactPaths(
     .get(pdfId, pageNumber) as
     | { page_uid: string; image_path: string | null; script_path: string | null }
     | undefined;
-}
-
-function sessionSub(request: FastifyRequest): string | null {
-  const session = decodeSession(parseCookies(request).makeslide_session);
-  return session?.sub ?? null;
 }
 
 function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {

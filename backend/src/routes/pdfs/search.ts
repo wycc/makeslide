@@ -1,11 +1,11 @@
 import fs from 'node:fs';
 import { canReadPdf } from './permissions';
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
 import { pageTextPath, pageScriptPath } from '../../services/storage';
 import { extractSnippet } from './searchSnippet';
-import { decodeSession, parseCookies } from '../auth';
+import { sessionSub } from '../auth';
 import type { PdfRow } from '../../types';
 import { getOrCreateEmbeddings, embedQuery, cosineSimilarity } from '../../services/embeddings';
 import { logger } from '../../logger';
@@ -36,11 +36,6 @@ interface SearchPageRow {
   page_uid: string;
   text_path: string | null;
   script_path: string | null;
-}
-
-function sessionSub(request: FastifyRequest): string | null {
-  const session = decodeSession(parseCookies(request).makeslide_session);
-  return session?.sub ?? null;
 }
 
 
