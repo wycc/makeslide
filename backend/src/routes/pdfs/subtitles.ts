@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { canReadPdf } from './permissions';
 import fs from 'node:fs';
 import { db } from '../../db';
@@ -7,7 +7,7 @@ import {
   pageScriptPath,
   pageTimelinePath,
 } from '../../services/storage';
-import { decodeSession, parseCookies } from '../auth';
+import { sessionSub } from '../auth';
 import { IdParamSchema, errorResponse } from './shared';
 import {
   splitScriptIntoSentences,
@@ -19,11 +19,6 @@ interface PageRecord {
   page_uid: string;
   page_number: number;
   audio_duration_seconds: number | null;
-}
-
-function sessionSubFromRequest(request: FastifyRequest): string | null {
-  const session = decodeSession(parseCookies(request).makeslide_session);
-  return session?.sub ?? null;
 }
 
 /**
@@ -196,7 +191,7 @@ export async function registerSubtitleRoutes(app: FastifyInstance): Promise<void
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
     }
 
-    const sub = sessionSubFromRequest(request);
+    const sub = sessionSub(request);
     if (!canReadPdf(sub, row)) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報'));
     }
@@ -233,7 +228,7 @@ export async function registerSubtitleRoutes(app: FastifyInstance): Promise<void
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
     }
 
-    const sub = sessionSubFromRequest(request);
+    const sub = sessionSub(request);
     if (!canReadPdf(sub, row)) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報'));
     }
@@ -270,7 +265,7 @@ export async function registerSubtitleRoutes(app: FastifyInstance): Promise<void
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
     }
 
-    const sub = sessionSubFromRequest(request);
+    const sub = sessionSub(request);
     if (!canReadPdf(sub, row)) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報'));
     }

@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { canReadPdf } from './permissions';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -7,7 +7,7 @@ import { spawn } from 'node:child_process';
 import { db } from '../../db';
 import type { PdfRow, PdfSourceItem } from '../../types';
 import { pdfDir } from '../../services/storage';
-import { decodeSession, parseCookies } from '../auth';
+import { sessionSub } from '../auth';
 import { IdParamSchema, errorResponse } from './shared';
 
 /**
@@ -36,11 +36,6 @@ export function loadExportedSources(pdfId: string): ExportedPdfSource[] {
     )
     .all(pdfId) as ExportedPdfSource[];
   return rows;
-}
-
-function sessionSubFromRequest(request: FastifyRequest): string | null {
-  const session = decodeSession(parseCookies(request).makeslide_session);
-  return session?.sub ?? null;
 }
 
 const ZIP_EXPORT_TIMEOUT_MS = 2 * 60_000;
@@ -152,7 +147,7 @@ export async function registerExportRoutes(app: FastifyInstance): Promise<void> 
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
     }
 
-    const sub = sessionSubFromRequest(request);
+    const sub = sessionSub(request);
     if (!canReadPdf(sub, row)) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報'));
     }
