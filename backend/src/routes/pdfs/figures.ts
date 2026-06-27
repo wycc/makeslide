@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { canReadPdf } from './permissions';
+import { canReadPdf, canEditPdf } from './permissions';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
@@ -19,12 +19,6 @@ import { IdParamSchema, PageParamSchema, errorResponse, nowIso, streamFile } fro
 const ShareTokenParamSchema = z.object({
   token: z.string().regex(/^[A-Za-z0-9_-]{12,128}$/, 'Invalid share token'),
 });
-
-function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
-  if (!row.owner_sub) return true;
-  if (sub && row.owner_sub === sub) return true;
-  return row.visibility === 'public_editable';
-}
 
 function getShareToken(request: FastifyRequest): string | null {
   const rawHeader = request.headers['x-makeslide-share-token'];

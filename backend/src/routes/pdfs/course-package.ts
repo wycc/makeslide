@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import { canEditPdf } from './permissions';
 import { createRequire } from 'node:module';
 import type { FastifyInstance } from 'fastify';
 import { db } from '../../db';
@@ -13,12 +14,6 @@ import { z } from 'zod';
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any
 const JSZip = require('jszip') as new () => any;
-
-function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
-  if (!row.owner_sub) return true;
-  if (sub && row.owner_sub === sub) return true;
-  return row.visibility === 'public_editable';
-}
 
 interface PageRow {
   page_number: number;

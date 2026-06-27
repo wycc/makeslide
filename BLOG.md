@@ -8699,3 +8699,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 ### 技術細節
 - **接入**：移除 `export.ts`、`subtitles.ts` 的本地 `sessionSubFromRequest` 定義，4 處呼叫改為共用的 `sessionSub(request)`（`import { sessionSub } from '../auth'`），並清掉因此不再使用的 `decodeSession`/`parseCookies`/`FastifyRequest` import。
 - **驗證**：backend `tsc --noEmit` 通過；`subtitles`、`export-import-zip-sources`、`batch-export`、`export-zip-cjk-filename` 共 10/10 回歸通過；全 repo 已無 `sessionSubFromRequest`。以 `scripts/run-tests.sh backend` 執行。
+
+## 抽出共用 canEditPdf 權限函式（21 檔去重）（2026-06-27）
+
+### 功能目的
+判斷「某使用者能否編輯某份簡報」的標準 `canEditPdf(sub, row)`（owner 或 public_editable 可編輯）原本在 21 個內容編輯路由檔逐字重複。繼 `canReadPdf` 之後把它也收斂到 `permissions.ts`。**重要例外**：刪除整份簡報的 `delete.ts` 刻意使用更嚴格的版本（額外要求 `Boolean(sub)`，即必須登入才行，避免匿名請求靠 public_editable 連結就刪掉整份簡報），因此不套用共用版本。
+
+### 使用方式
+此為後端內部重構，所有內容編輯路由的權限判斷不變。需要判斷編輯權限時，`import { canEditPdf } from './permissions'`。
+
+### 技術細節
+- **共用函式**（`backend/src/routes/pdfs/permissions.ts`）：新增 `canEditPdf(sub, row)`——ownerless 可編輯、owner 可編輯、其餘僅 `public_editable`。函式註解標明 delete.ts 的嚴格例外。
+- **接入**：以腳本移除 21 個檔案的標準本地定義並合併 import（已有 `canReadPdf` 來自 `./permissions` 的 12 檔改成 `{ canReadPdf, canEditPdf }`，其餘 9 檔新增 import）。`delete.ts` 的嚴格版維持不動。
+- **測試**：`permissions.test.ts` 新增 `canEditPdf` 案例（ownerless/owner/public_editable 可編輯、public 與 private 非 owner 不可編輯、public_editable 連匿名也可編輯——與唯讀權限不同）。
+- **驗證**：backend `tsc --noEmit` 通過；標準本地定義 0（僅 permissions.ts 與 delete.ts 定義 canEditPdf）；抽查約 12 個路由測試檔回歸（含 detail-permission 92、quizzes 24）全通過。注意 `page-animation` 有 1 個與此無關的既有失敗（shape kind 驗證），已比對 master 確認並列入 TODO。以 `scripts/run-tests.sh backend` 執行。

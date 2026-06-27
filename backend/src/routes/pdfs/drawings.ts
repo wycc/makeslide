@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { canReadPdf } from './permissions';
+import { canReadPdf, canEditPdf } from './permissions';
 import { z } from 'zod';
 import { db } from '../../db';
 import { sessionSub } from '../auth';
@@ -13,12 +13,6 @@ const SaveDrawingBodySchema = z.object({
 const ShareTokenParamSchema = z.object({
   token: z.string().regex(/^[A-Za-z0-9_-]{12,128}$/, 'Invalid share token'),
 });
-
-function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
-  if (!row.owner_sub) return true;
-  if (sub && row.owner_sub === sub) return true;
-  return row.visibility === 'public_editable';
-}
 
 // Stricter variant for this file's one destructive/irreversible route (deleting the whole
 // drawing for a page). Reuses canEditPdf()'s owner/public_editable logic but additionally

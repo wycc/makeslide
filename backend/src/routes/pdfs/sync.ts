@@ -1,16 +1,11 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { canEditPdf } from './permissions';
 import { z } from 'zod';
 import { db } from '../../db';
 import { sessionSub } from '../auth';
 import type { PdfRow } from '../../types';
 import { errorResponse, IdParamSchema, nowIso } from './shared';
 import { callChatJSON } from '../../services/openai';
-
-function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
-  if (!row.owner_sub) return true;
-  if (sub && row.owner_sub === sub) return true;
-  return row.visibility === 'public_editable';
-}
 
 type SyncRole = 'master' | 'follower';
 

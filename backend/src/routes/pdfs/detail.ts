@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { canReadPdf } from './permissions';
+import { canReadPdf, canEditPdf } from './permissions';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -84,12 +84,6 @@ const VoicePollSchema = z.object({
 function hasOwnerOrLegacyAccess(sub: string | null, row: Pick<PdfRow, 'owner_sub'>): boolean {
   if (!row.owner_sub) return true;
   return Boolean(sub && row.owner_sub === sub);
-}
-
-function canEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_sub' | 'visibility'>): boolean {
-  if (!row.owner_sub) return true;
-  if (sub && row.owner_sub === sub) return true;
-  return row.visibility === 'public_editable';
 }
 
 // Stricter variant for this file's destructive/irreversible poll routes: deleting a poll outright,

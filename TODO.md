@@ -13,6 +13,13 @@
 - [ ] 系統性採用 `mapApiErrorToHumanMessage`：目前約 55 處 catch 區塊直接 `setError(err.message)` 顯示後端原始 message、繞過既有的錯誤訊息映射（前端僅 2 處 `UploadButton`、`ImportTextPage` 使用 mapper）。全面改造屬較大工程，且各 catch 上下文不同、許多後端 message 已是中文（未必都是英文洩漏），逐點需產品判斷顯示風格，故列為待使用者決定。
 - [ ] 把前端測試納入 root `npm test`：目前 root 測試腳本未涵蓋前端 `node:test` 測試。納入涉及 CI 行為變更與 `npm install`（sandbox 無法驗證），列為待使用者決定。
 
+## 後端去重 canEditPdf（第一四八輪，2026-06-27）
+
+- [x] 抽出共用 `canEditPdf` 權限函式（去重 / 可測）：標準 `canEditPdf`（owner / public_editable）在 21 個路由檔逐字重複。抽成共用並補測試；**delete.ts 的版本刻意更嚴格**（`Boolean(sub) && public_editable`，禁止匿名刪除），不替換。
+  - 修改說明（2026-06-27）：在 `permissions.ts` 新增 `canEditPdf`（標準版，含註解說明 delete.ts 例外）。以腳本移除 21 檔標準本地定義並合併 import（已有 `import { canReadPdf } from './permissions'` 的 12 檔改為 `{ canReadPdf, canEditPdf }`、其餘 9 檔新增 import）。delete.ts 的嚴格版維持不動。新增 `permissions.test.ts` 的 canEditPdf 測試（見下）。修正腳本誤把 permissions.ts 自身納入而加的自我 import。backend `tsc --noEmit` 通過；抽查約 12 個路由測試檔回歸全通過（quizzes 24、drawings、page-comments、detail-permission 92、figures-polls-permission、add-pages…）；標準本地定義 0。分支 `refactor/shared-can-edit-pdf`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 28 個完成項目（28/100，未達上限）。
+- [ ] （既有失敗，待修）`page-animation.test.ts` 1/123 失敗：`validateAnimationSpec rejects a shape effect with an invalid shape kind`。在 master 即失敗、與權限重構無關。待查 `validateAnimationSpec` 對 shape kind 的驗證。
+
 ## 後端大量去重 sessionSub（第一四六輪，2026-06-27）
 
 - [x] 抽出共用 `sessionSub` 工具（大量去重 / 可測）：`sessionSub(request)`（解 session cookie 取 account sub）在 **40 個** PDF 路由檔逐字重複定義（38 同名 + 2 個 `sessionSubFromRequest` 同 body）。抽成共用並補測試。
@@ -108,6 +115,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （後端，去重）抽出共用 `canEditPdf` 至 permissions.ts：21 檔標準定義收斂、合併 import；delete.ts 嚴格版保留；補測試；typecheck 通過、12 路由測試回歸通過；另記 1 個既有失敗（page-animation shape kind）（計數 28/100） | refactor/shared-can-edit-pdf（已 merge） |
 | 2026-06-27 | （後端）收斂 2 個 `sessionSubFromRequest`（export/subtitles）改用共用 `sessionSub`，清理未用 import；10 測試回歸通過；全 repo 無殘留（計數 27/100） | refactor/collapse-session-sub-from-request（已 merge） |
 | 2026-06-27 | （後端，大量去重）抽出共用 `sessionSub` 至 auth.ts：移除 38 檔逐字重複定義 + 清理 26 檔未使用 FastifyRequest import；補 4 測試；typecheck 通過、14 路由測試回歸通過（計數 26/100） | refactor/shared-session-sub（已 merge） |
 | 2026-06-27 | （修既有失敗）`quizzes.test.ts` copy-to：診斷確認端點正常回 201，400 是測試送 `content-type: application/json` 卻無 body 觸發 Fastify body parser；改 3 請求為只帶 cookie；24/24 通過（計數 25/100） | fix/quizzes-copyto-test-headers（已 merge） |
