@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第一七四輪已完成 **53/100**，未達上限。
+- 最新進度：截至第一七五輪已完成 **54/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -34,6 +34,14 @@
   - 資料修復（2026-06-27）：以現行 gpt-5.5 設定，透過真正的持久化路徑 `generateAnimationForPage` 重產第 42、43 頁焦點動畫並寫回 `animation.json` + `pages` 資料表。重產後 distinct xPct 由 1（全 x10）變為 4–5、效果數由 13/6 收斂為 8/5、方框位置貼合實際版面。第 44 頁為 `static-image`、本就無動畫規格（非壞殘留），未變動。
   - 程式碼修復（分支 `fix/autofocus-image-provider-comment`，已 merge）：修正 [animationAutoFocus.ts](backend/src/services/animationAutoFocus.ts) `generateAiFocusEffects` docstring 中**已過時且會誤導排查的註解**——原稱圖片「only actually used when `LLM_PROVIDER=openai`」（因 Gemini 會剝除非文字內容）。此說法已不正確：`buildGeminiContents` 會把 data URL 轉成 `inlineData`、OpenAI 相容 provider（openai/cgu-air/openrouter）直接透傳 `image_url`，故圖片在**所有現行 provider 都會送達模型**；改寫為依實際逐 provider 行為描述，並點明「結果看似純文字（方框機械排成一欄、無視版面）代表模型/閘道未套用 vision，而非本程式碼把圖片丟掉」。僅改註解，後端 `tsc --noEmit` 通過。
   - 本項為使用者回報 bug 修復，**不計入** 100 輪計數。
+
+## 範本清單 skill_data 防護解析（第一七五輪，2026-06-27）
+
+延續無防護 JSON.parse 盤點，發現 `GET /api/templates` 逐列 `rowToTemplate` 中 `JSON.parse(row.skill_data) as Record<...>` 無防護——**任一筆**範本 skill_data 損壞會 500 整份公開範本清單（一壞全壞）。
+
+- [x] 範本 `skill_data` 解析加防護（修一筆損壞 500 整份清單）：新增匯出純函式 `parseSkillData(raw)`（非法 JSON／非物件回 `{}`），`rowToTemplate` 改用之，損壞範本退化為空 skill_data 而非整份 500。
+  - 修改說明（2026-06-27）：`templates.ts` 新增 `parseSkillData`（try/catch + 型別檢查：非物件/陣列/null 回 `{}`）。新增 2 測試：純函式各種輸入降級、以及整合測試（直接插入非法 JSON skill_data 列後 GET 仍回 200、該列仍在清單且 skill_data 為 `{}`）。後端 `tsc --noEmit` 通過、templates 8/8 通過。分支 `fix/templates-guard-skill-data-parse`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 54 個完成項目（54/100，未達上限）。
 
 ## 投票選項 JSON 防護解析收斂（第一七四輪，2026-06-27）
 
@@ -301,6 +309,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （後端，健壯性修復）範本清單 `skill_data` 無防護解析致一壞全壞：`GET /api/templates` 逐列 `rowToTemplate` 的 `JSON.parse(skill_data)` 任一筆損壞會 500 整份清單；抽出 `parseSkillData`（非法/非物件回 {}）改用之、損壞列退化為空；補純函式 + 損壞列整合測試（8/8）（計數 54/100） | fix/templates-guard-skill-data-parse（已 merge） |
 | 2026-06-27 | （後端，去重+健壯性修復）抽出共用 `parsePollOptions`：`page_polls.options_json` 兩處無防護 `JSON.parse(...) as string[]`（投票結果 CSV、投票端點）單筆損壞會 500，統一改用穩健解析（非法/非陣列回 []、過濾非字串）；`rowToPoll` 去重；補 5 測試，poll 路由共 100+ 測試回歸通過（計數 53/100） | refactor/parse-poll-options（已 merge） |
 | 2026-06-27 | （後端，去重）抽出共用 `csvDownloadFilename`：收斂 6 個匯出/報告路由（quiz-results/poll-results/comments/report 學生·逐頁·題目）內聯的「標題優先、否則退回 ID」CSV 檔名邏輯；report 3 處順帶消除重複 `safeDownloadBaseName` 呼叫；補 4 測試，37 測試回歸通過、檔名輸出不變（計數 52/100） | refactor/csv-download-filename（已 merge） |
 | 2026-06-27 | （§7.1 後端聚合子項）課後報告摘要「最難題目」排序抽出為純函式：`reportMetrics.ts` 新增 `selectHardestQuestions`（過濾未作答→正確率升冪、並列以答錯數多者優先→取前 5→補 wrong_rate），`report/summary` 改用之（行為等價、API 不變）；補 4 測試，report-metrics/report-question-stats/report-summary 共 21 測試回歸通過（計數 51/100） | refactor/select-hardest-questions（已 merge） |
