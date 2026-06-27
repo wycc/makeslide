@@ -13,6 +13,16 @@
 - [ ] 系統性採用 `mapApiErrorToHumanMessage`：目前約 55 處 catch 區塊直接 `setError(err.message)` 顯示後端原始 message、繞過既有的錯誤訊息映射（前端僅 2 處 `UploadButton`、`ImportTextPage` 使用 mapper）。全面改造屬較大工程，且各 catch 上下文不同、許多後端 message 已是中文（未必都是英文洩漏），逐點需產品判斷顯示風格，故列為待使用者決定。
 - [ ] 把前端測試納入 root `npm test`：目前 root 測試腳本未涵蓋前端 `node:test` 測試。納入涉及 CI 行為變更與 `npm install`（sandbox 無法驗證），列為待使用者決定。
 
+## 完整後端測試套件基線 + 既有失敗盤點（第一五四輪，2026-06-27）
+
+本輪以 `scripts/run-tests.sh backend` 跑完整後端套件：**1199 測試，18 失敗**。經抽查與在去重前 commit（`e0d9db8`）比對，**18 個全為既有失敗、與近期去重無關**。逐一分類並修復其一：
+
+- [x] 修 `input-security.test.ts`（4 失敗）：4 個 upload/youtube 驗證測試全回 **401**（未授權）——測試未呼叫 `setSystemAuthSettings({ googleAuthEnabled: false })`，請求在到達驗證邏輯前就被 auth 擋下（驗證邏輯本身正常）。確認無任何測試把 `googleAuthEnabled` 設 true（無全域順序衝突），於檔頭加上該設定。`input-security.test.ts` 4/4 通過。純測試修正。分支 `fix/input-security-test-auth`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 34 個完成項目（34/100，未達上限）。
+- [ ] （既有失敗，待判斷）`pages-api.test.ts`（7 失敗）+ page-operations 邊界（1）：測試預期頁面素材路徑為連號 `pages/002.png`，但實際為 uid 化 `pages/<uid>.jpg`。**需判斷**是測試過時（uid 為現行設計、應改測試）或為命名 regression。涉及插入/刪除頁的「path 對齊／compact 編號」不變式，需理解設計意圖後再改，勿盲改。
+- [ ] （既有失敗，待判斷）`skills.test.ts`（1）：`createUserSkill/updateUserSkill` 回傳物件缺模板欄位（`imageStylePrompt`/`quizPrompt`/`ttsProvider`/`ttsVoice`），測試以 deepEqual 期望這些 key（值 undefined）。需判斷是 CRUD 未 round-trip 這些欄位（真缺口）或測試過度指定。
+- [ ] （既有失敗，待查）其餘：`timing.test.ts`(1 page timings null fallback)、`figure-reference-image-generation.test.ts`(1)、regenerate/rollback 矩陣(約 3：start→status→conflict/cancel、rollback not found/conflict、cancel final state)。逐一重現並判斷測試 vs 程式正確性。
+
 ## 後端去重 canDestructivelyEditPdf（第一五三輪，2026-06-27）
 
 - [x] 抽出共用 `canDestructivelyEditPdf`（去重 / 可測 / 安全一致）：破壞性動作（刪簡報/頁/測驗/投票/手寫）的嚴格編輯權限（`Boolean(sub) && public_editable`，禁止匿名）在 4 檔以 `canDestructivelyEditPdf` 重複、且 `delete.ts` 以同邏輯的 local `canEditPdf` 存在（同名不同 body 易混淆）。抽成共用並補測試。
@@ -135,6 +145,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | 跑完整後端套件（1199 測試/18 既有失敗，與去重無關）並分類；修 `input-security.test.ts` 4 失敗（缺 googleAuthEnabled:false 致 401）；其餘 14 個分組記錄待判斷（計數 34/100） | fix/input-security-test-auth（已 merge） |
 | 2026-06-27 | （後端，去重）抽出共用 `canDestructivelyEditPdf`：4 檔 + delete.ts（消除同名不同 body）收斂至 permissions.ts；補測試；177 測試回歸通過、嚴格匿名行為保留（計數 33/100） | refactor/shared-can-destructively-edit（已 merge） |
 | 2026-06-27 | （後端，去重收尾）detail.ts 改用共用 share `getShareToken`/`ShareTokenParamSchema`；`shareTokenFromRequest`(sync/server) 為 header-only 變體刻意保留；101 測試回歸通過（計數 32/100） | refactor/detail-reuse-share（已 merge） |
 | 2026-06-27 | （後端，去重）抽出共用 `getPdfPermissionRow` 至 permissions.ts：10 標準檔收斂、合併 import；report.ts title 變體保留；typecheck 通過、約 274 路由測試回歸通過（計數 31/100） | refactor/shared-get-pdf-permission-row（已 merge） |
