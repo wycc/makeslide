@@ -8726,3 +8726,18 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **根因**：形狀種類清單擴充後，這個「拒絕不合法形狀」的測試沒有跟著更新，仍拿一個現在已合法的 `triangle` 當反例。
 - **修正**：改用真正不在 `ANIMATION_SHAPE_KINDS`（circle/rect/ellipse/arrow/line/triangle/star/hexagon）內的 `'octagon'`，並加註解。
 - **驗證**：`page-animation.test.ts` 由 122/123 變為 123/123 通過（以 `scripts/run-tests.sh backend` 執行）。純測試修正，未動產品碼。
+
+## 抽出共用 share 存取工具（10 檔去重）（2026-06-27）
+
+### 功能目的
+分享連結（share link）相關的三個工具——`ShareTokenParamSchema`（驗證 token 格式）、`getShareToken`（從 header 或 query 取 token）、`hasShareAccess`（檢查 token 對某簡報是否有效）——原本在約 10 個路由檔成組逐字重複。繼權限與身分函式之後，把這組 share 邏輯也收斂到單一來源。
+
+### 使用方式
+此為後端內部重構，分享連結存取行為不變。需要時 `import { ShareTokenParamSchema, getShareToken, hasShareAccess } from './share'`。
+
+### 技術細節
+- **共用模組**（`backend/src/routes/pdfs/share.ts`）：匯出三者並加說明——`getShareToken` 以 `x-makeslide-share-token` header 優先、退回 `?share=` query；`hasShareAccess` 結合 token 驗證與 `pdf_shares` 查詢。
+- **接入**：以腳本移除 10 個一致檔（add-pages、runs、drawings、watchProgress、quizzes、figures、slow-artifacts、page-operations、versioning、page-animation）的本地三定義，改為從 `./share` import，並清掉因此未使用的 `FastifyRequest` 型別 import。
+- **測試**：新增 `share.test.ts`（6 案例：getShareToken 的 header/query/優先序/trim/陣列處理、ShareTokenParamSchema 的長度與字元規則）。`hasShareAccess` 由既有約 75 個權限測試覆蓋。
+- **驗證**：backend `tsc --noEmit` 通過；share 相關路由回歸約 263 個測試全通過。以 `scripts/run-tests.sh backend` 執行。
+- **小插曲**：腳本一度因 `grep` 命中 `share.ts` 自身而把它也處理、造成毀損，已重寫修復——之後操作均明確排除目標共用檔。
