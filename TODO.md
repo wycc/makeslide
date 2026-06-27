@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第一七七輪已完成 **56/100**，未達上限。
+- 最新進度：截至第一七八輪已完成 **57/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -34,6 +34,14 @@
   - 資料修復（2026-06-27）：以現行 gpt-5.5 設定，透過真正的持久化路徑 `generateAnimationForPage` 重產第 42、43 頁焦點動畫並寫回 `animation.json` + `pages` 資料表。重產後 distinct xPct 由 1（全 x10）變為 4–5、效果數由 13/6 收斂為 8/5、方框位置貼合實際版面。第 44 頁為 `static-image`、本就無動畫規格（非壞殘留），未變動。
   - 程式碼修復（分支 `fix/autofocus-image-provider-comment`，已 merge）：修正 [animationAutoFocus.ts](backend/src/services/animationAutoFocus.ts) `generateAiFocusEffects` docstring 中**已過時且會誤導排查的註解**——原稱圖片「only actually used when `LLM_PROVIDER=openai`」（因 Gemini 會剝除非文字內容）。此說法已不正確：`buildGeminiContents` 會把 data URL 轉成 `inlineData`、OpenAI 相容 provider（openai/cgu-air/openrouter）直接透傳 `image_url`，故圖片在**所有現行 provider 都會送達模型**；改寫為依實際逐 provider 行為描述，並點明「結果看似純文字（方框機械排成一欄、無視版面）代表模型/閘道未套用 vision，而非本程式碼把圖片丟掉」。僅改註解，後端 `tsc --noEmit` 通過。
   - 本項為使用者回報 bug 修復，**不計入** 100 輪計數。
+
+## 焦點動畫框拖曳/縮放幾何抽出純函式（第一七八輪，2026-06-27）
+
+延續前端：`AnimationEditorTab` 的 `onPointerMove` 內聯了焦點框拖曳/縮放幾何（9 把手、邊界夾界、最小尺寸、西/北把手連動原點、四捨五入），多分支座標運算最易在邊界出錯卻無測試、最難手動驗證。
+
+- [x] 抽出焦點框拖曳/縮放幾何純函式 `resizeFocusBox`（可測 / 固化邊界行為）。
+  - 修改說明（2026-06-27）：新增 `frontend/src/lib/focusBoxResize.ts`（`resizeFocusBox(handle, start, dxPct, dyPct, moveOnly?)` + `FocusBoxHandle` 型別 + `FOCUS_BOX_MIN_SIZE_PCT` 常數）。`AnimationEditorTab` 的 `onPointerMove` 改用之、本地 `DragHandle` 改為 `FocusBoxHandle` 別名（單一來源）。新增 `focusBoxResize.test.ts`（7 組：移動夾角落、moveOnly、東把手放大夾界、西把手連動原點、南北對稱、夾最小尺寸、四捨五入）。前端 `tsc --noEmit` 通過、7/7 通過。分支 `refactor/focus-box-resize`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 57 個完成項目（57/100，未達上限）。
 
 ## 品質檢查面板挑選邏輯抽出純函式（第一七七輪，2026-06-27）
 
@@ -325,6 +333,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （前端，可測）焦點動畫框拖曳/縮放幾何抽出 `resizeFocusBox`：9 把手邊界夾界/最小尺寸/西北把手連動原點/四捨五入，`AnimationEditorTab` onPointerMove 改用之；補 7 邊界測試；前端 typecheck 通過（計數 57/100） | refactor/focus-box-resize（已 merge） |
 | 2026-06-27 | （前端，去重/可測）品質檢查面板挑選邏輯抽出純函式：`selectIssuePages`／`selectEmptyScriptFillPages`（含 LLM 批次補逐字稿 fan-out 上限），`QualityCheckPanel` 改用之、移除內聯；補 5 測試；前端 typecheck 通過（計數 56/100） | refactor/quality-check-selection（已 merge） |
 | 2026-06-27 | （後端，健壯性修復）相似頁面 embedding 無防護解析致一壞全壞：`GET …/similar` 跨整個帳號教材庫比對，任一筆 embedding 損壞 500 整個面板；新增 `parseEmbedding`（非法/非陣列/含非數字回 null），目標損壞→indexed:false、候選損壞→跳過；補純函式 5 + 整合 2 測試（16 回歸）（計數 55/100） | fix/similar-pages-guard-embedding-parse（已 merge） |
 | 2026-06-27 | （後端，健壯性修復）範本清單 `skill_data` 無防護解析致一壞全壞：`GET /api/templates` 逐列 `rowToTemplate` 的 `JSON.parse(skill_data)` 任一筆損壞會 500 整份清單；抽出 `parseSkillData`（非法/非物件回 {}）改用之、損壞列退化為空；補純函式 + 損壞列整合測試（8/8）（計數 54/100） | fix/templates-guard-skill-data-parse（已 merge） |
