@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第一八三輪已完成 **62/100**，未達上限。
+- 最新進度：截至第一八四輪已完成 **63/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -34,6 +34,14 @@
   - 資料修復（2026-06-27）：以現行 gpt-5.5 設定，透過真正的持久化路徑 `generateAnimationForPage` 重產第 42、43 頁焦點動畫並寫回 `animation.json` + `pages` 資料表。重產後 distinct xPct 由 1（全 x10）變為 4–5、效果數由 13/6 收斂為 8/5、方框位置貼合實際版面。第 44 頁為 `static-image`、本就無動畫規格（非壞殘留），未變動。
   - 程式碼修復（分支 `fix/autofocus-image-provider-comment`，已 merge）：修正 [animationAutoFocus.ts](backend/src/services/animationAutoFocus.ts) `generateAiFocusEffects` docstring 中**已過時且會誤導排查的註解**——原稱圖片「only actually used when `LLM_PROVIDER=openai`」（因 Gemini 會剝除非文字內容）。此說法已不正確：`buildGeminiContents` 會把 data URL 轉成 `inlineData`、OpenAI 相容 provider（openai/cgu-air/openrouter）直接透傳 `image_url`，故圖片在**所有現行 provider 都會送達模型**；改寫為依實際逐 provider 行為描述，並點明「結果看似純文字（方框機械排成一欄、無視版面）代表模型/閘道未套用 vision，而非本程式碼把圖片丟掉」。僅改註解，後端 `tsc --noEmit` 通過。
   - 本項為使用者回報 bug 修復，**不計入** 100 輪計數。
+
+## 品質檢查面板徽章狀態抽出純函式（第一八四輪，2026-06-28）
+
+推進 §7.2（品質檢查自動化）的前端基礎：`QualityCheckPanel` 三個分析區塊（品質/逐字稿/圖片）的標題徽章顯示判斷以巢狀三元運算式重複了三份、無獨立測試，且為 §7.2 後續「側邊欄分頁品質徽章」所需。
+
+- [x] 抽出品質檢查徽章狀態純函式 `analysisBadgeState`（去重 / 可測 / §7.2 基礎）。
+  - 修改說明（2026-06-28）：`lib/qualityCheckSelection.ts` 新增 `analysisBadgeState(hasRun, running, issueCount)`，回傳判別聯集 `{kind:'hidden'} | {kind:'ok'} | {kind:'issues',count}`（未執行/執行中→hidden、完成無問題→ok、否則→帶數量 issues）。`QualityCheckPanel` 三區塊改用之（品質區塊問題數用過濾後的 `issuePages.length`），移除三份重複巢狀三元；顏色仍由各區塊 JSX 依語意自選、顯示行為等價。新增 4 組測試。前端 `tsc --noEmit` 通過、qualityCheckSelection 9 測試通過。分支 `refactor/analysis-badge-state`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 63 個完成項目（63/100，未達上限）。
 
 ## 首頁分類分組組裝抽出純函式（第一八三輪，2026-06-27）
 
@@ -375,6 +383,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-28 | （前端，去重，推進 §7.2）抽出品質檢查徽章狀態純函式 `analysisBadgeState(hasRun, running, issueCount)`（hidden/ok/issues 判別聯集），收斂 `QualityCheckPanel` 品質/逐字稿/圖片三區塊重複的巢狀三元徽章判斷；新增 4 測試（qualityCheckSelection 9/9）；tsc 通過。為後續側邊欄品質徽章提供可測基礎（計數 63/100） | refactor/analysis-badge-state（已 merge） |
 | 2026-06-28 | （前端，使用者回報 UI）「AI 助手」分頁改 notebook 子分頁：原本導師問答／品質報告／本頁問答三塊垂直堆疊各自侷促，改為頂端子分頁列（導師問答／品質報告／本頁問答）一次顯示一個，active 面板 `flex-1` 撐滿側欄高度；`PageAskPanel` 對話區由 `max-h-96` 改 `flex-1`、`QualityCheckPanel` root 改 `flex-1 overflow-y-auto`（chat 本就 flex-1）。新增 3 個子分頁 i18n key（labelKey 以 `TranslationKey` 型別收斂）。tsc／i18n parity／vite build 通過。不計入 100 輪計數 | feat/ai-tab-notebook（已 merge） |
 | 2026-06-28 | （前端，使用者回報 UI 系列）播放頁檢視體驗整理：(1) 移除與「投影片管理」重複的「大綱」區，把總時長＋看過進度併入管理區標題，刪 `OutlineSection`/`getOutlineTitle`/死 i18n key；(2) 側欄「放大」(`sidebarExpanded`) 時投影片管理改「圖左、清理後逐字稿右」並排檢視，新增可測純函式 `cleanTranscriptForReview`（去 `Speaker N:`／`[語氣]`／換行，5 測試）；(3) 編輯區分頁標籤改 `whitespace-nowrap`/`text-xs` 不換行；(4) 深色播放器沒設文字色而繼承淺色 `text-text` 致控制列圖示近隱形——給播放器 `text-slate-100`、剩餘時間 slate-500→400；(5) 動畫焦點框加 ⤢ 放大對話框（重用 responsive `EffectPositionEditor`＋X/Y/寬高 輸入，抽 `applyFocusParams` 共用）。tsc／i18n parity／vite build 通過。不計入 100 輪計數 | refactor/merge-outline-into-slide-mgmt（已 merge） |
 | 2026-06-28 | （前端，使用者回報 UI，大型）淺色主題改造第一階段（PlayPage）：根因是全站淺色模式失效——元件普遍寫死深色 `slate-*`，淺色像「深色降亮度」。改為「淺色管理介面＋深色播放區」混合設計。Token 層（`index.css`/`tailwind.config.js`）：頁底改 #F5F7FA、新增 `surface-muted`/`border-light`、主色 cyan→indigo（淺 #4F46E5 以通過對比測試、深 #818CF8）。`PlayPageHeader` 改淺色列＋陰影、條件橫幅與同步 Q&A 面板加 `dark:` 變體（下拉彈窗維持深色）。`PlayPageSidebar` 各區改語意 token 白卡片（深色 token≈舊 slate，深色模式視覺不變）、管理列 4 顆按鈕收斂為「主色 Add／淡色 Regenerate／中性 Add-multiple／danger Delete」、留言(sky)/複習(rose)改淺色淡卡片。`PlayPageSlidePanel` 深色播放器加陰影與淺底分界。AI 分頁的兩個獨立子面板 `PageAskPanel`（AI 導師問這一頁）、`QualityCheckPanel`（品質報告）為單獨檔、首輪未涵蓋，使用者再回報後一併遷移（同樣手法；提問鈕收斂為 indigo 主色、品質徽章與腳本/圖片分析鈕改淺色淡 chip）。使用者再指中央播放面板——依其選擇做「觀看區留深、編輯區轉淺」：投影片觀看區/字幕/播放控制與播放設定維持深色（沉浸觀看），下方逐字稿/提示詞/來源/系統分頁編輯區（行 1065–1720）改語意 token 淺色面板＋彩色強調 `dark:` 變體（分頁列 active 用 surface 對比凸顯）。動畫/圖表兩子分頁（獨立元件 `AnimationEditorTab` ~2590 行、`FigureAssetsTab`）使用者要求一併完成，亦以相同手法遷移——至此整個播放面板編輯區在淺色模式完整一致。驗證：tsc、`contrastRatio.test.ts` 8/8、vite build、輸出 CSS 確認含新 token。**取代**先前 `fix/outline-text-contrast` 的 slate-400 暫時修法（改用 `text-muted`）。不計入 100 輪計數 | feat/light-theme-playpage（已 merge） |
