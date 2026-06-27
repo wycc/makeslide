@@ -1,5 +1,24 @@
 # MakeSlide 功能說明
 
+## 課後報告「最難題目」排序抽出為可測純函式
+
+### 背景
+
+課後報告摘要 API（`GET /api/pdfs/:id/report/summary`）會回傳一份「最難的前 5 題」清單，供老師快速看出全班最容易答錯的題目。原本這段排序與挑選邏輯是**直接內嵌在路由處理函式裡**——把每題的統計過濾掉沒人作答的、依正確率由低到高排序、再取前 5 名並補上答錯率。這段純運算邏輯沒有獨立測試，與資料庫查詢綁在一起，難以驗證排序與並列處理是否正確。
+
+### 變更內容
+
+- 在 `backend/src/routes/pdfs/reportMetrics.ts` 新增純函式 `selectHardestQuestions(stats, limit = 5)`，把「過濾未作答 → 依正確率升冪（並列時答錯數多者優先）→ 取前 N 名 → 補上 `wrong_rate`（答錯數 / 作答數，已防除以 0）」的邏輯收斂成單一可測函式，並定義對應的 `QuestionDifficultyStat` 輸入與 `HardestQuestion` 輸出型別。
+- `report.ts` 的摘要路由改為呼叫 `selectHardestQuestions(questionStats, 5)`，行為完全等價、移除內嵌邏輯。
+
+### 使用方式
+
+此為內部重構，對外 API 回應格式不變。`quiz.hardest_questions` 仍為依難度排序的前 5 題，每題含 `question_id`、`question`、`attempt_count`、`wrong_count`、`wrong_rate`。
+
+### 測試
+
+新增 4 組 `selectHardestQuestions` 單元測試（基本排序 + 答錯率、正確率並列時以答錯數多者優先、排除未作答題並遵守 limit、全未作答／空陣列回空陣列）。後端 `tsc --noEmit` 通過；`report-metrics`／`report-question-stats`／`report-summary` 共 21 測試回歸全通過。
+
 ## 釐清「AI 焦點動畫紅框位置全錯」並修正過時的圖片供應商註解
 
 ### 背景
