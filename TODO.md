@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第一八一輪已完成 **60/100**，未達上限。
+- 最新進度：截至第一八二輪已完成 **61/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -34,6 +34,14 @@
   - 資料修復（2026-06-27）：以現行 gpt-5.5 設定，透過真正的持久化路徑 `generateAnimationForPage` 重產第 42、43 頁焦點動畫並寫回 `animation.json` + `pages` 資料表。重產後 distinct xPct 由 1（全 x10）變為 4–5、效果數由 13/6 收斂為 8/5、方框位置貼合實際版面。第 44 頁為 `static-image`、本就無動畫規格（非壞殘留），未變動。
   - 程式碼修復（分支 `fix/autofocus-image-provider-comment`，已 merge）：修正 [animationAutoFocus.ts](backend/src/services/animationAutoFocus.ts) `generateAiFocusEffects` docstring 中**已過時且會誤導排查的註解**——原稱圖片「only actually used when `LLM_PROVIDER=openai`」（因 Gemini 會剝除非文字內容）。此說法已不正確：`buildGeminiContents` 會把 data URL 轉成 `inlineData`、OpenAI 相容 provider（openai/cgu-air/openrouter）直接透傳 `image_url`，故圖片在**所有現行 provider 都會送達模型**；改寫為依實際逐 provider 行為描述，並點明「結果看似純文字（方框機械排成一欄、無視版面）代表模型/閘道未套用 vision，而非本程式碼把圖片丟掉」。僅改註解，後端 `tsc --noEmit` 通過。
   - 本項為使用者回報 bug 修復，**不計入** 100 輪計數。
+
+## 範本庫分類/搜尋/排序抽出純函式（第一八二輪，2026-06-27）
+
+延續前端：`TemplatesPage` 的分類晶片衍生與「依分類+搜尋過濾、依模式排序」內聯在 useMemo、無測試；newest 保留 API 序、popular 套用次數降冪（穩定排序）等細節易在改動時壞掉。
+
+- [x] 抽出範本庫過濾/排序純函式 `templateCategories`／`filterAndSortTemplates`（可測 / 固化排序規則）。
+  - 修改說明（2026-06-27）：新增 `lib/templateFilter.ts`（`templateCategories` 回 `['all', ...去重排序]`；`filterAndSortTemplates(templates, {category, query, sortMode})` 依分類+搜尋名稱/說明/提示詞過濾，newest 保留原序／popular 套用次數降冪，不可變）。`TemplatesPage` 兩 useMemo 改用之。新增 `templateFilter.test.ts`（5 組：分類去重含空、分類過濾、搜尋三欄位含 CJK/大小寫、newest/popular 排序、不改輸入）。前端 `tsc --noEmit` 通過、5/5 通過。分支 `refactor/template-filter`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 61 個完成項目（61/100，未達上限）。
 
 ## 測驗歷史平均分抽出純函式 + flaky 調查結論（第一八一輪，2026-06-27）
 
@@ -359,6 +367,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （前端，可測）範本庫分類/搜尋/排序抽出 `templateCategories`／`filterAndSortTemplates`（newest 保留序、popular 套用次數降冪穩定排序、搜尋名稱/說明/提示詞），`TemplatesPage` 改用之；補 5 測試；前端 typecheck 通過（計數 61/100） | refactor/template-filter（已 merge） |
 | 2026-06-27 | （前端，可測）測驗歷史平均分抽出 `averageAttemptScore`（忽略未評分 null、全空回 null、未四捨五入），`QuizBuilderPage` 改用之；補 4 測試（quizScoring 15）；前端 typecheck 通過。另記錄 `render-text-pages-figure-injection` 非確定性 flaky 調查結論（跨檔全域污染、不值得自動盲修）（計數 60/100） | refactor/average-attempt-score（已 merge） |
 | 2026-06-27 | （基線檢查+修自引入回歸）跑完整套件：前端 575/575 全綠；後端 3 失敗中 2 個為既有 flaky（figure-reference/llmUsage，隔離 10/10、僅併跑全域污染），1 個是第一七五輪自引入——templates「corrupt skill_data」測試用固定 id 致持久化 DB `UNIQUE` 衝突；改隨機後綴 id、連跑 8/8（計數 59/100） | fix/templates-test-unique-id（已 merge） |
 | 2026-06-27 | （前端，可測）動畫效果合併選取計算抽出 `mergeEffectRanges`：最早 start/最晚 end/沿用最早效果(含 startTrigger)/duration 算法，`AnimationEditorTab` 合併處理改用之；補 3 測試（animationSpec 61）；前端 typecheck 通過（計數 58/100） | refactor/merge-effect-ranges（已 merge） |
