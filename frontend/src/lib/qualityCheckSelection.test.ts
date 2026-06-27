@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { selectIssuePages, selectEmptyScriptFillPages } from './qualityCheckSelection';
+import { selectIssuePages, selectEmptyScriptFillPages, analysisBadgeState } from './qualityCheckSelection';
 import type { PageQualityResult } from './api';
 
 const page = (pageNumber: number, codes: PageQualityResult['issues'][number]['code'][]): PageQualityResult => ({
@@ -43,4 +43,22 @@ test('selectEmptyScriptFillPages caps the result at max', () => {
 
 test('selectEmptyScriptFillPages is null-safe', () => {
   assert.deepEqual(selectEmptyScriptFillPages(null, 5), []);
+});
+
+test('analysisBadgeState hides until the analysis has produced a result', () => {
+  assert.deepEqual(analysisBadgeState(false, false, 0), { kind: 'hidden' });
+  assert.deepEqual(analysisBadgeState(false, false, 3), { kind: 'hidden' });
+});
+
+test('analysisBadgeState hides while the analysis is in flight', () => {
+  // running takes precedence even once a previous result exists
+  assert.deepEqual(analysisBadgeState(true, true, 2), { kind: 'hidden' });
+});
+
+test('analysisBadgeState reports ok when a completed run found no issues', () => {
+  assert.deepEqual(analysisBadgeState(true, false, 0), { kind: 'ok' });
+});
+
+test('analysisBadgeState reports the issue count when a completed run found issues', () => {
+  assert.deepEqual(analysisBadgeState(true, false, 4), { kind: 'issues', count: 4 });
 });
