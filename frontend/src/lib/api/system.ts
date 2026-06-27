@@ -83,6 +83,7 @@ export interface SystemAiSettings {
   auto_generate_animation?: boolean;
   subtitle_sync_mode?: SubtitleSyncMode;
   monthly_budget_usd?: number | null;
+  semantic_search_max_pdfs?: number;
 }
 
 export interface UpdateSystemAiSettingsPayload {
@@ -121,6 +122,7 @@ export interface UpdateSystemAiSettingsPayload {
   auto_generate_animation?: boolean;
   subtitle_sync_mode?: SubtitleSyncMode;
   monthly_budget_usd?: number | null;
+  semantic_search_max_pdfs?: number;
 }
 
 export interface MonthlyCostResponse {

@@ -21,6 +21,22 @@ export type SubtitleSyncMode = 'estimate' | 'whisper';
 export const CGU_AIR_DEFAULT_BASE_URL = 'https://air.cgu.edu.tw/cgullmapi/v1';
 
 /**
+ * 語意搜尋一次最多掃描幾份簡報（見 routes/pdfs/search.ts）。教材知識庫成長後
+ * 預設的 20 份可能太少，因此開放為每帳號可調設定。下限 1、上限 200 以避免
+ * 0／負數讓查詢永遠空集合，或過大值造成單次語意搜尋的 embedding 成本失控。
+ */
+export const SEMANTIC_SEARCH_MAX_PDFS_DEFAULT = 20;
+export const SEMANTIC_SEARCH_MAX_PDFS_MIN = 1;
+export const SEMANTIC_SEARCH_MAX_PDFS_MAX = 200;
+
+/** 將語意搜尋簡報上限夾在 [MIN, MAX] 並取整；非有限值回退為預設值。 */
+export function clampSemanticSearchMaxPdfs(value: number): number {
+  if (!Number.isFinite(value)) return SEMANTIC_SEARCH_MAX_PDFS_DEFAULT;
+  const rounded = Math.round(value);
+  return Math.max(SEMANTIC_SEARCH_MAX_PDFS_MIN, Math.min(SEMANTIC_SEARCH_MAX_PDFS_MAX, rounded));
+}
+
+/**
  * 帳號層級設定：每個使用者（以 Google sub 區分）各自擁有一份，存放在
  * accounts/<accountId>/settings.env，彼此完全獨立、不共用快取。
  */
@@ -59,6 +75,8 @@ export interface PerAccountAiSettings {
   subtitleSyncMode: SubtitleSyncMode;
   /** Monthly LLM+TTS cost budget in USD; null = no limit. */
   monthlyBudgetUsd: number | null;
+  /** 語意搜尋一次最多掃描幾份簡報（[MIN, MAX] 之間，預設 20）。 */
+  semanticSearchMaxPdfs: number;
 }
 
 /**
@@ -200,6 +218,12 @@ function basePerAccountSettings(): PerAccountAiSettings {
     mcpAuthToken: '',
     subtitleSyncMode: asSubtitleSyncMode(process.env.SUBTITLE_SYNC_MODE) ?? 'estimate',
     monthlyBudgetUsd: null,
+    semanticSearchMaxPdfs: (() => {
+      const raw = process.env.SEMANTIC_SEARCH_MAX_PDFS?.trim();
+      if (!raw) return SEMANTIC_SEARCH_MAX_PDFS_DEFAULT;
+      const n = Number(raw);
+      return Number.isFinite(n) ? clampSemanticSearchMaxPdfs(n) : SEMANTIC_SEARCH_MAX_PDFS_DEFAULT;
+    })(),
   };
 }
 
@@ -242,6 +266,12 @@ function loadPerAccountOverrides(accountId: string): Partial<PerAccountAiSetting
       if (!raw) return undefined;
       const n = Number(raw);
       return Number.isFinite(n) && n >= 0 ? n : undefined;
+    })(),
+    semanticSearchMaxPdfs: (() => {
+      const raw = values.SEMANTIC_SEARCH_MAX_PDFS?.trim();
+      if (!raw) return undefined;
+      const n = Number(raw);
+      return Number.isFinite(n) ? clampSemanticSearchMaxPdfs(n) : undefined;
     })(),
   });
 }
@@ -297,6 +327,7 @@ const PER_ACCOUNT_ENV_PAIRS: Array<[string, keyof PerAccountAiSettings]> = [
   ['MCP_AUTH_TOKEN', 'mcpAuthToken'],
   ['SUBTITLE_SYNC_MODE', 'subtitleSyncMode'],
   ['MONTHLY_BUDGET_USD', 'monthlyBudgetUsd'],
+  ['SEMANTIC_SEARCH_MAX_PDFS', 'semanticSearchMaxPdfs'],
 ];
 
 /** Constant-time string equality (avoids a JS `===` timing side-channel comparing MCP tokens). */

@@ -125,6 +125,7 @@ export default function SettingsPage() {
   const [autoGenerateAnimation, setAutoGenerateAnimation] = useState(false);
   const [subtitleSyncMode, setSubtitleSyncMode] = useState<SubtitleSyncMode>('estimate');
   const [monthlyBudgetUsd, setMonthlyBudgetUsd] = useState<string>('');
+  const [semanticSearchMaxPdfs, setSemanticSearchMaxPdfs] = useState<string>('');
   const [slaSettings, setSlaSettings] = useState<SlaSettingsResponse | null>(null);
   const [slaOverrideInputs, setSlaOverrideInputs] = useState<Record<string, string>>({});
   const [slaLoading, setSlaLoading] = useState(false);
@@ -197,6 +198,7 @@ export default function SettingsPage() {
       setAutoGenerateAnimation(Boolean(s.auto_generate_animation));
       setSubtitleSyncMode(s.subtitle_sync_mode ?? 'estimate');
       setMonthlyBudgetUsd(typeof s.monthly_budget_usd === 'number' ? String(s.monthly_budget_usd) : '');
+      setSemanticSearchMaxPdfs(typeof s.semantic_search_max_pdfs === 'number' ? String(s.semantic_search_max_pdfs) : '');
       const cachedUserCode = window.localStorage.getItem(LOCAL_USER_CODE_KEY)?.trim() ?? '';
       setUserCode((auth?.authenticated ? s.user_code : cachedUserCode) ?? '');
       if (s.has_openai_key || s.has_gemini_key) {
@@ -300,6 +302,10 @@ export default function SettingsPage() {
         auto_generate_animation: autoGenerateAnimation,
         subtitle_sync_mode: subtitleSyncMode,
         monthly_budget_usd: monthlyBudgetUsd.trim() === '' ? null : Number(monthlyBudgetUsd.trim()),
+        // 空白＝不更動（schema 不接受 null）；有值才送整數
+        ...(semanticSearchMaxPdfs.trim() === ''
+          ? {}
+          : { semantic_search_max_pdfs: Math.round(Number(semanticSearchMaxPdfs.trim())) }),
       });
       storeLanguageSettings(uiLanguage, contentLanguage);
       window.localStorage.setItem(PLAYBACK_SPEED_STORAGE_KEY, String(playbackSpeed));
@@ -358,6 +364,7 @@ export default function SettingsPage() {
     autoGenerateAnimation,
     subtitleSyncMode,
     monthlyBudgetUsd,
+    semanticSearchMaxPdfs,
     DEFAULT_CGU_AIR_BASE_URL,
     DEFAULT_OPENROUTER_BASE_URL,
     t,
@@ -850,6 +857,20 @@ export default function SettingsPage() {
                       className="mt-1 w-48 rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"
                     />
                     <span className="mt-1 block text-xs text-muted">{t('settings.monthlyBudgetUsdHint')}</span>
+                  </label>
+                  <label className="block text-sm text-text sm:col-span-2">
+                    {t('settings.semanticSearchMaxPdfs')}
+                    <input
+                      type="number"
+                      min={1}
+                      max={200}
+                      step="1"
+                      value={semanticSearchMaxPdfs}
+                      onChange={(e) => setSemanticSearchMaxPdfs(e.target.value)}
+                      placeholder={t('settings.semanticSearchMaxPdfsPlaceholder')}
+                      className="mt-1 w-48 rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"
+                    />
+                    <span className="mt-1 block text-xs text-muted">{t('settings.semanticSearchMaxPdfsHint')}</span>
                   </label>
                   <div className="block text-sm text-text sm:col-span-2">
                     <span>{t('settings.priceReferenceTitle')}</span>
