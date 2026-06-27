@@ -1380,6 +1380,7 @@ export const zhTW = {
   'play.sidebar.reviewListPage': '第 {n} 頁',
   'play.sidebar.reviewListRemove': '移除',
   'play.sidebar.slideViewedProgress': '已看 {viewed}/{total}',
+  'play.sidebar.reviewNoScript': '（此頁尚無逐字稿）',
   'play.sidebar.slideManagement': '投影片管理',
   'play.sidebar.regenerateTitle': '重生（可選逐字稿/語音/圖檔）',
   'play.sidebar.regenerating': '重生中…',

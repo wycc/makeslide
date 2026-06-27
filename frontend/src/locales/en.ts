@@ -1380,6 +1380,7 @@ export const en = {
   'play.sidebar.reviewListPage': 'Page {n}',
   'play.sidebar.reviewListRemove': 'Remove',
   'play.sidebar.slideViewedProgress': 'Viewed {viewed}/{total}',
+  'play.sidebar.reviewNoScript': '(No transcript yet)',
   'play.sidebar.slideManagement': 'Slide management',
   'play.sidebar.regenerateTitle': 'Regenerate (optional transcript/audio/images)',
   'play.sidebar.regenerating': 'Regenerating…',

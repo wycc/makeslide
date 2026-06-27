@@ -9,6 +9,7 @@ import { PageAskPanel } from './PageAskPanel';
 import { QualityCheckPanel } from './QualityCheckPanel';
 import { copyTextToClipboard } from '../../lib/clipboard';
 import { formatAudioDuration } from '../../lib/audioDuration';
+import { cleanTranscriptForReview } from '../../lib/transcriptReview';
 import { getReviewItems, removeReviewItem, formatReviewListMarkdown, type ReviewItem } from '../../lib/reviewList';
 import { filterComments } from '../../lib/commentFilter';
 import { countUnresolvedComments, sortCommentsUnresolvedFirst } from '../../lib/commentStats';
@@ -613,7 +614,7 @@ export function PlayPageSidebar() {
     isReadOnlyProcessing,
     detail,
     currentPage, currentIdx, deckPages, totalPages,
-    visitedIdxSet,
+    visitedIdxSet, scripts,
     watchProgressByPage,
     slideBusy, slideError,
     regenJobRunning, regenAllBusy,
@@ -827,6 +828,43 @@ export function PlayPageSidebar() {
           </div>
           {slideError ? <p className="mt-2 text-xs text-rose-700 dark:text-rose-300">{slideError}</p> : null}
         </div>
+        {sidebarExpanded ? (
+          <div className="grid max-h-[calc(100vh-16rem)] grid-cols-1 gap-2 overflow-y-auto p-3 lg:grid-cols-2">
+            {deckPages.map((p, idx) => {
+              const isActive = idx === currentIdx;
+              const imgSrc = p.thumbnail_url ?? p.image_url;
+              const reviewText = cleanTranscriptForReview(scripts[p.page_number]);
+              const pageLabel = `${t('play.common.pagePrefix')}${p.page_number}${t('play.common.pageSuffix')}`;
+              return (
+                <button
+                  key={p.page_number}
+                  type="button"
+                  data-page-number={p.page_number}
+                  onClick={() => setCurrentIdx(idx)}
+                  className={`flex gap-3 rounded-lg border p-2 text-left transition-colors ${
+                    isActive ? 'border-primary/50 bg-primary/10' : 'border-border bg-surface hover:bg-surface-muted'
+                  }`}
+                >
+                  <div className="relative w-40 shrink-0 self-start overflow-hidden rounded border border-border bg-surface-muted">
+                    {imgSrc ? (
+                      <img
+                        src={withImageBust(imgSrc) ?? imgSrc}
+                        alt={pageLabel}
+                        className="h-auto w-full object-contain"
+                      />
+                    ) : (
+                      <div className="flex aspect-video w-full items-center justify-center text-xs text-muted">{p.page_number}</div>
+                    )}
+                    <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[10px] text-white">{p.page_number}</span>
+                  </div>
+                  <p className="min-w-0 flex-1 break-words text-xs leading-relaxed text-text">
+                    {reviewText || <span className="text-muted">{t('play.sidebar.reviewNoScript')}</span>}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
         <div
           className="grid max-h-48 grid-cols-4 gap-2 overflow-y-auto p-3"
           onDragOver={(e) => {
@@ -1014,6 +1052,7 @@ export function PlayPageSidebar() {
             </div>
           ))}
         </div>
+        )}
         {regenSelectedPages.size > 0 ? (
           <div className="flex items-center justify-between gap-2 border-t border-indigo-200 bg-indigo-50 px-3 py-1.5 dark:border-fuchsia-500/30 dark:bg-fuchsia-500/10">
             <span className="text-xs text-indigo-700 dark:text-fuchsia-300">
