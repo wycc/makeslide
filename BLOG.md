@@ -1,5 +1,40 @@
 # MakeSlide 功能說明
 
+## 多面產生失敗後維持 metadata 與 DB 一致（避免簡報像整份壞掉）
+
+### 目的
+
+「多面產生（從提示／大綱新增多頁，`addPagesFromPrompt`）」會在開始生成前**就先**改動簡報結構：
+把插入點之後的既有頁碼整批往後位移、把 `pdfs.page_count` 加上新增頁數、並插入新頁的資料列。
+但原本只有在整個流程**成功**時才會重寫 `metadata.json`。因此只要在產圖／逐字稿／語音任一步失敗
+（或被取消），DB 就停在「已位移、含半成品 failed 頁」的新佈局，而磁碟上的 `metadata.json` 仍是
+舊佈局——兩者分歧。對於信任 `metadata.json` 的消費端（匯出 ZIP／GitHub 同步／重新匯入），這份
+簡報會呈現殘缺、頁面錯位、甚至像整份壞掉，儘管其實沒有任何一頁真的遺失。
+
+### 變更內容
+
+- 抽出共用函式 `rebuildAddPagesMetadataFromDb(pdfId)`：以 DB 為唯一真實來源，重建 `metadata.json`
+  的 `pages` 清單與 `page_count`。
+- 在多面產生的**成功、失敗、取消**三條終結路徑都呼叫它，使 `metadata.json` 永遠與 DB 同步，不再
+  因中途失敗而分歧。
+- 採 best-effort：metadata 是 DB 的衍生快照，重建失敗只記錄 log，不會把它升級成任務失敗、也不會
+  掩蓋原始錯誤。
+
+### 使用方式
+
+此為內部健壯性修正，使用者無需操作。日後若新增多頁的流程中途失敗，簡報結構仍會保持一致；失敗的
+頁面會以 `failed` 狀態呈現，可用既有的單頁「重新產生圖片／改寫逐字稿／重新產生語音」修復。
+
+### 實作備註
+
+`addPagesFromPrompt.ts` 新增並匯出 `rebuildAddPagesMetadataFromDb`，成功路徑改為呼叫它（取代原本的
+內聯重建），catch 區塊在分辨取消／失敗之前先呼叫它做 metadata 同步。新增
+`add-pages-metadata-resync.test.ts`（驗證：位移／擴張後的 DB 佈局能被正確同步進 metadata、且無
+metadata 檔時為 no-op）。前後端 `tsc --noEmit` 通過，新測試 2/2 + orphan-recovery 5/5 回歸通過。
+
+> 附帶盤點到一個後續項目：單頁 `regenerate-image` 一律以現有圖當基底（`images.edit`），對失敗後
+> 沒有底圖的頁面無法重產；應在無底圖時退而走「文字→圖」生成路徑（詳見 TODO.md）。
+
 ## 品質檢查回應新增摘要計數（徽章基礎）
 
 ### 目的
