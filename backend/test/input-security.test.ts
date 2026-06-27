@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildApp } from '../src/server';
+import { setSystemAuthSettings } from '../src/services/aiSettings';
+
+// Without this the upload endpoints require a logged-in session and every
+// request returns 401 before the input-validation logic under test runs.
+setSystemAuthSettings({ googleAuthEnabled: false });
 
 function multipartUpload(filename: string, contentType: string, body: string): string {
   return (

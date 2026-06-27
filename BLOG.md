@@ -8782,3 +8782,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **接入**：`page-operations`、`detail`、`quizzes`、`drawings` 4 檔移除本地 `canDestructivelyEditPdf` 並併入既有 `./permissions` import；`delete.ts` 移除其同邏輯但同名為 `canEditPdf` 的 local 函式、改用共用的 `canDestructivelyEditPdf`，消除「同名不同行為」的混淆。
 - **測試**：`permissions.test.ts` 新增案例，特別斷言「匿名請求在 public_editable 下：canEditPdf 為 true、canDestructivelyEditPdf 為 false」這個關鍵差異。
 - **驗證**：backend `tsc --noEmit` 通過；`delete-permission`、`delete-pdf-job-cleanup`、`permissions`、`quizzes`、`drawings`、`page-operations-permission`、`detail-permission` 共 177 個測試回歸通過，確認嚴格的匿名禁止行為維持不變。以 `scripts/run-tests.sh backend` 執行。
+
+## 後端測試套件基線與 input-security 401 修正（2026-06-27）
+
+### 功能目的
+跑一次完整後端測試套件建立綠燈基線，盤點仍存在的失敗。結果為 1199 個測試、18 個失敗；與去重前 commit 比對確認 18 個全是既有失敗、與近期重構無關。本項先修掉其中最明確的一組——`input-security.test.ts` 的 4 個失敗。
+
+### 使用方式
+此為測試修正，無行為變更。
+
+### 技術細節
+- **根因**：`input-security.test.ts` 的 4 個測試（上傳檔名淨化、拒絕偽造 PDF、拒絕含 NUL 的文字、YouTube host/語言驗證）全部回 **401**。原因是該檔沒有像其他測試一樣呼叫 `setSystemAuthSettings({ googleAuthEnabled: false })`，於是上傳端點要求登入、請求在進入待測的輸入驗證邏輯前就被擋下。驗證邏輯本身是正常的。
+- **修正**：於檔頭加上 `setSystemAuthSettings({ googleAuthEnabled: false })`。已確認沒有任何測試把 `googleAuthEnabled` 設成 `true`，因此不會有全域狀態的順序衝突。
+- **驗證**：`input-security.test.ts` 由 0/4 變為 4/4 通過。純測試修正。
+- **其餘既有失敗（已記錄於 TODO 待逐一判斷）**：`pages-api`（7，頁面素材路徑由連號 `002.png` 變 uid 化 `<uid>.jpg` 的測試 vs 程式判斷）、`skills`（1，模板欄位未 round-trip）、`timing`/`figure-reference`/regenerate 矩陣（共約 5）。這些需判斷是測試過時或真實 regression，不宜為了綠燈盲改。
