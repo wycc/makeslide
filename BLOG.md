@@ -8478,3 +8478,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **接入**：`HomePage` 的 `homeStats` useMemo 由原本內聯三次 reduce 改為 `summarizeHomeStats(items)`，相依陣列不變（`[items]`）。
 - **測試**（`homeStats.test.ts`，4 案例）：空清單回傳全 0、正常彙總（含 3.5 分鐘四捨五入為 4）、缺值欄位以 0 計入、與被取代的舊 reduce 寫法對多筆資料輸出一致。
 - **驗證**：前端 `tsc --noEmit` 通過；新測試 4/4 通過；純前端、不動後端、不需新 i18n。
+
+## 投影片縮放比例邊界收斂為共用純函式（2026-06-27）
+
+### 功能目的
+播放頁頂部有一組「投影片圖片縮放」的 −／＋ 按鈕，可在 65%–135% 之間以 10% 為步進調整。原本放大與縮小的計算各自內嵌在 `PlayPageHeader` 的 onClick 裡（`Math.max(0.65, Number((scale - 0.1).toFixed(2)))` 與 `Math.min(1.35, Number((scale + 0.1).toFixed(2)))`），而按鈕的 disabled 判斷又另外硬編了 `<= 0.65`／`>= 1.35`。同一組邊界值（0.65／1.35／0.1）散落四處、容易漂移，且沒有測試。本項把步進邏輯與邊界值收斂成共用常數與可測純函式。
+
+### 使用方式
+此為內部重構，縮放按鈕行為與先前完全一致。需要調整縮放比例時，`import { stepSlideImageScale, SLIDE_IMAGE_SCALE_MIN, SLIDE_IMAGE_SCALE_MAX, SLIDE_IMAGE_SCALE_STEP } from '<相對路徑>/lib/slideImageScale'`，呼叫 `stepSlideImageScale(scale, +STEP)` 放大、`stepSlideImageScale(scale, -STEP)` 縮小。
+
+### 技術細節
+- **純函式模組**（`frontend/src/lib/slideImageScale.ts`）：匯出 `SLIDE_IMAGE_SCALE_MIN = 0.65`、`SLIDE_IMAGE_SCALE_MAX = 1.35`、`SLIDE_IMAGE_SCALE_STEP = 0.1` 與 `stepSlideImageScale(scale, delta)`。後者先 `Number((scale + delta).toFixed(2))` 消除浮點誤差（如 `0.7 + 0.1 = 0.7999…` → `0.8`），再以共用 `clamp` 夾在 [MIN, MAX]；對放大／縮小皆等價於原本的 `Math.min`／`Math.max` 寫法。
+- **接入**：`PlayPageHeader` 的 −／＋ 按鈕 onClick 改用 `stepSlideImageScale(scale, ∓STEP)`，兩個按鈕的 disabled 判斷改用 `SLIDE_IMAGE_SCALE_MIN`／`SLIDE_IMAGE_SCALE_MAX` 常數，元件內已無散落的 magic number。
+- **測試**（`slideImageScale.test.ts`，4 案例）：步進並消除浮點誤差、縮小不低於 0.65、放大不高於 1.35、與被取代的舊內聯寫法對多個比例輸出一致。
+- **驗證**：前端 `tsc --noEmit` 通過；新測試 4/4 通過；純前端、不動後端、不需新 i18n。
