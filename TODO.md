@@ -14,6 +14,19 @@
 - [ ] 系統性採用 `mapApiErrorToHumanMessage`：目前約 55 處 catch 區塊直接 `setError(err.message)` 顯示後端原始 message、繞過既有的錯誤訊息映射（前端僅 2 處 `UploadButton`、`ImportTextPage` 使用 mapper）。全面改造屬較大工程，且各 catch 上下文不同、許多後端 message 已是中文（未必都是英文洩漏），逐點需產品判斷顯示風格，故列為待使用者決定。
 - [ ] 把前端測試納入 root `npm test`：目前 root 測試腳本未涵蓋前端 `node:test` 測試。納入涉及 CI 行為變更與 `npm install`（sandbox 無法驗證），列為待使用者決定。
 
+## add-pages 失敗導致 metadata 與 DB 分歧 + Uhga6bY0Bm 修復（使用者回報 bug，2026-06-27）
+
+使用者回報：簡報 `Uhga6bY0Bm` 第 42 頁以後資料因前一次失敗的「多面產生」而像是不見了。
+
+- 診斷：`runAddPagesFromPrompt` 的 `runAddPagesJob` 會**先**就地改動 DB 結構（把既有頁碼整批位移、`pdfs.page_count` +N、插入新頁列），卻只在**成功路徑**才重寫 `metadata.json`。那次任務在產圖/逐字稿/語音途中失敗（第 42 頁僅產出圖、43/44 全空），重啟後 `recoverOrphanedAddPagesPages()` 把這 3 頁半成品標成 `failed`。結果 DB 是位移後的 86 頁（原 42–83 → 45–86，外加 42–44 三筆 failed），但 `metadata.json` 仍停在舊的 83 頁佈局 → **DB 與 metadata 分歧**，使信任 metadata 的消費端（匯出／GitHub 同步／重新匯入）呈現殘缺或整份壞掉的簡報，但其實沒有任何頁面真的遺失（原始 83 頁檔案完整）。
+- 實例修復：依使用者裁示「保留 3 頁並重新產生」，把 `Uhga6bY0Bm/metadata.json` 重建為與 DB 一致的 86 頁（原 83 頁時間戳保留、新增 42/43/44 三頁 failed 條目），消除分歧。三頁的實際內容重產（LLM 產圖／TTS，計費且需後端執行）保留給使用者於 UI 觸發。
+- 程式碼修復（分支 `fix/add-pages-failure-metadata-consistency`）：抽出 `rebuildAddPagesMetadataFromDb(pdfId)`（從 DB 重建 metadata 的 pages/page_count），在**成功與失敗（含取消）兩條終結路徑都呼叫**，使 DB↔metadata 永不分歧；best-effort（寫入失敗只記 log，不掩蓋原始錯誤）。新增 `add-pages-metadata-resync.test.ts`（2 測試），前後端 typecheck 通過、新測試 + orphan-recovery 5 回歸全綠。
+- 本項為使用者回報 bug 修復，**不計入** 100 輪計數。
+
+### 後續可執行項目（本輪盤點新增）
+
+- [ ] **單頁 `regenerate-image` 對「無底圖」頁面退而用文字→圖生成**：`POST /api/pdfs/:id/pages/:n/regenerate-image`（[page-operations.ts](backend/src/routes/pdfs/page-operations.ts)）一律以 `client.images.edit` 拿現有圖當基底；像 `Uhga6bY0Bm` 第 43/44 頁這種失敗後沒有底圖（`image_path` 為 null）的頁面會在讀檔時丟錯、無法於 UI 重產。應在無底圖時改走 add-pages 用的「文字→圖」生成路徑（`renderTextPagesWithLlm` 或 `images.generate`），讓任何 failed/部分完成頁都恆可修復。需實機 LLM 影像測試（sandbox 無法驗證影像生成），列為後續項目。
+
 ## 品質檢查回應新增摘要計數（第一七一輪，2026-06-27）
 
 依 §7.2 品質檢查自動化，完成其「後端摘要」子項：為品質檢查 API 加上播放頁徽章所需的彙總計數。
@@ -255,6 +268,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （使用者回報 bug，不計數）add-pages 失敗讓 DB↔metadata 分歧、簡報像整份壞掉：`runAddPagesJob` 先位移頁碼/+page_count/插新頁但僅成功時重寫 metadata.json → 失敗留下位移後 DB 與舊 metadata 不一致。抽出 `rebuildAddPagesMetadataFromDb` 並在成功/失敗/取消三路徑都呼叫；新增 2 測試，typecheck + orphan-recovery 5 回歸通過。另實例修復 `Uhga6bY0Bm`：依裁示「保留 3 頁並重新產生」把 metadata 重建為與 DB 一致的 86 頁（原 83 頁時間戳保留）。盤點新增後續項目「regenerate-image 無底圖退化生成」 | fix/add-pages-failure-metadata-consistency |
 | 2026-06-27 | （§7.2 後端子項）品質檢查回應新增 `summary` 摘要（pagesChecked/pagesWithIssues/totalIssues）：新增純函式 `summarizeQualityResults`、前端型別同步；補單元測試 + 整合測試斷言，quality-check 5/5、前後端 typecheck 通過（計數 50/100） | feat/quality-check-summary（已 merge） |
 | 2026-06-27 | （§8.1.4 純前端）全域搜尋選取模式新增「加入複習清單」批次動作：新增純函式 `searchResultsToReviewItems`（過濾無頁碼、snippet→questionText），`GlobalSearchBox` 加按鈕呼叫 `addReviewItems`；新增 i18n 鍵與 3 測試，前端 typecheck + i18n + GlobalSearchBox 回歸通過（計數 49/100） | feat/search-add-to-review-list（已 merge） |
 | 2026-06-27 | （§7.1 後端聚合子項）課後報告 pages.csv 新增頁面困難度：`reportMetrics.ts` 新增純函式 `pageDifficultyScore`（完成率/投票分歧/提問率三訊號平均、0–1、缺值略過），`report/pages.csv` 新增 `question_count`/`difficulty_score` 欄位；補 4 純函式測試 + 更新 pages-csv 測試，報告測試回歸通過（計數 48/100） | feat/report-page-difficulty（已 merge） |

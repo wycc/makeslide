@@ -105,6 +105,47 @@ export function recoverOrphanedAddPagesPages(): number {
   return result.changes;
 }
 
+/**
+ * Rebuild `metadata.json`'s page list + `page_count` from the current DB state.
+ *
+ * `runAddPagesJob` mutates the DB structurally up-front (it shifts every existing page
+ * number to make room, bumps `pdfs.page_count`, and inserts the new page rows) but
+ * historically only rewrote `metadata.json` on the *success* path. So any failure (or
+ * cancel) midway through image/script/audio generation left the DB at the new, shifted
+ * page layout while `metadata.json` still described the *old* layout — a divergence that
+ * made metadata-backed consumers (export, GitHub sync, re-import) render a stale/broken
+ * presentation even though every page was still present in the DB. Calling this on every
+ * terminal outcome keeps the on-disk metadata in lockstep with the DB.
+ *
+ * Best-effort by design: metadata is a derived snapshot of the DB (the source of truth),
+ * so a write failure here is logged but never escalated into a job failure.
+ */
+export async function rebuildAddPagesMetadataFromDb(pdfId: string): Promise<void> {
+  const meta = await readMetadata(pdfId);
+  if (!meta) return;
+  const pdfRow = db
+    .prepare(`SELECT page_count FROM pdfs WHERE id = ?`)
+    .get(pdfId) as { page_count: number | null } | undefined;
+  const allPageRows = db
+    .prepare(
+      `SELECT page_number, image_path, text_path, script_path, audio_path, audio_duration_seconds, status
+         FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
+    )
+    .all(pdfId) as PageRow[];
+  meta.page_count = pdfRow?.page_count ?? allPageRows.length;
+  meta.updated_at = nowIso();
+  meta.pages = allPageRows.map((p): PdfMetadataPage => ({
+    page_number: p.page_number,
+    image: p.image_path,
+    text: p.text_path,
+    script: p.script_path ?? undefined,
+    audio: p.audio_path ?? undefined,
+    audio_duration_seconds: p.audio_duration_seconds ?? undefined,
+    status: p.status,
+  }));
+  await writeMetadata(pdfId, meta);
+}
+
 const AddPagesSlideSchema = z.object({
   slides: z
     .array(
@@ -532,28 +573,8 @@ async function runAddPagesJob(
       );
     }
 
-    // Rebuild metadata.json
-    const meta = await readMetadata(pdfId);
-    if (meta) {
-      meta.page_count = newPageCount;
-      meta.updated_at = nowIso();
-      const allPageRows = db
-        .prepare(
-          `SELECT page_number, image_path, text_path, script_path, audio_path, audio_duration_seconds, status
-             FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
-        )
-        .all(pdfId) as PageRow[];
-      meta.pages = allPageRows.map((p): PdfMetadataPage => ({
-        page_number: p.page_number,
-        image: p.image_path,
-        text: p.text_path,
-        script: p.script_path ?? undefined,
-        audio: p.audio_path ?? undefined,
-        audio_duration_seconds: p.audio_duration_seconds ?? undefined,
-        status: p.status,
-      }));
-      await writeMetadata(pdfId, meta);
-    }
+    // Rebuild metadata.json from the (now final) DB state.
+    await rebuildAddPagesMetadataFromDb(pdfId);
 
     updateJob(pdfId, {
       status: 'done',
@@ -568,6 +589,16 @@ async function runAddPagesJob(
       'add-pages-from-prompt: done',
     );
   } catch (err) {
+    // The structural insert (page-number shift + page_count bump + new page rows) runs
+    // before generation, so a failure/cancel here leaves the DB at the new layout. Resync
+    // metadata.json to that DB state so the two never diverge (the divergence is what made
+    // a partially-added presentation look broken/empty in metadata-backed views). Source of
+    // truth is the DB, so a resync failure is logged but never masks the original error.
+    try {
+      await rebuildAddPagesMetadataFromDb(pdfId);
+    } catch (metaErr) {
+      logger.error({ err: metaErr, pdfId }, 'add-pages-from-prompt: failed to resync metadata after interruption');
+    }
     const code = (err as { code?: string })?.code;
     if (code === 'CANCELLED') {
       // Job was already set to 'cancelled' by abortAddPagesJob; just log
