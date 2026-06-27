@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第一六七輪已完成 **46/100**，未達上限。
+- 最新進度：截至第一六八輪已完成 **47/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -73,7 +73,9 @@
 - [ ] （§8.1.4）首頁／播放頁搜尋結果加入「加入複習清單」動作：`GlobalSearchBox` 結果列加入按鈕，複用既有 `reviewList.addReviewItems`（已有測試）。純前端 UI 整合。
 - [ ] （P0，§7.1）課後報告個人層級報表：後端 `computeStudentRecords` 已彙整每位學生作答；補前端「個人」分頁顯示每位學生完成率／提問／投票參與。前端為主、後端視需要補欄位。
 - [ ] （§8.1.5／§4.1）播放頁 header 入口分組為「製作／授課／自學／報告／匯出」任務流：降低功能密度造成的新手阻力（資訊架構調整，純前端、需產品確認分組）。
-- [ ] （§7.5）生成前成本估算覆蓋確認：確認 PDF／文字／YouTube 三個生成入口皆於 `PromptModal` 顯示 `costEstimate` 估算；補缺口並為 pageCount 傳遞補測試。
+- [x] （§7.5）生成前成本估算覆蓋確認：確認 PDF／文字／YouTube 三個生成入口皆於 `PromptModal` 顯示 `costEstimate` 估算；補缺口並為 pageCount 傳遞補測試。（第一六八輪，2026-06-27 完成）
+  - 修改說明（2026-06-27）：盤點發現**真缺口**——`PromptModal` 僅在 `pageCount > 0` 顯示成本估算，但剛上傳的 PDF／文字／YouTube 在 DB 的 `page_count` 皆為 `null`（pipeline 分頁後才有），故三入口在**首次生成前都不顯示估算**（只有已生成簡報重生時才有）。修法：上傳 PDF 時後端計算來源 PDF 實體頁數（slides 模式用 `getPdfPageCount()`、document 模式用 `pageTexts.length`），於 `POST /api/pdfs` 回應新增 `source_page_count`（**不寫入** persisted `page_count`，純作估算依據；TXT 為 null）。前端 `UploadResponse` 加 `source_page_count?: number | null`，新增純函式 `lib/promptTargetPageCount.ts`（優先真實 `page_count`、否則 `source_page_count`、皆非正數回 null），`HomePage.openPromptFor` 改用之 → 首次上傳 PDF 即可在生成前看到成本估算。**確認結論**：文字／YouTube 的投影片數於生成前由 AI 分頁才定、本就無從估算，維持不顯示（非缺口）。新增 `upload-source-page-count.test.ts`（PDF 回實體頁數 7、TXT 為 null，poppler 不可用時跳過）與 `promptTargetPageCount.test.ts`（優先序/fallback/無值回 null 共 3 測試）；前後端 `tsc --noEmit` 通過、相關上傳路由回歸通過。分支 `feat/upload-source-page-count-cost-estimate`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 47 個完成項目（47/100，未達上限）。
 
 ## 前端補測試 debugLog（第一五九輪，2026-06-27）
 
@@ -187,7 +189,7 @@
   - 修改說明（2026-06-27）：根因確認——`'ready'` **根本不是合法 page 狀態**（`statusMachine.ts` 的 `PAGE_STATUSES` 無 `ready`，終態為 `audio_ready`；`'ready'` 僅為 PDF 狀態），故 4 路由的 `WHERE status = 'ready'` 對 `pages` 永遠匹配 0 列。將 4 路由的頁面查詢一律改為 `status = 'audio_ready'` 並加註解說明。修正既有 3 個測試（image-quality/script-quality/h5p）的 fixture——原本用**不存在的** `'ready'` page 狀態（所以測試過但 production 壞），改為 `'audio_ready'`，使其反映真實狀態並成為回歸測試（pdfs INSERT 的 `'ready'` 為正確 PDF 狀態，維持不動）。為原本無測試的 quality-check 新增 `quality-check.test.ts`（4 子測試：audio_ready 頁面被檢查〔回歸〕、非完成頁〔rendered〕不檢查、404、403）。backend `tsc --noEmit` 通過；4 個路由測試以 Node 22（`.nvmrc`）+ `--test-force-exit` 執行，子測試全通過（quality-check 4/4、image-quality 4/4、script-quality 5/5、h5p 4/4）。分支 `fix/quality-export-page-status`，已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 16 個完成項目（16/100，未達上限）。
 - [ ] **（P0）課後報告補強**：依 §7.1，`registerReportRoutes()`／`PostClassReportPanel` 補上頁面困難度（完成率低／提問多／投票分歧高）、題目答錯率與 CSV 下載入口。可分拆為純函式（前端彙總）+ 後端聚合兩個子項。
-- [ ] **（P1）生成前成本估算 modal 串接**：已有 `lib/costEstimate.ts` helper 與 `PromptModal` 估算，依 §7.5 確認是否已於所有來源（PDF／文字／YouTube）生成前顯示，補齊缺口並加測試。
+- [x] **（P1）生成前成本估算 modal 串接**：已有 `lib/costEstimate.ts` helper 與 `PromptModal` 估算，依 §7.5 確認是否已於所有來源（PDF／文字／YouTube）生成前顯示，補齊缺口並加測試。（與上方 §7.5「生成前成本估算覆蓋確認」為同一工作，已於第一六八輪一併完成；不重複計數。詳見該項與工作記錄。）
 - [ ] **（P1）教材知識庫：搜尋結果加入動作**：依 §7.4／§8.1，首頁搜尋結果加入「加入新簡報」或「收藏頁」入口（延伸 `search.ts`／`from-pages.ts`）。
 - [ ] **（P1）AI 導師自學模式入口正式化**：依 §7.3，將既有 `PageAskPanel`／`usePageAsk` 包裝成學生端自學入口（測驗後個人化複習清單、答錯題回看）。
 
@@ -233,6 +235,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （§7.5，補真缺口）上傳 PDF 後在生成前顯示成本估算：`POST /api/pdfs` 新增回傳 `source_page_count`（PDF 實體頁數，不寫 persisted page_count），前端新增 `promptTargetPageCount` 純函式（page_count → source_page_count fallback）供 PromptModal；確認 TXT/YouTube 生成前無從估算（非缺口）。補 backend 2 + frontend 3 測試，前後端 typecheck + 上傳路由回歸通過（計數 47/100） | feat/upload-source-page-count-cost-estimate（已 merge） |
 | 2026-06-27 | （新功能，使用者指定）播放頁一般檢視點擊投影片改為進入全螢幕（取代點擊 playPause，播放/暫停改用獨立按鈕與空白鍵）：`PlayPageSlidePanel` 的 `onImgClick` 改用 context 的 `setFullscreenLayout`/`setImageOnlyFullscreen`；新增 aria-label i18n 鍵；前端 typecheck + i18n 27 測試通過（計數 46/100） | feat/click-slide-toggle-fullscreen（已 merge） |
 | 2026-06-27 | （新功能）語意搜尋掃描簡報數上限改為每帳號可設定：硬編 `MAX_SEMANTIC_PDFS=20` → 設定 `semanticSearchMaxPdfs`（預設 20、範圍 1–200，clamp 防呆），串接 settings.env/admin API/Settings 頁/i18n；補 4 測試，前後端 typecheck + 回歸通過（計數 45/100） | feat/configurable-semantic-search-limit（已 merge） |
 | 2026-06-27 | （真 bug 修復）ZIP 匯入 page 狀態 fallback 非法 `'ready'`+不驗證 → 改用 `isPageStatus` 驗證、無效正規化為 audio_ready；13 測試回歸（計數 44/100） | fix/import-page-status-normalize（已 merge） |
