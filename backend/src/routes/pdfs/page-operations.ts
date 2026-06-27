@@ -542,12 +542,23 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     const tx = db.transaction(() => {
       cancelRunningPageArtifactsForDeletedPage(id, n, now);
       db.prepare(`DELETE FROM pages WHERE pdf_id = ? AND page_number = ?`).run(id, n);
+      // Compact the trailing pages down by one. A direct `page_number - 1` can
+      // transiently violate the UNIQUE(pdf_id, page_number) index because SQLite
+      // applies the bulk UPDATE row by row in an unspecified order (rowids and
+      // page_numbers diverge after earlier inserts/deletes). Shift the affected
+      // pages out of range first, then back at -1 net — the same offset trick the
+      // insert path uses.
       db.prepare(
         `UPDATE pages
-            SET page_number = page_number - 1,
+            SET page_number = page_number + 100000
+          WHERE pdf_id = ? AND page_number > ?`,
+      ).run(id, n);
+      db.prepare(
+        `UPDATE pages
+            SET page_number = page_number - 100001,
                 updated_at = ?
           WHERE pdf_id = ? AND page_number > ?`,
-      ).run(now, id, n);
+      ).run(now, id, n + 100000);
       db.prepare(`UPDATE pdfs SET page_count = ?, updated_at = ? WHERE id = ?`).run(newCount, now, id);
     });
 

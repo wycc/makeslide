@@ -24,28 +24,22 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+// Page artifacts are keyed by each page's stable page_uid, NOT by its page
+// number — inserting/deleting pages renumbers page_number but never renames
+// files (see page-operations.ts). So the only deck-wide invariant after an
+// insert/delete is that page_number stays contiguous 1..N.
 function assertDeckAligned(pdfId: string): void {
   const rows = db
-    .prepare(
-      `SELECT page_number,image_path,text_path,script_path,audio_path
-       FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
-    )
-    .all(pdfId) as Array<{
-    page_number: number;
-    image_path: string;
-    text_path: string;
-    script_path: string;
-    audio_path: string | null;
-  }>;
-  for (const r of rows) {
-    const p = String(r.page_number).padStart(3, '0');
-    assert.equal(r.image_path, `pages/${p}.png`);
-    assert.equal(r.text_path, `pages/${p}.text.txt`);
-    assert.equal(r.script_path, `pages/${p}.script.txt`);
-    if (r.audio_path) assert.equal(r.audio_path, `pages/${p}.mp3`);
-  }
+    .prepare(`SELECT page_number FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`)
+    .all(pdfId) as Array<{ page_number: number }>;
+  assert.deepEqual(
+    rows.map((r) => r.page_number),
+    Array.from({ length: rows.length }, (_, i) => i + 1),
+  );
 }
 
+// Seed pages with stable uid-based paths (pages/u<i>.jpg, .text.txt, .script.txt,
+// .m4a) matching the production storage scheme, and write the corresponding files.
 function seedReadyPdfFor(pdfId: string, pageCount: number): void {
   const t = nowIso();
   db.prepare(`DELETE FROM pages WHERE pdf_id = ?`).run(pdfId);
@@ -59,19 +53,19 @@ function seedReadyPdfFor(pdfId: string, pageCount: number): void {
   const pagesDir = path.join(pdfDir, 'pages');
   fs.mkdirSync(pagesDir, { recursive: true });
   for (let i = 1; i <= pageCount; i++) {
-    const p = String(i).padStart(3, '0');
-    const image = `pages/${p}.png`;
-    const text = `pages/${p}.text.txt`;
-    const script = `pages/${p}.script.txt`;
-    const audio = `pages/${p}.mp3`;
+    const uid = `u${i}`;
+    const image = `pages/${uid}.jpg`;
+    const text = `pages/${uid}.text.txt`;
+    const script = `pages/${uid}.script.txt`;
+    const audio = `pages/${uid}.m4a`;
     db.prepare(
-      `INSERT INTO pages (pdf_id,page_number,image_path,text_path,script_path,audio_path,audio_duration_seconds,status,error_message,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,NULL,'audio_ready',NULL,?,?)`,
-    ).run(pdfId, i, image, text, script, audio, t, t);
-    fs.writeFileSync(path.join(pagesDir, `${p}.png`), Buffer.from([137, 80, 78, 71]));
-    fs.writeFileSync(path.join(pagesDir, `${p}.text.txt`), `text-${i}`, 'utf8');
-    fs.writeFileSync(path.join(pagesDir, `${p}.script.txt`), `script-${i}`, 'utf8');
-    fs.writeFileSync(path.join(pagesDir, `${p}.mp3`), Buffer.from([0x49, 0x44, 0x33]));
+      `INSERT INTO pages (pdf_id,page_number,page_uid,image_path,text_path,script_path,audio_path,audio_duration_seconds,status,error_message,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,NULL,'audio_ready',NULL,?,?)`,
+    ).run(pdfId, i, uid, image, text, script, audio, t, t);
+    fs.writeFileSync(path.join(pagesDir, `${uid}.jpg`), Buffer.from([0xff, 0xd8, 0xff]));
+    fs.writeFileSync(path.join(pagesDir, `${uid}.text.txt`), `text-${i}`, 'utf8');
+    fs.writeFileSync(path.join(pagesDir, `${uid}.script.txt`), `script-${i}`, 'utf8');
+    fs.writeFileSync(path.join(pagesDir, `${uid}.m4a`), Buffer.from([0x00]));
   }
 }
 
@@ -203,13 +197,13 @@ test('POST /api/pdfs/:id/pages should insert one page and keep path aligned', as
     .all(PDF_ID) as Array<{ page_number: number; image_path: string; text_path: string; script_path: string; audio_path: string | null }>;
   assert.equal(rows.length, 4);
   assert.deepEqual(rows.map((r) => r.page_number), [1, 2, 3, 4]);
-  for (const r of rows) {
-    const p = String(r.page_number).padStart(3, '0');
-    assert.equal(r.image_path, `pages/${p}.png`);
-    assert.equal(r.text_path, `pages/${p}.text.txt`);
-    assert.equal(r.script_path, `pages/${p}.script.txt`);
-    if (r.audio_path) assert.equal(r.audio_path, `pages/${p}.mp3`);
-  }
+  // Existing pages keep their stable uid-based paths (just renumbered); the newly
+  // inserted page (now #2) has a fresh uid path, not one of the originals.
+  assert.equal(rows[0].image_path, 'pages/u1.jpg');
+  assert.equal(rows[2].image_path, 'pages/u2.jpg');
+  assert.equal(rows[3].image_path, 'pages/u3.jpg');
+  assert.match(rows[1].image_path, /^pages\/.+\.jpg$/);
+  assert.ok(!['pages/u1.jpg', 'pages/u2.jpg', 'pages/u3.jpg'].includes(rows[1].image_path));
   await app.close();
 });
 
@@ -248,24 +242,21 @@ test('DELETE /api/pdfs/:id/pages/:n should delete correct page and compact numbe
   });
   assert.equal(resp.statusCode, 200);
 
-  // Deleted page artifacts must be removed together.
-  assert.equal(fs.existsSync(path.join(pagesDir, '004.png')), false);
-  assert.equal(fs.existsSync(path.join(pagesDir, '004.text.txt')), false);
-  assert.equal(fs.existsSync(path.join(pagesDir, '004.script.txt')), false);
-  assert.equal(fs.existsSync(path.join(pagesDir, '004.mp3')), false);
+  // The deleted page (page 2 = uid u2) artifacts must be removed; survivors keep
+  // their own uid files (no renaming).
+  assert.equal(fs.existsSync(path.join(pagesDir, 'u2.jpg')), false);
+  assert.equal(fs.existsSync(path.join(pagesDir, 'u2.text.txt')), false);
+  assert.equal(fs.existsSync(path.join(pagesDir, 'u2.script.txt')), false);
+  assert.equal(fs.existsSync(path.join(pagesDir, 'u2.m4a')), false);
 
   const rows = db
     .prepare(`SELECT page_number,image_path,text_path,script_path,audio_path FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`)
     .all(PDF_ID) as Array<{ page_number: number; image_path: string; text_path: string; script_path: string; audio_path: string | null }>;
   assert.equal(rows.length, 3);
   assert.deepEqual(rows.map((r) => r.page_number), [1, 2, 3]);
-  for (const r of rows) {
-    const p = String(r.page_number).padStart(3, '0');
-    assert.equal(r.image_path, `pages/${p}.png`);
-    assert.equal(r.text_path, `pages/${p}.text.txt`);
-    assert.equal(r.script_path, `pages/${p}.script.txt`);
-    if (r.audio_path) assert.equal(r.audio_path, `pages/${p}.mp3`);
-  }
+  // Survivors (u1, u3, u4) keep their stable uid paths, compacted to 1..3.
+  assert.deepEqual(rows.map((r) => r.image_path), ['pages/u1.jpg', 'pages/u3.jpg', 'pages/u4.jpg']);
+  assert.deepEqual(rows.map((r) => r.script_path), ['pages/u1.script.txt', 'pages/u3.script.txt', 'pages/u4.script.txt']);
   await app.close();
 });
 
@@ -274,9 +265,9 @@ test('DELETE /api/pdfs/:id/pages/:n should succeed even when some artifact files
   const app = await buildApp();
   const pagesDir = path.join(config.storageRoot, PDF_ID, 'pages');
 
-  // Simulate partially missing artifacts before delete.
-  fs.rmSync(path.join(pagesDir, '002.mp3'), { force: true });
-  fs.rmSync(path.join(pagesDir, '002.script.txt'), { force: true });
+  // Simulate partially missing artifacts (page 2 = uid u2) before delete.
+  fs.rmSync(path.join(pagesDir, 'u2.m4a'), { force: true });
+  fs.rmSync(path.join(pagesDir, 'u2.script.txt'), { force: true });
 
   const resp = await app.inject({
     method: 'DELETE',
@@ -338,10 +329,9 @@ test('DELETE /api/pdfs/:id/pages/:n should remove page by script content and com
   const app = await buildApp();
   const pagesDir = path.join(config.storageRoot, PDF_ID, 'pages');
 
-  // Make script contents deterministic for identity check.
+  // Make script contents deterministic for identity check (keyed by stable uid).
   for (let i = 1; i <= 5; i++) {
-    const p = String(i).padStart(3, '0');
-    fs.writeFileSync(path.join(pagesDir, `${p}.script.txt`), String(i), 'utf8');
+    fs.writeFileSync(path.join(pagesDir, `u${i}.script.txt`), String(i), 'utf8');
   }
 
   const resp = await app.inject({
@@ -350,12 +340,13 @@ test('DELETE /api/pdfs/:id/pages/:n should remove page by script content and com
   });
   assert.equal(resp.statusCode, 200);
 
-  // Original script "3" should be deleted.
-  assert.equal(fs.existsSync(path.join(pagesDir, '005.script.txt')), false);
-  assert.equal(fs.readFileSync(path.join(pagesDir, '001.script.txt'), 'utf8'), '1');
-  assert.equal(fs.readFileSync(path.join(pagesDir, '002.script.txt'), 'utf8'), '2');
-  assert.equal(fs.readFileSync(path.join(pagesDir, '003.script.txt'), 'utf8'), '4');
-  assert.equal(fs.readFileSync(path.join(pagesDir, '004.script.txt'), 'utf8'), '5');
+  // Page 3 (uid u3, content "3") is deleted; survivors keep their own uid files
+  // and contents (no renaming), and compact to page_number 1..4.
+  assert.equal(fs.existsSync(path.join(pagesDir, 'u3.script.txt')), false);
+  assert.equal(fs.readFileSync(path.join(pagesDir, 'u1.script.txt'), 'utf8'), '1');
+  assert.equal(fs.readFileSync(path.join(pagesDir, 'u2.script.txt'), 'utf8'), '2');
+  assert.equal(fs.readFileSync(path.join(pagesDir, 'u4.script.txt'), 'utf8'), '4');
+  assert.equal(fs.readFileSync(path.join(pagesDir, 'u5.script.txt'), 'utf8'), '5');
 
   const rows = db
     .prepare(`SELECT page_number,script_path FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`)
@@ -363,31 +354,20 @@ test('DELETE /api/pdfs/:id/pages/:n should remove page by script content and com
   assert.deepEqual(rows.map((r) => r.page_number), [1, 2, 3, 4]);
   assert.deepEqual(
     rows.map((r) => r.script_path),
-    ['pages/001.script.txt', 'pages/002.script.txt', 'pages/003.script.txt', 'pages/004.script.txt'],
+    ['pages/u1.script.txt', 'pages/u2.script.txt', 'pages/u4.script.txt', 'pages/u5.script.txt'],
   );
 
   await app.close();
 });
 
 test('create presentation then add/delete on different positions should remain correct', async () => {
-  const app = await buildApp();
-
-  const upload = await app.inject({
-    method: 'POST',
-    url: '/api/pdfs',
-    headers: { 'content-type': 'multipart/form-data; boundary=----roo' },
-    payload:
-      '------roo\r\n' +
-      'Content-Disposition: form-data; name="file"; filename="seed.txt"\r\n' +
-      'Content-Type: text/plain\r\n\r\n' +
-      'seed\r\n' +
-      '------roo--\r\n',
-  });
-  assert.equal(upload.statusCode, 201);
-  const created = upload.json() as { id: string };
-  const id = created.id;
-
+  // Seed a ready deck directly. (A previous version uploaded a real PDF first,
+  // but its background pipeline raced with the manual seeding and left the deck
+  // with non-contiguous page_numbers, which is an artificial state the delete
+  // path is not meant to handle.)
+  const id = 'test-pages-positions-01';
   seedReadyPdfFor(id, 5);
+  const app = await buildApp();
 
   const addAtStart = await app.inject({
     method: 'POST',
