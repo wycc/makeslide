@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第一六六輪已完成 **45/100**，未達上限。
+- 最新進度：截至第一六七輪已完成 **46/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -13,6 +13,15 @@
 
 - [ ] 系統性採用 `mapApiErrorToHumanMessage`：目前約 55 處 catch 區塊直接 `setError(err.message)` 顯示後端原始 message、繞過既有的錯誤訊息映射（前端僅 2 處 `UploadButton`、`ImportTextPage` 使用 mapper）。全面改造屬較大工程，且各 catch 上下文不同、許多後端 message 已是中文（未必都是英文洩漏），逐點需產品判斷顯示風格，故列為待使用者決定。
 - [ ] 把前端測試納入 root `npm test`：目前 root 測試腳本未涵蓋前端 `node:test` 測試。納入涉及 CI 行為變更與 `npm install`（sandbox 無法驗證），列為待使用者決定。
+
+## 點擊投影片改為進入全螢幕（第一六七輪，2026-06-27）
+
+使用者指定的新功能：把播放頁「點擊投影片」的動作從暫停／播放改為切換全螢幕。經詢問確認範圍為
+「僅非全螢幕：點圖進全螢幕」、且「移除點擊暫停、改用獨立按鈕」。
+
+- [x] 播放頁一般檢視點擊投影片改為進入全螢幕（取代點擊 playPause）：原本 `PlayPageSlidePanel` 的 `onImgClick` 呼叫 `playPause()`，改為進入圖片全螢幕。
+  - 修改說明（2026-06-27）：`PlayPageSlidePanel` 自 `PlayPageContext` 取用 `setFullscreenLayout`／`setImageOnlyFullscreen`，`onImgClick` 改為 `setFullscreenLayout('image'); setImageOnlyFullscreen(true)`（沿用 `PlayPageHeader` 全螢幕按鈕的相同機制，保留「影像編輯選取／繪圖模式」時不觸發的守衛）；移除點擊暫停（playPause 仍由獨立播放控制按鈕與空白鍵負責）。aria-label 改用新 i18n 鍵 `play.slidePanel.enterFullscreenOverlay`（zh-TW「進入全螢幕」／en「Enter fullscreen」）。全螢幕模式內點擊行為不變。前端 `tsc --noEmit` 通過、i18n parity/nonempty 27 測試通過（`pauseAudioOverlay`/`resumeAudioOverlay` 仍由 `PlayPageFullscreen` 使用而保留）。分支 `feat/click-slide-toggle-fullscreen`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 46 個完成項目（46/100，未達上限）。
 
 ## ZIP 匯入頁面狀態正規化（第一六五輪，2026-06-27）
 
@@ -224,6 +233,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （新功能，使用者指定）播放頁一般檢視點擊投影片改為進入全螢幕（取代點擊 playPause，播放/暫停改用獨立按鈕與空白鍵）：`PlayPageSlidePanel` 的 `onImgClick` 改用 context 的 `setFullscreenLayout`/`setImageOnlyFullscreen`；新增 aria-label i18n 鍵；前端 typecheck + i18n 27 測試通過（計數 46/100） | feat/click-slide-toggle-fullscreen（已 merge） |
 | 2026-06-27 | （新功能）語意搜尋掃描簡報數上限改為每帳號可設定：硬編 `MAX_SEMANTIC_PDFS=20` → 設定 `semanticSearchMaxPdfs`（預設 20、範圍 1–200，clamp 防呆），串接 settings.env/admin API/Settings 頁/i18n；補 4 測試，前後端 typecheck + 回歸通過（計數 45/100） | feat/configurable-semantic-search-limit（已 merge） |
 | 2026-06-27 | （真 bug 修復）ZIP 匯入 page 狀態 fallback 非法 `'ready'`+不驗證 → 改用 `isPageStatus` 驗證、無效正規化為 audio_ready；13 測試回歸（計數 44/100） | fix/import-page-status-normalize（已 merge） |
 | 2026-06-27 | （真 bug 修復）from-pages 頁面用非法狀態 `'ready'`→ 重啟後被 orphan-recovery 標 failed；改 `'audio_ready'`、補回歸測試（from-pages 6/6）。另記錄完整套件零星 flaky（figure-reference/llmUsage、隔離下通過）（計數 43/100） | fix/from-pages-page-status（已 merge） |

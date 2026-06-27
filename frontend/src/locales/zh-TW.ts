@@ -780,6 +780,7 @@ export const zhTW = {
   'play.slidePanel.shareQrAlt': '分享連結 QR Code',
   'play.slidePanel.pauseAudioOverlay': '暫停語音播放',
   'play.slidePanel.resumeAudioOverlay': '繼續語音播放',
+  'play.slidePanel.enterFullscreenOverlay': '進入全螢幕',
   'play.slidePanel.viewImageHistory': '查看此頁圖片的歷史版本',
   'play.slidePanel.versionButton': '🖼 版本',
   'play.slidePanel.pageImageAlt': '第 {page} 頁',

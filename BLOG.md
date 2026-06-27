@@ -1,5 +1,34 @@
 # MakeSlide 功能說明
 
+## 點擊投影片改為進入全螢幕（取代點擊暫停）
+
+### 目的
+
+在播放頁的一般檢視中，原本「點擊投影片圖片」會暫停／繼續語音播放（playPause）。但播放／暫停
+已另有獨立的控制按鈕與空白鍵快捷鍵，點擊大面積的投影片來暫停其實不直覺；多數使用者期待點投影片
+能「放大來看」。因此把一般檢視的投影片點擊改為「進入全螢幕（圖片）模式」，更符合直覺。
+
+### 變更內容
+
+- 一般檢視點擊投影片圖片 → 進入圖片全螢幕模式（與 header 的「全螢幕」按鈕同一機制）。
+- 移除投影片點擊的「暫停／播放」行為；播放／暫停改由既有的獨立控制按鈕與空白鍵負責。
+- 全螢幕模式內的點擊行為維持不變（仍為暫停／播放）。
+- 投影片圖片的無障礙標籤（aria-label）由「暫停／繼續語音」改為「進入全螢幕」。
+
+### 使用方式
+
+播放頁一般檢視下，直接點一下投影片即可進入全螢幕；要暫停／播放語音，改用投影片下方的播放控制
+按鈕或鍵盤空白鍵。進入全螢幕後的操作（含點擊暫停、左右切頁、Esc 離開）一切照舊。
+
+### 實作備註
+
+`PlayPageSlidePanel` 從 `PlayPageContext` 取用 `setFullscreenLayout`／`setImageOnlyFullscreen`，把投影片
+`onImgClick` 由 `playPause()` 改為 `setFullscreenLayout('image'); setImageOnlyFullscreen(true)`（沿用
+`PlayPageHeader` 全螢幕按鈕的相同呼叫；保留原本「影像編輯選取 / 繪圖模式」時不觸發的守衛）。
+`imgProps` 的 aria-label 改用新 i18n 鍵 `play.slidePanel.enterFullscreenOverlay`（zh-TW「進入全螢幕」／
+en「Enter fullscreen」）。`pauseAudioOverlay`／`resumeAudioOverlay` 仍由全螢幕元件 `PlayPageFullscreen`
+使用而保留。前端 `tsc --noEmit` 通過、i18n parity/nonempty 27 測試通過。
+
 ## 語意搜尋掃描簡報數上限改為可設定
 
 ### 目的
