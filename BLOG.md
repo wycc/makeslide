@@ -1,5 +1,26 @@
 # MakeSlide 功能說明
 
+## CSV 下載檔名「標題優先、否則退回 ID」邏輯收斂為共用純函式
+
+### 背景
+
+各種 CSV／報告匯出（測驗結果、投票結果、留言、課後報告的學生／逐頁／題目 CSV）在組下載檔名時，都用同一個模式：先把簡報標題清成安全的檔名基底，**有標題就用 `<標題>-<類別>.csv`，沒標題（空白或被清成空）就退回 `<類別>-<簡報ID>.csv`**。這段邏輯原本散落在 6 個路由各自內聯（其中課後報告 3 處還把 `safeDownloadBaseName(title, '')` 重複呼叫兩次），既重複又沒有針對「標題/ID 取捨」的獨立測試。
+
+### 變更內容
+
+- 在 `backend/src/routes/pdfs/downloadFilename.ts` 新增純函式 `csvDownloadFilename(title, id, { titleSuffix, fallbackPrefix })`，把「標題基底存在 → `<基底>-<titleSuffix>.csv`，否則 → `<fallbackPrefix>-<id>.csv`」收斂成單一可測函式。
+- 6 處呼叫點改用此函式（行為與檔名完全等價）：
+  - `quiz-results-csv.ts`、`poll-results-csv.ts`、`comments.ts`
+  - `report.ts` 的學生／逐頁／題目三個 CSV 匯出（順帶消除重複呼叫 `safeDownloadBaseName`）。
+
+### 使用方式
+
+純內部重構，下載檔名輸出不變（例：標題「Week 1」的題目 CSV 仍為 `Week 1-questions.csv`，無標題則為 `report-questions-<id>.csv`）。
+
+### 測試
+
+`download-filename.test.ts` 新增 4 組 `csvDownloadFilename` 測試（標題版含 CJK、空白／null／undefined 退回 ID 版、對齊先前內聯模式）。後端 `tsc --noEmit` 通過；download-filename／poll-results-csv／quiz-results-csv／comments-csv／report-pages-csv／report-questions-csv／report-summary 等共 37 測試回歸全通過。
+
 ## 課後報告「最難題目」排序抽出為可測純函式
 
 ### 背景
