@@ -39,7 +39,7 @@ import type {
   QuizSet,
   SyncQuizProgress,
 } from '../types';
-import { scoreSumExceedingTotal, normalizeQuestionScores, calcQuestionScore } from '../lib/quizScoring';
+import { scoreSumExceedingTotal, normalizeQuestionScores, calcQuestionScore, calcAttemptScore, maxAttemptScore } from '../lib/quizScoring';
 import { roundToTwoDecimals } from '../lib/roundTo';
 
 const LOCAL_USER_CODE_KEY = 'makeslide.user_code';
@@ -242,9 +242,7 @@ export default function QuizBuilderPage() {
     const quiz = savedQuizzes.find((q) => q.id === snapshot.quizId);
     let score: number | undefined;
     if (quiz) {
-      const scoreTable = normalizeQuestionScores(quiz.questions);
-      const total = quiz.questions.reduce((acc, q, idx) => acc + calcQuestionScore(q, snapshot.answers[q.id] ?? [], scoreTable[idx] ?? 0), 0);
-      score = roundToTwoDecimals(total);
+      score = roundToTwoDecimals(calcAttemptScore(quiz.questions, snapshot.answers));
     }
     void submitQuizAttempt(snapshot.pdfId, snapshot.quizId, {
       client_id: clientId,
@@ -674,13 +672,8 @@ export default function QuizBuilderPage() {
     return (
     <div className="rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/10 p-4">
       {syncQuizShowAnswers ? (() => {
-        const scoreTable = normalizeQuestionScores(effectiveQuestions);
-        const total = effectiveQuestions.reduce((acc, q, idx) => {
-          const selected = studentAnswers[q.id] ?? [];
-          return acc + calcQuestionScore(q, selected, scoreTable[idx] ?? 0);
-        }, 0);
-        const score = roundToTwoDecimals(total);
-        const max = scoreTable.reduce((acc, s) => acc + s, 0);
+        const score = roundToTwoDecimals(calcAttemptScore(effectiveQuestions, studentAnswers));
+        const max = maxAttemptScore(effectiveQuestions);
         return (
           <div className="mb-3 flex items-center justify-between gap-2 rounded border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
             <span>{formatMessage('quiz.totalScore', { score })}</span>

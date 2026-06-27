@@ -8558,3 +8558,19 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 ### 技術細節
 - **更新測試期望**：把 `PROGRESS_STEPS` 的期望陣列補上 `downloading_captions`、`downloading_audio`、`transcribing_audio`（依 `statusMachine.ts` 的陣列順序），並新增 `isProgressStep('transcribing_audio')` 為 true 的斷言。
 - **驗證**：後端 `tsc --noEmit` 通過；`status-machine.test.ts` 5/5 通過（以新加入的 `scripts/run-tests.sh` 執行）。
+
+## 抽出測驗計分純函式 calcAttemptScore / maxAttemptScore（2026-06-27）
+
+### 功能目的
+`QuizBuilderPage` 有兩處重複的「計算一次測驗作答總分」邏輯：提交作答時、以及同步測驗顯示分數時，都各自寫了 `const scoreTable = normalizeQuestionScores(questions)` 再 `questions.reduce(...calcQuestionScore...)`，其中一處還另外 `scoreTable.reduce(...)` 算滿分。這段計分核心邏輯散落在頁面元件、且沒有針對「整份作答總分」的獨立測試。本項把它收斂成 `lib/quizScoring.ts` 的可測純函式。
+
+### 使用方式
+此為內部重構，計分行為與先前一致。需要算一次作答總分時，`import { calcAttemptScore, maxAttemptScore } from '<相對路徑>/lib/quizScoring'`，呼叫 `calcAttemptScore(questions, answersById)` 取得得分、`maxAttemptScore(questions)` 取得滿分；分數的四捨五入由呼叫端自行決定（`roundToTwoDecimals`）。
+
+### 技術細節
+- **新增純函式**（`frontend/src/lib/quizScoring.ts`）：
+  - `calcAttemptScore(questions, answersById)`：以 `normalizeQuestionScores()` 取得每題配分，對每題用 `calcQuestionScore()` 累加；`answersById` 以題目 id 對應選取的選項索引（缺答視為未作答）。回傳**未四捨五入**的原始總分，讓呼叫端依顯示需求自行 round。
+  - `maxAttemptScore(questions)`：normalized 配分加總，即該測驗滿分。
+- **接入**：`QuizBuilderPage` 兩處計分內聯（提交作答、同步顯示分數/滿分）改用上述函式，呼叫端維持 `roundToTwoDecimals`；其他 per-question 用途（如答錯偵測）維持不變。
+- **測試**（`quizScoring.test.ts`，新增 3 案例）：`maxAttemptScore` 配分加總、`calcAttemptScore` 依 id 加總（含全對／部分對／缺答／全缺）、回傳未四捨五入的原始值（三題均分 33.33… 全對回 100、單題回 100/3）。全檔 11/11 通過。
+- **驗證**：前端 `tsc --noEmit` 通過；測試以 `scripts/run-tests.sh frontend` 執行通過；純前端、不動後端、不需新 i18n。

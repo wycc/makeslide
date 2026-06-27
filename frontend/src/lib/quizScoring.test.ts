@@ -9,6 +9,8 @@ import {
   normalizeQuestionScores,
   isCorrectAnswer,
   calcQuestionScore,
+  calcAttemptScore,
+  maxAttemptScore,
 } from './quizScoring';
 
 function q(score: number | null): QuizQuestion {
@@ -86,4 +88,34 @@ test('calcQuestionScore: multiple question gives per-option partial credit', () 
   assert.equal(calcQuestionScore(m, [], 12), 6);
   // zero options → 0
   assert.equal(calcQuestionScore(mq([], 0), [], 12), 0);
+});
+
+function qWithId(id: string, score: number | null): QuizQuestion {
+  return { ...q(score), id } as unknown as QuizQuestion;
+}
+
+test('maxAttemptScore sums the normalized per-question scores', () => {
+  assert.equal(maxAttemptScore([qWithId('a', null), qWithId('b', null)]), 100);
+  assert.equal(maxAttemptScore([qWithId('a', 60), qWithId('b', null)]), 100);
+  assert.equal(maxAttemptScore([]), 0);
+});
+
+test('calcAttemptScore sums earned points across questions by id', () => {
+  const questions = [qWithId('a', null), qWithId('b', null)]; // single, answer [0], normalized 50/50
+  // both correct → 100
+  assert.equal(calcAttemptScore(questions, { a: [0], b: [0] }), 100);
+  // one correct, one wrong → 50
+  assert.equal(calcAttemptScore(questions, { a: [0], b: [1] }), 50);
+  // missing answer treated as no selection (wrong for single) → 50
+  assert.equal(calcAttemptScore(questions, { a: [0] }), 50);
+  // no answers → 0
+  assert.equal(calcAttemptScore(questions, {}), 0);
+});
+
+test('calcAttemptScore returns the raw (unrounded) total', () => {
+  // three unscored questions → normalized 33.33…; all correct sums back to 100
+  const questions = [qWithId('a', null), qWithId('b', null), qWithId('c', null)];
+  assert.ok(Math.abs(calcAttemptScore(questions, { a: [0], b: [0], c: [0] }) - 100) < 1e-9);
+  // a single correct one earns one third of 100 (unrounded)
+  assert.ok(Math.abs(calcAttemptScore(questions, { a: [0] }) - 100 / 3) < 1e-9);
 });

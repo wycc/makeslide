@@ -74,3 +74,25 @@ export function calcQuestionScore(question: QuizQuestion, selected: number[], qu
   }
   return earned;
 }
+
+/**
+ * Total points earned for an attempt: sums calcQuestionScore() over all
+ * questions, using normalizeQuestionScores() for the per-question point values.
+ * `answersById` maps question id -> selected option indices (missing = no
+ * answer). Returns the raw (unrounded) total; callers round for display.
+ */
+export function calcAttemptScore(
+  questions: QuizQuestion[],
+  answersById: Record<string, number[]>,
+): number {
+  const scoreTable = normalizeQuestionScores(questions);
+  return questions.reduce(
+    (acc, q, idx) => acc + calcQuestionScore(q, answersById[q.id] ?? [], scoreTable[idx] ?? 0),
+    0,
+  );
+}
+
+/** Maximum achievable points for a quiz (sum of normalized per-question scores). */
+export function maxAttemptScore(questions: QuizQuestion[]): number {
+  return normalizeQuestionScores(questions).reduce((acc, s) => acc + s, 0);
+}
