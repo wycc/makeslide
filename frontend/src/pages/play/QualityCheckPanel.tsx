@@ -111,7 +111,7 @@ export function QualityCheckPanel() {
   };
 
   return (
-    <section className="rounded-lg border border-border bg-surface p-4">
+    <section className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-lg border border-border bg-surface p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h2 className="flex items-center gap-2 text-sm font-semibold text-text">
           {t('play.quality.title')}

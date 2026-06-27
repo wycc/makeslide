@@ -45,7 +45,7 @@ export function PageAskPanel() {
   }
 
   return (
-    <section className="rounded-lg border border-border bg-surface">
+    <section className="flex min-h-0 flex-1 flex-col rounded-lg border border-border bg-surface">
       <div className="border-b border-border px-4 py-3">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-text">{t('play.sidebar.pageAsk.title')}</h2>
@@ -62,7 +62,7 @@ export function PageAskPanel() {
       </div>
 
       {hasConversation && (
-        <div className="max-h-96 space-y-2 overflow-y-auto border-b border-border p-3">
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto border-b border-border p-3">
           {pageAskMessages.map((m, i) => (
             <div
               key={i}

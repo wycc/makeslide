@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useI18n } from '../../i18n';
+import { useI18n, type TranslationKey } from '../../i18n';
 import { debugLog, debugWarn } from '../../lib/debugLog';
 import { calculateWatchProgressPercent, calculateAvgListenedPercent, formatWatchProgressBadgeCount } from '../../lib/watchProgress';
 import { updatePageNote, listPageComments, listAllComments, createPageComment, resolvePageComment, editPageComment, deletePageComment, fetchSimilarPages, type PageComment, type SimilarPage } from '../../lib/api/pdfs';
@@ -679,6 +679,13 @@ export function PlayPageSidebar() {
     window.setTimeout(() => setPollCopyMsg(null), 2000);
   };
   const [notebookTab, setNotebookTab] = useState<NotebookTab>(() => getStoredNotebookTab());
+  // 「AI 助手」分頁底下的子分頁，一次只顯示一個功能、讓各自有較大顯示高度。
+  const [aiSubTab, setAiSubTab] = useState<'tutor' | 'quality' | 'chat'>('tutor');
+  const AI_SUBTABS: ReadonlyArray<{ id: 'tutor' | 'quality' | 'chat'; labelKey: TranslationKey }> = [
+    { id: 'tutor', labelKey: 'play.sidebar.aiSubTab.tutor' },
+    { id: 'quality', labelKey: 'play.sidebar.aiSubTab.quality' },
+    { id: 'chat', labelKey: 'play.sidebar.aiSubTab.chat' },
+  ];
   const selectNotebookTab = (tab: NotebookTab) => {
     setNotebookTab(tab);
     setStoredNotebookTab(tab);
@@ -1398,13 +1405,34 @@ export function PlayPageSidebar() {
 
       {notebookTab === 'interact' && <ReviewListSection />}
 
-      {notebookTab === 'ai' && <PageAskPanel />}
+      {notebookTab === 'ai' && (
+        <div className="flex shrink-0 gap-1 rounded-lg border border-border bg-surface p-1" role="tablist">
+          {AI_SUBTABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={aiSubTab === tab.id}
+              onClick={() => setAiSubTab(tab.id)}
+              className={`flex-1 whitespace-nowrap rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
+                aiSubTab === tab.id
+                  ? 'bg-primary/15 text-primary dark:bg-primary/20'
+                  : 'text-muted hover:bg-surface-muted hover:text-text'
+              }`}
+            >
+              {t(tab.labelKey)}
+            </button>
+          ))}
+        </div>
+      )}
 
-      {notebookTab === 'ai' && <QualityCheckPanel />}
+      {notebookTab === 'ai' && aiSubTab === 'tutor' && <PageAskPanel />}
+
+      {notebookTab === 'ai' && aiSubTab === 'quality' && <QualityCheckPanel />}
 
       {notebookTab === 'notes' && <PageNoteSection />}
 
-      {notebookTab === 'ai' && (
+      {notebookTab === 'ai' && aiSubTab === 'chat' && (
       <section className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-lg border border-border bg-surface">
       <div className="border-b border-border px-4 py-3">
       <div className="mb-2 flex items-center justify-between gap-2">
