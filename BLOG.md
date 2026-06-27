@@ -9544,3 +9544,22 @@ AI 批次加頁（`addPagesFromPrompt`）在簡報中間插入多頁時，會把
 - **修正**：將該行由 `text-slate-500` 改為 `text-slate-400`（#94a3b8），對比提升至約 4.9:1、通過 AA；同時仍暗於上方主標題的 `text-slate-300`，保留「標題亮、副標暗」的視覺層次。
 - **範圍**：僅改動 `OutlineSection` 的副標題顏色一處；側欄其他 `text-slate-500`（空狀態提示、縮圖頁碼 fallback、留言時間戳等）為刻意的弱化次要資訊，未一併調整以免破壞既有層次。
 - **驗證**：純 className 變更、無型別或邏輯影響。分支 `fix/outline-text-contrast`。
+
+## 淺色主題改造第一階段：PlayPage「淺色管理＋深色播放」（使用者回報 UI，2026-06-28）
+
+### 功能目的
+使用者連續回報播放頁（PlayPage）在淺色模式下難用：先是大綱次要文字太淡、再是管理按鈕底色和面板融在一起。深入勘查後確認這不是單一顏色問題，而是**全站淺色模式失效**——前端 30+ 個元件用寫死的深色 `slate-*` / `text-fuchsia-200` / `bg-*/15` 類別，完全沒適配淺色（僅 4 個檔案用既有語意 token）。結果淺色模式像「把深色主題降亮度」，整體灰濛濛、層級不清。使用者進一步給出明確方向：做成「淺色管理介面 ＋ 深色播放區」混合設計，並建議一組完整配色。
+
+本階段聚焦截圖所在的 PlayPage，先把 token 基礎與此頁做對、驗證方向，後續再逐頁推廣到其餘 ~28 個檔。
+
+### 使用方式
+淺色主題下開啟 PlayPage：上方工具列與右側「投影片管理／大綱」等區塊為淺色白底卡片、文字三層次（標題／內文／副標）清楚可讀、管理按鈕色彩收斂；中央投影片與逐字稿維持深色沉浸區，並與淺色面板有清楚分界。切回深色主題時，PlayPage 視覺與改動前幾乎一致（無回歸）。
+
+### 技術細節
+- **Token 基礎**（[index.css](frontend/src/index.css) + [tailwind.config.js](frontend/tailwind.config.js)）：light 頁底改 #F5F7FA、surface 維持白；新增 `--color-surface-muted`（卡片標題列）與 `--color-border-light`（細分隔線）兩組 token（深淺各一值）並註冊為 Tailwind 工具類；主色由 cyan 改 indigo。**關鍵約束**：[contrastRatio.test.ts](frontend/src/lib/contrastRatio.test.ts) 會解析 `index.css` 強制 `primary` 對 surface ≥ 4.5——indigo-500 `#6366F1` 當文字僅約 3.6:1 會 fail，故 light 的 `--color-primary` 取 indigo-600 `#4F46E5`（約 6.3:1），dark 取 indigo-400 `#818CF8`。實心主色按鈕用 `bg-indigo-600 + 白字`，觀感等同使用者要的 `#6366F1` 且通過測試。
+- **設計策略**：中性骨架（卡片底/邊框/文字）一律改用語意 token，因 dark token 刻意貼齊既有 slate 值，深色模式幾乎零變化、light 模式自動正確；彩色強調元素（留言 sky、複習 rose、彩色按鈕、徽章）token 涵蓋不到的色相，則以 `dark:` 變體呈現——base 走淺色淡卡片、`dark:` 還原原深色樣式。
+- **[PlayPageHeader](frontend/src/pages/play/PlayPageHeader.tsx)**：header 容器改 `bg-surface` + 細邊框 + 極淡陰影（解決使用者反映的「上方遮罩感太強」）；標題/頁碼/同步控制 token 化；條件橫幅（唯讀／失敗／待確認／重生 banner）與同步 Q&A 面板改為 `dark:` 變體以在淺底可讀；下拉觸發鈕的 accent map 加淺色版＋`dark:` 還原；下拉**彈窗本體刻意維持深色**（popover），故其內彩色按鈕無需改動。
+- **[PlayPageSidebar](frontend/src/pages/play/PlayPageSidebar.tsx)**（最大宗，~294 行變動）：每個 `<section>` 改白底卡片；以範圍 `sed` 將 ~68 處中性 `slate-*` 機械轉為 token，再逐一手工處理彩色強調區。大綱副標改 `text-muted`（**正式取代**先前 slate-400 暫時修法）。**管理列 4 顆按鈕收斂**：原本 fuchsia/emerald/indigo/rose 四色並陳 → 新增=主色實心、重生=淡色主色、新增多頁=中性次要、刪除=danger soft。分頁列 active 態與計數徽章由 cyan 改 primary。留言(sky)/複習(rose)面板改淺色淡卡片＋`dark:` 還原。縮圖上的「X/Y 完成」watch-progress 徽章因疊在投影片影像上（白字＋實心色在任何圖上都穩），刻意保留。
+- **[PlayPageSlidePanel](frontend/src/pages/play/PlayPageSlidePanel.tsx) / [PlayPage](frontend/src/pages/PlayPage.tsx)**：頁面整體文字 token 化（原 wrapper 的 `text-slate-100` 在淺底近乎隱形）；深色播放器外層加 `shadow-lg dark:shadow-none`，使其在淺底成為刻意的深色卡片、邊界清楚。
+- **驗證**：前端 `tsc --noEmit` 通過；`contrastRatio.test.ts` 8/8（新 token 仍過 AA/AAA）；`vite build` 成功；檢查輸出 CSS 確認 `bg-surface-muted`/`border-border-light`/`bg-primary`/`text-primary` 等新工具類已生成、`--color-primary` 為 indigo。分支 `feat/light-theme-playpage`。
+- **未在本階段**：其餘 ~28 個檔（HomePage、各 Dialog、TemplatesPage、SystemDataPage、RemoteControllerPage…）仍深色硬寫，淺色模式尚未修，列為後續依本階段 token 與 pattern 逐頁推廣。
