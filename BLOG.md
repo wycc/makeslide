@@ -1,5 +1,38 @@
 # MakeSlide 功能說明
 
+## 重新產生圖片時，即使原圖不存在也能進行（改走文字→圖生成）
+
+### 目的
+
+「重生」圖片（單頁 `重新產生圖片` 與一次勾選多項的批次「重生」）原本一律把該頁**現有的圖片**讀進來
+當作 `images.edit` 的編輯基底。但有些頁面的底圖檔可能根本不存在——例如一次失敗的多面產生在資料庫
+留下了 `image_path` 卻沒寫出實際圖檔（`Uhga6bY0Bm` 的第 42/43/44 頁即是）。此時讀檔會丟出
+`ENOENT: no such file or directory`，導致整個重生任務在第 1 步「圖檔」就失敗，使用者無從在介面上修復
+這些頁。
+
+### 變更內容
+
+- 讀取底圖改為容錯：底圖檔不存在（`ENOENT`）時不再讓任務失敗，而是退而**從零生成**該頁圖片；其他
+  讀檔錯誤仍照常拋出。
+- 生成方式比照初次產圖（`renderTextPagesWithLlm`）的選擇邏輯：
+  - 該頁有 figure 參考圖 → 以參考圖為輸入做 `images.edit`（搭配一般生成 prompt）。
+  - 沒有任何參考圖 → 純文字→圖 `images.generate`。
+- **有真正底圖時行為完全不變**：仍使用既有的「編輯這張投影片」prompt 模板做 `images.edit`。
+- 單頁 `regenerate-image` 端點與批次「重生」job 兩條路徑都套用此修正。
+
+### 使用方式
+
+對失敗或缺圖的頁面直接按「重新產生圖片」（或批次重生勾選「圖檔」）即可；系統會自動依該頁的文字／
+逐字稿內容重新生成一張投影片圖，不再因找不到原圖而整個失敗。
+
+### 實作備註
+
+`regenerate.ts`（批次 job 圖檔步驟）與 `page-operations.ts`（單頁 `regenerate-image`）都把「讀底圖 →
+`toFile`」改為 `try/catch`（只吞 `ENOENT`、其餘照拋並記 `warn`），再依「是否有底圖／是否有 figure 參考圖」
+決定走 `images.edit` 或 `images.generate`。新增 `regenerate-image-missing-base.test.ts`：分別驗證單頁路由
+與批次 job 在缺底圖時呼叫 `images.generate`（而非 `images.edit`）、批次 job 能完成並把新圖寫出到磁碟。
+後端 `tsc --noEmit` 通過，新測試 2/2 與 figure-reference／image-edit-timeout 回歸通過。
+
 ## 多面產生失敗後維持 metadata 與 DB 一致（避免簡報像整份壞掉）
 
 ### 目的

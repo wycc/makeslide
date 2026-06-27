@@ -1306,9 +1306,6 @@ async function runRegenerateImages(
       { base_prompt: basePrompt },
     );
 
-    const currentImagePath = pageImagePath(pdfId, p.page_uid);
-    const currentImageBuffer = await fs.promises.readFile(currentImagePath);
-    const currentImageForEdit = await toFile(currentImageBuffer, `page-${p.page_number}.jpg`, { type: 'image/jpeg' });
     const figureRefFiles = await Promise.all(
       figureRefs.map((figure, index) =>
         fs.promises
@@ -1316,27 +1313,65 @@ async function runRegenerateImages(
           .then((buf) => toFile(buf, `figure-ref-${index + 1}.png`, { type: 'image/png' })),
       ),
     );
-    const editImage: Parameters<typeof client.images.edit>[0]['image'] =
-      figureRefFiles.length > 0 ? [currentImageForEdit, ...figureRefFiles] : currentImageForEdit;
+
+    // The base image is the slide's existing render, used as the edit source. It can be
+    // legitimately missing — e.g. a half-failed add-pages insert leaves the page row with
+    // image_path set but no file on disk. Rather than failing the whole regenerate job with
+    // ENOENT, fall back to generating the image from scratch (the same path the initial
+    // pipeline / renderTextPagesWithLlm uses): edit conditioned on figure references when
+    // any exist, otherwise a pure text->image generation.
+    const currentImagePath = pageImagePath(pdfId, p.page_uid);
+    let currentImageForEdit: Awaited<ReturnType<typeof toFile>> | null = null;
+    try {
+      const currentImageBuffer = await fs.promises.readFile(currentImagePath);
+      currentImageForEdit = await toFile(currentImageBuffer, `page-${p.page_number}.jpg`, { type: 'image/jpeg' });
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+      logger.warn(
+        { pdfId, pageNumber: p.page_number, jobId: state.job_id, imagePath: currentImagePath },
+        'regenerate(image): base image missing, generating from scratch instead of editing',
+      );
+    }
+
+    const editInputs: Array<Awaited<ReturnType<typeof toFile>>> = [];
+    if (currentImageForEdit) editInputs.push(currentImageForEdit);
+    editInputs.push(...figureRefFiles);
 
     const artifactHandle = startArtifact({
       run: timingRun,
       pageNumber: p.page_number,
       artifact: 'image',
       reason: 'regenerate',
-      metadata: { job_id: state.job_id, precision: 'inline', figureReferenceCount: figureRefs.length },
+      metadata: {
+        job_id: state.job_id,
+        precision: 'inline',
+        figureReferenceCount: figureRefs.length,
+        fromScratch: currentImageForEdit ? undefined : true,
+      },
     });
     const generated = await withExponentialBackoffRetry(
       () =>
-        client.images.edit({
-          model: config.openaiImageModel,
-          image: editImage,
-          prompt: editPrompt,
-          size: '1536x1024',
-          quality: 'low',
-        }, {
-          timeout: imageTimeoutMs,
-        }),
+        editInputs.length > 0
+          ? client.images.edit({
+              model: config.openaiImageModel,
+              image: editInputs.length === 1 ? editInputs[0]! : editInputs,
+              // With a real base image use the "edit this slide" template; with only figure
+              // references (no base) the base-image-oriented edit template doesn't apply, so
+              // fall back to the plain build prompt.
+              prompt: currentImageForEdit ? editPrompt : basePrompt,
+              size: '1536x1024',
+              quality: 'low',
+            }, {
+              timeout: imageTimeoutMs,
+            })
+          : client.images.generate({
+              model: config.openaiImageModel,
+              prompt: basePrompt,
+              size: '1536x1024',
+              quality: 'low',
+            } as never, {
+              timeout: imageTimeoutMs,
+            }),
       {
         maxAttempts: 5,
         initialDelayMs: 1000,
