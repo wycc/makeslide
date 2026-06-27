@@ -77,10 +77,12 @@ export async function registerH5pRoutes(app: FastifyInstance): Promise<void> {
     if (!pdfRow) return reply.code(404).send(errorResponse('NOT_FOUND', 'PDF not found'));
     if (!canReadPdf(sessionSub(request), pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', 'Access denied'));
 
+    // Completed pages end at the terminal page status 'audio_ready' ('ready' is
+    // a PDF-level status, never set on pages, so it matched nothing).
     const pages = db
       .prepare(
         `SELECT page_number, page_uid, image_path, audio_path, script_path, text_path
-           FROM pages WHERE pdf_id = ? AND status = 'ready' ORDER BY page_number ASC`,
+           FROM pages WHERE pdf_id = ? AND status = 'audio_ready' ORDER BY page_number ASC`,
       )
       .all(id) as PageRow[];
 

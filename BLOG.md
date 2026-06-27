@@ -8532,3 +8532,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **重用既有純函式**：`lib/progressPercent.ts` 的 `progressPercent(current, total)`——`total <= 0` 或輸入非有限值時回 0，否則四捨五入後 `clamp` 到 [0, 100]。
 - **接入**（2 個檔案）：`HomePage` 用量比例條 `${max > 0 ? Math.round((value / max) * 100) : 0}%` 改為 `${progressPercent(value, max)}%`（行為等價）；`SettingsPage` 向量索引進度條 `const pct = Math.round((indexed_pages / total_pages) * 100)` 搭配 `Math.min(pct, 100)` 改為 `const pct = progressPercent(indexed_pages, total_pages)`，去掉多餘的 `Math.min`（函式已 clamp），並修掉 `total_pages` 為 0 時的 `NaN%`。外層 `total_pages > 0` 的顯示條件保留不變。
 - **驗證**：前端 `tsc --noEmit` 通過；`progressPercent` 既有 4 個測試續通過；`pages`／`components` 已無殘留的通用比例百分比內聯寫法（`score * 100` 之類本身即 0–1 比例、非除法，不在此範圍）；純前端、不動後端、不需新 i18n。
+
+## 修正品質檢查與匯出漏頁（page 狀態 bug）（2026-06-27）
+
+### 功能目的
+播放頁的「品質檢查」面板，以及圖片品質、講稿品質與 H5P 匯出這幾個後端功能，原本對正常生成完成的簡報會回傳「沒有任何頁面」。根因是這四個路由都用 `SELECT ... FROM pages WHERE status = 'ready'` 取頁，但 `'ready'` **根本不是合法的頁面狀態**——`statusMachine.ts` 的 `PAGE_STATUSES` 只有 `pending / rendered / text_ready / script_ready / audio_ready / failed`，`'ready'` 是 PDF 層級的狀態。主 pipeline 完成後，每一頁的終態是 `audio_ready`（`pipeline.ts` 只把 `pdfs.status` 設為 `'ready'`，從不把任何頁面設成 `'ready'`）。因此這些查詢永遠匹配 0 列，功能形同失效。本項把查詢條件修正為真正的完成狀態。
+
+### 使用方式
+此為後端修正，使用方式不變。修正後，對已生成完成（頁面為 `audio_ready`）的簡報呼叫品質檢查、圖片品質、講稿品質與 H5P 匯出，會正確涵蓋所有完成頁面。
+
+### 技術細節
+- **修正 4 個路由**：`quality-check.ts`、`image-quality.ts`、`script-quality.ts`、`h5p.ts` 的頁面查詢由 `status = 'ready'` 改為 `status = 'audio_ready'`，並加上註解說明 `'ready'` 是 PDF 狀態、頁面終態為 `audio_ready`，避免日後再犯。
+- **修正既有測試 fixture**：`image-quality.test.ts`、`script-quality.test.ts`、`h5p.test.ts` 原本以**不存在的** `'ready'` 頁面狀態建立測試資料，所以測試會過、但與 production 不符（掩蓋了這個 bug）。改為 `'audio_ready'`，使測試反映真實情況並成為回歸測試。各檔 `pdfs` INSERT 的 `'ready'` 是正確的 PDF 狀態，維持不變。
+- **新增測試**：原本沒有後端測試的 quality-check 補上 `quality-check.test.ts`，涵蓋「`audio_ready` 頁面會被檢查（回歸）」、「非完成頁（如 `rendered`）不被檢查」、404、403 四個案例。
+- **驗證**：backend `tsc --noEmit` 通過；四個路由測試以專案 `.nvmrc` 指定的 Node 22 搭配 `--test-force-exit` 執行，子測試全數通過（quality-check 4/4、image-quality 4/4、script-quality 5/5、h5p 4/4）。

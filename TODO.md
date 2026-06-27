@@ -17,7 +17,9 @@
 
 使用者提示產生新項目時應參考 `docs/STATUS_REPORT_2026_06_27.md`（該檔此前因檔名問題不存在、現已補上）。依其 §4.2／§7.2／§9 的優先建議，新增以下項目（P0 bug 列首，已初步以 grep 驗證）：
 
-- [ ] **（P0 bug）修正品質檢查／匯出漏頁**：`quality-check.ts`、`image-quality.ts`、`script-quality.ts`、`h5p.ts` 皆以 `pages WHERE status = 'ready'` 取頁，但主 pipeline 完成後**頁面層級**停在 `audio_ready`（[`pipeline.ts:1260`]）、`pipeline.ts:1299` 只把 **pdfs**.status 設為 `'ready'`，頁面從不設 `'ready'`（grep 全 backend 確認頁面無 `status:'ready'` 賦值）。結果這些功能對正常生成的簡報可能回傳空頁清單。修正方向：改以「完成狀態集合（`audio_ready`／`ready`）」過濾，並先寫一個重現測試再修，補後端測試涵蓋 audio_ready 頁面被納入。屬後端、需測試、跨 4 路由，建議單獨一輪謹慎處理。
+- [x] **（P0 bug）修正品質檢查／匯出漏頁**：`quality-check.ts`、`image-quality.ts`、`script-quality.ts`、`h5p.ts` 皆以 `pages WHERE status = 'ready'` 取頁，但主 pipeline 完成後**頁面層級**停在 `audio_ready`（[`pipeline.ts:1260`]）、`pipeline.ts:1299` 只把 **pdfs**.status 設為 `'ready'`，頁面從不設 `'ready'`（grep 全 backend 確認頁面無 `status:'ready'` 賦值）。結果這些功能對正常生成的簡報可能回傳空頁清單。修正方向：改以「完成狀態集合（`audio_ready`／`ready`）」過濾，並先寫一個重現測試再修，補後端測試涵蓋 audio_ready 頁面被納入。屬後端、需測試、跨 4 路由，建議單獨一輪謹慎處理。
+  - 修改說明（2026-06-27）：根因確認——`'ready'` **根本不是合法 page 狀態**（`statusMachine.ts` 的 `PAGE_STATUSES` 無 `ready`，終態為 `audio_ready`；`'ready'` 僅為 PDF 狀態），故 4 路由的 `WHERE status = 'ready'` 對 `pages` 永遠匹配 0 列。將 4 路由的頁面查詢一律改為 `status = 'audio_ready'` 並加註解說明。修正既有 3 個測試（image-quality/script-quality/h5p）的 fixture——原本用**不存在的** `'ready'` page 狀態（所以測試過但 production 壞），改為 `'audio_ready'`，使其反映真實狀態並成為回歸測試（pdfs INSERT 的 `'ready'` 為正確 PDF 狀態，維持不動）。為原本無測試的 quality-check 新增 `quality-check.test.ts`（4 子測試：audio_ready 頁面被檢查〔回歸〕、非完成頁〔rendered〕不檢查、404、403）。backend `tsc --noEmit` 通過；4 個路由測試以 Node 22（`.nvmrc`）+ `--test-force-exit` 執行，子測試全通過（quality-check 4/4、image-quality 4/4、script-quality 5/5、h5p 4/4）。分支 `fix/quality-export-page-status`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 16 個完成項目（16/100，未達上限）。
 - [ ] **（P0）課後報告補強**：依 §7.1，`registerReportRoutes()`／`PostClassReportPanel` 補上頁面困難度（完成率低／提問多／投票分歧高）、題目答錯率與 CSV 下載入口。可分拆為純函式（前端彙總）+ 後端聚合兩個子項。
 - [ ] **（P1）生成前成本估算 modal 串接**：已有 `lib/costEstimate.ts` helper 與 `PromptModal` 估算，依 §7.5 確認是否已於所有來源（PDF／文字／YouTube）生成前顯示，補齊缺口並加測試。
 - [ ] **（P1）教材知識庫：搜尋結果加入動作**：依 §7.4／§8.1，首頁搜尋結果加入「加入新簡報」或「收藏頁」入口（延伸 `search.ts`／`from-pages.ts`）。
@@ -61,6 +63,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-27 | （P0 bug，依 STATUS_REPORT §4.2）修正品質檢查／匯出漏頁：`quality-check`/`image-quality`/`script-quality`/`h5p` 4 路由的頁面查詢由不存在的 page 狀態 `'ready'` 改為終態 `'audio_ready'`；修正 3 測試 fixture、新增 quality-check.test.ts；以 Node 22 + `--test-force-exit` 驗證子測試全通過（計數 16/100） | fix/quality-export-page-status（已 merge） |
 | 2026-06-27 | 比例條百分比收斂：發現既有 `progressPercent` 已是該通用函式，改為重用而非新增；收斂 `HomePage` 用量比例條與 `SettingsPage` 索引進度條 2 處，順帶修掉 `total_pages=0` 時 `NaN%` 潛在 bug；typecheck 通過、既有測試續通過（計數 15/100） | refactor/reuse-progress-percent（已 merge） |
 | 2026-06-27 | 依 LOOP.md 第 2 條分析前端程式（第一三四輪）：TODO 僅剩 2 個待使用者決定項目，新增 5 個項目並完成其一——模板字串內插收斂為 `lib/interpolateTemplate.ts`，收斂 6 處內聯（ImportTextPage/AddPagesFromPromptModal/PlayPageSidebar/SystemDataPage/QuizBuilderPage/PlayPageFullscreen）；補 6 測試；typecheck 通過、無殘留（計數 14/100） | refactor/interpolate-template（已 merge） |
 | 2026-06-27 | 逐字稿字數上限範圍說明 i18n：新增共用鍵 `play.scriptMaxCharsRange`（內插 MIN/MAX），`TtsDialog`/`RegenAllDialog` 輸入下方加範圍提示、`min/max` 屬性改用常數；i18n parity+nonempty 27 測試通過（計數 13/100）。至此第一二九輪新增的 4 個可執行項目已全部完成，TODO 僅剩 2 個待使用者決定項目 | feat/script-max-chars-range-hint（已 merge） |
