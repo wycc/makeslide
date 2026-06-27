@@ -47,6 +47,7 @@ import {
 } from '../lib/theme';
 import { GEMINI_TTS_VOICES, OPENAI_TTS_VOICES, geminiVoiceLabel, openaiVoiceLabel } from '../lib/ttsVoices';
 import { formatSlaOverrideRangeMessage, validateSlaOverrideSecondsInput } from '../lib/slaOverrideValidation';
+import { progressPercent } from '../lib/progressPercent';
 import { copyTextToClipboard } from '../lib/clipboard';
 import { bytesToRoundedKb } from '../lib/bytesFreed';
 import { LLM_PRICE_PER_1M_TOKENS, TTS_PRICE_PER_1K_CHARS, formatUsd } from '../lib/costEstimate';
@@ -1063,11 +1064,11 @@ export default function SettingsPage() {
                         .replace('{pdfs}', String(embeddingStats.indexed_pdfs))}
                     </p>
                     {embeddingStats.total_pages > 0 ? (() => {
-                      const pct = Math.round((embeddingStats.indexed_pages / embeddingStats.total_pages) * 100);
+                      const pct = progressPercent(embeddingStats.indexed_pages, embeddingStats.total_pages);
                       return (
                         <div className="space-y-1">
                           <div className="h-2 w-full overflow-hidden rounded-full bg-border">
-                            <div className="h-full rounded-full bg-indigo-500" style={{ width: `${Math.min(pct, 100)}%` }} />
+                            <div className="h-full rounded-full bg-indigo-500" style={{ width: `${pct}%` }} />
                           </div>
                           <p className="text-[11px] text-muted">
                             {t('settings.embeddingIndexCoverage')

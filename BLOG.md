@@ -8519,3 +8519,16 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **接入**（6 個檔案）：`ImportTextPage` 與 `AddPagesFromPromptModal` 直接以 `import { interpolateTemplate as formatTemplate / formatMessage }` 取代原本的本地函式，呼叫點不需改動；`PlayPageSidebar`、`SystemDataPage`、`QuizBuilderPage`、`PlayPageFullscreen` 的 `formatMessage` 改為 `interpolateTemplate(t(key), values)` 的薄包裝（保留各自的 `useCallback` 與型別簽章）。
 - **測試**（`interpolateTemplate.test.ts`，6 案例）：單一／多佔位符、同一佔位符多處出現、數字以 `String()` 轉換、無對應值原樣保留、空 values 回傳原模板、與被取代的舊內聯 reduce 寫法輸出一致。
 - **驗證**：前端 `tsc --noEmit` 通過；新測試 6/6 通過；全專案已無殘留的內聯 `{key}` 內插寫法（測試檔除外）；純前端、不動後端、不需新 i18n。
+
+## 比例條百分比改用既有 progressPercent 並修掉 NaN% 潛在 bug（2026-06-27）
+
+### 功能目的
+首頁卡片的「使用量比例條」與設定頁的「向量索引進度條」原本各自內嵌 `value / max * 100` 的百分比計算。其中設定頁的寫法 `Math.round((indexed_pages / total_pages) * 100)` 沒有處理分母為 0 的情況——若 `total_pages` 為 0 會算出 `NaN`，渲染成 `NaN%`。專案其實早已有一個通用且具完整測試的 `progressPercent(current, total)` 工具（會處理除以 0 與非有限值、並把結果夾在 0–100），因此本項直接重用它取代這兩處內聯，而不是再造一個 `ratioPercent`，同時順手修掉設定頁的 NaN 潛在 bug。
+
+### 使用方式
+此為內部重構，比例條顯示與先前一致（設定頁在資料異常時更穩健）。需要把「部分 / 全部」換算成百分比寬度時，`import { progressPercent } from '<相對路徑>/lib/progressPercent'`，呼叫 `progressPercent(value, max)` 即可。
+
+### 技術細節
+- **重用既有純函式**：`lib/progressPercent.ts` 的 `progressPercent(current, total)`——`total <= 0` 或輸入非有限值時回 0，否則四捨五入後 `clamp` 到 [0, 100]。
+- **接入**（2 個檔案）：`HomePage` 用量比例條 `${max > 0 ? Math.round((value / max) * 100) : 0}%` 改為 `${progressPercent(value, max)}%`（行為等價）；`SettingsPage` 向量索引進度條 `const pct = Math.round((indexed_pages / total_pages) * 100)` 搭配 `Math.min(pct, 100)` 改為 `const pct = progressPercent(indexed_pages, total_pages)`，去掉多餘的 `Math.min`（函式已 clamp），並修掉 `total_pages` 為 0 時的 `NaN%`。外層 `total_pages > 0` 的顯示條件保留不變。
+- **驗證**：前端 `tsc --noEmit` 通過；`progressPercent` 既有 4 個測試續通過；`pages`／`components` 已無殘留的通用比例百分比內聯寫法（`score * 100` 之類本身即 0–1 比例、非除法，不在此範圍）；純前端、不動後端、不需新 i18n。
