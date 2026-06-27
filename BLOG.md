@@ -1,5 +1,26 @@
 # MakeSlide 功能說明
 
+## 範本庫的分類/搜尋/排序邏輯抽出為可測純函式
+
+### 背景
+
+範本庫頁面（`TemplatesPage`）會列出公開的教學範本，並提供分類篩選、關鍵字搜尋（比對名稱／說明／提示詞）與「最新／最熱門」排序。原本這些衍生邏輯——分類晶片清單、以及「依分類+搜尋過濾再依模式排序」——直接內聯在元件的 `useMemo` 裡，沒有獨立測試；其中「最新」要保留 API 的 created_at 倒序、「最熱門」依套用次數排序且以穩定排序讓新近度當決勝，這類細節最容易在改動時悄悄壞掉。
+
+### 變更內容
+
+- 新增 `frontend/src/lib/templateFilter.ts`：
+  - `templateCategories(templates)`：回傳 `['all', ...去重並排序的分類]`。
+  - `filterAndSortTemplates(templates, { category, query, sortMode })`：依分類與搜尋（名稱/說明/提示詞、大小寫不敏感）過濾，再依 `newest`（保留原序）或 `popular`（套用次數降冪、穩定排序）排序；不修改輸入陣列。
+- `TemplatesPage` 的兩個 `useMemo` 改用這兩個純函式（行為等價）。
+
+### 使用方式
+
+純內部重構，範本庫的篩選/搜尋/排序行為不變。
+
+### 測試
+
+新增 `templateFilter.test.ts`（5 組：分類去重排序含空陣列、依分類過濾、搜尋三欄位含 CJK 與大小寫、newest 保留原序／popular 降冪、不可變不改輸入）。前端 `tsc --noEmit` 通過、新測試 5/5 通過。
+
 ## 測驗歷史平均分計算抽出為可測純函式
 
 ### 背景

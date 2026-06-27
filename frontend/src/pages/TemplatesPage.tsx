@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../i18n';
 import { listTemplates, deleteTemplate, applyTemplate, type Template } from '../lib/api/templates';
 import { getAuthStatus, type AuthStatus } from '../lib/api';
+import { templateCategories, filterAndSortTemplates } from '../lib/templateFilter';
 
 function TemplateCard({
   template,
@@ -92,29 +93,12 @@ export default function TemplatesPage() {
     void getAuthStatus().then(setAuthStatus).catch(() => {});
   }, []);
 
-  const categories = useMemo(() => {
-    const cats = new Set(templates.map((t) => t.category));
-    return ['all', ...Array.from(cats).sort()];
-  }, [templates]);
+  const categories = useMemo(() => templateCategories(templates), [templates]);
 
-  const filtered = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    const matched = templates.filter((tmpl) => {
-      if (activeCategory !== 'all' && tmpl.category !== activeCategory) return false;
-      if (!q) return true;
-      return (
-        tmpl.name.toLowerCase().includes(q) ||
-        tmpl.description.toLowerCase().includes(q) ||
-        tmpl.skill_data.prompt.toLowerCase().includes(q)
-      );
-    });
-    // 'newest' keeps the API's created_at DESC order; 'popular' sorts by
-    // apply_count desc (stable sort preserves recency as the tiebreaker).
-    if (sortMode === 'popular') {
-      return [...matched].sort((a, b) => b.apply_count - a.apply_count);
-    }
-    return matched;
-  }, [templates, activeCategory, searchQuery, sortMode]);
+  const filtered = useMemo(
+    () => filterAndSortTemplates(templates, { category: activeCategory, query: searchQuery, sortMode }),
+    [templates, activeCategory, searchQuery, sortMode],
+  );
 
   function handleApply(template: Template) {
     const { prompt, applyTo, imageStylePrompt, quizPrompt, ttsProvider, ttsVoice } = template.skill_data;
