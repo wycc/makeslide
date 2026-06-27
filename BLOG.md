@@ -8419,3 +8419,20 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **接入**：`AnimationEditorTab.truncateSentence` 改為委派 `truncateWithEllipsis`（保留預設上限 18 與本地函式名）；`PlayPageSidebar` 把 `text.slice(0, 20) + (text.length > 20 ? '…' : '')` 改為 `truncateWithEllipsis(text, 20)`，輸出完全等價。
 - **測試**（`truncate.test.ts`，5 案例）：未超長不變（含等長邊界不加省略號）、超長截斷加單一省略號（含 CJK 字元）、`maxLen` 0 邊界（非空回 `…`、空字串回空）、非有限值／負值不截斷、非字串淨化為空字串。
 - **驗證**：前端 `tsc --noEmit` 通過；新測試 5/5 通過；純前端、不動後端、不需新 i18n。
+
+## 數值夾範圍（clamp）收斂為共用純函式（2026-06-27）
+
+### 功能目的
+前端有十餘處「把數值夾在固定範圍內」的 `Math.max(min, Math.min(max, value))`（或等價的 `Math.min(max, Math.max(min, value))`）內聯寫法，散落在測驗時限輸入、播放頁音訊跳轉、刪除投影片後的索引回退、進度百分比、PDF 卡片進度、跳頁輸入、繪圖最近點計算、報告百分比，以及動畫編輯分頁的多個圓角／不透明度／線寬輸入。其中 `AnimationEditorTab` 甚至同時存在一個 local `clamp` useCallback 與多處未使用它的內聯寫法，前後不一致。本項把這個夾範圍邏輯收斂成單一可測的共用純函式，消除重複、統一語意，方便日後重用。
+
+### 使用方式
+此為內部重構，所有畫面行為與先前完全一致（每個呼叫點輸出等價）。日後需要把數值限制在某範圍時，只需 `import { clamp } from '<相對路徑>/lib/clamp'`，呼叫 `clamp(value, min, max)` 即可，例如 `clamp(Number(input), 0, 3600)`。
+
+### 技術細節
+- **純函式模組**（`frontend/src/lib/clamp.ts`）：`clamp(value, min, max)` 回傳 `Math.min(max, Math.max(min, value))`。刻意採與專案既有內聯寫法相同的運算順序，因此：
+  - `min <= max` 時為標準 clamp，回傳落在 `[min, max]` 的值。
+  - 不額外淨化 `NaN`——`value` 為 `NaN` 時結果仍為 `NaN`，與原內聯式行為一致（呼叫端原本即依賴此特性，如 `AnimationEditorTab` 線寬以 `Number.isFinite(v) ? v : 5` 接手 fallback）。
+  - 呼叫端負責保證 `min <= max`；若傳入 `min > max` 則回傳 `max`（與原寫法一致）。
+- **接入**（共 9 個檔案）：`QuizBuilderPage`（時限輸入）、`useSlideManagement`（刪片後索引回退）、`PlayPage`（音訊 `currentTime` 跳轉）、`reportSummary`（百分比 0–1 夾值）、`drawingGeometry`（線段最近點參數 t）、`PdfCard`（進度 current 夾值）、`PlayPageSlidePanel`（跳頁輸入夾 1–總頁數）、`AnimationEditorTab`（移除 local `clamp` useCallback，拖曳調整與 7 處 onChange 圓角／不透明度／線寬輸入改用共用函式）、`progressPercent`（內部最後一步 clamp 改委派）。
+- **測試**（`clamp.test.ts`，5 案例）：範圍內值不變（含上下邊界 inclusive）、超界拉回最近邊界、與被取代的 `Math.max/Math.min` 寫法輸出一致、`NaN` 傳遞、`min > max` 倒置邊界回 `max`。
+- **驗證**：前端 `tsc --noEmit` 通過；`clamp` 與 `progressPercent` 測試共 9/9 通過；全專案已無殘留的 `Math.max(0, Math.min` ／ `Math.max(1, Math.min` 內聯 clamp（測試檔除外）；純前端、不動後端、不需新 i18n。

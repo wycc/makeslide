@@ -2703,3 +2703,17 @@ TODO.md 目前仍有兩個明確標註「待使用者決定 / 待處理」的未
 - 工作內容：剩餘 2 個 `[ ]` 項目仍為「待使用者決定 / 涉 CI 變更」不宜自動逕行，依 LOOP.md 第 2 條分析程式。grep 盤點截斷加省略號寫法，發現 `AnimationEditorTab` 與 `PlayPageSidebar` 兩處重複且缺防呆，抽成 `truncateWithEllipsis` 收斂並補邊界/淨化測試，兩處呼叫點行為不變。
 - 時間：2026-06-27
 - 分支：`refactor/truncate-ellipsis`（已 merge 回 master）
+
+## 新增可執行項目（第一二八輪，2026-06-27）
+
+- [x] 數值夾範圍（clamp）收斂為共用純函式（去重 / 可測性）：前端十餘處內嵌 `Math.max(min, Math.min(max, value))`（或等價的 `Math.min(max, Math.max(min, value))`），散落在測驗時限、音訊跳轉、刪片索引回退、進度百分比、PDF 卡片進度、跳頁輸入、繪圖最近點、報告百分比與動畫編輯分頁多個圓角/不透明度/線寬輸入；`AnimationEditorTab` 更同時存在 local `clamp` useCallback 與未使用它的內聯寫法，前後不一致。抽成共用純函式並補測試。純前端、不動後端、不需新 i18n。
+  - 修改說明（2026-06-27）：新增 `frontend/src/lib/clamp.ts`（`clamp(value, min, max)` = `Math.min(max, Math.max(min, value))`，採與既有內聯式相同運算順序，行為完全一致：`NaN` 照樣傳遞、`min > max` 回 `max`、不額外淨化）。收斂 9 個檔案：`QuizBuilderPage`、`useSlideManagement`、`PlayPage`、`reportSummary`、`drawingGeometry`、`PdfCard`、`PlayPageSlidePanel`、`AnimationEditorTab`（移除 local clamp useCallback + 拖曳與 7 處 onChange 輸入改用共用函式）、`progressPercent`（內部最後一步 clamp 改委派）。新增 `clamp.test.ts` 5 組測試（範圍內不變含上下界、超界拉回、與舊寫法輸出一致、`NaN` 傳遞、`min>max` 回 max）。前端 `tsc --noEmit` 通過、`clamp`/`progressPercent` 測試 9/9 通過、全專案已無殘留內聯 clamp。分支 `refactor/clamp-helper`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 8 個完成項目（8/100，未達上限）。
+
+## 工作記錄（第一二八輪，2026-06-27）
+
+- 工作內容：剩餘 2 個 `[ ]` 項目仍為「待使用者決定 / 涉 CI 變更」不宜自動逕行，依 LOOP.md 第 2 條分析程式。grep 盤點 `Math.max/Math.min` 夾範圍寫法，發現跨 9 檔十餘處重複（且 `AnimationEditorTab` 自帶 local clamp 卻未一致使用），抽成共用 `clamp` 純函式收斂，每處呼叫點行為完全一致並補測試。
+- 時間：2026-06-27
+- 分支：`refactor/clamp-helper`（已 merge 回 master）
+- 備註：`git add -A` 時一併納入了一個並行 loop 對 `LOOP.md` 的無關變更（將第 2、3 條指示合併為一條），該變更看似刻意且良性，故保留未撤銷。
+- 分支：`refactor/truncate-ellipsis`（已 merge 回 master）
