@@ -44,7 +44,7 @@ function seedPdf(id: string, opts: { ownerSub?: string | null; visibility?: stri
   for (let i = 1; i <= 2; i++) {
     db.prepare(
       `INSERT INTO pages (pdf_id,page_number,page_uid,status,created_at,updated_at)
-       VALUES (?,?,'uid-iq${i}${id}','ready',?,?)`,
+       VALUES (?,?,'uid-iq${i}${id}','audio_ready',?,?)`,
     ).run(id, i, t, t);
   }
 }

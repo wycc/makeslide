@@ -66,9 +66,12 @@ export async function registerQualityCheckRoutes(app: FastifyInstance): Promise<
     if (!pdfRow) return reply.code(404).send(errorResponse('NOT_FOUND', 'PDF not found'));
     if (!canReadPdf(sub, pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', 'Access denied'));
 
+    // Completed pages end at the terminal page status 'audio_ready'; 'ready' is
+    // a PDF-level status (not a valid page status), so filtering on it returned
+    // no rows for normally-generated presentations.
     const pageRows = db.prepare(`
       SELECT page_number, page_uid, image_path, audio_path, script_path, status
-      FROM pages WHERE pdf_id = ? AND status = 'ready' ORDER BY page_number ASC
+      FROM pages WHERE pdf_id = ? AND status = 'audio_ready' ORDER BY page_number ASC
     `).all(id) as PageQualityRow[];
 
     const results: PageQualityResult[] = [];
