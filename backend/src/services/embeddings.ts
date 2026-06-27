@@ -7,6 +7,24 @@ import { cosineSimilarity } from './cosineSimilarity';
 // Re-exported so existing importers (routes/pdfs/search.ts, similar-pages.ts) keep working.
 export { cosineSimilarity };
 
+/**
+ * Safely parse a stored embedding (a JSON-stringified `number[]`) back into a
+ * vector. Returns `null` when the value is missing, not valid JSON, not an
+ * array, or contains any non-finite entry — so a single corrupt row can't 500
+ * a route that ranks across many embeddings (the caller skips/ignores it).
+ */
+export function parseEmbedding(raw: string | null | undefined): number[] | null {
+  if (raw == null) return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return null;
+    if (!parsed.every((v) => typeof v === 'number' && Number.isFinite(v))) return null;
+    return parsed as number[];
+  } catch {
+    return null;
+  }
+}
+
 function contentHash(text: string): string {
   return crypto.createHash('sha1').update(text).digest('hex').slice(0, 16);
 }

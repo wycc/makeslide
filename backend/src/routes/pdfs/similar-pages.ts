@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { db } from '../../db';
 import { sessionSub } from '../auth';
 import { errorResponse } from './shared';
-import { cosineSimilarity } from '../../services/embeddings';
+import { cosineSimilarity, parseEmbedding } from '../../services/embeddings';
 
 const TOP_K = 5;
 const MIN_SCORE = 0.3;
@@ -45,7 +45,11 @@ export async function registerSimilarPagesRoutes(app: FastifyInstance): Promise<
       .get(`${id}:${pageRow.page_uid}`) as { embedding: string } | undefined;
     if (!targetRow) return reply.send({ similar: [], indexed: false });
 
-    const targetVec = JSON.parse(targetRow.embedding) as number[];
+    // A corrupt/unusable target embedding can't be compared against anything;
+    // treat it like "not indexed" so the client hides the section gracefully
+    // instead of the route throwing a 500.
+    const targetVec = parseEmbedding(targetRow.embedding);
+    if (!targetVec) return reply.send({ similar: [], indexed: false });
 
     const candidates = db
       .prepare(
@@ -59,13 +63,20 @@ export async function registerSimilarPagesRoutes(app: FastifyInstance): Promise<
       .all(sub, id, pageNumber) as CandidateRow[];
 
     const similar = candidates
-      .map((row) => ({
-        pdf_id: row.pdf_id,
-        page_number: row.page_number,
-        pdf_title: row.pdf_title,
-        score: Math.round(cosineSimilarity(targetVec, JSON.parse(row.embedding) as number[]) * 1000) / 1000,
-      }))
-      .filter((c) => c.score >= MIN_SCORE)
+      .map((row) => {
+        // Skip a candidate whose embedding is corrupt rather than failing the
+        // whole request — one bad row in the user's corpus shouldn't break the
+        // entire similar-pages panel.
+        const vec = parseEmbedding(row.embedding);
+        if (!vec) return null;
+        return {
+          pdf_id: row.pdf_id,
+          page_number: row.page_number,
+          pdf_title: row.pdf_title,
+          score: Math.round(cosineSimilarity(targetVec, vec) * 1000) / 1000,
+        };
+      })
+      .filter((c): c is NonNullable<typeof c> => c !== null && c.score >= MIN_SCORE)
       .sort((a, b) => b.score - a.score)
       .slice(0, TOP_K);
 
