@@ -8809,3 +8809,17 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **根因**：`updateUserSkill` 的物件字面值固定列出 4 個模板鍵，未值時為 `undefined`；與 `createUserSkill` 的條件 spread 形狀不一致。
 - **修正**：`updateUserSkill` 先把每個欄位解析成最終值（patch 優先、否則沿用 existing），再以 `...(value ? { key: value } : {})` 條件 spread 納入，與 `createUserSkill` 一致。值不變、只是不再寫出 undefined 鍵，使回傳物件與持久化形狀相同。
 - **驗證**：backend `tsc --noEmit` 通過；`skills.test.ts` 由 4/5 變為 5/5 通過。確認無其他測試依賴舊形狀。以 `scripts/run-tests.sh backend` 執行。
+
+## 修正 timing / regenerate-matrix 測試的 401（2026-06-27）
+
+### 功能目的
+延續 input-security 的修正，再清掉兩個檔因相同根因失敗的測試：`timing.test.ts`（1）與 `regenerate-matrix.test.ts`（4）。它們的 HTTP 請求都回 401，原因同樣是檔案沒有停用 Google 登入，導致請求在進入待測 handler 前就被擋下。
+
+### 使用方式
+此為測試修正，無行為變更。
+
+### 技術細節
+- **根因**：兩檔皆未呼叫 `setSystemAuthSettings({ googleAuthEnabled: false })`，於是 `GET /api/pdfs/:id`（timing）與 regenerate/rollback 等端點（regenerate-matrix）的請求一律 401。
+- **修正**：兩檔檔頭加上 `setSystemAuthSettings({ googleAuthEnabled: false })`。
+- **驗證**：`timing.test.ts` 12/12、`regenerate-matrix.test.ts` 4/4 通過；兩檔一起連跑 3 次皆 16/16 穩定（過程中曾觀察到 regenerate 的 rollback 測試一次性 flake，重跑未再現）。以 `scripts/run-tests.sh backend` 執行。
+- 至此，2026-06-27 完整套件盤點的 18 個既有失敗已修復 10 個（input-security 4、skills 1、timing 1、regenerate-matrix 4）；剩 `pages-api`(7，需配合 uid 化儲存設計重寫) 與 `figure-reference-image-generation`(1) 待處理。
