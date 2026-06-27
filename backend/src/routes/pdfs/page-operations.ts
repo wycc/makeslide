@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { ShareTokenParamSchema, getShareToken, hasShareAccess } from './share';
-import { canReadPdf, canEditPdf } from './permissions';
+import { getPdfPermissionRow, canReadPdf, canEditPdf } from './permissions';
 import { toFile } from 'openai';
 import type { ChatCompletionContentPart } from 'openai/resources/chat/completions';
 import fs from 'node:fs';
@@ -68,12 +68,6 @@ function canDestructivelyEditPdf(sub: string | null, row: Pick<PdfRow, 'owner_su
   if (!row.owner_sub) return true;
   if (sub && row.owner_sub === sub) return true;
   return Boolean(sub) && row.visibility === 'public_editable';
-}
-
-function getPdfPermissionRow(id: string): Pick<PdfRow, 'owner_sub' | 'visibility'> | undefined {
-  return db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
-    | Pick<PdfRow, 'owner_sub' | 'visibility'>
-    | undefined;
 }
 
 const EDIT_SLIDE_IMAGE_PROMPT_FALLBACK = [

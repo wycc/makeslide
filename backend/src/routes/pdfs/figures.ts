@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { ShareTokenParamSchema, getShareToken, hasShareAccess } from './share';
-import { canReadPdf, canEditPdf } from './permissions';
+import { getPdfPermissionRow, canReadPdf, canEditPdf } from './permissions';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
@@ -16,12 +16,6 @@ import {
 } from '../../services/pdfFigures';
 import type { FigureEntry } from '../../worker/steps/extractPdfFigures';
 import { IdParamSchema, PageParamSchema, errorResponse, nowIso, streamFile } from './shared';
-
-function getPdfPermissionRow(id: string): Pick<PdfRow, 'owner_sub' | 'visibility'> | undefined {
-  return db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
-    | Pick<PdfRow, 'owner_sub' | 'visibility'>
-    | undefined;
-}
 
 const MAX_EXCLUDED_FIGURES = 50;
 

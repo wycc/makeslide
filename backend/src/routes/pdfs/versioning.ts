@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { ShareTokenParamSchema, getShareToken, hasShareAccess } from './share';
-import { canReadPdf, canEditPdf } from './permissions';
+import { getPdfPermissionRow, canReadPdf, canEditPdf } from './permissions';
 import { z } from 'zod';
 import { db } from '../../db';
 import { sessionSub } from '../auth';
@@ -25,12 +25,6 @@ function getPageArtifactPaths(
     .prepare(`SELECT page_uid, image_path, script_path FROM pages WHERE pdf_id = ? AND page_number = ?`)
     .get(pdfId, pageNumber) as
     | { page_uid: string; image_path: string | null; script_path: string | null }
-    | undefined;
-}
-
-function getPdfPermissionRow(id: string): Pick<PdfRow, 'owner_sub' | 'visibility'> | undefined {
-  return db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
-    | Pick<PdfRow, 'owner_sub' | 'visibility'>
     | undefined;
 }
 

@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { canEditPdf } from './permissions';
+import { getPdfPermissionRow, canEditPdf } from './permissions';
 import { z } from 'zod';
 import { db } from '../../db';
 import { sessionSub } from '../auth';
@@ -138,12 +138,6 @@ interface SyncSessionRow {
 function ensurePdfExists(id: string): boolean {
   const row = db.prepare(`SELECT id FROM pdfs WHERE id = ?`).get(id) as { id: string } | undefined;
   return Boolean(row);
-}
-
-function getPdfPermissionRow(id: string): Pick<PdfRow, 'owner_sub' | 'visibility'> | undefined {
-  return db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
-    | Pick<PdfRow, 'owner_sub' | 'visibility'>
-    | undefined;
 }
 
 function nowMs(): number {
