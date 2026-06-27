@@ -375,9 +375,15 @@ export async function fillCustomScriptEffectsCode(
  *
  * When `imageDataUrl` is provided (a `data:image/...` URL of the rendered page),
  * it is attached to the user message so vision-capable models can determine
- * more accurate positions/sizes. Falls back to text-only when omitted (also
- * note: the Gemini provider currently strips non-text content parts, so the
- * image is only actually used when `LLM_PROVIDER=openai`).
+ * more accurate positions/sizes; falls back to text-only when omitted. The
+ * image is forwarded to the model on every current provider: the
+ * OpenAI-compatible providers (`openai`/`cgu-air`/`openrouter`) pass the
+ * `image_url` part straight through to `chat.completions.create`, and the
+ * Gemini provider converts the data URL to an `inlineData` part via
+ * `buildGeminiContents`. So if results look text-only (e.g. boxes placed in a
+ * mechanical column that ignores the layout), the image was still sent — the
+ * model or gateway just didn't apply vision; it does not mean this code dropped
+ * the image.
  *
  * If the AI picked `type: 'custom-script'` for one sentence, this also makes
  * an extra LLM call via `fillCustomScriptEffectsCode` to generate that
