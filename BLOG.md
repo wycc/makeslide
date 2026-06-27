@@ -9566,3 +9566,16 @@ AI 批次加頁（`addPagesFromPrompt`）在簡報中間插入多頁時，會把
 - **編輯區子分頁收尾（動畫／圖表）**：編輯區的 🎞 動畫（`AnimationEditorTab`，~2590 行）與 📊 圖表素材（`FigureAssetsTab`）是獨立元件、仍深色，使用者要求一併完成。以相同手法遷移：中性骨架 token 化、fuchsia（動畫主題色）與 cyan/sky/emerald/rose/purple 等強調色加 `dark:` 變體；選取態（`border-fuchsia-400 bg-fuchsia-500/15`、`ring-cyan-400`）與對話泡泡在淺色下亦可讀。至此整個中央播放面板的編輯區在淺色模式完整一致、深色模式不變。
 - **驗證**：前端 `tsc --noEmit` 通過；`contrastRatio.test.ts` 8/8（新 token 仍過 AA/AAA）；`vite build` 成功；檢查輸出 CSS 確認 `bg-surface-muted`/`border-border-light`/`bg-primary`/`text-primary` 等新工具類已生成、`--color-primary` 為 indigo。分支 `feat/light-theme-playpage`。
 - **未在本階段**：其餘 ~28 個檔（HomePage、各 Dialog、TemplatesPage、SystemDataPage、RemoteControllerPage…）仍深色硬寫，淺色模式尚未修，列為後續依本階段 token 與 pattern 逐頁推廣。
+
+## 播放頁檢視體驗整理：大綱併入管理區、放大並排檢視、焦點框放大對話框（使用者回報 UI 系列，2026-06-28）
+
+### 功能目的
+延續淺色主題改造後，使用者針對播放頁提出一連串檢視/編輯體驗的調整。
+
+### 使用方式與技術細節
+- **移除重複的「大綱」**：大綱與「投影片管理」清單功能重疊（都是列投影片＋點選跳頁），且其預覽行 fallback 成逐字稿開頭（`Speaker N: [情緒]…`）並非有意義標題。把它真正有用的「總時長＋看過進度」併入投影片管理區標題，移除 `OutlineSection`、`getOutlineTitle`、未用的 `truncateWithEllipsis` import 與 4 個死 i18n key（改新增 `slideViewedProgress`）。
+- **放大模式並排檢視**：側欄「放大」(`sidebarExpanded`，佔滿右側、隱藏播放器) 時，投影片管理由縮圖格切換為「圖片左、清理後逐字稿右」的卡片列表，方便快速檢視圖＋內容。逐字稿以新純函式 [`cleanTranscriptForReview`](frontend/src/lib/transcriptReview.ts) 整理：去除 `[語氣]`/`【語氣】` 標註、`Speaker N:`／`Speaker N：` 標記、換行與多重空白收斂成一段（5 個單元測試）。
+- **分頁標籤不換行**：編輯區的「圖表素材／系統資料」四字標籤在半寬編輯區被擠到兩行，分頁鈕改 `whitespace-nowrap` + `px-2` + `text-xs`，六個分頁單行排好。
+- **深色播放器文字對比**：根因是「觀看深／編輯淺」改造後，常駐深色的播放面板沒設基底文字色，於淺色主題下繼承到 `text-text`（深 slate-900），導致控制列無色圖示（上一頁/播放/下一頁/QR）近乎隱形。給播放面板 `text-slate-100` 淺色基底（淺色編輯區自有 `text-text` 覆蓋），剩餘時間由 slate-500 提到 slate-400。
+- **焦點框放大對話框**：動畫效果的「焦點位置與大小」原本只有小預覽，拖曳調整不易。在標題旁加 ⤢ 按鈕開啟對話框，內含放大版的 `EffectPositionEditor`（本就 responsive，自動放大）＋ X/Y/寬/高 數字輸入；抽出共用 `applyFocusParams`（含 overlay-image 鎖定比例時高度連動），讓行內小預覽與對話框邏輯一致。
+- **驗證**：前端 `tsc --noEmit`、i18n parity/nonempty、`vite build` 全通過；`cleanTranscriptForReview` 5/5。分支 `refactor/merge-outline-into-slide-mgmt`（已 merge）。
