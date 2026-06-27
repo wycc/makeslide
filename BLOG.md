@@ -1,5 +1,24 @@
 # MakeSlide 功能說明
 
+## 測驗歷史平均分計算抽出為可測純函式
+
+### 背景
+
+測驗建構頁（`QuizBuilderPage`）的「作答歷史」區會顯示所有作答的**平均分**。計算時要忽略「尚未評分」（score 為 null）的作答，只對有分數的作答取平均，全部未評分時則顯示「—」而非誤導的 0 分。原本這段「過濾未評分 → 加總 → 除以筆數 → 空則 null」的邏輯內聯在 JSX 的 IIFE 裡、沒有獨立測試。
+
+### 變更內容
+
+- 在 `frontend/src/lib/quizScoring.ts` 新增 `averageAttemptScore(attempts)` 純函式：只計入有分數的作答、回傳原始（未四捨五入）平均，無任何已評分作答時回 `null`。
+- `QuizBuilderPage` 改用之（四捨五入仍由呼叫端 `roundToTwoDecimals` 處理，與其他分數顯示一致），移除內聯的 `scoredAttempts`／reduce 計算。
+
+### 使用方式
+
+純內部重構，作答歷史的平均分顯示行為不變。
+
+### 測試
+
+`quizScoring.test.ts` 新增 4 組 `averageAttemptScore` 測試（一般平均、忽略 null 未評分、全未評分回 null、回傳未四捨五入原始值）。前端 `tsc --noEmit` 通過、quizScoring 15 測試全通過。
+
 ## 動畫效果「合併選取」的計算抽出為可測純函式
 
 ### 背景

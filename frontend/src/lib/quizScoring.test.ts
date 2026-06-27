@@ -11,7 +11,28 @@ import {
   calcQuestionScore,
   calcAttemptScore,
   maxAttemptScore,
+  averageAttemptScore,
 } from './quizScoring';
+
+test('averageAttemptScore returns the mean of scored attempts', () => {
+  assert.equal(averageAttemptScore([{ score: 80 }, { score: 100 }, { score: 60 }]), 80);
+  assert.equal(averageAttemptScore([{ score: 50 }]), 50);
+});
+
+test('averageAttemptScore ignores unscored (null) attempts', () => {
+  // only the two scored attempts count: mean(90, 70) = 80
+  assert.equal(averageAttemptScore([{ score: 90 }, { score: null }, { score: 70 }]), 80);
+});
+
+test('averageAttemptScore returns null when no attempt is scored', () => {
+  assert.equal(averageAttemptScore([]), null);
+  assert.equal(averageAttemptScore([{ score: null }, { score: null }]), null);
+});
+
+test('averageAttemptScore returns the raw unrounded mean', () => {
+  // mean(100, 0, 0) = 33.33… (rounding is the caller's responsibility)
+  assert.ok(Math.abs(averageAttemptScore([{ score: 100 }, { score: 0 }, { score: 0 }])! - 100 / 3) < 1e-9);
+});
 
 function q(score: number | null): QuizQuestion {
   return {
