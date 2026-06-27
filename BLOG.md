@@ -8546,3 +8546,15 @@ PDF 相關的 API 路由早期集中在單一檔案 `backend/src/routes/pdfs.ts`
 - **修正既有測試 fixture**：`image-quality.test.ts`、`script-quality.test.ts`、`h5p.test.ts` 原本以**不存在的** `'ready'` 頁面狀態建立測試資料，所以測試會過、但與 production 不符（掩蓋了這個 bug）。改為 `'audio_ready'`，使測試反映真實情況並成為回歸測試。各檔 `pdfs` INSERT 的 `'ready'` 是正確的 PDF 狀態，維持不變。
 - **新增測試**：原本沒有後端測試的 quality-check 補上 `quality-check.test.ts`，涵蓋「`audio_ready` 頁面會被檢查（回歸）」、「非完成頁（如 `rendered`）不被檢查」、404、403 四個案例。
 - **驗證**：backend `tsc --noEmit` 通過；四個路由測試以專案 `.nvmrc` 指定的 Node 22 搭配 `--test-force-exit` 執行，子測試全數通過（quality-check 4/4、image-quality 4/4、script-quality 5/5、h5p 4/4）。
+
+## 修正 status-machine 測試的 PROGRESS_STEPS 鏡像 drift（2026-06-27）
+
+### 功能目的
+`backend/test/status-machine.test.ts` 有一個既有失敗的測試：它以 `deepEqual` 斷言 `PROGRESS_STEPS` 的完整清單，但期望值只有 7 個步驟，而實際的 `statusMachine.ts` 已經新增了 3 個 YouTube 相關進度步驟（`downloading_captions`、`downloading_audio`、`transcribing_audio`）。這些步驟在 `youtubeCaptions.ts` 與 `pipeline.ts` 實際使用、前端 `types.ts` 的 `ProgressStep` 也已鏡像，因此是測試本身過時、而非程式有誤。本項把測試更新到與單一真實來源一致，讓測試恢復綠燈並能在日後擋下真正的 drift。
+
+### 使用方式
+此為測試修正，無行為變更。
+
+### 技術細節
+- **更新測試期望**：把 `PROGRESS_STEPS` 的期望陣列補上 `downloading_captions`、`downloading_audio`、`transcribing_audio`（依 `statusMachine.ts` 的陣列順序），並新增 `isProgressStep('transcribing_audio')` 為 true 的斷言。
+- **驗證**：後端 `tsc --noEmit` 通過；`status-machine.test.ts` 5/5 通過（以新加入的 `scripts/run-tests.sh` 執行）。

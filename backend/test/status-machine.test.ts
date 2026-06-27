@@ -47,9 +47,13 @@ test('page status and progress step single sources expose valid values', () => {
     'script_ready',
     'synthesizing',
     'rendering_video',
+    'downloading_captions',
+    'downloading_audio',
+    'transcribing_audio',
   ]);
   assert.equal(isProgressStep(null), true);
   assert.equal(isProgressStep('rendering_video'), true);
+  assert.equal(isProgressStep('transcribing_audio'), true);
   assert.equal(isProgressStep('audio_ready'), false);
 });
 
