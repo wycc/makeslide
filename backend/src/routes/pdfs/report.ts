@@ -4,6 +4,7 @@ import type { PdfRow } from '../../types';
 import { decodeSession, parseCookies } from '../auth';
 import { errorResponse, IdParamSchema } from './shared';
 import { csvEscape, withCsvBom } from './csv';
+import { safeRatio, round4, pollDivergence } from './reportMetrics';
 import { safeDownloadBaseName, buildContentDisposition } from './downloadFilename';
 import { isCorrectAnswer } from '../../services/quizCorrectness';
 import { getSyncFollowerQuestionsSnapshot } from './sync';
@@ -132,7 +133,7 @@ function computeQuestionStats(pdfId: string): QuestionStat[] {
 
   return Array.from(statMap.values()).map((s) => ({
     ...s,
-    correct_rate: s.attempt_count > 0 ? s.correct_count / s.attempt_count : 0,
+    correct_rate: safeRatio(s.correct_count, s.attempt_count),
   }));
 }
 
@@ -330,14 +331,13 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
       pollByPage.set(row.page_number, agg);
     }
 
-    const round4 = (n: number) => Math.round(n * 10000) / 10000;
     const header = ['page_number', 'total_viewers', 'completed_viewers', 'completion_rate', 'poll_total_votes', 'poll_divergence_score', 'avg_listened_ratio'].join(',');
     const rows: string[] = [header];
     for (const wp of watchPages) {
-      const completion = wp.total_viewers > 0 ? wp.completed_viewers / wp.total_viewers : 0;
+      const completion = safeRatio(wp.completed_viewers, wp.total_viewers);
       const poll = pollByPage.get(wp.page_number);
       const totalVotes = poll?.total ?? 0;
-      const divergence = totalVotes > 0 ? 1 - poll!.max / totalVotes : 0;
+      const divergence = pollDivergence(poll?.max ?? 0, totalVotes);
       // 無聆聽資料（無觀看者或皆無 duration）時輸出空字串，避免被誤讀為 0%。
       const avgListened = wp.avg_listened_ratio == null ? '' : round4(wp.avg_listened_ratio);
       rows.push([
@@ -369,7 +369,6 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
     }
 
     const stats = computeQuestionStats(id);
-    const round4 = (n: number) => Math.round(n * 10000) / 10000;
     const header = ['question_id', 'question', 'option_count', 'attempt_count', 'correct_count', 'wrong_count', 'correct_rate', 'option_votes'].join(',');
     const rows: string[] = [header];
     for (const s of stats) {
@@ -488,7 +487,7 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
         question: s.question,
         attempt_count: s.attempt_count,
         wrong_count: s.wrong_count,
-        wrong_rate: s.attempt_count > 0 ? s.wrong_count / s.attempt_count : 0,
+        wrong_rate: safeRatio(s.wrong_count, s.attempt_count),
       }));
 
     return reply.code(200).send({
@@ -505,7 +504,7 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
         poll_count: poll.poll_count ?? 0,
         vote_count: poll.vote_count ?? 0,
         participant_count: poll.participant_count ?? 0,
-        participation_rate: pollParticipationDenominator > 0 ? (poll.vote_count ?? 0) / pollParticipationDenominator : 0,
+        participation_rate: safeRatio(poll.vote_count ?? 0, pollParticipationDenominator),
       },
       questions: {
         count: followerQuestions.length,
@@ -516,7 +515,7 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
           page_number: row.page_number,
           total_viewers: row.total_viewers,
           completed_viewers: row.completed_viewers,
-          completion_rate: row.total_viewers > 0 ? row.completed_viewers / row.total_viewers : 0,
+          completion_rate: safeRatio(row.completed_viewers, row.total_viewers),
           avg_listened_ratio: row.avg_listened_ratio,
         })),
       },
