@@ -897,6 +897,16 @@ export default function PlayPage() {
       return;
     }
     if (audio.paused) {
+      // 本頁已經播到結尾（沒開自動換頁而停在此）：按播放/點圖片時，從頭重播「這一頁」，
+      // 而不是讓瀏覽器對已結束的音訊呼叫 play() ── 那會停在結尾、立即再觸發 ended，被誤判
+      // 而切到下一頁。先 seek 回 0 即可乾淨重播當頁。
+      const atEnd = audio.ended
+        || (Number.isFinite(audio.duration) && audio.duration > 0 && audio.currentTime >= audio.duration - 0.05);
+      if (atEnd) {
+        audio.currentTime = 0;
+        setCurrentTime(0);
+        setFinished(false);
+      }
       void audio.play().catch(() => setIsPlaying(false));
     } else {
       audio.pause();
