@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent, RefObject, TouchEvent } from 'react';
 import DrawingCanvas from '../../components/DrawingCanvas';
 import { SlideRenderer } from '../../components/slide/SlideRenderer';
@@ -184,6 +184,10 @@ export function PlayPageFullscreen() {
   const [fullscreenPollOpen, setFullscreenPollOpen] = useState(false);
   // 點左上角 💬 訊息徽章時開關的提問面板（內容與編輯模式共用 SyncQuestionsPanel）。
   const [fullscreenQuestionsOpen, setFullscreenQuestionsOpen] = useState(false);
+  // 問題全部被清除後，開關面板的 💬 徽章會消失，這裡自動把面板收掉，避免空面板卡在畫面上。
+  useEffect(() => {
+    if (syncFollowerQuestions.length === 0) setFullscreenQuestionsOpen(false);
+  }, [syncFollowerQuestions.length]);
   const activePagePolls = pagePolls.filter((poll) => poll.is_active);
 
   const syncDisplayedQuestion = syncDisplayedQuestionId
