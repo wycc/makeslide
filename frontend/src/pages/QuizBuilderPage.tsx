@@ -220,8 +220,9 @@ export default function QuizBuilderPage() {
   }, [pdfId, syncActiveQuizId, savedQuizzes]);
 
   const isFollowerTesting = syncRole === 'follower' && activeQuiz != null;
-  // 是否有編輯權限（老師/協作者）。唯讀學生只能複習：移除所有編輯/控制功能，只看自己的歷史與解答。
+  // 是否有編輯權限（老師/協作者）。唯讀學生只能複習：移除所有編輯/控制功能，只看題目/解答與自己的歷史。
   const canEditQuiz = Boolean(detail?.is_owner || detail?.visibility === 'public_editable');
+  const selectedQuiz = savedQuizzes.find((q) => q.id === selectedQuizId) ?? null;
 
   useEffect(() => {
     if (!activeQuiz || !activeQuiz.shuffle_questions) {
@@ -1104,6 +1105,30 @@ export default function QuizBuilderPage() {
                   {historyShowAll ? t('quiz.historyShowLess') : t('quiz.historyShowMore').replace('{n}', String(historySessions.length))}
                 </button>
               )}
+            </div>
+          ) : null}
+          {!isFollowerTesting && !canEditQuiz && selectedQuiz ? (
+            <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+              <h2 className="text-sm font-semibold text-slate-200">{selectedQuiz.title}</h2>
+              <ul className="mt-2 space-y-2">
+                {selectedQuiz.questions.map((q, i) => (
+                  <li key={q.id} className="rounded border border-slate-800 bg-slate-950 px-3 py-2 text-sm">
+                    <p className="text-slate-200"><span className="text-slate-500">{i + 1}.</span> {q.question}</p>
+                    <ul className="mt-1 space-y-0.5">
+                      {q.options.map((opt, oIdx) => {
+                        const isCorrect = q.answer_indices.includes(oIdx);
+                        return (
+                          <li key={oIdx} className={`rounded px-1.5 py-0.5 ${isCorrect ? 'text-emerald-300' : 'text-slate-400'}`}>
+                            {isCorrect ? '☑' : '☐'} {opt.text}
+                            {isCorrect ? <span className="ml-1 text-[10px] text-emerald-400">{t('quiz.correctAnswerParen')}</span> : null}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    {q.explanation ? <p className="mt-1 text-[11px] text-slate-500">{formatMessage('quiz.explanation', { explanation: q.explanation })}</p> : null}
+                  </li>
+                ))}
+              </ul>
             </div>
           ) : null}
           {isFollowerTesting || !canEditQuiz ? null : (
