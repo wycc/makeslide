@@ -25,6 +25,65 @@ const ImportedSourceSchema = z.object({
   updated_at: z.string().trim().min(1).optional(),
 });
 
+// 投票題目（page_polls）。options_json 是 export 端直接帶出的 JSON 字串，這裡只驗證
+// 長度上限避免被塞爆，內容維持原樣寫回（來源就是本服務自己的匯出檔）。單筆驗證失敗
+// 只跳過該筆，不影響其餘匯入。
+const ImportedPollSchema = z.object({
+  page_number: z.number().int().positive(),
+  question: z.string().trim().min(1).max(2000),
+  options_json: z.string().trim().min(1).max(20000),
+  is_active: z.union([z.literal(0), z.literal(1)]).optional(),
+  show_results: z.union([z.literal(0), z.literal(1)]).optional(),
+  created_at: z.string().trim().min(1).optional(),
+  updated_at: z.string().trim().min(1).optional(),
+});
+
+// 測驗題庫（quiz_sets）。questions_json 同樣是匯出端帶出的 JSON 字串。
+const ImportedQuizSchema = z.object({
+  title: z.string().trim().min(1).max(500),
+  prompt: z.string().max(20000),
+  questions_json: z.string().trim().min(1).max(200000),
+  created_at: z.string().trim().min(1).optional(),
+  updated_at: z.string().trim().min(1).optional(),
+});
+
+// 動畫對應（pages.render_type / animation_spec_path）。匯入時依 page_number 套回；
+// 對應的規格檔已隨儲存目錄原樣複製，因此 animation_spec_path 直接沿用即可。
+const ImportedAnimationSchema = z.object({
+  page_number: z.number().int().positive(),
+  render_type: z.enum(['static-image', 'gsap-image']),
+  animation_spec_path: z.string().trim().max(500).nullable().optional(),
+});
+
+/**
+ * 讀取 export.zip 根目錄的某個 sidecar JSON（陣列），逐筆用 schema 驗證後回傳合法項目。
+ * 缺檔、非 JSON、非陣列、或單筆驗證失敗都只是「少還原這部分」而非整個匯入失敗——舊版
+ * 匯出檔本來就不含這些檔案。
+ */
+async function readSidecarArray<T>(
+  extractedDir: string,
+  fileName: string,
+  schema: z.ZodType<T>,
+  log: FastifyRequest['log'],
+): Promise<T[]> {
+  const filePath = path.join(extractedDir, fileName);
+  if (!fs.existsSync(filePath)) return [];
+  const out: T[] = [];
+  try {
+    const raw = await fs.promises.readFile(filePath, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      for (const item of parsed) {
+        const result = schema.safeParse(item);
+        if (result.success) out.push(result.data);
+      }
+    }
+  } catch (err) {
+    log.warn({ err, fileName }, 'Failed to parse sidecar JSON in export zip, skipping');
+  }
+  return out;
+}
+
 function ownerSubFromRequest(request: FastifyRequest): string | null {
   const session = decodeSession(parseCookies(request).makeslide_session);
   return session?.sub ?? null;
@@ -75,27 +134,13 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
         return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid export zip: metadata.json is not valid JSON'));
       }
 
-      // sources.json 是選用的（舊版匯出檔、或這次匯出時這份簡報本來就沒有任何
-      // pdf_sources 紀錄都不會有這個檔案），缺檔或格式錯誤皆視為「沒有來源資料
-      // 可還原」，不視為整個匯入失敗。
-      const importedSources: z.infer<typeof ImportedSourceSchema>[] = [];
-      const sourcesJsonPath = path.join(extractedDir, 'sources.json');
-      if (fs.existsSync(sourcesJsonPath)) {
-        try {
-          const raw = await fs.promises.readFile(sourcesJsonPath, 'utf8');
-          const parsedJson = JSON.parse(raw);
-          if (Array.isArray(parsedJson)) {
-            for (const item of parsedJson) {
-              const result = ImportedSourceSchema.safeParse(item);
-              if (result.success) {
-                importedSources.push(result.data);
-              }
-            }
-          }
-        } catch (err) {
-          request.log.warn({ err }, 'Failed to parse sources.json in export zip, skipping source restoration');
-        }
-      }
+      // sources.json／polls.json／quizzes.json／animations.json 都是選用的 sidecar
+      // （舊版匯出檔、或這份簡報本來就沒有對應資料時都不會有），缺檔或格式錯誤皆視為
+      // 「沒有這部分資料可還原」，不視為整個匯入失敗。
+      const importedSources = await readSidecarArray(extractedDir, 'sources.json', ImportedSourceSchema, request.log);
+      const importedPolls = await readSidecarArray(extractedDir, 'polls.json', ImportedPollSchema, request.log);
+      const importedQuizzes = await readSidecarArray(extractedDir, 'quizzes.json', ImportedQuizSchema, request.log);
+      const importedAnimations = await readSidecarArray(extractedDir, 'animations.json', ImportedAnimationSchema, request.log);
 
       const importedPageCount =
         typeof metadata.page_count === 'number' && Number.isFinite(metadata.page_count) && metadata.page_count > 0
@@ -248,6 +293,54 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
             s.created_at || now,
             s.updated_at || now,
           );
+        }
+      }
+
+      // 還原投票題目／測驗題庫／動畫對應。page_polls 與 animations 都依 page_number
+      // 對應到上面剛建立的 pages，因此先查出實際存在的頁碼，跳過對不到頁的孤兒資料
+      // （避免外鍵失敗讓整個匯入回滾）。
+      const existingPageNumbers = new Set(
+        (db.prepare('SELECT page_number FROM pages WHERE pdf_id = ?').all(id) as Array<{ page_number: number }>)
+          .map((r) => r.page_number),
+      );
+
+      if (importedPolls.length > 0) {
+        const insertPoll = db.prepare(
+          `INSERT INTO page_polls (pdf_id, page_number, question, options_json, is_active, show_results, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        );
+        for (const poll of importedPolls) {
+          if (!existingPageNumbers.has(poll.page_number)) continue;
+          insertPoll.run(
+            id,
+            poll.page_number,
+            poll.question,
+            poll.options_json,
+            poll.is_active ?? 1,
+            poll.show_results ?? 1,
+            poll.created_at || now,
+            poll.updated_at || now,
+          );
+        }
+      }
+
+      if (importedQuizzes.length > 0) {
+        const insertQuiz = db.prepare(
+          `INSERT INTO quiz_sets (pdf_id, title, prompt, questions_json, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?)`
+        );
+        for (const quiz of importedQuizzes) {
+          insertQuiz.run(id, quiz.title, quiz.prompt, quiz.questions_json, quiz.created_at || now, quiz.updated_at || now);
+        }
+      }
+
+      if (importedAnimations.length > 0) {
+        const updateAnimation = db.prepare(
+          `UPDATE pages SET render_type = ?, animation_spec_path = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`
+        );
+        for (const anim of importedAnimations) {
+          if (!existingPageNumbers.has(anim.page_number)) continue;
+          updateAnimation.run(anim.render_type, anim.animation_spec_path ?? null, now, id, anim.page_number);
         }
       }
 

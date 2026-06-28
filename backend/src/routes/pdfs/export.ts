@@ -38,6 +38,85 @@ export function loadExportedSources(pdfId: string): ExportedPdfSource[] {
   return rows;
 }
 
+/**
+ * 投票題目（`page_polls`）同樣只存在資料庫、不落在 `pdfDir()` 底下，所以單純打包
+ * 儲存目錄帶不到。匯出時序列化成 `polls.json` 加進 zip，供 `import.ts` 還原。只帶
+ * 題目本身（不含 `page_poll_votes` 的學生票數）——匯入會建立一份全新的私有副本，
+ * 原本聽眾的投票紀錄套到新副本上沒有意義，且 `id`/`pdf_id` 匯入後都會換新。
+ */
+export interface ExportedPoll {
+  page_number: number;
+  question: string;
+  options_json: string;
+  is_active: number;
+  show_results: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Exported for unit testing; not part of the public export routes API. */
+export function loadExportedPolls(pdfId: string): ExportedPoll[] {
+  return db
+    .prepare(
+      `SELECT page_number, question, options_json, is_active, show_results, created_at, updated_at
+         FROM page_polls
+        WHERE pdf_id = ?
+        ORDER BY page_number ASC, created_at ASC, id ASC`,
+    )
+    .all(pdfId) as ExportedPoll[];
+}
+
+/**
+ * 測驗題庫（`quiz_sets`）也是純資料庫資料。序列化成 `quizzes.json` 加進 zip。
+ * 同樣只帶題庫，不帶 `quiz_attempts`（學生作答紀錄）。
+ */
+export interface ExportedQuiz {
+  title: string;
+  prompt: string;
+  questions_json: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Exported for unit testing; not part of the public export routes API. */
+export function loadExportedQuizzes(pdfId: string): ExportedQuiz[] {
+  return db
+    .prepare(
+      `SELECT title, prompt, questions_json, created_at, updated_at
+         FROM quiz_sets
+        WHERE pdf_id = ?
+        ORDER BY created_at ASC, id ASC`,
+    )
+    .all(pdfId) as ExportedQuiz[];
+}
+
+/**
+ * GSAP 動畫規格檔（`pages/<page_uid>.animation.json`）本身會隨 `pdfDir()` 一起被打包，
+ * 但「這一頁要用動畫播放」這件事是記在 `pages` 資料表的 `render_type` /
+ * `animation_spec_path` 欄位，而 `import.ts` 重建 `pages` 時不會帶到這兩欄（還會重新
+ * 產生 `page_uid`），導致匯入後動畫靜默失效。把這兩欄序列化成 `animations.json`，
+ * 匯入時依 `page_number` 對回去即可——規格檔已隨儲存目錄原樣複製，路徑維持不變。
+ */
+export interface ExportedAnimation {
+  page_number: number;
+  render_type: string;
+  animation_spec_path: string | null;
+}
+
+/** Exported for unit testing; not part of the public export routes API. */
+export function loadExportedAnimations(pdfId: string): ExportedAnimation[] {
+  return db
+    .prepare(
+      `SELECT page_number, render_type, animation_spec_path
+         FROM pages
+        WHERE pdf_id = ?
+          AND render_type IS NOT NULL
+          AND render_type <> 'static-image'
+        ORDER BY page_number ASC`,
+    )
+    .all(pdfId) as ExportedAnimation[];
+}
+
 const ZIP_EXPORT_TIMEOUT_MS = 2 * 60_000;
 
 /**
@@ -167,14 +246,20 @@ export async function registerExportRoutes(app: FastifyInstance): Promise<void> 
     try {
       await runZipCommand(sourceDir, zipPath);
 
-      const sources = loadExportedSources(parsed.data.id);
-      if (sources.length > 0) {
-        const sourcesJsonPath = path.join(tempDir, 'sources.json');
-        await fs.promises.writeFile(sourcesJsonPath, JSON.stringify(sources, null, 2), 'utf8');
-        // 只把這個檔案以「去掉路徑、放進 zip 根目錄」的方式加進已存在的 zip，不影響
-        // 前面 runZipCommand 已經寫入的 pdfDir() 內容，也完全不會碰到 sourceDir 本身。
-        await addFileToZip(tempDir, zipPath, 'sources.json');
-      }
+      // 把一份資料表內容序列化成 sidecar JSON，以「去掉路徑、放進 zip 根目錄」的方式
+      // 加進已存在的 zip（不影響前面 runZipCommand 寫入的 pdfDir() 內容，也不碰
+      // sourceDir 本身）。空陣列就略過，維持舊版匯出檔不含該檔的相容性。
+      const appendSidecar = async (fileName: string, data: unknown[]): Promise<void> => {
+        if (data.length === 0) return;
+        const sidecarPath = path.join(tempDir, fileName);
+        await fs.promises.writeFile(sidecarPath, JSON.stringify(data, null, 2), 'utf8');
+        await addFileToZip(tempDir, zipPath, fileName);
+      };
+
+      await appendSidecar('sources.json', loadExportedSources(parsed.data.id));
+      await appendSidecar('polls.json', loadExportedPolls(parsed.data.id));
+      await appendSidecar('quizzes.json', loadExportedQuizzes(parsed.data.id));
+      await appendSidecar('animations.json', loadExportedAnimations(parsed.data.id));
 
       const zipBuffer = await fs.promises.readFile(zipPath);
       reply.header('content-type', 'application/zip');

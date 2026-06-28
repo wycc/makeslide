@@ -8,7 +8,15 @@ import type { PdfRow } from '../../types';
 import { pdfDir } from '../../services/storage';
 import { sessionSub } from '../auth';
 import { errorResponse } from './shared';
-import { runZipCommand, addFileToZip, loadExportedSources, buildContentDisposition } from './export';
+import {
+  runZipCommand,
+  addFileToZip,
+  loadExportedSources,
+  loadExportedPolls,
+  loadExportedQuizzes,
+  loadExportedAnimations,
+  buildContentDisposition,
+} from './export';
 
 const BATCH_EXPORT_TIMEOUT_MS = 10 * 60_000;
 
@@ -72,13 +80,27 @@ async function runBatchExport(jobId: string, ownerSub: string, tempDir: string):
     const innerZipPath = path.join(stagingDir, innerZipName);
     try {
       await runZipCommand(sourceDir, innerZipPath);
-      const sources = loadExportedSources(pdf.id);
-      if (sources.length > 0) {
-        // Use a per-pdf temp dir so the file is stored as 'sources.json' (not an absolute path)
+      // 與單份 export.zip 一致，把資料表內容（來源／投票／測驗／動畫對應）以 sidecar
+      // JSON 形式塞進每份內層 zip，讓批次匯出的單份檔匯入時也能完整還原。用 per-pdf
+      // 暫存目錄是為了讓檔案以「去掉路徑、放進 zip 根目錄」的方式加入。
+      const sidecars: Array<{ name: string; data: unknown[] }> = [
+        { name: 'sources.json', data: loadExportedSources(pdf.id) },
+        { name: 'polls.json', data: loadExportedPolls(pdf.id) },
+        { name: 'quizzes.json', data: loadExportedQuizzes(pdf.id) },
+        { name: 'animations.json', data: loadExportedAnimations(pdf.id) },
+      ];
+      const pending = sidecars.filter((s) => s.data.length > 0);
+      if (pending.length > 0) {
         const perPdfTmpDir = path.join(tempDir, `tmp-src-${pdf.id}`);
         await fs.promises.mkdir(perPdfTmpDir, { recursive: true });
-        await fs.promises.writeFile(path.join(perPdfTmpDir, 'sources.json'), JSON.stringify(sources, null, 2), 'utf8');
-        await addFileToZip(perPdfTmpDir, innerZipPath, 'sources.json');
+        for (const sidecar of pending) {
+          await fs.promises.writeFile(
+            path.join(perPdfTmpDir, sidecar.name),
+            JSON.stringify(sidecar.data, null, 2),
+            'utf8',
+          );
+          await addFileToZip(perPdfTmpDir, innerZipPath, sidecar.name);
+        }
         void fs.promises.rm(perPdfTmpDir, { recursive: true, force: true });
       }
     } catch {
