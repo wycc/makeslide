@@ -699,7 +699,7 @@ export function PlayPageHeader() {
           </button>
           <Link
             to={`/play/${encodeURIComponent(pdfId ?? '')}/quizzes`}
-            className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-3 py-1.5 text-center text-sm text-fuchsia-100 hover:bg-fuchsia-500/25"
+            className={`rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-3 py-1.5 text-center text-sm text-fuchsia-100 hover:bg-fuchsia-500/25 ${isReadOnlyProcessing ? 'pointer-events-none opacity-40' : ''}`}
           >
             {t('play.header.quizGeneration')}
           </Link>
