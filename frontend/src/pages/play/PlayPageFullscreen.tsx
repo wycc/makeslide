@@ -742,7 +742,7 @@ export function PlayPageFullscreen() {
             e.stopPropagation();
             setFullscreenQuestionDialogOpen(true);
           }}
-          className="absolute left-4 top-4 rounded-md border border-cyan-400/60 bg-cyan-500/20 px-3 py-1.5 text-sm font-medium text-cyan-50 shadow-lg hover:bg-cyan-500/30"
+          className="absolute left-4 top-4 z-40 rounded-md border border-cyan-400/60 bg-cyan-500/20 px-4 py-2 text-sm font-medium text-cyan-50 shadow-lg hover:bg-cyan-500/30"
         >
           {t('play.fullscreen.askQuestion')}
         </button>
