@@ -17,6 +17,10 @@ import { runUnzipCommand } from './unzip';
 // 跟 detail.ts 的 `POST /api/pdfs/:id/sources/txt` 共用同一套上限，避免匯入端
 // 用一份刻意構造的超大/格式錯誤 sources.json 塞爆資料庫；單一筆驗證失敗只跳過
 // 那一筆，不影響整個匯入流程（其餘 metadata 欄位仍可能是合法、值得保留的）。
+// 匯出檔搭載資料表內容用的中繼 JSON。匯入時內容會寫回資料庫，這些檔案本身不應留在
+// 新簡報的儲存目錄裡。
+const SIDECAR_FILES = new Set(['sources.json', 'polls.json', 'quizzes.json', 'animations.json']);
+
 const ImportedSourceSchema = z.object({
   source_kind: z.enum(['pdf', 'txt', 'youtube_caption', 'youtube_audio']),
   source_name: z.string().trim().max(200).nullable().optional(),
@@ -193,10 +197,10 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
       const destDir = createPdfDir(id);
       const entries = await fs.promises.readdir(extractedDir);
       for (const entry of entries) {
-        // sources.json 只是 export.zip 用來搭載 pdf_sources 資料表內容的中繼檔
-        // （該表不落在 pdfDir() 底下任何檔案裡），下面會把它的內容寫回資料庫，
-        // 不應該原樣留在新 PDF 的儲存目錄裡。
-        if (entry === 'sources.json') continue;
+        // sources/polls/quizzes/animations.json 都只是 export.zip 用來搭載資料表內容
+        // 的中繼檔（這些資料不落在 pdfDir() 底下），下面會把內容寫回資料庫，不應該
+        // 原樣留在新 PDF 的儲存目錄裡。
+        if (SIDECAR_FILES.has(entry)) continue;
         await fs.promises.cp(path.join(extractedDir, entry), path.join(destDir, entry), { recursive: true });
       }
 

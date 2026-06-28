@@ -32,9 +32,25 @@ function seedPdfWithInteractiveData(id: string): { pageUid: string; animationRel
   const animationRelPath = `pages/${pageUid}.animation.json`;
 
   fs.mkdirSync(path.join(dir, 'pages'), { recursive: true });
+  // 一份「會啟用」的 spec（enabled:true + 一個 spotlight effect），用來和匯入失敗時
+  // 端點回傳的 defaultAnimationSpec()（enabled:false、effects 空）區分開來。
   fs.writeFileSync(
     path.join(dir, animationRelPath),
-    JSON.stringify({ version: 1, steps: [{ target: '#title', effect: 'fade-in' }] }),
+    JSON.stringify({
+      version: 1,
+      enabled: true,
+      effects: [
+        {
+          id: 'spot-1',
+          target: 'slide',
+          type: 'spotlight',
+          start: 0,
+          duration: 1.2,
+          ease: 'power1.out',
+          params: { xPct: 10, yPct: 10, widthPct: 30, heightPct: 30 },
+        },
+      ],
+    }),
   );
 
   fs.writeFileSync(
@@ -147,6 +163,18 @@ test('export.zip -> import.zip round-trips polls, quizzes and slide animations',
       true,
       'animation spec file should have been copied with the storage dir',
     );
+
+    // 真正的回歸防線：import 會重新產生 page_uid，但動畫規格檔仍以匯出端的舊 uid
+    // 命名。spec 端點必須依 animation_spec_path（而非新的 page_uid）定位檔案，否則會
+    // 找不到並回退成停用的 defaultAnimationSpec()，動畫就「消失」了。
+    const specResp = await app.inject({
+      method: 'GET',
+      url: `/api/pdfs/${importedId}/pages/1/animation/spec`,
+    });
+    assert.equal(specResp.statusCode, 200);
+    const servedSpec = specResp.json() as { enabled: boolean; effects: unknown[] };
+    assert.equal(servedSpec.enabled, true, 'served spec must be the real enabled spec, not the disabled default');
+    assert.equal(servedSpec.effects.length, 1, 'the seeded spotlight effect must survive the round-trip');
 
     // sidecar 中繼檔不應原樣留在新簡報目錄。
     assert.equal(fs.existsSync(path.join(importedDir, 'polls.json')), false);

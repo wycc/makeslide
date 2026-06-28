@@ -68,8 +68,17 @@ async function loadAnimationPageImageDataUrl(id: string, row: AnimationPageRow):
   return loadFocusAiPageImageDataUrl(absPath, { pdfId: id, pageUid: row.page_uid });
 }
 
-function readStoredSpec(id: string, pageUid: string): AnimationSpec {
-  const absPath = pageAnimationSpecPath(id, pageUid);
+function readStoredSpec(id: string, row: Pick<AnimationPageRow, 'page_uid' | 'animation_spec_path'>): AnimationSpec {
+  // Prefer the explicit stored relative path over the conventional
+  // <page_uid>.animation.json location. They match for natively generated
+  // presentations, but diverge after a ZIP import: import.ts regenerates
+  // page_uid while the spec file keeps its original name, so resolving by
+  // page_uid alone would 404 and silently drop the animation. This mirrors how
+  // image/audio are served from their stored *_path columns (see
+  // loadAnimationPageImageDataUrl and detail.ts's image route).
+  const absPath = row.animation_spec_path
+    ? safeJoinPdfPath(id, row.animation_spec_path)
+    : pageAnimationSpecPath(id, row.page_uid);
   if (!fs.existsSync(absPath)) {
     return defaultAnimationSpec();
   }
@@ -98,7 +107,7 @@ export async function registerPageAnimationRoutes(app: FastifyInstance): Promise
     if (!hasShareAccess(request, id) && !canReadPdf(sessionSub(request), pdfRow)) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的動畫'));
     }
-    const spec = readStoredSpec(id, row.page_uid);
+    const spec = readStoredSpec(id, row);
     return reply.code(200).send({
       page_number: n,
       render_type: row.render_type === 'gsap-image' ? 'gsap-image' : 'static-image',
@@ -161,7 +170,7 @@ export async function registerPageAnimationRoutes(app: FastifyInstance): Promise
     if (!hasShareAccess(request, id) && !canReadPdf(sessionSub(request), pdfRow)) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的動畫規格'));
     }
-    const spec = readStoredSpec(id, row.page_uid);
+    const spec = readStoredSpec(id, row);
     // no-store so the renderer never plays a stale spec right after the editor saves
     return reply.header('Cache-Control', 'no-store').code(200).send(spec);
   });
