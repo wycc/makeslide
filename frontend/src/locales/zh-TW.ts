@@ -937,7 +937,7 @@ export const zhTW = {
   'play.fullscreen.pendingQuestions': '學生提問',
   'play.fullscreen.noSubtitle': '（本頁尚無字幕）',
   'play.fullscreen.editTranscriptHeading': '📝 編輯逐字稿（第 {page} 頁）',
-  'play.fullscreen.exit': '離開全螢幕',
+  'play.fullscreen.exit': '離開',
   'play.fullscreen.layout.image': '圖片',
   'play.fullscreen.layout.split': '字幕',
   'play.fullscreen.layout.edit': '編輯',
