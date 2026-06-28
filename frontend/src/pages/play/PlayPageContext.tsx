@@ -404,6 +404,8 @@ export interface PlayPageContextValue {
   handleSubmitFollowerQuestion: () => void;
   handleRaiseHand: () => void;
   handleToggleDisplayedQuestion: () => void;
+  handleDeleteFollowerQuestion: (questionId: string) => void;
+  handleClearFollowerQuestions: () => void;
   handleAiAnswerFollowerQuestions: () => void;
   handleSummarizeFollowerQuestions: () => Promise<void>;
   questionSummary: string | null;

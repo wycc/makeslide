@@ -1347,6 +1347,33 @@ export async function toggleSyncDisplayedQuestion(
   return (await resp.json()) as { ok: boolean; displayed_question_id: string | null };
 }
 
+export async function deleteSyncFollowerQuestion(
+  id: string,
+  clientId: string,
+  questionId: string,
+): Promise<{ ok: boolean }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/sync/questions/delete`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ client_id: clientId, question_id: questionId }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { ok: boolean };
+}
+
+export async function clearSyncFollowerQuestions(
+  id: string,
+  clientId: string,
+): Promise<{ ok: boolean }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/sync/questions/clear`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ client_id: clientId }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { ok: boolean };
+}
+
 export async function submitSyncQuizProgress(
   id: string,
   clientId: string,

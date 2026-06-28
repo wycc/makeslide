@@ -444,6 +444,10 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     question: z.string().trim().min(1).max(500),
   });
   const MasterQuestionActionBodySchema = z.object({ client_id: z.string().trim().min(1).max(128) });
+  const DeleteQuestionBodySchema = z.object({
+    client_id: z.string().trim().min(1).max(128),
+    question_id: z.string().trim().min(1).max(128),
+  });
   const QuizProgressBodySchema = z.object({
     client_id: z.string().trim().min(1).max(128),
     quiz_id: z.number().int().positive(),
@@ -747,6 +751,42 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     session.displayedQuestionId = session.displayedQuestionId ? null : session.followerQuestions[0]?.id ?? null;
     session.updatedAt = nowIso();
     return reply.send({ ok: true, displayed_question_id: session.displayedQuestionId });
+  });
+
+  app.post('/api/pdfs/:id/sync/questions/delete', async (request, reply) => {
+    const parsedParams = IdParamSchema.safeParse(request.params);
+    const parsedBody = DeleteQuestionBodySchema.safeParse(request.body);
+    if (!parsedParams.success || !parsedBody.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid sync question delete request'));
+    }
+    const { id } = parsedParams.data;
+    const { client_id: clientId, question_id: questionId } = parsedBody.data;
+    const session = getSession(id);
+    if (roleFor(session, clientId) !== 'master') {
+      return reply.code(403).send(errorResponse('SYNC_NOT_MASTER', 'Only master can delete follower questions'));
+    }
+    session.followerQuestions = session.followerQuestions.filter((q) => q.id !== questionId);
+    if (session.displayedQuestionId === questionId) session.displayedQuestionId = null;
+    session.updatedAt = nowIso();
+    return reply.send({ ok: true });
+  });
+
+  app.post('/api/pdfs/:id/sync/questions/clear', async (request, reply) => {
+    const parsedParams = IdParamSchema.safeParse(request.params);
+    const parsedBody = MasterQuestionActionBodySchema.safeParse(request.body);
+    if (!parsedParams.success || !parsedBody.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid sync question clear request'));
+    }
+    const { id } = parsedParams.data;
+    const { client_id: clientId } = parsedBody.data;
+    const session = getSession(id);
+    if (roleFor(session, clientId) !== 'master') {
+      return reply.code(403).send(errorResponse('SYNC_NOT_MASTER', 'Only master can clear follower questions'));
+    }
+    session.followerQuestions = [];
+    session.displayedQuestionId = null;
+    session.updatedAt = nowIso();
+    return reply.send({ ok: true });
   });
 
   app.post('/api/pdfs/:id/sync/questions/ai-answer', async (request, reply) => {

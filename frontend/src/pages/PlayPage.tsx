@@ -24,6 +24,8 @@ import {
   regeneratePageAudio,
   submitSyncFollowerQuestion,
   toggleSyncDisplayedQuestion,
+  deleteSyncFollowerQuestion,
+  clearSyncFollowerQuestions,
   updatePlaybackSyncState,
   type PageWatchProgressStats,
   type PdfReportSummary,
@@ -1553,6 +1555,31 @@ export default function PlayPage() {
     }
   }, [pdfId]);
 
+  const handleDeleteFollowerQuestion = useCallback(async (questionId: string) => {
+    if (!pdfId || !syncClientIdRef.current) return;
+    try {
+      await deleteSyncFollowerQuestion(pdfId, syncClientIdRef.current, questionId);
+      setSyncFollowerQuestions((prev) => prev.filter((q) => q.id !== questionId));
+      setSyncDisplayedQuestionId((prev) => (prev === questionId ? null : prev));
+      setSyncError(null);
+    } catch (err) {
+      setSyncError(err instanceof ApiError ? err.message : t('play.error.deleteQuestion'));
+    }
+  }, [pdfId]);
+
+  const handleClearFollowerQuestions = useCallback(async () => {
+    if (!pdfId || !syncClientIdRef.current) return;
+    if (!window.confirm(t('play.sync.clearAllQuestionsConfirm'))) return;
+    try {
+      await clearSyncFollowerQuestions(pdfId, syncClientIdRef.current);
+      setSyncFollowerQuestions([]);
+      setSyncDisplayedQuestionId(null);
+      setSyncError(null);
+    } catch (err) {
+      setSyncError(err instanceof ApiError ? err.message : t('play.error.clearQuestions'));
+    }
+  }, [pdfId]);
+
   const handleAiAnswerFollowerQuestions = useCallback(async () => {
     if (!pdfId || !syncClientIdRef.current || syncAiAnswerBusy) return;
     setSyncAiAnswerBusy(true);
@@ -2432,7 +2459,8 @@ export default function PlayPage() {
     syncQuestionInput, setSyncQuestionInput, fullscreenQuestionDialogOpen, setFullscreenQuestionDialogOpen,
     fullscreenPollControlOpen, setFullscreenPollControlOpen, remoteCursor, syncDrawingState,
     isSyncFollower, canUseDrawingTools, handleSyncEnabledChange, handleSubmitFollowerQuestion,
-    handleRaiseHand, handleToggleDisplayedQuestion, handleAiAnswerFollowerQuestions,
+    handleRaiseHand, handleToggleDisplayedQuestion, handleDeleteFollowerQuestion,
+    handleClearFollowerQuestions, handleAiAnswerFollowerQuestions,
     handleSummarizeFollowerQuestions, questionSummary, questionSummaryBusy,
     // fullscreen / layout
     imageOnlyFullscreen, setImageOnlyFullscreen, fullscreenLayout, setFullscreenLayout,

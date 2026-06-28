@@ -250,6 +250,8 @@ export function PlayPageHeader() {
     handleSubmitFollowerQuestion,
     handleRaiseHand,
     handleToggleDisplayedQuestion,
+    handleDeleteFollowerQuestion,
+    handleClearFollowerQuestions,
     handleAiAnswerFollowerQuestions,
     handleSummarizeFollowerQuestions,
     questionSummary,
@@ -551,6 +553,14 @@ export function PlayPageHeader() {
                       >
                         {questionSummaryBusy ? t('play.sync.summarizeQuestionsBusy') : t('play.sync.summarizeQuestions')}
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleClearFollowerQuestions()}
+                        disabled={syncFollowerQuestions.length === 0}
+                        className="rounded border border-rose-300 bg-rose-50 px-2 py-1 text-rose-800 disabled:opacity-40 dark:border-rose-500/50 dark:bg-rose-500/15 dark:text-rose-100"
+                      >
+                        {t('play.sync.clearAllQuestions')}
+                      </button>
                     </div>
                   </div>
                   {syncAiAnswer ? (
@@ -565,9 +575,20 @@ export function PlayPageHeader() {
                   ) : null}
                   <div className="max-h-28 space-y-1 overflow-auto">
                     {syncFollowerQuestions.slice(0, 5).map((q) => (
-                      <div key={q.id} className={`rounded px-2 py-1 ${q.question === '🖐' ? 'border border-amber-300 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/15' : 'bg-surface dark:bg-slate-950/70'}`}>
-                        <span className={q.question === '🖐' ? 'text-amber-700 dark:text-amber-300' : 'text-cyan-700 dark:text-cyan-300'}>{q.code || q.display_name || t('play.sync.anonymous')}：</span>
-                        {q.question === '🖐' ? <span className="text-amber-800 dark:text-amber-200">🖐 {t('play.sync.raiseHand')}</span> : q.question}
+                      <div key={q.id} className={`flex items-start gap-2 rounded px-2 py-1 ${q.question === '🖐' ? 'border border-amber-300 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/15' : 'bg-surface dark:bg-slate-950/70'}`}>
+                        <div className="min-w-0 flex-1">
+                          <span className={q.question === '🖐' ? 'text-amber-700 dark:text-amber-300' : 'text-cyan-700 dark:text-cyan-300'}>{q.code || q.display_name || t('play.sync.anonymous')}：</span>
+                          {q.question === '🖐' ? <span className="text-amber-800 dark:text-amber-200">🖐 {t('play.sync.raiseHand')}</span> : q.question}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteFollowerQuestion(q.id)}
+                          aria-label={t('play.sync.deleteQuestion')}
+                          title={t('play.sync.deleteQuestion')}
+                          className="shrink-0 rounded px-1 leading-none text-muted hover:bg-rose-100 hover:text-rose-700 dark:hover:bg-rose-500/20 dark:hover:text-rose-200"
+                        >
+                          ✕
+                        </button>
                       </div>
                     ))}
                   </div>
