@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useI18n } from '../../i18n';
 import { usePlayPageContext } from './PlayPageContext';
-import { updatePageNote } from '../../lib/api/pdfs';
+import { createPageComment } from '../../lib/api/pdfs';
+import { getStoredCommentAuthor } from '../../lib/commentAuthor';
 
 export function PageAskPanel() {
   const { t } = useI18n();
@@ -11,7 +12,7 @@ export function PageAskPanel() {
     pageAskMessages,
     pageAskBusy, pageAskError,
     handleAskPage, clearPageAsk,
-    pdfId, currentPage, setDetail,
+    pdfId, currentPage,
   } = usePlayPageContext();
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'ok' | 'fail'>('idle');
 
@@ -23,15 +24,11 @@ export function PageAskPanel() {
     if (!pdfId || !currentPage || !lastAnswer || !lastQuestion) return;
     setSaveStatus('saving');
     try {
-      const existing = currentPage.page_notes?.trim() ?? '';
-      const appended = `Q: ${lastQuestion.trim()}\nA: ${lastAnswer.trim()}`;
-      const newNote = existing ? `${existing}\n\n${appended}` : appended;
-      await updatePageNote(pdfId, currentPage.page_number, newNote);
-      // 同步更新本地 detail，否則筆記區（讀 currentPage.page_notes）看不到剛存的內容。
-      setDetail((prev) => prev ? {
-        ...prev,
-        pages: prev.pages.map((p) => p.page_number === currentPage.page_number ? { ...p, page_notes: newNote } : p),
-      } : prev);
+      // 存成「頁面評論」的一則（多筆、可單獨刪除），而非覆蓋單一的頁面備註。
+      // 評論長度上限 2000，超過就截斷以免後端 400。
+      const combined = `Q: ${lastQuestion.trim()}\nA: ${lastAnswer.trim()}`;
+      const text = combined.length > 2000 ? `${combined.slice(0, 1999)}…` : combined;
+      await createPageComment(pdfId, currentPage.page_number, getStoredCommentAuthor() || 'AI 導師', text);
       setSaveStatus('ok');
     } catch {
       setSaveStatus('fail');
