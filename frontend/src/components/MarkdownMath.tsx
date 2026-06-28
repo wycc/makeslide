@@ -3,9 +3,10 @@ import katex from 'katex';
 
 /**
  * 輕量 Markdown + LaTeX 渲染：支援 `# 標題`、`**粗體**`、`*斜體*`、`` `行內碼` ``、
- * `-`/`*`/`1.` 條列、段落換行，以及 LaTeX 數學（`$...$`、`$$...$$`、`\(...\)`、`\[...\]`）。
- * 不引入 markdown 套件，數學交由專案已內建的 katex 渲染。文字內容一律以 React text node
- * 呈現（不走 innerHTML），只有 katex 產生的 HTML 才用 dangerouslySetInnerHTML（受信任）。
+ * `-`/`*`/`1.` 條列、段落換行，以及 LaTeX 數學——區塊數學 `$$...$$`、`\[...\]`（可跨行），
+ * 行內數學 `$...$`、`\(...\)`。不引入 markdown 套件，數學交由專案已內建的 katex 渲染。
+ * 文字內容一律以 React text node 呈現（不走 innerHTML）；只有 katex 產生的 HTML 才用
+ * dangerouslySetInnerHTML（受信任）。
  */
 function renderMathHtml(tex: string, displayMode: boolean): string {
   try {
@@ -15,10 +16,10 @@ function renderMathHtml(tex: string, displayMode: boolean): string {
   }
 }
 
-// 行內 token：數學優先（避免 $ 內的 * 被當粗體），其次粗體/行內碼/斜體。
-// 注意：每次呼叫都建立新的 RegExp 實例——renderInline 會遞迴（粗體/斜體內含其他語法），
-// 若共用同一個帶 g 旗標的有狀態 regex，遞迴會污染外層迴圈的 lastIndex 而無限迴圈。
-const INLINE_SOURCE = '(\\$\\$[\\s\\S]+?\\$\\$|\\\\\\[[\\s\\S]+?\\\\\\]|\\\\\\([\\s\\S]+?\\\\\\)|\\$[^$\\n]+?\\$|\\*\\*[\\s\\S]+?\\*\\*|`[^`]+?`|\\*[^*\\n]+?\\*)';
+// 行內 token（不含區塊數學，那在外層先抽走）：行內數學 \(...\)、$...$，再粗體/行內碼/斜體。
+// 每次呼叫都建立新的 RegExp——renderInline 會遞迴，共用帶 g 旗標的有狀態 regex 會污染
+// 外層迴圈的 lastIndex 而無限迴圈。
+const INLINE_SOURCE = '(\\\\\\([\\s\\S]+?\\\\\\)|\\$[^$\\n]+?\\$|\\*\\*[\\s\\S]+?\\*\\*|`[^`]+?`|\\*[^*\\n]+?\\*)';
 
 function renderInline(text: string, keyPrefix: string): ReactNode[] {
   const out: ReactNode[] = [];
@@ -30,9 +31,7 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
     if (m.index > last) out.push(text.slice(last, m.index));
     const tok = m[0];
     const key = `${keyPrefix}-${i++}`;
-    if (tok.startsWith('$$') || tok.startsWith('\\[')) {
-      out.push(<span key={key} dangerouslySetInnerHTML={{ __html: renderMathHtml(tok.slice(2, -2), true) }} />);
-    } else if (tok.startsWith('\\(')) {
+    if (tok.startsWith('\\(')) {
       out.push(<span key={key} dangerouslySetInnerHTML={{ __html: renderMathHtml(tok.slice(2, -2), false) }} />);
     } else if (tok.startsWith('$')) {
       out.push(<span key={key} dangerouslySetInnerHTML={{ __html: renderMathHtml(tok.slice(1, -1), false) }} />);
@@ -49,8 +48,8 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
   return out;
 }
 
-export function MarkdownMath({ content, className }: { content: string; className?: string }) {
-  const lines = (content ?? '').replace(/\r\n/g, '\n').split('\n');
+/** 把一段「不含區塊數學」的文字逐行解析成標題/條列/段落區塊。 */
+function renderTextBlocks(text: string, keyPrefix: string): ReactNode[] {
   const blocks: ReactNode[] = [];
   let list: { ordered: boolean; items: string[] } | null = null;
 
@@ -67,29 +66,58 @@ export function MarkdownMath({ content, className }: { content: string; classNam
     list = null;
   };
 
-  lines.forEach((line, idx) => {
-    const key = `b${idx}`;
+  text.split('\n').forEach((line, idx) => {
+    const key = `${keyPrefix}-b${idx}`;
+    const lkey = `${keyPrefix}-l${idx}`;
     const heading = /^(#{1,6})\s+(.*)$/.exec(line.trim());
     const listItem = /^\s*([-*]|\d+\.)\s+(.*)$/.exec(line);
     if (heading) {
-      flushList(`l${idx}`);
+      flushList(lkey);
       const tag = (heading[1]?.length ?? 1) <= 2 ? 'h3' : 'h4';
       blocks.push(createElement(tag, { key, className: 'mt-2 font-semibold' }, renderInline(heading[2] ?? '', key)));
     } else if (listItem) {
       const ordered = /\d+\./.test(listItem[1] ?? '');
       if (!list || list.ordered !== ordered) {
-        flushList(`l${idx}`);
+        flushList(lkey);
         list = { ordered, items: [] };
       }
       list.items.push(listItem[2] ?? '');
     } else if (line.trim() === '') {
-      flushList(`l${idx}`);
+      flushList(lkey);
     } else {
-      flushList(`l${idx}`);
+      flushList(lkey);
       blocks.push(<p key={key} className="whitespace-pre-wrap break-words">{renderInline(line, key)}</p>);
     }
   });
-  flushList('lend');
+  flushList(`${keyPrefix}-lend`);
+  return blocks;
+}
 
-  return <div className={`space-y-1 ${className ?? ''}`}>{blocks}</div>;
+// 區塊數學（可跨行）：$$...$$、\[...\]。
+const BLOCK_MATH_SOURCE = '\\$\\$[\\s\\S]+?\\$\\$|\\\\\\[[\\s\\S]+?\\\\\\]';
+
+export function MarkdownMath({ content, className }: { content: string; className?: string }) {
+  const text = (content ?? '').replace(/\r\n/g, '\n');
+  const nodes: ReactNode[] = [];
+  const re = new RegExp(BLOCK_MATH_SOURCE, 'g');
+  let last = 0;
+  let i = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) nodes.push(...renderTextBlocks(text.slice(last, m.index), `seg${i}`));
+    const tok = m[0];
+    // $$...$$ 與 \[...\] 都是去頭去尾 2 個字元。
+    nodes.push(
+      <div
+        key={`bm${i}`}
+        className="my-1 overflow-x-auto"
+        dangerouslySetInnerHTML={{ __html: renderMathHtml(tok.slice(2, -2), true) }}
+      />,
+    );
+    last = m.index + tok.length;
+    i++;
+  }
+  if (last < text.length) nodes.push(...renderTextBlocks(text.slice(last), 'segend'));
+
+  return <div className={`space-y-1 ${className ?? ''}`}>{nodes}</div>;
 }

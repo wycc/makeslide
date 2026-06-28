@@ -1387,10 +1387,11 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         ],
       });
       // 模型常把換行以字面 `\n`（反斜線+n）輸出而非真正的換行字元，導致前端顯示成
-      // 「\n\n」而非分行。回傳前把這些字面跳脫序列還原成真正的換行/Tab，提升可讀性。
+      // 「\n\n」而非分行。只在「跳脫字母後面不是英文字母」時才還原成換行，避免誤傷
+      // LaTeX 指令（如 \nabla、\nu、\rho、\right、\text、\times——後者開頭就是 \t/\n/\r）。
       const answer = result.data.answer
-        .replace(/\\r\\n|\\n|\\r/g, '\n')
-        .replace(/\\t/g, '\t')
+        .replace(/\\r?\\n\\r?\\n/g, '\n\n')
+        .replace(/\\r\\n|\\n(?![A-Za-z])|\\r(?![A-Za-z])/g, '\n')
         .trim();
       return reply.code(200).send({ answer });
     } catch (err) {
