@@ -275,7 +275,7 @@ export function PlayPageFullscreen() {
       aria-label={isPlaying ? t('play.slidePanel.pauseAudioOverlay') : t('play.slidePanel.resumeAudioOverlay')}
     >
       {!isPlaying ? (
-        <div className="pointer-events-none absolute left-4 top-4 flex h-12 w-12 items-center justify-center rounded-full border border-white/35 bg-black/55 text-white shadow-lg backdrop-blur-sm">
+        <div className="pointer-events-none absolute left-4 top-16 flex h-12 w-12 items-center justify-center rounded-full border border-white/35 bg-black/55 text-white shadow-lg backdrop-blur-sm">
           <span className="sr-only">{t('play.fullscreen.audioPaused')}</span>
           <span className="h-6 w-2 rounded-sm bg-current" aria-hidden="true" />
           <span className="ml-2 h-6 w-2 rounded-sm bg-current" aria-hidden="true" />
@@ -287,7 +287,7 @@ export function PlayPageFullscreen() {
         // 點徽章會穿透觸發上一頁。改為自行吃掉點擊（z-30 蓋過 z-20 的上一頁區），並
         // stopPropagation 以免冒泡到根容器的播放／暫停切換。
         <div
-          className="absolute left-4 top-28 z-30 flex flex-col items-start gap-1"
+          className="absolute left-4 top-32 z-30 flex flex-col items-start gap-1"
           onClick={(e) => e.stopPropagation()}
         >
           {syncFollowerQuestions.length > 0 ? (
@@ -317,7 +317,7 @@ export function PlayPageFullscreen() {
       ) : null}
       {fullscreenQuestionsOpen && syncEnabled && syncRole === 'master' ? (
         <div
-          className="absolute left-4 top-40 z-40 max-h-[70vh] w-[min(28rem,90vw)] overflow-y-auto rounded-xl border border-amber-400/40 bg-slate-950/95 p-4 text-xs text-slate-100 shadow-2xl backdrop-blur"
+          className="absolute left-4 top-44 z-40 max-h-[70vh] w-[min(28rem,90vw)] overflow-y-auto rounded-xl border border-amber-400/40 bg-surface-muted p-4 text-xs text-text shadow-2xl backdrop-blur dark:bg-slate-900/95 dark:text-slate-100"
           onClick={(e) => e.stopPropagation()}
         >
           <SyncQuestionsPanel />
