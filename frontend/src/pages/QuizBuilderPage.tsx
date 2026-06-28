@@ -19,6 +19,7 @@ import {
   getSystemAiSettings,
   generateQuizSet,
   joinPlaybackSync,
+  joinSharedPlaybackSync,
   saveQuizSet,
   submitQuizAttempt,
   submitSyncQuizProgress,
@@ -141,6 +142,10 @@ export default function QuizBuilderPage() {
     answers: Record<string, number[]>;
   } | null>(null);
   const previousActiveQuizIdRef = useRef<number | null>(null);
+  // 是否有資格取得 master（編輯權限）：owner 或 public_editable。null = detail 尚未載入。
+  // 唯讀學生（false）加入同步要走 follower 的 share-join，否則 /sync/join 會回 403。
+  const canBeMasterRef = useRef<boolean | null>(null);
+  canBeMasterRef.current = detail ? Boolean(detail.is_owner || detail.visibility === 'public_editable') : null;
 
   useEffect(() => {
     if (!pdfId) return;
@@ -345,33 +350,41 @@ export default function QuizBuilderPage() {
         syncClientIdRef.current = clientId;
         window.sessionStorage.setItem(storageKey, clientId);
       }
+      // 等 detail 載入後才知道能否當 master；唯讀學生（canMaster=false）走 follower 的
+      // share-join，避免以 master 身分呼叫 /sync/join 而吃 403。
+      const canMaster = canBeMasterRef.current;
+      const doJoin = (cid: string) =>
+        canMaster ? joinPlaybackSync(pdfId, cid, userCode) : joinSharedPlaybackSync(pdfId, cid, '');
+      const applyJoined = (joined: Awaited<ReturnType<typeof joinPlaybackSync>>) => {
+        joinedOnce = true;
+        const nextRole = canMaster ? resolveRole(joined.role) : 'follower';
+        setSyncRole(nextRole);
+        window.localStorage.setItem(roleKey, nextRole);
+        setSyncActiveQuizId(joined.active_quiz_id ?? null);
+        setSyncQuizSessionId(joined.quiz_session_id ?? null);
+        setSyncQuizShowAnswers(joined.quiz_show_answers ?? false);
+        setSyncQuizProgress(joined.quiz_progress ?? []);
+      };
       try {
         if (!joinedOnce) {
+          if (canMaster === null) return; // detail 尚未載入，下一輪再決定角色
           try {
-            const joined = await joinPlaybackSync(pdfId, clientId, userCode);
+            const joined = await doJoin(clientId);
             if (cancelled) return;
-            joinedOnce = true;
-            const nextRole = resolveRole(joined.role);
-            setSyncRole(nextRole);
-            window.localStorage.setItem(roleKey, nextRole);
-            setSyncActiveQuizId(joined.active_quiz_id ?? null);
-            setSyncQuizSessionId(joined.quiz_session_id ?? null);
-            setSyncQuizShowAnswers(joined.quiz_show_answers ?? false);
-            setSyncQuizProgress(joined.quiz_progress ?? []);
+            applyJoined(joined);
           } catch (err) {
+            // 唯讀學生但老師尚未開啟直播同步：share-join 回 409，不是錯誤，靜待下一輪。
+            if (!canMaster && err instanceof ApiError && err.status === 409) {
+              if (!cancelled) { setSyncRole('follower'); setSyncError(null); }
+              return;
+            }
             if (err instanceof ApiError && err.status === 400) {
               const regenerated = `sync-${Date.now()}-${Math.random().toString(36).slice(2)}`;
               syncClientIdRef.current = regenerated;
               window.sessionStorage.setItem(storageKey, regenerated);
-              const joined = await joinPlaybackSync(pdfId, regenerated, userCode);
+              const joined = await doJoin(regenerated);
               if (cancelled) return;
-              joinedOnce = true;
-              const nextRole = resolveRole(joined.role);
-              setSyncRole(nextRole);
-              window.localStorage.setItem(roleKey, nextRole);
-              setSyncActiveQuizId(joined.active_quiz_id ?? null);
-              setSyncQuizShowAnswers(joined.quiz_show_answers ?? false);
-              setSyncQuizProgress(joined.quiz_progress ?? []);
+              applyJoined(joined);
             } else {
               throw err;
             }
