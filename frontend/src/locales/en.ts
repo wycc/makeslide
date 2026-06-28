@@ -1391,6 +1391,8 @@ export const en = {
   'play.sidebar.aiSubTab.tutor': 'Tutor',
   'play.sidebar.aiSubTab.quality': 'Quality',
   'play.sidebar.aiSubTab.chat': 'Chat & edit',
+  'play.sidebar.notesSubTab.note': 'Page note',
+  'play.sidebar.notesSubTab.comments': 'Comments',
   'play.sidebar.slideManagement': 'Slide management',
   'play.sidebar.regenerateTitle': 'Regenerate (optional transcript/audio/images)',
   'play.sidebar.regenerating': 'Regenerating…',

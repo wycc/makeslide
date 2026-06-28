@@ -1391,6 +1391,8 @@ export const zhTW = {
   'play.sidebar.aiSubTab.tutor': '導師問答',
   'play.sidebar.aiSubTab.quality': '品質報告',
   'play.sidebar.aiSubTab.chat': '本頁問答',
+  'play.sidebar.notesSubTab.note': '頁面備註',
+  'play.sidebar.notesSubTab.comments': '頁面評論',
   'play.sidebar.slideManagement': '投影片管理',
   'play.sidebar.regenerateTitle': '重生（可選逐字稿/語音/圖檔）',
   'play.sidebar.regenerating': '重生中…',

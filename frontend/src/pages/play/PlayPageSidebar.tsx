@@ -692,6 +692,12 @@ export function PlayPageSidebar() {
     { id: 'quality', labelKey: 'play.sidebar.aiSubTab.quality' },
     { id: 'chat', labelKey: 'play.sidebar.aiSubTab.chat' },
   ];
+  // 「筆記留言」分頁底下的子分頁：一次只顯示備註或評論，比照 AI 助手分頁的 notebook 模式。
+  const [notesSubTab, setNotesSubTab] = useState<'note' | 'comments'>('note');
+  const NOTES_SUBTABS: ReadonlyArray<{ id: 'note' | 'comments'; labelKey: TranslationKey }> = [
+    { id: 'note', labelKey: 'play.sidebar.notesSubTab.note' },
+    { id: 'comments', labelKey: 'play.sidebar.notesSubTab.comments' },
+  ];
   const selectNotebookTab = (tab: NotebookTab) => {
     setNotebookTab(tab);
     setStoredNotebookTab(tab);
@@ -1098,7 +1104,28 @@ export function PlayPageSidebar() {
       </section>
       )}
 
-      {notebookTab === 'notes' && <PageNoteSection />}
+      {notebookTab === 'notes' && (
+        <div className="flex shrink-0 gap-1 rounded-lg border border-border bg-surface p-1" role="tablist">
+          {NOTES_SUBTABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={notesSubTab === tab.id}
+              onClick={() => setNotesSubTab(tab.id)}
+              className={`flex-1 whitespace-nowrap rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
+                notesSubTab === tab.id
+                  ? 'bg-primary/15 text-primary dark:bg-primary/20'
+                  : 'text-muted hover:bg-surface-muted hover:text-text'
+              }`}
+            >
+              {t(tab.labelKey)}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {notebookTab === 'notes' && notesSubTab === 'note' && <PageNoteSection />}
 
       {notebookTab === 'interact' && (
       <section className="rounded-lg border border-border bg-surface">
@@ -1405,7 +1432,7 @@ export function PlayPageSidebar() {
       </section>
       )}
 
-      {notebookTab === 'notes' && <CommentsSection />}
+      {notebookTab === 'notes' && notesSubTab === 'comments' && <CommentsSection />}
 
       {notebookTab === 'slides' && <SimilarPagesSection />}
 
@@ -1435,8 +1462,6 @@ export function PlayPageSidebar() {
       {notebookTab === 'ai' && aiSubTab === 'tutor' && <PageAskPanel />}
 
       {notebookTab === 'ai' && aiSubTab === 'quality' && <QualityCheckPanel />}
-
-      {notebookTab === 'notes' && <PageNoteSection />}
 
       {notebookTab === 'ai' && aiSubTab === 'chat' && (
       <section className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-lg border border-border bg-surface">
