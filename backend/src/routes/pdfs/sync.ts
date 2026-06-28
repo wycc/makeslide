@@ -3,6 +3,7 @@ import { getPdfPermissionRow, canEditPdf, canReadPdf } from './permissions';
 import { z } from 'zod';
 import { db } from '../../db';
 import { sessionSub } from '../auth';
+import { getAccountDisplayNames } from '../../services/accountProfiles';
 import type { PdfRow } from '../../types';
 import { errorResponse, IdParamSchema, nowIso } from './shared';
 import { callChatJSON } from '../../services/openai';
@@ -84,6 +85,8 @@ interface SyncFollowerQuestion {
   id: string;
   clientId: string;
   code: string | null;
+  /** Google account `sub` of the asker (when logged in); resolved to a display name in responses. Never sent to clients directly. */
+  sub: string | null;
   question: string;
   createdAt: string;
 }
@@ -117,7 +120,11 @@ export function __getSyncSessionForTest(pdfId: string): SyncSessionState | undef
 /** Snapshot current in-memory follower questions for read-only reporting routes. */
 export function getSyncFollowerQuestionsSnapshot(pdfId: string): Array<Pick<SyncFollowerQuestion, 'id' | 'clientId' | 'code' | 'question' | 'createdAt'>> {
   const session = sessions.get(pdfId);
-  return session ? session.followerQuestions.map((question) => ({ ...question })) : [];
+  // Explicitly project the reporting fields (no `sub`) so the asker's account id never
+  // escapes through this snapshot.
+  return session
+    ? session.followerQuestions.map(({ id, clientId, code, question, createdAt }) => ({ id, clientId, code, question, createdAt }))
+    : [];
 }
 
 interface SyncSessionRow {
@@ -262,16 +269,22 @@ function upsertPersistedSession(session: SyncSessionState): void {
   );
 }
 
-function toQuestionResponse(question: SyncFollowerQuestion): SyncFollowerQuestion & {
+function toQuestionResponse(question: SyncFollowerQuestion, displayName?: string | null): Omit<SyncFollowerQuestion, 'sub'> & {
   client_id: string;
   created_at: string;
   show_on_screen: boolean;
+  display_name: string | null;
 } {
+  // Strip `sub` from the wire shape: it's the asker's Google account id and other
+  // followers also receive this list when polling state, so only the resolved
+  // display name should leave the server.
+  const { sub: _sub, ...rest } = question;
   return {
-    ...question,
+    ...rest,
     client_id: question.clientId,
     created_at: question.createdAt,
     show_on_screen: false,
+    display_name: displayName ?? null,
   };
 }
 
@@ -305,7 +318,12 @@ function toAiAnswerResponse(answer: SyncAiAnswer | null): (SyncAiAnswer & { ques
 }
 
 function buildStateResponse(session: SyncSessionState, pdfId: string, role: SyncRole, clientId?: string) {
-  const followerQuestions = session.followerQuestions.map(toQuestionResponse);
+  // Resolve askers' Google `sub` to account display names in one batch (name → email fallback);
+  // anonymous askers stay null and the client falls back to their manual code / 「匿名」.
+  const questionNames = getAccountDisplayNames(session.followerQuestions.map((q) => q.sub));
+  const followerQuestions = session.followerQuestions.map((q) =>
+    toQuestionResponse(q, q.sub ? questionNames.get(q.sub) ?? null : null),
+  );
   return {
     pdf_id: pdfId,
     role,
@@ -699,16 +717,19 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send(errorResponse('SYNC_NOT_FOLLOWER', 'Only followers can submit questions'));
     }
     const now = nowIso();
+    const sub = sessionSub(request);
     const item: SyncFollowerQuestion = {
       id: `q-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
       clientId,
       code: userCode?.trim() || session.userCodes.get(clientId) || null,
+      sub,
       question,
       createdAt: now,
     };
     session.followerQuestions = [item, ...session.followerQuestions].slice(0, 100);
     session.updatedAt = now;
-    return reply.code(201).send(toQuestionResponse(item));
+    const displayName = sub ? getAccountDisplayNames([sub]).get(sub) ?? null : null;
+    return reply.code(201).send(toQuestionResponse(item, displayName));
   });
 
   app.post('/api/pdfs/:id/sync/questions/toggle-display', async (request, reply) => {

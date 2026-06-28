@@ -667,6 +667,8 @@ export interface SyncFollowerQuestion {
   clientId: string;
   client_id?: string;
   code: string | null;
+  /** Asker's account display name (Google name, falling back to email) when logged in; null for anonymous askers. */
+  display_name?: string | null;
   question: string;
   show_on_screen?: boolean;
   createdAt: string;
