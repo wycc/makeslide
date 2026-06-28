@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, type KeyboardEvent as ReactKe
 import { useNavigate } from 'react-router-dom';
 import { useI18n, type TranslationKey } from '../../i18n';
 import { debugLog, debugWarn } from '../../lib/debugLog';
+import { MarkdownMath } from '../../components/MarkdownMath';
 import { calculateWatchProgressPercent, calculateAvgListenedPercent, formatWatchProgressBadgeCount } from '../../lib/watchProgress';
 import { updatePageNote, listPageComments, listAllComments, createPageComment, resolvePageComment, editPageComment, deletePageComment, fetchSimilarPages, type PageComment, type SimilarPage } from '../../lib/api/pdfs';
 import { usePlayPageContext } from './PlayPageContext';
@@ -338,7 +339,7 @@ function CommentsSection() {
                       </div>
                     </div>
                   ) : (
-                    <p className={`mt-0.5 break-words text-sky-900/90 dark:text-sky-100/80 ${c.resolved ? 'line-through text-muted' : ''}`}>{c.text}</p>
+                    <MarkdownMath content={c.text} className={`mt-0.5 break-words text-sky-900/90 dark:text-sky-100/80 ${c.resolved ? 'text-muted line-through' : ''}`} />
                   )}
                 </div>
                 <div className="flex shrink-0 flex-col gap-0.5">

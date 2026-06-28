@@ -3,6 +3,7 @@ import { useI18n } from '../../i18n';
 import { usePlayPageContext } from './PlayPageContext';
 import { createPageComment } from '../../lib/api/pdfs';
 import { getStoredCommentAuthor } from '../../lib/commentAuthor';
+import { MarkdownMath } from '../../components/MarkdownMath';
 
 export function PageAskPanel() {
   const { t } = useI18n();
@@ -75,7 +76,9 @@ export function PageAskPanel() {
               <p className="mb-0.5 text-[10px] uppercase tracking-wide text-muted">
                 {m.role === 'user' ? t('play.sidebar.pageAsk.you') : t('play.sidebar.pageAsk.tutor')}
               </p>
-              <p className="whitespace-pre-wrap">{m.content}</p>
+              {m.role === 'user'
+                ? <p className="whitespace-pre-wrap">{m.content}</p>
+                : <MarkdownMath content={m.content} />}
             </div>
           ))}
           {pageAskBusy && <p className="text-xs text-muted">{t('play.sidebar.pageAsk.asking')}</p>}
