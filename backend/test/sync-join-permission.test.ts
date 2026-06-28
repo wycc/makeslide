@@ -82,6 +82,40 @@ test('POST /sync/join returns 404 for a non-existent PDF', async () => {
   await app.close();
 });
 
+test('POST /sync/share-join lets a read-only viewer of a public presentation follow without a share token', async () => {
+  // A read-only viewer who opens a public deck from the list (no ?share token in the URL) must
+  // still be able to join the live sync as a follower. The owner becomes master first.
+  seedSyncPdf('sharejoin-pub-01', 'public');
+  const app = await buildApp();
+  try {
+    const master = await app.inject({ method: 'POST', url: '/api/pdfs/sharejoin-pub-01/sync/join', headers: OWNER_HEADERS, payload: { client_id: 'owner-c1' } });
+    assert.equal(master.statusCode, 200);
+
+    const follower = await app.inject({ method: 'POST', url: '/api/pdfs/sharejoin-pub-01/sync/share-join', headers: OTHER_HEADERS, payload: { client_id: 'viewer-c1' } });
+    assert.equal(follower.statusCode, 200);
+    assert.equal((follower.json() as { role: string }).role, 'follower');
+  } finally {
+    await app.close();
+  }
+});
+
+test('POST /sync/share-join rejects a viewer of a private presentation with no share token', async () => {
+  // Private decks stay token-gated: a reader with neither edit access nor a valid share token
+  // cannot follow, so this relaxation does not leak private presentations.
+  seedSyncPdf('sharejoin-priv-01', 'private');
+  const app = await buildApp();
+  try {
+    const master = await app.inject({ method: 'POST', url: '/api/pdfs/sharejoin-priv-01/sync/join', headers: OWNER_HEADERS, payload: { client_id: 'owner-c1' } });
+    assert.equal(master.statusCode, 200);
+
+    const follower = await app.inject({ method: 'POST', url: '/api/pdfs/sharejoin-priv-01/sync/share-join', headers: OTHER_HEADERS, payload: { client_id: 'viewer-c1' } });
+    assert.equal(follower.statusCode, 403);
+    assert.equal((follower.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+  } finally {
+    await app.close();
+  }
+});
+
 function syncStatePayload(clientId: string) {
   return { client_id: clientId, page_number: 1, is_playing: true, current_time: 0 };
 }

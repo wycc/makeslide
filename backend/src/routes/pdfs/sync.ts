@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { getPdfPermissionRow, canEditPdf } from './permissions';
+import { getPdfPermissionRow, canEditPdf, canReadPdf } from './permissions';
 import { z } from 'zod';
 import { db } from '../../db';
 import { sessionSub } from '../auth';
@@ -496,12 +496,16 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid shared sync join request'));
     }
     const { id } = parsedParams.data;
-    if (!ensurePdfExists(id)) {
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     }
     const shareToken = shareTokenFromRequest(request);
-    if (!hasValidShareTokenForPdf(id, shareToken)) {
-      return reply.code(403).send(errorResponse('INVALID_SHARE_TOKEN', '分享連結不存在、已失效，或不屬於此簡報'));
+    // 以 follower（唯讀跟隨）身分加入直播同步的門檻：持有有效分享 token，或本來就能讀
+    // 這份簡報（例如 public visibility，靠 QR/網址觀看但 token 沒帶到的情況）。master
+    // 主控權仍只在 /sync/join 以 canEditPdf 把關，唯讀觀看者拿不到主控。
+    if (!hasValidShareTokenForPdf(id, shareToken) && !canReadPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限加入此簡報的同步階段'));
     }
     const { client_id: clientId } = parsedBody.data;
     const session = getSession(id);

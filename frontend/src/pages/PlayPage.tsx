@@ -571,6 +571,9 @@ export default function PlayPage() {
   const shareIsReadOnly =
     !detail?.is_owner &&
     (detail?.share_mode === 'read_only' || (!currentShareToken && detail?.visibility === 'public'));
+  // 加入同步前必須先載到簡報詳情，才能判斷是否唯讀；否則唯讀者可能在 detail 載入前
+  // 以 master 身分（/sync/join）嘗試而吃 403，連帶把同步關掉。
+  const isDetailLoaded = detail != null;
   const canViewPostClassReport = Boolean(detail?.is_owner && !currentShareToken);
   const canAskPage = Boolean(detail?.is_authenticated);
   const isReadOnlyProcessing =
@@ -1109,7 +1112,9 @@ export default function PlayPage() {
   }, [pdfId, currentShareToken]);
 
   useEffect(() => {
-    if (!syncEnabled || !pdfId) return;
+    // 等 detail 載入後再 join：唯讀判斷依賴 detail，太早 join 會讓唯讀者吃 403。
+    // 本 effect 已把 isDetailLoaded / shareIsReadOnly 列入相依，detail 載入後會重跑。
+    if (!syncEnabled || !pdfId || !isDetailLoaded) return;
     const enabledKey = `makeslide.sync.enabled.${pdfId}`;
     window.localStorage.setItem(enabledKey, '1');
     // client_id 必須「每個分頁唯一」；若用 localStorage 會在同瀏覽器多分頁共用，
@@ -1123,7 +1128,10 @@ export default function PlayPage() {
     void (async () => {
       try {
         const userCode = await resolveConfiguredUserCode();
-        const joined = currentShareToken
+        // 唯讀觀看者（含從列表進入、URL 沒帶分享 token 的 public 簡報）一律走 follower 的
+        // share-join；/sync/join 會以編輯權限把關，唯讀者呼叫只會拿到 403。currentShareToken
+        // 可能為空字串，後端 share-join 對可讀的簡報（public）也會放行。
+        const joined = (currentShareToken || shareIsReadOnly)
           ? await joinSharedPlaybackSync(pdfId, next, currentShareToken)
           : await joinPlaybackSync(pdfId, next, userCode || undefined);
         if (cancelled) return;
@@ -1157,7 +1165,7 @@ export default function PlayPage() {
     return () => {
       cancelled = true;
     };
-  }, [syncEnabled, pdfId, currentShareToken]);
+  }, [syncEnabled, pdfId, currentShareToken, shareIsReadOnly, isDetailLoaded]);
 
   // 同步模式下手寫工具僅 master 可用；若目前角色變成 follower（例如 master 易主），強制關閉手寫模式。
   useEffect(() => {
