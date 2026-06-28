@@ -407,6 +407,7 @@ export interface PlayPageContextValue {
   handleDeleteFollowerQuestion: (questionId: string) => void;
   handleClearFollowerQuestions: () => void;
   handleAiAnswerFollowerQuestions: () => void;
+  handleHideAiAnswer: () => void;
   handleSummarizeFollowerQuestions: () => Promise<void>;
   questionSummary: string | null;
   questionSummaryBusy: boolean;

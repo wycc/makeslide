@@ -253,6 +253,7 @@ export function PlayPageHeader() {
     handleDeleteFollowerQuestion,
     handleClearFollowerQuestions,
     handleAiAnswerFollowerQuestions,
+    handleHideAiAnswer,
     handleSummarizeFollowerQuestions,
     questionSummary,
     questionSummaryBusy,
@@ -564,8 +565,19 @@ export function PlayPageHeader() {
                     </div>
                   </div>
                   {syncAiAnswer ? (
-                    <div className="max-h-72 overflow-y-auto rounded border border-cyan-200 bg-cyan-50 p-3 text-cyan-900 whitespace-pre-wrap dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-50">
-                      {syncAiAnswer.answer}
+                    <div className="rounded border border-cyan-200 bg-cyan-50 p-3 dark:border-cyan-500/30 dark:bg-cyan-500/10">
+                      <div className="mb-2 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => void handleHideAiAnswer()}
+                          className="rounded border border-cyan-300 px-2 py-1 text-xs text-cyan-800 hover:bg-cyan-100 dark:border-cyan-500/50 dark:text-cyan-100 dark:hover:bg-cyan-500/20"
+                        >
+                          {t('play.sync.hideAiAnswer')}
+                        </button>
+                      </div>
+                      <div className="max-h-72 overflow-y-auto whitespace-pre-wrap text-cyan-900 dark:text-cyan-50">
+                        {syncAiAnswer.answer}
+                      </div>
                     </div>
                   ) : null}
                   {questionSummary ? (

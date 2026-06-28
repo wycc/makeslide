@@ -856,6 +856,24 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
+  // 隱藏目前廣播給全班的 AI 回答：清掉 session.aiAnswer，followers 端的 overlay 隨即消失。
+  app.post('/api/pdfs/:id/sync/questions/clear-ai-answer', async (request, reply) => {
+    const parsedParams = IdParamSchema.safeParse(request.params);
+    const parsedBody = MasterQuestionActionBodySchema.safeParse(request.body);
+    if (!parsedParams.success || !parsedBody.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid sync clear AI answer request'));
+    }
+    const { id } = parsedParams.data;
+    const { client_id: clientId } = parsedBody.data;
+    const session = getSession(id);
+    if (roleFor(session, clientId) !== 'master') {
+      return reply.code(403).send(errorResponse('SYNC_NOT_MASTER', 'Only master can hide the AI answer'));
+    }
+    session.aiAnswer = null;
+    session.updatedAt = nowIso();
+    return reply.send({ ok: true });
+  });
+
   // POST /api/pdfs/:id/sync/questions/summarize
   app.post('/api/pdfs/:id/sync/questions/summarize', async (request, reply) => {
     const parsedParams = IdParamSchema.safeParse(request.params);

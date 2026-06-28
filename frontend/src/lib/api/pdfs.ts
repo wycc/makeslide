@@ -1421,6 +1421,19 @@ export async function answerSyncFollowerQuestionsWithAi(
   return (await resp.json()) as SyncAiAnswer;
 }
 
+export async function clearSyncAiAnswer(
+  id: string,
+  clientId: string,
+): Promise<{ ok: boolean }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/sync/questions/clear-ai-answer`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ client_id: clientId }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { ok: boolean };
+}
+
 export async function summarizeSyncFollowerQuestions(
   id: string,
   clientId: string,

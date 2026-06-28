@@ -9,6 +9,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   ApiError,
   answerSyncFollowerQuestionsWithAi,
+  clearSyncAiAnswer,
   summarizeSyncFollowerQuestions,
   fetchPdfReportSummary,
   fetchPageSubtitleTimeline,
@@ -1595,6 +1596,17 @@ export default function PlayPage() {
     }
   }, [pdfId, syncAiAnswerBusy]);
 
+  const handleHideAiAnswer = useCallback(async () => {
+    if (!pdfId || !syncClientIdRef.current) return;
+    try {
+      await clearSyncAiAnswer(pdfId, syncClientIdRef.current);
+      setSyncAiAnswer(null);
+      setSyncError(null);
+    } catch (err) {
+      setSyncError(err instanceof ApiError ? err.message : t('play.error.hideAiAnswer'));
+    }
+  }, [pdfId]);
+
   const handleSummarizeFollowerQuestions = useCallback(async () => {
     if (!pdfId || !syncClientIdRef.current || questionSummaryBusy) return;
     setQuestionSummaryBusy(true);
@@ -2460,7 +2472,7 @@ export default function PlayPage() {
     fullscreenPollControlOpen, setFullscreenPollControlOpen, remoteCursor, syncDrawingState,
     isSyncFollower, canUseDrawingTools, handleSyncEnabledChange, handleSubmitFollowerQuestion,
     handleRaiseHand, handleToggleDisplayedQuestion, handleDeleteFollowerQuestion,
-    handleClearFollowerQuestions, handleAiAnswerFollowerQuestions,
+    handleClearFollowerQuestions, handleAiAnswerFollowerQuestions, handleHideAiAnswer,
     handleSummarizeFollowerQuestions, questionSummary, questionSummaryBusy,
     // fullscreen / layout
     imageOnlyFullscreen, setImageOnlyFullscreen, fullscreenLayout, setFullscreenLayout,
