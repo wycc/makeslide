@@ -897,15 +897,15 @@ export default function PlayPage() {
       return;
     }
     if (audio.paused) {
-      // 本頁已經播到結尾（沒開自動換頁而停在此）：按播放/點圖片時，從頭重播「這一頁」，
-      // 而不是讓瀏覽器對已結束的音訊呼叫 play() ── 那會停在結尾、立即再觸發 ended，被誤判
-      // 而切到下一頁。先 seek 回 0 即可乾淨重播當頁。
+      // 本頁已播到結尾（沒開自動換頁而停在此）：按播放/點圖片時前進到下一頁並開始播放
+      // （手動續播），而不是讓瀏覽器對已結束的音訊呼叫 play() 重播當頁。最後一頁則照常重播。
       const atEnd = audio.ended
         || (Number.isFinite(audio.duration) && audio.duration > 0 && audio.currentTime >= audio.duration - 0.05);
-      if (atEnd) {
-        audio.currentTime = 0;
-        setCurrentTime(0);
+      if (atEnd && currentIdx < totalPages - 1) {
         setFinished(false);
+        setCurrentIdx((i) => Math.min(totalPages - 1, i + 1));
+        setIsPlaying(true);
+        return;
       }
       void audio.play().catch(() => setIsPlaying(false));
     } else {
