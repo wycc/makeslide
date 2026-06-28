@@ -279,7 +279,7 @@ export function PlayPageFullscreen() {
       aria-label={isPlaying ? t('play.slidePanel.pauseAudioOverlay') : t('play.slidePanel.resumeAudioOverlay')}
     >
       {!isPlaying ? (
-        <div className="pointer-events-none absolute left-4 top-16 flex h-12 w-12 items-center justify-center rounded-full border border-white/35 bg-black/55 text-white shadow-lg backdrop-blur-sm">
+        <div className="pointer-events-none absolute right-4 top-16 z-30 flex h-12 w-12 items-center justify-center rounded-full border border-white/35 bg-black/55 text-white shadow-lg backdrop-blur-sm">
           <span className="sr-only">{t('play.fullscreen.audioPaused')}</span>
           <span className="h-6 w-2 rounded-sm bg-current" aria-hidden="true" />
           <span className="ml-2 h-6 w-2 rounded-sm bg-current" aria-hidden="true" />
