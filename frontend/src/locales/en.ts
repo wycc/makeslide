@@ -1707,6 +1707,8 @@ export const en = {
   'quiz.collapse': 'Collapse',
   'quiz.viewAnswers': 'View answers',
   'quiz.correctAnswerParen': '(Correct answer)',
+  'quiz.reviewHideAnswers': 'Hide answers',
+  'quiz.reviewShowAnswers': 'Show answers',
   'quiz.selectedWrongParen': '(Selected but wrong)',
   'quiz.historyQuestionMissing': 'Question content not found, so detailed answers cannot be displayed.',
   'quiz.historyShowMore': 'Show more ({n} total)',

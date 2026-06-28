@@ -1707,6 +1707,8 @@ export const zhTW = {
   'quiz.collapse': '收合',
   'quiz.viewAnswers': '查看作答',
   'quiz.correctAnswerParen': '（正確答案）',
+  'quiz.reviewHideAnswers': '隱藏答案',
+  'quiz.reviewShowAnswers': '顯示答案',
   'quiz.selectedWrongParen': '（已選但錯誤）',
   'quiz.historyQuestionMissing': '找不到題目內容，無法顯示詳細作答。',
   'quiz.historyShowMore': '顯示更多（共 {n} 筆）',
