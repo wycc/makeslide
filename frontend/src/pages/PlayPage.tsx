@@ -1108,8 +1108,24 @@ export default function PlayPage() {
       setSyncEnabled(true);
       return;
     }
+    // 從列表進入（網址沒帶分享 token）的唯讀觀看者：若簡報 owner 已經進入 master 模式
+    // （同步中），自動以 follower 加入，與帶 token 連結的體驗一致。需等 detail 載入後
+    // 才能判斷是否唯讀；本 effect 已將 isDetailLoaded / shareIsReadOnly 列入相依。
+    if (isDetailLoaded && shareIsReadOnly) {
+      let cancelled = false;
+      void fetchPlaybackSyncState(pdfId)
+        .then((state) => {
+          if (!cancelled) setSyncEnabled(Boolean(state.master_client_id));
+        })
+        .catch(() => {
+          if (!cancelled) setSyncEnabled(false);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
     setSyncEnabled(false);
-  }, [pdfId, currentShareToken]);
+  }, [pdfId, currentShareToken, isDetailLoaded, shareIsReadOnly]);
 
   useEffect(() => {
     // 等 detail 載入後再 join：唯讀判斷依賴 detail，太早 join 會讓唯讀者吃 403。
@@ -1371,7 +1387,10 @@ export default function PlayPage() {
           });
           setSyncRole(state.role);
           setFollowerAudioUnlocked(state.follower_audio_unlocked);
-          if (currentShareToken && !state.master_client_id) {
+          // 唯讀觀看者（帶 token 的分享連結，或從列表自動跟隨的 public 觀看者）一旦
+          // master 收掉同步就退出 follower；owner／可編輯分享者不在此列，留待下方自動
+          // 重奪 master 的邏輯處理。
+          if ((currentShareToken || shareIsReadOnly) && !state.master_client_id) {
             window.localStorage.removeItem(`makeslide.sync.enabled.${pdfId}`);
             setSyncEnabled(false);
             setSyncRole('follower');
@@ -1484,7 +1503,7 @@ export default function PlayPage() {
       });
       window.clearInterval(timer);
     };
-  }, [syncEnabled, pdfId, imageOnlyFullscreen, navigate, syncRole, currentIdx, currentShareToken]);
+  }, [syncEnabled, pdfId, imageOnlyFullscreen, navigate, syncRole, currentIdx, currentShareToken, shareIsReadOnly]);
 
   const handleSubmitFollowerQuestion = useCallback(async () => {
     if (!pdfId || !syncClientIdRef.current) return;
