@@ -678,6 +678,8 @@ export interface SyncFollowerQuestion {
 export interface SyncQuizProgress {
   client_id: string;
   code: string | null;
+  /** 學員帳號顯示名稱（登入時），未登入為 null；code 為 null 時用來顯示。 */
+  display_name?: string | null;
   quiz_id: number;
   answered_count: number;
   total_questions: number;

@@ -74,6 +74,8 @@ function hasValidShareTokenForPdf(pdfId: string, token: string | null): boolean 
 interface SyncQuizProgress {
   clientId: string;
   code: string | null;
+  /** 回報者的 Google 帳號 sub（登入時），回應時解析成顯示名稱；不直接送給前端。 */
+  sub: string | null;
   quizId: number;
   answeredCount: number;
   totalQuestions: number;
@@ -288,9 +290,10 @@ function toQuestionResponse(question: SyncFollowerQuestion, displayName?: string
   };
 }
 
-function toQuizProgressResponse(progress: SyncQuizProgress): {
+function toQuizProgressResponse(progress: SyncQuizProgress, displayName?: string | null): {
   client_id: string;
   code: string | null;
+  display_name: string | null;
   quiz_id: number;
   answered_count: number;
   total_questions: number;
@@ -300,6 +303,7 @@ function toQuizProgressResponse(progress: SyncQuizProgress): {
   return {
     client_id: progress.clientId,
     code: progress.code,
+    display_name: displayName ?? null,
     quiz_id: progress.quizId,
     answered_count: progress.answeredCount,
     total_questions: progress.totalQuestions,
@@ -341,9 +345,11 @@ function buildStateResponse(session: SyncSessionState, pdfId: string, role: Sync
     follower_questions: followerQuestions,
     questions: followerQuestions,
     displayed_question_id: session.displayedQuestionId,
-    quiz_progress: Array.from(session.quizProgress.values())
-      .filter((p) => p.quizId === session.activeQuizId)
-      .map(toQuizProgressResponse),
+    quiz_progress: (() => {
+      const active = Array.from(session.quizProgress.values()).filter((p) => p.quizId === session.activeQuizId);
+      const names = getAccountDisplayNames(active.map((p) => p.sub));
+      return active.map((p) => toQuizProgressResponse(p, p.sub ? names.get(p.sub) ?? null : null));
+    })(),
     ai_answer: toAiAnswerResponse(session.aiAnswer),
     updated_at: session.updatedAt,
     master_expires_at: session.masterClientId ? new Date(session.masterExpiresAt).toISOString() : null,
@@ -694,6 +700,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     session.quizProgress.set(clientId, {
       clientId,
       code: session.userCodes.get(clientId) ?? null,
+      sub: sessionSub(request),
       quizId,
       answeredCount,
       totalQuestions,

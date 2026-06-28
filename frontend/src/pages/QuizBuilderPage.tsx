@@ -939,7 +939,7 @@ export default function QuizBuilderPage() {
                     return (
                       <li key={p.client_id} className="rounded-md border border-slate-700 bg-slate-950 px-2 py-2 text-xs">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="truncate font-medium text-slate-200">{p.code || t('quiz.anonymousStudent')}</span>
+                          <span className="truncate font-medium text-slate-200">{p.code || p.display_name || t('quiz.anonymousStudent')}</span>
                           <span className={p.submitted ? 'text-emerald-300' : 'text-slate-400'}>
                             {p.answered_count} / {p.total_questions}{p.submitted ? `・${t('quiz.completed')}` : ''}
                           </span>
