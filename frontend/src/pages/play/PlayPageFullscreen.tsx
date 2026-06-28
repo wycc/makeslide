@@ -10,6 +10,7 @@ import { figureImageUrl } from '../../lib/api';
 import { getFocusEffectParams, OVERLAY_EFFECT_TYPES } from '../../lib/animationSpec';
 import type { SlideAnimationEffect } from '../../types';
 import { AnimationEditorTab } from './AnimationEditorTab';
+import { SyncQuestionsPanel } from './SyncQuestionsPanel';
 import { usePlayPageContext } from './PlayPageContext';
 
 /**
@@ -181,6 +182,8 @@ export function PlayPageFullscreen() {
 
   // Fullscreen poll voting overlay (so viewers can vote without leaving fullscreen).
   const [fullscreenPollOpen, setFullscreenPollOpen] = useState(false);
+  // 點左上角 💬 訊息徽章時開關的提問面板（內容與編輯模式共用 SyncQuestionsPanel）。
+  const [fullscreenQuestionsOpen, setFullscreenQuestionsOpen] = useState(false);
   const activePagePolls = pagePolls.filter((poll) => poll.is_active);
 
   const syncDisplayedQuestion = syncDisplayedQuestionId
@@ -284,15 +287,21 @@ export function PlayPageFullscreen() {
         // 點徽章會穿透觸發上一頁。改為自行吃掉點擊（z-30 蓋過 z-20 的上一頁區），並
         // stopPropagation 以免冒泡到根容器的播放／暫停切換。
         <div
-          className="absolute left-4 top-20 z-30 flex flex-col items-start gap-1"
+          className="absolute left-4 top-28 z-30 flex flex-col items-start gap-1"
           onClick={(e) => e.stopPropagation()}
         >
           {syncFollowerQuestions.length > 0 ? (
-            <div className="flex items-center gap-1 rounded-full border border-amber-300/40 bg-black/55 px-3 py-1 text-amber-100 shadow-lg backdrop-blur-sm">
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setFullscreenQuestionsOpen((o) => !o); }}
+              aria-pressed={fullscreenQuestionsOpen}
+              title={t('play.fullscreen.pendingQuestions')}
+              className="flex items-center gap-1 rounded-full border border-amber-300/40 bg-black/55 px-3 py-1 text-amber-100 shadow-lg backdrop-blur-sm hover:bg-black/75"
+            >
               <span aria-hidden="true">💬</span>
               <span className="text-sm font-semibold">{syncFollowerQuestions.length}</span>
               <span className="sr-only">{t('play.fullscreen.pendingQuestions')}</span>
-            </div>
+            </button>
           ) : null}
           {pagePolls.length > 0 && !fullscreenPollOpen
             ? pagePolls.map((poll) => (
@@ -304,6 +313,14 @@ export function PlayPageFullscreen() {
                 </span>
               ))
             : null}
+        </div>
+      ) : null}
+      {fullscreenQuestionsOpen && syncEnabled && syncRole === 'master' ? (
+        <div
+          className="absolute left-4 top-40 z-40 max-h-[70vh] w-[min(28rem,90vw)] overflow-y-auto rounded-xl border border-amber-400/40 bg-slate-950/95 p-4 text-xs text-slate-100 shadow-2xl backdrop-blur"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <SyncQuestionsPanel />
         </div>
       ) : null}
       {activePagePolls.length > 0 ? (
