@@ -16,15 +16,17 @@ function renderMathHtml(tex: string, displayMode: boolean): string {
 }
 
 // 行內 token：數學優先（避免 $ 內的 * 被當粗體），其次粗體/行內碼/斜體。
-const INLINE_RE = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$[^$\n]+?\$|\*\*[\s\S]+?\*\*|`[^`]+?`|\*[^*\n]+?\*)/g;
+// 注意：每次呼叫都建立新的 RegExp 實例——renderInline 會遞迴（粗體/斜體內含其他語法），
+// 若共用同一個帶 g 旗標的有狀態 regex，遞迴會污染外層迴圈的 lastIndex 而無限迴圈。
+const INLINE_SOURCE = '(\\$\\$[\\s\\S]+?\\$\\$|\\\\\\[[\\s\\S]+?\\\\\\]|\\\\\\([\\s\\S]+?\\\\\\)|\\$[^$\\n]+?\\$|\\*\\*[\\s\\S]+?\\*\\*|`[^`]+?`|\\*[^*\\n]+?\\*)';
 
 function renderInline(text: string, keyPrefix: string): ReactNode[] {
   const out: ReactNode[] = [];
   let last = 0;
   let i = 0;
-  INLINE_RE.lastIndex = 0;
+  const re = new RegExp(INLINE_SOURCE, 'g');
   let m: RegExpExecArray | null;
-  while ((m = INLINE_RE.exec(text)) !== null) {
+  while ((m = re.exec(text)) !== null) {
     if (m.index > last) out.push(text.slice(last, m.index));
     const tok = m[0];
     const key = `${keyPrefix}-${i++}`;
