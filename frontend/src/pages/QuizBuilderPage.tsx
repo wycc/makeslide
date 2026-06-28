@@ -175,6 +175,22 @@ export default function QuizBuilderPage() {
     };
   }, [pdfId]);
 
+  // 老師發布／新增測驗後，已開著的學生頁面不會自動更新。分頁重新取得焦點時重抓一次清單，
+  // 讓剛被設為 public 的測驗不用手動重整就會出現。
+  useEffect(() => {
+    if (!pdfId) return;
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      void fetchQuizSets(pdfId).then(setSavedQuizzes).catch(() => undefined);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, [pdfId]);
+
   const scoreSumExceeded = useMemo(() => scoreSumExceedingTotal(questions), [questions]);
 
   const canSave = useMemo(

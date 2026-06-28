@@ -586,7 +586,9 @@ function migrate(): void {
   if (!columnExists('quiz_sets', 'is_public')) {
     // 測驗預設不公開：唯讀學生只看得到 public 或「正在進行」的測驗，讓老師能預先備題。
     db.exec(`ALTER TABLE quiz_sets ADD COLUMN is_public INTEGER NOT NULL DEFAULT 0`);
-    logger.info('Added column quiz_sets.is_public');
+    // 功能上線前就存在的測驗視為公開，避免既有測驗突然對學生隱形；之後新建的才預設私有。
+    db.exec(`UPDATE quiz_sets SET is_public = 1`);
+    logger.info('Added column quiz_sets.is_public (existing quizzes set public)');
   }
   if (!columnExists('pdfs', 'play_count')) {
     db.exec(`ALTER TABLE pdfs ADD COLUMN play_count INTEGER NOT NULL DEFAULT 0`);
