@@ -517,7 +517,7 @@ function ReviewListSection() {
 
 function PageNoteSection() {
   const { t } = useI18n();
-  const { currentPage, deckPages, pdfId, isReadOnlyProcessing } = usePlayPageContext();
+  const { currentPage, deckPages, pdfId, isReadOnlyProcessing, setDetail } = usePlayPageContext();
   const [noteText, setNoteText] = useState(currentPage?.page_notes ?? '');
   const [noteBusy, setNoteBusy] = useState(false);
   const [noteMsg, setNoteMsg] = useState<string | null>(null);
@@ -537,10 +537,11 @@ function PageNoteSection() {
     });
   };
 
+  // 換頁、或 page_notes 從外部變動（例如在 AI 導師裡「存成筆記」）時，重新同步編輯框內容。
   useEffect(() => {
     setNoteText(currentPage?.page_notes ?? '');
     setNoteMsg(null);
-  }, [currentPage?.page_number]);
+  }, [currentPage?.page_number, currentPage?.page_notes]);
 
   const handleBlur = async () => {
     if (!pdfId || !currentPage || savingRef.current) return;
@@ -550,6 +551,11 @@ function PageNoteSection() {
     setNoteBusy(true);
     try {
       await updatePageNote(pdfId, currentPage.page_number, trimmed);
+      // 同步更新本地 detail，讓「有筆記」綠點與其他讀 page_notes 的地方即時反映。
+      setDetail((prev) => prev ? {
+        ...prev,
+        pages: prev.pages.map((p) => p.page_number === currentPage.page_number ? { ...p, page_notes: trimmed } : p),
+      } : prev);
       setNoteMsg(t('play.sidebar.noteSaved'));
       setTimeout(() => setNoteMsg(null), 2000);
     } catch {

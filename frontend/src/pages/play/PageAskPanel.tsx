@@ -11,7 +11,7 @@ export function PageAskPanel() {
     pageAskMessages,
     pageAskBusy, pageAskError,
     handleAskPage, clearPageAsk,
-    pdfId, currentPage,
+    pdfId, currentPage, setDetail,
   } = usePlayPageContext();
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'ok' | 'fail'>('idle');
 
@@ -27,6 +27,11 @@ export function PageAskPanel() {
       const appended = `Q: ${lastQuestion.trim()}\nA: ${lastAnswer.trim()}`;
       const newNote = existing ? `${existing}\n\n${appended}` : appended;
       await updatePageNote(pdfId, currentPage.page_number, newNote);
+      // 同步更新本地 detail，否則筆記區（讀 currentPage.page_notes）看不到剛存的內容。
+      setDetail((prev) => prev ? {
+        ...prev,
+        pages: prev.pages.map((p) => p.page_number === currentPage.page_number ? { ...p, page_notes: newNote } : p),
+      } : prev);
       setSaveStatus('ok');
     } catch {
       setSaveStatus('fail');
