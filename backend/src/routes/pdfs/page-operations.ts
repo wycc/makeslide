@@ -1386,7 +1386,13 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
           { role: 'user', content: parsedBody.data.question },
         ],
       });
-      return reply.code(200).send({ answer: result.data.answer.trim() });
+      // 模型常把換行以字面 `\n`（反斜線+n）輸出而非真正的換行字元，導致前端顯示成
+      // 「\n\n」而非分行。回傳前把這些字面跳脫序列還原成真正的換行/Tab，提升可讀性。
+      const answer = result.data.answer
+        .replace(/\\r\\n|\\n|\\r/g, '\n')
+        .replace(/\\t/g, '\t')
+        .trim();
+      return reply.code(200).send({ answer });
     } catch (err) {
       request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to answer page ask question');
       return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to answer question'));
