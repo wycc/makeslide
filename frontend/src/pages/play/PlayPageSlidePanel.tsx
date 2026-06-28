@@ -461,12 +461,21 @@ export function PlayPageSlidePanel() {
               imgProps={{ role: 'button', tabIndex: -1, 'aria-label': t('play.slidePanel.enterFullscreenOverlay') }}
               overlay={
                 <>
+                  {!isPlaying && currentPage?.audio_url ? (
+                    <div
+                      className="pointer-events-none absolute right-2 top-2 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-white/35 bg-black/55 text-white shadow-lg backdrop-blur-sm"
+                      aria-hidden="true"
+                    >
+                      <span className="h-4 w-1.5 rounded-sm bg-current" />
+                      <span className="ml-1 h-4 w-1.5 rounded-sm bg-current" />
+                    </div>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => currentPage && void openVersionHistory('image', currentPage.page_number)}
                     disabled={!currentPage}
                     title={t('play.slidePanel.viewImageHistory')}
-                    className="absolute right-2 top-2 z-20 rounded-md border border-slate-600 bg-slate-900/80 px-2 py-1 text-xs text-slate-300 backdrop-blur hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="absolute right-2 top-12 z-20 rounded-md border border-slate-600 bg-slate-900/80 px-2 py-1 text-xs text-slate-300 backdrop-blur hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {t('play.slidePanel.versionButton')}
                   </button>
