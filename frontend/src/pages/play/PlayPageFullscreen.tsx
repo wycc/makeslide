@@ -280,7 +280,13 @@ export function PlayPageFullscreen() {
       ) : null}
       {syncEnabled && syncRole === 'master'
         && (syncFollowerQuestions.length > 0 || (pagePolls.length > 0 && !fullscreenPollOpen)) ? (
-        <div className="pointer-events-none absolute left-4 top-20 z-30 flex flex-col items-start gap-1">
+        // 這些狀態徽章疊在左緣全高的「上一頁」點擊區之上：若維持 pointer-events-none，
+        // 點徽章會穿透觸發上一頁。改為自行吃掉點擊（z-30 蓋過 z-20 的上一頁區），並
+        // stopPropagation 以免冒泡到根容器的播放／暫停切換。
+        <div
+          className="absolute left-4 top-20 z-30 flex flex-col items-start gap-1"
+          onClick={(e) => e.stopPropagation()}
+        >
           {syncFollowerQuestions.length > 0 ? (
             <div className="flex items-center gap-1 rounded-full border border-amber-300/40 bg-black/55 px-3 py-1 text-amber-100 shadow-lg backdrop-blur-sm">
               <span aria-hidden="true">💬</span>
