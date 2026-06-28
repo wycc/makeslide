@@ -693,6 +693,8 @@ export interface QuizAttempt {
   session_id: string;
   client_id: string;
   code: string | null;
+  /** 學員帳號顯示名稱（登入時），未登入為 null；code 為 null 時用來顯示。 */
+  display_name?: string | null;
   answers: Record<string, number[]>;
   score: number | null;
   submitted_at: string;

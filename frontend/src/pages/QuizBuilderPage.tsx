@@ -1006,7 +1006,7 @@ export default function QuizBuilderPage() {
                         return (
                           <li key={attempt.id} className="rounded border border-slate-800 bg-slate-900 px-2 py-1">
                             <div className="flex items-center justify-between gap-2">
-                              <span className="truncate text-slate-200">{attempt.code || t('quiz.anonymousStudent')}</span>
+                              <span className="truncate text-slate-200">{attempt.code || attempt.display_name || t('quiz.anonymousStudent')}</span>
                               <span className="flex items-center gap-2 text-slate-400">
                                 {attempt.score != null ? formatMessage('quiz.scorePoints', { score: roundToTwoDecimals(attempt.score) }) : t('quiz.notScored')}
                                 <span className="text-slate-500">{new Date(attempt.submitted_at).toLocaleTimeString()}</span>

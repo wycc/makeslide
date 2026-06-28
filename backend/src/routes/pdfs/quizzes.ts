@@ -5,6 +5,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
 import { logger } from '../../logger';
+import { getAccountDisplayNames } from '../../services/accountProfiles';
 import { calcQuestionScore, normalizeQuestionScores } from '../../services/quizScoring';
 import { sessionSub } from '../auth';
 import { callChatJSON } from '../../services/openai';
@@ -97,6 +98,7 @@ interface QuizAttemptRow {
   session_id: string;
   client_id: string;
   code: string | null;
+  sub: string | null;
   answers_json: string;
   score: number | null;
   submitted_at: string;
@@ -104,7 +106,7 @@ interface QuizAttemptRow {
   updated_at: string;
 }
 
-function rowToQuizAttempt(row: QuizAttemptRow) {
+function rowToQuizAttempt(row: QuizAttemptRow, displayName?: string | null) {
   let answers: unknown = {};
   try {
     answers = JSON.parse(row.answers_json);
@@ -112,12 +114,14 @@ function rowToQuizAttempt(row: QuizAttemptRow) {
     answers = {};
   }
   const parsed = QuizAttemptAnswersSchema.safeParse(answers);
+  // 不外送 row.sub（帳號 id），只送解析後的顯示名稱。
   return {
     id: row.id,
     quiz_id: row.quiz_id,
     session_id: row.session_id,
     client_id: row.client_id,
     code: row.code,
+    display_name: displayName ?? null,
     answers: parsed.success ? parsed.data : {},
     score: row.score,
     submitted_at: row.submitted_at,
@@ -330,26 +334,29 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
     if (!quiz) return reply.code(404).send(errorResponse('QUIZ_NOT_FOUND', `Quiz ${parsed.data.quizId} not found`));
     const now = nowIso();
     const code = body.data.code?.trim() || null;
+    const sub = sessionSub(request);
     // Score is always recomputed server-side from the quiz's answer key; a client-submitted score is never trusted.
     const score = computeAttemptScore(quiz.questions_json, body.data.answers);
     const answersJson = JSON.stringify(body.data.answers);
     db.prepare(
-      `INSERT INTO quiz_attempts (pdf_id, quiz_id, session_id, client_id, code, answers_json, score, submitted_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO quiz_attempts (pdf_id, quiz_id, session_id, client_id, code, sub, answers_json, score, submitted_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (session_id, client_id) DO UPDATE SET
          code = excluded.code,
+         sub = excluded.sub,
          answers_json = excluded.answers_json,
          score = excluded.score,
          submitted_at = excluded.submitted_at,
          updated_at = excluded.updated_at`,
-    ).run(parsed.data.id, parsed.data.quizId, body.data.session_id, body.data.client_id, code, answersJson, score, now, now, now);
+    ).run(parsed.data.id, parsed.data.quizId, body.data.session_id, body.data.client_id, code, sub, answersJson, score, now, now, now);
     const row = db
       .prepare(
-        `SELECT id, pdf_id, quiz_id, session_id, client_id, code, answers_json, score, submitted_at, created_at, updated_at
+        `SELECT id, pdf_id, quiz_id, session_id, client_id, code, sub, answers_json, score, submitted_at, created_at, updated_at
          FROM quiz_attempts WHERE session_id = ? AND client_id = ?`,
       )
       .get(body.data.session_id, body.data.client_id) as QuizAttemptRow;
-    return reply.code(201).send(rowToQuizAttempt(row));
+    const displayName = row.sub ? getAccountDisplayNames([row.sub]).get(row.sub) ?? null : null;
+    return reply.code(201).send(rowToQuizAttempt(row, displayName));
   });
 
   app.get('/api/pdfs/:id/quizzes/:quizId/attempts', async (request, reply) => {
@@ -364,11 +371,12 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
     if (!quiz) return reply.code(404).send(errorResponse('QUIZ_NOT_FOUND', `Quiz ${parsed.data.quizId} not found`));
     const rows = db
       .prepare(
-        `SELECT id, pdf_id, quiz_id, session_id, client_id, code, answers_json, score, submitted_at, created_at, updated_at
+        `SELECT id, pdf_id, quiz_id, session_id, client_id, code, sub, answers_json, score, submitted_at, created_at, updated_at
          FROM quiz_attempts WHERE quiz_id = ? ORDER BY submitted_at DESC`,
       )
       .all(parsed.data.quizId) as QuizAttemptRow[];
-    const attempts = rows.map(rowToQuizAttempt);
+    const names = getAccountDisplayNames(rows.map((r) => r.sub));
+    const attempts = rows.map((r) => rowToQuizAttempt(r, r.sub ? names.get(r.sub) ?? null : null));
     const sessionsMap = new Map<string, { session_id: string; submitted_at: string; attempts: ReturnType<typeof rowToQuizAttempt>[] }>();
     for (const attempt of attempts) {
       const existing = sessionsMap.get(attempt.session_id);
