@@ -12,6 +12,7 @@ import {
   runZipCommand,
   addFileToZip,
   loadExportedSources,
+  loadExportedPageUids,
   loadExportedPolls,
   loadExportedQuizzes,
   loadExportedAnimations,
@@ -85,6 +86,7 @@ async function runBatchExport(jobId: string, ownerSub: string, tempDir: string):
       // 暫存目錄是為了讓檔案以「去掉路徑、放進 zip 根目錄」的方式加入。
       const sidecars: Array<{ name: string; data: unknown[] }> = [
         { name: 'sources.json', data: loadExportedSources(pdf.id) },
+        { name: 'page-uids.json', data: loadExportedPageUids(pdf.id) },
         { name: 'polls.json', data: loadExportedPolls(pdf.id) },
         { name: 'quizzes.json', data: loadExportedQuizzes(pdf.id) },
         { name: 'animations.json', data: loadExportedAnimations(pdf.id) },

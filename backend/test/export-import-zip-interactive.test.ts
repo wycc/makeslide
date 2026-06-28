@@ -53,6 +53,25 @@ function seedPdfWithInteractiveData(id: string): { pageUid: string; animationRel
     }),
   );
 
+  // 圖表素材：figures.json 清單 + 圖檔 + split-figure-map + 每頁排除設定。前三者依
+  // page_number / 相對路徑解析（隨儲存目錄複製即可），figure-selection 以 page_uid 命名
+  // （靠 import 保留 page_uid 才對得回去）。
+  fs.writeFileSync(
+    path.join(dir, 'figures.json'),
+    JSON.stringify({
+      pdfId: id,
+      generatedAt: now,
+      pages: [{ pageNumber: 1, figures: [{ id: 'p1-fig1', imagePath: 'figures/p1-fig1.png', width: 100, height: 80 }] }],
+    }),
+  );
+  fs.mkdirSync(path.join(dir, 'figures'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'figures', 'p1-fig1.png'), 'fake-png-bytes');
+  fs.writeFileSync(path.join(dir, 'split-figure-map.json'), JSON.stringify({ '1': [1] }));
+  fs.writeFileSync(
+    path.join(dir, 'pages', `${pageUid}.figure-selection.json`),
+    JSON.stringify({ excluded: ['p1-fig1'] }),
+  );
+
   fs.writeFileSync(
     path.join(dir, 'metadata.json'),
     JSON.stringify(
@@ -176,7 +195,25 @@ test('export.zip -> import.zip round-trips polls, quizzes and slide animations',
     assert.equal(servedSpec.enabled, true, 'served spec must be the real enabled spec, not the disabled default');
     assert.equal(servedSpec.effects.length, 1, 'the seeded spotlight effect must survive the round-trip');
 
+    // page_uid 保留：import 應沿用匯出端的 page_uid，而非重新產生。
+    const importedUid = (db
+      .prepare(`SELECT page_uid FROM pages WHERE pdf_id = ? AND page_number = 1`)
+      .get(importedId) as { page_uid: string }).page_uid;
+    assert.equal(importedUid, pageUid, 'imported page should keep the original page_uid');
+
+    // 圖表素材：清單、圖檔、split-map 隨儲存目錄複製；figure-selection 以 page_uid 命名，
+    // 靠保留的 page_uid 才對得回去。
+    assert.equal(fs.existsSync(path.join(importedDir, 'figures.json')), true, 'figures manifest should survive');
+    assert.equal(fs.existsSync(path.join(importedDir, 'figures', 'p1-fig1.png')), true, 'figure image should survive');
+    assert.equal(fs.existsSync(path.join(importedDir, 'split-figure-map.json')), true, 'split-figure-map should survive');
+    assert.equal(
+      fs.existsSync(path.join(importedDir, 'pages', `${importedUid}.figure-selection.json`)),
+      true,
+      'per-page figure selection should resolve under the preserved page_uid',
+    );
+
     // sidecar 中繼檔不應原樣留在新簡報目錄。
+    assert.equal(fs.existsSync(path.join(importedDir, 'page-uids.json')), false);
     assert.equal(fs.existsSync(path.join(importedDir, 'polls.json')), false);
     assert.equal(fs.existsSync(path.join(importedDir, 'quizzes.json')), false);
     assert.equal(fs.existsSync(path.join(importedDir, 'animations.json')), false);

@@ -54,6 +54,27 @@ export interface ExportedPoll {
   updated_at: string;
 }
 
+/**
+ * Per-page artifact files are named after the page's `page_uid`
+ * (pages/<uid>.animation.json, <uid>.figure-selection.json, <uid>.timeline.json…).
+ * import.ts used to mint a fresh page_uid on import, which orphaned every one of
+ * those files. Carrying the original page_uid in a `page-uids.json` sidecar lets
+ * import preserve it (page_uid only has to be unique within a pdf, and the import
+ * is a brand-new pdf id, so reusing the source's uids is collision-free) and keeps
+ * all uid-named files resolvable.
+ */
+export interface ExportedPageUid {
+  page_number: number;
+  page_uid: string;
+}
+
+/** Exported for unit testing; not part of the public export routes API. */
+export function loadExportedPageUids(pdfId: string): ExportedPageUid[] {
+  return db
+    .prepare(`SELECT page_number, page_uid FROM pages WHERE pdf_id = ? AND page_uid IS NOT NULL ORDER BY page_number ASC`)
+    .all(pdfId) as ExportedPageUid[];
+}
+
 /** Exported for unit testing; not part of the public export routes API. */
 export function loadExportedPolls(pdfId: string): ExportedPoll[] {
   return db
@@ -257,6 +278,7 @@ export async function registerExportRoutes(app: FastifyInstance): Promise<void> 
       };
 
       await appendSidecar('sources.json', loadExportedSources(parsed.data.id));
+      await appendSidecar('page-uids.json', loadExportedPageUids(parsed.data.id));
       await appendSidecar('polls.json', loadExportedPolls(parsed.data.id));
       await appendSidecar('quizzes.json', loadExportedQuizzes(parsed.data.id));
       await appendSidecar('animations.json', loadExportedAnimations(parsed.data.id));

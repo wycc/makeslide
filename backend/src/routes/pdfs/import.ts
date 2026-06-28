@@ -19,7 +19,14 @@ import { runUnzipCommand } from './unzip';
 // 那一筆，不影響整個匯入流程（其餘 metadata 欄位仍可能是合法、值得保留的）。
 // 匯出檔搭載資料表內容用的中繼 JSON。匯入時內容會寫回資料庫，這些檔案本身不應留在
 // 新簡報的儲存目錄裡。
-const SIDECAR_FILES = new Set(['sources.json', 'polls.json', 'quizzes.json', 'animations.json']);
+const SIDECAR_FILES = new Set(['sources.json', 'page-uids.json', 'polls.json', 'quizzes.json', 'animations.json']);
+
+// 來源簡報每頁的 page_uid。匯入時保留原 uid，讓 pages/<uid>.* 這類以 page_uid 命名的
+// 檔案（動畫規格、圖表排除設定、timeline…）在新簡報底下仍能對得上。
+const ImportedPageUidSchema = z.object({
+  page_number: z.number().int().positive(),
+  page_uid: z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/),
+});
 
 const ImportedSourceSchema = z.object({
   source_kind: z.enum(['pdf', 'txt', 'youtube_caption', 'youtube_audio']),
@@ -142,6 +149,8 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
       // （舊版匯出檔、或這份簡報本來就沒有對應資料時都不會有），缺檔或格式錯誤皆視為
       // 「沒有這部分資料可還原」，不視為整個匯入失敗。
       const importedSources = await readSidecarArray(extractedDir, 'sources.json', ImportedSourceSchema, request.log);
+      const importedPageUids = await readSidecarArray(extractedDir, 'page-uids.json', ImportedPageUidSchema, request.log);
+      const pageUidByNumber = new Map(importedPageUids.map((p) => [p.page_number, p.page_uid]));
       const importedPolls = await readSidecarArray(extractedDir, 'polls.json', ImportedPollSchema, request.log);
       const importedQuizzes = await readSidecarArray(extractedDir, 'quizzes.json', ImportedQuizSchema, request.log);
       const importedAnimations = await readSidecarArray(extractedDir, 'animations.json', ImportedAnimationSchema, request.log);
@@ -267,10 +276,14 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
           // invisible to quality-check/exports and get it marked 'failed' by the
           // startup orphan-recovery sweep.)
           const pageStatus = isPageStatus(p.status) ? p.status : 'audio_ready';
+          // Reuse the source's page_uid when the export carried it (page-uids.json),
+          // so pages/<uid>.* sidecar files (animation spec, figure selection, timeline)
+          // keep resolving; fall back to a fresh id for older exports without it.
+          const pageUid = pageUidByNumber.get(pageNumber) ?? nanoid(10);
           insertPage.run(
             id,
             pageNumber,
-            nanoid(10),
+            pageUid,
             imagePath,
             textPath,
             scriptPath,
