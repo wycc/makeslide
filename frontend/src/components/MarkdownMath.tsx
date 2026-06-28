@@ -48,7 +48,39 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
   return out;
 }
 
-/** 把一段「不含區塊數學」的文字逐行解析成標題/條列/段落區塊。 */
+// ── Markdown 表格 ───────────────────────────────────────────────────────────
+const isTableRow = (line: string): boolean => /^\s*\|.*\|\s*$/.test(line);
+const isTableSeparator = (line: string): boolean => /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/.test(line) && line.includes('-');
+
+function parseCells(row: string): string[] {
+  let r = row.trim();
+  if (r.startsWith('|')) r = r.slice(1);
+  if (r.endsWith('|')) r = r.slice(0, -1);
+  return r.split('|').map((c) => c.trim());
+}
+
+function renderTable(rows: string[], key: string): ReactNode {
+  const [headerRow, , ...bodyRows] = rows; // rows[1] 是分隔列，略過
+  const headerCells = parseCells(headerRow ?? '');
+  const cellCls = 'border border-current/20 px-2 py-1 align-top';
+  return (
+    <div key={key} className="my-1 overflow-x-auto">
+      <table className="w-full border-collapse text-left">
+        <thead>
+          <tr>{headerCells.map((c, i) => <th key={i} className={`${cellCls} font-semibold`}>{renderInline(c, `${key}-h${i}`)}</th>)}</tr>
+        </thead>
+        <tbody>
+          {bodyRows.map((row, r) => {
+            const cells = parseCells(row);
+            return <tr key={r}>{headerCells.map((_, ci) => <td key={ci} className={cellCls}>{renderInline(cells[ci] ?? '', `${key}-r${r}c${ci}`)}</td>)}</tr>;
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** 把一段「不含區塊數學」的文字逐行解析成標題/條列/表格/段落區塊。 */
 function renderTextBlocks(text: string, keyPrefix: string): ReactNode[] {
   const blocks: ReactNode[] = [];
   let list: { ordered: boolean; items: string[] } | null = null;
@@ -66,9 +98,40 @@ function renderTextBlocks(text: string, keyPrefix: string): ReactNode[] {
     list = null;
   };
 
-  text.split('\n').forEach((line, idx) => {
+  const lines = text.split('\n');
+  let idx = 0;
+  while (idx < lines.length) {
+    const line = lines[idx] ?? '';
     const key = `${keyPrefix}-b${idx}`;
     const lkey = `${keyPrefix}-l${idx}`;
+
+    // 表格：第二（非空）列為分隔列時，連續的 | 列（容許列間空行）整段當表格。
+    let nextNonBlank = idx + 1;
+    while (nextNonBlank < lines.length && (lines[nextNonBlank] ?? '').trim() === '') nextNonBlank++;
+    if (isTableRow(line) && isTableSeparator(lines[nextNonBlank] ?? '')) {
+      flushList(lkey);
+      const rows: string[] = [];
+      let j = idx;
+      while (j < lines.length) {
+        const l = lines[j] ?? '';
+        if (isTableRow(l)) {
+          rows.push(l);
+          j++;
+        } else if (l.trim() === '') {
+          // 跳過列間（一或多行）空行——只要後面還有表格列就繼續，否則結束表格。
+          let k = j + 1;
+          while (k < lines.length && (lines[k] ?? '').trim() === '') k++;
+          if (isTableRow(lines[k] ?? '')) j = k;
+          else break;
+        } else {
+          break;
+        }
+      }
+      blocks.push(renderTable(rows, key));
+      idx = j;
+      continue;
+    }
+
     const heading = /^(#{1,6})\s+(.*)$/.exec(line.trim());
     const listItem = /^\s*([-*]|\d+\.)\s+(.*)$/.exec(line);
     if (heading) {
@@ -88,7 +151,8 @@ function renderTextBlocks(text: string, keyPrefix: string): ReactNode[] {
       flushList(lkey);
       blocks.push(<p key={key} className="whitespace-pre-wrap break-words">{renderInline(line, key)}</p>);
     }
-  });
+    idx++;
+  }
   flushList(`${keyPrefix}-lend`);
   return blocks;
 }
