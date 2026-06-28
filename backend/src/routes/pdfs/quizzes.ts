@@ -59,6 +59,7 @@ const SaveQuizBodySchema = z
     questions: QuizQuestionsSchema,
     time_limit_seconds: z.number().int().min(0).max(3600).default(0),
     shuffle_questions: z.boolean().default(false),
+    is_public: z.boolean().default(false),
   })
   .superRefine((body, ctx) => {
     const sum = explicitScoreSum(body.questions);
@@ -138,6 +139,7 @@ interface QuizSetRow {
   questions_json: string;
   time_limit_seconds: number;
   shuffle_questions: number;
+  is_public: number;
   created_at: string;
   updated_at: string;
 }
@@ -162,6 +164,7 @@ function rowToQuiz(row: QuizSetRow) {
     questions: parsed.success ? parsed.data : [],
     time_limit_seconds: row.time_limit_seconds ?? 0,
     shuffle_questions: Boolean(row.shuffle_questions),
+    is_public: Boolean(row.is_public),
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -241,9 +244,23 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的測驗'));
     }
     const rows = db
-      .prepare(`SELECT id, pdf_id, title, prompt, questions_json, time_limit_seconds, shuffle_questions, created_at, updated_at FROM quiz_sets WHERE pdf_id = ? ORDER BY updated_at DESC`)
+      .prepare(`SELECT id, pdf_id, title, prompt, questions_json, time_limit_seconds, shuffle_questions, is_public, created_at, updated_at FROM quiz_sets WHERE pdf_id = ? ORDER BY updated_at DESC`)
       .all(parsed.data.id) as QuizSetRow[];
-    return reply.send({ quizzes: rows.map(rowToQuiz) });
+    // 有編輯權限（老師/協作者）看得到全部測驗；唯讀學生只看得到 public 的，加上「正在進行」
+    // 的那一份（master 在線且設了 active_quiz_id）——讓老師能預先備題、開始後學生才看得到。
+    const canEdit = canEditPdf(sessionSub(request), pdfRow);
+    let visible = rows;
+    if (!canEdit) {
+      let activeQuizId: number | null = null;
+      const sess = db
+        .prepare(`SELECT active_quiz_id, master_expires_at FROM pdf_sync_sessions WHERE pdf_id = ?`)
+        .get(parsed.data.id) as { active_quiz_id: number | null; master_expires_at: string | null } | undefined;
+      if (sess?.master_expires_at && new Date(sess.master_expires_at).getTime() > Date.now()) {
+        activeQuizId = sess.active_quiz_id ?? null;
+      }
+      visible = rows.filter((r) => r.is_public === 1 || r.id === activeQuizId);
+    }
+    return reply.send({ quizzes: visible.map(rowToQuiz) });
   });
 
   app.post('/api/pdfs/:id/quizzes/generate', async (request, reply) => {
@@ -283,8 +300,8 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限為此簡報新增測驗'));
     }
     const now = nowIso();
-    const result = db.prepare(`INSERT INTO quiz_sets (pdf_id, title, prompt, questions_json, time_limit_seconds, shuffle_questions, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(parsed.data.id, body.data.title, body.data.prompt, JSON.stringify(normalizeQuestions(body.data.questions)), body.data.time_limit_seconds, body.data.shuffle_questions ? 1 : 0, now, now);
-    const row = db.prepare(`SELECT id, pdf_id, title, prompt, questions_json, time_limit_seconds, shuffle_questions, created_at, updated_at FROM quiz_sets WHERE id = ?`).get(result.lastInsertRowid) as QuizSetRow;
+    const result = db.prepare(`INSERT INTO quiz_sets (pdf_id, title, prompt, questions_json, time_limit_seconds, shuffle_questions, is_public, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(parsed.data.id, body.data.title, body.data.prompt, JSON.stringify(normalizeQuestions(body.data.questions)), body.data.time_limit_seconds, body.data.shuffle_questions ? 1 : 0, body.data.is_public ? 1 : 0, now, now);
+    const row = db.prepare(`SELECT id, pdf_id, title, prompt, questions_json, time_limit_seconds, shuffle_questions, is_public, created_at, updated_at FROM quiz_sets WHERE id = ?`).get(result.lastInsertRowid) as QuizSetRow;
     return reply.code(201).send(rowToQuiz(row));
   });
 
@@ -299,9 +316,9 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的測驗'));
     }
     const now = nowIso();
-    const result = db.prepare(`UPDATE quiz_sets SET title = ?, prompt = ?, questions_json = ?, time_limit_seconds = ?, shuffle_questions = ?, updated_at = ? WHERE id = ? AND pdf_id = ?`).run(body.data.title, body.data.prompt, JSON.stringify(normalizeQuestions(body.data.questions)), body.data.time_limit_seconds, body.data.shuffle_questions ? 1 : 0, now, parsed.data.quizId, parsed.data.id);
+    const result = db.prepare(`UPDATE quiz_sets SET title = ?, prompt = ?, questions_json = ?, time_limit_seconds = ?, shuffle_questions = ?, is_public = ?, updated_at = ? WHERE id = ? AND pdf_id = ?`).run(body.data.title, body.data.prompt, JSON.stringify(normalizeQuestions(body.data.questions)), body.data.time_limit_seconds, body.data.shuffle_questions ? 1 : 0, body.data.is_public ? 1 : 0, now, parsed.data.quizId, parsed.data.id);
     if (result.changes === 0) return reply.code(404).send(errorResponse('QUIZ_NOT_FOUND', `Quiz ${parsed.data.quizId} not found`));
-    const row = db.prepare(`SELECT id, pdf_id, title, prompt, questions_json, time_limit_seconds, shuffle_questions, created_at, updated_at FROM quiz_sets WHERE id = ?`).get(parsed.data.quizId) as QuizSetRow;
+    const row = db.prepare(`SELECT id, pdf_id, title, prompt, questions_json, time_limit_seconds, shuffle_questions, is_public, created_at, updated_at FROM quiz_sets WHERE id = ?`).get(parsed.data.quizId) as QuizSetRow;
     return reply.send(rowToQuiz(row));
   });
 

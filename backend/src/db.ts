@@ -583,6 +583,11 @@ function migrate(): void {
     db.exec(`ALTER TABLE quiz_attempts ADD COLUMN sub TEXT`);
     logger.info('Added column quiz_attempts.sub');
   }
+  if (!columnExists('quiz_sets', 'is_public')) {
+    // 測驗預設不公開：唯讀學生只看得到 public 或「正在進行」的測驗，讓老師能預先備題。
+    db.exec(`ALTER TABLE quiz_sets ADD COLUMN is_public INTEGER NOT NULL DEFAULT 0`);
+    logger.info('Added column quiz_sets.is_public');
+  }
   if (!columnExists('pdfs', 'play_count')) {
     db.exec(`ALTER TABLE pdfs ADD COLUMN play_count INTEGER NOT NULL DEFAULT 0`);
     logger.info('Added column pdfs.play_count');

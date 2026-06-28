@@ -1756,6 +1756,8 @@ export const zhTW = {
   'quiz.timeLimitNone': '無限制',
   'quiz.timeLimitUnit': '秒',
   'quiz.shuffleQuestions': '隨機排序題目（學生作答時打亂題序）',
+  'quiz.isPublic': '公開給學生',
+  'quiz.isPublicHint': '未公開的測驗，唯讀學生平時看不到，只有測驗進行中才看得到；可先備題，結束後再公開供複習。',
   'quiz.countdownPrefix': '剩餘',
   'quiz.countdownSuffix': '秒',
   'language.zhTW': '繁體中文',

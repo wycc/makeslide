@@ -91,6 +91,7 @@ export default function QuizBuilderPage() {
   const [questions, setQuestions] = useState<QuizQuestion[]>([emptyQuestion(0)]);
   const [timeLimitSeconds, setTimeLimitSeconds] = useState(0);
   const [shuffleQuestions, setShuffleQuestions] = useState(false);
+  const [isPublic, setIsPublic] = useState(false);
   const [shuffledQuestionsForTaking, setShuffledQuestionsForTaking] = useState<QuizQuestion[] | null>(null);
   const [quizCountdown, setQuizCountdown] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -163,6 +164,7 @@ export default function QuizBuilderPage() {
           setQuestions(nextQuizzes[0].questions);
           setTimeLimitSeconds(nextQuizzes[0].time_limit_seconds ?? 0);
           setShuffleQuestions(nextQuizzes[0].shuffle_questions ?? false);
+          setIsPublic(nextQuizzes[0].is_public ?? false);
         }
       } catch (err) {
         if (alive) setError(err instanceof ApiError ? err.message : t('quiz.loadFailed'));
@@ -188,6 +190,18 @@ export default function QuizBuilderPage() {
     () => savedQuizzes.find((quiz) => quiz.id === syncActiveQuizId) ?? null,
     [savedQuizzes, syncActiveQuizId],
   );
+
+  // 老師開始的測驗若不在目前清單裡（唯讀學生先前看不到的非公開題，開始後才可見），重抓一次取得題目。
+  const refetchedForQuizRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!pdfId || syncActiveQuizId == null) return;
+    if (savedQuizzes.some((quiz) => quiz.id === syncActiveQuizId)) return;
+    if (refetchedForQuizRef.current === syncActiveQuizId) return;
+    refetchedForQuizRef.current = syncActiveQuizId;
+    let cancelled = false;
+    void fetchQuizSets(pdfId).then((qs) => { if (!cancelled) setSavedQuizzes(qs); }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [pdfId, syncActiveQuizId, savedQuizzes]);
 
   const isFollowerTesting = syncRole === 'follower' && activeQuiz != null;
 
@@ -625,7 +639,7 @@ export default function QuizBuilderPage() {
     setBusy(true);
     setError(null);
     try {
-      const saved = await saveQuizSet(pdfId, { title, prompt, questions, quizId: selectedQuizId, time_limit_seconds: timeLimitSeconds, shuffle_questions: shuffleQuestions });
+      const saved = await saveQuizSet(pdfId, { title, prompt, questions, quizId: selectedQuizId, time_limit_seconds: timeLimitSeconds, shuffle_questions: shuffleQuestions, is_public: isPublic });
       setSelectedQuizId(saved.id);
       setSavedQuizzes((prev) => [saved, ...prev.filter((q) => q.id !== saved.id)]);
       setMessage(t('quiz.saveDone'));
@@ -847,7 +861,7 @@ export default function QuizBuilderPage() {
             ) : null}
             {savedQuizzes.filter((q) => !savedQuizzesSearch.trim() || q.title.toLowerCase().includes(savedQuizzesSearch.trim().toLowerCase())).map((quiz) => (
               <div key={quiz.id} className={`rounded-md border px-3 py-2 text-sm ${selectedQuizId === quiz.id ? 'border-cyan-500 bg-cyan-500/10 text-cyan-100' : 'border-slate-700 text-slate-300'}`}>
-                <button type="button" onClick={() => { setSelectedQuizId(quiz.id); setTitle(quiz.title); setPrompt(quiz.prompt); setQuestions(quiz.questions); setTimeLimitSeconds(quiz.time_limit_seconds ?? 0); setShuffleQuestions(quiz.shuffle_questions ?? false); }} className="block w-full text-left hover:text-white">
+                <button type="button" onClick={() => { setSelectedQuizId(quiz.id); setTitle(quiz.title); setPrompt(quiz.prompt); setQuestions(quiz.questions); setTimeLimitSeconds(quiz.time_limit_seconds ?? 0); setShuffleQuestions(quiz.shuffle_questions ?? false); setIsPublic(quiz.is_public ?? false); }} className="block w-full text-left hover:text-white">
                   <span className="flex items-center gap-1.5">
                     <span className="min-w-0 flex-1 truncate font-medium">{quiz.title}</span>
                     {quiz.questions.length > 0 && (
@@ -1098,6 +1112,18 @@ export default function QuizBuilderPage() {
                 className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-indigo-500"
               />
               <span className="text-sm text-slate-300">{t('quiz.shuffleQuestions')}</span>
+            </label>
+            <label className="mt-2 flex cursor-pointer items-start gap-2">
+              <input
+                type="checkbox"
+                checked={isPublic}
+                onChange={(e) => setIsPublic(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-900 text-indigo-500"
+              />
+              <span className="text-sm text-slate-300">
+                {t('quiz.isPublic')}
+                <span className="mt-0.5 block text-xs text-slate-500">{t('quiz.isPublicHint')}</span>
+              </span>
             </label>
             <div className="mt-3 flex flex-wrap gap-2">
               <button type="button" onClick={() => void handleGenerate()} disabled={busy || !prompt.trim()} className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-4 py-2 text-sm text-fuchsia-100 hover:bg-fuchsia-500/25 disabled:opacity-50">{busy ? t('quiz.busy') : t('quiz.generate')}</button>

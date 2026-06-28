@@ -1756,6 +1756,8 @@ export const en = {
   'quiz.timeLimitNone': 'Unlimited',
   'quiz.timeLimitUnit': 'seconds',
   'quiz.shuffleQuestions': 'Shuffle question order for students',
+  'quiz.isPublic': 'Public to students',
+  'quiz.isPublicHint': 'Non-public quizzes stay hidden from read-only students except while the quiz is running; prepare them in advance and make them public afterwards for review.',
   'quiz.countdownPrefix': '',
   'quiz.countdownSuffix': 's remaining',
   'language.zhTW': '繁體中文',

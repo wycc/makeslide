@@ -729,3 +729,30 @@ test('POST /quizzes/:quizId/attempts never awards more than 100 points even if a
     await app.close();
   }
 });
+
+test('GET /quizzes hides non-public quizzes from read-only users but shows them to the owner', async () => {
+  seedQuizPdf('quiz-public-vis-01', 'public');
+  const app = await buildApp();
+  try {
+    const pubResp = await app.inject({ method: 'POST', url: '/api/pdfs/quiz-public-vis-01/quizzes', headers: OWNER_HEADERS, payload: { ...validQuizPayload(), title: '公開測驗', is_public: true } });
+    assert.equal(pubResp.statusCode, 201);
+    const publicId = (pubResp.json() as { id: number }).id;
+    const privResp = await app.inject({ method: 'POST', url: '/api/pdfs/quiz-public-vis-01/quizzes', headers: OWNER_HEADERS, payload: { ...validQuizPayload(), title: '備課測驗' } });
+    assert.equal(privResp.statusCode, 201);
+    const privateId = (privResp.json() as { id: number }).id;
+
+    // 唯讀使用者只看得到 public 的那一份。
+    const readOnly = await app.inject({ method: 'GET', url: '/api/pdfs/quiz-public-vis-01/quizzes', headers: OTHER_HEADERS });
+    const roIds = (readOnly.json() as { quizzes: Array<{ id: number }> }).quizzes.map((q) => q.id);
+    assert.deepEqual(roIds, [publicId], 'read-only user should only see the public quiz');
+
+    // 老師看得到全部。
+    const owner = await app.inject({ method: 'GET', url: '/api/pdfs/quiz-public-vis-01/quizzes', headers: OWNER_HEADERS });
+    const ownerIds = (owner.json() as { quizzes: Array<{ id: number }> }).quizzes.map((q) => q.id).sort((a, b) => a - b);
+    assert.deepEqual(ownerIds, [publicId, privateId].sort((a, b) => a - b), 'owner should see both quizzes');
+  } finally {
+    db.prepare('DELETE FROM quiz_sets WHERE pdf_id = ?').run('quiz-public-vis-01');
+    db.prepare('DELETE FROM pdfs WHERE id = ?').run('quiz-public-vis-01');
+    await app.close();
+  }
+});
