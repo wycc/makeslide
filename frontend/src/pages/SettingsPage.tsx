@@ -238,30 +238,9 @@ export default function SettingsPage() {
   const onSave = useCallback(async () => {
     setErr(null);
     setMsg(null);
-    if (llmProvider === 'openai' && !openaiApiKey.trim()) {
-      setErr(t('settings.openaiKeyRequiredForLlm'));
-      return;
-    }
-    if (llmProvider === 'gemini' && !geminiApiKey.trim()) {
-      setErr(t('settings.geminiKeyRequiredForLlm'));
-      return;
-    }
-    if (llmProvider === 'cgu-air' && !cguAirApiKey.trim()) {
-      setErr(t('settings.cguAirKeyRequiredForLlm'));
-      return;
-    }
-    if (llmProvider === 'openrouter' && !openrouterApiKey.trim()) {
-      setErr(t('settings.openrouterKeyRequiredForLlm'));
-      return;
-    }
-    if (ttsProvider === 'openai' && !openaiApiKey.trim()) {
-      setErr(t('settings.openaiKeyRequiredForTts'));
-      return;
-    }
-    if (ttsProvider === 'gemini' && !geminiApiKey.trim()) {
-      setErr(t('settings.geminiKeyRequiredForTts'));
-      return;
-    }
+    // 不再因「選定的 provider 對應 API key 未填」而擋下儲存：尚未設定任何金鑰的帳號
+    // 也應該能存 user_code／語言等其他欄位，而且金鑰輸入框在每次儲存後會被清空，重存
+    // 時這種檢查會誤判成缺金鑰。缺金鑰留待實際呼叫 AI 時再回報即可。
     setSaving(true);
     try {
       await updateSystemAiSettings({
