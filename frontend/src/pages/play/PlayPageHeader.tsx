@@ -21,7 +21,7 @@ function CopyAllQuestionsButton({ questions }: { questions: SyncFollowerQuestion
   const [msg, setMsg] = useState<string | null>(null);
   const handleCopy = () => {
     const text = questions
-      .map((q) => `[${q.display_name || q.code || t('play.sync.anonymous')}] ${q.question}`)
+      .map((q) => `[${q.code || q.display_name || t('play.sync.anonymous')}] ${q.question}`)
       .join('\n');
     void copyTextToClipboard(text).then((ok) => {
       setMsg(ok ? t('play.header.copyAllQuestionsDone') : t('play.header.copyAllQuestionsFail'));
@@ -566,7 +566,7 @@ export function PlayPageHeader() {
                   <div className="max-h-28 space-y-1 overflow-auto">
                     {syncFollowerQuestions.slice(0, 5).map((q) => (
                       <div key={q.id} className={`rounded px-2 py-1 ${q.question === '🖐' ? 'border border-amber-300 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/15' : 'bg-surface dark:bg-slate-950/70'}`}>
-                        <span className={q.question === '🖐' ? 'text-amber-700 dark:text-amber-300' : 'text-cyan-700 dark:text-cyan-300'}>{q.display_name || q.code || t('play.sync.anonymous')}：</span>
+                        <span className={q.question === '🖐' ? 'text-amber-700 dark:text-amber-300' : 'text-cyan-700 dark:text-cyan-300'}>{q.code || q.display_name || t('play.sync.anonymous')}：</span>
                         {q.question === '🖐' ? <span className="text-amber-800 dark:text-amber-200">🖐 {t('play.sync.raiseHand')}</span> : q.question}
                       </div>
                     ))}
