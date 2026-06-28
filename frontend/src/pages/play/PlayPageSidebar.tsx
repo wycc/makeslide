@@ -306,9 +306,8 @@ function CommentsSection() {
                       <textarea
                         value={editingText}
                         onChange={(e) => setEditingText(e.target.value)}
-                        rows={2}
                         maxLength={2000}
-                        className="w-full resize-none rounded border border-sky-200 dark:border-sky-700/40 bg-white dark:bg-sky-900/30 px-2 py-1 text-[11px] text-sky-900 dark:text-sky-100 focus:outline-none focus:ring-1 focus:ring-sky-600/60"
+                        className="h-40 w-full resize-none overflow-y-auto rounded border border-sky-200 dark:border-sky-700/40 bg-white dark:bg-sky-900/30 px-2 py-1 text-[11px] text-sky-900 dark:text-sky-100 focus:outline-none focus:ring-1 focus:ring-sky-600/60"
                       />
                       {(() => {
                         const hint = getTextLengthHint(editingText.length, 2000);
