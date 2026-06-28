@@ -220,6 +220,8 @@ export default function QuizBuilderPage() {
   }, [pdfId, syncActiveQuizId, savedQuizzes]);
 
   const isFollowerTesting = syncRole === 'follower' && activeQuiz != null;
+  // 是否有編輯權限（老師/協作者）。唯讀學生只能複習：移除所有編輯/控制功能，只看自己的歷史與解答。
+  const canEditQuiz = Boolean(detail?.is_owner || detail?.visibility === 'public_editable');
 
   useEffect(() => {
     if (!activeQuiz || !activeQuiz.shuffle_questions) {
@@ -888,6 +890,8 @@ export default function QuizBuilderPage() {
                   </span>
                 </button>
                 <div className="mt-2 flex flex-wrap gap-1">
+                  {canEditQuiz ? (
+                  <>
                   <button
                     type="button"
                     onClick={() => void handleStartQuiz(quiz.id)}
@@ -914,6 +918,8 @@ export default function QuizBuilderPage() {
                   >
                     {t('quiz.end')}
                   </button>
+                  </>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => void loadQuizHistory(quiz.id)}
@@ -992,7 +998,7 @@ export default function QuizBuilderPage() {
         )}
         <section className="space-y-4">
           {isFollowerTesting && activeQuiz ? renderQuizTakingView(activeQuiz) : null}
-          {syncRole === 'master' && historyQuizId != null ? (
+          {historyQuizId != null ? (
             <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-sm font-semibold text-slate-200">
@@ -1100,7 +1106,7 @@ export default function QuizBuilderPage() {
               )}
             </div>
           ) : null}
-          {isFollowerTesting ? null : (
+          {isFollowerTesting || !canEditQuiz ? null : (
           <>
           <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
             <label className="block text-sm text-slate-300">{t('quiz.titleLabel')}</label>

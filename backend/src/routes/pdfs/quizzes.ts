@@ -386,12 +386,18 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
     }
     const quiz = db.prepare(`SELECT id FROM quiz_sets WHERE id = ? AND pdf_id = ?`).get(parsed.data.quizId, parsed.data.id) as { id: number } | undefined;
     if (!quiz) return reply.code(404).send(errorResponse('QUIZ_NOT_FOUND', `Quiz ${parsed.data.quizId} not found`));
-    const rows = db
+    let rows = db
       .prepare(
         `SELECT id, pdf_id, quiz_id, session_id, client_id, code, sub, answers_json, score, submitted_at, created_at, updated_at
          FROM quiz_attempts WHERE quiz_id = ? ORDER BY submitted_at DESC`,
       )
       .all(parsed.data.quizId) as QuizAttemptRow[];
+    // 老師（可編輯）看得到全部作答；唯讀學生只能看自己的紀錄（依登入帳號 sub 比對）。
+    // 未登入者無法辨識「自己的」紀錄，回空陣列以免看到其他人的作答。
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      const sub = sessionSub(request);
+      rows = sub ? rows.filter((r) => r.sub === sub) : [];
+    }
     const names = getAccountDisplayNames(rows.map((r) => r.sub));
     const attempts = rows.map((r) => rowToQuizAttempt(r, r.sub ? names.get(r.sub) ?? null : null));
     const sessionsMap = new Map<string, { session_id: string; submitted_at: string; attempts: ReturnType<typeof rowToQuizAttempt>[] }>();
