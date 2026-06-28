@@ -658,9 +658,16 @@ export default function SettingsPage() {
           </aside>
 
           <section className="min-w-0 space-y-4">
-            <div className="rounded-xl border border-border bg-surface/40 p-4">
-              <h2 className="text-base font-semibold text-text">{activeCategoryInfo.label}</h2>
-              <p className="mt-1 text-sm text-muted">{activeCategoryInfo.description}</p>
+            <div className="flex items-start justify-between gap-3 rounded-xl border border-border bg-surface/40 p-4">
+              <div className="min-w-0">
+                <h2 className="text-base font-semibold text-text">{activeCategoryInfo.label}</h2>
+                <p className="mt-1 text-sm text-muted">{activeCategoryInfo.description}</p>
+              </div>
+              {activeCategoryInfo.id === 'account' ? (
+                <button type="button" onClick={() => void onSave()} disabled={saving} className="shrink-0 rounded-md bg-text px-4 py-2 text-sm font-medium text-bg disabled:opacity-50">
+                  {saving ? t('settings.saving') : t('settings.save')}
+                </button>
+              ) : null}
             </div>
 
             {activeCategoryInfo.id === 'account' ? (
@@ -727,11 +734,6 @@ export default function SettingsPage() {
                     </select>
                     <span className="mt-1 block text-xs text-muted">{t('settings.themeHint')}</span>
                   </label>
-                </div>
-                <div className="flex justify-end">
-                  <button type="button" onClick={() => void onSave()} disabled={saving} className="rounded-md bg-text px-4 py-2 text-sm font-medium text-bg disabled:opacity-50">
-                    {saving ? t('settings.saving') : t('settings.save')}
-                  </button>
                 </div>
                 <div className="rounded-lg border border-border bg-bg/60 p-3">
                   <div className="mb-1 text-sm font-medium text-text">{t('settings.mcpTokenTitle')}</div>
