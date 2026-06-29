@@ -17,6 +17,7 @@ import { countUnresolvedComments, sortCommentsUnresolvedFirst } from '../../lib/
 import { formatCommentsMarkdown } from '../../lib/commentMarkdown';
 import { formatPollResultsMarkdown } from '../../lib/pollResultsMarkdown';
 import { pollOptionPercent } from '../../lib/pollPercent';
+import { PollResultsDialog } from './PollResultsDialog';
 import { formatNotesMarkdown } from '../../lib/notesMarkdown';
 import { formatPageListText } from '../../lib/pageListText';
 import { getStoredCommentAuthor, setStoredCommentAuthor } from '../../lib/commentAuthor';
@@ -676,6 +677,7 @@ export function PlayPageSidebar() {
   const [bookmarkCopyMsg, setBookmarkCopyMsg] = useState<string | null>(null);
   const [importantCopyMsg, setImportantCopyMsg] = useState<string | null>(null);
   const [pollCopyMsg, setPollCopyMsg] = useState<string | null>(null);
+  const [pollResultsDialogOpen, setPollResultsDialogOpen] = useState(false);
   const handleCopyPollResults = async () => {
     const md = formatPollResultsMarkdown(pagePolls, {
       heading: t('play.sidebar.poll.copyHeading'),
@@ -1160,6 +1162,15 @@ export function PlayPageSidebar() {
             {pagePolls.length > 0 && (
               <button
                 type="button"
+                onClick={() => setPollResultsDialogOpen(true)}
+                className="rounded-md border border-border px-2 py-1 text-xs text-text hover:bg-surface-muted"
+              >
+                {t('play.sidebar.poll.viewResults')}
+              </button>
+            )}
+            {pagePolls.length > 0 && (
+              <button
+                type="button"
                 onClick={() => void handleCopyPollResults()}
                 className="rounded-md border border-border px-2 py-1 text-xs text-text hover:bg-surface-muted"
               >
@@ -1319,6 +1330,14 @@ export function PlayPageSidebar() {
           </div>
         )}
       </section>
+      )}
+
+      {pollResultsDialogOpen && (
+        <PollResultsDialog
+          polls={pagePolls}
+          pageNumber={currentPage?.page_number}
+          onClose={() => setPollResultsDialogOpen(false)}
+        />
       )}
 
       {notebookTab === 'interact' && (
