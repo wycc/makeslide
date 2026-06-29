@@ -1334,6 +1334,7 @@ export function PlayPageSidebar() {
 
       {pollResultsDialogOpen && (
         <PollResultsDialog
+          pdfId={pdfId}
           polls={pagePolls}
           pageNumber={currentPage?.page_number}
           onClose={() => setPollResultsDialogOpen(false)}

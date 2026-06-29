@@ -4,6 +4,7 @@ import type {
   PageChatResponse,
   PageFiguresResponse,
   PagePoll,
+  PagePollVoter,
   PdfDetail,
   PdfListItem,
   PipelineRunsResponse,
@@ -699,6 +700,14 @@ export async function fetchPagePolls(id: string, pageNumber: number): Promise<Pa
   if (!resp.ok) throw await parseErrorBody(resp);
   const data = (await resp.json()) as { polls?: PagePoll[] };
   return Array.isArray(data.polls) ? data.polls : [];
+}
+
+/** 取得某投票的投票人名單（僅限可編輯者／老師）。 */
+export async function fetchPagePollVoters(id: string, pollId: number): Promise<PagePollVoter[]> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/polls/${encodeURIComponent(String(pollId))}/voters`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  const data = (await resp.json()) as { voters?: PagePollVoter[] };
+  return Array.isArray(data.voters) ? data.voters : [];
 }
 
 export async function createPagePoll(id: string, pageNumber: number, question: string, options: string[], showResults = true): Promise<PagePoll> {

@@ -509,6 +509,14 @@ export interface PagePollOption {
   votes: number;
 }
 
+/** 單筆投票人記錄（老師專用名單）：voter_id 即投票者自設的 code（或匿名 voter-xxx）。 */
+export interface PagePollVoter {
+  voter_id: string;
+  option_index: number;
+  option_text: string;
+  voted_at: string;
+}
+
 export interface PagePoll {
   id: number;
   pdf_id: string;

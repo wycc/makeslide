@@ -1107,6 +1107,34 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     return reply.send(rowToPoll(updated));
   });
 
+  // 投票人名單（僅限可編輯者／老師）。voter_id 即投票者自設的 user_code（或匿名 voter-xxx），
+  // 故此端點刻意以 canEditPdf 守門，避免共用的 /polls 讀取端點把投票人身分洩漏給其他學生。
+  app.get('/api/pdfs/:id/polls/:pollId/voters', async (request, reply) => {
+    const parsed = PollParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or poll id'));
+    const { id, pollId } = parsed.data;
+    const pdf = db.prepare(`SELECT id, owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
+      | Pick<PdfRow, 'id' | 'owner_sub' | 'visibility'>
+      | undefined;
+    if (!pdf) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), pdf)) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視投票人名單'));
+    const row = db
+      .prepare(`SELECT id, options_json FROM page_polls WHERE id = ? AND pdf_id = ?`)
+      .get(pollId, id) as { id: number; options_json: string } | undefined;
+    if (!row) return reply.code(404).send(errorResponse('POLL_NOT_FOUND', `Poll ${pollId} not found`));
+    const options = parsePollOptions(row.options_json);
+    const votes = db
+      .prepare(`SELECT voter_id, option_index, updated_at FROM page_poll_votes WHERE poll_id = ? ORDER BY updated_at ASC, voter_id ASC`)
+      .all(pollId) as Array<{ voter_id: string; option_index: number; updated_at: string }>;
+    const voters = votes.map((v) => ({
+      voter_id: v.voter_id,
+      option_index: v.option_index,
+      option_text: options[v.option_index] ?? '',
+      voted_at: v.updated_at,
+    }));
+    return reply.send({ voters });
+  });
+
   app.patch('/api/pdfs/:id/polls/:pollId', async (request, reply) => {
     const parsed = PollParamSchema.safeParse(request.params);
     if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or poll id'));
