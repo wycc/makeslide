@@ -394,6 +394,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-29 | （使用者要求續作）投票結果對話框補上各選項的投票人 code：新增老師專用端點 `GET /api/pdfs/:id/polls/:pollId/voters`（以 `canEditPdf` 守門，避免共用的 /polls 讀取端點洩漏投票人身分），回傳每票的 voter_id（投票者自設 user_code 或匿名 voter-xxx）＋所選選項；對話框開啟時抓取並以標籤列出各選項投票人，匿名者顯示為「匿名」。新增前端純函式 `groupVotersByOption`/`isAnonymousVoterId`。新增後端 3 測試、前端 helper 3 測試；前後端 typecheck、i18n 24 測試全綠 | feat/poll-results-dialog |
 | 2026-06-29 | （使用者要求功能）播放頁側欄投票區新增「查看結果」按鈕，開啟跳出式對話框（`PollResultsDialog`）顯示本頁各投票的資訊（問題、總票數、已作答人數、進行中／已結束）與各選項票數＋百分比長條；沿用既有聚合 `PagePoll` 資料、不額外打後端。新增 zh-TW/en 各 9 個 i18n 鍵；前端 typecheck 通過、i18n 24 測試全綠 | feat/poll-results-dialog |
 | 2026-06-28 | （前端，去重，推進 §7.2）抽出品質檢查徽章狀態純函式 `analysisBadgeState(hasRun, running, issueCount)`（hidden/ok/issues 判別聯集），收斂 `QualityCheckPanel` 品質/逐字稿/圖片三區塊重複的巢狀三元徽章判斷；新增 4 測試（qualityCheckSelection 9/9）；tsc 通過。為後續側邊欄品質徽章提供可測基礎（計數 63/100） | refactor/analysis-badge-state（已 merge） |
 | 2026-06-28 | （前端，使用者回報 UI）「AI 助手」分頁改 notebook 子分頁：原本導師問答／品質報告／本頁問答三塊垂直堆疊各自侷促，改為頂端子分頁列（導師問答／品質報告／本頁問答）一次顯示一個，active 面板 `flex-1` 撐滿側欄高度；`PageAskPanel` 對話區由 `max-h-96` 改 `flex-1`、`QualityCheckPanel` root 改 `flex-1 overflow-y-auto`（chat 本就 flex-1）。新增 3 個子分頁 i18n key（labelKey 以 `TranslationKey` 型別收斂）。tsc／i18n parity／vite build 通過。不計入 100 輪計數 | feat/ai-tab-notebook（已 merge） |
