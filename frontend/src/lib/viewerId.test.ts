@@ -11,7 +11,7 @@ class MemoryStorage {
 }
 (globalThis as { window?: unknown }).window = { localStorage: new MemoryStorage() };
 
-const { getOrCreateViewerId } = await import('./viewerId');
+const { getOrCreateViewerId, pickViewerId } = await import('./viewerId');
 
 test('getOrCreateViewerId creates a viewer- prefixed id and persists it', () => {
   window.localStorage.removeItem('makeslide.viewer.id');
@@ -41,4 +41,17 @@ test('getOrCreateViewerId returns a fresh id without window/localStorage', () =>
   } finally {
     (globalThis as { window?: unknown }).window = saved;
   }
+});
+
+test('pickViewerId prefers a configured user_code over the anonymous fallback', () => {
+  assert.equal(pickViewerId('S1234567', 'viewer-abc'), 'S1234567');
+});
+
+test('pickViewerId trims the user_code', () => {
+  assert.equal(pickViewerId('  alice  ', 'viewer-abc'), 'alice');
+});
+
+test('pickViewerId falls back to the anonymous id when the user_code is empty or blank', () => {
+  assert.equal(pickViewerId('', 'viewer-abc'), 'viewer-abc');
+  assert.equal(pickViewerId('   ', 'viewer-abc'), 'viewer-abc');
 });
