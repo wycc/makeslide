@@ -394,6 +394,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-30 | （使用者要求續作）觀看記錄視窗加「時間」欄：顯示每筆 `updated_at`（該觀眾最後一次回報此頁的時間）格式化為本地 `YYYY/MM/DD HH:mm`，cell title 保留原始 ISO。後端明細端點本就回傳 updated_at，僅前端顯示。新增純函式 `formatWatchTimestamp` 與 2 測試；前端 typecheck、watchProgress 20 + i18n 24 測試全綠 | feat/watch-records-dialog |
 | 2026-06-30 | （使用者回報續修）觀看記錄只顯示隨機 `viewer-xxx`：根因是 `useWatchProgress` 一律用 `getOrCreateViewerId()` 的匿名 localStorage id 回報，從未帶入 user_code（與投票不同）。改為比照投票：先 `resolveConfiguredUserCode()`，有設 user_code 就用它、否則退回匿名 id。user_code 為非同步解析，故每筆排隊回報在送出前 `await viewerIdReadyRef`，確保整個 session 同一人用同一個 viewer_id（不會前匿名後 user_code 被當兩人）。既有舊記錄無法回溯。新增純函式 `pickViewerId` 與 3 測試；前端 typecheck、viewerId 7 測試全綠 | fix/watch-records-use-user-code |
 | 2026-06-30 | （使用者要求功能）投影片管理新增「觀看記錄」視窗：新增老師專用端點 `GET /api/pdfs/:id/watch-progress/details`（`canEditPdf` 守門、可選 `?page=N`），回傳逐位觀眾各頁的觀看明細。投影片管理標題列加「觀看記錄」按鈕（整份、以使用者為單位列出各頁聆聽時間/完整度/是否看完）；每張投影片的綠色觀看徽章改為可點擊，點擊後只顯示該單張投影片的觀看記錄。新增前端純函式 `groupWatchRecordsByViewer`/`watchRecordListenedPercent`/`formatWatchDuration`。新增後端 3 測試、前端 helper 4 測試；前後端 typecheck、i18n 24 測試全綠 | feat/watch-records-dialog |
 | 2026-06-29 | （使用者要求續作）投票結果對話框補上各選項的投票人 code：新增老師專用端點 `GET /api/pdfs/:id/polls/:pollId/voters`（以 `canEditPdf` 守門，避免共用的 /polls 讀取端點洩漏投票人身分），回傳每票的 voter_id（投票者自設 user_code 或匿名 voter-xxx）＋所選選項；對話框開啟時抓取並以標籤列出各選項投票人，匿名者顯示為「匿名」。新增前端純函式 `groupVotersByOption`/`isAnonymousVoterId`。新增後端 3 測試、前端 helper 3 測試；前後端 typecheck、i18n 24 測試全綠 | feat/poll-results-dialog |
