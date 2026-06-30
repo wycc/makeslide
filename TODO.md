@@ -394,6 +394,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-06-30 | （使用者要求功能）投影片管理新增「觀看記錄」視窗：新增老師專用端點 `GET /api/pdfs/:id/watch-progress/details`（`canEditPdf` 守門、可選 `?page=N`），回傳逐位觀眾各頁的觀看明細。投影片管理標題列加「觀看記錄」按鈕（整份、以使用者為單位列出各頁聆聽時間/完整度/是否看完）；每張投影片的綠色觀看徽章改為可點擊，點擊後只顯示該單張投影片的觀看記錄。新增前端純函式 `groupWatchRecordsByViewer`/`watchRecordListenedPercent`/`formatWatchDuration`。新增後端 3 測試、前端 helper 4 測試；前後端 typecheck、i18n 24 測試全綠 | feat/watch-records-dialog |
 | 2026-06-29 | （使用者要求續作）投票結果對話框補上各選項的投票人 code：新增老師專用端點 `GET /api/pdfs/:id/polls/:pollId/voters`（以 `canEditPdf` 守門，避免共用的 /polls 讀取端點洩漏投票人身分），回傳每票的 voter_id（投票者自設 user_code 或匿名 voter-xxx）＋所選選項；對話框開啟時抓取並以標籤列出各選項投票人，匿名者顯示為「匿名」。新增前端純函式 `groupVotersByOption`/`isAnonymousVoterId`。新增後端 3 測試、前端 helper 3 測試；前後端 typecheck、i18n 24 測試全綠 | feat/poll-results-dialog |
 | 2026-06-29 | （使用者要求功能）播放頁側欄投票區新增「查看結果」按鈕，開啟跳出式對話框（`PollResultsDialog`）顯示本頁各投票的資訊（問題、總票數、已作答人數、進行中／已結束）與各選項票數＋百分比長條；沿用既有聚合 `PagePoll` 資料、不額外打後端。新增 zh-TW/en 各 9 個 i18n 鍵；前端 typecheck 通過、i18n 24 測試全綠 | feat/poll-results-dialog |
 | 2026-06-28 | （前端，去重，推進 §7.2）抽出品質檢查徽章狀態純函式 `analysisBadgeState(hasRun, running, issueCount)`（hidden/ok/issues 判別聯集），收斂 `QualityCheckPanel` 品質/逐字稿/圖片三區塊重複的巢狀三元徽章判斷；新增 4 測試（qualityCheckSelection 9/9）；tsc 通過。為後續側邊欄品質徽章提供可測基礎（計數 63/100） | refactor/analysis-badge-state（已 merge） |
