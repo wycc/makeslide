@@ -894,6 +894,26 @@ export async function fetchWatchProgress(id: string): Promise<PageWatchProgressS
   return Array.isArray(data.pages) ? data.pages : [];
 }
 
+/** 單筆逐位觀眾的觀看明細（老師專用）。 */
+export interface WatchProgressDetailRecord {
+  page_number: number;
+  viewer_id: string;
+  listened_ms: number;
+  tab_hidden_ms: number;
+  duration_ms: number | null;
+  completed: boolean;
+  updated_at: string;
+}
+
+/** 取得逐位觀眾的觀看明細；給定 `page` 時只取單張投影片。 */
+export async function fetchWatchProgressDetails(id: string, page?: number): Promise<WatchProgressDetailRecord[]> {
+  const query = page != null ? `?page=${encodeURIComponent(String(page))}` : '';
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/watch-progress/details${query}`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  const data = (await resp.json()) as { records?: WatchProgressDetailRecord[] };
+  return Array.isArray(data.records) ? data.records : [];
+}
+
 export async function fetchPdfReportSummary(id: string): Promise<PdfReportSummary> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/report/summary`);
   if (!resp.ok) throw await parseErrorBody(resp);

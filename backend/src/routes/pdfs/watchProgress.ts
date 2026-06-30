@@ -15,6 +15,11 @@ const ReportWatchProgressBodySchema = z.object({
   completed: z.boolean(),
 });
 
+// `?page=N`：可選，查詢字串為字串，用 coerce 轉成正整數。
+const WatchDetailsQuerySchema = z.object({
+  page: z.coerce.number().int().positive().optional(),
+});
+
 interface PageWatchProgressRow {
   pdf_id: string;
   page_number: number;
@@ -120,6 +125,52 @@ export async function registerWatchProgressRoutes(app: FastifyInstance): Promise
         total_viewers: row.total_viewers,
         completed_viewers: row.completed_viewers,
         avg_listened_ratio: row.avg_listened_ratio,
+      })),
+    });
+  });
+
+  // 逐位觀眾的明細記錄（老師專用）：供「觀看記錄」視窗顯示每個使用者各頁的觀看情形。
+  // 以 canEditPdf 守門，避免把其他觀眾的 viewer_id／觀看時間洩漏給一般讀者。
+  // 可選 `?page=N` 只取單張投影片（對應每張投影片綠色徽章點擊後的單頁檢視）。
+  app.get('/api/pdfs/:id/watch-progress/details', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid pdf id'));
+    const query = WatchDetailsQuerySchema.safeParse(request.query ?? {});
+    if (!query.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', query.error.issues[0]?.message ?? 'Invalid query'));
+    const pdfRow = getPdfPermissionRow(parsed.data.id);
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的觀看記錄'));
+    }
+    const page = query.data.page;
+    const rows = (
+      page != null
+        ? db
+            .prepare(
+              `SELECT page_number, viewer_id, listened_ms, tab_hidden_ms, duration_ms, completed, updated_at
+                 FROM page_watch_progress
+                WHERE pdf_id = ? AND page_number = ?
+                ORDER BY viewer_id ASC`,
+            )
+            .all(parsed.data.id, page)
+        : db
+            .prepare(
+              `SELECT page_number, viewer_id, listened_ms, tab_hidden_ms, duration_ms, completed, updated_at
+                 FROM page_watch_progress
+                WHERE pdf_id = ?
+                ORDER BY viewer_id ASC, page_number ASC`,
+            )
+            .all(parsed.data.id)
+    ) as PageWatchProgressRow[];
+    return reply.send({
+      records: rows.map((row) => ({
+        page_number: row.page_number,
+        viewer_id: row.viewer_id,
+        listened_ms: row.listened_ms,
+        tab_hidden_ms: row.tab_hidden_ms,
+        duration_ms: row.duration_ms,
+        completed: row.completed === 1,
+        updated_at: row.updated_at,
       })),
     });
   });

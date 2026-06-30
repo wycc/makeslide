@@ -6,6 +6,9 @@ import {
   calculateWatchProgressPercent,
   calculateAvgListenedPercent,
   formatWatchProgressBadgeCount,
+  groupWatchRecordsByViewer,
+  watchRecordListenedPercent,
+  formatWatchDuration,
 } from './watchProgress';
 
 test('evaluateWatchCompletion returns false when there is no audio (durationMs is null)', () => {
@@ -133,4 +136,33 @@ test('formatWatchProgressBadgeCount formats as "completed/total"', () => {
     avg_listened_ratio: 0.72,
   });
   assert.equal(result, '3/5');
+});
+
+test('groupWatchRecordsByViewer groups by viewer (sorted) and sorts each viewer by page', () => {
+  const grouped = groupWatchRecordsByViewer([
+    { viewer_id: 'bob', page_number: 2, listened_ms: 0, duration_ms: null, completed: false },
+    { viewer_id: 'alice', page_number: 3, listened_ms: 0, duration_ms: null, completed: true },
+    { viewer_id: 'alice', page_number: 1, listened_ms: 0, duration_ms: null, completed: false },
+  ]);
+  assert.deepEqual(grouped.map((g) => g.viewer_id), ['alice', 'bob']);
+  assert.deepEqual(grouped[0].records.map((r) => r.page_number), [1, 3]);
+  assert.deepEqual(grouped[1].records.map((r) => r.page_number), [2]);
+});
+
+test('groupWatchRecordsByViewer returns an empty array for no records', () => {
+  assert.deepEqual(groupWatchRecordsByViewer([]), []);
+});
+
+test('watchRecordListenedPercent clamps to 0-100 and returns null without duration', () => {
+  assert.equal(watchRecordListenedPercent(5000, 10000), 50);
+  assert.equal(watchRecordListenedPercent(15000, 10000), 100);
+  assert.equal(watchRecordListenedPercent(5000, null), null);
+  assert.equal(watchRecordListenedPercent(5000, 0), null);
+});
+
+test('formatWatchDuration formats milliseconds as m:ss', () => {
+  assert.equal(formatWatchDuration(0), '0:00');
+  assert.equal(formatWatchDuration(65000), '1:05');
+  assert.equal(formatWatchDuration(125000), '2:05');
+  assert.equal(formatWatchDuration(-100), '0:00');
 });
