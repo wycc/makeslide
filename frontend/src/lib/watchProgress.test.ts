@@ -145,8 +145,10 @@ test('groupWatchRecordsByViewer groups by viewer (sorted) and sorts each viewer 
     { viewer_id: 'alice', page_number: 1, listened_ms: 0, duration_ms: null, completed: false },
   ]);
   assert.deepEqual(grouped.map((g) => g.viewer_id), ['alice', 'bob']);
-  assert.deepEqual(grouped[0].records.map((r) => r.page_number), [1, 3]);
-  assert.deepEqual(grouped[1].records.map((r) => r.page_number), [2]);
+  const alice = grouped.find((g) => g.viewer_id === 'alice');
+  const bob = grouped.find((g) => g.viewer_id === 'bob');
+  assert.deepEqual(alice?.records.map((r) => r.page_number), [1, 3]);
+  assert.deepEqual(bob?.records.map((r) => r.page_number), [2]);
 });
 
 test('groupWatchRecordsByViewer returns an empty array for no records', () => {
