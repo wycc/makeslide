@@ -9,6 +9,7 @@ import {
   groupWatchRecordsByViewer,
   watchRecordListenedPercent,
   formatWatchDuration,
+  formatWatchTimestamp,
 } from './watchProgress';
 
 test('evaluateWatchCompletion returns false when there is no audio (durationMs is null)', () => {
@@ -167,4 +168,15 @@ test('formatWatchDuration formats milliseconds as m:ss', () => {
   assert.equal(formatWatchDuration(65000), '1:05');
   assert.equal(formatWatchDuration(125000), '2:05');
   assert.equal(formatWatchDuration(-100), '0:00');
+});
+
+test('formatWatchTimestamp formats a valid ISO timestamp as local YYYY/MM/DD HH:mm', () => {
+  // 以本地時間建構，避免測試受執行環境時區影響。
+  const local = new Date(2026, 5, 30, 9, 5); // 2026-06-30 09:05 local
+  const formatted = formatWatchTimestamp(local.toISOString());
+  assert.equal(formatted, '2026/06/30 09:05');
+});
+
+test('formatWatchTimestamp returns the input unchanged when it cannot be parsed', () => {
+  assert.equal(formatWatchTimestamp('not-a-date'), 'not-a-date');
 });

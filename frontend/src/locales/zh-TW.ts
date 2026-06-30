@@ -1425,6 +1425,7 @@ export const zhTW = {
   'play.watchRecords.colListened': '聆聽時間',
   'play.watchRecords.colCompletion': '完整度',
   'play.watchRecords.colDone': '看完',
+  'play.watchRecords.colTime': '時間',
   'play.sidebar.loading': '載入中…',
   'play.sidebar.noImage': '無圖片',
   'play.sidebar.selectedRegenerate': '已選 {count} 頁將重生（Ctrl/Shift 點選）',

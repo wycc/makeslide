@@ -122,3 +122,14 @@ export function formatWatchDuration(ms: number): string {
   const seconds = totalSeconds % 60;
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
+
+/**
+ * 把觀看記錄的 ISO 時間戳（後端 `updated_at`，即該觀眾最後一次回報此頁的時間）格式化成
+ * 本地 `YYYY/MM/DD HH:mm`，供視窗「時間」欄顯示「大約是什麼時候看的」。無法解析時原樣回傳。
+ */
+export function formatWatchTimestamp(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
