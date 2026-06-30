@@ -286,3 +286,62 @@ test('POST /pages/:n/watch-progress returns 404 for an unknown pdf and 400 for a
     await app.close();
   }
 });
+
+function insertWatchRow(pdfId: string, pageNumber: number, viewerId: string, opts: { listened_ms?: number; duration_ms?: number | null; completed?: boolean } = {}): void {
+  const t = nowIso();
+  db.prepare(
+    `INSERT INTO page_watch_progress (pdf_id, page_number, viewer_id, listened_ms, tab_hidden_ms, duration_ms, completed, updated_at)
+     VALUES (?,?,?,?,?,?,?,?)`,
+  ).run(pdfId, pageNumber, viewerId, opts.listened_ms ?? 0, 0, opts.duration_ms ?? 10000, opts.completed ? 1 : 0, t);
+}
+
+test('GET /watch-progress/details returns per-viewer rows for the owner', async () => {
+  seedWatchProgressPdf('wp-details-01', 'public');
+  insertWatchRow('wp-details-01', 1, 'alice', { listened_ms: 9000, completed: true });
+  insertWatchRow('wp-details-01', 2, 'alice', { listened_ms: 3000, completed: false });
+  insertWatchRow('wp-details-01', 1, 'bob', { listened_ms: 1000, completed: false });
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({ method: 'GET', url: '/api/pdfs/wp-details-01/watch-progress/details', headers: OWNER_HEADERS });
+    assert.equal(resp.statusCode, 200, `expected 200 but got ${resp.statusCode}: ${resp.body.slice(0, 200)}`);
+    const body = resp.json() as { records: Array<{ viewer_id: string; page_number: number; completed: boolean }> };
+    assert.equal(body.records.length, 3);
+    const alice = body.records.filter((r) => r.viewer_id === 'alice');
+    assert.equal(alice.length, 2);
+    assert.equal(alice[0].completed, true);
+  } finally {
+    db.prepare(`DELETE FROM page_watch_progress WHERE pdf_id = ?`).run('wp-details-01');
+    await app.close();
+  }
+});
+
+test('GET /watch-progress/details?page=N restricts to a single slide', async () => {
+  seedWatchProgressPdf('wp-details-02', 'public');
+  insertWatchRow('wp-details-02', 1, 'alice');
+  insertWatchRow('wp-details-02', 2, 'alice');
+  insertWatchRow('wp-details-02', 2, 'bob');
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({ method: 'GET', url: '/api/pdfs/wp-details-02/watch-progress/details?page=2', headers: OWNER_HEADERS });
+    assert.equal(resp.statusCode, 200);
+    const body = resp.json() as { records: Array<{ viewer_id: string; page_number: number }> };
+    assert.equal(body.records.length, 2);
+    assert.ok(body.records.every((r) => r.page_number === 2), 'only page 2 rows');
+  } finally {
+    db.prepare(`DELETE FROM page_watch_progress WHERE pdf_id = ?`).run('wp-details-02');
+    await app.close();
+  }
+});
+
+test('GET /watch-progress/details is forbidden for a non-editor (protects viewer identity)', async () => {
+  seedWatchProgressPdf('wp-details-03', 'public');
+  insertWatchRow('wp-details-03', 1, 'alice');
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({ method: 'GET', url: '/api/pdfs/wp-details-03/watch-progress/details', headers: OTHER_HEADERS });
+    assert.equal(resp.statusCode, 403);
+  } finally {
+    db.prepare(`DELETE FROM page_watch_progress WHERE pdf_id = ?`).run('wp-details-03');
+    await app.close();
+  }
+});
