@@ -6,6 +6,7 @@ import {
   groupWatchRecordsByViewer,
   watchRecordListenedPercent,
   formatWatchDuration,
+  formatWatchTimestamp,
 } from '../../lib/watchProgress';
 import { useOverlayDismiss } from '../../components/useOverlayDismiss';
 
@@ -109,6 +110,7 @@ export function WatchRecordsDialog({ pdfId, page, onClose }: WatchRecordsDialogP
                         <th className="px-2 py-1 font-normal">{t('play.watchRecords.colListened')}</th>
                         <th className="px-2 py-1 font-normal">{t('play.watchRecords.colCompletion')}</th>
                         <th className="px-2 py-1 text-center font-normal">{t('play.watchRecords.colDone')}</th>
+                        <th className="px-2 py-1 font-normal">{t('play.watchRecords.colTime')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -127,6 +129,9 @@ export function WatchRecordsDialog({ pdfId, page, onClose }: WatchRecordsDialogP
                               ) : (
                                 <span className="text-slate-600">–</span>
                               )}
+                            </td>
+                            <td className="px-2 py-1 whitespace-nowrap font-mono text-slate-400" title={r.updated_at}>
+                              {formatWatchTimestamp(r.updated_at)}
                             </td>
                           </tr>
                         );

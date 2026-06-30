@@ -1425,6 +1425,7 @@ export const en = {
   'play.watchRecords.colListened': 'Listened',
   'play.watchRecords.colCompletion': 'Completion',
   'play.watchRecords.colDone': 'Done',
+  'play.watchRecords.colTime': 'Time',
   'play.sidebar.loading': 'Loading…',
   'play.sidebar.noImage': 'No image',
   'play.sidebar.selectedRegenerate': '{count} selected page(s) will regenerate (Ctrl/Shift click)',
