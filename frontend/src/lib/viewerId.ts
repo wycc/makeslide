@@ -13,3 +13,12 @@ export function getOrCreateViewerId(): string {
   window.localStorage.setItem(STORAGE_KEY, next);
   return next;
 }
+
+/**
+ * 決定觀看記錄要用的 viewer_id：優先採用使用者設定的 user_code，沒有（空字串／
+ * 只有空白）才退回匿名 viewer id。純函式，方便測試；非同步取得 user_code 的部分
+ * 留在 useWatchProgress（見 resolveConfiguredUserCode）。
+ */
+export function pickViewerId(configuredUserCode: string, anonymousFallbackId: string): string {
+  return configuredUserCode.trim() || anonymousFallbackId;
+}

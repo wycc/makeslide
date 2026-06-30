@@ -2,7 +2,8 @@ import { useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 import { reportWatchProgress } from '../../lib/api';
 import { evaluateWatchCompletion } from '../../lib/watchProgress';
-import { getOrCreateViewerId } from '../../lib/viewerId';
+import { getOrCreateViewerId, pickViewerId } from '../../lib/viewerId';
+import { resolveConfiguredUserCode } from './utils';
 import { createSequentialQueue } from '../../lib/saveQueue';
 
 const TICK_MS = 1000;
@@ -35,9 +36,19 @@ interface PendingReport {
  * UI 錯誤訊息——這是背景被動追蹤，不是使用者主動觸發的操作。
  */
 export function useWatchProgress({ pdfId, pageNumber, audioRef, durationMs }: UseWatchProgressParams): void {
+  // 觀看記錄的 viewer_id 優先採用使用者設定的 user_code（比照投票），沒有才退回匿名
+  // viewer id。user_code 需非同步解析，故先暫存匿名 id 當保底，再以 viewerIdReadyRef
+  // 標記解析完成；回報任務送出前 await 此 promise，避免同一人前幾頁被記成匿名 id、
+  // 解析完成後又變成 user_code 而在記錄中被當成兩個不同的觀眾。
   const viewerIdRef = useRef<string>('');
-  if (!viewerIdRef.current) {
-    viewerIdRef.current = getOrCreateViewerId();
+  const viewerIdReadyRef = useRef<Promise<void> | null>(null);
+  if (!viewerIdReadyRef.current) {
+    const fallbackId = getOrCreateViewerId();
+    viewerIdRef.current = fallbackId;
+    viewerIdReadyRef.current = (async () => {
+      const code = await resolveConfiguredUserCode();
+      viewerIdRef.current = pickViewerId(code, fallbackId);
+    })();
   }
 
   const listenedMsRef = useRef(0);
@@ -61,6 +72,8 @@ export function useWatchProgress({ pdfId, pageNumber, audioRef, durationMs }: Us
   const sendReportRef = useRef(
     createSequentialQueue(async (report: PendingReport) => {
       try {
+        // 等 user_code 解析完成再送，確保整個 session 都用同一個 viewer_id。
+        await viewerIdReadyRef.current;
         const completed = evaluateWatchCompletion({
           onEndedFired: report.onEndedFired,
           listenedMs: report.listenedMs,
