@@ -98,6 +98,22 @@ export function figuresDir(pdfId: string): string {
   return path.join(pdfDir(pdfId), 'figures');
 }
 
+/** Directory holding proctoring video recordings captured while students take a quiz. */
+export function quizRecordingsDir(pdfId: string): string {
+  return path.join(pdfDir(pdfId), 'quiz-recordings');
+}
+
+/** Path for a single quiz recording file. `filename` must already be sanitized by the caller. */
+export function quizRecordingPath(pdfId: string, filename: string): string {
+  const dir = quizRecordingsDir(pdfId);
+  const joined = path.join(dir, filename);
+  const normalizedDir = path.resolve(dir) + path.sep;
+  if (!joined.startsWith(normalizedDir)) {
+    throw new Error(`Refusing to resolve quiz recording path outside its directory: ${filename}`);
+  }
+  return joined;
+}
+
 export function figureManifestPath(pdfId: string): string {
   return path.join(pdfDir(pdfId), 'figures.json');
 }

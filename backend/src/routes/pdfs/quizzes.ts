@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
 import { ShareTokenParamSchema, getShareToken, hasShareAccess } from './share';
 import { getPdfPermissionRow, canReadPdf, canEditPdf, canDestructivelyEditPdf } from './permissions';
 import type { FastifyInstance } from 'fastify';
@@ -9,7 +10,8 @@ import { getAccountDisplayNames } from '../../services/accountProfiles';
 import { calcQuestionScore, normalizeQuestionScores } from '../../services/quizScoring';
 import { sessionSub } from '../auth';
 import { callChatJSON } from '../../services/openai';
-import { pageScriptPath, pageTextPath } from '../../services/storage';
+import { pageScriptPath, pageTextPath, quizRecordingsDir, quizRecordingPath } from '../../services/storage';
+import { quizRecordingFilename } from '../../services/quizRecording';
 import type { PdfRow } from '../../types';
 import { errorResponse, IdParamSchema } from './shared';
 
@@ -146,6 +148,14 @@ interface QuizSetRow {
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+/** Reads a text value from a @fastify/multipart field (mirrors upload.ts's helper). */
+function multipartFieldValue(field: unknown): string | undefined {
+  const first = Array.isArray(field) ? field[0] : field;
+  if (!first || typeof first !== 'object') return undefined;
+  const value = (first as { value?: unknown }).value;
+  return typeof value === 'string' ? value : undefined;
 }
 
 function rowToQuiz(row: QuizSetRow) {
@@ -447,5 +457,115 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
       .prepare(`SELECT id, pdf_id, title, prompt, questions_json, time_limit_seconds, shuffle_questions, created_at, updated_at FROM quiz_sets WHERE id = ?`)
       .get(result.lastInsertRowid) as QuizSetRow;
     return reply.code(201).send(rowToQuiz(newRow));
+  });
+
+  // 學生作答期間的監考錄影上傳（multipart）。與作答提交同樣的存取守門。
+  app.post('/api/pdfs/:id/quizzes/:quizId/recordings', async (request, reply) => {
+    const parsed = QuizParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid quiz parameters'));
+    if (!request.isMultipart()) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Expected multipart/form-data'));
+    const pdfRow = getPdfPermissionRow(parsed.data.id);
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
+    if (!hasShareAccess(request, parsed.data.id) && !canReadPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限上傳此測驗的錄影'));
+    }
+    const quiz = db.prepare(`SELECT id FROM quiz_sets WHERE id = ? AND pdf_id = ?`).get(parsed.data.quizId, parsed.data.id) as { id: number } | undefined;
+    if (!quiz) return reply.code(404).send(errorResponse('QUIZ_NOT_FOUND', `Quiz ${parsed.data.quizId} not found`));
+
+    let file;
+    try {
+      file = await request.file();
+    } catch {
+      return reply.code(413).send(errorResponse('FILE_TOO_LARGE', '錄影檔超過大小上限'));
+    }
+    if (!file) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Missing recording file'));
+    const sessionId = multipartFieldValue(file.fields.session_id);
+    const clientId = multipartFieldValue(file.fields.client_id);
+    const code = multipartFieldValue(file.fields.code)?.trim() || null;
+    if (!sessionId || !clientId) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Missing session_id or client_id'));
+
+    let buffer: Buffer;
+    try {
+      buffer = await file.toBuffer();
+    } catch {
+      return reply.code(413).send(errorResponse('FILE_TOO_LARGE', '錄影檔超過大小上限'));
+    }
+    if (buffer.length === 0) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Empty recording'));
+
+    const fileName = quizRecordingFilename(parsed.data.quizId, sessionId, clientId);
+    await fs.mkdir(quizRecordingsDir(parsed.data.id), { recursive: true });
+    await fs.writeFile(quizRecordingPath(parsed.data.id, fileName), buffer);
+
+    const now = nowIso();
+    const mime = file.mimetype ?? null;
+    const sub = sessionSub(request);
+    db.prepare(
+      `INSERT INTO quiz_recordings (pdf_id, quiz_id, session_id, client_id, code, sub, file_name, size_bytes, mime_type, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (session_id, client_id) DO UPDATE SET
+         code = excluded.code,
+         sub = excluded.sub,
+         file_name = excluded.file_name,
+         size_bytes = excluded.size_bytes,
+         mime_type = excluded.mime_type,
+         updated_at = excluded.updated_at`,
+    ).run(parsed.data.id, parsed.data.quizId, sessionId, clientId, code, sub, fileName, buffer.length, mime, now, now);
+    return reply.code(201).send({ ok: true, size_bytes: buffer.length });
+  });
+
+  // 老師檢視某測驗的所有監考錄影清單。
+  app.get('/api/pdfs/:id/quizzes/:quizId/recordings', async (request, reply) => {
+    const parsed = QuizParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid quiz parameters'));
+    const pdfRow = getPdfPermissionRow(parsed.data.id);
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視測驗錄影'));
+    const rows = db
+      .prepare(
+        `SELECT id, session_id, client_id, code, sub, size_bytes, mime_type, created_at, updated_at
+         FROM quiz_recordings WHERE quiz_id = ? AND pdf_id = ? ORDER BY updated_at DESC`,
+      )
+      .all(parsed.data.quizId, parsed.data.id) as Array<{
+        id: number; session_id: string; client_id: string; code: string | null; sub: string | null;
+        size_bytes: number; mime_type: string | null; created_at: string; updated_at: string;
+      }>;
+    const names = getAccountDisplayNames(rows.map((r) => r.sub).filter((s): s is string => Boolean(s)));
+    return reply.send({
+      recordings: rows.map((r) => ({
+        id: r.id,
+        session_id: r.session_id,
+        client_id: r.client_id,
+        code: r.code,
+        display_name: r.sub ? names.get(r.sub) ?? null : null,
+        size_bytes: r.size_bytes,
+        mime_type: r.mime_type,
+        created_at: r.created_at,
+        updated_at: r.updated_at,
+      })),
+    });
+  });
+
+  // 老師下載/串流單一錄影檔。
+  app.get('/api/pdfs/:id/quizzes/:quizId/recordings/:recordingId/file', async (request, reply) => {
+    const parsed = QuizParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid quiz parameters'));
+    const recordingId = Number((request.params as { recordingId?: string }).recordingId);
+    if (!Number.isInteger(recordingId) || recordingId <= 0) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid recording id'));
+    const pdfRow = getPdfPermissionRow(parsed.data.id);
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限下載測驗錄影'));
+    const row = db
+      .prepare(`SELECT file_name, mime_type FROM quiz_recordings WHERE id = ? AND quiz_id = ? AND pdf_id = ?`)
+      .get(recordingId, parsed.data.quizId, parsed.data.id) as { file_name: string; mime_type: string | null } | undefined;
+    if (!row) return reply.code(404).send(errorResponse('RECORDING_NOT_FOUND', `Recording ${recordingId} not found`));
+    const filePath = quizRecordingPath(parsed.data.id, row.file_name);
+    try {
+      await fs.access(filePath);
+    } catch {
+      return reply.code(404).send(errorResponse('RECORDING_NOT_FOUND', 'Recording file missing on disk'));
+    }
+    reply.header('Content-Type', row.mime_type || 'video/webm');
+    reply.header('Content-Disposition', `inline; filename="${row.file_name}"`);
+    return reply.send(createReadStream(filePath));
   });
 }
