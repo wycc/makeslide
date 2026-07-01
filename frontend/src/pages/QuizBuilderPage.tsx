@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useI18n } from '../i18n';
+import { QuizProctorGate } from '../components/QuizProctorGate';
 import { formatRelativeTime, buildRelativeTimeLabels } from '../lib/relativeTime';
 import { summarizeQuizProgress } from '../lib/quizProgress';
 import { interpolateTemplate } from '../lib/interpolateTemplate';
@@ -1000,7 +1001,15 @@ export default function QuizBuilderPage() {
         </aside>
         )}
         <section className="space-y-4">
-          {isFollowerTesting && activeQuiz ? renderQuizTakingView(activeQuiz) : null}
+          {isFollowerTesting && activeQuiz ? (
+            <QuizProctorGate
+              active={!syncQuizShowAnswers}
+              sessionKey={`${activeQuiz.id}:${syncQuizSessionId ?? ''}`}
+              onForceSubmit={submitFollowerAttempt}
+            >
+              {renderQuizTakingView(activeQuiz)}
+            </QuizProctorGate>
+          ) : null}
           {historyQuizId != null ? (
             <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
               <div className="flex items-center justify-between gap-2">
