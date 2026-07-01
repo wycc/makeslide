@@ -558,6 +558,8 @@ export interface QuizSet {
   shuffle_questions?: boolean;
   /** 是否公開：唯讀學生只看得到 public 的（或正在進行的）測驗。預設 false，老師可預先備題。 */
   is_public?: boolean;
+  /** 作答時是否開相機錄影監考。預設 true；關閉則不請求相機、不錄影、不顯示錄影指示。 */
+  record_camera?: boolean;
   created_at: string;
   updated_at: string;
 }
