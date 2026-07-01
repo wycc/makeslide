@@ -90,7 +90,7 @@ function SimilarPagesSection() {
 function CommentsSection() {
   const { t } = useI18n();
   const relativeTimeLabels = buildRelativeTimeLabels(t);
-  const { pdfId, currentPage, setCurrentIdx } = usePlayPageContext();
+  const { pdfId, currentPage, setCurrentIdx, currentShareToken } = usePlayPageContext();
   const [showAll, setShowAll] = useState(false);
   const [comments, setComments] = useState<PageComment[]>([]);
   const [filterQuery, setFilterQuery] = useState('');
@@ -105,7 +105,7 @@ function CommentsSection() {
 
   const loadComments = useCallback(() => {
     if (!pdfId || !currentPage) return;
-    const fetcher = showAll ? listAllComments(pdfId) : listPageComments(pdfId, currentPage.page_number);
+    const fetcher = showAll ? listAllComments(pdfId, currentShareToken) : listPageComments(pdfId, currentPage.page_number, currentShareToken);
     fetcher.then(setComments).catch(() => setComments([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pdfId, currentPage?.page_number, showAll]);
@@ -120,7 +120,7 @@ function CommentsSection() {
     setSubmitting(true);
     setError(null);
     try {
-      const created = await createPageComment(pdfId, currentPage.page_number, author.trim() || 'anonymous', trimmedText);
+      const created = await createPageComment(pdfId, currentPage.page_number, author.trim() || 'anonymous', trimmedText, currentShareToken);
       setComments((prev) => [...prev, created]);
       setStoredCommentAuthor(author);
       setText('');
