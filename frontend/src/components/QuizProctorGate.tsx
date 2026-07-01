@@ -6,6 +6,7 @@ import type { MdBlock, MdInline } from '../lib/markdownLite';
 import {
   DEFAULT_MAX_VIOLATIONS,
   evaluateViolation,
+  isQuizFinished,
   isQuizLockedOut,
   isQuizStarted,
   markQuizLockedOut,
@@ -17,7 +18,7 @@ import {
  *  避免把「切換全螢幕」這個轉場本身誤判成離開測驗。 */
 const GRACE_MS = 900;
 
-type Phase = 'rules' | 'testing' | 'locked';
+type Phase = 'rules' | 'testing' | 'locked' | 'completed';
 
 function renderInline(inline: MdInline[]): ReactNode {
   return inline.map((seg, i) =>
@@ -100,7 +101,13 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
     violationCountRef.current = 0;
     lastViolationAtRef.current = null;
     setShowWarning(false);
-    setPhase(isQuizLockedOut(sessionKey) || isQuizStarted(sessionKey) ? 'locked' : 'rules');
+    setPhase(
+      isQuizFinished(sessionKey)
+        ? 'completed'
+        : isQuizLockedOut(sessionKey) || isQuizStarted(sessionKey)
+          ? 'locked'
+          : 'rules',
+    );
   }, [sessionKey]);
 
   // 載入可客製化的規則 markdown（相對 document.baseURI，兼容子路徑與 Electron file://）。
@@ -180,7 +187,13 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
 
   return (
     <div ref={containerRef} className="bg-slate-950 [&:fullscreen]:h-screen [&:fullscreen]:overflow-y-auto">
-      {phase === 'locked' ? (
+      {phase === 'completed' ? (
+        <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-8 text-center">
+          <div className="text-4xl">✅</div>
+          <h2 className="text-lg font-bold text-emerald-100">{t('quiz.proctor.completedTitle')}</h2>
+          <p className="max-w-md text-sm text-emerald-100/80">{t('quiz.proctor.completedBody')}</p>
+        </div>
+      ) : phase === 'locked' ? (
         <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 rounded-xl border border-rose-500/40 bg-rose-500/10 p-8 text-center">
           <div className="text-4xl">🔒</div>
           <h2 className="text-lg font-bold text-rose-100">{t('quiz.proctor.lockedTitle')}</h2>

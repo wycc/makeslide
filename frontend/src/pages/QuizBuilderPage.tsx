@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useI18n } from '../i18n';
 import { QuizProctorGate } from '../components/QuizProctorGate';
+import { markQuizFinished } from '../lib/quizProctor';
 import { useQuizRecorder } from '../hooks/useQuizRecorder';
 import { formatRelativeTime, buildRelativeTimeLabels } from '../lib/relativeTime';
 import { summarizeQuizProgress } from '../lib/quizProgress';
@@ -315,12 +316,14 @@ export default function QuizBuilderPage() {
   }, [savedQuizzes]);
 
   // 學生主動「完成作答並離開」：交卷後離開作答頁。離開會卸載監考門檻，其 onEnd 會停止錄影
-  // 並上傳、瀏覽器亦會自動退出全螢幕；因「已開始」旗標仍在，重新進入同一測驗會被擋下。
+  // 並上傳、瀏覽器亦會自動退出全螢幕。標記本次 session 已完成，使 PlayPage 不再自動導回作答頁、
+  // 重新進入亦顯示「已完成」。
   const handleFinishQuiz = useCallback(() => {
     if (!pdfId) return;
+    if (activeQuiz) markQuizFinished(`${activeQuiz.id}:${syncQuizSessionId ?? ''}`);
     submitFollowerAttempt();
     navigate(`/play/${encodeURIComponent(pdfId)}?fullscreen=1`);
-  }, [pdfId, submitFollowerAttempt, navigate]);
+  }, [pdfId, activeQuiz, syncQuizSessionId, submitFollowerAttempt, navigate]);
 
   useEffect(() => {
     if (syncRole !== 'follower' || !syncQuizShowAnswers) return;
@@ -763,13 +766,15 @@ export default function QuizBuilderPage() {
     const effectiveQuestions = shuffledQuestionsForTaking ?? quiz.questions;
     return (
     <div className="rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/10 p-4">
-      {/* 監考自拍預覽：作答期間常駐右下角，讓學生確認相機開著、正在錄影。 */}
+      {/* 監考自拍預覽：作答期間常駐右下角，縮成小圖示避免擋到題目；紅點表示錄影中，
+          hover 顯示「錄影中」文字。仍保留 video ref 供錄影使用。 */}
       {!syncQuizShowAnswers ? (
-        <div className="fixed bottom-3 right-3 z-[210] w-32 overflow-hidden rounded-lg border border-rose-500/60 bg-black shadow-lg sm:w-40">
-          <video ref={quizRecorder.videoRef} muted playsInline className="h-auto w-full -scale-x-100" />
-          <span className="absolute left-1 top-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-rose-300">
-            {t('quiz.proctor.recordingBadge')}
-          </span>
+        <div
+          className="fixed bottom-3 right-3 z-[210] h-12 w-12 overflow-hidden rounded-full border-2 border-rose-500/70 bg-black shadow-lg"
+          title={t('quiz.proctor.recordingBadge')}
+        >
+          <video ref={quizRecorder.videoRef} muted playsInline className="h-full w-full -scale-x-100 object-cover" />
+          <span className="absolute right-0.5 top-0.5 h-2 w-2 animate-pulse rounded-full bg-rose-500 ring-1 ring-black/60" />
         </div>
       ) : null}
       {syncQuizShowAnswers ? (() => {
@@ -1020,7 +1025,7 @@ export default function QuizBuilderPage() {
                   >
                     {t('quiz.history')}
                   </button>
-                  {canEditQuiz ? (
+                  {detail?.is_owner ? (
                     <button
                       type="button"
                       onClick={() => void loadQuizRecordings(quiz.id)}
@@ -1046,7 +1051,7 @@ export default function QuizBuilderPage() {
                           value=""
                           disabled={copyingQuizId === quiz.id}
                           onChange={(e) => { if (e.target.value) void handleCopyQuizTo(quiz, e.target.value); }}
-                          className="rounded border border-sky-500/50 bg-sky-500/15 px-1 py-1 text-xs text-sky-100 disabled:opacity-40"
+                          className="max-w-[8rem] truncate rounded border border-sky-500/50 bg-sky-500/15 px-1 py-1 text-xs text-sky-100 disabled:opacity-40"
                         >
                           <option value="">{copyingQuizId === quiz.id ? '…' : t('quiz.copyTo')}</option>
                           {allPdfs.filter((p) => p.id !== pdfId).map((p) => (

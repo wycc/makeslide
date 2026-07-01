@@ -56,6 +56,22 @@ export function canDestructivelyEditPdf(
 }
 
 /**
+ * Owner-only rule for sensitive resources that even public_editable collaborators
+ * must not access (e.g. students' proctoring camera recordings):
+ * - ownerless PDFs (legacy / anonymous uploads) have no owner to restrict to, so
+ *   they stay open — consistent with the other helpers' `!owner_sub` branch.
+ * - otherwise only the authenticated owner qualifies; share-based editors and
+ *   public visibility do NOT grant access.
+ */
+export function isPdfOwner(
+  sub: string | null,
+  row: Pick<PdfRow, 'owner_sub'>,
+): boolean {
+  if (!row.owner_sub) return true;
+  return Boolean(sub) && row.owner_sub === sub;
+}
+
+/**
  * Fetch just the owner/visibility columns used for permission checks, or
  * undefined when the PDF does not exist. Previously duplicated verbatim in 10
  * route files. (report.ts keeps its own variant that also selects `title`.)

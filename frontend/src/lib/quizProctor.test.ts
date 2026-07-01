@@ -7,6 +7,8 @@ import {
   markQuizLockedOut,
   isQuizStarted,
   markQuizStarted,
+  isQuizFinished,
+  markQuizFinished,
   DEFAULT_MAX_VIOLATIONS,
 } from './quizProctor';
 
@@ -54,6 +56,23 @@ test('started flag round-trips and is independent from lockout', () => {
   assert.equal(isQuizStarted(key, storage), true);
   // started 與 lockout 使用不同前綴、互不影響。
   assert.equal(isQuizLockedOut(key, storage), false);
+});
+
+test('finished flag round-trips and is independent from started/lockout', () => {
+  const map = new Map<string, string>();
+  const storage = {
+    getItem: (k: string) => map.get(k) ?? null,
+    setItem: (k: string, v: string) => { map.set(k, v); },
+  };
+  const key = 'quiz-3:session-9';
+  assert.equal(isQuizFinished(key, storage), false);
+  markQuizFinished(key, storage);
+  assert.equal(isQuizFinished(key, storage), true);
+  // finished 使用獨立前綴，不影響 started / lockout 判斷。
+  assert.equal(isQuizStarted(key, storage), false);
+  assert.equal(isQuizLockedOut(key, storage), false);
+  // 不同 session 不受影響。
+  assert.equal(isQuizFinished('quiz-3:session-other', storage), false);
 });
 
 test('lockout helpers no-op safely with an empty session key', () => {
