@@ -179,7 +179,7 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
   if (!active) return <>{children}</>;
 
   return (
-    <div ref={containerRef} className="bg-slate-950">
+    <div ref={containerRef} className="bg-slate-950 [&:fullscreen]:h-screen [&:fullscreen]:overflow-y-auto">
       {phase === 'locked' ? (
         <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 rounded-xl border border-rose-500/40 bg-rose-500/10 p-8 text-center">
           <div className="text-4xl">🔒</div>
