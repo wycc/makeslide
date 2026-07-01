@@ -284,3 +284,39 @@ test('page-comments: PATCH returns 404 for unknown comment', async () => {
     await app.close();
   }
 });
+
+test('page-comments: a share-link viewer of a PRIVATE pdf can read and post comments', async () => {
+  const app = await buildApp();
+  const SHARE_ID = 'cmtest-share-01';
+  const TOKEN = 'sharetok_ABCDEFGH1234';
+  try {
+    seedPdf(SHARE_ID, { ownerSub: 'owner-1', visibility: 'private' });
+    const now = nowIso();
+    db.prepare(`INSERT OR REPLACE INTO pdf_shares (token, pdf_id, access, created_at, updated_at) VALUES (?,?,?,?,?)`)
+      .run(TOKEN, SHARE_ID, 'read_only', now, now);
+
+    // Without the token, a non-owner is denied.
+    const denied = await app.inject({ method: 'GET', url: `/api/pdfs/${SHARE_ID}/pages/1/comments`, headers: OTHER_HEADERS });
+    assert.equal(denied.statusCode, 403);
+
+    // A non-owner posts a comment via the share link.
+    const created = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${SHARE_ID}/pages/1/comments?share=${TOKEN}`,
+      headers: { ...OTHER_HEADERS, 'content-type': 'application/json' },
+      payload: JSON.stringify({ author: 'student', text: 'hi from share' }),
+    });
+    assert.equal(created.statusCode, 201);
+
+    // Another share-link viewer sees that comment.
+    const listed = await app.inject({ method: 'GET', url: `/api/pdfs/${SHARE_ID}/comments?share=${TOKEN}` });
+    assert.equal(listed.statusCode, 200);
+    const body = JSON.parse(listed.body) as { comments: Array<{ text: string }> };
+    assert.equal(body.comments.length, 1);
+    assert.equal(body.comments[0]?.text, 'hi from share');
+  } finally {
+    db.prepare(`DELETE FROM pdf_shares WHERE pdf_id = ?`).run(SHARE_ID);
+    cleanup(SHARE_ID);
+    await app.close();
+  }
+});
