@@ -1322,6 +1322,7 @@ export async function updatePlaybackSyncState(
     quiz_mode?: boolean;
     active_quiz_id?: number | null;
     quiz_show_answers?: boolean;
+    quiz_session_reset?: boolean;
     cursor_x?: number | null;
     cursor_y?: number | null;
     drawing_page_number?: number | null;

@@ -67,6 +67,8 @@ export interface QuizProctorGateProps {
   onBeforeStart?: () => Promise<void>;
   /** 測驗結束（自動交卷、老師公布答案或離開）時執行（例如停止錄影並上傳）。 */
   onEnd?: () => void;
+  /** 學生已按「完成作答並離開」：切到「已完成」畫面並停留（停止監控、退出全螢幕、結束錄影）。 */
+  finished?: boolean;
 }
 
 /**
@@ -77,7 +79,7 @@ export interface QuizProctorGateProps {
  * 全螢幕採 best-effort：在不支援 Element.requestFullscreen 的行動瀏覽器上，仍以
  * visibilitychange/blur 監控切換 App 的行為。
  */
-export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, maxViolations = DEFAULT_MAX_VIOLATIONS, onBeforeStart, onEnd }: QuizProctorGateProps) {
+export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, maxViolations = DEFAULT_MAX_VIOLATIONS, onBeforeStart, onEnd, finished = false }: QuizProctorGateProps) {
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const [phase, setPhase] = useState<Phase>('rules');
@@ -182,7 +184,19 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
   // 元件卸載（例如老師直接結束測驗使作答畫面消失）時，仍結束錄影並上傳。
   useEffect(() => () => { onEndRef.current?.(); }, []);
 
-  // 不需監考時直接顯示作答內容（例如老師已公布答案的檢視）。
+  // 學生按「完成作答並離開」：切到「已完成」畫面並停留（不離開作答頁）。停止監控（phase 非
+  // testing 即卸載事件）、退出全螢幕、結束錄影上傳。之後老師若公布答案，active 轉 false 會直接
+  // 顯示答案（見下方 !active 分支）。
+  useEffect(() => {
+    if (finished && phaseRef.current !== 'completed') {
+      setShowWarning(false);
+      setPhase('completed');
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      onEndRef.current?.();
+    }
+  }, [finished]);
+
+  // 不需監考時直接顯示作答內容（例如老師已公布答案的檢視——包含已完成作答者也看得到答案）。
   if (!active) return <>{children}</>;
 
   return (
