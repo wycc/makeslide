@@ -1408,6 +1408,46 @@ export async function fetchQuizAttempts(id: string, quizId: number): Promise<Qui
   return (await resp.json()) as QuizAttemptsResponse;
 }
 
+export async function uploadQuizRecording(
+  id: string,
+  quizId: number,
+  payload: { client_id: string; session_id: string; code?: string | null; blob: Blob },
+): Promise<{ ok: boolean; size_bytes: number }> {
+  const form = new FormData();
+  form.append('session_id', payload.session_id);
+  form.append('client_id', payload.client_id);
+  if (payload.code) form.append('code', payload.code);
+  form.append('recording', payload.blob, 'recording.webm');
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/quizzes/${quizId}/recordings`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { ok: boolean; size_bytes: number };
+}
+
+export interface QuizRecording {
+  id: number;
+  session_id: string;
+  client_id: string;
+  code: string | null;
+  display_name: string | null;
+  size_bytes: number;
+  mime_type: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function fetchQuizRecordings(id: string, quizId: number): Promise<QuizRecording[]> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/quizzes/${quizId}/recordings`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return ((await resp.json()) as { recordings: QuizRecording[] }).recordings;
+}
+
+export function quizRecordingFileUrl(id: string, quizId: number, recordingId: number): string {
+  return `api/pdfs/${encodeURIComponent(id)}/quizzes/${quizId}/recordings/${recordingId}/file`;
+}
+
 export async function answerSyncFollowerQuestionsWithAi(
   id: string,
   clientId: string,

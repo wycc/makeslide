@@ -62,6 +62,10 @@ export interface QuizProctorGateProps {
   children: ReactNode;
   /** 允許的違規次數上限（預設 1）。 */
   maxViolations?: number;
+  /** 按下同意後、進入測驗前執行（例如請求相機並開始錄影）。reject 則不進入測驗、顯示錯誤。 */
+  onBeforeStart?: () => Promise<void>;
+  /** 測驗結束（自動交卷、老師公布答案或離開）時執行（例如停止錄影並上傳）。 */
+  onEnd?: () => void;
 }
 
 /**
@@ -72,18 +76,23 @@ export interface QuizProctorGateProps {
  * 全螢幕採 best-effort：在不支援 Element.requestFullscreen 的行動瀏覽器上，仍以
  * visibilitychange/blur 監控切換 App 的行為。
  */
-export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, maxViolations = DEFAULT_MAX_VIOLATIONS }: QuizProctorGateProps) {
+export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, maxViolations = DEFAULT_MAX_VIOLATIONS, onBeforeStart, onEnd }: QuizProctorGateProps) {
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const [phase, setPhase] = useState<Phase>('rules');
   const [rulesBlocks, setRulesBlocks] = useState<MdBlock[] | null>(null);
   const [rulesFailed, setRulesFailed] = useState(false);
   const [showWarning, setShowWarning] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
   const violationCountRef = useRef(0);
   const lastViolationAtRef = useRef<number | null>(null);
   const graceUntilRef = useRef(0);
   const phaseRef = useRef<Phase>('rules');
   phaseRef.current = phase;
+  // 讓 unmount cleanup 取用最新的 onEnd，而不必納入 effect 依賴。
+  const onEndRef = useRef(onEnd);
+  onEndRef.current = onEnd;
 
   // 依 sessionKey 決定初始 phase：已鎖定或先前已由其他頁面實例開始過（重整後重新進入）
   // 直接進入 locked，否則從規則畫面開始。
@@ -127,6 +136,7 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
       setPhase('locked');
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
       onForceSubmit();
+      onEndRef.current?.();
     } else {
       setShowWarning(true);
     }
@@ -148,12 +158,22 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
     };
   }, [phase, registerViolation]);
 
-  // 老師公布答案或測驗結束（active 轉 false）時，若仍在全螢幕則退出。
+  // 老師公布答案或測驗結束（active 轉 false）時，退出全螢幕並結束錄影上傳。
+  const endedForInactiveRef = useRef(false);
   useEffect(() => {
-    if (!active && document.fullscreenElement) {
-      document.exitFullscreen().catch(() => {});
+    if (!active) {
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      if (!endedForInactiveRef.current) {
+        endedForInactiveRef.current = true;
+        onEndRef.current?.();
+      }
+    } else {
+      endedForInactiveRef.current = false;
     }
   }, [active]);
+
+  // 元件卸載（例如老師直接結束測驗使作答畫面消失）時，仍結束錄影並上傳。
+  useEffect(() => () => { onEndRef.current?.(); }, []);
 
   // 不需監考時直接顯示作答內容（例如老師已公布答案的檢視）。
   if (!active) return <>{children}</>;
@@ -179,15 +199,29 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
               <RulesMarkdown blocks={rulesBlocks} />
             )}
           </div>
+          {startError ? <p className="mb-2 text-sm text-rose-300">{t('quiz.proctor.cameraError')}</p> : null}
           <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-slate-400">{t('quiz.proctor.agreeHint')}</p>
             <button
               type="button"
-              onClick={() => { markQuizStarted(sessionKey); enterFullscreen(); setPhase('testing'); }}
-              disabled={rulesBlocks === null}
+              onClick={async () => {
+                setStartError(null);
+                setStarting(true);
+                try {
+                  if (onBeforeStart) await onBeforeStart();
+                  markQuizStarted(sessionKey);
+                  enterFullscreen();
+                  setPhase('testing');
+                } catch {
+                  setStartError('start_failed');
+                } finally {
+                  setStarting(false);
+                }
+              }}
+              disabled={rulesBlocks === null || starting}
               className="shrink-0 rounded-md border border-emerald-500/50 bg-emerald-500/20 px-5 py-2.5 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/30 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {t('quiz.proctor.agreeButton')}
+              {starting ? t('quiz.proctor.starting') : t('quiz.proctor.agreeButton')}
             </button>
           </div>
         </div>
