@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { ShareTokenParamSchema, getShareToken, hasShareAccess } from './share';
-import { getPdfPermissionRow, canReadPdf, canEditPdf, canDestructivelyEditPdf } from './permissions';
+import { getPdfPermissionRow, canReadPdf, canEditPdf, canDestructivelyEditPdf, isPdfOwner } from './permissions';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
@@ -519,7 +519,7 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid quiz parameters'));
     const pdfRow = getPdfPermissionRow(parsed.data.id);
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
-    if (!canEditPdf(sessionSub(request), pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視測驗錄影'));
+    if (!isPdfOwner(sessionSub(request), pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視測驗錄影'));
     const rows = db
       .prepare(
         `SELECT id, session_id, client_id, code, sub, size_bytes, mime_type, created_at, updated_at
@@ -553,7 +553,7 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
     if (!Number.isInteger(recordingId) || recordingId <= 0) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid recording id'));
     const pdfRow = getPdfPermissionRow(parsed.data.id);
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
-    if (!canEditPdf(sessionSub(request), pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限下載測驗錄影'));
+    if (!isPdfOwner(sessionSub(request), pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限下載測驗錄影'));
     const row = db
       .prepare(`SELECT file_name, mime_type FROM quiz_recordings WHERE id = ? AND quiz_id = ? AND pdf_id = ?`)
       .get(recordingId, parsed.data.quizId, parsed.data.id) as { file_name: string; mime_type: string | null } | undefined;

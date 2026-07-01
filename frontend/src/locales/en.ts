@@ -1682,6 +1682,8 @@ export const en = {
   'quiz.proctor.returnButton': 'Return to fullscreen and continue',
   'quiz.proctor.lockedTitle': 'This attempt has ended',
   'quiz.proctor.lockedBody': 'Your quiz was auto-submitted after repeatedly leaving the screen. You cannot re-enter the same attempt.',
+  'quiz.proctor.completedTitle': 'You have finished',
+  'quiz.proctor.completedBody': 'This attempt has been submitted. You cannot re-enter the same attempt.',
   'quiz.proctor.starting': 'Starting…',
   'quiz.proctor.cameraError': 'Could not start the camera. This quiz records the whole session — please allow camera access, then start.',
   'quiz.proctor.recordingBadge': '● Recording',

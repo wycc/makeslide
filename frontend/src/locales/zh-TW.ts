@@ -1682,6 +1682,8 @@ export const zhTW = {
   'quiz.proctor.returnButton': '返回全螢幕繼續作答',
   'quiz.proctor.lockedTitle': '本次測驗已結束',
   'quiz.proctor.lockedBody': '因多次離開測驗畫面，系統已自動交卷。同一次測驗不允許再次進入。',
+  'quiz.proctor.completedTitle': '你已完成作答',
+  'quiz.proctor.completedBody': '本次測驗已交卷。同一次測驗不允許再次進入。',
   'quiz.proctor.starting': '啟動中…',
   'quiz.proctor.cameraError': '無法啟用相機。本測驗需要全程錄影，請允許相機權限後再開始。',
   'quiz.proctor.recordingBadge': '● 錄影中',

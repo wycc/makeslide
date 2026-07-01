@@ -27,6 +27,7 @@ type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
 
 const LOCKOUT_PREFIX = 'makeslide.quiz_proctor_lockout.';
 const STARTED_PREFIX = 'makeslide.quiz_proctor_started.';
+const FINISHED_PREFIX = 'makeslide.quiz_proctor_finished.';
 
 function resolveStorage(storage?: StorageLike): StorageLike | null {
   if (storage) return storage;
@@ -72,4 +73,14 @@ export function isQuizStarted(sessionKey: string, storage?: StorageLike): boolea
 /** 學生按下同意開始作答時標記；重整或重新載入後 isQuizStarted 為真即擋下再次進入。 */
 export function markQuizStarted(sessionKey: string, storage?: StorageLike): void {
   writeFlag(STARTED_PREFIX, sessionKey, storage);
+}
+
+/** 本次測驗是否已由學生主動「完成作答並離開」。用於離開後不再被自動導回作答頁。 */
+export function isQuizFinished(sessionKey: string, storage?: StorageLike): boolean {
+  return readFlag(FINISHED_PREFIX, sessionKey, storage);
+}
+
+/** 學生按下「完成作答並離開」時標記；使離開後 PlayPage 不再自動導回、重新進入顯示已完成。 */
+export function markQuizFinished(sessionKey: string, storage?: StorageLike): void {
+  writeFlag(FINISHED_PREFIX, sessionKey, storage);
 }
