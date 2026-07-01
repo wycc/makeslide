@@ -472,6 +472,9 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     quiz_mode: z.boolean().optional(),
     active_quiz_id: z.number().int().positive().nullable().optional(),
     quiz_show_answers: z.boolean().optional(),
+    // 老師「開始測驗」時帶上，強制重新產生 quiz_session_id（即使重開同一份測驗也視為全新一次），
+    // 讓之前作答過/被鎖定的學生不會因舊 sessionKey 而進不去。
+    quiz_session_reset: z.boolean().optional(),
     cursor_x: z.number().min(0).max(1).nullable().optional(),
     cursor_y: z.number().min(0).max(1).nullable().optional(),
     drawing_page_number: z.number().int().min(1).nullable().optional(),
@@ -575,6 +578,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       quiz_mode: quizMode,
       active_quiz_id: activeQuizId,
       quiz_show_answers: quizShowAnswers,
+      quiz_session_reset: quizSessionReset,
       cursor_x: cursorX,
       cursor_y: cursorY,
       drawing_page_number: drawingPageNumber,
@@ -617,7 +621,12 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
         session.quizShowAnswers = false;
       }
     }
-    if (session.activeQuizId !== previousActiveQuizId) {
+    // 換測驗（active_quiz_id 改變）或老師明確「開始測驗」（quiz_session_reset，即使重開同一份）
+    // 都重新產生 session id 並清空進度，讓本次成為全新一次測驗、不受之前作答/鎖定影響。
+    if (
+      session.activeQuizId !== previousActiveQuizId ||
+      (quizSessionReset === true && session.activeQuizId)
+    ) {
       session.quizProgress.clear();
       session.quizSessionId = session.activeQuizId
         ? `qs-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`

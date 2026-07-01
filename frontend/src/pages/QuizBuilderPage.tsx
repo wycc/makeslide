@@ -126,6 +126,9 @@ export default function QuizBuilderPage() {
   const [recordingsBusy, setRecordingsBusy] = useState(false);
   const [recordingsError, setRecordingsError] = useState<string | null>(null);
   const [finishConfirmOpen, setFinishConfirmOpen] = useState(false);
+  // 記下學生按「完成作答」時的 sessionKey；與目前作答的 sessionKey 相同時 gate 顯示「已完成」。
+  // 換題／新測驗（sessionKey 改變）時自然不再相符，無需手動重置。
+  const [finishedSessionKey, setFinishedSessionKey] = useState<string | null>(null);
   const [viewingAttemptId, setViewingAttemptId] = useState<number | null>(null);
   const [draggingQIdx, setDraggingQIdx] = useState<number | null>(null);
   const [aiQuizPageNumber, setAiQuizPageNumber] = useState(1);
@@ -315,15 +318,15 @@ export default function QuizBuilderPage() {
     });
   }, [savedQuizzes]);
 
-  // 學生主動「完成作答並離開」：交卷後離開作答頁。離開會卸載監考門檻，其 onEnd 會停止錄影
-  // 並上傳、瀏覽器亦會自動退出全螢幕。標記本次 session 已完成，使 PlayPage 不再自動導回作答頁、
-  // 重新進入亦顯示「已完成」。
+  // 學生主動「完成作答並離開」：交卷後停留在「已完成」畫面（不跳回簡報頁）。標記本次 session
+  // 已完成並記下該 sessionKey，QuizProctorGate 收到 finished 後切到已完成畫面、停止監控與錄影；
+  // 之後老師若公布答案，仍會在同一頁顯示答案（見 gate 的 !active 分支）。
   const handleFinishQuiz = useCallback(() => {
-    if (!pdfId) return;
-    if (activeQuiz) markQuizFinished(`${activeQuiz.id}:${syncQuizSessionId ?? ''}`);
+    if (!pdfId || !activeQuiz) return;
+    markQuizFinished(`${activeQuiz.id}:${syncQuizSessionId ?? ''}`);
     submitFollowerAttempt();
-    navigate(`/play/${encodeURIComponent(pdfId)}?fullscreen=1`);
-  }, [pdfId, activeQuiz, syncQuizSessionId, submitFollowerAttempt, navigate]);
+    setFinishedSessionKey(`${activeQuiz.id}:${syncQuizSessionId ?? ''}`);
+  }, [pdfId, activeQuiz, syncQuizSessionId, submitFollowerAttempt]);
 
   useEffect(() => {
     if (syncRole !== 'follower' || !syncQuizShowAnswers) return;
@@ -545,7 +548,7 @@ export default function QuizBuilderPage() {
   }, [activeQuiz, pdfId, t]);
 
   const sendQuizSyncState = useCallback(
-    async (quizId: number, showAnswers: boolean) => {
+    async (quizId: number, showAnswers: boolean, resetSession = false) => {
       if (!pdfId || !syncClientIdRef.current) return;
       await updatePlaybackSyncState(pdfId, syncClientIdRef.current, {
         page_number: 1,
@@ -554,6 +557,9 @@ export default function QuizBuilderPage() {
         quiz_mode: true,
         active_quiz_id: quizId,
         quiz_show_answers: showAnswers,
+        // 「開始測驗」時強制後端重新產生 quiz_session_id，使本次成為全新一次測驗；
+        // 「公布答案」沿用同一 session（不重置）。
+        quiz_session_reset: resetSession,
       });
       setSyncActiveQuizId(quizId);
       setSyncQuizShowAnswers(showAnswers);
@@ -585,7 +591,7 @@ export default function QuizBuilderPage() {
         return;
       }
       try {
-        await sendQuizSyncState(quizId, false);
+        await sendQuizSyncState(quizId, false, true);
         setMessage(t('quiz.startDone'));
       } catch (err) {
         setSyncError(err instanceof ApiError ? err.message : t('quiz.startFailed'));
@@ -1108,6 +1114,7 @@ export default function QuizBuilderPage() {
             <QuizProctorGate
               active={!syncQuizShowAnswers}
               sessionKey={`${activeQuiz.id}:${syncQuizSessionId ?? ''}`}
+              finished={finishedSessionKey === `${activeQuiz.id}:${syncQuizSessionId ?? ''}`}
               onForceSubmit={submitFollowerAttempt}
               onBeforeStart={quizRecorder.start}
               onEnd={quizRecorder.stopAndUpload}

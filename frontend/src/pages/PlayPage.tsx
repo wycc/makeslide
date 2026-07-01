@@ -1475,10 +1475,12 @@ export default function PlayPage() {
             && typeof state.active_quiz_id === 'number'
             && state.active_quiz_id > 0
           ) {
-            // 學生已「完成作答並離開」或因違規被鎖定的本次測驗，不再自動導回作答頁，
-            // 避免離開後又被反覆拉回。sessionKey 與 QuizProctorGate 一致。
+            // 學生已「完成作答並離開」或因違規被鎖定的本次測驗，平常不再自動導回作答頁，避免離開後
+            // 又被反覆拉回；但老師一旦公布答案（quiz_show_answers），即使已完成者也要導回作答頁看答案。
+            // sessionKey 與 QuizProctorGate 一致。
             const quizSessionKey = `${state.active_quiz_id}:${state.quiz_session_id ?? ''}`;
-            if (!isQuizFinished(quizSessionKey) && !isQuizLockedOut(quizSessionKey)) {
+            const blocked = isQuizFinished(quizSessionKey) || isQuizLockedOut(quizSessionKey);
+            if (!blocked || state.quiz_show_answers) {
               navigate(`/play/${encodeURIComponent(pdfId)}/quizzes`, { replace: true });
               return;
             }
