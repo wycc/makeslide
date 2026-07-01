@@ -9,7 +9,7 @@ export const QUIZ_TOTAL_SCORE = 100;
 
 /** Minimal shape needed for scoring (a subset of the full quiz question). */
 export interface ScorableQuestion {
-  type: 'single' | 'multiple';
+  type: 'single' | 'multiple' | 'essay';
   options: readonly unknown[];
   answer_indices: number[];
   score?: number | null;
@@ -36,6 +36,9 @@ export function normalizeQuestionScores(questions: ScorableQuestion[]): number[]
  * earns an equal share. Mirrors the frontend calcQuestionScore().
  */
 export function calcQuestionScore(question: ScorableQuestion, selected: number[], questionScore: number): number {
+  // Essay questions are graded separately (AI + teacher review); they never contribute to the
+  // auto-scored objective attempt total.
+  if (question.type === 'essay') return 0;
   if (question.type === 'single') {
     return isCorrectAnswer(question.answer_indices, selected) ? questionScore : 0;
   }

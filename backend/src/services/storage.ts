@@ -114,6 +114,22 @@ export function quizRecordingPath(pdfId: string, filename: string): string {
   return joined;
 }
 
+/** Directory holding photographed paper answers for essay (written) quiz questions. */
+export function quizEssayDir(pdfId: string): string {
+  return path.join(pdfDir(pdfId), 'quiz-essay');
+}
+
+/** Path for a single essay answer photo. `filename` must already be sanitized by the caller. */
+export function quizEssayPath(pdfId: string, filename: string): string {
+  const dir = quizEssayDir(pdfId);
+  const joined = path.join(dir, filename);
+  const normalizedDir = path.resolve(dir) + path.sep;
+  if (!joined.startsWith(normalizedDir)) {
+    throw new Error(`Refusing to resolve quiz essay path outside its directory: ${filename}`);
+  }
+  return joined;
+}
+
 export function figureManifestPath(pdfId: string): string {
   return path.join(pdfDir(pdfId), 'figures.json');
 }

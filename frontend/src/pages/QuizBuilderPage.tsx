@@ -4,6 +4,8 @@ import { useI18n } from '../i18n';
 import { QuizProctorGate } from '../components/QuizProctorGate';
 import { markQuizFinished } from '../lib/quizProctor';
 import { useQuizRecorder } from '../hooks/useQuizRecorder';
+import { EssayAnswerUploader } from '../components/EssayAnswerUploader';
+import { EssayAnswersPanel } from '../components/EssayAnswersPanel';
 import { formatRelativeTime, buildRelativeTimeLabels } from '../lib/relativeTime';
 import { summarizeQuizProgress } from '../lib/quizProgress';
 import { interpolateTemplate } from '../lib/interpolateTemplate';
@@ -126,6 +128,7 @@ export default function QuizBuilderPage() {
   const [recordings, setRecordings] = useState<QuizRecording[]>([]);
   const [recordingsBusy, setRecordingsBusy] = useState(false);
   const [recordingsError, setRecordingsError] = useState<string | null>(null);
+  const [essayQuizId, setEssayQuizId] = useState<number | null>(null);
   const [finishConfirmOpen, setFinishConfirmOpen] = useState(false);
   // 記下學生按「完成作答」時的 sessionKey；與目前作答的 sessionKey 相同時 gate 顯示「已完成」。
   // 換題／新測驗（sessionKey 改變）時自然不再相符，無需手動重置。
@@ -215,7 +218,7 @@ export default function QuizBuilderPage() {
     () =>
       Boolean(title.trim()) &&
       questions.length > 0 &&
-      questions.every((q) => q.question.trim() && q.options.filter((o) => o.text.trim()).length >= 2) &&
+      questions.every((q) => q.question.trim() && (q.type === 'essay' || q.options.filter((o) => o.text.trim()).length >= 2)) &&
       scoreSumExceeded == null,
     [questions, scoreSumExceeded, title],
   );
@@ -850,30 +853,42 @@ export default function QuizBuilderPage() {
               <h3 className="font-medium text-slate-100">
                 {formatMessage('quiz.questionScoreHeading', { index: qIdx + 1, score: roundToTwoDecimals(qScore), question: q.question })}
               </h3>
-              <div className="mt-3 space-y-2">
-                {q.options.map((option, oIdx) => {
-                  const isCorrect = q.answer_indices.includes(oIdx);
-                  const isSelected = selected.includes(oIdx);
-                  return (
-                    <label key={oIdx} className={`flex items-center gap-2 rounded border px-3 py-2 ${syncQuizShowAnswers && isCorrect ? 'border-emerald-500/60 bg-emerald-500/10 text-emerald-100' : 'border-slate-700 bg-slate-900 text-slate-100'}`}>
-                      <input
-                        type={q.type === 'single' ? 'radio' : 'checkbox'}
-                        checked={isSelected}
-                        onChange={() => toggleStudentAnswer(q, oIdx)}
-                        disabled={syncQuizShowAnswers}
-                      />
-                      <span>{option.text}</span>
-                      {syncQuizShowAnswers && isCorrect ? <span className="ml-auto text-xs text-emerald-300">{t('quiz.correctAnswer')}</span> : null}
-                    </label>
-                  );
-                })}
-              </div>
-              {syncQuizShowAnswers ? (
+              {q.type === 'essay' ? (
+                <EssayAnswerUploader
+                  pdfId={pdfId}
+                  quizId={quiz.id}
+                  questionId={q.id}
+                  clientId={syncClientIdRef.current}
+                  sessionId={syncQuizSessionId}
+                  resolveCode={async () => (await resolveConfiguredUserCode()) || null}
+                  disabled={syncQuizShowAnswers}
+                />
+              ) : (
+                <div className="mt-3 space-y-2">
+                  {q.options.map((option, oIdx) => {
+                    const isCorrect = q.answer_indices.includes(oIdx);
+                    const isSelected = selected.includes(oIdx);
+                    return (
+                      <label key={oIdx} className={`flex items-center gap-2 rounded border px-3 py-2 ${syncQuizShowAnswers && isCorrect ? 'border-emerald-500/60 bg-emerald-500/10 text-emerald-100' : 'border-slate-700 bg-slate-900 text-slate-100'}`}>
+                        <input
+                          type={q.type === 'single' ? 'radio' : 'checkbox'}
+                          checked={isSelected}
+                          onChange={() => toggleStudentAnswer(q, oIdx)}
+                          disabled={syncQuizShowAnswers}
+                        />
+                        <span>{option.text}</span>
+                        {syncQuizShowAnswers && isCorrect ? <span className="ml-auto text-xs text-emerald-300">{t('quiz.correctAnswer')}</span> : null}
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+              {syncQuizShowAnswers && q.type !== 'essay' ? (
                 <p className={`mt-2 text-xs ${earned > 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
                   {formatMessage('quiz.questionEarnedScore', { earned: roundToTwoDecimals(earned), total: roundToTwoDecimals(qScore) })}
                 </p>
               ) : null}
-              {syncQuizShowAnswers ? <p className="mt-3 rounded bg-slate-900 px-3 py-2 text-sm text-slate-200">{formatMessage('quiz.explanation', { explanation: q.explanation || t('quiz.noExplanation') })}</p> : null}
+              {syncQuizShowAnswers && q.type !== 'essay' ? <p className="mt-3 rounded bg-slate-900 px-3 py-2 text-sm text-slate-200">{formatMessage('quiz.explanation', { explanation: q.explanation || t('quiz.noExplanation') })}</p> : null}
             </div>
           );
         })}
@@ -1044,6 +1059,16 @@ export default function QuizBuilderPage() {
                       {t('quiz.recordings.button')}
                     </button>
                   ) : null}
+                  {canEditQuiz && quiz.questions.some((q) => q.type === 'essay') ? (
+                    <button
+                      type="button"
+                      onClick={() => setEssayQuizId(quiz.id)}
+                      className="rounded border border-slate-600 bg-slate-800/60 px-2 py-1 text-xs text-slate-200 hover:bg-slate-800"
+                      title={t('quiz.essay.panelTitle')}
+                    >
+                      {t('quiz.essay.panelButton')}
+                    </button>
+                  ) : null}
                   {syncRole === 'master' ? (
                     <>
                       <button
@@ -1125,6 +1150,14 @@ export default function QuizBuilderPage() {
             >
               {renderQuizTakingView(activeQuiz)}
             </QuizProctorGate>
+          ) : null}
+          {essayQuizId != null && pdfId ? (
+            <EssayAnswersPanel
+              pdfId={pdfId}
+              quizId={essayQuizId}
+              quizTitle={savedQuizzes.find((q) => q.id === essayQuizId)?.title}
+              onClose={() => setEssayQuizId(null)}
+            />
           ) : null}
           {recordingsQuizId != null ? (
             <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
@@ -1497,6 +1530,7 @@ export default function QuizBuilderPage() {
               <select value={q.type} onChange={(e) => updateQuestion(qIdx, { type: e.target.value as QuizQuestionType, answer_indices: [0] })} className="mt-3 rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-sm">
                 <option value="single">{t('quiz.singleChoice')}</option>
                 <option value="multiple">{t('quiz.multipleChoice')}</option>
+                <option value="essay">{t('quiz.essayChoice')}</option>
               </select>
               <div className="relative mt-3">
                 <textarea value={q.question} onChange={(e) => updateQuestion(qIdx, { question: e.target.value })} rows={2} placeholder={t('quiz.questionPlaceholder')} className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
@@ -1546,17 +1580,31 @@ export default function QuizBuilderPage() {
                   />
                 </div>
               </div>
-              <div className="mt-3 space-y-2">
-                {q.options.map((option, oIdx) => (
-                  <div key={oIdx} className="flex items-center gap-2">
-                    {showEditorAnswers ? (
-                      <input type={q.type === 'single' ? 'radio' : 'checkbox'} checked={q.answer_indices.includes(oIdx)} onChange={() => toggleAnswer(qIdx, oIdx)} />
-                    ) : null}
-                    <input value={option.text} onChange={(e) => updateOption(qIdx, oIdx, e.target.value)} placeholder={formatMessage('quiz.optionPlaceholder', { index: oIdx + 1 })} className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
-                  </div>
-                ))}
-              </div>
-              {showEditorAnswers ? (
+              {q.type === 'essay' ? (
+                <div className="mt-3">
+                  <label className="block text-xs text-slate-400">{t('quiz.referenceAnswerLabel')}</label>
+                  <textarea
+                    value={q.reference_answer ?? ''}
+                    onChange={(e) => updateQuestion(qIdx, { reference_answer: e.target.value })}
+                    rows={3}
+                    placeholder={t('quiz.referenceAnswerPlaceholder')}
+                    className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                  />
+                  <p className="mt-1 text-[11px] text-slate-500">{t('quiz.essayEditorHint')}</p>
+                </div>
+              ) : (
+                <div className="mt-3 space-y-2">
+                  {q.options.map((option, oIdx) => (
+                    <div key={oIdx} className="flex items-center gap-2">
+                      {showEditorAnswers ? (
+                        <input type={q.type === 'single' ? 'radio' : 'checkbox'} checked={q.answer_indices.includes(oIdx)} onChange={() => toggleAnswer(qIdx, oIdx)} />
+                      ) : null}
+                      <input value={option.text} onChange={(e) => updateOption(qIdx, oIdx, e.target.value)} placeholder={formatMessage('quiz.optionPlaceholder', { index: oIdx + 1 })} className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+                    </div>
+                  ))}
+                </div>
+              )}
+              {showEditorAnswers && q.type !== 'essay' ? (
                 <textarea value={q.explanation} onChange={(e) => updateQuestion(qIdx, { explanation: e.target.value })} rows={2} placeholder={t('quiz.explanationPlaceholder')} className="mt-3 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
               ) : null}
             </div>
