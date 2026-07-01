@@ -394,6 +394,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-01 | （使用者要求）錄影規則文案獨立、依需要載入：把「相機錄影」段落從 `quiz-rules.md` 移到新檔 `quiz-rules-recording.md`；`QuizProctorGate` 新增 `recording` prop，規則載入改為永遠載入主規則、`recording` 為真時再額外抓取並附加錄影規則（抓取失敗不阻斷主規則）。`QuizBuilderPage` 依 `activeQuiz.record_camera` 傳入。關閉錄影的測驗不再顯示誤導的相機規則。前端 tsc 通過、611/611 | feat/quiz-rules-recording-split |
 | 2026-07-01 | （使用者要求功能）測驗新增「作答時是否開相機錄影」選項：quiz_sets 新增 `record_camera` 欄位（migration，預設 1），貫穿 save/update/copy 端點與 `QuizSet` 型別、`saveQuizSet` API；編輯測驗加一個勾選框（zh-TW/en 各 2 鍵）。關閉時 `QuizProctorGate` 的 `onBeforeStart`/`onEnd` 傳 undefined（不請求相機、不錄影上傳）、隱藏右下角錄影指示，但全螢幕與離開偵測仍生效。備註：quiz-rules.md 的相機段落為靜態，關閉錄影時文案未動態調整（老師可自行客製）。前後端 tsc 通過、前端 611/611、後端 quizzes 25/25 | feat/quiz-record-camera-option |
 | 2026-07-01 | （使用者要求，測驗監考三項行為調整）① 按「完成作答」後停在「已完成」畫面、不跳回簡報：`handleFinishQuiz` 不再 navigate，改記下 finished 的 sessionKey 並傳 `finished` 給 `QuizProctorGate`，gate 切到 completed phase、停止監控、退出全螢幕、結束錄影上傳。② 老師公布答案時，已完成／已鎖定者也要看到答案：gate 的 `!active` 分支對他們直接顯示答案；PlayPage 對已完成/鎖定者平常不導回作答頁，但 `quiz_show_answers` 為真時仍導回。③ 每次「開始測驗」都是全新一次：`handleStartQuiz` 送 `quiz_session_reset`，後端在開始時強制重新產生 `quiz_session_id`（即使重開同一份），使之前作答過/被鎖定的學生不再因舊 sessionKey 進不去。前後端 tsc 通過、前端 611/611、後端 sync 13/13 | fix/quiz-finish-stay-completed |
 | 2026-07-01 | （使用者回報）監考錄影指示圖示不對：外圈太大、紅點在角落未置中。改為經典「錄影中」符號——較小外圈環（`h-8 w-8`）＋ flex 置中的脈動實心紅點（`h-3 w-3`），移除自拍影像顯示、video 改隱藏但保留 ref 供錄影。前端 tsc 通過 | fix/quiz-recording-icon |
