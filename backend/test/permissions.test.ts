@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { canReadPdf, canEditPdf, canDestructivelyEditPdf } from '../src/routes/pdfs/permissions';
+import { canReadPdf, canEditPdf, canDestructivelyEditPdf, isPdfOwner } from '../src/routes/pdfs/permissions';
 
 test('ownerless PDFs are readable by anyone', () => {
   assert.equal(canReadPdf(null, { owner_sub: null, visibility: 'private' }), true);
@@ -28,6 +28,17 @@ test('canEditPdf: ownerless editable, owner editable, others only when public_ed
   assert.equal(canEditPdf('u2', { owner_sub: 'u1', visibility: 'private' }), false);
   // unlike read access, public_editable allows even an anonymous editor here
   assert.equal(canEditPdf(null, { owner_sub: 'u1', visibility: 'public_editable' }), true);
+});
+
+test('isPdfOwner: only the authenticated owner (or ownerless) qualifies, not editors/public', () => {
+  // ownerless (legacy/anonymous) stays open
+  assert.equal(isPdfOwner(null, { owner_sub: null }), true);
+  assert.equal(isPdfOwner('anyone', { owner_sub: null }), true);
+  // the owner qualifies
+  assert.equal(isPdfOwner('u1', { owner_sub: 'u1' }), true);
+  // non-owners never qualify — even a public_editable collaborator or anonymous
+  assert.equal(isPdfOwner('u2', { owner_sub: 'u1' }), false);
+  assert.equal(isPdfOwner(null, { owner_sub: 'u1' }), false);
 });
 
 test('canDestructivelyEditPdf is like canEditPdf but forbids anonymous public_editable', () => {
