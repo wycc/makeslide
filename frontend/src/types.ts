@@ -531,7 +531,7 @@ export interface PagePoll {
   updated_at: string;
 }
 
-export type QuizQuestionType = 'single' | 'multiple';
+export type QuizQuestionType = 'single' | 'multiple' | 'essay';
 
 export interface QuizOption {
   text: string;
@@ -546,6 +546,8 @@ export interface QuizQuestion {
   explanation: string;
   score?: number | null;
   page_number?: number | null;
+  /** 問答題（essay）的參考答案／評分重點，供 AI 閱卷用，不顯示給學生。 */
+  reference_answer?: string;
 }
 
 export interface QuizSet {

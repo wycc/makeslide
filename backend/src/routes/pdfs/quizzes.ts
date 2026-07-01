@@ -10,8 +10,9 @@ import { getAccountDisplayNames } from '../../services/accountProfiles';
 import { calcQuestionScore, normalizeQuestionScores } from '../../services/quizScoring';
 import { sessionSub } from '../auth';
 import { callChatJSON } from '../../services/openai';
-import { pageScriptPath, pageTextPath, quizRecordingsDir, quizRecordingPath } from '../../services/storage';
+import { pageScriptPath, pageTextPath, quizRecordingsDir, quizRecordingPath, quizEssayDir, quizEssayPath } from '../../services/storage';
 import { quizRecordingFilename } from '../../services/quizRecording';
+import { essayPhotoFilename, clampEssayScore, gradeEssayAnswer, processEssayPhoto } from '../../services/quizEssayGrading';
 import type { PdfRow } from '../../types';
 import { errorResponse, IdParamSchema } from './shared';
 
@@ -22,12 +23,17 @@ import { errorResponse, IdParamSchema } from './shared';
 // visibility happens to be public_editable. The other (reversible) generate/create/update routes
 // in this file keep using canEditPdf() unchanged. Mirrors delete.ts's canEditPdf() fix.
 const QuizOptionSchema = z.object({ text: z.string().trim().min(1).max(300) });
+// options/answer_indices are relaxed here (may be empty for essay questions); the strict
+// "single/multiple need >=2 options and >=1 answer" check happens in SaveQuizBodySchema so
+// that reads stay lenient and GeneratedQuizQuestionSchema can still `.extend` this object.
 const QuizQuestionSchema = z.object({
   id: z.string().trim().min(1).max(80),
-  type: z.enum(['single', 'multiple']),
+  type: z.enum(['single', 'multiple', 'essay']),
   question: z.string().trim().min(1).max(1000),
-  options: z.array(QuizOptionSchema).min(2).max(8),
-  answer_indices: z.array(z.number().int().min(0).max(7)).min(1).max(8),
+  options: z.array(QuizOptionSchema).max(8).default([]),
+  answer_indices: z.array(z.number().int().min(0).max(7)).max(8).default([]),
+  // Essay questions: optional model answer / rubric used by the AI grader (never shown to students).
+  reference_answer: z.string().trim().max(4000).optional().default(''),
   explanation: z.string().trim().max(1200).optional().default(''),
   score: z.number().min(0).max(1000).nullable().optional(),
   page_number: z.number().int().min(1).max(9999).nullable().optional(),
@@ -73,6 +79,19 @@ const SaveQuizBodySchema = z
         message: `題目自訂分數加總為 ${sum}，超過測驗滿分 ${QUIZ_TOTAL_SCORE} 分，請調整各題分數`,
       });
     }
+    // 選擇題（single/multiple）需至少 2 個選項與 1 個正解；問答題（essay）不需選項。
+    body.questions.forEach((q, idx) => {
+      if (q.type === 'essay') return;
+      if (q.options.length < 2) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['questions', idx, 'options'], message: '選擇題至少需要 2 個選項' });
+      }
+      if (q.answer_indices.length < 1) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['questions', idx, 'answer_indices'], message: '選擇題至少需要 1 個正解' });
+      }
+      if (q.answer_indices.some((i) => i >= q.options.length)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['questions', idx, 'answer_indices'], message: '正解索引超出選項範圍' });
+      }
+    });
   });
 
 const GenerateQuizBodySchema = z.object({
@@ -570,5 +589,177 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
     reply.header('Content-Type', row.mime_type || 'video/webm');
     reply.header('Content-Disposition', `inline; filename="${row.file_name}"`);
     return reply.send(createReadStream(filePath));
+  });
+
+  // 學生上傳一題問答題（essay）的紙本作答照片（multipart，可多張），伺服器 AI 閱卷後儲存。
+  app.post('/api/pdfs/:id/quizzes/:quizId/essay-answers', async (request, reply) => {
+    const parsed = QuizParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid quiz parameters'));
+    if (!request.isMultipart()) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Expected multipart/form-data'));
+    const pdfRow = getPdfPermissionRow(parsed.data.id);
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
+    if (!hasShareAccess(request, parsed.data.id) && !canReadPdf(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限上傳此測驗的作答'));
+    }
+    const quizRow = db.prepare(`SELECT id, questions_json FROM quiz_sets WHERE id = ? AND pdf_id = ?`).get(parsed.data.quizId, parsed.data.id) as
+      | { id: number; questions_json: string }
+      | undefined;
+    if (!quizRow) return reply.code(404).send(errorResponse('QUIZ_NOT_FOUND', `Quiz ${parsed.data.quizId} not found`));
+
+    const fields: Record<string, string> = {};
+    const photoBuffers: Buffer[] = [];
+    try {
+      for await (const part of request.parts()) {
+        if (part.type === 'file') {
+          photoBuffers.push(await part.toBuffer());
+        } else if (typeof part.value === 'string') {
+          fields[part.fieldname] = part.value;
+        }
+      }
+    } catch {
+      return reply.code(413).send(errorResponse('FILE_TOO_LARGE', '上傳照片超過大小上限'));
+    }
+    const sessionId = fields.session_id?.trim();
+    const clientId = fields.client_id?.trim();
+    const questionId = fields.question_id?.trim();
+    const code = fields.code?.trim() || null;
+    if (!sessionId || !clientId || !questionId) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Missing session_id, client_id or question_id'));
+    if (photoBuffers.length === 0) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'No photos uploaded'));
+
+    const questionsResult = QuizQuestionsSchema.safeParse((() => { try { return JSON.parse(quizRow.questions_json); } catch { return []; } })());
+    const questions = questionsResult.success ? questionsResult.data : [];
+    const qIdx = questions.findIndex((q) => q.id === questionId);
+    const question = qIdx >= 0 ? questions[qIdx] : undefined;
+    if (!question || question.type !== 'essay') return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Not an essay question'));
+    const maxScore = normalizeQuestionScores(questions)[qIdx] ?? 0;
+
+    await fs.mkdir(quizEssayDir(parsed.data.id), { recursive: true });
+    const fileNames: string[] = [];
+    const dataUrls: string[] = [];
+    for (let i = 0; i < photoBuffers.length; i++) {
+      const processed = await processEssayPhoto(photoBuffers[i]!);
+      if (!processed) continue;
+      const fileName = essayPhotoFilename(parsed.data.quizId, sessionId, clientId, questionId, i);
+      await fs.writeFile(quizEssayPath(parsed.data.id, fileName), processed.jpeg);
+      fileNames.push(fileName);
+      dataUrls.push(processed.dataUrl);
+    }
+    if (fileNames.length === 0) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Could not process any photo'));
+
+    const graded = await gradeEssayAnswer({
+      question: question.question,
+      referenceAnswer: question.reference_answer ?? '',
+      maxScore,
+      imageDataUrls: dataUrls,
+      label: `quiz-essay-grade:${parsed.data.quizId}:${questionId}`,
+    });
+    const now = nowIso();
+    const sub = sessionSub(request);
+    // On re-upload the answer changed, so any prior teacher override is cleared (teacher_score → NULL).
+    db.prepare(
+      `INSERT INTO quiz_essay_answers (pdf_id, quiz_id, question_id, session_id, client_id, code, sub, file_names, max_score, ai_score, ai_feedback, teacher_score, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+       ON CONFLICT (session_id, client_id, question_id) DO UPDATE SET
+         code = excluded.code,
+         sub = excluded.sub,
+         file_names = excluded.file_names,
+         max_score = excluded.max_score,
+         ai_score = excluded.ai_score,
+         ai_feedback = excluded.ai_feedback,
+         teacher_score = NULL,
+         updated_at = excluded.updated_at`,
+    ).run(parsed.data.id, parsed.data.quizId, questionId, sessionId, clientId, code, sub, JSON.stringify(fileNames), maxScore, graded?.score ?? null, graded?.feedback ?? null, now, now);
+    // Score/feedback are intentionally not returned to the student — those are for the teacher's review.
+    return reply.code(201).send({ ok: true, photo_count: fileNames.length, graded: graded != null });
+  });
+
+  // 老師檢視某測驗所有問答題的作答與 AI 評分。
+  app.get('/api/pdfs/:id/quizzes/:quizId/essay-answers', async (request, reply) => {
+    const parsed = QuizParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid quiz parameters'));
+    const pdfRow = getPdfPermissionRow(parsed.data.id);
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視作答'));
+    const rows = db
+      .prepare(
+        `SELECT id, question_id, session_id, client_id, code, sub, file_names, max_score, ai_score, ai_feedback, teacher_score, created_at, updated_at
+         FROM quiz_essay_answers WHERE quiz_id = ? AND pdf_id = ? ORDER BY updated_at DESC`,
+      )
+      .all(parsed.data.quizId, parsed.data.id) as Array<{
+        id: number; question_id: string; session_id: string; client_id: string; code: string | null; sub: string | null;
+        file_names: string; max_score: number; ai_score: number | null; ai_feedback: string | null; teacher_score: number | null;
+        created_at: string; updated_at: string;
+      }>;
+    const names = getAccountDisplayNames(rows.map((r) => r.sub).filter((s): s is string => Boolean(s)));
+    return reply.send({
+      answers: rows.map((r) => {
+        let photoCount = 0;
+        try { const arr = JSON.parse(r.file_names); if (Array.isArray(arr)) photoCount = arr.length; } catch { /* ignore */ }
+        return {
+          id: r.id,
+          question_id: r.question_id,
+          code: r.code,
+          display_name: r.sub ? names.get(r.sub) ?? null : null,
+          photo_count: photoCount,
+          max_score: r.max_score,
+          ai_score: r.ai_score,
+          ai_feedback: r.ai_feedback,
+          teacher_score: r.teacher_score,
+          effective_score: r.teacher_score ?? r.ai_score ?? null,
+          updated_at: r.updated_at,
+        };
+      }),
+    });
+  });
+
+  // 老師下載/檢視單張作答照片。
+  app.get('/api/pdfs/:id/quizzes/:quizId/essay-answers/:answerId/photo/:index', async (request, reply) => {
+    const parsed = QuizParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid quiz parameters'));
+    const answerId = Number((request.params as { answerId?: string }).answerId);
+    const index = Number((request.params as { index?: string }).index);
+    if (!Number.isInteger(answerId) || answerId <= 0 || !Number.isInteger(index) || index < 0) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid answer id or index'));
+    }
+    const pdfRow = getPdfPermissionRow(parsed.data.id);
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視作答照片'));
+    const row = db
+      .prepare(`SELECT file_names FROM quiz_essay_answers WHERE id = ? AND quiz_id = ? AND pdf_id = ?`)
+      .get(answerId, parsed.data.quizId, parsed.data.id) as { file_names: string } | undefined;
+    if (!row) return reply.code(404).send(errorResponse('ESSAY_ANSWER_NOT_FOUND', `Answer ${answerId} not found`));
+    let files: string[] = [];
+    try { const arr = JSON.parse(row.file_names); if (Array.isArray(arr)) files = arr.filter((x): x is string => typeof x === 'string'); } catch { /* ignore */ }
+    const fileName = files[index];
+    if (!fileName) return reply.code(404).send(errorResponse('ESSAY_ANSWER_NOT_FOUND', 'Photo index out of range'));
+    const filePath = quizEssayPath(parsed.data.id, fileName);
+    try {
+      await fs.access(filePath);
+    } catch {
+      return reply.code(404).send(errorResponse('ESSAY_ANSWER_NOT_FOUND', 'Photo file missing on disk'));
+    }
+    reply.header('Content-Type', 'image/jpeg');
+    reply.header('Content-Disposition', `inline; filename="${fileName}"`);
+    return reply.send(createReadStream(filePath));
+  });
+
+  // 老師覆核／修改 AI 給的分數。
+  app.patch('/api/pdfs/:id/quizzes/:quizId/essay-answers/:answerId', async (request, reply) => {
+    const parsed = QuizParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid quiz parameters'));
+    const answerId = Number((request.params as { answerId?: string }).answerId);
+    if (!Number.isInteger(answerId) || answerId <= 0) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid answer id'));
+    const body = z.object({ teacher_score: z.number().nullable() }).safeParse(request.body ?? {});
+    if (!body.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid body'));
+    const pdfRow = getPdfPermissionRow(parsed.data.id);
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限修改分數'));
+    const row = db
+      .prepare(`SELECT max_score FROM quiz_essay_answers WHERE id = ? AND quiz_id = ? AND pdf_id = ?`)
+      .get(answerId, parsed.data.quizId, parsed.data.id) as { max_score: number } | undefined;
+    if (!row) return reply.code(404).send(errorResponse('ESSAY_ANSWER_NOT_FOUND', `Answer ${answerId} not found`));
+    const teacherScore = body.data.teacher_score == null ? null : clampEssayScore(body.data.teacher_score, row.max_score);
+    db.prepare(`UPDATE quiz_essay_answers SET teacher_score = ?, updated_at = ? WHERE id = ?`).run(teacherScore, nowIso(), answerId);
+    return reply.send({ ok: true, teacher_score: teacherScore });
   });
 }

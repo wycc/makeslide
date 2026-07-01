@@ -1478,6 +1478,64 @@ export function quizRecordingFileUrl(id: string, quizId: number, recordingId: nu
   return `api/pdfs/${encodeURIComponent(id)}/quizzes/${quizId}/recordings/${recordingId}/file`;
 }
 
+export async function uploadEssayAnswer(
+  id: string,
+  quizId: number,
+  payload: { client_id: string; session_id: string; code?: string | null; question_id: string; photos: Blob[] },
+): Promise<{ ok: boolean; photo_count: number; graded: boolean }> {
+  const form = new FormData();
+  form.append('session_id', payload.session_id);
+  form.append('client_id', payload.client_id);
+  form.append('question_id', payload.question_id);
+  if (payload.code) form.append('code', payload.code);
+  payload.photos.forEach((photo, i) => form.append('photo', photo, `answer-${i}.jpg`));
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/quizzes/${quizId}/essay-answers`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { ok: boolean; photo_count: number; graded: boolean };
+}
+
+export interface QuizEssayAnswer {
+  id: number;
+  question_id: string;
+  code: string | null;
+  display_name: string | null;
+  photo_count: number;
+  max_score: number;
+  ai_score: number | null;
+  ai_feedback: string | null;
+  teacher_score: number | null;
+  effective_score: number | null;
+  updated_at: string;
+}
+
+export async function fetchEssayAnswers(id: string, quizId: number): Promise<QuizEssayAnswer[]> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/quizzes/${quizId}/essay-answers`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return ((await resp.json()) as { answers: QuizEssayAnswer[] }).answers;
+}
+
+export function essayAnswerPhotoUrl(id: string, quizId: number, answerId: number, index: number): string {
+  return `api/pdfs/${encodeURIComponent(id)}/quizzes/${quizId}/essay-answers/${answerId}/photo/${index}`;
+}
+
+export async function updateEssayTeacherScore(
+  id: string,
+  quizId: number,
+  answerId: number,
+  teacherScore: number | null,
+): Promise<{ ok: boolean; teacher_score: number | null }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/quizzes/${quizId}/essay-answers/${answerId}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ teacher_score: teacherScore }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { ok: boolean; teacher_score: number | null };
+}
+
 export async function answerSyncFollowerQuestionsWithAi(
   id: string,
   clientId: string,

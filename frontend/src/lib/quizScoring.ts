@@ -59,6 +59,8 @@ export function isCorrectAnswer(question: QuizQuestion, selected: number[]): boo
  * option whose selected-state matches the answer key earns an equal share.
  */
 export function calcQuestionScore(question: QuizQuestion, selected: number[], questionScore: number): number {
+  // Essay questions are graded separately (AI + teacher review), never in the objective total.
+  if (question.type === 'essay') return 0;
   if (question.type === 'single') {
     return isCorrectAnswer(question, selected) ? questionScore : 0;
   }
