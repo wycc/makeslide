@@ -98,6 +98,7 @@ export default function QuizBuilderPage() {
   const [timeLimitSeconds, setTimeLimitSeconds] = useState(0);
   const [shuffleQuestions, setShuffleQuestions] = useState(false);
   const [isPublic, setIsPublic] = useState(false);
+  const [recordCamera, setRecordCamera] = useState(true);
   // 學生複習檢視是否顯示正解與解析（可隱藏答案自我測驗，再顯示）。
   const [reviewShowAnswers, setReviewShowAnswers] = useState(true);
   const [shuffledQuestionsForTaking, setShuffledQuestionsForTaking] = useState<QuizQuestion[] | null>(null);
@@ -181,6 +182,7 @@ export default function QuizBuilderPage() {
           setTimeLimitSeconds(nextQuizzes[0].time_limit_seconds ?? 0);
           setShuffleQuestions(nextQuizzes[0].shuffle_questions ?? false);
           setIsPublic(nextQuizzes[0].is_public ?? false);
+          setRecordCamera(nextQuizzes[0].record_camera ?? true);
         }
       } catch (err) {
         if (alive) setError(err instanceof ApiError ? err.message : t('quiz.loadFailed'));
@@ -713,7 +715,7 @@ export default function QuizBuilderPage() {
     setBusy(true);
     setError(null);
     try {
-      const saved = await saveQuizSet(pdfId, { title, prompt, questions, quizId: selectedQuizId, time_limit_seconds: timeLimitSeconds, shuffle_questions: shuffleQuestions, is_public: isPublic });
+      const saved = await saveQuizSet(pdfId, { title, prompt, questions, quizId: selectedQuizId, time_limit_seconds: timeLimitSeconds, shuffle_questions: shuffleQuestions, is_public: isPublic, record_camera: recordCamera });
       setSelectedQuizId(saved.id);
       setSavedQuizzes((prev) => [saved, ...prev.filter((q) => q.id !== saved.id)]);
       setMessage(t('quiz.saveDone'));
@@ -773,8 +775,9 @@ export default function QuizBuilderPage() {
     return (
     <div className="rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/10 p-4">
       {/* 監考錄影指示：作答期間常駐右下角，做成小小的「錄影中」圖示（外圈環＋置中脈動紅點），
-          避免擋到題目；hover 顯示「錄影中」文字。video 隱藏但保留 ref 供錄影使用。 */}
-      {!syncQuizShowAnswers ? (
+          避免擋到題目；hover 顯示「錄影中」文字。video 隱藏但保留 ref 供錄影使用。
+          僅在本測驗開啟錄影時顯示。 */}
+      {!syncQuizShowAnswers && quiz.record_camera !== false ? (
         <div
           className="fixed bottom-3 right-3 z-[210] flex h-8 w-8 items-center justify-center rounded-full border-2 border-rose-500/80 bg-black/80 shadow-lg"
           title={t('quiz.proctor.recordingBadge')}
@@ -982,7 +985,7 @@ export default function QuizBuilderPage() {
             ) : null}
             {savedQuizzes.filter((q) => !savedQuizzesSearch.trim() || q.title.toLowerCase().includes(savedQuizzesSearch.trim().toLowerCase())).map((quiz) => (
               <div key={quiz.id} className={`rounded-md border px-3 py-2 text-sm ${selectedQuizId === quiz.id ? 'border-cyan-500 bg-cyan-500/10 text-cyan-100' : 'border-slate-700 text-slate-300'}`}>
-                <button type="button" onClick={() => { setSelectedQuizId(quiz.id); setTitle(quiz.title); setPrompt(quiz.prompt); setQuestions(quiz.questions); setTimeLimitSeconds(quiz.time_limit_seconds ?? 0); setShuffleQuestions(quiz.shuffle_questions ?? false); setIsPublic(quiz.is_public ?? false); }} className="block w-full text-left hover:text-white">
+                <button type="button" onClick={() => { setSelectedQuizId(quiz.id); setTitle(quiz.title); setPrompt(quiz.prompt); setQuestions(quiz.questions); setTimeLimitSeconds(quiz.time_limit_seconds ?? 0); setShuffleQuestions(quiz.shuffle_questions ?? false); setIsPublic(quiz.is_public ?? false); setRecordCamera(quiz.record_camera ?? true); }} className="block w-full text-left hover:text-white">
                   <span className="flex items-center gap-1.5">
                     <span className="min-w-0 flex-1 truncate font-medium">{quiz.title}</span>
                     {quiz.questions.length > 0 && (
@@ -1116,8 +1119,8 @@ export default function QuizBuilderPage() {
               sessionKey={`${activeQuiz.id}:${syncQuizSessionId ?? ''}`}
               finished={finishedSessionKey === `${activeQuiz.id}:${syncQuizSessionId ?? ''}`}
               onForceSubmit={submitFollowerAttempt}
-              onBeforeStart={quizRecorder.start}
-              onEnd={quizRecorder.stopAndUpload}
+              onBeforeStart={activeQuiz.record_camera === false ? undefined : quizRecorder.start}
+              onEnd={activeQuiz.record_camera === false ? undefined : quizRecorder.stopAndUpload}
             >
               {renderQuizTakingView(activeQuiz)}
             </QuizProctorGate>
@@ -1343,6 +1346,18 @@ export default function QuizBuilderPage() {
               <span className="text-sm text-slate-300">
                 {t('quiz.isPublic')}
                 <span className="mt-0.5 block text-xs text-slate-500">{t('quiz.isPublicHint')}</span>
+              </span>
+            </label>
+            <label className="mt-2 flex cursor-pointer items-start gap-2">
+              <input
+                type="checkbox"
+                checked={recordCamera}
+                onChange={(e) => setRecordCamera(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-900 text-indigo-500"
+              />
+              <span className="text-sm text-slate-300">
+                {t('quiz.recordCamera')}
+                <span className="mt-0.5 block text-xs text-slate-500">{t('quiz.recordCameraHint')}</span>
               </span>
             </label>
             <div className="mt-3 flex flex-wrap gap-2">

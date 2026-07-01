@@ -1792,6 +1792,8 @@ export const en = {
   'quiz.shuffleQuestions': 'Shuffle question order for students',
   'quiz.isPublic': 'Public to students',
   'quiz.isPublicHint': 'Non-public quizzes stay hidden from read-only students except while the quiz is running; prepare them in advance and make them public afterwards for review.',
+  'quiz.recordCamera': 'Record camera during the quiz',
+  'quiz.recordCameraHint': 'When on, students must enable their camera and are recorded after agreeing to the rules; when off, no camera is requested or recorded, while fullscreen and leave-detection still apply.',
   'quiz.countdownPrefix': '',
   'quiz.countdownSuffix': 's remaining',
   'language.zhTW': '繁體中文',
