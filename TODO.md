@@ -394,6 +394,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-01 | （使用者回報）監考錄影指示圖示不對：外圈太大、紅點在角落未置中。改為經典「錄影中」符號——較小外圈環（`h-8 w-8`）＋ flex 置中的脈動實心紅點（`h-3 w-3`），移除自拍影像顯示、video 改隱藏但保留 ref 供錄影。前端 tsc 通過 | fix/quiz-recording-icon |
 | 2026-07-01 | （使用者回報，測驗監考四項後續修正，同一分支）① 按「完成作答並離開」後不再被自動拉回：新增持久化「已完成」旗標 `markQuizFinished`/`isQuizFinished`（鍵同 gate 的 `quizId:sessionId`），`handleFinishQuiz` 交卷時標記、PlayPage 導向作答頁前若該 session 已完成或已鎖定則跳過（一併修好違規鎖定後仍被反覆拉回），gate 重新進入顯示友善「已完成」畫面而非違規訊息（新增 completed phase 與 zh-TW/en 各 2 鍵）。② 錄影僅簡報 owner 可見：新增 `isPdfOwner`（排除 public_editable 協作者與公開），套用錄影清單/檔案端點，前端錄影按鈕改以 `detail.is_owner` 顯示。③ 監考自拍預覽縮成右下角小圓圖示（含脈動紅點），不再擋題目。④ 「複製到」下拉加 `max-w-[8rem] truncate`，長簡報標題不再撐爆版面。新增 quizProctor finished 測試與 isPdfOwner 測試；前後端 tsc 通過、前端 611/611、後端 permissions 6/6・quizzes 25/25 | fix/quiz-proctoring-followups |
 | 2026-07-01 | （使用者要求功能）測驗新增「完成作答並離開」按鈕：作答中（`!syncQuizShowAnswers`）於題目下方顯示按鈕，點擊出現頁內確認框（非 `window.confirm`，避免觸發失焦違規），確認後 `submitFollowerAttempt()` 交卷並 `navigate` 回播放頁；離開會卸載 `QuizProctorGate`，其 `onEnd` 停止並上傳錄影、瀏覽器自動退出全螢幕，且「已開始」旗標使同一測驗無法重新進入。新增 zh-TW/en 各 5 個 i18n 鍵；前端 tsc 通過、610/610 測試全綠 | feat/quiz-finish-button |
 | 2026-07-01 | （使用者回報 bug）監考錄影未出現在歷史記錄：根因為老師結束測驗時 follower 的 `active_quiz_id`/`quiz_session_id` 會被 sync 重置為 null，早於 gate `onEnd`（`stopAndUpload`）執行，導致上傳時 `sessionId` 為 null 而整個略過上傳、錄影從未到伺服器。改為在 `useQuizRecorder.start()` 擷取當下的 `pdfId/quizId/sessionId/clientId` 至 ref，`stopAndUpload` 改用擷取值（deps 收斂為 []），與結束時的 prop 變動脫鉤。前端 tsc 通過 | fix/quiz-recording-session-capture |
