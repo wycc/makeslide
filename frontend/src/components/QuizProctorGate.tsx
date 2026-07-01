@@ -69,6 +69,8 @@ export interface QuizProctorGateProps {
   onEnd?: () => void;
   /** 學生已按「完成作答並離開」：切到「已完成」畫面並停留（停止監控、退出全螢幕、結束錄影）。 */
   finished?: boolean;
+  /** 本測驗是否開相機錄影：為 true 時額外載入並附加 public/quiz-rules-recording.md 的錄影規則。 */
+  recording?: boolean;
 }
 
 /**
@@ -79,7 +81,7 @@ export interface QuizProctorGateProps {
  * 全螢幕採 best-effort：在不支援 Element.requestFullscreen 的行動瀏覽器上，仍以
  * visibilitychange/blur 監控切換 App 的行為。
  */
-export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, maxViolations = DEFAULT_MAX_VIOLATIONS, onBeforeStart, onEnd, finished = false }: QuizProctorGateProps) {
+export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, maxViolations = DEFAULT_MAX_VIOLATIONS, onBeforeStart, onEnd, finished = false, recording = false }: QuizProctorGateProps) {
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const [phase, setPhase] = useState<Phase>('rules');
@@ -113,15 +115,32 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
   }, [sessionKey]);
 
   // 載入可客製化的規則 markdown（相對 document.baseURI，兼容子路徑與 Electron file://）。
+  // 主規則永遠載入；本測驗有開錄影時，額外載入並附加 quiz-rules-recording.md 的相機規則。
   useEffect(() => {
     let alive = true;
-    const url = new URL('quiz-rules.md', document.baseURI).href;
-    fetch(url)
-      .then((res) => (res.ok ? res.text() : Promise.reject(new Error(String(res.status)))))
-      .then((text) => { if (alive) { setRulesBlocks(parseMarkdownLite(text)); setRulesFailed(false); } })
-      .catch(() => { if (alive) { setRulesBlocks([]); setRulesFailed(true); } });
+    const fetchMd = (name: string) =>
+      fetch(new URL(name, document.baseURI).href).then((res) =>
+        res.ok ? res.text() : Promise.reject(new Error(String(res.status))),
+      );
+    (async () => {
+      try {
+        const baseText = await fetchMd('quiz-rules.md');
+        let blocks = parseMarkdownLite(baseText);
+        if (recording) {
+          try {
+            const recText = await fetchMd('quiz-rules-recording.md');
+            blocks = blocks.concat(parseMarkdownLite(recText));
+          } catch {
+            /* 錄影規則載入失敗不阻斷主規則顯示 */
+          }
+        }
+        if (alive) { setRulesBlocks(blocks); setRulesFailed(false); }
+      } catch {
+        if (alive) { setRulesBlocks([]); setRulesFailed(true); }
+      }
+    })();
     return () => { alive = false; };
-  }, []);
+  }, [recording]);
 
   const enterFullscreen = useCallback(() => {
     graceUntilRef.current = Date.now() + GRACE_MS;
