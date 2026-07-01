@@ -618,6 +618,11 @@ function migrate(): void {
     db.exec(`ALTER TABLE quiz_sets ADD COLUMN shuffle_questions INTEGER NOT NULL DEFAULT 0`);
     logger.info('Added column quiz_sets.shuffle_questions');
   }
+  if (!columnExists('quiz_sets', 'record_camera')) {
+    // 監考錄影預設開啟；老師可於編輯測驗時關閉某份測驗的作答錄影。
+    db.exec(`ALTER TABLE quiz_sets ADD COLUMN record_camera INTEGER NOT NULL DEFAULT 1`);
+    logger.info('Added column quiz_sets.record_camera');
+  }
 
   if (!tableExists('page_comments')) {
     db.exec(`

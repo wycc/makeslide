@@ -1792,6 +1792,8 @@ export const zhTW = {
   'quiz.shuffleQuestions': '隨機排序題目（學生作答時打亂題序）',
   'quiz.isPublic': '公開給學生',
   'quiz.isPublicHint': '未公開的測驗，唯讀學生平時看不到，只有測驗進行中才看得到；可先備題，結束後再公開供複習。',
+  'quiz.recordCamera': '作答時開相機錄影監考',
+  'quiz.recordCameraHint': '開啟時，學生同意規則後需開相機並全程錄影；關閉則不請求相機、不錄影，仍保留全螢幕與離開偵測。',
   'quiz.countdownPrefix': '剩餘',
   'quiz.countdownSuffix': '秒',
   'language.zhTW': '繁體中文',
