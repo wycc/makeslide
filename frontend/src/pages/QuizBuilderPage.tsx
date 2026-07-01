@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useI18n } from '../i18n';
 import { QuizProctorGate } from '../components/QuizProctorGate';
+import { useQuizRecorder } from '../hooks/useQuizRecorder';
 import { formatRelativeTime, buildRelativeTimeLabels } from '../lib/relativeTime';
 import { summarizeQuizProgress } from '../lib/quizProgress';
 import { interpolateTemplate } from '../lib/interpolateTemplate';
@@ -14,7 +15,9 @@ import {
   fetchPdfs,
   fetchPlaybackSyncState,
   fetchQuizAttempts,
+  fetchQuizRecordings,
   fetchQuizSets,
+  quizRecordingFileUrl,
   generateAiQuizQuestion,
   getAuthStatus,
   getSystemAiSettings,
@@ -26,6 +29,7 @@ import {
   submitSyncQuizProgress,
   updatePlaybackSyncState,
 } from '../lib/api';
+import type { QuizRecording } from '../lib/api';
 import { shuffleArray } from './play/utils';
 import { copyTextToClipboard } from '../lib/clipboard';
 import { formatQuizQuestionsText } from '../lib/quizQuestionsText';
@@ -116,6 +120,10 @@ export default function QuizBuilderPage() {
   const [historyBusy, setHistoryBusy] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyShowAll, setHistoryShowAll] = useState(false);
+  const [recordingsQuizId, setRecordingsQuizId] = useState<number | null>(null);
+  const [recordings, setRecordings] = useState<QuizRecording[]>([]);
+  const [recordingsBusy, setRecordingsBusy] = useState(false);
+  const [recordingsError, setRecordingsError] = useState<string | null>(null);
   const [viewingAttemptId, setViewingAttemptId] = useState<number | null>(null);
   const [draggingQIdx, setDraggingQIdx] = useState<number | null>(null);
   const [aiQuizPageNumber, setAiQuizPageNumber] = useState(1);
@@ -226,6 +234,15 @@ export default function QuizBuilderPage() {
   // 是否有編輯權限（老師/協作者）。唯讀學生只能複習：移除所有編輯/控制功能，只看題目/解答與自己的歷史。
   const canEditQuiz = Boolean(detail?.is_owner || detail?.visibility === 'public_editable');
   const selectedQuiz = savedQuizzes.find((q) => q.id === selectedQuizId) ?? null;
+
+  // 監考錄影：學生同意規則時開相機錄影，交卷/結束時上傳。
+  const quizRecorder = useQuizRecorder({
+    pdfId,
+    quizId: activeQuiz?.id,
+    sessionId: syncQuizSessionId,
+    clientId: syncClientIdRef.current,
+    resolveCode: async () => (await resolveConfiguredUserCode()) || null,
+  });
 
   useEffect(() => {
     if (!activeQuiz || !activeQuiz.shuffle_questions) {
@@ -616,6 +633,23 @@ export default function QuizBuilderPage() {
     [pdfId, t],
   );
 
+  const loadQuizRecordings = useCallback(
+    async (quizId: number) => {
+      if (!pdfId) return;
+      setRecordingsQuizId(quizId);
+      setRecordingsBusy(true);
+      setRecordingsError(null);
+      try {
+        setRecordings(await fetchQuizRecordings(pdfId, quizId));
+      } catch (err) {
+        setRecordingsError(err instanceof ApiError ? err.message : t('quiz.recordings.loadFailed'));
+      } finally {
+        setRecordingsBusy(false);
+      }
+    },
+    [pdfId, t],
+  );
+
   const handleAiGenerateQuestion = async () => {
     if (!pdfId) return;
     setAiQuizBusy(true);
@@ -720,6 +754,15 @@ export default function QuizBuilderPage() {
     const effectiveQuestions = shuffledQuestionsForTaking ?? quiz.questions;
     return (
     <div className="rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/10 p-4">
+      {/* 監考自拍預覽：作答期間常駐右下角，讓學生確認相機開著、正在錄影。 */}
+      {!syncQuizShowAnswers ? (
+        <div className="fixed bottom-3 right-3 z-[210] w-32 overflow-hidden rounded-lg border border-rose-500/60 bg-black shadow-lg sm:w-40">
+          <video ref={quizRecorder.videoRef} muted playsInline className="h-auto w-full -scale-x-100" />
+          <span className="absolute left-1 top-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-rose-300">
+            {t('quiz.proctor.recordingBadge')}
+          </span>
+        </div>
+      ) : null}
       {syncQuizShowAnswers ? (() => {
         const score = roundToTwoDecimals(calcAttemptScore(effectiveQuestions, studentAnswers));
         const max = maxAttemptScore(effectiveQuestions);
@@ -932,6 +975,16 @@ export default function QuizBuilderPage() {
                   >
                     {t('quiz.history')}
                   </button>
+                  {canEditQuiz ? (
+                    <button
+                      type="button"
+                      onClick={() => void loadQuizRecordings(quiz.id)}
+                      className="rounded border border-slate-600 bg-slate-800/60 px-2 py-1 text-xs text-slate-200 hover:bg-slate-800"
+                      title={t('quiz.recordings.title')}
+                    >
+                      {t('quiz.recordings.button')}
+                    </button>
+                  ) : null}
                   {syncRole === 'master' ? (
                     <>
                       <button
@@ -1006,9 +1059,52 @@ export default function QuizBuilderPage() {
               active={!syncQuizShowAnswers}
               sessionKey={`${activeQuiz.id}:${syncQuizSessionId ?? ''}`}
               onForceSubmit={submitFollowerAttempt}
+              onBeforeStart={quizRecorder.start}
+              onEnd={quizRecorder.stopAndUpload}
             >
               {renderQuizTakingView(activeQuiz)}
             </QuizProctorGate>
+          ) : null}
+          {recordingsQuizId != null ? (
+            <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold text-slate-200">
+                  {t('quiz.recordings.title')}
+                  {(() => {
+                    const quiz = savedQuizzes.find((q) => q.id === recordingsQuizId);
+                    return quiz ? `：${quiz.title}` : '';
+                  })()}
+                </h2>
+                <button type="button" onClick={() => { setRecordingsQuizId(null); setRecordings([]); setRecordingsError(null); }} className="text-xs text-slate-500 hover:text-slate-300">{t('quiz.recordings.close')}</button>
+              </div>
+              {recordingsBusy ? <p className="mt-1 text-xs text-slate-500">{t('quiz.recordings.loading')}</p> : null}
+              {recordingsError ? <p className="mt-1 text-xs text-rose-400">{recordingsError}</p> : null}
+              {!recordingsBusy && !recordingsError && recordings.length === 0 ? (
+                <p className="mt-1 text-xs text-slate-500">{t('quiz.recordings.empty')}</p>
+              ) : null}
+              {!recordingsBusy && recordings.length > 0 ? (
+                <ul className="mt-2 space-y-2">
+                  {recordings.map((rec) => (
+                    <li key={rec.id} className="flex items-center justify-between gap-3 rounded border border-slate-700 bg-slate-950/50 px-3 py-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm text-slate-200">{rec.code || rec.display_name || t('quiz.recordings.anonymous')}</p>
+                        <p className="text-[11px] text-slate-500">{(rec.size_bytes / (1024 * 1024)).toFixed(1)} MB · {formatRelativeTime(rec.updated_at, relativeTimeLabels)}</p>
+                      </div>
+                      {pdfId ? (
+                        <a
+                          href={quizRecordingFileUrl(pdfId, recordingsQuizId, rec.id)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="shrink-0 rounded border border-cyan-500/40 bg-cyan-500/15 px-2 py-1 text-xs text-cyan-100 hover:bg-cyan-500/25"
+                        >
+                          {t('quiz.recordings.view')}
+                        </a>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
           ) : null}
           {historyQuizId != null ? (
             <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
