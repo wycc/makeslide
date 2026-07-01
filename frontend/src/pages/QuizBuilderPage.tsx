@@ -124,6 +124,7 @@ export default function QuizBuilderPage() {
   const [recordings, setRecordings] = useState<QuizRecording[]>([]);
   const [recordingsBusy, setRecordingsBusy] = useState(false);
   const [recordingsError, setRecordingsError] = useState<string | null>(null);
+  const [finishConfirmOpen, setFinishConfirmOpen] = useState(false);
   const [viewingAttemptId, setViewingAttemptId] = useState<number | null>(null);
   const [draggingQIdx, setDraggingQIdx] = useState<number | null>(null);
   const [aiQuizPageNumber, setAiQuizPageNumber] = useState(1);
@@ -312,6 +313,14 @@ export default function QuizBuilderPage() {
       submittedAttemptRef.current = null;
     });
   }, [savedQuizzes]);
+
+  // 學生主動「完成作答並離開」：交卷後離開作答頁。離開會卸載監考門檻，其 onEnd 會停止錄影
+  // 並上傳、瀏覽器亦會自動退出全螢幕；因「已開始」旗標仍在，重新進入同一測驗會被擋下。
+  const handleFinishQuiz = useCallback(() => {
+    if (!pdfId) return;
+    submitFollowerAttempt();
+    navigate(`/play/${encodeURIComponent(pdfId)}?fullscreen=1`);
+  }, [pdfId, submitFollowerAttempt, navigate]);
 
   useEffect(() => {
     if (syncRole !== 'follower' || !syncQuizShowAnswers) return;
@@ -855,6 +864,42 @@ export default function QuizBuilderPage() {
           );
         })}
       </div>
+      {!syncQuizShowAnswers ? (
+        <div className="mt-6 flex justify-end">
+          <button
+            type="button"
+            onClick={() => setFinishConfirmOpen(true)}
+            className="rounded-md border border-emerald-500/60 bg-emerald-500/20 px-5 py-2.5 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/30"
+          >
+            {t('quiz.finishQuiz')}
+          </button>
+        </div>
+      ) : null}
+      {!syncQuizShowAnswers && finishConfirmOpen ? (
+        <div className="fixed inset-0 z-[220] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-xl border border-emerald-400/60 bg-slate-900 p-6 text-center shadow-2xl">
+            <div className="mb-2 text-4xl">✅</div>
+            <h2 className="mb-2 text-lg font-bold text-emerald-100">{t('quiz.finishQuizConfirmTitle')}</h2>
+            <p className="mb-5 text-sm text-emerald-100/90">{t('quiz.finishQuizConfirmBody')}</p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setFinishConfirmOpen(false)}
+                className="flex-1 rounded-md border border-slate-600 bg-slate-800 px-4 py-2.5 text-sm text-slate-200 hover:bg-slate-700"
+              >
+                {t('quiz.finishQuizCancel')}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setFinishConfirmOpen(false); handleFinishQuiz(); }}
+                className="flex-1 rounded-md border border-emerald-500/60 bg-emerald-500/25 px-4 py-2.5 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/35"
+              >
+                {t('quiz.finishQuizConfirm')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {syncQuizShowAnswers ? (() => {
         const scoreTable = normalizeQuestionScores(quiz.questions);
         const wrongQuestions = quiz.questions.filter((q, idx) => {
