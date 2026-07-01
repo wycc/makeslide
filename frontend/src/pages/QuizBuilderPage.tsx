@@ -1118,6 +1118,7 @@ export default function QuizBuilderPage() {
               active={!syncQuizShowAnswers}
               sessionKey={`${activeQuiz.id}:${syncQuizSessionId ?? ''}`}
               finished={finishedSessionKey === `${activeQuiz.id}:${syncQuizSessionId ?? ''}`}
+              recording={activeQuiz.record_camera !== false}
               onForceSubmit={submitFollowerAttempt}
               onBeforeStart={activeQuiz.record_camera === false ? undefined : quizRecorder.start}
               onEnd={activeQuiz.record_camera === false ? undefined : quizRecorder.stopAndUpload}
