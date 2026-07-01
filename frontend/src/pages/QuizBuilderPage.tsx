@@ -766,15 +766,15 @@ export default function QuizBuilderPage() {
     const effectiveQuestions = shuffledQuestionsForTaking ?? quiz.questions;
     return (
     <div className="rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/10 p-4">
-      {/* 監考自拍預覽：作答期間常駐右下角，縮成小圖示避免擋到題目；紅點表示錄影中，
-          hover 顯示「錄影中」文字。仍保留 video ref 供錄影使用。 */}
+      {/* 監考錄影指示：作答期間常駐右下角，做成小小的「錄影中」圖示（外圈環＋置中脈動紅點），
+          避免擋到題目；hover 顯示「錄影中」文字。video 隱藏但保留 ref 供錄影使用。 */}
       {!syncQuizShowAnswers ? (
         <div
-          className="fixed bottom-3 right-3 z-[210] h-12 w-12 overflow-hidden rounded-full border-2 border-rose-500/70 bg-black shadow-lg"
+          className="fixed bottom-3 right-3 z-[210] flex h-8 w-8 items-center justify-center rounded-full border-2 border-rose-500/80 bg-black/80 shadow-lg"
           title={t('quiz.proctor.recordingBadge')}
         >
-          <video ref={quizRecorder.videoRef} muted playsInline className="h-full w-full -scale-x-100 object-cover" />
-          <span className="absolute right-0.5 top-0.5 h-2 w-2 animate-pulse rounded-full bg-rose-500 ring-1 ring-black/60" />
+          <span className="h-3 w-3 animate-pulse rounded-full bg-rose-500" />
+          <video ref={quizRecorder.videoRef} muted playsInline className="hidden" />
         </div>
       ) : null}
       {syncQuizShowAnswers ? (() => {
