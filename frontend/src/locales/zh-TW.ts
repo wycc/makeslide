@@ -1366,6 +1366,8 @@ export const zhTW = {
   'play.sidebar.commentsFilterByAuthor': '只顯示 {author} 的評論',
   'play.sidebar.commentsNoMatch': '沒有符合的評論',
   'play.sidebar.commentAuthorPlaceholder': '暱稱（選填）',
+  'play.sidebar.aiTutorAuthor': 'AI 導師',
+  'play.sidebar.aiTutorAuthorWithName': '{name}（AI 導師）',
   'play.sidebar.commentTextPlaceholder': '輸入評論…',
   'play.sidebar.commentSubmitHint': 'Ctrl/⌘ + Enter 送出',
   'play.sidebar.commentPost': '送出',
