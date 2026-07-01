@@ -2156,22 +2156,28 @@ export interface PageComment {
   created_at: string;
 }
 
-export async function listPageComments(id: string, pageNumber: number): Promise<PageComment[]> {
-  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/comments`);
+export async function listPageComments(id: string, pageNumber: number, shareToken?: string): Promise<PageComment[]> {
+  const token = shareToken?.trim();
+  const suffix = token ? `?share=${encodeURIComponent(token)}` : '';
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/comments${suffix}`);
   if (!resp.ok) throw await parseErrorBody(resp);
   const data = (await resp.json()) as { comments: PageComment[] };
   return data.comments;
 }
 
-export async function listAllComments(id: string): Promise<PageComment[]> {
-  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/comments`);
+export async function listAllComments(id: string, shareToken?: string): Promise<PageComment[]> {
+  const token = shareToken?.trim();
+  const suffix = token ? `?share=${encodeURIComponent(token)}` : '';
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/comments${suffix}`);
   if (!resp.ok) throw await parseErrorBody(resp);
   const data = (await resp.json()) as { comments: PageComment[] };
   return data.comments;
 }
 
-export async function createPageComment(id: string, pageNumber: number, author: string, text: string): Promise<PageComment> {
-  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/comments`, {
+export async function createPageComment(id: string, pageNumber: number, author: string, text: string, shareToken?: string): Promise<PageComment> {
+  const token = shareToken?.trim();
+  const suffix = token ? `?share=${encodeURIComponent(token)}` : '';
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/comments${suffix}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ author, text }),

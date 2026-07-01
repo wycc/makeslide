@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { canReadPdf, canEditPdf } from './permissions';
+import { hasShareAccess } from './share';
 import { z } from 'zod';
 import { db } from '../../db';
 import { sessionSub } from '../auth';
@@ -68,7 +69,8 @@ export async function registerCommentsRoutes(app: FastifyInstance): Promise<void
     const sub = sessionSub(request);
     const pdfRow = getPdfRow(id);
     if (!pdfRow) return reply.code(404).send(errorResponse('NOT_FOUND', 'PDF not found'));
-    if (!canReadPdf(sub, pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', 'Access denied'));
+    // Comments are shared with everyone who can open the presentation, including share-link viewers.
+    if (!hasShareAccess(request, id) && !canReadPdf(sub, pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', 'Access denied'));
     const rows = db
       .prepare(`SELECT * FROM page_comments WHERE pdf_id = ? ORDER BY page_number ASC, created_at ASC`)
       .all(id) as PageCommentRow[];
@@ -118,7 +120,7 @@ export async function registerCommentsRoutes(app: FastifyInstance): Promise<void
     const sub = sessionSub(request);
     const pdfRow = getPdfRow(id);
     if (!pdfRow) return reply.code(404).send(errorResponse('NOT_FOUND', 'PDF not found'));
-    if (!canReadPdf(sub, pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', 'Access denied'));
+    if (!hasShareAccess(request, id) && !canReadPdf(sub, pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', 'Access denied'));
     const rows = db
       .prepare(`SELECT * FROM page_comments WHERE pdf_id = ? AND page_number = ? ORDER BY created_at ASC`)
       .all(id, n) as PageCommentRow[];
@@ -138,7 +140,8 @@ export async function registerCommentsRoutes(app: FastifyInstance): Promise<void
       const sub = sessionSub(request);
       const pdfRow = getPdfRow(id);
       if (!pdfRow) return reply.code(404).send(errorResponse('NOT_FOUND', 'PDF not found'));
-      if (!canReadPdf(sub, pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', 'Access denied'));
+      // Anyone who can open the presentation (incl. via share link) may post a comment everyone sees.
+      if (!hasShareAccess(request, id) && !canReadPdf(sub, pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', 'Access denied'));
       const now = nowIso();
       const result = db
         .prepare(
