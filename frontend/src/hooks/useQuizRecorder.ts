@@ -41,6 +41,13 @@ export function useQuizRecorder({ pdfId, quizId, sessionId, clientId, resolveCod
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const stoppedRef = useRef(false);
+  // 開始錄影時擷取當下的上傳識別子。測驗結束時 sessionId 等 prop 可能已被重置為 null
+  // （老師結束測驗會一併清掉 active_quiz_id / quiz_session_id），若上傳時才讀 prop 會漏傳；
+  // 故以本次錄影開始時的識別子為準。
+  const uploadCtxRef = useRef<{ pdfId: string; quizId: number; sessionId: string; clientId: string } | null>(null);
+  // 每次 render 保存最新 props，讓 stable 的 start/stopAndUpload 在呼叫當下讀到最新值。
+  const latestRef = useRef({ pdfId, quizId, sessionId, clientId, resolveCode });
+  latestRef.current = { pdfId, quizId, sessionId, clientId, resolveCode };
   const [status, setStatus] = useState<QuizRecorderStatus>('idle');
   const [error, setError] = useState<string | null>(null);
 
@@ -59,6 +66,9 @@ export function useQuizRecorder({ pdfId, quizId, sessionId, clientId, resolveCod
     streamRef.current = stream;
     stoppedRef.current = false;
     chunksRef.current = [];
+    // 擷取本次錄影開始時的上傳識別子，結束上傳時不受 prop 變動（session 被清空）影響。
+    const { pdfId, quizId, sessionId, clientId } = latestRef.current;
+    uploadCtxRef.current = pdfId && quizId != null && sessionId ? { pdfId, quizId, sessionId, clientId } : null;
     if (videoRef.current) {
       videoRef.current.srcObject = stream;
       videoRef.current.muted = true;
@@ -96,20 +106,21 @@ export function useQuizRecorder({ pdfId, quizId, sessionId, clientId, resolveCod
     streamRef.current = null;
     recorderRef.current = null;
 
-    if (!finalBlob || !pdfId || quizId == null || !sessionId) {
+    const ctx = uploadCtxRef.current;
+    if (!finalBlob || !ctx) {
       setStatus('done');
       return;
     }
     setStatus('uploading');
     try {
-      const code = await resolveCode();
-      await uploadQuizRecording(pdfId, quizId, { client_id: clientId, session_id: sessionId, code, blob: finalBlob });
+      const code = await latestRef.current.resolveCode();
+      await uploadQuizRecording(ctx.pdfId, ctx.quizId, { client_id: ctx.clientId, session_id: ctx.sessionId, code, blob: finalBlob });
       setStatus('done');
     } catch {
       setError('upload_failed');
       setStatus('error');
     }
-  }, [pdfId, quizId, sessionId, clientId, resolveCode]);
+  }, []);
 
   return { videoRef, status, error, start, stopAndUpload };
 }
