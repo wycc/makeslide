@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useI18n } from '../../i18n';
 import { usePlayPageContext } from './PlayPageContext';
 import { createPageComment } from '../../lib/api/pdfs';
+import { getAuthStatus } from '../../lib/api/system';
 import { getStoredCommentAuthor } from '../../lib/commentAuthor';
+import { interpolateTemplate } from '../../lib/interpolateTemplate';
 import { MarkdownMath } from '../../components/MarkdownMath';
 
 export function PageAskPanel() {
@@ -13,9 +15,18 @@ export function PageAskPanel() {
     pageAskMessages,
     pageAskBusy, pageAskError,
     handleAskPage, clearPageAsk,
-    pdfId, currentPage,
+    pdfId, currentPage, currentShareToken,
   } = usePlayPageContext();
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'ok' | 'fail'>('idle');
+  // 登入使用者的顯示名稱，作為「存這則 AI 導師回答的人」的預設名稱（未設暱稱時用）。
+  const [authName, setAuthName] = useState('');
+  useEffect(() => {
+    let alive = true;
+    void getAuthStatus()
+      .then((s) => { if (alive) setAuthName((s.user?.name || s.user?.email || '').trim()); })
+      .catch(() => { /* 未登入或舊後端：維持空字串 */ });
+    return () => { alive = false; };
+  }, []);
 
   const hasConversation = pageAskMessages.length > 0;
   const lastAnswer = [...pageAskMessages].reverse().find((m) => m.role === 'assistant')?.content ?? null;
@@ -29,7 +40,12 @@ export function PageAskPanel() {
       // 評論長度上限 2000，超過就截斷以免後端 400。
       const combined = `Q: ${lastQuestion.trim()}\nA: ${lastAnswer.trim()}`;
       const text = combined.length > 2000 ? `${combined.slice(0, 1999)}…` : combined;
-      await createPageComment(pdfId, currentPage.page_number, getStoredCommentAuthor() || 'AI 導師', text);
+      // 標示這則評論是誰存的：優先用評論暱稱，否則用登入帳號名稱；仍保留「AI 導師」表示內容來源。
+      const saver = (getStoredCommentAuthor() || authName).trim().slice(0, 60);
+      const author = saver
+        ? interpolateTemplate(t('play.sidebar.aiTutorAuthorWithName'), { name: saver })
+        : t('play.sidebar.aiTutorAuthor');
+      await createPageComment(pdfId, currentPage.page_number, author, text, currentShareToken);
       setSaveStatus('ok');
     } catch {
       setSaveStatus('fail');

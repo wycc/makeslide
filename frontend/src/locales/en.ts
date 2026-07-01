@@ -1366,6 +1366,8 @@ export const en = {
   'play.sidebar.commentsFilterByAuthor': "Show only {author}'s comments",
   'play.sidebar.commentsNoMatch': 'No matching comments',
   'play.sidebar.commentAuthorPlaceholder': 'Nickname (optional)',
+  'play.sidebar.aiTutorAuthor': 'AI Tutor',
+  'play.sidebar.aiTutorAuthorWithName': '{name} (AI Tutor)',
   'play.sidebar.commentTextPlaceholder': 'Add a comment…',
   'play.sidebar.commentSubmitHint': 'Ctrl/⌘ + Enter to submit',
   'play.sidebar.commentPost': 'Post',
