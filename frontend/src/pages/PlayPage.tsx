@@ -575,6 +575,10 @@ export default function PlayPage() {
   const shareIsReadOnly =
     !detail?.is_owner &&
     (detail?.share_mode === 'read_only' || (!currentShareToken && detail?.visibility === 'public'));
+  // 同步 master/follower 的定義：只有「自己的簡報」——即簡報擁有者——按下同步模式會成為
+  // master；其他所有人（分享連結訪客、public 唯讀觀看者、public_editable 協作者）一律是
+  // follower。整段同步流程（加入路徑、自動跟隨、master 失效後是否重奪）都以此為準。
+  const isSyncMasterEligible = Boolean(detail?.is_owner);
   // 加入同步前必須先載到簡報詳情，才能判斷是否唯讀；否則唯讀者可能在 detail 載入前
   // 以 master 身分（/sync/join）嘗試而吃 403，連帶把同步關掉。
   const isDetailLoaded = detail != null;
@@ -1122,10 +1126,11 @@ export default function PlayPage() {
       setSyncEnabled(true);
       return;
     }
-    // 從列表進入（網址沒帶分享 token）的唯讀觀看者：若簡報 owner 已經進入 master 模式
-    // （同步中），自動以 follower 加入，與帶 token 連結的體驗一致。需等 detail 載入後
-    // 才能判斷是否唯讀；本 effect 已將 isDetailLoaded / shareIsReadOnly 列入相依。
-    if (isDetailLoaded && shareIsReadOnly) {
+    // 從列表進入（網址沒帶分享 token）的非擁有者（唯讀觀看者或 public_editable 協作者）：
+    // 若簡報 owner 已經進入 master 模式（同步中），自動以 follower 加入，與帶 token 連結的
+    // 體驗一致。需等 detail 載入後才能判斷擁有者身分；本 effect 已將 isDetailLoaded /
+    // isSyncMasterEligible 列入相依。
+    if (isDetailLoaded && !isSyncMasterEligible) {
       let cancelled = false;
       void fetchPlaybackSyncState(pdfId)
         .then((state) => {
@@ -1139,7 +1144,7 @@ export default function PlayPage() {
       };
     }
     setSyncEnabled(false);
-  }, [pdfId, currentShareToken, isDetailLoaded, shareIsReadOnly]);
+  }, [pdfId, currentShareToken, isDetailLoaded, isSyncMasterEligible]);
 
   useEffect(() => {
     // 等 detail 載入後再 join：唯讀判斷依賴 detail，太早 join 會讓唯讀者吃 403。
@@ -1158,17 +1163,18 @@ export default function PlayPage() {
     void (async () => {
       try {
         const userCode = await resolveConfiguredUserCode();
-        // 唯讀觀看者（含從列表進入、URL 沒帶分享 token 的 public 簡報）一律走 follower 的
-        // share-join；/sync/join 會以編輯權限把關，唯讀者呼叫只會拿到 403。currentShareToken
-        // 可能為空字串，後端 share-join 對可讀的簡報（public）也會放行。
-        const joined = (currentShareToken || shareIsReadOnly)
-          ? await joinSharedPlaybackSync(pdfId, next, currentShareToken)
-          : await joinPlaybackSync(pdfId, next, userCode || undefined);
+        // 只有簡報擁有者走 master 的 /sync/join；其他所有人（分享連結訪客、public 唯讀
+        // 觀看者、public_editable 協作者）一律走 follower 的 /sync/share-join。/sync/join 會
+        // 以 isPdfOwner 把關，非擁有者呼叫只會拿到 403。currentShareToken 可能為空字串，
+        // 後端 share-join 對可讀的簡報（public / public_editable）也會放行。
+        const joined = isSyncMasterEligible
+          ? await joinPlaybackSync(pdfId, next, userCode || undefined)
+          : await joinSharedPlaybackSync(pdfId, next, currentShareToken);
         if (cancelled) return;
         setSyncRole(joined.role);
         // Remember that this browser was master so polling can reclaim the slot
         // after a server-side reset (e.g. server restart or session expiry).
-        if (joined.role === 'master' && !currentShareToken) {
+        if (joined.role === 'master' && isSyncMasterEligible) {
           window.localStorage.setItem(`makeslide.sync.wasMaster.${pdfId}`, '1');
         }
         setFollowerAudioUnlocked(joined.follower_audio_unlocked);
@@ -1195,7 +1201,7 @@ export default function PlayPage() {
     return () => {
       cancelled = true;
     };
-  }, [syncEnabled, pdfId, currentShareToken, shareIsReadOnly, isDetailLoaded]);
+  }, [syncEnabled, pdfId, currentShareToken, isSyncMasterEligible, isDetailLoaded]);
 
   // 同步模式下手寫工具僅 master 可用；若目前角色變成 follower（例如 master 易主），強制關閉手寫模式。
   useEffect(() => {
@@ -1401,10 +1407,10 @@ export default function PlayPage() {
           });
           setSyncRole(state.role);
           setFollowerAudioUnlocked(state.follower_audio_unlocked);
-          // 唯讀觀看者（帶 token 的分享連結，或從列表自動跟隨的 public 觀看者）一旦
-          // master 收掉同步就退出 follower；owner／可編輯分享者不在此列，留待下方自動
-          // 重奪 master 的邏輯處理。
-          if ((currentShareToken || shareIsReadOnly) && !state.master_client_id) {
+          // 非擁有者（帶 token 的分享連結、自動跟隨的 public 觀看者、public_editable 協作者）
+          // 一旦 master 收掉同步就退出 follower；只有擁有者不在此列，留待下方自動重奪 master
+          // 的邏輯處理（master 只屬於擁有者）。
+          if (!isSyncMasterEligible && !state.master_client_id) {
             window.localStorage.removeItem(`makeslide.sync.enabled.${pdfId}`);
             setSyncEnabled(false);
             setSyncRole('follower');
@@ -1418,7 +1424,7 @@ export default function PlayPage() {
           if (
             state.role === 'follower'
             && !state.master_client_id
-            && !currentShareToken
+            && isSyncMasterEligible
             && syncClientIdRef.current
             && window.localStorage.getItem(`makeslide.sync.wasMaster.${pdfId}`) === '1'
           ) {
@@ -1524,7 +1530,7 @@ export default function PlayPage() {
       });
       window.clearInterval(timer);
     };
-  }, [syncEnabled, pdfId, imageOnlyFullscreen, navigate, syncRole, currentIdx, currentShareToken, shareIsReadOnly]);
+  }, [syncEnabled, pdfId, imageOnlyFullscreen, navigate, syncRole, currentIdx, currentShareToken, isSyncMasterEligible]);
 
   const handleSubmitFollowerQuestion = useCallback(async () => {
     if (!pdfId || !syncClientIdRef.current) return;
