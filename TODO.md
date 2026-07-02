@@ -14,6 +14,18 @@
 - [ ] 系統性採用 `mapApiErrorToHumanMessage`：目前約 55 處 catch 區塊直接 `setError(err.message)` 顯示後端原始 message、繞過既有的錯誤訊息映射（前端僅 2 處 `UploadButton`、`ImportTextPage` 使用 mapper）。全面改造屬較大工程，且各 catch 上下文不同、許多後端 message 已是中文（未必都是英文洩漏），逐點需產品判斷顯示風格，故列為待使用者決定。
 - [ ] 把前端測試納入 root `npm test`：目前 root 測試腳本未涵蓋前端 `node:test` 測試。納入涉及 CI 行為變更與 `npm install`（sandbox 無法驗證），列為待使用者決定。
 
+## 測驗監考錄影只錄影不錄音（使用者要求，2026-07-02）
+
+使用者要求：測驗錄影時不要錄音，只錄影就好。
+
+- [x] 監考錄影改為只擷取影像、不請求麥克風。
+  - 修改說明（2026-07-02）：[useQuizRecorder.ts](frontend/src/hooks/useQuizRecorder.ts) 的
+    `getUserMedia` 由 `{ video, audio: true }` 改為 `audio: false`，避免收錄考場環境音或學生說話；
+    串流無音軌後，即使 MediaRecorder 用含 opus 的 mime 字串，產出仍為純視訊 webm。更新模組與
+    呼叫處註解。無測試斷言 `audio: true`，前端 `tsc --noEmit` 通過。分支
+    `feat/quiz-recording-video-only`，已 merge 回 master。
+  - 本項為使用者要求的功能變更，**不計入** 100 輪計數。
+
 ## 同步 master/follower 定義改為以擁有者為準（使用者要求，2026-07-02）
 
 使用者要求變更 master/follower 的定義：「自己的簡報按下同步模式會變成 master，不是的會變成 follower」。
@@ -413,6 +425,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-02 | （使用者要求）測驗監考錄影只錄影不錄音：`useQuizRecorder` 的 `getUserMedia` 由 `audio: true` 改為 `audio: false`，不請求麥克風、避免收錄環境音；串流無音軌故產出純視訊 webm。更新註解、前端 tsc 通過 | feat/quiz-recording-video-only |
 | 2026-07-02 | （使用者要求）同步 master/follower 定義改為以擁有者為準：「自己的簡報按同步→master，不是的→follower」。後端 `/sync/join`、`/sync/state` 取得主控權門檻由 `canEditPdf` 改為 `isPdfOwner`（public_editable 協作者不再能搶 master，改以 follower share-join）；前端 `PlayPage` 以 `isSyncMasterEligible = detail?.is_owner` 決定 join/share-join 路徑、自動跟隨與 master 重奪。更新+新增 sync 權限測試；前後端 tsc 通過、sync 權限 13/13 + 其餘 sync 7/7 回歸通過 | feat/sync-master-follower-by-ownership |
 | 2026-07-02 | （使用者要求）把 AI 導師回答存成評論時標示「存的人」的名稱：原本未設暱稱時作者只記成「AI 導師」，看不出誰存的。改為以「評論暱稱 → 登入帳號 name/email」解析存檔者，作者存為「{存檔者}（AI 導師）」（同時保留 AI 導師來源標示），完全無名稱時才退回單純「AI 導師」。新增 i18n 鍵 `play.sidebar.aiTutorAuthor`／`aiTutorAuthorWithName`（zh-TW/en），並沿用新的 share token 參數。前端 tsc 通過、i18n 24 測試通過 | feat/ai-tutor-comment-saver-name |
 | 2026-07-02 | （使用者要求）評論對「能開啟簡報的人」公開（含分享連結）：評論本來就對簡報的可讀者共享（無按作者過濾），但評論路由只認 `canReadPdf`，導致以分享連結開啟私人簡報的學生讀取/新增評論會 403。將評論「列出全部／單頁列出／新增」三個端點改為 `hasShareAccess(request,id) || canReadPdf(...)`（比照 quiz 路由），前端 `listAllComments`/`listPageComments`/`createPageComment` 加 `share` query 並由 `PlayPageSidebar` 帶入 `currentShareToken`；resolve/edit/delete 仍限 owner/editor。新增回歸測試（分享連結觀看者可貼文並互相看到、無 token 仍 403）。前後端 tsc 通過、page-comments 12/12 | feat/comments-visible-via-share |
