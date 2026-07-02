@@ -45,6 +45,7 @@ import { registerImageQualityRoutes } from './image-quality';
 import { registerTemplateRoutes } from './templates';
 import { registerEmbeddingStatsRoutes } from './embedding-stats';
 import { registerSimilarPagesRoutes } from './similar-pages';
+import { registerPdfPermissionRoutes } from './pdfPermissions';
 
 export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerUploadRoutes(app);
@@ -93,4 +94,5 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerTemplateRoutes(app);
   await registerEmbeddingStatsRoutes(app);
   await registerSimilarPagesRoutes(app);
+  await registerPdfPermissionRoutes(app);
 }
