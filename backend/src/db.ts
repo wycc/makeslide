@@ -703,6 +703,27 @@ function migrate(): void {
     logger.info('Created table page_embeddings');
   }
 
+  // Per-presentation identity-based access control list. Grants a specific principal
+  // (an individual user by email, or — added later — a named group) read-only or
+  // read-write access. Users not listed fall back to the presentation's default access
+  // (the existing pdfs.visibility). The owner always has full access regardless.
+  if (!tableExists('pdf_permissions')) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS pdf_permissions (
+        pdf_id TEXT NOT NULL,
+        principal_type TEXT NOT NULL,
+        principal_id TEXT NOT NULL,
+        access TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (pdf_id, principal_type, principal_id),
+        FOREIGN KEY (pdf_id) REFERENCES pdfs(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_pdf_permissions_pdf ON pdf_permissions(pdf_id);
+    `);
+    logger.info('Created table pdf_permissions');
+  }
+
   logger.info({ dbPath: config.dbPath }, 'Database migrations applied');
 }
 
