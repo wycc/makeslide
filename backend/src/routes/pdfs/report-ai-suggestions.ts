@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { canEditPdf } from './permissions';
+import { canEditPdf , aclCtx } from './permissions';
 import { z } from 'zod';
 import { db } from '../../db';
 import type { PdfRow } from '../../types';
@@ -93,7 +93,7 @@ export async function registerReportAiSuggestionsRoutes(app: FastifyInstance): P
       .prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`)
       .get(id) as Pick<PdfRow, 'owner_sub' | 'visibility'> | undefined;
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!canEditPdf(sessionSub(request), pdfRow)) {
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限生成此簡報的 AI 建議'));
     }
 

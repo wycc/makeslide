@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { canEditPdf } from './permissions';
+import { canEditPdf , aclCtx } from './permissions';
 import { z } from 'zod';
 import { db } from '../../db';
 import type { PdfRow } from '../../types';
@@ -41,7 +41,7 @@ export async function registerGeneratePollRoutes(app: FastifyInstance): Promise<
 
     const pdf = db.prepare(`SELECT id, owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as Pick<PdfRow, 'id' | 'owner_sub' | 'visibility'> | undefined;
     if (!pdf) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!canEditPdf(sessionSub(request), pdf)) return reply.code(403).send(errorResponse('FORBIDDEN', 'No edit permission'));
+    if (!canEditPdf(sessionSub(request), pdf, aclCtx(request, id))) return reply.code(403).send(errorResponse('FORBIDDEN', 'No edit permission'));
 
     const page = db.prepare(`SELECT script_path, text_path FROM pages WHERE pdf_id = ? AND page_number = ?`).get(id, n) as PageRow | undefined;
     if (!page) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));

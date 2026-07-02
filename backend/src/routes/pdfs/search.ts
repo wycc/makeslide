@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { canReadPdf } from './permissions';
+import { canReadPdf , aclCtx } from './permissions';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
@@ -162,7 +162,7 @@ export async function registerSearchRoutes(app: FastifyInstance): Promise<void> 
       .all(MAX_READABLE_PDFS * 10) as Array<Pick<PdfRow, 'id' | 'title' | 'owner_sub' | 'visibility'> & { created_at: string; description?: string }>;
 
     const readablePdfs = allPdfs
-      .filter((row) => canReadPdf(sub, row))
+      .filter((row) => canReadPdf(sub, row, aclCtx(request, row.id)))
       .slice(0, MAX_READABLE_PDFS);
 
     const results: SearchResult[] = [];

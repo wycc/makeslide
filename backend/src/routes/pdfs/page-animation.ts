@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { ShareTokenParamSchema, getShareToken, hasShareAccess } from './share';
-import { getPdfPermissionRow, canReadPdf, canEditPdf } from './permissions';
+import { getPdfPermissionRow, canReadPdf, canEditPdf , aclCtx } from './permissions';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
@@ -104,7 +104,7 @@ export async function registerPageAnimationRoutes(app: FastifyInstance): Promise
     if (!row) {
       return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', 'Page not found'));
     }
-    if (!hasShareAccess(request, id) && !canReadPdf(sessionSub(request), pdfRow)) {
+    if (!hasShareAccess(request, id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的動畫'));
     }
     const spec = readStoredSpec(id, row);
@@ -130,7 +130,7 @@ export async function registerPageAnimationRoutes(app: FastifyInstance): Promise
       return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', 'Page not found'));
     }
     const pdfRow = getPdfPermissionRow(id);
-    if (!pdfRow || !canEditPdf(sessionSub(request), pdfRow)) {
+    if (!pdfRow || !canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的動畫'));
     }
     const validated = validateAnimationSpec(parsedBody.data.spec);
@@ -167,7 +167,7 @@ export async function registerPageAnimationRoutes(app: FastifyInstance): Promise
     if (!row) {
       return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', 'Page not found'));
     }
-    if (!hasShareAccess(request, id) && !canReadPdf(sessionSub(request), pdfRow)) {
+    if (!hasShareAccess(request, id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的動畫規格'));
     }
     const spec = readStoredSpec(id, row);
@@ -192,7 +192,7 @@ export async function registerPageAnimationRoutes(app: FastifyInstance): Promise
       return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', 'Page not found'));
     }
     const pdfRow = getPdfPermissionRow(id);
-    if (!pdfRow || !canEditPdf(sessionSub(request), pdfRow)) {
+    if (!pdfRow || !canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的動畫'));
     }
     if (parsedBody.data.sentences.length === 0) {
@@ -234,7 +234,7 @@ export async function registerPageAnimationRoutes(app: FastifyInstance): Promise
     if (!row) {
       return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', 'Page not found'));
     }
-    if (!hasShareAccess(request, id) && !canReadPdf(sessionSub(request), pdfRow)) {
+    if (!hasShareAccess(request, id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的自訂腳本動畫'));
     }
     return reply
@@ -270,7 +270,7 @@ export async function registerPageAnimationRoutes(app: FastifyInstance): Promise
       return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', 'Page not found'));
     }
     const pdfRow = getPdfPermissionRow(id);
-    if (!pdfRow || !canEditPdf(sessionSub(request), pdfRow)) {
+    if (!pdfRow || !canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的動畫'));
     }
     const pageText = row.text_path
