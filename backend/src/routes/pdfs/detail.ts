@@ -14,7 +14,8 @@ import type { PageRow, PdfListItem, PdfRow, PdfSourceItem } from '../../types';
 import { coverImagePath, pageTimelinePath, readMetadata, safeJoinPdfPath, videoPath, writeMetadata, youtubeOutlinePath, youtubeSourceAudioPath } from '../../services/storage';
 import { isGithubSyncDirty } from '../../services/presentationGit';
 import { getAccountDisplayNames } from '../../services/accountProfiles';
-import { sessionSub } from '../auth';
+import { sessionSub, sessionEmail } from '../auth';
+import { resolvePdfAccessLevel } from './pdfAccess';
 import { ensureCoverThumbnail, ensurePageThumbnail, generateCoverThumbnail } from '../../services/thumbnails';
 import {
   IdParamSchema,
@@ -186,7 +187,9 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       )
       .all() as PdfRow[];
     // 沒有 owner 的舊資料不在列表中顯示（仍可透過直接連結存取，canReadPdf() 對它們的權限不變）。
-    const readableRows = rows.filter((row) => row.owner_sub != null && canReadPdf(sub, row));
+    // 帶入 ACL context：被個別授權（只讀/讀寫）的使用者，其被授權的簡報也要出現在列表中。
+    const email = sessionEmail(request);
+    const readableRows = rows.filter((row) => row.owner_sub != null && canReadPdf(sub, row, { id: row.id, email }));
     const ownerNames = getAccountDisplayNames(readableRows.map((row) => row.owner_sub));
     const items: PdfListItem[] = await Promise.all(
       readableRows.map(async (row) => {
@@ -230,7 +233,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     if (!shareAccess && isShareTokenExpired(request, parsed.data.id)) {
       return reply.code(410).send(errorResponse('SHARE_LINK_EXPIRED', '此分享連結已過期'));
     }
-    if (!shareAccess && !canReadPdf(sub, row)) {
+    if (!shareAccess && !canReadPdf(sub, row, { id: row.id, email: sessionEmail(request) })) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報'));
     }
     const pages = db
@@ -271,16 +274,21 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     // 分享連結的唯讀/可編輯模式只限制其他訪客；owner（或沒有 owner 的舊資料）
     // 永遠視為可讀寫，前端用這個旗標避免把自己設定的唯讀分享套用到自己身上。
     const isOwner = hasOwnerOrLegacyAccess(sub, row);
+    // The requester's identity-based access level (owner→edit; listed users per the ACL;
+    // otherwise the default/visibility). Lets the frontend grant edit UI to read-write ACL
+    // users who aren't the owner, without relying on is_owner alone.
+    const accessLevel = resolvePdfAccessLevel(row.id, sub, sessionEmail(request), row);
     if (shareMode) {
       return reply.send({
         ...detail,
         sources: sourceItems,
         share_mode: shareMode,
         is_owner: isOwner,
+        access_level: accessLevel,
         is_authenticated: Boolean(sub),
       });
     }
-    return reply.send({ ...detail, sources: sourceItems, is_owner: isOwner, is_authenticated: Boolean(sub) });
+    return reply.send({ ...detail, sources: sourceItems, is_owner: isOwner, access_level: accessLevel, is_authenticated: Boolean(sub) });
   });
 
   app.post('/api/pdfs/:id/sources/txt', async (request, reply) => {

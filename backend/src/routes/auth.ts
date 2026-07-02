@@ -102,6 +102,16 @@ export function sessionSub(request: FastifyRequest): string | null {
   return session?.sub ?? null;
 }
 
+/**
+ * Decode the session cookie and return the account email, or null when there is no valid
+ * session. Used by identity-based sharing to match a requester against a presentation's
+ * per-user access control list (which is keyed by email).
+ */
+export function sessionEmail(request: FastifyRequest): string | null {
+  const session = decodeSession(parseCookies(request).makeslide_session);
+  return session?.email ?? null;
+}
+
 /** Production always runs behind TLS (see Dockerfile); dev/test typically runs on plain http://localhost where Secure would break login. */
 function secureCookieSuffix(): string {
   return process.env.NODE_ENV === 'production' ? '; Secure' : '';
