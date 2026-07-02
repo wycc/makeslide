@@ -32,8 +32,9 @@ function pickMimeType(): string {
 }
 
 /**
- * 測驗監考錄影：以 getUserMedia 開前鏡頭 + MediaRecorder 全程錄影，交卷時上傳伺服器。
- * 相機為必要條件——start() 失敗時 reject，呼叫端（QuizProctorGate 的前置檢查）應阻止進入測驗。
+ * 測驗監考錄影：以 getUserMedia 開前鏡頭 + MediaRecorder 全程錄影（只錄影像、不錄聲音），
+ * 交卷時上傳伺服器。相機為必要條件——start() 失敗時 reject，呼叫端（QuizProctorGate 的前置
+ * 檢查）應阻止進入測驗。
  */
 export function useQuizRecorder({ pdfId, quizId, sessionId, clientId, resolveCode }: UseQuizRecorderParams): QuizRecorder {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -58,7 +59,10 @@ export function useQuizRecorder({ pdfId, quizId, sessionId, clientId, resolveCod
     }
     let stream: MediaStream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: true });
+      // 監考錄影只錄「影像」不錄「聲音」：不請求麥克風（audio: false），避免收錄考場環境音或
+      // 學生說話。MediaRecorder 之後即使用含 opus 音訊 codec 的 mime 字串，因串流無音軌，
+      // 產出的仍是純視訊 webm。
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
     } catch (err) {
       setError('camera_denied');
       throw err instanceof Error ? err : new Error('camera_denied');
