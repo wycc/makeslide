@@ -14,6 +14,25 @@
 - [ ] 系統性採用 `mapApiErrorToHumanMessage`：目前約 55 處 catch 區塊直接 `setError(err.message)` 顯示後端原始 message、繞過既有的錯誤訊息映射（前端僅 2 處 `UploadButton`、`ImportTextPage` 使用 mapper）。全面改造屬較大工程，且各 catch 上下文不同、許多後端 message 已是中文（未必都是英文洩漏），逐點需產品判斷顯示風格，故列為待使用者決定。
 - [ ] 把前端測試納入 root `npm test`：目前 root 測試腳本未涵蓋前端 `node:test` 測試。納入涉及 CI 行為變更與 `npm install`（sandbox 無法驗證），列為待使用者決定。
 
+## 同步 master/follower 定義改為以擁有者為準（使用者要求，2026-07-02）
+
+使用者要求變更 master/follower 的定義：「自己的簡報按下同步模式會變成 master，不是的會變成 follower」。
+原本 master 是「第一個以編輯權限（owner 或 public_editable 協作者）加入同步的人」，導致有編輯權限的
+協作者也能搶下主控權。新定義收斂為：**只有簡報擁有者**按下同步會成為 master，其他所有人（分享連結
+訪客、public 唯讀觀看者、public_editable 協作者）一律為 follower。
+
+- [x] 同步 master 角色改以「簡報擁有者」為判準（取代「有編輯權限且先搶先贏」）。
+  - 修改說明（2026-07-02）：後端 [sync.ts](backend/src/routes/pdfs/sync.ts) 的 `/sync/join` 與 `/sync/state`
+    取得主控權的門檻由 `canEditPdf` 改為 `isPdfOwner`——非擁有者（含 public_editable 協作者）呼叫
+    master 路徑回 403，只能以 follower 走 `/sync/share-join`。前端 [PlayPage.tsx](frontend/src/pages/PlayPage.tsx)
+    新增 `isSyncMasterEligible = Boolean(detail?.is_owner)`，加入路徑（join vs share-join）、自動跟隨、
+    master 失效後是否自動重奪，全部改以此判準（取代原本的 `currentShareToken || shareIsReadOnly`）。
+    更新 `sync-join-permission.test.ts`：原「public_editable 協作者可取得 master」改為「被拒（403）、
+    但可以 follower 身分 share-join」，並新增「非擁有者協作者無法於 /sync/state 空窗期搶 master」測試。
+    前後端 `tsc --noEmit` 通過；sync 權限 13/13 測試 + 其餘 sync 測試 7/7 回歸通過（以 Node 22 執行）。
+    分支 `feat/sync-master-follower-by-ownership`，已 merge 回 master。
+  - 本項為使用者要求的功能變更，**不計入** 100 輪計數。
+
 ## AI 導師（PageAskPanel）回答品質改善（使用者要求，2026-06-28）
 
 背景：AI 導師回答先前把換行輸出成字面 `\n`，已於後端 `/pages/:n/ask`（[page-operations.ts](backend/src/routes/pdfs/page-operations.ts)）回傳前正規化成真換行（分支 `fix/ai-tutor-newline-readability`）。以下為可進一步提升回答可讀性與品質的後續項目：
@@ -394,6 +413,7 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-02 | （使用者要求）同步 master/follower 定義改為以擁有者為準：「自己的簡報按同步→master，不是的→follower」。後端 `/sync/join`、`/sync/state` 取得主控權門檻由 `canEditPdf` 改為 `isPdfOwner`（public_editable 協作者不再能搶 master，改以 follower share-join）；前端 `PlayPage` 以 `isSyncMasterEligible = detail?.is_owner` 決定 join/share-join 路徑、自動跟隨與 master 重奪。更新+新增 sync 權限測試；前後端 tsc 通過、sync 權限 13/13 + 其餘 sync 7/7 回歸通過 | feat/sync-master-follower-by-ownership |
 | 2026-07-02 | （使用者要求）把 AI 導師回答存成評論時標示「存的人」的名稱：原本未設暱稱時作者只記成「AI 導師」，看不出誰存的。改為以「評論暱稱 → 登入帳號 name/email」解析存檔者，作者存為「{存檔者}（AI 導師）」（同時保留 AI 導師來源標示），完全無名稱時才退回單純「AI 導師」。新增 i18n 鍵 `play.sidebar.aiTutorAuthor`／`aiTutorAuthorWithName`（zh-TW/en），並沿用新的 share token 參數。前端 tsc 通過、i18n 24 測試通過 | feat/ai-tutor-comment-saver-name |
 | 2026-07-02 | （使用者要求）評論對「能開啟簡報的人」公開（含分享連結）：評論本來就對簡報的可讀者共享（無按作者過濾），但評論路由只認 `canReadPdf`，導致以分享連結開啟私人簡報的學生讀取/新增評論會 403。將評論「列出全部／單頁列出／新增」三個端點改為 `hasShareAccess(request,id) || canReadPdf(...)`（比照 quiz 路由），前端 `listAllComments`/`listPageComments`/`createPageComment` 加 `share` query 並由 `PlayPageSidebar` 帶入 `currentShareToken`；resolve/edit/delete 仍限 owner/editor。新增回歸測試（分享連結觀看者可貼文並互相看到、無 token 仍 403）。前後端 tsc 通過、page-comments 12/12 | feat/comments-visible-via-share |
 | 2026-07-02 | （使用者要求）AI 導師「問這一頁」改以 Markdown＋LaTeX 作答：前端 `PageAskPanel` 早已用 `MarkdownMath`（Markdown＋KaTeX，支援 `$...$`／`$$...$$`）渲染答案，但 `/pages/:n/ask` 的 system prompt 從未要求模型輸出該格式。於 [page-operations.ts](backend/src/routes/pdfs/page-operations.ts) 該 prompt 新增「格式（務必遵守）」指示：以 Markdown 作答（標題／粗體／條列／表格），數學式一律用 Markdown 可渲染的 LaTeX（行內 `$...$`、區塊 `$$...$$`），不得用純文字或圖片描述數學式。純 prompt 調整、無需前端改動；後端 tsc 通過 | feat/ai-tutor-markdown-latex-answer |

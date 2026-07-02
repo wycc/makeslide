@@ -66,12 +66,34 @@ test('POST /sync/join allows the owner', async () => {
   await app.close();
 });
 
-test('POST /sync/join allows a read-write collaborator on a public_editable presentation', async () => {
+test('POST /sync/join rejects a non-owner collaborator on a public_editable presentation', async () => {
+  // New master/follower definition: the sync master is the presentation's OWNER only. A
+  // public_editable collaborator has edit access but is not the owner, so the master path
+  // (/sync/join) now rejects them — they join as a follower via /sync/share-join instead.
   seedSyncPdf('syncjoin-editable-01', 'public_editable');
   const app = await buildApp();
   const resp = await app.inject({ method: 'POST', url: '/api/pdfs/syncjoin-editable-01/sync/join', headers: OTHER_HEADERS, payload: { client_id: 'c1' } });
-  assert.equal(resp.statusCode, 200);
+  assert.equal(resp.statusCode, 403);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
   await app.close();
+});
+
+test('POST /sync/share-join lets a non-owner collaborator follow a public_editable presentation once the owner is master', async () => {
+  // The other half of the new definition: a non-owner collaborator still participates, but
+  // as a follower. Owner becomes master first, then the collaborator follows without a token.
+  seedSyncPdf('sharejoin-editable-01', 'public_editable');
+  const app = await buildApp();
+  try {
+    const master = await app.inject({ method: 'POST', url: '/api/pdfs/sharejoin-editable-01/sync/join', headers: OWNER_HEADERS, payload: { client_id: 'owner-c1' } });
+    assert.equal(master.statusCode, 200);
+    assert.equal((master.json() as { role: string }).role, 'master');
+
+    const follower = await app.inject({ method: 'POST', url: '/api/pdfs/sharejoin-editable-01/sync/share-join', headers: OTHER_HEADERS, payload: { client_id: 'collab-c1' } });
+    assert.equal(follower.statusCode, 200);
+    assert.equal((follower.json() as { role: string }).role, 'follower');
+  } finally {
+    await app.close();
+  }
 });
 
 test('POST /sync/join returns 404 for a non-existent PDF', async () => {
@@ -152,6 +174,26 @@ test('POST /sync/state allows the owner to claim master directly without calling
     });
     assert.equal(resp.statusCode, 200);
     assert.equal((resp.json() as { role: string }).role, 'master');
+  } finally {
+    await app.close();
+  }
+});
+
+test('POST /sync/state rejects a non-owner collaborator from claiming master when no master is active', async () => {
+  // New definition: even a public_editable collaborator (who has edit access) is not the owner,
+  // so they can no longer grab the master role by hitting /sync/state during the no-master
+  // window. Previously canEditPdf() would have let them claim it.
+  seedSyncPdf('syncstate-editable-collab-01', 'public_editable');
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: '/api/pdfs/syncstate-editable-collab-01/sync/state',
+      headers: OTHER_HEADERS,
+      payload: syncStatePayload('collab-client-1'),
+    });
+    assert.equal(resp.statusCode, 403);
+    assert.equal((resp.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
   } finally {
     await app.close();
   }
