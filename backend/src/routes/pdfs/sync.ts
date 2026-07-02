@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { getPdfPermissionRow, canEditPdf, canReadPdf, isPdfOwner } from './permissions';
+import { getPdfPermissionRow, canEditPdf, canReadPdf, isPdfOwner , aclCtx } from './permissions';
 import { z } from 'zod';
 import { db } from '../../db';
 import { sessionSub } from '../auth';
@@ -536,7 +536,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     // 以 follower（唯讀跟隨）身分加入直播同步的門檻：持有有效分享 token，或本來就能讀
     // 這份簡報（例如 public visibility，靠 QR/網址觀看但 token 沒帶到的情況）。master
     // 主控權仍只在 /sync/join 以 canEditPdf 把關，唯讀觀看者拿不到主控。
-    if (!hasValidShareTokenForPdf(id, shareToken) && !canReadPdf(sessionSub(request), pdfRow)) {
+    if (!hasValidShareTokenForPdf(id, shareToken) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限加入此簡報的同步階段'));
     }
     const { client_id: clientId } = parsedBody.data;
@@ -959,7 +959,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     if (!pdfRow) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     }
-    if (!canEditPdf(sessionSub(request), pdfRow)) {
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限踢出學生'));
     }
     db.prepare(`DELETE FROM sync_attendees WHERE pdf_id = ? AND client_id = ?`).run(id, clientId);
@@ -979,7 +979,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     if (!pdfRow) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     }
-    if (!canEditPdf(sessionSub(request), pdfRow)) {
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限查看出席名單'));
     }
     interface AttendeeRow { client_id: string; user_code: string | null; joined_at: string }

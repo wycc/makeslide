@@ -1,6 +1,8 @@
+import type { FastifyRequest } from 'fastify';
 import { db } from '../../db';
 import type { PdfRow } from '../../types';
 import { resolvePdfAccessLevel } from './pdfAccess';
+import { sessionEmail } from '../auth';
 
 /**
  * Identity context for consulting a presentation's per-user access control list (ACL).
@@ -13,6 +15,14 @@ export interface PdfAclContext {
   id: string;
   /** The requester's account email, or null when unauthenticated. */
   email: string | null;
+}
+
+/**
+ * Build the ACL context for a request + presentation id, to pass as the third argument of
+ * canReadPdf/canEditPdf so they consult the per-user access control list.
+ */
+export function aclCtx(request: FastifyRequest, id: string): PdfAclContext {
+  return { id, email: sessionEmail(request) };
 }
 
 /**

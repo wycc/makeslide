@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { canReadPdf } from './permissions';
+import { canReadPdf , aclCtx } from './permissions';
 import fs from 'node:fs';
 import { db } from '../../db';
 import { sessionSub } from '../auth';
@@ -76,7 +76,7 @@ export async function registerQualityCheckRoutes(app: FastifyInstance): Promise<
       | Pick<PdfRow, 'owner_sub' | 'visibility' | 'status'>
       | undefined;
     if (!pdfRow) return reply.code(404).send(errorResponse('NOT_FOUND', 'PDF not found'));
-    if (!canReadPdf(sub, pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', 'Access denied'));
+    if (!canReadPdf(sub, pdfRow, aclCtx(request, id))) return reply.code(403).send(errorResponse('FORBIDDEN', 'Access denied'));
 
     // Completed pages end at the terminal page status 'audio_ready'; 'ready' is
     // a PDF-level status (not a valid page status), so filtering on it returned

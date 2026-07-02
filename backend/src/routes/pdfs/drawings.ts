@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { ShareTokenParamSchema, getShareToken, hasShareAccess } from './share';
-import { getPdfPermissionRow, canReadPdf, canEditPdf, canDestructivelyEditPdf } from './permissions';
+import { getPdfPermissionRow, canReadPdf, canEditPdf, canDestructivelyEditPdf , aclCtx } from './permissions';
 import { z } from 'zod';
 import { db } from '../../db';
 import { sessionSub } from '../auth';
@@ -36,7 +36,7 @@ export async function registerDrawingsRoutes(app: FastifyInstance): Promise<void
     if (!pageRow) {
       return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', 'Page not found'));
     }
-    if (!hasShareAccess(request, id) && !canReadPdf(sessionSub(request), pdfRow)) {
+    if (!hasShareAccess(request, id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的畫板'));
     }
     const row = db
@@ -62,7 +62,7 @@ export async function registerDrawingsRoutes(app: FastifyInstance): Promise<void
     if (!pdfRow) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     }
-    if (!canEditPdf(sessionSub(request), pdfRow)) {
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的畫板'));
     }
     const now = nowIso();

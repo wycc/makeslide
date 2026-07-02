@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { canReadPdf } from './permissions';
+import { canReadPdf , aclCtx } from './permissions';
 import fs from 'node:fs';
 import { db } from '../../db';
 import type { PdfRow } from '../../types';
@@ -192,7 +192,7 @@ export async function registerSubtitleRoutes(app: FastifyInstance): Promise<void
     }
 
     const sub = sessionSub(request);
-    if (!canReadPdf(sub, row)) {
+    if (!canReadPdf(sub, row, aclCtx(request, parsed.data.id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報'));
     }
 
@@ -229,7 +229,7 @@ export async function registerSubtitleRoutes(app: FastifyInstance): Promise<void
     }
 
     const sub = sessionSub(request);
-    if (!canReadPdf(sub, row)) {
+    if (!canReadPdf(sub, row, aclCtx(request, parsed.data.id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報'));
     }
 
@@ -266,7 +266,7 @@ export async function registerSubtitleRoutes(app: FastifyInstance): Promise<void
     }
 
     const sub = sessionSub(request);
-    if (!canReadPdf(sub, row)) {
+    if (!canReadPdf(sub, row, aclCtx(request, parsed.data.id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報'));
     }
 

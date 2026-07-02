@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { canReadPdf } from './permissions';
+import { canReadPdf , aclCtx } from './permissions';
 import fs from 'node:fs/promises';
 import { db } from '../../db';
 import type { PdfRow } from '../../types';
@@ -29,7 +29,7 @@ export async function registerScriptsTxtRoutes(app: FastifyInstance): Promise<vo
       .prepare(`SELECT id, title, owner_sub, visibility FROM pdfs WHERE id = ?`)
       .get(id) as Pick<PdfRow, 'id' | 'title' | 'owner_sub' | 'visibility'> | undefined;
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!canReadPdf(sessionSub(request), pdfRow)) {
+    if (!canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限下載此簡報的逐字稿'));
     }
 

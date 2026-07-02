@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { canReadPdf } from './permissions';
+import { canReadPdf , aclCtx } from './permissions';
 import path from 'node:path';
 import { db } from '../../db';
 import type { PageRow, PdfRow } from '../../types';
@@ -22,7 +22,7 @@ export async function registerHandoutRoutes(app: FastifyInstance): Promise<void>
       .prepare(`SELECT id, title, original_filename, owner_sub, visibility, page_count FROM pdfs WHERE id = ?`)
       .get(parsed.data.id) as Pick<PdfRow, 'id' | 'title' | 'original_filename' | 'owner_sub' | 'visibility' | 'page_count'> | undefined;
     if (!row) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
-    if (!canReadPdf(sessionSub(request), row)) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限下載此簡報講義'));
+    if (!canReadPdf(sessionSub(request), row, aclCtx(request, parsed.data.id))) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限下載此簡報講義'));
 
     const pages = db
       .prepare(

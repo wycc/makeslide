@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { ShareTokenParamSchema, getShareToken, hasShareAccess } from './share';
-import { getPdfPermissionRow, canReadPdf, canEditPdf } from './permissions';
+import { getPdfPermissionRow, canReadPdf, canEditPdf , aclCtx } from './permissions';
 import { z } from 'zod';
 import { db } from '../../db';
 import { sessionSub } from '../auth';
@@ -38,7 +38,7 @@ export async function registerVersioningRoutes(app: FastifyInstance): Promise<vo
     const { id, n } = parsed.data;
     const pdfRow = getPdfPermissionRow(id);
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!hasShareAccess(request, id) && !canReadPdf(sessionSub(request), pdfRow)) {
+    if (!hasShareAccess(request, id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的圖片版本歷史'));
     }
     const page = getPageArtifactPaths(id, n);
@@ -57,7 +57,7 @@ export async function registerVersioningRoutes(app: FastifyInstance): Promise<vo
     const { id, n } = parsed.data;
     const pdfRow = getPdfPermissionRow(id);
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!hasShareAccess(request, id) && !canReadPdf(sessionSub(request), pdfRow)) {
+    if (!hasShareAccess(request, id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的逐字稿版本歷史'));
     }
     const page = getPageArtifactPaths(id, n);
@@ -77,7 +77,7 @@ export async function registerVersioningRoutes(app: FastifyInstance): Promise<vo
     const { id, n } = parsed.data;
     const pdfRow = getPdfPermissionRow(id);
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!hasShareAccess(request, id) && !canReadPdf(sessionSub(request), pdfRow)) {
+    if (!hasShareAccess(request, id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的逐字稿版本內容'));
     }
     const page = getPageArtifactPaths(id, n);
@@ -102,7 +102,7 @@ export async function registerVersioningRoutes(app: FastifyInstance): Promise<vo
     const { id, n } = parsed.data;
     const pdfRow = getPdfPermissionRow(id);
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!hasShareAccess(request, id) && !canReadPdf(sessionSub(request), pdfRow)) {
+    if (!hasShareAccess(request, id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的圖片版本內容'));
     }
     const page = getPageArtifactPaths(id, n);
@@ -128,7 +128,7 @@ export async function registerVersioningRoutes(app: FastifyInstance): Promise<vo
     const { id, n } = parsed.data;
     const pdfRow = getPdfPermissionRow(id);
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!canEditPdf(sessionSub(request), pdfRow)) {
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限還原此簡報的圖片版本'));
     }
     const page = getPageArtifactPaths(id, n);
@@ -181,7 +181,7 @@ export async function registerVersioningRoutes(app: FastifyInstance): Promise<vo
     const { id, n } = parsed.data;
     const pdfRow = getPdfPermissionRow(id);
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!canEditPdf(sessionSub(request), pdfRow)) {
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限還原此簡報的逐字稿版本'));
     }
     const page = getPageArtifactPaths(id, n);

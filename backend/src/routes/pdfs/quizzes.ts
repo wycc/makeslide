@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { ShareTokenParamSchema, getShareToken, hasShareAccess } from './share';
-import { getPdfPermissionRow, canReadPdf, canEditPdf, canDestructivelyEditPdf, isPdfOwner } from './permissions';
+import { getPdfPermissionRow, canReadPdf, canEditPdf, canDestructivelyEditPdf, isPdfOwner , aclCtx } from './permissions';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
@@ -272,7 +272,7 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid pdf id'));
     const pdfRow = getPdfPermissionRow(parsed.data.id);
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
-    if (!hasShareAccess(request, parsed.data.id) && !canReadPdf(sessionSub(request), pdfRow)) {
+    if (!hasShareAccess(request, parsed.data.id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, parsed.data.id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的測驗'));
     }
     const rows = db
@@ -280,7 +280,7 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
       .all(parsed.data.id) as QuizSetRow[];
     // 有編輯權限（老師/協作者）看得到全部測驗；唯讀學生只看得到 public 的，加上「正在進行」
     // 的那一份（master 在線且設了 active_quiz_id）——讓老師能預先備題、開始後學生才看得到。
-    const canEdit = canEditPdf(sessionSub(request), pdfRow);
+    const canEdit = canEditPdf(sessionSub(request), pdfRow, aclCtx(request, parsed.data.id));
     let visible = rows;
     if (!canEdit) {
       let activeQuizId: number | null = null;
@@ -304,7 +304,7 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
       | { id: string; title: string | null; page_count: number | null; owner_sub: string | null; visibility: PdfRow['visibility'] }
       | undefined;
     if (!pdf) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
-    if (!canEditPdf(sessionSub(request), pdf)) {
+    if (!canEditPdf(sessionSub(request), pdf, aclCtx(request, parsed.data.id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限為此簡報產生測驗'));
     }
     const context = await readPageContext(parsed.data.id, pdf.page_count);
@@ -328,7 +328,7 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
     if (!body.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
     const pdfRow = getPdfPermissionRow(parsed.data.id);
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
-    if (!canEditPdf(sessionSub(request), pdfRow)) {
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, parsed.data.id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限為此簡報新增測驗'));
     }
     const now = nowIso();
@@ -344,7 +344,7 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
     if (!body.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
     const pdfRow = getPdfPermissionRow(parsed.data.id);
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
-    if (!canEditPdf(sessionSub(request), pdfRow)) {
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, parsed.data.id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的測驗'));
     }
     const now = nowIso();
@@ -374,7 +374,7 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
     if (!body.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
     const pdfRow = getPdfPermissionRow(parsed.data.id);
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
-    if (!hasShareAccess(request, parsed.data.id) && !canReadPdf(sessionSub(request), pdfRow)) {
+    if (!hasShareAccess(request, parsed.data.id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, parsed.data.id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限作答此簡報的測驗'));
     }
     const quiz = db.prepare(`SELECT id, questions_json FROM quiz_sets WHERE id = ? AND pdf_id = ?`).get(parsed.data.quizId, parsed.data.id) as
@@ -413,7 +413,7 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid quiz parameters'));
     const pdfRow = getPdfPermissionRow(parsed.data.id);
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
-    if (!hasShareAccess(request, parsed.data.id) && !canReadPdf(sessionSub(request), pdfRow)) {
+    if (!hasShareAccess(request, parsed.data.id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, parsed.data.id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的測驗作答紀錄'));
     }
     const quiz = db.prepare(`SELECT id FROM quiz_sets WHERE id = ? AND pdf_id = ?`).get(parsed.data.quizId, parsed.data.id) as { id: number } | undefined;
@@ -426,7 +426,7 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
       .all(parsed.data.quizId) as QuizAttemptRow[];
     // 老師（可編輯）看得到全部作答；唯讀學生只能看自己的紀錄（依登入帳號 sub 比對）。
     // 未登入者無法辨識「自己的」紀錄，回空陣列以免看到其他人的作答。
-    if (!canEditPdf(sessionSub(request), pdfRow)) {
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, parsed.data.id))) {
       const sub = sessionSub(request);
       rows = sub ? rows.filter((r) => r.sub === sub) : [];
     }
@@ -460,11 +460,11 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
 
     const srcRow = getPdfPermissionRow(id);
     if (!srcRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `Source PDF ${id} not found`));
-    if (!canReadPdf(sub, srcRow)) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限讀取來源簡報'));
+    if (!canReadPdf(sub, srcRow, aclCtx(request, id))) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限讀取來源簡報'));
 
     const dstRow = getPdfPermissionRow(targetId);
     if (!dstRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `Target PDF ${targetId} not found`));
-    if (!canEditPdf(sub, dstRow)) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限修改目標簡報'));
+    if (!canEditPdf(sub, dstRow, aclCtx(request, targetId))) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限修改目標簡報'));
 
     const quiz = db
       .prepare(`SELECT title, questions_json, prompt, time_limit_seconds, shuffle_questions, record_camera FROM quiz_sets WHERE id = ? AND pdf_id = ?`)
@@ -488,7 +488,7 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
     if (!request.isMultipart()) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Expected multipart/form-data'));
     const pdfRow = getPdfPermissionRow(parsed.data.id);
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
-    if (!hasShareAccess(request, parsed.data.id) && !canReadPdf(sessionSub(request), pdfRow)) {
+    if (!hasShareAccess(request, parsed.data.id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, parsed.data.id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限上傳此測驗的錄影'));
     }
     const quiz = db.prepare(`SELECT id FROM quiz_sets WHERE id = ? AND pdf_id = ?`).get(parsed.data.quizId, parsed.data.id) as { id: number } | undefined;
@@ -598,7 +598,7 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
     if (!request.isMultipart()) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Expected multipart/form-data'));
     const pdfRow = getPdfPermissionRow(parsed.data.id);
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
-    if (!hasShareAccess(request, parsed.data.id) && !canReadPdf(sessionSub(request), pdfRow)) {
+    if (!hasShareAccess(request, parsed.data.id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, parsed.data.id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限上傳此測驗的作答'));
     }
     const quizRow = db.prepare(`SELECT id, questions_json FROM quiz_sets WHERE id = ? AND pdf_id = ?`).get(parsed.data.quizId, parsed.data.id) as
@@ -679,7 +679,7 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid quiz parameters'));
     const pdfRow = getPdfPermissionRow(parsed.data.id);
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
-    if (!canEditPdf(sessionSub(request), pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視作答'));
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, parsed.data.id))) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視作答'));
     const rows = db
       .prepare(
         `SELECT id, question_id, session_id, client_id, code, sub, file_names, max_score, ai_score, ai_feedback, teacher_score, created_at, updated_at
@@ -723,7 +723,7 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
     }
     const pdfRow = getPdfPermissionRow(parsed.data.id);
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
-    if (!canEditPdf(sessionSub(request), pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視作答照片'));
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, parsed.data.id))) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視作答照片'));
     const row = db
       .prepare(`SELECT file_names FROM quiz_essay_answers WHERE id = ? AND quiz_id = ? AND pdf_id = ?`)
       .get(answerId, parsed.data.quizId, parsed.data.id) as { file_names: string } | undefined;
@@ -753,7 +753,7 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
     if (!body.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid body'));
     const pdfRow = getPdfPermissionRow(parsed.data.id);
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
-    if (!canEditPdf(sessionSub(request), pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限修改分數'));
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, parsed.data.id))) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限修改分數'));
     const row = db
       .prepare(`SELECT max_score FROM quiz_essay_answers WHERE id = ? AND quiz_id = ? AND pdf_id = ?`)
       .get(answerId, parsed.data.quizId, parsed.data.id) as { max_score: number } | undefined;

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { getPdfPermissionRow, canReadPdf, canEditPdf } from './permissions';
+import { getPdfPermissionRow, canReadPdf, canEditPdf , aclCtx } from './permissions';
 import { db } from '../../db';
 import { sessionSub } from '../auth';
 import type { PdfRow } from '../../types';
@@ -20,7 +20,7 @@ export async function registerRegenerateRoutes(app: FastifyInstance): Promise<vo
     if (!pdfRow) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsedParams.data.id} not found`));
     }
-    if (!canEditPdf(sessionSub(request), pdfRow)) {
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, parsedParams.data.id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限重新生成此簡報'));
     }
     try {
@@ -54,7 +54,7 @@ export async function registerRegenerateRoutes(app: FastifyInstance): Promise<vo
     if (!pdfRow) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsedParams.data.id} not found`));
     }
-    if (!canReadPdf(sessionSub(request), pdfRow)) {
+    if (!canReadPdf(sessionSub(request), pdfRow, aclCtx(request, parsedParams.data.id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限查看此簡報的重新生成狀態'));
     }
     const state = getRegenerateJob(parsedParams.data.id);
@@ -71,7 +71,7 @@ export async function registerRegenerateRoutes(app: FastifyInstance): Promise<vo
     if (!pdfRow) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsedParams.data.id} not found`));
     }
-    if (!canEditPdf(sessionSub(request), pdfRow)) {
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, parsedParams.data.id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限取消此簡報的重新生成'));
     }
     try {
@@ -100,7 +100,7 @@ export async function registerRegenerateRoutes(app: FastifyInstance): Promise<vo
     if (!pdfRow) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsedParams.data.id} not found`));
     }
-    if (!canEditPdf(sessionSub(request), pdfRow)) {
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, parsedParams.data.id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限回滾此簡報'));
     }
     try {
