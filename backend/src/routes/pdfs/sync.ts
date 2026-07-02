@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { getPdfPermissionRow, canEditPdf, canReadPdf } from './permissions';
+import { getPdfPermissionRow, canEditPdf, canReadPdf, isPdfOwner } from './permissions';
 import { z } from 'zod';
 import { db } from '../../db';
 import { sessionSub } from '../auth';
@@ -495,11 +495,12 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     if (!pdfRow) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     }
-    // 直接（非分享連結）加入同步等於取得 master（主控）角色，所以門檻比照其他編輯類端點用
-    // canEditPdf()，而非單純的讀取權限——一般唯讀訪客不該能搶先取得直播同步的主控權，
-    // 只有擁有者/協作者可以；分享連結的訪客一律走下方有驗證 token 的 /sync/share-join。
-    if (!canEditPdf(sessionSub(request), pdfRow)) {
-      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限加入此簡報的同步階段'));
+    // master（主控）角色的定義：只有「自己的簡報」——即簡報擁有者——按下同步模式才會成為
+    // master。其他所有人（唯讀訪客、public_editable 協作者）一律是 follower，改走下方的
+    // /sync/share-join。因此這裡的門檻用 isPdfOwner() 而非 canEditPdf()：即使是有編輯權限的
+    // public_editable 協作者，也不能透過本端點搶下主控權（會被導向以 follower 身分加入）。
+    if (!isPdfOwner(sessionSub(request), pdfRow)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '只有簡報擁有者可取得同步主控權'));
     }
     const { client_id: clientId, user_code: userCode } = parsedBody.data;
     const session = getSession(id);
@@ -588,10 +589,11 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     const session = getSession(id);
     touchClient(session, clientId);
     if (!session.masterClientId || session.masterExpiresAt <= nowMs()) {
-      // 取得主控權與 /sync/join 走相同的編輯權限門檻：不能讓完全沒有編輯權限的請求，
-      // 繞過 /sync/join 直接呼叫這個端點取得主控權（例如目前剛好沒有 master 的空窗期）。
-      if (!canEditPdf(sessionSub(request), pdfRow)) {
-        return reply.code(403).send(errorResponse('FORBIDDEN', '無權限取得此簡報同步階段的主控權'));
+      // 取得主控權與 /sync/join 走相同的擁有者門檻：master 只屬於簡報擁有者，不能讓非擁有者
+      // （即使是 public_editable 協作者）繞過 /sync/join 直接呼叫這個端點、在沒有 master 的
+      // 空窗期搶下主控權。
+      if (!isPdfOwner(sessionSub(request), pdfRow)) {
+        return reply.code(403).send(errorResponse('FORBIDDEN', '只有簡報擁有者可取得同步主控權'));
       }
       claimMaster(session, clientId);
     }
