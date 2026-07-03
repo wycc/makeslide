@@ -354,6 +354,58 @@ export async function updatePdfVisibility(id: string, visibility: PdfVisibilityM
   return (await resp.json()) as UpdatePdfVisibilityResponse;
 }
 
+// ─── Per-user access control list (identity-based sharing) ───────────────────
+export type PdfPermissionAccess = 'read_only' | 'read_write';
+
+export interface PdfPermissionEntry {
+  email: string;
+  access: PdfPermissionAccess;
+  display_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PdfPermissionsResponse {
+  pdf_id: string;
+  default_visibility: PdfVisibilityMode;
+  permissions: PdfPermissionEntry[];
+}
+
+export interface AccountSearchResult {
+  email: string;
+  display_name: string;
+}
+
+export async function listPdfPermissions(id: string): Promise<PdfPermissionsResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/permissions`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as PdfPermissionsResponse;
+}
+
+export async function upsertPdfPermission(id: string, email: string, access: PdfPermissionAccess): Promise<void> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/permissions`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email, access }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+}
+
+export async function removePdfPermission(id: string, email: string): Promise<void> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/permissions`, {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+}
+
+export async function searchAccounts(query: string): Promise<AccountSearchResult[]> {
+  const resp = await fetch(`api/accounts/search?q=${encodeURIComponent(query)}`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return ((await resp.json()) as { accounts: AccountSearchResult[] }).accounts;
+}
+
 export interface CreateYoutubeTaskResponse {
   id: string;
   status: string;
