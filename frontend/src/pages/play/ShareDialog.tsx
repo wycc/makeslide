@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { copyTextToClipboard } from '../../lib/clipboard';
 import { useI18n } from '../../i18n';
 import { useOverlayDismiss } from '../../components/useOverlayDismiss';
+import { AccessControlPanel } from './AccessControlPanel';
+import type { PdfVisibilityMode } from '../../lib/api/pdfs';
 
 /** Builds the iframe embed snippet for a share URL, or '' when there is no URL yet. */
 export function buildEmbedCode(shareUrl: string): string {
@@ -18,16 +20,27 @@ interface ShareDialogProps {
   onCopySuccess: () => void;
   onCopyError: () => void;
   onClose: () => void;
+  /** When set (owner only), an "Access" tab lets the owner manage the per-user permission list. */
+  pdfId?: string;
+  visibility?: PdfVisibilityMode;
+  canManageAccess?: boolean;
 }
 
-export function ShareDialog({ shareUrl, expiresAt, selectedExpiresDays, onExpiresDaysChange, onCopySuccess, onCopyError, onClose }: ShareDialogProps) {
+type ShareTab = 'link' | 'embed' | 'access';
+
+export function ShareDialog({ shareUrl, expiresAt, selectedExpiresDays, onExpiresDaysChange, onCopySuccess, onCopyError, onClose, pdfId, visibility, canManageAccess }: ShareDialogProps) {
   const { t } = useI18n();
   const [copyStatus, setCopyStatus] = useState<'idle' | 'success' | 'error'>('idle');
-  const [activeTab, setActiveTab] = useState<'link' | 'embed'>('link');
+  const [activeTab, setActiveTab] = useState<ShareTab>('link');
   const [embedCopyStatus, setEmbedCopyStatus] = useState<'idle' | 'success'>('idle');
 
   const embedCode = buildEmbedCode(shareUrl);
   const { onBackdropClick } = useOverlayDismiss(onClose);
+  const showAccessTab = Boolean(canManageAccess && pdfId);
+  const tabs: ShareTab[] = showAccessTab ? ['link', 'embed', 'access'] : ['link', 'embed'];
+
+  const tabLabel = (tab: ShareTab): string =>
+    tab === 'link' ? t('play.shareDialog.tabLink') : tab === 'embed' ? t('play.shareDialog.embedTab') : t('play.access.tab');
 
   const EXPIRY_OPTIONS: Array<{ label: string; value: number | undefined }> = [
     { label: t('play.shareDialog.expiryNever'), value: undefined },
@@ -49,19 +62,21 @@ export function ShareDialog({ shareUrl, expiresAt, selectedExpiresDays, onExpire
       >
         <h3 className="text-base font-semibold text-slate-100">{t('play.shareDialog.title')}</h3>
         <div className="mt-3 flex gap-1 border-b border-slate-700">
-          {(['link', 'embed'] as const).map((tab) => (
+          {tabs.map((tab) => (
             <button
               key={tab}
               type="button"
               onClick={() => setActiveTab(tab)}
               className={`px-3 py-1.5 text-xs font-medium ${activeTab === tab ? 'border-b-2 border-violet-400 text-violet-200' : 'text-slate-400 hover:text-slate-200'}`}
             >
-              {t(tab === 'link' ? 'play.shareDialog.tabLink' : 'play.shareDialog.embedTab')}
+              {tabLabel(tab)}
             </button>
           ))}
         </div>
 
-        {activeTab === 'link' ? (
+        {activeTab === 'access' && pdfId ? (
+          <AccessControlPanel pdfId={pdfId} initialVisibility={visibility ?? 'private'} />
+        ) : activeTab === 'link' ? (
           <>
             <p className="mt-3 text-sm text-slate-300">{t('play.shareDialog.description')}</p>
             <textarea
