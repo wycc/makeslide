@@ -1,5 +1,24 @@
 # MakeSlide 功能說明
 
+## 測驗錄影的人頭偵測提示（去抖狀態機）
+
+### 背景
+
+規畫中的功能：測驗錄影時在瀏覽器端偵測鏡頭裡是否有人頭，若一段時間偵測不到就提示學生入鏡並顯示鏡頭預覽。逐幀偵測（無論用瀏覽器原生 `FaceDetector` 或輕量模型）都會有單幀誤判——偶爾一兩幀抓不到臉是正常的，如果每次沒抓到就立刻閃提示會非常干擾。這個 section 先完成「偵測結果序列 → 是否提示」的去抖狀態機（尚未接偵測迴圈與 UI）。
+
+### 變更內容
+
+- 新增 `frontend/src/lib/headDetectionPrompt.ts` 的 `updateHeadDetectionState(state, headDetected, missThreshold)`，搭配型別 `HeadDetectionState`（`{consecutiveMisses, prompting}`）與初始狀態 `initialHeadDetectionState`。
+- 遲滯（hysteresis）設計避免閃爍：要**連續 `missThreshold` 幀都沒偵測到人頭**才會開啟提示（on-delay 去抖，門檻至少為 1、非整數向下取整）；一旦某一幀**偵測到人頭就立即清除提示並歸零計數**（快速恢復）。提示開啟後會維持到再次偵測到人頭為止。當偵測結果不改變狀態時回傳同一物件參考，方便配合 React 狀態更新。
+
+### 使用方式
+
+這是給後續「人頭偵測」功能使用的核心邏輯：偵測迴圈每處理完一幀就以該幀是否偵測到人頭呼叫一次 reducer，UI 再依回傳的 `prompting` 決定要不要顯示「請回到鏡頭前」的提示與鏡頭預覽。目前尚未接上實際偵測與 UI，屬功能的第一步。
+
+### 測試
+
+新增 `headDetectionPrompt.test.ts`（8 組：未達門檻不提示、剛好達門檻才提示、單一偵測幀不觸發提示、偵測到人頭立即清除提示並歸零、提示持續到偵測為止、門檻夾為至少 1、非整數門檻向下取整、無變化時回傳同一參考）。前端 `tsc --noEmit` 通過、8/8 通過。
+
 ## 錄音模式的簡報切換時間軸（基礎純函式）
 
 ### 背景

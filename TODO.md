@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第一九〇輪已完成 **69/100**，未達上限。
+- 最新進度：截至第一九一輪已完成 **70/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -93,6 +93,22 @@ prompt 規則以「（第 N 頁）」標示跨頁引用，但先前是純文字�
     已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 64 個完成項目（64/100，未達上限）。
 
+## 測驗錄影人頭偵測提示狀態機純函式（第一九一輪，2026-07-04）
+
+接續第一八九輪拆分的 NEW_FEATURE「測驗錄影加人頭偵測」首步：逐幀偵測會有單幀誤判，若每次抓不到臉就
+閃提示會很干擾。先固化「偵測結果序列 → 是否提示」的去抖狀態機，作為之後接偵測迴圈／UI 的可測基礎。
+
+- [x] 抽出人頭偵測提示去抖狀態機 `updateHeadDetectionState`（可測 / 人頭偵測基礎）。
+  - 修改說明（2026-07-04）：新增 [headDetectionPrompt.ts](frontend/src/lib/headDetectionPrompt.ts) 的
+    `updateHeadDetectionState(state, headDetected, missThreshold)`（＋`HeadDetectionState` 型別與
+    `initialHeadDetectionState`）。遲滯設計避免閃爍：開啟提示需「連續 `missThreshold` 幀未偵測」（on-delay
+    去抖、threshold 夾為至少 1 並向下取整），偵測到人頭則立即清除提示並歸零計數（快速恢復）；提示開啟後維持
+    到偵測到人頭為止。detect 為 no-op 時回傳同一物件參考。新增 `headDetectionPrompt.test.ts`（8 組：未達門檻
+    不提示、達門檻提示、單幀偵測不觸發、偵測即清除提示、提示持續到偵測、門檻夾 ≥1、非整數門檻向下取整、
+    no-op 同參考）。前端 `tsc --noEmit` 通過、8/8 通過。分支 `feat/head-detection-prompt`，已 merge 回 master。
+    BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 70 個完成項目（70/100，未達上限）。
+
 ## 錄音模式簡報切換時間軸純函式（第一九〇輪，2026-07-04）
 
 接續第一八九輪拆分的 NEW_FEATURE「錄音模式」首步：先固化「錄音時記錄簡報切頁時間點 → 正規化時間軸」
@@ -142,10 +158,10 @@ MediaRecorder 接線）。
   切換事件」資料結構，抽出可測純函式把 `(recordingStartMs, pageSwitchEvents[])` 正規化為 `{page, startMs,
   endMs}` 連續區段（處理亂序、同頁連續、結尾以錄音長度收尾），供未來「同步播放簡報+錄音」或「產生影片」使用。
   先做時間軸模型與測試，不含錄音 UI／儲存／MediaRecorder 接線。（第一九〇輪完成，見下方「錄音模式簡報切換時間軸純函式」section）
-- [ ] **測驗錄影人頭偵測——第一步：提示狀態純函式**（NEW_FEATURE「測驗錄影加人頭偵測」）：在既有
+- [x] **測驗錄影人頭偵測——第一步：提示狀態純函式**（NEW_FEATURE「測驗錄影加人頭偵測」）：在既有
   `useQuizRecorder` 錄影流程加 in-browser 人臉/人頭偵測（優先用瀏覽器原生 `FaceDetector`，退回輕量模型），
   偵測不到時提示並顯示鏡頭預覽。先抽出「偵測結果序列 → 是否提示」的純函式（連續 N 次未偵測才提示、含去抖，
-  避免單幀誤報造成閃爍），可測；再接 UI／偵測迴圈。
+  避免單幀誤報造成閃爍），可測；再接 UI／偵測迴圈。（第一九一輪完成，見下方「測驗錄影人頭偵測提示狀態機純函式」section）
 - [ ] **Jupyter Notebook 頁面型別——第一步：解析與唯讀渲染**（NEW_FEATURE「Jupyter notebook 支持」）：支援
   把 `.ipynb` 放進一個頁面。先做後端解析 `.ipynb` → 正規化 cell 模型（markdown／code／outputs，防護損壞 JSON）
   的可測純函式 + 前端唯讀渲染（code 以既有樣式、markdown 走 `MarkdownMath`、outputs 先支援 text/image）；
