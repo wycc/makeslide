@@ -481,9 +481,10 @@ export interface PdfDetail {
    */
   is_owner?: boolean;
   /**
-   * The requester's identity-based access level for this presentation: 'edit' (owner or a
-   * read-write ACL/visibility grant), 'read' (read-only grant), or 'none'. Used to show a
-   * read-only UI to read-only-listed users and to enable editing for read-write collaborators.
+   * The requester's EFFECTIVE access level for this presentation — the higher of the two access
+   * systems: identity-based (owner / read-write or read-only ACL / visibility default) and any
+   * share-token capability. 'edit' (owner, read-write grant, or editable token), 'read'
+   * (read-only grant/default or read-only token), or 'none'. Drives the read-only vs edit UI.
    */
   access_level?: 'none' | 'read' | 'edit';
   /** Whether the requester has an authenticated session (logged in). False for anonymous visitors. */

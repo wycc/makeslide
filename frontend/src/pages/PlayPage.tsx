@@ -46,6 +46,7 @@ import { parseGotoPage } from '../lib/parseGotoPage';
 import { splitScriptIntoSentences, buildSentenceTimeline, type SentenceTimelineItem } from '../lib/subtitles';
 import { roundToTwoDecimals } from '../lib/roundTo';
 import { type DrawingCanvasHandle, type DrawingData, type DrawingStroke } from '../components/DrawingCanvas';
+import { resolveDeckReadOnly } from './play/deckAccess';
 import { useVersionHistory } from './play/useVersionHistory';
 import { useRegeneration } from './play/useRegeneration';
 import { useVideoGeneration } from './play/useVideoGeneration';
@@ -572,13 +573,13 @@ export default function PlayPage() {
   const totalPages = deckPages.length;
   // owner（含沒有 owner 的舊資料）永遠可讀寫；分享連結的唯讀限制只套用在其他訪客身上，
   // 避免 owner 自己設定唯讀分享後，用自己的帳號開啟簡報時也被鎖成唯讀。
-  const shareIsReadOnly =
-    (!detail?.is_owner &&
-      (detail?.share_mode === 'read_only' || (!currentShareToken && detail?.visibility === 'public'))) ||
-    // A user explicitly granted read-only via the per-user ACL (or a read-only default) resolves to
-    // access_level 'read'; treat the deck as read-only so we don't show edit controls that the
-    // backend would reject. Owners and read-write grants resolve to 'edit' and are unaffected.
-    detail?.access_level === 'read';
+  const shareIsReadOnly = resolveDeckReadOnly({
+    isOwner: Boolean(detail?.is_owner),
+    shareMode: detail?.share_mode,
+    visibility: detail?.visibility,
+    accessLevel: detail?.access_level,
+    hasShareToken: Boolean(currentShareToken),
+  });
   // 同步 master/follower 的定義：只有「自己的簡報」——即簡報擁有者——按下同步模式會成為
   // master；其他所有人（分享連結訪客、public 唯讀觀看者、public_editable 協作者）一律是
   // follower。整段同步流程（加入路徑、自動跟隨、master 失效後是否重奪）都以此為準。
@@ -618,11 +619,15 @@ export default function PlayPage() {
     });
   }, [currentIdx]);
 
-  const readOnlyReason = isReadOnlyProcessing
-    ? shareIsReadOnly
+  const readOnlyReason = !isReadOnlyProcessing
+    ? null
+    : shareIsReadOnly
       ? t('play.banner.readOnlyShare')
-      : `${t('play.banner.generatingPrefix')}${formatGeneratingStatusLabel(detail.status, detail.progress_step, t)}${t('play.banner.generatingSuffix')}`
-    : null;
+      : // Reached only when the deck is still generating, which implies detail is loaded; the
+        // `detail &&` guard keeps the type checker happy now that shareIsReadOnly is a plain boolean.
+        detail
+        ? `${t('play.banner.generatingPrefix')}${formatGeneratingStatusLabel(detail.status, detail.progress_step, t)}${t('play.banner.generatingSuffix')}`
+        : null;
   const slideImageMaxHeightVh = Math.round(52 * slideImageScale);
   const imageBustKey = detail?.updated_at ?? '';
   const withImageBust = useCallback(

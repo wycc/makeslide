@@ -88,9 +88,15 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
     **有效權限**（身分 max token），前端 `shareIsReadOnly` 隨之一致。
   - **破壞性操作**：刪頁／刪測驗／刪投票／刪畫板等改以 `canDestructivelyEditPdf`＋合併 context，需解析出
     edit（不論來源）**且已登入**；**刪除整份簡報**限縮為**僅擁有者**（`isPdfOwner`）。
-  - 後端 tsc 通過；既有權限套件無回歸（delete 測試更新為 owner-only）＋新增 `token-capability` 11 測試
-    全綠；前端 tsc 通過、ShareDialog＋i18n 29 綠；i18n 文案更新以區分兩套概念。分支
-    `feat/unified-access-capability-tokens`。
+  - 後端 tsc 通過；既有權限套件無回歸（delete 測試更新為 owner-only）＋新增 `token-capability` 測試；
+    前端 tsc 通過、i18n 文案更新以區分兩套概念。分支 `feat/unified-access-capability-tokens`。
+  - 測試缺口補齊（使用者要求）：後端 `token-capability` 擴充至 **22 測試**——`resolveTokenAccessLevel`
+    邊界（無 token／格式錯／對到別份／read↔edit／過期）、detail `access_level` 為**有效權限**（editable
+    token→edit、read_only token→read）、破壞性操作**經 read_write 名單授權**（非 visibility）＋整合
+    DELETE drawing 驗證接線、editable token 於第二條編輯路由（PATCH title）賦權。前端把 `shareIsReadOnly`
+    抽成純函式 [deckAccess.ts](frontend/src/pages/play/deckAccess.ts) 的 `resolveDeckReadOnly` 並接回
+    `PlayPage`，新增 7 測試（`deckAccess.test.ts`）。後端各權限套件與前端 tsc／deckAccess＋ShareDialog＋i18n
+    全綠。備註：多個 buildApp 整合檔並跑會遇 SQLite 檔鎖競爭，分組序跑即正常。
 
 ## 同步 master/follower 定義改為以擁有者為準（使用者要求，2026-07-02）
 
