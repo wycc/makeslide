@@ -1,5 +1,24 @@
 # MakeSlide 功能說明
 
+## 後端 Email 驗證 schema 收斂到共用處
+
+### 背景
+
+後端在「存取權限（ACL）」與「群組」的成員管理 API 裡，都用同一個 zod schema 檢查 email——`z.string().trim().toLowerCase().email().max(320)`（去空白、轉小寫、格式檢查、長度上限）。這段 schema 在 `pdfPermissions.ts` 與 `groups.ts` 各寫了一份。
+
+### 變更內容
+
+- 在 `routes/pdfs/shared.ts` 新增匯出的 `EmailSchema`（與原本相同的規則）。
+- `pdfPermissions.ts` 與 `groups.ts` 移除各自的本地定義，改為從 `shared.ts` 匯入。兩個檔案各自的 `GroupIdSchema` 因為形狀不同（一個是字串、一個是物件），維持各自定義。
+
+### 使用方式
+
+純內部重構，email 的驗證行為不變。ACL 與群組成員的 email 規則現在是同一個來源，日後調整（例如長度上限）只需改一處。
+
+### 測試
+
+email 驗證屬 schema 層，由既有 HTTP 測試覆蓋：`pdf-permissions-api` 與 `groups-api` 共 10/10 回歸通過。後端 `tsc --noEmit` 通過。
+
 ## Email 驗證規則收斂為共用純函式
 
 ### 背景

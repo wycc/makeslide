@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第二一七輪已完成 **96/100**，未達上限。
+- 最新進度：截至第二一八輪已完成 **97/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -92,6 +92,18 @@ prompt 規則以「（第 N 頁）」標示跨頁引用，但先前是純文字�
     新測試 7/7 + `page-ask` 整合測試回歸（Node 22，共 10 綠）。分支 `feat/ask-history-char-budget`，
     已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 64 個完成項目（64/100，未達上限）。
+
+## 後端 EmailSchema 收斂到 shared（去重）（第二一八輪，2026-07-05）
+
+延續盤點（後端）：`z.string().trim().toLowerCase().email().max(320)` 這個 email zod schema 在
+`pdfPermissions.ts` 與 `groups.ts` 各定義一份（ACL/群組成員管理）。
+
+- [x] 抽出共用 `EmailSchema` 到 `shared.ts`（去重 2 處）。
+  - 修改說明（2026-07-05）：`routes/pdfs/shared.ts` 新增 `export const EmailSchema`（trim＋lowercase＋email＋
+    max 320）。`pdfPermissions.ts`／`groups.ts` 移除各自的本地 `EmailSchema`、改 import 共用版（兩檔的
+    `GroupIdSchema` 形狀不同、維持各自定義不動）。後端 `tsc --noEmit` 通過；`pdf-permissions-api`＋`groups-api`
+    共 10/10 回歸通過。分支 `refactor/shared-email-schema`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 97 個完成項目（97/100，未達上限）。
 
 ## Email 驗證正規表示式收斂為共用純函式（第二一七輪，2026-07-05）
 
