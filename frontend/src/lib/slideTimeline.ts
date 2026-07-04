@@ -66,3 +66,15 @@ export function buildSlideTimeline(
   }
   return segments;
 }
+
+// 讀取側：給定播放位置（相對錄音起點的毫秒），回傳當下應顯示的頁碼；落在時間軸之外
+// （早於第一段、或到達/超過結尾）回 `null`。區段為半開區間 `[startMs, endMs)`，故剛好
+// 落在某段 endMs 的時間點屬於下一段（或結尾則為 null）。供「同步播放簡報+錄音」使用：
+// 播放器每次時間更新即以目前秒數查出要顯示哪一頁。
+export function slideAtTime(segments: readonly SlideTimelineSegment[], ms: number): number | null {
+  if (!Number.isFinite(ms)) return null;
+  for (const seg of segments) {
+    if (ms >= seg.startMs && ms < seg.endMs) return seg.page;
+  }
+  return null;
+}

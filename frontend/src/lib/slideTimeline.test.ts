@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildSlideTimeline, type SlideSwitchEvent } from './slideTimeline';
+import { buildSlideTimeline, slideAtTime, type SlideSwitchEvent } from './slideTimeline';
 
 const ev = (page: number, atMs: number): SlideSwitchEvent => ({ page, atMs });
 
@@ -61,4 +61,31 @@ test('buildSlideTimeline returns [] for empty events or non-positive duration', 
 test('buildSlideTimeline ignores events with non-finite time or non-integer page', () => {
   const segments = buildSlideTimeline(0, [ev(1, 0), ev(1.5, 3000), ev(2, Number.NaN)], 10000);
   assert.deepEqual(segments, [{ page: 1, startMs: 0, endMs: 10000 }]);
+});
+
+const TL = buildSlideTimeline(0, [ev(1, 0), ev(2, 10000), ev(3, 25000)], 30000);
+// TL = [ {1,0,10000}, {2,10000,25000}, {3,25000,30000} ]
+
+test('slideAtTime returns the page shown at a given offset', () => {
+  assert.equal(slideAtTime(TL, 0), 1);
+  assert.equal(slideAtTime(TL, 5000), 1);
+  assert.equal(slideAtTime(TL, 15000), 2);
+  assert.equal(slideAtTime(TL, 29999), 3);
+});
+
+test('slideAtTime treats segment boundaries as half-open [start, end)', () => {
+  // 10000 is the end of segment 1 and start of segment 2 -> belongs to segment 2.
+  assert.equal(slideAtTime(TL, 10000), 2);
+  assert.equal(slideAtTime(TL, 25000), 3);
+});
+
+test('slideAtTime returns null outside the timeline', () => {
+  assert.equal(slideAtTime(TL, -1), null);
+  assert.equal(slideAtTime(TL, 30000), null); // exactly at the end (exclusive)
+  assert.equal(slideAtTime(TL, 999999), null);
+});
+
+test('slideAtTime returns null for an empty timeline or non-finite input', () => {
+  assert.equal(slideAtTime([], 100), null);
+  assert.equal(slideAtTime(TL, Number.NaN), null);
 });

@@ -1,5 +1,24 @@
 # MakeSlide 功能說明
 
+## 錄音同步播放的「當下頁碼」查詢（slideAtTime）
+
+### 背景
+
+先前的 `buildSlideTimeline` 負責「寫入側」——把錄音期間的切頁事件整理成一條時間軸。要真正做到「同步播放簡報+錄音」，還需要「讀取側」：播放到某個時間點時，要能立刻查出當下該顯示哪一頁。這一節補上這個查詢函式。
+
+### 變更內容
+
+- 在 `frontend/src/lib/slideTimeline.ts` 新增 `slideAtTime(segments, ms)`：給定時間軸區段與相對錄音起點的毫秒數，回傳當下應顯示的頁碼。
+- 區段採半開區間 `[startMs, endMs)`：剛好落在某段結尾時間點的位置，會歸屬到下一段（避免切換瞬間兩段重疊）；若時間點落在整條時間軸之外（早於第一段、或到達/超過結尾），或傳入非有限數字，則回傳 `null`。
+
+### 使用方式
+
+播放器在時間更新時，用目前的播放毫秒數呼叫 `slideAtTime(timeline, ms)`，即可得知要顯示的頁碼並切換投影片，與錄音同步。搭配 `buildSlideTimeline`（錄製時產生時間軸）即構成錄音同步播放的資料基礎；實際播放器 UI 為後續工作。
+
+### 測試
+
+`slideTimeline.test.ts` 擴充 4 組 `slideAtTime` 測試（區間內取頁、邊界半開歸屬到下一段、時間軸外與結尾回 null、空時間軸與 NaN 回 null），全檔 13/13。前端 `tsc --noEmit` 通過。
+
 ## Jupyter Notebook 唯讀渲染元件
 
 ### 背景
