@@ -1591,6 +1591,8 @@ export const zhTW = {
   'play.sidebar.pageAsk.asking': '思考中…',
   'play.sidebar.pageAsk.clear': '清除',
   'play.sidebar.pageAsk.loginRequired': '請先登入才能使用 AI 導師問答',
+  'play.sidebar.pageAsk.citedPagesLabel': '引用頁碼：',
+  'play.sidebar.pageAsk.jumpToPage': '第 {page} 頁',
   'play.sidebar.saveAsNote': '存到評論',
   'play.sidebar.saveAsNoteDone': '已存到評論',
   'play.sidebar.saveAsNoteFail': '儲存失敗',

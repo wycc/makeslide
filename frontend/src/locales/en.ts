@@ -1591,6 +1591,8 @@ export const en = {
   'play.sidebar.pageAsk.asking': 'Thinking…',
   'play.sidebar.pageAsk.clear': 'Clear',
   'play.sidebar.pageAsk.loginRequired': 'Please log in to use the AI Tutor Q&A',
+  'play.sidebar.pageAsk.citedPagesLabel': 'Cited pages:',
+  'play.sidebar.pageAsk.jumpToPage': 'Page {page}',
   'play.sidebar.saveAsNote': 'Save to comments',
   'play.sidebar.saveAsNoteDone': 'Saved to comments',
   'play.sidebar.saveAsNoteFail': 'Save failed',
