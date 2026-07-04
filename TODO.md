@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第二〇七輪已完成 **86/100**，未達上限。
+- 最新進度：截至第二〇八輪已完成 **87/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -92,6 +92,19 @@ prompt 規則以「（第 N 頁）」標示跨頁引用，但先前是純文字�
     新測試 7/7 + `page-ask` 整合測試回歸（Node 22，共 10 綠）。分支 `feat/ask-history-char-budget`，
     已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 64 個完成項目（64/100，未達上限）。
+
+## [0,1] 內聯夾界改用共用 clamp（第二〇八輪，2026-07-04）
+
+延續盤點：`PlayPage`／`AnimationEditorTab` 尚有 6 處以 `Math.min(1, Math.max(0, value))` 內聯夾界到 [0,1]
+（游標座標、spotlight/overlay/pointer 透明度），未使用既有且已測的 `clamp`。
+
+- [x] 6 處 [0,1] 內聯夾界改用共用 `clamp`（一致性 / 復用已測 helper）。
+  - 修改說明（2026-07-04）：`PlayPage`（cursor_x/cursor_y 各 1）與 `AnimationEditorTab`（spotlightOpacity、
+    overlayImageOpacity、pointerOpacity×2）的 `Math.min(1, Math.max(0, …))` 改為 `clamp(…, 0, 1)`（兩檔皆已
+    import clamp）。與原式位元等價、無行為變更；`clamp` 已有測試故不另加。屬一致性清理（消除內聯 min/max、
+    收斂到單一 helper）。前端 `tsc --noEmit` 通過。分支 `refactor/reuse-clamp-opacity`，已 merge 回 master。
+    BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 87 個完成項目（87/100，未達上限）。
 
 ## 指標正規化座標收斂為共用純函式（第二〇七輪，2026-07-04）
 

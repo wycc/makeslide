@@ -1461,8 +1461,8 @@ export default function PlayPage() {
           );
           if (typeof state.cursor_x === 'number' && typeof state.cursor_y === 'number') {
             setRemoteCursor({
-              x: Math.min(1, Math.max(0, state.cursor_x)),
-              y: Math.min(1, Math.max(0, state.cursor_y)),
+              x: clamp(state.cursor_x, 0, 1),
+              y: clamp(state.cursor_y, 0, 1),
             });
           } else {
             setRemoteCursor(null);

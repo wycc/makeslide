@@ -1391,7 +1391,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                       disabled={disabled}
                       onChange={(e) => {
                         const v = parseFloat(e.target.value);
-                        if (!isNaN(v)) updateEffect(effect.id, { spotlightOpacity: Math.min(1, Math.max(0, v)) });
+                        if (!isNaN(v)) updateEffect(effect.id, { spotlightOpacity: clamp(v, 0, 1) });
                       }}
                       className="w-16 rounded-md border border-border bg-surface px-2 py-1 text-sm text-text disabled:cursor-not-allowed disabled:opacity-40"
                     />
@@ -1984,7 +1984,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                       disabled={disabled}
                       onChange={(e) => {
                         const v = parseFloat(e.target.value);
-                        if (!isNaN(v)) updateEffect(effect.id, { overlayImageOpacity: Math.min(1, Math.max(0, v)) });
+                        if (!isNaN(v)) updateEffect(effect.id, { overlayImageOpacity: clamp(v, 0, 1) });
                       }}
                       className="w-16 rounded-md border border-border bg-surface px-2 py-1 text-sm text-text disabled:cursor-not-allowed disabled:opacity-40"
                     />
@@ -2272,7 +2272,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                             value={effect.pointerOpacity ?? 1}
                             disabled={disabled}
                             onChange={(e) =>
-                              updateEffect(effect.id, { pointerOpacity: Math.min(1, Math.max(0, Number(e.target.value) || 1)) })
+                              updateEffect(effect.id, { pointerOpacity: clamp(Number(e.target.value) || 1, 0, 1) })
                             }
                             className="w-28 accent-fuchsia-500 disabled:cursor-not-allowed disabled:opacity-40"
                           />
@@ -2284,7 +2284,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                             value={effect.pointerOpacity ?? 1}
                             disabled={disabled}
                             onChange={(e) =>
-                              updateEffect(effect.id, { pointerOpacity: Math.min(1, Math.max(0, Number(e.target.value) || 1)) })
+                              updateEffect(effect.id, { pointerOpacity: clamp(Number(e.target.value) || 1, 0, 1) })
                             }
                             className="w-16 rounded-md border border-border bg-surface px-1 py-1 text-sm text-text disabled:opacity-40"
                           />
