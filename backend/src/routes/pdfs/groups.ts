@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { z } from 'zod';
 import { db } from '../../db';
 import { sessionSub } from '../auth';
-import { errorResponse, nowIso } from './shared';
+import { errorResponse, nowIso, EmailSchema } from './shared';
 
 interface GroupRow {
   id: string;
@@ -32,7 +32,6 @@ function memberEmails(groupId: string): string[] {
 }
 
 export async function registerGroupRoutes(app: FastifyInstance): Promise<void> {
-  const EmailSchema = z.string().trim().toLowerCase().email().max(320);
   const NameSchema = z.string().trim().min(1).max(120);
   const GroupIdSchema = z.object({ groupId: z.string().regex(/^grp-[A-Za-z0-9_-]{8,64}$/, 'Invalid group id') });
   const CreateBodySchema = z.object({ name: NameSchema, emails: z.array(EmailSchema).max(1000).optional() });

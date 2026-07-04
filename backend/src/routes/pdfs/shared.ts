@@ -65,6 +65,10 @@ export const IdParamSchema = z.object({
   id: z.string().regex(PDF_ID_RE, 'Invalid pdf id'),
 });
 
+// Shared email validation for ACL/group member management: trimmed, lowercased,
+// RFC-ish via zod's .email(), bounded to 320 chars. Used by pdfPermissions/groups.
+export const EmailSchema = z.string().trim().toLowerCase().email().max(320);
+
 // Body for POST /api/pdfs/:id/start — optional freeform style hint from
 // the user. We cap length to avoid embedding megabytes of prompt into the
 // DB or the per-page LLM call.
