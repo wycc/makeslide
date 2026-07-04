@@ -1,5 +1,24 @@
 # MakeSlide 功能說明
 
+## 後端群組 id 格式規則收斂到共用處
+
+### 背景
+
+群組的 id 有固定格式（`grp-` 開頭再接 8–64 個 url-safe 字元）。驗證這個格式的正規表示式 `/^grp-[A-Za-z0-9_-]{8,64}$/` 在「存取權限」與「群組」兩個路由檔各寫了一份——雖然兩邊包裝方式不同（一個是純字串 schema、一個是帶 `groupId` 的物件參數 schema），但底層的 regex 是同一條。
+
+### 變更內容
+
+- 在 `routes/pdfs/shared.ts` 新增匯出的 `GROUP_ID_RE` 常數。
+- `pdfPermissions.ts` 與 `groups.ts` 改用這個共用常數，各自的 schema 包裝方式保持不變。
+
+### 使用方式
+
+純內部重構，群組 id 的驗證行為不變。格式規則現在只有單一來源，日後調整長度或字元集只需改一處。
+
+### 測試
+
+由既有 HTTP 測試覆蓋：`pdf-permissions-api` 與 `groups-api` 共 10/10 回歸通過。後端 `tsc --noEmit` 通過。
+
 ## 後端 Email 驗證 schema 收斂到共用處
 
 ### 背景
