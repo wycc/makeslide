@@ -52,10 +52,21 @@
   [AccessControlPanel.tsx](frontend/src/pages/play/AccessControlPanel.tsx)：預設權限選擇（對應 visibility）、
   含 search 的加入框（帳號 search 或直接輸入 email）、名單逐項改權限/移除。新增 API client 與 zh-TW/en
   文案（i18n parity 24/24）。前端 typecheck + ShareDialog 測試通過。分支 `feat/pdf-acl-step4-share-ui`（已 merge）。
-- [ ] 步驟 5（待進行）：群組——DB 表（groups/group_members）+ 後端 CRUD + 系統設定的群組管理 UI +
-  「把目前名單存成群組」+ 讓 ACL 的 principal 支援 group（resolver 展開群組成員）+ 分享對話框 search 納入群組。
-- [ ] 步驟 6（待進行）：收尾——read-write 協作者的前端編輯 UI 開放（目前多以 `is_owner` 把關，可改用
-  `access_level`）、整合驗證、同步 demo16。
+- [x] 步驟 5：群組。DB 表 `groups`/`group_members` + 後端 owner-scoped CRUD
+  [groups.ts](backend/src/routes/pdfs/groups.ts)（POST 可帶 seed emails 供「存成群組」；4 測試）；
+  resolver `fetchMatchedGrants` 展開群組成員（成員繼承群組授權、直接與群組取最高）；管理 API 的
+  PUT/DELETE/list 支援 group principal（回傳群組名稱＋人數）。前端：系統設定新增「群組」分類
+  [GroupsManager.tsx](frontend/src/components/GroupsManager.tsx)（建群組/成員增刪含 search）；分享
+  「存取權限」分頁 search 納入群組、名單顯示群組（👥＋人數）、「把目前名單存成群組」。分支
+  `feat/pdf-acl-step5-groups-backend`／`-step5c-groups-ui`／`-step5d-share-groups`（皆已 merge）。
+- [x] 步驟 6：收尾。前端 `PdfDetail` 加 `access_level`，`PlayPage` 的 `shareIsReadOnly` 納入
+  `access_level==='read'`——只讀名單使用者顯示唯讀 UI（不再出現會被後端擋下的編輯鈕）；讀寫授權
+  仍解析為 edit、可編輯。前後端 typecheck 通過；ACL/群組/權限測試 42 綠（pdf-access 13、
+  permissions-api 6、groups-api 4、read-gate 5、sync-join 14）。分支 `feat/pdf-acl-step6-readonly-ui`
+  （已 merge）。
+
+本功能（身分式分享權限：只讀/讀寫名單＋群組＋預設權限）**六步驟全部完成**。保留項：admin.ts／
+upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，fail-closed 安全，非核心分享路徑）。
 
 ## 同步 master/follower 定義改為以擁有者為準（使用者要求，2026-07-02）
 
@@ -456,7 +467,8 @@
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
-| 2026-07-03 | （使用者要求，步驟 1–4／共 6）身分式分享權限：per-user 只讀/讀寫名單 + 預設權限（沿用 visibility）。步驟1 ACL 表+resolver（11 測試）；步驟2a canRead/EditPdf 加可選 ACL context+detail 讀取+access_level（5+92 測試）；步驟2b 接線全站 ~130 呼叫點（無回歸）；步驟3 管理 API+帳號 search（5 測試）；步驟4 分享對話框「存取權限」分頁（含 search、i18n 24/24）。群組（步驟5）與收尾（步驟6）待進行 | feat/pdf-acl-step1..4（皆已 merge） |
+| 2026-07-03 | （使用者要求，步驟 5–6／共 6，接續當日步驟 1–4）身分式分享權限完成群組與收尾。步驟5 群組：DB（groups/group_members）+ owner-scoped CRUD（4 測試）+ resolver 展開群組成員 + 管理 API/list 支援 group principal + 系統設定「群組」管理 UI + 分享面板 search 納入群組/名單顯示群組/「存成群組」；步驟6 收尾：前端 `access_level` 讓只讀名單顯示唯讀 UI。前後端 typecheck 通過、ACL/群組/權限 42 測試綠。功能六步驟全部完成 | feat/pdf-acl-step5-groups-backend／-step5c-groups-ui／-step5d-share-groups／-step6-readonly-ui（皆已 merge） |
+| 2026-07-03 | （使用者要求，步驟 1–4／共 6）身分式分享權限：per-user 只讀/讀寫名單 + 預設權限（沿用 visibility）。步驟1 ACL 表+resolver（11 測試）；步驟2a canRead/EditPdf 加可選 ACL context+detail 讀取+access_level（5+92 測試）；步驟2b 接線全站 ~130 呼叫點（無回歸）；步驟3 管理 API+帳號 search（5 測試）；步驟4 分享對話框「存取權限」分頁（含 search、i18n 24/24） | feat/pdf-acl-step1..4（皆已 merge） |
 | 2026-07-02 | （使用者要求）測驗監考錄影只錄影不錄音：`useQuizRecorder` 的 `getUserMedia` 由 `audio: true` 改為 `audio: false`，不請求麥克風、避免收錄環境音；串流無音軌故產出純視訊 webm。更新註解、前端 tsc 通過 | feat/quiz-recording-video-only |
 | 2026-07-02 | （使用者要求）同步 master/follower 定義改為以擁有者為準：「自己的簡報按同步→master，不是的→follower」。後端 `/sync/join`、`/sync/state` 取得主控權門檻由 `canEditPdf` 改為 `isPdfOwner`（public_editable 協作者不再能搶 master，改以 follower share-join）；前端 `PlayPage` 以 `isSyncMasterEligible = detail?.is_owner` 決定 join/share-join 路徑、自動跟隨與 master 重奪。更新+新增 sync 權限測試；前後端 tsc 通過、sync 權限 13/13 + 其餘 sync 7/7 回歸通過 | feat/sync-master-follower-by-ownership |
 | 2026-07-02 | （使用者要求）把 AI 導師回答存成評論時標示「存的人」的名稱：原本未設暱稱時作者只記成「AI 導師」，看不出誰存的。改為以「評論暱稱 → 登入帳號 name/email」解析存檔者，作者存為「{存檔者}（AI 導師）」（同時保留 AI 導師來源標示），完全無名稱時才退回單純「AI 導師」。新增 i18n 鍵 `play.sidebar.aiTutorAuthor`／`aiTutorAuthorWithName`（zh-TW/en），並沿用新的 share token 參數。前端 tsc 通過、i18n 24 測試通過 | feat/ai-tutor-comment-saver-name |
