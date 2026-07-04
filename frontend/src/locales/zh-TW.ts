@@ -403,6 +403,7 @@ export const zhTW = {
   'home.importZip': '匯入 ZIP',
   'home.importingZip': 'ZIP 匯入中…',
   'home.importZipProgressAriaLabel': 'ZIP 匯入進度',
+  'home.batchExportProgressAriaLabel': '批次匯出進度',
   'home.imported': '已匯入 ZIP',
   'home.importFailed': '匯入失敗',
   'home.tagAll': '全部',
