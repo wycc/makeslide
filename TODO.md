@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第二一〇輪已完成 **89/100**，未達上限。
+- 最新進度：截至第二一一輪已完成 **90/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -92,6 +92,19 @@ prompt 規則以「（第 N 頁）」標示跨頁引用，但先前是純文字�
     新測試 7/7 + `page-ask` 整合測試回歸（Node 22，共 10 綠）。分支 `feat/ask-history-char-budget`，
     已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 64 個完成項目（64/100，未達上限）。
+
+## 設定頁快取清除改用 api client（第二一一輪，2026-07-04）
+
+延續盤點：`SettingsPage` 以直接 `fetch` 打 `system/thumbnail-cache`、`admin/cache`（DELETE），各自寫
+`if(!resp.ok){setMsg;return}`＋`catch{setMsg(null)}`，繞過 api client 一致的錯誤處理。
+
+- [x] 縮圖/產物快取清除改用 api client `clearThumbnailCache`／`clearArtifactCache`。
+  - 修改說明（2026-07-04）：`api/system.ts` 新增 `clearThumbnailCache()`／`clearArtifactCache()`（DELETE、
+    走 `parseErrorBody`、回各自的 JSON 形狀）。`SettingsPage` 兩個 handler 改用之、移除元件內 raw fetch 與
+    `resp.ok` 判斷。行為微調（更佳）：原本網路錯誤（catch）不顯示訊息，現與 !ok 一致改顯示按鈕標籤 fallback
+    訊息，讓失敗都有回饋；成功路徑不變。前端 `tsc --noEmit` 通過（api HTTP 包裝一向不另做單元測試）。分支
+    `refactor/settings-cache-api-client`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 90 個完成項目（90/100，未達上限）。
 
 ## 課後報告面板改用 api client（去重型別/直呼 fetch）（第二一〇輪，2026-07-04）
 

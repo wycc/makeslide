@@ -1,5 +1,24 @@
 # MakeSlide 功能說明
 
+## 設定頁的快取清除改用 API client
+
+### 背景
+
+系統設定頁有「清除縮圖快取」與「清除產物快取」兩個按鈕，原本是用元件內的 `fetch(...)` 直接呼叫 `system/thumbnail-cache`、`admin/cache`（DELETE），各自寫 `if (!resp.ok) { 設訊息; return }` 加上 `catch { 設 null }` 的錯誤處理，繞過了 App 其他地方統一的 `parseErrorBody`（`ApiError`）。
+
+### 變更內容
+
+- 在 `lib/api/system.ts` 新增 `clearThumbnailCache()` 與 `clearArtifactCache()`：兩者都以 DELETE 呼叫對應端點，失敗時走共用的 `parseErrorBody`，成功時回傳各自的結果（清除的檔案/目錄數與釋放的位元組數）。
+- `SettingsPage` 兩個 handler 改用這兩個函式，移除元件內的 raw `fetch` 與 `resp.ok` 判斷。
+
+### 使用方式
+
+行為基本不變：點清除快取後仍會顯示「清了幾個檔／釋放多少 KB」。附帶一個小改善——原本只有伺服器回非 2xx 時才顯示訊息、網路錯誤則沒有任何回饋；現在兩種失敗都會顯示按鈕標籤的 fallback 訊息，讓「按了沒反應」的情況也有提示。
+
+### 測試
+
+API client 的 HTTP 包裝函式在本專案一向不做單元測試（與既有函式一致），改動由 `tsc --noEmit` 型別檢查把關。前端 `tsc --noEmit` 通過。
+
 ## 課後報告面板改用 API client（去重型別、統一錯誤處理）
 
 ### 背景

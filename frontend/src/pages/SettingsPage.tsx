@@ -26,6 +26,8 @@ import {
   type Skill,
   getEmbeddingStats,
   type EmbeddingStats,
+  clearThumbnailCache,
+  clearArtifactCache,
 } from '../lib/api';
 import type { SlaSettingsResponse, SlaTargetKind, SlaTargetSetting } from '../types';
 import {
@@ -376,13 +378,11 @@ export default function SettingsPage() {
     setThumbnailCacheBusy(true);
     setThumbnailCacheMsg(null);
     try {
-      const resp = await fetch('api/system/thumbnail-cache', { method: 'DELETE' });
-      if (!resp.ok) { setThumbnailCacheMsg(t('settings.clearThumbnailCacheButton')); return; }
-      const data = (await resp.json()) as { files_deleted: number; bytes_freed: number };
+      const data = await clearThumbnailCache();
       const kb = bytesToRoundedKb(data.bytes_freed);
       setThumbnailCacheMsg(t('settings.clearThumbnailCacheDone').replace('{files}', String(data.files_deleted)).replace('{kb}', String(kb)));
     } catch {
-      setThumbnailCacheMsg(null);
+      setThumbnailCacheMsg(t('settings.clearThumbnailCacheButton'));
     } finally {
       setThumbnailCacheBusy(false);
     }
@@ -392,13 +392,11 @@ export default function SettingsPage() {
     setArtifactCacheBusy(true);
     setArtifactCacheMsg(null);
     try {
-      const resp = await fetch('api/admin/cache', { method: 'DELETE' });
-      if (!resp.ok) { setArtifactCacheMsg(t('settings.clearArtifactCacheButton')); return; }
-      const data = (await resp.json()) as { dirs_cleared: number; bytes_freed: number };
+      const data = await clearArtifactCache();
       const kb = bytesToRoundedKb(data.bytes_freed);
       setArtifactCacheMsg(t('settings.clearArtifactCacheDone').replace('{dirs}', String(data.dirs_cleared)).replace('{kb}', String(kb)));
     } catch {
-      setArtifactCacheMsg(null);
+      setArtifactCacheMsg(t('settings.clearArtifactCacheButton'));
     } finally {
       setArtifactCacheBusy(false);
     }
