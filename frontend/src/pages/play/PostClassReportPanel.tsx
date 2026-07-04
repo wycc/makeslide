@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { PdfReportQuestionStat, PdfReportSummary } from '../../lib/api';
 import { resetWatchProgress } from '../../lib/api';
+import { flattenAttemptsChronologically } from '../../lib/reportAttemptsTimeline';
 import { useI18n } from '../../i18n';
 import { useOverlayDismiss } from '../../components/useOverlayDismiss';
 import {
@@ -482,9 +483,7 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
             </section>
 
             {students.length > 0 ? (() => {
-              const allAttempts = students
-                .flatMap((s) => s.attempts.map((a) => ({ ...a, client_id: s.client_id })))
-                .sort((a, b) => new Date(a.submitted_at).getTime() - new Date(b.submitted_at).getTime());
+              const allAttempts = flattenAttemptsChronologically(students);
               return (
                 <section className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
                   <h3 className="mb-1 font-semibold text-slate-100">{t('play.report.timelineTitle')}</h3>

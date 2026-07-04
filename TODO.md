@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第一九六輪已完成 **75/100**，未達上限。
+- 最新進度：截至第一九七輪已完成 **76/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -92,6 +92,20 @@ prompt 規則以「（第 N 頁）」標示跨頁引用，但先前是純文字�
     新測試 7/7 + `page-ask` 整合測試回歸（Node 22，共 10 綠）。分支 `feat/ask-history-char-budget`，
     已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 64 個完成項目（64/100，未達上限）。
+
+## 課後報告作答時間軸攤平排序抽出純函式（第一九七輪，2026-07-04）
+
+延續既有程式碼盤點：`PostClassReportPanel` 的「作答時間軸」區塊在 JSX 內聯 IIFE 攤平所有學生的作答並依
+送出時間排序，無測試。
+
+- [x] 抽出作答時間軸攤平排序純函式 `flattenAttemptsChronologically`（可測）。
+  - 修改說明（2026-07-04）：新增 [reportAttemptsTimeline.ts](frontend/src/lib/reportAttemptsTimeline.ts) 的
+    `flattenAttemptsChronologically(students)`——把每位學生的 `attempts` 攤平、逐筆掛上該學生 `client_id`、
+    依 `submitted_at` 升冪排序（泛型、不改輸入）。`PostClassReportPanel` 時間軸區塊改用之。新增
+    `reportAttemptsTimeline.test.ts`（4 組：跨學生攤平＋依時間排序、掛 client_id、空學生/空 attempts 回空、
+    不改輸入）。前端 `tsc --noEmit` 通過、4/4 通過。分支 `refactor/attempts-timeline`，已 merge 回 master。
+    BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 76 個完成項目（76/100，未達上限）。
 
 ## 「複製全部逐字稿」Markdown 組裝抽出純函式（第一九六輪，2026-07-04）
 

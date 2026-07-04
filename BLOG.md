@@ -1,5 +1,24 @@
 # MakeSlide 功能說明
 
+## 課後報告「作答時間軸」的攤平排序抽出純函式
+
+### 背景
+
+課後報告面板有一個「作答時間軸」區塊，把全班每位學生的每一次作答依送出時間串成一條時間軸。原本這段「把每位學生的作答攤平、逐筆貼上該學生的 `client_id`、再依送出時間排序」的邏輯直接寫在 JSX 裡的 IIFE，沒有測試。
+
+### 變更內容
+
+- 新增 `frontend/src/lib/reportAttemptsTimeline.ts` 的 `flattenAttemptsChronologically(students)`：把每位學生的 `attempts` 攤平成單一陣列、逐筆掛上該學生的 `client_id`、依 `submitted_at` 升冪排序；泛型設計、不改動輸入。
+- `PostClassReportPanel` 的時間軸區塊改用這個共用函式。
+
+### 使用方式
+
+純內部重構，作答時間軸的顯示不變（仍依時間先後列出全班的每次作答）。抽成純函式後，攤平與排序有了獨立測試。
+
+### 測試
+
+新增 `reportAttemptsTimeline.test.ts`（4 組：跨學生攤平並依送出時間排序、每筆掛上正確的 client_id、空學生或空作答回空陣列、不改動輸入）。前端 `tsc --noEmit` 通過、4/4 通過。
+
 ## 「複製全部逐字稿」的 Markdown 組裝抽出純函式
 
 ### 背景
