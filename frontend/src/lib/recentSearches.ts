@@ -40,6 +40,19 @@ export function addRecentSearch(query: string): string[] {
   return next;
 }
 
+/** 移除指定的一筆最近搜尋（精確比對）並回傳更新後的清單；非瀏覽器環境僅回傳計算結果、不寫入。 */
+export function removeRecentSearch(query: string): string[] {
+  const next = getRecentSearches().filter((q) => q !== query);
+  if (hasLocalStorage()) {
+    try {
+      window.localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(next));
+    } catch {
+      // ignore
+    }
+  }
+  return next;
+}
+
 /** 清除所有最近搜尋。 */
 export function clearRecentSearches(): void {
   if (!hasLocalStorage()) return;
