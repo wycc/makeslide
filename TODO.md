@@ -97,6 +97,15 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
     抽成純函式 [deckAccess.ts](frontend/src/pages/play/deckAccess.ts) 的 `resolveDeckReadOnly` 並接回
     `PlayPage`，新增 7 測試（`deckAccess.test.ts`）。後端各權限套件與前端 tsc／deckAccess＋ShareDialog＋i18n
     全綠。備註：多個 buildApp 整合檔並跑會遇 SQLite 檔鎖競爭，分組序跑即正常。
+  - 二次矩陣覆核（使用者要求，2026-07-04）發現並修復一個**提權漏洞**：`PATCH /api/pdfs/:id/visibility`
+    的閘門原為 `canEditPdf(...aclCtx)`，新模型下匿名 editable-token 持有者或 read_write 名單使用者可
+    改「預設權限」（如改成 public_editable 讓全世界永久可編輯、token 過期後仍有效）。visibility 變更屬
+    **存取管理**而非內容編輯，改為 owner-only（`hasOwnerOrLegacyAccess`），與 ACL 管理 API／建立分享
+    連結一致。`token-capability` 擴充至 **27 測試**，補齊矩陣：建立分享連結 owner-only（非擁有者／
+    token 持有者 403）、visibility owner-only（read_write 名單與匿名 token 皆 403、owner 200）、
+    read_write 名單刪整份簡報 403、只讀名單＋editable token→有效 edit（反向 max）、群組授權 HTTP
+    端對端（read_only 群組可讀不可編、升 read_write 可編、陌生人 403）。相關 9 套件序跑全綠。分支
+    `fix/access-admin-owner-only`。
 
 ## 同步 master/follower 定義改為以擁有者為準（使用者要求，2026-07-02）
 
@@ -497,6 +506,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-04 | （使用者要求二次覆核權限測試矩陣）發現並修復**提權漏洞**：`PATCH /api/pdfs/:id/visibility` 閘門原為 `canEditPdf(...aclCtx)`，統一模型後匿名 editable-token 持有者／read_write 名單使用者可改「預設權限」（改 public_editable 即讓全世界永久可編輯、token 過期仍有效）。visibility 屬存取管理非內容編輯，改為 owner-only（`hasOwnerOrLegacyAccess`），與 ACL 管理 API／建立分享連結一致。並補齊矩陣測試（token-capability 22→27）：建立分享連結 owner-only、visibility owner-only、read_write 名單刪整份 403、只讀名單＋editable token→有效 edit（反向 max）、群組授權 HTTP 端對端。後端 tsc 通過、9 個權限套件序跑全綠（detail 92、page-ops 31、token-capability 27、pdf-access 13、permissions/permissions-api 各 6、read-gate/delete 各 5、groups 4、share-expiry 3） | fix/access-admin-owner-only |
 | 2026-07-04 | （使用者要求）分享權限模型統一為兩套系統、分享連結成為真正的能力憑證：先前三套機制（visibility／分享 token／身分 ACL）語意重疊，且建立連結會偷偷翻動全域 visibility、token 不具保密力、`hasShareAccess` 未檢查到期。改為：系統一＝身分權限（visibility 預設＋ACL，`resolvePdfAccessLevel`）；系統二＝token 能力憑證（新增 `resolveTokenAccessLevel` 含到期，任何持有者取得內含 read/edit，建立連結不再改 visibility）；`aclCtx` 帶入 token，`canReadPdf`/`canEditPdf` 以 `max(身分,token)` 決策（~146 呼叫點免改）、清掉 40 處多餘且有到期 bug 的 share 讀取前綴、detail `access_level` 改回有效權限。破壞性子操作＝解析出 edit＋已登入；刪整份簡報限縮為僅 owner。後端 tsc 通過、既有權限套件無回歸（delete 測試改 owner-only）＋新增 token-capability 11 測試綠；前端 tsc 通過、ShareDialog＋i18n 29 綠、文案區分兩概念 | feat/unified-access-capability-tokens |
 | 2026-07-03 | （使用者要求）把 worktree/demo16 完整合併回 master：先在 demo16 提交其未提交的「直播測驗允許重新進入（quiz re-entry）」WIP（排除 demo16 專屬的 start.sh 本地改動），再 `git merge --no-ff worktree/demo16` 帶入 demo16 累積但未進 master 的功能（poll-results 彈窗、watch-records 對話框、quiz camera recording/proctoring/finish button、quiz re-entry）。主 repo 工作區同一份重複的 WIP 經比對與 demo16 內容完全相同（僅檔案權限位元差異），已捨棄改由合併帶回。前後端 typecheck 通過；i18n 27、pdf-access 13、groups-api 4、poll-voters 3 測試綠 | worktree/demo16 → master（merge dd26906） |
 | 2026-07-03 | （使用者要求，步驟 5–6／共 6，接續當日步驟 1–4）身分式分享權限完成群組與收尾。步驟5 群組：DB（groups/group_members）+ owner-scoped CRUD（4 測試）+ resolver 展開群組成員 + 管理 API/list 支援 group principal + 系統設定「群組」管理 UI + 分享面板 search 納入群組/名單顯示群組/「存成群組」；步驟6 收尾：前端 `access_level` 讓只讀名單顯示唯讀 UI。前後端 typecheck 通過、ACL/群組/權限 42 測試綠。功能六步驟全部完成 | feat/pdf-acl-step5-groups-backend／-step5c-groups-ui／-step5d-share-groups／-step6-readonly-ui（皆已 merge） |

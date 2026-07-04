@@ -656,8 +656,13 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     if (!row) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     }
-    if (!canEditPdf(sessionSub(request), row, aclCtx(request, id))) {
-      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
+    // Changing the visibility is ACCESS ADMINISTRATION, not content editing: it sets the default
+    // permission applied to everyone. Like the per-user ACL API and share-link creation, it is
+    // owner-only. It must NOT accept edit-level access from an editable share token or a
+    // read_write ACL grant — otherwise an (even anonymous) token holder could set
+    // public_editable and keep edit access forever, long after the token expires.
+    if (!hasOwnerOrLegacyAccess(sessionSub(request), row)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '只有簡報擁有者可以變更預設存取權限'));
     }
     const now = nowIso();
     const visibility = body.data.visibility;
