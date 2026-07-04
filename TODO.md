@@ -467,6 +467,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-03 | （使用者要求）把 worktree/demo16 完整合併回 master：先在 demo16 提交其未提交的「直播測驗允許重新進入（quiz re-entry）」WIP（排除 demo16 專屬的 start.sh 本地改動），再 `git merge --no-ff worktree/demo16` 帶入 demo16 累積但未進 master 的功能（poll-results 彈窗、watch-records 對話框、quiz camera recording/proctoring/finish button、quiz re-entry）。主 repo 工作區同一份重複的 WIP 經比對與 demo16 內容完全相同（僅檔案權限位元差異），已捨棄改由合併帶回。前後端 typecheck 通過；i18n 27、pdf-access 13、groups-api 4、poll-voters 3 測試綠 | worktree/demo16 → master（merge dd26906） |
 | 2026-07-03 | （使用者要求，步驟 5–6／共 6，接續當日步驟 1–4）身分式分享權限完成群組與收尾。步驟5 群組：DB（groups/group_members）+ owner-scoped CRUD（4 測試）+ resolver 展開群組成員 + 管理 API/list 支援 group principal + 系統設定「群組」管理 UI + 分享面板 search 納入群組/名單顯示群組/「存成群組」；步驟6 收尾：前端 `access_level` 讓只讀名單顯示唯讀 UI。前後端 typecheck 通過、ACL/群組/權限 42 測試綠。功能六步驟全部完成 | feat/pdf-acl-step5-groups-backend／-step5c-groups-ui／-step5d-share-groups／-step6-readonly-ui（皆已 merge） |
 | 2026-07-03 | （使用者要求，步驟 1–4／共 6）身分式分享權限：per-user 只讀/讀寫名單 + 預設權限（沿用 visibility）。步驟1 ACL 表+resolver（11 測試）；步驟2a canRead/EditPdf 加可選 ACL context+detail 讀取+access_level（5+92 測試）；步驟2b 接線全站 ~130 呼叫點（無回歸）；步驟3 管理 API+帳號 search（5 測試）；步驟4 分享對話框「存取權限」分頁（含 search、i18n 24/24） | feat/pdf-acl-step1..4（皆已 merge） |
 | 2026-07-02 | （使用者要求）測驗監考錄影只錄影不錄音：`useQuizRecorder` 的 `getUserMedia` 由 `audio: true` 改為 `audio: false`，不請求麥克風、避免收錄環境音；串流無音軌故產出純視訊 webm。更新註解、前端 tsc 通過 | feat/quiz-recording-video-only |
