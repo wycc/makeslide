@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第二〇八輪已完成 **87/100**，未達上限。
+- 最新進度：截至第二〇九輪已完成 **88/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -92,6 +92,22 @@ prompt 規則以「（第 N 頁）」標示跨頁引用，但先前是純文字�
     新測試 7/7 + `page-ask` 整合測試回歸（Node 22，共 10 綠）。分支 `feat/ask-history-char-budget`，
     已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 64 個完成項目（64/100，未達上限）。
+
+## 檔案下載樣板收斂為共用工具（第二〇九輪，2026-07-04）
+
+延續盤點：`document.createElement('a')` + 設 href/download + click（+object URL 建/釋放）的下載樣板在 5 處
+重複（首頁匯出/批次匯出、報告摘要、測驗 JSON、課程包），無測試。
+
+- [x] 抽出檔案下載共用工具 `triggerDownload`／`downloadBlob`（去重 5 處 / 可測 / DI）。
+  - 修改說明（2026-07-04）：新增 [download.ts](frontend/src/lib/download.ts)——`triggerDownload(href, filename)`
+    下載已知 URL（伺服器端點或 object URL）；`downloadBlob(blob, filename)` 建 object URL 後下載並 `revoke`。
+    沿用 `clipboard.ts` 的依賴注入風格（可注入 document／URL 供測試、無 DOM 環境為 no-op）。5 處改用之：
+    `HomePage` 匯出＋批次匯出（`triggerDownload`）、`PostClassReportPanel` 報告摘要、`QuizBuilderPage` 測驗
+    JSON、`PlayPageHeader` 課程包（`downloadBlob`）。blob 路徑統一加上 appendChild/remove（更穩健、對既有行為
+    無害）。新增 `download.test.ts`（3 組：triggerDownload 設屬性/append/click/remove、downloadBlob 建 URL→下載
+    →revoke、無 DOM/URL 時 no-op）。前端 `tsc --noEmit` 通過、3/3 通過。分支 `refactor/download-helper`，已 merge
+    回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 88 個完成項目（88/100，未達上限）。
 
 ## [0,1] 內聯夾界改用共用 clamp（第二〇八輪，2026-07-04）
 

@@ -8,6 +8,7 @@ import { usePlayPageContext } from './PlayPageContext';
 import { SyncQuestionsPanel } from './SyncQuestionsPanel';
 import { copyTextToClipboard } from '../../lib/clipboard';
 import { buildAllScriptsMarkdown } from '../../lib/allScriptsMarkdown';
+import { downloadBlob } from '../../lib/download';
 import { progressPercent } from '../../lib/progressPercent';
 import {
   stepSlideImageScale,
@@ -319,14 +320,9 @@ export function PlayPageHeader() {
       const resp = await fetch(`api/pdfs/${encodeURIComponent(pdfId)}/course-package`, { method: 'POST' });
       if (!resp.ok) { setCoursePackageBusy(false); return; }
       const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
       const cd = resp.headers.get('content-disposition') ?? '';
       const match = /filename="([^"]+)"/.exec(cd);
-      a.download = match?.[1] ?? 'course-package.zip';
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, match?.[1] ?? 'course-package.zip');
     } finally {
       setCoursePackageBusy(false);
     }

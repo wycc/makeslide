@@ -38,6 +38,7 @@ import { summarizeHomeStats } from '../lib/homeStats';
 import { progressPercent } from '../lib/progressPercent';
 import { compareZhHant } from '../lib/compareZhHant';
 import { parseTags } from '../lib/parseTags';
+import { triggerDownload } from '../lib/download';
 
 const POLL_INTERVAL_ACTIVE_MS = 5000;
 const POLL_INTERVAL_IDLE_MS = 30000;
@@ -567,13 +568,7 @@ export default function HomePage() {
   const handleExport = useCallback(
     async (id: string) => {
       try {
-        const a = document.createElement('a');
-        a.href = `api/pdfs/${encodeURIComponent(id)}/export.zip`;
-        a.download = `${id}.zip`;
-        a.rel = 'noopener';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
+        triggerDownload(`api/pdfs/${encodeURIComponent(id)}/export.zip`, `${id}.zip`);
         showToast(t('home.exported'));
       } catch (err) {
         const msg = err instanceof ApiError ? err.message : t('home.exportFailed');
@@ -681,13 +676,7 @@ export default function HomePage() {
               batchExportPollRef.current = null;
             }
             setBatchExportJobId(null);
-            const a = document.createElement('a');
-            a.href = batchExportDownloadUrl(jobId);
-            a.download = 'batch-export.zip';
-            a.rel = 'noopener';
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
+            triggerDownload(batchExportDownloadUrl(jobId), 'batch-export.zip');
             showToast(t('home.batchExportDone'));
           } else if (res.status === 'failed') {
             if (batchExportPollRef.current != null) {

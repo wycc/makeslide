@@ -1,5 +1,27 @@
 # MakeSlide 功能說明
 
+## 檔案下載樣板收斂為共用工具
+
+### 背景
+
+前端有好幾個「下載檔案」的地方——首頁的匯出 ZIP／批次匯出、課後報告摘要（Markdown）、測驗匯出（JSON）、課程包（ZIP）。它們原本都各自寫一段一樣的 DOM 樣板：`document.createElement('a')`、設好 `href` 與 `download`、`click()`，用 Blob 的還要 `URL.createObjectURL` 再 `revokeObjectURL`。這段樣板重複了 5 次，也沒有測試。
+
+### 變更內容
+
+- 新增 `frontend/src/lib/download.ts`，提供兩個入口：
+  - `triggerDownload(href, filename)`：下載一個已知的 URL（伺服器端點或 object URL）。
+  - `downloadBlob(blob, filename)`：把 Blob 建成 object URL 後下載，並在結束時 `revokeObjectURL` 釋放。
+- 沿用專案 `clipboard.ts` 的依賴注入風格：可傳入 document／URL 以便測試，預設使用全域物件；在沒有 DOM 的環境（例如 SSR）則安全地變成 no-op。
+- 5 個呼叫點改用之：`HomePage`（匯出、批次匯出）用 `triggerDownload`；`PostClassReportPanel`（報告摘要）、`QuizBuilderPage`（測驗 JSON）、`PlayPageHeader`（課程包）用 `downloadBlob`。Blob 路徑統一補上「加入 DOM → 點擊 → 移除」，對既有行為無害且在部分瀏覽器更穩健。
+
+### 使用方式
+
+純內部重構，各處下載的行為不變。要新增下載功能時，直接呼叫 `triggerDownload` 或 `downloadBlob` 即可，不必再重寫 `<a>` 樣板。
+
+### 測試
+
+新增 `download.test.ts`（3 組，透過注入假的 document／URL 驗證：`triggerDownload` 正確設定 `href`/`download`/`rel` 並依序 append→click→remove、`downloadBlob` 建立 object URL→下載→釋放、以及在沒有 document/URL 時安全 no-op）。前端 `tsc --noEmit` 通過、3/3 通過。
+
 ## 把 [0,1] 內聯夾界改用共用 clamp
 
 ### 背景
