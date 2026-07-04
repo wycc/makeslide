@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第一八五輪已完成 **64/100**，未達上限。
+- 最新進度：截至第一八六輪已完成 **65/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -13,6 +13,24 @@
 
 - [ ] 系統性採用 `mapApiErrorToHumanMessage`：目前約 55 處 catch 區塊直接 `setError(err.message)` 顯示後端原始 message、繞過既有的錯誤訊息映射（前端僅 2 處 `UploadButton`、`ImportTextPage` 使用 mapper）。全面改造屬較大工程，且各 catch 上下文不同、許多後端 message 已是中文（未必都是英文洩漏），逐點需產品判斷顯示風格，故列為待使用者決定。
 - [ ] 把前端測試納入 root `npm test`：目前 root 測試腳本未涵蓋前端 `node:test` 測試。納入涉及 CI 行為變更與 `npm install`（sandbox 無法驗證），列為待使用者決定。
+
+## AI 導師回答的引用頁碼可點擊跳頁（第一八六輪，2026-07-04）
+
+推進 §「AI 導師（PageAskPanel）回答品質改善」backlog 的「引用頁碼可點擊」項：AI 導師回答會依
+prompt 規則以「（第 N 頁）」標示跨頁引用，但先前是純文字，讀者得自行手動翻頁查證。
+
+- [x] AI 導師回答下方新增「引用頁碼」可點擊捷徑（可測純函式解析 + 點擊跳頁）。
+  - 修改說明（2026-07-04）：新增前端純函式 [extractCitedPages.ts](frontend/src/lib/extractCitedPages.ts)
+    的 `extractCitedPages(text)`——以「第 N 頁」寬鬆樣式（容許空白變化）掃描回答全文，回傳升冪、
+    去重、正整數的頁碼清單（是否有效／排除當前頁交由呼叫端）。[PageAskPanel.tsx](frontend/src/pages/play/PageAskPanel.tsx)
+    在每則 AI 導師答案下方（非答案本身、不動 `MarkdownMath` 渲染路徑）新增一列「引用頁碼」晶片，
+    僅顯示實際存在於 `deckPages` 且非目前頁的頁碼，點擊以 `setCurrentIdx` 對應索引跳頁。新增 i18n 鍵
+    `play.sidebar.pageAsk.citedPagesLabel`／`jumpToPage`（zh-TW／en，parity 24/24）。新增
+    `extractCitedPages.test.ts`（7 組：單頁、多頁升冪去重、空白變化、忽略原始來源、忽略第 0 頁、
+    空／無引用回空、重複呼叫穩定不受 regex lastIndex 影響）。前端 `tsc --noEmit` 通過、新測試 7/7、
+    i18n 24/24。分支 `feat/ask-clickable-page-citations`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 同輪順帶更新：確認「Markdown 渲染」項已由 `MarkdownMath` 於先前輪次解決，補記為完成（**不計入**）。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 65 個完成項目（65/100，未達上限）。
 
 ## AI 導師多輪對話脈絡字數上限管理（第一八五輪，2026-07-04）
 
@@ -147,10 +165,10 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 背景：AI 導師回答先前把換行輸出成字面 `\n`，已於後端 `/pages/:n/ask`（[page-operations.ts](backend/src/routes/pdfs/page-operations.ts)）回傳前正規化成真換行（分支 `fix/ai-tutor-newline-readability`）。以下為可進一步提升回答可讀性與品質的後續項目：
 
-- [ ] **Markdown 渲染**：回答含 `**粗體**`、`##` 標題、`-`/數字條列，但 [PageAskPanel.tsx](frontend/src/pages/play/PageAskPanel.tsx) 目前以 `whitespace-pre-wrap` 純文字顯示，符號原樣外露。專案目前**沒有 markdown 渲染器**（只有 `formatReportSummaryMarkdown` 這類「產生」markdown 的 formatter）。需引入輕量渲染器（如 `react-markdown`）安全渲染、禁用原始 HTML、限制可用標籤，或自寫最小子集（粗體／標題／條列）的渲染。
+- [x] **Markdown 渲染**：~~回答含 `**粗體**`、`##` 標題、`-`/數字條列，但目前以純文字顯示~~。**已完成**（非本輪）：`PageAskPanel` 現以自寫的輕量渲染器 [MarkdownMath.tsx](frontend/src/components/MarkdownMath.tsx) 呈現 AI 導師回答，支援標題／粗體／斜體／行內碼／條列／表格與 LaTeX（katex），文字走 React text node、不用 innerHTML（僅 katex 產出的受信任 HTML 例外）。此項於先前輪次隨 MarkdownMath 導入而解決，僅補記狀態、**不計入**計數。
 - [ ] **串流輸出（streaming）**：目前 `/ask` 一次回傳完整 JSON，長答需等待且無進度感。改為 SSE 串流（比照 `animation/custom-script` 既有 SSE 模式），逐段顯示、可中途取消。
 - [ ] **輸出長度／結構控制**：system prompt 要求「完整、不刻意精簡」常導致過長。新增「精簡／詳細」切換或長度上限，並引導模型先給重點摘要再展開。
-- [ ] **引用頁碼可點擊**：回答中的「（第 N 頁）」目前是純文字。解析成可點連結，點擊跳到該頁，提升跨頁查證效率。
+- [x] **引用頁碼可點擊**：回答中的「（第 N 頁）」目前是純文字。解析成可點連結，點擊跳到該頁，提升跨頁查證效率。（第一八六輪完成，見下方「AI 導師回答的引用頁碼可點擊跳頁」section）
 - [ ] **錯誤與空答處理**：當所有內容皆無相關資訊時，模型偶爾仍杜撰；強化 prompt 與後處理（偵測「查無資訊」語句時給固定提示），並把後端原始錯誤改走 `mapApiErrorToHumanMessage`。
 - [x] **保留對話脈絡的上限管理**：`history` 全量帶入長對話會超出 token 預算；加上輪數/字數截斷與必要的摘要壓縮。（第一八五輪完成，見下方「AI 導師多輪對話脈絡字數上限管理」section）
 

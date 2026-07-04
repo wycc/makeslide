@@ -5,6 +5,7 @@ import { createPageComment } from '../../lib/api/pdfs';
 import { getAuthStatus } from '../../lib/api/system';
 import { getStoredCommentAuthor } from '../../lib/commentAuthor';
 import { interpolateTemplate } from '../../lib/interpolateTemplate';
+import { extractCitedPages } from '../../lib/extractCitedPages';
 import { MarkdownMath } from '../../components/MarkdownMath';
 
 export function PageAskPanel() {
@@ -16,7 +17,21 @@ export function PageAskPanel() {
     pageAskBusy, pageAskError,
     handleAskPage, clearPageAsk,
     pdfId, currentPage, currentShareToken,
+    deckPages, setCurrentIdx,
   } = usePlayPageContext();
+
+  // 把 AI 導師答案中引用的「第 N 頁」轉成可點擊捷徑：只保留實際存在、且非目前頁的頁碼，
+  // 點擊即切換到該頁（透過 deckPages 對應的索引）。
+  const citedPagesFor = (answer: string): number[] => {
+    const currentNumber = currentPage?.page_number ?? null;
+    return extractCitedPages(answer).filter(
+      (n) => n !== currentNumber && deckPages.some((p) => p.page_number === n),
+    );
+  };
+  const jumpToPage = (pageNumber: number) => {
+    const idx = deckPages.findIndex((p) => p.page_number === pageNumber);
+    if (idx >= 0) setCurrentIdx(idx);
+  };
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'ok' | 'fail'>('idle');
   // 登入使用者的顯示名稱，作為「存這則 AI 導師回答的人」的預設名稱（未設暱稱時用）。
   const [authName, setAuthName] = useState('');
@@ -95,6 +110,23 @@ export function PageAskPanel() {
               {m.role === 'user'
                 ? <p className="whitespace-pre-wrap">{m.content}</p>
                 : <MarkdownMath content={m.content} />}
+              {m.role === 'assistant' && citedPagesFor(m.content).length > 0 && (
+                <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-emerald-200/60 pt-2 dark:border-emerald-800/40">
+                  <span className="text-[10px] uppercase tracking-wide text-muted">
+                    {t('play.sidebar.pageAsk.citedPagesLabel')}
+                  </span>
+                  {citedPagesFor(m.content).map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => jumpToPage(n)}
+                      className="rounded border border-emerald-300 bg-emerald-100/70 px-1.5 py-0.5 text-[11px] font-medium text-emerald-800 hover:bg-emerald-200 dark:border-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100 dark:hover:bg-emerald-800/60"
+                    >
+                      {interpolateTemplate(t('play.sidebar.pageAsk.jumpToPage'), { page: n })}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
           {pageAskBusy && <p className="text-xs text-muted">{t('play.sidebar.pageAsk.asking')}</p>}
