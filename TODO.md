@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第二〇〇輪已完成 **79/100**，未達上限。
+- 最新進度：截至第二〇一輪已完成 **80/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -92,6 +92,19 @@ prompt 規則以「（第 N 頁）」標示跨頁引用，但先前是純文字�
     新測試 7/7 + `page-ask` 整合測試回歸（Node 22，共 10 綠）。分支 `feat/ask-history-char-budget`，
     已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 64 個完成項目（64/100，未達上限）。
+
+## 測驗題目完整性檢查抽出純函式（第二〇一輪，2026-07-04）
+
+延續既有程式碼盤點：`QuizBuilderPage` 的 `canSave` 內聯一段非平凡的「每題是否完整」判斷、無測試。
+
+- [x] 抽出測驗題目完整性檢查純函式 `allQuestionsComplete`（可測 / 固化可儲存規則）。
+  - 修改說明（2026-07-04）：新增 [quizValidation.ts](frontend/src/lib/quizValidation.ts) 的
+    `allQuestionsComplete(questions)`——每題須有非空題幹，且申論題（essay）免選項、其餘題型至少 2 個非空
+    選項（空陣列回 true，呼叫端另檢查「至少一題」）。`QuizBuilderPage` 的 `canSave` 改用之。新增
+    `quizValidation.test.ts`（6 組：選擇題合格、空題幹不合格、選項不足不合格、申論題免選項、需每題皆完整、
+    空陣列回 true）。前端 `tsc --noEmit` 通過、6/6 通過。分支 `refactor/quiz-questions-complete`，已 merge 回
+    master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 80 個完成項目（80/100，未達上限）。
 
 ## 已作答題數計算抽出共用純函式（第二〇〇輪，2026-07-04）
 
