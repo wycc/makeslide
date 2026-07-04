@@ -1,5 +1,26 @@
 # MakeSlide 功能說明
 
+## 修復 export/import round-trip 測試的未定義變數
+
+### 背景
+
+`export-import-zip-interactive.test.ts` 有一個驗證「把互動內容（投票、測驗、投影片動畫）匯出成 ZIP 再匯入後仍完整」的回歸測試，但它在 master 上一直失敗，錯誤是 `ReferenceError: pageUid is not defined`。經追查，這是**測試本身的 bug，不是產品的問題**。
+
+### 變更內容
+
+- 這個測試用一個 `seedPdfWithInteractiveData(id)` 函式建立測試資料，它回傳 `{ pageUid, animationRelPath }`。測試主體在第 139 行只解構了 `const { animationRelPath } = …`，漏掉 `pageUid`；但後面第 202 行的斷言（檢查「匯入後仍沿用原本的 page_uid」）卻用到了 `pageUid`，於是拋出 ReferenceError。
+- 修法只有一行：改成 `const { pageUid, animationRelPath } = seedPdfWithInteractiveData(id)`。未更動任何產品程式碼。
+
+### 使用方式
+
+這是測試修正，對使用者沒有影響。修好後這個回歸測試會實際跑起來，並確認產品行為正確——匯入 ZIP 時會沿用匯出端的 `page_uid`（而非重新產生），讓以 `page_uid` 命名的素材（如逐頁的圖表選取檔）在匯入後仍能對應得回去。
+
+### 測試
+
+修正後該檔 1/1 通過，後端 `tsc --noEmit` 通過。
+
+> 備註：本項是「自 2026-06-27 計數重設起算」的第 100 個完成項目，已達 loop 設定的 100 項上限，自動改善迴圈就此暫停，等待是否重設計數或調整門檻的指示。
+
 ## zip 下載回應收斂為 sendZipDownload
 
 ### 背景

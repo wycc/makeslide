@@ -136,7 +136,7 @@ test('export.zip -> import.zip round-trips polls, quizzes and slide animations',
   const id = `inter${Date.now().toString(36)}`;
   let importedId: string | null = null;
   try {
-    const { animationRelPath } = seedPdfWithInteractiveData(id);
+    const { pageUid, animationRelPath } = seedPdfWithInteractiveData(id);
 
     const exportResp = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/export.zip` });
     assert.equal(exportResp.statusCode, 200);
