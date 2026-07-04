@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第二一二輪已完成 **91/100**，未達上限。
+- 最新進度：截至第二一三輪已完成 **92/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -92,6 +92,20 @@ prompt 規則以「（第 N 頁）」標示跨頁引用，但先前是純文字�
     新測試 7/7 + `page-ask` 整合測試回歸（Node 22，共 10 綠）。分支 `feat/ask-history-char-budget`，
     已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 64 個完成項目（64/100，未達上限）。
+
+## localStorage 數字陣列安全讀取抽出純函式（第二一三輪，2026-07-04）
+
+延續盤點：`PlayPage` 的 bookmarks／importantPages 兩個 useState 初始化，內聯相同的「localStorage 讀 JSON→
+確認陣列」safe-parse、無測試。
+
+- [x] 抽出 `readNumberArrayFromStorage`（去重 2 處 / 可測 / DI）。
+  - 修改說明（2026-07-04）：新增 [storageNumberArray.ts](frontend/src/lib/storageNumberArray.ts) 的
+    `readNumberArrayFromStorage(key, storage?)`——讀值→`JSON.parse`→是陣列才回、非法/缺值/getItem 拋錯皆回 `[]`；
+    並過濾非數字元素（比原 `as number[]` 轉型更穩健），可注入 storage 供測試。`PlayPage` 兩個 useState 初始化改用
+    之。新增 `storageNumberArray.test.ts`（5 組：讀數字陣列、濾非數字、缺值/壞 JSON/非陣列回空、無 storage 回空、
+    getItem 拋錯回空）。前端 `tsc --noEmit` 通過、5/5 通過。分支 `refactor/read-number-array-storage`，已 merge
+    回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 92 個完成項目（92/100，未達上限）。
 
 ## 課程包下載改用 api client + 檔名解析純函式（第二一二輪，2026-07-04）
 
