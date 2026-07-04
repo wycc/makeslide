@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第一九五輪已完成 **74/100**，未達上限。
+- 最新進度：截至第一九六輪已完成 **75/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -92,6 +92,20 @@ prompt 規則以「（第 N 頁）」標示跨頁引用，但先前是純文字�
     新測試 7/7 + `page-ask` 整合測試回歸（Node 22，共 10 綠）。分支 `feat/ask-history-char-budget`，
     已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 64 個完成項目（64/100，未達上限）。
+
+## 「複製全部逐字稿」Markdown 組裝抽出純函式（第一九六輪，2026-07-04）
+
+延續既有程式碼盤點：`PlayPageHeader` 的「複製全部逐字稿」按鈕在 onClick 內聯了「依頁碼排序＋每頁組
+`## 第N頁` 標題接逐字稿＋join」的組裝，無測試。
+
+- [x] 抽出「複製全部逐字稿」Markdown 組裝純函式 `buildAllScriptsMarkdown`（去重雛形 / 可測）。
+  - 修改說明（2026-07-04）：新增 [allScriptsMarkdown.ts](frontend/src/lib/allScriptsMarkdown.ts) 的
+    `buildAllScriptsMarkdown(pages, scripts, {pagePrefix, pageSuffix})`——依 `page_number` 排序（不改輸入）、
+    每頁輸出 `## <前綴>N<後綴>\n<逐字稿>`（缺稿留空）、頁間空一行。`PlayPageHeader` 的按鈕改用之。新增
+    `allScriptsMarkdown.test.ts`（5 組：排序＋格式、缺稿留空、空頁回空字串、不改輸入、自訂前後綴）。前端
+    `tsc --noEmit` 通過、5/5 通過。分支 `refactor/all-scripts-markdown`，已 merge 回 master。BLOG.md 新增對應
+    section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 75 個完成項目（75/100，未達上限）。
 
 ## 測驗選項勾選切換抽出共用純函式（第一九五輪，2026-07-04）
 
