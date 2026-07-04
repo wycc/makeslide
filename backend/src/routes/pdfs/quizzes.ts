@@ -56,7 +56,7 @@ const GeneratedQuizQuestionsSchema = z.array(GeneratedQuizQuestionSchema).min(1)
 // to 80 points each would let a fully-correct attempt score 160/100).
 const QUIZ_TOTAL_SCORE = 100;
 const QUIZ_SCORE_SUM_EPSILON = 1e-6;
-function explicitScoreSum(questions: Array<{ score?: number | null }>): number {
+export function explicitScoreSum(questions: Array<{ score?: number | null }>): number {
   return questions.reduce((acc, q) => acc + (typeof q.score === 'number' && Number.isFinite(q.score) && q.score >= 0 ? q.score : 0), 0);
 }
 
