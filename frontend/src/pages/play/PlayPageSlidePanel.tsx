@@ -8,6 +8,7 @@ import { formatTime, formatDurationMs, formatTokenCount, formatCostUsd, adjustRe
 import { PageTimingChips } from './PageTimingChips';
 import { ApiError, fetchPageGenerationPrompts, fetchPdfRunHistory, fetchPdfSlowArtifacts, figureImageUrl, fetchSyncAttendees, kickSyncAttendee, rewritePageScript } from '../../lib/api';
 import { copyTextToClipboard } from '../../lib/clipboard';
+import { estimateSpeakingTimeLabel } from '../../lib/speakingTimeEstimate';
 import { clamp } from '../../lib/clamp';
 import { computeRemainingSeconds } from '../../lib/remainingTime';
 import { SHOW_SUBTITLE_STORAGE_KEY, SUBTITLE_SIZE_STORAGE_KEY, SUBTITLE_POSITION_STORAGE_KEY, AUTO_ADVANCE_STORAGE_KEY, INTERACTIVE_MODE_STORAGE_KEY, useI18n, type TranslationKey, type SubtitleSize, type SubtitlePosition } from '../../i18n';
@@ -1314,10 +1315,7 @@ export function PlayPageSlidePanel() {
                   {editorError ? <span className="text-rose-700 dark:text-rose-300">{editorError}</span> : t('play.slidePanel.transcript.saveHint')}
                   {!editorError && editingScript.trim() && (() => {
                     const chars = editingScript.trim().length;
-                    const secs = Math.round(chars / 4);
-                    const mm = Math.floor(secs / 60);
-                    const ss = String(secs % 60).padStart(2, '0');
-                    return <span className="ml-2 text-muted">{t('play.slidePanel.transcript.charCount').replace('{n}', String(chars))} · {mm}:{ss}</span>;
+                    return <span className="ml-2 text-muted">{t('play.slidePanel.transcript.charCount').replace('{n}', String(chars))} · {estimateSpeakingTimeLabel(chars)}</span>;
                   })()}
                 </div>
                 <button

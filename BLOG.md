@@ -1,5 +1,24 @@
 # MakeSlide 功能說明
 
+## 逐字稿朗讀時間預估抽出純函式
+
+### 背景
+
+在播放頁編輯某一頁的逐字稿時，下方會即時顯示「字數 · 預估朗讀時間（mm:ss）」。原本這段「以字數粗估秒數（每秒約 4 個字）再手動組成 mm:ss」的邏輯直接寫在元件的 JSX 裡，沒有測試。
+
+### 變更內容
+
+- 新增 `frontend/src/lib/speakingTimeEstimate.ts`：`estimateSpeakingSeconds(chars)`（每秒約 4 個字、四捨五入到秒，非正或非有限值回 0）與 `estimateSpeakingTimeLabel(chars)`（把秒數組成 `m:ss`，分鐘不補零、秒補兩位，沿用原本的顯示格式）。
+- `PlayPageSlidePanel` 的即時預估改用這個共用函式。
+
+### 使用方式
+
+純內部重構，逐字稿編輯區的「字數 · 預估時間」顯示不變。抽成純函式後，這個「每秒約 4 字」的估算 heuristic 有了單一來源與測試，日後要調整估算方式或格式也只需改一處。
+
+### 測試
+
+新增 `speakingTimeEstimate.test.ts`（4 組：以 chars/4 四捨五入估秒、非正/`NaN` 回 0、`m:ss` 格式化、空輸入回 `0:00`）。前端 `tsc --noEmit` 通過、4/4 通過。
+
 ## 錄音 session 模型（資料層中間層）
 
 ### 背景
