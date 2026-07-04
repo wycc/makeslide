@@ -1105,6 +1105,13 @@ export async function fetchPdfStudentRecords(id: string): Promise<StudentRecord[
   return Array.isArray(data.students) ? data.students : [];
 }
 
+export async function fetchReportAiSuggestions(id: string): Promise<string> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/report/ai-suggestions`, { method: 'POST' });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  const data = (await resp.json()) as { suggestions?: string };
+  return data.suggestions ?? '';
+}
+
 export interface PageAskMessage {
   role: 'user' | 'assistant';
   content: string;
