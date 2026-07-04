@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第一八九輪已完成 **68/100**，未達上限。
+- 最新進度：截至第一九〇輪已完成 **69/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -93,6 +93,24 @@ prompt 規則以「（第 N 頁）」標示跨頁引用，但先前是純文字�
     已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 64 個完成項目（64/100，未達上限）。
 
+## 錄音模式簡報切換時間軸純函式（第一九〇輪，2026-07-04）
+
+接續第一八九輪拆分的 NEW_FEATURE「錄音模式」首步：先固化「錄音時記錄簡報切頁時間點 → 正規化時間軸」
+的資料模型與純函式，作為未來「同步播放簡報+錄音」或「合成影片」的共同基礎（尚不含錄音 UI／儲存／
+MediaRecorder 接線）。
+
+- [x] 抽出簡報切換時間軸純函式 `buildSlideTimeline`（可測 / 錄音模式基礎）。
+  - 修改說明（2026-07-04）：新增 [slideTimeline.ts](frontend/src/lib/slideTimeline.ts) 的
+    `buildSlideTimeline(recordingStartMs, events, recordingDurationMs)`（＋`SlideSwitchEvent`／
+    `SlideTimelineSegment` 型別）。把原始切頁事件（絕對時間戳、可能亂序）換算成相對錄音起點的 0-based
+    連續區段 `{page, startMs, endMs}`：夾到 `[0, duration]`（濾掉錄音前/後雜訊）、依偏移穩定排序、合併
+    連續同頁、第一段回溯到 0 覆蓋整段錄音、濾除零長度區段（同一時間點以較晚事件勝出）；空事件或
+    `duration ≤ 0` 回空。沿用既有 `clamp`。新增 `slideTimeline.test.ts`（9 組：連續區段、首段回溯、亂序
+    排序、同頁合併、真實回看前頁保留、前後雜訊夾界、同刻零長度濾除、空/非正 duration、忽略非整數頁/
+    非有限時間）。前端 `tsc --noEmit` 通過、9/9 通過。分支 `feat/recording-slide-timeline`，已 merge 回 master。
+    BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 69 個完成項目（69/100，未達上限）。
+
 ## 規畫輪：批次匯出進度條 + 依 NEW_FEATURE 補充項目（第一八九輪，2026-07-04）
 
 盤點：AI 導師（PageAskPanel）品質 backlog 已幾乎清空（僅剩 SSE 串流，屬大項、不宜自動 loop 逕行）；
@@ -120,10 +138,10 @@ prompt 規則以「（第 N 頁）」標示跨頁引用，但先前是純文字�
   目前為同步一次性打包（`runZipCommand` 後整包 `readFile` 回傳）、前端無進度。改為 job 化（比照 batch-export
   的 `job + poll + download` 三段式）或串流，讓 PlayPage 的單份匯出也能顯示進度條。可拆：後端 job scaffolding +
   status 端點（可測）／前端輪詢與進度條（複用 `progressPercent`）。
-- [ ] **錄音模式——第一步：簡報切換時間軸純函式**（NEW_FEATURE「錄音模式」）：定義「錄音 session + 簡報
+- [x] **錄音模式——第一步：簡報切換時間軸純函式**（NEW_FEATURE「錄音模式」）：定義「錄音 session + 簡報
   切換事件」資料結構，抽出可測純函式把 `(recordingStartMs, pageSwitchEvents[])` 正規化為 `{page, startMs,
   endMs}` 連續區段（處理亂序、同頁連續、結尾以錄音長度收尾），供未來「同步播放簡報+錄音」或「產生影片」使用。
-  先做時間軸模型與測試，不含錄音 UI／儲存／MediaRecorder 接線。
+  先做時間軸模型與測試，不含錄音 UI／儲存／MediaRecorder 接線。（第一九〇輪完成，見下方「錄音模式簡報切換時間軸純函式」section）
 - [ ] **測驗錄影人頭偵測——第一步：提示狀態純函式**（NEW_FEATURE「測驗錄影加人頭偵測」）：在既有
   `useQuizRecorder` 錄影流程加 in-browser 人臉/人頭偵測（優先用瀏覽器原生 `FaceDetector`，退回輕量模型），
   偵測不到時提示並顯示鏡頭預覽。先抽出「偵測結果序列 → 是否提示」的純函式（連續 N 次未偵測才提示、含去抖，
