@@ -13,8 +13,7 @@ import {
   type GroupDetail,
   type AccountSearchResult,
 } from '../lib/api/pdfs';
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+import { isValidEmail } from '../lib/isValidEmail';
 
 /**
  * Manage the current user's reusable groups (named sets of member emails) used by identity-based
@@ -67,7 +66,7 @@ export function GroupsManager() {
   }
 
   const emailToAdd = (selectedEmail || query).trim().toLowerCase();
-  const canAddMember = Boolean(selected) && EMAIL_RE.test(emailToAdd) && !busy;
+  const canAddMember = Boolean(selected) && isValidEmail(emailToAdd) && !busy;
 
   async function handleSelect(id: string) {
     setBusy(true);

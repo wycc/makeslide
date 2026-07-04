@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第二一六輪已完成 **95/100**，未達上限。
+- 最新進度：截至第二一七輪已完成 **96/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -92,6 +92,19 @@ prompt 規則以「（第 N 頁）」標示跨頁引用，但先前是純文字�
     新測試 7/7 + `page-ask` 整合測試回歸（Node 22，共 10 綠）。分支 `feat/ask-history-char-budget`，
     已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 64 個完成項目（64/100，未達上限）。
+
+## Email 驗證正規表示式收斂為共用純函式（第二一七輪，2026-07-05）
+
+延續盤點：`EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/` 在 `AccessControlPanel` 與 `GroupsManager` 各定義一份、
+用於「加入名單/成員」的可加入判斷，無測試。
+
+- [x] 抽出 `isValidEmail`（去重 2 處 / 可測）。
+  - 修改說明（2026-07-05）：新增 [isValidEmail.ts](frontend/src/lib/isValidEmail.ts) 的 `isValidEmail(email)`
+    （沿用同一寬鬆規則：本地部分＋`@`＋網域＋`.`＋TLD）。`AccessControlPanel`（`canAdd`）與 `GroupsManager`
+    （`canAddMember`）移除本地 `EMAIL_RE`、改用之。新增 `isValidEmail.test.ts`（3 組：一般 email、缺 @/網域/TLD、
+    空白/含空格）。前端 `tsc --noEmit` 通過、3/3 通過。分支 `refactor/is-valid-email`，已 merge 回 master。
+    BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 96 個完成項目（96/100，未達上限）。
 
 ## 最近搜尋統一到共用模組（修跨檔不一致）（第二一六輪，2026-07-05）
 

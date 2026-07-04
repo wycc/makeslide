@@ -16,6 +16,7 @@ import {
   type AccountSearchResult,
   type GroupSummary,
 } from '../../lib/api/pdfs';
+import { isValidEmail } from '../../lib/isValidEmail';
 
 interface AccessControlPanelProps {
   pdfId: string;
@@ -25,8 +26,6 @@ interface AccessControlPanelProps {
 type PickTarget =
   | { type: 'user'; email: string; label: string }
   | { type: 'group'; groupId: string; label: string };
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * Identity-based sharing: pick a default permission (the presentation's visibility) applied to
@@ -96,7 +95,7 @@ export function AccessControlPanel({ pdfId, initialVisibility }: AccessControlPa
   }
 
   const freeEmail = query.trim().toLowerCase();
-  const canAdd = !busy && (picked !== null || EMAIL_RE.test(freeEmail));
+  const canAdd = !busy && (picked !== null || isValidEmail(freeEmail));
 
   async function handleAdd() {
     if (!canAdd) return;
