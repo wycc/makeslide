@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第二〇四輪已完成 **83/100**，未達上限。
+- 最新進度：截至第二〇五輪已完成 **84/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -92,6 +92,20 @@ prompt 規則以「（第 N 頁）」標示跨頁引用，但先前是純文字�
     新測試 7/7 + `page-ask` 整合測試回歸（Node 22，共 10 綠）。分支 `feat/ask-history-char-budget`，
     已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 64 個完成項目（64/100，未達上限）。
+
+## 標籤字串解析收斂為共用純函式（第二〇五輪，2026-07-04）
+
+延續既有程式碼盤點：`HomePage`／`PdfCard` 有 5 處內聯相同的「逗號分隔標籤字串 → 去空白非空陣列」解析、
+無測試。
+
+- [x] 抽出標籤解析純函式 `parseTags`（去重 5 處 / 可測）。
+  - 修改說明（2026-07-04）：新增 [parseTags.ts](frontend/src/lib/parseTags.ts) 的 `parseTags(raw)`——
+    `(raw ?? '').split(',').map(trim).filter(Boolean)`，null/undefined/空回空陣列。`HomePage` 4 處（標籤晶片、
+    標籤過濾、加標籤）與 `PdfCard` 1 處改用之。其中標籤過濾原變體未 filter 空字串，但因比對的 tagFilter 皆非
+    空、`includes` 結果不受影響，改用 filter 版行為等價。新增 `parseTags.test.ts`（4 組：split+trim、濾空項、
+    null/undefined/空回空、單一標籤）。前端 `tsc --noEmit` 通過、4/4 通過。分支 `refactor/parse-tags`，已 merge
+    回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 84 個完成項目（84/100，未達上限）。
 
 ## 逐字稿朗讀時間預估抽出純函式（第二〇四輪，2026-07-04）
 
