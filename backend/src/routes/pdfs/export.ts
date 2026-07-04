@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { canReadPdf } from './permissions';
+import { canReadPdf , aclCtx } from './permissions';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -248,7 +248,7 @@ export async function registerExportRoutes(app: FastifyInstance): Promise<void> 
     }
 
     const sub = sessionSub(request);
-    if (!canReadPdf(sub, row)) {
+    if (!canReadPdf(sub, row, aclCtx(request, parsed.data.id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報'));
     }
 

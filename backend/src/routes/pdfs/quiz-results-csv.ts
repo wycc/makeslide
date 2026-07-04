@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { canEditPdf } from './permissions';
+import { canEditPdf , aclCtx } from './permissions';
 import { db } from '../../db';
 import type { PdfRow } from '../../types';
 import { sessionSub } from '../auth';
@@ -27,7 +27,7 @@ export async function registerQuizResultsCsvRoutes(app: FastifyInstance): Promis
       .prepare(`SELECT id, title, original_filename, owner_sub, visibility FROM pdfs WHERE id = ?`)
       .get(parsed.data.id) as Pick<PdfRow, 'id' | 'title' | 'original_filename' | 'owner_sub' | 'visibility'> | undefined;
     if (!row) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
-    if (!canEditPdf(sessionSub(request), row)) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限下載測驗結果'));
+    if (!canEditPdf(sessionSub(request), row, aclCtx(request, parsed.data.id))) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限下載測驗結果'));
 
     const attempts = db
       .prepare(

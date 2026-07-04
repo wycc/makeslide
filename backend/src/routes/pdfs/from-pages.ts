@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { canReadPdf } from './permissions';
+import { canReadPdf , aclCtx } from './permissions';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -55,7 +55,7 @@ export async function registerFromPagesRoutes(app: FastifyInstance): Promise<voi
         .prepare(`SELECT owner_sub, visibility, title FROM pdfs WHERE id = ?`)
         .get(spec.pdf_id) as (Pick<PdfRow, 'owner_sub' | 'visibility'> & { title: string | null }) | undefined;
       if (!pdfRow) return reply.code(404).send(errorResponse('NOT_FOUND', `PDF not found: ${spec.pdf_id}`));
-      if (!canReadPdf(sub, pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', `Access denied: ${spec.pdf_id}`));
+      if (!canReadPdf(sub, pdfRow, aclCtx(request, spec.pdf_id))) return reply.code(403).send(errorResponse('FORBIDDEN', `Access denied: ${spec.pdf_id}`));
 
       const pageRow = db
         .prepare(`SELECT * FROM pages WHERE pdf_id = ? AND page_number = ?`)

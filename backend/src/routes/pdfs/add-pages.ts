@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { ShareTokenParamSchema, getShareToken, hasShareAccess } from './share';
-import { getPdfPermissionRow, canReadPdf, canEditPdf } from './permissions';
+import { getPdfPermissionRow, canReadPdf, canEditPdf , aclCtx } from './permissions';
 import { z } from 'zod';
 import {
   getAddPagesJob,
@@ -66,7 +66,7 @@ export async function registerAddPagesRoutes(app: FastifyInstance): Promise<void
     if (!pdfRow) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsedParams.data.id} not found`));
     }
-    if (!canEditPdf(sessionSub(request), pdfRow)) {
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, parsedParams.data.id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限為此簡報新增頁面'));
     }
 
@@ -108,7 +108,7 @@ export async function registerAddPagesRoutes(app: FastifyInstance): Promise<void
     if (!pdfRow) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsedParams.data.id} not found`));
     }
-    if (!hasShareAccess(request, parsedParams.data.id) && !canReadPdf(sessionSub(request), pdfRow)) {
+    if (!hasShareAccess(request, parsedParams.data.id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, parsedParams.data.id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的新增頁面進度'));
     }
     const state = getAddPagesJob(parsedParams.data.id);
@@ -129,7 +129,7 @@ export async function registerAddPagesRoutes(app: FastifyInstance): Promise<void
     if (!pdfRow) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsedParams.data.id} not found`));
     }
-    if (!canEditPdf(sessionSub(request), pdfRow)) {
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, parsedParams.data.id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限取消此簡報的新增頁面任務'));
     }
     const cancelled = abortAddPagesJob(parsedParams.data.id);
@@ -160,7 +160,7 @@ export async function registerAddPagesRoutes(app: FastifyInstance): Promise<void
     if (!pdfRow) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     }
-    if (!canEditPdf(sessionSub(request), pdfRow)) {
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限為此簡報產生大綱'));
     }
 

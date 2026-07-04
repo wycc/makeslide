@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { canEditPdf } from './permissions';
+import { canEditPdf , aclCtx } from './permissions';
 import { db } from '../../db';
 import type { PdfRow } from '../../types';
 import { sessionSub } from '../auth';
@@ -270,7 +270,7 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
     const { id } = parsed.data;
     const pdfRow = getPdfPermissionRow(id);
     if (!pdfRow) return reply.code(404).send('PDF not found');
-    if (!canEditPdf(sessionSub(request), pdfRow)) {
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send('Forbidden');
     }
 
@@ -307,7 +307,7 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
     const { id } = parsed.data;
     const pdfRow = getPdfPermissionRow(id);
     if (!pdfRow) return reply.code(404).send('PDF not found');
-    if (!canEditPdf(sessionSub(request), pdfRow)) {
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send('Forbidden');
     }
 
@@ -381,7 +381,7 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
     const { id } = parsed.data;
     const pdfRow = getPdfPermissionRow(id);
     if (!pdfRow) return reply.code(404).send('PDF not found');
-    if (!canEditPdf(sessionSub(request), pdfRow)) {
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send('Forbidden');
     }
 
@@ -414,7 +414,7 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
     const { id } = parsed.data;
     const pdfRow = getPdfPermissionRow(id);
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!canEditPdf(sessionSub(request), pdfRow)) {
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的學生報告'));
     }
 
@@ -428,7 +428,7 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
     const { id } = parsed.data;
     const pdfRow = getPdfPermissionRow(id);
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!canEditPdf(sessionSub(request), pdfRow)) {
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的課後學習報告'));
     }
 

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { canReadPdf, canEditPdf } from './permissions';
+import { canReadPdf, canEditPdf , aclCtx } from './permissions';
 import { hasShareAccess } from './share';
 import { z } from 'zod';
 import { db } from '../../db';
@@ -70,7 +70,7 @@ export async function registerCommentsRoutes(app: FastifyInstance): Promise<void
     const pdfRow = getPdfRow(id);
     if (!pdfRow) return reply.code(404).send(errorResponse('NOT_FOUND', 'PDF not found'));
     // Comments are shared with everyone who can open the presentation, including share-link viewers.
-    if (!hasShareAccess(request, id) && !canReadPdf(sub, pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', 'Access denied'));
+    if (!hasShareAccess(request, id) && !canReadPdf(sub, pdfRow, aclCtx(request, id))) return reply.code(403).send(errorResponse('FORBIDDEN', 'Access denied'));
     const rows = db
       .prepare(`SELECT * FROM page_comments WHERE pdf_id = ? ORDER BY page_number ASC, created_at ASC`)
       .all(id) as PageCommentRow[];
@@ -85,7 +85,7 @@ export async function registerCommentsRoutes(app: FastifyInstance): Promise<void
     const sub = sessionSub(request);
     const pdfRow = getPdfRow(id);
     if (!pdfRow) return reply.code(404).send(errorResponse('NOT_FOUND', 'PDF not found'));
-    if (!canEditPdf(sub, pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限下載評論'));
+    if (!canEditPdf(sub, pdfRow, aclCtx(request, id))) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限下載評論'));
     const rows = db
       .prepare(`SELECT * FROM page_comments WHERE pdf_id = ? ORDER BY page_number ASC, created_at ASC`)
       .all(id) as PageCommentRow[];
@@ -120,7 +120,7 @@ export async function registerCommentsRoutes(app: FastifyInstance): Promise<void
     const sub = sessionSub(request);
     const pdfRow = getPdfRow(id);
     if (!pdfRow) return reply.code(404).send(errorResponse('NOT_FOUND', 'PDF not found'));
-    if (!hasShareAccess(request, id) && !canReadPdf(sub, pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', 'Access denied'));
+    if (!hasShareAccess(request, id) && !canReadPdf(sub, pdfRow, aclCtx(request, id))) return reply.code(403).send(errorResponse('FORBIDDEN', 'Access denied'));
     const rows = db
       .prepare(`SELECT * FROM page_comments WHERE pdf_id = ? AND page_number = ? ORDER BY created_at ASC`)
       .all(id, n) as PageCommentRow[];
@@ -141,7 +141,7 @@ export async function registerCommentsRoutes(app: FastifyInstance): Promise<void
       const pdfRow = getPdfRow(id);
       if (!pdfRow) return reply.code(404).send(errorResponse('NOT_FOUND', 'PDF not found'));
       // Anyone who can open the presentation (incl. via share link) may post a comment everyone sees.
-      if (!hasShareAccess(request, id) && !canReadPdf(sub, pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', 'Access denied'));
+      if (!hasShareAccess(request, id) && !canReadPdf(sub, pdfRow, aclCtx(request, id))) return reply.code(403).send(errorResponse('FORBIDDEN', 'Access denied'));
       const now = nowIso();
       const result = db
         .prepare(
@@ -165,7 +165,7 @@ export async function registerCommentsRoutes(app: FastifyInstance): Promise<void
       const sub = sessionSub(request);
       const pdfRow = getPdfRow(id);
       if (!pdfRow) return reply.code(404).send(errorResponse('NOT_FOUND', 'PDF not found'));
-      if (!canEditPdf(sub, pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', 'Access denied'));
+      if (!canEditPdf(sub, pdfRow, aclCtx(request, id))) return reply.code(403).send(errorResponse('FORBIDDEN', 'Access denied'));
       const existing = db.prepare(`SELECT id FROM page_comments WHERE id = ? AND pdf_id = ?`).get(commentId, id);
       if (!existing) return reply.code(404).send(errorResponse('NOT_FOUND', 'Comment not found'));
       const sets: string[] = [];
@@ -189,7 +189,7 @@ export async function registerCommentsRoutes(app: FastifyInstance): Promise<void
       const sub = sessionSub(request);
       const pdfRow = getPdfRow(id);
       if (!pdfRow) return reply.code(404).send(errorResponse('NOT_FOUND', 'PDF not found'));
-      if (!canEditPdf(sub, pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', 'Access denied'));
+      if (!canEditPdf(sub, pdfRow, aclCtx(request, id))) return reply.code(403).send(errorResponse('FORBIDDEN', 'Access denied'));
       const existing = db.prepare(`SELECT id FROM page_comments WHERE id = ? AND pdf_id = ?`).get(commentId, id);
       if (!existing) return reply.code(404).send(errorResponse('NOT_FOUND', 'Comment not found'));
       db.prepare(`DELETE FROM page_comments WHERE id = ? AND pdf_id = ?`).run(commentId, id);

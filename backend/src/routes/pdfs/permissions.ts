@@ -1,5 +1,29 @@
+import type { FastifyRequest } from 'fastify';
 import { db } from '../../db';
 import type { PdfRow } from '../../types';
+import { resolvePdfAccessLevel } from './pdfAccess';
+import { sessionEmail } from '../auth';
+
+/**
+ * Identity context for consulting a presentation's per-user access control list (ACL).
+ * When passed to canReadPdf/canEditPdf, the requester's effective access is resolved from
+ * the ACL (falling back to visibility) instead of visibility alone. Omitting it keeps the
+ * original visibility-only behavior, so existing call sites are unaffected until migrated.
+ */
+export interface PdfAclContext {
+  /** The presentation id whose ACL to consult. */
+  id: string;
+  /** The requester's account email, or null when unauthenticated. */
+  email: string | null;
+}
+
+/**
+ * Build the ACL context for a request + presentation id, to pass as the third argument of
+ * canReadPdf/canEditPdf so they consult the per-user access control list.
+ */
+export function aclCtx(request: FastifyRequest, id: string): PdfAclContext {
+  return { id, email: sessionEmail(request) };
+}
 
 /**
  * Read-access rule shared by the PDF routes (previously duplicated verbatim in
@@ -11,7 +35,9 @@ import type { PdfRow } from '../../types';
 export function canReadPdf(
   sub: string | null,
   row: Pick<PdfRow, 'owner_sub' | 'visibility'>,
+  acl?: PdfAclContext,
 ): boolean {
+  if (acl) return resolvePdfAccessLevel(acl.id, sub, acl.email, row) !== 'none';
   if (!row.owner_sub) return true;
   if (sub && row.owner_sub === sub) return true;
   return row.visibility === 'public' || row.visibility === 'public_editable';
@@ -31,7 +57,9 @@ export function canReadPdf(
 export function canEditPdf(
   sub: string | null,
   row: Pick<PdfRow, 'owner_sub' | 'visibility'>,
+  acl?: PdfAclContext,
 ): boolean {
+  if (acl) return resolvePdfAccessLevel(acl.id, sub, acl.email, row) === 'edit';
   if (!row.owner_sub) return true;
   if (sub && row.owner_sub === sub) return true;
   return row.visibility === 'public_editable';

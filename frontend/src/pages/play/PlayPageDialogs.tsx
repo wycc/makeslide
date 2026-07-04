@@ -35,6 +35,7 @@ export function PlayPageDialogs() {
     // AddPages
     showAddPagesModal, setShowAddPagesModal, pdfId, currentPage, totalPages,
     reloadDetail, setCurrentIdx,
+    detail,
   } = usePlayPageContext();
 
   return (
@@ -116,6 +117,9 @@ export function PlayPageDialogs() {
           }}
           onCopyError={() => setShareError(t('play.shareDialog.copyErrorMessage'))}
           onClose={() => setShareDialogOpen(false)}
+          pdfId={pdfId}
+          visibility={detail?.visibility}
+          canManageAccess={Boolean(detail?.is_owner)}
         />
       ) : null}
 

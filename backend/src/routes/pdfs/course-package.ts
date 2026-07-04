@@ -1,5 +1,5 @@
 import fs from 'node:fs/promises';
-import { canEditPdf } from './permissions';
+import { canEditPdf , aclCtx } from './permissions';
 import { createRequire } from 'node:module';
 import type { FastifyInstance } from 'fastify';
 import { db } from '../../db';
@@ -68,7 +68,7 @@ export async function registerCoursePackageRoutes(app: FastifyInstance): Promise
       .prepare(`SELECT id, title, original_filename, owner_sub, visibility, page_count FROM pdfs WHERE id = ?`)
       .get(parsed.data.id) as Pick<PdfRow, 'id' | 'title' | 'original_filename' | 'owner_sub' | 'visibility' | 'page_count'> | undefined;
     if (!row) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
-    if (!canEditPdf(sessionSub(request), row)) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限下載此課程包'));
+    if (!canEditPdf(sessionSub(request), row, aclCtx(request, parsed.data.id))) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限下載此課程包'));
 
     const pages = db
       .prepare(

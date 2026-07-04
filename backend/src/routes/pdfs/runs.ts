@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { ShareTokenParamSchema, getShareToken, hasShareAccess } from './share';
-import { canReadPdf } from './permissions';
+import { canReadPdf , aclCtx } from './permissions';
 import { z } from 'zod';
 import { db } from '../../db';
 import { sessionSub } from '../auth';
@@ -107,7 +107,7 @@ export async function registerRunHistoryRoutes(app: FastifyInstance): Promise<vo
     if (!pdf) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     }
-    if (!hasShareAccess(request, id) && !canReadPdf(sessionSub(request), pdf)) {
+    if (!hasShareAccess(request, id) && !canReadPdf(sessionSub(request), pdf, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的執行歷程'));
     }
     const limit = parsedQuery.data.limit ?? DEFAULT_RUN_HISTORY_LIMIT;

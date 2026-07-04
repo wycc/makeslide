@@ -355,6 +355,156 @@ export async function updatePdfVisibility(id: string, visibility: PdfVisibilityM
   return (await resp.json()) as UpdatePdfVisibilityResponse;
 }
 
+// ─── Per-user access control list (identity-based sharing) ───────────────────
+export type PdfPermissionAccess = 'read_only' | 'read_write';
+
+export interface PdfPermissionEntry {
+  principal_type: 'user' | 'group';
+  /** Set for user principals, null for groups. */
+  email: string | null;
+  /** Set for group principals, null for users. */
+  group_id: string | null;
+  access: PdfPermissionAccess;
+  /** User: account name or email. Group: the group name. */
+  display_name: string | null;
+  /** Group only: number of members; null for users. */
+  member_count: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PdfPermissionsResponse {
+  pdf_id: string;
+  default_visibility: PdfVisibilityMode;
+  permissions: PdfPermissionEntry[];
+}
+
+export interface AccountSearchResult {
+  email: string;
+  display_name: string;
+}
+
+export async function listPdfPermissions(id: string): Promise<PdfPermissionsResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/permissions`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as PdfPermissionsResponse;
+}
+
+export async function upsertPdfPermission(id: string, email: string, access: PdfPermissionAccess): Promise<void> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/permissions`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email, access }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+}
+
+export async function upsertPdfGroupPermission(id: string, groupId: string, access: PdfPermissionAccess): Promise<void> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/permissions`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ group_id: groupId, access }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+}
+
+export async function removePdfGroupPermission(id: string, groupId: string): Promise<void> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/permissions`, {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ group_id: groupId }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+}
+
+export async function removePdfPermission(id: string, email: string): Promise<void> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/permissions`, {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+}
+
+export async function searchAccounts(query: string): Promise<AccountSearchResult[]> {
+  const resp = await fetch(`api/accounts/search?q=${encodeURIComponent(query)}`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return ((await resp.json()) as { accounts: AccountSearchResult[] }).accounts;
+}
+
+// ─── User-defined groups (reusable member sets for sharing) ──────────────────
+export interface GroupSummary {
+  id: string;
+  name: string;
+  member_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GroupDetail {
+  id: string;
+  name: string;
+  members: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export async function listGroups(): Promise<GroupSummary[]> {
+  const resp = await fetch('api/groups');
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return ((await resp.json()) as { groups: GroupSummary[] }).groups;
+}
+
+export async function createGroup(name: string, emails?: string[]): Promise<GroupDetail> {
+  const resp = await fetch('api/groups', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name, ...(emails && emails.length ? { emails } : {}) }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as GroupDetail;
+}
+
+export async function getGroup(groupId: string): Promise<GroupDetail> {
+  const resp = await fetch(`api/groups/${encodeURIComponent(groupId)}`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as GroupDetail;
+}
+
+export async function renameGroup(groupId: string, name: string): Promise<void> {
+  const resp = await fetch(`api/groups/${encodeURIComponent(groupId)}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+}
+
+export async function deleteGroup(groupId: string): Promise<void> {
+  const resp = await fetch(`api/groups/${encodeURIComponent(groupId)}`, { method: 'DELETE' });
+  if (!resp.ok) throw await parseErrorBody(resp);
+}
+
+export async function addGroupMember(groupId: string, email: string): Promise<string[]> {
+  const resp = await fetch(`api/groups/${encodeURIComponent(groupId)}/members`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return ((await resp.json()) as { members: string[] }).members;
+}
+
+export async function removeGroupMember(groupId: string, email: string): Promise<string[]> {
+  const resp = await fetch(`api/groups/${encodeURIComponent(groupId)}/members`, {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return ((await resp.json()) as { members: string[] }).members;
+}
+
 export interface CreateYoutubeTaskResponse {
   id: string;
   status: string;
@@ -1322,6 +1472,7 @@ export async function updatePlaybackSyncState(
     quiz_mode?: boolean;
     active_quiz_id?: number | null;
     quiz_show_answers?: boolean;
+    quiz_allow_reentry?: boolean;
     quiz_session_reset?: boolean;
     cursor_x?: number | null;
     cursor_y?: number | null;
@@ -1407,7 +1558,7 @@ export async function clearSyncFollowerQuestions(
 export async function submitSyncQuizProgress(
   id: string,
   clientId: string,
-  payload: { quiz_id: number; answered_count: number; total_questions: number; submitted?: boolean },
+  payload: { quiz_id: number; answered_count: number; total_questions: number; submitted?: boolean; reentry_allowed?: boolean },
 ): Promise<{ ok: boolean }> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/sync/quiz/progress`, {
     method: 'POST',
