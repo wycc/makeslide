@@ -10,6 +10,7 @@ import { formatRelativeTime, buildRelativeTimeLabels } from '../lib/relativeTime
 import { summarizeQuizProgress } from '../lib/quizProgress';
 import { toggleAnswerIndex } from '../lib/toggleAnswerIndex';
 import { countAnsweredQuestions } from '../lib/countAnsweredQuestions';
+import { allQuestionsComplete } from '../lib/quizValidation';
 import { interpolateTemplate } from '../lib/interpolateTemplate';
 import { clamp } from '../lib/clamp';
 import {
@@ -221,7 +222,7 @@ export default function QuizBuilderPage() {
     () =>
       Boolean(title.trim()) &&
       questions.length > 0 &&
-      questions.every((q) => q.question.trim() && (q.type === 'essay' || q.options.filter((o) => o.text.trim()).length >= 2)) &&
+      allQuestionsComplete(questions) &&
       scoreSumExceeded == null,
     [questions, scoreSumExceeded, title],
   );
