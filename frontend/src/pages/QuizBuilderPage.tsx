@@ -9,6 +9,7 @@ import { EssayAnswersPanel } from '../components/EssayAnswersPanel';
 import { formatRelativeTime, buildRelativeTimeLabels } from '../lib/relativeTime';
 import { summarizeQuizProgress } from '../lib/quizProgress';
 import { toggleAnswerIndex } from '../lib/toggleAnswerIndex';
+import { countAnsweredQuestions } from '../lib/countAnsweredQuestions';
 import { interpolateTemplate } from '../lib/interpolateTemplate';
 import { clamp } from '../lib/clamp';
 import {
@@ -270,7 +271,7 @@ export default function QuizBuilderPage() {
     const clientId = syncClientIdRef.current;
     if (!clientId) return;
     const totalQuestions = activeQuiz.questions.length;
-    const answeredCount = activeQuiz.questions.filter((q) => (studentAnswers[q.id] ?? []).length > 0).length;
+    const answeredCount = countAnsweredQuestions(activeQuiz.questions, studentAnswers);
     const submitted = totalQuestions > 0 && answeredCount >= totalQuestions;
     const last = lastReportedProgressRef.current;
     if (last && last.quizId === activeQuiz.id && last.answeredCount === answeredCount && last.submitted === submitted) {
@@ -330,7 +331,7 @@ export default function QuizBuilderPage() {
     const clientId = syncClientIdRef.current;
     if (!clientId) return;
     const totalQuestions = activeQuiz.questions.length;
-    const answeredCount = activeQuiz.questions.filter((q) => (studentAnswers[q.id] ?? []).length > 0).length;
+    const answeredCount = countAnsweredQuestions(activeQuiz.questions, studentAnswers);
     lastReportedProgressRef.current = { quizId: activeQuiz.id, answeredCount, submitted: true };
     void submitSyncQuizProgress(pdfId, clientId, {
       quiz_id: activeQuiz.id,
@@ -367,7 +368,7 @@ export default function QuizBuilderPage() {
     const clientId = syncClientIdRef.current;
     if (!pdfId || !clientId) return;
     const totalQuestions = activeQuiz.questions.length;
-    const answeredCount = activeQuiz.questions.filter((q) => (studentAnswers[q.id] ?? []).length > 0).length;
+    const answeredCount = countAnsweredQuestions(activeQuiz.questions, studentAnswers);
     lastReportedProgressRef.current = { quizId: activeQuiz.id, answeredCount, submitted: false };
     setSyncQuizAllowReentry(false);
     void submitSyncQuizProgress(pdfId, clientId, {
