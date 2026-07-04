@@ -16,7 +16,7 @@ import {
   loadExportedPolls,
   loadExportedQuizzes,
   loadExportedAnimations,
-  buildContentDisposition,
+  sendZipDownload,
 } from './export';
 
 const BATCH_EXPORT_TIMEOUT_MS = 10 * 60_000;
@@ -170,10 +170,6 @@ export async function registerBatchExportRoutes(app: FastifyInstance): Promise<v
     const zipBuffer = await fs.promises.readFile(job.zipPath);
     const dateStr = new Date().toISOString().slice(0, 10);
     const zipName = `makeslide_all_${dateStr}.zip`;
-    void reply.header('content-type', 'application/zip');
-    void reply.header('content-length', String(zipBuffer.byteLength));
-    void reply.header('cache-control', 'no-store');
-    void reply.header('content-disposition', buildContentDisposition(zipName));
-    return reply.send(zipBuffer);
+    return sendZipDownload(reply, zipBuffer, zipName);
   });
 }

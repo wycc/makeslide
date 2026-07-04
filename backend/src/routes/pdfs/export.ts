@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import { canReadPdf , aclCtx } from './permissions';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -157,6 +157,16 @@ export function buildContentDisposition(filename: string): string {
   return `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encoded}`;
 }
 
+// Send a Buffer as a zip download with the standard headers. Shared by the
+// single-deck (export.zip) and batch (export/batch/:id/download) routes.
+export function sendZipDownload(reply: FastifyReply, buffer: Buffer, filename: string) {
+  reply.header('content-type', 'application/zip');
+  reply.header('content-length', String(buffer.byteLength));
+  reply.header('cache-control', 'no-store');
+  reply.header('content-disposition', buildContentDisposition(filename));
+  return reply.send(buffer);
+}
+
 /** Exported for unit testing; not part of the public export routes API. */
 export function runZipCommand(
   cwd: string,
@@ -284,11 +294,7 @@ export async function registerExportRoutes(app: FastifyInstance): Promise<void> 
       await appendSidecar('animations.json', loadExportedAnimations(parsed.data.id));
 
       const zipBuffer = await fs.promises.readFile(zipPath);
-      reply.header('content-type', 'application/zip');
-      reply.header('content-length', String(zipBuffer.byteLength));
-      reply.header('cache-control', 'no-store');
-      reply.header('content-disposition', buildContentDisposition(zipFileName));
-      return reply.send(zipBuffer);
+      return sendZipDownload(reply, zipBuffer, zipFileName);
     } catch {
       return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to export zip'));
     } finally {
