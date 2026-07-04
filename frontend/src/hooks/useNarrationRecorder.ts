@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { startRecording, recordSlideSwitch, stopRecording, type RecordingSession } from '../lib/recordingSession';
-import { uploadNarration } from '../lib/api/pdfs';
+import { addNarrationSegment, reRecordNarrationSegment } from '../lib/api/pdfs';
 
 // 播放頁「錄旁白」：用 MediaRecorder 錄講者聲音，同時以 recordingSession 記錄翻頁時間點；
 // 停止時以 stopRecording 產生時間軸並連同音檔上傳。純錄音（不含影片）。
@@ -18,7 +18,10 @@ export interface NarrationRecorderState {
   saving: boolean;
   error: string | null;
   supported: boolean;
-  startRecording: () => Promise<void>;
+  // 正在重錄的段 id（新錄一段時為 null）。
+  targetSegmentId: string | null;
+  // startRecording(null) 新增一段；startRecording(segId) 重錄該段。
+  startRecording: (targetSegmentId?: string | null) => Promise<void>;
   stopAndSave: () => Promise<boolean>;
   cancelRecording: () => void;
 }
@@ -31,7 +34,9 @@ export function useNarrationRecorder(
   const [recording, setRecording] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [targetSegmentId, setTargetSegmentId] = useState<string | null>(null);
 
+  const targetRef = useRef<string | null>(null);
   const sessionRef = useRef<RecordingSession | null>(null);
   const startedAtRef = useRef(0);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -56,7 +61,7 @@ export function useNarrationRecorder(
     sessionRef.current = null;
   }, []);
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (target: string | null = null) => {
     if (!supported || recording || currentPageNumber == null) return;
     setError(null);
     try {
@@ -70,6 +75,8 @@ export function useNarrationRecorder(
       const now = Date.now();
       startedAtRef.current = now;
       sessionRef.current = startRecording(currentPageNumber, now);
+      targetRef.current = target;
+      setTargetSegmentId(target);
       recorder.start();
       setRecording(true);
     } catch {
@@ -93,13 +100,17 @@ export function useNarrationRecorder(
       const endedAt = Date.now();
       const segments = stopRecording(session, endedAt);
       const durationMs = Math.max(0, endedAt - startedAtRef.current);
-      await uploadNarration(pdfId, blob, { durationMs, segments });
+      const target = targetRef.current;
+      if (target) await reRecordNarrationSegment(pdfId, target, blob, { durationMs, segments });
+      else await addNarrationSegment(pdfId, blob, { durationMs, segments });
       onSaved?.();
       return true;
     } catch {
       setError('save');
       return false;
     } finally {
+      targetRef.current = null;
+      setTargetSegmentId(null);
       cleanupStream();
       setSaving(false);
     }
@@ -107,6 +118,8 @@ export function useNarrationRecorder(
 
   const cancelRecording = useCallback(() => {
     try { recorderRef.current?.stop(); } catch { /* ignore */ }
+    targetRef.current = null;
+    setTargetSegmentId(null);
     cleanupStream();
     setRecording(false);
   }, [cleanupStream]);
@@ -114,5 +127,5 @@ export function useNarrationRecorder(
   // 卸載時釋放麥克風。
   useEffect(() => () => cleanupStream(), [cleanupStream]);
 
-  return { recording, saving, error, supported, startRecording: start, stopAndSave, cancelRecording };
+  return { recording, saving, error, supported, targetSegmentId, startRecording: start, stopAndSave, cancelRecording };
 }

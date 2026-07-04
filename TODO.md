@@ -7,6 +7,33 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 簡報旁白進階功能（使用者要求，2026-07-05）★ 多任務逐步推進
+
+使用者要求把旁白升級為：分段錄音、可調整段順序、可重錄某段、段列表顯示每段用過的頁面、語音轉
+逐字稿並同步顯示、逐字稿編輯界面（逐段逐頁、選段自動跳頁）、記錄游標與繪圖並同步重播、最後影片輸出。
+拆成 9 個小任務逐一完成。**皆為使用者要求的功能整合，不計入 100 輪計數。**
+
+- [x] **T1+T2：分段錄音（後端多段模型 + 前端 UI）**（2026-07-05）
+  - **後端**：narration 由「單段」改為**多段 segment 模型**——`<pdf>/narration/manifest.json`（有序 segment 清單，
+    每段含 `durationMs`／`slideTimeline`／`createdAt`）＋逐段音檔 `<segId>.webm`。改寫 [narration.ts](backend/src/routes/pdfs/narration.ts)：
+    `GET /narration`（回段清單，每段附 `pages` 去重頁碼）、`POST /narration/segments`、`PUT /narration/segments/:segId`
+    （重錄）、`DELETE /narration/segments/:segId`、`PUT /narration/order`（排序）、`GET /narration/segments/:segId/audio`。
+    storage 改為 `narrationManifestPath`／`narrationSegmentAudioPath`。`narration.test.ts` 重寫（新增→列表(含頁面)→
+    排序→重錄→串流→刪除、非擁有者 403、非法時間軸 400 共 3 組）。
+  - **前端**：`api/pdfs.ts` 改為段導向（`getNarration`／`addNarrationSegment`／`reRecordNarrationSegment`／
+    `deleteNarrationSegment`／`reorderNarrationSegments`／`narrationSegmentAudioUrl`）。`useNarrationRecorder` 支援
+    `startRecording(null=新增 | segId=重錄)`。[NarrationPanel](frontend/src/pages/play/NarrationPanel.tsx) 改為段列表
+    （「第 N 段 · 頁 x,y · 秒數」＋播放/上下移/重錄/刪除）＋「錄一段」；逐段播放依該段時間軸自動翻頁。i18n parity 24/24。
+  - 前後端 `tsc` 通過、`narration` 3/3。分支 `feat/narration-segments`，已 merge 回 master。
+- [ ] T3：跨段同步播放（各段串成全域時間軸、連續播放並自動翻頁）
+- [ ] T4：語音轉文字（後端對每段 STT，依翻頁時間切逐頁逐字稿）
+- [ ] T5：播放時同步顯示逐字稿
+- [ ] T6：逐字稿編輯 UI（逐段逐頁分開；選段自動跳頁）
+- [ ] T7：記錄+重播游標軌跡
+- [ ] T8：記錄+重播繪圖
+- [ ] T9：影片輸出（ffmpeg）
+
+### （下方為初版 MVP 記錄，已被上方分段模型取代）
 ## 簡報旁白錄音 MVP（使用者要求，2026-07-05）★ 大功能整合
 
 使用者要求把 NEW_FEATURE.md 的「錄音模式」真正做成可用功能。先前 loop 已完成資料層純函式
