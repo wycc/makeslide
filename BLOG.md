@@ -1,5 +1,24 @@
 # MakeSlide 功能說明
 
+## 把 [0,1] 內聯夾界改用共用 clamp
+
+### 背景
+
+專案已有一個經過測試的 `clamp(value, min, max)` 純函式，但播放頁與動畫編輯頁仍有 6 個地方以 `Math.min(1, Math.max(0, value))` 手寫夾界到 0–1（游標座標、聚光燈/疊圖/指標的透明度）。這種手寫式和共用的 `clamp` 是同一件事，散落各處既不一致、也繞過了已有測試的實作。
+
+### 變更內容
+
+- 把 `PlayPage`（游標 x/y）與 `AnimationEditorTab`（`spotlightOpacity`、`overlayImageOpacity`、`pointerOpacity` 兩處）共 6 處的 `Math.min(1, Math.max(0, …))` 改為 `clamp(…, 0, 1)`。兩個檔案本來就已 import `clamp`。
+- 與原式位元等價、沒有任何行為變更，屬一致性清理。
+
+### 使用方式
+
+純內部重構、無使用者可見變化。這些夾界改走同一個 `clamp` 實作後，數值範圍限制的行為集中在單一、有測試的函式，日後維護更一致。
+
+### 測試
+
+未新增測試（`clamp` 已有自己的單元測試涵蓋邊界行為）；這是等價替換。前端 `tsc --noEmit` 通過。
+
 ## 指標正規化座標收斂為共用純函式
 
 ### 背景
