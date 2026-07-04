@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useI18n } from '../i18n';
 import { QuizProctorGate } from '../components/QuizProctorGate';
-import { markQuizFinished } from '../lib/quizProctor';
+import { clearQuizProctorState, markQuizFinished } from '../lib/quizProctor';
 import { useQuizRecorder } from '../hooks/useQuizRecorder';
 import { EssayAnswerUploader } from '../components/EssayAnswerUploader';
 import { EssayAnswersPanel } from '../components/EssayAnswersPanel';
@@ -113,6 +113,7 @@ export default function QuizBuilderPage() {
   const [syncActiveQuizId, setSyncActiveQuizId] = useState<number | null>(null);
   const [syncQuizSessionId, setSyncQuizSessionId] = useState<string | null>(null);
   const [syncQuizShowAnswers, setSyncQuizShowAnswers] = useState(false);
+  const [syncQuizAllowReentry, setSyncQuizAllowReentry] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [deletingQuizId, setDeletingQuizId] = useState<number | null>(null);
   const [studentAnswers, setStudentAnswers] = useState<Record<string, number[]>>({});
@@ -323,15 +324,61 @@ export default function QuizBuilderPage() {
     });
   }, [savedQuizzes]);
 
+  const reportFollowerSubmittedProgress = useCallback(() => {
+    if (!pdfId || !activeQuiz) return;
+    const clientId = syncClientIdRef.current;
+    if (!clientId) return;
+    const totalQuestions = activeQuiz.questions.length;
+    const answeredCount = activeQuiz.questions.filter((q) => (studentAnswers[q.id] ?? []).length > 0).length;
+    lastReportedProgressRef.current = { quizId: activeQuiz.id, answeredCount, submitted: true };
+    void submitSyncQuizProgress(pdfId, clientId, {
+      quiz_id: activeQuiz.id,
+      answered_count: answeredCount,
+      total_questions: totalQuestions,
+      submitted: true,
+    }).catch(() => {
+      lastReportedProgressRef.current = null;
+    });
+  }, [activeQuiz, pdfId, studentAnswers]);
+
   // 學生主動「完成作答並離開」：交卷後停留在「已完成」畫面（不跳回簡報頁）。標記本次 session
   // 已完成並記下該 sessionKey，QuizProctorGate 收到 finished 後切到已完成畫面、停止監控與錄影；
   // 之後老師若公布答案，仍會在同一頁顯示答案（見 gate 的 !active 分支）。
   const handleFinishQuiz = useCallback(() => {
     if (!pdfId || !activeQuiz) return;
     markQuizFinished(`${activeQuiz.id}:${syncQuizSessionId ?? ''}`);
+    reportFollowerSubmittedProgress();
     submitFollowerAttempt();
     setFinishedSessionKey(`${activeQuiz.id}:${syncQuizSessionId ?? ''}`);
-  }, [pdfId, activeQuiz, syncQuizSessionId, submitFollowerAttempt]);
+  }, [pdfId, activeQuiz, syncQuizSessionId, reportFollowerSubmittedProgress, submitFollowerAttempt]);
+
+  const handleForceSubmitQuiz = useCallback(() => {
+    reportFollowerSubmittedProgress();
+    submitFollowerAttempt();
+  }, [reportFollowerSubmittedProgress, submitFollowerAttempt]);
+
+  useEffect(() => {
+    if (!activeQuiz || !syncQuizSessionId || !syncQuizAllowReentry) return;
+    const sessionKey = `${activeQuiz.id}:${syncQuizSessionId}`;
+    clearQuizProctorState(sessionKey);
+    setFinishedSessionKey((prev) => (prev === sessionKey ? null : prev));
+    submittedAttemptRef.current = null;
+    const clientId = syncClientIdRef.current;
+    if (!pdfId || !clientId) return;
+    const totalQuestions = activeQuiz.questions.length;
+    const answeredCount = activeQuiz.questions.filter((q) => (studentAnswers[q.id] ?? []).length > 0).length;
+    lastReportedProgressRef.current = { quizId: activeQuiz.id, answeredCount, submitted: false };
+    setSyncQuizAllowReentry(false);
+    void submitSyncQuizProgress(pdfId, clientId, {
+      quiz_id: activeQuiz.id,
+      answered_count: answeredCount,
+      total_questions: totalQuestions,
+      submitted: false,
+      reentry_allowed: false,
+    }).catch(() => {
+      lastReportedProgressRef.current = null;
+    });
+  }, [activeQuiz, pdfId, studentAnswers, syncQuizSessionId, syncQuizAllowReentry]);
 
   useEffect(() => {
     if (syncRole !== 'follower' || !syncQuizShowAnswers) return;
@@ -436,6 +483,7 @@ export default function QuizBuilderPage() {
         setSyncActiveQuizId(joined.active_quiz_id ?? null);
         setSyncQuizSessionId(joined.quiz_session_id ?? null);
         setSyncQuizShowAnswers(joined.quiz_show_answers ?? false);
+        setSyncQuizAllowReentry(Boolean(joined.quiz_allow_reentry));
         setSyncQuizProgress(joined.quiz_progress ?? []);
       };
       try {
@@ -471,6 +519,7 @@ export default function QuizBuilderPage() {
           setSyncActiveQuizId(state.active_quiz_id ?? null);
           setSyncQuizSessionId(state.quiz_session_id ?? null);
           setSyncQuizShowAnswers(state.quiz_show_answers ?? false);
+          setSyncQuizAllowReentry(Boolean(state.quiz_allow_reentry));
           setSyncQuizProgress(state.quiz_progress ?? []);
         }
         setSyncError(null);
@@ -568,6 +617,7 @@ export default function QuizBuilderPage() {
       });
       setSyncActiveQuizId(quizId);
       setSyncQuizShowAnswers(showAnswers);
+      setSyncQuizAllowReentry(false);
       setSyncError(null);
     },
     [pdfId],
@@ -586,8 +636,36 @@ export default function QuizBuilderPage() {
     setSyncActiveQuizId(null);
     setSyncQuizSessionId(null);
     setSyncQuizShowAnswers(false);
+    setSyncQuizAllowReentry(false);
     setSyncError(null);
   }, [pdfId]);
+
+  const handleAllowQuizReentry = useCallback(
+    async (progress: SyncQuizProgress) => {
+      if (syncRole !== 'master') {
+        setSyncError(t('quiz.masterOnlyAllowReentry'));
+        return;
+      }
+      if (!pdfId) return;
+      try {
+        await submitSyncQuizProgress(pdfId, progress.client_id, {
+          quiz_id: progress.quiz_id,
+          answered_count: progress.answered_count,
+          total_questions: progress.total_questions,
+          submitted: false,
+          reentry_allowed: true,
+        });
+        setSyncQuizProgress((prev) => prev.map((p) => (
+          p.client_id === progress.client_id ? { ...p, submitted: false, reentry_allowed: true } : p
+        )));
+        setSyncError(null);
+        setMessage(t('quiz.allowReentryDone'));
+      } catch (err) {
+        setSyncError(err instanceof ApiError ? err.message : t('quiz.allowReentryFailed'));
+      }
+    },
+    [pdfId, syncRole, t],
+  );
 
   const handleStartQuiz = useCallback(
     async (quizId: number) => {
@@ -1032,6 +1110,15 @@ export default function QuizBuilderPage() {
                   </button>
                   <button
                     type="button"
+                    onClick={() => undefined}
+                    disabled
+                    className="rounded border border-sky-500/50 bg-sky-500/15 px-2 py-1 text-xs text-sky-100 disabled:opacity-40"
+                    title={t('quiz.allowReentryTitle')}
+                  >
+                    {t('quiz.allowReentry')}
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => void handleEndQuiz()}
                     disabled={syncActiveQuizId !== quiz.id}
                     className="rounded border border-emerald-500/50 bg-emerald-500/15 px-2 py-1 text-xs text-emerald-100 disabled:opacity-40"
@@ -1117,9 +1204,22 @@ export default function QuizBuilderPage() {
                       <li key={p.client_id} className="rounded-md border border-slate-700 bg-slate-950 px-2 py-2 text-xs">
                         <div className="flex items-center justify-between gap-2">
                           <span className="truncate font-medium text-slate-200">{p.code || p.display_name || t('quiz.anonymousStudent')}</span>
-                          <span className={p.submitted ? 'text-emerald-300' : 'text-slate-400'}>
-                            {p.answered_count} / {p.total_questions}{p.submitted ? `・${t('quiz.completed')}` : ''}
-                          </span>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <span className={p.submitted ? 'text-emerald-300' : 'text-slate-400'}>
+                              {p.answered_count} / {p.total_questions}{p.submitted ? `・${t('quiz.completed')}` : ''}
+                            </span>
+                            {p.submitted ? (
+                              <button
+                                type="button"
+                                onClick={() => void handleAllowQuizReentry(p)}
+                                disabled={Boolean(p.reentry_allowed)}
+                                className="rounded border border-sky-500/50 bg-sky-500/15 px-1.5 py-0.5 text-[10px] text-sky-100 disabled:opacity-40"
+                                title={t('quiz.allowReentryTitle')}
+                              >
+                                {p.reentry_allowed ? t('quiz.reentryAllowed') : t('quiz.allowReentry')}
+                              </button>
+                            ) : null}
+                          </div>
                         </div>
                         <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
                           <div
@@ -1143,8 +1243,9 @@ export default function QuizBuilderPage() {
               active={!syncQuizShowAnswers}
               sessionKey={`${activeQuiz.id}:${syncQuizSessionId ?? ''}`}
               finished={finishedSessionKey === `${activeQuiz.id}:${syncQuizSessionId ?? ''}`}
+              allowReentry={syncQuizAllowReentry}
               recording={activeQuiz.record_camera !== false}
-              onForceSubmit={submitFollowerAttempt}
+              onForceSubmit={handleForceSubmitQuiz}
               onBeforeStart={activeQuiz.record_camera === false ? undefined : quizRecorder.start}
               onEnd={activeQuiz.record_camera === false ? undefined : quizRecorder.stopAndUpload}
             >

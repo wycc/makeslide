@@ -28,6 +28,8 @@ interface SyncSessionState {
   activeQuizId: number | null;
   quizSessionId: string | null;
   quizShowAnswers: boolean;
+  quizAllowReentry: boolean;
+  quizReentryAllowedClients: Set<string>;
   followerQuestions: SyncFollowerQuestion[];
   displayedQuestionId: string | null;
   aiAnswer: SyncAiAnswer | null;
@@ -80,6 +82,7 @@ interface SyncQuizProgress {
   answeredCount: number;
   totalQuestions: number;
   submitted: boolean;
+  reentryAllowed: boolean;
   updatedAt: string;
 }
 
@@ -215,6 +218,8 @@ function resetSyncMode(session: SyncSessionState): void {
   session.quizMode = false;
   session.activeQuizId = null;
   session.quizShowAnswers = false;
+  session.quizAllowReentry = false;
+  session.quizReentryAllowedClients.clear();
   session.displayedQuestionId = null;
   session.aiAnswer = null;
   session.followerQuestions = [];
@@ -298,6 +303,7 @@ function toQuizProgressResponse(progress: SyncQuizProgress, displayName?: string
   answered_count: number;
   total_questions: number;
   submitted: boolean;
+  reentry_allowed: boolean;
   updated_at: string;
 } {
   return {
@@ -308,6 +314,7 @@ function toQuizProgressResponse(progress: SyncQuizProgress, displayName?: string
     answered_count: progress.answeredCount,
     total_questions: progress.totalQuestions,
     submitted: progress.submitted,
+    reentry_allowed: progress.reentryAllowed,
     updated_at: progress.updatedAt,
   };
 }
@@ -342,6 +349,7 @@ function buildStateResponse(session: SyncSessionState, pdfId: string, role: Sync
     active_quiz_id: session.activeQuizId,
     quiz_session_id: session.quizSessionId,
     quiz_show_answers: session.quizShowAnswers,
+    quiz_allow_reentry: clientId ? session.quizReentryAllowedClients.has(clientId) : false,
     follower_questions: followerQuestions,
     questions: followerQuestions,
     displayed_question_id: session.displayedQuestionId,
@@ -389,6 +397,8 @@ function getSession(pdfId: string): SyncSessionState {
     activeQuizId: persisted?.active_quiz_id ?? null,
     quizSessionId: null,
     quizShowAnswers: Boolean(persisted?.quiz_show_answers),
+    quizAllowReentry: false,
+    quizReentryAllowedClients: new Set<string>(),
     followerQuestions: [],
     displayedQuestionId: null,
     aiAnswer: null,
@@ -404,8 +414,8 @@ function getSession(pdfId: string): SyncSessionState {
   return created;
 }
 
-function roleFor(session: SyncSessionState, clientId: string): SyncRole {
-  return session.masterClientId === clientId ? 'master' : 'follower';
+function roleFor(session: SyncSessionState, clientId: string, isOwner = false): SyncRole {
+  return isOwner || session.masterClientId === clientId ? 'master' : 'follower';
 }
 
 function pruneExpiredClients(session: SyncSessionState): void {
@@ -460,6 +470,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     answered_count: z.number().int().min(0),
     total_questions: z.number().int().min(0),
     submitted: z.boolean().optional(),
+    reentry_allowed: z.boolean().optional(),
   });
   const AiAnswerSchema = z.object({ answer: z.string().min(1).max(2000) });
   const UpdateBodySchema = z.object({
@@ -472,6 +483,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     quiz_mode: z.boolean().optional(),
     active_quiz_id: z.number().int().positive().nullable().optional(),
     quiz_show_answers: z.boolean().optional(),
+    quiz_allow_reentry: z.boolean().optional(),
     // 老師「開始測驗」時帶上，強制重新產生 quiz_session_id（即使重開同一份測驗也視為全新一次），
     // 讓之前作答過/被鎖定的學生不會因舊 sessionKey 而進不去。
     quiz_session_reset: z.boolean().optional(),
@@ -507,18 +519,16 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     const isNew = !session.clients.has(clientId);
     touchClient(session, clientId);
     if (userCode) session.userCodes.set(clientId, userCode);
-    if (!session.masterClientId || session.masterExpiresAt <= nowMs()) {
+    if (!session.masterClientId || session.masterExpiresAt <= nowMs() || session.masterClientId !== clientId) {
       claimMaster(session, clientId);
       session.updatedAt = nowIso();
       upsertPersistedSession(session);
-    } else if (session.masterClientId !== clientId) {
-      session.updatedAt = nowIso();
     }
     if (isNew) {
       db.prepare(`INSERT INTO sync_attendees (pdf_id, client_id, user_code, joined_at) VALUES (?, ?, ?, ?)`)
         .run(id, clientId, userCode ?? null, nowIso());
     }
-    return reply.send(buildStateResponse(session, id, roleFor(session, clientId), clientId));
+    return reply.send(buildStateResponse(session, id, roleFor(session, clientId, true), clientId));
   });
 
   app.post('/api/pdfs/:id/sync/share-join', async (request, reply) => {
@@ -547,7 +557,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(409).send(errorResponse('SYNC_NOT_ACTIVE', '原使用者尚未開啟定步模式'));
     }
     if (session.masterClientId === clientId) {
-      return reply.send(buildStateResponse(session, id, 'master', clientId));
+      return reply.send(buildStateResponse(session, id, roleFor(session, clientId), clientId));
     }
     session.followerAccess.set(clientId, 'share');
     session.updatedAt = nowIso();
@@ -579,6 +589,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       quiz_mode: quizMode,
       active_quiz_id: activeQuizId,
       quiz_show_answers: quizShowAnswers,
+      quiz_allow_reentry: quizAllowReentry,
       quiz_session_reset: quizSessionReset,
       cursor_x: cursorX,
       cursor_y: cursorY,
@@ -598,7 +609,10 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       claimMaster(session, clientId);
     }
     if (session.masterClientId !== clientId) {
-      return reply.code(403).send(errorResponse('SYNC_NOT_MASTER', 'Only master can update sync state'));
+      if (!isPdfOwner(sessionSub(request), pdfRow)) {
+        return reply.code(403).send(errorResponse('SYNC_NOT_MASTER', 'Only master can update sync state'));
+      }
+      claimMaster(session, clientId);
     }
     // 同一個 master client 的三個並行推送來源（換頁/播放 effect、節流後的繪圖推送、節流後的
     // 游標推送）送出的請求，網路到達順序不保證與送出順序一致；帶 seq 的請求若比目前已套用的
@@ -616,11 +630,14 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     const previousActiveQuizId = session.activeQuizId;
     if (typeof activeQuizId !== 'undefined') session.activeQuizId = activeQuizId;
     if (typeof quizShowAnswers === 'boolean') session.quizShowAnswers = quizShowAnswers;
+    if (typeof quizAllowReentry === 'boolean') session.quizAllowReentry = quizAllowReentry;
     if (typeof quizMode === 'boolean') {
       session.quizMode = quizMode;
       if (!quizMode) {
         session.activeQuizId = null;
         session.quizShowAnswers = false;
+        session.quizAllowReentry = false;
+        session.quizReentryAllowedClients.clear();
       }
     }
     // 換測驗（active_quiz_id 改變）或老師明確「開始測驗」（quiz_session_reset，即使重開同一份）
@@ -630,6 +647,8 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       (quizSessionReset === true && session.activeQuizId)
     ) {
       session.quizProgress.clear();
+      session.quizAllowReentry = false;
+      session.quizReentryAllowedClients.clear();
       session.quizSessionId = session.activeQuizId
         ? `qs-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
         : null;
@@ -650,7 +669,8 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid sync query request'));
     }
     const { id } = parsedParams.data;
-    if (!ensurePdfExists(id)) {
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     }
     const clientId = parsedQuery.data.client_id;
@@ -663,7 +683,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
         session.masterExpiresAt = nowMs() + MASTER_TTL_MS;
       }
     }
-    const role = clientId ? roleFor(session, clientId) : 'follower';
+    const role = clientId ? roleFor(session, clientId, isPdfOwner(sessionSub(request), pdfRow)) : 'follower';
     return reply.send(buildStateResponse(session, id, role, clientId));
   });
 
@@ -698,7 +718,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     if (!ensurePdfExists(id)) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     }
-    const { client_id: clientId, quiz_id: quizId, answered_count: answeredCount, total_questions: totalQuestions, submitted } = parsedBody.data;
+    const { client_id: clientId, quiz_id: quizId, answered_count: answeredCount, total_questions: totalQuestions, submitted, reentry_allowed: reentryAllowed } = parsedBody.data;
     const session = getSession(id);
     if (roleFor(session, clientId) !== 'follower') {
       return reply.code(403).send(errorResponse('SYNC_NOT_FOLLOWER', 'Only followers can report quiz progress'));
@@ -708,6 +728,9 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     }
     touchClient(session, clientId);
     const now = nowIso();
+    const existing = session.quizProgress.get(clientId);
+    if (reentryAllowed === true) session.quizReentryAllowedClients.add(clientId);
+    if (reentryAllowed === false) session.quizReentryAllowedClients.delete(clientId);
     session.quizProgress.set(clientId, {
       clientId,
       code: session.userCodes.get(clientId) ?? null,
@@ -716,6 +739,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       answeredCount,
       totalQuestions,
       submitted: submitted ?? false,
+      reentryAllowed: reentryAllowed ?? existing?.reentryAllowed ?? false,
       updatedAt: now,
     });
     session.updatedAt = now;
