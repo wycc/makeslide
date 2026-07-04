@@ -3,6 +3,7 @@ import type { PdfListItem } from '../types';
 import StatusBadge from './StatusBadge';
 import { useI18n } from '../i18n';
 import { formatAudioDuration } from '../lib/audioDuration';
+import { parseTags } from '../lib/parseTags';
 import { formatRelativeTime, buildRelativeTimeLabels } from '../lib/relativeTime';
 import { createPdfShare } from '../lib/api/pdfs';
 import { copyTextToClipboard } from '../lib/clipboard';
@@ -386,7 +387,7 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExpo
           </div>
         ) : (
           <div className="flex flex-wrap items-center gap-1">
-            {(pdf.tags ?? '').split(',').map((tag) => tag.trim()).filter(Boolean).map((tag) => (
+            {parseTags(pdf.tags).map((tag) => (
               onTagFilter ? (
                 <button
                   key={tag}

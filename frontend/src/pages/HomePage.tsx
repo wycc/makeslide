@@ -37,6 +37,7 @@ import { promptTargetPageCount } from '../lib/promptTargetPageCount';
 import { summarizeHomeStats } from '../lib/homeStats';
 import { progressPercent } from '../lib/progressPercent';
 import { compareZhHant } from '../lib/compareZhHant';
+import { parseTags } from '../lib/parseTags';
 
 const POLL_INTERVAL_ACTIVE_MS = 5000;
 const POLL_INTERVAL_IDLE_MS = 30000;
@@ -297,13 +298,13 @@ export default function HomePage() {
       ? items.filter(isRecentlyPlayed)
       : items.filter((pdf) => (pdf.category?.trim() || DEFAULT_CATEGORY) === categoryFilter);
   const allTags = Array.from(new Set(
-    items.flatMap((pdf) => (pdf.tags ?? '').split(',').map((t) => t.trim()).filter(Boolean))
+    items.flatMap((pdf) => parseTags(pdf.tags))
   )).sort((a, b) => compareZhHant(a, b, { numeric: false }));
 
   const normalizedTitleFilter = titleFilter.trim().toLocaleLowerCase();
   const tagFilteredItems = tagFilter.size > 0
     ? categoryFilteredItems.filter((pdf) => {
-        const pdfTags = (pdf.tags ?? '').split(',').map((tag) => tag.trim());
+        const pdfTags = parseTags(pdf.tags);
         return [...tagFilter].every((t) => pdfTags.includes(t));
       })
     : categoryFilteredItems;
@@ -398,7 +399,7 @@ export default function HomePage() {
     for (const id of ids) {
       const current = items.find((p) => p.id === id);
       const existingTags = current?.tags ?? '';
-      const tagList = existingTags.split(',').map((s) => s.trim()).filter(Boolean);
+      const tagList = parseTags(existingTags);
       if (!tagList.includes(tag)) tagList.push(tag);
       const next = tagList.join(',');
       try {
@@ -1423,7 +1424,7 @@ export default function HomePage() {
                           </p>
                           {(pdf.tags ?? '').trim() && (
                             <div className="mt-1 flex flex-wrap gap-1">
-                              {(pdf.tags ?? '').split(',').map((tag) => tag.trim()).filter(Boolean).map((tag) => (
+                              {parseTags(pdf.tags).map((tag) => (
                                 <button
                                   key={tag}
                                   type="button"
