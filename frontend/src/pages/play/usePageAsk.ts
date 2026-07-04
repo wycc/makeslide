@@ -2,6 +2,8 @@ import { useState, useCallback } from 'react';
 import { askPageQuestion, ApiError, type PageAskMessage } from '../../lib/api';
 import { useI18n } from '../../i18n';
 
+export type PageAskVerbosity = 'brief' | 'detailed';
+
 export interface PageAskState {
   pageAskInput: string;
   setPageAskInput: (v: string) => void;
@@ -10,6 +12,9 @@ export interface PageAskState {
   pageAskBusy: boolean;
   pageAskError: string | null;
   setPageAskError: (v: string | null) => void;
+  // Answer-length preference sent with each question (default 'detailed').
+  pageAskVerbosity: PageAskVerbosity;
+  setPageAskVerbosity: (v: PageAskVerbosity) => void;
   handleAskPage: () => Promise<void>;
   clearPageAsk: () => void;
 }
@@ -28,6 +33,7 @@ export function usePageAsk({
   const [pageAskMessages, setPageAskMessages] = useState<PageAskMessage[]>([]);
   const [pageAskBusy, setPageAskBusy] = useState(false);
   const [pageAskError, setPageAskError] = useState<string | null>(null);
+  const [pageAskVerbosity, setPageAskVerbosity] = useState<PageAskVerbosity>('detailed');
 
   const handleAskPage = useCallback(async () => {
     if (!pdfId || currentPageNumber == null || !pageAskInput.trim()) return;
@@ -39,7 +45,7 @@ export function usePageAsk({
     setPageAskMessages((prev) => [...prev, { role: 'user', content: question }]);
     setPageAskInput('');
     try {
-      const result = await askPageQuestion(pdfId, currentPageNumber, question, shareToken || undefined, history);
+      const result = await askPageQuestion(pdfId, currentPageNumber, question, shareToken || undefined, history, pageAskVerbosity);
       setPageAskMessages((prev) => [...prev, { role: 'assistant', content: result.answer }]);
     } catch (err) {
       // Roll back the optimistic question so the user can retry.
@@ -49,7 +55,7 @@ export function usePageAsk({
     } finally {
       setPageAskBusy(false);
     }
-  }, [pdfId, currentPageNumber, pageAskInput, pageAskMessages, shareToken, t]);
+  }, [pdfId, currentPageNumber, pageAskInput, pageAskMessages, shareToken, pageAskVerbosity, t]);
 
   const clearPageAsk = useCallback(() => {
     setPageAskInput('');
@@ -64,6 +70,8 @@ export function usePageAsk({
     pageAskBusy,
     pageAskError,
     setPageAskError,
+    pageAskVerbosity,
+    setPageAskVerbosity,
     handleAskPage,
     clearPageAsk,
   };

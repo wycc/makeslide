@@ -18,6 +18,7 @@ export function PageAskPanel() {
     handleAskPage, clearPageAsk,
     pdfId, currentPage, currentShareToken,
     deckPages, setCurrentIdx,
+    pageAskVerbosity, setPageAskVerbosity,
   } = usePlayPageContext();
 
   // 把 AI 導師答案中引用的「第 N 頁」轉成可點擊捷徑：只保留實際存在、且非目前頁的頁碼，
@@ -158,6 +159,29 @@ export function PageAskPanel() {
       )}
 
       <div className="p-3">
+        <div className="mb-2 flex items-center gap-2">
+          <span className="text-[11px] text-muted">{t('play.sidebar.pageAsk.verbosityLabel')}</span>
+          <div className="inline-flex overflow-hidden rounded-md border border-border">
+            {(['brief', 'detailed'] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setPageAskVerbosity(v)}
+                disabled={pageAskBusy}
+                aria-pressed={pageAskVerbosity === v}
+                className={`px-2 py-0.5 text-[11px] font-medium disabled:opacity-50 ${
+                  pageAskVerbosity === v
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-surface text-text hover:bg-surface-muted'
+                }`}
+              >
+                {v === 'brief'
+                  ? t('play.sidebar.pageAsk.verbosityBrief')
+                  : t('play.sidebar.pageAsk.verbosityDetailed')}
+              </button>
+            ))}
+          </div>
+        </div>
         <textarea
           className="mb-2 w-full resize-none rounded-md border border-border bg-surface px-3 py-2 text-sm text-text placeholder:text-muted focus:border-primary focus:outline-none disabled:opacity-50"
           rows={3}

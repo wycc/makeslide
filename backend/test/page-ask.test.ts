@@ -110,6 +110,31 @@ test('POST ask — sends all pages and prior history to the model', async () => 
     // The system prompt mandates citing page numbers when answering from other pages.
     assert.match(flat, /引用規則/);
     assert.match(flat, /學生目前所在頁.*以外/);
+    // No explicit verbosity → defaults to the detailed instruction.
+    assert.match(flat, /本次回答長度：詳細/);
+  } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+  }
+});
+
+test('POST ask — verbosity:brief injects the concise-answer instruction', async () => {
+  const pdfId = `ask-brief-${RUN}`;
+  seedPdfWithPages(pdfId, OWNER_SUB, [{ text: '一些內容', script: '一些逐字稿' }]);
+  mockAsk('精簡回答。');
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${pdfId}/pages/1/ask`,
+      headers: { ...OWNER_HEADERS, 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '重點是什麼？', verbosity: 'brief' }),
+    });
+    assert.equal(resp.statusCode, 200);
+    assert.ok(captured, 'model was called');
+    const flat = JSON.stringify(captured!.messages);
+    assert.match(flat, /本次回答長度：精簡/);
+    assert.doesNotMatch(flat, /本次回答長度：詳細/);
   } finally {
     setOpenAIClientForTest(null);
     await app.close();
