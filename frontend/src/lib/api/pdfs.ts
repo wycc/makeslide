@@ -26,6 +26,7 @@ import type {
 } from '../../types';
 import type { SentenceTimelineItem } from '../subtitles';
 import { ApiError, isApiErrorBody, parseErrorBody } from './common';
+import { filenameFromContentDisposition } from '../contentDisposition';
 
 export async function fetchPdfs(): Promise<PdfListItem[]> {
   const resp = await fetch('api/pdfs');
@@ -1110,6 +1111,14 @@ export async function fetchReportAiSuggestions(id: string): Promise<string> {
   if (!resp.ok) throw await parseErrorBody(resp);
   const data = (await resp.json()) as { suggestions?: string };
   return data.suggestions ?? '';
+}
+
+export async function fetchCoursePackage(id: string): Promise<{ blob: Blob; filename: string }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/course-package`, { method: 'POST' });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  const blob = await resp.blob();
+  const filename = filenameFromContentDisposition(resp.headers.get('content-disposition'), 'course-package.zip');
+  return { blob, filename };
 }
 
 export interface PageAskMessage {

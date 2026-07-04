@@ -1,5 +1,25 @@
 # MakeSlide 功能說明
 
+## 課程包下載改用 API client（含可測的檔名解析）
+
+### 背景
+
+播放頁可以把整份簡報打包成「課程包」ZIP 下載。原本這段是用元件內的 `fetch(...)` POST 到 `course-package`、再用內聯的正規表示式從 `Content-Disposition` 標頭抓存檔檔名，既繞過了 App 統一的 `parseErrorBody` 錯誤處理，檔名解析也沒有測試。
+
+### 變更內容
+
+- 新增 `frontend/src/lib/contentDisposition.ts` 的 `filenameFromContentDisposition(header, fallback)`：從 `Content-Disposition` 取出 `filename="..."`，取不到時回傳 fallback。純函式、可測。
+- 在 `lib/api/pdfs.ts` 新增 `fetchCoursePackage(id)`：POST 呼叫端點，失敗走 `parseErrorBody`，成功回傳 `{ blob, filename }`（檔名以上面的純函式從回應標頭解析）。
+- `PlayPageHeader` 改用 `fetchCoursePackage` + `downloadBlob`，移除元件內的 raw fetch 與內聯 regex。下載失敗時維持原本「不顯示錯誤」的行為。
+
+### 使用方式
+
+純內部重構，課程包下載的行為不變（仍會用伺服器指定的檔名存檔）。檔名解析與 HTTP 呼叫都收斂到共用之處。
+
+### 測試
+
+新增 `contentDisposition.test.ts`（4 組：取出引號內檔名、標頭缺失時回 fallback、沒有引號檔名時回 fallback、支援 CJK/unicode 檔名）。API 的 HTTP 包裝函式一向不做單元測試，改動由 `tsc` 把關。前端 `tsc --noEmit` 通過、4/4 通過。
+
 ## 設定頁的快取清除改用 API client
 
 ### 背景
