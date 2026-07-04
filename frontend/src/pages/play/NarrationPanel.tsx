@@ -7,6 +7,8 @@ import {
   narrationSegmentAudioUrl,
   deleteNarrationSegment,
   reorderNarrationSegments,
+  transcribeNarrationSegment,
+  updateNarrationTranscript,
   type NarrationSegment,
 } from '../../lib/api/pdfs';
 import { slideAtTime } from '../../lib/slideTimeline';
@@ -21,6 +23,8 @@ export function NarrationPanel() {
   const [segments, setSegments] = useState<NarrationSegment[] | null>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [playAll, setPlayAll] = useState(false);
+  const [syncedPage, setSyncedPage] = useState<number | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const reload = useCallback(() => {
@@ -41,8 +45,11 @@ export function NarrationPanel() {
     const audio = audioRef.current;
     if (!audio || !playing) return;
     const page = slideAtTime(playing.slide_timeline, audio.currentTime * 1000);
-    if (page != null) goToPage(page);
+    if (page != null) { goToPage(page); setSyncedPage(page); }
   }, [playing, goToPage]);
+
+  // 播放中、目前頁的逐字稿（T5 同步顯示）。
+  const syncedTranscript = playing && syncedPage != null ? (playing.transcript_by_page[String(syncedPage)] ?? '') : '';
 
   // 切到某段：跳到該段第一頁後，由下方 effect 在 src 更新後開始播放。
   const startSegment = useCallback((seg: NarrationSegment) => {
@@ -158,13 +165,22 @@ export function NarrationPanel() {
                       {t('play.narration.pages').replace('{pages}', seg.pages.join(', ') || '—')} · {Math.round(seg.duration_ms / 1000)}s
                     </span>
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => playSegment(seg)}
-                    className={`rounded border px-1.5 py-0.5 text-[11px] ${playingId === seg.id ? 'border-emerald-400 bg-emerald-500/20 text-emerald-700 dark:text-emerald-200' : 'border-border bg-surface text-text hover:bg-border'}`}
-                  >
-                    ▶ {t('play.narration.play')}
-                  </button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setExpandedId((cur) => (cur === seg.id ? null : seg.id))}
+                      className={`rounded border px-1.5 py-0.5 text-[11px] ${expandedId === seg.id ? 'border-amber-400 bg-amber-500/20 text-amber-700 dark:text-amber-200' : 'border-border bg-surface text-text hover:bg-border'}`}
+                    >
+                      📝 {t('play.narration.transcript')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => playSegment(seg)}
+                      className={`rounded border px-1.5 py-0.5 text-[11px] ${playingId === seg.id ? 'border-emerald-400 bg-emerald-500/20 text-emerald-700 dark:text-emerald-200' : 'border-border bg-surface text-text hover:bg-border'}`}
+                    >
+                      ▶ {t('play.narration.play')}
+                    </button>
+                  </div>
                 </div>
                 {canRecord && (
                   <div className="mt-1.5 flex flex-wrap items-center gap-1">
@@ -173,6 +189,9 @@ export function NarrationPanel() {
                     <button type="button" disabled={recorder.recording || recorder.saving} onClick={() => void recorder.startRecording(seg.id)} className="rounded border border-indigo-400/50 px-1.5 py-0.5 text-[11px] text-indigo-700 hover:bg-indigo-500/10 disabled:opacity-40 dark:text-indigo-300">{t('play.narration.reRecordSeg')}</button>
                     <button type="button" onClick={() => handleDelete(seg.id)} className="rounded border border-rose-400/50 px-1.5 py-0.5 text-[11px] text-rose-700 hover:bg-rose-500/10 dark:text-rose-300">{t('play.narration.deleteSegment')}</button>
                   </div>
+                )}
+                {expandedId === seg.id && (
+                  <SegmentTranscriptEditor seg={seg} canEdit={canRecord} pdfId={pdfId} onJumpToPage={goToPage} onSaved={reload} />
                 )}
               </li>
             ))}
@@ -185,8 +204,94 @@ export function NarrationPanel() {
             onEnded={handleEnded}
             className="mt-2 w-full"
           />
+          {playing && syncedTranscript && (
+            <p className="mt-1 rounded-md border border-border bg-surface-muted/60 px-2 py-1.5 text-xs leading-relaxed text-text">
+              {syncedTranscript}
+            </p>
+          )}
         </>
       )}
     </section>
+  );
+}
+
+// 逐段逐頁的逐字稿編輯器（T6）：每頁一個 textarea，聚焦時自動跳到該頁；可一鍵語音轉文字。
+function SegmentTranscriptEditor({
+  seg,
+  canEdit,
+  pdfId,
+  onJumpToPage,
+  onSaved,
+}: {
+  seg: NarrationSegment;
+  canEdit: boolean;
+  pdfId: string | undefined;
+  onJumpToPage: (page: number) => void;
+  onSaved: () => void;
+}) {
+  const { t } = useI18n();
+  const [draft, setDraft] = useState<Record<string, string>>(() => ({ ...seg.transcript_by_page }));
+  const [busy, setBusy] = useState<'transcribe' | 'save' | null>(null);
+  const [status, setStatus] = useState<'ok' | 'fail' | null>(null);
+
+  const transcribe = async () => {
+    if (!pdfId) return;
+    setBusy('transcribe');
+    setStatus(null);
+    try {
+      const r = await transcribeNarrationSegment(pdfId, seg.id);
+      setDraft({ ...r.transcript_by_page });
+      onSaved();
+    } catch {
+      setStatus('fail');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const save = async () => {
+    if (!pdfId) return;
+    setBusy('save');
+    setStatus(null);
+    try {
+      await updateNarrationTranscript(pdfId, seg.id, draft);
+      setStatus('ok');
+      onSaved();
+    } catch {
+      setStatus('fail');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="mt-2 space-y-2 rounded-md border border-amber-300/40 bg-amber-500/5 p-2">
+      {canEdit && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button type="button" disabled={busy !== null} onClick={() => void transcribe()} className="rounded border border-violet-400/50 px-2 py-0.5 text-[11px] text-violet-700 hover:bg-violet-500/10 disabled:opacity-40 dark:text-violet-300">
+            {busy === 'transcribe' ? t('play.narration.transcribing') : t('play.narration.transcribe')}
+          </button>
+          <button type="button" disabled={busy !== null} onClick={() => void save()} className="rounded border border-emerald-500/60 bg-emerald-500/15 px-2 py-0.5 text-[11px] text-emerald-700 hover:bg-emerald-500/25 disabled:opacity-40 dark:text-emerald-200">
+            {busy === 'save' ? '…' : t('play.narration.saveTranscript')}
+          </button>
+          {status === 'ok' && <span className="text-[11px] text-emerald-600 dark:text-emerald-300">✓</span>}
+          {status === 'fail' && <span className="text-[11px] text-rose-600 dark:text-rose-300">{t('play.narration.transcribeError')}</span>}
+        </div>
+      )}
+      {seg.pages.length === 0 && <p className="text-[11px] text-muted">—</p>}
+      {seg.pages.map((page) => (
+        <label key={page} className="block">
+          <span className="text-[11px] text-muted">{t('play.narration.pageLabel').replace('{n}', String(page))}</span>
+          <textarea
+            value={draft[String(page)] ?? ''}
+            readOnly={!canEdit}
+            onFocus={() => onJumpToPage(page)}
+            onChange={(e) => setDraft((d) => ({ ...d, [String(page)]: e.target.value }))}
+            rows={2}
+            className="mt-0.5 w-full resize-y rounded border border-border bg-surface px-2 py-1 text-xs text-text focus:border-primary focus:outline-none"
+          />
+        </label>
+      ))}
+    </div>
   );
 }

@@ -7,6 +7,8 @@ import { getPdfPermissionRow, canReadPdf, canEditPdf, aclCtx } from './permissio
 import { sessionSub } from '../auth';
 import { errorResponse, IdParamSchema, nowIso } from './shared';
 import { narrationDir, narrationManifestPath, narrationSegmentAudioPath } from '../../services/storage';
+import { transcribeAudioBufferWithWordTimestamps } from '../../services/openai';
+import { splitWordsByPage } from './narrationTranscript';
 
 // 簡報旁白錄音（多段）：每份簡報存一份 manifest.json（有序的 segment 清單）＋逐段音檔。
 // 每段 = 一次錄音（可跨多頁），含該段的翻頁時間軸（相對段起點）。
@@ -27,6 +29,8 @@ interface SegmentMeta {
   durationMs: number;
   slideTimeline: z.infer<typeof SegmentSchema>[];
   createdAt: string;
+  // 逐頁逐字稿（key 為頁碼字串，值為該頁的逐字稿）。可由 STT 產生或使用者編輯。
+  transcriptByPage?: Record<string, string>;
 }
 interface NarrationManifest {
   segments: SegmentMeta[];
@@ -39,6 +43,7 @@ const ManifestSchema = z.object({
       durationMs: z.number(),
       slideTimeline: z.array(SegmentSchema),
       createdAt: z.string(),
+      transcriptByPage: z.record(z.string(), z.string()).optional(),
     }),
   ),
 });
@@ -127,6 +132,7 @@ export async function registerNarrationRoutes(app: FastifyInstance): Promise<voi
         duration_ms: s.durationMs,
         pages: distinctPages(s.slideTimeline),
         slide_timeline: s.slideTimeline,
+        transcript_by_page: s.transcriptByPage ?? {},
         created_at: s.createdAt,
       })),
     });
@@ -222,6 +228,60 @@ export async function registerNarrationRoutes(app: FastifyInstance): Promise<voi
     }
     for (const seg of manifest.segments) if (!reordered.includes(seg)) reordered.push(seg);
     manifest.segments = reordered;
+    await writeManifest(parsed.data.id, manifest);
+    return reply.send({ ok: true });
+  });
+
+  // 對某段做語音轉文字（Whisper 逐字時間戳），依該段翻頁時間切成逐頁逐字稿並存回 manifest。
+  app.post('/api/pdfs/:id/narration/segments/:segId/transcribe', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    const segId = String((request.params as { segId?: string }).segId ?? '');
+    if (!parsed.success || !segId) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid parameters'));
+    const pdfRow = getPdfPermissionRow(parsed.data.id);
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, parsed.data.id))) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限轉錄此旁白段'));
+    }
+    const manifest = await readManifest(parsed.data.id);
+    const seg = manifest.segments.find((s) => s.id === segId);
+    if (!seg) return reply.code(404).send(errorResponse('SEGMENT_NOT_FOUND', `Segment ${segId} not found`));
+    const audioPath = narrationSegmentAudioPath(parsed.data.id, segId);
+    let audio: Buffer;
+    try {
+      audio = await fs.readFile(audioPath);
+    } catch {
+      return reply.code(404).send(errorResponse('SEGMENT_NOT_FOUND', 'Segment audio not found'));
+    }
+    let words;
+    try {
+      words = await transcribeAudioBufferWithWordTimestamps(audio, 'narration.webm', 'audio/webm');
+    } catch (err) {
+      request.log.error({ err, pdfId: parsed.data.id, segId }, 'narration transcription failed');
+      return reply.code(502).send(errorResponse('TRANSCRIBE_FAILED', '語音轉文字失敗'));
+    }
+    const transcriptByPage = splitWordsByPage(words, seg.slideTimeline);
+    // Record<number,string> → Record<string,string> for JSON storage.
+    seg.transcriptByPage = Object.fromEntries(Object.entries(transcriptByPage));
+    await writeManifest(parsed.data.id, manifest);
+    return reply.send({ ok: true, transcript_by_page: seg.transcriptByPage });
+  });
+
+  // 編輯某段的逐頁逐字稿（整段覆寫）。
+  app.put('/api/pdfs/:id/narration/segments/:segId/transcript', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    const segId = String((request.params as { segId?: string }).segId ?? '');
+    if (!parsed.success || !segId) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid parameters'));
+    const body = z.object({ transcript_by_page: z.record(z.string(), z.string()) }).safeParse(request.body);
+    if (!body.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid transcript'));
+    const pdfRow = getPdfPermissionRow(parsed.data.id);
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, parsed.data.id))) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此旁白逐字稿'));
+    }
+    const manifest = await readManifest(parsed.data.id);
+    const seg = manifest.segments.find((s) => s.id === segId);
+    if (!seg) return reply.code(404).send(errorResponse('SEGMENT_NOT_FOUND', `Segment ${segId} not found`));
+    seg.transcriptByPage = body.data.transcript_by_page;
     await writeManifest(parsed.data.id, manifest);
     return reply.send({ ok: true });
   });

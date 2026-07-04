@@ -28,9 +28,14 @@
 - [x] T3：跨段同步播放（2026-07-05）：`NarrationPanel` 新增「▶ 播放全部」——從第 1 段連續播放，`onEnded`
   自動接下一段；播放中依當段時間軸自動翻頁（改用 `playingId` effect `load()`+`play()`）。i18n 加 `playAll`（24/24）。
   前端 `tsc` 通過。分支 `feat/narration-playall`。
-- [ ] T4：語音轉文字（後端對每段 STT，依翻頁時間切逐頁逐字稿）
-- [ ] T5：播放時同步顯示逐字稿
-- [ ] T6：逐字稿編輯 UI（逐段逐頁分開；選段自動跳頁）
+- [x] T4/T5/T6：逐字稿（STT + 同步顯示 + 編輯）（2026-07-05）
+  - **T4 後端**：純函式 [narrationTranscript.ts](backend/src/routes/pdfs/narrationTranscript.ts) `splitWordsByPage`
+    （Whisper 逐字時間戳依段翻頁時間切逐頁）；segment meta 加 `transcriptByPage`；端點 `POST …/segments/:segId/transcribe`
+    （`transcribeAudioBufferWithWordTimestamps`）、`PUT …/segments/:segId/transcript`（手動編輯）；GET 回 `transcript_by_page`。
+    測試 `narration-transcript` 4 組 + `narration` 新增轉錄(mock Whisper)→逐頁→編輯整合，共 8/8。
+  - **T5 前端**：播放時記 `syncedPage`，音檔下方同步顯示當下頁逐字稿。
+  - **T6 前端**：每段「📝 逐字稿」展開 `SegmentTranscriptEditor`——逐頁 textarea、聚焦即跳到該頁、「🗣 語音轉文字」
+    一鍵轉錄、「儲存逐字稿」。i18n 6 鍵（24/24）。前後端 `tsc` 通過。分支 `feat/narration-transcript`。
 - [ ] T7：記錄+重播游標軌跡
 - [ ] T8：記錄+重播繪圖
 - [ ] T9：影片輸出（ffmpeg）

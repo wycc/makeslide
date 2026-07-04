@@ -1125,6 +1125,7 @@ export interface NarrationSegment {
   duration_ms: number;
   pages: number[];
   slide_timeline: SlideTimelineSeg[];
+  transcript_by_page: Record<string, string>;
   created_at: string;
 }
 export interface NarrationList {
@@ -1180,6 +1181,21 @@ export async function reorderNarrationSegments(id: string, order: string[]): Pro
 
 export function narrationSegmentAudioUrl(id: string, segId: string): string {
   return `api/pdfs/${encodeURIComponent(id)}/narration/segments/${encodeURIComponent(segId)}/audio`;
+}
+
+export async function transcribeNarrationSegment(id: string, segId: string): Promise<{ transcript_by_page: Record<string, string> }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/narration/segments/${encodeURIComponent(segId)}/transcribe`, { method: 'POST' });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { transcript_by_page: Record<string, string> };
+}
+
+export async function updateNarrationTranscript(id: string, segId: string, transcriptByPage: Record<string, string>): Promise<void> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/narration/segments/${encodeURIComponent(segId)}/transcript`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ transcript_by_page: transcriptByPage }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
 }
 
 export async function fetchCoursePackage(id: string): Promise<{ blob: Blob; filename: string }> {
