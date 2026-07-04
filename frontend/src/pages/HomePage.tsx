@@ -40,6 +40,7 @@ import { compareZhHant } from '../lib/compareZhHant';
 import { parseTags } from '../lib/parseTags';
 import { triggerDownload } from '../lib/download';
 import { readJsonArrayFromStorage } from '../lib/storageNumberArray';
+import { getRecentSearches, addRecentSearch, removeRecentSearch, clearRecentSearches } from '../lib/recentSearches';
 
 const POLL_INTERVAL_ACTIVE_MS = 5000;
 const POLL_INTERVAL_IDLE_MS = 30000;
@@ -51,8 +52,6 @@ const CUSTOM_CATEGORIES_STORAGE_KEY = 'makeslide.home.customCategories';
 const TITLE_FILTER_STORAGE_KEY = 'makeslide.home.titleFilter';
 const SORT_MODE_STORAGE_KEY = 'makeslide.home.sortMode';
 const FAVORITES_STORAGE_KEY = 'makeslide.favorites';
-const RECENT_SEARCHES_STORAGE_KEY = 'makeslide.recentSearches';
-const MAX_RECENT_SEARCHES = 5;
 const VIEW_MODE_STORAGE_KEY = 'makeslide.home.viewMode';
 
 type ViewMode = 'grid' | 'list';
@@ -184,25 +183,6 @@ const readStoredTitleFilter = () => {
   return window.localStorage.getItem(TITLE_FILTER_STORAGE_KEY) || '';
 };
 
-const readRecentSearches = (): string[] =>
-  readJsonArrayFromStorage(RECENT_SEARCHES_STORAGE_KEY)
-    .filter((s): s is string => typeof s === 'string')
-    .slice(0, MAX_RECENT_SEARCHES);
-
-const saveRecentSearch = (term: string): string[] => {
-  const trimmed = term.trim();
-  if (!trimmed) return readRecentSearches();
-  const existing = readRecentSearches().filter((s) => s !== trimmed);
-  const next = [trimmed, ...existing].slice(0, MAX_RECENT_SEARCHES);
-  window.localStorage.setItem(RECENT_SEARCHES_STORAGE_KEY, JSON.stringify(next));
-  return next;
-};
-
-const removeRecentSearch = (term: string): string[] => {
-  const next = readRecentSearches().filter((s) => s !== term);
-  window.localStorage.setItem(RECENT_SEARCHES_STORAGE_KEY, JSON.stringify(next));
-  return next;
-};
 
 const readStoredSortMode = (): SortMode | null => {
   if (typeof window === 'undefined') return null;
@@ -230,7 +210,7 @@ export default function HomePage() {
   const [categoryFilter, setCategoryFilter] = useState<string>(readStoredCategoryFilter);
   const [customCategories, setCustomCategories] = useState<string[]>(readStoredCustomCategories);
   const [titleFilter, setTitleFilter] = useState<string>(readStoredTitleFilter);
-  const [recentSearches, setRecentSearches] = useState<string[]>(readRecentSearches);
+  const [recentSearches, setRecentSearches] = useState<string[]>(getRecentSearches);
   const [searchFocused, setSearchFocused] = useState(false);
   const [explicitSortMode, setExplicitSortMode] = useState<SortMode | null>(readStoredSortMode);
   const [tagFilter, setTagFilter] = useState<Set<string>>(new Set());
@@ -414,7 +394,7 @@ export default function HomePage() {
 
   const commitSearchTerm = useCallback((term: string) => {
     if (term.trim()) {
-      setRecentSearches(saveRecentSearch(term));
+      setRecentSearches(addRecentSearch(term));
     }
   }, []);
 
@@ -1111,7 +1091,7 @@ export default function HomePage() {
                         <span>{t('home.search.recent')}</span>
                         <button
                           type="button"
-                          onMouseDown={(e) => { e.preventDefault(); window.localStorage.removeItem(RECENT_SEARCHES_STORAGE_KEY); setRecentSearches([]); }}
+                          onMouseDown={(e) => { e.preventDefault(); clearRecentSearches(); setRecentSearches([]); }}
                           className="text-muted hover:text-text"
                         >
                           {t('home.search.clearRecent')}

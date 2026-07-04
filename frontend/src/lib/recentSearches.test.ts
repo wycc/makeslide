@@ -11,7 +11,7 @@ class MemoryStorage {
 const localStorage = new MemoryStorage();
 (globalThis as { window?: unknown }).window = { localStorage };
 
-const { getRecentSearches, addRecentSearch, clearRecentSearches } = await import('./recentSearches');
+const { getRecentSearches, addRecentSearch, removeRecentSearch, clearRecentSearches } = await import('./recentSearches');
 
 test('getRecentSearches returns [] when nothing is stored', () => {
   clearRecentSearches();
@@ -46,6 +46,22 @@ test('addRecentSearch caps the list at 8 entries (newest kept)', () => {
   assert.equal(recents.length, 8);
   assert.equal(recents[0], 'q10');
   assert.equal(recents[7], 'q3');
+});
+
+test('removeRecentSearch drops the given entry, persists, and returns the rest', () => {
+  clearRecentSearches();
+  addRecentSearch('alpha');
+  addRecentSearch('beta');
+  addRecentSearch('gamma');
+  const result = removeRecentSearch('beta');
+  assert.deepEqual(result, ['gamma', 'alpha']);
+  assert.deepEqual(getRecentSearches(), ['gamma', 'alpha']);
+});
+
+test('removeRecentSearch is a no-op for a term that is not present', () => {
+  clearRecentSearches();
+  addRecentSearch('alpha');
+  assert.deepEqual(removeRecentSearch('missing'), ['alpha']);
 });
 
 test('getRecentSearches tolerates corrupted storage', () => {

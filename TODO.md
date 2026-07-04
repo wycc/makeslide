@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第二一五輪已完成 **94/100**，未達上限。
+- 最新進度：截至第二一六輪已完成 **95/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -92,6 +92,23 @@ prompt 規則以「（第 N 頁）」標示跨頁引用，但先前是純文字�
     新測試 7/7 + `page-ask` 整合測試回歸（Node 22，共 10 綠）。分支 `feat/ask-history-char-budget`，
     已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 64 個完成項目（64/100，未達上限）。
+
+## 最近搜尋統一到共用模組（修跨檔不一致）（第二一六輪，2026-07-05）
+
+延續盤點：發現 `HomePage` 自行實作了一套「最近搜尋」（讀/存/移除/清除），與 `GlobalSearchBox` 使用的
+共用 [recentSearches.ts](frontend/src/lib/recentSearches.ts) **寫入同一個 localStorage key `makeslide.recentSearches`**，
+但規則不一致（HomePage 上限 5、大小寫敏感去重；lib 上限 8、大小寫不敏感）——兩處交錯使用會互相覆寫、行為不
+一致，屬**跨檔不一致的潛在 bug**。
+
+- [x] `HomePage` 最近搜尋改用共用 `recentSearches.ts`（修不一致 / 去重）。
+  - 修改說明（2026-07-05）：`recentSearches.ts` 新增 `removeRecentSearch(query)`（精確移除一筆、持久化、回更新
+    清單；補 2 測試）。`HomePage` 移除本地 `readRecentSearches`／`saveRecentSearch`／`removeRecentSearch` 與
+    `RECENT_SEARCHES_STORAGE_KEY`／`MAX_RECENT_SEARCHES`，改用 lib 的 `getRecentSearches`／`addRecentSearch`／
+    `removeRecentSearch`／`clearRecentSearches`（清除全部原本是內聯 `removeItem`，改用 `clearRecentSearches`）。
+    **行為統一**：HomePage 的最近搜尋現與 GlobalSearchBox 一致（上限 8、大小寫不敏感），消除同 key 兩套規則的
+    不一致。前端 `tsc --noEmit` 通過、recentSearches 8/8。分支 `refactor/unify-recent-searches`，已 merge 回 master。
+    BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 95 個完成項目（95/100，未達上限）。
 
 ## user_code 讀取去重（重複 async 函式 + magic string 收斂）（第二一五輪，2026-07-05）
 

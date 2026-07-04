@@ -1,5 +1,24 @@
 # MakeSlide 功能說明
 
+## 「最近搜尋」統一到共用模組（修正跨頁不一致）
+
+### 背景
+
+App 有一個共用模組 `lib/recentSearches.ts` 管理「最近搜尋關鍵字」（讀取、新增、清除），全域搜尋框 `GlobalSearchBox` 用的是它。但首頁（`HomePage`）卻自己另寫了一整套一樣功能的實作，而且**寫入的是同一個 localStorage key（`makeslide.recentSearches`）**——問題是兩邊規則不一樣：首頁上限 5 筆、去重時大小寫敏感；共用模組上限 8 筆、大小寫不敏感。也就是說，在搜尋框和首頁交替搜尋時，兩套邏輯會互相覆寫同一份資料、行為不一致，是個潛在的 bug。
+
+### 變更內容
+
+- 在 `lib/recentSearches.ts` 補上 `removeRecentSearch(query)`（精確移除一筆、寫回 storage、回傳更新後的清單），讓共用模組涵蓋首頁需要的「移除單筆」情境。
+- `HomePage` 刪掉自己那套 `readRecentSearches`／`saveRecentSearch`／`removeRecentSearch` 與相關常數，全部改用共用模組的 `getRecentSearches`／`addRecentSearch`／`removeRecentSearch`／`clearRecentSearches`（原本內聯的「清除全部」也改用 `clearRecentSearches`）。
+
+### 使用方式
+
+首頁的最近搜尋現在與全域搜尋框行為一致（最多保留 8 筆、去重不分大小寫），不會再因為兩套規則寫同一份資料而互相打架。這是一個把重複實作收斂成單一來源、同時修正跨頁不一致的重構。
+
+### 測試
+
+`recentSearches.test.ts` 新增 2 組 `removeRecentSearch` 測試（移除指定項並持久化、對不存在的項為 no-op），連同既有共 8/8 通過。前端 `tsc --noEmit` 通過。
+
 ## user_code 讀取邏輯去重
 
 ### 背景
