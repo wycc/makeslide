@@ -573,8 +573,12 @@ export default function PlayPage() {
   // owner（含沒有 owner 的舊資料）永遠可讀寫；分享連結的唯讀限制只套用在其他訪客身上，
   // 避免 owner 自己設定唯讀分享後，用自己的帳號開啟簡報時也被鎖成唯讀。
   const shareIsReadOnly =
-    !detail?.is_owner &&
-    (detail?.share_mode === 'read_only' || (!currentShareToken && detail?.visibility === 'public'));
+    (!detail?.is_owner &&
+      (detail?.share_mode === 'read_only' || (!currentShareToken && detail?.visibility === 'public'))) ||
+    // A user explicitly granted read-only via the per-user ACL (or a read-only default) resolves to
+    // access_level 'read'; treat the deck as read-only so we don't show edit controls that the
+    // backend would reject. Owners and read-write grants resolve to 'edit' and are unaffected.
+    detail?.access_level === 'read';
   // 同步 master/follower 的定義：只有「自己的簡報」——即簡報擁有者——按下同步模式會成為
   // master；其他所有人（分享連結訪客、public 唯讀觀看者、public_editable 協作者）一律是
   // follower。整段同步流程（加入路徑、自動跟隨、master 失效後是否重奪）都以此為準。
@@ -1483,10 +1487,11 @@ export default function PlayPage() {
           ) {
             // 學生已「完成作答並離開」或因違規被鎖定的本次測驗，平常不再自動導回作答頁，避免離開後
             // 又被反覆拉回；但老師一旦公布答案（quiz_show_answers），即使已完成者也要導回作答頁看答案。
+            // 老師也可針對單一學生允許重新進入（quiz_allow_reentry），讓已離開／完成者回到規則頁重進一次。
             // sessionKey 與 QuizProctorGate 一致。
             const quizSessionKey = `${state.active_quiz_id}:${state.quiz_session_id ?? ''}`;
             const blocked = isQuizFinished(quizSessionKey) || isQuizLockedOut(quizSessionKey);
-            if (!blocked || state.quiz_show_answers) {
+            if (!blocked || state.quiz_show_answers || state.quiz_allow_reentry) {
               navigate(`/play/${encodeURIComponent(pdfId)}/quizzes`, { replace: true });
               return;
             }

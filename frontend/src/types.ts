@@ -480,6 +480,12 @@ export interface PdfDetail {
    * `visibility`/`share_mode`, which only restrict other visitors.
    */
   is_owner?: boolean;
+  /**
+   * The requester's identity-based access level for this presentation: 'edit' (owner or a
+   * read-write ACL/visibility grant), 'read' (read-only grant), or 'none'. Used to show a
+   * read-only UI to read-only-listed users and to enable editing for read-write collaborators.
+   */
+  access_level?: 'none' | 'read' | 'edit';
   /** Whether the requester has an authenticated session (logged in). False for anonymous visitors. */
   is_authenticated?: boolean;
   has_source_text?: boolean;
@@ -507,6 +513,14 @@ export interface PdfSourceItem {
 export interface PagePollOption {
   text: string;
   votes: number;
+}
+
+/** 單筆投票人記錄（老師專用名單）：voter_id 即投票者自設的 code（或匿名 voter-xxx）。 */
+export interface PagePollVoter {
+  voter_id: string;
+  option_index: number;
+  option_text: string;
+  voted_at: string;
 }
 
 export interface PagePoll {
@@ -690,6 +704,7 @@ export interface SyncQuizProgress {
   answered_count: number;
   total_questions: number;
   submitted: boolean;
+  reentry_allowed?: boolean;
   updated_at: string;
 }
 
@@ -741,6 +756,7 @@ export interface SyncJoinResponse {
   active_quiz_id: number | null;
   quiz_session_id?: string | null;
   quiz_show_answers: boolean;
+  quiz_allow_reentry?: boolean;
   follower_questions: SyncFollowerQuestion[];
   questions: SyncFollowerQuestion[];
   displayed_question_id: string | null;
@@ -769,6 +785,7 @@ export interface SyncStateResponse {
   active_quiz_id: number | null;
   quiz_session_id?: string | null;
   quiz_show_answers: boolean;
+  quiz_allow_reentry?: boolean;
   follower_questions: SyncFollowerQuestion[];
   displayed_question_id: string | null;
   quiz_progress?: SyncQuizProgress[];
