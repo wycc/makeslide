@@ -39,6 +39,7 @@ import { progressPercent } from '../lib/progressPercent';
 import { compareZhHant } from '../lib/compareZhHant';
 import { parseTags } from '../lib/parseTags';
 import { triggerDownload } from '../lib/download';
+import { readJsonArrayFromStorage } from '../lib/storageNumberArray';
 
 const POLL_INTERVAL_ACTIVE_MS = 5000;
 const POLL_INTERVAL_IDLE_MS = 30000;
@@ -173,36 +174,20 @@ const readStoredCategoryFilter = () => {
   return window.localStorage.getItem(CATEGORY_FILTER_STORAGE_KEY) || '__all__';
 };
 
-const readStoredCustomCategories = () => {
-  if (typeof window === 'undefined') return [] as string[];
-  try {
-    const raw = window.localStorage.getItem(CUSTOM_CATEGORIES_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .map((value) => (typeof value === 'string' ? value.trim() : ''))
-      .filter((value) => Boolean(value));
-  } catch {
-    return [];
-  }
-};
+const readStoredCustomCategories = (): string[] =>
+  readJsonArrayFromStorage(CUSTOM_CATEGORIES_STORAGE_KEY)
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .filter((value) => Boolean(value));
 
 const readStoredTitleFilter = () => {
   if (typeof window === 'undefined') return '';
   return window.localStorage.getItem(TITLE_FILTER_STORAGE_KEY) || '';
 };
 
-const readRecentSearches = (): string[] => {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = window.localStorage.getItem(RECENT_SEARCHES_STORAGE_KEY);
-    const parsed: unknown = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? (parsed as string[]).filter((s) => typeof s === 'string').slice(0, MAX_RECENT_SEARCHES) : [];
-  } catch {
-    return [];
-  }
-};
+const readRecentSearches = (): string[] =>
+  readJsonArrayFromStorage(RECENT_SEARCHES_STORAGE_KEY)
+    .filter((s): s is string => typeof s === 'string')
+    .slice(0, MAX_RECENT_SEARCHES);
 
 const saveRecentSearch = (term: string): string[] => {
   const trimmed = term.trim();
