@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第二〇五輪已完成 **84/100**，未達上限。
+- 最新進度：截至第二〇六輪已完成 **85/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -92,6 +92,20 @@ prompt 規則以「（第 N 頁）」標示跨頁引用，但先前是純文字�
     新測試 7/7 + `page-ask` 整合測試回歸（Node 22，共 10 綠）。分支 `feat/ask-history-char-budget`，
     已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 64 個完成項目（64/100，未達上限）。
+
+## 投票選項清理收斂為共用純函式（第二〇六輪，2026-07-04）
+
+延續盤點（轉後端）：`detail.ts` 建立投票有 2 處內聯 `options.map(o=>o.trim()).filter(Boolean)`（AI 版另
+`.slice(0,6)`），送出前清理無測試。
+
+- [x] 抽出投票選項清理純函式 `sanitizePollOptions`（去重 2 處 / 可測）。
+  - 修改說明（2026-07-04）：在 [pollOptions.ts](backend/src/routes/pdfs/pollOptions.ts) 新增
+    `sanitizePollOptions(options, limit?)`——去空白、濾空項，並在有 `limit` 時清理後取前 N 個。`detail.ts` 手動
+    建立投票改用 `sanitizePollOptions(body.data.options)`、AI 產生投票改用 `sanitizePollOptions(generated.data.options, 6)`，
+    行為等價。`poll-options.test.ts` 新增 4 組（去空白濾空、清理後夾 limit、無 limit 保留全部、全空/空回空）。
+    後端 `tsc --noEmit` 通過、poll-options 9/9 通過。分支 `refactor/sanitize-poll-options`，已 merge 回 master。
+    BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 85 個完成項目（85/100，未達上限）。
 
 ## 標籤字串解析收斂為共用純函式（第二〇五輪，2026-07-04）
 
