@@ -1594,6 +1594,7 @@ export const zhTW = {
   'play.narration.segmentLabel': '第 {n} 段',
   'play.narration.pages': '頁 {pages}',
   'play.narration.play': '播放',
+  'play.narration.playAll': '播放全部',
   'play.narration.reRecordSeg': '重錄此段',
   'play.narration.deleteSegment': '刪除此段',
   'play.narration.micError': '無法存取麥克風，請確認權限',
