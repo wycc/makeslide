@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第二〇二輪已完成 **81/100**，未達上限。
+- 最新進度：截至第二〇三輪已完成 **82/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -92,6 +92,20 @@ prompt 規則以「（第 N 頁）」標示跨頁引用，但先前是純文字�
     新測試 7/7 + `page-ask` 整合測試回歸（Node 22，共 10 綠）。分支 `feat/ask-history-char-budget`，
     已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 64 個完成項目（64/100，未達上限）。
+
+## 錄音 session 模型純函式（第二〇三輪，2026-07-04）
+
+推進錄音功能的資料層：銜接「錄音期間逐次切頁通知」與已固化的 `buildSlideTimeline`／`slideAtTime`
+（第一九〇、一九四輪），補上中間的 session 累積層。仍不含 MediaRecorder／儲存／UI。
+
+- [x] 抽出錄音 session 模型 `startRecording`／`recordSlideSwitch`／`stopRecording`（可測 / 錄音資料層中間層）。
+  - 修改說明（2026-07-04）：新增 [recordingSession.ts](frontend/src/lib/recordingSession.ts)——`startRecording(page, now)`
+    以起始頁建立 session；`recordSlideSwitch(session, page, now)` append 事件（切到同頁則回原參考 no-op、
+    不改輸入）；`stopRecording(session, now)` 以 `max(0, now−start)` 為時長交給 `buildSlideTimeline` 產出時間軸。
+    新增 `recordingSession.test.ts`（7 組：起始事件、切頁 append、同頁 no-op 同參考、不改輸入、停止產出時間軸、
+    無切頁單一整段、停止時間 ≤ 起點回空）。前端 `tsc --noEmit` 通過、7/7 通過。分支 `feat/recording-session`，
+    已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 82 個完成項目（82/100，未達上限）。
 
 ## 後端測驗分數加總驗證補單元測試（第二〇二輪，2026-07-04）
 

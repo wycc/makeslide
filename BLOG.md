@@ -1,5 +1,26 @@
 # MakeSlide 功能說明
 
+## 錄音 session 模型（資料層中間層）
+
+### 背景
+
+規畫中的「錄音模式」資料層先前已有兩塊拼圖：`buildSlideTimeline`（把切頁事件整理成時間軸）與 `slideAtTime`（依播放時間查當下頁碼）。這一節補上中間那一層——「錄音 session」：從錄音開始、逐次記錄切頁、到停止產出時間軸的狀態模型，讓上層（未來的錄音 hook / UI）只要在頁面切換時呼叫一個函式即可。
+
+### 變更內容
+
+- 新增 `frontend/src/lib/recordingSession.ts`，提供三個純函式：
+  - `startRecording(page, now)`：以目前頁建立一個 session（把起始頁記為第一筆事件）。
+  - `recordSlideSwitch(session, page, now)`：記錄一次切頁；如果和最近一筆事件是同一頁就直接回傳原本的 session（no-op），避免重複的切頁通知灌爆事件流；不改動輸入。
+  - `stopRecording(session, now)`：以 `max(0, now − 起始時間)` 為錄音長度，交給 `buildSlideTimeline` 產出正規化時間軸。
+
+### 使用方式
+
+上層在錄音開始時呼叫 `startRecording`、每次投影片切換時呼叫 `recordSlideSwitch`、結束時呼叫 `stopRecording` 取得時間軸，即可搭配 `slideAtTime` 做同步播放或影片合成。目前仍不含實際的錄音（MediaRecorder）、儲存與 UI，屬資料層的中間層。
+
+### 測試
+
+新增 `recordingSession.test.ts`（7 組：起始事件、切頁時 append、同頁切換為 no-op 且回傳同一參考、不改動輸入、停止時產出正規化時間軸、全程未切頁時為單一整段、停止時間早於或等於起點時回空時間軸）。前端 `tsc --noEmit` 通過、7/7 通過。
+
 ## 後端測驗分數加總驗證補單元測試
 
 ### 背景
