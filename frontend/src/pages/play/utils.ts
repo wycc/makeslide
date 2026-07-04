@@ -9,7 +9,7 @@ export function shuffleArray<T>(arr: T[]): T[] {
   return arr;
 }
 
-const LOCAL_USER_CODE_KEY = 'makeslide.user_code';
+export const LOCAL_USER_CODE_KEY = 'makeslide.user_code';
 
 /** 取得當前使用者的識別碼：優先從後端 settings 取，其次讀 localStorage。 */
 export async function resolveConfiguredUserCode(): Promise<string> {

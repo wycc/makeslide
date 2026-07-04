@@ -12,6 +12,7 @@ import { toggleAnswerIndex } from '../lib/toggleAnswerIndex';
 import { countAnsweredQuestions } from '../lib/countAnsweredQuestions';
 import { allQuestionsComplete } from '../lib/quizValidation';
 import { downloadBlob } from '../lib/download';
+import { resolveConfiguredUserCode } from './play/utils';
 import { interpolateTemplate } from '../lib/interpolateTemplate';
 import { clamp } from '../lib/clamp';
 import {
@@ -26,8 +27,6 @@ import {
   fetchQuizSets,
   quizRecordingFileUrl,
   generateAiQuizQuestion,
-  getAuthStatus,
-  getSystemAiSettings,
   generateQuizSet,
   joinPlaybackSync,
   joinSharedPlaybackSync,
@@ -55,19 +54,6 @@ import type {
 import { scoreSumExceedingTotal, normalizeQuestionScores, calcQuestionScore, calcAttemptScore, maxAttemptScore, averageAttemptScore } from '../lib/quizScoring';
 import { roundToTwoDecimals } from '../lib/roundTo';
 
-const LOCAL_USER_CODE_KEY = 'makeslide.user_code';
-
-async function resolveConfiguredUserCode(): Promise<string> {
-  const localCode = window.localStorage.getItem(LOCAL_USER_CODE_KEY)?.trim() || '';
-  try {
-    const auth = await getAuthStatus();
-    if (!auth.authenticated) return localCode;
-    const settings = await getSystemAiSettings();
-    return settings.user_code?.trim() || localCode;
-  } catch {
-    return localCode;
-  }
-}
 
 
 function emptyQuestion(index: number): QuizQuestion {
