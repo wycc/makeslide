@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第一九一輪已完成 **70/100**，未達上限。
+- 最新進度：截至第一九二輪已完成 **71/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -93,6 +93,23 @@ prompt 規則以「（第 N 頁）」標示跨頁引用，但先前是純文字�
     已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 64 個完成項目（64/100，未達上限）。
 
+## Jupyter Notebook 解析純函式（第一九二輪，2026-07-04）
+
+接續第一八九輪拆分的 NEW_FEATURE「Jupyter notebook 支持」首步。原「解析＋唯讀渲染」拆為 a（解析純函式，
+本輪）與 b（前端唯讀渲染＋頁面接線，待續），先固化可測的解析核心。
+
+- [x] 抽出 `.ipynb` 解析純函式 `parseNotebook`（可測 / Notebook 頁面基礎）。
+  - 修改說明（2026-07-04）：新增 [notebook.ts](frontend/src/lib/notebook.ts) 的 `parseNotebook(raw)`（＋
+    `ParsedNotebook`／`NotebookCell`／`NotebookOutput` 型別）。把 .ipynb 原始 JSON 正規化為依序 cell：
+    `cell_type` 映射為 `markdown`／`code`／`raw`（未知歸 raw）、`source`（字串或字串陣列）併為單一字串；
+    僅 code cell 解析 `outputs`，收斂三類——`stream`→text、`execute_result`／`display_data`→優先 image（`image/*`）
+    否則 `text/plain`、`error`→{ename,evalue,traceback}（traceback 併行）。全程防護：損壞 JSON／非物件／
+    無 cells 陣列→空 notebook，非物件 cell／無法呈現的 output 跳過但保留該 cell。新增 `notebook.test.ts`
+    （9 組：md/code+陣列 source、stream→text、image 優先、text/plain fallback、error 併 traceback、未知型別歸
+    raw 且忽略 outputs、丟棄無法呈現 output 保留 cell、損壞/缺 cells→空、跳過非物件 cell）。前端 `tsc --noEmit`
+    通過、9/9 通過。分支 `feat/notebook-parser`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 71 個完成項目（71/100，未達上限）。
+
 ## 測驗錄影人頭偵測提示狀態機純函式（第一九一輪，2026-07-04）
 
 接續第一八九輪拆分的 NEW_FEATURE「測驗錄影加人頭偵測」首步：逐幀偵測會有單幀誤判，若每次抓不到臉就
@@ -162,10 +179,13 @@ MediaRecorder 接線）。
   `useQuizRecorder` 錄影流程加 in-browser 人臉/人頭偵測（優先用瀏覽器原生 `FaceDetector`，退回輕量模型），
   偵測不到時提示並顯示鏡頭預覽。先抽出「偵測結果序列 → 是否提示」的純函式（連續 N 次未偵測才提示、含去抖，
   避免單幀誤報造成閃爍），可測；再接 UI／偵測迴圈。（第一九一輪完成，見下方「測驗錄影人頭偵測提示狀態機純函式」section）
-- [ ] **Jupyter Notebook 頁面型別——第一步：解析與唯讀渲染**（NEW_FEATURE「Jupyter notebook 支持」）：支援
-  把 `.ipynb` 放進一個頁面。先做後端解析 `.ipynb` → 正規化 cell 模型（markdown／code／outputs，防護損壞 JSON）
-  的可測純函式 + 前端唯讀渲染（code 以既有樣式、markdown 走 `MarkdownMath`、outputs 先支援 text/image）；
-  「在頁面中執行代碼」列為後續獨立項目。
+- [x] **Jupyter Notebook 頁面型別——第一步 a：解析純函式**（NEW_FEATURE「Jupyter notebook 支持」）：把 `.ipynb`
+  原始 JSON 解析成正規化 cell 模型（markdown／code／raw，code 的 outputs 收斂為 text／image／error，防護損壞
+  JSON 與缺欄位）。（第一九二輪完成，見下方「Jupyter Notebook 解析純函式」section）
+- [ ] **Jupyter Notebook 頁面型別——第一步 b：前端唯讀渲染 + 頁面接線**（NEW_FEATURE「Jupyter notebook 支持」）：
+  以第一步 a 的 `parseNotebook` 模型做前端唯讀渲染（markdown 走 `MarkdownMath`、code 以既有等寬樣式、outputs
+  先支援 text／image／error），並定義「.ipynb 如何成為一個頁面」的載入/儲存接線。「在頁面中執行代碼」列為後續
+  獨立項目。
 
 ## 測驗監考錄影只錄影不錄音（使用者要求，2026-07-02）
 
