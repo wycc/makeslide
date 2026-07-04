@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { ShareTokenParamSchema, getShareToken, hasShareAccess } from './share';
+import { ShareTokenParamSchema, getShareToken } from './share';
 import { getPdfPermissionRow, canReadPdf, canEditPdf, canDestructivelyEditPdf , aclCtx } from './permissions';
 import { z } from 'zod';
 import { db } from '../../db';
@@ -36,7 +36,7 @@ export async function registerDrawingsRoutes(app: FastifyInstance): Promise<void
     if (!pageRow) {
       return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', 'Page not found'));
     }
-    if (!hasShareAccess(request, id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+    if (!canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的畫板'));
     }
     const row = db
@@ -83,7 +83,7 @@ export async function registerDrawingsRoutes(app: FastifyInstance): Promise<void
     if (!pdfRow) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     }
-    if (!canDestructivelyEditPdf(sessionSub(request), pdfRow)) {
+    if (!canDestructivelyEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的畫板'));
     }
     db.prepare(`DELETE FROM page_drawings WHERE pdf_id = ? AND page_number = ?`).run(id, n);

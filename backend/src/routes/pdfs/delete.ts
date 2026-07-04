@@ -7,7 +7,7 @@ import { clearAddPagesJob } from '../../worker/addPagesFromPrompt';
 import { clearSyncSession } from './sync';
 import type { PdfRow } from '../../types';
 import { errorResponse, IdParamSchema } from './shared';
-import { canDestructivelyEditPdf } from './permissions';
+import { isPdfOwner } from './permissions';
 
 export async function registerDeleteRoutes(app: FastifyInstance): Promise<void> {
   app.delete('/api/pdfs/:id', async (request, reply) => {
@@ -23,8 +23,10 @@ export async function registerDeleteRoutes(app: FastifyInstance): Promise<void> 
     if (!existing) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', 'PDF not found'));
     }
-    if (!canDestructivelyEditPdf(sessionSub(request), existing)) {
-      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限刪除此簡報'));
+    // Deleting a WHOLE presentation is owner-only: neither an editable share token nor a
+    // read_write ACL grant (nor public_editable visibility) may destroy the whole thing.
+    if (!isPdfOwner(sessionSub(request), existing)) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '只有簡報擁有者可以刪除此簡報'));
     }
 
     db.prepare(`DELETE FROM pdfs WHERE id = ?`).run(id);

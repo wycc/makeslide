@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { ShareTokenParamSchema, getShareToken, hasShareAccess } from './share';
+import { ShareTokenParamSchema, getShareToken } from './share';
 import { getPdfPermissionRow, canReadPdf, canEditPdf , aclCtx } from './permissions';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -72,7 +72,7 @@ export async function registerFigureRoutes(app: FastifyInstance): Promise<void> 
     if (!row) {
       return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', 'Page not found'));
     }
-    if (!hasShareAccess(request, id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+    if (!canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的圖表素材'));
     }
     const sourcePdfPages = resolveSourcePdfPages(id, n);
@@ -137,7 +137,7 @@ export async function registerFigureRoutes(app: FastifyInstance): Promise<void> 
     if (!figure) {
       return reply.code(404).send(errorResponse('FIGURE_NOT_FOUND', 'Figure not found'));
     }
-    if (!hasShareAccess(request, id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+    if (!canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的圖表圖片'));
     }
     const abs = figureImageAbsPath(id, figure);

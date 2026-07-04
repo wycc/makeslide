@@ -253,7 +253,10 @@ export function usePdfMetadata({
       const absoluteUrl = `${window.location.origin}${res.share_url}`;
       setShareUrl(absoluteUrl);
       setShareExpiresAt(res.expires_at ?? null);
-      setDetail((prev) => prev ? { ...prev, visibility: res.visibility ?? (shareAccess === 'editable' ? 'public_editable' : 'public'), updated_at: res.updated_at } : prev);
+      // Creating a share link no longer changes the presentation's visibility; the response
+      // echoes the current (unchanged) visibility. Keep the local copy in sync without forcing
+      // it public.
+      setDetail((prev) => prev ? { ...prev, visibility: res.visibility ?? prev.visibility, updated_at: res.updated_at } : prev);
       setShareDialogOpen(true);
       const copyResult = await copyTextToClipboard(absoluteUrl);
       if (copyResult.ok) {
@@ -297,7 +300,8 @@ export function usePdfMetadata({
       const res = await createPdfShare(pdfId, shareAccess);
       const absoluteUrl = `${window.location.origin}${res.share_url}`;
       setShareUrl(absoluteUrl);
-      setDetail((prev) => prev ? { ...prev, visibility: res.visibility ?? (shareAccess === 'editable' ? 'public_editable' : 'public'), updated_at: res.updated_at } : prev);
+      // Creating a share link no longer changes visibility; keep the local copy as-is.
+      setDetail((prev) => prev ? { ...prev, visibility: res.visibility ?? prev.visibility, updated_at: res.updated_at } : prev);
       const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=520x520&data=${encodeURIComponent(absoluteUrl)}`;
       setPlayQrCodeUrl(qrSrc);
       setShareMessage(
