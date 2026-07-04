@@ -1,5 +1,25 @@
 # MakeSlide 功能說明
 
+## localStorage JSON 陣列讀取的通用化與去重
+
+### 背景
+
+上一節把播放頁「數字陣列」的 localStorage 安全讀取抽成了純函式。首頁其實也有兩處類似的讀取——「自訂分類清單」與「最近搜尋」——都是同一段「讀值、`JSON.parse`、確認是陣列、出錯回空」的樣板，只是最後對元素的處理不同（一個 trim + 去空、一個過濾字串再截斷）。這些也沒有測試。
+
+### 變更內容
+
+- 在 `frontend/src/lib/storageNumberArray.ts` 新增通用的 `readJsonArrayFromStorage(key, storage?)`：安全讀出一個 JSON 陣列並回傳 `unknown[]`，非法 JSON／缺值／非陣列／`getItem` 拋錯一律回 `[]`，元素型別由呼叫端自行過濾。
+- 原本的 `readNumberArrayFromStorage` 改為建立在它之上（`readJsonArrayFromStorage(...).filter(是數字)`）。
+- 首頁的 `readStoredCustomCategories` 與 `readRecentSearches` 改用通用版，各自只保留自己的元素後處理（trim/去空、過濾字串/截斷），移除重複的 try/catch 與 SSR 判斷。
+
+### 使用方式
+
+純內部重構，首頁的自訂分類與最近搜尋讀取行為不變。之後任何「從 localStorage 讀一個 JSON 陣列」的需求都能共用同一個有測試的核心，只需接上自己的元素過濾。
+
+### 測試
+
+`storageNumberArray.test.ts` 新增 2 組 `readJsonArrayFromStorage` 測試（原樣回傳混合型別陣列、對壞掉的 JSON／非陣列／缺值／`getItem` 拋錯回空），連同既有數字讀取共 7/7 通過。前端 `tsc --noEmit` 通過。
+
 ## localStorage 數字陣列的安全讀取抽出純函式
 
 ### 背景

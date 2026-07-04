@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第二一三輪已完成 **92/100**，未達上限。
+- 最新進度：截至第二一四輪已完成 **93/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -92,6 +92,20 @@ prompt 規則以「（第 N 頁）」標示跨頁引用，但先前是純文字�
     新測試 7/7 + `page-ask` 整合測試回歸（Node 22，共 10 綠）。分支 `feat/ask-history-char-budget`，
     已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 64 個完成項目（64/100，未達上限）。
+
+## localStorage JSON 陣列讀取通用化 + 去重（第二一四輪，2026-07-05）
+
+延續第二一三輪：`HomePage` 的 `readStoredCustomCategories`／`readRecentSearches` 也各自內聯同一段 localStorage
+「讀值→`JSON.parse`→確認陣列」safe-parse（僅元素後處理不同），無測試。
+
+- [x] 抽出通用 `readJsonArrayFromStorage` 並讓數字/字串讀取共用（去重 3 處 / 可測）。
+  - 修改說明（2026-07-05）：[storageNumberArray.ts](frontend/src/lib/storageNumberArray.ts) 新增通用
+    `readJsonArrayFromStorage(key, storage?)`（回 `unknown[]`，非法/缺值/非陣列/拋錯皆 `[]`）；`readNumberArrayFromStorage`
+    改為 `readJsonArrayFromStorage(...).filter(isNumber)`。`HomePage` 的 `readStoredCustomCategories`（map trim+filter）
+    與 `readRecentSearches`（filter string + slice）改用通用版、移除各自的 try/catch 與 SSR guard（helper 已涵蓋）。
+    測試新增 2 組 `readJsonArrayFromStorage`（原始陣列原樣、壞 JSON/非陣列/缺值/拋錯回空），共 7/7。前端
+    `tsc --noEmit` 通過。分支 `refactor/read-json-array-storage`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 93 個完成項目（93/100，未達上限）。
 
 ## localStorage 數字陣列安全讀取抽出純函式（第二一三輪，2026-07-04）
 
