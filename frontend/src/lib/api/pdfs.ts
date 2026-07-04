@@ -359,9 +359,16 @@ export async function updatePdfVisibility(id: string, visibility: PdfVisibilityM
 export type PdfPermissionAccess = 'read_only' | 'read_write';
 
 export interface PdfPermissionEntry {
-  email: string;
+  principal_type: 'user' | 'group';
+  /** Set for user principals, null for groups. */
+  email: string | null;
+  /** Set for group principals, null for users. */
+  group_id: string | null;
   access: PdfPermissionAccess;
+  /** User: account name or email. Group: the group name. */
   display_name: string | null;
+  /** Group only: number of members; null for users. */
+  member_count: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -388,6 +395,24 @@ export async function upsertPdfPermission(id: string, email: string, access: Pdf
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ email, access }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+}
+
+export async function upsertPdfGroupPermission(id: string, groupId: string, access: PdfPermissionAccess): Promise<void> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/permissions`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ group_id: groupId, access }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+}
+
+export async function removePdfGroupPermission(id: string, groupId: string): Promise<void> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/permissions`, {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ group_id: groupId }),
   });
   if (!resp.ok) throw await parseErrorBody(resp);
 }
