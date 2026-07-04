@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { RegenerateProgress } from './RegenerateProgress';
 import type { ShareAccessMode } from '../../lib/api';
-import { fetchSyncAttendees, generatePdfDescription } from '../../lib/api';
+import { fetchSyncAttendees, generatePdfDescription, fetchCoursePackage } from '../../lib/api';
 import { useI18n } from '../../i18n';
 import { usePlayPageContext } from './PlayPageContext';
 import { SyncQuestionsPanel } from './SyncQuestionsPanel';
@@ -317,12 +317,10 @@ export function PlayPageHeader() {
     if (!pdfId || coursePackageBusy) return;
     setCoursePackageBusy(true);
     try {
-      const resp = await fetch(`api/pdfs/${encodeURIComponent(pdfId)}/course-package`, { method: 'POST' });
-      if (!resp.ok) { setCoursePackageBusy(false); return; }
-      const blob = await resp.blob();
-      const cd = resp.headers.get('content-disposition') ?? '';
-      const match = /filename="([^"]+)"/.exec(cd);
-      downloadBlob(blob, match?.[1] ?? 'course-package.zip');
+      const { blob, filename } = await fetchCoursePackage(pdfId);
+      downloadBlob(blob, filename);
+    } catch {
+      /* keep the pre-existing silent-on-failure behavior */
     } finally {
       setCoursePackageBusy(false);
     }

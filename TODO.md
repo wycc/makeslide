@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第二一一輪已完成 **90/100**，未達上限。
+- 最新進度：截至第二一二輪已完成 **91/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -92,6 +92,20 @@ prompt 規則以「（第 N 頁）」標示跨頁引用，但先前是純文字�
     新測試 7/7 + `page-ask` 整合測試回歸（Node 22，共 10 綠）。分支 `feat/ask-history-char-budget`，
     已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 64 個完成項目（64/100，未達上限）。
+
+## 課程包下載改用 api client + 檔名解析純函式（第二一二輪，2026-07-04）
+
+延續盤點：`PlayPageHeader` 課程包下載用元件內 raw `fetch` POST + 內聯 content-disposition 檔名 regex，繞過
+api client 錯誤處理、且檔名解析無測試。
+
+- [x] 課程包下載改用 api client `fetchCoursePackage` + 抽出 `filenameFromContentDisposition`（可測）。
+  - 修改說明（2026-07-04）：新增 [contentDisposition.ts](frontend/src/lib/contentDisposition.ts) 的
+    `filenameFromContentDisposition(header, fallback)`（取 `filename="..."`、缺則 fallback）。`api/pdfs.ts` 新增
+    `fetchCoursePackage(id)`（POST、`parseErrorBody`、回 `{blob, filename}`，檔名走該純函式）。`PlayPageHeader`
+    改用之並以 `downloadBlob` 下載；失敗維持原本靜默行為（!ok→throw→空 catch，與原 `!ok return` 等價）。新增
+    `contentDisposition.test.ts`（4 組：取引號檔名、缺標頭 fallback、無引號 fallback、CJK 檔名）。前端
+    `tsc --noEmit` 通過、4/4 通過。分支 `refactor/course-package-api`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 91 個完成項目（91/100，未達上限）。
 
 ## 設定頁快取清除改用 api client（第二一一輪，2026-07-04）
 
