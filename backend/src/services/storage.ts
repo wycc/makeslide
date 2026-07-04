@@ -45,6 +45,19 @@ export function coverImagePath(pdfId: string): string {
   return path.join(pdfDir(pdfId), 'cover.jpg');
 }
 
+// 簡報旁白錄音（audio + 翻頁時間軸）。每份簡報一段旁白（MVP）。
+export function narrationDir(pdfId: string): string {
+  return path.join(pdfDir(pdfId), 'narration');
+}
+
+export function narrationAudioPath(pdfId: string): string {
+  return path.join(narrationDir(pdfId), 'audio.webm');
+}
+
+export function narrationTimelinePath(pdfId: string): string {
+  return path.join(narrationDir(pdfId), 'timeline.json');
+}
+
 export function coverThumbnailPath(pdfId: string): string {
   return path.join(pdfDir(pdfId), 'cover.thumb.jpg');
 }

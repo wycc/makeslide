@@ -8,6 +8,7 @@ import { registerDeleteRoutes } from './delete';
 import { registerObservabilityRoutes } from './observability';
 import { registerSyncRoutes } from './sync';
 import { registerQuizRoutes } from './quizzes';
+import { registerNarrationRoutes } from './narration';
 import { registerHandoutRoutes } from './handout';
 import { registerExportRoutes } from './export';
 import { registerImportRoutes } from './import';
@@ -58,6 +59,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerObservabilityRoutes(app);
   await registerSyncRoutes(app);
   await registerQuizRoutes(app);
+  await registerNarrationRoutes(app);
   await registerHandoutRoutes(app);
   await registerExportRoutes(app);
   await registerImportRoutes(app);
