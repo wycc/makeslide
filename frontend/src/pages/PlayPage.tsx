@@ -42,6 +42,7 @@ import { debugLog, debugWarn } from '../lib/debugLog';
 import { clamp } from '../lib/clamp';
 import { normalizedPointerPosition } from '../lib/normalizedPointerPosition';
 import { toggleSortedNumber } from '../lib/toggleSortedNumber';
+import { readNumberArrayFromStorage } from '../lib/storageNumberArray';
 import { formatGeneratingStatusLabel } from '../lib/statusLabels';
 import { nextPageInList, prevPageInList } from '../lib/pageListNav';
 import { parseGotoPage } from '../lib/parseGotoPage';
@@ -451,14 +452,9 @@ export default function PlayPage() {
   const isLockedFullscreen = Boolean(currentShareToken);
   const playbackProgressStorageKey = pdfId ? `makeslide.playback.progress.${pdfId}` : '';
   const bookmarksStorageKey = pdfId ? `makeslide.bookmarks.${pdfId}` : '';
-  const [bookmarks, setBookmarks] = useState<number[]>(() => {
-    if (!pdfId) return [];
-    try {
-      const raw = window.localStorage.getItem(`makeslide.bookmarks.${pdfId}`);
-      const parsed: unknown = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? (parsed as number[]) : [];
-    } catch { return []; }
-  });
+  const [bookmarks, setBookmarks] = useState<number[]>(() =>
+    pdfId ? readNumberArrayFromStorage(`makeslide.bookmarks.${pdfId}`) : [],
+  );
 
   const toggleBookmark = useCallback((pageNumber: number) => {
     if (!bookmarksStorageKey) return;
@@ -470,14 +466,9 @@ export default function PlayPage() {
   }, [bookmarksStorageKey]);
 
   const importantPagesStorageKey = pdfId ? `makeslide.importantPages.${pdfId}` : '';
-  const [importantPages, setImportantPages] = useState<number[]>(() => {
-    if (!pdfId) return [];
-    try {
-      const raw = window.localStorage.getItem(`makeslide.importantPages.${pdfId}`);
-      const parsed: unknown = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? (parsed as number[]) : [];
-    } catch { return []; }
-  });
+  const [importantPages, setImportantPages] = useState<number[]>(() =>
+    pdfId ? readNumberArrayFromStorage(`makeslide.importantPages.${pdfId}`) : [],
+  );
 
   const toggleImportantPage = useCallback((pageNumber: number) => {
     if (!importantPagesStorageKey) return;

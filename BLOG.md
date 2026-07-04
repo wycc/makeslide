@@ -1,5 +1,24 @@
 # MakeSlide 功能說明
 
+## localStorage 數字陣列的安全讀取抽出純函式
+
+### 背景
+
+播放頁的「書籤」與「重點頁」都存成 localStorage 裡的 JSON 數字陣列。原本這兩個狀態的初始化各自寫了一段一樣的 safe-parse：讀值、`JSON.parse`、確認是陣列、出錯就回空陣列——重複而且沒有測試，原本也只是用 `as number[]` 直接轉型、沒有真的檢查元素型別。
+
+### 變更內容
+
+- 新增 `frontend/src/lib/storageNumberArray.ts` 的 `readNumberArrayFromStorage(key, storage?)`：從 storage 讀出並 `JSON.parse`，是陣列才回傳，非法 JSON／缺值／`getItem` 拋錯都回 `[]`；另外過濾掉非數字的元素，比原本的直接轉型更穩健（避免損壞資料流入頁碼運算）。可注入 storage 以便測試，預設用 `window.localStorage`。
+- `PlayPage` 的 bookmarks、importantPages 兩個 `useState` 初始化改用這個共用函式。
+
+### 使用方式
+
+純內部重構，書籤與重點頁的讀取行為維持不變（正常資料照樣載入）。抽成純函式後有了獨立測試，且對損壞或被竄改的 localStorage 內容更有防護。
+
+### 測試
+
+新增 `storageNumberArray.test.ts`（5 組：讀出數字陣列、過濾非數字元素、缺值/壞掉的 JSON/非陣列都回空、沒有 storage 時回空、`getItem` 拋錯時回空）。前端 `tsc --noEmit` 通過、5/5 通過。
+
 ## 課程包下載改用 API client（含可測的檔名解析）
 
 ### 背景
