@@ -68,18 +68,25 @@ export function decidePdfAccessLevel(input: DecidePdfAccessInput): PdfAccessLeve
 }
 
 /**
- * Fetch the ACL grants that apply to `userEmail` for this presentation. Step 1 resolves only
- * individual `user` principals (matched case-insensitively by email); `group` principals are
- * added later, at which point this function also expands group memberships.
+ * Fetch the ACL grants that apply to `userEmail` for this presentation, matched
+ * case-insensitively by email against both:
+ * - individual `user` principals (principal_id is the email), and
+ * - `group` principals (principal_id is a group id) whose membership includes the email.
+ * A user may match several grants (listed directly and via one or more groups); the caller
+ * takes the highest.
  */
 function fetchMatchedGrants(pdfId: string, userEmail: string | null): PdfPermissionAccess[] {
   if (!userEmail) return [];
   const rows = db
     .prepare(
       `SELECT access FROM pdf_permissions
-        WHERE pdf_id = ? AND principal_type = 'user' AND LOWER(principal_id) = LOWER(?)`,
+        WHERE pdf_id = ? AND principal_type = 'user' AND LOWER(principal_id) = LOWER(?)
+       UNION ALL
+       SELECT p.access FROM pdf_permissions p
+         JOIN group_members m ON m.group_id = p.principal_id
+        WHERE p.pdf_id = ? AND p.principal_type = 'group' AND LOWER(m.email) = LOWER(?)`,
     )
-    .all(pdfId, userEmail) as Array<{ access: PdfPermissionAccess }>;
+    .all(pdfId, userEmail, pdfId, userEmail) as Array<{ access: PdfPermissionAccess }>;
   return rows.map((r) => r.access);
 }
 

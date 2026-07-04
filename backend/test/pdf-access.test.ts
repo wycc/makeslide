@@ -116,3 +116,40 @@ test('resolvePdfAccessLevel: a listed read-only user caps below a public_editabl
   // Unlisted user still gets the public_editable default (edit).
   assert.equal(resolvePdfAccessLevel('acl-db-2', 'u-dave', 'dave@example.com', row), 'edit');
 });
+
+function seedGroup(groupId: string, ownerSub: string, memberEmails: string[]): void {
+  const t = nowIso();
+  db.prepare(`DELETE FROM groups WHERE id = ?`).run(groupId);
+  db.prepare(`INSERT INTO groups (id, owner_sub, name, created_at, updated_at) VALUES (?, ?, 'g', ?, ?)`).run(groupId, ownerSub, t, t);
+  for (const email of memberEmails) {
+    db.prepare(`INSERT OR REPLACE INTO group_members (group_id, email, created_at) VALUES (?, ?, ?)`).run(groupId, email, t);
+  }
+}
+
+function grantGroup(pdfId: string, groupId: string, access: 'read_only' | 'read_write'): void {
+  const t = nowIso();
+  db.prepare(
+    `INSERT OR REPLACE INTO pdf_permissions (pdf_id, principal_type, principal_id, access, created_at, updated_at)
+     VALUES (?, 'group', ?, ?, ?, ?)`,
+  ).run(pdfId, groupId, access, t, t);
+}
+
+test('resolvePdfAccessLevel: a group member inherits the group grant', () => {
+  seedPdf('acl-db-3', 'owner-1', 'private');
+  seedGroup('grp-team1234', 'owner-1', ['erin@example.com', 'frank@example.com']);
+  grantGroup('acl-db-3', 'grp-team1234', 'read_write');
+  const row = { owner_sub: 'owner-1', visibility: 'private' as const };
+  // A group member gets the group's access.
+  assert.equal(resolvePdfAccessLevel('acl-db-3', 'u-erin', 'erin@example.com', row), 'edit');
+  // A non-member still falls back to the private default.
+  assert.equal(resolvePdfAccessLevel('acl-db-3', 'u-zoe', 'zoe@example.com', row), 'none');
+});
+
+test('resolvePdfAccessLevel: the highest of a direct grant and a group grant wins', () => {
+  seedPdf('acl-db-4', 'owner-1', 'private');
+  seedGroup('grp-readers99', 'owner-1', ['gil@example.com']);
+  grantGroup('acl-db-4', 'grp-readers99', 'read_only');
+  grant('acl-db-4', 'gil@example.com', 'read_write');
+  const row = { owner_sub: 'owner-1', visibility: 'private' as const };
+  assert.equal(resolvePdfAccessLevel('acl-db-4', 'u-gil', 'gil@example.com', row), 'edit');
+});

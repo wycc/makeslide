@@ -132,3 +132,35 @@ test('account search requires authentication', async () => {
     await app.close();
   }
 });
+
+test('owner can grant and revoke a group principal on a presentation', async () => {
+  seedPdf('permtest4');
+  const app = await buildApp();
+  try {
+    // owner creates a group
+    const group = (await app.inject({ method: 'POST', url: '/api/groups', headers: OWNER, payload: { name: 'Team', emails: ['m1@example.com'] } })).json() as { id: string };
+
+    // grant the group read_write on the presentation
+    let resp = await app.inject({ method: 'PUT', url: '/api/pdfs/permtest4/permissions', headers: OWNER, payload: { group_id: group.id, access: 'read_write' } });
+    assert.equal(resp.statusCode, 200);
+
+    // list shows a group entry with its name and member count
+    resp = await app.inject({ method: 'GET', url: '/api/pdfs/permtest4/permissions', headers: OWNER });
+    let perms = (resp.json() as { permissions: Array<{ principal_type: string; group_id: string | null; access: string; display_name: string | null; member_count: number | null }> }).permissions;
+    const groupEntry = perms.find((p) => p.principal_type === 'group');
+    assert.ok(groupEntry, 'group entry should be listed');
+    assert.equal(groupEntry!.group_id, group.id);
+    assert.equal(groupEntry!.access, 'read_write');
+    assert.equal(groupEntry!.display_name, 'Team');
+    assert.equal(groupEntry!.member_count, 1);
+
+    // revoke the group
+    resp = await app.inject({ method: 'DELETE', url: '/api/pdfs/permtest4/permissions', headers: OWNER, payload: { group_id: group.id } });
+    assert.equal(resp.statusCode, 200);
+    resp = await app.inject({ method: 'GET', url: '/api/pdfs/permtest4/permissions', headers: OWNER });
+    perms = (resp.json() as { permissions: typeof perms }).permissions;
+    assert.equal(perms.filter((p) => p.principal_type === 'group').length, 0);
+  } finally {
+    await app.close();
+  }
+});
