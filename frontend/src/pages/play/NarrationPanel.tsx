@@ -20,6 +20,7 @@ export function NarrationPanel() {
 
   const [segments, setSegments] = useState<NarrationSegment[] | null>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
+  const [playAll, setPlayAll] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const reload = useCallback(() => {
@@ -43,13 +44,38 @@ export function NarrationPanel() {
     if (page != null) goToPage(page);
   }, [playing, goToPage]);
 
-  const playSegment = useCallback((seg: NarrationSegment) => {
-    setPlayingId(seg.id);
-    // 跳到該段第一頁，讓播放一開始就對齊。
+  // 切到某段：跳到該段第一頁後，由下方 effect 在 src 更新後開始播放。
+  const startSegment = useCallback((seg: NarrationSegment) => {
     if (seg.pages[0] != null) goToPage(seg.pages[0]);
-    // 等 <audio> 換 src 後再播。
-    setTimeout(() => { void audioRef.current?.play().catch(() => { /* ignore */ }); }, 0);
+    setPlayingId(seg.id);
   }, [goToPage]);
+
+  // playingId 改變即載入新音檔並播放（比 setTimeout 穩健）。
+  useEffect(() => {
+    if (!playingId) return;
+    const audio = audioRef.current;
+    if (audio) { audio.load(); void audio.play().catch(() => { /* 使用者手動播放即可 */ }); }
+  }, [playingId]);
+
+  const playSegment = useCallback((seg: NarrationSegment) => {
+    setPlayAll(false);
+    startSegment(seg);
+  }, [startSegment]);
+
+  const playAllFromStart = useCallback(() => {
+    if (!segments || segments.length === 0) return;
+    setPlayAll(true);
+    startSegment(segments[0]!);
+  }, [segments, startSegment]);
+
+  // 一段播完：連播模式下自動接下一段，否則停止。
+  const handleEnded = useCallback(() => {
+    if (!playAll || !segments) { setPlayingId(null); return; }
+    const idx = segments.findIndex((s) => s.id === playingId);
+    const next = segments[idx + 1];
+    if (next) startSegment(next);
+    else { setPlayAll(false); setPlayingId(null); }
+  }, [playAll, segments, playingId, startSegment]);
 
   const handleDelete = useCallback((segId: string) => {
     if (!pdfId) return;
@@ -110,7 +136,18 @@ export function NarrationPanel() {
 
       {segments.length > 0 && (
         <>
-          <p className="mb-1 text-[11px] text-muted">{t('play.narration.syncHint')}</p>
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <p className="text-[11px] text-muted">{t('play.narration.syncHint')}</p>
+            {segments.length > 1 && (
+              <button
+                type="button"
+                onClick={playAllFromStart}
+                className={`rounded border px-2 py-0.5 text-[11px] font-medium ${playAll ? 'border-emerald-400 bg-emerald-500/20 text-emerald-700 dark:text-emerald-200' : 'border-cyan-500/50 bg-cyan-500/10 text-cyan-700 hover:bg-cyan-500/20 dark:text-cyan-200'}`}
+              >
+                ▶ {t('play.narration.playAll')}
+              </button>
+            )}
+          </div>
           <ol className="space-y-1.5">
             {segments.map((seg, i) => (
               <li key={seg.id} className="rounded-md border border-border bg-surface-muted/50 p-2">
@@ -145,6 +182,7 @@ export function NarrationPanel() {
             src={pdfId && playingId ? narrationSegmentAudioUrl(pdfId, playingId) : undefined}
             controls
             onTimeUpdate={handleTimeUpdate}
+            onEnded={handleEnded}
             className="mt-2 w-full"
           />
         </>

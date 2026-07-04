@@ -25,7 +25,9 @@
     `startRecording(null=新增 | segId=重錄)`。[NarrationPanel](frontend/src/pages/play/NarrationPanel.tsx) 改為段列表
     （「第 N 段 · 頁 x,y · 秒數」＋播放/上下移/重錄/刪除）＋「錄一段」；逐段播放依該段時間軸自動翻頁。i18n parity 24/24。
   - 前後端 `tsc` 通過、`narration` 3/3。分支 `feat/narration-segments`，已 merge 回 master。
-- [ ] T3：跨段同步播放（各段串成全域時間軸、連續播放並自動翻頁）
+- [x] T3：跨段同步播放（2026-07-05）：`NarrationPanel` 新增「▶ 播放全部」——從第 1 段連續播放，`onEnded`
+  自動接下一段；播放中依當段時間軸自動翻頁（改用 `playingId` effect `load()`+`play()`）。i18n 加 `playAll`（24/24）。
+  前端 `tsc` 通過。分支 `feat/narration-playall`。
 - [ ] T4：語音轉文字（後端對每段 STT，依翻頁時間切逐頁逐字稿）
 - [ ] T5：播放時同步顯示逐字稿
 - [ ] T6：逐字稿編輯 UI（逐段逐頁分開；選段自動跳頁）

@@ -1594,6 +1594,7 @@ export const en = {
   'play.narration.segmentLabel': 'Segment {n}',
   'play.narration.pages': 'Pages {pages}',
   'play.narration.play': 'Play',
+  'play.narration.playAll': 'Play all',
   'play.narration.reRecordSeg': 'Re-record',
   'play.narration.deleteSegment': 'Delete',
   'play.narration.micError': 'Cannot access the microphone — check permissions',
