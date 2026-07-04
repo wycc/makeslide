@@ -11,6 +11,7 @@ import { summarizeQuizProgress } from '../lib/quizProgress';
 import { toggleAnswerIndex } from '../lib/toggleAnswerIndex';
 import { countAnsweredQuestions } from '../lib/countAnsweredQuestions';
 import { allQuestionsComplete } from '../lib/quizValidation';
+import { downloadBlob } from '../lib/download';
 import { interpolateTemplate } from '../lib/interpolateTemplate';
 import { clamp } from '../lib/clamp';
 import {
@@ -1513,12 +1514,7 @@ export default function QuizBuilderPage() {
                   onClick={() => {
                     const data = { title, questions };
                     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `${title.trim() || 'quiz'}.json`;
-                    a.click();
-                    URL.revokeObjectURL(url);
+                    downloadBlob(blob, `${title.trim() || 'quiz'}.json`);
                   }}
                   className="rounded-md border border-slate-600 bg-slate-800/70 px-4 py-2 text-sm text-slate-200 hover:bg-slate-700"
                 >

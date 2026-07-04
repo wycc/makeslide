@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { PdfReportQuestionStat, PdfReportSummary } from '../../lib/api';
 import { resetWatchProgress } from '../../lib/api';
 import { flattenAttemptsChronologically } from '../../lib/reportAttemptsTimeline';
+import { downloadBlob } from '../../lib/download';
 import { useI18n } from '../../i18n';
 import { useOverlayDismiss } from '../../components/useOverlayDismiss';
 import {
@@ -109,12 +110,7 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
   const handleDownloadSummary = () => {
     if (!summary) return;
     const blob = new Blob([buildSummaryMarkdown()], { type: 'text/markdown;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `report-${pdfId}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadBlob(blob, `report-${pdfId}.md`);
   };
 
   const handleResetWatchProgress = () => {
