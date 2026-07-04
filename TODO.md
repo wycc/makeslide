@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第二〇六輪已完成 **85/100**，未達上限。
+- 最新進度：截至第二〇七輪已完成 **86/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -92,6 +92,20 @@ prompt 規則以「（第 N 頁）」標示跨頁引用，但先前是純文字�
     新測試 7/7 + `page-ask` 整合測試回歸（Node 22，共 10 綠）。分支 `feat/ask-history-char-budget`，
     已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 64 個完成項目（64/100，未達上限）。
+
+## 指標正規化座標收斂為共用純函式（第二〇七輪，2026-07-04）
+
+延續盤點：播放頁/遙控頁多處 onPointerMove/Up 內聯 `Math.min(1, Math.max(0, (clientX-rect.left)/rect.width))`
+（x、y 各一份）計算「元素內正規化 [0,1] 座標」，重複且無測試。
+
+- [x] 抽出指標正規化座標純函式 `normalizedPointerPosition`（去重 4 處 / 可測 / 復用 clamp）。
+  - 修改說明（2026-07-04）：新增 [normalizedPointerPosition.ts](frontend/src/lib/normalizedPointerPosition.ts) 的
+    `normalizedPointerPosition(clientX, clientY, rect)`——回 `{x, y}`、各以既有 `clamp(..,0,1)` 夾界（與原
+    `Math.min(1,Math.max(0,..))` 位元等價、含 width/height=0 的 NaN 行為）。`PlayPageSlidePanel`（2 處影像框選）、
+    `RemoteControllerPage`（`getNormCoords`）、`PlayPage`（游標推送）共 4 處改用之。新增
+    `normalizedPointerPosition.test.ts`（4 組：中心、左上/右下角、超界夾 0/1）。前端 `tsc --noEmit` 通過、4/4
+    通過。分支 `refactor/normalized-pointer-position`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 86 個完成項目（86/100，未達上限）。
 
 ## 投票選項清理收斂為共用純函式（第二〇六輪，2026-07-04）
 

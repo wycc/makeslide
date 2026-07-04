@@ -12,6 +12,7 @@ import {
 } from '../lib/api/pdfs';
 import type { PagePoll, PdfDetailPage } from '../types';
 import { pollOptionPercent } from '../lib/pollPercent';
+import { normalizedPointerPosition } from '../lib/normalizedPointerPosition';
 import { formatPollResultsMarkdown } from '../lib/pollResultsMarkdown';
 import { copyTextToClipboard } from '../lib/clipboard';
 
@@ -201,10 +202,8 @@ export default function RemoteControllerPage() {
 
   const getNormCoords = (e: PointerEvent<HTMLCanvasElement>): [number, number] => {
     const rect = e.currentTarget.getBoundingClientRect();
-    return [
-      Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width)),
-      Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height)),
-    ];
+    const { x, y } = normalizedPointerPosition(e.clientX, e.clientY, rect);
+    return [x, y];
   };
 
   const handleCanvasPointerDown = (e: PointerEvent<HTMLCanvasElement>) => {

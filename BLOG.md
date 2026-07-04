@@ -1,5 +1,24 @@
 # MakeSlide 功能說明
 
+## 指標正規化座標收斂為共用純函式
+
+### 背景
+
+播放頁與遙控頁有好幾個地方需要把滑鼠/觸控事件的座標，換算成「在某個元素內的 0–1 正規化位置」——例如影像框選、遙控頁的雷射游標、播放頁的游標同步。原本每一處都各自寫 `Math.min(1, Math.max(0, (clientX - rect.left) / rect.width))`（x、y 各一份），重複且沒有測試。
+
+### 變更內容
+
+- 新增 `frontend/src/lib/normalizedPointerPosition.ts` 的 `normalizedPointerPosition(clientX, clientY, rect)`：回傳 `{ x, y }`，各以既有的 `clamp(.., 0, 1)` 夾在 0–1 之間。與原本的 `Math.min(1, Math.max(0, ..))` 位元等價（包含 `rect.width/height` 為 0 時的 NaN 行為）。
+- 4 個呼叫點改用之：`PlayPageSlidePanel`（兩處影像框選）、`RemoteControllerPage`（`getNormCoords`）、`PlayPage`（游標推送）。
+
+### 使用方式
+
+純內部重構，各處框選/游標的行為不變。抽成純函式後，這個常見的「事件座標 → 元素內正規化位置」計算有了單一來源與測試，之後新增互動時可直接重用。
+
+### 測試
+
+新增 `normalizedPointerPosition.test.ts`（4 組：矩形中心點、左上/右下角、超出矩形時夾到 0/1）。前端 `tsc --noEmit` 通過、4/4 通過。
+
 ## 投票選項清理收斂為共用純函式
 
 ### 背景

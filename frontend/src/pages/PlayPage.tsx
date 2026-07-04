@@ -40,6 +40,7 @@ import {
 } from '../lib/animationSpec';
 import { debugLog, debugWarn } from '../lib/debugLog';
 import { clamp } from '../lib/clamp';
+import { normalizedPointerPosition } from '../lib/normalizedPointerPosition';
 import { toggleSortedNumber } from '../lib/toggleSortedNumber';
 import { formatGeneratingStatusLabel } from '../lib/statusLabels';
 import { nextPageInList, prevPageInList } from '../lib/pageListNav';
@@ -1363,8 +1364,7 @@ export default function PlayPage() {
       ) {
         return;
       }
-      const x = Math.min(1, Math.max(0, (ev.clientX - rect.left) / rect.width));
-      const y = Math.min(1, Math.max(0, (ev.clientY - rect.top) / rect.height));
+      const { x, y } = normalizedPointerPosition(ev.clientX, ev.clientY, rect);
       pendingCursorRef.current = { x, y };
       if (cursorPushRafRef.current == null) {
         cursorPushRafRef.current = window.setTimeout(
