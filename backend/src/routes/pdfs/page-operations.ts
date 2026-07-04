@@ -3,6 +3,7 @@ import { ShareTokenParamSchema, getShareToken } from './share';
 import { getPdfPermissionRow, canReadPdf, canEditPdf, canDestructivelyEditPdf , aclCtx } from './permissions';
 import { budgetChatHistory } from './askHistoryBudget';
 import { askVerbosityInstruction } from './askVerbosity';
+import { finalizeTutorAnswer } from './tutorAnswer';
 import { toFile } from 'openai';
 import type { ChatCompletionContentPart } from 'openai/resources/chat/completions';
 import fs from 'node:fs';
@@ -1374,7 +1375,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         messages: [
           {
             role: 'system',
-            content: '你是繁體中文課堂 AI 導師。請只輸出 JSON：{"answer":"..."}。你會獲得整份簡報所有頁面的頁面文字與逐字稿（每頁以「# 第 N 頁」標示，其中一頁標為「學生目前所在頁」），以及（若有）這份教材的原始來源全文。請綜合全份內容詳細回答學生問題，必要時可跨頁說明；當答案只出現在原始來源全文、而不在投影片文字或逐字稿時，也要依原始來源全文作答。回答請清楚、有條理。【格式（務必遵守）】請以 Markdown 格式作答，適當使用標題（`##`）、粗體（`**粗體**`）、條列（`-`、`1.`）與表格來組織內容以利閱讀；數學式一律使用 Markdown 可渲染的 LaTeX：行內公式用單一 `$...$` 包住、獨立成行的公式用 `$$...$$` 包住（例如行內 $E=mc^2$、區塊 $$\\int_a^b f(x)\\,dx$$），不要用純文字或圖片描述數學式。【引用規則（務必遵守）】只要你的回答用到「學生目前所在頁」以外其他頁面的資訊，就必須在該處主動以括號標示來源頁碼，例如「（第 3 頁）」或「（第 3 頁逐字稿）」，不可省略；引用原始來源全文時標示「（原始來源）」；引用學生目前所在頁的內容則可不標示頁碼。若所有提供的內容都沒有相關資訊，請誠實說明。' + `\n${verbosityInstruction}`,
+            content: '你是繁體中文課堂 AI 導師。請只輸出 JSON：{"answer":"..."}。你會獲得整份簡報所有頁面的頁面文字與逐字稿（每頁以「# 第 N 頁」標示，其中一頁標為「學生目前所在頁」），以及（若有）這份教材的原始來源全文。請綜合全份內容詳細回答學生問題，必要時可跨頁說明；當答案只出現在原始來源全文、而不在投影片文字或逐字稿時，也要依原始來源全文作答。回答請清楚、有條理。【格式（務必遵守）】請以 Markdown 格式作答，適當使用標題（`##`）、粗體（`**粗體**`）、條列（`-`、`1.`）與表格來組織內容以利閱讀；數學式一律使用 Markdown 可渲染的 LaTeX：行內公式用單一 `$...$` 包住、獨立成行的公式用 `$$...$$` 包住（例如行內 $E=mc^2$、區塊 $$\\int_a^b f(x)\\,dx$$），不要用純文字或圖片描述數學式。【引用規則（務必遵守）】只要你的回答用到「學生目前所在頁」以外其他頁面的資訊，就必須在該處主動以括號標示來源頁碼，例如「（第 3 頁）」或「（第 3 頁逐字稿）」，不可省略；引用原始來源全文時標示「（原始來源）」；引用學生目前所在頁的內容則可不標示頁碼。【禁止杜撰（務必遵守）】你只能依據上述提供的頁面內容與原始來源作答，嚴禁杜撰、臆測或引入教材以外的知識；若所有提供的內容都找不到與問題相關的資訊，請直接明確回答「找不到相關資訊」並簡短建議學生換個問法或查看相關頁面，切勿編造答案。' + `\n${verbosityInstruction}`,
           },
           {
             role: 'user',
@@ -1399,13 +1400,8 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
           { role: 'user', content: parsedBody.data.question },
         ],
       });
-      // 模型常把換行以字面 `\n`（反斜線+n）輸出而非真正的換行字元，導致前端顯示成
-      // 「\n\n」而非分行。只在「跳脫字母後面不是英文字母」時才還原成換行，避免誤傷
-      // LaTeX 指令（如 \nabla、\nu、\rho、\right、\text、\times——後者開頭就是 \t/\n/\r）。
-      const answer = result.data.answer
-        .replace(/\\r?\\n\\r?\\n/g, '\n\n')
-        .replace(/\\r\\n|\\n(?![A-Za-z])|\\r(?![A-Za-z])/g, '\n')
-        .trim();
+      // 換行正規化 + 空答保底（見 finalizeTutorAnswer）。
+      const answer = finalizeTutorAnswer(result.data.answer);
       return reply.code(200).send({ answer });
     } catch (err) {
       request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to answer page ask question');
