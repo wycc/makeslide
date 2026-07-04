@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第二二〇輪已完成 **99/100**，未達上限（**距門檻僅剩 1 項**）。
+- 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
 ## 未完成項目（待使用者決定）
 
@@ -93,6 +93,26 @@ prompt 規則以「（第 N 頁）」標示跨頁引用，但先前是純文字�
     已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 64 個完成項目（64/100，未達上限）。
 
+## 修復 export/import round-trip 測試（第二二一輪，2026-07-05）★ 第 100 項 · 達上限
+
+第二二〇輪發現的既有失敗——`export-import-zip-interactive.test.ts` 的
+`export.zip -> import.zip round-trips polls, quizzes and slide animations` 在 master 即 `ReferenceError:
+pageUid is not defined`。本輪修復之，作為本次計數的第 100（最後）項。
+
+- [x] 修 `export-import-zip-interactive` 測試的未定義 `pageUid`（測試 bug、非產品 bug）。
+  - 修改說明（2026-07-05）：根因為測試第 202 行斷言「import 保留原始 page_uid」時引用 `pageUid`，但第 139 行
+    `const { animationRelPath } = seedPdfWithInteractiveData(id)` 只解構了 `animationRelPath`、漏了 `pageUid`
+    （seed 函式回傳 `{ pageUid, animationRelPath }`，`pageUid = 'uidpage001'`）。改為
+    `const { pageUid, animationRelPath } = …`。純測試修正、未動產品碼。後端 `tsc --noEmit` 通過；該檔 1/1 通過，
+    並確認產品行為正確（import 依 `page-uids.json`／metadata 沿用匯出端 page_uid，而非重新產生）。分支
+    `fix/export-import-test-pageuid`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 **100** 個完成項目（**100/100，已達上限**）。
+
+> ⛔ **已達 100 項門檻（LOOP.md 第 3 條）。** 自動 loop 就此**停止新增與執行新項目**。等待使用者裁示：
+> (a) **重設計數**——在本檔最後新增一行 `---- 計數重設 ----`，之後從 0 重新起算；或
+> (b) **調整／取消門檻**（例如改為 200）。在收到指示前，後續 cron 觸發時不再開新項目。
+> 另有兩項**待裁示的既有議題**保留於下方各輪記錄：`buildContentDisposition` 兩份不同實作待統一（需決定採哪套、屬行為變更）。
+
 ## zip 下載回應標頭收斂為 sendZipDownload（去重）+ 發現既有失敗（第二二〇輪，2026-07-05）
 
 延續盤點：`export.zip` 與批次匯出下載都以相同 4 個標頭（content-type/length、cache-control、content-disposition）
@@ -107,10 +127,12 @@ prompt 規則以「（第 N 頁）」標示跨頁引用，但先前是純文字�
 
 ### 本輪順帶發現（**待處理**，非本輪修）
 
-- [ ] **（既有失敗）`export-import-zip-interactive.test.ts` 的 `export.zip -> import.zip round-trips polls,
-  quizzes and slide animations` 在 master 即失敗**：`ReferenceError: pageUid is not defined`。經確認**非本輪
-  改動造成**（於 merge 前的 master 上重現）。屬 export/import round-trip 路徑（polls/quizzes/animations）某處
-  引用了未定義的 `pageUid`。建議下一輪（或重設後）優先修此真實 bug。
+- [x] **（既有失敗，已於第二二一輪修復）`export-import-zip-interactive.test.ts` 的 round-trip 測試**
+  `ReferenceError: pageUid is not defined`。**根因為測試 bug、非產品 bug**：第 202 行斷言「import 保留原始
+  page_uid」用到 `pageUid`，但第 139 行 `const { animationRelPath } = seedPdfWithInteractiveData(id)` 漏解構
+  `pageUid`（seed 函式回傳 `{ pageUid, animationRelPath }`）。修法：改為 `const { pageUid, animationRelPath } = …`。
+  修復後該檔 1/1 通過，且確認產品行為正確（import 確實沿用匯出端 page_uid）。見下方「修復 export/import
+  round-trip 測試」section。
 - [ ] **（既有重複，待收斂需裁示）`buildContentDisposition` 有兩份不同實作**：`downloadFilename.ts`（asciiFallback
   將 `"`、`\` 換成 `_`；`filename*` 用 `encodeURIComponent`）與 `export.ts`（`"`→`'`；`filename*` 另把 `'()`
   百分比轉義）。兩者對含引號/括號的檔名輸出不同，統一屬**行為變更**、需決定採哪一套，故未於自動 loop 逕改。
