@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第一九二輪已完成 **71/100**，未達上限。
+- 最新進度：截至第一九三輪已完成 **72/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -92,6 +92,21 @@ prompt 規則以「（第 N 頁）」標示跨頁引用，但先前是純文字�
     新測試 7/7 + `page-ask` 整合測試回歸（Node 22，共 10 綠）。分支 `feat/ask-history-char-budget`，
     已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 64 個完成項目（64/100，未達上限）。
+
+## Jupyter Notebook 唯讀渲染元件（第一九三輪，2026-07-04）
+
+接續第一九二輪的 `.ipynb` 解析純函式，完成 NEW_FEATURE「Jupyter notebook 支持」首步 b 的**渲染元件**部分
+（頁面接線拆為步驟 c 待續）。
+
+- [x] 新增 Jupyter Notebook 唯讀渲染元件 `NotebookView`（建立在 `parseNotebook` 之上）。
+  - 修改說明（2026-07-04）：新增 [NotebookView.tsx](frontend/src/components/NotebookView.tsx)。吃
+    `ParsedNotebook`：markdown cell 走既有 `MarkdownMath`（標題／粗體／條列／表格／LaTeX）、code/raw cell 以
+    等寬 `<pre><code>` 區塊顯示原始碼（空白 source 略過）、code cell 的 outputs 依三類呈現——text/error 用
+    `<pre>`（error 以 rose 色系並粗體標 `ename: evalue`＋traceback）、image 以 `data:` URI `<img>`；空 notebook
+    回 `null`。沿用專案 surface/border 色票、深色模式相容。前端 `tsc --noEmit` 通過（專案無 React 元件測試框架，
+    元件以 tsc 驗證；解析邏輯已於步驟 a 的 `notebook.test.ts` 覆蓋）。分支 `feat/notebook-view`，已 merge 回 master。
+    BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 72 個完成項目（72/100，未達上限）。
 
 ## Jupyter Notebook 解析純函式（第一九二輪，2026-07-04）
 
@@ -182,10 +197,12 @@ MediaRecorder 接線）。
 - [x] **Jupyter Notebook 頁面型別——第一步 a：解析純函式**（NEW_FEATURE「Jupyter notebook 支持」）：把 `.ipynb`
   原始 JSON 解析成正規化 cell 模型（markdown／code／raw，code 的 outputs 收斂為 text／image／error，防護損壞
   JSON 與缺欄位）。（第一九二輪完成，見下方「Jupyter Notebook 解析純函式」section）
-- [ ] **Jupyter Notebook 頁面型別——第一步 b：前端唯讀渲染 + 頁面接線**（NEW_FEATURE「Jupyter notebook 支持」）：
-  以第一步 a 的 `parseNotebook` 模型做前端唯讀渲染（markdown 走 `MarkdownMath`、code 以既有等寬樣式、outputs
-  先支援 text／image／error），並定義「.ipynb 如何成為一個頁面」的載入/儲存接線。「在頁面中執行代碼」列為後續
-  獨立項目。
+- [x] **Jupyter Notebook 頁面型別——第一步 b：前端唯讀渲染元件**（NEW_FEATURE「Jupyter notebook 支持」）：
+  以第一步 a 的 `parseNotebook` 模型做唯讀渲染元件（markdown 走 `MarkdownMath`、code 以等寬樣式、outputs 支援
+  text／image／error）。（第一九三輪完成，見下方「Jupyter Notebook 唯讀渲染元件」section）
+- [ ] **Jupyter Notebook 頁面型別——第一步 c：頁面接線**（NEW_FEATURE「Jupyter notebook 支持」）：定義
+  「.ipynb 如何成為一個頁面」的上傳/載入/儲存接線，並在播放/檢視流程把 `NotebookView` 接上實際資料。「在頁面中
+  執行代碼」列為後續獨立項目。
 
 ## 測驗監考錄影只錄影不錄音（使用者要求，2026-07-02）
 
