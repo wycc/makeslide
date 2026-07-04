@@ -7,6 +7,31 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 簡報旁白錄音 MVP（使用者要求，2026-07-05）★ 大功能整合
+
+使用者要求把 NEW_FEATURE.md 的「錄音模式」真正做成可用功能。先前 loop 已完成資料層純函式
+（`buildSlideTimeline`／`slideAtTime`／`recordingSession`）；本次接上實際的**錄音、儲存、UI、同步播放**，
+交付 MVP（**不含影片輸出**，列為後續）。**本項為使用者要求的功能整合，不計入 100 輪計數。**
+
+- [x] 簡報旁白 MVP：播放頁錄旁白（音檔＋翻頁時間軸）→ 上傳 → 同步播放（自動翻頁）。
+  - **後端**：`services/storage.ts` 新增 `narrationDir`／`narrationAudioPath`／`narrationTimelinePath`；新增
+    [narration.ts](backend/src/routes/pdfs/narration.ts) 四端點——`POST /api/pdfs/:id/narration`（multipart：音檔＋
+    `timeline` JSON，編輯權限、zod 驗證時間軸）、`GET /narration`（metadata：exists／duration／segments，讀取權限）、
+    `GET /narration/audio`（串流 webm，讀取權限）、`DELETE /narration`（編輯權限）；於 `index.ts` 註冊。每份簡報
+    一段旁白、存檔於 `<pdf>/narration/`（audio.webm＋timeline.json），不需 DB migration。新增
+    `narration.test.ts`（3 組：owner round-trip 上傳→get→串流→刪除、非擁有者上傳 403、時間軸非法 400）。
+  - **前端**：`api/pdfs.ts` 新增 `getNarration`／`uploadNarration`（FormData）／`narrationAudioUrl`／`deleteNarration`
+    ＋型別；新增 hook [useNarrationRecorder.ts](frontend/src/hooks/useNarrationRecorder.ts)（`MediaRecorder` 錄音＋
+    `recordingSession` 記錄翻頁，停止時 `stopRecording` 產時間軸並上傳；含麥克風釋放、不支援時 no-op）；新增
+    [NarrationPanel.tsx](frontend/src/pages/play/NarrationPanel.tsx)（擁有者/協作者可錄/重錄/刪；任何可讀者可播放，
+    播放時 `onTimeUpdate` → `slideAtTime` → `setCurrentIdx` **自動翻頁**），掛在播放頁側邊欄「slides」分頁。新增
+    13 個 `play.narration.*` i18n 鍵（zh-TW／en，parity 24/24）。
+  - **測試/驗證**：後端 `narration` 3/3；前後端 `tsc --noEmit` 通過；`recordingSession` 7/7、`slideTimeline` 13/13
+    回歸；i18n parity 24/24。錄音/播放的瀏覽器行為（`getUserMedia`／`MediaRecorder`／`<audio>`）屬瀏覽器端、無法
+    於 sandbox 單元測，改由端到端 API round-trip＋純函式測試覆蓋資料流。分支 `feat/narration-recording`，已 merge
+    回 master。BLOG.md 新增對應 section。
+  - **後續（未做）**：影片檔輸出（ffmpeg 合成畫面＋音訊）；多段旁白／逐頁重錄；錄音時的暫停/續錄；行動裝置相容性測試。
+
 ## 未完成項目（待使用者決定）
 
 以下兩項屬範圍大或涉 CI 行為變更，**不宜於自動 loop 中逕行**，需使用者裁示後再進行：

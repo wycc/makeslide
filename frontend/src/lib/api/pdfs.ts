@@ -1113,6 +1113,43 @@ export async function fetchReportAiSuggestions(id: string): Promise<string> {
   return data.suggestions ?? '';
 }
 
+export interface NarrationSegment {
+  page: number;
+  startMs: number;
+  endMs: number;
+}
+export type NarrationInfo =
+  | { exists: false }
+  | { exists: true; duration_ms: number; segments: NarrationSegment[]; created_at: string };
+
+export async function getNarration(id: string): Promise<NarrationInfo> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/narration`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as NarrationInfo;
+}
+
+export async function uploadNarration(
+  id: string,
+  audio: Blob,
+  timeline: { durationMs: number; segments: NarrationSegment[] },
+): Promise<{ ok: boolean; size_bytes: number; duration_ms: number }> {
+  const form = new FormData();
+  form.append('timeline', JSON.stringify(timeline));
+  form.append('file', audio, 'audio.webm');
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/narration`, { method: 'POST', body: form });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { ok: boolean; size_bytes: number; duration_ms: number };
+}
+
+export function narrationAudioUrl(id: string): string {
+  return `api/pdfs/${encodeURIComponent(id)}/narration/audio`;
+}
+
+export async function deleteNarration(id: string): Promise<void> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/narration`, { method: 'DELETE' });
+  if (!resp.ok) throw await parseErrorBody(resp);
+}
+
 export async function fetchCoursePackage(id: string): Promise<{ blob: Blob; filename: string }> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/course-package`, { method: 'POST' });
   if (!resp.ok) throw await parseErrorBody(resp);

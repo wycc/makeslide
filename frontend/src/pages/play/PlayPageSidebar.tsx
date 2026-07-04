@@ -7,6 +7,7 @@ import { calculateWatchProgressPercent, calculateAvgListenedPercent, formatWatch
 import { updatePageNote, listPageComments, listAllComments, createPageComment, resolvePageComment, editPageComment, deletePageComment, fetchSimilarPages, type PageComment, type SimilarPage } from '../../lib/api/pdfs';
 import { usePlayPageContext } from './PlayPageContext';
 import { PageAskPanel } from './PageAskPanel';
+import { NarrationPanel } from './NarrationPanel';
 import { QualityCheckPanel } from './QualityCheckPanel';
 import { WatchRecordsDialog } from './WatchRecordsDialog';
 import { copyTextToClipboard } from '../../lib/clipboard';
@@ -1507,6 +1508,8 @@ export function PlayPageSidebar() {
       {notebookTab === 'notes' && notesSubTab === 'comments' && <CommentsSection />}
 
       {notebookTab === 'slides' && <SimilarPagesSection />}
+
+      {notebookTab === 'slides' && <NarrationPanel />}
 
       {notebookTab === 'interact' && <ReviewListSection />}
 
