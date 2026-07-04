@@ -1,5 +1,27 @@
 # MakeSlide 功能說明
 
+## Jupyter Notebook 解析（基礎純函式）
+
+### 背景
+
+規畫中的功能：把一個 Jupyter Notebook（`.ipynb`）直接放進一個頁面並唯讀呈現（「在頁面中執行代碼」列為後續）。`.ipynb` 是一份 JSON，cell 的 `source`／輸出 `text` 可能是字串也可能是「每行一個元素」的字串陣列，輸出型別（stream／執行結果／圖片／錯誤）也各不相同。要能渲染，得先把它整理成前端好用、且對損壞內容有防護的正規化模型。這個 section 先完成這個解析核心。
+
+### 變更內容
+
+- 新增 `frontend/src/lib/notebook.ts` 的 `parseNotebook(raw)`，回傳 `ParsedNotebook`（`{ cells }`），每個 cell 為 `{ type, source, outputs }`：
+  - `type`：`markdown`／`code`／`raw`（未知型別歸為 `raw`）。
+  - `source`：把字串或字串陣列併成單一字串。
+  - `outputs`：僅 code cell 有，收斂為三類——`stream` → 文字；`execute_result`／`display_data` → 優先取圖片（`image/*`，附 MIME 與 base64），否則取 `text/plain`；`error` → `{ ename, evalue, traceback }`（traceback 併成多行字串）。
+- 全程防護損壞資料：JSON 解析失敗、頂層非物件、沒有 `cells` 陣列 → 回空 notebook；非物件的 cell 或無法呈現的 output 會被跳過，但不影響同一份 notebook 的其他內容。
+
+### 使用方式
+
+這是給後續「Notebook 頁面唯讀渲染」使用的資料模型：把 `.ipynb` 內容交給 `parseNotebook`，即可得到一串乾淨的 cell（markdown 之後走 `MarkdownMath`、code 以等寬樣式、輸出依 text／image／error 呈現）。目前尚未接上頁面載入與渲染，屬功能的第一步。
+
+### 測試
+
+新增 `notebook.test.ts`（9 組：markdown/code 與陣列 source、stream 轉文字、圖片優先於 text/plain、無圖片時取 text/plain、error 併 traceback、未知 cell 型別歸 raw 且忽略其 outputs、丟棄無法呈現的 output 但保留 cell、損壞 JSON／缺 cells 回空、跳過非物件 cell）。前端 `tsc --noEmit` 通過、9/9 通過。
+
 ## 測驗錄影的人頭偵測提示（去抖狀態機）
 
 ### 背景
