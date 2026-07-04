@@ -40,6 +40,7 @@ import {
 } from '../lib/animationSpec';
 import { debugLog, debugWarn } from '../lib/debugLog';
 import { clamp } from '../lib/clamp';
+import { toggleSortedNumber } from '../lib/toggleSortedNumber';
 import { formatGeneratingStatusLabel } from '../lib/statusLabels';
 import { nextPageInList, prevPageInList } from '../lib/pageListNav';
 import { parseGotoPage } from '../lib/parseGotoPage';
@@ -461,7 +462,7 @@ export default function PlayPage() {
   const toggleBookmark = useCallback((pageNumber: number) => {
     if (!bookmarksStorageKey) return;
     setBookmarks((prev) => {
-      const next = prev.includes(pageNumber) ? prev.filter((n) => n !== pageNumber) : [...prev, pageNumber].sort((a, b) => a - b);
+      const next = toggleSortedNumber(prev, pageNumber);
       window.localStorage.setItem(bookmarksStorageKey, JSON.stringify(next));
       return next;
     });
@@ -480,7 +481,7 @@ export default function PlayPage() {
   const toggleImportantPage = useCallback((pageNumber: number) => {
     if (!importantPagesStorageKey) return;
     setImportantPages((prev) => {
-      const next = prev.includes(pageNumber) ? prev.filter((n) => n !== pageNumber) : [...prev, pageNumber].sort((a, b) => a - b);
+      const next = toggleSortedNumber(prev, pageNumber);
       window.localStorage.setItem(importantPagesStorageKey, JSON.stringify(next));
       return next;
     });

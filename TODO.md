@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第一九八輪已完成 **77/100**，未達上限。
+- 最新進度：截至第一九九輪已完成 **78/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -92,6 +92,19 @@ prompt 規則以「（第 N 頁）」標示跨頁引用，但先前是純文字�
     新測試 7/7 + `page-ask` 整合測試回歸（Node 22，共 10 綠）。分支 `feat/ask-history-char-budget`，
     已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 64 個完成項目（64/100，未達上限）。
+
+## 書籤/重點頁切換抽出共用純函式（第一九九輪，2026-07-04）
+
+延續既有程式碼盤點：`PlayPage` 的 `toggleBookmark`（書籤頁）與 `toggleImportantPage`（重點頁）內聯同一段
+「切換數字於升冪清單」邏輯、無測試。
+
+- [x] 抽出升冪數字切換純函式 `toggleSortedNumber`（去重 2 處 / 可測）。
+  - 修改說明（2026-07-04）：新增 [toggleSortedNumber.ts](frontend/src/lib/toggleSortedNumber.ts) 的
+    `toggleSortedNumber(list, value)`——存在→移除、不存在→加入並保持升冪（沿用原 filter/append 語意、不改
+    輸入）。`PlayPage` 兩個 handler 改用之。新增 `toggleSortedNumber.test.ts`（5 組：加入保持升冪、移除已存在、
+    空集合加入、移除唯一值變空、不改輸入）。前端 `tsc --noEmit` 通過、5/5 通過。分支
+    `refactor/toggle-sorted-number`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 78 個完成項目（78/100，未達上限）。
 
 ## 首頁繁中排序比較器收斂為共用純函式（第一九八輪，2026-07-04）
 
