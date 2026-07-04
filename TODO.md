@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第一九七輪已完成 **76/100**，未達上限。
+- 最新進度：截至第一九八輪已完成 **77/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -92,6 +92,21 @@ prompt 規則以「（第 N 頁）」標示跨頁引用，但先前是純文字�
     新測試 7/7 + `page-ask` 整合測試回歸（Node 22，共 10 綠）。分支 `feat/ask-history-char-budget`，
     已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 64 個完成項目（64/100，未達上限）。
+
+## 首頁繁中排序比較器收斂為共用純函式（第一九八輪，2026-07-04）
+
+延續既有程式碼盤點：`HomePage` 有 5 處分類/標籤排序重複同一個 `localeCompare(b, 'zh-Hant', {…})`，
+字串字面易打錯、且排序規則無測試。
+
+- [x] 抽出繁中排序比較器 `compareZhHant`（去重 5 處 / 可測）。
+  - 修改說明（2026-07-04）：新增 [compareZhHant.ts](frontend/src/lib/compareZhHant.ts) 的
+    `compareZhHant(a, b, { numeric })`——`sensitivity:'base'`（大小寫/腔調不敏感）、`numeric` 預設 `true`
+    （自然數排序）。`HomePage` 4 處 `{numeric:true,…}` 改用 `.sort(compareZhHant)`、標籤排序（無 numeric）改用
+    `.sort((a,b)=>compareZhHant(a,b,{numeric:false}))`，行為等價。新增 `compareZhHant.test.ts`（5 組：基本大小
+    與符號一致、numeric 自然數排序、numeric:false 字典序、大小寫視為相等、可直接當 sort 比較器）。前端
+    `tsc --noEmit` 通過、compareZhHant 5/5＋groupItemsByCategory 5/5＋HomePage.sort 6/6 回歸通過。分支
+    `refactor/compare-zh-hant`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 77 個完成項目（77/100，未達上限）。
 
 ## 課後報告作答時間軸攤平排序抽出純函式（第一九七輪，2026-07-04）
 
