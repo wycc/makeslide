@@ -325,3 +325,139 @@ test('an editable token lets an anonymous holder edit via PATCH title; a read-on
     assert.equal(rejected.statusCode, 403);
   } finally { cleanup(id); await app.close(); }
 });
+
+// --- Access ADMINISTRATION is owner-only: neither edit-level tokens nor ACL grants qualify ---
+
+test('creating a share link is owner-only: authed non-owner and anonymous token holder get 403', async () => {
+  const id = `tok-mint-${Date.now()}`;
+  seedPdf(id, 'public_editable'); // even the most permissive default must not allow minting
+  const token = insertToken(id, 'editable');
+  const app = await buildApp();
+  try {
+    const other = await app.inject({
+      method: 'POST', url: `/api/pdfs/${id}/share`,
+      headers: { ...OTHER, 'content-type': 'application/json' },
+      payload: JSON.stringify({ access: 'editable' }),
+    });
+    assert.equal(other.statusCode, 403);
+    // an editable-token holder must not be able to mint further tokens
+    const viaToken = await app.inject({
+      method: 'POST', url: `/api/pdfs/${id}/share?share=${encodeURIComponent(token)}`,
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({ access: 'editable' }),
+    });
+    assert.equal(viaToken.statusCode, 403);
+  } finally { cleanup(id); await app.close(); }
+});
+
+test('changing visibility (the default permission) is owner-only', async () => {
+  const id = `tok-vis-${Date.now()}`;
+  seedPdf(id, 'private');
+  insertUserAcl(id, 'tok-other@example.com', 'read_write');
+  const token = insertToken(id, 'editable');
+  const app = await buildApp();
+  try {
+    // a read_write ACL grantee may edit CONTENT but not administer access
+    const grantee = await app.inject({
+      method: 'PATCH', url: `/api/pdfs/${id}/visibility`,
+      headers: { ...OTHER, 'content-type': 'application/json' },
+      payload: JSON.stringify({ visibility: 'public_editable' }),
+    });
+    assert.equal(grantee.statusCode, 403);
+    // an anonymous editable-token holder must not escalate the default beyond the token's life
+    const viaToken = await app.inject({
+      method: 'PATCH', url: `/api/pdfs/${id}/visibility?share=${encodeURIComponent(token)}`,
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({ visibility: 'public_editable' }),
+    });
+    assert.equal(viaToken.statusCode, 403);
+    const row = db.prepare(`SELECT visibility FROM pdfs WHERE id = ?`).get(id) as { visibility: string };
+    assert.equal(row.visibility, 'private', 'visibility must be unchanged by non-owner attempts');
+    // the owner still can
+    const owner = await app.inject({
+      method: 'PATCH', url: `/api/pdfs/${id}/visibility`,
+      headers: { ...OWNER, 'content-type': 'application/json' },
+      payload: JSON.stringify({ visibility: 'public' }),
+    });
+    assert.equal(owner.statusCode, 200, owner.body.slice(0, 200));
+  } finally { cleanup(id); await app.close(); }
+});
+
+test('deleting the whole presentation is owner-only even for a read_write ACL grantee', async () => {
+  const id = `tok-del-acl-${Date.now()}`;
+  seedPdf(id, 'private');
+  insertUserAcl(id, 'tok-other@example.com', 'read_write');
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({ method: 'DELETE', url: `/api/pdfs/${id}`, headers: OTHER });
+    assert.equal(resp.statusCode, 403);
+    assert.notEqual(db.prepare(`SELECT id FROM pdfs WHERE id = ?`).get(id), undefined);
+  } finally { cleanup(id); await app.close(); }
+});
+
+// --- max() in the other direction: a read-only listed user holding an editable token gets edit ---
+
+test('a read-only listed user holding an editable token resolves to effective edit', async () => {
+  const id = `tok-ro-plus-${Date.now()}`;
+  seedPdf(id, 'private');
+  insertUserAcl(id, 'tok-other@example.com', 'read_only'); // identity says read...
+  const token = insertToken(id, 'editable'); // ...token says edit → max = edit
+  const app = await buildApp();
+  try {
+    const detail = await app.inject({ method: 'GET', url: `/api/pdfs/${id}?share=${encodeURIComponent(token)}`, headers: OTHER });
+    assert.equal(detail.statusCode, 200, detail.body.slice(0, 200));
+    assert.equal((detail.json() as { access_level: string }).access_level, 'edit');
+    const edit = await app.inject({
+      method: 'PATCH', url: `/api/pdfs/${id}/title?share=${encodeURIComponent(token)}`,
+      headers: { ...OTHER, 'content-type': 'application/json' },
+      payload: JSON.stringify({ title: 'Edited by read-only listee via editable token' }),
+    });
+    assert.ok(edit.statusCode < 300, `expected success but got ${edit.statusCode}: ${edit.body.slice(0, 200)}`);
+  } finally { cleanup(id); await app.close(); }
+});
+
+// --- Group grants end-to-end over HTTP (the resolver unit tests cover the SQL; this proves wiring) ---
+
+test('a group member reads a private presentation via a group grant; read_write group also edits', async () => {
+  const id = `tok-grp-${Date.now()}`;
+  const groupId = `grp-tokcap${Date.now()}`;
+  seedPdf(id, 'private');
+  const t = nowIso();
+  db.prepare(`DELETE FROM groups WHERE id = ?`).run(groupId);
+  db.prepare(`INSERT INTO groups (id, owner_sub, name, created_at, updated_at) VALUES (?,?,?,?,?)`)
+    .run(groupId, 'tok-owner', 'Test group', t, t);
+  db.prepare(`INSERT INTO group_members (group_id, email, created_at) VALUES (?,?,?)`)
+    .run(groupId, 'tok-other@example.com', t);
+  db.prepare(
+    `INSERT INTO pdf_permissions (pdf_id, principal_type, principal_id, access, created_at, updated_at)
+     VALUES (?, 'group', ?, 'read_only', ?, ?)`,
+  ).run(id, groupId, t, t);
+  const app = await buildApp();
+  try {
+    // read_only group grant: the member reads, sees access_level=read, cannot edit
+    const detail = await app.inject({ method: 'GET', url: `/api/pdfs/${id}`, headers: OTHER });
+    assert.equal(detail.statusCode, 200, detail.body.slice(0, 200));
+    assert.equal((detail.json() as { access_level: string }).access_level, 'read');
+    const editDenied = await app.inject({
+      method: 'PATCH', url: `/api/pdfs/${id}/title`,
+      headers: { ...OTHER, 'content-type': 'application/json' },
+      payload: JSON.stringify({ title: 'nope' }),
+    });
+    assert.equal(editDenied.statusCode, 403);
+    // upgrade the group to read_write: the member may now edit
+    db.prepare(`UPDATE pdf_permissions SET access = 'read_write' WHERE pdf_id = ? AND principal_id = ?`).run(id, groupId);
+    const editOk = await app.inject({
+      method: 'PATCH', url: `/api/pdfs/${id}/title`,
+      headers: { ...OTHER, 'content-type': 'application/json' },
+      payload: JSON.stringify({ title: 'Edited via read_write group grant' }),
+    });
+    assert.ok(editOk.statusCode < 300, `expected success but got ${editOk.statusCode}: ${editOk.body.slice(0, 200)}`);
+    // an anonymous stranger (not in the group, no token) still cannot read
+    const anon = await app.inject({ method: 'GET', url: `/api/pdfs/${id}` });
+    assert.equal(anon.statusCode, 403);
+  } finally {
+    db.prepare(`DELETE FROM groups WHERE id = ?`).run(groupId);
+    cleanup(id);
+    await app.close();
+  }
+});
