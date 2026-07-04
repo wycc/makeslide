@@ -19,3 +19,13 @@ export function parsePollOptions(optionsJson: string | null | undefined): string
     return [];
   }
 }
+
+/**
+ * Normalize incoming poll option texts before persisting: trim each option and
+ * drop blank ones, optionally capping to `limit` options. Shared by the manual
+ * poll-create and AI-generated poll routes in detail.ts.
+ */
+export function sanitizePollOptions(options: readonly string[], limit?: number): string[] {
+  const cleaned = options.map((option) => option.trim()).filter(Boolean);
+  return typeof limit === 'number' ? cleaned.slice(0, limit) : cleaned;
+}

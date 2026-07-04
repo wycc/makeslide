@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { canReadPdf, canEditPdf, canDestructivelyEditPdf , aclCtx } from './permissions';
 import { getShareToken, ShareTokenParamSchema, resolveTokenAccessLevel } from './share';
-import { parsePollOptions } from './pollOptions';
+import { parsePollOptions, sanitizePollOptions } from './pollOptions';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -986,7 +986,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     const page = db.prepare(`SELECT pdf_id FROM pages WHERE pdf_id = ? AND page_number = ?`).get(id, n);
     if (!page) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
     const now = nowIso();
-    const options = body.data.options.map((option) => option.trim()).filter(Boolean);
+    const options = sanitizePollOptions(body.data.options);
     const result = db
       .prepare(`INSERT INTO page_polls (pdf_id, page_number, question, options_json, is_active, show_results, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?, ?)`)
       .run(id, n, body.data.question.trim(), JSON.stringify(options), body.data.show_results ? 1 : 0, now, now);
@@ -1035,7 +1035,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       ],
     });
     const now = nowIso();
-    const options = generated.data.options.map((option) => option.trim()).filter(Boolean).slice(0, 6);
+    const options = sanitizePollOptions(generated.data.options, 6);
     const result = db
       .prepare(`INSERT INTO page_polls (pdf_id, page_number, question, options_json, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)`)
       .run(id, n, generated.data.question.trim(), JSON.stringify(options), now, now);

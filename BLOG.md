@@ -1,5 +1,24 @@
 # MakeSlide 功能說明
 
+## 投票選項清理收斂為共用純函式
+
+### 背景
+
+在投影片上建立即時投票時（不論是老師手動輸入選項、或由 AI 依逐字稿產生），送出前都要先把選項清理一下——去掉每個選項的前後空白、拿掉空白選項，AI 產生的版本還會限制最多 6 個。原本這段清理在 `detail.ts` 裡寫了兩份，而且沒有測試。
+
+### 變更內容
+
+- 在 `backend/src/routes/pdfs/pollOptions.ts` 新增 `sanitizePollOptions(options, limit?)`：去除每個選項前後空白、濾掉空白選項，若給了 `limit` 就在清理後取前 N 個。
+- `detail.ts` 手動建立投票改用 `sanitizePollOptions(body.data.options)`、AI 產生投票改用 `sanitizePollOptions(generated.data.options, 6)`，行為完全等價。
+
+### 使用方式
+
+純內部重構，建立投票的行為不變。抽成共用函式後，選項清理規則（去空白、濾空、上限）有了單一來源與測試，和同檔既有的 `parsePollOptions`（解析已儲存的選項 JSON）並列，涵蓋投票選項「寫入前清理」與「讀取時解析」兩端。
+
+### 測試
+
+`poll-options.test.ts` 新增 4 組 `sanitizePollOptions` 測試（去空白並濾掉空項、清理後套用上限、無上限時保留全部、全空白或空輸入回空陣列）。後端 `tsc --noEmit` 通過、poll-options 共 9/9 通過。
+
 ## 標籤字串解析收斂為共用純函式
 
 ### 背景
