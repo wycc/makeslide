@@ -1,5 +1,25 @@
 # MakeSlide 功能說明
 
+## user_code 讀取邏輯去重
+
+### 背景
+
+App 用一個「使用者識別碼（user_code）」來對應觀看記錄、投票、測驗作答等。取得它的邏輯是 `resolveConfiguredUserCode`：先讀 localStorage 的暫存值，若已登入則以後端設定的 user_code 覆蓋。這個函式原本放在 `pages/play/utils.ts` 並被多個 hook／頁面共用，但 `QuizBuilderPage` 卻另外複製了一份一模一樣的實作；而且對應的 localStorage key 字串 `'makeslide.user_code'` 在三個檔案裡各寫了一次。這種「同一段邏輯／同一個魔術字串散落多處」很容易在其中一處改動時走味。
+
+### 變更內容
+
+- 將 `play/utils.ts` 的 `LOCAL_USER_CODE_KEY` 改為匯出。
+- `QuizBuilderPage` 刪掉自己那份重複的 `resolveConfiguredUserCode` 與 key 定義，改為 `import` `play/utils` 既有的版本；順帶移除因此不再用到的 `getAuthStatus`／`getSystemAiSettings` 匯入。
+- `SettingsPage` 刪掉元件內重複的 key 定義，改用 `play/utils` 匯出的常數。
+
+### 使用方式
+
+純內部重構，取得 user_code 的行為完全不變（複製的版本與正本逐字相同）。之後 user_code 的解析與 storage key 都只有單一來源。
+
+### 測試
+
+此函式屬整合性（會呼叫後端 API），原本即無單元測試；本次為等價的去重，由 `tsc --noEmit` 型別檢查把關。前端 `tsc --noEmit` 通過。
+
 ## localStorage JSON 陣列讀取的通用化與去重
 
 ### 背景

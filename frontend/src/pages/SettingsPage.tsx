@@ -53,13 +53,13 @@ import { formatSlaOverrideRangeMessage, validateSlaOverrideSecondsInput } from '
 import { progressPercent } from '../lib/progressPercent';
 import { copyTextToClipboard } from '../lib/clipboard';
 import { bytesToRoundedKb } from '../lib/bytesFreed';
+import { LOCAL_USER_CODE_KEY } from './play/utils';
 import { LLM_PRICE_PER_1M_TOKENS, TTS_PRICE_PER_1K_CHARS, formatUsd } from '../lib/costEstimate';
 import { createTemplate } from '../lib/api/templates';
 
 type SettingsCategory = 'account' | 'ai' | 'sync' | 'skills' | 'groups' | 'admin';
 
-export default function SettingsPage() { 
-  const LOCAL_USER_CODE_KEY = 'makeslide.user_code';
+export default function SettingsPage() {
   const navigate = useNavigate();
   const { t } = useI18n();
   const voiceGenderLabels = { male: t('tts.voiceGenderMale'), female: t('tts.voiceGenderFemale') };

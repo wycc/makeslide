@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第二一四輪已完成 **93/100**，未達上限。
+- 最新進度：截至第二一五輪已完成 **94/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -92,6 +92,21 @@ prompt 規則以「（第 N 頁）」標示跨頁引用，但先前是純文字�
     新測試 7/7 + `page-ask` 整合測試回歸（Node 22，共 10 綠）。分支 `feat/ask-history-char-budget`，
     已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 64 個完成項目（64/100，未達上限）。
+
+## user_code 讀取去重（重複 async 函式 + magic string 收斂）（第二一五輪，2026-07-05）
+
+延續盤點：`resolveConfiguredUserCode`（讀 localStorage user_code、登入則以後端 settings 覆蓋）在 `play/utils.ts`
+已匯出且有 3 個消費者，但 `QuizBuilderPage` 另存了一份**完全相同**的本地複本；magic string `'makeslide.user_code'`
+更在 `play/utils`／`QuizBuilderPage`／`SettingsPage` 各定義一次。
+
+- [x] 去重 `resolveConfiguredUserCode` 複本 + 收斂 `LOCAL_USER_CODE_KEY`（3→1）。
+  - 修改說明（2026-07-05）：`play/utils.ts` 的 `LOCAL_USER_CODE_KEY` 改為 `export`。`QuizBuilderPage` 移除本地
+    複本的 `resolveConfiguredUserCode` 與 `LOCAL_USER_CODE_KEY`，改 `import { resolveConfiguredUserCode } from './play/utils'`，
+    並移除因此不再使用的 `getAuthStatus`／`getSystemAiSettings` 匯入。`SettingsPage` 移除元件內重複的
+    `LOCAL_USER_CODE_KEY`，改 import `play/utils` 的。行為等價（複本與正本 byte-identical）；由 `tsc --noEmit`
+    把關（此函式為整合性、原本即無單元測試）。前端 `tsc --noEmit` 通過。分支 `refactor/dedupe-user-code`，
+    已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 94 個完成項目（94/100，未達上限）。
 
 ## localStorage JSON 陣列讀取通用化 + 去重（第二一四輪，2026-07-05）
 
