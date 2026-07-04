@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第二一九輪已完成 **98/100**，未達上限。
+- 最新進度：截至第二二〇輪已完成 **99/100**，未達上限（**距門檻僅剩 1 項**）。
 
 ## 未完成項目（待使用者決定）
 
@@ -92,6 +92,28 @@ prompt 規則以「（第 N 頁）」標示跨頁引用，但先前是純文字�
     新測試 7/7 + `page-ask` 整合測試回歸（Node 22，共 10 綠）。分支 `feat/ask-history-char-budget`，
     已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 64 個完成項目（64/100，未達上限）。
+
+## zip 下載回應標頭收斂為 sendZipDownload（去重）+ 發現既有失敗（第二二〇輪，2026-07-05）
+
+延續盤點：`export.zip` 與批次匯出下載都以相同 4 個標頭（content-type/length、cache-control、content-disposition）
+回傳 zip buffer，逐字重複。
+
+- [x] 抽出 `sendZipDownload(reply, buffer, filename)`（去重 2 處 / 行為等價）。
+  - 修改說明（2026-07-05）：`export.ts` 新增 `sendZipDownload`（設 4 標頭＋`buildContentDisposition`＋`reply.send`）。
+    `export.ts` 單份匯出與 `batch-export.ts` 批次下載改用之（batch 原 import 的 `buildContentDisposition` 改為
+    `sendZipDownload`）。後端 `tsc --noEmit` 通過；`export-zip-cjk-filename`＋`batch-export` 共 7/7 通過（涵蓋
+    sendZipDownload 兩條路徑）。分支 `refactor/send-zip-download`，已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 99 個完成項目（99/100，未達上限）。
+
+### 本輪順帶發現（**待處理**，非本輪修）
+
+- [ ] **（既有失敗）`export-import-zip-interactive.test.ts` 的 `export.zip -> import.zip round-trips polls,
+  quizzes and slide animations` 在 master 即失敗**：`ReferenceError: pageUid is not defined`。經確認**非本輪
+  改動造成**（於 merge 前的 master 上重現）。屬 export/import round-trip 路徑（polls/quizzes/animations）某處
+  引用了未定義的 `pageUid`。建議下一輪（或重設後）優先修此真實 bug。
+- [ ] **（既有重複，待收斂需裁示）`buildContentDisposition` 有兩份不同實作**：`downloadFilename.ts`（asciiFallback
+  將 `"`、`\` 換成 `_`；`filename*` 用 `encodeURIComponent`）與 `export.ts`（`"`→`'`；`filename*` 另把 `'()`
+  百分比轉義）。兩者對含引號/括號的檔名輸出不同，統一屬**行為變更**、需決定採哪一套，故未於自動 loop 逕改。
 
 ## 後端 group id regex 收斂到 shared（去重）（第二一九輪，2026-07-05）
 

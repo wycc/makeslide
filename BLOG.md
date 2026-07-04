@@ -1,5 +1,24 @@
 # MakeSlide 功能說明
 
+## zip 下載回應收斂為 sendZipDownload
+
+### 背景
+
+單份簡報匯出（`export.zip`）與「匯出全部」的批次下載，都是把打包好的 zip 位元組回傳給瀏覽器，並設定同樣的四個回應標頭：`content-type: application/zip`、`content-length`、`cache-control: no-store`、以及帶檔名的 `content-disposition`。這段標頭設定在兩個路由裡逐字重複。
+
+### 變更內容
+
+- 在 `routes/pdfs/export.ts` 新增 `sendZipDownload(reply, buffer, filename)`：設定上述四個標頭（檔名走既有的 `buildContentDisposition`）並送出 buffer。
+- 單份匯出與批次匯出下載兩處改用它（批次匯出原本 import 的 `buildContentDisposition` 改為 `sendZipDownload`）。
+
+### 使用方式
+
+純內部重構，兩種匯出下載的行為不變。之後若要新增其他 zip 下載端點，直接呼叫 `sendZipDownload` 即可，標頭設定不會再各寫一份。
+
+### 測試
+
+由既有 HTTP 測試覆蓋 `sendZipDownload` 的兩條路徑：`export-zip-cjk-filename`（單份匯出、含 CJK 檔名）與 `batch-export`（批次下載）共 7/7 通過。後端 `tsc --noEmit` 通過。（另註：本輪順帶發現 `export-import-zip-interactive` 有一個**與本次改動無關、在 master 即存在**的失敗 `pageUid is not defined`，已記入 TODO.md 待處理。）
+
 ## 後端群組 id 格式規則收斂到共用處
 
 ### 背景
