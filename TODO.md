@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第一八六輪已完成 **65/100**，未達上限。
+- 最新進度：截至第一八七輪已完成 **66/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -13,6 +13,26 @@
 
 - [ ] 系統性採用 `mapApiErrorToHumanMessage`：目前約 55 處 catch 區塊直接 `setError(err.message)` 顯示後端原始 message、繞過既有的錯誤訊息映射（前端僅 2 處 `UploadButton`、`ImportTextPage` 使用 mapper）。全面改造屬較大工程，且各 catch 上下文不同、許多後端 message 已是中文（未必都是英文洩漏），逐點需產品判斷顯示風格，故列為待使用者決定。
 - [ ] 把前端測試納入 root `npm test`：目前 root 測試腳本未涵蓋前端 `node:test` 測試。納入涉及 CI 行為變更與 `npm install`（sandbox 無法驗證），列為待使用者決定。
+
+## AI 導師回答長度精簡／詳細切換（第一八七輪，2026-07-04）
+
+推進 §「AI 導師（PageAskPanel）回答品質改善」backlog 的「輸出長度／結構控制」項：原 system prompt
+一律要求「完整、不刻意精簡」，長答常過度冗長且無進度感。新增每次提問可選「精簡／詳細」。
+
+- [x] AI 導師新增「精簡／詳細」回答長度切換（可測純函式 + 前後端接線）。
+  - 修改說明（2026-07-04）：後端新增純函式 [askVerbosity.ts](backend/src/routes/pdfs/askVerbosity.ts)
+    的 `askVerbosityInstruction(verbosity)`——`brief` 回精簡指示（結論先行、1～3 句重點、避免冗長）、
+    `detailed`（含未指定）回詳盡指示（同樣「結論先行、先給重點摘要再展開」以改善長答可讀性）。
+    `AskPageBodySchema` 新增 `verbosity: z.enum(['brief','detailed']).optional()`；`/ask` 把該指示接到
+    system prompt 末尾，並把原硬編的「盡量解釋透徹、不要刻意精簡」改為中性的「清楚、有條理」（長度改由
+    verbosity 控制）。前端：`askPageQuestion` 新增 `verbosity` 參數；`usePageAsk` 新增 `pageAskVerbosity`
+    狀態（預設 detailed）+ setter 並隨每次提問送出；`PlayPageContext` 型別同步；`PageAskPanel` 於輸入框
+    上方加「回答長度：精簡｜詳細」分段切換。新增 i18n 三鍵（zh-TW／en，parity 24/24）。
+  - 測試：後端 `ask-verbosity.test.ts`（4 組純函式）+ `page-ask.test.ts` 新增整合測試（未指定→prompt 帶
+    「本次回答長度：詳細」、`verbosity:'brief'`→帶「精簡」且不含「詳細」）。前後端 `tsc --noEmit` 通過；
+    後端 ask 相關 8/8（Node 22）、前端 i18n 24/24。分支 `feat/ask-verbosity-toggle`，已 merge 回 master。
+    BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 66 個完成項目（66/100，未達上限）。
 
 ## AI 導師回答的引用頁碼可點擊跳頁（第一八六輪，2026-07-04）
 
@@ -167,7 +187,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 - [x] **Markdown 渲染**：~~回答含 `**粗體**`、`##` 標題、`-`/數字條列，但目前以純文字顯示~~。**已完成**（非本輪）：`PageAskPanel` 現以自寫的輕量渲染器 [MarkdownMath.tsx](frontend/src/components/MarkdownMath.tsx) 呈現 AI 導師回答，支援標題／粗體／斜體／行內碼／條列／表格與 LaTeX（katex），文字走 React text node、不用 innerHTML（僅 katex 產出的受信任 HTML 例外）。此項於先前輪次隨 MarkdownMath 導入而解決，僅補記狀態、**不計入**計數。
 - [ ] **串流輸出（streaming）**：目前 `/ask` 一次回傳完整 JSON，長答需等待且無進度感。改為 SSE 串流（比照 `animation/custom-script` 既有 SSE 模式），逐段顯示、可中途取消。
-- [ ] **輸出長度／結構控制**：system prompt 要求「完整、不刻意精簡」常導致過長。新增「精簡／詳細」切換或長度上限，並引導模型先給重點摘要再展開。
+- [x] **輸出長度／結構控制**：system prompt 要求「完整、不刻意精簡」常導致過長。新增「精簡／詳細」切換或長度上限，並引導模型先給重點摘要再展開。（第一八七輪完成，見下方「AI 導師回答長度精簡／詳細切換」section）
 - [x] **引用頁碼可點擊**：回答中的「（第 N 頁）」目前是純文字。解析成可點連結，點擊跳到該頁，提升跨頁查證效率。（第一八六輪完成，見下方「AI 導師回答的引用頁碼可點擊跳頁」section）
 - [ ] **錯誤與空答處理**：當所有內容皆無相關資訊時，模型偶爾仍杜撰；強化 prompt 與後處理（偵測「查無資訊」語句時給固定提示），並把後端原始錯誤改走 `mapApiErrorToHumanMessage`。
 - [x] **保留對話脈絡的上限管理**：`history` 全量帶入長對話會超出 token 預算；加上輪數/字數截斷與必要的摘要壓縮。（第一八五輪完成，見下方「AI 導師多輪對話脈絡字數上限管理」section）

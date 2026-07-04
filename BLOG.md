@@ -1,5 +1,26 @@
 # MakeSlide 功能說明
 
+## AI 導師回答長度：精簡／詳細切換
+
+### 背景
+
+播放頁的「AI 導師」（`PageAskPanel`）原本一律以「完整、不刻意精簡、盡量解釋透徹」的方式回答，導致即使是簡單問題也常得到很長的答案，閱讀成本高、也沒有進度感。使用者其實常常只想先要一個「重點結論」，需要時再展開。
+
+### 變更內容
+
+- 新增後端純函式 `backend/src/routes/pdfs/askVerbosity.ts` 的 `askVerbosityInstruction(verbosity)`：`brief` 回傳「精簡」指示（結論先行、1～3 句點出重點、避免冗長展開），`detailed`（含未指定）回傳「詳細」指示（詳盡作答，但同樣要求「先給重點摘要再展開」以改善長答可讀性）。
+- `/api/pdfs/:id/pages/:n/ask` 的 body schema 新增可選的 `verbosity: 'brief' | 'detailed'`，並把對應指示接到 system prompt 末尾；原本硬編在 prompt 裡的「盡量解釋透徹、不要刻意精簡」改為中性的「清楚、有條理」，把長度取捨交給 verbosity 控制。
+- 前端：API client `askPageQuestion` 新增 `verbosity` 參數；`usePageAsk` 新增 `pageAskVerbosity` 狀態（預設「詳細」）並隨每次提問送出；`PageAskPanel` 在輸入框上方加了一個「回答長度：精簡｜詳細」的分段切換。
+- 新增 i18n 鍵 `play.sidebar.pageAsk.verbosityLabel`／`verbosityBrief`／`verbosityDetailed`（zh-TW／en）。
+
+### 使用方式
+
+在 AI 導師輸入框上方選擇「精簡」或「詳細」，再送出問題即可：選「精簡」時 AI 會先用一兩句給出重點、只在必要時補關鍵細節；選「詳細」（預設）則維持完整解說，但一樣會先給結論摘要再展開。切換即時生效、套用於下一次提問，不影響已顯示的回答。
+
+### 測試
+
+後端新增 `ask-verbosity.test.ts`（4 組純函式：brief 為精簡、detailed 為詳盡、undefined 等同 detailed、三者都含「結論先行」摘要引導）；`page-ask.test.ts` 新增整合測試（未指定 → prompt 帶「本次回答長度：詳細」；`verbosity:'brief'` → 帶「精簡」且不含「詳細」）。前後端 `tsc --noEmit` 通過；後端 ask 相關 8/8、前端 i18n parity 24/24。
+
 ## AI 導師回答的引用頁碼可點擊跳頁
 
 ### 背景

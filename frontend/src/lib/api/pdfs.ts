@@ -1116,12 +1116,13 @@ export async function askPageQuestion(
   question: string,
   shareToken?: string,
   history: PageAskMessage[] = [],
+  verbosity?: 'brief' | 'detailed',
 ): Promise<{ answer: string }> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (shareToken) headers['X-MakeSlide-Share-Token'] = shareToken;
   const resp = await fetch(
     `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/ask`,
-    { method: 'POST', headers, body: JSON.stringify({ question, history }) },
+    { method: 'POST', headers, body: JSON.stringify({ question, history, ...(verbosity ? { verbosity } : {}) }) },
   );
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as { answer: string };

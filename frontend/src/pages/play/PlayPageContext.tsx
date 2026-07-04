@@ -483,6 +483,8 @@ export interface PlayPageContextValue {
   pageAskBusy: boolean;
   pageAskError: string | null;
   setPageAskError: (v: string | null) => void;
+  pageAskVerbosity: 'brief' | 'detailed';
+  setPageAskVerbosity: (v: 'brief' | 'detailed') => void;
   handleAskPage: () => Promise<void>;
   clearPageAsk: () => void;
 

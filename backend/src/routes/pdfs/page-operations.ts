@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { ShareTokenParamSchema, getShareToken } from './share';
 import { getPdfPermissionRow, canReadPdf, canEditPdf, canDestructivelyEditPdf , aclCtx } from './permissions';
 import { budgetChatHistory } from './askHistoryBudget';
+import { askVerbosityInstruction } from './askVerbosity';
 import { toFile } from 'openai';
 import type { ChatCompletionContentPart } from 'openai/resources/chat/completions';
 import fs from 'node:fs';
@@ -263,6 +264,8 @@ const AskPageBodySchema = z.object({
     .array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(8000) }))
     .max(20)
     .optional(),
+  // 回答長度偏好：精簡（brief）或詳細（detailed）。未指定視為 detailed。
+  verbosity: z.enum(['brief', 'detailed']).optional(),
 });
 
 const AskPageResponseSchema = z.object({
@@ -1362,6 +1365,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         role: m.role,
         content: m.content,
       }));
+      const verbosityInstruction = askVerbosityInstruction(parsedBody.data.verbosity);
       const result = await callChatJSON({
         label: `ask-page ${id}/${n}`,
         schema: AskPageResponseSchema,
@@ -1370,7 +1374,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         messages: [
           {
             role: 'system',
-            content: '你是繁體中文課堂 AI 導師。請只輸出 JSON：{"answer":"..."}。你會獲得整份簡報所有頁面的頁面文字與逐字稿（每頁以「# 第 N 頁」標示，其中一頁標為「學生目前所在頁」），以及（若有）這份教材的原始來源全文。請綜合全份內容詳細回答學生問題，必要時可跨頁說明；當答案只出現在原始來源全文、而不在投影片文字或逐字稿時，也要依原始來源全文作答。回答請完整、清楚、有條理，盡量解釋透徹，不要刻意精簡。【格式（務必遵守）】請以 Markdown 格式作答，適當使用標題（`##`）、粗體（`**粗體**`）、條列（`-`、`1.`）與表格來組織內容以利閱讀；數學式一律使用 Markdown 可渲染的 LaTeX：行內公式用單一 `$...$` 包住、獨立成行的公式用 `$$...$$` 包住（例如行內 $E=mc^2$、區塊 $$\\int_a^b f(x)\\,dx$$），不要用純文字或圖片描述數學式。【引用規則（務必遵守）】只要你的回答用到「學生目前所在頁」以外其他頁面的資訊，就必須在該處主動以括號標示來源頁碼，例如「（第 3 頁）」或「（第 3 頁逐字稿）」，不可省略；引用原始來源全文時標示「（原始來源）」；引用學生目前所在頁的內容則可不標示頁碼。若所有提供的內容都沒有相關資訊，請誠實說明。',
+            content: '你是繁體中文課堂 AI 導師。請只輸出 JSON：{"answer":"..."}。你會獲得整份簡報所有頁面的頁面文字與逐字稿（每頁以「# 第 N 頁」標示，其中一頁標為「學生目前所在頁」），以及（若有）這份教材的原始來源全文。請綜合全份內容詳細回答學生問題，必要時可跨頁說明；當答案只出現在原始來源全文、而不在投影片文字或逐字稿時，也要依原始來源全文作答。回答請清楚、有條理。【格式（務必遵守）】請以 Markdown 格式作答，適當使用標題（`##`）、粗體（`**粗體**`）、條列（`-`、`1.`）與表格來組織內容以利閱讀；數學式一律使用 Markdown 可渲染的 LaTeX：行內公式用單一 `$...$` 包住、獨立成行的公式用 `$$...$$` 包住（例如行內 $E=mc^2$、區塊 $$\\int_a^b f(x)\\,dx$$），不要用純文字或圖片描述數學式。【引用規則（務必遵守）】只要你的回答用到「學生目前所在頁」以外其他頁面的資訊，就必須在該處主動以括號標示來源頁碼，例如「（第 3 頁）」或「（第 3 頁逐字稿）」，不可省略；引用原始來源全文時標示「（原始來源）」；引用學生目前所在頁的內容則可不標示頁碼。若所有提供的內容都沒有相關資訊，請誠實說明。' + `\n${verbosityInstruction}`,
           },
           {
             role: 'user',
