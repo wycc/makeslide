@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第二〇三輪已完成 **82/100**，未達上限。
+- 最新進度：截至第二〇四輪已完成 **83/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -92,6 +92,20 @@ prompt 規則以「（第 N 頁）」標示跨頁引用，但先前是純文字�
     新測試 7/7 + `page-ask` 整合測試回歸（Node 22，共 10 綠）。分支 `feat/ask-history-char-budget`，
     已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 64 個完成項目（64/100，未達上限）。
+
+## 逐字稿朗讀時間預估抽出純函式（第二〇四輪，2026-07-04）
+
+延續既有程式碼盤點：`PlayPageSlidePanel` 逐字稿編輯區即時預估「字數 → 朗讀時間 mm:ss」的內聯邏輯
+（`Math.round(chars/4)` 再手組字串）無測試。
+
+- [x] 抽出朗讀時間預估純函式 `estimateSpeakingSeconds`／`estimateSpeakingTimeLabel`（可測 / 固化 chars/4 heuristic）。
+  - 修改說明（2026-07-04）：新增 [speakingTimeEstimate.ts](frontend/src/lib/speakingTimeEstimate.ts)——
+    `estimateSpeakingSeconds(chars)`（每秒約 4 字、四捨五入、非正/非有限回 0）與 `estimateSpeakingTimeLabel(chars)`
+    （組成 m:ss、分不補零、秒補兩位，沿用原格式）。`PlayPageSlidePanel` 改用之，行為完全等價。新增
+    `speakingTimeEstimate.test.ts`（4 組：chars/4 四捨五入、非正/NaN 回 0、m:ss 格式、空輸入 0:00）。前端
+    `tsc --noEmit` 通過、4/4 通過。分支 `refactor/speaking-time-estimate`，已 merge 回 master。BLOG.md 新增對應
+    section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 83 個完成項目（83/100，未達上限）。
 
 ## 錄音 session 模型純函式（第二〇三輪，2026-07-04）
 
