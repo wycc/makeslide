@@ -45,17 +45,19 @@ export function coverImagePath(pdfId: string): string {
   return path.join(pdfDir(pdfId), 'cover.jpg');
 }
 
-// 簡報旁白錄音（audio + 翻頁時間軸）。每份簡報一段旁白（MVP）。
+// 簡報旁白錄音（多段：manifest + 逐段音檔）。存於 <pdf>/narration/。
 export function narrationDir(pdfId: string): string {
   return path.join(pdfDir(pdfId), 'narration');
 }
 
-export function narrationAudioPath(pdfId: string): string {
-  return path.join(narrationDir(pdfId), 'audio.webm');
+export function narrationManifestPath(pdfId: string): string {
+  return path.join(narrationDir(pdfId), 'manifest.json');
 }
 
-export function narrationTimelinePath(pdfId: string): string {
-  return path.join(narrationDir(pdfId), 'timeline.json');
+// 逐段音檔：narration/<segmentId>.webm（segmentId 為內部產生的 nanoid，非使用者輸入）。
+export function narrationSegmentAudioPath(pdfId: string, segmentId: string): string {
+  const safe = segmentId.replace(/[^A-Za-z0-9_-]/g, '');
+  return path.join(narrationDir(pdfId), `${safe}.webm`);
 }
 
 export function coverThumbnailPath(pdfId: string): string {

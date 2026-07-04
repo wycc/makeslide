@@ -1113,41 +1113,73 @@ export async function fetchReportAiSuggestions(id: string): Promise<string> {
   return data.suggestions ?? '';
 }
 
-export interface NarrationSegment {
+// 旁白時間軸區段（相對段起點）。
+export interface SlideTimelineSeg {
   page: number;
   startMs: number;
   endMs: number;
 }
-export type NarrationInfo =
-  | { exists: false }
-  | { exists: true; duration_ms: number; segments: NarrationSegment[]; created_at: string };
-
-export async function getNarration(id: string): Promise<NarrationInfo> {
-  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/narration`);
-  if (!resp.ok) throw await parseErrorBody(resp);
-  return (await resp.json()) as NarrationInfo;
+// 一段錄音（一次錄音，可跨多頁）。
+export interface NarrationSegment {
+  id: string;
+  duration_ms: number;
+  pages: number[];
+  slide_timeline: SlideTimelineSeg[];
+  created_at: string;
+}
+export interface NarrationList {
+  segments: NarrationSegment[];
 }
 
-export async function uploadNarration(
-  id: string,
-  audio: Blob,
-  timeline: { durationMs: number; segments: NarrationSegment[] },
-): Promise<{ ok: boolean; size_bytes: number; duration_ms: number }> {
+export async function getNarration(id: string): Promise<NarrationList> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/narration`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as NarrationList;
+}
+
+function narrationForm(audio: Blob, timeline: { durationMs: number; segments: SlideTimelineSeg[] }): FormData {
   const form = new FormData();
   form.append('timeline', JSON.stringify(timeline));
   form.append('file', audio, 'audio.webm');
-  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/narration`, { method: 'POST', body: form });
-  if (!resp.ok) throw await parseErrorBody(resp);
-  return (await resp.json()) as { ok: boolean; size_bytes: number; duration_ms: number };
+  return form;
 }
 
-export function narrationAudioUrl(id: string): string {
-  return `api/pdfs/${encodeURIComponent(id)}/narration/audio`;
+export async function addNarrationSegment(
+  id: string,
+  audio: Blob,
+  timeline: { durationMs: number; segments: SlideTimelineSeg[] },
+): Promise<{ id: string }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/narration/segments`, { method: 'POST', body: narrationForm(audio, timeline) });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { id: string };
 }
 
-export async function deleteNarration(id: string): Promise<void> {
-  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/narration`, { method: 'DELETE' });
+export async function reRecordNarrationSegment(
+  id: string,
+  segId: string,
+  audio: Blob,
+  timeline: { durationMs: number; segments: SlideTimelineSeg[] },
+): Promise<void> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/narration/segments/${encodeURIComponent(segId)}`, { method: 'PUT', body: narrationForm(audio, timeline) });
   if (!resp.ok) throw await parseErrorBody(resp);
+}
+
+export async function deleteNarrationSegment(id: string, segId: string): Promise<void> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/narration/segments/${encodeURIComponent(segId)}`, { method: 'DELETE' });
+  if (!resp.ok) throw await parseErrorBody(resp);
+}
+
+export async function reorderNarrationSegments(id: string, order: string[]): Promise<void> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/narration/order`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ order }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+}
+
+export function narrationSegmentAudioUrl(id: string, segId: string): string {
+  return `api/pdfs/${encodeURIComponent(id)}/narration/segments/${encodeURIComponent(segId)}/audio`;
 }
 
 export async function fetchCoursePackage(id: string): Promise<{ blob: Blob; filename: string }> {

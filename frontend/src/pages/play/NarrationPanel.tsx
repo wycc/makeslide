@@ -2,120 +2,152 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useI18n } from '../../i18n';
 import { usePlayPageContext } from './PlayPageContext';
 import { useNarrationRecorder } from '../../hooks/useNarrationRecorder';
-import { getNarration, narrationAudioUrl, deleteNarration, type NarrationInfo } from '../../lib/api/pdfs';
+import {
+  getNarration,
+  narrationSegmentAudioUrl,
+  deleteNarrationSegment,
+  reorderNarrationSegments,
+  type NarrationSegment,
+} from '../../lib/api/pdfs';
 import { slideAtTime } from '../../lib/slideTimeline';
 
-// 簡報旁白（MVP）：擁有者/協作者可錄講者旁白（錄音 + 記錄翻頁），任何可讀者可播放——
-// 播放時依時間軸自動翻到對應頁。
+// 簡報旁白（分段）：擁有者/協作者可分段錄音，每段可重錄/刪除/上下移；段列表顯示每段用過的
+// 頁面。任何可讀者可逐段播放——播放時依該段時間軸自動翻頁。
 export function NarrationPanel() {
   const { t } = useI18n();
   const { pdfId, detail, currentPage, deckPages, currentIdx, setCurrentIdx } = usePlayPageContext();
   const canRecord = Boolean(detail?.is_owner || detail?.visibility === 'public_editable');
 
-  const [info, setInfo] = useState<NarrationInfo | null>(null);
+  const [segments, setSegments] = useState<NarrationSegment[] | null>(null);
+  const [playingId, setPlayingId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const reload = useCallback(() => {
     if (!pdfId) return;
-    void getNarration(pdfId).then(setInfo).catch(() => setInfo({ exists: false }));
+    void getNarration(pdfId).then((r) => setSegments(r.segments)).catch(() => setSegments([]));
   }, [pdfId]);
-
   useEffect(() => { reload(); }, [reload]);
 
   const recorder = useNarrationRecorder(pdfId, currentPage?.page_number ?? null, reload);
 
-  // 播放時依目前秒數自動翻頁。
-  const handleTimeUpdate = useCallback(() => {
-    const audio = audioRef.current;
-    if (!audio || !info || !info.exists) return;
-    const page = slideAtTime(info.segments, audio.currentTime * 1000);
-    if (page == null) return;
+  const goToPage = useCallback((page: number) => {
     const idx = deckPages.findIndex((p) => p.page_number === page);
     if (idx >= 0 && idx !== currentIdx) setCurrentIdx(idx);
-  }, [info, deckPages, currentIdx, setCurrentIdx]);
+  }, [deckPages, currentIdx, setCurrentIdx]);
 
-  const handleDelete = useCallback(() => {
+  const playing = segments?.find((s) => s.id === playingId) ?? null;
+  const handleTimeUpdate = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio || !playing) return;
+    const page = slideAtTime(playing.slide_timeline, audio.currentTime * 1000);
+    if (page != null) goToPage(page);
+  }, [playing, goToPage]);
+
+  const playSegment = useCallback((seg: NarrationSegment) => {
+    setPlayingId(seg.id);
+    // 跳到該段第一頁，讓播放一開始就對齊。
+    if (seg.pages[0] != null) goToPage(seg.pages[0]);
+    // 等 <audio> 換 src 後再播。
+    setTimeout(() => { void audioRef.current?.play().catch(() => { /* ignore */ }); }, 0);
+  }, [goToPage]);
+
+  const handleDelete = useCallback((segId: string) => {
     if (!pdfId) return;
-    void deleteNarration(pdfId).then(() => setInfo({ exists: false })).catch(() => { /* ignore */ });
-  }, [pdfId]);
+    void deleteNarrationSegment(pdfId, segId).then(reload).catch(() => { /* ignore */ });
+  }, [pdfId, reload]);
 
-  if (!recorder.supported && !info?.exists) {
-    // 無錄音能力且無既有旁白可播 → 不顯示面板。
-    if (!canRecord) return null;
-  }
+  const move = useCallback((index: number, delta: number) => {
+    if (!pdfId || !segments) return;
+    const next = [...segments];
+    const target = index + delta;
+    if (target < 0 || target >= next.length) return;
+    [next[index], next[target]] = [next[target]!, next[index]!];
+    setSegments(next);
+    void reorderNarrationSegments(pdfId, next.map((s) => s.id)).then(reload).catch(reload);
+  }, [pdfId, segments, reload]);
+
+  if (segments == null) return null; // 尚未載入
+  if (!canRecord && segments.length === 0) return null; // 觀看者且無旁白 → 不顯示
 
   return (
     <section className="rounded-lg border border-border bg-surface p-3">
-      <h2 className="mb-2 text-sm font-semibold text-text">{t('play.narration.title')}</h2>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold text-text">{t('play.narration.title')}</h2>
+        {canRecord && !recorder.recording && !recorder.saving && recorder.supported && (
+          <button
+            type="button"
+            onClick={() => void recorder.startRecording(null)}
+            className="rounded-md border border-indigo-500/60 bg-indigo-500/15 px-2 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-500/25 dark:text-indigo-200"
+          >
+            {t('play.narration.addSegment')}
+          </button>
+        )}
+      </div>
 
       {recorder.error === 'mic' && <p className="mb-2 text-xs text-rose-600 dark:text-rose-300">{t('play.narration.micError')}</p>}
       {recorder.error === 'save' && <p className="mb-2 text-xs text-rose-600 dark:text-rose-300">{t('play.narration.saveError')}</p>}
+      {canRecord && !recorder.supported && <p className="mb-2 text-xs text-muted">{t('play.narration.unsupported')}</p>}
 
-      {/* 播放既有旁白 */}
-      {info?.exists && !recorder.recording && (
-        <div className="mb-2">
+      {recorder.recording && (
+        <div className="mb-2 flex flex-wrap items-center gap-2 rounded-md border border-rose-300/60 bg-rose-500/10 px-2 py-1.5">
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-rose-600 dark:text-rose-300">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-rose-500" />
+            {recorder.targetSegmentId ? t('play.narration.reRecording') : t('play.narration.recording')}
+          </span>
+          <button type="button" onClick={() => void recorder.stopAndSave()} className="rounded-md border border-emerald-500/60 bg-emerald-500/15 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-500/25 dark:text-emerald-200">
+            {t('play.narration.stopSave')}
+          </button>
+          <button type="button" onClick={recorder.cancelRecording} className="rounded-md border border-border bg-surface-muted px-2 py-1 text-xs text-text hover:bg-border">
+            {t('play.narration.cancel')}
+          </button>
+        </div>
+      )}
+      {recorder.saving && <p className="mb-2 text-xs text-muted">{t('play.narration.saving')}</p>}
+
+      {segments.length === 0 && !recorder.recording && !recorder.saving && (
+        <p className="text-xs text-muted">{t('play.narration.none')}</p>
+      )}
+
+      {segments.length > 0 && (
+        <>
           <p className="mb-1 text-[11px] text-muted">{t('play.narration.syncHint')}</p>
+          <ol className="space-y-1.5">
+            {segments.map((seg, i) => (
+              <li key={seg.id} className="rounded-md border border-border bg-surface-muted/50 p-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-text">
+                    {t('play.narration.segmentLabel').replace('{n}', String(i + 1))}
+                    <span className="ml-2 font-normal text-muted">
+                      {t('play.narration.pages').replace('{pages}', seg.pages.join(', ') || '—')} · {Math.round(seg.duration_ms / 1000)}s
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => playSegment(seg)}
+                    className={`rounded border px-1.5 py-0.5 text-[11px] ${playingId === seg.id ? 'border-emerald-400 bg-emerald-500/20 text-emerald-700 dark:text-emerald-200' : 'border-border bg-surface text-text hover:bg-border'}`}
+                  >
+                    ▶ {t('play.narration.play')}
+                  </button>
+                </div>
+                {canRecord && (
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                    <button type="button" disabled={i === 0} onClick={() => move(i, -1)} className="rounded border border-border px-1.5 py-0.5 text-[11px] text-muted hover:text-text disabled:opacity-30">▲</button>
+                    <button type="button" disabled={i === segments.length - 1} onClick={() => move(i, 1)} className="rounded border border-border px-1.5 py-0.5 text-[11px] text-muted hover:text-text disabled:opacity-30">▼</button>
+                    <button type="button" disabled={recorder.recording || recorder.saving} onClick={() => void recorder.startRecording(seg.id)} className="rounded border border-indigo-400/50 px-1.5 py-0.5 text-[11px] text-indigo-700 hover:bg-indigo-500/10 disabled:opacity-40 dark:text-indigo-300">{t('play.narration.reRecordSeg')}</button>
+                    <button type="button" onClick={() => handleDelete(seg.id)} className="rounded border border-rose-400/50 px-1.5 py-0.5 text-[11px] text-rose-700 hover:bg-rose-500/10 dark:text-rose-300">{t('play.narration.deleteSegment')}</button>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ol>
           <audio
             ref={audioRef}
-            src={pdfId ? narrationAudioUrl(pdfId) : undefined}
+            src={pdfId && playingId ? narrationSegmentAudioUrl(pdfId, playingId) : undefined}
             controls
             onTimeUpdate={handleTimeUpdate}
-            className="w-full"
+            className="mt-2 w-full"
           />
-        </div>
-      )}
-      {info && !info.exists && !recorder.recording && !recorder.saving && (
-        <p className="mb-2 text-xs text-muted">{t('play.narration.none')}</p>
-      )}
-
-      {/* 錄製控制（擁有者/協作者） */}
-      {canRecord && (
-        <div className="flex flex-wrap items-center gap-2">
-          {recorder.recording ? (
-            <>
-              <span className="inline-flex items-center gap-1 text-xs font-medium text-rose-600 dark:text-rose-300">
-                <span className="h-2 w-2 animate-pulse rounded-full bg-rose-500" />{t('play.narration.recording')}
-              </span>
-              <button
-                type="button"
-                onClick={() => void recorder.stopAndSave()}
-                className="rounded-md border border-emerald-500/60 bg-emerald-500/15 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-500/25 dark:text-emerald-200"
-              >
-                {t('play.narration.stopSave')}
-              </button>
-              <button
-                type="button"
-                onClick={recorder.cancelRecording}
-                className="rounded-md border border-border bg-surface-muted px-2 py-1 text-xs text-text hover:bg-border"
-              >
-                {t('play.narration.cancel')}
-              </button>
-            </>
-          ) : recorder.saving ? (
-            <span className="text-xs text-muted">{t('play.narration.saving')}</span>
-          ) : recorder.supported ? (
-            <>
-              <button
-                type="button"
-                onClick={() => void recorder.startRecording()}
-                className="rounded-md border border-indigo-500/60 bg-indigo-500/15 px-2 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-500/25 dark:text-indigo-200"
-              >
-                {info?.exists ? t('play.narration.rerecord') : t('play.narration.record')}
-              </button>
-              {info?.exists && (
-                <button
-                  type="button"
-                  onClick={handleDelete}
-                  className="rounded-md border border-rose-500/50 bg-rose-500/10 px-2 py-1 text-xs text-rose-700 hover:bg-rose-500/20 dark:text-rose-200"
-                >
-                  {t('play.narration.delete')}
-                </button>
-              )}
-            </>
-          ) : (
-            <span className="text-xs text-muted">{t('play.narration.unsupported')}</span>
-          )}
-        </div>
+        </>
       )}
     </section>
   );

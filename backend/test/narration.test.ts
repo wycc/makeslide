@@ -26,12 +26,12 @@ function seedPdf(id: string, owner: string): void {
   db.prepare(`DELETE FROM pdfs WHERE id = ?`).run(id);
   db.prepare(
     `INSERT INTO pdfs (id,title,original_filename,status,page_count,owner_sub,visibility,created_at,updated_at)
-     VALUES (?,?,?,'ready',2,?,'private',?,?)`,
+     VALUES (?,?,?,'ready',3,?,'private',?,?)`,
   ).run(id, 'Deck', 'd.pdf', owner, t, t);
 }
 
 // multipart body: a `timeline` text field followed by the audio file part.
-function narrationBody(timeline: unknown, audio: Buffer): Buffer {
+function segmentBody(timeline: unknown, audio: Buffer): Buffer {
   const head = Buffer.from(
     '------narr\r\n'
     + 'Content-Disposition: form-data; name="timeline"\r\n\r\n'
@@ -41,86 +41,90 @@ function narrationBody(timeline: unknown, audio: Buffer): Buffer {
     + 'Content-Type: audio/webm\r\n\r\n',
     'utf8',
   );
-  const tail = Buffer.from('\r\n------narr--\r\n', 'utf8');
-  return Buffer.concat([head, audio, tail]);
+  return Buffer.concat([head, audio, Buffer.from('\r\n------narr--\r\n', 'utf8')]);
+}
+const MP = 'multipart/form-data; boundary=----narr';
+const TL1 = { durationMs: 10000, segments: [{ page: 1, startMs: 0, endMs: 10000 }] };
+const TL2 = { durationMs: 20000, segments: [{ page: 2, startMs: 0, endMs: 8000 }, { page: 3, startMs: 8000, endMs: 20000 }] };
+const AUDIO = Buffer.from('fake-webm-bytes', 'utf8');
+
+async function addSegment(app: Awaited<ReturnType<typeof buildApp>>, id: string, tl: unknown, headers = OWNER_HEADERS) {
+  return app.inject({ method: 'POST', url: `/api/pdfs/${id}/narration/segments`, headers: { ...headers, 'content-type': MP }, payload: segmentBody(tl, AUDIO) });
 }
 
-const MP = 'multipart/form-data; boundary=----narr';
-const TIMELINE = { durationMs: 30000, segments: [{ page: 1, startMs: 0, endMs: 15000 }, { page: 2, startMs: 15000, endMs: 30000 }] };
-const AUDIO = Buffer.from('fake-webm-opus-bytes', 'utf8');
-
-test('narration round-trip: upload -> get -> audio -> delete (owner)', async () => {
+test('narration segments: add, list (with pages), reorder, re-record, stream, delete', async () => {
   const id = `narr-${RUN}`;
   seedPdf(id, OWNER);
   const app = await buildApp();
   try {
-    // before recording: not present
-    const before = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/narration`, headers: OWNER_HEADERS });
-    assert.equal(before.statusCode, 200);
-    assert.equal((before.json() as { exists: boolean }).exists, false);
+    // empty
+    const empty = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/narration`, headers: OWNER_HEADERS });
+    assert.equal(empty.statusCode, 200);
+    assert.deepEqual((empty.json() as { segments: unknown[] }).segments, []);
 
-    // upload
-    const up = await app.inject({
-      method: 'POST',
-      url: `/api/pdfs/${id}/narration`,
-      headers: { ...OWNER_HEADERS, 'content-type': MP },
-      payload: narrationBody(TIMELINE, AUDIO),
-    });
-    assert.equal(up.statusCode, 201);
-    assert.equal((up.json() as { duration_ms: number }).duration_ms, 30000);
+    // add two segments
+    const a = await addSegment(app, id, TL1);
+    assert.equal(a.statusCode, 201);
+    const segA = (a.json() as { id: string }).id;
+    const b = await addSegment(app, id, TL2);
+    assert.equal(b.statusCode, 201);
+    const segB = (b.json() as { id: string }).id;
 
-    // get metadata
-    const meta = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/narration`, headers: OWNER_HEADERS });
-    assert.equal(meta.statusCode, 200);
-    const body = meta.json() as { exists: boolean; duration_ms: number; segments: Array<{ page: number }> };
-    assert.equal(body.exists, true);
-    assert.equal(body.duration_ms, 30000);
-    assert.deepEqual(body.segments.map((s) => s.page), [1, 2]);
+    // list: two segments, pages per segment
+    const list = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/narration`, headers: OWNER_HEADERS });
+    const segs = (list.json() as { segments: Array<{ id: string; pages: number[]; duration_ms: number }> }).segments;
+    assert.equal(segs.length, 2);
+    assert.deepEqual(segs.map((s) => s.id), [segA, segB]);
+    assert.deepEqual(segs[0]!.pages, [1]);
+    assert.deepEqual(segs[1]!.pages, [2, 3]);
 
-    // stream audio
-    const audio = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/narration/audio`, headers: OWNER_HEADERS });
+    // reorder -> [segB, segA]
+    const ro = await app.inject({ method: 'PUT', url: `/api/pdfs/${id}/narration/order`, headers: { ...OWNER_HEADERS, 'content-type': 'application/json' }, payload: JSON.stringify({ order: [segB, segA] }) });
+    assert.equal(ro.statusCode, 200);
+    const list2 = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/narration`, headers: OWNER_HEADERS });
+    assert.deepEqual((list2.json() as { segments: Array<{ id: string }> }).segments.map((s) => s.id), [segB, segA]);
+
+    // re-record segA with a new timeline
+    const rr = await app.inject({ method: 'PUT', url: `/api/pdfs/${id}/narration/segments/${segA}`, headers: { ...OWNER_HEADERS, 'content-type': MP }, payload: segmentBody({ durationMs: 5000, segments: [{ page: 3, startMs: 0, endMs: 5000 }] }, AUDIO) });
+    assert.equal(rr.statusCode, 200);
+    const list3 = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/narration`, headers: OWNER_HEADERS });
+    const after = (list3.json() as { segments: Array<{ id: string; pages: number[] }> }).segments;
+    assert.deepEqual(after.find((s) => s.id === segA)!.pages, [3]);
+
+    // stream segment audio
+    const audio = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/narration/segments/${segB}/audio`, headers: OWNER_HEADERS });
     assert.equal(audio.statusCode, 200);
     assert.equal(audio.headers['content-type'], 'audio/webm');
-    assert.equal(audio.rawPayload.toString('utf8'), 'fake-webm-opus-bytes');
+    assert.equal(audio.rawPayload.toString('utf8'), 'fake-webm-bytes');
 
-    // delete
-    const del = await app.inject({ method: 'DELETE', url: `/api/pdfs/${id}/narration`, headers: OWNER_HEADERS });
+    // delete segA
+    const del = await app.inject({ method: 'DELETE', url: `/api/pdfs/${id}/narration/segments/${segA}`, headers: OWNER_HEADERS });
     assert.equal(del.statusCode, 200);
-    const after = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/narration`, headers: OWNER_HEADERS });
-    assert.equal((after.json() as { exists: boolean }).exists, false);
+    const list4 = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/narration`, headers: OWNER_HEADERS });
+    assert.deepEqual((list4.json() as { segments: Array<{ id: string }> }).segments.map((s) => s.id), [segB]);
   } finally {
     await app.close();
   }
 });
 
-test('narration upload requires edit permission (non-owner -> 403)', async () => {
+test('narration segment add requires edit permission (non-owner -> 403)', async () => {
   const id = `narr-perm-${RUN}`;
   seedPdf(id, OWNER);
   const app = await buildApp();
   try {
-    const resp = await app.inject({
-      method: 'POST',
-      url: `/api/pdfs/${id}/narration`,
-      headers: { ...OTHER_HEADERS, 'content-type': MP },
-      payload: narrationBody(TIMELINE, AUDIO),
-    });
+    const resp = await addSegment(app, id, TL1, OTHER_HEADERS);
     assert.equal(resp.statusCode, 403);
   } finally {
     await app.close();
   }
 });
 
-test('narration upload rejects an invalid timeline (400)', async () => {
+test('narration segment add rejects an invalid timeline (400)', async () => {
   const id = `narr-bad-${RUN}`;
   seedPdf(id, OWNER);
   const app = await buildApp();
   try {
-    const resp = await app.inject({
-      method: 'POST',
-      url: `/api/pdfs/${id}/narration`,
-      headers: { ...OWNER_HEADERS, 'content-type': MP },
-      payload: narrationBody({ durationMs: 'nope', segments: 'bad' }, AUDIO),
-    });
+    const resp = await addSegment(app, id, { durationMs: 'nope', segments: 'bad' });
     assert.equal(resp.statusCode, 400);
   } finally {
     await app.close();
