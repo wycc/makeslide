@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { askPageQuestion, ApiError, type PageAskMessage } from '../../lib/api';
+import { askPageQuestion, mapApiErrorToHumanMessage, type PageAskMessage } from '../../lib/api';
 import { useI18n } from '../../i18n';
 
 export type PageAskVerbosity = 'brief' | 'detailed';
@@ -51,7 +51,9 @@ export function usePageAsk({
       // Roll back the optimistic question so the user can retry.
       setPageAskMessages((prev) => prev.slice(0, -1));
       setPageAskInput(question);
-      setPageAskError(err instanceof ApiError ? err.message : t('play.sidebar.pageAsk.askFailed'));
+      // Route the backend error through the shared human-readable mapper (code-aware,
+      // localized) instead of surfacing the raw backend message.
+      setPageAskError(mapApiErrorToHumanMessage(err, t).message);
     } finally {
       setPageAskBusy(false);
     }

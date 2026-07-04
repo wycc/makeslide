@@ -169,3 +169,47 @@ test('POST ask — attaches the original source.txt full text when present', asy
     await app.close();
   }
 });
+
+test('POST ask — system prompt forbids fabrication when no info is found', async () => {
+  const pdfId = `ask-nofab-${RUN}`;
+  seedPdfWithPages(pdfId, OWNER_SUB, [{ text: '一些內容', script: '一些逐字稿' }]);
+  mockAsk('回答。');
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${pdfId}/pages/1/ask`,
+      headers: { ...OWNER_HEADERS, 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '這份教材沒提到的東西？' }),
+    });
+    assert.equal(resp.statusCode, 200);
+    const flat = JSON.stringify(captured!.messages);
+    assert.match(flat, /禁止杜撰/);
+    assert.match(flat, /找不到相關資訊/);
+  } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+  }
+});
+
+test('POST ask — a blank model answer is replaced with the fixed fallback', async () => {
+  const pdfId = `ask-blank-${RUN}`;
+  seedPdfWithPages(pdfId, OWNER_SUB, [{ text: '一些內容', script: '一些逐字稿' }]);
+  // Model returns whitespace-only content (an empty answer edge case).
+  mockAsk('   ');
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${pdfId}/pages/1/ask`,
+      headers: { ...OWNER_HEADERS, 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '隨便問' }),
+    });
+    assert.equal(resp.statusCode, 200);
+    const answer = (resp.json() as { answer: string }).answer;
+    assert.match(answer, /找不到可以回答這個問題的相關資訊/);
+  } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+  }
+});

@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第一八七輪已完成 **66/100**，未達上限。
+- 最新進度：截至第一八八輪已完成 **67/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -13,6 +13,30 @@
 
 - [ ] 系統性採用 `mapApiErrorToHumanMessage`：目前約 55 處 catch 區塊直接 `setError(err.message)` 顯示後端原始 message、繞過既有的錯誤訊息映射（前端僅 2 處 `UploadButton`、`ImportTextPage` 使用 mapper）。全面改造屬較大工程，且各 catch 上下文不同、許多後端 message 已是中文（未必都是英文洩漏），逐點需產品判斷顯示風格，故列為待使用者決定。
 - [ ] 把前端測試納入 root `npm test`：目前 root 測試腳本未涵蓋前端 `node:test` 測試。納入涉及 CI 行為變更與 `npm install`（sandbox 無法驗證），列為待使用者決定。
+
+## AI 導師錯誤與空答處理（第一八八輪，2026-07-04）
+
+推進 §「AI 導師（PageAskPanel）回答品質改善」backlog 的「錯誤與空答處理」項：強化 prompt 防杜撰、
+空答保底，並把前端錯誤改走 `mapApiErrorToHumanMessage`。
+
+- [x] AI 導師禁止杜撰 + 空答保底 + 前端錯誤走人性化 mapper。
+  - 修改說明（2026-07-04）：
+    - **禁止杜撰（prompt）**：`/ask` system prompt 的「查無資訊」條款由「請誠實說明」強化為「只能依
+      提供內容作答、嚴禁杜撰／臆測，找不到時明確回『找不到相關資訊』並建議換個問法或查看相關頁面」。
+    - **空答保底 + 換行正規化收斂（可測純函式）**：新增 [tutorAnswer.ts](backend/src/routes/pdfs/tutorAnswer.ts)
+      的 `finalizeTutorAnswer(raw)`——把原本內聯於 `/ask` 的「字面 `\n`→真換行（保留 `\nabla` 等 LaTeX
+      指令）」正規化抽出並固化，且在 trim 後為空字串時回傳固定提示 `TUTOR_NO_ANSWER_FALLBACK`（避免前端
+      出現空白導師泡泡、涵蓋模型回空的情況）。route 改用之。
+    - **前端錯誤人性化**：`usePageAsk` 的 catch 由 `err.message`／`askFailed` 改為
+      `mapApiErrorToHumanMessage(err, t).message`（code-aware、已在地化，與 UploadButton／ImportTextPage 一致）。
+  - 測試：後端新增 `tutor-answer.test.ts`（7 組：字面 `\n\n`/`\n`/`\r\n`→換行、保留 `\nabla`/`\rho`/
+    `\right`/`\times`、trim、空/空白/`\n\n`→fallback、正常答案不變）+ `page-ask.test.ts` 新增 2 整合測試
+    （prompt 含「禁止杜撰／找不到相關資訊」、模型回空白→回應為 fallback 文案）。前後端 `tsc --noEmit` 通過；
+    後端 ask 相關 13/13（Node 22）、前端錯誤映射 7/7、i18n parity 不變。分支 `feat/ask-error-and-empty-answer`，
+    已 merge 回 master。BLOG.md 新增對應 section。
+  - 說明：「偵測『查無資訊』語句給固定提示」一項，改以**空答保底**（模型回空→固定提示）實作，刻意不做
+    脆弱的自然語言片語偵測（易誤判傷 UX）；防杜撰改由 prompt 從源頭處理。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 67 個完成項目（67/100，未達上限）。
 
 ## AI 導師回答長度精簡／詳細切換（第一八七輪，2026-07-04）
 
@@ -189,7 +213,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 - [ ] **串流輸出（streaming）**：目前 `/ask` 一次回傳完整 JSON，長答需等待且無進度感。改為 SSE 串流（比照 `animation/custom-script` 既有 SSE 模式），逐段顯示、可中途取消。
 - [x] **輸出長度／結構控制**：system prompt 要求「完整、不刻意精簡」常導致過長。新增「精簡／詳細」切換或長度上限，並引導模型先給重點摘要再展開。（第一八七輪完成，見下方「AI 導師回答長度精簡／詳細切換」section）
 - [x] **引用頁碼可點擊**：回答中的「（第 N 頁）」目前是純文字。解析成可點連結，點擊跳到該頁，提升跨頁查證效率。（第一八六輪完成，見下方「AI 導師回答的引用頁碼可點擊跳頁」section）
-- [ ] **錯誤與空答處理**：當所有內容皆無相關資訊時，模型偶爾仍杜撰；強化 prompt 與後處理（偵測「查無資訊」語句時給固定提示），並把後端原始錯誤改走 `mapApiErrorToHumanMessage`。
+- [x] **錯誤與空答處理**：當所有內容皆無相關資訊時，模型偶爾仍杜撰；強化 prompt 與後處理（偵測「查無資訊」語句時給固定提示），並把後端原始錯誤改走 `mapApiErrorToHumanMessage`。（第一八八輪完成，見下方「AI 導師錯誤與空答處理」section）
 - [x] **保留對話脈絡的上限管理**：`history` 全量帶入長對話會超出 token 預算；加上輪數/字數截斷與必要的摘要壓縮。（第一八五輪完成，見下方「AI 導師多輪對話脈絡字數上限管理」section）
 
 ## add-pages 失敗導致 metadata 與 DB 分歧 + Uhga6bY0Bm 修復（使用者回報 bug，2026-06-27）
