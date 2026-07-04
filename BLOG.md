@@ -1,5 +1,24 @@
 # MakeSlide 功能說明
 
+## 首頁繁體中文排序比較器收斂為共用純函式
+
+### 背景
+
+首頁在多個地方（分類清單、加入自訂分類、標籤清單…）都要把字串做「繁體中文、大小寫不敏感、數字自然排序」的排序，原本每一處都各自寫一份 `a.localeCompare(b, 'zh-Hant', { numeric: true, sensitivity: 'base' })`。這種長字串字面很容易在某一處打錯（例如漏了 `numeric` 或拼錯 locale），而且排序規則本身沒有測試。
+
+### 變更內容
+
+- 新增 `frontend/src/lib/compareZhHant.ts` 的 `compareZhHant(a, b, { numeric })`：固定使用 `zh-Hant` 與 `sensitivity: 'base'`（大小寫、腔調不敏感），`numeric` 預設為 `true`（讓「項目2」排在「項目10」前面，符合直覺），需要時可關閉。
+- `HomePage` 5 處排序改用之：4 處自然數排序直接 `.sort(compareZhHant)`、標籤排序（原本沒有 `numeric`）改用 `.sort((a, b) => compareZhHant(a, b, { numeric: false }))`。
+
+### 使用方式
+
+純內部重構，首頁各處的排序顯示不變。之後任何需要繁中排序的地方都可直接重用這個比較器，不必再手寫一長串 `localeCompare` 選項。
+
+### 測試
+
+新增 `compareZhHant.test.ts`（5 組：基本大小與符號一致、預設 numeric 的自然數排序、`numeric:false` 的字典序、大小寫視為相等、可直接當 `Array.sort` 比較器）。前端 `tsc --noEmit` 通過；`compareZhHant` 5/5，並跑 `groupItemsByCategory`、`HomePage.sort` 回歸通過。
+
 ## 課後報告「作答時間軸」的攤平排序抽出純函式
 
 ### 背景

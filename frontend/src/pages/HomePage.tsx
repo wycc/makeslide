@@ -36,6 +36,7 @@ import { uploadProgressPercent } from '../lib/uploadProgress';
 import { promptTargetPageCount } from '../lib/promptTargetPageCount';
 import { summarizeHomeStats } from '../lib/homeStats';
 import { progressPercent } from '../lib/progressPercent';
+import { compareZhHant } from '../lib/compareZhHant';
 
 const POLL_INTERVAL_ACTIVE_MS = 5000;
 const POLL_INTERVAL_IDLE_MS = 30000;
@@ -287,9 +288,9 @@ export default function HomePage() {
     const category = pdf.category?.trim() || DEFAULT_CATEGORY;
     if (!categories.includes(category)) categories.push(category);
     return categories;
-  }, []).sort((a, b) => a.localeCompare(b, 'zh-Hant', { numeric: true, sensitivity: 'base' }));
+  }, []).sort(compareZhHant);
   const allCategories = Array.from(new Set([...itemCategories, ...customCategories]))
-    .sort((a, b) => a.localeCompare(b, 'zh-Hant', { numeric: true, sensitivity: 'base' }));
+    .sort(compareZhHant);
   const categoryFilteredItems = categoryFilter === '__all__'
     ? items
     : categoryFilter === '__recent__'
@@ -297,7 +298,7 @@ export default function HomePage() {
       : items.filter((pdf) => (pdf.category?.trim() || DEFAULT_CATEGORY) === categoryFilter);
   const allTags = Array.from(new Set(
     items.flatMap((pdf) => (pdf.tags ?? '').split(',').map((t) => t.trim()).filter(Boolean))
-  )).sort((a, b) => a.localeCompare(b, 'zh-Hant', { sensitivity: 'base' }));
+  )).sort((a, b) => compareZhHant(a, b, { numeric: false }));
 
   const normalizedTitleFilter = titleFilter.trim().toLocaleLowerCase();
   const tagFilteredItems = tagFilter.size > 0
@@ -465,7 +466,7 @@ export default function HomePage() {
     }
 
     const next = [...customCategories, category]
-      .sort((a, b) => a.localeCompare(b, 'zh-Hant', { numeric: true, sensitivity: 'base' }));
+      .sort(compareZhHant);
     persistCustomCategories(next);
     updateCategoryFilter(category);
     showToast(t('home.categoryAdded').replace('{category}', category));
@@ -766,7 +767,7 @@ export default function HomePage() {
             ...customCategories.map((value) => (value === category ? nextCategory : value)),
             nextCategory,
           ]),
-        ).sort((a, b) => a.localeCompare(b, 'zh-Hant', { numeric: true, sensitivity: 'base' }));
+        ).sort(compareZhHant);
         persistCustomCategories(nextCustomCategories);
 
         const results = await Promise.allSettled(
