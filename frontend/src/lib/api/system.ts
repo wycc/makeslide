@@ -330,3 +330,15 @@ export async function updateSlaTargetOverride(kind: SlaTargetKind, name: string,
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as SlaSettingsResponse;
 }
+
+export async function clearThumbnailCache(): Promise<{ files_deleted: number; bytes_freed: number }> {
+  const resp = await fetch('api/system/thumbnail-cache', { method: 'DELETE' });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { files_deleted: number; bytes_freed: number };
+}
+
+export async function clearArtifactCache(): Promise<{ dirs_cleared: number; bytes_freed: number }> {
+  const resp = await fetch('api/admin/cache', { method: 'DELETE' });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { dirs_cleared: number; bytes_freed: number };
+}
