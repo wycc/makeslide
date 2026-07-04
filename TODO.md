@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第一八四輪已完成 **63/100**，未達上限。
+- 最新進度：截至第一八五輪已完成 **64/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -13,6 +13,23 @@
 
 - [ ] 系統性採用 `mapApiErrorToHumanMessage`：目前約 55 處 catch 區塊直接 `setError(err.message)` 顯示後端原始 message、繞過既有的錯誤訊息映射（前端僅 2 處 `UploadButton`、`ImportTextPage` 使用 mapper）。全面改造屬較大工程，且各 catch 上下文不同、許多後端 message 已是中文（未必都是英文洩漏），逐點需產品判斷顯示風格，故列為待使用者決定。
 - [ ] 把前端測試納入 root `npm test`：目前 root 測試腳本未涵蓋前端 `node:test` 測試。納入涉及 CI 行為變更與 `npm install`（sandbox 無法驗證），列為待使用者決定。
+
+## AI 導師多輪對話脈絡字數上限管理（第一八五輪，2026-07-04）
+
+推進 §「AI 導師（PageAskPanel）回答品質改善」backlog 的「保留對話脈絡的上限管理」項：`/ask`
+端點原本把 history 全量帶入 prompt，schema 僅限輪數（20）與單則長度（8000），最壞約 160,000 字，
+會反過來把 corpus（14000）/來源全文（12000）擠出 token 預算。
+
+- [x] AI 導師 `/ask` history 加字數上限（保留最新連續數輪 / 可測純函式）。
+  - 修改說明（2026-07-04）：新增 `backend/src/routes/pdfs/askHistoryBudget.ts` 純函式
+    `budgetChatHistory(history, maxChars)`——由新到舊累加 content 長度、保留能放入預算的最新連續
+    數輪（先丟最舊）；最新一則單獨超標時截斷保留（前綴「……（前略）……」、保留尾段）而非整段
+    丟棄；`maxChars ≤ 0`／空歷史回空、不改動輸入。`page-operations.ts` 新增常數
+    `ASK_HISTORY_MAX_CHARS = 8000`，`/ask` 在送入模型前先 `budgetChatHistory` 收斂再 `.map`；
+    輪數上限仍由 schema 把關。新增 `ask-history-budget.test.ts`（7 組）。後端 `tsc --noEmit` 通過；
+    新測試 7/7 + `page-ask` 整合測試回歸（Node 22，共 10 綠）。分支 `feat/ask-history-char-budget`，
+    已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 64 個完成項目（64/100，未達上限）。
 
 ## 測驗監考錄影只錄影不錄音（使用者要求，2026-07-02）
 
@@ -135,7 +152,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 - [ ] **輸出長度／結構控制**：system prompt 要求「完整、不刻意精簡」常導致過長。新增「精簡／詳細」切換或長度上限，並引導模型先給重點摘要再展開。
 - [ ] **引用頁碼可點擊**：回答中的「（第 N 頁）」目前是純文字。解析成可點連結，點擊跳到該頁，提升跨頁查證效率。
 - [ ] **錯誤與空答處理**：當所有內容皆無相關資訊時，模型偶爾仍杜撰；強化 prompt 與後處理（偵測「查無資訊」語句時給固定提示），並把後端原始錯誤改走 `mapApiErrorToHumanMessage`。
-- [ ] **保留對話脈絡的上限管理**：`history` 全量帶入長對話會超出 token 預算；加上輪數/字數截斷與必要的摘要壓縮。
+- [x] **保留對話脈絡的上限管理**：`history` 全量帶入長對話會超出 token 預算；加上輪數/字數截斷與必要的摘要壓縮。（第一八五輪完成，見下方「AI 導師多輪對話脈絡字數上限管理」section）
 
 ## add-pages 失敗導致 metadata 與 DB 分歧 + Uhga6bY0Bm 修復（使用者回報 bug，2026-06-27）
 

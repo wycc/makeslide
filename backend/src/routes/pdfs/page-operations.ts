@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { ShareTokenParamSchema, getShareToken } from './share';
 import { getPdfPermissionRow, canReadPdf, canEditPdf, canDestructivelyEditPdf , aclCtx } from './permissions';
+import { budgetChatHistory } from './askHistoryBudget';
 import { toFile } from 'openai';
 import type { ChatCompletionContentPart } from 'openai/resources/chat/completions';
 import fs from 'node:fs';
@@ -275,6 +276,11 @@ const ASK_DECK_CORPUS_MAX_CHARS = 14000;
 // AI tutor prompt, so it can answer from the full document even when a detail
 // only exists in the source and not in any page's slide text or script.
 const ASK_SOURCE_TEXT_MAX_CHARS = 12000;
+// Budget for the prior conversation turns replayed to the AI tutor. The schema
+// only bounds turn count (max 20) and per-message length (max 8000), so a long
+// chat could otherwise dwarf the corpus/source budgets; trim to the most recent
+// turns that fit within this character budget (see budgetChatHistory).
+const ASK_HISTORY_MAX_CHARS = 8000;
 
 function parseChatHistory(json: string | null): Array<z.infer<typeof ChatMessageSchema>> {
   if (!json) return [];
@@ -1352,7 +1358,10 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         sourceText = sourceText.slice(0, ASK_SOURCE_TEXT_MAX_CHARS) + '\n……（原文過長，後略）……';
       }
 
-      const history = (parsedBody.data.history ?? []).map((m) => ({ role: m.role, content: m.content }));
+      const history = budgetChatHistory(parsedBody.data.history ?? [], ASK_HISTORY_MAX_CHARS).map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
       const result = await callChatJSON({
         label: `ask-page ${id}/${n}`,
         schema: AskPageResponseSchema,
