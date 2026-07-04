@@ -66,6 +66,35 @@ test('POST /sync/join allows the owner', async () => {
   await app.close();
 });
 
+test('POST /sync/join treats every owner tab as master, not only the first client', async () => {
+  seedSyncPdf('syncjoin-own-tabs-01', 'private');
+  const app = await buildApp();
+  try {
+    const first = await app.inject({ method: 'POST', url: '/api/pdfs/syncjoin-own-tabs-01/sync/join', headers: OWNER_HEADERS, payload: { client_id: 'owner-tab-1' } });
+    assert.equal(first.statusCode, 200);
+    assert.equal((first.json() as { role: string }).role, 'master');
+
+    const second = await app.inject({ method: 'POST', url: '/api/pdfs/syncjoin-own-tabs-01/sync/join', headers: OWNER_HEADERS, payload: { client_id: 'owner-tab-2' } });
+    assert.equal(second.statusCode, 200);
+    assert.equal((second.json() as { role: string }).role, 'master');
+
+    const firstPoll = await app.inject({ method: 'GET', url: '/api/pdfs/syncjoin-own-tabs-01/sync/state?client_id=owner-tab-1', headers: OWNER_HEADERS });
+    assert.equal(firstPoll.statusCode, 200);
+    assert.equal((firstPoll.json() as { role: string }).role, 'master');
+
+    const firstUpdate = await app.inject({
+      method: 'POST',
+      url: '/api/pdfs/syncjoin-own-tabs-01/sync/state',
+      headers: OWNER_HEADERS,
+      payload: { client_id: 'owner-tab-1', page_number: 1, is_playing: true, current_time: 3 },
+    });
+    assert.equal(firstUpdate.statusCode, 200);
+    assert.equal((firstUpdate.json() as { role: string }).role, 'master');
+  } finally {
+    await app.close();
+  }
+});
+
 test('POST /sync/join rejects a non-owner collaborator on a public_editable presentation', async () => {
   // New master/follower definition: the sync master is the presentation's OWNER only. A
   // public_editable collaborator has edit access but is not the owner, so the master path

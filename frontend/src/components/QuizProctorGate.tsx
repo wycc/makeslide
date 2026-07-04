@@ -5,6 +5,7 @@ import { parseMarkdownLite } from '../lib/markdownLite';
 import type { MdBlock, MdInline } from '../lib/markdownLite';
 import {
   DEFAULT_MAX_VIOLATIONS,
+  clearQuizProctorState,
   evaluateViolation,
   isQuizFinished,
   isQuizLockedOut,
@@ -69,6 +70,8 @@ export interface QuizProctorGateProps {
   onEnd?: () => void;
   /** 學生已按「完成作答並離開」：切到「已完成」畫面並停留（停止監控、退出全螢幕、結束錄影）。 */
   finished?: boolean;
+  /** 老師允許本次測驗重新進入；會清除本機已完成／離開鎖定旗標並回到規則頁。 */
+  allowReentry?: boolean;
   /** 本測驗是否開相機錄影：為 true 時額外載入並附加 public/quiz-rules-recording.md 的錄影規則。 */
   recording?: boolean;
 }
@@ -81,7 +84,7 @@ export interface QuizProctorGateProps {
  * 全螢幕採 best-effort：在不支援 Element.requestFullscreen 的行動瀏覽器上，仍以
  * visibilitychange/blur 監控切換 App 的行為。
  */
-export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, maxViolations = DEFAULT_MAX_VIOLATIONS, onBeforeStart, onEnd, finished = false, recording = false }: QuizProctorGateProps) {
+export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, maxViolations = DEFAULT_MAX_VIOLATIONS, onBeforeStart, onEnd, finished = false, allowReentry = false, recording = false }: QuizProctorGateProps) {
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const [phase, setPhase] = useState<Phase>('rules');
@@ -105,6 +108,11 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
     violationCountRef.current = 0;
     lastViolationAtRef.current = null;
     setShowWarning(false);
+    if (allowReentry) {
+      clearQuizProctorState(sessionKey);
+      setPhase('rules');
+      return;
+    }
     setPhase(
       isQuizFinished(sessionKey)
         ? 'completed'
@@ -112,7 +120,7 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
           ? 'locked'
           : 'rules',
     );
-  }, [sessionKey]);
+  }, [sessionKey, allowReentry]);
 
   // 載入可客製化的規則 markdown（相對 document.baseURI，兼容子路徑與 Electron file://）。
   // 主規則永遠載入；本測驗有開錄影時，額外載入並附加 quiz-rules-recording.md 的相機規則。

@@ -11,6 +11,7 @@ function p(over: Partial<SyncQuizProgress> = {}): SyncQuizProgress {
     answered_count: 0,
     total_questions: 3,
     submitted: false,
+    reentry_allowed: false,
     updated_at: '2026-06-25T00:00:00.000Z',
     ...over,
   };

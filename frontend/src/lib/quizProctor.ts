@@ -23,7 +23,7 @@ export function shouldCountViolation(lastAt: number | null, now: number, debounc
   return now - lastAt >= debounceMs;
 }
 
-type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
+type StorageLike = Pick<Storage, 'getItem' | 'setItem'> & Partial<Pick<Storage, 'removeItem'>>;
 
 const LOCKOUT_PREFIX = 'makeslide.quiz_proctor_lockout.';
 const STARTED_PREFIX = 'makeslide.quiz_proctor_started.';
@@ -55,6 +55,17 @@ function writeFlag(prefix: string, sessionKey: string, storage?: StorageLike): v
   }
 }
 
+function clearFlag(prefix: string, sessionKey: string, storage?: StorageLike): void {
+  const store = resolveStorage(storage);
+  if (!store || !sessionKey) return;
+  if (typeof store.removeItem !== 'function') return;
+  try {
+    store.removeItem(prefix + sessionKey);
+  } catch {
+    // 清除失敗時維持既有鎖定狀態，不阻斷其他流程。
+  }
+}
+
 /** 本次測驗（以 sessionKey 唯一標示）是否已被鎖定、不允許再進入。 */
 export function isQuizLockedOut(sessionKey: string, storage?: StorageLike): boolean {
   return readFlag(LOCKOUT_PREFIX, sessionKey, storage);
@@ -83,4 +94,11 @@ export function isQuizFinished(sessionKey: string, storage?: StorageLike): boole
 /** 學生按下「完成作答並離開」時標記；使離開後 PlayPage 不再自動導回、重新進入顯示已完成。 */
 export function markQuizFinished(sessionKey: string, storage?: StorageLike): void {
   writeFlag(FINISHED_PREFIX, sessionKey, storage);
+}
+
+/** 老師允許重新進入時，清除本次測驗的開始／完成／鎖定旗標。 */
+export function clearQuizProctorState(sessionKey: string, storage?: StorageLike): void {
+  clearFlag(LOCKOUT_PREFIX, sessionKey, storage);
+  clearFlag(STARTED_PREFIX, sessionKey, storage);
+  clearFlag(FINISHED_PREFIX, sessionKey, storage);
 }

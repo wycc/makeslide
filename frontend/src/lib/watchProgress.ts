@@ -70,3 +70,66 @@ export function formatWatchProgressBadgeCount(stats: PageWatchProgressSummary): 
   if (stats.total_viewers <= 0) return null;
   return `${stats.completed_viewers}/${stats.total_viewers}`;
 }
+
+// ── 「觀看記錄」視窗用的純函式 ────────────────────────────────────────────────
+//
+// 輸入為後端 `GET /api/pdfs/:id/watch-progress/details` 回傳的逐位觀眾明細
+// （見 `frontend/src/lib/api/pdfs.ts` 的 `WatchProgressDetailRecord`）。
+
+/** 觀看記錄視窗所需的最小欄位。 */
+export interface WatchRecordItem {
+  viewer_id: string;
+  page_number: number;
+  listened_ms: number;
+  duration_ms: number | null;
+  completed: boolean;
+}
+
+export interface ViewerWatchRecords<T extends WatchRecordItem> {
+  viewer_id: string;
+  records: T[];
+}
+
+/**
+ * 依 viewer_id 將明細分組（viewer 依字母序、組內依頁碼排序），供視窗「每位使用者一張卡片」顯示。
+ * 純函式：不更動輸入陣列。
+ */
+export function groupWatchRecordsByViewer<T extends WatchRecordItem>(records: T[]): ViewerWatchRecords<T>[] {
+  const byViewer = new Map<string, T[]>();
+  for (const record of records) {
+    const list = byViewer.get(record.viewer_id);
+    if (list) list.push(record);
+    else byViewer.set(record.viewer_id, [record]);
+  }
+  return [...byViewer.keys()]
+    .sort((a, b) => a.localeCompare(b))
+    .map((viewer_id) => ({
+      viewer_id,
+      records: [...(byViewer.get(viewer_id) as T[])].sort((a, b) => a.page_number - b.page_number),
+    }));
+}
+
+/** 單筆記錄的聆聽完整度整數百分比（0-100）；無語音長度時回傳 null。倒退重聽造成 >100% 時夾在 100。 */
+export function watchRecordListenedPercent(listenedMs: number, durationMs: number | null): number | null {
+  if (durationMs == null || durationMs <= 0) return null;
+  return clampPercent((listenedMs / durationMs) * 100);
+}
+
+/** 毫秒格式化為 `m:ss`（供觀看時間欄位顯示）。負值或非有限值視為 0。 */
+export function formatWatchDuration(ms: number): string {
+  const totalSeconds = Number.isFinite(ms) && ms > 0 ? Math.round(ms / 1000) : 0;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+/**
+ * 把觀看記錄的 ISO 時間戳（後端 `updated_at`，即該觀眾最後一次回報此頁的時間）格式化成
+ * 本地 `YYYY/MM/DD HH:mm`，供視窗「時間」欄顯示「大約是什麼時候看的」。無法解析時原樣回傳。
+ */
+export function formatWatchTimestamp(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}

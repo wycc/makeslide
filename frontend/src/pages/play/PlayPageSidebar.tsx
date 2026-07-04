@@ -8,6 +8,7 @@ import { updatePageNote, listPageComments, listAllComments, createPageComment, r
 import { usePlayPageContext } from './PlayPageContext';
 import { PageAskPanel } from './PageAskPanel';
 import { QualityCheckPanel } from './QualityCheckPanel';
+import { WatchRecordsDialog } from './WatchRecordsDialog';
 import { copyTextToClipboard } from '../../lib/clipboard';
 import { formatAudioDuration } from '../../lib/audioDuration';
 import { cleanTranscriptForReview } from '../../lib/transcriptReview';
@@ -17,6 +18,7 @@ import { countUnresolvedComments, sortCommentsUnresolvedFirst } from '../../lib/
 import { formatCommentsMarkdown } from '../../lib/commentMarkdown';
 import { formatPollResultsMarkdown } from '../../lib/pollResultsMarkdown';
 import { pollOptionPercent } from '../../lib/pollPercent';
+import { PollResultsDialog } from './PollResultsDialog';
 import { formatNotesMarkdown } from '../../lib/notesMarkdown';
 import { formatPageListText } from '../../lib/pageListText';
 import { getStoredCommentAuthor, setStoredCommentAuthor } from '../../lib/commentAuthor';
@@ -676,6 +678,9 @@ export function PlayPageSidebar() {
   const [bookmarkCopyMsg, setBookmarkCopyMsg] = useState<string | null>(null);
   const [importantCopyMsg, setImportantCopyMsg] = useState<string | null>(null);
   const [pollCopyMsg, setPollCopyMsg] = useState<string | null>(null);
+  const [pollResultsDialogOpen, setPollResultsDialogOpen] = useState(false);
+  // 觀看記錄視窗：null=關閉、'all'=整份簡報、數字=只看單張投影片。
+  const [watchRecordsPage, setWatchRecordsPage] = useState<number | 'all' | null>(null);
   const handleCopyPollResults = async () => {
     const md = formatPollResultsMarkdown(pagePolls, {
       heading: t('play.sidebar.poll.copyHeading'),
@@ -792,6 +797,16 @@ export function PlayPageSidebar() {
               )}
             </div>
             <div className="flex shrink-0 gap-2">
+              {detail?.is_owner && (
+                <button
+                  type="button"
+                  onClick={() => setWatchRecordsPage('all')}
+                  className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-2 py-1 text-xs text-emerald-700 dark:text-emerald-200 hover:bg-emerald-500/25"
+                  title={t('play.sidebar.watchRecordsTitle')}
+                >
+                  {t('play.sidebar.watchRecords')}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => {
@@ -1060,10 +1075,23 @@ export function PlayPageSidebar() {
                   percent: percent ?? 0,
                   avgListenedPercent: avgListenedPercent ?? 0,
                 });
+                // 縮圖本身是 <button>，不能再巢狀 <button>；用 role=button 的 span，
+                // 點擊時 stopPropagation 避免觸發縮圖換頁，改為開啟單頁觀看記錄。
+                const openSinglePage = (e: { stopPropagation: () => void; preventDefault: () => void }) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  setWatchRecordsPage(p.page_number);
+                };
                 return (
                   <span
-                    className="absolute bottom-0 right-0 z-10 rounded-tl bg-emerald-600/80 px-1 text-[9px] text-white"
-                    title={tooltip}
+                    role="button"
+                    tabIndex={0}
+                    className="absolute bottom-0 right-0 z-10 cursor-pointer rounded-tl bg-emerald-600/80 px-1 text-[9px] text-white hover:bg-emerald-500"
+                    title={`${tooltip}\n${t('play.sidebar.watchRecordsBadgeHint')}`}
+                    onClick={openSinglePage}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') openSinglePage(e);
+                    }}
                   >
                     {formatMessage('play.sidebar.watchProgress.badge', { count: badgeText })}
                   </span>
@@ -1103,6 +1131,14 @@ export function PlayPageSidebar() {
           </button>
         </div>
       </section>
+      )}
+
+      {watchRecordsPage != null && (
+        <WatchRecordsDialog
+          pdfId={pdfId}
+          page={watchRecordsPage === 'all' ? null : watchRecordsPage}
+          onClose={() => setWatchRecordsPage(null)}
+        />
       )}
 
       {notebookTab === 'notes' && (
@@ -1157,6 +1193,15 @@ export function PlayPageSidebar() {
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            {pagePolls.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setPollResultsDialogOpen(true)}
+                className="rounded-md border border-border px-2 py-1 text-xs text-text hover:bg-surface-muted"
+              >
+                {t('play.sidebar.poll.viewResults')}
+              </button>
+            )}
             {pagePolls.length > 0 && (
               <button
                 type="button"
@@ -1319,6 +1364,15 @@ export function PlayPageSidebar() {
           </div>
         )}
       </section>
+      )}
+
+      {pollResultsDialogOpen && (
+        <PollResultsDialog
+          pdfId={pdfId}
+          polls={pagePolls}
+          pageNumber={currentPage?.page_number}
+          onClose={() => setPollResultsDialogOpen(false)}
+        />
       )}
 
       {notebookTab === 'interact' && (
