@@ -1019,6 +1019,25 @@ export default function HomePage() {
                 </div>
               </div>
             )}
+            {batchExportJobId !== null && batchExportTotal > 0 && (
+              <div className="w-full max-w-sm rounded-lg border border-emerald-400/40 bg-emerald-500/10 p-2">
+                <div className="mb-1 flex items-center justify-between text-xs text-emerald-100">
+                  <span>{t('home.batchExporting').replace('{progress}', String(batchExportProgress)).replace('{total}', String(batchExportTotal))}</span>
+                  <span>{progressPercent(batchExportProgress, batchExportTotal)}%</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-border">
+                  <div
+                    className="h-full rounded-full bg-emerald-400 transition-all duration-200"
+                    style={{ width: `${progressPercent(batchExportProgress, batchExportTotal)}%` }}
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={progressPercent(batchExportProgress, batchExportTotal)}
+                    aria-label={t('home.batchExportProgressAriaLabel')}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </header>

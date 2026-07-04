@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第一八八輪已完成 **67/100**，未達上限。
+- 最新進度：截至第一八九輪已完成 **68/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -92,6 +92,46 @@ prompt 規則以「（第 N 頁）」標示跨頁引用，但先前是純文字�
     新測試 7/7 + `page-ask` 整合測試回歸（Node 22，共 10 綠）。分支 `feat/ask-history-char-budget`，
     已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 64 個完成項目（64/100，未達上限）。
+
+## 規畫輪：批次匯出進度條 + 依 NEW_FEATURE 補充項目（第一八九輪，2026-07-04）
+
+盤點：AI 導師（PageAskPanel）品質 backlog 已幾乎清空（僅剩 SSE 串流，屬大項、不宜自動 loop 逕行）；
+其餘未完成 `[ ]` 多為**待使用者決定**（系統性 mapApiErrorToHumanMessage、前端測試納入 root）、
+**需產品／身分裁示**（課後報告個人層級——`quiz_attempts.client_id`／`page_poll_votes.voter_id`／
+`page_watch_progress.viewer_id`／`page_comments.author` 身分鍵不統一，跨表彙整需先定義「同一人」）、
+或 **§8.1.5 header 分組需產品確認**。乾淨、低風險、可自動完成的既有 backlog 已實質見底。依 LOOP.md
+第 2 條，分析後參考 [NEW_FEATURE.md](NEW_FEATURE.md) 方向新增五個項目，並完成其一（匯出進度條）。
+
+- [x] **批次匯出「匯出全部 ZIP」顯示視覺進度條**（NEW_FEATURE「匯出時顯示進度條」）：`HomePage` 的批次
+  匯出（`/api/export/batch` job + `pollBatchExport`）原本只在按鈕文字顯示「打包中… N/total」，無視覺
+  進度條。
+  - 修改說明（2026-07-04）：`HomePage` 在匯入 ZIP 進度條區塊旁新增批次匯出進度條（僅
+    `batchExportJobId !== null && batchExportTotal > 0` 時顯示），沿用既有 `batchExportProgress`/
+    `batchExportTotal` 狀態與已測純函式 `progressPercent(current,total)`（clamp 0–100、防 NaN）計算寬度與
+    `aria-valuenow`，樣式比照既有 importZip 進度條（emerald 色系、`role="progressbar"`）。新增 i18n 鍵
+    `home.batchExportProgressAriaLabel`（zh-TW／en）。純前端、無新邏輯風險（百分比走既有測試覆蓋的
+    helper）。前端 `tsc --noEmit` 通過、i18n parity 24/24。分支 `feat/batch-export-progress-bar`，已 merge
+    回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 68 個完成項目（68/100，未達上限）。
+
+以下為本輪新增、待後續 loop 接續的四個項目（依 NEW_FEATURE.md 方向，已拆成 autonomous-friendly 首步）：
+
+- [ ] **單份簡報匯出（export.zip）進度回報**（NEW_FEATURE「匯出進度條」延伸）：`GET /api/pdfs/:id/export.zip`
+  目前為同步一次性打包（`runZipCommand` 後整包 `readFile` 回傳）、前端無進度。改為 job 化（比照 batch-export
+  的 `job + poll + download` 三段式）或串流，讓 PlayPage 的單份匯出也能顯示進度條。可拆：後端 job scaffolding +
+  status 端點（可測）／前端輪詢與進度條（複用 `progressPercent`）。
+- [ ] **錄音模式——第一步：簡報切換時間軸純函式**（NEW_FEATURE「錄音模式」）：定義「錄音 session + 簡報
+  切換事件」資料結構，抽出可測純函式把 `(recordingStartMs, pageSwitchEvents[])` 正規化為 `{page, startMs,
+  endMs}` 連續區段（處理亂序、同頁連續、結尾以錄音長度收尾），供未來「同步播放簡報+錄音」或「產生影片」使用。
+  先做時間軸模型與測試，不含錄音 UI／儲存／MediaRecorder 接線。
+- [ ] **測驗錄影人頭偵測——第一步：提示狀態純函式**（NEW_FEATURE「測驗錄影加人頭偵測」）：在既有
+  `useQuizRecorder` 錄影流程加 in-browser 人臉/人頭偵測（優先用瀏覽器原生 `FaceDetector`，退回輕量模型），
+  偵測不到時提示並顯示鏡頭預覽。先抽出「偵測結果序列 → 是否提示」的純函式（連續 N 次未偵測才提示、含去抖，
+  避免單幀誤報造成閃爍），可測；再接 UI／偵測迴圈。
+- [ ] **Jupyter Notebook 頁面型別——第一步：解析與唯讀渲染**（NEW_FEATURE「Jupyter notebook 支持」）：支援
+  把 `.ipynb` 放進一個頁面。先做後端解析 `.ipynb` → 正規化 cell 模型（markdown／code／outputs，防護損壞 JSON）
+  的可測純函式 + 前端唯讀渲染（code 以既有樣式、markdown 走 `MarkdownMath`、outputs 先支援 text/image）；
+  「在頁面中執行代碼」列為後續獨立項目。
 
 ## 測驗監考錄影只錄影不錄音（使用者要求，2026-07-02）
 

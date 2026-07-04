@@ -403,6 +403,7 @@ export const en = {
   'home.importZip': 'Import ZIP',
   'home.importingZip': 'Importing ZIP…',
   'home.importZipProgressAriaLabel': 'ZIP import progress',
+  'home.batchExportProgressAriaLabel': 'Batch export progress',
   'home.imported': 'ZIP imported',
   'home.importFailed': 'Import failed',
   'home.tagAll': 'All',
