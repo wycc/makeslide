@@ -69,6 +69,10 @@ export const IdParamSchema = z.object({
 // RFC-ish via zod's .email(), bounded to 320 chars. Used by pdfPermissions/groups.
 export const EmailSchema = z.string().trim().toLowerCase().email().max(320);
 
+// Group id format (`grp-` + 8–64 url-safe chars). Shared by pdfPermissions/groups,
+// which wrap it differently (bare string vs. { groupId } object param).
+export const GROUP_ID_RE = /^grp-[A-Za-z0-9_-]{8,64}$/;
+
 // Body for POST /api/pdfs/:id/start — optional freeform style hint from
 // the user. We cap length to avoid embedding megabytes of prompt into the
 // DB or the per-page LLM call.

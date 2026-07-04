@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { db } from '../../db';
 import { sessionSub } from '../auth';
 import { getPdfPermissionRow, isPdfOwner } from './permissions';
-import { IdParamSchema, EmailSchema, errorResponse, nowIso } from './shared';
+import { IdParamSchema, EmailSchema, GROUP_ID_RE, errorResponse, nowIso } from './shared';
 import type { PdfPermissionAccess } from './pdfAccess';
 
 interface PermissionRow {
@@ -26,7 +26,7 @@ function escapeLike(input: string): string {
 }
 
 export async function registerPdfPermissionRoutes(app: FastifyInstance): Promise<void> {
-  const GroupIdSchema = z.string().regex(/^grp-[A-Za-z0-9_-]{8,64}$/);
+  const GroupIdSchema = z.string().regex(GROUP_ID_RE);
   const AccessSchema = z.enum(['read_only', 'read_write']);
   // A permission entry targets either an individual user (by email) or a group (by id).
   const UpsertBodySchema = z.union([
