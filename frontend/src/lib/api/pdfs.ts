@@ -4,6 +4,7 @@ import type {
   PageChatResponse,
   PageFiguresResponse,
   PagePoll,
+  PagePollVoter,
   PdfDetail,
   PdfListItem,
   PipelineRunsResponse,
@@ -406,6 +407,79 @@ export async function searchAccounts(query: string): Promise<AccountSearchResult
   return ((await resp.json()) as { accounts: AccountSearchResult[] }).accounts;
 }
 
+// ─── User-defined groups (reusable member sets for sharing) ──────────────────
+export interface GroupSummary {
+  id: string;
+  name: string;
+  member_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GroupDetail {
+  id: string;
+  name: string;
+  members: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export async function listGroups(): Promise<GroupSummary[]> {
+  const resp = await fetch('api/groups');
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return ((await resp.json()) as { groups: GroupSummary[] }).groups;
+}
+
+export async function createGroup(name: string, emails?: string[]): Promise<GroupDetail> {
+  const resp = await fetch('api/groups', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name, ...(emails && emails.length ? { emails } : {}) }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as GroupDetail;
+}
+
+export async function getGroup(groupId: string): Promise<GroupDetail> {
+  const resp = await fetch(`api/groups/${encodeURIComponent(groupId)}`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as GroupDetail;
+}
+
+export async function renameGroup(groupId: string, name: string): Promise<void> {
+  const resp = await fetch(`api/groups/${encodeURIComponent(groupId)}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+}
+
+export async function deleteGroup(groupId: string): Promise<void> {
+  const resp = await fetch(`api/groups/${encodeURIComponent(groupId)}`, { method: 'DELETE' });
+  if (!resp.ok) throw await parseErrorBody(resp);
+}
+
+export async function addGroupMember(groupId: string, email: string): Promise<string[]> {
+  const resp = await fetch(`api/groups/${encodeURIComponent(groupId)}/members`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return ((await resp.json()) as { members: string[] }).members;
+}
+
+export async function removeGroupMember(groupId: string, email: string): Promise<string[]> {
+  const resp = await fetch(`api/groups/${encodeURIComponent(groupId)}/members`, {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return ((await resp.json()) as { members: string[] }).members;
+}
+
 export interface CreateYoutubeTaskResponse {
   id: string;
   status: string;
@@ -753,6 +827,14 @@ export async function fetchPagePolls(id: string, pageNumber: number): Promise<Pa
   return Array.isArray(data.polls) ? data.polls : [];
 }
 
+/** 取得某投票的投票人名單（僅限可編輯者／老師）。 */
+export async function fetchPagePollVoters(id: string, pollId: number): Promise<PagePollVoter[]> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/polls/${encodeURIComponent(String(pollId))}/voters`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  const data = (await resp.json()) as { voters?: PagePollVoter[] };
+  return Array.isArray(data.voters) ? data.voters : [];
+}
+
 export async function createPagePoll(id: string, pageNumber: number, question: string, options: string[], showResults = true): Promise<PagePoll> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/polls`, {
     method: 'POST',
@@ -935,6 +1017,26 @@ export async function fetchWatchProgress(id: string): Promise<PageWatchProgressS
   if (!resp.ok) throw await parseErrorBody(resp);
   const data = (await resp.json()) as { pages?: PageWatchProgressStats[] };
   return Array.isArray(data.pages) ? data.pages : [];
+}
+
+/** 單筆逐位觀眾的觀看明細（老師專用）。 */
+export interface WatchProgressDetailRecord {
+  page_number: number;
+  viewer_id: string;
+  listened_ms: number;
+  tab_hidden_ms: number;
+  duration_ms: number | null;
+  completed: boolean;
+  updated_at: string;
+}
+
+/** 取得逐位觀眾的觀看明細；給定 `page` 時只取單張投影片。 */
+export async function fetchWatchProgressDetails(id: string, page?: number): Promise<WatchProgressDetailRecord[]> {
+  const query = page != null ? `?page=${encodeURIComponent(String(page))}` : '';
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/watch-progress/details${query}`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  const data = (await resp.json()) as { records?: WatchProgressDetailRecord[] };
+  return Array.isArray(data.records) ? data.records : [];
 }
 
 export async function fetchPdfReportSummary(id: string): Promise<PdfReportSummary> {
@@ -1345,6 +1447,7 @@ export async function updatePlaybackSyncState(
     quiz_mode?: boolean;
     active_quiz_id?: number | null;
     quiz_show_answers?: boolean;
+    quiz_allow_reentry?: boolean;
     quiz_session_reset?: boolean;
     cursor_x?: number | null;
     cursor_y?: number | null;
@@ -1430,7 +1533,7 @@ export async function clearSyncFollowerQuestions(
 export async function submitSyncQuizProgress(
   id: string,
   clientId: string,
-  payload: { quiz_id: number; answered_count: number; total_questions: number; submitted?: boolean },
+  payload: { quiz_id: number; answered_count: number; total_questions: number; submitted?: boolean; reentry_allowed?: boolean },
 ): Promise<{ ok: boolean }> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/sync/quiz/progress`, {
     method: 'POST',

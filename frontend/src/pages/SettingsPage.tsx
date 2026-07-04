@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { GroupsManager } from '../components/GroupsManager';
 import {
   ApiError,
   getAuthStatus,
@@ -53,7 +54,7 @@ import { bytesToRoundedKb } from '../lib/bytesFreed';
 import { LLM_PRICE_PER_1M_TOKENS, TTS_PRICE_PER_1K_CHARS, formatUsd } from '../lib/costEstimate';
 import { createTemplate } from '../lib/api/templates';
 
-type SettingsCategory = 'account' | 'ai' | 'sync' | 'skills' | 'admin';
+type SettingsCategory = 'account' | 'ai' | 'sync' | 'skills' | 'groups' | 'admin';
 
 export default function SettingsPage() { 
   const LOCAL_USER_CODE_KEY = 'makeslide.user_code';
@@ -593,6 +594,7 @@ export default function SettingsPage() {
     { id: 'ai', label: t('settings.nav.ai'), description: t('settings.nav.aiDesc') },
     { id: 'sync', label: t('settings.nav.sync'), description: t('settings.nav.syncDesc') },
     { id: 'skills', label: t('settings.nav.skills'), description: t('settings.nav.skillsDesc') },
+    { id: 'groups', label: t('settings.nav.groups'), description: t('settings.nav.groupsDesc') },
     { id: 'admin', label: t('settings.nav.admin'), description: t('settings.nav.adminDesc'), adminOnly: true },
   ];
 
@@ -1089,6 +1091,13 @@ export default function SettingsPage() {
                     <p className="text-[11px] text-muted">{t('settings.embeddingIndexHint')}</p>
                   </div>
                 ) : null}
+              </div>
+            ) : null}
+
+            {activeCategoryInfo.id === 'groups' ? (
+              <div className="rounded-xl border border-border bg-surface/40 p-4">
+                <p className="mb-3 text-xs text-muted">{t('settings.groups.hint')}</p>
+                <GroupsManager />
               </div>
             ) : null}
           </section>
