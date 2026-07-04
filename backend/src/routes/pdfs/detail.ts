@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { canReadPdf, canEditPdf, canDestructivelyEditPdf , aclCtx } from './permissions';
-import { getShareToken, ShareTokenParamSchema } from './share';
+import { getShareToken, ShareTokenParamSchema, resolveTokenAccessLevel } from './share';
 import { parsePollOptions } from './pollOptions';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -15,7 +15,7 @@ import { coverImagePath, pageTimelinePath, readMetadata, safeJoinPdfPath, videoP
 import { isGithubSyncDirty } from '../../services/presentationGit';
 import { getAccountDisplayNames } from '../../services/accountProfiles';
 import { sessionSub, sessionEmail } from '../auth';
-import { resolvePdfAccessLevel } from './pdfAccess';
+import { resolvePdfAccessLevel, maxAccessLevel } from './pdfAccess';
 import { ensureCoverThumbnail, ensurePageThumbnail, generateCoverThumbnail } from '../../services/thumbnails';
 import {
   IdParamSchema,
@@ -99,13 +99,8 @@ function hasOwnerOrLegacyAccess(sub: string | null, row: Pick<PdfRow, 'owner_sub
 // delete.ts's canEditPdf() fix.
 const CreatePdfShareBodySchema = z.object({
   access: z.enum(['read_only', 'editable']),
-  visibility: z.enum(['private', 'public', 'public_editable']).optional(),
   expires_days: z.number().int().min(1).max(3650).optional(),
 });
-
-function accessToVisibility(access: 'read_only' | 'editable'): 'public' | 'public_editable' {
-  return access === 'editable' ? 'public_editable' : 'public';
-}
 
 function generateShareToken(): string {
   return crypto.randomBytes(18).toString('base64url');
@@ -188,8 +183,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       .all() as PdfRow[];
     // 沒有 owner 的舊資料不在列表中顯示（仍可透過直接連結存取，canReadPdf() 對它們的權限不變）。
     // 帶入 ACL context：被個別授權（只讀/讀寫）的使用者，其被授權的簡報也要出現在列表中。
-    const email = sessionEmail(request);
-    const readableRows = rows.filter((row) => row.owner_sub != null && canReadPdf(sub, row, { id: row.id, email }));
+    const readableRows = rows.filter((row) => row.owner_sub != null && canReadPdf(sub, row, aclCtx(request, row.id)));
     const ownerNames = getAccountDisplayNames(readableRows.map((row) => row.owner_sub));
     const items: PdfListItem[] = await Promise.all(
       readableRows.map(async (row) => {
@@ -233,7 +227,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     if (!shareAccess && isShareTokenExpired(request, parsed.data.id)) {
       return reply.code(410).send(errorResponse('SHARE_LINK_EXPIRED', '此分享連結已過期'));
     }
-    if (!shareAccess && !canReadPdf(sub, row, { id: row.id, email: sessionEmail(request) })) {
+    if (!shareAccess && !canReadPdf(sub, row, aclCtx(request, parsed.data.id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報'));
     }
     const pages = db
@@ -274,10 +268,15 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     // 分享連結的唯讀/可編輯模式只限制其他訪客；owner（或沒有 owner 的舊資料）
     // 永遠視為可讀寫，前端用這個旗標避免把自己設定的唯讀分享套用到自己身上。
     const isOwner = hasOwnerOrLegacyAccess(sub, row);
-    // The requester's identity-based access level (owner→edit; listed users per the ACL;
-    // otherwise the default/visibility). Lets the frontend grant edit UI to read-write ACL
-    // users who aren't the owner, without relying on is_owner alone.
-    const accessLevel = resolvePdfAccessLevel(row.id, sub, sessionEmail(request), row);
+    // The requester's EFFECTIVE access level from both systems: identity-based
+    // (owner→edit; listed users per the ACL; otherwise the visibility default) combined with
+    // any share-token capability, taking the higher of the two. Lets the frontend grant edit UI
+    // to read-write ACL users and editable-token holders alike, and never show edit controls the
+    // backend would reject.
+    const accessLevel = maxAccessLevel(
+      resolvePdfAccessLevel(row.id, sub, sessionEmail(request), row),
+      resolveTokenAccessLevel(request, row.id),
+    );
     if (shareMode) {
       return reply.send({
         ...detail,
@@ -414,21 +413,12 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       return reply.code(403).send(errorResponse('FORBIDDEN', '只有簡報擁有者可以建立分享連結'));
     }
 
-    const visibility = body.data.visibility ?? accessToVisibility(body.data.access);
+    // A share token is a standalone capability: creating one no longer changes the
+    // presentation's visibility. Identity-based access (visibility + ACL) and token
+    // capability are two independent systems; the effective access for any action is
+    // the higher of the two. The response echoes the current (unchanged) visibility.
+    const visibility = row.visibility;
     const now = nowIso();
-    if (row.visibility !== visibility) {
-      db.prepare(`UPDATE pdfs SET visibility = ?, updated_at = ? WHERE id = ?`).run(visibility, now, parsed.data.id);
-      try {
-        const metadata = await readMetadata(parsed.data.id);
-        if (metadata) {
-          metadata.visibility = visibility;
-          metadata.updated_at = now;
-          await writeMetadata(parsed.data.id, metadata);
-        }
-      } catch (err) {
-        request.log.warn({ err, id: parsed.data.id }, 'Failed to update metadata visibility while creating share');
-      }
-    }
 
     const expiresDays = body.data.expires_days;
     const expiresAt = expiresDays
@@ -877,7 +867,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       | Pick<PdfRow, 'owner_sub' | 'visibility'>
       | undefined;
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!shareAccessForPdf(request, id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+    if (!canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的頁面提示詞'));
     }
     const row = db
@@ -968,7 +958,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       | Pick<PdfRow, 'owner_sub' | 'visibility'>
       | undefined;
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!shareAccessForPdf(request, id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+    if (!canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的投票'));
     }
     const page = db.prepare(`SELECT pdf_id FROM pages WHERE pdf_id = ? AND page_number = ?`).get(id, n);
@@ -1056,7 +1046,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     const { id, pollId } = parsed.data;
     const pdf = db.prepare(`SELECT id, owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as Pick<PdfRow, 'id' | 'owner_sub' | 'visibility'> | undefined;
     if (!pdf) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!canDestructivelyEditPdf(sessionSub(request), pdf)) return reply.code(403).send(errorResponse('FORBIDDEN', 'No edit permission'));
+    if (!canDestructivelyEditPdf(sessionSub(request), pdf, aclCtx(request, id))) return reply.code(403).send(errorResponse('FORBIDDEN', 'No edit permission'));
     const row = db.prepare(`SELECT id FROM page_polls WHERE id = ? AND pdf_id = ?`).get(pollId, id) as { id: number } | undefined;
     if (!row) return reply.code(404).send(errorResponse('POLL_NOT_FOUND', `Poll ${pollId} not found`));
     db.prepare(`DELETE FROM page_polls WHERE id = ? AND pdf_id = ?`).run(pollId, id);
@@ -1073,7 +1063,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       | Pick<PdfRow, 'owner_sub' | 'visibility'>
       | undefined;
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!shareAccessForPdf(request, id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+    if (!canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限對此簡報的投票進行投票'));
     }
     const row = db
@@ -1099,7 +1089,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     const { id, pollId } = parsed.data;
     const pdf = db.prepare(`SELECT id, owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as Pick<PdfRow, 'id' | 'owner_sub' | 'visibility'> | undefined;
     if (!pdf) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!canDestructivelyEditPdf(sessionSub(request), pdf)) return reply.code(403).send(errorResponse('FORBIDDEN', 'No edit permission'));
+    if (!canDestructivelyEditPdf(sessionSub(request), pdf, aclCtx(request, id))) return reply.code(403).send(errorResponse('FORBIDDEN', 'No edit permission'));
     const row = db
       .prepare(`SELECT id, pdf_id, page_number, question, options_json, is_active, show_results, created_at, updated_at FROM page_polls WHERE id = ? AND pdf_id = ?`)
       .get(pollId, id) as PagePollRow | undefined;
@@ -1151,7 +1141,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     const { id, pollId } = parsed.data;
     const pdf = db.prepare(`SELECT id, owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as Pick<PdfRow, 'id' | 'owner_sub' | 'visibility'> | undefined;
     if (!pdf) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!canDestructivelyEditPdf(sessionSub(request), pdf)) return reply.code(403).send(errorResponse('FORBIDDEN', 'No edit permission'));
+    if (!canDestructivelyEditPdf(sessionSub(request), pdf, aclCtx(request, id))) return reply.code(403).send(errorResponse('FORBIDDEN', 'No edit permission'));
     const row = db
       .prepare(`SELECT id, pdf_id, page_number, question, options_json, is_active, show_results, created_at, updated_at FROM page_polls WHERE id = ? AND pdf_id = ?`)
       .get(pollId, id) as PagePollRow | undefined;
@@ -1236,7 +1226,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     if (!pdfRow) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', 'PDF not found'));
     }
-    if (!shareAccessForPdf(request, parsed.data.id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, parsed.data.id))) {
+    if (!canReadPdf(sessionSub(request), pdfRow, aclCtx(request, parsed.data.id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的封面'));
     }
     const cover = coverImagePath(parsed.data.id);
@@ -1270,7 +1260,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     if (!pdfRow) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', 'PDF not found'));
     }
-    if (!shareAccessForPdf(request, parsed.data.id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, parsed.data.id))) {
+    if (!canReadPdf(sessionSub(request), pdfRow, aclCtx(request, parsed.data.id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的封面縮圖'));
     }
     const cover = coverImagePath(parsed.data.id);
@@ -1297,7 +1287,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     if (!row) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     }
-    if (!shareAccessForPdf(request, id) && !canReadPdf(sessionSub(request), row, aclCtx(request, id))) {
+    if (!canReadPdf(sessionSub(request), row, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的影片'));
     }
     const abs = videoPath(id);
@@ -1322,7 +1312,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     if (!row) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     }
-    if (!shareAccessForPdf(request, id) && !canReadPdf(sessionSub(request), row, aclCtx(request, id))) {
+    if (!canReadPdf(sessionSub(request), row, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的大綱'));
     }
     const abs = youtubeOutlinePath(id);
@@ -1345,7 +1335,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       | Pick<PdfRow, 'owner_sub' | 'visibility'>
       | undefined;
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!shareAccessForPdf(request, id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+    if (!canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的投影片圖片'));
     }
     const pageRow = db
@@ -1396,7 +1386,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       | Pick<PdfRow, 'owner_sub' | 'visibility'>
       | undefined;
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!shareAccessForPdf(request, id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+    if (!canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的投影片縮圖'));
     }
     const pageRow = db
@@ -1433,7 +1423,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       | Pick<PdfRow, 'owner_sub' | 'visibility'>
       | undefined;
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!shareAccessForPdf(request, id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+    if (!canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的頁面文字'));
     }
     const pageRow = db
@@ -1471,7 +1461,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       | Pick<PdfRow, 'owner_sub' | 'visibility'>
       | undefined;
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!shareAccessForPdf(request, id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+    if (!canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的逐字稿'));
     }
     const pageRow = db
@@ -1513,7 +1503,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       | Pick<PdfRow, 'owner_sub' | 'visibility'>
       | undefined;
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!shareAccessForPdf(request, id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+    if (!canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的字幕時間軸'));
     }
     const pageRow = db
@@ -1601,7 +1591,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       | Pick<PdfRow, 'owner_sub' | 'visibility'>
       | undefined;
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!shareAccessForPdf(request, id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+    if (!canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的語音'));
     }
     const pageRow = db
@@ -1643,7 +1633,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     if (!pdfRow) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     }
-    if (!shareAccessForPdf(request, id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+    if (!canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的來源音訊'));
     }
     const abs = youtubeSourceAudioPath(id);
@@ -1663,7 +1653,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       | Pick<PdfRow, 'owner_sub' | 'visibility'>
       | undefined;
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!shareAccessForPdf(request, id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+    if (!canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的生成提示詞紀錄'));
     }
     const prompts = getPageGenerationPrompts(id, n);

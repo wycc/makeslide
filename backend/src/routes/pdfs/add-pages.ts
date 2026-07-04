@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { ShareTokenParamSchema, getShareToken, hasShareAccess } from './share';
+import { ShareTokenParamSchema, getShareToken } from './share';
 import { getPdfPermissionRow, canReadPdf, canEditPdf , aclCtx } from './permissions';
 import { z } from 'zod';
 import {
@@ -108,7 +108,7 @@ export async function registerAddPagesRoutes(app: FastifyInstance): Promise<void
     if (!pdfRow) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsedParams.data.id} not found`));
     }
-    if (!hasShareAccess(request, parsedParams.data.id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, parsedParams.data.id))) {
+    if (!canReadPdf(sessionSub(request), pdfRow, aclCtx(request, parsedParams.data.id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的新增頁面進度'));
     }
     const state = getAddPagesJob(parsedParams.data.id);

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { ShareTokenParamSchema, getShareToken, hasShareAccess } from './share';
+import { ShareTokenParamSchema, getShareToken } from './share';
 import { getPdfPermissionRow, canReadPdf, canEditPdf , aclCtx } from './permissions';
 import { z } from 'zod';
 import { db } from '../../db';
@@ -49,7 +49,7 @@ export async function registerWatchProgressRoutes(app: FastifyInstance): Promise
     const { id, n } = parsed.data;
     const pdfRow = getPdfPermissionRow(id);
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id)) && !hasShareAccess(request, id)) {
+    if (!canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限回報此簡報的觀看進度'));
     }
     const now = nowIso();

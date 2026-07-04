@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { ShareTokenParamSchema, getShareToken, hasShareAccess } from './share';
+import { ShareTokenParamSchema, getShareToken } from './share';
 import { getPdfPermissionRow, canReadPdf, canEditPdf, canDestructivelyEditPdf , aclCtx } from './permissions';
 import { toFile } from 'openai';
 import type { ChatCompletionContentPart } from 'openai/resources/chat/completions';
@@ -516,7 +516,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     const { id, n } = parsed.data;
     const row = db.prepare(`SELECT * FROM pdfs WHERE id = ?`).get(id) as PdfRow | undefined;
     if (!row) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!canDestructivelyEditPdf(sessionSub(request), row)) {
+    if (!canDestructivelyEditPdf(sessionSub(request), row, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
     }
     if (row.status !== 'ready' || !row.page_count || row.page_count <= 0) {
@@ -941,7 +941,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       | { owner_sub: string | null; visibility: PdfRow['visibility']; page_count: number | null }
       | undefined;
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!hasShareAccess(request, id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+    if (!canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的候選圖片'));
     }
     if (!pdfRow.page_count || n > pdfRow.page_count) {
@@ -1193,7 +1193,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     const { id, n } = parsedParams.data;
     const pdfRow = getPdfPermissionRow(id);
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!hasShareAccess(request, id) && !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+    if (!canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的聊天紀錄'));
     }
     const pageRow = db
@@ -1211,7 +1211,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     const { id, n } = parsedParams.data;
     const pdfRow = getPdfPermissionRow(id);
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!canDestructivelyEditPdf(sessionSub(request), pdfRow)) {
+    if (!canDestructivelyEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
     }
     const info = db
@@ -1314,7 +1314,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     }
     const pdfRow = getPdfPermissionRow(id);
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!canReadPdf(sub, pdfRow, aclCtx(request, id)) && !hasShareAccess(request, id)) {
+    if (!canReadPdf(sub, pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限查閱此簡報'));
     }
     const pageRow = db

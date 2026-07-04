@@ -324,7 +324,10 @@ export async function resolveShareToken(token: string): Promise<ShareInfoRespons
 }
 
 export async function createPdfShare(id: string, access: ShareAccessMode, expiresDays?: number): Promise<CreateShareResponse> {
-  const body: Record<string, unknown> = { access, visibility: access === 'editable' ? 'public_editable' : 'public' };
+  // A share link is a standalone capability token: creating one grants the chosen access
+  // (read_only / editable) to anyone who holds the link, and does NOT change the presentation's
+  // visibility. Identity-based access (visibility + ACL) is managed separately.
+  const body: Record<string, unknown> = { access };
   if (expiresDays != null) body.expires_days = expiresDays;
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/share`, {
     method: 'POST',

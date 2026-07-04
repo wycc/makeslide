@@ -1,28 +1,46 @@
 import type { FastifyRequest } from 'fastify';
 import { db } from '../../db';
 import type { PdfRow } from '../../types';
-import { resolvePdfAccessLevel } from './pdfAccess';
+import { resolvePdfAccessLevel, maxAccessLevel, type PdfAccessLevel } from './pdfAccess';
+import { resolveTokenAccessLevel } from './share';
 import { sessionEmail } from '../auth';
 
 /**
- * Identity context for consulting a presentation's per-user access control list (ACL).
- * When passed to canReadPdf/canEditPdf, the requester's effective access is resolved from
- * the ACL (falling back to visibility) instead of visibility alone. Omitting it keeps the
- * original visibility-only behavior, so existing call sites are unaffected until migrated.
+ * Access context passed to canReadPdf/canEditPdf so they resolve the requester's *effective*
+ * access from BOTH systems that gate a presentation:
+ * - identity-based access (the presentation's `visibility` default + per-user/group ACL), and
+ * - the capability carried by any valid share token on the request.
+ * The effective level is the higher of the two. Omitting the context keeps the original
+ * visibility-only behavior, so any not-yet-migrated call site is unaffected.
  */
 export interface PdfAclContext {
   /** The presentation id whose ACL to consult. */
   id: string;
   /** The requester's account email, or null when unauthenticated. */
   email: string | null;
+  /** Capability granted by a valid share token on the request (`none` when there is none). */
+  tokenAccess: PdfAccessLevel;
 }
 
 /**
- * Build the ACL context for a request + presentation id, to pass as the third argument of
- * canReadPdf/canEditPdf so they consult the per-user access control list.
+ * Build the access context for a request + presentation id, to pass as the third argument of
+ * canReadPdf/canEditPdf/canDestructivelyEditPdf so they consult both the identity-based ACL and
+ * the request's share-token capability.
  */
 export function aclCtx(request: FastifyRequest, id: string): PdfAclContext {
-  return { id, email: sessionEmail(request) };
+  return { id, email: sessionEmail(request), tokenAccess: resolveTokenAccessLevel(request, id) };
+}
+
+/**
+ * Effective access from both systems: the higher of the identity-based level
+ * (visibility default + ACL) and the share-token capability.
+ */
+function effectiveAccess(
+  sub: string | null,
+  row: Pick<PdfRow, 'owner_sub' | 'visibility'>,
+  acl: PdfAclContext,
+): PdfAccessLevel {
+  return maxAccessLevel(resolvePdfAccessLevel(acl.id, sub, acl.email, row), acl.tokenAccess);
 }
 
 /**
@@ -37,7 +55,7 @@ export function canReadPdf(
   row: Pick<PdfRow, 'owner_sub' | 'visibility'>,
   acl?: PdfAclContext,
 ): boolean {
-  if (acl) return resolvePdfAccessLevel(acl.id, sub, acl.email, row) !== 'none';
+  if (acl) return effectiveAccess(sub, row, acl) !== 'none';
   if (!row.owner_sub) return true;
   if (sub && row.owner_sub === sub) return true;
   return row.visibility === 'public' || row.visibility === 'public_editable';
@@ -59,25 +77,33 @@ export function canEditPdf(
   row: Pick<PdfRow, 'owner_sub' | 'visibility'>,
   acl?: PdfAclContext,
 ): boolean {
-  if (acl) return resolvePdfAccessLevel(acl.id, sub, acl.email, row) === 'edit';
+  if (acl) return effectiveAccess(sub, row, acl) === 'edit';
   if (!row.owner_sub) return true;
   if (sub && row.owner_sub === sub) return true;
   return row.visibility === 'public_editable';
 }
 
 /**
- * Edit-access rule for destructive / irreversible actions (deleting a whole
- * presentation, a page, a quiz set, a poll, a page's drawing, etc.). Same as
- * canEditPdf but additionally requires an authenticated session before honoring
- * a public_editable share: a fully anonymous request must never be able to
- * destroy content just because an editable share link is enabled. Previously
- * duplicated verbatim in 5 route files (4 as canDestructivelyEditPdf + delete.ts
- * as a local stricter canEditPdf).
+ * Edit-access rule for destructive / irreversible actions on parts of a presentation
+ * (deleting a page, a quiz set, a poll, a page's drawing, etc.). Requires edit-level
+ * effective access from EITHER system (identity ACL or an editable share token) AND an
+ * authenticated session: a fully anonymous request must never be able to destroy content
+ * just because an editable share/token is in play.
+ *
+ * Note: deleting a WHOLE presentation is stricter still — owner-only — and is enforced
+ * locally in delete.ts via isPdfOwner, not through this helper.
+ *
+ * When called without an `acl` context it keeps the original visibility-only behavior.
  */
 export function canDestructivelyEditPdf(
   sub: string | null,
   row: Pick<PdfRow, 'owner_sub' | 'visibility'>,
+  acl?: PdfAclContext,
 ): boolean {
+  if (acl) {
+    if (!row.owner_sub) return true; // legacy / anonymous uploads stay open
+    return effectiveAccess(sub, row, acl) === 'edit' && Boolean(sub);
+  }
   if (!row.owner_sub) return true;
   if (sub && row.owner_sub === sub) return true;
   return Boolean(sub) && row.visibility === 'public_editable';

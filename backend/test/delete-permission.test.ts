@@ -63,11 +63,16 @@ test('DELETE /api/pdfs/:id allows the owner to delete their presentation', async
   await app.close();
 });
 
-test('DELETE /api/pdfs/:id allows a read-write collaborator on a public_editable presentation', async () => {
+test('DELETE /api/pdfs/:id rejects a non-owner collaborator even on a public_editable presentation (whole-presentation delete is owner-only)', async () => {
   seedDeletePdf('delete-perm-editable-01', 'public_editable');
   const app = await buildApp();
+  // Deleting a WHOLE presentation is owner-only now: neither public_editable visibility
+  // nor a read_write share/ACL grant may destroy the whole thing. Only the owner can.
   const resp = await app.inject({ method: 'DELETE', url: '/api/pdfs/delete-perm-editable-01', headers: OTHER_HEADERS });
-  assert.equal(resp.statusCode, 204);
+  assert.equal(resp.statusCode, 403);
+  assert.equal((resp.json() as { error: { code: string } }).error.code, 'FORBIDDEN');
+  const row = db.prepare(`SELECT id FROM pdfs WHERE id = ?`).get('delete-perm-editable-01');
+  assert.notEqual(row, undefined);
   await app.close();
 });
 

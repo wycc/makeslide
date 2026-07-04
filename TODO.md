@@ -68,6 +68,36 @@
 本功能（身分式分享權限：只讀/讀寫名單＋群組＋預設權限）**六步驟全部完成**。保留項：admin.ts／
 upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，fail-closed 安全，非核心分享路徑）。
 
+## 分享權限模型統一：兩套系統＋分享連結成為能力憑證（使用者要求，2026-07-04）
+
+先前檢討發現「誰能存取簡報」由三套語意重疊的機制決定：`visibility`、分享連結 token（`pdf_shares`）、
+身分式 ACL（`pdf_permissions`／群組）。其中分享連結並非真正的能力憑證——建立連結時會**偷偷翻動
+全域 `visibility`**（read_only→public、editable→public_editable），token 本身不具保密力，且 editable
+連結的編輯能力其實來自 visibility 而非 token；`hasShareAccess` 也未檢查到期。使用者要求：把三套整併成
+**兩套一致的系統**，每個動作都以兩套系統的**較高權限**為準。
+
+- [x] 統一為兩套系統：
+  - **系統一（身分權限）**：`visibility` 預設 ＋ per-user/group ACL，合併由 `resolvePdfAccessLevel` 解析。
+    前端「存取權限」分頁即此設定（預設權限＋名單），與分享連結分頁分離呈現。
+  - **系統二（Token 能力憑證）**：新增 `resolveTokenAccessLevel`（含到期檢查），任何持有有效 token 的人
+    （含未登入）取得 token 內含的 read／edit 能力；建立連結**不再改動 visibility**（後端移除翻動、前端
+    移除送出 `visibility` 與本地誤設 public）。
+  - **合併決策**：`aclCtx` 帶入 token 能力，`canReadPdf`/`canEditPdf` 內部以 `max(身分, token)` 決策；
+    全站約 146 個讀寫閘門呼叫點無需改動即同時吃兩套系統。清掉 40 處多餘且有到期 bug 的
+    `hasShareAccess`／`shareAccessForPdf` 讀取前綴，收斂為單一路徑。detail 回應的 `access_level` 改為
+    **有效權限**（身分 max token），前端 `shareIsReadOnly` 隨之一致。
+  - **破壞性操作**：刪頁／刪測驗／刪投票／刪畫板等改以 `canDestructivelyEditPdf`＋合併 context，需解析出
+    edit（不論來源）**且已登入**；**刪除整份簡報**限縮為**僅擁有者**（`isPdfOwner`）。
+  - 後端 tsc 通過；既有權限套件無回歸（delete 測試更新為 owner-only）＋新增 `token-capability` 測試；
+    前端 tsc 通過、i18n 文案更新以區分兩套概念。分支 `feat/unified-access-capability-tokens`。
+  - 測試缺口補齊（使用者要求）：後端 `token-capability` 擴充至 **22 測試**——`resolveTokenAccessLevel`
+    邊界（無 token／格式錯／對到別份／read↔edit／過期）、detail `access_level` 為**有效權限**（editable
+    token→edit、read_only token→read）、破壞性操作**經 read_write 名單授權**（非 visibility）＋整合
+    DELETE drawing 驗證接線、editable token 於第二條編輯路由（PATCH title）賦權。前端把 `shareIsReadOnly`
+    抽成純函式 [deckAccess.ts](frontend/src/pages/play/deckAccess.ts) 的 `resolveDeckReadOnly` 並接回
+    `PlayPage`，新增 7 測試（`deckAccess.test.ts`）。後端各權限套件與前端 tsc／deckAccess＋ShareDialog＋i18n
+    全綠。備註：多個 buildApp 整合檔並跑會遇 SQLite 檔鎖競爭，分組序跑即正常。
+
 ## 同步 master/follower 定義改為以擁有者為準（使用者要求，2026-07-02）
 
 使用者要求變更 master/follower 的定義：「自己的簡報按下同步模式會變成 master，不是的會變成 follower」。
@@ -467,6 +497,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-04 | （使用者要求）分享權限模型統一為兩套系統、分享連結成為真正的能力憑證：先前三套機制（visibility／分享 token／身分 ACL）語意重疊，且建立連結會偷偷翻動全域 visibility、token 不具保密力、`hasShareAccess` 未檢查到期。改為：系統一＝身分權限（visibility 預設＋ACL，`resolvePdfAccessLevel`）；系統二＝token 能力憑證（新增 `resolveTokenAccessLevel` 含到期，任何持有者取得內含 read/edit，建立連結不再改 visibility）；`aclCtx` 帶入 token，`canReadPdf`/`canEditPdf` 以 `max(身分,token)` 決策（~146 呼叫點免改）、清掉 40 處多餘且有到期 bug 的 share 讀取前綴、detail `access_level` 改回有效權限。破壞性子操作＝解析出 edit＋已登入；刪整份簡報限縮為僅 owner。後端 tsc 通過、既有權限套件無回歸（delete 測試改 owner-only）＋新增 token-capability 11 測試綠；前端 tsc 通過、ShareDialog＋i18n 29 綠、文案區分兩概念 | feat/unified-access-capability-tokens |
 | 2026-07-03 | （使用者要求）把 worktree/demo16 完整合併回 master：先在 demo16 提交其未提交的「直播測驗允許重新進入（quiz re-entry）」WIP（排除 demo16 專屬的 start.sh 本地改動），再 `git merge --no-ff worktree/demo16` 帶入 demo16 累積但未進 master 的功能（poll-results 彈窗、watch-records 對話框、quiz camera recording/proctoring/finish button、quiz re-entry）。主 repo 工作區同一份重複的 WIP 經比對與 demo16 內容完全相同（僅檔案權限位元差異），已捨棄改由合併帶回。前後端 typecheck 通過；i18n 27、pdf-access 13、groups-api 4、poll-voters 3 測試綠 | worktree/demo16 → master（merge dd26906） |
 | 2026-07-03 | （使用者要求，步驟 5–6／共 6，接續當日步驟 1–4）身分式分享權限完成群組與收尾。步驟5 群組：DB（groups/group_members）+ owner-scoped CRUD（4 測試）+ resolver 展開群組成員 + 管理 API/list 支援 group principal + 系統設定「群組」管理 UI + 分享面板 search 納入群組/名單顯示群組/「存成群組」；步驟6 收尾：前端 `access_level` 讓只讀名單顯示唯讀 UI。前後端 typecheck 通過、ACL/群組/權限 42 測試綠。功能六步驟全部完成 | feat/pdf-acl-step5-groups-backend／-step5c-groups-ui／-step5d-share-groups／-step6-readonly-ui（皆已 merge） |
 | 2026-07-03 | （使用者要求，步驟 1–4／共 6）身分式分享權限：per-user 只讀/讀寫名單 + 預設權限（沿用 visibility）。步驟1 ACL 表+resolver（11 測試）；步驟2a canRead/EditPdf 加可選 ACL context+detail 讀取+access_level（5+92 測試）；步驟2b 接線全站 ~130 呼叫點（無回歸）；步驟3 管理 API+帳號 search（5 測試）；步驟4 分享對話框「存取權限」分頁（含 search、i18n 24/24） | feat/pdf-acl-step1..4（皆已 merge） |
