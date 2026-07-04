@@ -10,6 +10,7 @@ import { ApiError, fetchPageGenerationPrompts, fetchPdfRunHistory, fetchPdfSlowA
 import { copyTextToClipboard } from '../../lib/clipboard';
 import { estimateSpeakingTimeLabel } from '../../lib/speakingTimeEstimate';
 import { clamp } from '../../lib/clamp';
+import { normalizedPointerPosition } from '../../lib/normalizedPointerPosition';
 import { computeRemainingSeconds } from '../../lib/remainingTime';
 import { SHOW_SUBTITLE_STORAGE_KEY, SUBTITLE_SIZE_STORAGE_KEY, SUBTITLE_POSITION_STORAGE_KEY, AUTO_ADVANCE_STORAGE_KEY, INTERACTIVE_MODE_STORAGE_KEY, useI18n, type TranslationKey, type SubtitleSize, type SubtitlePosition } from '../../i18n';
 import { debugLog, debugWarn } from '../../lib/debugLog';
@@ -537,8 +538,7 @@ export function PlayPageSlidePanel() {
                     e.preventDefault();
                     if (!imageEditDragRef.current) return;
                     const rect = e.currentTarget.getBoundingClientRect();
-                    const nx = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-                    const ny = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
+                    const { x: nx, y: ny } = normalizedPointerPosition(e.clientX, e.clientY, rect);
                     const { startX, startY } = imageEditDragRef.current;
                     const x = Math.min(startX, nx);
                     const y = Math.min(startY, ny);
@@ -556,8 +556,7 @@ export function PlayPageSlidePanel() {
                   onPointerUp={(e) => {
                     if (!imageEditDragRef.current) return;
                     const rect = e.currentTarget.getBoundingClientRect();
-                    const nx = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-                    const ny = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
+                    const { x: nx, y: ny } = normalizedPointerPosition(e.clientX, e.clientY, rect);
                     const { startX, startY } = imageEditDragRef.current;
                     imageEditDragRef.current = null;
                     const x = Math.min(startX, nx);
