@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { PdfReportQuestionStat, PdfReportSummary } from '../../lib/api';
-import { resetWatchProgress } from '../../lib/api';
+import { resetWatchProgress, fetchPdfStudentRecords, fetchReportAiSuggestions, type StudentRecord } from '../../lib/api';
 import { flattenAttemptsChronologically } from '../../lib/reportAttemptsTimeline';
 import { downloadBlob } from '../../lib/download';
 import { useI18n } from '../../i18n';
@@ -16,30 +16,6 @@ import {
 import { copyTextToClipboard } from '../../lib/clipboard';
 import { formatRelativeTime, buildRelativeTimeLabels } from '../../lib/relativeTime';
 
-interface StudentQuestionResult {
-  question_id: string;
-  question: string;
-  options: string[];
-  selected: number[];
-  correct_indices: number[];
-  is_correct: boolean;
-}
-
-interface StudentAttempt {
-  attempt_id: number;
-  quiz_id: number;
-  quiz_title: string;
-  score: number | null;
-  submitted_at: string;
-  question_results: StudentQuestionResult[];
-}
-
-interface StudentRecord {
-  client_id: string;
-  attempt_count: number;
-  average_score: number | null;
-  attempts: StudentAttempt[];
-}
 
 interface PostClassReportPanelProps {
   pdfId: string;
@@ -131,9 +107,8 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
   useEffect(() => {
     if (!summary) return;
     setStudentsLoading(true);
-    fetch(`api/pdfs/${encodeURIComponent(pdfId)}/report/students`)
-      .then((r) => r.ok ? r.json() as Promise<{ students: StudentRecord[] }> : Promise.reject(r.status))
-      .then((data) => { setStudents(data.students); })
+    fetchPdfStudentRecords(pdfId)
+      .then((students) => { setStudents(students); })
       .catch(() => { setStudents([]); })
       .finally(() => { setStudentsLoading(false); });
   }, [pdfId, summary]);
@@ -515,9 +490,8 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
                   onClick={() => {
                     setAiLoading(true);
                     setAiError(null);
-                    fetch(`api/pdfs/${encodeURIComponent(pdfId)}/report/ai-suggestions`, { method: 'POST' })
-                      .then((r) => r.ok ? r.json() as Promise<{ suggestions: string }> : r.json().then((e: unknown) => Promise.reject(e)))
-                      .then((data) => { setAiSuggestions(data.suggestions); })
+                    fetchReportAiSuggestions(pdfId)
+                      .then((suggestions) => { setAiSuggestions(suggestions); })
                       .catch(() => { setAiError(t('play.report.aiError')); })
                       .finally(() => { setAiLoading(false); });
                   }}

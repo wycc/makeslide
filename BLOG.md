@@ -1,5 +1,24 @@
 # MakeSlide 功能說明
 
+## 課後報告面板改用 API client（去重型別、統一錯誤處理）
+
+### 背景
+
+課後報告面板（`PostClassReportPanel`）自己定義了 `StudentRecord`、`StudentAttempt`、`StudentQuestionResult` 三個型別，但這些與 API client（`lib/api/pdfs.ts`）裡既有、結構完全一樣的型別重複；而且它是用元件內的 `fetch(...)` 直接打 `report/students` 與 `report/ai-suggestions` 兩個端點，各自寫 `r.ok ? r.json() : reject` 的錯誤處理，繞過了 App 其他地方統一的 `parseErrorBody`（`ApiError`）機制。
+
+### 變更內容
+
+- 在 `lib/api/pdfs.ts` 新增 `fetchReportAiSuggestions(id)`（比照既有的 `fetchPdfStudentRecords`，失敗時走共用的 `parseErrorBody`）。
+- `PostClassReportPanel` 移除 3 個與 API client 重複的本地型別，改為從 `lib/api` 匯入 `StudentRecord`；學生名單改用既有的 `fetchPdfStudentRecords(pdfId)`、AI 建議改用新的 `fetchReportAiSuggestions(pdfId)`，刪掉元件內兩段 ad-hoc `fetch` 樣板。
+
+### 使用方式
+
+純內部重構，課後報告的行為不變。所有對後端的呼叫集中在 API client、共用同一套錯誤處理，型別也只留單一來源，維護時不會再有兩份定義走味的風險。
+
+### 測試
+
+型別相容性與呼叫正確性由 `tsc --noEmit` 保證（移除本地型別後改用 API client 的型別仍全數通過）；API client 的 HTTP 包裝函式在本專案一向不做單元測試，與既有函式一致，故未新增測試。前端 `tsc --noEmit` 通過。
+
 ## 檔案下載樣板收斂為共用工具
 
 ### 背景
