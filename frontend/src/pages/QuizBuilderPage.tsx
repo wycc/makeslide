@@ -8,6 +8,7 @@ import { EssayAnswerUploader } from '../components/EssayAnswerUploader';
 import { EssayAnswersPanel } from '../components/EssayAnswersPanel';
 import { formatRelativeTime, buildRelativeTimeLabels } from '../lib/relativeTime';
 import { summarizeQuizProgress } from '../lib/quizProgress';
+import { toggleAnswerIndex } from '../lib/toggleAnswerIndex';
 import { interpolateTemplate } from '../lib/interpolateTemplate';
 import { clamp } from '../lib/clamp';
 import {
@@ -548,25 +549,16 @@ export default function QuizBuilderPage() {
   };
 
   const toggleAnswer = (qIdx: number, oIdx: number) => {
-    setQuestions((prev) => prev.map((q, i) => {
-      if (i !== qIdx) return q;
-      if (q.type === 'single') return { ...q, answer_indices: [oIdx] };
-      const set = new Set(q.answer_indices);
-      if (set.has(oIdx)) set.delete(oIdx);
-      else set.add(oIdx);
-      return { ...q, answer_indices: Array.from(set).sort((a, b) => a - b) };
-    }));
+    setQuestions((prev) => prev.map((q, i) => (
+      i === qIdx ? { ...q, answer_indices: toggleAnswerIndex(q.answer_indices, oIdx, q.type === 'single') } : q
+    )));
   };
 
   const toggleStudentAnswer = (question: QuizQuestion, optionIdx: number) => {
-    setStudentAnswers((prev) => {
-      const current = prev[question.id] ?? [];
-      if (question.type === 'single') return { ...prev, [question.id]: [optionIdx] };
-      const next = new Set(current);
-      if (next.has(optionIdx)) next.delete(optionIdx);
-      else next.add(optionIdx);
-      return { ...prev, [question.id]: Array.from(next).sort((a, b) => a - b) };
-    });
+    setStudentAnswers((prev) => ({
+      ...prev,
+      [question.id]: toggleAnswerIndex(prev[question.id] ?? [], optionIdx, question.type === 'single'),
+    }));
   };
 
   const handleResetStudentAnswers = useCallback(async () => {

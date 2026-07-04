@@ -5,7 +5,7 @@
 ## 計數狀態
 
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
-- 最新進度：截至第一九四輪已完成 **73/100**，未達上限。
+- 最新進度：截至第一九五輪已完成 **74/100**，未達上限。
 
 ## 未完成項目（待使用者決定）
 
@@ -92,6 +92,21 @@ prompt 規則以「（第 N 頁）」標示跨頁引用，但先前是純文字�
     新測試 7/7 + `page-ask` 整合測試回歸（Node 22，共 10 綠）。分支 `feat/ask-history-char-budget`，
     已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 64 個完成項目（64/100，未達上限）。
+
+## 測驗選項勾選切換抽出共用純函式（第一九五輪，2026-07-04）
+
+轉回既有程式碼盤點（掃描確認：前端 lib 除 `api.ts`（HTTP/re-export）外皆有測試、後端 route 的 JSON.parse
+皆已防護，無補漏測/防護的低垂果實）。於 `QuizBuilderPage` 發現一處**真實重複且無測試**的邏輯並收斂。
+
+- [x] 抽出測驗選項勾選切換純函式 `toggleAnswerIndex`（去重 / 可測）。
+  - 修改說明（2026-07-04）：`QuizBuilderPage` 的 `toggleAnswer`（設定正解）與 `toggleStudentAnswer`（學生
+    作答）各自內聯同一段「單選→只留該選項；複選→用 Set 加/減後升冪排序」邏輯、無測試。新增
+    [toggleAnswerIndex.ts](frontend/src/lib/toggleAnswerIndex.ts) 的
+    `toggleAnswerIndex(current, index, single)`（單選回 `[index]`、複選加/減後去重升冪、不改輸入），兩處
+    handler 改用之、各收斂為一行。新增 `toggleAnswerIndex.test.ts`（7 組：單選忽略現況、複選加/減、空集合加、
+    移除最後一個、去重、不改輸入）。前端 `tsc --noEmit` 通過、7/7 通過。分支 `refactor/toggle-answer-index`，
+    已 merge 回 master。BLOG.md 新增對應 section。
+  - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 74 個完成項目（74/100，未達上限）。
 
 ## 錄音模式播放讀取側純函式 slideAtTime（第一九四輪，2026-07-04）
 

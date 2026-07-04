@@ -1,5 +1,24 @@
 # MakeSlide 功能說明
 
+## 測驗選項勾選切換抽出共用純函式
+
+### 背景
+
+測驗建構頁（`QuizBuilderPage`）有兩個地方會切換「選了哪些選項」：老師設定題目正解，以及（預覽/作答時）學生選答。兩者原本各自寫了一份幾乎一樣的邏輯——單選題就只留剛點的那一個、複選題則用 `Set` 加或減再排序——重複且沒有測試。
+
+### 變更內容
+
+- 新增 `frontend/src/lib/toggleAnswerIndex.ts` 的 `toggleAnswerIndex(current, index, single)`：`single`（單選）直接回傳只含該選項的陣列；複選則把該 index 加入或移除，回傳去重且升冪排序的新陣列，不改動輸入。
+- `QuizBuilderPage` 的 `toggleAnswer` 與 `toggleStudentAnswer` 兩個 handler 改用這個共用函式，各自收斂為一行，行為完全等價。
+
+### 使用方式
+
+純內部重構，測驗設定正解與作答勾選的行為不變；此函式也成為之後任何「多選/單選切換」需求的單一可測來源。
+
+### 測試
+
+新增 `toggleAnswerIndex.test.ts`（7 組：單選忽略現有選擇、複選加入、複選移除、空集合加入、移除最後一個變空、去重、不改動輸入）。前端 `tsc --noEmit` 通過、7/7 通過。
+
 ## 錄音同步播放的「當下頁碼」查詢（slideAtTime）
 
 ### 背景
