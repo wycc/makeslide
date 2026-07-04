@@ -1,5 +1,27 @@
 # MakeSlide 功能說明
 
+## Jupyter Notebook 唯讀渲染元件
+
+### 背景
+
+延續上一節的 `.ipynb` 解析純函式，這一步做出把解析結果實際畫出來的唯讀元件——讓一個 Notebook 能以清楚、貼合專案風格的方式呈現（「在頁面中執行代碼」仍列為後續）。
+
+### 變更內容
+
+- 新增 `frontend/src/components/NotebookView.tsx`，吃 `parseNotebook` 產出的 `ParsedNotebook` 並逐 cell 渲染：
+  - **markdown cell**：交給既有的 `MarkdownMath`，直接支援標題、粗體、條列、表格與 LaTeX。
+  - **code / raw cell**：以等寬 `<pre><code>` 區塊顯示原始碼（空白內容會略過）。
+  - **outputs**（僅 code cell）：文字輸出用 `<pre>`；錯誤輸出以紅色系呈現、粗體標示 `錯誤類型: 訊息` 再接 traceback；圖片輸出以 `data:` URI 的 `<img>` 呈現。
+- 樣式沿用專案的 surface／border 色票，深色模式相容；空 notebook 回傳 `null`。
+
+### 使用方式
+
+給定一份 `.ipynb` 內容，先以 `parseNotebook` 解析，再把結果傳給 `<NotebookView notebook={...} />` 即可唯讀呈現整份 Notebook。目前尚未定義「.ipynb 如何成為一個頁面」的載入/儲存接線（列為步驟 c），因此這個元件先作為可重用的呈現單元。
+
+### 測試
+
+專案沒有 React 元件測試框架，元件本身以 `tsc --noEmit` 型別檢查驗證；其資料來源 `parseNotebook` 的解析行為已由上一節的 `notebook.test.ts`（9 組）覆蓋。前端 `tsc --noEmit` 通過。
+
 ## Jupyter Notebook 解析（基礎純函式）
 
 ### 背景
