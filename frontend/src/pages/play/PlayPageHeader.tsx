@@ -7,6 +7,7 @@ import { useI18n } from '../../i18n';
 import { usePlayPageContext } from './PlayPageContext';
 import { SyncQuestionsPanel } from './SyncQuestionsPanel';
 import { copyTextToClipboard } from '../../lib/clipboard';
+import { buildAllScriptsMarkdown } from '../../lib/allScriptsMarkdown';
 import { progressPercent } from '../../lib/progressPercent';
 import {
   stepSlideImageScale,
@@ -839,12 +840,10 @@ export function PlayPageHeader() {
             type="button"
             disabled={!detail?.pages?.length}
             onClick={async () => {
-              const pages = detail?.pages ?? [];
-              const text = pages
-                .slice()
-                .sort((a, b) => a.page_number - b.page_number)
-                .map((p) => `## ${t('play.common.pagePrefix')}${p.page_number}${t('play.common.pageSuffix')}\n${scripts[p.page_number] ?? ''}`)
-                .join('\n\n');
+              const text = buildAllScriptsMarkdown(detail?.pages ?? [], scripts, {
+                pagePrefix: t('play.common.pagePrefix'),
+                pageSuffix: t('play.common.pageSuffix'),
+              });
               const result = await copyTextToClipboard(text);
               setCopyAllScriptsStatus(result.ok ? 'ok' : 'fail');
               setTimeout(() => setCopyAllScriptsStatus('idle'), 2000);
