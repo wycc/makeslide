@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { db } from '../src/db';
 import { config } from '../src/config';
 import { setSystemAuthSettings } from '../src/services/aiSettings';
+import { setOpenAIClientForTest } from '../src/services/openai';
 import { buildApp } from '../src/server';
 
 setSystemAuthSettings({ googleAuthEnabled: false });
@@ -103,6 +104,48 @@ test('narration segments: add, list (with pages), reorder, re-record, stream, de
     const list4 = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/narration`, headers: OWNER_HEADERS });
     assert.deepEqual((list4.json() as { segments: Array<{ id: string }> }).segments.map((s) => s.id), [segB]);
   } finally {
+    await app.close();
+  }
+});
+
+test('narration transcribe: STT -> per-page transcript, then manual edit', async () => {
+  const id = `narr-tr-${RUN}`;
+  seedPdf(id, OWNER);
+  // mock Whisper word-timestamp transcription
+  setOpenAIClientForTest({
+    audio: {
+      transcriptions: {
+        create: async () => ({
+          words: [
+            { word: 'hello', start: 1, end: 2 },
+            { word: 'world', start: 4, end: 5 },
+            { word: 'next', start: 12, end: 13 },
+          ],
+        }),
+      },
+    },
+  } as never);
+  const app = await buildApp();
+  try {
+    const a = await addSegment(app, id, { durationMs: 20000, segments: [{ page: 1, startMs: 0, endMs: 10000 }, { page: 2, startMs: 10000, endMs: 20000 }] });
+    const segId = (a.json() as { id: string }).id;
+
+    const tr = await app.inject({ method: 'POST', url: `/api/pdfs/${id}/narration/segments/${segId}/transcribe`, headers: OWNER_HEADERS });
+    assert.equal(tr.statusCode, 200);
+    assert.deepEqual((tr.json() as { transcript_by_page: Record<string, string> }).transcript_by_page, { '1': 'hello world', '2': 'next' });
+
+    // GET reflects the transcript
+    const list = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/narration`, headers: OWNER_HEADERS });
+    const seg = (list.json() as { segments: Array<{ id: string; transcript_by_page: Record<string, string> }> }).segments[0]!;
+    assert.equal(seg.transcript_by_page['1'], 'hello world');
+
+    // manual edit
+    const ed = await app.inject({ method: 'PUT', url: `/api/pdfs/${id}/narration/segments/${segId}/transcript`, headers: { ...OWNER_HEADERS, 'content-type': 'application/json' }, payload: JSON.stringify({ transcript_by_page: { '1': 'edited page one', '2': 'edited two' } }) });
+    assert.equal(ed.statusCode, 200);
+    const list2 = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/narration`, headers: OWNER_HEADERS });
+    assert.equal((list2.json() as { segments: Array<{ transcript_by_page: Record<string, string> }> }).segments[0]!.transcript_by_page['1'], 'edited page one');
+  } finally {
+    setOpenAIClientForTest(null);
     await app.close();
   }
 });
