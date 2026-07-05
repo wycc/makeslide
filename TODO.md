@@ -88,6 +88,13 @@
   字幕在 TTS 區間切成該頁逐字稿（一般播放字幕），其餘用旁白逐字稿。後端 timeline/segment/manifest 加 `audioCues`
   （zod、上限保護），GET 回 `audio_cues`。前後端 `tsc`、narrationTracks 8/8、後端 narration 5/5（audio_cues 往返）、
   i18n 24/24。分支 `feat/narration-record-tts`。
+- [x] 修正：一般檢視錄音也要擷取游標/畫筆＋擷取更穩健（使用者回報某段完全沒錄到游標與畫筆）（2026-07-05）：
+  native-pen 改版只在**全螢幕**接了擷取佈線，**一般投影片檢視**（`PlayPageSlidePanel`）在移除舊擷取層後沒補上，
+  導致在一般檢視錄音時 `cursorTrack`／`drawSnapshots` 全空。修法：`PlayPageSlidePanel` 也接 `onWrapperPointerMove`
+  ＋ `onLocalChange`；並改為**不再用單一 `active` 旗標開關 handler**——`NarrationPanel` 一律把 recorder 的
+  `onCursorMove`／`onDrawSnapshot` 提供出去（其內部以 `recordingRef` 自我把關、非錄音期間 no-op），兩個檢視都
+  無條件呼叫，避免旗標與實際錄音狀態不同步。前端 `tsc`、i18n 24/24、narrationTracks 8/8。分支
+  `fix/narration-capture-normal-view`。
 - [ ] T9：影片輸出（ffmpeg）
 
 ### （下方為初版 MVP 記錄，已被上方分段模型取代）
