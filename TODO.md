@@ -46,6 +46,12 @@
     （漸進顯示）＋測試 4 組。播放時 `NarrationPanel` 依音訊秒數算出疊加送進 `narrationOverlay`，`PlayPageSlidePanel`
     以 SVG polyline 畫筆跡、div 圓點畫游標，隨播放同步。前後端 `tsc` 通過、後端 9/9、前端 tracks 4/4。
     分支 `feat/narration-cursor-draw`。
+- [x] STT 修正（使用者回報「語音轉錄失敗」）（2026-07-05）：原因為 STT 硬打 `openai` provider，但使用者用
+  cgu-air（OpenAI 相容）、未設純 openai 金鑰。修法：`openai.ts` 的 `transcribeAudioBuffer`／
+  `transcribeAudioBufferWithWordTimestamps` 加 `provider` 參數；新增 `resolveTranscriptionProvider()`（回目前設定的
+  LLM provider、gemini→openai）；narration 轉錄改用該 provider（與 chat 同端點）。並加韌性：word-timestamps 失敗/
+  無字時退回純文字轉錄（掛第一頁，`assignPlainTranscript` + 測試），兩者皆失敗才回錯誤並**帶出真正原因訊息**；
+  前端逐字稿編輯器顯示該訊息。後端 11/11、前後端 `tsc`。分支 `fix/narration-stt-provider`。
 - [ ] T9：影片輸出（ffmpeg）
 
 ### （下方為初版 MVP 記錄，已被上方分段模型取代）
