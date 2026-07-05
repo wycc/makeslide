@@ -162,14 +162,22 @@ test('narration stores and returns cursor + draw tracks', async () => {
       segments: [{ page: 1, startMs: 0, endMs: 5000 }],
       cursorTrack: [{ tMs: 0, x: 0.1, y: 0.2 }, { tMs: 100, x: 0.3, y: 0.4 }],
       drawTrack: [{ tMs: 50, points: [{ x: 0.1, y: 0.1 }, { x: 0.2, y: 0.2 }] }],
+      drawSnapshots: [
+        { tMs: 0, data: { strokes: [] } },
+        { tMs: 120, data: { strokes: [{ color: '#ef4444', lineWidth: 6, points: [[0.1, 0.1], [0.2, 0.2]] }] } },
+        { tMs: 300, data: { strokes: [{ color: '#3b82f6', lineWidth: 3, points: [[0.3, 0.3], [0.4, 0.4]], isEraser: true }] } },
+      ],
     };
     const a = await addSegment(app, id, tl);
     assert.equal(a.statusCode, 201);
     const list = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/narration`, headers: OWNER_HEADERS });
-    const seg = (list.json() as { segments: Array<{ cursor_track: unknown[]; draw_track: Array<{ points: unknown[] }> }> }).segments[0]!;
+    const seg = (list.json() as { segments: Array<{ cursor_track: unknown[]; draw_track: Array<{ points: unknown[] }>; draw_snapshots: Array<{ tMs: number; data: { strokes: unknown[] } }> }> }).segments[0]!;
     assert.equal(seg.cursor_track.length, 2);
     assert.equal(seg.draw_track.length, 1);
     assert.equal(seg.draw_track[0]!.points.length, 2);
+    assert.equal(seg.draw_snapshots.length, 3);
+    assert.equal(seg.draw_snapshots[2]!.data.strokes.length, 1);
+    assert.equal(seg.draw_snapshots[1]!.tMs, 120);
   } finally {
     await app.close();
   }

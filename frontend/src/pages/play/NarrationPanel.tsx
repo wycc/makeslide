@@ -12,7 +12,7 @@ import {
   type NarrationSegment,
 } from '../../lib/api/pdfs';
 import { slideAtTime } from '../../lib/slideTimeline';
-import { cursorAtTime, strokesUntil, subtitleAtTime } from '../../lib/narrationTracks';
+import { cursorAtTime, drawingSnapshotAtTime, subtitleAtTime } from '../../lib/narrationTracks';
 import { ApiError } from '../../lib/api';
 
 // 簡報旁白（分段）：擁有者/協作者可分段錄音，每段可重錄/刪除/上下移；段列表顯示每段用過的
@@ -37,12 +37,12 @@ export function NarrationPanel() {
 
   const recorder = useNarrationRecorder(pdfId, currentPage?.page_number ?? null, reload);
 
-  // 錄音期間，讓投影片上的擷取層把指標動作送進 recorder（T7/T8 擷取）。
+  // 錄音期間，讓投影片外框把游標移動、原生畫筆快照送進 recorder。
   useEffect(() => {
-    if (recorder.recording) setNarrationCapture({ active: true, onCapture: recorder.onCapturePointer });
-    else setNarrationCapture({ active: false, onCapture: null });
-    return () => setNarrationCapture({ active: false, onCapture: null });
-  }, [recorder.recording, recorder.onCapturePointer, setNarrationCapture]);
+    if (recorder.recording) setNarrationCapture({ active: true, onCursorMove: recorder.onCursorMove, onDrawSnapshot: recorder.onDrawSnapshot });
+    else setNarrationCapture({ active: false, onCursorMove: null, onDrawSnapshot: null });
+    return () => setNarrationCapture({ active: false, onCursorMove: null, onDrawSnapshot: null });
+  }, [recorder.recording, recorder.onCursorMove, recorder.onDrawSnapshot, setNarrationCapture]);
 
   const goToPage = useCallback((page: number) => {
     const idx = deckPages.findIndex((p) => p.page_number === page);
@@ -56,8 +56,8 @@ export function NarrationPanel() {
     const ms = audio.currentTime * 1000;
     const page = slideAtTime(playing.slide_timeline, ms);
     if (page != null) { goToPage(page); setSyncedPage(page); }
-    // T7/T8 重播：把當下游標/繪圖疊加送進 context，由投影片面板繪出。
-    setNarrationOverlay({ cursor: cursorAtTime(playing.cursor_track, ms), strokes: strokesUntil(playing.draw_track, ms) });
+    // 重播：把當下游標與畫面快照送進 context，由投影片面板繪出（游標＝十字、畫筆＝唯讀 DrawingCanvas）。
+    setNarrationOverlay({ cursor: cursorAtTime(playing.cursor_track, ms), drawing: drawingSnapshotAtTime(playing.draw_snapshots, ms) });
     // 同步字幕：有逐字時間戳就用滾動字幕，否則退回當頁逐字稿。顯示於投影片上取代原字幕。
     const sub = playing.word_cues.length > 0
       ? subtitleAtTime(playing.word_cues, ms)

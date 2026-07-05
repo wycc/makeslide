@@ -65,6 +65,23 @@ export function strokesUntil(track: readonly NarrationStroke[], ms: number): Nar
   return out;
 }
 
+// 錄音時原生畫筆（DrawingCanvas）每次筆劃變化的快照，帶相對段起點的時間。
+// data 直接是 DrawingCanvas 的 { strokes } 結構（含顏色/粗細/橡皮擦），重播時交給唯讀 DrawingCanvas 還原。
+export interface DrawSnapshot<TData = { strokes: unknown[] }> {
+  tMs: number;
+  data: TData;
+}
+
+// 給定播放毫秒，回傳「當下應顯示的畫面快照」（<= ms 的最後一份），早於第一份回 null。
+export function drawingSnapshotAtTime<TData>(snaps: readonly DrawSnapshot<TData>[], ms: number): TData | null {
+  let cur: TData | null = null;
+  for (const s of snaps) {
+    if (s.tMs <= ms) cur = s.data;
+    else break;
+  }
+  return cur;
+}
+
 export interface WordCue {
   tMs: number;
   word: string;
