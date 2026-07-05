@@ -7,6 +7,20 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 頁面筆記／留言也顯示指示圖示（使用者要求，2026-07-05）★ 使用者要求功能，不計入計數
+
+使用者要求：延續投票圖示，若頁面有「筆記（page_notes）」或「留言（comments）」也各顯示不同圖示。
+
+- [x] 投影片上方指示圖示擴充為圖示列：🗳 投票 / 📝 筆記 / 💬 留言。
+  - **後端**：deck detail 再加每頁 `has_comment` 旗標（`detail.ts` 以 `SELECT DISTINCT page_number FROM
+    page_comments` 查出、穿過 `rowToDetail` 新參數 `commentPageNumbers`）；筆記沿用既有 `page_notes`。
+  - **前端**：`PlayPageSlidePanel` 與 `PlayPageFullscreen` 的徽章改為並排圖示列——🗳（`has_poll`）／
+    📝（`page_notes` 非空）／💬（`has_comment`），各自不同顏色（fuchsia／amber／sky）。全螢幕 poll 圖示仍在
+    投票進行中時隱藏（避免與 top-right 投票鈕重複）。新增 i18n `play.slidePanel.noteDefinedBadge`／
+    `commentDefinedBadge`（parity 2194/2194）。
+  - 端到端驗證（Node 22 對真實資料 `-nM_vsV4xc`）：有 `page_notes` 的頁→📝；注入留言頁→`has_comment:true`。
+    前後端 `tsc`＋前端 `vite build` 通過、i18n 24/24。分支 `feat/page-note-comment-indicators`。
+
 ## 有 poll 定義的頁面顯示投票指示圖示（使用者要求，2026-07-05）★ 使用者要求功能，不計入計數
 
 使用者要求：在「有 polling 定義的頁面」上方顯示一個投票圖示。
@@ -1315,6 +1329,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-05 | （使用者要求）頁面筆記／留言也顯示不同圖示：指示徽章擴為圖示列 🗳 投票／📝 筆記（`page_notes`）／💬 留言。後端 detail 加每頁 `has_comment`（`SELECT DISTINCT page_number FROM page_comments`，穿過 `rowToDetail`）；一般檢視與全螢幕皆更新。新增 i18n note/commentDefinedBadge。Node 22 對真實資料 `-nM_vsV4xc` 端到端驗證（筆記頁→📝、注入留言→has_comment true）。前後端 `tsc`＋前端 `vite build` 通過、i18n 24/24、parity 2194/2194 | feat/page-note-comment-indicators |
 | 2026-07-05 | （使用者回報全螢幕時圖示未出現）投票指示徽章補到全螢幕：`PlayPageFullscreen` 新增 top-center 徽章（`currentPage.has_poll && !hasActivePoll`，投票進行中已有 top-right 🗳 投票鈕故不重複）。前端 `tsc`＋`vite build` 通過 | fix/poll-indicator-fullscreen |
 | 2026-07-05 | （使用者回報有 poll 的頁面仍不顯示圖示）修正投票指示徽章判斷來源：前一版用 `pagePolls`，但 `usePagePolls` 只在特定互動情境才抓該頁 poll、單純翻頁不載入，故圖示幾乎不出現。改為 deck detail 每頁附 `has_poll` 旗標（`detail.ts` 單一 `SELECT DISTINCT page_number FROM page_polls`，穿過 `rowToDetail` 新參數），徽章條件改 `currentPage.has_poll || pagePolls.length>0`。以真實資料 `rgHBiyrbZf` 端到端驗證（第24頁 true、第25頁 false）。前後端 `tsc`＋前端 `vite build` 通過 | fix/poll-indicator-uses-has-poll-flag |
 | 2026-07-05 | （使用者要求）有 poll 定義的頁面在投影片上方顯示投票指示圖示：沿用當前頁的 `pagePolls`（`length > 0` 即該頁有投票），於 `PlayPageSlidePanel` 影像 overlay 上方置中加一個非互動 🗳 徽章（多個 poll 附數量），新增 i18n `play.slidePanel.pollDefinedBadge`。前端 `tsc`＋`vite build` 通過、i18n 24/24、parity 2192/2192 | feat/poll-page-indicator-icon |
