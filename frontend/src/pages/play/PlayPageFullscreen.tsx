@@ -157,6 +157,7 @@ export function PlayPageFullscreen() {
     handleVotePoll,
     syncPollShowResults, setSyncPollShowResults,
     pollStarted,
+    pollJoinQrImageUrl, pollJoinShareUrl,
     pagePolls,
     handleSelectDisplayedPoll, syncDisplayedPollId,
     classroomMode, classroomAwaitingNext,
@@ -392,6 +393,25 @@ export function PlayPageFullscreen() {
               </div>
             </div>
           ))}
+        </div>
+      ) : null}
+      {pollJoinQrImageUrl ? (
+        <div
+          className="absolute bottom-4 left-4 z-40 flex flex-col items-center gap-1.5 rounded-xl border border-fuchsia-400/40 bg-slate-950/90 p-3 shadow-2xl backdrop-blur"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <p className="text-xs font-semibold text-fuchsia-100">{t('play.fullscreen.pollJoinQrTitle')}</p>
+          <img
+            src={pollJoinQrImageUrl}
+            alt={t('play.fullscreen.pollJoinQrAlt')}
+            className="h-36 w-36 rounded-md border border-slate-700 bg-white p-1.5"
+          />
+          <p className="max-w-[9.5rem] text-center text-[10px] leading-tight text-slate-400">
+            {t('play.fullscreen.pollJoinQrHint')}
+          </p>
+          {pollJoinShareUrl ? (
+            <p className="max-w-[9.5rem] break-all text-center text-[9px] text-slate-500">{pollJoinShareUrl}</p>
+          ) : null}
         </div>
       ) : null}
       {fullscreenLayout === 'image' && !drawingMode ? (

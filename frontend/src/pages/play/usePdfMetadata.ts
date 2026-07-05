@@ -20,6 +20,7 @@ import {
 } from '../../lib/ttsVoices';
 import { useI18n, getStoredTtsSpeed, setStoredTtsSpeed } from '../../i18n';
 import { copyTextToClipboard } from '../../lib/clipboard';
+import { buildJoinQrImageUrl } from '../../lib/joinQr';
 import type { PdfDetail } from '../../types';
 
 interface UsePdfMetadataParams {
@@ -302,8 +303,7 @@ export function usePdfMetadata({
       setShareUrl(absoluteUrl);
       // Creating a share link no longer changes visibility; keep the local copy as-is.
       setDetail((prev) => prev ? { ...prev, visibility: res.visibility ?? prev.visibility, updated_at: res.updated_at } : prev);
-      const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=520x520&data=${encodeURIComponent(absoluteUrl)}`;
-      setPlayQrCodeUrl(qrSrc);
+      setPlayQrCodeUrl(buildJoinQrImageUrl(absoluteUrl));
       setShareMessage(
         t('play.share.qrCodeCreated').replace(
           '{access}',

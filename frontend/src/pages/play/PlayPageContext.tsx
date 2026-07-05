@@ -394,6 +394,9 @@ export interface PlayPageContextValue {
   syncRealtimePollStarted: boolean;
   syncPollShowResults: boolean;
   setSyncPollShowResults: Dispatch<SetStateAction<boolean>>;
+  // 投票進行中，供聽眾掃描加入（並自動開啟同步模式）的 QR 與其分享連結（未啟用時為 null）。
+  pollJoinQrImageUrl: string | null;
+  pollJoinShareUrl: string | null;
 
   // ─── Classroom / interactive ────────────────────────────────────────────────
   classroomMode: boolean;

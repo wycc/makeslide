@@ -61,6 +61,7 @@ import { usePageAnimation } from './play/usePageAnimation';
 import { usePromptAndSource } from './play/usePromptAndSource';
 import { useChatAndImageEdit } from './play/useChatAndImageEdit';
 import { usePagePolls } from './play/usePagePolls';
+import { usePollJoinQrCode } from './play/usePollJoinQrCode';
 import { usePageAsk } from './play/usePageAsk';
 import { useWatchProgress } from './play/useWatchProgress';
 import katex from 'katex';
@@ -960,6 +961,14 @@ export default function PlayPage() {
     syncPollShowResults,
     setSyncPollShowResults,
     setSyncDisplayedPollId,
+  });
+
+  // 投票進行中（且自己是可主控的擁有者）時，自動產生「掃描加入」QR：掃描後以分享連結進入簡報，
+  // 便會自動開啟同步模式（見上方 currentShareToken 分支），讓聽眾直接進到同步中的簡報並投票。
+  const { pollJoinQrImageUrl, pollJoinShareUrl } = usePollJoinQrCode({
+    pdfId,
+    active: pollState.pollStarted,
+    eligible: isSyncMasterEligible,
   });
 
   // 一般手動開始的投票結束後不會自動繼續播放；只有由 realtime-poll 動畫效果觸發暫停的
@@ -2495,6 +2504,7 @@ export default function PlayPage() {
     activePoll, activePollQuestion,
     syncDisplayedPollId, setSyncDisplayedPollId,
     syncRealtimePollStarted, syncPollShowResults, setSyncPollShowResults,
+    pollJoinQrImageUrl, pollJoinShareUrl,
     // video (from useVideoGeneration)
     ...videoState,
     // classroom
