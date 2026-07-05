@@ -106,6 +106,12 @@
   `DrawingCanvas` 仍會載入並顯示該頁存在伺服器的手繪標註，疊在旁白重播筆畫上。加 `narrationPlaying` 旗標
   （由 `NarrationPanel` 依 `playingId` 設定），播放中時 `PlayPageSlidePanel` 與 `PlayPageFullscreen` 皆不渲染
   編輯用 `DrawingCanvas`，只顯示旁白自己錄到的筆畫。前端 `tsc`、i18n 24/24。分支 `fix/narration-hide-saved-drawing`。
+- [x] 修正：旁白重播只顯示「錄製期間新增」的筆畫；新增筆畫永久留在頁面（使用者要求）（2026-07-05）：原本畫筆快照
+  存的是 `DrawingCanvas` **完整** strokes（含錄製前既有），重播看到的「原有筆畫」其實是快照裡複製的既有部分。改為
+  只記**增量**：`DrawingCanvas` 載入頁面後回報既有筆數 baseline（並於 `baselineSignal`＝錄製開始時再回報一次以鎖定當前
+  頁），recorder 記各頁 baseline、只存 `strokes.slice(base)`。重播（唯讀 canvas）因此只顯示這段錄製新增的筆畫；
+  重播中隱藏編輯用 canvas（既有標註不顯示）。永久保存不變——錄製時原生 `DrawingCanvas` 仍把既有＋新增存回該頁，
+  故新增筆畫錄完後留在每頁。前端 `tsc`、i18n 24/24、narrationTracks 10/10。分支 `fix/narration-draw-delta-only`。
 - [ ] T9：影片輸出（ffmpeg）
 
 ### （下方為初版 MVP 記錄，已被上方分段模型取代）
