@@ -54,10 +54,11 @@ export function narrationManifestPath(pdfId: string): string {
   return path.join(narrationDir(pdfId), 'manifest.json');
 }
 
-// 逐段音檔：narration/<segmentId>.webm（segmentId 為內部產生的 nanoid，非使用者輸入）。
+// 逐段音檔：narration/<segmentId>.audio（實際內容為 mp3 或 webm，以 manifest 的 audioMime 為準；
+// segmentId 為內部產生的 nanoid，非使用者輸入）。
 export function narrationSegmentAudioPath(pdfId: string, segmentId: string): string {
   const safe = segmentId.replace(/[^A-Za-z0-9_-]/g, '');
-  return path.join(narrationDir(pdfId), `${safe}.webm`);
+  return path.join(narrationDir(pdfId), `${safe}.audio`);
 }
 
 export function coverThumbnailPath(pdfId: string): string {
