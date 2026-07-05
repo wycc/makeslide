@@ -7,6 +7,23 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 存取權限 UI 移出分享連結對話框（使用者要求，2026-07-05）★ 使用者要求功能，不計入計數
+
+使用者回報：目前「存取權限」（身分權限：預設權限＋名單/群組 ACL）UI 位置不合理——它被藏在
+「建立分享連結／QR」的 `ShareDialog` 內當第三個分頁，導致「管理誰能存取」得先按「建立分享連結」
+產生一條 QR/連結、才在跳出的對話框裡找到。存取管理是身分層次的事，不該以「先建立分享連結」為前提。
+
+- [x] 把「存取權限」從 `ShareDialog` 抽出，改為分享下拉選單內獨立的（僅擁有者可見）對話框入口。
+  - **抽出**：新增 [AccessControlDialog.tsx](frontend/src/pages/play/AccessControlDialog.tsx)——獨立 modal
+    （標題＋關閉＋backdrop dismiss）包住既有 [AccessControlPanel](frontend/src/pages/play/AccessControlPanel.tsx)。
+  - **入口**：Header「群組分享」下拉選單頂部新增「🔑 存取權限」按鈕（gate 在 `!currentShareToken && detail.is_owner`），
+    點擊開 `AccessControlDialog`；不再需要先建立分享連結。狀態 `accessDialogOpen` 由 `usePdfMetadata` 提供、
+    經 `PlayPageContext` 傳遞、於 [PlayPageDialogs](frontend/src/pages/play/PlayPageDialogs.tsx) 渲染。
+  - **簡化**：[ShareDialog](frontend/src/pages/play/ShareDialog.tsx) 移除 `access` 分頁與 `pdfId`/`visibility`/
+    `canManageAccess` props，退回「連結／嵌入」兩個分頁，回歸單一職責（產生分享連結／QR／嵌入碼）。
+  - 沿用既有 i18n `play.access.tab`／`play.access.description`（未新增鍵，parity 2195/2195）。前端
+    `tsc --noEmit`＋`vite build` 通過、ShareDialog 測試 2/2。分支 `refactor/access-control-out-of-share-dialog`。
+
 ## 投票進行中顯示「掃描加入」QR（使用者要求，2026-07-05）★ 使用者要求功能，不計入計數
 
 使用者要求：**polling（投票進行）時在螢幕上顯示 QR code，讓聽眾掃描進入簡報並自動開啟同步模式**。
@@ -1263,6 +1280,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-05 | （使用者要求）存取權限 UI 位置不合理修正：身分權限管理（預設權限＋名單/群組 ACL）原被藏在「建立分享連結／QR」的 `ShareDialog` 內當第三個分頁，須先按「建立分享連結」產生 QR/連結才進得去。抽出為獨立 `AccessControlDialog`（modal 包 `AccessControlPanel`），入口改為 Header「群組分享」下拉選單頂部新增的「🔑 存取權限」按鈕（gate `!currentShareToken && detail.is_owner`）；`ShareDialog` 移除 access 分頁與 `pdfId`/`visibility`/`canManageAccess` props，退回「連結／嵌入」兩分頁回歸單一職責。狀態 `accessDialogOpen` 經 `usePdfMetadata`→`PlayPageContext`→`PlayPageDialogs`。沿用既有 i18n（未新增鍵、parity 2195/2195）。前端 `tsc --noEmit`＋`vite build` 通過、ShareDialog 測試 2/2 | refactor/access-control-out-of-share-dialog |
 | 2026-07-04 | （使用者要求二次覆核權限測試矩陣）發現並修復**提權漏洞**：`PATCH /api/pdfs/:id/visibility` 閘門原為 `canEditPdf(...aclCtx)`，統一模型後匿名 editable-token 持有者／read_write 名單使用者可改「預設權限」（改 public_editable 即讓全世界永久可編輯、token 過期仍有效）。visibility 屬存取管理非內容編輯，改為 owner-only（`hasOwnerOrLegacyAccess`），與 ACL 管理 API／建立分享連結一致。並補齊矩陣測試（token-capability 22→27）：建立分享連結 owner-only、visibility owner-only、read_write 名單刪整份 403、只讀名單＋editable token→有效 edit（反向 max）、群組授權 HTTP 端對端。後端 tsc 通過、9 個權限套件序跑全綠（detail 92、page-ops 31、token-capability 27、pdf-access 13、permissions/permissions-api 各 6、read-gate/delete 各 5、groups 4、share-expiry 3） | fix/access-admin-owner-only |
 | 2026-07-04 | （使用者要求）分享權限模型統一為兩套系統、分享連結成為真正的能力憑證：先前三套機制（visibility／分享 token／身分 ACL）語意重疊，且建立連結會偷偷翻動全域 visibility、token 不具保密力、`hasShareAccess` 未檢查到期。改為：系統一＝身分權限（visibility 預設＋ACL，`resolvePdfAccessLevel`）；系統二＝token 能力憑證（新增 `resolveTokenAccessLevel` 含到期，任何持有者取得內含 read/edit，建立連結不再改 visibility）；`aclCtx` 帶入 token，`canReadPdf`/`canEditPdf` 以 `max(身分,token)` 決策（~146 呼叫點免改）、清掉 40 處多餘且有到期 bug 的 share 讀取前綴、detail `access_level` 改回有效權限。破壞性子操作＝解析出 edit＋已登入；刪整份簡報限縮為僅 owner。後端 tsc 通過、既有權限套件無回歸（delete 測試改 owner-only）＋新增 token-capability 11 測試綠；前端 tsc 通過、ShareDialog＋i18n 29 綠、文案區分兩概念 | feat/unified-access-capability-tokens |
 | 2026-07-03 | （使用者要求）把 worktree/demo16 完整合併回 master：先在 demo16 提交其未提交的「直播測驗允許重新進入（quiz re-entry）」WIP（排除 demo16 專屬的 start.sh 本地改動），再 `git merge --no-ff worktree/demo16` 帶入 demo16 累積但未進 master 的功能（poll-results 彈窗、watch-records 對話框、quiz camera recording/proctoring/finish button、quiz re-entry）。主 repo 工作區同一份重複的 WIP 經比對與 demo16 內容完全相同（僅檔案權限位元差異），已捨棄改由合併帶回。前後端 typecheck 通過；i18n 27、pdf-access 13、groups-api 4、poll-voters 3 測試綠 | worktree/demo16 → master（merge dd26906） |
