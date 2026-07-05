@@ -30,6 +30,9 @@ const TimelineSchema = z.object({
   drawTrack: z.array(StrokeSchema).max(2000).optional(),
 });
 
+// 逐字時間戳（tMs 相對段起點）：供播放時同步顯示字幕。
+const WordCueSchema = z.object({ tMs: z.number(), word: z.string() });
+
 interface SegmentMeta {
   id: string;
   durationMs: number;
@@ -37,6 +40,8 @@ interface SegmentMeta {
   createdAt: string;
   // 逐頁逐字稿（key 為頁碼字串，值為該頁的逐字稿）。可由 STT 產生或使用者編輯。
   transcriptByPage?: Record<string, string>;
+  // 逐字時間戳（STT 產生，供播放同步字幕）；使用者編輯逐頁稿不影響此處。
+  wordCues?: z.infer<typeof WordCueSchema>[];
   cursorTrack?: z.infer<typeof CursorPointSchema>[];
   drawTrack?: z.infer<typeof StrokeSchema>[];
 }
@@ -52,6 +57,7 @@ const ManifestSchema = z.object({
       slideTimeline: z.array(SegmentSchema),
       createdAt: z.string(),
       transcriptByPage: z.record(z.string(), z.string()).optional(),
+      wordCues: z.array(WordCueSchema).optional(),
       cursorTrack: z.array(CursorPointSchema).optional(),
       drawTrack: z.array(StrokeSchema).optional(),
     }),
@@ -143,6 +149,7 @@ export async function registerNarrationRoutes(app: FastifyInstance): Promise<voi
         pages: distinctPages(s.slideTimeline),
         slide_timeline: s.slideTimeline,
         transcript_by_page: s.transcriptByPage ?? {},
+        word_cues: s.wordCues ?? [],
         cursor_track: s.cursorTrack ?? [],
         draw_track: s.drawTrack ?? [],
         created_at: s.createdAt,
@@ -200,8 +207,9 @@ export async function registerNarrationRoutes(app: FastifyInstance): Promise<voi
     seg.slideTimeline = up.timeline.segments;
     seg.cursorTrack = up.timeline.cursorTrack;
     seg.drawTrack = up.timeline.drawTrack;
-    // 重錄時逐字稿失效（音檔已換），清掉舊逐字稿。
+    // 重錄時逐字稿失效（音檔已換），清掉舊逐字稿與逐字時間戳。
     seg.transcriptByPage = undefined;
+    seg.wordCues = undefined;
     await writeManifest(parsed.data.id, manifest);
     return reply.send({ ok: true, id: segId, size_bytes: up.buffer.length });
   });
@@ -295,15 +303,19 @@ export async function registerNarrationRoutes(app: FastifyInstance): Promise<voi
       const words = await transcribeAudioBufferWithWordTimestamps(sttAudio, sttName, sttMime, provider);
       if (words.length > 0) {
         transcriptByPage = splitWordsByPage(words, seg.slideTimeline);
+        // 逐字時間戳（秒→毫秒）供播放同步字幕。
+        seg.wordCues = words.map((w) => ({ tMs: Math.round(w.start * 1000), word: w.word }));
       } else {
         const text = await transcribeAudioBuffer(sttAudio, sttName, sttMime, provider);
         transcriptByPage = assignPlainTranscript(text, seg.slideTimeline);
+        seg.wordCues = undefined;
       }
     } catch (wordErr) {
       request.log.warn({ err: wordErr, pdfId: parsed.data.id, segId, provider }, 'narration word-timestamp STT failed; falling back to plain');
       try {
         const text = await transcribeAudioBuffer(sttAudio, sttName, sttMime, provider);
         transcriptByPage = assignPlainTranscript(text, seg.slideTimeline);
+        seg.wordCues = undefined;
       } catch (err) {
         request.log.error({ err, pdfId: parsed.data.id, segId }, 'narration transcription failed');
         const message = err instanceof Error && err.message ? `語音轉文字失敗：${err.message}` : '語音轉文字失敗';

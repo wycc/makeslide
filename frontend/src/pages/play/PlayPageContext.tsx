@@ -53,6 +53,9 @@ export interface PlayPageContextValue {
   setNarrationCapture: Dispatch<SetStateAction<{ active: boolean; onCapture: ((kind: 'move' | 'down' | 'up', x: number, y: number) => void) | null }>>;
   narrationOverlay: NarrationOverlayState;
   setNarrationOverlay: Dispatch<SetStateAction<NarrationOverlayState>>;
+  // 播放旁白時的同步字幕（顯示於投影片上，取代原字幕）；null 表示無。
+  narrationSubtitle: string | null;
+  setNarrationSubtitle: Dispatch<SetStateAction<string | null>>;
   loadError: string | null;
   /** 僅 owner 可見的每頁觀看進度聚合統計，依 `page_number` 查找；無資料或非 owner 時為空 Map。 */
   watchProgressByPage: Map<number, PageWatchProgressStats>;

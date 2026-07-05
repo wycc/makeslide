@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cursorAtTime, strokesUntil } from './narrationTracks';
+import { cursorAtTime, strokesUntil, subtitleAtTime } from './narrationTracks';
 
 const track = [
   { tMs: 0, x: 0, y: 0 },
@@ -21,6 +21,20 @@ test('cursorAtTime clamps to the last point after the end, null before the start
   assert.deepEqual(cursorAtTime(track, 9999), { x: 1, y: 1 });
   assert.equal(cursorAtTime([{ tMs: 500, x: 0.2, y: 0.2 }], 100), null);
   assert.equal(cursorAtTime([], 100), null);
+});
+
+test('subtitleAtTime shows only the recent words within the window', () => {
+  const cues = [
+    { tMs: 0, word: 'hello' },
+    { tMs: 1000, word: 'there' },
+    { tMs: 2000, word: 'friends' },
+    { tMs: 9000, word: 'later' },
+  ];
+  assert.equal(subtitleAtTime(cues, 2500, 6000), 'hello there friends');
+  // at 9500 with a 6s window, only "later" (>3500ms) remains; older words dropped
+  assert.equal(subtitleAtTime(cues, 9500, 6000), 'later');
+  assert.equal(subtitleAtTime(cues, -100, 6000), '');
+  assert.equal(subtitleAtTime([], 1000), '');
 });
 
 test('strokesUntil reveals only strokes that have started by the given time', () => {

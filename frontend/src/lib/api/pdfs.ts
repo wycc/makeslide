@@ -1128,6 +1128,7 @@ export interface NarrationSegment {
   pages: number[];
   slide_timeline: SlideTimelineSeg[];
   transcript_by_page: Record<string, string>;
+  word_cues: { tMs: number; word: string }[];
   cursor_track: NarrationCursorPoint[];
   draw_track: NarrationStrokeData[];
   created_at: string;
