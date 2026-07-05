@@ -1591,6 +1591,7 @@ export const en = {
   'play.narration.saving': 'Saving…',
   'play.narration.none': 'No narration recorded yet',
   'play.narration.syncHint': 'Playback auto-advances to the matching page',
+  'play.narration.captureHint': 'Move the mouse over the slide = cursor; press & drag = pen.',
   'play.narration.segmentLabel': 'Segment {n}',
   'play.narration.pages': 'Pages {pages}',
   'play.narration.play': 'Play',

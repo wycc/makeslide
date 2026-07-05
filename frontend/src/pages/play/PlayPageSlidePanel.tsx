@@ -493,7 +493,7 @@ export function PlayPageSlidePanel() {
                   {/* 旁白錄製擷取層：擷取投影片上的指標動作（移動=游標、拖曳=畫筆） */}
                   {narrationCapture.active && narrationCapture.onCapture && (
                     <div
-                      className="absolute inset-0 z-30 cursor-crosshair"
+                      className="absolute inset-0 z-40 cursor-crosshair"
                       style={{ touchAction: 'none' }}
                       onPointerDown={(e) => {
                         e.currentTarget.setPointerCapture?.(e.pointerId);
