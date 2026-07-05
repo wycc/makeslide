@@ -36,6 +36,8 @@ export interface NarrationCaptureState {
   active: boolean;
   onCursorMove: ((x: number, y: number) => void) | null;
   onDrawSnapshot: ((data: DrawingData) => void) | null;
+  // 回報目前頁載入的既有筆數，作為只擷取「錄製期間新增」筆劃的基準。
+  onDrawBaseline: ((count: number) => void) | null;
 }
 
 // ── Full context interface ────────────────────────────────────────────────────

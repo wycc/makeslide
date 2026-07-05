@@ -72,10 +72,16 @@ export interface DrawingCanvasProps {
   remoteData?: DrawingData | null;
   // master 端每次本機筆劃變化時回呼，供外層透過同步狀態頻道即時推送給 follower。
   onLocalChange?: (data: DrawingData) => void;
+  // 載入某頁既有筆劃後回報其筆數，供旁白錄製以此為基準只擷取「錄製期間新增」的筆劃。
+  onBaseline?: (count: number) => void;
+  // 此值改變時，立即以「目前」筆數回報一次 baseline（用於錄製開始當下，鎖定當前頁的既有筆數）。
+  baselineSignal?: unknown;
 }
 
 const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
-  function DrawingCanvas({ pdfId, pageNumber, enabled, color, lineWidth, eraser, remoteData, onLocalChange }, ref) {
+  function DrawingCanvas({ pdfId, pageNumber, enabled, color, lineWidth, eraser, remoteData, onLocalChange, onBaseline, baselineSignal }, ref) {
+    const onBaselineRef = useRef(onBaseline);
+    onBaselineRef.current = onBaseline;
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const strokesRef = useRef<DrawingStroke[]>([]);
     const currentStrokeRef = useRef<DrawingStroke | null>(null);
@@ -162,6 +168,8 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
         if (cancelled) return;
         strokesRef.current = data?.strokes ?? [];
         redraw();
+        // 回報此頁既有筆數作為錄製增量的基準（含無既有＝0）。
+        onBaselineRef.current?.(strokesRef.current.length);
       });
       return () => {
         cancelled = true;
@@ -176,6 +184,12 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
       currentStrokeRef.current = null;
       redraw();
     }, [remoteData, redraw]);
+
+    // 訊號改變時（例如錄製開始），立即以目前筆數回報 baseline，鎖定當前頁的既有筆數。
+    useEffect(() => {
+      if (baselineSignal === undefined) return;
+      onBaselineRef.current?.(strokesRef.current.length);
+    }, [baselineSignal]);
 
     const scheduleSave = useCallback(() => {
       if (saveTimerRef.current !== null) clearTimeout(saveTimerRef.current);

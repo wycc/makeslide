@@ -38,8 +38,10 @@ export interface NarrationRecorderState {
   cancelRecording: () => void;
   // 錄音期間，投影片外框的指標移動呼叫此函式記游標（x/y 為正規化 0–1，不攔截原生畫筆）。
   onCursorMove: (x: number, y: number) => void;
-  // 錄音期間，原生畫筆（DrawingCanvas）每次筆劃變化回報完整畫面快照，記成帶時間的快照序列。
+  // 錄音期間，原生畫筆（DrawingCanvas）每次筆劃變化回報完整畫面快照，記成帶時間的快照序列（只記增量）。
   onDrawSnapshot: (data: NarrationDrawingData) => void;
+  // 進入某頁載入既有筆劃後回報其筆數，作為只擷取「錄製期間新增」筆劃的基準。
+  onDrawBaseline: (count: number) => void;
   // 錄音期間講者播放原有 TTS 時呼叫：開始一段（page＝當時頁碼，fromSec＝該頁音檔起播秒數）。
   ttsPlayStart: (page: number, fromSec: number) => void;
   // 錄音期間 TTS 停止/暫停/換頁時呼叫：關閉目前這一段。
@@ -72,6 +74,8 @@ export function useNarrationRecorder(
   // 目前頁碼（供畫筆快照標記所屬頁；畫筆是逐頁的，重播需以頁為單位取快照）。
   const currentPageRef = useRef<number | null>(currentPageNumber);
   useEffect(() => { currentPageRef.current = currentPageNumber; }, [currentPageNumber]);
+  // 各頁「錄製開始時的既有筆數」，用來只擷取錄製期間新增的筆劃（增量＝完整 strokes.slice(base)）。
+  const pageBaseRef = useRef<Map<number, number>>(new Map());
   const recordingRef = useRef(false);
   const lastCountTsRef = useRef(0);
   const [captureCounts, setCaptureCounts] = useState({ cursor: 0, strokes: 0 });
@@ -95,15 +99,26 @@ export function useNarrationRecorder(
     }
   }, [bumpCounts]);
 
-  // 錄音期間記原生畫筆快照。筆畫數改變（完成一筆或橡皮擦刪除）一律記錄；畫的過程節流取樣使筆畫漸進長出。
+  // 進入某頁載入既有筆劃後，記下該頁基準筆數（錄製只擷取超出此基準的新增筆劃）。
+  const onDrawBaseline = useCallback((count: number) => {
+    const page = currentPageRef.current;
+    if (page != null) pageBaseRef.current.set(page, count);
+  }, []);
+
+  // 錄音期間記原生畫筆快照——只記「錄製期間新增」的筆劃（完整 strokes 去掉該頁既有的前綴）。
+  // 筆畫數改變（完成一筆或橡皮擦刪除）一律記錄；畫的過程節流取樣使筆畫漸進長出。
   const onDrawSnapshot = useCallback((data: NarrationDrawingData) => {
     if (!recordingRef.current) return;
     const tMs = Date.now() - startedAtRef.current;
-    const structural = data.strokes.length !== lastStrokeCountRef.current;
+    const page = currentPageRef.current ?? undefined;
+    const base = (page != null ? pageBaseRef.current.get(page) : 0) ?? 0;
+    // 只保留錄製期間新增的筆劃（既有筆劃在陣列前綴，新增 append 在尾端）。
+    const delta: NarrationDrawingData = { strokes: data.strokes.slice(base) };
+    const structural = delta.strokes.length !== lastStrokeCountRef.current;
     if (structural || tMs - lastDrawTsRef.current >= DRAW_SAMPLE_MS) {
       lastDrawTsRef.current = tMs;
-      lastStrokeCountRef.current = data.strokes.length;
-      drawSnapshotsRef.current.push({ tMs, data: cloneDrawingData(data), page: currentPageRef.current ?? undefined });
+      lastStrokeCountRef.current = delta.strokes.length;
+      drawSnapshotsRef.current.push({ tMs, data: cloneDrawingData(delta), page });
       bumpCounts();
     }
   }, [bumpCounts]);
@@ -165,6 +180,7 @@ export function useNarrationRecorder(
       drawSnapshotsRef.current = [];
       audioCuesRef.current = [];
       openCueRef.current = null;
+      pageBaseRef.current = new Map();
       lastCursorTsRef.current = -CURSOR_SAMPLE_MS;
       lastDrawTsRef.current = -DRAW_SAMPLE_MS;
       lastStrokeCountRef.current = -1;
@@ -226,5 +242,5 @@ export function useNarrationRecorder(
   // 卸載時釋放麥克風。
   useEffect(() => () => cleanupStream(), [cleanupStream]);
 
-  return { recording, saving, error, supported, targetSegmentId, captureCounts, startRecording: start, stopAndSave, cancelRecording, onCursorMove, onDrawSnapshot, ttsPlayStart, ttsPlayStop };
+  return { recording, saving, error, supported, targetSegmentId, captureCounts, startRecording: start, stopAndSave, cancelRecording, onCursorMove, onDrawSnapshot, onDrawBaseline, ttsPlayStart, ttsPlayStop };
 }

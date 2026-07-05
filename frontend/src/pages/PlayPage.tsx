@@ -2059,7 +2059,7 @@ export default function PlayPage() {
   });
 
   // 旁白：投影片指標擷取（錄製時）與游標/繪圖重播疊加（播放時）。
-  const [narrationCapture, setNarrationCapture] = useState<NarrationCaptureState>({ active: false, onCursorMove: null, onDrawSnapshot: null });
+  const [narrationCapture, setNarrationCapture] = useState<NarrationCaptureState>({ active: false, onCursorMove: null, onDrawSnapshot: null, onDrawBaseline: null });
   const [narrationOverlay, setNarrationOverlay] = useState<NarrationOverlayState>(null);
   const [narrationSubtitle, setNarrationSubtitle] = useState<string | null>(null);
   const [narrationPlaying, setNarrationPlaying] = useState(false);
