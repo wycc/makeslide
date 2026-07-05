@@ -9,6 +9,7 @@ import { errorResponse, IdParamSchema, nowIso } from './shared';
 import { narrationDir, narrationManifestPath, narrationSegmentAudioPath } from '../../services/storage';
 import { transcribeAudioBufferWithWordTimestamps, transcribeAudioBuffer, resolveTranscriptionProvider } from '../../services/openai';
 import { splitWordsByPage, assignPlainTranscript } from './narrationTranscript';
+import { transcodeToMp3 } from '../../services/audioTranscode';
 
 // 簡報旁白錄音（多段）：每份簡報存一份 manifest.json（有序的 segment 清單）＋逐段音檔。
 // 每段 = 一次錄音（可跨多頁），含該段的翻頁時間軸（相對段起點）。
@@ -278,19 +279,30 @@ export async function registerNarrationRoutes(app: FastifyInstance): Promise<voi
     // 退回一般純文字轉錄（較多端點支援），整段掛到第一頁。兩者都失敗才回錯誤（並帶出真正原因）。
     // 用與 chat 相同的 OpenAI 相容 provider（例如 cgu-air）跑 STT，避免只設了該 provider 金鑰卻硬打 openai。
     const provider = resolveTranscriptionProvider();
+    // MediaRecorder 的 webm 常缺時長 metadata（Whisper 會回 invalid_audio），先用 ffmpeg 轉成 mp3。
+    let sttAudio = audio;
+    let sttName = 'narration.webm';
+    let sttMime = 'audio/webm';
+    try {
+      sttAudio = await transcodeToMp3(audio);
+      sttName = 'narration.mp3';
+      sttMime = 'audio/mpeg';
+    } catch (tErr) {
+      request.log.warn({ err: tErr, pdfId: parsed.data.id, segId }, 'narration audio transcode failed; sending original webm');
+    }
     let transcriptByPage: Record<number, string>;
     try {
-      const words = await transcribeAudioBufferWithWordTimestamps(audio, 'narration.webm', 'audio/webm', provider);
+      const words = await transcribeAudioBufferWithWordTimestamps(sttAudio, sttName, sttMime, provider);
       if (words.length > 0) {
         transcriptByPage = splitWordsByPage(words, seg.slideTimeline);
       } else {
-        const text = await transcribeAudioBuffer(audio, 'narration.webm', 'audio/webm', provider);
+        const text = await transcribeAudioBuffer(sttAudio, sttName, sttMime, provider);
         transcriptByPage = assignPlainTranscript(text, seg.slideTimeline);
       }
     } catch (wordErr) {
       request.log.warn({ err: wordErr, pdfId: parsed.data.id, segId, provider }, 'narration word-timestamp STT failed; falling back to plain');
       try {
-        const text = await transcribeAudioBuffer(audio, 'narration.webm', 'audio/webm', provider);
+        const text = await transcribeAudioBuffer(sttAudio, sttName, sttMime, provider);
         transcriptByPage = assignPlainTranscript(text, seg.slideTimeline);
       } catch (err) {
         request.log.error({ err, pdfId: parsed.data.id, segId }, 'narration transcription failed');

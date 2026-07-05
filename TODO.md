@@ -52,6 +52,11 @@
   LLM provider、gemini→openai）；narration 轉錄改用該 provider（與 chat 同端點）。並加韌性：word-timestamps 失敗/
   無字時退回純文字轉錄（掛第一頁，`assignPlainTranscript` + 測試），兩者皆失敗才回錯誤並**帶出真正原因訊息**；
   前端逐字稿編輯器顯示該訊息。後端 11/11、前後端 `tsc`。分支 `fix/narration-stt-provider`。
+- [x] STT 修正②（使用者回報 `invalid_audio: Unable to determine audio duration`）（2026-07-05）：
+  MediaRecorder 的 webm/opus 常缺時長 metadata，Whisper 400。修法：新增
+  [audioTranscode.ts](backend/src/services/audioTranscode.ts) `transcodeToMp3`（ffmpeg 轉單聲道 16kHz mp3、
+  時長明確），narration 轉錄前先轉檔再送 Whisper（轉檔失敗則退回原檔）。新增 `audio-transcode.test.ts`
+  （產生 webm→轉 mp3→驗證，ffmpeg 不可用時 skip）。後端 12/12、`tsc` 通過。分支 `fix/narration-stt-transcode`。
 - [ ] T9：影片輸出（ffmpeg）
 
 ### （下方為初版 MVP 記錄，已被上方分段模型取代）
