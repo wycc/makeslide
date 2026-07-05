@@ -19,7 +19,7 @@ import { ApiError } from '../../lib/api';
 // 頁面。任何可讀者可逐段播放——播放時依該段時間軸自動翻頁。
 export function NarrationPanel() {
   const { t } = useI18n();
-  const { pdfId, detail, currentPage, deckPages, currentIdx, setCurrentIdx, setNarrationCapture, setNarrationOverlay, setNarrationSubtitle, isPlaying, audioRef, scripts, withShareToken } = usePlayPageContext();
+  const { pdfId, detail, currentPage, deckPages, currentIdx, setCurrentIdx, setNarrationCapture, setNarrationOverlay, setNarrationSubtitle, setNarrationPlaying, isPlaying, audioRef, scripts, withShareToken } = usePlayPageContext();
   const canRecord = Boolean(detail?.is_owner || detail?.visibility === 'public_editable');
 
   const [segments, setSegments] = useState<NarrationSegment[] | null>(null);
@@ -105,10 +105,12 @@ export function NarrationPanel() {
     setNarrationSubtitle(sub || null);
   }, [playing, goToPage, setNarrationOverlay, setNarrationSubtitle, deckPages, withShareToken, scripts, stopTts]);
 
-  // 沒有在播放時清掉重播疊加與字幕，並停掉 TTS。
+  // 沒有在播放時清掉重播疊加與字幕，並停掉 TTS。播放中則標記 narrationPlaying（隱藏投影片上原有已存標註）。
   useEffect(() => {
+    setNarrationPlaying(!!playingId);
     if (!playingId) { setNarrationOverlay(null); setNarrationSubtitle(null); stopTts(); }
-  }, [playingId, setNarrationOverlay, setNarrationSubtitle, stopTts]);
+    return () => setNarrationPlaying(false);
+  }, [playingId, setNarrationOverlay, setNarrationSubtitle, setNarrationPlaying, stopTts]);
 
   // 播放中、目前頁的逐字稿（T5 同步顯示）。
   const syncedTranscript = playing && syncedPage != null ? (playing.transcript_by_page[String(syncedPage)] ?? '') : '';

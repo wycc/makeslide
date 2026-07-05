@@ -63,6 +63,9 @@ export interface PlayPageContextValue {
   // 播放旁白時的同步字幕（顯示於投影片上，取代原字幕）；null 表示無。
   narrationSubtitle: string | null;
   setNarrationSubtitle: Dispatch<SetStateAction<string | null>>;
+  // 旁白重播進行中：此時隱藏投影片上原有的已存手繪標註，只顯示旁白重播的筆畫。
+  narrationPlaying: boolean;
+  setNarrationPlaying: Dispatch<SetStateAction<boolean>>;
   loadError: string | null;
   /** 僅 owner 可見的每頁觀看進度聚合統計，依 `page_number` 查找；無資料或非 owner 時為空 Map。 */
   watchProgressByPage: Map<number, PageWatchProgressStats>;
