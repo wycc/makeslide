@@ -222,8 +222,6 @@ test('usePdfMetadata status message locale keys are complete', () => {
     'play.metadata.titleRegenerateFailed',
     'play.metadata.ttsSettingsSaved',
     'play.metadata.ttsSettingsSaveFailed',
-    'play.share.makePrivateSuccess',
-    'play.share.makePrivateFailed',
     'play.share.qrCodeCreated',
     'play.share.qrCodeCreateFailed',
     'play.githubSync.success',

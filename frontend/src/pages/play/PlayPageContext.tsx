@@ -352,7 +352,6 @@ export interface PlayPageContextValue {
   shareBusy: boolean;
   playQrCodeUrl: string | null;
   handleCreateShareLink: () => void;
-  handleMakeSharePrivate: () => void;
   handleShowPlayQrCode: () => void;
   canViewPostClassReport: boolean;
   openPostClassReport: () => void;
