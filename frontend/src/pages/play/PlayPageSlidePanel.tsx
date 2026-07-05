@@ -485,6 +485,16 @@ export function PlayPageSlidePanel() {
               overlay={
                 <>
                   <NarrationSlideOverlay />
+                  {currentPage && pagePolls.length > 0 ? (
+                    <div
+                      className="pointer-events-none absolute left-1/2 top-2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-full border border-fuchsia-400/50 bg-fuchsia-500/85 px-2.5 py-1 text-xs font-semibold text-white shadow-lg backdrop-blur-sm"
+                      aria-label={t('play.slidePanel.pollDefinedBadge')}
+                      title={t('play.slidePanel.pollDefinedBadge')}
+                    >
+                      <span aria-hidden="true">🗳</span>
+                      {pagePolls.length > 1 ? <span>{pagePolls.length}</span> : null}
+                    </div>
+                  ) : null}
                   {!isPlaying && currentPage?.audio_url ? (
                     <div
                       className="pointer-events-none absolute right-2 top-2 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-white/35 bg-black/55 text-white shadow-lg backdrop-blur-sm"
