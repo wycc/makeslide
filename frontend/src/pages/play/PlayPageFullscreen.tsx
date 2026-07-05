@@ -183,19 +183,21 @@ export function PlayPageFullscreen() {
   const { t } = useI18n();
 
   // 旁白錄製：投影片外框的指標移動記游標（正規化到外框＝畫筆同座標系，故重播一致），不攔截原生畫筆。
+  // 直接呼叫 recorder 提供的 onCursorMove（其內部自我把關，非錄音期間為 no-op），不看 active 旗標以免不同步。
   const handleNarrationCursor = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
-    if (!narrationCapture.active || !narrationCapture.onCursorMove) return;
+    const onMove = narrationCapture.onCursorMove;
+    if (!onMove) return;
     const rect = e.currentTarget.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return;
     const x = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
     const y = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
-    narrationCapture.onCursorMove(x, y);
+    onMove(x, y);
   }, [narrationCapture]);
 
-  // 原生畫筆每次變化：既推給同步頻道，也（錄音時）記進旁白快照，保留顏色/橡皮擦/粗細。
+  // 原生畫筆每次變化：既推給同步頻道，也記進旁白快照（onDrawSnapshot 內部自我把關）。
   const handleFullscreenDrawChange = useCallback((data: import('../../components/DrawingCanvas').DrawingData) => {
     pushLocalDrawingChange(data);
-    if (narrationCapture.active) narrationCapture.onDrawSnapshot?.(data);
+    narrationCapture.onDrawSnapshot?.(data);
   }, [pushLocalDrawingChange, narrationCapture]);
 
   // Fullscreen poll voting overlay (so viewers can vote without leaving fullscreen).

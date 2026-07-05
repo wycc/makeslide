@@ -148,6 +148,7 @@ export function PlayPageSlidePanel() {
     handleReplaceImageFile,
     isSyncFollower, canUseDrawingTools,
     remoteDrawingData, pushLocalDrawingChange,
+    narrationCapture,
     openVersionHistory,
     activeTab,
     sidebarExpanded,
@@ -172,6 +173,22 @@ export function PlayPageSlidePanel() {
 
   const { t } = useI18n();
   const pageLabel = (page: number | string) => t('play.source.pageLabel').replace('{page}', String(page));
+
+  // 旁白錄製（一般檢視）：外框指標移動記游標（不攔截原生畫筆）；原生畫筆變化推同步頻道並記進旁白快照。
+  // 直接呼叫 recorder 提供的函式（內部自我把關，非錄音期間 no-op），不看 active 旗標以免不同步。
+  const handleNarrationCursor = (e: import('react').PointerEvent<HTMLDivElement>) => {
+    const onMove = narrationCapture.onCursorMove;
+    if (!onMove) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    const x = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    const y = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
+    onMove(x, y);
+  };
+  const handleMainDrawChange = (data: import('../../components/DrawingCanvas').DrawingData) => {
+    pushLocalDrawingChange(data);
+    narrationCapture.onDrawSnapshot?.(data);
+  };
   const [sourceCopyStatus, setSourceCopyStatus] = useState<Record<number, 'success' | 'error'>>({});
   const sourceCopyStatusTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
   const sourceCopyStatusMountedRef = useRef(true);
@@ -446,6 +463,7 @@ export function PlayPageSlidePanel() {
                   : undefined
               }
               onAnimationError={() => setAnimationWarning(t('play.animation.runtimeWarning'))}
+              onWrapperPointerMove={handleNarrationCursor}
               wrapperClassName="relative inline-block rounded-lg"
               wrapperStyle={{ lineHeight: 0, maxHeight: transcriptFocusMode ? '10rem' : `${slideImageMaxHeightVh}vh` }}
               src={displayedImageSrc ?? playbackImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
@@ -517,7 +535,7 @@ export function PlayPageSlidePanel() {
                   lineWidth={drawingTool === 'eraser' ? drawingLineWidth * 3 : drawingLineWidth}
                   eraser={drawingTool === 'eraser'}
                   remoteData={isSyncFollower ? remoteDrawingData : undefined}
-                  onLocalChange={pushLocalDrawingChange}
+                  onLocalChange={handleMainDrawChange}
                 />
               )}
               {/* Region selector overlay (for inpainting) */}

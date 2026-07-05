@@ -41,10 +41,10 @@ export function NarrationPanel() {
 
   const recorder = useNarrationRecorder(pdfId, currentPage?.page_number ?? null, reload);
 
-  // 錄音期間，讓投影片外框把游標移動、原生畫筆快照送進 recorder。
+  // 一律把 recorder 的擷取函式提供出去（它們內部以 recordingRef 自我把關，非錄音期間呼叫即 no-op）。
+  // 不用單一 active 旗標來開關 handler，避免旗標與實際錄音狀態不同步導致擷取失效。
   useEffect(() => {
-    if (recorder.recording) setNarrationCapture({ active: true, onCursorMove: recorder.onCursorMove, onDrawSnapshot: recorder.onDrawSnapshot });
-    else setNarrationCapture({ active: false, onCursorMove: null, onDrawSnapshot: null });
+    setNarrationCapture({ active: recorder.recording, onCursorMove: recorder.onCursorMove, onDrawSnapshot: recorder.onDrawSnapshot });
     return () => setNarrationCapture({ active: false, onCursorMove: null, onDrawSnapshot: null });
   }, [recorder.recording, recorder.onCursorMove, recorder.onDrawSnapshot, setNarrationCapture]);
 
