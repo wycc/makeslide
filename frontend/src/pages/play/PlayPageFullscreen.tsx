@@ -317,6 +317,15 @@ export function PlayPageFullscreen() {
           <span className="ml-2 h-6 w-2 rounded-sm bg-current" aria-hidden="true" />
         </div>
       ) : null}
+      {currentPage?.has_poll && !hasActivePoll ? (
+        <div
+          className="pointer-events-none absolute left-1/2 top-4 z-30 flex -translate-x-1/2 items-center gap-1 rounded-full border border-fuchsia-300/50 bg-fuchsia-500/85 px-3 py-1 text-sm font-semibold text-white shadow-lg backdrop-blur-sm"
+          aria-label={t('play.slidePanel.pollDefinedBadge')}
+          title={t('play.slidePanel.pollDefinedBadge')}
+        >
+          <span aria-hidden="true">🗳</span>
+        </div>
+      ) : null}
       {syncEnabled && syncRole === 'master'
         && (syncFollowerQuestions.length > 0 || (pagePolls.length > 0 && !fullscreenPollOpen)) ? (
         // 這些狀態徽章疊在左緣全高的「上一頁」點擊區之上：若維持 pointer-events-none，
