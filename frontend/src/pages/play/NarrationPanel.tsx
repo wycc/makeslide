@@ -155,6 +155,10 @@ export function NarrationPanel() {
           <button type="button" onClick={recorder.cancelRecording} className="rounded-md border border-border bg-surface-muted px-2 py-1 text-xs text-text hover:bg-border">
             {t('play.narration.cancel')}
           </button>
+          <span className="w-full text-[11px] text-muted">
+            {t('play.narration.captureHint')}
+            <span className="ml-1 font-mono text-text">🖱 {recorder.captureCounts.cursor} · ✏ {recorder.captureCounts.strokes}</span>
+          </span>
         </div>
       )}
       {recorder.saving && <p className="mb-2 text-xs text-muted">{t('play.narration.saving')}</p>}

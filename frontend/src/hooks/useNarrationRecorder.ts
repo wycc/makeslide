@@ -25,6 +25,8 @@ export interface NarrationRecorderState {
   supported: boolean;
   // 正在重錄的段 id（新錄一段時為 null）。
   targetSegmentId: string | null;
+  // 錄音中即時擷取到的游標點數與筆跡筆數（回饋用）。
+  captureCounts: { cursor: number; strokes: number };
   // startRecording(null) 新增一段；startRecording(segId) 重錄該段。
   startRecording: (targetSegmentId?: string | null) => Promise<void>;
   stopAndSave: () => Promise<boolean>;
@@ -54,6 +56,8 @@ export function useNarrationRecorder(
   const currentStrokeRef = useRef<NarrationStrokeData | null>(null);
   const lastCursorTsRef = useRef(0);
   const recordingRef = useRef(false);
+  const lastCountTsRef = useRef(0);
+  const [captureCounts, setCaptureCounts] = useState({ cursor: 0, strokes: 0 });
 
   // 擷取投影片指標動作（僅錄音期間）。move 記游標（節流）；down/move(按住)/up 記成一筆繪圖。
   const onCapturePointer = useCallback((kind: NarrationPointerKind, x: number, y: number) => {
@@ -66,6 +70,7 @@ export function useNarrationRecorder(
         drawTrackRef.current.push(currentStrokeRef.current);
       }
       currentStrokeRef.current = null;
+      setCaptureCounts({ cursor: cursorTrackRef.current.length, strokes: drawTrackRef.current.length });
     } else {
       // move
       if (currentStrokeRef.current) currentStrokeRef.current.points.push({ x, y });
@@ -73,6 +78,11 @@ export function useNarrationRecorder(
         lastCursorTsRef.current = tMs;
         cursorTrackRef.current.push({ tMs, x, y });
       }
+    }
+    // 節流更新即時計數（給錄音中的回饋，也方便確認有在擷取）。
+    if (tMs - lastCountTsRef.current > 300) {
+      lastCountTsRef.current = tMs;
+      setCaptureCounts({ cursor: cursorTrackRef.current.length, strokes: drawTrackRef.current.length });
     }
   }, []);
 
@@ -114,6 +124,8 @@ export function useNarrationRecorder(
       drawTrackRef.current = [];
       currentStrokeRef.current = null;
       lastCursorTsRef.current = -CURSOR_SAMPLE_MS;
+      lastCountTsRef.current = 0;
+      setCaptureCounts({ cursor: 0, strokes: 0 });
       targetRef.current = target;
       setTargetSegmentId(target);
       recordingRef.current = true;
@@ -169,5 +181,5 @@ export function useNarrationRecorder(
   // 卸載時釋放麥克風。
   useEffect(() => () => cleanupStream(), [cleanupStream]);
 
-  return { recording, saving, error, supported, targetSegmentId, startRecording: start, stopAndSave, cancelRecording, onCapturePointer };
+  return { recording, saving, error, supported, targetSegmentId, captureCounts, startRecording: start, stopAndSave, cancelRecording, onCapturePointer };
 }

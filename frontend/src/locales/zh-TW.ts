@@ -1591,6 +1591,7 @@ export const zhTW = {
   'play.narration.saving': '儲存中…',
   'play.narration.none': '尚未錄製旁白',
   'play.narration.syncHint': '播放時會自動翻到對應頁',
+  'play.narration.captureHint': '在投影片上移動滑鼠＝記錄游標；按住拖曳＝畫筆。',
   'play.narration.segmentLabel': '第 {n} 段',
   'play.narration.pages': '頁 {pages}',
   'play.narration.play': '播放',
