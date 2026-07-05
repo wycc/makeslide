@@ -317,13 +317,35 @@ export function PlayPageFullscreen() {
           <span className="ml-2 h-6 w-2 rounded-sm bg-current" aria-hidden="true" />
         </div>
       ) : null}
-      {currentPage?.has_poll && !hasActivePoll ? (
-        <div
-          className="pointer-events-none absolute left-1/2 top-4 z-30 flex -translate-x-1/2 items-center gap-1 rounded-full border border-fuchsia-300/50 bg-fuchsia-500/85 px-3 py-1 text-sm font-semibold text-white shadow-lg backdrop-blur-sm"
-          aria-label={t('play.slidePanel.pollDefinedBadge')}
-          title={t('play.slidePanel.pollDefinedBadge')}
-        >
-          <span aria-hidden="true">🗳</span>
+      {currentPage && ((currentPage.has_poll && !hasActivePoll) || currentPage.page_notes?.trim() || currentPage.has_comment) ? (
+        <div className="pointer-events-none absolute left-1/2 top-4 z-30 flex -translate-x-1/2 items-center gap-1.5">
+          {currentPage.has_poll && !hasActivePoll ? (
+            <span
+              className="flex items-center gap-1 rounded-full border border-fuchsia-300/50 bg-fuchsia-500/85 px-3 py-1 text-sm font-semibold text-white shadow-lg backdrop-blur-sm"
+              aria-label={t('play.slidePanel.pollDefinedBadge')}
+              title={t('play.slidePanel.pollDefinedBadge')}
+            >
+              <span aria-hidden="true">🗳</span>
+            </span>
+          ) : null}
+          {currentPage.page_notes?.trim() ? (
+            <span
+              className="rounded-full border border-amber-300/50 bg-amber-500/85 px-3 py-1 text-sm font-semibold text-white shadow-lg backdrop-blur-sm"
+              aria-label={t('play.slidePanel.noteDefinedBadge')}
+              title={t('play.slidePanel.noteDefinedBadge')}
+            >
+              <span aria-hidden="true">📝</span>
+            </span>
+          ) : null}
+          {currentPage.has_comment ? (
+            <span
+              className="rounded-full border border-sky-300/50 bg-sky-500/85 px-3 py-1 text-sm font-semibold text-white shadow-lg backdrop-blur-sm"
+              aria-label={t('play.slidePanel.commentDefinedBadge')}
+              title={t('play.slidePanel.commentDefinedBadge')}
+            >
+              <span aria-hidden="true">💬</span>
+            </span>
+          ) : null}
         </div>
       ) : null}
       {syncEnabled && syncRole === 'master'
