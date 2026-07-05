@@ -19,9 +19,14 @@ const SegmentSchema = z.object({
   startMs: z.number().nonnegative(),
   endMs: z.number().nonnegative(),
 });
+// 游標點與繪圖筆畫（座標正規化 0–1、tMs 相對段起點）。
+const CursorPointSchema = z.object({ tMs: z.number(), x: z.number(), y: z.number() });
+const StrokeSchema = z.object({ tMs: z.number(), points: z.array(z.object({ x: z.number(), y: z.number() })).max(5000) });
 const TimelineSchema = z.object({
   durationMs: z.number().nonnegative(),
   segments: z.array(SegmentSchema).max(10000),
+  cursorTrack: z.array(CursorPointSchema).max(50000).optional(),
+  drawTrack: z.array(StrokeSchema).max(2000).optional(),
 });
 
 interface SegmentMeta {
@@ -31,6 +36,8 @@ interface SegmentMeta {
   createdAt: string;
   // 逐頁逐字稿（key 為頁碼字串，值為該頁的逐字稿）。可由 STT 產生或使用者編輯。
   transcriptByPage?: Record<string, string>;
+  cursorTrack?: z.infer<typeof CursorPointSchema>[];
+  drawTrack?: z.infer<typeof StrokeSchema>[];
 }
 interface NarrationManifest {
   segments: SegmentMeta[];
@@ -44,6 +51,8 @@ const ManifestSchema = z.object({
       slideTimeline: z.array(SegmentSchema),
       createdAt: z.string(),
       transcriptByPage: z.record(z.string(), z.string()).optional(),
+      cursorTrack: z.array(CursorPointSchema).optional(),
+      drawTrack: z.array(StrokeSchema).optional(),
     }),
   ),
 });
@@ -133,6 +142,8 @@ export async function registerNarrationRoutes(app: FastifyInstance): Promise<voi
         pages: distinctPages(s.slideTimeline),
         slide_timeline: s.slideTimeline,
         transcript_by_page: s.transcriptByPage ?? {},
+        cursor_track: s.cursorTrack ?? [],
+        draw_track: s.drawTrack ?? [],
         created_at: s.createdAt,
       })),
     });
@@ -155,7 +166,14 @@ export async function registerNarrationRoutes(app: FastifyInstance): Promise<voi
     await fs.mkdir(narrationDir(parsed.data.id), { recursive: true });
     await fs.writeFile(narrationSegmentAudioPath(parsed.data.id, id), up.buffer);
     const manifest = await readManifest(parsed.data.id);
-    manifest.segments.push({ id, durationMs: up.timeline.durationMs, slideTimeline: up.timeline.segments, createdAt: nowIso() });
+    manifest.segments.push({
+      id,
+      durationMs: up.timeline.durationMs,
+      slideTimeline: up.timeline.segments,
+      createdAt: nowIso(),
+      cursorTrack: up.timeline.cursorTrack,
+      drawTrack: up.timeline.drawTrack,
+    });
     await writeManifest(parsed.data.id, manifest);
     return reply.code(201).send({ ok: true, id, size_bytes: up.buffer.length });
   });
@@ -179,6 +197,10 @@ export async function registerNarrationRoutes(app: FastifyInstance): Promise<voi
     await fs.writeFile(narrationSegmentAudioPath(parsed.data.id, segId), up.buffer);
     seg.durationMs = up.timeline.durationMs;
     seg.slideTimeline = up.timeline.segments;
+    seg.cursorTrack = up.timeline.cursorTrack;
+    seg.drawTrack = up.timeline.drawTrack;
+    // 重錄時逐字稿失效（音檔已換），清掉舊逐字稿。
+    seg.transcriptByPage = undefined;
     await writeManifest(parsed.data.id, manifest);
     return reply.send({ ok: true, id: segId, size_bytes: up.buffer.length });
   });

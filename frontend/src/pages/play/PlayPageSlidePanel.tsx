@@ -166,6 +166,7 @@ export function PlayPageSlidePanel() {
     bookmarks, toggleBookmark,
     importantPages, toggleImportantPage,
     pageSentences,
+    narrationCapture, narrationOverlay,
   } = usePlayPageContext();
 
   const { t } = useI18n();
@@ -463,6 +464,52 @@ export function PlayPageSlidePanel() {
               imgProps={{ role: 'button', tabIndex: -1, 'aria-label': t('play.slidePanel.enterFullscreenOverlay') }}
               overlay={
                 <>
+                  {/* 旁白重播疊加（游標 + 繪圖），播放時同步顯示 */}
+                  {narrationOverlay && (
+                    <>
+                      <svg className="pointer-events-none absolute inset-0 z-20 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                        {narrationOverlay.strokes.map((s, i) => (
+                          <polyline
+                            key={i}
+                            points={s.points.map((p) => `${p.x * 100},${p.y * 100}`).join(' ')}
+                            fill="none"
+                            stroke="#ef4444"
+                            strokeWidth={2}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            vectorEffect="non-scaling-stroke"
+                          />
+                        ))}
+                      </svg>
+                      {narrationOverlay.cursor && (
+                        <span
+                          className="pointer-events-none absolute z-20 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-700 bg-cyan-400/80 shadow"
+                          style={{ left: `${narrationOverlay.cursor.x * 100}%`, top: `${narrationOverlay.cursor.y * 100}%` }}
+                          aria-hidden="true"
+                        />
+                      )}
+                    </>
+                  )}
+                  {/* 旁白錄製擷取層：擷取投影片上的指標動作（移動=游標、拖曳=畫筆） */}
+                  {narrationCapture.active && narrationCapture.onCapture && (
+                    <div
+                      className="absolute inset-0 z-30 cursor-crosshair"
+                      style={{ touchAction: 'none' }}
+                      onPointerDown={(e) => {
+                        e.currentTarget.setPointerCapture?.(e.pointerId);
+                        const { x, y } = normalizedPointerPosition(e.clientX, e.clientY, e.currentTarget.getBoundingClientRect());
+                        narrationCapture.onCapture?.('down', x, y);
+                      }}
+                      onPointerMove={(e) => {
+                        const { x, y } = normalizedPointerPosition(e.clientX, e.clientY, e.currentTarget.getBoundingClientRect());
+                        narrationCapture.onCapture?.('move', x, y);
+                      }}
+                      onPointerUp={(e) => {
+                        const { x, y } = normalizedPointerPosition(e.clientX, e.clientY, e.currentTarget.getBoundingClientRect());
+                        narrationCapture.onCapture?.('up', x, y);
+                      }}
+                    />
+                  )}
                   {!isPlaying && currentPage?.audio_url ? (
                     <div
                       className="pointer-events-none absolute right-2 top-2 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-white/35 bg-black/55 text-white shadow-lg backdrop-blur-sm"

@@ -27,6 +27,10 @@ type DrawingTool = 'pen' | 'cursor' | 'eraser';
 type RegenOptions = { image: boolean; script: boolean; audio: boolean; animation: boolean };
 type ImageEditRegion = { x: number; y: number; w: number; h: number } | null;
 
+export type NarrationOverlayState =
+  | { cursor: { x: number; y: number } | null; strokes: { points: { x: number; y: number }[] }[] }
+  | null;
+
 // ── Full context interface ────────────────────────────────────────────────────
 export interface PlayPageContextValue {
   // ─── Routing / identity ─────────────────────────────────────────────────────
@@ -43,6 +47,12 @@ export interface PlayPageContextValue {
   setCurrentIdx: Dispatch<SetStateAction<number>>;
   visitedIdxSet: ReadonlySet<number>;
   totalPages: number;
+
+  // 旁白錄製/播放：擷取投影片上的指標動作（錄製時），以及重播游標/繪圖疊加（播放時）。
+  narrationCapture: { active: boolean; onCapture: ((kind: 'move' | 'down' | 'up', x: number, y: number) => void) | null };
+  setNarrationCapture: Dispatch<SetStateAction<{ active: boolean; onCapture: ((kind: 'move' | 'down' | 'up', x: number, y: number) => void) | null }>>;
+  narrationOverlay: NarrationOverlayState;
+  setNarrationOverlay: Dispatch<SetStateAction<NarrationOverlayState>>;
   loadError: string | null;
   /** 僅 owner 可見的每頁觀看進度聚合統計，依 `page_number` 查找；無資料或非 owner 時為空 Map。 */
   watchProgressByPage: Map<number, PageWatchProgressStats>;

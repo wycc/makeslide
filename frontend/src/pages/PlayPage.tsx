@@ -68,7 +68,7 @@ import { resolveConfiguredUserCode } from './play/utils';
 import { VersionHistoryDialog } from './play/VersionHistoryDialog';
 import { ImagePreviewDialog } from './play/ImagePreviewDialog';
 import { useBudgetWarning } from '../hooks/useBudgetWarning';
-import { PlayPageCtx } from './play/PlayPageContext';
+import { PlayPageCtx, type NarrationOverlayState } from './play/PlayPageContext';
 import { PlayPageDialogs } from './play/PlayPageDialogs';
 import { PlayPageFullscreen } from './play/PlayPageFullscreen';
 import { PlayPageHeader } from './play/PlayPageHeader';
@@ -2058,6 +2058,10 @@ export default function PlayPage() {
     shareToken: currentShareToken,
   });
 
+  // 旁白：投影片指標擷取（錄製時）與游標/繪圖重播疊加（播放時）。
+  const [narrationCapture, setNarrationCapture] = useState<{ active: boolean; onCapture: ((kind: 'move' | 'down' | 'up', x: number, y: number) => void) | null }>({ active: false, onCapture: null });
+  const [narrationOverlay, setNarrationOverlay] = useState<NarrationOverlayState>(null);
+
   const scriptEditorState = useScriptEditor({
     pdfId,
     currentPage,
@@ -2437,6 +2441,7 @@ export default function PlayPage() {
     // deck data
     detail, setDetail, deckPages, currentPage, currentIdx, setCurrentIdx, visitedIdxSet, totalPages, loadError,
     watchProgressByPage,
+    narrationCapture, setNarrationCapture, narrationOverlay, setNarrationOverlay,
     // playback
     isPlaying, setIsPlaying, currentTime, setCurrentTime, duration, setDuration,
     finished, setFinished, audioMuted, setAudioMuted, effectiveAudioMuted,

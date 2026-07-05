@@ -36,8 +36,16 @@
   - **T5 前端**：播放時記 `syncedPage`，音檔下方同步顯示當下頁逐字稿。
   - **T6 前端**：每段「📝 逐字稿」展開 `SegmentTranscriptEditor`——逐頁 textarea、聚焦即跳到該頁、「🗣 語音轉文字」
     一鍵轉錄、「儲存逐字稿」。i18n 6 鍵（24/24）。前後端 `tsc` 通過。分支 `feat/narration-transcript`。
-- [ ] T7：記錄+重播游標軌跡
-- [ ] T8：記錄+重播繪圖
+- [x] T7/T8：記錄+重播游標軌跡與繪圖（2026-07-05）
+  - **統一擷取**：錄音時投影片上蓋一層擷取層（`PlayPageSlidePanel` overlay，經 `PlayPageContext.narrationCapture`
+    由 `useNarrationRecorder.onCapturePointer` 接收）——指標移動記游標（節流 40ms）、按住拖曳記成一筆繪圖（內建紅筆），
+    不動既有繪圖子系統。座標正規化 0–1。停止時連同 `cursorTrack`／`drawTrack` 上傳。
+  - **後端**：narration `TimelineSchema`／segment meta／manifest 加 `cursorTrack`／`drawTrack`（zod 驗證、上限保護），
+    add/re-record 儲存、GET 回 `cursor_track`／`draw_track`；重錄時清掉舊逐字稿。測試加「tracks 往返」（narration 5 組）。
+  - **重播**：純函式 [narrationTracks.ts](frontend/src/lib/narrationTracks.ts) `cursorAtTime`（相鄰點內插）／`strokesUntil`
+    （漸進顯示）＋測試 4 組。播放時 `NarrationPanel` 依音訊秒數算出疊加送進 `narrationOverlay`，`PlayPageSlidePanel`
+    以 SVG polyline 畫筆跡、div 圓點畫游標，隨播放同步。前後端 `tsc` 通過、後端 9/9、前端 tracks 4/4。
+    分支 `feat/narration-cursor-draw`。
 - [ ] T9：影片輸出（ffmpeg）
 
 ### （下方為初版 MVP 記錄，已被上方分段模型取代）

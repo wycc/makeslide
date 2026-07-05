@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { startRecording, recordSlideSwitch, stopRecording, type RecordingSession } from '../lib/recordingSession';
-import { addNarrationSegment, reRecordNarrationSegment } from '../lib/api/pdfs';
+import { addNarrationSegment, reRecordNarrationSegment, type NarrationCursorPoint, type NarrationStrokeData } from '../lib/api/pdfs';
+
+// 錄製時擷取投影片上的指標動作：'move' 記游標、按住拖曳（'down'→'move'→'up'）記成一筆繪圖。
+export type NarrationPointerKind = 'move' | 'down' | 'up';
+// 游標取樣最小間隔（毫秒），控制軌跡大小。
+const CURSOR_SAMPLE_MS = 40;
 
 // 播放頁「錄旁白」：用 MediaRecorder 錄講者聲音，同時以 recordingSession 記錄翻頁時間點；
 // 停止時以 stopRecording 產生時間軸並連同音檔上傳。純錄音（不含影片）。
@@ -24,6 +29,8 @@ export interface NarrationRecorderState {
   startRecording: (targetSegmentId?: string | null) => Promise<void>;
   stopAndSave: () => Promise<boolean>;
   cancelRecording: () => void;
+  // 由投影片上的擷取層在錄音期間呼叫（x/y 為正規化 0–1）。
+  onCapturePointer: (kind: NarrationPointerKind, x: number, y: number) => void;
 }
 
 export function useNarrationRecorder(
@@ -42,6 +49,32 @@ export function useNarrationRecorder(
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const cursorTrackRef = useRef<NarrationCursorPoint[]>([]);
+  const drawTrackRef = useRef<NarrationStrokeData[]>([]);
+  const currentStrokeRef = useRef<NarrationStrokeData | null>(null);
+  const lastCursorTsRef = useRef(0);
+  const recordingRef = useRef(false);
+
+  // 擷取投影片指標動作（僅錄音期間）。move 記游標（節流）；down/move(按住)/up 記成一筆繪圖。
+  const onCapturePointer = useCallback((kind: NarrationPointerKind, x: number, y: number) => {
+    if (!recordingRef.current) return;
+    const tMs = Date.now() - startedAtRef.current;
+    if (kind === 'down') {
+      currentStrokeRef.current = { tMs, points: [{ x, y }] };
+    } else if (kind === 'up') {
+      if (currentStrokeRef.current && currentStrokeRef.current.points.length > 1) {
+        drawTrackRef.current.push(currentStrokeRef.current);
+      }
+      currentStrokeRef.current = null;
+    } else {
+      // move
+      if (currentStrokeRef.current) currentStrokeRef.current.points.push({ x, y });
+      if (tMs - lastCursorTsRef.current >= CURSOR_SAMPLE_MS) {
+        lastCursorTsRef.current = tMs;
+        cursorTrackRef.current.push({ tMs, x, y });
+      }
+    }
+  }, []);
 
   const supported =
     typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== 'undefined';
@@ -59,6 +92,8 @@ export function useNarrationRecorder(
     recorderRef.current = null;
     chunksRef.current = [];
     sessionRef.current = null;
+    recordingRef.current = false;
+    currentStrokeRef.current = null;
   }, []);
 
   const start = useCallback(async (target: string | null = null) => {
@@ -75,8 +110,13 @@ export function useNarrationRecorder(
       const now = Date.now();
       startedAtRef.current = now;
       sessionRef.current = startRecording(currentPageNumber, now);
+      cursorTrackRef.current = [];
+      drawTrackRef.current = [];
+      currentStrokeRef.current = null;
+      lastCursorTsRef.current = -CURSOR_SAMPLE_MS;
       targetRef.current = target;
       setTargetSegmentId(target);
+      recordingRef.current = true;
       recorder.start();
       setRecording(true);
     } catch {
@@ -97,12 +137,14 @@ export function useNarrationRecorder(
         recorder.onstop = () => resolve(new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' }));
         recorder.stop();
       });
+      recordingRef.current = false;
       const endedAt = Date.now();
       const segments = stopRecording(session, endedAt);
       const durationMs = Math.max(0, endedAt - startedAtRef.current);
+      const upload = { durationMs, segments, cursorTrack: cursorTrackRef.current, drawTrack: drawTrackRef.current };
       const target = targetRef.current;
-      if (target) await reRecordNarrationSegment(pdfId, target, blob, { durationMs, segments });
-      else await addNarrationSegment(pdfId, blob, { durationMs, segments });
+      if (target) await reRecordNarrationSegment(pdfId, target, blob, upload);
+      else await addNarrationSegment(pdfId, blob, upload);
       onSaved?.();
       return true;
     } catch {
@@ -127,5 +169,5 @@ export function useNarrationRecorder(
   // 卸載時釋放麥克風。
   useEffect(() => () => cleanupStream(), [cleanupStream]);
 
-  return { recording, saving, error, supported, targetSegmentId, startRecording: start, stopAndSave, cancelRecording };
+  return { recording, saving, error, supported, targetSegmentId, startRecording: start, stopAndSave, cancelRecording, onCapturePointer };
 }
