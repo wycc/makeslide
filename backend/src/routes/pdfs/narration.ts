@@ -33,12 +33,16 @@ const DrawingStrokeSchema = z.object({
 });
 const DrawingDataSchema = z.object({ strokes: z.array(DrawingStrokeSchema).max(2000) });
 const DrawSnapshotSchema = z.object({ tMs: z.number(), data: DrawingDataSchema });
+// 錄音期間講者播放「原有合成語音（TTS）」的區間：重播旁白時，於此區間同步播放該頁 TTS 並切成該頁字幕。
+// startMs/endMs 相對段起點；fromSec 為該次播放在該頁音檔中的起始秒數。
+const AudioCueSchema = z.object({ startMs: z.number(), endMs: z.number(), page: z.number().int(), fromSec: z.number().nonnegative() });
 const TimelineSchema = z.object({
   durationMs: z.number().nonnegative(),
   segments: z.array(SegmentSchema).max(10000),
   cursorTrack: z.array(CursorPointSchema).max(50000).optional(),
   drawTrack: z.array(StrokeSchema).max(2000).optional(),
   drawSnapshots: z.array(DrawSnapshotSchema).max(20000).optional(),
+  audioCues: z.array(AudioCueSchema).max(5000).optional(),
 });
 
 // 逐字時間戳（tMs 相對段起點）：供播放時同步顯示字幕。
@@ -59,6 +63,8 @@ interface SegmentMeta {
   drawTrack?: z.infer<typeof StrokeSchema>[];
   // 原生畫筆快照序列（取代 drawTrack 作為新的重播來源；drawTrack 保留供舊資料相容）。
   drawSnapshots?: z.infer<typeof DrawSnapshotSchema>[];
+  // 錄音時播放原有 TTS 的區間（重播時同步播放該頁語音並切字幕）。
+  audioCues?: z.infer<typeof AudioCueSchema>[];
 }
 interface NarrationManifest {
   segments: SegmentMeta[];
@@ -77,6 +83,7 @@ const ManifestSchema = z.object({
       cursorTrack: z.array(CursorPointSchema).optional(),
       drawTrack: z.array(StrokeSchema).optional(),
       drawSnapshots: z.array(DrawSnapshotSchema).optional(),
+      audioCues: z.array(AudioCueSchema).optional(),
     }),
   ),
 });
@@ -186,6 +193,7 @@ export async function registerNarrationRoutes(app: FastifyInstance): Promise<voi
         cursor_track: s.cursorTrack ?? [],
         draw_track: s.drawTrack ?? [],
         draw_snapshots: s.drawSnapshots ?? [],
+        audio_cues: s.audioCues ?? [],
         created_at: s.createdAt,
       })),
     });
@@ -216,6 +224,7 @@ export async function registerNarrationRoutes(app: FastifyInstance): Promise<voi
       cursorTrack: up.timeline.cursorTrack,
       drawTrack: up.timeline.drawTrack,
       drawSnapshots: up.timeline.drawSnapshots,
+      audioCues: up.timeline.audioCues,
     });
     await writeManifest(parsed.data.id, manifest);
     return reply.code(201).send({ ok: true, id, size_bytes: up.buffer.length });
@@ -243,6 +252,7 @@ export async function registerNarrationRoutes(app: FastifyInstance): Promise<voi
     seg.cursorTrack = up.timeline.cursorTrack;
     seg.drawTrack = up.timeline.drawTrack;
     seg.drawSnapshots = up.timeline.drawSnapshots;
+    seg.audioCues = up.timeline.audioCues;
     // 重錄時逐字稿失效（音檔已換），清掉舊逐字稿與逐字時間戳。
     seg.transcriptByPage = undefined;
     seg.wordCues = undefined;

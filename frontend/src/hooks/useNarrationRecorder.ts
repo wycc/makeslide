@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { startRecording, recordSlideSwitch, stopRecording, type RecordingSession } from '../lib/recordingSession';
-import { addNarrationSegment, reRecordNarrationSegment, type NarrationCursorPoint, type NarrationDrawSnapshot, type NarrationDrawingData } from '../lib/api/pdfs';
+import { addNarrationSegment, reRecordNarrationSegment, type NarrationCursorPoint, type NarrationDrawSnapshot, type NarrationDrawingData, type NarrationAudioCue } from '../lib/api/pdfs';
 
 // 游標取樣最小間隔（毫秒），控制軌跡大小。
 const CURSOR_SAMPLE_MS = 40;
@@ -40,6 +40,10 @@ export interface NarrationRecorderState {
   onCursorMove: (x: number, y: number) => void;
   // 錄音期間，原生畫筆（DrawingCanvas）每次筆劃變化回報完整畫面快照，記成帶時間的快照序列。
   onDrawSnapshot: (data: NarrationDrawingData) => void;
+  // 錄音期間講者播放原有 TTS 時呼叫：開始一段（page＝當時頁碼，fromSec＝該頁音檔起播秒數）。
+  ttsPlayStart: (page: number, fromSec: number) => void;
+  // 錄音期間 TTS 停止/暫停/換頁時呼叫：關閉目前這一段。
+  ttsPlayStop: () => void;
 }
 
 export function useNarrationRecorder(
@@ -60,6 +64,8 @@ export function useNarrationRecorder(
   const chunksRef = useRef<Blob[]>([]);
   const cursorTrackRef = useRef<NarrationCursorPoint[]>([]);
   const drawSnapshotsRef = useRef<NarrationDrawSnapshot[]>([]);
+  const audioCuesRef = useRef<NarrationAudioCue[]>([]);
+  const openCueRef = useRef<{ startMs: number; page: number; fromSec: number } | null>(null);
   const lastCursorTsRef = useRef(0);
   const lastDrawTsRef = useRef(0);
   const lastStrokeCountRef = useRef(-1);
@@ -99,6 +105,26 @@ export function useNarrationRecorder(
     }
   }, [bumpCounts]);
 
+  // 關閉目前開啟中的 TTS 區間（若有），寫入 endMs。
+  const closeCue = useCallback(() => {
+    const open = openCueRef.current;
+    if (!open) return;
+    const endMs = Date.now() - startedAtRef.current;
+    if (endMs > open.startMs) audioCuesRef.current.push({ startMs: open.startMs, endMs, page: open.page, fromSec: open.fromSec });
+    openCueRef.current = null;
+  }, []);
+
+  const ttsPlayStart = useCallback((page: number, fromSec: number) => {
+    if (!recordingRef.current) return;
+    closeCue(); // 先關掉前一段（換頁或重新播放）
+    openCueRef.current = { startMs: Date.now() - startedAtRef.current, page, fromSec };
+  }, [closeCue]);
+
+  const ttsPlayStop = useCallback(() => {
+    if (!recordingRef.current) return;
+    closeCue();
+  }, [closeCue]);
+
   const supported =
     typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== 'undefined';
 
@@ -134,6 +160,8 @@ export function useNarrationRecorder(
       sessionRef.current = startRecording(currentPageNumber, now);
       cursorTrackRef.current = [];
       drawSnapshotsRef.current = [];
+      audioCuesRef.current = [];
+      openCueRef.current = null;
       lastCursorTsRef.current = -CURSOR_SAMPLE_MS;
       lastDrawTsRef.current = -DRAW_SAMPLE_MS;
       lastStrokeCountRef.current = -1;
@@ -163,10 +191,11 @@ export function useNarrationRecorder(
         recorder.stop();
       });
       recordingRef.current = false;
+      closeCue(); // 收尾：關閉仍開啟中的 TTS 區間
       const endedAt = Date.now();
       const segments = stopRecording(session, endedAt);
       const durationMs = Math.max(0, endedAt - startedAtRef.current);
-      const upload = { durationMs, segments, cursorTrack: cursorTrackRef.current, drawSnapshots: drawSnapshotsRef.current };
+      const upload = { durationMs, segments, cursorTrack: cursorTrackRef.current, drawSnapshots: drawSnapshotsRef.current, audioCues: audioCuesRef.current };
       const target = targetRef.current;
       if (target) await reRecordNarrationSegment(pdfId, target, blob, upload);
       else await addNarrationSegment(pdfId, blob, upload);
@@ -181,7 +210,7 @@ export function useNarrationRecorder(
       cleanupStream();
       setSaving(false);
     }
-  }, [pdfId, onSaved, cleanupStream]);
+  }, [pdfId, onSaved, cleanupStream, closeCue]);
 
   const cancelRecording = useCallback(() => {
     try { recorderRef.current?.stop(); } catch { /* ignore */ }
@@ -194,5 +223,5 @@ export function useNarrationRecorder(
   // 卸載時釋放麥克風。
   useEffect(() => () => cleanupStream(), [cleanupStream]);
 
-  return { recording, saving, error, supported, targetSegmentId, captureCounts, startRecording: start, stopAndSave, cancelRecording, onCursorMove, onDrawSnapshot };
+  return { recording, saving, error, supported, targetSegmentId, captureCounts, startRecording: start, stopAndSave, cancelRecording, onCursorMove, onDrawSnapshot, ttsPlayStart, ttsPlayStop };
 }

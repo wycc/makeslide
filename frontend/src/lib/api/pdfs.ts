@@ -1126,6 +1126,8 @@ export interface NarrationDrawingStroke { color: string; lineWidth: number; poin
 export interface NarrationDrawingData { strokes: NarrationDrawingStroke[] }
 // 錄音時原生畫筆每次變化的畫面快照（帶相對段起點時間）。
 export interface NarrationDrawSnapshot { tMs: number; data: NarrationDrawingData }
+// 錄音時播放原有 TTS 的區間（重播時同步播放該頁語音並切字幕）。startMs/endMs 相對段起點，fromSec 為該頁音檔起播秒數。
+export interface NarrationAudioCue { startMs: number; endMs: number; page: number; fromSec: number }
 // 一段錄音（一次錄音，可跨多頁）。
 export interface NarrationSegment {
   id: string;
@@ -1137,6 +1139,7 @@ export interface NarrationSegment {
   cursor_track: NarrationCursorPoint[];
   draw_track: NarrationStrokeData[];
   draw_snapshots: NarrationDrawSnapshot[];
+  audio_cues: NarrationAudioCue[];
   created_at: string;
 }
 export interface NarrationList {
@@ -1148,6 +1151,7 @@ export interface NarrationTimelineUpload {
   cursorTrack?: NarrationCursorPoint[];
   drawTrack?: NarrationStrokeData[];
   drawSnapshots?: NarrationDrawSnapshot[];
+  audioCues?: NarrationAudioCue[];
 }
 
 export async function getNarration(id: string): Promise<NarrationList> {

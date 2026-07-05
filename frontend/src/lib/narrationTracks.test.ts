@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cursorAtTime, strokesUntil, subtitleAtTime, drawingSnapshotAtTime } from './narrationTracks';
+import { cursorAtTime, strokesUntil, subtitleAtTime, drawingSnapshotAtTime, audioCueAtTime } from './narrationTracks';
 
 const track = [
   { tMs: 0, x: 0, y: 0 },
@@ -59,6 +59,19 @@ test('drawingSnapshotAtTime returns the latest snapshot at or before the time', 
   assert.deepEqual(drawingSnapshotAtTime(snaps, 900), { strokes: ['a'] });
   assert.deepEqual(drawingSnapshotAtTime(snaps, 9999), { strokes: ['a', 'b'] });
   assert.equal(drawingSnapshotAtTime([], 100), null);
+});
+
+test('audioCueAtTime returns the cue whose [startMs, endMs) contains the time', () => {
+  const cues = [
+    { startMs: 1000, endMs: 3000, page: 2, fromSec: 0 },
+    { startMs: 5000, endMs: 6000, page: 3, fromSec: 1.5 },
+  ];
+  assert.equal(audioCueAtTime(cues, 500), null);
+  assert.equal(audioCueAtTime(cues, 1000)?.page, 2);
+  assert.equal(audioCueAtTime(cues, 2999)?.page, 2);
+  assert.equal(audioCueAtTime(cues, 3000), null); // end is exclusive
+  assert.equal(audioCueAtTime(cues, 5500)?.fromSec, 1.5);
+  assert.equal(audioCueAtTime([], 100), null);
 });
 
 test('strokesUntil grows a timed stroke point-by-point and interpolates the tip', () => {
