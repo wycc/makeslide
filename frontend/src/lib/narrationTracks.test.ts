@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cursorAtTime, strokesUntil, subtitleAtTime } from './narrationTracks';
+import { cursorAtTime, strokesUntil, subtitleAtTime, drawingSnapshotAtTime } from './narrationTracks';
 
 const track = [
   { tMs: 0, x: 0, y: 0 },
@@ -46,6 +46,19 @@ test('strokesUntil reveals only strokes that have started by the given time', ()
   assert.equal(strokesUntil(strokes, 1500).length, 2);
   assert.equal(strokesUntil(strokes, 0).length, 1);
   assert.equal(strokesUntil(strokes, 5000).length, 3);
+});
+
+test('drawingSnapshotAtTime returns the latest snapshot at or before the time', () => {
+  const snaps = [
+    { tMs: 0, data: { strokes: [] } },
+    { tMs: 500, data: { strokes: ['a'] } },
+    { tMs: 1500, data: { strokes: ['a', 'b'] } },
+  ];
+  assert.equal(drawingSnapshotAtTime(snaps, -1), null);
+  assert.deepEqual(drawingSnapshotAtTime(snaps, 0), { strokes: [] });
+  assert.deepEqual(drawingSnapshotAtTime(snaps, 900), { strokes: ['a'] });
+  assert.deepEqual(drawingSnapshotAtTime(snaps, 9999), { strokes: ['a', 'b'] });
+  assert.equal(drawingSnapshotAtTime([], 100), null);
 });
 
 test('strokesUntil grows a timed stroke point-by-point and interpolates the tip', () => {

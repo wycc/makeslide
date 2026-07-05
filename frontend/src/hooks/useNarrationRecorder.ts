@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { startRecording, recordSlideSwitch, stopRecording, type RecordingSession } from '../lib/recordingSession';
-import { addNarrationSegment, reRecordNarrationSegment, type NarrationCursorPoint, type NarrationStrokeData } from '../lib/api/pdfs';
+import { addNarrationSegment, reRecordNarrationSegment, type NarrationCursorPoint, type NarrationDrawSnapshot, type NarrationDrawingData } from '../lib/api/pdfs';
 
-// 錄製時擷取投影片上的指標動作：'move' 記游標、按住拖曳（'down'→'move'→'up'）記成一筆繪圖。
-export type NarrationPointerKind = 'move' | 'down' | 'up';
 // 游標取樣最小間隔（毫秒），控制軌跡大小。
 const CURSOR_SAMPLE_MS = 40;
+// 畫筆快照取樣最小間隔（毫秒）：畫的過程節流，但「筆畫數改變」（一筆完成/橡皮擦刪除）一律記錄以保留關鍵狀態。
+const DRAW_SAMPLE_MS = 80;
+
+// 深拷貝畫面快照：DrawingCanvas 回報的快照含「進行中筆畫」（其 points 會被後續 move 就地修改），必須拷貝。
+function cloneDrawingData(data: NarrationDrawingData): NarrationDrawingData {
+  return { strokes: data.strokes.map((s) => ({ ...s, points: s.points.map((p) => [p[0], p[1]] as [number, number]) })) };
+}
 
 // 播放頁「錄旁白」：用 MediaRecorder 錄講者聲音，同時以 recordingSession 記錄翻頁時間點；
 // 停止時以 stopRecording 產生時間軸並連同音檔上傳。純錄音（不含影片）。
@@ -31,8 +36,10 @@ export interface NarrationRecorderState {
   startRecording: (targetSegmentId?: string | null) => Promise<void>;
   stopAndSave: () => Promise<boolean>;
   cancelRecording: () => void;
-  // 由投影片上的擷取層在錄音期間呼叫（x/y 為正規化 0–1）。
-  onCapturePointer: (kind: NarrationPointerKind, x: number, y: number) => void;
+  // 錄音期間，投影片外框的指標移動呼叫此函式記游標（x/y 為正規化 0–1，不攔截原生畫筆）。
+  onCursorMove: (x: number, y: number) => void;
+  // 錄音期間，原生畫筆（DrawingCanvas）每次筆劃變化回報完整畫面快照，記成帶時間的快照序列。
+  onDrawSnapshot: (data: NarrationDrawingData) => void;
 }
 
 export function useNarrationRecorder(
@@ -52,39 +59,45 @@ export function useNarrationRecorder(
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const cursorTrackRef = useRef<NarrationCursorPoint[]>([]);
-  const drawTrackRef = useRef<NarrationStrokeData[]>([]);
-  const currentStrokeRef = useRef<NarrationStrokeData | null>(null);
+  const drawSnapshotsRef = useRef<NarrationDrawSnapshot[]>([]);
   const lastCursorTsRef = useRef(0);
+  const lastDrawTsRef = useRef(0);
+  const lastStrokeCountRef = useRef(-1);
   const recordingRef = useRef(false);
   const lastCountTsRef = useRef(0);
   const [captureCounts, setCaptureCounts] = useState({ cursor: 0, strokes: 0 });
 
-  // 擷取投影片指標動作（僅錄音期間）。move 記游標（節流）；down/move(按住)/up 記成一筆繪圖。
-  const onCapturePointer = useCallback((kind: NarrationPointerKind, x: number, y: number) => {
+  const bumpCounts = useCallback(() => {
+    const last = drawSnapshotsRef.current[drawSnapshotsRef.current.length - 1];
+    setCaptureCounts({ cursor: cursorTrackRef.current.length, strokes: last ? last.data.strokes.length : 0 });
+  }, []);
+
+  // 錄音期間記游標（節流）。由投影片外框的 onPointerMove 呼叫，不攔截原生畫筆。
+  const onCursorMove = useCallback((x: number, y: number) => {
     if (!recordingRef.current) return;
     const tMs = Date.now() - startedAtRef.current;
-    if (kind === 'down') {
-      currentStrokeRef.current = { tMs, points: [{ x, y, tMs }] };
-    } else if (kind === 'up') {
-      if (currentStrokeRef.current && currentStrokeRef.current.points.length > 1) {
-        drawTrackRef.current.push(currentStrokeRef.current);
-      }
-      currentStrokeRef.current = null;
-      setCaptureCounts({ cursor: cursorTrackRef.current.length, strokes: drawTrackRef.current.length });
-    } else {
-      // move
-      if (currentStrokeRef.current) currentStrokeRef.current.points.push({ x, y, tMs });
-      if (tMs - lastCursorTsRef.current >= CURSOR_SAMPLE_MS) {
-        lastCursorTsRef.current = tMs;
-        cursorTrackRef.current.push({ tMs, x, y });
-      }
+    if (tMs - lastCursorTsRef.current >= CURSOR_SAMPLE_MS) {
+      lastCursorTsRef.current = tMs;
+      cursorTrackRef.current.push({ tMs, x, y });
     }
-    // 節流更新即時計數（給錄音中的回饋，也方便確認有在擷取）。
     if (tMs - lastCountTsRef.current > 300) {
       lastCountTsRef.current = tMs;
-      setCaptureCounts({ cursor: cursorTrackRef.current.length, strokes: drawTrackRef.current.length });
+      bumpCounts();
     }
-  }, []);
+  }, [bumpCounts]);
+
+  // 錄音期間記原生畫筆快照。筆畫數改變（完成一筆或橡皮擦刪除）一律記錄；畫的過程節流取樣使筆畫漸進長出。
+  const onDrawSnapshot = useCallback((data: NarrationDrawingData) => {
+    if (!recordingRef.current) return;
+    const tMs = Date.now() - startedAtRef.current;
+    const structural = data.strokes.length !== lastStrokeCountRef.current;
+    if (structural || tMs - lastDrawTsRef.current >= DRAW_SAMPLE_MS) {
+      lastDrawTsRef.current = tMs;
+      lastStrokeCountRef.current = data.strokes.length;
+      drawSnapshotsRef.current.push({ tMs, data: cloneDrawingData(data) });
+      bumpCounts();
+    }
+  }, [bumpCounts]);
 
   const supported =
     typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== 'undefined';
@@ -103,7 +116,6 @@ export function useNarrationRecorder(
     chunksRef.current = [];
     sessionRef.current = null;
     recordingRef.current = false;
-    currentStrokeRef.current = null;
   }, []);
 
   const start = useCallback(async (target: string | null = null) => {
@@ -121,9 +133,10 @@ export function useNarrationRecorder(
       startedAtRef.current = now;
       sessionRef.current = startRecording(currentPageNumber, now);
       cursorTrackRef.current = [];
-      drawTrackRef.current = [];
-      currentStrokeRef.current = null;
+      drawSnapshotsRef.current = [];
       lastCursorTsRef.current = -CURSOR_SAMPLE_MS;
+      lastDrawTsRef.current = -DRAW_SAMPLE_MS;
+      lastStrokeCountRef.current = -1;
       lastCountTsRef.current = 0;
       setCaptureCounts({ cursor: 0, strokes: 0 });
       targetRef.current = target;
@@ -153,7 +166,7 @@ export function useNarrationRecorder(
       const endedAt = Date.now();
       const segments = stopRecording(session, endedAt);
       const durationMs = Math.max(0, endedAt - startedAtRef.current);
-      const upload = { durationMs, segments, cursorTrack: cursorTrackRef.current, drawTrack: drawTrackRef.current };
+      const upload = { durationMs, segments, cursorTrack: cursorTrackRef.current, drawSnapshots: drawSnapshotsRef.current };
       const target = targetRef.current;
       if (target) await reRecordNarrationSegment(pdfId, target, blob, upload);
       else await addNarrationSegment(pdfId, blob, upload);
@@ -181,5 +194,5 @@ export function useNarrationRecorder(
   // 卸載時釋放麥克風。
   useEffect(() => () => cleanupStream(), [cleanupStream]);
 
-  return { recording, saving, error, supported, targetSegmentId, captureCounts, startRecording: start, stopAndSave, cancelRecording, onCapturePointer };
+  return { recording, saving, error, supported, targetSegmentId, captureCounts, startRecording: start, stopAndSave, cancelRecording, onCursorMove, onDrawSnapshot };
 }

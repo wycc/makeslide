@@ -68,7 +68,7 @@ import { resolveConfiguredUserCode } from './play/utils';
 import { VersionHistoryDialog } from './play/VersionHistoryDialog';
 import { ImagePreviewDialog } from './play/ImagePreviewDialog';
 import { useBudgetWarning } from '../hooks/useBudgetWarning';
-import { PlayPageCtx, type NarrationOverlayState } from './play/PlayPageContext';
+import { PlayPageCtx, type NarrationOverlayState, type NarrationCaptureState } from './play/PlayPageContext';
 import { PlayPageDialogs } from './play/PlayPageDialogs';
 import { PlayPageFullscreen } from './play/PlayPageFullscreen';
 import { PlayPageHeader } from './play/PlayPageHeader';
@@ -2059,7 +2059,7 @@ export default function PlayPage() {
   });
 
   // 旁白：投影片指標擷取（錄製時）與游標/繪圖重播疊加（播放時）。
-  const [narrationCapture, setNarrationCapture] = useState<{ active: boolean; onCapture: ((kind: 'move' | 'down' | 'up', x: number, y: number) => void) | null }>({ active: false, onCapture: null });
+  const [narrationCapture, setNarrationCapture] = useState<NarrationCaptureState>({ active: false, onCursorMove: null, onDrawSnapshot: null });
   const [narrationOverlay, setNarrationOverlay] = useState<NarrationOverlayState>(null);
   const [narrationSubtitle, setNarrationSubtitle] = useState<string | null>(null);
 

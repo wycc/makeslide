@@ -28,8 +28,15 @@ type RegenOptions = { image: boolean; script: boolean; audio: boolean; animation
 type ImageEditRegion = { x: number; y: number; w: number; h: number } | null;
 
 export type NarrationOverlayState =
-  | { cursor: { x: number; y: number } | null; strokes: { points: { x: number; y: number }[] }[] }
+  | { cursor: { x: number; y: number } | null; drawing: DrawingData | null }
   | null;
+
+// 旁白錄製擷取的回呼：游標移動（座標正規化 0–1）與原生畫筆快照。錄音時由 NarrationPanel 提供。
+export interface NarrationCaptureState {
+  active: boolean;
+  onCursorMove: ((x: number, y: number) => void) | null;
+  onDrawSnapshot: ((data: DrawingData) => void) | null;
+}
 
 // ── Full context interface ────────────────────────────────────────────────────
 export interface PlayPageContextValue {
@@ -49,8 +56,8 @@ export interface PlayPageContextValue {
   totalPages: number;
 
   // 旁白錄製/播放：擷取投影片上的指標動作（錄製時），以及重播游標/繪圖疊加（播放時）。
-  narrationCapture: { active: boolean; onCapture: ((kind: 'move' | 'down' | 'up', x: number, y: number) => void) | null };
-  setNarrationCapture: Dispatch<SetStateAction<{ active: boolean; onCapture: ((kind: 'move' | 'down' | 'up', x: number, y: number) => void) | null }>>;
+  narrationCapture: NarrationCaptureState;
+  setNarrationCapture: Dispatch<SetStateAction<NarrationCaptureState>>;
   narrationOverlay: NarrationOverlayState;
   setNarrationOverlay: Dispatch<SetStateAction<NarrationOverlayState>>;
   // 播放旁白時的同步字幕（顯示於投影片上，取代原字幕）；null 表示無。

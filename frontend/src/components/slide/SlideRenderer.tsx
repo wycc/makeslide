@@ -406,6 +406,8 @@ export interface SlideRendererProps {
   children?: ReactNode;
   /** 固定在外框、不跟著動畫移動的內容（例如版本按鈕）。 */
   overlay?: ReactNode;
+  /** 掛在最外框的 pointermove（透過事件冒泡收到畫筆層的移動而不攔截它），供旁白錄製記錄游標。 */
+  onWrapperPointerMove?: (e: import('react').PointerEvent<HTMLDivElement>) => void;
 }
 
 export function SlideRenderer({
@@ -428,6 +430,7 @@ export function SlideRenderer({
   imgProps,
   children,
   overlay,
+  onWrapperPointerMove,
 }: SlideRendererProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const animated = renderType === 'gsap-image' && hasPlayableAnimation(spec);
@@ -475,7 +478,7 @@ export function SlideRenderer({
 
   if (!animated || animationFailed) {
     return (
-      <div className={wrapperClassName} style={wrapperStyle}>
+      <div className={wrapperClassName} style={wrapperStyle} onPointerMove={onWrapperPointerMove}>
         {img}
         {overlay}
         {children}
@@ -484,7 +487,7 @@ export function SlideRenderer({
   }
 
   return (
-    <div className={`${wrapperClassName ?? ''} overflow-hidden`} style={wrapperStyle}>
+    <div className={`${wrapperClassName ?? ''} overflow-hidden`} style={wrapperStyle} onPointerMove={onWrapperPointerMove}>
       <div ref={stageRef} className="relative" style={{ lineHeight: 0, fontSize: `${ANIMATION_TEXT_BASE_PX * stageFontScale}px`, willChange: 'transform, opacity' }}>
         {img}
         {children}

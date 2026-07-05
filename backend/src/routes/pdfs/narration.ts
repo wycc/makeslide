@@ -23,11 +23,22 @@ const SegmentSchema = z.object({
 // 游標點與繪圖筆畫（座標正規化 0–1、tMs 相對段起點）。
 const CursorPointSchema = z.object({ tMs: z.number(), x: z.number(), y: z.number() });
 const StrokeSchema = z.object({ tMs: z.number(), points: z.array(z.object({ x: z.number(), y: z.number(), tMs: z.number().optional() })).max(5000) });
+// 原生畫筆（DrawingCanvas）的畫面快照序列：每份快照帶時間，data 為完整 { strokes }（含顏色/粗細/橡皮擦），
+// 重播時直接交給唯讀 DrawingCanvas 還原，故支援全部原生畫筆功能。
+const DrawingStrokeSchema = z.object({
+  color: z.string(),
+  lineWidth: z.number(),
+  points: z.array(z.tuple([z.number(), z.number()])).max(5000),
+  isEraser: z.boolean().optional(),
+});
+const DrawingDataSchema = z.object({ strokes: z.array(DrawingStrokeSchema).max(2000) });
+const DrawSnapshotSchema = z.object({ tMs: z.number(), data: DrawingDataSchema });
 const TimelineSchema = z.object({
   durationMs: z.number().nonnegative(),
   segments: z.array(SegmentSchema).max(10000),
   cursorTrack: z.array(CursorPointSchema).max(50000).optional(),
   drawTrack: z.array(StrokeSchema).max(2000).optional(),
+  drawSnapshots: z.array(DrawSnapshotSchema).max(20000).optional(),
 });
 
 // 逐字時間戳（tMs 相對段起點）：供播放時同步顯示字幕。
@@ -46,6 +57,8 @@ interface SegmentMeta {
   wordCues?: z.infer<typeof WordCueSchema>[];
   cursorTrack?: z.infer<typeof CursorPointSchema>[];
   drawTrack?: z.infer<typeof StrokeSchema>[];
+  // 原生畫筆快照序列（取代 drawTrack 作為新的重播來源；drawTrack 保留供舊資料相容）。
+  drawSnapshots?: z.infer<typeof DrawSnapshotSchema>[];
 }
 interface NarrationManifest {
   segments: SegmentMeta[];
@@ -63,6 +76,7 @@ const ManifestSchema = z.object({
       wordCues: z.array(WordCueSchema).optional(),
       cursorTrack: z.array(CursorPointSchema).optional(),
       drawTrack: z.array(StrokeSchema).optional(),
+      drawSnapshots: z.array(DrawSnapshotSchema).optional(),
     }),
   ),
 });
@@ -171,6 +185,7 @@ export async function registerNarrationRoutes(app: FastifyInstance): Promise<voi
         word_cues: s.wordCues ?? [],
         cursor_track: s.cursorTrack ?? [],
         draw_track: s.drawTrack ?? [],
+        draw_snapshots: s.drawSnapshots ?? [],
         created_at: s.createdAt,
       })),
     });
@@ -200,6 +215,7 @@ export async function registerNarrationRoutes(app: FastifyInstance): Promise<voi
       audioMime,
       cursorTrack: up.timeline.cursorTrack,
       drawTrack: up.timeline.drawTrack,
+      drawSnapshots: up.timeline.drawSnapshots,
     });
     await writeManifest(parsed.data.id, manifest);
     return reply.code(201).send({ ok: true, id, size_bytes: up.buffer.length });
@@ -226,6 +242,7 @@ export async function registerNarrationRoutes(app: FastifyInstance): Promise<voi
     seg.slideTimeline = up.timeline.segments;
     seg.cursorTrack = up.timeline.cursorTrack;
     seg.drawTrack = up.timeline.drawTrack;
+    seg.drawSnapshots = up.timeline.drawSnapshots;
     // 重錄時逐字稿失效（音檔已換），清掉舊逐字稿與逐字時間戳。
     seg.transcriptByPage = undefined;
     seg.wordCues = undefined;

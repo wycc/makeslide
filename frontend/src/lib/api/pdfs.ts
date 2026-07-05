@@ -1121,6 +1121,11 @@ export interface SlideTimelineSeg {
 }
 export interface NarrationCursorPoint { tMs: number; x: number; y: number }
 export interface NarrationStrokeData { tMs: number; points: { x: number; y: number; tMs?: number }[] }
+// 原生畫筆（DrawingCanvas）的一筆畫，與其 DrawingStroke 結構一致（含顏色/粗細/橡皮擦）。
+export interface NarrationDrawingStroke { color: string; lineWidth: number; points: [number, number][]; isEraser?: boolean }
+export interface NarrationDrawingData { strokes: NarrationDrawingStroke[] }
+// 錄音時原生畫筆每次變化的畫面快照（帶相對段起點時間）。
+export interface NarrationDrawSnapshot { tMs: number; data: NarrationDrawingData }
 // 一段錄音（一次錄音，可跨多頁）。
 export interface NarrationSegment {
   id: string;
@@ -1131,6 +1136,7 @@ export interface NarrationSegment {
   word_cues: { tMs: number; word: string }[];
   cursor_track: NarrationCursorPoint[];
   draw_track: NarrationStrokeData[];
+  draw_snapshots: NarrationDrawSnapshot[];
   created_at: string;
 }
 export interface NarrationList {
@@ -1141,6 +1147,7 @@ export interface NarrationTimelineUpload {
   segments: SlideTimelineSeg[];
   cursorTrack?: NarrationCursorPoint[];
   drawTrack?: NarrationStrokeData[];
+  drawSnapshots?: NarrationDrawSnapshot[];
 }
 
 export async function getNarration(id: string): Promise<NarrationList> {
