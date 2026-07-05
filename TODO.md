@@ -18,6 +18,13 @@
     非互動（`pointer-events-none`）徽章，置中於影像上方（與 🔖／★／版本／播放中等既有角標同層 z-20），
     顯示 🗳；同頁多個 poll 時附數量。新增 i18n `play.slidePanel.pollDefinedBadge`（zh-TW／en，parity 2192/2192）。
   - 前端 `tsc`＋`vite build` 通過、i18n 24/24。分支 `feat/poll-page-indicator-icon`。
+- [x] 修正（使用者回報「有 poll 的頁面仍不顯示圖示」）：前一版以 `pagePolls` 判斷，但
+    [usePagePolls](frontend/src/pages/play/usePagePolls.ts) 只在特定互動情境（投票進行中／設定面板開啟／互動模式／
+    follower sync）才抓該頁 poll，單純翻頁不會載入，故圖示幾乎不出現。改為在 deck detail 回應為每頁附
+    `has_poll` 旗標（`detail.ts` 以單一 `SELECT DISTINCT page_number FROM page_polls` 查出、穿過 `rowToDetail`
+    的新參數 `pollPageNumbers`），徽章條件改為 `currentPage.has_poll || pagePolls.length > 0`（後者保留投票面板
+    開啟時的即時性）。以真實資料 `rgHBiyrbZf` 端到端驗證：第 24 頁（有 poll）→ `has_poll:true`、第 25 頁→`false`。
+    前後端 `tsc`＋前端 `vite build` 通過。分支 `fix/poll-indicator-uses-has-poll-flag`。
 
 ## 存取權限 UI 移出分享連結對話框（使用者要求，2026-07-05）★ 使用者要求功能，不計入計數
 
@@ -1304,6 +1311,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-05 | （使用者回報有 poll 的頁面仍不顯示圖示）修正投票指示徽章判斷來源：前一版用 `pagePolls`，但 `usePagePolls` 只在特定互動情境才抓該頁 poll、單純翻頁不載入，故圖示幾乎不出現。改為 deck detail 每頁附 `has_poll` 旗標（`detail.ts` 單一 `SELECT DISTINCT page_number FROM page_polls`，穿過 `rowToDetail` 新參數），徽章條件改 `currentPage.has_poll || pagePolls.length>0`。以真實資料 `rgHBiyrbZf` 端到端驗證（第24頁 true、第25頁 false）。前後端 `tsc`＋前端 `vite build` 通過 | fix/poll-indicator-uses-has-poll-flag |
 | 2026-07-05 | （使用者要求）有 poll 定義的頁面在投影片上方顯示投票指示圖示：沿用當前頁的 `pagePolls`（`length > 0` 即該頁有投票），於 `PlayPageSlidePanel` 影像 overlay 上方置中加一個非互動 🗳 徽章（多個 poll 附數量），新增 i18n `play.slidePanel.pollDefinedBadge`。前端 `tsc`＋`vite build` 通過、i18n 24/24、parity 2192/2192 | feat/poll-page-indicator-icon |
 | 2026-07-05 | （使用者回報 header 徽章一直顯示「私密」）修正 visibility 狀態徽章不即時更新：徽章讀載入時抓的 `detail.visibility`，但「存取權限」對話框改預設權限只寫後端＋自身 local state、未回寫 `detail`，故重整前徽章不變。加 `onVisibilityChange` 回呼由 `AccessControlPanel`→`AccessControlDialog`→`PlayPageDialogs`，存檔成功即 `setDetail` 更新 visibility，徽章即時反映。前端 `tsc`＋`vite build` 通過 | fix/access-visibility-badge-live-update |
 | 2026-07-05 | （使用者提問後決定）移除分享下拉選單內多餘的「設為 private」按鈕：把預設權限設為 private 已由新「存取權限」對話框的「預設權限」下拉涵蓋；且兩套系統模型下該按鈕誤導——只動 visibility（系統一），不撤銷已發出的分享連結 token（系統二到期前仍有效）。移除 `handleMakeSharePrivate`、按鈕、及已無用的 `play.share.makePrivate*` 4 個 i18n 鍵（含 `i18n.test.ts` 引用）。前端 `tsc`＋`vite build` 通過、i18n 24/24、parity 2191/2191 | refactor/remove-make-private-button |
