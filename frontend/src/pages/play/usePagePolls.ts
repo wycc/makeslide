@@ -22,6 +22,8 @@ const MAX_POLL_OPTIONS = 6;
 interface UsePagePollsParams {
   pdfId: string | undefined;
   currentPage: PdfDetailPage | null;
+  /** Share-link token (from `?share=`), needed so anonymous scan-in followers can fetch/vote on polls. */
+  shareToken: string;
   // 輪詢觸發條件
   interactiveMode: boolean;
   syncEnabled: boolean;
@@ -74,6 +76,7 @@ export interface PagePollsState {
 export function usePagePolls({
   pdfId,
   currentPage,
+  shareToken,
   interactiveMode,
   syncEnabled,
   syncRole,
@@ -144,7 +147,7 @@ export function usePagePolls({
     let timer: number | null = null;
     const loadPolls = async () => {
       try {
-        const polls = await fetchPagePolls(pdfId, currentPage.page_number);
+        const polls = await fetchPagePolls(pdfId, currentPage.page_number, shareToken);
         if (cancelled) return;
         setPagePolls(polls);
         setPollError(null);
@@ -158,7 +161,7 @@ export function usePagePolls({
       cancelled = true;
       if (timer != null) window.clearTimeout(timer);
     };
-  }, [shouldFetchPolls, pdfId, currentPage?.page_number, t]);
+  }, [shouldFetchPolls, pdfId, currentPage?.page_number, shareToken, t]);
 
   const handleGeneratePollDraft = useCallback(async () => {
     if (!pdfId || !currentPage) return;
@@ -260,7 +263,7 @@ export function usePagePolls({
       setPollBusy(true);
       setPollError(null);
       try {
-        const poll = await votePagePoll(pdfId, pollId, voterId, optionIndex);
+        const poll = await votePagePoll(pdfId, pollId, voterId, optionIndex, shareToken);
         setPagePolls((prev) => prev.map((item) => (item.id === poll.id ? poll : item)));
         setPollVotes((prev) => ({ ...prev, [pollId]: optionIndex }));
       } catch (err) {
@@ -269,7 +272,7 @@ export function usePagePolls({
         setPollBusy(false);
       }
     },
-    [pdfId, t],
+    [pdfId, shareToken, t],
   );
 
   const handleResetPollVotes = useCallback(
