@@ -293,12 +293,21 @@ function providerLabel(provider: OpenAiCompatibleProvider): string {
   return 'OpenAI';
 }
 
+// 目前帳號設定的 LLM provider（gemini 不支援 OpenAI 相容音訊轉錄，退回 openai）。
+// 供語音轉文字選用與 chat 相同的 OpenAI 相容端點（例如 cgu-air），這樣只設了該 provider 的
+// 金鑰也能用 Whisper STT。
+export function resolveTranscriptionProvider(accountId: string = currentAccountId()): OpenAiCompatibleProvider {
+  const selected = getRuntimeAiSettings(accountId).llmProvider;
+  return selected === 'gemini' ? 'openai' : selected;
+}
+
 export async function transcribeAudioBuffer(
   audio: Buffer,
   filename: string,
   mimeType: string,
+  provider: OpenAiCompatibleProvider = 'openai',
 ): Promise<string> {
-  const client = getOpenAIClient();
+  const client = getOpenAIClient(currentAccountId(), provider);
   const file = await toFile(audio, filename, { type: mimeType });
   const startedAt = Date.now();
   const transcription = await client.audio.transcriptions.create({
@@ -329,8 +338,9 @@ export async function transcribeAudioBufferWithWordTimestamps(
   audio: Buffer,
   filename: string,
   mimeType: string,
+  provider: OpenAiCompatibleProvider = 'openai',
 ): Promise<TranscribedWordTimestamp[]> {
-  const client = getOpenAIClient();
+  const client = getOpenAIClient(currentAccountId(), provider);
   const file = await toFile(audio, filename, { type: mimeType });
   const startedAt = Date.now();
   const transcription = await client.audio.transcriptions.create({

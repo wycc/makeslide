@@ -14,6 +14,17 @@ export interface TimelineSeg {
   endMs: number;
 }
 
+// 沒有逐字時間戳時（部分 OpenAI 相容端點不支援 word timestamps）的退路：把整段純文字逐字稿
+// 掛到該段的第一頁；使用者可在編輯界面把內容搬到其他頁。
+export function assignPlainTranscript(text: string, timeline: readonly TimelineSeg[]): Record<number, string> {
+  const trimmed = text.trim();
+  if (!trimmed || timeline.length === 0) return {};
+  const pages = new Set<number>();
+  for (const s of timeline) pages.add(s.page);
+  const firstPage = Math.min(...pages);
+  return { [firstPage]: trimmed };
+}
+
 export function splitWordsByPage(words: readonly TranscriptWord[], timeline: readonly TimelineSeg[]): Record<number, string> {
   if (timeline.length === 0) return {};
   const last = timeline[timeline.length - 1]!;

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { splitWordsByPage } from '../src/routes/pdfs/narrationTranscript';
+import { splitWordsByPage, assignPlainTranscript } from '../src/routes/pdfs/narrationTranscript';
 
 const timeline = [
   { page: 1, startMs: 0, endMs: 10000 },
@@ -28,4 +28,14 @@ test('splitWordsByPage assigns words past the end to the last page', () => {
 test('splitWordsByPage ignores blank/invalid words and empty timeline', () => {
   assert.deepEqual(splitWordsByPage([{ word: '  ', start: 1 }, { word: 'a', start: Number.NaN }], timeline), {});
   assert.deepEqual(splitWordsByPage([{ word: 'a', start: 1 }], []), {});
+});
+
+test('assignPlainTranscript puts the whole text on the segment first page (word-timestamp fallback)', () => {
+  assert.deepEqual(assignPlainTranscript('  hello there  ', timeline), { 1: 'hello there' });
+  assert.deepEqual(assignPlainTranscript('x', [{ page: 5, startMs: 0, endMs: 1000 }, { page: 2, startMs: 1000, endMs: 2000 }]), { 2: 'x' });
+});
+
+test('assignPlainTranscript returns {} for blank text or empty timeline', () => {
+  assert.deepEqual(assignPlainTranscript('   ', timeline), {});
+  assert.deepEqual(assignPlainTranscript('x', []), {});
 });

@@ -13,6 +13,7 @@ import {
 } from '../../lib/api/pdfs';
 import { slideAtTime } from '../../lib/slideTimeline';
 import { cursorAtTime, strokesUntil } from '../../lib/narrationTracks';
+import { ApiError } from '../../lib/api';
 
 // 簡報旁白（分段）：擁有者/協作者可分段錄音，每段可重錄/刪除/上下移；段列表顯示每段用過的
 // 頁面。任何可讀者可逐段播放——播放時依該段時間軸自動翻頁。
@@ -249,17 +250,20 @@ function SegmentTranscriptEditor({
   const [draft, setDraft] = useState<Record<string, string>>(() => ({ ...seg.transcript_by_page }));
   const [busy, setBusy] = useState<'transcribe' | 'save' | null>(null);
   const [status, setStatus] = useState<'ok' | 'fail' | null>(null);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
 
   const transcribe = async () => {
     if (!pdfId) return;
     setBusy('transcribe');
     setStatus(null);
+    setErrMsg(null);
     try {
       const r = await transcribeNarrationSegment(pdfId, seg.id);
       setDraft({ ...r.transcript_by_page });
       onSaved();
-    } catch {
+    } catch (err) {
       setStatus('fail');
+      setErrMsg(err instanceof ApiError ? err.message : null);
     } finally {
       setBusy(null);
     }
@@ -291,7 +295,7 @@ function SegmentTranscriptEditor({
             {busy === 'save' ? '…' : t('play.narration.saveTranscript')}
           </button>
           {status === 'ok' && <span className="text-[11px] text-emerald-600 dark:text-emerald-300">✓</span>}
-          {status === 'fail' && <span className="text-[11px] text-rose-600 dark:text-rose-300">{t('play.narration.transcribeError')}</span>}
+          {status === 'fail' && <span className="text-[11px] text-rose-600 dark:text-rose-300">{errMsg ?? t('play.narration.transcribeError')}</span>}
         </div>
       )}
       {seg.pages.length === 0 && <p className="text-[11px] text-muted">—</p>}
