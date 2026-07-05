@@ -7,6 +7,8 @@ interface AccessControlDialogProps {
   pdfId: string;
   visibility?: PdfVisibilityMode;
   onClose: () => void;
+  /** Propagated up when the default permission changes, so the header status badge stays in sync. */
+  onVisibilityChange?: (visibility: PdfVisibilityMode) => void;
 }
 
 /**
@@ -14,7 +16,7 @@ interface AccessControlDialogProps {
  * group ACL). Deliberately separate from the share-link dialog: access management is an identity
  * concern and must not require first minting a share link / QR code.
  */
-export function AccessControlDialog({ pdfId, visibility, onClose }: AccessControlDialogProps) {
+export function AccessControlDialog({ pdfId, visibility, onClose, onVisibilityChange }: AccessControlDialogProps) {
   const { t } = useI18n();
   const { onBackdropClick } = useOverlayDismiss(onClose);
 
@@ -39,7 +41,7 @@ export function AccessControlDialog({ pdfId, visibility, onClose }: AccessContro
             {t('play.shareDialog.close')}
           </button>
         </div>
-        <AccessControlPanel pdfId={pdfId} initialVisibility={visibility ?? 'private'} />
+        <AccessControlPanel pdfId={pdfId} initialVisibility={visibility ?? 'private'} onVisibilityChange={onVisibilityChange} />
       </div>
     </div>
   );
