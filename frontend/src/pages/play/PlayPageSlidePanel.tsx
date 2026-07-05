@@ -536,6 +536,8 @@ export function PlayPageSlidePanel() {
                   eraser={drawingTool === 'eraser'}
                   remoteData={isSyncFollower ? remoteDrawingData : undefined}
                   onLocalChange={handleMainDrawChange}
+                  onBaseline={narrationCapture.onDrawBaseline ?? undefined}
+                  baselineSignal={narrationCapture.active}
                 />
               )}
               {/* Region selector overlay (for inpainting) */}

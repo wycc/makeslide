@@ -44,9 +44,9 @@ export function NarrationPanel() {
   // 一律把 recorder 的擷取函式提供出去（它們內部以 recordingRef 自我把關，非錄音期間呼叫即 no-op）。
   // 不用單一 active 旗標來開關 handler，避免旗標與實際錄音狀態不同步導致擷取失效。
   useEffect(() => {
-    setNarrationCapture({ active: recorder.recording, onCursorMove: recorder.onCursorMove, onDrawSnapshot: recorder.onDrawSnapshot });
-    return () => setNarrationCapture({ active: false, onCursorMove: null, onDrawSnapshot: null });
-  }, [recorder.recording, recorder.onCursorMove, recorder.onDrawSnapshot, setNarrationCapture]);
+    setNarrationCapture({ active: recorder.recording, onCursorMove: recorder.onCursorMove, onDrawSnapshot: recorder.onDrawSnapshot, onDrawBaseline: recorder.onDrawBaseline });
+    return () => setNarrationCapture({ active: false, onCursorMove: null, onDrawSnapshot: null, onDrawBaseline: null });
+  }, [recorder.recording, recorder.onCursorMove, recorder.onDrawSnapshot, recorder.onDrawBaseline, setNarrationCapture]);
 
   const goToPage = useCallback((page: number) => {
     const idx = deckPages.findIndex((p) => p.page_number === page);

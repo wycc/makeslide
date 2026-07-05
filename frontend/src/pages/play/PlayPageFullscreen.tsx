@@ -453,6 +453,8 @@ export function PlayPageFullscreen() {
                       eraser={drawingTool === 'eraser'}
                       remoteData={isSyncFollower ? remoteDrawingData : undefined}
                       onLocalChange={handleFullscreenDrawChange}
+                      onBaseline={narrationCapture.onDrawBaseline ?? undefined}
+                      baselineSignal={narrationCapture.active}
                     />
                   )}
                   {positioningEffect && (
@@ -625,6 +627,8 @@ export function PlayPageFullscreen() {
               eraser={drawingTool === 'eraser'}
               remoteData={isSyncFollower ? remoteDrawingData : undefined}
               onLocalChange={handleFullscreenDrawChange}
+              onBaseline={narrationCapture.onDrawBaseline ?? undefined}
+              baselineSignal={narrationCapture.active}
             />
           )}
           <NarrationSlideOverlay />
