@@ -1120,7 +1120,7 @@ export interface SlideTimelineSeg {
   endMs: number;
 }
 export interface NarrationCursorPoint { tMs: number; x: number; y: number }
-export interface NarrationStrokeData { tMs: number; points: { x: number; y: number }[] }
+export interface NarrationStrokeData { tMs: number; points: { x: number; y: number; tMs?: number }[] }
 // 一段錄音（一次錄音，可跨多頁）。
 export interface NarrationSegment {
   id: string;

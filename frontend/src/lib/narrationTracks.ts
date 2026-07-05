@@ -5,9 +5,15 @@ export interface CursorPoint {
   x: number;
   y: number;
 }
+export interface StrokePoint {
+  x: number;
+  y: number;
+  // 該點的時間（相對段起點，毫秒）。舊資料可能沒有——此時整筆一起出現（見 strokesUntil）。
+  tMs?: number;
+}
 export interface NarrationStroke {
   tMs: number;
-  points: { x: number; y: number }[];
+  points: StrokePoint[];
 }
 
 // 給定播放毫秒，回傳當下游標位置（在相鄰兩點間線性內插使移動平順）；早於第一點回 null。
@@ -27,9 +33,36 @@ export function cursorAtTime(track: readonly CursorPoint[], ms: number): { x: nu
   return prev ? { x: prev.x, y: prev.y } : null;
 }
 
-// 給定播放毫秒，回傳「到此刻為止已開始畫的筆畫」（漸進顯示）。
+// 給定播放毫秒，回傳「到此刻為止已畫出的筆畫」。每一筆會依點的時間戳裁切，讓筆畫**隨時間一段段長出來**，
+// 並在最後一段做內插使筆尖平順推進；若某筆的點沒有時間戳（舊資料），該筆一旦起筆就整筆顯示。
 export function strokesUntil(track: readonly NarrationStroke[], ms: number): NarrationStroke[] {
-  return track.filter((s) => s.tMs <= ms);
+  const out: NarrationStroke[] = [];
+  for (const s of track) {
+    if (s.tMs > ms) continue;
+    const timed = s.points.some((p) => typeof p.tMs === 'number');
+    if (!timed) {
+      out.push(s);
+      continue;
+    }
+    const pts: StrokePoint[] = [];
+    let prev: StrokePoint | null = null;
+    for (const p of s.points) {
+      const pt = p.tMs ?? s.tMs;
+      if (pt <= ms) {
+        pts.push({ x: p.x, y: p.y, tMs: p.tMs });
+        prev = { ...p, tMs: pt };
+      } else {
+        if (prev) {
+          const span = pt - (prev.tMs ?? s.tMs);
+          const f = span > 0 ? (ms - (prev.tMs ?? s.tMs)) / span : 0;
+          if (f > 0) pts.push({ x: prev.x + (p.x - prev.x) * f, y: prev.y + (p.y - prev.y) * f });
+        }
+        break;
+      }
+    }
+    if (pts.length > 0) out.push({ tMs: s.tMs, points: pts });
+  }
+  return out;
 }
 
 export interface WordCue {
