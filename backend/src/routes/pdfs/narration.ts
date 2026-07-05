@@ -22,7 +22,7 @@ const SegmentSchema = z.object({
 });
 // 游標點與繪圖筆畫（座標正規化 0–1、tMs 相對段起點）。
 const CursorPointSchema = z.object({ tMs: z.number(), x: z.number(), y: z.number() });
-const StrokeSchema = z.object({ tMs: z.number(), points: z.array(z.object({ x: z.number(), y: z.number() })).max(5000) });
+const StrokeSchema = z.object({ tMs: z.number(), points: z.array(z.object({ x: z.number(), y: z.number(), tMs: z.number().optional() })).max(5000) });
 const TimelineSchema = z.object({
   durationMs: z.number().nonnegative(),
   segments: z.array(SegmentSchema).max(10000),

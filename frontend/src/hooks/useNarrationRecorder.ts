@@ -64,7 +64,7 @@ export function useNarrationRecorder(
     if (!recordingRef.current) return;
     const tMs = Date.now() - startedAtRef.current;
     if (kind === 'down') {
-      currentStrokeRef.current = { tMs, points: [{ x, y }] };
+      currentStrokeRef.current = { tMs, points: [{ x, y, tMs }] };
     } else if (kind === 'up') {
       if (currentStrokeRef.current && currentStrokeRef.current.points.length > 1) {
         drawTrackRef.current.push(currentStrokeRef.current);
@@ -73,7 +73,7 @@ export function useNarrationRecorder(
       setCaptureCounts({ cursor: cursorTrackRef.current.length, strokes: drawTrackRef.current.length });
     } else {
       // move
-      if (currentStrokeRef.current) currentStrokeRef.current.points.push({ x, y });
+      if (currentStrokeRef.current) currentStrokeRef.current.points.push({ x, y, tMs });
       if (tMs - lastCursorTsRef.current >= CURSOR_SAMPLE_MS) {
         lastCursorTsRef.current = tMs;
         cursorTrackRef.current.push({ tMs, x, y });

@@ -47,3 +47,26 @@ test('strokesUntil reveals only strokes that have started by the given time', ()
   assert.equal(strokesUntil(strokes, 0).length, 1);
   assert.equal(strokesUntil(strokes, 5000).length, 3);
 });
+
+test('strokesUntil grows a timed stroke point-by-point and interpolates the tip', () => {
+  const strokes = [
+    {
+      tMs: 100,
+      points: [
+        { x: 0, y: 0, tMs: 100 },
+        { x: 1, y: 0, tMs: 200 },
+        { x: 1, y: 1, tMs: 300 },
+      ],
+    },
+  ];
+  // before the stroke starts → nothing
+  assert.equal(strokesUntil(strokes, 50).length, 0);
+  // only the first point is out yet
+  assert.deepEqual(strokesUntil(strokes, 100)[0]!.points, [{ x: 0, y: 0, tMs: 100 }]);
+  // halfway to the 2nd point → first point + interpolated tip at x=0.5
+  const mid = strokesUntil(strokes, 150)[0]!.points;
+  assert.equal(mid.length, 2);
+  assert.deepEqual(mid[mid.length - 1], { x: 0.5, y: 0 });
+  // past the end → all three points
+  assert.equal(strokesUntil(strokes, 999)[0]!.points.length, 3);
+});
