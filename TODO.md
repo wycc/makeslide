@@ -95,6 +95,13 @@
   `onCursorMove`／`onDrawSnapshot` 提供出去（其內部以 `recordingRef` 自我把關、非錄音期間 no-op），兩個檢視都
   無條件呼叫，避免旗標與實際錄音狀態不同步。前端 `tsc`、i18n 24/24、narrationTracks 8/8。分支
   `fix/narration-capture-normal-view`。
+- [x] 修正：換頁時畫筆殘留（使用者回報換頁畫筆更新有問題、應相對頁開頭）（2026-07-05）：畫筆是**逐頁**的
+  （`DrawingCanvas` 換頁清空、且換頁當下不記快照），但重播用 `drawingSnapshotAtTime` 只按時間找最後一份快照、
+  不分頁，導致沒畫東西的新頁**殘留上一頁的筆畫**（實測某 2 段錄音：page 10 畫的一筆殘留顯示到 page 11）。修法：
+  每個畫筆快照記下**所屬頁碼**（recorder 以 `currentPageRef` 標記），重播改用 `drawingSnapshotForPage(snaps, ms, page)`
+  只取「當前頁、<=ms 的最後一份」快照、否則空白，使每頁畫筆各自獨立、從空白開始（即相對頁開頭）；無頁碼舊資料
+  退回不分頁行為。後端 `DrawSnapshotSchema` 加 optional `page`。加逐頁＋舊資料相容測試。前後端 `tsc`、
+  narrationTracks 10/10、後端 narration 5/5、i18n 24/24。分支 `fix/narration-draw-per-page`。
 - [ ] T9：影片輸出（ffmpeg）
 
 ### （下方為初版 MVP 記錄，已被上方分段模型取代）
