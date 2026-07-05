@@ -57,6 +57,13 @@
   [audioTranscode.ts](backend/src/services/audioTranscode.ts) `transcodeToMp3`（ffmpeg 轉單聲道 16kHz mp3、
   時長明確），narration 轉錄前先轉檔再送 Whisper（轉檔失敗則退回原檔）。新增 `audio-transcode.test.ts`
   （產生 webm→轉 mp3→驗證，ffmpeg 不可用時 skip）。後端 12/12、`tsc` 通過。分支 `fix/narration-stt-transcode`。
+- [x] 全螢幕擷取/重播修正（使用者回報「畫筆重播不顯示、沒抓全螢幕動作」）（2026-07-05）：錄音實際在**全螢幕**
+  進行，但擷取層與重播疊加只存在於一般投影片面板（`PlayPageSlidePanel`），導致全螢幕錄製時筆跡從未被記錄
+  （故無法重播）、游標擷取亦不一致。修法：抽出共用元件
+  [NarrationSlideOverlay.tsx](frontend/src/pages/play/NarrationSlideOverlay.tsx)（擷取層 z-50＋游標圓點/SVG 筆跡
+  重播 z-40，讀 `PlayPageContext.narrationCapture`／`narrationOverlay`），同時掛進**一般面板與兩處全螢幕
+  `SlideRenderer`**，使擷取與重播在各檢視共用同一 `inset-0` 座標空間。前端 `tsc` 通過、i18n 24/24。
+  分支 `fix/narration-fullscreen-capture`。
 - [ ] T9：影片輸出（ffmpeg）
 
 ### （下方為初版 MVP 記錄，已被上方分段模型取代）
