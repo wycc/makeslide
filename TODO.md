@@ -80,7 +80,14 @@
   擷取，重播畫成**十字游標**。後端 narration timeline/segment/manifest 新增 `drawSnapshots`（DrawingData zod
   schema，含上限保護），GET 回 `draw_snapshots`；舊 `drawTrack` 保留相容。純函式 `drawingSnapshotAtTime`＋測試。
   前後端 `tsc`、narrationTracks 7/7、後端 narration 5/5（加 drawSnapshots 往返）、i18n 24/24。分支 `feat/narration-native-pen`。
-- [ ] 錄音時若播放原有合成語音（TTS），一併記錄；重播時同步播放該語音並切換成語音字幕（使用者要求，待做）
+- [x] 錄音時記錄並重播原有合成語音（TTS）＋切換語音字幕（使用者要求）（2026-07-05）：講者戴耳機，錄音時按播放
+  讓系統念某頁 TTS（不進麥克風）。錄音時把這些播放記成 `audioCues {startMs,endMs,page,fromSec}`——recorder 的
+  `ttsPlayStart/ttsPlayStop` 開關區間，[NarrationPanel](frontend/src/pages/play/NarrationPanel.tsx) 在錄音期間監聽
+  主播放器的 `isPlaying`＋當前頁來驅動（換頁自動關舊開新）。重播時用**獨立隱藏 `<audio>`** 在各區間播放該頁
+  `audio_url`（帶 share token、seek 到 `fromSec`＋已過秒數），暫停/結束/離開區間即停；純函式 `audioCueAtTime`。
+  字幕在 TTS 區間切成該頁逐字稿（一般播放字幕），其餘用旁白逐字稿。後端 timeline/segment/manifest 加 `audioCues`
+  （zod、上限保護），GET 回 `audio_cues`。前後端 `tsc`、narrationTracks 8/8、後端 narration 5/5（audio_cues 往返）、
+  i18n 24/24。分支 `feat/narration-record-tts`。
 - [ ] T9：影片輸出（ffmpeg）
 
 ### （下方為初版 MVP 記錄，已被上方分段模型取代）
