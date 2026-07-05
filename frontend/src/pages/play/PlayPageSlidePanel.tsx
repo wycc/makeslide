@@ -153,6 +153,7 @@ export function PlayPageSlidePanel() {
     activeTab,
     sidebarExpanded,
     pagePolls,
+    pollJoinQrImageUrl, pollJoinShareUrl,
     syncEnabled, syncRole,
     classroomMode, setClassroomMode,
     classroomAwaitingNext,
@@ -1018,6 +1019,22 @@ export function PlayPageSlidePanel() {
                     </div>
                   ))}
                 </div>
+                {pollJoinQrImageUrl ? (
+                  <div className="mt-2 flex items-center gap-3 border-t border-fuchsia-500/20 pt-2">
+                    <img
+                      src={pollJoinQrImageUrl}
+                      alt={t('play.fullscreen.pollJoinQrAlt')}
+                      className="h-20 w-20 shrink-0 rounded border border-slate-700 bg-white p-1"
+                    />
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-fuchsia-100">{t('play.fullscreen.pollJoinQrTitle')}</p>
+                      <p className="mt-0.5 text-[10px] leading-tight text-fuchsia-200/70">{t('play.fullscreen.pollJoinQrHint')}</p>
+                      {pollJoinShareUrl ? (
+                        <p className="mt-0.5 break-all text-[9px] text-fuchsia-200/50">{pollJoinShareUrl}</p>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ) : null}
             {syncEnabled && syncRole === 'master' ? (
