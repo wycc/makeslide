@@ -943,6 +943,7 @@ export default function PlayPage() {
   const pollState = usePagePolls({
     pdfId,
     currentPage,
+    shareToken: currentShareToken,
     interactiveMode,
     syncEnabled,
     syncRole,

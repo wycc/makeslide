@@ -849,8 +849,10 @@ export async function updatePdfPrompt(
   return (await resp.json()) as UpdatePdfPromptResponse;
 }
 
-export async function fetchPagePolls(id: string, pageNumber: number): Promise<PagePoll[]> {
-  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/polls`);
+export async function fetchPagePolls(id: string, pageNumber: number, shareToken?: string): Promise<PagePoll[]> {
+  const token = shareToken?.trim();
+  const suffix = token ? `?share=${encodeURIComponent(token)}` : '';
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/polls${suffix}`);
   if (!resp.ok) throw await parseErrorBody(resp);
   const data = (await resp.json()) as { polls?: PagePoll[] };
   return Array.isArray(data.polls) ? data.polls : [];
@@ -903,8 +905,10 @@ export async function deletePagePoll(id: string, pollId: number): Promise<void> 
   if (!resp.ok && resp.status !== 204) throw await parseErrorBody(resp);
 }
 
-export async function votePagePoll(id: string, pollId: number, voterId: string, optionIndex: number): Promise<PagePoll> {
-  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/polls/${encodeURIComponent(String(pollId))}/votes`, {
+export async function votePagePoll(id: string, pollId: number, voterId: string, optionIndex: number, shareToken?: string): Promise<PagePoll> {
+  const token = shareToken?.trim();
+  const suffix = token ? `?share=${encodeURIComponent(token)}` : '';
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/polls/${encodeURIComponent(String(pollId))}/votes${suffix}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ voter_id: voterId, option_index: optionIndex }),
