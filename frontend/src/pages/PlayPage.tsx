@@ -963,11 +963,13 @@ export default function PlayPage() {
     setSyncDisplayedPollId,
   });
 
-  // 投票進行中（且自己是可主控的擁有者）時，自動產生「掃描加入」QR：掃描後以分享連結進入簡報，
-  // 便會自動開啟同步模式（見上方 currentShareToken 分支），讓聽眾直接進到同步中的簡報並投票。
+  // 投票進行中，且自己正處於「同步主控（master）」時，才產生「掃描加入」QR：掃描後以分享連結
+  // 進入簡報會自動開啟同步模式（見上方 currentShareToken 分支）並跟隨本 master，聽眾即落在同步中的
+  // 簡報並看到投票。若尚未開啟同步（沒有 master），掃碼者無 master 可跟隨、收不到 realtime_poll_started，
+  // 就看不到投票，故此時不顯示 QR。
   const { pollJoinQrImageUrl, pollJoinShareUrl } = usePollJoinQrCode({
     pdfId,
-    active: pollState.pollStarted,
+    active: pollState.pollStarted && syncEnabled && syncRole === 'master',
     eligible: isSyncMasterEligible,
   });
 

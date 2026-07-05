@@ -211,6 +211,17 @@ export function PlayPageFullscreen() {
   }, [syncFollowerQuestions.length]);
   const activePagePolls = pagePolls.filter((poll) => poll.is_active);
 
+  // 掃碼加入的聽眾（follower）一有進行中的投票就自動展開投票面板，直接落在投票畫面，
+  // 不必自己去找右上角的 🗳 小按鈕。投票結束（沒有進行中的投票）時收合。
+  const hasActivePoll = activePagePolls.length > 0;
+  useEffect(() => {
+    if (syncEnabled && syncRole === 'follower' && hasActivePoll) {
+      setFullscreenPollOpen(true);
+    } else if (!hasActivePoll) {
+      setFullscreenPollOpen(false);
+    }
+  }, [syncEnabled, syncRole, hasActivePoll]);
+
   const syncDisplayedQuestion = syncDisplayedQuestionId
     ? syncFollowerQuestions.find((q) => q.id === syncDisplayedQuestionId) ?? null
     : null;
