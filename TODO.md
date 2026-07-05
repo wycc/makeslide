@@ -71,6 +71,16 @@
   `tMs`。另外 [NarrationSlideOverlay](frontend/src/pages/play/NarrationSlideOverlay.tsx) 在**錄製時**用同一批
   指標事件維護本地即時筆跡/游標並畫出來，講者邊畫邊看得到紅線。加漸進重播測試；前後端 `tsc`、narrationTracks
   6/6、後端 narration 5/5、i18n 24/24。分支 `fix/narration-progressive-strokes`。
+- [x] 旁白改用原生畫筆（顏色/橡皮擦/粗細）＋快照重播（使用者要求「全螢幕用原有畫筆，保留換色橡皮擦」）（2026-07-05）：
+  放棄先前的內建紅筆擷取層，改為錄音時直接用原有 [DrawingCanvas](frontend/src/components/DrawingCanvas.tsx)——
+  它的 `onLocalChange` 每次筆劃變化回報完整 `{strokes}` 快照（含 color/lineWidth/isEraser）。recorder 為這些快照
+  打時間戳（節流 80ms，但筆畫數改變＝完成一筆/橡皮擦刪除時一律記錄）並上傳 `drawSnapshots`；重播用**唯讀
+  DrawingCanvas（remoteData 模式）**還原對應時間的快照，故顏色/橡皮擦/粗細全數保留。游標改由 `SlideRenderer`
+  新增的 `onWrapperPointerMove`（掛在畫筆 canvas 與 overlay 的共同祖先外框，靠事件冒泡收到移動而不攔截畫筆）
+  擷取，重播畫成**十字游標**。後端 narration timeline/segment/manifest 新增 `drawSnapshots`（DrawingData zod
+  schema，含上限保護），GET 回 `draw_snapshots`；舊 `drawTrack` 保留相容。純函式 `drawingSnapshotAtTime`＋測試。
+  前後端 `tsc`、narrationTracks 7/7、後端 narration 5/5（加 drawSnapshots 往返）、i18n 24/24。分支 `feat/narration-native-pen`。
+- [ ] 錄音時若播放原有合成語音（TTS），一併記錄；重播時同步播放該語音並切換成語音字幕（使用者要求，待做）
 - [ ] T9：影片輸出（ffmpeg）
 
 ### （下方為初版 MVP 記錄，已被上方分段模型取代）
