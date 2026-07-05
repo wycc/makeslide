@@ -64,6 +64,8 @@ export interface PdfMetadataState {
   shareBusy: boolean;
   shareDialogOpen: boolean;
   setShareDialogOpen: Dispatch<SetStateAction<boolean>>;
+  accessDialogOpen: boolean;
+  setAccessDialogOpen: Dispatch<SetStateAction<boolean>>;
   shareUrl: string;
   setShareUrl: Dispatch<SetStateAction<string>>;
   playQrCodeUrl: string | null;
@@ -118,6 +120,7 @@ export function usePdfMetadata({
   const [shareExpiresAt, setShareExpiresAt] = useState<string | null>(null);
   const [shareBusy, setShareBusy] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [accessDialogOpen, setAccessDialogOpen] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
   const [playQrCodeUrl, setPlayQrCodeUrl] = useState<string | null>(null);
   const [githubSyncBusy, setGithubSyncBusy] = useState(false);
@@ -362,6 +365,8 @@ export function usePdfMetadata({
     shareBusy,
     shareDialogOpen,
     setShareDialogOpen,
+    accessDialogOpen,
+    setAccessDialogOpen,
     shareUrl,
     setShareUrl,
     playQrCodeUrl,

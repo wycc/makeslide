@@ -4,6 +4,7 @@ import { TtsDialog } from './TtsDialog';
 import { ImageStyleDialog } from './ImageStyleDialog';
 import { RegenAllDialog } from './RegenAllDialog';
 import { ShareDialog } from './ShareDialog';
+import { AccessControlDialog } from './AccessControlDialog';
 import { useI18n } from '../../i18n';
 
 export function PlayPageDialogs() {
@@ -32,6 +33,7 @@ export function PlayPageDialogs() {
     shareDialogOpen, setShareDialogOpen, shareUrl, shareExpiresAt,
     shareExpiresDays, setShareExpiresDays,
     setShareMessage, setShareError,
+    accessDialogOpen, setAccessDialogOpen,
     // AddPages
     showAddPagesModal, setShowAddPagesModal, pdfId, currentPage, totalPages,
     reloadDetail, setCurrentIdx,
@@ -117,9 +119,14 @@ export function PlayPageDialogs() {
           }}
           onCopyError={() => setShareError(t('play.shareDialog.copyErrorMessage'))}
           onClose={() => setShareDialogOpen(false)}
+        />
+      ) : null}
+
+      {accessDialogOpen && pdfId && detail?.is_owner ? (
+        <AccessControlDialog
           pdfId={pdfId}
           visibility={detail?.visibility}
-          canManageAccess={Boolean(detail?.is_owner)}
+          onClose={() => setAccessDialogOpen(false)}
         />
       ) : null}
 
