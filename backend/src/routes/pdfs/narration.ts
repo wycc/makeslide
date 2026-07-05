@@ -38,6 +38,8 @@ interface SegmentMeta {
   durationMs: number;
   slideTimeline: z.infer<typeof SegmentSchema>[];
   createdAt: string;
+  // 儲存音檔的 MIME（上傳時轉成 mp3 讓播放器可拖曳跳轉；轉檔失敗則保留原 webm）。
+  audioMime?: string;
   // 逐頁逐字稿（key 為頁碼字串，值為該頁的逐字稿）。可由 STT 產生或使用者編輯。
   transcriptByPage?: Record<string, string>;
   // 逐字時間戳（STT 產生，供播放同步字幕）；使用者編輯逐頁稿不影響此處。
@@ -56,6 +58,7 @@ const ManifestSchema = z.object({
       durationMs: z.number(),
       slideTimeline: z.array(SegmentSchema),
       createdAt: z.string(),
+      audioMime: z.string().optional(),
       transcriptByPage: z.record(z.string(), z.string()).optional(),
       wordCues: z.array(WordCueSchema).optional(),
       cursorTrack: z.array(CursorPointSchema).optional(),
@@ -85,6 +88,22 @@ async function readManifest(pdfId: string): Promise<NarrationManifest> {
 async function writeManifest(pdfId: string, manifest: NarrationManifest): Promise<void> {
   await fs.mkdir(narrationDir(pdfId), { recursive: true });
   await fs.writeFile(narrationManifestPath(pdfId), JSON.stringify(manifest), 'utf8');
+}
+
+// 儲存段落音檔：把 MediaRecorder 的 webm 轉成 mp3（有時長、可拖曳跳轉），轉檔失敗則存原檔。
+// 回傳實際儲存的 MIME。
+async function storeSegmentAudio(pdfId: string, segId: string, webm: Buffer): Promise<string> {
+  let bytes = webm;
+  let mime = 'audio/webm';
+  try {
+    bytes = await transcodeToMp3(webm, { sampleRate: 44100, bitrate: '96k' });
+    mime = 'audio/mpeg';
+  } catch {
+    // 保留原始 webm（播放器可能無法拖曳，但仍可播）。
+  }
+  await fs.mkdir(narrationDir(pdfId), { recursive: true });
+  await fs.writeFile(narrationSegmentAudioPath(pdfId, segId), bytes);
+  return mime;
 }
 
 function distinctPages(timeline: z.infer<typeof SegmentSchema>[]): number[] {
@@ -171,14 +190,14 @@ export async function registerNarrationRoutes(app: FastifyInstance): Promise<voi
     if (!up.ok) return reply.code(up.code).send(errorResponse('INVALID_REQUEST', up.message));
 
     const id = nanoid(10);
-    await fs.mkdir(narrationDir(parsed.data.id), { recursive: true });
-    await fs.writeFile(narrationSegmentAudioPath(parsed.data.id, id), up.buffer);
+    const audioMime = await storeSegmentAudio(parsed.data.id, id, up.buffer);
     const manifest = await readManifest(parsed.data.id);
     manifest.segments.push({
       id,
       durationMs: up.timeline.durationMs,
       slideTimeline: up.timeline.segments,
       createdAt: nowIso(),
+      audioMime,
       cursorTrack: up.timeline.cursorTrack,
       drawTrack: up.timeline.drawTrack,
     });
@@ -202,7 +221,7 @@ export async function registerNarrationRoutes(app: FastifyInstance): Promise<voi
     if (!seg) return reply.code(404).send(errorResponse('SEGMENT_NOT_FOUND', `Segment ${segId} not found`));
     const up = await readSegmentUpload(request);
     if (!up.ok) return reply.code(up.code).send(errorResponse('INVALID_REQUEST', up.message));
-    await fs.writeFile(narrationSegmentAudioPath(parsed.data.id, segId), up.buffer);
+    seg.audioMime = await storeSegmentAudio(parsed.data.id, segId, up.buffer);
     seg.durationMs = up.timeline.durationMs;
     seg.slideTimeline = up.timeline.segments;
     seg.cursorTrack = up.timeline.cursorTrack;
@@ -359,9 +378,33 @@ export async function registerNarrationRoutes(app: FastifyInstance): Promise<voi
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限播放此簡報旁白'));
     }
     const audioPath = narrationSegmentAudioPath(parsed.data.id, segId);
-    if (!(await fileExists(audioPath))) return reply.code(404).send(errorResponse('SEGMENT_NOT_FOUND', 'Segment audio not found'));
-    reply.header('Content-Type', 'audio/webm');
+    let size: number;
+    try {
+      size = (await fs.stat(audioPath)).size;
+    } catch {
+      return reply.code(404).send(errorResponse('SEGMENT_NOT_FOUND', 'Segment audio not found'));
+    }
+    const manifest = await readManifest(parsed.data.id);
+    const mime = manifest.segments.find((s) => s.id === segId)?.audioMime ?? 'audio/webm';
+    reply.header('Content-Type', mime);
     reply.header('Cache-Control', 'no-store');
+    // 支援 HTTP Range，讓 <audio> 播放器可以拖曳跳轉。
+    reply.header('Accept-Ranges', 'bytes');
+    const range = request.headers.range;
+    const match = typeof range === 'string' ? /^bytes=(\d*)-(\d*)$/.exec(range.trim()) : null;
+    if (match) {
+      const start = match[1] ? parseInt(match[1], 10) : 0;
+      const end = match[2] ? Math.min(parseInt(match[2], 10), size - 1) : size - 1;
+      if (Number.isNaN(start) || start > end || start >= size) {
+        reply.header('Content-Range', `bytes */${size}`);
+        return reply.code(416).send();
+      }
+      reply.code(206);
+      reply.header('Content-Range', `bytes ${start}-${end}/${size}`);
+      reply.header('Content-Length', String(end - start + 1));
+      return reply.send(createReadStream(audioPath, { start, end }));
+    }
+    reply.header('Content-Length', String(size));
     return reply.send(createReadStream(audioPath));
   });
 }

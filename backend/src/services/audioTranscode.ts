@@ -12,13 +12,23 @@ const TRANSCODE_TIMEOUT_MS = 60_000;
  * `400 invalid_audio: Unable to determine audio duration`。用 ffmpeg 重新編碼成單聲道 16kHz mp3
  * （語音足夠、體積小、時長明確），讓轉錄端點能正確處理。回傳 mp3 buffer。
  */
-export async function transcodeToMp3(input: Buffer): Promise<Buffer> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'ms-narr-stt-'));
+export interface TranscodeOptions {
+  sampleRate?: number; // 預設 16000（STT 用；播放品質可用 44100）
+  bitrate?: string; // 預設 '48k'（STT 用；播放可用 '96k'）
+  mono?: boolean; // 預設 true（麥克風多為單聲道）
+}
+
+export async function transcodeToMp3(input: Buffer, opts: TranscodeOptions = {}): Promise<Buffer> {
+  const { sampleRate = 16000, bitrate = '48k', mono = true } = opts;
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'ms-narr-transcode-'));
   const inPath = path.join(dir, 'in.webm');
   const outPath = path.join(dir, 'out.mp3');
   try {
     await fs.writeFile(inPath, input);
-    await runFfmpeg(['-i', inPath, '-ac', '1', '-ar', '16000', '-b:a', '48k', '-y', outPath]);
+    const args = ['-i', inPath];
+    if (mono) args.push('-ac', '1');
+    args.push('-ar', String(sampleRate), '-b:a', bitrate, '-y', outPath);
+    await runFfmpeg(args);
     return await fs.readFile(outPath);
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
