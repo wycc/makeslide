@@ -21,6 +21,9 @@ import { isValidEmail } from '../../lib/isValidEmail';
 interface AccessControlPanelProps {
   pdfId: string;
   initialVisibility: PdfVisibilityMode;
+  /** Notifies the parent when the default permission (visibility) is persisted, so shared UI
+   *  (e.g. the header status badge that reads detail.visibility) can update without a page reload. */
+  onVisibilityChange?: (visibility: PdfVisibilityMode) => void;
 }
 
 type PickTarget =
@@ -32,7 +35,7 @@ type PickTarget =
  * everyone not listed, then grant specific users OR groups read-only / read-write access. Targets
  * are found via account search (email / display name) and group name; a free-typed email works too.
  */
-export function AccessControlPanel({ pdfId, initialVisibility }: AccessControlPanelProps) {
+export function AccessControlPanel({ pdfId, initialVisibility, onVisibilityChange }: AccessControlPanelProps) {
   const { t } = useI18n();
   const [visibility, setVisibility] = useState<PdfVisibilityMode>(initialVisibility);
   const [entries, setEntries] = useState<PdfPermissionEntry[]>([]);
@@ -89,7 +92,7 @@ export function AccessControlPanel({ pdfId, initialVisibility }: AccessControlPa
   async function handleVisibilityChange(next: PdfVisibilityMode) {
     setVisibility(next);
     setBusy(true);
-    try { await updatePdfVisibility(pdfId, next); setError(null); }
+    try { await updatePdfVisibility(pdfId, next); onVisibilityChange?.(next); setError(null); }
     catch { setError(t('play.access.saveFailed')); }
     finally { setBusy(false); }
   }

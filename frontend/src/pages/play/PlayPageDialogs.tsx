@@ -37,7 +37,7 @@ export function PlayPageDialogs() {
     // AddPages
     showAddPagesModal, setShowAddPagesModal, pdfId, currentPage, totalPages,
     reloadDetail, setCurrentIdx,
-    detail,
+    detail, setDetail,
   } = usePlayPageContext();
 
   return (
@@ -127,6 +127,9 @@ export function PlayPageDialogs() {
           pdfId={pdfId}
           visibility={detail?.visibility}
           onClose={() => setAccessDialogOpen(false)}
+          onVisibilityChange={(visibility) =>
+            setDetail((prev) => (prev ? { ...prev, visibility } : prev))
+          }
         />
       ) : null}
 
