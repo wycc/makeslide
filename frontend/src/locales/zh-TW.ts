@@ -875,6 +875,7 @@ export const zhTW = {
   'play.slidePanel.attendeesTitle': '出席名單',
   'play.slidePanel.liveVotesTitle': '即時投票狀況',
   'play.slidePanel.liveVotesCount': '{count} 人已投票',
+  'play.slidePanel.pollDefinedBadge': '此頁有投票',
   'play.slidePanel.attendeesEmpty': '尚無學生加入',
   'play.slidePanel.kickAttendee': '踢出',
   'play.slidePanel.studentAudioControlTitle': '學生端音訊控制',
