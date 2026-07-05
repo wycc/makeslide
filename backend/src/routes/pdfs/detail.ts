@@ -250,7 +250,11 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       .prepare(`SELECT DISTINCT page_number FROM page_polls WHERE pdf_id = ?`)
       .all(parsed.data.id) as Array<{ page_number: number }>;
     const pollPageNumbers = new Set(pollPageRows.map((r) => r.page_number));
-    const detail = rowToDetail(row, pages, timingRowsToPageMap(timingRows), pollPageNumbers);
+    const commentPageRows = db
+      .prepare(`SELECT DISTINCT page_number FROM page_comments WHERE pdf_id = ?`)
+      .all(parsed.data.id) as Array<{ page_number: number }>;
+    const commentPageNumbers = new Set(commentPageRows.map((r) => r.page_number));
+    const detail = rowToDetail(row, pages, timingRowsToPageMap(timingRows), pollPageNumbers, commentPageNumbers);
     const sources = db
       .prepare(
         `SELECT id, pdf_id, source_kind, source_name, content_text, created_at, updated_at

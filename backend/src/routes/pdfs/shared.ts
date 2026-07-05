@@ -572,6 +572,7 @@ export function rowToDetail(
   pages: PageRow[],
   timingsByPage: PageTimingsByPage = new Map(),
   pollPageNumbers: ReadonlySet<number> = new Set(),
+  commentPageNumbers: ReadonlySet<number> = new Set(),
 ): PdfDetail {
   const runtime = getRuntimeAiSettings(accountIdFromOwnerSub(row.owner_sub));
   const detailPages: PdfDetailPage[] = pages.map((p) => ({
@@ -591,6 +592,7 @@ export function rowToDetail(
     timings: timingsByPage.get(p.page_number) ?? emptyPageTimings(),
     page_notes: p.page_notes ?? '',
     has_poll: pollPageNumbers.has(p.page_number),
+    has_comment: commentPageNumbers.has(p.page_number),
   }));
   return {
     id: row.id,

@@ -876,6 +876,8 @@ export const en = {
   'play.slidePanel.liveVotesTitle': 'Live votes',
   'play.slidePanel.liveVotesCount': '{count} voted',
   'play.slidePanel.pollDefinedBadge': 'This page has a poll',
+  'play.slidePanel.noteDefinedBadge': 'This page has notes',
+  'play.slidePanel.commentDefinedBadge': 'This page has comments',
   'play.slidePanel.attendeesEmpty': 'No students have joined yet',
   'play.slidePanel.kickAttendee': 'Kick',
   'play.slidePanel.studentAudioControlTitle': 'Student audio control',
