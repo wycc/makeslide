@@ -29,6 +29,12 @@
     分享連結 token**（系統二在 token 到期前仍有效）。移除 `handleMakeSharePrivate`、按鈕、及已無人使用的
     `play.share.makePrivate*` 4 個 i18n 鍵（含 `i18n.test.ts` 引用）。前端 `tsc`＋`vite build` 通過、i18n 24/24、
     parity 2191/2191。分支 `refactor/remove-make-private-button`。
+- [x] 修正（使用者回報「無論預設權限改成什麼，header 徽章都顯示私密」）：header 的 visibility 狀態徽章讀
+    `detail.visibility`（載入時抓一次），但 [AccessControlPanel](frontend/src/pages/play/AccessControlPanel.tsx)
+    改預設權限只寫後端與自身 local state、未回寫共用 `detail`，故徽章停在載入值（private）直到重新整理。修法：
+    新增 `onVisibilityChange` 回呼，由 `AccessControlPanel`→`AccessControlDialog`→`PlayPageDialogs` 一路傳上，
+    存檔成功後 `setDetail` 更新 `visibility`，徽章即時反映。前端 `tsc`＋`vite build` 通過。分支
+    `fix/access-visibility-badge-live-update`。
 
 ## 投票進行中顯示「掃描加入」QR（使用者要求，2026-07-05）★ 使用者要求功能，不計入計數
 
@@ -1286,6 +1292,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-05 | （使用者回報 header 徽章一直顯示「私密」）修正 visibility 狀態徽章不即時更新：徽章讀載入時抓的 `detail.visibility`，但「存取權限」對話框改預設權限只寫後端＋自身 local state、未回寫 `detail`，故重整前徽章不變。加 `onVisibilityChange` 回呼由 `AccessControlPanel`→`AccessControlDialog`→`PlayPageDialogs`，存檔成功即 `setDetail` 更新 visibility，徽章即時反映。前端 `tsc`＋`vite build` 通過 | fix/access-visibility-badge-live-update |
 | 2026-07-05 | （使用者提問後決定）移除分享下拉選單內多餘的「設為 private」按鈕：把預設權限設為 private 已由新「存取權限」對話框的「預設權限」下拉涵蓋；且兩套系統模型下該按鈕誤導——只動 visibility（系統一），不撤銷已發出的分享連結 token（系統二到期前仍有效）。移除 `handleMakeSharePrivate`、按鈕、及已無用的 `play.share.makePrivate*` 4 個 i18n 鍵（含 `i18n.test.ts` 引用）。前端 `tsc`＋`vite build` 通過、i18n 24/24、parity 2191/2191 | refactor/remove-make-private-button |
 | 2026-07-05 | （使用者要求）存取權限 UI 位置不合理修正：身分權限管理（預設權限＋名單/群組 ACL）原被藏在「建立分享連結／QR」的 `ShareDialog` 內當第三個分頁，須先按「建立分享連結」產生 QR/連結才進得去。抽出為獨立 `AccessControlDialog`（modal 包 `AccessControlPanel`），入口改為 Header「群組分享」下拉選單頂部新增的「🔑 存取權限」按鈕（gate `!currentShareToken && detail.is_owner`）；`ShareDialog` 移除 access 分頁與 `pdfId`/`visibility`/`canManageAccess` props，退回「連結／嵌入」兩分頁回歸單一職責。狀態 `accessDialogOpen` 經 `usePdfMetadata`→`PlayPageContext`→`PlayPageDialogs`。沿用既有 i18n（未新增鍵、parity 2195/2195）。前端 `tsc --noEmit`＋`vite build` 通過、ShareDialog 測試 2/2 | refactor/access-control-out-of-share-dialog |
 | 2026-07-04 | （使用者要求二次覆核權限測試矩陣）發現並修復**提權漏洞**：`PATCH /api/pdfs/:id/visibility` 閘門原為 `canEditPdf(...aclCtx)`，統一模型後匿名 editable-token 持有者／read_write 名單使用者可改「預設權限」（改 public_editable 即讓全世界永久可編輯、token 過期仍有效）。visibility 屬存取管理非內容編輯，改為 owner-only（`hasOwnerOrLegacyAccess`），與 ACL 管理 API／建立分享連結一致。並補齊矩陣測試（token-capability 22→27）：建立分享連結 owner-only、visibility owner-only、read_write 名單刪整份 403、只讀名單＋editable token→有效 edit（反向 max）、群組授權 HTTP 端對端。後端 tsc 通過、9 個權限套件序跑全綠（detail 92、page-ops 31、token-capability 27、pdf-access 13、permissions/permissions-api 各 6、read-gate/delete 各 5、groups 4、share-expiry 3） | fix/access-admin-owner-only |
