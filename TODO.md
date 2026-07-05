@@ -102,6 +102,10 @@
   只取「當前頁、<=ms 的最後一份」快照、否則空白，使每頁畫筆各自獨立、從空白開始（即相對頁開頭）；無頁碼舊資料
   退回不分頁行為。後端 `DrawSnapshotSchema` 加 optional `page`。加逐頁＋舊資料相容測試。前後端 `tsc`、
   narrationTracks 10/10、後端 narration 5/5、i18n 24/24。分支 `fix/narration-draw-per-page`。
+- [x] 修正：旁白重播時隱藏頁面原有的已存手繪標註（使用者要求）（2026-07-05）：重播旁白時，投影片主
+  `DrawingCanvas` 仍會載入並顯示該頁存在伺服器的手繪標註，疊在旁白重播筆畫上。加 `narrationPlaying` 旗標
+  （由 `NarrationPanel` 依 `playingId` 設定），播放中時 `PlayPageSlidePanel` 與 `PlayPageFullscreen` 皆不渲染
+  編輯用 `DrawingCanvas`，只顯示旁白自己錄到的筆畫。前端 `tsc`、i18n 24/24。分支 `fix/narration-hide-saved-drawing`。
 - [ ] T9：影片輸出（ffmpeg）
 
 ### （下方為初版 MVP 記錄，已被上方分段模型取代）
