@@ -1119,6 +1119,8 @@ export interface SlideTimelineSeg {
   startMs: number;
   endMs: number;
 }
+export interface NarrationCursorPoint { tMs: number; x: number; y: number }
+export interface NarrationStrokeData { tMs: number; points: { x: number; y: number }[] }
 // 一段錄音（一次錄音，可跨多頁）。
 export interface NarrationSegment {
   id: string;
@@ -1126,10 +1128,18 @@ export interface NarrationSegment {
   pages: number[];
   slide_timeline: SlideTimelineSeg[];
   transcript_by_page: Record<string, string>;
+  cursor_track: NarrationCursorPoint[];
+  draw_track: NarrationStrokeData[];
   created_at: string;
 }
 export interface NarrationList {
   segments: NarrationSegment[];
+}
+export interface NarrationTimelineUpload {
+  durationMs: number;
+  segments: SlideTimelineSeg[];
+  cursorTrack?: NarrationCursorPoint[];
+  drawTrack?: NarrationStrokeData[];
 }
 
 export async function getNarration(id: string): Promise<NarrationList> {
@@ -1138,7 +1148,7 @@ export async function getNarration(id: string): Promise<NarrationList> {
   return (await resp.json()) as NarrationList;
 }
 
-function narrationForm(audio: Blob, timeline: { durationMs: number; segments: SlideTimelineSeg[] }): FormData {
+function narrationForm(audio: Blob, timeline: NarrationTimelineUpload): FormData {
   const form = new FormData();
   form.append('timeline', JSON.stringify(timeline));
   form.append('file', audio, 'audio.webm');
@@ -1148,7 +1158,7 @@ function narrationForm(audio: Blob, timeline: { durationMs: number; segments: Sl
 export async function addNarrationSegment(
   id: string,
   audio: Blob,
-  timeline: { durationMs: number; segments: SlideTimelineSeg[] },
+  timeline: NarrationTimelineUpload,
 ): Promise<{ id: string }> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/narration/segments`, { method: 'POST', body: narrationForm(audio, timeline) });
   if (!resp.ok) throw await parseErrorBody(resp);
@@ -1159,7 +1169,7 @@ export async function reRecordNarrationSegment(
   id: string,
   segId: string,
   audio: Blob,
-  timeline: { durationMs: number; segments: SlideTimelineSeg[] },
+  timeline: NarrationTimelineUpload,
 ): Promise<void> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/narration/segments/${encodeURIComponent(segId)}`, { method: 'PUT', body: narrationForm(audio, timeline) });
   if (!resp.ok) throw await parseErrorBody(resp);

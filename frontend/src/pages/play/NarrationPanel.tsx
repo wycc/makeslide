@@ -12,12 +12,13 @@ import {
   type NarrationSegment,
 } from '../../lib/api/pdfs';
 import { slideAtTime } from '../../lib/slideTimeline';
+import { cursorAtTime, strokesUntil } from '../../lib/narrationTracks';
 
 // 簡報旁白（分段）：擁有者/協作者可分段錄音，每段可重錄/刪除/上下移；段列表顯示每段用過的
 // 頁面。任何可讀者可逐段播放——播放時依該段時間軸自動翻頁。
 export function NarrationPanel() {
   const { t } = useI18n();
-  const { pdfId, detail, currentPage, deckPages, currentIdx, setCurrentIdx } = usePlayPageContext();
+  const { pdfId, detail, currentPage, deckPages, currentIdx, setCurrentIdx, setNarrationCapture, setNarrationOverlay } = usePlayPageContext();
   const canRecord = Boolean(detail?.is_owner || detail?.visibility === 'public_editable');
 
   const [segments, setSegments] = useState<NarrationSegment[] | null>(null);
@@ -35,6 +36,13 @@ export function NarrationPanel() {
 
   const recorder = useNarrationRecorder(pdfId, currentPage?.page_number ?? null, reload);
 
+  // 錄音期間，讓投影片上的擷取層把指標動作送進 recorder（T7/T8 擷取）。
+  useEffect(() => {
+    if (recorder.recording) setNarrationCapture({ active: true, onCapture: recorder.onCapturePointer });
+    else setNarrationCapture({ active: false, onCapture: null });
+    return () => setNarrationCapture({ active: false, onCapture: null });
+  }, [recorder.recording, recorder.onCapturePointer, setNarrationCapture]);
+
   const goToPage = useCallback((page: number) => {
     const idx = deckPages.findIndex((p) => p.page_number === page);
     if (idx >= 0 && idx !== currentIdx) setCurrentIdx(idx);
@@ -44,9 +52,17 @@ export function NarrationPanel() {
   const handleTimeUpdate = useCallback(() => {
     const audio = audioRef.current;
     if (!audio || !playing) return;
-    const page = slideAtTime(playing.slide_timeline, audio.currentTime * 1000);
+    const ms = audio.currentTime * 1000;
+    const page = slideAtTime(playing.slide_timeline, ms);
     if (page != null) { goToPage(page); setSyncedPage(page); }
-  }, [playing, goToPage]);
+    // T7/T8 重播：把當下游標/繪圖疊加送進 context，由投影片面板繪出。
+    setNarrationOverlay({ cursor: cursorAtTime(playing.cursor_track, ms), strokes: strokesUntil(playing.draw_track, ms) });
+  }, [playing, goToPage, setNarrationOverlay]);
+
+  // 沒有在播放時清掉重播疊加。
+  useEffect(() => {
+    if (!playingId) setNarrationOverlay(null);
+  }, [playingId, setNarrationOverlay]);
 
   // 播放中、目前頁的逐字稿（T5 同步顯示）。
   const syncedTranscript = playing && syncedPage != null ? (playing.transcript_by_page[String(syncedPage)] ?? '') : '';

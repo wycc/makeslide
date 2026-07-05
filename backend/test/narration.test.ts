@@ -150,6 +150,29 @@ test('narration transcribe: STT -> per-page transcript, then manual edit', async
   }
 });
 
+test('narration stores and returns cursor + draw tracks', async () => {
+  const id = `narr-track-${RUN}`;
+  seedPdf(id, OWNER);
+  const app = await buildApp();
+  try {
+    const tl = {
+      durationMs: 5000,
+      segments: [{ page: 1, startMs: 0, endMs: 5000 }],
+      cursorTrack: [{ tMs: 0, x: 0.1, y: 0.2 }, { tMs: 100, x: 0.3, y: 0.4 }],
+      drawTrack: [{ tMs: 50, points: [{ x: 0.1, y: 0.1 }, { x: 0.2, y: 0.2 }] }],
+    };
+    const a = await addSegment(app, id, tl);
+    assert.equal(a.statusCode, 201);
+    const list = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/narration`, headers: OWNER_HEADERS });
+    const seg = (list.json() as { segments: Array<{ cursor_track: unknown[]; draw_track: Array<{ points: unknown[] }> }> }).segments[0]!;
+    assert.equal(seg.cursor_track.length, 2);
+    assert.equal(seg.draw_track.length, 1);
+    assert.equal(seg.draw_track[0]!.points.length, 2);
+  } finally {
+    await app.close();
+  }
+});
+
 test('narration segment add requires edit permission (non-owner -> 403)', async () => {
   const id = `narr-perm-${RUN}`;
   seedPdf(id, OWNER);
