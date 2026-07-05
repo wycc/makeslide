@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cursorAtTime, strokesUntil, subtitleAtTime, drawingSnapshotAtTime, audioCueAtTime } from './narrationTracks';
+import { cursorAtTime, strokesUntil, subtitleAtTime, drawingSnapshotAtTime, drawingSnapshotForPage, audioCueAtTime } from './narrationTracks';
 
 const track = [
   { tMs: 0, x: 0, y: 0 },
@@ -59,6 +59,27 @@ test('drawingSnapshotAtTime returns the latest snapshot at or before the time', 
   assert.deepEqual(drawingSnapshotAtTime(snaps, 900), { strokes: ['a'] });
   assert.deepEqual(drawingSnapshotAtTime(snaps, 9999), { strokes: ['a', 'b'] });
   assert.equal(drawingSnapshotAtTime([], 100), null);
+});
+
+test('drawingSnapshotForPage keeps each page independent (no residual from a previous page)', () => {
+  // page 9 empty at start, one stroke drawn on page 10 at 500ms, then page 11 (nothing drawn).
+  const snaps = [
+    { tMs: 0, data: { strokes: [] }, page: 9 },
+    { tMs: 500, data: { strokes: ['s10'] }, page: 10 },
+  ];
+  // on page 10 after the draw → its stroke
+  assert.deepEqual(drawingSnapshotForPage(snaps, 800, 10), { strokes: ['s10'] });
+  // on page 10 before the draw → empty (null, no snapshot yet)
+  assert.equal(drawingSnapshotForPage(snaps, 100, 10), null);
+  // on page 11 (later time) → must NOT inherit page 10's stroke
+  assert.equal(drawingSnapshotForPage(snaps, 5000, 11), null);
+  // on page 9 → its empty snapshot
+  assert.deepEqual(drawingSnapshotForPage(snaps, 5000, 9), { strokes: [] });
+});
+
+test('drawingSnapshotForPage treats snapshots without a page as matching any page (legacy data)', () => {
+  const snaps = [{ tMs: 0, data: { strokes: ['x'] } }];
+  assert.deepEqual(drawingSnapshotForPage(snaps, 100, 3), { strokes: ['x'] });
 });
 
 test('audioCueAtTime returns the cue whose [startMs, endMs) contains the time', () => {

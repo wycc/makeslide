@@ -12,7 +12,7 @@ import {
   type NarrationSegment,
 } from '../../lib/api/pdfs';
 import { slideAtTime } from '../../lib/slideTimeline';
-import { cursorAtTime, drawingSnapshotAtTime, subtitleAtTime, audioCueAtTime } from '../../lib/narrationTracks';
+import { cursorAtTime, drawingSnapshotForPage, drawingSnapshotAtTime, subtitleAtTime, audioCueAtTime } from '../../lib/narrationTracks';
 import { ApiError } from '../../lib/api';
 
 // 簡報旁白（分段）：擁有者/協作者可分段錄音，每段可重錄/刪除/上下移；段列表顯示每段用過的
@@ -69,7 +69,11 @@ export function NarrationPanel() {
     const page = slideAtTime(playing.slide_timeline, ms);
     if (page != null) { goToPage(page); setSyncedPage(page); }
     // 重播：把當下游標與畫面快照送進 context，由投影片面板繪出（游標＝十字、畫筆＝唯讀 DrawingCanvas）。
-    setNarrationOverlay({ cursor: cursorAtTime(playing.cursor_track, ms), drawing: drawingSnapshotAtTime(playing.draw_snapshots, ms) });
+    // 畫筆以「當前頁」為單位取快照，避免沒畫東西的新頁殘留上一頁的筆畫；無頁碼舊資料退回不分頁行為。
+    const drawing = page != null
+      ? drawingSnapshotForPage(playing.draw_snapshots, ms, page)
+      : drawingSnapshotAtTime(playing.draw_snapshots, ms);
+    setNarrationOverlay({ cursor: cursorAtTime(playing.cursor_track, ms), drawing });
 
     // 錄音當下講者播過的原有 TTS：於該區間同步播放該頁語音。
     const cue = audioCueAtTime(playing.audio_cues, ms);

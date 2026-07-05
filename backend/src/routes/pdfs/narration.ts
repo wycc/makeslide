@@ -32,7 +32,7 @@ const DrawingStrokeSchema = z.object({
   isEraser: z.boolean().optional(),
 });
 const DrawingDataSchema = z.object({ strokes: z.array(DrawingStrokeSchema).max(2000) });
-const DrawSnapshotSchema = z.object({ tMs: z.number(), data: DrawingDataSchema });
+const DrawSnapshotSchema = z.object({ tMs: z.number(), data: DrawingDataSchema, page: z.number().int().optional() });
 // 錄音期間講者播放「原有合成語音（TTS）」的區間：重播旁白時，於此區間同步播放該頁 TTS 並切成該頁字幕。
 // startMs/endMs 相對段起點；fromSec 為該次播放在該頁音檔中的起始秒數。
 const AudioCueSchema = z.object({ startMs: z.number(), endMs: z.number(), page: z.number().int(), fromSec: z.number().nonnegative() });

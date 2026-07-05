@@ -69,6 +69,9 @@ export function useNarrationRecorder(
   const lastCursorTsRef = useRef(0);
   const lastDrawTsRef = useRef(0);
   const lastStrokeCountRef = useRef(-1);
+  // 目前頁碼（供畫筆快照標記所屬頁；畫筆是逐頁的，重播需以頁為單位取快照）。
+  const currentPageRef = useRef<number | null>(currentPageNumber);
+  useEffect(() => { currentPageRef.current = currentPageNumber; }, [currentPageNumber]);
   const recordingRef = useRef(false);
   const lastCountTsRef = useRef(0);
   const [captureCounts, setCaptureCounts] = useState({ cursor: 0, strokes: 0 });
@@ -100,7 +103,7 @@ export function useNarrationRecorder(
     if (structural || tMs - lastDrawTsRef.current >= DRAW_SAMPLE_MS) {
       lastDrawTsRef.current = tMs;
       lastStrokeCountRef.current = data.strokes.length;
-      drawSnapshotsRef.current.push({ tMs, data: cloneDrawingData(data) });
+      drawSnapshotsRef.current.push({ tMs, data: cloneDrawingData(data), page: currentPageRef.current ?? undefined });
       bumpCounts();
     }
   }, [bumpCounts]);

@@ -1124,8 +1124,8 @@ export interface NarrationStrokeData { tMs: number; points: { x: number; y: numb
 // 原生畫筆（DrawingCanvas）的一筆畫，與其 DrawingStroke 結構一致（含顏色/粗細/橡皮擦）。
 export interface NarrationDrawingStroke { color: string; lineWidth: number; points: [number, number][]; isEraser?: boolean }
 export interface NarrationDrawingData { strokes: NarrationDrawingStroke[] }
-// 錄音時原生畫筆每次變化的畫面快照（帶相對段起點時間）。
-export interface NarrationDrawSnapshot { tMs: number; data: NarrationDrawingData }
+// 錄音時原生畫筆每次變化的畫面快照（帶相對段起點時間與所屬頁碼；畫筆逐頁，重播以頁為單位取快照）。
+export interface NarrationDrawSnapshot { tMs: number; data: NarrationDrawingData; page?: number }
 // 錄音時播放原有 TTS 的區間（重播時同步播放該頁語音並切字幕）。startMs/endMs 相對段起點，fromSec 為該頁音檔起播秒數。
 export interface NarrationAudioCue { startMs: number; endMs: number; page: number; fromSec: number }
 // 一段錄音（一次錄音，可跨多頁）。

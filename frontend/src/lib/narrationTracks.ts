@@ -65,19 +65,35 @@ export function strokesUntil(track: readonly NarrationStroke[], ms: number): Nar
   return out;
 }
 
-// 錄音時原生畫筆（DrawingCanvas）每次筆劃變化的快照，帶相對段起點的時間。
+// 錄音時原生畫筆（DrawingCanvas）每次筆劃變化的快照，帶相對段起點的時間與**所屬頁碼**。
 // data 直接是 DrawingCanvas 的 { strokes } 結構（含顏色/粗細/橡皮擦），重播時交給唯讀 DrawingCanvas 還原。
+// page 為擷取當下的頁碼：因為畫筆是逐頁的（換頁會清空），重播必須以頁為單位取快照，否則沒畫東西的新頁
+// 會殘留上一頁的畫面（見 drawingSnapshotForPage）。舊資料可能沒有 page。
 export interface DrawSnapshot<TData = { strokes: unknown[] }> {
   tMs: number;
   data: TData;
+  page?: number;
 }
 
 // 給定播放毫秒，回傳「當下應顯示的畫面快照」（<= ms 的最後一份），早於第一份回 null。
+// 註：不分頁，僅供無頁碼的舊資料相容使用；新資料請用 drawingSnapshotForPage。
 export function drawingSnapshotAtTime<TData>(snaps: readonly DrawSnapshot<TData>[], ms: number): TData | null {
   let cur: TData | null = null;
   for (const s of snaps) {
     if (s.tMs <= ms) cur = s.data;
     else break;
+  }
+  return cur;
+}
+
+// 以頁為單位取快照：回傳「<= ms 且屬於 page 的最後一份」畫面；該頁在此刻尚未有任何快照則回 null（空白）。
+// 這確保每頁的畫筆各自獨立、從空白開始，換頁不會殘留上一頁的筆畫。
+// 無頁碼的舊快照（page===undefined）視為符合任何頁，維持舊行為。
+export function drawingSnapshotForPage<TData>(snaps: readonly DrawSnapshot<TData>[], ms: number, page: number): TData | null {
+  let cur: TData | null = null;
+  for (const s of snaps) {
+    if (s.tMs > ms) break;
+    if (s.page === undefined || s.page === page) cur = s.data;
   }
   return cur;
 }
