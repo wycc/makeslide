@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent, RefObject, TouchEvent } from 'react';
 import DrawingCanvas from '../../components/DrawingCanvas';
 import { SlideRenderer } from '../../components/slide/SlideRenderer';
+import { NarrationSlideOverlay } from './NarrationSlideOverlay';
 import { useI18n } from '../../i18n';
 import { pollOptionPercent } from '../../lib/pollPercent';
 import { interpolateTemplate } from '../../lib/interpolateTemplate';
@@ -441,6 +442,7 @@ export function PlayPageFullscreen() {
                       onParamsChange={handlePositioningEffectParamsChange}
                     />
                   )}
+                  <NarrationSlideOverlay />
                 </SlideRenderer>
               ) : (
                 <div className="text-slate-300">
@@ -604,6 +606,7 @@ export function PlayPageFullscreen() {
               onLocalChange={pushLocalDrawingChange}
             />
           )}
+          <NarrationSlideOverlay />
         </SlideRenderer>
       ) : (
         <div className="text-slate-300">
