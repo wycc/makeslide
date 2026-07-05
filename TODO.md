@@ -26,6 +26,17 @@
     [PlayPageSlidePanel](frontend/src/pages/play/PlayPageSlidePanel.tsx) 即時票數卡下方 QR。
     新增 `play.fullscreen.pollJoinQr{Title,Hint,Alt}` i18n（zh-TW／en，parity 24/24）。
   - 前端 `tsc --noEmit` 通過；joinQr 3/3、i18n 24/24、poll 相關回歸 7/7。分支 `feat/poll-join-qrcode`。
+- [x] 修正（使用者回報「掃碼進入後似乎沒有進入投票頁面」）：
+  - **根因**：(1) QR 原本只要「擁有者＋投票中」就顯示，未要求自己處於同步主控（master）。但側邊欄的
+    「開始投票」按鈕未 gate 在同步模式，擁有者可在**未開同步**時開始投票並看到 QR；掃碼者雖以分享連結
+    進入並自動開啟同步，卻沒有 master 可跟隨、收不到 `realtime_poll_started`，故看不到投票。
+    (2) 即使有 master，follower 同步到投票頁後只看到右上角 🗳 小按鈕、需自己點開，易誤以為「沒有投票」。
+  - **修法**：(1) [PlayPage](frontend/src/pages/PlayPage.tsx) 把 QR 顯示條件收緊為
+    `pollStarted && syncEnabled && syncRole === 'master'`——只有自己確實在廣播（master）時才顯示，確保掃碼
+    必然有 master 可跟隨（fullscreen 的投票控制本就要求 master，正常演示流程不受影響）。
+    (2) [PlayPageFullscreen](frontend/src/pages/play/PlayPageFullscreen.tsx) 新增 effect：follower 端一有
+    進行中的投票就**自動展開投票面板**，讓掃碼者直接落在投票畫面；投票結束自動收合。
+  - 前端 `tsc --noEmit` 通過；joinQr 3/3、i18n 24/24。分支 `fix/poll-join-qr-requires-sync-master`。
 
 ## 簡報旁白進階功能（使用者要求，2026-07-05）★ 多任務逐步推進
 
