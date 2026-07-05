@@ -82,6 +82,22 @@ export function drawingSnapshotAtTime<TData>(snaps: readonly DrawSnapshot<TData>
   return cur;
 }
 
+// 錄音時播放原有 TTS 的區間。重播時用來同步播放該頁語音並切字幕。
+export interface AudioCue {
+  startMs: number;
+  endMs: number;
+  page: number;
+  fromSec: number;
+}
+
+// 給定播放毫秒，回傳當下所處的 TTS 播放區間（若有），否則 null。
+export function audioCueAtTime(cues: readonly AudioCue[], ms: number): AudioCue | null {
+  for (const c of cues) {
+    if (ms >= c.startMs && ms < c.endMs) return c;
+  }
+  return null;
+}
+
 export interface WordCue {
   tMs: number;
   word: string;

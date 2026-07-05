@@ -12,14 +12,14 @@ import {
   type NarrationSegment,
 } from '../../lib/api/pdfs';
 import { slideAtTime } from '../../lib/slideTimeline';
-import { cursorAtTime, drawingSnapshotAtTime, subtitleAtTime } from '../../lib/narrationTracks';
+import { cursorAtTime, drawingSnapshotAtTime, subtitleAtTime, audioCueAtTime } from '../../lib/narrationTracks';
 import { ApiError } from '../../lib/api';
 
 // 簡報旁白（分段）：擁有者/協作者可分段錄音，每段可重錄/刪除/上下移；段列表顯示每段用過的
 // 頁面。任何可讀者可逐段播放——播放時依該段時間軸自動翻頁。
 export function NarrationPanel() {
   const { t } = useI18n();
-  const { pdfId, detail, currentPage, deckPages, currentIdx, setCurrentIdx, setNarrationCapture, setNarrationOverlay, setNarrationSubtitle } = usePlayPageContext();
+  const { pdfId, detail, currentPage, deckPages, currentIdx, setCurrentIdx, setNarrationCapture, setNarrationOverlay, setNarrationSubtitle, isPlaying, audioRef, scripts, withShareToken } = usePlayPageContext();
   const canRecord = Boolean(detail?.is_owner || detail?.visibility === 'public_editable');
 
   const [segments, setSegments] = useState<NarrationSegment[] | null>(null);
@@ -27,7 +27,11 @@ export function NarrationPanel() {
   const [playAll, setPlayAll] = useState(false);
   const [syncedPage, setSyncedPage] = useState<number | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const narrationAudioRef = useRef<HTMLAudioElement | null>(null);
+  // 重播時用來播放「錄音當下講者播過的原有 TTS」，與旁白音檔獨立。
+  const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
+  // 目前正在播放的 TTS 區間（以 startMs 識別），避免每次 timeupdate 重新載入。
+  const activeCueStartRef = useRef<number | null>(null);
 
   const reload = useCallback(() => {
     if (!pdfId) return;
@@ -50,25 +54,57 @@ export function NarrationPanel() {
   }, [deckPages, currentIdx, setCurrentIdx]);
 
   const playing = segments?.find((s) => s.id === playingId) ?? null;
+
+  // 停掉重播中的 TTS（旁白暫停/結束/離開區間時）。
+  const stopTts = useCallback(() => {
+    const tts = ttsAudioRef.current;
+    if (tts && !tts.paused) tts.pause();
+    activeCueStartRef.current = null;
+  }, []);
+
   const handleTimeUpdate = useCallback(() => {
-    const audio = audioRef.current;
+    const audio = narrationAudioRef.current;
     if (!audio || !playing) return;
     const ms = audio.currentTime * 1000;
     const page = slideAtTime(playing.slide_timeline, ms);
     if (page != null) { goToPage(page); setSyncedPage(page); }
     // 重播：把當下游標與畫面快照送進 context，由投影片面板繪出（游標＝十字、畫筆＝唯讀 DrawingCanvas）。
     setNarrationOverlay({ cursor: cursorAtTime(playing.cursor_track, ms), drawing: drawingSnapshotAtTime(playing.draw_snapshots, ms) });
-    // 同步字幕：有逐字時間戳就用滾動字幕，否則退回當頁逐字稿。顯示於投影片上取代原字幕。
-    const sub = playing.word_cues.length > 0
-      ? subtitleAtTime(playing.word_cues, ms)
-      : (page != null ? (playing.transcript_by_page[String(page)] ?? '') : '');
-    setNarrationSubtitle(sub || null);
-  }, [playing, goToPage, setNarrationOverlay, setNarrationSubtitle]);
 
-  // 沒有在播放時清掉重播疊加與字幕。
+    // 錄音當下講者播過的原有 TTS：於該區間同步播放該頁語音。
+    const cue = audioCueAtTime(playing.audio_cues, ms);
+    const tts = ttsAudioRef.current;
+    if (tts) {
+      if (cue) {
+        if (activeCueStartRef.current !== cue.startMs) {
+          // 進入新的一段 TTS：載入該頁音檔並對齊播放位置。
+          activeCueStartRef.current = cue.startMs;
+          const rawUrl = deckPages.find((p) => p.page_number === cue.page)?.audio_url ?? null;
+          const url = rawUrl ? (withShareToken(rawUrl) ?? rawUrl) : null;
+          if (url) {
+            tts.src = url;
+            tts.currentTime = cue.fromSec + Math.max(0, (ms - cue.startMs) / 1000);
+            void tts.play().catch(() => { /* 自動播放被擋則略過 */ });
+          }
+        }
+      } else if (activeCueStartRef.current !== null) {
+        stopTts();
+      }
+    }
+
+    // 同步字幕：TTS 區間內顯示該頁逐字稿（一般播放字幕）；否則用旁白逐字稿（有時間戳用滾動字幕）。
+    const sub = cue
+      ? (scripts[cue.page] ?? playing.transcript_by_page[String(cue.page)] ?? '')
+      : playing.word_cues.length > 0
+        ? subtitleAtTime(playing.word_cues, ms)
+        : (page != null ? (playing.transcript_by_page[String(page)] ?? '') : '');
+    setNarrationSubtitle(sub || null);
+  }, [playing, goToPage, setNarrationOverlay, setNarrationSubtitle, deckPages, withShareToken, scripts, stopTts]);
+
+  // 沒有在播放時清掉重播疊加與字幕，並停掉 TTS。
   useEffect(() => {
-    if (!playingId) { setNarrationOverlay(null); setNarrationSubtitle(null); }
-  }, [playingId, setNarrationOverlay, setNarrationSubtitle]);
+    if (!playingId) { setNarrationOverlay(null); setNarrationSubtitle(null); stopTts(); }
+  }, [playingId, setNarrationOverlay, setNarrationSubtitle, stopTts]);
 
   // 播放中、目前頁的逐字稿（T5 同步顯示）。
   const syncedTranscript = playing && syncedPage != null ? (playing.transcript_by_page[String(syncedPage)] ?? '') : '';
@@ -82,9 +118,17 @@ export function NarrationPanel() {
   // playingId 改變即載入新音檔並播放（比 setTimeout 穩健）。
   useEffect(() => {
     if (!playingId) return;
-    const audio = audioRef.current;
+    const audio = narrationAudioRef.current;
     if (audio) { audio.load(); void audio.play().catch(() => { /* 使用者手動播放即可 */ }); }
   }, [playingId]);
+
+  // 錄音期間偵測講者是否正在播放原有 TTS：isPlaying/換頁時開關 TTS 區間（fromSec 取主播放器目前秒數）。
+  useEffect(() => {
+    if (!recorder.recording) return;
+    if (isPlaying && currentPage) recorder.ttsPlayStart(currentPage.page_number, audioRef.current?.currentTime ?? 0);
+    else recorder.ttsPlayStop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recorder.recording, isPlaying, currentPage?.page_number]);
 
   const playSegment = useCallback((seg: NarrationSegment) => {
     setPlayAll(false);
@@ -223,13 +267,16 @@ export function NarrationPanel() {
             ))}
           </ol>
           <audio
-            ref={audioRef}
+            ref={narrationAudioRef}
             src={pdfId && playingId ? narrationSegmentAudioUrl(pdfId, playingId) : undefined}
             controls
             onTimeUpdate={handleTimeUpdate}
-            onEnded={handleEnded}
+            onEnded={() => { stopTts(); handleEnded(); }}
+            onPause={stopTts}
             className="mt-2 w-full"
           />
+          {/* 重播「錄音當下播過的原有 TTS」，與旁白音檔獨立、不顯示控制列。 */}
+          <audio ref={ttsAudioRef} className="hidden" />
           {playing && syncedTranscript && (
             <p className="mt-1 rounded-md border border-border bg-surface-muted/60 px-2 py-1.5 text-xs leading-relaxed text-text">
               {syncedTranscript}
