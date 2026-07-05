@@ -153,6 +153,7 @@ export function PlayPageSlidePanel() {
     activeTab,
     sidebarExpanded,
     pagePolls,
+    handleStartPoll, setPollSettingsOpen,
     pollJoinQrImageUrl, pollJoinShareUrl,
     syncEnabled, syncRole,
     classroomMode, setClassroomMode,
@@ -488,14 +489,16 @@ export function PlayPageSlidePanel() {
                   {currentPage ? (
                     <div className="pointer-events-none absolute left-1/2 top-2 z-20 flex -translate-x-1/2 items-center gap-1">
                       {currentPage.has_poll || pagePolls.length > 0 ? (
-                        <span
-                          className="flex items-center gap-1 rounded-full border border-fuchsia-400/50 bg-fuchsia-500/85 px-2.5 py-1 text-xs font-semibold text-white shadow-lg backdrop-blur-sm"
-                          aria-label={t('play.slidePanel.pollDefinedBadge')}
-                          title={t('play.slidePanel.pollDefinedBadge')}
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleStartPoll(); setPollSettingsOpen(true); }}
+                          className="pointer-events-auto flex items-center gap-1 rounded-full border border-fuchsia-400/50 bg-fuchsia-500/85 px-2.5 py-1 text-xs font-semibold text-white shadow-lg backdrop-blur-sm hover:bg-fuchsia-500"
+                          aria-label={t('play.fullscreen.startPoll')}
+                          title={t('play.fullscreen.startPoll')}
                         >
                           <span aria-hidden="true">🗳</span>
                           {pagePolls.length > 1 ? <span>{pagePolls.length}</span> : null}
-                        </span>
+                        </button>
                       ) : null}
                       {currentPage.page_notes?.trim() ? (
                         <span

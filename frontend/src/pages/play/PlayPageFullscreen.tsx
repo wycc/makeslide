@@ -320,13 +320,15 @@ export function PlayPageFullscreen() {
       {currentPage && ((currentPage.has_poll && !hasActivePoll) || currentPage.page_notes?.trim() || currentPage.has_comment) ? (
         <div className="pointer-events-none absolute left-1/2 top-4 z-30 flex -translate-x-1/2 items-center gap-1.5">
           {currentPage.has_poll && !hasActivePoll ? (
-            <span
-              className="flex items-center gap-1 rounded-full border border-fuchsia-300/50 bg-fuchsia-500/85 px-3 py-1 text-sm font-semibold text-white shadow-lg backdrop-blur-sm"
-              aria-label={t('play.slidePanel.pollDefinedBadge')}
-              title={t('play.slidePanel.pollDefinedBadge')}
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); handleStartPoll(); setFullscreenPollControlOpen(true); }}
+              className="pointer-events-auto flex items-center gap-1 rounded-full border border-fuchsia-300/50 bg-fuchsia-500/85 px-3 py-1 text-sm font-semibold text-white shadow-lg backdrop-blur-sm hover:bg-fuchsia-500"
+              aria-label={t('play.fullscreen.startPoll')}
+              title={t('play.fullscreen.startPoll')}
             >
               <span aria-hidden="true">🗳</span>
-            </span>
+            </button>
           ) : null}
           {currentPage.page_notes?.trim() ? (
             <span
