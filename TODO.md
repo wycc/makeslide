@@ -18,6 +18,11 @@
   - **一般檢視**：`handleStartPoll()` ＋ `setPollSettingsOpen(true)`（側欄投票控制面板）。
   - 以 `stopPropagation` 避免觸發投影片本身的點擊（全螢幕＝播放/暫停、一般＝進全螢幕）。沿用 i18n
     `play.fullscreen.startPoll`（未新增鍵）。前端 `tsc`＋`vite build` 通過。分支 `feat/poll-icon-click-starts-poll`。
+- [x] 修正（使用者回報「掃 QR 進入後不會自動出現投票選項」）：`fetchPagePolls`／`votePagePoll` 未帶
+    `?share=<token>`，但後端 GET `/polls`、POST `/votes` 都以 `canReadPdf(aclCtx)` 授權、而 `aclCtx` 的 token
+    能力是從 `?share=` query 解析。匿名掃碼 follower 因此在抓 poll 時 403 → `pagePolls` 恆空 → 投票面板永不
+    自動展開（連投票也會失敗）。修法：把 `currentShareToken` 經 `usePagePolls` 傳入兩個 API（比照
+    `fetchPdfDetail` 的 `?share=` 處理）。前端 `tsc`＋`vite build` 通過。分支 `fix/poll-fetch-vote-share-token`。
 
 ## 頁面筆記／留言也顯示指示圖示（使用者要求，2026-07-05）★ 使用者要求功能，不計入計數
 
@@ -1341,6 +1346,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-05 | （使用者回報掃 QR 進入後不出現投票選項）修正 poll fetch/vote 未帶 share token：`fetchPagePolls`／`votePagePoll` 未附 `?share=<token>`，但後端 GET `/polls`、POST `/votes` 以 `canReadPdf(aclCtx)` 授權（token 能力來自 `?share=` query），匿名掃碼 follower 因此 403、`pagePolls` 恆空、投票面板永不自動展開。把 `currentShareToken` 經 `usePagePolls` 傳入兩個 API（比照 `fetchPdfDetail`）。前端 `tsc`＋`vite build` 通過 | fix/poll-fetch-vote-share-token |
 | 2026-07-05 | （使用者要求）點擊投票圖示即開始投票並開啟即時投票視窗：🗳 徽章改為按鈕（📝／💬 維持純指示），複用既有「開始即時投票」模式——全螢幕 `handleStartPoll()`＋`setFullscreenPollControlOpen(true)`、一般檢視 `handleStartPoll()`＋`setPollSettingsOpen(true)`，`stopPropagation` 避免觸發投影片點擊。沿用 i18n `play.fullscreen.startPoll`。前端 `tsc`＋`vite build` 通過 | feat/poll-icon-click-starts-poll |
 | 2026-07-05 | （使用者要求）頁面筆記／留言也顯示不同圖示：指示徽章擴為圖示列 🗳 投票／📝 筆記（`page_notes`）／💬 留言。後端 detail 加每頁 `has_comment`（`SELECT DISTINCT page_number FROM page_comments`，穿過 `rowToDetail`）；一般檢視與全螢幕皆更新。新增 i18n note/commentDefinedBadge。Node 22 對真實資料 `-nM_vsV4xc` 端到端驗證（筆記頁→📝、注入留言→has_comment true）。前後端 `tsc`＋前端 `vite build` 通過、i18n 24/24、parity 2194/2194 | feat/page-note-comment-indicators |
 | 2026-07-05 | （使用者回報全螢幕時圖示未出現）投票指示徽章補到全螢幕：`PlayPageFullscreen` 新增 top-center 徽章（`currentPage.has_poll && !hasActivePoll`，投票進行中已有 top-right 🗳 投票鈕故不重複）。前端 `tsc`＋`vite build` 通過 | fix/poll-indicator-fullscreen |
