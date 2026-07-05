@@ -143,7 +143,7 @@ export function PlayPageFullscreen() {
     pdfId,
     isSyncFollower, canUseDrawingTools,
     remoteDrawingData, pushLocalDrawingChange,
-    narrationCapture,
+    narrationCapture, narrationPlaying,
     syncEnabled, syncRole,
     syncDisplayedQuestionId,
     syncFollowerQuestions,
@@ -442,7 +442,7 @@ export function PlayPageFullscreen() {
                   imgClassName="max-h-full max-w-full object-contain"
                   imgRef={fullscreenImageRef}
                 >
-                  {pdfId && currentPage && (
+                  {pdfId && currentPage && !narrationPlaying && (
                     <DrawingCanvas
                       ref={drawingCanvasSplitRef}
                       pdfId={pdfId}
@@ -614,7 +614,7 @@ export function PlayPageFullscreen() {
           imgClassName="max-h-screen max-w-screen object-contain"
           imgRef={fullscreenImageRef}
         >
-          {pdfId && currentPage && (
+          {pdfId && currentPage && !narrationPlaying && (
             <DrawingCanvas
               ref={drawingCanvasFullscreenRef}
               pdfId={pdfId}

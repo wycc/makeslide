@@ -2062,6 +2062,7 @@ export default function PlayPage() {
   const [narrationCapture, setNarrationCapture] = useState<NarrationCaptureState>({ active: false, onCursorMove: null, onDrawSnapshot: null });
   const [narrationOverlay, setNarrationOverlay] = useState<NarrationOverlayState>(null);
   const [narrationSubtitle, setNarrationSubtitle] = useState<string | null>(null);
+  const [narrationPlaying, setNarrationPlaying] = useState(false);
 
   const scriptEditorState = useScriptEditor({
     pdfId,
@@ -2444,6 +2445,7 @@ export default function PlayPage() {
     watchProgressByPage,
     narrationCapture, setNarrationCapture, narrationOverlay, setNarrationOverlay,
     narrationSubtitle, setNarrationSubtitle,
+    narrationPlaying, setNarrationPlaying,
     // playback
     isPlaying, setIsPlaying, currentTime, setCurrentTime, duration, setDuration,
     finished, setFinished, audioMuted, setAudioMuted, effectiveAudioMuted,

@@ -148,7 +148,7 @@ export function PlayPageSlidePanel() {
     handleReplaceImageFile,
     isSyncFollower, canUseDrawingTools,
     remoteDrawingData, pushLocalDrawingChange,
-    narrationCapture,
+    narrationCapture, narrationPlaying,
     openVersionHistory,
     activeTab,
     sidebarExpanded,
@@ -525,7 +525,7 @@ export function PlayPageSlidePanel() {
                 </>
               }
             >
-              {pdfId && currentPage && (
+              {pdfId && currentPage && !narrationPlaying && (
                 <DrawingCanvas
                   ref={drawingCanvasMainRef}
                   pdfId={pdfId}
