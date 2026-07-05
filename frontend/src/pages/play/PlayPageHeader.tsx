@@ -241,6 +241,7 @@ export function PlayPageHeader() {
     scripts,
     handleCreateShareLink,
     handleMakeSharePrivate,
+    setAccessDialogOpen,
     canViewPostClassReport,
     openPostClassReport,
     shareUrl,
@@ -856,6 +857,16 @@ export function PlayPageHeader() {
           </button>
           </HeaderDropdown>
           <HeaderDropdown id="share" label={t('play.header.groupShare')} accent="emerald" open={openMenuId === 'share'} onOpenChange={setOpenMenuId}>
+          {!currentShareToken && detail?.is_owner ? (
+            <button
+              type="button"
+              onClick={() => setAccessDialogOpen(true)}
+              className="rounded-md border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-sm text-amber-200 hover:bg-amber-500/25"
+              title={t('play.access.description')}
+            >
+              {`🔑 ${t('play.access.tab')}`}
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => void handleSyncToGithub()}

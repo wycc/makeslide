@@ -341,6 +341,8 @@ export interface PlayPageContextValue {
   // ─── Share / QR ─────────────────────────────────────────────────────────────
   shareDialogOpen: boolean;
   setShareDialogOpen: Dispatch<SetStateAction<boolean>>;
+  accessDialogOpen: boolean;
+  setAccessDialogOpen: Dispatch<SetStateAction<boolean>>;
   shareUrl: string;
   shareAccess: ShareAccessMode;
   setShareAccess: Dispatch<SetStateAction<ShareAccessMode>>;
