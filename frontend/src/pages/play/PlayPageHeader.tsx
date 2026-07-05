@@ -240,7 +240,6 @@ export function PlayPageHeader() {
     shareBusy,
     scripts,
     handleCreateShareLink,
-    handleMakeSharePrivate,
     setAccessDialogOpen,
     canViewPostClassReport,
     openPostClassReport,
@@ -911,15 +910,6 @@ export function PlayPageHeader() {
                 className="rounded-md border border-violet-500/50 bg-violet-500/15 px-3 py-1.5 text-xs text-violet-200 hover:bg-violet-500/25 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {shareBusy ? t('play.share.creating') : `▦ ${t('play.share.createLink')}`}
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleMakeSharePrivate()}
-                disabled={shareBusy || isReadOnlyProcessing}
-                className="rounded-md border border-slate-600 bg-slate-800/70 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
-                title={t('play.share.makePrivateTitle')}
-              >
-                {t('play.share.makePrivate')}
               </button>
             </div>
           ) : null}

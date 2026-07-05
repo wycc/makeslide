@@ -5,7 +5,6 @@ import {
   createPdfShare,
   regeneratePdfTitle,
   syncPresentationToGitHub,
-  updatePdfVisibility,
   updatePdfScriptSettings,
   updatePdfTitle,
   updatePdfTtsSettings,
@@ -89,7 +88,6 @@ export interface PdfMetadataState {
   handleRegenerateTitle: () => void;
   handleSaveTtsSettings: () => void;
   handleCreateShareLink: () => void;
-  handleMakeSharePrivate: () => void;
   handleShowPlayQrCode: () => void;
   handleSyncToGithub: () => void;
   handleSaveTags: () => void;
@@ -281,23 +279,6 @@ export function usePdfMetadata({
     }
   }, [pdfId, shareAccess, shareExpiresDays, isReadOnlyProcessing, setDetail, t]);
 
-  const handleMakeSharePrivate = useCallback(async () => {
-    if (!pdfId || isReadOnlyProcessing) return;
-    setShareBusy(true);
-    setShareMessage(null);
-    setShareError(null);
-    try {
-      const res = await updatePdfVisibility(pdfId, 'private');
-      setDetail((prev) => prev ? { ...prev, visibility: res.visibility, updated_at: res.updated_at } : prev);
-      setShareUrl('');
-      setShareMessage(t('play.share.makePrivateSuccess'));
-    } catch (err) {
-      setShareError(err instanceof ApiError ? err.message : t('play.share.makePrivateFailed'));
-    } finally {
-      setShareBusy(false);
-    }
-  }, [pdfId, isReadOnlyProcessing, setDetail, t]);
-
   const handleShowPlayQrCode = useCallback(async () => {
     if (!pdfId) return;
     try {
@@ -386,7 +367,6 @@ export function usePdfMetadata({
     handleRegenerateTitle,
     handleSaveTtsSettings,
     handleCreateShareLink,
-    handleMakeSharePrivate,
     handleShowPlayQrCode,
     handleSyncToGithub,
     handleSaveTags,
