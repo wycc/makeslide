@@ -64,6 +64,13 @@
   重播 z-40，讀 `PlayPageContext.narrationCapture`／`narrationOverlay`），同時掛進**一般面板與兩處全螢幕
   `SlideRenderer`**，使擷取與重播在各檢視共用同一 `inset-0` 座標空間。前端 `tsc` 通過、i18n 24/24。
   分支 `fix/narration-fullscreen-capture`。
+- [x] 筆畫漸進重播＋錄製即時顯示（使用者回報「筆畫像一次全部畫出、錄的時候看不到筆畫」）（2026-07-05）：
+  原本 `NarrationStroke` 只有一個筆畫級 `tMs`（起筆時間），點沒有各自時間，`strokesUntil` 起筆時間一到就
+  整筆回傳→重播一次畫完。修法：擷取時每個點記自己的 `tMs`（recorder），`strokesUntil` 改為**依點時間裁切、
+  末端內插筆尖**使筆畫隨時間長出來（舊資料無點時間→整筆顯示，向後相容）；後端 `StrokeSchema` 的點加 optional
+  `tMs`。另外 [NarrationSlideOverlay](frontend/src/pages/play/NarrationSlideOverlay.tsx) 在**錄製時**用同一批
+  指標事件維護本地即時筆跡/游標並畫出來，講者邊畫邊看得到紅線。加漸進重播測試；前後端 `tsc`、narrationTracks
+  6/6、後端 narration 5/5、i18n 24/24。分支 `fix/narration-progressive-strokes`。
 - [ ] T9：影片輸出（ffmpeg）
 
 ### （下方為初版 MVP 記錄，已被上方分段模型取代）
