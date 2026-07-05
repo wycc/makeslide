@@ -31,3 +31,19 @@ export function cursorAtTime(track: readonly CursorPoint[], ms: number): { x: nu
 export function strokesUntil(track: readonly NarrationStroke[], ms: number): NarrationStroke[] {
   return track.filter((s) => s.tMs <= ms);
 }
+
+export interface WordCue {
+  tMs: number;
+  word: string;
+}
+
+// 依播放毫秒，把最近 `windowMs`（預設 6 秒）內講到的字組成一行字幕（滾動式）。
+export function subtitleAtTime(cues: readonly WordCue[], ms: number, windowMs = 6000): string {
+  return cues
+    .filter((c) => c.tMs <= ms && c.tMs > ms - windowMs)
+    .map((c) => c.word.trim())
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}

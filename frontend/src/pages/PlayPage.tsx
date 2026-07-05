@@ -2061,6 +2061,7 @@ export default function PlayPage() {
   // 旁白：投影片指標擷取（錄製時）與游標/繪圖重播疊加（播放時）。
   const [narrationCapture, setNarrationCapture] = useState<{ active: boolean; onCapture: ((kind: 'move' | 'down' | 'up', x: number, y: number) => void) | null }>({ active: false, onCapture: null });
   const [narrationOverlay, setNarrationOverlay] = useState<NarrationOverlayState>(null);
+  const [narrationSubtitle, setNarrationSubtitle] = useState<string | null>(null);
 
   const scriptEditorState = useScriptEditor({
     pdfId,
@@ -2442,6 +2443,7 @@ export default function PlayPage() {
     detail, setDetail, deckPages, currentPage, currentIdx, setCurrentIdx, visitedIdxSet, totalPages, loadError,
     watchProgressByPage,
     narrationCapture, setNarrationCapture, narrationOverlay, setNarrationOverlay,
+    narrationSubtitle, setNarrationSubtitle,
     // playback
     isPlaying, setIsPlaying, currentTime, setCurrentTime, duration, setDuration,
     finished, setFinished, audioMuted, setAudioMuted, effectiveAudioMuted,

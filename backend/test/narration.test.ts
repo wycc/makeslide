@@ -134,10 +134,12 @@ test('narration transcribe: STT -> per-page transcript, then manual edit', async
     assert.equal(tr.statusCode, 200);
     assert.deepEqual((tr.json() as { transcript_by_page: Record<string, string> }).transcript_by_page, { '1': 'hello world', '2': 'next' });
 
-    // GET reflects the transcript
+    // GET reflects the transcript + word cues (for timed on-slide subtitles)
     const list = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/narration`, headers: OWNER_HEADERS });
-    const seg = (list.json() as { segments: Array<{ id: string; transcript_by_page: Record<string, string> }> }).segments[0]!;
+    const seg = (list.json() as { segments: Array<{ id: string; transcript_by_page: Record<string, string>; word_cues: Array<{ tMs: number; word: string }> }> }).segments[0]!;
     assert.equal(seg.transcript_by_page['1'], 'hello world');
+    assert.equal(seg.word_cues.length, 3);
+    assert.deepEqual(seg.word_cues[0], { tMs: 1000, word: 'hello' });
 
     // manual edit
     const ed = await app.inject({ method: 'PUT', url: `/api/pdfs/${id}/narration/segments/${segId}/transcript`, headers: { ...OWNER_HEADERS, 'content-type': 'application/json' }, payload: JSON.stringify({ transcript_by_page: { '1': 'edited page one', '2': 'edited two' } }) });

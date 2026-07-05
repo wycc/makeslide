@@ -166,7 +166,7 @@ export function PlayPageSlidePanel() {
     bookmarks, toggleBookmark,
     importantPages, toggleImportantPage,
     pageSentences,
-    narrationCapture, narrationOverlay,
+    narrationCapture, narrationOverlay, narrationSubtitle,
   } = usePlayPageContext();
 
   const { t } = useI18n();
@@ -654,10 +654,11 @@ export function PlayPageSlidePanel() {
               {animationWarning}
             </div>
           ) : null}
-          {showSubtitle && currentSentence ? (
+          {/* 播放旁白時，旁白同步字幕優先於原字幕（取代原有字幕） */}
+          {(narrationSubtitle ?? (showSubtitle ? currentSentence : null)) ? (
             <div className={`pointer-events-none absolute left-1/2 w-[min(92%,900px)] -translate-x-1/2 px-2 ${subtitlePosition === 'top' ? 'top-3' : 'bottom-3'}`}>
-              <div className={`mx-auto rounded-md bg-black/60 px-4 py-2 text-center font-medium leading-relaxed text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${subtitleSize === 'sm' ? 'text-xs md:text-sm' : subtitleSize === 'lg' ? 'text-base md:text-xl' : 'text-sm md:text-base'}`}>
-                <p className="line-clamp-2 whitespace-pre-wrap">{currentSentence}</p>
+              <div className={`mx-auto rounded-md px-4 py-2 text-center font-medium leading-relaxed text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${narrationSubtitle ? 'bg-indigo-950/70' : 'bg-black/60'} ${subtitleSize === 'sm' ? 'text-xs md:text-sm' : subtitleSize === 'lg' ? 'text-base md:text-xl' : 'text-sm md:text-base'}`}>
+                <p className="line-clamp-2 whitespace-pre-wrap">{narrationSubtitle ?? currentSentence}</p>
               </div>
             </div>
           ) : null}

@@ -12,14 +12,14 @@ import {
   type NarrationSegment,
 } from '../../lib/api/pdfs';
 import { slideAtTime } from '../../lib/slideTimeline';
-import { cursorAtTime, strokesUntil } from '../../lib/narrationTracks';
+import { cursorAtTime, strokesUntil, subtitleAtTime } from '../../lib/narrationTracks';
 import { ApiError } from '../../lib/api';
 
 // 簡報旁白（分段）：擁有者/協作者可分段錄音，每段可重錄/刪除/上下移；段列表顯示每段用過的
 // 頁面。任何可讀者可逐段播放——播放時依該段時間軸自動翻頁。
 export function NarrationPanel() {
   const { t } = useI18n();
-  const { pdfId, detail, currentPage, deckPages, currentIdx, setCurrentIdx, setNarrationCapture, setNarrationOverlay } = usePlayPageContext();
+  const { pdfId, detail, currentPage, deckPages, currentIdx, setCurrentIdx, setNarrationCapture, setNarrationOverlay, setNarrationSubtitle } = usePlayPageContext();
   const canRecord = Boolean(detail?.is_owner || detail?.visibility === 'public_editable');
 
   const [segments, setSegments] = useState<NarrationSegment[] | null>(null);
@@ -58,12 +58,17 @@ export function NarrationPanel() {
     if (page != null) { goToPage(page); setSyncedPage(page); }
     // T7/T8 重播：把當下游標/繪圖疊加送進 context，由投影片面板繪出。
     setNarrationOverlay({ cursor: cursorAtTime(playing.cursor_track, ms), strokes: strokesUntil(playing.draw_track, ms) });
-  }, [playing, goToPage, setNarrationOverlay]);
+    // 同步字幕：有逐字時間戳就用滾動字幕，否則退回當頁逐字稿。顯示於投影片上取代原字幕。
+    const sub = playing.word_cues.length > 0
+      ? subtitleAtTime(playing.word_cues, ms)
+      : (page != null ? (playing.transcript_by_page[String(page)] ?? '') : '');
+    setNarrationSubtitle(sub || null);
+  }, [playing, goToPage, setNarrationOverlay, setNarrationSubtitle]);
 
-  // 沒有在播放時清掉重播疊加。
+  // 沒有在播放時清掉重播疊加與字幕。
   useEffect(() => {
-    if (!playingId) setNarrationOverlay(null);
-  }, [playingId, setNarrationOverlay]);
+    if (!playingId) { setNarrationOverlay(null); setNarrationSubtitle(null); }
+  }, [playingId, setNarrationOverlay, setNarrationSubtitle]);
 
   // 播放中、目前頁的逐字稿（T5 同步顯示）。
   const syncedTranscript = playing && syncedPage != null ? (playing.transcript_by_page[String(syncedPage)] ?? '') : '';
