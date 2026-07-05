@@ -485,7 +485,7 @@ export function PlayPageSlidePanel() {
               overlay={
                 <>
                   <NarrationSlideOverlay />
-                  {currentPage && pagePolls.length > 0 ? (
+                  {currentPage && (currentPage.has_poll || pagePolls.length > 0) ? (
                     <div
                       className="pointer-events-none absolute left-1/2 top-2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-full border border-fuchsia-400/50 bg-fuchsia-500/85 px-2.5 py-1 text-xs font-semibold text-white shadow-lg backdrop-blur-sm"
                       aria-label={t('play.slidePanel.pollDefinedBadge')}

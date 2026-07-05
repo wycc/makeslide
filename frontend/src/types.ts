@@ -449,6 +449,8 @@ export interface PdfDetailPage {
   error_message?: string | null;
   timings?: PdfDetailPageTimings | null;
   page_notes?: string;
+  /** True when this page has at least one poll defined (regardless of active/started state). */
+  has_poll?: boolean;
 }
 
 export interface PdfDetail {
