@@ -7,6 +7,18 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 點擊投票圖示即開始投票並開啟即時投票視窗（使用者要求，2026-07-05）★ 使用者要求功能，不計入計數
+
+使用者要求：讓（投影片上方的）投票圖示可點擊，按下即打開 realtime poll 視窗並開始投票。
+
+- [x] 🗳 徽章改為可互動按鈕（📝／💬 維持純指示），點擊複用既有「開始即時投票」模式
+    （`setPollStarted(true)` ＋開啟控制面板，見 [PlayPage.tsx:1000](frontend/src/pages/PlayPage.tsx#L1000)、
+    [2163](frontend/src/pages/PlayPage.tsx#L2163)）：
+  - **全螢幕**：`handleStartPoll()` ＋ `setFullscreenPollControlOpen(true)`（即時投票控制視窗，master 時渲染）。
+  - **一般檢視**：`handleStartPoll()` ＋ `setPollSettingsOpen(true)`（側欄投票控制面板）。
+  - 以 `stopPropagation` 避免觸發投影片本身的點擊（全螢幕＝播放/暫停、一般＝進全螢幕）。沿用 i18n
+    `play.fullscreen.startPoll`（未新增鍵）。前端 `tsc`＋`vite build` 通過。分支 `feat/poll-icon-click-starts-poll`。
+
 ## 頁面筆記／留言也顯示指示圖示（使用者要求，2026-07-05）★ 使用者要求功能，不計入計數
 
 使用者要求：延續投票圖示，若頁面有「筆記（page_notes）」或「留言（comments）」也各顯示不同圖示。
@@ -1329,6 +1341,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-05 | （使用者要求）點擊投票圖示即開始投票並開啟即時投票視窗：🗳 徽章改為按鈕（📝／💬 維持純指示），複用既有「開始即時投票」模式——全螢幕 `handleStartPoll()`＋`setFullscreenPollControlOpen(true)`、一般檢視 `handleStartPoll()`＋`setPollSettingsOpen(true)`，`stopPropagation` 避免觸發投影片點擊。沿用 i18n `play.fullscreen.startPoll`。前端 `tsc`＋`vite build` 通過 | feat/poll-icon-click-starts-poll |
 | 2026-07-05 | （使用者要求）頁面筆記／留言也顯示不同圖示：指示徽章擴為圖示列 🗳 投票／📝 筆記（`page_notes`）／💬 留言。後端 detail 加每頁 `has_comment`（`SELECT DISTINCT page_number FROM page_comments`，穿過 `rowToDetail`）；一般檢視與全螢幕皆更新。新增 i18n note/commentDefinedBadge。Node 22 對真實資料 `-nM_vsV4xc` 端到端驗證（筆記頁→📝、注入留言→has_comment true）。前後端 `tsc`＋前端 `vite build` 通過、i18n 24/24、parity 2194/2194 | feat/page-note-comment-indicators |
 | 2026-07-05 | （使用者回報全螢幕時圖示未出現）投票指示徽章補到全螢幕：`PlayPageFullscreen` 新增 top-center 徽章（`currentPage.has_poll && !hasActivePoll`，投票進行中已有 top-right 🗳 投票鈕故不重複）。前端 `tsc`＋`vite build` 通過 | fix/poll-indicator-fullscreen |
 | 2026-07-05 | （使用者回報有 poll 的頁面仍不顯示圖示）修正投票指示徽章判斷來源：前一版用 `pagePolls`，但 `usePagePolls` 只在特定互動情境才抓該頁 poll、單純翻頁不載入，故圖示幾乎不出現。改為 deck detail 每頁附 `has_poll` 旗標（`detail.ts` 單一 `SELECT DISTINCT page_number FROM page_polls`，穿過 `rowToDetail` 新參數），徽章條件改 `currentPage.has_poll || pagePolls.length>0`。以真實資料 `rgHBiyrbZf` 端到端驗證（第24頁 true、第25頁 false）。前後端 `tsc`＋前端 `vite build` 通過 | fix/poll-indicator-uses-has-poll-flag |
