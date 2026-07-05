@@ -7,6 +7,26 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 投票進行中顯示「掃描加入」QR（使用者要求，2026-07-05）★ 使用者要求功能，不計入計數
+
+使用者要求：**polling（投票進行）時在螢幕上顯示 QR code，讓聽眾掃描進入簡報並自動開啟同步模式**。
+
+- [x] 投票進行中自動顯示可掃描的「加入」QR（掃描以分享連結進入→自動同步模式→投票）。
+  - **原理串接**：既有行為——帶 `share` token 的分享連結進入播放頁時，會自動開啟同步模式
+    （[PlayPage.tsx](frontend/src/pages/PlayPage.tsx) `currentShareToken` 分支）。本功能在投票開始時
+    產生唯讀分享連結並轉成 QR，聽眾掃描後即落在同步中的簡報並可投票。
+  - **純函式**：新增 [joinQr.ts](frontend/src/lib/joinQr.ts) `buildJoinQrImageUrl(data,size?)`（產生
+    api.qrserver.com QR 圖 URL，floor/clamp size），並把 `usePdfMetadata` 既有的內聯 QR URL 建構改用之（去重）。
+    測試 [joinQr.test.ts](frontend/src/lib/joinQr.test.ts) 3 組。
+  - **hook**：新增 [usePollJoinQrCode.ts](frontend/src/pages/play/usePollJoinQrCode.ts)——依
+    `pollStarted`（投票中）＋`isSyncMasterEligible`（擁有者）啟用，惰性 `createPdfShare(read_only)` 產生
+    分享連結與 QR；投票結束即清空，不殘留。
+  - **接線/UI**：`pollJoinQrImageUrl`／`pollJoinShareUrl` 經 `PlayPage`→`PlayPageContext` 提供；
+    [PlayPageFullscreen](frontend/src/pages/play/PlayPageFullscreen.tsx) 左下角 QR 卡、
+    [PlayPageSlidePanel](frontend/src/pages/play/PlayPageSlidePanel.tsx) 即時票數卡下方 QR。
+    新增 `play.fullscreen.pollJoinQr{Title,Hint,Alt}` i18n（zh-TW／en，parity 24/24）。
+  - 前端 `tsc --noEmit` 通過；joinQr 3/3、i18n 24/24、poll 相關回歸 7/7。分支 `feat/poll-join-qrcode`。
+
 ## 簡報旁白進階功能（使用者要求，2026-07-05）★ 多任務逐步推進
 
 使用者要求把旁白升級為：分段錄音、可調整段順序、可重錄某段、段列表顯示每段用過的頁面、語音轉
