@@ -7,6 +7,18 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 有 poll 定義的頁面顯示投票指示圖示（使用者要求，2026-07-05）★ 使用者要求功能，不計入計數
+
+使用者要求：在「有 polling 定義的頁面」上方顯示一個投票圖示。
+
+- [x] 投影片上方置中顯示投票指示徽章（目前頁有 poll 定義時）。
+  - **判斷**：沿用既有 `pagePolls`（[usePagePolls](frontend/src/pages/play/usePagePolls.ts) 依當前頁載入的該頁
+    poll 清單），`pagePolls.length > 0` 即該頁有投票定義。無批次端點，故以「目前顯示頁」為準。
+  - **UI**：[PlayPageSlidePanel](frontend/src/pages/play/PlayPageSlidePanel.tsx) 的投影片影像 overlay 新增一個
+    非互動（`pointer-events-none`）徽章，置中於影像上方（與 🔖／★／版本／播放中等既有角標同層 z-20），
+    顯示 🗳；同頁多個 poll 時附數量。新增 i18n `play.slidePanel.pollDefinedBadge`（zh-TW／en，parity 2192/2192）。
+  - 前端 `tsc`＋`vite build` 通過、i18n 24/24。分支 `feat/poll-page-indicator-icon`。
+
 ## 存取權限 UI 移出分享連結對話框（使用者要求，2026-07-05）★ 使用者要求功能，不計入計數
 
 使用者回報：目前「存取權限」（身分權限：預設權限＋名單/群組 ACL）UI 位置不合理——它被藏在
@@ -1292,6 +1304,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-05 | （使用者要求）有 poll 定義的頁面在投影片上方顯示投票指示圖示：沿用當前頁的 `pagePolls`（`length > 0` 即該頁有投票），於 `PlayPageSlidePanel` 影像 overlay 上方置中加一個非互動 🗳 徽章（多個 poll 附數量），新增 i18n `play.slidePanel.pollDefinedBadge`。前端 `tsc`＋`vite build` 通過、i18n 24/24、parity 2192/2192 | feat/poll-page-indicator-icon |
 | 2026-07-05 | （使用者回報 header 徽章一直顯示「私密」）修正 visibility 狀態徽章不即時更新：徽章讀載入時抓的 `detail.visibility`，但「存取權限」對話框改預設權限只寫後端＋自身 local state、未回寫 `detail`，故重整前徽章不變。加 `onVisibilityChange` 回呼由 `AccessControlPanel`→`AccessControlDialog`→`PlayPageDialogs`，存檔成功即 `setDetail` 更新 visibility，徽章即時反映。前端 `tsc`＋`vite build` 通過 | fix/access-visibility-badge-live-update |
 | 2026-07-05 | （使用者提問後決定）移除分享下拉選單內多餘的「設為 private」按鈕：把預設權限設為 private 已由新「存取權限」對話框的「預設權限」下拉涵蓋；且兩套系統模型下該按鈕誤導——只動 visibility（系統一），不撤銷已發出的分享連結 token（系統二到期前仍有效）。移除 `handleMakeSharePrivate`、按鈕、及已無用的 `play.share.makePrivate*` 4 個 i18n 鍵（含 `i18n.test.ts` 引用）。前端 `tsc`＋`vite build` 通過、i18n 24/24、parity 2191/2191 | refactor/remove-make-private-button |
 | 2026-07-05 | （使用者要求）存取權限 UI 位置不合理修正：身分權限管理（預設權限＋名單/群組 ACL）原被藏在「建立分享連結／QR」的 `ShareDialog` 內當第三個分頁，須先按「建立分享連結」產生 QR/連結才進得去。抽出為獨立 `AccessControlDialog`（modal 包 `AccessControlPanel`），入口改為 Header「群組分享」下拉選單頂部新增的「🔑 存取權限」按鈕（gate `!currentShareToken && detail.is_owner`）；`ShareDialog` 移除 access 分頁與 `pdfId`/`visibility`/`canManageAccess` props，退回「連結／嵌入」兩分頁回歸單一職責。狀態 `accessDialogOpen` 經 `usePdfMetadata`→`PlayPageContext`→`PlayPageDialogs`。沿用既有 i18n（未新增鍵、parity 2195/2195）。前端 `tsc --noEmit`＋`vite build` 通過、ShareDialog 測試 2/2 | refactor/access-control-out-of-share-dialog |
