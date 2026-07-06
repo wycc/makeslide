@@ -47,6 +47,10 @@ export function PageAskPanel() {
   const hasConversation = pageAskMessages.length > 0;
   const lastAnswer = [...pageAskMessages].reverse().find((m) => m.role === 'assistant')?.content ?? null;
   const lastQuestion = [...pageAskMessages].reverse().find((m) => m.role === 'user')?.content ?? null;
+  // While streaming, the assistant bubble fills in live; only show the "thinking…" hint
+  // until the first streamed token arrives (assistant placeholder still empty).
+  const lastMessage = pageAskMessages[pageAskMessages.length - 1];
+  const awaitingFirstToken = pageAskBusy && lastMessage?.role === 'assistant' && lastMessage.content === '';
 
   const handleSaveAsNote = async () => {
     if (!pdfId || !currentPage || !lastAnswer || !lastQuestion) return;
@@ -99,6 +103,9 @@ export function PageAskPanel() {
       {hasConversation && (
         <div className="min-h-0 flex-1 space-y-2 overflow-y-auto border-b border-border p-3">
           {pageAskMessages.map((m, i) => (
+            // Skip the empty assistant placeholder shown before the first streamed token
+            // (the "thinking…" hint covers that state instead).
+            m.role === 'assistant' && m.content === '' ? null : (
             <div
               key={i}
               className={m.role === 'user'
@@ -129,8 +136,9 @@ export function PageAskPanel() {
                 </div>
               )}
             </div>
+            )
           ))}
-          {pageAskBusy && <p className="text-xs text-muted">{t('play.sidebar.pageAsk.asking')}</p>}
+          {awaitingFirstToken && <p className="text-xs text-muted">{t('play.sidebar.pageAsk.asking')}</p>}
           {lastAnswer && !pageAskBusy && (
             <div className="flex justify-end">
               <button

@@ -45,20 +45,46 @@ function seedPdfWithPages(pdfId: string, owner: string, pages: { text: string; s
 
 // Capture the messages sent to the model so we can assert the prompt contents.
 let captured: { messages: Array<{ role: string; content: unknown }> } | null = null;
+// The /ask endpoint now streams the answer as plain text via SSE, so the mock returns
+// an async-iterable stream of content deltas (chunked to exercise the streaming path).
 function mockAsk(answer: string): void {
   setOpenAIClientForTest({
     chat: {
       completions: {
         create: async (args: { messages: Array<{ role: string; content: unknown }> }) => {
           captured = { messages: args.messages };
+          const mid = Math.ceil(answer.length / 2);
+          const chunks = [answer.slice(0, mid), answer.slice(mid)];
           return {
-            choices: [{ message: { content: JSON.stringify({ answer }) }, finish_reason: 'stop' }],
-            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+            async *[Symbol.asyncIterator]() {
+              for (const c of chunks) {
+                yield { choices: [{ delta: { content: c }, finish_reason: null }] };
+              }
+              yield {
+                choices: [{ delta: {}, finish_reason: 'stop' }],
+                usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+              };
+            },
           };
         },
       },
     },
   } as never);
+}
+
+// Extract the final answer from an SSE response body (the `event: done` payload).
+function parseSseAnswer(body: string): string | null {
+  let answer: string | null = null;
+  for (const block of body.split('\n\n')) {
+    let event = '';
+    let data = '';
+    for (const line of block.split('\n')) {
+      if (line.startsWith('event:')) event = line.slice('event:'.length).trim();
+      else if (line.startsWith('data:')) data += line.slice('data:'.length).trim();
+    }
+    if (event === 'done' && data) answer = (JSON.parse(data) as { answer: string }).answer;
+  }
+  return answer;
 }
 
 test('POST /api/pdfs/:id/pages/:n/ask — 403 when not authenticated', async () => {
@@ -95,7 +121,7 @@ test('POST ask — sends all pages and prior history to the model', async () => 
       }),
     });
     assert.equal(resp.statusCode, 200);
-    assert.equal((resp.json() as { answer: string }).answer, '這是綜合全份的詳細回答。');
+    assert.equal(parseSseAnswer(resp.body), '這是綜合全份的詳細回答。');
 
     assert.ok(captured, 'model was called');
     const flat = JSON.stringify(captured!.messages);
@@ -206,8 +232,8 @@ test('POST ask — a blank model answer is replaced with the fixed fallback', as
       body: JSON.stringify({ question: '隨便問' }),
     });
     assert.equal(resp.statusCode, 200);
-    const answer = (resp.json() as { answer: string }).answer;
-    assert.match(answer, /找不到可以回答這個問題的相關資訊/);
+    const answer = parseSseAnswer(resp.body);
+    assert.match(answer ?? '', /找不到可以回答這個問題的相關資訊/);
   } finally {
     setOpenAIClientForTest(null);
     await app.close();
