@@ -1417,13 +1417,40 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       };
 
       try {
+        // Diagnostic: track how the upstream LLM delivers tokens so we can tell whether
+        // "no streaming" is the model/gateway buffering the whole answer (deltaCount≈1,
+        // spanMs≈0) vs genuine token streaming (deltaCount high, spanMs large). Logged
+        // once per request at info level; see the `ask-page stream stats` log.
+        const streamStart = Date.now();
+        let deltaCount = 0;
+        let firstDeltaMs: number | null = null;
+        let lastDeltaMs = 0;
         const result = await streamChatText({
           label: `ask-page ${id}/${n}`,
           maxTokens: 4000,
           temperature: 0.3,
           messages,
-          onDelta: (delta) => sendEvent('delta', { text: delta }),
+          onDelta: (delta) => {
+            deltaCount += 1;
+            const elapsed = Date.now() - streamStart;
+            if (firstDeltaMs === null) firstDeltaMs = elapsed;
+            lastDeltaMs = elapsed;
+            sendEvent('delta', { text: delta });
+          },
         });
+        request.log.info(
+          {
+            pdfId: id,
+            pageNumber: n,
+            deltaCount,
+            firstDeltaMs,
+            lastDeltaMs,
+            spanMs: firstDeltaMs === null ? 0 : lastDeltaMs - firstDeltaMs,
+            totalMs: Date.now() - streamStart,
+            answerChars: result.text.length,
+          },
+          'ask-page stream stats',
+        );
         // 換行正規化 + 空答保底（見 finalizeTutorAnswer）。
         const answer = finalizeTutorAnswer(result.text);
         sendEvent('done', { answer });
