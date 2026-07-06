@@ -18,8 +18,11 @@
   - 驗證：orphan-recovery 測試改在 `data/test.db` 落地、dev `app.db` 不再新增列；後端全套 1353/1358 通過（4 個為既有的
     並行執行 flakiness，單獨跑各檔皆綠；歷史基準曾記錄「18 個既有失敗」，故未新增回歸）。前端 `tsc` 無涉、後端 `tsc` 通過。
     分支 `fix/test-db-isolation`。
-  - ⚠ 待處理（需使用者授權）：dev `app.db` 內既存的測試殘列（含造成本次錯誤的 `orphan-recovery-processing-01`）尚未清除；
-    刪除 dev DB 列的動作被權限守門攔下，需使用者同意後再清。DB 已備份於 `data/app.db.bak-20260706-234611`。
+  - [x] 清除 dev `app.db` 既存測試殘列（經使用者授權）：以「無對應 `storage/<id>/` 目錄」為判準（真實簡報 id 為
+    10 碼 nanoid 如 `-nM_vsV4xc`、且必有 storage 目錄；殘列全為可讀測試前綴如 `csv-test`/`embed-pdf`/`sim-*`/`wp-*`/
+    `orphan-recovery-*` 等且無 storage），確認 0 筆殘列符合真實 nanoid 樣式後，連同 22 個帶 `pdf_id` 的子表一併刪除
+    共 524 列（1845→1321，剛好等於原本「有 storage 目錄」的數量，即只刪無 storage 的測試列）。`processing` 狀態列歸零、
+    ENOENT 元凶 `orphan-recovery-processing-01` 已移除。備份：`data/app.db.bak-20260706-234611`、`…bak-purge-20260706-235841`。
 
 ## AI 導師問答逐字（串流）顯示（使用者要求，2026-07-06）★ 使用者要求功能，不計入計數
 
