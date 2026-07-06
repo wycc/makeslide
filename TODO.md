@@ -7,6 +7,20 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 測試隔離：測試不再污染 dev 資料庫（使用者回報 dev worker ENOENT，2026-07-06）★ 修 bug，不計入計數
+
+使用者回報 dev worker 反覆出現 `ENOENT … storage/orphan-recovery-processing-01/metadata.json`。根因：後端測試直接透過 `../src/db` 對真實 dev DB 塞列、並在 `config.storageRoot` 下寫 fixture，且無測試後清理，長期污染 dev DB。其中 `add-pages-orphan-recovery.test.ts` 塞了一列 status=`processing` 的 PDF，運行中的 dev worker 把它當成中斷的 pipeline 工作重排，但該 PDF 的 storage 目錄從未建立 → `persistMetadata → writeMetadata` ENOENT 迴圈。
+
+- [x] 測試隔離：`MAKESLIDE_TEST=1`（由後端 `test` npm script 與 `scripts/run-tests.sh` 設定）時，`config.ts` 將
+    `DB_PATH`／`STORAGE_ROOT` 導向 gitignored 的 `data/test.db`／`data/test-storage`，不再碰 `data/app.db`／`storage/`。
+    dev `.env` 的 `DB_PATH` 在 dotenv 載入「之前」先捕捉（`shellDbPath`），使 `.env` 不會把測試拉回 dev DB；但真正由 shell
+    匯出的覆寫仍優先（CI/呼叫者可自訂）。
+  - 驗證：orphan-recovery 測試改在 `data/test.db` 落地、dev `app.db` 不再新增列；後端全套 1353/1358 通過（4 個為既有的
+    並行執行 flakiness，單獨跑各檔皆綠；歷史基準曾記錄「18 個既有失敗」，故未新增回歸）。前端 `tsc` 無涉、後端 `tsc` 通過。
+    分支 `fix/test-db-isolation`。
+  - ⚠ 待處理（需使用者授權）：dev `app.db` 內既存的測試殘列（含造成本次錯誤的 `orphan-recovery-processing-01`）尚未清除；
+    刪除 dev DB 列的動作被權限守門攔下，需使用者同意後再清。DB 已備份於 `data/app.db.bak-20260706-234611`。
+
 ## AI 導師問答逐字（串流）顯示（使用者要求，2026-07-06）★ 使用者要求功能，不計入計數
 
 使用者要求：AI 導師問答（PageAskPanel）能一個字一個字（逐 token）顯示，而非等整段答案生成完才一次出現。採「真串流（SSE）」方案，降低首字延遲。工作完成於分支 `feat/tutor-ask-streaming`。
@@ -1363,6 +1377,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-06 | （修 bug，使用者回報 dev worker `ENOENT … orphan-recovery-processing-01/metadata.json`）根因為測試無隔離、直接寫真實 dev DB 且不清理，其中 orphan-recovery 測試塞入 status=`processing` 的 PDF 列，dev worker 當成中斷工作重排卻無對應 storage 目錄而 ENOENT 迴圈。修法：`MAKESLIDE_TEST=1` 時 `config.ts` 把 `DB_PATH`／`STORAGE_ROOT` 導向 gitignored 的 `data/test.db`／`data/test-storage`（dev `.env` 值在 dotenv 前捕捉、不再拉回 dev DB，shell 覆寫仍優先）；`test` npm script 與 `run-tests.sh` 設該旗標。後端全套 1353/1358（4 為既有並行 flakiness）。dev DB 既存殘列待使用者授權後清除 | fix/test-db-isolation |
 | 2026-07-06 | （使用者要求）AI 導師問答改為逐字（SSE 串流）顯示：後端 `/ask` 由 `callChatJSON` 等整包改用 `streamChatText` 純文字串流，回 SSE（`delta`/`done`/`error`），`done` 仍過 `finalizeTutorAnswer`；system prompt 改為直接輸出純文字、移除 `AskPageResponseSchema`。前端 `askPageQuestion` 改讀 SSE 加 `onDelta`；`usePageAsk` 串流累加 assistant 泡泡、`PageAskPanel` 首 token 前才顯示「思考中…」。`page-ask.test.ts` 改串流 mock，6/6 通過（Node 22 `--test-force-exit`），前後端 `tsc` 通過 | feat/tutor-ask-streaming |
 | 2026-07-05 | （使用者回報掃 QR 進入後不出現投票選項）修正 poll fetch/vote 未帶 share token：`fetchPagePolls`／`votePagePoll` 未附 `?share=<token>`，但後端 GET `/polls`、POST `/votes` 以 `canReadPdf(aclCtx)` 授權（token 能力來自 `?share=` query），匿名掃碼 follower 因此 403、`pagePolls` 恆空、投票面板永不自動展開。把 `currentShareToken` 經 `usePagePolls` 傳入兩個 API（比照 `fetchPdfDetail`）。前端 `tsc`＋`vite build` 通過 | fix/poll-fetch-vote-share-token |
 | 2026-07-05 | （使用者要求）點擊投票圖示即開始投票並開啟即時投票視窗：🗳 徽章改為按鈕（📝／💬 維持純指示），複用既有「開始即時投票」模式——全螢幕 `handleStartPoll()`＋`setFullscreenPollControlOpen(true)`、一般檢視 `handleStartPoll()`＋`setPollSettingsOpen(true)`，`stopPropagation` 避免觸發投影片點擊。沿用 i18n `play.fullscreen.startPoll`。前端 `tsc`＋`vite build` 通過 | feat/poll-icon-click-starts-poll |
