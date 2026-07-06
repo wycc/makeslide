@@ -10,7 +10,7 @@
     "build:bundle": "node build-bundle.mjs",
     "start": "../scripts/with-node-env.sh node dist/server.js",
     "typecheck": "../scripts/with-node-env.sh tsc --noEmit",
-    "test": "../scripts/with-node-env.sh tsx --test ./test/*.test.ts",
+    "test": "MAKESLIDE_TEST=1 ../scripts/with-node-env.sh tsx --test ./test/*.test.ts",
     "script:assign-owner": "../scripts/with-node-env.sh tsx src/scripts/assignPresentationsToAccount.ts",
     "mcp-server": "../scripts/with-node-env.sh tsx src/mcp-server.ts"
   },
