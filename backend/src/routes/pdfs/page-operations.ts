@@ -15,7 +15,7 @@ import { db, savePageGenerationPrompt } from '../../db';
 import { config } from '../../config';
 import { sessionSub } from '../auth';
 import type { PageRow, PdfRow } from '../../types';
-import { callChatJSON } from '../../services/openai';
+import { callChatJSON, streamChatText } from '../../services/openai';
 import { getImageClient } from '../../services/openai';
 import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
@@ -267,10 +267,6 @@ const AskPageBodySchema = z.object({
     .optional(),
   // 回答長度偏好：精簡（brief）或詳細（detailed）。未指定視為 detailed。
   verbosity: z.enum(['brief', 'detailed']).optional(),
-});
-
-const AskPageResponseSchema = z.object({
-  answer: z.string().min(1),
 });
 
 // Budget for the full-deck corpus sent to the AI tutor, keeping prompts bounded
@@ -1367,44 +1363,79 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         content: m.content,
       }));
       const verbosityInstruction = askVerbosityInstruction(parsedBody.data.verbosity);
-      const result = await callChatJSON({
-        label: `ask-page ${id}/${n}`,
-        schema: AskPageResponseSchema,
-        maxTokens: 4000,
-        temperature: 0.3,
-        messages: [
-          {
-            role: 'system',
-            content: '你是繁體中文課堂 AI 導師。請只輸出 JSON：{"answer":"..."}。你會獲得整份簡報所有頁面的頁面文字與逐字稿（每頁以「# 第 N 頁」標示，其中一頁標為「學生目前所在頁」），以及（若有）這份教材的原始來源全文。請綜合全份內容詳細回答學生問題，必要時可跨頁說明；當答案只出現在原始來源全文、而不在投影片文字或逐字稿時，也要依原始來源全文作答。回答請清楚、有條理。【格式（務必遵守）】請以 Markdown 格式作答，適當使用標題（`##`）、粗體（`**粗體**`）、條列（`-`、`1.`）與表格來組織內容以利閱讀；數學式一律使用 Markdown 可渲染的 LaTeX：行內公式用單一 `$...$` 包住、獨立成行的公式用 `$$...$$` 包住（例如行內 $E=mc^2$、區塊 $$\\int_a^b f(x)\\,dx$$），不要用純文字或圖片描述數學式。【引用規則（務必遵守）】只要你的回答用到「學生目前所在頁」以外其他頁面的資訊，就必須在該處主動以括號標示來源頁碼，例如「（第 3 頁）」或「（第 3 頁逐字稿）」，不可省略；引用原始來源全文時標示「（原始來源）」；引用學生目前所在頁的內容則可不標示頁碼。【禁止杜撰（務必遵守）】你只能依據上述提供的頁面內容與原始來源作答，嚴禁杜撰、臆測或引入教材以外的知識；若所有提供的內容都找不到與問題相關的資訊，請直接明確回答「找不到相關資訊」並簡短建議學生換個問法或查看相關頁面，切勿編造答案。' + `\n${verbosityInstruction}`,
-          },
-          {
-            role: 'user',
-            content: [
-              `簡報標題：${pdfTitleRow?.title?.trim() || '（未命名）'}`,
-              `學生目前頁碼：${n}`,
-              `以下為整份簡報內容（逐頁的投影片文字與逐字稿）：`,
-              '-----------------',
-              corpus || '（無可用內容）',
-              '-----------------',
-              ...(sourceText
-                ? [
-                    '以下為這份教材的原始來源全文（可能包含未寫進投影片或逐字稿的細節）：',
-                    '=================',
-                    sourceText,
-                    '=================',
-                  ]
-                : []),
-            ].join('\n'),
-          },
-          ...history,
-          { role: 'user', content: parsedBody.data.question },
-        ],
+      const messages = [
+        {
+          role: 'system' as const,
+          content: '你是繁體中文課堂 AI 導師。請直接輸出回答內容（純文字，不要包成 JSON 或程式碼區塊）。你會獲得整份簡報所有頁面的頁面文字與逐字稿（每頁以「# 第 N 頁」標示，其中一頁標為「學生目前所在頁」），以及（若有）這份教材的原始來源全文。請綜合全份內容詳細回答學生問題，必要時可跨頁說明；當答案只出現在原始來源全文、而不在投影片文字或逐字稿時，也要依原始來源全文作答。回答請清楚、有條理。【格式（務必遵守）】請以 Markdown 格式作答，適當使用標題（`##`）、粗體（`**粗體**`）、條列（`-`、`1.`）與表格來組織內容以利閱讀；數學式一律使用 Markdown 可渲染的 LaTeX：行內公式用單一 `$...$` 包住、獨立成行的公式用 `$$...$$` 包住（例如行內 $E=mc^2$、區塊 $$\\int_a^b f(x)\\,dx$$），不要用純文字或圖片描述數學式。【引用規則（務必遵守）】只要你的回答用到「學生目前所在頁」以外其他頁面的資訊，就必須在該處主動以括號標示來源頁碼，例如「（第 3 頁）」或「（第 3 頁逐字稿）」，不可省略；引用原始來源全文時標示「（原始來源）」；引用學生目前所在頁的內容則可不標示頁碼。【禁止杜撰（務必遵守）】你只能依據上述提供的頁面內容與原始來源作答，嚴禁杜撰、臆測或引入教材以外的知識；若所有提供的內容都找不到與問題相關的資訊，請直接明確回答「找不到相關資訊」並簡短建議學生換個問法或查看相關頁面，切勿編造答案。' + `\n${verbosityInstruction}`,
+        },
+        {
+          role: 'user' as const,
+          content: [
+            `簡報標題：${pdfTitleRow?.title?.trim() || '（未命名）'}`,
+            `學生目前頁碼：${n}`,
+            `以下為整份簡報內容（逐頁的投影片文字與逐字稿）：`,
+            '-----------------',
+            corpus || '（無可用內容）',
+            '-----------------',
+            ...(sourceText
+              ? [
+                  '以下為這份教材的原始來源全文（可能包含未寫進投影片或逐字稿的細節）：',
+                  '=================',
+                  sourceText,
+                  '=================',
+                ]
+              : []),
+          ].join('\n'),
+        },
+        ...history,
+        { role: 'user' as const, content: parsedBody.data.question },
+      ];
+
+      // 回應改為 SSE（text/event-stream），讓前端能在模型逐字生成時即時顯示：
+      // - event: delta — { text: string }，每次收到一段新生成的回答片段
+      // - event: done  — { answer: string }，生成完成後經 finalizeTutorAnswer 收尾的最終答案
+      // - event: error — { code, message }，發生錯誤時送出，串流隨即結束
+      reply.hijack();
+      reply.raw.writeHead(200, {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
       });
-      // 換行正規化 + 空答保底（見 finalizeTutorAnswer）。
-      const answer = finalizeTutorAnswer(result.data.answer);
-      return reply.code(200).send({ answer });
+      // 客戶端斷線後再寫入 response stream 會觸發未處理的 'error' 事件；用 request.raw 'close'
+      // 追蹤斷線讓 sendEvent 停止寫入，並在 reply.raw 上掛 error 監聽避免 race 的寫入外拋。
+      let clientDisconnected = false;
+      request.raw.on('close', () => {
+        clientDisconnected = true;
+      });
+      reply.raw.on('error', (err) => {
+        request.log.warn({ err, pdfId: id, pageNumber: n }, 'ask-page SSE: response stream error (client likely disconnected)');
+      });
+      const sendEvent = (event: string, data: unknown): void => {
+        if (clientDisconnected) return;
+        reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      };
+
+      try {
+        const result = await streamChatText({
+          label: `ask-page ${id}/${n}`,
+          maxTokens: 4000,
+          temperature: 0.3,
+          messages,
+          onDelta: (delta) => sendEvent('delta', { text: delta }),
+        });
+        // 換行正規化 + 空答保底（見 finalizeTutorAnswer）。
+        const answer = finalizeTutorAnswer(result.text);
+        sendEvent('done', { answer });
+      } catch (err) {
+        request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to answer page ask question');
+        sendEvent('error', errorResponse('INTERNAL_ERROR', 'Failed to answer question').error);
+      } finally {
+        reply.raw.end();
+      }
     } catch (err) {
-      request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to answer page ask question');
+      // 準備 corpus/來源全文階段（hijack 之前）發生的非預期錯誤：仍以一般 JSON 錯誤回應。
+      request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to prepare page ask question');
       return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to answer question'));
     }
   });

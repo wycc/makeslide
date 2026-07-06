@@ -7,6 +7,23 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## AI 導師問答逐字（串流）顯示（使用者要求，2026-07-06）★ 使用者要求功能，不計入計數
+
+使用者要求：AI 導師問答（PageAskPanel）能一個字一個字（逐 token）顯示，而非等整段答案生成完才一次出現。採「真串流（SSE）」方案，降低首字延遲。
+
+- [x] 後端 `POST /api/pdfs/:id/pages/:n/ask` 由「等整包 JSON `{answer}` 再回傳」改為 SSE（`text/event-stream`）串流：
+    改用既有 `streamChatText`（純文字輸出，不再包 JSON），system prompt 由「只輸出 JSON」改為「直接輸出純文字」。
+    事件：`delta`（`{text}` 每段新生成片段）／`done`（`{answer}` 經 `finalizeTutorAnswer` 換行正規化＋空答保底的最終答案）／
+    `error`（`{code,message}`）。權限檢查與 corpus/來源全文組裝仍在 hijack 之前，保留一般 JSON 錯誤回應；移除已不用的
+    `AskPageResponseSchema`。比照 animation custom-script 的 hijack/斷線處理。
+  - **前端 API**：`askPageQuestion` 改為讀 SSE stream（`getReader`＋`TextDecoder`，比照 `generateCustomScriptCode`），
+    新增 `onDelta` 回呼、以 `done` 的 answer 為最終值。
+  - **前端 hook/UI**：`usePageAsk` 送出後先塞空的 assistant 泡泡，`onDelta` 即時累加內容、`done` 以正規化後答案取代；
+    錯誤時回滾使用者訊息＋assistant 佔位（`slice(0,-2)`）。`PageAskPanel` 於首個 token 前才顯示「思考中…」提示、
+    空的 assistant 佔位泡泡不渲染。
+  - 後端 `page-ask.test.ts` 更新為串流 mock（async-iterable 吐 delta）＋SSE 解析；6/6 以 Node 22 `--test-force-exit` 通過。
+    前後端 `tsc` 通過。分支 `feat/tutor-ask-streaming`。
+
 ## 點擊投票圖示即開始投票並開啟即時投票視窗（使用者要求，2026-07-05）★ 使用者要求功能，不計入計數
 
 使用者要求：讓（投影片上方的）投票圖示可點擊，按下即打開 realtime poll 視窗並開始投票。
@@ -1346,6 +1363,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-06 | （使用者要求）AI 導師問答改為逐字（SSE 串流）顯示：後端 `/ask` 由 `callChatJSON` 等整包改用 `streamChatText` 純文字串流，回 SSE（`delta`/`done`/`error`），`done` 仍過 `finalizeTutorAnswer`；system prompt 改為直接輸出純文字、移除 `AskPageResponseSchema`。前端 `askPageQuestion` 改讀 SSE 加 `onDelta`；`usePageAsk` 串流累加 assistant 泡泡、`PageAskPanel` 首 token 前才顯示「思考中…」。`page-ask.test.ts` 改串流 mock，6/6 通過（Node 22 `--test-force-exit`），前後端 `tsc` 通過 | feat/tutor-ask-streaming |
 | 2026-07-05 | （使用者回報掃 QR 進入後不出現投票選項）修正 poll fetch/vote 未帶 share token：`fetchPagePolls`／`votePagePoll` 未附 `?share=<token>`，但後端 GET `/polls`、POST `/votes` 以 `canReadPdf(aclCtx)` 授權（token 能力來自 `?share=` query），匿名掃碼 follower 因此 403、`pagePolls` 恆空、投票面板永不自動展開。把 `currentShareToken` 經 `usePagePolls` 傳入兩個 API（比照 `fetchPdfDetail`）。前端 `tsc`＋`vite build` 通過 | fix/poll-fetch-vote-share-token |
 | 2026-07-05 | （使用者要求）點擊投票圖示即開始投票並開啟即時投票視窗：🗳 徽章改為按鈕（📝／💬 維持純指示），複用既有「開始即時投票」模式——全螢幕 `handleStartPoll()`＋`setFullscreenPollControlOpen(true)`、一般檢視 `handleStartPoll()`＋`setPollSettingsOpen(true)`，`stopPropagation` 避免觸發投影片點擊。沿用 i18n `play.fullscreen.startPoll`。前端 `tsc`＋`vite build` 通過 | feat/poll-icon-click-starts-poll |
 | 2026-07-05 | （使用者要求）頁面筆記／留言也顯示不同圖示：指示徽章擴為圖示列 🗳 投票／📝 筆記（`page_notes`）／💬 留言。後端 detail 加每頁 `has_comment`（`SELECT DISTINCT page_number FROM page_comments`，穿過 `rowToDetail`）；一般檢視與全螢幕皆更新。新增 i18n note/commentDefinedBadge。Node 22 對真實資料 `-nM_vsV4xc` 端到端驗證（筆記頁→📝、注入留言→has_comment true）。前後端 `tsc`＋前端 `vite build` 通過、i18n 24/24、parity 2194/2194 | feat/page-note-comment-indicators |

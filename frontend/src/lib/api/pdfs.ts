@@ -1237,6 +1237,14 @@ export interface PageAskMessage {
   content: string;
 }
 
+/**
+ * Asks the AI tutor a question about a page. The backend responds with an SSE
+ * stream so the answer can be shown token-by-token as it's generated:
+ * - `event: delta` — `{ text }`, a chunk of the answer; reported via `onDelta` as it arrives.
+ * - `event: done`  — `{ answer }`, the final answer after server-side normalization.
+ * - `event: error` — `{ code, message }`, thrown as an `ApiError`.
+ * Resolves with the final `{ answer }`.
+ */
 export async function askPageQuestion(
   id: string,
   pageNumber: number,
@@ -1244,6 +1252,7 @@ export async function askPageQuestion(
   shareToken?: string,
   history: PageAskMessage[] = [],
   verbosity?: 'brief' | 'detailed',
+  onDelta?: (delta: string) => void,
 ): Promise<{ answer: string }> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (shareToken) headers['X-MakeSlide-Share-Token'] = shareToken;
@@ -1252,7 +1261,57 @@ export async function askPageQuestion(
     { method: 'POST', headers, body: JSON.stringify({ question, history, ...(verbosity ? { verbosity } : {}) }) },
   );
   if (!resp.ok) throw await parseErrorBody(resp);
-  return (await resp.json()) as { answer: string };
+  if (!resp.body) throw new ApiError('Empty response body', 'INTERNAL_ERROR', resp.status);
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let answer: string | null = null;
+
+  const handleEvent = (block: string): void => {
+    let event = 'message';
+    let data = '';
+    for (const line of block.split('\n')) {
+      if (line.startsWith('event:')) event = line.slice('event:'.length).trim();
+      else if (line.startsWith('data:')) data += line.slice('data:'.length).trim();
+    }
+    if (!data) return;
+    const parsed = JSON.parse(data) as Record<string, unknown>;
+    if (event === 'delta') {
+      const text = parsed.text;
+      if (typeof text === 'string' && text) onDelta?.(text);
+    } else if (event === 'done') {
+      const doneAnswer = parsed.answer;
+      if (typeof doneAnswer === 'string') answer = doneAnswer;
+    } else if (event === 'error') {
+      throw new ApiError(
+        typeof parsed.message === 'string' ? parsed.message : 'Failed to answer question',
+        typeof parsed.code === 'string' ? parsed.code : 'INTERNAL_ERROR',
+        resp.status,
+      );
+    }
+  };
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let idx: number;
+      while ((idx = buffer.indexOf('\n\n')) >= 0) {
+        handleEvent(buffer.slice(0, idx));
+        buffer = buffer.slice(idx + 2);
+      }
+    }
+    if (buffer.trim()) handleEvent(buffer);
+  } finally {
+    reader.cancel().catch(() => {});
+  }
+
+  if (answer === null) {
+    throw new ApiError('Stream ended without a result', 'INTERNAL_ERROR', resp.status);
+  }
+  return { answer };
 }
 
 export async function fetchQuizSets(id: string): Promise<QuizSet[]> {
