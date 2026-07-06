@@ -17,6 +17,13 @@ export const OPENAI_TTS_VOICES = [
   'verse',
 ] as const;
 
+// Capture DB_PATH / STORAGE_ROOT as provided by the real process environment
+// BEFORE dotenv loads the dev `.env` (which sets them to the dev DB/storage). In
+// test mode below we prefer these shell-provided overrides, falling back to
+// throwaway test paths — so the dev `.env` can't drag tests onto the real dev DB.
+const shellDbPath = process.env.DB_PATH;
+const shellStorageRoot = process.env.STORAGE_ROOT;
+
 // Load .env from repo root (one level above backend/)
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..', '..');
@@ -176,6 +183,20 @@ const EnvSchema = z.object({
   HTTPS_CERT_PATH: z.string().optional().default(''),
   NB_PREFIX: z.string().optional().default(''),
 });
+
+// Test isolation: when running under the test runner (MAKESLIDE_TEST=1, set by the
+// backend `test` npm script and scripts/run-tests.sh), redirect the database and
+// storage root to throwaway locations under the gitignored `data/` dir instead of
+// the real dev DB/storage. This prevents tests — which seed rows directly via
+// `../src/db` and write fixtures under `config.storageRoot`, without cleaning up —
+// from polluting the running dev instance (a stray `processing` PDF row otherwise
+// makes the dev worker loop on a pipeline task whose storage dir never existed).
+// A DB_PATH/STORAGE_ROOT exported in the real shell still wins (see shellDbPath
+// above), so CI or a caller can override; the dev `.env` values are ignored here.
+if (process.env.MAKESLIDE_TEST === '1' || process.env.NODE_ENV === 'test') {
+  process.env.DB_PATH = shellDbPath ?? './data/test.db';
+  process.env.STORAGE_ROOT = shellStorageRoot ?? './data/test-storage';
+}
 
 const parsed = EnvSchema.safeParse(process.env);
 if (!parsed.success) {

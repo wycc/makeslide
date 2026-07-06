@@ -47,7 +47,9 @@ run_side() {
   echo "▶ ${side} tests: ${targets[*]}"
   # CALLER_DIR (PWD) is what with-node-env.sh exec's in, so cd into the workspace
   # first; tsx then resolves the workspace tsconfig and test globs correctly.
-  ( cd "$workdir" && "$WNE" "$TSX" --test --test-force-exit --test-timeout="$TIMEOUT_MS" "${targets[@]}" )
+  # MAKESLIDE_TEST=1 redirects the backend DB/storage to throwaway `data/test.*`
+  # locations (see backend/src/config.ts) so tests don't pollute the real dev DB.
+  ( cd "$workdir" && MAKESLIDE_TEST=1 "$WNE" "$TSX" --test --test-force-exit --test-timeout="$TIMEOUT_MS" "${targets[@]}" )
 }
 
 main() {
