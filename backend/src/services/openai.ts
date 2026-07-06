@@ -128,6 +128,21 @@ export function getOpenAIClient(accountId: string = currentAccountId(), provider
 
   const debugFetch: typeof globalThis.fetch = async (url, init) => {
     const resp = await globalThis.fetch(url as Parameters<typeof globalThis.fetch>[0], init);
+
+    // Streaming responses (SSE) MUST pass through untouched. Cloning + draining the
+    // body below (`await clone.arrayBuffer()`) reads the entire stream to completion
+    // before returning `resp` to the OpenAI SDK, which collapses token-by-token
+    // streaming into one burst at the end (defeats `/ask` and animation streaming).
+    // For these we only log headers and hand the live stream straight back.
+    const contentType = resp.headers.get('content-type') ?? '';
+    if (contentType.includes('text/event-stream')) {
+      logger.debug(
+        redactLogObject({ status: resp.status, url: url.toString(), contentType }),
+        'OpenAI streaming response (passthrough, body not buffered)',
+      );
+      return resp;
+    }
+
     const clone = resp.clone();
     const buf = Buffer.from(await clone.arrayBuffer());
 
