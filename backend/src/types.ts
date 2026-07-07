@@ -168,7 +168,7 @@ export interface PdfRow {
   updated_at: string;
 }
 
-export type SlideRenderType = 'static-image' | 'gsap-image';
+export type SlideRenderType = 'static-image' | 'gsap-image' | 'notebook';
 
 export interface PageRow {
   pdf_id: string;
@@ -185,6 +185,8 @@ export interface PageRow {
   // without them, so keep them optional at the type level.
   render_type?: SlideRenderType | null;
   animation_spec_path?: string | null;
+  // Jupyter notebook page: relative path to the page's `.ipynb` asset.
+  notebook_path?: string | null;
   page_notes?: string;
   created_at: string;
   updated_at: string;
@@ -239,6 +241,8 @@ export interface PdfDetailPage {
   audio_duration_seconds: number | null;
   render_type: SlideRenderType;
   animation_spec_url: string | null;
+  /** URL to fetch this page's `.ipynb` (only set when render_type === 'notebook'). */
+  notebook_url?: string | null;
   status: PageStatus;
   error_message?: string | null;
   timings?: PdfDetailPageTimings | null;

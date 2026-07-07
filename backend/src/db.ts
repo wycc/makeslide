@@ -424,6 +424,11 @@ function migrate(): void {
     db.exec(`ALTER TABLE pages ADD COLUMN animation_spec_path TEXT`);
     logger.info('Added column pages.animation_spec_path');
   }
+  // Jupyter notebook page type: per-page `.ipynb` asset path (render_type = 'notebook').
+  if (!columnExists('pages', 'notebook_path')) {
+    db.exec(`ALTER TABLE pages ADD COLUMN notebook_path TEXT`);
+    logger.info('Added column pages.notebook_path');
+  }
   if (!columnExists('page_polls', 'show_results')) {
     db.exec(`ALTER TABLE page_polls ADD COLUMN show_results INTEGER NOT NULL DEFAULT 1`);
     logger.info('Added column page_polls.show_results');
