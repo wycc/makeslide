@@ -7,6 +7,21 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 在 AI 呼叫中提供 MCP（唯讀）工具給 LLM（使用者要求，2026-07-07）★ 使用者要求功能，不計入計數
+
+使用者要求：makeslide 自己呼叫 LLM 時，也把它定義的 MCP 工具傳出去，讓模型能主動查更多簡報資訊做更好的生成。先寫設計文件（[docs/mcp-tools-in-ai-design.md](docs/mcp-tools-in-ai-design.md)）再實作。經確認採：**只暴露唯讀工具**、v1 接 **AI 導師問答＋逐頁腳本生成**、**只支援 OpenAI 相容 provider**。工作於分支 `feat/mcp-tools-in-ai`。
+
+- [x] 設計文件 `docs/mcp-tools-in-ai-design.md`（目標／非目標／工具登錄表／tool-loop／安全／分階段）。
+- [x] `aiTools.ts`：行程內唯讀工具登錄表（`list_presentations`／`get_presentation`／`get_page_text`／`get_page_script`），
+    handler 直接查 DB/檔案、**scope 到當前帳號**（跨帳號拒絕）、結果截斷；不走 HTTP、無副作用。排除會變更的工具。
+- [x] `openai.ts`：`callChatJSON`／`streamChatText` 加選填 `tools`/`toolContext` 與**上限 5 輪的 tool-calling 迴圈**。
+    `callChatJSON` 保持 `response_format=json_object` 並在 `tool_calls` 時迴圈；`streamChatText` 於工具輪串流、最終答案逐段串流。
+    gateway 不支援 tools 時退化為無工具生成。Gemini 於 v1 略過。以 `config.aiMcpToolsEnabled`（`AI_MCP_TOOLS_ENABLED`，預設開）控制。
+- [x] 接線：AI 導師 `/ask`（streamChatText）與逐頁腳本生成（generateScript 的 per-page callChatJSON）。
+- [x] 測試：`ai-tools.test.ts`（schema／帳號 scope／跨帳號拒絕／錯誤處理）、`ai-tool-loop.test.ts`（兩個 wrapper 都會執行工具輪並把結果回填）。
+    另以 raw curl 驗證 cgu-air gateway 確實支援 function-calling（回 `finish_reason: tool_calls`）。後端 `tsc` 通過、page-ask 回歸 6/6。
+- [ ] Phase 2（後續）：Gemini function-calling；`mcp-server.ts` 與 `aiTools.ts` 去重；擴大到更多生成流程；每帳號工具白名單 UI。
+
 ## 測試隔離：測試不再污染 dev 資料庫（使用者回報 dev worker ENOENT，2026-07-06）★ 修 bug，不計入計數
 
 使用者回報 dev worker 反覆出現 `ENOENT … storage/orphan-recovery-processing-01/metadata.json`。根因：後端測試直接透過 `../src/db` 對真實 dev DB 塞列、並在 `config.storageRoot` 下寫 fixture，且無測試後清理，長期污染 dev DB。其中 `add-pages-orphan-recovery.test.ts` 塞了一列 status=`processing` 的 PDF，運行中的 dev worker 把它當成中斷的 pipeline 工作重排，但該 PDF 的 storage 目錄從未建立 → `persistMetadata → writeMetadata` ENOENT 迴圈。
@@ -1380,6 +1395,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-07 | （使用者要求，先設計後實作）在 makeslide 自身 AI 呼叫中提供唯讀 MCP 工具給 LLM。設計文件 `docs/mcp-tools-in-ai-design.md`。實作：`aiTools.ts` 行程內唯讀工具登錄表（帳號 scope、跨帳號拒絕、無副作用）；`callChatJSON`／`streamChatText` 加 `tools`/`toolContext` 與上限 5 輪 tool-calling 迴圈（串流版工具輪＋最終答案逐段串流，gateway 不支援時退化）；接 `/ask` 與 per-page `generateScript`；`config.aiMcpToolsEnabled` 開關。測試 ai-tools／ai-tool-loop 全綠、page-ask 回歸 6/6、raw curl 確認 cgu-air 支援 function-calling。Gemini／去重列 Phase 2 | feat/mcp-tools-in-ai |
 | 2026-07-07 | （修 bug，接續下列診斷）**找到 AI 導師不逐字的真正根因**：`getOpenAIClient` 給 OpenAI SDK 的自訂 `debugFetch`（[openai.ts](backend/src/services/openai.ts)）對每個回應都 `resp.clone()`＋`await clone.arrayBuffer()`（為了 log body preview／brotli 自動修正），把**整條 SSE 讀到結束才 return** 給 SDK → 52/54 段 delta 全卡到最後一次湧出。以真實端到端 probe 重現（修前全部 +4129ms 同時到；修後 delta 6002→6652ms trickle）。修法：偵測 `content-type: text/event-stream` 時原樣 pass-through、只 log headers、不讀 body；一般 JSON 回應維持原本 buffer＋preview＋brotli。此 bug 同時影響動畫 custom-script 串流。後端 `tsc` 通過 | fix/streaming-debugfetch-buffer（已 merge） |
 | 2026-07-07 | （診斷，使用者回報線上 AI 導師「後端→前端似乎沒串流」）先以本機 real-socket 探針證明 Fastify→client 的 SSE 逐段抵達正常（mock 每 300ms 一段、client 端 315/615/914/1215/1516ms 收到），排除 app 內緩衝。為判斷線上主因，在 `/ask` 的 `onDelta` 加輕量 `ask-page stream stats` log（`deltaCount`／`firstDeltaMs`／`spanMs`／`totalMs`／`answerChars`）：`deltaCount≈1`＋`spanMs≈0`＝上游 LLM/gateway 整包不串流；`deltaCount` 高但 client 仍一次收到＝外層代理/CDN 緩衝。已合併 master 待部署後看 log。後端 `tsc` 通過 | diag/ask-stream-delta-logging（已 merge） |
 | 2026-07-06 | （修 bug，使用者回報 dev worker `ENOENT … orphan-recovery-processing-01/metadata.json`）根因為測試無隔離、直接寫真實 dev DB 且不清理，其中 orphan-recovery 測試塞入 status=`processing` 的 PDF 列，dev worker 當成中斷工作重排卻無對應 storage 目錄而 ENOENT 迴圈。修法：`MAKESLIDE_TEST=1` 時 `config.ts` 把 `DB_PATH`／`STORAGE_ROOT` 導向 gitignored 的 `data/test.db`／`data/test-storage`（dev `.env` 值在 dotenv 前捕捉、不再拉回 dev DB，shell 覆寫仍優先）；`test` npm script 與 `run-tests.sh` 設該旗標。後端全套 1353/1358（4 為既有並行 flakiness）。dev DB 既存殘列待使用者授權後清除 | fix/test-db-isolation |
