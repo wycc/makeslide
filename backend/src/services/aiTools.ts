@@ -11,6 +11,7 @@
  * this with mcp-server.ts is Phase 2.
  */
 import * as fs from 'node:fs';
+import sharp from 'sharp';
 import type { ChatCompletionTool } from 'openai/resources/chat/completions';
 import { db } from '../db';
 import { safeJoinPdfPath } from './storage';
@@ -23,16 +24,25 @@ export interface AiToolContext {
   pdfId?: string;
 }
 
+/** A tool result: text, plus (optionally) image data URLs to attach to the model as vision input. */
+export interface AiToolResult {
+  text: string;
+  /** data: URLs the model should see; the tool loop attaches them as a vision message. */
+  images?: string[];
+}
+
 export interface AiTool {
   name: string;
   description: string;
   /** JSON Schema for the tool's arguments (OpenAI function `parameters`). */
   parameters: Record<string, unknown>;
-  handler: (args: Record<string, unknown>, ctx: AiToolContext) => Promise<string>;
+  handler: (args: Record<string, unknown>, ctx: AiToolContext) => Promise<string | AiToolResult>;
 }
 
 // Cap each tool result so a chatty tool can't blow up the context window.
 const MAX_TOOL_RESULT_CHARS = 8000;
+// Downscale page images before sending to the model to keep tokens/latency bounded.
+const PAGE_IMAGE_MAX_WIDTH = 1024;
 
 function truncate(text: string): string {
   return text.length > MAX_TOOL_RESULT_CHARS
@@ -166,6 +176,38 @@ const READONLY_TOOLS: AiTool[] = [
       return truncate(script.trim() || '（此頁尚無腳本。）');
     },
   },
+  {
+    name: 'get_page_image',
+    description: '取得簡報某一頁的畫面圖片（縮圖），讓你能直接看到該頁實際呈現的版面、圖表與視覺內容。',
+    parameters: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID；省略則指目前正在處理的簡報。' },
+        page: { type: 'number', description: '頁碼（從 1 開始）。' },
+      },
+      required: ['page'],
+    },
+    async handler(args, ctx): Promise<AiToolResult> {
+      const id = resolveId(args, ctx);
+      if (!id) return { text: '錯誤：未指定簡報 ID，且沒有預設簡報。' };
+      if (!ownedPdf(id, ctx)) return { text: `錯誤：找不到簡報 ${id}，或無權存取。` };
+      const page = Number(args.page);
+      if (!Number.isInteger(page) || page < 1) return { text: '錯誤：page 必須是正整數。' };
+      const row = db
+        .prepare(`SELECT image_path FROM pages WHERE pdf_id = ? AND page_number = ?`)
+        .get(id, page) as { image_path: string | null } | undefined;
+      if (!row) return { text: `錯誤：第 ${page} 頁不存在。` };
+      if (!row.image_path) return { text: `第 ${page} 頁尚未有圖片。` };
+      try {
+        const buf = await fs.promises.readFile(safeJoinPdfPath(id, row.image_path));
+        const jpeg = await sharp(buf).resize({ width: PAGE_IMAGE_MAX_WIDTH, withoutEnlargement: true }).jpeg({ quality: 80 }).toBuffer();
+        const dataUrl = `data:image/jpeg;base64,${jpeg.toString('base64')}`;
+        return { text: `（已附上第 ${page} 頁的畫面圖片，請直接參考圖片內容。）`, images: [dataUrl] };
+      } catch (err) {
+        return { text: `錯誤：讀取第 ${page} 頁圖片失敗：${err instanceof Error ? err.message : String(err)}` };
+      }
+    },
+  },
 ];
 
 /** The read-only tool set makeslide may expose to the LLM during its own AI calls. */
@@ -182,20 +224,22 @@ export function toOpenAiTools(tools: AiTool[]): ChatCompletionTool[] {
 }
 
 /**
- * Execute one tool call by name. Never throws: unknown tools and handler errors
- * are returned as an error string so the model can recover or answer without it.
+ * Execute one tool call by name, returning a normalized result (text + optional
+ * images). Never throws: unknown tools and handler errors are returned as an error
+ * string so the model can recover or answer without it.
  */
 export async function executeAiTool(
   tools: AiTool[],
   name: string,
   args: Record<string, unknown>,
   ctx: AiToolContext,
-): Promise<string> {
+): Promise<AiToolResult> {
   const tool = tools.find((t) => t.name === name);
-  if (!tool) return `錯誤：未知工具「${name}」。`;
+  if (!tool) return { text: `錯誤：未知工具「${name}」。` };
   try {
-    return await tool.handler(args ?? {}, ctx);
+    const out = await tool.handler(args ?? {}, ctx);
+    return typeof out === 'string' ? { text: out } : out;
   } catch (err) {
-    return `錯誤：工具「${name}」執行失敗：${err instanceof Error ? err.message : String(err)}`;
+    return { text: `錯誤：工具「${name}」執行失敗：${err instanceof Error ? err.message : String(err)}` };
   }
 }

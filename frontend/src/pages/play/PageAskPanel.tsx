@@ -104,8 +104,9 @@ export function PageAskPanel() {
         <div className="min-h-0 flex-1 space-y-2 overflow-y-auto border-b border-border p-3">
           {pageAskMessages.map((m, i) => (
             // Skip the empty assistant placeholder shown before the first streamed token
-            // (the "thinking…" hint covers that state instead).
-            m.role === 'assistant' && m.content === '' ? null : (
+            // (the "thinking…" hint covers that state instead) — unless it already has
+            // tool-call notes to show while the tutor looks things up.
+            m.role === 'assistant' && m.content === '' && !(m.toolNotes && m.toolNotes.length) ? null : (
             <div
               key={i}
               className={m.role === 'user'
@@ -115,9 +116,21 @@ export function PageAskPanel() {
               <p className="mb-0.5 text-[10px] uppercase tracking-wide text-muted">
                 {m.role === 'user' ? t('play.sidebar.pageAsk.you') : t('play.sidebar.pageAsk.tutor')}
               </p>
+              {m.role === 'assistant' && m.toolNotes && m.toolNotes.length > 0 && (
+                <ul className="mb-1.5 space-y-0.5 border-b border-emerald-200/60 pb-1.5 dark:border-emerald-800/40">
+                  {m.toolNotes.map((note, j) => (
+                    <li key={j} className="flex items-center gap-1 text-[11px] text-emerald-700/90 dark:text-emerald-300/90">
+                      <span aria-hidden>🔍</span>
+                      <span>{note}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
               {m.role === 'user'
                 ? <p className="whitespace-pre-wrap">{m.content}</p>
-                : <MarkdownMath content={m.content} />}
+                : m.content
+                  ? <MarkdownMath content={m.content} />
+                  : <p className="text-xs text-muted">{t('play.sidebar.pageAsk.asking')}</p>}
               {m.role === 'assistant' && citedPagesFor(m.content).length > 0 && (
                 <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-emerald-200/60 pt-2 dark:border-emerald-800/40">
                   <span className="text-[10px] uppercase tracking-wide text-muted">
