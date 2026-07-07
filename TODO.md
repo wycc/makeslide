@@ -7,6 +7,19 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## AI 導師工具調用顯示 ＋ 取得頁面圖片工具（使用者要求，2026-07-07）★ 使用者要求功能，不計入計數
+
+使用者要求：(1) 調用工具時前端也要顯示調用訊息；(2) 新增「取得指定頁面圖片」的工具。工作於分支 `feat/tutor-tool-call-indicator`。
+
+- [x] 工具調用即時顯示：`streamChatText` 加 `onToolCall` callback；`/ask` handler 把每次工具呼叫轉成新的 SSE `tool` 事件（`{name,args}`）。
+    前端 `askPageQuestion` 加 `onTool`、`usePageAsk` 把工具呼叫轉成本地化說明（`describeToolCall`）累加到待答泡泡的 `toolNotes`，
+    `PageAskPanel` 在答案泡泡頂端以「🔍 查看第 N 頁畫面」逐條顯示。新增 7 個 i18n 鍵（zh-TW／en，parity 38/38）。
+- [x] `get_page_image` 唯讀工具：讀該頁 `image_path`、sharp 縮到寬 1024 的 JPEG data URL 回傳。因 `role:'tool'` 只能帶文字，
+    tool 迴圈改為在工具回傳圖片時，補一則 vision `user` 訊息（image_url）讓模型真的看得到。`AiTool` handler 可回 `{ text, images }`、
+    `executeAiTool` 正規化；兩個 wrapper 的迴圈都以 `appendToolImages` 附圖。
+- [x] 測試：`ai-tools`（新增 get_page_image 回 jpeg data URL＋跨帳號拒絕）8/8、`ai-tool-loop` 續綠、page-ask 回歸 6/6、i18n 38/38、前後端 `tsc`。
+    真實端到端驗證（cgu gateway）：模型主動呼叫 `get_page_image(11)` → `tool` SSE 事件送達 client → 看圖後答案逐段串流（397 deltas）。
+
 ## 在 AI 呼叫中提供 MCP（唯讀）工具給 LLM（使用者要求，2026-07-07）★ 使用者要求功能，不計入計數
 
 使用者要求：makeslide 自己呼叫 LLM 時，也把它定義的 MCP 工具傳出去，讓模型能主動查更多簡報資訊做更好的生成。先寫設計文件（[docs/mcp-tools-in-ai-design.md](docs/mcp-tools-in-ai-design.md)）再實作。經確認採：**只暴露唯讀工具**、v1 接 **AI 導師問答＋逐頁腳本生成**、**只支援 OpenAI 相容 provider**。工作於分支 `feat/mcp-tools-in-ai`。
@@ -1395,6 +1408,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-07 | （使用者要求）AI 導師工具調用即時顯示＋新增 get_page_image 工具。`streamChatText` 加 `onToolCall`→`/ask` 送 SSE `tool` 事件；前端 `askPageQuestion(onTool)`／`usePageAsk` 累加本地化 `toolNotes`／`PageAskPanel` 泡泡頂端顯示「🔍 查看第 N 頁畫面」（7 i18n 鍵）。`get_page_image`：sharp 縮圖成 JPEG data URL，因 tool 訊息只能帶文字故由迴圈補 vision user 訊息（`AiTool` 可回 `{text,images}`、`appendToolImages`）。測試 ai-tools 8/8、ai-tool-loop 綠、page-ask 6/6、i18n 38/38；真實 cgu e2e 確認模型呼叫 get_page_image、`tool` 事件送達、答案 397 deltas 串流 | feat/tutor-tool-call-indicator |
 | 2026-07-07 | （使用者要求，先設計後實作）在 makeslide 自身 AI 呼叫中提供唯讀 MCP 工具給 LLM。設計文件 `docs/mcp-tools-in-ai-design.md`。實作：`aiTools.ts` 行程內唯讀工具登錄表（帳號 scope、跨帳號拒絕、無副作用）；`callChatJSON`／`streamChatText` 加 `tools`/`toolContext` 與上限 5 輪 tool-calling 迴圈（串流版工具輪＋最終答案逐段串流，gateway 不支援時退化）；接 `/ask` 與 per-page `generateScript`；`config.aiMcpToolsEnabled` 開關。測試 ai-tools／ai-tool-loop 全綠、page-ask 回歸 6/6、raw curl 確認 cgu-air 支援 function-calling。Gemini／去重列 Phase 2 | feat/mcp-tools-in-ai |
 | 2026-07-07 | （修 bug，接續下列診斷）**找到 AI 導師不逐字的真正根因**：`getOpenAIClient` 給 OpenAI SDK 的自訂 `debugFetch`（[openai.ts](backend/src/services/openai.ts)）對每個回應都 `resp.clone()`＋`await clone.arrayBuffer()`（為了 log body preview／brotli 自動修正），把**整條 SSE 讀到結束才 return** 給 SDK → 52/54 段 delta 全卡到最後一次湧出。以真實端到端 probe 重現（修前全部 +4129ms 同時到；修後 delta 6002→6652ms trickle）。修法：偵測 `content-type: text/event-stream` 時原樣 pass-through、只 log headers、不讀 body；一般 JSON 回應維持原本 buffer＋preview＋brotli。此 bug 同時影響動畫 custom-script 串流。後端 `tsc` 通過 | fix/streaming-debugfetch-buffer（已 merge） |
 | 2026-07-07 | （診斷，使用者回報線上 AI 導師「後端→前端似乎沒串流」）先以本機 real-socket 探針證明 Fastify→client 的 SSE 逐段抵達正常（mock 每 300ms 一段、client 端 315/615/914/1215/1516ms 收到），排除 app 內緩衝。為判斷線上主因，在 `/ask` 的 `onDelta` 加輕量 `ask-page stream stats` log（`deltaCount`／`firstDeltaMs`／`spanMs`／`totalMs`／`answerChars`）：`deltaCount≈1`＋`spanMs≈0`＝上游 LLM/gateway 整包不串流；`deltaCount` 高但 client 仍一次收到＝外層代理/CDN 緩衝。已合併 master 待部署後看 log。後端 `tsc` 通過 | diag/ask-stream-delta-logging（已 merge） |
