@@ -79,6 +79,13 @@ const EnvSchema = z.object({
   GERMINI_API_KEY: z.string().optional().default(''),
   GEMINI_API_KEY: z.string().optional().default(''),
   LLM_PROVIDER: z.enum(['openai', 'gemini', 'cgu-air', 'openrouter']).optional().default('openai'),
+  // When true, makeslide's own AI calls may hand read-only presentation tools to the
+  // LLM (function-calling) so it can look up more context. See docs/mcp-tools-in-ai-design.md.
+  AI_MCP_TOOLS_ENABLED: z
+    .string()
+    .optional()
+    .default('true')
+    .transform((v) => v.toLowerCase() !== 'false'),
   TTS_PROVIDER: z.enum(['openai', 'gemini']).optional().default('openai'),
   OPENAI_LLM_MODEL: z.string().optional().default('gpt-4o-mini'),
   GEMINI_LLM_MODEL: z.string().optional().default('gemini-2.0-flash'),
@@ -236,6 +243,7 @@ export const config = {
   openaiApiKey: env.OPENAI_API_KEY.trim(),
   geminiApiKey: (env.GERMINI_API_KEY || env.GEMINI_API_KEY).trim(),
   llmProvider: env.LLM_PROVIDER,
+  aiMcpToolsEnabled: env.AI_MCP_TOOLS_ENABLED,
   ttsProvider: env.TTS_PROVIDER,
   openaiLlmModel: env.OPENAI_LLM_MODEL,
   geminiLlmModel: env.GEMINI_LLM_MODEL,

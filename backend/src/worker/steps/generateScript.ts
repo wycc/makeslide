@@ -8,6 +8,8 @@ import { config } from '../../config';
 import { logger } from '../../logger';
 import { db, savePageGenerationPrompt } from '../../db';
 import { callChatJSON, type TokenUsage } from '../../services/openai';
+import { getReadonlyAiTools } from '../../services/aiTools';
+import { currentAccountId } from '../../services/accountContext';
 import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { loadPromptTemplate, renderPromptTemplate } from '../../services/promptTemplates';
 import { pageScriptPath, pdfDir } from '../../services/storage';
@@ -833,6 +835,10 @@ export async function generateScript(
           label,
           maxTokens: 2400,
           temperature: 0.6,
+          // Let the model look up neighbouring pages' text/scripts to keep terminology
+          // and narration style consistent across the deck (read-only tools).
+          tools: getReadonlyAiTools(),
+          toolContext: { accountId: currentAccountId(), pdfId },
         });
         //const script = ensureToneMarkers(data.script.trim());
         const script = data.script.trim();
