@@ -7,6 +7,19 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## Jupyter Notebook 整合（使用者要求 /loop，2026-07-07）★ 使用者要求功能，不計入計數
+
+使用者以 `/loop` 要求：依 [docs/jupyter-integration-plan.md](docs/jupyter-integration-plan.md) 逐步完成 Jupyter 整合（一頁＝一個 `.ipynb`＝一個 kernel、一次顯示一個 cell、可就地執行、結果寫回 `.ipynb`）。分階段推進，每階段一個獨立分支。
+
+- [x] **階段 0：後端資料模型基礎**（計畫 §2.3 核心）。`SlideRenderType` 增 `'notebook'`（前後端型別同步）；`pages` 新增 `notebook_path TEXT` 欄位（比照 `animation_spec_path` 的 idempotent migration）；`PageRow.notebook_path`／`PdfDetailPage.notebook_url`；detail SELECT 帶出新欄；`shared.ts` 序列化保留 `render_type='notebook'` 並輸出 `notebook_url`；`loadExportedAnimations` 收斂為只取 `gsap-image`，避免 notebook 的 render_type 被寫進 `animations.json` 而讓 import 的 zod enum 拒絕（notebook 匯出屬後續階段）。
+    - 驗證：前後端 `tsc` 通過；`detail-permission`（92 子測試）、`page-animation`（123 子測試）全綠；`add-pages-metadata-resync` 通過。分支 `feat/notebook-render-type-model`，已 merge 回 master。
+- [ ] **階段 1（MVP 其餘）**：後端 `/api/jupyter/connection` 端點與 `.ipynb` 資產 CRUD（`GET/PUT /api/pdfs/:id/pages/:n/notebook`）＋ `JUPYTER_ENABLED`/`JUPYTER_BASE_URL`/`JUPYTER_TOKEN` 設定；前端 `NotebookPanel` 單 cell 視圖＋`@jupyterlab/services` 連線 hook＋`↑`/`↓` 切 cell、`Ctrl/Shift+Enter` 執行；無音訊頁處理（TTS／播放計時／就緒判定略過 notebook）；執行結果寫回 `.ipynb`。
+- [ ] **階段 2**：完整輸出（markdown/raw cell、image/html/latex、kernel 狀態列、重啟/清除）。
+- [ ] **階段 3**：cell 內容編輯、語法 highlight（CodeMirror）。
+- [ ] **階段 4**：AI 由主題產生可執行 notebook 頁、匯出時包含 notebook。
+
+> 註：既有的 NEW_FEATURE「Jupyter notebook 支持」漸進線已完成唯讀基礎（`parseNotebook` 純函式＋`NotebookView` 唯讀渲染，見下方第一九二／一九三輪），本計畫的階段 0 資料模型與其相容，後續階段將把互動執行接上。
+
 ## AI 導師工具調用顯示 ＋ 取得頁面圖片工具（使用者要求，2026-07-07）★ 使用者要求功能，不計入計數
 
 使用者要求：(1) 調用工具時前端也要顯示調用訊息；(2) 新增「取得指定頁面圖片」的工具。工作於分支 `feat/tutor-tool-call-indicator`。
