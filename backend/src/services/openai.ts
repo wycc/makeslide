@@ -5,6 +5,12 @@ import { promisify } from 'node:util';
 
 const brotliDecompressAsync = promisify(brotliDecompressRaw);
 import type { ChatCompletion, ChatCompletionMessageParam } from 'openai/resources/chat/completions';
+import {
+  toOpenAiTools,
+  executeAiTool,
+  type AiTool,
+  type AiToolContext,
+} from './aiTools';
 import { z } from 'zod';
 import { config } from '../config';
 import { logger } from '../logger';
@@ -394,6 +400,10 @@ export interface ChatJSONParams<T> {
   temperature?: number;
   /** Optional label for logs to locate slow / failing calls. */
   label?: string;
+  /** Read-only tools to offer the model (function-calling). Requires `toolContext`. */
+  tools?: AiTool[];
+  /** Account/deck scope for tool execution (see aiTools.ts). */
+  toolContext?: AiToolContext;
 }
 
 function supportsMaxCompletionTokens(model: string): boolean {
@@ -412,6 +422,67 @@ function isRetryable(err: unknown): boolean {
     if (err.status !== undefined && err.status >= 500 && err.status < 600) return true;
   }
   return false;
+}
+
+// ── AI tool-calling (function-calling) support ──────────────────────────────────
+// See docs/mcp-tools-in-ai-design.md. When a call site passes read-only tools and
+// the feature flag is on (OpenAI-compatible providers only), the model may call
+// tools to fetch more presentation context before answering.
+
+const MAX_TOOL_ROUNDS = 5;
+
+interface ResolvedToolset {
+  aiTools: AiTool[];
+  openAiTools: ReturnType<typeof toOpenAiTools>;
+  toolContext: AiToolContext;
+}
+
+/** Decide whether tools should be offered for this call (flag on, provider ok, tools given). */
+function resolveToolset(
+  provider: LlmProvider,
+  tools: AiTool[] | undefined,
+  toolContext: AiToolContext | undefined,
+  label?: string,
+): ResolvedToolset | null {
+  if (!tools || tools.length === 0) return null;
+  if (!config.aiMcpToolsEnabled) return null;
+  if (!toolContext) return null;
+  if (provider === 'gemini') {
+    // Phase 1 supports OpenAI-compatible providers only; degrade gracefully.
+    logger.debug({ label }, 'AI tools requested but provider is gemini — skipping tools (Phase 1)');
+    return null;
+  }
+  return { aiTools: tools, openAiTools: toOpenAiTools(tools), toolContext };
+}
+
+/**
+ * Runs non-streaming tool-calling rounds, mutating `messages` in place (appending
+ * the assistant tool_call turns and each tool result). Returns the final completion
+ * whose message no longer requests tools (the model's actual answer). `createOnce`
+ * performs a single chat.completions.create with the given tool_choice.
+ */
+async function runToolRounds(opts: {
+  messages: ChatCompletionMessageParam[];
+  toolset: ResolvedToolset;
+  label?: string;
+  createOnce: (toolChoice: 'auto' | 'none') => Promise<ChatCompletion>;
+}): Promise<ChatCompletion> {
+  for (let round = 1; round <= MAX_TOOL_ROUNDS; round++) {
+    const completion = await opts.createOnce(round < MAX_TOOL_ROUNDS ? 'auto' : 'none');
+    const msg = completion.choices[0]?.message;
+    const toolCalls = msg?.tool_calls ?? [];
+    if (!toolCalls.length) return completion;
+    opts.messages.push({ role: 'assistant', content: msg?.content ?? '', tool_calls: toolCalls });
+    for (const tc of toolCalls) {
+      if (tc.type !== 'function') continue;
+      let args: Record<string, unknown> = {};
+      try { args = JSON.parse(tc.function.arguments || '{}') as Record<string, unknown>; } catch { args = {}; }
+      const result = await executeAiTool(opts.toolset.aiTools, tc.function.name, args, opts.toolset.toolContext);
+      logger.debug({ label: opts.label, tool: tc.function.name, round }, 'AI tool executed');
+      opts.messages.push({ role: 'tool', tool_call_id: tc.id, content: result });
+    }
+  }
+  return opts.createOnce('none');
 }
 
 /**
@@ -443,6 +514,7 @@ export async function callChatJSON<T>(
   const provider = runtime.llmProvider as OpenAiCompatibleProvider;
   const client = getOpenAIClient(currentAccountId(), provider);
   const model = params.model ?? providerModel(runtime, provider);
+  const toolset = resolveToolset(runtime.llmProvider, params.tools, params.toolContext, params.label);
   const maxAttempts = 2; // parse/validate retries (on top of SDK retries)
   let lastErr: unknown;
 
@@ -471,15 +543,40 @@ export async function callChatJSON<T>(
         ...(useTemperature ? { temperature } : {}),
         messages: sanitizeMessagesForLog(params.messages),
       });
-      completion = await client.chat.completions.create({
+      // A per-attempt working copy so tool-call turns don't leak across retries.
+      const workingMessages: ChatCompletionMessageParam[] = toolset ? [...params.messages] : params.messages;
+      const baseCreate = (extra: Record<string, unknown>) => client.chat.completions.create({
         model,
-        messages: params.messages,
+        messages: workingMessages,
         response_format: { type: 'json_object' },
         ...(useTemperature ? { temperature } : {}),
         ...(supportsMaxCompletionTokens(model)
           ? { max_completion_tokens: maxTokens }
           : { max_tokens: maxTokens }),
+        ...extra,
       });
+      if (toolset) {
+        try {
+          completion = await runToolRounds({
+            messages: workingMessages,
+            toolset,
+            label: params.label,
+            createOnce: (toolChoice) => baseCreate({ tools: toolset.openAiTools, tool_choice: toolChoice }),
+          });
+        } catch (toolErr) {
+          // Some OpenAI-compatible gateways reject the tools/response_format combo;
+          // fall back to a plain no-tools generation so the feature can't break AI calls.
+          logger.warn(
+            { label: params.label, model, err: toolErr instanceof Error ? toolErr.message : String(toolErr) },
+            'AI tool rounds failed — falling back to no-tools generation',
+          );
+          workingMessages.length = 0;
+          workingMessages.push(...params.messages);
+          completion = await baseCreate({});
+        }
+      } else {
+        completion = await baseCreate({});
+      }
     } catch (err) {
       const latencyMs = Date.now() - startedAt;
       const apiErr = err instanceof APIError ? err : null;
@@ -614,6 +711,10 @@ export interface ChatTextStreamParams {
   label?: string;
   /** Called once per chunk of generated text, in order, as it arrives. */
   onDelta: (delta: string) => void;
+  /** Read-only tools to offer the model (function-calling). Requires `toolContext`. */
+  tools?: AiTool[];
+  /** Account/deck scope for tool execution (see aiTools.ts). */
+  toolContext?: AiToolContext;
 }
 
 /**
@@ -648,6 +749,7 @@ export async function streamChatText(params: ChatTextStreamParams): Promise<Chat
   const maxTokens = Math.max(params.maxTokens ?? 4000, 1);
   const temperature = params.temperature ?? 0.6;
   const useTemperature = supportsTemperature(model);
+  const toolset = resolveToolset(runtime.llmProvider, params.tools, params.toolContext, params.label);
 
   await appendLlmRequestLog({
     ts: new Date().toISOString(),
@@ -659,56 +761,132 @@ export async function streamChatText(params: ChatTextStreamParams): Promise<Chat
     messages: sanitizeMessagesForLog(params.messages),
   });
 
-  let stream: AsyncIterable<{
-    choices?: Array<{ delta?: { content?: string | null }; finish_reason?: string | null }>;
-    usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | null;
-  }>;
-  try {
-    stream = await client.chat.completions.create({
-      model,
-      messages: params.messages,
-      stream: true,
-      stream_options: { include_usage: true },
-      ...(useTemperature ? { temperature } : {}),
-      ...(supportsMaxCompletionTokens(model)
-        ? { max_completion_tokens: maxTokens }
-        : { max_tokens: maxTokens }),
-    });
-  } catch (err) {
-    const apiErr = err instanceof APIError ? err : null;
-    logger.warn(
-      {
-        label: params.label,
-        model,
-        latencyMs: Date.now() - startedAt,
-        status: apiErr?.status,
-        code: apiErr?.code,
-        message: apiErr?.message ?? (err instanceof Error ? err.message : String(err)),
-      },
-      'OpenAI chat.completions.create (stream) failed',
-    );
-    throw err;
-  }
-
   let text = '';
   let finishReason: string | null = null;
   let usage: TokenUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+  // Tool-call rounds run on a working copy so appended tool turns don't mutate the caller's array.
+  const workingMessages: ChatCompletionMessageParam[] = toolset ? [...params.messages] : params.messages;
 
-  for await (const chunk of stream) {
-    const choice = chunk.choices?.[0];
-    const delta = choice?.delta?.content ?? '';
-    if (delta) {
-      text += delta;
-      params.onDelta(delta);
+  interface AssembledToolCall { id: string; name: string; args: string }
+
+  // Stream one round; forwards content deltas via onDelta and assembles any tool_call deltas.
+  const streamRound = async (
+    withTools: boolean,
+    toolChoice: 'auto' | 'none',
+  ): Promise<{ content: string; toolCalls: AssembledToolCall[]; finishReason: string | null }> => {
+    let stream: AsyncIterable<{
+      choices?: Array<{
+        delta?: {
+          content?: string | null;
+          tool_calls?: Array<{ index?: number; id?: string; function?: { name?: string; arguments?: string } }>;
+        };
+        finish_reason?: string | null;
+      }>;
+      usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | null;
+    }>;
+    try {
+      stream = await client.chat.completions.create({
+        model,
+        messages: workingMessages,
+        stream: true,
+        stream_options: { include_usage: true },
+        ...(useTemperature ? { temperature } : {}),
+        ...(supportsMaxCompletionTokens(model) ? { max_completion_tokens: maxTokens } : { max_tokens: maxTokens }),
+        ...(withTools && toolset ? { tools: toolset.openAiTools, tool_choice: toolChoice } : {}),
+      });
+    } catch (err) {
+      const apiErr = err instanceof APIError ? err : null;
+      logger.warn(
+        {
+          label: params.label,
+          model,
+          latencyMs: Date.now() - startedAt,
+          status: apiErr?.status,
+          code: apiErr?.code,
+          message: apiErr?.message ?? (err instanceof Error ? err.message : String(err)),
+        },
+        'OpenAI chat.completions.create (stream) failed',
+      );
+      throw err;
     }
-    if (choice?.finish_reason) finishReason = choice.finish_reason;
-    if (chunk.usage) {
-      usage = {
-        prompt_tokens: chunk.usage.prompt_tokens ?? 0,
-        completion_tokens: chunk.usage.completion_tokens ?? 0,
-        total_tokens: chunk.usage.total_tokens ?? 0,
-      };
+    let content = '';
+    let finish: string | null = null;
+    const calls = new Map<number, AssembledToolCall>();
+    for await (const chunk of stream) {
+      const choice = chunk.choices?.[0];
+      const d = choice?.delta;
+      if (d?.content) {
+        content += d.content;
+        params.onDelta(d.content);
+      }
+      if (d?.tool_calls) {
+        for (const tc of d.tool_calls) {
+          const idx = tc.index ?? 0;
+          const cur = calls.get(idx) ?? { id: '', name: '', args: '' };
+          if (tc.id) cur.id = tc.id;
+          if (tc.function?.name) cur.name = tc.function.name;
+          if (tc.function?.arguments) cur.args += tc.function.arguments;
+          calls.set(idx, cur);
+        }
+      }
+      if (choice?.finish_reason) finish = choice.finish_reason;
+      if (chunk.usage) {
+        usage = {
+          prompt_tokens: chunk.usage.prompt_tokens ?? 0,
+          completion_tokens: chunk.usage.completion_tokens ?? 0,
+          total_tokens: chunk.usage.total_tokens ?? 0,
+        };
+      }
     }
+    return { content, toolCalls: [...calls.values()], finishReason: finish };
+  };
+
+  const runStreamingToolRounds = async (): Promise<void> => {
+    for (let round = 1; round <= MAX_TOOL_ROUNDS; round++) {
+      const r = await streamRound(true, round < MAX_TOOL_ROUNDS ? 'auto' : 'none');
+      finishReason = r.finishReason;
+      if (r.finishReason === 'tool_calls' && r.toolCalls.length) {
+        workingMessages.push({
+          role: 'assistant',
+          content: r.content || '',
+          tool_calls: r.toolCalls.map((c) => ({ id: c.id, type: 'function', function: { name: c.name, arguments: c.args } })),
+        });
+        for (const c of r.toolCalls) {
+          let args: Record<string, unknown> = {};
+          try { args = JSON.parse(c.args || '{}') as Record<string, unknown>; } catch { args = {}; }
+          const result = await executeAiTool(toolset!.aiTools, c.name, args, toolset!.toolContext);
+          logger.debug({ label: params.label, tool: c.name, round }, 'AI tool executed (stream)');
+          workingMessages.push({ role: 'tool', tool_call_id: c.id, content: result });
+        }
+        continue;
+      }
+      text = r.content; // final answer round (already streamed via onDelta)
+      return;
+    }
+    // Rounds exhausted: force a final tool-free answer.
+    const r = await streamRound(false, 'none');
+    text = r.content;
+    finishReason = r.finishReason;
+  };
+
+  if (toolset) {
+    try {
+      await runStreamingToolRounds();
+    } catch (err) {
+      logger.warn(
+        { label: params.label, model, err: err instanceof Error ? err.message : String(err) },
+        'AI tool streaming failed — falling back to no-tools generation',
+      );
+      workingMessages.length = 0;
+      workingMessages.push(...params.messages);
+      const r = await streamRound(false, 'none');
+      text = r.content;
+      finishReason = r.finishReason;
+    }
+  } else {
+    const r = await streamRound(false, 'none');
+    text = r.content;
+    finishReason = r.finishReason;
   }
 
   const latencyMs = Date.now() - startedAt;

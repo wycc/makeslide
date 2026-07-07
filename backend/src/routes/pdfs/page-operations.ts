@@ -17,6 +17,8 @@ import { sessionSub } from '../auth';
 import type { PageRow, PdfRow } from '../../types';
 import { callChatJSON, streamChatText } from '../../services/openai';
 import { getImageClient } from '../../services/openai';
+import { getReadonlyAiTools } from '../../services/aiTools';
+import { currentAccountId } from '../../services/accountContext';
 import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
 import { buildFigureReferenceNotes, getFigureReferencesForPage, loadFigureReferenceFiles, loadFigureSelection } from '../../services/pdfFigures';
@@ -1430,6 +1432,9 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
           maxTokens: 4000,
           temperature: 0.3,
           messages,
+          // Let the tutor look up more presentation context on demand (read-only).
+          tools: getReadonlyAiTools(),
+          toolContext: { accountId: currentAccountId(), pdfId: id },
           onDelta: (delta) => {
             deltaCount += 1;
             const elapsed = Date.now() - streamStart;

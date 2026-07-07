@@ -1,0 +1,201 @@
+/**
+ * In-process, read-only "AI tools" that makeslide can hand to the LLM as
+ * function-calling tools during its own generation / Q&A calls, so the model can
+ * pull more presentation context (other pages' slide text / scripts, deck
+ * metadata) before answering. See docs/mcp-tools-in-ai-design.md.
+ *
+ * These mirror the read-only subset of the external MCP tools (mcp-server.ts) but
+ * execute directly against the DB/filesystem — no HTTP, no token. Every handler is
+ * strictly read-only and scoped to the current account (a model must never reach
+ * another account's presentations, and must never cause side effects). Deduplicating
+ * this with mcp-server.ts is Phase 2.
+ */
+import * as fs from 'node:fs';
+import type { ChatCompletionTool } from 'openai/resources/chat/completions';
+import { db } from '../db';
+import { safeJoinPdfPath } from './storage';
+import { accountIdFromOwnerSub } from './accountContext';
+
+export interface AiToolContext {
+  /** Current account (from currentAccountId()); tools may only see this account's decks. */
+  accountId: string;
+  /** The presentation currently being generated/answered, used as the default `id`. */
+  pdfId?: string;
+}
+
+export interface AiTool {
+  name: string;
+  description: string;
+  /** JSON Schema for the tool's arguments (OpenAI function `parameters`). */
+  parameters: Record<string, unknown>;
+  handler: (args: Record<string, unknown>, ctx: AiToolContext) => Promise<string>;
+}
+
+// Cap each tool result so a chatty tool can't blow up the context window.
+const MAX_TOOL_RESULT_CHARS = 8000;
+
+function truncate(text: string): string {
+  return text.length > MAX_TOOL_RESULT_CHARS
+    ? `${text.slice(0, MAX_TOOL_RESULT_CHARS)}\n……（內容過長，後略）……`
+    : text;
+}
+
+interface PdfRow {
+  id: string;
+  title: string | null;
+  status: string | null;
+  page_count: number | null;
+  owner_sub: string | null;
+}
+
+/** Fetch a deck row only if it belongs to the current account; otherwise null. */
+function ownedPdf(id: string, ctx: AiToolContext): PdfRow | null {
+  const row = db
+    .prepare(`SELECT id, title, status, page_count, owner_sub FROM pdfs WHERE id = ?`)
+    .get(id) as PdfRow | undefined;
+  if (!row) return null;
+  if (accountIdFromOwnerSub(row.owner_sub) !== ctx.accountId) return null;
+  return row;
+}
+
+function readPageFile(id: string, column: 'text_path' | 'script_path', page: number): string | null {
+  const row = db
+    .prepare(`SELECT ${column} AS p FROM pages WHERE pdf_id = ? AND page_number = ?`)
+    .get(id, page) as { p: string | null } | undefined;
+  if (!row) return null; // page does not exist
+  if (!row.p) return ''; // page exists but has no such artifact yet
+  try {
+    return fs.readFileSync(safeJoinPdfPath(id, row.p), 'utf8');
+  } catch {
+    return '';
+  }
+}
+
+function resolveId(args: Record<string, unknown>, ctx: AiToolContext): string {
+  const raw = typeof args.id === 'string' && args.id.trim() ? args.id.trim() : ctx.pdfId;
+  return raw ?? '';
+}
+
+const READONLY_TOOLS: AiTool[] = [
+  {
+    name: 'list_presentations',
+    description: '列出目前帳號的所有簡報（回傳 ID、標題、狀態與頁數）。當你需要引用其他簡報時可先用此工具找出其 ID。',
+    parameters: { type: 'object', properties: {}, required: [] },
+    async handler(_args, ctx) {
+      const rows = db
+        .prepare(`SELECT id, title, status, page_count, owner_sub FROM pdfs ORDER BY created_at DESC LIMIT 200`)
+        .all() as PdfRow[];
+      const mine = rows.filter((r) => accountIdFromOwnerSub(r.owner_sub) === ctx.accountId);
+      if (!mine.length) return '（目前帳號沒有任何簡報。）';
+      return truncate(
+        mine
+          .map((p) => `• ID: ${p.id} | 標題: ${p.title ?? '（無標題）'} | 狀態: ${p.status ?? '—'} | 頁數: ${p.page_count ?? '?'}`)
+          .join('\n'),
+      );
+    },
+  },
+  {
+    name: 'get_presentation',
+    description: '取得指定簡報的中繼資料與逐頁摘要（每頁的頁碼、狀態與投影片文字前段）。用於掌握整份簡報結構。',
+    parameters: {
+      type: 'object',
+      properties: { id: { type: 'string', description: '簡報 ID；省略則指目前正在處理的簡報。' } },
+      required: [],
+    },
+    async handler(args, ctx) {
+      const id = resolveId(args, ctx);
+      if (!id) return '錯誤：未指定簡報 ID，且沒有預設簡報。';
+      const pdf = ownedPdf(id, ctx);
+      if (!pdf) return `錯誤：找不到簡報 ${id}，或無權存取。`;
+      const pages = db
+        .prepare(`SELECT page_number, status, text_path FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`)
+        .all(id) as Array<{ page_number: number; status: string | null; text_path: string | null }>;
+      const lines = pages.map((p) => {
+        let preview = '';
+        if (p.text_path) {
+          try { preview = fs.readFileSync(safeJoinPdfPath(id, p.text_path), 'utf8').replace(/\s+/g, ' ').trim().slice(0, 120); } catch { /* ignore */ }
+        }
+        return `- 第 ${p.page_number} 頁（${p.status ?? '—'}）：${preview || '（無文字）'}`;
+      });
+      return truncate(
+        [`簡報 ${id}`, `標題：${pdf.title ?? '（無標題）'}`, `狀態：${pdf.status ?? '—'}`, `頁數：${pages.length}`, '', '逐頁摘要：', ...lines].join('\n'),
+      );
+    },
+  },
+  {
+    name: 'get_page_text',
+    description: '讀取簡報某一頁的投影片文字（page text）。用於查看某頁畫面上實際呈現的內容。',
+    parameters: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID；省略則指目前正在處理的簡報。' },
+        page: { type: 'number', description: '頁碼（從 1 開始）。' },
+      },
+      required: ['page'],
+    },
+    async handler(args, ctx) {
+      const id = resolveId(args, ctx);
+      if (!id) return '錯誤：未指定簡報 ID，且沒有預設簡報。';
+      if (!ownedPdf(id, ctx)) return `錯誤：找不到簡報 ${id}，或無權存取。`;
+      const page = Number(args.page);
+      if (!Number.isInteger(page) || page < 1) return '錯誤：page 必須是正整數。';
+      const text = readPageFile(id, 'text_path', page);
+      if (text === null) return `錯誤：第 ${page} 頁不存在。`;
+      return truncate(text.trim() || '（此頁沒有投影片文字。）');
+    },
+  },
+  {
+    name: 'get_page_script',
+    description: '讀取簡報某一頁已生成的腳本（逐字稿）。用於參考鄰頁的敘述風格與術語以維持一致。',
+    parameters: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID；省略則指目前正在處理的簡報。' },
+        page: { type: 'number', description: '頁碼（從 1 開始）。' },
+      },
+      required: ['page'],
+    },
+    async handler(args, ctx) {
+      const id = resolveId(args, ctx);
+      if (!id) return '錯誤：未指定簡報 ID，且沒有預設簡報。';
+      if (!ownedPdf(id, ctx)) return `錯誤：找不到簡報 ${id}，或無權存取。`;
+      const page = Number(args.page);
+      if (!Number.isInteger(page) || page < 1) return '錯誤：page 必須是正整數。';
+      const script = readPageFile(id, 'script_path', page);
+      if (script === null) return `錯誤：第 ${page} 頁不存在。`;
+      return truncate(script.trim() || '（此頁尚無腳本。）');
+    },
+  },
+];
+
+/** The read-only tool set makeslide may expose to the LLM during its own AI calls. */
+export function getReadonlyAiTools(): AiTool[] {
+  return READONLY_TOOLS;
+}
+
+/** Convert AiTool[] to the OpenAI Chat Completions `tools` array. */
+export function toOpenAiTools(tools: AiTool[]): ChatCompletionTool[] {
+  return tools.map((t) => ({
+    type: 'function',
+    function: { name: t.name, description: t.description, parameters: t.parameters },
+  }));
+}
+
+/**
+ * Execute one tool call by name. Never throws: unknown tools and handler errors
+ * are returned as an error string so the model can recover or answer without it.
+ */
+export async function executeAiTool(
+  tools: AiTool[],
+  name: string,
+  args: Record<string, unknown>,
+  ctx: AiToolContext,
+): Promise<string> {
+  const tool = tools.find((t) => t.name === name);
+  if (!tool) return `錯誤：未知工具「${name}」。`;
+  try {
+    return await tool.handler(args ?? {}, ctx);
+  } catch (err) {
+    return `錯誤：工具「${name}」執行失敗：${err instanceof Error ? err.message : String(err)}`;
+  }
+}
