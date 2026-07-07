@@ -189,6 +189,20 @@ const EnvSchema = z.object({
   HTTPS_KEY_PATH: z.string().optional().default(''),
   HTTPS_CERT_PATH: z.string().optional().default(''),
   NB_PREFIX: z.string().optional().default(''),
+  // Jupyter notebook integration (docs/jupyter-integration-plan.md). Disabled by
+  // default so the whole feature stays hidden until an operator opts in.
+  JUPYTER_ENABLED: z
+    .string()
+    .optional()
+    .default('false')
+    .transform((v) => v.toLowerCase() === 'true'),
+  // Empty → frontend connects same-origin using NB_PREFIX (JupyterHub single-user
+  // proxy). Set explicitly for a dev/desktop Jupyter server on another origin.
+  JUPYTER_BASE_URL: z.string().optional().default(''),
+  // Optional token for the explicit-URL dev/desktop mode. In production the
+  // same-origin cookie is used instead and this stays empty (never shipped to the
+  // frontend bundle; only handed out by the session-protected connection endpoint).
+  JUPYTER_TOKEN: z.string().optional().default(''),
 });
 
 // Test isolation: when running under the test runner (MAKESLIDE_TEST=1, set by the
@@ -282,6 +296,9 @@ export const config = {
   httpsKeyPath: env.HTTPS_KEY_PATH.trim(),
   httpsCertPath: env.HTTPS_CERT_PATH.trim(),
   nbPrefix: normalizeNbPrefix(env.NB_PREFIX),
+  jupyterEnabled: env.JUPYTER_ENABLED,
+  jupyterBaseUrl: env.JUPYTER_BASE_URL.trim(),
+  jupyterToken: env.JUPYTER_TOKEN.trim(),
 } as const;
 
 export type AppConfig = typeof config;
