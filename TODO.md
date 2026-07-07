@@ -13,7 +13,11 @@
 
 - [x] **階段 0：後端資料模型基礎**（計畫 §2.3 核心）。`SlideRenderType` 增 `'notebook'`（前後端型別同步）；`pages` 新增 `notebook_path TEXT` 欄位（比照 `animation_spec_path` 的 idempotent migration）；`PageRow.notebook_path`／`PdfDetailPage.notebook_url`；detail SELECT 帶出新欄；`shared.ts` 序列化保留 `render_type='notebook'` 並輸出 `notebook_url`；`loadExportedAnimations` 收斂為只取 `gsap-image`，避免 notebook 的 render_type 被寫進 `animations.json` 而讓 import 的 zod enum 拒絕（notebook 匯出屬後續階段）。
     - 驗證：前後端 `tsc` 通過；`detail-permission`（92 子測試）、`page-animation`（123 子測試）全綠；`add-pages-metadata-resync` 通過。分支 `feat/notebook-render-type-model`，已 merge 回 master。
-- [ ] **階段 1（MVP 其餘）**：後端 `/api/jupyter/connection` 端點與 `.ipynb` 資產 CRUD（`GET/PUT /api/pdfs/:id/pages/:n/notebook`）＋ `JUPYTER_ENABLED`/`JUPYTER_BASE_URL`/`JUPYTER_TOKEN` 設定；前端 `NotebookPanel` 單 cell 視圖＋`@jupyterlab/services` 連線 hook＋`↑`/`↓` 切 cell、`Ctrl/Shift+Enter` 執行；無音訊頁處理（TTS／播放計時／就緒判定略過 notebook）；執行結果寫回 `.ipynb`。
+- [x] **階段 1a：後端設定 ＋ 連線端點**（計畫 §2.1／§2.2）。config 新增 `JUPYTER_ENABLED`（預設 false，整功能隱藏至營運者開啟）／`JUPYTER_BASE_URL`（空＝同源＋`NB_PREFIX`）／`JUPYTER_TOKEN`（僅 dev/desktop）。新增 `GET /api/jupyter/connection`（session 保護）：停用時 404、未登入 401，否則回 `{ enabled, baseUrl, wsUrl, nbPrefix, token }`；token 只在顯式 URL（dev/desktop）模式回，同源正式環境靠 cookie 回空字串（不寫進前端 bundle）。`deriveWsUrl` 做 http→ws／https→wss。
+    - 驗證：`jupyter-connection` 測試 5/5（deriveWsUrl、停用 404、未登入 401、同源無 token 形狀、dev/desktop URL+token 形狀）；後端 `tsc` 通過。分支 `feat/jupyter-connection-endpoint`，已 merge 回 master。
+- [ ] **階段 1b：`.ipynb` 資產 CRUD**：`GET/PUT /api/pdfs/:id/pages/:n/notebook`（取／存 nbformat JSON，account 隔離，比照 page-operations／animation spec 路由），並在寫入時同步 `pages.notebook_path`／`metadata.json`。
+- [ ] **階段 1c（前端）**：`NotebookPanel` 單 cell 視圖（捲軸容器、command/edit 雙模式）＋`@jupyterlab/services` 連線 hook（lazy-load）＋`↑`/`↓` 切 cell、`Ctrl/Shift+Enter` 執行；在 `SlideRenderer` 的 `renderType` 分流新增 `notebook` 分支。
+- [ ] **階段 1d**：無音訊頁處理（TTS／播放計時／就緒判定把 `render_type==='notebook'` 視為無語音頁略過）；執行結果即時寫回 `.ipynb`。
 - [ ] **階段 2**：完整輸出（markdown/raw cell、image/html/latex、kernel 狀態列、重啟/清除）。
 - [ ] **階段 3**：cell 內容編輯、語法 highlight（CodeMirror）。
 - [ ] **階段 4**：AI 由主題產生可執行 notebook 頁、匯出時包含 notebook。
