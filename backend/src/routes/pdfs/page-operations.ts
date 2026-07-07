@@ -1394,6 +1394,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       ];
 
       // 回應改為 SSE（text/event-stream），讓前端能在模型逐字生成時即時顯示：
+      // - event: tool  — { name: string, args: object }，模型呼叫唯讀工具查更多簡報資訊時送出（UI 顯示「查看第 N 頁…」）
       // - event: delta — { text: string }，每次收到一段新生成的回答片段
       // - event: done  — { answer: string }，生成完成後經 finalizeTutorAnswer 收尾的最終答案
       // - event: error — { code, message }，發生錯誤時送出，串流隨即結束
@@ -1435,6 +1436,8 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
           // Let the tutor look up more presentation context on demand (read-only).
           tools: getReadonlyAiTools(),
           toolContext: { accountId: currentAccountId(), pdfId: id },
+          // Surface each tool call to the client so the UI can show "查看第 N 頁…".
+          onToolCall: (call) => sendEvent('tool', call),
           onDelta: (delta) => {
             deltaCount += 1;
             const elapsed = Date.now() - streamStart;

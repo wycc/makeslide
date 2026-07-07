@@ -1235,11 +1235,14 @@ export async function fetchCoursePackage(id: string): Promise<{ blob: Blob; file
 export interface PageAskMessage {
   role: 'user' | 'assistant';
   content: string;
+  /** UI-only: human-readable notes of tools the tutor called for this answer (ignored by the backend). */
+  toolNotes?: string[];
 }
 
 /**
  * Asks the AI tutor a question about a page. The backend responds with an SSE
  * stream so the answer can be shown token-by-token as it's generated:
+ * - `event: tool`  — `{ name, args }`, the model called a read-only tool; reported via `onTool`.
  * - `event: delta` — `{ text }`, a chunk of the answer; reported via `onDelta` as it arrives.
  * - `event: done`  — `{ answer }`, the final answer after server-side normalization.
  * - `event: error` — `{ code, message }`, thrown as an `ApiError`.
@@ -1253,6 +1256,7 @@ export async function askPageQuestion(
   history: PageAskMessage[] = [],
   verbosity?: 'brief' | 'detailed',
   onDelta?: (delta: string) => void,
+  onTool?: (call: { name: string; args: Record<string, unknown> }) => void,
 ): Promise<{ answer: string }> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (shareToken) headers['X-MakeSlide-Share-Token'] = shareToken;
@@ -1277,7 +1281,13 @@ export async function askPageQuestion(
     }
     if (!data) return;
     const parsed = JSON.parse(data) as Record<string, unknown>;
-    if (event === 'delta') {
+    if (event === 'tool') {
+      const name = parsed.name;
+      if (typeof name === 'string' && name) {
+        const args = parsed.args && typeof parsed.args === 'object' ? (parsed.args as Record<string, unknown>) : {};
+        onTool?.({ name, args });
+      }
+    } else if (event === 'delta') {
       const text = parsed.text;
       if (typeof text === 'string' && text) onDelta?.(text);
     } else if (event === 'done') {

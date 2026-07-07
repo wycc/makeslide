@@ -1,8 +1,31 @@
 import { useState, useCallback } from 'react';
 import { askPageQuestion, mapApiErrorToHumanMessage, type PageAskMessage } from '../../lib/api';
 import { useI18n } from '../../i18n';
+import { interpolateTemplate } from '../../lib/interpolateTemplate';
 
 export type PageAskVerbosity = 'brief' | 'detailed';
+
+type TFn = ReturnType<typeof useI18n>['t'];
+
+/** Turn a tool call into a localized, human-readable note shown in the tutor bubble. */
+function describeToolCall(call: { name: string; args: Record<string, unknown> }, t: TFn): string {
+  const page = typeof call.args.page === 'number' ? call.args.page : Number(call.args.page);
+  const hasPage = Number.isInteger(page) && page > 0;
+  switch (call.name) {
+    case 'get_page_text':
+      return hasPage ? interpolateTemplate(t('play.sidebar.pageAsk.toolGetPageText'), { page }) : t('play.sidebar.pageAsk.toolGeneric');
+    case 'get_page_script':
+      return hasPage ? interpolateTemplate(t('play.sidebar.pageAsk.toolGetPageScript'), { page }) : t('play.sidebar.pageAsk.toolGeneric');
+    case 'get_page_image':
+      return hasPage ? interpolateTemplate(t('play.sidebar.pageAsk.toolGetPageImage'), { page }) : t('play.sidebar.pageAsk.toolGeneric');
+    case 'get_presentation':
+      return t('play.sidebar.pageAsk.toolGetPresentation');
+    case 'list_presentations':
+      return t('play.sidebar.pageAsk.toolListPresentations');
+    default:
+      return interpolateTemplate(t('play.sidebar.pageAsk.toolGenericNamed'), { name: call.name });
+  }
+}
 
 export interface PageAskState {
   pageAskInput: string;
@@ -58,6 +81,15 @@ export function usePageAsk({
           const next = [...prev];
           const last = next[next.length - 1];
           if (last && last.role === 'assistant') next[next.length - 1] = { ...last, content: last.content + delta };
+          return next;
+        }),
+        // Record each tool the tutor calls as a human-readable note on the pending answer.
+        (call) => setPageAskMessages((prev) => {
+          const next = [...prev];
+          const last = next[next.length - 1];
+          if (last && last.role === 'assistant') {
+            next[next.length - 1] = { ...last, toolNotes: [...(last.toolNotes ?? []), describeToolCall(call, t)] };
+          }
           return next;
         }),
       );

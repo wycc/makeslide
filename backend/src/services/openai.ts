@@ -431,6 +431,21 @@ function isRetryable(err: unknown): boolean {
 
 const MAX_TOOL_ROUNDS = 5;
 
+/**
+ * A `role:'tool'` message can only carry text, so when a tool returns images we
+ * attach them as a follow-up vision `user` message the model can actually see.
+ */
+function appendToolImages(messages: ChatCompletionMessageParam[], images: string[] | undefined): void {
+  if (!images || images.length === 0) return;
+  messages.push({
+    role: 'user',
+    content: [
+      { type: 'text', text: '（以下為上一個工具附上的頁面圖片，請直接依圖片內容作答。）' },
+      ...images.map((url) => ({ type: 'image_url' as const, image_url: { url } })),
+    ],
+  });
+}
+
 interface ResolvedToolset {
   aiTools: AiTool[];
   openAiTools: ReturnType<typeof toOpenAiTools>;
@@ -478,8 +493,9 @@ async function runToolRounds(opts: {
       let args: Record<string, unknown> = {};
       try { args = JSON.parse(tc.function.arguments || '{}') as Record<string, unknown>; } catch { args = {}; }
       const result = await executeAiTool(opts.toolset.aiTools, tc.function.name, args, opts.toolset.toolContext);
-      logger.debug({ label: opts.label, tool: tc.function.name, round }, 'AI tool executed');
-      opts.messages.push({ role: 'tool', tool_call_id: tc.id, content: result });
+      logger.debug({ label: opts.label, tool: tc.function.name, round, images: result.images?.length ?? 0 }, 'AI tool executed');
+      opts.messages.push({ role: 'tool', tool_call_id: tc.id, content: result.text });
+      appendToolImages(opts.messages, result.images);
     }
   }
   return opts.createOnce('none');
@@ -715,6 +731,8 @@ export interface ChatTextStreamParams {
   tools?: AiTool[];
   /** Account/deck scope for tool execution (see aiTools.ts). */
   toolContext?: AiToolContext;
+  /** Called just before each tool is executed, so callers can surface progress (e.g. via SSE). */
+  onToolCall?: (call: { name: string; args: Record<string, unknown> }) => void;
 }
 
 /**
@@ -854,9 +872,11 @@ export async function streamChatText(params: ChatTextStreamParams): Promise<Chat
         for (const c of r.toolCalls) {
           let args: Record<string, unknown> = {};
           try { args = JSON.parse(c.args || '{}') as Record<string, unknown>; } catch { args = {}; }
+          params.onToolCall?.({ name: c.name, args });
           const result = await executeAiTool(toolset!.aiTools, c.name, args, toolset!.toolContext);
-          logger.debug({ label: params.label, tool: c.name, round }, 'AI tool executed (stream)');
-          workingMessages.push({ role: 'tool', tool_call_id: c.id, content: result });
+          logger.debug({ label: params.label, tool: c.name, round, images: result.images?.length ?? 0 }, 'AI tool executed (stream)');
+          workingMessages.push({ role: 'tool', tool_call_id: c.id, content: result.text });
+          appendToolImages(workingMessages, result.images);
         }
         continue;
       }
