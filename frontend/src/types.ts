@@ -193,7 +193,7 @@ export interface PdfListItem {
   updated_at: string;
 }
 
-export type SlideRenderType = 'static-image' | 'gsap-image';
+export type SlideRenderType = 'static-image' | 'gsap-image' | 'notebook';
 
 export type SlideAnimationEffectType =
   | 'fade-in'
@@ -445,6 +445,8 @@ export interface PdfDetailPage {
   audio_duration_seconds?: number | null;
   render_type?: SlideRenderType;
   animation_spec_url?: string | null;
+  /** URL to fetch this page's `.ipynb` (only set when render_type === 'notebook'). */
+  notebook_url?: string | null;
   status: PageStatus;
   error_message?: string | null;
   timings?: PdfDetailPageTimings | null;

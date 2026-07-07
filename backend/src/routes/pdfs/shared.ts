@@ -583,9 +583,15 @@ export function rowToDetail(
     script_url: p.script_path ? `api/pdfs/${row.id}/pages/${p.page_number}/script` : null,
     audio_url: p.audio_path ? `api/pdfs/${row.id}/pages/${p.page_number}/audio` : null,
     audio_duration_seconds: p.audio_duration_seconds,
-    render_type: p.render_type === 'gsap-image' ? 'gsap-image' : 'static-image',
+    render_type:
+      p.render_type === 'gsap-image' || p.render_type === 'notebook'
+        ? p.render_type
+        : 'static-image',
     animation_spec_url: p.animation_spec_path
       ? `api/pdfs/${row.id}/pages/${p.page_number}/animation/spec`
+      : null,
+    notebook_url: p.notebook_path
+      ? `api/pdfs/${row.id}/pages/${p.page_number}/notebook`
       : null,
     status: p.status,
     error_message: p.error_message,

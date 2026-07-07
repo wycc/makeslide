@@ -128,11 +128,14 @@ export interface ExportedAnimation {
 export function loadExportedAnimations(pdfId: string): ExportedAnimation[] {
   return db
     .prepare(
+      // Only GSAP animation pages are captured here; notebook pages carry their
+      // own `notebook_path` column and are handled separately (not by this
+      // animations serialization), so restrict to 'gsap-image' explicitly to
+      // avoid emitting a render_type that import.ts's zod enum would reject.
       `SELECT page_number, render_type, animation_spec_path
          FROM pages
         WHERE pdf_id = ?
-          AND render_type IS NOT NULL
-          AND render_type <> 'static-image'
+          AND render_type = 'gsap-image'
         ORDER BY page_number ASC`,
     )
     .all(pdfId) as ExportedAnimation[];
