@@ -233,6 +233,11 @@ export async function buildApp() {
     await app.register(authRoutes, { prefix });
   }
 
+  const { jupyterRoutes } = await import("./routes/jupyter");
+  for (const prefix of routePrefixes) {
+    await app.register(jupyterRoutes, { prefix });
+  }
+
   if (process.env.LOG_ROUTES === '1') {
     app.addHook('onReady', async () => {
       app.log.info({ routes: app.printRoutes() }, 'Registered Fastify routes');
