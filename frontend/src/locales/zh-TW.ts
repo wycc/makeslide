@@ -1192,6 +1192,8 @@ export const zhTW = {
   'play.notebook.toCellCode': '轉為程式碼',
   'play.notebook.copySource': '複製原始碼',
   'play.notebook.copyOutput': '複製輸出',
+  'play.notebook.showMoreLines': '顯示其餘 {n} 行',
+  'play.notebook.collapseOutput': '收合',
   'play.notebook.edit': '編輯',
   'play.notebook.editHint': '編輯此 cell 內容（也可雙擊；Enter 進入編輯）',
   'play.notebook.done': '完成',

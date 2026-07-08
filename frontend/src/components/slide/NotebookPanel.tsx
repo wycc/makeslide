@@ -8,7 +8,7 @@
 // back to the `.ipynb` (plan §1.2, §1.3, MVP). Read-only viewers only see stored outputs.
 
 import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
-import type { KeyboardEvent } from 'react';
+import type { KeyboardEvent, ReactNode } from 'react';
 import { MarkdownMath } from '../MarkdownMath';
 import { useI18n } from '../../i18n';
 import { parseAnsi, type AnsiColor } from '../../lib/ansi';
@@ -38,9 +38,13 @@ import {
 } from '../../lib/nbformatModel';
 import { useJupyterKernel } from './useJupyterKernel';
 import { kernelStatusLabelKey } from '../../lib/jupyterConnection';
+import { collapseText } from '../../lib/collapseText';
 
 /** How long a cell may run before the footer hints it is taking a while (phase 5e). */
 const NOTEBOOK_RUN_TIMEOUT_MS = 30_000;
+
+/** Text/error outputs longer than this collapse to a "show more" toggle (phase 6e). */
+const MAX_OUTPUT_LINES = 16;
 
 // Lazy so CodeMirror + Python mode are code-split out of the main bundle (phase 3b).
 const CodeMirrorEditor = lazy(() => import('./codeMirrorEditor'));
@@ -110,6 +114,27 @@ function NotebookHtmlOutput({ html }: { html: string }) {
   );
 }
 
+// A <pre> output that collapses to the first MAX_OUTPUT_LINES lines with a show-more toggle when
+// long, so a huge stream/traceback doesn't blow out the fixed-height single-cell view (phase 6e).
+function CollapsibleOutput({ text, render, className }: { text: string; render: (t: string) => ReactNode; className: string }) {
+  const { t } = useI18n();
+  const [expanded, setExpanded] = useState(false);
+  const { text: collapsed, hiddenLines } = collapseText(text, MAX_OUTPUT_LINES);
+  if (hiddenLines === 0) return <pre className={className}>{render(text)}</pre>;
+  return (
+    <div className="flex flex-col gap-0.5">
+      <pre className={className}>{render(expanded ? text : collapsed)}</pre>
+      <button
+        type="button"
+        onClick={() => setExpanded((e) => !e)}
+        className="self-start rounded px-1 text-[11px] text-sky-500 hover:underline"
+      >
+        {expanded ? t('play.notebook.collapseOutput') : t('play.notebook.showMoreLines').replace('{n}', String(hiddenLines))}
+      </button>
+    </div>
+  );
+}
+
 function OutputBlock({ output }: { output: NbDisplayOutput }) {
   switch (output.kind) {
     case 'image':
@@ -120,18 +145,26 @@ function OutputBlock({ output }: { output: NbDisplayOutput }) {
     case 'latex':
       return <MarkdownMath content={output.latex} />;
     case 'error':
-      return (
+      // Tracebacks already include the "EName: evalue" line, ANSI-coloured; collapse when long.
+      return output.traceback ? (
+        <CollapsibleOutput
+          text={output.traceback}
+          render={(tt) => <AnsiText text={tt} />}
+          className="overflow-x-auto rounded bg-rose-50 px-3 py-2 text-xs text-rose-800 dark:bg-rose-950/30 dark:text-rose-200"
+        />
+      ) : (
         <pre className="overflow-x-auto rounded bg-rose-50 px-3 py-2 text-xs text-rose-800 dark:bg-rose-950/30 dark:text-rose-200">
-          {output.traceback ? (
-            // Tracebacks already include the "EName: evalue" line, ANSI-coloured.
-            <AnsiText text={output.traceback} />
-          ) : (
-            <span className="font-semibold">{[output.ename, output.evalue].filter(Boolean).join(': ')}</span>
-          )}
+          <span className="font-semibold">{[output.ename, output.evalue].filter(Boolean).join(': ')}</span>
         </pre>
       );
     default:
-      return <pre className="overflow-x-auto rounded bg-surface-muted px-3 py-2 text-xs text-text">{output.text}</pre>;
+      return (
+        <CollapsibleOutput
+          text={output.text}
+          render={(tt) => tt}
+          className="overflow-x-auto rounded bg-surface-muted px-3 py-2 text-xs text-text"
+        />
+      );
   }
 }
 
