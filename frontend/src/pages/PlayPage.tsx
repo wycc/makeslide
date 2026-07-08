@@ -2060,6 +2060,7 @@ export default function PlayPage() {
     currentIdx,
     totalPages,
     isReadOnlyProcessing,
+    deckTitle: detail?.title ?? null,
     reloadDetail,
     setCurrentIdx,
     setRegenSelectedPages: regenState.setRegenSelectedPages,

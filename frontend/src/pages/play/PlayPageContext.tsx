@@ -311,6 +311,8 @@ export interface PlayPageContextValue {
   handleUpdateCoverFromCurrentPage: () => void;
   handleConvertCurrentPageToNotebook: () => void;
   handleGenerateNotebookForCurrentPage: () => void;
+  handleExportCurrentPageNotebook: () => void;
+  handleImportNotebookFile: (file: File) => void;
   aiPollBusy: boolean;
   handleGeneratePollDraft: () => void;
   handleDeletePoll: (pollId: number) => void;

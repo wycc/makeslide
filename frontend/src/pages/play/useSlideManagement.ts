@@ -8,8 +8,14 @@ import {
   replaceSlideImage,
   updatePdfCoverFromPage,
 } from '../../lib/api';
-import { savePageNotebook, generatePageNotebook } from '../../lib/api/pdfs';
+import { savePageNotebook, generatePageNotebook, fetchPageNotebook } from '../../lib/api/pdfs';
 import { defaultNbNotebook } from '../../lib/nbformatModel';
+import {
+  notebookDownloadFilename,
+  serializeNotebookFile,
+  parseNotebookFile,
+  MAX_IPYNB_UPLOAD_BYTES,
+} from '../../lib/notebookFile';
 import type { PdfDetailPage } from '../../types';
 import { useI18n } from '../../i18n';
 import { clamp } from '../../lib/clamp';
@@ -20,6 +26,8 @@ interface UseSlideManagementParams {
   currentIdx: number;
   totalPages: number;
   isReadOnlyProcessing: boolean;
+  /** Deck title, used only to name the exported `.ipynb` file. */
+  deckTitle?: string | null;
   reloadDetail: () => Promise<void>;
   setCurrentIdx: Dispatch<SetStateAction<number>>;
   // 新增/刪除/搬移頁面都會讓既有頁碼重新編號，批次重生的頁碼選取集合（純粹存 page_number）
@@ -39,6 +47,8 @@ export interface SlideManagementState {
   handleUpdateCoverFromCurrentPage: () => void;
   handleConvertCurrentPageToNotebook: () => void;
   handleGenerateNotebookForCurrentPage: () => void;
+  handleExportCurrentPageNotebook: () => void;
+  handleImportNotebookFile: (file: File) => void;
 }
 
 export function useSlideManagement({
@@ -47,6 +57,7 @@ export function useSlideManagement({
   currentIdx,
   totalPages,
   isReadOnlyProcessing,
+  deckTitle,
   reloadDetail,
   setCurrentIdx,
   setRegenSelectedPages,
@@ -170,6 +181,55 @@ export function useSlideManagement({
     }
   }, [pdfId, currentPage, isReadOnlyProcessing, reloadDetail, t]);
 
+  // 匯出：下載目前頁的 `.ipynb`（重用既有 GET notebook 端點；讀取權限即可，故不擋唯讀觀看者）。
+  const handleExportCurrentPageNotebook = useCallback(async () => {
+    if (!pdfId || !currentPage) return;
+    setSlideBusy(true);
+    setSlideError(null);
+    try {
+      const res = await fetchPageNotebook(pdfId, currentPage.page_number);
+      const blob = new Blob([serializeNotebookFile(res.notebook)], { type: 'application/x-ipynb+json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = notebookDownloadFilename(deckTitle, currentPage.page_number);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setSlideError(err instanceof ApiError ? err.message : t('play.slideManagement.exportNotebookFailed'));
+    } finally {
+      setSlideBusy(false);
+    }
+  }, [pdfId, currentPage, deckTitle, t]);
+
+  // 匯入：讀使用者選的 `.ipynb`，經 PUT notebook 端點寫回（後端 validateNotebook 驗證＋翻 render_type），
+  // 使該頁成為 notebook 頁並載入檔案內容。需編輯權限。
+  const handleImportNotebookFile = useCallback(async (file: File) => {
+    if (isReadOnlyProcessing) return;
+    if (!pdfId || !currentPage) return;
+    if (file.size > MAX_IPYNB_UPLOAD_BYTES) {
+      setSlideError(t('play.slideManagement.importNotebookTooLarge'));
+      return;
+    }
+    setSlideBusy(true);
+    setSlideError(null);
+    try {
+      const parsed = parseNotebookFile(await file.text());
+      if (!parsed.ok) {
+        setSlideError(t('play.slideManagement.importNotebookInvalid'));
+        return;
+      }
+      await savePageNotebook(pdfId, currentPage.page_number, parsed.notebook);
+      await reloadDetail();
+    } catch (err) {
+      setSlideError(err instanceof ApiError ? err.message : t('play.slideManagement.importNotebookFailed'));
+    } finally {
+      setSlideBusy(false);
+    }
+  }, [pdfId, currentPage, isReadOnlyProcessing, reloadDetail, t]);
+
   const handleUpdateCoverFromCurrentPage = useCallback(async () => {
     if (!pdfId || !currentPage) return;
     if (!currentPage.image_url) {
@@ -200,5 +260,7 @@ export function useSlideManagement({
     handleUpdateCoverFromCurrentPage,
     handleConvertCurrentPageToNotebook,
     handleGenerateNotebookForCurrentPage,
+    handleExportCurrentPageNotebook,
+    handleImportNotebookFile,
   };
 }
