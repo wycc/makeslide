@@ -1,5 +1,29 @@
 # MakeSlide 功能說明
 
+## Jupyter Notebook 整合（階段 5b）：總播放時長排除 notebook 頁
+
+### 背景
+
+一頁被轉成 notebook 之後，它原本（作為一般語音頁時）產生的音訊時長仍記在資料庫裡。由於 notebook 頁在播放
+時是**不發聲、不自動換頁**的（階段 1d），但整份簡報顯示的「總播放時長」卻仍把那段其實不會播放的旁白算進去，
+造成時長顯示與實際播放不一致。這一步把它修正。
+
+### 使用方式
+
+不需任何操作：把一頁轉成／AI 產生成／匯入為 notebook 後，該頁的殘留音訊時長會**立即**從整份簡報的總播放
+時長中扣除，時長顯示與實際會播放的內容一致。
+
+### 實作重點
+
+- 新增純函式 `sumPageAudioDurations`：彙總各頁時長時，把 `render_type === 'notebook'` 的頁一律視為無聲，
+  即使它還帶著舊的 `audio_duration_seconds`（與播放端「notebook 頁不載入音訊」的規則一致）。
+- 重生音訊的 `regenerate` 流程改用這個彙總；此外在把一頁寫成 notebook 的共用函式 `writeNotebookForPage`
+  裡**當場重算**總時長並同步到資料庫與 `metadata.json`，所以「轉成／AI 產生／匯入 notebook」都會即時修正
+  快取，不必等下次重生音訊。
+
+分支：`fix/notebook-total-audio-duration`。純函式新增測試、`notebook-generate` 補上「頁變 notebook 後總時長歸零」
+斷言，相關回歸 18/18、後端 `tsc` 通過。
+
 ## Jupyter Notebook 整合（階段 5a）：投影片清單標示 notebook 頁
 
 ### 背景
