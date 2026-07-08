@@ -1,5 +1,27 @@
 # MakeSlide 功能說明
 
+## Jupyter Notebook 整合（階段 1d-i）：notebook 頁不再嘗試產生語音
+
+### 背景
+
+一般的簡報頁會由逐字稿產生 TTS 語音，用於播放與計時。但 notebook 頁是**互動式、沒有語音**的
+（依整合計畫，notebook 頁不參與 TTS／播放計時）。如果不特別處理，當系統重新產生語音時，可能把一個
+notebook 頁當成「還缺語音、待補」而去呼叫 TTS——但它根本沒有逐字稿，只會失敗或留下無意義的音檔。這一步
+確保語音產生流程**直接略過** notebook 頁。
+
+### 這一步做了什麼
+
+- 語音合成流程 `synthesizeAudio` 在挑選要處理的頁面時，會一併讀出每頁的 `render_type`；只要是
+  `notebook` 頁，就在並行佇列裡**直接標記為「略過」**（不呼叫 TTS、不寫任何音檔），而且是「正常略過」而非
+  「失敗」——不會被計成錯誤，也不會擋住其他頁面。進度回報照常送出，讓上層流程知道這頁已處理完。
+
+### 使用方式
+
+這是流程層的行為修正，使用者不需要做任何事：把某頁變成 notebook 後，之後「重新產生語音」不會再對它做無謂
+的 TTS 嘗試。notebook 頁本來就沒有語音，播放時也不會有音檔。
+
+分支：`feat/notebook-silent-tts`。測試 `synthesize-audio-notebook` 1/1、後端 `tsc` 通過。
+
 ## Jupyter Notebook 整合（階段 1c-iii-a）：連上 Jupyter kernel 的連線層核心
 
 ### 背景

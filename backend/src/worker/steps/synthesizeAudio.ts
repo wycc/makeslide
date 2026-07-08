@@ -493,9 +493,15 @@ export async function synthesizeAudio(
 ): Promise<SynthesizeAudioResult> {
   const { pdfId, pageCount, pages, onPage, shouldAbort } = opts;
   const pageUidRows = db
-    .prepare(`SELECT page_number, page_uid FROM pages WHERE pdf_id = ?`)
-    .all(pdfId) as Array<{ page_number: number; page_uid: string }>;
+    .prepare(`SELECT page_number, page_uid, render_type FROM pages WHERE pdf_id = ?`)
+    .all(pdfId) as Array<{ page_number: number; page_uid: string; render_type: string | null }>;
   const pageUidByNumber = new Map(pageUidRows.map((r) => [r.page_number, r.page_uid]));
+  // Notebook pages are silent (no script/audio); never synthesize TTS for them even if a
+  // caller passes one in. They are recorded as a benign skip (no error) so they don't count
+  // as failures or leave a stale audio file. See plan §2.3 "notebook 頁無音訊".
+  const notebookPageNumbers = new Set(
+    pageUidRows.filter((r) => r.render_type === 'notebook').map((r) => r.page_number),
+  );
   const voice = opts.voice?.trim() || config.openaiTtsVoice;
   const speed = opts.speed ?? config.openaiTtsSpeed;
   const runtime = getRuntimeAiSettings();
@@ -525,6 +531,33 @@ export async function synthesizeAudio(
         try {
           const uid = pageUidByNumber.get(page.pageNumber);
           if (!uid) throw new Error(`page_uid not found for page ${page.pageNumber}`);
+          if (notebookPageNumbers.has(page.pageNumber)) {
+            const ts = new Date().toISOString();
+            const res: SynthesizeAudioPageResult = {
+              pageNumber: page.pageNumber,
+              audioPath: '',
+              chars: 0,
+              bytes: 0,
+              durationSeconds: null,
+              generatedAt: ts,
+              startedAt: ts,
+              endedAt: ts,
+              latencyMs: 0,
+              skipped: true,
+              error: null,
+            };
+            results[idx] = res;
+            done += 1;
+            onPage?.(page.pageNumber, done, {
+              startedAt: res.startedAt,
+              endedAt: res.endedAt,
+              skipped: res.skipped,
+              audioPath: res.audioPath,
+              durationSeconds: res.durationSeconds,
+              error: res.error,
+            });
+            return;
+          }
           const res = await synthesizeOnePage({
             pdfId,
             pageNumber: page.pageNumber,
