@@ -1,5 +1,35 @@
 # MakeSlide 功能說明
 
+## Jupyter Notebook 整合（階段 1c-iii-a）：連上 Jupyter kernel 的連線層核心
+
+### 背景
+
+notebook 頁已能顯示（階段 1c-ii），下一步是讓 code cell 能真的**連上 Jupyter kernel 執行**。連線這件事
+有兩種情境：正式環境下 MakeSlide 與 Jupyter server 同源，瀏覽器用既有 cookie 就能連（不必把 token 放進
+前端）；開發／桌面版則用後端下發的明確網址與 token。這一步先把「決定要連哪個網址」與「把 kernel 送來的
+訊息轉成我們的輸出模型」這兩塊**純邏輯**做好並測到，之後接 `@jupyterlab/services` 的 hook 就只剩接線。
+
+### 這一步做了什麼
+
+新增 `frontend/src/lib/jupyterConnection.ts`（全部純函式、可完整單元測試）：
+
+- **`resolveJupyterUrls`**：把後端 `/api/jupyter/connection` 回來的連線資訊解析成實際要用的 `baseUrl` 與
+  `wsUrl`。有明確網址就直接用；若是空字串（同源模式），就用目前網站的 origin 加上 `NB_PREFIX` 組出 base
+  URL，並把 `http→ws`、`https→wss` 推出 WebSocket 網址。
+- **`iopubMessageFrom`**：把 Jupyter kernel 透過 `iopub` 送來的原始訊息（`header.msg_type` + `content`）
+  轉成階段 1c-i 的 `applyIopub` 看得懂的格式——刻意不 import 笨重的 `@jupyterlab/services`，所以這段對應
+  邏輯本身就能單元測試。
+- **`kernelStatusFrom`**：從 kernel 的 `status` 訊息讀出目前是 idle／busy／starting／dead，供之後的狀態列
+  顯示。
+- 另加 API client `fetchJupyterConnection` 呼叫後端連線端點。
+
+### 使用方式
+
+這一步仍是內部基礎（尚無使用者可見變化）。接下來的 `useJupyterKernel` hook 會用這些函式，配合
+`@jupyterlab/services` 建立 kernel 連線、送出執行、把 `iopub` 串流即時畫成輸出。
+
+分支：`feat/jupyter-kernel-core`。測試 `jupyterConnection` 6/6、前端 `tsc` 通過。
+
 ## Jupyter Notebook 整合（階段 1c-ii）：notebook 頁在播放器裡「一次顯示一個 cell」
 
 ### 背景
