@@ -19,7 +19,7 @@ import { runUnzipCommand } from './unzip';
 // 那一筆，不影響整個匯入流程（其餘 metadata 欄位仍可能是合法、值得保留的）。
 // 匯出檔搭載資料表內容用的中繼 JSON。匯入時內容會寫回資料庫，這些檔案本身不應留在
 // 新簡報的儲存目錄裡。
-const SIDECAR_FILES = new Set(['sources.json', 'page-uids.json', 'polls.json', 'quizzes.json', 'animations.json']);
+const SIDECAR_FILES = new Set(['sources.json', 'page-uids.json', 'polls.json', 'quizzes.json', 'animations.json', 'notebooks.json']);
 
 // 來源簡報每頁的 page_uid。匯入時保留原 uid，讓 pages/<uid>.* 這類以 page_uid 命名的
 // 檔案（動畫規格、圖表排除設定、timeline…）在新簡報底下仍能對得上。
@@ -64,6 +64,14 @@ const ImportedAnimationSchema = z.object({
   page_number: z.number().int().positive(),
   render_type: z.enum(['static-image', 'gsap-image']),
   animation_spec_path: z.string().trim().max(500).nullable().optional(),
+});
+
+// Notebook 頁對應（pages.render_type='notebook' / notebook_path）。匯入時依 page_number 套回；
+// 對應的 `.ipynb` 已隨儲存目錄原樣複製，因此 notebook_path 直接沿用即可。
+const ImportedNotebookSchema = z.object({
+  page_number: z.number().int().positive(),
+  render_type: z.literal('notebook'),
+  notebook_path: z.string().trim().max(500).nullable().optional(),
 });
 
 /**
@@ -154,6 +162,7 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
       const importedPolls = await readSidecarArray(extractedDir, 'polls.json', ImportedPollSchema, request.log);
       const importedQuizzes = await readSidecarArray(extractedDir, 'quizzes.json', ImportedQuizSchema, request.log);
       const importedAnimations = await readSidecarArray(extractedDir, 'animations.json', ImportedAnimationSchema, request.log);
+      const importedNotebooks = await readSidecarArray(extractedDir, 'notebooks.json', ImportedNotebookSchema, request.log);
 
       const importedPageCount =
         typeof metadata.page_count === 'number' && Number.isFinite(metadata.page_count) && metadata.page_count > 0
@@ -358,6 +367,16 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
         for (const anim of importedAnimations) {
           if (!existingPageNumbers.has(anim.page_number)) continue;
           updateAnimation.run(anim.render_type, anim.animation_spec_path ?? null, now, id, anim.page_number);
+        }
+      }
+
+      if (importedNotebooks.length > 0) {
+        const updateNotebook = db.prepare(
+          `UPDATE pages SET render_type = 'notebook', notebook_path = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`
+        );
+        for (const nb of importedNotebooks) {
+          if (!existingPageNumbers.has(nb.page_number)) continue;
+          updateNotebook.run(nb.notebook_path ?? null, now, id, nb.page_number);
         }
       }
 
