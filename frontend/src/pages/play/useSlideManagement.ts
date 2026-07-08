@@ -19,6 +19,7 @@ import {
 import type { PdfDetailPage } from '../../types';
 import { useI18n } from '../../i18n';
 import { clamp } from '../../lib/clamp';
+import { cleanTranscriptForReview } from '../../lib/transcriptReview';
 
 interface UseSlideManagementParams {
   pdfId: string | undefined;
@@ -28,6 +29,8 @@ interface UseSlideManagementParams {
   isReadOnlyProcessing: boolean;
   /** Deck title, used only to name the exported `.ipynb` file. */
   deckTitle?: string | null;
+  /** Current page's transcript, passed as context when AI-generating a notebook (phase 5c). */
+  currentPageScript?: string | null;
   reloadDetail: () => Promise<void>;
   setCurrentIdx: Dispatch<SetStateAction<number>>;
   // 新增/刪除/搬移頁面都會讓既有頁碼重新編號，批次重生的頁碼選取集合（純粹存 page_number）
@@ -58,6 +61,7 @@ export function useSlideManagement({
   totalPages,
   isReadOnlyProcessing,
   deckTitle,
+  currentPageScript,
   reloadDetail,
   setCurrentIdx,
   setRegenSelectedPages,
@@ -169,17 +173,20 @@ export function useSlideManagement({
     if (!pdfId || !currentPage) return;
     const topic = window.prompt(t('play.slideManagement.generateNotebookPrompt'))?.trim();
     if (!topic) return;
+    // Pass the page's existing transcript (if any, cleaned of review markup) as context so the AI
+    // notebook fits the page; backend truncates it further.
+    const context = cleanTranscriptForReview(currentPageScript).trim() || undefined;
     setSlideBusy(true);
     setSlideError(null);
     try {
-      await generatePageNotebook(pdfId, currentPage.page_number, topic);
+      await generatePageNotebook(pdfId, currentPage.page_number, topic, context);
       await reloadDetail();
     } catch (err) {
       setSlideError(err instanceof ApiError ? err.message : t('play.slideManagement.generateNotebookFailed'));
     } finally {
       setSlideBusy(false);
     }
-  }, [pdfId, currentPage, isReadOnlyProcessing, reloadDetail, t]);
+  }, [pdfId, currentPage, isReadOnlyProcessing, currentPageScript, reloadDetail, t]);
 
   // 匯出：下載目前頁的 `.ipynb`（重用既有 GET notebook 端點；讀取權限即可，故不擋唯讀觀看者）。
   const handleExportCurrentPageNotebook = useCallback(async () => {
