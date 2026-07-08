@@ -1,5 +1,29 @@
 # MakeSlide 功能說明
 
+## Jupyter Notebook 整合（階段 3b）：程式碼 cell 語法高亮編輯（CodeMirror）
+
+### 背景
+
+先前在 notebook 頁編輯 code cell 時，用的是一般純文字輸入框——沒有語法高亮、沒有行號，寫 Python 體驗較陽春。
+這一步把它換成和 JupyterLab 同款的 CodeMirror 編輯器。
+
+### 使用方式
+
+在可編輯的 notebook 頁進入某個 **code cell** 的編輯模式（Enter 或雙擊），就會看到帶**語法高亮、行號**的
+CodeMirror 編輯器。執行與離開編輯的快捷鍵維持不變：`Ctrl/⌘+Enter` 執行、`Shift+Enter` 執行並跳下一格、`Esc`
+結束編輯。markdown cell 仍用原本的純文字框。編輯器會自動跟隨介面的淺色／深色主題。
+
+### 實作重點
+
+- 編輯器透過 `React.lazy` **動態載入**：CodeMirror 與 Python 語言模式被切成獨立的檔案 chunk（約 gzip 158KB），
+  不會進入主程式包，只有真的在編輯 notebook 的人才會載入；載入期間先用純文字框墊著（Suspense fallback）。
+- CodeMirror 刻意不攔截 `Ctrl/⌘+Enter`、`Shift+Enter`、`Esc`，讓這些鍵冒泡回 NotebookPanel 的容器鍵盤處理，
+  完整沿用既有的「執行／結束編輯」模型，不必重寫。
+- 編輯器主題以 `MutationObserver` 監看網頁根節點的 `dark` class，與 App 的深淺色切換保持一致。
+
+分支：`feat/notebook-codemirror`。相依 `@uiw/react-codemirror`、`@codemirror/lang-python` 等；前端 `tsc`＋
+`vite build` 通過（CodeMirror 已切為 lazy chunk）。
+
 ## Jupyter Notebook 整合（階段 4d）：單頁 `.ipynb` 檔的匯入與匯出
 
 ### 背景
