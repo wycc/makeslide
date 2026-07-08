@@ -1,5 +1,31 @@
 # MakeSlide 功能說明
 
+## Jupyter Notebook 整合（階段 5d）：在 notebook 頁新增與刪除 cell
+
+### 背景
+
+先前 notebook 頁的編輯器只能修改「既有」的 cell，沒辦法新增一格或刪掉一格——一頁有幾個 cell 就固定是幾個。
+這對實際整理教材很不方便。這一步補上 cell 的新增與刪除。
+
+### 使用方式
+
+在可編輯的 notebook 頁，編輯器上方工具列新增三顆按鈕：
+
+- **＋程式碼**：在目前 cell 下方插入一個新的程式碼 cell，並自動跳到它。
+- **＋Markdown**：同上，但插入 markdown 說明 cell。
+- **🗑 刪除 cell**：刪除目前這個 cell（會先確認）；當整頁只剩一個 cell 時無法刪除（notebook 至少保留一格）。
+
+所有變更都會即時寫回該頁的 `.ipynb`。
+
+### 實作重點
+
+- 新增純函式 `newCell` / `insertCell` / `deleteCell`（不可變更新，會回傳「刪除／新增後應選取哪一格」的索引；
+  `deleteCell` 保證至少留一個 cell、索引越界時不動作），皆有單元測試。
+- 新增／刪除前會先把「正在編輯中的草稿」提交（沿用執行 cell 時的同一套 commit 機制），避免因為重新渲染而遺失
+  未存的編輯內容。
+
+分支：`feat/notebook-cell-add-delete`。`nbformatModel` 測試 18/18、前端 `tsc`＋i18n 38/38＋`vite build` 通過。
+
 ## Jupyter Notebook 整合（階段 5b）：總播放時長排除 notebook 頁
 
 ### 背景
