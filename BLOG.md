@@ -1,5 +1,32 @@
 # MakeSlide 功能說明
 
+## Jupyter Notebook 整合（階段 2b-ii）：HTML 輸出改用沙箱 iframe 安全渲染
+
+### 背景
+
+在 notebook 頁執行 code cell 時，很多常見輸出其實是 HTML——例如 `pandas` 的 DataFrame 表格、`plotly`
+互動圖表、或物件的 rich `repr`。先前這些 HTML 只能以「逸出後的純文字」顯示（你會看到一堆 `&lt;table&gt;`
+的原始碼而不是真正的表格），因為直接把任意 HTML 插進頁面有安全風險：notebook 輸出可能夾帶任意 script，
+會碰到登入 cookie、其他頁面內容等。這一步在**不犧牲安全**的前提下讓這些輸出真正渲染出來。
+
+### 使用方式
+
+使用者不需要做任何設定。在 notebook 頁執行會產生 HTML 輸出的程式碼（如 `df`（pandas 表格）、`fig`
+（plotly 圖）等），輸出區就會直接顯示排版好的表格／圖表，而不再是原始碼文字。iframe 會依內容自動調整
+高度，不會出現內部捲軸。
+
+### 實作重點
+
+- HTML 輸出改在 `<iframe sandbox="allow-scripts">`（**刻意不加** `allow-same-origin`）內渲染：框架執行於
+  opaque origin，內嵌的任意 markup／script 都碰不到父頁面、cookie 或 storage——與自訂腳本動畫用的沙箱同款
+  隔離機制。
+- 新增純函式 `buildNotebookHtmlSrcDoc`（`lib/notebookHtmlSandbox.ts`）把 HTML 片段原樣包進一份最小、主題
+  中性的文件；文件內嵌一段小 script 量測自身內容高度並 `postMessage` 回父層。
+- `NotebookPanel` 的 `NotebookHtmlOutput` 元件監聽該高度訊息（以 `event.source` 比對確認來自這個 iframe），
+  自動把 iframe 撐高到內容大小。
+
+分支：`feat/notebook-html-sandbox-2bii`。新測 `notebookHtmlSandbox` 4/4、前端 `tsc`＋`vite build` 通過。
+
 ## Jupyter Notebook 整合（階段 4a）：匯出／匯入簡報時保留 notebook 頁
 
 ### 背景
