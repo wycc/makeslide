@@ -233,6 +233,22 @@ export function deleteCell(nb: NbNotebook, cellIndex: number): { notebook: NbNot
   return { notebook: { ...nb, cells }, index: clampCellIndex(cellIndex, cells.length) };
 }
 
+/**
+ * Move the cell at `cellIndex` by `delta` (-1 up, +1 down), returning the new notebook and the
+ * moved cell's new index so the caller can keep the selection on it. A no-op — same notebook,
+ * clamped index — when the source is out of range or the move would fall outside the list.
+ */
+export function moveCell(nb: NbNotebook, cellIndex: number, delta: number): { notebook: NbNotebook; index: number } {
+  const target = cellIndex + delta;
+  if (cellIndex < 0 || cellIndex >= nb.cells.length || target < 0 || target >= nb.cells.length) {
+    return { notebook: nb, index: clampCellIndex(cellIndex, nb.cells.length) };
+  }
+  const cells = [...nb.cells];
+  const [moved] = cells.splice(cellIndex, 1);
+  cells.splice(target, 0, moved!);
+  return { notebook: { ...nb, cells }, index: target };
+}
+
 /** Clear every code cell's outputs (used by the "clear all outputs" action). */
 export function clearAllOutputs(nb: NbNotebook): NbNotebook {
   const cells = nb.cells.map((cell) =>

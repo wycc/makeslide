@@ -1185,6 +1185,8 @@ export const zhTW = {
   'play.notebook.addMarkdownCell': 'Markdown',
   'play.notebook.deleteCell': '刪除 cell',
   'play.notebook.deleteCellConfirm': '確定刪除目前這個 cell？',
+  'play.notebook.moveCellUp': '上移 cell',
+  'play.notebook.moveCellDown': '下移 cell',
   'play.notebook.edit': '編輯',
   'play.notebook.editHint': '編輯此 cell 內容（也可雙擊；Enter 進入編輯）',
   'play.notebook.done': '完成',
