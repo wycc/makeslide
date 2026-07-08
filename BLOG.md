@@ -1,5 +1,24 @@
 # MakeSlide 功能說明
 
+## Jupyter Notebook 整合（階段 7a）：顯示 cell 的執行編號 `In [n]`
+
+### 背景
+
+在 JupyterLab 裡，每個程式碼 cell 前面都有 `In [n]:` 標示它是第幾次被執行、還沒執行則是 `In [ ]:`。MakeSlide
+的 notebook 頁其實有把執行編號存下來，但先前沒有顯示出來，看不出各 cell 的執行順序與狀態。
+
+### 使用方式
+
+不需任何操作：notebook 頁的每個程式碼 cell，其原始碼上方會顯示 `In [n]:`（`n` 為執行次數；尚未執行過則顯示
+`In [ ]:`），與 JupyterLab 一致。
+
+### 實作重點
+
+- 新增純函式 `executionCountLabel`（有執行編號時 `[n]`、否則 `[ ]`），有單元測試。
+- `NotebookPanel` 在程式碼 cell 的原始碼上方渲染該標籤。
+
+分支：`feat/notebook-execution-count`。`nbformatModel` 測試 26/26、前端 `tsc`＋`vite build` 通過。
+
 ## Jupyter Notebook 整合（階段 6c）：一鍵執行整頁所有程式碼（Run all）
 
 ### 背景

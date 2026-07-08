@@ -60,6 +60,13 @@
     - [x] **6d：複製 cell 原始碼／輸出到剪貼簿**（2026-07-08）：`nbformatModel` 加純函式 `outputsToPlainText`（stream 文字＋result 的 `text/plain`＋error traceback 去 ANSI、退回 `ename: evalue`；純圖片輸出略過）；`NotebookPanel` 頁腳加「複製原始碼」／（code cell 有輸出時）「複製輸出」鈕（`navigator.clipboard`，唯讀觀看者亦可用、best-effort）。i18n 2 鍵。驗證：`nbformatModel` 24/24、前端 `tsc`＋i18n 38/38＋`vite build` 通過。分支 `feat/notebook-copy-cell`，已 merge 回 master。
     - [x] **6e：長輸出折疊**（2026-07-08）：巨量 stream 輸出或 traceback 會把固定高度的單 cell 視圖撐爆。純函式 [collapseText](frontend/src/lib/collapseText.ts)（截前 N 行＋回報隱藏行數，fits／maxLines 無效時 no-op）；`NotebookPanel` 新增 `CollapsibleOutput` 元件，text／error 輸出超過 16 行時折疊並顯示「顯示其餘 {n} 行」／「收合」切換，短輸出與 image/html/latex 不受影響。i18n 2 鍵。驗證：`collapseText` 3/3、前端 `tsc`＋i18n 38/38＋`vite build` 通過。分支 `feat/notebook-collapse-output`，已 merge 回 master。**階段 6 已完成 6a／6b／6d／6e；6c（Run all）需連 kernel 依序執行，此環境 `JUPYTER_ENABLED` 未開、無法端到端驗證，暫緩至實機。**
 
+- [ ] **階段 7：notebook 顯示層強化**（2026-07-09 依 LOOP.md 第 2 條分析後新增；核心 0–6 已完成，以下為顯示／可用性強化）。
+    - [x] **7a：顯示 cell 執行編號 `In [n]`**（2026-07-09）：`execution_count` 已存但未呈現。純函式 `executionCountLabel`（已執行 `[n]`／未執行 `[ ]`）；`NotebookPanel` code cell 原始碼上方顯示 `In [n]:`（JupyterLab 同款），使用者可看出執行順序／狀態。驗證：`nbformatModel` 26/26、前端 `tsc`＋`vite build` 通過。分支 `feat/notebook-execution-count`，已 merge 回 master。
+    - [ ] **7b：markdown cell 編輯時即時預覽切換**：編輯 markdown cell 時可切換「原始碼／預覽」，或 side-by-side 預覽。
+    - [ ] **7c：cell 執行耗時顯示**：執行完在 cell 顯示耗時（如「1.2s」），純函式格式化＋執行前後計時。
+    - [ ] **7d：notebook 內文字搜尋**：跨 cell 搜尋 source／輸出文字並跳到命中 cell。
+    - [ ] **7e：鍵盤快捷鍵說明面板**：列出 command/edit 模式的快捷鍵（↑↓ 切 cell、Enter 編輯、Ctrl/Shift+Enter 執行等）。
+
 > 註：既有的 NEW_FEATURE「Jupyter notebook 支持」漸進線已完成唯讀基礎（`parseNotebook` 純函式＋`NotebookView` 唯讀渲染，見下方第一九二／一九三輪），本計畫的階段 0 資料模型與其相容，後續階段將把互動執行接上。
 
 ## AI 導師工具調用顯示 ＋ 取得頁面圖片工具（使用者要求，2026-07-07）★ 使用者要求功能，不計入計數
@@ -1463,6 +1470,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-09 | （依 LOOP.md 第 2 條分析 notebook 顯示層，新增階段 7「顯示層強化」5 項並完成 7a）7a：顯示 cell 執行編號 `In [n]`——`execution_count` 已存但未呈現。純函式 `executionCountLabel`（已執行 `[n]`／未執行 `[ ]`）；NotebookPanel code cell 原始碼上方顯示 `In [n]:`（JupyterLab 同款）。驗證：nbformatModel 26/26、前端 tsc＋vite build。另診斷使用者實機 `/api/kernels` 失敗：`.env` `JUPYTER_ENABLED=true` 已生效但 `JUPYTER_BASE_URL` 未設＝同源，而同源 app server 無 Jupyter，需運維層接 Jupyter server（反向代理或顯式 URL），非程式 bug。另新增 7b（md 預覽）／7c（耗時）／7d（搜尋）／7e（快捷鍵說明）待後續。**使用者要求本輪後暫停 loop** | feat/notebook-execution-count（已 merge） |
 | 2026-07-09 | （Jupyter 整合階段 6c，階段 6 全部完成）Run all——`nbformatModel` 加純函式 `codeCellIndices`；NotebookPanel kernel 工具列加「全部執行」鈕，依序執行所有 code cell、local `working` 串接、逐格串流、遇錯停止（stop-on-error）、最後寫回；執行中/無 code cell disabled；i18n 1 鍵。驗證：nbformatModel 25/25、前端 tsc＋i18n 38/38＋vite build（端到端需 kernel 實機）。另診斷並修正使用者 404：`.env` 的 `JUPYTER_ENABLED` 由 false 改 true（後端 dotenv 讀 .env，非 start.sh），移除 start.sh 無效 shell 變數 | feat/notebook-run-all（已 merge）；chore start.sh |
 | 2026-07-08 | （Jupyter 整合階段 6e）長輸出折疊。純函式 `collapseText`（截前 N 行＋隱藏行數、fits/無效 no-op）；NotebookPanel 加 `CollapsibleOutput`，text／error 輸出超過 16 行折疊並「顯示其餘 {n} 行／收合」，image/html/latex 不受影響；i18n 2 鍵。驗證：collapseText 3/3、前端 tsc＋i18n 38/38＋vite build。階段 6 餘 6c（Run all）需 kernel、暫緩至實機 | feat/notebook-collapse-output（已 merge） |
 | 2026-07-08 | （Jupyter 整合階段 6d）複製 cell 原始碼／輸出到剪貼簿。`nbformatModel` 加純函式 `outputsToPlainText`（stream＋result text/plain＋error 去 ANSI／退回 ename:evalue、圖片略過）；NotebookPanel 頁腳加「複製原始碼／輸出」鈕（navigator.clipboard、唯讀可用、best-effort）；i18n 2 鍵。驗證：nbformatModel 24/24、前端 tsc＋i18n 38/38＋vite build。註：本次 feature commit 8f489c7 因工作目錄隔離不乾淨，誤含使用者既有未提交改動 LOOP.md／NEW_FEATURE.md／start.sh（待使用者決定是否拆出） | feat/notebook-copy-cell（已 merge） |
