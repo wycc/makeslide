@@ -249,6 +249,28 @@ export function moveCell(nb: NbNotebook, cellIndex: number, delta: number): { no
   return { notebook: { ...nb, cells }, index: target };
 }
 
+/**
+ * Change a cell's type, preserving its source. Switching to `markdown`/`raw` drops the
+ * code-only fields (`outputs`, `execution_count`); switching to `code` adds the runnable-cell
+ * defaults (empty outputs, null execution_count). A no-op when the index is out of range or the
+ * cell is already that type.
+ */
+export function changeCellType(nb: NbNotebook, cellIndex: number, cellType: NbCellType): NbNotebook {
+  if (cellIndex < 0 || cellIndex >= nb.cells.length) return nb;
+  const cell = nb.cells[cellIndex];
+  if (!cell || cell.cell_type === cellType) return nb;
+  const cells = nb.cells.map((c, i) => {
+    if (i !== cellIndex) return c;
+    if (cellType === 'code') {
+      return { ...c, cell_type: 'code' as const, outputs: [], execution_count: null };
+    }
+    // to markdown/raw: strip code-only fields
+    const { outputs: _outputs, execution_count: _execCount, ...rest } = c;
+    return { ...rest, cell_type: cellType };
+  });
+  return { ...nb, cells };
+}
+
 /** Clear every code cell's outputs (used by the "clear all outputs" action). */
 export function clearAllOutputs(nb: NbNotebook): NbNotebook {
   const cells = nb.cells.map((cell) =>
