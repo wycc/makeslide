@@ -25,6 +25,7 @@ import {
   moveCell as moveCellPosition,
   changeCellType,
   displayOutputs,
+  outputsToPlainText,
   defaultNbNotebook,
   parseNbNotebook,
   withCellExecution,
@@ -378,6 +379,13 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
     [editing, commitEdit, cells.length],
   );
 
+  // Copy text to the clipboard (cell source or flattened outputs). Available to read-only viewers
+  // too. Best-effort: silently ignore when the clipboard API is unavailable or denied.
+  const copyText = useCallback((text: string) => {
+    if (!text) return;
+    void navigator.clipboard?.writeText(text).catch(() => undefined);
+  }, []);
+
   // Reorder the current cell up/down within the notebook (distinct from moveCell, which only moves
   // the selection). Commits any edit first, keeps the selection on the moved cell, and drops any
   // running-cell highlight since indices shift.
@@ -652,6 +660,24 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
               title={t('play.notebook.runHint')}
             >
               {isRunningCurrent ? t('play.notebook.running') : `▶ ${t('play.notebook.run')}`}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => copyText(cellText(currentCell ?? { cell_type: 'code', source: '' }))}
+            className="rounded px-1.5 py-0.5 text-text-muted hover:bg-surface-muted"
+            title={t('play.notebook.copySource')}
+          >
+            ⧉ {t('play.notebook.copySource')}
+          </button>
+          {currentCell?.cell_type === 'code' && outputsToPlainText(currentCell.outputs) ? (
+            <button
+              type="button"
+              onClick={() => copyText(outputsToPlainText(currentCell.outputs))}
+              className="rounded px-1.5 py-0.5 text-text-muted hover:bg-surface-muted"
+              title={t('play.notebook.copyOutput')}
+            >
+              ⧉ {t('play.notebook.copyOutput')}
             </button>
           ) : null}
           <button
