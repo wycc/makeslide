@@ -609,7 +609,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
             <button
               type="button"
               onClick={() => addCell('code', 'below')}
-              className="rounded px-1.5 py-0.5 text-text-muted hover:bg-surface-muted"
+              className="rounded px-1.5 py-0.5 text-text hover:bg-surface-muted"
               title={t('play.notebook.addCodeCell')}
             >
               ＋{t('play.notebook.addCodeCell')}
@@ -617,7 +617,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
             <button
               type="button"
               onClick={() => addCell('markdown', 'below')}
-              className="rounded px-1.5 py-0.5 text-text-muted hover:bg-surface-muted"
+              className="rounded px-1.5 py-0.5 text-text hover:bg-surface-muted"
               title={t('play.notebook.addMarkdownCell')}
             >
               ＋{t('play.notebook.addMarkdownCell')}
@@ -626,7 +626,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
               type="button"
               onClick={() => reorderCurrentCell(-1)}
               disabled={currentIndex <= 0}
-              className="rounded px-1.5 py-0.5 text-text-muted hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded px-1.5 py-0.5 text-text hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
               title={t('play.notebook.moveCellUp')}
             >
               ⬆
@@ -635,7 +635,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
               type="button"
               onClick={() => reorderCurrentCell(1)}
               disabled={currentIndex >= cells.length - 1}
-              className="rounded px-1.5 py-0.5 text-text-muted hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded px-1.5 py-0.5 text-text hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
               title={t('play.notebook.moveCellDown')}
             >
               ⬇
@@ -643,7 +643,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
             <button
               type="button"
               onClick={toggleCellType}
-              className="rounded px-1.5 py-0.5 text-text-muted hover:bg-surface-muted"
+              className="rounded px-1.5 py-0.5 text-text hover:bg-surface-muted"
               title={currentCell?.cell_type === 'code' ? t('play.notebook.toCellMarkdown') : t('play.notebook.toCellCode')}
             >
               {currentCell?.cell_type === 'code' ? t('play.notebook.toCellMarkdown') : t('play.notebook.toCellCode')}
@@ -671,7 +671,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
             <button
               type="button"
               onClick={restartKernel}
-              className="rounded px-1.5 py-0.5 text-text-muted hover:bg-surface-muted"
+              className="rounded px-1.5 py-0.5 text-text hover:bg-surface-muted"
               title={t('play.notebook.restart')}
             >
               ⟳ {t('play.notebook.restart')}
@@ -679,7 +679,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
             <button
               type="button"
               onClick={() => clearOutputs('cell')}
-              className="rounded px-1.5 py-0.5 text-text-muted hover:bg-surface-muted"
+              className="rounded px-1.5 py-0.5 text-text hover:bg-surface-muted"
               title={t('play.notebook.clearOutputs')}
             >
               {t('play.notebook.clearOutputs')}
@@ -687,7 +687,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
             <button
               type="button"
               onClick={() => clearOutputs('all')}
-              className="rounded px-1.5 py-0.5 text-text-muted hover:bg-surface-muted"
+              className="rounded px-1.5 py-0.5 text-text hover:bg-surface-muted"
               title={t('play.notebook.clearAllOutputs')}
             >
               {t('play.notebook.clearAllOutputs')}
@@ -749,7 +749,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
               <button
                 type="button"
                 onClick={beginEdit}
-                className="rounded px-1.5 py-0.5 text-text-muted hover:bg-surface-muted"
+                className="rounded px-1.5 py-0.5 text-text hover:bg-surface-muted"
                 title={t('play.notebook.editHint')}
               >
                 ✎ {t('play.notebook.edit')}
@@ -770,7 +770,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
           <button
             type="button"
             onClick={() => copyText(cellText(currentCell ?? { cell_type: 'code', source: '' }))}
-            className="rounded px-1.5 py-0.5 text-text-muted hover:bg-surface-muted"
+            className="rounded px-1.5 py-0.5 text-text hover:bg-surface-muted"
             title={t('play.notebook.copySource')}
           >
             ⧉ {t('play.notebook.copySource')}
@@ -779,7 +779,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
             <button
               type="button"
               onClick={() => copyText(outputsToPlainText(currentCell.outputs))}
-              className="rounded px-1.5 py-0.5 text-text-muted hover:bg-surface-muted"
+              className="rounded px-1.5 py-0.5 text-text hover:bg-surface-muted"
               title={t('play.notebook.copyOutput')}
             >
               ⧉ {t('play.notebook.copyOutput')}
@@ -789,7 +789,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
             type="button"
             onClick={() => moveCell(-1)}
             disabled={currentIndex <= 0}
-            className="rounded px-1.5 py-0.5 hover:bg-surface-muted disabled:opacity-40"
+            className="rounded px-1.5 py-0.5 text-text hover:bg-surface-muted disabled:opacity-40"
             aria-label={t('play.notebook.prevCell')}
           >
             ↑
@@ -798,7 +798,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
             type="button"
             onClick={() => moveCell(1)}
             disabled={currentIndex >= cells.length - 1}
-            className="rounded px-1.5 py-0.5 hover:bg-surface-muted disabled:opacity-40"
+            className="rounded px-1.5 py-0.5 text-text hover:bg-surface-muted disabled:opacity-40"
             aria-label={t('play.notebook.nextCell')}
           >
             ↓
