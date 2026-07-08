@@ -75,6 +75,11 @@ test('POST notebook/generate writes an AI notebook and flips render_type for the
   mockOutlineLlm();
   const app = await buildApp();
   try {
+    // Give the (only) page a stored audio duration + deck total, so we can verify converting it
+    // to a notebook drops it from the total (phase 5b).
+    db.prepare(`UPDATE pages SET audio_duration_seconds = 12 WHERE pdf_id = ? AND page_number = 1`).run(id);
+    db.prepare(`UPDATE pdfs SET total_audio_duration_seconds = 12 WHERE id = ?`).run(id);
+
     const res = await app.inject({
       method: 'POST',
       url: `/api/pdfs/${id}/pages/1/notebook/generate`,
@@ -92,6 +97,10 @@ test('POST notebook/generate writes an AI notebook and flips render_type for the
     const row = db.prepare(`SELECT render_type, notebook_path FROM pages WHERE pdf_id = ? AND page_number = 1`).get(id) as { render_type: string; notebook_path: string };
     assert.equal(row.render_type, 'notebook');
     assert.equal(fs.existsSync(path.join(config.storageRoot, id, 'pages', 'nbgenuid1.ipynb')), true);
+
+    // The deck total was recomputed with the now-notebook page excluded → back to null.
+    const pdf = db.prepare(`SELECT total_audio_duration_seconds FROM pdfs WHERE id = ?`).get(id) as { total_audio_duration_seconds: number | null };
+    assert.equal(pdf.total_audio_duration_seconds, null);
   } finally {
     setOpenAIClientForTest(null);
     cleanup(id);

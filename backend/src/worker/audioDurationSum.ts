@@ -15,3 +15,17 @@ export function sumAudioDurationSeconds(values: Array<number | null | undefined>
   }
   return count > 0 ? Math.round(total * 1000) / 1000 : null;
 }
+
+/**
+ * Sums a deck total from page rows, treating interactive notebook pages
+ * (`render_type === 'notebook'`) as silent regardless of any `audio_duration_seconds` that
+ * lingers from before the page was converted (Jupyter phase 5b). This keeps the deck total
+ * consistent with playback, where notebook pages never play audio (phase 1d).
+ */
+export function sumPageAudioDurations(
+  pages: Array<{ audio_duration_seconds: number | null | undefined; render_type: string | null | undefined }>,
+): number | null {
+  return sumAudioDurationSeconds(
+    pages.map((p) => (p.render_type === 'notebook' ? null : p.audio_duration_seconds)),
+  );
+}

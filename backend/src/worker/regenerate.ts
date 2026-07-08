@@ -25,7 +25,7 @@ import {
   writeMetadata,
 } from '../services/storage';
 import type { PageStatus, PdfRow, PipelineStage, SlideRenderType } from '../types';
-import { sumAudioDurationSeconds } from './audioDurationSum';
+import { sumPageAudioDurations } from './audioDurationSum';
 import { generateScript } from './steps/generateScript';
 import { commitPresentationFile } from '../services/presentationGit';
 import { readScriptsForTts, synthesizeAudio } from './steps/synthesizeAudio';
@@ -1191,9 +1191,9 @@ async function runRegenerateAudio(
     ).run(relPath, a.durationSeconds, updatedAt, pdfId, a.pageNumber);
   }
   const durationRows = db
-    .prepare(`SELECT audio_duration_seconds FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`)
-    .all(pdfId) as Array<{ audio_duration_seconds: number | null }>;
-  const totalAudioDurationSeconds = sumAudioDurationSeconds(durationRows.map((row) => row.audio_duration_seconds));
+    .prepare(`SELECT audio_duration_seconds, render_type FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`)
+    .all(pdfId) as Array<{ audio_duration_seconds: number | null; render_type: string | null }>;
+  const totalAudioDurationSeconds = sumPageAudioDurations(durationRows);
   db.prepare(`UPDATE pdfs SET total_audio_duration_seconds = ?, updated_at = ? WHERE id = ?`).run(
     totalAudioDurationSeconds,
     updatedAt,
