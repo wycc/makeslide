@@ -22,6 +22,7 @@ import {
   defaultNbNotebook,
   parseNbNotebook,
   withCellExecution,
+  withCellSource,
   type NbCell,
   type NbDisplayOutput,
   type NbNotebook,
@@ -50,18 +51,50 @@ function OutputBlock({ output }: { output: NbDisplayOutput }) {
   }
 }
 
-function CellBody({ cell, outputs }: { cell: NbCell; outputs: NbDisplayOutput[] }) {
+interface CellBodyProps {
+  cell: NbCell;
+  outputs: NbDisplayOutput[];
+  editing: boolean;
+  draft: string;
+  onDraftChange: (value: string) => void;
+  onBeginEdit?: () => void;
+  textareaRef: React.RefObject<HTMLTextAreaElement>;
+  editPlaceholder: string;
+}
+
+function CellBody({ cell, outputs, editing, draft, onDraftChange, onBeginEdit, textareaRef, editPlaceholder }: CellBodyProps) {
   const source = cellText(cell);
+  const editor = editing ? (
+    <textarea
+      ref={textareaRef}
+      value={draft}
+      onChange={(e) => onDraftChange(e.target.value)}
+      spellCheck={false}
+      placeholder={editPlaceholder}
+      className="min-h-[6rem] w-full resize-y rounded-md border border-sky-500/50 bg-surface px-3 py-2 font-mono text-xs text-text outline-none focus:ring-1 focus:ring-sky-500/50"
+      rows={Math.min(20, Math.max(4, draft.split('\n').length + 1))}
+    />
+  ) : null;
+
   if (cell.cell_type === 'markdown') {
-    return <MarkdownMath content={source} />;
+    return editor ?? (
+      <div onDoubleClick={onBeginEdit}>
+        <MarkdownMath content={source} />
+      </div>
+    );
   }
   return (
     <div className="flex flex-col gap-1.5">
-      {source.trim() !== '' && (
-        <pre className="overflow-x-auto rounded-md border border-border bg-surface px-3 py-2 text-xs text-text">
-          <code>{source}</code>
-        </pre>
-      )}
+      {editor
+        ? editor
+        : source.trim() !== '' && (
+            <pre
+              onDoubleClick={onBeginEdit}
+              className="overflow-x-auto rounded-md border border-border bg-surface px-3 py-2 text-xs text-text"
+            >
+              <code>{source}</code>
+            </pre>
+          )}
       {outputs.map((output, j) => (
         <OutputBlock key={j} output={output} />
       ))}
@@ -87,7 +120,11 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
   const [runningIndex, setRunningIndex] = useState<number | null>(null);
   const [liveOutputs, setLiveOutputs] = useState<NbOutput[]>([]);
   const [runError, setRunError] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const draftRef = useRef('');
   const containerRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const notebookKey = editable ? `${pdfId}:${pageNumber}` : null;
   const kernel = useJupyterKernel(notebookKey);
@@ -99,6 +136,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
     setCellIndex(0);
     setRunningIndex(null);
     setLiveOutputs([]);
+    setEditing(false);
     fetchPageNotebook(pdfId, pageNumber, shareToken)
       .then((resp) => {
         if (!cancelled) setNotebook(parseNbNotebook(resp.notebook));
@@ -118,13 +156,46 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
   const currentIndex = clampCellIndex(cellIndex, cells.length);
   const currentCell = cells[currentIndex];
 
+  const persistNotebook = useCallback(
+    (next: NbNotebook) => {
+      setNotebook(next);
+      void savePageNotebook(pdfId, pageNumber, next).catch(() => undefined);
+    },
+    [pdfId, pageNumber],
+  );
+
+  const beginEdit = useCallback(() => {
+    if (!editable || !currentCell) return;
+    const text = cellText(currentCell);
+    draftRef.current = text;
+    setDraft(text);
+    setEditing(true);
+  }, [editable, currentCell]);
+
+  // Commit the in-progress edit into the notebook (persisting to the .ipynb) and return the
+  // updated notebook, so callers like "run" can act on the just-committed source.
+  const commitEdit = useCallback((): NbNotebook | null => {
+    if (!editing || !notebook) return notebook;
+    const idx = clampCellIndex(cellIndex, notebook.cells.length);
+    const next = withCellSource(notebook, idx, draftRef.current);
+    persistNotebook(next);
+    setEditing(false);
+    return next;
+  }, [editing, notebook, cellIndex, persistNotebook]);
+
   const runCell = useCallback(
     async (advance: boolean) => {
       if (!editable || !notebook) return;
       const idx = clampCellIndex(cellIndex, notebook.cells.length);
-      const cell = notebook.cells[idx];
+      // Commit any in-progress edit first so we run the latest source.
+      const base = editing ? withCellSource(notebook, idx, draftRef.current) : notebook;
+      if (editing) {
+        persistNotebook(base);
+        setEditing(false);
+      }
+      const cell = base.cells[idx];
       if (!cell || cell.cell_type !== 'code') {
-        if (advance) setCellIndex((i) => clampCellIndex(i + 1, notebook.cells.length));
+        if (advance) setCellIndex((i) => clampCellIndex(i + 1, base.cells.length));
         return;
       }
       kernel.connect();
@@ -141,8 +212,8 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
         });
         // Persist outputs + execution_count back into the .ipynb (plan §1.3).
         setNotebook((prev) => {
-          const base = prev ?? notebook;
-          const next = withCellExecution(base, idx, acc, executionCount);
+          const b = prev ?? base;
+          const next = withCellExecution(b, idx, acc, executionCount);
           void savePageNotebook(pdfId, pageNumber, next).catch(() => undefined);
           return next;
         });
@@ -150,18 +221,10 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
         setRunError(true);
       } finally {
         setRunningIndex(null);
-        if (advance) setCellIndex((i) => clampCellIndex(i + 1, notebook.cells.length));
+        if (advance) setCellIndex((i) => clampCellIndex(i + 1, base.cells.length));
       }
     },
-    [editable, notebook, cellIndex, kernel, pdfId, pageNumber],
-  );
-
-  const persistNotebook = useCallback(
-    (next: NbNotebook) => {
-      setNotebook(next);
-      void savePageNotebook(pdfId, pageNumber, next).catch(() => undefined);
-    },
-    [pdfId, pageNumber],
+    [editable, notebook, cellIndex, editing, kernel, persistNotebook, pdfId, pageNumber],
   );
 
   const clearOutputs = useCallback(
@@ -184,8 +247,18 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
     void kernel.restart().catch(() => setRunError(true));
   }, [editable, kernel]);
 
-  // Command-mode keys: ↑/↓ switch cells; Ctrl/⌘+Enter runs the cell; Shift+Enter runs & advances.
-  // stopPropagation keeps them from the global PlayPage handler (which still gets Space/←/→).
+  const moveCell = useCallback(
+    (delta: number) => {
+      if (editing) commitEdit();
+      setCellIndex((idx) => clampCellIndex(idx + delta, cells.length));
+    },
+    [editing, commitEdit, cells.length],
+  );
+
+  // Keyboard model (plan §1.2 command/edit):
+  //  - Run keys (Ctrl/⌘+Enter, Shift+Enter) work in both modes and commit any edit first.
+  //  - command mode: Enter → edit; ↑/↓ → switch cell (stopPropagation so global Space/←/→ paging stays).
+  //  - edit mode: Escape → commit & leave; all other keys go to the textarea (no cell switching).
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLDivElement>) => {
       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
@@ -200,14 +273,35 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
         if (editable) void runCell(true);
         return;
       }
+      if (editing) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
+          commitEdit();
+          containerRef.current?.focus();
+        }
+        // Everything else (typing, arrows, Enter for newline) belongs to the textarea.
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (editable) beginEdit();
+        return;
+      }
       if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
         e.stopPropagation();
         e.preventDefault();
         setCellIndex((idx) => clampCellIndex(idx + (e.key === 'ArrowDown' ? 1 : -1), cells.length));
       }
     },
-    [cells.length, editable, runCell],
+    [cells.length, editable, editing, runCell, beginEdit, commitEdit],
   );
+
+  // Focus the editor when entering edit mode.
+  useEffect(() => {
+    if (editing) textareaRef.current?.focus();
+  }, [editing]);
 
   useEffect(() => {
     containerRef.current?.scrollTo({ top: 0 });
@@ -282,13 +376,46 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
         ) : cells.length === 0 ? (
           <p className="text-xs text-text-muted">{t('play.notebook.empty')}</p>
         ) : currentCell ? (
-          <CellBody cell={currentCell} outputs={outputs} />
+          <CellBody
+            cell={currentCell}
+            outputs={outputs}
+            editing={editing}
+            draft={draft}
+            onDraftChange={(v) => {
+              draftRef.current = v;
+              setDraft(v);
+            }}
+            onBeginEdit={editable ? beginEdit : undefined}
+            textareaRef={textareaRef}
+            editPlaceholder={t('play.notebook.editPlaceholder')}
+          />
         ) : null}
       </div>
       <div className="flex items-center justify-between gap-2 border-t border-slate-800 px-3 py-1.5 text-[11px] text-text-muted">
         <span className="truncate">{footer}</span>
         <span className="flex items-center gap-2">
           {kernelLabel ? <span className="truncate text-text-muted/80">{kernelLabel}</span> : null}
+          {editable && currentCell ? (
+            editing ? (
+              <button
+                type="button"
+                onClick={() => commitEdit()}
+                className="rounded px-1.5 py-0.5 font-medium text-emerald-400 hover:bg-surface-muted"
+                title={t('play.notebook.doneHint')}
+              >
+                ✓ {t('play.notebook.done')}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={beginEdit}
+                className="rounded px-1.5 py-0.5 text-text-muted hover:bg-surface-muted"
+                title={t('play.notebook.editHint')}
+              >
+                ✎ {t('play.notebook.edit')}
+              </button>
+            )
+          ) : null}
           {editable && currentCell?.cell_type === 'code' ? (
             <button
               type="button"
@@ -302,7 +429,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
           ) : null}
           <button
             type="button"
-            onClick={() => setCellIndex((idx) => clampCellIndex(idx - 1, cells.length))}
+            onClick={() => moveCell(-1)}
             disabled={currentIndex <= 0}
             className="rounded px-1.5 py-0.5 hover:bg-surface-muted disabled:opacity-40"
             aria-label={t('play.notebook.prevCell')}
@@ -311,7 +438,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
           </button>
           <button
             type="button"
-            onClick={() => setCellIndex((idx) => clampCellIndex(idx + 1, cells.length))}
+            onClick={() => moveCell(1)}
             disabled={currentIndex >= cells.length - 1}
             className="rounded px-1.5 py-0.5 hover:bg-surface-muted disabled:opacity-40"
             aria-label={t('play.notebook.nextCell')}
