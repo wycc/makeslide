@@ -7,6 +7,9 @@ import {
   clearAllOutputs,
   clearCellOutputs,
   withCellSource,
+  newCell,
+  insertCell,
+  deleteCell,
   defaultNbNotebook,
   displayOutput,
   displayOutputs,
@@ -171,6 +174,51 @@ test('withCellSource replaces a cell source immutably and no-ops out of range', 
   // out-of-range index returns the same notebook reference
   assert.equal(withCellSource(nb, 9, 'x'), nb);
   assert.equal(withCellSource(nb, -1, 'x'), nb);
+});
+
+test('newCell builds runnable code cells and minimal markdown cells', () => {
+  const code = newCell('code');
+  assert.equal(code.cell_type, 'code');
+  assert.deepEqual(code.outputs, []);
+  assert.equal(code.execution_count, null);
+  const md = newCell('markdown');
+  assert.equal(md.cell_type, 'markdown');
+  assert.equal('outputs' in md, false);
+});
+
+test('insertCell inserts at the clamped index immutably and returns the new index', () => {
+  const nb = twoCellNb();
+  const mid = insertCell(nb, 1, 'code');
+  assert.equal(mid.notebook.cells.length, 3);
+  assert.equal(mid.index, 1);
+  assert.equal(mid.notebook.cells[1]!.cell_type, 'code');
+  assert.equal(nb.cells.length, 2); // original untouched
+
+  // index past the end appends
+  const appended = insertCell(nb, 99, 'markdown');
+  assert.equal(appended.index, 2);
+  assert.equal(appended.notebook.cells[2]!.cell_type, 'markdown');
+});
+
+test('deleteCell removes a cell and clamps the next selection', () => {
+  const nb = twoCellNb();
+  const afterDelete = deleteCell(nb, 0);
+  assert.equal(afterDelete.notebook.cells.length, 1);
+  assert.equal(afterDelete.notebook.cells[0]!.cell_type, 'markdown');
+  assert.equal(afterDelete.index, 0);
+  assert.equal(nb.cells.length, 2); // original untouched
+
+  // deleting the last cell when selection sat past it clamps into range
+  const deleteSecond = deleteCell(nb, 1);
+  assert.equal(deleteSecond.index, 0);
+});
+
+test('deleteCell is a no-op on the last remaining cell and out-of-range indices', () => {
+  const single = defaultNbNotebook();
+  assert.equal(deleteCell(single, 0).notebook, single); // keeps ≥1 cell
+  const nb = twoCellNb();
+  assert.equal(deleteCell(nb, 9).notebook, nb);
+  assert.equal(deleteCell(nb, -1).notebook, nb);
 });
 
 // ---- display MIME selection ----
