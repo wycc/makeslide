@@ -1,5 +1,24 @@
 # MakeSlide 功能說明
 
+## Jupyter Notebook 整合（階段 5c）：AI 產生 notebook 時參考該頁既有內容
+
+### 背景
+
+階段 4b 讓 AI 可以由一句主題產生 notebook，但當時只送出主題本身。若這一頁本來就有旁白逐字稿（例如原本是
+一般語音頁），那些內容其實是很好的參考，能讓產生的 notebook 更貼合這一頁要講的主題。
+
+### 使用方式
+
+使用方式不變：按「AI 產生 Notebook」、輸入主題即可。差別在於——如果目前這一頁已經有逐字稿，系統會自動把它
+一併當作參考內容送給 AI，產生的 notebook 會更貼近該頁脈絡。
+
+### 實作重點
+
+- 後端 generate 端點本就接受選用的 `context` 參數；這一步把前端接上：取當前頁的逐字稿、用既有的
+  `cleanTranscriptForReview` 去除審閱標記後，作為 context 一併送出（後端再自行截斷長度）。
+
+分支：`feat/notebook-generate-context`。前端 `tsc`＋`vite build` 通過（後端 context 行為已由既有測試涵蓋）。
+
 ## Jupyter Notebook 整合（階段 5d）：在 notebook 頁新增與刪除 cell
 
 ### 背景
