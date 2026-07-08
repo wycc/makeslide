@@ -96,6 +96,11 @@ export function pageAnimationSpecPath(pdfId: string, pageUid: string): string {
   return path.join(pagesDir(pdfId), `${pageUid}.animation.json`);
 }
 
+/** Jupyter notebook asset for a `render_type = 'notebook'` page (per-page `.ipynb`). */
+export function pageNotebookPath(pdfId: string, pageUid: string): string {
+  return path.join(pagesDir(pdfId), `${pageUid}.ipynb`);
+}
+
 /** Whisper-aligned per-sentence subtitle timeline (only written when subtitleSyncMode is 'whisper'). */
 export function pageTimelinePath(pdfId: string, pageUid: string): string {
   return path.join(pagesDir(pdfId), `${pageUid}.timeline.json`);

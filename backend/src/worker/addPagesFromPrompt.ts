@@ -128,7 +128,7 @@ export async function rebuildAddPagesMetadataFromDb(pdfId: string): Promise<void
     .get(pdfId) as { page_count: number | null } | undefined;
   const allPageRows = db
     .prepare(
-      `SELECT page_number, image_path, text_path, script_path, audio_path, audio_duration_seconds, status
+      `SELECT page_number, image_path, text_path, script_path, audio_path, audio_duration_seconds, status, render_type, notebook_path
          FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
     )
     .all(pdfId) as PageRow[];
@@ -142,6 +142,8 @@ export async function rebuildAddPagesMetadataFromDb(pdfId: string): Promise<void
     audio: p.audio_path ?? undefined,
     audio_duration_seconds: p.audio_duration_seconds ?? undefined,
     status: p.status,
+    render_type: p.render_type ?? undefined,
+    notebook_path: p.notebook_path ?? undefined,
   }));
   await writeMetadata(pdfId, meta);
 }

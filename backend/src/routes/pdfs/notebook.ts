@@ -1,0 +1,134 @@
+import fs from 'node:fs';
+import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
+import { db } from '../../db';
+import { sessionSub } from '../auth';
+import { getPdfPermissionRow, canReadPdf, canEditPdf, aclCtx } from './permissions';
+import { pageNotebookPath, safeJoinPdfPath, readMetadata, writeMetadata } from '../../services/storage';
+import { defaultNotebook, parseStoredNotebook, validateNotebook } from '../../services/notebookAsset';
+import type { SlideRenderType } from '../../types';
+import { PageParamSchema, errorResponse, nowIso } from './shared';
+
+const SaveNotebookBodySchema = z.object({
+  notebook: z.unknown(),
+});
+
+interface NotebookPageRow {
+  page_uid: string;
+  render_type: SlideRenderType | null;
+  notebook_path: string | null;
+}
+
+function getNotebookPageRow(id: string, n: number): NotebookPageRow | undefined {
+  return db
+    .prepare(`SELECT page_uid, render_type, notebook_path FROM pages WHERE pdf_id = ? AND page_number = ?`)
+    .get(id, n) as NotebookPageRow | undefined;
+}
+
+/**
+ * Read the page's stored `.ipynb`. Prefer the explicit `notebook_path` column over the
+ * conventional `<page_uid>.ipynb` location: they match for natively created pages but can
+ * diverge after a ZIP import (import.ts regenerates page_uid while asset files keep their
+ * original names), mirroring how page-animation.ts resolves the stored spec path.
+ */
+function readStoredNotebook(id: string, row: NotebookPageRow): ReturnType<typeof parseStoredNotebook> {
+  const absPath = row.notebook_path
+    ? safeJoinPdfPath(id, row.notebook_path)
+    : pageNotebookPath(id, row.page_uid);
+  if (!fs.existsSync(absPath)) {
+    return defaultNotebook();
+  }
+  try {
+    return parseStoredNotebook(fs.readFileSync(absPath, 'utf8'));
+  } catch {
+    return defaultNotebook();
+  }
+}
+
+export async function registerNotebookRoutes(app: FastifyInstance): Promise<void> {
+  // GET the page's `.ipynb` as nbformat JSON. Returns a default empty notebook when none
+  // is stored yet, so the frontend always has a valid document to open.
+  app.get('/api/pdfs/:id/pages/:n/notebook', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const { id, n } = parsed.data;
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    }
+    const row = getNotebookPageRow(id, n);
+    if (!row) {
+      return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', 'Page not found'));
+    }
+    if (!canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的 notebook'));
+    }
+    const notebook = readStoredNotebook(id, row);
+    // no-store so the renderer never opens a stale notebook right after a save/execute writes back
+    return reply.header('Cache-Control', 'no-store').code(200).send({
+      page_number: n,
+      render_type: row.render_type === 'notebook' ? 'notebook' : (row.render_type ?? 'static-image'),
+      notebook,
+    });
+  });
+
+  // PUT (create/replace) the page's `.ipynb`. Used both for editing cells and for writing
+  // execution outputs back. Flips render_type to 'notebook', records notebook_path, and keeps
+  // metadata.json in lockstep with the DB (best-effort, DB is source of truth).
+  app.put('/api/pdfs/:id/pages/:n/notebook', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const parsedBody = SaveNotebookBodySchema.safeParse(request.body ?? {});
+    if (!parsedBody.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid body'));
+    }
+    const { id, n } = parsed.data;
+    const row = getNotebookPageRow(id, n);
+    if (!row) {
+      return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', 'Page not found'));
+    }
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow || !canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的 notebook'));
+    }
+    const validated = validateNotebook(parsedBody.data.notebook);
+    if (!validated.ok) {
+      return reply.code(400).send(errorResponse('INVALID_NOTEBOOK', validated.message));
+    }
+    const relNotebookPath = `pages/${row.page_uid}.ipynb`;
+    await fs.promises.writeFile(pageNotebookPath(id, row.page_uid), `${JSON.stringify(validated.notebook, null, 1)}\n`, 'utf8');
+    const now = nowIso();
+    db.prepare(
+      `UPDATE pages SET render_type = 'notebook', notebook_path = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`,
+    ).run(relNotebookPath, now, id, n);
+    db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(now, id);
+
+    // Keep metadata.json consistent with the DB (mirrors the consistency lesson: metadata is a
+    // derived snapshot of the DB, so a resync failure is logged-by-omission but never fatal).
+    try {
+      const meta = await readMetadata(id);
+      if (meta) {
+        const page = meta.pages.find((p) => p.page_number === n);
+        if (page) {
+          page.render_type = 'notebook';
+          page.notebook_path = relNotebookPath;
+        }
+        meta.updated_at = now;
+        await writeMetadata(id, meta);
+      }
+    } catch {
+      // non-fatal
+    }
+
+    return reply.code(200).send({
+      page_number: n,
+      render_type: 'notebook',
+      notebook_url: `api/pdfs/${id}/pages/${n}/notebook`,
+      updated_at: now,
+    });
+  });
+}
