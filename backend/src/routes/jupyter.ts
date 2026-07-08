@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { config } from '../config';
 import { sessionSub } from './auth';
 import { errorResponse } from './pdfs/shared';
+import { jupyterProxyEnabled, jupyterProxyMountPath } from './jupyterProxy';
 
 /**
  * Connection parameters the frontend needs to talk to the Jupyter server with
@@ -46,13 +47,16 @@ export async function jupyterRoutes(app: FastifyInstance) {
       return reply.code(401).send(errorResponse('UNAUTHENTICATED', '需要登入'));
     }
     const baseUrl = config.jupyterBaseUrl;
+    // When the backend same-origin proxy is on, the frontend must connect to the proxy's mount
+    // path (`<NB_PREFIX><PROXY_PREFIX>`), not MakeSlide's own NB_PREFIX; the session cookie
+    // authenticates and no token is exposed.
+    const sameOriginPrefix = jupyterProxyEnabled(config) ? jupyterProxyMountPath(config) : config.nbPrefix;
     const info: JupyterConnectionInfo = {
       enabled: true,
       baseUrl,
       wsUrl: deriveWsUrl(baseUrl),
-      nbPrefix: config.nbPrefix,
-      // Only meaningful in explicit-URL mode; same-origin production leaves it empty
-      // and relies on the cookie.
+      nbPrefix: sameOriginPrefix,
+      // Only meaningful in explicit-URL mode; same-origin (proxy or Hub) relies on the cookie.
       token: baseUrl ? config.jupyterToken : '',
     };
     return reply.send(info);

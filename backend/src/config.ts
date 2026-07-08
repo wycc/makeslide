@@ -203,6 +203,15 @@ const EnvSchema = z.object({
   // same-origin cookie is used instead and this stays empty (never shipped to the
   // frontend bundle; only handed out by the session-protected connection endpoint).
   JUPYTER_TOKEN: z.string().optional().default(''),
+  // Same-origin backend reverse proxy: when set, the backend proxies `<NB_PREFIX><PROXY_PREFIX>/*`
+  // (HTTP + WebSocket) to this local Jupyter server, e.g. http://127.0.0.1:8888. The frontend then
+  // connects same-origin (no CORS/mixed-content, cookie-authenticated) and the internal Jupyter
+  // never faces the network. Empty → no backend proxy.
+  JUPYTER_PROXY_TARGET: z.string().optional().default(''),
+  // Path prefix the proxy mounts under (kept separate from NB_PREFIX, which is MakeSlide's own
+  // base, so Jupyter's API doesn't collide with MakeSlide's routes/static). The Jupyter server
+  // must run with ServerApp.base_url = `<NB_PREFIX><PROXY_PREFIX>`.
+  JUPYTER_PROXY_PREFIX: z.string().optional().default('/jupyter'),
 });
 
 // Test isolation: when running under the test runner (MAKESLIDE_TEST=1, set by the
@@ -299,6 +308,8 @@ export const config = {
   jupyterEnabled: env.JUPYTER_ENABLED,
   jupyterBaseUrl: env.JUPYTER_BASE_URL.trim(),
   jupyterToken: env.JUPYTER_TOKEN.trim(),
+  jupyterProxyTarget: env.JUPYTER_PROXY_TARGET.trim(),
+  jupyterProxyPrefix: env.JUPYTER_PROXY_PREFIX.trim(),
 } as const;
 
 export type AppConfig = typeof config;
