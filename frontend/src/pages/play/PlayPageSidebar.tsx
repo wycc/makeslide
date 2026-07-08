@@ -638,6 +638,8 @@ export function PlayPageSidebar() {
     handleUpdateCoverFromCurrentPage,
     handleConvertCurrentPageToNotebook,
     handleGenerateNotebookForCurrentPage,
+    handleExportCurrentPageNotebook,
+    handleImportNotebookFile,
     setShowAddPagesModal,
     draggingPage, setDraggingPage,
     thumbLoadUntilIdx, setThumbLoadUntilIdx,
@@ -694,6 +696,7 @@ export function PlayPageSidebar() {
     window.setTimeout(() => setPollCopyMsg(null), 2000);
   };
   const [notebookTab, setNotebookTab] = useState<NotebookTab>(() => getStoredNotebookTab());
+  const ipynbImportInputRef = useRef<HTMLInputElement>(null);
   // 「AI 助手」分頁底下的子分頁，一次只顯示一個功能、讓各自有較大顯示高度。
   const [aiSubTab, setAiSubTab] = useState<'tutor' | 'quality' | 'chat'>('tutor');
   const AI_SUBTABS: ReadonlyArray<{ id: 'tutor' | 'quality' | 'chat'; labelKey: TranslationKey }> = [
@@ -871,6 +874,35 @@ export function PlayPageSidebar() {
                 title={t('play.slideManagement.generateNotebookTitle')}
               >
                 {t('play.slideManagement.generateNotebook')}
+              </button>
+              <button
+                type="button"
+                onClick={() => ipynbImportInputRef.current?.click()}
+                disabled={isReadOnlyProcessing || slideBusy || !currentPage}
+                className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-text hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
+                title={t('play.slideManagement.importNotebookTitle')}
+              >
+                {t('play.slideManagement.importNotebook')}
+              </button>
+              <input
+                ref={ipynbImportInputRef}
+                type="file"
+                accept=".ipynb,application/x-ipynb+json,application/json"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = ''; // 允許連續匯入同一檔名
+                  if (file) void handleImportNotebookFile(file);
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => void handleExportCurrentPageNotebook()}
+                disabled={slideBusy || !currentPage || currentPage.render_type !== 'notebook'}
+                className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-text hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
+                title={currentPage?.render_type === 'notebook' ? t('play.slideManagement.exportNotebookTitle') : t('play.slideManagement.exportNotebookUnavailable')}
+              >
+                {t('play.slideManagement.exportNotebook')}
               </button>
               <button
                 type="button"
