@@ -1192,6 +1192,8 @@ export const en = {
   'play.notebook.toCellCode': 'To Code',
   'play.notebook.copySource': 'Copy source',
   'play.notebook.copyOutput': 'Copy output',
+  'play.notebook.showMoreLines': 'Show {n} more lines',
+  'play.notebook.collapseOutput': 'Collapse',
   'play.notebook.edit': 'Edit',
   'play.notebook.editHint': 'Edit this cell (or double-click; Enter to edit)',
   'play.notebook.done': 'Done',
