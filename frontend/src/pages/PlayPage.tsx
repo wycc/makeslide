@@ -40,6 +40,7 @@ import {
 } from '../lib/animationSpec';
 import { debugLog, debugWarn } from '../lib/debugLog';
 import { clamp } from '../lib/clamp';
+import { playablePageAudioUrl } from '../lib/pageAudio';
 import { normalizedPointerPosition } from '../lib/normalizedPointerPosition';
 import { toggleSortedNumber } from '../lib/toggleSortedNumber';
 import { readNumberArrayFromStorage } from '../lib/storageNumberArray';
@@ -782,11 +783,13 @@ export default function PlayPage() {
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
-    if (!currentPage || !currentPage.audio_url) {
-      // Page has no audio (e.g. an interactive notebook page — plan §2.3). Stop and clear
-      // any audio carried over from the previous page so it neither keeps playing nor fires
-      // 'ended' (which would auto-advance off an interactive page). Invalidate pending
-      // reloads so a racing retry can't re-attach the old source.
+    const playableUrl = playablePageAudioUrl(currentPage);
+    if (!currentPage || !playableUrl) {
+      // Page has no audio (e.g. an interactive notebook page — plan §2.3; also covers a page
+      // converted to notebook that still carries an audio_url). Stop and clear any audio
+      // carried over from the previous page so it neither keeps playing nor fires 'ended'
+      // (which would auto-advance off an interactive page). Invalidate pending reloads so a
+      // racing retry can't re-attach the old source.
       currentAudioTokenRef.current += 1;
       clearAudioRetryTimer();
       audio.pause();
@@ -798,7 +801,7 @@ export default function PlayPage() {
       setAudioError(null);
       return;
     }
-    const audioUrl = withShareToken(currentPage.audio_url) ?? currentPage.audio_url;
+    const audioUrl = withShareToken(playableUrl) ?? playableUrl;
     const pageNumber = currentPage.page_number;
     const token = currentAudioTokenRef.current + 1;
     currentAudioTokenRef.current = token;
@@ -880,12 +883,13 @@ export default function PlayPage() {
       } else {
         prefetchedImageNextRef.current = null;
       }
-      if (next?.audio_url) {
+      const nextPlayableUrl = playablePageAudioUrl(next);
+      if (nextPlayableUrl) {
         const a = new Audio();
         a.preload = 'auto';
         // 與正式播放使用同一組版本 URL，才能真正命中快取
         const nextVersionKey = detail?.updated_at ? encodeURIComponent(detail.updated_at) : '';
-        const nextAudioUrl = withShareToken(next.audio_url) ?? next.audio_url;
+        const nextAudioUrl = withShareToken(nextPlayableUrl) ?? nextPlayableUrl;
         a.src = nextVersionKey
           ? `${nextAudioUrl}${nextAudioUrl.includes('?') ? '&' : '?'}v=${nextVersionKey}`
           : nextAudioUrl;
@@ -1682,8 +1686,9 @@ export default function PlayPage() {
   // 無法在不移走 audioRef 的前提下獨立抽出。
   const handleRetry = useCallback(() => {
     const audio = audioRef.current;
-    if (!audio || !currentPage?.audio_url) return;
-    const audioUrl = withShareToken(currentPage.audio_url) ?? currentPage.audio_url;
+    const playableUrl = playablePageAudioUrl(currentPage);
+    if (!audio || !currentPage || !playableUrl) return;
+    const audioUrl = withShareToken(playableUrl) ?? playableUrl;
     const pageNumber = currentPage.page_number;
     const token = currentAudioTokenRef.current + 1;
     currentAudioTokenRef.current = token;
@@ -2646,10 +2651,11 @@ export default function PlayPage() {
           setAudioError(null);
           if (isPlaying) {
             void audioRef.current?.play().catch(() => {
-              if (currentPage?.audio_url) {
+              const playableUrl = playablePageAudioUrl(currentPage);
+              if (currentPage && playableUrl) {
                 scheduleAudioReload(
                   currentAudioTokenRef.current,
-                  withShareToken(currentPage.audio_url) ?? currentPage.audio_url,
+                  withShareToken(playableUrl) ?? playableUrl,
                   currentPage.page_number,
                 );
               }
@@ -2665,10 +2671,11 @@ export default function PlayPage() {
             pageNumber: currentPage?.page_number,
             src: audioRef.current?.src,
           });
-          if (currentPage?.audio_url) {
+          const playableUrl = playablePageAudioUrl(currentPage);
+          if (currentPage && playableUrl) {
             scheduleAudioReload(
               currentAudioTokenRef.current,
-              withShareToken(currentPage.audio_url) ?? currentPage.audio_url,
+              withShareToken(playableUrl) ?? playableUrl,
               currentPage.page_number,
             );
           }
