@@ -7,6 +7,7 @@ import { getPdfPermissionRow, canReadPdf, canEditPdf, aclCtx } from './permissio
 import { pageNotebookPath, safeJoinPdfPath, readMetadata, writeMetadata } from '../../services/storage';
 import { defaultNotebook, parseStoredNotebook, validateNotebook, type NotebookDocument } from '../../services/notebookAsset';
 import { generateNotebookFromTopic } from '../../services/notebookGeneration';
+import { sumPageAudioDurations } from '../../worker/audioDurationSum';
 import type { SlideRenderType } from '../../types';
 import { PageParamSchema, errorResponse, nowIso } from './shared';
 
@@ -69,7 +70,18 @@ export async function writeNotebookForPage(
   db.prepare(
     `UPDATE pages SET render_type = 'notebook', notebook_path = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`,
   ).run(relNotebookPath, now, id, n);
-  db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(now, id);
+  // The page is now a notebook, so recompute the deck total with it excluded (phase 5b): notebook
+  // pages never play audio (phase 1d), so any audio_duration lingering from before it was
+  // converted must not inflate the total.
+  const durationRows = db
+    .prepare(`SELECT audio_duration_seconds, render_type FROM pages WHERE pdf_id = ?`)
+    .all(id) as Array<{ audio_duration_seconds: number | null; render_type: string | null }>;
+  const totalAudioDurationSeconds = sumPageAudioDurations(durationRows);
+  db.prepare(`UPDATE pdfs SET total_audio_duration_seconds = ?, updated_at = ? WHERE id = ?`).run(
+    totalAudioDurationSeconds,
+    now,
+    id,
+  );
 
   // Keep metadata.json consistent with the DB (mirrors the consistency lesson: metadata is a
   // derived snapshot of the DB, so a resync failure is logged-by-omission but never fatal).
@@ -81,6 +93,7 @@ export async function writeNotebookForPage(
         page.render_type = 'notebook';
         page.notebook_path = relNotebookPath;
       }
+      meta.total_audio_duration_seconds = totalAudioDurationSeconds;
       meta.updated_at = now;
       await writeMetadata(id, meta);
     }
