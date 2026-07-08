@@ -273,6 +273,11 @@ export function changeCellType(nb: NbNotebook, cellIndex: number, cellType: NbCe
   return { ...nb, cells };
 }
 
+/** Jupyter-style execution count label: `[3]` for an executed cell, `[ ]` when never run. */
+export function executionCountLabel(count: unknown): string {
+  return typeof count === 'number' ? `[${count}]` : '[ ]';
+}
+
 /** Indices of every code cell, in order — the execution order for "Run all" (phase 6c). */
 export function codeCellIndices(nb: NbNotebook): number[] {
   const out: number[] = [];
