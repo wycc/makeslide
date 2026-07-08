@@ -1,5 +1,23 @@
 # MakeSlide 功能說明
 
+## Jupyter Notebook 整合（階段 5a）：投影片清單標示 notebook 頁
+
+### 背景
+
+一份簡報裡可能同時有一般圖片頁和互動式 notebook 頁。先前在右側投影片縮圖清單中，兩者長得一模一樣，使用者
+沒辦法一眼看出哪幾頁是可執行的 notebook。
+
+### 使用方式
+
+不需任何操作：凡是 notebook 頁，其縮圖右上角會出現一個天藍色的「📓 Notebook」標籤，一眼即可分辨。
+
+### 實作重點
+
+- 在投影片縮圖上依 `render_type === 'notebook'` 條件渲染一個小標籤，滑鼠移上去有「此頁為互動式 Jupyter
+  notebook」的提示；淺／深色主題皆適用。
+
+分支：`feat/notebook-sidebar-badge`。前端 `tsc`＋i18n 38/38＋`vite build` 通過。
+
 ## Jupyter Notebook 整合（階段 3b）：程式碼 cell 語法高亮編輯（CodeMirror）
 
 ### 背景
