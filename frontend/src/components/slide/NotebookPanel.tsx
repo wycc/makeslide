@@ -20,12 +20,15 @@ import {
   clampCellIndex,
   clearAllOutputs,
   clearCellOutputs,
+  insertCell,
+  deleteCell,
   displayOutputs,
   defaultNbNotebook,
   parseNbNotebook,
   withCellExecution,
   withCellSource,
   type NbCell,
+  type NbCellType,
   type NbDisplayOutput,
   type NbNotebook,
   type NbOutput,
@@ -329,6 +332,37 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
     void kernel.restart().catch(() => setRunError(true));
   }, [editable, kernel]);
 
+  // Insert a new empty cell above/below the current one and select it. Commits any in-progress
+  // edit first (same base-from-draft pattern as runCell) so the draft isn't lost to the re-render.
+  const addCell = useCallback(
+    (cellType: NbCellType, position: 'above' | 'below') => {
+      if (!editable || !notebook) return;
+      const idx = clampCellIndex(cellIndex, notebook.cells.length);
+      const base = editing ? withCellSource(notebook, idx, draftRef.current) : notebook;
+      if (editing) setEditing(false);
+      const { notebook: next, index } = insertCell(base, position === 'below' ? idx + 1 : idx, cellType);
+      persistNotebook(next);
+      setCellIndex(index);
+    },
+    [editable, notebook, cellIndex, editing, persistNotebook],
+  );
+
+  // Delete the current cell (never the last remaining one) and select the clamped neighbour.
+  const removeCell = useCallback(() => {
+    if (!editable || !notebook || notebook.cells.length <= 1) return;
+    if (!window.confirm(t('play.notebook.deleteCellConfirm'))) return;
+    const idx = clampCellIndex(cellIndex, notebook.cells.length);
+    const base = editing ? withCellSource(notebook, idx, draftRef.current) : notebook;
+    if (editing) setEditing(false);
+    const { notebook: next, index } = deleteCell(base, idx);
+    persistNotebook(next);
+    setCellIndex(index);
+    if (runningIndex === idx) {
+      setRunningIndex(null);
+      setLiveOutputs([]);
+    }
+  }, [editable, notebook, cellIndex, editing, runningIndex, persistNotebook, t]);
+
   const moveCell = useCallback(
     (delta: number) => {
       if (editing) commitEdit();
@@ -417,31 +451,60 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
   return (
     <div className={`flex flex-col overflow-hidden rounded-lg border border-slate-800 bg-surface ${className ?? ''}`} style={style}>
       {editable ? (
-        <div className="flex items-center justify-end gap-1.5 border-b border-slate-800 px-3 py-1 text-[11px]">
-          <button
-            type="button"
-            onClick={restartKernel}
-            className="rounded px-1.5 py-0.5 text-text-muted hover:bg-surface-muted"
-            title={t('play.notebook.restart')}
-          >
-            ⟳ {t('play.notebook.restart')}
-          </button>
-          <button
-            type="button"
-            onClick={() => clearOutputs('cell')}
-            className="rounded px-1.5 py-0.5 text-text-muted hover:bg-surface-muted"
-            title={t('play.notebook.clearOutputs')}
-          >
-            {t('play.notebook.clearOutputs')}
-          </button>
-          <button
-            type="button"
-            onClick={() => clearOutputs('all')}
-            className="rounded px-1.5 py-0.5 text-text-muted hover:bg-surface-muted"
-            title={t('play.notebook.clearAllOutputs')}
-          >
-            {t('play.notebook.clearAllOutputs')}
-          </button>
+        <div className="flex items-center justify-between gap-1.5 border-b border-slate-800 px-3 py-1 text-[11px]">
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => addCell('code', 'below')}
+              className="rounded px-1.5 py-0.5 text-text-muted hover:bg-surface-muted"
+              title={t('play.notebook.addCodeCell')}
+            >
+              ＋{t('play.notebook.addCodeCell')}
+            </button>
+            <button
+              type="button"
+              onClick={() => addCell('markdown', 'below')}
+              className="rounded px-1.5 py-0.5 text-text-muted hover:bg-surface-muted"
+              title={t('play.notebook.addMarkdownCell')}
+            >
+              ＋{t('play.notebook.addMarkdownCell')}
+            </button>
+            <button
+              type="button"
+              onClick={removeCell}
+              disabled={cells.length <= 1}
+              className="rounded px-1.5 py-0.5 text-rose-400 hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
+              title={t('play.notebook.deleteCell')}
+            >
+              🗑 {t('play.notebook.deleteCell')}
+            </button>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={restartKernel}
+              className="rounded px-1.5 py-0.5 text-text-muted hover:bg-surface-muted"
+              title={t('play.notebook.restart')}
+            >
+              ⟳ {t('play.notebook.restart')}
+            </button>
+            <button
+              type="button"
+              onClick={() => clearOutputs('cell')}
+              className="rounded px-1.5 py-0.5 text-text-muted hover:bg-surface-muted"
+              title={t('play.notebook.clearOutputs')}
+            >
+              {t('play.notebook.clearOutputs')}
+            </button>
+            <button
+              type="button"
+              onClick={() => clearOutputs('all')}
+              className="rounded px-1.5 py-0.5 text-text-muted hover:bg-surface-muted"
+              title={t('play.notebook.clearAllOutputs')}
+            >
+              {t('play.notebook.clearAllOutputs')}
+            </button>
+          </div>
         </div>
       ) : null}
       <div

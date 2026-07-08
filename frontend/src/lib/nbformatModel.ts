@@ -203,6 +203,36 @@ export function withCellSource(nb: NbNotebook, cellIndex: number, source: string
   return { ...nb, cells };
 }
 
+/** A fresh empty cell of the given type (code cells carry the runnable-cell defaults). */
+export function newCell(cellType: NbCellType): NbCell {
+  return cellType === 'code'
+    ? { cell_type: 'code', source: '', metadata: {}, outputs: [], execution_count: null }
+    : { cell_type: cellType, source: '', metadata: {} };
+}
+
+/**
+ * Insert a new empty cell at `index` (clamped to 0…length, so `length` appends) and return the
+ * new notebook plus the inserted cell's index — the caller uses it to move the selection there.
+ */
+export function insertCell(nb: NbNotebook, index: number, cellType: NbCellType): { notebook: NbNotebook; index: number } {
+  const at = Math.max(0, Math.min(index, nb.cells.length));
+  const cells = [...nb.cells.slice(0, at), newCell(cellType), ...nb.cells.slice(at)];
+  return { notebook: { ...nb, cells }, index: at };
+}
+
+/**
+ * Delete the cell at `cellIndex`, returning the new notebook and the index to select next
+ * (clamped into the shortened list). A no-op — returning the same notebook and a clamped index —
+ * when the index is out of range or it is the last remaining cell (a notebook keeps ≥1 cell).
+ */
+export function deleteCell(nb: NbNotebook, cellIndex: number): { notebook: NbNotebook; index: number } {
+  if (cellIndex < 0 || cellIndex >= nb.cells.length || nb.cells.length <= 1) {
+    return { notebook: nb, index: clampCellIndex(cellIndex, nb.cells.length) };
+  }
+  const cells = nb.cells.filter((_, i) => i !== cellIndex);
+  return { notebook: { ...nb, cells }, index: clampCellIndex(cellIndex, cells.length) };
+}
+
 /** Clear every code cell's outputs (used by the "clear all outputs" action). */
 export function clearAllOutputs(nb: NbNotebook): NbNotebook {
   const cells = nb.cells.map((cell) =>
