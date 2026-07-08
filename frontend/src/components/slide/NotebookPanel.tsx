@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { MarkdownMath } from '../MarkdownMath';
 import { useI18n } from '../../i18n';
+import { parseAnsi, type AnsiColor } from '../../lib/ansi';
 import { fetchPageNotebook, savePageNotebook } from '../../lib/api/pdfs';
 import {
   applyIopub,
@@ -30,6 +31,36 @@ import {
 } from '../../lib/nbformatModel';
 import { useJupyterKernel } from './useJupyterKernel';
 
+const ANSI_COLOR_CLASS: Record<AnsiColor, string> = {
+  black: 'text-slate-500',
+  red: 'text-rose-400',
+  green: 'text-emerald-400',
+  yellow: 'text-amber-400',
+  blue: 'text-sky-400',
+  magenta: 'text-fuchsia-400',
+  cyan: 'text-cyan-400',
+  white: 'text-slate-200',
+};
+
+/** Render text that may contain ANSI SGR colour codes (Jupyter tracebacks) as styled spans. */
+function AnsiText({ text }: { text: string }) {
+  const segments = parseAnsi(text);
+  return (
+    <>
+      {segments.map((seg, i) => {
+        const cls = [seg.color ? ANSI_COLOR_CLASS[seg.color] : '', seg.bold ? 'font-semibold' : ''].filter(Boolean).join(' ');
+        return cls ? (
+          <span key={i} className={cls}>
+            {seg.text}
+          </span>
+        ) : (
+          <span key={i}>{seg.text}</span>
+        );
+      })}
+    </>
+  );
+}
+
 function OutputBlock({ output }: { output: NbDisplayOutput }) {
   switch (output.kind) {
     case 'image':
@@ -42,8 +73,12 @@ function OutputBlock({ output }: { output: NbDisplayOutput }) {
     case 'error':
       return (
         <pre className="overflow-x-auto rounded bg-rose-50 px-3 py-2 text-xs text-rose-800 dark:bg-rose-950/30 dark:text-rose-200">
-          <span className="font-semibold">{[output.ename, output.evalue].filter(Boolean).join(': ')}</span>
-          {output.traceback ? `\n${output.traceback}` : ''}
+          {output.traceback ? (
+            // Tracebacks already include the "EName: evalue" line, ANSI-coloured.
+            <AnsiText text={output.traceback} />
+          ) : (
+            <span className="font-semibold">{[output.ename, output.evalue].filter(Boolean).join(': ')}</span>
+          )}
         </pre>
       );
     default:
