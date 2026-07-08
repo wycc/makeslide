@@ -1467,6 +1467,8 @@ export const zhTW = {
   'play.sidebar.addMultipleTitle': '根據提示詞新增多頁投影片',
   'play.sidebar.addMultiple': '新增多頁',
   'play.sidebar.delete': '刪除',
+  'play.sidebar.notebookBadge': 'Notebook',
+  'play.sidebar.notebookBadgeTitle': '此頁為互動式 Jupyter notebook',
   'play.sidebar.thumbnailTitle': '第 {page} 頁{selected}',
   'play.sidebar.thumbnailSelectedSuffix': '（已選取重生）',
   'play.sidebar.dragToReorder': '拖曳此把手可重排',

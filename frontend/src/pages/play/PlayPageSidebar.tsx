@@ -944,6 +944,14 @@ export function PlayPageSidebar() {
                       <div className="flex aspect-video w-full items-center justify-center text-xs text-muted">{p.page_number}</div>
                     )}
                     <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[10px] text-white">{p.page_number}</span>
+                    {p.render_type === 'notebook' && (
+                      <span
+                        className="absolute right-1 top-1 rounded bg-sky-600/90 px-1 text-[10px] font-medium text-white"
+                        title={t('play.sidebar.notebookBadgeTitle')}
+                      >
+                        📓 {t('play.sidebar.notebookBadge')}
+                      </span>
+                    )}
                   </div>
                   <p className="min-w-0 flex-1 break-words text-xs leading-relaxed text-text">
                     {reviewText || <span className="text-muted">{t('play.sidebar.reviewNoScript')}</span>}
