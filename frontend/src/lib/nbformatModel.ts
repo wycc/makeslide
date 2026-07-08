@@ -192,6 +192,17 @@ export function clearCellOutputs(nb: NbNotebook, cellIndex: number): NbNotebook 
   return withCellExecution(nb, cellIndex, [], null);
 }
 
+/**
+ * Replace a cell's source text (used by the cell editor). Source is stored as a single
+ * string; nbformat readers accept string or string[] so this stays valid. A no-op when the
+ * index is out of range.
+ */
+export function withCellSource(nb: NbNotebook, cellIndex: number, source: string): NbNotebook {
+  if (cellIndex < 0 || cellIndex >= nb.cells.length) return nb;
+  const cells = nb.cells.map((cell, i) => (i === cellIndex ? { ...cell, source } : cell));
+  return { ...nb, cells };
+}
+
 /** Clear every code cell's outputs (used by the "clear all outputs" action). */
 export function clearAllOutputs(nb: NbNotebook): NbNotebook {
   const cells = nb.cells.map((cell) =>

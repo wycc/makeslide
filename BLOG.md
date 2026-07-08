@@ -1,5 +1,32 @@
 # MakeSlide 功能說明
 
+## Jupyter Notebook 整合（階段 3a）：直接編輯 notebook 的 cell 內容
+
+### 背景
+
+能執行、能管理 kernel 之後，就差「改內容」了。這一步讓你可以在簡報裡**直接編輯 notebook cell 的內容**
+（程式碼或 markdown），改完存回 `.ipynb`，不需要另外開 JupyterLab。採 Jupyter 慣用的 command／edit 雙模式。
+
+### 使用方式
+
+在有編輯權限的 notebook 頁：
+
+- **進入編輯**：按 `Enter`、雙擊 cell，或按面板右下角的「✎ 編輯」。cell 會變成一個文字框，游標自動聚焦。
+- **編輯中**：正常打字；上下鍵移動游標、`Enter` 換行（都交給文字框，不會切換 cell）。
+- **完成編輯**：按 `Esc` 或「✓ 完成」，內容就會存回 `.ipynb`。
+- **command 模式**（未編輯時）：`↑`／`↓` 切換 cell、`Enter` 進入編輯、`Ctrl/⌘+Enter` 執行、`Shift+Enter`
+  執行並前進；`Space`／`←`／`→` 仍是換簡報頁。
+- 切換 cell 或執行前，正在編輯的內容會自動先存起來；執行時跑的是你最新改好的原始碼。
+
+### 實作重點
+
+- 新增純函式 `withCellSource`（不可變更新某個 cell 的原始碼、越界時原樣返回），有單元測試。
+- `NotebookPanel` 實作 command／edit 雙模式狀態機：edit 模式用 `<textarea>`（會隨行數長高），command 模式沿用
+  先前的導覽與執行鍵；兩者切換時自動提交草稿並透過 `savePageNotebook` 存回。
+- 語法高亮（CodeMirror）留待下一步；目前先用純文字框（計畫 §3.1 的漸進做法）。
+
+分支：`feat/notebook-cell-edit`。`nbformatModel` 14/14、前端 `tsc`＋i18n parity 38/38＋`vite build` 通過。
+
 ## Jupyter Notebook 整合（階段 2a）：重啟 kernel 與清除輸出
 
 ### 背景

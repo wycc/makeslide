@@ -6,6 +6,7 @@ import {
   clampCellIndex,
   clearAllOutputs,
   clearCellOutputs,
+  withCellSource,
   defaultNbNotebook,
   displayOutput,
   displayOutputs,
@@ -158,6 +159,18 @@ test('clearCellOutputs and clearAllOutputs reset code cells', () => {
   const cleared = clearAllOutputs(withCellExecution(nb, 0, [{ output_type: 'stream', name: 'stdout', text: 'z' }], 2));
   assert.deepEqual(cleared.cells[0]!.outputs, []);
   assert.equal(cleared.cells[0]!.execution_count, null);
+});
+
+test('withCellSource replaces a cell source immutably and no-ops out of range', () => {
+  const nb = twoCellNb();
+  const next = withCellSource(nb, 1, 'edited markdown');
+  assert.equal(cellText(next.cells[1]!), 'edited markdown');
+  assert.equal(cellText(nb.cells[1]!), 'note'); // original untouched
+  // preserves the cell's other fields (type)
+  assert.equal(next.cells[1]!.cell_type, 'markdown');
+  // out-of-range index returns the same notebook reference
+  assert.equal(withCellSource(nb, 9, 'x'), nb);
+  assert.equal(withCellSource(nb, -1, 'x'), nb);
 });
 
 // ---- display MIME selection ----
