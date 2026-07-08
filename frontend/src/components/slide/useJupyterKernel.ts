@@ -11,10 +11,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Kernel } from '@jupyterlab/services';
 import { fetchJupyterConnection } from '../../lib/api/jupyter';
-import { iopubMessageFrom, kernelStatusFrom, resolveJupyterUrls, type KernelStatus } from '../../lib/jupyterConnection';
+import { iopubMessageFrom, kernelStatusFrom, resolveJupyterUrls, isJupyterDisabledError, type KernelStatus } from '../../lib/jupyterConnection';
 import type { IopubMessage } from '../../lib/nbformatModel';
 
-export type KernelPhase = 'idle' | 'connecting' | 'ready' | 'busy' | 'unavailable' | 'error';
+// 'disabled' = backend JUPYTER_ENABLED is off (connection endpoint 404s), distinct from a real
+// connection failure ('unavailable') so the UI can say "not enabled" instead of "can't connect".
+export type KernelPhase = 'idle' | 'connecting' | 'ready' | 'busy' | 'unavailable' | 'disabled' | 'error';
 
 export interface ExecuteHandlers {
   onIopub: (msg: IopubMessage) => void;
@@ -107,8 +109,8 @@ export function useJupyterKernel(notebookKey: string | null): UseJupyterKernelRe
         });
         setPhase('ready');
       })
-      .catch(() => {
-        if (keyRef.current === key) setPhase('unavailable');
+      .catch((err) => {
+        if (keyRef.current === key) setPhase(isJupyterDisabledError(err) ? 'disabled' : 'unavailable');
       });
   }, []);
 

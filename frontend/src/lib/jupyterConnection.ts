@@ -103,11 +103,21 @@ export function kernelStatusFrom(raw: RawKernelMessage): KernelStatus | null {
  */
 export type KernelStatusLabelKey =
   | ''
+  | 'play.notebook.kernelDisabled'
   | 'play.notebook.kernelUnavailable'
   | 'play.notebook.kernelConnecting'
   | 'play.notebook.kernelSlow'
   | 'play.notebook.kernelBusy'
   | 'play.notebook.kernelReady';
+
+/**
+ * True when an error from `fetchJupyterConnection` means the feature is *disabled* on the
+ * backend (`GET /api/jupyter/connection` returns 404 when `JUPYTER_ENABLED` is false) rather
+ * than a genuine connection failure. Duck-typed on `status` so this stays free of the API layer.
+ */
+export function isJupyterDisabledError(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { status?: unknown }).status === 404;
+}
 
 export function kernelStatusLabelKey(s: {
   editable: boolean;
@@ -117,6 +127,9 @@ export function kernelStatusLabelKey(s: {
   timedOut: boolean;
 }): KernelStatusLabelKey {
   if (!s.editable) return '';
+  // Feature disabled on the backend (404) — a distinct, non-retryable state, checked before the
+  // generic run/connection errors so it isn't masked by a failed run.
+  if (s.phase === 'disabled') return 'play.notebook.kernelDisabled';
   if (s.runError || s.phase === 'unavailable' || s.phase === 'error') return 'play.notebook.kernelUnavailable';
   if (s.phase === 'connecting') return 'play.notebook.kernelConnecting';
   const busy = s.running || s.phase === 'busy';
