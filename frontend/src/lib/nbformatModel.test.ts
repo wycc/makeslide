@@ -14,6 +14,7 @@ import {
   changeCellType,
   codeCellIndices,
   executionCountLabel,
+  formatCellTiming,
   defaultNbNotebook,
   displayOutput,
   displayOutputs,
@@ -350,4 +351,11 @@ test('outputsToPlainText falls back to ename:evalue without a traceback and igno
   );
   assert.equal(outputsToPlainText([{ output_type: 'display_data', data: { 'image/png': 'base64' } }]), '');
   assert.equal(outputsToPlainText(undefined), '');
+});
+
+test('formatCellTiming formats milliseconds, seconds, and minutes correctly', () => {
+  assert.equal(formatCellTiming(0), '0ms');
+  assert.equal(formatCellTiming(235), '235ms');
+  assert.equal(formatCellTiming(1200), '1.2s');
+  assert.equal(formatCellTiming(65400), '1m 5.4s');
 });

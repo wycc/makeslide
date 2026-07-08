@@ -278,6 +278,20 @@ export function executionCountLabel(count: unknown): string {
   return typeof count === 'number' ? `[${count}]` : '[ ]';
 }
 
+/**
+ * Format a cell execution duration for display (phase 7c).
+ *   < 1 000 ms  -> "235ms"
+ *   < 60 000 ms -> "1.2s"
+ *   >= 60 000 ms -> "1m 5.4s"
+ */
+export function formatCellTiming(ms: number): string {
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  const minutes = Math.floor(ms / 60000);
+  const seconds = ((ms % 60000) / 1000).toFixed(1);
+  return `${minutes}m ${seconds}s`;
+}
+
 /** Indices of every code cell, in order — the execution order for "Run all" (phase 6c). */
 export function codeCellIndices(nb: NbNotebook): number[] {
   const out: number[] = [];
