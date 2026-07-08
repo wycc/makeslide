@@ -135,6 +135,7 @@ export function PlayPageFullscreen() {
     fullscreenImageSrc,
     withImageBust,
     withShareToken,
+    currentShareToken,
     drawingMode, setDrawingMode,
     drawingTool, setDrawingTool,
     drawingColor, setDrawingColor,
@@ -492,6 +493,9 @@ export function PlayPageFullscreen() {
                   currentTime={currentTime}
                   isPlaying={slideAnimationPlaying}
                   playbackRate={playbackRate}
+                  pdfId={pdfId ?? undefined}
+                  pageNumber={currentPage?.page_number}
+                  shareToken={currentShareToken || undefined}
                   resolveFigureImageUrl={
                     pdfId
                       ? (figureId) => withShareToken(figureImageUrl(pdfId, figureId)) ?? figureImageUrl(pdfId, figureId)
@@ -666,6 +670,9 @@ export function PlayPageFullscreen() {
           currentTime={currentTime}
           isPlaying={slideAnimationPlaying}
           playbackRate={playbackRate}
+          pdfId={pdfId ?? undefined}
+          pageNumber={currentPage?.page_number}
+          shareToken={currentShareToken || undefined}
           resolveFigureImageUrl={
             pdfId
               ? (figureId) => withShareToken(figureImageUrl(pdfId, figureId)) ?? figureImageUrl(pdfId, figureId)
