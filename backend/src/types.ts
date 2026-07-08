@@ -340,6 +340,9 @@ export interface PdfMetadataPage {
   audio_chars?: number;
   audio_generated_at?: string;
   audio_duration_seconds?: number | null;
+  render_type?: SlideRenderType | null;
+  // Jupyter notebook page: relative path to the page's `.ipynb` asset.
+  notebook_path?: string | null;
 }
 
 export interface PdfMetadataModels {

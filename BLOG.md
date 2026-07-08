@@ -1,5 +1,40 @@
 # MakeSlide 功能說明
 
+## Jupyter Notebook 整合（階段 1b）：每頁的 `.ipynb` 資產存取 API
+
+### 背景
+
+MakeSlide 正在逐步把「一個 Jupyter Notebook 檔＝一個簡報頁」整合進來——同一頁的所有 cell 共用一個
+kernel、一次顯示一個 cell、可就地執行、結果即時寫回 `.ipynb`（整體計畫見 `docs/jupyter-integration-plan.md`）。
+在此之前：階段 0 建立了資料模型（新增 `render_type = 'notebook'` 與 `pages.notebook_path` 欄位），階段 1a
+提供了連線設定與 `GET /api/jupyter/connection` 端點。本階段（1b）補上關鍵的一塊——**讓每一頁能夠讀取與
+儲存自己的 `.ipynb` 檔案**，這是後續前端 NotebookPanel 開啟 notebook、以及執行結果寫回的基礎。
+
+### 使用方式
+
+這是一組後端 API（尚無使用者介面，供後續前端階段串接）：
+
+- **`GET /api/pdfs/:id/pages/:n/notebook`**：取得該頁的 notebook（nbformat JSON）。若該頁尚未存過
+  `.ipynb`，會回傳一份「只含一個空 code cell」的預設 notebook，前端因此永遠拿得到一份可開啟的文件。
+  回應帶 `Cache-Control: no-store`，確保剛存檔／剛執行完寫回後不會讀到舊版本。
+- **`PUT /api/pdfs/:id/pages/:n/notebook`**：儲存該頁的 notebook（編輯 cell 或把執行輸出寫回時都走這條）。
+  儲存後會把該頁 `render_type` 設為 `'notebook'`、記錄 `notebook_path`，並同步更新 `metadata.json`。
+- **權限**：讀取需有簡報檢視權（擁有者／公開／有效分享連結），儲存需有編輯權；跨帳號存取私密簡報會被
+  拒絕，唯讀分享連結只能讀不能寫——與其他頁面資產（動畫規格等）一致。
+
+### 實作重點
+
+- **無損驗證**：`.ipynb` 是 notebook 頁的「真相來源」，所以驗證刻意寬鬆——`backend/src/services/notebookAsset.ts`
+  的 `validateNotebook` 用 zod `.passthrough()` 保留 `outputs`、`execution_count`、`metadata.kernelspec`、widget
+  狀態等所有欄位，只檢查結構是否為合理的 nbformat（`cells` 陣列、cell 型別限 code/markdown/raw、必要頂層鍵），
+  並補上 `nbformat`／`nbformat_minor`／`metadata` 預設值。另有大小上限（10 MB／1000 cells）防止暴衝的輸出塞爆儲存。
+- **路徑解析**：讀檔優先採用 DB 的 `notebook_path` 欄位、再退回慣例位置 `pages/<page_uid>.ipynb`——這與動畫
+  規格相同，是為了相容「ZIP 匯入會重新產生 page_uid、但資產檔沿用原名」的情形。
+- **一致性**：`PdfMetadataPage` 型別新增 `render_type`／`notebook_path`，並讓 metadata resync
+  （`rebuildAddPagesMetadataFromDb`）帶出這兩欄，使 `metadata.json` 與資料庫始終一致。
+
+分支：`feat/notebook-asset-crud`。
+
 ## 投票進行時，螢幕上顯示「掃描加入」QR，聽眾一掃即進入同步簡報
 
 ### 背景
