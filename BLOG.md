@@ -11,7 +11,7 @@
 
 ### 使用方式
 
-營運者在後端 `.env` 設定（並重啟後端）：
+營運者只需在後端 `.env` 設定，然後用 `start.sh` 啟動：
 
 ```bash
 JUPYTER_ENABLED=true
@@ -19,15 +19,11 @@ JUPYTER_PROXY_TARGET=http://127.0.0.1:8888   # 本機 Jupyter server
 # JUPYTER_PROXY_PREFIX=/jupyter               # 掛載路徑，預設 /jupyter，通常不用改
 ```
 
-並在本機起一個 Jupyter server，其 base_url 要對齊掛載路徑：
-
-```bash
-jupyter server --ServerApp.base_url=/jupyter \
-  --ServerApp.token='' --ServerApp.disable_check_xsrf=True \
-  --ip=127.0.0.1 --port=8888
-```
-
-之後 notebook 頁的「執行」「全部執行」就會透過 MakeSlide 同源連到這個 Jupyter，使用者不需任何設定。
+`start.sh` 會在偵測到上述設定時**自動在本機啟動一個 Jupyter server**（base_url 對齊掛載路徑、host/port 取自
+`JUPYTER_PROXY_TARGET`、綁 localhost 無 token），並在收到中斷訊號時一併關閉；若該 port 已有服務則沿用、找不到
+`jupyter` 執行檔則只警告不中斷。之後 notebook 頁的「執行」「全部執行」就會透過 MakeSlide 同源連到這個 Jupyter，
+使用者不需任何設定。（若要手動管理 Jupyter，也可自行以 `jupyter server --ServerApp.base_url=/jupyter
+--ServerApp.token='' --ip=127.0.0.1 --port=8888` 啟動。）
 
 ### 實作重點
 
