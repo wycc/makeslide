@@ -1,5 +1,31 @@
 # MakeSlide 功能說明
 
+## Jupyter Notebook 整合（階段 6c）：一鍵執行整頁所有程式碼（Run all）
+
+### 背景
+
+先前 notebook 頁只能一格一格手動執行。當一頁有多個彼此相依的程式碼 cell（前一格定義變數、後一格使用），
+逐格點很麻煩。這一步加上「全部執行」。
+
+### 使用方式
+
+在可編輯、且已啟用 Jupyter 執行的 notebook 頁，工具列的 **▶▶ 全部執行** 會由上而下依序執行整頁的每個程式碼
+cell；每一格的輸出會即時顯示。若中途某一格出錯，會停在該格不再往下（與 JupyterLab 的「Run all」相同）。整頁
+沒有任何程式碼 cell、或正在執行時，按鈕會變灰。
+
+### 實作重點
+
+- 新增純函式 `codeCellIndices`（依序列出所有程式碼 cell 的位置），作為執行順序與「是否有可執行 cell」的依據，
+  有單元測試。
+- 執行時把整份 notebook 以一份區域工作副本串接：每一格執行完的輸出立即寫回這份副本，讓下一格看得到；輸出
+  逐格即時串流，整份文件在最後統一存回 `.ipynb`。
+- 端到端執行需要後端已啟用 Jupyter（`JUPYTER_ENABLED=true`）並連上一個實際的 Jupyter server。
+
+分支：`feat/notebook-run-all`。`nbformatModel` 測試 25/25、前端 `tsc`＋i18n 38/38＋`vite build` 通過。
+
+> 至此 Jupyter Notebook 整合的階段 6（notebook 編輯器 cell 操作：新增／刪除／上下移動／型別切換／複製／長輸出
+> 折疊／全部執行）全部完成。
+
 ## Jupyter Notebook 整合（階段 6e）：過長的輸出自動折疊
 
 ### 背景
