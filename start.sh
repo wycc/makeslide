@@ -370,6 +370,65 @@ else
 fi
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Step 6.5: 依 .env 啟動本機 Jupyter server（供後端同源反向代理）
+# ──────────────────────────────────────────────────────────────────────────────
+# 讀 .env 中單一變數的值（取最後一筆、去行內註解/引號/前後空白）。
+read_env_var() {
+  local key="$1" file="$SCRIPT_DIR/.env" line=""
+  [[ -f "$file" ]] || return 0
+  line="$(grep -E "^[[:space:]]*${key}=" "$file" | tail -1)" || return 0
+  line="${line#*=}"
+  line="${line%%#*}"
+  printf '%s' "$line" | sed -E "s/^[[:space:]]+//; s/[[:space:]]+$//; s/^[\"']//; s/[\"']$//"
+}
+
+JUPYTER_PID=""
+# 僅在 JUPYTER_ENABLED=true 且設了 JUPYTER_PROXY_TARGET 時，於本機啟動 Jupyter server，
+# 讓後端可把 <NB_PREFIX><JUPYTER_PROXY_PREFIX>/* 同源反向代理到它（見 backend/src/routes/jupyterProxy.ts）。
+# base_url 對齊掛載路徑、port/host 取自 JUPYTER_PROXY_TARGET；找不到 jupyter 只警告不中斷 MakeSlide。
+start_jupyter() {
+  local enabled target prefix nbp base hostport jhost jport jbin jlog
+  enabled="$(read_env_var JUPYTER_ENABLED)"
+  target="$(read_env_var JUPYTER_PROXY_TARGET)"
+  if [[ "$enabled" != "true" || -z "$target" ]]; then
+    log_info "未啟用 Jupyter 後端代理（JUPYTER_ENABLED!=true 或未設 JUPYTER_PROXY_TARGET），略過啟動 Jupyter server"
+    return 0
+  fi
+
+  prefix="$(read_env_var JUPYTER_PROXY_PREFIX)"; [[ -n "$prefix" ]] || prefix="/jupyter"
+  nbp="$(read_env_var NB_PREFIX)"
+  base="${nbp}${prefix}"
+  hostport="${target#*://}"; hostport="${hostport%%/*}"
+  jhost="${hostport%%:*}"; jport="${hostport##*:}"
+  [[ "$jport" == "$hostport" ]] && jport=8888   # target 未帶 port 時預設 8888
+  [[ -n "$jhost" ]] || jhost=127.0.0.1
+
+  jbin="$(command -v jupyter || true)"
+  [[ -z "$jbin" && -x /opt/Anaconda3/bin/jupyter ]] && jbin=/opt/Anaconda3/bin/jupyter
+  if [[ -z "$jbin" ]]; then
+    log_warn "找不到 jupyter 執行檔，略過啟動 Jupyter server（notebook 就地執行將無法連線）"
+    return 0
+  fi
+
+  if [[ -n "$(find_pids_on_port "$jport")" ]]; then
+    log_info "port $jport 已有服務在監聽，沿用既有 Jupyter server（不另外啟動）"
+    return 0
+  fi
+
+  jlog="$SCRIPT_DIR/jupyter.log"
+  log_info "啟動 Jupyter server（base_url=$base，位址 ${jhost}:${jport}，log→jupyter.log）"
+  "$jbin" server \
+    --ServerApp.base_url="$base" \
+    --ServerApp.token='' --ServerApp.password='' \
+    --ServerApp.disable_check_xsrf=True \
+    --ServerApp.allow_origin='*' \
+    --ip="$jhost" --port="$jport" --no-browser \
+    > "$jlog" 2>&1 &
+  JUPYTER_PID=$!
+  log_info "Jupyter server 已啟動（pid=$JUPYTER_PID）"
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Step 7: 啟動 dev server
 # ──────────────────────────────────────────────────────────────────────────────
 log_step "啟動 dev server (mode=$MODE)"
@@ -380,6 +439,10 @@ fi
 CHILD_PID=""
 cleanup() {
   local code=$?
+  if [[ -n "${JUPYTER_PID:-}" ]] && kill -0 "$JUPYTER_PID" 2>/dev/null; then
+    log_warn "終結 Jupyter server (pid=$JUPYTER_PID)…"
+    terminate_process_tree "$JUPYTER_PID" TERM
+  fi
   if [[ -n "$CHILD_PID" ]] && kill -0 "$CHILD_PID" 2>/dev/null; then
     log_warn "收到中斷訊號，正在終結子程序 (pid=$CHILD_PID)…"
     # 先送 TERM 給整棵子程序樹，避免 npm/tsx/vite/backend 留下 orphan process 佔住 port
@@ -397,6 +460,11 @@ cleanup() {
   exit "$code"
 }
 trap cleanup INT TERM
+
+# backend／all 模式才需要本機 Jupyter（frontend-only 無後端代理）。
+if [[ "$MODE" != "frontend" ]]; then
+  start_jupyter
+fi
 
 case "$MODE" in
   all)
@@ -423,6 +491,9 @@ case "$MODE" in
       # 以 backend 作為主前景程序，watcher 由 cleanup 一併回收
       cleanup() {
         local code=$?
+        if [[ -n "${JUPYTER_PID:-}" ]] && kill -0 "$JUPYTER_PID" 2>/dev/null; then
+          terminate_process_tree "$JUPYTER_PID" TERM
+        fi
         if [[ -n "${WATCH_PID:-}" ]] && kill -0 "$WATCH_PID" 2>/dev/null; then
           terminate_process_tree "$WATCH_PID" TERM
         fi
