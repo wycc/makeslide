@@ -1,5 +1,26 @@
 # MakeSlide 功能說明
 
+## Jupyter Notebook 整合（修正）：未啟用時顯示清楚的狀態訊息
+
+### 背景
+
+Jupyter 的就地執行功能預設在後端是關閉的（需要營運者顯式開啟）。功能關閉時，連線查詢端點會回應 404。先前
+前端把這個 404 當成一般的「Kernel 無法連線」，讓人以為是伺服器壞了或網路問題，其實只是功能還沒啟用。
+
+### 使用方式
+
+當後端尚未啟用 Jupyter 執行功能時，notebook 頁底部狀態列現在會明確顯示「**Jupyter 執行功能未啟用（請洽管理員
+開啟）**」，而不是誤導的「無法連線」。若要真正啟用就地執行，營運者需在後端設定 `JUPYTER_ENABLED=true`（並視部署
+方式設定 `JUPYTER_BASE_URL`／`JUPYTER_TOKEN`）。
+
+### 實作重點
+
+- 新增純函式 `isJupyterDisabledError`（以 `status === 404` 辨識「功能關閉」而非連線失敗），以及一個獨立的
+  `disabled` kernel 狀態；狀態列的取捨把 `disabled` 排在一般錯誤之前，避免被「執行失敗」蓋掉。
+- kernel 連線的 hook 在收到 404 時進入 `disabled` 狀態，其餘錯誤才維持「無法連線」。
+
+分支：`fix/jupyter-disabled-status`。`jupyterConnection` 測試 8/8、前端 `tsc`＋i18n 38/38＋`vite build` 通過。
+
 ## Jupyter Notebook 整合（階段 6b）：在程式碼與 Markdown 之間切換 cell 型別
 
 ### 背景
