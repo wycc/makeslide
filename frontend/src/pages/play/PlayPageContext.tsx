@@ -310,6 +310,7 @@ export interface PlayPageContextValue {
   handleMoveSlide: (from: number, to: number) => void;
   handleUpdateCoverFromCurrentPage: () => void;
   handleConvertCurrentPageToNotebook: () => void;
+  handleGenerateNotebookForCurrentPage: () => void;
   aiPollBusy: boolean;
   handleGeneratePollDraft: () => void;
   handleDeletePoll: (pollId: number) => void;

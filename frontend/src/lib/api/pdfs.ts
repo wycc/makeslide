@@ -171,6 +171,26 @@ export async function savePageNotebook(
   return (await resp.json()) as SavePageNotebookResponse;
 }
 
+export interface GeneratePageNotebookResponse extends SavePageNotebookResponse {
+  notebook: unknown;
+}
+
+/** Ask the backend to AI-generate a notebook page from a topic and store it (phase 4b). */
+export async function generatePageNotebook(
+  id: string,
+  pageNumber: number,
+  topic: string,
+  context?: string,
+): Promise<GeneratePageNotebookResponse> {
+  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/notebook/generate`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(context ? { topic, context } : { topic }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as GeneratePageNotebookResponse;
+}
+
 export async function savePageAnimation(
   id: string,
   pageNumber: number,
