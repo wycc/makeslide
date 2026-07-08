@@ -46,3 +46,6 @@ log.txt
 .certs/localhost-cert.pem
 .certs/localhost-key.pem
 .roo/schedules.json
+
+# Jupyter 就地執行專用 venv（start.sh 自動建立）
+.jupyter-venv/

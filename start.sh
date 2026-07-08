@@ -397,6 +397,34 @@ read_env_var() {
   printf '%s' "$line" | sed -E "s/^[[:space:]]+//; s/[[:space:]]+$//; s/^[\"']//; s/[\"']$//"
 }
 
+JUPYTER_VENV="$SCRIPT_DIR/.jupyter-venv"
+JUPYTER_BIN=""
+# 取得一個 jupyter_server >= 2 的 jupyter（@jupyterlab/services 的新 kernel WebSocket protocol
+# 需要 2.x；舊版會導致前端「執行了卻收不到輸出」）。優先用專用 venv；系統版本夠新則用系統；
+# 都不行則自動建 venv 安裝新版。結果放全域 JUPYTER_BIN。取得成功回 0。
+ensure_jupyter_bin() {
+  local sysbin sysver major py venvbin="$JUPYTER_VENV/bin/jupyter"
+  if [[ -x "$venvbin" ]]; then JUPYTER_BIN="$venvbin"; return 0; fi
+  sysbin="$(command -v jupyter || true)"
+  [[ -z "$sysbin" && -x /opt/Anaconda3/bin/jupyter ]] && sysbin=/opt/Anaconda3/bin/jupyter
+  if [[ -n "$sysbin" ]]; then
+    sysver="$("$sysbin" server --version 2>/dev/null | head -1)"
+    major="${sysver%%.*}"
+    if [[ "$major" =~ ^[0-9]+$ ]] && (( major >= 2 )); then JUPYTER_BIN="$sysbin"; return 0; fi
+    log_warn "系統 jupyter_server 版本過舊（${sysver:-未知}），前端需要 >= 2；建立專用 venv 安裝新版"
+  else
+    log_warn "找不到 jupyter，建立專用 venv 安裝 jupyter_server"
+  fi
+  py="$(command -v python3 || command -v python || echo /opt/Anaconda3/bin/python)"
+  if ! "$py" -m venv "$JUPYTER_VENV" >/dev/null 2>&1; then log_warn "建立 venv 失敗（缺 python venv 模組？）"; return 1; fi
+  log_info "安裝 jupyter_server + ipykernel 到 .jupyter-venv（首次較久，需網路）…"
+  if ! "$JUPYTER_VENV/bin/pip" install --quiet --upgrade pip jupyter_server ipykernel >/dev/null 2>&1; then
+    log_warn "pip 安裝 jupyter_server 失敗（需網路）"; return 1
+  fi
+  "$JUPYTER_VENV/bin/python" -m ipykernel install --sys-prefix --name python3 --display-name "Python 3" >/dev/null 2>&1 || true
+  JUPYTER_BIN="$venvbin"; return 0
+}
+
 JUPYTER_PID=""
 # 僅在 JUPYTER_ENABLED=true 且設了 JUPYTER_PROXY_TARGET 時，於本機啟動 Jupyter server，
 # 讓後端可把 <NB_PREFIX><JUPYTER_PROXY_PREFIX>/* 同源反向代理到它（見 backend/src/routes/jupyterProxy.ts）。
@@ -419,8 +447,11 @@ start_jupyter() {
   [[ "$jport" == "$hostport" ]] && jport=8888   # target 未帶 port 時預設 8888
   [[ -n "$jhost" ]] || jhost=127.0.0.1
 
-  jbin="$(command -v jupyter || true)"
-  [[ -z "$jbin" && -x /opt/Anaconda3/bin/jupyter ]] && jbin=/opt/Anaconda3/bin/jupyter
+  if ! ensure_jupyter_bin; then
+    log_warn "無法取得夠新的 jupyter，略過啟動 Jupyter server（notebook 就地執行將無法連線）"
+    return 0
+  fi
+  jbin="$JUPYTER_BIN"
   if [[ -z "$jbin" ]]; then
     log_warn "找不到 jupyter 執行檔，略過啟動 Jupyter server（notebook 就地執行將無法連線）"
     return 0
