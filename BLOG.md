@@ -1,5 +1,29 @@
 # MakeSlide 功能說明
 
+## Jupyter Notebook 整合（階段 5e）：cell 執行過久時給提示
+
+### 背景
+
+在 notebook 頁執行一格程式時，若那格跑很久（無窮迴圈、卡在等待、或 kernel 出狀況），先前狀態列只會一直顯示
+靜態的「Kernel 執行中…」，使用者無從判斷是還在正常運算、還是已經卡死。這一步加上「跑太久」的提示。
+
+### 使用方式
+
+執行一格程式時，如果超過約 30 秒仍未結束，底部狀態列會從「Kernel 執行中…」變成「**仍在執行中…（可重啟
+kernel）**」，提示你它還在跑、但你也可以選擇用工具列的「⟳ 重啟 kernel」中止並重來。
+
+### 實作重點
+
+- 把狀態列的顯示優先順序抽成純函式 `kernelStatusLabelKey`（無法連線／連線中／跑太久／執行中／就緒），回傳精確
+  的翻譯鍵，方便單元測試各種狀態的取捨。
+- `NotebookPanel` 針對「正在執行的那一格」啟動一個 30 秒計時器，逾時就切換到「跑太久」狀態；該格執行結束時
+  自動清除，不會誤報。
+
+分支：`feat/notebook-kernel-timeout`。`jupyterConnection` 測試 7/7、前端 `tsc`＋i18n 38/38＋`vite build` 通過。
+
+> 至此，Jupyter Notebook 整合的階段 0–5 於本開發環境內可完成的程式工作全部結束；剩餘僅為需要實際啟動 Jupyter
+> server 與 LLM gateway 的端到端實機驗證。
+
 ## Jupyter Notebook 整合（階段 5c）：AI 產生 notebook 時參考該頁既有內容
 
 ### 背景
