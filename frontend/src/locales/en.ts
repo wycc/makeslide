@@ -1176,6 +1176,7 @@ export const en = {
   'play.notebook.kernelReady': 'Kernel ready',
   'play.notebook.kernelConnecting': 'Connecting kernel…',
   'play.notebook.kernelBusy': 'Kernel running…',
+  'play.notebook.kernelSlow': 'Still running (taking a while)… you can restart the kernel',
   'play.notebook.kernelUnavailable': 'Kernel unavailable',
   'play.notebook.restart': 'Restart kernel',
   'play.notebook.clearOutputs': 'Clear outputs',

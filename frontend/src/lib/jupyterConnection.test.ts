@@ -4,6 +4,7 @@ import {
   httpToWs,
   iopubMessageFrom,
   kernelStatusFrom,
+  kernelStatusLabelKey,
   resolveJupyterUrls,
   type JupyterConnectionInfo,
 } from './jupyterConnection';
@@ -63,4 +64,21 @@ test('kernelStatusFrom reads execution_state from status messages only', () => {
   assert.equal(kernelStatusFrom({ header: { msg_type: 'status' }, content: { execution_state: 'weird' } }), 'unknown');
   // not a status message → null
   assert.equal(kernelStatusFrom({ header: { msg_type: 'stream' }, content: {} }), null);
+});
+
+test('kernelStatusLabelKey resolves the footer status key with correct precedence', () => {
+  const base = { editable: true, runError: false, phase: 'ready', running: false, timedOut: false };
+  // read-only viewers see nothing
+  assert.equal(kernelStatusLabelKey({ ...base, editable: false }), '');
+  // errors/unavailable win over everything
+  assert.equal(kernelStatusLabelKey({ ...base, runError: true, running: true }), 'play.notebook.kernelUnavailable');
+  assert.equal(kernelStatusLabelKey({ ...base, phase: 'unavailable' }), 'play.notebook.kernelUnavailable');
+  assert.equal(kernelStatusLabelKey({ ...base, phase: 'connecting' }), 'play.notebook.kernelConnecting');
+  // a run that has passed the timeout shows the "slow" hint instead of plain busy
+  assert.equal(kernelStatusLabelKey({ ...base, running: true, timedOut: true }), 'play.notebook.kernelSlow');
+  assert.equal(kernelStatusLabelKey({ ...base, running: true }), 'play.notebook.kernelBusy');
+  assert.equal(kernelStatusLabelKey({ ...base, phase: 'busy' }), 'play.notebook.kernelBusy');
+  assert.equal(kernelStatusLabelKey(base), 'play.notebook.kernelReady');
+  // timeout without an active run is ignored (nothing running to be slow)
+  assert.equal(kernelStatusLabelKey({ ...base, timedOut: true }), 'play.notebook.kernelReady');
 });

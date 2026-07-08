@@ -34,6 +34,10 @@ import {
   type NbOutput,
 } from '../../lib/nbformatModel';
 import { useJupyterKernel } from './useJupyterKernel';
+import { kernelStatusLabelKey } from '../../lib/jupyterConnection';
+
+/** How long a cell may run before the footer hints it is taking a while (phase 5e). */
+const NOTEBOOK_RUN_TIMEOUT_MS = 30_000;
 
 // Lazy so CodeMirror + Python mode are code-split out of the main bundle (phase 3b).
 const CodeMirrorEditor = lazy(() => import('./codeMirrorEditor'));
@@ -205,6 +209,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
   const [runningIndex, setRunningIndex] = useState<number | null>(null);
   const [liveOutputs, setLiveOutputs] = useState<NbOutput[]>([]);
   const [runError, setRunError] = useState(false);
+  const [runTimedOut, setRunTimedOut] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const draftRef = useRef('');
@@ -423,6 +428,17 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
     containerRef.current?.scrollTo({ top: 0 });
   }, [currentIndex, notebook]);
 
+  // Flag a run that has been going for a while so the footer can hint (still running, restart
+  // possible) rather than sitting on a silent "busy" (phase 5e).
+  useEffect(() => {
+    if (runningIndex == null) {
+      setRunTimedOut(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setRunTimedOut(true), NOTEBOOK_RUN_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [runningIndex]);
+
   const footer = useMemo(() => {
     if (cells.length === 0) return '';
     const type = currentCell?.cell_type ?? 'code';
@@ -439,14 +455,14 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
       : displayOutputs(currentCell.outputs)
     : [];
 
-  const kernelLabel = (() => {
-    if (!editable) return '';
-    if (runError || kernel.phase === 'unavailable' || kernel.phase === 'error') return t('play.notebook.kernelUnavailable');
-    if (kernel.phase === 'connecting') return t('play.notebook.kernelConnecting');
-    if (runningIndex != null || kernel.phase === 'busy') return t('play.notebook.kernelBusy');
-    if (kernel.phase === 'ready') return t('play.notebook.kernelReady');
-    return '';
-  })();
+  const kernelLabelKey = kernelStatusLabelKey({
+    editable,
+    runError,
+    phase: kernel.phase,
+    running: runningIndex != null,
+    timedOut: runTimedOut,
+  });
+  const kernelLabel = kernelLabelKey ? t(kernelLabelKey) : '';
 
   return (
     <div className={`flex flex-col overflow-hidden rounded-lg border border-slate-800 bg-surface ${className ?? ''}`} style={style}>

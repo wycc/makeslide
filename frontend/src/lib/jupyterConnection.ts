@@ -94,3 +94,34 @@ export function kernelStatusFrom(raw: RawKernelMessage): KernelStatus | null {
       return 'unknown';
   }
 }
+
+/**
+ * Map the notebook kernel state to the i18n key for the footer status line (phase 5e). Pure so
+ * the precedence is unit-testable: unavailable/error win, then connecting, then a *slow* run
+ * (busy past the run-timeout — still running, but long enough to hint a restart), then plain
+ * busy, then ready. Returns '' when there is nothing to show (e.g. read-only viewers).
+ */
+export type KernelStatusLabelKey =
+  | ''
+  | 'play.notebook.kernelUnavailable'
+  | 'play.notebook.kernelConnecting'
+  | 'play.notebook.kernelSlow'
+  | 'play.notebook.kernelBusy'
+  | 'play.notebook.kernelReady';
+
+export function kernelStatusLabelKey(s: {
+  editable: boolean;
+  runError: boolean;
+  phase: string;
+  running: boolean;
+  timedOut: boolean;
+}): KernelStatusLabelKey {
+  if (!s.editable) return '';
+  if (s.runError || s.phase === 'unavailable' || s.phase === 'error') return 'play.notebook.kernelUnavailable';
+  if (s.phase === 'connecting') return 'play.notebook.kernelConnecting';
+  const busy = s.running || s.phase === 'busy';
+  if (busy && s.timedOut) return 'play.notebook.kernelSlow';
+  if (busy) return 'play.notebook.kernelBusy';
+  if (s.phase === 'ready') return 'play.notebook.kernelReady';
+  return '';
+}
