@@ -58,7 +58,7 @@
     - [x] **6b：cell 型別切換（code ↔ markdown）**（2026-07-08）：`nbformatModel` 加純函式 `changeCellType`（保留 source；code→markdown 去除 `outputs`/`execution_count`，markdown→code 補 runnable 預設；同型別／越界 no-op）；`NotebookPanel` 工具列加「轉為 Markdown」／「轉為程式碼」鈕（依當前 cell 型別變換標籤），先 commit 進行中編輯、離開 code 型別時清執行高亮，經 `savePageNotebook` 寫回。i18n 2 鍵。驗證：`nbformatModel` 22/22、前端 `tsc`＋i18n 38/38＋`vite build` 通過。分支 `feat/notebook-cell-type-toggle`，已 merge 回 master。
     - [ ] **6c：執行全部 code cell（Run all）**：依序執行所有 code cell，逐格串流輸出並寫回；遇錯可選擇停止或續跑。
     - [x] **6d：複製 cell 原始碼／輸出到剪貼簿**（2026-07-08）：`nbformatModel` 加純函式 `outputsToPlainText`（stream 文字＋result 的 `text/plain`＋error traceback 去 ANSI、退回 `ename: evalue`；純圖片輸出略過）；`NotebookPanel` 頁腳加「複製原始碼」／（code cell 有輸出時）「複製輸出」鈕（`navigator.clipboard`，唯讀觀看者亦可用、best-effort）。i18n 2 鍵。驗證：`nbformatModel` 24/24、前端 `tsc`＋i18n 38/38＋`vite build` 通過。分支 `feat/notebook-copy-cell`，已 merge 回 master。
-    - [ ] **6e：長輸出折疊**：單一 cell 輸出超過 N 行時預設折疊、可展開，避免長輸出把單 cell 視圖撐爆。
+    - [x] **6e：長輸出折疊**（2026-07-08）：巨量 stream 輸出或 traceback 會把固定高度的單 cell 視圖撐爆。純函式 [collapseText](frontend/src/lib/collapseText.ts)（截前 N 行＋回報隱藏行數，fits／maxLines 無效時 no-op）；`NotebookPanel` 新增 `CollapsibleOutput` 元件，text／error 輸出超過 16 行時折疊並顯示「顯示其餘 {n} 行」／「收合」切換，短輸出與 image/html/latex 不受影響。i18n 2 鍵。驗證：`collapseText` 3/3、前端 `tsc`＋i18n 38/38＋`vite build` 通過。分支 `feat/notebook-collapse-output`，已 merge 回 master。**階段 6 已完成 6a／6b／6d／6e；6c（Run all）需連 kernel 依序執行，此環境 `JUPYTER_ENABLED` 未開、無法端到端驗證，暫緩至實機。**
 
 > 註：既有的 NEW_FEATURE「Jupyter notebook 支持」漸進線已完成唯讀基礎（`parseNotebook` 純函式＋`NotebookView` 唯讀渲染，見下方第一九二／一九三輪），本計畫的階段 0 資料模型與其相容，後續階段將把互動執行接上。
 
@@ -1463,6 +1463,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-08 | （Jupyter 整合階段 6e）長輸出折疊。純函式 `collapseText`（截前 N 行＋隱藏行數、fits/無效 no-op）；NotebookPanel 加 `CollapsibleOutput`，text／error 輸出超過 16 行折疊並「顯示其餘 {n} 行／收合」，image/html/latex 不受影響；i18n 2 鍵。驗證：collapseText 3/3、前端 tsc＋i18n 38/38＋vite build。階段 6 餘 6c（Run all）需 kernel、暫緩至實機 | feat/notebook-collapse-output（已 merge） |
 | 2026-07-08 | （Jupyter 整合階段 6d）複製 cell 原始碼／輸出到剪貼簿。`nbformatModel` 加純函式 `outputsToPlainText`（stream＋result text/plain＋error 去 ANSI／退回 ename:evalue、圖片略過）；NotebookPanel 頁腳加「複製原始碼／輸出」鈕（navigator.clipboard、唯讀可用、best-effort）；i18n 2 鍵。驗證：nbformatModel 24/24、前端 tsc＋i18n 38/38＋vite build。註：本次 feature commit 8f489c7 因工作目錄隔離不乾淨，誤含使用者既有未提交改動 LOOP.md／NEW_FEATURE.md／start.sh（待使用者決定是否拆出） | feat/notebook-copy-cell（已 merge） |
 | 2026-07-08 | （使用者實機回饋 fix）notebook 頁 `GET /api/jupyter/connection` 404（後端 JUPYTER_ENABLED 預設關閉）原被前端當成一般「Kernel 無法連線」，訊息誤導。新增獨立 `disabled` kernel phase：純函式 `isJupyterDisabledError`（duck-type status===404）＋`kernelStatusLabelKey` 加 disabled 分支（先於一般錯誤判斷），`useJupyterKernel` connect catch 區分 404→`disabled`，狀態列改顯示「Jupyter 執行功能未啟用（請洽管理員開啟）」。i18n `kernelDisabled`。驗證：jupyterConnection 8/8（disabled 優先＋isJupyterDisabledError）、前端 tsc＋i18n 38/38＋vite build | fix/jupyter-disabled-status（已 merge） |
 | 2026-07-08 | （Jupyter 整合階段 6b）cell 型別切換 code↔markdown。`nbformatModel` 加純函式 `changeCellType`（保留 source、code→md 去 outputs/exec_count、md→code 補預設、同型別/越界 no-op）；NotebookPanel 工具列加「轉為 Markdown／程式碼」鈕（依當前型別變標籤、先 commit、離開 code 清執行高亮）經 savePageNotebook 寫回；i18n 2 鍵。驗證：nbformatModel 22/22、前端 tsc＋i18n 38/38＋vite build | feat/notebook-cell-type-toggle（已 merge） |
