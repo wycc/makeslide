@@ -1,5 +1,29 @@
 # MakeSlide 功能說明
 
+## Jupyter Notebook 整合（修正）：要用 jupyter_server 2 以上，前端才收得到執行輸出
+
+### 背景
+
+在 notebook 頁按「執行」後，程式其實有在 kernel 裡跑，但畫面上看不到任何輸出。追查後發現是 **Jupyter server
+版本太舊**：前端用的 `@jupyterlab/services` 7.x 透過一種較新的 kernel WebSocket 傳輸協定（`v1.kernel.websocket`
+binary subprotocol）與 kernel 溝通，這是 `jupyter_server` 2.0 以後才支援的；而機器上只有 `jupyter_server` 1.4.1
+（只會舊的 JSON 協定）。結果 cell 執行了，但輸出訊息前端收不到、也就顯示不出來。
+
+### 使用方式
+
+不需手動處理：`start.sh` 現在會自動確保用到夠新的 Jupyter——優先用專用的 `.jupyter-venv`；若系統的
+`jupyter_server` 已是 2 以上就直接用；兩者皆無時，會**自動建立一個專用 venv 並安裝新版 `jupyter_server` 與
+`ipykernel`**（首次較久、需網路），完全不動到系統／Anaconda 既有環境。
+
+### 實作重點
+
+- `start.sh` 新增 `ensure_jupyter_bin()`：以 `jupyter server --version` 判斷主版本是否 ≥ 2，據此在「專用 venv／
+  系統 jupyter／自動建 venv 安裝」之間選擇。
+- 專用 venv 目錄 `.jupyter-venv/` 已加入 `.gitignore`。
+
+實機驗證：建立 venv 安裝 `jupyter_server` 2.14.2 後，用**與前端完全相同**的 `@jupyterlab/services` 執行
+`print(1+1)`，成功收到輸出 `2`。至此 notebook 的就地執行對前端真正可用。
+
 ## Jupyter Notebook 整合：後端內建反向代理到本機 Jupyter server
 
 ### 背景
