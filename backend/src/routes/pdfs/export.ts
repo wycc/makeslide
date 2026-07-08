@@ -141,6 +141,31 @@ export function loadExportedAnimations(pdfId: string): ExportedAnimation[] {
     .all(pdfId) as ExportedAnimation[];
 }
 
+/**
+ * Notebook 頁對應（`pages.render_type = 'notebook'` / `notebook_path`）。與動畫同理：
+ * `.ipynb` 檔本身隨 `pdfDir()` 一起打包，但「這頁是 notebook」記在 `pages` 欄位，`import.ts`
+ * 重建時不會帶到，故序列化成 `notebooks.json`，匯入時依 `page_number` 套回（notebook_path
+ * 沿用，因為 `.ipynb` 已隨儲存目錄原樣複製）。
+ */
+export interface ExportedNotebook {
+  page_number: number;
+  render_type: string;
+  notebook_path: string | null;
+}
+
+/** Exported for unit testing; not part of the public export routes API. */
+export function loadExportedNotebooks(pdfId: string): ExportedNotebook[] {
+  return db
+    .prepare(
+      `SELECT page_number, render_type, notebook_path
+         FROM pages
+        WHERE pdf_id = ?
+          AND render_type = 'notebook'
+        ORDER BY page_number ASC`,
+    )
+    .all(pdfId) as ExportedNotebook[];
+}
+
 const ZIP_EXPORT_TIMEOUT_MS = 2 * 60_000;
 
 /**
@@ -295,6 +320,7 @@ export async function registerExportRoutes(app: FastifyInstance): Promise<void> 
       await appendSidecar('polls.json', loadExportedPolls(parsed.data.id));
       await appendSidecar('quizzes.json', loadExportedQuizzes(parsed.data.id));
       await appendSidecar('animations.json', loadExportedAnimations(parsed.data.id));
+      await appendSidecar('notebooks.json', loadExportedNotebooks(parsed.data.id));
 
       const zipBuffer = await fs.promises.readFile(zipPath);
       return sendZipDownload(reply, zipBuffer, zipFileName);

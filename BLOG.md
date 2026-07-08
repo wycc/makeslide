@@ -1,5 +1,27 @@
 # MakeSlide 功能說明
 
+## Jupyter Notebook 整合（階段 4a）：匯出／匯入簡報時保留 notebook 頁
+
+### 背景
+
+MakeSlide 可以把整份簡報匯出成 ZIP、再匯入回來（搬移、備份、分享用）。先前這個流程雖然會把 notebook 的
+`.ipynb` 檔一起打包，但「某一頁是 notebook 頁」這件事（記在資料庫欄位）在匯入重建時會遺失，導致匯入後那頁
+變回普通頁、不再是可執行的 notebook。這一步把它補齊。
+
+### 使用方式
+
+使用者不需要做任何事：把含有 notebook 頁的簡報匯出成 ZIP，再匯入回來（或匯入到另一台 MakeSlide），該頁
+仍然是 notebook 頁、內容與先前存下的執行結果都在，可以繼續執行。
+
+### 實作重點
+
+- 比照既有的動畫頁做法：匯出時多寫一個 `notebooks.json` 附檔，記錄哪些頁是 notebook 頁以及它們的 `.ipynb`
+  路徑；匯入時讀回這份清單，依頁碼把 `render_type='notebook'` 與 notebook 路徑還原到重建後的頁面上
+  （`.ipynb` 檔本身隨儲存目錄原樣複製，路徑維持不變）。
+- 附完整的 export→import 來回測試，確認頁型別、`.ipynb` 檔、以及 notebook 內容都能完整保留。
+
+分支：`feat/notebook-export-import`。新測 `export-import-notebook` 2/2、既有匯出/匯入回歸 7/7、後端 `tsc` 通過。
+
 ## Jupyter Notebook 整合（階段 2b-i）：錯誤訊息（traceback）正確上色
 
 ### 背景
