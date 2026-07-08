@@ -1,5 +1,32 @@
 # MakeSlide 功能說明
 
+## Jupyter Notebook 整合（階段 4d）：單頁 `.ipynb` 檔的匯入與匯出
+
+### 背景
+
+先前雖然可以把整份簡報（含 notebook 頁）匯出成 ZIP 再匯入（階段 4a），但那是 MakeSlide 內部的搬移格式。如果你
+想把某一頁拿去 JupyterLab／VS Code 編輯、或把手上現成的 `.ipynb` 教材直接放進某一頁，就需要**單頁 `.ipynb`
+檔**這種標準 Jupyter 交換格式。這一步補上。
+
+### 使用方式
+
+在播放頁的「投影片管理」工具列：
+
+- **匯出 .ipynb**：對著一個 notebook 頁按下，會下載該頁的 `.ipynb` 檔（檔名為 `<簡報標題>-p<頁碼>.ipynb`），
+  可直接用 JupyterLab／VS Code 開啟。唯讀觀看者也能匯出。
+- **匯入 .ipynb**：選一個 `.ipynb` 檔，就會把它匯入目前這一頁——該頁隨即變成 notebook 頁並載入檔案內容。需要
+  編輯權限。
+
+### 實作重點
+
+- 純前端實作，**重用既有的 notebook 讀寫 API**：匯出走既有的 GET notebook 端點取回 nbformat JSON、在瀏覽器
+  產生下載；匯入把檔案內容經既有的 PUT notebook 端點寫回（後端 `validateNotebook` 做權威驗證、並把該頁
+  `render_type` 翻成 `notebook`）。不需要新的後端端點。
+- 抽出純函式 `notebookFile.ts`（下載檔名 slug、序列化格式與後端一致、上傳內容的基本 shape 檢查），方便單元測試；
+  匯入有 10MB 上限與「這不是有效 .ipynb」的清楚提示。
+
+分支：`feat/notebook-ipynb-file`。新測 `notebookFile` 4/4、前端 `tsc`＋i18n 38/38＋`vite build` 通過。
+
 ## Jupyter Notebook 整合（階段 4b）：由主題用 AI 產生一頁可執行的 notebook
 
 ### 背景
