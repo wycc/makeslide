@@ -15,6 +15,7 @@ import {
   defaultNbNotebook,
   displayOutput,
   displayOutputs,
+  outputsToPlainText,
   iopubToOutput,
   joinMultiline,
   parseNbNotebook,
@@ -302,4 +303,26 @@ test('displayOutput maps stream and error, and displayOutputs drops empties', ()
   ];
   assert.equal(displayOutputs(outs).length, 1);
   assert.deepEqual(displayOutputs(undefined), []);
+});
+
+test('outputsToPlainText flattens stream, results, and ANSI-stripped errors for copying', () => {
+  const outs: NbOutput[] = [
+    { output_type: 'stream', name: 'stdout', text: 'hello\n' },
+    { output_type: 'execute_result', data: { 'text/plain': '42' }, execution_count: 1 },
+    { output_type: 'error', ename: 'ValueError', evalue: 'bad', traceback: ['[31mValueError[0m: bad'] },
+  ];
+  const text = outputsToPlainText(outs);
+  assert.match(text, /hello/);
+  assert.match(text, /42/);
+  assert.match(text, /ValueError: bad/);
+  assert.equal(text.includes(''), false); // ANSI escape stripped
+});
+
+test('outputsToPlainText falls back to ename:evalue without a traceback and ignores image-only outputs', () => {
+  assert.equal(
+    outputsToPlainText([{ output_type: 'error', ename: 'KeyError', evalue: "'x'", traceback: [] }]),
+    "KeyError: 'x'",
+  );
+  assert.equal(outputsToPlainText([{ output_type: 'display_data', data: { 'image/png': 'base64' } }]), '');
+  assert.equal(outputsToPlainText(undefined), '');
 });

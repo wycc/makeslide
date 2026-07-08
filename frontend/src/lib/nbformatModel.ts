@@ -7,6 +7,8 @@
 // nbformat output objects, and picks the richest displayable MIME per output for the
 // single-cell renderer. All functions are pure and immutable (no kernel/DOM deps).
 
+import { stripAnsi } from './ansi';
+
 export type NbCellType = 'code' | 'markdown' | 'raw';
 
 /** nbformat stores multi-line text as either one string or an array of line strings. */
@@ -331,4 +333,40 @@ export function displayOutput(output: NbOutput): NbDisplayOutput | null {
 export function displayOutputs(outputs: NbOutput[] | undefined): NbDisplayOutput[] {
   if (!Array.isArray(outputs)) return [];
   return outputs.map(displayOutput).filter((o): o is NbDisplayOutput => o !== null);
+}
+
+/**
+ * Flatten a cell's outputs to plain text for copying to the clipboard: stream text, the
+ * `text/plain` of results/display data, and error tracebacks with ANSI colour codes stripped
+ * (falling back to `ename: evalue`). Image-only outputs contribute nothing. Segments are joined
+ * with newlines.
+ */
+export function outputsToPlainText(outputs: NbOutput[] | undefined): string {
+  if (!Array.isArray(outputs)) return '';
+  const parts: string[] = [];
+  for (const output of outputs) {
+    switch (output.output_type) {
+      case 'stream':
+        parts.push(joinMultiline(output.text));
+        break;
+      case 'execute_result':
+      case 'display_data': {
+        const data = isObject(output.data) ? output.data : {};
+        parts.push(joinMultiline(data['text/plain']));
+        break;
+      }
+      case 'error': {
+        const tb = stripAnsi(joinMultiline(output.traceback));
+        if (tb) {
+          parts.push(tb);
+        } else {
+          const ename = typeof output.ename === 'string' ? output.ename : '';
+          const evalue = typeof output.evalue === 'string' ? output.evalue : '';
+          parts.push([ename, evalue].filter(Boolean).join(': '));
+        }
+        break;
+      }
+    }
+  }
+  return parts.filter((p) => p !== '').join('\n');
 }

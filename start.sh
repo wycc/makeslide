@@ -40,7 +40,7 @@ HTTPS_MODE=0
 HTTPS_CERT_DIR="${HTTPS_CERT_DIR:-$SCRIPT_DIR/.certs}"
 HTTPS_KEY_PATH="${HTTPS_KEY_PATH:-$HTTPS_CERT_DIR/localhost-key.pem}"
 HTTPS_CERT_PATH="${HTTPS_CERT_PATH:-$HTTPS_CERT_DIR/localhost-cert.pem}"
-
+JUPYTER_ENABLED=false
 # ──────────────────────────────────────────────────────────────────────────────
 # --help
 # ──────────────────────────────────────────────────────────────────────────────

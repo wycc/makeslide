@@ -1190,6 +1190,8 @@ export const en = {
   'play.notebook.moveCellDown': 'Move cell down',
   'play.notebook.toCellMarkdown': 'To Markdown',
   'play.notebook.toCellCode': 'To Code',
+  'play.notebook.copySource': 'Copy source',
+  'play.notebook.copyOutput': 'Copy output',
   'play.notebook.edit': 'Edit',
   'play.notebook.editHint': 'Edit this cell (or double-click; Enter to edit)',
   'play.notebook.done': 'Done',
