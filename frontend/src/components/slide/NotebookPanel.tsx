@@ -26,6 +26,7 @@ import {
   changeCellType,
   codeCellIndices,
   executionCountLabel,
+  formatCellTiming,
   displayOutputs,
   outputsToPlainText,
   defaultNbNotebook,
@@ -252,6 +253,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
   const [liveOutputs, setLiveOutputs] = useState<NbOutput[]>([]);
   const [runError, setRunError] = useState(false);
   const [runTimedOut, setRunTimedOut] = useState(false);
+  const [cellTimings, setCellTimings] = useState<Record<number, number>>({});
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const draftRef = useRef('');
@@ -268,6 +270,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
     setCellIndex(0);
     setRunningIndex(null);
     setLiveOutputs([]);
+    setCellTimings({});
     setEditing(false);
     fetchPageNotebook(pdfId, pageNumber, shareToken)
       .then((resp) => {
@@ -330,6 +333,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
         if (advance) setCellIndex((i) => clampCellIndex(i + 1, base.cells.length));
         return;
       }
+      const runStartMs = Date.now();
       kernel.connect();
       setRunError(false);
       setRunningIndex(idx);
@@ -349,7 +353,9 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
           void savePageNotebook(pdfId, pageNumber, next).catch(() => undefined);
           return next;
         });
+        setCellTimings(prev => ({ ...prev, [idx]: Date.now() - runStartMs }));
       } catch {
+        setCellTimings(prev => ({ ...prev, [idx]: Date.now() - runStartMs }));
         setRunError(true);
       } finally {
         setRunningIndex(null);
@@ -379,6 +385,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
       setRunningIndex(i);
       let acc: NbOutput[] = [];
       setLiveOutputs([]);
+      const runStartMs = Date.now();
       try {
         const { executionCount } = await kernel.execute(cellText(cell), {
           onIopub: (msg) => {
@@ -388,7 +395,9 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
         });
         working = withCellExecution(working, i, acc, executionCount);
         setNotebook(working);
+        setCellTimings(prev => ({ ...prev, [i]: Date.now() - runStartMs }));
       } catch {
+        setCellTimings(prev => ({ ...prev, [i]: Date.now() - runStartMs }));
         setRunError(true);
         setRunningIndex(null);
         break;
@@ -700,6 +709,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
         ) : cells.length === 0 ? (
           <p className="text-xs text-text-muted">{t('play.notebook.empty')}</p>
         ) : currentCell ? (
+          <>
           <CellBody
             cell={currentCell}
             outputs={outputs}
@@ -713,6 +723,12 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
             textareaRef={textareaRef}
             editPlaceholder={t('play.notebook.editPlaceholder')}
           />
+        {!editing && currentCell?.cell_type === 'code' && cellTimings[currentIndex] != null ? (
+          <p className="mt-1 text-[10px] text-text-muted/60">
+            {`耗時 ${formatCellTiming(cellTimings[currentIndex]!)}`}
+          </p>
+        ) : null}
+          </>
         ) : null}
       </div>
       <div className="flex items-center justify-between gap-2 border-t border-slate-800 px-3 py-1.5 text-[11px] text-text-muted">
