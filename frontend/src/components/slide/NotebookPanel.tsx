@@ -23,6 +23,7 @@ import {
   insertCell,
   deleteCell,
   moveCell as moveCellPosition,
+  changeCellType,
   displayOutputs,
   defaultNbNotebook,
   parseNbNotebook,
@@ -398,6 +399,23 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
     [editable, notebook, cellIndex, editing, runningIndex, persistNotebook],
   );
 
+  // Toggle the current cell between code and markdown, preserving its source. Commits any edit
+  // first; converting away from code drops that cell's running highlight (its outputs go away).
+  const toggleCellType = useCallback(() => {
+    if (!editable || !notebook) return;
+    const idx = clampCellIndex(cellIndex, notebook.cells.length);
+    const base = editing ? withCellSource(notebook, idx, draftRef.current) : notebook;
+    if (editing) setEditing(false);
+    const nextType: NbCellType = base.cells[idx]?.cell_type === 'code' ? 'markdown' : 'code';
+    const next = changeCellType(base, idx, nextType);
+    if (next === base) return;
+    persistNotebook(next);
+    if (runningIndex === idx) {
+      setRunningIndex(null);
+      setLiveOutputs([]);
+    }
+  }, [editable, notebook, cellIndex, editing, runningIndex, persistNotebook]);
+
   // Keyboard model (plan §1.2 command/edit):
   //  - Run keys (Ctrl/⌘+Enter, Shift+Enter) work in both modes and commit any edit first.
   //  - command mode: Enter → edit; ↑/↓ → switch cell (stopPropagation so global Space/←/→ paging stays).
@@ -524,6 +542,14 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
               title={t('play.notebook.moveCellDown')}
             >
               ⬇
+            </button>
+            <button
+              type="button"
+              onClick={toggleCellType}
+              className="rounded px-1.5 py-0.5 text-text-muted hover:bg-surface-muted"
+              title={currentCell?.cell_type === 'code' ? t('play.notebook.toCellMarkdown') : t('play.notebook.toCellCode')}
+            >
+              {currentCell?.cell_type === 'code' ? t('play.notebook.toCellMarkdown') : t('play.notebook.toCellCode')}
             </button>
             <button
               type="button"

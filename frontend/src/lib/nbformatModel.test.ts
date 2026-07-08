@@ -11,6 +11,7 @@ import {
   insertCell,
   deleteCell,
   moveCell,
+  changeCellType,
   defaultNbNotebook,
   displayOutput,
   displayOutputs,
@@ -240,6 +241,29 @@ test('moveCell is a no-op past the list edges and for out-of-range sources', () 
   assert.equal(moveCell(nb, 0, -1).notebook, nb); // already at top
   assert.equal(moveCell(nb, 1, 1).notebook, nb); // already at bottom
   assert.equal(moveCell(nb, 5, 1).notebook, nb); // out of range
+});
+
+test('changeCellType converts code→markdown dropping outputs, and markdown→code adding defaults', () => {
+  const nb = twoCellNb(); // [code 'a' with outputs+exec_count, markdown 'note']
+  const toMd = changeCellType(nb, 0, 'markdown');
+  assert.equal(toMd.cells[0]!.cell_type, 'markdown');
+  assert.equal(cellText(toMd.cells[0]!), 'a'); // source preserved
+  assert.equal('outputs' in toMd.cells[0]!, false); // code-only fields stripped
+  assert.equal('execution_count' in toMd.cells[0]!, false);
+  assert.equal(nb.cells[0]!.cell_type, 'code'); // original untouched
+
+  const toCode = changeCellType(nb, 1, 'code');
+  assert.equal(toCode.cells[1]!.cell_type, 'code');
+  assert.equal(cellText(toCode.cells[1]!), 'note');
+  assert.deepEqual((toCode.cells[1] as { outputs: unknown[] }).outputs, []);
+  assert.equal((toCode.cells[1] as { execution_count: unknown }).execution_count, null);
+});
+
+test('changeCellType is a no-op for same type and out-of-range indices', () => {
+  const nb = twoCellNb();
+  assert.equal(changeCellType(nb, 0, 'code'), nb); // already code
+  assert.equal(changeCellType(nb, 1, 'markdown'), nb); // already markdown
+  assert.equal(changeCellType(nb, 9, 'code'), nb); // out of range
 });
 
 // ---- display MIME selection ----

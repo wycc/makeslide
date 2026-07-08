@@ -1187,6 +1187,8 @@ export const en = {
   'play.notebook.deleteCellConfirm': 'Delete the current cell?',
   'play.notebook.moveCellUp': 'Move cell up',
   'play.notebook.moveCellDown': 'Move cell down',
+  'play.notebook.toCellMarkdown': 'To Markdown',
+  'play.notebook.toCellCode': 'To Code',
   'play.notebook.edit': 'Edit',
   'play.notebook.editHint': 'Edit this cell (or double-click; Enter to edit)',
   'play.notebook.done': 'Done',
