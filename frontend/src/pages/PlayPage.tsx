@@ -781,7 +781,23 @@ export default function PlayPage() {
   // ---- Swap audio src when current page changes ----
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || !currentPage || !currentPage.audio_url) return;
+    if (!audio) return;
+    if (!currentPage || !currentPage.audio_url) {
+      // Page has no audio (e.g. an interactive notebook page — plan §2.3). Stop and clear
+      // any audio carried over from the previous page so it neither keeps playing nor fires
+      // 'ended' (which would auto-advance off an interactive page). Invalidate pending
+      // reloads so a racing retry can't re-attach the old source.
+      currentAudioTokenRef.current += 1;
+      clearAudioRetryTimer();
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.load();
+      setCurrentTime(0);
+      setDuration(0);
+      setDurationPageNumber(null);
+      setAudioError(null);
+      return;
+    }
     const audioUrl = withShareToken(currentPage.audio_url) ?? currentPage.audio_url;
     const pageNumber = currentPage.page_number;
     const token = currentAudioTokenRef.current + 1;
