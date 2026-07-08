@@ -1,5 +1,46 @@
 # MakeSlide 功能說明
 
+## Jupyter Notebook 整合：後端內建反向代理到本機 Jupyter server
+
+### 背景
+
+要讓 notebook 頁能真的執行程式，瀏覽器必須連得到一個 Jupyter server。先前只支援兩種情境：外部已經把 MakeSlide
+和 Jupyter 放在同源（例如 JupyterHub），或用顯式 URL 直連。但一般部署（MakeSlide 跑在自己的網域、前面沒有這層
+代理）就會卡住——瀏覽器把連線指向 MakeSlide 自己，那裡沒有 Jupyter。這一步讓 MakeSlide 後端**自己**扮演這個
+代理，營運者不必額外架 JupyterHub 或改 nginx。
+
+### 使用方式
+
+營運者在後端 `.env` 設定（並重啟後端）：
+
+```bash
+JUPYTER_ENABLED=true
+JUPYTER_PROXY_TARGET=http://127.0.0.1:8888   # 本機 Jupyter server
+# JUPYTER_PROXY_PREFIX=/jupyter               # 掛載路徑，預設 /jupyter，通常不用改
+```
+
+並在本機起一個 Jupyter server，其 base_url 要對齊掛載路徑：
+
+```bash
+jupyter server --ServerApp.base_url=/jupyter \
+  --ServerApp.token='' --ServerApp.disable_check_xsrf=True \
+  --ip=127.0.0.1 --port=8888
+```
+
+之後 notebook 頁的「執行」「全部執行」就會透過 MakeSlide 同源連到這個 Jupyter，使用者不需任何設定。
+
+### 實作重點
+
+- 後端把 `<NB_PREFIX><JUPYTER_PROXY_PREFIX>/*`（HTTP 與 WebSocket）代理到 `JUPYTER_PROXY_TARGET`；瀏覽器全程
+  同源（不會有 CORS 或 https 頁面連 http 的混合內容問題），靠既有的登入 cookie 認證。
+- 掛載路徑刻意用一個**獨立的前綴**（預設 `/jupyter`），與 MakeSlide 自己的 base（`NB_PREFIX`）分開，避免 Jupyter
+  的 `/api/*` 和 MakeSlide 的路由／靜態資源撞在一起。
+- **安全**：因為代理目標可以執行任意程式碼，HTTP 請求與 WebSocket 握手**都**必須帶有效的 MakeSlide 登入 session
+  才放行，未登入的請求直接被擋在門外、碰不到 Jupyter；Jupyter 本身只綁 localhost、不對外。
+
+分支：`feat/jupyter-backend-proxy`。相依 `@fastify/http-proxy`；`jupyter-proxy` 測試 5/5、`jupyter-connection`
+回歸 4/4、後端 `tsc` 通過。（真實 Jupyter＋瀏覽器 WebSocket 的端到端連線待部署實機驗證。）
+
 ## Jupyter Notebook 整合（階段 7a）：顯示 cell 的執行編號 `In [n]`
 
 ### 背景
