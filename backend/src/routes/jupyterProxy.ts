@@ -46,6 +46,9 @@ export async function jupyterProxyRoutes(app: FastifyInstance): Promise<void> {
   if (!jupyterProxyEnabled(config)) return;
   const token = config.jupyterToken;
   const mountPath = jupyterProxyMountPath(config);
+  // A local Jupyter over https uses a self-signed cert; since the target is loopback and we
+  // control both ends, skip cert verification for the proxied HTTP (undici) and WebSocket clients.
+  const isHttps = config.jupyterProxyTarget.startsWith('https://');
   await app.register(fastifyHttpProxy, {
     upstream: config.jupyterProxyTarget,
     prefix: mountPath,
@@ -53,6 +56,8 @@ export async function jupyterProxyRoutes(app: FastifyInstance): Promise<void> {
     // ServerApp.base_url = mountPath, so it serves e.g. `<mountPath>/api/kernels`.
     rewritePrefix: mountPath,
     websocket: true,
+    ...(isHttps ? { undici: { connect: { rejectUnauthorized: false } } } : {}),
+    ...(isHttps ? { wsClientOptions: { rejectUnauthorized: false } } : {}),
     // HTTP guard: only a logged-in MakeSlide session may reach Jupyter.
     preHandler: (request, reply, done) => {
       if (!sessionSub(request)) {

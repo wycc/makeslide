@@ -372,6 +372,21 @@ fi
 # ──────────────────────────────────────────────────────────────────────────────
 # Step 6.5: 依 .env 啟動本機 Jupyter server（供後端同源反向代理）
 # ──────────────────────────────────────────────────────────────────────────────
+# 確保本機自簽憑證存在（重用 --https 的 HTTPS_KEY_PATH/HTTPS_CERT_PATH）；供 https 版 Jupyter 使用。
+ensure_self_signed_cert() {
+  mkdir -p "$(dirname "$HTTPS_KEY_PATH")" "$(dirname "$HTTPS_CERT_PATH")"
+  [[ -f "$HTTPS_KEY_PATH" && -f "$HTTPS_CERT_PATH" ]] && return 0
+  if ! command -v openssl >/dev/null 2>&1; then
+    log_warn "找不到 openssl，無法自動產生自簽憑證"
+    return 1
+  fi
+  log_warn "產生本機 self-signed 憑證：$HTTPS_CERT_PATH"
+  openssl req -x509 -newkey rsa:2048 -nodes \
+    -keyout "$HTTPS_KEY_PATH" -out "$HTTPS_CERT_PATH" \
+    -days 365 -subj "/CN=localhost" \
+    -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" >/dev/null 2>&1
+}
+
 # 讀 .env 中單一變數的值（取最後一筆、去行內註解/引號/前後空白）。
 read_env_var() {
   local key="$1" file="$SCRIPT_DIR/.env" line=""
@@ -387,7 +402,8 @@ JUPYTER_PID=""
 # 讓後端可把 <NB_PREFIX><JUPYTER_PROXY_PREFIX>/* 同源反向代理到它（見 backend/src/routes/jupyterProxy.ts）。
 # base_url 對齊掛載路徑、port/host 取自 JUPYTER_PROXY_TARGET；找不到 jupyter 只警告不中斷 MakeSlide。
 start_jupyter() {
-  local enabled target prefix nbp base hostport jhost jport jbin jlog
+  local enabled target prefix nbp base hostport jhost jport jbin jlog scheme
+  local ssl_args=()
   enabled="$(read_env_var JUPYTER_ENABLED)"
   target="$(read_env_var JUPYTER_PROXY_TARGET)"
   if [[ "$enabled" != "true" || -z "$target" ]]; then
@@ -415,10 +431,21 @@ start_jupyter() {
     return 0
   fi
 
+  # https target：以自簽憑證啟用 SSL（後端代理對 loopback 自簽憑證略過驗證）。
+  scheme="${target%%://*}"
+  if [[ "$scheme" == "https" ]]; then
+    if ensure_self_signed_cert; then
+      ssl_args=(--ServerApp.certfile="$HTTPS_CERT_PATH" --ServerApp.keyfile="$HTTPS_KEY_PATH")
+    else
+      log_warn "無法準備憑證，Jupyter 仍以 http 啟動——但 JUPYTER_PROXY_TARGET 是 https，後端代理會連不上；請安裝 openssl 或把 target 改回 http"
+    fi
+  fi
+
   jlog="$SCRIPT_DIR/jupyter.log"
-  log_info "啟動 Jupyter server（base_url=$base，位址 ${jhost}:${jport}，log→jupyter.log）"
+  log_info "啟動 Jupyter server（$scheme，base_url=$base，位址 ${jhost}:${jport}，log→jupyter.log）"
   "$jbin" server \
     --ServerApp.base_url="$base" \
+    ${ssl_args[@]+"${ssl_args[@]}"} \
     --ServerApp.token='' --ServerApp.password='' \
     --ServerApp.disable_check_xsrf=True \
     --ServerApp.allow_origin='*' \
