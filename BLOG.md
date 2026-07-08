@@ -1,5 +1,31 @@
 # MakeSlide 功能說明
 
+## Jupyter Notebook 整合（階段 2a）：重啟 kernel 與清除輸出
+
+### 背景
+
+能執行 code cell 之後，就需要一般 notebook 都有的兩個管理動作：**重啟 kernel**（清掉所有變數、重新開始）與
+**清除輸出**（把 cell 的執行結果清空）。這一步把它們加進 notebook 面板。
+
+### 使用方式
+
+在有編輯權限的 notebook 頁，面板右上角會出現一排工具：
+
+- **⟳ 重啟 kernel**：重新啟動這一頁的 kernel，之前定義的變數會全部清掉、從頭來過。
+- **清除輸出**：清空目前這個 cell 的執行結果。
+- **清除全部輸出**：清空這一頁所有 cell 的執行結果。
+
+清除動作會同步存回 `.ipynb`，所以下次打開看到的是清空後的狀態。面板右下角持續顯示 kernel 的目前狀態
+（連線中／就緒／執行中／無法連線）。
+
+### 實作重點
+
+- 重啟接上 `useJupyterKernel` 既有的 `restart()`；清除則使用先前已經寫好並測試過的純函式
+  `clearCellOutputs`／`clearAllOutputs`，清完再透過 `savePageNotebook` 寫回。
+- 這些控制項只在有編輯權限時顯示。
+
+分支：`feat/notebook-kernel-controls`。前端 `tsc`＋i18n parity 38/38＋`nbformatModel` 13/13＋`vite build` 通過。
+
 ## Jupyter Notebook 整合（階段 1c-iii-b）：notebook 頁的程式碼可以真的執行了
 
 ### 背景
