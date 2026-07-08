@@ -1,5 +1,32 @@
 # MakeSlide 功能說明
 
+## Jupyter Notebook 整合（階段 4b）：由主題用 AI 產生一頁可執行的 notebook
+
+### 背景
+
+先前一頁要變成 notebook，只能得到一個空白的 code cell，內容得自己從頭打。這一步讓後端可以**由一句主題**
+（例如「排序演算法」「梯度下降」）直接請 AI 產生一整頁交錯著說明與可執行 Python 的教學 notebook。
+
+### 使用方式
+
+這一步先完成**後端 API**：對某一頁呼叫 `POST /api/pdfs/:id/pages/:n/notebook/generate`，帶上 `{ "topic":
+"你的主題" }`（可選再帶 `context` 作為參考內容），需要該簡報的編輯權限。API 會回傳產生好的 notebook，同時把
+那一頁轉成 notebook 頁、存下 `.ipynb`。產生的內容是「markdown 說明 + 可直接執行的 code cell」交錯，開啟該頁
+即可逐格執行。（前端的「AI 產生」按鈕與真實 gateway 端到端串接列為後續 4b-ii。）
+
+### 實作重點
+
+- 讓模型只回傳一份**收窄、好驗證**的大綱——一串有序的 `markdown`／`code` cell（純文字 source），而不是直接吐
+  nbformat，避免它產生壞掉的 notebook 結構。
+- 純函式 `outlineToNotebook` 把大綱轉成真正的 nbformat：code cell 補上空 `outputs` 與 `execution_count: null`
+  以便在 kernel 乾淨執行、並掛上 Python kernelspec；結果再統一過一次既有的 `validateNotebook` 才落地。
+- 寫回邏輯（寫 `.ipynb`、翻 `render_type='notebook'`、同步 `metadata.json`）抽成共用的 `writeNotebookForPage`，
+  與既有的手動存檔（PUT）路由共用，確保兩條路徑對資料庫與 metadata 的處理完全一致。
+- 核心邏輯（大綱轉換、prompt 組裝、schema 驗證）與網路呼叫拆開，方便單元測試。
+
+分支：`feat/notebook-ai-generate`。新測 `notebook-generation` 5/5（純核心）＋`notebook-generate` 3/3（mock LLM
+路由），既有 notebook 相關回歸 17/17、後端 `tsc` 通過。
+
 ## Jupyter Notebook 整合（階段 2b-ii）：HTML 輸出改用沙箱 iframe 安全渲染
 
 ### 背景
