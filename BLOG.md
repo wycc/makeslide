@@ -1,5 +1,44 @@
 # MakeSlide 功能說明
 
+## Jupyter Notebook 整合（階段 1c-iii-b）：notebook 頁的程式碼可以真的執行了
+
+### 背景
+
+前面幾步把 notebook 頁「顯示出來」「一次一個 cell」「不參與語音／自動換頁」都做好了。這一步接上最關鍵
+的一塊——**連上真正的 Jupyter kernel，讓 code cell 可以就地執行，執行結果即時顯示並存回 `.ipynb`**。
+
+### 使用方式
+
+在你有編輯權限的簡報裡，當一頁是 notebook 頁時：
+
+- 用 `↑`／`↓` 切換到想執行的 cell（`Space`／`←`／`→` 仍是換簡報頁）。
+- **`Ctrl`／`⌘ + Enter`**：執行目前這個 code cell；**`Shift + Enter`**：執行並跳到下一個 cell；也可以按
+  面板右下角的「▶ 執行」鈕。
+- 執行時輸出會**即時**一段段出現（文字、圖片、錯誤訊息等），完成後結果會**自動存回**該頁的 `.ipynb`，
+  下次打開或別人觀看時看得到上次的執行結果。
+- 面板右下角會顯示 kernel 狀態（連線中／就緒／執行中／無法連線）。
+- **唯讀觀看者**只能看到先前存下的輸出，不會連 kernel、也不能執行（安全考量）。
+
+同一頁的所有 cell 共用一個 kernel（變數跨 cell 保留）；切到別的簡報頁時該頁 kernel 會保持「暖」的，切回來
+變數還在；離開整個 notebook 頁才會關閉 kernel。
+
+### 實作重點
+
+- 新增 `useJupyterKernel` hook：用**動態 import** 惰性載入官方 `@jupyterlab/services`（只有真的開 notebook 頁
+  才載入，不拖累主播放頁的載入速度），連線參數來自後端 `/api/jupyter/connection`（同源時用 cookie、
+  開發/桌面用明確網址與 token）。kernel 以「一頁一檔一 kernel」的註冊表管理，跨頁保暖。
+- 執行時把 kernel 送回來的 `iopub` 訊息用先前的 `applyIopub` 即時 reduce 成輸出並顯示；完成後用
+  `withCellExecution` 併回 notebook，再透過 `savePageNotebook` 存回 `.ipynb`（後端會同步資料庫與 metadata）。
+- 執行能力只開放給有編輯權限（`access_level === 'edit'`）的使用者。
+
+### 啟用方式（營運者）
+
+此功能預設隱藏。要啟用需在後端設定 `JUPYTER_ENABLED=true`，並提供 `JUPYTER_BASE_URL`（同源正式環境可留空，
+走 cookie）與（開發/桌面）`JUPYTER_TOKEN`，指向一台既有的 Jupyter server。
+
+分支：`feat/jupyter-kernel-execute`。前端 `tsc`＋i18n parity 38/38＋`vite build` 通過；kernel 純邏輯
+（`jupyterConnection` 6/6、`nbformatModel` 13/13）皆有單元測試。實際 kernel 執行需連上 Jupyter server 手動驗證。
+
 ## Jupyter Notebook 整合（階段 1d-ii）：播放到 notebook 頁會停下來等你操作
 
 ### 背景
