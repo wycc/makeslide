@@ -1,5 +1,37 @@
 # MakeSlide 功能說明
 
+## Jupyter Notebook 整合（階段 1c-i）：可執行 notebook 的 nbformat 核心模型
+
+### 背景
+
+Notebook 頁要能「一次顯示一個 cell、就地執行、把輸出即時寫回 `.ipynb`」，前端需要一個能同時支撐
+「顯示」「執行」「寫回」三件事的資料模型。既有的 `notebook.ts` 只做唯讀顯示、而且是有損的（把
+source 併成字串、丟掉 `execution_count`／metadata），無法拿來寫回。這次新增一個**無損且可互動**的核心
+模型 `frontend/src/lib/nbformatModel.ts`，作為後續 NotebookPanel 與 kernel 連線的地基。
+
+### 這個模型做了什麼
+
+全部是純函式（不碰 kernel、不碰 DOM），可完整單元測試：
+
+- **無損解析**：`parseNbNotebook` 把後端回來的 notebook 正規化成合法 nbformat，但**保留所有欄位**
+  （cell 的 `id`／`metadata`／`attachments`、notebook 頂層的 `kernelspec` 等），因此編輯或執行後可以原樣
+  寫回；壞掉的輸入會退化成一份「只含一個空 code cell」的預設 notebook 而不是丟例外。
+- **cell 導覽**：`clampCellIndex` 把 `↑`/`↓` 想切到的 cell 索引夾在合法範圍內。
+- **執行串流**：`applyIopub` 把 kernel 執行時逐則送來的 `iopub` 訊息即時 reduce 成 nbformat 輸出——
+  連續同名的 `stream`（stdout/stderr）會自動接在一起、`clear_output` 會清空、狀態類訊息會略過，而且
+  過程完全 immutable（方便 React 狀態更新）。
+- **寫回**：`withCellExecution`／`clearCellOutputs`／`clearAllOutputs` 以不可變方式更新某個 code cell 的
+  輸出與 `execution_count`，供「執行結果寫回 `.ipynb`」與「清除輸出」使用。
+- **輸出渲染選擇**：`displayOutput` 為每個輸出挑一種最豐富的可呈現格式（優先 image，其次 HTML、LaTeX，
+  最後純文字；另處理 stream 與 error），供單一 cell 視圖顯示。
+
+### 使用方式
+
+這是內部基礎模組，尚無使用者介面。它會被接下來的 `NotebookPanel`（單 cell 視圖）與
+`useJupyterKernel`（`@jupyterlab/services` 連線與執行）使用。
+
+分支：`feat/notebook-nbformat-model`。測試 `nbformatModel` 13/13、前端 `tsc` 通過。
+
 ## Jupyter Notebook 整合（階段 1b）：每頁的 `.ipynb` 資產存取 API
 
 ### 背景
