@@ -238,6 +238,11 @@ export async function buildApp() {
     await app.register(jupyterRoutes, { prefix });
   }
 
+  // Same-origin reverse proxy to a local Jupyter server (session-gated HTTP + WebSocket).
+  // Mounts under its own path (<NB_PREFIX><PROXY_PREFIX>); no-op unless JUPYTER_PROXY_TARGET is set.
+  const { jupyterProxyRoutes } = await import("./routes/jupyterProxy");
+  await app.register(jupyterProxyRoutes);
+
   if (process.env.LOG_ROUTES === '1') {
     app.addHook('onReady', async () => {
       app.log.info({ routes: app.printRoutes() }, 'Registered Fastify routes');
