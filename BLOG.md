@@ -15,13 +15,15 @@
 
 ```bash
 JUPYTER_ENABLED=true
-JUPYTER_PROXY_TARGET=http://127.0.0.1:8888   # 本機 Jupyter server
+JUPYTER_PROXY_TARGET=https://127.0.0.1:8888  # 本機 Jupyter server（http 或 https 皆可）
 # JUPYTER_PROXY_PREFIX=/jupyter               # 掛載路徑，預設 /jupyter，通常不用改
 ```
 
 `start.sh` 會在偵測到上述設定時**自動在本機啟動一個 Jupyter server**（base_url 對齊掛載路徑、host/port 取自
 `JUPYTER_PROXY_TARGET`、綁 localhost 無 token），並在收到中斷訊號時一併關閉；若該 port 已有服務則沿用、找不到
-`jupyter` 執行檔則只警告不中斷。之後 notebook 頁的「執行」「全部執行」就會透過 MakeSlide 同源連到這個 Jupyter，
+`jupyter` 執行檔則只警告不中斷。若 `JUPYTER_PROXY_TARGET` 用 `https://`，start.sh 會以自簽憑證啟動 Jupyter
+（重用 `--https` 那份 `.certs/` 憑證），後端代理對這條 loopback 自簽連線略過憑證驗證即可連上。（後端到 Jupyter
+是本機 loopback 的 server-to-server 連線，其實用 http 就已安全；https 屬選用。）之後 notebook 頁的「執行」「全部執行」就會透過 MakeSlide 同源連到這個 Jupyter，
 使用者不需任何設定。（若要手動管理 Jupyter，也可自行以 `jupyter server --ServerApp.base_url=/jupyter
 --ServerApp.token='' --ip=127.0.0.1 --port=8888` 啟動。）
 
