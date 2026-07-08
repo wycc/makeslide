@@ -5,12 +5,18 @@ import { db } from '../../db';
 import { sessionSub } from '../auth';
 import { getPdfPermissionRow, canReadPdf, canEditPdf, aclCtx } from './permissions';
 import { pageNotebookPath, safeJoinPdfPath, readMetadata, writeMetadata } from '../../services/storage';
-import { defaultNotebook, parseStoredNotebook, validateNotebook } from '../../services/notebookAsset';
+import { defaultNotebook, parseStoredNotebook, validateNotebook, type NotebookDocument } from '../../services/notebookAsset';
+import { generateNotebookFromTopic } from '../../services/notebookGeneration';
 import type { SlideRenderType } from '../../types';
 import { PageParamSchema, errorResponse, nowIso } from './shared';
 
 const SaveNotebookBodySchema = z.object({
   notebook: z.unknown(),
+});
+
+const GenerateNotebookBodySchema = z.object({
+  topic: z.string().trim().min(1).max(500),
+  context: z.string().max(4000).optional(),
 });
 
 interface NotebookPageRow {
@@ -43,6 +49,45 @@ function readStoredNotebook(id: string, row: NotebookPageRow): ReturnType<typeof
   } catch {
     return defaultNotebook();
   }
+}
+
+/**
+ * Persist a validated notebook to a page: write the `.ipynb`, flip the page's render_type to
+ * 'notebook', record notebook_path, and best-effort resync metadata.json (the DB is the source
+ * of truth). Shared by the PUT-notebook route (edits / execution write-back) and the AI-generate
+ * route (phase 4b) so both keep the DB/metadata in lockstep the same way.
+ */
+export async function writeNotebookForPage(
+  id: string,
+  n: number,
+  pageUid: string,
+  notebook: NotebookDocument,
+): Promise<{ relNotebookPath: string; now: string }> {
+  const relNotebookPath = `pages/${pageUid}.ipynb`;
+  await fs.promises.writeFile(pageNotebookPath(id, pageUid), `${JSON.stringify(notebook, null, 1)}\n`, 'utf8');
+  const now = nowIso();
+  db.prepare(
+    `UPDATE pages SET render_type = 'notebook', notebook_path = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`,
+  ).run(relNotebookPath, now, id, n);
+  db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(now, id);
+
+  // Keep metadata.json consistent with the DB (mirrors the consistency lesson: metadata is a
+  // derived snapshot of the DB, so a resync failure is logged-by-omission but never fatal).
+  try {
+    const meta = await readMetadata(id);
+    if (meta) {
+      const page = meta.pages.find((p) => p.page_number === n);
+      if (page) {
+        page.render_type = 'notebook';
+        page.notebook_path = relNotebookPath;
+      }
+      meta.updated_at = now;
+      await writeMetadata(id, meta);
+    }
+  } catch {
+    // non-fatal
+  }
+  return { relNotebookPath, now };
 }
 
 export async function registerNotebookRoutes(app: FastifyInstance): Promise<void> {
@@ -99,35 +144,51 @@ export async function registerNotebookRoutes(app: FastifyInstance): Promise<void
     if (!validated.ok) {
       return reply.code(400).send(errorResponse('INVALID_NOTEBOOK', validated.message));
     }
-    const relNotebookPath = `pages/${row.page_uid}.ipynb`;
-    await fs.promises.writeFile(pageNotebookPath(id, row.page_uid), `${JSON.stringify(validated.notebook, null, 1)}\n`, 'utf8');
-    const now = nowIso();
-    db.prepare(
-      `UPDATE pages SET render_type = 'notebook', notebook_path = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`,
-    ).run(relNotebookPath, now, id, n);
-    db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(now, id);
-
-    // Keep metadata.json consistent with the DB (mirrors the consistency lesson: metadata is a
-    // derived snapshot of the DB, so a resync failure is logged-by-omission but never fatal).
-    try {
-      const meta = await readMetadata(id);
-      if (meta) {
-        const page = meta.pages.find((p) => p.page_number === n);
-        if (page) {
-          page.render_type = 'notebook';
-          page.notebook_path = relNotebookPath;
-        }
-        meta.updated_at = now;
-        await writeMetadata(id, meta);
-      }
-    } catch {
-      // non-fatal
-    }
+    const { now } = await writeNotebookForPage(id, n, row.page_uid, validated.notebook);
 
     return reply.code(200).send({
       page_number: n,
       render_type: 'notebook',
       notebook_url: `api/pdfs/${id}/pages/${n}/notebook`,
+      updated_at: now,
+    });
+  });
+
+  // POST: AI-generate an executable notebook for the page from a topic (phase 4b). The model
+  // returns a validated outline that is turned into nbformat and persisted like any other write
+  // (flips render_type to 'notebook'). Requires edit permission.
+  app.post('/api/pdfs/:id/pages/:n/notebook/generate', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const parsedBody = GenerateNotebookBodySchema.safeParse(request.body ?? {});
+    if (!parsedBody.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'A non-empty topic is required'));
+    }
+    const { id, n } = parsed.data;
+    const row = getNotebookPageRow(id, n);
+    if (!row) {
+      return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', 'Page not found'));
+    }
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow || !canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的 notebook'));
+    }
+    let notebook: NotebookDocument;
+    try {
+      notebook = await generateNotebookFromTopic(parsedBody.data.topic, parsedBody.data.context);
+    } catch (err) {
+      request.log.warn({ err, id, n }, 'notebook generation failed');
+      return reply.code(502).send(errorResponse('NOTEBOOK_GENERATION_FAILED', 'AI 產生 notebook 失敗，請稍後再試'));
+    }
+    const { now } = await writeNotebookForPage(id, n, row.page_uid, notebook);
+
+    return reply.code(200).send({
+      page_number: n,
+      render_type: 'notebook',
+      notebook_url: `api/pdfs/${id}/pages/${n}/notebook`,
+      notebook,
       updated_at: now,
     });
   });
