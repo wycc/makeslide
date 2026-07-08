@@ -11,7 +11,11 @@
     "test": "../scripts/with-node-env.sh tsx --test 'src/**/*.test.ts'"
   },
   "dependencies": {
+    "@codemirror/lang-python": "^6.2.1",
+    "@codemirror/state": "^6.7.1",
+    "@codemirror/view": "^6.43.6",
     "@jupyterlab/services": "^7.6.1",
+    "@uiw/react-codemirror": "^4.25.10",
     "gsap": "^3.15.0",
     "katex": "^0.17.0",
     "react": "^18.3.1",

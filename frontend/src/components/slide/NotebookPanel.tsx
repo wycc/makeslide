@@ -7,7 +7,7 @@
 // `Shift+Enter` runs it and advances; iopub output streams in live and the result is written
 // back to the `.ipynb` (plan §1.2, §1.3, MVP). Read-only viewers only see stored outputs.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
 import type { KeyboardEvent } from 'react';
 import { MarkdownMath } from '../MarkdownMath';
 import { useI18n } from '../../i18n';
@@ -31,6 +31,9 @@ import {
   type NbOutput,
 } from '../../lib/nbformatModel';
 import { useJupyterKernel } from './useJupyterKernel';
+
+// Lazy so CodeMirror + Python mode are code-split out of the main bundle (phase 3b).
+const CodeMirrorEditor = lazy(() => import('./codeMirrorEditor'));
 
 const ANSI_COLOR_CLASS: Record<AnsiColor, string> = {
   black: 'text-slate-500',
@@ -135,7 +138,9 @@ interface CellBodyProps {
 
 function CellBody({ cell, outputs, editing, draft, onDraftChange, onBeginEdit, textareaRef, editPlaceholder }: CellBodyProps) {
   const source = cellText(cell);
-  const editor = editing ? (
+  // Plain textarea editor — used for markdown cells and as the Suspense fallback while the
+  // CodeMirror chunk loads for code cells.
+  const textareaEditor = (
     <textarea
       ref={textareaRef}
       value={draft}
@@ -145,15 +150,21 @@ function CellBody({ cell, outputs, editing, draft, onDraftChange, onBeginEdit, t
       className="min-h-[6rem] w-full resize-y rounded-md border border-sky-500/50 bg-surface px-3 py-2 font-mono text-xs text-text outline-none focus:ring-1 focus:ring-sky-500/50"
       rows={Math.min(20, Math.max(4, draft.split('\n').length + 1))}
     />
-  ) : null;
+  );
 
   if (cell.cell_type === 'markdown') {
-    return editor ?? (
+    return editing ? textareaEditor : (
       <div onDoubleClick={onBeginEdit}>
         <MarkdownMath content={source} />
       </div>
     );
   }
+  // Code cells get syntax-highlighted CodeMirror while editing (lazy-loaded, phase 3b).
+  const editor = editing ? (
+    <Suspense fallback={textareaEditor}>
+      <CodeMirrorEditor value={draft} onChange={onDraftChange} autoFocus />
+    </Suspense>
+  ) : null;
   return (
     <div className="flex flex-col gap-1.5">
       {editor
