@@ -9,10 +9,12 @@
 
 ### 使用方式
 
-這一步先完成**後端 API**：對某一頁呼叫 `POST /api/pdfs/:id/pages/:n/notebook/generate`，帶上 `{ "topic":
-"你的主題" }`（可選再帶 `context` 作為參考內容），需要該簡報的編輯權限。API 會回傳產生好的 notebook，同時把
-那一頁轉成 notebook 頁、存下 `.ipynb`。產生的內容是「markdown 說明 + 可直接執行的 code cell」交錯，開啟該頁
-即可逐格執行。（前端的「AI 產生」按鈕與真實 gateway 端到端串接列為後續 4b-ii。）
+在播放頁的「投影片管理」工具列，對著目前這一頁按下紫色的**「AI 產生 Notebook」**按鈕，輸入一句主題（例如
+「排序演算法」），AI 就會產生一整頁「markdown 說明 + 可直接執行的 code cell」交錯的教學 notebook，並把那一頁
+轉成 notebook 頁，開啟即可逐格執行。需要該簡報的編輯權限。
+
+（底層是後端 API `POST /api/pdfs/:id/pages/:n/notebook/generate`，帶 `{ "topic": "你的主題" }`、可選 `context`
+參考內容，也可直接呼叫。真實 gateway 的端到端串接留待實機驗證。）
 
 ### 實作重點
 
