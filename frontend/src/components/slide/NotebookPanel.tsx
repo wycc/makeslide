@@ -16,6 +16,8 @@ import {
   applyIopub,
   cellText,
   clampCellIndex,
+  clearAllOutputs,
+  clearCellOutputs,
   displayOutputs,
   defaultNbNotebook,
   parseNbNotebook,
@@ -154,6 +156,34 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
     [editable, notebook, cellIndex, kernel, pdfId, pageNumber],
   );
 
+  const persistNotebook = useCallback(
+    (next: NbNotebook) => {
+      setNotebook(next);
+      void savePageNotebook(pdfId, pageNumber, next).catch(() => undefined);
+    },
+    [pdfId, pageNumber],
+  );
+
+  const clearOutputs = useCallback(
+    (scope: 'cell' | 'all') => {
+      if (!editable || !notebook) return;
+      const idx = clampCellIndex(cellIndex, notebook.cells.length);
+      persistNotebook(scope === 'all' ? clearAllOutputs(notebook) : clearCellOutputs(notebook, idx));
+      if (runningIndex === idx || scope === 'all') {
+        setRunningIndex(null);
+        setLiveOutputs([]);
+      }
+    },
+    [editable, notebook, cellIndex, runningIndex, persistNotebook],
+  );
+
+  const restartKernel = useCallback(() => {
+    if (!editable) return;
+    setRunError(false);
+    kernel.connect();
+    void kernel.restart().catch(() => setRunError(true));
+  }, [editable, kernel]);
+
   // Command-mode keys: ↑/↓ switch cells; Ctrl/⌘+Enter runs the cell; Shift+Enter runs & advances.
   // stopPropagation keeps them from the global PlayPage handler (which still gets Space/←/→).
   const handleKeyDown = useCallback(
@@ -210,6 +240,34 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
 
   return (
     <div className={`flex flex-col overflow-hidden rounded-lg border border-slate-800 bg-surface ${className ?? ''}`} style={style}>
+      {editable ? (
+        <div className="flex items-center justify-end gap-1.5 border-b border-slate-800 px-3 py-1 text-[11px]">
+          <button
+            type="button"
+            onClick={restartKernel}
+            className="rounded px-1.5 py-0.5 text-text-muted hover:bg-surface-muted"
+            title={t('play.notebook.restart')}
+          >
+            ⟳ {t('play.notebook.restart')}
+          </button>
+          <button
+            type="button"
+            onClick={() => clearOutputs('cell')}
+            className="rounded px-1.5 py-0.5 text-text-muted hover:bg-surface-muted"
+            title={t('play.notebook.clearOutputs')}
+          >
+            {t('play.notebook.clearOutputs')}
+          </button>
+          <button
+            type="button"
+            onClick={() => clearOutputs('all')}
+            className="rounded px-1.5 py-0.5 text-text-muted hover:bg-surface-muted"
+            title={t('play.notebook.clearAllOutputs')}
+          >
+            {t('play.notebook.clearAllOutputs')}
+          </button>
+        </div>
+      ) : null}
       <div
         ref={containerRef}
         tabIndex={0}

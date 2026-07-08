@@ -32,6 +32,8 @@
     - [ ] 1d-ii-b（後續）：`playbackReadiness.ts` 動畫就緒判定目前僅涉圖片/逐字稿觸發，notebook 頁無動畫故不受影響；待接 kernel 後再一併檢視互動頁在同步/上課模式的行為。
     - [x] 1d-iii：執行結果即時經 `savePageNotebook` 寫回 `.ipynb`（已於 1c-iii-b 完成）。
 - [ ] **階段 2**：完整輸出（markdown/raw cell、image/html/latex、kernel 狀態列、重啟/清除）。
+    - [x] **2a：kernel 重啟／清除輸出 ＋ 狀態列**（計畫 §1.1／§1.3）：`NotebookPanel`（editable 時）新增工具列「⟳ 重啟 kernel」「清除輸出（當前 cell）」「清除全部輸出」——重啟接 `useJupyterKernel.restart()`、清除接純函式 `clearCellOutputs`／`clearAllOutputs`（已測）並經 `savePageNotebook` 寫回；頁腳 kernel 狀態列（連線中／就緒／執行中／無法連線）已於 1c-iii-b 具備。i18n 3 鍵（restart／clearOutputs／clearAllOutputs）。markdown／raw cell 與 image/latex 輸出已由 `CellBody`／`displayOutputs` 呈現。驗證：前端 `tsc`＋i18n 38/38＋`nbformatModel` 13/13＋`vite build` 通過。分支 `feat/notebook-kernel-controls`，已 merge。
+    - [ ] 2b（後續）：HTML 輸出改走 sandbox iframe（現以逸出文字顯示）；ANSI traceback 上色。
 - [ ] **階段 3**：cell 內容編輯、語法 highlight（CodeMirror）。
 - [ ] **階段 4**：AI 由主題產生可執行 notebook 頁、匯出時包含 notebook。
 
@@ -1438,6 +1440,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-08 | （使用者要求 /loop，Jupyter 整合階段 2a）kernel 重啟／清除輸出＋狀態列。`NotebookPanel`（editable）新增工具列：⟳ 重啟 kernel（接 `useJupyterKernel.restart()`）、清除輸出（當前 cell）、清除全部輸出（接已測純函式 `clearCellOutputs`／`clearAllOutputs`＋`savePageNotebook` 寫回）；頁腳 kernel 狀態列已於 1c-iii-b 具備；markdown/raw 與 image/latex 輸出已由 CellBody/displayOutputs 呈現。i18n 3 鍵。前端 tsc＋i18n 38/38＋nbformatModel 13/13＋vite build 通過。階段 2 尚餘 HTML sandbox iframe、ANSI traceback 上色 | feat/notebook-kernel-controls（已 merge） |
 | 2026-07-08 | （使用者授權安裝相依，Jupyter 整合階段 1c-iii-b＋1c-iii-c/1d-iii）code cell 連真實 kernel 執行＋結果寫回。加相依 @jupyterlab/services@^7.6.1。`useJupyterKernel.ts`：動態 `import('@jupyterlab/services')` lazy-load（vite code-split）、連線參數走 `fetchJupyterConnection`+`resolveJupyterUrls`+`ServerConnection.makeSettings`、module-level per-file kernel registry（跨頁保暖、離開整頁才 shutdown）、`requestExecute.onIOPub`→`iopubMessageFrom`→回呼、`statusChanged`→狀態列。`NotebookPanel`：`access_level==='edit'`（新 `editable` prop、SlideRenderer `notebookEditable` 由兩處播放檢視傳入）時 Ctrl/⌘+Enter 執行、Shift+Enter 執行並前進、▶執行鈕；執行時 `applyIopub` 即時顯示、完成 `withCellExecution`+`savePageNotebook` 寫回。唯讀者不連 kernel。i18n 8 鍵。前端 tsc＋i18n 38/38＋vite build 通過。端到端執行需啟 Jupyter server（Anaconda 已備）＋設 JUPYTER_ENABLED/BASE_URL/TOKEN 手動驗證 | feat/jupyter-kernel-execute（已 merge） |
 | 2026-07-08 | （使用者要求 /loop，Jupyter 整合階段 1d-ii）notebook 頁不自動換頁、不殘留前頁音訊（計畫 §2.3）。`PlayPage` 換頁交換音訊 src 的 effect 原本 `!audio_url` 提早 return，留著前頁 `<audio>` src→落在 notebook 頁若播放中，前頁音訊播畢觸發 `handleEnded` 自動換頁把互動頁跳過。改為無 audio_url 時主動 pause＋removeAttribute('src')＋load＋重置狀態＋token 失效，使 notebook 頁不播放/不觸發 ended/不自動換頁。總時長 `sumAudioDurationSeconds` 本就忽略 null 自然排除。前端 tsc＋vite build 通過（互動頁自動換頁屬 effect 邏輯，實機播放待真實使用驗證） | fix/notebook-no-audio-autoadvance（已 merge） |
 | 2026-07-08 | （使用者要求 /loop，Jupyter 整合階段 1d-i）TTS 產生略過 notebook 頁（計畫 §2.3）。`synthesizeAudio` 選頁 query 帶 `render_type`，對 `render_type==='notebook'` 的頁在並行 queue 內短路為 benign skip（skipped:true、error:null、不呼叫 TTS、不寫音檔、progress 照常回報），避免 notebook 頁被當成缺音訊而觸發 TTS 或標記失敗。測試 synthesize-audio-notebook 1/1（seed 純 notebook 頁，若 skip 回歸會嘗試真 TTS）、後端 tsc 通過。1d 尚餘前端計時/就緒判定（notebook 已無 audio_url 故播放自然略過，待接 kernel 驗證自動換頁）、執行寫回 | feat/notebook-silent-tts（已 merge） |
