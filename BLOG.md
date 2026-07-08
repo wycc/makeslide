@@ -1,5 +1,25 @@
 # MakeSlide 功能說明
 
+## Jupyter Notebook 整合（階段 6b）：在程式碼與 Markdown 之間切換 cell 型別
+
+### 背景
+
+整理 notebook 教材時，常會想把一格從程式碼改成說明文字（Markdown），或反過來。先前一格建立後型別就固定了，
+只能刪掉重建。這一步讓 cell 型別可以直接切換。
+
+### 使用方式
+
+在可編輯的 notebook 頁，工具列會依目前這一格的型別顯示一顆按鈕：程式碼 cell 顯示「轉為 Markdown」、Markdown
+cell 顯示「轉為程式碼」。按下即可切換，原本輸入的內容會保留。
+
+### 實作重點
+
+- 新增純函式 `changeCellType`（保留 source；轉成 Markdown 會移除程式碼專屬的 outputs／execution_count，轉成
+  程式碼會補上可執行 cell 的預設欄位；同型別或索引越界時不動作），有單元測試。
+- 切換前先提交進行中的編輯；若把一格從程式碼轉走，會一併清掉它的「執行中」高亮（因為輸出已不再適用）。
+
+分支：`feat/notebook-cell-type-toggle`。`nbformatModel` 測試 22/22、前端 `tsc`＋i18n 38/38＋`vite build` 通過。
+
 ## Jupyter Notebook 整合（階段 6a）：調整 cell 的上下順序
 
 ### 背景

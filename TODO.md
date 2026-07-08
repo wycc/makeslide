@@ -55,7 +55,7 @@
 
 - [ ] **階段 6：notebook 編輯器 cell 操作強化**（2026-07-08 依 LOOP.md 第 2 條分析後新增；接續 5d 的 cell 增／刪）。
     - [x] **6a：cell 上下移動**（2026-07-08）：`nbformatModel` 加純函式 `moveCell`（immutable、回移動後 index、邊界／越界 no-op）；`NotebookPanel` 工具列加 ⬆／⬇ 鈕（端點 disabled），先 commit 進行中編輯、選取跟隨移動的 cell、清除執行中高亮（index 位移），經 `savePageNotebook` 寫回；為避免與既有「切換選取」的 local `moveCell` 撞名，純函式以 `moveCellPosition` 別名匯入。i18n 2 鍵。驗證：`nbformatModel` 20/20、前端 `tsc`＋i18n 38/38＋`vite build` 通過。分支 `feat/notebook-cell-reorder`，已 merge 回 master。
-    - [ ] **6b：cell 型別切換（code ↔ markdown）**：`nbformatModel` 加 `changeCellType` 純函式（保留 source，code→markdown 去除 outputs/execution_count，markdown→code 補空 outputs），`NotebookPanel` command 模式加切換鈕/快捷鍵。
+    - [x] **6b：cell 型別切換（code ↔ markdown）**（2026-07-08）：`nbformatModel` 加純函式 `changeCellType`（保留 source；code→markdown 去除 `outputs`/`execution_count`，markdown→code 補 runnable 預設；同型別／越界 no-op）；`NotebookPanel` 工具列加「轉為 Markdown」／「轉為程式碼」鈕（依當前 cell 型別變換標籤），先 commit 進行中編輯、離開 code 型別時清執行高亮，經 `savePageNotebook` 寫回。i18n 2 鍵。驗證：`nbformatModel` 22/22、前端 `tsc`＋i18n 38/38＋`vite build` 通過。分支 `feat/notebook-cell-type-toggle`，已 merge 回 master。
     - [ ] **6c：執行全部 code cell（Run all）**：依序執行所有 code cell，逐格串流輸出並寫回；遇錯可選擇停止或續跑。
     - [ ] **6d：複製 cell 原始碼／輸出到剪貼簿**：`NotebookPanel` 加「複製原始碼」「複製輸出」鈕（`navigator.clipboard`），輸出取純文字表示。
     - [ ] **6e：長輸出折疊**：單一 cell 輸出超過 N 行時預設折疊、可展開，避免長輸出把單 cell 視圖撐爆。
@@ -1463,6 +1463,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-08 | （Jupyter 整合階段 6b）cell 型別切換 code↔markdown。`nbformatModel` 加純函式 `changeCellType`（保留 source、code→md 去 outputs/exec_count、md→code 補預設、同型別/越界 no-op）；NotebookPanel 工具列加「轉為 Markdown／程式碼」鈕（依當前型別變標籤、先 commit、離開 code 清執行高亮）經 savePageNotebook 寫回；i18n 2 鍵。驗證：nbformatModel 22/22、前端 tsc＋i18n 38/38＋vite build | feat/notebook-cell-type-toggle（已 merge） |
 | 2026-07-08 | （依 LOOP.md 第 2 條分析 notebook 編輯器，新增階段 6「cell 操作強化」5 項並完成 6a）6a：cell 上下移動——`nbformatModel` 加純函式 `moveCell`（immutable、回移動後 index、邊界 no-op），NotebookPanel 工具列加 ⬆／⬇ 鈕（端點 disabled、先 commit 編輯、選取跟隨、清執行高亮）經 savePageNotebook 寫回，純函式以 `moveCellPosition` 別名避免與導覽用 local moveCell 撞名；i18n 2 鍵。驗證：nbformatModel 20/20、前端 tsc＋i18n 38/38＋vite build。另新增 6b（型別切換）／6c（Run all）／6d（複製 cell）／6e（長輸出折疊）待後續 | feat/notebook-cell-reorder（已 merge） |
 | 2026-07-08 | （Jupyter 整合狀態校正）TODO 多個已完成的頂層階段仍謊報為 `[ ]`，校正反映真實：階段 1c／1d／2／3／4 標為完成（各子項均已 merge），舊 NEW_FEATURE「第一步 c：頁面接線」項目確認已被新計畫階段 0／1b／1c-ii／4c／4d 完全且超額涵蓋（可執行 `NotebookPanel` 取代唯讀 `NotebookView`）故收束。**結論：Jupyter 整合階段 0–5 於本環境可完成的程式工作全部結束；剩餘僅 `1d-ii-b`（同步/上課模式互動頁）與真實 cgu gateway 端到端等需啟動 Jupyter server／gateway 的實機驗證項，自動 loop 無法推進。** | master（僅文件校正） |
 | 2026-07-08 | （Jupyter 整合階段 5e，階段 5 全部完成）kernel 執行逾時／連線失敗提示。狀態列優先順序抽成純函式 `kernelStatusLabelKey`（回精確 i18n key union），NotebookPanel 加 runTimedOut＋30s 計時器（鍵於執行中 cell），逾時後顯示「仍在執行中…（可重啟 kernel）」；i18n kernelSlow。驗證：jupyterConnection 7/7、前端 tsc＋i18n 38/38＋vite build。至此 Jupyter 整合階段 0–5 於此環境可完成的程式工作全部結束，剩餘為需 Jupyter server＋gateway 的實機驗證項 | feat/notebook-kernel-timeout（已 merge） |
