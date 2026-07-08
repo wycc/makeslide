@@ -496,6 +496,7 @@ export function PlayPageFullscreen() {
                   pdfId={pdfId ?? undefined}
                   pageNumber={currentPage?.page_number}
                   shareToken={currentShareToken || undefined}
+                  notebookEditable={detail?.access_level === 'edit'}
                   resolveFigureImageUrl={
                     pdfId
                       ? (figureId) => withShareToken(figureImageUrl(pdfId, figureId)) ?? figureImageUrl(pdfId, figureId)
@@ -673,6 +674,7 @@ export function PlayPageFullscreen() {
           pdfId={pdfId ?? undefined}
           pageNumber={currentPage?.page_number}
           shareToken={currentShareToken || undefined}
+          notebookEditable={detail?.access_level === 'edit'}
           resolveFigureImageUrl={
             pdfId
               ? (figureId) => withShareToken(figureImageUrl(pdfId, figureId)) ?? figureImageUrl(pdfId, figureId)

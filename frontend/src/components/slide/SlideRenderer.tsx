@@ -413,6 +413,8 @@ export interface SlideRendererProps {
   pdfId?: string;
   pageNumber?: number;
   shareToken?: string;
+  /** deck access_level==='edit' 時允許在 notebook 頁執行 cell（連 Jupyter kernel）。 */
+  notebookEditable?: boolean;
 }
 
 export function SlideRenderer({
@@ -439,6 +441,7 @@ export function SlideRenderer({
   pdfId,
   pageNumber,
   shareToken,
+  notebookEditable,
 }: SlideRendererProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const animated = renderType === 'gsap-image' && hasPlayableAnimation(spec);
@@ -494,6 +497,7 @@ export function SlideRenderer({
           pdfId={pdfId}
           pageNumber={pageNumber}
           shareToken={shareToken}
+          editable={notebookEditable}
           className="h-full w-full"
           style={wrapperStyle?.maxHeight ? { maxHeight: wrapperStyle.maxHeight } : undefined}
         />
