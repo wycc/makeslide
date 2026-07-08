@@ -636,6 +636,7 @@ export function PlayPageSidebar() {
     handleDeleteCurrentSlide,
     handleMoveSlide,
     handleUpdateCoverFromCurrentPage,
+    handleConvertCurrentPageToNotebook,
     setShowAddPagesModal,
     draggingPage, setDraggingPage,
     thumbLoadUntilIdx, setThumbLoadUntilIdx,
@@ -851,6 +852,15 @@ export function PlayPageSidebar() {
                 title={t('play.sidebar.addMultipleTitle')}
               >
                 {t('play.sidebar.addMultiple')}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleConvertCurrentPageToNotebook()}
+                disabled={isReadOnlyProcessing || slideBusy || !currentPage || currentPage.render_type === 'notebook'}
+                className="rounded-md border border-sky-200 bg-sky-50 px-2 py-1 text-xs text-sky-700 hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-sky-500/40 dark:bg-sky-500/15 dark:text-sky-200 dark:hover:bg-sky-500/25"
+                title={currentPage?.render_type === 'notebook' ? t('play.slideManagement.alreadyNotebook') : t('play.slideManagement.convertToNotebookTitle')}
+              >
+                {t('play.slideManagement.convertToNotebook')}
               </button>
               <button
                 type="button"
