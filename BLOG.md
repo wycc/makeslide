@@ -1,5 +1,36 @@
 # MakeSlide 功能說明
 
+## Jupyter Notebook 整合（階段 1c-ii）：notebook 頁在播放器裡「一次顯示一個 cell」
+
+### 背景
+
+有了無損的 nbformat 模型（階段 1c-i）與後端 `.ipynb` 讀寫 API（階段 1b）之後，這次把它們接上播放器
+畫面：當一頁的 `render_type` 是 `notebook` 時，投影片位置不再顯示圖片，而是渲染這頁的 `.ipynb`，
+**一次只顯示一個 cell**，可用鍵盤上下鍵在 cell 之間切換。這是把 notebook 真正「放進一個頁面」的第一個
+看得見的成果；就地執行（連 kernel）會在後續補上。
+
+### 使用方式
+
+- notebook 頁會在投影片區域顯示一個**單一 cell 視圖**：內容過長時 cell 區域自己出現垂直捲軸，不會把頁面
+  撐開。
+- **`↑`／`↓`**：切換到上一個／下一個 cell；面板底部顯示目前位置（例如 `Cell 3 / 12 · code`）與上下切換鈕。
+- **`Space`／`←`／`→`**：維持原本的「換簡報頁」行為不受影響——notebook 面板只攔截上下鍵，左右與空白鍵仍
+  交給播放器換頁。
+- markdown cell 會渲染成排版後的文字（含 LaTeX），code cell 顯示原始碼與其**先前存下的輸出**（文字、圖片、
+  錯誤訊息等）。
+- 一般檢視與全螢幕都支援；透過分享連結觀看時也會帶著分享 token 正確載入。
+
+### 實作重點
+
+- 新增 `NotebookPanel`（`frontend/src/components/slide/NotebookPanel.tsx`）：用階段 1c-i 的 `nbformatModel`
+  載入並正規化該頁 `.ipynb`，以 `clampCellIndex` 做上下導覽、以 `displayOutputs` 挑每個輸出最適合的呈現方式。
+- `SlideRenderer` 新增 `notebook` 分流：在所有 hook 之後才判斷分支（維持 React hook 順序穩定），需要 `pdfId`
+  與 `pageNumber` 才渲染 notebook，缺任一項時安全退回顯示圖片。
+- 新增前端 API `fetchPageNotebook`／`savePageNotebook`，並把 `currentShareToken` 一路傳給兩處播放檢視。
+- 新增 7 個 `play.notebook.*` i18n 字串（繁中／英）。
+
+分支：`feat/notebook-panel-view`。前端 `tsc`、i18n parity 38/38、`vite build` 均通過。
+
 ## Jupyter Notebook 整合（階段 1c-i）：可執行 notebook 的 nbformat 核心模型
 
 ### 背景

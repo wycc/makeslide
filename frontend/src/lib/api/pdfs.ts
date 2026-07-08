@@ -129,6 +129,48 @@ export interface SavePageAnimationResponse {
   updated_at: string;
 }
 
+export interface PageNotebookResponse {
+  page_number: number;
+  render_type: SlideRenderType;
+  /** Raw nbformat document; normalize with parseNbNotebook before use. */
+  notebook: unknown;
+}
+
+/** Fetch a page's `.ipynb` (nbformat JSON). Returns a default empty notebook when none is stored. */
+export async function fetchPageNotebook(
+  id: string,
+  pageNumber: number,
+  shareToken?: string,
+): Promise<PageNotebookResponse> {
+  const token = shareToken?.trim();
+  const suffix = token ? `?share=${encodeURIComponent(token)}` : '';
+  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/notebook${suffix}`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as PageNotebookResponse;
+}
+
+export interface SavePageNotebookResponse {
+  page_number: number;
+  render_type: SlideRenderType;
+  notebook_url: string;
+  updated_at: string;
+}
+
+/** Store a page's `.ipynb` (editing cells or writing execution outputs back). */
+export async function savePageNotebook(
+  id: string,
+  pageNumber: number,
+  notebook: unknown,
+): Promise<SavePageNotebookResponse> {
+  const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/notebook`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ notebook }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as SavePageNotebookResponse;
+}
+
 export async function savePageAnimation(
   id: string,
   pageNumber: number,

@@ -13,6 +13,7 @@ import {
 import { useI18n } from '../../i18n';
 import { useGsapSlideTimeline } from './useGsapSlideTimeline';
 import { WRAPPING_OVERLAY_TEXT_STYLE } from './overlayTextStyle';
+import { NotebookPanel } from './NotebookPanel';
 
 // Overlay animation text uses `em`/em-derived sizes that inherit the stage's
 // font-size. We set the stage font-size proportional to its rendered width so
@@ -408,6 +409,10 @@ export interface SlideRendererProps {
   overlay?: ReactNode;
   /** 掛在最外框的 pointermove（透過事件冒泡收到畫筆層的移動而不攔截它），供旁白錄製記錄游標。 */
   onWrapperPointerMove?: (e: import('react').PointerEvent<HTMLDivElement>) => void;
+  /** notebook 頁（render_type==='notebook'）以此定位並載入該頁 `.ipynb`；缺任一項時退回圖片。 */
+  pdfId?: string;
+  pageNumber?: number;
+  shareToken?: string;
 }
 
 export function SlideRenderer({
@@ -431,6 +436,9 @@ export function SlideRenderer({
   children,
   overlay,
   onWrapperPointerMove,
+  pdfId,
+  pageNumber,
+  shareToken,
 }: SlideRendererProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const animated = renderType === 'gsap-image' && hasPlayableAnimation(spec);
@@ -475,6 +483,25 @@ export function SlideRenderer({
       {...imgProps}
     />
   );
+
+  // Notebook pages render their `.ipynb` instead of the slide image. Requires pdfId +
+  // pageNumber to locate the asset; without them we fall through to the image (safe default).
+  // Placed after all hooks so hook order stays stable across render-type changes.
+  if (renderType === 'notebook' && pdfId && pageNumber != null) {
+    return (
+      <div className={wrapperClassName} style={wrapperStyle} onPointerMove={onWrapperPointerMove}>
+        <NotebookPanel
+          pdfId={pdfId}
+          pageNumber={pageNumber}
+          shareToken={shareToken}
+          className="h-full w-full"
+          style={wrapperStyle?.maxHeight ? { maxHeight: wrapperStyle.maxHeight } : undefined}
+        />
+        {overlay}
+        {children}
+      </div>
+    );
+  }
 
   if (!animated || animationFailed) {
     return (
