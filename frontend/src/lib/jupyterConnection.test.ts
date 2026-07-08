@@ -5,6 +5,7 @@ import {
   iopubMessageFrom,
   kernelStatusFrom,
   kernelStatusLabelKey,
+  isJupyterDisabledError,
   resolveJupyterUrls,
   type JupyterConnectionInfo,
 } from './jupyterConnection';
@@ -81,4 +82,14 @@ test('kernelStatusLabelKey resolves the footer status key with correct precedenc
   assert.equal(kernelStatusLabelKey(base), 'play.notebook.kernelReady');
   // timeout without an active run is ignored (nothing running to be slow)
   assert.equal(kernelStatusLabelKey({ ...base, timedOut: true }), 'play.notebook.kernelReady');
+  // 'disabled' (feature off) wins even over a failed run, and is distinct from unavailable
+  assert.equal(kernelStatusLabelKey({ ...base, phase: 'disabled', runError: true }), 'play.notebook.kernelDisabled');
+});
+
+test('isJupyterDisabledError is true only for a 404-status error', () => {
+  assert.equal(isJupyterDisabledError({ status: 404 }), true);
+  assert.equal(isJupyterDisabledError({ status: 500 }), false);
+  assert.equal(isJupyterDisabledError(new Error('boom')), false);
+  assert.equal(isJupyterDisabledError(null), false);
+  assert.equal(isJupyterDisabledError(undefined), false);
 });

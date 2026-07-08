@@ -1177,6 +1177,7 @@ export const en = {
   'play.notebook.kernelConnecting': 'Connecting kernel…',
   'play.notebook.kernelBusy': 'Kernel running…',
   'play.notebook.kernelSlow': 'Still running (taking a while)… you can restart the kernel',
+  'play.notebook.kernelDisabled': 'Jupyter execution is not enabled (ask an administrator to turn it on)',
   'play.notebook.kernelUnavailable': 'Kernel unavailable',
   'play.notebook.restart': 'Restart kernel',
   'play.notebook.clearOutputs': 'Clear outputs',

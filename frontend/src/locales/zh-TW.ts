@@ -1177,6 +1177,7 @@ export const zhTW = {
   'play.notebook.kernelConnecting': 'Kernel 連線中…',
   'play.notebook.kernelBusy': 'Kernel 執行中…',
   'play.notebook.kernelSlow': 'Kernel 執行時間較長，仍在執行中…（可重啟 kernel）',
+  'play.notebook.kernelDisabled': 'Jupyter 執行功能未啟用（請洽管理員開啟）',
   'play.notebook.kernelUnavailable': 'Kernel 無法連線',
   'play.notebook.restart': '重啟 kernel',
   'play.notebook.clearOutputs': '清除輸出',
