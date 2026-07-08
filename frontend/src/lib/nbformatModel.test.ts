@@ -10,6 +10,7 @@ import {
   newCell,
   insertCell,
   deleteCell,
+  moveCell,
   defaultNbNotebook,
   displayOutput,
   displayOutputs,
@@ -219,6 +220,26 @@ test('deleteCell is a no-op on the last remaining cell and out-of-range indices'
   const nb = twoCellNb();
   assert.equal(deleteCell(nb, 9).notebook, nb);
   assert.equal(deleteCell(nb, -1).notebook, nb);
+});
+
+test('moveCell reorders immutably and returns the moved cell new index', () => {
+  const nb = twoCellNb(); // [code 'a', markdown 'note']
+  const down = moveCell(nb, 0, 1);
+  assert.equal(down.index, 1);
+  assert.equal(down.notebook.cells[1]!.cell_type, 'code');
+  assert.equal(down.notebook.cells[0]!.cell_type, 'markdown');
+  assert.equal(nb.cells[0]!.cell_type, 'code'); // original untouched
+
+  const up = moveCell(nb, 1, -1);
+  assert.equal(up.index, 0);
+  assert.equal(up.notebook.cells[0]!.cell_type, 'markdown');
+});
+
+test('moveCell is a no-op past the list edges and for out-of-range sources', () => {
+  const nb = twoCellNb();
+  assert.equal(moveCell(nb, 0, -1).notebook, nb); // already at top
+  assert.equal(moveCell(nb, 1, 1).notebook, nb); // already at bottom
+  assert.equal(moveCell(nb, 5, 1).notebook, nb); // out of range
 });
 
 // ---- display MIME selection ----
