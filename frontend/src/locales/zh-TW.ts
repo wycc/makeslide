@@ -1180,6 +1180,7 @@ export const zhTW = {
   'play.notebook.kernelDisabled': 'Jupyter 執行功能未啟用（請洽管理員開啟）',
   'play.notebook.kernelUnavailable': 'Kernel 無法連線',
   'play.notebook.restart': '重啟 kernel',
+  'play.notebook.runAll': '全部執行',
   'play.notebook.clearOutputs': '清除輸出',
   'play.notebook.clearAllOutputs': '清除全部輸出',
   'play.notebook.addCodeCell': '程式碼',

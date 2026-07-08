@@ -273,6 +273,15 @@ export function changeCellType(nb: NbNotebook, cellIndex: number, cellType: NbCe
   return { ...nb, cells };
 }
 
+/** Indices of every code cell, in order — the execution order for "Run all" (phase 6c). */
+export function codeCellIndices(nb: NbNotebook): number[] {
+  const out: number[] = [];
+  nb.cells.forEach((cell, i) => {
+    if (cell.cell_type === 'code') out.push(i);
+  });
+  return out;
+}
+
 /** Clear every code cell's outputs (used by the "clear all outputs" action). */
 export function clearAllOutputs(nb: NbNotebook): NbNotebook {
   const cells = nb.cells.map((cell) =>
