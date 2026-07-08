@@ -339,7 +339,6 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
       setRunningIndex(idx);
       let acc: NbOutput[] = [];
       setLiveOutputs([]);
-      const runStartMs = Date.now();
       try {
         const { executionCount } = await kernel.execute(cellText(cell), {
           onIopub: (msg) => {
@@ -386,6 +385,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
       setRunningIndex(i);
       let acc: NbOutput[] = [];
       setLiveOutputs([]);
+      const runStartMs = Date.now();
       try {
         const { executionCount } = await kernel.execute(cellText(cell), {
           onIopub: (msg) => {
@@ -709,6 +709,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
         ) : cells.length === 0 ? (
           <p className="text-xs text-text-muted">{t('play.notebook.empty')}</p>
         ) : currentCell ? (
+          <>
           <CellBody
             cell={currentCell}
             outputs={outputs}
@@ -723,10 +724,11 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
             editPlaceholder={t('play.notebook.editPlaceholder')}
           />
         {!editing && currentCell?.cell_type === 'code' && cellTimings[currentIndex] != null ? (
-          <p className='mt-1 text-[10px] text-text-muted/60'>
+          <p className="mt-1 text-[10px] text-text-muted/60">
             {`耗時 ${formatCellTiming(cellTimings[currentIndex]!)}`}
           </p>
         ) : null}
+          </>
         ) : null}
       </div>
       <div className="flex items-center justify-between gap-2 border-t border-slate-800 px-3 py-1.5 text-[11px] text-text-muted">
