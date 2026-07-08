@@ -13,6 +13,7 @@ import { MarkdownMath } from '../MarkdownMath';
 import { useI18n } from '../../i18n';
 import { parseAnsi, type AnsiColor } from '../../lib/ansi';
 import { fetchPageNotebook, savePageNotebook } from '../../lib/api/pdfs';
+import { buildNotebookHtmlSrcDoc, NOTEBOOK_HTML_HEIGHT_MESSAGE } from '../../lib/notebookHtmlSandbox';
 import {
   applyIopub,
   cellText,
@@ -61,13 +62,48 @@ function AnsiText({ text }: { text: string }) {
   );
 }
 
+// Render a notebook `text/html` output inside a sandboxed, auto-sized iframe (phase 2b-ii).
+// The frame runs with `allow-scripts` but NO `allow-same-origin`, so pandas/plotly/repr HTML
+// (which may embed arbitrary scripts) executes in an opaque origin that cannot reach the parent
+// page, its cookies, or storage. The embedded script postMessage's its content height so the
+// iframe grows to fit without an inner scrollbar; we match `event.source` to the frame's window
+// to ignore messages from anywhere else.
+function NotebookHtmlOutput({ html }: { html: string }) {
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const [height, setHeight] = useState(40);
+  const srcDoc = useMemo(() => buildNotebookHtmlSrcDoc(html), [html]);
+  useEffect(() => {
+    function onMessage(e: MessageEvent) {
+      const frame = iframeRef.current;
+      if (!frame || e.source !== frame.contentWindow) return;
+      const data = e.data as { type?: unknown; height?: unknown } | null;
+      if (data && typeof data === 'object' && data.type === NOTEBOOK_HTML_HEIGHT_MESSAGE && typeof data.height === 'number') {
+        // +4px 緩衝避免內部捲軸；夾在合理範圍避免異常回報值把版面撐爆。
+        setHeight(Math.min(Math.max(Math.ceil(data.height) + 4, 24), 4000));
+      }
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
+  return (
+    <iframe
+      ref={iframeRef}
+      title="notebook-html-output"
+      sandbox="allow-scripts"
+      srcDoc={srcDoc}
+      className="w-full rounded border border-border bg-surface-muted"
+      style={{ height }}
+    />
+  );
+}
+
 function OutputBlock({ output }: { output: NbDisplayOutput }) {
   switch (output.kind) {
     case 'image':
       return <img src={`data:${output.mimeType};base64,${output.dataBase64}`} alt="" className="max-w-full rounded border border-border" />;
     case 'html':
-      // Stored HTML output; shown as escaped text until the sandboxed iframe renderer lands (phase 2).
-      return <pre className="overflow-x-auto rounded bg-surface-muted px-3 py-2 text-xs text-text">{output.html}</pre>;
+      // Arbitrary notebook HTML (tables, plotly, repr) rendered in a sandboxed iframe (phase 2b-ii).
+      return <NotebookHtmlOutput html={output.html} />;
     case 'latex':
       return <MarkdownMath content={output.latex} />;
     case 'error':
