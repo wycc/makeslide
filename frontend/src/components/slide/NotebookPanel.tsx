@@ -24,6 +24,7 @@ import {
   deleteCell,
   moveCell as moveCellPosition,
   changeCellType,
+  codeCellIndices,
   displayOutputs,
   outputsToPlainText,
   defaultNbNotebook,
@@ -353,6 +354,47 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
     [editable, notebook, cellIndex, editing, kernel, persistNotebook, pdfId, pageNumber],
   );
 
+  // Run all code cells in order (phase 6c). Threads the notebook through a local `working` copy
+  // (not React state, which updates async) so each cell's write-back is visible to the next, and
+  // stops on the first cell that errors (mirroring Jupyter's "Run all" stop-on-error). Outputs
+  // stream live per cell; the final document is persisted once. End-to-end needs a live kernel.
+  const runAll = useCallback(async () => {
+    if (!editable || !notebook) return;
+    const idx0 = clampCellIndex(cellIndex, notebook.cells.length);
+    let working = editing ? withCellSource(notebook, idx0, draftRef.current) : notebook;
+    if (editing) setEditing(false);
+    const indices = codeCellIndices(working);
+    if (indices.length === 0) return;
+    kernel.connect();
+    setRunError(false);
+    for (const i of indices) {
+      const cell = working.cells[i];
+      if (!cell || cell.cell_type !== 'code') continue;
+      setCellIndex(i);
+      setRunningIndex(i);
+      let acc: NbOutput[] = [];
+      setLiveOutputs([]);
+      try {
+        const { executionCount } = await kernel.execute(cellText(cell), {
+          onIopub: (msg) => {
+            acc = applyIopub(acc, msg);
+            setLiveOutputs(acc);
+          },
+        });
+        working = withCellExecution(working, i, acc, executionCount);
+        setNotebook(working);
+      } catch {
+        setRunError(true);
+        setRunningIndex(null);
+        break;
+      }
+      setRunningIndex(null);
+      // Stop on the first cell that raised (Python error appears as an 'error' output).
+      if (acc.some((o) => o.output_type === 'error')) break;
+    }
+    void savePageNotebook(pdfId, pageNumber, working).catch(() => undefined);
+  }, [editable, notebook, cellIndex, editing, kernel, pdfId, pageNumber]);
+
   const clearOutputs = useCallback(
     (scope: 'cell' | 'all') => {
       if (!editable || !notebook) return;
@@ -603,6 +645,15 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
             </button>
           </div>
           <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => void runAll()}
+              disabled={runningIndex != null || !notebook || codeCellIndices(notebook).length === 0}
+              className="rounded px-1.5 py-0.5 font-medium text-sky-400 hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
+              title={t('play.notebook.runAll')}
+            >
+              ▶▶ {t('play.notebook.runAll')}
+            </button>
             <button
               type="button"
               onClick={restartKernel}

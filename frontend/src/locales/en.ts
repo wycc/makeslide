@@ -1180,6 +1180,7 @@ export const en = {
   'play.notebook.kernelDisabled': 'Jupyter execution is not enabled (ask an administrator to turn it on)',
   'play.notebook.kernelUnavailable': 'Kernel unavailable',
   'play.notebook.restart': 'Restart kernel',
+  'play.notebook.runAll': 'Run all',
   'play.notebook.clearOutputs': 'Clear outputs',
   'play.notebook.clearAllOutputs': 'Clear all outputs',
   'play.notebook.addCodeCell': 'Code',

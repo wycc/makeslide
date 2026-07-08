@@ -12,6 +12,7 @@ import {
   deleteCell,
   moveCell,
   changeCellType,
+  codeCellIndices,
   defaultNbNotebook,
   displayOutput,
   displayOutputs,
@@ -265,6 +266,21 @@ test('changeCellType is a no-op for same type and out-of-range indices', () => {
   assert.equal(changeCellType(nb, 0, 'code'), nb); // already code
   assert.equal(changeCellType(nb, 1, 'markdown'), nb); // already markdown
   assert.equal(changeCellType(nb, 9, 'code'), nb); // out of range
+});
+
+test('codeCellIndices returns only code cell positions in order', () => {
+  const nb = twoCellNb(); // [code, markdown]
+  assert.deepEqual(codeCellIndices(nb), [0]);
+  const mixed = parseNbNotebook({
+    cells: [
+      { cell_type: 'markdown', source: '#' },
+      { cell_type: 'code', source: 'a' },
+      { cell_type: 'raw', source: 'r' },
+      { cell_type: 'code', source: 'b' },
+    ],
+    metadata: {}, nbformat: 4, nbformat_minor: 5,
+  });
+  assert.deepEqual(codeCellIndices(mixed), [1, 3]);
 });
 
 // ---- display MIME selection ----
