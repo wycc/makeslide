@@ -1467,6 +1467,8 @@ export const en = {
   'play.sidebar.addMultipleTitle': 'Add multiple slides from a prompt',
   'play.sidebar.addMultiple': 'Add pages',
   'play.sidebar.delete': 'Delete',
+  'play.sidebar.notebookBadge': 'Notebook',
+  'play.sidebar.notebookBadgeTitle': 'This page is an interactive Jupyter notebook',
   'play.sidebar.thumbnailTitle': 'Page {page}{selected}',
   'play.sidebar.thumbnailSelectedSuffix': ' (selected for regeneration)',
   'play.sidebar.dragToReorder': 'Drag this handle to reorder',
