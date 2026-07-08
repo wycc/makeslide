@@ -1,5 +1,26 @@
 # MakeSlide 功能說明
 
+## Jupyter Notebook 整合（階段 2b-i）：錯誤訊息（traceback）正確上色
+
+### 背景
+
+執行 code cell 出錯時，Jupyter kernel 回傳的錯誤 traceback 帶有 ANSI 色碼（例如把錯誤類型標成紅色）。
+先前直接照原樣顯示，那些色碼會變成一堆看不懂的亂碼字元（像 `[0;31m`）夾在錯誤訊息裡。這一步把它們
+正確解析成有顏色的文字。
+
+### 使用方式
+
+在 notebook 頁執行出錯時，錯誤 traceback 會像在 JupyterLab 裡一樣**帶顏色顯示**（錯誤類型、行號等會用
+對應顏色標示），不再出現亂碼色碼。使用者不需要做任何設定。
+
+### 實作重點
+
+- 新增純函式 `parseAnsi`：解析 ANSI SGR 色碼（前景色、粗體、reset），把文字切成一段段帶樣式的片段；亮色
+  （90–97）映射到對應基礎色，其他不支援的 escape 序列直接剝除。附完整單元測試。
+- notebook 的錯誤輸出改用 `AnsiText` 元件渲染，把解析出的顏色對應到畫面樣式。
+
+分支：`feat/notebook-ansi-traceback`。`ansi` 7/7、前端 `tsc`＋`vite build` 通過。
+
 ## Jupyter Notebook 整合（階段 3a）：直接編輯 notebook 的 cell 內容
 
 ### 背景
