@@ -8,7 +8,7 @@ import {
   replaceSlideImage,
   updatePdfCoverFromPage,
 } from '../../lib/api';
-import { savePageNotebook } from '../../lib/api/pdfs';
+import { savePageNotebook, generatePageNotebook } from '../../lib/api/pdfs';
 import { defaultNbNotebook } from '../../lib/nbformatModel';
 import type { PdfDetailPage } from '../../types';
 import { useI18n } from '../../i18n';
@@ -38,6 +38,7 @@ export interface SlideManagementState {
   handleReplaceImageFile: (file: File, targetPageNumber?: number) => void;
   handleUpdateCoverFromCurrentPage: () => void;
   handleConvertCurrentPageToNotebook: () => void;
+  handleGenerateNotebookForCurrentPage: () => void;
 }
 
 export function useSlideManagement({
@@ -150,6 +151,25 @@ export function useSlideManagement({
     }
   }, [pdfId, currentPage, isReadOnlyProcessing, reloadDetail, t]);
 
+  // 由使用者輸入的主題，請後端 AI 產生一整頁可執行的 notebook（後端 generate 端點也會把該頁翻成
+  // notebook 頁）。以 window.prompt 取得主題；空白則取消。產生較慢，故沿用 slideBusy 顯示忙碌。
+  const handleGenerateNotebookForCurrentPage = useCallback(async () => {
+    if (isReadOnlyProcessing) return;
+    if (!pdfId || !currentPage) return;
+    const topic = window.prompt(t('play.slideManagement.generateNotebookPrompt'))?.trim();
+    if (!topic) return;
+    setSlideBusy(true);
+    setSlideError(null);
+    try {
+      await generatePageNotebook(pdfId, currentPage.page_number, topic);
+      await reloadDetail();
+    } catch (err) {
+      setSlideError(err instanceof ApiError ? err.message : t('play.slideManagement.generateNotebookFailed'));
+    } finally {
+      setSlideBusy(false);
+    }
+  }, [pdfId, currentPage, isReadOnlyProcessing, reloadDetail, t]);
+
   const handleUpdateCoverFromCurrentPage = useCallback(async () => {
     if (!pdfId || !currentPage) return;
     if (!currentPage.image_url) {
@@ -179,5 +199,6 @@ export function useSlideManagement({
     handleReplaceImageFile,
     handleUpdateCoverFromCurrentPage,
     handleConvertCurrentPageToNotebook,
+    handleGenerateNotebookForCurrentPage,
   };
 }
