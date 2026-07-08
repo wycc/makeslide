@@ -13,6 +13,7 @@ import {
   moveCell,
   changeCellType,
   codeCellIndices,
+  executionCountLabel,
   defaultNbNotebook,
   displayOutput,
   displayOutputs,
@@ -281,6 +282,14 @@ test('codeCellIndices returns only code cell positions in order', () => {
     metadata: {}, nbformat: 4, nbformat_minor: 5,
   });
   assert.deepEqual(codeCellIndices(mixed), [1, 3]);
+});
+
+test('executionCountLabel formats executed vs unexecuted cells', () => {
+  assert.equal(executionCountLabel(3), '[3]');
+  assert.equal(executionCountLabel(0), '[0]');
+  assert.equal(executionCountLabel(null), '[ ]');
+  assert.equal(executionCountLabel(undefined), '[ ]');
+  assert.equal(executionCountLabel('x'), '[ ]');
 });
 
 // ---- display MIME selection ----

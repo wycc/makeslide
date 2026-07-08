@@ -25,6 +25,7 @@ import {
   moveCell as moveCellPosition,
   changeCellType,
   codeCellIndices,
+  executionCountLabel,
   displayOutputs,
   outputsToPlainText,
   defaultNbNotebook,
@@ -214,12 +215,16 @@ function CellBody({ cell, outputs, editing, draft, onDraftChange, onBeginEdit, t
       {editor
         ? editor
         : source.trim() !== '' && (
-            <pre
-              onDoubleClick={onBeginEdit}
-              className="overflow-x-auto rounded-md border border-border bg-surface px-3 py-2 text-xs text-text"
-            >
-              <code>{source}</code>
-            </pre>
+            <div className="flex flex-col gap-0.5">
+              {/* Jupyter-style execution count (phase 7a). */}
+              <span className="font-mono text-[10px] text-sky-500/70">In {executionCountLabel(cell.execution_count)}:</span>
+              <pre
+                onDoubleClick={onBeginEdit}
+                className="overflow-x-auto rounded-md border border-border bg-surface px-3 py-2 text-xs text-text"
+              >
+                <code>{source}</code>
+              </pre>
+            </div>
           )}
       {outputs.map((output, j) => (
         <OutputBlock key={j} output={output} />
