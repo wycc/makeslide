@@ -428,6 +428,28 @@ export function PlayPageSlidePanel() {
         tabIndex={0}
       >
         <div className="relative flex h-full w-full max-w-4xl items-center justify-center">
+          {currentPage && !playQrCodeUrl ? (
+            <div className="absolute left-3 top-3 z-20 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => toggleBookmark(currentPage.page_number)}
+                title={bookmarks.includes(currentPage.page_number) ? t('play.sidebar.bookmarkRemove') : t('play.sidebar.bookmarkAdd')}
+                aria-label={bookmarks.includes(currentPage.page_number) ? t('play.sidebar.bookmarkRemove') : t('play.sidebar.bookmarkAdd')}
+                className={`rounded-md border bg-slate-900/80 px-2 py-1 text-sm shadow-lg backdrop-blur hover:bg-slate-800 ${bookmarks.includes(currentPage.page_number) ? 'border-amber-500/60 text-amber-300' : 'border-slate-600 text-slate-400'}`}
+              >
+                🔖
+              </button>
+              <button
+                type="button"
+                onClick={() => toggleImportantPage(currentPage.page_number)}
+                title={importantPages.includes(currentPage.page_number) ? t('play.sidebar.unmarkImportant') : t('play.sidebar.markImportant')}
+                aria-label={importantPages.includes(currentPage.page_number) ? t('play.sidebar.unmarkImportant') : t('play.sidebar.markImportant')}
+                className={`rounded-md border bg-slate-900/80 px-2 py-1 text-sm shadow-lg backdrop-blur hover:bg-slate-800 ${importantPages.includes(currentPage.page_number) ? 'border-yellow-500/60 text-yellow-300' : 'border-slate-600 text-slate-400'}`}
+              >
+                ★
+              </button>
+            </div>
+          ) : null}
           {playQrCodeUrl ? (
             <div className="flex flex-col items-center gap-3 rounded-lg border border-slate-700 bg-slate-900/80 p-4 shadow-xl">
               <img
@@ -543,26 +565,7 @@ export function PlayPageSlidePanel() {
                   >
                     {t('play.slidePanel.versionButton')}
                   </button>
-                  {currentPage && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => toggleBookmark(currentPage.page_number)}
-                        title={bookmarks.includes(currentPage.page_number) ? t('play.sidebar.bookmarkRemove') : t('play.sidebar.bookmarkAdd')}
-                        className={`absolute left-2 top-2 z-20 rounded-md border bg-slate-900/80 px-2 py-1 text-sm backdrop-blur hover:bg-slate-800 ${bookmarks.includes(currentPage.page_number) ? 'border-amber-500/60 text-amber-300' : 'border-slate-600 text-slate-400'}`}
-                      >
-                        🔖
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => toggleImportantPage(currentPage.page_number)}
-                        title={importantPages.includes(currentPage.page_number) ? t('play.sidebar.unmarkImportant') : t('play.sidebar.markImportant')}
-                        className={`absolute bottom-2 left-2 z-20 rounded-md border bg-slate-900/80 px-2 py-1 text-sm backdrop-blur hover:bg-slate-800 ${importantPages.includes(currentPage.page_number) ? 'border-yellow-500/60 text-yellow-300' : 'border-slate-600 text-slate-400'}`}
-                      >
-                        ★
-                      </button>
-                    </>
-                  )}
+                  {/* 書籤／標記為重要的按鈕已移到外層頁面容器（投影片舞台）的角落，不再覆蓋在小小的 cell 角落 */}
                 </>
               }
             >
