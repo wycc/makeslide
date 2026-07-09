@@ -2,11 +2,15 @@
 // NotebookPanel (React.lazy) so CodeMirror + the Python language mode are code-split into their
 // own chunk and never enter the main bundle — only editors of a notebook page pay for it.
 //
+// The notebook panel lives inside the always-dark play stage (slate-950), and the non-editing
+// source is shown as a dark code block, so the editor uses CodeMirror's built-in dark theme
+// unconditionally. That keeps proper syntax highlighting and a consistent dark look whether the
+// surrounding app is in light or dark mode (avoids the pale-text-on-light-surface mismatch).
+//
 // Keyboard: we deliberately do NOT bind Ctrl/⌘+Enter, Shift+Enter, or Escape here. CodeMirror
 // leaves those unbound, so they bubble up to NotebookPanel's container onKeyDown which owns the
 // run / commit-edit model. Plain Enter / arrows stay inside the editor as usual.
 
-import { useEffect, useState } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { python } from '@codemirror/lang-python';
 import { EditorView } from '@codemirror/view';
@@ -17,30 +21,13 @@ export interface CodeMirrorEditorProps {
   autoFocus?: boolean;
 }
 
-/** Track the app's Tailwind `class` dark mode (html.dark) so the editor theme matches. */
-function useHtmlDarkClass(): boolean {
-  const [dark, setDark] = useState(
-    () => typeof document !== 'undefined' && document.documentElement.classList.contains('dark'),
-  );
-  useEffect(() => {
-    const el = document.documentElement;
-    const update = () => setDark(el.classList.contains('dark'));
-    update();
-    const obs = new MutationObserver(update);
-    obs.observe(el, { attributes: true, attributeFilter: ['class'] });
-    return () => obs.disconnect();
-  }, []);
-  return dark;
-}
-
 export default function CodeMirrorEditor({ value, onChange, autoFocus }: CodeMirrorEditorProps) {
-  const dark = useHtmlDarkClass();
   return (
     <CodeMirror
       value={value}
       onChange={onChange}
       autoFocus={autoFocus}
-      theme={dark ? 'dark' : 'light'}
+      theme="dark"
       extensions={[python(), EditorView.lineWrapping]}
       basicSetup={{
         lineNumbers: true,

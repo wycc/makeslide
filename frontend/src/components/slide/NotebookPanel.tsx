@@ -221,7 +221,7 @@ function CellBody({ cell, outputs, editing, draft, onDraftChange, onBeginEdit, t
               <span className="font-mono text-[10px] text-sky-500/70">In {executionCountLabel(cell.execution_count)}:</span>
               <pre
                 onDoubleClick={onBeginEdit}
-                className="overflow-x-auto rounded-md border border-border bg-surface px-3 py-2 text-xs text-text"
+                className="overflow-x-auto rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-100"
               >
                 <code>{source}</code>
               </pre>
