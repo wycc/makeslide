@@ -221,7 +221,7 @@ function CellBody({ cell, outputs, editing, draft, onDraftChange, onBeginEdit, t
               <span className="font-mono text-[10px] text-sky-500/70">In {executionCountLabel(cell.execution_count)}:</span>
               <pre
                 onDoubleClick={onBeginEdit}
-                className="overflow-x-auto rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-100"
+                className="overflow-x-auto rounded-md border border-border bg-surface px-3 py-2 text-xs text-text"
               >
                 <code>{source}</code>
               </pre>
@@ -602,7 +602,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
   const kernelLabel = kernelLabelKey ? t(kernelLabelKey) : '';
 
   return (
-    <div className={`flex flex-col overflow-hidden rounded-lg border border-slate-800 bg-surface ${className ?? ''}`} style={style}>
+    <div className={`flex flex-col overflow-hidden rounded-lg border border-slate-800 bg-surface text-text ${className ?? ''}`} style={style}>
       {editable ? (
         <div className="flex items-center justify-between gap-1.5 border-b border-slate-800 px-3 py-1 text-[11px]">
           <div className="flex items-center gap-1.5">
