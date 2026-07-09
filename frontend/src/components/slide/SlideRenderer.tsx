@@ -500,7 +500,11 @@ export function SlideRenderer({
       ? { height: '85vh' }
       : { maxHeight: wrapperStyle?.maxHeight };
     return (
-      <div className={wrapperClassName} style={wrapperStyle} onPointerMove={onWrapperPointerMove}>
+      <div
+        className={isFullscreen ? `${wrapperClassName ?? ''} w-full` : wrapperClassName}
+        style={wrapperStyle}
+        onPointerMove={onWrapperPointerMove}
+      >
         <NotebookPanel
           pdfId={pdfId}
           pageNumber={pageNumber}
