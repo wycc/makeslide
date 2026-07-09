@@ -8,7 +8,7 @@
 // back to the `.ipynb` (plan §1.2, §1.3, MVP). Read-only viewers only see stored outputs.
 
 import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
-import type { KeyboardEvent, ReactNode } from 'react';
+import type { ChangeEvent, KeyboardEvent, ReactNode } from 'react';
 import { MarkdownMath } from '../MarkdownMath';
 import { useI18n } from '../../i18n';
 import { parseAnsi, type AnsiColor } from '../../lib/ansi';
@@ -259,6 +259,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
   const draftRef = useRef('');
   const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const notebookKey = editable ? `${pdfId}:${pageNumber}` : null;
   const kernel = useJupyterKernel(notebookKey);
@@ -297,6 +298,40 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
       void savePageNotebook(pdfId, pageNumber, next).catch(() => undefined);
     },
     [pdfId, pageNumber],
+  );
+
+  // Download the current notebook verbatim as a standard .ipynb file (nbformat JSON).
+  const downloadNotebook = useCallback(() => {
+    if (!notebook) return;
+    const blob = new Blob([JSON.stringify(notebook, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `page-${pageNumber}.ipynb`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [notebook, pageNumber]);
+
+  // Import an .ipynb file, replacing this page's notebook after confirmation.
+  const handleUploadFile = useCallback(
+    async (e: ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = ''; // allow re-selecting the same file later
+      if (!file || !editable) return;
+      if (!window.confirm(t('play.notebook.uploadConfirm'))) return;
+      let parsed: NbNotebook;
+      try {
+        parsed = parseNbNotebook(JSON.parse(await file.text()));
+      } catch {
+        setLoadError(true);
+        return;
+      }
+      setEditing(false);
+      setCellIndex(0);
+      setLoadError(false);
+      persistNotebook(parsed);
+    },
+    [editable, persistNotebook, t],
   );
 
   const beginEdit = useCallback(() => {
@@ -700,6 +735,30 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
               title={t('play.notebook.clearAllOutputs')}
             >
               {t('play.notebook.clearAllOutputs')}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".ipynb,application/json,application/x-ipynb+json"
+              onChange={handleUploadFile}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="rounded px-1.5 py-0.5 text-text hover:bg-surface-muted"
+              title={t('play.notebook.uploadHint')}
+            >
+              📤 {t('play.notebook.upload')}
+            </button>
+            <button
+              type="button"
+              onClick={downloadNotebook}
+              disabled={!notebook}
+              className="rounded px-1.5 py-0.5 text-text hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
+              title={t('play.notebook.downloadHint')}
+            >
+              📥 {t('play.notebook.download')}
             </button>
           </div>
         </div>
