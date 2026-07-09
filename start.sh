@@ -441,6 +441,46 @@ ensure_jupyter_bin() {
   JUPYTER_BIN="$venvbin"; return 0
 }
 
+# 自動掃描 Conda/Anaconda 環境並註冊為 Jupyter kernelspec，讓前端「執行環境」下拉選單自動列出，
+# 免手動安裝 nb_conda_kernels。每個含 ipykernel 的環境以 `<env>/bin/python -m ipykernel install
+# --user` 註冊（寫入 user kernel 目錄，任何 jupyter 都找得到）。設 JUPYTER_SCAN_CONDA_ENVS=false 停用。
+register_conda_kernels() {
+  local scan base condacmd envs_dir env envname pybin registered=0 d
+  scan="$(read_env_var JUPYTER_SCAN_CONDA_ENVS)"
+  [[ "$scan" == "false" ]] && return 0
+  # 決定 conda base：優先 JUPYTER_CONDA_PREFIX（若指向某 env 則往上取 base）；否則問 conda；再否則常見路徑。
+  base="$(read_env_var JUPYTER_CONDA_PREFIX)"
+  [[ "$base" == */envs/* ]] && base="${base%/envs/*}"
+  if [[ -z "$base" ]]; then
+    condacmd="$(command -v conda || true)"
+    [[ -n "$condacmd" ]] && base="$("$condacmd" info --base 2>/dev/null || true)"
+  fi
+  if [[ -z "$base" ]]; then
+    for d in /opt/Anaconda3 "$HOME/anaconda3" "$HOME/miniconda3" /opt/conda /opt/miniconda3; do
+      [[ -d "$d" ]] && { base="$d"; break; }
+    done
+  fi
+  [[ -z "$base" || ! -d "$base" ]] && return 0
+  # 環境清單：base 自身 + base/envs/* 各目錄。
+  local prefixes=("$base")
+  envs_dir="$base/envs"
+  if [[ -d "$envs_dir" ]]; then
+    for env in "$envs_dir"/*/; do [[ -d "$env" ]] && prefixes+=("${env%/}"); done
+  fi
+  for env in "${prefixes[@]}"; do
+    pybin="$env/bin/python"
+    [[ -x "$pybin" ]] || continue
+    "$pybin" -c "import ipykernel" >/dev/null 2>&1 || continue   # 沒 ipykernel 的環境跳過
+    if [[ "$env" == "$base" ]]; then envname="base"; else envname="$(basename "$env")"; fi
+    if "$pybin" -m ipykernel install --user --name "conda-$envname" \
+         --display-name "Python ($envname)" >/dev/null 2>&1; then
+      registered=$((registered + 1))
+    fi
+  done
+  (( registered > 0 )) && log_info "已自動掃描並註冊 $registered 個 Conda 環境為 Jupyter kernel（可於前端「執行環境」下拉選單切換）"
+  return 0
+}
+
 JUPYTER_PID=""
 # 僅在 JUPYTER_ENABLED=true 且設了 JUPYTER_PROXY_TARGET 時，於本機啟動 Jupyter server，
 # 讓後端可把 <NB_PREFIX><JUPYTER_PROXY_PREFIX>/* 同源反向代理到它（見 backend/src/routes/jupyterProxy.ts）。
@@ -475,6 +515,7 @@ start_jupyter() {
     log_warn "找不到 jupyter 執行檔，略過啟動 Jupyter server（notebook 就地執行將無法連線）"
     return 0
   fi
+  register_conda_kernels
 
   if [[ -n "$(find_pids_on_port "$jport")" ]]; then
     log_info "port $jport 已有服務在監聽，沿用既有 Jupyter server（不另外啟動）"
