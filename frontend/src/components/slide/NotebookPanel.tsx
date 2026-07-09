@@ -49,6 +49,12 @@ const NOTEBOOK_RUN_TIMEOUT_MS = 30_000;
 /** Text/error outputs longer than this collapse to a "show more" toggle (phase 6e). */
 const MAX_OUTPUT_LINES = 16;
 
+/** Adjustable cell font size (px) for the code/output area, persisted in localStorage. */
+const FONT_MIN = 9;
+const FONT_MAX = 28;
+const FONT_DEFAULT = 13;
+const FONT_STORAGE_KEY = 'makeslide.nbFontSize';
+
 // Lazy so CodeMirror + Python mode are code-split out of the main bundle (phase 3b).
 const CodeMirrorEditor = lazy(() => import('./codeMirrorEditor'));
 
@@ -153,10 +159,10 @@ function OutputBlock({ output }: { output: NbDisplayOutput }) {
         <CollapsibleOutput
           text={output.traceback}
           render={(tt) => <AnsiText text={tt} />}
-          className="overflow-x-auto rounded bg-rose-50 px-3 py-2 text-xs text-rose-800 dark:bg-rose-950/30 dark:text-rose-200"
+          className="overflow-x-auto rounded bg-rose-50 px-3 py-2 text-rose-800 dark:bg-rose-950/30 dark:text-rose-200"
         />
       ) : (
-        <pre className="overflow-x-auto rounded bg-rose-50 px-3 py-2 text-xs text-rose-800 dark:bg-rose-950/30 dark:text-rose-200">
+        <pre className="overflow-x-auto rounded bg-rose-50 px-3 py-2 text-rose-800 dark:bg-rose-950/30 dark:text-rose-200">
           <span className="font-semibold">{[output.ename, output.evalue].filter(Boolean).join(': ')}</span>
         </pre>
       );
@@ -165,7 +171,7 @@ function OutputBlock({ output }: { output: NbDisplayOutput }) {
         <CollapsibleOutput
           text={output.text}
           render={(tt) => tt}
-          className="overflow-x-auto rounded bg-surface-muted px-3 py-2 text-xs text-text"
+          className="overflow-x-auto rounded bg-surface-muted px-3 py-2 text-text"
         />
       );
   }
@@ -180,9 +186,10 @@ interface CellBodyProps {
   onBeginEdit?: () => void;
   textareaRef: React.RefObject<HTMLTextAreaElement>;
   editPlaceholder: string;
+  fontSize: number;
 }
 
-function CellBody({ cell, outputs, editing, draft, onDraftChange, onBeginEdit, textareaRef, editPlaceholder }: CellBodyProps) {
+function CellBody({ cell, outputs, editing, draft, onDraftChange, onBeginEdit, textareaRef, editPlaceholder, fontSize }: CellBodyProps) {
   const source = cellText(cell);
   // Plain textarea editor — used for markdown cells and as the Suspense fallback while the
   // CodeMirror chunk loads for code cells.
@@ -193,7 +200,7 @@ function CellBody({ cell, outputs, editing, draft, onDraftChange, onBeginEdit, t
       onChange={(e) => onDraftChange(e.target.value)}
       spellCheck={false}
       placeholder={editPlaceholder}
-      className="min-h-[6rem] w-full resize-y rounded-md border border-sky-500/50 bg-surface px-3 py-2 font-mono text-xs text-text outline-none focus:ring-1 focus:ring-sky-500/50"
+      className="min-h-[6rem] w-full resize-y rounded-md border border-sky-500/50 bg-surface px-3 py-2 font-mono text-text outline-none focus:ring-1 focus:ring-sky-500/50"
       rows={Math.min(20, Math.max(4, draft.split('\n').length + 1))}
     />
   );
@@ -208,7 +215,7 @@ function CellBody({ cell, outputs, editing, draft, onDraftChange, onBeginEdit, t
   // Code cells get syntax-highlighted CodeMirror while editing (lazy-loaded, phase 3b).
   const editor = editing ? (
     <Suspense fallback={textareaEditor}>
-      <CodeMirrorEditor value={draft} onChange={onDraftChange} autoFocus />
+      <CodeMirrorEditor value={draft} onChange={onDraftChange} autoFocus fontSize={fontSize} />
     </Suspense>
   ) : null;
   return (
@@ -221,7 +228,7 @@ function CellBody({ cell, outputs, editing, draft, onDraftChange, onBeginEdit, t
               <span className="font-mono text-[10px] leading-none text-sky-500/70">In {executionCountLabel(cell.execution_count)}:</span>
               <pre
                 onDoubleClick={onBeginEdit}
-                className="overflow-x-auto rounded-md border border-border bg-surface px-3 py-2 text-xs text-text"
+                className="overflow-x-auto rounded-md border border-border bg-surface px-3 py-2 text-text"
               >
                 <code>{source}</code>
               </pre>
@@ -260,6 +267,22 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
   const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [fontSize, setFontSize] = useState<number>(() => {
+    if (typeof localStorage === 'undefined') return FONT_DEFAULT;
+    const n = Number(localStorage.getItem(FONT_STORAGE_KEY));
+    return Number.isFinite(n) && n > 0 ? Math.min(FONT_MAX, Math.max(FONT_MIN, n)) : FONT_DEFAULT;
+  });
+  const changeFontSize = useCallback((delta: number) => {
+    setFontSize((prev) => {
+      const next = Math.min(FONT_MAX, Math.max(FONT_MIN, prev + delta));
+      try {
+        localStorage.setItem(FONT_STORAGE_KEY, String(next));
+      } catch {
+        /* ignore storage failures (private mode, etc.) */
+      }
+      return next;
+    });
+  }, []);
 
   const notebookKey = editable ? `${pdfId}:${pageNumber}` : null;
   const kernel = useJupyterKernel(notebookKey);
@@ -639,8 +662,8 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
   return (
     <div className={`flex flex-col overflow-hidden rounded-lg border border-slate-800 bg-surface text-text leading-normal ${className ?? ''}`} style={style}>
       {editable ? (
-        <div className="flex items-center justify-between gap-1.5 border-b border-slate-800 px-3 py-1 text-[11px]">
-          <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center justify-between gap-y-1 gap-x-1.5 border-b border-slate-800 px-3 py-1 text-[11px]">
+          <div className="flex flex-wrap items-center gap-1.5">
             <button
               type="button"
               onClick={() => addCell('code', 'below')}
@@ -693,7 +716,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
               🗑 {t('play.notebook.deleteCell')}
             </button>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             <button
               type="button"
               onClick={() => void runCell(false)}
@@ -760,6 +783,26 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
             >
               📥 {t('play.notebook.download')}
             </button>
+            <span className="mx-0.5 h-4 w-px bg-slate-700" aria-hidden="true" />
+            <button
+              type="button"
+              onClick={() => changeFontSize(-1)}
+              disabled={fontSize <= FONT_MIN}
+              className="rounded px-1.5 py-0.5 text-text hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
+              title={t('play.notebook.fontSmaller')}
+            >
+              A－
+            </button>
+            <span className="tabular-nums text-text-muted" title={t('play.notebook.fontSize')}>{fontSize}</span>
+            <button
+              type="button"
+              onClick={() => changeFontSize(1)}
+              disabled={fontSize >= FONT_MAX}
+              className="rounded px-1.5 py-0.5 text-text hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
+              title={t('play.notebook.fontLarger')}
+            >
+              A＋
+            </button>
           </div>
         </div>
       ) : null}
@@ -768,6 +811,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
         tabIndex={0}
         onKeyDown={handleKeyDown}
         className="min-h-0 flex-1 overflow-y-auto px-4 py-3 outline-none focus:ring-1 focus:ring-sky-500/40"
+        style={{ fontSize: `${fontSize}px` }}
         aria-label={t('play.notebook.ariaLabel')}
       >
         {notebook === null ? (
@@ -790,6 +834,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
             onBeginEdit={editable ? beginEdit : undefined}
             textareaRef={textareaRef}
             editPlaceholder={t('play.notebook.editPlaceholder')}
+            fontSize={fontSize}
           />
         {!editing && currentCell?.cell_type === 'code' && cellTimings[currentIndex] != null ? (
           <p className="mt-1 text-[10px] text-text-muted/60">

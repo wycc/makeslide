@@ -501,7 +501,7 @@ export function SlideRenderer({
       : { maxHeight: wrapperStyle?.maxHeight };
     return (
       <div
-        className={isFullscreen ? `${wrapperClassName ?? ''} w-full` : wrapperClassName}
+        className={`${wrapperClassName ?? ''} w-full`}
         style={wrapperStyle}
         onPointerMove={onWrapperPointerMove}
       >

@@ -6,7 +6,7 @@
 // leaves those unbound, so they bubble up to NotebookPanel's container onKeyDown which owns the
 // run / commit-edit model. Plain Enter / arrows stay inside the editor as usual.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { python } from '@codemirror/lang-python';
 import { EditorView } from '@codemirror/view';
@@ -15,6 +15,8 @@ export interface CodeMirrorEditorProps {
   value: string;
   onChange: (value: string) => void;
   autoFocus?: boolean;
+  /** Cell font size in px; keeps the editor in step with the adjustable cell text size. */
+  fontSize?: number;
 }
 
 /** Track the app's Tailwind `class` dark mode (html.dark) so the editor theme matches. */
@@ -33,15 +35,23 @@ function useHtmlDarkClass(): boolean {
   return dark;
 }
 
-export default function CodeMirrorEditor({ value, onChange, autoFocus }: CodeMirrorEditorProps) {
+export default function CodeMirrorEditor({ value, onChange, autoFocus, fontSize }: CodeMirrorEditorProps) {
   const dark = useHtmlDarkClass();
+  const extensions = useMemo(
+    () => [
+      python(),
+      EditorView.lineWrapping,
+      EditorView.theme({ '&': { fontSize: `${fontSize ?? 13}px` } }),
+    ],
+    [fontSize],
+  );
   return (
     <CodeMirror
       value={value}
       onChange={onChange}
       autoFocus={autoFocus}
       theme={dark ? 'dark' : 'light'}
-      extensions={[python(), EditorView.lineWrapping]}
+      extensions={extensions}
       basicSetup={{
         lineNumbers: true,
         foldGutter: false,
@@ -49,7 +59,7 @@ export default function CodeMirrorEditor({ value, onChange, autoFocus }: CodeMir
         autocompletion: false,
         highlightActiveLineGutter: true,
       }}
-      className="rounded-md border border-sky-500/50 overflow-hidden text-xs"
+      className="rounded-md border border-sky-500/50 overflow-hidden"
     />
   );
 }
