@@ -452,7 +452,7 @@ export function PlayPageSlidePanel() {
           ) : null}
           {currentPage && !playQrCodeUrl ? (
             <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
-              {audioError ? (
+              {currentPage.render_type !== 'notebook' && (audioError ? (
                 <button
                   type="button"
                   onClick={handleRetry}
@@ -482,7 +482,7 @@ export function PlayPageSlidePanel() {
                 >
                   {classroomMode && classroomAwaitingNext ? '⏭▶︎' : isPlaying ? '⏸' : '▶︎'}
                 </button>
-              )}
+              ))}
               <button
                 type="button"
                 onClick={() => currentPage && void openVersionHistory('image', currentPage.page_number)}
