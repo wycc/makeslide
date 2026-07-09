@@ -450,6 +450,50 @@ export function PlayPageSlidePanel() {
               </button>
             </div>
           ) : null}
+          {currentPage && !playQrCodeUrl ? (
+            <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
+              {audioError ? (
+                <button
+                  type="button"
+                  onClick={handleRetry}
+                  className="rounded-full border border-rose-500/50 bg-rose-500/15 px-4 py-2 text-sm text-rose-300 shadow-lg hover:bg-rose-500/25"
+                  aria-label={t('play.slidePanel.audioRetry')}
+                  title={audioError}
+                >
+                  ▶︎
+                </button>
+              ) : !currentPage?.audio_url ? (
+                <button
+                  type="button"
+                  disabled
+                  className="cursor-not-allowed rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm opacity-30 shadow-lg"
+                  aria-label={t('play.slidePanel.noAudio')}
+                  title={t('play.slidePanel.noAudio')}
+                >
+                  ▶︎
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={playPause}
+                  className="rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm shadow-lg hover:bg-slate-700"
+                  aria-label={classroomMode && classroomAwaitingNext ? t('play.slidePanel.nextAndPlay') : isPlaying ? t('play.slidePanel.pause') : t('play.slidePanel.play')}
+                  title={`${classroomMode && classroomAwaitingNext ? t('play.slidePanel.nextAndPlay') : isPlaying ? t('play.slidePanel.pause') : t('play.slidePanel.play')} (Space)`}
+                >
+                  {classroomMode && classroomAwaitingNext ? '⏭▶︎' : isPlaying ? '⏸' : '▶︎'}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => currentPage && void openVersionHistory('image', currentPage.page_number)}
+                disabled={!currentPage}
+                title={t('play.slidePanel.viewImageHistory')}
+                className="rounded-md border border-slate-600 bg-slate-900/80 px-2 py-1 text-xs text-slate-300 shadow-lg backdrop-blur hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {t('play.slidePanel.versionButton')}
+              </button>
+            </div>
+          ) : null}
           {playQrCodeUrl ? (
             <div className="flex flex-col items-center gap-3 rounded-lg border border-slate-700 bg-slate-900/80 p-4 shadow-xl">
               <img
@@ -556,16 +600,7 @@ export function PlayPageSlidePanel() {
                       <span className="ml-1 h-4 w-1.5 rounded-sm bg-current" />
                     </div>
                   ) : null}
-                  <button
-                    type="button"
-                    onClick={() => currentPage && void openVersionHistory('image', currentPage.page_number)}
-                    disabled={!currentPage}
-                    title={t('play.slidePanel.viewImageHistory')}
-                    className="absolute right-2 top-12 z-20 rounded-md border border-slate-600 bg-slate-900/80 px-2 py-1 text-xs text-slate-300 backdrop-blur hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    {t('play.slidePanel.versionButton')}
-                  </button>
-                  {/* 書籤／標記為重要的按鈕已移到外層頁面容器（投影片舞台）的角落，不再覆蓋在小小的 cell 角落 */}
+                  {/* 版本、書籤、標記為重要的按鈕都已移到外層頁面容器（投影片舞台）的角落，不再覆蓋在小小的 cell 角落 */}
                 </>
               }
             >
@@ -764,37 +799,7 @@ export function PlayPageSlidePanel() {
           />
           <span>/ {totalPages}</span>
         </span>
-        {audioError ? (
-          <button
-            type="button"
-            onClick={handleRetry}
-            className="rounded-full border border-rose-500/50 bg-rose-500/15 px-4 py-2 text-sm text-rose-300 hover:bg-rose-500/25"
-            aria-label={t('play.slidePanel.audioRetry')}
-            title={audioError}
-          >
-            ▶︎
-          </button>
-        ) : !currentPage?.audio_url ? (
-          <button
-            type="button"
-            disabled
-            className="rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm opacity-30 cursor-not-allowed"
-            aria-label={t('play.slidePanel.noAudio')}
-            title={t('play.slidePanel.noAudio')}
-          >
-            ▶︎
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={playPause}
-            className="rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm hover:bg-slate-700"
-            aria-label={classroomMode && classroomAwaitingNext ? t('play.slidePanel.nextAndPlay') : isPlaying ? t('play.slidePanel.pause') : t('play.slidePanel.play')}
-            title={`${classroomMode && classroomAwaitingNext ? t('play.slidePanel.nextAndPlay') : isPlaying ? t('play.slidePanel.pause') : t('play.slidePanel.play')} (Space)`}
-          >
-            {classroomMode && classroomAwaitingNext ? '⏭▶︎' : isPlaying ? '⏸' : '▶︎'}
-          </button>
-        )}
+        {/* play/pause 已移到投影片舞台右上角（頁面角落），與版本按鈕同一群組 */}
         <button
           type="button"
           onClick={goNext}
