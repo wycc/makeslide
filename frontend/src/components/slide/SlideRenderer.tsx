@@ -491,6 +491,14 @@ export function SlideRenderer({
   // pageNumber to locate the asset; without them we fall through to the image (safe default).
   // Placed after all hooks so hook order stays stable across render-type changes.
   if (renderType === 'notebook' && pdfId && pageNumber != null) {
+    // Size the single-cell notebook sensibly in both contexts. In the normal panel the caller
+    // passes a window-relative maxHeight: the notebook fits its content and only scrolls past that
+    // cap, instead of forcing a tall box with a big empty area. In fullscreen (no maxHeight given)
+    // it fills a large, centred slice of the viewport instead of shrinking to a tiny strip.
+    const isFullscreen = !wrapperStyle?.maxHeight;
+    const notebookStyle: CSSProperties = isFullscreen
+      ? { height: '85vh' }
+      : { maxHeight: wrapperStyle?.maxHeight };
     return (
       <div className={wrapperClassName} style={wrapperStyle} onPointerMove={onWrapperPointerMove}>
         <NotebookPanel
@@ -498,8 +506,8 @@ export function SlideRenderer({
           pageNumber={pageNumber}
           shareToken={shareToken}
           editable={notebookEditable}
-          className="h-full w-full"
-          style={wrapperStyle?.maxHeight ? { maxHeight: wrapperStyle.maxHeight } : undefined}
+          className={isFullscreen ? 'mx-auto w-full max-w-5xl' : 'w-full'}
+          style={notebookStyle}
         />
         {overlay}
         {children}
