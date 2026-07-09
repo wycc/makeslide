@@ -591,7 +591,7 @@ export function PlayPageSlidePanel() {
                       ) : null}
                     </div>
                   ) : null}
-                  {!isPlaying && currentPage?.audio_url ? (
+                  {!isPlaying && currentPage?.audio_url && currentPage.render_type !== 'notebook' ? (
                     <div
                       className="pointer-events-none absolute right-2 top-2 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-white/35 bg-black/55 text-white shadow-lg backdrop-blur-sm"
                       aria-hidden="true"
