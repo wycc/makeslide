@@ -218,7 +218,7 @@ function CellBody({ cell, outputs, editing, draft, onDraftChange, onBeginEdit, t
         : source.trim() !== '' && (
             <div className="flex flex-col gap-0.5">
               {/* Jupyter-style execution count (phase 7a). */}
-              <span className="font-mono text-[10px] text-sky-500/70">In {executionCountLabel(cell.execution_count)}:</span>
+              <span className="font-mono text-[10px] leading-none text-sky-500/70">In {executionCountLabel(cell.execution_count)}:</span>
               <pre
                 onDoubleClick={onBeginEdit}
                 className="overflow-x-auto rounded-md border border-border bg-surface px-3 py-2 text-xs text-text"
@@ -602,7 +602,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
   const kernelLabel = kernelLabelKey ? t(kernelLabelKey) : '';
 
   return (
-    <div className={`flex flex-col overflow-hidden rounded-lg border border-slate-800 bg-surface text-text ${className ?? ''}`} style={style}>
+    <div className={`flex flex-col overflow-hidden rounded-lg border border-slate-800 bg-surface text-text leading-normal ${className ?? ''}`} style={style}>
       {editable ? (
         <div className="flex items-center justify-between gap-1.5 border-b border-slate-800 px-3 py-1 text-[11px]">
           <div className="flex items-center gap-1.5">
