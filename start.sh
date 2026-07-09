@@ -403,7 +403,23 @@ JUPYTER_BIN=""
 # 需要 2.x；舊版會導致前端「執行了卻收不到輸出」）。優先用專用 venv；系統版本夠新則用系統；
 # 都不行則自動建 venv 安裝新版。結果放全域 JUPYTER_BIN。取得成功回 0。
 ensure_jupyter_bin() {
-  local sysbin sysver major py venvbin="$JUPYTER_VENV/bin/jupyter"
+  local sysbin sysver major py venvbin="$JUPYTER_VENV/bin/jupyter" condaprefix condabin condaver condamajor
+  # 設定 JUPYTER_CONDA_PREFIX：指定 notebook kernel 要用的 Anaconda/Conda 環境 prefix（內含 bin/jupyter）。
+  # 設了就優先用它，讓 cell 在該環境（含其 numpy/pandas 等套件）中執行；該環境需有 jupyter_server >= 2 + ipykernel。
+  condaprefix="$(read_env_var JUPYTER_CONDA_PREFIX)"
+  if [[ -n "$condaprefix" ]]; then
+    condabin="$condaprefix/bin/jupyter"
+    if [[ -x "$condabin" ]]; then
+      condaver="$("$condabin" server --version 2>/dev/null | head -1)"; condamajor="${condaver%%.*}"
+      if [[ "$condamajor" =~ ^[0-9]+$ ]] && (( condamajor >= 2 )); then
+        log_info "Jupyter 使用指定的 Conda 環境：$condaprefix（jupyter_server ${condaver}）"
+        JUPYTER_BIN="$condabin"; return 0
+      fi
+      log_warn "JUPYTER_CONDA_PREFIX=$condaprefix 的 jupyter_server 過舊（${condaver:-未知}，需 >= 2）；請在該環境執行 \"conda install -y 'jupyter_server>=2' ipykernel\"。改用其他 jupyter"
+    else
+      log_warn "JUPYTER_CONDA_PREFIX=$condaprefix 下找不到 bin/jupyter；請在該環境執行 \"conda install -y jupyter ipykernel\"。改用其他 jupyter"
+    fi
+  fi
   if [[ -x "$venvbin" ]]; then JUPYTER_BIN="$venvbin"; return 0; fi
   sysbin="$(command -v jupyter || true)"
   [[ -z "$sysbin" && -x /opt/Anaconda3/bin/jupyter ]] && sysbin=/opt/Anaconda3/bin/jupyter
@@ -419,7 +435,7 @@ ensure_jupyter_bin() {
   if ! "$py" -m venv "$JUPYTER_VENV" >/dev/null 2>&1; then log_warn "建立 venv 失敗（缺 python venv 模組？）"; return 1; fi
   log_info "安裝 jupyter_server + ipykernel 到 .jupyter-venv（首次較久，需網路）…"
   if ! "$JUPYTER_VENV/bin/pip" install --quiet --upgrade pip jupyter_server ipykernel >/dev/null 2>&1; then
-    log_warn "pip 安裝 jupyter_server 失敗（需網路）"; return 1
+    log_warn "pip 安裝 jupyter_server 失敗（需網路）；可手動執行 \"$JUPYTER_VENV/bin/pip install jupyter_server ipykernel\"，或改用系統已安裝的 jupyter_server >= 2"; return 1
   fi
   "$JUPYTER_VENV/bin/python" -m ipykernel install --sys-prefix --name python3 --display-name "Python 3" >/dev/null 2>&1 || true
   JUPYTER_BIN="$venvbin"; return 0
@@ -446,6 +462,9 @@ start_jupyter() {
   jhost="${hostport%%:*}"; jport="${hostport##*:}"
   [[ "$jport" == "$hostport" ]] && jport=8888   # target 未帶 port 時預設 8888
   [[ -n "$jhost" ]] || jhost=127.0.0.1
+  if [[ "$jport" == "$PORT" ]]; then
+    log_warn "JUPYTER_PROXY_TARGET 的 port ($jport) 與後端 PORT ($PORT) 相同，會造成衝突；請在 .env 將 Jupyter 改到不同 port（例如 https://127.0.0.1:8899）"
+  fi
 
   if ! ensure_jupyter_bin; then
     log_warn "無法取得夠新的 jupyter，略過啟動 Jupyter server（notebook 就地執行將無法連線）"
