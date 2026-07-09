@@ -661,6 +661,15 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
           <div className="flex items-center gap-1.5">
             <button
               type="button"
+              onClick={() => void runCell(false)}
+              disabled={runningIndex != null || currentCell?.cell_type !== 'code'}
+              className="rounded px-1.5 py-0.5 font-medium text-sky-400 hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
+              title={t('play.notebook.runHint')}
+            >
+              {isRunningCurrent ? t('play.notebook.running') : `▶ ${t('play.notebook.run')}`}
+            </button>
+            <button
+              type="button"
               onClick={() => void runAll()}
               disabled={runningIndex != null || !notebook || codeCellIndices(notebook).length === 0}
               className="rounded px-1.5 py-0.5 font-medium text-sky-400 hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
