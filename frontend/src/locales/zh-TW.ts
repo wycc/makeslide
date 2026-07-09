@@ -1191,6 +1191,7 @@ export const zhTW = {
   'play.notebook.fontSize': '字型大小',
   'play.notebook.fontSmaller': '縮小字型',
   'play.notebook.fontLarger': '放大字型',
+  'play.notebook.kernelEnv': '執行環境（Conda）',
   'play.notebook.addCodeCell': '程式碼',
   'play.notebook.addMarkdownCell': 'Markdown',
   'play.notebook.deleteCell': '刪除 cell',

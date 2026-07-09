@@ -39,7 +39,7 @@ import {
   type NbNotebook,
   type NbOutput,
 } from '../../lib/nbformatModel';
-import { useJupyterKernel } from './useJupyterKernel';
+import { useJupyterKernel, listKernelSpecs, type KernelSpecInfo } from './useJupyterKernel';
 import { kernelStatusLabelKey } from '../../lib/jupyterConnection';
 import { collapseText } from '../../lib/collapseText';
 
@@ -54,6 +54,9 @@ const FONT_MIN = 9;
 const FONT_MAX = 28;
 const FONT_DEFAULT = 13;
 const FONT_STORAGE_KEY = 'makeslide.nbFontSize';
+
+/** Remembered kernelspec name (Conda/Anaconda environment) across notebook pages. */
+const KERNEL_STORAGE_KEY = 'makeslide.nbKernel';
 
 // Lazy so CodeMirror + Python mode are code-split out of the main bundle (phase 3b).
 const CodeMirrorEditor = lazy(() => import('./codeMirrorEditor'));
@@ -284,8 +287,38 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
     });
   }, []);
 
+  const [kernelSpecs, setKernelSpecs] = useState<KernelSpecInfo[]>([]);
+  const [kernelName, setKernelName] = useState<string>(() =>
+    (typeof localStorage !== 'undefined' && localStorage.getItem(KERNEL_STORAGE_KEY)) || 'python3',
+  );
   const notebookKey = editable ? `${pdfId}:${pageNumber}` : null;
-  const kernel = useJupyterKernel(notebookKey);
+  const kernel = useJupyterKernel(notebookKey, kernelName);
+
+  // Load the available kernelspecs (Conda/Anaconda environments) so the toolbar can offer a picker.
+  useEffect(() => {
+    if (!editable) return;
+    let cancelled = false;
+    listKernelSpecs()
+      .then((specs) => { if (!cancelled) setKernelSpecs(specs); })
+      .catch(() => { if (!cancelled) setKernelSpecs([]); });
+    return () => { cancelled = true; };
+  }, [editable]);
+
+  // If the remembered env is no longer available, fall back to python3 or the first spec.
+  useEffect(() => {
+    if (kernelSpecs.length === 0 || kernelSpecs.some((s) => s.name === kernelName)) return;
+    const fallback = kernelSpecs.find((s) => s.name === 'python3') ?? kernelSpecs[0];
+    if (fallback) setKernelName(fallback.name);
+  }, [kernelSpecs, kernelName]);
+
+  const changeKernel = useCallback((name: string) => {
+    setKernelName(name);
+    try {
+      localStorage.setItem(KERNEL_STORAGE_KEY, name);
+    } catch {
+      /* ignore storage failures */
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -717,6 +750,21 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
             </button>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
+            {kernelSpecs.length > 1 ? (
+              <select
+                value={kernelName}
+                onChange={(e) => changeKernel(e.target.value)}
+                className="max-w-[11rem] rounded border border-slate-700 bg-surface px-1 py-0.5 text-text hover:bg-surface-muted focus:outline-none focus:ring-1 focus:ring-sky-500/50"
+                title={t('play.notebook.kernelEnv')}
+                aria-label={t('play.notebook.kernelEnv')}
+              >
+                {kernelSpecs.map((s) => (
+                  <option key={s.name} value={s.name}>
+                    {s.displayName}
+                  </option>
+                ))}
+              </select>
+            ) : null}
             <button
               type="button"
               onClick={() => void runCell(false)}

@@ -1191,6 +1191,7 @@ export const en = {
   'play.notebook.fontSize': 'Font size',
   'play.notebook.fontSmaller': 'Smaller font',
   'play.notebook.fontLarger': 'Larger font',
+  'play.notebook.kernelEnv': 'Environment (Conda)',
   'play.notebook.addCodeCell': 'Code',
   'play.notebook.addMarkdownCell': 'Markdown',
   'play.notebook.deleteCell': 'Delete cell',
