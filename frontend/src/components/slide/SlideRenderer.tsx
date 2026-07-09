@@ -506,7 +506,7 @@ export function SlideRenderer({
           pageNumber={pageNumber}
           shareToken={shareToken}
           editable={notebookEditable}
-          className={isFullscreen ? 'mx-auto w-full max-w-5xl' : 'w-full'}
+          className="w-full"
           style={notebookStyle}
         />
         {overlay}
