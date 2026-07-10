@@ -2,7 +2,9 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { RegenerateProgress } from './RegenerateProgress';
 import type { ShareAccessMode } from '../../lib/api';
-import { fetchSyncAttendees, generatePdfDescription, fetchCoursePackage } from '../../lib/api';
+import { fetchSyncAttendees, generatePdfDescription, fetchCoursePackage, fetchQualityCheck } from '../../lib/api';
+import { analysisBadgeState } from '../../lib/qualityCheckSelection';
+import { OPEN_QUALITY_PANEL_EVENT } from './notebookTabs';
 import { useI18n } from '../../i18n';
 import { usePlayPageContext } from './PlayPageContext';
 import { SyncQuestionsPanel } from './SyncQuestionsPanel';
@@ -313,6 +315,25 @@ export function PlayPageHeader() {
       if (attendeePollRef.current != null) clearInterval(attendeePollRef.current);
     };
   }, [syncEnabled, syncRole, pdfId]);
+
+  // Auto-run the quality check once generation completes, so the header can flag "N pages have
+  // quality issues" without the user having to open the AI panel and click "run" themselves
+  // (§7.2). Only ever fetched once per pdf — content can drift after that (edits, regeneration),
+  // but re-running silently in the background isn't worth the extra request traffic; the panel's
+  // own manual "run" button stays the way to refresh it.
+  const [qualityIssueCount, setQualityIssueCount] = useState<number | null>(null);
+  const qualityFetchedForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!pdfId || detail?.status !== 'ready') return;
+    if (qualityFetchedForRef.current === pdfId) return;
+    qualityFetchedForRef.current = pdfId;
+    void fetchQualityCheck(pdfId)
+      .then((data) => setQualityIssueCount(data.summary.pagesWithIssues))
+      .catch(() => {});
+  }, [pdfId, detail?.status]);
+  const qualityBadge = analysisBadgeState(qualityIssueCount !== null, false, qualityIssueCount ?? 0);
+  const openQualityPanel = () => window.dispatchEvent(new CustomEvent(OPEN_QUALITY_PANEL_EVENT));
+
   const handleDownloadCoursePackage = async () => {
     if (!pdfId || coursePackageBusy) return;
     setCoursePackageBusy(true);
@@ -386,6 +407,16 @@ export function PlayPageHeader() {
               <div className="text-[10px] text-muted">{progressPercent(currentIdx + 1, totalPages)}%</div>
             )}
           </div>
+          {qualityBadge.kind === 'issues' && (
+            <button
+              type="button"
+              onClick={openQualityPanel}
+              title={t('play.header.qualityBadgeHint')}
+              className="ml-1 shrink-0 whitespace-nowrap rounded-full border border-amber-400/60 bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700 hover:bg-amber-200 dark:border-amber-500/50 dark:bg-amber-500/15 dark:text-amber-300 dark:hover:bg-amber-500/25"
+            >
+              ⚠ {t('play.quality.issueCount').replace('{n}', String(qualityBadge.count))}
+            </button>
+          )}
           <label className="ml-2 inline-flex items-center gap-1 text-xs text-text">
             <input
               type="checkbox"

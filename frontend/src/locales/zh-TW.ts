@@ -2052,6 +2052,7 @@ export const zhTW = {
   'play.header.downloadNotesTxt': '下載備註 TXT',
   'play.header.nativeShare': '📤 分享',
   'play.header.copyLink': '🔗 複製連結',
+  'play.header.qualityBadgeHint': '點擊查看品質檢查詳情',
   'play.header.copyLinkDone': '已複製連結 ✓',
   'play.header.copyLinkFail': '複製失敗',
   'play.header.showDescription': '顯示簡介',

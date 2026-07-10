@@ -25,6 +25,15 @@ export const DEFAULT_NOTEBOOK_TAB: NotebookTab = 'slides';
 
 export const NOTEBOOK_TAB_STORAGE_KEY = 'makeslide.notebookTab';
 
+/**
+ * Dispatched (no detail payload) when something outside the sidebar — e.g. the header's
+ * quality-issue badge — wants to jump straight to the "AI 助手" tab's quality sub-tab. The
+ * sidebar owns `notebookTab`/`aiSubTab` as local state, so this is a lightweight cross-component
+ * signal rather than lifting that state into context (mirrors the existing
+ * `makeslide:notebook-cell-nav` event used for fullscreen arrow-key cell navigation).
+ */
+export const OPEN_QUALITY_PANEL_EVENT = 'makeslide:open-quality-panel';
+
 export function isNotebookTab(value: unknown): value is NotebookTab {
   return NOTEBOOK_TABS.some((tab) => tab.id === value);
 }
